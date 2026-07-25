@@ -11,6 +11,7 @@
 #include "r_bsp.h"
 #include "r_marks.h"
 
+#include "r_shadowcookie.h"
 #include <algorithm>
 #include "r_staticmodelcache.h"
 #include "r_add_staticmodel.h"
@@ -259,11 +260,6 @@ void __cdecl R_GetBspLightSurfs(const GfxLight **visibleLights, int visibleCount
         else
             R_GetBspSpotLightSurfs(light, lightIndex, surfData);
     }
-}
-
-BOOL __cdecl R_SortBspShadowReceiverSurfaces(GfxSurface *surface0, GfxSurface *surface1)
-{
-    return surface0 < surface1;
 }
 
 void __cdecl R_GetBspOmniLightSurfs(const GfxLight *light, int lightIndex, GfxBspDrawSurfData *surfData)
@@ -1472,4 +1468,3 @@ void __cdecl R_EmitShadowedLightPartitionSurfs(
     info->drawSurfs = &frontEndDataOut->drawSurfs[firstDrawSurf];
     info->drawSurfCount = drawSurfCount;
 }
-

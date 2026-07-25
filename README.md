@@ -34,6 +34,29 @@ Keep in Mind: This is a ~20 year old game with some known exploits. We will try 
 However, there is a non-zero chance of some type of binary exploitation when playing online. Use a sandbox (Sandboxie?) for peace of mind. 
 ```
 
+### Cross-build from Linux with LLVM-MinGW
+
+The MinGW configuration produces a 32-bit Windows multiplayer executable. It
+requires CMake, Ninja, and LLVM-MinGW's `i686-w64-mingw32-*` tools on `PATH`.
+LLVM-MinGW 20260616 (LLVM 22.1.8, MSVCRT), CMake 3.31.10, and Ninja 1.13.0 are
+the validated tool versions.
+
+```bash
+bash build-linux-for-windows.sh
+# Optional: put build files outside the checkout.
+bash build-linux-for-windows.sh /path/to/build-directory
+```
+
+The script builds `KisakCOD-mp` in Debug with `KISAK_OPENAL=ON`. It reuses the
+build directory and stops on configuration or compilation errors. CMake fetches
+the pinned OpenAL Soft and Tracy versions during configuration. The executable
+is written to `bin/KisakCOD-mp.exe`; the game assets and runtime DLLs described
+above are still required to run it under 32-bit-capable Wine.
+
+Radiant requires MSVC/MFC and is excluded from the MinGW configuration. The
+MinGW port also retains D3DX shader helper stubs returning `E_NOTIMPL`, so a
+successful build does not establish full rendering or gameplay compatibility.
+
 ## Known Issues
 (Use the **[issues](https://github.com/SwagSoftware/KisakCOD/issues)** section)
 

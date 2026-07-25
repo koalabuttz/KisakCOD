@@ -8,7 +8,7 @@
 #include <universal/q_shared.h>
 #include "win_steam.h"
 
-#include <Windows.h>
+#include <windows.h>
 
 #include <qcommon/qcommon.h>
 
@@ -83,7 +83,7 @@ public:
 
 };
 
-SteamCallbackHandler::SteamCallbackHandler() 
+SteamCallbackHandler::SteamCallbackHandler()
 	: m_CallbackBeginAuthResponse(this, &SteamCallbackHandler::Callback_BeginAuthResponse)
 {
 }
@@ -246,7 +246,7 @@ bool Steam_CheckClientTicket(const void* pAuthTicket, uint32 authTicketLen, uint
 	id.SetFromUint64(steamID64);
 
 	EBeginAuthSessionResult res = SteamUser()->BeginAuthSession(pAuthTicket, authTicketLen, id);
-	
+
 	if (res != k_EBeginAuthSessionResultOK)
 	{
 		return false;

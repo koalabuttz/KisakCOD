@@ -545,9 +545,13 @@ int __cdecl DoStackTrace(char* msg, int nIgnore)
     memset((uint8_t*)g_assertAddress, 0, sizeof(g_assertAddress));
     g_assertAddressCount = 0;
     reg_ebp = 0;
+#if defined(__MINGW32__)
+    __asm__ volatile("movl %%ebp, %0" : "=r"(reg_ebp));
+#else
     __asm {
         mov reg_ebp, ebp
     }
+#endif
     for (i = 0; i < nIgnore + 32; ++i)
     {
         v2 = reg_ebp;
