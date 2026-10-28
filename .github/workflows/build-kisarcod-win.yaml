@@ -71,7 +71,12 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 
+      - name: Check native Windows bootstrap
+        run: |
+          ./scripts/ci/check-windows-bootstrap.ps1 -BuildOutput "bin/${{ matrix.config }}" -DxSdkPackage "${{ env.DXSDK_DIR_NUGET }}"
+
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: KisakCOD-${{ matrix.config }}
           path: ${{ github.workspace }}/bin
