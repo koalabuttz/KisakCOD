@@ -30,7 +30,7 @@ struct vidConfig_t // sizeof=0x30 — subset needed by r_init; matches client_mp
 #include "r_image.h"
 #include "r_fog.h"
 
-#include <Windows.h>
+#include <windows.h>
 #include <d3d9.h>
 
 enum GfxRenderer : __int32
@@ -124,7 +124,7 @@ struct trStatistics_t // sizeof=0x28
 };
 
 struct GfxWorld;
-struct __declspec(align(128)) r_global_permanent_t // sizeof=0x2180
+struct alignas(128) r_global_permanent_t // sizeof=0x2180
 {                                       // ...
     Material *sortedMaterials[2048];    // ...
     int needSortMaterials;              // ...
@@ -224,7 +224,7 @@ struct GfxLodParms // sizeof=0x20
     // padding byte
 };
 
-struct __declspec(align(8)) r_globals_t // sizeof=0x8310
+struct alignas(8) r_globals_t // sizeof=0x8310
 {                                       // ...
     GfxViewParms identityViewParms;     // ...
     bool inFrame;                       // ...

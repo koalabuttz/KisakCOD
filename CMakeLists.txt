@@ -9,7 +9,8 @@ add_compile_definitions(_CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_DEPRECATE)
 
 # Set this to match the folder name in scripts/platform
 # This will handle the path overrides if needed
-set(KISAK_PLATFORM win32)
+set(KISAK_PLATFORM "win32" CACHE STRING "Build platform: win32|mingw|linux")
+set_property(CACHE KISAK_PLATFORM PROPERTY STRINGS win32 mingw linux)
 
 # Set Address Sanitizer
 # NOTE: If you use this you will need to copy to the game's directory
@@ -19,7 +20,7 @@ set(USE_ASAN OFF)
 
 # Set to ON to build the sound system against OpenAL instead of Miles/MSS.
 # When OFF (default), the original Miles Sound System (MSS/AIL) backend is used.
-set(KISAK_OPENAL OFF)
+option(KISAK_OPENAL "Build the sound system against OpenAL instead of Miles/MSS" OFF)
 
 # Set the gloabl directory variables
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -44,4 +45,7 @@ message("Building KISAK_PLATFORM: ${KISAK_PLATFORM}")
 add_subdirectory(${SCRIPTS_DIR}/mp)
 add_subdirectory(${SCRIPTS_DIR}/sp)
 add_subdirectory(${SCRIPTS_DIR}/dedi)
-add_subdirectory(${SCRIPTS_DIR}/radiant)
+if (KISAK_PLATFORM STREQUAL "win32")
+    # Radiant requires MSVC's MFC libraries, which MinGW does not provide.
+    add_subdirectory(${SCRIPTS_DIR}/radiant)
+endif()

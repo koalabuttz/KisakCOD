@@ -379,7 +379,7 @@ struct shellshock_t // sizeof=0x20
 };
 static_assert(sizeof(shellshock_t) == 0x20);
 
-struct __declspec(align(8)) animation_s // sizeof=0x68
+struct alignas(8) animation_s // sizeof=0x68
 {                                       // ...
     char name[64];
     int32_t initialLerp;
@@ -453,7 +453,7 @@ struct scr_animtree_t // sizeof=0x4
 };
 static_assert(sizeof(scr_animtree_t) == 0x4);
 
-struct __declspec(align(8)) animScriptData_t // sizeof=0x9A9D0
+struct alignas(8) animScriptData_t // sizeof=0x9A9D0
 {                                       // ...
     animation_s animations[512];
     uint32_t numAnimations;

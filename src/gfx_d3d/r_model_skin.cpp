@@ -73,7 +73,7 @@ void R_SkinXModelCmd(_WORD *data)
     int boneIndex = -1;
     GfxPackedVertex *skinVerticesOut = NULL;
 
-    DObjSkelMat __declspec(align(16)) boneSkelMats[128];
+    alignas(16) DObjSkelMat boneSkelMats[128];
     memset(boneSkelMats, 0, sizeof(boneSkelMats));
 
     for (uint32_t i = 0; i < skinCmd->surfCount; i++)
