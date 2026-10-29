@@ -9,7 +9,7 @@ on:
 
 jobs:
   runtime-regressions:
-    name: Runtime ownership and VM stack regressions
+    name: Runtime regression checks
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -18,6 +18,8 @@ jobs:
         run: python3 scripts/tests/test_renderer_command_ownership.py
       - name: Entity field evaluation stack
         run: python3 scripts/tests/test_script_vm_field_stack.py
+      - name: Shader constant ordering
+        run: python3 scripts/tests/test_shader_constant_order.py
 
   build:
     name: Build with DirectX SDK

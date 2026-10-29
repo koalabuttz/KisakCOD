@@ -3,9 +3,10 @@ These asset-free regression checks require Python 3 and a C++20 compiler:
 ```sh
 python3 scripts/tests/test_renderer_command_ownership.py
 python3 scripts/tests/test_script_vm_field_stack.py
+python3 scripts/tests/test_shader_constant_order.py
 ```
 
-Both scripts accept `--cxx` (or `CXX`) to select a compiler. They compile the
+All scripts accept `--cxx` (or `CXX`) to select a compiler. They compile the
 functions extracted from the current production source, with checked test
 doubles for unrelated engine services. Assertions remain enabled.
 
@@ -18,6 +19,13 @@ The VM check forces the global layout that exposed the false overflow, then
 checks scalar and undefined fields, array getters that need two working values,
 repeated getters, output-parameter cleanup and genuine stack overflow. It tests
 the field bridge and stack bookkeeping, rather than executing complete scripts.
+
+The shader check verifies destination ordering and destination/value pairing
+through all 16 constant slots, with unused storage poisoned to expose accidental
+reads. It exercises the ordering used by material comparisons; loading and
+rendering real materials still need a game check. The extracted collection and
+comparison helpers also check literal and named constants, equivalent/self
+comparisons, reversed ordering signs and repeated comparisons.
 
 GitHub Actions runs these checks alongside the Windows builds and native
 bootstrap check. Loading a map and quitting with licensed assets remain separate

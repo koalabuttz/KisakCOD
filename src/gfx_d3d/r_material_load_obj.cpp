@@ -6304,7 +6304,7 @@ void __cdecl R_RegisterShaderConst(uint32_t dest, const float *value, GfxShaderC
             consts->count,
             16);
     for (sortedIndex = consts->count;
-        sortedIndex && *(&consts->count + sortedIndex + 1) > dest;
+        sortedIndex && consts->dest[sortedIndex - 1] > dest;
         consts->value[sortedIndex + 1] = consts->value[sortedIndex])
     {
         --sortedIndex;
