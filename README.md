@@ -59,8 +59,13 @@ the pinned OpenAL Soft and Tracy versions during configuration. The executable
 is written to `bin/KisakCOD-mp.exe`; the game assets and runtime DLLs described
 above are still required to run it under 32-bit-capable Wine.
 
-Radiant requires MSVC/MFC and is excluded from the MinGW configuration. The
-MinGW port also retains D3DX shader helper stubs returning `E_NOTIMPL`, so a
+The MinGW build requires the x86 D3DX9_43 runtime from the official DirectX
+End-User Runtimes (June 2010). Wine provides its own implementation. The original
+game's `d3dx9_34.dll` alone does not satisfy this dependency. Shader compilation
+and reflection use the real D3DX APIs; an asset-free
+[shader runtime check](scripts/tests/d3dx_shader_runtime.md) verifies them.
+
+Radiant requires MSVC/MFC and is excluded from the MinGW configuration. A
 successful build does not establish full rendering or gameplay compatibility.
 
 ## Known Issues

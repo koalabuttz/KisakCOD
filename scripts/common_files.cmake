@@ -321,12 +321,6 @@ set(GFX_D3D
     "${SRC_DIR}/gfx_d3d/r_xsurface.h"
 )
 
-if(KISAK_PLATFORM STREQUAL "mingw")
-    list(APPEND GFX_D3D
-        "${SRC_DIR}/gfx_d3d/d3dx_stub.cpp"
-    )
-endif()
-
 set(PHYSICS
     "${SRC_DIR}/physics/physpreset_load_obj.cpp"
     "${SRC_DIR}/physics/phys_coll_boxbrush.cpp"

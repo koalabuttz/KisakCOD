@@ -27,6 +27,11 @@ rendering real materials still need a game check. The extracted collection and
 comparison helpers also check literal and named constants, equivalent/self
 comparisons, reversed ordering signs and repeated comparisons.
 
+The separate [D3DX runtime check](d3dx_shader_runtime.md) compiles and reflects
+real shaders on Windows or Wine, including macros, includes, input/output
+semantics, COM ownership and invalid-input diagnostics. It needs the x86 D3DX9_43
+runtime but no GPU or game assets. Windows CI runs it in both configurations.
+
 GitHub Actions runs these checks alongside the Windows builds and native
 bootstrap check. Loading a map and quitting with licensed assets remain separate
 application checks.
