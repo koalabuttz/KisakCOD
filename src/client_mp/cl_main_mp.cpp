@@ -1917,59 +1917,75 @@ void __cdecl CL_BeginDownload(char *localName, char *remoteName);
 
 void __cdecl CL_NextDownload(int32_t localClientNum);
 
+static bool CL_CommitWWWDownload(const char *temporary, const char *destination)
+{
+#ifdef _WIN32
+    // Both names are under fs_homepath. Replace atomically and report failure;
+    // FS_CopyFile has no return value and can silently fail to open the target.
+    return MoveFileExA(temporary, destination, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
+#else
+    return rename(temporary, destination) == 0;
+#endif
+}
+
 void __cdecl CL_WWWDownload()
 {
-    char *error; // [esp+10h] [ebp-110h]
-    dlStatus_t ret; // [esp+14h] [ebp-10Ch]
-    char to_ospath[260]; // [esp+18h] [ebp-108h] BYREF
+    dlStatus_t ret = (dlStatus_t)DL_DownloadLoop();
+    if (ret == DL_CONTINUE)
+        return;
 
-    ret = (dlStatus_t)DL_DownloadLoop();
-    if (ret)
+    if (DL_DLIsMotd())
     {
-        if (DL_DLIsMotd())
+        if (ret == DL_DONE)
+            CL_FinishMotdDownload();
+        cls.wwwDlInProgress = 0;
+        return;
+    }
+
+    if (ret == DL_DONE)
+    {
+        char to_ospath[260];
+        FS_BuildOSPath((char*)fs_homepath->current.string, cls.originalDownloadName, (char*)"", to_ospath);
+        to_ospath[strlen(to_ospath) - 1] = 0;
+        if (!CL_CommitWWWDownload(cls.downloadTempName, to_ospath))
         {
-            if (ret == DL_DONE)
-                CL_FinishMotdDownload();
-            cls.wwwDlInProgress = 0;
+            remove(cls.downloadTempName);
+            ret = DL_FAILED;
         }
-        else if (ret == DL_DONE)
+    }
+
+    if (ret == DL_DONE)
+    {
+        cls.download = 0;
+        cls.downloadName[0] = 0;
+        cls.downloadTempName[0] = 0;
+        I_strncpyz(legacyHacks.cl_downloadName, "", sizeof(legacyHacks.cl_downloadName));
+        if (cls.wwwDlDisconnected)
         {
-            cls.download = 0;
-            FS_BuildOSPath((char*)fs_homepath->current.integer, cls.originalDownloadName, (char*)"", to_ospath);
-            to_ospath[&to_ospath[strlen(to_ospath) + 1] - &to_ospath[1] - 1] = 0;
-            if (rename(cls.downloadTempName, to_ospath))
-            {
-                FS_CopyFile(cls.downloadTempName, to_ospath);
-                remove(cls.downloadTempName);
-            }
-            cls.downloadName[0] = 0;
-            cls.downloadTempName[0] = 0;
-            I_strncpyz(legacyHacks.cl_downloadName, "", 64);
-            if (cls.wwwDlDisconnected)
-            {
-                if (!autoupdateStarted)
-                    Cbuf_AddText(0, "reconnect\n");
-            }
-            else
-            {
-                CL_AddReliableCommand(0, "wwwdl done");
-            }
-            cls.wwwDlInProgress = 0;
-            CL_NextDownload(0);
-        }
-        else if (cls.wwwDlDisconnected)
-        {
-            error = va("Download failure while getting %s", cls.downloadName);
-            cls.wwwDlDisconnected = 0;
-            CL_ClearStaticDownload();
-            Com_Error(ERR_DROP, error);
+            if (!autoupdateStarted)
+                Cbuf_AddText(0, "reconnect\n");
         }
         else
         {
-            Com_Printf(CON_CHANNEL_CLIENT, "Download failure while getting %s", cls.downloadName);
-            CL_AddReliableCommand(0, "wwwdl fail");
-            cls.wwwDlInProgress = 0;
+            CL_AddReliableCommand(0, "wwwdl done");
         }
+        cls.wwwDlInProgress = 0;
+        CL_NextDownload(0);
+    }
+    else if (cls.wwwDlDisconnected)
+    {
+        cls.wwwDlDisconnected = 0;
+        CL_ClearStaticDownload();
+        Com_Error(ERR_DROP, "HTTP download failed");
+    }
+    else
+    {
+        Com_Printf(CON_CHANNEL_CLIENT, "HTTP download failed; falling back to server download\n");
+        CL_AddReliableCommand(0, "wwwdl fail");
+        cls.wwwDlInProgress = 0;
+        I_strncpyz(cls.downloadName, cls.originalDownloadName, sizeof(cls.downloadName));
+        Com_sprintf(cls.downloadTempName, sizeof(cls.downloadTempName), "%s.tmp", cls.originalDownloadName);
+        legacyHacks.cl_downloadCount = 0;
     }
 }
 
