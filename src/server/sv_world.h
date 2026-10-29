@@ -35,6 +35,15 @@ void __cdecl SV_Trace(
     int locational,
     uint8_t *priorityMap,
     int staticmodels);
+// Capsule trace honoring every IgnoreEntParams flag, including the parent.
+void __cdecl SV_TraceCapsuleWithIgnore(
+    trace_t *results,
+    const float *start,
+    const float *mins,
+    const float *maxs,
+    const float *end,
+    const IgnoreEntParams *ignoreEntParams,
+    int contentmask);
 int __cdecl SV_TracePassed(
     const float *start,
     const float *mins,

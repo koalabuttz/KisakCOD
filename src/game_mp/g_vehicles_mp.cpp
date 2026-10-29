@@ -222,6 +222,51 @@ void __cdecl VEH_SetPosition(gentity_s *ent, const float *origin, const float *a
 }
 
 
+// Find a reachable standing/crouched capsule beside the vehicle or on its roof.
+// Sweeps ignore the occupied vehicle, while endpoint/ground checks include it.
+static bool G_VehFindExitPosition(gentity_s *ent, gentity_s *player, float *origin)
+{
+    const float clearance = 2.0f;
+    const float x = player->r.currentOrigin[0];
+    const float y = player->r.currentOrigin[1];
+    const float z = player->r.currentOrigin[2];
+    const float candidates[5][3] =
+    {
+        { ent->r.absmax[0] - player->r.mins[0] + clearance, y, z },
+        { ent->r.absmin[0] - player->r.maxs[0] - clearance, y, z },
+        { x, ent->r.absmax[1] - player->r.mins[1] + clearance, z },
+        { x, ent->r.absmin[1] - player->r.maxs[1] - clearance, z },
+        { x, y, ent->r.absmax[2] - player->r.mins[2] + clearance },
+    };
+    IgnoreEntParams ignore;
+    SV_SetupIgnoreEntParams(&ignore, player->s.number);
+    ignore.ignoreParent = 1;
+    IgnoreEntParams exitIgnore = ignore;
+    exitIgnore.ignoreParent = 0;
+    exitIgnore.ignoreSiblings = 0;
+    for (int i = 0; i < 5; ++i)
+    {
+        trace_t trace;
+        SV_TraceCapsuleWithIgnore(&trace, player->r.currentOrigin, player->r.mins,
+            player->r.maxs, candidates[i], &ignore, MASK_PLAYERSOLID);
+        if (trace.startsolid || trace.allsolid || trace.fraction < 1.0f)
+            continue;
+        // Check the complete player hull, not just a point above the vehicle.
+        SV_TraceCapsuleWithIgnore(&trace, candidates[i], player->r.mins, player->r.maxs,
+            candidates[i], &exitIgnore, MASK_PLAYERSOLID);
+        if (trace.startsolid || trace.allsolid)
+            continue;
+        float down[3] = { candidates[i][0], candidates[i][1], candidates[i][2] - 128.0f };
+        SV_TraceCapsuleWithIgnore(&trace, candidates[i], player->r.mins, player->r.maxs,
+            down, &exitIgnore, MASK_PLAYERSOLID);
+        if (trace.startsolid || trace.allsolid || trace.fraction == 1.0f)
+            continue;
+        Vec3Lerp(candidates[i], down, trace.fraction, origin);
+        return true;
+    }
+    return false;
+}
+
 void __cdecl G_VehUnlinkPlayer(gentity_s *ent, gentity_s *player)
 {
     gclient_s *client; // [esp+8h] [ebp-24h]
@@ -241,17 +286,20 @@ void __cdecl G_VehUnlinkPlayer(gentity_s *ent, gentity_s *player)
 
     iassert(veh);
 
-    veh->flags &= ~1u;
     angles[0] = client->ps.viewangles[0];
     angles[1] = client->ps.viewangles[1];
     angles[2] = 0.0;
-    origin[0] = player->r.currentOrigin[0];
-    origin[1] = player->r.currentOrigin[1];
-    origin[2] = player->r.currentOrigin[2];
-    origin[2] = ent->r.currentOrigin[2] + veh->phys.maxs[2];
     angles[0] = 0.0;
-    TeleportPlayer(player, origin, angles);
+    // Forced unlinking (death, disconnect or vehicle removal) must still clear
+    // ownership when every exit is blocked. Do not teleport into a solid then.
+    if (G_VehFindExitPosition(ent, player, origin))
+        TeleportPlayer(player, origin, angles);
     VehicleClearRideSlotForPlayer(ent, player->s.number);
+    bool occupied = false;
+    for (int i = 0; i < VEHICLE_RIDESLOTS_COUNT; ++i)
+        occupied |= veh->boneIndex.riderSlots[i].entNum != ENTITYNUM_NONE;
+    if (!occupied)
+        veh->flags &= ~1u;
     player->r.ownerNum.setEnt(NULL);
     client->ps.pm_flags &= ~PMF_VEHICLE_ATTACHED;
     client->ps.weapFlags &= ~0x80u;
@@ -319,8 +367,7 @@ void __cdecl G_VehiclesSetupSpawnedEnts()
         if (s_vehicles[i].entNum != ENTITYNUM_NONE)
         {
             ent = &g_entities[s_vehicles[i].entNum];
-            if (ent->classname != scr_const.script_vehicle)
-                MyAssertHandler(".\\game_mp\\g_vehicles_mp.cpp", 2751, 0, "%s", "ent->classname == scr_const.script_vehicle");
+            iassert(ent->s.eType == ET_VEHICLE);
             if (!ent->scr_vehicle)
                 MyAssertHandler(".\\game_mp\\g_vehicles_mp.cpp", 2752, 0, "%s", "ent->scr_vehicle");
             SetupCollisionMap(ent);
@@ -480,8 +527,6 @@ void __cdecl InitEntityVars(gentity_s *ent, scr_vehicle_s *veh, int32_t infoIdx)
     ent->r.contents = MASK_WEAPONCLIP;
     if ((ent->spawnflags & 1) != 0)
     {
-        if (!alwaysfails)
-            MyAssertHandler(".\\game_mp\\g_vehicles_mp.cpp", 2874, 0, "Initializing a usable vehicle!");
         ent->r.contents |= CONTENTS_USE;
     }
     ent->s.eType = ET_VEHICLE;
@@ -536,8 +581,22 @@ bool __cdecl G_VehUsable(gentity_s *vehicle, gentity_s *player)
     gclient_s *client; // [esp+0h] [ebp-4h]
 
     client = player->client;
-    if (!client)
+    if (!client || !vehicle->scr_vehicle || player->health <= 0
+        || client->sess.cs.team == TEAM_SPECTATOR)
         return 0;
+    if (vehicle->scr_vehicle->team != TEAM_FREE
+        && vehicle->scr_vehicle->team != client->sess.cs.team)
+        return 0;
+    // An unassigned vehicle can be used by either team, but opposing players
+    // cannot occupy it together. TEAM_FREE players retain free-for-all behavior.
+    for (int i = 0; i < VEHICLE_RIDESLOTS_COUNT; ++i)
+    {
+        int rider = vehicle->scr_vehicle->boneIndex.riderSlots[i].entNum;
+        if (rider != ENTITYNUM_NONE
+            && (rider < 0 || rider >= MAX_GENTITIES || !g_entities[rider].client
+                || g_entities[rider].client->sess.cs.team != client->sess.cs.team))
+            return 0;
+    }
     if ((client->ps.pm_flags & PMF_VEHICLE_ATTACHED) != 0)
         return 0;
     if (player->r.ownerNum.isDefined())
@@ -732,7 +791,7 @@ void __cdecl VEH_TouchEntities_0(gentity_s *ent, float frameTime)
                     Vec3Add(target->r.currentOrigin, mins, mins);
                     Vec3Add(target->r.currentOrigin, maxs, maxs);
                 }
-                else if (target->classname == scr_const.script_vehicle)
+                else if (target->scr_vehicle)
                 {
                     if (!target->model)
                         continue;
@@ -1128,9 +1187,10 @@ char __cdecl VEH_PlayerRotation(gentity_s *player, vehicle_physic_t *phys)
     char sign; // [esp+33h] [ebp-5h]
     float yawWanted; // [esp+34h] [ebp-4h]
 
-    angle = (double)player->client->sess.cmd.angles[1] * 0.0054931640625 + 180.0;
+    angle = (double)player->client->sess.cmd.angles[1] * 0.0054931640625
+        + player->client->ps.delta_angles[1];
     yawWanted = AngleNormalize360(angle);
-    v7 = phys->angles[1] + 90.0;
+    v7 = phys->angles[1];
     yawCurrent = AngleNormalize360(v7);
     v6 = yawWanted - yawCurrent;
     v9 = v6 * 0.002777777845039964;
@@ -1532,9 +1592,16 @@ void __cdecl G_VehEntHandler_Use(gentity_s *pEnt, gentity_s *pOther, gentity_s *
     if (pOther->client)
     {
         if ((pOther->client->ps.pm_flags & PMF_VEHICLE_ATTACHED) != 0)
-            G_EntUnlink(pOther);
-        else
+        {
+            float exitOrigin[3];
+            if (pOther->r.ownerNum.isDefined() && pOther->r.ownerNum.ent() == pEnt
+                && G_VehFindExitPosition(pEnt, pOther, exitOrigin))
+                G_EntUnlink(pOther);
+        }
+        else if (G_VehUsable(pEnt, pOther))
+        {
             LinkPlayerToVehicle(pEnt, pOther);
+        }
     }
 }
 
@@ -1557,8 +1624,7 @@ void __cdecl LinkPlayerToVehicle(gentity_s *ent, gentity_s *player)
     client = player->client;
     if (!client)
         MyAssertHandler(".\\game_mp\\g_vehicles_mp.cpp", 2487, 0, "%s", "client");
-    if (!alwaysfails)
-        MyAssertHandler(".\\game_mp\\g_vehicles_mp.cpp", 2489, 0, "Trying to attach a player to a vehicle!");
+    iassert(veh);
     if ((client->ps.pm_flags & PMF_VEHICLE_ATTACHED) != 0)
         Com_Error(ERR_DROP, "LinkPlayerToVehicle: Player is already using a vehicle");
     if (player->r.ownerNum.isDefined())

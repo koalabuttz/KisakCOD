@@ -525,7 +525,17 @@ void __cdecl Player_SetVehicleDropHint(gentity_s *ent)
 
     iassert(ent->r.ownerNum.isDefined());
 
-    ps->ps.cursorHintEntIndex = ent->r.ownerNum.entnum();
-    ent->r.ownerNum.ent()->flags |= FL_CURSOR_HINT;
+    gentity_s *vehicle = ent->r.ownerNum.ent();
+    ps->ps.cursorHintEntIndex = vehicle->s.number;
+    // A nonzero hint is also required by Player_ActivateCmd to route the use
+    // button to this vehicle. Without it, occupied players cannot exit.
+    ps->ps.cursorHint = HINT_ACTIVATE;
+    ps->ps.cursorHintString = -1;
+    if (vehicle->s.weapon && *BG_GetWeaponDef(vehicle->s.weapon)->dropHintString)
+    {
+        ps->ps.cursorHint = vehicle->s.weapon + WEAPON_HINT_OFFSET;
+        ps->ps.cursorHintString = BG_GetWeaponDef(vehicle->s.weapon)->dropHintStringIndex;
+    }
+    vehicle->flags |= FL_CURSOR_HINT;
 }
 

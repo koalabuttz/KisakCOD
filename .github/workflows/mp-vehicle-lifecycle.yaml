@@ -1,0 +1,38 @@
+name: Multiplayer vehicle lifecycle
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [master]
+    paths:
+      - src/game_mp/g_vehicles_mp.cpp
+      - src/game_mp/g_utils_mp.cpp
+      - src/game_mp/g_active_mp.cpp
+      - src/game_mp/player_use_mp.cpp
+      - src/client_mp/cl_input.cpp
+      - src/cgame_mp/cg_view_mp.cpp
+      - src/server/sv_world.cpp
+      - src/server/sv_world.h
+      - scripts/tests/test_mp_vehicle_lifecycle.py
+      - .github/workflows/mp-vehicle-lifecycle.yaml
+  push:
+    branches: [master]
+    paths:
+      - src/game_mp/g_vehicles_mp.cpp
+      - src/game_mp/g_utils_mp.cpp
+      - src/game_mp/g_active_mp.cpp
+      - src/game_mp/player_use_mp.cpp
+      - src/client_mp/cl_input.cpp
+      - src/cgame_mp/cg_view_mp.cpp
+      - src/server/sv_world.cpp
+      - src/server/sv_world.h
+      - scripts/tests/test_mp_vehicle_lifecycle.py
+      - .github/workflows/mp-vehicle-lifecycle.yaml
+
+jobs:
+  lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/tests/test_mp_vehicle_lifecycle.py
