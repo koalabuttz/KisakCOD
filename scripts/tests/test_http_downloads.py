@@ -57,7 +57,9 @@ extern "C" int getaddrinfo(const char* name, const char* service,
     assert(realLookup); return realLookup(name,service,hints,result);
 }
 #endif
+#ifndef _WIN32
 #define __cdecl
+#endif
 #define KISAK_MP
 constexpr int MAX_OSPATH = 260;
 constexpr int CON_CHANNEL_CLIENT = 1;
@@ -148,8 +150,8 @@ int main(int argc, char** argv) {
     pass("invalid names and protocols do not create files");
     assert(DL_ProgressValue(-1)==0 && DL_ProgressValue(0)==0);
     assert(DL_ProgressValue(123)==123);
-    assert(DL_ProgressValue(std::numeric_limits<curl_off_t>::max())==std::numeric_limits<int>::max());
-    assert(DL_Write(nullptr, std::numeric_limits<size_t>::max(), 2, nullptr)==0);
+    assert(DL_ProgressValue((std::numeric_limits<curl_off_t>::max)())==(std::numeric_limits<int>::max)());
+    assert(DL_Write(nullptr, (std::numeric_limits<size_t>::max)(), 2, nullptr)==0);
     pass("counter and write-size overflow bounds");
 
     legacyHacks.cl_downloadCount=999; legacyHacks.cl_downloadSize=1;
