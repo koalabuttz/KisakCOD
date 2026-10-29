@@ -1097,7 +1097,7 @@ void EmitCanonicalString(uint32_t stringValue)
 	else if (scrCompilePub.developer_statement == SCR_DEV_EVALUATE)
 	{
 		*(unsigned short*)scrCompileGlob.codePos = Scr_CompileCanonicalString(stringValue);
-		if (!*scrCompileGlob.codePos)
+		if (!*(unsigned short *)scrCompileGlob.codePos)
 			CompileError(0, "unknown field");
 	}
 	else
