@@ -1,4 +1,4 @@
-name: Script parser stack growth
+name: Script parser safety
 
 on:
   workflow_dispatch:
@@ -6,17 +6,25 @@ on:
     branches: [master]
     paths:
       - src/script/scr_yacc2.cpp
-      - src/script/scr_parser.cpp
+      - src/script/scr_main.cpp
       - src/script/scr_parsetree.cpp
+      - src/script/scr_yacc.h
+      - src/script/scr_yacc_structs.h
+      - src/script/scr_vm.h
       - scripts/tests/test_script_parser_stack.py
+      - scripts/tests/test_script_parser_recovery.py
       - .github/workflows/script-parser-stack.yaml
   push:
     branches: [master]
     paths:
       - src/script/scr_yacc2.cpp
-      - src/script/scr_parser.cpp
+      - src/script/scr_main.cpp
       - src/script/scr_parsetree.cpp
+      - src/script/scr_yacc.h
+      - src/script/scr_yacc_structs.h
+      - src/script/scr_vm.h
       - scripts/tests/test_script_parser_stack.py
+      - scripts/tests/test_script_parser_recovery.py
       - .github/workflows/script-parser-stack.yaml
 
 jobs:
@@ -26,3 +34,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 scripts/tests/test_script_parser_stack.py
+      - run: python3 scripts/tests/test_script_parser_recovery.py

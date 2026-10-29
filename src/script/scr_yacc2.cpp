@@ -2051,8 +2051,7 @@ yyerrlab1:
 			goto yyerrpop;
 		}
 
-		//if (++yyn < 0 || yyn > 0x543 || yycheck[yyn] != 1) // 0x59B on t5
-		if (++yyn >= 0x544 || yycheck[yyn] != 1) // LWSS CHANGE
+		if (++yyn < 0 || yyn >= 0x544 || yycheck[yyn] != 1)
 		{
 			goto yyerrpop;
 		}
