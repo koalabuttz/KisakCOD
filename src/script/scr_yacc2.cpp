@@ -1080,7 +1080,7 @@ int yyparse()
 	yyssp = yyss;
 	yyvsp = yyvs;
 
-//	goto yysetstate;
+	goto yysetstate;
 
 	while (1)
 	{
@@ -1090,10 +1090,12 @@ int yyparse()
 yynewstate:
 		/* In all cases, when you get here, the value and location stacks
 		have just been pushed.  So pushing a state here evens the stacks.  */
-		//yyssp++; // LWSS CHANGE - move ++ below
+		++yyssp;
 
-//	yysetstate:
-		*++yyssp = yystate;
+yysetstate:
+		// The initial state shares index zero with the initial semantic value.
+		// Keep both stacks aligned so relocation preserves yyvsp's position.
+		*yyssp = yystate;
 
 		if (yyssp >= &yyss[yystacksize - 1])
 		{
