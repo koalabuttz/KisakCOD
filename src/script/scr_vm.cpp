@@ -4887,7 +4887,8 @@ void __cdecl Scr_AccountForLoadingTime(uint32_t startTime)
 {
     if (scrVmGlob.loading)
     {
-        // Synchronous asset registration is engine work, not a looping script.
+        // Synchronous asset registration and console I/O are engine work, not
+        // time spent executing a looping script.
         // Retain all script time already spent; resetting the watchdog here
         // would let a loop evade it by repeatedly precaching an existing item.
         const uint32_t elapsed = static_cast<uint32_t>(Sys_Milliseconds()) - startTime;

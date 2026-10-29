@@ -922,12 +922,14 @@ void print()
 
     if (!g_NoScriptSpam->current.enabled)
     {
+        const uint32_t printStartTime = static_cast<uint32_t>(Sys_Milliseconds());
         NumParam = Scr_GetNumParam();
         for (i = 0; i < NumParam; ++i)
         {
             DebugString = Scr_GetDebugString(i);
             Com_Printf(level.scriptPrintChannel, "%s", DebugString);
         }
+        Scr_AccountForLoadingTime(printStartTime);
     }
 }
 
@@ -944,13 +946,17 @@ void println()
     }
     if (v0->current.enabled)
     {
+        const uint32_t printStartTime = static_cast<uint32_t>(Sys_Milliseconds());
         v1 = Sys_Milliseconds();
         Com_Printf(level.scriptPrintChannel, "PRINT TIME: %d\n", v1);
+        Scr_AccountForLoadingTime(printStartTime);
     }
     if (!g_NoScriptSpam->current.enabled)
     {
         print();
+        const uint32_t printStartTime = static_cast<uint32_t>(Sys_Milliseconds());
         Com_Printf(level.scriptPrintChannel, "\n");
+        Scr_AccountForLoadingTime(printStartTime);
     }
 }
 

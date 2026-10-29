@@ -7,6 +7,7 @@ python3 scripts/tests/test_shader_constant_order.py
 python3 scripts/tests/test_shellshock_channel_metadata.py
 python3 scripts/tests/test_script_loading_watchdog.py
 python3 scripts/tests/test_voice_lifecycle.py
+python3 scripts/tests/test_script_console_watchdog.py
 ```
 
 All scripts accept `--cxx` (or `CXX`) to select a compiler. They compile the
@@ -43,6 +44,11 @@ The watchdog check excludes synchronous item-registration time during loading
 without resetting script time already spent. It checks SP and MP precache calls,
 the five-second boundary, real pure/interleaved loops, clock wrap and unchanged
 runtime/precache restrictions.
+
+The console watchdog check applies the same loading-time accounting to script
+print output. It covers SP/MP print and println, profiling output, suppressed
+messages, nested accounting, clock wrap and genuine repeated-print loops. It
+preserves the script budget already consumed and normal runtime timing.
 
 The voice check exercises disabled/dedicated startup, device and codec failure
 rollback, repeated shutdown, off/on transitions and capture failures. It also
