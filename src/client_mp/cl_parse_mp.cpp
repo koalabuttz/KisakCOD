@@ -258,7 +258,7 @@ void __cdecl CL_ParseWWWDownload(int localClientNum, msg_t *msg)
     I_strncpyz(cls.downloadName, String, sizeof(cls.downloadName));
     cls.downloadSize = MSG_ReadLong(msg);
     cls.downloadFlags = MSG_ReadLong(msg);
-    if ((cls.downloadFlags & 2) != 0)
+    if (cl_wwwDownload->current.enabled && (cls.downloadFlags & 2) != 0)
     {
         Sys_OpenURL(cls.downloadName, 1);
         Cbuf_AddText(localClientNum, "quit\n");
@@ -269,18 +269,24 @@ void __cdecl CL_ParseWWWDownload(int localClientNum, msg_t *msg)
     else
     {
         legacyHacks.cl_downloadSize = cls.downloadSize;
-        Com_DPrintf(CON_CHANNEL_CLIENT, "Server redirected download: %s\n", cls.downloadName);
+        Com_DPrintf(CON_CHANNEL_CLIENT, "Server redirected download to HTTP\n");
         cls.wwwDlInProgress = 1;
         CL_AddReliableCommand(localClientNum, "wwwdl ack");
         FS_BuildOSPath(fs_homepath, cls.downloadTempName, (char *)"", toOSPath);
         I_strncpyz(cls.downloadTempName, toOSPath, sizeof(cls.downloadTempName));
         cls.downloadTempName[strlen(cls.downloadTempName) - 1] = 0;
-        if (!DL_BeginDownload(cls.downloadTempName, cls.downloadName))
+        if (!cl_wwwDownload->current.enabled || !DL_BeginDownload(cls.downloadTempName, cls.downloadName))
         {
             CL_AddReliableCommand(localClientNum, "wwwdl fail");
             DL_CancelDownload();
             cls.wwwDlInProgress = 0;
-            Com_Printf(CON_CHANNEL_CLIENT, "Failed to initialize download for '%s'\n", cls.downloadName);
+            // UDP fallback expects relative filesystem names, rather than the
+            // URL and absolute temporary path used by the HTTP subsystem.
+            I_strncpyz(cls.downloadName, cls.originalDownloadName, sizeof(cls.downloadName));
+            Com_sprintf(cls.downloadTempName, sizeof(cls.downloadTempName), "%s.tmp", cls.originalDownloadName);
+            legacyHacks.cl_downloadCount = 0;
+            Com_Printf(CON_CHANNEL_CLIENT, "Failed to initialize HTTP download\n");
+            return;
         }
         if ((cls.downloadFlags & 1) != 0)
         {

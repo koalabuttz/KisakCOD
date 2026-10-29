@@ -56,6 +56,9 @@ endif() # WIN32 AND NOT mingw
 target_include_directories(${PROJECT_NAME} PUBLIC ${SRC_DIR})
 target_include_directories(${PROJECT_NAME} PUBLIC ${DEPS_DIR})
 
+# dl_main uses a real, nonblocking HTTP(S) downloader on every platform.
+include(${SCRIPTS_DIR}/extern/curl.cmake)
+
 if (NOT KISAK_OPENAL)
     target_include_directories(${PROJECT_NAME} PUBLIC "${DEPS_DIR}/msslib")
 endif()
