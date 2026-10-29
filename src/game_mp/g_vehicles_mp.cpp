@@ -37,6 +37,122 @@ extern uint16_t *s_flashTags[5];
 extern short s_numVehicleInfos;
 extern cspField_t s_vehicleFields[33];
 
+// Sound aliases are server vehicle metadata. Reuse the replicated sound-blend
+// entity type so remote clients need no vehicle-info table or new protocol.
+static void G_VehFreeSoundBlend(EntHandle *handle)
+{
+    if (!handle->isDefined())
+        return;
+    gentity_s *sound = handle->ent();
+    iassert(sound->s.eType == ET_SOUND_BLEND);
+    // Clear the owning handle before entity cleanup can dissociate references.
+    handle->setEnt(NULL);
+    G_FreeEntity(sound);
+}
+
+static void G_VehFreeEngineSounds(scr_vehicle_s *veh)
+{
+    G_VehFreeSoundBlend(&veh->idleSndEnt);
+    G_VehFreeSoundBlend(&veh->engineSndEnt);
+}
+
+static void G_VehInitSoundBlend(gentity_s *sound, gentity_s *vehicle)
+{
+    Scr_SetStringFromCharString(&sound->classname, "sound_blend");
+    sound->s.eType = ET_SOUND_BLEND;
+    sound->s.lerp.pos.trType = TR_INTERPOLATE;
+    sound->s.lerp.apos.trType = TR_STATIONARY;
+    sound->r.contents = 0;
+    sound->r.ownerNum.setEnt(vehicle);
+    sound->s.eventParms[0] = 0;
+    sound->s.eventParms[1] = 0;
+}
+
+static bool G_VehEnsureEngineSounds(gentity_s *ent, const vehicle_info_t *info)
+{
+    scr_vehicle_s *veh = ent->scr_vehicle;
+    bool idle = info->sndIndices[VEH_LOW_IDLE_SND] && info->sndIndices[VEH_HIGH_IDLE_SND];
+    bool engine = info->sndIndices[VEH_LOW_ENGINE_SND] && info->sndIndices[VEH_HIGH_ENGINE_SND];
+    // Empty or incomplete pairs remain silent, as in the SP vehicle system.
+    if (!idle)
+        G_VehFreeSoundBlend(&veh->idleSndEnt);
+    if (!engine)
+        G_VehFreeSoundBlend(&veh->engineSndEnt);
+    bool needIdle = idle && !veh->idleSndEnt.isDefined();
+    bool needEngine = engine && !veh->engineSndEnt.isDefined();
+    gentity_s *newIdle = needIdle ? G_TrySpawn() : NULL;
+    if (needIdle && !newIdle)
+        return false;
+    gentity_s *newEngine = needEngine ? G_TrySpawn() : NULL;
+    if (needEngine && !newEngine)
+    {
+        if (newIdle)
+            G_FreeEntity(newIdle);
+        return false;
+    }
+    if (newIdle)
+    {
+        G_VehInitSoundBlend(newIdle, ent);
+        veh->idleSndEnt.setEnt(newIdle);
+    }
+    if (newEngine)
+    {
+        G_VehInitSoundBlend(newEngine, ent);
+        veh->engineSndEnt.setEnt(newEngine);
+    }
+    return true;
+}
+
+static void G_VehUpdateSoundBlend(EntHandle *handle, const float *origin,
+    uint8_t lowAlias, uint8_t highAlias, float lerp)
+{
+    if (!handle->isDefined())
+        return;
+    gentity_s *sound = handle->ent();
+    iassert(sound->s.eType == ET_SOUND_BLEND);
+    sound->s.eventParms[0] = lowAlias;
+    sound->s.eventParms[1] = highAlias;
+    sound->s.lerp.u.soundBlend.lerp = lerp;
+    G_SetOrigin(sound, origin);
+    sound->s.lerp.pos.trType = TR_INTERPOLATE;
+    SV_LinkEntity(sound);
+}
+
+static void G_VehUpdateEngineSounds(gentity_s *ent)
+{
+    scr_vehicle_s *veh = ent->scr_vehicle;
+    iassert(veh);
+    if (ent->health <= 0 || !veh->playEngineSound)
+    {
+        G_VehFreeEngineSounds(veh);
+        return;
+    }
+    const vehicle_info_t *info = &s_vehicleInfos[veh->infoIdx];
+    G_VehEnsureEngineSounds(ent, info);
+    if (!veh->idleSndEnt.isDefined() && !veh->engineSndEnt.isDefined())
+        return;
+    float engineLerp = 0.0f;
+    if (info->engineSndSpeed > 0.0f && veh->speed > 0.0f)
+    {
+        engineLerp = veh->speed / info->engineSndSpeed;
+        if (engineLerp > 1.0f)
+            engineLerp = 1.0f;
+    }
+    veh->engineSndLerp = engineLerp;
+    veh->idleSndLerp = 1.0f - engineLerp;
+    float origin[3];
+    if (!G_DObjGetWorldTagPos(ent, scr_const.tag_origin, origin))
+    {
+        origin[0] = ent->r.currentOrigin[0];
+        origin[1] = ent->r.currentOrigin[1];
+        origin[2] = ent->r.currentOrigin[2];
+    }
+    G_VehUpdateSoundBlend(&veh->idleSndEnt, origin,
+        info->sndIndices[VEH_LOW_IDLE_SND], info->sndIndices[VEH_HIGH_IDLE_SND], veh->idleSndLerp);
+    G_VehUpdateSoundBlend(&veh->engineSndEnt, origin,
+        info->sndIndices[VEH_LOW_ENGINE_SND], info->sndIndices[VEH_HIGH_ENGINE_SND], veh->engineSndLerp);
+}
+
 void __cdecl CG_VehRegisterDvars();
 
 clientInfo_t *__cdecl ClientInfoForLocalClient(int32_t localClientNum)
@@ -470,6 +586,9 @@ void __cdecl InitEntityVehicleVars(gentity_s *ent, scr_vehicle_s *veh, __int16 i
     veh->joltSpeed = 0.0;
     veh->joltDecel = 0.0;
     veh->turretHitNum = 0;
+    veh->playEngineSound = 1;
+    veh->idleSndLerp = 0.0f;
+    veh->engineSndLerp = 0.0f;
     VEH_SetPosition(ent, ent->r.currentOrigin, ent->r.currentAngles);
 }
 
@@ -519,8 +638,7 @@ void __cdecl G_VehFreeEntity(gentity_s *vehEnt)
     Scr_SetString(&scr_vehicle->lookAtText0, 0);
     Scr_SetString(&scr_vehicle->lookAtText1, 0);
     scr_vehicle->lookAtEnt.setEnt(NULL);
-    scr_vehicle->idleSndEnt.setEnt(NULL);
-    scr_vehicle->engineSndEnt.setEnt(NULL);
+    G_VehFreeEngineSounds(scr_vehicle);
     vehEnt->nextthink = 0;
     vehEnt->takedamage = 0;
     vehEnt->active = 0;
@@ -841,6 +959,7 @@ void __cdecl G_VehEntHandler_Think(gentity_s *pSelf)
         VEH_UpdateSteering(pSelf);
         VEH_UpdateMaterialTime(pSelf, frameTime);
         VEH_UpdateSounds(pSelf);
+        G_VehUpdateEngineSounds(pSelf);
         pSelf->s.time2 = (int)(info->suspensionTravel * 1000.0);
         pSelf->nextthink = level.time + 50;
     }

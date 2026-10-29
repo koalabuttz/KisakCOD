@@ -1180,7 +1180,7 @@ void __cdecl G_PrintEntities()
     }
 }
 
-gentity_s *__cdecl G_Spawn()
+gentity_s *__cdecl G_TrySpawn()
 {
     gentity_s *e; // [esp+0h] [ebp-4h]
 
@@ -1195,15 +1195,23 @@ gentity_s *__cdecl G_Spawn()
     else
     {
         if (level.num_entities >= ENTITYNUM_WORLD)
-        {
-            G_PrintEntities();
-            Com_Error(ERR_DROP, "G_Spawn: no free entities");
-        }
+            return NULL;
         e = &level.gentities[level.num_entities++];
         SV_LocateGameData(level.gentities, level.num_entities, sizeof(gentity_s), &level.clients->ps, sizeof(gclient_s));
     }
     G_InitGentity(e);
     return e;
+}
+
+gentity_s *__cdecl G_Spawn()
+{
+    gentity_s *ent = G_TrySpawn();
+    if (!ent)
+    {
+        G_PrintEntities();
+        Com_Error(ERR_DROP, "G_Spawn: no free entities");
+    }
+    return ent;
 }
 
 bool __cdecl G_MaySpawnEntity(gentity_s *e)

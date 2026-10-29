@@ -54,6 +54,8 @@ void __cdecl G_DObjGetWorldBoneIndexMatrix(gentity_s *ent, int boneIndex, float 
 gentity_s *__cdecl G_Find(gentity_s *from, int fieldofs, uint16_t match);
 void __cdecl G_InitGentity(gentity_s *e);
 void __cdecl G_PrintEntities();
+// Optional entities may fail allocation without dropping the server.
+gentity_s *__cdecl G_TrySpawn();
 gentity_s *__cdecl G_Spawn();
 bool __cdecl G_MaySpawnEntity(gentity_s *e);
 gentity_s *__cdecl G_SpawnPlayerClone();

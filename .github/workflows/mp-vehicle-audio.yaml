@@ -1,0 +1,30 @@
+name: Multiplayer vehicle audio
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [master]
+    paths:
+      - src/game_mp/g_vehicles_mp.cpp
+      - src/game_mp/g_utils_mp.cpp
+      - src/game_mp/g_utils_mp.h
+      - src/cgame_mp/cg_vehicles_mp.cpp
+      - scripts/tests/test_mp_vehicle_audio.py
+      - .github/workflows/mp-vehicle-audio.yaml
+  push:
+    branches: [master]
+    paths:
+      - src/game_mp/g_vehicles_mp.cpp
+      - src/game_mp/g_utils_mp.cpp
+      - src/game_mp/g_utils_mp.h
+      - src/cgame_mp/cg_vehicles_mp.cpp
+      - scripts/tests/test_mp_vehicle_audio.py
+      - .github/workflows/mp-vehicle-audio.yaml
+
+jobs:
+  audio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/tests/test_mp_vehicle_audio.py
