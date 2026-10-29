@@ -51,6 +51,7 @@ using mat3x3 = float[3][3];
 #define iassert(x) assert(x)
 constexpr int ENTITYNUM_NONE=1023, ENTITYNUM_WORLD=1022, MAX_GENTITIES=1024, VEHICLE_RIDESLOTS_COUNT=3;
 constexpr int VEHICLE_RIDESLOT_DRIVER=0, VEHICLE_RIDESLOT_PASSENGER=1, VEHICLE_RIDESLOT_GUNNER=2;
+constexpr int VEH_WHEELS_4=0,VEH_TANK=1;
 constexpr int PMF_VEHICLE_ATTACHED=0x100000, PMF_MANTLE=4, PMF_SPRINTING=8;
 constexpr int PM_NORMAL=0, PM_NORMAL_LINKED=1, PM_DEAD=2, PM_DEAD_LINKED=3;
 constexpr int ET_VEHICLE=12, TR_INTERPOLATE=1, CONTENTS_USE=0x200000, MASK_WEAPONCLIP=3;
@@ -84,10 +85,10 @@ struct gclient_s {
  Handle useHoldEntity; int useHoldTime{};
 };
 struct VehicleRideSlot_t { uint32_t tagName{}; int boneIdx=-1, entNum=ENTITYNUM_NONE; };
-struct vehicle_physic_t { float maxs[3]{}, angles[3]{}; };
+struct vehicle_physic_t { float maxs[3]{}, angles[3]{},mins[3]{},origin[3]{},prevOrigin[3]{},prevAngles[3]{},wheelZPos[4]{}; };
 struct scr_vehicle_s {
  int flags{}, team{}, infoIdx{}, entNum=ENTITYNUM_NONE; float speed{};
- struct { VehicleRideSlot_t riderSlots[3]; } boneIndex;
+ struct { VehicleRideSlot_t riderSlots[3];int wheel[4]{-1,-1,-1,-1}; } boneIndex;
  vehicle_physic_t phys;
 };
 struct tagInfo_s {
@@ -119,7 +120,8 @@ struct { int time=100; } level;
 struct clientInfo_t { bool infoValid=true; char model[64]{},attachModelNames[6][64]{},attachTagNames[6][64]{}; };
 struct { clientInfo_t clientinfo[64]; } level_bgs;
 struct { uint16_t script_vehicle=71, script_vehicle_collmap=73,tag_driver=10,tag_passenger=11; } scr_const;
-struct { char turretWeapon[64]{}; } s_vehicleInfos[8];
+struct vehicle_info_t { char turretWeapon[64]{};int type=VEH_WHEELS_4; };
+vehicle_info_t s_vehicleInfos[8];
 struct trace_t { bool startsolid{},allsolid{}; float fraction=1;int hitType{},hitId{};float normal[3]{}; };
 struct IgnoreEntParams { int baseEntity{},parentEntity{},ignoreParent{},ignoreSiblings=1;bool ignoreSelf=true,ignoreChildren=true; };
 struct WeaponDef { const char *dropHintString=""; int dropHintStringIndex=13; } weapon;
@@ -148,6 +150,11 @@ void SV_LinkEntity(gentity_s*e) { ++linked;updateBounds(e); }
 void SV_DObjGetBounds(gentity_s*,float*,float*) {}
 int G_GetWeaponIndexForName(const char*) { return 1; }
 void SetupCollisionMap(gentity_s*) { ++collisionSetups; }
+void VEH_GetWheelOrigin(gentity_s*,int i,float*out) { out[0]=i==0?-20:20;out[1]=out[2]=0; }
+void VEH_GroundPlant(gentity_s*e,int gravity,float frame) { assert(gravity==0&&frame==0.05f);e->scr_vehicle->phys.origin[2]=7; }
+void VEH_SetPosition(gentity_s*e,const float*origin,const float*angles) { G_SetOrigin(e,origin);G_SetAngle(e,angles); }
+void VEH_TouchEntities_0(gentity_s*,float frame) { assert(frame==0.05f); }
+
 int G_ModelName(int index) { return index; }
 const char* SL_ConvertToString(int) { return "model"; }
 void I_strncpyz(char*o,const char*i,unsigned n) { std::snprintf(o,n,"%s",i); }
@@ -297,7 +304,7 @@ void reset() {
  for(int i=0;i<3;++i){auto&r=v.scr_vehicle->boneIndex.riderSlots[i];r.boneIdx=i;r.tagName=10+i;}
  teleports=linked=collisionSetups=traceSweeps=traceChecks=0;
  blockCandidate=-1;blockAll=noGround=lowCeiling=endpointSolid=startSolid=false;
- scriptActive=driving=true;input=clientActive_t{};weapon=WeaponDef{};minHeight.current.value=-15;maxHeight.current.value=50;ceilingHeight=85;clippedEntities.clear();cgame=cg_s{};
+ scriptActive=driving=true;input=clientActive_t{};weapon=WeaponDef{};minHeight.current.value=-15;maxHeight.current.value=50;ceilingHeight=85;clippedEntities.clear();cgame=cg_s{};s_vehicleInfos[0].type=VEH_WHEELS_4;
 }
 gentity_s* vehicle() { return &g_entities[100]; }
 gentity_s* player(int i=0) { return &g_entities[i]; }
@@ -442,6 +449,31 @@ void testCameraZeroOrNegativeMaximum() {
  maxHeight.current.value=-10;input.vehicleViewPitch=-30;CalcViewValuesVehicleDriver(0);assert(recordedFocus[2]==55);
  for(float v:cgame.refdef.vieworg)assert(std::isfinite(v));
 }
+void testFirstThinkFourWheelInitialization() {
+ auto*v=vehicle();v->scr_vehicle->flags=0;InitFirstThink(v);
+ assert(v->scr_vehicle->flags&8);assert(v->scr_vehicle->phys.mins[0]==-30);
+ assert(v->scr_vehicle->phys.maxs[0]==30&&v->scr_vehicle->phys.maxs[2]==60);
+ assert(v->health==99999&&v->handler==ENT_HANDLER_VEHICLE&&v->nextthink==level.time+50);
+}
+void testFirstThinkWheelHeightTags() {
+ auto&veh=*vehicle()->scr_vehicle;veh.boneIndex.wheel[0]=1;veh.boneIndex.wheel[2]=2;
+ veh.phys.wheelZPos[1]=-4;InitFirstThink(vehicle());
+ assert(veh.phys.wheelZPos[0]==40&&veh.phys.wheelZPos[2]==40&&veh.phys.wheelZPos[1]==-4);
+}
+void testFirstThinkBacksUpPosition() {
+ auto&phys=vehicle()->scr_vehicle->phys;phys.origin[0]=10;phys.origin[1]=20;phys.angles[1]=90;
+ InitFirstThink(vehicle());assert(phys.prevOrigin[0]==10&&phys.prevOrigin[1]==20&&phys.prevOrigin[2]==7);
+ assert(phys.prevAngles[1]==90&&vehicle()->r.currentAngles[1]==90);
+}
+void testFirstThinkHelicopterPreservesBounds() {
+ s_vehicleInfos[0].type=5;auto&phys=vehicle()->scr_vehicle->phys;
+ phys.mins[0]=-12;phys.maxs[0]=12;InitFirstThink(vehicle());assert(phys.mins[0]==-12&&phys.maxs[0]==12);
+}
+void testFirstThinkUnsupportedTankStillRejected() {
+ s_vehicleInfos[0].type=VEH_TANK;bool rejected=false;
+ try { InitFirstThink(vehicle()); } catch(const std::runtime_error&) { rejected=true; }
+ assert(rejected);
+}
 int main(int argc,char**argv) {
  const std::map<std::string,std::function<void()>> cases={
 #define CASE(name) {#name,test##name}
@@ -456,7 +488,9 @@ int main(int argc,char**argv) {
  CASE(InputWrap),CASE(NonDriverInputUnchanged),CASE(SteeringStraightAndTurns),CASE(SteeringWrapAndClamp),
  CASE(TraceParentFlagAndLegacyPath),CASE(TraceEndpointIncludesOtherOccupant),CASE(TraceSelfFlag),CASE(TraceChildrenFlag),
  CASE(TraceWorldHitPreservesNormal),CASE(TraceEntityHitBeforeWorld),CASE(TraceWorldStartSolid),CASE(TraceStationaryParentOverlap),
- CASE(InputPitchLimits),CASE(InputPitchInvertedAndEqualLimits),CASE(CameraFocusWithinRange),CASE(CameraZeroOrNegativeMaximum)
+ CASE(InputPitchLimits),CASE(InputPitchInvertedAndEqualLimits),CASE(CameraFocusWithinRange),CASE(CameraZeroOrNegativeMaximum),
+ CASE(FirstThinkFourWheelInitialization),CASE(FirstThinkWheelHeightTags),CASE(FirstThinkBacksUpPosition),
+ CASE(FirstThinkHelicopterPreservesBounds),CASE(FirstThinkUnsupportedTankStillRejected)
 #undef CASE
  };
  if(argc==1){for(auto&c:cases)std::puts(c.first.c_str());return 0;}
@@ -472,7 +506,7 @@ def main():
     args=parser.parse_args()
     groups={
         'src/server/sv_world.cpp':['SV_SetupIgnoreEntParams','SV_ClipMoveToEntity','SV_Trace','SV_TraceCapsuleWithIgnore'],
-        'src/game_mp/g_vehicles_mp.cpp': ['G_VehPlayerRideSlot','G_VehFindExitPosition','G_VehUnlinkPlayer','VehicleClearRideSlotForPlayer','G_VehiclesSetupSpawnedEnts','InitEntityVars','G_VehUsable','VehicleHasSeatFree','G_VehEntHandler_Use','LinkPlayerToVehicle','VEH_PlayerRotation'],
+        'src/game_mp/g_vehicles_mp.cpp': ['G_VehPlayerRideSlot','G_VehFindExitPosition','G_VehUnlinkPlayer','VehicleClearRideSlotForPlayer','G_VehiclesSetupSpawnedEnts','InitEntityVars','G_VehUsable','VehicleHasSeatFree','G_VehEntHandler_Use','LinkPlayerToVehicle','VEH_PlayerRotation','InitFirstThink'],
         'src/game_mp/g_utils_mp.cpp':['G_EntUnlink'],
         'src/game_mp/g_active_mp.cpp':['G_UpdateClientInfo'],
         'src/game_mp/player_use_mp.cpp':['Player_SetVehicleDropHint','Player_ActivateCmd'],
