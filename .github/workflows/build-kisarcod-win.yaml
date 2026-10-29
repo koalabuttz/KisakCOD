@@ -20,6 +20,8 @@ jobs:
         run: python3 scripts/tests/test_script_vm_field_stack.py
       - name: Shader constant ordering
         run: python3 scripts/tests/test_shader_constant_order.py
+      - name: Dedicated shellshock sound channels
+        run: python3 scripts/tests/test_shellshock_channel_metadata.py
 
   build:
     name: Build with DirectX SDK

@@ -2185,6 +2185,11 @@ int __cdecl BG_LoadShellShockDvars(const char *name)
     int success; // [esp+1BCh] [ebp-8h]
     int i; // [esp+1C0h] [ebp-4h]
 
+    // Dedicated servers skip SND_Init, but shellshock files still contain the
+    // per-channel volume settings. Load their metadata without an audio device.
+    if (!SND_GetEntChannelCount())
+        SND_InitEntChannels();
+
     Com_sprintf(fullpath, 0x40u, "shock/%s.shock", name);
     filebuf = Com_LoadRawTextFile(fullpath);
     if (filebuf

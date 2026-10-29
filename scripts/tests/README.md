@@ -4,6 +4,7 @@ These asset-free regression checks require Python 3 and a C++20 compiler:
 python3 scripts/tests/test_renderer_command_ownership.py
 python3 scripts/tests/test_script_vm_field_stack.py
 python3 scripts/tests/test_shader_constant_order.py
+python3 scripts/tests/test_shellshock_channel_metadata.py
 ```
 
 All scripts accept `--cxx` (or `CXX`) to select a compiler. They compile the
@@ -31,6 +32,10 @@ The separate [D3DX runtime check](d3dx_shader_runtime.md) compiles and reflects
 real shaders on Windows or Wine, including macros, includes, input/output
 semantics, COM ownership and invalid-input diagnostics. It needs the x86 D3DX9_43
 runtime but no GPU or game assets. Windows CI runs it in both configurations.
+
+The shellshock check loads sound-channel metadata without an audio device,
+verifies repeated/client reuse and fallback settings, and preserves warnings for
+unknown channel names and errors for missing channel definitions.
 
 GitHub Actions runs these checks alongside the Windows builds and native
 bootstrap check. Loading a map and quitting with licensed assets remain separate
