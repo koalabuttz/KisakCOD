@@ -24,6 +24,8 @@ int sampleCount;
 float voice_current_voicelevel;
 bool playing;
 int count;
+static bool s_voiceDisabledByConfig;
+static bool s_voiceMixerConfigured;
 
 dsound_sample_t *currentRecordingSample;
 dsound_sample_t *s_clientSamples[64];
@@ -584,12 +586,18 @@ dsound_sample_t *__cdecl Sound_NewSample()
     return DSound_NewSample();
 }
 
+void __cdecl Record_Shutdown();
+void __cdecl Sound_Shutdown();
+
 bool __cdecl Voice_Init()
 {
     DvarLimits min; // [esp+4h] [ebp-30h]
     DvarLimits mina; // [esp+4h] [ebp-30h]
     HWND__ *handle; // [esp+2Ch] [ebp-8h]
     int client; // [esp+30h] [ebp-4h]
+
+    if (g_voice_initialized)
+        return true;
 
     winvoice_mic_mute = Dvar_RegisterBool("winvoice_mic_mute", 1, DVAR_ARCHIVE, "Mute the microphone");
     min.value.max = 65535.0;
@@ -599,23 +607,50 @@ bool __cdecl Voice_Init()
     mina.value.max = 2.0;
     mina.value.min = 0.25;
     winvoice_mic_scaler = Dvar_RegisterFloat("winvoice_mic_scaler", 1.0, mina, DVAR_ARCHIVE, "Microphone scaler value");
+
+    // Voice is optional, including on clients without audio hardware.  Do not
+    // open a mixer or a DirectSound device when communications are disabled.
+    s_voiceDisabledByConfig = !cl_voice || !cl_voice->current.enabled;
+    if (s_voiceDisabledByConfig || (com_dedicated && com_dedicated->current.integer))
+        return false;
+
+    g_current_bandwidth_setting = 0;
+    handle = GetDesktopWindow();
+    if (!Record_Init())
+    {
+        Record_Shutdown();
+        return false;
+    }
+    if (!Sound_Init(handle)
+        || !Encode_Init(g_current_bandwidth_setting)
+        || !Decode_Init(g_current_bandwidth_setting))
+    {
+        Record_Shutdown();
+        Decode_Shutdown();
+        Sound_Shutdown();
+        return false;
+    }
+
+    g_voice_initialized = 1;
+    memset(s_clientTalkTime, 0, sizeof(s_clientTalkTime));
+    for (client = 0; client < 64; ++client)
+    {
+        s_clientSamples[client] = Sound_NewSample();
+        if (!s_clientSamples[client])
+        {
+            Voice_Shutdown();
+            return false;
+        }
+    }
+
     mixerGetRecordSource(old_rec_source);
     mixerSetRecordSource((char*)"Mic");
     mic_old_reclevel = mixerGetRecordLevel((char*)"Mic");
     mic_current_reclevel = (unsigned __int16)(int)winvoice_mic_reclevel->current.value;
     mixerSetRecordLevel((char*)"Mic", (int)winvoice_mic_reclevel->current.value);
     mixerSetMicrophoneMute(winvoice_mic_mute->current.color[0]);
-    g_current_bandwidth_setting = 0;
-    handle = GetDesktopWindow();
-    const auto recordInitialized = Record_Init();
-    const auto soundInitialized = Sound_Init(handle);
-    Encode_Init(g_current_bandwidth_setting);
-    Decode_Init(g_current_bandwidth_setting);
-    g_voice_initialized = recordInitialized && soundInitialized;
-    memset((unsigned __int8 *)s_clientTalkTime, 0, sizeof(s_clientTalkTime));
-    for (client = 0; client < 64; ++client)
-        s_clientSamples[client] = Sound_NewSample();
-    return 0;
+    s_voiceMixerConfigured = true;
+    return true;
 }
 
 int __cdecl Record_DestroySample(dsound_sample_t *sample);
@@ -640,16 +675,27 @@ void __cdecl Voice_Shutdown()
 {
     int client; // [esp+0h] [ebp-4h]
 
+    cl_voiceCommunication.voicePacketCount = 0;
+    if (!g_voice_initialized)
+        return;
+
     for (client = 0; client < 64; ++client)
-        Sound_DestroySample(s_clientSamples[client]);
+    {
+        if (s_clientSamples[client])
+            Sound_DestroySample(s_clientSamples[client]);
+        s_clientSamples[client] = nullptr;
+    }
     Voice_StopRecording();
     Record_Shutdown();
-    Encode_Shutdown();
     Decode_Shutdown();
     Sound_Shutdown();
-    mixerSetMicrophoneMute(1);
-    mixerSetRecordLevel((char*)"Mic", mic_old_reclevel);
-    mixerSetRecordSource(old_rec_source);
+    if (s_voiceMixerConfigured)
+    {
+        mixerSetMicrophoneMute(1);
+        mixerSetRecordLevel((char*)"Mic", mic_old_reclevel);
+        mixerSetRecordSource(old_rec_source);
+        s_voiceMixerConfigured = false;
+    }
     g_voice_initialized = 0;
 }
 
@@ -702,10 +748,23 @@ void __cdecl Record_Frame()
 
 int __cdecl Voice_GetLocalVoiceData()
 {
+    if (!cl_voice || !cl_voice->current.enabled)
+    {
+        Voice_Shutdown();
+        s_voiceDisabledByConfig = true;
+        return 0;
+    }
+    // An explicit off/on transition may retry unavailable hardware.  A failed
+    // device initialization by itself must not reopen devices every frame.
+    if (s_voiceDisabledByConfig)
+    {
+        s_voiceDisabledByConfig = false;
+        Voice_Init();
+    }
     if (!g_voice_initialized)
         return 0;
-    if (!recording)
-        Voice_StartRecording();
+    if (!recording && !Voice_StartRecording())
+        return 0;
     if (winvoice_mic_scaler->current.value != voice_current_scaler)
     {
         voice_current_scaler = winvoice_mic_scaler->current.value;
@@ -735,6 +794,9 @@ void __cdecl Voice_IncomingVoiceData(unsigned __int8 talker, unsigned __int8 *da
     int v5; // [esp+10h] [ebp-200Ch]
     __int16 out[4096]; // [esp+14h] [ebp-2008h] BYREF
     uint32_t data_len; // [esp+2018h] [ebp-4h]
+
+    if (!g_voice_initialized)
+        return;
 
     if (!playing)
         playing = 1;
@@ -790,10 +852,19 @@ HRESULT __cdecl Record_Start(dsound_sample_t *sample)
 
 char __cdecl Voice_StartRecording()
 {
+    if (!g_voice_initialized)
+        return 0;
     if (!recording)
     {
         currentRecordingSample = Record_NewSample();
-        Record_Start(currentRecordingSample);
+        if (!currentRecordingSample || Record_Start(currentRecordingSample) < 0)
+        {
+            if (currentRecordingSample)
+                Record_DestroySample(currentRecordingSample);
+            currentRecordingSample = nullptr;
+            Voice_Shutdown();
+            return 0;
+        }
         recording = 1;
         ++count;
     }
@@ -816,6 +887,7 @@ char __cdecl Voice_StopRecording()
         return 0;
     Record_Stop(currentRecordingSample);
     Record_DestroySample(currentRecordingSample);
+    currentRecordingSample = nullptr;
     recording = 0;
     return 1;
 }

@@ -6,6 +6,7 @@ python3 scripts/tests/test_script_vm_field_stack.py
 python3 scripts/tests/test_shader_constant_order.py
 python3 scripts/tests/test_shellshock_channel_metadata.py
 python3 scripts/tests/test_script_loading_watchdog.py
+python3 scripts/tests/test_voice_lifecycle.py
 ```
 
 All scripts accept `--cxx` (or `CXX`) to select a compiler. They compile the
@@ -42,6 +43,12 @@ The watchdog check excludes synchronous item-registration time during loading
 without resetting script time already spent. It checks SP and MP precache calls,
 the five-second boundary, real pure/interleaved loops, clock wrap and unchanged
 runtime/precache restrictions.
+
+The voice check exercises disabled/dedicated startup, device and codec failure
+rollback, repeated shutdown, off/on transitions and capture failures. It also
+checks COM buffer ownership and bounded sample storage through 1,000 capture
+stop/start cycles. Audio devices and codec allocation use checked test doubles;
+physical microphone/playback behavior still needs a device test.
 
 GitHub Actions runs these checks alongside the Windows builds and native
 bootstrap check. Loading a map and quitting with licensed assets remain separate

@@ -128,7 +128,8 @@ dsound_sample_t *__cdecl DSOUNDRecord_NewSample()
     if (!g_recording_initialized)
         return nullptr;
 
-    iassert(s_recordingSamplePtr - s_recordingSamples <= 64 /* MAX_CLIENTS */ + 1);
+    if (s_recordingSamplePtr >= s_recordingSamples + ARRAY_COUNT(s_recordingSamples))
+        return nullptr;
 
     pRecSample = s_recordingSamplePtr++;
     memset(pRecSample, 0, sizeof(dsound_sample_t));
@@ -143,13 +144,28 @@ dsound_sample_t *__cdecl DSOUNDRecord_NewSample()
 
 int __cdecl DSOUNDRecord_DestroySample(dsound_sample_t *pRecSample)
 {
-    if (!g_recording_initialized)
+    if (!pRecSample)
         return 0;
+    if (pRecSample->DSCB)
+    {
+        pRecSample->DSCB->Stop();
+        pRecSample->DSCB->Release();
+        pRecSample->DSCB = nullptr;
+    }
+    if (g_current_sample == pRecSample)
+    {
+        g_current_sample = nullptr;
+        g_currently_recording = 0;
+    }
     if (pRecSample->DSB)
     {
         pRecSample->DSB->Release();
         pRecSample->DSB = 0;
     }
+    // Playback samples live for the voice session.  The recording sample is
+    // its final allocation and must be reusable after each stop/start cycle.
+    if (pRecSample + 1 == s_recordingSamplePtr)
+        s_recordingSamplePtr = pRecSample;
     return 1;
 }
 
@@ -287,6 +303,10 @@ void __cdecl DSOUNDRecord_Shutdown()
     if (g_pDSCaptureInstance)
         hr = g_pDSCaptureInstance->Release();
     g_pDSCaptureInstance = 0;
+    g_recording_initialized = 0;
+    g_currently_recording = 0;
+    g_current_sample = nullptr;
+    s_recordingSamplePtr = s_recordingSamples;
     if (hr < 0)
         Com_PrintError(CON_CHANNEL_SOUND, "Error releasing direct sound instance!  %s\n", hr);
 }
