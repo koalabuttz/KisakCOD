@@ -67,6 +67,10 @@ void Log(char const *format, ...)
 
 scrVmPub_t scrVmPub;
 scrVmGlob_t scrVmGlob;
+// Field getters can build an array using two live values. Keep their empty-stack
+// sentinel inside owned storage instead of forming eval_stack - 1, which can
+// alias the full main stack when the two VM globals are adjacent in memory.
+static VariableValue s_entityFieldEvalStack[3];
 jmp_buf g_script_error[33];
 scrVmDebugPub_t scrVmDebugPub;
 
@@ -203,6 +207,7 @@ void __cdecl TRACK_scr_vm()
 {
     track_static_alloc_internal(&scrVmGlob, 8232, "scrVmGlob", 7);
     track_static_alloc_internal(&scrVmPub, 17192, "scrVmPub", 7);
+    track_static_alloc_internal(s_entityFieldEvalStack, sizeof(s_entityFieldEvalStack), "s_entityFieldEvalStack", 7);
     track_static_alloc_internal(g_script_error, 2112, "g_script_error", 7);
     track_static_alloc_internal(&scrVmDebugPub, 147984, "scrVmDebugPub", 0);
 }
@@ -4233,34 +4238,38 @@ void __cdecl Scr_AddBool(uint32_t value)
     scrVmPub.top->u.intValue = value;
 }
 
+static bool Scr_IsStackValueInRange(const VariableValue *value, const VariableValue *first, const VariableValue *last)
+{
+    const uintptr_t address = reinterpret_cast<uintptr_t>(value);
+    return address >= reinterpret_cast<uintptr_t>(first) && address <= reinterpret_cast<uintptr_t>(last);
+}
+
 void IncInParam()
 {
-    if ((scrVmPub.top < (VariableValue*)&scrVmGlob - 1 || scrVmPub.top >(VariableValue*) & scrVmGlob)
-        && (scrVmPub.top < scrVmPub.stack || scrVmPub.top > scrVmPub.maxstack))
+    if (!Scr_IsStackValueInRange(scrVmPub.top, s_entityFieldEvalStack, s_entityFieldEvalStack + 2)
+        && !Scr_IsStackValueInRange(scrVmPub.top, scrVmPub.stack, scrVmPub.maxstack))
     {
         MyAssertHandler(
             ".\\script\\scr_vm.cpp",
             3894,
             0,
             "%s",
-            "((scrVmPub.top >= scrVmGlob.eval_stack - 1) && (scrVmPub.top <= scrVmGlob.eval_stack)) || ((scrVmPub.top >= scrVmP"
-            "ub.stack) && (scrVmPub.top <= scrVmPub.maxstack))");
+            "scrVmPub.top is within the field-evaluation stack or the main VM stack");
     }
     Scr_ClearOutParams();
-    if (scrVmPub.top == scrVmPub.maxstack)
+    if (scrVmPub.top == scrVmPub.maxstack || scrVmPub.top == s_entityFieldEvalStack + 2)
         Sys_Error("Internal script stack overflow");
     ++scrVmPub.top;
     ++scrVmPub.inparamcount;
-    if ((scrVmPub.top < (VariableValue*)&scrVmGlob || scrVmPub.top > &scrVmGlob.eval_stack[1])
-        && (scrVmPub.top < scrVmPub.stack || scrVmPub.top > scrVmPub.maxstack))
+    if (!Scr_IsStackValueInRange(scrVmPub.top, s_entityFieldEvalStack + 1, s_entityFieldEvalStack + 2)
+        && !Scr_IsStackValueInRange(scrVmPub.top, scrVmPub.stack, scrVmPub.maxstack))
     {
         MyAssertHandler(
             ".\\script\\scr_vm.cpp",
             3904,
             0,
             "%s",
-            "((scrVmPub.top >= scrVmGlob.eval_stack) && (scrVmPub.top <= scrVmGlob.eval_stack + 1)) || ((scrVmPub.top >= scrVmP"
-            "ub.stack) && (scrVmPub.top <= scrVmPub.maxstack))");
+            "scrVmPub.top is within the field-evaluation values or the main VM stack");
     }
 }
 
@@ -4510,16 +4519,16 @@ VariableValue __cdecl GetEntityFieldValue(uint32_t classnum, int entnum, int off
     iassert(!scrVmPub.inparamcount);
     iassert(!scrVmPub.outparamcount);
 
-    scrVmPub.top = scrVmGlob.eval_stack - 1;
-    scrVmGlob.eval_stack[0].type = VAR_UNDEFINED;
+    scrVmPub.top = s_entityFieldEvalStack;
+    s_entityFieldEvalStack[1].type = VAR_UNDEFINED;
 
     Scr_GetObjectField(classnum, entnum, offset);
     iassert(!scrVmPub.inparamcount || scrVmPub.inparamcount == 1);
     iassert(!scrVmPub.outparamcount);
-    iassert(scrVmPub.top - scrVmPub.inparamcount == scrVmGlob.eval_stack - 1);
+    iassert(scrVmPub.top - scrVmPub.inparamcount == s_entityFieldEvalStack);
 
     scrVmPub.inparamcount = 0;
-    return scrVmGlob.eval_stack[0];
+    return s_entityFieldEvalStack[1];
 }
 
 void __cdecl Scr_SetStructField(uint32_t structId, uint32_t index)

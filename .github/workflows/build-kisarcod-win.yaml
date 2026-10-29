@@ -8,6 +8,17 @@ on:
     branches: [ "master" ]
 
 jobs:
+  runtime-regressions:
+    name: Runtime ownership and VM stack regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Renderer command ownership
+        run: python3 scripts/tests/test_renderer_command_ownership.py
+      - name: Entity field evaluation stack
+        run: python3 scripts/tests/test_script_vm_field_stack.py
+
   build:
     name: Build with DirectX SDK
     runs-on: windows-2022
