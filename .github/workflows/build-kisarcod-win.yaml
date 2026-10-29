@@ -28,6 +28,8 @@ jobs:
         run: python3 scripts/tests/test_voice_lifecycle.py
       - name: Script console I/O watchdog
         run: python3 scripts/tests/test_script_console_watchdog.py
+      - name: Config command ownership
+        run: python3 scripts/tests/test_exec_command_ownership.py
 
   build:
     name: Build with DirectX SDK

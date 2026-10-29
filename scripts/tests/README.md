@@ -8,6 +8,7 @@ python3 scripts/tests/test_shellshock_channel_metadata.py
 python3 scripts/tests/test_script_loading_watchdog.py
 python3 scripts/tests/test_voice_lifecycle.py
 python3 scripts/tests/test_script_console_watchdog.py
+python3 scripts/tests/test_exec_command_ownership.py
 ```
 
 All scripts accept `--cxx` (or `CXX`) to select a compiler. They compile the
@@ -55,6 +56,13 @@ rollback, repeated shutdown, off/on transitions and capture failures. It also
 checks COM buffer ownership and bounded sample storage through 1,000 capture
 stop/start cycles. Audio devices and codec allocation use checked test doubles;
 physical microphone/playback behavior still needs a device test.
+
+The exec check runs production disk/fastfile dispatch and command parsing across
+map-memory resets and asset unloading. It covers trailing commands, nested
+configs, missing/empty input, allocation failure, startup order and repeated
+restarts while preserving synchronous execution and existing wait semantics.
+Real nonlocal aborts also check reverse-order ownership cleanup, repeated and
+reentrant recovery, and bounded command nesting.
 
 GitHub Actions runs these checks alongside the Windows builds and native
 bootstrap check. Loading a map and quitting with licensed assets remain separate
