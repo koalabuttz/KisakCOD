@@ -1,0 +1,24 @@
+name: Developer script startup settings
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [master]
+    paths:
+      - src/qcommon/common.cpp
+      - scripts/tests/test_script_developer_config.py
+      - .github/workflows/script-developer-config.yaml
+  push:
+    branches: [master]
+    paths:
+      - src/qcommon/common.cpp
+      - scripts/tests/test_script_developer_config.py
+      - .github/workflows/script-developer-config.yaml
+
+jobs:
+  startup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/tests/test_script_developer_config.py
