@@ -6402,7 +6402,10 @@ void Scr_PrecacheItem()
     if (!level.initializing)
         Scr_Error("precacheItem must be called before any wait statements in the level script\n");
     String = Scr_GetString(0);
-    if (!G_FindItem(String, 0))
+    const uint32_t precacheStartTime = static_cast<uint32_t>(Sys_Milliseconds());
+    const gitem_s *item = G_FindItem(String, 0);
+    Scr_AccountForLoadingTime(precacheStartTime);
+    if (!item)
     {
         v1 = va("unknown item '%s'", String);
         Scr_ParamError(0, v1);

@@ -384,6 +384,7 @@ void __cdecl VM_UnarchiveStack(uint32_t startLocalId, VariableStackBuffer* stack
 void VM_UnarchiveStack2(uint32_t startLocalId, function_stack_t *stack, VariableStackBuffer *stackValue);
 int __cdecl Scr_AddLocalVars(uint32_t localId);
 void __cdecl Scr_ResetTimeout();
+void __cdecl Scr_AccountForLoadingTime(uint32_t startTime);
 BOOL __cdecl Scr_IsStackClear();
 void __cdecl Scr_StackClear();
 void __cdecl Scr_ProfileUpdate();

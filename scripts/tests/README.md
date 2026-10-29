@@ -5,6 +5,7 @@ python3 scripts/tests/test_renderer_command_ownership.py
 python3 scripts/tests/test_script_vm_field_stack.py
 python3 scripts/tests/test_shader_constant_order.py
 python3 scripts/tests/test_shellshock_channel_metadata.py
+python3 scripts/tests/test_script_loading_watchdog.py
 ```
 
 All scripts accept `--cxx` (or `CXX`) to select a compiler. They compile the
@@ -36,6 +37,11 @@ runtime but no GPU or game assets. Windows CI runs it in both configurations.
 The shellshock check loads sound-channel metadata without an audio device,
 verifies repeated/client reuse and fallback settings, and preserves warnings for
 unknown channel names and errors for missing channel definitions.
+
+The watchdog check excludes synchronous item-registration time during loading
+without resetting script time already spent. It checks SP and MP precache calls,
+the five-second boundary, real pure/interleaved loops, clock wrap and unchanged
+runtime/precache restrictions.
 
 GitHub Actions runs these checks alongside the Windows builds and native
 bootstrap check. Loading a map and quitting with licensed assets remain separate

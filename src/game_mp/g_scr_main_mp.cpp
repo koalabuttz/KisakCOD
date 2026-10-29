@@ -3773,7 +3773,10 @@ void Scr_PrecacheItem()
 
     pszItemName = Scr_GetString(0);
 
-    if (!G_FindItem(pszItemName, 0))
+    const uint32_t precacheStartTime = static_cast<uint32_t>(Sys_Milliseconds());
+    const gitem_s *item = G_FindItem(pszItemName, 0);
+    Scr_AccountForLoadingTime(precacheStartTime);
+    if (!item)
     {
         Scr_ParamError(0, va("unknown item '%s'", pszItemName));
     }

@@ -1778,6 +1778,12 @@ uint32_t Scr_EvalArrayIndex(uint32_t parentId, VariableValue *index)
 
 #define INC_TOP() iassert(fs.top >= scrVmPub.stack); ++fs.top; iassert(fs.top <= scrVmPub.maxstack);
 
+static bool Scr_HasTimedOut()
+{
+    // Keep the five-second script budget across the millisecond clock wrap.
+    return static_cast<uint32_t>(Sys_Milliseconds()) - static_cast<uint32_t>(scrVmGlob.starttime) >= 5000u;
+}
+
 uint32_t VM_ExecuteInternal()
 {
     //int gOpcode;
@@ -3026,7 +3032,6 @@ function_call:
             fs.pos += jumpOffset;
             continue;
 
-#define INFINITE_LOOP_TIMEOUT 5000
         case OP_jumpback:
             if (scrVarPub.numScriptValues > 0xF37E || scrVarPub.numScriptObjects > 0x7380)
             {
@@ -3038,7 +3043,7 @@ function_call:
                 }
                 Sys_Error("exceeded maximum number of script variables");
             }
-            if ((uint32_t)(Sys_Milliseconds() - scrVmGlob.starttime) >= INFINITE_LOOP_TIMEOUT)
+            if (Scr_HasTimedOut())
             {
                 iassert(logScriptTimes);
                 if (logScriptTimes->current.enabled)
@@ -4876,6 +4881,18 @@ void __cdecl Scr_ResetTimeout()
         Com_Printf(CON_CHANNEL_PARSERSCRIPT, "RESET TIME: %d\n", v0);
     }
     memset(scrVmDebugPub.jumpbackHistory, 0, sizeof(scrVmDebugPub.jumpbackHistory));
+}
+
+void __cdecl Scr_AccountForLoadingTime(uint32_t startTime)
+{
+    if (scrVmGlob.loading)
+    {
+        // Synchronous asset registration is engine work, not a looping script.
+        // Retain all script time already spent; resetting the watchdog here
+        // would let a loop evade it by repeatedly precaching an existing item.
+        const uint32_t elapsed = static_cast<uint32_t>(Sys_Milliseconds()) - startTime;
+        scrVmGlob.starttime = static_cast<int>(static_cast<uint32_t>(scrVmGlob.starttime) + elapsed);
+    }
 }
 
 BOOL __cdecl Scr_IsStackClear()
