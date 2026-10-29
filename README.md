@@ -45,9 +45,15 @@ the validated tool versions.
 bash build-linux-for-windows.sh
 # Optional: put build files outside the checkout.
 bash build-linux-for-windows.sh /path/to/build-directory
+# Optional: use an optimized build with debug symbols for runtime testing.
+bash build-linux-for-windows.sh /path/to/optimized-build-directory RelWithDebInfo
 ```
 
-The script builds `KisakCOD-mp` in Debug with `KISAK_OPENAL=ON`. It reuses the
+The script builds `KisakCOD-mp` with `KISAK_OPENAL=ON`. The optional second
+argument selects `Debug` (default), `Release`, `RelWithDebInfo`, or `MinSizeRel`.
+Debug leaves optimization off; use `RelWithDebInfo` or `Release` for runtime
+performance tests, especially under CPU emulation. Use separate build directories
+to preserve each configuration's object files. The script reuses the selected
 build directory and stops on configuration or compilation errors. CMake fetches
 the pinned OpenAL Soft and Tracy versions during configuration. The executable
 is written to `bin/KisakCOD-mp.exe`; the game assets and runtime DLLs described
