@@ -1026,6 +1026,11 @@ void __cdecl Com_SetScriptSettings()
 
 void __cdecl Com_RunAutoExec(int localClientNum, int controllerIndex)
 {
+    // Developer presets enable developer_script as well as development options.
+    // Keep ordinary startup in the configured script mode unless opted in.
+    if (com_developer->current.integer <= 0)
+        return;
+
     Dvar_SetInAutoExec(1);
 #ifdef KISAK_MP
     Cmd_ExecuteSingleCommand(localClientNum, controllerIndex, (char*)"exec autoexec_dev_mp.cfg");
