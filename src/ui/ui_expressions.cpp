@@ -198,7 +198,7 @@ struct ValidOperation // sizeof=0x10
     void(__cdecl *function)(Operand *, Operand *, Operand *);
 };
 
-ValidOperation validOperations[84] =
+static constexpr ValidOperation validOperations[84] =
 {
   { OP_EQUALS, VAL_STRING, VAL_STRING, &compare_doesStringEqualString },
   { OP_NOTEQUAL, VAL_STRING, VAL_STRING, &compare_doesStringNotEqualString },
@@ -311,6 +311,38 @@ ValidOperation validOperations[84] =
   { OP_NOOP, VAL_INT, VAL_INT, NULL }
 }; // idb
 
+using OperationFunction = void(__cdecl *)(Operand *, Operand *, Operand *);
+
+// All binary operation/type combinations are known at build time. A table
+// lookup avoids scanning the complete list for each operator on every UI frame.
+struct OperationFunctionTable
+{
+    OperationFunction functions[OP_BITWISEOR + 1][VAL_STRING + 1][VAL_STRING + 1]{};
+
+    constexpr OperationFunctionTable()
+    {
+        for (const ValidOperation &operation : validOperations)
+        {
+            if (operation.op == OP_NOOP)
+                break;
+            functions[operation.op][operation.leftSide][operation.rightSide] = operation.function;
+        }
+    }
+};
+
+static constexpr OperationFunctionTable s_operationFunctions;
+
+static OperationFunction FindOperationFunction(operationEnum op, expDataType leftSide, expDataType rightSide)
+{
+    if (static_cast<unsigned int>(op) > OP_BITWISEOR
+        || static_cast<unsigned int>(leftSide) > VAL_STRING
+        || static_cast<unsigned int>(rightSide) > VAL_STRING)
+    {
+        return nullptr;
+    }
+    return s_operationFunctions.functions[op][leftSide][rightSide];
+}
+
 char *__cdecl GetSourceString(Operand operand)
 {
     char *result; // [esp+8h] [ebp-4h]
@@ -376,19 +408,11 @@ void(__cdecl *__cdecl GetOperationFunction(
     double v4; // [esp+0h] [ebp-2Ch]
     double v5; // [esp+Ch] [ebp-20h]
     Operand temp2; // [esp+18h] [ebp-14h]
-    int opNum; // [esp+20h] [ebp-Ch]
-    int opNuma; // [esp+20h] [ebp-Ch]
     Operand temp; // [esp+24h] [ebp-8h]
 
-    for (opNum = 0; validOperations[opNum].op; ++opNum)
-    {
-        if (validOperations[opNum].op == op
-            && validOperations[opNum].leftSide == data1->dataType
-            && validOperations[opNum].rightSide == data2->dataType)
-        {
-            return validOperations[opNum].function;
-        }
-    }
+    OperationFunction function = FindOperationFunction(op, data1->dataType, data2->dataType);
+    if (function)
+        return function;
     if (data1->dataType == VAL_STRING)
     {
         v5 = (double)atoi(data1->internals.string);
@@ -419,16 +443,7 @@ void(__cdecl *__cdecl GetOperationFunction(
         }
         *data2 = temp2;
     }
-    for (opNuma = 0; validOperations[opNuma].op; ++opNuma)
-    {
-        if (validOperations[opNuma].op == op
-            && validOperations[opNuma].leftSide == data1->dataType
-            && validOperations[opNuma].rightSide == data2->dataType)
-        {
-            return validOperations[opNuma].function;
-        }
-    }
-    return 0;
+    return FindOperationFunction(op, data1->dataType, data2->dataType);
 }
 
 bool __cdecl OpPairsWithRightParen(operationEnum op)
