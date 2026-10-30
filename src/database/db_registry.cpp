@@ -23,6 +23,13 @@
 #include <win32/win_localize.h>
 #include <universal/profile.h>
 
+#if defined(__linux__)
+// db_registry.cpp opens zone files and writes/reads csv exports through the
+// Win32 file API (CreateFileA/ReadFile/WriteFile/GetFileSize/CloseHandle).
+#include <linux/compat.h>
+#include <qcommon/threads_interlock.h>
+#endif
+
 #include <algorithm>
 
 #include <setjmp.h>
@@ -456,8 +463,13 @@ char *__cdecl DB_ReferencedFFChecksums()
         {
             if (g_zoneNameList[0])
                 I_strncat(g_zoneNameList, 2080, " ");
+#if defined(_WIN32) || defined(_MSC_VER)
             //itoa(g_zones[i].fileSize, zoneSizeStr, 0xAu);
             _itoa(g_zones[i].fileSize, zoneSizeStr, 0xAu);
+#else
+            // zoneSizeStr is 16 bytes; a base-10 int32 needs at most 12 (11 digits, sign, NUL).
+            snprintf(zoneSizeStr, sizeof(zoneSizeStr), "%d", g_zones[i].fileSize);
+#endif
             I_strncat(g_zoneNameList, 2080, zoneSizeStr);
         }
     }
@@ -646,14 +658,19 @@ void __cdecl DB_GetVertexBufferAndOffset(uint8_t zoneHandle, _BYTE *verts, void 
 
 void __cdecl DB_BuildOSPath_Mod(const char *zoneName, uint32_t size, char *filename)
 {
-    char *v3; // eax
+    const char *v3; // eax
     const char *string; // [esp-8h] [ebp-8h]
 
     if (!*(_BYTE *)fs_gameDirVar->current.integer)
         MyAssertHandler(".\\database\\db_registry.cpp", 3204, 0, "%s", "IsUsingMods()");
     string = fs_gameDirVar->current.string;
+#if defined(__linux__)
+    v3 = fs_basepath->current.string;
+    Com_sprintf(filename, size, "%s/%s/%s.ff", v3, string, zoneName);
+#else
     v3 = Sys_DefaultInstallPath();
     Com_sprintf(filename, size, "%s\\%s\\%s.ff", v3, string, zoneName);
+#endif
 }
 
 bool __cdecl DB_ModFileExists()
@@ -842,8 +859,14 @@ void __cdecl Mark_ClipMapAsset(clipMap_t *clipMap)
 
 void __cdecl DB_RemoveLoadedSound(XAssetHeader header)
 {
+#if defined(__linux__) && defined(KISAK_DEDICATED)
+    // The metadata-only sound loader retains data in the owning zone block.
+    // No playback buffer was allocated; DB_UnloadXZoneMemory releases it.
+    (void)header;
+#else
     //Z_Free((char *)header.xmodelPieces[3].numpieces, 15);
     Z_Free(header.loadSnd->sound.data, 15);
+#endif
 }
 
 void __cdecl DB_RemoveClipMap(XAssetHeader ass)
@@ -2211,7 +2234,9 @@ void __cdecl DB_UpdateDebugZone()
         zoneInfo[1].allocFlags = DB_ZONE_DEV;
         zoneInfo[1].freeFlags = DB_ZONE_DEV;
         DB_LoadXAssets(zoneInfo, 2u, 1);
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
         CG_VisionSetMyChanges();
+#endif
     }
 }
 
@@ -2384,10 +2409,12 @@ void __cdecl  DB_Thread(uint32_t threadContext)
     if (setjmp(*Value))
     {
         Profile_Recover(1);
-#ifdef __llvm__ 
+#ifndef __linux__
+#ifdef __llvm__
         __builtin_debugtrap();
 #else
         __debugbreak();
+#endif
 #endif
         Com_ErrorAbort();
     }
@@ -2473,6 +2500,16 @@ char __cdecl DB_NextZoneCsvToken(const char **parse, char *token, uint32_t token
     }
 }
 
+// Portable duplicate of the CRT's _strdup: the returned block is freed with free().
+static char *DB_StrDupPortable(const char *s)
+{
+#if defined(_WIN32) || defined(_MSC_VER)
+    return _strdup(s);
+#else
+    return strdup(s);
+#endif
+}
+
 void __cdecl DB_AddReorderAsset(const char *typeString, const char *assetName)
 {
     char *v2; // [esp+0h] [ebp-10h]
@@ -2504,11 +2541,11 @@ void __cdecl DB_AddReorderAsset(const char *typeString, const char *assetName)
     entrya = &s_dbReorder.entries[s_dbReorder.entryCount++];
     entrya->type = type;
     if (type >= ASSET_TYPE_COUNT)
-        v2 = _strdup(typeString);
+        v2 = DB_StrDupPortable(typeString);
     else
         v2 = (char *)g_assetNames[type];
     entrya->typeString = v2;
-    entrya->assetName = _strdup(assetName);
+    entrya->assetName = DB_StrDupPortable(assetName);
     if (entrya->type != ASSET_TYPE_STRING || I_stricmp(typeString, "ignore"))
     {
         if (entrya->type == ASSET_TYPE_CLIPMAP || entrya->type == ASSET_TYPE_CLIPMAP_PVS)
@@ -2783,12 +2820,17 @@ int32_t __cdecl DB_TryLoadXFileInternal(char *zoneName, int32_t zoneFlags)
 
 void __cdecl DB_BuildOSPath(const char *zoneName, uint32_t size, char *filename)
 {
-    char *v3; // eax
+    const char *v3; // eax
     char *Language; // [esp-8h] [ebp-8h]
 
     Language = Win_GetLanguage();
+#if defined(__linux__)
+    v3 = fs_basepath->current.string;
+    Com_sprintf(filename, size, "%s/zone/%s/%s.ff", v3, Language, zoneName);
+#else
     v3 = Sys_DefaultInstallPath();
     Com_sprintf(filename, size, "%s\\zone\\%s\\%s.ff", v3, Language, zoneName);
+#endif
 }
 
 int32_t __cdecl DB_GetZoneAllocType(int32_t zoneFlags)

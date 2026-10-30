@@ -12,7 +12,14 @@
 #include <qcommon/com_bsp.h>
 #include <qcommon/cmd.h>
 #include <qcommon/files.h>
+#if defined(__linux__)
+#include <linux/compat.h>
+#include <qcommon/threads_interlock.h> // InterlockedCompareExchange in FS_FileExists etc.
+#include <dirent.h>   // readdir/opendir, used by Sys_DirectoryHasContents
+#include <sys/stat.h> // stat, for entries whose d_type is DT_UNKNOWN
+#else
 #include <io.h>
+#endif
 
 const dvar_t *fs_remotePCDirectory;
 const dvar_t *fs_remotePCName;
@@ -293,9 +300,11 @@ int __cdecl FS_GetFileOsPath(const char *filename, char *ospath)
 
 int __cdecl FS_OpenFileOverwrite(char *qpath)
 {
+#if !defined(__linux__)
     DWORD oldAttributes; // [esp+0h] [ebp-10Ch]
-    char ospath[256]; // [esp+4h] [ebp-108h] BYREF
     uint32_t attributes; // [esp+108h] [ebp-4h]
+#endif
+    char ospath[256]; // [esp+4h] [ebp-108h] BYREF
 
     FS_CheckFileSystemStarted();
     if (!qpath)
@@ -304,10 +313,40 @@ int __cdecl FS_OpenFileOverwrite(char *qpath)
     {
         if (fs_debug->current.integer)
             Com_Printf(CON_CHANNEL_FILES, "FS_FOpenFileOverWrite: %s\n", ospath);
+#if defined(__linux__)
+        // The Win32 path clears FILE_ATTRIBUTE_READONLY so an existing read-only
+        // file can be rewritten. Linux expresses that as the mode bits, so drop
+        // only the owner write bit's absence and leave every other bit alone.
+        {
+            struct stat statInfo;
+
+            if (stat(ospath, &statInfo) != 0)
+            {
+                Com_PrintWarning(
+                    CON_CHANNEL_FILES,
+                    "WARNING: FS_FOpenFileOverWrite: stat(\"%s\") failed: %s; attempting the open anyway\n",
+                    ospath,
+                    strerror(errno));
+            }
+            else if (!(statInfo.st_mode & S_IWUSR))
+            {
+                if (chmod(ospath, statInfo.st_mode | S_IWUSR) != 0)
+                {
+                    Com_PrintWarning(
+                        CON_CHANNEL_FILES,
+                        "WARNING: FS_FOpenFileOverWrite: chmod(\"%s\", 0%o) failed: %s\n",
+                        ospath,
+                        (unsigned)(statInfo.st_mode | S_IWUSR),
+                        strerror(errno));
+                }
+            }
+        }
+#else
         oldAttributes = GetFileAttributesA(ospath);
         attributes = oldAttributes & 0xFFFFFFFE;
         if ((oldAttributes & 0xFFFFFFFE) != oldAttributes)
             SetFileAttributesA(ospath, attributes);
+#endif
         return FS_GetHandleAndOpenFile(qpath, ospath, FS_THREAD_MAIN);
     }
     else
@@ -395,7 +434,7 @@ void __cdecl FS_ReplaceSeparators(char *path)
             if (!wasSep)
             {
                 wasSep = 1;
-                *dst++ = 92;
+                *dst++ = PATH_SEP;
             }
         }
         else
@@ -462,11 +501,11 @@ int __cdecl FS_CreatePath(char *OSPath)
     {
         for (ofs = OSPath + 1; *ofs; ++ofs)
         {
-            if (*ofs == 92)
+            if (*ofs == PATH_SEP)
             {
                 *ofs = 0;
                 Sys_Mkdir(OSPath);
-                *ofs = 92;
+                *ofs = PATH_SEP;
             }
         }
         return 0;
@@ -1629,6 +1668,52 @@ int __cdecl Sys_DirectoryHasContents(const char *directory)
     } while (_findnext64i32(findhandle, &findinfo) != -1);
     _findclose(findhandle);
     return 0;
+}
+#elif defined(__linux__)
+// FS_AddGameDirectory() calls this for every localized game directory, so the
+// Linux build needs a real definition. It answers the same question as the
+// _findfirst()/_findnext() scan above: an entry makes the directory "non-empty"
+// unless it is a subdirectory named ".", ".." or "CVS".
+static bool Sys_ReaddirEntryIsDirectory(const char *directory, const struct dirent *entry)
+{
+    char ospath[260];
+    struct stat statInfo;
+
+    if (entry->d_type == DT_DIR)
+        return true;
+    if (entry->d_type != DT_UNKNOWN)
+        return false;
+
+    // Some filesystems report DT_UNKNOWN and leave the type to stat().
+    Com_sprintf(ospath, sizeof(ospath), "%s/%s", directory, entry->d_name);
+    return stat(ospath, &statInfo) == 0 && S_ISDIR(statInfo.st_mode);
+}
+
+int __cdecl Sys_DirectoryHasContents(const char *directory)
+{
+    DIR *dir;
+    struct dirent *entry;
+    int hasContents = 0;
+
+    dir = opendir(directory);
+    if (!dir)
+        return 0;
+
+    while ((entry = readdir(dir)) != NULL)
+    {
+        if (Sys_ReaddirEntryIsDirectory(directory, entry)
+            && (!I_stricmp(entry->d_name, ".")
+                || !I_stricmp(entry->d_name, "..")
+                || !I_stricmp(entry->d_name, "CVS")))
+        {
+            continue;
+        }
+        hasContents = 1;
+        break;
+    }
+
+    closedir(dir);
+    return hasContents;
 }
 #endif
 

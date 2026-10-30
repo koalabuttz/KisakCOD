@@ -26,7 +26,11 @@
 #include <buildnumber.h>
 #include <win32/win_net.h>
 #include <xanim/dobj.h>
+#if defined(__linux__) && defined(KISAK_DEDICATED)
+#include <sound/snd_public.h>
+#else
 #include <sound/snd_local.h>
+#endif
 #include <script/scr_animtree.h>
 #include <gfx_d3d/r_scene.h>
 #include <ragdoll/ragdoll.h>
@@ -40,6 +44,9 @@
 
 #include <setjmp.h>
 
+#if defined(__linux__) && defined(KISAK_DEDICATED)
+#define KISAK_SERVER_ONLY
+#endif
 
 #ifdef KISAK_SP
 #include <game/g_local.h>
@@ -170,8 +177,10 @@ void QDECL Com_PrintMessage(int channel, const char* msg, int error)
 	// LWSS: Punkbuster stuff
 	//PbCaptureConsoleOutput(msg, 4096);
 
-    // always print to stdout console
+#ifndef KISAK_SERVER_ONLY
+    // The native terminal backend already writes through Sys_Print below.
     fprintf(stderr, "%s", msg);
+#endif
 
 	if (rd_buffer)
 	{
@@ -191,6 +200,7 @@ void QDECL Com_PrintMessage(int channel, const char* msg, int error)
 	}
 	else
 	{
+#ifndef KISAK_SERVER_ONLY
 		if (channel != CON_CHANNEL_LOGFILEONLY
 #ifdef KISAK_MP
             && com_dedicated && !com_dedicated->current.integer
@@ -200,6 +210,7 @@ void QDECL Com_PrintMessage(int channel, const char* msg, int error)
 			//iassert( !Con_IsNotifyChannel( channel ) );
 			CL_ConsolePrint(0, channel, msg, 0, 0, 32 * error);
 		}
+#endif
 		if (*msg == 94 && msg[1])
 			msg += 2;
 		if (channel != CON_CHANNEL_LOGFILEONLY
@@ -411,7 +422,11 @@ void Com_Prefetch(const void* s, const uint32_t bytes, e_prefetch type)
 		}
 #else
         // DI: lol
+#ifdef __linux__
+        __builtin_prefetch(s, 0, 0);
+#else
         PreFetchCacheLine(PF_NON_TEMPORAL_LEVEL_ALL, s);
+#endif
 #endif
 
 		break;
@@ -439,14 +454,29 @@ void Com_OpenLogFile()
 {
     const char* BuildNumber; // eax
     const char* v1; // [esp-4h] [ebp-14h]
+#ifdef __linux__
+    time_t aclock;
+    tm localTime;
+#else
     __int64 aclock; // [esp+0h] [ebp-10h] BYREF
+#endif
     tm* newtime; // [esp+Ch] [ebp-4h]
 
     if (Sys_IsMainThread() && !opening_qconsole)
     {
         opening_qconsole = 1;
+#ifdef __linux__
+        aclock = time(nullptr);
+        newtime = localtime_r(&aclock, &localTime);
+        if (!newtime)
+        {
+            opening_qconsole = 0;
+            return;
+        }
+#else
         _time64(&aclock);
         newtime = _localtime64(&aclock);
+#endif
 #ifdef KISAK_MP
         logfile = FS_FOpenTextFileWrite("console_mp.log");
 #elif KISAK_SP
@@ -522,6 +552,7 @@ void Com_PrintWarning(int channel, const char *fmt, ...)
 void __cdecl Com_Shutdown(const char* finalmsg)
 {
     Com_ShutdownInternal(finalmsg);
+#ifndef KISAK_SERVER_ONLY
 #ifdef KISAK_MP
     if (!com_dedicated->current.integer)
 #endif
@@ -529,6 +560,7 @@ void __cdecl Com_Shutdown(const char* finalmsg)
         CL_InitRenderer();
         Com_AssetLoadUI();
     }
+#endif
 }
 
 void __cdecl CL_ShutdownDemo()
@@ -579,11 +611,13 @@ void __cdecl Com_ShutdownInternal(const char* finalmsg)
 {
     int localClientNum; // [esp+0h] [ebp-4h]
 
+#ifndef KISAK_SERVER_ONLY
     for (localClientNum = 0; localClientNum < 1; ++localClientNum)
         CL_Disconnect(localClientNum);
 //    KISAK_NULLSUB();
     CL_ShutdownAll(false);
     CL_ShutdownDemo();
+#endif
 #ifdef KISAK_MP
     FakeLag_Shutdown();
 #endif
@@ -670,6 +704,7 @@ void Com_Error(errorParm_t code, const char* fmt, ...)
     iassert( com_errorMessage[0] );
     if (code == ERR_SCRIPT || code == ERR_LOCALIZATION)
     {
+#ifndef KISAK_SERVER_ONLY
         if (!com_fixedConsolePosition)
         {
             com_fixedConsolePosition = 1;
@@ -687,6 +722,7 @@ void Com_Error(errorParm_t code, const char* fmt, ...)
             Sys_LeaveCriticalSection(CRITSECT_COM_ERROR);
             return;
         }
+#endif
         code = ERR_DROP;
     ERR_JMP:
         iassert(com_errorEntered);
@@ -698,7 +734,9 @@ void Com_Error(errorParm_t code, const char* fmt, ...)
     if (code == ERR_SCRIPT_DROP)
     {
         com_fixedConsolePosition = 1;
+#ifndef KISAK_SERVER_ONLY
         CL_ConsoleFixPosition();
+#endif
         code = ERR_DROP;
         goto ERR_JMP;
     }
@@ -708,6 +746,7 @@ void Com_Error(errorParm_t code, const char* fmt, ...)
         goto ERR_JMP;
     }
     com_fixedConsolePosition = 1;
+#ifndef KISAK_SERVER_ONLY
     CL_ConsoleFixPosition();
     if (cls.uiStarted && Sys_IsMainThread())
     {
@@ -717,6 +756,7 @@ void Com_Error(errorParm_t code, const char* fmt, ...)
         Sys_LeaveCriticalSection(CRITSECT_COM_ERROR);
     }
     else
+#endif
     {
 #ifdef KISAK_MP
         if (!com_dedicated->current.integer)
@@ -746,15 +786,19 @@ void __cdecl  Com_Quit_f()
     {
         Com_ClearTempMemory();
         Sys_DestroySplashWindow();
+#ifndef KISAK_SERVER_ONLY
         for (localClientNum = 0; localClientNum < 1; ++localClientNum)
             CL_Shutdown(localClientNum);
+#endif
 #ifdef KISAK_MP
         FakeLag_Shutdown();
 #endif
         //LB_EndOngoingTasks();
         // KISAKTODO: could be missing more here for SP
         SV_Shutdown("EXE_SERVERQUIT");
+#ifndef KISAK_SERVER_ONLY
         CL_ShutdownRef();
+#endif
         Com_Close();
         Com_CloseLogfiles();
         FS_Shutdown();
@@ -972,7 +1016,9 @@ void __cdecl Com_EventLoop()
         {
             iassert(!ev.evPtr);
 #ifdef KISAK_MP
+#ifndef KISAK_SERVER_ONLY
             Com_ClientPacketEvent();
+#endif
             Com_ServerPacketEvent();
 #endif
             goto END;
@@ -980,13 +1026,17 @@ void __cdecl Com_EventLoop()
         case SE_KEY:
         {
             iassert(!ev.evPtr);
+#ifndef KISAK_SERVER_ONLY
             CL_KeyEvent(0, ev.evValue, ev.evValue2, ev.evTime);
+#endif
             break;
         }
         case SE_CHAR:
         {
             iassert(!ev.evPtr);
+#ifndef KISAK_SERVER_ONLY
             CL_CharEvent(0, ev.evValue);
+#endif
             break;
         }
         case SE_CONSOLE:
@@ -1086,6 +1136,7 @@ void __cdecl Com_Init(char* commandLine)
     if (com_errorEntered)
         Com_ErrorCleanup();
 
+#ifndef KISAK_SERVER_ONLY
     if (!com_sv_running->current.enabled)
     {
 #ifdef KISAK_MP
@@ -1104,6 +1155,7 @@ void __cdecl Com_Init(char* commandLine)
             R_EndRemoteScreenUpdate();
         }
     }
+#endif
 }
 
 bool shouldQuitOnError;
@@ -1138,19 +1190,23 @@ void Com_ErrorCleanup()
     LargeLocalReset();
     R_PopRemoteScreenUpdate();
     Com_SyncThreads();
+#ifndef KISAK_SERVER_ONLY
 #ifdef KISAK_MP
     if (!com_dedicated->current.enabled)
 #endif
     {
         R_ComErrorCleanup();
     }
+#endif
     Cmd_ComErrorCleanup();
     Dvar_SetInAutoExec(0);
     if (IsFastFileLoad())
         DB_Cleanup();
     Com_ClearTempMemory();
+#ifndef KISAK_SERVER_ONLY
     if (!IsFastFileLoad())
         FX_UnregisterAll();
+#endif
     if (ProfLoad_IsActive())
         ProfLoad_Deactivate();
     Dvar_SetIntByName("cl_paused", 0);
@@ -1174,21 +1230,27 @@ void Com_ErrorCleanup()
     }
     else
     {
+#ifndef KISAK_SERVER_ONLY
         if (cls.uiStarted && errorcode != ERR_DROP)
         {
             MenuScreenForError = UI_GetMenuScreenForError();
             UI_SetActiveMenu(0, (uiMenuCommand_t)MenuScreenForError);
         }
+#endif
         Com_SetErrorMessage(com_errorMessage);
     }
     if (fs_debug && fs_debug->current.integer == 2)
         Dvar_SetInt((dvar_s*)fs_debug, 0);
+#ifndef KISAK_SERVER_ONLY
     SND_ErrorCleanup();
+#endif
     Com_CleanupBsp();
     KISAK_NULLSUB();
     Com_ResetParseSessions();
+#ifndef KISAK_SERVER_ONLY
     CL_FlushDebugServerData();
     CL_UpdateDebugServerData();
+#endif
     FS_ResetFiles();
     if (errorcode == ERR_DROP)
         Cbuf_Init();
@@ -1204,7 +1266,9 @@ void Com_ErrorCleanup()
     lastErrorTime = v5;
     if (errorcode != ERR_SERVERDISCONNECT && errorcode != ERR_DROP && errorcode != ERR_DISCONNECT)
         Sys_Error("%s", com_errorMessage);
+#ifndef KISAK_SERVER_ONLY
     updateScreenCalled = 0;
+#endif
     if (errorcode == ERR_SERVERDISCONNECT)
     {
         Com_ShutdownInternal("EXE_DISCONNECTEDFROMOWNLISTENSERVER");
@@ -1222,8 +1286,10 @@ void Com_ErrorCleanup()
         if (errorcode == ERR_DROP)
         {
             Com_PrintError(CON_CHANNEL_SYSTEM, "********************\nERROR: %s\n********************\n", com_errorMessage);
+#ifndef KISAK_SERVER_ONLY
             if (cls.uiStarted && !com_fixedConsolePosition)
                 CL_ConsoleFixPosition();
+#endif
         }
         else
         {
@@ -1282,6 +1348,10 @@ void __cdecl Com_Init_Try_Block_Function(char* commandLine)
     Cmd_Init();
     Com_StartupVariable(0);
     Com_InitDvars();
+#ifdef KISAK_SERVER_ONLY
+    if (!IsFastFileLoad())
+        Sys_Error("The native Linux dedicated server requires useFastFile 1; raw source-asset loading is not supported.");
+#endif
     CCS_InitConstantConfigStrings();
     initStartTime = 0;
     if (IsFastFileLoad())
@@ -1294,10 +1364,12 @@ void __cdecl Com_Init_Try_Block_Function(char* commandLine)
     }
     if (IsFastFileLoad())
         Com_InitXAssets();
+#ifndef KISAK_SERVER_ONLY
     CL_InitKeyCommands();
+#endif
     FS_InitFilesystem();
     Con_InitChannels();
-#ifdef KISAK_MP
+#if defined(KISAK_MP) && !defined(KISAK_SERVER_ONLY)
     LiveStorage_Init();
 #endif
     for (int localClientNum = 0; localClientNum < 1; ++localClientNum)
@@ -1307,7 +1379,9 @@ void __cdecl Com_Init_Try_Block_Function(char* commandLine)
     if ((dvar_modifiedFlags & 0x20) != 0)
         Com_InitDvars();
     com_recommendedSet = Dvar_RegisterBool("com_recommendedSet", 0, DVAR_ARCHIVE, "Use recommended settings");
+#ifndef KISAK_SERVER_ONLY
     Com_CheckSetRecommended(0);
+#endif
     Com_StartupVariable(0);
     if (!IsFastFileLoad())
         SEH_UpdateLanguageInfo();
@@ -1367,6 +1441,7 @@ void __cdecl Com_Init_Try_Block_Function(char* commandLine)
 
 #ifdef KISAK_MP
     Dvar_ClearModified((dvar_s*)com_dedicated);
+#ifndef KISAK_SERVER_ONLY
     if (!com_dedicated->current.integer)
     {
         KISAK_NULLSUB();
@@ -1374,6 +1449,7 @@ void __cdecl Com_Init_Try_Block_Function(char* commandLine)
         for (int localClientNum = 0; localClientNum < 1; ++localClientNum)
             CL_Init(localClientNum);
     }
+#endif
 #elif KISAK_SP
     CL_InitOnceForAllClients();
     CL_Init(0);
@@ -1381,6 +1457,7 @@ void __cdecl Com_Init_Try_Block_Function(char* commandLine)
     com_frameTime = Sys_Milliseconds();
     Com_StartupVariable(0);
 
+#ifndef KISAK_SERVER_ONLY
 #ifdef KISAK_MP
     if (!com_dedicated->current.integer)
 #endif
@@ -1394,6 +1471,7 @@ void __cdecl Com_Init_Try_Block_Function(char* commandLine)
         cls.soundStarted = 1;
         SND_Init();
     }
+#endif
 
 #ifdef KISAK_SP
     //Sys_LoadingKeepAlive();
@@ -1416,7 +1494,9 @@ void __cdecl Com_Init_Try_Block_Function(char* commandLine)
     //}
 #endif
 
+#ifndef KISAK_SERVER_ONLY
     COM_PlayIntroMovies();
+#endif
     if (IsFastFileLoad())
     {
         PMem_EndAlloc(comInitAllocName, 1u);
@@ -1607,7 +1687,12 @@ void Com_InitDvars()
 
 void __cdecl Com_StartupConfigs(int localClientNum)
 {
+#ifdef KISAK_SERVER_ONLY
+    // A dedicated server has no local player profile or hardware presets.
+    Com_ExecStartupConfigs(localClientNum, nullptr);
+#else
     Com_InitPlayerProfiles(localClientNum);
+#endif
 }
 
 void Com_InitXAssets()
@@ -1655,8 +1740,10 @@ void __cdecl Com_WriteConfigToFile(int localClientNum, char* filename)
     if (file)
     {
         FS_Printf(file, "// generated by Call of Duty, do not modify\n");
+#ifndef KISAK_SERVER_ONLY
         FS_Printf(file, "unbindall\n");
         Key_WriteBindings(localClientNum, file);
+#endif
         Dvar_WriteVariables(file);
         Con_WriteFilterConfigString(file);
         FS_FCloseFile(file);
@@ -1710,6 +1797,7 @@ void __cdecl Com_AdjustMaxFPS(int* maxFPS)
 #ifdef KISAK_MP
 void Com_DedicatedModified()
 {
+#ifndef KISAK_SERVER_ONLY
     int localClientNum; // [esp+0h] [ebp-4h]
 
     if ((com_dedicated->flags & 0x40) == 0)
@@ -1749,6 +1837,7 @@ void Com_DedicatedModified()
             SV_AddDedicatedCommands();
         }
     }
+#endif
 }
 #elif KISAK_SP
 static void Com_AttractMode(int localClientNum)
@@ -1917,8 +2006,11 @@ void __cdecl Com_Frame_Try_Block_Function()
 #ifdef KISAK_MP
     Com_DedicatedModified();
 
+#ifndef KISAK_SERVER_ONLY
     if (!com_dedicated->current.integer)
 #endif
+#endif
+#ifndef KISAK_SERVER_ONLY
     {
         R_SetEndTime(com_lastFrameTime[lastFrameIndex]);
 
@@ -1973,6 +2065,7 @@ void __cdecl Com_Frame_Try_Block_Function()
         Com_Statmon();
         R_WaitEndTime();
     }
+#endif
 
 #ifdef KISAK_SP
     //if (g_launchData.startupText[0])
@@ -1987,6 +2080,7 @@ void __cdecl Com_Frame_Try_Block_Function()
 
 void __cdecl Com_WriteConfiguration(int localClientNum)
 {
+#ifndef KISAK_SERVER_ONLY
     char configFile[68]; // [esp+0h] [ebp-48h] BYREF
 
     if (com_fullyInitialized && (dvar_modifiedFlags & 1) != 0)
@@ -2002,6 +2096,7 @@ void __cdecl Com_WriteConfiguration(int localClientNum)
             Com_WriteConfigToFile(localClientNum, configFile);
         }
     }
+#endif
 }
 
 int __cdecl Com_ModifyMsec(int msec)
@@ -2166,6 +2261,7 @@ void __cdecl Com_Frame()
     {
         Com_ErrorCleanup();
         Sys_LeaveCriticalSection(CRITSECT_COM_ERROR);
+#ifndef KISAK_SERVER_ONLY
 #ifdef KISAK_MP
         if (!com_dedicated->current.integer)
 #endif
@@ -2173,6 +2269,7 @@ void __cdecl Com_Frame()
             CL_InitRenderer();
             Com_StartHunkUsers();
         }
+#endif
     }
     else
     {
@@ -2221,7 +2318,9 @@ void __cdecl Com_Close()
     XAnimShutdown();
     Com_ShutdownWorld();
     CM_Shutdown();
+#ifndef KISAK_SERVER_ONLY
     SND_ShutdownChannels();
+#endif
     Hunk_Clear();
     if (IsFastFileLoad())
         DB_ShutdownXAssets();
@@ -2240,14 +2339,18 @@ void __cdecl Field_Clear(field_t* edit)
 
 void __cdecl Com_Restart()
 {
+#ifndef KISAK_SERVER_ONLY
     CL_ShutdownHunkUsers();
+#endif
     SV_ShutdownGameProgs();
     Com_ShutdownDObj();
     DObjShutdown();
     XAnimShutdown();
     Com_ShutdownWorld();
     CM_Shutdown();
+#ifndef KISAK_SERVER_ONLY
     SND_ShutdownChannels();
+#endif
     Hunk_Clear();
     Hunk_ResetDebugMem();
     if (IsFastFileLoad())
@@ -2364,12 +2467,14 @@ void __cdecl Com_SyncThreads()
 #ifndef KISAK_SP // called from Debug_Frame for script debugger
     iassert( Sys_IsMainThread() );
 #endif
+#ifndef KISAK_SERVER_ONLY
     R_SyncRenderThread();
 #ifdef KISAK_SP
     if (com_sv_running->current.enabled)
         SV_WaitServer();
 #endif
     R_WaitWorkerCmds();
+#endif
 }
 
 void __cdecl Com_FreeEvent(char* ptr)
@@ -2389,7 +2494,7 @@ void Com_CheckError()
     if (v0)
     {
         void * value = Sys_GetValue(2);
-        longjmp((int*)value, -1);
+        longjmp(*static_cast<jmp_buf*>(value), -1);
     }
 }
 

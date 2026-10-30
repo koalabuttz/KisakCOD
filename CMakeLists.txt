@@ -1,5 +1,20 @@
 cmake_minimum_required(VERSION 3.18)
 
+# The serialized assets and VM currently require a 32-bit process. Set the
+# architecture before project() so CMake tests the actual Linux compiler ABI.
+if(NOT DEFINED KISAK_PLATFORM)
+    if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
+        set(KISAK_PLATFORM "linux" CACHE STRING "Build platform: win32|mingw|linux")
+    else()
+        set(KISAK_PLATFORM "win32" CACHE STRING "Build platform: win32|mingw|linux")
+    endif()
+endif()
+if(KISAK_PLATFORM STREQUAL "linux")
+    set(CMAKE_C_FLAGS_INIT "${CMAKE_C_FLAGS_INIT} -m32")
+    set(CMAKE_CXX_FLAGS_INIT "${CMAKE_CXX_FLAGS_INIT} -m32")
+    set(CMAKE_EXE_LINKER_FLAGS_INIT "${CMAKE_EXE_LINKER_FLAGS_INIT} -m32")
+endif()
+
 project(KisakCOD)
 
 # Set the default C++ standard
@@ -29,8 +44,10 @@ set(BIN_DIR ${CMAKE_CURRENT_SOURCE_DIR}/bin)
 set(SCRIPTS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/scripts)
 set(PLATFORM_DIR ${SCRIPTS_DIR}/platform)
 
-# Set the output directories
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${BIN_DIR})
+# Allow separate build configurations to keep their native executables apart.
+if(NOT CMAKE_RUNTIME_OUTPUT_DIRECTORY)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${BIN_DIR})
+endif()
 
 # Include global scripts/tricks
 include(${SCRIPTS_DIR}/extern/increment_build.cmake)
@@ -41,11 +58,16 @@ include(${SCRIPTS_DIR}/platform_override.cmake)
 # Log out the KISAK_PLATFORM
 message("Building KISAK_PLATFORM: ${KISAK_PLATFORM}")
 
-# Include the subprojects
-add_subdirectory(${SCRIPTS_DIR}/mp)
-add_subdirectory(${SCRIPTS_DIR}/sp)
-add_subdirectory(${SCRIPTS_DIR}/dedi)
-if (KISAK_PLATFORM STREQUAL "win32")
-    # Radiant requires MSVC's MFC libraries, which MinGW does not provide.
-    add_subdirectory(${SCRIPTS_DIR}/radiant)
+# Native Linux currently builds the multiplayer dedicated server only.
+# Keep the Windows client/editor source and dependency selection unchanged.
+if(KISAK_PLATFORM STREQUAL "linux")
+    add_subdirectory(${SCRIPTS_DIR}/platform/linux)
+else()
+    add_subdirectory(${SCRIPTS_DIR}/mp)
+    add_subdirectory(${SCRIPTS_DIR}/sp)
+    add_subdirectory(${SCRIPTS_DIR}/dedi)
+    if(KISAK_PLATFORM STREQUAL "win32")
+        # Radiant requires MSVC's MFC libraries, which MinGW does not provide.
+        add_subdirectory(${SCRIPTS_DIR}/radiant)
+    endif()
 endif()

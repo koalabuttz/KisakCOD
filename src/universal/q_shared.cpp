@@ -1031,6 +1031,12 @@ bool __cdecl ParseConfigStringToStructCustomSize(
                     *(uint32_t *)&pStruct[v20->iOffset] = (int)(v15 * 1000.0);
                     break;
                 case CSPFT_FX:
+#if defined(__linux__) && defined(KISAK_DEDICATED)
+                    // A dedicated server has no renderer: the effect name is
+                    // parsed but never registered, and the destination keeps the
+                    // value it already had, exactly as the runtime com_dedicated
+                    // test below left it.
+#else
 #ifdef KISAK_MP
                     if (!com_dedicated->current.integer)
 #endif
@@ -1038,6 +1044,7 @@ bool __cdecl ParseConfigStringToStructCustomSize(
                         v9 = FX_Register(src);
                         *(uint32_t *)&pStruct[v20->iOffset] = (uint32_t)v9;
                     }
+#endif
                     break;
                 case CSPFT_XMODEL:
                     I_strncpyz(dest, src, 0x2000);
@@ -1047,6 +1054,11 @@ bool __cdecl ParseConfigStringToStructCustomSize(
                         v18 = 1;
                     break;
                 case CSPFT_MATERIAL:
+#if defined(__linux__) && defined(KISAK_DEDICATED)
+                    // See CSPFT_FX: no renderer on a dedicated server, so the
+                    // material handle is not resolved and the destination is left
+                    // as it was.
+#else
 #ifdef KISAK_MP
                     if (!com_dedicated->current.integer)
 #endif
@@ -1054,6 +1066,7 @@ bool __cdecl ParseConfigStringToStructCustomSize(
                         v10 = Material_RegisterHandle(src, IMAGE_TRACK_MISC);
                         *(uint32_t *)&pStruct[v20->iOffset] = (uint32_t)v10;
                     }
+#endif
                     break;
                 case CSPFT_SOUND:
                     SoundAlias = Com_FindSoundAlias(src);

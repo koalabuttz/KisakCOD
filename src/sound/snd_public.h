@@ -1,7 +1,9 @@
 #pragma once
 
 #include <qcommon/qcommon.h>
-#ifndef KISAK_OPENAL
+#if defined(__linux__) && defined(KISAK_DEDICATED)
+#include <linux/compat.h>
+#elif !defined(KISAK_OPENAL)
 #include <msslib/mss.h>
 #else
 // snd_public.h is included very widely across the codebase, and msslib/mss.h's own

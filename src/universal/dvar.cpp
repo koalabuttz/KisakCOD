@@ -1,7 +1,12 @@
 #include <universal/q_shared.h>
 #include <qcommon/qcommon.h>
 
+#if defined(__linux__)
+#include <linux/compat.h>
+#include <qcommon/threads_interlock.h>
+#else
 #include <windows.h>
+#endif
 #include <win32/win_local.h>
 #include <qcommon/cmd.h>
 #include "com_files.h"
@@ -164,7 +169,7 @@ char *__cdecl Dvar_InfoString(int localClientNum, char bit)
 
     info1[0] = 0;
     Dvar_ForEach((void(__cdecl *)(const dvar_s *, void *))Dvar_InfoStringSingle, &bit);
-#ifdef KISAK_MP
+#if defined(KISAK_MP) && !(defined(__linux__) && defined(KISAK_DEDICATED))
     if ((bit & 2) != 0)
     {
         UsernameForLocalClient = CL_GetUsernameForLocalClient();

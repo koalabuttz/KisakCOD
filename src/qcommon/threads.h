@@ -1,6 +1,13 @@
 #pragma once
 
+#ifdef __linux__
+// Native Linux: no Windows SDK. qcommon/threads.h only needs the Win32 base
+// types at the bottom of this file (DWORD/HANDLE), which the POSIX bridge
+// declares with the fixed 32-bit Windows widths.
+#include <linux/compat.h>
+#else
 #include <windows.h> // literally just for some of the extern types at the bottom
+#endif
 #include <gfx_d3d/rb_backend.h> // THREAD_CONTEXT_COUNT
 
 enum ThreadOwner : __int32

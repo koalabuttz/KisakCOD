@@ -13,10 +13,20 @@
 
 #ifndef _XBOX
 #define DIRECTINPUT_VERSION 0x0800  //[ 0x0300 | 0x0500 | 0x0700 | 0x0800 ]
+#ifdef __linux__
+// Native Linux has no Windows SDK: dinput/winsock/wsipx are DirectInput and
+// WinSock 1.x headers. The dedicated server uses the engine's own input and net
+// entry points (Sys_*, NET_*, IN_*), which the POSIX backend implements against
+// the platform, so only the Win32 base types are needed here. See
+// src/linux/compat.h; input/net device code stays outside this header.
+#include <linux/compat.h>
+#include <mutex> // the non-Windows s_criticalSections branch below is std::mutex
+#else
 #include <dinput.h>
 //#include <dsound.h>
 #include <winsock.h>
 #include <wsipx.h>
+#endif
 #endif
 #include <qcommon/qcommon.h>
 #ifdef KISAK_MP

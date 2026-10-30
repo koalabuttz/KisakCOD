@@ -1,7 +1,11 @@
 #pragma once
 #include "scr_stringlist.h"
 #include <cstdio> // FILE
+#ifdef __linux__
+#include <linux/compat.h>
+#else
 #include <windows.h>
+#endif
 
 // LWSS: this enum name is kinda retarded
 enum Enum_t : __int32

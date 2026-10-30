@@ -5,6 +5,29 @@
 #include <math.h>
 #include <cstdint>
 
+#ifdef __linux__
+// This header is included on its own (database, sound, UI), so it carries the
+// same non-Clang compiler spellings as q_shared.h: Clang has __cdecl/__int32 as
+// keywords under -fms-extensions, GCC needs the GNU attributes. The #ifndef
+// guards make a preceding q_shared.h include win.
+#if !defined(__clang__)
+#if defined(__i386__) || defined(__x86_64__)
+#ifndef __cdecl
+#define __cdecl __attribute__((cdecl))
+#endif
+#ifndef __stdcall
+#define __stdcall __attribute__((stdcall))
+#endif
+#ifndef __declspec
+#define __declspec(x) __attribute__((x))
+#endif
+#endif
+#ifndef __int32
+#define __int32 int
+#endif
+#endif // !__clang__
+#endif // __linux__
+
 #define EQUAL_EPSILON 0.001f
 #define ZERO_EPSILON 0.000001f
 #define WEIGHT_EPSILON EQUAL_EPSILON
@@ -12,7 +35,18 @@
 #define MAX_11BIT_FLT 0.99951172f // not a real name
 
 #define CLAMP(x, low, high) ((x) < (low) ? (low) : ((x) > (high) ? (high) : (x)))
+#ifdef __linux__
+// _isnan is an MSVC CRT intrinsic; the C library's isnan is the same predicate
+// (nonzero iff the value is a NaN).
+#define IS_NAN(x) isnan(x)
+// __forceinline is a Microsoft keyword: Clang accepts it under -fms-extensions,
+// GCC needs the equivalent attribute spelled out.
+#if !defined(__clang__) && !defined(__forceinline)
+#define __forceinline inline __attribute__((always_inline))
+#endif
+#else
 #define IS_NAN(x) _isnan(x)
+#endif
 
 static const float MPH_TO_INCHES_PER_SEC = 17.6f;
 
@@ -164,8 +198,28 @@ void __cdecl TRACK_com_math();
 // == RANDOM == 
 void __cdecl Rand_Init(int seed);
 
+#ifdef __linux__
+// POSIX <stdlib.h> declares `long int random(void)`. C++ cannot overload on
+// return type, so the engine's `float random()` cannot carry that name in the
+// same translation unit. The alias below keeps the call sites unchanged while
+// giving the engine's function its own symbol at compile time; the definition in
+// com_math.cpp is renamed by the same macro, so declaration and definition stay
+// in agreement without touching any other file.
+//
+// <cstdlib> is included before the alias is defined so the C library's own
+// declaration is parsed under its real name; stdlib.h's include guard then makes
+// any later include of it a no-op. A proper cross-file rename (definition plus
+// call sites) would let this alias disappear entirely.
+#include <cstdlib>
+float __cdecl Q_random();
+#else
 float __cdecl random();
+#endif
 float __cdecl crandom();
+
+#ifdef __linux__
+#define random Q_random
+#endif
 
 float __cdecl flrand(float min, float max);
 int __cdecl irand(int min, int max);

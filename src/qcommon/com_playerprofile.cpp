@@ -556,29 +556,42 @@ void __cdecl Com_SetRecommended(int localClientNum, int restart)
     }
 }
 
+// Windows confirms a detected hardware/config change with a modal Yes/No box.
+// A dedicated Linux server has no window to attach a box to, so there is no way
+// to ask the user: report the pending change on the console and answer "No" so
+// the stored profile is left alone instead of being rewritten unasked.
+static bool Sys_ConfirmChangePrompt(const char *titleRef, const char *bodyRef)
+{
+    char *title; // [esp-Ch] [ebp-Ch]
+    char *body; // [esp-8h] [ebp-8h]
+
+    title = Win_LocalizeRef(titleRef);
+    body = Win_LocalizeRef(bodyRef);
+#if defined(__linux__)
+    Com_PrintWarning(
+        CON_CHANNEL_SYSTEM,
+        "WARNING: %s: %s\nWARNING: no profile confirmation dialog is available on this platform; "
+        "leaving the player profile unchanged\n",
+        title,
+        body);
+    return false;
+#else
+    HWND ActiveWindow; // eax
+
+    ActiveWindow = GetActiveWindow();
+    return MessageBoxA(ActiveWindow, body, title, 0x44u) == 6;
+#endif
+}
+
 bool __cdecl Sys_ShouldUpdateForInfoChange()
 {
-    HWND ActiveWindow; // eax
-    char *v2; // [esp-Ch] [ebp-Ch]
-    char *v3; // [esp-8h] [ebp-8h]
-
     Sys_ArchiveInfo(0);
-    v3 = Win_LocalizeRef("WIN_COMPUTER_CHANGE_TITLE");
-    v2 = Win_LocalizeRef("WIN_COMPUTER_CHANGE_BODY");
-    ActiveWindow = GetActiveWindow();
-    return MessageBoxA(ActiveWindow, v2, v3, 0x44u) == 6;
+    return Sys_ConfirmChangePrompt("WIN_COMPUTER_CHANGE_TITLE", "WIN_COMPUTER_CHANGE_BODY");
 }
 
 bool __cdecl Sys_ShouldUpdateForConfigChange()
 {
-    HWND ActiveWindow; // eax
-    char *v2; // [esp-Ch] [ebp-Ch]
-    char *v3; // [esp-8h] [ebp-8h]
-
-    v3 = Win_LocalizeRef("WIN_CONFIGURE_UPDATED_TITLE");
-    v2 = Win_LocalizeRef("WIN_CONFIGURE_UPDATED_BODY");
-    ActiveWindow = GetActiveWindow();
-    return MessageBoxA(ActiveWindow, v2, v3, 0x44u) == 6;
+    return Sys_ConfirmChangePrompt("WIN_CONFIGURE_UPDATED_TITLE", "WIN_CONFIGURE_UPDATED_BODY");
 }
 
 bool __cdecl Sys_HasInfoChanged()

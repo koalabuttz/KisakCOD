@@ -1,5 +1,9 @@
 #pragma once
+#ifdef __linux__
+#include <linux/d3d9_types.h> // native Linux: D3D9 type surface only, no D3D9 API
+#else
 #include <d3d9.h>
+#endif
 #include "rb_backend.h"
 
 enum $F8BAC180992631E19A574A0F352E600A : __int32

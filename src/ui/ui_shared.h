@@ -1614,20 +1614,20 @@ struct Scr_ScriptWindow : UI_LinesComponent // sizeof=0x3C
 
     char *GetFilename();
 
-    void FindNext();
-    void FindPrev();
-    void SetCurrentLine(int line);
+    void __thiscall FindNext();
+    void __thiscall FindPrev();
+    void __thiscall SetCurrentLine(int line);
 
-    void GetSourcePos(uint32_t *start, uint32_t *end);
+    void __thiscall GetSourcePos(uint32_t *start, uint32_t *end);
 
-    void AddBreakpoint(
+    void __thiscall AddBreakpoint(
         struct Scr_Breakpoint **pBreakpoint,
         char *codePos,
         int builtinIndex,
         Scr_WatchElement_s *element,
         uint8_t type);
 
-    bool AddBreakpointAtSourcePos(
+    bool __thiscall AddBreakpointAtSourcePos(
         Scr_WatchElement_s *element,
         uint8_t breakpointType,
         bool user,
@@ -1635,7 +1635,7 @@ struct Scr_ScriptWindow : UI_LinesComponent // sizeof=0x3C
         uint32_t startSourcePos,
         uint32_t endSourcePos);
 
-    void ToggleBreakpointInternal(
+    void __thiscall ToggleBreakpointInternal(
         Scr_WatchElement_s *element,
         bool force,
         bool overwrite,

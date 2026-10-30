@@ -4,7 +4,11 @@
 #include <universal/assertive.h>
 #include <qcommon/qcommon.h>
 
+#if defined(__linux__)
+#include <linux/compat.h>
+#else
 #include <windows.h>
+#endif
 #include "threads.h"
 #include <xanim/xanim.h>
 #include <mutex>

@@ -34,6 +34,25 @@ Keep in Mind: This is a ~20 year old game with some known exploits. We will try 
 However, there is a non-zero chance of some type of binary exploitation when playing online. Use a sandbox (Sandboxie?) for peace of mind. 
 ```
 
+### Native Linux dedicated server
+
+The initial native Linux port builds the **32-bit x86 multiplayer dedicated
+server**, not a graphical client. Install CMake, Ninja, Clang and the 32-bit C++
+development libraries, then run:
+
+```sh
+# Debian/Ubuntu
+sudo apt-get install cmake ninja-build clang g++-multilib
+bash build-linux.sh
+python3 scripts/tests/test_linux_bootstrap.py
+```
+
+The executable is `bin/KisakCOD-dedi` (native ELF, no Wine). This is not yet a
+playable server: **Linux Steam authentication is unavailable and client tickets
+are rejected**. Game assets, map loading and multiplayer compatibility require
+separate verification. See [Linux build and verification details](docs/linux-dedicated.md)
+for the supported scope, prerequisites, tests, and remaining work.
+
 ### Cross-build from Linux with LLVM-MinGW
 
 The MinGW configuration produces a 32-bit Windows multiplayer executable. It

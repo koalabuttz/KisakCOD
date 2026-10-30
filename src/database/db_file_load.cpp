@@ -8,6 +8,11 @@
 #include <gfx_d3d/r_image.h>
 #include <gfx_d3d/r_buffers.h>
 
+#if defined(__linux__)
+#include <linux/compat.h>
+#include <qcommon/threads_interlock.h>
+#endif
+
 //uint32_t volatile g_loadingAssets      828e3f3c     db_file_load.obj
 //int32_t marker_db_file_load  828e3f40     db_file_load.obj
 
@@ -48,6 +53,17 @@ static int32_t __cdecl DB_ReadData();
 static void Load_XAssetListCustom();
 static void __cdecl Load_XAssetArrayCustom(int32_t count);
 
+#if defined(__linux__)
+// Bytes the most recent ReadFileEx() completion actually delivered.
+//
+// The Win32 build below credits a whole FILE_BUFFER_SIZE on the assumption that
+// every read is full. That holds for all but the last read of a fastfile, where
+// the remainder can be shorter, so avail_in ends up larger than the data really
+// in the buffer. The Linux build credits what the completion routine reports
+// instead, which is the same number whenever the read was full.
+static uint32_t g_lastReadBytes;
+#endif
+
 void __cdecl DB_CancelLoadXFile()
 {
     if (g_load.compressBufferStart)
@@ -67,12 +83,27 @@ int32_t DB_WaitXFileStage()
 
     if (!g_load.f)
         MyAssertHandler(".\\database\\db_file_load.cpp", 278, 0, "%s", "g_load.f");
+#if defined(__linux__)
+    if (g_load.outstandingReads <= 0)
+        Com_Error(ERR_DROP, "Unexpected end of fastfile '%s'", g_load.filename);
+    g_lastReadBytes = 0;
+#else
     if (g_load.outstandingReads <= 0)
         MyAssertHandler(".\\database\\db_file_load.cpp", 280, 0, "%s", "g_load.outstandingReads > 0");
+#endif
     --g_load.outstandingReads;
+#if defined(__linux__)
+    if (SleepEx(0xFFFFFFFF, 1) != WAIT_IO_COMPLETION || !g_lastReadBytes)
+        Com_Error(ERR_DROP, "Incomplete read of fastfile '%s'", g_load.filename);
+#else
     SleepEx(0xFFFFFFFF, 1);
+#endif
     result = InterlockedIncrement(&g_loadedSize);
+#if defined(__linux__)
+    g_load.stream.avail_in += g_lastReadBytes;
+#else
     g_load.stream.avail_in += 0x40000;
+#endif
     return result;
 }
 
@@ -185,6 +216,12 @@ void __stdcall DB_FileReadCompletion(
     uint32_t dwNumberOfBytesTransfered,
     _OVERLAPPED *lpOverlapped)
 {
+#if defined(__linux__)
+    // SleepEx() below calls this when the read finishes, so the delivered length
+    // is known by the time DB_WaitXFileStage() credits the buffer.
+    (void)lpOverlapped;
+    g_lastReadBytes = dwErrorCode == 0 ? dwNumberOfBytesTransfered : 0;
+#endif
     ;
 }
 
@@ -230,8 +267,13 @@ void __cdecl DB_LoadXFileInternal()
         Com_Error(ERR_DROP, "Fastfile for zone '%s' is empty.", g_load.filename);
     DB_WaitXFileStage();
     DB_ReadXFileStage();
+#if defined(__linux__)
+    if (g_load.stream.avail_in < sizeof(magic) + sizeof(version))
+        Com_Error(ERR_DROP, "Fastfile for zone '%s' has a truncated header.", g_load.filename);
+#else
     if (g_load.stream.avail_in < 8)
         MyAssertHandler(".\\database\\db_file_load.cpp", 598, 0, "%s", "sizeof( magic ) <= g_load.stream.avail_in");
+#endif
     *(uint32_t *)magic = *(uint32_t *)g_load.stream.next_in;
     *(uint32_t *)&magic[4] = *((uint32_t *)g_load.stream.next_in + 1);
     g_load.stream.next_in += 8;

@@ -10,9 +10,14 @@
 #include "g_main.h"
 #endif
 
+// Debug primitives only ever feed the client's draw list. A dedicated server has
+// no client renderer, so these forward to nothing there; the symbols are kept so
+// the game module still links.
 void __cdecl G_DebugLine(const float *start, const float *end, const float *color, int32_t depthTest)
 {
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
     CL_AddDebugLine(start, end, color, depthTest, 0, 1);
+#endif
 }
 
 void __cdecl G_DebugLineWithDuration(
@@ -22,12 +27,16 @@ void __cdecl G_DebugLineWithDuration(
     int32_t depthTest,
     int32_t duration)
 {
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
     CL_AddDebugLine(start, end, color, depthTest, duration, 1);
+#endif
 }
 
 void __cdecl G_DebugStar(const float *point, const float *color)
 {
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
     CL_AddDebugStar(point, color, 0, 1);
+#endif
 }
 
 void __cdecl G_DebugStarWithText(
@@ -37,7 +46,9 @@ void __cdecl G_DebugStarWithText(
     char *string,
     float fontsize)
 {
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
     CL_AddDebugStarWithText(point, starColor, textColor, string, fontsize, 0, 1);
+#endif
 }
 
 void __cdecl G_DebugBox(

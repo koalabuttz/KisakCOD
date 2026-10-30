@@ -8,7 +8,9 @@
 #include <sound/snd_public.h>
 
 int fs_numServerReferencedIwds;
-char basename[64];
+// Scratch buffer for FS_GetMapBaseName. Named to avoid shadowing the POSIX
+// basename() from <libgen.h>, which this file's includes pull in on Linux.
+static char fs_mapBaseName[64];
 const char *fs_serverReferencedIwdNames[1024];
 int fs_serverReferencedIwds[1024];
 
@@ -28,14 +30,14 @@ char *__cdecl FS_GetMapBaseName(char *mapname)
     len = v2;
     if (!I_stricmp(&mapname[v2 - 3], "bsp"))
         len = v2 - 7;
-    memcpy((uint8_t *)basename, (uint8_t *)mapname, len);
-    basename[len] = 0;
+    memcpy((uint8_t *)fs_mapBaseName, (uint8_t *)mapname, len);
+    fs_mapBaseName[len] = 0;
     for (c = 0; c < len; ++c)
     {
-        if (basename[c] == 37)
-            basename[c] = 95;
+        if (fs_mapBaseName[c] == 37)
+            fs_mapBaseName[c] = 95;
     }
-    return basename;
+    return fs_mapBaseName;
 }
 
 BOOL __cdecl FS_serverPak(const char *pak)

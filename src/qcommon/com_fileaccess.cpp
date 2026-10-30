@@ -137,6 +137,25 @@ int __cdecl FileWrapper_GetFileSize(FILE *h)
 }
 
 #ifdef KISAK_SP
+#if defined(__linux__)
+#include <linux/compat.h>
+// The Windows server build below asks SetFilePointerEx() about handle 0 and
+// stores the answer in a BYREF LARGE_INTEGER that it then reads back, so it
+// reports position 0 for every file regardless of where the stream actually is.
+// sv_demo.cpp derives demo markers from this offset, so the Linux server asks
+// the stream itself instead of a handle it never opened.
+uint32_t FS_FileTell(FILE *file)
+{
+    long position; // signed, so a stream error can be told apart from offset 0
+
+    ProfLoad_BeginTrackedValue(MAP_PROFILE_FILE_SEEK);
+    position = ftell(file);
+    ProfLoad_EndTrackedValue(MAP_PROFILE_FILE_SEEK);
+    if (position < 0)
+        return 0;
+    return (uint32_t)position;
+}
+#else
 #include <windows.h>
 #include <fileapi.h>
 uint32_t FS_FileTell(FILE *file)
@@ -151,4 +170,5 @@ uint32_t FS_FileTell(FILE *file)
     ProfLoad_EndTrackedValue(MAP_PROFILE_FILE_SEEK);
     return v2.LowPart;
 }
+#endif
 #endif

@@ -10,6 +10,11 @@
 #include "cmd.h"
 #include <universal/com_files.h>
 #include <server_mp/server_mp.h>
+
+#if defined(__linux__)
+#include <linux/compat.h>
+#include <qcommon/threads_interlock.h>
+#endif
 #include <win32/win_net.h>
 #include <cgame_mp/cg_local_mp.h>
 #include <universal/profile.h>
@@ -85,7 +90,13 @@ void __cdecl NetProf_PrepProfiling(netProfileInfo_t *prof)
     {
         if (!net_iProfilingOn)
         {
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
             if (!com_sv_running->current.enabled || CL_AnyLocalClientsRunning() && net_profile->current.integer == 2)
+#else
+            // Mode 1 profiles the client's netchan stream; a dedicated server has
+            // no local clients, so it only ever profiles its own server stream.
+            if (!com_sv_running->current.enabled)
+#endif
                 net_iProfilingOn = 1;
             else
                 net_iProfilingOn = 2;
@@ -239,7 +250,9 @@ void __cdecl Net_DisplayProfile(int localClientNum)
     {
         if (net_iProfilingOn == 1)
         {
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
             CL_Netchan_PrintProfileStats(localClientNum, 0);
+#endif
         }
         else
         {
@@ -711,7 +724,9 @@ void __cdecl Net_DumpProfile_f()
   {
     if (net_iProfilingOn == 1)
     {
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
       CL_Netchan_PrintProfileStats(0, 1);
+#endif
     }
     else
     {
@@ -791,6 +806,9 @@ bool __cdecl Netchan_TransmitNextFragment(netchan_t *chan)
 
 void BADPACKET(void *buffer, uint32_t len)
 {
+    // badpacket.dat is a client developer aid gated on the client-only
+    // cl_shownet dvar; the dedicated server has no way to enable it.
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
     if (cl_shownet && cl_shownet->current.integer >= 1) // LWSS: move behind `cl_shownet`
     {
         int file = FS_FOpenFileWrite((char *)"badpacket.dat");
@@ -800,6 +818,10 @@ void BADPACKET(void *buffer, uint32_t len)
             FS_FCloseFile(file);
         }
     }
+#else
+    (void)buffer;
+    (void)len;
+#endif
 }
 
 bool __cdecl Netchan_Transmit(netchan_t *chan, int length, char *data)
@@ -1186,8 +1208,10 @@ bool __cdecl NET_OutOfBandPrint(netsrc_t sock, netadr_t adr, const char *data)
 
         if (sock == NS_SERVER)
             SV_Netchan_AddOOBProfilePacket(v6);
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
         else
             CL_Netchan_AddOOBProfilePacket(sock, v6);
+#endif
         return res > 0;
     }
     else
@@ -1226,8 +1250,10 @@ bool __cdecl NET_OutOfBandData(netsrc_t sock, netadr_t adr, const uint8_t *forma
 
     if (sock == NS_SERVER)
         SV_Netchan_AddOOBProfilePacket(mbuf_20);
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
     else
         CL_Netchan_AddOOBProfilePacket(sock, mbuf_20);
+#endif
     return res > 0;
 }
 
@@ -1251,8 +1277,10 @@ bool __cdecl NET_OutOfBandVoiceData(netsrc_t sock, netadr_t adr, uint8_t *format
 
     if (sock == NS_SERVER)
         SV_Netchan_AddOOBProfilePacket(mbuf_20);
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
     else
         CL_Netchan_AddOOBProfilePacket(sock, mbuf_20);
+#endif
     return res > 0;
 }
 

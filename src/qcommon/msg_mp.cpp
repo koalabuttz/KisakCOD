@@ -2,7 +2,11 @@
 #include "msg_mp.h"
 #include "huffman.h"
 
+#if defined(__linux__)
+#include <linux/compat.h>
+#else
 #include <windows.h>
+#endif
 #include <bgame/bg_local.h>
 #include "sv_msg_write_mp.h"
 #include <server_mp/server_mp.h>
@@ -1272,7 +1276,14 @@ double __cdecl MSG_ReadOriginFloat(int bits, msg_t *msg, float oldValue)
             iassert( bits == MSG_FIELD_ORIGINY );
             index = 1;
         }
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
         roundedCenter = (int)((*CL_GetMapCenter())[index] + 0.5);
+#else
+        // A dedicated server has no client static. svs.mapCenter is the same
+        // centre that is published to clients in svsHeader, so origin deltas
+        // still decode against the value the sender encoded with.
+        roundedCenter = (int)(svs.mapCenter[index] + 0.5);
+#endif
         return (float)(roundedCenter + (((int)oldValue + 0x8000 - roundedCenter) ^ MSG_ReadBits(msg, 0x10u)) - 0x8000);
     }
     else
@@ -1287,7 +1298,13 @@ double __cdecl MSG_ReadOriginZFloat(msg_t *msg, float oldValue)
 
     if (MSG_ReadBit(msg))
     {
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
         roundedCenter = (int)((*CL_GetMapCenter())[2] + 0.5);
+#else
+        // See MSG_ReadOriginFloat: the dedicated server decodes against the
+        // centre it advertises in svsHeader, not a client static.
+        roundedCenter = (int)(svs.mapCenter[2] + 0.5);
+#endif
         return (float)(roundedCenter + (((int)oldValue + 0x8000 - roundedCenter) ^ MSG_ReadBits(msg, 0x10u)) - 0x8000);
     }
     else
@@ -1316,22 +1333,27 @@ int __cdecl MSG_ReadDeltaEntityStruct(msg_t *msg, int time, const char *from, ch
     iassert( number < (1 << GENTITYNUM_BITS) );
     if (MSG_ReadBit(msg) == 1)
     {
+        // cl_shownet is a client-only network trace dvar; a dedicated server
+        // never registers it.
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
         if (cl_shownet && (cl_shownet->current.integer >= 2 || cl_shownet->current.integer == -1))
             Com_Printf(CON_CHANNEL_SYSTEM, "%3i: #%-3i remove\n", msg->readcount, number);
+#endif
         return 1;
     }
     else if (MSG_ReadBit(msg))
     {
         lc = MSG_ReadLastChangedField(msg, 61);
+        print = 0;
+        // cl_shownet is a client-only network trace dvar; a dedicated server
+        // never registers it, so wire-trace printing is compiled out there.
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
         if (cl_shownet && (cl_shownet->current.integer >= 2 || cl_shownet->current.integer == -1))
         {
             print = 1;
             Com_Printf(CON_CHANNEL_SYSTEM, "%3i: #%-3i ", msg->readcount, *(uint32_t *)to);
         }
-        else
-        {
-            print = 0;
-        }
+#endif
         *(uint32_t *)to = number;
         if (strcmp(entityStateFields[0].name, "eType"))
             MyAssertHandler(".\\qcommon\\msg_mp.cpp", 1763, 0, "%s", "strcmp( entityStateFields[0].name, \"eType\" ) == 0");
@@ -1444,8 +1466,12 @@ int __cdecl MSG_ReadDeltaStruct(
     iassert( number < (1u << indexBits) );
     if (MSG_ReadBit(msg) == 1)
     {
+        // cl_shownet is a client-only network trace dvar; a dedicated server
+        // never registers it.
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
         if (cl_shownet && (cl_shownet->current.integer >= 2 || cl_shownet->current.integer == -1))
             Com_Printf(CON_CHANNEL_SYSTEM, "%3i: #%-3i remove\n", msg->readcount, number);
+#endif
         return 1;
     }
     else if (MSG_ReadBit(msg))
@@ -1454,15 +1480,16 @@ int __cdecl MSG_ReadDeltaStruct(
         
         if ((uint32_t)lc <= (uint32_t)numFields)
         {
+            print = 0;
+            // cl_shownet is a client-only network trace dvar; a dedicated
+            // server never registers it.
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
             if (cl_shownet && (cl_shownet->current.integer >= 2 || cl_shownet->current.integer == -1))
             {
                 print = 1;
                 Com_Printf(CON_CHANNEL_SYSTEM, "%3i: #%-3i ", msg->readcount, *(uint32_t *)to);
             }
-            else
-            {
-                print = 0;
-            }
+#endif
             *(uint32_t *)to = number;
             i = 0;
             field = stateFields;
@@ -1617,17 +1644,17 @@ void __cdecl MSG_ReadDeltaPlayerstate(
     // Copy entire `from` into `to`
     memcpy(to, from, sizeof(playerState_s));
 
-    int print;
+    int print = 0;
 
+    // cl_shownet is a client-only network trace dvar; a dedicated server never
+    // registers it.
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
     if (cl_shownet && (cl_shownet->current.integer >= 2 || cl_shownet->current.integer == -2))
     {
         print = 1;
         Com_Printf(CON_CHANNEL_SYSTEM, "%3i: playerstate ", msg->readcount);
     }
-    else
-    {
-        print = 0;
-    }
+#endif
 
     bool lc = MSG_ReadBit(msg) > 0;
 
@@ -1668,6 +1695,11 @@ void __cdecl MSG_ReadDeltaPlayerstate(
     //}
 
 
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
+    // Client-side prediction bookkeeping: the client records the origin it sent
+    // so the reassembled delta base matches what the server encoded against. A
+    // dedicated server has no predicted origin to look up and no client globals
+    // (clients[]) to look it up in, so this only applies to the client build.
     if (!lc)
     {
         if (!CL_GetPredictedOriginForServerTime(
@@ -1695,11 +1727,14 @@ void __cdecl MSG_ReadDeltaPlayerstate(
             //to->viewangles[2] = from->viewangles[2];
         }
     }
+#endif // !defined(__linux__) || !defined(KISAK_DEDICATED)
 
     if (MSG_ReadBit(msg))
     {
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
         if (cl_shownet && cl_shownet->current.integer == 4)
             Com_Printf(CON_CHANNEL_SYSTEM, "%s ", "PS_STATS");
+#endif
         int Bits = MSG_ReadBits(msg, MAX_STATS);
         if ((Bits & (1 << STAT_HEALTH)) != 0)
             to->stats[STAT_HEALTH] = MSG_ReadShort(msg);
@@ -1719,8 +1754,10 @@ void __cdecl MSG_ReadDeltaPlayerstate(
         {
             if (MSG_ReadBit(msg))
             {
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
                 if (cl_shownet && cl_shownet->current.integer == 4)
                     Com_Printf(CON_CHANNEL_SYSTEM, "%s ", "PS_AMMO");
+#endif
                 int Bits = MSG_ReadShort(msg);
                 for (int j = 0; j < 16; ++j)
                 {
@@ -1737,8 +1774,10 @@ void __cdecl MSG_ReadDeltaPlayerstate(
     {
         if (MSG_ReadBit(msg))
         {
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
             if (cl_shownet && cl_shownet->current.integer == 4)
                 Com_Printf(CON_CHANNEL_SYSTEM, "%s ", "PS_AMMOCLIP");
+#endif
             int Bits = MSG_ReadShort(msg);
             for (int j = 0; j < 16; ++j)
             {

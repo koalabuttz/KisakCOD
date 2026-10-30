@@ -18,10 +18,10 @@
 #include <script/scr_memorytree.h>
 #include <database/database.h>
 
-#ifdef WIN32
+#if defined(WIN32) || defined(__linux__)
 #include <win32/win_steam.h>
 #else
-#error Steam auth for Arch(Server)
+#error Steam auth is not implemented for this platform
 #endif
 #include <qcommon/com_bsp.h>
 
@@ -385,7 +385,7 @@ void __cdecl SV_Map_f()
     if (*map)
     {
         com_errorPrintsCount = 0;
-        if (!Com_HasPlayerProfile() && !com_dedicated->current.enabled)
+        if (!com_dedicated->current.enabled && !Com_HasPlayerProfile())
         {
             Com_Error(ERR_DROP, "PLATFORM_NOTSIGNEDINTOPROFILE");
             return;

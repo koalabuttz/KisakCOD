@@ -3,7 +3,11 @@
 #include "mem_track.h"
 #include <xanim/xanim.h>
 
+#if defined(__linux__)
+#include <linux/compat.h>
+#else
 #include <windows.h>
+#endif
 
 
 uint8_t windingPool[12292];

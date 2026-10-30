@@ -414,8 +414,13 @@ void __cdecl SV_SpawnServer(char *mapname)
     Scr_ParseGameTypeList();
     SV_SetGametype();
 
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
+    // Tells the local client which map and gametype it is about to load. A
+    // dedicated server has no local client; the zone loading above and below is
+    // unaffected.
     if (!mapIsPreloaded)
         CL_InitLoad(mapname, sv_gametype->current.string);
+#endif
 
     if (IsFastFileLoad() && !mapIsPreloaded)
     {
@@ -461,10 +466,18 @@ void __cdecl SV_SpawnServer(char *mapname)
 
         if (!mapIsPreloaded)
         {
+            // CL_MapLoading and CL_ShutdownAll drive the local client's loading
+            // screen and its own subsystems. A dedicated server has neither, so
+            // only the remote-screen update pair is kept there.
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
             CL_MapLoading(mapname);
             R_BeginRemoteScreenUpdate();
             R_EndRemoteScreenUpdate();
             CL_ShutdownAll(false);
+#else
+            R_BeginRemoteScreenUpdate();
+            R_EndRemoteScreenUpdate();
+#endif
         }
 
         SV_ShutdownGameProgs();
@@ -504,10 +517,12 @@ void __cdecl SV_SpawnServer(char *mapname)
 
     if (!mapIsPreloaded)
     {
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
         {
             PROF_SCOPED("start loading client");
             CL_StartLoading();
         }
+#endif
 
         if (IsFastFileLoad())
         {
@@ -866,11 +881,17 @@ void __cdecl SV_Shutdown(const char *finalmsg)
         SV_FreeClients();
         SV_ClearServer();
         Dvar_SetBool((dvar_s *)com_sv_running, 0);
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
+        // A listen-server host keeps a local client that has to be told the
+        // server is gone. A dedicated server has no local client to disconnect.
         for (client = 0; client < 1; ++client)
         {
             if (CL_IsLocalClientActive(client))
                 CL_Disconnect(client);
         }
+#else
+        (void)client;
+#endif
         memset(&svs, 0, sizeof(svs));
         bgs = 0;
         Com_Printf(CON_CHANNEL_SERVER, "---------------------------\n");

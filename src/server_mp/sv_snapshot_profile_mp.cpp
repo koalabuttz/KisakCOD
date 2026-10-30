@@ -1028,7 +1028,13 @@ void __cdecl SV_Netchan_PrintProfileStats(int bPrintToConsole)
     iTotalMinSent = 9999;
     iTotalMaxRecieved = 0;
     iTotalMinRecieved = 9999;
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
     iYPos = cl_profileTextY->current.integer;
+#else
+    // Screen-space origin for the profile overlay, which a dedicated server does
+    // not draw; SV_ProfDraw is a no-op there, so the value is inert.
+    iYPos = 0;
+#endif
     iYStep = 10;
     if (!net_profile->current.integer)
         MyAssertHandler(".\\server_mp\\sv_snapshot_profile_mp.cpp", 1185, 0, "%s", "net_profile->current.integer");
@@ -1261,7 +1267,11 @@ void __cdecl SV_Netchan_PrintProfileStats(int bPrintToConsole)
             else
             {
                 iYPos += 10;
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
                 SV_ProfDraw(iYPos, szLine, i == cg_packetAnalysisClient->current.integer);
+#else
+                SV_ProfDraw(iYPos, szLine, false);
+#endif
             }
         }
         ++i;
@@ -1271,6 +1281,11 @@ void __cdecl SV_Netchan_PrintProfileStats(int bPrintToConsole)
 
 void __cdecl SV_ProfDraw(int y, char *string, bool showHighlight)
 {
+    // Purely on-screen presentation: it draws a highlight rect and a text line
+    // for the in-game network profile overlay. A dedicated server has no client
+    // screen, so the same lines reach it only through the console path taken
+    // when bPrintToConsole is set.
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
     float color[4]; // [esp+Ch] [ebp-10h] BYREF
 
     if (showHighlight)
@@ -1282,5 +1297,10 @@ void __cdecl SV_ProfDraw(int y, char *string, bool showHighlight)
         CL_DrawRect(12, y, 1024, cl_profileTextHeight->current.integer - 6, color);
     }
     CL_DrawString(12, y, string, 0, cl_profileTextHeight->current.integer);
+#else
+    (void)y;
+    (void)string;
+    (void)showHighlight;
+#endif
 }
 

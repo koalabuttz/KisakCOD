@@ -1333,6 +1333,9 @@ void __cdecl ClientEndFrame(gentity_s *ent)
                     memset(partBits, 255, sizeof(partBits));
                     G_DObjCalcPose(ent, partBits);
                     SV_XModelDebugBoxes(ent);
+                    // The pose and debug boxes above are real server work; only
+                    // the on-screen text is client-only.
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
                     v5 = va(
                         "[%i] %.3f, %.3f, %.3f\n",
                         clientNum,
@@ -1340,6 +1343,7 @@ void __cdecl ClientEndFrame(gentity_s *ent)
                         level_bgs.clientinfo[clientNum].torso.yawAngle,
                         level_bgs.clientinfo[clientNum].playerAngles[1]);
                     CL_AddDebugStarWithText(ent->r.currentOrigin, colorYellow, colorYellow, v5, 0.25, 1, 1);
+#endif
                 }
                 ent->client->buttonsSinceLastFrame = 0;
             }

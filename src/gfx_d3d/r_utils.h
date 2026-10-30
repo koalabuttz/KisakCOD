@@ -153,6 +153,7 @@ void __cdecl R_MatrixIdentity44(float (*out)[4]);
 double __cdecl R_GetBaseLodDist(const float *origin);
 double __cdecl R_GetAdjustedLodDist(float dist, XModelLodRampType lodRampType);
 
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
 template <typename T>
 inline void __cdecl R_ReleaseAndSetNULL(
     IDirect3DSurface9 *var,
@@ -166,3 +167,4 @@ inline void __cdecl R_ReleaseAndSetNULL(
     useCount = var->Release();
     iassert(!useCount);
 }
+#endif

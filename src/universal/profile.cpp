@@ -4,7 +4,9 @@
 #include <qcommon/threads.h>
 #include "timing.h"
 
+#ifndef __linux__
 #include <windows.h>
+#endif
 
 ProfileScript profileScript;
 int g_profileStack[256];

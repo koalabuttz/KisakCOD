@@ -19,6 +19,13 @@
 
 #include <cstdint>
 
+#if defined(__linux__)
+// Z_VirtualReserve/Commit/Decommit/Free below drive the Win32 virtual-memory
+// calls directly, so the declaration surface has to be present even when
+// win_local.h stops pulling in <windows.h>.
+#include <linux/compat.h>
+#endif
+
 HunkUser *g_user;
 fileData_s *com_hunkData;
 

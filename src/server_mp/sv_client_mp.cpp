@@ -14,11 +14,11 @@
 #include <universal/com_constantconfigstrings.h>
 #include <universal/profile.h>
 
-#ifdef WIN32
+#if defined(WIN32) || defined(__linux__)
 #include <win32/win_steam.h>
 #include <universal/base64.h>
 #else
-#error Steam auth for Arch (Server)
+#error Steam auth is not implemented for this platform
 #endif
 
 struct ucmd_t // sizeof=0xC

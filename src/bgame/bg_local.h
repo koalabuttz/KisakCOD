@@ -391,7 +391,7 @@ struct alignas(8) animation_s // sizeof=0x68
     // padding byte
     // padding byte
     // padding byte
-    int64_t movetype;
+    alignas(8) int64_t movetype;
     scriptAnimNoteType_t noteType;
     // padding byte
     // padding byte

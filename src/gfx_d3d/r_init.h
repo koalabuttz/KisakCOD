@@ -30,8 +30,17 @@ struct vidConfig_t // sizeof=0x30 — subset needed by r_init; matches client_mp
 #include "r_image.h"
 #include "r_fog.h"
 
+#ifdef __linux__
+// Native Linux has no Windows SDK and no D3D9 SDK. compat.h carries the Win32
+// base types this header names (HINSTANCE/HWND/HRESULT) and d3d9_types.h the
+// D3D9 type surface; neither implements anything, so a dedicated build parses
+// these declarations without gaining a renderer.
+#include <linux/compat.h>
+#include <linux/d3d9_types.h>
+#else
 #include <windows.h>
 #include <d3d9.h>
+#endif
 
 enum GfxRenderer : __int32
 {                                       // ...

@@ -1393,8 +1393,10 @@ void __cdecl MSG_WriteEntityRemoval(
 {
     iassert( from );
     iassert( !msg->readOnly );
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
     if (cl_shownet && (cl_shownet->current.integer >= 2 || cl_shownet->current.integer == -1))
         Com_Printf(CON_CHANNEL_SYSTEM, "W|%3i: #%-3i remove\n", msg->cursize, *(uint32_t *)from);
+#endif
     if (sv_debugPacketContents->current.enabled)
         Com_Printf(CON_CHANNEL_SYSTEM, "Entity was removed\n");
     SV_PacketDataIsOverhead(snapInfo->clientNum, msg);

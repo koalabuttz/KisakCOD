@@ -1043,7 +1043,18 @@ void __cdecl CG_TraceCapsule(
     int contentMask);
 
 #ifdef KISAK_MP
+#if defined(__linux__) && defined(KISAK_DEDICATED)
+// Context zero is local-client prediction, which cannot run on this server.
+// Keep the authoritative server handler in context one unchanged.
+static void BG_ClientTraceUnavailable(trace_t*, const float*, const float*, const float*, const float*, int, int)
+{
+    MyAssertHandler(__FILE__, __LINE__, 0, "Client movement prediction requested in the dedicated server");
+    abort();
+}
+static const pmoveHandler_t pmoveHandlers[2] = { { BG_ClientTraceUnavailable, NULL }, { G_TraceCapsule, G_PlayerEvent } };
+#else
 static const pmoveHandler_t pmoveHandlers[2] = { { CG_TraceCapsule, NULL}, {G_TraceCapsule, G_PlayerEvent} }; // idb
+#endif
 #elif KISAK_SP
 static const pmoveHandler_t pmoveHandlers[2] = { { CG_TraceCapsule }, { G_TraceCapsule } };
 #endif

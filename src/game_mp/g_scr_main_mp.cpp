@@ -809,7 +809,11 @@ void GScr_line()
         Scr_Error("illegal call to line()");
         break;
     }
+    // The script still consumes its arguments above; only the draw is dropped,
+    // because a dedicated server has no client renderer to receive the line.
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
     CL_AddDebugLine(start, end, color, depthTest, duration.intValue, 1);
+#endif
 }
 
 void assertCmd()
@@ -6271,8 +6275,7 @@ int32_t Scr_ParseGameTypeList_LoadObj()
             }
             dest = g_scr_data.gametype.list[v11].pszScript;
             I_strncpyz(dest, src, 64);
-            //strlwr(dest);
-            _strlwr(dest);
+            I_strlwr(dest);
             qpath = va("maps/mp/gametypes/%s.txt", src);
             len = FS_FOpenFileByMode(qpath, &f, FS_READ);
             if (len > 0 && len < 1024)

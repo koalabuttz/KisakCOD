@@ -4,6 +4,11 @@
 #include <string.h>
 #include <qcommon/qcommon.h>
 
+#if defined(__linux__)
+#include <errno.h>  // errno, for the failure text in Com_RealTime
+#include <time.h>   // time, localtime_r
+#endif
+
 char __cdecl Com_Filter(const char *filter, char *name, int casesensitive)
 {
     const char *v3; // eax
@@ -157,13 +162,32 @@ int __cdecl Com_HashKey(const char *string, int maxlen)
 
 int __cdecl Com_RealTime(qtime_s *qtime)
 {
+#if defined(__linux__)
+    time_t t; // [esp+0h] [ebp-10h] BYREF
+    tm tmBuf; // storage for localtime_r, which has no static buffer
+    tm *tms; // [esp+Ch] [ebp-4h]
+#else
     __int64 t; // [esp+0h] [ebp-10h] BYREF
     tm *tms; // [esp+Ch] [ebp-4h]
+#endif
 
+#if defined(__linux__)
+    t = time(NULL);
+    if (t == (time_t)-1)
+        Com_PrintWarning(CON_CHANNEL_SYSTEM, "WARNING: Com_RealTime: time() failed: %s\n", strerror(errno));
+    if (!qtime)
+        return (int)t;
+    // localtime_r always writes through the caller's buffer, so qtime is only
+    // touched when it succeeds; a failure leaves the caller's values as they were.
+    tms = localtime_r(&t, &tmBuf);
+    if (!tms)
+        Com_PrintWarning(CON_CHANNEL_SYSTEM, "WARNING: Com_RealTime: localtime_r() failed: %s\n", strerror(errno));
+#else
     t = _time64(0);
     if (!qtime)
         return t;
     tms = _localtime64(&t);
+#endif
     if (tms)
     {
         qtime->tm_sec = tms->tm_sec;
@@ -176,7 +200,11 @@ int __cdecl Com_RealTime(qtime_s *qtime)
         qtime->tm_yday = tms->tm_yday;
         qtime->tm_isdst = tms->tm_isdst;
     }
+#if defined(__linux__)
+    return (int)t;
+#else
     return t;
+#endif
 }
 
 static void __cdecl Com_Prefetch(const char *s, signed int bytes)

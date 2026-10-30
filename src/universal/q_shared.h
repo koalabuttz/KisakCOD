@@ -26,10 +26,27 @@
 #pragma warning(disable : 4786)		// identifier was truncated
 #endif // _WIN32
 
+#ifdef __linux__
+// libstdc++ headers (<cmath>, <iostream>, <mutex>, <algorithm>, ...) spell
+// numeric_limits<T>::min()/max() and use std::min/std::max internally, so the
+// function-like macros below cannot exist in a native Linux build: they would
+// mangle any standard header included afterwards. constexpr templates are the
+// equivalent here. They keep the macros' mixed-numeric-type behaviour (the
+// conditional converts both operands, so min(3u, 0) still yields unsigned),
+// evaluate each argument exactly once, and return by value so a call can never
+// produce a dangling reference.
+#undef max
+#undef min
+template <class T, class U>
+constexpr auto min(T a, U b) { return a < b ? a : b; }
+template <class T, class U>
+constexpr auto max(T a, U b) { return a > b ? a : b; }
+#else
 #undef max
 #define max(a,b) ((a) > (b) ? (a) : (b))
 #undef min
 #define min(a,b) ((a) < (b) ? (a) : (b))
+#endif
 
 #include <universal/assertive.h> // LWSS add
 
@@ -44,6 +61,20 @@
 #include <ctype.h>
 #include <cfloat> // FLT_MAX
 #include <cstdint>
+#ifdef __linux__
+// <climits>: INT_MIN / INT_MAX for DvarLimits (winnt.h supplies them on Win32).
+// <endian.h>: host byte order, checked next to LOW_IND/HIGH_IND below.
+// <linux/compat.h>: the Win32 base types plus the MSVC CRT shims (_snprintf,
+// _vsnprintf_s, _stricmp) that the engine sources call directly.
+// <qcommon/threads_interlock.h>: the portable Interlocked* intrinsics (adding it
+// here rather than redefining them keeps a single definition engine-wide).
+// Every module includes q_shared.h first, so this is the one place that has to
+// make all of that visible.
+#include <climits>
+#include <endian.h>
+#include <linux/compat.h>
+#include <qcommon/threads_interlock.h>
+#endif
 
 // this is the define for determining if we have an asm version of a C function
 #if (defined _M_IX86 || defined __i386__) && !defined __sun__  && !defined __LCC__
@@ -51,6 +82,40 @@
 #else
 #define id386	0
 #endif
+
+//======================= Non-Windows compiler spellings =================
+// The engine sources are written in the Microsoft C++ dialect. Clang accepts
+// those spellings as keywords under -fms-extensions (__cdecl, __stdcall,
+// __declspec, __int8..__int64), which is how native Linux builds compile them,
+// so nothing is redefined for Clang: the calling convention and the alignment
+// hints must stay part of every declaration that shares a header with the
+// MSVC build. GCC has no such keywords, so the same spellings are expressed
+// with the equivalent GNU attributes instead of being dropped.
+#ifdef __linux__
+#if !defined(__clang__)
+#if defined(__i386__) || defined(__x86_64__)
+#ifndef __cdecl
+#define __cdecl __attribute__((cdecl))
+#endif
+#ifndef __stdcall
+#define __stdcall __attribute__((stdcall))
+#endif
+#ifndef __declspec
+#define __declspec(x) __attribute__((x))
+#endif
+#else
+#error "q_shared.h needs Clang -fms-extensions (or an x86 GCC host) for __cdecl/__stdcall"
+#endif
+
+// MS integer type names. Clang provides these as keywords under
+// -fms-extensions; the definitions are identical to the __GNUC__ block further
+// down, so that block stays valid for both compilers.
+#define __int8  char
+#define __int16 short
+#define __int32 int
+#define __int64 long long
+#endif // !__clang__
+#endif // __linux__
 
 // for windows fastcall option
 #define	QDECL
@@ -98,6 +163,47 @@ static ID_INLINE int BigLong(int l) { return LongSwap(l); }
 #define	PATH_SEP '\\'
 
 #endif // WIN32
+
+//======================= LINUX DEFINES =================================
+// Native (POSIX) Linux build. Mirrors the WIN32 block above so that the rest of
+// the engine sees the same macro surface; only the values that are genuinely
+// platform facts (build string, path separator) differ.
+#ifdef __linux__
+
+#define	MAC_STATIC
+
+// QDECL keeps the empty definition from above: on x86 the SysV calling
+// convention is what __cdecl means on Windows, so no attribute is needed.
+
+// buildstring will be incorporated into the version string
+#ifdef NDEBUG
+#define	CPUSTRING	"linux-x86"
+#else
+#define	CPUSTRING	"linux-x86-debug"
+#endif
+
+// angle indexes
+#define	PITCH				0		// up / down
+#define	YAW					1		// left / right
+#define	ROLL				2		// fall over
+
+#define ID_INLINE inline
+
+int __cdecl ShortSwap(__int16 l);
+int __cdecl LongSwap(int l);
+
+static ID_INLINE short BigShort(short l) { return ShortSwap(l); }
+#define LittleShort
+static ID_INLINE int BigLong(int l) { return LongSwap(l); }
+#define LittleLong
+//static ID_INLINE float BigFloat(const float *l) { FloatSwap(l); }
+#define LittleFloat
+
+// Native path separator. Engine code that assembles paths by hand must use
+// PATH_SEP (or the Sys_* path helpers) instead of assuming '\\'.
+#define	PATH_SEP '/'
+
+#endif // __linux__
 
 #define PI_DIV_180		0.017453292519943295769236907684886
 #define INV_PI_DIV_180	57.295779513082320876798154814105
@@ -509,6 +615,11 @@ typedef ull             uint64;
 
 // Some convenience macros to make partial accesses nicer
 #define LAST_IND(x,part_type)    (sizeof(x)/sizeof(part_type) - 1)
+// The swap layer below assumes a little-endian host: on a big-endian host the
+// Little* helpers would silently return swapped data instead of not swapping.
+#if defined(__BYTE_ORDER) && defined(__LITTLE_ENDIAN) && __BYTE_ORDER != __LITTLE_ENDIAN
+#error "q_shared.h: the byte-swap layer requires a little-endian host"
+#endif
 #if defined(__BYTE_ORDER) && __BYTE_ORDER == __BIG_ENDIAN
 #  define LOW_IND(x,part_type)   LAST_IND(x,part_type)
 #  define HIGH_IND(x,part_type)  0
@@ -921,6 +1032,12 @@ uint32_t __cdecl LongNoSwap(uint32_t color);
 #define arr_esize(a) (sizeof((a)[0]))
 #define arr_cnt(a) (sizeof(a)/arr_esize(a))
 #define ARRAY_COUNT(a) arr_cnt(a)
+#ifdef __linux__
+// The Win32 name for the same macro. Deliberately built on ARRAY_COUNT so it
+// stays array-only: it rejects pointers with the same compile error the Windows
+// definition produces, instead of quietly reporting a bogus constant.
+#define ARRAYSIZE(a) ARRAY_COUNT(a)
+#endif
 struct va_info_t
 {
 	char va_string[2][1024];

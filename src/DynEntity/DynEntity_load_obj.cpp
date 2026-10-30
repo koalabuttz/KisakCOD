@@ -6,6 +6,11 @@
 #include <universal/q_parse.h>
 #include <qcommon/com_bsp.h>
 
+#ifdef __linux__
+// This file scans only numeric vectors, with no scanf_s buffer-size arguments.
+#define sscanf_s sscanf
+#endif
+
 const char *dynEntClassNames[2] =
 {
     "dyn_brushmodel",

@@ -1591,7 +1591,20 @@ inline T Buf_Read(unsigned char **pos)
 }
 
 #include <xmmintrin.h>  // SSE
+#ifdef __linux__
+#include <x86intrin.h>
+// Clang's Microsoft intrinsic takes unsigned long*, while Linux DWORD is an
+// unsigned int. Keep Windows-sized fields intact and adapt the local result.
+inline unsigned char _BitScanReverse(unsigned int* index, unsigned int mask)
+{
+    if (!mask)
+        return 0;
+    *index = 31u - static_cast<unsigned int>(__builtin_clz(mask));
+    return 1;
+}
+#else
 #include <intrin.h>
+#endif
 
 // (https://github.com/SwagSoftware/KisakCOD/issues/52)
 // 

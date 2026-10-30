@@ -1,4 +1,10 @@
-These asset-free regression checks require Python 3 and a C++20 compiler:
+Native Linux dedicated-server checks are documented in
+[the Linux build guide](../../docs/linux-dedicated.md#asset-free-checks). They
+include an ELF32/bootstrap smoke test, native runtime and UDP tests, fastfile
+short-read regressions, and non-interactive debugger checks. They require the
+32-bit Linux toolchain and are separate from Windows runtime checks.
+
+These shared asset-free regression checks require Python 3 and a C++20 compiler:
 
 ```sh
 python3 scripts/tests/test_renderer_command_ownership.py

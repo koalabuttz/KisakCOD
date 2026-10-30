@@ -20,10 +20,10 @@
 #include <script/scr_debugger.h>
 #include <universal/profile.h>
 
-#ifdef WIN32
+#if defined(WIN32) || defined(__linux__)
 #include <win32/win_steam.h>
 #else
-#error Steam auth for Arch(Server)
+#error Steam auth is not implemented for this platform
 #endif
 
 
@@ -955,13 +955,17 @@ void __cdecl SV_RunFrame()
         start = (int)Sys_MillisecondsRaw();
     SV_ResetSkeletonCache();
 
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
     CL_FlushDebugServerData();
+#endif
     G_RunFrame(svs.time);
     //Scr_ProfileUpdate();
     //Scr_ProfileBuiltinUpdate();
     //Profile_ResetCounters(1);
     //Profile_ResetScriptCounters();
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
     CL_UpdateDebugServerData();
+#endif
 
     if (Win_GetThreadLock() == THREAD_LOCK_ALL)
         v0 = __rdtsc();

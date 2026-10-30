@@ -475,7 +475,9 @@ void __cdecl SV_XModelDebugBoxes(gentity_s *ent)
                     MatrixTransformVector(vec, axis, end);
                     Vec3Add(end, ent->r.currentOrigin, end);
                     ++tempBoxVerts;
+#if !defined(__linux__) || !defined(KISAK_DEDICATED)
                     CL_AddDebugLine(start, end, color, 0, 0, 1);
+#endif
                 }
                 ++localBoneIndex;
                 ++boneMatrix;

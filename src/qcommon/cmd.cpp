@@ -222,6 +222,8 @@ void Cmd_Vstr_f(void) {
 #include <format>
 #include <filesystem>
 #include <vector>
+#include <cerrno>
+#include <cstring>
 #include <sound/snd_local.h>
 #include <universal/com_sndalias.h>
 
@@ -292,6 +294,33 @@ static void WriteWAVHeader(FILE *f, uint32_t dataSize, uint32_t sampleRate, uint
 }
 
 
+// Opens one raw-dump output file. Returns false when the file cannot be
+// created, after reporting why, so the caller skips the asset instead of
+// writing through a null FILE*.
+static bool Cmd_OpenRawDump(FILE **out, const char *path, const char *mode)
+{
+    *out = NULL;
+#if defined(__linux__)
+    *out = fopen(path, mode);
+    if (!*out)
+    {
+        Com_PrintError(CON_CHANNEL_ERROR, "Cmd_Dumpraw: cannot open '%s' (%s): %s\n", path, mode, strerror(errno));
+        return false;
+    }
+    return true;
+#else
+    {
+        errno_t err = fopen_s(out, path, mode);
+        if (err != 0)
+        {
+            Com_PrintError(CON_CHANNEL_ERROR, "Cmd_Dumpraw: cannot open '%s' (%s): error %d\n", path, mode, (int)err);
+            return false;
+        }
+        return true;
+    }
+#endif
+}
+
 void Cmd_Dumpraw_f(void)
 {
     auto DumpFileType = [](XAssetType type) -> void
@@ -314,7 +343,8 @@ void Cmd_Dumpraw_f(void)
                 auto dir = p.parent_path();
                 std::filesystem::create_directories(rawDir / dir);
 
-                fopen_s(&f, std::format("{}\\{}", rawDir, file.stringTable->name).c_str(), "w");
+                if (!Cmd_OpenRawDump(&f, std::format("{}\\{}", rawDir, file.stringTable->name).c_str(), "w"))
+                    continue;
                 for (int row = 0; row < file.stringTable->columnCount; row++)
                 {
                     for (int col = 0; col < file.stringTable->rowCount; col++)
@@ -366,7 +396,8 @@ void Cmd_Dumpraw_f(void)
                         sndfilepath.remove_filename();
                         std::filesystem::create_directories(sndfilepath);
 
-                        fopen_s(&f, std::format("{}\\{}", rawDir, realname).c_str(), "wb");
+                        if (!Cmd_OpenRawDump(&f, std::format("{}\\{}", rawDir, realname).c_str(), "wb"))
+                            continue;
                         // enjoy this long deref chain
                         WriteWAVHeader(f, file.sound->head->soundFile->u.loadSnd->sound.info.data_len,
                             file.sound->head->soundFile->u.loadSnd->sound.info.rate,
@@ -393,7 +424,8 @@ void Cmd_Dumpraw_f(void)
                 sndfilepath.remove_filename();
                 std::filesystem::create_directories(sndfilepath);
 
-                fopen_s(&f, std::format("{}\\{}", rawDir, realname).c_str(), "wb");
+                if (!Cmd_OpenRawDump(&f, std::format("{}\\{}", rawDir, realname).c_str(), "wb"))
+                    continue;
 
                 WriteWAVHeader(f, file.loadSnd->sound.info.data_len,
                     file.loadSnd->sound.info.rate,
@@ -407,7 +439,8 @@ void Cmd_Dumpraw_f(void)
             }
             else
             {
-                fopen_s(&f, std::format("{}\\{}", rawDir, file.rawfile->name).c_str(), "wb");
+                if (!Cmd_OpenRawDump(&f, std::format("{}\\{}", rawDir, file.rawfile->name).c_str(), "wb"))
+                    continue;
                 fwrite(file.rawfile->buffer, file.rawfile->len, 1, f);
                 fflush(f);
                 fclose(f);
@@ -1275,7 +1308,11 @@ void __cdecl Cmd_ExecuteSingleCommand(int32_t  localClientNum, int32_t  controll
             {
                 if (!Dvar_Command() && (!com_sv_running || !com_sv_running->current.enabled || !SV_GameCommand()))
                 {
-#ifndef KISAK_RADIANT
+#if defined(__linux__) && defined(KISAK_DEDICATED)
+                    Com_Printf(CON_CHANNEL_SYSTEM, "Unknown command: %s\n", Cmd_Argv(0));
+                    Cmd_EndTokenizedString();
+                    return;
+#elif !defined(KISAK_RADIANT)
                     CL_ForwardCommandToServer(localClientNum, text);
                     Cmd_EndTokenizedString();
                     return;

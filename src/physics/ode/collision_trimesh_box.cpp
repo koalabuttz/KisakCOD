@@ -41,7 +41,11 @@
 #include <universal/q_shared.h> // va()
 #include "collision_trimesh_KISAK.h"
 
+#ifdef __linux__
+#include <linux/compat.h>
+#else
 #include <windows.h>
+#endif
 #include <universal/com_math.h>
 #include "collision_kernel.h"
 
