@@ -148,11 +148,22 @@ On this machine, that check loads and unloads `code_post_gfx_mp`,
 common initialization, and exits normally through `quit`. Their installed
 fastfile headers are `IWffu100`, version 5.
 
-A separate `mp_crash` test loads the map fastfile and collision data and reaches
-`Game Initialization`, but stalls there and was terminated after 90 seconds.
-**Map startup and gameplay are not yet working/verified.** Diagnostic logs for
-that local run are `build-linux/steam-map.log`. Further investigation needs a
-thread backtrace (install `gdb` if it is not available).
+To extend the check through map initialization, server frames, `status`, and
+clean shutdown:
+
+```sh
+python3 scripts/tests/test_linux_asset_startup.py \
+  "$HOME/.steam/debian-installation/steamapps/common/Call of Duty 4" \
+  --map mp_crash
+```
+
+`mp_crash` and `mp_shipment` have completed this check in Debug with the installed
+retail assets; `mp_crash` also passes in RelWithDebInfo. The first map test exposed
+an EOF loop in the script scanner: exhausted input was restarted when no local
+client existed. The scanner now dispatches EOF independently of
+client count, with an asset-free SP/MP regression covering zero and one local
+client. This fixes map initialization; it does not establish real-client or
+multiplayer gameplay compatibility.
 
 ## Supported boundaries and remaining verification
 
@@ -175,6 +186,6 @@ Before calling this port playable, verify with licensed assets: complete zone
 loading/unloading; map start/restart/rotation; sustained server simulation;
 client authentication and connection; entity/snapshot serialization; downloads;
 console `status`/`quit` with an active map; signal shutdown; and resource cleanup
-over repeated maps. Initial-zone loading/unloading and a no-map `quit` have passed
-the optional installed-assets check above; that does not establish the remaining
-gameplay checks.
+over repeated maps. Initial-zone loading/unloading and the single-map
+startup/frame/status/quit check above have passed with installed assets; that
+does not establish sustained operation, real client connections, or gameplay.
