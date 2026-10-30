@@ -29,6 +29,7 @@
 #include <qcommon/qcommon.h>
 #include <linux/net_internal.h>
 #include "shim_engine.h"
+#include "test_loopback_auth.h"
 
 // ------------------------------------------------------------------ harness --
 
@@ -768,6 +769,11 @@ int main()
 
     TestLayout();
 
+    // Before anything calls NET_Init(): the loopback auth guard freezes its
+    // start-up answer once per process, so every start-up decision gets its own
+    // forked child (see test_loopback_auth.cpp).
+    RunLoopbackAuthScenarioProcesses();
+
     // Seed a free port before init so the bound port is predictable.
     seedPort = PickFreeUdpPort();
     if (seedPort <= 0)
@@ -856,9 +862,13 @@ int main()
 
     TestSleepNoHotSpinWithoutSocket();
 
+    // This process never enabled sv_loopbackTestAuth, so it is the default case.
+    RunLoopbackAuthDefaultChecks();
+
     NET_Shutdown();
     close(peer);
 
-    printf("\n%d checks, %d failures\n", g_checks, g_failures);
-    return g_failures == 0 ? 0 : 1;
+    printf("\n%d checks, %d failures\n", g_checks + LoopbackAuthCheckCount(),
+           g_failures + LoopbackAuthFailureCount());
+    return (g_failures + LoopbackAuthFailureCount()) == 0 ? 0 : 1;
 }

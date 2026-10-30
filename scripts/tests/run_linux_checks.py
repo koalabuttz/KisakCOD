@@ -111,6 +111,14 @@ def plan_checks(options, workdir, build_dir, binary, python, cxx):
 
     checks.append(
         Check(
+            "handshake_auth",
+            "production server authentication parsing and local handshake safeguards",
+            [Command([python, TESTS / "test_server_handshake_auth.py", "--cxx", cxx, "--m32"], timeout=300)],
+        )
+    )
+
+    checks.append(
+        Check(
             "debugger",
             "script debugger boundary without a UI",
             [Command([python, TESTS / "test_linux_debugger.py", "--cxx", cxx], timeout=300)],

@@ -68,7 +68,7 @@ def resource_growth(baseline, later):
 
 
 class Server:
-    def __init__(self, binary, game, work, output, timeout):
+    def __init__(self, binary, game, work, output, timeout, startup_args=()):
         self.timeout, self.output = timeout, output
         self.samples, self.stages, self.cycle_endpoints = [], [], []
         self.next_sample = 0.0
@@ -87,7 +87,7 @@ class Server:
         command = [str(binary), "+set", "fs_basepath", str(assets), "+set", "fs_homepath", str(home),
                    "+set", "net_ip", "127.0.0.1", "+set", "net_port", str(port),
                    "+set", "dedicated", "1", "+set", "sv_hostname", self.hostname,
-                   "+map", "mp_crash"]
+                   *startup_args, "+map", "mp_crash"]
         self.log_stream = self.log_path.open("wb")
         self.process = None
         self.socket = None

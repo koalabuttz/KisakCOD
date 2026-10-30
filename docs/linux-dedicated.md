@@ -6,8 +6,10 @@ The Windows MP/SP/editor build paths remain separate.
 
 This is an initial port, not a gameplay-ready release. There is no native Linux
 graphical client. In particular, **Steam authentication is not implemented on
-Linux yet: every client ticket is rejected**. Do not deploy this build as a
-public game server or treat the bootstrap check as a multiplayer test.
+Linux yet: ordinary client tickets are rejected**. An explicit startup-only,
+loopback-only test mode can skip ticket verification; it does not establish
+playable-client compatibility. Do not deploy this build as a public game server
+or treat the bootstrap check as a multiplayer test.
 
 ## Build
 
@@ -230,6 +232,79 @@ can run in CI without starting the engine:
 python3 scripts/tests/test_linux_lifecycle_driver.py
 ```
 
+## Local connection testing without Steam authentication
+
+For authorized testing on the same machine only, add these startup settings to
+an otherwise configured server launch:
+
+```sh
+bin/KisakCOD-dedi \
+  +set fs_basepath /path/to/isolated/assets \
+  +set fs_homepath /path/to/separate/writable/home \
+  +set dedicated 1 +set net_ip 127.0.0.1 +set net_port 28960 \
+  +set sv_loopbackTestAuth 1 +map mp_crash
+```
+
+This option is **off by default**, unarchived, and captured once at process
+startup. Console/script setters cannot enable it; `net_restart` and map changes
+do not change the captured choice. Restart the process without the flag (or
+with `+set sv_loopbackTestAuth 0`) to restore ordinary fail-closed ticket checks.
+That rollback does not implement Linux Steam authentication.
+
+The test mode requires all of the following before skipping a ticket check:
+
+- A dedicated server with literal `net_ip 127.0.0.1`. Omitted/empty settings,
+  `localhost`, wildcard, LAN, hostname and other loopback addresses are refused
+  at startup, even with UDP disabled. This engine treats `localhost` as a
+  wildcard bind, not as a safe alternative.
+- A live IPv4 UDP socket actually bound to `127.0.0.1`, verified with the kernel,
+  and a current option/configuration that still agrees with the startup choice.
+- A UDP source address exactly `127.0.0.1`, not the wider `127/8` range, LAN
+  addresses, or internal loopback/bot address types.
+
+It generates `local-test-…` session identities, **not authenticated Steam IDs**.
+They are not persistent account identities. Protocol, source-address/challenge
+matching, passwords and capacity checks remain in place. Local processes are
+trusted: a local proxy or port forward can relay remote traffic, so do not
+forward the port or use this mode for public/LAN hosting.
+
+Without opt-in, missing custom ticket/ID arguments now receive an explicit
+handshake error rather than asserting or silently retrying. Malformed fields
+are rejected before Base64 decoding, and a well-formed native request reports
+that Steam authentication is unavailable. Authentication tickets are not logged.
+
+### Client compatibility is a separate boundary
+
+This codebase requires connect protocol **1**. Do not change that number to
+impersonate a stock or CoD4x server: a matching integer alone cannot fix
+challenge-response, gamestate, snapshot or gameplay serialization differences.
+The [CoD4x server source](https://github.com/callofduty4x/CoD4x_Server/blob/master/src/sv_client.c)
+has a different challenge-response format, including an echoed client challenge
+and protocol information. Its legacy-protocol handling does not establish a
+normal playable protocol-1 channel with this build. The installed stock/CoD4x
+client has **not** completed a playable connection here. In a live local attempt
+with test authentication enabled, the installed client advanced to repeated
+`connect` requests advertising protocol **6**; this server explicitly rejected
+them because it requires **1**, while the client still displayed “awaiting
+challenge.” That observation confirms the authentication barrier was passed,
+not that the protocols are compatible. A client may retry without displaying
+this build's version/error response.
+
+The opt-in installed-assets regression can exercise real UDP connection
+admission without claiming gameplay compatibility:
+
+```sh
+python3 scripts/tests/test_linux_handshake.py \
+  "$HOME/.steam/debian-installation/steamapps/common/Call of Duty 4" \
+  --binary bin/KisakCOD-dedi
+```
+
+It stages asset symlinks and a separate temporary home, checks default rejection,
+unsafe startup binds, source/token/protocol negatives, startup-only protection,
+and safe socket restart. A protocol-1 wire probe reaches `connectResponse` with
+a synthetic identity and clean server shutdown; it does not decode a gamestate
+or run a graphical client. This is an admission check, not a playable-client test.
+
 ## Supported boundaries and remaining verification
 
 - Networking is native nonblocking IPv4/UDP. IPX and SOCKS proxying are not
@@ -243,7 +318,7 @@ python3 scripts/tests/test_linux_lifecycle_driver.py
   shellshock configuration, script compilation, and the script VM remain.
 - Native Steam GameServer initialization and callback-based ticket verification
   remain to be implemented and tested with the official Linux runtime. There is
-  no authentication-bypass fallback.
+  no automatic authentication fallback; only the explicit local test mode above.
 - Windows source paths are retained, but native MSVC/MinGW builds must still be
   checked in their own environments after shared-header changes.
 

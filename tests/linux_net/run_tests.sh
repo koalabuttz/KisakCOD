@@ -21,6 +21,7 @@ CXX=${CXX:-clang++}
     src/linux/net.cpp \
     tests/linux_net/shim_engine.cpp \
     tests/linux_net/test_net.cpp \
+    tests/linux_net/test_loopback_auth.cpp \
     -o "$out"
 
 exec "$out"

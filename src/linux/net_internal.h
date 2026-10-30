@@ -54,6 +54,37 @@ qboolean Sys_GetPacket(netadr_t *net_from, msg_t *net_message);
 // dropped as non-fatal), zero when the send genuinely failed.
 char Sys_SendPacket(int length, uint8_t *data, netadr_t to);
 
+// ---- loopback local-auth test guard ---------------------------------------
+//
+// sv_loopbackTestAuth skips Steam ticket verification for local testing only.
+// It is off by default. The per-packet guard requires both explicit loopback
+// configuration and a live loopback-bound socket; it does not skip the server's
+// protocol, challenge, password or capacity checks.
+
+// Registers the startup-only "sv_loopbackTestAuth" cvar and freezes its value
+// for the rest of the process.  NET_Init() calls this after the engine's
+// start-up dvars exist and before the first bind, so the server handshake
+// path sees a settled answer.  Calling it again never changes the answer: a
+// NET_Shutdown()/NET_Init() cycle cannot turn the bypass on or off.
+void NET_InitLoopbackAuthTest();
+
+// The start-up decision alone: true when sv_loopbackTestAuth was on when the
+// process captured it.  This says nothing about whether a bypass is currently
+// usable - no socket may be bound and the cvar may have been changed since -
+// so it must not be used to authorise anything.  NET_CanBypassLoopbackAuth()
+// is the authorisation question.
+bool NET_LoopbackAuthTestEnabled();
+
+// Per-packet authorisation for the unauthenticated handshake path.  True only
+// when all of the following hold: the frozen start-up answer is on, the cvar
+// still reads on (an engine-internal Dvar_Set that turns it off revokes the
+// bypass immediately), the server is dedicated, net_ip currently names literal
+// 127.0.0.1, the UDP socket is really bound there according to getsockname(),
+// and the sender is exactly
+// 127.0.0.1 with type NA_IP.  The sender's port is free.  Everything else -
+// LAN, public, broadcast, NA_LOOPBACK/NA_BOT/IPX pseudo-types - is rejected.
+bool NET_CanBypassLoopbackAuth(netadr_t from);
+
 // ---- address conversion ---------------------------------------------------
 
 void NetadrToSockadr(netadr_t *a, struct sockaddr *s);

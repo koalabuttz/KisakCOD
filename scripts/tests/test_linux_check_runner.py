@@ -115,11 +115,14 @@ class PlannedCommandTests(unittest.TestCase):
         self.assertEqual(argv[argv.index("--compiler") + 1], CXX)
 
     def test_compiled_checks_receive_the_explicit_compiler_on_the_command_line(self):
-        for name, flag in (("debugger", "--cxx"), ("fastfile", "--cxx"), ("net_deadline", "--cxx")):
+        for name, flag in (("debugger", "--cxx"), ("fastfile", "--cxx"), ("net_deadline", "--cxx"), ("handshake_auth", "--cxx")):
             argv = check_named(self.checks, name).commands[0].argv
             self.assertIn(flag, argv, f"{name} does not pass {flag}")
             self.assertEqual(argv[argv.index(flag) + 1], CXX, f"{name} uses a compiler other than --cxx")
             self.assertNotIn("clang++", argv, f"{name} falls back to a default compiler")
+
+    def test_handshake_auth_requires_32_bit_execution(self):
+        self.assertIn("--m32", check_named(self.checks, "handshake_auth").commands[0].argv)
 
     def test_source_self_tests_compile_with_the_explicit_compiler(self):
         for name in ("sys_fileio", "sys_virtualmem"):
@@ -175,13 +178,14 @@ class PlannedCommandTests(unittest.TestCase):
             else:
                 self.assertIsNone(check.requires, f"{check.name} requires an artefact")
 
-    def test_default_plan_is_the_ten_known_checks_in_order(self):
+    def test_default_plan_is_the_eleven_known_checks_in_order(self):
         # main() validates --only/--skip against this list; a plan that drifts
         # from it would let a check be named in help text but never run.
         known = [
             "bootstrap",
             "runtime",
             "lifecycle_driver",
+            "handshake_auth",
             "debugger",
             "fastfile",
             "net_deadline",

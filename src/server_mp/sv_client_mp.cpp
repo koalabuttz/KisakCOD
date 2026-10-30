@@ -13,6 +13,10 @@
 #include <win32/win_local.h>
 #include <universal/com_constantconfigstrings.h>
 #include <universal/profile.h>
+#include "sv_handshake_auth.h"
+#if defined(__linux__) && defined(KISAK_DEDICATED)
+#include <linux/net_internal.h>
+#endif
 
 #if defined(WIN32) || defined(__linux__)
 #include <win32/win_steam.h>
@@ -128,11 +132,56 @@ int __cdecl SV_IsTempBannedGuid(const char *cdkeyHash)
     return 0;
 }
 
+#if defined(__linux__) && defined(KISAK_DEDICATED)
+static bool SV_RejectUnsafeTestHandshake(netadr_t from)
+{
+    if (NET_LoopbackAuthTestEnabled() && !NET_CanBypassLoopbackAuth(from))
+    {
+        NET_OutOfBandPrint(NS_SERVER, from,
+            "error\nLoopback test authentication requires source and server bind 127.0.0.1.");
+        return true;
+    }
+    return false;
+}
+#endif
+
 void __cdecl SV_GetChallenge(netadr_t from)
 {
+#if defined(__linux__) && defined(KISAK_DEDICATED)
+    if (SV_RejectUnsafeTestHandshake(from))
+        return;
+    const bool localTest = NET_CanBypassLoopbackAuth(from);
+#else
+    const bool localTest = false;
+#endif
+    const char* clientSteamTicketBase64 = SV_Cmd_Argv(2);
+    const char* clientSteamID64 = SV_Cmd_Argv(3);
+    unsigned char decodedSteamTicket[1024 + 128] = {};
+    uint64_t steamID64 = 0;
+    size_t encodedLength = 0;
+    uint32 decodedLen = 0;
+    if (!localTest)
+    {
+        const char* error = nullptr;
+        if (!clientSteamTicketBase64[0] || !clientSteamID64[0])
+            error = "error\nThis server requires the custom Steam ticket/ID handshake; no authentication fields were supplied.";
+        else if (!SV_ParseSteamIdentity(clientSteamID64, &steamID64) ||
+                 !SV_ValidateSteamTicketBase64(clientSteamTicketBase64, sizeof(decodedSteamTicket), &encodedLength))
+            error = "error\nMalformed Steam authentication fields.";
+        if (error)
+        {
+            // Invalidate an earlier challenge from this address as well: a
+            // failed authentication retry must not retain an accepted token.
+            for (int slot = 0; slot < 1024; ++slot)
+                if (NET_CompareAdr(from, svs.challenges[slot].adr))
+                    memset(&svs.challenges[slot], 0, sizeof(svs.challenges[slot]));
+            NET_OutOfBandPrint(NS_SERVER, from, error);
+            return;
+        }
+        decodedLen = b64_decode((unsigned char*)clientSteamTicketBase64, encodedLength, decodedSteamTicket);
+    }
+
     int v1; // esi
-    //char *cdkeyHash; // [esp+4h] [ebp-18h]
-    char *clientSteamTicketBase64;
     challenge_t *challenge; // [esp+8h] [ebp-14h]
     int oldest; // [esp+Ch] [ebp-10h]
     int i; // [esp+10h] [ebp-Ch]
@@ -162,24 +211,16 @@ void __cdecl SV_GetChallenge(netadr_t from)
         challenge->connected = 0;
         i = oldest;
     }
-    //cdkeyHash = (char *)SV_Cmd_Argv(2);
-    clientSteamTicketBase64 = (char *)SV_Cmd_Argv(2);
-    char *clientSteamID64 = (char *)SV_Cmd_Argv(3);
-    unsigned char decodedSteamTicket[1024 + 128]{ 0 };
-
-    if (!clientSteamTicketBase64[0] || !clientSteamID64[0])
+#if defined(__linux__) && defined(KISAK_DEDICATED)
+    char testIdentity[33] = {};
+    if (localTest)
     {
-        iassert(0); // guy didn't send enough information
-        return;
+        // This is a label for an unauthenticated local session, not a Steam ID.
+        Com_sprintf(testIdentity, sizeof(testIdentity), "local-test-%08x%04x",
+            static_cast<unsigned int>(challenge->challenge), static_cast<unsigned int>(from.port));
+        clientSteamID64 = testIdentity;
     }
-
-    if (strlen(clientSteamTicketBase64) > sizeof(decodedSteamTicket))
-    {
-        iassert(0);
-        return;
-    }
-
-    uint32 decodedLen = b64_decode((unsigned char*)clientSteamTicketBase64, strlen(clientSteamTicketBase64), decodedSteamTicket);
+#endif
 
     //if (SV_IsBannedGuid(cdkeyHash))
     if (SV_IsBannedGuid(clientSteamID64))
@@ -201,11 +242,9 @@ void __cdecl SV_GetChallenge(netadr_t from)
     //I_strncpyz(svs.challenges[i].cdkeyHash, cdkeyHash, 33);
     I_strncpyz(svs.challenges[i].cdkeyHash, clientSteamID64, 33);
     
-    char *endptr;
-    uint64_t steamID64 = strtoull(clientSteamID64, &endptr, 10);
-
-    //if (!SV_ShouldAuthorizeAddress(from))
-    if (Steam_CheckClientTicket(decodedSteamTicket, decodedLen, steamID64))
+    // Test mode is admitted by the native socket/source guard above; it must
+    // never change the Steam backend's ordinary fail-closed behavior.
+    if (localTest || Steam_CheckClientTicket(decodedSteamTicket, decodedLen, steamID64))
     {
         challenge->pingTime = svs.time;
         NET_OutOfBandPrint(NS_SERVER, from, va("challengeResponse %i", challenge->challenge));
@@ -213,8 +252,12 @@ void __cdecl SV_GetChallenge(netadr_t from)
     }
     else
     {
+#if defined(__linux__) && defined(KISAK_DEDICATED)
+        NET_OutOfBandPrint(NS_SERVER, from, "error\nSteam authentication is unavailable in this native Linux build.");
+#else
         Com_Printf(CON_CHANNEL_SERVER, "rejected connection from invalid Steam GUID \"%s\"\n", clientSteamID64);
         NET_OutOfBandPrint(NS_SERVER, svs.challenges[i].adr, "error\xA\x15Your Steam Client Ticket was Invalid");
+#endif
         memset(&svs.challenges[i], 0, sizeof(svs.challenges[i]));
         return;
     }
@@ -605,13 +648,21 @@ void __cdecl SV_DirectConnect(netadr_t from)
     int count; // [esp+47Ch] [ebp-Ch]
     int qport; // [esp+480h] [ebp-8h]
 
+#if defined(__linux__) && defined(KISAK_DEDICATED)
+    if (SV_RejectUnsafeTestHandshake(from))
+        return;
+#endif
     Com_DPrintf(CON_CHANNEL_SERVER, "SV_DirectConnect()\n");
     I_strncpyz(userinfo, SV_Cmd_Argv(1), 1024);
     version = atoi(Info_ValueForKey(userinfo, "protocol"));
     if (version != 1)
     {
         NET_OutOfBandPrint(NS_SERVER, from, va("EXE_SERVER_IS_DIFFERENT_VER %s", "1.0"));
+#if defined(__linux__) && defined(KISAK_DEDICATED)
+        Com_Printf(CON_CHANNEL_SERVER, "Rejected connect: client protocol %i, required protocol %i; authentication bypass does not change protocol compatibility.\n", version, 1);
+#else
         Com_DPrintf(CON_CHANNEL_SERVER, "    rejected connect from protocol version %i (should be %i)\n", version, 1);
+#endif
         return;
     }
     challenge = atoi(Info_ValueForKey(userinfo, "challenge"));
@@ -651,6 +702,15 @@ void __cdecl SV_DirectConnect(netadr_t from)
             NET_OutOfBandPrint(NS_SERVER, from, "error\nEXE_BAD_CHALLENGE");
             return;
         }
+#if defined(__linux__) && defined(KISAK_DEDICATED)
+        // Only server-issued local identities are valid in test mode. The
+        // address/token lookup above still applies to UDP loopback clients.
+        if (NET_LoopbackAuthTestEnabled() != SV_IsLoopbackTestIdentity(cdkeyHash))
+        {
+            NET_OutOfBandPrint(NS_SERVER, from, "error\nEXE_BAD_CHALLENGE");
+            return;
+        }
+#endif
         if (svs.challenges[i].firstPing)
         {
             ping = svs.challenges[i].firstPing;
@@ -910,14 +970,16 @@ void __cdecl SV_DropClient(client_t *drop, const char *reason, bool tellThem)
     challenge_t *challenge; // [esp+34h] [ebp-8h]
     int i; // [esp+38h] [ebp-4h]
 
-    // LWSS ADD
-    if (com_dedicated->current.integer)
+    if (com_dedicated->current.integer
+#if defined(__linux__) && defined(KISAK_DEDICATED)
+        && !SV_IsLoopbackTestIdentity(drop->cdkeyHash)
+#endif
+        )
     {
-        char *endptr;
-        uint64_t steamID64 = strtoull(drop->cdkeyHash, &endptr, 10);
-        Steam_OnClientDropped(steamID64);
+        uint64_t steamID64 = 0;
+        if (SV_ParseSteamIdentity(drop->cdkeyHash, &steamID64))
+            Steam_OnClientDropped(steamID64);
     }
-    // LWSS END
 
     if (drop->header.state == CS_FREE)
         MyAssertHandler(".\\server_mp\\sv_client_mp.cpp", 1267, 0, "%s", "drop->header.state != CS_FREE");

@@ -79,6 +79,22 @@ static int lastNetPort = -1;
 
 static bool warnedSocksUnsupported = false;
 
+// ---- loopback local-auth test guard state ---------------------------------
+//
+// `loopbackAuthTestFrozen` records that the start-up decision was captured and
+// is never cleared again, so NET_Shutdown()/NET_Init() and net_restart inside
+// one process can neither grant nor revoke the permission.  The captured value
+// lives in `loopbackAuthTestEnabled`; it is the only authority for "was the
+// bypass switched on at start-up", and it is never recomputed from the cvar.
+// See NET_CanBypassLoopbackAuth() for what else has to be true per packet.
+static const dvar_t *sv_loopbackTestAuth;
+
+static bool loopbackAuthTestFrozen = false;
+static bool loopbackAuthTestEnabled = false;
+
+static bool warnedLoopbackAuthTest = false;
+static bool warnedLoopbackAuthTestRevoked = false;
+
 //=============================================================================
 // Small helpers
 //=============================================================================
@@ -548,6 +564,245 @@ void Sys_ShowIP()
 }
 
 //=============================================================================
+// Loopback local-auth test guard
+//=============================================================================
+//
+// sv_loopbackTestAuth skips Steam ticket verification for local testing.
+// Protocol, address/token challenge matching, passwords and capacity checks
+// remain in the server handshake.  Every rule here exists so that a
+// mistaken configuration fails closed instead of exposing an unauthenticated
+// server to a network:
+//
+//   * The cvar is startup-only (DVAR_INIT) and its value is captured exactly
+//     once, before any socket is bound.  The captured bool is frozen for the
+//     life of the process: a NET_Shutdown()/NET_Init() cycle or a net_restart
+//     keeps the original decision, so neither a map change nor an internal
+//     caller can upgrade a running process into bypass mode.
+//   * The cvar is never trusted as permission on its own.  Dvar_Set() can
+//     rewrite a DVAR_INIT dvar from engine code, so the gate requires the cvar
+//     to AGREE with the frozen value; an internal caller that turns it off
+//     revokes the bypass immediately, and one that turns it on grants nothing.
+//   * Binding must be loopback and nothing else.  net_ip has to be exactly
+//     "127.0.0.1" before anything binds, and the address the kernel actually
+//     gave us has to be 127.0.0.1 as well - checked with getsockname() after
+//     bind, so a mismatched or wildcard bind is closed and fatal rather than
+//     quietly serving the network.  "localhost" is deliberately rejected even
+//     though it looks like loopback: NET_IPSocket() treats it as "no interface"
+//     and binds INADDR_ANY, which is every interface on the machine.  So are
+//     0.0.0.0, LAN addresses, host names and 127.0.0.2.
+//   * The server has to be dedicated (com_dedicated non-zero), and the client
+//     has to be 127.0.0.1 with type NA_IP on the local socket.  LAN, public
+//     and broadcast senders never qualify, and neither do the internal
+//     NA_LOOPBACK/NA_BOT pseudo-types or IPX.  The sender's port is free: a
+//     test client picks an ephemeral port.
+//
+// This is a test harness switch, not a server option.  The warning printed
+// below says so.
+
+static const char *NET_LOOPBACK_TEST_ADDRESS = "127.0.0.1";
+
+/*
+====================
+NET_LoopbackTestAddress
+
+Exactly 127.0.0.1 and nothing else.  127.0.0.0/8 as a whole is not enough:
+127.0.0.2 and friends are ordinary addresses on a loopback interface and are
+not what a local test client uses.
+====================
+*/
+static bool NET_LoopbackTestAddress(const byte *ip)
+{
+    return ip[0] == 127 && ip[1] == 0 && ip[2] == 0 && ip[3] == 1;
+}
+
+/*
+====================
+NET_SocketIsLoopbackBoundFd
+
+Asks the kernel what `sock` is bound to, rather than trusting net_ip.  This is
+what makes the guard independent of the configuration path: a socket that ended
+up on INADDR_ANY, on a LAN address, or that no longer exists (NET_INVALID_SOCKET)
+reports false.
+====================
+*/
+static bool NET_SocketIsLoopbackBoundFd(int sock)
+{
+    struct sockaddr_in bound;
+    socklen_t boundLength = sizeof(bound);
+
+    if (sock == NET_INVALID_SOCKET)
+        return false;
+
+    memset(&bound, 0, sizeof(bound));
+    if (getsockname(sock, (struct sockaddr *)&bound, &boundLength) == -1)
+        return false;
+    if (bound.sin_family != AF_INET)
+        return false;
+
+    return NET_LoopbackTestAddress((const byte *)&bound.sin_addr);
+}
+
+/*
+====================
+NET_LoopbackTestConfigSafe
+
+The start-up half of the contract: net_ip names loopback exactly and this is a
+dedicated server.  Anything else - including the empty string and "localhost",
+which NET_IPSocket() turns into a wildcard bind - is unsafe.
+====================
+*/
+static bool NET_LoopbackTestConfigSafe(const char *bindIP)
+{
+    if (!bindIP || strcmp(bindIP, NET_LOOPBACK_TEST_ADDRESS) != 0)
+        return false;
+
+    if (!com_dedicated || com_dedicated->current.integer == 0)
+        return false;
+
+    return true;
+}
+
+/*
+====================
+NET_CheckLoopbackTestConfig
+
+Gate for every path that is about to bring a socket up.  Returns true when the
+open may proceed, false when the frozen permission is on and the configuration
+is unsafe - in which case the diagnostic has already been raised as fatal, and
+the caller must not bind anything.
+
+Com_Error(ERR_FATAL) does not return in the engine, so in production the false
+path is unreachable; the return value exists so that a test harness with a
+non-fatal Com_Error still cannot fall through to bind(2).
+====================
+*/
+static bool NET_CheckLoopbackTestConfig(const char *bindIP, const char *stage)
+{
+    if (!loopbackAuthTestEnabled)
+        return true;
+
+    if (NET_LoopbackTestConfigSafe(bindIP))
+        return true;
+
+    Com_Error(ERR_FATAL,
+              "sv_loopbackTestAuth is enabled, but this start-up (%s) would not be limited to loopback.\n"
+              "net_ip is \"%s\"; with sv_loopbackTestAuth it must be exactly \"%s\", and this must be a dedicated server (dedicated must be set to 1 or 2).\n"
+              "\"localhost\" is refused because the engine binds every interface for it, and 0.0.0.0, LAN addresses and host names would expose the unauthenticated test logins to the network.\n"
+              "Set net_ip %s and dedicated 1, or turn sv_loopbackTestAuth off.\n",
+              stage ? stage : "start-up",
+              bindIP ? bindIP : "(unset)",
+              NET_LOOPBACK_TEST_ADDRESS,
+              NET_LOOPBACK_TEST_ADDRESS);
+
+    return false;
+}
+
+/*
+====================
+NET_InitLoopbackAuthTest
+
+Registers sv_loopbackTestAuth and captures it for the rest of the process.
+NET_Init() calls this after the engine's start-up dvars exist and before the
+first bind, so the server handshake path never observes a half-settled answer.
+
+The capture happens once.  A later call (a second NET_Init after NET_Shutdown,
+or anything else) only re-registers the dvar; it cannot change the frozen bool,
+so a map reset or restart cannot grant a bypass the process did not start with.
+====================
+*/
+void NET_InitLoopbackAuthTest()
+{
+    sv_loopbackTestAuth = Dvar_RegisterBool("sv_loopbackTestAuth", false, DVAR_INIT,
+                                            "Allow unauthenticated local test clients (127.0.0.1 only; startup only; local testing only)");
+
+    if (loopbackAuthTestFrozen)
+        return;
+
+    loopbackAuthTestEnabled = sv_loopbackTestAuth && sv_loopbackTestAuth->current.enabled;
+    loopbackAuthTestFrozen = true;
+
+    if (loopbackAuthTestEnabled && !warnedLoopbackAuthTest)
+    {
+        warnedLoopbackAuthTest = true;
+        Com_PrintWarning(CON_CHANNEL_SYSTEM,
+                         "\n"
+                         "=========================================================================\n"
+                         "WARNING: sv_loopbackTestAuth is enabled.\n"
+                         "This server will accept UNAUTHENTICATED connections and give them\n"
+                         "synthetic non-Steam identities. Local processes are trusted; do not\n"
+                         "forward this port. Protocol, challenge and password checks remain.\n"
+                         "This is a LOCAL TESTING switch. Never enable it on a server that\n"
+                         "other machines, a LAN, or the internet can reach.\n"
+                         "The bypass lasts until this process exits; restarts and map\n"
+                         "changes cannot turn it on or off.\n"
+                         "=========================================================================\n");
+    }
+}
+
+/*
+====================
+NET_LoopbackAuthTestEnabled
+
+The captured start-up answer only.  It deliberately says nothing about the
+current socket or the current cvar: callers must not treat this as permission,
+because a socket may not be bound at all.  NET_CanBypassLoopbackAuth() answers
+the authorisation question.
+====================
+*/
+bool NET_LoopbackAuthTestEnabled()
+{
+    return loopbackAuthTestFrozen && loopbackAuthTestEnabled;
+}
+
+/*
+====================
+NET_CanBypassLoopbackAuth
+
+The per-packet authorisation question.  Everything is re-checked here rather
+than cached, because each of these can change under a running process:
+the cvar can be rewritten by engine code, `dedicated` is a latched dvar, and
+the socket is reopened by net_restart.
+
+Note what is NOT used: Sys_IsLANAddress() and friends.  They answer "is this
+address local-ish", which includes private ranges this guard must refuse, and
+they treat every 127.x.x.x address as LAN.
+====================
+*/
+bool NET_CanBypassLoopbackAuth(netadr_t from)
+{
+    if (!loopbackAuthTestFrozen || !loopbackAuthTestEnabled)
+        return false;
+
+    // The cvar must still agree with the start-up capture.  It is read here as
+    // a veto only: a dvar that has been turned off revokes the bypass at once,
+    // while a dvar turned on after start-up still grants nothing, because the
+    // frozen bool stays false.  Reading it cannot create permission.
+    if (!sv_loopbackTestAuth || !sv_loopbackTestAuth->current.enabled)
+    {
+        if (!warnedLoopbackAuthTestRevoked)
+        {
+            warnedLoopbackAuthTestRevoked = true;
+            Com_PrintWarning(CON_CHANNEL_SYSTEM,
+                             "WARNING: sv_loopbackTestAuth no longer agrees with its start-up value;"
+                             " the local test bypass is refused while it stays changed.\n");
+        }
+        return false;
+    }
+
+    const dvar_t* net_ip = Dvar_FindVar("net_ip");
+    if (!net_ip || !NET_LoopbackTestConfigSafe(net_ip->current.string))
+        return false;
+
+    if (!NET_SocketIsLoopbackBoundFd(ip_socket))
+        return false;
+
+    if (from.type != NA_IP)
+        return false;
+
+    return NET_LoopbackTestAddress(from.ip);
+}
+
+//=============================================================================
 // Socket setup
 //=============================================================================
 
@@ -618,6 +873,22 @@ static int NET_IPSocket(const char *net_interface, int port)
     {
         Com_PrintWarning(CON_CHANNEL_SYSTEM, "WARNING: UDP_OpenSocket: bind: %s\n", NET_ErrorString());
         close(newsocket);
+        return NET_INVALID_SOCKET;
+    }
+
+    // With the local test bypass on, the configuration check that got us here is
+    // only a promise: confirm with the kernel what this socket is really bound
+    // to before it can receive a single packet.  A socket that landed on a
+    // wildcard or LAN address is closed instead of used, and the mismatch is
+    // fatal - continuing would serve unauthenticated test logins to the network.
+    if (loopbackAuthTestEnabled && !NET_SocketIsLoopbackBoundFd(newsocket))
+    {
+        close(newsocket);
+        Com_Error(ERR_FATAL,
+                  "sv_loopbackTestAuth is enabled but the UDP socket bound to something other than %s.\n"
+                  "Refusing to run an unauthenticated test server on a non-loopback address.\n"
+                  "Set net_ip %s and dedicated 1, or turn sv_loopbackTestAuth off.\n",
+                  NET_LOOPBACK_TEST_ADDRESS, NET_LOOPBACK_TEST_ADDRESS);
         return NET_INVALID_SOCKET;
     }
 
@@ -693,6 +964,13 @@ static void NET_OpenIP()
     const char *bindIP = net_ip->current.string;
     int i;
 
+    // Last thing before a descriptor exists: with the local test bypass on, the
+    // address about to be bound has to be loopback exactly.  Com_Error is fatal,
+    // so nothing below runs in production; returning keeps a non-fatal test
+    // harness from opening the very socket the check refused.
+    if (!NET_CheckLoopbackTestConfig(bindIP, "UDP bind"))
+        return;
+
     for (i = 0; i < NET_MAX_PORT_ATTEMPTS; ++i)
     {
         ip_socket = NET_IPSocket(bindIP, i + basePort);
@@ -752,6 +1030,14 @@ static bool NET_GetDvars()
 
     net_ip = Dvar_RegisterString("net_ip", "localhost", DVAR_LATCH, "Network IP Address");
     net_port = Dvar_RegisterInt("net_port", 28960, DvarLimits(0, 0xFFFF), DVAR_LATCH, "Network port");
+
+    // The local test bypass demands loopback exactly.  Checked on every dvar
+    // read - which is every NET_Config()/net_restart, and the boot path as
+    // well, including when net_noudp stops the sockets from opening at all, so
+    // an unsafe configuration is rejected even if it would not bind yet.  The
+    // return value is not consulted here: the diagnostic is fatal, and
+    // NET_OpenIP() repeats the check immediately before opening a socket.
+    (void)NET_CheckLoopbackTestConfig(net_ip->current.string, "start-up");
 
     if (net_ip->current.string)
     {
@@ -869,6 +1155,12 @@ void NET_Init()
     netInitialized = true;
     Com_Printf(CON_CHANNEL_SYSTEM, "UDP network initialized\n");
 
+    // Capture sv_loopbackTestAuth before anything binds, so the server
+    // handshake path has a settled answer from its first challenge on.  This is
+    // the only place the decision is taken; NET_Shutdown()/NET_Init() cycles
+    // keep it.  See the loopback local-auth test guard section.
+    NET_InitLoopbackAuthTest();
+
     NET_GetDvars();
     NET_Config(true);
 }
@@ -887,6 +1179,11 @@ void NET_Shutdown()
     NET_CloseSocket(&ip_socket);
     networkingEnabled = false;
     netInitialized = false;
+
+    // The loopback local-auth test guard is deliberately not reset here: its
+    // start-up decision outlives the sockets, so a shutdown/init cycle inside
+    // one process can neither grant nor revoke the bypass.  With no socket
+    // bound NET_CanBypassLoopbackAuth() refuses anyway.
 }
 
 /*

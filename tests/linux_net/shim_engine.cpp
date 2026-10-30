@@ -20,6 +20,8 @@ static void Shim_VLog(const char *prefix, const char *fmt, va_list args)
     vfprintf(stderr, fmt, args);
 }
 
+static int shimComErrorCount;
+
 void Com_Printf(int, const char *fmt, ...)
 {
     va_list args;
@@ -55,6 +57,8 @@ void Com_PrintWarning(int, const char *fmt, ...)
 void Com_Error(errorParm_t code, const char *fmt, ...)
 {
     va_list args;
+
+    shimComErrorCount++;
     va_start(args, fmt);
     fprintf(stderr, "FATAL(%d): ", (int)code);
     vfprintf(stderr, fmt, args);
@@ -62,11 +66,29 @@ void Com_Error(errorParm_t code, const char *fmt, ...)
     va_end(args);
 }
 
+// The real Com_Error(ERR_FATAL) never returns.  This one does, which is why the
+// tests treat "an error was reported" and "no unsafe socket exists" as two
+// separate assertions and never accept the diagnostic as proof of an abort.
+
+int Shim_ComErrorCount()
+{
+    return shimComErrorCount;
+}
+
+void Shim_ComErrorReset()
+{
+    shimComErrorCount = 0;
+}
+
 // ------------------------------------------------------------------ dvars ---
 
 static const int SHIM_MAX_DVARS = 64;
 static dvar_s shimDvars[SHIM_MAX_DVARS];
 static int shimDvarCount;
+
+// The engine keeps this pointer for the "dedicated" dvar once Com_Init has
+// registered it; src/linux/net.cpp reads com_dedicated->current.integer.
+const dvar_t *com_dedicated;
 
 const dvar_t *Shim_DvarFind(const char *name)
 {
@@ -78,6 +100,24 @@ const dvar_t *Shim_DvarFind(const char *name)
             return &shimDvars[i];
     }
     return NULL;
+}
+
+const dvar_s *Dvar_FindVar(const char *dvarName)
+{
+    return Shim_DvarFind(dvarName);
+}
+
+// Mirrors registration of the "dedicated" dvar: the engine-side pointer follows
+// whichever dvar carries that name.
+static void Shim_LinkComDedicated(const char *name, dvar_s *dvar)
+{
+    if (!strcmp(name, "dedicated"))
+        com_dedicated = dvar;
+}
+
+void Shim_ClearComDedicated()
+{
+    com_dedicated = NULL;
 }
 
 static dvar_s *Shim_DvarAlloc(const char *name, uint16_t flags, const char *description)
@@ -93,6 +133,7 @@ static dvar_s *Shim_DvarAlloc(const char *name, uint16_t flags, const char *desc
     dvar->description = description;
     dvar->flags = flags;
     dvar->modified = false;
+    Shim_LinkComDedicated(name, dvar);
     return dvar;
 }
 
@@ -103,7 +144,10 @@ void Shim_DvarSeedInt(const char *name, int value)
     if (!dvar)
         dvar = Shim_DvarAlloc(name, DVAR_LATCH, "seeded");
     if (dvar)
+    {
         dvar->current.integer = value;
+        Shim_LinkComDedicated(name, dvar);
+    }
 }
 
 void Shim_DvarSeedString(const char *name, const char *value)
@@ -113,7 +157,27 @@ void Shim_DvarSeedString(const char *name, const char *value)
     if (!dvar)
         dvar = Shim_DvarAlloc(name, DVAR_LATCH, "seeded");
     if (dvar)
+    {
         dvar->current.string = value;
+        Shim_LinkComDedicated(name, dvar);
+    }
+}
+
+// Seeds a boolean dvar the way "+set <name> 1" on the command line does: the
+// value exists before the code under test registers the dvar, and registration
+// keeps it (see Dvar_RegisterBool above).
+void Shim_DvarSeedBool(const char *name, bool value)
+{
+    dvar_s *dvar = (dvar_s *)Shim_DvarFind(name);
+
+    if (!dvar)
+        dvar = Shim_DvarAlloc(name, DVAR_LATCH, "seeded");
+    if (dvar)
+    {
+        dvar->current.enabled = value;
+        dvar->current.integer = value ? 1 : 0;
+        Shim_LinkComDedicated(name, dvar);
+    }
 }
 
 const dvar_s *Dvar_RegisterBool(const char *dvarName, bool value, uint16_t flags, const char *description)

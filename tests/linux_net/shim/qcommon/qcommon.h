@@ -23,9 +23,15 @@ void Com_PrintError(int channel, const char *fmt, ...);
 void Com_PrintWarning(int channel, const char *fmt, ...);
 void Com_Error(errorParm_t code, const char *fmt, ...);
 
+// The engine's "dedicated" dvar, registered in Com_Init and read as
+// com_dedicated->current.integer (0 = listen server, 1 = dedicated, 2 = ...).
+// Declared here exactly as src/qcommon/qcommon.h:120 declares it.
+extern const dvar_t *com_dedicated;
+
 const dvar_s *Dvar_RegisterBool(const char *dvarName, bool value, uint16_t flags, const char *description);
 const dvar_s *Dvar_RegisterInt(const char *dvarName, int value, DvarLimits min, uint16_t flags, const char *description);
 const dvar_s *Dvar_RegisterString(const char *dvarName, const char *value, uint16_t flags, const char *description);
+const dvar_s *Dvar_FindVar(const char *dvarName);
 void Dvar_SetInt(dvar_s *dvar, int value);
 inline void Dvar_SetInt(const dvar_s *dvar, int value)
 {

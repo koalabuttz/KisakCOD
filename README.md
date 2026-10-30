@@ -48,10 +48,12 @@ python3 scripts/tests/test_linux_bootstrap.py
 ```
 
 The executable is `bin/KisakCOD-dedi` (native ELF, no Wine). This is not yet a
-playable server: **Linux Steam authentication is unavailable and client tickets
-are rejected**. Game assets, map loading and multiplayer compatibility require
-separate verification. See [Linux build and verification details](docs/linux-dedicated.md)
-for the supported scope, prerequisites, tests, and remaining work.
+playable server: **Linux Steam authentication is unavailable and ordinary client
+tickets are rejected**. An explicit loopback-only test mode can skip ticket
+verification, but does not establish stock/CoD4x gameplay compatibility. Game
+assets, map loading and multiplayer compatibility require separate verification.
+See [Linux build and verification details](docs/linux-dedicated.md) for the
+supported scope, prerequisites, tests, and remaining work.
 
 ### Cross-build from Linux with LLVM-MinGW
 

@@ -16,10 +16,15 @@ typedef enum { qfalse, qtrue } qboolean;
 
 #define MAX_STRING_CHARS 1024
 
+// Values copied from src/universal/q_shared.h so a flag the code under test
+// passes can be told apart from a zero-initialised one.  Only the flags the
+// POSIX network layer uses are mirrored.
 enum DvarFlags : uint16_t
 {
+    DVAR_NOFLAG  = 0x0,
     DVAR_ARCHIVE = 0x1,
-    DVAR_LATCH   = 0x20,
+    DVAR_INIT    = 0x10,    // startup only: never settable from the console afterwards
+    DVAR_LATCH   = 0x20,    // takes effect on the next dvar read, not on set
 };
 
 struct DvarValue
