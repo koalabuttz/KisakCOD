@@ -3,7 +3,8 @@
 // Exercises the real implementation against real kernel sockets on loopback:
 // binary payload round-trip, network byte order of netadr_t.port, non-blocking
 // empty reads, oversize-datagram rejection without buffer overflow, zero-length
-// datagrams, address parsing, LAN classification, NET_Sleep timing, the
+// datagrams, address parsing, LAN classification, NET_Sleep timing (including
+// that a 1 ms wait does not degenerate into a poll), the
 // net_port fallback walk, rebind/shutdown idempotency and descriptor leaks.
 //
 // Not part of any build target.  See tests/linux_net/README.md.
@@ -411,6 +412,62 @@ static void TestSleepTiming(int peer, int serverPort)
     Check(elapsed < 500.0, "NET_Sleep returns early once the socket is readable");
 }
 
+// The frame loop calls NET_Sleep(1) to wait for the next packet. A sleep that
+// returns without waiting is a poll: the caller loops straight back into it and
+// an idle server burns a core with no players connected. 100 iterations must
+// therefore consume measurable wall time.
+static void TestSleepNoHotSpin()
+{
+    uint8_t buffer[64];
+    netadr_t from;
+    msg_t msg;
+    double t0;
+    double elapsed;
+    int iteration;
+
+    Section("NET_Sleep(1) waits instead of polling");
+
+    // Drain first: a readable socket legitimately cuts a sleep short, and an
+    // earlier test leaves one datagram queued.
+    memset(&msg, 0, sizeof(msg));
+    msg.data = buffer;
+    msg.maxsize = sizeof(buffer);
+    for (iteration = 0; iteration < 1000 && Sys_GetPacket(&from, &msg) == qtrue; ++iteration)
+        ;
+
+    t0 = NowMs();
+    for (iteration = 0; iteration < 100; ++iteration)
+        NET_Sleep(1);
+    elapsed = NowMs() - t0;
+
+    printf("  (100 x NET_Sleep(1) took %.2f ms)\n", elapsed);
+    Check(elapsed >= 50.0, "100 x NET_Sleep(1) on an idle socket waited at least 50ms");
+    Check(elapsed <= 2000.0, "100 x NET_Sleep(1) on an idle socket did not oversleep");
+}
+
+// The same wait with no socket open, where NET_Sleep falls through to
+// nanosleep. That path never rounded its timeout away; this keeps both paths
+// honest about actually waiting.
+static void TestSleepNoHotSpinWithoutSocket()
+{
+    double t0;
+    double elapsed;
+    int iteration;
+
+    Section("NET_Sleep(1) waits with no socket open");
+
+    NET_Shutdown();
+
+    t0 = NowMs();
+    for (iteration = 0; iteration < 100; ++iteration)
+        NET_Sleep(1);
+    elapsed = NowMs() - t0;
+
+    printf("  (100 x NET_Sleep(1) took %.2f ms)\n", elapsed);
+    Check(elapsed >= 50.0, "100 x NET_Sleep(1) without a socket waited at least 50ms");
+    Check(elapsed <= 2000.0, "100 x NET_Sleep(1) without a socket did not oversleep");
+}
+
 static void TestPortFallback(int peer)
 {
     struct sockaddr_in addr;
@@ -743,6 +800,7 @@ int main()
     TestAddressParsing();
     TestLANClassification();
     TestSleepTiming(peer, serverPort);
+    TestSleepNoHotSpin();
     TestPortFallback(peer);
     TestRebindAndShutdown(peer);
     TestNetIPBind(peer);
@@ -795,6 +853,8 @@ int main()
             Check(Sys_GetPacket(&from, &msg) == qtrue, "clearing net_noudp restores the UDP socket");
         }
     }
+
+    TestSleepNoHotSpinWithoutSocket();
 
     NET_Shutdown();
     close(peer);

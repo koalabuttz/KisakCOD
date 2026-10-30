@@ -146,22 +146,35 @@ static void NET_SleepNs(int msec)
 ====================
 NET_RemainingMs
 
-Milliseconds left until `deadline` (CLOCK_MONOTONIC), clamped at 0.
+Milliseconds left until `deadline` (CLOCK_MONOTONIC), rounded up, clamped at 0.
+
+A deadline recorded a moment ago is nearly always a fractional number of
+milliseconds away, so rounding down would return 0 while time still remains.
+select() reads a 0 timeout as "do not wait", which turns a 1 ms sleep into a
+poll: the caller returns immediately, calls again, and an idle server spins a
+core. Rounding up keeps any non-zero remainder a real wait.
 ====================
 */
 static int NET_RemainingMs(const struct timespec *deadline)
 {
     struct timespec now;
+    int64_t remainingNs;
     int64_t remainingMs;
 
     if (clock_gettime(CLOCK_MONOTONIC, &now) == -1)
         return 0;
 
-    remainingMs = (int64_t)(deadline->tv_sec - now.tv_sec) * 1000;
-    remainingMs += (int64_t)(deadline->tv_nsec - now.tv_nsec) / 1000000;
+    // Subtract as one signed nanosecond count. The two fields cannot be
+    // compared independently: a deadline a fraction of a second out still has
+    // a negative nanosecond difference that only the borrowed second cancels.
+    remainingNs = ((int64_t)deadline->tv_sec - (int64_t)now.tv_sec) * 1000000000LL
+                + ((int64_t)deadline->tv_nsec - (int64_t)now.tv_nsec);
 
-    if (remainingMs < 0)
+    if (remainingNs <= 0)
         return 0;
+
+    remainingMs = (remainingNs + 999999LL) / 1000000LL;
+
     if (remainingMs > INT32_MAX)
         return INT32_MAX;
     return (int)remainingMs;
