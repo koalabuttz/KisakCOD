@@ -177,6 +177,7 @@ int __cdecl FS_CompareIwds(char *needediwds, int len, int dlstring)
 int fs_numServerReferencedFFs;
 const char *fs_serverReferencedFFNames[32];
 int fs_serverReferencedFFCheckSums[32];
+static_assert(ARRAY_COUNT(fs_serverReferencedFFNames) == ARRAY_COUNT(fs_serverReferencedFFCheckSums));
 int __cdecl FS_CompareFFs(char *neededFFs, int len, int dlstring)
 {
     int v4; // eax
@@ -353,7 +354,7 @@ void __cdecl FS_ServerSetReferencedFFs(char *FFSums, char *FFNames)
     fs_numServerReferencedFFs = FS_ServerSetReferencedFiles(
         FFSums,
         FFNames,
-        1024,
+        ARRAY_COUNT(fs_serverReferencedFFNames),
         fs_serverReferencedFFCheckSums,
         fs_serverReferencedFFNames);
 }
