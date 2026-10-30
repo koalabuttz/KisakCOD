@@ -9,6 +9,7 @@ These shared asset-free regression checks require Python 3 and a C++20 compiler:
 ```sh
 python3 scripts/tests/test_renderer_command_ownership.py
 python3 scripts/tests/test_script_vm_field_stack.py
+python3 scripts/tests/test_script_lexer_eof.py
 python3 scripts/tests/test_shader_constant_order.py
 python3 scripts/tests/test_shellshock_channel_metadata.py
 python3 scripts/tests/test_script_loading_watchdog.py
@@ -25,6 +26,11 @@ The renderer check covers command-buffer ownership before initialization,
 partial allocation, unvisited and aliased frame bindings, normal/swapped frame
 cycles, and command-buffer cleanup/reallocation. Lighting, debug geometry and
 scene cleanup are stubbed; complete renderer shutdown still needs a game check.
+
+The lexer EOF check runs the production scanner/parser with zero and one local
+clients in SP and MP. Empty/comment-only files, final tokens without a newline,
+repeated parses, and malformed input must terminate without restarting an
+exhausted source. It does not require a running client or game assets.
 
 The VM check forces the global layout that exposed the false overflow, then
 checks scalar and undefined fields, array getters that need two working values,

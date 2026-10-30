@@ -988,16 +988,12 @@ int __cdecl yylex()
 					yy_bp = yytext;
 					continue;
 				}
+				// Scr_ScanFile supplies one script per parse; there is no yywrap
+				// input source to switch to. Dispatch EOF independently of clients.
 				yy_did_buffer_switch_on_eof = 0;
-				if (CL_GetLocalClientActiveCount())
-				{
-					yy_c_buf_p = yytext;
-					yy_act = (yy_start - 1) / 2 + 96;
-					goto do_action;
-				}
-				if (!yy_did_buffer_switch_on_eof)
-					yyrestart();
-				break;
+				yy_c_buf_p = yytext;
+				yy_act = (yy_start - 1) / 2 + 96;
+				goto do_action;
 			case 96:
 			case 97:
 			case 98:
