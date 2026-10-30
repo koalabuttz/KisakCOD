@@ -658,7 +658,7 @@ void __cdecl G_EntUnlink(gentity_s *ent)
             viewAngles[2] = 0.0;
             SetClientViewAngle(ent, viewAngles);
             ent->r.currentAngles[0] = 0.0;
-            if (parent->classname == scr_const.script_vehicle)
+            if (parent->scr_vehicle && (client->ps.pm_flags & PMF_VEHICLE_ATTACHED) != 0)
                 G_VehUnlinkPlayer(parent, ent);
         }
         prev = 0;

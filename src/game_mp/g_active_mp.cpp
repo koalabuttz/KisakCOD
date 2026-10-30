@@ -1376,7 +1376,6 @@ int32_t __cdecl G_UpdateClientInfo(gentity_s *ent)
 {
     uint32_t v1; // eax
     uint32_t v2; // eax
-    const char *v3; // eax
     int32_t number; // [esp-4h] [ebp-5Ch]
     const char *tagName; // [esp+3Ch] [ebp-1Ch]
     int32_t bChanged; // [esp+40h] [ebp-18h]
@@ -1442,17 +1441,6 @@ int32_t __cdecl G_UpdateClientInfo(gentity_s *ent)
             client->sess.cs.attachModelIndex[i] = 0;
             client->sess.cs.attachTagIndex[i] = 0;
         }
-    }
-    if ((client->ps.pm_flags & PMF_VEHICLE_ATTACHED) != 0)
-    {
-        v3 = va("pm_flags is %i", client->ps.pm_flags);
-        MyAssertHandler(
-            ".\\game_mp\\g_active_mp.cpp",
-            1436,
-            0,
-            "%s\n\t%s",
-            "!( client->ps.pm_flags & PMF_VEHICLE_ATTACHED )",
-            v3);
     }
     if ((client->ps.pm_flags & PMF_VEHICLE_ATTACHED) != 0)
     {

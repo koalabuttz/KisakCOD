@@ -1047,6 +1047,70 @@ void __cdecl SV_Trace(
     }
 }
 
+// Hull traces used for vehicle exits need explicit parent/sibling filtering.
+// SV_Trace's legacy hull path only carries passEntityNum/passOwnerNum, so keep
+// that behavior for existing callers and apply the requested flags here.
+void __cdecl SV_TraceCapsuleWithIgnore(
+    trace_t *results,
+    const float *start,
+    const float *mins,
+    const float *maxs,
+    const float *end,
+    const IgnoreEntParams *ignoreEntParams,
+    int contentmask)
+{
+    iassert(results && start && mins && maxs && end && ignoreEntParams);
+    CM_BoxTrace(results, start, end, mins, maxs, 0, contentmask);
+    results->hitType = results->fraction == 1.0f ? TRACE_HITTYPE_NONE : TRACE_HITTYPE_ENTITY;
+    results->hitId = results->fraction == 1.0f ? 0 : ENTITYNUM_WORLD;
+    if (results->fraction == 0.0f)
+        return;
+
+    moveclip_t clip;
+    clip.contentmask = contentmask;
+    // Filtering is performed explicitly below. Do not let the legacy clipper
+    // implicitly skip other occupants which happen to share the same owner.
+    clip.passEntityNum = ENTITYNUM_NONE;
+    clip.passOwnerNum = -1;
+    float boundsMin[3], boundsMax[3];
+    for (int axis = 0; axis < 3; ++axis)
+    {
+        iassert(maxs[axis] >= mins[axis]);
+        float center = (mins[axis] + maxs[axis]) * 0.5f;
+        float halfSize = (maxs[axis] - mins[axis]) * 0.5f;
+        clip.mins[axis] = -halfSize;
+        clip.maxs[axis] = halfSize;
+        clip.outerSize[axis] = halfSize + 1.0f;
+        clip.extents.start[axis] = start[axis] + center;
+        clip.extents.end[axis] = end[axis] + center;
+        boundsMin[axis] = (start[axis] < end[axis] ? start[axis] : end[axis]) + mins[axis] - 1.0f;
+        boundsMax[axis] = (start[axis] > end[axis] ? start[axis] : end[axis]) + maxs[axis] + 1.0f;
+    }
+    CM_CalcTraceExtents(&clip.extents);
+    int entities[MAX_GENTITIES];
+    int count = CM_AreaEntities(boundsMin, boundsMax, entities, MAX_GENTITIES, contentmask);
+    for (int i = 0; i < count; ++i)
+    {
+        int entnum = entities[i];
+        gentity_s *touch = SV_GentityNum(entnum);
+        if (ignoreEntParams->baseEntity != ENTITYNUM_NONE)
+        {
+            if ((ignoreEntParams->ignoreSelf && entnum == ignoreEntParams->baseEntity)
+                || (ignoreEntParams->ignoreParent && entnum == ignoreEntParams->parentEntity))
+                continue;
+            if (touch->r.ownerNum.isDefined())
+            {
+                int owner = touch->r.ownerNum.entnum();
+                if ((ignoreEntParams->ignoreSiblings && entnum != ignoreEntParams->baseEntity
+                    && owner == ignoreEntParams->parentEntity)
+                    || (ignoreEntParams->ignoreChildren && owner == ignoreEntParams->baseEntity))
+                    continue;
+            }
+        }
+        SV_ClipMoveToEntity(&clip, &sv.svEntities[entnum], results);
+    }
+}
+
 int __cdecl SV_TracePassed(
     const float *start,
     const float *mins,

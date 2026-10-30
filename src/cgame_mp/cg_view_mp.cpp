@@ -1079,12 +1079,16 @@ void __cdecl CalcViewValuesVehicleDriver(int32_t localClientNum)
     pitch = (v4 - v2) * 360.0;
     v1 = I_fabs(pitch);
     pitch = v1;
-    if (vehDriverViewHeightMax->current.value == 0.0)
-        MyAssertHandler(".\\cgame_mp\\cg_view_mp.cpp", 791, 0, "%s", "vehDriverViewHeightMax->current.value != 0");
-    focusPoint[2] = (vehDriverViewHeightMax->current.value - pitch)
-        / vehDriverViewHeightMax->current.value
-        * vehDriverViewFocusRange->current.value
-        + focusPoint[2];
+    // Archived orbit bounds may be zero, negative or inverted. Keep the focus
+    // within its configured range instead of dividing by zero or below ground.
+    float focusScale = 0.0f;
+    if (vehDriverViewHeightMax->current.value > 0.0f)
+        focusScale = 1.0f - pitch / vehDriverViewHeightMax->current.value;
+    if (focusScale < 0.0f)
+        focusScale = 0.0f;
+    else if (focusScale > 1.0f)
+        focusScale = 1.0f;
+    focusPoint[2] += focusScale * vehDriverViewFocusRange->current.value;
     if (vehDebugClient->current.enabled)
         CG_DebugStar(focusPoint, colorBlue, 0);
     CG_VehSphereCoordsToPos(

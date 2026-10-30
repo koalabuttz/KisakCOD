@@ -784,8 +784,24 @@ void __cdecl CL_FinishMove(int localClientNum, usercmd_s *cmd)
     LocalClientGlobals->cgameExtraButtons = 0;
     if (CG_VehLocalClientDriving(localClientNum))
     {
-        cmd->angles[1] = (uint16_t)(int)(LocalClientGlobals->vehicleViewYaw * 182.0444488525391);
-        cmd->angles[0] = (uint16_t)(int)(LocalClientGlobals->vehicleViewPitch * 182.0444488525391);
+        // Vehicle orbit yaw is 90 degrees behind the normal view convention.
+        // Populate it from live input in world space; these fields used to stay
+        // zero, fixing the camera in place and forcing steering toward one yaw.
+        LocalClientGlobals->vehicleViewYaw = AngleNormalize360(
+            LocalClientGlobals->viewangles[1] + LocalClientGlobals->snap.ps.delta_angles[1] - 90.0f);
+        LocalClientGlobals->vehicleViewPitch = AngleNormalize180(
+            LocalClientGlobals->viewangles[0] + LocalClientGlobals->snap.ps.delta_angles[0]);
+        float minPitch = vehDriverViewHeightMin->current.value;
+        float maxPitch = vehDriverViewHeightMax->current.value;
+        // Tolerate inverted archived bounds without sending an invalid orbit.
+        float lowerPitch = minPitch < maxPitch ? minPitch : maxPitch;
+        float upperPitch = minPitch > maxPitch ? minPitch : maxPitch;
+        if (LocalClientGlobals->vehicleViewPitch < lowerPitch)
+            LocalClientGlobals->vehicleViewPitch = lowerPitch;
+        else if (LocalClientGlobals->vehicleViewPitch > upperPitch)
+            LocalClientGlobals->vehicleViewPitch = upperPitch;
+        // Keep the standard usercmd angles (relative to ps.delta_angles). The
+        // server consumes these for steering just as it does for player aim.
         cmd->angles[2] = 0;
     }
 }
