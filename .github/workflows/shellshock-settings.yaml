@@ -1,0 +1,30 @@
+name: Shellshock view settings
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [master]
+    paths:
+      - src/bgame/bg_misc.cpp
+      - src/bgame/bg_local.h
+      - src/cgame/cg_shellshock.cpp
+      - src/universal/dvar.cpp
+      - scripts/tests/test_shellshock_settings.py
+      - .github/workflows/shellshock-settings.yaml
+  push:
+    branches: [master]
+    paths:
+      - src/bgame/bg_misc.cpp
+      - src/bgame/bg_local.h
+      - src/cgame/cg_shellshock.cpp
+      - src/universal/dvar.cpp
+      - scripts/tests/test_shellshock_settings.py
+      - .github/workflows/shellshock-settings.yaml
+
+jobs:
+  settings:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/tests/test_shellshock_settings.py

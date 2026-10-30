@@ -1028,7 +1028,7 @@ void __cdecl BG_RegisterDvars()
         "In seconds, how soon from the end of the effect to start blending out the screengrab layer.");
 #endif
     minci.value.max = 1000.0f;
-    minci.value.min = 0.001f;
+    minci.value.min = 0.0f;
     bg_shock_viewKickPeriod = Dvar_RegisterFloat(
         "bg_shock_viewKickPeriod",
         0.75f,
@@ -1044,7 +1044,7 @@ void __cdecl BG_RegisterDvars()
         DVAR_CHEAT,
         "Shell shock kick radius");
     minck.value.max = 1000.0f;
-    minck.value.min = 0.001f;
+    minck.value.min = 0.0f;
     bg_shock_viewKickFadeTime = Dvar_RegisterFloat(
         "bg_shock_viewKickFadeTime",
         3.0f,
@@ -2236,7 +2236,7 @@ void __cdecl BG_SetShellShockParmsFromDvars(shellshock_parms_t *parms)
     iassert(parms->screenBlend.blurredEffectTime > 0);
 
     parms->screenBlend.type = (ShockViewTypes)bg_shock_screenType->current.integer;
-    parms->view.fadeTime = 3000;
+    parms->view.fadeTime = SnapFloatToInt(bg_shock_viewKickFadeTime->current.value * 1000.0f);
     value = bg_shock_viewKickPeriod->current.value;
     v6 = 0.001f - value;
     if (v6 < 0.0f)
