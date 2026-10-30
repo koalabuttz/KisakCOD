@@ -680,7 +680,13 @@ void __cdecl SV_DirectConnect(netadr_t from)
     clients = svs.clients;
     while (i < sv_maxclients->current.integer)
     {
-        if (NET_CompareBaseAdr(from, clients->header.netchan.remoteAddress)
+        // Only a slot that already completed a connection can be reconnecting.
+        // A connect the game rejects leaves the slot CS_FREE, but Netchan_Setup()
+        // has already stored the address and qport on it, and lastConnectTime is
+        // only set on success. Matching such a slot would throttle a free slot and
+        // silently swallow the client's corrected retry.
+        if (clients->header.state != CS_FREE
+            && NET_CompareBaseAdr(from, clients->header.netchan.remoteAddress)
             && (clients->header.netchan.qport == qport || from.port == clients->header.netchan.remoteAddress.port))
         {
             if (svs.time - clients->lastConnectTime < 1000 * sv_reconnectlimit->current.integer)

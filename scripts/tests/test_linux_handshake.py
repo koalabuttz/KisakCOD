@@ -23,9 +23,6 @@ from test_linux_server_lifecycle import CheckFailure, OOB, Server
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# sv_reconnectlimit defaults to 3 seconds; wait a little longer than that.
-RECONNECT_SETTLE = 3.5
-
 
 def require(condition, message):
     if not condition:
@@ -124,17 +121,20 @@ def run_session(binary, game, work, enabled, allow_protocol6=False):
             server.query("getinfo", "mp_crash")
             require(exchange(server, sock, "getchallenge 789") == reply, "safe net_restart preserves local challenge mode")
             console_barrier(server, ["set g_password LocalProbePassword"])
+            # A wide reconnect window keeps the retry below inside it whatever the
+            # machine speed, so this probe does not depend on how fast the server
+            # started.
+            console_barrier(server, ["set sv_reconnectlimit 600"])
             require("GAME_INVALIDPASSWORD" in exchange(server, sock, connect(token, protocol=admitted)),
                     "authentication bypass does not skip the game password")
-            # SV_DirectConnect drops a repeat connect from the same address inside
-            # sv_reconnectlimit seconds (default 3). The rejected attempt leaves a
-            # freed client whose lastConnectTime is still 0, so that gate also
-            # swallows the retry while server time is below the limit; waiting it
-            # out makes the retry independent of how fast the server started.
-            time.sleep(RECONNECT_SETTLE)
+            # That rejected attempt left its client slot free but already carrying
+            # this address and connect port. A free slot is not a reconnect, so
+            # SV_DirectConnect must admit the corrected retry at once instead of
+            # throttling it as a too-soon reconnect of an admitted client.
             reply = exchange(server, sock, connect(token, protocol=admitted, password="LocalProbePassword"))
             require(reply.startswith("connectResponse"),
-                    f"protocol {admitted} with issued challenge and password reaches real connection admission")
+                    f"protocol {admitted} with issued challenge and password reaches real connection admission "
+                    f"immediately after a rejection inside sv_reconnectlimit")
             # The wire probe never sends gameplay packets. Verify the admitted
             # identity in the actual game log, then quit to exercise its cleanup.
             require(re.search(r'guid "local-test-[0-9a-f]{12}"', server.log()) is not None,

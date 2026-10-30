@@ -815,7 +815,13 @@ static void Netchan_Setup(netsrc_t sock, netchan_t *chan, netadr_t adr, int qpor
     R.netchanAdr = adr;
     R.netchanQport = qport;
     if (chan)
+    {
+        // Netchan_Setup() in src/qcommon/net_chan_mp.cpp stores both on the
+        // channel; the address and qport a rejected connect leaves behind are
+        // what the reconnect lookup matches later.
         chan->remoteAddress = adr;
+        chan->qport = qport;
+    }
     Record(FormatVa("netchan:%s:%d", NET_AdrToString(adr), qport));
 }
 
@@ -2054,6 +2060,130 @@ static void TestDirectConnectGameRejection()
     CheckEq(R.freeClientScriptId, 1, "the allocated script id is released");
 }
 
+// The reconnect throttle is keyed on a client slot, so it must only apply to a
+// slot that actually completed a connection. A connect the game rejects leaves
+// the slot CS_FREE, but Netchan_Setup() has already stored this client's address
+// and qport on it, and lastConnectTime is only written on success. Matching that
+// slot would throttle a free slot, and because the rejection is a developer-only
+// print the client waits forever for a reply it never gets instead of retrying.
+// A rejected password followed by a corrected retry is the common case, and on a
+// server younger than the limit every retry lands inside it.
+//
+// ResetWorld() leaves sv_reconnectlimit at 0, which disables the throttle, so
+// unrelated tests never depend on connect timing. This test raises it to the
+// shipped default of 3 seconds, which is also the timing the original bug needed.
+static void TestDirectConnectReconnectLimit()
+{
+    netadr_t from = MakeAdr(203, 0, 113, 7, 28000);
+    const int limitMs = 3 * 1000;
+    int token;
+
+    // --- the slot a rejected connect leaves behind does not throttle ---------
+    ResetWorld();
+    dvar_reconnectlimit.current.integer = 3;
+    Check(svs.time < limitMs, "the server is younger than the reconnect limit");
+    token = IssueChallenge(from);
+    Check(token > 0, "challenge issued");
+
+    g_clientConnectDenial = "GAME_INVALIDPASSWORD";
+    ConnectArgs badPassword = { "1", token, 49001, "wrong" };
+    ConnectAttempt(from, MakeUserinfo(badPassword).c_str());
+    CheckText(LastOob(), "error\nGAME_INVALIDPASSWORD", "the rejected password is reported to the client");
+    Check(!ClientIsConnected(0), "a game-rejected client leaves the slot free");
+    Check(svs.clients[0].header.state == CS_FREE, "the slot is CS_FREE after the rejection");
+    CheckEq(svs.clients[0].header.netchan.qport, 49001,
+            "the rejected slot still holds the client's qport");
+    Check(NET_CompareAdr(svs.clients[0].header.netchan.remoteAddress, from),
+          "the rejected slot still holds the client's address");
+    CheckEq(svs.clients[0].lastConnectTime, 0, "a rejected connect never sets lastConnectTime");
+
+    // The client corrects its password and retries, well inside the limit.
+    int connectsBefore = R.clientConnectCalls;
+    g_clientConnectDenial = NULL;
+    token = IssueChallenge(from);
+    Check(token > 0, "the retry obtains a challenge");
+    R.oob.clear();
+    R.debugPrinted.clear();
+    ConnectArgs rightPassword = { "1", token, 49001, "right" };
+    ConnectAttempt(from, MakeUserinfo(rightPassword).c_str());
+    CheckText(LastOob(), "connectResponse mods/kisak", "the corrected retry is admitted");
+    Check(ClientIsConnected(0), "the corrected retry reached CS_CONNECTED");
+    Check(!AnyLineContains(R.debugPrinted, "reconnect rejected"),
+          "a free slot never reports a reconnect rejection");
+    CheckEq(R.clientConnectCalls, connectsBefore + 1, "the game was asked about the retry");
+
+    // --- a client that completed a connection is still throttled ------------
+    ResetWorld();
+    dvar_reconnectlimit.current.integer = 3;
+    token = IssueChallenge(from);
+    Check(token > 0, "challenge issued for the first connect");
+    ConnectArgs firstConnect = { "1", token, 49001, "" };
+    ConnectAttempt(from, MakeUserinfo(firstConnect).c_str());
+    CheckText(LastOob(), "connectResponse mods/kisak", "the first connect is admitted");
+    Check(ClientIsConnected(0), "the first client is connected");
+    CheckEq(svs.clients[0].lastConnectTime, svs.time, "a completed connection records its time");
+    Check(svs.time - svs.clients[0].lastConnectTime < limitMs,
+          "the reconnect below happens inside the limit");
+
+    token = IssueChallenge(from);
+    Check(token > 0, "the reconnect obtains a challenge");
+    connectsBefore = R.clientConnectCalls;
+    int netchansBefore = R.netchanSetups;
+    R.oob.clear();
+    R.debugPrinted.clear();
+    ConnectArgs tooSoon = { "1", token, 49001, "" };
+    ConnectAttempt(from, MakeUserinfo(tooSoon).c_str());
+    Check(R.oob.empty(), "the too-soon rejection sends the client no reply");
+    Check(!AnyLineContains(R.oob, "error"),
+          "the too-soon rejection never aborts the client's connection attempt");
+    Check(AnyLineContains(R.debugPrinted, "reconnect rejected : too soon"),
+          "the developer channel still reports the rejection");
+    CheckEq(R.netchanSetups, netchansBefore, "the throttled reconnect set up no netchan");
+    CheckEq(R.clientConnectCalls, connectsBefore, "the game was not asked about the throttled reconnect");
+    Check(ClientIsConnected(0), "the connected client is left untouched");
+    CheckEq(R.freeClient, 0, "the connected client was not freed");
+
+    // --- after the limit the existing reconnect path takes over -------------
+    svs.time += limitMs;
+    Check(svs.time - svs.clients[0].lastConnectTime >= limitMs,
+          "the reconnect below happens at the edge of the limit");
+    token = IssueChallenge(from);
+    Check(token > 0, "the late reconnect obtains a challenge");
+    R.oob.clear();
+    R.debugPrinted.clear();
+    ConnectAttempt(from, MakeUserinfo(tooSoon).c_str());
+    CheckText(LastOob(), "connectResponse mods/kisak", "the reconnect after the limit is admitted");
+    Check(AnyLineContains(R.alwaysPrinted, "reconnect. same qport: 1, same port: 1"),
+          "the existing reconnect path matched the slot on both qport and port");
+    Check(!AnyLineContains(R.debugPrinted, "reconnect rejected"),
+          "no rejection is reported once the limit has passed");
+    CheckEq(R.freeClient, 1, "the reconnect path freed the previous client");
+    CheckEq(R.lastClientNum, 0, "the reconnecting client kept its slot number");
+    Check(ClientIsConnected(0), "the reconnecting client occupies the same slot");
+    CheckEq(R.netchanSetups, netchansBefore + 1, "the reconnect set up one new netchan");
+
+    // --- a slot the server moved back to CS_FREE does not throttle ----------
+    // SV_CheckTimeouts() expires a zombie into CS_FREE and keeps its
+    // lastConnectTime, so a free slot can carry a recent connect time. It is
+    // reusable again: the throttle must key on the state, not on that timestamp.
+    ResetWorld();
+    dvar_reconnectlimit.current.integer = 3;
+    svs.clients[0].header.state = CS_FREE;
+    svs.clients[0].header.netchan.remoteAddress = from;
+    svs.clients[0].header.netchan.qport = 49001;
+    svs.clients[0].lastConnectTime = svs.time;
+    token = IssueChallenge(from);
+    Check(token > 0, "challenge issued for the freed slot");
+    R.oob.clear();
+    R.debugPrinted.clear();
+    ConnectArgs freedSlot = { "1", token, 49001, "" };
+    ConnectAttempt(from, MakeUserinfo(freedSlot).c_str());
+    CheckText(LastOob(), "connectResponse mods/kisak", "a freed slot does not throttle the next connect");
+    Check(ClientIsConnected(0), "the client took the freed slot");
+    Check(!AnyLineContains(R.debugPrinted, "reconnect rejected"),
+          "a stale connect time on a free slot throttles nothing");
+}
+
 static void TestDirectConnectLoopbackSource()
 {
     ConnectArgs args = { "1", 4242, 49001, "" };
@@ -2231,6 +2361,7 @@ int main(void)
 #endif
     Run("SV_DirectConnect: capacity and password", TestDirectConnectCapacityAndPassword);
     Run("SV_DirectConnect: game rejection", TestDirectConnectGameRejection);
+    Run("SV_DirectConnect: reconnect limit", TestDirectConnectReconnectLimit);
     Run("SV_DirectConnect: loopback source", TestDirectConnectLoopbackSource);
     Run("SV_DropClient: Steam notification", TestDropClientSteamNotification);
     Run("SV_DropClient: identity classification", TestDropClientIdentityClassification);

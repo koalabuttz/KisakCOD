@@ -299,6 +299,16 @@ required and received versions. It was originally a bare
 `EXE_SERVER_IS_DIFFERENT_VER` packet, which clients ignore, so a mismatched
 client kept retrying while displaying "awaiting challenge."
 
+`sv_reconnectlimit` (default 3 seconds) throttles a slot only when that slot
+completed a connection. A connect the game refuses - a wrong `g_password`, for
+example - leaves its slot free but already carrying the client's address and
+connect port, and such a slot no longer counts as a reconnect, so the client's
+corrected retry is admitted immediately instead of stalling until the limit
+expires. While the throttle does apply, the rejection stays on the developer
+channel (`developer 1`) and sends the client no packet: the client is retrying
+legitimately, and an `error` reply would make it abandon the attempt and show a
+message instead.
+
 #### Retail 1.7 clients and `sv_allowProtocol6`
 
 An installed retail client (`iw3mp.exe`, "CoD4 MP 1.7", CoD4x loader disabled)
