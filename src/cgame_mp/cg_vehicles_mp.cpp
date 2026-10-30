@@ -559,24 +559,11 @@ void __cdecl VehicleFXTest(int32_t localClientNum, const DObj_s *obj, centity_s 
 {
     char *v4; // eax
     entityState_s_un1 v6; // [esp+18h] [ebp-10Ch]
-    float v7; // [esp+1Ch] [ebp-108h]
-    float lerp; // [esp+20h] [ebp-104h]
-    float v9; // [esp+24h] [ebp-100h]
-    float v10; // [esp+28h] [ebp-FCh]
-    float v11; // [esp+2Ch] [ebp-F8h]
     float diff[3]; // [esp+3Ch] [ebp-E8h] BYREF
     float v13; // [esp+48h] [ebp-DCh]
     float v14; // [esp+4Ch] [ebp-D8h]
     float v15; // [esp+50h] [ebp-D4h]
-    int32_t v16; // [esp+54h] [ebp-D0h]
     int32_t startMsec; // [esp+58h] [ebp-CCh]
-    const snd_alias_t *idleAlias0; // [esp+60h] [ebp-C4h]
-    SndEntHandle sndEnt; // [esp+64h] [ebp-C0h]
-    float sndLerp; // [esp+68h] [ebp-BCh]
-    const snd_alias_t *idleAlias1; // [esp+6Ch] [ebp-B8h]
-    const snd_alias_t *engineAlias1; // [esp+70h] [ebp-B4h]
-    const snd_alias_t *engineAlias0; // [esp+74h] [ebp-B0h]
-    bool result; // [esp+7Ah] [ebp-AAh]
     uint8_t boneIndex; // [esp+7Bh] [ebp-A9h]
     int32_t entityNum; // [esp+7Ch] [ebp-A8h]
     const cg_s *cgameGlob; // [esp+80h] [ebp-A4h]
@@ -621,57 +608,8 @@ void __cdecl VehicleFXTest(int32_t localClientNum, const DObj_s *obj, centity_s 
                 }
             }
         }
-        if (fxInfo->soundEnabled)
-            result = CG_ShouldPlaySoundOnLocalClient();
-        else
-            result = 0;
-        if (result)
-        {
-            engineAlias0 = CL_PickSoundAlias("hummer_engine_low");
-            engineAlias1 = CL_PickSoundAlias("hummer_engine_high");
-            idleAlias0 = CL_PickSoundAlias("hummer_idle_low");
-            idleAlias1 = CL_PickSoundAlias("hummer_idle_high");
-            if (engineAlias0)
-            {
-                if (engineAlias1 && idleAlias0 && idleAlias1)
-                {
-                    sndLerp = speed / 0.80000001;
-                    v11 = 0.0 - sndLerp;
-                    if (v11 < 0.0)
-                        v10 = sndLerp;
-                    else
-                        v10 = 0.0;
-                    sndLerp = v10;
-                    v9 = v10 - 1.0;
-                    if (v9 < 0.0)
-                        lerp = sndLerp;
-                    else
-                        lerp = 1.0;
-                    sndLerp = lerp;
-                    v16 = 0;
-                    sndEnt.field.entIndex = ns->number;
-                    SND_PlayBlendedSoundAliases(
-                        engineAlias0,
-                        engineAlias1,
-                        lerp,
-                        1.0,
-                        sndEnt,
-                        fxInfo->soundEngineOrigin,
-                        0,
-                        SASYS_CGAME);
-                    v7 = 1.0 - lerp;
-                    SND_PlayBlendedSoundAliases(
-                        idleAlias0,
-                        idleAlias1,
-                        v7,
-                        1.0,
-                        sndEnt,
-                        fxInfo->soundEngineOrigin,
-                        0,
-                        SASYS_CGAME);
-                }
-            }
-        }
+        // Engine/idle aliases arrive through server-owned ET_SOUND_BLEND
+        // entities. Do not also play the prototype's hardcoded humvee sounds.
         return;
     }
     if (cent->nextState.eType == ET_HELICOPTER)
