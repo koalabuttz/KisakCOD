@@ -94,7 +94,24 @@ python3 scripts/tests/test_linux_bootstrap.py
 python3 scripts/tests/test_linux_bootstrap.py build-linux/debug/bin/KisakCOD-dedi
 ```
 
-Runtime and UDP checks need the same multilib toolchain, but no game assets:
+Run the complete asset-free set against an already configured/built target:
+
+```sh
+python3 scripts/tests/run_linux_checks.py \
+  --build-dir build-linux --binary bin/KisakCOD-dedi
+```
+
+The runner prints the exact commands and fails on missing artifacts, unsuitable
+compile databases, nonzero results, or timeouts. `--list` prints the command list
+without executing it; `--log-dir` retains text logs. It builds test harnesses, not
+the server itself. The Linux GitHub Actions workflow runs this entrypoint for
+Debug and RelWithDebInfo on Ubuntu 24.04, uploading only the native executable
+and check logs. It never downloads or uploads licensed game data. Hosted CI
+results must be checked separately from local runs; existing Windows CI remains
+responsible for MSVC builds.
+
+Runtime and UDP checks can also be run individually. They need the same multilib
+toolchain, but no game assets:
 
 ```sh
 python3 scripts/tests/test_linux_runtime.py
@@ -165,6 +182,54 @@ client count, with an asset-free SP/MP regression covering zero and one local
 client. This fixes map initialization; it does not establish real-client or
 multiplayer gameplay compatibility.
 
+## Optional lifecycle soak and UDP query checks
+
+For repeated map restart/change/rotation with real loopback UDP queries:
+
+```sh
+python3 scripts/tests/test_linux_server_lifecycle.py \
+  "$HOME/.steam/debian-installation/steamapps/common/Call of Duty 4" \
+  --binary bin/KisakCOD-dedi --output-dir build-linux/lifecycle-run \
+  --cycles 5 --hold-seconds 15 --shutdown both
+```
+
+Use a new output directory for each run. This test stages the same isolated asset
+view and writable home, binds only `127.0.0.1` on a dynamically selected port,
+and never authenticates or connects a player. Each cycle performs `map_restart`,
+changes to `mp_shipment`, and uses `map_rotate` to return to `mp_crash`. Fresh
+challenge-correlated `getinfo`/`getstatus` replies and console `status` acknowledge
+each stage. A separate process checks SIGTERM shutdown in addition to the main
+run's console `quit`.
+
+Logs and JSON reports retain RSS, virtual size, CPU time, descriptor counts and
+thread counts sampled from `/proc`. Resource checks compare `mp_crash` at the
+end of each full cycle with the first completed cycle as warm-up. Defaults allow
+64 MiB RSS growth, two additional descriptors and no extra threads; stricter
+limits can be selected with `--max-rss-growth-mib` and `--max-fd-growth`. These
+are regression thresholds, not a proof that the process cannot leak. One cycle
+alone has no post-warm-up resource comparison. Mid-load peaks are recorded but
+not compared to steady-map thresholds. CPU and virtual size are measurements,
+not enforced budgets.
+
+A five-cycle run passed locally in both Debug and RelWithDebInfo, with 15-second
+holds at each stage, fresh replies throughout, and both shutdown paths exiting
+zero. Same-map RSS growth after warm-up was at most 100 KiB, with no additional
+descriptors or threads. Those first runs also exposed an idle-CPU issue in the
+network wait's deadline rounding: a requested 1 ms wait usually rounded down to
+zero and polled instead of sleeping. Positive fractional deadlines now round up.
+After rebuilding, both configurations passed another three cycles with
+10-second holds; same-map RSS grew at most 8 KiB, with no descriptor/thread
+growth. Median CPU over steady one-second samples fell from about 101% of one
+core to 10% in Debug and 8% in RelWithDebInfo on this host. Loading spikes and
+machine scheduling affect these numbers; they are observations, not budgets.
+
+The driver's own asset-free parser, shutdown-evidence and error-cleanup tests
+can run in CI without starting the engine:
+
+```sh
+python3 scripts/tests/test_linux_lifecycle_driver.py
+```
+
 ## Supported boundaries and remaining verification
 
 - Networking is native nonblocking IPv4/UDP. IPX and SOCKS proxying are not
@@ -182,10 +247,9 @@ multiplayer gameplay compatibility.
 - Windows source paths are retained, but native MSVC/MinGW builds must still be
   checked in their own environments after shared-header changes.
 
-Before calling this port playable, verify with licensed assets: complete zone
-loading/unloading; map start/restart/rotation; sustained server simulation;
-client authentication and connection; entity/snapshot serialization; downloads;
-console `status`/`quit` with an active map; signal shutdown; and resource cleanup
-over repeated maps. Initial-zone loading/unloading and the single-map
-startup/frame/status/quit check above have passed with installed assets; that
-does not establish sustained operation, real client connections, or gameplay.
+Before calling this port playable, verify native client authentication and
+connection, entity/snapshot serialization with real clients, downloads, and
+multiplayer gameplay. Initial-zone loading/unloading, map start/restart/rotation,
+loopback queries, console/signal shutdown, and bounded idle resource sampling
+have passed the checks above; longer runs, client load, and Windows builds remain
+separate validation requirements.

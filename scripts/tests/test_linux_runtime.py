@@ -21,6 +21,7 @@ import tempfile
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 LINUX_SRC = PROJECT_ROOT / "src" / "linux"
+BUILD_DIR = PROJECT_ROOT / "build-linux"
 
 NOTICE = "Console: input line longer than 1023 characters discarded"
 
@@ -43,7 +44,7 @@ CONSOLE_CASES = (
 
 def project_compile_flags():
     """Flags for the platform sources, taken from the project's build if it exists."""
-    commands = PROJECT_ROOT / "build-linux" / "compile_commands.json"
+    commands = BUILD_DIR / "compile_commands.json"
     if commands.is_file():
         for entry in json.loads(commands.read_text()):
             if not entry["file"].endswith("src/linux/sys_posix.cpp"):
@@ -59,13 +60,14 @@ def project_compile_flags():
                 if skip_next:
                     skip_next = False
                     continue
-                if token == "-o":
+                if token in ("-o", "-MT", "-MF", "-MQ"):
                     skip_next = True
                     continue
-                if token == "-c" or token == entry["file"]:
+                if token in ("-c", "-MD", "-MMD") or token == entry["file"]:
                     continue
                 flags.append(token)
-            return flags, "build-linux/compile_commands.json"
+            return flags, str(commands)
+        raise ValueError(f"{commands} has no native Linux sys_posix.cpp compiler entry")
 
     # Best effort without a configured build: the engine headers still need the
     # include roots, and 32-bit matches the server.
@@ -74,6 +76,9 @@ def project_compile_flags():
             "-std=gnu++20",
             "-m32",
             "-D_DEBUG",
+            "-DKISAK_MP",
+            "-DKISAK_DEDICATED",
+            "-DDEDICATED",
             "-D_GNU_SOURCE",
             "-D_FILE_OFFSET_BITS=64",
             "-fms-extensions",
@@ -87,6 +92,8 @@ def project_compile_flags():
 
 
 def run(command, **kwargs):
+    kwargs.setdefault("cwd", BUILD_DIR if BUILD_DIR.is_dir() else PROJECT_ROOT)
+    kwargs.setdefault("timeout", 180)
     return subprocess.run(command, check=False, **kwargs)
 
 
@@ -237,10 +244,18 @@ def check_translation_units(compiler="clang++"):
 
 
 def main():
+    global BUILD_DIR
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--compiler", default="clang++", help="C++ compiler for the runtime tests")
+    parser.add_argument("--build-dir", type=Path, default=BUILD_DIR,
+                        help="configured CMake directory containing compile_commands.json")
     parser.add_argument("--skip-build-check", action="store_true", help="skip the per-file syntax check")
     arguments = parser.parse_args()
+    BUILD_DIR = arguments.build_dir.resolve()
+    try:
+        project_compile_flags()
+    except (ValueError, OSError, KeyError) as error:
+        parser.error(str(error))
 
     print("Linux runtime wrapper tests", flush=True)
     print("===========================", flush=True)
@@ -256,7 +271,7 @@ def main():
         print(f"built runtime test with {flag_source}", flush=True)
 
         print("\nengine-free primitives", flush=True)
-        failures += build_and_run_primitive_selftest(workdir)
+        failures += build_and_run_primitive_selftest(workdir, arguments.compiler)
 
         print("\nengine-facing wrappers", flush=True)
         failures += run_self_contained_modes(executable)

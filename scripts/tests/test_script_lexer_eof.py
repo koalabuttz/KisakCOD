@@ -59,7 +59,7 @@ def main():
                                       f"int CL_GetLocalClientActiveCount() {{ return {clients}; }}")
                 cpp, executable = work / "parser.cpp", work / "parser"
                 cpp.write_text(source)
-                subprocess.run(compiler + ["-std=c++17", "-O1", "-g",
+                subprocess.run(compiler + ["-std=c++17", "-O1", "-g", "-UNDEBUG",
                                "-fsanitize=address,undefined", "-fno-sanitize-recover=all",
                                "-fno-omit-frame-pointer", f"-D{mode}", str(cpp),
                                "-o", str(executable)], check=True, timeout=60)

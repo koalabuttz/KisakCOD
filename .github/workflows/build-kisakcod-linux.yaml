@@ -1,0 +1,132 @@
+name: Linux native dedicated server
+
+# Builds and checks the 32-bit native Linux dedicated server (KISAK_PLATFORM=linux,
+# target KisakCOD-dedi). The checks are asset-free: they need no installed game
+# data, no Steam client, no credentials, and they never accept client
+# connections, so nothing licensed is downloaded and no game server is exposed.
+# Configuration fetches the pinned Tracy dependency over the network; that is the
+# only outbound access this workflow needs.
+#
+# Configure and build stay in the workflow and never reuse the Windows output
+# paths: each configuration gets its own build directory and its own runtime
+# output directory. The Python runner only tests what was built.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "master" ]
+    paths:
+      - CMakeLists.txt
+      - build-linux.sh
+      - scripts/**
+      - src/**
+      - deps/**
+      - tests/linux_net/**
+      - .github/workflows/build-kisakcod-linux.yaml
+  pull_request:
+    branches: [ "master" ]
+    paths:
+      - CMakeLists.txt
+      - build-linux.sh
+      - scripts/**
+      - src/**
+      - deps/**
+      - tests/linux_net/**
+      - .github/workflows/build-kisakcod-linux.yaml
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    name: Native Linux ${{ matrix.config }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [Debug, RelWithDebInfo]
+
+    env:
+      # Separate from bin/<config> so the Windows targets keep their own outputs.
+      BUILD_DIR: build-linux/${{ matrix.config }}
+      CMAKE_RUNTIME_OUTPUT_DIRECTORY: ${{ github.workspace }}/out/linux-${{ matrix.config }}
+      BINARY: out/linux-${{ matrix.config }}/KisakCOD-dedi
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install native 32-bit build tools
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            cmake ninja-build clang g++-multilib python3
+
+      - name: Report compiler versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang --version
+          clang++ --version
+          cmake --version
+          ninja --version
+          python3 --version
+          echo "target architecture probe:"
+          printf 'int main(){return 0;}\n' > "$RUNNER_TEMP/m32-probe.cpp"
+          clang++ -m32 "$RUNNER_TEMP/m32-probe.cpp" -o "$RUNNER_TEMP/m32-probe"
+          "$RUNNER_TEMP/m32-probe"
+          echo "32-bit link works"
+
+      - name: Configure ${{ matrix.config }}
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B "$BUILD_DIR" -G Ninja \
+            -DKISAK_PLATFORM=linux \
+            -DCMAKE_BUILD_TYPE=${{ matrix.config }} \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$CMAKE_RUNTIME_OUTPUT_DIRECTORY"
+
+      - name: Build KisakCOD-dedi
+        timeout-minutes: 40
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build "$BUILD_DIR" --target KisakCOD-dedi --parallel 2
+          test -x "$BINARY"
+          ls -l "$BINARY"
+
+      - name: Check test-runner configuration and failure handling
+        shell: bash
+        run: python3 scripts/tests/test_linux_check_runner.py
+
+      - name: Run asset-free native checks
+        timeout-minutes: 30
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/tests/run_linux_checks.py \
+            --build-dir "$BUILD_DIR" \
+            --binary "$BINARY" \
+            --cxx clang++ \
+            --log-dir "artifacts/checks-${{ matrix.config }}"
+
+      - name: Upload executable and check logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: KisakCOD-linux-${{ matrix.config }}
+          # The executable plus text logs only: no bin/ tree, no game data.
+          path: |
+            ${{ env.BINARY }}
+            artifacts/checks-${{ matrix.config }}
+          if-no-files-found: warn
+          compression-level: 9
+          retention-days: 7
