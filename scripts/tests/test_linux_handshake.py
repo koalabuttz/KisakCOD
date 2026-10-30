@@ -3,6 +3,12 @@
 
 Exercises connection admission, not gamestate decoding or playable-client
 compatibility. Assets are symlinked read-only into a separate temporary home.
+
+Three server configurations are started: default authentication, the loopback
+local-test opt-in, and the loopback local-test opt-in together with
+``sv_allowProtocol6`` so the retail 1.7 protocol number (6) is admitted through
+the protocol-1 path. A fourth start covers ``sv_allowProtocol6`` on its own,
+which must still refuse every client because authentication is unchanged.
 """
 import argparse
 from pathlib import Path
@@ -16,6 +22,9 @@ import time
 from test_linux_server_lifecycle import CheckFailure, OOB, Server
 
 ROOT = Path(__file__).resolve().parents[2]
+
+# sv_reconnectlimit defaults to 3 seconds; wait a little longer than that.
+RECONNECT_SETTLE = 3.5
 
 
 def require(condition, message):
@@ -61,8 +70,10 @@ def connect(token, protocol=1, qport=19341, password=""):
             f'\\name\\HandshakeProbe\\rate\\25000\\snaps\\20\\password\\{password}"')
 
 
-def run_session(binary, game, work, enabled):
+def run_session(binary, game, work, enabled, allow_protocol6=False):
     args = ["+set", "sv_loopbackTestAuth", str(int(enabled))]
+    if allow_protocol6:
+        args += ["+set", "sv_allowProtocol6", "1"]
     server = Server(binary, game, work, work, 60, startup_args=args)
     try:
         server.query("getinfo", "mp_crash")  # Nonce/name-correlated readiness.
@@ -85,16 +96,23 @@ def run_session(binary, game, work, enabled):
             require(match is not None, "startup opt-in issues a challenge without Steam fields")
             token = int(match[1])
             require(exchange(server, sock, "getchallenge 456") == reply, "challenge retry retains token")
-            for protocol in (6, 21):
+            # With the compatibility switch off, protocol 6 is refused like any
+            # other version; with it on, 6 is admitted and the error text names
+            # the accepted alternatives.
+            suffix = " or 6 (CoD4 1.7)" if allow_protocol6 else ""
+            admitted = 6 if allow_protocol6 else 1
+            for protocol in (7, 21) if allow_protocol6 else (6, 21):
                 rejection = exchange(server, sock, connect(token, protocol=protocol))
-                require(rejection == f"error\nThis server requires protocol version 1 (CoD4 1.0); "
+                require(rejection == f"error\nThis server requires protocol version 1 (CoD4 1.0){suffix}; "
                                  f"your client uses protocol {protocol}.",
                         f"client protocol {protocol} gets an explicit error independently of authentication")
-            require("BAD_CHALLENGE" in exchange(server, sock, connect(token ^ 1)), "wrong token rejected")
+            require("BAD_CHALLENGE" in exchange(server, sock, connect(token ^ 1, protocol=admitted)),
+                    "wrong token rejected")
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as other:
                 other.bind(("127.0.0.1", 0))
                 other.settimeout(0.25)
-                require("BAD_CHALLENGE" in exchange(server, other, connect(token)), "changed source port rejected")
+                require("BAD_CHALLENGE" in exchange(server, other, connect(token, protocol=admitted)),
+                        "changed source port rejected")
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as other:
                 other.bind(("127.0.0.2", 0))
                 other.settimeout(0.25)
@@ -106,14 +124,39 @@ def run_session(binary, game, work, enabled):
             server.query("getinfo", "mp_crash")
             require(exchange(server, sock, "getchallenge 789") == reply, "safe net_restart preserves local challenge mode")
             console_barrier(server, ["set g_password LocalProbePassword"])
-            require("GAME_INVALIDPASSWORD" in exchange(server, sock, connect(token)),
+            require("GAME_INVALIDPASSWORD" in exchange(server, sock, connect(token, protocol=admitted)),
                     "authentication bypass does not skip the game password")
-            reply = exchange(server, sock, connect(token, password="LocalProbePassword"))
-            require(reply.startswith("connectResponse"), "protocol 1 with issued challenge and password reaches real connection admission")
+            # SV_DirectConnect drops a repeat connect from the same address inside
+            # sv_reconnectlimit seconds (default 3). The rejected attempt leaves a
+            # freed client whose lastConnectTime is still 0, so that gate also
+            # swallows the retry while server time is below the limit; waiting it
+            # out makes the retry independent of how fast the server started.
+            time.sleep(RECONNECT_SETTLE)
+            reply = exchange(server, sock, connect(token, protocol=admitted, password="LocalProbePassword"))
+            require(reply.startswith("connectResponse"),
+                    f"protocol {admitted} with issued challenge and password reaches real connection admission")
             # The wire probe never sends gameplay packets. Verify the admitted
             # identity in the actual game log, then quit to exercise its cleanup.
             require(re.search(r'guid "local-test-[0-9a-f]{12}"', server.log()) is not None,
                     "admitted client has a server-generated non-Steam identity")
+        server.shutdown("console")
+    finally:
+        server.cleanup()
+
+
+def protocol6_without_auth(binary, game, work):
+    """sv_allowProtocol6 alone: the version check changes, authentication does not."""
+    server = Server(binary, game, work, work, 60,
+                    startup_args=["+set", "sv_loopbackTestAuth", "0", "+set", "sv_allowProtocol6", "1"])
+    try:
+        server.query("getinfo", "mp_crash")
+        sock = server.socket
+        reply = exchange(server, sock, "getchallenge 123")
+        require("Steam ticket/ID handshake" in reply,
+                "protocol 6 switch leaves the default authentication requirement: " + repr(reply))
+        reply = exchange(server, sock, connect(123, protocol=6))
+        require("BAD_CHALLENGE" in reply,
+                "protocol 6 without an authenticated challenge is still refused: " + repr(reply))
         server.shutdown("console")
     finally:
         server.cleanup()
@@ -150,10 +193,15 @@ def main():
     with tempfile.TemporaryDirectory(prefix="kisak-handshake-") as temporary:
         work = Path(temporary)
         try:
-            for label, enabled in (("default", False), ("local", True)):
+            for label, enabled, allow_protocol6 in (("default", False, False),
+                                                    ("local", True, False),
+                                                    ("local-protocol6", True, True)):
                 session = work / label
                 session.mkdir()
-                run_session(binary, game, session, enabled)
+                run_session(binary, game, session, enabled, allow_protocol6)
+            session = work / "protocol6-no-auth"
+            session.mkdir()
+            protocol6_without_auth(binary, game, session)
             matrix = work / "matrix"
             matrix.mkdir()
             startup_matrix(binary, game, matrix)
@@ -162,7 +210,9 @@ def main():
             for log in work.glob("*/server.log"):
                 print(str(log) + "\n" + log.read_text(errors="replace")[-12000:])
             return 1
-    print("Live handshake admission passed; playable stock/CoD4x compatibility is NOT established.")
+    print("Live handshake admission passed, including optional protocol 6 admission for local-test "
+          "authentication only; gamestate decoding, real Steam authentication and stock/CoD4x "
+          "playable compatibility are NOT established here.")
     return 0
 
 

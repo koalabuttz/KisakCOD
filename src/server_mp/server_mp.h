@@ -927,6 +927,7 @@ extern const dvar_t *sv_debugMessageKey;
 extern const dvar_t *sv_fps;
 extern const dvar_t *sv_botsPressAttackBtn;
 extern const dvar_t *sv_serverid;
+extern const dvar_t *sv_allowProtocol6;
 extern const dvar_t *sv_mapRotation;
 
 extern serverStatic_t svs;

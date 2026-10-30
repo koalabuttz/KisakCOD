@@ -761,6 +761,11 @@ void __cdecl SV_Init()
     sv_voiceQuality = Dvar_RegisterInt("sv_voiceQuality", 3, (DvarLimits)0x900000000LL, DVAR_SYSTEMINFO, "Voice quality");
     sv_cheats = Dvar_RegisterBool("sv_cheats", 1, DVAR_SYSTEMINFO | DVAR_INIT, "Enable cheats on the server");
     sv_serverid = Dvar_RegisterInt("sv_serverid", 0, (DvarLimits)0x7FFFFFFF80000000LL, DVAR_SYSTEMINFO | DVAR_ROM, "Server identification");
+    sv_allowProtocol6 = Dvar_RegisterBool(
+        "sv_allowProtocol6",
+        0,
+        DVAR_NOFLAG,
+        "Also admit retail CoD4 1.7 clients (protocol 6); they still need a supported authentication path");
     sv_pure = Dvar_RegisterBool("sv_pure", 0, DVAR_SERVERINFO | DVAR_SYSTEMINFO, "Cannot use modified IWD files");
     rcon_password = Dvar_RegisterString("rcon_password", (char *)"", DVAR_NOFLAG, "Password for the rcon command");
     sv_fps = Dvar_RegisterInt("sv_fps", 20, (DvarLimits)0x3E80000000ALL, DVAR_NOFLAG, "Server frames per second");

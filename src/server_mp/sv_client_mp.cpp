@@ -655,12 +655,18 @@ void __cdecl SV_DirectConnect(netadr_t from)
     Com_DPrintf(CON_CHANNEL_SERVER, "SV_DirectConnect()\n");
     I_strncpyz(userinfo, SV_Cmd_Argv(1), 1024);
     version = atoi(Info_ValueForKey(userinfo, "protocol"));
+    // Retail 1.7 clients advertise protocol 6. Their gamestate, entity and
+    // player-state encodings match protocol 1, so the server can admit them
+    // when the operator opts in.
+    if (version == 6 && sv_allowProtocol6->current.enabled)
+        version = 1;
     if (version != 1)
     {
         // Clients only act on connection replies they recognize; an "error"
         // packet makes them stop retrying and show the reason.
         NET_OutOfBandPrint(NS_SERVER, from,
-            va("error\nThis server requires protocol version %i (CoD4 1.0); your client uses protocol %i.\n", 1, version));
+            va("error\nThis server requires protocol version %i (CoD4 1.0)%s; your client uses protocol %i.\n",
+               1, sv_allowProtocol6->current.enabled ? " or 6 (CoD4 1.7)" : "", version));
 #if defined(__linux__) && defined(KISAK_DEDICATED)
         Com_Printf(CON_CHANNEL_SERVER, "Rejected connect: client protocol %i, required protocol %i; authentication bypass does not change protocol compatibility.\n", version, 1);
 #else

@@ -7,9 +7,15 @@ The Windows MP/SP/editor build paths remain separate.
 This is an initial port, not a gameplay-ready release. There is no native Linux
 graphical client. In particular, **Steam authentication is not implemented on
 Linux yet: ordinary client tickets are rejected**. An explicit startup-only,
-loopback-only test mode can skip ticket verification; it does not establish
-playable-client compatibility. Do not deploy this build as a public game server
-or treat the bootstrap check as a multiplayer test.
+loopback-only test mode can skip ticket verification; it does not by itself
+establish playable-client compatibility. Separately, the opt-in boolean
+`sv_allowProtocol6` lets retail CoD4 1.7 clients through the connect-version check
+(they advertise protocol 6). In that local test mode one stock 1.7 client has
+joined and played briefly; see
+[Retail 1.7 clients and `sv_allowProtocol6`](#retail-17-clients-and-sv_allowprotocol6).
+One short single-player session is a connectivity result, not a compatibility
+guarantee. Do not deploy this build as a public game server or treat the
+bootstrap check as a multiplayer test.
 
 ## Build
 
@@ -268,6 +274,10 @@ matching, passwords and capacity checks remain in place. Local processes are
 trusted: a local proxy or port forward can relay remote traffic, so do not
 forward the port or use this mode for public/LAN hosting.
 
+A retail CoD4 1.7 client also needs `sv_allowProtocol6 1` in that launch, because
+it advertises connect protocol 6; see
+[Retail 1.7 clients and `sv_allowProtocol6`](#retail-17-clients-and-sv_allowprotocol6).
+
 Without opt-in, missing custom ticket/ID arguments now receive an explicit
 handshake error rather than asserting or silently retrying. Malformed fields
 are rejected before Base64 decoding, and a well-formed native request reports
@@ -275,24 +285,81 @@ that Steam authentication is unavailable. Authentication tickets are not logged.
 
 ### Client compatibility is a separate boundary
 
-This codebase requires connect protocol **1**. Do not change that number to
-impersonate a stock or CoD4x server: a matching integer alone cannot fix
-challenge-response, gamestate, snapshot or gameplay serialization differences.
-The [CoD4x server source](https://github.com/callofduty4x/CoD4x_Server/blob/master/src/sv_client.c)
+This codebase serves connect protocol **1**, and `getinfo`/`getstatus` still
+advertise it. Changing that number to impersonate a stock or CoD4x server would
+not help: a matching integer alone cannot fix challenge-response, gamestate,
+snapshot or gameplay serialization differences. The
+[CoD4x server source](https://github.com/callofduty4x/CoD4x_Server/blob/master/src/sv_client.c)
 has a different challenge-response format, including an echoed client challenge
-and protocol information. Its legacy-protocol handling does not establish a
-normal playable protocol-1 channel with this build. The installed stock/CoD4x
-client has **not** completed a playable connection here. In a live local attempt
-with test authentication enabled, the installed client advanced to repeated
-`connect` requests advertising protocol **6**; this server explicitly rejected
-them because it requires **1**. That observation confirms the authentication
-barrier was passed, not that the protocols are compatible. The rejection was
-originally a bare `EXE_SERVER_IS_DIFFERENT_VER` packet, which clients ignore,
-so the client kept retrying while displaying “awaiting challenge.” The server
-now sends an `error` reply naming the required and received protocol versions.
+and protocol information, so it does not complete a normal playable protocol-1
+channel with this build.
 
-The opt-in installed-assets regression can exercise real UDP connection
-admission without claiming gameplay compatibility:
+A version mismatch is answered with a client-visible `error` packet naming the
+required and received versions. It was originally a bare
+`EXE_SERVER_IS_DIFFERENT_VER` packet, which clients ignore, so a mismatched
+client kept retrying while displaying "awaiting challenge."
+
+#### Retail 1.7 clients and `sv_allowProtocol6`
+
+An installed retail client (`iw3mp.exe`, "CoD4 MP 1.7", CoD4x loader disabled)
+advertises connect protocol **6**. Examining that client's gamestate parser,
+constant configstring table, and entity/player-state netfield tables showed them
+to be identical to this 1.0 code; emulating its entity decoder against a real
+server gamestate decoded all 70 baselines. The examined encodings match; other
+1.7 differences, such as gameplay or script behaviour, have not been audited.
+
+`sv_allowProtocol6` is an **opt-in boolean that defaults to off** (registered in
+`SV_Init` with `DVAR_NOFLAG`). When it is enabled, a `connect` advertising
+protocol 6 is handled as protocol 1; every other number is still rejected, and
+the error text then names both accepted versions:
+
+```text
+error
+This server requires protocol version 1 (CoD4 1.0) or 6 (CoD4 1.7); your client uses protocol 21.
+```
+
+With the dvar off, the same reply is
+`error` / `This server requires protocol version 1 (CoD4 1.0); your client uses
+protocol 21.` The switch changes the version check only: the challenge token, the
+Steam ticket handshake, the game password and the capacity checks are unchanged.
+Because native Steam ticket verification is still unimplemented, a retail client
+can only reach a real server through the loopback test mode:
+
+```sh
+./bin/KisakCOD-dedi +set fs_basepath /path/to/cod4 \
+  +set fs_homepath /path/to/server-home +set net_ip 127.0.0.1 \
+  +set dedicated 1 +set sv_loopbackTestAuth 1 +set sv_allowProtocol6 1 \
+  +map mp_crash
+```
+
+Windows clients previously desynchronised against this server for an unrelated
+reason: the message Huffman tree was built with a platform-dependent tie order,
+which swapped the codes for bytes 155 and 205. That is fixed in `23a62702`
+("Build the message Huffman tree identically on every platform"). Before that
+fix, any Windows client mis-decoded messages containing either byte, whatever
+protocol it sent.
+
+Verified: with that fix plus `sv_allowProtocol6 1` and `sv_loopbackTestAuth 1`,
+one stock retail 1.7 client connected to `mp_crash` and played briefly with one
+player; no obvious problem was observed. Connection admission for protocol 6 is
+covered by the checks described below.
+
+Not verified:
+- more than one player, or a 1.7 client mixed with 1.0 clients.
+- map changes and rotation while a 1.7 client is connected.
+- long sessions, or any load beyond a brief single-player test.
+- server-browser listing: `getinfo`/`getstatus` still advertise protocol 1, so a
+  1.7 browser may hide this server. Use `/connect`.
+- CoD4x clients. CoD4x 21.1 uses its own entity decoder and still desynchronises;
+  it remains a separate target.
+- 1.8 clients, which advertise protocol 7 and are not accepted.
+- Windows builds of this server.
+
+Playable compatibility with retail 1.7 clients therefore rests on one local
+single-player session, not on a general claim.
+
+The opt-in installed-assets regression exercises real UDP connection admission
+without claiming gameplay compatibility:
 
 ```sh
 python3 scripts/tests/test_linux_handshake.py \
@@ -300,11 +367,16 @@ python3 scripts/tests/test_linux_handshake.py \
   --binary bin/KisakCOD-dedi
 ```
 
-It stages asset symlinks and a separate temporary home, checks default rejection,
-unsafe startup binds, source/token/protocol negatives, startup-only protection,
-and safe socket restart. A protocol-1 wire probe reaches `connectResponse` with
-a synthetic identity and clean server shutdown; it does not decode a gamestate
-or run a graphical client. This is an admission check, not a playable-client test.
+It stages asset symlinks and a separate temporary home, then starts four servers:
+default authentication, the loopback test-mode opt-in, that opt-in plus
+`sv_allowProtocol6`, and `sv_allowProtocol6` on its own. It checks default
+rejection, unsafe startup binds, source/token/protocol negatives, startup-only
+protection and safe socket restart. The protocol-6 session connects with protocol
+6, receives `connectResponse` and shows the synthetic `local-test-…` identity in
+the server log, while protocols 7 and 21 still receive the two-version error; the
+`sv_allowProtocol6`-only server still refuses every client because authentication
+is unchanged. The test decodes no gamestate and runs no graphical client, so it is
+an admission check rather than a playable-client test.
 
 ## Supported boundaries and remaining verification
 
@@ -323,9 +395,11 @@ or run a graphical client. This is an admission check, not a playable-client tes
 - Windows source paths are retained, but native MSVC/MinGW builds must still be
   checked in their own environments after shared-header changes.
 
-Before calling this port playable, verify native client authentication and
-connection, entity/snapshot serialization with real clients, downloads, and
-multiplayer gameplay. Initial-zone loading/unloading, map start/restart/rotation,
-loopback queries, console/signal shutdown, and bounded idle resource sampling
-have passed the checks above; longer runs, client load, and Windows builds remain
-separate validation requirements.
+Before calling this port playable in general, verify native client
+authentication, entity/snapshot serialization across several real clients and
+maps, downloads, and multiplayer gameplay. One retail 1.7 client has completed a
+short local test-mode session; multi-player load, map rotation with a connected
+client, CoD4x and 1.8 clients, and Windows builds of this server remain open.
+Initial-zone loading/unloading, map start/restart/rotation, loopback queries,
+console/signal shutdown, and bounded idle resource sampling have passed the
+checks above; longer runs and client load are separate validation requirements.

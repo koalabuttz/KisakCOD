@@ -8,11 +8,14 @@ building, run `python3 scripts/tests/run_linux_checks.py --build-dir build-linux
 `test_linux_server_lifecycle.py` additionally exercises restart/rotation, live
 loopback queries and resource samples with installed licensed assets; it is not
 run on public CI. Its failure-cleanup/query-parser unit tests are asset-free.
-`test_server_handshake_auth.py` exercises production authentication parsing and
-handshake functions without assets; the UDP suite also checks the startup-only
-loopback bypass against real sockets. The opt-in `test_linux_handshake.py` uses
-installed assets to verify real UDP admission/default rejection and unsafe bind
-failures. It does not establish playable stock/CoD4x client compatibility.
+`test_server_handshake_auth.py` exercises production authentication parsing,
+handshake functions and connect-version admission (including the opt-in
+`sv_allowProtocol6` switch) without assets; the UDP suite also checks the
+startup-only loopback bypass against real sockets. The opt-in
+`test_linux_handshake.py` uses installed assets to verify real UDP admission,
+default rejection, unsafe bind failures and optional protocol-6 admission for a
+local-test client. It decodes no gamestate and does not establish general
+stock/CoD4x client compatibility.
 
 These shared asset-free regression checks require Python 3 and a C++20 compiler:
 

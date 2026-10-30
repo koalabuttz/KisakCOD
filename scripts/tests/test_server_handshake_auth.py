@@ -23,7 +23,8 @@ dropped because it has no meaning on the x86-64/32 GNU ABI this harness builds
 for; every signature is checked against the expected production signature before
 it is used, so a source change fails the run instead of testing other code.
 Only the surrounding engine services are doubled:
-command argument text, out-of-band printing, ``svs``, dvars, the Steam backend,
+command argument text, out-of-band printing, ``svs``, dvars (including the
+default-off ``sv_allowProtocol6`` switch), the Steam backend,
 script allocation, netchan setup and the game's ``ClientConnect``. Those doubles
 record every call so the tests can assert both the decision and its ordering.
 
@@ -379,6 +380,9 @@ static dvar_t dvar_privatepassword;
 static dvar_t dvar_kickbantime;
 static dvar_t dvar_dedicated;
 static dvar_t dvar_fsgamedir;
+// sv_allowProtocol6 is registered in SV_Init as a plain bool dvar defaulting to
+// off (DVAR_NOFLAG); the handshake reads only its enabled state.
+static dvar_t dvar_allowprotocol6;
 
 static const dvar_t *sv_maxclients = &dvar_maxclients;
 static const dvar_t *sv_minPing = &dvar_minping;
@@ -389,6 +393,7 @@ static const dvar_t *sv_privatePassword = &dvar_privatepassword;
 static const dvar_t *sv_kickBanTime = &dvar_kickbantime;
 static const dvar_t *com_dedicated = &dvar_dedicated;
 static const dvar_t *fs_gameDirVar = &dvar_fsgamedir;
+static const dvar_t *sv_allowProtocol6 = &dvar_allowprotocol6;
 
 // ---- recording doubles -----------------------------------------------------
 
@@ -1063,6 +1068,7 @@ static void ResetWorld()
     dvar_kickbantime.current.value = 600.0f;
     dvar_dedicated.current.integer = 1;
     dvar_fsgamedir.current.string = "mods/kisak";
+    dvar_allowprotocol6.current.enabled = false;
 
     srand(0x5EED);
 }
@@ -1756,6 +1762,112 @@ static void TestDirectConnectVersionRejection()
               "version check comes before the challenge lookup");
 }
 
+// Retail CoD4 1.7 clients advertise protocol 6. sv_allowProtocol6 (registered in
+// SV_Init, default off) only lets that one number through, rewriting it to 1 so
+// the rest of the handshake is the protocol-1 path unchanged. It is a
+// compatibility switch for the version check alone: the challenge token and the
+// Steam identity attached to it are still mandatory.
+static void TestDirectConnectProtocol6Admission()
+{
+    netadr_t from = MakeAdr(203, 0, 113, 7, 28000);
+
+    // --- shipped default: protocol 6 is just another rejected version --------
+    ResetWorld();
+    Check(!sv_allowProtocol6->current.enabled, "sv_allowProtocol6 defaults to off");
+    int token = IssueChallenge(from);
+    Check(token > 0, "challenge issued");
+
+    ConnectArgs six = { "6", token, 49001, "" };
+    ConnectAttempt(from, MakeUserinfo(six).c_str());
+    CheckText(LastOob(), "error\nThis server requires protocol version 1 (CoD4 1.0); your client uses protocol 6.\n",
+              "protocol 6 is rejected by default with the plain version message");
+    Check(!AnyLineContains(R.oob, "CoD4 1.7"),
+          "the disabled dvar does not advertise the 1.7 alternative");
+    CheckEq(R.netchanSetups, 0, "rejected protocol 6 does not set up a netchan");
+    Check(!ClientIsConnected(0), "rejected protocol 6 does not connect a client");
+    Check(FindSlot(from) >= 0, "the challenge record survives the version rejection");
+
+    // --- enabled: protocol 6 takes the protocol-1 path and connects ---------
+    ResetWorld();
+    dvar_allowprotocol6.current.enabled = true;
+    token = IssueChallenge(from);
+    Check(token > 0, "challenge issued with the dvar on");
+
+    ConnectArgs sixOk = { "6", token, 49001, "" };
+    ConnectAttempt(from, MakeUserinfo(sixOk).c_str());
+    CheckText(LastOob(), "connectResponse mods/kisak", "protocol 6 connect is acknowledged");
+    Check(ClientIsConnected(0), "protocol 6 client reached CS_CONNECTED");
+    CheckText(std::string(svs.clients[0].cdkeyHash), kGoodIdentity,
+              "the authenticated identity is copied onto the protocol 6 client");
+    CheckEq(svs.clients[0].challenge, token, "the protocol 6 client records the accepted token");
+    CheckEq(R.netchanSetups, 1, "protocol 6 sets up exactly one netchan");
+    Check(R.netchanQport == 49001, "protocol 6 netchan got the client qport");
+    Check(NET_CompareAdr(R.netchanAdr, from), "protocol 6 netchan got the client address");
+    CheckEq(R.userinfoChanged, 1, "SV_UserinfoChanged ran for protocol 6");
+    CheckEq(R.clientConnectCalls, 1, "the game was asked to accept the protocol 6 client");
+    CheckEq(R.lastClientNum, 0, "the game was told client number 0");
+    Check(R.lastScriptPersId != 0, "the protocol 6 client was given an allocated script id");
+    CheckEq(R.heartbeats, 1, "the first protocol 6 client triggers a heartbeat");
+    CheckText(Info_ValueForKey(svs.clients[0].userinfo, "protocol"), "6",
+              "the client's own protocol string stays in its userinfo");
+
+    // --- enabled: no other version is admitted, and the reply says so -------
+    {
+        const char *const rejected[] = { "21", "7", "2", "0" };
+        for (size_t v = 0; v < sizeof(rejected) / sizeof(rejected[0]); ++v)
+        {
+            netadr_t peer = MakeAdr(203, 0, 113, 8, static_cast<unsigned short>(28100 + v));
+            ResetWorld();
+            dvar_allowprotocol6.current.enabled = true;
+            int fresh = IssueChallenge(peer);
+            Check(fresh > 0, std::string("challenge issued for protocol ") + rejected[v]);
+
+            ConnectArgs other = { rejected[v], fresh, 49001, "" };
+            ConnectAttempt(peer, MakeUserinfo(other).c_str());
+            CheckText(LastOob(),
+                      std::string("error\nThis server requires protocol version 1 (CoD4 1.0)"
+                                  " or 6 (CoD4 1.7); your client uses protocol ") +
+                          rejected[v] + ".\n",
+                      std::string("protocol ") + rejected[v] + " is still rejected");
+            CheckEq(R.netchanSetups, 0, std::string("protocol ") + rejected[v] + " sets up no netchan");
+            Check(!ClientIsConnected(0), std::string("protocol ") + rejected[v] + " connects no client");
+        }
+    }
+
+    // --- enabled: the challenge token is still required ---------------------
+    ResetWorld();
+    dvar_allowprotocol6.current.enabled = true;
+    token = IssueChallenge(from);
+    Check(token > 0, "challenge issued for the token test");
+    ConnectArgs staleToken = { "6", token + 1, 49001, "" };
+    ConnectAttempt(from, MakeUserinfo(staleToken).c_str());
+    CheckText(LastOob(), "error\nEXE_BAD_CHALLENGE",
+              "protocol 6 with a wrong challenge token is rejected");
+    CheckEq(R.netchanSetups, 0, "a wrong token sets up no netchan even for protocol 6");
+    Check(!ClientIsConnected(0), "a wrong token connects no protocol 6 client");
+
+    ConnectArgs noToken = { "6", 0, 49001, "" };
+    ConnectAttempt(from, MakeUserinfo(noToken).c_str());
+    CheckText(LastOob(), "error\nEXE_BAD_CHALLENGE",
+              "protocol 6 without ever asking for a challenge is rejected");
+
+    // --- enabled: authentication is not bypassed ----------------------------
+    // The backend rejects the ticket, so no challenge (and therefore no
+    // identity) is ever issued; the protocol-6 client cannot connect anyway.
+    ResetWorld();
+    dvar_allowprotocol6.current.enabled = true;
+    g_steamAcceptsTicket = false;
+    SetArgv("getchallenge", "", kGoodTicket, kGoodIdentity);
+    SV_GetChallenge(from);
+    Check(OobChallengeToken() < 0, "a rejected ticket issues no challenge");
+    ConnectArgs unauth = { "6", 12345, 49001, "" };
+    ConnectAttempt(from, MakeUserinfo(unauth).c_str());
+    CheckText(LastOob(), "error\nEXE_BAD_CHALLENGE",
+              "protocol 6 cannot connect without an authenticated challenge");
+    CheckEq(R.netchanSetups, 0, "an unauthenticated protocol 6 client gets no netchan");
+    Check(!ClientIsConnected(0), "an unauthenticated protocol 6 client is not connected");
+}
+
 static void TestDirectConnectBadChallenge()
 {
     netadr_t from = MakeAdr(203, 0, 113, 7, 28000);
@@ -2110,6 +2222,7 @@ int main(void)
     Run("SV_GetChallenge: loopback test guard", TestLocalTestGuardRejectsUnpermittedSource);
 #endif
     Run("SV_DirectConnect: version rejection", TestDirectConnectVersionRejection);
+    Run("SV_DirectConnect: protocol 6 admission", TestDirectConnectProtocol6Admission);
     Run("SV_DirectConnect: challenge rejection", TestDirectConnectBadChallenge);
     Run("SV_DirectConnect: success path", TestDirectConnectSuccess);
 #if defined(__linux__) && defined(KISAK_DEDICATED)
