@@ -123,6 +123,207 @@ int __cdecl nodeCmp(const void *left, const void *right)
     return *(uint32_t *)(*(uint32_t *)left + 12) - *(uint32_t *)(*(uint32_t *)right + 12);
 }
 
+// ---------------------------------------------------------------------------
+// Deterministic ordering of the merge pool
+//
+// Huff_BuildFromData orders its pool of nodes by weight alone. Because qsort()
+// leaves the relative order of equal elements unspecified, and msg_hData has
+// ties (bytes 155 and 205 share weight 3889, bytes 228 and 231 share 4683), the
+// resulting tree -- and with it every symbol's bit code -- depended on which C
+// library the binary was linked against. The retail Windows client's runtime
+// sorts those ties differently than glibc, which moved the codes of bytes 155
+// and 205 and made a live client misread any compressed message containing
+// them.
+//
+// The helpers below reproduce that client's ordering, so the tree is identical
+// on every platform. They reimplement the sort that client's runtime performs:
+// a median-of-three quicksort that recurses into the shorter side and keeps the
+// longer one on an explicit stack, a selection sort for runs of eight or fewer
+// elements, and -- like the original -- elements that compare equal to the
+// pivot are left in place instead of being swapped across it. The ordering was
+// verified against the shipped executable rather than assumed: all 256 sorts
+// this function performs, and all 256 resulting symbol codes, match it exactly.
+// ---------------------------------------------------------------------------
+
+// Runs this short are finished with a selection sort.
+static const int HUF_SORT_SMALL_RUN = 8;
+
+// The pool never holds more than 256 entries, so the longer side of every
+// split is pushed at most 8 times; the client's runtime reserves 30 slots.
+static const int HUF_SORT_STACK = 30;
+
+static void Huff_SwapNodes(nodetype **a, nodetype **b)
+{
+    nodetype *t = *a;
+    *a = *b;
+    *b = t;
+}
+
+// Move the largest remaining element of [lo, hi] to the end, repeatedly.
+static void Huff_SortSmallRun(nodetype **lo, nodetype **hi)
+{
+    while (hi > lo)
+    {
+        nodetype **largest = lo;
+        nodetype **scan;
+
+        for (scan = lo + 1; scan <= hi; ++scan)
+        {
+            if ((*scan)->weight > (*largest)->weight)
+                largest = scan;
+        }
+        Huff_SwapNodes(largest, hi);
+        --hi;
+    }
+}
+
+// Sort *count consecutive node pointers, in place.
+static void Huff_SortNodes(nodetype **nodes, int count)
+{
+    nodetype **lostk[HUF_SORT_STACK];
+    nodetype **histk[HUF_SORT_STACK];
+    nodetype **lo;
+    nodetype **hi;
+    int stkptr = 0;
+
+    if (count < 2)
+        return;
+
+    lo = nodes;
+    hi = nodes + count - 1;
+
+    for (;;)
+    {
+        nodetype **mid;
+        nodetype **loguy;
+        nodetype **higuy;
+
+        if (hi - lo + 1 <= HUF_SORT_SMALL_RUN)
+        {
+            Huff_SortSmallRun(lo, hi);
+
+            // Nothing left in this branch: take the pending range, or stop.
+            if (stkptr == 0)
+                return;
+            --stkptr;
+            lo = lostk[stkptr];
+            hi = histk[stkptr];
+            continue;
+        }
+
+        // Order lo, mid and hi so mid holds the median: that element becomes
+        // the pivot and stays where it is for the whole partition.
+        mid = lo + (hi - lo + 1) / 2;
+        if ((*lo)->weight > (*mid)->weight)
+            Huff_SwapNodes(lo, mid);
+        if ((*lo)->weight > (*hi)->weight)
+            Huff_SwapNodes(lo, hi);
+        if ((*mid)->weight > (*hi)->weight)
+            Huff_SwapNodes(mid, hi);
+
+        loguy = lo;
+        higuy = hi;
+        for (;;)
+        {
+            // Advance from the left until something belongs on the right...
+            if (mid > loguy)
+            {
+                do
+                {
+                    ++loguy;
+                } while (loguy < mid && (*loguy)->weight <= (*mid)->weight);
+            }
+            if (mid <= loguy)
+            {
+                do
+                {
+                    ++loguy;
+                } while (loguy <= hi && (*loguy)->weight <= (*mid)->weight);
+            }
+            // ...and from the right until something belongs on the left.
+            do
+            {
+                --higuy;
+            } while (higuy > mid && (*higuy)->weight > (*mid)->weight);
+
+            if (loguy > higuy)
+                break;
+
+            Huff_SwapNodes(loguy, higuy);
+            // Follow the pivot if the crossing swap moved it.
+            if (mid == higuy)
+                mid = loguy;
+        }
+
+        // Everything in [lo, higuy] is <= the pivot and everything from loguy
+        // on is >= it. Skip the elements equal to the pivot that would
+        // otherwise be carried into the shorter side; they already sit between
+        // the two halves and need no further sorting.
+        ++higuy;
+        if (mid < higuy)
+        {
+            bool reachedPivot = false;
+
+            do
+            {
+                --higuy;
+                if (higuy <= mid)
+                {
+                    reachedPivot = true;
+                    break;
+                }
+            } while ((*higuy)->weight == (*mid)->weight);
+
+            if (!reachedPivot)
+                goto split;
+        }
+        // Hand those pivot-equal elements that are still on the left over to
+        // the right-hand side as well.
+        do
+        {
+            --higuy;
+        } while (higuy > lo && (*higuy)->weight == (*mid)->weight);
+
+    split:
+        // Keep the longer side for later and continue with the shorter one, so
+        // the explicit stack never needs more than a handful of entries.
+        if (higuy - lo >= hi - loguy)
+        {
+            if (lo < higuy)
+            {
+                lostk[stkptr] = lo;
+                histk[stkptr] = higuy;
+                ++stkptr;
+            }
+            if (loguy < hi)
+            {
+                lo = loguy;
+                continue;
+            }
+        }
+        else
+        {
+            if (loguy < hi)
+            {
+                lostk[stkptr] = loguy;
+                histk[stkptr] = hi;
+                ++stkptr;
+            }
+            if (lo < higuy)
+            {
+                hi = higuy;
+                continue;
+            }
+        }
+
+        if (stkptr == 0)
+            return;
+        --stkptr;
+        lo = lostk[stkptr];
+        hi = histk[stkptr];
+    }
+}
+
 void __cdecl Huff_BuildFromData(huff_t *huff, const int *msg_hData)
 {
     nodetype *inited; // eax
@@ -140,7 +341,7 @@ void __cdecl Huff_BuildFromData(huff_t *huff, const int *msg_hData)
         inited = Huff_initNode(huff, i, msg_hData[i]);
         heap[i] = inited;
     }
-    qsort(heap, 0x100u, 4u, nodeCmp);
+    Huff_SortNodes(heap, 256);
     v3 = Huff_initNode(huff, 257, 1);
     v3->left = huff->tree;
     v3->right = heap[0];
@@ -150,7 +351,7 @@ void __cdecl Huff_BuildFromData(huff_t *huff, const int *msg_hData)
     heap[0] = v3;
     while (numNodes > 1)
     {
-        qsort(&heap[heapHead], 256 - heapHead, 4u, nodeCmp);
+        Huff_SortNodes(&heap[heapHead], 256 - heapHead);
         v4 = Huff_initNode(huff, 257, 1);
         v4->left = heap[heapHead];
         v4->right = heap[heapHead + 1];

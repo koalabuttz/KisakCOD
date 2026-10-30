@@ -13,6 +13,7 @@ client, credentials, or a listening game server:
   * the script debugger boundary, built from the real Linux implementation;
   * the production fastfile read path, built against the bundled zlib;
   * deterministic network-deadline arithmetic and native UDP in ``tests/linux_net``;
+  * the message Huffman tree, which must match the one Windows clients build;
   * the file I/O and virtual-memory self-tests shipped in the platform sources;
   * the script lexer EOF regression, which ends a scan with no local clients.
 
@@ -145,6 +146,16 @@ def plan_checks(options, workdir, build_dir, binary, python, cxx):
             "net_deadline",
             "fractional network wait deadlines remain positive",
             [Command([python, TESTS / "test_linux_net_deadline.py", "--cxx", cxx], timeout=180)],
+        )
+    )
+
+    # The message Huffman tree must match the one Windows clients build, or
+    # compressed messages decode into garbage on a live connection.
+    checks.append(
+        Check(
+            "huffman",
+            "message Huffman tree matches the Windows client's",
+            [Command([python, TESTS / "test_huffman_tree.py", "--cxx", cxx], timeout=300)],
         )
     )
 
@@ -423,7 +434,7 @@ def main():
     parser.add_argument("--list", action="store_true", help="print the command list and exit without running")
     options = parser.parse_args()
 
-    known = ["bootstrap", "runtime", "lifecycle_driver", "debugger", "fastfile", "net_deadline", "udp", "sys_fileio", "sys_virtualmem", "lexer_eof"]
+    known = ["bootstrap", "runtime", "lifecycle_driver", "handshake_auth", "debugger", "fastfile", "net_deadline", "huffman", "udp", "sys_fileio", "sys_virtualmem", "lexer_eof"]
     options.only = parse_names(options.only)
     options.skip = parse_names(options.skip)
     for name in options.only | options.skip:
