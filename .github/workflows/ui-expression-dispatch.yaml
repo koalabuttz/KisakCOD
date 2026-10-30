@@ -1,0 +1,26 @@
+name: UI expression dispatch
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [master]
+    paths:
+      - src/ui/ui_expressions.cpp
+      - src/ui/ui_shared.h
+      - scripts/tests/test_ui_expression_dispatch.py
+      - .github/workflows/ui-expression-dispatch.yaml
+  push:
+    branches: [master]
+    paths:
+      - src/ui/ui_expressions.cpp
+      - src/ui/ui_shared.h
+      - scripts/tests/test_ui_expression_dispatch.py
+      - .github/workflows/ui-expression-dispatch.yaml
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/tests/test_ui_expression_dispatch.py --sanitize
