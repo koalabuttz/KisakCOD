@@ -234,7 +234,7 @@ static_assert(sizeof(scrVmDebugPub_t) == 0x24210);
 
 struct scrVmGlob_t // sizeof=0x2028
 {                                       // ...
-    VariableValue eval_stack[2];        // ...
+    VariableValue eval_stack[2];        // Legacy layout; field getters use owned sentinel/scratch storage.
     const char *dialog_error_message;   // ...
     int loading;                        // ...
     int starttime;                      // ...
@@ -384,6 +384,7 @@ void __cdecl VM_UnarchiveStack(uint32_t startLocalId, VariableStackBuffer* stack
 void VM_UnarchiveStack2(uint32_t startLocalId, function_stack_t *stack, VariableStackBuffer *stackValue);
 int __cdecl Scr_AddLocalVars(uint32_t localId);
 void __cdecl Scr_ResetTimeout();
+void __cdecl Scr_AccountForLoadingTime(uint32_t startTime);
 BOOL __cdecl Scr_IsStackClear();
 void __cdecl Scr_StackClear();
 void __cdecl Scr_ProfileUpdate();

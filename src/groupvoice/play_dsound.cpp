@@ -302,8 +302,7 @@ dsound_sample_t *__cdecl DSound_NewSample()
         return sample;
 
     Com_Printf(CON_CHANNEL_SOUND, "Error: Failed to create DirectSound play buffer\n");
-    sample->DSB->Release();
-    sample->DSB = 0;
+    DSOUNDRecord_DestroySample(sample);
 
     return 0;
 }
@@ -338,6 +337,8 @@ int32_t __cdecl DSound_Init(bool callDsoundInit, HWND__ *handle)
         else
         {
             Com_Printf(CON_CHANNEL_SOUND, "Error: [play] failure when calling SetCooperativeLevel()\n");
+            lpds->Release();
+            lpds = nullptr;
             return 0;
         }
     }
@@ -350,10 +351,9 @@ int32_t __cdecl DSound_Init(bool callDsoundInit, HWND__ *handle)
 
 void __cdecl DSound_Shutdown()
 {
-    if (dsoundplay_initialized)
-    {
+    if (lpds)
         lpds->Release();
-        dsoundplay_initialized = 0;
-    }
+    lpds = nullptr;
+    dsoundplay_initialized = 0;
 }
 

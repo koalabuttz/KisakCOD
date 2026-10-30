@@ -97,7 +97,7 @@ if (MSVC OR KISAK_PLATFORM STREQUAL "win32")
     )
 elseif(KISAK_PLATFORM STREQUAL "mingw")
     target_link_libraries(${PROJECT_NAME} PUBLIC
-        dsound d3d9 ddraw ws2_32 winmm gdiplus
+        dsound d3d9 d3dx9_43 ddraw ws2_32 winmm gdiplus
         kernel32 user32 gdi32 winspool comdlg32 advapi32
         shell32 ole32 oleaut32 uuid odbc32 odbccp32 dxguid
     )

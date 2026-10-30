@@ -8,6 +8,29 @@ on:
     branches: [ "master" ]
 
 jobs:
+  runtime-regressions:
+    name: Runtime regression checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Renderer command ownership
+        run: python3 scripts/tests/test_renderer_command_ownership.py
+      - name: Entity field evaluation stack
+        run: python3 scripts/tests/test_script_vm_field_stack.py
+      - name: Shader constant ordering
+        run: python3 scripts/tests/test_shader_constant_order.py
+      - name: Dedicated shellshock sound channels
+        run: python3 scripts/tests/test_shellshock_channel_metadata.py
+      - name: Script loading watchdog
+        run: python3 scripts/tests/test_script_loading_watchdog.py
+      - name: Optional voice lifecycle
+        run: python3 scripts/tests/test_voice_lifecycle.py
+      - name: Script console I/O watchdog
+        run: python3 scripts/tests/test_script_console_watchdog.py
+      - name: Config command ownership
+        run: python3 scripts/tests/test_exec_command_ownership.py
+
   build:
     name: Build with DirectX SDK
     runs-on: windows-2022
@@ -74,6 +97,19 @@ jobs:
       - name: Check native Windows bootstrap
         run: |
           ./scripts/ci/check-windows-bootstrap.ps1 -BuildOutput "bin/${{ matrix.config }}" -DxSdkPackage "${{ env.DXSDK_DIR_NUGET }}"
+
+      - name: Check D3DX shader runtime
+        run: |
+          cmake -S scripts/tests/d3dx -B build-d3dx -G "Visual Studio 17 2022" -A Win32 -DDXSDK_DIR="${{ env.DXSDK_DIR }}"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build-d3dx --config ${{ matrix.config }}
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $probeDir = Join-Path $PWD "build-d3dx/${{ matrix.config }}"
+          $runtimeDir = Join-Path "${{ env.DXSDK_DIR }}" "release/bin/x86"
+          Copy-Item (Join-Path $runtimeDir 'D3DX9_43.dll') $probeDir
+          Copy-Item (Join-Path $runtimeDir 'D3DCompiler_43.dll') $probeDir
+          & (Join-Path $probeDir 'kisakcod-d3dx-runtime.exe')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - uses: actions/upload-artifact@v4
         if: always()

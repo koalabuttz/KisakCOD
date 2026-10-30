@@ -38,6 +38,8 @@ char __cdecl Decode_Init(int32_t bandwidthEnum)
         mode = &speex_nb_mode;
     }
     g_decoder = speex_decoder_init(mode);
+    if (!g_decoder)
+        return 0;
     int32_t tmp = 1;
     speex_decoder_ctl(g_decoder, SPEEX_SET_ENH, &tmp);
     Decode_SetOptions();

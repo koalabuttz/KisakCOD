@@ -52,6 +52,8 @@ bool __cdecl Encode_Init(int32_t bandwidthEnum)
         v1 = speex_encoder_init(&speex_nb_mode);
     }
     g_encoder = v1;
+    if (!g_encoder)
+        return false;
     speex_bits_init(&encodeBits);
     g_speex_initialized = 1;
     Encode_SetOptions(g_encoder_samplerate, g_encoder_quality);

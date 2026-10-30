@@ -86,10 +86,15 @@ void __cdecl R_ShutdownRenderCommands()
     R_ShutdownModelLightingGlobals();
     for (dataIndex = 0; dataIndex < 2; ++dataIndex)
     {
-        R_FreeGlobalVariable(s_backEndData[dataIndex].commands->cmds);
+        // Backend command lists are frame bindings, not allocation owners. Before
+        // the first frame they may be null, and multiple frames can bind the same
+        // list. Release each allocation through the array that owns it instead.
+        R_FreeGlobalVariable(g_frontEndCmds[dataIndex].cmds);
+        g_frontEndCmds[dataIndex] = {};
         R_ShutdownDebugEntry(&s_backEndData[dataIndex].debugGlobals);
     }
     R_FreeGlobalVariable(g_debugFrontEndCmds.cmds);
+    g_debugFrontEndCmds = {};
     R_ShutdownSceneBuffers();
 }
 

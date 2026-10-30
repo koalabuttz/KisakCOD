@@ -11,6 +11,7 @@
 #include <database/database.h>
 #include <win32/win_local.h>
 #include <universal/com_files.h>
+#include <universal/com_memory.h>
 #include <script/scr_debugger.h>
 #include <server/sv_game.h>
 #include <universal/profile.h>
@@ -43,6 +44,30 @@ uint8_t sv_cmd_text_buf[65536];
 int32_t  marker_cmd;
 int32_t  cmd_wait;
 bool cmd_insideCBufExecute[1];
+
+static char *s_execBuffers[CMD_MAX_NESTING];
+static uint32_t s_execBufferCount;
+
+static char *__cdecl Cmd_AllocExecBuffer(uint32_t size, const char *name)
+{
+    if (s_execBufferCount >= CMD_MAX_NESTING)
+    {
+        Com_Error(ERR_DROP, "exec exceeded maximum command nesting");
+        return nullptr;
+    }
+    char *buffer = static_cast<char *>(Z_Malloc(size, name, 10));
+    if (buffer)
+        s_execBuffers[s_execBufferCount++] = buffer;
+    return buffer;
+}
+
+static void __cdecl Cmd_FreeExecBuffer(char *buffer)
+{
+    iassert(s_execBufferCount);
+    iassert(s_execBuffers[s_execBufferCount - 1] == buffer);
+    s_execBuffers[--s_execBufferCount] = nullptr;
+    Z_Free(buffer, 10);
+}
 
 
 cmd_function_s *__cdecl _Cmd_FindCommand(const char *cmdName)
@@ -1177,6 +1202,10 @@ void __cdecl Cmd_ComErrorCleanup()
     Cmd_ResetArgs(&sv_cmd_args, &sv_cmd_argsPrivate);
     for (client = 0; client < 1; ++client)
         cmd_insideCBufExecute[client] = 0;
+
+    // Com_Error aborts with longjmp, bypassing the normal exec return path.
+    while (s_execBufferCount)
+        Cmd_FreeExecBuffer(s_execBuffers[s_execBufferCount - 1]);
 }
 
 void __cdecl Cmd_ExecuteSingleCommand(int32_t  localClientNum, int32_t  controllerIndex, char *text)
@@ -1332,12 +1361,24 @@ char __cdecl Cmd_ExecFromDisk(int32_t  localClientNum, int32_t  controllerIndex,
 {
     char *text; // [esp+0h] [ebp-4h] BYREF
 
-    FS_ReadFile(filename, (void **)&text);
+    const int32_t length = FS_ReadFile(filename, (void **)&text);
     if (!text)
         return 0;
-    Com_Printf(CON_CHANNEL_SYSTEM, "execing %s from disk\n", filename);
-    Cbuf_ExecuteBuffer(localClientNum, controllerIndex, text);
+
+    // Commands can restart the map and clear the hunk while this buffer is
+    // still being parsed. Release the temporary file allocation before dispatch.
+    char *commandText = Cmd_AllocExecBuffer(length + 1, "Cmd_ExecFromDisk");
+    if (!commandText)
+    {
+        FS_FreeFile(text);
+        Com_Error(ERR_FATAL, "Could not allocate command buffer for %s", filename);
+        return 0;
+    }
+    memcpy(commandText, text, length + 1);
     FS_FreeFile(text);
+    Com_Printf(CON_CHANNEL_SYSTEM, "execing %s from disk\n", filename);
+    Cbuf_ExecuteBuffer(localClientNum, controllerIndex, commandText);
+    Cmd_FreeExecBuffer(commandText);
     return 1;
 }
 
@@ -1356,8 +1397,19 @@ char __cdecl Cmd_ExecFromFastFile(int32_t  localClientNum, int32_t  controllerIn
     rawfile = DB_FindXAssetHeader(ASSET_TYPE_RAWFILE, filename).rawfile;
     if (!rawfile)
         return 0;
+
+    // A restart can also unload the rawfile's fastfile during execution.
+    const uint32_t length = strlen(rawfile->buffer);
+    char *commandText = Cmd_AllocExecBuffer(length + 1, "Cmd_ExecFromFastFile");
+    if (!commandText)
+    {
+        Com_Error(ERR_FATAL, "Could not allocate command buffer for %s", filename);
+        return 0;
+    }
+    memcpy(commandText, rawfile->buffer, length + 1);
     Com_Printf(CON_CHANNEL_SYSTEM, "execing %s from fastfile\n", filename);
-    Cbuf_ExecuteBuffer(localClientNum, controllerIndex, (char *)rawfile->buffer);
+    Cbuf_ExecuteBuffer(localClientNum, controllerIndex, commandText);
+    Cmd_FreeExecBuffer(commandText);
     return 1;
 }
 
