@@ -86,8 +86,10 @@ def run_session(binary, game, work, enabled):
             token = int(match[1])
             require(exchange(server, sock, "getchallenge 456") == reply, "challenge retry retains token")
             for protocol in (6, 21):
-                require("DIFFERENT_VER" in exchange(server, sock, connect(token, protocol=protocol)),
-                        f"client protocol {protocol} remains rejected independently of authentication")
+                rejection = exchange(server, sock, connect(token, protocol=protocol))
+                require(rejection == f"error\nThis server requires protocol version 1 (CoD4 1.0); "
+                                 f"your client uses protocol {protocol}.",
+                        f"client protocol {protocol} gets an explicit error independently of authentication")
             require("BAD_CHALLENGE" in exchange(server, sock, connect(token ^ 1)), "wrong token rejected")
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as other:
                 other.bind(("127.0.0.1", 0))

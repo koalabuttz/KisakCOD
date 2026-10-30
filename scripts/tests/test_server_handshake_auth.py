@@ -1728,7 +1728,8 @@ static void TestDirectConnectVersionRejection()
 
     ConnectArgs args = { "2", token, 49001, "" };
     ConnectAttempt(from, MakeUserinfo(args).c_str());
-    CheckText(LastOob(), "EXE_SERVER_IS_DIFFERENT_VER 1.0", "wrong protocol version rejected");
+    CheckText(LastOob(), "error\nThis server requires protocol version 1 (CoD4 1.0); your client uses protocol 2.\n",
+              "wrong protocol version gets an error reply naming both protocols");
     CheckEq(R.netchanSetups, 0, "no netchan setup");
     Check(!ClientIsConnected(0), "no client became connected");
     Check(FindSlot(from) >= 0, "the challenge record is still present");
@@ -1751,7 +1752,7 @@ static void TestDirectConnectVersionRejection()
     // A wrong challenge token with a bad protocol still reports the version.
     ConnectArgs wrong = { "0", 12345, 49001, "" };
     ConnectAttempt(from, MakeUserinfo(wrong).c_str());
-    CheckText(LastOob(), "EXE_SERVER_IS_DIFFERENT_VER 1.0",
+    CheckText(LastOob(), "error\nThis server requires protocol version 1 (CoD4 1.0); your client uses protocol 0.\n",
               "version check comes before the challenge lookup");
 }
 

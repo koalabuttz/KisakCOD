@@ -657,7 +657,10 @@ void __cdecl SV_DirectConnect(netadr_t from)
     version = atoi(Info_ValueForKey(userinfo, "protocol"));
     if (version != 1)
     {
-        NET_OutOfBandPrint(NS_SERVER, from, va("EXE_SERVER_IS_DIFFERENT_VER %s", "1.0"));
+        // Clients only act on connection replies they recognize; an "error"
+        // packet makes them stop retrying and show the reason.
+        NET_OutOfBandPrint(NS_SERVER, from,
+            va("error\nThis server requires protocol version %i (CoD4 1.0); your client uses protocol %i.\n", 1, version));
 #if defined(__linux__) && defined(KISAK_DEDICATED)
         Com_Printf(CON_CHANNEL_SERVER, "Rejected connect: client protocol %i, required protocol %i; authentication bypass does not change protocol compatibility.\n", version, 1);
 #else

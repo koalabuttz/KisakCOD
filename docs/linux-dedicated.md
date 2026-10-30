@@ -285,10 +285,11 @@ normal playable protocol-1 channel with this build. The installed stock/CoD4x
 client has **not** completed a playable connection here. In a live local attempt
 with test authentication enabled, the installed client advanced to repeated
 `connect` requests advertising protocol **6**; this server explicitly rejected
-them because it requires **1**, while the client still displayed “awaiting
-challenge.” That observation confirms the authentication barrier was passed,
-not that the protocols are compatible. A client may retry without displaying
-this build's version/error response.
+them because it requires **1**. That observation confirms the authentication
+barrier was passed, not that the protocols are compatible. The rejection was
+originally a bare `EXE_SERVER_IS_DIFFERENT_VER` packet, which clients ignore,
+so the client kept retrying while displaying “awaiting challenge.” The server
+now sends an `error` reply naming the required and received protocol versions.
 
 The opt-in installed-assets regression can exercise real UDP connection
 admission without claiming gameplay compatibility:
