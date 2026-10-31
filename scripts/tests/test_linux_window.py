@@ -63,7 +63,10 @@ def main():
                                ("linux/sys_events.cpp", "KisakCOD-client-window"),
                                ("linux/sys_critical.cpp", "KisakCOD-client-window"),
                                ("linux/sys_posix.cpp", "KisakCOD-client-window"),
-                               ("tests/linux_window/window_test.cpp", "KisakCOD-window-test")):
+                               ("tests/linux_window/window_test.cpp", "KisakCOD-window-test"),
+                               ("client/cl_keys.cpp", "KisakCOD-client-input"),
+                               ("client_mp/cl_input.cpp", "KisakCOD-client-input"),
+                               ("qcommon/field.cpp", "KisakCOD-client-input")):
             commands = [entry["command"] for entry in entries if entry["file"].endswith(suffix)
                         and target + ".dir" in entry["command"]]
             check(len(commands) == 1, f"actual production compile entry: {target}/{suffix}")
@@ -71,7 +74,7 @@ def main():
             for flag in ("-m32", "-DKISAK_MP", "-DRELEASE_ASSERTS"):
                 check(bool(re.search(r"(?:^|\s)" + re.escape(flag) + r"(?:\s|$)", command)), f"{suffix} uses {flag}")
             check("-DKISAK_DEDICATED" not in command and "-DDEDICATED" not in command, f"{suffix} is a client compile")
-        command = ["cmake", "--build", build, "--target", "KisakCOD-client-window", "KisakCOD-window-test", "-j", args.jobs]
+        command = ["cmake", "--build", build, "--target", "KisakCOD-client-window", "KisakCOD-window-test", "KisakCOD-client-input", "KisakCOD-client-input-test", "KisakCOD-shutdown-signal-test", "-j", args.jobs]
         run(command)
         run(command)
         check(True, "window targets build and incrementally rebuild")
@@ -83,6 +86,16 @@ def main():
         summary = re.search(r"-- (\d+) checks, (\d+) failures --", result.stdout)
         check(summary and int(summary[1]) >= 34 and int(summary[2]) == 0, "real SDL event/engine queue suite passes")
         check(f"SDL driver={args.video_driver}" in result.stdout, "test reports the explicitly selected SDL driver")
+        result = run([build / "bin/KisakCOD-client-input-test"], env=env, timeout=30)
+        print(result.stdout, end="")
+        summary = re.search(r"-- (\d+) checks, (\d+) failures --", result.stdout)
+        check(summary and int(summary[1]) >= 36 and int(summary[2]) == 0, "actual client input lifecycle suite passes")
+        result = run([build / "bin/KisakCOD-shutdown-signal-test"], env=env, timeout=30)
+        check("Shutdown signal lifecycle: 0 failures" in result.stdout, "signal lifecycle restores handlers and retains first concurrent request")
+        result = subprocess.run([str(build / "bin/KisakCOD-client-input"), "--frame"], env=env,
+                                capture_output=True, text=True, timeout=15)
+        check(result.returncode == 5 and "frame=unavailable" in result.stderr and "window=created" not in result.stdout,
+              "unavailable game frame explicitly rejected")
         shell = build / "bin/KisakCOD-client-window"
         result = run([shell, "--frames", "2", "--trace", "--title", "KisakCOD window smoke"], env=env, timeout=15)
         print(result.stdout, end="")

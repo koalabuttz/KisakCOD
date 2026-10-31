@@ -222,7 +222,24 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
         "${TESTS_DIR}/linux_window/window_test.cpp"
         ${KISAK_WINDOW_HOST_SERVICES}
     )
-    foreach(window_target KisakCOD-window-platform KisakCOD-client-window KisakCOD-window-test)
+    set(KISAK_CLIENT_INPUT_SOURCES
+        "${SRC_DIR}/linux/client/window/client_input_host.cpp"
+        "${SRC_DIR}/client/cl_keys.cpp"
+        "${SRC_DIR}/client_mp/cl_input.cpp"
+        "${SRC_DIR}/qcommon/field.cpp"
+        "${SRC_DIR}/universal/q_shared.cpp"
+    )
+    add_executable(KisakCOD-client-input
+        "${SRC_DIR}/linux/client/window/client_input_main.cpp"
+        "${SRC_DIR}/linux/client/window/shutdown_signal.cpp"
+        ${KISAK_CLIENT_INPUT_SOURCES} ${KISAK_WINDOW_HOST_SERVICES})
+    add_executable(KisakCOD-client-input-test
+        "${TESTS_DIR}/linux_window/client_input_test.cpp"
+        ${KISAK_CLIENT_INPUT_SOURCES} ${KISAK_WINDOW_HOST_SERVICES})
+    add_executable(KisakCOD-shutdown-signal-test
+        "${SRC_DIR}/linux/client/window/shutdown_signal.cpp"
+        "${TESTS_DIR}/linux_window/shutdown_signal_test.cpp")
+    foreach(window_target KisakCOD-window-platform KisakCOD-client-window KisakCOD-window-test KisakCOD-client-input KisakCOD-client-input-test KisakCOD-shutdown-signal-test)
         target_compile_features(${window_target} PRIVATE cxx_std_20)
         target_compile_definitions(${window_target} PRIVATE
             KISAK_MP KISAK_OPENAL RELEASE_ASSERTS _FILE_OFFSET_BITS=64 _GNU_SOURCE
@@ -236,6 +253,8 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
         target_link_libraries(${window_target} PRIVATE SDL2::SDL2 Threads::Threads)
         target_link_options(${window_target} PRIVATE -Wl,--gc-sections)
     endforeach()
+    target_link_libraries(KisakCOD-client-input-test PRIVATE KisakCOD-window-platform)
+    target_link_libraries(KisakCOD-client-input PRIVATE KisakCOD-window-platform)
     target_link_libraries(KisakCOD-client-window PRIVATE KisakCOD-window-platform)
     target_link_libraries(KisakCOD-window-test PRIVATE KisakCOD-window-platform)
 endif()

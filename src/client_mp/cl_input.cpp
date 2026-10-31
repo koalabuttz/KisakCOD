@@ -7,6 +7,7 @@
 #include <qcommon/mem_track.h>
 #include <universal/com_memory.h>
 #include <client/client.h>
+#include <client/cl_input_services.h>
 #include <aim_assist/aim_assist.h>
 #include <win32/win_local.h>
 #include <qcommon/cmd.h>
@@ -76,32 +77,32 @@ int __cdecl CL_MouseEvent(int x, int y, int dx, int dy)
 {
     clientActive_t *LocalClientGlobals; // [esp+0h] [ebp-8h]
 
-    if (DevGui_IsActive())
+    if (CL_GetInputServices().DevGuiActive())
     {
-        DevGui_MouseEvent(dx, dy);
+        CL_GetInputServices().DevGuiMouse(dx, dy);
         return 1;
     }
     else if (Key_IsCatcherActive(0, KEYCATCH_SCRIPT))
     {
-        Scr_MouseEvent(x, y);
-        CL_ShowSystemCursor(1);
+        CL_GetInputServices().ScriptMouse(x, y);
+        CL_GetInputServices().ShowCursor(1);
         return 0;
     }
     else
     {
         LocalClientGlobals = CL_GetLocalClientGlobals(0);
         if ((clientUIActives[0].keyCatchers & KEYCATCH_UI) == 0
-            || UI_GetActiveMenu(0) == UIMENU_SCOREBOARD
+            || CL_GetInputServices().UiActiveMenu(0) == UIMENU_SCOREBOARD
             || cl_bypassMouseInput->current.enabled)
         {
-            CL_ShowSystemCursor(0);
+            CL_GetInputServices().ShowCursor(0);
             LocalClientGlobals->mouseDx[LocalClientGlobals->mouseIndex] += dx;
             LocalClientGlobals->mouseDy[LocalClientGlobals->mouseIndex] += dy;
             return 1;
         }
         else
         {
-            UI_MouseEvent(0, x, y);
+            CL_GetInputServices().UiMouse(0, x, y);
             return 0;
         }
     }

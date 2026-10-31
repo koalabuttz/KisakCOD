@@ -7,6 +7,12 @@ SDL_PushEvent. Motion/resize/focus use X requests; close uses WM_DELETE_WINDOW. 
 checks the software-surface shell and engine input queue boundary, not gameplay
 or the D3D renderer. No X access-control settings are changed.
 
+With --engine-input, target KisakCOD-client-input to verify the production
+disconnected console editor, key state across resize/focus changes, and clean
+WM/Escape/SIGTERM/SIGINT teardown while a key is held. Repeated launches share
+one X server; they test process/window cleanup, not same-process host reuse.
+The host explicitly reports game-frame execution unavailable.
+
 Pass --runner 'qemu-i386' when the client cannot execute directly. Configure any
 client libraries through that runner's environment (e.g. QEMU_SET_ENV), while
 --xdotool-library-path applies only to the host xdotool process.
@@ -20,6 +26,7 @@ from pathlib import Path
 import re
 import select
 import shlex
+import signal
 import subprocess
 import tempfile
 import time
@@ -105,6 +112,8 @@ def main():
     parser.add_argument("--xdotool", default="xdotool")
     parser.add_argument("--xdotool-library-path")
     parser.add_argument("--relative", action="store_true", help="also verify OS relative-mouse capture lifecycle")
+    parser.add_argument("--engine-input", action="store_true",
+                        help="verify real disconnected client editor/state and repeated close/signal lifecycles")
     parser.add_argument("--log-dir", type=Path)
     parser.add_argument("--timeout", type=float, default=10)
     args = parser.parse_args()
@@ -148,7 +157,7 @@ def main():
             streams.append(stream)
             process = subprocess.Popen(shlex.split(args.runner) + [str(args.binary.resolve()),
                                        "--run-ms", "60000", "--trace", "--title", title] +
-                                       (["--relative"] if args.relative and name == "main" else []),
+                                       (["--relative"] if args.relative and name != "focus-peer" else []),
                                        env=env, stdout=stream, stderr=subprocess.STDOUT)
             processes.append(process)
             wait_for(lambda: "window=created driver=x11" in read(path) and
@@ -158,7 +167,26 @@ def main():
                                       check=False).stdout.split(), args.timeout, name + " X11 window", process)
             if len(ids) != 1:
                 raise RuntimeError(f"{name}: expected exactly one matching window, found {ids}")
+            if args.engine_input:
+                wait_for(lambda: "input=engine connection=disconnected frame=unavailable" in read(path) and
+                         "editor text= cursor=0 held=0\n" in read(path),
+                         args.timeout, name + " fresh production input state", process)
             return process, int(ids[0]), path
+
+        def require_closed(process, path, label, window_id):
+            if process.wait(timeout=args.timeout) != 0:
+                raise RuntimeError(label + ": process did not close cleanly")
+            summary = read(path)
+            if summary.count("window=closing\n") != 1 or not re.search(r"window=closed .* held=0 .* game=false", summary):
+                raise RuntimeError(label + ": missing unique close and empty held-state evidence")
+            if args.engine_input and not re.search(r"window=closed .*relative_active=0 input=engine frame=unavailable game=false", summary):
+                raise RuntimeError(label + ": production input/capture teardown missing")
+            # A new process is used for each cycle. This tests OS window/process
+            # cleanup, not same-process WindowHost allocator/resource reuse.
+            title = re.search(r"window=created .*title=(\S+)", summary)
+            if title and xdo("search", "--name", "^" + re.escape(title.group(1)) + "$", check=False).stdout.strip():
+                raise RuntimeError(label + f": X11 window remains after process exit ({window_id})")
+            return summary
 
         client, window, trace = launch("main")
         peer, peer_window, peer_trace = launch("focus-peer")
@@ -180,6 +208,18 @@ def main():
                             ("key=97 down=1\n", "key=97 down=0\n", "character=97\n")),
                  args.timeout, "XTest key/text through engine queue", client)
         print("PASS: XTest keyboard and SDL text through engine queue", flush=True)
+        if args.engine_input:
+            wait_for(lambda: "editor text=a cursor=1 held=0\n" in read(trace)[offset:],
+                     args.timeout, "production editor inserted a", client)
+            offset = len(read(trace))
+            xdo("key", "b")
+            wait_for(lambda: "editor text=ab cursor=2 held=0\n" in read(trace)[offset:],
+                     args.timeout, "production editor inserted b", client)
+            offset = len(read(trace))
+            xdo("key", "BackSpace")
+            wait_for(lambda: "editor text=a cursor=1 held=0\n" in read(trace)[offset:],
+                     args.timeout, "production editor handled BackSpace", client)
+            print("PASS: real client console editor insertion and BackSpace", flush=True)
 
         offset = len(read(trace))
         if args.relative:
@@ -203,9 +243,19 @@ def main():
         offset = len(read(trace))
         xdo("keydown", "w")
         wait_for(lambda: "key=119 down=1\n" in read(trace)[offset:], args.timeout, "held key", client)
+        if args.engine_input:
+            wait_for(lambda: re.search(r"editor text=.* cursor=\d+ held=1\n", read(trace)[offset:]),
+                     args.timeout, "real client tracks held key", client)
+            offset = len(read(trace))
+            xdo("windowsize", "--sync", window, 620, 340)
+            wait_for(lambda: "resize 620 340\n" in read(trace)[offset:] and
+                     re.search(r"editor text=.* cursor=\d+ held=1\n", read(trace)[offset:]),
+                     args.timeout, "resize while production input remains held", client)
+            print("PASS: OS resize while real client key state remains held", flush=True)
         offset = len(read(trace))
         xdo("windowfocus", "--sync", peer_window)
-        wait_for(lambda: "focus lost\n" in read(trace)[offset:] and "input=reset\n" in read(trace)[offset:],
+        reset_marker = "input=reset held=0\n" if args.engine_input else "input=reset\n"
+        wait_for(lambda: "focus lost\n" in read(trace)[offset:] and reset_marker in read(trace)[offset:],
                  args.timeout, "focus loss resets held input", client)
         if args.relative:
             wait_for(lambda: "relative requested=1 active=0 error=\n" in read(trace)[offset:],
@@ -222,21 +272,45 @@ def main():
                  args.timeout, "fresh press after focus loss", client)
         print("PASS: real focus transfer clears held state and accepts a fresh press", flush=True)
 
+        if args.engine_input:
+            offset = len(read(trace))
+            xdo("keydown", "z")
+            wait_for(lambda: "key=122 down=1\n" in read(trace)[offset:] and
+                     re.search(r"editor text=.* cursor=\d+ held=1\n", read(trace)[offset:]),
+                     args.timeout, "held key before WM close", client)
         offset = len(read(trace))
         request_window_close(display, window)
-        if client.wait(timeout=args.timeout) != 0:
-            raise RuntimeError("main shell did not close cleanly")
-        summary = read(trace)
-        if "window=closing\n" not in summary or not re.search(r"window=closed .* held=0 .* game=false", summary):
-            raise RuntimeError("main shell lacks explicit close and empty-held-state evidence")
+        summary = require_closed(client, trace, "main", window)
+        if args.engine_input:
+            xdo("keyup", "z")
         if args.relative:
             if "relative requested=1 active=0 error=\n" not in summary[offset:]:
                 raise RuntimeError("close did not release relative capture")
             print("PASS: relative capture active, released on blur, restored on focus, released on close", flush=True)
         request_window_close(display, peer_window)
-        if peer.wait(timeout=args.timeout) != 0 or "window=closed " not in read(peer_trace):
-            raise RuntimeError("focus peer did not close cleanly")
+        require_closed(peer, peer_trace, "focus peer", peer_window)
         print("PASS: WM_DELETE_WINDOW through X11, clean process exit, held=0", flush=True)
+        if args.engine_input:
+            for label, number in (("escape", None), ("sigterm", signal.SIGTERM), ("sigint", signal.SIGINT)):
+                cycle, cycle_window, cycle_trace = launch("cycle-" + label)
+                xdo("windowfocus", "--sync", cycle_window)
+                if args.relative:
+                    wait_for(lambda: "relative requested=1 active=1 error=\n" in read(cycle_trace),
+                             args.timeout, label + " relative capture", cycle)
+                offset = len(read(cycle_trace))
+                xdo("keydown", "w")
+                wait_for(lambda: "key=119 down=1\n" in read(cycle_trace)[offset:] and
+                         re.search(r"editor text=.* cursor=\d+ held=1\n", read(cycle_trace)[offset:]),
+                         args.timeout, label + " held production key", cycle)
+                if number is None:
+                    xdo("key", "Escape")
+                else:
+                    cycle.send_signal(number)
+                cycle_log = require_closed(cycle, cycle_trace, label, cycle_window)
+                xdo("keyup", "w")  # Release X server state before creating the next client.
+                if number is not None and f"signal={int(number)}\n" not in cycle_log:
+                    raise RuntimeError(label + ": no explicit handled-signal evidence")
+                print(f"PASS: repeated process/window lifecycle: {label} closes with real held=0 and capture released", flush=True)
         print("Verified software window/input shell only; no game renderer or gameplay.", flush=True)
         return 0
     except (OSError, RuntimeError, subprocess.SubprocessError) as error:

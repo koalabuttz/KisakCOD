@@ -352,3 +352,26 @@ sink must outlive the host.
 See [the window checkpoint](progress-2026-10-31-client-window.md) for the measured
 SDL, X11, dedicated-build and integration limits. These tests do not establish
 hardware input, GPU rendering, authenticated joining, or native gameplay.
+
+
+### Production input-consumer host
+
+The same window opt-in now also builds `KisakCOD-client-input`,
+`KisakCOD-client-input-test`, and `KisakCOD-shutdown-signal-test`.
+Run `KisakCOD-client-input --trace --relative --run-ms 10000` for actual engine
+key/character/mouse handling and disconnected field editing reported in stdout.
+It uses real `playerKeys` and field state; the earlier `KisakCOD-client-window`
+remains the platform-only recorder. The new host still presents a plain surface,
+not game UI. Its terminal-cell layout and unavailable console execution/clipboard/
+autocomplete services are explicit. The normal game service adapter preserves the
+existing subsystem calls.
+
+Focus/quit clear actual key, button and mouse state; each input tick consumes
+mouse deltas. SIGINT/SIGTERM enter normal shutdown and restore previous handlers.
+`--frame` returns exit 5 with the unavailable `CL_Frame` dependencies, without
+pretending a game loop ran. No connection state is advanced. The window checker
+includes both hosts and the real-consumer lifecycle tests; the external X11
+checker selects the new path with `--engine-input`.
+
+See [the input-host checkpoint](progress-2026-10-31-client-input-host.md) for
+implementation boundaries, build commands, evidence and remaining startup work.

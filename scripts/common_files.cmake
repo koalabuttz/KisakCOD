@@ -85,6 +85,8 @@ set(CLIENT
     "${SRC_DIR}/client/cl_debugdata.cpp"
     "${SRC_DIR}/client/cl_devgui.cpp"
     "${SRC_DIR}/client/cl_keys.cpp"
+    "${SRC_DIR}/client/cl_input_services.cpp"
+    "${SRC_DIR}/client/cl_input_services.h"
     "${SRC_DIR}/client/con_channels.cpp"
     "${SRC_DIR}/client/screen_placement.cpp"
 )
@@ -372,6 +374,7 @@ set(PHYSICS_ODE
 )
 
 set(QCOMMON
+    "${SRC_DIR}/qcommon/field.cpp"
     "${SRC_DIR}/qcommon/bitarray.h"
     "${SRC_DIR}/qcommon/cmd.cpp"
     "${SRC_DIR}/qcommon/cmd.h"
