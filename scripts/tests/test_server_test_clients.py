@@ -818,6 +818,14 @@ int main() {
     Check(!gThinkCalls.empty() && gThinkCalls[0].first == 0, "only the NA_BOT client");
     Check(gResetSkeletonCacheCalls > 0, "the skeleton cache is reset per frame");
 
+    std::printf("\n== failed initial bot gamestate cannot enter the world ==\n");
+    Reset();
+    gGamestateDropsClient = true;
+    Check(SV_AddTestClient() == nullptr, "failed initial gamestate returns no entity");
+    Check(gGamestateCalls == std::vector<int>{0} && gEnterWorldCalls.empty(),
+          "failed initial gamestate never enters the world");
+    Check(svs.clients[0].header.state == CS_ZOMBIE, "gamestate-dropped slot remains a zombie");
+
     std::printf("\n== retained bots re-enter after full map load ==\n");
     Reset();
     sv_maxclients_storage.integer = 8;
