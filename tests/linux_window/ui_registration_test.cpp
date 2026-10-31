@@ -8,14 +8,26 @@
 #include <array>
 namespace {
 int checks,failures,allocations;
+bool failCopy;
+struct Allocation {char *pointer{};bool live{};};
+std::array<Allocation,128> tracked;
+size_t used;
+bool Live(const char *p){for(size_t n=0;n<used;++n)if(tracked[n].pointer==p)return tracked[n].live;return false;}
 UiContext *observed;
 void Check(bool ok,const char *name){++checks;failures+=!ok;std::printf("%s: %s\n",ok?"PASS":"FAIL",name);}
 void Keywords(){Check(observed->menuCount==0&&observed->openMenuCount==0,"shared setup resets counts before game keyword callback");}
 void ThrowKeywords(){throw std::runtime_error("fixture keyword failure");}
 }
 void MyAssertHandler(const char*,int,int,const char*,...){throw std::runtime_error("engine assertion");}
-const char *CopyString(const char *s){auto *p=static_cast<char*>(std::malloc(std::strlen(s)+1));if(!p)throw std::bad_alloc();++allocations;return std::strcpy(p,s);}
-void FreeString(const char *s){if(s){--allocations;std::free(const_cast<char*>(s));}}
+const char *CopyString(const char *s){
+ if(failCopy){failCopy=false;throw std::bad_alloc();}
+ // Quarantine released storage: flag old-code alias reads without executing UB.
+ for(size_t n=0;n<used;++n)if(tracked[n].pointer==s&&!tracked[n].live)throw std::logic_error("copy after release");
+ if(used==tracked.size())throw std::logic_error("fixture capacity");
+ auto *p=static_cast<char*>(std::malloc(std::strlen(s)+1));if(!p)throw std::bad_alloc();
+ tracked[used++]={p,true};++allocations;return std::strcpy(p,s);
+}
+void FreeString(const char *s){if(!s)return;for(size_t n=0;n<used;++n)if(tracked[n].pointer==s){if(!tracked[n].live)throw std::logic_error("duplicate release");tracked[n].live=false;--allocations;return;}throw std::logic_error("unowned release");}
 int main(){
  UiContext dc{};observed=&dc;dc.menuCount=3;dc.openMenuCount=2;UI_SetupMenuContext(&dc,Keywords);
  Check(!dc.menuCount&&!dc.openMenuCount,"setup publishes empty registration without claiming full UI startup");
@@ -44,5 +56,21 @@ int main(){
  for(int n=0;n<3;++n){UI_ReplaceOwnedMenus(&dc,initial,2);UILocalVar_SetString(UILocalVar_FindOrCreate(&dc.localVars,key)->table,value);UI_ShutdownOwnedMenuContext(&dc);}
  Check(allocations==0&&!dc.Menus[0],"same-context recreation releases actual localvars each cycle");
  try{UI_SetupMenuContext(&dc,ThrowKeywords);Check(false,"keyword error propagated");}catch(const std::runtime_error&){Check(!dc.menuCount&&!dc.openMenuCount,"keyword error propagates without claiming registration");}
+ // Real string mutation failure must preserve values and remain safe to shut down.
+ auto *stringVar=UILocalVar_FindOrCreate(&dc.localVars,key)->table;
+ UILocalVar_SetString(stringVar,value);const char *old=stringVar->u.string;
+ failCopy=true;bool threw=false;try{UILocalVar_SetString(stringVar,key);}catch(const std::bad_alloc&){threw=true;}
+ Check(threw&&stringVar->type==UILOCALVAR_STRING&&stringVar->u.string==old&&Live(old),"failed replacement preserves the existing live string");
+ bool cleanup=true;try{UI_ShutdownOwnedMenuContext(&dc);}catch(const std::logic_error&){cleanup=false;dc.localVars={};}
+ Check(cleanup&&allocations==0,"shutdown after failed replacement performs no duplicate release");
+ UILocalVar scalar{};scalar.type=UILOCALVAR_INT;scalar.u.integer=73;failCopy=true;threw=false;
+ try{UILocalVar_SetString(&scalar,value);}catch(const std::bad_alloc&){threw=true;}
+ Check(threw&&scalar.type==UILOCALVAR_INT&&scalar.u.integer==73,"failed string conversion preserves prior scalar type and value");
+ UILocalVar alias{};UILocalVar_SetString(&alias,value);old=alias.u.string;bool aliasOk=true;
+ try{UILocalVar_SetString(&alias,const_cast<char*>(alias.u.string));}catch(const std::logic_error&){aliasOk=false;}
+ Check(aliasOk&&Live(alias.u.string)&&!std::strcmp(alias.u.string,value)&&!Live(old),"self-alias string assignment copies before releasing prior storage");
+ if(Live(alias.u.string))FreeString(alias.u.string);
+ Check(allocations==0,"string failure and alias fixtures leave no live owned allocation");
+ for(size_t n=0;n<used;++n)std::free(tracked[n].pointer);
  std::printf("-- %d checks, %d failures --\n",checks,failures);return failures?1:0;
 }
