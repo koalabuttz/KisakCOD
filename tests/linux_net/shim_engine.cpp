@@ -75,6 +75,20 @@ int Shim_ComErrorCount()
     return shimComErrorCount;
 }
 
+// ---- SV_UnverifiedGuidsEnabled (server side, seeded by the test) -----------
+
+static bool shimUnverifiedGuidsEnabled;
+
+bool SV_UnverifiedGuidsEnabled()
+{
+    return shimUnverifiedGuidsEnabled;
+}
+
+void Shim_SeedUnverifiedGuidsEnabled(bool enabled)
+{
+    shimUnverifiedGuidsEnabled = enabled;
+}
+
 void Shim_ComErrorReset()
 {
     shimComErrorCount = 0;

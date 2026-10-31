@@ -4,17 +4,23 @@
 The multi-player handshake is the only place an unauthenticated UDP packet can
 decide what the server believes about a client's identity:
 
-  ``SV_GetChallenge``   (``src/server_mp/sv_client_mp.cpp``) validates the
-                        claimed Steam ID and ticket, issues a challenge, and
-                        - in the native Linux dedicated build - issues a
-                        synthetic ``local-test-...`` identity for permitted
-                        loopback test clients.
+  ``SV_GetChallenge``   (``src/server_mp/sv_client_mp.cpp``) classifies the
+                        handshake by field count: a retail CoD4 client's
+                        ``getchallenge <n> "<32 hex GUID>"``, KisakCOD's
+                        ``getchallenge <n> <ticket> <SteamID64>``, or nothing
+                        else. It validates the claimed identity and ticket,
+                        issues a challenge, and - in the native Linux dedicated
+                        build - issues a synthetic ``local-test-...`` identity
+                        for permitted loopback test clients.
   ``SV_DirectConnect``  consumes a challenge token and copies the stored
-                        identity onto a ``client_t``.
+                        identity onto a ``client_t``, after deciding which kinds
+                        of identity this process accepts at all.
   ``SV_DropClient``     tells the Steam backend about a departing client.
 
-Everything here runs the real code. The three functions are extracted from
-production together with ``SV_IsTempBannedGuid`` and the static
+Everything here runs the real code. The three functions above are extracted from
+production together with ``SV_IsTempBannedGuid``, ``SV_BanGuidBriefly``,
+``SV_FindFreeTempBanSlot``, the ``sv_allowUnverifiedGuids`` capture and veto
+(``SV_CaptureUnverifiedGuids``/``SV_UnverifiedGuidsEnabled``) and the static
 ``SV_RejectUnsafeTestHandshake`` guard, and the helpers are the real
 ``sv_handshake_auth.h`` header and the real ``b64_decode``/``b64_int`` from
 ``src/universal/base64.cpp``. The extracted client functions keep their text
@@ -24,7 +30,8 @@ for; every signature is checked against the expected production signature before
 it is used, so a source change fails the run instead of testing other code.
 Only the surrounding engine services are doubled:
 command argument text, out-of-band printing, ``svs``, dvars (including the
-default-off ``sv_allowProtocol6`` switch), the Steam backend,
+default-off ``sv_allowProtocol6`` switch and the
+``sv_allowUnverifiedGuids`` dvar the capture reads), the Steam backend,
 script allocation, netchan setup and the game's ``ClientConnect``. Those doubles
 record every call so the tests can assert both the decision and its ordering.
 
@@ -81,6 +88,10 @@ BASE64_SOURCE = ROOT / "src" / "universal" / "base64.cpp"
 # (name, exact start of the definition text). The second field is verified so a
 # signature change cannot silently turn this into a different test.
 CLIENT_FUNCTIONS = (
+    ("SV_CaptureUnverifiedGuids", "void __cdecl SV_CaptureUnverifiedGuids()"),
+    ("SV_UnverifiedGuidsEnabled", "bool SV_UnverifiedGuidsEnabled()"),
+    ("SV_FindFreeTempBanSlot", "uint32_t __cdecl SV_FindFreeTempBanSlot()"),
+    ("SV_BanGuidBriefly", "void __cdecl SV_BanGuidBriefly("),
     ("SV_RejectUnsafeTestHandshake", "static bool SV_RejectUnsafeTestHandshake("),
     ("SV_IsTempBannedGuid", "int __cdecl SV_IsTempBannedGuid("),
     ("SV_GetChallenge", "void __cdecl SV_GetChallenge("),
@@ -383,6 +394,12 @@ static dvar_t dvar_fsgamedir;
 // sv_allowProtocol6 is registered in SV_Init as a plain bool dvar defaulting to
 // off (DVAR_NOFLAG); the handshake reads only its enabled state.
 static dvar_t dvar_allowprotocol6;
+// sv_allowUnverifiedGuids is registered in SV_Init as a DVAR_INIT bool
+// defaulting to off. The harness owns the same storage production keeps in
+// sv_client_mp.cpp so the extracted capture and veto bodies compile and can be
+// driven through every captured/current combination.
+static dvar_t dvar_allowunverifiedguids;
+static const dvar_t *sv_allowUnverifiedGuids = &dvar_allowunverifiedguids;
 
 static const dvar_t *sv_maxclients = &dvar_maxclients;
 static const dvar_t *sv_minPing = &dvar_minping;
@@ -407,6 +424,9 @@ struct Recorder
     std::vector<std::string> debugPrinted;
     std::vector<std::string> steamDropped;
     std::vector<std::string> serverCommands;
+    // Identities handed to SV_IsBannedGuid(), in call order, so a test can prove
+    // a ban check received the normalised GUID and not some raw field.
+    std::vector<std::string> banCheckedIdentities;
     int steamChecks;
     uint64_t lastSteamId;
     uint32_t lastTicketLength;
@@ -499,6 +519,14 @@ static const char *SV_Cmd_Argv(int argIndex)
     if (argIndex < 0 || argIndex >= g_cmdArgc || !g_cmdArgv[argIndex])
         return "";
     return g_cmdArgv[argIndex];
+}
+
+// SV_Cmd_Argc() counts the tokenised fields of the current server command,
+// including the command name. SV_GetChallenge() classifies the handshake with
+// it, so the tests set it explicitly instead of inferring it from fields.
+static int SV_Cmd_Argc()
+{
+    return g_cmdArgc;
 }
 
 // ---- printing --------------------------------------------------------------
@@ -785,7 +813,7 @@ static void Steam_OnClientDropped(uint64_t steamID64)
 
 static int SV_IsBannedGuid(const char *cdkeyHash)
 {
-    (void)cdkeyHash;
+    R.banCheckedIdentities.push_back(std::string(cdkeyHash ? cdkeyHash : ""));
     return g_bannedGuid ? 1 : 0;
 }
 
@@ -889,6 +917,15 @@ static const char *SEH_StringEd_GetString(const char *pszReference)
     (void)pszReference;
     return NULL;
 }
+
+// ---- sv_allowUnverifiedGuids capture state ---------------------------------
+// Production freezes sv_allowUnverifiedGuids into these two file-scope statics
+// when SV_Init() registers the dvar. The extracted SV_CaptureUnverifiedGuids()
+// and SV_UnverifiedGuidsEnabled() bodies read and write them, so the harness
+// declares the same storage and the tests drive the captured/current matrix
+// exactly as a real process would experience it.
+static bool unverifiedGuidsCaptured = false;
+static bool unverifiedGuidsEnabled = false;
 '''
 
 DRIVER_HEAD = r'''
@@ -968,7 +1005,8 @@ static netadr_t MakeLoopbackAdr()
 }
 
 static bool SetArgv(const std::string &a0, const std::string &a1 = std::string(),
-                    const std::string &a2 = std::string(), const std::string &a3 = std::string())
+                    const std::string &a2 = std::string(), const std::string &a3 = std::string(),
+                    int argc = -1)
 {
     const std::string *args[4] = { &a0, &a1, &a2, &a3 };
     size_t used = 0;
@@ -987,6 +1025,11 @@ static bool SetArgv(const std::string &a0, const std::string &a1 = std::string()
         used += length + 1;
         g_cmdArgc = i + 1;
     }
+    // Production classifies the handshake with SV_Cmd_Argc(), not by inspecting
+    // fields. Let a test declare a count the four stored slots do not imply:
+    // argc 2 (no identity field at all) or 5 (fields nobody reads).
+    if (argc >= 0)
+        g_cmdArgc = argc;
     return true;
 }
 
@@ -1016,6 +1059,10 @@ static int OobChallengeToken()
 
 static std::string SlotIdentity(int slot)
 {
+    // A missing slot is a test failure the caller reports; returning "" keeps a
+    // failed lookup from reading outside svs.challenges.
+    if (slot < 0 || slot >= 1024)
+        return std::string();
     return std::string(svs.challenges[slot].cdkeyHash);
 }
 
@@ -1062,6 +1109,9 @@ static void ResetWorld()
     g_scrNextId = 1;
     g_cmdArgc = 0;
     memset(g_cmdText, 0, sizeof(g_cmdText));
+    unverifiedGuidsCaptured = false;
+    unverifiedGuidsEnabled = false;
+    dvar_allowunverifiedguids.current.enabled = false;
 
     svs.time = 1000;
 
@@ -2284,6 +2334,13 @@ static void TestDropClientIdentityClassification()
         { "12 3", false, "identity with a space" },
         { "18446744073709551616", false, "identity overflowing uint64" },
         { "steam_76561197960287930", false, "prefixed identity" },
+        // Retail GUIDs are never Steam identities, including the all-digit
+        // spelling that looks numeric, so the backend must not hear about them.
+        { "9fa4b618b026886e7fe966bb184ae770", false, "retail GUID" },
+        { "9FA4B618B026886E7FE966BB184AE770", false, "uppercase retail GUID" },
+        { "12345678901234567890123456789012", false, "all-digit retail GUID" },
+        { "00000000000000000000000000000000", false, "all-zero retail GUID" },
+        { "ffffffffffffffffffffffffffffffff", false, "all-f retail GUID" },
     };
 
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i)
@@ -2319,6 +2376,640 @@ static void TestDropClientZombie()
     CheckEq(static_cast<long long>(R.steamDropped.size()), 1,
             "the backend notification still happens once");
 }
+
+// ---- unverified retail GUIDs ----------------------------------------------
+
+// The canonical retail CoD4 1.7 GUID observed from a real client, plus the same
+// value in uppercase and mixed-case spellings.
+static const char *const kRetailGuid = "9fa4b618b026886e7fe966bb184ae770";
+static const char *const kRetailGuidUpper = "9FA4B618B026886E7FE966BB184AE770";
+static const char *const kRetailGuidMixed = "9Fa4B618b026886e7fE966Bb184ae770";
+
+static const char *const kMissingFieldsMessage =
+    "error\nThis server requires the custom Steam ticket/ID handshake; no authentication fields were supplied.";
+static const char *const kMalformedGuidMessage = "error\nMalformed GUID authentication fields.";
+static const char *const kGuidPolicyMessage =
+    "error\nThis server requires Steam authentication; unverified retail GUIDs are not accepted.";
+static const char *const kUnsupportedHandshakeMessage = "error\nUnsupported authentication handshake.";
+
+// Turns the opt-in on exactly the way SV_Init() does: set the dvar, capture once.
+static void EnableUnverifiedGuids()
+{
+    dvar_allowunverifiedguids.current.enabled = true;
+    SV_CaptureUnverifiedGuids();
+}
+
+// A retail request: getchallenge <clientChallenge> "<32 hex GUID>" (argc 3).
+static int IssueRetailChallenge(netadr_t from, const char *guid)
+{
+    SetArgv("getchallenge", "0", guid, std::string(), 3);
+    SV_GetChallenge(from);
+    return OobChallengeToken();
+}
+
+// Places a challenge record directly, the way SV_GetChallenge would have, so the
+// SV_DirectConnect identity policy can be exercised on its own.
+static int SeedChallenge(netadr_t from, const char *identity, int token)
+{
+    for (int i = 0; i < 1024; ++i)
+    {
+        challenge_t &c = svs.challenges[i];
+        if (c.adr.type == NA_BOT && c.adr.port == 0 && c.challenge == 0)
+        {
+            c.adr = from;
+            c.challenge = token;
+            c.time = svs.time;
+            c.pingTime = svs.time;
+            I_strncpyz(c.cdkeyHash, identity, sizeof(c.cdkeyHash));
+            return i;
+        }
+    }
+    return -1;
+}
+
+// ---- SV_ParseRetailGuid ----------------------------------------------------
+
+struct GuidCase
+{
+    const char *text;
+    bool ok;
+};
+
+static const GuidCase kGuidCases[] = {
+    { "9fa4b618b026886e7fe966bb184ae770", true },
+    { "9FA4B618B026886E7FE966BB184AE770", true },  // accepted, normalised
+    { "9Fa4B618b026886e7fE966Bb184ae770", true },
+    { "12345678901234567890123456789012", true },  // all digits
+    { "00000000000000000000000000000000", true },  // all zero
+    { "ffffffffffffffffffffffffffffffff", true },
+    { "abcdef0123456789abcdef0123456789", true },
+    { "9fa4b618b026886e7fe966bb184ae77", false },            // 31 characters
+    { "9fa4b618b026886e7fe966bb184ae7700", false },          // 33 characters
+    { "", false },                                           // empty
+    { "9fa4b618b026886e7fe966bb184ae770 ", false },          // trailing space
+    { " 9fa4b618b026886e7fe966bb184ae770", false },          // leading space
+    { "9fa4b618b026886e7fe966bb184ae77\n", false },          // newline
+    { "9fa4b618b02688\n7fe966bb184ae770", false },           // embedded whitespace
+    { "9fa4b618b026886e7fe966bb184ae77g", false },           // non-hex letter
+    { "9fa4b618b026-86e7fe966bb184ae770", false },           // separator
+    { "+9fa4b618b026886e7fe966bb184ae77", false },           // sign
+    { "-9fa4b618b026886e7fe966bb184ae77", false },           // sign
+    { "0x9fa4b618b026886e7fe966bb184ae7", false },           // 0x prefix, 32 chars
+    { "local-test-000012340000", false },                    // synthetic namespace
+    { "9fa4b618b026886e7fe966bb184ae77\331\241", false },    // 32 hex + non-ASCII
+    { "\331\2419fa4b618b026886e7fe966bb184", false },        // non-ASCII first bytes
+};
+
+static void TestParseRetailGuid()
+{
+    for (size_t i = 0; i < sizeof(kGuidCases) / sizeof(kGuidCases[0]); ++i)
+    {
+        const GuidCase &c = kGuidCases[i];
+        char out[33];
+        memset(out, 'X', sizeof(out));            // sentinel, deliberately not zero
+        bool ok = SV_ParseRetailGuid(c.text, out);
+        std::string label = std::string("SV_ParseRetailGuid(\"") + Escape(c.text) + "\")";
+        Check(ok == c.ok, label + (c.ok ? " accepted" : " rejected"));
+        if (c.ok)
+        {
+            // Exactly 32 lowercase hex digits followed by a NUL.
+            std::string want;
+            for (size_t j = 0; j < 32; ++j)
+            {
+                char ch = c.text[j];
+                if (ch >= 'A' && ch <= 'F')
+                    ch = static_cast<char>(ch - 'A' + 'a');
+                want.push_back(ch);
+            }
+            CheckText(std::string(out, 32), want, label + " written to lowercase");
+            CheckEq(static_cast<long long>(strlen(out)), 32, label + " output length");
+            CheckEq(static_cast<int>(out[32]), 0, label + " output is NUL-terminated at byte 32");
+        }
+        else
+        {
+            Check(out[0] == 'X' && out[32] == 'X', label + " leaves the output buffer untouched");
+        }
+    }
+
+    char out[33] = {};
+    Check(!SV_ParseRetailGuid(NULL, out), "SV_ParseRetailGuid(NULL, out) rejected");
+    Check(!SV_ParseRetailGuid(kRetailGuid, NULL), "SV_ParseRetailGuid(text, NULL) rejected");
+
+    // A GUID is not a Steam identity, and the two parsers never overlap.
+    uint64_t steamId = 0;
+    Check(!SV_ParseSteamIdentity(kRetailGuid, &steamId), "a retail GUID is not a Steam identity");
+    Check(!SV_ParseSteamIdentity("12345678901234567890123456789012", &steamId),
+          "an all-digit retail GUID is too long to be a Steam identity");
+}
+
+// ---- sv_allowUnverifiedGuids capture --------------------------------------
+
+static void TestUnverifiedGuidsCapture()
+{
+    // Shipped default: off, silent.
+    Check(!SV_UnverifiedGuidsEnabled(), "the shipped default does not accept unverified GUIDs");
+    SV_CaptureUnverifiedGuids();
+    Check(!SV_UnverifiedGuidsEnabled(), "capturing the default leaves it off");
+    Check(!AnyLineContains(R.alwaysPrinted, "sv_allowUnverifiedGuids is enabled"),
+          "the default configuration prints no warning");
+
+    // Enabled at start-up: the decision, the verbatim warning, printed once.
+    ResetWorld();
+    EnableUnverifiedGuids();
+    Check(SV_UnverifiedGuidsEnabled(), "an enabled start-up captures permission");
+    const std::string expectedWarning =
+        "WARNING: sv_allowUnverifiedGuids is enabled. Retail GUIDs are accepted WITHOUT verification from any "
+        "address. Players can impersonate GUIDs and evade GUID bans; do not trust GUID-based privileges or "
+        "persistent identity. Steam-format clients still require Steam authentication. Protocol, challenge and "
+        "password checks remain enabled. This setting requires a full process restart to change.\n";
+    Check(AnyLineContains(R.alwaysPrinted, expectedWarning.c_str()), "the warning is printed verbatim");
+    int warnings = 0;
+    for (size_t i = 0; i < R.alwaysPrinted.size(); ++i)
+        if (R.alwaysPrinted[i].find("sv_allowUnverifiedGuids is enabled") != std::string::npos)
+            ++warnings;
+    CheckEq(warnings, 1, "the warning is printed exactly once");
+
+    // The capture is frozen. Turning the dvar off revokes acceptance at once...
+    dvar_allowunverifiedguids.current.enabled = false;
+    Check(!SV_UnverifiedGuidsEnabled(), "clearing the dvar revokes acceptance immediately");
+    // ...and a later capture call (a second SV_Init) does not adopt the new value.
+    SV_CaptureUnverifiedGuids();
+    Check(!SV_UnverifiedGuidsEnabled(), "a later capture call changes nothing");
+    dvar_allowunverifiedguids.current.enabled = true;
+    Check(SV_UnverifiedGuidsEnabled(), "the frozen capture survives the dvar being rewritten");
+    CheckEq(warnings, 1, "no second warning was printed");
+
+    // A dvar turned on after start-up grants nothing: only the capture grants.
+    ResetWorld();
+    dvar_allowunverifiedguids.current.enabled = true;
+    Check(!SV_UnverifiedGuidsEnabled(), "turning the dvar on after start-up grants nothing");
+}
+
+// ---- SV_GetChallenge: retail GUIDs, switch off ----------------------------
+
+static void TestGetChallengeRetailGuidDisabled()
+{
+    netadr_t from = MakeAdr(203, 0, 113, 7, 28000);
+
+    Check(!SV_UnverifiedGuidsEnabled(), "the shipped default refuses unverified GUIDs");
+    int token = IssueRetailChallenge(from, kRetailGuid);
+    CheckText(LastOob(), kGuidPolicyMessage, "a retail GUID is refused with the policy message");
+    CheckEq(static_cast<long long>(token), -1, "no challenge token was issued");
+    Check(AllChallengesZeroed(), "no challenge slot was allocated");
+    CheckEq(R.steamChecks, 0, "a refused retail GUID never reaches the Steam backend");
+    CheckEq(static_cast<long long>(R.banCheckedIdentities.size()), 0,
+            "a refused retail GUID never reaches the ban check");
+
+    // A 32-hex field is also valid base64, so this proves the retail branch was
+    // taken and nothing was decoded as a Steam ticket.
+    ResetWorld();
+    SetArgv("getchallenge", "0", kRetailGuid, std::string(), 3);
+    SV_GetChallenge(from);
+    CheckText(LastOob(), kGuidPolicyMessage,
+              "a base64-shaped 32-hex field is still classified as a retail GUID");
+    CheckEq(R.steamChecks, 0, "the base64 decoder and Steam backend are never reached");
+
+    // A refused retail retry must also invalidate a challenge already issued to
+    // this address, so a stale token cannot be replayed after a failed retry.
+    ResetWorld();
+    token = IssueChallenge(from);
+    Check(token > 0, "a Steam challenge was issued first");
+    Check(FindSlot(from) >= 0, "the Steam challenge is recorded");
+    IssueRetailChallenge(from, kRetailGuid);
+    CheckText(LastOob(), kGuidPolicyMessage, "the retail retry is still refused");
+    Check(AllChallengesZeroed(), "the refused retail retry invalidated the earlier Steam token");
+}
+
+// ---- SV_GetChallenge: retail GUIDs, switch on -----------------------------
+
+static void TestGetChallengeRetailGuidEnabled()
+{
+    netadr_t from = MakeAdr(203, 0, 113, 7, 28000);
+    EnableUnverifiedGuids();
+
+    int token = IssueRetailChallenge(from, kRetailGuid);
+    Check(token > 0, "an enabled server issues a challenge for a retail GUID");
+    int slot = FindSlot(from);
+    Check(slot >= 0, "the retail challenge is recorded for the source address");
+    if (slot >= 0)
+    {
+        CheckText(SlotIdentity(slot), kRetailGuid, "the GUID is stored as the identity");
+        CheckEq(static_cast<long long>(strlen(svs.challenges[slot].cdkeyHash)), 32,
+                "the stored identity is 32 characters");
+        CheckEq(static_cast<int>(svs.challenges[slot].cdkeyHash[32]), 0,
+                "byte 32 of the stored identity is NUL");
+        bool exact = true;
+        for (int i = 0; i < 32; ++i)
+            if (svs.challenges[slot].cdkeyHash[i] != kRetailGuid[i])
+                exact = false;
+        Check(exact, "the stored identity is the exact GUID, byte for byte");
+    }
+    CheckEq(R.steamChecks, 0, "no Steam backend call for a retail GUID");
+    Check(R.banCheckedIdentities.size() >= 1, "the permanent-ban check ran");
+    if (!R.banCheckedIdentities.empty())
+        CheckText(R.banCheckedIdentities[0], kRetailGuid,
+                  "the permanent-ban check received the normalised GUID");
+
+    // Uppercase and mixed-case spellings normalise to the same identity.
+    ResetWorld();
+    EnableUnverifiedGuids();
+    token = IssueRetailChallenge(from, kRetailGuidUpper);
+    Check(token > 0, "an uppercase GUID is accepted");
+    CheckText(SlotIdentity(FindSlot(from)), kRetailGuid, "an uppercase GUID is stored as lowercase");
+    ResetWorld();
+    EnableUnverifiedGuids();
+    token = IssueRetailChallenge(from, kRetailGuidMixed);
+    Check(token > 0, "a mixed-case GUID is accepted");
+    CheckText(SlotIdentity(FindSlot(from)), kRetailGuid, "a mixed-case GUID is stored as lowercase");
+
+    // Any source address, with the loopback test bypass off the whole time.
+    struct SourceCase
+    {
+        netadr_t adr;
+        const char *what;
+    };
+    const SourceCase sources[] = {
+        { MakeAdr(203, 0, 113, 7, 28000), "a public address" },
+        { MakeAdr(192, 168, 1, 20, 28960), "a LAN address" },
+        { MakeAdr(10, 1, 2, 3, 28962), "a 10/8 address" },
+        { MakeAdr(127, 0, 0, 1, 28961), "a 127.0.0.1 source" },
+        { MakeAdr(172, 16, 0, 9, 28963), "a 172.16/12 address" },
+    };
+    for (size_t i = 0; i < sizeof(sources) / sizeof(sources[0]); ++i)
+    {
+        ResetWorld();
+        EnableUnverifiedGuids();
+        Check(!g_loopbackAuthTestFrozenEnabled, "the loopback test bypass is off");
+        int issued = IssueRetailChallenge(sources[i].adr, kRetailGuid);
+        Check(issued > 0, std::string("a retail GUID is accepted from ") + sources[i].what);
+        CheckText(SlotIdentity(FindSlot(sources[i].adr)), kRetailGuid,
+                  std::string("the identity from ") + sources[i].what + " is the GUID");
+        CheckEq(R.steamChecks, 0, std::string("no Steam backend call from ") + sources[i].what);
+    }
+
+    // All-digit and all-zero spellings are GUIDs here, never Steam identities.
+    const char *const numericGuids[] = { "12345678901234567890123456789012",
+                                         "00000000000000000000000000000000" };
+    for (size_t i = 0; i < sizeof(numericGuids) / sizeof(numericGuids[0]); ++i)
+    {
+        ResetWorld();
+        EnableUnverifiedGuids();
+        int issued = IssueRetailChallenge(from, numericGuids[i]);
+        Check(issued > 0, std::string("the GUID \"") + numericGuids[i] + "\" is accepted");
+        CheckText(SlotIdentity(FindSlot(from)), numericGuids[i], "the numeric GUID is stored verbatim");
+        CheckEq(R.steamChecks, 0, "a numeric GUID is never treated as a Steam identity");
+    }
+}
+
+// ---- SV_GetChallenge: malformed retail GUIDs ------------------------------
+
+static void TestGetChallengeRetailGuidMalformed()
+{
+    netadr_t from = MakeAdr(203, 0, 113, 7, 28000);
+
+    const char *const bad[] = {
+        "9fa4b618b026886e7fe966bb184ae77",        // 31 characters
+        "9fa4b618b026886e7fe966bb184ae7700",      // 33 characters
+        "",                                       // empty
+        "9fa4b618b026886e7fe966bb184ae77g",       // non-hex letter
+        "9fa4b618b026-86e7fe966bb184ae770",       // separator
+        "\331\2419fa4b618b026886e7fe966bb184",  // non-ASCII first bytes
+        " 9fa4b618b026886e7fe966bb184ae770",      // leading whitespace
+        "9fa4b618b026886e7fe966bb184ae770 ",      // trailing whitespace
+        "+9fa4b618b026886e7fe966bb184ae77",       // sign
+        "-9fa4b618b026886e7fe966bb184ae77",       // sign
+        "0x9fa4b618b026886e7fe966bb184ae7",       // 0x prefix
+        "local-test-000012340000",                // synthetic namespace
+    };
+
+    for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); ++i)
+    {
+        ResetWorld();
+        EnableUnverifiedGuids();
+        std::string label = std::string("retail GUID \"") + Escape(bad[i]) + "\"";
+        int token = IssueRetailChallenge(from, bad[i]);
+        CheckText(LastOob(), kMalformedGuidMessage, label + " is refused as malformed");
+        CheckEq(static_cast<long long>(token), -1, label + " gets no token");
+        Check(AllChallengesZeroed(), label + " allocates no challenge slot");
+        CheckEq(R.steamChecks, 0, label + " never reaches the Steam backend");
+    }
+}
+
+// ---- SV_GetChallenge: field-count classification --------------------------
+
+static void TestGetChallengeArgcClassification()
+{
+    netadr_t from = MakeAdr(203, 0, 113, 7, 28000);
+
+    // argc 1 and 2: no identity field at all.
+    SetArgv("getchallenge", std::string(), std::string(), std::string(), 1);
+    SV_GetChallenge(from);
+    CheckText(LastOob(), kMissingFieldsMessage, "argc 1 is reported as missing fields");
+    ResetWorld();
+    SetArgv("getchallenge", "0", std::string(), std::string(), 2);
+    SV_GetChallenge(from);
+    CheckText(LastOob(), kMissingFieldsMessage, "argc 2 is reported as missing fields");
+    Check(AllChallengesZeroed(), "argc 2 allocates no slot");
+
+    // argc 3 depends only on the GUID policy, not on the field contents.
+    ResetWorld();
+    SetArgv("getchallenge", "0", kRetailGuid, std::string(), 3);
+    SV_GetChallenge(from);
+    CheckText(LastOob(), kGuidPolicyMessage, "argc 3 takes the retail branch while disabled");
+    ResetWorld();
+    EnableUnverifiedGuids();
+    SetArgv("getchallenge", "0", kRetailGuid, std::string(), 3);
+    SV_GetChallenge(from);
+    Check(OobChallengeToken() > 0, "argc 3 takes the retail branch while enabled");
+    CheckEq(R.steamChecks, 0, "the retail branch never calls the Steam backend");
+
+    // argc 4 is the Steam handshake, unaffected by the GUID policy.
+    ResetWorld();
+    EnableUnverifiedGuids();
+    SetArgv("getchallenge", "0", kGoodTicket, kGoodIdentity, 4);
+    SV_GetChallenge(from);
+    Check(OobChallengeToken() > 0, "argc 4 still takes the Steam path when GUIDs are enabled");
+    CheckEq(R.steamChecks, 1, "argc 4 always verifies with the Steam backend");
+    CheckText(SlotIdentity(FindSlot(from)), kGoodIdentity, "argc 4 stores the Steam identity");
+
+    // argc 5 and above is not a handshake this server implements.
+    ResetWorld();
+    EnableUnverifiedGuids();
+    SetArgv("getchallenge", "0", kRetailGuid, kGoodIdentity, 5);
+    SV_GetChallenge(from);
+    CheckText(LastOob(), kUnsupportedHandshakeMessage, "argc 5 is refused as unsupported");
+    Check(AllChallengesZeroed(), "argc 5 allocates no slot");
+    CheckEq(R.steamChecks, 0, "argc 5 never reaches the Steam backend");
+}
+
+// ---- SV_GetChallenge: Steam is never replaced by the GUID path ------------
+
+static void TestGetChallengeSteamNeverFallsBackToGuid()
+{
+    netadr_t from = MakeAdr(203, 0, 113, 7, 28000);
+
+    // A ticket field of 32 hex digits is a valid base64 payload *and* a
+    // syntactically valid GUID. With GUIDs enabled it must still be verified as
+    // a Steam ticket, because argc decided the method, not the field shape.
+    ResetWorld();
+    EnableUnverifiedGuids();
+    SetArgv("getchallenge", "0", kRetailGuid, kGoodIdentity, 4);
+    SV_GetChallenge(from);
+    Check(OobChallengeToken() > 0, "the Steam handshake is accepted on its own merits");
+    CheckText(SlotIdentity(FindSlot(from)), kGoodIdentity,
+              "the Steam identity is stored, not the GUID-shaped ticket");
+    CheckEq(R.steamChecks, 1, "the GUID-shaped ticket was verified, not reinterpreted");
+
+    // Backend rejection fails closed: no fallback to the GUID branch, and no
+    // identity is left behind for a later directconnect to pick up.
+    ResetWorld();
+    EnableUnverifiedGuids();
+    g_steamAcceptsTicket = false;
+    SetArgv("getchallenge", "0", kRetailGuid, kGoodIdentity, 4);
+    SV_GetChallenge(from);
+    CheckEq(R.steamChecks, 1, "the backend was consulted exactly once");
+    Check(AllChallengesZeroed(), "a rejected Steam ticket leaves no challenge");
+#if defined(__linux__) && defined(KISAK_DEDICATED)
+    CheckText(LastOob(), "error\nSteam authentication is unavailable in this native Linux build.",
+              "the native Linux unavailable message is preserved");
+#else
+    CheckText(LastOob(), "error\x0a\x15" "Your Steam Client Ticket was Invalid",
+              "the Steam rejection message is preserved");
+#endif
+}
+
+// ---- temporary ban keys ---------------------------------------------------
+
+static void TestTempBanKeyHardening()
+{
+    netadr_t from = MakeAdr(203, 0, 113, 7, 28000);
+
+    // A short identity bans exactly that identity.
+    SV_BanGuidBriefly("abc");
+    CheckEq(SV_IsTempBannedGuid("abc"), 1, "a short identity bans itself");
+    CheckEq(SV_IsTempBannedGuid("abd"), 0, "a neighbouring short identity is not banned");
+    CheckEq(SV_IsTempBannedGuid("abcdef"), 0, "a longer identity sharing the prefix is not banned");
+    CheckEq(SV_IsTempBannedGuid("ab"), 0, "the prefix alone is not banned");
+
+    // The 32nd byte participates: two 32-character keys that differ only at
+    // index 31 are different keys.
+    ResetWorld();
+    const char *keyA = "9fa4b618b026886e7fe966bb184ae770";
+    const char *keyB = "9fa4b618b026886e7fe966bb184ae771";
+    SV_BanGuidBriefly(keyA);
+    CheckEq(SV_IsTempBannedGuid(keyA), 1, "a 32-character identity bans itself");
+    CheckEq(SV_IsTempBannedGuid(keyB), 0, "an identity differing only at byte 32 is not banned");
+
+    // Empty identities: never banned, and banning one does not poison the table.
+    ResetWorld();
+    CheckEq(SV_IsTempBannedGuid(""), 0, "an empty identity is never temporarily banned");
+    SV_BanGuidBriefly("");
+    CheckEq(SV_IsTempBannedGuid(""), 0, "banning an empty identity does not ban it");
+    CheckEq(SV_IsTempBannedGuid("abc"), 0, "banning an empty identity bans nothing else");
+    CheckEq(static_cast<long long>(SV_FindFreeTempBanSlot()), 0, "the empty ban left the slot reusable");
+
+    // A temporary ban still rejects the challenge and clears the slot.
+    ResetWorld();
+    EnableUnverifiedGuids();
+    SV_BanGuidBriefly(kRetailGuid);
+    int token = IssueRetailChallenge(from, kRetailGuid);
+    CheckText(LastOob(), "error\x0a\x15" "You are temporarily banned from this server",
+              "a temporarily banned GUID is refused");
+    CheckEq(static_cast<long long>(token), -1, "a temporarily banned GUID gets no token");
+    Check(AllChallengesZeroed(), "a temporarily banned GUID leaves no challenge");
+
+    // An expired ban no longer rejects.
+    ResetWorld();
+    EnableUnverifiedGuids();
+    SV_BanGuidBriefly(kRetailGuid);
+    svs.tempBans[0].banTime = svs.time - 700000;
+    token = IssueRetailChallenge(from, kRetailGuid);
+    Check(token > 0, "an expired GUID ban no longer rejects the GUID");
+}
+
+static void TestPermanentBanGetsNormalizedGuid()
+{
+    netadr_t from = MakeAdr(203, 0, 113, 7, 28000);
+
+    // An uppercase claim is ban-checked under its normalised spelling, so a ban
+    // entry written in lowercase catches every spelling of the same GUID.
+    ResetWorld();
+    EnableUnverifiedGuids();
+    g_bannedGuid = true;
+    IssueRetailChallenge(from, kRetailGuidUpper);
+    Check(R.banCheckedIdentities.size() >= 1, "the permanent-ban check ran for a retail GUID");
+    if (!R.banCheckedIdentities.empty())
+        CheckText(R.banCheckedIdentities[0], kRetailGuid,
+                  "the permanent-ban check received the normalised GUID");
+    CheckText(LastOob(), "error\x0a\x15" "You are permanently banned from this server",
+              "a permanently banned GUID is refused");
+    Check(AllChallengesZeroed(), "a permanently banned GUID leaves no challenge");
+    CheckEq(R.steamChecks, 0, "a banned GUID never reaches the Steam backend");
+
+    // With the switch off the identity is refused before any ban check, so the
+    // ordering of policy and ban lookup is observable.
+    ResetWorld();
+    g_bannedGuid = true;
+    IssueRetailChallenge(from, kRetailGuidUpper);
+    CheckText(LastOob(), kGuidPolicyMessage, "the policy rejection comes first");
+    CheckEq(static_cast<long long>(R.banCheckedIdentities.size()), 0,
+            "a policy-rejected GUID never reaches the ban check");
+}
+
+// ---- SV_DirectConnect: identity policy ------------------------------------
+
+static void TestDirectConnectGuidIdentity()
+{
+    netadr_t from = MakeAdr(203, 0, 113, 7, 28000);
+    const int token = 0x51A7E;
+    ConnectArgs version1 = { "1", token, 49001, "" };
+
+    // Switch off: a challenge record carrying a GUID identity is refused even
+    // with the right token. This is what stops a forged or stale slot from
+    // admitting an identity the process never agreed to accept.
+    int slot = SeedChallenge(from, kRetailGuid, token);
+    Check(slot >= 0, "a GUID challenge record was seeded");
+    ConnectAttempt(from, MakeUserinfo(version1).c_str());
+    CheckText(LastOob(), "error\nEXE_BAD_CHALLENGE", "a GUID identity is refused while the switch is off");
+    CheckEq(R.netchanSetups, 0, "a refused GUID identity sets up no netchan");
+    Check(!ClientIsConnected(0), "a refused GUID identity connects no client");
+
+    // Switch on: accepted, and connected with the identity copied onto the client.
+    ResetWorld();
+    EnableUnverifiedGuids();
+    slot = SeedChallenge(from, kRetailGuid, token);
+    ConnectAttempt(from, MakeUserinfo(version1).c_str());
+    CheckText(LastOob(), "connectResponse mods/kisak", "a GUID identity connects when enabled");
+    Check(ClientIsConnected(0), "the GUID client reached CS_CONNECTED");
+    CheckText(std::string(svs.clients[0].cdkeyHash), kRetailGuid, "the GUID is copied onto the client");
+    CheckEq(svs.clients[0].challenge, token, "the client records the accepted token");
+    CheckEq(R.netchanSetups, 1, "exactly one netchan was set up");
+
+    // The token still has to match, from the right address.
+    ResetWorld();
+    EnableUnverifiedGuids();
+    SeedChallenge(from, kRetailGuid, token);
+    ConnectArgs wrongToken = { "1", token + 1, 49001, "" };
+    ConnectAttempt(from, MakeUserinfo(wrongToken).c_str());
+    CheckText(LastOob(), "error\nEXE_BAD_CHALLENGE", "a wrong token is refused for a GUID identity");
+
+    ResetWorld();
+    EnableUnverifiedGuids();
+    SeedChallenge(from, kRetailGuid, token);
+    ConnectAttempt(MakeAdr(203, 0, 113, 7, 28001), MakeUserinfo(version1).c_str());
+    CheckText(LastOob(), "error\nEXE_BAD_CHALLENGE", "another source port cannot use the token");
+
+    ResetWorld();
+    EnableUnverifiedGuids();
+    SeedChallenge(from, kRetailGuid, token);
+    ConnectAttempt(MakeAdr(203, 0, 113, 8, 28000), MakeUserinfo(version1).c_str());
+    CheckText(LastOob(), "error\nEXE_BAD_CHALLENGE", "another address cannot use the token");
+
+    // A non-canonical spelling is not accepted, even with the switch on: the
+    // handshake always stores lowercase, so an uppercase slot is not its output.
+    ResetWorld();
+    EnableUnverifiedGuids();
+    SeedChallenge(from, kRetailGuidUpper, token);
+    ConnectAttempt(from, MakeUserinfo(version1).c_str());
+    CheckText(LastOob(), "error\nEXE_BAD_CHALLENGE", "a non-canonical GUID identity is refused");
+
+    // A synthetic local test label outside test mode is refused.
+    ResetWorld();
+    EnableUnverifiedGuids();
+    SeedChallenge(from, "local-test-000012340000", token);
+    ConnectAttempt(from, MakeUserinfo(version1).c_str());
+    CheckText(LastOob(), "error\nEXE_BAD_CHALLENGE", "a synthetic test identity is refused outside test mode");
+
+    // userinfo is never an identity source: a Steam-looking value there cannot
+    // rescue a GUID slot while the switch is off.
+    ResetWorld();
+    SeedChallenge(from, kRetailGuid, token);
+    {
+        char buffer[1024];
+        snprintf(buffer, sizeof(buffer), "\\protocol\\1\\challenge\\%d\\qport\\49001\\guid\\%s\\cdkey\\%s",
+                 token, kGoodIdentity, kGoodIdentity);
+        ConnectAttempt(from, buffer);
+    }
+    CheckText(LastOob(), "error\nEXE_BAD_CHALLENGE", "a userinfo identity cannot rescue a refused GUID slot");
+    Check(!ClientIsConnected(0), "no client was connected from the userinfo claim");
+
+    // ...and it cannot replace the identity the handshake stored.
+    ResetWorld();
+    EnableUnverifiedGuids();
+    SeedChallenge(from, kRetailGuid, token);
+    {
+        char buffer[1024];
+        snprintf(buffer, sizeof(buffer), "\\protocol\\1\\challenge\\%d\\qport\\49001\\guid\\%s",
+                 token, kGoodIdentity);
+        ConnectAttempt(from, buffer);
+    }
+    CheckText(LastOob(), "connectResponse mods/kisak", "the GUID client connected");
+    CheckText(std::string(svs.clients[0].cdkeyHash), kRetailGuid,
+              "the challenge identity wins over a userinfo claim");
+
+    // The protocol gate is unchanged by the GUID policy.
+    ResetWorld();
+    EnableUnverifiedGuids();
+    SeedChallenge(from, kRetailGuid, token);
+    ConnectArgs protocol21 = { "21", token, 49001, "" };
+    ConnectAttempt(from, MakeUserinfo(protocol21).c_str());
+    Check(LastOob().find("This server requires protocol version 1") != std::string::npos,
+          "the protocol gate still rejects protocol 21 with GUIDs enabled");
+    Check(!ClientIsConnected(0), "a rejected protocol connects no client");
+
+    // Retail 1.7 hosting: protocol 6 plus a GUID identity. The two switches are
+    // independent, so both have to be on.
+    ResetWorld();
+    EnableUnverifiedGuids();
+    dvar_allowprotocol6.current.enabled = true;
+    SeedChallenge(from, kRetailGuid, token);
+    ConnectArgs protocol6 = { "6", token, 49001, "" };
+    ConnectAttempt(from, MakeUserinfo(protocol6).c_str());
+    CheckText(LastOob(), "connectResponse mods/kisak", "a protocol 6 GUID client connects");
+    Check(ClientIsConnected(0), "the protocol 6 GUID client reached CS_CONNECTED");
+    CheckText(std::string(svs.clients[0].cdkeyHash), kRetailGuid, "the protocol 6 client keeps the GUID");
+
+    // The private-password slot gate is unchanged by the GUID policy.
+    ResetWorld();
+    EnableUnverifiedGuids();
+    dvar_maxclients.current.integer = 1;
+    dvar_privateclients.current.integer = 1;
+    dvar_privatepassword.current.string = "secret";
+    SeedChallenge(from, kRetailGuid, token);
+    ConnectArgs wrongPassword = { "1", token, 49001, "wrong" };
+    ConnectAttempt(from, MakeUserinfo(wrongPassword).c_str());
+    CheckText(LastOob(), "error\nEXE_SERVERISFULL",
+              "a wrong private password still finds no slot with GUIDs enabled");
+    Check(!ClientIsConnected(0), "a wrong password connects no client");
+}
+
+#if defined(__linux__) && defined(KISAK_DEDICATED)
+static void TestBothSwitchesFailClosed()
+{
+    netadr_t loop = MakeAdr(127, 0, 0, 1, 28960);
+    EnableUnverifiedGuids();
+    g_loopbackAuthTestFrozenEnabled = true;
+    g_loopbackAuthTestCanBypass = true;
+
+    // This configuration cannot start (NET_InitLoopbackAuthTest is fatal), but
+    // if it were ever reached the packet path must still admit nobody.
+    SetArgv("getchallenge");
+    SV_GetChallenge(loop);
+    CheckText(LastOob(), "error\nsv_loopbackTestAuth and sv_allowUnverifiedGuids cannot both be enabled.",
+              "the packet path refuses both switches at once");
+    Check(AllChallengesZeroed(), "no challenge is issued when both switches are on");
+    CheckEq(R.steamChecks, 0, "no backend call when both switches are on");
+
+    // SV_DirectConnect goes through the same guard.
+    const int token = 0x51A7E;
+    SeedChallenge(loop, "local-test-000012340000", token);
+    ConnectArgs version1 = { "1", token, 49001, "" };
+    ConnectAttempt(loop, MakeUserinfo(version1).c_str());
+    CheckText(LastOob(), "error\nsv_loopbackTestAuth and sv_allowUnverifiedGuids cannot both be enabled.",
+              "directconnect refuses both switches at once");
+    Check(!ClientIsConnected(0), "no client connects when both switches are on");
+}
+#endif
 '''
 
 DRIVER_MAIN = r'''
@@ -2336,11 +3027,20 @@ int main(void)
 
     Run("SV_ParseSteamIdentity", TestParseSteamIdentity);
     Run("SV_ValidateSteamTicketBase64", TestValidateSteamTicketBase64);
+    Run("SV_ParseRetailGuid", TestParseRetailGuid);
+    Run("sv_allowUnverifiedGuids: capture and veto", TestUnverifiedGuidsCapture);
 #if defined(__linux__) && defined(KISAK_DEDICATED)
     Run("SV_IsLoopbackTestIdentity", TestLoopbackTestIdentity);
 #endif
     Run("SV_GetChallenge: missing and malformed fields", TestGetChallengeMissingFields);
     Run("SV_GetChallenge: malformed authentication fields", TestGetChallengeMalformedFields);
+    Run("SV_GetChallenge: field-count classification", TestGetChallengeArgcClassification);
+    Run("SV_GetChallenge: retail GUIDs disabled", TestGetChallengeRetailGuidDisabled);
+    Run("SV_GetChallenge: retail GUIDs enabled", TestGetChallengeRetailGuidEnabled);
+    Run("SV_GetChallenge: malformed retail GUIDs", TestGetChallengeRetailGuidMalformed);
+    Run("SV_GetChallenge: Steam never falls back to GUID", TestGetChallengeSteamNeverFallsBackToGuid);
+    Run("SV_GetChallenge: temporary ban keys", TestTempBanKeyHardening);
+    Run("SV_GetChallenge: permanent ban identity", TestPermanentBanGetsNormalizedGuid);
     Run("SV_GetChallenge: backend rejection", TestGetChallengeBackendRejection);
     Run("SV_GetChallenge: accepted authentication", TestGetChallengeAccepted);
     Run("SV_GetChallenge: failed authentication clears the challenge", TestGetChallengeFailureClearsIssuedChallenge);
@@ -2355,9 +3055,11 @@ int main(void)
     Run("SV_DirectConnect: protocol 6 admission", TestDirectConnectProtocol6Admission);
     Run("SV_DirectConnect: challenge rejection", TestDirectConnectBadChallenge);
     Run("SV_DirectConnect: success path", TestDirectConnectSuccess);
+    Run("SV_DirectConnect: GUID identity policy", TestDirectConnectGuidIdentity);
 #if defined(__linux__) && defined(KISAK_DEDICATED)
     Run("SV_DirectConnect: identity rules in test mode", TestDirectConnectTestModeIdentityRules);
     Run("SV_DirectConnect: guard ordering", TestDirectConnectGuardOrdering);
+    Run("both switches: fail closed", TestBothSwitchesFailClosed);
 #endif
     Run("SV_DirectConnect: capacity and password", TestDirectConnectCapacityAndPassword);
     Run("SV_DirectConnect: game rejection", TestDirectConnectGameRejection);
@@ -2378,9 +3080,16 @@ FOOTER_SENTINEL = "// ---- end of extracted production code ----\n"
 def build_harness(client_functions: dict, base64_functions: dict) -> str:
     extracted_client = ""
     extracted_client += "// ---- extracted from src/server_mp/sv_client_mp.cpp (verbatim) ----\n"
+    # SV_BanGuidBriefly() calls SV_FindFreeTempBanSlot(), which production defines
+    # after it; declare it first so the extracted text compiles as-is.
+    extracted_client += "uint32_t SV_FindFreeTempBanSlot();\n"
+    extracted_client += client_functions["SV_CaptureUnverifiedGuids"] + "\n"
+    extracted_client += client_functions["SV_UnverifiedGuidsEnabled"] + "\n"
     extracted_client += "#if defined(__linux__) && defined(KISAK_DEDICATED)\n"
     extracted_client += client_functions["SV_RejectUnsafeTestHandshake"]
     extracted_client += "#endif\n\n"
+    extracted_client += client_functions["SV_FindFreeTempBanSlot"] + "\n"
+    extracted_client += client_functions["SV_BanGuidBriefly"] + "\n"
     extracted_client += client_functions["SV_IsTempBannedGuid"] + "\n"
     extracted_client += client_functions["SV_GetChallenge"] + "\n"
     extracted_client += client_functions["SV_DirectConnect"] + "\n"

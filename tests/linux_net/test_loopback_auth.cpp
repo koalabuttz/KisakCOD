@@ -998,6 +998,48 @@ static void ScenarioDedicatedUnset()
     NET_Shutdown();
 }
 
+static void ScenarioUnverifiedGuidsConflict()
+{
+    netadr_t from;
+    const int port = PickFreeUdpPort();
+
+    Section("start-up: sv_loopbackTestAuth and sv_allowUnverifiedGuids both on");
+    if (port <= 0)
+    {
+        Check(false, "could not pick a free UDP port");
+        return;
+    }
+
+    // Everything except the second switch is the documented, safe test
+    // configuration, so the refusal cannot come from the net_ip/dedicated gate.
+    SeedAuthStartup(true, 1, "127.0.0.1", false, port);
+    Shim_SeedUnverifiedGuidsEnabled(true);
+    Shim_ComErrorReset();
+    NET_Init();
+
+    Check(Shim_ComErrorCount() > 0, "the combination is refused with a diagnostic");
+    Check(!NET_LoopbackAuthTestEnabled(), "the loopback test bypass is not enabled");
+    Check(!NET_CanBypassLoopbackAuth(AdrIP("127.0.0.1", 5555)),
+          "a 127.0.0.1 client gets no bypass, even on a loopback bind");
+    Check(!NET_CanBypassLoopbackAuth(AdrIP("127.0.0.1", 0)),
+          "no bypass from any source port either");
+
+    // The engine aborts on Com_Error(ERR_FATAL); this shim returns, so start-up
+    // continues *without* the bypass and a plain server socket may exist. That
+    // is safe - what must not survive is the bypass, asserted above.
+    (void)EngineReadsLoopbackDatagram(PortFromDvar(), &from);
+
+    // The refusal is remembered: a second start-up cannot turn the bypass on.
+    NET_Shutdown();
+    Shim_ComErrorReset();
+    NET_Init();
+    Check(!NET_LoopbackAuthTestEnabled(), "a restart does not enable the bypass either");
+    Check(!NET_CanBypassLoopbackAuth(AdrIP("127.0.0.1", 5555)),
+          "a restart keeps refusing the bypass");
+
+    NET_Shutdown();
+}
+
 // ------------------------------------------------------- scenario processes --
 
 struct ScenarioEntry
@@ -1021,6 +1063,7 @@ static const ScenarioEntry g_scenarios[] = {
     { "unsafe-startup-wildcard", ScenarioUnsafeStartupWildcard },
     { "dedicated-zero", ScenarioDedicatedZero },
     { "dedicated-unset", ScenarioDedicatedUnset },
+    { "unverified-guids-conflict", ScenarioUnverifiedGuidsConflict },
 };
 
 // Runs one scenario in a child process and folds its counts into ours.  A child

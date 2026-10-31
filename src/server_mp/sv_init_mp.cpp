@@ -766,6 +766,16 @@ void __cdecl SV_Init()
         0,
         DVAR_NOFLAG,
         "Also admit retail CoD4 1.7 clients (protocol 6); they still need a supported authentication path");
+    // Startup-only: DVAR_INIT makes a later console "set" a no-op, and
+    // SV_CaptureUnverifiedGuids() freezes the answer for the life of the
+    // process, so a map change, an SV_Init rerun or a net_restart cannot widen
+    // trust in a running server.  See SV_UnverifiedGuidsEnabled().
+    sv_allowUnverifiedGuids = Dvar_RegisterBool(
+        "sv_allowUnverifiedGuids",
+        0,
+        DVAR_INIT,
+        "Accept retail CoD4 GUID handshakes without verification (startup only; spoofable, see documentation)");
+    SV_CaptureUnverifiedGuids();
     sv_pure = Dvar_RegisterBool("sv_pure", 0, DVAR_SERVERINFO | DVAR_SYSTEMINFO, "Cannot use modified IWD files");
     rcon_password = Dvar_RegisterString("rcon_password", (char *)"", DVAR_NOFLAG, "Password for the rcon command");
     sv_fps = Dvar_RegisterInt("sv_fps", 20, (DvarLimits)0x3E80000000ALL, DVAR_NOFLAG, "Server frames per second");

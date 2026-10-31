@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 
 // Network authentication fields are untrusted strings. Validate them before
 // using the legacy Base64 decoder or interpreting a claimed Steam identity.
@@ -25,6 +26,48 @@ inline bool SV_ParseSteamIdentity(const char* text, uint64_t* identity)
     if (!value)
         return false;
     *identity = value;
+    return true;
+}
+
+// A retail CoD4 client authenticates with
+//
+//     getchallenge <clientChallenge> "<32 hex digits>"
+//
+// The quoted field is an operator-visible GUID, not a credential: nothing in the
+// exchange proves that the sender owns it.  Accepting one is therefore an
+// explicit, opt-in trust decision (see sv_allowUnverifiedGuids), and the accepted
+// form is pinned to exactly 32 ASCII hex digits so that a GUID has a single
+// spelling.  Normalising to lowercase here means two clients claiming the same
+// GUID compare equal against bans and against each other no matter which case
+// they sent.
+//
+// Everything else is rejected: a shorter or longer field, trailing characters,
+// whitespace, a sign, a "0x" prefix, and any non-ASCII byte.  Rejection is by
+// byte inspection, so an embedded NUL simply ends the hex run and fails on the
+// length check that follows.
+inline bool SV_ParseRetailGuid(const char* text, char out[33])
+{
+    if (!text || !out)
+        return false;
+    char normalized[33] = {};
+    for (size_t i = 0; i < 32; ++i)
+    {
+        const unsigned char c = static_cast<unsigned char>(text[i]);
+        char digit;
+        if (c >= '0' && c <= '9')
+            digit = static_cast<char>(c);
+        else if (c >= 'a' && c <= 'f')
+            digit = static_cast<char>(c);
+        else if (c >= 'A' && c <= 'F')
+            digit = static_cast<char>(c - 'A' + 'a');
+        else
+            return false;
+        normalized[i] = digit;
+    }
+    // Exactly 32 digits: a 33rd character (including a longer field) is rejected.
+    if (text[32] != 0)
+        return false;
+    memcpy(out, normalized, sizeof(normalized));
     return true;
 }
 

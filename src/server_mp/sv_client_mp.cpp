@@ -118,12 +118,19 @@ void __cdecl SV_AuthorizeRequest(netadr_t from, int challenge, const char *cdkey
 int __cdecl SV_IsTempBannedGuid(const char *cdkeyHash)
 {
     uint32_t banSlot; // [esp+Ch] [ebp-4h]
+    char key[32] = {};
 
     if (!*cdkeyHash)
         return 0;
+    // Compare a fixed 32-byte key rather than 32 bytes starting at the caller's
+    // string: a short identity would otherwise be compared together with whatever
+    // followed it in memory.  The key is zero-filled first, so the padding is
+    // deterministic and identical for identical inputs.
+    for (int i = 0; i < 32 && cdkeyHash[i]; ++i)
+        key[i] = cdkeyHash[i];
     for (banSlot = 0; banSlot < 0x10; ++banSlot)
     {
-        if (!memcmp(&svs.tempBans[banSlot], cdkeyHash, 0x20u)
+        if (!memcmp(&svs.tempBans[banSlot], key, 0x20u)
             && sv_kickBanTime->current.value * 1000.0 >= (svs.time - svs.tempBans[banSlot].banTime))
         {
             return 1;
@@ -135,6 +142,15 @@ int __cdecl SV_IsTempBannedGuid(const char *cdkeyHash)
 #if defined(__linux__) && defined(KISAK_DEDICATED)
 static bool SV_RejectUnsafeTestHandshake(netadr_t from)
 {
+    // Fail closed if both trust-widening switches are somehow on at once.  The
+    // start-up conflict is already fatal (NET_InitLoopbackAuthTest), so this can
+    // only be reached through a configuration the process never validated.
+    if (SV_UnverifiedGuidsEnabled() && NET_LoopbackAuthTestEnabled())
+    {
+        NET_OutOfBandPrint(NS_SERVER, from,
+            "error\nsv_loopbackTestAuth and sv_allowUnverifiedGuids cannot both be enabled.");
+        return true;
+    }
     if (NET_LoopbackAuthTestEnabled() && !NET_CanBypassLoopbackAuth(from))
     {
         NET_OutOfBandPrint(NS_SERVER, from,
@@ -145,6 +161,53 @@ static bool SV_RejectUnsafeTestHandshake(netadr_t from)
 }
 #endif
 
+// sv_allowUnverifiedGuids is captured once, when SV_Init() registers the dvar,
+// and never recaptured.  A map change, an SV_Init rerun or a net_restart only
+// re-registers the dvar and leaves this answer alone, so a running process can
+// never be upgraded into accepting unverified GUIDs by any later path.
+//
+// The capture point is correct for the "+set" command line because the engine
+// applies command-line variables long before SV_Init() runs: Com_StartupVariable
+// turns "set sv_allowUnverifiedGuids 1" into an external placeholder dvar, and
+// Dvar_RegisterBool() below re-registers that placeholder with the real type,
+// keeping the value.  The live tests exercise this.
+static bool unverifiedGuidsCaptured = false;
+static bool unverifiedGuidsEnabled = false;
+
+void __cdecl SV_CaptureUnverifiedGuids()
+{
+    if (unverifiedGuidsCaptured)
+        return;
+
+    unverifiedGuidsEnabled = sv_allowUnverifiedGuids && sv_allowUnverifiedGuids->current.enabled;
+    unverifiedGuidsCaptured = true;
+
+    if (unverifiedGuidsEnabled)
+    {
+        Com_Printf(CON_CHANNEL_SERVER,
+            "WARNING: sv_allowUnverifiedGuids is enabled. Retail GUIDs are accepted WITHOUT verification from any "
+            "address. Players can impersonate GUIDs and evade GUID bans; do not trust GUID-based privileges or "
+            "persistent identity. Steam-format clients still require Steam authentication. Protocol, challenge and "
+            "password checks remain enabled. This setting requires a full process restart to change.\n");
+    }
+}
+
+/*
+====================
+SV_UnverifiedGuidsEnabled
+
+The captured start-up answer, vetoed by the current dvar.  The dvar is read only
+as a veto: turning it off revokes unverified-GUID acceptance immediately, while
+turning it on after start-up grants nothing because the frozen bool stays false.
+====================
+*/
+bool SV_UnverifiedGuidsEnabled()
+{
+    if (!unverifiedGuidsCaptured || !unverifiedGuidsEnabled)
+        return false;
+    return sv_allowUnverifiedGuids && sv_allowUnverifiedGuids->current.enabled;
+}
+
 void __cdecl SV_GetChallenge(netadr_t from)
 {
 #if defined(__linux__) && defined(KISAK_DEDICATED)
@@ -154,8 +217,15 @@ void __cdecl SV_GetChallenge(netadr_t from)
 #else
     const bool localTest = false;
 #endif
-    const char* clientSteamTicketBase64 = SV_Cmd_Argv(2);
-    const char* clientSteamID64 = SV_Cmd_Argv(3);
+    // The handshake shape selects the authentication method; the field contents
+    // only decide whether that method succeeds.  A retail CoD4 client sends two
+    // fields (challenge counter + GUID), KisakCOD's Steam handshake sends three
+    // (challenge counter + base64 ticket + SteamID64), and nothing else is
+    // accepted.  The method is never inferred from what a field looks like, so a
+    // hex-looking ticket can never be treated as a GUID or the other way round.
+    const int argc = SV_Cmd_Argc();
+    char retailGuid[33] = {};
+    bool retailGuidMode = false;
     unsigned char decodedSteamTicket[1024 + 128] = {};
     uint64_t steamID64 = 0;
     size_t encodedLength = 0;
@@ -163,11 +233,37 @@ void __cdecl SV_GetChallenge(netadr_t from)
     if (!localTest)
     {
         const char* error = nullptr;
-        if (!clientSteamTicketBase64[0] || !clientSteamID64[0])
+        if (argc < 3)
+        {
             error = "error\nThis server requires the custom Steam ticket/ID handshake; no authentication fields were supplied.";
-        else if (!SV_ParseSteamIdentity(clientSteamID64, &steamID64) ||
-                 !SV_ValidateSteamTicketBase64(clientSteamTicketBase64, sizeof(decodedSteamTicket), &encodedLength))
-            error = "error\nMalformed Steam authentication fields.";
+        }
+        else if (argc == 3)
+        {
+            // Retail: getchallenge <clientChallenge> "<32 hex GUID>"
+            if (!SV_ParseRetailGuid(SV_Cmd_Argv(2), retailGuid))
+                error = "error\nMalformed GUID authentication fields.";
+            else if (!SV_UnverifiedGuidsEnabled())
+                error = "error\nThis server requires Steam authentication; unverified retail GUIDs are not accepted.";
+            else
+                retailGuidMode = true;
+        }
+        else if (argc == 4)
+        {
+            // KisakCOD Steam handshake: getchallenge <clientChallenge> <ticket> <SteamID64>
+            const char* clientSteamTicketBase64 = SV_Cmd_Argv(2);
+            const char* clientSteamID64 = SV_Cmd_Argv(3);
+            if (!clientSteamTicketBase64[0] || !clientSteamID64[0])
+                error = "error\nThis server requires the custom Steam ticket/ID handshake; no authentication fields were supplied.";
+            else if (!SV_ParseSteamIdentity(clientSteamID64, &steamID64) ||
+                     !SV_ValidateSteamTicketBase64(clientSteamTicketBase64, sizeof(decodedSteamTicket), &encodedLength))
+                error = "error\nMalformed Steam authentication fields.";
+            else
+                decodedLen = b64_decode((unsigned char*)clientSteamTicketBase64, encodedLength, decodedSteamTicket);
+        }
+        else
+        {
+            error = "error\nUnsupported authentication handshake.";
+        }
         if (error)
         {
             // Invalidate an earlier challenge from this address as well: a
@@ -178,7 +274,6 @@ void __cdecl SV_GetChallenge(netadr_t from)
             NET_OutOfBandPrint(NS_SERVER, from, error);
             return;
         }
-        decodedLen = b64_decode((unsigned char*)clientSteamTicketBase64, encodedLength, decodedSteamTicket);
     }
 
     int v1; // esi
@@ -211,40 +306,59 @@ void __cdecl SV_GetChallenge(netadr_t from)
         challenge->connected = 0;
         i = oldest;
     }
-#if defined(__linux__) && defined(KISAK_DEDICATED)
-    char testIdentity[33] = {};
+    // One zero-filled 33-byte identity buffer for every path. The ban checks and
+    // the challenge record both read it, and it is always fully initialised, so a
+    // short identity can never expose stale bytes to a comparison.
+    char identity[33] = {};
     if (localTest)
     {
+#if defined(__linux__) && defined(KISAK_DEDICATED)
         // This is a label for an unauthenticated local session, not a Steam ID.
-        Com_sprintf(testIdentity, sizeof(testIdentity), "local-test-%08x%04x",
+        Com_sprintf(identity, sizeof(identity), "local-test-%08x%04x",
             static_cast<unsigned int>(challenge->challenge), static_cast<unsigned int>(from.port));
-        clientSteamID64 = testIdentity;
-    }
 #endif
+    }
+    else if (retailGuidMode)
+    {
+        memcpy(identity, retailGuid, sizeof(identity));
+    }
+    else
+    {
+        // A lone Steam identity is at most 20 decimal digits, and the challenge
+        // counter field is never used as identity.
+        const char* clientSteamID64 = SV_Cmd_Argv(3);
+        I_strncpyz(identity, clientSteamID64, sizeof(identity));
+    }
 
     //if (SV_IsBannedGuid(cdkeyHash))
-    if (SV_IsBannedGuid(clientSteamID64))
+    if (SV_IsBannedGuid(identity))
     {
-        Com_Printf(CON_CHANNEL_SERVER, "rejected connection from permanently banned GUID \"%s\"\n", clientSteamID64);
+        Com_Printf(CON_CHANNEL_SERVER, "rejected connection from permanently banned GUID \"%s\"\n", identity);
         NET_OutOfBandPrint(NS_SERVER, svs.challenges[i].adr, "error\xA\x15You are permanently banned from this server");
         memset(&svs.challenges[i], 0, sizeof(svs.challenges[i]));
         return;
     }
     //if (SV_IsTempBannedGuid(cdkeyHash))
-    if (SV_IsTempBannedGuid(clientSteamID64))
+    if (SV_IsTempBannedGuid(identity))
     {
-        Com_Printf(CON_CHANNEL_SERVER, "rejected connection from temporarily banned GUID \"%s\"\n", clientSteamID64);
+        Com_Printf(CON_CHANNEL_SERVER, "rejected connection from temporarily banned GUID \"%s\"\n", identity);
         NET_OutOfBandPrint(NS_SERVER, svs.challenges[i].adr, "error\xA\x15You are temporarily banned from this server");
         memset(&svs.challenges[i], 0, sizeof(svs.challenges[i]));
         return;
     }
 
     //I_strncpyz(svs.challenges[i].cdkeyHash, cdkeyHash, 33);
-    I_strncpyz(svs.challenges[i].cdkeyHash, clientSteamID64, 33);
-    
+    memcpy(svs.challenges[i].cdkeyHash, identity, sizeof(identity));
+
     // Test mode is admitted by the native socket/source guard above; it must
-    // never change the Steam backend's ordinary fail-closed behavior.
-    if (localTest || Steam_CheckClientTicket(decodedSteamTicket, decodedLen, steamID64))
+    // never change the Steam backend's ordinary fail-closed behavior.  A retail
+    // GUID request skips the Steam backend because there is no ticket to check --
+    // that is the trust the operator opted into.  A Steam-format request (argc
+    // == 4) always reaches Steam_CheckClientTicket here, even when unverified
+    // GUIDs are enabled, and never falls back to the GUID path on rejection.
+    const bool authenticated = localTest || retailGuidMode ||
+        Steam_CheckClientTicket(decodedSteamTicket, decodedLen, steamID64);
+    if (authenticated)
     {
         challenge->pingTime = svs.time;
         NET_OutOfBandPrint(NS_SERVER, from, va("challengeResponse %i", challenge->challenge));
@@ -255,7 +369,7 @@ void __cdecl SV_GetChallenge(netadr_t from)
 #if defined(__linux__) && defined(KISAK_DEDICATED)
         NET_OutOfBandPrint(NS_SERVER, from, "error\nSteam authentication is unavailable in this native Linux build.");
 #else
-        Com_Printf(CON_CHANNEL_SERVER, "rejected connection from invalid Steam GUID \"%s\"\n", clientSteamID64);
+        Com_Printf(CON_CHANNEL_SERVER, "rejected connection from invalid Steam GUID \"%s\"\n", identity);
         NET_OutOfBandPrint(NS_SERVER, svs.challenges[i].adr, "error\xA\x15Your Steam Client Ticket was Invalid");
 #endif
         memset(&svs.challenges[i], 0, sizeof(svs.challenges[i]));
@@ -472,9 +586,16 @@ int __cdecl SV_GetClientStat(int clientNum, int index)
 void __cdecl SV_BanGuidBriefly(const char *cdkeyHash)
 {
     uint32_t banSlot; // [esp+8h] [ebp-4h]
+    char key[32] = {};
 
+    // Store the same zero-padded 32-byte key SV_IsTempBannedGuid builds, so a
+    // short identity bans exactly that identity and nothing adjacent to it.  An
+    // empty identity leaves a zeroed slot, which the lookup already treats as
+    // "never banned" and which SV_FindFreeTempBanSlot() reuses.
+    for (int i = 0; i < 32 && cdkeyHash[i]; ++i)
+        key[i] = cdkeyHash[i];
     banSlot = SV_FindFreeTempBanSlot();
-    memcpy(&svs.tempBans[banSlot], cdkeyHash, 0x20u);
+    memcpy(&svs.tempBans[banSlot], key, 0x20u);
     svs.tempBans[banSlot].banTime = svs.time;
 }
 
@@ -700,7 +821,7 @@ void __cdecl SV_DirectConnect(netadr_t from)
         ++i;
         ++clients;
     }
-    cdkeyHash[0] = 0;
+    memset(cdkeyHash, 0, sizeof(cdkeyHash));
 
     if (!NET_IsLocalAddress(from))
     {
@@ -717,15 +838,42 @@ void __cdecl SV_DirectConnect(netadr_t from)
             NET_OutOfBandPrint(NS_SERVER, from, "error\nEXE_BAD_CHALLENGE");
             return;
         }
+        // The identity was fixed by the handshake and lives on the challenge
+        // record; userinfo never supplies it.  Decide here, before anything is
+        // marked connected, which kinds of identity this process accepts at all:
+        //  - loopback test mode: only the server's own synthetic labels;
+        //  - otherwise: a strict SteamID64, plus a canonical 32-lowercase-hex
+        //    retail GUID only when unverified GUIDs were enabled at start-up.
+        // Anything else is a forged or stale challenge and is rejected.
+        bool identityAccepted = false;
 #if defined(__linux__) && defined(KISAK_DEDICATED)
-        // Only server-issued local identities are valid in test mode. The
-        // address/token lookup above still applies to UDP loopback clients.
-        if (NET_LoopbackAuthTestEnabled() != SV_IsLoopbackTestIdentity(cdkeyHash))
+        if (NET_LoopbackAuthTestEnabled())
+        {
+            identityAccepted = SV_IsLoopbackTestIdentity(cdkeyHash);
+        }
+        else if (!SV_IsLoopbackTestIdentity(cdkeyHash))
+#endif
+        {
+            uint64_t steamIdentity = 0;
+            if (SV_ParseSteamIdentity(cdkeyHash, &steamIdentity))
+            {
+                identityAccepted = true;
+            }
+            else if (SV_UnverifiedGuidsEnabled())
+            {
+                // SV_GetChallenge stores the normalised lowercase spelling, so a
+                // value that does not parse back identically is not canonical and
+                // is refused even with unverified GUIDs enabled.
+                char canonicalGuid[33] = {};
+                if (SV_ParseRetailGuid(cdkeyHash, canonicalGuid) && !strcmp(canonicalGuid, cdkeyHash))
+                    identityAccepted = true;
+            }
+        }
+        if (!identityAccepted)
         {
             NET_OutOfBandPrint(NS_SERVER, from, "error\nEXE_BAD_CHALLENGE");
             return;
         }
-#endif
         if (svs.challenges[i].firstPing)
         {
             ping = svs.challenges[i].firstPing;

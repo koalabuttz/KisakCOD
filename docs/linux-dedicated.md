@@ -385,8 +385,74 @@ protection and safe socket restart. The protocol-6 session connects with protoco
 6, receives `connectResponse` and shows the synthetic `local-test-…` identity in
 the server log, while protocols 7 and 21 still receive the two-version error; the
 `sv_allowProtocol6`-only server still refuses every client because authentication
-is unchanged. The test decodes no gamestate and runs no graphical client, so it is
-an admission check rather than a playable-client test.
+is unchanged. It then starts the retail-GUID configurations described in the next
+section. The test decodes no gamestate and runs no graphical client, so it is an
+admission check rather than a playable-client test.
+
+#### Unverified retail GUIDs and `sv_allowUnverifiedGuids`
+
+A stock retail 1.7 client that is not running through Steam authenticates with
+`getchallenge 0 "<32 hex digits>"` — the player's CD-key-derived GUID — and never
+sends a Steam ticket. There is no way to verify that string, so the server has to
+be told to trust it:
+
+`sv_allowUnverifiedGuids` is an **opt-in boolean that defaults to off**,
+registered in `SV_Init` next to `sv_allowProtocol6` with `DVAR_INIT`. Its value is
+read **once per process**, when `SV_Init` registers it, and never read again. The
+practical consequences:
+
+- **Startup only.** `+set sv_allowUnverifiedGuids 1` on the command line works; the
+  console `set` does not, at any time. A map change, `net_restart` or a re-run of
+  `SV_Init` cannot turn it on, and turning the dvar off only ever revokes. Undoing
+  a mistaken change needs a process restart.
+- **Any address.** Unlike the loopback test mode, there is no source-address or
+  bind restriction: the GUID is accepted from whatever address the request came
+  from. Protocol, challenge-token, capacity and game-password checks are unchanged
+  and still apply.
+- **Conflicts with `sv_loopbackTestAuth`.** The two switches widen trust in the
+  same handshake, so enabling both is refused: start-up fails with
+  `sv_loopbackTestAuth and sv_allowUnverifiedGuids cannot both be enabled` before a
+  socket is bound. The packet path refuses the combination too.
+- **Steam clients are unaffected.** A request in the four-field Steam form
+  (`getchallenge <n> <base64 ticket> <SteamID64>`) is still verified by the Steam
+  backend whether or not GUIDs are enabled, and a rejected ticket never falls back
+  to the GUID path. Native Linux builds still have no working Steam verification,
+  so on this platform only the GUID path admits retail clients.
+- **Independent of `sv_allowProtocol6`.** One controls authentication, the other
+  the version number a client may advertise. Retail 1.7 hosting needs both;
+  either can be set on its own.
+
+The GUID is **not an identity proof**. Anyone can send someone else's 32 hex
+digits, so with this switch on:
+
+- GUIDs are impersonable. `sv_banClient`/`ban.txt` entries can be evaded by
+  sending a different GUID, and a banned player can make an innocent GUID appear
+  banned. Do not grant privileges, admin, or persistent identity on a GUID.
+- Two players who happen to send the same GUID are indistinguishable to the
+  server, and a reconnecting player can appear as a different person.
+- There is **no rate limiting** anywhere in this handshake. Each request costs a
+  challenge slot and, for GUID requests, no Steam call. If the server is exposed
+  to the internet, limit inbound UDP with the firewall (a `limit` rule in
+  `nftables`, or `hashlimit` in `iptables`) and consider `sv_maxPing`,
+  `sv_minPing` and `sv_reconnectlimit` as cheap additional friction.
+- Use a strong `g_password`/`sv_privatePassword` and do not treat either as an
+  identity mechanism; both are unchanged by this switch and both remain the only
+  admission control you actually have besides the GUID.
+
+Example launch for retail 1.7 hosting:
+
+```sh
+./bin/KisakCOD-dedi +set fs_basepath /path/to/cod4 \
+  +set fs_homepath /path/to/server-home +set dedicated 1 \
+  +set sv_allowUnverifiedGuids 1 +set sv_allowProtocol6 1 \
+  +set g_password change-me +map mp_crash
+```
+
+The server prints a one-line warning at start-up when the switch is captured on;
+that line is the record that the process considers retail GUIDs acceptable. To
+roll back, remove `+set sv_allowUnverifiedGuids 1` (or set it to `0`) and restart
+the process; every client must then present a Steam ticket, which on this native
+Linux build means no retail client can connect.
 
 ## Supported boundaries and remaining verification
 

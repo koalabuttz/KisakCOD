@@ -24,3 +24,8 @@ void Shim_ClearComDedicated();
 // code refused", not "the process died": tests must assert the socket state too.
 int Shim_ComErrorCount();
 void Shim_ComErrorReset();
+
+// Stands in for the server's frozen sv_allowUnverifiedGuids answer, which
+// src/linux/net.cpp consults when it refuses sv_loopbackTestAuth at the same
+// time.  Defaults to false, i.e. the shipped configuration.
+void Shim_SeedUnverifiedGuidsEnabled(bool enabled);

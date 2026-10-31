@@ -928,6 +928,7 @@ extern const dvar_t *sv_fps;
 extern const dvar_t *sv_botsPressAttackBtn;
 extern const dvar_t *sv_serverid;
 extern const dvar_t *sv_allowProtocol6;
+extern const dvar_t *sv_allowUnverifiedGuids;
 extern const dvar_t *sv_mapRotation;
 
 extern serverStatic_t svs;
@@ -1024,6 +1025,8 @@ void __cdecl SV_SendClientMessages();
 
 // sv_client_mp
 void __cdecl SV_GetChallenge(netadr_t from);
+void __cdecl SV_CaptureUnverifiedGuids();
+bool SV_UnverifiedGuidsEnabled();
 int __cdecl SV_IsBannedGuid(const char *cdkeyHash);
 void __cdecl SV_ReceiveStats(netadr_t from, msg_t *msg);
 void __cdecl SV_SetClientStat(int clientNum, int index, uint32_t value);

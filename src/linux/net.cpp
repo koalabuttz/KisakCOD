@@ -41,6 +41,9 @@
 #include <universal/q_shared.h>
 #include <qcommon/qcommon.h>
 #include "net_internal.h"
+// SV_UnverifiedGuidsEnabled(): the start-up conflict check needs the server's
+// frozen sv_allowUnverifiedGuids answer.  See NET_InitLoopbackAuthTest().
+#include <server_mp/server_mp.h>
 
 // 65507 == 65535 - sizeof(struct iphdr) - sizeof(struct udphdr)
 static const int NET_MAX_UDP_PAYLOAD = 65507;
@@ -720,6 +723,24 @@ void NET_InitLoopbackAuthTest()
 
     loopbackAuthTestEnabled = sv_loopbackTestAuth && sv_loopbackTestAuth->current.enabled;
     loopbackAuthTestFrozen = true;
+
+    // Two trust-widening switches in one handshake: sv_loopbackTestAuth removes
+    // authentication for loopback test clients, and sv_allowUnverifiedGuids
+    // removes it for any source claiming a retail GUID.  Enabling both is a
+    // configuration the server was never designed to reason about, so refuse to
+    // come up at all, before any socket is bound.
+    if (loopbackAuthTestEnabled && SV_UnverifiedGuidsEnabled())
+    {
+        // Disable the bypass first, so a build whose Com_Error does not exit
+        // still cannot fall through to a bound, bypassing socket.
+        loopbackAuthTestEnabled = false;
+        Com_Error(ERR_FATAL,
+                  "\n"
+                  "sv_loopbackTestAuth and sv_allowUnverifiedGuids cannot both be enabled.\n"
+                  "sv_loopbackTestAuth accepts unauthenticated local test clients; sv_allowUnverifiedGuids\n"
+                  "accepts unverified retail GUIDs from any address. Enable at most one of them.\n");
+        return;
+    }
 
     if (loopbackAuthTestEnabled && !warnedLoopbackAuthTest)
     {

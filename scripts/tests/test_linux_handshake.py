@@ -9,6 +9,20 @@ local-test opt-in, and the loopback local-test opt-in together with
 ``sv_allowProtocol6`` so the retail 1.7 protocol number (6) is admitted through
 the protocol-1 path. A fourth start covers ``sv_allowProtocol6`` on its own,
 which must still refuse every client because authentication is unchanged.
+
+Five more starts cover the retail GUID opt-in itself, which is independent of the
+loopback test bypass and never turns it on:
+
+  * ``sv_allowUnverifiedGuids 1`` with a real ``getchallenge 0 "<32 hex GUID>"``
+    exchange and a protocol 1 connect;
+  * the same with ``sv_allowProtocol6 1`` and a protocol 6 connect, i.e. the
+    retail 1.7 hosting configuration;
+  * the same bound to a local non-loopback address, connecting from it, which
+    proves no source address is special-cased;
+  * a default server, where ``set sv_allowUnverifiedGuids 1`` at the console must
+    not enable anything because the option is read once at start-up;
+  * ``sv_loopbackTestAuth 1`` and ``sv_allowUnverifiedGuids 1`` together, which
+    must stop start-up before anything binds.
 """
 import argparse
 from pathlib import Path
@@ -65,6 +79,43 @@ def console_barrier(server, commands):
 def connect(token, protocol=1, qport=19341, password=""):
     return (f'connect "\\protocol\\{protocol}\\challenge\\{token}\\qport\\{qport}'
             f'\\name\\HandshakeProbe\\rate\\25000\\snaps\\20\\password\\{password}"')
+
+
+# The retail CoD4 1.7 GUID observed from a real client, and the same value in
+# uppercase to prove the server normalises the spelling.
+RETAIL_GUID = "9fa4b618b026886e7fe966bb184ae770"
+RETAIL_GUID_UPPER = RETAIL_GUID.upper()
+
+MALFORMED_GUID_ERROR = "error\nMalformed GUID authentication fields."
+GUID_DISABLED_ERROR = ("error\nThis server requires Steam authentication; "
+                       "unverified retail GUIDs are not accepted.")
+
+
+def retail_getchallenge(guid=RETAIL_GUID):
+    return f'getchallenge 0 "{guid}"'
+
+
+def local_non_loopback_address():
+    """A local IPv4 address that is not 127.0.0.1, or None when there is none."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            # TEST-NET-1 is never routed, so this only asks the kernel which local
+            # address the default route would use; no packet is sent.
+            probe.connect(("192.0.2.1", 9))
+            address = probe.getsockname()[0]
+    except OSError:
+        return None
+    return None if address.startswith("127.") else address
+
+
+def rebind_client_to(server, address):
+    """Point the test client at a server bound to a specific local address."""
+    port = server.address[1]
+    server.socket.close()
+    server.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    server.socket.bind((address, 0))
+    server.socket.settimeout(0.25)
+    server.address = (address, port)
 
 
 def run_session(binary, game, work, enabled, allow_protocol6=False):
@@ -162,6 +213,114 @@ def protocol6_without_auth(binary, game, work):
         server.cleanup()
 
 
+def run_guid_session(binary, game, work, allow_protocol6=False, bind_address=None):
+    """A GUID-on server with no loopback test mode: the retail hosting case."""
+    prefix = f"[guids{'/proto6' if allow_protocol6 else ''}{'/'+bind_address if bind_address else ''}] "
+    args = ["+set", "sv_allowUnverifiedGuids", "1"]
+    if allow_protocol6:
+        args += ["+set", "sv_allowProtocol6", "1"]
+    if bind_address:
+        args += ["+set", "net_ip", bind_address]
+    server = Server(binary, game, work, work, 60, startup_args=args)
+    try:
+        if bind_address:
+            rebind_client_to(server, bind_address)
+        server.query("getinfo", "mp_crash")
+        require("sv_allowUnverifiedGuids is enabled" in server.log(),
+                prefix + "the opt-in printed its warning")
+        require("sv_loopbackTestAuth is enabled" not in server.log(),
+                prefix + "the loopback test bypass stayed off")
+
+        sock = server.socket
+        reply = exchange(server, sock, retail_getchallenge())
+        match = re.fullmatch(r"challengeResponse (-?\d+)", reply)
+        require(match is not None, prefix + "a retail GUID request issues a challenge: " + repr(reply))
+        token = int(match[1])
+
+        require(exchange(server, sock, retail_getchallenge(RETAIL_GUID_UPPER)) == reply,
+                prefix + "the uppercase spelling keeps the same challenge")
+
+        # A malformed GUID must invalidate the token that was already issued for
+        # this address, so a failed retry cannot be replayed.
+        bad = exchange(server, sock, retail_getchallenge(RETAIL_GUID[:-1]))
+        require(bad == MALFORMED_GUID_ERROR, prefix + "a 31-character GUID is refused: " + repr(bad))
+        require("BAD_CHALLENGE" in exchange(server, sock, connect(token)),
+                prefix + "the malformed retry invalidated the earlier token")
+
+        # Ask again, then connect for real.
+        reply = exchange(server, sock, retail_getchallenge())
+        match = re.fullmatch(r"challengeResponse (-?\d+)", reply)
+        require(match is not None, prefix + "a fresh challenge was issued: " + repr(reply))
+        token = int(match[1])
+        admitted = 6 if allow_protocol6 else 1
+        require("BAD_CHALLENGE" in exchange(server, sock, connect(token ^ 1, protocol=admitted)),
+                prefix + "a wrong token is still rejected")
+        reply = exchange(server, sock, connect(token, protocol=admitted))
+        require(reply.startswith("connectResponse"),
+                prefix + f"protocol {admitted} with a retail GUID reaches connection admission: " + repr(reply))
+        require(re.search(r'guid "' + RETAIL_GUID + r'"', server.log()) is not None,
+                prefix + "the admitted client carries the claimed retail GUID")
+
+        # The opt-in is startup-only: the console cannot change it.
+        console_barrier(server, ["set sv_allowUnverifiedGuids 0"])
+        require("sv_allowUnverifiedGuids is write protected" in server.log(),
+                prefix + "the option is write protected at run time")
+        reply = exchange(server, sock, retail_getchallenge())
+        require(re.fullmatch(r"challengeResponse (-?\d+)", reply) is not None,
+                prefix + "the console cannot revoke the start-up decision: " + repr(reply))
+        server.shutdown("console")
+    finally:
+        server.cleanup()
+
+
+def guid_off_session(binary, game, work):
+    """Default server: retail GUIDs are refused and the console cannot enable them."""
+    server = Server(binary, game, work, work, 60,
+                    startup_args=["+set", "sv_loopbackTestAuth", "0"])
+    try:
+        server.query("getinfo", "mp_crash")
+        sock = server.socket
+        reply = exchange(server, sock, retail_getchallenge())
+        require(reply == GUID_DISABLED_ERROR,
+                "default mode refuses a retail GUID: " + repr(reply))
+        require("BAD_CHALLENGE" in exchange(server, sock, connect(123)),
+                "default mode cannot connect on a GUID it refused")
+
+        console_barrier(server, ["set sv_allowUnverifiedGuids 1"])
+        require("sv_allowUnverifiedGuids is write protected" in server.log(),
+                "the console cannot set the startup-only option")
+        reply = exchange(server, sock, retail_getchallenge())
+        require(reply == GUID_DISABLED_ERROR,
+                "a runtime set does not let a default server accept retail GUIDs: " + repr(reply))
+        server.shutdown("console")
+    finally:
+        server.cleanup()
+
+
+def both_switches_are_fatal(binary, game, work):
+    """sv_loopbackTestAuth plus sv_allowUnverifiedGuids must stop start-up."""
+    assets = work / "assets"
+    assets.mkdir()
+    for name in ("main", "zone"):
+        (assets / name).symlink_to(game / name, target_is_directory=True)
+    home = work / "home"
+    home.mkdir()
+    (home / "localization.txt").symlink_to(game / "localization.txt")
+    command = [str(binary), "+set", "fs_basepath", str(assets), "+set", "fs_homepath", str(home),
+               "+set", "dedicated", "1", "+set", "net_ip", "127.0.0.1", "+set", "net_noudp", "1",
+               "+set", "sv_loopbackTestAuth", "1", "+set", "sv_allowUnverifiedGuids", "1",
+               "+map", "mp_crash"]
+    try:
+        result = subprocess.run(command, cwd=home, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True, errors="replace", timeout=45)
+    except subprocess.TimeoutExpired:
+        raise CheckFailure("both switches did not stop start-up; the server kept running")
+    require(result.returncode != 0,
+            "both switches make the process exit non-zero instead of serving")
+    require("sv_loopbackTestAuth and sv_allowUnverifiedGuids cannot both be enabled" in result.stdout,
+            "the failure names both switches")
+
+
 def startup_matrix(binary, game, work):
     assets = work / "assets"
     assets.mkdir()
@@ -202,6 +361,26 @@ def main():
             session = work / "protocol6-no-auth"
             session.mkdir()
             protocol6_without_auth(binary, game, session)
+            for label, allow_protocol6, bind_address in (("guids", False, None),
+                                                         ("guids-protocol6", True, None),
+                                                         ("guids-off", False, None)):
+                session = work / label
+                session.mkdir()
+                if label == "guids-off":
+                    guid_off_session(binary, game, session)
+                else:
+                    run_guid_session(binary, game, session, allow_protocol6, bind_address)
+            address = local_non_loopback_address()
+            if address is None:
+                print("SKIP: no non-127.0.0.1 local address; the any-source GUID check is not run",
+                      flush=True)
+            else:
+                session = work / "guids-nonloopback"
+                session.mkdir()
+                run_guid_session(binary, game, session, bind_address=address)
+            session = work / "both-switches"
+            session.mkdir()
+            both_switches_are_fatal(binary, game, session)
             matrix = work / "matrix"
             matrix.mkdir()
             startup_matrix(binary, game, matrix)
@@ -211,8 +390,8 @@ def main():
                 print(str(log) + "\n" + log.read_text(errors="replace")[-12000:])
             return 1
     print("Live handshake admission passed, including optional protocol 6 admission for local-test "
-          "authentication only; gamestate decoding, real Steam authentication and stock/CoD4x "
-          "playable compatibility are NOT established here.")
+          "authentication and the opt-in retail GUID path; gamestate decoding, real Steam "
+          "authentication and stock/CoD4x playable compatibility are NOT established here.")
     return 0
 
 

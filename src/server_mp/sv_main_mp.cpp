@@ -67,6 +67,7 @@ const dvar_t *sv_fps;
 const dvar_t *sv_botsPressAttackBtn;
 const dvar_t *sv_serverid;
 const dvar_t *sv_allowProtocol6;
+const dvar_t *sv_allowUnverifiedGuids;
 const dvar_t *sv_mapRotation;
 
 serverStatic_t svs;

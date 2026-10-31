@@ -49,8 +49,11 @@ python3 scripts/tests/test_linux_bootstrap.py
 
 The executable is `bin/KisakCOD-dedi` (native ELF, no Wine). This is not yet a
 playable server: **Linux Steam authentication is unavailable and ordinary client
-tickets are rejected**. An explicit loopback-only test mode can skip ticket
-verification; combined with the opt-in `sv_allowProtocol6`, one stock retail
+tickets are rejected**. Two explicit opt-ins can admit a client without a ticket:
+a loopback-only test mode, and `sv_allowUnverifiedGuids`, which accepts the retail
+GUID handshake from any address without verification - so with it on, GUIDs are
+spoofable and must not carry bans, privileges or persistent identity. With the
+loopback test mode plus the opt-in `sv_allowProtocol6`, one stock retail
 CoD4 1.7 client has joined and played briefly, but that single local session does
 not establish general multiplayer or CoD4x compatibility. Game assets, map
 loading and multiplayer compatibility require separate verification.

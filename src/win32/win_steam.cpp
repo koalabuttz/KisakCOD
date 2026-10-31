@@ -23,6 +23,7 @@
 
 #ifdef KISAK_MP
 #include <server_mp/server_mp.h>
+#include <server_mp/sv_handshake_auth.h>
 #endif
 
 #include <functional>
@@ -124,14 +125,18 @@ void Steam_CheckClients()
 	client_t *client = &svs.clients[0];
 	while (clientNum < sv_maxclients->current.integer)
 	{
-		char *endptr;
-		uint64_t steamID64 = strtoull(client->cdkeyHash, &endptr, 10);
-
-		for (int i = 0; i < steamIDsToKick.size(); i++)
+		// Only a strict Steam identity can match a pending Steam callback.  GUIDs
+		// (including all-digit retail GUIDs) and the native Linux "local-test-"
+		// labels are not Steam IDs: skip them, but keep advancing the iteration.
+		uint64_t steamID64 = 0;
+		if (SV_ParseSteamIdentity(client->cdkeyHash, &steamID64))
 		{
-			if (steamID64 == steamIDsToKick[i])
+			for (int i = 0; i < steamIDsToKick.size(); i++)
 			{
-				SV_DropClient(client, "Steam Auth Timed out", true);
+				if (steamID64 == steamIDsToKick[i])
+				{
+					SV_DropClient(client, "Steam Auth Timed out", true);
+				}
 			}
 		}
 
