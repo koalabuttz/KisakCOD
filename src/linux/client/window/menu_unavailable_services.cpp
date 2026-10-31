@@ -48,3 +48,8 @@ void Item_Slider_Paint(UiContext*,itemDef_s*) { Unavailable("slider painter"); }
 void Item_OwnerDraw_Paint(UiContext*,itemDef_s*) { Unavailable("owner-draw painter"); }
 void Item_GameMsgWindow_Paint(UiContext*,itemDef_s*) { Unavailable("game message painter"); }
 void Item_Bind_Paint(UiContext*,itemDef_s*) { Unavailable("binding painter"); }
+
+// Offline frame admission rejects visible-list diagnostics before entry.
+void Menu_PaintAll_BeginVisibleList(char *, unsigned int) { throw std::logic_error("UI visible-list diagnostics unavailable"); }
+void Menu_PaintAll_AppendToVisibleList(char *, unsigned int, char *) { throw std::logic_error("UI visible-list diagnostics unavailable"); }
+void Menu_PaintAll_DrawVisibleList(char *, UiContext *) { throw std::logic_error("UI visible-list diagnostics unavailable"); }

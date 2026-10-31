@@ -66,6 +66,9 @@ public:
     struct MenuMaterial {std::string_view name;UiMaterialHandle handle;itemDef_s *item=nullptr;};
     struct MenuPaintResult {bool painted;float requestedBlur;bool postprocessUnsupported;};
     MenuPaintResult DrawMenuTraversal(const MenuFonts &,const ScreenPlacement &,UiContext &,menuDef_t &,std::span<const MenuMaterial>);
+    // Frame painted means commands emitted, not absence/presence of blur requests.
+    // At most eight registered menus; no capture/debug/visible-list services.
+    MenuPaintResult DrawMenuFrame(const MenuFonts &,const ScreenPlacement &,UiContext &,std::span<const MenuMaterial>);
     void DrawMenuItem(const MenuFonts &,const ScreenPlacement &,UiContext &,itemDef_s &);
     size_t FontCount() const { return fonts_.size(); }
     void Submit();
@@ -80,6 +83,7 @@ public:
     void SubmitCommands(std::span<const uint8_t> commands);
 private:
     friend class CpuUiBridge;
+    MenuPaintResult DrawMenuBatch(const MenuFonts &,const ScreenPlacement &,UiContext &,std::span<menuDef_t *const>,std::span<const MenuMaterial>,bool);
     void PaintMenu(const MenuFonts &,const ScreenPlacement &,itemDef_s &,std::string_view,const float *,
                    void(*)(void*,itemDef_s*,const char*,const float*),void*,bool);
     struct OwnedFont { Font_s value{};std::string name;std::vector<Glyph> glyphs;UiMaterialHandle material; };

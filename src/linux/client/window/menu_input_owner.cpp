@@ -17,6 +17,7 @@
 #include <algorithm>
 const dvar_t *uiscript_debug;
 const dvar_t *ui_showMenuOnly;
+const dvar_t *ui_showList;
 namespace kisak::window {
 namespace { MenuInputOwner *current=nullptr; }
 MenuInputOwner &MenuInputOwner::Current(){if(!current)throw std::logic_error("menu services unavailable");current->CheckThread();return *current;}
@@ -45,17 +46,18 @@ MenuInputOwner::MenuInputOwner(ClientInputHost &input,CpuRenderer &renderer,cons
         throw std::logic_error("Owned menu context registration failed");
     Dvar_RegisterBool("m_filter",false,DVAR_ARCHIVE,"Allow mouse movement smoothing");
     ui_showMenuOnly=Dvar_RegisterString("ui_showMenuOnly","",DVAR_NOFLAG,"Restrict admitted menu painting by name");
+    ui_showList=Dvar_RegisterBool("ui_showList",false,DVAR_NOFLAG,"UI visible-list diagnostics (unsupported in offline frame)");
     uiscript_debug=Dvar_RegisterInt("uiscript_debug",0,0,2,DVAR_NOFLAG,"UI script diagnostic level");
     Resize(width,height);current=this;
     input_.AttachMenu(*this);attached_=true;Open();
-    } catch(...){ResetTransient();if(attached_){try {input_.DetachMenu(*this);}catch(...){}attached_=false;}UI_ShutdownOwnedMenuContext(&dc_);if(current==this)current=nullptr;uiscript_debug=nullptr;ui_showMenuOnly=nullptr;renderer_.Shutdown();throw;}
+    } catch(...){ResetTransient();if(attached_){try {input_.DetachMenu(*this);}catch(...){}attached_=false;}UI_ShutdownOwnedMenuContext(&dc_);if(current==this)current=nullptr;uiscript_debug=nullptr;ui_showMenuOnly=nullptr;ui_showList=nullptr;renderer_.Shutdown();throw;}
     std::printf("menu_controls=ready source=options_look items=105,106,111,112 audio_driver=%s blur=unsupported frame=unavailable\n",SDL_GetCurrentAudioDriver());
 }
 MenuInputOwner::~MenuInputOwner(){
     try {input_.ReleaseEngineCursor();}catch(const std::exception &e){std::fprintf(stderr,"menu cursor teardown: %s\n",e.what());}
     try {if(attached_){attached_=false;input_.DetachMenu(*this);}Close();}
     catch(const std::exception&e){std::fprintf(stderr,"menu teardown: %s\n",e.what());}
-    ResetTransient();UI_ShutdownOwnedMenuContext(&dc_);if(current==this)current=nullptr;uiscript_debug=nullptr;ui_showMenuOnly=nullptr;renderer_.Shutdown();
+    ResetTransient();UI_ShutdownOwnedMenuContext(&dc_);if(current==this)current=nullptr;uiscript_debug=nullptr;ui_showMenuOnly=nullptr;ui_showList=nullptr;renderer_.Shutdown();
 }
 void MenuInputOwner::ResetTransient() noexcept {
     inHandleKey=0;g_waitingForKey=0;g_editingField=0;g_editItem=nullptr;g_bindItem=nullptr;itemCapture=nullptr;captureFunc=nullptr;captureData=nullptr;scrollInfo={};
@@ -103,6 +105,7 @@ void MenuInputOwner::Trace(const char *phase) {
         std::printf("menu_state phase=%s open=%d focus=%d cl_freelook=%d m_filter=%d width=%d height=%d held=%d pointer_x=%d pointer_y=%d cursor_visible=%d pointer_inside=%d window_focused=%d cursor_x=%g cursor_y=%g requested_blur=%g traversal_painted=%d blur_unrendered=%d\n",
             phase,state.open,state.focus,state.freelook,state.filter,state.width,state.height,state.held,state.pointerX,state.pointerY,state.visible,state.pointerInside,state.windowFocused,state.cursorX,state.cursorY,state.requestedBlur,state.painted,state.blurUnrendered);
         if(std::strcmp(phase,"present")==0)std::printf("menu_traversal painted=%d item_count=%d blur_requested=%g blur_rendered=0 compositor=partial\n",state.painted,assets_->menu.itemCount,state.requestedBlur);
+        if(std::strcmp(phase,"present")==0)std::printf("menu_frame scheduler=Menu_PaintAll registered=%d open=%d commands_emitted=%d blur_unrendered=%g\n",dc_.menuCount,dc_.openMenuCount,state.painted,state.requestedBlur);
         std::fflush(stdout);
     }
 }
@@ -118,8 +121,7 @@ void MenuInputOwner::Present(WindowHost &window){CheckThread();const auto extent
     renderer_.BeginFrame();
     try {
         const float clear[4]={.25f,.5f,.75f,1};renderer_.Clear(clear);renderer_.SetViewport(0,0,width_,height_);
-        dc_.blurRadiusOut=0; // Actual Menu_PaintAll once-per-frame compositor accumulation boundary.
-        paintResult_=renderer_.DrawMenuTraversal(fonts_,placement_,dc_,assets_->menu,paintMaterials_);
+        paintResult_=renderer_.DrawMenuFrame(fonts_,placement_,dc_,paintMaterials_);
         if(CursorVisible())renderer_.DrawCursor(composition_->cursor,placement_,placement_,dc_);
         renderer_.Submit();renderer_.Present(window);
     } catch(...) {

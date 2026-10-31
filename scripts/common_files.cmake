@@ -523,6 +523,7 @@ set(UI
         "${SRC_DIR}/ui/ui_window_services.cpp"
         "${SRC_DIR}/ui/ui_cursor.cpp"
         "${SRC_DIR}/ui/ui_time.cpp"
+        "${SRC_DIR}/ui/ui_frame.cpp"
         "${SRC_DIR}/ui/ui_registration.cpp"
     "${SRC_DIR}/ui/ui_expression_text.cpp"
     "${SRC_DIR}/ui/ui_font_selection.cpp"

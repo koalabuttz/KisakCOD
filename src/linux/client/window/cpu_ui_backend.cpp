@@ -161,18 +161,42 @@ void CpuRenderer::PaintMenu(const MenuFonts &roles,const ScreenPlacement &placem
     activeText={};menuFont=nullptr;menuSelection={};scrPlaceView[0]=priorPlacement;if(fullItem)item=local;else item.textRect[0]=local.textRect[0];
 }
 CpuRenderer::MenuPaintResult CpuRenderer::DrawMenuTraversal(const MenuFonts &roles,const ScreenPlacement &placement,UiContext &dc,menuDef_t &menu,std::span<const MenuMaterial> materials) {
+    menuDef_t *one=&menu;return DrawMenuBatch(roles,placement,dc,{&one,1},materials,false);
+}
+CpuRenderer::MenuPaintResult CpuRenderer::DrawMenuFrame(const MenuFonts &roles,const ScreenPlacement &placement,UiContext &dc,std::span<const MenuMaterial> materials) {
+    CheckThread();if(state_!=State::recording || traversal.renderer || active.renderer || activeText.renderer)throw std::logic_error("Menu frame requires exclusive recording renderer");
+    if(dc.localClientNum!=0||dc.menuCount<0||dc.menuCount>8||dc.openMenuCount<0||dc.openMenuCount>16)
+        throw std::invalid_argument("Offline menu frame count exceeds supported bounds");
+    if(!ui_showList||ui_showList->type!=DVAR_TYPE_BOOL||ui_showList->current.enabled||g_debugMode||captureFunc)
+        throw std::invalid_argument("Offline menu frame capture/debug/list unavailable");
+    for(int n=0;n<dc.menuCount;++n) {
+        if(!dc.Menus[n])throw std::invalid_argument("Null registered menu");
+        for(int j=0;j<n;++j)if(dc.Menus[n]==dc.Menus[j])throw std::invalid_argument("Duplicate registered menu");
+    }
+    for(int n=0;n<dc.openMenuCount;++n) {
+        bool registered=false;for(int j=0;j<dc.menuCount;++j)registered|=dc.menuStack[n]==dc.Menus[j];
+        if(!registered)throw std::invalid_argument("Unregistered open menu");
+        for(int j=0;j<n;++j)if(dc.menuStack[j]==dc.menuStack[n])throw std::invalid_argument("Duplicate open menu");
+    }
+    return DrawMenuBatch(roles,placement,dc,{dc.Menus,static_cast<size_t>(dc.menuCount)},materials,true);
+}
+CpuRenderer::MenuPaintResult CpuRenderer::DrawMenuBatch(const MenuFonts &roles,const ScreenPlacement &placement,UiContext &dc,std::span<menuDef_t *const> menus,std::span<const MenuMaterial> materials,bool frame) {
     CheckThread();if(state_!=State::recording || traversal.renderer || active.renderer || activeText.renderer)throw std::logic_error("Menu traversal requires exclusive recording renderer");
+    auto finite=[](float v){return std::isfinite(v)&&std::abs(v)<=16384;};
+    for(auto *entry:menus) {
+    auto &menu=*entry;
     if(dc.localClientNum!=0 || menu.itemCount<0 || menu.itemCount>12 || (menu.itemCount&&!menu.items) || !menu.window.name || !ui_showMenuOnly || g_debugMode)
         throw std::invalid_argument("Invalid admitted menu graph");
     if(ui_showMenuOnly->type!=DVAR_TYPE_STRING||!ui_showMenuOnly->current.string||strnlen(menu.window.name,256)>255||strnlen(ui_showMenuOnly->current.string,256)>255)
         throw std::invalid_argument("Invalid menu name/filter string contract");
-    if(menu.window.style || menu.window.border || menu.window.ownerDrawFlags || menu.window.ownerDraw || (menu.window.staticFlags&0x70000000) || menu.fullScreen || menu.soundName || menu.visibleExp.numEntries || menu.rectXExp.numEntries || menu.rectYExp.numEntries)
+    if(menu.window.style || menu.window.border || menu.window.ownerDrawFlags || menu.window.ownerDraw || (menu.window.staticFlags&0x70000000) || (menu.fullScreen!=0&&menu.fullScreen!=1) || (menu.fullScreen&&menu.window.background) || menu.soundName || menu.visibleExp.numEntries || menu.rectXExp.numEntries || menu.rectYExp.numEntries)
         throw std::invalid_argument("Unsupported menu traversal feature");
-    auto finite=[](float v){return std::isfinite(v)&&std::abs(v)<=16384;};
     for(float v:{menu.window.rect.x,menu.window.rect.y,menu.window.rect.w,menu.window.rect.h,menu.blurRadius,menu.fadeAmount,menu.fadeInAmount,menu.fadeClamp})if(!finite(v))throw std::invalid_argument("Invalid menu geometry/fade");
     if(menu.window.rect.horzAlign<0||menu.window.rect.horzAlign>7||menu.window.rect.vertAlign<0||menu.window.rect.vertAlign>7)throw std::invalid_argument("Invalid menu alignment");
     if(menu.blurRadius<0 || menu.blurRadius>32 || menu.fadeAmount<0 || menu.fadeInAmount<0 || menu.fadeClamp<0 || menu.fadeClamp>1 || menu.fadeCycle<0 || menu.fadeCycle>60000 || !std::isfinite(dc.blurRadiusOut) || dc.blurRadiusOut<0 || dc.blurRadiusOut>1000)
         throw std::invalid_argument("Invalid menu compositor request");
+    }
+    for(size_t n=0;n<menus.size();++n)for(size_t j=0;j<n;++j)if(!I_stricmp(menus[n]->window.name,menus[j]->window.name))throw std::invalid_argument("Duplicate menu name");
     if(materials.empty() || materials.size()>12)throw std::invalid_argument("Invalid traversal material table");
     std::array<TraversalMaterial,12> bound{};bool white=false;
     for(size_t n=0;n<materials.size();++n) {
@@ -183,7 +207,7 @@ CpuRenderer::MenuPaintResult CpuRenderer::DrawMenuTraversal(const MenuFonts &rol
     }
     if(!white)throw std::invalid_argument("Traversal requires owned white material");
     for(size_t n=0;n<materials.size();++n)if(materials[n].item) {
-        bool found=false;for(int j=0;j<menu.itemCount;++j)found|=menu.items[j]==materials[n].item;
+        bool found=false;for(auto *menu:menus)for(int j=0;j<menu->itemCount;++j)found|=menu->items[j]==materials[n].item;
         if(!found)throw std::invalid_argument("Material binding outside menu graph");
         for(size_t j=0;j<n;++j)if(materials[j].item==materials[n].item)throw std::invalid_argument("Duplicate item material binding");
     }
@@ -195,6 +219,7 @@ CpuRenderer::MenuPaintResult CpuRenderer::DrawMenuTraversal(const MenuFonts &rol
         if(material){bool found=false;for(size_t n=0;n<materials.size();++n)found|=bound[n].name==std::string_view(value.internals.string,length);if(!found)throw std::invalid_argument("Unregistered material expression");}
     };
     auto text=[](const char *value){if(!value)return;const size_t length=strnlen(value,1024);if(length>1023)throw std::invalid_argument("Unbounded traversal text");for(size_t n=0;n<length;++n){const auto c=static_cast<unsigned char>(value[n]);if((c<32&&c!='\r'&&c!='\n')||c>=127||(c=='^'&&n+1<length&&value[n+1]>='0'&&value[n+1]<='9'))throw std::invalid_argument("Unsupported traversal text control");}};
+    for(auto *entry:menus) { auto &menu=*entry;
     for(int n=0;n<menu.itemCount;++n) {
         auto *i=menu.items[n];if(!i||i->parent!=&menu)throw std::invalid_argument("Invalid item parent");
         for(int j=0;j<n;++j)if(menu.items[j]==i)throw std::invalid_argument("Duplicate item pointer");
@@ -216,22 +241,26 @@ CpuRenderer::MenuPaintResult CpuRenderer::DrawMenuTraversal(const MenuFonts &rol
         if(i->type==0) {if(i->text||i->textExp.numEntries||i->dvar)throw std::invalid_argument("Decorative item text unsupported");}
         else if(i->window.rect.w<1||i->window.rect.h<0||i->window.rectClient.w<1||i->window.rectClient.h<0||i->textAlignMode<0||i->textAlignMode>14||(i->textAlignMode&3)==3||!finite(i->textalignx)||!finite(i->textaligny)||i->fontEnum<0||i->fontEnum>6||!finite(i->textscale)||i->textscale<=0||i->textscale>4||(i->textStyle!=0&&i->textStyle!=3&&i->textStyle!=6))throw std::invalid_argument("Invalid item text profile");
     }
+    }
     CachedAssets_t assets{};std::array<TraversalFont,7> boundFonts{};size_t count=0;
     auto font=[&](FontHandle handle){auto it=fonts_.find(handle);if(it==fonts_.end())throw std::invalid_argument("Unavailable traversal font role");boundFonts[count++]={handle,&it->second->value};return &it->second->value;};
     assets.smallFont=font(roles.small);assets.textFont=font(roles.text);assets.bigFont=font(roles.big);assets.extraBigFont=font(roles.extraBig);assets.boldFont=font(roles.bold);assets.consoleFont=font(roles.console);assets.objectiveFont=font(roles.objective);
     dvar_s small{},big{},extra{};small.current.value=roles.smallThreshold;big.current.value=roles.bigThreshold;extra.current.value=roles.extraBigThreshold;
     for(float v:{small.current.value,big.current.value,extra.current.value})if(!std::isfinite(v)||v<0||v>1)throw std::invalid_argument("Invalid font selection threshold");
     const auto priorCommands=commands_;const auto priorUi=uiBindingCount_,priorFont=fontBindingCount_,priorRaw=bindingCount_;
-    const auto priorMenu=menu;const auto priorBlur=dc.blurRadiusOut;std::array<itemDef_s,12> priorItems{};for(int n=0;n<menu.itemCount;++n)priorItems[n]=*menu.items[n];
+    const auto priorContext=dc;
+    std::array<menuDef_t,8> priorMenus{};std::array<itemDef_s,96> priorItems{};size_t itemCount=0;
+    for(size_t n=0;n<menus.size();++n){priorMenus[n]=*menus[n];for(int j=0;j<menus[n]->itemCount;++j)priorItems[itemCount++]=*menus[n]->items[j];}
     const auto priorPlacement=scrPlaceView[0];scrPlaceView[0]=placement;
     traversal={this,{bound.data(),materials.size()},{boundFonts.data(),count}};menuSelection={&assets,&small,&big,&extra};
     bool painted=false;
     try {
         for(size_t n=0;n<materials.size();++n)if(materials[n].item&&!materials[n].item->materialExp.numEntries)materials[n].item->window.background=bound[n].value;
-        painted=Menu_Paint(&dc,&menu)!=0;
+        if(frame){Menu_PaintAll(&dc);painted=commands_.usedTotal!=priorCommands.usedTotal;}
+        else painted=Menu_Paint(&dc,menus.front())!=0;
     }
     catch(...) {
-        for(int n=0;n<priorMenu.itemCount;++n)*priorMenu.items[n]=priorItems[n];menu=priorMenu;dc.blurRadiusOut=priorBlur;
+        itemCount=0;for(size_t n=0;n<menus.size();++n){for(int j=0;j<priorMenus[n].itemCount;++j)*priorMenus[n].items[j]=priorItems[itemCount++];*menus[n]=priorMenus[n];}dc=priorContext;
         commands_=priorCommands;uiBindingCount_=priorUi;fontBindingCount_=priorFont;bindingCount_=priorRaw;
         traversal={};menuSelection={};scrPlaceView[0]=priorPlacement;throw;
     }
