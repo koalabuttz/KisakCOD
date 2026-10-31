@@ -130,8 +130,11 @@ team switch without a crash**. The server retained the same process with no
 restart or coordinate error; the recorded session exchanged snapshots for more
 than 90 seconds without a server disconnect response. This supports a brief,
 single-player CoD4x 21.1 legacy-protocol connection, including those two
-previously failing actions. It does not establish multi-player, map-rotation,
-long-session, public-authentication or every CoD4x-version compatibility.
+previously failing actions. In a subsequent session, the player also confirmed
+that reaching the round timer's zero triggered map rotation and successfully
+loaded the next map while connected. These observations do not establish
+multi-player, extended multi-map sessions, public-authentication or every
+CoD4x-version compatibility.
 
 The earlier claim that CoD4x necessarily used a different legacy entity decoder
 and still desynchronized was not supported by this fresh test and has been
