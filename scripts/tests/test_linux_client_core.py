@@ -14,7 +14,7 @@ Verified here:
    ``-DKISAK_OPENAL`` present only as the header shim. Static CMake text is not
    enough on its own -- a comment can say anything.
 
-3. **The asset-free netchan test builds and passes**, in its own build
+3. **The asset-free netchan and parser/input tests build and pass**, in its own build
    directory, built twice so an incremental rebuild is proven to work (the
    build directory is reused, never wiped: a full configure from scratch would
    re-download dependencies).
@@ -58,6 +58,12 @@ EXPECTED_TUS = (
     "src/client_mp/cl_net_chan_mp.cpp",
     "src/client_mp/cl_parse_mp.cpp",
     "src/client_mp/cl_input.cpp",
+)
+STATE_RUNTIME_TUS = (
+    "src/client_mp/cl_parse_mp.cpp",
+    "src/client_mp/cl_input.cpp",
+    "src/qcommon/msg_mp.cpp",
+    "src/universal/q_shared.cpp",
 )
 
 failures = []
@@ -305,6 +311,39 @@ def check_compile_commands(build_dir):
             flag_present(command, "-DKISAK_OPENAL"),
         )
 
+    for rel in STATE_RUNTIME_TUS:
+        commands = by_file.get(os.path.realpath(ROOT / rel), [])
+        commands = [c for c in commands if "KisakCOD-client-state-test.dir" in c]
+        if not check(f"{rel} has one runtime-state test compile command", len(commands) == 1):
+            continue
+        command = commands[0]
+        for flag in ("-m32", "-DKISAK_MP", "-DKISAK_OPENAL", "-DRELEASE_ASSERTS"):
+            check(f"runtime {rel} uses {flag}", flag_present(command, flag))
+        for flag in ("-DKISAK_DEDICATED", "-DDEDICATED"):
+            check(f"runtime {rel} excludes {flag}", not flag_present(command, flag))
+
+
+def check_runtime_output(label, result, sections=()):
+    print(result.stdout.rstrip())
+    if result.stderr:
+        print(result.stderr.rstrip())
+    check(f"{label} exits 0", result.returncode == 0)
+    summary = re.search(r"--\s*(\d+) checks,\s*(\d+) failures\s*--", result.stdout)
+    if not check(f"{label} printed a summary", summary is not None):
+        return
+    ran, failed = map(int, summary.groups())
+    check(f"{label} ran a nonempty case set", ran >= 15)
+    check(f"{label} had no failing case", failed == 0)
+    section_total = 0
+    for section in sections:
+        match = re.search(rf"(?m)^{section}: (\d+) checks, (\d+) failures$", result.stdout)
+        if check(f"{label} reports {section} execution", match is not None):
+            count, errors = map(int, match.groups())
+            check(f"{label} {section} checks passed", count > 0 and errors == 0)
+            section_total += count
+    if sections:
+        check(f"{label} sections account for every check", section_total == ran)
+
 
 def check_build_and_run(cxx, cc, build_dir, build_type, jobs, timeout, build_timeout):
     build_dir.mkdir(parents=True, exist_ok=True)
@@ -337,9 +376,9 @@ def check_build_and_run(cxx, cc, build_dir, build_type, jobs, timeout, build_tim
         check_compile_commands(build_dir)
 
         targets = ["--target", "KisakCOD-client-core", "KisakCOD-client-netchan-test",
-                   "-j", str(jobs)]
+                   "KisakCOD-client-state-test", "-j", str(jobs)]
         result = run(["cmake", "--build", build_dir] + targets, build_timeout)
-        if not check(f"build ({build_type}) client core and netchan test",
+        if not check(f"build ({build_type}) client core and runtime tests",
                      result.returncode == 0,
                      (result.stderr or result.stdout)[-2000:]):
             return
@@ -352,24 +391,14 @@ def check_build_and_run(cxx, cc, build_dir, build_type, jobs, timeout, build_tim
               result.returncode == 0,
               (result.stderr or result.stdout)[-2000:])
 
-        binary = build_dir / "bin" / "KisakCOD-client-netchan-test"
-        if not check("netchan test binary was produced in the private build dir",
-                     binary.exists()):
-            return
-
-        result = run([binary], timeout)
-        print(result.stdout.rstrip())
-        check("netchan test exits 0", result.returncode == 0)
-        check("netchan test reports zero failures", "0 failures" in result.stdout)
-
-        summary = re.search(r"--\s*(\d+) checks,\s*(\d+) failures\s*--", result.stdout)
-        if summary:
-            ran, failed = int(summary.group(1)), int(summary.group(2))
-            check(f"netchan test ran its full case set ({ran} checks)", ran >= 15)
-            check("netchan test had no failing case", failed == 0)
-        else:
-            fail("netchan test printed a summary line",
-                 "no '-- N checks, M failures --' line")
+        for name, label, sections in (
+            ("KisakCOD-client-netchan-test", "netchan test", ()),
+            ("KisakCOD-client-state-test", "client state test", ("parser", "input")),
+        ):
+            binary = build_dir / "bin" / name
+            if not check(f"{label} binary was produced in the private build dir", binary.exists()):
+                continue
+            check_runtime_output(label, run([binary], timeout), sections)
     finally:
         # Always runs, including when the build failed or an exception escaped:
         # the dedicated binary must be provably untouched regardless.
@@ -408,6 +437,8 @@ def check_default_build_has_no_client_targets(cxx, cc, timeout, build_timeout):
               "KisakCOD-client-core" not in help_text)
         check("default build exposes no netchan test target",
               "KisakCOD-client-netchan-test" not in help_text)
+        check("default build exposes no client state test target",
+              "KisakCOD-client-state-test" not in help_text)
     finally:
         # TemporaryDirectory is uniquely named, so cleanup can only remove this
         # run's own directory -- never another agent's concurrent build.

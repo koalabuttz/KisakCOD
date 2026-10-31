@@ -111,6 +111,7 @@ jobs:
         run: |
           python3 scripts/tests/test_linux_check_runner.py
           python3 scripts/tests/test_linux_fastfile_driver.py
+          python3 scripts/tests/test_linux_client_core_driver.py
 
       - name: Run asset-free native checks
         timeout-minutes: 30

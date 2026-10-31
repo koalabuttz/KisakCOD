@@ -114,19 +114,28 @@ if(KISAK_BUILD_LINUX_CLIENT_CORE)
         "${SRC_DIR}/client_mp/cl_net_chan_mp.cpp"
         "${SRC_DIR}/server_mp/sv_net_chan_mp.cpp"
     )
-    target_compile_features(KisakCOD-client-netchan-test PRIVATE cxx_std_20)
-    target_compile_definitions(KisakCOD-client-netchan-test PRIVATE
-        KISAK_MP KISAK_OPENAL RELEASE_ASSERTS
-        _FILE_OFFSET_BITS=64 _GNU_SOURCE
-        TRACY_ENABLE TRACY_ON_DEMAND TRACY_ONLY_LOCALHOST
+    add_executable(KisakCOD-client-state-test
+        "${CMAKE_SOURCE_DIR}/tests/linux_client_core/client_state_test.cpp"
+        "${SRC_DIR}/client_mp/cl_parse_mp.cpp"
+        "${SRC_DIR}/client_mp/cl_input.cpp"
+        "${SRC_DIR}/qcommon/msg_mp.cpp"
+        "${SRC_DIR}/universal/q_shared.cpp"
     )
-    target_include_directories(KisakCOD-client-netchan-test PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
-    target_compile_options(KisakCOD-client-netchan-test PRIVATE
-        $<$<COMPILE_LANGUAGE:CXX>:-fms-extensions>
-        -msse2 -mfpmath=sse -fno-strict-aliasing
-        -ffunction-sections -fdata-sections
-        -Wno-c++11-narrowing -Wno-invalid-token-paste
-        -Wno-ignored-attributes -Wno-format-security
-    )
-    target_link_options(KisakCOD-client-netchan-test PRIVATE -Wl,--gc-sections)
+    foreach(client_test KisakCOD-client-netchan-test KisakCOD-client-state-test)
+        target_compile_features(${client_test} PRIVATE cxx_std_20)
+        target_compile_definitions(${client_test} PRIVATE
+            KISAK_MP KISAK_OPENAL RELEASE_ASSERTS
+            _FILE_OFFSET_BITS=64 _GNU_SOURCE
+            TRACY_ENABLE TRACY_ON_DEMAND TRACY_ONLY_LOCALHOST
+        )
+        target_include_directories(${client_test} PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
+        target_compile_options(${client_test} PRIVATE
+            $<$<COMPILE_LANGUAGE:CXX>:-fms-extensions>
+            -msse2 -mfpmath=sse -fno-strict-aliasing
+            -ffunction-sections -fdata-sections
+            -Wno-c++11-narrowing -Wno-invalid-token-paste
+            -Wno-ignored-attributes -Wno-format-security
+        )
+        target_link_options(${client_test} PRIVATE -Wl,--gc-sections)
+    endforeach()
 endif()

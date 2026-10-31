@@ -1172,6 +1172,12 @@ void __cdecl CL_ParseCommandString(int localClientNum, msg_t *msg)
 {
     int seq = MSG_ReadLong(msg);
     char *s = MSG_ReadString(msg);
+    // MSG_ReadString terminates its output even when the packet ends early.
+    // The caller will discard the overflowed message; do not commit a partial
+    // command (or acknowledge its sequence) before that happens.
+    if (msg->overflowed)
+        return;
+
     clientConnection_t *clc = CL_GetLocalClientConnection(localClientNum);
 
     if (clc->serverCommandSequence < seq)
