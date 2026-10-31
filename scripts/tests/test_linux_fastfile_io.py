@@ -23,7 +23,6 @@ import os
 from pathlib import Path
 import re
 import shlex
-import shutil
 import subprocess
 import tempfile
 
@@ -932,30 +931,48 @@ int main(int argc, char **argv) {
 """
 
 
-def build_zlib(compiler: list, root: Path, folder: Path) -> list:
+def zlib_front_end(compiler: list, override: str = None) -> list:
+    """Return the driver used to compile the bundled zlib.
+
+    The ``CC`` override wins when it names a program; a value that splits into
+    no words is rejected rather than silently building an empty command line.
+    Otherwise the harness driver is used unchanged, including versioned names
+    such as ``clang++-19``: the C front end is selected per compile with
+    ``-x c``, so no name mapping is needed.
+    """
+    if override is not None:
+        front_end = shlex.split(override)
+        if not front_end:
+            raise SystemExit("CC does not name a compiler: " + repr(override))
+        return front_end
+    return list(compiler)
+
+
+def build_zlib(compiler: list, root: Path, folder: Path, override: str = None) -> list:
     """Compile the bundled zlib as C.
 
     zlib 1.1.4 declares its entry points with old-style parameter lists, which
-    only the C front end accepts, so the C++ driver is mapped to its C sibling.
+    only the C front end accepts. Every translation unit is therefore compiled
+    with ``-x c -std=gnu89``, which both a C and a C++ driver accept, so the
+    harness works with ``gcc``, ``g++``, ``clang``, ``clang++`` and versioned
+    spellings of each. ``override`` defaults to the ``CC`` environment variable.
     """
     library = root / "deps" / "zlib"
     sources = [library / f"{name}.c" for name in ZLIB_SOURCES]
     missing = [str(path) for path in sources if not path.is_file()]
     if missing:
         raise SystemExit("bundled zlib sources are missing: " + ", ".join(missing))
-    cc = os.environ.get("CC")
-    if cc:
-        front_end = shlex.split(cc)
-    elif compiler[0].endswith("++"):
-        sibling = compiler[0][:-2]
-        front_end = [sibling] + compiler[1:] if shutil.which(sibling) else compiler
-    else:
-        front_end = list(compiler)
-    cxx = front_end + ["-m32", "-O1", "-w", "-c"]
+    if override is None:
+        # An empty CC means the same as an unset one; only an explicitly passed
+        # empty override is an error.
+        override = os.environ.get("CC") or None
+    front_end = zlib_front_end(compiler, override)
+    # -x c must precede the source so it selects the C front end for it.
+    cflags = front_end + ["-x", "c", "-std=gnu89", "-m32", "-O1", "-w", "-c"]
     objects = []
     for source in sources:
         target = folder / (source.stem + ".o")
-        compiled = subprocess.run(cxx + [str(source), "-o", str(target)], check=False)
+        compiled = subprocess.run(cflags + [str(source), "-o", str(target)], check=False)
         if compiled.returncode:
             raise SystemExit(f"bundled zlib failed to compile: {source.name}")
         objects.append(str(target))
