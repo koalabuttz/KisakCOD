@@ -128,7 +128,7 @@ def build_runtime_test(workdir, compiler="clang++"):
 def run_self_contained_modes(executable):
     """Modes that need no input: directory removal, command line, thread wrappers."""
     failures = 0
-    for mode in ("files", "cli", "threads"):
+    for mode in ("files", "cli", "threads", "render", "render-pending"):
         completed = run(
             [str(executable), mode],
             stdout=subprocess.PIPE,

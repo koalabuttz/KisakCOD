@@ -10,7 +10,7 @@
 //   clang++ -DSYS_RUNTIME_TEST ... src/linux/sys_runtime_test.cpp
 //       src/linux/sys_posix.cpp -o /tmp/sys_runtime_test
 //
-// Modes: threads, console, files, cli.
+// Modes: threads, render, render-pending, console, files, cli.
 
 #ifdef SYS_RUNTIME_TEST
 
@@ -34,6 +34,9 @@
 
 // Called by the wrappers under test; the test supplies its own definitions
 // because it links only the platform translation units.
+static bool s_expectRuntimeAssertion;
+static int s_runtimeAssertions;
+
 void __cdecl Com_InitThreadData(int threadContext)
 {
     (void)threadContext;
@@ -41,6 +44,11 @@ void __cdecl Com_InitThreadData(int threadContext)
 
 void MyAssertHandler(const char *filename, int line, int type, const char *fmt, ...)
 {
+    if (s_expectRuntimeAssertion)
+    {
+        ++s_runtimeAssertions;
+        return;
+    }
     va_list arguments;
     va_start(arguments, fmt);
 
@@ -272,6 +280,115 @@ namespace rt_test
         Check(Posix_SuspendCount(THREAD_CONTEXT_WORKER1) == 0, "worker 1 left unsuspended");
 
         return Report("threads");
+    }
+
+    // This callback stands in for GPU command execution, not for the platform
+    // transport: creation, TLS, event waits, pointer publication and ownership
+    // changes all execute the production Linux implementation above.
+    struct RenderPayload { int sequence; int result; };
+    std::atomic<bool> s_exitRenderer{false};
+    std::atomic<int> s_renderStarts{0}, s_renderFrames{0}, s_renderErrors{0};
+    void *s_renderExited;
+
+    void RenderWorker(uint32_t context)
+    {
+        if (context != THREAD_CONTEXT_BACKEND || !Sys_IsRenderThread() || Sys_IsMainThread())
+            ++s_renderErrors;
+        ++s_renderStarts;
+        for (;;)
+        {
+            Sys_WaitForSingleObject((void **)&backendEvent[1]);
+            if (s_exitRenderer.load()) break;
+            RenderPayload *payload = (RenderPayload *)Sys_RendererSleep();
+            if (payload)
+            {
+                if (payload->sequence != s_renderFrames.load()) ++s_renderErrors;
+                payload->result = payload->sequence ^ 0x5a5a;
+                ++s_renderFrames;
+                Sys_RenderCompleted();
+            }
+            if (Sys_FinishRenderer())
+            {
+                Sys_StopRenderer();
+                Sys_WaitForMainThread();
+                Sys_StartRenderer();
+            }
+        }
+        Sys_SetEvent(&s_renderExited);
+    }
+
+    int RunRenderTests()
+    {
+        Sys_InitMainThread();
+        Sys_CreateEvent(true, false, &s_renderExited);
+        Check(Sys_SpawnRenderThread(RenderWorker) == 1, "render thread created and resumed");
+        Sys_ReleaseThreadOwnership();
+        for (int frame = 0; frame < 64; ++frame)
+        {
+            RenderPayload payload{frame, -1};
+            Sys_WakeRenderer(&payload);
+            bool completed = Sys_WaitForSingleObjectTimeout((void **)&renderCompletedEvent, 2000);
+            Check(completed, "frame completion reached the frontend");
+            if (!completed) return Report("render");
+            Check(payload.result == (frame ^ 0x5a5a), "completed payload writes visible to frontend");
+            Check(s_renderFrames.load() == frame + 1, "each command consumed exactly once in order");
+            Check(!Sys_RendererReady(), "completion leaves no pending command pointer");
+            // Same ownership transfer as the engine's R_SyncRenderThread path.
+            Sys_FrontEndSleep();
+            Check(Sys_FinishRenderer(), "frontend owns paused backend");
+            Check(Sys_IsRendererReady(), "completed frame remains complete while paused");
+            Check(s_renderPausedCount == 0, "pause request and acknowledgement balanced");
+            Sys_ReleaseThreadOwnership();
+        }
+        s_exitRenderer.store(true);
+        Sys_NotifyRenderer();
+        bool exited = Sys_WaitForSingleObjectTimeout(&s_renderExited, 2000);
+        Check(exited, "backend callback exits after final ownership release");
+        // Test owns this finite callback. Production renderer lifecycle is not
+        // changed into a joinable shutdown protocol by this cleanup.
+        if (exited)
+            Check(pthread_join(s_threadSlots[THREAD_CONTEXT_BACKEND].tid, nullptr) == 0,
+                  "owned backend pthread joined");
+        Check(s_renderStarts.load() == 1, "render callback starts exactly once");
+        Check(s_renderErrors.load() == 0, "backend identity and command ordering valid");
+        Check(!Sys_RendererReady(), "no stale frame after backend exit");
+        return Report("render");
+    }
+
+    int RunRenderPendingTests()
+    {
+        Sys_InitMainThread();
+        int first = 1, second = 2;
+        Sys_WakeRenderer(&first);
+        Check(Sys_RendererReady(), "first frame is pending");
+        Check(Sys_WaitBackendEvent(), "first submission wakes backend");
+        s_expectRuntimeAssertion = true;
+        Sys_WakeRenderer(&second);
+        s_expectRuntimeAssertion = false;
+#ifdef USE_ASSERTS
+        Check(s_runtimeAssertions == 1, "double submission triggers pending-frame invariant");
+#endif
+        Check(!Sys_WaitBackendEvent(), "rejected submission does not signal a duplicate wake");
+        Check(!Sys_IsRendererReady(), "pending frame is not falsely marked complete");
+        s_expectRuntimeAssertion = true;
+        Sys_WakeRenderer(nullptr);
+        s_expectRuntimeAssertion = false;
+#ifdef USE_ASSERTS
+        Check(s_runtimeAssertions == 2, "null submission cannot cancel a pending frame");
+#endif
+        Check(Sys_RendererReady(), "pending frame survives null submission");
+        Check(!Sys_WaitBackendEvent(), "rejected null submission does not signal another wake");
+        Check(Sys_RendererSleep() == &first, "rejected second submission preserves first frame");
+        Check(!Sys_RendererSleep(), "first frame consumed once only");
+        Sys_RenderCompleted();
+        Sys_WakeRenderer(&second);
+        Check(Sys_RendererSleep() == &second, "next frame accepted after pending frame consumed");
+        Sys_RenderCompleted();
+        Sys_WakeRenderer(nullptr);
+        Check(!Sys_RendererReady(), "null notification does not create a frame");
+        Check(Sys_WaitBackendEvent(), "null notification preserves backend wake semantics");
+        Sys_RenderCompleted();
+        return Report("render-pending");
     }
 
     // -----------------------------------------------------------------------
@@ -661,6 +778,10 @@ int main(int argc, char **argv)
 
     if (strcmp(mode, "threads") == 0)
         return rt_test::RunThreadTests();
+    if (strcmp(mode, "render") == 0)
+        return rt_test::RunRenderTests();
+    if (strcmp(mode, "render-pending") == 0)
+        return rt_test::RunRenderPendingTests();
     if (strcmp(mode, "console") == 0)
         return rt_test::RunConsoleTests(argc, argv);
     if (strcmp(mode, "files") == 0)
@@ -668,7 +789,7 @@ int main(int argc, char **argv)
     if (strcmp(mode, "cli") == 0)
         return rt_test::RunCommandLineTests();
 
-    fprintf(stderr, "usage: %s threads|console|files|cli\n", argv[0]);
+    fprintf(stderr, "usage: %s threads|render|render-pending|console|files|cli\n", argv[0]);
     return 2;
 }
 

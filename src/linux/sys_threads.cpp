@@ -455,7 +455,16 @@ void Sys_WakeRenderer(void *data)
     EnsureEvent(&backendEvent[1], false, false);
 
     Sys_ResetEvent((void **)&renderCompletedEvent);
-    __atomic_exchange_n(&smpData, data, __ATOMIC_SEQ_CST);
+    // A frame belongs to the backend until it takes the pointer. Reject a
+    // second submission rather than losing the first, including in builds
+    // where assertions are disabled or the assertion handler returns.
+    volatile void *pending = nullptr;
+    if (!__atomic_compare_exchange_n(&smpData, &pending, data, false,
+                                     __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
+    {
+        iassert(pending == nullptr);
+        return;
+    }
 
     Sys_SetEvent((void **)&backendEvent[1]);
     Sys_SetWorkerCmdEvent();
