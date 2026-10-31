@@ -3,6 +3,7 @@
 #include "diagnostic_host.h"
 #include <universal/q_shared.h>
 #include <universal/com_memory.h>
+#include <script/scr_stringlist.h>
 #include <qcommon/qcommon.h>
 #include <qcommon/net_chan_mp.h>
 #include <qcommon/threads.h>
@@ -43,12 +44,8 @@ uint32_t Sys_Milliseconds() {
     static const auto start = std::chrono::steady_clock::now();
     return static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-start).count());
 }
-const char *CopyString(const char *text) {
-    auto result = ::strdup(text);
-    if (!result) Com_Error(ERR_FATAL,"Diagnostic string allocation failed\n");
-    return result;
-}
-void FreeString(const char *text) { std::free(const_cast<char *>(text)); }
+
+
 char *Z_VirtualAlloc(int size, const char *, int) {
     auto result = static_cast<char *>(std::calloc(1,size));
     if (!result) Com_Error(ERR_FATAL,"Diagnostic allocation failed\n");
@@ -91,9 +88,7 @@ static void InitializeDvars() {
 
 
 void Z_Free(void *memory,int) { std::free(memory); }
-void ReplaceString(const char **target,const char *text) {
-    const char *replacement=CopyString(text);FreeString(*target);*target=replacement;
-}
+
 void Com_FreeEvent(char *memory) { std::free(memory); }
 
 namespace kisak::client {
@@ -107,15 +102,15 @@ Runtime::Runtime() {
     Sys_InitializeCriticalSections();Sys_InitMainThread();
     Cmd_InitCore();Cbuf_Init();
     try {
-        InitializeDvars();NET_Init();com_frameTime=Sys_Milliseconds();owner=this;
+        SL_Init();InitializeDvars();NET_Init();com_frameTime=Sys_Milliseconds();owner=this;
         std::puts("runtime=ready commands=engine network=engine-udp script_monitor=unavailable connected=false");
     } catch(...) {
-        NET_Shutdown();Dvar_Shutdown();Cmd_ShutdownCore();ClearOwnedDvarPointers();throw;
+        NET_Shutdown();Dvar_Shutdown();Cmd_ShutdownCore();SL_Shutdown();ClearOwnedDvarPointers();throw;
     }
 }
 Runtime::~Runtime() {
     ClearCommands();Sys_ShutdownEvents();CL_CancelPlatformAuthTicket();
-    NET_Shutdown();Cmd_ShutdownCore();Dvar_Shutdown();
+    NET_Shutdown();Cmd_ShutdownCore();Dvar_Shutdown();SL_Shutdown();
     ClearOwnedDvarPointers();com_frameTime=0;owner=nullptr;
 }
 void Runtime::Tick() {

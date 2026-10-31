@@ -554,6 +554,7 @@ set(UNIVERSAL
     "${SRC_DIR}/universal/com_math.h"
     "${SRC_DIR}/universal/com_math_anglevectors.cpp"
     "${SRC_DIR}/universal/com_memory.cpp"
+    "${SRC_DIR}/universal/com_strings.cpp"
     "${SRC_DIR}/universal/com_memory.h"
     "${SRC_DIR}/universal/com_shared.cpp"
     "${SRC_DIR}/universal/com_sndalias.cpp"

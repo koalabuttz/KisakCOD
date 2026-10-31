@@ -1578,13 +1578,18 @@ const dvar_s *__cdecl Dvar_RegisterNew(
         Sys_UnlockWrite(&g_dvarCritSect);
         Com_Error(ERR_FATAL, "Can't create dvar '%s': %i dvars already exist", dvarName, 4096);
     }
-    dvar = &dvarPool[dvarCount];
-    sortedDvars[dvarCount] = dvar;
-    areDvarsSorted = 0;
-    ++dvarCount;
+    // Allocate owned strings before publishing this slot. The standalone host
+    // throws Com_Error; this cleanup handles C++ exceptions only. It does
+    // not add nontrivial automatic guards or claim longjmp recovery.
+    dvar_s candidate = {};
+    const char *ownedName = nullptr;
+    const char *ownedValue = nullptr;
+    dvar = &candidate;
+    try
+    {
     dvar->type = type;
     if ((flags & 0x4000) != 0)
-        dvar->name = Dvar_AllocNameString(dvarName);
+        dvar->name = ownedName = Dvar_AllocNameString(dvarName);
     else
         dvar->name = dvarName;
     
@@ -1616,6 +1621,7 @@ const dvar_s *__cdecl Dvar_RegisterNew(
         break;
     case DVAR_TYPE_STRING:
         Dvar_CopyString(value.string, &dvar->current);
+        ownedValue = dvar->current.string;
         Dvar_WeakCopyString(dvar->current.string, &dvar->latched);
         Dvar_WeakCopyString(dvar->current.string, &dvar->reset);
         break;
@@ -1631,6 +1637,22 @@ const dvar_s *__cdecl Dvar_RegisterNew(
     dvar->domainFunc = 0;
     dvar->flags = flags;
     dvar->description = description;
+    }
+    catch (...)
+    {
+        // Name and value each own a reference even when interning aliases them.
+        if (ownedValue)
+            FreeString(ownedValue);
+        if (ownedName)
+            FreeString(ownedName);
+        Sys_UnlockWrite(&g_dvarCritSect);
+        throw;
+    }
+    dvar = &dvarPool[dvarCount];
+    *dvar = candidate;
+    sortedDvars[dvarCount] = dvar;
+    areDvarsSorted = 0;
+    ++dvarCount;
     HashValue = generateHashValue(dvarName);
     dvar->hashNext = dvarHashTable[HashValue];
     dvarHashTable[HashValue] = dvar;

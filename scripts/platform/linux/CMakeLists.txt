@@ -72,6 +72,9 @@ include(${SCRIPTS_DIR}/platform/linux/asset_export.cmake)
 # real native client.
 # ---------------------------------------------------------------------------
 set(KISAK_CLIENT_RUNTIME_SOURCES
+    "${SRC_DIR}/universal/com_strings.cpp"
+    "${SRC_DIR}/script/scr_stringlist.cpp"
+    "${SRC_DIR}/script/scr_memorytree.cpp"
     "${SRC_DIR}/linux/client/diagnostic_host.cpp"
     "${SRC_DIR}/linux/client/discovery_session.cpp"
     "${SRC_DIR}/linux/net.cpp"
@@ -412,6 +415,18 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
         "${SRC_DIR}/qcommon/cmd.cpp"
         "${SRC_DIR}/universal/q_shared.cpp"
         "${SRC_DIR}/universal/com_shared.cpp")
+    add_executable(KisakCOD-dvar-string-failure-test
+        "${TESTS_DIR}/linux_client_commands/dvar_string_failure_test.cpp"
+        ${KISAK_CLIENT_RUNTIME_SOURCES})
+    add_executable(KisakCOD-string-consumers-test
+        "${TESTS_DIR}/linux_client_commands/string_consumers_test.cpp"
+        "${SRC_DIR}/ui/ui_localvars.cpp"
+        "${SRC_DIR}/ui/ui_registration.cpp"
+        ${KISAK_CLIENT_RUNTIME_SOURCES})
+    add_executable(KisakCOD-string-owner-test
+        "${TESTS_DIR}/linux_client_commands/string_owner_test.cpp"
+        "${SRC_DIR}/ui/ui_localvars.cpp"
+        ${KISAK_CLIENT_RUNTIME_SOURCES})
     add_executable(KisakCOD-client-runtime-test
         "${TESTS_DIR}/linux_client_commands/runtime_lifecycle_test.cpp"
         ${KISAK_CLIENT_RUNTIME_SOURCES})
@@ -430,7 +445,7 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
     # Exercise actual clock/Fade with signed arithmetic traps, without any
     # sanitizer runtime or platform-specific device dependencies.
     target_compile_options(KisakCOD-ui-time-test PRIVATE -ftrapv)
-    foreach(window_target KisakCOD-cpu-frame-owner-test KisakCOD-cpu-menu-frame-test KisakCOD-ui-registration-test KisakCOD-cpu-traversal-test KisakCOD-menu-composition-assets-test KisakCOD-ui-time-test KisakCOD-cpu-composition-test KisakCOD-cpu-viewport-test KisakCOD-ui-audio-failure-test KisakCOD-menu-input-failure-test KisakCOD-menu-input-owner-test KisakCOD-menu-control-assets-test KisakCOD-ui-audio-test KisakCOD-ui-audio-assets-test KisakCOD-menu-script-test KisakCOD-window-platform KisakCOD-client-window KisakCOD-window-test KisakCOD-client-input KisakCOD-client-input-test KisakCOD-shutdown-signal-test KisakCOD-client-command-test KisakCOD-client-runtime-test KisakCOD-client-input-startup-test KisakCOD-presentation-test KisakCOD-frame-deadline-test KisakCOD-pixel-resource-test KisakCOD-cpu-renderer-test KisakCOD-cpu-renderer-fault-test KisakCOD-cpu-raw-test KisakCOD-material-clone-mp-test KisakCOD-material-clone-radiant-test KisakCOD-cpu-ui-test KisakCOD-material-layered-mp-test KisakCOD-material-layered-sp-test KisakCOD-material-layered-radiant-test KisakCOD-cpu-text-test KisakCOD-cpu-menu-test KisakCOD-menu-assets-test KisakCOD-ui-material-assets-test KisakCOD-iwi-assets-test KisakCOD-font-assets-test)
+    foreach(window_target KisakCOD-string-consumers-test KisakCOD-dvar-string-failure-test KisakCOD-string-owner-test KisakCOD-cpu-frame-owner-test KisakCOD-cpu-menu-frame-test KisakCOD-ui-registration-test KisakCOD-cpu-traversal-test KisakCOD-menu-composition-assets-test KisakCOD-ui-time-test KisakCOD-cpu-composition-test KisakCOD-cpu-viewport-test KisakCOD-ui-audio-failure-test KisakCOD-menu-input-failure-test KisakCOD-menu-input-owner-test KisakCOD-menu-control-assets-test KisakCOD-ui-audio-test KisakCOD-ui-audio-assets-test KisakCOD-menu-script-test KisakCOD-window-platform KisakCOD-client-window KisakCOD-window-test KisakCOD-client-input KisakCOD-client-input-test KisakCOD-shutdown-signal-test KisakCOD-client-command-test KisakCOD-client-runtime-test KisakCOD-client-input-startup-test KisakCOD-presentation-test KisakCOD-frame-deadline-test KisakCOD-pixel-resource-test KisakCOD-cpu-renderer-test KisakCOD-cpu-renderer-fault-test KisakCOD-cpu-raw-test KisakCOD-material-clone-mp-test KisakCOD-material-clone-radiant-test KisakCOD-cpu-ui-test KisakCOD-material-layered-mp-test KisakCOD-material-layered-sp-test KisakCOD-material-layered-radiant-test KisakCOD-cpu-text-test KisakCOD-cpu-menu-test KisakCOD-menu-assets-test KisakCOD-ui-material-assets-test KisakCOD-iwi-assets-test KisakCOD-font-assets-test)
         target_compile_features(${window_target} PRIVATE cxx_std_20)
         target_compile_definitions(${window_target} PRIVATE
             KISAK_OPENAL RELEASE_ASSERTS _FILE_OFFSET_BITS=64 _GNU_SOURCE
