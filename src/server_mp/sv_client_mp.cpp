@@ -2017,13 +2017,14 @@ gentity_s *__cdecl SV_AddTestClient()
         1,
         botport + 1);
     SV_Cmd_TokenizeString(file);
-    *(uint32_t *)a.ip = 0;
-    memset(a.ipx, 0, sizeof(a.ipx));
+    // Initialize the complete address without unaligned word stores; test
+    // clients use the bot address type and a unique port.
+    memset(&a, 0, sizeof(a));
     a.type = NA_BOT;
     a.port = botport++;
-    *(_QWORD *)&v1.type = 0;
-    *(uint32_t *)&v1.port = a.port;
-    *(_QWORD *)&v1.ipx[2] = 0;
+    memset(&v1, 0, sizeof(v1));
+    v1.type = a.type;
+    v1.port = a.port;
     SV_DirectConnect(v1);
     SV_Cmd_EndTokenizedString();
     i = 0;

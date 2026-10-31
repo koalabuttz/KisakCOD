@@ -117,7 +117,8 @@ class PlannedCommandTests(unittest.TestCase):
     def test_compiled_checks_receive_the_explicit_compiler_on_the_command_line(self):
         for name, flag in (("debugger", "--cxx"), ("fastfile", "--cxx"), ("net_deadline", "--cxx"),
                            ("huffman", "--cxx"), ("handshake_auth", "--cxx"),
-                           ("random_range", "--cxx")):
+                           ("random_range", "--cxx"), ("gameplay_lifecycle", "--cxx"),
+                           ("server_test_clients", "--cxx")):
             argv = check_named(self.checks, name).commands[0].argv
             self.assertIn(flag, argv, f"{name} does not pass {flag}")
             self.assertEqual(argv[argv.index(flag) + 1], CXX, f"{name} uses a compiler other than --cxx")
@@ -125,6 +126,11 @@ class PlannedCommandTests(unittest.TestCase):
 
     def test_handshake_auth_requires_32_bit_execution(self):
         self.assertIn("--m32", check_named(self.checks, "handshake_auth").commands[0].argv)
+
+    def test_server_test_clients_require_32_bit_sanitized_execution(self):
+        argv = check_named(self.checks, "server_test_clients").commands[0].argv
+        self.assertIn("--m32", argv)
+        self.assertIn("--sanitize", argv)
 
     def test_source_self_tests_compile_with_the_explicit_compiler(self):
         for name in ("sys_fileio", "sys_virtualmem"):
@@ -168,7 +174,8 @@ class PlannedCommandTests(unittest.TestCase):
         names = {check.name for check in self.checks}
         self.assertNotIn("asset_startup", names)
         self.assertNotIn("server_lifecycle", names)
-        self.assertEqual({name for name in names if "lifecycle" in name}, {"lifecycle_driver"})
+        self.assertEqual({name for name in names if "lifecycle" in name},
+                         {"lifecycle_driver", "gameplay_lifecycle"})
         for check in self.checks:
             argv = " ".join(command.describe() for command in check.commands)
             self.assertNotIn("test_linux_asset_startup.py", argv)
@@ -180,7 +187,7 @@ class PlannedCommandTests(unittest.TestCase):
             else:
                 self.assertIsNone(check.requires, f"{check.name} requires an artefact")
 
-    def test_default_plan_is_the_thirteen_known_checks_in_order(self):
+    def test_default_plan_is_the_fifteen_known_checks_in_order(self):
         # main() validates --only/--skip against this list; a plan that drifts
         # from it would let a check be named in help text but never run.
         known = [
@@ -197,6 +204,8 @@ class PlannedCommandTests(unittest.TestCase):
             "sys_virtualmem",
             "lexer_eof",
             "random_range",
+            "gameplay_lifecycle",
+            "server_test_clients",
         ]
         self.assertEqual([check.name for check in self.checks], known)
 

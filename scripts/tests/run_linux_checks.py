@@ -247,6 +247,26 @@ def plan_checks(options, workdir, build_dir, binary, python, cxx):
         )
     )
 
+    # random_range bounds the shape of a grenade launch velocity but never enters
+    # the gameplay bodies; this drives the production death drop and item
+    # trajectory paths instead.
+    checks.append(
+        Check(
+            "gameplay_lifecycle",
+            "death-grenade drop and item launch/trajectory behaviour",
+            [Command([python, TESTS / "test_gameplay_lifecycle.py", "--cxx", cxx], timeout=300)],
+        )
+    )
+
+    checks.append(
+        Check(
+            "server_test_clients",
+            "internal test-client slot and command invariants",
+            [Command([python, TESTS / "test_server_test_clients.py", "--cxx", cxx,
+                      "--m32", "--sanitize"], timeout=300)],
+        )
+    )
+
     if options.only:
         checks = [check for check in checks if check.name in options.only]
     if options.skip:
@@ -445,7 +465,7 @@ def main():
     parser.add_argument("--list", action="store_true", help="print the command list and exit without running")
     options = parser.parse_args()
 
-    known = ["bootstrap", "runtime", "lifecycle_driver", "handshake_auth", "debugger", "fastfile", "net_deadline", "huffman", "udp", "sys_fileio", "sys_virtualmem", "lexer_eof", "random_range"]
+    known = ["bootstrap", "runtime", "lifecycle_driver", "handshake_auth", "debugger", "fastfile", "net_deadline", "huffman", "udp", "sys_fileio", "sys_virtualmem", "lexer_eof", "random_range", "gameplay_lifecycle", "server_test_clients"]
     options.only = parse_names(options.only)
     options.skip = parse_names(options.skip)
     for name in options.only | options.skip:
