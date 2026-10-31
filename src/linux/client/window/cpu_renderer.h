@@ -11,6 +11,7 @@ struct ScreenPlacement;
 struct itemDef_s;
 struct UiContext;
 struct windowDef_t;
+struct menuDef_t;
 
 namespace kisak::window {
 class WindowHost;
@@ -62,6 +63,9 @@ public:
     void DrawMenuText(const MenuFonts &,const ScreenPlacement &,itemDef_s &,std::string_view,const float *color);
     void DrawWindow(UiMaterialHandle,const ScreenPlacement &,UiContext &,windowDef_t &,float fadeAmount,float fadeInAmount,float fadeClamp,int fadeCycle);
     void DrawCursor(UiMaterialHandle,const ScreenPlacement &full,const ScreenPlacement &view,UiContext &);
+    struct MenuMaterial {std::string_view name;UiMaterialHandle handle;itemDef_s *item=nullptr;};
+    struct MenuPaintResult {bool painted;float requestedBlur;bool postprocessUnsupported;};
+    MenuPaintResult DrawMenuTraversal(const MenuFonts &,const ScreenPlacement &,UiContext &,menuDef_t &,std::span<const MenuMaterial>);
     void DrawMenuItem(const MenuFonts &,const ScreenPlacement &,UiContext &,itemDef_s &);
     size_t FontCount() const { return fonts_.size(); }
     void Submit();
@@ -87,7 +91,8 @@ private:
     void RecordText(FontHandle font,std::string_view text,int maxChars,float x,float y,float xScale,float yScale,
                     float rotation,const float *color,int style,int cursorPos);
     void RecordViewport(int x,int y,int width,int height);
-    void RasterUiPic(const GfxCmdStretchPic &pic,PixelBufferView image,const GfxViewport &viewport);
+    struct SamplePlan { PixelBufferView image;double offsetU=0,offsetV=0;unsigned taps=1; };
+    void RasterUiPic(const GfxCmdStretchPic &pic,const SamplePlan &sample,const GfxViewport &viewport);
     void WalkText(const GfxCmdDrawText2D &command,std::string_view text,const OwnedFont &font,bool render,uint64_t &coveredPixels,const GfxViewport &viewport);
 
     void RecordUiStretchPic(UiMaterialHandle material,float x,float y,float width,float height,
@@ -108,7 +113,7 @@ private:
     struct Texture { std::vector<PixelBuffer> levels; size_t bytes=0;
         PixelBufferView View() const { return levels.front().View(); }
     };
-    PixelBufferView SampleLevel(const GfxCmdStretchPic &,const UiMaterial &) const;
+    SamplePlan SampleLevel(const GfxCmdStretchPic &,const UiMaterial &) const;
     TextureHandle UploadLevels(std::span<const PixelBufferView>,bool complete);
     std::map<TextureHandle,Texture> textures_;
     TextureHandle nextTexture_=1; // Never reused across shutdown/restart.

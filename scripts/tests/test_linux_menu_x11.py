@@ -49,6 +49,8 @@ try:
   if controls:command+=['--menu-controls',str(bundle),'--ui-asset-dir',str(assets)]
   with trace.open('w') as log:p=subprocess.Popen(command,cwd=isolated,env=env,stdout=log,stderr=subprocess.STDOUT)
   processes.append(p);wait_for(lambda:'window=ready' in trace.read_text(),20,name+' ready',p)
+  if composition and controls:
+   assert 'menu_traversal painted=1 item_count=12 blur_requested=7 blur_rendered=0 compositor=partial' in trace.read_text(), 'actual traversal/compositor boundary missing'
   wid=int(xdo('search','--onlyvisible','--name','^'+title+'$'));return p,wid,trace
  def state(trace):
   lines=[x for x in trace.read_text().splitlines() if x.startswith('menu_state ') and 'phase=present' in x]
@@ -92,7 +94,9 @@ try:
   evidence.append({'cursor_pixels':got,'no_cursor_negative_mismatches':negatives,'cursor_under_text_negative_mismatches':wrong_order,'pointer':[mx,my]})
  p,wid,trace=launch('main');xdo('windowmove',wid,10,10);xdo('windowraise',wid);xdo('windowfocus','--sync',wid)
  expect(trace,p,open=1,width=640,height=480)
- for width,height in [(640,480),(900,675),(720,540),(960,540),(320,240)]:
+ sizes=[(640,480),(900,675),(720,540),(960,540),(320,240)]
+ if composition:sizes[1:1]=[(660,500),(480,640)]
+ for width,height in sizes:
   xdo('windowsize',wid,width,height);expect(trace,p,open=1,width=width,height=height)
   oracle=CompositionReference(composition,assets,width,height) if composition else None
   if composition:
@@ -170,13 +174,6 @@ try:
   if n:p.send_signal(signal.SIGTERM)
   else:request_window_close(display,wid)
   assert p.wait(timeout=20)==0;xdo('keyup','w');assert re.search(r'window=closed .*held=0 .*game=false',trace.read_text())
- if composition:
-  p,wid,trace=launch('unsupported-aspect')
-  xdo('windowsize',wid,660,500)
-  assert p.wait(timeout=30)==1,trace.read_text()
-  assert 'Anisotropic UI minification is unsupported' in trace.read_text()
-  assert not any('phase=present' in line and 'width=660 height=500' in line for line in trace.read_text().splitlines())
-  evidence.append({'unsupported_aspect':[660,500],'exit':1,'explicit_sampler_error':True})
  for directory in client_directories:
   assert not list(directory.rglob('*')), ('unexpected client filesystem output',directory)
  evidence.append({'isolated_client_files':0,'processes':len(client_directories)})

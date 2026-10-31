@@ -18,12 +18,12 @@ def encode_composition(menu):
         if not isinstance(v,str) or not v or len(v)>255 or v in ('.','..') or any(ord(c)<32 or ord(c)>=127 or c in '/\\' for c in v):raise ValueError('invalid composition name')
         return word(len(v))+v.encode('ascii')
     if menu['window']['name']!='options_look' or len(menu['items'])<8:raise ValueError('unsupported composition menu')
-    result=b'KUCOMP01'+word(8)+word(menu['fade_cycle'])+b''.join(scalar(v) for v in menu['fade_clamp_amount_in'])
+    result=b'KUCOMP02'+word(8)+word(menu['fade_cycle'])+b''.join(scalar(v) for v in menu['fade_clamp_amount_in'])
     names=set()
     for index,item in enumerate(menu['items'][:8]):
         w=item['window']
-        if item['index']!=index or item['type']!=0 or item['text'] or item['has_scripts'] or item['dvar'] or item['dvar_test'] or item['enable_dvar'] or item['dvar_flags'] or item['has_focus_sound'] or item['item_flags']:raise ValueError('unsupported composition item behavior')
-        if w['style']!=3 or w['border'] or w['owner_draw'] or w['owner_draw_flags']:raise ValueError('unsupported composition window')
+        if item['index']!=index or item['type']!=0 or item['data_type']!=0 or item['alignment']!=0 or item['text'] or item['has_scripts'] or item['dvar'] or item['dvar_test'] or item['enable_dvar'] or item['dvar_flags'] or item['has_focus_sound'] or item['item_flags']:raise ValueError('unsupported composition item behavior')
+        if w['style']!=3 or w['border'] or w['owner_draw'] or w['owner_draw_flags'] or w['static_flags']!=1048576 or w['dynamic_flags']!=65540 or w['rect_client']!=w['rect']:raise ValueError('unsupported composition window')
         material=w['background']
         if index==0:
             expected=[{'type':0,'op':16},{'type':1,'operand_type':2,'value':'white','localized_reference':None}]
@@ -32,7 +32,7 @@ def encode_composition(menu):
         elif any(item['expressions']) or item['material_expression']:raise ValueError('dynamic decoration unsupported')
         if material not in ('white','button_highlight_end'):raise ValueError('unsupported decoration material')
         names.add(material)
-        result+=word(index)+b''.join(scalar(v) for v in w['rect']['xywh'])
+        result+=word(index)+word(item['type'])+word(item['data_type'])+word(item['alignment'])+word(item['item_flags'])+word(int(index==0))+b''.join(scalar(v) for v in w['rect']['xywh'])
         result+=word(w['rect']['horz_align'])+word(w['rect']['vert_align'])+word(w['style'])+word(w['border'])+scalar(w['border_size'])+word(w['static_flags'])+word(w['dynamic_flags'])
         result+=b''.join(scalar(v) for field in ('fore_color','back_color') for v in w[field])+name(material)
     return result+name('ui_cursor'),names|{'ui_cursor'}

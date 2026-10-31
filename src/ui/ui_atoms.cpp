@@ -1,3 +1,4 @@
+#include "ui_fill.h"
 #include <universal/q_shared.h>
 #include "ui_shared.h"
 
@@ -115,20 +116,6 @@ void __cdecl UI_FillRect(
     int vertAlign,
     const float *color)
 {
-    if (sharedUiInfo.assets.whiteMaterial)
-        CL_DrawStretchPic(
-            scrPlace,
-            x,
-            y,
-            width,
-            height,
-            horzAlign,
-            vertAlign,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            color,
-            sharedUiInfo.assets.whiteMaterial);
+    UI_FillRectMaterial(scrPlace,x,y,width,height,horzAlign,vertAlign,color,sharedUiInfo.assets.whiteMaterial);
 }
 

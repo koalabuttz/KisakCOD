@@ -6,6 +6,7 @@
 #include <client_mp/client_mp.h>
 #include <ui/ui_input_core.h>
 #include <cstdio>
+#include <cstring>
 #include <stdexcept>
 namespace {int checks,failures;void Check(bool value,const char *name){++checks;failures+=!value;std::printf("%s: %s\n",value?"PASS":"FAIL",name);}template<class F>bool Reject(F f){try{f();return false;}catch(const std::exception&){return true;}}}
 int main(int argc,char **argv){
@@ -26,6 +27,11 @@ int main(int argc,char **argv){
    {
     kisak::window::MenuInputOwner owner(input,renderer,argv[1],argv[2],640,480);
     owner.Present(window);
+    auto *paintMenu=owner.Context().Menus[0];bool canonical=paintMenu->itemCount==12;
+    for(int n=0;n<paintMenu->itemCount;++n)canonical&=paintMenu->items[n]->parent==paintMenu;
+    Check(canonical&&paintMenu->items[0]->type==0&&paintMenu->items[7]->type==0&&paintMenu->items[8]->type==1&&paintMenu->items[9]->type==11&&std::strcmp(paintMenu->items[9]->dvar,"cl_freelook")==0,"one canonical real source-ordered twelve-item graph owns painting and navigation");
+    Check(paintMenu->items[0]->window.background&&paintMenu->items[0]->window.background==paintMenu->items[1]->window.background,"actual literal white registration shares owned material identity with static white item");
+    owner.Present(window);Check(owner.Context().blurRadiusOut==7,"repeated real menu traversal retains actual blur request without cross-frame accumulation");
     Check(Dvar_GetBool("cl_freelook")==savedLook && Dvar_GetBool("m_filter")==savedFilter,"recreated menu preserves settings only within existing input runtime");
     Check(owner.Opened() && cls.uiStarted && input.MenuOpen(),"real admitted menu opens and presents");
     owner.Key(K_DOWNARROW,true);owner.Key(K_DOWNARROW,false);

@@ -41,6 +41,9 @@ private:
     std::unique_ptr<MenuControlAsset> assets_;
     CpuRenderer::MenuFonts fonts_;
     std::unique_ptr<MenuCompositionAssets> composition_;
+    std::array<itemDef_s*,12> paintItems_{};
+    std::array<CpuRenderer::MenuMaterial,8> paintMaterials_{};
+    CpuRenderer::MenuPaintResult paintResult_{};
     bool focused_=false,pointerInside_=false;
     int pointerX_=0,pointerY_=0;
     int timeIndex_=0,previousTimes_[4]{};
@@ -51,7 +54,7 @@ private:
     struct TraceState {
         bool valid=false;
         int open=0,focus=-1,freelook=0,filter=0,width=0,height=0,held=0;
-        int pointerX=0,pointerY=0,visible=0,pointerInside=0,windowFocused=0;float cursorX=0,cursorY=0;
+        int pointerX=0,pointerY=0,visible=0,pointerInside=0,windowFocused=0;float cursorX=0,cursorY=0,requestedBlur=0;int painted=0,blurUnrendered=0;
         bool operator==(const TraceState &) const = default;
     };
     TraceState lastTrace_,lastPresentTrace_;

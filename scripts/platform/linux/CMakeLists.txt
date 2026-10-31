@@ -253,6 +253,7 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
         "${SRC_DIR}/linux/client/window/cpu_ui_backend.cpp"
         "${SRC_DIR}/client/cl_ui_draw.cpp"
         "${SRC_DIR}/ui/ui_atoms.cpp"
+        "${SRC_DIR}/ui/ui_fill.cpp"
         "${SRC_DIR}/ui/ui_cursor.cpp"
         "${SRC_DIR}/ui/ui_time.cpp"
         "${SRC_DIR}/ui/ui_text.cpp"
@@ -276,6 +277,7 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
         "${SRC_DIR}/ui/ui_input_core.cpp"
         "${SRC_DIR}/ui/ui_item_text.cpp"
         "${SRC_DIR}/ui/ui_window_paint.cpp"
+        "${SRC_DIR}/ui/ui_paint.cpp"
         "${SRC_DIR}/linux/client/window/cpu_window_services.cpp"
         "${SRC_DIR}/ui/ui_expression_text.cpp"
         ${KISAK_MENU_SCRIPT_SOURCES})
@@ -292,6 +294,7 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
     add_executable(KisakCOD-client-input "${SRC_DIR}/linux/client/window/client_input_main.cpp" ${KISAK_INPUT_HOST_SOURCES})
     add_executable(KisakCOD-menu-input-failure-test "${TESTS_DIR}/linux_window/menu_input_failure_test.cpp" ${KISAK_INPUT_HOST_SOURCES})
     target_link_options(KisakCOD-menu-input-failure-test PRIVATE -Wl,--wrap=SDL_UpdateWindowSurface)
+    add_executable(KisakCOD-cpu-traversal-test "${TESTS_DIR}/linux_window/cpu_traversal_test.cpp" ${KISAK_INPUT_HOST_SOURCES})
     add_executable(KisakCOD-menu-input-owner-test "${TESTS_DIR}/linux_window/menu_input_owner_test.cpp" ${KISAK_INPUT_HOST_SOURCES})
     add_executable(KisakCOD-menu-control-assets-test "${TESTS_DIR}/linux_window/menu_control_assets_test.cpp" "${SRC_DIR}/linux/client/window/menu_control_assets.cpp")
     add_executable(KisakCOD-ui-audio-failure-test "${TESTS_DIR}/linux_window/ui_audio_failure_test.cpp" "${SRC_DIR}/linux/client/window/ui_audio.cpp")
@@ -350,6 +353,9 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
         "${SRC_DIR}/linux/client/window/window_services.cpp"
         "${SRC_DIR}/client/screen_placement.cpp"
         ${KISAK_CPU_UI_SOURCES} ${KISAK_CPU_RENDERER_SOURCES})
+    add_executable(KisakCOD-menu-composition-assets-test
+        "${TESTS_DIR}/linux_window/menu_composition_assets_test.cpp"
+        "${SRC_DIR}/linux/client/window/menu_composition_assets.cpp")
     add_executable(KisakCOD-ui-material-assets-test
         "${TESTS_DIR}/linux_window/material_assets_test.cpp"
         "${SRC_DIR}/linux/client/window/material_assets.cpp")
@@ -360,6 +366,7 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
         "${SRC_DIR}/linux/client/window/cpu_window_services.cpp"
         "${SRC_DIR}/client/screen_placement.cpp"
         "${SRC_DIR}/ui/ui_window_paint.cpp"
+        "${SRC_DIR}/ui/ui_paint.cpp"
         "${SRC_DIR}/ui/ui_item_text.cpp"
         "${SRC_DIR}/ui/ui_input_core.cpp"
         "${SRC_DIR}/ui/ui_utils.cpp"
@@ -410,7 +417,7 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
     # Exercise actual clock/Fade with signed arithmetic traps, without any
     # sanitizer runtime or platform-specific device dependencies.
     target_compile_options(KisakCOD-ui-time-test PRIVATE -ftrapv)
-    foreach(window_target KisakCOD-ui-time-test KisakCOD-cpu-composition-test KisakCOD-cpu-viewport-test KisakCOD-ui-audio-failure-test KisakCOD-menu-input-failure-test KisakCOD-menu-input-owner-test KisakCOD-menu-control-assets-test KisakCOD-ui-audio-test KisakCOD-ui-audio-assets-test KisakCOD-menu-script-test KisakCOD-window-platform KisakCOD-client-window KisakCOD-window-test KisakCOD-client-input KisakCOD-client-input-test KisakCOD-shutdown-signal-test KisakCOD-client-command-test KisakCOD-client-runtime-test KisakCOD-client-input-startup-test KisakCOD-presentation-test KisakCOD-frame-deadline-test KisakCOD-pixel-resource-test KisakCOD-cpu-renderer-test KisakCOD-cpu-renderer-fault-test KisakCOD-cpu-raw-test KisakCOD-material-clone-mp-test KisakCOD-material-clone-radiant-test KisakCOD-cpu-ui-test KisakCOD-material-layered-mp-test KisakCOD-material-layered-sp-test KisakCOD-material-layered-radiant-test KisakCOD-cpu-text-test KisakCOD-cpu-menu-test KisakCOD-menu-assets-test KisakCOD-ui-material-assets-test KisakCOD-iwi-assets-test KisakCOD-font-assets-test)
+    foreach(window_target KisakCOD-cpu-traversal-test KisakCOD-menu-composition-assets-test KisakCOD-ui-time-test KisakCOD-cpu-composition-test KisakCOD-cpu-viewport-test KisakCOD-ui-audio-failure-test KisakCOD-menu-input-failure-test KisakCOD-menu-input-owner-test KisakCOD-menu-control-assets-test KisakCOD-ui-audio-test KisakCOD-ui-audio-assets-test KisakCOD-menu-script-test KisakCOD-window-platform KisakCOD-client-window KisakCOD-window-test KisakCOD-client-input KisakCOD-client-input-test KisakCOD-shutdown-signal-test KisakCOD-client-command-test KisakCOD-client-runtime-test KisakCOD-client-input-startup-test KisakCOD-presentation-test KisakCOD-frame-deadline-test KisakCOD-pixel-resource-test KisakCOD-cpu-renderer-test KisakCOD-cpu-renderer-fault-test KisakCOD-cpu-raw-test KisakCOD-material-clone-mp-test KisakCOD-material-clone-radiant-test KisakCOD-cpu-ui-test KisakCOD-material-layered-mp-test KisakCOD-material-layered-sp-test KisakCOD-material-layered-radiant-test KisakCOD-cpu-text-test KisakCOD-cpu-menu-test KisakCOD-menu-assets-test KisakCOD-ui-material-assets-test KisakCOD-iwi-assets-test KisakCOD-font-assets-test)
         target_compile_features(${window_target} PRIVATE cxx_std_20)
         target_compile_definitions(${window_target} PRIVATE
             KISAK_OPENAL RELEASE_ASSERTS _FILE_OFFSET_BITS=64 _GNU_SOURCE
@@ -432,6 +439,7 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
         target_link_options(${window_target} PRIVATE -Wl,--gc-sections)
     endforeach()
     target_link_libraries(KisakCOD-menu-input-failure-test PRIVATE KisakCOD-window-platform)
+    target_link_libraries(KisakCOD-cpu-traversal-test PRIVATE KisakCOD-window-platform)
     target_link_libraries(KisakCOD-menu-input-owner-test PRIVATE KisakCOD-window-platform)
     target_link_libraries(KisakCOD-font-assets-test PRIVATE KisakCOD-window-platform)
     target_link_libraries(KisakCOD-menu-assets-test PRIVATE KisakCOD-window-platform)

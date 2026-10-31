@@ -87,19 +87,32 @@ CpuRenderer::TextureHandle CpuRenderer::UploadLevels(std::span<const PixelBuffer
     }
     const auto handle=nextTexture_;textures_.emplace(handle,std::move(copy));++nextTexture_;textureBytes_+=bytes;return handle;
 }
-PixelBufferView CpuRenderer::SampleLevel(const GfxCmdStretchPic &pic,const UiMaterial &material) const {
+CpuRenderer::SamplePlan CpuRenderer::SampleLevel(const GfxCmdStretchPic &pic,const UiMaterial &material) const {
     const auto &texture=textures_.at(material.texture);const auto base=texture.View();
-    if(!material.strictSampler)return base;
+    if(!material.strictSampler)return {base};
     const double dx=std::abs(double(pic.s1)-pic.s0)*base.width/pic.w;
     const double dy=std::abs(double(pic.t1)-pic.t0)*base.height/pic.h;
-    if(std::max(dx,dy)<=1)return base;
-    if(std::abs(dx-dy)>1e-5*std::max(dx,dy))throw std::invalid_argument("Anisotropic UI minification is unsupported");
-    // Explicit CPU subset: isotropic footprint, nearest mip, zero bias,
-    // bilinear within the selected level. No hardware anisotropy parity claim.
+    if(!std::isfinite(dx) || !std::isfinite(dy))throw std::invalid_argument("Nonfinite UI texture footprint");
+    const double major=std::max(dx,dy);
+    if(major<=1)return {base};
     if(texture.levels.back().Extent().width!=1 || texture.levels.back().Extent().height!=1)
         throw std::invalid_argument("Metadata-backed minification requires complete mip chain");
-    const size_t level=std::min(size_t(std::floor(std::log2(dx)+.5)),texture.levels.size()-1);
-    return texture.levels[level].View();
+    const bool isotropic=std::abs(dx-dy)<=1e-5*major;
+    // Explicit CPU quality contract for the admitted 2x-anisotropic profile:
+    // point mip selection, zero bias, at most two bilinear taps. Coarsen the
+    // minor footprint when needed to bound anisotropy/work; this does not claim
+    // a particular D3D driver's sample locations or filtering precision.
+    // Retain the existing isotropic LOD and single-tap math exactly.
+    const double footprint=isotropic?dx:std::max({1.0,std::min(dx,dy),major/2});
+    const size_t level=std::min(size_t(std::floor(std::log2(footprint)+.5)),texture.levels.size()-1);
+    SamplePlan result{texture.levels[level].View()};
+    if(!isotropic) {
+        const double offset=(major-footprint)/2;
+        if(dx>dy)result.offsetU=offset/base.width;
+        else result.offsetV=offset/base.height;
+        result.taps=2;
+    }
+    return result;
 }
 
 void CpuRenderer::Release(TextureHandle texture) {
@@ -342,7 +355,7 @@ void CpuRenderer::WalkText(const GfxCmdDrawText2D &command,std::string_view text
                 const double top=std::clamp(std::ceil(double(quad.y)-.5),0.0,double(extent.height));
                 const double right=std::clamp(std::ceil(double(quad.x)+quad.w-.5),0.0,double(extent.width));
                 const double bottom=std::clamp(std::ceil(double(quad.y)+quad.h-.5),0.0,double(extent.height));
-                coveredPixels+=uint64_t((right-left)*(bottom-top));
+                coveredPixels+=uint64_t((right-left)*(bottom-top))*sampled.taps;
                 if(coveredPixels>64u*1024u*1024u)throw std::length_error("Text raster budget exhausted");
                 if(render)RasterUiPic(quad,sampled,viewport);
             };
@@ -358,7 +371,8 @@ void CpuRenderer::WalkText(const GfxCmdDrawText2D &command,std::string_view text
         x+=glyph->dx*double(command.xScale);--remaining;
     }
 }
-void CpuRenderer::RasterUiPic(const GfxCmdStretchPic &pic,PixelBufferView image,const GfxViewport &viewport) {
+void CpuRenderer::RasterUiPic(const GfxCmdStretchPic &pic,const SamplePlan &sample,const GfxViewport &viewport) {
+    const auto image=sample.image;
     const auto pixels=pixels_.Bytes();const auto extent=pixels_.Extent();
     const double originX=double(pic.x)+viewport.x,originY=double(pic.y)+viewport.y;
             const int left=int(std::clamp(std::ceil(originX-.5),double(viewport.x),double(viewport.x+viewport.width)));
@@ -368,16 +382,24 @@ void CpuRenderer::RasterUiPic(const GfxCmdStretchPic &pic,PixelBufferView image,
             for(int y=top;y<bottom;++y)for(int x=left;x<right;++x) {
                 const double u=pic.s0+(double(x)+.5-originX)/pic.w*(pic.s1-pic.s0);
                 const double v=pic.t0+(double(y)+.5-originY)/pic.h*(pic.t1-pic.t0);
-                const double tx=std::clamp(u*image.width-.5,0.0,double(image.width-1));
-                const double ty=std::clamp(v*image.height-.5,0.0,double(image.height-1));
-                const int x0=int(std::floor(tx)),y0=int(std::floor(ty));
-                const int x1=std::min(x0+1,image.width-1),y1=std::min(y0+1,image.height-1);
+                auto bilinear=[&](double sampleU,double sampleV,double (&rgba)[4]) {
+                    const double tx=std::clamp(sampleU*image.width-.5,0.0,double(image.width-1));
+                    const double ty=std::clamp(sampleV*image.height-.5,0.0,double(image.height-1));
+                    const int x0=int(std::floor(tx)),y0=int(std::floor(ty));
+                    const int x1=std::min(x0+1,image.width-1),y1=std::min(y0+1,image.height-1);
+                    for(unsigned channel=0;channel<4;++channel) {
+                        auto value=[&](int sx,int sy){return double(image.bytes[size_t(sy)*image.pitch+sx*4+channel]);};
+                        const double upper=value(x0,y0)*(1-(tx-x0))+value(x1,y0)*(tx-x0);
+                        const double lower=value(x0,y1)*(1-(tx-x0))+value(x1,y1)*(tx-x0);
+                        rgba[channel]=upper*(1-(ty-y0))+lower*(ty-y0);
+                    }
+                };
                 double sampled[4];
-                for(unsigned channel=0;channel<4;++channel) {
-                    auto value=[&](int sx,int sy){return double(image.bytes[size_t(sy)*image.pitch+sx*4+channel]);};
-                    const double upper=value(x0,y0)*(1-(tx-x0))+value(x1,y0)*(tx-x0);
-                    const double lower=value(x0,y1)*(1-(tx-x0))+value(x1,y1)*(tx-x0);
-                    sampled[channel]=upper*(1-(ty-y0))+lower*(ty-y0);
+                if(sample.taps==1)bilinear(u,v,sampled);
+                else {
+                    double other[4];bilinear(u-sample.offsetU,v-sample.offsetV,sampled);
+                    bilinear(u+sample.offsetU,v+sample.offsetV,other);
+                    for(unsigned channel=0;channel<4;++channel)sampled[channel]=(sampled[channel]+other[channel])*.5;
                 }
                 auto *dest=pixels.data()+(size_t(y)*extent.width+x)*4;
                 const double alpha=sampled[3]*pic.color.array[3]/(255.0*255.0);

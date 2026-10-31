@@ -15,6 +15,7 @@
 #include <stdexcept>
 #include <algorithm>
 const dvar_t *uiscript_debug;
+const dvar_t *ui_showMenuOnly;
 namespace kisak::window {
 namespace { MenuInputOwner *current=nullptr; }
 MenuInputOwner &MenuInputOwner::Current(){if(!current)throw std::logic_error("menu services unavailable");current->CheckThread();return *current;}
@@ -30,23 +31,28 @@ MenuInputOwner::MenuInputOwner(ClientInputHost &input,CpuRenderer &renderer,cons
     renderer_.Initialize(width,height);
     fonts_=LoadMenuFonts(renderer_,bundle,images);
     composition_=std::make_unique<MenuCompositionAssets>(LoadMenuComposition(renderer_,bundle,images));
+    if(composition_->items.size()!=8)throw std::invalid_argument("Traversal requires eight admitted background items");
+    for(size_t n=0;n<8;++n){auto &entry=*composition_->items[n];entry.item.parent=&assets_->menu;paintItems_[n]=&entry.item;paintMaterials_[n]={entry.materialName,entry.material,&entry.item};}
+    for(size_t n=0;n<assets_->items.size();++n)paintItems_[n+8]=&assets_->items[n];
+    assets_->menu.items=paintItems_.data();assets_->menu.itemCount=paintItems_.size();
     auto admit=[&](const char *&script){if(script&&*script)script=scripts_.RegisterScript(script);};
     admit(assets_->menu.onOpen);admit(assets_->menu.onClose);admit(assets_->menu.onESC);
     for(auto &item:assets_->items){admit(item.action);admit(item.onFocus);admit(item.leaveFocus);}
     dc_.localClientNum=0;dc_.menuCount=1;dc_.Menus[0]=&assets_->menu;dc_.isCursorVisible=false;
     UILocalVar_Init(&dc_.localVars);
     Dvar_RegisterBool("m_filter",false,DVAR_ARCHIVE,"Allow mouse movement smoothing");
+    ui_showMenuOnly=Dvar_RegisterString("ui_showMenuOnly","",DVAR_NOFLAG,"Restrict admitted menu painting by name");
     uiscript_debug=Dvar_RegisterInt("uiscript_debug",0,0,2,DVAR_NOFLAG,"UI script diagnostic level");
     Resize(width,height);current=this;
     input_.AttachMenu(*this);attached_=true;Open();
-    } catch(...){ResetTransient();if(attached_){try {input_.DetachMenu(*this);}catch(...){}attached_=false;}UILocalVar_Shutdown(&dc_.localVars);if(current==this)current=nullptr;uiscript_debug=nullptr;renderer_.Shutdown();throw;}
+    } catch(...){ResetTransient();if(attached_){try {input_.DetachMenu(*this);}catch(...){}attached_=false;}UILocalVar_Shutdown(&dc_.localVars);if(current==this)current=nullptr;uiscript_debug=nullptr;ui_showMenuOnly=nullptr;renderer_.Shutdown();throw;}
     std::printf("menu_controls=ready source=options_look items=105,106,111,112 audio_driver=%s blur=unsupported frame=unavailable\n",SDL_GetCurrentAudioDriver());
 }
 MenuInputOwner::~MenuInputOwner(){
     try {input_.ReleaseEngineCursor();}catch(const std::exception &e){std::fprintf(stderr,"menu cursor teardown: %s\n",e.what());}
     try {if(attached_){attached_=false;input_.DetachMenu(*this);}Close();}
     catch(const std::exception&e){std::fprintf(stderr,"menu teardown: %s\n",e.what());}
-    ResetTransient();UILocalVar_Shutdown(&dc_.localVars);if(current==this)current=nullptr;uiscript_debug=nullptr;renderer_.Shutdown();
+    ResetTransient();UILocalVar_Shutdown(&dc_.localVars);if(current==this)current=nullptr;uiscript_debug=nullptr;ui_showMenuOnly=nullptr;renderer_.Shutdown();
 }
 void MenuInputOwner::ResetTransient() noexcept {
     inHandleKey=0;g_waitingForKey=0;g_editingField=0;g_editItem=nullptr;g_bindItem=nullptr;itemCapture=nullptr;captureFunc=nullptr;captureData=nullptr;scrollInfo={};
@@ -87,12 +93,13 @@ int MenuInputOwner::FocusIndex() const {for(size_t i=0;i<assets_->items.size();+
 void MenuInputOwner::Trace(const char *phase) {
     // Logging must not allocate or throw between a UI action and capture sync.
     const TraceState state{true,Opened(),FocusIndex(),Dvar_GetBool("cl_freelook"),
-        Dvar_GetBool("m_filter"),width_,height_,input_.Held(),pointerX_,pointerY_,CursorVisible(),pointerInside_,focused_,dc_.cursor.x,dc_.cursor.y};
+        Dvar_GetBool("m_filter"),width_,height_,input_.Held(),pointerX_,pointerY_,CursorVisible(),pointerInside_,focused_,dc_.cursor.x,dc_.cursor.y,paintResult_.requestedBlur,paintResult_.painted,paintResult_.postprocessUnsupported};
     auto &cache=std::strcmp(phase,"present")==0?lastPresentTrace_:lastTrace_;
     if(state!=cache) {
         cache=state;
-        std::printf("menu_state phase=%s open=%d focus=%d cl_freelook=%d m_filter=%d width=%d height=%d held=%d pointer_x=%d pointer_y=%d cursor_visible=%d pointer_inside=%d window_focused=%d cursor_x=%g cursor_y=%g\n",
-            phase,state.open,state.focus,state.freelook,state.filter,state.width,state.height,state.held,state.pointerX,state.pointerY,state.visible,state.pointerInside,state.windowFocused,state.cursorX,state.cursorY);
+        std::printf("menu_state phase=%s open=%d focus=%d cl_freelook=%d m_filter=%d width=%d height=%d held=%d pointer_x=%d pointer_y=%d cursor_visible=%d pointer_inside=%d window_focused=%d cursor_x=%g cursor_y=%g requested_blur=%g traversal_painted=%d blur_unrendered=%d\n",
+            phase,state.open,state.focus,state.freelook,state.filter,state.width,state.height,state.held,state.pointerX,state.pointerY,state.visible,state.pointerInside,state.windowFocused,state.cursorX,state.cursorY,state.requestedBlur,state.painted,state.blurUnrendered);
+        if(std::strcmp(phase,"present")==0)std::printf("menu_traversal painted=%d item_count=%d blur_requested=%g blur_rendered=0 compositor=partial\n",state.painted,assets_->menu.itemCount,state.requestedBlur);
         std::fflush(stdout);
     }
 }
@@ -102,24 +109,21 @@ void MenuInputOwner::Present(WindowHost &window){CheckThread();const auto extent
     if(focused_&&pointerInside_)SDL_GetMouseState(&pointerX_,&pointerY_);
     UI_UpdateCursorPosition(&dc_,&placement_,pointerX_,pointerY_);
     if(!focused_||!pointerInside_)dc_.isCursorVisible=false;
-    std::array<windowDef_t,8> beforeWindows{};
-    if(composition_->windows.size()>beforeWindows.size())throw std::logic_error("Composition window bound exceeded");
-    for(size_t i=0;i<composition_->windows.size();++i)beforeWindows[i]=composition_->windows[i].window;
+    const auto beforeMenu=assets_->menu;const auto beforeBlur=dc_.blurRadiusOut;const auto beforeResult=paintResult_;
+    std::array<itemDef_s,12> beforeItems{};for(size_t n=0;n<paintItems_.size();++n)beforeItems[n]=*paintItems_[n];
     UI_UpdateContextTime(&dc_,&timeIndex_,previousTimes_,Sys_Milliseconds());
     renderer_.BeginFrame();
     try {
         const float clear[4]={.25f,.5f,.75f,1};renderer_.Clear(clear);renderer_.SetViewport(0,0,width_,height_);
-        if(Opened()) {
-            for(auto &back:composition_->windows)if(Window_IsVisible(0,&back.window))
-                renderer_.DrawWindow(back.material,placement_,dc_,back.window,composition_->fadeAmount,composition_->fadeInAmount,composition_->fadeClamp,composition_->fadeCycle);
-            for(auto &item:assets_->items)renderer_.DrawMenuItem(fonts_,placement_,dc_,item);
-            if(CursorVisible())renderer_.DrawCursor(composition_->cursor,placement_,placement_,dc_);
-        }
+        dc_.blurRadiusOut=0; // Actual Menu_PaintAll once-per-frame compositor accumulation boundary.
+        paintResult_=renderer_.DrawMenuTraversal(fonts_,placement_,dc_,assets_->menu,paintMaterials_);
+        if(CursorVisible())renderer_.DrawCursor(composition_->cursor,placement_,placement_,dc_);
         renderer_.Submit();renderer_.Present(window);
     } catch(...) {
         // An SDL failure may occur after CPU replay. Keep the resources/pixels,
         // discard the failed frame and let a later tick rebuild it normally.
-        for(size_t i=0;i<composition_->windows.size();++i)composition_->windows[i].window=beforeWindows[i];
+        for(size_t n=0;n<paintItems_.size();++n)*paintItems_[n]=beforeItems[n];
+        assets_->menu=beforeMenu;dc_.blurRadiusOut=beforeBlur;paintResult_=beforeResult;
         renderer_.CancelFrame();
         try {input_.ReleaseEngineCursor();}catch(const std::exception &e){std::fprintf(stderr,"menu cursor error cleanup: %s\n",e.what());}
         throw;

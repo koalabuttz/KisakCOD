@@ -65,8 +65,52 @@ int main() {
    Check(Pixel(r,0,0,colors[expected]),"owned genuine mip selection follows nearest level at isotropic footprint");
   }
   r.Resize(8,8);r.BeginFrame();r.Clear(black);r.DrawUiImage(mipMaterial,place,0,0,4,2,5,5,white);
+  r.Submit();
+  Check(Pixel(r,0,0,colors[1]),"nonuniform footprint selects the supported minor-axis mip without dropping material");
+  r.Resize(8,8);
+  std::vector<PixelBuffer> pattern(4);
+  const std::array<std::array<uint8_t,4>,4> rows={{{255,0,0,255},{0,255,0,255},{0,0,255,255},{255,255,255,255}}};
+  for(unsigned level=0;level<4;++level) {
+   pattern[level].Resize(8>>level,8>>level);auto bytes=pattern[level].Bytes();const int size=8>>level;
+   for(int y=0;y<size;++y)for(int x=0;x<size;++x){
+    const std::array<uint8_t,4> color=level==1?rows[y]:level==2?(y==0?std::array<uint8_t,4>{255,255,0,255}:std::array<uint8_t,4>{0,255,255,255}):std::array<uint8_t,4>{255,0,255,255};
+    std::copy(color.begin(),color.end(),bytes.begin()+(y*size+x)*4);
+   }
+  }
+  const auto patterned=r.RegisterUiMaterial(r.UploadMipChain(pattern),true);
+  auto drawPattern=[&](float x,float y,float w,float h){r.Resize(8,8);r.BeginFrame();r.Clear(black);r.DrawUiImage(patterned,place,x,y,w,h,5,5,white);r.Submit();};
+  drawPattern(0,0,4,2);
+  Check(Pixel(r,0,0,{128,128,0,255}) && Pixel(r,0,1,{128,128,255,255}),"two vertical taps average independently computed colored mip rows");
+  drawPattern(0,0,4,-2);
+  Check(Pixel(r,0,0,{128,128,255,255}) && Pixel(r,0,1,{128,128,0,255}),"flipped UV preserves symmetric anisotropic taps");
+  drawPattern(0,-1,4,2);
+  Check(Pixel(r,0,0,{128,128,255,255}) && Pixel(r,0,1,{0,0,0,255}),"clipping preserves original anisotropic footprint and UVs");
+  drawPattern(0,.25f,4,2);
+  Check(Pixel(r,0,0,{191,64,0,255}),"each displaced tap clamps independently at texture edge");
+  drawPattern(0,0,8,1);
+  Check(Pixel(r,0,0,{128,255,128,255}),"ratio above two coarsens the minor footprint and still uses exactly two taps");
+  drawPattern(0,0,8/1.40f,4);
+  Check(Pixel(r,0,0,{255,0,255,255}),"minor footprint below nearest-mip boundary selects stored base level");
+  drawPattern(0,0,8/1.43f,4);
+  Check(Pixel(r,0,0,{237,18,0,255}),"minor footprint above nearest-mip boundary selects and filters stored mip one");
+  drawPattern(0,0,4,3.999999f);
+  Check(Pixel(r,0,0,{255,0,0,255}),"existing isotropic tolerance retains prior single-tap pixel result");
+  drawPattern(0,0,4,8/2.01f);
+  Check(Pixel(r,0,0,{254,1,0,255}),"near-isotropic two-tap footprint approaches the original bilinear result");
+  r.Resize(8,8);
+  for(int y=0;y<4;++y)for(int x=0;x<4;++x)std::copy(rows[x].begin(),rows[x].end(),pattern[1].Bytes().begin()+(y*4+x)*4);
+  const auto horizontal=r.RegisterUiMaterial(r.UploadMipChain(pattern),true);
+  r.BeginFrame();r.Clear(black);r.DrawUiImage(horizontal,place,0,0,2,4,5,5,white);r.Submit();
+  Check(Pixel(r,0,0,{128,128,0,255}) && Pixel(r,1,0,{128,128,255,255}),"transposed major axis produces transposed two-tap colors");
+  r.Resize(8,8);
+  for(int y=0;y<4;++y)for(int x=0;x<4;++x){auto bytes=pattern[1].Bytes();std::copy(rows[y].begin(),rows[y].end(),bytes.begin()+(y*4+x)*4);bytes[(y*4+x)*4+3]=y==0?64:192;}
+  const auto translucent=r.RegisterUiMaterial(r.UploadMipChain(pattern),true);
+  r.BeginFrame();r.Clear(background);r.DrawUiImage(translucent,place,0,0,4,2,5,5,half);r.Submit();
+  Check(Pixel(r,0,0,{80,128,143,255}),"RGBA taps average before packed tint and one source-alpha blend");
+  r.Resize(8,8);const auto incomplete=r.RegisterUiMaterial(r.Upload(pattern.front().View()),true);
+  r.BeginFrame();r.Clear(black);r.DrawUiImage(incomplete,place,0,0,4,2,5,5,white);
   const auto saved=std::vector<uint8_t>(r.Pixels().bytes.begin(),r.Pixels().bytes.end());
-  Check(Reject([&]{r.Submit();}) && std::equal(saved.begin(),saved.end(),r.Pixels().bytes.begin()),"unsupported nonuniform minification rejects atomically before clear");
+  Check(Reject([&]{r.Submit();})&&std::equal(saved.begin(),saved.end(),r.Pixels().bytes.begin()),"nonuniform minification with incomplete mip chain still rejects before clear mutation");
   r.Resize(8,8);
   Check(Reject([&]{r.UploadMipChain(std::span<const PixelBuffer>(levels).first(3));}),"incomplete chain upload rejected");
   levels[1].Resize(3,4);Check(Reject([&]{r.UploadMipChain(levels);}),"invalid chain shape rejected");

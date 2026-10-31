@@ -50,6 +50,19 @@ def sample(image, u, v):
                      for dy,wy in ((0,1-(y-iy)),(1,y-iy))) for channel in range(4))
 
 
+def sampling_plan(dx,dy,base_width,base_height,levels):
+    """Documented bounded CPU filter, not a GPU-driver equivalence oracle."""
+    major=max(dx,dy)
+    if major<=1:return 0,[(0,0)]
+    if abs(dx-dy)<=1e-5*major:
+        return min(levels-1,max(0,math.floor(math.log2(dx)+.5))),[(0,0)]
+    footprint=max(1,min(dx,dy),major/2)
+    level=min(levels-1,max(0,math.floor(math.log2(footprint)+.5)))
+    distance=(major-footprint)/2
+    offset=(distance/base_width,0) if dx>=dy else (0,distance/base_height)
+    return level,[(-offset[0],-offset[1]),offset]
+
+
 def blend(old, rgba, color):
     tint = [max(0,min(255,math.floor(c*255+.5))) for c in color]
     alpha = rgba[3]/255*tint[3]/255
@@ -81,12 +94,15 @@ class CompositionReference:
         if not (x <= px+.5 < x+w and y <= py+.5 < y+h):
             return old
         levels = self.images[material]
-        mip = 0
+        mip,offsets=0,[(0,0)]
         if self.materials[material]['textures'][0]['sampler_state'] == 235:
-            ratio = max(levels[0].width/w,levels[0].height/h)
-            mip = max(0,min(len(levels)-1,math.floor(math.log2(ratio)+.5)))
+            mip,offsets=sampling_plan(levels[0].width/w,levels[0].height/h,
+                                     levels[0].width,levels[0].height,len(levels))
         u,v = (px+.5-x)/w,(py+.5-y)/h
-        return blend(old,sample(levels[mip],1-u if flipx else u,1-v if flipy else v),color)
+        u,v = (1-u if flipx else u),(1-v if flipy else v)
+        samples=[sample(levels[mip],u+du,v+dv) for du,dv in offsets]
+        rgba=tuple(sum(pixel[c] for pixel in samples)/len(samples) for c in range(4))
+        return blend(old,rgba,color)
 
     @lru_cache(maxsize=65536)
     def background(self, px, py):

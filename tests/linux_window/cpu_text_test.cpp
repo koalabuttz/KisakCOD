@@ -78,5 +78,19 @@ int main(){try{
   const auto image=mipText.Pixels();const auto at=3*image.pitch+4*4;
   Check(image.bytes[at]==0 && image.bytes[at+1]==255 && image.bytes[at+2]==0,"actual glyph replay selects owned stored mip for minified style6 text");
  }
+ {
+  CpuRenderer budget;budget.Initialize(1024,1024);std::vector<PixelBuffer> levels(11);
+  for(unsigned i=0;i<levels.size();++i)levels[i].Resize(1024>>i,1024>>i);
+  const auto atlas=budget.RegisterUiMaterial(budget.UploadMipChain(levels),true);
+  auto large=glyphs;for(auto &g:large){g.x0=g.y0=g.dx=0;g.pixelWidth=g.pixelHeight=255;g.s0=g.t0=0;g.s1=g.t1=1;}
+  const auto font=budget.RegisterFont(atlas,"anisotropic-budget",48,large);
+  ScreenPlacement nonuniform{};nonuniform.scaleVirtualToReal[0]=1;nonuniform.scaleVirtualToReal[1]=.5f;
+  const std::vector<uint8_t> original(budget.Pixels().bytes.begin(),budget.Pixels().bytes.end());
+  budget.BeginFrame();budget.Clear(black);const float whiteTint[4]={1,1,1,1};
+  budget.DrawUiText(font,nonuniform,std::string(128,'A'),128,2,2,1,1,4,whiteTint,0);
+  bool exhausted=false;try{budget.Submit();}catch(const std::length_error&e){exhausted=std::string_view(e.what())=="Text raster budget exhausted";}
+  Check(exhausted&&budget.Status()==CpuRenderer::State::recording&&std::equal(original.begin(),original.end(),budget.Pixels().bytes.begin()),
+        "two-tap text charges both samples and rejects before clear, despite single-tap area fitting budget");
+ }
 }catch(const std::exception&e){std::fprintf(stderr,"text fixture failed: %s\n",e.what());++failures;}
 std::printf("-- %d checks, %d failures --\n",checks,failures);return failures?1:0;}

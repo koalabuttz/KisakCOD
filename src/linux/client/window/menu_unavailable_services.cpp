@@ -32,3 +32,19 @@ void Menus_HandleOOBClick(UiContext*,menuDef_t*,int,int) { Unavailable("outside-
 int32_t CL_ControllerIndexFromClientNum(int32_t) { Unavailable("menu allowed-binding execution"); }
 bool IsExpressionTrue(int,const statement_s*) { Unavailable("visibility expressions"); }
 const char *SE_GetString(const char*) { Unavailable("general localization database lookup"); }
+// Traversal retains original branches, but graph admission rejects these
+// gameplay/general-expression/widget prerequisites before any drawing.
+bool UI_OwnerDrawVisible(short) { Unavailable("owner-draw visibility"); }
+bool CL_IsCgameInitialized(int) { Unavailable("cgame visibility state"); }
+char CG_ScopeIsOverlayed(int) { Unavailable("scope overlay visibility"); }
+bool CG_Flashbanged(int) { Unavailable("flashbang visibility"); }
+double GetExpressionFloat(int,const statement_s*) { Unavailable("general numeric UI expression"); }
+void UI_DrawRect(const ScreenPlacement*,float,float,float,float,int,int,float,const float*) { Unavailable("debug menu rectangle"); }
+void Item_TextField_Paint(UiContext*,itemDef_s*) { Unavailable("text-field painter"); }
+void Item_DvarEnum_Paint(UiContext*,itemDef_s*) { Unavailable("enum painter"); }
+void Item_Multi_Paint(UiContext*,itemDef_s*) { Unavailable("multi-choice painter"); }
+void Item_ListBox_Paint(UiContext*,itemDef_s*) { Unavailable("listbox painter"); }
+void Item_Slider_Paint(UiContext*,itemDef_s*) { Unavailable("slider painter"); }
+void Item_OwnerDraw_Paint(UiContext*,itemDef_s*) { Unavailable("owner-draw painter"); }
+void Item_GameMsgWindow_Paint(UiContext*,itemDef_s*) { Unavailable("game message painter"); }
+void Item_Bind_Paint(UiContext*,itemDef_s*) { Unavailable("binding painter"); }
