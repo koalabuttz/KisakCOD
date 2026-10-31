@@ -281,6 +281,7 @@ set(GFX_D3D
     "${SRC_DIR}/gfx_d3d/r_reflection_probe.h"
     "${SRC_DIR}/gfx_d3d/r_reflection_probe_load_obj.cpp"
     "${SRC_DIR}/gfx_d3d/r_rendercmds.cpp"
+    "${SRC_DIR}/gfx_d3d/r_command_buffer.cpp"
     "${SRC_DIR}/gfx_d3d/r_rendercmds.h"
     "${SRC_DIR}/gfx_d3d/r_rendertarget.cpp"
     "${SRC_DIR}/gfx_d3d/r_rendertarget.h"

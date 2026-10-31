@@ -2,6 +2,7 @@
 #include "client_input_host.h"
 #include "shutdown_signal.h"
 #include "frame_deadline.h"
+#include "cpu_renderer.h"
 #include <linux/sys_events.h>
 #include <qcommon/qcommon.h>
 #include <win32/win_local.h>
@@ -37,19 +38,16 @@ public:
     }
     void OnQuit() override { std::puts("window=closing"); }
 };
-void PresentDiagnostic(kisak::window::WindowHost &host,kisak::window::PixelBuffer &pixels) {
+void PresentEngineClear(kisak::window::WindowHost &host,kisak::window::CpuRenderer &renderer)
+{
     const auto extent=host.SurfaceExtent();
-    if(pixels.Resize(extent.width,extent.height)) {
-        auto bytes=pixels.Bytes();
-        for(int y=0;y<extent.height;++y)for(int x=0;x<extent.width;++x) {
-            const bool left=x<extent.width/2,top=y<extent.height/2;
-            auto *p=bytes.data()+(size_t(y)*extent.width+x)*4;
-            p[0]=(top?left:!left)?255:0;
-            p[1]=!left?255:0;p[2]=!top && left?255:0;p[3]=255;
-        }
-        std::printf("presentation=rgba8-diagnostic width=%d height=%d\n",extent.width,extent.height);
-    }
-    host.Present(pixels.View());
+    const auto current=renderer.Pixels();
+    if(renderer.Status()==kisak::window::CpuRenderer::State::stopped)renderer.Initialize(extent.width,extent.height);
+    else if(current.width!=extent.width || current.height!=extent.height)renderer.Resize(extent.width,extent.height);
+    if(current.width!=extent.width || current.height!=extent.height)
+        std::printf("presentation=engine-color-clear width=%d height=%d producer=R_EmitClearScreenCommand\n",extent.width,extent.height);
+    const float color[4]={0.25f,0.5f,0.75f,1.0f};
+    renderer.BeginFrame();renderer.Clear(color);renderer.Submit();renderer.Present(host);
 }
 bool Number(const char *text,unsigned maximum,unsigned &value) {
     if(!*text)return false;
@@ -93,9 +91,9 @@ int main(int argc,char **argv)
         kisak::window::WindowHost host(input,config);
         kisak::window::ShutdownSignal signals;
         if(server)input.Discover(server);
-        kisak::window::PixelBuffer pixels;
-        PresentDiagnostic(host,pixels);
-        std::printf("window=created driver=%s id=%u title=%s game=false input=engine connection=disconnected frame=unavailable presentation=rgba8-diagnostic\n",
+        kisak::window::CpuRenderer renderer;
+        PresentEngineClear(host,renderer);
+        std::printf("window=created driver=%s id=%u title=%s game=false input=engine connection=disconnected frame=unavailable presentation=engine-color-clear\n",
             SDL_GetCurrentVideoDriver(),host.Id(),config.title);
         std::printf("window=ready id=%u driver=%s\n",host.Id(),SDL_GetCurrentVideoDriver());
         if(relative)host.SetRelativeMouse(true);
@@ -137,7 +135,7 @@ int main(int argc,char **argv)
                 const auto sample=input.ConsumeMouse();
                 if(metrics.trace && (sample.x || sample.y))std::printf("input_tick mouse_dx=%d mouse_dy=%d frame=unavailable\n",sample.x,sample.y);
                 if(metrics.trace)std::printf("editor text=%s cursor=%d held=%d\n",input.Text(),input.Cursor(),input.Held());
-                PresentDiagnostic(host,pixels);++drawn;
+                PresentEngineClear(host,renderer);++drawn;
             }
             if(!host.Running())break;
             if((frames && drawn>=frames) || (runMilliseconds && SDL_GetTicks()-started>=runMilliseconds))host.RequestQuit();

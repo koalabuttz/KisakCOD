@@ -13,7 +13,7 @@ WM/Escape/SIGTERM/SIGINT teardown while a key is held. Repeated launches share
 one X server; they test process/window cleanup, not same-process host reuse.
 The host explicitly reports game-frame execution unavailable.
 
-Add --pixels to sample the diagnostic RGBA producer's visible RGB quadrants
+Add --pixels to sample the engine clear-command producer's visible RGB output
 with XGetImage at startup and after resize. JSON evidence records actual X11
 geometry, sample positions and colors; the 24-bit Xvfb drawable exposes no alpha.
 
@@ -126,7 +126,7 @@ def main():
     parser.add_argument("--commands", action="store_true",
                         help="also verify real console executor, local UDP discovery and network restart")
     parser.add_argument("--pixels", action="store_true",
-                        help="read X11 pixels and verify RGBA diagnostic quadrants before/after resize")
+                        help="read X11 pixels and verify the engine clear color before/after resize")
     parser.add_argument("--log-dir", type=Path)
     parser.add_argument("--timeout", type=float, default=10)
     args = parser.parse_args()
@@ -212,8 +212,8 @@ def main():
         xdo("windowfocus", "--sync", window)
         def check_pixels(label, extent):
             from x11_pixel_checks import read_quadrants
-            colors = {"top_left": [255, 0, 0], "top_right": [0, 255, 0],
-                      "bottom_left": [0, 0, 255], "bottom_right": [255, 255, 0]}
+            colors = {name: [64, 128, 191] for name in
+                      ("top_left", "top_right", "bottom_left", "bottom_right")}
 
             def matches():
                 sample = read_quadrants(display, window)
@@ -222,11 +222,12 @@ def main():
                 return dimensions == extent and all(
                     sample["samples"][name]["rgb"] == color for name, color in colors.items())
 
-            wait_for(matches, args.timeout, label + " X11 RGBA quadrant pixels", client)
-            marker = f"presentation=rgba8-diagnostic width={extent[0]} height={extent[1]}"
+            wait_for(matches, args.timeout, label + " X11 engine clear-color pixels", client)
+            marker = (f"presentation=engine-color-clear width={extent[0]} height={extent[1]} "
+                      "producer=R_EmitClearScreenCommand")
             if marker not in read(trace):
-                raise RuntimeError(label + ": matching pixels have no presentation trace")
-            print(f"PASS: XGetImage {label} {extent[0]}x{extent[1]} red/green/blue/yellow quadrants", flush=True)
+                raise RuntimeError(label + ": matching pixels have no engine producer presentation trace")
+            print(f"PASS: XGetImage {label} {extent[0]}x{extent[1]} RGB64/128/191 from engine clear command", flush=True)
 
         if args.pixels:
             check_pixels("initial", (960, 540))

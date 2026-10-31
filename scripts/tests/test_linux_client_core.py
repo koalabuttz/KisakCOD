@@ -491,7 +491,7 @@ def check_default_build_has_no_client_targets(cxx, cc, timeout, build_timeout):
               "KisakCOD-client-packet-test" not in help_text)
         for name in ("KisakCOD-client-auth-test", "KisakCOD-client-headless",
                      "KisakCOD-client-receive-test", "KisakCOD-client-platform-test",
-                     "KisakCOD-client-window", "KisakCOD-window-platform", "KisakCOD-window-test", "KisakCOD-client-input", "KisakCOD-client-input-test", "KisakCOD-shutdown-signal-test", "KisakCOD-client-command-test", "KisakCOD-client-runtime-test", "KisakCOD-client-input-startup-test", "KisakCOD-presentation-test", "KisakCOD-frame-deadline-test", "KisakCOD-pixel-resource-test"):
+                     "KisakCOD-client-window", "KisakCOD-window-platform", "KisakCOD-window-test", "KisakCOD-client-input", "KisakCOD-client-input-test", "KisakCOD-shutdown-signal-test", "KisakCOD-client-command-test", "KisakCOD-client-runtime-test", "KisakCOD-client-input-startup-test", "KisakCOD-presentation-test", "KisakCOD-frame-deadline-test", "KisakCOD-pixel-resource-test", "KisakCOD-cpu-renderer-test", "KisakCOD-cpu-renderer-fault-test"):
             check(f"default build exposes no {name} target", name not in help_text)
     finally:
         # TemporaryDirectory is uniquely named, so cleanup can only remove this

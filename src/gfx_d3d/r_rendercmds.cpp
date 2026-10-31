@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "r_rendercmds.h"
+#include "r_command_buffer.h"
 #include <qcommon/mem_track.h>
 #include <qcommon/threads.h>
 #include "rb_logfile.h"
@@ -408,13 +409,12 @@ void __cdecl R_BeginSharedCmdList()
 
 void __cdecl R_AddCmdEndOfList()
 {
-    R_GetCommandBuffer(RC_END_OF_LIST, 4);
+    R_EmitEndCommand(nullptr,[](void *,GfxRenderCommand id,int bytes) { return R_GetCommandBuffer(id,bytes); });
 }
 
 GfxCmdHeader *__cdecl R_GetCommandBuffer(GfxRenderCommand renderCmd, int bytes)
 {
     const char *v2; // eax
-    GfxCmdHeader *header; // [esp+8h] [ebp-8h]
     int sizeLimit; // [esp+Ch] [ebp-4h]
 
     if ((uint32_t)renderCmd >= RC_COUNT)
@@ -447,13 +447,7 @@ GfxCmdHeader *__cdecl R_GetCommandBuffer(GfxRenderCommand renderCmd, int bytes)
         sizeLimit -= 0x2000 - s_cmdList->usedCritical;
     if (bytes <= sizeLimit)
     {
-        header = (GfxCmdHeader *)&s_cmdList->cmds[s_cmdList->usedTotal];
-        s_cmdList->usedTotal += bytes;
-        s_cmdList->usedCritical += renderCmd >= RC_FIRST_NONCRITICAL ? 0 : bytes;
-        s_cmdList->lastCmd = header;
-        header->id = renderCmd;
-        header->byteCount = bytes;
-        return header;
+        return R_AppendCommand(*s_cmdList,s_renderCmdBufferSize,renderCmd,bytes);
     }
     else
     {
@@ -1480,31 +1474,11 @@ void __cdecl R_EndFrame()
     }
 }
 
-void __cdecl R_AddCmdClearScreen(int whichToClear, const float *color, float depth, uint8_t stencil)
+void __cdecl R_AddCmdClearScreen(int whichToClear,const float *color,float depth,uint8_t stencil)
 {
-    GfxCmdClearScreen *cmd; // [esp+Ch] [ebp-4h]
-
-    iassert( whichToClear );
-    if ((whichToClear & 0xFFFFFFF8) != 0)
-        MyAssertHandler(
-            ".\\r_rendercmds.cpp",
-            2044,
-            0,
-            "%s\n\t(whichToClear) = %i",
-            "((whichToClear & ~(0x00000001l | 0x00000002l | 0x00000004l)) == 0)",
-            whichToClear);
-    iassert( color );
-    iassert( (depth >= 0.0f && depth <= 1.0f) );
-    cmd = (GfxCmdClearScreen *)R_GetCommandBuffer(RC_CLEAR_SCREEN, 28);
-    iassert( cmd );
-    cmd->whichToClear = whichToClear;
-    iassert( cmd->whichToClear == whichToClear );
-    cmd->stencil = stencil;
-    cmd->depth = depth;
-    cmd->color[0] = *color;
-    cmd->color[1] = color[1];
-    cmd->color[2] = color[2];
-    cmd->color[3] = color[3];
+    R_EmitClearScreenCommand(nullptr,[](void *,GfxRenderCommand id,int bytes) {
+        return R_GetCommandBuffer(id,bytes);
+    },whichToClear,color,depth,stencil);
 }
 
 void __cdecl R_AddCmdSaveScreen(uint32_t screenTimerId)
