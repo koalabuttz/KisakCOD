@@ -2,7 +2,8 @@
 """Asset-free checks that the live bot probe cannot mistake missing bots for a pass."""
 import unittest
 from test_linux_bots import (FIXTURE_GSC, transition_fixture, transition_plan,
-                             validate_hold, validate_transitions)
+                             final_cohort_log, refill_fixture, validate_refills,
+                             validate_kick_window, validate_hold, validate_transitions)
 
 
 def healthy_log():
@@ -112,6 +113,92 @@ class TransitionEvidenceTests(unittest.TestCase):
         self.assertIn('level.callbackPlayerConnect = ::botTest_RestoreConnecting;', fixture)
         self.assertNotIn('botTest_stage', FIXTURE_GSC)
         self.assertEqual(transition_plan('mp_crash', 0), [(None, 'mp_crash')])
+
+
+def healthy_refills(cycles=3):
+    log = '0:00 BOTFEATURE stage=0 map=mp_crash\n'
+    for cycle in range(cycles + 1):
+        log += f'0:00 BOTFEATURE refill={cycle} capacity=3\n'
+        if cycle:
+            log += ''.join(f'0:00 BOTFEATURE kick entity={i} name=bot{3*(cycle-1)+i}\n' for i in range(3))
+            log += '0:00 BOTFEATURE vacant players=0\n'
+            log += ''.join(f'0:00 BOTFEATURE vacated entity={i} name=bot{3*(cycle-1)+i}\n' for i in range(3))
+        log += '0:00 BOTFEATURE auth_loopback=0 auth_unverified=0\n'
+        log += ''.join(f'0:01 BOTFEATURE identity entity={i} name=bot{3*cycle+i}\n' for i in range(3))
+        holds = healthy_log()
+        holds = '\n'.join(line.replace('team=allies', 'team=axis') if 'held entity=1 ' in line else line
+                          for line in holds.splitlines()) + '\n'
+        log += holds + '0:08 BOTFEATURE hold=done\n'
+    return log
+
+
+class RefillEvidenceTests(unittest.TestCase):
+    def passed(self, log):
+        return all(ok for ok, _ in validate_refills(log, 3, 2, 3))
+
+    def test_repeated_slot_reuse_beyond_capacity(self):
+        self.assertTrue(self.passed(healthy_refills()))
+        final = final_cohort_log(healthy_refills())
+        self.assertTrue(all(ok for ok, _ in validate_transitions(final, 3, 2, 'mp_crash', 0, True)))
+        self.assertIn('name=bot11', final)
+        self.assertNotIn('name=bot0\n', final)
+
+    def test_map_transitions_retain_final_not_original_cohort(self):
+        maps = healthy_transitions()
+        maps = maps[maps.index('0:00 BOTFEATURE stage=1'):]
+        for i in range(3):
+            maps = maps.replace(f'name=bot{i}\n', f'name=bot{i+9}\n')
+        maps = '\n'.join(line.replace('team=allies', 'team=axis') if 'held entity=1 ' in line else line
+                         for line in maps.splitlines()) + '\n'
+        log = healthy_refills() + maps
+        self.assertTrue(self.passed(log))
+        final = final_cohort_log(log)
+        self.assertTrue(all(ok for ok, _ in validate_transitions(final, 3, 2, 'mp_crash', 1, True)))
+        self.assertFalse(all(ok for ok, _ in validate_transitions(final.replace('name=bot9', 'name=bot0', 1),
+                                                                 3, 2, 'mp_crash', 1, True)))
+
+    def test_missing_duplicate_or_changed_evidence(self):
+        log = healthy_refills()
+        for line in log.splitlines(keepends=True)[1:]:
+            with self.subTest(line=line.strip()):
+                self.assertFalse(self.passed(log.replace(line, '', 1)))
+                self.assertFalse(self.passed(log.replace(line, line + line, 1)))
+        for old, new in [('capacity=3', 'capacity=8'), ('refill=1', 'refill=2'),
+                         ('vacant players=0', 'vacant players=1'),
+                         ('kick entity=0 name=bot0', 'kick entity=0 name=bot9'),
+                         ('vacated entity=0 name=bot0', 'vacated entity=0 name=bot9'),
+                         ('identity entity=0 name=bot3', 'identity entity=0 name=bot0'),
+                         ('auth_unverified=0', 'auth_unverified=1')]:
+            with self.subTest(new=new):
+                self.assertFalse(self.passed(log.replace(old, new, 1)))
+
+    def test_unused_slots_cannot_replace_reuse(self):
+        log = healthy_refills()
+        start = log.index('BOTFEATURE refill=1')
+        stop = log.index('BOTFEATURE refill=2')
+        middle = log[start:stop]
+        for marker in ('identity entity=', 'spawned entity=', 'held entity='):
+            middle = middle.replace(marker + '0', marker + '7')
+        self.assertFalse(self.passed(log[:start] + middle + log[stop:]))
+
+    def test_kick_window_requires_exact_engine_lines(self):
+        output = 'unrelated output\n0:bot0 EXE_PLAYERKICKED\n1:bot1 EXE_PLAYERKICKED\n'
+        expected = {('0', 'bot0'), ('1', 'bot1')}
+        self.assertTrue(validate_kick_window(output, expected))
+        self.assertTrue(validate_kick_window('ordinary output\n', set()))
+        self.assertFalse(validate_kick_window(output, set()))
+        self.assertFalse(validate_kick_window('', expected))
+        self.assertFalse(validate_kick_window(output + '0:bot0 EXE_PLAYERKICKED\n', expected))
+        self.assertFalse(validate_kick_window(output.replace('bot1', 'bot2'), expected))
+        self.assertFalse(validate_kick_window(output + 'malformed EXE_PLAYERKICKED\n', expected))
+
+    def test_fixture_uses_real_kick_and_default_grace(self):
+        fixture = refill_fixture()
+        self.assertIn('kick(oldIds[i]);', fixture)
+        self.assertIn('wait (getdvarint("sv_zombietime") + 2);', fixture)
+        self.assertIn('getdvarint("botTest_refill") < round', fixture)
+        self.assertNotIn('setdvar("sv_zombietime"', fixture)
+        self.assertEqual(fixture.count('addtestclient()'), 1)
 
 
 if __name__ == '__main__':

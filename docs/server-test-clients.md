@@ -94,6 +94,14 @@ Only the initial stage admits bots; replacements cannot hide losses. The fixture
 restores its recorded bots' stock marker before the original connect callback.
 This is isolated fixture continuity evidence, not proof of remote client identity.
 
+Add `--refill-cycles 3 --cycles 2 --timeout 90` to drop and refill the entire
+cohort three times before the map cycles. Refill mode forces server capacity to
+the bot count, observes the old entities disappear, and requires new names in
+the same slots. It assigns normal allies/axis menu choices by entity parity and
+disables bot firing for these opposing-team lifecycle holds. Only the exact
+planned kick lines are allowed; unexpected or missing kicks fail the test.
+Authentication and the normal zombie grace period stay unchanged.
+
 It uses a fresh temporary home/mod, symlinks installed assets read-only, binds
 an ephemeral `127.0.0.1` port and never edits the game installation. The fixture
 overrides registered `dm.gsc` and delegates initialization to stock `war::main`;
