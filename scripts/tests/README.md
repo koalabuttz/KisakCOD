@@ -43,7 +43,8 @@ kicks them before the hold completes. See
 coverage and blocker.
 
 The opt-in [native Linux client core](../../docs/linux-client.md) compiles actual
-client translation units and runs an asset-free client/server codec test. It is
+client translation units and runs asset-free client/server codec and bounded
+command-parser/key-state tests. Message readers are production code. It is
 checked separately from the dedicated-server suite and is not a playable client.
 
 These shared asset-free regression checks require Python 3 and a C++20 compiler:

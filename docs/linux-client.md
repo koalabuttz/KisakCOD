@@ -5,7 +5,7 @@
 There is **no native Linux client executable**, and this document does not
 claim one. What exists is an opt-in, compile-and-test-only foundation: the
 portable network translation units of the real multiplayer client build
-natively, and the client/server network command codec is tested end to end
+natively, and the client/server network command codec plus bounded parser/input state are tested
 without assets, sockets, or a game loop.
 
 The default native Linux build is still the dedicated multiplayer server. This
@@ -13,12 +13,13 @@ work changes nothing about it.
 
 ## What the milestone builds
 
-`KISAK_BUILD_LINUX_CLIENT_CORE` (default `OFF`) adds two targets:
+`KISAK_BUILD_LINUX_CLIENT_CORE` (default `OFF`) adds three targets:
 
 | Target | Kind | Purpose |
 | --- | --- | --- |
 | `KisakCOD-client-core` | OBJECT library | Compiles three production client TUs |
 | `KisakCOD-client-netchan-test` | executable | Asset-free test of the real codec |
+| `KisakCOD-client-state-test` | executable | Real command-parser and key-state runtime checks |
 
 The object library compiles these files **unmodified**, from their production
 source paths:
@@ -84,9 +85,10 @@ cmake -S . -B build-linux/client-core \
     -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$PWD/build-linux/client-core/bin"
 
 cmake --build build-linux/client-core \
-    --target KisakCOD-client-core KisakCOD-client-netchan-test -j4
+    --target KisakCOD-client-core KisakCOD-client-netchan-test KisakCOD-client-state-test -j4
 
 ./build-linux/client-core/bin/KisakCOD-client-netchan-test
+./build-linux/client-core/bin/KisakCOD-client-state-test
 ```
 
 Requires the same Clang and multilib toolchain as the native Linux server
@@ -109,11 +111,13 @@ need to be checked separately from local validation.
 
 The checker verifies generated compile commands for all three client-core
 translation units (`-m32`, `KISAK_MP`, no dedicated defines), builds in an isolated
-output directory and executes the codec test. Its default-OFF check uses a
+output directory and executes both runtime tests. The state-test compile commands
+are also checked for production source paths, client flags and `RELEASE_ASSERTS`. Its default-OFF check uses a
 separate temporary tree. Compiler-name checks can run without a build:
 
 ```sh
 python3 scripts/tests/test_linux_client_core.py --self-test
+python3 scripts/tests/test_linux_client_core_driver.py
 python3 scripts/tests/test_linux_client_core.py --build-type RelWithDebInfo \
     --build-dir build-linux/client-core-relwithdebinfo
 ```
@@ -171,10 +175,46 @@ rather than faked. Only these boundary symbols exist:
   client encodes at `data + 9, length - 9` and the server at
   `data + 4, length - 4`. That fails if the header size ever changes, without
   inventing a fake call.
-- **Anything above the codec.** Fragmentation, ordering, socket I/O, the
-  handshake, and all client state are outside this milestone.
-- **Runtime behaviour of `cl_parse_mp.cpp` and `cl_input.cpp`.** These are
-  compile-verified only; nothing runs them.
+- **Transport and full game state.** Fragmentation, ordering, socket I/O and
+  handshake are outside the codec test. The separate state test below covers
+  bounded parser/input behavior, not the full client loop.
+
+## Command parser and input runtime checks
+
+`client_state_test.cpp` links the actual `cl_parse_mp.cpp`, `cl_input.cpp`,
+`msg_mp.cpp` and `q_shared.cpp` translation units with section GC. Message
+readers and string cleaning/copying are production code, not doubles. Independent
+wire bytes exercise command admission, duplicate/stale sequences, ring wrap,
+every truncation of a command, complete retransmission after rejection,
+preexisting overflow, bounded/oversized strings, following-byte preservation,
+all split-buffer boundaries, and untouched history/connection fields.
+
+This exposed a real defect: `MSG_ReadString` returns a terminated string even
+when input ends early. `CL_ParseCommandString` used to commit that partial text
+and its newer sequence before the enclosing parser discarded the overflowed
+message. It now checks overflow before changing command history. Valid commands
+and the existing 1023-character output limit retain their previous behavior.
+
+Input tests run production `IN_KeyDown`, `IN_KeyUp`, `CL_KeyState`, attack
+command wrappers, `CL_UpdateCmdButton` and `CL_ClearKeys`. They cover repeat
+presses, two keys bound to one button, third-source rejection, unrelated releases,
+time accounting across frames, missing timestamps, clamped fractions, short
+presses between frames, pulse consumption, held-button persistence and clearing.
+No input behavior was changed by this milestone.
+
+Boundary doubles supply connection lookup, command arguments, frame clocks,
+diagnostic printing and fatal assertion handling. The private key-state array
+is reached through real attack/clear wrappers. This does not test real keyboard
+or mouse devices, window events, prediction, snapshot parsing, complete server
+message parsing or command execution. Assertions remain active in both build
+configurations. Native 32-bit sanitizer and graphical-client validation remain
+required separately.
+
+The checker requires both named parser/input result sections, zero failures,
+nonempty sections and consistent totals. Its unit tests reject missing/empty
+sections, contradictory totals and nonzero process exits. The default build
+still exposes none of the optional client targets and the dedicated executable
+fingerprint is checked even when a client build fails.
 
 ## What still blocks a real native client
 
