@@ -224,7 +224,7 @@ void Cmd_Vstr_f(void) {
 #include <vector>
 #include <cerrno>
 #include <cstring>
-#include <sound/snd_local.h>
+#include <sound/snd_public.h>
 #include <universal/com_sndalias.h>
 
 static void LoadXAssets()

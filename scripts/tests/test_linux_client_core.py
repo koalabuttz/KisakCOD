@@ -10,7 +10,7 @@ Verified here:
    no fake call is made to reach them (see ``check_header_offsets``).
 
 2. **The real compile commands**, from the generated ``compile_commands.json``:
-   six full client TUs, ``-m32``, ``-DKISAK_MP``, no dedicated defines, and
+   eight full client TUs, ``-m32``, ``-DKISAK_MP``, no dedicated defines, and
    ``-DKISAK_OPENAL`` present only as the header shim. Static CMake text is not
    enough on its own -- a comment can say anything.
 
@@ -57,6 +57,8 @@ OPTION = "KISAK_BUILD_LINUX_CLIENT_CORE"
 EXPECTED_TUS = (
     "src/client_mp/cl_auth.cpp",
     "src/client_mp/cl_connection_mp.cpp",
+    "src/client_mp/cl_connection_receive_mp.cpp",
+    "src/client_mp/cl_main_mp.cpp",
     "src/client_mp/cl_cgame_mp.cpp",
     "src/client_mp/cl_net_chan_mp.cpp",
     "src/client_mp/cl_parse_mp.cpp",
@@ -69,7 +71,7 @@ STATE_RUNTIME_TUS = (
     "src/universal/q_shared.cpp",
 )
 
-PACKET_RUNTIME_TUS = EXPECTED_TUS[2:] + (
+PACKET_RUNTIME_TUS = EXPECTED_TUS[4:] + (
     "src/server_mp/sv_net_chan_mp.cpp", "src/qcommon/msg_mp.cpp",
     "src/qcommon/huffman.cpp", "src/universal/q_shared.cpp",
     "src/universal/com_shared.cpp", "src/universal/com_math.cpp",
@@ -79,6 +81,21 @@ AUTH_RUNTIME_TUS = (
     "src/client_mp/cl_auth.cpp", "src/client_mp/cl_connection_mp.cpp",
     "src/universal/base64.cpp", "src/universal/q_shared.cpp",
     "src/qcommon/msg_mp.cpp", "src/qcommon/huffman.cpp", "src/universal/com_shared.cpp",
+)
+
+RECEIVE_RUNTIME_TUS = (
+    "src/client_mp/cl_connection_mp.cpp", "src/client_mp/cl_connection_receive_mp.cpp",
+    "src/qcommon/cmd.cpp", "src/qcommon/msg_mp.cpp", "src/qcommon/huffman.cpp",
+    "src/universal/q_shared.cpp", "src/universal/com_shared.cpp",
+)
+PLATFORM_RUNTIME_TUS = ("src/client_mp/cl_main_mp.cpp", "src/universal/q_shared.cpp")
+
+HEADLESS_RUNTIME_TUS = (
+    "src/linux/client/headless_main.cpp", "src/linux/client/diagnostic_host.cpp",
+    "src/linux/net.cpp", "src/linux/sys_threads.cpp", "src/linux/sys_critical.cpp",
+    "src/linux/sys_posix.cpp", "src/qcommon/net_chan_mp.cpp", "src/universal/dvar.cpp",
+    "src/universal/q_shared.cpp", "src/universal/com_shared.cpp", "src/universal/com_math.cpp",
+    "src/client_mp/cl_auth.cpp", "src/universal/base64.cpp",
 )
 
 failures = []
@@ -325,10 +342,13 @@ def check_compile_commands(build_dir):
             flag_present(command, "-DKISAK_OPENAL"),
         )
 
-    for target, sources in (("state", STATE_RUNTIME_TUS), ("packet", PACKET_RUNTIME_TUS), ("auth", AUTH_RUNTIME_TUS)):
+    for target, sources in (("state", STATE_RUNTIME_TUS), ("packet", PACKET_RUNTIME_TUS), ("auth", AUTH_RUNTIME_TUS),
+                            ("receive", RECEIVE_RUNTIME_TUS), ("platform", PLATFORM_RUNTIME_TUS),
+                            ("headless", HEADLESS_RUNTIME_TUS)):
         for rel in sources:
             commands = by_file.get(os.path.realpath(ROOT / rel), [])
-            commands = [c for c in commands if f"KisakCOD-client-{target}-test.dir" in c]
+            target_directory = "KisakCOD-client-headless.dir" if target == "headless" else f"KisakCOD-client-{target}-test.dir"
+            commands = [c for c in commands if target_directory in c]
             if not check(f"{rel} has one runtime-{target} test compile command", len(commands) == 1):
                 continue
             command = commands[0]
@@ -338,7 +358,7 @@ def check_compile_commands(build_dir):
                 check(f"{target} runtime {rel} excludes {flag}", not flag_present(command, flag))
 
 
-def check_runtime_output(label, result, sections=()):
+def check_runtime_output(label, result, sections=(), minimum_checks=15):
     print(result.stdout.rstrip())
     if result.stderr:
         print(result.stderr.rstrip())
@@ -347,7 +367,7 @@ def check_runtime_output(label, result, sections=()):
     if not check(f"{label} printed a summary", summary is not None):
         return
     ran, failed = map(int, summary.groups())
-    check(f"{label} ran a nonempty case set", ran >= 15)
+    check(f"{label} ran a nonempty case set", ran >= minimum_checks)
     check(f"{label} had no failing case", failed == 0)
     section_total = 0
     for section in sections:
@@ -392,7 +412,8 @@ def check_build_and_run(cxx, cc, build_dir, build_type, jobs, timeout, build_tim
 
         targets = ["--target", "KisakCOD-client-core", "KisakCOD-client-netchan-test",
                    "KisakCOD-client-state-test", "KisakCOD-client-packet-test",
-                   "KisakCOD-client-auth-test", "KisakCOD-client-headless", "-j", str(jobs)]
+                   "KisakCOD-client-auth-test", "KisakCOD-client-headless",
+                   "KisakCOD-client-receive-test", "KisakCOD-client-platform-test", "-j", str(jobs)]
         result = run(["cmake", "--build", build_dir] + targets, build_timeout)
         if not check(f"build ({build_type}) client core and runtime tests",
                      result.returncode == 0,
@@ -407,16 +428,18 @@ def check_build_and_run(cxx, cc, build_dir, build_type, jobs, timeout, build_tim
               result.returncode == 0,
               (result.stderr or result.stdout)[-2000:])
 
-        for name, label, sections in (
-            ("KisakCOD-client-netchan-test", "netchan test", ()),
-            ("KisakCOD-client-packet-test", "client packet test", ()),
-            ("KisakCOD-client-auth-test", "client authentication/resend test", ()),
-            ("KisakCOD-client-state-test", "client state test", ("parser", "input")),
+        for name, label, sections, minimum in (
+            ("KisakCOD-client-netchan-test", "netchan test", (), 15),
+            ("KisakCOD-client-packet-test", "client packet test", (), 15),
+            ("KisakCOD-client-auth-test", "client authentication/resend test", (), 15),
+            ("KisakCOD-client-receive-test", "client receive/lifecycle test", (), 34),
+            ("KisakCOD-client-platform-test", "client platform test", (), 10),
+            ("KisakCOD-client-state-test", "client state test", ("parser", "input"), 15),
         ):
             binary = build_dir / "bin" / name
             if not check(f"{label} binary was produced in the private build dir", binary.exists()):
                 continue
-            check_runtime_output(label, run([binary], timeout), sections)
+            check_runtime_output(label, run([binary], timeout), sections, minimum)
         result = run([sys.executable, ROOT / "scripts/tests/test_linux_client_headless.py",
                       "--binary", build_dir / "bin/KisakCOD-client-headless"], timeout)
         check("headless real UDP/event tests pass", result.returncode == 0,
@@ -464,7 +487,8 @@ def check_default_build_has_no_client_targets(cxx, cc, timeout, build_timeout):
               "KisakCOD-client-state-test" not in help_text)
         check("default build exposes no client packet test target",
               "KisakCOD-client-packet-test" not in help_text)
-        for name in ("KisakCOD-client-auth-test", "KisakCOD-client-headless"):
+        for name in ("KisakCOD-client-auth-test", "KisakCOD-client-headless",
+                     "KisakCOD-client-receive-test", "KisakCOD-client-platform-test"):
             check(f"default build exposes no {name} target", name not in help_text)
     finally:
         # TemporaryDirectory is uniquely named, so cleanup can only remove this

@@ -675,6 +675,7 @@ void SND_UpdatePhysics();
 bool __cdecl SND_ShouldGiveCpuWarning();
 void __cdecl SND_StopSounds(snd_stopsounds_arg_t which);
 void __cdecl SND_Init();
+char __cdecl SND_InitDriver();
 void __cdecl SND_PlayLocal_f();
 void __cdecl RelativeToListener(const snd_listener *listener, float yaw, float pitch, float dist, float *result);
 void SND_InitEntChannels();

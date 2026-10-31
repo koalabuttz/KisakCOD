@@ -4,12 +4,41 @@
 #endif
 #include "client_mp.h"
 #include "cl_auth.h"
+#include "cl_connection_mp.h"
 #include <cgame_mp/cg_local_mp.h>
 #include <client/client.h>
 #include <universal/assertive.h>
 #include <qcommon/msg_mp.h>
 #include <win32/win_local.h>
 #include <win32/win_storage.h>
+
+namespace {
+struct PendingChallenge {
+    bool sent;
+    netadr_t endpoint;
+    int attempt;
+    int sendTime;
+};
+PendingChallenge pendingChallenges[STATIC_MAX_LOCAL_CLIENTS];
+}
+
+void CL_ResetConnectionHandshake(int localClientNum)
+{
+    iassert(localClientNum >= 0 && localClientNum < STATIC_MAX_LOCAL_CLIENTS);
+    pendingChallenges[localClientNum] = {};
+}
+
+bool CL_ChallengeResponseAllowed(int localClientNum, netadr_t from)
+{
+    iassert(localClientNum >= 0 && localClientNum < STATIC_MAX_LOCAL_CLIENTS);
+    const auto &pending = pendingChallenges[localClientNum];
+    const auto *connection = CL_GetLocalClientConnection(localClientNum);
+    return pending.sent && CL_GetLocalClientConnectionState(localClientNum) == CA_CONNECTING
+        && connection->connectPacketCount >= pending.attempt
+        && connection->connectTime >= pending.sendTime
+        && NET_CompareAdr(connection->serverAddress, pending.endpoint)
+        && NET_CompareAdr(from, pending.endpoint);
+}
 
 uint8_t msgBuffer[2048];
 void __cdecl CL_CheckForResend(int localClientNum)
@@ -67,6 +96,7 @@ void __cdecl CL_CheckForResend(int localClientNum)
                 //v2 = va("getchallenge 0 \"%s\"", md5Str);
 
                 {
+                    CL_ResetConnectionHandshake(localClientNum);
                     ClientAuthResult auth = CL_GetPlatformChallenge(challengeRequest, sizeof(challengeRequest));
                     if (auth != ClientAuthResult::ready)
                     {
@@ -74,7 +104,11 @@ void __cdecl CL_CheckForResend(int localClientNum)
                             CL_AuthResultName(auth));
                         break;
                     }
-                    NET_OutOfBandPrint((netsrc_t)localClientNum, clc->serverAddress, challengeRequest);
+                    if (NET_OutOfBandPrint((netsrc_t)localClientNum, clc->serverAddress, challengeRequest))
+                    {
+                        pendingChallenges[localClientNum] = { true, clc->serverAddress,
+                            clc->connectPacketCount, clc->connectTime };
+                    }
                 }
                 break;
             case CA_CHALLENGING:

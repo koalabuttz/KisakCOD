@@ -3,7 +3,7 @@
 ## Status
 
 There is **no playable native Linux client**. The opt-in foundation now includes
-six full production client translation units, asset-free runtime integration tests,
+eight full production client translation units, asset-free runtime integration tests,
 and a runnable Linux discovery diagnostic. The diagnostic starts real UDP/event
 handling and sends read-only `getinfo`; it explicitly reports `connected=false`
 and unavailable Linux authentication. It does not initialize `CL_Frame`, load game
@@ -14,15 +14,17 @@ work changes nothing about it.
 
 ## What the milestone builds
 
-`KISAK_BUILD_LINUX_CLIENT_CORE` (default `OFF`) adds six targets:
+`KISAK_BUILD_LINUX_CLIENT_CORE` (default `OFF`) adds eight targets:
 
 | Target | Kind | Purpose |
 | --- | --- | --- |
-| `KisakCOD-client-core` | OBJECT library | Compiles six production client TUs |
+| `KisakCOD-client-core` | OBJECT library | Compiles eight production client TUs |
 | `KisakCOD-client-netchan-test` | executable | Asset-free test of the real codec |
 | `KisakCOD-client-state-test` | executable | Real command-parser and key-state runtime checks |
 | `KisakCOD-client-packet-test` | executable | Production command emission, server decoding and prediction history integration |
 | `KisakCOD-client-auth-test` | executable | Challenge formatting and real resend state machine |
+| `KisakCOD-client-receive-test` | executable | Production reader/tokenizer/receive lifecycle and connection guards |
+| `KisakCOD-client-platform-test` | executable | Full client-main compilation and portable setenv behavior |
 | `KisakCOD-client-headless` | executable | Read-only UDP server discovery, no game admission |
 
 The object library compiles these files **unmodified**, from their production
@@ -34,6 +36,8 @@ source paths:
 - `src/client_mp/cl_cgame_mp.cpp` — cgame state publication and history consumers
 - `src/client_mp/cl_auth.cpp` — challenge formatting and platform authentication boundary
 - `src/client_mp/cl_connection_mp.cpp` — production connection resend state machine
+- `src/client_mp/cl_connection_receive_mp.cpp` — connectionless dispatch and timeout lifecycle
+- `src/client_mp/cl_main_mp.cpp` — full client-main TU, with portable environment handling
 
 Note the paths: the multiplayer client sources live under `client_mp/`.
 `src/client/cl_input.cpp` is the singleplayer/Windows-client variant and is
@@ -92,12 +96,14 @@ cmake -S . -B build-linux/client-core \
     -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$PWD/build-linux/client-core/bin"
 
 cmake --build build-linux/client-core \
-    --target KisakCOD-client-core KisakCOD-client-netchan-test KisakCOD-client-state-test KisakCOD-client-packet-test KisakCOD-client-auth-test KisakCOD-client-headless -j4
+    --target KisakCOD-client-core KisakCOD-client-netchan-test KisakCOD-client-state-test KisakCOD-client-packet-test KisakCOD-client-auth-test KisakCOD-client-headless KisakCOD-client-receive-test KisakCOD-client-platform-test -j4
 
 ./build-linux/client-core/bin/KisakCOD-client-netchan-test
 ./build-linux/client-core/bin/KisakCOD-client-state-test
 ./build-linux/client-core/bin/KisakCOD-client-packet-test
 ./build-linux/client-core/bin/KisakCOD-client-auth-test
+./build-linux/client-core/bin/KisakCOD-client-receive-test
+./build-linux/client-core/bin/KisakCOD-client-platform-test
 ```
 
 Requires the same Clang and multilib toolchain as the native Linux server
@@ -118,9 +124,9 @@ The Linux workflow runs it separately for Debug and RelWithDebInfo, so the norma
 server checks do not silently opt into client targets. Hosted CI results still
 need to be checked separately from local validation.
 
-The checker verifies generated compile commands for all six client-core
+The checker verifies generated compile commands for all eight client-core
 translation units (`-m32`, `KISAK_MP`, no dedicated defines), builds in an isolated
-output directory and executes all four runtime tests plus real socket tests. The state-test compile commands
+output directory and executes all six runtime tests plus real socket tests. The state-test compile commands
 are also checked for production source paths, client flags and `RELEASE_ASSERTS`. Its default-OFF check uses a
 separate temporary tree. Compiler-name checks can run without a build:
 
@@ -227,7 +233,7 @@ fingerprint is checked even when a client build fails.
 
 ## What still blocks a real native client
 
-Compiling six client TUs is not a client. In rough order of weight:
+Compiling eight client TUs is not a client. In rough order of weight:
 
 1. **Win32 windowing, input and startup.** The client startup path, window
    creation, and input handling are Win32. Startup also goes through
@@ -282,8 +288,12 @@ or connect packet is sent. Linux currently prints `auth=unavailable`; successful
 discovery exits **3**, timeout **4**, transport failure **5**, invalid arguments
 **2**, and help **0**. Every status explicitly states `connected=false`.
 
-The diagnostic's POSIX startup and transport are independent of the engine's
-`NET_Init`/`CL_Frame`; the production code it shares is the authentication boundary
-and challenge formatter. The real `CL_CheckForResend` is tested separately with
-controlled host/transport doubles. See the [headless checkpoint](progress-2026-10-31-client-headless.md)
-for evidence, extraction details and remaining integration requirements.
+The diagnostic now uses production `NET_Init`, `NET_OutOfBandPrint`,
+`NET_GetClientPacket`, `NET_Sleep`, `NET_Shutdown`, dvar registration and Linux
+TLS/locking. It prints `network=engine-udp`. “Sent” means the engine API accepted
+the query; only a valid reply proves discovery. It still does not host `CL_Frame`
+or the connection dispatcher. Logging, allocation, clock and absent console/profile
+services are explicit diagnostic adapters. The real receive/resend lifecycle runs
+in a separate fixture with controlled game/transport services, not inside the
+runnable discovery path. See the [lifecycle checkpoint](progress-2026-10-31-client-lifecycle.md)
+for confirmed bugs, valid-wire coverage, render-thread work and remaining boundaries.
