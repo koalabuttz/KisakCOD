@@ -887,15 +887,17 @@ void __cdecl SV_CheckTimeouts()
     {
         if (drop->lastPacketTime > svs.time)
             drop->lastPacketTime = svs.time;
-        if (!drop->bIsTestClient)
+        // Bots never send packets, but dropped bot slots still need the normal
+        // zombie grace period and reclamation before they can be reused.
+        if (drop->header.state == CS_ZOMBIE && drop->lastPacketTime < zombiepoint)
         {
-            if (drop->header.state == CS_ZOMBIE && drop->lastPacketTime < zombiepoint)
-            {
-                Com_DPrintf(CON_CHANNEL_SERVER, "Going from CS_ZOMBIE to CS_FREE for client #%i\n", clientNum);
-                drop->header.state = CS_FREE;
-                drop->lastPacketTime = 0;
-            }
-            else if (drop->header.state == CS_ACTIVE && drop->lastPacketTime < droppoint)
+            Com_DPrintf(CON_CHANNEL_SERVER, "Going from CS_ZOMBIE to CS_FREE for client #%i\n", clientNum);
+            drop->header.state = CS_FREE;
+            drop->lastPacketTime = 0;
+        }
+        else if (!drop->bIsTestClient)
+        {
+            if (drop->header.state == CS_ACTIVE && drop->lastPacketTime < droppoint)
             {
                 if (++drop->timeoutCount > 5)
                     SV_DropClient(drop, "EXE_TIMEDOUT", 1);

@@ -14,7 +14,10 @@ The multi-player server can fill its own client slots with internal bots:
   ``SV_UpdateBots``     drives ``SV_BotUserMove`` once per frame for every
                         active ``NA_BOT`` client, and re-enters retained internal clients after a map load.
 
-Those three function bodies are extracted from production text unchanged and
+``SV_CheckTimeouts`` reclaims expired zombie slots, including dropped bots,
+while exempting connected bots from packet-silence timeouts.
+
+Those four function bodies are extracted from production text unchanged and
 compiled against doubles for the surrounding engine services (``svs``, the
 dvars, command tokenising, ``SV_DirectConnect``, gamestate/enter-world, the game
 client lookup, ``random``/``crandom``). Every signature is checked against the
@@ -54,6 +57,9 @@ What this pins down, and why each invariant matters for a load test:
                   ``sv_botsPressAttackBtn`` allows it, movement/angles follow the
                   documented draw order, and the delta message always tracks the
                   outgoing sequence
+  * timeout       dropped bot and network-client zombies expire at the same
+                  boundary; active/connecting bots stay exempt while ordinary
+                  clients retain their six-check timeout behavior
   * dispatch      only active ``NA_BOT`` clients are driven; free/zombie slots and
                   real loopback/IP clients are skipped
 
@@ -101,6 +107,7 @@ FUNCTIONS = (
     (CLIENT_SOURCE, "SV_AddTestClient", "gentity_s *__cdecl SV_AddTestClient()"),
     (MAIN_SOURCE, "SV_BotUserMove", "void __cdecl SV_BotUserMove(client_t *cl)"),
     (MAIN_SOURCE, "SV_UpdateBots", "void __cdecl SV_UpdateBots()"),
+    (MAIN_SOURCE, "SV_CheckTimeouts", "void __cdecl SV_CheckTimeouts()"),
 )
 
 # Damage applied to a temporary copy of the extracted production text. Each one
@@ -209,6 +216,8 @@ struct gentity_s;
 struct client_t {
     clientHeader_t header;
     int bIsTestClient;
+    int lastPacketTime;
+    int timeoutCount;
     const char *name;
     int gentityId;
     gentity_s *gentity;
@@ -249,6 +258,7 @@ struct dvar_t { dvarValue_t current; };
 enum { BUTTON_ATTACK = 1, BUTTON_USE = 2, BUTTON_USE_RELOAD = 4 };
 
 struct serverStatic_t {
+    int time;
     client_t clients[64];
 };
 
@@ -327,6 +337,11 @@ extern const dvar_t *com_sv_running;
 extern const dvar_t *sv_maxclients;
 extern const dvar_t *sv_botsPressAttackBtn;
 extern uint16_t botport;
+extern const dvar_t *sv_timeout, *sv_connectTimeout, *sv_zombietime;
+extern std::vector<int> gDropCalls;
+void SV_DropClient(client_t *cl, const char *reason, bool tellThem);
+enum { CON_CHANNEL_SERVER = 0 };
+void Com_DPrintf(int, const char *, ...);
 
 // The engine services the extracted text calls.
 void SV_Cmd_TokenizeString(char *text);
@@ -345,6 +360,7 @@ playerState_s *SV_GameClientNum(int num);
 gentity_s *SV_AddTestClient();
 void SV_BotUserMove(client_t *cl);
 void SV_UpdateBots();
+void SV_CheckTimeouts();
 
 #endif  // KISAK_TESTCLIENTS_SHIM_H
 """
@@ -381,6 +397,15 @@ dvarStorage_t sv_botsPressAttackBtn_storage(0, 1);
 const dvar_t *sv_botsPressAttackBtn = &sv_botsPressAttackBtn_storage.d;
 
 uint16_t botport = 1;
+const dvar_t timeout_dvar{{10, 0, 0}}, connect_timeout_dvar{{5, 0, 0}}, zombie_dvar{{2, 0, 0}};
+const dvar_t *sv_timeout = &timeout_dvar, *sv_connectTimeout = &connect_timeout_dvar, *sv_zombietime = &zombie_dvar;
+std::vector<int> gDropCalls;
+void Com_DPrintf(int, const char *, ...) {}
+void SV_DropClient(client_t *cl, const char *reason, bool tellThem) {
+    if (std::strcmp(reason, "EXE_TIMEDOUT") || !tellThem) std::abort();
+    gDropCalls.push_back(int(cl - svs.clients));
+    cl->header.state = CS_ZOMBIE;
+}
 
 playerState_s gPlayerStates[64];
 
@@ -511,6 +536,7 @@ static void Reset() {
     sv_maxclients_storage.integer = 32;
     sv_botsPressAttackBtn_storage.enabled = 1;
     com_sv_running_storage.enabled = 1;
+    gDropCalls.clear();
     gConnectCalls.clear();
     gGamestateCalls.clear();
     gGamestateDropsClient = false;
@@ -828,6 +854,47 @@ int main() {
     Check(svs.clients[0].header.state == CS_ZOMBIE && gEnterWorldCalls.size() == 1,
           "gamestate failure cannot resurrect a dropped bot");
     Check(gThinkCalls.size() == 1 && gThinkCalls[0].first == 1, "dropped bot receives no movement");
+
+    std::printf("\n== zombie expiry reclaims bots without timing out active bots ==\n");
+    Reset();
+    sv_maxclients_storage.integer = 8;
+    svs.time = 20000;
+    for (int i = 0; i < 8; ++i) {
+        svs.clients[i].header.state = CS_ZOMBIE;
+        svs.clients[i].lastPacketTime = 18000;
+        svs.clients[i].bIsTestClient = i % 2;
+    }
+    svs.clients[0].lastPacketTime = svs.clients[1].lastPacketTime = 17999;
+    svs.clients[4].header.state = CS_ACTIVE; svs.clients[4].lastPacketTime = 0;
+    svs.clients[5].header.state = CS_ACTIVE; svs.clients[5].lastPacketTime = 0;
+    svs.clients[6].header.state = CS_CONNECTED; svs.clients[6].lastPacketTime = 0;
+    svs.clients[7].header.state = CS_CONNECTED; svs.clients[7].lastPacketTime = 0;
+    SV_CheckTimeouts();
+    Check(svs.clients[0].header.state == CS_FREE && svs.clients[1].header.state == CS_FREE,
+          "expired real and internal bot zombies both become free");
+    Check(svs.clients[0].lastPacketTime == 0 && svs.clients[1].lastPacketTime == 0,
+          "both reclaimed slots clear last packet time");
+    Check(svs.clients[2].header.state == CS_ZOMBIE && svs.clients[3].header.state == CS_ZOMBIE,
+          "zombies at exact expiry boundary remain reserved");
+    for (int frame = 0; frame < 4; ++frame) SV_CheckTimeouts();
+    Check(gDropCalls.empty(), "real timeouts require six expired checks");
+    SV_CheckTimeouts();
+    Check(gDropCalls == std::vector<int>({4, 6}), "real active and connecting clients still time out");
+    Check(svs.clients[5].header.state == CS_ACTIVE && svs.clients[7].header.state == CS_CONNECTED,
+          "active and connecting bots remain exempt from packet timeouts");
+    Check(svs.clients[5].timeoutCount == 0 && svs.clients[7].timeoutCount == 0,
+          "bot packet timeout counters do not advance");
+    svs.clients[3].lastPacketTime = svs.time + 1;
+    SV_CheckTimeouts();
+    Check(svs.clients[3].header.state == CS_ZOMBIE && svs.clients[3].lastPacketTime == svs.time,
+          "future bot timestamp is clamped without premature reclamation");
+    ++svs.time;
+    SV_CheckTimeouts();
+    Check(svs.clients[2].header.state == CS_FREE && svs.clients[3].header.state == CS_ZOMBIE,
+          "expiry boundary advances while recently clamped bot remains reserved");
+    svs.time += 2000;
+    SV_CheckTimeouts();
+    Check(svs.clients[3].header.state == CS_FREE, "clamped bot eventually expires");
 
     std::printf("\n== server-not-running is asserted, not silently accepted ==\n");
     Reset();
