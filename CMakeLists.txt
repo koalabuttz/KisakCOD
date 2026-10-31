@@ -37,12 +37,21 @@ set(USE_ASAN OFF)
 # When OFF (default), the original Miles Sound System (MSS/AIL) backend is used.
 option(KISAK_OPENAL "Build the sound system against OpenAL instead of Miles/MSS" OFF)
 
+# Opt-in, native Linux only: compile the portable network core of the real
+# multiplayer client as an OBJECT library, plus its asset-free test. This is a
+# compile-only foundation milestone -- it produces no client executable, no
+# renderer, no windowing and no game entry point, and it never changes the
+# dedicated server build. See docs/linux-client.md.
+option(KISAK_BUILD_LINUX_CLIENT_CORE
+    "Build the native Linux client network core (opt-in, no client executable)" OFF)
+
 # Set the gloabl directory variables
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(DEPS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/deps)
 set(BIN_DIR ${CMAKE_CURRENT_SOURCE_DIR}/bin)
 set(SCRIPTS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/scripts)
 set(PLATFORM_DIR ${SCRIPTS_DIR}/platform)
+set(TESTS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tests)
 
 # Allow separate build configurations to keep their native executables apart.
 if(NOT CMAKE_RUNTIME_OUTPUT_DIRECTORY)

@@ -1,7 +1,8 @@
-name: Linux native dedicated server
+name: Linux native server and client core
 
 # Builds and checks the 32-bit native Linux dedicated server (KISAK_PLATFORM=linux,
-# target KisakCOD-dedi). The checks are asset-free: they need no installed game
+# target KisakCOD-dedi) and the opt-in compile/test-only client core. This does
+# not build a graphical client. The checks are asset-free: they need no installed game
 # data, no Steam client, no credentials, and they never accept client
 # connections, so nothing licensed is downloaded and no game server is exposed.
 # Configuration fetches the pinned Tracy dependency over the network; that is the
@@ -22,6 +23,7 @@ on:
       - src/**
       - deps/**
       - tests/linux_net/**
+      - tests/linux_client_core/**
       - .github/workflows/build-kisakcod-linux.yaml
   pull_request:
     branches: [ "master" ]
@@ -32,6 +34,7 @@ on:
       - src/**
       - deps/**
       - tests/linux_net/**
+      - tests/linux_client_core/**
       - .github/workflows/build-kisakcod-linux.yaml
 
 permissions:
@@ -105,7 +108,9 @@ jobs:
 
       - name: Check test-runner configuration and failure handling
         shell: bash
-        run: python3 scripts/tests/test_linux_check_runner.py
+        run: |
+          python3 scripts/tests/test_linux_check_runner.py
+          python3 scripts/tests/test_linux_fastfile_driver.py
 
       - name: Run asset-free native checks
         timeout-minutes: 30
@@ -117,6 +122,16 @@ jobs:
             --binary "$BINARY" \
             --cxx clang++ \
             --log-dir "artifacts/checks-${{ matrix.config }}"
+
+      - name: Build and check native client core
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/tests/test_linux_client_core.py \
+            --cxx clang++ \
+            --build-type "${{ matrix.config }}" \
+            --build-dir "$GITHUB_WORKSPACE/build-linux/client-core-${{ matrix.config }}"
 
       - name: Upload executable and check logs
         if: always()

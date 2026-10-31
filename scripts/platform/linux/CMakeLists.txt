@@ -55,3 +55,78 @@ find_package(Threads REQUIRED)
 target_link_libraries(KisakCOD-dedi PRIVATE Threads::Threads ${CMAKE_DL_LIBS})
 add_dependencies(KisakCOD-dedi update_build_number)
 include(${SCRIPTS_DIR}/extern/tracy.cmake)
+
+# ---------------------------------------------------------------------------
+# Opt-in native Linux client network core (KISAK_BUILD_LINUX_CLIENT_CORE)
+#
+# Off by default. When enabled this compiles the portable network translation
+# units of the real multiplayer client into an OBJECT library -- nothing is
+# extracted, shimmed or rewritten -- so client network code can be built and
+# tested natively without a client executable, renderer, windowing layer or
+# game entry point. The KISAK_DEDICATED/DEDICATED defines are deliberately
+# absent: this is the client side of the same sources.
+#
+# It produces no runnable game and does not touch KisakCOD-dedi above.
+# See docs/linux-client.md for the milestone boundary and what still blocks a
+# real native client.
+# ---------------------------------------------------------------------------
+if(KISAK_BUILD_LINUX_CLIENT_CORE)
+    message(STATUS "----- KisakCOD native Linux Client core (opt-in) -----")
+
+    # Proven to compile with the dedicated flags minus the DEDICATED defines.
+    # Only add a file here with its own compile proof, not by assumption.
+    set(KISAK_CLIENT_CORE_SOURCES
+        "${SRC_DIR}/client_mp/cl_net_chan_mp.cpp"
+        "${SRC_DIR}/client_mp/cl_parse_mp.cpp"
+        "${SRC_DIR}/client_mp/cl_input.cpp"
+    )
+
+    add_library(KisakCOD-client-core OBJECT ${KISAK_CLIENT_CORE_SOURCES})
+    target_compile_features(KisakCOD-client-core PRIVATE cxx_std_20)
+    target_compile_definitions(KisakCOD-client-core PRIVATE
+        KISAK_MP
+        # KISAK_OPENAL is selected here purely for its portable type-shim branch
+        # in src/sound/snd_public.h. On Linux that header avoids the Windows-only
+        # deps/msslib/mss.h when either KISAK_DEDICATED or KISAK_OPENAL is set;
+        # the client build has no DEDICATED define, so without this it would pull
+        # mss.h and fail. No sound source is compiled into this target and no
+        # audio backend is built or verified by it.
+        KISAK_OPENAL
+        _FILE_OFFSET_BITS=64 _GNU_SOURCE
+        TRACY_ENABLE TRACY_ON_DEMAND TRACY_ONLY_LOCALHOST
+        $<$<CONFIG:Debug>:_DEBUG>
+    )
+    target_include_directories(KisakCOD-client-core PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
+    target_compile_options(KisakCOD-client-core PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:-fms-extensions>
+        -msse2 -mfpmath=sse -fno-strict-aliasing
+        -ffunction-sections -fdata-sections
+        -Wno-c++11-narrowing -Wno-invalid-token-paste
+        -Wno-ignored-attributes -Wno-format-security
+    )
+
+    # Asset-free test for the real netchan command codec. It compiles the two
+    # production TUs itself and links with --gc-sections, so the profile and
+    # transmit paths these files also contain are discarded instead of needing
+    # stubs. RELEASE_ASSERTS keeps the codec's own iassert invariants live.
+    add_executable(KisakCOD-client-netchan-test
+        "${TESTS_DIR}/linux_client_core/netchan_client_core_test.cpp"
+        "${SRC_DIR}/client_mp/cl_net_chan_mp.cpp"
+        "${SRC_DIR}/server_mp/sv_net_chan_mp.cpp"
+    )
+    target_compile_features(KisakCOD-client-netchan-test PRIVATE cxx_std_20)
+    target_compile_definitions(KisakCOD-client-netchan-test PRIVATE
+        KISAK_MP KISAK_OPENAL RELEASE_ASSERTS
+        _FILE_OFFSET_BITS=64 _GNU_SOURCE
+        TRACY_ENABLE TRACY_ON_DEMAND TRACY_ONLY_LOCALHOST
+    )
+    target_include_directories(KisakCOD-client-netchan-test PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
+    target_compile_options(KisakCOD-client-netchan-test PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:-fms-extensions>
+        -msse2 -mfpmath=sse -fno-strict-aliasing
+        -ffunction-sections -fdata-sections
+        -Wno-c++11-narrowing -Wno-invalid-token-paste
+        -Wno-ignored-attributes -Wno-format-security
+    )
+    target_link_options(KisakCOD-client-netchan-test PRIVATE -Wl,--gc-sections)
+endif()

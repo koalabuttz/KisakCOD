@@ -1,11 +1,23 @@
 Native Linux dedicated-server checks are documented in
 [the Linux build guide](../../docs/linux-dedicated.md#asset-free-checks). They
 include an ELF32/bootstrap smoke test, native runtime and UDP tests, fastfile
-short-read regressions, non-interactive debugger checks, and random-helper/item-drop
-range checks (`test_random_range.py`). The latter extracts production helpers,
-checks Windows 15-bit parity and wide Linux `rand()` inputs, and bounds dropped
-item and grenade launch velocities; it does not simulate complete deaths or
-physics. These native checks require the
+short-read regressions, non-interactive debugger checks, random-helper/item-drop
+range checks (`test_random_range.py`), and gameplay-lifecycle checks
+(`test_gameplay_lifecycle.py`). The random-range check extracts production
+helpers, checks Windows 15-bit parity and wide Linux `rand()` inputs, and bounds
+dropped item and grenade launch velocities; it does not simulate complete deaths
+or physics. The gameplay-lifecycle check extracts the shipped `DeathGrenadeDrop`
+and `LaunchItem`/`G_RunItem` bodies and covers held versus offhand grenade
+selection, the remaining fuse, model, owner and 40-unit launch origin, the
+grenade-death perk (known, unknown and suicide-suppressed), and item
+initialization, the 50 ms trajectory step, settling, ground landing and the
+freed-entity guard. It also extracts the shipped `G_SetOrigin` and
+`BG_EvaluateTrajectory`, so placement really resets the trajectory and the item's
+step is really integrated over the frame rather than handed a canned sample. It
+drives those bodies with checked doubles for spawning, tracing and weapon defs,
+so it measures the engine's own logic without assets or a running server;
+collision geometry and capsule sweeps are still doubles, so no real physics
+collision is claimed. These native checks require the
 32-bit Linux toolchain and are separate from Windows runtime checks. After
 building, run `python3 scripts/tests/run_linux_checks.py --build-dir build-linux
 --binary bin/KisakCOD-dedi` for the full asset-free set. The opt-in
@@ -21,6 +33,18 @@ admission, default rejection, unsafe bind failures, optional protocol-6 admissio
 for a local-test client, and the retail-GUID opt-in for protocol 1 and protocol 6
 clients. It decodes no gamestate and does not establish general stock/CoD4x
 client compatibility.
+
+`test_server_test_clients.py` checks the extracted internal bot functions with
+controlled connection and movement services; the native runner runs its 32-bit
+sanitizer configuration. The opt-in `test_linux_bots.py` is a diagnostic probe,
+not a green gameplay check: its current stock-script fixture admits bots but
+kicks them before the hold completes. See
+[Server-side test clients](../../docs/server-test-clients.md) for the exact
+coverage and blocker.
+
+The opt-in [native Linux client core](../../docs/linux-client.md) compiles actual
+client translation units and runs an asset-free client/server codec test. It is
+checked separately from the dedicated-server suite and is not a playable client.
 
 These shared asset-free regression checks require Python 3 and a C++20 compiler:
 

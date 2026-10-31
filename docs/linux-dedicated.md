@@ -92,6 +92,10 @@ Console commands come from stdin; SIGINT/SIGTERM request shutdown on the main
 thread. Fatal initialization errors print to the terminal and exit nonzero,
 rather than displaying a Windows dialog.
 
+The first compile-and-test-only native client milestone is documented in
+[Native Linux client](linux-client.md). It is opt-in and does not yet produce a
+playable client or replace the dedicated server.
+
 ## Asset-free checks
 
 Run the bootstrap check against a compiled native executable:
@@ -133,6 +137,18 @@ The runtime suite exercises event/reset semantics, cooperative thread suspension
 thread-local storage, reserved/committed memory, symlink-safe directory removal,
 command-line bounds, and batched console input. Its isolated engine dependencies
 are test doubles; it is not a complete server simulation.
+
+Internal bot support, asset-free slot/command tests and the currently failing
+installed-assets diagnostic probe are documented in
+[Server-side test clients](server-test-clients.md). Bots do not verify a second
+real client's prediction or snapshot decoding.
+
+The `gameplay_lifecycle` check executes production grenade-death, item-launch,
+item-update, origin-reset and trajectory functions with controlled engine
+services. It covers grenade selection/fuses, death-perk and suicide branches,
+50 ms item motion, landing/reset and freed-entity handling. Collision traces and
+grenade creation are doubles: this is not real collision-world or grenade-flight
+validation.
 
 The `random_range` check compiles the production shared and multiplayer random
 helpers and the multiplayer item-drop function against a controlled libc

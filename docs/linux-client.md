@@ -1,0 +1,204 @@
+# Native Linux client
+
+## Status
+
+There is **no native Linux client executable**, and this document does not
+claim one. What exists is an opt-in, compile-and-test-only foundation: the
+portable network translation units of the real multiplayer client build
+natively, and the client/server network command codec is tested end to end
+without assets, sockets, or a game loop.
+
+The default native Linux build is still the dedicated multiplayer server. This
+work changes nothing about it.
+
+## What the milestone builds
+
+`KISAK_BUILD_LINUX_CLIENT_CORE` (default `OFF`) adds two targets:
+
+| Target | Kind | Purpose |
+| --- | --- | --- |
+| `KisakCOD-client-core` | OBJECT library | Compiles three production client TUs |
+| `KisakCOD-client-netchan-test` | executable | Asset-free test of the real codec |
+
+The object library compiles these files **unmodified**, from their production
+source paths:
+
+- `src/client_mp/cl_net_chan_mp.cpp` — client netchan command encode/decode
+- `src/client_mp/cl_parse_mp.cpp` — client message parsing
+- `src/client_mp/cl_input.cpp` — client input/command generation
+
+Note the paths: the multiplayer client sources live under `client_mp/`.
+`src/client/cl_input.cpp` is the singleplayer/Windows-client variant and is
+*not* what this target builds. `scripts/mp/mp_files.cmake` already lists
+`src/client_mp/cl_input.cpp` in `CLIENT_MP`, so the target matches the
+production multiplayer build rather than inventing a parallel file set.
+
+Compile settings are the dedicated server's Linux flags, **minus**
+`KISAK_DEDICATED` and `DEDICATED`, which is the whole point: the same sources
+compiled as the client side.
+
+Do not add a file to this list without its own compile proof. "It looks
+portable" is not proof.
+
+### Why `KISAK_OPENAL` appears here
+
+The client build has no `KISAK_DEDICATED` define, and `src/sound/snd_public.h`
+selects its Windows-only `deps/msslib/mss.h` include on that basis:
+
+```c
+#if defined(__linux__) && defined(KISAK_DEDICATED)
+#include <linux/compat.h>
+#elif !defined(KISAK_OPENAL)
+#include <msslib/mss.h>
+#else
+// portable typedef shim, no mss.h, no windows.h
+```
+
+Without a define, the client compile pulls `mss.h` and fails on a Windows-only
+header. The target therefore sets `KISAK_OPENAL`, which selects only the
+third branch — a block of portable Windows type shims.
+
+Be precise about what this does and does not mean:
+
+- It is **only** a header-include switch to get past `mss.h`.
+- **No** sound source is compiled into this target.
+- **No** audio backend is built, linked, or verified by it. Nothing here says
+  anything about whether OpenAL or Miles works on Linux.
+
+This is a build define, not a backend decision. Renderer and audio selection
+remain out of scope.
+
+## Running it
+
+Keep this out of the shared build tree. The dedicated binary lives at
+`bin/KisakCOD-dedi`, and `bin/` is the default runtime output directory — a
+build there can replace a running server's binary. Configure a private build
+directory with its own runtime output:
+
+```sh
+cmake -S . -B build-linux/client-core \
+    -DKISAK_PLATFORM=linux \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DKISAK_BUILD_LINUX_CLIENT_CORE=ON \
+    -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+    -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$PWD/build-linux/client-core/bin"
+
+cmake --build build-linux/client-core \
+    --target KisakCOD-client-core KisakCOD-client-netchan-test -j4
+
+./build-linux/client-core/bin/KisakCOD-client-netchan-test
+```
+
+Requires the same Clang and multilib toolchain as the native Linux server
+(`clang++ -m32` must link). Use a fresh build directory when changing compilers:
+CMake may reset cached options during that change. The checker detects a lost
+client-core opt-in rather than silently testing an unrelated target.
+
+The checker wraps all of the above and asserts the dedicated binary was not
+modified:
+
+```sh
+python3 scripts/tests/test_linux_client_core.py            # full: static + build + run
+python3 scripts/tests/test_linux_client_core.py --static-only
+```
+
+It is deliberately **not** registered in `scripts/tests/run_linux_checks.py`.
+The Linux workflow runs it separately for Debug and RelWithDebInfo, so the normal
+server checks do not silently opt into client targets. Hosted CI results still
+need to be checked separately from local validation.
+
+The checker verifies generated compile commands for all three client-core
+translation units (`-m32`, `KISAK_MP`, no dedicated defines), builds in an isolated
+output directory and executes the codec test. Its default-OFF check uses a
+separate temporary tree. Compiler-name checks can run without a build:
+
+```sh
+python3 scripts/tests/test_linux_client_core.py --self-test
+python3 scripts/tests/test_linux_client_core.py --build-type RelWithDebInfo \
+    --build-dir build-linux/client-core-relwithdebinfo
+```
+
+## What the netchan test proves
+
+`tests/linux_client_core/netchan_client_core_test.cpp` links the production
+`cl_net_chan_mp.cpp` and `sv_net_chan_mp.cpp` and drives the four codec
+functions: `CL_Netchan_Encode`, `CL_Netchan_Decode`, `SV_Netchan_Encode`,
+`SV_Netchan_Decode`.
+
+Cases covered:
+
+- **Golden vectors** — independently calculated expected bytes for known
+  challenge/serverId/sequence and command text, not outputs captured from the
+  implementation under test.
+- **Empty commands** — an empty command entry resets the ring index every
+  iteration, so the payload is XORed with one constant byte. Both directions.
+- **Roundtrip, both ways** — client encode → server decode, and server encode
+  → client decode, across a realistic payload.
+- **Command ring wrap** — the ring is 128 entries indexed with
+  `& (MAX_RELIABLE_COMMANDS - 1)`; sequence 127 and 128 must select different
+  slots, and a roundtrip must still hold across the wrap.
+- **Key material sensitivity** — challenge, serverId and message sequence each
+  change the key stream, and restoring them reproduces it exactly.
+- **Zero length** and a **1024-byte payload** that wraps the command ring many
+  times.
+
+One detail worth recording, found while writing these cases: the client side
+selects its key text with `serverCommandSequence` but mixes
+`serverMessageSequence` into the key. They are different fields; a test that
+sets only one measures the wrong thing.
+
+### How the small doubles stay honest
+
+The two production TUs normally reference the profiler, `Netchan_Transmit`,
+`Com_Printf`, `svs`, and more. None of that is stubbed. The objects are
+compiled with `-ffunction-sections -fdata-sections` and linked with
+`-Wl,--gc-sections`, so every function the test never calls is discarded
+rather than faked. Only these boundary symbols exist:
+
+- `clients[]` — the real `clientActive_t` array that the inline
+  `CL_GetLocalClientGlobals()` returns from
+- `CL_GetLocalClientConnection()` — returns an owned `clientConnection_t`
+- `MyAssertHandler()` — aborts loudly; the test builds with `RELEASE_ASSERTS`
+  so the codec's own `iassert` invariants are actually evaluated
+
+### What it does not cover
+
+- **The transmit wrappers.** `CL_Netchan_Transmit` and `SV_Netchan_Transmit`
+  call into `qcommon/net_chan_mp.cpp`, which drags in the whole netchan
+  subsystem and its socket layer. Reaching them from an asset-free test would
+  mean faking that layer, so they are not called. Instead the checker pins
+  their command-header offsets statically from the production sources — the
+  client encodes at `data + 9, length - 9` and the server at
+  `data + 4, length - 4`. That fails if the header size ever changes, without
+  inventing a fake call.
+- **Anything above the codec.** Fragmentation, ordering, socket I/O, the
+  handshake, and all client state are outside this milestone.
+- **Runtime behaviour of `cl_parse_mp.cpp` and `cl_input.cpp`.** These are
+  compile-verified only; nothing runs them.
+
+## What still blocks a real native client
+
+Compiling three network TUs is not a client. In rough order of weight:
+
+1. **Win32 windowing, input and startup.** The client startup path, window
+   creation, and input handling are Win32. Startup also goes through
+   Steam-error handling that has no Linux equivalent yet.
+2. **D3D9 renderer.** The rendering path makes real D3D9 calls. This is not a
+   stub-shaped problem.
+3. **Renderer backend choice** — out of scope for this milestone. Nothing here
+   selects or recommends a backend.
+4. **The rest of the client TUs**, each of which needs its own compile proof
+   before it can join the object library.
+
+The honest next step is to take one more TU at a time, proving compilation and
+adding a bounded test where a test can be bounded, rather than adding a fake
+game executable or presentation stubs to make a link succeed.
+
+## Relationship to the dedicated build
+
+- `KisakCOD-dedi` and its source lists are untouched.
+- With `KISAK_BUILD_LINUX_CLIENT_CORE=OFF` (the default) the targets do not
+  exist at all — verified by the checker against `cmake --build --target help`.
+- The Windows build path is not touched.
+- The checker fingerprints `bin/KisakCOD-dedi` before and after and fails if it
+  changed, so a running dedicated server is never disturbed.
