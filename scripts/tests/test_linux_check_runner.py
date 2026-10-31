@@ -116,7 +116,8 @@ class PlannedCommandTests(unittest.TestCase):
 
     def test_compiled_checks_receive_the_explicit_compiler_on_the_command_line(self):
         for name, flag in (("debugger", "--cxx"), ("fastfile", "--cxx"), ("net_deadline", "--cxx"),
-                           ("huffman", "--cxx"), ("handshake_auth", "--cxx")):
+                           ("huffman", "--cxx"), ("handshake_auth", "--cxx"),
+                           ("random_range", "--cxx")):
             argv = check_named(self.checks, name).commands[0].argv
             self.assertIn(flag, argv, f"{name} does not pass {flag}")
             self.assertEqual(argv[argv.index(flag) + 1], CXX, f"{name} uses a compiler other than --cxx")
@@ -179,7 +180,7 @@ class PlannedCommandTests(unittest.TestCase):
             else:
                 self.assertIsNone(check.requires, f"{check.name} requires an artefact")
 
-    def test_default_plan_is_the_twelve_known_checks_in_order(self):
+    def test_default_plan_is_the_thirteen_known_checks_in_order(self):
         # main() validates --only/--skip against this list; a plan that drifts
         # from it would let a check be named in help text but never run.
         known = [
@@ -195,6 +196,7 @@ class PlannedCommandTests(unittest.TestCase):
             "sys_fileio",
             "sys_virtualmem",
             "lexer_eof",
+            "random_range",
         ]
         self.assertEqual([check.name for check in self.checks], known)
 

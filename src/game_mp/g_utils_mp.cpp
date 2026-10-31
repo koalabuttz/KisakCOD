@@ -1486,7 +1486,8 @@ const char *__cdecl G_GetEntityTypeName(const gentity_s *ent)
 
 int __cdecl G_rand()
 {
-    return rand();
+    // Callers scale this as a 15-bit value, including the script random helpers.
+    return rand() & 0x7fff;
 }
 
 float __cdecl G_flrand(float min, float max)

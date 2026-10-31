@@ -202,7 +202,9 @@ void __cdecl TRACK_com_math()
 
 float __cdecl random()
 {
-    return (rand() / 32768.0);
+    // Preserve the 15-bit input range used by the Windows runtime. Linux rand()
+    // can return 31 bits, which would otherwise send crandom() far outside [-1, 1).
+    return ((rand() & 0x7fff) / 32768.0);
 }
 
 float __cdecl crandom()

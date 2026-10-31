@@ -125,6 +125,7 @@ toolchain, but no game assets:
 python3 scripts/tests/test_linux_runtime.py
 python3 scripts/tests/test_linux_fastfile_io.py
 python3 scripts/tests/test_linux_debugger.py
+python3 scripts/tests/test_random_range.py --cxx clang++-19 --sanitize
 bash tests/linux_net/run_tests.sh
 ```
 
@@ -132,6 +133,14 @@ The runtime suite exercises event/reset semantics, cooperative thread suspension
 thread-local storage, reserved/committed memory, symlink-safe directory removal,
 command-line bounds, and batched console input. Its isolated engine dependencies
 are test doubles; it is not a complete server simulation.
+
+The `random_range` check compiles the production shared and multiplayer random
+helpers and the multiplayer item-drop function against a controlled libc
+`rand()` double. It checks both word sizes, all 15-bit input values, representative
+31-bit values, drop-velocity bounds and the grenade launch-speed calculation.
+This protects against assuming Windows' 15-bit `RAND_MAX` on Linux, which caused
+runaway death-dropped items. `--sanitize` additionally runs a 64-bit ASan/UBSan
+variant; the regular runner includes the unsanitized 32/64-bit check.
 
 Additional native file/virtual-memory checks can be built directly:
 

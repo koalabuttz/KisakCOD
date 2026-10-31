@@ -1,7 +1,11 @@
 Native Linux dedicated-server checks are documented in
 [the Linux build guide](../../docs/linux-dedicated.md#asset-free-checks). They
 include an ELF32/bootstrap smoke test, native runtime and UDP tests, fastfile
-short-read regressions, and non-interactive debugger checks. They require the
+short-read regressions, non-interactive debugger checks, and random-helper/item-drop
+range checks (`test_random_range.py`). The latter extracts production helpers,
+checks Windows 15-bit parity and wide Linux `rand()` inputs, and bounds dropped
+item and grenade launch velocities; it does not simulate complete deaths or
+physics. These native checks require the
 32-bit Linux toolchain and are separate from Windows runtime checks. After
 building, run `python3 scripts/tests/run_linux_checks.py --build-dir build-linux
 --binary bin/KisakCOD-dedi` for the full asset-free set. The opt-in

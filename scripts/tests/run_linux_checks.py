@@ -15,7 +15,8 @@ client, credentials, or a listening game server:
   * deterministic network-deadline arithmetic and native UDP in ``tests/linux_net``;
   * the message Huffman tree, which must match the one Windows clients build;
   * the file I/O and virtual-memory self-tests shipped in the platform sources;
-  * the script lexer EOF regression, which ends a scan with no local clients.
+  * the script lexer EOF regression, which ends a scan with no local clients;
+  * the random-helper ranges, which must stay 15-bit where Linux rand() is 31-bit.
 
 Each command runs in its own process group with its own timeout, so a stuck
 check is killed instead of hanging the job. Every command prints the exact argv
@@ -236,6 +237,16 @@ def plan_checks(options, workdir, build_dir, binary, python, cxx):
         )
     )
 
+    # Linux rand() returns 31 bits where the Windows CRT returned 15, so every
+    # helper that scales it by 32768 must still produce a unit interval.
+    checks.append(
+        Check(
+            "random_range",
+            "random helpers keep their 15-bit ranges on Linux",
+            [Command([python, TESTS / "test_random_range.py", "--cxx", cxx], timeout=300)],
+        )
+    )
+
     if options.only:
         checks = [check for check in checks if check.name in options.only]
     if options.skip:
@@ -434,7 +445,7 @@ def main():
     parser.add_argument("--list", action="store_true", help="print the command list and exit without running")
     options = parser.parse_args()
 
-    known = ["bootstrap", "runtime", "lifecycle_driver", "handshake_auth", "debugger", "fastfile", "net_deadline", "huffman", "udp", "sys_fileio", "sys_virtualmem", "lexer_eof"]
+    known = ["bootstrap", "runtime", "lifecycle_driver", "handshake_auth", "debugger", "fastfile", "net_deadline", "huffman", "udp", "sys_fileio", "sys_virtualmem", "lexer_eof", "random_range"]
     options.only = parse_names(options.only)
     options.skip = parse_names(options.skip)
     for name in options.only | options.skip:
