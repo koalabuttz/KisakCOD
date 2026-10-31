@@ -10,11 +10,11 @@ Verified here:
    no fake call is made to reach them (see ``check_header_offsets``).
 
 2. **The real compile commands**, from the generated ``compile_commands.json``:
-   three full client TUs, ``-m32``, ``-DKISAK_MP``, no dedicated defines, and
+   four full client TUs, ``-m32``, ``-DKISAK_MP``, no dedicated defines, and
    ``-DKISAK_OPENAL`` present only as the header shim. Static CMake text is not
    enough on its own -- a comment can say anything.
 
-3. **The asset-free netchan and parser/input tests build and pass**, in its own build
+3. **The asset-free codec, state and packet integration tests build and pass**, in its own build
    directory, built twice so an incremental rebuild is proven to work (the
    build directory is reused, never wiped: a full configure from scratch would
    re-download dependencies).
@@ -55,6 +55,7 @@ OPTION = "KISAK_BUILD_LINUX_CLIENT_CORE"
 
 # The milestone compiles exactly these client translation units.
 EXPECTED_TUS = (
+    "src/client_mp/cl_cgame_mp.cpp",
     "src/client_mp/cl_net_chan_mp.cpp",
     "src/client_mp/cl_parse_mp.cpp",
     "src/client_mp/cl_input.cpp",
@@ -64,6 +65,12 @@ STATE_RUNTIME_TUS = (
     "src/client_mp/cl_input.cpp",
     "src/qcommon/msg_mp.cpp",
     "src/universal/q_shared.cpp",
+)
+
+PACKET_RUNTIME_TUS = EXPECTED_TUS + (
+    "src/server_mp/sv_net_chan_mp.cpp", "src/qcommon/msg_mp.cpp",
+    "src/qcommon/huffman.cpp", "src/universal/q_shared.cpp",
+    "src/universal/com_shared.cpp", "src/universal/com_math.cpp",
 )
 
 failures = []
@@ -220,11 +227,10 @@ def check_header_offsets():
 
     ``CL_Netchan_Transmit`` encodes ``data + 9`` for ``length - 9`` and
     ``SV_Netchan_Transmit`` encodes ``data + 4`` for ``length - 4``. Both
-    wrappers call into ``qcommon/net_chan_mp.cpp``, so reaching them from an
-    asset-free test would mean linking the whole netchan subsystem and faking
-    its socket layer. Instead the offsets are pinned statically from the
-    production text: a real guard that fails if the header size changes, with
-    no fake call involved.
+    wrappers call into ``qcommon/net_chan_mp.cpp``. These static checks retain
+    guards for both directions. The packet integration test additionally reaches
+    the production client transmit wrapper with a transport capture double; it
+    does not exercise sockets or the server transmit wrapper.
     """
     client = read(CLIENT_NETCHAN)
     server = read(SERVER_NETCHAN)
@@ -311,16 +317,17 @@ def check_compile_commands(build_dir):
             flag_present(command, "-DKISAK_OPENAL"),
         )
 
-    for rel in STATE_RUNTIME_TUS:
-        commands = by_file.get(os.path.realpath(ROOT / rel), [])
-        commands = [c for c in commands if "KisakCOD-client-state-test.dir" in c]
-        if not check(f"{rel} has one runtime-state test compile command", len(commands) == 1):
-            continue
-        command = commands[0]
-        for flag in ("-m32", "-DKISAK_MP", "-DKISAK_OPENAL", "-DRELEASE_ASSERTS"):
-            check(f"runtime {rel} uses {flag}", flag_present(command, flag))
-        for flag in ("-DKISAK_DEDICATED", "-DDEDICATED"):
-            check(f"runtime {rel} excludes {flag}", not flag_present(command, flag))
+    for target, sources in (("state", STATE_RUNTIME_TUS), ("packet", PACKET_RUNTIME_TUS)):
+        for rel in sources:
+            commands = by_file.get(os.path.realpath(ROOT / rel), [])
+            commands = [c for c in commands if f"KisakCOD-client-{target}-test.dir" in c]
+            if not check(f"{rel} has one runtime-{target} test compile command", len(commands) == 1):
+                continue
+            command = commands[0]
+            for flag in ("-m32", "-DKISAK_MP", "-DKISAK_OPENAL", "-DRELEASE_ASSERTS"):
+                check(f"{target} runtime {rel} uses {flag}", flag_present(command, flag))
+            for flag in ("-DKISAK_DEDICATED", "-DDEDICATED"):
+                check(f"{target} runtime {rel} excludes {flag}", not flag_present(command, flag))
 
 
 def check_runtime_output(label, result, sections=()):
@@ -376,7 +383,7 @@ def check_build_and_run(cxx, cc, build_dir, build_type, jobs, timeout, build_tim
         check_compile_commands(build_dir)
 
         targets = ["--target", "KisakCOD-client-core", "KisakCOD-client-netchan-test",
-                   "KisakCOD-client-state-test", "-j", str(jobs)]
+                   "KisakCOD-client-state-test", "KisakCOD-client-packet-test", "-j", str(jobs)]
         result = run(["cmake", "--build", build_dir] + targets, build_timeout)
         if not check(f"build ({build_type}) client core and runtime tests",
                      result.returncode == 0,
@@ -393,6 +400,7 @@ def check_build_and_run(cxx, cc, build_dir, build_type, jobs, timeout, build_tim
 
         for name, label, sections in (
             ("KisakCOD-client-netchan-test", "netchan test", ()),
+            ("KisakCOD-client-packet-test", "client packet test", ()),
             ("KisakCOD-client-state-test", "client state test", ("parser", "input")),
         ):
             binary = build_dir / "bin" / name
@@ -439,6 +447,8 @@ def check_default_build_has_no_client_targets(cxx, cc, timeout, build_timeout):
               "KisakCOD-client-netchan-test" not in help_text)
         check("default build exposes no client state test target",
               "KisakCOD-client-state-test" not in help_text)
+        check("default build exposes no client packet test target",
+              "KisakCOD-client-packet-test" not in help_text)
     finally:
         # TemporaryDirectory is uniquely named, so cleanup can only remove this
         # run's own directory -- never another agent's concurrent build.

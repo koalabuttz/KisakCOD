@@ -13,13 +13,14 @@ work changes nothing about it.
 
 ## What the milestone builds
 
-`KISAK_BUILD_LINUX_CLIENT_CORE` (default `OFF`) adds three targets:
+`KISAK_BUILD_LINUX_CLIENT_CORE` (default `OFF`) adds four targets:
 
 | Target | Kind | Purpose |
 | --- | --- | --- |
-| `KisakCOD-client-core` | OBJECT library | Compiles three production client TUs |
+| `KisakCOD-client-core` | OBJECT library | Compiles four production client TUs |
 | `KisakCOD-client-netchan-test` | executable | Asset-free test of the real codec |
 | `KisakCOD-client-state-test` | executable | Real command-parser and key-state runtime checks |
+| `KisakCOD-client-packet-test` | executable | Production command emission, server decoding and prediction history integration |
 
 The object library compiles these files **unmodified**, from their production
 source paths:
@@ -27,6 +28,7 @@ source paths:
 - `src/client_mp/cl_net_chan_mp.cpp` — client netchan command encode/decode
 - `src/client_mp/cl_parse_mp.cpp` — client message parsing
 - `src/client_mp/cl_input.cpp` — client input/command generation
+- `src/client_mp/cl_cgame_mp.cpp` — cgame state publication and history consumers
 
 Note the paths: the multiplayer client sources live under `client_mp/`.
 `src/client/cl_input.cpp` is the singleplayer/Windows-client variant and is
@@ -85,10 +87,11 @@ cmake -S . -B build-linux/client-core \
     -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$PWD/build-linux/client-core/bin"
 
 cmake --build build-linux/client-core \
-    --target KisakCOD-client-core KisakCOD-client-netchan-test KisakCOD-client-state-test -j4
+    --target KisakCOD-client-core KisakCOD-client-netchan-test KisakCOD-client-state-test KisakCOD-client-packet-test -j4
 
 ./build-linux/client-core/bin/KisakCOD-client-netchan-test
 ./build-linux/client-core/bin/KisakCOD-client-state-test
+./build-linux/client-core/bin/KisakCOD-client-packet-test
 ```
 
 Requires the same Clang and multilib toolchain as the native Linux server
@@ -109,9 +112,9 @@ The Linux workflow runs it separately for Debug and RelWithDebInfo, so the norma
 server checks do not silently opt into client targets. Hosted CI results still
 need to be checked separately from local validation.
 
-The checker verifies generated compile commands for all three client-core
+The checker verifies generated compile commands for all four client-core
 translation units (`-m32`, `KISAK_MP`, no dedicated defines), builds in an isolated
-output directory and executes both runtime tests. The state-test compile commands
+output directory and executes all three runtime tests. The state-test compile commands
 are also checked for production source paths, client flags and `RELEASE_ASSERTS`. Its default-OFF check uses a
 separate temporary tree. Compiler-name checks can run without a build:
 
@@ -218,7 +221,7 @@ fingerprint is checked even when a client build fails.
 
 ## What still blocks a real native client
 
-Compiling three network TUs is not a client. In rough order of weight:
+Compiling four client TUs is not a client. In rough order of weight:
 
 1. **Win32 windowing, input and startup.** The client startup path, window
    creation, and input handling are Win32. Startup also goes through
@@ -242,3 +245,18 @@ game executable or presentation stubs to make a link succeed.
 - The Windows build path is not touched.
 - The checker fingerprints `bin/KisakCOD-dedi` before and after and fails if it
   changed, so a running dedicated server is never disturbed.
+
+### Packet and prediction integration checkpoint
+
+`client_packet_test.cpp` exercises production cgame setters, `CL_FinishMove`,
+`CL_WritePacket`, Huffman compression, `CL_Netchan_Transmit` encoding,
+`SV_Netchan_Decode`, message readers, and the prediction/command history consumers.
+It crosses the 128-command, 32-packet and 256-prediction rings with 300 successive
+packets, checks command backlog capping, non-delta fallback, repeated prediction
+times, and expired/future history requests. See
+[the integration checkpoint](progress-2026-10-31-client-integration.md) for limits.
+
+The transport is a capture double at `Netchan_Transmit`; no socket, fragment
+assembly, authentication, actual connection handshake, renderer, cgame simulation,
+or two-player gameplay is exercised. Command scheduling/ring insertion is supplied
+by the harness. Temporary allocation and host services are controlled doubles.

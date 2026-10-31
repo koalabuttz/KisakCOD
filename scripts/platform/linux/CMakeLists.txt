@@ -79,6 +79,7 @@ if(KISAK_BUILD_LINUX_CLIENT_CORE)
         "${SRC_DIR}/client_mp/cl_net_chan_mp.cpp"
         "${SRC_DIR}/client_mp/cl_parse_mp.cpp"
         "${SRC_DIR}/client_mp/cl_input.cpp"
+        "${SRC_DIR}/client_mp/cl_cgame_mp.cpp"
     )
 
     add_library(KisakCOD-client-core OBJECT ${KISAK_CLIENT_CORE_SOURCES})
@@ -121,7 +122,20 @@ if(KISAK_BUILD_LINUX_CLIENT_CORE)
         "${SRC_DIR}/qcommon/msg_mp.cpp"
         "${SRC_DIR}/universal/q_shared.cpp"
     )
-    foreach(client_test KisakCOD-client-netchan-test KisakCOD-client-state-test)
+    add_executable(KisakCOD-client-packet-test
+        "${TESTS_DIR}/linux_client_core/client_packet_test.cpp"
+        "${SRC_DIR}/client_mp/cl_cgame_mp.cpp"
+        "${SRC_DIR}/client_mp/cl_input.cpp"
+        "${SRC_DIR}/client_mp/cl_parse_mp.cpp"
+        "${SRC_DIR}/client_mp/cl_net_chan_mp.cpp"
+        "${SRC_DIR}/server_mp/sv_net_chan_mp.cpp"
+        "${SRC_DIR}/qcommon/msg_mp.cpp"
+        "${SRC_DIR}/qcommon/huffman.cpp"
+        "${SRC_DIR}/universal/q_shared.cpp"
+        "${SRC_DIR}/universal/com_shared.cpp"
+        "${SRC_DIR}/universal/com_math.cpp"
+    )
+    foreach(client_test KisakCOD-client-netchan-test KisakCOD-client-state-test KisakCOD-client-packet-test)
         target_compile_features(${client_test} PRIVATE cxx_std_20)
         target_compile_definitions(${client_test} PRIVATE
             KISAK_MP KISAK_OPENAL RELEASE_ASSERTS
