@@ -1,6 +1,7 @@
 #include "window_host.h"
 #include "client_input_host.h"
 #include "shutdown_signal.h"
+#include "frame_deadline.h"
 #include <linux/sys_events.h>
 #include <qcommon/qcommon.h>
 #include <win32/win_local.h>
@@ -36,6 +37,20 @@ public:
     }
     void OnQuit() override { std::puts("window=closing"); }
 };
+void PresentDiagnostic(kisak::window::WindowHost &host,kisak::window::PixelBuffer &pixels) {
+    const auto extent=host.SurfaceExtent();
+    if(pixels.Resize(extent.width,extent.height)) {
+        auto bytes=pixels.Bytes();
+        for(int y=0;y<extent.height;++y)for(int x=0;x<extent.width;++x) {
+            const bool left=x<extent.width/2,top=y<extent.height/2;
+            auto *p=bytes.data()+(size_t(y)*extent.width+x)*4;
+            p[0]=(top?left:!left)?255:0;
+            p[1]=!left?255:0;p[2]=!top && left?255:0;p[3]=255;
+        }
+        std::printf("presentation=rgba8-diagnostic width=%d height=%d\n",extent.width,extent.height);
+    }
+    host.Present(pixels.View());
+}
 bool Number(const char *text,unsigned maximum,unsigned &value) {
     if(!*text)return false;
     unsigned parsed=0;
@@ -78,8 +93,9 @@ int main(int argc,char **argv)
         kisak::window::WindowHost host(input,config);
         kisak::window::ShutdownSignal signals;
         if(server)input.Discover(server);
-        host.Present(host.Focused()?35:45,host.Focused()?65:45,host.Focused()?100:45);
-        std::printf("window=created driver=%s id=%u title=%s game=false input=engine connection=disconnected frame=unavailable presentation=SDL-window-surface\n",
+        kisak::window::PixelBuffer pixels;
+        PresentDiagnostic(host,pixels);
+        std::printf("window=created driver=%s id=%u title=%s game=false input=engine connection=disconnected frame=unavailable presentation=rgba8-diagnostic\n",
             SDL_GetCurrentVideoDriver(),host.Id(),config.title);
         std::printf("window=ready id=%u driver=%s\n",host.Id(),SDL_GetCurrentVideoDriver());
         if(relative)host.SetRelativeMouse(true);
@@ -89,8 +105,9 @@ int main(int argc,char **argv)
         std::fflush(stdout);
         const uint32_t started=SDL_GetTicks();
         unsigned drawn=0;
+        kisak::window::FrameDeadline cadence;
         while(host.Running()) {
-            host.Pump(16);
+            host.Pump(cadence.WaitMilliseconds(kisak::window::FrameDeadline::Clock::now()));
             if(int signal=signals.PendingSignal()) { std::printf("signal=%d\n",signal);host.RequestQuit(); }
             if(relative && (host.RelativeMouseActive()!=lastRelative || host.RelativeMouseError()!=lastRelativeError)) {
                 lastRelative=host.RelativeMouseActive();lastRelativeError=host.RelativeMouseError();
@@ -111,21 +128,23 @@ int main(int argc,char **argv)
                     if(metrics.trace)std::printf("character=%d\n",event.evValue);
                 }
             }
-            if(host.Running()) {
+            const bool tick=host.Running() && cadence.TakeTick(kisak::window::FrameDeadline::Clock::now());
+            if(tick) {
                 if(metrics.trace)std::printf("command_tick=%llu\n",static_cast<unsigned long long>(input.Ticks()+1));
                 input.Tick();
             }
-            const auto sample=input.ConsumeMouse();
-            if(metrics.trace && (sample.x || sample.y))std::printf("input_tick mouse_dx=%d mouse_dy=%d frame=unavailable\n",sample.x,sample.y);
-            if(metrics.trace)std::printf("editor text=%s cursor=%d held=%d\n",input.Text(),input.Cursor(),input.Held());
+            if(tick) {
+                const auto sample=input.ConsumeMouse();
+                if(metrics.trace && (sample.x || sample.y))std::printf("input_tick mouse_dx=%d mouse_dy=%d frame=unavailable\n",sample.x,sample.y);
+                if(metrics.trace)std::printf("editor text=%s cursor=%d held=%d\n",input.Text(),input.Cursor(),input.Held());
+                PresentDiagnostic(host,pixels);++drawn;
+            }
             if(!host.Running())break;
-            host.Present(host.Focused()?35:45,host.Focused()?65:45,host.Focused()?100:45);
-            ++drawn;
             if((frames && drawn>=frames) || (runMilliseconds && SDL_GetTicks()-started>=runMilliseconds))host.RequestQuit();
             if(metrics.trace)std::fflush(stdout);
         }
-        std::printf("window=closed keys=%u characters=%u mouse=%u resizes=%u focus=%u resets=%u held=%d unsupported_text=%u relative_active=%d input=engine frame=unavailable game=false\n",
-            metrics.keys,metrics.characters,metrics.mouse,metrics.resizes,metrics.focus,input.Resets(),input.Held(),input.UnsupportedCharacters(),host.RelativeMouseActive());
+        std::printf("window=closed keys=%u characters=%u mouse=%u resizes=%u focus=%u resets=%u held=%d unsupported_text=%u relative_active=%d presented=%u input=engine frame=unavailable game=false\n",
+            metrics.keys,metrics.characters,metrics.mouse,metrics.resizes,metrics.focus,input.Resets(),input.Held(),input.UnsupportedCharacters(),host.RelativeMouseActive(),drawn+1);
     } catch(const std::exception &error) {
         std::fprintf(stderr,"Window host failed: %s\n",error.what());Sys_ShutdownEvents();return 1;
     }

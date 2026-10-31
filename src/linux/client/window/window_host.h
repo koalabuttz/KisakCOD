@@ -1,6 +1,7 @@
 #pragma once
 
 #include <SDL.h>
+#include "pixel_buffer.h"
 #include <array>
 #include <cstdint>
 #include <string_view>
@@ -45,6 +46,11 @@ public:
     const std::string &RelativeMouseError() const { return relativeError_; }
     // SDL window-surface presentation only. No game renderer is initialized.
     void Present(uint8_t red, uint8_t green, uint8_t blue);
+    // Pixel extent comes from the current SDL surface, not logical resize events.
+    // A view must match this extent. Presentation copies synchronously; no view
+    // or SDL surface pointer is retained across resize or another frame.
+    PixelExtent SurfaceExtent() const;
+    void Present(PixelBufferView frame);
     uint32_t Id() const { return SDL_GetWindowID(window_); }
     bool Running() const { return running_; }
     bool Focused() const { return focused_; }

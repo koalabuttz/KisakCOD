@@ -216,6 +216,7 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
     find_package(SDL2 2.0.18 CONFIG REQUIRED)
     add_library(KisakCOD-window-platform STATIC
         "${SRC_DIR}/linux/client/window/window_host.cpp"
+        "${SRC_DIR}/linux/client/window/pixel_buffer.cpp"
         "${SRC_DIR}/linux/client/window/engine_input.cpp"
     )
     set(KISAK_WINDOW_HOST_SERVICES
@@ -245,6 +246,13 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
     add_executable(KisakCOD-client-input-test
         "${TESTS_DIR}/linux_window/client_input_test.cpp"
         ${KISAK_CLIENT_INPUT_SOURCES} ${KISAK_CLIENT_RUNTIME_SOURCES})
+    add_executable(KisakCOD-presentation-test
+        "${TESTS_DIR}/linux_window/presentation_test.cpp")
+    add_executable(KisakCOD-pixel-resource-test
+        ${PROJECT_SOURCE_DIR}/tests/linux_window/pixel_buffer_resource_test.cpp
+        ${PROJECT_SOURCE_DIR}/src/linux/client/window/pixel_buffer.cpp)
+    add_executable(KisakCOD-frame-deadline-test
+        "${TESTS_DIR}/linux_window/frame_deadline_test.cpp")
     add_executable(KisakCOD-client-input-startup-test
         "${TESTS_DIR}/linux_client_commands/input_startup_test.cpp"
         ${KISAK_CLIENT_INPUT_SOURCES} ${KISAK_CLIENT_RUNTIME_SOURCES})
@@ -259,7 +267,7 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
     add_executable(KisakCOD-shutdown-signal-test
         "${SRC_DIR}/linux/client/window/shutdown_signal.cpp"
         "${TESTS_DIR}/linux_window/shutdown_signal_test.cpp")
-    foreach(window_target KisakCOD-window-platform KisakCOD-client-window KisakCOD-window-test KisakCOD-client-input KisakCOD-client-input-test KisakCOD-shutdown-signal-test KisakCOD-client-command-test KisakCOD-client-runtime-test KisakCOD-client-input-startup-test)
+    foreach(window_target KisakCOD-window-platform KisakCOD-client-window KisakCOD-window-test KisakCOD-client-input KisakCOD-client-input-test KisakCOD-shutdown-signal-test KisakCOD-client-command-test KisakCOD-client-runtime-test KisakCOD-client-input-startup-test KisakCOD-presentation-test KisakCOD-frame-deadline-test KisakCOD-pixel-resource-test)
         target_compile_features(${window_target} PRIVATE cxx_std_20)
         target_compile_definitions(${window_target} PRIVATE
             KISAK_MP KISAK_OPENAL RELEASE_ASSERTS _FILE_OFFSET_BITS=64 _GNU_SOURCE
@@ -273,6 +281,7 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
         target_link_libraries(${window_target} PRIVATE SDL2::SDL2 Threads::Threads)
         target_link_options(${window_target} PRIVATE -Wl,--gc-sections)
     endforeach()
+    target_link_libraries(KisakCOD-presentation-test PRIVATE KisakCOD-window-platform)
     target_link_libraries(KisakCOD-client-input-startup-test PRIVATE KisakCOD-window-platform)
     target_link_libraries(KisakCOD-client-input-test PRIVATE KisakCOD-window-platform)
     target_link_libraries(KisakCOD-client-input PRIVATE KisakCOD-window-platform)

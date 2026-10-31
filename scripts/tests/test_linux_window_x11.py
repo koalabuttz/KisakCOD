@@ -13,6 +13,10 @@ WM/Escape/SIGTERM/SIGINT teardown while a key is held. Repeated launches share
 one X server; they test process/window cleanup, not same-process host reuse.
 The host explicitly reports game-frame execution unavailable.
 
+Add --pixels to sample the diagnostic RGBA producer's visible RGB quadrants
+with XGetImage at startup and after resize. JSON evidence records actual X11
+geometry, sample positions and colors; the 24-bit Xvfb drawable exposes no alpha.
+
 Add --commands for real command-buffer execution across ticks, rejected local
 commands, loopback discovery and live network restart/cancellation. Replies are
 data only; no remote commands or authentication attempts are permitted.
@@ -25,6 +29,7 @@ client libraries through that runner's environment (e.g. QEMU_SET_ENV), while
 import argparse
 import ctypes
 import ctypes.util
+import json
 import os
 from pathlib import Path
 import re
@@ -120,6 +125,8 @@ def main():
                         help="verify real disconnected client editor/state and repeated close/signal lifecycles")
     parser.add_argument("--commands", action="store_true",
                         help="also verify real console executor, local UDP discovery and network restart")
+    parser.add_argument("--pixels", action="store_true",
+                        help="read X11 pixels and verify RGBA diagnostic quadrants before/after resize")
     parser.add_argument("--log-dir", type=Path)
     parser.add_argument("--timeout", type=float, default=10)
     args = parser.parse_args()
@@ -187,7 +194,7 @@ def main():
             summary = read(path)
             if summary.count("window=closing\n") != 1 or not re.search(r"window=closed .* held=0 .* game=false", summary):
                 raise RuntimeError(label + ": missing unique close and empty held-state evidence")
-            if args.engine_input and not re.search(r"window=closed .*relative_active=0 input=engine frame=unavailable game=false", summary):
+            if args.engine_input and not re.search(r"window=closed .*relative_active=0 (?:presented=\d+ )?input=engine frame=unavailable game=false", summary):
                 raise RuntimeError(label + ": production input/capture teardown missing")
             # A new process is used for each cycle. This tests OS window/process
             # cleanup, not same-process WindowHost allocator/resource reuse.
@@ -203,12 +210,34 @@ def main():
         xdo("windowmove", window, 10, 10)
         xdo("windowraise", window)
         xdo("windowfocus", "--sync", window)
+        def check_pixels(label, extent):
+            from x11_pixel_checks import read_quadrants
+            colors = {"top_left": [255, 0, 0], "top_right": [0, 255, 0],
+                      "bottom_left": [0, 0, 255], "bottom_right": [255, 255, 0]}
+
+            def matches():
+                sample = read_quadrants(display, window)
+                (logs / ("pixels-" + label + ".json")).write_text(json.dumps(sample, indent=2) + "\n")
+                dimensions = (sample["width"], sample["height"])
+                return dimensions == extent and all(
+                    sample["samples"][name]["rgb"] == color for name, color in colors.items())
+
+            wait_for(matches, args.timeout, label + " X11 RGBA quadrant pixels", client)
+            marker = f"presentation=rgba8-diagnostic width={extent[0]} height={extent[1]}"
+            if marker not in read(trace):
+                raise RuntimeError(label + ": matching pixels have no presentation trace")
+            print(f"PASS: XGetImage {label} {extent[0]}x{extent[1]} red/green/blue/yellow quadrants", flush=True)
+
+        if args.pixels:
+            check_pixels("initial", (960, 540))
         if args.relative:
             wait_for(lambda: "relative requested=1 active=1 error=\n" in read(trace),
                      args.timeout, "relative capture enabled", client)
         xdo("windowsize", "--sync", window, 640, 360)
         wait_for(lambda: "resize 640 360\n" in read(trace), args.timeout, "OS resize", client)
         print("PASS: real X11 window and resize", flush=True)
+        if args.pixels:
+            check_pixels("resized", (640, 360))
 
         offset = len(read(trace))
         xdo("key", "a")
@@ -265,6 +294,8 @@ def main():
                      re.search(r"editor text=.* cursor=\d+ held=1\n", read(trace)[offset:]),
                      args.timeout, "resize while production input remains held", client)
             print("PASS: OS resize while real client key state remains held", flush=True)
+            if args.pixels:
+                check_pixels("resized-held-input", (620, 340))
         offset = len(read(trace))
         xdo("windowfocus", "--sync", peer_window)
         reset_marker = "input=reset held=0\n" if args.engine_input else "input=reset\n"
@@ -296,6 +327,10 @@ def main():
         offset = len(read(trace))
         request_window_close(display, window)
         summary = require_closed(client, trace, "main", window)
+        if args.pixels:
+            frames = re.search(r"^window=closed .*\bpresented=(\d+)\b", summary, re.M)
+            if not frames or int(frames.group(1)) < 3:
+                raise RuntimeError("missing presentation count for startup and resized frames")
         if command_checks:
             command_checks.verify_shutdown()
         if args.engine_input:

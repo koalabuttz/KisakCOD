@@ -191,9 +191,36 @@ bool WindowHost::Pump(int waitMilliseconds)
 void WindowHost::Present(uint8_t red,uint8_t green,uint8_t blue)
 {
     CheckThread();
+    if(!running_)throw std::logic_error("Cannot present a closed window");
     SDL_Surface *surface=SDL_GetWindowSurface(window_);
     if (!surface) throw Error("SDL software surface");
     if (SDL_FillRect(surface,nullptr,SDL_MapRGB(surface->format,red,green,blue))<0
         || SDL_UpdateWindowSurface(window_)<0) throw Error("SDL software presentation");
 }
+PixelExtent WindowHost::SurfaceExtent() const
+{
+    CheckThread();
+    if(!running_)throw std::logic_error("Cannot query a closed window surface");
+    SDL_Surface *surface=SDL_GetWindowSurface(window_);
+    if(!surface)throw Error("SDL window surface");
+    return {surface->w,surface->h};
+}
+void WindowHost::Present(PixelBufferView frame)
+{
+    CheckThread();
+    if(!running_)throw std::logic_error("Cannot present a closed window");
+    ValidatePixelBuffer(frame);
+    SDL_Surface *surface=SDL_GetWindowSurface(window_);
+    if(!surface)throw Error("SDL window surface");
+    if(frame.width!=surface->w || frame.height!=surface->h)
+        throw std::invalid_argument("Pixel dimensions do not match the current window surface");
+    const bool lock=SDL_MUSTLOCK(surface);
+    if(lock && SDL_LockSurface(surface)<0)throw Error("SDL surface lock");
+    const int converted=SDL_ConvertPixels(frame.width,frame.height,SDL_PIXELFORMAT_RGBA32,
+        frame.bytes.data(),static_cast<int>(frame.pitch),surface->format->format,surface->pixels,surface->pitch);
+    if(lock)SDL_UnlockSurface(surface);
+    if(converted<0)throw Error("SDL RGBA pixel conversion");
+    if(SDL_UpdateWindowSurface(window_)<0)throw Error("SDL pixel presentation");
+}
+
 }
