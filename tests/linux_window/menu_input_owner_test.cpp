@@ -15,7 +15,7 @@ int main(int argc,char **argv){
   {
   kisak::window::ClientInputHost input;
   kisak::window::Config config;config.width=640;config.height=480;
-  kisak::window::WindowHost window(input,config);
+  kisak::window::WindowHost window(input,config);kisak::window::ClientInputHost::WindowCursorBinding cursorBinding(input,window);
   kisak::window::CpuRenderer renderer;
   Check(Reject([&]{kisak::window::MenuInputOwner owner(input,renderer,"/nonexistent-menu-input-fixture",argv[2],640,480);}) && renderer.Status()==kisak::window::CpuRenderer::State::stopped && !cls.uiStarted,"missing bundle leaves renderer and borrowed UI readiness unchanged");
   Check(Reject([&]{kisak::window::MenuInputOwner owner(input,renderer,argv[1],"/nonexistent-menu-image-fixture",640,480);}) && renderer.Status()==kisak::window::CpuRenderer::State::stopped && !cls.uiStarted,"failed font atlas initialization rolls back owned renderer generation");
@@ -46,8 +46,12 @@ int main(int argc,char **argv){
     CL_KeyEvent(0,K_ESCAPE,1,Sys_Milliseconds());CL_KeyEvent(0,K_ESCAPE,0,Sys_Milliseconds());
     Check(!owner.Opened() && !(clientUIActives[0].keyCatchers&KEYCATCH_UI),"actual client Escape closes menu and releases UI catcher");
     owner.Open();owner.Present(window);Check(owner.Opened() && Dvar_GetBool("cl_freelook")==savedLook && Dvar_GetBool("m_filter")==savedFilter,"same owner reopens preserving only live dvar settings");
+    SDL_Event focus{};focus.type=SDL_WINDOWEVENT;focus.window.windowID=window.Id();focus.window.event=SDL_WINDOWEVENT_FOCUS_GAINED;SDL_PushEvent(&focus);
+    SDL_Event enter=focus;enter.window.event=SDL_WINDOWEVENT_ENTER;SDL_PushEvent(&enter);window.Pump(0);window.SetEngineCursor(true);
+    Check(window.EngineCursorActive(),"same-window teardown fixture owns an active engine cursor lease");
     renderer.BeginFrame();const float black[4]={0,0,0,1};renderer.Clear(black);renderer.Submit();
    }
+   Check(!window.EngineCursorActive(),"owner destruction releases cursor while platform window remains alive");
    Check(renderer.Status()==kisak::window::CpuRenderer::State::stopped && !cls.uiStarted && !input.MenuOpen(),"destruction cancels pending frame and detaches/releases renderer generation");
    input.Focus(false);Check(input.Held()==0,"input reset after owner destruction has no dangling callback");
   }

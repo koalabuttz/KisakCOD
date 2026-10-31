@@ -17,7 +17,7 @@ extern "C" int __real_SDL_UpdateWindowSurface(SDL_Window*);
 extern "C" int __wrap_SDL_UpdateWindowSurface(SDL_Window *window){if(rejectSurface){rejectSurface=false;SDL_SetError("injected surface update failure");return -1;}return __real_SDL_UpdateWindowSurface(window);}
 int main(int argc,char**argv){if(argc!=3)return 2;Sys_InitializeCriticalSections();try{
  kisak::window::ClientInputHost input;kisak::window::Config cfg;cfg.width=640;cfg.height=480;
- kisak::window::WindowHost window(input,cfg);kisak::window::CpuRenderer renderer;
+ kisak::window::WindowHost window(input,cfg);kisak::window::ClientInputHost::WindowCursorBinding cursorBinding(input,window);kisak::window::CpuRenderer renderer;
  kisak::window::MenuInputOwner owner(input,renderer,argv[1],argv[2],640,480);owner.Present(window);
  unsigned before=attempted;bool traceThrew=false;rejectAllocation=true;
  try{owner.Trace("fault-telemetry");}catch(...){traceThrew=true;}rejectAllocation=false;

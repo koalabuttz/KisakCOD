@@ -1,6 +1,9 @@
 #include "menu_input_owner.h"
 #include "client_input_host.h"
 #include "menu_assets.h"
+#include "menu_composition_assets.h"
+#include <ui/ui_cursor.h>
+#include <ui/ui_time.h>
 #include "ui_audio_assets.h"
 #include "window_host.h"
 #include <ui/ui_input_core.h>
@@ -26,10 +29,11 @@ MenuInputOwner::MenuInputOwner(ClientInputHost &input,CpuRenderer &renderer,cons
     LoadMenuAudio(audio_,bundle);
     renderer_.Initialize(width,height);
     fonts_=LoadMenuFonts(renderer_,bundle,images);
+    composition_=std::make_unique<MenuCompositionAssets>(LoadMenuComposition(renderer_,bundle,images));
     auto admit=[&](const char *&script){if(script&&*script)script=scripts_.RegisterScript(script);};
     admit(assets_->menu.onOpen);admit(assets_->menu.onClose);admit(assets_->menu.onESC);
     for(auto &item:assets_->items){admit(item.action);admit(item.onFocus);admit(item.leaveFocus);}
-    dc_.localClientNum=0;dc_.menuCount=1;dc_.Menus[0]=&assets_->menu;dc_.isCursorVisible=true;
+    dc_.localClientNum=0;dc_.menuCount=1;dc_.Menus[0]=&assets_->menu;dc_.isCursorVisible=false;
     UILocalVar_Init(&dc_.localVars);
     Dvar_RegisterBool("m_filter",false,DVAR_ARCHIVE,"Allow mouse movement smoothing");
     uiscript_debug=Dvar_RegisterInt("uiscript_debug",0,0,2,DVAR_NOFLAG,"UI script diagnostic level");
@@ -39,6 +43,7 @@ MenuInputOwner::MenuInputOwner(ClientInputHost &input,CpuRenderer &renderer,cons
     std::printf("menu_controls=ready source=options_look items=105,106,111,112 audio_driver=%s blur=unsupported frame=unavailable\n",SDL_GetCurrentAudioDriver());
 }
 MenuInputOwner::~MenuInputOwner(){
+    try {input_.ReleaseEngineCursor();}catch(const std::exception &e){std::fprintf(stderr,"menu cursor teardown: %s\n",e.what());}
     try {if(attached_){attached_=false;input_.DetachMenu(*this);}Close();}
     catch(const std::exception&e){std::fprintf(stderr,"menu teardown: %s\n",e.what());}
     ResetTransient();UILocalVar_Shutdown(&dc_.localVars);if(current==this)current=nullptr;uiscript_debug=nullptr;renderer_.Shutdown();
@@ -47,13 +52,16 @@ void MenuInputOwner::ResetTransient() noexcept {
     inHandleKey=0;g_waitingForKey=0;g_editingField=0;g_editItem=nullptr;g_bindItem=nullptr;itemCapture=nullptr;captureFunc=nullptr;captureData=nullptr;scrollInfo={};
 }
 bool MenuInputOwner::Opened() const {return assets_ && Window_IsVisible(0,&assets_->menu.window) && Menus_MenuIsInStack(const_cast<UiContext*>(&dc_),const_cast<menuDef_t*>(&assets_->menu));}
-void MenuInputOwner::Open(){CheckThread();if(Opened())return;ResetTransient();dc_.realTime=Sys_Milliseconds();
+void MenuInputOwner::Open(){CheckThread();if(Opened())return;ResetTransient();
     const auto prior=scrPlaceView[0];scrPlaceView[0]=placement_;
     try {Menus_Open(&dc_,&assets_->menu);}catch(...){scrPlaceView[0]=prior;ResetTransient();throw;}
     scrPlaceView[0]=prior;input_.SyncMenuCapture();Trace("open");
 }
-void MenuInputOwner::Close(){CheckThread();if(!Opened())return;Menu_ClearFocus(&dc_,&assets_->menu);Menus_Close(&dc_,&assets_->menu);ResetTransient();if(attached_)input_.SyncMenuCapture();Trace("close");}
-void MenuInputOwner::ResetFocus(){CheckThread();Menu_ClearFocus(&dc_,&assets_->menu);ResetTransient();Trace("reset");}
+void MenuInputOwner::Close(){CheckThread();input_.ReleaseEngineCursor();if(!Opened())return;Menu_ClearFocus(&dc_,&assets_->menu);Menus_Close(&dc_,&assets_->menu);ResetTransient();if(attached_)input_.SyncMenuCapture();Trace("close");}
+void MenuInputOwner::ResetFocus(){CheckThread();focused_=false;dc_.isCursorVisible=false;input_.ReleaseEngineCursor();Menu_ClearFocus(&dc_,&assets_->menu);ResetTransient();Trace("reset");}
+void MenuInputOwner::Focus(bool focused){CheckThread();focused_=focused;if(!focused)ResetFocus();}
+void MenuInputOwner::PointerPresence(bool inside){CheckThread();pointerInside_=inside;if(!inside){dc_.isCursorVisible=false;input_.ReleaseEngineCursor();}}
+bool MenuInputOwner::CursorVisible() const {return Opened()&&focused_&&pointerInside_&&dc_.isCursorVisible&&!Dvar_GetBool("cl_bypassMouseInput");}
 void MenuInputOwner::Resize(int width,int height){CheckThread();if(width<1||height<1||width>16384||height>16384)throw std::invalid_argument("Invalid menu viewport");width_=width;height_=height;
     ScrPlace_SetupFloatViewportForDisplay(&placement_,0,0,float(width),float(height),1,width,height);
     for(auto &item:assets_->items)item.textRect[0].w=0; // real extent cache invalidated by viewport change
@@ -61,44 +69,62 @@ void MenuInputOwner::Resize(int width,int height){CheckThread();if(width<1||heig
 void MenuInputOwner::Key(int key,bool down){CheckThread();if(!Opened())return;
     if(key&K_CHAR_FLAG)return; // admitted controls have no text fields or on-key scripts
     switch(key){case K_TAB:case K_DOWNARROW:case K_UPARROW:case K_LEFTARROW:case K_RIGHTARROW:case K_KP_DOWNARROW:case K_KP_UPARROW:case K_ENTER:case K_KP_ENTER:case K_ESCAPE:case K_MOUSE1:case K_MOUSE2:case K_MOUSE3:case K_MWHEELUP:case K_MWHEELDOWN:case K_PGUP:case K_PGDN:break;default:return;}
-    const auto prior=scrPlaceView[0];scrPlaceView[0]=placement_;dc_.realTime=Sys_Milliseconds();
+    const auto prior=scrPlaceView[0];scrPlaceView[0]=placement_;
     try {Menu_HandleKey(&dc_,&assets_->menu,key,down);}
     catch(...){scrPlaceView[0]=prior;ResetTransient();std::fprintf(stderr,"menu action failed: cl_freelook=%d m_filter=%d (actual state retained)\n",Dvar_GetBool("cl_freelook"),Dvar_GetBool("m_filter"));throw;}
     scrPlaceView[0]=prior;if(!Opened()){Menu_ClearFocus(&dc_,&assets_->menu);ResetTransient();}Trace("key");
 }
 void MenuInputOwner::Mouse(int x,int y){CheckThread();if(!Opened())return;
-    // Same physical-to-full-virtual cursor domain used by UI_MouseEvent; actual
-    // Rect_ContainsPoint performs each item's placement transform.
-    dc_.cursor.x=std::clamp(x/placement_.scaleVirtualToFull[0],0.0f,640.0f);
-    dc_.cursor.y=std::clamp(y/placement_.scaleVirtualToFull[1],0.0f,480.0f);
-    dc_.isCursorVisible=true;dc_.realTime=Sys_Milliseconds();const auto prior=scrPlaceView[0];scrPlaceView[0]=placement_;
+    pointerX_=x;pointerY_=y;
+    UI_UpdateCursorPosition(&dc_,&placement_,x,y);
+    if(!focused_ || !pointerInside_)dc_.isCursorVisible=false;
+    if(!dc_.isCursorVisible){Trace("mouse");return;}
+    const auto prior=scrPlaceView[0];scrPlaceView[0]=placement_;
     try {Menu_HandleMouseMove(&dc_,&assets_->menu);}catch(...){scrPlaceView[0]=prior;ResetTransient();throw;}scrPlaceView[0]=prior;Trace("mouse");
 }
+
 int MenuInputOwner::FocusIndex() const {for(size_t i=0;i<assets_->items.size();++i)if(Window_HasFocus(0,&assets_->items[i].window))return assets_->sourceIndices[i];return -1;}
 void MenuInputOwner::Trace(const char *phase) {
     // Logging must not allocate or throw between a UI action and capture sync.
     const TraceState state{true,Opened(),FocusIndex(),Dvar_GetBool("cl_freelook"),
-        Dvar_GetBool("m_filter"),width_,height_,input_.Held()};
+        Dvar_GetBool("m_filter"),width_,height_,input_.Held(),pointerX_,pointerY_,CursorVisible(),pointerInside_,focused_,dc_.cursor.x,dc_.cursor.y};
     auto &cache=std::strcmp(phase,"present")==0?lastPresentTrace_:lastTrace_;
     if(state!=cache) {
         cache=state;
-        std::printf("menu_state phase=%s open=%d focus=%d cl_freelook=%d m_filter=%d width=%d height=%d held=%d\n",
-            phase,state.open,state.focus,state.freelook,state.filter,state.width,state.height,state.held);
+        std::printf("menu_state phase=%s open=%d focus=%d cl_freelook=%d m_filter=%d width=%d height=%d held=%d pointer_x=%d pointer_y=%d cursor_visible=%d pointer_inside=%d window_focused=%d cursor_x=%g cursor_y=%g\n",
+            phase,state.open,state.focus,state.freelook,state.filter,state.width,state.height,state.held,state.pointerX,state.pointerY,state.visible,state.pointerInside,state.windowFocused,state.cursorX,state.cursorY);
         std::fflush(stdout);
     }
 }
 void MenuInputOwner::Present(WindowHost &window){CheckThread();const auto extent=window.SurfaceExtent();if(extent.width!=width_||extent.height!=height_)Resize(extent.width,extent.height);
     const auto before=renderer_.Pixels();if(before.width!=width_||before.height!=height_)renderer_.Resize(width_,height_);
+    focused_=window.Focused();pointerInside_=window.PointerInside();
+    if(focused_&&pointerInside_)SDL_GetMouseState(&pointerX_,&pointerY_);
+    UI_UpdateCursorPosition(&dc_,&placement_,pointerX_,pointerY_);
+    if(!focused_||!pointerInside_)dc_.isCursorVisible=false;
+    std::array<windowDef_t,8> beforeWindows{};
+    if(composition_->windows.size()>beforeWindows.size())throw std::logic_error("Composition window bound exceeded");
+    for(size_t i=0;i<composition_->windows.size();++i)beforeWindows[i]=composition_->windows[i].window;
+    UI_UpdateContextTime(&dc_,&timeIndex_,previousTimes_,Sys_Milliseconds());
     renderer_.BeginFrame();
     try {
-        const float clear[4]={.25f,.5f,.75f,1};renderer_.Clear(clear);renderer_.SetViewport(0,0,width_,height_);dc_.realTime=Sys_Milliseconds();
-        if(Opened())for(auto &item:assets_->items)renderer_.DrawMenuItem(fonts_,placement_,dc_,item);
+        const float clear[4]={.25f,.5f,.75f,1};renderer_.Clear(clear);renderer_.SetViewport(0,0,width_,height_);
+        if(Opened()) {
+            for(auto &back:composition_->windows)if(Window_IsVisible(0,&back.window))
+                renderer_.DrawWindow(back.material,placement_,dc_,back.window,composition_->fadeAmount,composition_->fadeInAmount,composition_->fadeClamp,composition_->fadeCycle);
+            for(auto &item:assets_->items)renderer_.DrawMenuItem(fonts_,placement_,dc_,item);
+            if(CursorVisible())renderer_.DrawCursor(composition_->cursor,placement_,placement_,dc_);
+        }
         renderer_.Submit();renderer_.Present(window);
     } catch(...) {
         // An SDL failure may occur after CPU replay. Keep the resources/pixels,
         // discard the failed frame and let a later tick rebuild it normally.
-        renderer_.CancelFrame();throw;
+        for(size_t i=0;i<composition_->windows.size();++i)composition_->windows[i].window=beforeWindows[i];
+        renderer_.CancelFrame();
+        try {input_.ReleaseEngineCursor();}catch(const std::exception &e){std::fprintf(stderr,"menu cursor error cleanup: %s\n",e.what());}
+        throw;
     }
+    window.SetEngineCursor(CursorVisible());
     Trace("present");
 }
 const char *MenuInputOwner::Localize(const char *key) const {CheckThread();return assets_->Localize(key);}

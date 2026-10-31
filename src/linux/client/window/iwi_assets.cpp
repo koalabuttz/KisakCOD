@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <vector>
 
+void __cdecl Image_CopyBitmapData(GfxRawImage *,GfxImageFileHeader *,uint8_t *);
 void __cdecl Image_CopyDxtcData(GfxRawImage *,GfxImageFileHeader *,uint8_t *);
 namespace kisak::window {
 namespace {
@@ -19,14 +20,15 @@ IwiMipChain DecodeIwiMipChain(std::span<const uint8_t> bytes) {
  Require(bytes.size()>=sizeof(GfxImageFileHeader) && bytes.size()<=MaxFileBytes,"IWI file size outside supported bounds");
  GfxImageFileHeader header{};std::memcpy(&header,bytes.data(),sizeof(header));
  Require(!std::memcmp(header.tag,"IWi",3) && header.version==6,"unsupported IWI signature/version");
- Require(header.format==IMG_FORMAT_DXT1 || header.format==IMG_FORMAT_DXT3 || header.format==IMG_FORMAT_DXT5,"unsupported IWI pixel format");
+ Require(header.format==IMG_FORMAT_DXT1 || header.format==IMG_FORMAT_DXT3 || header.format==IMG_FORMAT_DXT5 || header.format==IMG_FORMAT_BITMAP_LUMINANCE_ALPHA,"unsupported IWI pixel format");
  Require(!(header.flags&(IMG_FLAG_CUBEMAP|IMG_FLAG_VOLMAP)) && header.dimensions[2]==1,"only 2D IWI images supported");
  const unsigned width=header.dimensions[0],height=header.dimensions[1];
  Require(width>=4 && height>=4 && width<=4096 && height<=4096 && !(width&(width-1)) && !(height&(height-1)),"unsupported IWI dimensions");
+ const bool luminanceAlpha=header.format==IMG_FORMAT_BITMAP_LUMINANCE_ALPHA;
  const size_t blockBytes=header.format==IMG_FORMAT_DXT1?8:16;
  std::vector<size_t> levels;
  for(unsigned w=width,h=height;;w=std::max(w/2,1u),h=std::max(h/2,1u)) {
-  levels.push_back(size_t((w+3)/4)*((h+3)/4)*blockBytes);
+  levels.push_back(luminanceAlpha?size_t(w)*h*2:size_t((w+3)/4)*((h+3)/4)*blockBytes);
   if((header.flags&IMG_FLAG_NOMIPMAPS) || (w==1 && h==1))break;
  }
  size_t expected=sizeof(header);for(size_t level:levels)expected+=level;
@@ -44,10 +46,11 @@ IwiMipChain DecodeIwiMipChain(std::span<const uint8_t> bytes) {
  for(size_t size:levels) {
   end-=size;
   std::vector<uint8_t> payload(bytes.begin()+end,bytes.begin()+end+size);
-  const unsigned pw=std::max(w,4u),ph=std::max(h,4u);
+  const unsigned pw=luminanceAlpha?w:std::max(w,4u),ph=luminanceAlpha?h:std::max(h,4u);
   std::vector<GfxRawPixel> decoded(size_t(pw)*ph);
   GfxRawImage raw{};raw.width=pw;raw.height=ph;raw.pixels=decoded.data();
-  Image_CopyDxtcData(&raw,&header,payload.data());
+  if(luminanceAlpha){auto mipHeader=header;mipHeader.dimensions[0]=w;mipHeader.dimensions[1]=h;Image_CopyBitmapData(&raw,&mipHeader,payload.data());}
+  else Image_CopyDxtcData(&raw,&header,payload.data());
   PixelBuffer level;level.Resize(w,h);
   for(unsigned y=0;y<h;++y)std::memcpy(level.Bytes().data()+size_t(y)*w*4,decoded.data()+size_t(y)*pw,size_t(w)*4);
   result.push_back(std::move(level));w=std::max(w/2,1u);h=std::max(h/2,1u);

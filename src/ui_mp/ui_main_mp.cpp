@@ -1,3 +1,5 @@
+#include <ui/ui_time.h>
+#include <ui/ui_cursor.h>
 #include <ui/ui_font_selection.h>
 #ifndef KISAK_MP
 #error This File is MultiPlayer Only
@@ -612,13 +614,7 @@ void __cdecl UI_MouseEvent(int localClientNum, int x, int y)
             "(localClientNum == 0)",
             localClientNum);
 
-    uiInfoArray.uiDC.cursor.x = x / scrPlaceFull.scaleVirtualToFull[0];
-    uiInfoArray.uiDC.cursor.y = y / scrPlaceFull.scaleVirtualToFull[1];
-    v3 = uiInfoArray.uiDC.cursor.x >= 0.0
-        && uiInfoArray.uiDC.cursor.x <= 640.0
-        && uiInfoArray.uiDC.cursor.y >= 0.0
-        && uiInfoArray.uiDC.cursor.y <= 480.0;
-    uiInfoArray.uiDC.isCursorVisible = v3;
+    UI_UpdateCursorPosition(&uiInfoArray.uiDC, &scrPlaceFull, x, y);
     CL_ShowSystemCursor(uiInfoArray.uiDC.isCursorVisible == 0);
     if (uiInfoArray.uiDC.isCursorVisible)
     {
@@ -629,9 +625,6 @@ void __cdecl UI_MouseEvent(int localClientNum, int x, int y)
 
 void __cdecl UI_UpdateTime(int localClientNum, int realtime)
 {
-    int frameTimeIndex; // [esp+4h] [ebp-Ch]
-    int frameTimeTotal; // [esp+Ch] [ebp-4h]
-
     if (localClientNum)
         MyAssertHandler(
             ".\\ui_mp\\ui_main_mp.cpp",
@@ -640,18 +633,7 @@ void __cdecl UI_UpdateTime(int localClientNum, int realtime)
             "%s\n\t(localClientNum) = %i",
             "(localClientNum == 0)",
             localClientNum);
-    uiInfoArray.uiDC.frameTime = realtime - uiInfoArray.uiDC.realTime;
-    uiInfoArray.uiDC.realTime = realtime;
-    uiInfoArray.previousTimes[uiInfoArray.timeIndex++ % 4] = uiInfoArray.uiDC.frameTime;
-    if (uiInfoArray.timeIndex > 4)
-    {
-        frameTimeTotal = 0;
-        for (frameTimeIndex = 0; frameTimeIndex < 4; ++frameTimeIndex)
-            frameTimeTotal += uiInfoArray.previousTimes[frameTimeIndex];
-        if (!frameTimeTotal)
-            frameTimeTotal = 1;
-        uiInfoArray.uiDC.FPS = (float)(4000 / frameTimeTotal);
-    }
+    UI_UpdateContextTime(&uiInfoArray.uiDC, &uiInfoArray.timeIndex, uiInfoArray.previousTimes, realtime);
 }
 
 void __cdecl UI_DrawBuildNumber(int localClientNum)
@@ -1013,11 +995,7 @@ void __cdecl UI_Refresh(int localClientNum)
         {
             if (!Dvar_GetBool("cl_bypassMouseInput") && UI_GetActiveMenu(localClientNum) != UIMENU_SCOREBOARD)
             {
-                w = scrPlaceFull.scaleVirtualToReal[0] * 32.0 / scrPlaceFull.scaleVirtualToFull[0];
-                h = scrPlaceFull.scaleVirtualToReal[1] * 32.0 / scrPlaceFull.scaleVirtualToFull[1];
-                y = uiInfoArray.uiDC.cursor.y - h * 0.5;
-                x = uiInfoArray.uiDC.cursor.x - w * 0.5;
-                UI_DrawHandlePic(&scrPlaceView[localClientNum], x, y, w, h, 4, 4, 0, sharedUiInfo.assets.cursor);
+                UI_DrawCursor(&uiInfoArray.uiDC, &scrPlaceFull, &scrPlaceView[localClientNum], sharedUiInfo.assets.cursor);
             }
         }
     }

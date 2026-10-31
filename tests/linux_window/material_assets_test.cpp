@@ -30,6 +30,8 @@ int main(int argc,char **argv){try{
  bad=bytes;bad[8]=255;bad[9]=255;Check(Reject(bad),"unbounded string length rejects");
  bad=bytes;bad[12]=0;Check(Reject(bad),"embedded control characters reject");
  const size_t image=12+std::string("fixture/font").size()+4;bad=bytes;bad[image]='/';Check(Reject(bad),"image identifiers cannot introduce paths");
+ for(unsigned sampler:{1u,226u,235u}){auto profile=bytes;profile[fields+7*4]=sampler;auto composition=DecodeUiCompositionMaterial(profile);Check(composition.samplerState==sampler&&composition.strictSampler==(sampler==235),"composition retains exact admitted sampler semantics");if(sampler!=235)Check(Reject(profile),"composition sampler remains rejected by font resolver");}
+ for(unsigned sampler:{0u,2u,225u}){auto profile=bytes;profile[fields+7*4]=sampler;bool rejects=false;try{DecodeUiCompositionMaterial(profile);}catch(const std::invalid_argument&){rejects=true;}Check(rejects,"nearby unsupported composition sampler rejects");}
  bytes.assign(8,0);Check(resolved.name=="fixture/font"&&resolved.imageName=="fixture_atlas","resolved metadata owns strings after input storage is destroyed");
  for(int i=1;i<argc;++i){auto actual=LoadUiMaterialFile(argv[i]);Check(actual.strictSampler&&!actual.name.empty(),"genuine exported supported material resolved");std::printf("material=%s image=%s magnification_only=1\n",actual.name.c_str(),actual.imageName.c_str());}
 }catch(const std::exception&e){std::fprintf(stderr,"material fixture failed: %s\n",e.what());++failures;}

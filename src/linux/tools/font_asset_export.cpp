@@ -159,7 +159,7 @@ void MenuInteraction(std::ostream &out,const menuDef_t &menu,const std::map<std:
 void ItemInteraction(std::ostream &out,const itemDef_s &item,const std::map<std::string,std::string> &translations){
  out<<",\"scripts\":{";const char *names[]={"mouse_enter_text","mouse_exit_text","mouse_enter","mouse_exit","action","on_accept","on_focus","leave_focus"};
  const char *values[]={item.mouseEnterText,item.mouseExitText,item.mouseEnter,item.mouseExit,item.action,item.onAccept,item.onFocus,item.leaveFocus};
- for(unsigned n=0;n<8;++n){if(n)out<<',';out<<Json(names[n])<<':';OptionalText(out,values[n]);}out<<",\"on_key\":";KeyScripts(out,item.onKey);out<<"},\"text_expression\":";Statement(out,item.textExp,translations);out<<",\"visible_expression\":";Statement(out,item.visibleExp,translations);
+ for(unsigned n=0;n<8;++n){if(n)out<<',';out<<Json(names[n])<<':';OptionalText(out,values[n]);}out<<",\"on_key\":";KeyScripts(out,item.onKey);out<<"},\"text_expression\":";Statement(out,item.textExp,translations);out<<",\"visible_expression\":";Statement(out,item.visibleExp,translations);out<<",\"material_expression\":";Statement(out,item.materialExp,translations);
 }
 struct UiSounds {const snd_alias_list_t *aliases[2]{};bool duplicate=false;};
 void CollectUiSound(XAssetHeader header,void *context) noexcept {
@@ -186,6 +186,11 @@ void ExportUiSounds(const std::filesystem::path &directory){
    }out<<']';}out<<'}';
  }out<<"]}\n";out.close();Require(bool(out),"cannot finish UI sound inventory");
 }
+struct CursorMaterial {Material *value=nullptr;bool duplicate=false;};
+void CollectCursorMaterial(XAssetHeader header,void *context) noexcept {
+ auto &cursor=*static_cast<CursorMaterial*>(context);auto *material=header.material;
+ if(material&&material->info.name&&!std::strcmp(material->info.name,"ui_cursor")){if(cursor.value)cursor.duplicate=true;cursor.value=material;}
+}
 void ExportMenus(const std::filesystem::path &directory){
  Menus menus;DB_EnumXAssets(ASSET_TYPE_MENU,CollectMenu,&menus,false);Require(!menus.overflow,"menu inventory exceeds bound");
  Localizations localized;DB_EnumXAssets(ASSET_TYPE_LOCALIZE_ENTRY,CollectLocalization,&localized,false);Require(!localized.overflow,"localization inventory exceeds bound");
@@ -202,6 +207,9 @@ void ExportMenus(const std::filesystem::path &directory){
   }out<<"]}";
  }
  out<<"],\"localized_controls\":{";bool firstControl=true;for(const char *name:{"EXE_YES","EXE_NO"}){if(!firstControl)out<<',';firstControl=false;out<<Json(name)<<':';auto found=translations.find(name);if(found==translations.end())out<<"null";else out<<Json(found->second);}out<<"}}\n";out.close();Require(bool(out),"cannot finish menu inventory");
+ CursorMaterial cursor;DB_EnumXAssets(ASSET_TYPE_MATERIAL,CollectCursorMaterial,&cursor,false);Require(!cursor.duplicate,"duplicate ui_cursor material");
+ if(cursor.value)relevantMaterials.insert(cursor.value);
+ std::ofstream cursorOut(directory/"cursor-inventory.json");Require(bool(cursorOut),"cannot create cursor inventory");cursorOut<<"{\"registration_name\":\"ui_cursor\",\"available\":"<<(cursor.value?"true":"false")<<"}\n";cursorOut.close();Require(bool(cursorOut),"cannot finish cursor inventory");
  std::ofstream materials(directory/"material-inventory.json");Require(bool(materials),"cannot create material inventory");materials<<"{\"materials\":[";bool first=true;
  for(auto *material:relevantMaterials){if(!first)materials<<',';first=false;MaterialManifest(materials,material);}materials<<"]}\n";materials.close();Require(bool(materials),"cannot finish material inventory");
  std::printf("menu_inventory=complete menus=%zu items=%zu materials=%zu localizations=%zu\n",menus.count,totalItems,relevantMaterials.size(),localized.count);

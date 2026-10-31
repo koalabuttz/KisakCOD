@@ -23,6 +23,8 @@ public:
     virtual void Resize(int width, int height) = 0;
     virtual void Focus(bool focused) = 0;
     virtual void Quit() = 0;
+    // Pointer boundary does not imply keyboard focus or release held keys.
+    virtual void PointerPresence(bool) {}
 };
 
 struct Config {
@@ -55,6 +57,16 @@ public:
     uint32_t Id() const { return SDL_GetWindowID(window_); }
     bool Running() const { return running_; }
     bool Focused() const { return focused_; }
+    bool PointerInside() const { return pointerInside_; }
+    // Hide the native cursor only while this running, focused window owns the
+    // pointer. Restores the previously observed SDL visibility on release.
+    void SetEngineCursor(bool requested);
+    // Disconnected host policy: legacy gameplay hide requests are recorded but
+    // keep a native cursor visible unless custom rendering or relative capture
+    // owns it. This is not the full game cursor policy.
+    void NativeCursorRequest(bool show);
+    bool NativeCursorRequested() const { return nativeCursorRequested_; }
+    bool EngineCursorActive() const { return cursorOwned_; }
     SDL_Window *NativeWindow() const { return window_; }
 private:
     void Dispatch(const SDL_Event &event);
@@ -62,6 +74,7 @@ private:
     void SetKey(uint32_t time, int key, bool down, bool repeat = false);
     void CheckThread() const;
     bool ApplyRelativeMouse(bool active);
+    void ApplyEngineCursor();
     uint32_t Time(uint32_t sdlTime) const { return sdlTime + clockOffset_; }
     EventSink &sink_;
     SDL_Window *window_ = nullptr;
@@ -70,6 +83,9 @@ private:
     bool running_ = true, focused_ = false, startedText_ = false, quitComplete_ = false;
     bool relativeRequested_=false,relativeActive_=false;
     std::string relativeError_;
+    bool pointerInside_=false,engineCursorRequested_=false,cursorOwned_=false;
+    int priorCursorVisibility_=SDL_ENABLE,initialCursorVisibility_=SDL_ENABLE;
+    bool nativeCursorTouched_=false,nativeCursorRequested_=true;
     int width_, height_;
     std::array<bool, SDL_NUM_SCANCODES> physical_{};
     std::array<unsigned char, 256> held_{};

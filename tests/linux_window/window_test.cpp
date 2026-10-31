@@ -33,6 +33,8 @@ public:
     void Resize(int w,int h) override { width=w;height=h;++resizeCalls; }
     void OnFocus(bool focused) override { focus=focused;++focusCalls; }
     void OnQuit() override { ++quitCalls; }
+    void OnPointerPresence(bool inside) override { pointer=inside;++pointerCalls;if(failPointer)throw std::runtime_error("fixture pointer failure"); }
+    bool pointer=false,failPointer=false;int pointerCalls=0;
     int width=0,height=0,resizeCalls=0,focusCalls=0,quitCalls=0;
     bool focus=false;
     uint32_t clockShift;
@@ -236,6 +238,58 @@ int main()
             check(sink.quitAttempts==1 && !SDL_WasInit(SDL_INIT_VIDEO),"failed explicit quit still completes sink cleanup during destruction");
             Input fresh;kisak::window::Config config;config.hidden=true;kisak::window::WindowHost host(fresh,config);
             check(host.Running(),"singleton remains reusable after throwing teardown");
+        }
+        {
+            // Keep video alive around host destruction to inspect restored global state.
+            if(SDL_InitSubSystem(SDL_INIT_VIDEO)<0)throw std::runtime_error(SDL_GetError());
+            SDL_ShowCursor(SDL_ENABLE);
+            Input sink;
+            {
+                kisak::window::Config config;config.hidden=true;kisak::window::WindowHost host(sink,config);
+                SDL_FlushEvents(SDL_FIRSTEVENT,SDL_LASTEVENT);
+                WindowEvent(host.Id(),SDL_WINDOWEVENT_FOCUS_GAINED);WindowEvent(host.Id(),SDL_WINDOWEVENT_ENTER);host.Pump();
+                host.SetEngineCursor(true);
+                check(host.PointerInside() && sink.pointer && host.EngineCursorActive() && SDL_ShowCursor(SDL_QUERY)==SDL_DISABLE,"engine cursor hides native cursor only in focused pointer-owning window");
+                host.NativeCursorRequest(false);
+                check(!host.NativeCursorRequested() && host.EngineCursorActive() && SDL_ShowCursor(SDL_QUERY)==SDL_DISABLE,"legacy cursor request cannot override presented custom cursor ownership");
+                Key(host.Id(),SDL_SCANCODE_A,true);host.Pump();Drain();const int priorResets=resets;
+                WindowEvent(host.Id()+1,SDL_WINDOWEVENT_LEAVE);host.Pump();
+                check(host.PointerInside() && host.EngineCursorActive(),"foreign pointer boundary cannot release cursor ownership");
+                WindowEvent(host.Id(),SDL_WINDOWEVENT_LEAVE);host.Pump();Drain();
+                check(!host.PointerInside() && !sink.pointer && !host.EngineCursorActive() && SDL_ShowCursor(SDL_QUERY)==SDL_ENABLE && consumerHeld['a'] && resets==priorResets,"pointer leave restores native cursor without releasing held keys or keyboard focus");
+                WindowEvent(host.Id(),SDL_WINDOWEVENT_ENTER);host.Pump();
+                check(host.EngineCursorActive() && SDL_ShowCursor(SDL_QUERY)==SDL_DISABLE,"pointer reentry reacquires requested engine cursor");
+                WindowEvent(host.Id(),SDL_WINDOWEVENT_FOCUS_LOST);host.Pump();
+                check(!host.EngineCursorActive() && SDL_ShowCursor(SDL_QUERY)==SDL_ENABLE && !consumerHeld['a'],"focus loss restores cursor and still resets actual input consumer");
+                WindowEvent(host.Id(),SDL_WINDOWEVENT_FOCUS_GAINED);host.Pump();
+                check(host.EngineCursorActive(),"focus gain reacquires engine cursor when pointer remains inside");
+                host.SetEngineCursor(false);host.NativeCursorRequest(false);
+                check(SDL_ShowCursor(SDL_QUERY)==SDL_ENABLE && !host.EngineCursorActive(),"disconnected no-UI hide request records intent while keeping editor native cursor visible");
+                host.SetEngineCursor(true);
+                bool conflict=false;try{host.SetRelativeMouse(true);}catch(const std::logic_error&){conflict=true;}
+                check(conflict && !host.RelativeMouseRequested(),"relative capture cannot silently override custom cursor ownership");
+                WindowEvent(host.Id(),SDL_WINDOWEVENT_LEAVE);host.Pump();
+                sink.failPointer=true;WindowEvent(host.Id(),SDL_WINDOWEVENT_ENTER);bool rejected=false;
+                try{host.Pump();}catch(const std::runtime_error&){rejected=true;}
+                check(rejected && !host.EngineCursorActive() && SDL_ShowCursor(SDL_QUERY)==SDL_ENABLE,"throwing pointer callback reports failure and restores native visibility");
+                sink.failPointer=false;host.SetEngineCursor(true);
+                host.RequestQuit();
+                check(!host.EngineCursorActive() && SDL_ShowCursor(SDL_QUERY)==SDL_ENABLE,"explicit close releases native cursor before sink teardown");
+            }
+            SDL_ShowCursor(SDL_DISABLE);
+            {
+                Input fresh;kisak::window::Config config;config.hidden=true;kisak::window::WindowHost host(fresh,config);
+                SDL_FlushEvents(SDL_FIRSTEVENT,SDL_LASTEVENT);WindowEvent(host.Id(),SDL_WINDOWEVENT_FOCUS_GAINED);WindowEvent(host.Id(),SDL_WINDOWEVENT_ENTER);host.Pump();
+                host.NativeCursorRequest(false);host.SetEngineCursor(true);
+            }
+            check(SDL_ShowCursor(SDL_QUERY)==SDL_DISABLE,"destruction restores a previously hidden external native cursor");
+            SDL_ShowCursor(SDL_ENABLE);
+            {
+                FaultInput fresh;kisak::window::Config config;config.hidden=true;kisak::window::WindowHost host(fresh,config);
+                SDL_FlushEvents(SDL_FIRSTEVENT,SDL_LASTEVENT);WindowEvent(host.Id(),SDL_WINDOWEVENT_FOCUS_GAINED);WindowEvent(host.Id(),SDL_WINDOWEVENT_ENTER);host.Pump();host.SetEngineCursor(true);fresh.failQuit=true;
+            }
+            check(SDL_ShowCursor(SDL_QUERY)==SDL_ENABLE,"throwing destructor sink cannot strand hidden native cursor");
+            SDL_QuitSubSystem(SDL_INIT_VIDEO);
         }
         SDL_QuitSubSystem(SDL_INIT_EVENTS);Sys_ShutdownEvents();
     } catch(const std::exception &error) { std::fprintf(stderr,"test exception: %s\n",error.what());++failures; }

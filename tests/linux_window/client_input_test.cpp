@@ -37,6 +37,15 @@ int main() {
         for(int cycle=0;cycle<2;++cycle) {
             kisak::window::ClientInputHost input;
             kisak::window::WindowHost host(input,{});
+            {
+                kisak::window::ClientInputHost::WindowCursorBinding temporary(input,host);
+                CL_GetInputServices().ShowCursor(false);
+                bool duplicate=false;try{kisak::window::ClientInputHost::WindowCursorBinding other(input,host);}catch(const std::logic_error&){duplicate=true;}
+                Check(duplicate && SDL_ShowCursor(SDL_QUERY)==SDL_ENABLE,"cursor service has one explicit binding and disconnected visibility policy");
+            }
+            bool unbound=false;try{CL_GetInputServices().ShowCursor(false);}catch(const std::logic_error&){unbound=true;}
+            Check(unbound,"cursor binding destruction removes borrowed window service");
+            kisak::window::ClientInputHost::WindowCursorBinding cursorBinding(input,host);
             auto pump=[&] { host.Pump(1);Drain(input); };
             Window(host.Id(),SDL_WINDOWEVENT_FOCUS_GAINED);pump();
             Check(clientUIActives[0].connectionState==CA_DISCONNECTED && !cls.uiStarted && !clientUIActives[0].isRunning && !playerKeys[0].keys['b'].binding,"real input starts disconnected with game UI/frame uninitialized");
@@ -54,6 +63,7 @@ int main() {
             Check(g_consoleField.widthInPixels==8 && g_consoleField.scroll<=g_consoleField.cursor && g_consoleField.drawWidth<=1,"tiny resize uses bounded explicit terminal layout");
             SDL_Event mouse{};mouse.type=SDL_MOUSEMOTION;mouse.motion.windowID=host.Id();mouse.motion.xrel=7;mouse.motion.yrel=-4;Push(mouse);pump();
             Check(clients[0].mouseDx[0]==7 && clients[0].mouseDy[0]==-4,"actual CL_MouseEvent accumulates deltas");
+            Check(!host.NativeCursorRequested() && SDL_ShowCursor(SDL_QUERY)==SDL_ENABLE,"actual disconnected CL_MouseEvent hide request uses bound editor cursor policy");
             const auto sample=input.ConsumeMouse();
             Check(sample.x==7 && sample.y==-4 && input.ConsumeMouse().x==0 && clients[0].mouseDy[0]==0,"input tick consumes real mouse deltas without a game frame");
             Push(mouse);pump();

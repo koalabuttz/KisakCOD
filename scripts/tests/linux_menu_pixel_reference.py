@@ -4,8 +4,9 @@ Optional real-asset test helper; requires Pillow. Private assets are caller inpu
 import io,json,math,struct
 from pathlib import Path
 from PIL import Image
-def reference(bundle,menu,atlas,width,height):
+def reference(bundle,menu,atlas,width,height,background=None):
  IWI=atlas
+ base=background or (lambda x,y:(64,128,191))
  result={};descriptions=[]
  for index in (105,111):
   prior=set(result)
@@ -36,13 +37,13 @@ def reference(bundle,menu,atlas,width,height):
     for px in range(max(0,math.ceil(gx-.5)),min(width,math.ceil(gx+gw-.5))):
      tx=max(0,min(w-1,(s0+(px+.5-gx)/gw*(s1-s0))*w-.5));ty=max(0,min(h-1,(t0+(py+.5-gy)/gh*(t1-t0))*h-.5));ix=int(tx);iy=int(ty);fx=tx-ix;fy=ty-iy
      a=sum(alpha.getpixel((min(ix+ox,w-1),min(iy+oy,h-1)))*wx*wy for ox,wx in [(0,1-fx),(1,fx)] for oy,wy in [(0,1-fy),(1,fy)])/255*tint[3]/255
-     old=result.get((px,py),(64,128,191));color=(0,0,0) if shadow else tuple(c*t/255 for c,t in zip(white,tint))
+     old=result.get((px,py),base(px,py));color=(0,0,0) if shadow else tuple(c*t/255 for c,t in zip(white,tint))
      result[px,py]=tuple(math.floor(src*a+dst*(1-a)+.5) for src,dst in zip(color,old))
   for c in text:
    draw(glyphs[c],x,y,True);draw(glyphs[c],x,y,False);x+=glyphs[c][3]*scale
-  visible=[p for p in result if p not in prior and max(abs(a-b) for a,b in zip(result[p],(64,128,191)))>15]
+  visible=[p for p in result if p not in prior and max(abs(a-b) for a,b in zip(result[p],base(*p)))>15]
   assert len(visible)>=8, (index,width,height,'label oracle has no meaningful visible pixels')
- changed=[(p,c) for p,c in result.items() if max(abs(a-b) for a,b in zip(c,(64,128,191)))>15]
+ changed=[(p,c) for p,c in result.items() if max(abs(a-b) for a,b in zip(c,base(*p)))>15]
  positions=[(f'label{i}',*p) for i,(p,c) in enumerate(changed[::max(1,len(changed)//100)])]
- positions.append(('background',5,5));result[5,5]=(64,128,191)
+ positions.append(('background',5,5));result[5,5]=base(5,5)
  return result,positions,descriptions

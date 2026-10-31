@@ -78,8 +78,11 @@ WindowHost::WindowHost(EventSink &sink, const Config &config)
         window_ = SDL_CreateWindow(config.title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
             width_, height_, SDL_WINDOW_RESIZABLE | (config.hidden ? SDL_WINDOW_HIDDEN : SDL_WINDOW_SHOWN));
         if (!window_) throw Error("SDL window creation");
+        initialCursorVisibility_=SDL_ShowCursor(SDL_QUERY);
+        if(initialCursorVisibility_<0)throw Error("SDL initial cursor visibility query");
         clockOffset_ = sink_.NowMilliseconds() - SDL_GetTicks();
         focused_ = (SDL_GetWindowFlags(window_) & SDL_WINDOW_INPUT_FOCUS) != 0;
+        pointerInside_ = (SDL_GetWindowFlags(window_) & SDL_WINDOW_MOUSE_FOCUS) != 0;
         startedText_ = !SDL_IsTextInputActive();
         if (startedText_) SDL_StartTextInput();
     } catch (...) {
@@ -101,12 +104,17 @@ WindowHost::~WindowHost() noexcept
     attempt("relative capture",[&]{
         if(!ApplyRelativeMouse(false))std::fprintf(stderr,"window teardown relative capture failed: %s\n",relativeError_.c_str());
     });
+    engineCursorRequested_=false;
+    attempt("native cursor restore",[&]{ ApplyEngineCursor(); });
     uint32_t time=Time(SDL_GetTicks());
     attempt("clock",[&]{ time=sink_.NowMilliseconds(); });
     for(unsigned key=1;key<held_.size();++key)if(held_[key])
         attempt("key release",[&]{ sink_.Key(time,key,false); });
     held_.fill(0);physical_.fill(false);mouseHeld_.fill(false);
     if(!quitComplete_)attempt("quit callback",[&]{ sink_.Quit();quitComplete_=true; });
+    if(nativeCursorTouched_)attempt("initial cursor restore",[&]{
+        if(SDL_ShowCursor(initialCursorVisibility_)<0)throw Error("SDL initial cursor restore");
+    });
     if (startedText_) SDL_StopTextInput();
     SDL_DestroyWindow(window_);
     SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_EVENTS);
@@ -127,8 +135,36 @@ bool WindowHost::ApplyRelativeMouse(bool active)
 }
 bool WindowHost::SetRelativeMouse(bool requested)
 {
-    CheckThread();relativeRequested_=requested;relativeError_.clear();
+    CheckThread();if(requested && engineCursorRequested_)throw std::logic_error("Relative capture cannot share engine cursor ownership");
+    relativeRequested_=requested;relativeError_.clear();
     return ApplyRelativeMouse(requested && focused_);
+}
+void WindowHost::ApplyEngineCursor()
+{
+    const bool hide=engineCursorRequested_ && running_ && focused_ && pointerInside_;
+    if(hide==cursorOwned_)return;
+    if(hide) {
+        const int prior=SDL_ShowCursor(SDL_QUERY);
+        if(prior<0)throw Error("SDL cursor visibility query");
+        if(SDL_ShowCursor(SDL_DISABLE)<0)throw Error("SDL cursor hide");
+        priorCursorVisibility_=prior;cursorOwned_=true;nativeCursorTouched_=true;
+    } else {
+        if(SDL_ShowCursor(priorCursorVisibility_)<0)throw Error("SDL cursor restore");
+        cursorOwned_=false;
+    }
+}
+void WindowHost::SetEngineCursor(bool requested)
+{
+    CheckThread();
+    if(requested && relativeRequested_)throw std::logic_error("Engine cursor cannot share relative mouse capture");
+    engineCursorRequested_=requested;ApplyEngineCursor();
+}
+void WindowHost::NativeCursorRequest(bool show)
+{
+    CheckThread();nativeCursorRequested_=show;
+    if(cursorOwned_ || relativeActive_)return;
+    if(SDL_ShowCursor(SDL_ENABLE)<0)throw Error("SDL offline native cursor visibility");
+    nativeCursorTouched_=true;
 }
 void WindowHost::SetKey(uint32_t time, int key, bool down, bool repeat)
 {
@@ -146,7 +182,7 @@ void WindowHost::RequestQuit()
 {
     CheckThread();
     if (!running_) return;
-    running_=false; ApplyRelativeMouse(false); ReleaseHeld(sink_.NowMilliseconds()); sink_.Quit();quitComplete_=true;
+    running_=false; ApplyEngineCursor(); ApplyRelativeMouse(false); ReleaseHeld(sink_.NowMilliseconds()); sink_.Quit();quitComplete_=true;
 }
 void WindowHost::Dispatch(const SDL_Event &event)
 {
@@ -156,9 +192,14 @@ void WindowHost::Dispatch(const SDL_Event &event)
         switch(event.window.event) {
         case SDL_WINDOWEVENT_CLOSE: RequestQuit(); break;
         case SDL_WINDOWEVENT_FOCUS_GAINED:
-            if (!focused_) { focused_=true; if(relativeRequested_)ApplyRelativeMouse(true); sink_.Focus(true); } break;
+            if (!focused_) { focused_=true; ApplyEngineCursor(); if(relativeRequested_)ApplyRelativeMouse(true); sink_.Focus(true); } break;
         case SDL_WINDOWEVENT_FOCUS_LOST: case SDL_WINDOWEVENT_MINIMIZED:
-            ApplyRelativeMouse(false); ReleaseHeld(time); focused_=false; sink_.Focus(false); break;
+            focused_=false; ApplyEngineCursor(); ApplyRelativeMouse(false); ReleaseHeld(time); sink_.Focus(false); break;
+        case SDL_WINDOWEVENT_ENTER: case SDL_WINDOWEVENT_LEAVE: {
+            const bool inside=event.window.event==SDL_WINDOWEVENT_ENTER;
+            if(pointerInside_!=inside) { pointerInside_=inside;ApplyEngineCursor();sink_.PointerPresence(inside); }
+            break;
+        }
         case SDL_WINDOWEVENT_SIZE_CHANGED: case SDL_WINDOWEVENT_RESIZED:
             if (event.window.data1>0 && event.window.data2>0
                 && (width_!=event.window.data1 || height_!=event.window.data2)) {
@@ -200,6 +241,7 @@ bool WindowHost::Pump(int waitMilliseconds)
 {
     CheckThread();
     if (!running_) return false;
+    try {
     SDL_Event event;
     int processed=0;
     if (waitMilliseconds>0) {
@@ -209,6 +251,11 @@ bool WindowHost::Pump(int waitMilliseconds)
     }
     while (running_ && processed<256 && SDL_PollEvent(&event)) { Dispatch(event); ++processed; }
     return running_;
+    } catch(...) {
+        engineCursorRequested_=false;
+        try { ApplyEngineCursor(); } catch(const std::exception &error) { std::fprintf(stderr,"window cursor restore after dispatch failure: %s\n",error.what()); }
+        throw;
+    }
 }
 void WindowHost::Present(uint8_t red,uint8_t green,uint8_t blue)
 {

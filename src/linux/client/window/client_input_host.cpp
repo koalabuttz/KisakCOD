@@ -77,7 +77,8 @@ void ClientInputHost::Resize(int width,int height) {
     g_consoleField.widthInPixels=std::max(8,width-32);
     FieldLayout(&scrPlaceFull,&g_consoleField);
 }
-void ClientInputHost::OnFocus(bool focused) { if(!focused && menu_)menu_->ResetFocus(); }
+void ClientInputHost::OnFocus(bool focused) { if(menu_)menu_->Focus(focused); }
+void ClientInputHost::OnPointerPresence(bool inside) { if(menu_)menu_->PointerPresence(inside); }
 void ClientInputHost::OnQuit() {}
 const char *ClientInputHost::Text() const { return g_consoleField.buffer; }
 int ClientInputHost::Cursor() const { return g_consoleField.cursor; }
@@ -118,7 +119,20 @@ bool ClientInputHost::UiCheckExecKey(int client,int) { if(client || !menu_)throw
 void ClientInputHost::UiMouse(int client,int x,int y) { if(client || !menu_)throw std::runtime_error("UI mouse unavailable");menu_->Mouse(x,y);SyncMenuCapture(); }
 void ClientInputHost::ScriptKey(int) { Unavailable("script key"); }
 void ClientInputHost::ScriptMouse(int,int) { Unavailable("script mouse"); }
-void ClientInputHost::ShowCursor(bool show) { if(SDL_ShowCursor(show?SDL_ENABLE:SDL_DISABLE)<0)throw std::runtime_error(SDL_GetError()); }
+ClientInputHost::WindowCursorBinding::WindowCursorBinding(ClientInputHost &input,WindowHost &window):input_(input) {
+    if(input_.cursorWindow_)throw std::logic_error("Input cursor service already bound");
+    input_.cursorWindow_=&window;
+}
+ClientInputHost::WindowCursorBinding::~WindowCursorBinding() {
+    auto *window=input_.cursorWindow_;input_.cursorWindow_=nullptr;
+    try { window->SetEngineCursor(false); }
+    catch(const std::exception &error) { std::fprintf(stderr,"cursor binding release failed: %s\n",error.what()); }
+}
+void ClientInputHost::ReleaseEngineCursor() { if(cursorWindow_)cursorWindow_->SetEngineCursor(false); }
+void ClientInputHost::ShowCursor(bool show) {
+    if(!cursorWindow_)throw std::logic_error("Window cursor service unavailable");
+    cursorWindow_->NativeCursorRequest(show);
+}
 void ClientInputHost::ClearNextDemo() { Unavailable("demo playback"); }
 void ClientInputHost::StopCinematic(int) { Unavailable("cinematic"); }
 bool ClientInputHost::ScoreboardDisplayed(int) { throw std::runtime_error("scoreboard unavailable"); }

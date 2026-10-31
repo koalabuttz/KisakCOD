@@ -17,7 +17,7 @@ public:
     bool Done()const{return at==data.size();}
 };
 }
-ResolvedUiMaterial DecodeUiMaterial(std::span<const uint8_t> bytes){
+static ResolvedUiMaterial DecodeMaterial(std::span<const uint8_t> bytes,bool composition){
     Require(bytes.size()>=8 && bytes.size()<=8192,"Material metadata size outside bounds");
     Require(!std::memcmp(bytes.data(),"KUMAT01\0",8),"Unsupported material metadata version");
     Reader r(bytes.subspan(8));ResolvedUiMaterial result{r.Name(),r.Name(),true};
@@ -32,7 +32,7 @@ ResolvedUiMaterial DecodeUiMaterial(std::span<const uint8_t> bytes){
         0,1,0x19289165u,0xe00e0002u, // active state entry/count, exact state words
         112,52,1 // shader word counts, original/remapped descriptions equal
     };
-    for(auto value:expected)Require(r.Word()==value,"Unsupported UI state, sampler, or shader layout");
+    for(size_t n=0;n<expected.size();++n){const auto value=r.Word();if(n==7 && composition){Require(value==1 || value==226 || value==235,"Unsupported composition sampler");result.samplerState=value;result.strictSampler=value==235;}else Require(value==expected[n],"Unsupported UI state, sampler, or shader layout");}
     Require(r.Wide()==0x602d184976cd8fe3ull && r.Wide()==0xffcac203960f77f6ull,"Unsupported UI shader program fingerprint");
     Require(r.Word()==3,"Unsupported UI argument count");
     const std::array<std::array<uint32_t,5>,3> arguments={{{3,4,60,0,4},{3,0,76,0,4},{2,0,2695565377u,0,0}}};
@@ -43,10 +43,14 @@ ResolvedUiMaterial DecodeUiMaterial(std::span<const uint8_t> bytes){
     Require(result.imageName.find('/')==std::string::npos && result.imageName.find('\\')==std::string::npos && result.imageName!="." && result.imageName!="..","Unsupported image identifier");
     return result;
 }
-ResolvedUiMaterial LoadUiMaterialFile(const std::string &path){
+ResolvedUiMaterial DecodeUiMaterial(std::span<const uint8_t> bytes){return DecodeMaterial(bytes,false);}
+ResolvedUiMaterial DecodeUiCompositionMaterial(std::span<const uint8_t> bytes){return DecodeMaterial(bytes,true);}
+static ResolvedUiMaterial LoadMaterial(const std::string &path,bool composition){
     std::ifstream input(path,std::ios::binary|std::ios::ate);if(!input)throw std::runtime_error("Cannot open specified material metadata");
     const auto size=input.tellg();Require(size>=8 && size<=8192,"Material metadata size outside bounds");
     std::vector<uint8_t> bytes(size_t(size),0);input.seekg(0);if(!input.read(reinterpret_cast<char*>(bytes.data()),size))throw std::runtime_error("Cannot read complete material metadata");
-    return DecodeUiMaterial(bytes);
+    return DecodeMaterial(bytes,composition);
 }
+ResolvedUiMaterial LoadUiMaterialFile(const std::string &path){return LoadMaterial(path,false);}
+ResolvedUiMaterial LoadUiCompositionMaterialFile(const std::string &path){return LoadMaterial(path,true);}
 }

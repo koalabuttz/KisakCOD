@@ -157,6 +157,7 @@ int main(int argc,char **argv)
         // the eventual game backend. SDL window surfaces may otherwise use GPU acceleration.
         SDL_SetHint(SDL_HINT_FRAMEBUFFER_ACCELERATION,"0");
         kisak::window::WindowHost host(input,config);
+        kisak::window::ClientInputHost::WindowCursorBinding cursorBinding(input,host);
         kisak::window::ShutdownSignal signals;
         if(server)input.Discover(server);
         kisak::window::CpuRenderer renderer;

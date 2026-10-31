@@ -22,6 +22,7 @@ void EngineInput::ResetInput()
     reset_(0);
 }
 void EngineInput::Focus(bool focused) { if(!focused)ResetInput();OnFocus(focused); }
+void EngineInput::PointerPresence(bool inside) { OnPointerPresence(inside); }
 void EngineInput::Quit() { ResetInput();OnQuit(); }
 uint32_t EngineInput::NowMilliseconds() const { return Sys_Milliseconds(); }
 void EngineInput::Key(uint32_t time,int key,bool down)

@@ -1,5 +1,7 @@
 #include "cpu_renderer.h"
 #include <ui/ui_shared.h>
+#include <ui/ui_cursor.h>
+#include <ui/ui_input_core.h>
 #include <ui/ui_font_selection.h>
 #include <client/client.h>
 #include <cstring>
@@ -56,6 +58,34 @@ void CpuRenderer::DrawUiImage(UiMaterialHandle material,const ScreenPlacement &p
     // no claim of unwinding an engine Com_Error longjmp through this host.
     try { UI_DrawHandlePic(&placement,x,y,width,height,horizontal,vertical,color,active.expected); }
     catch(...) {active={};throw;}
+    active={};
+}
+void CpuRenderer::DrawWindow(UiMaterialHandle material,const ScreenPlacement &placement,UiContext &dc,windowDef_t &window,float fadeAmount,float fadeInAmount,float fadeClamp,int fadeCycle) {
+    CheckThread();if(state_!=State::recording || active.renderer || activeText.renderer)throw std::logic_error("Window scope requires exclusive recording renderer");
+    if(dc.localClientNum!=0 || g_debugMode || window.border || (window.style!=1 && window.style!=3 && window.style!=5))throw std::invalid_argument("Unsupported window painter profile");
+    auto found=uiMaterials_.find(material);if(found==uiMaterials_.end())throw std::invalid_argument("Stale window material");
+    const auto &r=window.rect;
+    for(float v:{r.x,r.y,r.w,r.h,fadeAmount,fadeInAmount,fadeClamp})if(!std::isfinite(v) || std::abs(v)>16384)throw std::invalid_argument("Invalid window painter geometry/fade");
+    if(r.w==0 || r.h==0 || r.horzAlign<0 || r.horzAlign>7 || r.vertAlign<0 || r.vertAlign>7 || fadeAmount<0 || fadeInAmount<0 || fadeClamp<0 || fadeClamp>1 || fadeCycle<0 || fadeCycle>60000)throw std::invalid_argument("Invalid window painter bounds/fade");
+    for(unsigned i=0;i<4;++i)if(!std::isfinite(window.foreColor[i]) || !std::isfinite(window.backColor[i]))throw std::invalid_argument("Invalid window painter color");
+    windowDef_t local=window;local.background=&found->second->value;
+    const auto priorCommands=commands_;const auto priorBindings=uiBindingCount_;const auto priorPlacement=scrPlaceView[0];
+    scrPlaceView[0]=placement;active={this,material,local.background};
+    try {Window_Paint(&dc,&local,fadeAmount,fadeInAmount,fadeClamp,float(fadeCycle));}
+    catch(...) {commands_=priorCommands;uiBindingCount_=priorBindings;scrPlaceView[0]=priorPlacement;active={};throw;}
+    scrPlaceView[0]=priorPlacement;active={};local.background=window.background;window=local;
+}
+void CpuRenderer::DrawCursor(UiMaterialHandle material,const ScreenPlacement &full,const ScreenPlacement &view,UiContext &dc) {
+    CheckThread();if(state_!=State::recording || active.renderer || activeText.renderer)throw std::logic_error("Cursor scope requires exclusive recording renderer");
+    if(dc.localClientNum!=0)throw std::invalid_argument("Unsupported cursor client");
+    for(unsigned i=0;i<2;++i)if(!std::isfinite(full.scaleVirtualToReal[i]) || full.scaleVirtualToReal[i]<=0 || !std::isfinite(full.scaleVirtualToFull[i]) || full.scaleVirtualToFull[i]<=0)throw std::invalid_argument("Invalid cursor placement");
+    if(!std::isfinite(dc.cursor.x) || !std::isfinite(dc.cursor.y))throw std::invalid_argument("Invalid cursor coordinates");
+    auto found=uiMaterials_.find(material);if(found==uiMaterials_.end())throw std::invalid_argument("Stale cursor material");
+    if(!dc.isCursorVisible)return;
+    const auto priorCommands=commands_;const auto priorBindings=uiBindingCount_;
+    active={this,material,&found->second->value};
+    try {UI_DrawCursor(&dc,&full,&view,active.expected);}
+    catch(...) {commands_=priorCommands;uiBindingCount_=priorBindings;active={};throw;}
     active={};
 }
 void CpuRenderer::DrawUiText(FontHandle font,const ScreenPlacement &placement,std::string_view text,int maxChars,

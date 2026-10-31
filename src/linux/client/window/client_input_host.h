@@ -20,16 +20,30 @@ public:
     ClientInputHost& operator=(const ClientInputHost&)=delete;
     ClientInputHost(ClientInputHost&&)=delete;
     ClientInputHost& operator=(ClientInputHost&&)=delete;
+    // Bind only while both input and window live; declare after WindowHost so
+    // unbinding happens before window destruction.
+    class WindowCursorBinding {
+    public:
+        WindowCursorBinding(ClientInputHost &,WindowHost &);
+        ~WindowCursorBinding();
+        WindowCursorBinding(const WindowCursorBinding&)=delete;
+        WindowCursorBinding& operator=(const WindowCursorBinding&)=delete;
+    private:
+        ClientInputHost &input_;
+    };
     void Dispatch(const sysEvent_t &event);
     void AttachMenu(MenuInputClient &menu);
     void DetachMenu(MenuInputClient &menu);
     bool MenuOpen() const { return menu_ && menu_->Opened(); }
     void SyncMenuCapture();
+    // Releases only a currently bound window cursor; safe after unbinding.
+    void ReleaseEngineCursor();
     void Tick();
     void Discover(const char *endpoint);
     uint64_t Ticks() const { return runtime_.Ticks(); }
     void Resize(int width,int height) override;
     void OnFocus(bool focused) override;
+    void OnPointerPresence(bool inside) override;
     void OnQuit() override;
     const char *Text() const;
     int Cursor() const;
@@ -45,6 +59,7 @@ private:
     std::unique_ptr<kisak::client::DiscoverySession> discovery_;
     uint32_t previousTick_=0;
     MenuInputClient *menu_=nullptr;
+    WindowHost *cursorWindow_=nullptr;
     bool priorUiStarted_=false;
     int priorUiCatchers_=0;
     static void MenuOpenCommand();

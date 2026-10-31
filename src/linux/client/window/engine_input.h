@@ -17,10 +17,12 @@ public:
     void Mouse(uint32_t time,int x,int y,int dx,int dy) override;
     void Focus(bool focused) final;
     void Quit() final;
+    void PointerPresence(bool inside) final;
     unsigned UnsupportedCharacters() const { return unsupported_; }
 protected:
     virtual void OnFocus(bool focused) = 0;
     virtual void OnQuit() = 0;
+    virtual void OnPointerPresence(bool) {}
 private:
     void ResetInput();
     ResetHandler reset_;

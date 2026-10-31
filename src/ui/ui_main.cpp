@@ -1,3 +1,5 @@
+#include <ui/ui_time.h>
+#include "ui_cursor.h"
 #include <ui/ui_font_selection.h>
 #ifndef KISAK_SP 
 #error This file is for SinglePlayer only 
@@ -501,21 +503,7 @@ void UI_UpdateSaveUI()
 
 void __cdecl UI_UpdateTime(int realtime)
 {
-    int v1; // r9
-    signed int v2; // r10
-    __int64 v3; // r10
-
-    v1 = realtime - uiInfo.uiDC.realTime;
-    uiInfo.uiDC.frameTime = realtime - uiInfo.uiDC.realTime;
-    uiInfo.uiDC.realTime = realtime;
-    uiInfo.previousTimes[uiInfo.timeIndex++ % 4] = v1;
-    if (uiInfo.timeIndex > 4)
-    {
-        v2 = uiInfo.previousTimes[0] + uiInfo.previousTimes[1] + uiInfo.previousTimes[2] + uiInfo.previousTimes[3];
-        if (!v2)
-            v2 = 1;
-        uiInfo.uiDC.FPS = (float)(4000 / v2);
-    }
+    UI_UpdateContextTime(&uiInfo.uiDC, &uiInfo.timeIndex, uiInfo.previousTimes, realtime);
 }
 
 void __cdecl UI_Shutdown()
@@ -1613,11 +1601,7 @@ void __cdecl UI_Refresh()
         {
             //if (!Dvar_GetBool("cl_bypassMouseInput"))
             {
-                float w = scrPlaceFull.scaleVirtualToReal[0] * 32.0 / scrPlaceFull.scaleVirtualToFull[0];
-                float h = scrPlaceFull.scaleVirtualToReal[1] * 32.0 / scrPlaceFull.scaleVirtualToFull[1];
-                float y = uiInfo.uiDC.cursor.y - h * 0.5;
-                float x = uiInfo.uiDC.cursor.x - w * 0.5;
-                UI_DrawHandlePic(&scrPlaceView[0], x, y, w, h, 4, 4, 0, sharedUiInfo.assets.cursor);
+                UI_DrawCursor(&uiInfo.uiDC, &scrPlaceFull, &scrPlaceView[0], sharedUiInfo.assets.cursor);
             }
         }
         // LWSS END
@@ -2836,15 +2820,7 @@ void __cdecl UI_OwnerDraw(
 
 void __cdecl UI_MouseEvent(int localClientNum, int x, int y)
 {
-    uiInfo.uiDC.cursor.x = x / scrPlaceFull.scaleVirtualToFull[0];
-    uiInfo.uiDC.cursor.y = y / scrPlaceFull.scaleVirtualToFull[1];
-
-    bool cursorInBounds = uiInfo.uiDC.cursor.x >= 0.0
-        && uiInfo.uiDC.cursor.x <= 640.0
-        && uiInfo.uiDC.cursor.y >= 0.0
-        && uiInfo.uiDC.cursor.y <= 480.0;
-
-    uiInfo.uiDC.isCursorVisible = cursorInBounds;
+    UI_UpdateCursorPosition(&uiInfo.uiDC, &scrPlaceFull, x, y);
 
     CL_ShowSystemCursor(uiInfo.uiDC.isCursorVisible == 0);
 

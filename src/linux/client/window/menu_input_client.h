@@ -9,6 +9,8 @@ public:
     virtual void Open()=0;
     virtual void Close()=0;
     virtual void ResetFocus()=0;
+    virtual void Focus(bool focused) { if(!focused)ResetFocus(); }
+    virtual void PointerPresence(bool) {}
     virtual void Resize(int width,int height)=0;
     virtual bool Opened() const=0;
 };

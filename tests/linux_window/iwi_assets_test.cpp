@@ -68,6 +68,17 @@ int main(int argc,char **argv){
   mipColors &= chain[level].Bytes()[pixel+channels[level]]>240 && chain[level].Bytes()[pixel+3]==255;
  Check(mipColors,"tiny padded/cropped decode preserves distinct stored colors at every mip");
  auto shortChain=chainFile;shortChain.pop_back();reject(shortChain,"full-chain truncation rejects before any level publication");
+ // Actual bitmap helper must use each logical mip extent, not the base header.
+ auto laHeader=header;laHeader.format=IMG_FORMAT_BITMAP_LUMINANCE_ALPHA;laHeader.flags=0;
+ laHeader.fileSizeForPicmip[0]=70;laHeader.fileSizeForPicmip[1]=38;laHeader.fileSizeForPicmip[2]=30;laHeader.fileSizeForPicmip[3]=30;
+ std::vector<uint8_t> laFile(70);std::memcpy(laFile.data(),&laHeader,28);
+ for(size_t n=28;n<70;n+=2){laFile[n]=n;laFile[n+1]=255-n;}
+ auto laChain=kisak::window::DecodeIwiMipChain(laFile);
+ Check(laChain.size()==3&&laChain[0].Extent().width==4&&laChain[1].Extent().width==2&&laChain[2].Extent().width==1,"luminance-alpha keeps complete tiny mip chain");
+ bool laExact=true;const size_t starts[]={38,30,28};
+ for(size_t mip=0;mip<3;++mip)for(size_t n=0;n<laChain[mip].Bytes().size()/4;++n){auto b=laChain[mip].Bytes();auto at=starts[mip]+2*n;laExact&=b[n*4]==laFile[at]&&b[n*4+1]==laFile[at]&&b[n*4+2]==laFile[at]&&b[n*4+3]==laFile[at+1];}
+ Check(laExact,"production bitmap helper preserves distinct luminance and alpha at every mip");
+ auto laBad=laFile;laBad.pop_back();reject(laBad,"truncated luminance-alpha rejects before decode");laBad=laFile;laBad.push_back(0);reject(laBad,"trailing luminance-alpha rejects");
  if(argc>1){
   for(int arg=1;arg<argc;++arg){auto real=kisak::window::LoadIwiFile(argv[arg]);size_t zero=0,opaque=0,partial=0;uint32_t hash=2166136261u;
    auto bytes=real.Bytes();for(size_t i=0;i<bytes.size();++i){hash=(hash^bytes[i])*16777619u;if(i%4==3){zero+=bytes[i]==0;opaque+=bytes[i]==255;partial+=bytes[i]>0 && bytes[i]<255;}}

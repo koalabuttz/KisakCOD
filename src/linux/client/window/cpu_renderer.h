@@ -10,6 +10,7 @@
 struct ScreenPlacement;
 struct itemDef_s;
 struct UiContext;
+struct windowDef_t;
 
 namespace kisak::window {
 class WindowHost;
@@ -59,6 +60,8 @@ public:
     // Executes the genuine static auto-wrapped item painter, not Menu_Paint.
     // Only textRect is updated, and only after complete command recording succeeds.
     void DrawMenuText(const MenuFonts &,const ScreenPlacement &,itemDef_s &,std::string_view,const float *color);
+    void DrawWindow(UiMaterialHandle,const ScreenPlacement &,UiContext &,windowDef_t &,float fadeAmount,float fadeInAmount,float fadeClamp,int fadeCycle);
+    void DrawCursor(UiMaterialHandle,const ScreenPlacement &full,const ScreenPlacement &view,UiContext &);
     void DrawMenuItem(const MenuFonts &,const ScreenPlacement &,UiContext &,itemDef_s &);
     size_t FontCount() const { return fonts_.size(); }
     void Submit();

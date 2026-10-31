@@ -7,7 +7,7 @@
 #include "ui_audio.h"
 #include <thread>
 namespace kisak::window {
-class ClientInputHost;class WindowHost;
+class ClientInputHost;class WindowHost;struct MenuCompositionAssets;
 class MenuInputOwner final : public MenuInputClient {
 public:
     // Exclusively owns one renderer generation; requires stopped renderer,
@@ -21,6 +21,9 @@ public:
     void Open() override;
     void Close() override;
     void ResetFocus() override;
+    void Focus(bool) override;
+    void PointerPresence(bool) override;
+    bool CursorVisible() const;
     void Resize(int,int) override;
     bool Opened() const override;
     void Present(WindowHost &);
@@ -37,6 +40,10 @@ private:
     UiAudio audio_;MenuScriptHost scripts_;
     std::unique_ptr<MenuControlAsset> assets_;
     CpuRenderer::MenuFonts fonts_;
+    std::unique_ptr<MenuCompositionAssets> composition_;
+    bool focused_=false,pointerInside_=false;
+    int pointerX_=0,pointerY_=0;
+    int timeIndex_=0,previousTimes_[4]{};
     UiContext dc_{};ScreenPlacement placement_{};
     std::thread::id thread_;
     bool attached_=false;
@@ -44,6 +51,7 @@ private:
     struct TraceState {
         bool valid=false;
         int open=0,focus=-1,freelook=0,filter=0,width=0,height=0,held=0;
+        int pointerX=0,pointerY=0,visible=0,pointerInside=0,windowFocused=0;float cursorX=0,cursorY=0;
         bool operator==(const TraceState &) const = default;
     };
     TraceState lastTrace_,lastPresentTrace_;
