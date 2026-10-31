@@ -513,7 +513,13 @@ struct MaterialTechniqueSet // sizeof=0x94
 };
 static_assert(sizeof(MaterialTechniqueSet) == 148);
 
+#ifdef KISAK_RADIANT
+// MSVC aligns the embedded 64-bit draw-surface key to eight bytes. Preserve
+// that editor ABI explicitly on platforms whose native uint64 alignment is four.
+struct alignas(8) Material
+#else
 struct Material // sizeof=0x50
+#endif
 {                                       // ...
     MaterialInfo info;
     uint8_t stateBitsEntry[TECHNIQUE_COUNT];
@@ -551,10 +557,19 @@ struct Material // sizeof=0x50
 #endif
 };
 #ifdef KISAK_RADIANT
-// surfaceFlags lands at offset 80 (right after stateBitsTable@76), editorUsage@84,
+// surfaceFlags lands at offset 80 (right after stateBitsTable@76), editorUsage@86,
 // editorLocale@88; sizeof rounds to 96 because GfxDrawSurf (in MaterialInfo) forces
 // 8-byte alignment. The pad is harmless — the fields are read/written by name.
 static_assert(sizeof(Material) == 96);
+static_assert(alignof(Material) == 8);
+static_assert(offsetof(Material, techniqueSet) == 64);
+static_assert(offsetof(Material, textureTable) == 68);
+static_assert(offsetof(Material, constantTable) == 72);
+static_assert(offsetof(Material, stateBitsTable) == 76);
+static_assert(offsetof(Material, surfaceFlags) == 80);
+static_assert(offsetof(Material, editorToolFlags) == 84);
+static_assert(offsetof(Material, editorUsage) == 86);
+static_assert(offsetof(Material, editorLocale) == 88);
 #else
 static_assert(sizeof(Material) == 80);
 #endif

@@ -5,6 +5,13 @@
 #include "r_dvars.h"
 #include <universal/surfaceflags.h>
 
+#ifndef __linux__
+uint32_t __cdecl R_ReleaseD3DSurface(IDirect3DSurface9 *surface)
+{
+    return surface->Release();
+}
+#endif
+
 uint32_t __cdecl R_HashAssetName(const char *name)
 {
     const char *pos; // [esp+0h] [ebp-8h]
