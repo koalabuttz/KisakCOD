@@ -47,6 +47,8 @@ public:
 };
 void PresentEngineClear(kisak::window::WindowHost &host,kisak::window::CpuRenderer &renderer,kisak::window::CpuRenderer::TextureHandle &texture,kisak::window::CpuRenderer::UiMaterialHandle &material,kisak::window::CpuRenderer::FontHandle font,std::string_view text,const char *uiImage,kisak::window::MenuTextAsset *menu,const std::array<int,4> *viewport)
 {
+    if(renderer.Status()!=kisak::window::CpuRenderer::State::stopped && renderer.Status()!=kisak::window::CpuRenderer::State::ready)
+        throw std::logic_error("Frontend frame already active");
     const auto extent=host.SurfaceExtent();
     const auto current=renderer.Pixels();
     if(renderer.Status()==kisak::window::CpuRenderer::State::stopped)renderer.Initialize(extent.width,extent.height);
@@ -57,10 +59,10 @@ void PresentEngineClear(kisak::window::WindowHost &host,kisak::window::CpuRender
     if(menu) {
         ScreenPlacement placement{};
         ScrPlace_SetupFloatViewportForDisplay(&placement,0,0,float(extent.width),float(extent.height),1.0f,extent.width,extent.height);
-        renderer.BeginFrame();renderer.Clear(color);
+        auto frame=renderer.BeginScopedFrame(host);renderer.Clear(color);
         renderer.SetViewport(0,0,extent.width,extent.height);
         renderer.DrawMenuText(menu->fonts,placement,menu->item,menu->text,menu->item.window.foreColor);
-        renderer.Submit();renderer.Present(host);
+        frame.Finish();
         if(current.width!=extent.width || current.height!=extent.height || renderer.Presented()==1)
             std::printf("presentation=engine-menu-text width=%d height=%d source=%s producer=Item_Text_AutoWrapped_Paint text_rect=%g,%g,%g,%g\n",extent.width,extent.height,menu->source.c_str(),menu->item.textRect[0].x,menu->item.textRect[0].y,menu->item.textRect[0].w,menu->item.textRect[0].h);
         return;
@@ -81,7 +83,7 @@ void PresentEngineClear(kisak::window::WindowHost &host,kisak::window::CpuRender
         texture=renderer.Upload(image.View()); // The caller's pixels die immediately after upload.
         material=renderer.RegisterUiMaterial(texture);
     }
-    renderer.BeginFrame();renderer.Clear(color);
+    auto frame=renderer.BeginScopedFrame(host);renderer.Clear(color);
     const std::array<int,4> view=viewport?*viewport:std::array<int,4>{0,0,extent.width,extent.height};
     renderer.SetViewport(view[0],view[1],view[2],view[3]);
     ScreenPlacement placement{};
@@ -91,7 +93,7 @@ void PresentEngineClear(kisak::window::WindowHost &host,kisak::window::CpuRender
         const float textColor[4]={1,1,1,1};
         renderer.DrawUiText(font,placement,text,1024,24,48,5,5,.5f,textColor);
     }
-    renderer.Submit();renderer.Present(host);
+    frame.Finish();
     if(viewport && (current.width!=extent.width || current.height!=extent.height || renderer.Presented()==1))
         std::printf("viewport=engine x=%d y=%d width=%d height=%d target_width=%d target_height=%d producer=CL_SetViewport\n",view[0],view[1],view[2],view[3],extent.width,extent.height);
 }

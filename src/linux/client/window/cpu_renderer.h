@@ -28,6 +28,24 @@ public:
     void Initialize(int width,int height);
     void Resize(int width,int height);
     void BeginFrame();
+    // Scoped supported frame: renderer and window must outlive the scope.
+    // All operations and scope destruction belong to the renderer owner thread.
+    class Frame {
+    public:
+        ~Frame() noexcept;
+        Frame(const Frame&)=delete;Frame& operator=(const Frame&)=delete;
+        Frame(Frame&&)=delete;Frame& operator=(Frame&&)=delete;
+        void Finish();
+        void Cancel();
+    private:
+        friend class CpuRenderer;
+        Frame(CpuRenderer &,WindowHost &);
+        void Abort() noexcept;
+        CpuRenderer &renderer_;WindowHost &window_;
+        uint64_t generation_;bool active_=true;
+    };
+    Frame BeginScopedFrame(WindowHost &window) { return Frame(*this,window); }
+
     // Discard recording/pending commands without allocating, freeing assets,
     // rolling back pixels, or advancing the presentation counter.
     void CancelFrame();
@@ -44,7 +62,8 @@ public:
     size_t TextureCount() const { return textures_.size(); }
     using UiMaterialHandle=uint64_t;
     // Strict metadata sampler235 subset: minification needs
-    // an owned complete chain and an isotropic footprint. No GPU parity claim.
+    // an owned complete chain; bounded two-tap major-axis filtering is supported.
+    // No hardware anisotropic parity claim.
     UiMaterialHandle RegisterUiMaterial(TextureHandle texture,bool strictSampler=false);
     void ReleaseUiMaterial(UiMaterialHandle material);
     void DrawUiImage(UiMaterialHandle material,const ScreenPlacement &placement,
@@ -71,6 +90,7 @@ public:
     MenuPaintResult DrawMenuFrame(const MenuFonts &,const ScreenPlacement &,UiContext &,std::span<const MenuMaterial>);
     void DrawMenuItem(const MenuFonts &,const ScreenPlacement &,UiContext &,itemDef_s &);
     size_t FontCount() const { return fonts_.size(); }
+    // Failure restores recording-list metadata; pixels are preflight validated.
     void Submit();
     void Present(WindowHost &window);
     void Shutdown() noexcept;
@@ -79,6 +99,7 @@ public:
     unsigned Presented() const { return presented_; }
     // Validate the whole owned command list before changing pixels. Public for
     // reusable backend consumers; individual commands are read into local values, never retained across calls.
+    // External lists require ready state and cannot replace owned recording.
     // External raw-image commands always reject; only Blit supplies trusted bindings.
     void SubmitCommands(std::span<const uint8_t> commands);
 private:
@@ -110,6 +131,9 @@ private:
     static GfxCmdHeader *Allocate(void *,GfxRenderCommand,int);
     void CheckThread() const;
     void ResetCommands();
+    void AdvanceFrameGeneration();
+    void InvalidateFrame() noexcept;
+    uint64_t frameGeneration_=0; // Never reset across Shutdown/Initialize; saturates.
     void SubmitList(std::span<const uint8_t> commands,bool ownedFrame);
     struct Binding { size_t offset;TextureHandle texture; };
     std::array<Binding,256> bindings_{};

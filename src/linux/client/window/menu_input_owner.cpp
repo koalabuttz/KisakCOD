@@ -109,7 +109,7 @@ void MenuInputOwner::Trace(const char *phase) {
         std::fflush(stdout);
     }
 }
-void MenuInputOwner::Present(WindowHost &window){CheckThread();const auto extent=window.SurfaceExtent();if(extent.width!=width_||extent.height!=height_)Resize(extent.width,extent.height);
+void MenuInputOwner::Present(WindowHost &window){CheckThread();if(renderer_.Status()!=CpuRenderer::State::ready)throw std::logic_error("Menu frame already active");const auto extent=window.SurfaceExtent();if(extent.width!=width_||extent.height!=height_)Resize(extent.width,extent.height);
     const auto before=renderer_.Pixels();if(before.width!=width_||before.height!=height_)renderer_.Resize(width_,height_);
     focused_=window.Focused();pointerInside_=window.PointerInside();
     if(focused_&&pointerInside_)SDL_GetMouseState(&pointerX_,&pointerY_);
@@ -118,18 +118,18 @@ void MenuInputOwner::Present(WindowHost &window){CheckThread();const auto extent
     const auto beforeMenu=assets_->menu;const auto beforeBlur=dc_.blurRadiusOut;const auto beforeResult=paintResult_;
     std::array<itemDef_s,12> beforeItems{};for(size_t n=0;n<paintItems_.size();++n)beforeItems[n]=*paintItems_[n];
     UI_UpdateContextTime(&dc_,&timeIndex_,previousTimes_,Sys_Milliseconds());
-    renderer_.BeginFrame();
+    auto frame=renderer_.BeginScopedFrame(window);
     try {
         const float clear[4]={.25f,.5f,.75f,1};renderer_.Clear(clear);renderer_.SetViewport(0,0,width_,height_);
         paintResult_=renderer_.DrawMenuFrame(fonts_,placement_,dc_,paintMaterials_);
         if(CursorVisible())renderer_.DrawCursor(composition_->cursor,placement_,placement_,dc_);
-        renderer_.Submit();renderer_.Present(window);
+        frame.Finish();
     } catch(...) {
         // An SDL failure may occur after CPU replay. Keep the resources/pixels,
         // discard the failed frame and let a later tick rebuild it normally.
         for(size_t n=0;n<paintItems_.size();++n)*paintItems_[n]=beforeItems[n];
         assets_->menu=beforeMenu;dc_.blurRadiusOut=beforeBlur;paintResult_=beforeResult;
-        renderer_.CancelFrame();
+        frame.Cancel();
         try {input_.ReleaseEngineCursor();}catch(const std::exception &e){std::fprintf(stderr,"menu cursor error cleanup: %s\n",e.what());}
         throw;
     }

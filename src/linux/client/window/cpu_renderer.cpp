@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstring>
 #include <stdexcept>
+#include <cstdio>
 
 namespace kisak::window {
 namespace {
@@ -28,9 +29,43 @@ void CpuRenderer::RecordViewport(int x,int y,int width,int height) {
 void CpuRenderer::CheckThread() const {
     if(owner_!=std::this_thread::get_id())throw std::logic_error("CPU renderer requires owner thread");
 }
+void CpuRenderer::AdvanceFrameGeneration() {
+    if(frameGeneration_==std::numeric_limits<uint64_t>::max())throw std::overflow_error("Frame generation exhausted");
+    ++frameGeneration_;
+}
+void CpuRenderer::InvalidateFrame() noexcept {
+    if(frameGeneration_!=std::numeric_limits<uint64_t>::max())++frameGeneration_;
+}
+CpuRenderer::Frame::Frame(CpuRenderer &renderer,WindowHost &window):renderer_(renderer),window_(window) {
+    renderer_.BeginFrame();generation_=renderer_.frameGeneration_;
+}
+CpuRenderer::Frame::~Frame() noexcept { Abort(); }
+void CpuRenderer::Frame::Abort() noexcept {
+    if(!active_)return;
+    active_=false;
+    if(generation_!=renderer_.frameGeneration_)return;
+    if(renderer_.owner_!=std::this_thread::get_id()) {
+        std::fputs("Frame scope destroyed off owner thread; owner must cancel pending work\n",stderr);return;
+    }
+    if(renderer_.state_==State::recording||renderer_.state_==State::pending) {
+        renderer_.ResetCommands();renderer_.state_=State::ready;renderer_.InvalidateFrame();
+    }
+}
+void CpuRenderer::Frame::Cancel() {
+    if(!active_||generation_!=renderer_.frameGeneration_||renderer_.state_==State::ready||renderer_.state_==State::stopped){active_=false;return;}
+    renderer_.CheckThread();Abort();
+}
+void CpuRenderer::Frame::Finish() {
+    renderer_.CheckThread(); // Wrong-thread calls must not cancel owner-thread work.
+    if(!active_||generation_!=renderer_.frameGeneration_||renderer_.state_!=State::recording)
+        throw std::logic_error("Frame scope no longer owns recording");
+    try { renderer_.Submit();renderer_.Present(window_);active_=false; }
+    catch(...) { Abort();throw; }
+}
 void CpuRenderer::ResetCommands() { commands_={storage_.data(),0,0,nullptr};bindingCount_=0;uiBindingCount_=0;fontBindingCount_=0; }
 void CpuRenderer::Initialize(int width,int height) {
     if(state_!=State::stopped)throw std::logic_error("CPU renderer already initialized");
+    if(frameGeneration_==std::numeric_limits<uint64_t>::max())throw std::overflow_error("Frame generation exhausted");
     PixelBuffer replacement;replacement.Resize(width,height);
     pixels_=std::move(replacement);owner_=std::this_thread::get_id();
     ResetCommands();presented_=0;state_=State::ready;
@@ -39,15 +74,15 @@ void CpuRenderer::Resize(int width,int height) {
     CheckThread();
     if(state_==State::stopped)throw std::logic_error("CPU renderer stopped");
     pixels_.Resize(width,height); // Failure leaves pending frame and resource intact.
-    ResetCommands();state_=State::ready; // Successful resize cancels pending work.
+    ResetCommands();state_=State::ready;InvalidateFrame(); // Successful resize cancels pending work.
 }
 void CpuRenderer::CancelFrame() {
     CheckThread();if(state_==State::stopped)throw std::logic_error("CPU renderer stopped");
-    ResetCommands();state_=State::ready;
+    ResetCommands();state_=State::ready;InvalidateFrame();
 }
 void CpuRenderer::BeginFrame() {
     CheckThread();if(state_!=State::ready)throw std::logic_error("CPU renderer not ready");
-    ResetCommands();state_=State::recording;
+    AdvanceFrameGeneration();ResetCommands();state_=State::recording;
 }
 GfxCmdHeader *CpuRenderer::Allocate(void *owner,GfxRenderCommand id,int bytes) {
     auto &self=*static_cast<CpuRenderer *>(owner);
@@ -203,13 +238,17 @@ void CpuRenderer::RecordText(FontHandle font,std::string_view text,int maxChars,
 }
 void CpuRenderer::Submit() {
     CheckThread();if(state_!=State::recording)throw std::logic_error("CPU renderer not recording");
-    R_EmitEndCommand(this,Allocate);
-    SubmitList({storage_.data(),size_t(commands_.usedTotal)},true);
+    const auto before=commands_;
+    try { R_EmitEndCommand(this,Allocate);SubmitList({storage_.data(),size_t(commands_.usedTotal)},true); }
+    catch(...) { commands_=before;throw; }
 }
-void CpuRenderer::SubmitCommands(std::span<const uint8_t> commands) { SubmitList(commands,false); }
+void CpuRenderer::SubmitCommands(std::span<const uint8_t> commands) {
+    CheckThread();if(state_!=State::ready)throw std::logic_error("External submission requires ready renderer");
+    AdvanceFrameGeneration();SubmitList(commands,false);
+}
 void CpuRenderer::SubmitList(std::span<const uint8_t> commands,bool ownedFrame) {
     CheckThread();
-    if(state_!=State::ready && state_!=State::recording)throw std::logic_error("CPU renderer cannot submit");
+    if(ownedFrame ? state_!=State::recording : state_!=State::ready)throw std::logic_error("CPU renderer cannot submit");
     if(commands.size()>storage_.size())throw std::length_error("CPU command list exceeds bounded storage");
     // Snapshot even external lists: pixel mutation cannot change replayed commands.
     std::array<uint8_t,16384> snapshot{};
@@ -412,9 +451,10 @@ void CpuRenderer::RasterUiPic(const GfxCmdStretchPic &pic,const SamplePlan &samp
 }
 void CpuRenderer::Present(WindowHost &window) {
     CheckThread();if(state_!=State::pending)throw std::logic_error("CPU renderer has no submitted frame");
-    window.Present(pixels_.View());++presented_;ResetCommands();state_=State::ready;
+    window.Present(pixels_.View());++presented_;ResetCommands();state_=State::ready;InvalidateFrame();
 }
 void CpuRenderer::Shutdown() noexcept {
+    InvalidateFrame();
     fonts_.clear();uiMaterials_.clear();textures_.clear();textureBytes_=0;pixels_=PixelBuffer{};ResetCommands();state_=State::stopped;owner_={};presented_=0;
 }
 }
