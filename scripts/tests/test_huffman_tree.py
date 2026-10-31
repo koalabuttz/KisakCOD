@@ -17,9 +17,11 @@ production encoder and decoder.
 
 The expected table below was obtained by loading the installed Windows 1.7
 client executable into an emulator, calling its own tree build, and walking
-parent pointers from each symbol node. Only the resulting numbers are recorded
-here; no bytes from the executable are reproduced. It is the retail wire
-format, so a failure here means the server can no longer talk to a client.
+parent pointers from each symbol node. A separate recovery from the examined
+Windows 1.0 client produced the same 256 codes; target identities and limits are
+recorded in docs/retail-client-compatibility.md. Only the resulting numbers are
+recorded here; no bytes from either executable are reproduced. A mismatch means
+the server's codec no longer agrees with those examined clients.
 
 Usage:
     python3 scripts/tests/test_huffman_tree.py [--cxx clang++] [--timeout 180]
