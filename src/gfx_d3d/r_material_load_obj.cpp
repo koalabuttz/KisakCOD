@@ -4708,57 +4708,6 @@ void __cdecl Material_GetInfo(Material *handle, MaterialInfo *matInfo)
     *matInfo = Material_FromHandle(handle)->info;
 }
 
-Material *__cdecl Material_Duplicate(Material *mtlCopy, char *name)
-{
-    uint32_t v3; // [esp+8h] [ebp-30h]
-    const char *nameBackup; // [esp+18h] [ebp-20h]
-    Material *mtlNewa; // [esp+1Ch] [ebp-1Ch]
-    uint8_t *mtlNew; // [esp+1Ch] [ebp-1Ch]
-    int constantTableSize; // [esp+24h] [ebp-14h]
-    uint16_t hashIndex[3]; // [esp+28h] [ebp-10h] BYREF
-    bool exists; // [esp+2Fh] [ebp-9h] BYREF
-    uint32_t textureTableSize; // [esp+30h] [ebp-8h]
-    uint32_t stateBitsTableSize; // [esp+34h] [ebp-4h]
-
-    iassert( mtlCopy );
-    iassert( name );
-    Material_GetHashIndex(name, hashIndex, &exists);
-    if (exists)
-    {
-        mtlNewa = rg.materialHashTable[hashIndex[0]];
-        nameBackup = mtlNewa->info.name;
-        memcpy(mtlNewa, mtlCopy, sizeof(Material));
-        mtlNewa->info.name = nameBackup;
-        rgp.needSortMaterials = 1;
-        return mtlNewa;
-    }
-    else
-    {
-        v3 = strlen(name);
-        mtlNew = Material_Alloc(v3 + 81);
-        memcpy(mtlNew, mtlCopy, 0x50u);
-        *(_DWORD *)mtlNew = (uint32)mtlNew + 80;
-        memcpy(*(uint8_t **)mtlNew, (uint8_t *)name, v3 + 1);
-        stateBitsTableSize = 8 * mtlCopy->stateBitsCount;
-        *((_DWORD *)mtlNew + 19) = (uint32)Material_Alloc(stateBitsTableSize);
-        memcpy(*((uint8_t **)mtlNew + 19), (uint8_t *)mtlCopy->stateBitsTable, stateBitsTableSize);
-        if (mtlCopy->textureTable)
-        {
-            textureTableSize = 12 * mtlCopy->textureCount;
-            *((_DWORD *)mtlNew + 17) = (uint32)Material_Alloc(textureTableSize);
-            memcpy(*((uint8_t **)mtlNew + 17), (uint8_t *)mtlCopy->textureTable, textureTableSize);
-        }
-        if (mtlCopy->constantTable)
-        {
-            constantTableSize = 32 * mtlCopy->constantCount;
-            *((_DWORD *)mtlNew + 18) = (uint32)Material_Alloc(constantTableSize);
-            memcpy(*((uint8_t **)mtlNew + 18), (uint8_t *)mtlCopy->constantTable, constantTableSize);
-        }
-        Material_Add((Material *)mtlNew, hashIndex[0]);
-        return (Material *)mtlNew;
-    }
-}
-
 Material *__cdecl R_GetBspMaterial(uint32_t materialIndex)
 {
     const dmaterial_t *name; // [esp+2Ch] [ebp-110h]

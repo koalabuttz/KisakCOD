@@ -29,8 +29,10 @@ Independent source review found no blocking issue. Full Windows/editor builds an
 GPU execution are not verified. The pre-existing `Material_Duplicate` allocation
 at `r_material_load_obj.cpp:4738` and layered material creation still contain
 80-byte layout assumptions; these need a separate runtime-tested correction before
-claiming complete Radiant resource support. The current CPU backend does not call
-those material paths.
+claiming complete Radiant resource support. A subsequent
+[material-clone checkpoint](progress-2026-10-31-material-clone.md) repairs and
+runtime-tests the duplication path; layered material creation remains outstanding.
+The current CPU backend does not call those material paths.
 
 Packet extraction/validation remains denied and untouched. This change is confined
 to renderer headers, the genuine backend release boundary, and editor layout.

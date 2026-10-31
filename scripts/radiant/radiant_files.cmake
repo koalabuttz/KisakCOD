@@ -141,6 +141,7 @@ set(RADIANT_QCOMMON
 #   rb_logfile, rb_shadowcookie, rb_showcollision, r_draw_lit, r_draw_sunshadow,
 #   r_dpvs_dynmodel, r_fog, r_screenshot, r_texturemem.
 set(RADIANT_GFX_D3D
+    "${SRC_DIR}/gfx_d3d/r_command_buffer.cpp"
     "${SRC_DIR}/gfx_d3d/fxprimitives.h"
     "${SRC_DIR}/gfx_d3d/rb_backend.cpp"
     "${SRC_DIR}/gfx_d3d/rb_backend.h"
@@ -232,6 +233,7 @@ set(RADIANT_GFX_D3D
     "${SRC_DIR}/gfx_d3d/r_material.h"
     "${SRC_DIR}/gfx_d3d/r_material_load_db.h"
     "${SRC_DIR}/gfx_d3d/r_material_load_obj.cpp"
+    "${SRC_DIR}/gfx_d3d/r_material_clone.cpp"
     "${SRC_DIR}/gfx_d3d/r_material_override.cpp"
     "${SRC_DIR}/gfx_d3d/r_meshdata.cpp"
     "${SRC_DIR}/gfx_d3d/r_meshdata.h"

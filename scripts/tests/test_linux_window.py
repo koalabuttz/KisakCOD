@@ -78,7 +78,20 @@ def main():
             for flag in ("-m32", "-DKISAK_MP", "-DRELEASE_ASSERTS"):
                 check(bool(re.search(r"(?:^|\s)" + re.escape(flag) + r"(?:\s|$)", command)), f"{suffix} uses {flag}")
             check("-DKISAK_DEDICATED" not in command and "-DDEDICATED" not in command, f"{suffix} is a client compile")
-        command = ["cmake", "--build", build, "--target", "KisakCOD-client-window", "KisakCOD-window-test", "KisakCOD-client-input", "KisakCOD-client-input-test", "KisakCOD-shutdown-signal-test", "KisakCOD-client-command-test", "KisakCOD-client-runtime-test", "KisakCOD-client-input-startup-test", "KisakCOD-presentation-test", "KisakCOD-frame-deadline-test", "KisakCOD-pixel-resource-test", "KisakCOD-cpu-renderer-test", "KisakCOD-cpu-renderer-fault-test", "KisakCOD-cpu-raw-test", "-j", args.jobs]
+        for variant in ("mp", "radiant"):
+            target = f"KisakCOD-material-clone-{variant}-test"
+            commands = [entry["command"] for entry in entries
+                        if entry["file"].endswith("gfx_d3d/r_material_clone.cpp") and target + ".dir" in entry["command"]]
+            check(len(commands) == 1, f"actual production material clone compiled for {variant}")
+            command = commands[0]
+            if variant == "radiant":
+                check("-DKISAK_RADIANT" in command and "-DMAX_GENTITIES=2176" in command,
+                      "Radiant material clone uses actual editor defines")
+                check("-DKISAK_MP" not in command, "Radiant material clone excludes MP defines")
+            else:
+                check("-DKISAK_MP" in command, "MP material clone uses MP definition")
+                check("-DKISAK_RADIANT" not in command, "MP material clone excludes editor defines")
+        command = ["cmake", "--build", build, "--target", "KisakCOD-client-window", "KisakCOD-window-test", "KisakCOD-client-input", "KisakCOD-client-input-test", "KisakCOD-shutdown-signal-test", "KisakCOD-client-command-test", "KisakCOD-client-runtime-test", "KisakCOD-client-input-startup-test", "KisakCOD-presentation-test", "KisakCOD-frame-deadline-test", "KisakCOD-pixel-resource-test", "KisakCOD-cpu-renderer-test", "KisakCOD-cpu-renderer-fault-test", "KisakCOD-cpu-raw-test", "KisakCOD-material-clone-mp-test", "KisakCOD-material-clone-radiant-test", "-j", args.jobs]
         run(command)
         run(command)
         check(True, "window targets build and incrementally rebuild")
@@ -100,7 +113,7 @@ def main():
             summary = re.search(r"-- (\d+) checks, (\d+) failures --", result.stdout)
             check(summary and int(summary[1]) >= minimum and int(summary[2]) == 0,
                   f"actual {name} lifecycle suite passes")
-        for name, minimum in (("presentation", 27), ("frame-deadline", 14), ("pixel-resource", 20), ("cpu-renderer", 29), ("cpu-renderer-fault", 16), ("cpu-raw", 16)):
+        for name, minimum in (("presentation", 27), ("frame-deadline", 14), ("pixel-resource", 20), ("cpu-renderer", 29), ("cpu-renderer-fault", 16), ("cpu-raw", 16), ("material-clone-mp", 10), ("material-clone-radiant", 10)):
             result = run([build / f"bin/KisakCOD-{name}-test"], env=env, timeout=30)
             print(result.stdout, end="")
             summary = re.search(r"-- (\d+) checks, (\d+) failures --", result.stdout)
