@@ -667,10 +667,7 @@ void __cdecl CL_SetFullScreenViewport()
 }
 
 // attributes: thunk
-void __cdecl CL_SetViewport(int x, int y, int width, int height)
-{
-    R_AddCmdSetViewportValues(x, y, width, height);
-}
+
 
 
 

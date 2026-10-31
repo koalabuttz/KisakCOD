@@ -62,6 +62,8 @@ def main():
         entries = json.loads((build / "compile_commands.json").read_text())
         for suffix, target in (("window/window_host.cpp", "KisakCOD-window-platform"),
                                ("window/engine_input.cpp", "KisakCOD-window-platform"),
+                               ("client/cl_ui_draw.cpp", "KisakCOD-cpu-viewport-test"),
+                               ("gfx_d3d/r_viewport.cpp", "KisakCOD-cpu-viewport-test"),
                                ("linux/sys_events.cpp", "KisakCOD-client-window"),
                                ("linux/sys_critical.cpp", "KisakCOD-client-window"),
                                ("linux/sys_posix.cpp", "KisakCOD-client-window"),
@@ -101,7 +103,7 @@ def main():
                 check(f"-DKISAK_{own}" in command, f"{own} material {family} uses its game definition")
                 check("-DKISAK_RADIANT" not in command and f"-DKISAK_{other}" not in command,
                       f"{own} material {family} excludes other variant defines")
-        command = ["cmake", "--build", build, "--target", "KisakCOD-client-window", "KisakCOD-window-test", "KisakCOD-client-input", "KisakCOD-client-input-test", "KisakCOD-shutdown-signal-test", "KisakCOD-client-command-test", "KisakCOD-client-runtime-test", "KisakCOD-client-input-startup-test", "KisakCOD-presentation-test", "KisakCOD-frame-deadline-test", "KisakCOD-pixel-resource-test", "KisakCOD-cpu-renderer-test", "KisakCOD-cpu-renderer-fault-test", "KisakCOD-cpu-raw-test", "KisakCOD-material-clone-mp-test", "KisakCOD-material-clone-radiant-test", "KisakCOD-cpu-ui-test", "KisakCOD-material-layered-mp-test", "KisakCOD-material-layered-sp-test", "KisakCOD-material-layered-radiant-test", "KisakCOD-cpu-text-test", "KisakCOD-cpu-menu-test", "KisakCOD-menu-assets-test", "KisakCOD-ui-material-assets-test", "KisakCOD-iwi-assets-test", "KisakCOD-font-assets-test", "KisakCOD-menu-input-owner-test", "KisakCOD-menu-control-assets-test", "KisakCOD-menu-script-test", "KisakCOD-ui-audio-test", "KisakCOD-ui-audio-assets-test", "KisakCOD-ui-audio-failure-test", "KisakCOD-menu-input-failure-test", "-j", args.jobs]
+        command = ["cmake", "--build", build, "--target", "KisakCOD-client-window", "KisakCOD-window-test", "KisakCOD-client-input", "KisakCOD-client-input-test", "KisakCOD-shutdown-signal-test", "KisakCOD-client-command-test", "KisakCOD-client-runtime-test", "KisakCOD-client-input-startup-test", "KisakCOD-presentation-test", "KisakCOD-frame-deadline-test", "KisakCOD-pixel-resource-test", "KisakCOD-cpu-renderer-test", "KisakCOD-cpu-renderer-fault-test", "KisakCOD-cpu-raw-test", "KisakCOD-material-clone-mp-test", "KisakCOD-material-clone-radiant-test", "KisakCOD-cpu-ui-test", "KisakCOD-material-layered-mp-test", "KisakCOD-material-layered-sp-test", "KisakCOD-material-layered-radiant-test", "KisakCOD-cpu-text-test", "KisakCOD-cpu-menu-test", "KisakCOD-menu-assets-test", "KisakCOD-ui-material-assets-test", "KisakCOD-iwi-assets-test", "KisakCOD-font-assets-test", "KisakCOD-menu-input-owner-test", "KisakCOD-menu-control-assets-test", "KisakCOD-menu-script-test", "KisakCOD-ui-audio-test", "KisakCOD-ui-audio-assets-test", "KisakCOD-ui-audio-failure-test", "KisakCOD-menu-input-failure-test", "KisakCOD-cpu-viewport-test", "-j", args.jobs]
         run(command)
         run(command)
         check(True, "window targets build and incrementally rebuild")
@@ -123,7 +125,7 @@ def main():
             summary = re.search(r"(?:-- |layered material: |IWI decoder: |UI audio: |UI audio failure: |UI audio assets: )(\d+) checks, (\d+) failures", result.stdout)
             check(summary and int(summary[1]) >= minimum and int(summary[2]) == 0,
                   f"actual {name} lifecycle suite passes")
-        for name, minimum in (("presentation", 27), ("frame-deadline", 14), ("pixel-resource", 20), ("cpu-renderer", 29), ("cpu-renderer-fault", 33), ("cpu-raw", 16), ("material-clone-mp", 10), ("material-clone-radiant", 10), ("cpu-ui", 28), ("material-layered-mp", 19), ("material-layered-sp", 19), ("material-layered-radiant", 20), ("cpu-text", 21), ("cpu-menu", 25), ("menu-assets", 11), ("ui-material-assets", 11), ("iwi-assets", 24), ("font-assets", 10), ("menu-control-assets", 14), ("menu-script", 31), ("ui-audio", 20), ("ui-audio-failure", 15), ("ui-audio-assets", 30)):
+        for name, minimum in (("presentation", 27), ("frame-deadline", 14), ("pixel-resource", 20), ("cpu-renderer", 29), ("cpu-renderer-fault", 33), ("cpu-raw", 16), ("material-clone-mp", 10), ("material-clone-radiant", 10), ("cpu-ui", 28), ("cpu-viewport", 26), ("material-layered-mp", 19), ("material-layered-sp", 19), ("material-layered-radiant", 20), ("cpu-text", 21), ("cpu-menu", 25), ("menu-assets", 11), ("ui-material-assets", 11), ("iwi-assets", 24), ("font-assets", 10), ("menu-control-assets", 14), ("menu-script", 31), ("ui-audio", 20), ("ui-audio-failure", 15), ("ui-audio-assets", 30)):
             result = run([build / f"bin/KisakCOD-{name}-test"], env=env, timeout=30)
             print(result.stdout, end="")
             summary = re.search(r"(?:-- |layered material: |IWI decoder: |UI audio: |UI audio failure: |UI audio assets: )(\d+) checks, (\d+) failures", result.stdout)

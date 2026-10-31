@@ -49,3 +49,8 @@ void __cdecl CL_DrawTextPhysical(
 {
     R_AddCmdDrawText(text, maxChars, font, x, y, xScale, yScale, 0.0, color, style);
 }
+
+void __cdecl CL_SetViewport(int x, int y, int width, int height)
+{
+    R_AddCmdSetViewportValues(x, y, width, height);
+}

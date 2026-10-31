@@ -14,6 +14,7 @@
 #include <ui/keycodes.h>
 #include <universal/com_memory.h>
 #include <memory>
+#include <array>
 #include <cstdio>
 #include <cstdlib>
 #include <stdexcept>
@@ -44,7 +45,7 @@ public:
     }
     void OnQuit() override { std::puts("window=closing"); }
 };
-void PresentEngineClear(kisak::window::WindowHost &host,kisak::window::CpuRenderer &renderer,kisak::window::CpuRenderer::TextureHandle &texture,kisak::window::CpuRenderer::UiMaterialHandle &material,kisak::window::CpuRenderer::FontHandle font,std::string_view text,const char *uiImage,kisak::window::MenuTextAsset *menu)
+void PresentEngineClear(kisak::window::WindowHost &host,kisak::window::CpuRenderer &renderer,kisak::window::CpuRenderer::TextureHandle &texture,kisak::window::CpuRenderer::UiMaterialHandle &material,kisak::window::CpuRenderer::FontHandle font,std::string_view text,const char *uiImage,kisak::window::MenuTextAsset *menu,const std::array<int,4> *viewport)
 {
     const auto extent=host.SurfaceExtent();
     const auto current=renderer.Pixels();
@@ -57,6 +58,7 @@ void PresentEngineClear(kisak::window::WindowHost &host,kisak::window::CpuRender
         ScreenPlacement placement{};
         ScrPlace_SetupFloatViewportForDisplay(&placement,0,0,float(extent.width),float(extent.height),1.0f,extent.width,extent.height);
         renderer.BeginFrame();renderer.Clear(color);
+        renderer.SetViewport(0,0,extent.width,extent.height);
         renderer.DrawMenuText(menu->fonts,placement,menu->item,menu->text,menu->item.window.foreColor);
         renderer.Submit();renderer.Present(host);
         if(current.width!=extent.width || current.height!=extent.height || renderer.Presented()==1)
@@ -80,14 +82,18 @@ void PresentEngineClear(kisak::window::WindowHost &host,kisak::window::CpuRender
         material=renderer.RegisterUiMaterial(texture);
     }
     renderer.BeginFrame();renderer.Clear(color);
+    const std::array<int,4> view=viewport?*viewport:std::array<int,4>{0,0,extent.width,extent.height};
+    renderer.SetViewport(view[0],view[1],view[2],view[3]);
     ScreenPlacement placement{};
     const float tint[4]={1,1,1,.5f};
-    renderer.DrawUiImage(material,placement,float(extent.width-128)/2,float(extent.height-96)/2,128,96,5,5,tint);
+    renderer.DrawUiImage(material,placement,float(view[2]-128)/2,float(view[3]-96)/2,128,96,5,5,tint);
     if(font) {
         const float textColor[4]={1,1,1,1};
         renderer.DrawUiText(font,placement,text,1024,24,48,5,5,.5f,textColor);
     }
     renderer.Submit();renderer.Present(host);
+    if(viewport && (current.width!=extent.width || current.height!=extent.height || renderer.Presented()==1))
+        std::printf("viewport=engine x=%d y=%d width=%d height=%d target_width=%d target_height=%d producer=CL_SetViewport\n",view[0],view[1],view[2],view[3],extent.width,extent.height);
 }
 bool Number(const char *text,unsigned maximum,unsigned &value) {
     if(!*text)return false;
@@ -103,13 +109,14 @@ int main(int argc,char **argv)
 {
     unsigned frames=0,runMilliseconds=0;
     bool relative=false,requestFrame=false;
+    bool hasViewport=false;std::array<int,4> viewport{};
     const char *server=nullptr,*fontFile=nullptr,*fontAtlas=nullptr,*uiImage=nullptr,*menuBundle=nullptr,*menuControls=nullptr,*assetDirectory=nullptr;
     std::string text="Native Linux UI";bool explicitText=false;
     kisak::window::Config config;
     for(int i=1;i<argc;++i) {
         const std::string argument(argv[i]);
         if(argument=="--help") {
-            std::puts("Usage: KisakCOD-client-input [--frames 1..10000] [--run-ms 1..60000] [--trace] [--relative] [--title NAME] [--frame] [--server IPv4:port] [--menu-bundle DIR --ui-asset-dir DIR] [--menu-controls DIR --ui-asset-dir DIR] [--ui-image IWI] [--font-file FONT --font-atlas IWI [--text TEXT]]\n"
+            std::puts("Usage: KisakCOD-client-input [--frames 1..10000] [--run-ms 1..60000] [--trace] [--relative] [--title NAME] [--frame] [--server IPv4:port] [--menu-bundle DIR --ui-asset-dir DIR] [--menu-controls DIR --ui-asset-dir DIR] [--ui-image IWI] [--ui-viewport X Y W H] [--font-file FONT --font-atlas IWI [--text TEXT]]\n"
                 "Disconnected engine input host with bounded CPU UI rendering. In menu-controls mode Escape closes the menu; the local menu_open console command reopens it. Window close exits. Other modes also exit on Escape. Full game frames and gameplay are unavailable.");return 0;
         } else if(argument=="--frames" && i+1<argc) {
             if(!Number(argv[++i],10000,frames))return 2;
@@ -122,6 +129,14 @@ int main(int argc,char **argv)
         else if(argument=="--menu-controls" && i+1<argc && !menuControls)menuControls=argv[++i];
         else if(argument=="--ui-asset-dir" && i+1<argc && !assetDirectory)assetDirectory=argv[++i];
         else if(argument=="--ui-image" && i+1<argc && !uiImage)uiImage=argv[++i];
+        else if(argument=="--ui-viewport" && i+4<argc && !hasViewport) {
+            for(int field=0;field<4;++field) {
+                const char *value=argv[++i];unsigned parsed=0;
+                if(field<2 && std::string_view(value)=="0")viewport[field]=0;
+                else {if(!Number(value,8192,parsed))return 2;viewport[field]=int(parsed);}
+            }
+            hasViewport=true;
+        }
         else if(argument=="--font-file" && i+1<argc && !fontFile)fontFile=argv[++i];
         else if(argument=="--font-atlas" && i+1<argc && !fontAtlas)fontAtlas=argv[++i];
         else if(argument=="--text" && i+1<argc && !explicitText){text=argv[++i];explicitText=true;}
@@ -132,6 +147,7 @@ int main(int argc,char **argv)
     if(bool(fontFile)!=bool(fontAtlas) || (explicitText && !fontFile) || text.size()>1024)return 2;
     if(bool(menuBundle||menuControls)!=bool(assetDirectory) || (menuBundle&&menuControls) || ((menuBundle||menuControls) && (fontFile||uiImage||explicitText)))return 2;
     if(menuControls && (relative||server))return 2;
+    if(hasViewport && (menuBundle||menuControls))return 2;
     if(menuBundle||menuControls){config.width=640;config.height=480;}
     Sys_InitializeCriticalSections();
     try {
@@ -171,7 +187,7 @@ int main(int argc,char **argv)
         kisak::window::CpuRenderer::TextureHandle texture=0;
         kisak::window::CpuRenderer::UiMaterialHandle material=0;
         if(controls)controls->Present(host);
-        else PresentEngineClear(host,renderer,texture,material,font,text,uiImage,menu.get());
+        else PresentEngineClear(host,renderer,texture,material,font,text,uiImage,menu.get(),hasViewport?&viewport:nullptr);
         std::printf("window=created driver=%s id=%u title=%s game=false input=engine connection=disconnected frame=unavailable presentation=%s\n",
             SDL_GetCurrentVideoDriver(),host.Id(),config.title,controls?"engine-menu-controls":menu?"engine-menu-text":"engine-ui-image");
         std::printf("window=ready id=%u driver=%s\n",host.Id(),SDL_GetCurrentVideoDriver());
@@ -215,7 +231,7 @@ int main(int argc,char **argv)
                 if(metrics.trace && (sample.x || sample.y))std::printf("input_tick mouse_dx=%d mouse_dy=%d frame=unavailable\n",sample.x,sample.y);
                 if(metrics.trace)std::printf("editor text=%s cursor=%d held=%d\n",input.Text(),input.Cursor(),input.Held());
                 if(controls)controls->Present(host);
-                else PresentEngineClear(host,renderer,texture,material,font,text,uiImage,menu.get());
+                else PresentEngineClear(host,renderer,texture,material,font,text,uiImage,menu.get(),hasViewport?&viewport:nullptr);
                 ++drawn;
             }
             if(!host.Running())break;

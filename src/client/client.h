@@ -933,7 +933,6 @@ void __cdecl CL_GetViewForward(float *forward);
 void __cdecl CL_GetViewPos(float *pos);
 void __cdecl CL_RenderScene(const refdef_s *fd);
 void __cdecl CL_SetFullScreenViewport();
-void __cdecl CL_SetViewport(int x, int y, int width, int height);
 void __cdecl CL_DrawStretchPicPhysical(
     float x,
     float y,
@@ -1252,3 +1251,6 @@ inline clientUIActive_t *CL_GetLocalClientUIGlobals(int localClientNum)
 
 // Explicit display extent and pixel aspect for hosts without a game renderer/vidConfig.
 void ScrPlace_SetupFloatViewportForDisplay(ScreenPlacement *,float,float,float,float,float,int,int);
+
+// Shared viewport command entry (original SP caller, also used by native UI).
+void __cdecl CL_SetViewport(int x, int y, int width, int height);

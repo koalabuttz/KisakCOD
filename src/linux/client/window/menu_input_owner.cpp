@@ -91,7 +91,7 @@ void MenuInputOwner::Present(WindowHost &window){CheckThread();const auto extent
     const auto before=renderer_.Pixels();if(before.width!=width_||before.height!=height_)renderer_.Resize(width_,height_);
     renderer_.BeginFrame();
     try {
-        const float clear[4]={.25f,.5f,.75f,1};renderer_.Clear(clear);dc_.realTime=Sys_Milliseconds();
+        const float clear[4]={.25f,.5f,.75f,1};renderer_.Clear(clear);renderer_.SetViewport(0,0,width_,height_);dc_.realTime=Sys_Milliseconds();
         if(Opened())for(auto &item:assets_->items)renderer_.DrawMenuItem(fonts_,placement_,dc_,item);
         renderer_.Submit();renderer_.Present(window);
     } catch(...) {

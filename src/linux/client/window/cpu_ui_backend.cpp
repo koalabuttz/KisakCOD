@@ -10,6 +10,7 @@ namespace kisak::window {
 namespace {
 struct ActiveUi { CpuRenderer *renderer=nullptr;CpuRenderer::UiMaterialHandle handle=0;Material *expected=nullptr; };
 thread_local ActiveUi active;
+thread_local CpuRenderer *viewportOwner=nullptr;
 struct ActiveText { CpuRenderer *renderer=nullptr;CpuRenderer::FontHandle handle=0;Font_s *expected=nullptr;std::string_view text;bool menu=false; };
 thread_local ActiveText activeText;
 thread_local Font_s *menuFont=nullptr;
@@ -18,6 +19,10 @@ thread_local MenuSelection menuSelection;
 }
 class CpuUiBridge {
 public:
+    static void Viewport(int x,int y,int width,int height) {
+        if(!viewportOwner)throw std::logic_error("Viewport entry requires scoped renderer");
+        viewportOwner->RecordViewport(x,y,width,height);
+    }
     static void RecordText(const char *text,int maxChars,Font_s *font,float x,float y,float xScale,float yScale,
                            float rotation,const float *color,int style,int cursorPos) {
         if(!activeText.renderer || font!=activeText.expected || (!activeText.menu && text!=activeText.text.data()))throw std::logic_error("Text entry requires scoped owned font/text");
@@ -34,6 +39,12 @@ public:
         active.renderer->RecordUiStretchPic(active.handle,x,y,w,h,s0,t0,s1,t1,color);
     }
 };
+void CpuRenderer::SetViewport(int x,int y,int width,int height) {
+    CheckThread();if(state_!=State::recording || viewportOwner)throw std::logic_error("Viewport requires exclusive recording renderer");
+    viewportOwner=this;
+    try { CL_SetViewport(x,y,width,height); }catch(...) {viewportOwner=nullptr;throw;}
+    viewportOwner=nullptr;
+}
 void CpuRenderer::DrawUiImage(UiMaterialHandle material,const ScreenPlacement &placement,
                              float x,float y,float width,float height,int horizontal,int vertical,const float *color) {
     CheckThread();if(state_!=State::recording || active.renderer || activeText.renderer)throw std::logic_error("UI scope requires exclusive recording renderer");
@@ -141,3 +152,5 @@ Font_s *UI_GetFontHandle(const ScreenPlacement *placement,int fontEnum,float sca
 void UI_DrawTextWithGlow(const ScreenPlacement *,const char *,int,Font_s *,float,float,int,int,float,const float *,int,const float *,bool,bool) {
     throw std::invalid_argument("CPU menu subtitles/glow are unavailable");
 }
+
+void R_AddCmdSetViewportValues(int x,int y,int width,int height) { kisak::window::CpuUiBridge::Viewport(x,y,width,height); }

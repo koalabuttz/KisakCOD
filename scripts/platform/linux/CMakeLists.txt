@@ -245,6 +245,7 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
     set(KISAK_CPU_RENDERER_SOURCES
         "${SRC_DIR}/linux/client/window/cpu_renderer.cpp"
         "${SRC_DIR}/gfx_d3d/r_command_buffer.cpp"
+        "${SRC_DIR}/gfx_d3d/r_viewport.cpp"
         "${SRC_DIR}/gfx_d3d/r_color.cpp"
         "${SRC_DIR}/gfx_d3d/r_font_metrics.cpp"
         "${SRC_DIR}/qcommon/com_pack.cpp")
@@ -317,6 +318,11 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
         "${TESTS_DIR}/linux_window/iwi_assets_test.cpp"
         "${SRC_DIR}/linux/client/window/iwi_assets.cpp"
         "${SRC_DIR}/gfx_d3d/r_imagedecode.cpp")
+    add_executable(KisakCOD-cpu-viewport-test
+        "${TESTS_DIR}/linux_window/cpu_viewport_test.cpp"
+        "${SRC_DIR}/linux/client/window/window_services.cpp"
+        "${SRC_DIR}/client/screen_placement.cpp"
+        ${KISAK_CPU_UI_SOURCES} ${KISAK_CPU_RENDERER_SOURCES})
     add_executable(KisakCOD-cpu-ui-test
         "${TESTS_DIR}/linux_window/cpu_ui_test.cpp"
         "${SRC_DIR}/linux/client/window/window_services.cpp"
@@ -381,7 +387,7 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
     add_executable(KisakCOD-shutdown-signal-test
         "${SRC_DIR}/linux/client/window/shutdown_signal.cpp"
         "${TESTS_DIR}/linux_window/shutdown_signal_test.cpp")
-    foreach(window_target KisakCOD-ui-audio-failure-test KisakCOD-menu-input-failure-test KisakCOD-menu-input-owner-test KisakCOD-menu-control-assets-test KisakCOD-ui-audio-test KisakCOD-ui-audio-assets-test KisakCOD-menu-script-test KisakCOD-window-platform KisakCOD-client-window KisakCOD-window-test KisakCOD-client-input KisakCOD-client-input-test KisakCOD-shutdown-signal-test KisakCOD-client-command-test KisakCOD-client-runtime-test KisakCOD-client-input-startup-test KisakCOD-presentation-test KisakCOD-frame-deadline-test KisakCOD-pixel-resource-test KisakCOD-cpu-renderer-test KisakCOD-cpu-renderer-fault-test KisakCOD-cpu-raw-test KisakCOD-material-clone-mp-test KisakCOD-material-clone-radiant-test KisakCOD-cpu-ui-test KisakCOD-material-layered-mp-test KisakCOD-material-layered-sp-test KisakCOD-material-layered-radiant-test KisakCOD-cpu-text-test KisakCOD-cpu-menu-test KisakCOD-menu-assets-test KisakCOD-ui-material-assets-test KisakCOD-iwi-assets-test KisakCOD-font-assets-test)
+    foreach(window_target KisakCOD-cpu-viewport-test KisakCOD-ui-audio-failure-test KisakCOD-menu-input-failure-test KisakCOD-menu-input-owner-test KisakCOD-menu-control-assets-test KisakCOD-ui-audio-test KisakCOD-ui-audio-assets-test KisakCOD-menu-script-test KisakCOD-window-platform KisakCOD-client-window KisakCOD-window-test KisakCOD-client-input KisakCOD-client-input-test KisakCOD-shutdown-signal-test KisakCOD-client-command-test KisakCOD-client-runtime-test KisakCOD-client-input-startup-test KisakCOD-presentation-test KisakCOD-frame-deadline-test KisakCOD-pixel-resource-test KisakCOD-cpu-renderer-test KisakCOD-cpu-renderer-fault-test KisakCOD-cpu-raw-test KisakCOD-material-clone-mp-test KisakCOD-material-clone-radiant-test KisakCOD-cpu-ui-test KisakCOD-material-layered-mp-test KisakCOD-material-layered-sp-test KisakCOD-material-layered-radiant-test KisakCOD-cpu-text-test KisakCOD-cpu-menu-test KisakCOD-menu-assets-test KisakCOD-ui-material-assets-test KisakCOD-iwi-assets-test KisakCOD-font-assets-test)
         target_compile_features(${window_target} PRIVATE cxx_std_20)
         target_compile_definitions(${window_target} PRIVATE
             KISAK_OPENAL RELEASE_ASSERTS _FILE_OFFSET_BITS=64 _GNU_SOURCE
@@ -409,6 +415,7 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
     target_link_libraries(KisakCOD-cpu-menu-test PRIVATE KisakCOD-window-platform)
     target_link_libraries(KisakCOD-cpu-text-test PRIVATE KisakCOD-window-platform)
     target_link_libraries(KisakCOD-iwi-assets-test PRIVATE KisakCOD-window-platform)
+    target_link_libraries(KisakCOD-cpu-viewport-test PRIVATE KisakCOD-window-platform)
     target_link_libraries(KisakCOD-cpu-ui-test PRIVATE KisakCOD-window-platform)
     target_link_libraries(KisakCOD-cpu-raw-test PRIVATE KisakCOD-window-platform)
     target_link_libraries(KisakCOD-cpu-renderer-fault-test PRIVATE KisakCOD-window-platform)

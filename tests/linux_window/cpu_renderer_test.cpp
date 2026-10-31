@@ -48,7 +48,7 @@ int main() {
    auto invalid=bytes;
    GfxCmdClearScreen different=clear;different.color[0]=1.0f;different.color[1]=0.0f;
    std::memcpy(invalid.data(),&different,sizeof(different));
-   GfxCmdHeader unsupported=end;unsupported.id=RC_SET_VIEWPORT;
+   GfxCmdHeader unsupported=end;unsupported.id=RC_SAVE_SCREEN;
    std::memcpy(invalid.data()+28,&unsupported,sizeof(unsupported));
    const std::vector<uint8_t> before(renderer.Pixels().bytes.begin(),renderer.Pixels().bytes.end());
    const auto framesBefore=renderer.Presented();

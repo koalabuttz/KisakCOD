@@ -13,9 +13,9 @@ struct UiContext;
 
 namespace kisak::window {
 class WindowHost;
-// Explicit CPU capabilities: clear/end, owned raw blits and scoped unlit UI images.
-// No D3D device, assets,
-// full R_Init, registered game renderer, depth/stencil or arbitrary material shaders.
+// Explicit CPU capabilities: clear/end/viewport, owned raw blits and scoped UI.
+// No D3D device, full R_Init, registered game renderer, depth/stencil or
+// arbitrary material shaders.
 class CpuRenderer {
 public:
     enum class State { stopped, ready, recording, pending };
@@ -30,6 +30,8 @@ public:
     // rolling back pixels, or advancing the presentation counter.
     void CancelFrame();
     void Clear(const float (&color)[4]);
+    // Real CL_SetViewport producer; UI coordinates are local to this rectangle.
+    void SetViewport(int x,int y,int width,int height);
     using TextureHandle=uint64_t;
     // Upload copies padded RGBA input; resources are immutable and ready-state only.
     TextureHandle Upload(PixelBufferView image);
@@ -81,8 +83,9 @@ private:
     size_t fontBindingCount_=0;
     void RecordText(FontHandle font,std::string_view text,int maxChars,float x,float y,float xScale,float yScale,
                     float rotation,const float *color,int style,int cursorPos);
-    void RasterUiPic(const GfxCmdStretchPic &pic,PixelBufferView image);
-    void WalkText(const GfxCmdDrawText2D &command,std::string_view text,const OwnedFont &font,bool render,uint64_t &coveredPixels);
+    void RecordViewport(int x,int y,int width,int height);
+    void RasterUiPic(const GfxCmdStretchPic &pic,PixelBufferView image,const GfxViewport &viewport);
+    void WalkText(const GfxCmdDrawText2D &command,std::string_view text,const OwnedFont &font,bool render,uint64_t &coveredPixels,const GfxViewport &viewport);
 
     void RecordUiStretchPic(UiMaterialHandle material,float x,float y,float width,float height,
                            float s0,float t0,float s1,float t1,const float *color);

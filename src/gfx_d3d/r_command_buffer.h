@@ -18,3 +18,5 @@ void R_EmitStretchPicCommand(void *owner,GfxCommandAllocate allocate,float x,flo
 GfxCmdDrawText2D *R_EmitBaseTextCommand(void *owner,GfxCommandAllocate allocate,
     const char *text,int maxChars,Font_s *font,float x,float y,float xScale,float yScale,
     float rotation,const float *color,int style,int cursorPos,char cursor);
+
+void R_EmitSetViewportCommand(void *owner,GfxCommandAllocate allocate,int x,int y,int width,int height);

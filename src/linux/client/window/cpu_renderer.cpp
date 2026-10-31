@@ -1,6 +1,7 @@
 #include "cpu_renderer.h"
 #include "window_host.h"
 #include <gfx_d3d/rb_backend.h>
+#include <gfx_d3d/r_state.h>
 #include <limits>
 #include <algorithm>
 #include <cmath>
@@ -8,6 +9,22 @@
 #include <stdexcept>
 
 namespace kisak::window {
+namespace {
+void ValidateViewport(const GfxViewport &viewport,PixelExtent extent) {
+    if(viewport.x<0 || viewport.y<0 || viewport.width<=0 || viewport.height<=0 ||
+       int64_t(viewport.x)+viewport.width>extent.width || int64_t(viewport.y)+viewport.height>extent.height)
+        throw std::invalid_argument("Viewport must fit the owned render target");
+}
+bool FullViewport(const GfxViewport &viewport,PixelExtent extent) {
+    return viewport.x==0 && viewport.y==0 && viewport.width==extent.width && viewport.height==extent.height;
+}
+}
+void CpuRenderer::RecordViewport(int x,int y,int width,int height) {
+    CheckThread();if(state_!=State::recording)throw std::logic_error("Viewport requires recording renderer");
+    ValidateViewport({x,y,width,height},pixels_.Extent());
+    R_EmitSetViewportCommand(this,Allocate,x,y,width,height);
+}
+
 void CpuRenderer::CheckThread() const {
     if(owner_!=std::this_thread::get_id())throw std::logic_error("CPU renderer requires owner thread");
 }
@@ -185,7 +202,10 @@ void CpuRenderer::SubmitList(std::span<const uint8_t> commands,bool ownedFrame) 
     std::array<uint8_t,16384> snapshot{};
     if(!commands.empty())std::memcpy(snapshot.data(),commands.data(),commands.size());
     commands={snapshot.data(),commands.size()};
-    size_t offset=0;bool ended=false;uint64_t preflightTextPixels=0;
+    // Like RB_InitSceneViewport, every command list begins at the full target.
+    GfxCmdBufSourceState viewportState{};viewportState.viewportBehavior=GFX_USE_VIEWPORT_FOR_VIEW;
+    R_SetViewportValues(&viewportState,0,0,pixels_.Extent().width,pixels_.Extent().height);
+    size_t offset=0;bool ended=false,hadSubviewport=false;uint64_t preflightTextPixels=0;
     while(offset<commands.size()) {
         if(commands.size()-offset<sizeof(GfxCmdHeader))throw std::invalid_argument("Truncated render command header");
         GfxCmdHeader header;std::memcpy(&header,commands.data()+offset,sizeof(header));
@@ -193,12 +213,20 @@ void CpuRenderer::SubmitList(std::span<const uint8_t> commands,bool ownedFrame) 
             if(header.byteCount!=sizeof(header) || offset+sizeof(header)!=commands.size())throw std::invalid_argument("Invalid render command end");
             ended=true;break;
         }
-        if(header.id==RC_CLEAR_SCREEN) {
+        if(header.id==RC_SET_VIEWPORT) {
+            if(header.byteCount!=sizeof(GfxCmdSetViewport) || commands.size()-offset<sizeof(GfxCmdSetViewport))throw std::invalid_argument("Invalid viewport command");
+            GfxCmdSetViewport command;std::memcpy(&command,commands.data()+offset,sizeof(command));
+            ValidateViewport(command.viewport,pixels_.Extent());
+            R_SetViewportStruct(&viewportState,&command.viewport);
+            hadSubviewport|=!FullViewport(command.viewport,pixels_.Extent());
+        } else if(header.id==RC_CLEAR_SCREEN) {
+            if(hadSubviewport)throw std::invalid_argument("Clear after subviewport is unsupported");
             if(header.byteCount!=sizeof(GfxCmdClearScreen) || commands.size()-offset<sizeof(GfxCmdClearScreen))throw std::invalid_argument("Invalid clear command");
             GfxCmdClearScreen clear;std::memcpy(&clear,commands.data()+offset,sizeof(clear));
             if(clear.whichToClear!=1)throw std::invalid_argument("CPU renderer has no depth/stencil surfaces");
             for(float value:clear.color)if(!std::isfinite(value))throw std::invalid_argument("Nonfinite clear color");
         } else if(header.id==RC_STRETCH_RAW) {
+            if(!FullViewport(viewportState.sceneViewport,pixels_.Extent()))throw std::invalid_argument("Raw copy with subviewport is unsupported");
             // Never trust external raw pointers, including aliases of a reused
             // allocation. The internal frame supplies an offset+handle sidecar.
             if(!ownedFrame || header.byteCount!=sizeof(GfxCmdStretchRaw) || commands.size()-offset<sizeof(GfxCmdStretchRaw))throw std::invalid_argument("Raw image requires owned frame binding");
@@ -240,17 +268,21 @@ void CpuRenderer::SubmitList(std::span<const uint8_t> commands,bool ownedFrame) 
             if(!end || static_cast<const char*>(end)-characters>1024)throw std::invalid_argument("Unterminated or overlong text command");
             const std::string_view content(characters,static_cast<const char*>(end)-characters);
             for(size_t i=0;i<content.size();++i)if(content[i]=='^' && i+1<content.size() && content[i+1]>='0' && content[i+1]<='9')throw std::invalid_argument("Unsupported text color escape");
-            WalkText(text,content,*found->second,false,preflightTextPixels);
+            WalkText(text,content,*found->second,false,preflightTextPixels,viewportState.sceneViewport);
         } else throw std::invalid_argument("Unsupported CPU rendering command");
         offset+=header.byteCount;
     }
     if(!ended)throw std::invalid_argument("Missing render command end");
     const auto pixels=pixels_.Bytes();const auto extent=pixels_.Extent();
+    R_SetViewportValues(&viewportState,0,0,extent.width,extent.height);
     uint64_t renderedTextPixels=0;
     for(offset=0;offset<commands.size();) {
         GfxCmdHeader header;std::memcpy(&header,commands.data()+offset,sizeof(header));
         if(header.id==RC_END_OF_LIST)break;
-        if(header.id==RC_CLEAR_SCREEN) {
+        if(header.id==RC_SET_VIEWPORT) {
+            GfxCmdSetViewport command;std::memcpy(&command,commands.data()+offset,sizeof(command));
+            R_SetViewportStruct(&viewportState,&command.viewport);
+        } else if(header.id==RC_CLEAR_SCREEN) {
             GfxCmdClearScreen clear;std::memcpy(&clear,commands.data()+offset,sizeof(clear));
             float bounded[4];uint8_t color[4];
             for(unsigned i=0;i<4;++i)bounded[i]=std::clamp(clear.color[i],0.0f,1.0f);
@@ -273,19 +305,19 @@ void CpuRenderer::SubmitList(std::span<const uint8_t> commands,bool ownedFrame) 
             FontHandle handle=0;
             for(size_t i=0;i<fontBindingCount_;++i)if(fontBindings_[i].offset==offset)handle=fontBindings_[i].font;
             const char *characters=reinterpret_cast<const char*>(commands.data()+offset+offsetof(GfxCmdDrawText2D,text));
-            WalkText(text,std::string_view(characters),*fonts_.at(handle),true,renderedTextPixels);
+            WalkText(text,std::string_view(characters),*fonts_.at(handle),true,renderedTextPixels,viewportState.sceneViewport);
         } else {
             GfxCmdStretchPic pic;std::memcpy(&pic,commands.data()+offset,sizeof(pic));
             UiMaterialHandle handle=0;
             for(size_t i=0;i<uiBindingCount_;++i)if(uiBindings_[i].offset==offset)handle=uiBindings_[i].material;
             const auto image=SampleLevel(pic,*uiMaterials_.at(handle));
-            RasterUiPic(pic,image);
+            RasterUiPic(pic,image,viewportState.sceneViewport);
         }
         offset+=header.byteCount;
     }
     state_=State::pending;
 }
-void CpuRenderer::WalkText(const GfxCmdDrawText2D &command,std::string_view text,const OwnedFont &font,bool render,uint64_t &coveredPixels) {
+void CpuRenderer::WalkText(const GfxCmdDrawText2D &command,std::string_view text,const OwnedFont &font,bool render,uint64_t &coveredPixels,const GfxViewport &viewport) {
     auto material=uiMaterials_.find(font.material);
     if(material==uiMaterials_.end())throw std::invalid_argument("Stale font material");
     const double startX=double(command.x)-.5*command.xScale;
@@ -305,14 +337,14 @@ void CpuRenderer::WalkText(const GfxCmdDrawText2D &command,std::string_view text
         if(pic.w && pic.h) {
             const auto sampled=SampleLevel(pic,*material->second);
             auto pass=[&](const GfxCmdStretchPic &quad) {
-                const auto extent=pixels_.Extent();
+                const PixelExtent extent{viewport.width,viewport.height};
                 const double left=std::clamp(std::ceil(double(quad.x)-.5),0.0,double(extent.width));
                 const double top=std::clamp(std::ceil(double(quad.y)-.5),0.0,double(extent.height));
                 const double right=std::clamp(std::ceil(double(quad.x)+quad.w-.5),0.0,double(extent.width));
                 const double bottom=std::clamp(std::ceil(double(quad.y)+quad.h-.5),0.0,double(extent.height));
                 coveredPixels+=uint64_t((right-left)*(bottom-top));
                 if(coveredPixels>64u*1024u*1024u)throw std::length_error("Text raster budget exhausted");
-                if(render)RasterUiPic(quad,sampled);
+                if(render)RasterUiPic(quad,sampled,viewport);
             };
             if(command.renderFlags==4 || command.renderFlags==12) {
                 // Actual RB_DrawText styles3/6: original-alpha black shadow,
@@ -326,15 +358,16 @@ void CpuRenderer::WalkText(const GfxCmdDrawText2D &command,std::string_view text
         x+=glyph->dx*double(command.xScale);--remaining;
     }
 }
-void CpuRenderer::RasterUiPic(const GfxCmdStretchPic &pic,PixelBufferView image) {
+void CpuRenderer::RasterUiPic(const GfxCmdStretchPic &pic,PixelBufferView image,const GfxViewport &viewport) {
     const auto pixels=pixels_.Bytes();const auto extent=pixels_.Extent();
-            const int left=int(std::clamp(std::ceil(double(pic.x)-.5),0.0,double(extent.width)));
-            const int top=int(std::clamp(std::ceil(double(pic.y)-.5),0.0,double(extent.height)));
-            const int right=int(std::clamp(std::ceil(double(pic.x)+pic.w-.5),0.0,double(extent.width)));
-            const int bottom=int(std::clamp(std::ceil(double(pic.y)+pic.h-.5),0.0,double(extent.height)));
+    const double originX=double(pic.x)+viewport.x,originY=double(pic.y)+viewport.y;
+            const int left=int(std::clamp(std::ceil(originX-.5),double(viewport.x),double(viewport.x+viewport.width)));
+            const int top=int(std::clamp(std::ceil(originY-.5),double(viewport.y),double(viewport.y+viewport.height)));
+            const int right=int(std::clamp(std::ceil(originX+pic.w-.5),double(viewport.x),double(viewport.x+viewport.width)));
+            const int bottom=int(std::clamp(std::ceil(originY+pic.h-.5),double(viewport.y),double(viewport.y+viewport.height)));
             for(int y=top;y<bottom;++y)for(int x=left;x<right;++x) {
-                const double u=pic.s0+(double(x)+.5-pic.x)/pic.w*(pic.s1-pic.s0);
-                const double v=pic.t0+(double(y)+.5-pic.y)/pic.h*(pic.t1-pic.t0);
+                const double u=pic.s0+(double(x)+.5-originX)/pic.w*(pic.s1-pic.s0);
+                const double v=pic.t0+(double(y)+.5-originY)/pic.h*(pic.t1-pic.t0);
                 const double tx=std::clamp(u*image.width-.5,0.0,double(image.width-1));
                 const double ty=std::clamp(v*image.height-.5,0.0,double(image.height-1));
                 const int x0=int(std::floor(tx)),y0=int(std::floor(ty));

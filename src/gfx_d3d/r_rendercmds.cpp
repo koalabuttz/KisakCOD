@@ -1684,21 +1684,9 @@ void __cdecl R_InitTempSkinBuf()
 
 void R_AddCmdSetViewportValues(int x, int y, int width, int height)
 {
-    GfxCmdHeader *cmd; // r30
-
-    iassert(width > 0);
-    iassert(height > 0);
-    
-    cmd = R_GetCommandBuffer(RC_SET_VIEWPORT, 20);
-
-    iassert(cmd);
-
-    _DWORD *writer = (_DWORD *)cmd; // hack
-
-    writer[1] = x;
-    writer[2] = y;
-    writer[3] = width;
-    writer[4] = height;
+    R_EmitSetViewportCommand(nullptr,[](void *,GfxRenderCommand id,int bytes) {
+        return R_GetCommandBuffer(id,bytes);
+    },x,y,width,height);
 }
 
 void __cdecl R_BeginDebugFrame()

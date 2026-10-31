@@ -124,3 +124,10 @@ GfxCmdDrawText2D *R_EmitBaseTextCommand(void *owner,GfxCommandAllocate allocate,
     cmd->text[v13] = 0;
     return cmd;
 }
+
+void R_EmitSetViewportCommand(void *owner,GfxCommandAllocate allocate,int x,int y,int width,int height) {
+    iassert(width > 0);iassert(height > 0);
+    auto *command=reinterpret_cast<GfxCmdSetViewport*>(allocate(owner,RC_SET_VIEWPORT,sizeof(GfxCmdSetViewport)));
+    iassert(command);
+    command->viewport={x,y,width,height};
+}
