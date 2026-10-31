@@ -50,12 +50,13 @@ int main(int argc,char **argv)
 {
     unsigned frames=0,runMilliseconds=0;
     bool relative=false,requestFrame=false;
+    const char *server=nullptr;
     kisak::window::Config config;
     for(int i=1;i<argc;++i) {
         const std::string argument(argv[i]);
         if(argument=="--help") {
-            std::puts("Usage: KisakCOD-client-input [--frames 1..10000] [--run-ms 1..60000] [--trace] [--relative] [--title NAME] [--frame]\n"
-                "Production disconnected input host. Escape or window close exits. Console editing is reported in trace; no game frame, renderer or command execution.");return 0;
+            std::puts("Usage: KisakCOD-client-input [--frames 1..10000] [--run-ms 1..60000] [--trace] [--relative] [--title NAME] [--frame] [--server IPv4:port]\n"
+                "Production disconnected input host. Escape or window close exits. Console editing is reported in trace; real local commands and optional read-only discovery; no game frame or renderer.");return 0;
         } else if(argument=="--frames" && i+1<argc) {
             if(!Number(argv[++i],10000,frames))return 2;
         } else if(argument=="--run-ms" && i+1<argc) {
@@ -63,6 +64,7 @@ int main(int argc,char **argv)
         } else if(argument=="--trace")metrics.trace=true;
         else if(argument=="--relative")relative=true;
         else if(argument=="--frame")requestFrame=true;
+        else if(argument=="--server" && i+1<argc && !server)server=argv[++i];
         else if(argument=="--title" && i+1<argc && *argv[i+1])config.title=argv[++i];
         else return 2;
     }
@@ -75,6 +77,7 @@ int main(int argc,char **argv)
         SDL_SetHint(SDL_HINT_FRAMEBUFFER_ACCELERATION,"0");
         kisak::window::WindowHost host(input,config);
         kisak::window::ShutdownSignal signals;
+        if(server)input.Discover(server);
         host.Present(host.Focused()?35:45,host.Focused()?65:45,host.Focused()?100:45);
         std::printf("window=created driver=%s id=%u title=%s game=false input=engine connection=disconnected frame=unavailable presentation=SDL-window-surface\n",
             SDL_GetCurrentVideoDriver(),host.Id(),config.title);
@@ -107,6 +110,10 @@ int main(int argc,char **argv)
                     ++metrics.characters;
                     if(metrics.trace)std::printf("character=%d\n",event.evValue);
                 }
+            }
+            if(host.Running()) {
+                if(metrics.trace)std::printf("command_tick=%llu\n",static_cast<unsigned long long>(input.Ticks()+1));
+                input.Tick();
             }
             const auto sample=input.ConsumeMouse();
             if(metrics.trace && (sample.x || sample.y))std::printf("input_tick mouse_dx=%d mouse_dy=%d frame=unavailable\n",sample.x,sample.y);

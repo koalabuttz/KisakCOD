@@ -1,3 +1,4 @@
+#include <qcommon/cmd_services.h>
 // Production packet readers/tokenizer/resend/receive/timeout code. Host services
 // are doubles; successful tickets are an isolated fixture, never an executable mode.
 #include <client_mp/client_mp.h>
@@ -223,3 +224,19 @@ int main() {
         "packet dispatch releases production tokenizer nesting and pools");
     std::printf("-- %d checks, %d failures --\n",checks,failures);return failures?1:0;
 }
+
+// Receive fixture never executes console commands. Retained Cbuf references use
+// the explicit service seam; entering any command subsystem is a test failure.
+namespace {
+class ReceiveCommandServices final : public CmdServices {
+public:
+    void Monitor(const char*) override { std::abort(); }
+    void WaitServer() override { std::abort(); }
+    bool InServerFrame() override { std::abort(); }
+    int DvarCommand() override { std::abort(); }
+    bool ServerRunning() override { std::abort(); }
+    bool ServerGameCommand() override { std::abort(); }
+    void Forward(int,const char*) override { std::abort(); }
+};
+}
+CmdServices &Cmd_GetServices() { static ReceiveCommandServices services;return services; }

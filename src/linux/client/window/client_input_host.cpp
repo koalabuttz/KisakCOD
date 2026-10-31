@@ -2,6 +2,7 @@
 #include <client/client.h>
 #include <client_mp/client_mp.h>
 #include <ui/keycodes.h>
+#include <qcommon/cmd.h>
 #include <SDL.h>
 #include <algorithm>
 #include <cstring>
@@ -12,9 +13,9 @@
 clientActive_t clients[STATIC_MAX_LOCAL_CLIENTS];
 clientUIActive_t clientUIActives[STATIC_MAX_LOCAL_CLIENTS];
 clientStatic_t cls;
+uint32_t frame_msec;
 bool cl_waitingOnServerToLoadMap[1];
 const dvar_t *con_restricted;
-const dvar_t *com_sv_running;
 const dvar_t *sv_disableClientConsole;
 ScreenPlacement scrPlaceFull, scrPlaceView[1];
 static clientConnection_t connection;
@@ -24,7 +25,7 @@ clientConnection_t *CL_GetLocalClientConnection(int client) {
 }
 
 namespace kisak::window {
-namespace { ClientInputHost *owner=nullptr; dvar_t falseSetting{}; }
+namespace { ClientInputHost *owner=nullptr; cmd_function_s commands[9]{}; }
 ClientInputHost &ClientInputHost::Current() {
     if(!owner)throw std::logic_error("input services unavailable outside host lifetime");
     return *owner;
@@ -34,15 +35,21 @@ ClientInputHost::ClientInputHost() : EngineInput(MouseInput,ResetInput) {
     std::memset(clients,0,sizeof(clients));std::memset(clientUIActives,0,sizeof(clientUIActives));
     std::memset(&cls,0,sizeof(cls));std::memset(&connection,0,sizeof(connection));
     std::memset(playerKeys,0,sizeof(playerKeys));std::memset(&g_consoleField,0,sizeof(g_consoleField));
-    con_restricted=com_sv_running=sv_disableClientConsole=cl_bypassMouseInput=&falseSetting;
+    con_restricted=Dvar_RegisterBool("con_restricted",false,DVAR_ROM,"Input host console restriction");
+    sv_disableClientConsole=Dvar_RegisterBool("sv_disableClientConsole",false,DVAR_ROM,"No hosted server");
+    cl_bypassMouseInput=Dvar_RegisterBool("cl_bypassMouseInput",false,DVAR_NOFLAG,"Bypass UI mouse capture");
     clientUIActives[0].connectionState=CA_DISCONNECTED;
     g_consoleField.fixedSize=1;g_consoleField.charHeight=16;
-    owner=this;Resize(640,480);
+    owner=this;Resize(640,480);previousTick_=Sys_Milliseconds();
+    const char *names[]={"echo","status","discover","net_restart","bind","+attack","-attack","+forward","-forward"};
+    void(*handlers[])()={EchoCommand,StatusCommand,DiscoverCommand,RestartCommand,BindCommand,IN_Attack_Down,IN_Attack_Up,IN_ForwardDown,IN_ForwardUp};
+    for(int i=0;i<9;++i)Cmd_AddCommandInternal(names[i],handlers[i],&commands[i]);
 }
-ClientInputHost::~ClientInputHost() { Reset();owner=nullptr; }
+ClientInputHost::~ClientInputHost() { discovery_.reset();Reset();Key_Shutdown();
+    con_restricted=sv_disableClientConsole=cl_bypassMouseInput=nullptr;owner=nullptr; }
 void ClientInputHost::ResetInput(int) { Current().Reset(); }
 void ClientInputHost::Reset() {
-    Key_ClearStates(0);CL_ClearKeys(0);
+    runtime_.ClearCommands();Key_ClearStates(0);runtime_.ClearCommands();CL_ClearKeys(0);
     std::memset(clients[0].mouseDx,0,sizeof(clients[0].mouseDx));
     std::memset(clients[0].mouseDy,0,sizeof(clients[0].mouseDy));
     ++resets_;
@@ -89,7 +96,7 @@ void ClientInputHost::ConsoleToggleOutput() { Unavailable("console output expans
 bool ClientInputHost::ConsoleCancelAutoComplete() { return false; }
 void ClientInputHost::ConsoleAllowAutoComplete(bool) { Unavailable("console autocomplete"); }
 void ClientInputHost::ConsoleKey(int client,int key) {
-    if(key==K_ENTER || key==K_KP_ENTER) { Unavailable("console command execution");return; }
+    if(key==K_ENTER || key==K_KP_ENTER) { runtime_.Queue(g_consoleField.buffer);runtime_.Queue("\n");Field_Clear(&g_consoleField);return; }
     if(key==K_TAB) { Unavailable("console autocomplete");return; }
     Field_KeyDownEvent(client,&scrPlaceFull,&g_consoleField,key);
     FieldLayout(&scrPlaceFull,&g_consoleField);
@@ -109,7 +116,9 @@ bool ClientInputHost::ScoreboardDisplayed(int) { throw std::runtime_error("score
 bool ClientInputHost::ScoreboardInput(int,int) { throw std::runtime_error("scoreboard unavailable"); }
 void ClientInputHost::MessageKey(int,int) { Unavailable("in-game chat"); }
 const char *ClientInputHost::KeyName(int,int) { return "unbound input"; }
-void ClientInputHost::QueueCommand(int,const char*) { Unavailable("binding command execution"); }
+void ClientInputHost::QueueCommand(int client,const char *text) {
+    if(client!=0)throw std::out_of_range("local client");runtime_.Queue(text);
+}
 void ClientInputHost::FieldLayout(const ScreenPlacement*,field_t *field) {
     // Explicit terminal-cell layout, not fabricated engine font/GPU metrics.
     const int length=std::strlen(field->buffer),columns=std::max(1,field->widthInPixels/8);
@@ -118,10 +127,46 @@ void ClientInputHost::FieldLayout(const ScreenPlacement*,field_t *field) {
     if(field->cursor-field->scroll>=columns)field->scroll=field->cursor-columns+1;
     field->drawWidth=std::min(columns,length-field->scroll);
 }
+void ClientInputHost::EchoCommand() {
+    std::printf("echo");for(int i=1;i<Cmd_Argc();++i)std::printf(" %s",Cmd_Argv(i));std::puts("");
+}
+void ClientInputHost::StatusCommand() {
+    auto &host=Current();std::printf("status tick=%llu held=%d connection=disconnected frame=unavailable\n",static_cast<unsigned long long>(host.Ticks()),host.Held());
+}
+void ClientInputHost::BindCommand() {
+    if(Cmd_Argc()!=3 || std::strlen(Cmd_Argv(1))!=1 || static_cast<unsigned char>(Cmd_Argv(1)[0])<32 || static_cast<unsigned char>(Cmd_Argv(1)[0])>126) {
+        std::fputs("bind requires one printable ASCII key and one quoted command\n",stderr);return;
+    }
+    Key_SetBinding(0,static_cast<unsigned char>(Cmd_Argv(1)[0]),const_cast<char*>(Cmd_Argv(2)));
+}
+void ClientInputHost::DiscoverCommand() {
+    if(Cmd_Argc()!=2) { std::fputs("discover requires explicit IPv4:port\n",stderr);return; }
+    try { Current().Discover(Cmd_Argv(1)); }catch(const std::invalid_argument &e) { std::fprintf(stderr,"discovery=invalid %s\n",e.what()); }
+}
+void ClientInputHost::RestartCommand() {
+    auto &host=Current();host.discovery_.reset();host.runtime_.RestartNetwork();
+}
+void ClientInputHost::Discover(const char *endpoint) {
+    auto candidate=std::make_unique<kisak::client::DiscoverySession>(endpoint,1000);
+    if(!candidate->Start()) { std::fprintf(stderr,"discovery=error %s\n",candidate->Detail().c_str());return; }
+    discovery_=std::move(candidate);std::puts("discovery=sent connected=false");
+}
+void ClientInputHost::Tick() {
+    uint32_t now=Sys_Milliseconds();frame_msec=std::min(uint32_t(200),now-previousTick_);previousTick_=now;
+    runtime_.Tick();
+    if(discovery_) {
+        discovery_->Poll();
+        auto state=discovery_->State();
+        if(state!=kisak::client::DiscoveryState::pending) {
+            const char *name=state==kisak::client::DiscoveryState::received?"received":state==kisak::client::DiscoveryState::timeout?"timeout":"error";
+            std::printf("discovery=%s discarded=%u connected=false\n",name,discovery_->Discarded());discovery_.reset();
+        }
+    }
+}
+
 }
 CL_InputServices &CL_GetInputServices() { return kisak::window::ClientInputHost::Current(); }
 char *Sys_GetClipboardData() {
     std::fputs("input service unavailable: clipboard UTF-8/legacy-byte conversion\n",stderr);
     return nullptr;
 }
-void Com_FreeEvent(char *pointer) { std::free(pointer); }

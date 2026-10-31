@@ -1,5 +1,7 @@
 #include <universal/q_shared.h>
 #include "cmd.h"
+#include "cmd_services.h"
+#include <climits>
 
 #include <universal/assertive.h>
 #include <universal/q_parse.h>
@@ -176,13 +178,28 @@ bind g "cmd use rocket ; +attack ; wait ; -attack ; cmd use blaster"
 ============
 */
 void Cmd_Wait_f(void) {
-	if (Cmd_Argc() == 2) {
-		cmd_wait = atoi(Cmd_Argv(1));
-	}
-	else {
-		cmd_wait = 1;
-	}
+    if (Cmd_Argc() == 1) {
+        cmd_wait = 1;
+        return;
+    }
+    if (Cmd_Argc() == 2) {
+        const char *text = Cmd_Argv(1);
+        int value = 0;
+        bool valid = *text != '\0';
+        for (const char *p = text; valid && *p; ++p) {
+            if (*p < '0' || *p > '9' || value > (INT_MAX - (*p - '0')) / 10)
+                valid = false;
+            else
+                value = value * 10 + (*p - '0');
+        }
+        if (valid) {
+            cmd_wait = value;
+            return;
+        }
+    }
+    Com_Printf(CON_CHANNEL_SYSTEM, "wait [non-negative frame count]\n");
 }
+
 /*
 ===============
 Cmd_Vstr_f
@@ -492,11 +509,19 @@ void Cmd_Dumpraw_f(void)
 }
 // avail end
 
+void Cmd_InitCore()
+{
+    Cmd_ResetArgs(&cmd_args, &cmd_argsPrivate);
+    Cmd_ResetArgs(&sv_cmd_args, &sv_cmd_argsPrivate);
+    Cmd_AddCommandInternal("cmdlist", Cmd_List_f, &Cmd_List_f_VAR);
+    Cmd_AddCommandInternal("wait", Cmd_Wait_f, &Cmd_Wait_f_VAR);
+}
+
 void Cmd_Init()
 {
-	Cmd_ResetArgs(&cmd_args, &cmd_argsPrivate);
-	Cmd_ResetArgs(&sv_cmd_args, &sv_cmd_argsPrivate);
-	Cmd_AddCommandInternal("cmdlist", Cmd_List_f, &Cmd_List_f_VAR);
+    Cmd_ResetArgs(&cmd_args, &cmd_argsPrivate);
+    Cmd_ResetArgs(&sv_cmd_args, &sv_cmd_argsPrivate);
+    Cmd_AddCommandInternal("cmdlist", Cmd_List_f, &Cmd_List_f_VAR);
 	Cmd_AddCommandInternal("exec", Cmd_Exec_f, &Cmd_Exec_f_VAR);
 	Cmd_AddCommandInternal("vstr", Cmd_Vstr_f, &Cmd_Vstr_f_VAR);
 	Cmd_AddCommandInternal("wait", Cmd_Wait_f, &Cmd_Wait_f_VAR);
@@ -557,17 +582,7 @@ void __cdecl TRACK_cmd()
 
 void __cdecl _Cmd_Wait_f()
 {
-    const char *v0; // eax
-
-    if (Cmd_Argc() == 2)
-    {
-        v0 = Cmd_Argv(1);
-        cmd_wait = atoi(v0);
-    }
-    else
-    {
-        cmd_wait = 1;
-    }
+    Cmd_Wait_f();
 }
 
 void __cdecl Cbuf_Init()
@@ -606,7 +621,7 @@ void __cdecl Cbuf_AddText(int32_t  localClientNum, const char *text)
     {
         memcpy_noncrt(&cmd_text->data[cmd_text->cmdsize], text, length + 1);
         cmd_text->cmdsize += length;
-        Scr_MonitorCommand(text);
+        Cmd_GetServices().Monitor(text);
     }
     else
     {
@@ -668,6 +683,29 @@ void __cdecl Cbuf_AddServerText_f()
 
 static cmd_function_s *sv_cmd_functions;
 
+void Cbuf_Clear(int localClientNum)
+{
+    iassert(localClientNum == 0);
+    Sys_EnterCriticalSection(CRITSECT_CBUF);
+    iassert(!cmd_insideCBufExecute[localClientNum]);
+    cmd_textArray[localClientNum].cmdsize = 0;
+    cmd_wait = 0;
+    Sys_LeaveCriticalSection(CRITSECT_CBUF);
+}
+
+void Cmd_ShutdownCore()
+{
+    iassert(cmd_args.nesting == -1 && sv_cmd_args.nesting == -1);
+    Cbuf_Clear(0);
+    Sys_EnterCriticalSection(CRITSECT_CBUF);
+    sv_cmd_text.cmdsize = 0;
+    cmd_functions = nullptr;
+    sv_cmd_functions = nullptr;
+    Cmd_ResetArgs(&cmd_args, &cmd_argsPrivate);
+    Cmd_ResetArgs(&sv_cmd_args, &sv_cmd_argsPrivate);
+    Sys_LeaveCriticalSection(CRITSECT_CBUF);
+}
+
 void __cdecl Cmd_ExecuteServerString(char *text)
 {
     const char *arg0; // [esp+0h] [ebp-Ch]
@@ -675,21 +713,31 @@ void __cdecl Cmd_ExecuteServerString(char *text)
    // if (!PbTrapPreExecCmd(text)) // LWSS: Punk buster
     {
         SV_Cmd_TokenizeString(text);
-        if (SV_Cmd_Argc())
+        // No nontrivial automatic cleanup object may cross Com_Error's
+        // legacy longjmp. Explicit catch cleanup supports throwing hosts.
+        try
         {
-            arg0 = SV_Cmd_Argv(0);
-            for (cmd_function_s *itr= sv_cmd_functions; itr; itr = itr->next)
+            if (SV_Cmd_Argc())
             {
-                if (!I_stricmp(arg0, itr->name))
+                arg0 = SV_Cmd_Argv(0);
+                for (cmd_function_s *itr= sv_cmd_functions; itr; itr = itr->next)
                 {
-                    //*prev = cmd->next;
-                    //cmd->next = sv_cmd_functions;
-                    //sv_cmd_functions = cmd;
-                    if (itr->function)
-                        itr->function();
-                    break;
+                    if (!I_stricmp(arg0, itr->name))
+                    {
+                        //*prev = cmd->next;
+                        //cmd->next = sv_cmd_functions;
+                        //sv_cmd_functions = cmd;
+                        if (itr->function)
+                            itr->function();
+                        break;
+                    }
                 }
             }
+        }
+        catch (...)
+        {
+            SV_Cmd_EndTokenizedString();
+            throw;
         }
         SV_Cmd_EndTokenizedString();
     }
@@ -714,8 +762,15 @@ void __cdecl Cbuf_SV_Execute()
             if ((v0 & 1) == 0 && src[count] == 59 || src[count] == 10 || src[count] == 13)
                 break;
         }
-        if (count >= 4095)
-            count = 4095;
+        const bool oversized = count >= sizeof(dst);
+        const int consumed = count == sv_cmd_text.cmdsize ? count : count + 1;
+        if (oversized)
+        {
+            sv_cmd_text.cmdsize -= consumed;
+            memmove(src, src + consumed, sv_cmd_text.cmdsize);
+            Com_PrintError(CON_CHANNEL_ERROR, "Cbuf_SV_Execute: oversized command discarded\n");
+            continue;
+        }
         memcpy((uint8_t *)dst, src, count);
         dst[count] = 0;
         if (count == sv_cmd_text.cmdsize)
@@ -729,8 +784,8 @@ void __cdecl Cbuf_SV_Execute()
             memmove(src, &src[counta], sv_cmd_text.cmdsize);
         }
 #ifndef KISAK_RADIANT
-        SV_WaitServer();
-        iassert( !com_inServerFrame );
+        Cmd_GetServices().WaitServer();
+        iassert( !Cmd_GetServices().InServerFrame() );
 #endif
         Cmd_ExecuteServerString(dst);
     }
@@ -763,7 +818,7 @@ void __cdecl Cbuf_ExecuteBuffer(int32_t  localClientNum, int32_t  controllerInde
 {
     char v3; // [esp+10h] [ebp-1018h]
     int32_t  v4; // [esp+14h] [ebp-1014h]
-    char dst[4100]; // [esp+18h] [ebp-1010h] BYREF
+    char dst[4096]; // [esp+18h] [ebp-1010h] BYREF
     uint32_t count; // [esp+1020h] [ebp-8h]
     uint8_t *src; // [esp+1024h] [ebp-4h]
 
@@ -780,8 +835,14 @@ void __cdecl Cbuf_ExecuteBuffer(int32_t  localClientNum, int32_t  controllerInde
             if ((v3 & 1) == 0 && src[count] == 59 || src[count] == 10 || src[count] == 13)
                 break;
         }
-        if ((int32_t )count >= 4095)
-            count = 4095;
+        if (count >= sizeof(dst))
+        {
+            const uint32_t consumed = count == v4 ? count : count + 1;
+            src += consumed;
+            v4 -= consumed;
+            Com_Printf(CON_CHANNEL_SYSTEM, "Cbuf_ExecuteBuffer: oversized command discarded\n");
+            continue;
+        }
         memcpy((uint8_t *)dst, src, count);
         dst[count] = 0;
         if (count != v4)
@@ -804,7 +865,16 @@ void __cdecl Cbuf_Execute(int32_t  localClientNum, int32_t  controllerIndex)
             "!cmd_insideCBufExecute[localClientNum]",
             "Nesting Cbuf_Execute() is not allowed.");
     cmd_insideCBufExecute[localClientNum] = 1;
-    Cbuf_ExecuteInternal(localClientNum, controllerIndex);
+    try
+    {
+        Cbuf_ExecuteInternal(localClientNum, controllerIndex);
+    }
+    catch (...)
+    {
+        cmd_insideCBufExecute[localClientNum] = 0;
+        throw;
+    }
+    // Preserve the original server-phase flag value on successful execution.
     cmd_insideCBufExecute[localClientNum] = 0;
     Cbuf_SV_Execute();
 }
@@ -836,8 +906,15 @@ void __cdecl Cbuf_ExecuteInternal(int32_t  localClientNum, int32_t  controllerIn
             if ((v2 & 1) == 0 && src[count] == 59 || src[count] == 10 || src[count] == 13)
                 break;
         }
-        if (count >= 4095)
-            count = 4095;
+        const bool oversized = count >= sizeof(dst);
+        const int consumed = count == v3->cmdsize ? count : count + 1;
+        if (oversized)
+        {
+            v3->cmdsize -= consumed;
+            memmove(src, src + consumed, v3->cmdsize);
+            Com_PrintError(CON_CHANNEL_ERROR, "Cbuf_Execute: oversized command discarded\n");
+            continue;
+        }
         memcpy((uint8_t *)dst, src, count);
         dst[count] = 0;
         if (count == v3->cmdsize)
@@ -1258,70 +1335,79 @@ void __cdecl Cmd_ExecuteSingleCommand(int32_t  localClientNum, int32_t  controll
     //if (!PbTrapPreExecCmd(text))
     {
         Cmd_TokenizeString(text);
-        if (Cmd_Argc())
+        // Keep the full engine's nonlocal Com_Error path free of added
+        // nontrivial automatic destructors; it uses Cmd_ComErrorCleanup.
+        try
         {
-            cmd_args.localClientNum[cmd_args.nesting] = localClientNum;
-            cmd_args.controllerIndex[cmd_args.nesting] = controllerIndex;
-#ifdef KISAK_SP
-            Cmd_CheckNotify();
-#endif
-            arg0 = Cmd_Argv(0);
-            for (itr = cmd_functions; itr->next; itr = itr->next)
+            if (Cmd_Argc())
             {
-                if (!I_stricmp(arg0, itr->name))
+                cmd_args.localClientNum[cmd_args.nesting] = localClientNum;
+                cmd_args.controllerIndex[cmd_args.nesting] = controllerIndex;
+    #ifdef KISAK_SP
+                Cmd_CheckNotify();
+    #endif
+                arg0 = Cmd_Argv(0);
+                for (itr = cmd_functions; itr; itr = itr->next)
                 {
-                    //prev->next = cmd->next;
-                    //cmd->next = cmd_functions;
-                    //cmd_functions = cmd;
-                    if (itr->function)
+                    if (!I_stricmp(arg0, itr->name))
                     {
-                        if (itr->function == Cbuf_AddServerText_f)
+                        //prev->next = cmd->next;
+                        //cmd->next = cmd_functions;
+                        //cmd_functions = cmd;
+                        if (itr->function)
                         {
-#ifndef KISAK_RADIANT
-                            SV_WaitServer();
-                            iassert( !com_inServerFrame );
-#endif
-                            Cmd_ExecuteServerString(text);
+                            if (itr->function == Cbuf_AddServerText_f)
+                            {
+    #ifndef KISAK_RADIANT
+                                Cmd_GetServices().WaitServer();
+                                iassert( !Cmd_GetServices().InServerFrame() );
+    #endif
+                                Cmd_ExecuteServerString(text);
+                            }
+                            else
+                            {
+                                itr->function();
+                            }
+                            goto LABEL_26;
                         }
-                        else
-                        {
-                            itr->function();
-                        }
-                        goto LABEL_26;
+                        break;
                     }
-                    break;
                 }
-            }
 
-            //if (!I_strnicmp(text, "pb_", 3))
-            //{
-            //    if (I_strnicmp(text + 3, "sv_", 3))
-            //    {
-            //        PbClAddEvent(14, strlen(text) + 1, text);
-            //    }
-            //    else
-            //    {
-            //        PbSvAddEvent(14, -1, strlen(text) + 1, text);
-            //    }
-            //}
-            //else
-            {
-                if (!Dvar_Command() && (!com_sv_running || !com_sv_running->current.enabled || !SV_GameCommand()))
+                //if (!I_strnicmp(text, "pb_", 3))
+                //{
+                //    if (I_strnicmp(text + 3, "sv_", 3))
+                //    {
+                //        PbClAddEvent(14, strlen(text) + 1, text);
+                //    }
+                //    else
+                //    {
+                //        PbSvAddEvent(14, -1, strlen(text) + 1, text);
+                //    }
+                //}
+                //else
                 {
-#if defined(__linux__) && defined(KISAK_DEDICATED)
-                    Com_Printf(CON_CHANNEL_SYSTEM, "Unknown command: %s\n", Cmd_Argv(0));
-                    Cmd_EndTokenizedString();
-                    return;
-#elif !defined(KISAK_RADIANT)
-                    CL_ForwardCommandToServer(localClientNum, text);
-                    Cmd_EndTokenizedString();
-                    return;
-#endif
+                    if (!Cmd_GetServices().DvarCommand() && (!Cmd_GetServices().ServerRunning() || !Cmd_GetServices().ServerGameCommand()))
+                    {
+    #if defined(__linux__) && defined(KISAK_DEDICATED)
+                        Com_Printf(CON_CHANNEL_SYSTEM, "Unknown command: %s\n", Cmd_Argv(0));
+                        goto LABEL_26;
+    #elif !defined(KISAK_RADIANT)
+                        Cmd_GetServices().Forward(localClientNum, text);
+                        goto LABEL_26;
+    #endif
+                    }
                 }
-            }
 
+            }
+        LABEL_26:
+            ;
         }
-    LABEL_26:
+        catch (...)
+        {
+            Cmd_EndTokenizedString();
+            throw;
+        }
         Cmd_EndTokenizedString();
     }
 }

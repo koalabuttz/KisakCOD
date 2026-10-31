@@ -1,11 +1,18 @@
-// Standalone diagnostic host services. This is not Com_Init/CL_Frame: no console,
-// game clients, server, profiler, VM or engine allocator is initialized here.
+// Shared standalone runtime services: real command/dvar/NET lifecycle,
+// no renderer, game server, VM, profiler or full Com_Init/CL_Frame.
 #include "diagnostic_host.h"
 #include <universal/q_shared.h>
 #include <universal/com_memory.h>
 #include <qcommon/qcommon.h>
 #include <qcommon/net_chan_mp.h>
 #include <qcommon/threads.h>
+#include <win32/win_local.h>
+#include <qcommon/cmd.h>
+#include <qcommon/cmd_services.h>
+#include <client_mp/cl_auth.h>
+#include <linux/net_internal.h>
+#include <linux/sys_events.h>
+#include <stdexcept>
 #include <universal/assertive.h>
 #include <algorithm>
 #include <chrono>
@@ -25,7 +32,7 @@ DIAGNOSTIC_LOG(Com_PrintError)
 DIAGNOSTIC_LOG(Com_PrintWarning)
 void Com_Error(errorParm_t, const char *format, ...) {
     va_list args; va_start(args,format); log(format,args); va_end(args);
-    std::exit(5);
+    throw std::runtime_error("engine runtime error (see diagnostic)");
 }
 void MyAssertHandler(const char *file, int line, int, const char *format, ...) {
     std::fprintf(stderr,"Assertion at %s:%d: ",file,line);
@@ -48,20 +55,24 @@ char *Z_VirtualAlloc(int size, const char *, int) {
 }
 void Z_VirtualFree(void *memory) { std::free(memory); }
 void _copyDWord(uint32_t *dest, uint32_t value, uint32_t count) { std::fill_n(dest,count,value); }
-// No console exists in this host. Core dvar registration/validation is production.
-void Dvar_AddCommands() {}
+// No game console UI exists. Core dvar registration and commands are production.
+void Dvar_AddCoreCommands();
+void Dvar_AddCommands() { Dvar_AddCoreCommands(); }
 bool Com_LogFileOpen() { return false; }
 // The diagnostic never hosts a server or enables its authentication exceptions.
 bool SV_UnverifiedGuidsEnabled() { return false; }
 void CL_Netchan_AddOOBProfilePacket(int, int) {}
 void SV_Netchan_AddOOBProfilePacket(int) {}
 
-void Diagnostic_InitHost() {
-    Sys_InitMainThread();
+static void ClearOwnedDvarPointers() {
+    com_dedicated=com_sv_running=nullptr;
+    showpackets=fakelag_current=fakelag_target=fakelag_currentjitter=fakelag_jitter=fakelag_packetloss=nullptr;
+}
+static void InitializeDvars() {
     Dvar_Init();
-    com_dedicated = Dvar_RegisterInt("dedicated",0,DvarLimits(0,2),DVAR_INIT,"Standalone client diagnostic");
+    com_dedicated = Dvar_RegisterInt("dedicated",0,DvarLimits(0,2),DVAR_INIT,"Standalone client runtime");
     com_sv_running = Dvar_RegisterBool("sv_running",false,DVAR_INIT,"No hosted server");
-    // Do not claim full Netchan_Init: there is no console/profile command host.
+    // Do not claim full Netchan_Init: network profile commands are not hosted.
     // Register the production OOB path's controls with their standard defaults.
     showpackets = Dvar_RegisterInt("showpackets",0,DvarLimits(0,2),DVAR_NOFLAG,"Show packets");
     fakelag_current = Dvar_RegisterInt("fakelag_current",0,DvarLimits(0,999),DVAR_NOFLAG,"Current fake lag value");
@@ -76,4 +87,58 @@ void Diagnostic_InitHost() {
     Dvar_SetInt(port,0);
 }
 
-void Diagnostic_ShutdownHost() { Dvar_Shutdown(); }
+
+
+void Z_Free(void *memory,int) { std::free(memory); }
+void ReplaceString(const char **target,const char *text) {
+    const char *replacement=CopyString(text);FreeString(*target);*target=replacement;
+}
+void Com_FreeEvent(char *memory) { std::free(memory); }
+
+namespace kisak::client {
+namespace { Runtime *owner=nullptr; }
+Runtime &Runtime::Current() {
+    if(!owner)throw std::logic_error("client runtime unavailable");
+    return *owner;
+}
+Runtime::Runtime() {
+    if(owner)throw std::logic_error("one client runtime per process");
+    Sys_InitializeCriticalSections();Sys_InitMainThread();
+    Cmd_InitCore();Cbuf_Init();
+    try {
+        InitializeDvars();NET_Init();owner=this;
+        std::puts("runtime=ready commands=engine network=engine-udp script_monitor=unavailable connected=false");
+    } catch(...) {
+        NET_Shutdown();Dvar_Shutdown();Cmd_ShutdownCore();ClearOwnedDvarPointers();throw;
+    }
+}
+Runtime::~Runtime() {
+    ClearCommands();Sys_ShutdownEvents();CL_CancelPlatformAuthTicket();
+    NET_Shutdown();Cmd_ShutdownCore();Dvar_Shutdown();
+    ClearOwnedDvarPointers();owner=nullptr;
+}
+void Runtime::Tick() {
+    ++ticks_;
+    try { Cbuf_Execute(0,0); }catch(...) { ClearCommands();throw; }
+}
+void Runtime::Queue(const char *text) { Cbuf_AddText(0,text); }
+void Runtime::ClearCommands() { Cbuf_Clear(0); }
+void Runtime::RestartNetwork() { NET_Shutdown();NET_Init();std::puts("network=restarted connected=false"); }
+}
+namespace {
+class RuntimeCommands final : public CmdServices {
+public:
+    // No script VM monitor is installed. Command execution itself is production.
+    void Monitor(const char *) override {}
+    void WaitServer() override { throw std::runtime_error("server dispatch unavailable in client runtime"); }
+    bool InServerFrame() override { return false; }
+    int DvarCommand() override { return Dvar_Command(); }
+    bool ServerRunning() override { return false; }
+    bool ServerGameCommand() override { throw std::runtime_error("server game commands unavailable"); }
+    void Forward(int,const char *text) override { std::fprintf(stderr,"Unknown command (not forwarded): %s\n",text); }
+};
+}
+CmdServices &Cmd_GetServices() {
+    static RuntimeCommands services;
+    return services;
+}

@@ -245,10 +245,10 @@ Compiling eight client TUs is not a client. In rough order of weight:
 4. **The rest of the client TUs**, each of which needs its own compile proof
    before it can join the object library.
 
-The next connection milestone needs a supported Linux ticket provider and an
-engine host that drives the real connection receive/state loop. The diagnostic
-does not supply those services. Keep full-TU compile checks and production runtime
-tests while integrating that host.
+The next connection milestone needs a supported Linux ticket provider and a
+shared packet dispatcher driving the real connection receive/state loop. Shared
+input/command/network startup now exists, but discovery does not supply game
+admission or full frame services. Keep full-TU and runtime checks while integrating them.
 
 ## Relationship to the dedicated build
 
@@ -289,12 +289,12 @@ or connect packet is sent. Linux currently prints `auth=unavailable`; successful
 discovery exits **3**, timeout **4**, transport failure **5**, invalid arguments
 **2**, and help **0**. Every status explicitly states `connected=false`.
 
-The diagnostic now uses production `NET_Init`, `NET_OutOfBandPrint`,
+The diagnostic uses the shared runtime and production `NET_Init`, `NET_OutOfBandPrint`,
 `NET_GetClientPacket`, `NET_Sleep`, `NET_Shutdown`, dvar registration and Linux
 TLS/locking. It prints `network=engine-udp`. “Sent” means the engine API accepted
 the query; only a valid reply proves discovery. It still does not host `CL_Frame`
-or the connection dispatcher. Logging, allocation, clock and absent console/profile
-services are explicit diagnostic adapters. The real receive/resend lifecycle runs
+or the connection dispatcher. Logging, allocation and clock are shared runtime services; game console UI and
+network profiling remain unavailable. The real receive/resend lifecycle runs
 in a separate fixture with controlled game/transport services, not inside the
 runnable discovery path. See the [lifecycle checkpoint](progress-2026-10-31-client-lifecycle.md)
 for confirmed bugs, valid-wire coverage, render-thread work and remaining boundaries.
@@ -337,7 +337,8 @@ locking. Its consumer is an explicit reporting recorder, not `CL_KeyEvent`,
 `CL_CharEvent`, or `CL_Frame`. The mouse callback has the actual `CL_MouseEvent`
 signature; the mandatory reset callback has the `Key_ClearStates` signature.
 A future game host must supply those consumers and drive the engine lifecycle.
-The discovery diagnostic and window shell are still separate programs.
+The platform recorder remains separate. The production input frontend now shares
+command/network startup with the discovery frontend; see the latest checkpoint below.
 
 Focus loss, minimize and shutdown discard queued key/text events, preserve queued
 console payload ownership/order, and reset consumer input state. This recovers
@@ -362,8 +363,8 @@ Run `KisakCOD-client-input --trace --relative --run-ms 10000` for actual engine
 key/character/mouse handling and disconnected field editing reported in stdout.
 It uses real `playerKeys` and field state; the earlier `KisakCOD-client-window`
 remains the platform-only recorder. The new host still presents a plain surface,
-not game UI. Its terminal-cell layout and unavailable console execution/clipboard/
-autocomplete services are explicit. The normal game service adapter preserves the
+not game UI. Its terminal-cell layout and unavailable clipboard/autocomplete services are
+explicit; local command execution is now provided by the shared runtime below. The normal game service adapter preserves the
 existing subsystem calls.
 
 Focus/quit clear actual key, button and mouse state; each input tick consumes
@@ -375,3 +376,23 @@ checker selects the new path with `--engine-input`.
 
 See [the input-host checkpoint](progress-2026-10-31-client-input-host.md) for
 implementation boundaries, build commands, evidence and remaining startup work.
+
+
+### Shared command/network startup
+
+`KisakCOD-client-input` now executes local console text through actual Cmd/Cbuf and
+owns the same `Runtime` used by `KisakCOD-client-headless`. The input loop can run
+read-only discovery concurrently with window events using `--server IPv4:port` or
+`discover IPv4:port` in the editor. It never executes response text or advances
+admission state. Use `echo`, `status`, `wait`, core dvar commands, `net_restart`,
+one-ASCII-key `bind`, and registered attack/forward commands for local diagnostic
+behavior. Unknown commands report rejection; file/config execution and a full
+console UI are not imported. Focus/quit discard delayed command actions and wait
+state; bindings are freed before shared runtime teardown.
+
+The window checker now includes `KisakCOD-client-command-test` and
+`KisakCOD-client-runtime-test`. External X11 integration adds `--commands` to its
+`--engine-input --relative` path. Both frontends still report disconnected state
+and unavailable game frames/authentication. See the
+[shared runtime checkpoint](progress-2026-10-31-client-command-host.md) for the
+reproduced command bugs, shared ownership, real socket tests and remaining limits.

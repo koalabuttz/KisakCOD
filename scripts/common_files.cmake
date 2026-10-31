@@ -374,6 +374,8 @@ set(PHYSICS_ODE
 )
 
 set(QCOMMON
+    "${SRC_DIR}/qcommon/cmd_services.cpp"
+    "${SRC_DIR}/qcommon/cmd_services.h"
     "${SRC_DIR}/qcommon/field.cpp"
     "${SRC_DIR}/qcommon/bitarray.h"
     "${SRC_DIR}/qcommon/cmd.cpp"
@@ -537,6 +539,7 @@ set(UNIVERSAL
     "${SRC_DIR}/universal/com_stringtable.cpp"
     "${SRC_DIR}/universal/dvar.cpp"
     "${SRC_DIR}/universal/dvar_cmds.cpp"
+    "${SRC_DIR}/universal/dvar_game_commands.cpp"
     "${SRC_DIR}/universal/fft.cpp"
     "${SRC_DIR}/universal/fft.h"
     "${SRC_DIR}/universal/memfile.cpp"

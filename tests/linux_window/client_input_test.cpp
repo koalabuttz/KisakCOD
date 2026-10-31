@@ -1,19 +1,20 @@
-// Real SDL -> engine queue -> CL input consumers. IN_Attack_Down setup below is
-// a labelled command-argument fixture, not a running command executor/game frame.
+// Real SDL -> engine queue -> CL input consumers, with real Cmd/Cbuf dispatch.
+// No game frame or connected state is fabricated.
 #include <linux/client/window/client_input_host.h>
 #include <linux/sys_events.h>
 #include <client/client.h>
 #include <client_mp/client_mp.h>
 #include <ui/keycodes.h>
+#include <qcommon/cmd.h>
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
 #include <type_traits>
+extern CmdText cmd_textArray[1];
 
-uint32_t frame_msec=16; // explicit IN_KeyUp fixture clock, not a running game frame
-const char *Cmd_Argv(int n) { return n==1?"97":n==2?"100":""; }
 namespace {
 int checks, failures;
+
 void Check(bool ok,const char *name) { ++checks;failures+=!ok;std::printf("%s: %s\n",ok?"PASS":"FAIL",name); }
 void Push(SDL_Event event) { if(SDL_PushEvent(&event)!=1)throw std::runtime_error(SDL_GetError()); }
 void Window(uint32_t id,int type,int a=0,int b=0) { SDL_Event e{};e.type=SDL_WINDOWEVENT;e.window.windowID=id;e.window.event=type;e.window.data1=a;e.window.data2=b;Push(e); }
@@ -30,7 +31,7 @@ int main() {
             kisak::window::WindowHost host(input,{});
             auto pump=[&] { host.Pump(1);Drain(input); };
             Window(host.Id(),SDL_WINDOWEVENT_FOCUS_GAINED);pump();
-            Check(clientUIActives[0].connectionState==CA_DISCONNECTED && !cls.uiStarted && !clientUIActives[0].isRunning,"real input starts disconnected with game UI/frame uninitialized");
+            Check(clientUIActives[0].connectionState==CA_DISCONNECTED && !cls.uiStarted && !clientUIActives[0].isRunning && !playerKeys[0].keys['b'].binding,"real input starts disconnected with game UI/frame uninitialized");
             bool rejected=false;try { kisak::window::ClientInputHost duplicate; }catch(const std::logic_error&) { rejected=true; }
             Check(rejected,"second input owner rejected");
             Key(host.Id(),SDL_SCANCODE_A,true);Key(host.Id(),SDL_SCANCODE_A,true,true);pump();
@@ -48,9 +49,9 @@ int main() {
             const auto sample=input.ConsumeMouse();
             Check(sample.x==7 && sample.y==-4 && input.ConsumeMouse().x==0 && clients[0].mouseDy[0]==0,"input tick consumes real mouse deltas without a game frame");
             Push(mouse);pump();
-            IN_Attack_Down();int buttons=0;CL_UpdateCmdButton(0,&buttons,14,1);
-            Check(buttons==1,"fixture invokes actual IN_Attack_Down before reset");
-            IN_Attack_Up();IN_Attack_Down(); // leave a fresh wasPressed pulse unconsumed
+            Cbuf_AddText(0,"+attack 97 100\n");input.Tick();int buttons=0;CL_UpdateCmdButton(0,&buttons,14,1);
+            Check(buttons==1,"real command executor invokes IN_Attack_Down before reset");
+            Cbuf_AddText(0,"-attack 97 100;+attack 97 100\n");input.Tick(); // leave fresh pulse unconsumed
             Window(host.Id(),SDL_WINDOWEVENT_FOCUS_LOST);pump();buttons=0;CL_UpdateCmdButton(0,&buttons,14,1);
             Check(input.Held()==0 && !playerKeys[0].keys['a'].down && buttons==0 && clients[0].mouseDx[0]==0 && clients[0].mouseDy[0]==0,"focus reset clears real keys, action active/pulse and mouse history");
             Window(host.Id(),SDL_WINDOWEVENT_FOCUS_GAINED);Key(host.Id(),SDL_SCANCODE_A,false);Key(host.Id(),SDL_SCANCODE_A,true);pump();
@@ -61,13 +62,20 @@ int main() {
             Check(input.Held()==0 && !playerKeys[0].keys['a'].down && !std::strcmp(input.Text(),"za"),"overflowed key release and stale text recovered by focus boundary");
             Window(host.Id(),SDL_WINDOWEVENT_FOCUS_GAINED);pump();
             auto unsupported=input.Unsupported();Key(host.Id(),SDL_SCANCODE_RETURN,true);Key(host.Id(),SDL_SCANCODE_RETURN,false);pump();
-            Check(input.Unsupported()>unsupported && !std::strcmp(input.Text(),"za"),"command submission explicitly unavailable without pretending execution");
-            // Only release-side binding is reachable disconnected. It reports rejection;
-            // no command backlog or simulated CA_ACTIVE is introduced by this fixture.
-            playerKeys[0].keys['b'].binding=const_cast<char*>("+attack");unsupported=input.Unsupported();
+            Check(input.Unsupported()==unsupported && !*input.Text() && cmd_textArray[0].cmdsize>0,"console submission enters production command buffer");
+            // Disconnected down events remain console editing; real release binding
+            // semantics still enqueue the matching command without fake admission.
+            input.Tick();
+            Cbuf_AddText(0,"bind b \"+attack\"\n");input.Tick();unsupported=input.Unsupported();
             Key(host.Id(),SDL_SCANCODE_B,true);Key(host.Id(),SDL_SCANCODE_B,false);pump();
-            Check(input.Unsupported()>unsupported && clientUIActives[0].connectionState==CA_DISCONNECTED,"binding command rejected without fake admission");
-            playerKeys[0].keys['b'].binding=nullptr;
+            Check(input.Unsupported()==unsupported && cmd_textArray[0].cmdsize>0 && clientUIActives[0].connectionState==CA_DISCONNECTED,"real release binding queues command without fake admission");
+            input.Tick();
+            Cbuf_AddText(0,"wait 20;+attack 97 100\n");input.Tick();
+            Window(host.Id(),SDL_WINDOWEVENT_FOCUS_LOST);pump();input.Tick();buttons=0;CL_UpdateCmdButton(0,&buttons,14,1);
+            Check(buttons==0 && cmd_textArray[0].cmdsize==0,"focus cancels wait-delayed actions before they can reactivate input");
+            Window(host.Id(),SDL_WINDOWEVENT_FOCUS_GAINED);pump();
+            Cbuf_AddText(0,"+attack 97 100\n");input.Tick();buttons=0;CL_UpdateCmdButton(0,&buttons,14,1);
+            Check(buttons==1,"focus reset clears wait state so fresh commands execute");
             std::string reason;Check(!input.RequestFrame(reason) && reason.find("CL_Frame unavailable")!=std::string::npos,"frame request names unavailable production dependencies");
             Key(host.Id(),SDL_SCANCODE_W,true);pump();host.RequestQuit();
             Check(input.Held()==0 && !host.Running(),"quit clears actual held input before teardown");

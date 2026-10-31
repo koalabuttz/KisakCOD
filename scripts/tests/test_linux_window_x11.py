@@ -13,6 +13,10 @@ WM/Escape/SIGTERM/SIGINT teardown while a key is held. Repeated launches share
 one X server; they test process/window cleanup, not same-process host reuse.
 The host explicitly reports game-frame execution unavailable.
 
+Add --commands for real command-buffer execution across ticks, rejected local
+commands, loopback discovery and live network restart/cancellation. Replies are
+data only; no remote commands or authentication attempts are permitted.
+
 Pass --runner 'qemu-i386' when the client cannot execute directly. Configure any
 client libraries through that runner's environment (e.g. QEMU_SET_ENV), while
 --xdotool-library-path applies only to the host xdotool process.
@@ -114,11 +118,15 @@ def main():
     parser.add_argument("--relative", action="store_true", help="also verify OS relative-mouse capture lifecycle")
     parser.add_argument("--engine-input", action="store_true",
                         help="verify real disconnected client editor/state and repeated close/signal lifecycles")
+    parser.add_argument("--commands", action="store_true",
+                        help="also verify real console executor, local UDP discovery and network restart")
     parser.add_argument("--log-dir", type=Path)
     parser.add_argument("--timeout", type=float, default=10)
     args = parser.parse_args()
     if args.timeout <= 0 or not args.binary.is_file():
         parser.error("provide an existing shell binary and a positive timeout")
+    if args.commands and not args.engine_input:
+        parser.error("--commands requires --engine-input")
     logs = args.log_dir or Path(tempfile.mkdtemp(prefix="kisak-window-x11-"))
     logs.mkdir(parents=True, exist_ok=True)
     processes, streams = [], []
@@ -220,6 +228,11 @@ def main():
             wait_for(lambda: "editor text=a cursor=1 held=0\n" in read(trace)[offset:],
                      args.timeout, "production editor handled BackSpace", client)
             print("PASS: real client console editor insertion and BackSpace", flush=True)
+        command_checks = None
+        if args.commands:
+            from client_command_x11_checks import CommandChecks
+            command_checks = CommandChecks(xdo, wait_for, read, trace, client, args.timeout)
+            command_checks.run()
 
         offset = len(read(trace))
         if args.relative:
@@ -273,6 +286,8 @@ def main():
         print("PASS: real focus transfer clears held state and accepts a fresh press", flush=True)
 
         if args.engine_input:
+            if command_checks:
+                command_checks.prepare_shutdown()
             offset = len(read(trace))
             xdo("keydown", "z")
             wait_for(lambda: "key=122 down=1\n" in read(trace)[offset:] and
@@ -281,6 +296,8 @@ def main():
         offset = len(read(trace))
         request_window_close(display, window)
         summary = require_closed(client, trace, "main", window)
+        if command_checks:
+            command_checks.verify_shutdown()
         if args.engine_input:
             xdo("keyup", "z")
         if args.relative:

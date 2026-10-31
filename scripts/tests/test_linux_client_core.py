@@ -92,6 +92,8 @@ PLATFORM_RUNTIME_TUS = ("src/client_mp/cl_main_mp.cpp", "src/universal/q_shared.
 
 HEADLESS_RUNTIME_TUS = (
     "src/linux/client/headless_main.cpp", "src/linux/client/diagnostic_host.cpp",
+    "src/linux/client/discovery_session.cpp", "src/linux/sys_events.cpp",
+    "src/qcommon/cmd.cpp", "src/universal/dvar_cmds.cpp",
     "src/linux/net.cpp", "src/linux/sys_threads.cpp", "src/linux/sys_critical.cpp",
     "src/linux/sys_posix.cpp", "src/qcommon/net_chan_mp.cpp", "src/universal/dvar.cpp",
     "src/universal/q_shared.cpp", "src/universal/com_shared.cpp", "src/universal/com_math.cpp",
@@ -489,7 +491,7 @@ def check_default_build_has_no_client_targets(cxx, cc, timeout, build_timeout):
               "KisakCOD-client-packet-test" not in help_text)
         for name in ("KisakCOD-client-auth-test", "KisakCOD-client-headless",
                      "KisakCOD-client-receive-test", "KisakCOD-client-platform-test",
-                     "KisakCOD-client-window", "KisakCOD-window-platform", "KisakCOD-window-test", "KisakCOD-client-input", "KisakCOD-client-input-test", "KisakCOD-shutdown-signal-test"):
+                     "KisakCOD-client-window", "KisakCOD-window-platform", "KisakCOD-window-test", "KisakCOD-client-input", "KisakCOD-client-input-test", "KisakCOD-shutdown-signal-test", "KisakCOD-client-command-test", "KisakCOD-client-runtime-test"):
             check(f"default build exposes no {name} target", name not in help_text)
     finally:
         # TemporaryDirectory is uniquely named, so cleanup can only remove this

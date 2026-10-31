@@ -70,6 +70,25 @@ include(${SCRIPTS_DIR}/extern/tracy.cmake)
 # See docs/linux-client.md for the milestone boundary and what still blocks a
 # real native client.
 # ---------------------------------------------------------------------------
+set(KISAK_CLIENT_RUNTIME_SOURCES
+    "${SRC_DIR}/linux/client/diagnostic_host.cpp"
+    "${SRC_DIR}/linux/client/discovery_session.cpp"
+    "${SRC_DIR}/linux/net.cpp"
+    "${SRC_DIR}/linux/sys_threads.cpp"
+    "${SRC_DIR}/linux/sys_critical.cpp"
+    "${SRC_DIR}/linux/sys_posix.cpp"
+    "${SRC_DIR}/linux/sys_events.cpp"
+    "${SRC_DIR}/qcommon/cmd.cpp"
+    "${SRC_DIR}/qcommon/net_chan_mp.cpp"
+    "${SRC_DIR}/universal/dvar.cpp"
+    "${SRC_DIR}/universal/dvar_cmds.cpp"
+    "${SRC_DIR}/universal/q_shared.cpp"
+    "${SRC_DIR}/universal/com_shared.cpp"
+    "${SRC_DIR}/universal/com_math.cpp"
+    "${SRC_DIR}/client_mp/cl_auth.cpp"
+    "${SRC_DIR}/universal/base64.cpp"
+)
+
 if(KISAK_BUILD_LINUX_CLIENT_CORE)
     message(STATUS "----- KisakCOD native Linux Client core (opt-in) -----")
 
@@ -143,18 +162,7 @@ if(KISAK_BUILD_LINUX_CLIENT_CORE)
     # Kept below linux/client/ so the dedicated linux/*.cpp glob excludes main.
     add_executable(KisakCOD-client-headless
         "${SRC_DIR}/linux/client/headless_main.cpp"
-        "${SRC_DIR}/linux/client/diagnostic_host.cpp"
-        "${SRC_DIR}/linux/net.cpp"
-        "${SRC_DIR}/linux/sys_threads.cpp"
-        "${SRC_DIR}/linux/sys_critical.cpp"
-        "${SRC_DIR}/linux/sys_posix.cpp"
-        "${SRC_DIR}/qcommon/net_chan_mp.cpp"
-        "${SRC_DIR}/universal/dvar.cpp"
-        "${SRC_DIR}/universal/q_shared.cpp"
-        "${SRC_DIR}/universal/com_shared.cpp"
-        "${SRC_DIR}/universal/com_math.cpp"
-        "${SRC_DIR}/client_mp/cl_auth.cpp"
-        "${SRC_DIR}/universal/base64.cpp"
+        ${KISAK_CLIENT_RUNTIME_SOURCES}
     )
     target_link_libraries(KisakCOD-client-headless PRIVATE Threads::Threads)
     add_executable(KisakCOD-client-auth-test
@@ -187,8 +195,10 @@ if(KISAK_BUILD_LINUX_CLIENT_CORE)
         target_compile_definitions(${client_test} PRIVATE
             KISAK_MP KISAK_OPENAL RELEASE_ASSERTS
             _FILE_OFFSET_BITS=64 _GNU_SOURCE
-            TRACY_ENABLE TRACY_ON_DEMAND TRACY_ONLY_LOCALHOST
         )
+        if(NOT client_test STREQUAL "KisakCOD-client-headless")
+            target_compile_definitions(${client_test} PRIVATE TRACY_ENABLE TRACY_ON_DEMAND TRACY_ONLY_LOCALHOST)
+        endif()
         target_include_directories(${client_test} PRIVATE "${SRC_DIR}" "${DEPS_DIR}" "${tracy_SOURCE_DIR}/public")
         target_compile_options(${client_test} PRIVATE
             $<$<COMPILE_LANGUAGE:CXX>:-fms-extensions>
@@ -227,19 +237,26 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
         "${SRC_DIR}/client/cl_keys.cpp"
         "${SRC_DIR}/client_mp/cl_input.cpp"
         "${SRC_DIR}/qcommon/field.cpp"
-        "${SRC_DIR}/universal/q_shared.cpp"
     )
     add_executable(KisakCOD-client-input
         "${SRC_DIR}/linux/client/window/client_input_main.cpp"
         "${SRC_DIR}/linux/client/window/shutdown_signal.cpp"
-        ${KISAK_CLIENT_INPUT_SOURCES} ${KISAK_WINDOW_HOST_SERVICES})
+        ${KISAK_CLIENT_INPUT_SOURCES} ${KISAK_CLIENT_RUNTIME_SOURCES})
     add_executable(KisakCOD-client-input-test
         "${TESTS_DIR}/linux_window/client_input_test.cpp"
-        ${KISAK_CLIENT_INPUT_SOURCES} ${KISAK_WINDOW_HOST_SERVICES})
+        ${KISAK_CLIENT_INPUT_SOURCES} ${KISAK_CLIENT_RUNTIME_SOURCES})
+    add_executable(KisakCOD-client-command-test
+        "${TESTS_DIR}/linux_client_commands/command_core_test.cpp"
+        "${SRC_DIR}/qcommon/cmd.cpp"
+        "${SRC_DIR}/universal/q_shared.cpp"
+        "${SRC_DIR}/universal/com_shared.cpp")
+    add_executable(KisakCOD-client-runtime-test
+        "${TESTS_DIR}/linux_client_commands/runtime_lifecycle_test.cpp"
+        ${KISAK_CLIENT_RUNTIME_SOURCES})
     add_executable(KisakCOD-shutdown-signal-test
         "${SRC_DIR}/linux/client/window/shutdown_signal.cpp"
         "${TESTS_DIR}/linux_window/shutdown_signal_test.cpp")
-    foreach(window_target KisakCOD-window-platform KisakCOD-client-window KisakCOD-window-test KisakCOD-client-input KisakCOD-client-input-test KisakCOD-shutdown-signal-test)
+    foreach(window_target KisakCOD-window-platform KisakCOD-client-window KisakCOD-window-test KisakCOD-client-input KisakCOD-client-input-test KisakCOD-shutdown-signal-test KisakCOD-client-command-test KisakCOD-client-runtime-test)
         target_compile_features(${window_target} PRIVATE cxx_std_20)
         target_compile_definitions(${window_target} PRIVATE
             KISAK_MP KISAK_OPENAL RELEASE_ASSERTS _FILE_OFFSET_BITS=64 _GNU_SOURCE

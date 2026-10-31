@@ -1,12 +1,16 @@
 #pragma once
 #include "engine_input.h"
+#include <linux/client/diagnostic_host.h>
+#include <linux/client/discovery_session.h>
+#include <memory>
 #include <client/cl_input_services.h>
 #include <string>
 #include <qcommon/qcommon.h>
 #include <win32/win_local.h>
 
 namespace kisak::window {
-// One disconnected client input owner. No renderer, command executor or game frame.
+// One disconnected client input owner borrowing the shared command/network runtime.
+// No game renderer or game frame.
 class ClientInputHost : public EngineInput, public CL_InputServices {
 public:
     ClientInputHost();
@@ -16,6 +20,9 @@ public:
     ClientInputHost(ClientInputHost&&)=delete;
     ClientInputHost& operator=(ClientInputHost&&)=delete;
     void Dispatch(const sysEvent_t &event);
+    void Tick();
+    void Discover(const char *endpoint);
+    uint64_t Ticks() const { return runtime_.Ticks(); }
     void Resize(int width,int height) override;
     void OnFocus(bool focused) override;
     void OnQuit() override;
@@ -29,6 +36,14 @@ public:
     bool RequestFrame(std::string &reason) const;
     static ClientInputHost &Current();
 private:
+    kisak::client::Runtime runtime_;
+    std::unique_ptr<kisak::client::DiscoverySession> discovery_;
+    uint32_t previousTick_=0;
+    static void EchoCommand();
+    static void StatusCommand();
+    static void DiscoverCommand();
+    static void RestartCommand();
+    static void BindCommand();
     static int MouseInput(int,int,int,int);
     static void ResetInput(int);
     void Reset();
