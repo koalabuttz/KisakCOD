@@ -102,3 +102,15 @@ and a supported ticket provider before authenticating a headless connection;
 incoming gamestate and the engine event/frame loop remain separate integration
 steps. Discovery deliberately stops at that boundary rather than simulating
 successful credentials or admission.
+
+Final client commit: `3da5d07e` on `dot/client-headless-2026-10-31`.
+Its final aggregate checkers pass **251/251 in both Debug and RelWithDebInfo**.
+The root coordinator independently reran authentication/resend **20/20** and
+real socket/event tests **8/8**, including sustained malformed traffic deadline
+coverage. The client incremental patch is `headless-incremental.patch`; its
+independent cumulative patch is `client-cumulative-from-f8bde51a.patch`, both in
+`/workspace/kisakcod-client-headless-results/`. Full client startup's compile probe
+with existing headers reaches the Windows `_putenv` dependency; preserving copy
+semantics is necessary for a future Linux port, as plain POSIX `putenv` would
+retain a stack-backed string. No attempt to substitute insecure authentication
+or claim an engine frame/receive loop was made.
