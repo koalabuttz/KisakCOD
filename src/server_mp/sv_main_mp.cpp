@@ -887,15 +887,17 @@ void __cdecl SV_CheckTimeouts()
     {
         if (drop->lastPacketTime > svs.time)
             drop->lastPacketTime = svs.time;
-        if (!drop->bIsTestClient)
+        // Bots never send packets, but dropped bot slots still need the normal
+        // zombie grace period and reclamation before they can be reused.
+        if (drop->header.state == CS_ZOMBIE && drop->lastPacketTime < zombiepoint)
         {
-            if (drop->header.state == CS_ZOMBIE && drop->lastPacketTime < zombiepoint)
-            {
-                Com_DPrintf(CON_CHANNEL_SERVER, "Going from CS_ZOMBIE to CS_FREE for client #%i\n", clientNum);
-                drop->header.state = CS_FREE;
-                drop->lastPacketTime = 0;
-            }
-            else if (drop->header.state == CS_ACTIVE && drop->lastPacketTime < droppoint)
+            Com_DPrintf(CON_CHANNEL_SERVER, "Going from CS_ZOMBIE to CS_FREE for client #%i\n", clientNum);
+            drop->header.state = CS_FREE;
+            drop->lastPacketTime = 0;
+        }
+        else if (!drop->bIsTestClient)
+        {
+            if (drop->header.state == CS_ACTIVE && drop->lastPacketTime < droppoint)
             {
                 if (++drop->timeoutCount > 5)
                     SV_DropClient(drop, "EXE_TIMEDOUT", 1);
@@ -1101,9 +1103,20 @@ void __cdecl SV_UpdateBots()
     clients = svs.clients;
     while (i < sv_maxclients->current.integer)
     {
-        if (clients->header.state)
+        if (clients->header.netchan.remoteAddress.type == NA_BOT)
         {
-            if (clients->header.netchan.remoteAddress.type == NA_BOT)
+            // A full map load reconnects retained slots as CS_CONNECTED.
+            // Internal test clients send no packets to request a gamestate or
+            // enter the new world, so complete that transition here.
+            if (clients->bIsTestClient && clients->header.state == CS_CONNECTED)
+            {
+                usercmd_s nullcmd = {};
+                SV_SendClientGameState(clients);
+                // A failed gamestate can drop the client; never revive it.
+                if (clients->header.state == CS_CLIENTLOADING)
+                    SV_ClientEnterWorld(clients, &nullcmd);
+            }
+            if (clients->header.state == CS_ACTIVE)
                 SV_BotUserMove(clients);
         }
         ++i;

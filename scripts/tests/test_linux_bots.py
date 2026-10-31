@@ -28,16 +28,25 @@ Markers use ``logprint`` (builtin flag 0), which reaches ``games_mp.log`` even
 with ``developer 0``; ``println`` is developer-gated (flag 1) and was silently
 discarded, which is why earlier runs showed live bots but no markers.
 
-This is a diagnostic probe, not a currently passing gameplay regression. It
-requires bots to remain valid, playing and healthy through the hold, and asks
-the server to quit cleanly. The observed stock-script fixture admits three bots
-but kicks them before the hold completes, so those checks deliberately fail.
+The fixture marks internal clients with the stock scripts' pers["isBot"] field
+and submits normal team/class menu responses. It never sets sessionstate or
+calls spawn directly. Repeated hold samples require the same healthy, playing
+clients with the selected team, class and a weapon, followed by clean shutdown.
 
-NOT implemented or claimed: kill, drop, refill, map_restart, map change,
-client-side/snapshot decoding, retail/Steam compatibility, class/loadout
-selection, and any AI. ``SV_BotUserMove`` presses random buttons and neither
-navigates nor aims. The fixture prefers available map spawn points, but does not
-execute stock team/class spawn selection.
+With --cycles, the same admitted entity/name pairs are checked after repeated
+map_restart, map mp_shipment and map_rotate transitions. No replacements are
+admitted. A fixture connect callback restores the stock isBot script flag only
+for those exact pairs, before the normal callback checks retail class stats.
+
+With --refill-cycles, sv_maxclients equals the bot count so every refill must
+reuse freed slots. The fixture performs real GSC kick/SV_DropClient, waits the
+default zombie grace period plus two seconds, verifies disappearance, then
+admits a new cohort. Both teams are used through normal menus to respect team
+capacity; sv_botsPressAttackBtn=0 keeps combat out of these lifecycle checks.
+Map cycles, if requested, retain the final refill cohort.
+
+NOT implemented or claimed: combat kills, client-originated disconnect packets,
+client-side/snapshot decoding, retail/Steam compatibility, and AI.
 
 Usage:
     python3 scripts/tests/test_linux_bots.py "/path/to/Call of Duty 4" \
@@ -45,6 +54,7 @@ Usage:
 """
 
 import argparse
+import re
 from pathlib import Path
 import select
 import shutil
@@ -77,8 +87,6 @@ botTest_Watch()
     botTest_Log("BOTFEATURE auth_loopback=" + getdvar("sv_loopbackTestAuth")
                 + " auth_unverified=" + getdvar("sv_allowUnverifiedGuids"));
     level.botTestBots = [];
-    spawns = getentarray("mp_tdm_spawn", "classname");
-    botTest_Log("BOTFEATURE spawnpoints=" + spawns.size);
     for (i = 0; i < {bots}; i++)
     {
         bot = addtestclient();
@@ -87,36 +95,41 @@ botTest_Watch()
             botTest_Log("BOTFEATURE spawn=failed index=" + i);
             continue;
         }
-        bot.sessionteam = "{team}";
-        bot.sessionstate = "playing";
-        // Prefer a real map spawn point over the raw origin: spawning inside
-        // geometry kills the bot and frees its entity reference.
-        if (isdefined(spawns) && spawns.size > 0)
-        {
-            sp = spawns[i % spawns.size];
-            bot spawn(sp.origin, sp.angles);
-        }
-        else
-        {
-            bot spawn(bot.origin, bot.angles);
-        }
+        // Stock scripts explicitly recognize this field for internal test
+        // clients, which have no persisted retail class-stat payload.
+        bot.pers["isBot"] = true;
         level.botTestBots[i] = bot;
         botTest_Log("BOTFEATURE spawned entity=" + bot getentitynumber());
     }
     botTest_Log("BOTFEATURE count=" + level.botTestBots.size);
-    wait 3;
+    // Let the normal connection callbacks finish before sending menu events.
+    wait 2;
     for (i = 0; i < level.botTestBots.size; i++)
+        level.botTestBots[i] notify("menuresponse", game["menu_team"], "{team}");
+    wait 0.5;
+    for (i = 0; i < level.botTestBots.size; i++)
+        level.botTestBots[i] notify("menuresponse", game["menu_changeclass"], "assault_mp,0");
+    wait 3;
+    for (sample = 0; sample <= {hold_seconds}; sample++)
     {
-        b = level.botTestBots[i];
-        if (isdefined(b))
+        for (i = 0; i < level.botTestBots.size; i++)
         {
-            botTest_Log("BOTFEATURE held entity=" + b getentitynumber()
-                        + " state=" + b.sessionstate + " health=" + b.health);
+            b = level.botTestBots[i];
+            if (isdefined(b))
+            {
+                botTest_Log("BOTFEATURE held entity=" + b getentitynumber()
+                            + " sample=" + sample + " state=" + b.sessionstate
+                            + " health=" + b.health + " team=" + b.sessionteam
+                            + " class=" + b.pers["class"]
+                            + " weapon=" + b getcurrentweapon());
+            }
+            else
+            {
+                botTest_Log("BOTFEATURE held missing=" + i + " sample=" + sample);
+            }
         }
-        else
-        {
-            botTest_Log("BOTFEATURE held missing=" + i);
-        }
+        if (sample < {hold_seconds})
+            wait 1;
     }
     botTest_Log("BOTFEATURE hold=done");
 }
@@ -129,11 +142,269 @@ def free_port() -> int:
         return probe.getsockname()[1]
 
 
+def transition_plan(map_name: str, cycles: int) -> list:
+    return [(None, map_name)] + [stage for _ in range(cycles) for stage in
+                               [("map_restart", map_name), ("map mp_shipment", "mp_shipment"),
+                                ("map_rotate", map_name)]]
+
+
+def transition_fixture() -> str:
+    """Keep the single-map fixture intact; add persistent, exact identities."""
+    fixture = FIXTURE_GSC.replace('    maps\\mp\\gametypes\\war::main();', '''    maps\\mp\\gametypes\\war::main();
+    level.botTestOriginalConnect = level.callbackPlayerConnect;
+    level.callbackPlayerConnect = ::botTest_RestoreConnecting;''')
+    fixture += '''
+botTest_RestoreConnecting()
+{
+    if (getdvarint("botTest_stage") > 0)
+    {
+        for (i = 0; i < {bots}; i++)
+        {
+            if (self getentitynumber() == getdvarint("botTest_entity_" + i)
+                && self.name == getdvar("botTest_name_" + i))
+                self.pers["isBot"] = true;
+        }
+    }
+    [[level.botTestOriginalConnect]]();
+}
+'''
+    fixture = fixture.replace('    wait 1;\n', '''    wait 1;
+    stage = getdvarint("botTest_stage");
+    botTest_Log("BOTFEATURE stage=" + stage + " map=" + getdvar("mapname"));
+''', 1)
+    start = fixture.index('    for (i = 0; i < {bots}; i++)')
+    end = fixture.index('    botTest_Log("BOTFEATURE count=', start)
+    create = fixture[start:end].replace('        level.botTestBots[i] = bot;', '''        level.botTestBots[i] = bot;
+        setdvar("botTest_entity_" + i, bot getentitynumber());
+        setdvar("botTest_name_" + i, bot.name);
+        botTest_Log("BOTFEATURE identity entity=" + bot getentitynumber() + " name=" + bot.name);''')
+    retained = '''    else
+    {
+        players = getentarray("player", "classname");
+        for (i = 0; i < {bots}; i++)
+        {
+            found = false;
+            for (j = 0; j < players.size; j++)
+            {
+                b = players[j];
+                if (b getentitynumber() == getdvarint("botTest_entity_" + i)
+                    && b.name == getdvar("botTest_name_" + i))
+                {
+                    // Restore the stock script marker only for the exact
+                    // internal client admitted by this fixture at stage zero.
+                    b.pers["isBot"] = true;
+                    level.botTestBots[level.botTestBots.size] = b;
+                    botTest_Log("BOTFEATURE retained entity=" + b getentitynumber());
+                    botTest_Log("BOTFEATURE identity entity=" + b getentitynumber() + " name=" + b.name);
+                    found = true;
+                }
+            }
+            if (!found)
+                botTest_Log("BOTFEATURE identity=missing index=" + i);
+        }
+    }
+'''
+    return fixture[:start] + '    if (stage == 0)\n    {\n' + create + '    }\n' + retained + fixture[end:]
+
+
+def validate_transitions(log_text: str, bots: int, hold_seconds: int,
+                         map_name: str, cycles: int, balanced: bool = False) -> list:
+    """Require every planned stage once, with no re-admissions or identities lost."""
+    markers = list(re.finditer(r"BOTFEATURE stage=(\d+) map=(\S+)\s*$", log_text, re.M))
+    plan = transition_plan(map_name, cycles)
+    checks = [(len(markers) == len(plan), "exactly the planned transition stages occurred")]
+    initial = None
+    for index, (_, expected_map) in enumerate(plan):
+        if index >= len(markers):
+            checks.append((False, f"stage {index} exists"))
+            continue
+        marker = markers[index]
+        segment = log_text[marker.end():markers[index + 1].start() if index + 1 < len(markers) else len(log_text)]
+        label = f"stage {index} ({expected_map})"
+        checks.append((marker.group(1) == str(index) and marker.group(2) == expected_map,
+                       f"{label}: stage number and map match"))
+        identities = re.findall(r"BOTFEATURE identity entity=(\d+) name=(\S+)\s*$", segment, re.M)
+        distinct = len(identities) == bots and len(set(identities)) == bots
+        distinct = distinct and len({pair[0] for pair in identities}) == bots
+        if index == 0:
+            initial = set(identities)
+        checks.append((distinct and set(identities) == initial, f"{label}: original entity/name identities retained"))
+        checks.append((segment.count("BOTFEATURE auth_loopback=") == 1 and
+                       len(re.findall(r"BOTFEATURE auth_loopback=0 auth_unverified=0\s*$", segment, re.M)) == 1,
+                       f"{label}: authentication defaults retained"))
+        checks.append((len(re.findall(r"BOTFEATURE hold=done\s*$", segment, re.M)) == 1,
+                       f"{label}: hold completed once"))
+        admissions = re.findall(r"BOTFEATURE spawned entity=(\d+)\s*$", segment, re.M)
+        retained_ids = re.findall(r"BOTFEATURE retained entity=(\d+)\s*$", segment, re.M)
+        expected_ids = {pair[0] for pair in identities}
+        observed = admissions if index == 0 else retained_ids
+        checks.append((len(observed) == bots and set(observed) == expected_ids and
+                       not (retained_ids if index == 0 else admissions),
+                       f"{label}: initial admission only, no replacement clients"))
+        checks.append(("BOTFEATURE identity=missing" not in segment and
+                       "BOTFEATURE spawn=failed" not in segment and "BOTFEATURE held missing=" not in segment,
+                       f"{label}: no missing fixture clients"))
+        hold_log = segment.replace("BOTFEATURE retained entity=", "BOTFEATURE spawned entity=")
+        checks.extend((ok, f"{label}: {message}") for ok, message in validate_hold(hold_log, bots, hold_seconds, balanced))
+    return checks
+
+
+def refill_fixture() -> str:
+    """Drop only the tracked cohort, await normal expiry, and refill its slots."""
+    fixture = transition_fixture()
+    start = fixture.index('    botTest_Log("BOTFEATURE auth_loopback=')
+    end = fixture.index('\n}\n\nbotTest_RestoreConnecting()', start)
+    body = fixture[start:end]
+    body = body.replace('        level.botTestBots[i] notify("menuresponse", game["menu_team"], "{team}");', '''    {
+        team = "allies";
+        if ((level.botTestBots[i] getentitynumber() % 2) == 1)
+            team = "axis";
+        level.botTestBots[i] notify("menuresponse", game["menu_team"], team);
+    }''')
+    prefix = '''    rounds = 0;
+    if (stage == 0)
+        rounds = {refill_cycles};
+    for (round = 0; round <= rounds; round++)
+    {
+        if (stage == 0)
+        {
+            while (getdvarint("botTest_refill") < round)
+                wait 0.05;
+            botTest_Log("BOTFEATURE refill=" + round + " capacity=" + getdvar("sv_maxclients"));
+        }
+        if (stage == 0 && round > 0)
+        {
+            oldIds = [];
+            oldNames = [];
+            for (i = 0; i < level.botTestBots.size; i++)
+            {
+                b = level.botTestBots[i];
+                oldIds[i] = b getentitynumber();
+                oldNames[i] = b.name;
+                botTest_Log("BOTFEATURE kick entity=" + oldIds[i] + " name=" + oldNames[i]);
+            }
+            for (i = 0; i < oldIds.size; i++)
+                kick(oldIds[i]);
+            // Use the default zombie grace period, not a test-only shortcut.
+            wait (getdvarint("sv_zombietime") + 2);
+            players = getentarray("player", "classname");
+            botTest_Log("BOTFEATURE vacant players=" + players.size);
+            for (i = 0; i < oldIds.size; i++)
+            {
+                found = false;
+                for (j = 0; j < players.size; j++)
+                {
+                    if (players[j] getentitynumber() == oldIds[i] || players[j].name == oldNames[i])
+                        found = true;
+                }
+                if (!found)
+                    botTest_Log("BOTFEATURE vacated entity=" + oldIds[i] + " name=" + oldNames[i]);
+                else
+                    botTest_Log("BOTFEATURE vacate=failed entity=" + oldIds[i]);
+            }
+        }
+'''
+    return fixture[:start] + prefix + body + '\n    }' + fixture[end:]
+
+
+def refill_segments(log_text: str) -> list:
+    """Return only initial-map rounds; later maps have their own stage markers."""
+    initial = re.split(r"BOTFEATURE stage=[1-9]\d* map=", log_text, maxsplit=1)[0]
+    markers = list(re.finditer(r"BOTFEATURE refill=(\d+) capacity=(\d+)\s*$", initial, re.M))
+    return [(m, initial[m.end():markers[i + 1].start() if i + 1 < len(markers) else len(initial)])
+            for i, m in enumerate(markers)]
+
+
+def validate_refills(log_text: str, bots: int, hold_seconds: int, cycles: int) -> list:
+    rounds = refill_segments(log_text)
+    checks = [(len(rounds) == cycles + 1, "exactly the planned refill rounds occurred")]
+    previous = None
+    seen_names = set()
+    for index, (marker, segment) in enumerate(rounds):
+        label = f"refill {index}"
+        checks.append((marker.group(1) == str(index) and marker.group(2) == str(bots),
+                       f"{label}: ordered round at full configured capacity"))
+        identities = re.findall(r"BOTFEATURE identity entity=(\d+) name=(\S+)\s*$", segment, re.M)
+        current = set(identities)
+        checks.append((len(identities) == bots and len(current) == bots and
+                       len({p[0] for p in identities}) == bots, f"{label}: distinct complete cohort"))
+        checks.append((not (seen_names & {p[1] for p in identities}), f"{label}: newly admitted bot names"))
+        seen_names.update(p[1] for p in identities)
+        kicks = re.findall(r"BOTFEATURE kick entity=(\d+) name=(\S+)\s*$", segment, re.M)
+        vacated = re.findall(r"BOTFEATURE vacated entity=(\d+) name=(\S+)\s*$", segment, re.M)
+        if previous is not None:
+            checks.append((len(kicks) == bots and set(kicks) == previous and
+                           len(vacated) == bots and set(vacated) == previous,
+                           f"{label}: previous cohort explicitly kicked and absent"))
+            checks.append((len(re.findall(r"BOTFEATURE vacant players=0\s*$", segment, re.M)) == 1 and
+                           segment.count("BOTFEATURE vacant players=") == 1 and
+                           "BOTFEATURE vacate=failed" not in segment,
+                           f"{label}: no player entities before refill"))
+            checks.append(({p[0] for p in current} == {p[0] for p in previous},
+                           f"{label}: all original slots reused"))
+            last_kick = segment.rfind("BOTFEATURE kick entity=")
+            first_vacated = segment.find("BOTFEATURE vacated entity=")
+            last_vacated = segment.rfind("BOTFEATURE vacated entity=")
+            first_spawned = segment.find("BOTFEATURE spawned entity=")
+            checks.append((0 <= last_kick < first_vacated <= last_vacated < first_spawned,
+                           f"{label}: drop and disappearance precede admission"))
+        else:
+            checks.append((not kicks and not vacated, f"{label}: initial admission has no drops"))
+        checks.append((len(re.findall(r"BOTFEATURE auth_loopback=0 auth_unverified=0\s*$", segment, re.M)) == 1 and
+                       segment.count("BOTFEATURE auth_loopback=") == 1, f"{label}: default authentication"))
+        checks.append((len(re.findall(r"BOTFEATURE hold=done\s*$", segment, re.M)) == 1,
+                       f"{label}: completed hold once"))
+        checks.extend((ok, f"{label}: {message}") for ok, message in validate_hold(segment, bots, hold_seconds, True))
+        admitted = re.findall(r"BOTFEATURE spawned entity=(\d+)\s*$", segment, re.M)
+        checks.append((set(admitted) == {p[0] for p in current}, f"{label}: admission identity evidence agrees"))
+        previous = current
+    return checks
+
+
+def final_cohort_log(log_text: str) -> str:
+    """Use the last refill cohort as stage zero for retained-map validation."""
+    rounds = refill_segments(log_text)
+    if not rounds:
+        return log_text
+    first_stage = re.search(r"BOTFEATURE stage=0 map=\S+", log_text)
+    later_stage = re.search(r"BOTFEATURE stage=[1-9]\d* map=", log_text)
+    return ((first_stage.group() + '\n' if first_stage else '') + rounds[-1][1] +
+            (log_text[later_stage.start():] if later_stage else ''))
+
+
+def validate_kick_window(output: str, expected: set) -> bool:
+    """Match engine kick lines exactly; planned script markers alone cannot pass."""
+    lines = [line for line in output.splitlines() if "EXE_PLAYERKICKED" in line]
+    parsed = [re.fullmatch(r"(\d+):(\S+) EXE_PLAYERKICKED", line.strip()) for line in lines]
+    pairs = [(m.group(1), m.group(2)) for m in parsed if m]
+    return len(pairs) == len(lines) == len(expected) and set(pairs) == expected
+
+
 def read_text(path: Path) -> str:
     try:
         return path.read_text(errors="replace")
     except OSError:
         return ""
+
+
+def validate_hold(log_text: str, bots: int, hold_seconds: int, balanced: bool = False) -> list:
+    """Require an exact client set in every sample; duplicates cannot mask loss."""
+    spawned = re.findall(r"BOTFEATURE spawned entity=(\d+)\s*$", log_text, re.M)
+    rows = re.findall(r"BOTFEATURE held entity=(\d+) sample=(\d+) state=(\w+) "
+                      r"health=(-?\d+) team=(\w+) class=(\w+) weapon=(\S+)\s*$",
+                      log_text, re.M)
+    expected = set(spawned)
+    complete = len(spawned) == bots and len(expected) == bots
+    complete = complete and len(rows) == bots * (hold_seconds + 1)
+    for sample in range(hold_seconds + 1):
+        ids = [row[0] for row in rows if int(row[1]) == sample]
+        complete = complete and len(ids) == bots and set(ids) == expected
+    healthy = complete and all(row[2] == "playing" and int(row[3]) > 0 for row in rows)
+    loadout = complete and all(row[4] == ("axis" if balanced and int(row[0]) % 2 else "allies") and row[5] == "CLASS_ASSAULT"
+                              and row[6] not in ("none", "undefined") for row in rows)
+    return [(bool(complete), "the same distinct clients occur once in every hold sample"),
+            (bool(healthy), "every hold sample reports playing clients with positive health"),
+            (bool(loadout), "stock team/class flow equipped every client")]
 
 
 def main() -> int:
@@ -144,12 +415,25 @@ def main() -> int:
                         help="dedicated binary built from this tree (never the running bin/)")
     parser.add_argument("--bots", type=int, default=3)
     parser.add_argument("--map", dest="map_name", default="mp_crash")
-    parser.add_argument("--timeout", type=int, default=45, help="seconds to reach the final marker")
+    parser.add_argument("--timeout", type=int, default=45, help="seconds per stage to reach its hold marker")
+    parser.add_argument("--hold-seconds", type=int, default=5)
+    parser.add_argument("--cycles", type=int, default=0,
+                        help="repeat restart, Shipment, rotation with retained bots (default: single map)")
+    parser.add_argument("--refill-cycles", type=int, default=0,
+                        help="drop and refill the full cohort before map cycles; forces maxclients=bots")
     parser.add_argument("--keep", action="store_true", help="keep the temporary tree")
     args = parser.parse_args()
 
+    if args.hold_seconds < 1:
+        parser.error("--hold-seconds must be positive")
     if args.timeout <= 0:
         parser.error("--timeout must be positive")
+    if args.cycles < 0:
+        parser.error("--cycles must be nonnegative")
+    if args.refill_cycles < 0:
+        parser.error("--refill-cycles must be nonnegative")
+    if not re.fullmatch(r"mp_[a-z0-9_]+", args.map_name):
+        parser.error("--map must be a stock-style mp_ map name")
     if not 1 <= args.bots <= 8:
         parser.error("--bots must be between 1 and 8")
     game = args.game_dir.expanduser().resolve()
@@ -173,7 +457,10 @@ def main() -> int:
         scripts = mod / "maps" / "mp" / "gametypes"
         scripts.mkdir(parents=True)
         (scripts / "dm.gsc").write_text(
-            FIXTURE_GSC.replace("{bots}", str(args.bots)).replace("{team}", "allies")
+            (refill_fixture() if args.refill_cycles else transition_fixture() if args.cycles else FIXTURE_GSC)
+            .replace("{bots}", str(args.bots)).replace("{team}", "allies")
+            .replace("{hold_seconds}", str(args.hold_seconds))
+            .replace("{refill_cycles}", str(args.refill_cycles))
         )
 
         port = free_port()
@@ -185,13 +472,20 @@ def main() -> int:
             "+set", "dedicated", "1",
             "+set", "net_ip", "127.0.0.1",
             "+set", "net_port", str(port),
-            "+set", "sv_maxclients", "8",
+            "+set", "sv_maxclients", str(args.bots) if args.refill_cycles else "8",
             "+set", "g_gametype", "dm",
             # Write and flush the game log so the marker barrier can read it.
             "+set", "g_log", "games_mp.log",
             "+set", "g_logSync", "1",
             "+map", args.map_name,
         ]
+        if args.cycles or args.refill_cycles:
+            command[-2:-2] = ["+set", "botTest_stage", "0", "+set", "sv_mapRotation",
+                              f"gametype dm map {args.map_name}", "+set", "botTest_refill", "0"]
+        if args.refill_cycles:
+            # Full capacity needs both teams. Isolate lifecycle from combat;
+            # this gameplay setting does not alter authentication.
+            command[-2:-2] = ["+set", "sv_botsPressAttackBtn", "0"]
         print(f"+ {binary}")
         print(f"+ 127.0.0.1:{port} map={args.map_name} gametype=dm(fixture) bots={args.bots}")
         print(f"+ isolated tree {work}")
@@ -209,15 +503,71 @@ def main() -> int:
             return 1
 
         marker_seen = False
+        stage_failure = ""
+        kick_checks = []
+        planned_kicks = set()
+        cohort = set()
+        output_offset = 0
         try:
-            deadline = started + args.timeout
-            while time.monotonic() < deadline:
-                if process.poll() is not None:
+            plan = [(0, r, None if r == 0 else f"set botTest_refill {r}", args.map_name)
+                    for r in range(args.refill_cycles + 1)]
+            plan += [(stage, None, command, map_name) for stage, (command, map_name) in
+                     enumerate(transition_plan(args.map_name, args.cycles)) if stage > 0]
+            for step, (stage, refill_round, transition, expected_map) in enumerate(plan):
+                if transition:
+                    try:
+                        process.stdin.write(f"set botTest_stage {stage}\n{transition}\n".encode("ascii"))
+                        process.stdin.flush()
+                    except (BrokenPipeError, OSError) as error:
+                        stage_failure = f"stage {stage} command failed: {error}"
+                        break
+                deadline = time.monotonic() + args.timeout
+                reached = False
+                while time.monotonic() < deadline:
+                    if process.poll() is not None:
+                        break
+                    select.select([], [], [], 0.1)
+                    log = read_text(game_log)
+                    if args.cycles or args.refill_cycles:
+                        marker = (f"BOTFEATURE refill={refill_round} capacity={args.bots}"
+                                  if args.refill_cycles and stage == 0 else
+                                  f"BOTFEATURE stage={stage} map={expected_map}")
+                        segment = log.split(marker, 1)[1] if marker in log else ""
+                    else:
+                        segment = log
+                    if "BOTFEATURE hold=done" in segment:
+                        reached = True
+                        break
+                if not reached:
+                    stage_failure = f"stage {stage} ({expected_map}) did not complete within {args.timeout}s"
                     break
-                # select() only waits for the marker source; the deadline above
-                # stays authoritative, so a silent server still fails in time.
-                select.select([], [], [], 0.1)
-                if "BOTFEATURE hold=done" in read_text(game_log):
+                if args.cycles or args.refill_cycles:
+                    # Validate this hold before allowing another map to hide
+                    # missing or malformed samples. Full identity/auth/stage
+                    # validation follows after shutdown.
+                    segments = list(re.finditer(r"BOTFEATURE stage=\d+ map=\S+\s*$", log, re.M))
+                    if not segments or len(segments) != stage + 1:
+                        stage_failure = f"stage {stage}: duplicate or missing stage markers"
+                        break
+                    stage_log = (refill_segments(log)[-1][1] if args.refill_cycles and stage == 0
+                                 else log[segments[-1].end():])
+                    stage_log = stage_log.replace("BOTFEATURE retained entity=", "BOTFEATURE spawned entity=")
+                    if not all(ok for ok, _ in validate_hold(stage_log, args.bots, args.hold_seconds, bool(args.refill_cycles))):
+                        stage_failure = f"stage {stage}: invalid hold evidence"
+                        break
+                    print(f"PASS: live stage {stage} map={expected_map} hold reached", flush=True)
+                    if args.refill_cycles:
+                        output_now = read_text(stdout_path)
+                        expected_kicks = cohort if stage == 0 and refill_round > 0 else set()
+                        window_ok = validate_kick_window(output_now[output_offset:], expected_kicks)
+                        kick_checks.append((window_ok, f"step {step}: only exact planned kicks in engine output window"))
+                        planned_kicks.update(expected_kicks)
+                        output_offset = len(output_now)
+                        cohort = set(re.findall(r"BOTFEATURE identity entity=(\d+) name=(\S+)\s*$", stage_log, re.M))
+                        if not window_ok:
+                            stage_failure = f"step {step}: unexpected or missing engine kick"
+                            break
+                if step == len(plan) - 1:
                     marker_seen = True
                     break
             if marker_seen:
@@ -256,64 +606,60 @@ def main() -> int:
         elapsed = time.monotonic() - started
         output = read_text(stdout_path)
         log_text = read_text(game_log)
-        combined = output + "\n" + log_text
+        combined = output + "\n" + log_text + "\n" + read_text(mod / "console_mp.log")
 
         def marker_values(prefix: str) -> list:
             return [line.split(prefix, 1)[1].strip()
                     for line in log_text.splitlines() if prefix in line]
 
         spawned = marker_values("BOTFEATURE spawned entity=")
-        held = marker_values("BOTFEATURE held entity=")
-        held_ids = [entry.split(" ")[0] for entry in held]
-        held_playing = [e for e in held if "state=playing" in e]
-        held_healthy = []
-        for entry in held:
-            for token in entry.split():
-                if token.startswith("health="):
-                    try:
-                        if int(token.split("=", 1)[1]) > 0:
-                            held_healthy.append(entry)
-                    except ValueError:
-                        pass
+        expected_admissions = args.bots * (args.refill_cycles + 1)
         auth_lines = [line for line in log_text.splitlines() if "BOTFEATURE auth_loopback=" in line]
 
         checks = [
-            (marker_seen, f"fixture reached its final marker within {args.timeout}s"),
+            (marker_seen, f"fixture completed with a {args.timeout}s budget per stage"),
             (any("auth_loopback=0" in line and "auth_unverified=0" in line for line in auth_lines),
              "in-game dvars confirm default authentication (loopbackTestAuth 0, unverifiedGuids 0)"),
             ("is not a valid gametype" not in combined, "gametype dm is accepted as registered"),
             ("BOTFEATURE spawn=failed" not in combined, "no test client was refused"),
-            (len(spawned) == args.bots, f"{args.bots} test client(s) admitted (got {len(spawned)})"),
-            (len(set(spawned)) == args.bots and len(spawned) == args.bots,
-             "each admitted client has a distinct entity number"),
-            (len(held_playing) == len(spawned) and len(spawned) > 0,
-             "each client is a live GSC object with sessionstate playing"),
-            (len(held_healthy) == len(spawned) and len(spawned) > 0,
-             "each client reports positive health at the end of the hold"),
-            (held_ids == spawned, "the same clients are present after the hold"),
-            (combined.count("Gamestate has") >= len(spawned) or
-             combined.count("Going from CS_FREE to CS_CONNECTED for bot") >= len(spawned),
+            (len(spawned) == expected_admissions, f"{expected_admissions} test client admissions (got {len(spawned)})"),
+            (len(set(spawned)) == args.bots, "admissions used exactly the expected slots"),
+            *(validate_refills(log_text, args.bots, args.hold_seconds, args.refill_cycles) if args.refill_cycles else []),
+            *(validate_transitions(final_cohort_log(log_text) if args.refill_cycles else log_text,
+                                   args.bots, args.hold_seconds, args.map_name, args.cycles, bool(args.refill_cycles))
+              if args.cycles or args.refill_cycles else validate_hold(log_text, args.bots, args.hold_seconds)),
+            *kick_checks,
+            (len(spawned) == expected_admissions and (combined.count("Gamestate has") >= len(spawned) or
+             combined.count("Going from CS_FREE to CS_CONNECTED for bot") >= len(spawned)),
              "the server sent gamestates / connected each bot"),
             (process.returncode == 0, f"clean exit (got {process.returncode})"),
-            ("EXE_PLAYERKICKED" not in output.split("quitting...", 1)[0],
-             "no bot was kicked before shutdown"),
+            (validate_kick_window(output, planned_kicks) if args.refill_cycles else
+             "EXE_PLAYERKICKED" not in output.split("quitting...", 1)[0],
+             "only explicitly planned bots were kicked"),
             ("quitting..." in output and "ShutdownGame:" in combined,
              "engine quit and game cleanup were recorded"),
             ("ASSERT FAILED" not in combined, "no assertion"),
             ("FATAL ERROR" not in combined, "no fatal error"),
-            ("Script error" not in combined and "script error" not in combined,
+            (not any(error in combined.lower() for error in
+                     ("script error", "script runtime error", "script compile error", "script exception")),
              "no GSC script error"),
             (game_log.is_file(), "game log written to the mod directory of the temp home"),
         ]
         for ok, message in checks:
             print(f"{'PASS' if ok else 'FAIL'}: {message}")
+        if stage_failure:
+            print(f"FAIL: {stage_failure}")
         print(f"\ncompleted in {elapsed:.1f}s on isolated port {port}")
-        print("NOT verified: kill, drop, refill, map_restart, map change under bots, "
-              "client-side decode, retail/Steam compatibility, class selection, AI.")
+        print("NOT verified: combat kills, client-originated disconnect packets, " +
+              ("drop/refill, " if not args.refill_cycles else "") +
+              ("map_restart, map change under bots, " if not args.cycles else "") +
+              "client-side decode, retail/Steam compatibility, AI.")
 
         if all(ok for ok, _ in checks):
             success = True
-            print("\nBounded live test-client check passed (admit + hold + clean quit).")
+            print("\nBounded live test-client check passed (admit + hold + " +
+                  (f"{args.refill_cycles} full-capacity refill(s) + " if args.refill_cycles else "") +
+                  (f"{args.cycles} transition cycle(s) + " if args.cycles else "") + "clean quit).")
         else:
             print("\nEngine output (tail):\n" + combined[-5000:])
     finally:

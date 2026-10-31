@@ -8,11 +8,11 @@ This is useful for testing server-side slot and command behavior without another
 Steam copy. It is **not** a second real client, a client decoder, or a navigating
 AI.
 
-The asset-free function tests pass. The installed-assets probe described below
-is **not currently a passing gameplay regression**: three bots are admitted,
-but the stock-script fixture kicks them before its end-of-hold checks. Those
-assertions remain enabled and the probe reports failure. Do not use it as proof
-of sustained bot gameplay or multi-player synchronization.
+The installed-assets fixture now uses stock team/class callbacks and holds the
+same healthy, equipped clients across one-second samples before quitting. The
+three-bot probe passed locally under QEMU i386 with the existing licensed assets.
+This is emulated server-side evidence, not native-host performance validation,
+a real client decoder, or proof of multi-player synchronization.
 
 ## Existing implementation
 
@@ -81,38 +81,72 @@ python3 scripts/tests/test_linux_bots.py "/path/to/Call of Duty 4" \
     --binary build-bots/bin/KisakCOD-dedi --bots 3 --timeout 45 --keep
 ```
 
-**Expected current result: nonzero**, with retained logs explaining the failed
-hold checks. This probe is not run in public CI or the asset-free runner.
+The probe requires all admissions, every hold sample and clean shutdown to
+pass. `--hold-seconds` defaults to 5; it samples at the start and every second
+through the end. Missing or duplicate clients, a spectator/dead client, missing
+class/weapon, script errors in the console log, and a nonzero exit all fail.
+
+Add `--cycles 2 --timeout 90` to retain the same bots through two sequences of
+`map_restart`, `map mp_shipment`, and `map_rotate` back to the requested map.
+The timeout applies separately to each stage. Each map must report the original
+entity/name pairs and default authentication settings, followed by a full hold.
+Only the initial stage admits bots; replacements cannot hide losses. The fixture
+restores its recorded bots' stock marker before the original connect callback.
+This is isolated fixture continuity evidence, not proof of remote client identity.
+
+Add `--refill-cycles 3 --cycles 2 --timeout 90` to drop and refill the entire
+cohort three times before the map cycles. Refill mode forces server capacity to
+the bot count, observes the old entities disappear, and requires new names in
+the same slots. It assigns normal allies/axis menu choices by entity parity and
+disables bot firing for these opposing-team lifecycle holds. Only the exact
+planned kick lines are allowed; unexpected or missing kicks fail the test.
+Authentication and the normal zombie grace period stay unchanged.
 
 It uses a fresh temporary home/mod, symlinks installed assets read-only, binds
-an ephemeral `127.0.0.1` port and never edits the game installation. Because
-fastfile gametype validation only accepts registered names, the fixture
-overrides `dm.gsc` in its private mod and delegates initialization to stock
-`war::main`. This is a diagnostic fixture, not a stock DM round. Its markers
-use `logprint` and `g_logSync`, avoiding developer-only `println` output.
+an ephemeral `127.0.0.1` port and never edits the game installation. The fixture
+overrides registered `dm.gsc` and delegates initialization to stock `war::main`;
+it is not a stock DM round. Only the fixture is distributed, not stock scripts.
 
-Observed in the three-bot run on `mp_crash`:
+The fixture identifies each `addtestclient()` result with the stock script field
+`pers["isBot"]`, then sends `menuresponse` events for the allies team and the
+`assault_mp,0` class choice. Stock callbacks set session state, select spawn
+points and equip the class. The fixture never writes session state, spawns the
+player directly, manufactures class stats, or changes authentication settings.
 
-1. GSC recorded `sv_loopbackTestAuth=0` and `sv_allowUnverifiedGuids=0`.
-2. Entities 0, 1 and 2 were created; the server recorded connection admission,
-   gamestate generation and player snapshots for the internal clients.
-3. The game log recorded joins at approximately one second, then departures
-   at two to three seconds, before the four-second hold marker.
-4. Server output recorded `EXE_PLAYERKICKED` / `was kicked for cheating` for
-   the bots. The retained GSC references were then undefined.
+### Diagnosed failures
 
-The final probe reached its marker, but the server also failed to finish
-shutdown within the 45-second cleanup deadline and was killed by the harness.
-It recorded `quitting...` and entered `ShutdownGame`; that is not a clean-exit
-pass. The isolated logs were retained for both failures.
+The previous fixture bypassed the team/class flow and omitted `pers["isBot"]`.
+The installed stock `_globallogic.gsc` connection callback checks five class-stat
+slots for non-bots and calls `kick` when they are zero. Internal test clients
+have no persisted retail stats. Its explicit bot branch skips that player-stat
+check. Private logging confirmed the kick at zero class stat 205 for all three bots.
+The original fixture reproduced kicks; using the stock bot convention
+and menu flow removes them without changing engine admission or kick policy.
 
-The native message does not establish the precise script condition that caused
-the kick. That cause remains open; it is not a generic entity-reference-lifetime
-failure or proof that the bots survived until shutdown. Changing authentication
-or ignoring the kicks would not constitute a fix.
+Shutdown was an independent ownership defect. With `fs_game` nonempty,
+`BG_ShutdownWeaponDefFiles` released weapon string references as though the
+weapons had been loaded from raw files. Dedicated `BG_LoadWeaponDef` always
+borrows fastfile definitions instead. The captured Debug stack reaches
+`BG_FreeWeaponDefStrings` and `SL_FreeString` with a database-owned string,
+triggering `!refStr->user`. Teardown now follows the loader's ownership choice.
+The original failing fixture still kicks bots after this engine fix, but exits
+cleanly. This isolates the engine repair from the fixture correction.
 
-Next useful investigation: capture the script-triggered kick context and use the
-actual stock team/class connection callbacks, rather than forcing session state
-and invoking `spawn` directly. Only after a sustained, healthy hold passes should
-bot death/respawn, real drop/refill and map-transition checks be added. None of
-those later actions is currently verified by this probe.
+Asset-free regressions:
+
+```sh
+python3 scripts/tests/test_weapon_def_ownership.py --cxx clang++ --m32
+python3 scripts/tests/test_weapon_def_ownership.py --cxx clang++ --sanitize
+python3 scripts/tests/test_linux_bot_driver.py
+```
+
+The ownership test extracts production load, string release and shutdown bodies,
+checking dedicated/client paths with and without a mod and fastfiles, shared
+strings, every string-array boundary, repeated shutdown and 40 registration
+cycles per build. Database/string services are checked doubles. The pre-fix
+source fails on releasing a borrowed string. Driver tests reject incomplete,
+duplicate, malformed and unhealthy hold evidence.
+
+Death/respawn, deliberate disconnect/refill and map changes with bots remain
+separate follow-up work. The independent lifecycle driver covers empty-server
+restart/rotation; it does not establish bot survival through those transitions.

@@ -490,5 +490,40 @@ class RunSessionTest(unittest.TestCase):
         self.assertNotIn("growth_after_warmup", self.report())
 
 
+class TransitionDeadlineTest(unittest.TestCase):
+    def test_restart_queries_share_the_full_transition_budget(self):
+        server = driver.Server.__new__(driver.Server)
+        server.timeout = 60
+        server.stages = []
+        server.log_path = mock.Mock()
+        server.log_path.stat.return_value.st_size = 0
+        server.log_path.read_bytes.return_value = b"Server: mp_crash\nmap: mp_crash\n"
+        server.send = mock.Mock()
+        server.query = mock.Mock()
+        server.hold = mock.Mock()
+        server.sample = mock.Mock(return_value={})
+        # Three seconds passed before getinfo; ten seconds before getstatus.
+        with mock.patch.object(driver.time, "monotonic", side_effect=[100, 103, 109, 110]):
+            server.transition("restart", "map_restart", "mp_crash", 2)
+        self.assertEqual(server.query.call_args_list, [
+            mock.call("getinfo", "mp_crash", timeout=57),
+            mock.call("getstatus", "mp_crash", timeout=50)])
+        server.hold.assert_called_once_with("mp_crash", 2)
+
+    def test_query_failure_still_fails_transition(self):
+        server = driver.Server.__new__(driver.Server)
+        server.timeout = 60
+        server.stages = []
+        server.log_path = mock.Mock()
+        server.log_path.stat.return_value.st_size = 0
+        server.send = mock.Mock()
+        server.query = mock.Mock(side_effect=driver.CheckFailure("unexpected query protocol"))
+        server.hold = mock.Mock()
+        with self.assertRaisesRegex(driver.CheckFailure, "unexpected query protocol"):
+            server.transition("restart", "map_restart", "mp_crash", 2)
+        server.hold.assert_not_called()
+        self.assertEqual(server.stages, [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

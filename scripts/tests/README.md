@@ -36,9 +36,9 @@ client compatibility.
 
 `test_server_test_clients.py` checks the extracted internal bot functions with
 controlled connection and movement services; the native runner runs its 32-bit
-sanitizer configuration. The opt-in `test_linux_bots.py` is a diagnostic probe,
-not a green gameplay check: its current stock-script fixture admits bots but
-kicks them before the hold completes. See
+sanitizer configuration. The opt-in `test_linux_bots.py` uses stock bot/team/class setup, requires repeated healthy
+hold samples, and checks clean shutdown. The weapon-definition ownership and
+bot-driver regressions are part of the asset-free runner. See
 [Server-side test clients](../../docs/server-test-clients.md) for the exact
 coverage and blocker.
 
