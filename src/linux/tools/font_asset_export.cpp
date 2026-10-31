@@ -10,6 +10,7 @@
 #include <gfx_d3d/r_image.h>
 #include <gfx_d3d/r_material.h>
 #include <ui/ui_shared.h>
+#include <sound/snd_public.h>
 #include <set>
 #include <map>
 #include <iomanip>
@@ -133,6 +134,58 @@ void Window(std::ostream &out,const windowDef_t &w){
  out<<",\"style\":"<<w.style<<",\"border\":"<<w.border<<",\"border_size\":"<<w.borderSize<<",\"owner_draw\":"<<w.ownerDraw<<",\"owner_draw_flags\":"<<w.ownerDrawFlags<<",\"static_flags\":"<<w.staticFlags<<",\"dynamic_flags\":"<<w.dynamicFlags[0]<<",\"fore_color\":";Floats(out,w.foreColor,4);out<<",\"back_color\":";Floats(out,w.backColor,4);
  out<<",\"background\":";if(w.background){out<<Json(Name(w.background->info.name));relevantMaterials.insert(w.background);}else out<<"null";out<<'}';
 }
+// Export data only: never evaluate expressions or dispatch scripts.
+void KeyScripts(std::ostream &out,const ItemKeyHandler *key){
+ out<<'[';size_t count=0;std::set<const ItemKeyHandler*> seen;
+ for(;key;key=key->next){Require(count<256&&seen.insert(key).second,"invalid/bounded onKey list");if(count++)out<<',';out<<"{\"key\":"<<key->key<<",\"action\":";OptionalText(out,key->action);out<<'}';}out<<']';
+}
+void Statement(std::ostream &out,const statement_s &statement,const std::map<std::string,std::string> &translations){
+ Require(statement.numEntries>=0&&statement.numEntries<=4096&&(!statement.numEntries||statement.entries),"invalid expression storage");
+ out<<'[';
+ for(int n=0;n<statement.numEntries;++n){const auto *entry=statement.entries[n];Require(entry,"null expression entry");if(n)out<<',';out<<"{\"type\":"<<entry->type;
+  if(entry->type==0)out<<",\"op\":"<<int(entry->data.op);
+  else if(entry->type==1){const auto &value=entry->data.operand;out<<",\"operand_type\":"<<int(value.dataType)<<",\"value\":";
+   switch(value.dataType){case VAL_INT:out<<value.internals.intVal;break;case VAL_FLOAT:Require(std::isfinite(value.internals.floatVal),"nonfinite expression float");out<<std::setprecision(9)<<value.internals.floatVal;break;
+    case VAL_STRING:{OptionalText(out,value.internals.string);out<<",\"localized_reference\":";const std::string text=value.internals.string?Text(value.internals.string):"";auto found=translations.find(text.size()&&text[0]=='@'?text.substr(1):text);if(found==translations.end())out<<"null";else out<<Json(found->second);break;}
+    default:throw std::runtime_error("unknown expression operand type");}
+  }else throw std::runtime_error("unknown expression entry type");out<<'}';
+ }out<<']';
+}
+void MenuInteraction(std::ostream &out,const menuDef_t &menu,const std::map<std::string,std::string> &translations){
+ out<<",\"scripts\":{\"on_open\":";OptionalText(out,menu.onOpen);out<<",\"on_close\":";OptionalText(out,menu.onClose);out<<",\"on_esc\":";OptionalText(out,menu.onESC);out<<",\"on_key\":";KeyScripts(out,menu.onKey);out<<"},\"allowed_binding\":";OptionalText(out,menu.allowedBinding);
+ out<<",\"focus_color\":";Floats(out,menu.focusColor,4);out<<",\"disable_color\":";Floats(out,menu.disableColor,4);
+ const float fades[]={menu.fadeClamp,menu.fadeAmount,menu.fadeInAmount};out<<",\"fade_cycle\":"<<menu.fadeCycle<<",\"fade_clamp_amount_in\":";Floats(out,fades,3);out<<",\"visible_expression\":";Statement(out,menu.visibleExp,translations);
+}
+void ItemInteraction(std::ostream &out,const itemDef_s &item,const std::map<std::string,std::string> &translations){
+ out<<",\"scripts\":{";const char *names[]={"mouse_enter_text","mouse_exit_text","mouse_enter","mouse_exit","action","on_accept","on_focus","leave_focus"};
+ const char *values[]={item.mouseEnterText,item.mouseExitText,item.mouseEnter,item.mouseExit,item.action,item.onAccept,item.onFocus,item.leaveFocus};
+ for(unsigned n=0;n<8;++n){if(n)out<<',';out<<Json(names[n])<<':';OptionalText(out,values[n]);}out<<",\"on_key\":";KeyScripts(out,item.onKey);out<<"},\"text_expression\":";Statement(out,item.textExp,translations);out<<",\"visible_expression\":";Statement(out,item.visibleExp,translations);
+}
+struct UiSounds {const snd_alias_list_t *aliases[2]{};bool duplicate=false;};
+void CollectUiSound(XAssetHeader header,void *context) noexcept {
+ auto &sounds=*static_cast<UiSounds*>(context);const auto *alias=header.sound;
+ if(!alias||!alias->aliasName)return;
+ const char *names[]={"mouse_click","mouse_over"};
+ for(unsigned n=0;n<2;++n)if(!std::strcmp(alias->aliasName,names[n])){if(sounds.aliases[n])sounds.duplicate=true;sounds.aliases[n]=alias;}
+}
+void ExportUiSounds(const std::filesystem::path &directory){
+ UiSounds sounds;DB_EnumXAssets(ASSET_TYPE_SOUND,CollectUiSound,&sounds,false);Require(!sounds.duplicate,"duplicate UI sound alias");
+ std::ofstream out(directory/"ui-sounds.json");Require(bool(out),"cannot create UI sound inventory");out<<"{\"aliases\":[";
+ const char *names[]={"mouse_click","mouse_over"};
+ for(unsigned n=0;n<2;++n){if(n)out<<',';const auto *list=sounds.aliases[n];out<<"{\"name\":"<<Json(names[n])<<",\"available\":"<<(list?"true":"false");
+  if(list){Require(list->count>=0&&list->count<=64&&(!list->count||list->head),"invalid UI sound aliases");out<<",\"count\":"<<list->count<<",\"variants\":[";
+   for(int v=0;v<list->count;++v){if(v)out<<',';const auto &a=list->head[v];out<<"{\"name\":";OptionalText(out,a.aliasName);out<<",\"flags\":"<<a.flags<<",\"volume\":";const float volume[]={a.volMin,a.volMax};Floats(out,volume,2);out<<",\"pitch\":";const float pitch[]={a.pitchMin,a.pitchMax};Floats(out,pitch,2);out<<",\"start_delay\":"<<a.startDelay<<",\"secondary\":";OptionalText(out,a.secondaryAliasName);out<<",\"chain\":";OptionalText(out,a.chainAliasName);
+    const auto *file=a.soundFile;out<<",\"sound_file\":";
+    if(!file)out<<"null";else {out<<"{\"type\":"<<unsigned(file->type)<<",\"exists\":"<<unsigned(file->exists);
+     if(file->type==1&&file->u.loadSnd){const auto &loaded=*file->u.loadSnd;const auto &info=loaded.sound.info;out<<",\"loaded_name\":";OptionalText(out,loaded.name);out<<",\"format\":"<<info.format<<",\"rate\":"<<info.rate<<",\"bits\":"<<info.bits<<",\"channels\":"<<info.channels<<",\"samples\":"<<info.samples<<",\"data_len\":"<<info.data_len<<",\"block_size\":"<<info.block_size<<",\"data_present\":"<<(loaded.sound.data?"true":"false");
+      // The DB loader allocates and fills exactly data_len bytes at sound.data;
+      // dedicated SND_SetData preserves them without decoding/resampling.
+      const bool pcm=file->exists&&loaded.sound.data&&info.format==1&&(info.bits==8||info.bits==16)&&(info.channels==1||info.channels==2)&&info.rate>=8000&&info.rate<=192000&&info.data_len>0&&info.data_len<=4u*1024u*1024u&&uint64_t(info.samples)*info.channels*(info.bits/8)==info.data_len;
+      out<<",\"pcm_file\":";if(pcm){const auto name=std::string(names[n])+"_"+std::to_string(v)+".pcm";std::ofstream bytes(directory/name,std::ios::binary);Require(bool(bytes),"cannot create PCM export");bytes.write(reinterpret_cast<const char*>(loaded.sound.data),info.data_len);bytes.close();Require(bool(bytes),"cannot finish PCM export");out<<Json(name);}else out<<"null";
+     }out<<'}';}out<<'}';
+   }out<<']';}out<<'}';
+ }out<<"]}\n";out.close();Require(bool(out),"cannot finish UI sound inventory");
+}
 void ExportMenus(const std::filesystem::path &directory){
  Menus menus;DB_EnumXAssets(ASSET_TYPE_MENU,CollectMenu,&menus,false);Require(!menus.overflow,"menu inventory exceeds bound");
  Localizations localized;DB_EnumXAssets(ASSET_TYPE_LOCALIZE_ENTRY,CollectLocalization,&localized,false);Require(!localized.overflow,"localization inventory exceeds bound");
@@ -141,14 +194,14 @@ void ExportMenus(const std::filesystem::path &directory){
  std::ofstream out(directory/"menu-inventory.json");Require(bool(out),"cannot create menu inventory");out<<"{\"string_encoding\":\"engine bytes mapped to U+0000..U+00FF\",\"menus\":[";
  size_t totalItems=0;
  for(size_t m=0;m<menus.count;++m){auto *menu=menus.items[m];Require(menu&&menu->itemCount>=0&&menu->itemCount<=4096&&(!menu->itemCount||menu->items),"invalid menu item storage");Require(std::isfinite(menu->blurRadius),"nonfinite menu blur");totalItems+=menu->itemCount;Require(totalItems<=65536,"menu item inventory exceeds bound");if(m)out<<',';
-  out<<"{\"window\":";Window(out,menu->window);out<<",\"font\":";OptionalText(out,menu->font);out<<",\"font_index\":"<<menu->fontIndex<<",\"full_screen\":"<<menu->fullScreen<<",\"has_scripts\":"<<(menu->onOpen||menu->onClose||menu->onESC||menu->onKey?"true":"false")<<",\"expressions\":["<<menu->visibleExp.numEntries<<','<<menu->rectXExp.numEntries<<','<<menu->rectYExp.numEntries<<"],\"sound\":";OptionalText(out,menu->soundName);out<<",\"blur_radius\":"<<menu->blurRadius<<",\"items\":[";
+  out<<"{\"window\":";Window(out,menu->window);out<<",\"font\":";OptionalText(out,menu->font);out<<",\"font_index\":"<<menu->fontIndex<<",\"full_screen\":"<<menu->fullScreen<<",\"has_scripts\":"<<(menu->onOpen||menu->onClose||menu->onESC||menu->onKey?"true":"false")<<",\"expressions\":["<<menu->visibleExp.numEntries<<','<<menu->rectXExp.numEntries<<','<<menu->rectYExp.numEntries<<"],\"sound\":";OptionalText(out,menu->soundName);out<<",\"blur_radius\":"<<menu->blurRadius;MenuInteraction(out,*menu,translations);out<<",\"items\":[";
   for(int i=0;i<menu->itemCount;++i){const auto *item=menu->items[i];Require(item,"null menu item");Require(std::isfinite(item->textalignx)&&std::isfinite(item->textaligny)&&std::isfinite(item->textscale),"nonfinite item text layout");if(i)out<<',';
    out<<"{\"index\":"<<i<<",\"window\":";Window(out,item->window);out<<",\"text_rect\":";Rect(out,item->textRect[0]);out<<",\"type\":"<<item->type<<",\"data_type\":"<<item->dataType<<",\"alignment\":"<<item->alignment<<",\"font_enum\":"<<item->fontEnum<<",\"text_align_mode\":"<<item->textAlignMode<<",\"text_align_x\":"<<item->textalignx<<",\"text_align_y\":"<<item->textaligny<<",\"text_scale\":"<<item->textscale<<",\"text_style\":"<<item->textStyle<<",\"item_flags\":"<<item->itemFlags<<",\"text\":";OptionalText(out,item->text);
    out<<",\"localized_text\":";const auto key=item->text&&item->text[0]=='@'?translations.find(Text(item->text+1)):translations.end();if(key!=translations.end())out<<Json(key->second);else out<<"null";
-   out<<",\"has_scripts\":"<<(item->mouseEnterText||item->mouseExitText||item->mouseEnter||item->mouseExit||item->action||item->onAccept||item->onFocus||item->leaveFocus||item->onKey?"true":"false")<<",\"dvar\":";OptionalText(out,item->dvar);out<<",\"dvar_test\":";OptionalText(out,item->dvarTest);out<<",\"enable_dvar\":";OptionalText(out,item->enableDvar);out<<",\"dvar_flags\":"<<item->dvarFlags<<",\"has_focus_sound\":"<<(item->focusSound?"true":"false")<<",\"expressions\":["<<item->visibleExp.numEntries<<','<<item->textExp.numEntries<<','<<item->materialExp.numEntries<<','<<item->rectXExp.numEntries<<','<<item->rectYExp.numEntries<<','<<item->rectWExp.numEntries<<','<<item->rectHExp.numEntries<<','<<item->forecolorAExp.numEntries<<"]}";
+   out<<",\"has_scripts\":"<<(item->mouseEnterText||item->mouseExitText||item->mouseEnter||item->mouseExit||item->action||item->onAccept||item->onFocus||item->leaveFocus||item->onKey?"true":"false")<<",\"dvar\":";OptionalText(out,item->dvar);out<<",\"dvar_test\":";OptionalText(out,item->dvarTest);out<<",\"enable_dvar\":";OptionalText(out,item->enableDvar);out<<",\"dvar_flags\":"<<item->dvarFlags<<",\"has_focus_sound\":"<<(item->focusSound?"true":"false")<<",\"expressions\":["<<item->visibleExp.numEntries<<','<<item->textExp.numEntries<<','<<item->materialExp.numEntries<<','<<item->rectXExp.numEntries<<','<<item->rectYExp.numEntries<<','<<item->rectWExp.numEntries<<','<<item->rectHExp.numEntries<<','<<item->forecolorAExp.numEntries<<']';ItemInteraction(out,*item,translations);out<<'}';
   }out<<"]}";
  }
- out<<"]}\n";out.close();Require(bool(out),"cannot finish menu inventory");
+ out<<"],\"localized_controls\":{";bool firstControl=true;for(const char *name:{"EXE_YES","EXE_NO"}){if(!firstControl)out<<',';firstControl=false;out<<Json(name)<<':';auto found=translations.find(name);if(found==translations.end())out<<"null";else out<<Json(found->second);}out<<"}}\n";out.close();Require(bool(out),"cannot finish menu inventory");
  std::ofstream materials(directory/"material-inventory.json");Require(bool(materials),"cannot create material inventory");materials<<"{\"materials\":[";bool first=true;
  for(auto *material:relevantMaterials){if(!first)materials<<',';first=false;MaterialManifest(materials,material);}materials<<"]}\n";materials.close();Require(bool(materials),"cannot finish material inventory");
  std::printf("menu_inventory=complete menus=%zu items=%zu materials=%zu localizations=%zu\n",menus.count,totalItems,relevantMaterials.size(),localized.count);
@@ -201,7 +254,7 @@ void ExportFont(Font_s *font,size_t index,const std::filesystem::path &directory
   for(size_t i=0;i<fonts.count;++i)ExportFont(fonts.items[i],i,directory,manifest);
   manifest<<"\n]}\n";manifest.close();Require(bool(manifest),"cannot finish font manifest");
   ExportFontRoles(directory,fonts);
-  if(menusOption)ExportMenus(directory);
+  if(menusOption){ExportMenus(directory);ExportUiSounds(directory);}
   std::printf("asset_export=complete fonts=%zu networking=not-initialized\n",fonts.count);status=0;
  }catch(const std::exception &error){std::fprintf(stderr,"Offline font export failed: %s\n",error.what());}
  // File streams above are closed. This isolated one-shot tool owns DB arenas

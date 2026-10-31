@@ -1,5 +1,6 @@
 #pragma once
 #include "engine_input.h"
+#include "menu_input_client.h"
 #include <linux/client/diagnostic_host.h>
 #include <linux/client/discovery_session.h>
 #include <memory>
@@ -20,6 +21,10 @@ public:
     ClientInputHost(ClientInputHost&&)=delete;
     ClientInputHost& operator=(ClientInputHost&&)=delete;
     void Dispatch(const sysEvent_t &event);
+    void AttachMenu(MenuInputClient &menu);
+    void DetachMenu(MenuInputClient &menu);
+    bool MenuOpen() const { return menu_ && menu_->Opened(); }
+    void SyncMenuCapture();
     void Tick();
     void Discover(const char *endpoint);
     uint64_t Ticks() const { return runtime_.Ticks(); }
@@ -39,6 +44,10 @@ private:
     kisak::client::Runtime runtime_;
     std::unique_ptr<kisak::client::DiscoverySession> discovery_;
     uint32_t previousTick_=0;
+    MenuInputClient *menu_=nullptr;
+    bool priorUiStarted_=false;
+    int priorUiCatchers_=0;
+    static void MenuOpenCommand();
     static void EchoCommand();
     static void StatusCommand();
     static void DiscoverCommand();

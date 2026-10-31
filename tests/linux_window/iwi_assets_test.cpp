@@ -54,6 +54,20 @@ int main(int argc,char **argv){
  for(int y=0;y<4;++y)for(int x=0;x<8;++x){const size_t p=4*(y*8+x);const auto bytes=decoded.Bytes();
   placed &= bytes[p]==(x<4?247:0) && bytes[p+1]==(x<4?0:251) && bytes[p+2]==0 && bytes[p+3]==255;}
  Check(placed,"non-square DXT5 image places distinct blocks with correct row stride");
+ // Full nonsquare chain: 8x4 red, 4x2 green, 2x1 blue, 1x1 white.
+ auto chainHeader=wideHeader;chainHeader.flags=0;
+ chainHeader.fileSizeForPicmip[0]=108;chainHeader.fileSizeForPicmip[1]=76;
+ chainHeader.fileSizeForPicmip[2]=60;chainHeader.fileSizeForPicmip[3]=44;
+ std::vector<uint8_t> chainFile(108,0);std::memcpy(chainFile.data(),&chainHeader,28);
+ const uint16_t colors[]={0xffff,0x001f,0x07e0,0xf800,0xf800};
+ for(int b=0;b<5;++b){auto at=28+b*16;chainFile[at]=255;chainFile[at+8]=colors[b]&255;chainFile[at+9]=colors[b]>>8;}
+ auto chain=kisak::window::DecodeIwiMipChain(chainFile);
+ Check(chain.size()==4 && chain[1].Extent().width==4 && chain[1].Extent().height==2 && chain[2].Extent().width==2 && chain[2].Extent().height==1 && chain[3].Bytes().size()==4,"actual stored nonsquare chain retains tiny logical mip dimensions");
+ bool mipColors=true;const unsigned channels[]={0,1,2,0};
+ for(size_t level=0;level<4;++level)for(size_t pixel=0;pixel<chain[level].Bytes().size();pixel+=4)
+  mipColors &= chain[level].Bytes()[pixel+channels[level]]>240 && chain[level].Bytes()[pixel+3]==255;
+ Check(mipColors,"tiny padded/cropped decode preserves distinct stored colors at every mip");
+ auto shortChain=chainFile;shortChain.pop_back();reject(shortChain,"full-chain truncation rejects before any level publication");
  if(argc>1){
   for(int arg=1;arg<argc;++arg){auto real=kisak::window::LoadIwiFile(argv[arg]);size_t zero=0,opaque=0,partial=0;uint32_t hash=2166136261u;
    auto bytes=real.Bytes();for(size_t i=0;i<bytes.size();++i){hash=(hash^bytes[i])*16777619u;if(i%4==3){zero+=bytes[i]==0;opaque+=bytes[i]==255;partial+=bytes[i]>0 && bytes[i]<255;}}

@@ -29,7 +29,7 @@ clientConnection_t *CL_GetLocalClientConnection(int client) {
 }
 
 namespace kisak::window {
-namespace { ClientInputHost *owner=nullptr; cmd_function_s commands[5]{}; }
+namespace { ClientInputHost *owner=nullptr; cmd_function_s commands[6]{}; }
 ClientInputHost &ClientInputHost::Current() {
     if(!owner)throw std::logic_error("input services unavailable outside host lifetime");
     return *owner;
@@ -47,9 +47,9 @@ ClientInputHost::ClientInputHost() : EngineInput(MouseInput,ResetInput) {
     cl_freelook=Dvar_RegisterBool("cl_freelook",true,DVAR_ARCHIVE,"Enable looking with mouse");
     CL_InitInput();
     owner=this;Resize(640,480);previousTick_=Sys_Milliseconds();
-    const char *names[]={"echo","status","discover","net_restart","bind"};
-    void(*handlers[])()={EchoCommand,StatusCommand,DiscoverCommand,RestartCommand,BindCommand};
-    for(int i=0;i<5;++i)Cmd_AddCommandInternal(names[i],handlers[i],&commands[i]);
+    const char *names[]={"echo","status","discover","net_restart","bind","menu_open"};
+    void(*handlers[])()={EchoCommand,StatusCommand,DiscoverCommand,RestartCommand,BindCommand,MenuOpenCommand};
+    for(int i=0;i<6;++i)Cmd_AddCommandInternal(names[i],handlers[i],&commands[i]);
 }
 ClientInputHost::~ClientInputHost() { discovery_.reset();Reset();CL_ShutdownInput();Key_Shutdown();
     con_restricted=sv_disableClientConsole=cl_bypassMouseInput=nullptr;
@@ -59,6 +59,7 @@ void ClientInputHost::Reset() {
     runtime_.ClearCommands();Key_ClearStates(0);runtime_.ClearCommands();CL_ClearKeys(0);
     std::memset(clients[0].mouseDx,0,sizeof(clients[0].mouseDx));
     std::memset(clients[0].mouseDy,0,sizeof(clients[0].mouseDy));
+    if(menu_)menu_->ResetFocus();
     ++resets_;
 }
 int ClientInputHost::MouseInput(int x,int y,int dx,int dy) { return CL_MouseEvent(x,y,dx,dy); }
@@ -71,11 +72,12 @@ void ClientInputHost::Dispatch(const sysEvent_t &event) {
         CL_CharEvent(0,event.evValue);
     } else throw std::runtime_error("input host cannot execute console/system commands");
 }
-void ClientInputHost::Resize(int width,int) {
+void ClientInputHost::Resize(int width,int height) {
+    if(menu_)menu_->Resize(width,height);
     g_consoleField.widthInPixels=std::max(8,width-32);
     FieldLayout(&scrPlaceFull,&g_consoleField);
 }
-void ClientInputHost::OnFocus(bool) {}
+void ClientInputHost::OnFocus(bool focused) { if(!focused && menu_)menu_->ResetFocus(); }
 void ClientInputHost::OnQuit() {}
 const char *ClientInputHost::Text() const { return g_consoleField.buffer; }
 int ClientInputHost::Cursor() const { return g_consoleField.cursor; }
@@ -109,11 +111,11 @@ void ClientInputHost::ConsoleKey(int client,int key) {
     FieldLayout(&scrPlaceFull,&g_consoleField);
 }
 void ClientInputHost::ConsoleChar(int client,int key) { Field_CharEvent(client,&scrPlaceFull,&g_consoleField,key); }
-void ClientInputHost::UiKey(int,int,int) { Unavailable("UI key"); }
-void ClientInputHost::UiSetMenu(int,uiMenuCommand_t) { Unavailable("UI menu"); }
-int ClientInputHost::UiActiveMenu(int) { throw std::runtime_error("UI menu unavailable"); }
-bool ClientInputHost::UiCheckExecKey(int,int) { throw std::runtime_error("UI binding unavailable"); }
-void ClientInputHost::UiMouse(int,int,int) { Unavailable("UI mouse"); }
+void ClientInputHost::UiKey(int client,int key,int down) { if(client || !menu_)throw std::runtime_error("UI key owner unavailable");menu_->Key(key,down!=0);SyncMenuCapture(); }
+void ClientInputHost::UiSetMenu(int client,uiMenuCommand_t mode) { if(client || !menu_)throw std::runtime_error("UI menu owner unavailable");if(mode==UIMENU_MAIN)menu_->Open();else if(mode==UIMENU_NONE)menu_->Close();else throw std::invalid_argument("Unsupported UI menu mode");SyncMenuCapture(); }
+int ClientInputHost::UiActiveMenu(int client) { if(client || !menu_)throw std::runtime_error("UI menu unavailable");return menu_->Opened()?UIMENU_MAIN:UIMENU_NONE; }
+bool ClientInputHost::UiCheckExecKey(int client,int) { if(client || !menu_)throw std::runtime_error("UI binding unavailable");return false; /* admitted menu has no on-key or allowed binding */ }
+void ClientInputHost::UiMouse(int client,int x,int y) { if(client || !menu_)throw std::runtime_error("UI mouse unavailable");menu_->Mouse(x,y);SyncMenuCapture(); }
 void ClientInputHost::ScriptKey(int) { Unavailable("script key"); }
 void ClientInputHost::ScriptMouse(int,int) { Unavailable("script mouse"); }
 void ClientInputHost::ShowCursor(bool show) { if(SDL_ShowCursor(show?SDL_ENABLE:SDL_DISABLE)<0)throw std::runtime_error(SDL_GetError()); }
@@ -133,6 +135,41 @@ void ClientInputHost::FieldLayout(const ScreenPlacement*,field_t *field) {
     field->scroll=std::clamp(field->scroll,0,field->cursor);
     if(field->cursor-field->scroll>=columns)field->scroll=field->cursor-columns+1;
     field->drawWidth=std::min(columns,length-field->scroll);
+}
+void ClientInputHost::AttachMenu(MenuInputClient &menu) {
+    if(menu_)throw std::logic_error("UI input owner already attached");
+    const bool started=cls.uiStarted;
+    const int catchers=clientUIActives[0].keyCatchers;
+    try {
+        Reset();
+        priorUiStarted_=started;priorUiCatchers_=catchers;
+        menu_=&menu;cls.uiStarted=true;SyncMenuCapture();
+    } catch (...) {
+        // Publication is transactional even if the borrowed owner throws from
+        // Opened(). A failed constructor must never leave its pointer installed.
+        menu_=nullptr;cls.uiStarted=started;clientUIActives[0].keyCatchers=catchers;
+        throw;
+    }
+}
+void ClientInputHost::DetachMenu(MenuInputClient &menu) {
+    if(menu_!=&menu)throw std::logic_error("UI input detach owner mismatch");
+    auto unpublish=[&]() noexcept {
+        menu_=nullptr;cls.uiStarted=priorUiStarted_;
+        clientUIActives[0].keyCatchers=priorUiCatchers_;
+    };
+    // Deliver releases while services and menu data still live, but unpublish
+    // on every outcome. Preserve the exception so failed actions stay visible.
+    try { Reset(); }
+    catch (...) { unpublish();throw; }
+    unpublish();
+}
+void ClientInputHost::SyncMenuCapture() {
+    if(menu_ && menu_->Opened())clientUIActives[0].keyCatchers=(clientUIActives[0].keyCatchers&~KEYCATCH_CONSOLE)|KEYCATCH_UI;
+    else clientUIActives[0].keyCatchers&=~KEYCATCH_UI;
+}
+void ClientInputHost::MenuOpenCommand() {
+    auto &host=Current();if(!host.menu_){std::fputs("menu_open unavailable without interactive menu\n",stderr);return;}
+    host.menu_->Open();host.SyncMenuCapture();
 }
 void ClientInputHost::EchoCommand() {
     std::printf("echo");for(int i=1;i<Cmd_Argc();++i)std::printf(" %s",Cmd_Argv(i));std::puts("");

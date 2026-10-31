@@ -33,7 +33,7 @@ int main(){try{
  draw("AA\nA");Check(Lit(r,3,58),"actual explicit newline wrapping");
  r.Resize(160,160);r.BeginFrame();r.Clear(black);const auto oldRect=item.textRect[0];
  Check(Reject([&]{r.DrawMenuText(roles,placement,item,"good\tbad",red);})&&item.textRect[0].w==oldRect.w,"unsupported late control rejects before item mutation");
- item.textStyle=6;Check(Reject([&]{r.DrawMenuText(roles,placement,item,"A",red);}),"unsupported menu style rejects explicitly");item.textStyle=0;
+ item.textStyle=128;Check(Reject([&]{r.DrawMenuText(roles,placement,item,"A",red);}),"unsupported menu style rejects explicitly");item.textStyle=0;
  item.window.rect.w=.001f;Check(Reject([&]{r.DrawMenuText(roles,placement,item,"A A",red);}),"subpixel wrap width rejects before integer layout conversion");item.window.rect.w=12;
  std::string many;for(int i=0;i<140;++i)many+="A\n";
  Check(Reject([&]{r.DrawMenuText(roles,placement,item,many,red);})&&item.textRect[0].w==oldRect.w,"late line command-capacity exhaustion rolls back entire item recording and extents");

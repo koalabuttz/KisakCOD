@@ -54,6 +54,33 @@ int main() {
   const auto partialMaterial=r.RegisterUiMaterial(r.Upload({1,1,4,transparent}));
   r.BeginFrame();r.Clear(background);r.DrawUiImage(partialMaterial,place,0,0,2,2,5,5,half);r.Submit();
   Check(Pixel(r,0,0,{112,96,143,255}),"source alpha128 times tint alpha128 blends independently calculated nonblack destination");
+  r.Resize(8,8);
+  std::vector<PixelBuffer> levels(4);const std::array<std::array<uint8_t,4>,4> colors={{{255,0,0,255},{0,255,0,255},{0,0,255,255},{255,255,255,255}}};
+  for(unsigned i=0;i<4;++i){levels[i].Resize(8>>i,8>>i);auto b=levels[i].Bytes();for(size_t at=0;at<b.size();at+=4)std::copy(colors[i].begin(),colors[i].end(),b.begin()+at);}
+  const auto mipTexture=r.UploadMipChain(levels);const auto mipMaterial=r.RegisterUiMaterial(mipTexture,true);
+  for(auto &level:levels)std::fill(level.Bytes().begin(),level.Bytes().end(),0);
+  for(int size:{8,6,4,3,2,1}){
+   r.Resize(8,8);r.BeginFrame();r.Clear(black);r.DrawUiImage(mipMaterial,place,0,0,float(size),float(size),5,5,white);r.Submit();
+   const int expected=size>=6?0:size>=3?1:size==2?2:3;
+   Check(Pixel(r,0,0,colors[expected]),"owned genuine mip selection follows nearest level at isotropic footprint");
+  }
+  r.Resize(8,8);r.BeginFrame();r.Clear(black);r.DrawUiImage(mipMaterial,place,0,0,4,2,5,5,white);
+  const auto saved=std::vector<uint8_t>(r.Pixels().bytes.begin(),r.Pixels().bytes.end());
+  Check(Reject([&]{r.Submit();}) && std::equal(saved.begin(),saved.end(),r.Pixels().bytes.begin()),"unsupported nonuniform minification rejects atomically before clear");
+  r.Resize(8,8);
+  Check(Reject([&]{r.UploadMipChain(std::span<const PixelBuffer>(levels).first(3));}),"incomplete chain upload rejected");
+  levels[1].Resize(3,4);Check(Reject([&]{r.UploadMipChain(levels);}),"invalid chain shape rejected");
+  Check(Reject([&]{r.Release(mipTexture);}),"material pins entire owned mip resource");
+  {
+   CpuRenderer budget;budget.Initialize(1,1);std::vector<PixelBuffer> tiny(2);tiny[0].Resize(2,2);tiny[1].Resize(1,1);
+   std::vector<CpuRenderer::TextureHandle> handles;for(int i=0;i<64;++i)handles.push_back(budget.UploadMipChain(tiny));
+   Check(Reject([&]{budget.UploadMipChain(tiny);}) && budget.TextureCount()==64,"mip uploads share bounded image resource budget transactionally");
+   budget.Release(handles.back());const auto replacement=budget.UploadMipChain(tiny);
+   Check(replacement!=handles.back() && budget.TextureCount()==64,"release refunds resource capacity without reusing stale handle");
+   budget.Shutdown();Check(budget.TextureCount()==0,"shutdown releases every mip resource");
+  }
+  r.ReleaseUiMaterial(mipMaterial);r.Release(mipTexture);
+  Check(Reject([&]{r.RegisterUiMaterial(mipTexture,true);}),"released mip chain handle cannot be rebound");
  } catch(const std::exception&e) {std::fprintf(stderr,"UI test failed: %s\n",e.what());++failures;}
  std::printf("-- %d checks, %d failures --\n",checks,failures);return failures?1:0;
 }

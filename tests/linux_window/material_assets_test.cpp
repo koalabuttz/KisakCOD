@@ -21,7 +21,7 @@ int main(int argc,char **argv){try{
  for(uint64_t n:{0x602d184976cd8fe3ull,0xffcac203960f77f6ull}){Word(bytes,uint32_t(n));Word(bytes,uint32_t(n>>32));}
  Word(bytes,3);const size_t arguments=bytes.size();
  for(uint32_t n:{3u,4u,60u,0u,4u,3u,0u,76u,0u,4u,2u,0u,2695565377u,0u,0u})Word(bytes,n);
- auto resolved=DecodeUiMaterial(bytes);Check(resolved.name=="fixture/font"&&resolved.imageName=="fixture_atlas"&&resolved.magnificationOnly,"supported metadata resolves named sampler with magnification restriction");
+ auto resolved=DecodeUiMaterial(bytes);Check(resolved.name=="fixture/font"&&resolved.imageName=="fixture_atlas"&&resolved.strictSampler,"supported metadata resolves named sampler with magnification restriction");
  bool truncated=true;for(size_t n=0;n<bytes.size();++n)truncated&=Reject({bytes.begin(),bytes.begin()+n});Check(truncated,"every truncated metadata prefix rejects without reading outside bounds");
  auto bad=bytes;bad.push_back(0);Check(Reject(bad),"trailing bytes reject");bad=bytes;bad[6]='2';Check(Reject(bad),"unknown metadata version rejects");
  bool states=true;for(size_t i=0;i<22;++i){bad=bytes;bad[fields+i*4]^=1;states&=Reject(bad);}Check(states,"every unsupported state sampler technique and remap field rejects");
@@ -31,6 +31,6 @@ int main(int argc,char **argv){try{
  bad=bytes;bad[12]=0;Check(Reject(bad),"embedded control characters reject");
  const size_t image=12+std::string("fixture/font").size()+4;bad=bytes;bad[image]='/';Check(Reject(bad),"image identifiers cannot introduce paths");
  bytes.assign(8,0);Check(resolved.name=="fixture/font"&&resolved.imageName=="fixture_atlas","resolved metadata owns strings after input storage is destroyed");
- for(int i=1;i<argc;++i){auto actual=LoadUiMaterialFile(argv[i]);Check(actual.magnificationOnly&&!actual.name.empty(),"genuine exported supported material resolved");std::printf("material=%s image=%s magnification_only=1\n",actual.name.c_str(),actual.imageName.c_str());}
+ for(int i=1;i<argc;++i){auto actual=LoadUiMaterialFile(argv[i]);Check(actual.strictSampler&&!actual.name.empty(),"genuine exported supported material resolved");std::printf("material=%s image=%s magnification_only=1\n",actual.name.c_str(),actual.imageName.c_str());}
 }catch(const std::exception&e){std::fprintf(stderr,"material fixture failed: %s\n",e.what());++failures;}
 std::printf("-- %d checks, %d failures --\n",checks,failures);return failures?1:0;}

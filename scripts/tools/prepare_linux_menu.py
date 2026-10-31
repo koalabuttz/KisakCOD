@@ -50,16 +50,10 @@ def encode_item(menu, item):
         raise ValueError('invalid menu integer fields')
     return b'KUMENU01' + struct.pack('<15f11I', *floats, *words) + data + source
 
-def prepare(export, destination, menu_name, item_index):
-    inventory=read_json(export/'menu-inventory.json',32*1024*1024)
-    menus=[m for m in inventory['menus'] if m['window']['name']==menu_name]
-    if len(menus)!=1: raise ValueError('menu name must identify exactly one exported menu')
-    menu=menus[0];items=[i for i in menu['items'] if i['index']==item_index]
-    if len(items)!=1: raise ValueError('item index unavailable')
-    payload=encode_item(menu,items[0])
+def prepare_font_files(export):
     roles=read_json(export/'font-roles.json')
     manifest=read_json(export/'manifest.json')
-    files={'item.menu':payload}
+    files={}
     for role in ROLES:
         matches=[x for x in roles['roles'] if x['role']==role]
         if len(matches)!=1 or not matches[0]['actual_asset_name']: raise ValueError('missing genuine font role '+role)
@@ -69,6 +63,17 @@ def prepare(export, destination, menu_name, item_index):
         if Path(filename).name!=filename or not filename.endswith('.font'): raise ValueError('invalid export font filename')
         files[role+'.font']=bounded_read(export/filename,128*1024)
         files[role+'.material']=encode_material(font['material'])
+    return files,roles
+
+def prepare(export, destination, menu_name, item_index):
+    inventory=read_json(export/'menu-inventory.json',32*1024*1024)
+    menus=[m for m in inventory['menus'] if m['window']['name']==menu_name]
+    if len(menus)!=1: raise ValueError('menu name must identify exactly one exported menu')
+    menu=menus[0];items=[i for i in menu['items'] if i['index']==item_index]
+    if len(items)!=1: raise ValueError('item index unavailable')
+    payload=encode_item(menu,items[0])
+    files,roles=prepare_font_files(export)
+    files['item.menu']=payload
     if destination.exists(): raise ValueError('output must be a new private directory')
     destination.mkdir(mode=0o700,parents=False)
     for name,data in files.items(): (destination/name).write_bytes(data)

@@ -61,8 +61,9 @@ void CpuRenderer::DrawUiText(FontHandle font,const ScreenPlacement &placement,st
     activeText={};
 }
 
-void CpuRenderer::DrawMenuText(const MenuFonts &roles,const ScreenPlacement &placement,itemDef_s &item,
-                               std::string_view text,const float *color) {
+void CpuRenderer::PaintMenu(const MenuFonts &roles,const ScreenPlacement &placement,itemDef_s &item,
+                           std::string_view text,const float *color,
+                           void(*paint)(void*,itemDef_s*,const char*,const float*),void *context,bool fullItem) {
     CheckThread();
     if(state_!=State::recording || active.renderer || activeText.renderer)throw std::logic_error("Menu scope requires exclusive recording renderer");
     if(text.size()>1023 || text.find('\0')!=std::string_view::npos)throw std::invalid_argument("Invalid bounded menu text");
@@ -74,7 +75,7 @@ void CpuRenderer::DrawMenuText(const MenuFonts &roles,const ScreenPlacement &pla
     const auto &r=item.window.rect;
     for(float value:{r.x,r.y,r.w,r.h,item.textalignx,item.textaligny,item.textscale,item.window.borderSize})
         if(!std::isfinite(value) || std::abs(value)>16384)throw std::invalid_argument("Invalid menu geometry");
-    if(r.w<1 || r.h<0 || item.textscale<=0 || item.textscale>4 || (item.textStyle!=0 && item.textStyle!=3) || (item.itemFlags&2) ||
+    if(r.w<1 || r.h<0 || item.textscale<=0 || item.textscale>4 || (item.textStyle!=0 && item.textStyle!=3 && item.textStyle!=6) || (item.itemFlags&2) ||
        item.fontEnum<0 || item.fontEnum>6 || item.textAlignMode<0 || item.textAlignMode>14 || (item.textAlignMode&3)==3 ||
        r.horzAlign<0 || r.horzAlign>7 || r.vertAlign<0 || r.vertAlign>7)
         throw std::invalid_argument("Unsupported menu text layout/style");
@@ -96,9 +97,21 @@ void CpuRenderer::DrawMenuText(const MenuFonts &roles,const ScreenPlacement &pla
     const auto priorCommands=commands_;const size_t priorBindings=fontBindingCount_;
     const auto priorPlacement=scrPlaceView[0];scrPlaceView[0]=placement;
     activeText={this,selectedHandle,selected,ownedText,true};menuFont=selected;menuSelection={&assets,&small,&big,&extra};
-    try { Item_Text_AutoWrapped_Paint(0,&local,ownedText.c_str(),color,false,nullptr,false); }
+    try { paint(context,&local,ownedText.c_str(),color); }
     catch(...) { commands_=priorCommands;fontBindingCount_=priorBindings;activeText={};menuFont=nullptr;menuSelection={};scrPlaceView[0]=priorPlacement;throw; }
-    activeText={};menuFont=nullptr;menuSelection={};scrPlaceView[0]=priorPlacement;item.textRect[0]=local.textRect[0];
+    activeText={};menuFont=nullptr;menuSelection={};scrPlaceView[0]=priorPlacement;if(fullItem)item=local;else item.textRect[0]=local.textRect[0];
+}
+void CpuRenderer::DrawMenuText(const MenuFonts &roles,const ScreenPlacement &placement,itemDef_s &item,std::string_view text,const float *color) {
+    PaintMenu(roles,placement,item,text,color,[](void*,itemDef_s *local,const char *value,const float *tint){
+        Item_Text_AutoWrapped_Paint(0,local,value,tint,false,nullptr,false);
+    },nullptr,false);
+}
+void CpuRenderer::DrawMenuItem(const MenuFonts &roles,const ScreenPlacement &placement,UiContext &dc,itemDef_s &item) {
+    if(dc.localClientNum!=0 || !item.parent || (item.type!=1 && item.type!=11))throw std::invalid_argument("Unsupported owned menu item painter");
+    PaintMenu(roles,placement,item,{},nullptr,[](void *context,itemDef_s *local,const char*,const float*){
+        auto *dc=static_cast<UiContext*>(context);
+        if(local->type==11)Item_YesNo_Paint(dc,local);else Item_Text_Paint(dc,local);
+    },&dc,true);
 }
 Font_s *ScopedMenuFont(const ScreenPlacement *placement,int fontEnum,float scale) {
     if(!activeText.renderer || !activeText.menu || !menuFont)throw std::logic_error("Menu font selection requires scoped owned roles");

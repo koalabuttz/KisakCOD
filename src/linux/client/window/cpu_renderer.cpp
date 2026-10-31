@@ -40,22 +40,52 @@ void CpuRenderer::Clear(const float (&color)[4]) {
     R_EmitClearScreenCommand(this,Allocate,1,color,1.0f,0);
 }
 CpuRenderer::TextureHandle CpuRenderer::Upload(PixelBufferView image) {
+    return UploadLevels(std::span<const PixelBufferView>(&image,1),false);
+}
+CpuRenderer::TextureHandle CpuRenderer::UploadMipChain(std::span<const PixelBuffer> levels) {
+    std::vector<PixelBufferView> views;for(const auto &level:levels)views.push_back(level.View());
+    return UploadLevels(views,true);
+}
+CpuRenderer::TextureHandle CpuRenderer::UploadLevels(std::span<const PixelBufferView> levels,bool complete) {
     CheckThread();if(state_!=State::ready)throw std::logic_error("Upload requires ready renderer");
-    ValidatePixelBuffer(image);
-    const size_t bytes=size_t(image.width)*image.height*4;
+    if(levels.empty() || levels.size()>32)throw std::invalid_argument("Invalid mip count");
+    size_t bytes=0;int w=levels[0].width,h=levels[0].height;
+    for(size_t i=0;i<levels.size();++i) {
+        const auto image=levels[i];ValidatePixelBuffer(image);
+        if(image.width!=w || image.height!=h || (i && levels[i-1].width==1 && levels[i-1].height==1))throw std::invalid_argument("Invalid mip dimensions");
+        bytes+=size_t(w)*h*4;w=std::max(w/2,1);h=std::max(h/2,1);
+    }
+    if(complete && (levels.back().width!=1 || levels.back().height!=1))throw std::invalid_argument("Incomplete mip chain");
     if(textures_.size()>=64 || bytes>256u*1024u*1024u-textureBytes_ || nextTexture_==std::numeric_limits<TextureHandle>::max())
         throw std::length_error("CPU image resource budget exhausted");
-    PixelBuffer copy;copy.Resize(image.width,image.height);
-    for(int y=0;y<image.height;++y)std::memcpy(copy.Bytes().data()+size_t(y)*image.width*4,image.bytes.data()+size_t(y)*image.pitch,size_t(image.width)*4);
-    const auto handle=nextTexture_;
-    textures_.emplace(handle,std::move(copy));++nextTexture_;textureBytes_+=bytes;
-    return handle;
+    Texture copy;copy.bytes=bytes;
+    for(auto image:levels) {
+        PixelBuffer level;level.Resize(image.width,image.height);
+        for(int y=0;y<image.height;++y)std::memcpy(level.Bytes().data()+size_t(y)*image.width*4,image.bytes.data()+size_t(y)*image.pitch,size_t(image.width)*4);
+        copy.levels.push_back(std::move(level));
+    }
+    const auto handle=nextTexture_;textures_.emplace(handle,std::move(copy));++nextTexture_;textureBytes_+=bytes;return handle;
 }
+PixelBufferView CpuRenderer::SampleLevel(const GfxCmdStretchPic &pic,const UiMaterial &material) const {
+    const auto &texture=textures_.at(material.texture);const auto base=texture.View();
+    if(!material.strictSampler)return base;
+    const double dx=std::abs(double(pic.s1)-pic.s0)*base.width/pic.w;
+    const double dy=std::abs(double(pic.t1)-pic.t0)*base.height/pic.h;
+    if(std::max(dx,dy)<=1)return base;
+    if(std::abs(dx-dy)>1e-5*std::max(dx,dy))throw std::invalid_argument("Anisotropic UI minification is unsupported");
+    // Explicit CPU subset: isotropic footprint, nearest mip, zero bias,
+    // bilinear within the selected level. No hardware anisotropy parity claim.
+    if(texture.levels.back().Extent().width!=1 || texture.levels.back().Extent().height!=1)
+        throw std::invalid_argument("Metadata-backed minification requires complete mip chain");
+    const size_t level=std::min(size_t(std::floor(std::log2(dx)+.5)),texture.levels.size()-1);
+    return texture.levels[level].View();
+}
+
 void CpuRenderer::Release(TextureHandle texture) {
     CheckThread();if(state_!=State::ready)throw std::logic_error("Release requires ready renderer");
     auto found=textures_.find(texture);if(found==textures_.end())throw std::invalid_argument("Stale CPU image handle");
     for(const auto &item:uiMaterials_)if(item.second->texture==texture)throw std::logic_error("Texture is bound to a UI material");
-    textureBytes_-=found->second.Bytes().size();textures_.erase(found);
+    textureBytes_-=found->second.bytes;textures_.erase(found);
 }
 void CpuRenderer::Blit(TextureHandle texture,int x,int y,int width,int height) {
     CheckThread();if(state_!=State::recording)throw std::logic_error("Blit requires recording renderer");
@@ -67,11 +97,11 @@ void CpuRenderer::Blit(TextureHandle texture,int x,int y,int width,int height) {
     R_EmitStretchRawCommand(this,Allocate,x,y,width,height,image.width,image.height,image.bytes.data());
     bindings_[bindingCount_++]={offset,texture};
 }
-CpuRenderer::UiMaterialHandle CpuRenderer::RegisterUiMaterial(TextureHandle texture,bool magnificationOnly) {
+CpuRenderer::UiMaterialHandle CpuRenderer::RegisterUiMaterial(TextureHandle texture,bool strictSampler) {
     CheckThread();if(state_!=State::ready)throw std::logic_error("Material registration requires ready renderer");
     if(!textures_.contains(texture))throw std::invalid_argument("Stale UI texture");
     if(uiMaterials_.size()>=64 || nextUiMaterial_==std::numeric_limits<UiMaterialHandle>::max())throw std::length_error("UI material budget exhausted");
-    auto material=std::make_unique<UiMaterial>();material->texture=texture;material->magnificationOnly=magnificationOnly;
+    auto material=std::make_unique<UiMaterial>();material->texture=texture;material->strictSampler=strictSampler;
     material->value.info.name="cpu_owned_unlit_ui";
     const auto handle=nextUiMaterial_;uiMaterials_.emplace(handle,std::move(material));++nextUiMaterial_;return handle;
 }
@@ -120,7 +150,7 @@ void CpuRenderer::RecordText(FontHandle font,std::string_view text,int maxChars,
     CheckThread();if(state_!=State::recording)throw std::logic_error("Text requires recording renderer");
     auto found=fonts_.find(font);if(found==fonts_.end())throw std::invalid_argument("Stale font handle");
     if(text.size()>1024 || text.find('\0')!=std::string_view::npos || maxChars<=0 || maxChars>1024)throw std::invalid_argument("Text exceeds bounded command limits");
-    if((style!=0 && style!=3) || rotation!=0 || cursorPos>=0)throw std::invalid_argument("CPU text supports plain or one-pixel shadow style without rotation or cursor");
+    if((style!=0 && style!=3 && style!=6) || rotation!=0 || cursorPos>=0)throw std::invalid_argument("CPU text supports plain or supported shadow style without rotation or cursor");
     for(float value:{x,y})if(!std::isfinite(value) || std::abs(value)>1000000.0f)throw std::invalid_argument("Invalid text origin");
     for(float value:{xScale,yScale})if(!std::isfinite(value) || value<=0 || value>64)throw std::invalid_argument("Invalid text scale");
     for(size_t i=0;i<text.size();++i) {
@@ -188,9 +218,7 @@ void CpuRenderer::SubmitList(std::span<const uint8_t> commands,bool ownedFrame) 
             for(float value:{pic.x,pic.y,pic.w,pic.h})if(!std::isfinite(value) || std::abs(value)>1000000.0f)throw std::invalid_argument("Invalid UI geometry");
             if(pic.w<=0 || pic.h<=0)throw std::invalid_argument("Invalid UI dimensions");
             for(float value:{pic.s0,pic.t0,pic.s1,pic.t1})if(!std::isfinite(value) || value<0 || value>1)throw std::invalid_argument("Invalid UI UV");
-            const auto extent=textures_.at(found->second->texture).Extent();
-            if(found->second->magnificationOnly && (std::abs(double(pic.s1)-pic.s0)*extent.width>pic.w || std::abs(double(pic.t1)-pic.t0)*extent.height>pic.h))
-                throw std::invalid_argument("Metadata-backed UI minification is unsupported");
+            (void)SampleLevel(pic,*found->second);
         } else if(header.id==RC_DRAW_TEXT_2D) {
             constexpr size_t prefix=offsetof(GfxCmdDrawText2D,text);
             if(!ownedFrame || header.byteCount<sizeof(GfxCmdDrawText2D) || (header.byteCount&3) || commands.size()-offset<header.byteCount)throw std::invalid_argument("Text requires bounded owned frame binding");
@@ -200,7 +228,7 @@ void CpuRenderer::SubmitList(std::span<const uint8_t> commands,bool ownedFrame) 
             if(!binding)throw std::invalid_argument("Missing font binding");
             auto found=fonts_.find(binding->font);
             if(found==fonts_.end() || text.font!=&found->second->value)throw std::invalid_argument("Stale font binding");
-            if((text.renderFlags!=0 && text.renderFlags!=4) || text.rotation!=0 || text.maxChars<=0 || text.maxChars>1024)throw std::invalid_argument("Unsupported text style or limits");
+            if((text.renderFlags!=0 && text.renderFlags!=4 && text.renderFlags!=12) || text.rotation!=0 || text.maxChars<=0 || text.maxChars>1024)throw std::invalid_argument("Unsupported text style or limits");
             for(float value:{text.x,text.y})if(!std::isfinite(value) || std::abs(value)>1000000.0f)throw std::invalid_argument("Invalid text origin");
             for(float value:{text.xScale,text.yScale})if(!std::isfinite(value) || value<=0 || value>64)throw std::invalid_argument("Invalid text scale");
             const char *characters=reinterpret_cast<const char*>(commands.data()+offset+prefix);
@@ -246,7 +274,7 @@ void CpuRenderer::SubmitList(std::span<const uint8_t> commands,bool ownedFrame) 
             GfxCmdStretchPic pic;std::memcpy(&pic,commands.data()+offset,sizeof(pic));
             UiMaterialHandle handle=0;
             for(size_t i=0;i<uiBindingCount_;++i)if(uiBindings_[i].offset==offset)handle=uiBindings_[i].material;
-            const auto image=textures_.at(uiMaterials_.at(handle)->texture).View();
+            const auto image=SampleLevel(pic,*uiMaterials_.at(handle));
             RasterUiPic(pic,image);
         }
         offset+=header.byteCount;
@@ -256,7 +284,6 @@ void CpuRenderer::SubmitList(std::span<const uint8_t> commands,bool ownedFrame) 
 void CpuRenderer::WalkText(const GfxCmdDrawText2D &command,std::string_view text,const OwnedFont &font,bool render,uint64_t &coveredPixels) {
     auto material=uiMaterials_.find(font.material);
     if(material==uiMaterials_.end())throw std::invalid_argument("Stale font material");
-    const auto image=textures_.at(material->second->texture).View();
     const double startX=double(command.x)-.5*command.xScale;
     double x=startX,y=double(command.y)-.5*command.yScale;
     int remaining=command.maxChars;
@@ -272,8 +299,7 @@ void CpuRenderer::WalkText(const GfxCmdDrawText2D &command,std::string_view text
         pic.s0=glyph->s0;pic.t0=glyph->t0;pic.s1=glyph->s1;pic.t1=glyph->t1;
         for(float value:{pic.x,pic.y,pic.w,pic.h})if(!std::isfinite(value) || std::abs(value)>1000000.0f)throw std::invalid_argument("Text glyph geometry exceeds supported range");
         if(pic.w && pic.h) {
-            if(material->second->magnificationOnly && (std::abs(double(pic.s1)-pic.s0)*image.width>pic.w || std::abs(double(pic.t1)-pic.t0)*image.height>pic.h))
-                throw std::invalid_argument("Metadata-backed font minification is unsupported");
+            const auto sampled=SampleLevel(pic,*material->second);
             auto pass=[&](const GfxCmdStretchPic &quad) {
                 const auto extent=pixels_.Extent();
                 const double left=std::clamp(std::ceil(double(quad.x)-.5),0.0,double(extent.width));
@@ -282,12 +308,13 @@ void CpuRenderer::WalkText(const GfxCmdDrawText2D &command,std::string_view text
                 const double bottom=std::clamp(std::ceil(double(quad.y)+quad.h-.5),0.0,double(extent.height));
                 coveredPixels+=uint64_t((right-left)*(bottom-top));
                 if(coveredPixels>64u*1024u*1024u)throw std::length_error("Text raster budget exhausted");
-                if(render)RasterUiPic(quad,image);
+                if(render)RasterUiPic(quad,sampled);
             };
-            if(command.renderFlags==4) {
-                // Actual RB_DrawText style3: black with original packed alpha,
-                // offset one physical pixel (not one scaled glyph pixel), per glyph.
-                auto shadow=pic;shadow.x+=1;shadow.y+=1;shadow.color.packed=0;shadow.color.array[3]=command.color.array[3];
+            if(command.renderFlags==4 || command.renderFlags==12) {
+                // Actual RB_DrawText styles3/6: original-alpha black shadow,
+                // offset one/two physical pixels, before each foreground glyph.
+                const float distance=command.renderFlags==12?2:1;
+                auto shadow=pic;shadow.x+=distance;shadow.y+=distance;shadow.color.packed=0;shadow.color.array[3]=command.color.array[3];
                 pass(shadow);
             }
             pass(pic);

@@ -2,6 +2,7 @@
 // No game frame or connected state is fabricated.
 #include <linux/client/window/client_input_host.h>
 #include <linux/sys_events.h>
+#include <linux/client/window/menu_input_client.h>
 #include <client/client.h>
 #include <client_mp/client_mp.h>
 #include <ui/keycodes.h>
@@ -13,6 +14,13 @@
 extern CmdText cmd_textArray[1];
 
 namespace {
+struct ThrowingMenu final : kisak::window::MenuInputClient {
+    bool failOpened=false,failReset=false;int resets=0;
+    void Key(int,bool) override {} void Mouse(int,int) override {}
+    void Open() override {} void Close() override {} void Resize(int,int) override {}
+    void ResetFocus() override { ++resets;if(failReset)throw std::runtime_error("fixture reset failure"); }
+    bool Opened() const override { if(failOpened)throw std::runtime_error("fixture opened failure");return true; }
+};
 int checks, failures;
 
 void Check(bool ok,const char *name) { ++checks;failures+=!ok;std::printf("%s: %s\n",ok?"PASS":"FAIL",name); }
@@ -79,6 +87,21 @@ int main() {
             std::string reason;Check(!input.RequestFrame(reason) && reason.find("CL_Frame unavailable")!=std::string::npos,"frame request names unavailable production dependencies");
             Key(host.Id(),SDL_SCANCODE_W,true);pump();host.RequestQuit();
             Check(input.Held()==0 && !host.Running(),"quit clears actual held input before teardown");
+            const int originalCatchers=clientUIActives[0].keyCatchers;
+            clientUIActives[0].keyCatchers|=KEYCATCH_UI; // preserve preexisting capture even on failed detach
+            const bool priorStarted=cls.uiStarted;const int priorCatchers=clientUIActives[0].keyCatchers;
+            ThrowingMenu menu;menu.failOpened=true;bool failedAttach=false;
+            try {input.AttachMenu(menu);}catch(const std::runtime_error&){failedAttach=true;}
+            Check(failedAttach && cls.uiStarted==priorStarted && clientUIActives[0].keyCatchers==priorCatchers,"failed attachment restores UI readiness and capture");
+            menu.failOpened=false;input.AttachMenu(menu);menu.failReset=true;bool failedDetach=false;
+            try {input.DetachMenu(menu);}catch(const std::runtime_error&){failedDetach=true;}
+            Check(failedDetach && cls.uiStarted==priorStarted && clientUIActives[0].keyCatchers==priorCatchers,"failed reset detaches owner and restores prior capture while reporting error");
+            const int resetCalls=menu.resets;input.Focus(false);
+            Check(menu.resets==resetCalls,"later input reset cannot call failed detached owner");
+            menu.failReset=false;input.AttachMenu(menu);input.DetachMenu(menu);
+            Check(cls.uiStarted==priorStarted && clientUIActives[0].keyCatchers==priorCatchers,"fresh attachment works after failed attach and detach");
+            clientUIActives[0].keyCatchers=originalCatchers;
+
         }
         bool unavailable=false;try { CL_GetInputServices(); }catch(const std::logic_error&) { unavailable=true; }
         Check(unavailable,"provider unavailable outside scoped host lifetime");

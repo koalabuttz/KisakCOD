@@ -69,6 +69,11 @@ def main():
                                ("client/cl_keys.cpp", "KisakCOD-client-input"),
                                ("client_mp/cl_input.cpp", "KisakCOD-client-input"),
                                ("qcommon/field.cpp", "KisakCOD-client-input"),
+                               ("ui/ui_input_core.cpp", "KisakCOD-client-input"),
+                               ("ui/ui_script_core.cpp", "KisakCOD-client-input"),
+                               ("ui/ui_item_text.cpp", "KisakCOD-client-input"),
+                               ("window/ui_audio.cpp", "KisakCOD-client-input"),
+                               ("window/menu_input_owner.cpp", "KisakCOD-client-input"),
                                ("qcommon/cmd.cpp", "KisakCOD-client-input"),
                                ("universal/dvar.cpp", "KisakCOD-client-input"),
                                ("linux/net.cpp", "KisakCOD-client-input"),
@@ -96,37 +101,44 @@ def main():
                 check(f"-DKISAK_{own}" in command, f"{own} material {family} uses its game definition")
                 check("-DKISAK_RADIANT" not in command and f"-DKISAK_{other}" not in command,
                       f"{own} material {family} excludes other variant defines")
-        command = ["cmake", "--build", build, "--target", "KisakCOD-client-window", "KisakCOD-window-test", "KisakCOD-client-input", "KisakCOD-client-input-test", "KisakCOD-shutdown-signal-test", "KisakCOD-client-command-test", "KisakCOD-client-runtime-test", "KisakCOD-client-input-startup-test", "KisakCOD-presentation-test", "KisakCOD-frame-deadline-test", "KisakCOD-pixel-resource-test", "KisakCOD-cpu-renderer-test", "KisakCOD-cpu-renderer-fault-test", "KisakCOD-cpu-raw-test", "KisakCOD-material-clone-mp-test", "KisakCOD-material-clone-radiant-test", "KisakCOD-cpu-ui-test", "KisakCOD-material-layered-mp-test", "KisakCOD-material-layered-sp-test", "KisakCOD-material-layered-radiant-test", "KisakCOD-cpu-text-test", "KisakCOD-cpu-menu-test", "KisakCOD-menu-assets-test", "KisakCOD-ui-material-assets-test", "KisakCOD-iwi-assets-test", "KisakCOD-font-assets-test", "-j", args.jobs]
+        command = ["cmake", "--build", build, "--target", "KisakCOD-client-window", "KisakCOD-window-test", "KisakCOD-client-input", "KisakCOD-client-input-test", "KisakCOD-shutdown-signal-test", "KisakCOD-client-command-test", "KisakCOD-client-runtime-test", "KisakCOD-client-input-startup-test", "KisakCOD-presentation-test", "KisakCOD-frame-deadline-test", "KisakCOD-pixel-resource-test", "KisakCOD-cpu-renderer-test", "KisakCOD-cpu-renderer-fault-test", "KisakCOD-cpu-raw-test", "KisakCOD-material-clone-mp-test", "KisakCOD-material-clone-radiant-test", "KisakCOD-cpu-ui-test", "KisakCOD-material-layered-mp-test", "KisakCOD-material-layered-sp-test", "KisakCOD-material-layered-radiant-test", "KisakCOD-cpu-text-test", "KisakCOD-cpu-menu-test", "KisakCOD-menu-assets-test", "KisakCOD-ui-material-assets-test", "KisakCOD-iwi-assets-test", "KisakCOD-font-assets-test", "KisakCOD-menu-input-owner-test", "KisakCOD-menu-control-assets-test", "KisakCOD-menu-script-test", "KisakCOD-ui-audio-test", "KisakCOD-ui-audio-assets-test", "-j", args.jobs]
         run(command)
         run(command)
         check(True, "window targets build and incrementally rebuild")
-        env = dict(os.environ, SDL_VIDEODRIVER=args.video_driver)
+        env = dict(os.environ, SDL_VIDEODRIVER=args.video_driver, SDL_AUDIODRIVER="dummy")
         result = run([build / "bin/KisakCOD-window-test"], env=env, timeout=30)
         print(result.stdout, end="")
         if result.stderr:
             print(result.stderr, end="", file=sys.stderr)
-        summary = re.search(r"(?:-- |layered material: |IWI decoder: )(\d+) checks, (\d+) failures", result.stdout)
+        summary = re.search(r"(?:-- |layered material: |IWI decoder: |UI audio: |UI audio assets: )(\d+) checks, (\d+) failures", result.stdout)
         check(summary and int(summary[1]) >= 34 and int(summary[2]) == 0, "real SDL event/engine queue suite passes")
         check(f"SDL driver={args.video_driver}" in result.stdout, "test reports the explicitly selected SDL driver")
         result = run([build / "bin/KisakCOD-client-input-test"], env=env, timeout=30)
         print(result.stdout, end="")
-        summary = re.search(r"(?:-- |layered material: |IWI decoder: )(\d+) checks, (\d+) failures", result.stdout)
+        summary = re.search(r"(?:-- |layered material: |IWI decoder: |UI audio: |UI audio assets: )(\d+) checks, (\d+) failures", result.stdout)
         check(summary and int(summary[1]) >= 40 and int(summary[2]) == 0, "actual client input lifecycle suite passes")
         for name, minimum in (("command", 28), ("runtime", 42), ("input-startup", 23)):
             result = run([build / f"bin/KisakCOD-client-{name}-test"], env=env, timeout=30)
             print(result.stdout, end="")
-            summary = re.search(r"(?:-- |layered material: |IWI decoder: )(\d+) checks, (\d+) failures", result.stdout)
+            summary = re.search(r"(?:-- |layered material: |IWI decoder: |UI audio: |UI audio assets: )(\d+) checks, (\d+) failures", result.stdout)
             check(summary and int(summary[1]) >= minimum and int(summary[2]) == 0,
                   f"actual {name} lifecycle suite passes")
-        for name, minimum in (("presentation", 27), ("frame-deadline", 14), ("pixel-resource", 20), ("cpu-renderer", 29), ("cpu-renderer-fault", 33), ("cpu-raw", 16), ("material-clone-mp", 10), ("material-clone-radiant", 10), ("cpu-ui", 14), ("material-layered-mp", 19), ("material-layered-sp", 19), ("material-layered-radiant", 20), ("cpu-text", 19), ("cpu-menu", 25), ("menu-assets", 11), ("ui-material-assets", 11), ("iwi-assets", 21), ("font-assets", 10)):
+        for name, minimum in (("presentation", 27), ("frame-deadline", 14), ("pixel-resource", 20), ("cpu-renderer", 29), ("cpu-renderer-fault", 33), ("cpu-raw", 16), ("material-clone-mp", 10), ("material-clone-radiant", 10), ("cpu-ui", 28), ("material-layered-mp", 19), ("material-layered-sp", 19), ("material-layered-radiant", 20), ("cpu-text", 21), ("cpu-menu", 25), ("menu-assets", 11), ("ui-material-assets", 11), ("iwi-assets", 24), ("font-assets", 10), ("menu-control-assets", 14), ("menu-script", 31), ("ui-audio", 20), ("ui-audio-assets", 30)):
             result = run([build / f"bin/KisakCOD-{name}-test"], env=env, timeout=30)
             print(result.stdout, end="")
-            summary = re.search(r"(?:-- |layered material: |IWI decoder: )(\d+) checks, (\d+) failures", result.stdout)
+            summary = re.search(r"(?:-- |layered material: |IWI decoder: |UI audio: |UI audio assets: )(\d+) checks, (\d+) failures", result.stdout)
             check(summary and int(summary[1]) >= minimum and int(summary[2]) == 0,
                   f"actual {name} suite passes")
         result = run([build / "bin/KisakCOD-client-input", "--frames", "3", "--trace"], env=env, timeout=15)
         check("presentation=engine-ui-image" in result.stdout and "presented=4" in result.stdout
               and "frame=unavailable" in result.stdout, "existing input host presents bounded actual UI image frames")
+        result = run([build / "bin/KisakCOD-ui-audio-test", "--unavailable"], env=env, timeout=30)
+        check("1 checks, 0 failures" in result.stdout, "unavailable audio driver rejects explicitly")
+        result = run([sys.executable, ROOT / "scripts/tests/test_linux_ui_audio_prepare.py"], timeout=30)
+        print(result.stderr, end="")
+        check("Ran 5 tests" in result.stderr and "OK" in result.stderr, "audio metadata preparation rejects unsupported profiles and existing output")
+        # Genuine menu owner fixture is built above but requires private assets;
+        # run it separately with an explicit bundle/image directory.
         result = run([build / "bin/KisakCOD-shutdown-signal-test"], env=env, timeout=30)
         check("Shutdown signal lifecycle: 0 failures" in result.stdout, "signal lifecycle restores handlers and retains first concurrent request")
         result = subprocess.run([str(build / "bin/KisakCOD-client-input"), "--frame"], env=env,

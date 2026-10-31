@@ -9,6 +9,7 @@
 #include <string_view>
 struct ScreenPlacement;
 struct itemDef_s;
+struct UiContext;
 
 namespace kisak::window {
 class WindowHost;
@@ -29,11 +30,15 @@ public:
     using TextureHandle=uint64_t;
     // Upload copies padded RGBA input; resources are immutable and ready-state only.
     TextureHandle Upload(PixelBufferView image);
+    // Deep copy of the complete base-to-1x1 chain; dimensions halve/clamp.
+    TextureHandle UploadMipChain(std::span<const PixelBuffer> levels);
     void Release(TextureHandle texture);
     void Blit(TextureHandle texture,int x,int y,int width,int height);
     size_t TextureCount() const { return textures_.size(); }
     using UiMaterialHandle=uint64_t;
-    UiMaterialHandle RegisterUiMaterial(TextureHandle texture,bool magnificationOnly=false);
+    // Strict metadata sampler235 subset: minification needs
+    // an owned complete chain and an isotropic footprint. No GPU parity claim.
+    UiMaterialHandle RegisterUiMaterial(TextureHandle texture,bool strictSampler=false);
     void ReleaseUiMaterial(UiMaterialHandle material);
     void DrawUiImage(UiMaterialHandle material,const ScreenPlacement &placement,
                      float x,float y,float width,float height,int horizontal,int vertical,const float *color);
@@ -49,6 +54,7 @@ public:
     // Executes the genuine static auto-wrapped item painter, not Menu_Paint.
     // Only textRect is updated, and only after complete command recording succeeds.
     void DrawMenuText(const MenuFonts &,const ScreenPlacement &,itemDef_s &,std::string_view,const float *color);
+    void DrawMenuItem(const MenuFonts &,const ScreenPlacement &,UiContext &,itemDef_s &);
     size_t FontCount() const { return fonts_.size(); }
     void Submit();
     void Present(WindowHost &window);
@@ -62,6 +68,8 @@ public:
     void SubmitCommands(std::span<const uint8_t> commands);
 private:
     friend class CpuUiBridge;
+    void PaintMenu(const MenuFonts &,const ScreenPlacement &,itemDef_s &,std::string_view,const float *,
+                   void(*)(void*,itemDef_s*,const char*,const float*),void*,bool);
     struct OwnedFont { Font_s value{};std::string name;std::vector<Glyph> glyphs;UiMaterialHandle material; };
     std::map<FontHandle,std::unique_ptr<OwnedFont>> fonts_;
     FontHandle nextFont_=1;
@@ -75,7 +83,7 @@ private:
 
     void RecordUiStretchPic(UiMaterialHandle material,float x,float y,float width,float height,
                            float s0,float t0,float s1,float t1,const float *color);
-    struct UiMaterial { Material value{};TextureHandle texture;bool magnificationOnly=false; };
+    struct UiMaterial { Material value{};TextureHandle texture;bool strictSampler=false; };
     std::map<UiMaterialHandle,std::unique_ptr<UiMaterial>> uiMaterials_;
     UiMaterialHandle nextUiMaterial_=1;
     struct UiBinding { size_t offset;UiMaterialHandle material; };
@@ -88,7 +96,12 @@ private:
     struct Binding { size_t offset;TextureHandle texture; };
     std::array<Binding,256> bindings_{};
     size_t bindingCount_=0;
-    std::map<TextureHandle,PixelBuffer> textures_;
+    struct Texture { std::vector<PixelBuffer> levels; size_t bytes=0;
+        PixelBufferView View() const { return levels.front().View(); }
+    };
+    PixelBufferView SampleLevel(const GfxCmdStretchPic &,const UiMaterial &) const;
+    TextureHandle UploadLevels(std::span<const PixelBufferView>,bool complete);
+    std::map<TextureHandle,Texture> textures_;
     TextureHandle nextTexture_=1; // Never reused across shutdown/restart.
     size_t textureBytes_=0;
     PixelBuffer pixels_;

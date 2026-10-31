@@ -5,6 +5,7 @@
 #include "cpu_renderer.h"
 #include "font_assets.h"
 #include "menu_assets.h"
+#include "menu_input_owner.h"
 #include "iwi_assets.h"
 #include <client/client.h>
 #include <linux/sys_events.h>
@@ -36,6 +37,7 @@ public:
         if(metrics.trace)std::printf("resize %d %d\n",width,height);
     }
     void OnFocus(bool focused) override {
+        ClientInputHost::OnFocus(focused);
         ++metrics.focus;
         if(metrics.trace) { std::printf("focus %s\n",focused?"gained":"lost");
             if(!focused)std::printf("input=reset held=%d\n",Held()); }
@@ -101,14 +103,14 @@ int main(int argc,char **argv)
 {
     unsigned frames=0,runMilliseconds=0;
     bool relative=false,requestFrame=false;
-    const char *server=nullptr,*fontFile=nullptr,*fontAtlas=nullptr,*uiImage=nullptr,*menuBundle=nullptr,*assetDirectory=nullptr;
+    const char *server=nullptr,*fontFile=nullptr,*fontAtlas=nullptr,*uiImage=nullptr,*menuBundle=nullptr,*menuControls=nullptr,*assetDirectory=nullptr;
     std::string text="Native Linux UI";bool explicitText=false;
     kisak::window::Config config;
     for(int i=1;i<argc;++i) {
         const std::string argument(argv[i]);
         if(argument=="--help") {
-            std::puts("Usage: KisakCOD-client-input [--frames 1..10000] [--run-ms 1..60000] [--trace] [--relative] [--title NAME] [--frame] [--server IPv4:port] [--menu-bundle DIR --ui-asset-dir DIR] [--ui-image IWI] [--font-file FONT --font-atlas IWI [--text TEXT]]\n"
-                "Production disconnected input host. Escape or window close exits. Console editing is reported in trace; real local commands and optional read-only discovery; no game frame or renderer.");return 0;
+            std::puts("Usage: KisakCOD-client-input [--frames 1..10000] [--run-ms 1..60000] [--trace] [--relative] [--title NAME] [--frame] [--server IPv4:port] [--menu-bundle DIR --ui-asset-dir DIR] [--menu-controls DIR --ui-asset-dir DIR] [--ui-image IWI] [--font-file FONT --font-atlas IWI [--text TEXT]]\n"
+                "Disconnected engine input host with bounded CPU UI rendering. In menu-controls mode Escape closes the menu; the local menu_open console command reopens it. Window close exits. Other modes also exit on Escape. Full game frames and gameplay are unavailable.");return 0;
         } else if(argument=="--frames" && i+1<argc) {
             if(!Number(argv[++i],10000,frames))return 2;
         } else if(argument=="--run-ms" && i+1<argc) {
@@ -117,6 +119,7 @@ int main(int argc,char **argv)
         else if(argument=="--relative")relative=true;
         else if(argument=="--frame")requestFrame=true;
         else if(argument=="--menu-bundle" && i+1<argc && !menuBundle)menuBundle=argv[++i];
+        else if(argument=="--menu-controls" && i+1<argc && !menuControls)menuControls=argv[++i];
         else if(argument=="--ui-asset-dir" && i+1<argc && !assetDirectory)assetDirectory=argv[++i];
         else if(argument=="--ui-image" && i+1<argc && !uiImage)uiImage=argv[++i];
         else if(argument=="--font-file" && i+1<argc && !fontFile)fontFile=argv[++i];
@@ -127,8 +130,9 @@ int main(int argc,char **argv)
         else return 2;
     }
     if(bool(fontFile)!=bool(fontAtlas) || (explicitText && !fontFile) || text.size()>1024)return 2;
-    if(bool(menuBundle)!=bool(assetDirectory) || (menuBundle && (fontFile||uiImage||explicitText)))return 2;
-    if(menuBundle){config.width=640;config.height=480;}
+    if(bool(menuBundle||menuControls)!=bool(assetDirectory) || (menuBundle&&menuControls) || ((menuBundle||menuControls) && (fontFile||uiImage||explicitText)))return 2;
+    if(menuControls && (relative||server))return 2;
+    if(menuBundle||menuControls){config.width=640;config.height=480;}
     Sys_InitializeCriticalSections();
     try {
         ShellInput input;
@@ -140,7 +144,14 @@ int main(int argc,char **argv)
         kisak::window::ShutdownSignal signals;
         if(server)input.Discover(server);
         kisak::window::CpuRenderer renderer;
+        // Destroy the UI owner (and detach its input callbacks) before the
+        // renderer, platform window, or engine input service owner.
+        std::unique_ptr<kisak::window::MenuInputOwner> controls;
         std::unique_ptr<kisak::window::MenuTextAsset> menu;
+        if(menuControls) {
+            const auto extent=host.SurfaceExtent();
+            controls=std::make_unique<kisak::window::MenuInputOwner>(input,renderer,menuControls,assetDirectory,extent.width,extent.height);
+        }
         if(menuBundle) {
             const auto extent=host.SurfaceExtent();renderer.Initialize(extent.width,extent.height);
             menu=std::make_unique<kisak::window::MenuTextAsset>(kisak::window::LoadMenuBundle(renderer,menuBundle,assetDirectory));
@@ -159,9 +170,10 @@ int main(int argc,char **argv)
         }
         kisak::window::CpuRenderer::TextureHandle texture=0;
         kisak::window::CpuRenderer::UiMaterialHandle material=0;
-        PresentEngineClear(host,renderer,texture,material,font,text,uiImage,menu.get());
+        if(controls)controls->Present(host);
+        else PresentEngineClear(host,renderer,texture,material,font,text,uiImage,menu.get());
         std::printf("window=created driver=%s id=%u title=%s game=false input=engine connection=disconnected frame=unavailable presentation=%s\n",
-            SDL_GetCurrentVideoDriver(),host.Id(),config.title,menu?"engine-menu-text":"engine-ui-image");
+            SDL_GetCurrentVideoDriver(),host.Id(),config.title,controls?"engine-menu-controls":menu?"engine-menu-text":"engine-ui-image");
         std::printf("window=ready id=%u driver=%s\n",host.Id(),SDL_GetCurrentVideoDriver());
         if(relative)host.SetRelativeMouse(true);
         bool lastRelative=host.RelativeMouseActive();
@@ -187,7 +199,7 @@ int main(int argc,char **argv)
                     ++metrics.keys;
 
                     if(metrics.trace)std::printf("key=%d down=%d\n",event.evValue,event.evValue2);
-                    if(event.evValue==K_ESCAPE && event.evValue2)host.RequestQuit();
+                    if(!menuControls && event.evValue==K_ESCAPE && event.evValue2)host.RequestQuit();
                 } else if(event.evType==SE_CHAR) {
                     ++metrics.characters;
                     if(metrics.trace)std::printf("character=%d\n",event.evValue);
@@ -202,7 +214,9 @@ int main(int argc,char **argv)
                 const auto sample=input.ConsumeMouse();
                 if(metrics.trace && (sample.x || sample.y))std::printf("input_tick mouse_dx=%d mouse_dy=%d frame=unavailable\n",sample.x,sample.y);
                 if(metrics.trace)std::printf("editor text=%s cursor=%d held=%d\n",input.Text(),input.Cursor(),input.Held());
-                PresentEngineClear(host,renderer,texture,material,font,text,uiImage,menu.get());++drawn;
+                if(controls)controls->Present(host);
+                else PresentEngineClear(host,renderer,texture,material,font,text,uiImage,menu.get());
+                ++drawn;
             }
             if(!host.Running())break;
             if((frames && drawn>=frames) || (runMilliseconds && SDL_GetTicks()-started>=runMilliseconds))host.RequestQuit();

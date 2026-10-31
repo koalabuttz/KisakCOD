@@ -8,7 +8,7 @@ namespace kisak::window {
 struct ResolvedUiMaterial {
     std::string name;
     std::string imageName;
-    bool magnificationOnly=true;
+    bool strictSampler=true;
 };
 ResolvedUiMaterial DecodeUiMaterial(std::span<const uint8_t> bytes);
 ResolvedUiMaterial LoadUiMaterialFile(const std::string &path);

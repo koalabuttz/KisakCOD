@@ -18,7 +18,7 @@ int main(int argc,char**argv){try{
  invalid=bytes;invalid.push_back(0);Check(Reject([&]{DecodeMenuText(invalid);}),"trailing menu payload rejected");
  invalid=bytes;invalid[0]=0;Check(Reject([&]{DecodeMenuText(invalid);}),"invalid menu format rejected");
  invalid=bytes;uint32_t nan=0x7fc00000;for(int n=0;n<4;++n)invalid[8+n]=nan>>(8*n);Check(Reject([&]{DecodeMenuText(invalid);}),"nonfinite menu geometry rejected before allocation");
- invalid=bytes;invalid[84]=6;Check(Reject([&]{DecodeMenuText(invalid);}),"unsupported style metadata rejected");
+ invalid=bytes;invalid[84]=128;Check(Reject([&]{DecodeMenuText(invalid);}),"unsupported style metadata rejected");
  invalid=bytes;invalid[92]=2;Check(Reject([&]{DecodeMenuText(invalid);}),"cinematic item flags rejected");
  invalid=bytes;invalid[112]='\t';Check(Reject([&]{DecodeMenuText(invalid);}),"unsupported control text rejected");
  invalid=bytes;invalid[112]='^';invalid[113]='1';Check(Reject([&]{DecodeMenuText(invalid);}),"unsupported color escape rejected");

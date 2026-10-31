@@ -1,0 +1,43 @@
+// Explicit genuine-asset integration fixture. Requires the privately prepared
+// control bundle and image directory; no replacement assets or fabricated UI.
+#include <linux/client/window/menu_input_owner.h>
+#include <linux/client/window/client_input_host.h>
+#include <linux/client/window/window_host.h>
+#include <client_mp/client_mp.h>
+#include <ui/ui_input_core.h>
+#include <cstdio>
+#include <stdexcept>
+namespace {int checks,failures;void Check(bool value,const char *name){++checks;failures+=!value;std::printf("%s: %s\n",value?"PASS":"FAIL",name);}template<class F>bool Reject(F f){try{f();return false;}catch(const std::exception&){return true;}}}
+int main(int argc,char **argv){
+ if(argc!=3){std::fprintf(stderr,"requires genuine control bundle and image directory\n");return 2;}
+ Sys_InitializeCriticalSections();
+ try {
+  kisak::window::ClientInputHost input;
+  kisak::window::Config config;config.width=640;config.height=480;
+  kisak::window::WindowHost window(input,config);
+  kisak::window::CpuRenderer renderer;
+  Check(Reject([&]{kisak::window::MenuInputOwner owner(input,renderer,"/nonexistent-menu-input-fixture",argv[2],640,480);}) && renderer.Status()==kisak::window::CpuRenderer::State::stopped && !cls.uiStarted,"missing bundle leaves renderer and borrowed UI readiness unchanged");
+  Check(Reject([&]{kisak::window::MenuInputOwner owner(input,renderer,argv[1],"/nonexistent-menu-image-fixture",640,480);}) && renderer.Status()==kisak::window::CpuRenderer::State::stopped && !cls.uiStarted,"failed font atlas initialization rolls back owned renderer generation");
+  renderer.Initialize(8,8);
+  Check(Reject([&]{kisak::window::MenuInputOwner owner(input,renderer,argv[1],argv[2],640,480);}) && renderer.Pixels().width==8,"live unrelated renderer generation rejected without mutation");renderer.Shutdown();
+  for(int cycle=0;cycle<3;++cycle){
+   {
+    kisak::window::MenuInputOwner owner(input,renderer,argv[1],argv[2],640,480);
+    owner.Present(window);
+    Check(owner.Opened() && cls.uiStarted && input.MenuOpen(),"real admitted menu opens and presents");
+    owner.Key(K_DOWNARROW,true);owner.Key(K_DOWNARROW,false);
+    Check(owner.FocusIndex()==106 || owner.FocusIndex()==112,"real cursor navigation focuses an exported yes/no item");
+    const char *name=owner.FocusIndex()==106?"cl_freelook":"m_filter";const bool before=Dvar_GetBool(name);
+    owner.Key(K_ENTER,true);const bool after=Dvar_GetBool(name);owner.Key(K_ENTER,false);
+    Check(after!=before && Dvar_GetBool(name)==after,"actual yes/no handler toggles once on key down, not release");
+    owner.ResetFocus();Check(owner.FocusIndex()==-1 && !inHandleKey && !itemCapture && !g_editItem && !g_bindItem,"focus reset clears actual focus and transient capture pointers");
+    owner.Key(K_ESCAPE,true);owner.Key(K_ESCAPE,false);Check(!owner.Opened(),"actual Escape script closes menu");
+    owner.Open();owner.Present(window);Check(owner.Opened(),"same owner reopens through actual menu lifecycle");
+    renderer.BeginFrame();const float black[4]={0,0,0,1};renderer.Clear(black);renderer.Submit();
+   }
+   Check(renderer.Status()==kisak::window::CpuRenderer::State::stopped && !cls.uiStarted && !input.MenuOpen(),"destruction cancels pending frame and detaches/releases renderer generation");
+   input.Focus(false);Check(input.Held()==0,"input reset after owner destruction has no dangling callback");
+  }
+ }catch(const std::exception &e){std::fprintf(stderr,"fixture failed: %s\n",e.what());return 1;}
+ std::printf("-- %d checks, %d failures --\n",checks,failures);return failures?1:0;
+}

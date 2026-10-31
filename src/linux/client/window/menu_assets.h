@@ -8,5 +8,6 @@ struct MenuTextAsset { itemDef_s item{};std::string text,source;CpuRenderer::Men
 MenuTextAsset DecodeMenuText(std::span<const uint8_t>);
 MenuTextAsset LoadMenuTextFile(const std::string &);
 // Caller owns renderer lifetime; resources are released by its normal shutdown.
+CpuRenderer::MenuFonts LoadMenuFonts(CpuRenderer &,const std::string &bundle,const std::string &imageDirectory);
 MenuTextAsset LoadMenuBundle(CpuRenderer &,const std::string &bundle,const std::string &imageDirectory);
 }

@@ -34,8 +34,12 @@ int main(){try{
  draw("A",1024,2);Check(Lit(r,5,0)&&Lit(r,8,1)&&!Lit(r,9,1),"normalized scale transforms glyph size and baseline consistently");
  r.Resize(80,80);r.BeginFrame();r.Clear(black);
  Check(Reject([&]{r.DrawUiText(font,placement,"^1red",10,4,4,5,5,1,color);})&&Reject([&]{r.DrawUiText(font,placement,"\t",10,4,4,5,5,1,color);})&&Reject([&]{r.DrawUiText(font,placement,"\xc3\xa9",10,4,4,5,5,1,color);}),"unsupported color codes/control/non-ASCII glyphs reject explicitly");
- Check(Reject([&]{r.DrawUiText(font,placement,"A",10,4,4,5,5,1,color,6);}),"unsupported text style rejects without partial command");
+ Check(Reject([&]{r.DrawUiText(font,placement,"A",10,4,4,5,5,1,color,128);}),"unsupported text style rejects without partial command");
  r.DrawUiText(font,placement,"A",10,4,4,5,5,1,color);r.Submit();Check(Lit(r,4,1),"failed text scope restores for a subsequent real UI draw");
+ r.Resize(80,80);r.BeginFrame();const float gray[4]={.5f,.5f,.5f,1};r.Clear(gray);
+ r.DrawUiText(font,placement,"A",10,4,4,5,5,1,color,6);r.Submit();
+ auto rendered=r.Pixels();
+ Check(Lit(r,4,1) && rendered.bytes[3*rendered.pitch+6*4]==0 && rendered.bytes[3*rendered.pitch+6*4+3]==255 && rendered.bytes[3*rendered.pitch+5*4]==128,"style6 draws actual two-physical-pixel black shadow before glyph");
  Check(Reject([&]{R_AddCmdDrawText("A",1,reinterpret_cast<Font_s*>(1),0,0,1,1,0,color,0);}),"unscoped font pointer rejects before any lookup");
  r.Resize(80,80);const auto before=std::vector<uint8_t>(r.Pixels().bytes.begin(),r.Pixels().bytes.end());
  alignas(4)std::array<uint8_t,16384> storage{};GfxCmdArray list{storage.data(),0,0,nullptr};
@@ -64,5 +68,15 @@ int main(){try{
  extras.push_back(extras.back());
  Check(controlFont!=0 && Reject([&]{r.RegisterFont(newMaterial,"bad-extra",48,extras);}),"genuine control glyph metrics accepted while duplicate extra ordering rejects");
  r.ReleaseFont(controlFont);
+ {
+  CpuRenderer mipText;mipText.Initialize(16,16);std::vector<PixelBuffer> levels(2);
+  levels[0].Resize(2,2);std::fill(levels[0].Bytes().begin(),levels[0].Bytes().end(),255);
+  levels[1].Resize(1,1);const std::array<uint8_t,4> green={0,255,0,255};std::copy(green.begin(),green.end(),levels[1].Bytes().begin());
+  const auto atlas=mipText.RegisterUiMaterial(mipText.UploadMipChain(levels),true);
+  const auto mipFont=mipText.RegisterFont(atlas,"stored-mip-fixture",48,glyphs);const float whiteTint[4]={1,1,1,1};
+  mipText.BeginFrame();mipText.Clear(black);mipText.DrawUiText(mipFont,placement,"A",1,4,4,5,5,.5f,whiteTint,6);mipText.Submit();
+  const auto image=mipText.Pixels();const auto at=3*image.pitch+4*4;
+  Check(image.bytes[at]==0 && image.bytes[at+1]==255 && image.bytes[at+2]==0,"actual glyph replay selects owned stored mip for minified style6 text");
+ }
 }catch(const std::exception&e){std::fprintf(stderr,"text fixture failed: %s\n",e.what());++failures;}
 std::printf("-- %d checks, %d failures --\n",checks,failures);return failures?1:0;}
