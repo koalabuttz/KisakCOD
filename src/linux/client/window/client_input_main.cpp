@@ -3,6 +3,7 @@
 #include "shutdown_signal.h"
 #include "frame_deadline.h"
 #include "cpu_renderer.h"
+#include <client/client.h>
 #include <linux/sys_events.h>
 #include <qcommon/qcommon.h>
 #include <win32/win_local.h>
@@ -38,26 +39,29 @@ public:
     }
     void OnQuit() override { std::puts("window=closing"); }
 };
-void PresentEngineClear(kisak::window::WindowHost &host,kisak::window::CpuRenderer &renderer,kisak::window::CpuRenderer::TextureHandle &texture)
+void PresentEngineClear(kisak::window::WindowHost &host,kisak::window::CpuRenderer &renderer,kisak::window::CpuRenderer::TextureHandle &texture,kisak::window::CpuRenderer::UiMaterialHandle &material)
 {
     const auto extent=host.SurfaceExtent();
     const auto current=renderer.Pixels();
     if(renderer.Status()==kisak::window::CpuRenderer::State::stopped)renderer.Initialize(extent.width,extent.height);
     else if(current.width!=extent.width || current.height!=extent.height)renderer.Resize(extent.width,extent.height);
     if(current.width!=extent.width || current.height!=extent.height)
-        std::printf("presentation=engine-owned-raw width=%d height=%d producer=R_EmitStretchRawCommand\n",extent.width,extent.height);
+        std::printf("presentation=engine-ui-image width=%d height=%d producer=UI_DrawHandlePic\n",extent.width,extent.height);
     const float color[4]={0.25f,0.5f,0.75f,1.0f};
     if(!texture) {
         kisak::window::PixelBuffer image;image.Resize(64,64);
         auto pixels=image.Bytes();
         for(int y=0;y<64;++y)for(int x=0;x<64;++x) {
             auto *p=pixels.data()+(y*64+x)*4;
-            p[0]=(x<32)==(y<32)?255:0;p[1]=x>=32?255:0;p[2]=y>=32 && x<32?255:0;p[3]=0;
+            p[0]=(x<32)==(y<32)?255:0;p[1]=x>=32?255:0;p[2]=y>=32 && x<32?255:0;p[3]=255;
         }
         texture=renderer.Upload(image.View()); // The caller's pixels die immediately after upload.
+        material=renderer.RegisterUiMaterial(texture);
     }
     renderer.BeginFrame();renderer.Clear(color);
-    renderer.Blit(texture,(extent.width-64)/2,(extent.height-64)/2,64,64);
+    ScreenPlacement placement{};
+    const float tint[4]={1,1,1,.5f};
+    renderer.DrawUiImage(material,placement,float(extent.width-128)/2,float(extent.height-96)/2,128,96,5,5,tint);
     renderer.Submit();renderer.Present(host);
 }
 bool Number(const char *text,unsigned maximum,unsigned &value) {
@@ -104,8 +108,9 @@ int main(int argc,char **argv)
         if(server)input.Discover(server);
         kisak::window::CpuRenderer renderer;
         kisak::window::CpuRenderer::TextureHandle texture=0;
-        PresentEngineClear(host,renderer,texture);
-        std::printf("window=created driver=%s id=%u title=%s game=false input=engine connection=disconnected frame=unavailable presentation=engine-owned-raw\n",
+        kisak::window::CpuRenderer::UiMaterialHandle material=0;
+        PresentEngineClear(host,renderer,texture,material);
+        std::printf("window=created driver=%s id=%u title=%s game=false input=engine connection=disconnected frame=unavailable presentation=engine-ui-image\n",
             SDL_GetCurrentVideoDriver(),host.Id(),config.title);
         std::printf("window=ready id=%u driver=%s\n",host.Id(),SDL_GetCurrentVideoDriver());
         if(relative)host.SetRelativeMouse(true);
@@ -147,7 +152,7 @@ int main(int argc,char **argv)
                 const auto sample=input.ConsumeMouse();
                 if(metrics.trace && (sample.x || sample.y))std::printf("input_tick mouse_dx=%d mouse_dy=%d frame=unavailable\n",sample.x,sample.y);
                 if(metrics.trace)std::printf("editor text=%s cursor=%d held=%d\n",input.Text(),input.Cursor(),input.Held());
-                PresentEngineClear(host,renderer,texture);++drawn;
+                PresentEngineClear(host,renderer,texture,material);++drawn;
             }
             if(!host.Running())break;
             if((frames && drawn>=frames) || (runMilliseconds && SDL_GetTicks()-started>=runMilliseconds))host.RequestQuit();

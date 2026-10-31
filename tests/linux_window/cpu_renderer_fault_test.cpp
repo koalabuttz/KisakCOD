@@ -3,6 +3,8 @@
 #include <cstdlib>
 #include <new>
 #include <stdexcept>
+#include <limits>
+#include <ui/ui_shared.h>
 
 namespace {
 bool failNextAllocation=false;
@@ -119,6 +121,45 @@ int main() {
         renderer.Blit(replacement,0,0,2,2);renderer.Submit();
     }
     Check(liveAllocations==baseline,"pending textured frame destruction frees registry and all pixel resources");
+    {
+        Renderer renderer;renderer.Initialize(2,2);
+        const uint8_t rgba[16]={7,19,31,255, 43,59,71,255, 83,97,109,255, 127,139,151,255};
+        const kisak::window::PixelBufferView source{2,2,8,rgba};
+        auto texture=renderer.Upload(source);
+        const long withTexture=liveAllocations;
+        for(int point=0;point<2;++point) {
+            bool rejected=false;allocationsBeforeFailure=point;
+            try { renderer.RegisterUiMaterial(texture); }catch(const std::bad_alloc&) { rejected=true; }
+            Check(rejected && allocationsBeforeFailure==-1 && liveAllocations==withTexture &&
+                  renderer.Status()==Renderer::State::ready && renderer.TextureCount()==1,
+                  "failed UI material allocation rolls back without losing its texture");
+        }
+        auto material=renderer.RegisterUiMaterial(texture);
+        bool rejected=false;
+        try { renderer.Release(texture); }catch(const std::logic_error&) { rejected=true; }
+        Check(rejected && renderer.TextureCount()==1,"registered UI material keeps its texture alive");
+        ScreenPlacement placement{};const float white[4]={1,1,1,1};
+        renderer.BeginFrame();renderer.DrawUiImage(material,placement,0,0,2,2,5,5,white);renderer.Submit();
+        rejected=false;
+        try { renderer.ReleaseUiMaterial(material); }catch(const std::logic_error&) { rejected=true; }
+        Check(rejected && renderer.Status()==Renderer::State::pending,
+              "pending UI commands prevent material release");
+        renderer.Resize(2,2);renderer.ReleaseUiMaterial(material);renderer.Release(texture);
+        Check(renderer.TextureCount()==0 && liveAllocations==baseline+1,
+              "ready-state material release permits dependent texture cleanup");
+        renderer.Shutdown();renderer.Initialize(2,2);
+        texture=renderer.Upload(source);const auto replacement=renderer.RegisterUiMaterial(texture);
+        renderer.BeginFrame();rejected=false;
+        try { renderer.DrawUiImage(material,placement,0,0,2,2,5,5,white); }catch(const std::invalid_argument&) { rejected=true; }
+        Check(rejected && replacement!=material,"restart cannot revive stale UI material handles");
+        const float invalid[4]={1,1,1,std::numeric_limits<float>::quiet_NaN()};
+        rejected=false;
+        try { renderer.DrawUiImage(replacement,placement,0,0,2,2,5,5,invalid); }catch(const std::invalid_argument&) { rejected=true; }
+        renderer.DrawUiImage(replacement,placement,0,0,2,2,5,5,white);renderer.Submit();
+        Check(rejected && renderer.Pixels().bytes[0]==7 && renderer.Pixels().bytes[1]==19,
+              "failed real UI call restores scope so the next valid call can render");
+    }
+    Check(liveAllocations==baseline,"pending UI frame destruction frees materials and dependent textures");
     std::printf("-- %d checks, %d failures --\n",checks,failures);
     return failures?1:0;
 }

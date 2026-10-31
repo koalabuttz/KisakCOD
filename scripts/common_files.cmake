@@ -89,6 +89,7 @@ set(CLIENT
     "${SRC_DIR}/client/cl_input_services.h"
     "${SRC_DIR}/client/con_channels.cpp"
     "${SRC_DIR}/client/screen_placement.cpp"
+    "${SRC_DIR}/client/cl_ui_draw.cpp"
 )
 
 set(COMMON
@@ -313,6 +314,7 @@ set(GFX_D3D
     "${SRC_DIR}/gfx_d3d/r_texturemem.cpp"
     "${SRC_DIR}/gfx_d3d/r_texturemem.h"
     "${SRC_DIR}/gfx_d3d/r_utils.cpp"
+    "${SRC_DIR}/gfx_d3d/r_color.cpp"
     "${SRC_DIR}/gfx_d3d/r_utils.h"
     "${SRC_DIR}/gfx_d3d/r_warn.cpp"
     "${SRC_DIR}/gfx_d3d/r_water.cpp"

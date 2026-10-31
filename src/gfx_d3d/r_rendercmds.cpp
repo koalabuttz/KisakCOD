@@ -591,7 +591,6 @@ void __cdecl R_AddCmdDrawStretchPic(
     const char *Name; // eax
     Material *defaultMaterial; // [esp+0h] [ebp-1Ch]
     Material *actualMaterial; // [esp+14h] [ebp-8h]
-    GfxCmdStretchPic *cmd; // [esp+18h] [ebp-4h]
 
     if (material)
         defaultMaterial = (Material *)Material_FromHandle(material);
@@ -620,20 +619,9 @@ void __cdecl R_AddCmdDrawStretchPic(
         actualMaterial = rgp.defaultMaterial;
     }
     iassert( !Material_UsesDepthBuffer( actualMaterial ) );
-    cmd = (GfxCmdStretchPic *)R_GetCommandBuffer(RC_FIRST_NONCRITICAL, 44);
-    if (cmd)
-    {
-        cmd->material = actualMaterial;
-        cmd->x = x;
-        cmd->y = y;
-        cmd->w = w;
-        cmd->h = h;
-        cmd->s0 = s0;
-        cmd->t0 = t0;
-        cmd->s1 = s1;
-        cmd->t1 = t1;
-        R_ConvertColorToBytes(color, &cmd->color);
-    }
+    R_EmitStretchPicCommand(nullptr,[](void *,GfxRenderCommand id,int bytes) {
+        return R_GetCommandBuffer(id,bytes);
+    },x,y,w,h,s0,t0,s1,t1,color,actualMaterial);
 }
 
 bool __cdecl Material_HasAnyFogableTechnique(const Material *material)

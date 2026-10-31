@@ -60,6 +60,7 @@ EXPECTED_TUS = (
     "src/client_mp/cl_connection_receive_mp.cpp",
     "src/client_mp/cl_main_mp.cpp",
     "src/client_mp/cl_cgame_mp.cpp",
+    "src/client/cl_ui_draw.cpp",
     "src/client_mp/cl_net_chan_mp.cpp",
     "src/client_mp/cl_parse_mp.cpp",
     "src/client_mp/cl_input.cpp",
@@ -71,7 +72,12 @@ STATE_RUNTIME_TUS = (
     "src/universal/q_shared.cpp",
 )
 
-PACKET_RUNTIME_TUS = EXPECTED_TUS[4:] + (
+# UI wrappers moved to a separate core TU; the unchanged packet fixture does
+# not consume them. Keep its production source expectations explicit.
+PACKET_RUNTIME_TUS = (
+    "src/client_mp/cl_cgame_mp.cpp", "src/client_mp/cl_net_chan_mp.cpp",
+    "src/client_mp/cl_parse_mp.cpp", "src/client_mp/cl_input.cpp",
+) + (
     "src/server_mp/sv_net_chan_mp.cpp", "src/qcommon/msg_mp.cpp",
     "src/qcommon/huffman.cpp", "src/universal/q_shared.cpp",
     "src/universal/com_shared.cpp", "src/universal/com_math.cpp",
@@ -491,7 +497,7 @@ def check_default_build_has_no_client_targets(cxx, cc, timeout, build_timeout):
               "KisakCOD-client-packet-test" not in help_text)
         for name in ("KisakCOD-client-auth-test", "KisakCOD-client-headless",
                      "KisakCOD-client-receive-test", "KisakCOD-client-platform-test",
-                     "KisakCOD-client-window", "KisakCOD-window-platform", "KisakCOD-window-test", "KisakCOD-client-input", "KisakCOD-client-input-test", "KisakCOD-shutdown-signal-test", "KisakCOD-client-command-test", "KisakCOD-client-runtime-test", "KisakCOD-client-input-startup-test", "KisakCOD-presentation-test", "KisakCOD-frame-deadline-test", "KisakCOD-pixel-resource-test", "KisakCOD-cpu-renderer-test", "KisakCOD-cpu-renderer-fault-test", "KisakCOD-cpu-raw-test", "KisakCOD-material-clone-mp-test", "KisakCOD-material-clone-radiant-test"):
+                     "KisakCOD-client-window", "KisakCOD-window-platform", "KisakCOD-window-test", "KisakCOD-client-input", "KisakCOD-client-input-test", "KisakCOD-shutdown-signal-test", "KisakCOD-client-command-test", "KisakCOD-client-runtime-test", "KisakCOD-client-input-startup-test", "KisakCOD-presentation-test", "KisakCOD-frame-deadline-test", "KisakCOD-pixel-resource-test", "KisakCOD-cpu-renderer-test", "KisakCOD-cpu-renderer-fault-test", "KisakCOD-cpu-raw-test", "KisakCOD-material-clone-mp-test", "KisakCOD-material-clone-radiant-test", "KisakCOD-cpu-ui-test", "KisakCOD-material-layered-mp-test", "KisakCOD-material-layered-sp-test", "KisakCOD-material-layered-radiant-test"):
             check(f"default build exposes no {name} target", name not in help_text)
     finally:
         # TemporaryDirectory is uniquely named, so cleanup can only remove this

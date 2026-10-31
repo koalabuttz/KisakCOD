@@ -78,20 +78,23 @@ def main():
             for flag in ("-m32", "-DKISAK_MP", "-DRELEASE_ASSERTS"):
                 check(bool(re.search(r"(?:^|\s)" + re.escape(flag) + r"(?:\s|$)", command)), f"{suffix} uses {flag}")
             check("-DKISAK_DEDICATED" not in command and "-DDEDICATED" not in command, f"{suffix} is a client compile")
-        for variant in ("mp", "radiant"):
-            target = f"KisakCOD-material-clone-{variant}-test"
+        for family, variant in (("clone", "mp"), ("clone", "radiant"), ("layered", "mp"), ("layered", "sp"), ("layered", "radiant")):
+            target = f"KisakCOD-material-{family}-{variant}-test"
             commands = [entry["command"] for entry in entries
-                        if entry["file"].endswith("gfx_d3d/r_material_clone.cpp") and target + ".dir" in entry["command"]]
-            check(len(commands) == 1, f"actual production material clone compiled for {variant}")
+                        if entry["file"].endswith(f"gfx_d3d/r_material_{family}.cpp") and target + ".dir" in entry["command"]]
+            check(len(commands) == 1, f"actual production material {family} compiled for {variant}")
             command = commands[0]
             if variant == "radiant":
                 check("-DKISAK_RADIANT" in command and "-DMAX_GENTITIES=2176" in command,
-                      "Radiant material clone uses actual editor defines")
-                check("-DKISAK_MP" not in command, "Radiant material clone excludes MP defines")
+                      f"Radiant material {family} uses actual editor defines")
+                check("-DKISAK_MP" not in command and "-DKISAK_SP" not in command,
+                      f"Radiant material {family} excludes game defines")
             else:
-                check("-DKISAK_MP" in command, "MP material clone uses MP definition")
-                check("-DKISAK_RADIANT" not in command, "MP material clone excludes editor defines")
-        command = ["cmake", "--build", build, "--target", "KisakCOD-client-window", "KisakCOD-window-test", "KisakCOD-client-input", "KisakCOD-client-input-test", "KisakCOD-shutdown-signal-test", "KisakCOD-client-command-test", "KisakCOD-client-runtime-test", "KisakCOD-client-input-startup-test", "KisakCOD-presentation-test", "KisakCOD-frame-deadline-test", "KisakCOD-pixel-resource-test", "KisakCOD-cpu-renderer-test", "KisakCOD-cpu-renderer-fault-test", "KisakCOD-cpu-raw-test", "KisakCOD-material-clone-mp-test", "KisakCOD-material-clone-radiant-test", "-j", args.jobs]
+                own, other = ("MP", "SP") if variant == "mp" else ("SP", "MP")
+                check(f"-DKISAK_{own}" in command, f"{own} material {family} uses its game definition")
+                check("-DKISAK_RADIANT" not in command and f"-DKISAK_{other}" not in command,
+                      f"{own} material {family} excludes other variant defines")
+        command = ["cmake", "--build", build, "--target", "KisakCOD-client-window", "KisakCOD-window-test", "KisakCOD-client-input", "KisakCOD-client-input-test", "KisakCOD-shutdown-signal-test", "KisakCOD-client-command-test", "KisakCOD-client-runtime-test", "KisakCOD-client-input-startup-test", "KisakCOD-presentation-test", "KisakCOD-frame-deadline-test", "KisakCOD-pixel-resource-test", "KisakCOD-cpu-renderer-test", "KisakCOD-cpu-renderer-fault-test", "KisakCOD-cpu-raw-test", "KisakCOD-material-clone-mp-test", "KisakCOD-material-clone-radiant-test", "KisakCOD-cpu-ui-test", "KisakCOD-material-layered-mp-test", "KisakCOD-material-layered-sp-test", "KisakCOD-material-layered-radiant-test", "-j", args.jobs]
         run(command)
         run(command)
         check(True, "window targets build and incrementally rebuild")
@@ -100,28 +103,28 @@ def main():
         print(result.stdout, end="")
         if result.stderr:
             print(result.stderr, end="", file=sys.stderr)
-        summary = re.search(r"-- (\d+) checks, (\d+) failures --", result.stdout)
+        summary = re.search(r"(?:-- |layered material: )(\d+) checks, (\d+) failures", result.stdout)
         check(summary and int(summary[1]) >= 34 and int(summary[2]) == 0, "real SDL event/engine queue suite passes")
         check(f"SDL driver={args.video_driver}" in result.stdout, "test reports the explicitly selected SDL driver")
         result = run([build / "bin/KisakCOD-client-input-test"], env=env, timeout=30)
         print(result.stdout, end="")
-        summary = re.search(r"-- (\d+) checks, (\d+) failures --", result.stdout)
+        summary = re.search(r"(?:-- |layered material: )(\d+) checks, (\d+) failures", result.stdout)
         check(summary and int(summary[1]) >= 40 and int(summary[2]) == 0, "actual client input lifecycle suite passes")
         for name, minimum in (("command", 28), ("runtime", 42), ("input-startup", 23)):
             result = run([build / f"bin/KisakCOD-client-{name}-test"], env=env, timeout=30)
             print(result.stdout, end="")
-            summary = re.search(r"-- (\d+) checks, (\d+) failures --", result.stdout)
+            summary = re.search(r"(?:-- |layered material: )(\d+) checks, (\d+) failures", result.stdout)
             check(summary and int(summary[1]) >= minimum and int(summary[2]) == 0,
                   f"actual {name} lifecycle suite passes")
-        for name, minimum in (("presentation", 27), ("frame-deadline", 14), ("pixel-resource", 20), ("cpu-renderer", 29), ("cpu-renderer-fault", 16), ("cpu-raw", 16), ("material-clone-mp", 10), ("material-clone-radiant", 10)):
+        for name, minimum in (("presentation", 27), ("frame-deadline", 14), ("pixel-resource", 20), ("cpu-renderer", 29), ("cpu-renderer-fault", 24), ("cpu-raw", 16), ("material-clone-mp", 10), ("material-clone-radiant", 10), ("cpu-ui", 14), ("material-layered-mp", 19), ("material-layered-sp", 19), ("material-layered-radiant", 20)):
             result = run([build / f"bin/KisakCOD-{name}-test"], env=env, timeout=30)
             print(result.stdout, end="")
-            summary = re.search(r"-- (\d+) checks, (\d+) failures --", result.stdout)
+            summary = re.search(r"(?:-- |layered material: )(\d+) checks, (\d+) failures", result.stdout)
             check(summary and int(summary[1]) >= minimum and int(summary[2]) == 0,
                   f"actual {name} suite passes")
         result = run([build / "bin/KisakCOD-client-input", "--frames", "3", "--trace"], env=env, timeout=15)
-        check("presentation=engine-owned-raw" in result.stdout and "presented=4" in result.stdout
-              and "frame=unavailable" in result.stdout, "existing input host presents bounded engine owned-image frames")
+        check("presentation=engine-ui-image" in result.stdout and "presented=4" in result.stdout
+              and "frame=unavailable" in result.stdout, "existing input host presents bounded actual UI image frames")
         result = run([build / "bin/KisakCOD-shutdown-signal-test"], env=env, timeout=30)
         check("Shutdown signal lifecycle: 0 failures" in result.stdout, "signal lifecycle restores handlers and retains first concurrent request")
         result = subprocess.run([str(build / "bin/KisakCOD-client-input"), "--frame"], env=env,

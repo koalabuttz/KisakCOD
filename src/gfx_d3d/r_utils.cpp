@@ -56,13 +56,7 @@ char __cdecl R_CullPointAndRadius(const float *pt, float radius, const DpvsPlane
     return 0;
 }
 
-void __cdecl R_ConvertColorToBytes(const float *colorFloat, uint32_t *colorBytes)
-{
-    if (colorFloat)
-        Byte4PackVertexColor(colorFloat, (unsigned char*)colorBytes);
-    else
-        *colorBytes = -1;
-}
+
 
 double __cdecl FresnelTerm(float n0, float n1, float cosIncidentAngle)
 {

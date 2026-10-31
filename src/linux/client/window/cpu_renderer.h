@@ -4,11 +4,14 @@
 #include <array>
 #include <thread>
 #include <map>
+#include <memory>
+struct ScreenPlacement;
 
 namespace kisak::window {
 class WindowHost;
-// Explicit CPU backend capability: color clear/end and owned 1:1 raw-image blits. No D3D device, assets,
-// full R_Init, registered game renderer, depth/stencil or material rendering.
+// Explicit CPU capabilities: clear/end, owned raw blits and scoped unlit UI images.
+// No D3D device, assets,
+// full R_Init, registered game renderer, depth/stencil or arbitrary material shaders.
 class CpuRenderer {
 public:
     enum class State { stopped, ready, recording, pending };
@@ -26,6 +29,11 @@ public:
     void Release(TextureHandle texture);
     void Blit(TextureHandle texture,int x,int y,int width,int height);
     size_t TextureCount() const { return textures_.size(); }
+    using UiMaterialHandle=uint64_t;
+    UiMaterialHandle RegisterUiMaterial(TextureHandle texture);
+    void ReleaseUiMaterial(UiMaterialHandle material);
+    void DrawUiImage(UiMaterialHandle material,const ScreenPlacement &placement,
+                     float x,float y,float width,float height,int horizontal,int vertical,const float *color);
     void Submit();
     void Present(WindowHost &window);
     void Shutdown() noexcept;
@@ -37,6 +45,15 @@ public:
     // External raw-image commands always reject; only Blit supplies trusted bindings.
     void SubmitCommands(std::span<const uint8_t> commands);
 private:
+    friend class CpuUiBridge;
+    void RecordUiStretchPic(UiMaterialHandle material,float x,float y,float width,float height,
+                           float s0,float t0,float s1,float t1,const float *color);
+    struct UiMaterial { Material value{};TextureHandle texture; };
+    std::map<UiMaterialHandle,std::unique_ptr<UiMaterial>> uiMaterials_;
+    UiMaterialHandle nextUiMaterial_=1;
+    struct UiBinding { size_t offset;UiMaterialHandle material; };
+    std::array<UiBinding,256> uiBindings_{};
+    size_t uiBindingCount_=0;
     static GfxCmdHeader *Allocate(void *,GfxRenderCommand,int);
     void CheckThread() const;
     void ResetCommands();

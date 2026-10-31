@@ -1,6 +1,7 @@
 #include "r_command_buffer.h"
 #include <climits>
 #include "rb_backend.h"
+#include "r_utils.h"
 
 GfxCmdHeader *R_AppendCommand(GfxCmdArray &list,unsigned capacity,GfxRenderCommand command,int bytes)
 {
@@ -61,4 +62,14 @@ void R_EmitStretchRawCommand(void *owner,GfxCommandAllocate allocate,int x,int y
     command->x=x;command->y=y;command->w=width;command->h=height;
     command->cols=columns;command->rows=rows;command->data=rgba;
     command->client=0;command->dirty=1;
+}
+
+void R_EmitStretchPicCommand(void *owner,GfxCommandAllocate allocate,float x,float y,float width,float height,
+                             float s0,float t0,float s1,float t1,const float *color,Material *material)
+{
+    auto *command=reinterpret_cast<GfxCmdStretchPic *>(allocate(owner,RC_STRETCH_PIC,sizeof(GfxCmdStretchPic)));
+    if(!command)return;
+    command->material=material;command->x=x;command->y=y;command->w=width;command->h=height;
+    command->s0=s0;command->t0=t0;command->s1=s1;command->t1=t1;
+    R_ConvertColorToBytes(color,&command->color.packed);
 }

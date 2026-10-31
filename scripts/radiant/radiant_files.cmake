@@ -284,6 +284,7 @@ set(RADIANT_GFX_D3D
     "${SRC_DIR}/gfx_d3d/r_sunshadow.cpp"
     "${SRC_DIR}/gfx_d3d/r_sunshadow.h"
     "${SRC_DIR}/gfx_d3d/r_utils.cpp"
+    "${SRC_DIR}/gfx_d3d/r_color.cpp"
     "${SRC_DIR}/gfx_d3d/r_utils.h"
     "${SRC_DIR}/gfx_d3d/r_warn.cpp"
     "${SRC_DIR}/gfx_d3d/r_water.cpp"

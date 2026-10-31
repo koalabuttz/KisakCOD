@@ -99,6 +99,7 @@ if(KISAK_BUILD_LINUX_CLIENT_CORE)
         "${SRC_DIR}/client_mp/cl_parse_mp.cpp"
         "${SRC_DIR}/client_mp/cl_input.cpp"
         "${SRC_DIR}/client_mp/cl_cgame_mp.cpp"
+        "${SRC_DIR}/client/cl_ui_draw.cpp"
         "${SRC_DIR}/client_mp/cl_auth.cpp"
         "${SRC_DIR}/client_mp/cl_connection_mp.cpp"
         "${SRC_DIR}/client_mp/cl_connection_receive_mp.cpp"
@@ -235,6 +236,7 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
     )
     set(KISAK_CLIENT_INPUT_SOURCES
         "${SRC_DIR}/linux/client/window/client_input_host.cpp"
+        "${SRC_DIR}/client/screen_placement.cpp"
         "${SRC_DIR}/client/cl_keys.cpp"
         "${SRC_DIR}/client_mp/cl_input.cpp"
         "${SRC_DIR}/qcommon/field.cpp"
@@ -242,9 +244,14 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
     set(KISAK_CPU_RENDERER_SOURCES
         "${SRC_DIR}/linux/client/window/cpu_renderer.cpp"
         "${SRC_DIR}/gfx_d3d/r_command_buffer.cpp"
+        "${SRC_DIR}/gfx_d3d/r_color.cpp"
         "${SRC_DIR}/qcommon/com_pack.cpp")
+    set(KISAK_CPU_UI_SOURCES
+        "${SRC_DIR}/linux/client/window/cpu_ui_backend.cpp"
+        "${SRC_DIR}/client/cl_ui_draw.cpp"
+        "${SRC_DIR}/ui/ui_atoms.cpp")
     add_executable(KisakCOD-client-input
-        ${KISAK_CPU_RENDERER_SOURCES}
+        ${KISAK_CPU_RENDERER_SOURCES} ${KISAK_CPU_UI_SOURCES}
         "${SRC_DIR}/linux/client/window/client_input_main.cpp"
         "${SRC_DIR}/linux/client/window/shutdown_signal.cpp"
         ${KISAK_CLIENT_INPUT_SOURCES} ${KISAK_CLIENT_RUNTIME_SOURCES})
@@ -256,11 +263,22 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
             "${TESTS_DIR}/linux_window/material_clone_test.cpp"
             "${SRC_DIR}/gfx_d3d/r_material_clone.cpp")
     endforeach()
+    add_executable(KisakCOD-cpu-ui-test
+        "${TESTS_DIR}/linux_window/cpu_ui_test.cpp"
+        "${SRC_DIR}/linux/client/window/window_services.cpp"
+        "${SRC_DIR}/client/screen_placement.cpp"
+        ${KISAK_CPU_UI_SOURCES} ${KISAK_CPU_RENDERER_SOURCES})
+    foreach(material_variant mp sp radiant)
+        add_executable(KisakCOD-material-layered-${material_variant}-test
+            "${TESTS_DIR}/linux_window/material_layered_test.cpp"
+            "${SRC_DIR}/gfx_d3d/r_material_layered.cpp")
+    endforeach()
     add_executable(KisakCOD-cpu-raw-test
         "${TESTS_DIR}/linux_window/cpu_raw_test.cpp"
         "${SRC_DIR}/linux/client/window/window_services.cpp"
         ${KISAK_CPU_RENDERER_SOURCES})
     add_executable(KisakCOD-cpu-renderer-fault-test
+        ${KISAK_CPU_UI_SOURCES} "${SRC_DIR}/client/screen_placement.cpp"
         "${TESTS_DIR}/linux_window/cpu_renderer_fault_test.cpp"
         "${SRC_DIR}/linux/client/window/window_services.cpp"
         ${KISAK_CPU_RENDERER_SOURCES})
@@ -289,13 +307,15 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
     add_executable(KisakCOD-shutdown-signal-test
         "${SRC_DIR}/linux/client/window/shutdown_signal.cpp"
         "${TESTS_DIR}/linux_window/shutdown_signal_test.cpp")
-    foreach(window_target KisakCOD-window-platform KisakCOD-client-window KisakCOD-window-test KisakCOD-client-input KisakCOD-client-input-test KisakCOD-shutdown-signal-test KisakCOD-client-command-test KisakCOD-client-runtime-test KisakCOD-client-input-startup-test KisakCOD-presentation-test KisakCOD-frame-deadline-test KisakCOD-pixel-resource-test KisakCOD-cpu-renderer-test KisakCOD-cpu-renderer-fault-test KisakCOD-cpu-raw-test KisakCOD-material-clone-mp-test KisakCOD-material-clone-radiant-test)
+    foreach(window_target KisakCOD-window-platform KisakCOD-client-window KisakCOD-window-test KisakCOD-client-input KisakCOD-client-input-test KisakCOD-shutdown-signal-test KisakCOD-client-command-test KisakCOD-client-runtime-test KisakCOD-client-input-startup-test KisakCOD-presentation-test KisakCOD-frame-deadline-test KisakCOD-pixel-resource-test KisakCOD-cpu-renderer-test KisakCOD-cpu-renderer-fault-test KisakCOD-cpu-raw-test KisakCOD-material-clone-mp-test KisakCOD-material-clone-radiant-test KisakCOD-cpu-ui-test KisakCOD-material-layered-mp-test KisakCOD-material-layered-sp-test KisakCOD-material-layered-radiant-test)
         target_compile_features(${window_target} PRIVATE cxx_std_20)
         target_compile_definitions(${window_target} PRIVATE
             KISAK_OPENAL RELEASE_ASSERTS _FILE_OFFSET_BITS=64 _GNU_SOURCE
         )
-        if(window_target STREQUAL "KisakCOD-material-clone-radiant-test")
+        if(window_target MATCHES "^KisakCOD-material-.*-radiant-test$")
             target_compile_definitions(${window_target} PRIVATE KISAK_RADIANT MAX_GENTITIES=2176)
+        elseif(window_target STREQUAL "KisakCOD-material-layered-sp-test")
+            target_compile_definitions(${window_target} PRIVATE KISAK_SP)
         else()
             target_compile_definitions(${window_target} PRIVATE KISAK_MP)
         endif()
@@ -308,6 +328,7 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
         target_link_libraries(${window_target} PRIVATE SDL2::SDL2 Threads::Threads)
         target_link_options(${window_target} PRIVATE -Wl,--gc-sections)
     endforeach()
+    target_link_libraries(KisakCOD-cpu-ui-test PRIVATE KisakCOD-window-platform)
     target_link_libraries(KisakCOD-cpu-raw-test PRIVATE KisakCOD-window-platform)
     target_link_libraries(KisakCOD-cpu-renderer-fault-test PRIVATE KisakCOD-window-platform)
     target_link_libraries(KisakCOD-cpu-renderer-test PRIVATE KisakCOD-window-platform)

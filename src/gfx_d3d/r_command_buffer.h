@@ -11,3 +11,6 @@ void R_EmitEndCommand(void *owner,GfxCommandAllocate allocate);
 
 void R_EmitStretchRawCommand(void *owner,GfxCommandAllocate allocate,int x,int y,int width,int height,
                              int columns,int rows,const uint8_t *rgba);
+
+void R_EmitStretchPicCommand(void *owner,GfxCommandAllocate allocate,float x,float y,float width,float height,
+                             float s0,float t0,float s1,float t1,const float *color,Material *material);

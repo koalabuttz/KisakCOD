@@ -21,7 +21,7 @@ const dvar_t *cl_nodelta;
 extern const dvar_t *cl_analog_attack_threshold;
 extern const dvar_t *cl_stanceHoldTime;
 const dvar_t *sv_disableClientConsole;
-ScreenPlacement scrPlaceFull, scrPlaceView[1];
+// Screen placement globals are owned by the real client screen_placement.cpp.
 static clientConnection_t connection;
 clientConnection_t *CL_GetLocalClientConnection(int client) {
     if(client!=0)throw std::out_of_range("local client");

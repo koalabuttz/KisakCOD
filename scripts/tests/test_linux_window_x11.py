@@ -13,7 +13,7 @@ WM/Escape/SIGTERM/SIGINT teardown while a key is held. Repeated launches share
 one X server; they test process/window cleanup, not same-process host reuse.
 The host explicitly reports game-frame execution unavailable.
 
-Add --pixels to sample the engine raw-image command's visible pixels and clear-color background
+Add --pixels to sample the engine UI image command's visible pixels and clear-color background
 with XGetImage at startup and after resize. JSON evidence records actual X11
 geometry, sample positions and colors; the 24-bit Xvfb drawable exposes no alpha.
 
@@ -213,24 +213,34 @@ def main():
         def check_pixels(label, extent):
             from x11_pixel_checks import read_pixels
             width, height = extent
-            left, top = (width - 64) // 2, (height - 64) // 2
-            # Image interior/corner texels and pixels just outside each edge pin
-            # the centered 64x64 destination; distant samples pin clear output.
+            left, top = (width - 128) // 2, (height - 96) // 2
+            # Hand-derived pixel expectations: 64x64 opaque RGBA quadrants scaled
+            # to 128x96, bilinear texel-center sampling, packed tint alpha128,
+            # source-over onto (64,128,191), rounded once at output. Boundary
+            # samples distinguish bilinear filtering from nearest or raw blits.
             expected = {
-                "image_top_left": (left + 16, top + 16, [255, 0, 0]),
-                "image_top_right": (left + 48, top + 16, [0, 255, 0]),
-                "image_bottom_left": (left + 16, top + 48, [0, 0, 255]),
-                "image_bottom_right": (left + 48, top + 48, [255, 255, 0]),
-                "image_corner_top_left": (left, top, [255, 0, 0]),
-                "image_corner_top_right": (left + 63, top, [0, 255, 0]),
-                "image_corner_bottom_left": (left, top + 63, [0, 0, 255]),
-                "image_corner_bottom_right": (left + 63, top + 63, [255, 255, 0]),
+                "image_top_left": (left + 32, top + 24, [160, 64, 95]),
+                "image_top_right": (left + 96, top + 24, [32, 192, 95]),
+                "image_bottom_left": (left + 32, top + 72, [32, 64, 223]),
+                "image_bottom_right": (left + 96, top + 72, [160, 192, 95]),
+                "image_corner_top_left": (left, top, [160, 64, 95]),
+                "image_corner_top_right": (left + 127, top, [32, 192, 95]),
+                "image_corner_bottom_left": (left, top + 95, [32, 64, 223]),
+                "image_corner_bottom_right": (left + 127, top + 95, [160, 192, 95]),
+                "filter_left": (left + 63, top + 24, [128, 96, 95]),
+                "filter_right": (left + 64, top + 24, [64, 160, 95]),
+                "filter_top": (left + 32, top + 47, [139, 64, 116]),
+                "filter_bottom": (left + 32, top + 48, [53, 64, 202]),
+                "filter_center_tl": (left + 63, top + 47, [117, 96, 111]),
+                "filter_center_tr": (left + 64, top + 47, [75, 160, 100]),
+                "filter_center_bl": (left + 63, top + 48, [75, 96, 175]),
+                "filter_center_br": (left + 64, top + 48, [117, 160, 122]),
             }
             background = {
-                "edge_left": (left - 1, top + 16),
-                "edge_right": (left + 64, top + 16),
-                "edge_top": (left + 16, top - 1),
-                "edge_bottom": (left + 16, top + 64),
+                "edge_left": (left - 1, top + 24),
+                "edge_right": (left + 128, top + 24),
+                "edge_top": (left + 32, top - 1),
+                "edge_bottom": (left + 32, top + 96),
                 "background_top_left": (width // 4, height // 4),
                 "background_top_right": (3 * width // 4, height // 4),
                 "background_bottom_left": (width // 4, 3 * height // 4),
@@ -247,11 +257,11 @@ def main():
                     sample["samples"][name]["rgb"] == color for name, (_, _, color) in expected.items())
 
             wait_for(matches, args.timeout, label + " X11 owned image and background pixels", client)
-            marker = (f"presentation=engine-owned-raw width={extent[0]} height={extent[1]} "
-                      "producer=R_EmitStretchRawCommand")
+            marker = (f"presentation=engine-ui-image width={extent[0]} height={extent[1]} "
+                      "producer=UI_DrawHandlePic")
             if marker not in read(trace):
                 raise RuntimeError(label + ": matching pixels have no engine producer presentation trace")
-            print(f"PASS: XGetImage {label} {extent[0]}x{extent[1]} owned 64x64 RGB image and clear background", flush=True)
+            print(f"PASS: XGetImage {label} {extent[0]}x{extent[1]} scaled UI image, bilinear boundaries, alpha blend and clear background", flush=True)
 
         if args.pixels:
             check_pixels("initial", (960, 540))
@@ -388,7 +398,7 @@ def main():
                 if number is not None and f"signal={int(number)}\n" not in cycle_log:
                     raise RuntimeError(label + ": no explicit handled-signal evidence")
                 print(f"PASS: repeated process/window lifecycle: {label} closes with real held=0 and capture released", flush=True)
-        print("Verified software window/input shell only; no game renderer or gameplay.", flush=True)
+        print("Verified bounded CPU UI images and window/input lifecycle; no full game renderer or gameplay.", flush=True)
         return 0
     except (OSError, RuntimeError, subprocess.SubprocessError) as error:
         print(f"FAIL: {error}", flush=True)
