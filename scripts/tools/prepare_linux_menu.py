@@ -18,6 +18,16 @@ def bounded_read(path, maximum):
 def read_json(path, maximum=2*1024*1024):
     return json.loads(bounded_read(path,maximum))
 
+MENU_INVENTORY_LIMIT = 128 * 1024 * 1024
+
+def read_menu_inventory(export):
+    inventory = read_json(export/'menu-inventory.json', MENU_INVENTORY_LIMIT)
+    if not isinstance(inventory, dict) or set(inventory) != {'string_encoding', 'menus', 'localized_controls'}:
+        raise ValueError('unsupported menu inventory schema')
+    if inventory['string_encoding'] != 'engine bytes mapped to U+0000..U+00FF' or not isinstance(inventory['menus'], list) or not isinstance(inventory['localized_controls'], dict):
+        raise ValueError('unsupported menu inventory encoding/collections')
+    return inventory
+
 ROLES = ('smallFont', 'textFont', 'bigFont', 'extraBigFont', 'boldFont', 'consoleFont', 'objectiveFont')
 
 def encode_item(menu, item):
@@ -66,7 +76,7 @@ def prepare_font_files(export):
     return files,roles
 
 def prepare(export, destination, menu_name, item_index):
-    inventory=read_json(export/'menu-inventory.json',32*1024*1024)
+    inventory=read_menu_inventory(export)
     menus=[m for m in inventory['menus'] if m['window']['name']==menu_name]
     if len(menus)!=1: raise ValueError('menu name must identify exactly one exported menu')
     menu=menus[0];items=[i for i in menu['items'] if i['index']==item_index]
