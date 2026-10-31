@@ -5,6 +5,7 @@
 #include <linux/client/window/window_host.h>
 #include <client_mp/client_mp.h>
 #include <ui/ui_input_core.h>
+#include <ui/ui_registration.h>
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
@@ -34,6 +35,7 @@ int main(int argc,char **argv){
     owner.Present(window);Check(owner.Context().blurRadiusOut==7,"repeated real menu traversal retains actual blur request without cross-frame accumulation");
     Check(Dvar_GetBool("cl_freelook")==savedLook && Dvar_GetBool("m_filter")==savedFilter,"recreated menu preserves settings only within existing input runtime");
     Check(owner.Opened() && cls.uiStarted && input.MenuOpen(),"real admitted menu opens and presents");
+    Check(UI_ReplaceOwnedMenus(&owner.Context(),owner.Context().Menus,1)==UiOwnedMenuRegistration::activeMenus && owner.Opened(),"live menu cannot be reloaded out from under actual input and script state");
     owner.Key(K_DOWNARROW,true);owner.Key(K_DOWNARROW,false);
     Check(owner.FocusIndex()==106 || owner.FocusIndex()==112,"real cursor navigation focuses an exported yes/no item");
     const char *name=owner.FocusIndex()==106?"cl_freelook":"m_filter";const bool before=Dvar_GetBool(name);
@@ -51,7 +53,10 @@ int main(int argc,char **argv){
     const bool savedLook=Dvar_GetBool("cl_freelook"),savedFilter=Dvar_GetBool("m_filter");
     CL_KeyEvent(0,K_ESCAPE,1,Sys_Milliseconds());CL_KeyEvent(0,K_ESCAPE,0,Sys_Milliseconds());
     Check(!owner.Opened() && !(clientUIActives[0].keyCatchers&KEYCATCH_UI),"actual client Escape closes menu and releases UI catcher");
+    Check(UI_ReplaceOwnedMenus(&owner.Context(),owner.Context().Menus,1)==UiOwnedMenuRegistration::ok && !UILocalVar_Find(&owner.Context().localVars,"ui_hideBack") && owner.Context().openMenuCount==0,"closed real menu reload releases script localvars and resets registration stack");
     owner.Open();owner.Present(window);Check(owner.Opened() && Dvar_GetBool("cl_freelook")==savedLook && Dvar_GetBool("m_filter")==savedFilter,"same owner reopens preserving only live dvar settings");
+    CL_KeyEvent(0,K_DOWNARROW,1,Sys_Milliseconds());CL_KeyEvent(0,K_DOWNARROW,0,Sys_Milliseconds());owner.Present(window);
+    Check((owner.FocusIndex()==106||owner.FocusIndex()==112) && UILocalVar_Find(&owner.Context().localVars,"ui_highlight") && input.Held()==0,"reloaded registry supports actual client key dispatch and recreates focus-script localvars");
     SDL_Event focus{};focus.type=SDL_WINDOWEVENT;focus.window.windowID=window.Id();focus.window.event=SDL_WINDOWEVENT_FOCUS_GAINED;SDL_PushEvent(&focus);
     SDL_Event enter=focus;enter.window.event=SDL_WINDOWEVENT_ENTER;SDL_PushEvent(&enter);window.Pump(0);window.SetEngineCursor(true);
     Check(window.EngineCursorActive(),"same-window teardown fixture owns an active engine cursor lease");

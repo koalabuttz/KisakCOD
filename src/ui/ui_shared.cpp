@@ -1,3 +1,4 @@
+#include "ui_registration.h"
 #include "ui_script_core.h"
 #include "ui_input_core.h"
 #include <universal/q_shared.h>
@@ -376,13 +377,15 @@ void __cdecl Script_StatClearPerkNew(UiContext *dc, itemDef_s *item, const char 
     }
 }
 
-void __cdecl Menu_Setup(UiContext *dc)
+static void UI_SetupParserKeywords()
 {
-    dc->menuCount = 0;
-    dc->openMenuCount = 0;
     Item_SetupKeywordHash();
     Menu_SetupKeywordHash();
-    UILocalVar_Init(&dc->localVars);
+}
+
+void __cdecl Menu_Setup(UiContext *dc)
+{
+    UI_SetupMenuContext(dc, UI_SetupParserKeywords);
 }
 
 void __cdecl Menu_FreeMemory(menuDef_t *menu)
@@ -4328,7 +4331,8 @@ void __cdecl UI_AddMenu(UiContext *dc, menuDef_t *menu)
             640);
     if (IsFastFileLoad() && DB_FindXAssetHeader(ASSET_TYPE_MENU, menu->window.name).menu != menu)
         MyAssertHandler(".\\ui\\ui_shared.cpp", 6304, 0, "%s", "touchMenu == menu");
-    dc->Menus[dc->menuCount++] = menu;
+    if (!UI_AppendMenuReference(dc, menu))
+        Com_Error(ERR_DROP, "UI_AddMenu: invalid menu registration");
 }
 
 int __cdecl UI_PlayLocalSoundAliasByName(uint32_t localClientNum, const char *aliasname)

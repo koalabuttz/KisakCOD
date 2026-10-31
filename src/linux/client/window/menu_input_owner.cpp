@@ -4,6 +4,7 @@
 #include "menu_composition_assets.h"
 #include <ui/ui_cursor.h>
 #include <ui/ui_time.h>
+#include <ui/ui_registration.h>
 #include "ui_audio_assets.h"
 #include "window_host.h"
 #include <ui/ui_input_core.h>
@@ -38,21 +39,23 @@ MenuInputOwner::MenuInputOwner(ClientInputHost &input,CpuRenderer &renderer,cons
     auto admit=[&](const char *&script){if(script&&*script)script=scripts_.RegisterScript(script);};
     admit(assets_->menu.onOpen);admit(assets_->menu.onClose);admit(assets_->menu.onESC);
     for(auto &item:assets_->items){admit(item.action);admit(item.onFocus);admit(item.leaveFocus);}
-    dc_.localClientNum=0;dc_.menuCount=1;dc_.Menus[0]=&assets_->menu;dc_.isCursorVisible=false;
-    UILocalVar_Init(&dc_.localVars);
+    dc_.localClientNum=0;dc_.isCursorVisible=false;
+    menuDef_t *registered=&assets_->menu;
+    if(UI_ReplaceOwnedMenus(&dc_,&registered,1)!=UiOwnedMenuRegistration::ok)
+        throw std::logic_error("Owned menu context registration failed");
     Dvar_RegisterBool("m_filter",false,DVAR_ARCHIVE,"Allow mouse movement smoothing");
     ui_showMenuOnly=Dvar_RegisterString("ui_showMenuOnly","",DVAR_NOFLAG,"Restrict admitted menu painting by name");
     uiscript_debug=Dvar_RegisterInt("uiscript_debug",0,0,2,DVAR_NOFLAG,"UI script diagnostic level");
     Resize(width,height);current=this;
     input_.AttachMenu(*this);attached_=true;Open();
-    } catch(...){ResetTransient();if(attached_){try {input_.DetachMenu(*this);}catch(...){}attached_=false;}UILocalVar_Shutdown(&dc_.localVars);if(current==this)current=nullptr;uiscript_debug=nullptr;ui_showMenuOnly=nullptr;renderer_.Shutdown();throw;}
+    } catch(...){ResetTransient();if(attached_){try {input_.DetachMenu(*this);}catch(...){}attached_=false;}UI_ShutdownOwnedMenuContext(&dc_);if(current==this)current=nullptr;uiscript_debug=nullptr;ui_showMenuOnly=nullptr;renderer_.Shutdown();throw;}
     std::printf("menu_controls=ready source=options_look items=105,106,111,112 audio_driver=%s blur=unsupported frame=unavailable\n",SDL_GetCurrentAudioDriver());
 }
 MenuInputOwner::~MenuInputOwner(){
     try {input_.ReleaseEngineCursor();}catch(const std::exception &e){std::fprintf(stderr,"menu cursor teardown: %s\n",e.what());}
     try {if(attached_){attached_=false;input_.DetachMenu(*this);}Close();}
     catch(const std::exception&e){std::fprintf(stderr,"menu teardown: %s\n",e.what());}
-    ResetTransient();UILocalVar_Shutdown(&dc_.localVars);if(current==this)current=nullptr;uiscript_debug=nullptr;ui_showMenuOnly=nullptr;renderer_.Shutdown();
+    ResetTransient();UI_ShutdownOwnedMenuContext(&dc_);if(current==this)current=nullptr;uiscript_debug=nullptr;ui_showMenuOnly=nullptr;renderer_.Shutdown();
 }
 void MenuInputOwner::ResetTransient() noexcept {
     inHandleKey=0;g_waitingForKey=0;g_editingField=0;g_editItem=nullptr;g_bindItem=nullptr;itemCapture=nullptr;captureFunc=nullptr;captureData=nullptr;scrollInfo={};
