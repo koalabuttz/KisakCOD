@@ -1,3 +1,4 @@
+static void ScrPlace_CalcSafeAreaOffsetsForDisplay(float,float,float,float,float,float*,float*,float*,float*,int,int);
 #include <universal/q_shared.h>
 #include "client.h"
 
@@ -33,12 +34,13 @@ void __cdecl ScrPlace_Init()
 }
 #endif
 
-void __cdecl ScrPlace_SetupFloatViewport(
+void __cdecl ScrPlace_SetupFloatViewportForDisplay(
     ScreenPlacement *scrPlace,
     float viewportX,
     float viewportY,
     float viewportWidth,
-    float viewportHeight)
+    float viewportHeight,
+    float pixelAspect, int displayWidth, int displayHeight)
 {
     float horzAspectScale; // [esp+70h] [ebp-Ch]
     float adjustedRealWidth; // [esp+74h] [ebp-8h]
@@ -47,12 +49,12 @@ void __cdecl ScrPlace_SetupFloatViewport(
     memset((uint8_t *)scrPlace, 0xB0u, sizeof(ScreenPlacement));
     scrPlace->realViewportSize[0] = viewportWidth;
     scrPlace->realViewportSize[1] = viewportHeight;
-    adjustedRealWidth = viewportHeight * 1.333333373069763 / cls.vidConfig.aspectRatioDisplayPixel;
+    adjustedRealWidth = viewportHeight * 1.333333373069763 / pixelAspect;
     if (adjustedRealWidth > (double)viewportWidth)
         adjustedRealWidth = viewportWidth;
     horzAspectPixelDiff = viewportWidth - adjustedRealWidth;
     horzAspectScale = viewportWidth / adjustedRealWidth;
-    ScrPlace_CalcSafeAreaOffsets(
+    ScrPlace_CalcSafeAreaOffsetsForDisplay(
         viewportX,
         viewportY,
         viewportWidth,
@@ -61,7 +63,7 @@ void __cdecl ScrPlace_SetupFloatViewport(
         scrPlace->realViewableMin,
         scrPlace->realViewableMax,
         scrPlace->virtualViewableMin,
-        scrPlace->virtualViewableMax);
+        scrPlace->virtualViewableMax,displayWidth,displayHeight);
     scrPlace->scaleVirtualToReal[0] = adjustedRealWidth / 640.0;
     scrPlace->scaleVirtualToReal[1] = viewportHeight / 480.0;
     scrPlace->scaleVirtualToFull[0] = viewportWidth / 640.0;
@@ -79,7 +81,12 @@ void __cdecl ScrPlace_SetupFloatViewport(
     scrPlace->subScreenLeft = horzAspectPixelDiff * 0.5;
 }
 
-void __cdecl ScrPlace_CalcSafeAreaOffsets(
+void __cdecl ScrPlace_SetupFloatViewport(ScreenPlacement *scrPlace,float viewportX,float viewportY,float viewportWidth,float viewportHeight)
+{
+    ScrPlace_SetupFloatViewportForDisplay(scrPlace,viewportX,viewportY,viewportWidth,viewportHeight,cls.vidConfig.aspectRatioDisplayPixel,cls.vidConfig.displayWidth,cls.vidConfig.displayHeight);
+}
+
+static void ScrPlace_CalcSafeAreaOffsetsForDisplay(
     float viewportX,
     float viewportY,
     float viewportWidth,
@@ -88,7 +95,7 @@ void __cdecl ScrPlace_CalcSafeAreaOffsets(
     float *realViewableMin,
     float *realViewableMax,
     float *virtualViewableMin,
-    float *virtualViewableMax)
+    float *virtualViewableMax,int displayWidth,int displayHeight)
 {
     const char *v9; // eax
     const char *v10; // eax
@@ -134,21 +141,21 @@ void __cdecl ScrPlace_CalcSafeAreaOffsets(
             safeAreaRatioVert,
             0.0,
             1.0);
-    if (!cls.vidConfig.displayWidth)
+    if (!displayWidth)
         MyAssertHandler(
             ".\\client\\screen_placement.cpp",
             53,
             0,
-            "%s\n\t(cls.vidConfig.displayWidth) = %i",
-            "(cls.vidConfig.displayWidth > 0)",
+            "%s\n\t(displayWidth) = %i",
+            "(displayWidth > 0)",
             0);
-    if (!cls.vidConfig.displayHeight)
+    if (!displayHeight)
         MyAssertHandler(
             ".\\client\\screen_placement.cpp",
             54,
             0,
-            "%s\n\t(cls.vidConfig.displayHeight) = %i",
-            "(cls.vidConfig.displayHeight > 0)",
+            "%s\n\t(displayHeight) = %i",
+            "(displayHeight > 0)",
             0);
     if (viewportX < 0.0)
         MyAssertHandler(".\\client\\screen_placement.cpp", 55, 0, "%s\n\t(viewportX) = %g", "(viewportX >= 0)", viewportX);
@@ -170,52 +177,52 @@ void __cdecl ScrPlace_CalcSafeAreaOffsets(
             "%s\n\t(viewportHeight) = %g",
             "(viewportHeight > 0)",
             viewportHeight);
-    if ((double)cls.vidConfig.displayWidth < viewportX + viewportWidth)
+    if ((double)displayWidth < viewportX + viewportWidth)
     {
-        v9 = va("%g + %g > %i", viewportX, viewportWidth, cls.vidConfig.displayWidth);
+        v9 = va("%g + %g > %i", viewportX, viewportWidth, displayWidth);
         MyAssertHandler(
             ".\\client\\screen_placement.cpp",
             59,
             0,
             "%s\n\t%s",
-            "viewportX + viewportWidth <= cls.vidConfig.displayWidth",
+            "viewportX + viewportWidth <= displayWidth",
             v9);
     }
-    if ((double)cls.vidConfig.displayHeight < viewportY + viewportHeight)
+    if ((double)displayHeight < viewportY + viewportHeight)
     {
-        v10 = va("%g + %g > %i", viewportY, viewportHeight, cls.vidConfig.displayHeight);
+        v10 = va("%g + %g > %i", viewportY, viewportHeight, displayHeight);
         MyAssertHandler(
             ".\\client\\screen_placement.cpp",
             60,
             0,
             "%s\n\t%s",
-            "viewportY + viewportHeight <= cls.vidConfig.displayHeight",
+            "viewportY + viewportHeight <= displayHeight",
             v10);
     }
-    safeAreaSize = (1.0 - safeAreaRatioHorz) * 0.5 * (double)cls.vidConfig.displayWidth;
-    safeAreaSize_4 = (1.0 - safeAreaRatioVert) * 0.5 * (double)cls.vidConfig.displayHeight;
+    safeAreaSize = (1.0 - safeAreaRatioHorz) * 0.5 * (double)displayWidth;
+    safeAreaSize_4 = (1.0 - safeAreaRatioVert) * 0.5 * (double)displayHeight;
     v18 = viewportX - safeAreaSize;
     if (v18 < 0.0)
-        v17 = (1.0 - safeAreaRatioHorz) * 0.5 * (double)cls.vidConfig.displayWidth;
+        v17 = (1.0 - safeAreaRatioHorz) * 0.5 * (double)displayWidth;
     else
         v17 = viewportX;
     v16 = viewportY - safeAreaSize_4;
     if (v16 < 0.0)
-        v15 = (1.0 - safeAreaRatioVert) * 0.5 * (double)cls.vidConfig.displayHeight;
+        v15 = (1.0 - safeAreaRatioVert) * 0.5 * (double)displayHeight;
     else
         v15 = viewportY;
     v20 = viewportWidth + viewportX;
-    v21 = (double)cls.vidConfig.displayWidth - safeAreaSize;
+    v21 = (double)displayWidth - safeAreaSize;
     v14 = v21 - v20;
     if (v14 < 0.0)
-        v13 = (double)cls.vidConfig.displayWidth - safeAreaSize;
+        v13 = (double)displayWidth - safeAreaSize;
     else
         v13 = viewportWidth + viewportX;
     v19 = viewportHeight + viewportY;
-    v22 = (double)cls.vidConfig.displayHeight - safeAreaSize_4;
+    v22 = (double)displayHeight - safeAreaSize_4;
     v12 = v22 - v19;
     if (v12 < 0.0)
-        v11 = (double)cls.vidConfig.displayHeight - safeAreaSize_4;
+        v11 = (double)displayHeight - safeAreaSize_4;
     else
         v11 = viewportHeight + viewportY;
     *realViewableMin = v17 - viewportX;
@@ -226,6 +233,11 @@ void __cdecl ScrPlace_CalcSafeAreaOffsets(
     virtualViewableMin[1] = 480.0 / viewportHeight * realViewableMin[1];
     *virtualViewableMax = *realViewableMax * horzAspectScale * (640.0 / viewportWidth);
     virtualViewableMax[1] = 480.0 / viewportHeight * realViewableMax[1];
+}
+
+void __cdecl ScrPlace_CalcSafeAreaOffsets(float x,float y,float width,float height,float aspect,float *realMin,float *realMax,float *virtualMin,float *virtualMax)
+{
+    ScrPlace_CalcSafeAreaOffsetsForDisplay(x,y,width,height,aspect,realMin,realMax,virtualMin,virtualMax,cls.vidConfig.displayWidth,cls.vidConfig.displayHeight);
 }
 
 void __cdecl ScrPlace_SetupViewport(

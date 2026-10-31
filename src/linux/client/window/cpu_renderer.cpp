@@ -67,11 +67,11 @@ void CpuRenderer::Blit(TextureHandle texture,int x,int y,int width,int height) {
     R_EmitStretchRawCommand(this,Allocate,x,y,width,height,image.width,image.height,image.bytes.data());
     bindings_[bindingCount_++]={offset,texture};
 }
-CpuRenderer::UiMaterialHandle CpuRenderer::RegisterUiMaterial(TextureHandle texture) {
+CpuRenderer::UiMaterialHandle CpuRenderer::RegisterUiMaterial(TextureHandle texture,bool magnificationOnly) {
     CheckThread();if(state_!=State::ready)throw std::logic_error("Material registration requires ready renderer");
     if(!textures_.contains(texture))throw std::invalid_argument("Stale UI texture");
     if(uiMaterials_.size()>=64 || nextUiMaterial_==std::numeric_limits<UiMaterialHandle>::max())throw std::length_error("UI material budget exhausted");
-    auto material=std::make_unique<UiMaterial>();material->texture=texture;
+    auto material=std::make_unique<UiMaterial>();material->texture=texture;material->magnificationOnly=magnificationOnly;
     material->value.info.name="cpu_owned_unlit_ui";
     const auto handle=nextUiMaterial_;uiMaterials_.emplace(handle,std::move(material));++nextUiMaterial_;return handle;
 }
@@ -120,7 +120,7 @@ void CpuRenderer::RecordText(FontHandle font,std::string_view text,int maxChars,
     CheckThread();if(state_!=State::recording)throw std::logic_error("Text requires recording renderer");
     auto found=fonts_.find(font);if(found==fonts_.end())throw std::invalid_argument("Stale font handle");
     if(text.size()>1024 || text.find('\0')!=std::string_view::npos || maxChars<=0 || maxChars>1024)throw std::invalid_argument("Text exceeds bounded command limits");
-    if(style!=0 || rotation!=0 || cursorPos>=0)throw std::invalid_argument("CPU text supports plain style without rotation or cursor");
+    if((style!=0 && style!=3) || rotation!=0 || cursorPos>=0)throw std::invalid_argument("CPU text supports plain or one-pixel shadow style without rotation or cursor");
     for(float value:{x,y})if(!std::isfinite(value) || std::abs(value)>1000000.0f)throw std::invalid_argument("Invalid text origin");
     for(float value:{xScale,yScale})if(!std::isfinite(value) || value<=0 || value>64)throw std::invalid_argument("Invalid text scale");
     for(size_t i=0;i<text.size();++i) {
@@ -188,6 +188,9 @@ void CpuRenderer::SubmitList(std::span<const uint8_t> commands,bool ownedFrame) 
             for(float value:{pic.x,pic.y,pic.w,pic.h})if(!std::isfinite(value) || std::abs(value)>1000000.0f)throw std::invalid_argument("Invalid UI geometry");
             if(pic.w<=0 || pic.h<=0)throw std::invalid_argument("Invalid UI dimensions");
             for(float value:{pic.s0,pic.t0,pic.s1,pic.t1})if(!std::isfinite(value) || value<0 || value>1)throw std::invalid_argument("Invalid UI UV");
+            const auto extent=textures_.at(found->second->texture).Extent();
+            if(found->second->magnificationOnly && (std::abs(double(pic.s1)-pic.s0)*extent.width>pic.w || std::abs(double(pic.t1)-pic.t0)*extent.height>pic.h))
+                throw std::invalid_argument("Metadata-backed UI minification is unsupported");
         } else if(header.id==RC_DRAW_TEXT_2D) {
             constexpr size_t prefix=offsetof(GfxCmdDrawText2D,text);
             if(!ownedFrame || header.byteCount<sizeof(GfxCmdDrawText2D) || (header.byteCount&3) || commands.size()-offset<header.byteCount)throw std::invalid_argument("Text requires bounded owned frame binding");
@@ -197,7 +200,7 @@ void CpuRenderer::SubmitList(std::span<const uint8_t> commands,bool ownedFrame) 
             if(!binding)throw std::invalid_argument("Missing font binding");
             auto found=fonts_.find(binding->font);
             if(found==fonts_.end() || text.font!=&found->second->value)throw std::invalid_argument("Stale font binding");
-            if(text.renderFlags || text.rotation!=0 || text.maxChars<=0 || text.maxChars>1024)throw std::invalid_argument("Unsupported text style or limits");
+            if((text.renderFlags!=0 && text.renderFlags!=4) || text.rotation!=0 || text.maxChars<=0 || text.maxChars>1024)throw std::invalid_argument("Unsupported text style or limits");
             for(float value:{text.x,text.y})if(!std::isfinite(value) || std::abs(value)>1000000.0f)throw std::invalid_argument("Invalid text origin");
             for(float value:{text.xScale,text.yScale})if(!std::isfinite(value) || value<=0 || value>64)throw std::invalid_argument("Invalid text scale");
             const char *characters=reinterpret_cast<const char*>(commands.data()+offset+prefix);
@@ -269,14 +272,25 @@ void CpuRenderer::WalkText(const GfxCmdDrawText2D &command,std::string_view text
         pic.s0=glyph->s0;pic.t0=glyph->t0;pic.s1=glyph->s1;pic.t1=glyph->t1;
         for(float value:{pic.x,pic.y,pic.w,pic.h})if(!std::isfinite(value) || std::abs(value)>1000000.0f)throw std::invalid_argument("Text glyph geometry exceeds supported range");
         if(pic.w && pic.h) {
-            const auto extent=pixels_.Extent();
-            const double left=std::clamp(std::ceil(double(pic.x)-.5),0.0,double(extent.width));
-            const double top=std::clamp(std::ceil(double(pic.y)-.5),0.0,double(extent.height));
-            const double right=std::clamp(std::ceil(double(pic.x)+pic.w-.5),0.0,double(extent.width));
-            const double bottom=std::clamp(std::ceil(double(pic.y)+pic.h-.5),0.0,double(extent.height));
-            coveredPixels+=uint64_t((right-left)*(bottom-top));
-            if(coveredPixels>64u*1024u*1024u)throw std::length_error("Text raster budget exhausted");
-            if(render)RasterUiPic(pic,image);
+            if(material->second->magnificationOnly && (std::abs(double(pic.s1)-pic.s0)*image.width>pic.w || std::abs(double(pic.t1)-pic.t0)*image.height>pic.h))
+                throw std::invalid_argument("Metadata-backed font minification is unsupported");
+            auto pass=[&](const GfxCmdStretchPic &quad) {
+                const auto extent=pixels_.Extent();
+                const double left=std::clamp(std::ceil(double(quad.x)-.5),0.0,double(extent.width));
+                const double top=std::clamp(std::ceil(double(quad.y)-.5),0.0,double(extent.height));
+                const double right=std::clamp(std::ceil(double(quad.x)+quad.w-.5),0.0,double(extent.width));
+                const double bottom=std::clamp(std::ceil(double(quad.y)+quad.h-.5),0.0,double(extent.height));
+                coveredPixels+=uint64_t((right-left)*(bottom-top));
+                if(coveredPixels>64u*1024u*1024u)throw std::length_error("Text raster budget exhausted");
+                if(render)RasterUiPic(quad,image);
+            };
+            if(command.renderFlags==4) {
+                // Actual RB_DrawText style3: black with original packed alpha,
+                // offset one physical pixel (not one scaled glyph pixel), per glyph.
+                auto shadow=pic;shadow.x+=1;shadow.y+=1;shadow.color.packed=0;shadow.color.array[3]=command.color.array[3];
+                pass(shadow);
+            }
+            pass(pic);
         }
         x+=glyph->dx*double(command.xScale);--remaining;
     }

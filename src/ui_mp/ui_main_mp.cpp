@@ -1,3 +1,4 @@
+#include <ui/ui_font_selection.h>
 #ifndef KISAK_MP
 #error This File is MultiPlayer Only
 #endif
@@ -488,24 +489,6 @@ void __cdecl UI_DrawHighlightRect(
     R_AddCmdDrawQuadPic(verts, loColor, sharedUiInfo.assets.whiteMaterial);
 }
 
-int __cdecl UI_TextWidth(const char *text, int maxChars, Font_s *font, float scale)
-{
-    float actualScale; // [esp+8h] [ebp-4h]
-
-    actualScale = R_NormalizedTextScale(font, scale);
-    return (int)((double)R_TextWidth(text, maxChars, font) * actualScale);
-}
-
-int __cdecl UI_TextHeight(Font_s *font, float scale)
-{
-    float actualScale; // [esp+8h] [ebp-4h]
-
-    actualScale = R_NormalizedTextScale(font, scale);
-    return (int)((double)R_TextHeight(font) * actualScale);
-}
-
-
-
 void __cdecl UI_DrawTextWithGlow(
     const ScreenPlacement *scrPlace,
     const char *text,
@@ -614,56 +597,6 @@ void __cdecl UI_DrawTextWithCursor(
     v13 = floor(v15);
     y = v13;
     CL_DrawTextPhysicalWithCursor((char*)text, maxChars, font, x, v13, xScale, yScale, color, style, cursorPos, cursor);
-}
-
-Font_s *__cdecl UI_GetFontHandle(const ScreenPlacement *scrPlace, int fontEnum, float scale)
-{
-    float scalea; // [esp+10h] [ebp+10h]
-
-    switch (fontEnum)
-    {
-    case 2:
-        return sharedUiInfo.assets.bigFont;
-    case 3:
-        return sharedUiInfo.assets.smallFont;
-    case 5:
-        return sharedUiInfo.assets.consoleFont;
-    case 6:
-        return sharedUiInfo.assets.objectiveFont;
-    }
-    scalea = scrPlace->scaleVirtualToReal[1] * scale;
-    if (fontEnum == 4)
-    {
-        if (ui_smallFont->current.value < (double)scalea)
-        {
-            if (ui_bigFont->current.value > (double)scalea)
-                return sharedUiInfo.assets.textFont;
-            else
-                return sharedUiInfo.assets.boldFont;
-        }
-        else
-        {
-            return sharedUiInfo.assets.smallFont;
-        }
-    }
-    else if (ui_smallFont->current.value < (double)scalea)
-    {
-        if (ui_extraBigFont->current.value > (double)scalea)
-        {
-            if (ui_bigFont->current.value > (double)scalea)
-                return sharedUiInfo.assets.textFont;
-            else
-                return sharedUiInfo.assets.bigFont;
-        }
-        else
-        {
-            return sharedUiInfo.assets.extraBigFont;
-        }
-    }
-    else
-    {
-        return sharedUiInfo.assets.smallFont;
-    }
 }
 
 void __cdecl UI_MouseEvent(int localClientNum, int x, int y)
@@ -6064,4 +5997,10 @@ bool __cdecl Menu_IsMenuOpenAndVisible(int localClientNum, const char *menuName)
 bool __cdecl UI_ShouldDrawCrosshair()
 {
     return ui_drawCrosshair->current.enabled;
+}
+
+Font_s *__cdecl UI_GetFontHandle(const ScreenPlacement *scrPlace,int fontEnum,float scale)
+{
+    return UI_SelectFont(scrPlace,fontEnum,scale,sharedUiInfo.assets,
+                         ui_smallFont,ui_bigFont,ui_extraBigFont);
 }

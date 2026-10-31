@@ -8,6 +8,7 @@
 #include <string>
 #include <string_view>
 struct ScreenPlacement;
+struct itemDef_s;
 
 namespace kisak::window {
 class WindowHost;
@@ -32,7 +33,7 @@ public:
     void Blit(TextureHandle texture,int x,int y,int width,int height);
     size_t TextureCount() const { return textures_.size(); }
     using UiMaterialHandle=uint64_t;
-    UiMaterialHandle RegisterUiMaterial(TextureHandle texture);
+    UiMaterialHandle RegisterUiMaterial(TextureHandle texture,bool magnificationOnly=false);
     void ReleaseUiMaterial(UiMaterialHandle material);
     void DrawUiImage(UiMaterialHandle material,const ScreenPlacement &placement,
                      float x,float y,float width,float height,int horizontal,int vertical,const float *color);
@@ -41,6 +42,13 @@ public:
     void ReleaseFont(FontHandle font);
     void DrawUiText(FontHandle font,const ScreenPlacement &placement,std::string_view text,int maxChars,
                     float x,float y,int horizontal,int vertical,float scale,const float *color,int style=0);
+    struct MenuFonts {
+        FontHandle small=0,text=0,big=0,extraBig=0,bold=0,console=0,objective=0;
+        float smallThreshold=.25f,bigThreshold=.4f,extraBigThreshold=.55f;
+    };
+    // Executes the genuine static auto-wrapped item painter, not Menu_Paint.
+    // Only textRect is updated, and only after complete command recording succeeds.
+    void DrawMenuText(const MenuFonts &,const ScreenPlacement &,itemDef_s &,std::string_view,const float *color);
     size_t FontCount() const { return fonts_.size(); }
     void Submit();
     void Present(WindowHost &window);
@@ -67,7 +75,7 @@ private:
 
     void RecordUiStretchPic(UiMaterialHandle material,float x,float y,float width,float height,
                            float s0,float t0,float s1,float t1,const float *color);
-    struct UiMaterial { Material value{};TextureHandle texture; };
+    struct UiMaterial { Material value{};TextureHandle texture;bool magnificationOnly=false; };
     std::map<UiMaterialHandle,std::unique_ptr<UiMaterial>> uiMaterials_;
     UiMaterialHandle nextUiMaterial_=1;
     struct UiBinding { size_t offset;UiMaterialHandle material; };

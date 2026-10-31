@@ -511,6 +511,8 @@ set(UI
     "${SRC_DIR}/ui/ui_shared.h"
     "${SRC_DIR}/ui/ui_atoms.cpp"
     "${SRC_DIR}/ui/ui_text.cpp"
+    "${SRC_DIR}/ui/ui_text_layout.cpp"
+    "${SRC_DIR}/ui/ui_font_selection.cpp"
     "${SRC_DIR}/ui/ui_component.cpp"
     "${SRC_DIR}/ui/ui_expressions.cpp"
     "${SRC_DIR}/ui/ui_expressions_logicfunctions.cpp"

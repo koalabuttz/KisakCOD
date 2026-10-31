@@ -1249,3 +1249,6 @@ inline clientUIActive_t *CL_GetLocalClientUIGlobals(int localClientNum)
 }
 
 #endif // KISAK_SP
+
+// Explicit display extent and pixel aspect for hosts without a game renderer/vidConfig.
+void ScrPlace_SetupFloatViewportForDisplay(ScreenPlacement *,float,float,float,float,float,int,int);

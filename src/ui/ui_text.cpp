@@ -39,3 +39,19 @@ void __cdecl UI_DrawText(
     y = v11;
     CL_DrawTextPhysical(text, maxChars, font, x, v11, xScale, yScale, color, style);
 }
+
+int __cdecl UI_TextWidth(const char *text, int maxChars, Font_s *font, float scale)
+{
+    float actualScale; // [esp+8h] [ebp-4h]
+
+    actualScale = R_NormalizedTextScale(font, scale);
+    return (int)((double)R_TextWidth(text, maxChars, font) * actualScale);
+}
+
+int __cdecl UI_TextHeight(Font_s *font, float scale)
+{
+    float actualScale; // [esp+8h] [ebp-4h]
+
+    actualScale = R_NormalizedTextScale(font, scale);
+    return (int)((double)R_TextHeight(font) * actualScale);
+}

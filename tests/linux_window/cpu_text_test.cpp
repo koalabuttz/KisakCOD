@@ -34,7 +34,7 @@ int main(){try{
  draw("A",1024,2);Check(Lit(r,5,0)&&Lit(r,8,1)&&!Lit(r,9,1),"normalized scale transforms glyph size and baseline consistently");
  r.Resize(80,80);r.BeginFrame();r.Clear(black);
  Check(Reject([&]{r.DrawUiText(font,placement,"^1red",10,4,4,5,5,1,color);})&&Reject([&]{r.DrawUiText(font,placement,"\t",10,4,4,5,5,1,color);})&&Reject([&]{r.DrawUiText(font,placement,"\xc3\xa9",10,4,4,5,5,1,color);}),"unsupported color codes/control/non-ASCII glyphs reject explicitly");
- Check(Reject([&]{r.DrawUiText(font,placement,"A",10,4,4,5,5,1,color,3);}),"unsupported text style rejects without partial command");
+ Check(Reject([&]{r.DrawUiText(font,placement,"A",10,4,4,5,5,1,color,6);}),"unsupported text style rejects without partial command");
  r.DrawUiText(font,placement,"A",10,4,4,5,5,1,color);r.Submit();Check(Lit(r,4,1),"failed text scope restores for a subsequent real UI draw");
  Check(Reject([&]{R_AddCmdDrawText("A",1,reinterpret_cast<Font_s*>(1),0,0,1,1,0,color,0);}),"unscoped font pointer rejects before any lookup");
  r.Resize(80,80);const auto before=std::vector<uint8_t>(r.Pixels().bytes.begin(),r.Pixels().bytes.end());
