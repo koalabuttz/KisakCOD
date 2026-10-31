@@ -175,13 +175,16 @@ class Server:
 
     def transition(self, label, command, map_name, hold_seconds):
         offset = self.log_path.stat().st_size
+        deadline = time.monotonic() + self.timeout
         if command:
             self.send(command)
         self.send("status")
-        self.query("getinfo", map_name)
-        deadline = time.monotonic() + self.timeout
+        self.query("getinfo", map_name, timeout=max(0, deadline - time.monotonic()))
         while time.monotonic() < deadline:
-            self.query("getstatus", map_name, timeout=min(5, self.timeout))
+            # A same-map getinfo can precede the actual restart. Allow loading
+            # to use the remaining transition budget, not the steady-state
+            # five-second responsiveness limit used by hold().
+            self.query("getstatus", map_name, timeout=max(0, deadline - time.monotonic()))
             segment = self.log_path.read_bytes()[offset:].decode(errors="replace")
             if f"map: {map_name}\n" in segment:
                 if command == "map_restart" and f"Server: {map_name}\n" not in segment:
