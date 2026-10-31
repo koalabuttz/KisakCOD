@@ -251,6 +251,10 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
     add_executable(KisakCOD-client-input-test
         "${TESTS_DIR}/linux_window/client_input_test.cpp"
         ${KISAK_CLIENT_INPUT_SOURCES} ${KISAK_CLIENT_RUNTIME_SOURCES})
+    add_executable(KisakCOD-cpu-raw-test
+        "${TESTS_DIR}/linux_window/cpu_raw_test.cpp"
+        "${SRC_DIR}/linux/client/window/window_services.cpp"
+        ${KISAK_CPU_RENDERER_SOURCES})
     add_executable(KisakCOD-cpu-renderer-fault-test
         "${TESTS_DIR}/linux_window/cpu_renderer_fault_test.cpp"
         "${SRC_DIR}/linux/client/window/window_services.cpp"
@@ -280,7 +284,7 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
     add_executable(KisakCOD-shutdown-signal-test
         "${SRC_DIR}/linux/client/window/shutdown_signal.cpp"
         "${TESTS_DIR}/linux_window/shutdown_signal_test.cpp")
-    foreach(window_target KisakCOD-window-platform KisakCOD-client-window KisakCOD-window-test KisakCOD-client-input KisakCOD-client-input-test KisakCOD-shutdown-signal-test KisakCOD-client-command-test KisakCOD-client-runtime-test KisakCOD-client-input-startup-test KisakCOD-presentation-test KisakCOD-frame-deadline-test KisakCOD-pixel-resource-test KisakCOD-cpu-renderer-test KisakCOD-cpu-renderer-fault-test)
+    foreach(window_target KisakCOD-window-platform KisakCOD-client-window KisakCOD-window-test KisakCOD-client-input KisakCOD-client-input-test KisakCOD-shutdown-signal-test KisakCOD-client-command-test KisakCOD-client-runtime-test KisakCOD-client-input-startup-test KisakCOD-presentation-test KisakCOD-frame-deadline-test KisakCOD-pixel-resource-test KisakCOD-cpu-renderer-test KisakCOD-cpu-renderer-fault-test KisakCOD-cpu-raw-test)
         target_compile_features(${window_target} PRIVATE cxx_std_20)
         target_compile_definitions(${window_target} PRIVATE
             KISAK_MP KISAK_OPENAL RELEASE_ASSERTS _FILE_OFFSET_BITS=64 _GNU_SOURCE
@@ -294,6 +298,7 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
         target_link_libraries(${window_target} PRIVATE SDL2::SDL2 Threads::Threads)
         target_link_options(${window_target} PRIVATE -Wl,--gc-sections)
     endforeach()
+    target_link_libraries(KisakCOD-cpu-raw-test PRIVATE KisakCOD-window-platform)
     target_link_libraries(KisakCOD-cpu-renderer-fault-test PRIVATE KisakCOD-window-platform)
     target_link_libraries(KisakCOD-cpu-renderer-test PRIVATE KisakCOD-window-platform)
     target_link_libraries(KisakCOD-presentation-test PRIVATE KisakCOD-window-platform)

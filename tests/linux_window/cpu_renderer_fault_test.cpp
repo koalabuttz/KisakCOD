@@ -2,10 +2,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <new>
-#include <limits>
+#include <stdexcept>
 
 namespace {
 bool failNextAllocation=false;
+int allocationsBeforeFailure=-1;
 long liveAllocations=0;
 int checks=0,failures=0;
 void Check(bool value,const char *name) {
@@ -17,7 +18,10 @@ void Check(bool value,const char *name) {
 // Isolated executable fault injection: production allocators are unchanged.
 // Fail exactly the next allocation, then restore normal exception handling.
 void *operator new(std::size_t size) {
-    if(failNextAllocation) { failNextAllocation=false;throw std::bad_alloc(); }
+    if(failNextAllocation || allocationsBeforeFailure==0) {
+        failNextAllocation=false;allocationsBeforeFailure=-1;throw std::bad_alloc();
+    }
+    if(allocationsBeforeFailure>0)--allocationsBeforeFailure;
     if(void *p=std::malloc(size?size:1)) { ++liveAllocations;return p; }
     throw std::bad_alloc();
 }
@@ -75,6 +79,46 @@ int main() {
         renderer.BeginFrame();renderer.Clear(red);renderer.Submit();
     }
     Check(liveAllocations==baseline,"destruction cancels pending frame without leaking owned storage");
+    {
+        Renderer renderer;renderer.Initialize(2,2);
+        const long initialized=liveAllocations;
+        const uint8_t rgba[16]={7,19,31,0, 43,59,71,0, 83,97,109,0, 127,139,151,0};
+        const kisak::window::PixelBufferView source{2,2,8,rgba};
+        bool rejected=false;allocationsBeforeFailure=0;
+        try { renderer.Upload(source); }catch(const std::bad_alloc&) { rejected=true; }
+        Check(rejected && allocationsBeforeFailure==-1 && renderer.TextureCount()==0 &&
+              renderer.Status()==Renderer::State::ready && liveAllocations==initialized,
+              "failed texture pixel allocation leaves resource registry empty");
+        rejected=false;allocationsBeforeFailure=1;
+        try { renderer.Upload(source); }catch(const std::bad_alloc&) { rejected=true; }
+        Check(rejected && allocationsBeforeFailure==-1 && renderer.TextureCount()==0 &&
+              renderer.Status()==Renderer::State::ready && liveAllocations==initialized,
+              "failed registry insertion frees the completed texture allocation");
+        const auto handle=renderer.Upload(source);
+        const long withTexture=liveAllocations;
+        Check(handle!=0 && renderer.TextureCount()==1,
+              "upload succeeds after both allocation failure points");
+        rejected=false;allocationsBeforeFailure=1;
+        try { renderer.Upload(source); }catch(const std::bad_alloc&) { rejected=true; }
+        Check(rejected && renderer.TextureCount()==1 && liveAllocations==withTexture,
+              "failed second upload preserves existing resource and allocation budget");
+        renderer.BeginFrame();renderer.Blit(handle,0,0,2,2);renderer.Submit();
+        Check(renderer.Pixels().bytes[0]==7 && renderer.Pixels().bytes[15]==255,
+              "existing owned texture still draws after registry allocation failure");
+        renderer.Resize(2,2);renderer.Release(handle);
+        renderer.BeginFrame();rejected=false;
+        try { renderer.Blit(handle,0,0,2,2); }catch(const std::invalid_argument&) { rejected=true; }
+        Check(rejected && renderer.TextureCount()==0,
+              "released resource handle cannot be recorded again");
+        renderer.Shutdown();renderer.Initialize(2,2);
+        const auto replacement=renderer.Upload(source);
+        renderer.BeginFrame();rejected=false;
+        try { renderer.Blit(handle,0,0,2,2); }catch(const std::invalid_argument&) { rejected=true; }
+        Check(rejected && replacement!=handle,
+              "restart does not revive a stale handle even with replacement storage");
+        renderer.Blit(replacement,0,0,2,2);renderer.Submit();
+    }
+    Check(liveAllocations==baseline,"pending textured frame destruction frees registry and all pixel resources");
     std::printf("-- %d checks, %d failures --\n",checks,failures);
     return failures?1:0;
 }

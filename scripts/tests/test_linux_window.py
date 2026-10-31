@@ -78,7 +78,7 @@ def main():
             for flag in ("-m32", "-DKISAK_MP", "-DRELEASE_ASSERTS"):
                 check(bool(re.search(r"(?:^|\s)" + re.escape(flag) + r"(?:\s|$)", command)), f"{suffix} uses {flag}")
             check("-DKISAK_DEDICATED" not in command and "-DDEDICATED" not in command, f"{suffix} is a client compile")
-        command = ["cmake", "--build", build, "--target", "KisakCOD-client-window", "KisakCOD-window-test", "KisakCOD-client-input", "KisakCOD-client-input-test", "KisakCOD-shutdown-signal-test", "KisakCOD-client-command-test", "KisakCOD-client-runtime-test", "KisakCOD-client-input-startup-test", "KisakCOD-presentation-test", "KisakCOD-frame-deadline-test", "KisakCOD-pixel-resource-test", "KisakCOD-cpu-renderer-test", "KisakCOD-cpu-renderer-fault-test", "-j", args.jobs]
+        command = ["cmake", "--build", build, "--target", "KisakCOD-client-window", "KisakCOD-window-test", "KisakCOD-client-input", "KisakCOD-client-input-test", "KisakCOD-shutdown-signal-test", "KisakCOD-client-command-test", "KisakCOD-client-runtime-test", "KisakCOD-client-input-startup-test", "KisakCOD-presentation-test", "KisakCOD-frame-deadline-test", "KisakCOD-pixel-resource-test", "KisakCOD-cpu-renderer-test", "KisakCOD-cpu-renderer-fault-test", "KisakCOD-cpu-raw-test", "-j", args.jobs]
         run(command)
         run(command)
         check(True, "window targets build and incrementally rebuild")
@@ -100,15 +100,15 @@ def main():
             summary = re.search(r"-- (\d+) checks, (\d+) failures --", result.stdout)
             check(summary and int(summary[1]) >= minimum and int(summary[2]) == 0,
                   f"actual {name} lifecycle suite passes")
-        for name, minimum in (("presentation", 27), ("frame-deadline", 14), ("pixel-resource", 20), ("cpu-renderer", 29), ("cpu-renderer-fault", 8)):
+        for name, minimum in (("presentation", 27), ("frame-deadline", 14), ("pixel-resource", 20), ("cpu-renderer", 29), ("cpu-renderer-fault", 16), ("cpu-raw", 16)):
             result = run([build / f"bin/KisakCOD-{name}-test"], env=env, timeout=30)
             print(result.stdout, end="")
             summary = re.search(r"-- (\d+) checks, (\d+) failures --", result.stdout)
             check(summary and int(summary[1]) >= minimum and int(summary[2]) == 0,
                   f"actual {name} suite passes")
         result = run([build / "bin/KisakCOD-client-input", "--frames", "3", "--trace"], env=env, timeout=15)
-        check("presentation=engine-color-clear" in result.stdout and "presented=4" in result.stdout
-              and "frame=unavailable" in result.stdout, "existing input host presents bounded engine color-clear frames")
+        check("presentation=engine-owned-raw" in result.stdout and "presented=4" in result.stdout
+              and "frame=unavailable" in result.stdout, "existing input host presents bounded engine owned-image frames")
         result = run([build / "bin/KisakCOD-shutdown-signal-test"], env=env, timeout=30)
         check("Shutdown signal lifecycle: 0 failures" in result.stdout, "signal lifecycle restores handlers and retains first concurrent request")
         result = subprocess.run([str(build / "bin/KisakCOD-client-input"), "--frame"], env=env,

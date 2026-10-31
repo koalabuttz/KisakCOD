@@ -4,7 +4,7 @@ import ctypes
 import ctypes.util
 
 
-def read_quadrants(display, window):
+def read_pixels(display, window, positions):
     # Prefix of the public XImage structure through its RGB masks. XGetPixel
     # handles image byte order/stride; masks map the visual to RGB channels.
     class Image(ctypes.Structure):
@@ -45,11 +45,9 @@ def read_quadrants(display, window):
                                 ctypes.byref(width), ctypes.byref(height), ctypes.byref(border), ctypes.byref(depth)):
             raise RuntimeError("XGetGeometry failed for presentation window")
         result = {"width": width.value, "height": height.value, "depth": depth.value, "samples": {}}
-        positions = (("top_left", width.value // 4, height.value // 4),
-                     ("top_right", 3 * width.value // 4, height.value // 4),
-                     ("bottom_left", width.value // 4, 3 * height.value // 4),
-                     ("bottom_right", 3 * width.value // 4, 3 * height.value // 4))
         for label, px, py in positions:
+            if not (0 <= px < width.value and 0 <= py < height.value):
+                raise RuntimeError(f"readback sample {label} outside X11 geometry")
             image = x11.XGetImage(connection, window, px, py, 1, 1, ctypes.c_ulong(-1).value, 2)  # ZPixmap
             if not image:
                 raise RuntimeError(f"XGetImage failed at ({px}, {py})")

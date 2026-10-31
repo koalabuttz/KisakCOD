@@ -8,3 +8,6 @@ using GfxCommandAllocate = GfxCmdHeader *(*)(void *,GfxRenderCommand,int);
 void R_EmitClearScreenCommand(void *owner,GfxCommandAllocate allocate,int whichToClear,
                              const float *color,float depth,uint8_t stencil);
 void R_EmitEndCommand(void *owner,GfxCommandAllocate allocate);
+
+void R_EmitStretchRawCommand(void *owner,GfxCommandAllocate allocate,int x,int y,int width,int height,
+                             int columns,int rows,const uint8_t *rgba);

@@ -13,7 +13,7 @@ WM/Escape/SIGTERM/SIGINT teardown while a key is held. Repeated launches share
 one X server; they test process/window cleanup, not same-process host reuse.
 The host explicitly reports game-frame execution unavailable.
 
-Add --pixels to sample the engine clear-command producer's visible RGB output
+Add --pixels to sample the engine raw-image command's visible pixels and clear-color background
 with XGetImage at startup and after resize. JSON evidence records actual X11
 geometry, sample positions and colors; the 24-bit Xvfb drawable exposes no alpha.
 
@@ -126,7 +126,7 @@ def main():
     parser.add_argument("--commands", action="store_true",
                         help="also verify real console executor, local UDP discovery and network restart")
     parser.add_argument("--pixels", action="store_true",
-                        help="read X11 pixels and verify the engine clear color before/after resize")
+                        help="read X11 pixels and verify the owned image and background before/after resize")
     parser.add_argument("--log-dir", type=Path)
     parser.add_argument("--timeout", type=float, default=10)
     args = parser.parse_args()
@@ -211,23 +211,47 @@ def main():
         xdo("windowraise", window)
         xdo("windowfocus", "--sync", window)
         def check_pixels(label, extent):
-            from x11_pixel_checks import read_quadrants
-            colors = {name: [64, 128, 191] for name in
-                      ("top_left", "top_right", "bottom_left", "bottom_right")}
+            from x11_pixel_checks import read_pixels
+            width, height = extent
+            left, top = (width - 64) // 2, (height - 64) // 2
+            # Image interior/corner texels and pixels just outside each edge pin
+            # the centered 64x64 destination; distant samples pin clear output.
+            expected = {
+                "image_top_left": (left + 16, top + 16, [255, 0, 0]),
+                "image_top_right": (left + 48, top + 16, [0, 255, 0]),
+                "image_bottom_left": (left + 16, top + 48, [0, 0, 255]),
+                "image_bottom_right": (left + 48, top + 48, [255, 255, 0]),
+                "image_corner_top_left": (left, top, [255, 0, 0]),
+                "image_corner_top_right": (left + 63, top, [0, 255, 0]),
+                "image_corner_bottom_left": (left, top + 63, [0, 0, 255]),
+                "image_corner_bottom_right": (left + 63, top + 63, [255, 255, 0]),
+            }
+            background = {
+                "edge_left": (left - 1, top + 16),
+                "edge_right": (left + 64, top + 16),
+                "edge_top": (left + 16, top - 1),
+                "edge_bottom": (left + 16, top + 64),
+                "background_top_left": (width // 4, height // 4),
+                "background_top_right": (3 * width // 4, height // 4),
+                "background_bottom_left": (width // 4, 3 * height // 4),
+                "background_bottom_right": (3 * width // 4, 3 * height // 4),
+            }
+            expected.update({name: (x, y, [64, 128, 191]) for name, (x, y) in background.items()})
+            positions = [(name, x, y) for name, (x, y, _) in expected.items()]
 
             def matches():
-                sample = read_quadrants(display, window)
+                sample = read_pixels(display, window, positions)
                 (logs / ("pixels-" + label + ".json")).write_text(json.dumps(sample, indent=2) + "\n")
                 dimensions = (sample["width"], sample["height"])
                 return dimensions == extent and all(
-                    sample["samples"][name]["rgb"] == color for name, color in colors.items())
+                    sample["samples"][name]["rgb"] == color for name, (_, _, color) in expected.items())
 
-            wait_for(matches, args.timeout, label + " X11 engine clear-color pixels", client)
-            marker = (f"presentation=engine-color-clear width={extent[0]} height={extent[1]} "
-                      "producer=R_EmitClearScreenCommand")
+            wait_for(matches, args.timeout, label + " X11 owned image and background pixels", client)
+            marker = (f"presentation=engine-owned-raw width={extent[0]} height={extent[1]} "
+                      "producer=R_EmitStretchRawCommand")
             if marker not in read(trace):
                 raise RuntimeError(label + ": matching pixels have no engine producer presentation trace")
-            print(f"PASS: XGetImage {label} {extent[0]}x{extent[1]} RGB64/128/191 from engine clear command", flush=True)
+            print(f"PASS: XGetImage {label} {extent[0]}x{extent[1]} owned 64x64 RGB image and clear background", flush=True)
 
         if args.pixels:
             check_pixels("initial", (960, 540))

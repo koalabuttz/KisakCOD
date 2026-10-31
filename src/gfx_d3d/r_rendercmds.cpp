@@ -2334,3 +2334,12 @@ void __cdecl R_AddCmdDraw2DImage(
     }
 }
 #endif // KISAK_RADIANT
+
+// Producer for the existing RB_StretchRawCmd format. The game caller owns RGBA
+// storage until backend consumption; the CPU host uses its own resource binding.
+void R_AddCmdStretchRaw(int x,int y,int width,int height,int columns,int rows,const uint8_t *rgba)
+{
+    R_EmitStretchRawCommand(nullptr,[](void *,GfxRenderCommand id,int bytes) {
+        return R_GetCommandBuffer(id,bytes);
+    },x,y,width,height,columns,rows,rgba);
+}

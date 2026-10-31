@@ -1,5 +1,6 @@
 #include "r_command_buffer.h"
 #include <climits>
+#include "rb_backend.h"
 
 GfxCmdHeader *R_AppendCommand(GfxCmdArray &list,unsigned capacity,GfxRenderCommand command,int bytes)
 {
@@ -50,4 +51,14 @@ void R_EmitClearScreenCommand(void *owner,GfxCommandAllocate allocate,int whichT
 void R_EmitEndCommand(void *owner,GfxCommandAllocate allocate)
 {
     allocate(owner,RC_END_OF_LIST,4);
+}
+
+void R_EmitStretchRawCommand(void *owner,GfxCommandAllocate allocate,int x,int y,int width,int height,
+                             int columns,int rows,const uint8_t *rgba)
+{
+    auto *command=reinterpret_cast<GfxCmdStretchRaw *>(allocate(owner,RC_STRETCH_RAW,sizeof(GfxCmdStretchRaw)));
+    if(!command)return;
+    command->x=x;command->y=y;command->w=width;command->h=height;
+    command->cols=columns;command->rows=rows;command->data=rgba;
+    command->client=0;command->dirty=1;
 }
