@@ -9,7 +9,8 @@
 
 namespace kisak::window {
 // One WindowHost owns the SDL event queue per process; foreign IDs are ignored.
-// The sink must outlive the host and callbacks must not throw.
+// The sink must outlive the host. Dispatch propagates callback failures;
+// destruction reports failures and still releases all owned SDL resources.
 // SDL dispatch and engine interpretation are separate. Timestamps are translated
 // once into the sink's monotonic clock epoch, preserving queued-event timing.
 class EventSink {
@@ -33,7 +34,7 @@ struct Config {
 class WindowHost {
 public:
     WindowHost(EventSink &sink, const Config &config = {});
-    ~WindowHost();
+    ~WindowHost() noexcept;
     WindowHost(const WindowHost &) = delete;
     WindowHost &operator=(const WindowHost &) = delete;
     bool Pump(int waitMilliseconds = 0);
@@ -66,7 +67,7 @@ private:
     SDL_Window *window_ = nullptr;
     SDL_threadID owner_;
     uint32_t clockOffset_ = 0;
-    bool running_ = true, focused_ = false, startedText_ = false;
+    bool running_ = true, focused_ = false, startedText_ = false, quitComplete_ = false;
     bool relativeRequested_=false,relativeActive_=false;
     std::string relativeError_;
     int width_, height_;

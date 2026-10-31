@@ -18,7 +18,7 @@ binary=args.binary.resolve();bundle=args.bundle.resolve();assets=args.assets.res
 mode='test'
 inventory=json.loads(args.menu_inventory.read_text());menu=next(m for m in inventory['menus'] if m['window']['name']=='options_look')
 atlas=(assets/'gamefonts_pc.iwi').read_bytes()
-rfd,wfd=os.pipe();processes=[];evidence=[]
+rfd,wfd=os.pipe();processes=[];evidence=[];client_directories=[]
 try:
  with (out/'xvfb.log').open('w') as log:
   xvfb=subprocess.Popen([args.xvfb,'-displayfd',str(wfd),'-screen','0','1200x900x24','-nolisten','tcp'],pass_fds=(wfd,),stdout=log,stderr=subprocess.STDOUT);processes.append(xvfb)
@@ -26,11 +26,21 @@ try:
  env=dict(os.environ,DISPLAY=display,SDL_VIDEODRIVER='x11',SDL_AUDIODRIVER='dummy')
  tenv=dict(env)
  def xdo(*values):return subprocess.check_output([args.xdotool,*map(str,values)],env=tenv,text=True,timeout=10).strip()
+ startup={'display':display,'xvfb_pid':xvfb.pid,'geometry_probes':[]}
+ def display_ready():
+  probe=subprocess.run([args.xdotool,'getdisplaygeometry'],env=tenv,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=5)
+  startup['geometry_probes'].append({'exit':probe.returncode,'output':probe.stdout})
+  (out/'x11-startup.json').write_text(json.dumps(startup,indent=2))
+  return probe.returncode==0
+ # Check the test display independently. Do not retry a failed application.
+ wait_for(display_ready,10,'private X11 display accepts connections',xvfb)
  def launch(name,controls=True):
   title='KisakControls-'+mode+'-'+name;trace=out/(name+'.log')
+  isolated=out/(name+'-cwd');isolated.mkdir(exist_ok=True);assert not list(isolated.iterdir()),'client test directory must be empty'
+  client_directories.append(isolated)
   command=([args.emulator] if args.emulator else [])+[str(binary),'--title',title,'--trace','--run-ms','60000']
   if controls:command+=['--menu-controls',str(bundle),'--ui-asset-dir',str(assets)]
-  with trace.open('w') as log:p=subprocess.Popen(command,env=env,stdout=log,stderr=subprocess.STDOUT)
+  with trace.open('w') as log:p=subprocess.Popen(command,cwd=isolated,env=env,stdout=log,stderr=subprocess.STDOUT)
   processes.append(p);wait_for(lambda:'window=ready' in trace.read_text(),20,name+' ready',p)
   wid=int(xdo('search','--onlyvisible','--name','^'+title+'$'));return p,wid,trace
  def state(trace):
@@ -55,8 +65,21 @@ try:
  xdo('key','Return');expect(trace,p,cl_freelook=1-before)
  xdo('key','Down');s=expect(trace,p,focus=112);before=int(s['m_filter']);xdo('key','Return');expect(trace,p,m_filter=1-before)
  xdo('mousemove','--window',wid,450,260);s=expect(trace,p,focus=106);before=int(s['cl_freelook']);xdo('click',1);expect(trace,p,cl_freelook=1-before)
- xdo('key','Escape');expect(trace,p,open=0);assert p.poll() is None
- xdo('type','--clearmodifiers','--delay','15','menu_open');xdo('key','Return');expect(trace,p,open=1)
+ preserved={key:state(trace)[key] for key in ('cl_freelook','m_filter')}
+ for cycle in range(5):
+  xdo('key','Escape');expect(trace,p,open=0,**preserved);assert p.poll() is None
+  xdo('type','--clearmodifiers','--delay','15','menu_open');xdo('key','Return');expect(trace,p,open=1,**preserved)
+ # Hold a real X key until autorepeat reaches the production menu consumer.
+ xdo('mousemove','--window',wid,450,260);s=expect(trace,p,focus=106);before=int(s['cl_freelook']);offset=len(trace.read_text())
+ xdo('keydown','Return')
+ wait_for(lambda:trace.read_text()[offset:].count('key=13 down=1\n')>=4,5,'real keyboard autorepeat',p)
+ xdo('keyup','Return');wait_for(lambda:'key=13 down=0\n' in trace.read_text()[offset:],5,'autorepeat release',p)
+ repeat_log=trace.read_text()[offset:];repeats=repeat_log.count('key=13 down=1\n')
+ # CL_KeyEvent tracks repeat events but admits only the first UI activation.
+ assert repeat_log.count('menu_sound alias=mouse_click ')==1
+ expect(trace,p,cl_freelook=1-before,held=0)
+ xdo('key','Return');expect(trace,p,cl_freelook=before,held=0)
+ evidence.append({'actual_key_repeat_presses':repeats,'same_process_reopen_cycles':5})
  peer,pwid,ptrace=launch('peer',False);xdo('windowmove',pwid,800,600);xdo('windowfocus','--sync',wid);xdo('keydown','w')
  offset=len(trace.read_text());xdo('windowfocus','--sync',pwid)
  wait_for(lambda:'focus lost' in trace.read_text()[offset:] and 'input=reset held=0' in trace.read_text()[offset:],20,'held key reset on focusloss',p)
@@ -65,10 +88,15 @@ try:
  request_window_close(display,wid);assert p.wait(timeout=20)==0;assert re.search(r'window=closed .*held=0 .*game=false',trace.read_text())
  request_window_close(display,pwid);assert peer.wait(timeout=20)==0
  for n in range(2):
-  p,wid,trace=launch('recreate'+str(n));expect(trace,p,open=1);xdo('windowfocus','--sync',wid);xdo('keydown','w')
+  p,wid,trace=launch('recreate'+str(n));expect(trace,p,open=1,cl_freelook=1,m_filter=0);xdo('windowfocus','--sync',wid)
+  xdo('mousemove','--window',wid,450,260);expect(trace,p,focus=106);xdo('click',1);expect(trace,p,cl_freelook=0)
+  xdo('keydown','w')
   if n:p.send_signal(signal.SIGTERM)
   else:request_window_close(display,wid)
   assert p.wait(timeout=20)==0;xdo('keyup','w');assert re.search(r'window=closed .*held=0 .*game=false',trace.read_text())
+ for directory in client_directories:
+  assert not list(directory.rglob('*')), ('unexpected client filesystem output',directory)
+ evidence.append({'isolated_client_files':0,'processes':len(client_directories)})
  (out/'evidence.json').write_text(json.dumps({'audio':'explicit SDL dummy driver; no physical audibility claim','checks':evidence},indent=2));print(mode,'genuine menu interaction/lifecycle and independent labels PASS')
 finally:
  os.close(rfd)

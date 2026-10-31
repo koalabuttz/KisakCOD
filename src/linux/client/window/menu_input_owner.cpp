@@ -10,7 +10,6 @@
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
-#include <sstream>
 #include <algorithm>
 const dvar_t *uiscript_debug;
 namespace kisak::window {
@@ -76,12 +75,31 @@ void MenuInputOwner::Mouse(int x,int y){CheckThread();if(!Opened())return;
     try {Menu_HandleMouseMove(&dc_,&assets_->menu);}catch(...){scrPlaceView[0]=prior;ResetTransient();throw;}scrPlaceView[0]=prior;Trace("mouse");
 }
 int MenuInputOwner::FocusIndex() const {for(size_t i=0;i<assets_->items.size();++i)if(Window_HasFocus(0,&assets_->items[i].window))return assets_->sourceIndices[i];return -1;}
-void MenuInputOwner::Trace(const char *phase){std::ostringstream state;state<<"open="<<Opened()<<" focus="<<FocusIndex()<<" cl_freelook="<<Dvar_GetBool("cl_freelook")<<" m_filter="<<Dvar_GetBool("m_filter")<<" width="<<width_<<" height="<<height_<<" held="<<input_.Held();auto &cache=std::strcmp(phase,"present")==0?lastPresentTrace_:lastTrace_;if(state.str()!=cache){cache=state.str();std::printf("menu_state phase=%s %s\n",phase,cache.c_str());std::fflush(stdout);}}
+void MenuInputOwner::Trace(const char *phase) {
+    // Logging must not allocate or throw between a UI action and capture sync.
+    const TraceState state{true,Opened(),FocusIndex(),Dvar_GetBool("cl_freelook"),
+        Dvar_GetBool("m_filter"),width_,height_,input_.Held()};
+    auto &cache=std::strcmp(phase,"present")==0?lastPresentTrace_:lastTrace_;
+    if(state!=cache) {
+        cache=state;
+        std::printf("menu_state phase=%s open=%d focus=%d cl_freelook=%d m_filter=%d width=%d height=%d held=%d\n",
+            phase,state.open,state.focus,state.freelook,state.filter,state.width,state.height,state.held);
+        std::fflush(stdout);
+    }
+}
 void MenuInputOwner::Present(WindowHost &window){CheckThread();const auto extent=window.SurfaceExtent();if(extent.width!=width_||extent.height!=height_)Resize(extent.width,extent.height);
     const auto before=renderer_.Pixels();if(before.width!=width_||before.height!=height_)renderer_.Resize(width_,height_);
-    renderer_.BeginFrame();const float clear[4]={.25f,.5f,.75f,1};renderer_.Clear(clear);dc_.realTime=Sys_Milliseconds();
-    if(Opened())for(auto &item:assets_->items)renderer_.DrawMenuItem(fonts_,placement_,dc_,item);
-    renderer_.Submit();renderer_.Present(window);Trace("present");
+    renderer_.BeginFrame();
+    try {
+        const float clear[4]={.25f,.5f,.75f,1};renderer_.Clear(clear);dc_.realTime=Sys_Milliseconds();
+        if(Opened())for(auto &item:assets_->items)renderer_.DrawMenuItem(fonts_,placement_,dc_,item);
+        renderer_.Submit();renderer_.Present(window);
+    } catch(...) {
+        // An SDL failure may occur after CPU replay. Keep the resources/pixels,
+        // discard the failed frame and let a later tick rebuild it normally.
+        renderer_.CancelFrame();throw;
+    }
+    Trace("present");
 }
 const char *MenuInputOwner::Localize(const char *key) const {CheckThread();return assets_->Localize(key);}
 }

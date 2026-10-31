@@ -26,6 +26,9 @@ public:
     void Initialize(int width,int height);
     void Resize(int width,int height);
     void BeginFrame();
+    // Discard recording/pending commands without allocating, freeing assets,
+    // rolling back pixels, or advancing the presentation counter.
+    void CancelFrame();
     void Clear(const float (&color)[4]);
     using TextureHandle=uint64_t;
     // Upload copies padded RGBA input; resources are immutable and ready-state only.

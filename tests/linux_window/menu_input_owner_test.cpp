@@ -12,6 +12,7 @@ int main(int argc,char **argv){
  if(argc!=3){std::fprintf(stderr,"requires genuine control bundle and image directory\n");return 2;}
  Sys_InitializeCriticalSections();
  try {
+  {
   kisak::window::ClientInputHost input;
   kisak::window::Config config;config.width=640;config.height=480;
   kisak::window::WindowHost window(input,config);
@@ -21,23 +22,38 @@ int main(int argc,char **argv){
   renderer.Initialize(8,8);
   Check(Reject([&]{kisak::window::MenuInputOwner owner(input,renderer,argv[1],argv[2],640,480);}) && renderer.Pixels().width==8,"live unrelated renderer generation rejected without mutation");renderer.Shutdown();
   for(int cycle=0;cycle<3;++cycle){
+   const bool savedLook=Dvar_GetBool("cl_freelook"),savedFilter=Dvar_GetBool("m_filter");
    {
     kisak::window::MenuInputOwner owner(input,renderer,argv[1],argv[2],640,480);
     owner.Present(window);
+    Check(Dvar_GetBool("cl_freelook")==savedLook && Dvar_GetBool("m_filter")==savedFilter,"recreated menu preserves settings only within existing input runtime");
     Check(owner.Opened() && cls.uiStarted && input.MenuOpen(),"real admitted menu opens and presents");
     owner.Key(K_DOWNARROW,true);owner.Key(K_DOWNARROW,false);
     Check(owner.FocusIndex()==106 || owner.FocusIndex()==112,"real cursor navigation focuses an exported yes/no item");
     const char *name=owner.FocusIndex()==106?"cl_freelook":"m_filter";const bool before=Dvar_GetBool(name);
     owner.Key(K_ENTER,true);const bool after=Dvar_GetBool(name);owner.Key(K_ENTER,false);
     Check(after!=before && Dvar_GetBool(name)==after,"actual yes/no handler toggles once on key down, not release");
+    const bool repeatBefore=Dvar_GetBool(name);
+    CL_KeyEvent(0,K_ENTER,1,Sys_Milliseconds());const bool repeatAfter=Dvar_GetBool(name);
+    CL_KeyEvent(0,K_ENTER,1,Sys_Milliseconds());
+    Check(repeatAfter!=repeatBefore && Dvar_GetBool(name)==repeatAfter && input.Held()==1 && playerKeys[0].keys[K_ENTER].repeats==2,"actual client key-repeat suppresses repeated yes/no toggle while tracking held key");
+    CL_KeyEvent(0,K_ENTER,0,Sys_Milliseconds());CL_KeyEvent(0,K_ENTER,1,Sys_Milliseconds());
+    Check(Dvar_GetBool(name)==repeatBefore,"fresh press after repeat release toggles again and retains changed setting");
+    input.Focus(false);
+    Check(input.Held()==0 && !playerKeys[0].keys[K_ENTER].down,"focus loss releases held actual client key before menu teardown");
     owner.ResetFocus();Check(owner.FocusIndex()==-1 && !inHandleKey && !itemCapture && !g_editItem && !g_bindItem,"focus reset clears actual focus and transient capture pointers");
-    owner.Key(K_ESCAPE,true);owner.Key(K_ESCAPE,false);Check(!owner.Opened(),"actual Escape script closes menu");
-    owner.Open();owner.Present(window);Check(owner.Opened(),"same owner reopens through actual menu lifecycle");
+    const bool savedLook=Dvar_GetBool("cl_freelook"),savedFilter=Dvar_GetBool("m_filter");
+    CL_KeyEvent(0,K_ESCAPE,1,Sys_Milliseconds());CL_KeyEvent(0,K_ESCAPE,0,Sys_Milliseconds());
+    Check(!owner.Opened() && !(clientUIActives[0].keyCatchers&KEYCATCH_UI),"actual client Escape closes menu and releases UI catcher");
+    owner.Open();owner.Present(window);Check(owner.Opened() && Dvar_GetBool("cl_freelook")==savedLook && Dvar_GetBool("m_filter")==savedFilter,"same owner reopens preserving only live dvar settings");
     renderer.BeginFrame();const float black[4]={0,0,0,1};renderer.Clear(black);renderer.Submit();
    }
    Check(renderer.Status()==kisak::window::CpuRenderer::State::stopped && !cls.uiStarted && !input.MenuOpen(),"destruction cancels pending frame and detaches/releases renderer generation");
    input.Focus(false);Check(input.Held()==0,"input reset after owner destruction has no dangling callback");
   }
+  }
+  {kisak::window::ClientInputHost fresh;
+   Check(Dvar_GetBool("cl_freelook") && Dvar_FindVar("m_filter")==nullptr,"fresh input runtime resets defaults without loading saved UI settings");}
  }catch(const std::exception &e){std::fprintf(stderr,"fixture failed: %s\n",e.what());return 1;}
  std::printf("-- %d checks, %d failures --\n",checks,failures);return failures?1:0;
 }

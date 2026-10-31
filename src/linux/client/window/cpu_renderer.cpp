@@ -24,6 +24,10 @@ void CpuRenderer::Resize(int width,int height) {
     pixels_.Resize(width,height); // Failure leaves pending frame and resource intact.
     ResetCommands();state_=State::ready; // Successful resize cancels pending work.
 }
+void CpuRenderer::CancelFrame() {
+    CheckThread();if(state_==State::stopped)throw std::logic_error("CPU renderer stopped");
+    ResetCommands();state_=State::ready;
+}
 void CpuRenderer::BeginFrame() {
     CheckThread();if(state_!=State::ready)throw std::logic_error("CPU renderer not ready");
     ResetCommands();state_=State::recording;

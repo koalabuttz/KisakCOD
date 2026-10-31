@@ -37,6 +37,23 @@ public:
     bool focus=false;
     uint32_t clockShift;
 };
+class FaultInput : public Input {
+public:
+    bool failClock=false,failRelease=false,failQuit=false;
+    int releaseAttempts=0,quitAttempts=0;
+    uint32_t NowMilliseconds() const override {
+        if(failClock)throw std::runtime_error("fixture clock failure");
+        return Input::NowMilliseconds();
+    }
+    void Key(uint32_t time,int key,bool down) override {
+        if(!down){++releaseAttempts;if(failRelease)throw std::runtime_error("fixture key release failure");}
+        Input::Key(time,key,down);
+    }
+    void OnQuit() override {
+        ++quitAttempts;if(failQuit)throw std::runtime_error("fixture quit failure");
+        Input::OnQuit();
+    }
+};
 std::vector<sysEvent_t> Drain() {
     std::vector<sysEvent_t> events;sysEvent_t event{};
     while(Sys_PollQueuedEvent(&event)) {
@@ -187,6 +204,38 @@ int main()
             int32_t difference=events.empty()?100:int32_t(uint32_t(events[0].evTime)-(timestamp+shift));
             check(uint64_t(timestamp)+shift>UINT32_MAX && events.size()==1 && difference>=-2 && difference<=2,
                 "timestamp calibration remains correct across 32-bit clock wrap");
+        }
+        {
+            FaultInput sink;sink.failClock=true;bool rejected=false;
+            try {kisak::window::Config config;config.hidden=true;kisak::window::WindowHost host(sink,config);}
+            catch(const std::runtime_error&){rejected=true;}
+            check(rejected && !SDL_WasInit(SDL_INIT_VIDEO) && SDL_WasInit(SDL_INIT_EVENTS),"throwing constructor clock rolls back owned SDL subsystem without losing external events");
+            sink.failClock=false;
+            {kisak::window::Config config;config.hidden=true;kisak::window::WindowHost host(sink,config);}
+            check(sink.quitAttempts==1 && !SDL_WasInit(SDL_INIT_VIDEO),"window can be recreated after partial constructor failure");
+        }
+        {
+            FaultInput sink;
+            {
+                kisak::window::Config config;config.hidden=true;kisak::window::WindowHost host(sink,config);
+                SDL_FlushEvents(SDL_FIRSTEVENT,SDL_LASTEVENT);
+                WindowEvent(host.Id(),SDL_WINDOWEVENT_FOCUS_GAINED);Key(host.Id(),SDL_SCANCODE_A,true);Key(host.Id(),SDL_SCANCODE_B,true);host.Pump();Drain();
+                sink.failClock=sink.failRelease=sink.failQuit=true;
+            }
+            check(sink.releaseAttempts==2 && sink.quitAttempts==1 && !SDL_WasInit(SDL_INIT_VIDEO),"destructor attempts every held release and quit despite callback errors and frees SDL");
+            check(!consumerHeld['a'] && !consumerHeld['b'],"final quit reset runs after failed per-key callbacks");
+        }
+        {
+            FaultInput sink;bool propagated=false;
+            {
+                kisak::window::Config config;config.hidden=true;kisak::window::WindowHost host(sink,config);
+                sink.failClock=true;
+                try {host.RequestQuit();}catch(const std::runtime_error&){propagated=true;}
+                check(propagated && !host.Running(),"explicit quit reports callback failure and stops dispatch");
+            }
+            check(sink.quitAttempts==1 && !SDL_WasInit(SDL_INIT_VIDEO),"failed explicit quit still completes sink cleanup during destruction");
+            Input fresh;kisak::window::Config config;config.hidden=true;kisak::window::WindowHost host(fresh,config);
+            check(host.Running(),"singleton remains reusable after throwing teardown");
         }
         SDL_QuitSubSystem(SDL_INIT_EVENTS);Sys_ShutdownEvents();
     } catch(const std::exception &error) { std::fprintf(stderr,"test exception: %s\n",error.what());++failures; }

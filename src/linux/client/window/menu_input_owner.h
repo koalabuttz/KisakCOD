@@ -41,6 +41,11 @@ private:
     std::thread::id thread_;
     bool attached_=false;
     int width_=0,height_=0;
-    std::string lastTrace_,lastPresentTrace_;
+    struct TraceState {
+        bool valid=false;
+        int open=0,focus=-1,freelook=0,filter=0,width=0,height=0,held=0;
+        bool operator==(const TraceState &) const = default;
+    };
+    TraceState lastTrace_,lastPresentTrace_;
 };
 }

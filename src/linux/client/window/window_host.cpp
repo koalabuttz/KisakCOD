@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstring>
+#include <cstdio>
 #include <stdexcept>
 #include <string>
 
@@ -69,22 +70,43 @@ WindowHost::WindowHost(EventSink &sink, const Config &config)
     if (width_ < 1 || height_ < 1 || width_ > 8192 || height_ > 8192)
         throw std::invalid_argument("Window dimensions must be between 1 and 8192");
     if (hostActive.test_and_set()) throw std::logic_error("Only one SDL window event host may own a process queue");
-    if (SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0) {
-        hostActive.clear();throw Error("SDL video initialization");
+    bool initialized=false;
+    try {
+        if (SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
+            throw Error("SDL video initialization");
+        initialized=true;
+        window_ = SDL_CreateWindow(config.title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+            width_, height_, SDL_WINDOW_RESIZABLE | (config.hidden ? SDL_WINDOW_HIDDEN : SDL_WINDOW_SHOWN));
+        if (!window_) throw Error("SDL window creation");
+        clockOffset_ = sink_.NowMilliseconds() - SDL_GetTicks();
+        focused_ = (SDL_GetWindowFlags(window_) & SDL_WINDOW_INPUT_FOCUS) != 0;
+        startedText_ = !SDL_IsTextInputActive();
+        if (startedText_) SDL_StartTextInput();
+    } catch (...) {
+        if(startedText_)SDL_StopTextInput();
+        if(window_)SDL_DestroyWindow(window_);
+        if(initialized)SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_EVENTS);
+        hostActive.clear();
+        throw;
     }
-    window_ = SDL_CreateWindow(config.title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-        width_, height_, SDL_WINDOW_RESIZABLE | (config.hidden ? SDL_WINDOW_HIDDEN : SDL_WINDOW_SHOWN));
-    if (!window_) { auto error=Error("SDL window creation"); SDL_QuitSubSystem(SDL_INIT_VIDEO|SDL_INIT_EVENTS);hostActive.clear(); throw error; }
-    clockOffset_ = sink_.NowMilliseconds() - SDL_GetTicks();
-    focused_ = (SDL_GetWindowFlags(window_) & SDL_WINDOW_INPUT_FOCUS) != 0;
-    startedText_ = !SDL_IsTextInputActive();
-    if (startedText_) SDL_StartTextInput();
 }
-WindowHost::~WindowHost()
+WindowHost::~WindowHost() noexcept
 {
-    ApplyRelativeMouse(false);
-    ReleaseHeld(sink_.NowMilliseconds());
-    if (running_) sink_.Quit();
+    // A failed sink must not strand the SDL singleton or skip other releases.
+    auto attempt=[](const char *operation,auto action) noexcept {
+        try { action(); }
+        catch(const std::exception &error) { std::fprintf(stderr,"window teardown %s failed: %s\n",operation,error.what()); }
+        catch(...) { std::fprintf(stderr,"window teardown %s failed: unknown exception\n",operation); }
+    };
+    attempt("relative capture",[&]{
+        if(!ApplyRelativeMouse(false))std::fprintf(stderr,"window teardown relative capture failed: %s\n",relativeError_.c_str());
+    });
+    uint32_t time=Time(SDL_GetTicks());
+    attempt("clock",[&]{ time=sink_.NowMilliseconds(); });
+    for(unsigned key=1;key<held_.size();++key)if(held_[key])
+        attempt("key release",[&]{ sink_.Key(time,key,false); });
+    held_.fill(0);physical_.fill(false);mouseHeld_.fill(false);
+    if(!quitComplete_)attempt("quit callback",[&]{ sink_.Quit();quitComplete_=true; });
     if (startedText_) SDL_StopTextInput();
     SDL_DestroyWindow(window_);
     SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_EVENTS);
@@ -124,7 +146,7 @@ void WindowHost::RequestQuit()
 {
     CheckThread();
     if (!running_) return;
-    running_=false; ApplyRelativeMouse(false); ReleaseHeld(sink_.NowMilliseconds()); sink_.Quit();
+    running_=false; ApplyRelativeMouse(false); ReleaseHeld(sink_.NowMilliseconds()); sink_.Quit();quitComplete_=true;
 }
 void WindowHost::Dispatch(const SDL_Event &event)
 {
