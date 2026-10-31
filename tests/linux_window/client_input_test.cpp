@@ -15,8 +15,9 @@ extern CmdText cmd_textArray[1];
 
 namespace {
 struct ThrowingMenu final : kisak::window::MenuInputClient {
-    bool failOpened=false,failReset=false;int resets=0;
+    bool failOpened=false,failReset=false;int resets=0,presenceCalls=0;bool pointer=false;
     void Key(int,bool) override {} void Mouse(int,int) override {}
+    void PointerPresence(bool inside) override { ++presenceCalls;pointer=inside; }
     void Open() override {} void Close() override {} void Resize(int,int) override {}
     void ResetFocus() override { ++resets;if(failReset)throw std::runtime_error("fixture reset failure"); }
     bool Opened() const override { if(failOpened)throw std::runtime_error("fixture opened failure");return true; }
@@ -78,6 +79,16 @@ int main() {
             for(int i=0;i<256;++i)Sys_QueEvent(1,SE_CHAR,'x',0,0,nullptr);
             Window(host.Id(),SDL_WINDOWEVENT_FOCUS_LOST);pump();
             Check(input.Held()==0 && !playerKeys[0].keys['a'].down && !std::strcmp(input.Text(),"za"),"overflowed key release and stale text recovered by focus boundary");
+            // Motion reaches the engine only through the drain, so a sample that
+            // was queued but never applied must not survive a focus boundary.
+            Window(host.Id(),SDL_WINDOWEVENT_FOCUS_GAINED);pump();
+            Push(mouse);host.Pump(1);
+            Check(clients[0].mouseDx[0]==0 && clients[0].mouseDy[0]==0,"pumped motion stays queued until the drain applies it");
+            Drain(input);
+            Check(clients[0].mouseDx[0]==7 && clients[0].mouseDy[0]==-4,"drained motion reaches actual CL_MouseEvent");
+            Push(mouse);host.Pump(1);
+            Window(host.Id(),SDL_WINDOWEVENT_FOCUS_LOST);host.Pump(1);Drain(input);
+            Check(clients[0].mouseDx[0]==0 && clients[0].mouseDy[0]==0,"focus loss discards motion queued but not yet drained");
             Window(host.Id(),SDL_WINDOWEVENT_FOCUS_GAINED);pump();
             auto unsupported=input.Unsupported();Key(host.Id(),SDL_SCANCODE_RETURN,true);Key(host.Id(),SDL_SCANCODE_RETURN,false);pump();
             Check(input.Unsupported()==unsupported && !*input.Text() && cmd_textArray[0].cmdsize>0,"console submission enters production command buffer");
@@ -110,6 +121,15 @@ int main() {
             Check(menu.resets==resetCalls,"later input reset cannot call failed detached owner");
             menu.failReset=false;input.AttachMenu(menu);input.DetachMenu(menu);
             Check(cls.uiStarted==priorStarted && clientUIActives[0].keyCatchers==priorCatchers,"fresh attachment works after failed attach and detach");
+            // A pointer boundary is a state transition, so the ordered queue
+            // applies it through Dispatch instead of the poll applying it inline.
+            input.AttachMenu(menu);menu.presenceCalls=0;
+            Sys_QuePointerPresence(1,0);
+            Check(menu.presenceCalls==0,"pointer boundary is queued instead of applied by the poll");
+            Drain(input);
+            Check(menu.presenceCalls==1 && !menu.pointer,
+                "queued pointer boundary reaches the menu through Dispatch with the pointer outside");
+            input.DetachMenu(menu);
             clientUIActives[0].keyCatchers=originalCatchers;
 
         }

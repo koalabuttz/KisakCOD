@@ -17,6 +17,16 @@ typedef enum
     SE_KEY = 0x1,
     SE_CHAR = 0x2,
     SE_CONSOLE = 0x3,
+#ifndef _WIN32
+    // Ordered pointer motion. A backend that queues motion instead of applying
+    // it while polling keeps a click from being overtaken by a later sample.
+    // evValue/evValue2 carry the relative delta, evValue3/evValue4 the absolute
+    // position. Linux only, so the Windows event set is unchanged.
+    SE_MOUSE = 0x4,
+    // Ordered pointer boundary: evValue!=0 entered the window. Queued so the
+    // consumer sees it in order with the motion and keys around it.
+    SE_POINTER = 0x5,
+#endif
 } sysEventType_t;
 
 enum SphereEdgeTraceResult : __int32

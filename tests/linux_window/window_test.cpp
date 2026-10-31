@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <stdexcept>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -24,11 +25,25 @@ void check(bool condition,const char *name) {
     ++checks;if(!condition)++failures;
     std::printf("%s: %s\n",condition?"PASS":"FAIL",name);
 }
+void checkTrace(const std::vector<std::string> &actual,const std::vector<std::string> &expected,const char *name) {
+    if(actual!=expected) {
+        std::printf("trace actual:");
+        for(const auto &line:actual)std::printf(" [%s]",line.c_str());
+        std::printf("\ntrace expect:");
+        for(const auto &line:expected)std::printf(" [%s]",line.c_str());
+        std::printf("\n");
+    }
+    check(actual==expected,name);
+}
 void ResetConsumer(int n) { if(n!=0)std::abort();++resets;consumerHeld.fill(false); }
 int MouseConsumer(int x,int y,int dx,int dy) { ++mouseCalls;lastX=x;lastY=y;lastDx=dx;lastDy=dy;return 0; }
 class Input : public kisak::window::EngineInput {
 public:
     explicit Input(uint32_t shift=5000) : EngineInput(MouseConsumer,ResetConsumer),clockShift(shift) {}
+    // The drain, not the poll, applies motion and pointer boundaries.
+    using EngineInput::MotionOf;
+    using EngineInput::DeliverMouse;
+    using EngineInput::DeliverPointerPresence;
     uint32_t NowMilliseconds() const override { return SDL_GetTicks()+clockShift; }
     void Resize(int w,int h) override { width=w;height=h;++resizeCalls; }
     void OnFocus(bool focused) override { focus=focused;++focusCalls; }
@@ -64,6 +79,50 @@ std::vector<sysEvent_t> Drain() {
     }
     return events;
 }
+std::vector<std::string> order;
+// Main-equivalent drain: pump, then apply every queued record in the order the
+// queue yields it. The trace records what a consumer observed, including the
+// pointer state a click landed on, so ordering and target are both visible.
+std::vector<sysEvent_t> DrainApplied(Input &input) {
+    std::vector<sysEvent_t> events;sysEvent_t event{};
+    while(Sys_PollQueuedEvent(&event)) {
+        if(event.evType==SE_KEY) {
+            if(event.evValue>=0 && event.evValue<256)consumerHeld[event.evValue]=event.evValue2;
+            order.push_back("key "+std::to_string(event.evValue)+(event.evValue2?" down ":" up ")
+                +std::to_string(lastX)+","+std::to_string(lastY));
+        } else if(event.evType==SE_CHAR) {
+            order.push_back("char "+std::to_string(event.evValue));
+        } else if(event.evType==SE_MOUSE) {
+            const auto motion=input.MotionOf(event);
+            order.push_back("mouse "+std::to_string(motion.x)+","+std::to_string(motion.y)
+                +" d"+std::to_string(motion.dx)+","+std::to_string(motion.dy));
+            input.DeliverMouse(motion);
+        } else if(event.evType==SE_POINTER) {
+            order.push_back(std::string("pointer ")+(event.evValue?"inside":"left"));
+            input.DeliverPointerPresence(event.evValue!=0);
+        }
+        events.push_back(event);
+    }
+    return events;
+}
+// SDL can hand a pushed window boundary to a following poll, so a test that
+// asserts engine-side order settles the host's pointer state first instead of
+// assuming the boundary and the motion beside it land in the same poll.
+void SettlePointer(kisak::window::WindowHost &host,Input &input,bool inside) {
+    for(int n=0;n<4 && host.PointerInside()!=inside;++n) { host.Pump();DrainApplied(input); }
+}
+// SDL can hand pushed events to a later poll, so a test that asserts on queue
+// contents pumps until two consecutive polls deliver nothing.
+std::vector<sysEvent_t> SettleInput(kisak::window::WindowHost &host,Input &input) {
+    std::vector<sysEvent_t> events;int quiet=0;
+    for(int n=0;n<16 && quiet<2;++n) {
+        host.Pump();
+        const auto batch=DrainApplied(input);
+        quiet=batch.empty()?quiet+1:0;
+        events.insert(events.end(),batch.begin(),batch.end());
+    }
+    return events;
+}
 uint32_t Push(SDL_Event event) { if(SDL_PushEvent(&event)!=1)throw std::runtime_error(SDL_GetError());return event.common.timestamp; }
 void WindowEvent(uint32_t id,uint8_t kind,int a=0,int b=0) {
     SDL_Event event{};event.type=SDL_WINDOWEVENT;event.window.windowID=id;event.window.event=kind;
@@ -80,6 +139,10 @@ void Text(uint32_t id,const char *text) {
 void Button(uint32_t id,uint8_t button,bool down) {
     SDL_Event event{};event.type=down?SDL_MOUSEBUTTONDOWN:SDL_MOUSEBUTTONUP;event.button.windowID=id;
     event.button.button=button;Push(event);
+}
+void Motion(uint32_t id,int x,int y,int dx,int dy) {
+    SDL_Event event{};event.type=SDL_MOUSEMOTION;event.motion.windowID=id;
+    event.motion.x=x;event.motion.y=y;event.motion.xrel=dx;event.motion.yrel=dy;Push(event);
 }
 }
 int main()
@@ -131,9 +194,115 @@ int main()
             check(Drain().empty() && host.Running(),"other-window events cannot mutate or close this host");
             SDL_Event motion{};motion.type=SDL_MOUSEMOTION;motion.motion.windowID=host.Id();
             motion.motion.x=30;motion.motion.y=40;motion.motion.xrel=-4;motion.motion.yrel=6;Push(motion);
-            Button(host.Id(),SDL_BUTTON_RIGHT,true);Button(host.Id(),SDL_BUTTON_RIGHT,false);host.Pump();events=Drain();
+            Button(host.Id(),SDL_BUTTON_RIGHT,true);Button(host.Id(),SDL_BUTTON_RIGHT,false);host.Pump();events=DrainApplied(input);
             check(mouseCalls==1 && lastX==30 && lastY==40 && lastDx==-4 && lastDy==6
-                && events.size()==2 && events[0].evValue==K_MOUSE2,"mouse coordinates and button mapping reach engine-compatible adapter");
+                && events.size()==3 && events[0].evType==SE_MOUSE && events[1].evValue==K_MOUSE2,"mouse coordinates and button mapping reach engine-compatible adapter");
+            // Regression: Pump delivers the whole SDL batch before the main loop
+            // drains, so motion applied at poll time overtook a click that arrived
+            // before it. Batch motion A, a click on it, then motion B.
+            {
+                order.clear();const int callsBefore=mouseCalls;
+                Motion(host.Id(),100,120,3,5);
+                Button(host.Id(),SDL_BUTTON_LEFT,true);Button(host.Id(),SDL_BUTTON_LEFT,false);
+                Motion(host.Id(),400,300,300,180);
+                host.Pump();
+                check(mouseCalls==callsBefore,"motion is deferred while a pumped batch is still arriving");
+                const auto batched=DrainApplied(input);
+                const std::vector<std::string> expected{
+                    "mouse 100,120 d3,5",
+                    "key "+std::to_string(K_MOUSE1)+" down 100,120",
+                    "key "+std::to_string(K_MOUSE1)+" up 100,120",
+                    "mouse 400,300 d300,180"};
+                checkTrace(order,expected,"batched motion, click and later motion keep SDL arrival order through the drain");
+                check(batched.size()==4 && batched[0].evType==SE_MOUSE && batched[1].evType==SE_KEY
+                    && batched[2].evType==SE_KEY && batched[3].evType==SE_MOUSE,
+                    "click is delivered against the pointer position it was pressed on, not a later sample");
+                order.clear();
+                Key(host.Id(),SDL_SCANCODE_SPACE,true);
+                Motion(host.Id(),50,60,-7,-8);
+                Key(host.Id(),SDL_SCANCODE_SPACE,false);
+                host.Pump();
+                const auto keyedEvents=DrainApplied(input);
+                const std::vector<std::string> keyed{
+                    "key "+std::to_string(K_SPACE)+" down 400,300",
+                    "mouse 50,60 d-7,-8",
+                    "key "+std::to_string(K_SPACE)+" up 50,60"};
+                check(order==keyed && keyedEvents.size()==3,"keyboard pressed before motion stays before it in the same batch");
+            }
+            // Regression: motion must not evict a key transition. A release
+            // followed by a full batch of motion and a wheel used to overflow the
+            // 256-record ring and drop the release, stranding the held key.
+            {
+                order.clear();
+                Key(host.Id(),SDL_SCANCODE_W,true);host.Pump();DrainApplied(input);
+                check(consumerHeld['w'],"fixture delivers key-down before the pressure batch");
+                Key(host.Id(),SDL_SCANCODE_W,false);
+                for(int n=0;n<254;++n)Motion(host.Id(),200+n,300+n,1,1);
+                SDL_Event step{};step.type=SDL_MOUSEWHEEL;step.wheel.windowID=host.Id();step.wheel.y=1;Push(step);
+                host.Pump();
+                const auto pressured=DrainApplied(input);
+                check(!consumerHeld['w'],"key release survives 254 motion samples and a wheel in one batch");
+                check(pressured.size()==4 && pressured[0].evType==SE_KEY && !pressured[0].evValue2
+                    && pressured[1].evType==SE_MOUSE && pressured[2].evValue==K_MWHEELUP,
+                    "release, coalesced motion and wheel stay distinct records in arrival order");
+                const auto merged=input.MotionOf(pressured[1]);
+                check(merged.x==453 && merged.y==553 && merged.dx==254 && merged.dy==254,
+                    "consecutive motion coalesces to the latest position with summed deltas");
+            }
+            // Regression: motion interleaved with other input must not evict a
+            // release either. 86 (motion, wheel) pairs after a release is 259
+            // records for a 256-record ring, so admission has to reclaim motion.
+            {
+                order.clear();
+                Key(host.Id(),SDL_SCANCODE_W,true);
+                const auto down=SettleInput(host,input);
+                check(consumerHeld['w'] && !down.empty(),"fixture delivers key-down before the interleaved batch");
+                Key(host.Id(),SDL_SCANCODE_W,false);
+                for(int n=0;n<86;++n) {
+                    Motion(host.Id(),300+n,400+n,1,1);
+                    SDL_Event step{};step.type=SDL_MOUSEWHEEL;step.wheel.windowID=host.Id();step.wheel.y=1;Push(step);
+                }
+                const auto interleaved=SettleInput(host,input);
+                int transitions=0,motions=0;
+                for(const auto &record:interleaved) {
+                    if(record.evType==SE_KEY)++transitions;
+                    else if(record.evType==SE_MOUSE)++motions;
+                }
+                check(!consumerHeld['w'],"key release survives interleaved motion and wheel pressure");
+                check(interleaved.size()==256 && transitions==173 && motions==83
+                    && interleaved[0].evType==SE_KEY && !interleaved[0].evValue2,
+                    "full ring keeps every key transition and reclaims only queued motion");
+            }
+            // Regression: a pointer boundary is a transition like any other, so it
+            // must not be applied ahead of the motion and click around it. The
+            // boundary is settled first because SDL may hand a pushed window event
+            // to a following poll.
+            {
+                WindowEvent(host.Id(),SDL_WINDOWEVENT_ENTER);host.Pump();DrainApplied(input);
+                SettlePointer(host,input,true);order.clear();
+                Motion(host.Id(),600,400,2,3);
+                Button(host.Id(),SDL_BUTTON_LEFT,true);Button(host.Id(),SDL_BUTTON_LEFT,false);
+                WindowEvent(host.Id(),SDL_WINDOWEVENT_LEAVE);
+                host.Pump();DrainApplied(input);SettlePointer(host,input,false);
+                const std::vector<std::string> leaving{
+                    "mouse 600,400 d2,3",
+                    "key "+std::to_string(K_MOUSE1)+" down 600,400",
+                    "key "+std::to_string(K_MOUSE1)+" up 600,400",
+                    "pointer left"};
+                checkTrace(order,leaving,"pointer leave is ordered after the motion and click that preceded it");
+                order.clear();
+                WindowEvent(host.Id(),SDL_WINDOWEVENT_ENTER);
+                host.Pump();DrainApplied(input);SettlePointer(host,input,true);
+                Motion(host.Id(),700,500,-2,-3);
+                Button(host.Id(),SDL_BUTTON_LEFT,true);Button(host.Id(),SDL_BUTTON_LEFT,false);
+                host.Pump();DrainApplied(input);
+                const std::vector<std::string> entering{
+                    "pointer inside",
+                    "mouse 700,500 d-2,-3",
+                    "key "+std::to_string(K_MOUSE1)+" down 700,500",
+                    "key "+std::to_string(K_MOUSE1)+" up 700,500"};
+                checkTrace(order,entering,"pointer entry is ordered before the motion and click that followed it");
+            }
             SDL_Event wheel{};wheel.type=SDL_MOUSEWHEEL;wheel.wheel.windowID=host.Id();wheel.wheel.y=-2;wheel.wheel.direction=SDL_MOUSEWHEEL_FLIPPED;
             Push(wheel);host.Pump();events=Drain();
             check(events.size()==4 && events[0].evValue==K_MWHEELUP && events[0].evValue2 && !events[1].evValue2,"flipped wheel emits bounded press-release pairs");
@@ -145,8 +314,9 @@ int main()
             Key(host.Id(),SDL_SCANCODE_W,true);Button(host.Id(),SDL_BUTTON_LEFT,true);host.Pump();Drain();
             int before=resets;WindowEvent(host.Id(),SDL_WINDOWEVENT_FOCUS_LOST);host.Pump();
             check(resets==before+1 && !consumerHeld['w'] && !consumerHeld[K_MOUSE1] && Drain().empty(),"focus loss clears consumer and stale queued input");
+            const int unfocusedCalls=mouseCalls;
             Key(host.Id(),SDL_SCANCODE_A,true);Text(host.Id(),"background");Push(motion);host.Pump();
-            check(Drain().empty() && mouseCalls==1,"unfocused keyboard text and mouse input are ignored");
+            check(Drain().empty() && mouseCalls==unfocusedCalls,"unfocused keyboard text and mouse input are ignored");
             WindowEvent(host.Id(),SDL_WINDOWEVENT_FOCUS_GAINED);Key(host.Id(),SDL_SCANCODE_W,true);host.Pump();Drain();
             Key(host.Id(),SDL_SCANCODE_W,false);host.Pump();
             for(int n=0;n<256;++n)Sys_QueEvent(1,SE_CHAR,'x',0,0,nullptr);
@@ -247,7 +417,7 @@ int main()
             {
                 kisak::window::Config config;config.hidden=true;kisak::window::WindowHost host(sink,config);
                 SDL_FlushEvents(SDL_FIRSTEVENT,SDL_LASTEVENT);
-                WindowEvent(host.Id(),SDL_WINDOWEVENT_FOCUS_GAINED);WindowEvent(host.Id(),SDL_WINDOWEVENT_ENTER);host.Pump();
+                WindowEvent(host.Id(),SDL_WINDOWEVENT_FOCUS_GAINED);WindowEvent(host.Id(),SDL_WINDOWEVENT_ENTER);host.Pump();DrainApplied(sink);
                 host.SetEngineCursor(true);
                 check(host.PointerInside() && sink.pointer && host.EngineCursorActive() && SDL_ShowCursor(SDL_QUERY)==SDL_DISABLE,"engine cursor hides native cursor only in focused pointer-owning window");
                 host.NativeCursorRequest(false);
@@ -255,23 +425,29 @@ int main()
                 Key(host.Id(),SDL_SCANCODE_A,true);host.Pump();Drain();const int priorResets=resets;
                 WindowEvent(host.Id()+1,SDL_WINDOWEVENT_LEAVE);host.Pump();
                 check(host.PointerInside() && host.EngineCursorActive(),"foreign pointer boundary cannot release cursor ownership");
-                WindowEvent(host.Id(),SDL_WINDOWEVENT_LEAVE);host.Pump();Drain();
+                WindowEvent(host.Id(),SDL_WINDOWEVENT_LEAVE);host.Pump();DrainApplied(sink);
                 check(!host.PointerInside() && !sink.pointer && !host.EngineCursorActive() && SDL_ShowCursor(SDL_QUERY)==SDL_ENABLE && consumerHeld['a'] && resets==priorResets,"pointer leave restores native cursor without releasing held keys or keyboard focus");
-                WindowEvent(host.Id(),SDL_WINDOWEVENT_ENTER);host.Pump();
+                WindowEvent(host.Id(),SDL_WINDOWEVENT_ENTER);host.Pump();DrainApplied(sink);
                 check(host.EngineCursorActive() && SDL_ShowCursor(SDL_QUERY)==SDL_DISABLE,"pointer reentry reacquires requested engine cursor");
                 WindowEvent(host.Id(),SDL_WINDOWEVENT_FOCUS_LOST);host.Pump();
                 check(!host.EngineCursorActive() && SDL_ShowCursor(SDL_QUERY)==SDL_ENABLE && !consumerHeld['a'],"focus loss restores cursor and still resets actual input consumer");
-                WindowEvent(host.Id(),SDL_WINDOWEVENT_FOCUS_GAINED);host.Pump();
+                WindowEvent(host.Id(),SDL_WINDOWEVENT_FOCUS_GAINED);host.Pump();DrainApplied(sink);
                 check(host.EngineCursorActive(),"focus gain reacquires engine cursor when pointer remains inside");
                 host.SetEngineCursor(false);host.NativeCursorRequest(false);
                 check(SDL_ShowCursor(SDL_QUERY)==SDL_ENABLE && !host.EngineCursorActive(),"disconnected no-UI hide request records intent while keeping editor native cursor visible");
                 host.SetEngineCursor(true);
                 bool conflict=false;try{host.SetRelativeMouse(true);}catch(const std::logic_error&){conflict=true;}
                 check(conflict && !host.RelativeMouseRequested(),"relative capture cannot silently override custom cursor ownership");
-                WindowEvent(host.Id(),SDL_WINDOWEVENT_LEAVE);host.Pump();
+                WindowEvent(host.Id(),SDL_WINDOWEVENT_LEAVE);host.Pump();DrainApplied(sink);
                 sink.failPointer=true;WindowEvent(host.Id(),SDL_WINDOWEVENT_ENTER);bool rejected=false;
-                try{host.Pump();}catch(const std::runtime_error&){rejected=true;}
-                check(rejected && !host.EngineCursorActive() && SDL_ShowCursor(SDL_QUERY)==SDL_ENABLE,"throwing pointer callback reports failure and restores native visibility");
+                // The boundary is queued, so the poll cannot run the consumer: a
+                // failing callback surfaces when the ordered queue applies it.
+                host.Pump();
+                check(host.PointerInside() && !rejected,"pointer boundary is queued instead of run by the poll");
+                try{DrainApplied(sink);}catch(const std::runtime_error&){rejected=true;}
+                check(rejected,"throwing pointer callback reports failure when the queue applies it");
+                sink.failPointer=false;host.SetEngineCursor(false);
+                check(!host.EngineCursorActive() && SDL_ShowCursor(SDL_QUERY)==SDL_ENABLE,"cursor ownership stays with the window when a consumer callback fails");
                 sink.failPointer=false;host.SetEngineCursor(true);
                 host.RequestQuit();
                 check(!host.EngineCursorActive() && SDL_ShowCursor(SDL_QUERY)==SDL_ENABLE,"explicit close releases native cursor before sink teardown");

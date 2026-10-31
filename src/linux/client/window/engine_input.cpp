@@ -22,7 +22,13 @@ void EngineInput::ResetInput()
     reset_(0);
 }
 void EngineInput::Focus(bool focused) { if(!focused)ResetInput();OnFocus(focused); }
-void EngineInput::PointerPresence(bool inside) { OnPointerPresence(inside); }
+void EngineInput::PointerPresence(bool inside)
+{
+    // The window layer already moved the native cursor for this boundary. The
+    // engine-visible transition takes the ordered path so it cannot be applied
+    // ahead of a motion sample or click that arrived before it.
+    Sys_QuePointerPresence(NowMilliseconds(),inside?1:0);
+}
 void EngineInput::Quit() { ResetInput();OnQuit(); }
 uint32_t EngineInput::NowMilliseconds() const { return Sys_Milliseconds(); }
 void EngineInput::Key(uint32_t time,int key,bool down)
@@ -62,8 +68,24 @@ void EngineInput::Text(uint32_t time,std::string_view text)
         else ++unsupported_;
     }
 }
-void EngineInput::Mouse(uint32_t,int x,int y,int dx,int dy)
+MouseMotion EngineInput::MotionOf(const sysEvent_t &event)
 {
-    if (mouse_) mouse_(x,y,dx,dy);
+    if (event.evType != SE_MOUSE) throw std::invalid_argument("A pointer motion event is required");
+    MouseMotion motion;
+    motion.x=event.evValue3; motion.y=event.evValue4;
+    motion.dx=event.evValue; motion.dy=event.evValue2;
+    return motion;
+}
+int EngineInput::DeliverMouse(const MouseMotion &motion)
+{
+    return mouse_ ? mouse_(motion.x,motion.y,motion.dx,motion.dy) : 0;
+}
+void EngineInput::DeliverPointerPresence(bool inside) { OnPointerPresence(inside); }
+void EngineInput::Mouse(uint32_t time,int x,int y,int dx,int dy)
+{
+    // Queue instead of applying: WindowHost::Pump hands every pending SDL event to
+    // this sink before the main loop drains, so applying motion here would deliver
+    // a later sample ahead of a click that arrived earlier.
+    Sys_QueMouseEvent(time,x,y,dx,dy);
 }
 }

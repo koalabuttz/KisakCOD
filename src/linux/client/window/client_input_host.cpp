@@ -70,6 +70,10 @@ void ClientInputHost::Dispatch(const sysEvent_t &event) {
     } else if(event.evType==SE_CHAR) {
         if(event.evValue<0 || event.evValue>255)throw std::out_of_range("engine character");
         CL_CharEvent(0,event.evValue);
+    } else if(event.evType==SE_MOUSE) {
+        DeliverMouse(MotionOf(event));
+    } else if(event.evType==SE_POINTER) {
+        DeliverPointerPresence(event.evValue!=0);
     } else throw std::runtime_error("input host cannot execute console/system commands");
 }
 void ClientInputHost::Resize(int width,int height) {

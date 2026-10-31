@@ -28,6 +28,11 @@ void ResetShellInput(int) {
 class ShellInput : public kisak::window::EngineInput {
 public:
     ShellInput() : EngineInput(ShellMouse,ResetShellInput) {}
+    // Motion and pointer boundaries arrive through the shared queue; the drain
+    // applies them.
+    using EngineInput::MotionOf;
+    using EngineInput::DeliverMouse;
+    using EngineInput::DeliverPointerPresence;
     void Resize(int width,int height) override {
         ++metrics.resizes;
         if(metrics.trace)std::printf("resize %d %d\n",width,height);
@@ -101,6 +106,11 @@ int main(int argc,char **argv)
                 } else if(event.evType==SE_CHAR) {
                     ++metrics.characters;
                     if(metrics.trace)std::printf("character=%d\n",event.evValue);
+                } else if(event.evType==SE_MOUSE) {
+                    input.DeliverMouse(input.MotionOf(event));
+                } else if(event.evType==SE_POINTER) {
+                    if(metrics.trace)std::printf("pointer=%s\n",event.evValue?"inside":"left");
+                    input.DeliverPointerPresence(event.evValue!=0);
                 }
             }
             if(!host.Running())break;
