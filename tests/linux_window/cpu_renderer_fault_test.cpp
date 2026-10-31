@@ -160,6 +160,34 @@ int main() {
               "failed real UI call restores scope so the next valid call can render");
     }
     Check(liveAllocations==baseline,"pending UI frame destruction frees materials and dependent textures");
+    {
+        Renderer renderer;renderer.Initialize(4,4);
+        const uint8_t white[4]={255,255,255,255};
+        const auto texture=renderer.Upload({1,1,4,white});const auto material=renderer.RegisterUiMaterial(texture);
+        std::array<Glyph,96> glyphs{};
+        for(unsigned i=0;i<96;++i){glyphs[i].letter=i+32;glyphs[i].dx=1;glyphs[i].pixelWidth=glyphs[i].pixelHeight=1;glyphs[i].s1=glyphs[i].t1=1;}
+        const long beforeFont=liveAllocations;
+        for(int point=0;point<4;++point){
+            bool rejected=false;allocationsBeforeFailure=point;
+            try{renderer.RegisterFont(material,"long-synthetic-font-name-for-owned-allocation",48,glyphs);}catch(const std::bad_alloc&){rejected=true;}
+            Check(rejected&&allocationsBeforeFailure==-1&&renderer.FontCount()==0&&liveAllocations==beforeFont,"font object/name/glyph/map allocation failure rolls back owned resources");
+        }
+        const auto font=renderer.RegisterFont(material,"synthetic-font",48,glyphs);bool rejected=false;
+        try{renderer.ReleaseUiMaterial(material);}catch(const std::logic_error&){rejected=true;}
+        Check(rejected&&renderer.FontCount()==1,"registered font pins atlas material and texture transitively");
+        ScreenPlacement placement{};const float color[4]={1,1,1,1};
+        renderer.BeginFrame();renderer.DrawUiText(font,placement,"A",1,1,1,5,5,1,color);renderer.Submit();
+        rejected=false;try{renderer.ReleaseFont(font);}catch(const std::logic_error&){rejected=true;}
+        Check(rejected&&renderer.Status()==Renderer::State::pending,"pending text frame prevents font release");
+        renderer.Resize(4,4);renderer.ReleaseFont(font);renderer.ReleaseUiMaterial(material);renderer.Release(texture);
+        Check(renderer.FontCount()==0&&renderer.TextureCount()==0&&liveAllocations==baseline+1,"ready release order frees font/material/texture owned resources");
+        renderer.Shutdown();renderer.Initialize(4,4);auto newTexture=renderer.Upload({1,1,4,white});auto newMaterial=renderer.RegisterUiMaterial(newTexture);auto replacement=renderer.RegisterFont(newMaterial,"synthetic-replacement",48,glyphs);
+        renderer.BeginFrame();rejected=false;
+        try{renderer.DrawUiText(font,placement,"A",1,1,1,5,5,1,color);}catch(const std::invalid_argument&){rejected=true;}
+        renderer.DrawUiText(replacement,placement,"A",1,1,1,5,5,1,color);renderer.Submit();
+        Check(rejected&&replacement!=font&&renderer.Pixels().bytes[0]==255,"restart rejects stale font while actual replacement text renders");
+    }
+    Check(liveAllocations==baseline,"pending text destruction frees fonts and transitive resources");
     std::printf("-- %d checks, %d failures --\n",checks,failures);
     return failures?1:0;
 }

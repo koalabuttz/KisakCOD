@@ -11,7 +11,7 @@ namespace kisak::window {
 void CpuRenderer::CheckThread() const {
     if(owner_!=std::this_thread::get_id())throw std::logic_error("CPU renderer requires owner thread");
 }
-void CpuRenderer::ResetCommands() { commands_={storage_.data(),0,0,nullptr};bindingCount_=0;uiBindingCount_=0; }
+void CpuRenderer::ResetCommands() { commands_={storage_.data(),0,0,nullptr};bindingCount_=0;uiBindingCount_=0;fontBindingCount_=0; }
 void CpuRenderer::Initialize(int width,int height) {
     if(state_!=State::stopped)throw std::logic_error("CPU renderer already initialized");
     PixelBuffer replacement;replacement.Resize(width,height);
@@ -77,6 +77,7 @@ CpuRenderer::UiMaterialHandle CpuRenderer::RegisterUiMaterial(TextureHandle text
 }
 void CpuRenderer::ReleaseUiMaterial(UiMaterialHandle material) {
     CheckThread();if(state_!=State::ready)throw std::logic_error("Material release requires ready renderer");
+    for(const auto &item:fonts_)if(item.second->material==material)throw std::logic_error("UI material is bound to a font");
     if(!uiMaterials_.erase(material))throw std::invalid_argument("Stale UI material");
 }
 void CpuRenderer::RecordUiStretchPic(UiMaterialHandle material,float x,float y,float width,float height,
@@ -93,6 +94,49 @@ void CpuRenderer::RecordUiStretchPic(UiMaterialHandle material,float x,float y,f
     R_EmitStretchPicCommand(this,Allocate,x,y,width,height,s0,t0,s1,t1,bounded,&found->second->value);
     uiBindings_[uiBindingCount_++]={offset,material};
 }
+CpuRenderer::FontHandle CpuRenderer::RegisterFont(UiMaterialHandle material,std::string_view name,int pixelHeight,std::span<const Glyph> glyphs) {
+    CheckThread();if(state_!=State::ready)throw std::logic_error("Font registration requires ready renderer");
+    auto atlas=uiMaterials_.find(material);if(atlas==uiMaterials_.end())throw std::invalid_argument("Stale font atlas material");
+    if(name.empty() || name.size()>255 || name.find('\0')!=std::string_view::npos || pixelHeight<=0 || pixelHeight>512 || glyphs.size()<96 || glyphs.size()>4096)
+        throw std::invalid_argument("Invalid owned font dimensions or metadata");
+    for(size_t i=0;i<glyphs.size();++i) {
+        const auto &glyph=glyphs[i];
+        if((i<96 && glyph.letter!=i+32) || (i>=96 && ((glyph.letter>=32 && glyph.letter<=127) || (i>96 && glyph.letter<=glyphs[i-1].letter))))
+            throw std::invalid_argument("Font glyph ordering does not match engine lookup");
+        for(float uv:{glyph.s0,glyph.t0,glyph.s1,glyph.t1})if(!std::isfinite(uv) || uv<0 || uv>1)throw std::invalid_argument("Invalid font atlas coordinates");
+        if(glyph.s0>glyph.s1 || glyph.t0>glyph.t1)throw std::invalid_argument("Reversed font glyph coordinates");
+    }
+    if(fonts_.size()>=16 || nextFont_==std::numeric_limits<FontHandle>::max())throw std::length_error("Owned font budget exhausted");
+    auto font=std::make_unique<OwnedFont>();font->name=name;font->glyphs.assign(glyphs.begin(),glyphs.end());font->material=material;
+    font->value={font->name.c_str(),pixelHeight,int(glyphs.size()),&atlas->second->value,nullptr,font->glyphs.data()};
+    const auto handle=nextFont_;fonts_.emplace(handle,std::move(font));++nextFont_;return handle;
+}
+void CpuRenderer::ReleaseFont(FontHandle font) {
+    CheckThread();if(state_!=State::ready)throw std::logic_error("Font release requires ready renderer");
+    if(!fonts_.erase(font))throw std::invalid_argument("Stale font handle");
+}
+void CpuRenderer::RecordText(FontHandle font,std::string_view text,int maxChars,float x,float y,float xScale,float yScale,
+                             float rotation,const float *color,int style,int cursorPos) {
+    CheckThread();if(state_!=State::recording)throw std::logic_error("Text requires recording renderer");
+    auto found=fonts_.find(font);if(found==fonts_.end())throw std::invalid_argument("Stale font handle");
+    if(text.size()>1024 || text.find('\0')!=std::string_view::npos || maxChars<=0 || maxChars>1024)throw std::invalid_argument("Text exceeds bounded command limits");
+    if(style!=0 || rotation!=0 || cursorPos>=0)throw std::invalid_argument("CPU text supports plain style without rotation or cursor");
+    for(float value:{x,y})if(!std::isfinite(value) || std::abs(value)>1000000.0f)throw std::invalid_argument("Invalid text origin");
+    for(float value:{xScale,yScale})if(!std::isfinite(value) || value<=0 || value>64)throw std::invalid_argument("Invalid text scale");
+    for(size_t i=0;i<text.size();++i) {
+        const auto letter=static_cast<unsigned char>(text[i]);
+        if((letter<32 && letter!='\n' && letter!='\r') || letter>=127 || (letter=='^' && i+1<text.size() && text[i+1]>='0' && text[i+1]<='9'))
+            throw std::invalid_argument("Unsupported text control, glyph or color escape");
+    }
+    float bounded[4]={1,1,1,1};
+    if(color)for(unsigned i=0;i<4;++i){if(!std::isfinite(color[i]))throw std::invalid_argument("Nonfinite text color");bounded[i]=std::clamp(color[i],0.0f,1.0f);}
+    if(text.empty())return;
+    if(fontBindingCount_==fontBindings_.size())throw std::length_error("Font binding budget exhausted");
+    const size_t offset=commands_.usedTotal;
+    // DrawUiText supplies a null-terminated owned string while this producer copies it.
+    R_EmitBaseTextCommand(this,Allocate,text.data(),maxChars,&found->second->value,x,y,xScale,yScale,rotation,bounded,style,-1,0);
+    fontBindings_[fontBindingCount_++]={offset,font};
+}
 void CpuRenderer::Submit() {
     CheckThread();if(state_!=State::recording)throw std::logic_error("CPU renderer not recording");
     R_EmitEndCommand(this,Allocate);
@@ -107,7 +151,7 @@ void CpuRenderer::SubmitList(std::span<const uint8_t> commands,bool ownedFrame) 
     std::array<uint8_t,16384> snapshot{};
     if(!commands.empty())std::memcpy(snapshot.data(),commands.data(),commands.size());
     commands={snapshot.data(),commands.size()};
-    size_t offset=0;bool ended=false;
+    size_t offset=0;bool ended=false;uint64_t preflightTextPixels=0;
     while(offset<commands.size()) {
         if(commands.size()-offset<sizeof(GfxCmdHeader))throw std::invalid_argument("Truncated render command header");
         GfxCmdHeader header;std::memcpy(&header,commands.data()+offset,sizeof(header));
@@ -144,11 +188,30 @@ void CpuRenderer::SubmitList(std::span<const uint8_t> commands,bool ownedFrame) 
             for(float value:{pic.x,pic.y,pic.w,pic.h})if(!std::isfinite(value) || std::abs(value)>1000000.0f)throw std::invalid_argument("Invalid UI geometry");
             if(pic.w<=0 || pic.h<=0)throw std::invalid_argument("Invalid UI dimensions");
             for(float value:{pic.s0,pic.t0,pic.s1,pic.t1})if(!std::isfinite(value) || value<0 || value>1)throw std::invalid_argument("Invalid UI UV");
+        } else if(header.id==RC_DRAW_TEXT_2D) {
+            constexpr size_t prefix=offsetof(GfxCmdDrawText2D,text);
+            if(!ownedFrame || header.byteCount<sizeof(GfxCmdDrawText2D) || (header.byteCount&3) || commands.size()-offset<header.byteCount)throw std::invalid_argument("Text requires bounded owned frame binding");
+            GfxCmdDrawText2D text;std::memcpy(&text,commands.data()+offset,sizeof(text));
+            const FontBinding *binding=nullptr;
+            for(size_t i=0;i<fontBindingCount_;++i)if(fontBindings_[i].offset==offset)binding=&fontBindings_[i];
+            if(!binding)throw std::invalid_argument("Missing font binding");
+            auto found=fonts_.find(binding->font);
+            if(found==fonts_.end() || text.font!=&found->second->value)throw std::invalid_argument("Stale font binding");
+            if(text.renderFlags || text.rotation!=0 || text.maxChars<=0 || text.maxChars>1024)throw std::invalid_argument("Unsupported text style or limits");
+            for(float value:{text.x,text.y})if(!std::isfinite(value) || std::abs(value)>1000000.0f)throw std::invalid_argument("Invalid text origin");
+            for(float value:{text.xScale,text.yScale})if(!std::isfinite(value) || value<=0 || value>64)throw std::invalid_argument("Invalid text scale");
+            const char *characters=reinterpret_cast<const char*>(commands.data()+offset+prefix);
+            const void *end=std::memchr(characters,0,header.byteCount-prefix);
+            if(!end || static_cast<const char*>(end)-characters>1024)throw std::invalid_argument("Unterminated or overlong text command");
+            const std::string_view content(characters,static_cast<const char*>(end)-characters);
+            for(size_t i=0;i<content.size();++i)if(content[i]=='^' && i+1<content.size() && content[i+1]>='0' && content[i+1]<='9')throw std::invalid_argument("Unsupported text color escape");
+            WalkText(text,content,*found->second,false,preflightTextPixels);
         } else throw std::invalid_argument("Unsupported CPU rendering command");
         offset+=header.byteCount;
     }
     if(!ended)throw std::invalid_argument("Missing render command end");
     const auto pixels=pixels_.Bytes();const auto extent=pixels_.Extent();
+    uint64_t renderedTextPixels=0;
     for(offset=0;offset<commands.size();) {
         GfxCmdHeader header;std::memcpy(&header,commands.data()+offset,sizeof(header));
         if(header.id==RC_END_OF_LIST)break;
@@ -170,11 +233,56 @@ void CpuRenderer::SubmitList(std::span<const uint8_t> commands,bool ownedFrame) 
                     std::memcpy(dest,source,3);dest[3]=255; // X8R8G8B8 ignores source alpha.
                 }
             }
+        } else if(header.id==RC_DRAW_TEXT_2D) {
+            GfxCmdDrawText2D text;std::memcpy(&text,commands.data()+offset,sizeof(text));
+            FontHandle handle=0;
+            for(size_t i=0;i<fontBindingCount_;++i)if(fontBindings_[i].offset==offset)handle=fontBindings_[i].font;
+            const char *characters=reinterpret_cast<const char*>(commands.data()+offset+offsetof(GfxCmdDrawText2D,text));
+            WalkText(text,std::string_view(characters),*fonts_.at(handle),true,renderedTextPixels);
         } else {
             GfxCmdStretchPic pic;std::memcpy(&pic,commands.data()+offset,sizeof(pic));
             UiMaterialHandle handle=0;
             for(size_t i=0;i<uiBindingCount_;++i)if(uiBindings_[i].offset==offset)handle=uiBindings_[i].material;
             const auto image=textures_.at(uiMaterials_.at(handle)->texture).View();
+            RasterUiPic(pic,image);
+        }
+        offset+=header.byteCount;
+    }
+    state_=State::pending;
+}
+void CpuRenderer::WalkText(const GfxCmdDrawText2D &command,std::string_view text,const OwnedFont &font,bool render,uint64_t &coveredPixels) {
+    auto material=uiMaterials_.find(font.material);
+    if(material==uiMaterials_.end())throw std::invalid_argument("Stale font material");
+    const auto image=textures_.at(material->second->texture).View();
+    const double startX=double(command.x)-.5*command.xScale;
+    double x=startX,y=double(command.y)-.5*command.yScale;
+    int remaining=command.maxChars;
+    for(unsigned char letter:text) {
+        if(!remaining)break;
+        if(letter=='\r') { x=startX;continue; }
+        if(letter=='\n') { x=startX;y+=font.value.pixelHeight*double(command.yScale);continue; }
+        if(letter<32 || letter>=127)throw std::invalid_argument("Unsupported text glyph");
+        const auto *glyph=R_GetCharacterGlyph(const_cast<Font_s*>(&font.value),letter);
+        GfxCmdStretchPic pic{};pic.material=&material->second->value;pic.color=command.color;
+        pic.x=float(x+glyph->x0*double(command.xScale));pic.y=float(y+glyph->y0*double(command.yScale));
+        pic.w=command.xScale*glyph->pixelWidth;pic.h=command.yScale*glyph->pixelHeight;
+        pic.s0=glyph->s0;pic.t0=glyph->t0;pic.s1=glyph->s1;pic.t1=glyph->t1;
+        for(float value:{pic.x,pic.y,pic.w,pic.h})if(!std::isfinite(value) || std::abs(value)>1000000.0f)throw std::invalid_argument("Text glyph geometry exceeds supported range");
+        if(pic.w && pic.h) {
+            const auto extent=pixels_.Extent();
+            const double left=std::clamp(std::ceil(double(pic.x)-.5),0.0,double(extent.width));
+            const double top=std::clamp(std::ceil(double(pic.y)-.5),0.0,double(extent.height));
+            const double right=std::clamp(std::ceil(double(pic.x)+pic.w-.5),0.0,double(extent.width));
+            const double bottom=std::clamp(std::ceil(double(pic.y)+pic.h-.5),0.0,double(extent.height));
+            coveredPixels+=uint64_t((right-left)*(bottom-top));
+            if(coveredPixels>64u*1024u*1024u)throw std::length_error("Text raster budget exhausted");
+            if(render)RasterUiPic(pic,image);
+        }
+        x+=glyph->dx*double(command.xScale);--remaining;
+    }
+}
+void CpuRenderer::RasterUiPic(const GfxCmdStretchPic &pic,PixelBufferView image) {
+    const auto pixels=pixels_.Bytes();const auto extent=pixels_.Extent();
             const int left=int(std::clamp(std::ceil(double(pic.x)-.5),0.0,double(extent.width)));
             const int top=int(std::clamp(std::ceil(double(pic.y)-.5),0.0,double(extent.height)));
             const int right=int(std::clamp(std::ceil(double(pic.x)+pic.w-.5),0.0,double(extent.width)));
@@ -201,16 +309,12 @@ void CpuRenderer::SubmitList(std::span<const uint8_t> commands,bool ownedFrame) 
                 }
                 dest[3]=255; // Explicit opaque UI target, source-alpha/inverse-source-alpha RGB.
             }
-        }
-        offset+=header.byteCount;
-    }
-    state_=State::pending;
 }
 void CpuRenderer::Present(WindowHost &window) {
     CheckThread();if(state_!=State::pending)throw std::logic_error("CPU renderer has no submitted frame");
     window.Present(pixels_.View());++presented_;ResetCommands();state_=State::ready;
 }
 void CpuRenderer::Shutdown() noexcept {
-    uiMaterials_.clear();textures_.clear();textureBytes_=0;pixels_=PixelBuffer{};ResetCommands();state_=State::stopped;owner_={};presented_=0;
+    fonts_.clear();uiMaterials_.clear();textures_.clear();textureBytes_=0;pixels_=PixelBuffer{};ResetCommands();state_=State::stopped;owner_={};presented_=0;
 }
 }

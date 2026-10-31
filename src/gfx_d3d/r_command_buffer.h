@@ -14,3 +14,7 @@ void R_EmitStretchRawCommand(void *owner,GfxCommandAllocate allocate,int x,int y
 
 void R_EmitStretchPicCommand(void *owner,GfxCommandAllocate allocate,float x,float y,float width,float height,
                              float s0,float t0,float s1,float t1,const float *color,Material *material);
+
+GfxCmdDrawText2D *R_EmitBaseTextCommand(void *owner,GfxCommandAllocate allocate,
+    const char *text,int maxChars,Font_s *font,float x,float y,float xScale,float yScale,
+    float rotation,const float *color,int style,int cursorPos,char cursor);

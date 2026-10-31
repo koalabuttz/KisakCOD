@@ -3410,19 +3410,7 @@ void __cdecl CL_SetWaitingOnServerToLoadMap(int32_t localClientNum, bool waiting
     cl_waitingOnServerToLoadMap[localClientNum] = waiting;
 }
 
-void __cdecl CL_DrawTextPhysical(
-    const char *text,
-    int32_t maxChars,
-    Font_s *font,
-    float x,
-    float y,
-    float xScale,
-    float yScale,
-    const float *color,
-    int32_t style)
-{
-    R_AddCmdDrawText(text, maxChars, font, x, y, xScale, yScale, 0.0, color, style);
-}
+
 
 void __cdecl CL_DrawTextPhysicalWithEffects(
     const char *text,

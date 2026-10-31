@@ -212,6 +212,7 @@ set(RADIANT_GFX_D3D
     "${SRC_DIR}/gfx_d3d/r_dvars.cpp"
     "${SRC_DIR}/gfx_d3d/r_dvars.h"
     "${SRC_DIR}/gfx_d3d/r_font.cpp"
+    "${SRC_DIR}/gfx_d3d/r_font_metrics.cpp"
     "${SRC_DIR}/gfx_d3d/r_font.h"
     "${SRC_DIR}/gfx_d3d/r_gfx.h"
     "${SRC_DIR}/gfx_d3d/r_image.cpp"

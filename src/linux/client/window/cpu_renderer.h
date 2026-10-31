@@ -5,6 +5,8 @@
 #include <thread>
 #include <map>
 #include <memory>
+#include <string>
+#include <string_view>
 struct ScreenPlacement;
 
 namespace kisak::window {
@@ -34,6 +36,12 @@ public:
     void ReleaseUiMaterial(UiMaterialHandle material);
     void DrawUiImage(UiMaterialHandle material,const ScreenPlacement &placement,
                      float x,float y,float width,float height,int horizontal,int vertical,const float *color);
+    using FontHandle=uint64_t;
+    FontHandle RegisterFont(UiMaterialHandle material,std::string_view name,int pixelHeight,std::span<const Glyph> glyphs);
+    void ReleaseFont(FontHandle font);
+    void DrawUiText(FontHandle font,const ScreenPlacement &placement,std::string_view text,int maxChars,
+                    float x,float y,int horizontal,int vertical,float scale,const float *color,int style=0);
+    size_t FontCount() const { return fonts_.size(); }
     void Submit();
     void Present(WindowHost &window);
     void Shutdown() noexcept;
@@ -46,6 +54,17 @@ public:
     void SubmitCommands(std::span<const uint8_t> commands);
 private:
     friend class CpuUiBridge;
+    struct OwnedFont { Font_s value{};std::string name;std::vector<Glyph> glyphs;UiMaterialHandle material; };
+    std::map<FontHandle,std::unique_ptr<OwnedFont>> fonts_;
+    FontHandle nextFont_=1;
+    struct FontBinding { size_t offset;FontHandle font; };
+    std::array<FontBinding,128> fontBindings_{};
+    size_t fontBindingCount_=0;
+    void RecordText(FontHandle font,std::string_view text,int maxChars,float x,float y,float xScale,float yScale,
+                    float rotation,const float *color,int style,int cursorPos);
+    void RasterUiPic(const GfxCmdStretchPic &pic,PixelBufferView image);
+    void WalkText(const GfxCmdDrawText2D &command,std::string_view text,const OwnedFont &font,bool render,uint64_t &coveredPixels);
+
     void RecordUiStretchPic(UiMaterialHandle material,float x,float y,float width,float height,
                            float s0,float t0,float s1,float t1,const float *color);
     struct UiMaterial { Material value{};TextureHandle texture; };

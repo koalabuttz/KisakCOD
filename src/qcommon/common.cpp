@@ -43,6 +43,9 @@
 #include <universal/profile.h>
 
 #include <setjmp.h>
+#ifdef KISAK_UI_ASSET_EXPORT_ONLY
+#include <linux/tools/font_asset_export.h>
+#endif
 
 #if defined(__linux__) && defined(KISAK_DEDICATED)
 #define KISAK_SERVER_ONLY
@@ -1423,6 +1426,9 @@ void __cdecl Com_Init_Try_Block_Function(char* commandLine)
     Dvar_SetString(version, s);
     shortversion = Dvar_RegisterString("shortversion", "1.0", DVAR_ROM | DVAR_SERVERINFO, "Short game version");
     Sys_Init();
+#ifdef KISAK_UI_ASSET_EXPORT_ONLY
+    Kisak_ExportUiAssets(comInitAllocName);
+#endif
 #ifdef KISAK_MP
     Netchan_Init(__rdtsc());
 #endif

@@ -14,36 +14,7 @@ const char MYRANDOMCHARS[63] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890"
 };
 
-const Glyph *__cdecl R_GetCharacterGlyph(Font_s *font, uint32_t letter)
-{
-    Glyph *glyph; // [esp+0h] [ebp-10h]
-    int top; // [esp+4h] [ebp-Ch]
-    int bottom; // [esp+8h] [ebp-8h]
-    int mid; // [esp+Ch] [ebp-4h]
 
-    if (letter < 0x20 || letter > 0x7F)
-    {
-        top = font->glyphCount - 1;
-        bottom = 96;
-        while (bottom <= top)
-        {
-            mid = (bottom + top) / 2;
-            if (font->glyphs[mid].letter == letter)
-                return &font->glyphs[mid];
-            if (font->glyphs[mid].letter >= letter)
-                top = mid - 1;
-            else
-                bottom = mid + 1;
-        }
-        return font->glyphs + 14;
-    }
-    else
-    {
-        glyph = &font->glyphs[letter - 32];
-        iassert( glyph->letter == letter );
-        return glyph;
-    }
-}
 
 uint32_t __cdecl R_FontGetRandomLetter(Font_s *font, int seed)
 {
@@ -163,12 +134,7 @@ Font_s *__cdecl R_RegisterFont_LoadObj(const char *fontName, int imageTrack)
     }
 }
 
-double __cdecl R_NormalizedTextScale(Font_s *font, float scale)
-{
-    iassert( font );
-    iassert( font->pixelHeight > 0 );
-    return (float)(scale * 48.0 / (double)font->pixelHeight);
-}
+
 
 int __cdecl R_LetterWidth(uint32_t letter, Font_s *font)
 {

@@ -2,6 +2,7 @@
 #include <climits>
 #include "rb_backend.h"
 #include "r_utils.h"
+#include <universal/profile.h>
 
 GfxCmdHeader *R_AppendCommand(GfxCmdArray &list,unsigned capacity,GfxRenderCommand command,int bytes)
 {
@@ -72,4 +73,54 @@ void R_EmitStretchPicCommand(void *owner,GfxCommandAllocate allocate,float x,flo
     command->material=material;command->x=x;command->y=y;command->w=width;command->h=height;
     command->s0=s0;command->t0=t0;command->s1=s1;command->t1=t1;
     R_ConvertColorToBytes(color,&command->color.packed);
+}
+
+GfxCmdDrawText2D *R_EmitBaseTextCommand(void *owner,GfxCommandAllocate allocate,
+    const char *text,int maxChars,Font_s *font,float x,float y,float xScale,float yScale,
+    float rotation,const float *color,int style,int cursorPos,char cursor)
+{
+    uint32_t v13; // [esp+0h] [ebp-4Ch]
+    GfxCmdDrawText2D *cmd; // [esp+48h] [ebp-4h]
+
+    iassert( maxChars > 0 );
+    iassert( text );
+    if (!*text && cursorPos < 0)
+        return 0;
+    v13 = strlen(text);
+    cmd = (GfxCmdDrawText2D *)allocate(owner, RC_DRAW_TEXT_2D, (v13 + 84) & 0xFFFFFFFC);
+    if (!cmd)
+        return 0;
+    cmd->x = x;
+    cmd->y = y;
+    cmd->rotation = rotation;
+    cmd->font = font;
+    cmd->xScale = xScale;
+    cmd->yScale = yScale;
+    R_ConvertColorToBytes(color, (uint32_t *)&cmd->color);
+    cmd->maxChars = maxChars;
+    cmd->renderFlags = 0;
+    switch (style)
+    {
+    case 3:
+        cmd->renderFlags |= 4u;
+        break;
+    case 6:
+        cmd->renderFlags |= 0xCu;
+        break;
+    case 128:
+        cmd->renderFlags |= 1u;
+        break;
+    }
+    if (cursorPos > -1)
+    {
+        cmd->renderFlags |= 2u;
+        cmd->cursorPos = cursorPos;
+        cmd->cursorLetter = cursor;
+    }
+    {
+        PROF_SCOPED("R_memcpy");
+        memcpy((uint8_t *)cmd->text, (uint8_t *)text, v13);
+    }
+    cmd->text[v13] = 0;
+    return cmd;
 }

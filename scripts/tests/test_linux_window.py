@@ -8,6 +8,8 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import struct
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -94,7 +96,7 @@ def main():
                 check(f"-DKISAK_{own}" in command, f"{own} material {family} uses its game definition")
                 check("-DKISAK_RADIANT" not in command and f"-DKISAK_{other}" not in command,
                       f"{own} material {family} excludes other variant defines")
-        command = ["cmake", "--build", build, "--target", "KisakCOD-client-window", "KisakCOD-window-test", "KisakCOD-client-input", "KisakCOD-client-input-test", "KisakCOD-shutdown-signal-test", "KisakCOD-client-command-test", "KisakCOD-client-runtime-test", "KisakCOD-client-input-startup-test", "KisakCOD-presentation-test", "KisakCOD-frame-deadline-test", "KisakCOD-pixel-resource-test", "KisakCOD-cpu-renderer-test", "KisakCOD-cpu-renderer-fault-test", "KisakCOD-cpu-raw-test", "KisakCOD-material-clone-mp-test", "KisakCOD-material-clone-radiant-test", "KisakCOD-cpu-ui-test", "KisakCOD-material-layered-mp-test", "KisakCOD-material-layered-sp-test", "KisakCOD-material-layered-radiant-test", "-j", args.jobs]
+        command = ["cmake", "--build", build, "--target", "KisakCOD-client-window", "KisakCOD-window-test", "KisakCOD-client-input", "KisakCOD-client-input-test", "KisakCOD-shutdown-signal-test", "KisakCOD-client-command-test", "KisakCOD-client-runtime-test", "KisakCOD-client-input-startup-test", "KisakCOD-presentation-test", "KisakCOD-frame-deadline-test", "KisakCOD-pixel-resource-test", "KisakCOD-cpu-renderer-test", "KisakCOD-cpu-renderer-fault-test", "KisakCOD-cpu-raw-test", "KisakCOD-material-clone-mp-test", "KisakCOD-material-clone-radiant-test", "KisakCOD-cpu-ui-test", "KisakCOD-material-layered-mp-test", "KisakCOD-material-layered-sp-test", "KisakCOD-material-layered-radiant-test", "KisakCOD-cpu-text-test", "KisakCOD-iwi-assets-test", "KisakCOD-font-assets-test", "-j", args.jobs]
         run(command)
         run(command)
         check(True, "window targets build and incrementally rebuild")
@@ -103,23 +105,23 @@ def main():
         print(result.stdout, end="")
         if result.stderr:
             print(result.stderr, end="", file=sys.stderr)
-        summary = re.search(r"(?:-- |layered material: )(\d+) checks, (\d+) failures", result.stdout)
+        summary = re.search(r"(?:-- |layered material: |IWI decoder: )(\d+) checks, (\d+) failures", result.stdout)
         check(summary and int(summary[1]) >= 34 and int(summary[2]) == 0, "real SDL event/engine queue suite passes")
         check(f"SDL driver={args.video_driver}" in result.stdout, "test reports the explicitly selected SDL driver")
         result = run([build / "bin/KisakCOD-client-input-test"], env=env, timeout=30)
         print(result.stdout, end="")
-        summary = re.search(r"(?:-- |layered material: )(\d+) checks, (\d+) failures", result.stdout)
+        summary = re.search(r"(?:-- |layered material: |IWI decoder: )(\d+) checks, (\d+) failures", result.stdout)
         check(summary and int(summary[1]) >= 40 and int(summary[2]) == 0, "actual client input lifecycle suite passes")
         for name, minimum in (("command", 28), ("runtime", 42), ("input-startup", 23)):
             result = run([build / f"bin/KisakCOD-client-{name}-test"], env=env, timeout=30)
             print(result.stdout, end="")
-            summary = re.search(r"(?:-- |layered material: )(\d+) checks, (\d+) failures", result.stdout)
+            summary = re.search(r"(?:-- |layered material: |IWI decoder: )(\d+) checks, (\d+) failures", result.stdout)
             check(summary and int(summary[1]) >= minimum and int(summary[2]) == 0,
                   f"actual {name} lifecycle suite passes")
-        for name, minimum in (("presentation", 27), ("frame-deadline", 14), ("pixel-resource", 20), ("cpu-renderer", 29), ("cpu-renderer-fault", 24), ("cpu-raw", 16), ("material-clone-mp", 10), ("material-clone-radiant", 10), ("cpu-ui", 14), ("material-layered-mp", 19), ("material-layered-sp", 19), ("material-layered-radiant", 20)):
+        for name, minimum in (("presentation", 27), ("frame-deadline", 14), ("pixel-resource", 20), ("cpu-renderer", 29), ("cpu-renderer-fault", 33), ("cpu-raw", 16), ("material-clone-mp", 10), ("material-clone-radiant", 10), ("cpu-ui", 14), ("material-layered-mp", 19), ("material-layered-sp", 19), ("material-layered-radiant", 20), ("cpu-text", 19), ("iwi-assets", 21), ("font-assets", 10)):
             result = run([build / f"bin/KisakCOD-{name}-test"], env=env, timeout=30)
             print(result.stdout, end="")
-            summary = re.search(r"(?:-- |layered material: )(\d+) checks, (\d+) failures", result.stdout)
+            summary = re.search(r"(?:-- |layered material: |IWI decoder: )(\d+) checks, (\d+) failures", result.stdout)
             check(summary and int(summary[1]) >= minimum and int(summary[2]) == 0,
                   f"actual {name} suite passes")
         result = run([build / "bin/KisakCOD-client-input", "--frames", "3", "--trace"], env=env, timeout=15)
@@ -131,6 +133,33 @@ def main():
                                 capture_output=True, text=True, timeout=15)
         check(result.returncode == 5 and "frame=unavailable" in result.stderr and "window=created" not in result.stdout,
               "unavailable game frame explicitly rejected")
+        with tempfile.TemporaryDirectory(prefix="kisak-ui-assets-") as temporary:
+            directory = Path(temporary)
+            missing = directory / "missing"
+            bad_iwi = directory / "unsupported.iwi"
+            bad_iwi.write_bytes(struct.pack("<3sBBBHHH4I", b"IWi", 6, 255, 0, 4, 4, 1, 28, 28, 28, 28))
+            bad_font = directory / "invalid.font"
+            bad_font.write_bytes(bytes(16))
+            font_name, material_name = b"checker-font\0", b"checker-material\0"
+            glyphs = b"".join(struct.pack("<HbbBBBx4f", letter, 0, 0, 1, 1, 1, 0, 0, 1, 1) for letter in range(32, 128))
+            names_start = 16 + len(glyphs)
+            valid_font = directory / "synthetic-parser-only.font"
+            valid_font.write_bytes(struct.pack("<4I", names_start, 48, 96, names_start + len(font_name)) + glyphs + font_name + material_name)
+            for arguments, label in (
+                (("--ui-image", missing), "missing explicit UI image"),
+                (("--ui-image", bad_iwi), "unsupported explicit UI image"),
+                (("--font-file", missing, "--font-atlas", missing), "missing explicit font"),
+                (("--font-file", bad_font, "--font-atlas", bad_iwi), "invalid explicit font"),
+                (("--font-file", valid_font, "--font-atlas", bad_iwi), "unsupported explicit font atlas"),
+                (("--font-file", valid_font, "--font-atlas", missing), "missing explicit font atlas"),
+            ):
+                result = subprocess.run([str(build / "bin/KisakCOD-client-input"), *map(str, arguments), "--frames", "1"],
+                                        env=env, capture_output=True, text=True, timeout=15)
+                check(result.returncode == 1 and "window=ready" not in result.stdout and "Window host failed" in result.stderr,
+                      label + " fails without visible fallback")
+            result = subprocess.run([str(build / "bin/KisakCOD-client-input"), "--font-file", str(missing)],
+                                    env=env, capture_output=True, text=True, timeout=15)
+            check(result.returncode == 2 and "window=ready" not in result.stdout, "font and atlas must be supplied together")
         shell = build / "bin/KisakCOD-client-window"
         result = run([shell, "--frames", "2", "--trace", "--title", "KisakCOD window smoke"], env=env, timeout=15)
         print(result.stdout, end="")

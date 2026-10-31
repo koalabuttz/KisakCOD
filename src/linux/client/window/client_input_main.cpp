@@ -3,6 +3,8 @@
 #include "shutdown_signal.h"
 #include "frame_deadline.h"
 #include "cpu_renderer.h"
+#include "font_assets.h"
+#include "iwi_assets.h"
 #include <client/client.h>
 #include <linux/sys_events.h>
 #include <qcommon/qcommon.h>
@@ -39,7 +41,7 @@ public:
     }
     void OnQuit() override { std::puts("window=closing"); }
 };
-void PresentEngineClear(kisak::window::WindowHost &host,kisak::window::CpuRenderer &renderer,kisak::window::CpuRenderer::TextureHandle &texture,kisak::window::CpuRenderer::UiMaterialHandle &material)
+void PresentEngineClear(kisak::window::WindowHost &host,kisak::window::CpuRenderer &renderer,kisak::window::CpuRenderer::TextureHandle &texture,kisak::window::CpuRenderer::UiMaterialHandle &material,kisak::window::CpuRenderer::FontHandle font,std::string_view text,const char *uiImage)
 {
     const auto extent=host.SurfaceExtent();
     const auto current=renderer.Pixels();
@@ -49,11 +51,16 @@ void PresentEngineClear(kisak::window::WindowHost &host,kisak::window::CpuRender
         std::printf("presentation=engine-ui-image width=%d height=%d producer=UI_DrawHandlePic\n",extent.width,extent.height);
     const float color[4]={0.25f,0.5f,0.75f,1.0f};
     if(!texture) {
-        kisak::window::PixelBuffer image;image.Resize(64,64);
-        auto pixels=image.Bytes();
-        for(int y=0;y<64;++y)for(int x=0;x<64;++x) {
-            auto *p=pixels.data()+(y*64+x)*4;
-            p[0]=(x<32)==(y<32)?255:0;p[1]=x>=32?255:0;p[2]=y>=32 && x<32?255:0;p[3]=255;
+        kisak::window::PixelBuffer image;
+        if(uiImage) {
+            image=kisak::window::LoadIwiFile(uiImage);
+            std::printf("ui_image=loaded width=%d height=%d source=IWI producer=UI_DrawHandlePic\n",image.Extent().width,image.Extent().height);
+        } else {
+            image.Resize(64,64);auto pixels=image.Bytes();
+            for(int y=0;y<64;++y)for(int x=0;x<64;++x) {
+                auto *p=pixels.data()+(y*64+x)*4;
+                p[0]=(x<32)==(y<32)?255:0;p[1]=x>=32?255:0;p[2]=y>=32 && x<32?255:0;p[3]=255;
+            }
         }
         texture=renderer.Upload(image.View()); // The caller's pixels die immediately after upload.
         material=renderer.RegisterUiMaterial(texture);
@@ -62,6 +69,10 @@ void PresentEngineClear(kisak::window::WindowHost &host,kisak::window::CpuRender
     ScreenPlacement placement{};
     const float tint[4]={1,1,1,.5f};
     renderer.DrawUiImage(material,placement,float(extent.width-128)/2,float(extent.height-96)/2,128,96,5,5,tint);
+    if(font) {
+        const float textColor[4]={1,1,1,1};
+        renderer.DrawUiText(font,placement,text,1024,24,48,5,5,.5f,textColor);
+    }
     renderer.Submit();renderer.Present(host);
 }
 bool Number(const char *text,unsigned maximum,unsigned &value) {
@@ -78,12 +89,13 @@ int main(int argc,char **argv)
 {
     unsigned frames=0,runMilliseconds=0;
     bool relative=false,requestFrame=false;
-    const char *server=nullptr;
+    const char *server=nullptr,*fontFile=nullptr,*fontAtlas=nullptr,*uiImage=nullptr;
+    std::string text="Native Linux UI";bool explicitText=false;
     kisak::window::Config config;
     for(int i=1;i<argc;++i) {
         const std::string argument(argv[i]);
         if(argument=="--help") {
-            std::puts("Usage: KisakCOD-client-input [--frames 1..10000] [--run-ms 1..60000] [--trace] [--relative] [--title NAME] [--frame] [--server IPv4:port]\n"
+            std::puts("Usage: KisakCOD-client-input [--frames 1..10000] [--run-ms 1..60000] [--trace] [--relative] [--title NAME] [--frame] [--server IPv4:port] [--ui-image IWI] [--font-file FONT --font-atlas IWI [--text TEXT]]\n"
                 "Production disconnected input host. Escape or window close exits. Console editing is reported in trace; real local commands and optional read-only discovery; no game frame or renderer.");return 0;
         } else if(argument=="--frames" && i+1<argc) {
             if(!Number(argv[++i],10000,frames))return 2;
@@ -92,10 +104,15 @@ int main(int argc,char **argv)
         } else if(argument=="--trace")metrics.trace=true;
         else if(argument=="--relative")relative=true;
         else if(argument=="--frame")requestFrame=true;
+        else if(argument=="--ui-image" && i+1<argc && !uiImage)uiImage=argv[++i];
+        else if(argument=="--font-file" && i+1<argc && !fontFile)fontFile=argv[++i];
+        else if(argument=="--font-atlas" && i+1<argc && !fontAtlas)fontAtlas=argv[++i];
+        else if(argument=="--text" && i+1<argc && !explicitText){text=argv[++i];explicitText=true;}
         else if(argument=="--server" && i+1<argc && !server)server=argv[++i];
         else if(argument=="--title" && i+1<argc && *argv[i+1])config.title=argv[++i];
         else return 2;
     }
+    if(bool(fontFile)!=bool(fontAtlas) || (explicitText && !fontFile) || text.size()>1024)return 2;
     Sys_InitializeCriticalSections();
     try {
         ShellInput input;
@@ -107,9 +124,20 @@ int main(int argc,char **argv)
         kisak::window::ShutdownSignal signals;
         if(server)input.Discover(server);
         kisak::window::CpuRenderer renderer;
+        kisak::window::CpuRenderer::FontHandle font=0;
+        if(fontFile) {
+            const auto extent=host.SurfaceExtent();renderer.Initialize(extent.width,extent.height);
+            const auto metrics=kisak::window::LoadFontFile(fontFile);
+            const auto atlas=kisak::window::LoadIwiFile(fontAtlas);
+            const auto atlasTexture=renderer.Upload(atlas.View());
+            const auto atlasMaterial=renderer.RegisterUiMaterial(atlasTexture);
+            font=renderer.RegisterFont(atlasMaterial,metrics.name,metrics.pixelHeight,metrics.glyphs);
+            std::printf("font=loaded name=%s material=%s glyphs=%zu pixel_height=%d atlas_width=%d atlas_height=%d producer=UI_DrawText\n",
+                metrics.name.c_str(),metrics.materialName.c_str(),metrics.glyphs.size(),metrics.pixelHeight,atlas.Extent().width,atlas.Extent().height);
+        }
         kisak::window::CpuRenderer::TextureHandle texture=0;
         kisak::window::CpuRenderer::UiMaterialHandle material=0;
-        PresentEngineClear(host,renderer,texture,material);
+        PresentEngineClear(host,renderer,texture,material,font,text,uiImage);
         std::printf("window=created driver=%s id=%u title=%s game=false input=engine connection=disconnected frame=unavailable presentation=engine-ui-image\n",
             SDL_GetCurrentVideoDriver(),host.Id(),config.title);
         std::printf("window=ready id=%u driver=%s\n",host.Id(),SDL_GetCurrentVideoDriver());
@@ -152,7 +180,7 @@ int main(int argc,char **argv)
                 const auto sample=input.ConsumeMouse();
                 if(metrics.trace && (sample.x || sample.y))std::printf("input_tick mouse_dx=%d mouse_dy=%d frame=unavailable\n",sample.x,sample.y);
                 if(metrics.trace)std::printf("editor text=%s cursor=%d held=%d\n",input.Text(),input.Cursor(),input.Held());
-                PresentEngineClear(host,renderer,texture,material);++drawn;
+                PresentEngineClear(host,renderer,texture,material,font,text,uiImage);++drawn;
             }
             if(!host.Running())break;
             if((frames && drawn>=frames) || (runMilliseconds && SDL_GetTicks()-started>=runMilliseconds))host.RequestQuit();
