@@ -234,6 +234,7 @@ set(RADIANT_GFX_D3D
     "${SRC_DIR}/gfx_d3d/r_material_load_db.h"
     "${SRC_DIR}/gfx_d3d/r_material_load_obj.cpp"
     "${SRC_DIR}/gfx_d3d/r_material_clone.cpp"
+    "${SRC_DIR}/gfx_d3d/r_material_layered.cpp"
     "${SRC_DIR}/gfx_d3d/r_material_override.cpp"
     "${SRC_DIR}/gfx_d3d/r_meshdata.cpp"
     "${SRC_DIR}/gfx_d3d/r_meshdata.h"
