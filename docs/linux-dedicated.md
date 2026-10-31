@@ -382,8 +382,14 @@ Not verified:
   checked, but no stock 1.7 browser was watched listing this server. Its configured
   internet master did not resolve during this investigation; LAN browsing and a
   direct `/connect` do not depend on that master.
-- CoD4x clients. CoD4x 21.1 uses its own entity decoder and still desynchronises;
-  it remains a separate target.
+- general CoD4x compatibility. A fresh test of the restored CoD4x 21.1 client
+  selected legacy protocol 6, completed gamestate transfer and exchanged player
+  snapshots. Death/team-change testing then exposed the server-side dropped-item
+  random-range bug described in the
+  [compatibility evidence](retail-client-compatibility.md#cod4x-211-loopback-test).
+  With that fix, the player repeated a grenade death and a team switch without
+  a crash. This supersedes the earlier assumption of a separate CoD4x entity
+  decoder; it is not a broad compatibility guarantee.
 - 1.8 clients, which advertise protocol 7 and are not accepted.
 - Windows builds of this server.
 

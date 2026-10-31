@@ -94,6 +94,51 @@ A playable 1.0 connection remains **unverified**. The comparison did not cover:
 Do not interpret matching selected code or data as proof that the versions
 differ only in their protocol numbers.
 
+## CoD4x 21.1 loopback test
+
+The restored installed client identified itself on the wire as `xver=21.1` and
+selected legacy `protocol=6`. Its `cod4x_021.dll` SHA-256 was
+`bf5965ea484e0b899119ebb99428b8f7aaf175f2052e610c1ce466119e6b0d2b`.
+The test used `mp_crash`, `sv_loopbackTestAuth 1`, `sv_allowProtocol6 1`, and
+`sv_advertisedProtocol 6` on a loopback-only native Linux server, with a local
+UDP relay recording packet flow. No client files were changed.
+
+Observed before the random-range fix:
+
+- Challenge, protocol-6 admission, stats transfer and gamestate transfer
+  completed; the server then sent player snapshots.
+- The player reported a disconnect after a team switch, and another after a
+  grenade death. The server logged an out-of-map entity coordinate and failed
+  again during shutdown.
+- A targeted server debugger stopped before the second coordinate error. It
+  identified entity 323 as an item (`ET_ITEM`), with an X trajectory velocity of
+  approximately 2,157,791 units/second. Its X position moved from approximately
+  1,167 to 109,057. The player's own position remained in the map.
+
+The shared random helper divided libc `rand()` by 32,768, assuming the
+15-bit Windows range. Linux libc returns up to 2,147,483,647; `crandom()` therefore
+produced values far outside its intended range, and `Drop_Item` multiplied them
+by the configured drop-speed amplitudes. The multiplayer `G_rand()` family had
+the same assumption, including the helper used for death-related grenade drops.
+An isolated production-function probe reproduced million-unit item velocities.
+Both producers now constrain their input to 15 bits, preserving the Windows
+mapping and restoring their consumers' expected bounds. The snapshot writer's
+coordinate guard was not relaxed.
+
+After rebuilding with that fix, the player repeated **a grenade death and a
+team switch without a crash**. The server retained the same process with no
+restart or coordinate error; the recorded session exchanged snapshots for more
+than 90 seconds without a server disconnect response. This supports a brief,
+single-player CoD4x 21.1 legacy-protocol connection, including those two
+previously failing actions. It does not establish multi-player, map-rotation,
+long-session, public-authentication or every CoD4x-version compatibility.
+
+The earlier claim that CoD4x necessarily used a different legacy entity decoder
+and still desynchronized was not supported by this fresh test and has been
+withdrawn. The available public client source identifies itself as 21.8, not the
+installed 21.1; its legacy parser calls the original retail decoder, but that
+source is not a byte-for-byte specification of this installed DLL.
+
 ## Local reproduction artifacts
 
 The investigation scripts and structured outputs are retained locally under
