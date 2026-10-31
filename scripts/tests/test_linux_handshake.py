@@ -23,6 +23,20 @@ loopback test bypass and never turns it on:
     not enable anything because the option is read once at start-up;
   * ``sv_loopbackTestAuth 1`` and ``sv_allowUnverifiedGuids 1`` together, which
     must stop start-up before anything binds.
+
+Five further starts cover ``sv_advertisedProtocol``, which changes only what
+getinfo and getstatus report, never admission:
+
+  * a default start, where both browser queries report protocol 1 and a console
+    ``set sv_advertisedProtocol 6`` is refused as write protected;
+  * ``+set sv_advertisedProtocol 6`` with ``+set sv_allowProtocol6 1``, where both
+    queries report 6 and a protocol 6 client still reaches admission;
+  * ``+set sv_advertisedProtocol 3``, which is neither supported value and must
+    warn and fall back to 1;
+  * the same with ``9``, which is outside any useful range and must not be
+    saturated to 6 by the dvar domain instead of falling back;
+  * ``+set sv_advertisedProtocol 6`` alone, which must warn that 1.7 clients will
+    see the server but cannot join, while a 1.0 client is still admitted.
 """
 import argparse
 from pathlib import Path
@@ -213,6 +227,130 @@ def protocol6_without_auth(binary, game, work):
         server.cleanup()
 
 
+VALUE_WARNING = "sv_advertisedProtocol must be 1 or 6; advertising protocol 1"
+MISMATCH_WARNING = "sv_advertisedProtocol is 6 but sv_allowProtocol6 is off"
+
+
+def admitted_reply(server, protocol):
+    """Reach real connection admission once, so a browsing change is proven inert."""
+    sock = server.socket
+    reply = exchange(server, sock, "getchallenge 123")
+    match = re.fullmatch(r"challengeResponse (-?\d+)", reply)
+    require(match is not None,
+            f"a server advertising protocol {server.protocol} still issues challenges: " + repr(reply))
+    return exchange(server, sock, connect(int(match[1]), protocol=protocol))
+
+
+def advertised_default(binary, game, work):
+    """A stock start advertises protocol 1 to both browser queries and cannot change it."""
+    server = Server(binary, game, work, work, 60,
+                    startup_args=["+set", "sv_loopbackTestAuth", "1"])
+    try:
+        # query() rejects any reply whose protocol is not self.protocol, so these
+        # two calls are the assertion that both queries report 1.
+        server.query("getinfo", "mp_crash")
+        server.query("getstatus", "mp_crash")
+        require(VALUE_WARNING not in server.log() and MISMATCH_WARNING not in server.log(),
+                "a default start prints no sv_advertisedProtocol warning")
+        # The advertised value is read once at start-up, like the other
+        # startup-only options, so a live console set must be a no-op.
+        console_barrier(server, ["set sv_advertisedProtocol 6"])
+        require("sv_advertisedProtocol is write protected" in server.log(),
+                "the console cannot change the advertised protocol at run time")
+        server.query("getinfo", "mp_crash")
+        server.query("getstatus", "mp_crash")
+        require(admitted_reply(server, 1).startswith("connectResponse"),
+                "a default server still admits a protocol 1 client")
+        server.shutdown("console")
+    finally:
+        server.cleanup()
+
+
+def advertised_protocol6(binary, game, work):
+    """Advertising 6 with sv_allowProtocol6 on reports 6 and still admits 1.7 clients."""
+    server = Server(binary, game, work, work, 60, protocol="6",
+                    startup_args=["+set", "sv_loopbackTestAuth", "1",
+                                  "+set", "sv_allowProtocol6", "1",
+                                  "+set", "sv_advertisedProtocol", "6"])
+    try:
+        server.query("getinfo", "mp_crash")
+        server.query("getstatus", "mp_crash")
+        require(VALUE_WARNING not in server.log(),
+                "6 is an accepted value and does not fall back")
+        require(MISMATCH_WARNING not in server.log(),
+                "6 with sv_allowProtocol6 on prints no mismatch warning")
+        require(admitted_reply(server, 6).startswith("connectResponse"),
+                "advertising 6 leaves the 1.7 admission path working")
+        # The answer is captured once per process, so the socket restart and a real
+        # map change must not lose or change it.  transition() waits for the fresh
+        # console "Server:" marker, so a status line from the old map cannot pass.
+        console_barrier(server, ["net_restart"])
+        server.query("getinfo", "mp_crash")
+        server.query("getstatus", "mp_crash")
+        server.transition("advertised6 restart", "map_restart", "mp_crash", 0)
+        server.transition("advertised6 map", "map mp_shipment", "mp_shipment", 0)
+        require(VALUE_WARNING not in server.log(),
+                "a socket restart and two map reloads do not re-validate the captured protocol")
+        server.shutdown("console")
+    finally:
+        server.cleanup()
+
+
+def advertised_invalid_value(binary, game, work, value="3"):
+    """A value that is neither 1 nor 6 warns and falls back to advertising 1.
+
+    Both an in-limits odd value (3) and one outside any plausible range (9) are
+    checked: the second is the case where a registered 1..6 domain would have
+    saturated silently to 6 instead of warning, which is the dangerous direction.
+    """
+    server = Server(binary, game, work, work, 60,
+                    startup_args=["+set", "sv_loopbackTestAuth", "1",
+                                  "+set", "sv_advertisedProtocol", value])
+    try:
+        # The expected protocol stays at the Server default, so these queries fail
+        # if the unsupported value was advertised instead of replaced.
+        server.query("getinfo", "mp_crash")
+        server.query("getstatus", "mp_crash")
+        require(VALUE_WARNING in server.log(),
+                f"the unsupported value {value} warns that it is being replaced with 1")
+        require(MISMATCH_WARNING not in server.log(),
+                f"the unsupported value {value} never falls through to the 1.7 warning")
+        server.shutdown("console")
+    finally:
+        server.cleanup()
+
+
+def advertised_without_protocol6(binary, game, work):
+    """Advertising 6 without sv_allowProtocol6 warns but still admits 1.0 clients."""
+    server = Server(binary, game, work, work, 60, protocol="6",
+                    startup_args=["+set", "sv_loopbackTestAuth", "1",
+                                  "+set", "sv_advertisedProtocol", "6"])
+    try:
+        server.query("getinfo", "mp_crash")
+        server.query("getstatus", "mp_crash")
+        require(MISMATCH_WARNING in server.log(),
+                "advertising 6 with the 1.7 switch off names the consequence in the log")
+        require(VALUE_WARNING not in server.log(),
+                "6 is accepted even when 1.7 clients cannot join")
+        # The warning's other half: a 1.7 client really is refused, and the error
+        # text names only version 1 because sv_allowProtocol6 is off.
+        sock = server.socket
+        reply = exchange(server, sock, "getchallenge 123")
+        match = re.fullmatch(r"challengeResponse (-?\d+)", reply)
+        require(match is not None, "advertising 6 without sv_allowProtocol6 still issues challenges")
+        require(exchange(server, sock, connect(int(match[1]), protocol=6)) ==
+                "error\nThis server requires protocol version 1 (CoD4 1.0); "
+                "your client uses protocol 6.",
+                "advertising 6 does not admit a protocol 6 client while the switch is off")
+        # Advertising is not admission: the published protocol number alone must
+        # never lock out the clients the server does accept.
+        require(admitted_reply(server, 1).startswith("connectResponse"),
+                "advertising 6 does not stop a protocol 1 client from joining")
+        server.shutdown("console")
+    finally:
+        server.cleanup()
+
+
 def run_guid_session(binary, game, work, allow_protocol6=False, bind_address=None):
     """A GUID-on server with no loopback test mode: the retail hosting case."""
     prefix = f"[guids{'/proto6' if allow_protocol6 else ''}{'/'+bind_address if bind_address else ''}] "
@@ -361,6 +499,17 @@ def main():
             session = work / "protocol6-no-auth"
             session.mkdir()
             protocol6_without_auth(binary, game, session)
+            for label, scenario, kwargs in (("advertised-default", advertised_default, {}),
+                                            ("advertised-protocol6", advertised_protocol6, {}),
+                                            ("advertised-invalid", advertised_invalid_value,
+                                             {"value": "3"}),
+                                            ("advertised-invalid-high", advertised_invalid_value,
+                                             {"value": "9"}),
+                                            ("advertised-without-protocol6",
+                                             advertised_without_protocol6, {})):
+                session = work / label
+                session.mkdir()
+                scenario(binary, game, session, **kwargs)
             for label, allow_protocol6, bind_address in (("guids", False, None),
                                                          ("guids-protocol6", True, None),
                                                          ("guids-off", False, None)):

@@ -208,6 +208,47 @@ bool SV_UnverifiedGuidsEnabled()
     return sv_allowUnverifiedGuids && sv_allowUnverifiedGuids->current.enabled;
 }
 
+// sv_advertisedProtocol is captured once, when SV_Init() registers it, and never
+// recaptured.  DVAR_INIT only refuses external and script input; the MP script
+// "setdvar" function reaches Dvar_SetFromStringByName(), which is an internal
+// write, so the dvar itself can change mid-session.  Freezing the validated
+// value keeps every browse reply reporting one number.
+static bool advertisedProtocolCaptured = false;
+static int advertisedProtocolValue = 1;
+
+void __cdecl SV_CaptureAdvertisedProtocol()
+{
+    int value;
+
+    if (advertisedProtocolCaptured)
+        return;
+
+    value = sv_advertisedProtocol ? sv_advertisedProtocol->current.integer : 1;
+    if (value != 1 && value != 6)
+    {
+        Com_PrintWarning(CON_CHANNEL_SERVER,
+            "WARNING: sv_advertisedProtocol must be 1 or 6; advertising protocol 1.\n");
+        value = 1;
+        if (sv_advertisedProtocol)
+            Dvar_SetInt((dvar_s *)sv_advertisedProtocol, value);
+    }
+
+    advertisedProtocolValue = value;
+    advertisedProtocolCaptured = true;
+}
+
+int SV_GetAdvertisedProtocol()
+{
+    return advertisedProtocolCaptured ? advertisedProtocolValue : 1;
+}
+
+// Both browse replies report this one value, so they cannot disagree with each
+// other or with a dvar an internal write has changed.
+void __cdecl SV_SetAdvertisedProtocolInfo(char *info)
+{
+    Info_SetValueForKey(info, "protocol", va("%i", SV_GetAdvertisedProtocol()));
+}
+
 void __cdecl SV_GetChallenge(netadr_t from)
 {
 #if defined(__linux__) && defined(KISAK_DEDICATED)

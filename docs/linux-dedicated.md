@@ -285,10 +285,14 @@ that Steam authentication is unavailable. Authentication tickets are not logged.
 
 ### Client compatibility is a separate boundary
 
-This codebase serves connect protocol **1**, and `getinfo`/`getstatus` still
-advertise it. Changing that number to impersonate a stock or CoD4x server would
-not help: a matching integer alone cannot fix challenge-response, gamestate,
-snapshot or gameplay serialization differences. The
+This codebase serves connect protocol **1**, plus protocol 6 when
+`sv_allowProtocol6` is on. The number `getinfo`/`getstatus` report is a separate,
+browsing-only value chosen by `sv_advertisedProtocol`; see
+[Server-browser listing and `sv_advertisedProtocol`](#server-browser-listing-and-sv_advertisedprotocol).
+Advertising the number a stock or CoD4x client expects can pass the browser's
+version check, but guarantees neither listing nor a working connection. A
+matching integer alone cannot fix challenge-response, gamestate, snapshot or
+gameplay serialization differences. The
 [CoD4x server source](https://github.com/callofduty4x/CoD4x_Server/blob/master/src/sv_client.c)
 has a different challenge-response format, including an echoed client challenge
 and protocol information, so it does not complete a normal playable protocol-1
@@ -312,11 +316,14 @@ message instead.
 #### Retail 1.7 clients and `sv_allowProtocol6`
 
 An installed retail client (`iw3mp.exe`, "CoD4 MP 1.7", CoD4x loader disabled)
-advertises connect protocol **6**. Examining that client's gamestate parser,
-constant configstring table, and entity/player-state netfield tables showed them
-to be identical to this 1.0 code; emulating its entity decoder against a real
-server gamestate decoded all 70 baselines. The examined encodings match; other
-1.7 differences, such as gameplay or script behaviour, have not been audited.
+advertises connect protocol **6**. Its examined gamestate parser and
+constant-configstring/entity/player-state tables agree with this code's message
+format; emulating its entity decoder against a real server gamestate decoded all
+70 baselines. A separate comparison with the examined 1.0 client also found
+matching tables and Huffman codes. See
+[retail client compatibility evidence](retail-client-compatibility.md) for target
+hashes, scope and limitations. Other 1.7 differences, such as gameplay or script
+behaviour, have not been audited.
 
 `sv_allowProtocol6` is an **opt-in boolean that defaults to off** (registered in
 `SV_Init` with `DVAR_NOFLAG`). When it is enabled, a `connect` advertising
@@ -332,8 +339,11 @@ With the dvar off, the same reply is
 `error` / `This server requires protocol version 1 (CoD4 1.0); your client uses
 protocol 21.` The switch changes the version check only: the challenge token, the
 Steam ticket handshake, the game password and the capacity checks are unchanged.
-Because native Steam ticket verification is still unimplemented, a retail client
-can only reach a real server through the loopback test mode:
+Native Steam ticket verification is still unimplemented. Testing with a retail
+client therefore needs an explicit authentication opt-in: the loopback-only test
+mode below, or the separate
+[unverified retail GUID mode](#unverified-retail-guids-and-sv_allowunverifiedguids)
+with its identity-spoofing risk:
 
 ```sh
 ./bin/KisakCOD-dedi +set fs_basepath /path/to/cod4 \
@@ -358,8 +368,11 @@ Not verified:
 - more than one player, or a 1.7 client mixed with 1.0 clients.
 - map changes and rotation while a 1.7 client is connected.
 - long sessions, or any load beyond a brief single-player test.
-- server-browser listing: `getinfo`/`getstatus` still advertise protocol 1, so a
-  1.7 browser may hide this server. Use `/connect`.
+- server-browser listing with a real client. `+set sv_advertisedProtocol 6` makes
+  the `getinfo` reply match what a 1.7 browser accepts, and the reply bytes were
+  checked, but no stock 1.7 browser was watched listing this server. Its configured
+  internet master did not resolve during this investigation; LAN browsing and a
+  direct `/connect` do not depend on that master.
 - CoD4x clients. CoD4x 21.1 uses its own entity decoder and still desynchronises;
   it remains a separate target.
 - 1.8 clients, which advertise protocol 7 and are not accepted.
@@ -385,9 +398,66 @@ protection and safe socket restart. The protocol-6 session connects with protoco
 6, receives `connectResponse` and shows the synthetic `local-test-…` identity in
 the server log, while protocols 7 and 21 still receive the two-version error; the
 `sv_allowProtocol6`-only server still refuses every client because authentication
-is unchanged. It then starts the retail-GUID configurations described in the next
-section. The test decodes no gamestate and runs no graphical client, so it is an
-admission check rather than a playable-client test.
+is unchanged. Five further starts cover `sv_advertisedProtocol`: a default server
+whose `getinfo` and `getstatus` both report protocol 1 and where a console `set`
+is refused as write protected; `6` together with `sv_allowProtocol6 1`, where
+both queries report 6 and a protocol 6 client still reaches `connectResponse`,
+with the advertised value retained across socket and map restarts and a map
+change; unsupported values `3` and `9`, each of which warns and falls back to
+advertising 1; and `6` alone, which warns and rejects a protocol 6 connect while
+a protocol 1 client is still admitted. It then starts the retail-GUID
+configurations described in the next section. The test decodes no gamestate and
+runs no graphical client, so it is an admission check rather than a
+playable-client test.
+
+#### Server-browser listing and `sv_advertisedProtocol`
+
+By default, the examined stock clients reject a server's `getinfo` reply when
+its `protocol` field differs from their own number: **1** for CoD4 1.0, **6** for
+retail 1.7. The client's `debug_protocol` override can change that comparison.
+Matching that field passes the browser's version check; it does not guarantee
+listing or a playable connection. `getstatus` also carries a `protocol` field,
+but it is not the version gate in the examined browser path. The server's
+periodic master-server heartbeat carries no protocol number.
+
+`sv_advertisedProtocol` is an integer, registered in `SV_Init` with `DVAR_INIT`,
+that defaults to **1** and accepts **1** or **6**. The validated startup choice is
+captured for the process lifetime. Both `getinfo` and `getstatus` report that
+captured value; `SV_Init` also initializes the read-only `protocol` serverinfo
+dvar to agree. Later internal dvar writes from game scripts cannot change the
+protocol in either query response. The asset-free authentication harness checks
+the production capture/accessor and shared protocol-field publishing helper
+against internal-style writes, stale info-string values and repeated capture
+attempts. The query handlers' calls to that helper are checked by source review;
+a live game-script mutation has not been exercised. Consequences:
+
+- **Startup only.** `+set sv_advertisedProtocol 6` on the command line works; a
+  console `set` is refused with `sv_advertisedProtocol is write protected.` A
+  running server keeps advertising the number it started with.
+- **Only 1 and 6 are meaningful.** Any other value is announced at start-up and
+  replaced with 1:
+  `WARNING: sv_advertisedProtocol must be 1 or 6; advertising protocol 1.`
+  The dvar is registered over the whole integer range rather than 1..6 so that
+  this check sees what was typed; a value outside 1..6 is never silently clamped
+  to a limit (9 does not become 6).
+- **Independent of admission.** Advertising never changes who may connect. It is
+  a claim about the reply, not a policy. Advertising 6 with `sv_allowProtocol6`
+  off is accepted but warns, because 1.7 clients will then see a server they
+  cannot join:
+  `WARNING: sv_advertisedProtocol is 6 but sv_allowProtocol6 is off; 1.7 clients will see this server but cannot join.`
+  For a retail 1.7 hosting launch, set both.
+- **The two stock browser version checks require different numbers.** The
+  examined 1.0 and 1.7 browsers expect 1 and 6 respectively, so one reply cannot
+  pass both checks. The examined CoD4x browser accepts either number; that does
+  not establish a playable CoD4x connection.
+
+The examined LAN browser broadcasts `getinfo xxx` to UDP ports **28960-28963**.
+A server using another port in that range can therefore answer discovery;
+arbitrary non-default ports are not covered by that broadcast scan. Network
+reachability and browser filters still apply. The stock 1.7 internet list targets
+`cod4master.activision.com`, which did not resolve during this investigation.
+Changing the advertised protocol cannot repair an unavailable master; use LAN
+browsing or a direct `/connect`.
 
 #### Unverified retail GUIDs and `sv_allowUnverifiedGuids`
 
@@ -445,8 +515,16 @@ Example launch for retail 1.7 hosting:
 ./bin/KisakCOD-dedi +set fs_basepath /path/to/cod4 \
   +set fs_homepath /path/to/server-home +set dedicated 1 \
   +set sv_allowUnverifiedGuids 1 +set sv_allowProtocol6 1 \
+  +set sv_advertisedProtocol 6 \
   +set g_password change-me +map mp_crash
 ```
+
+The `sv_advertisedProtocol 6` line makes the reply pass a stock 1.7 LAN
+browser's version check; without it that browser rejects the reply, although a
+direct `/connect` remains possible. Actual listing has not been verified with a
+real client. Drop it (or set it to 1) when the players browsing are on 1.0, since
+the two stock browser versions require different numbers — see
+[Server-browser listing and `sv_advertisedProtocol`](#server-browser-listing-and-sv_advertisedprotocol).
 
 The server prints a one-line warning at start-up when the switch is captured on;
 that line is the record that the process considers retail GUIDs acceptable. To

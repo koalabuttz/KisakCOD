@@ -90,6 +90,9 @@ BASE64_SOURCE = ROOT / "src" / "universal" / "base64.cpp"
 CLIENT_FUNCTIONS = (
     ("SV_CaptureUnverifiedGuids", "void __cdecl SV_CaptureUnverifiedGuids()"),
     ("SV_UnverifiedGuidsEnabled", "bool SV_UnverifiedGuidsEnabled()"),
+    ("SV_CaptureAdvertisedProtocol", "void __cdecl SV_CaptureAdvertisedProtocol()"),
+    ("SV_GetAdvertisedProtocol", "int SV_GetAdvertisedProtocol()"),
+    ("SV_SetAdvertisedProtocolInfo", "void __cdecl SV_SetAdvertisedProtocolInfo(char *info)"),
     ("SV_FindFreeTempBanSlot", "uint32_t __cdecl SV_FindFreeTempBanSlot()"),
     ("SV_BanGuidBriefly", "void __cdecl SV_BanGuidBriefly("),
     ("SV_RejectUnsafeTestHandshake", "static bool SV_RejectUnsafeTestHandshake("),
@@ -412,6 +415,14 @@ static const dvar_t *com_dedicated = &dvar_dedicated;
 static const dvar_t *fs_gameDirVar = &dvar_fsgamedir;
 static const dvar_t *sv_allowProtocol6 = &dvar_allowprotocol6;
 
+// sv_advertisedProtocol is registered in SV_Init as a DVAR_INIT int defaulting
+// to 1; its capture is production code in sv_client_mp.cpp.
+static dvar_t dvar_advertisedprotocol;
+static const dvar_t *sv_advertisedProtocol = &dvar_advertisedprotocol;
+// The read-only "protocol" serverinfo dvar that SV_Init seeds from the capture.
+static dvar_t dvar_protocolinfo;
+static const dvar_t *protocolInfo = &dvar_protocolinfo;
+
 // ---- recording doubles -----------------------------------------------------
 
 struct Recorder
@@ -443,6 +454,10 @@ struct Recorder
     int scrAllocCalls;
     int sendDisconnects;
     std::string lastDisconnectReason;
+    // Internal-style dvar writes (Dvar_SetInt), in call order.  DVAR_INIT and
+    // DVAR_ROM refuse external and script input but let these through, which is
+    // exactly the hole the advertised-protocol capture closes.
+    std::vector<int> dvarSetIntValues;
 
     Recorder()
         : steamChecks(0)
@@ -568,6 +583,33 @@ static int Com_PrintWarning(int channel, const char *fmt, ...)
     R.alwaysPrinted.push_back(text);
     (void)channel;
     return 0;
+}
+
+// Dvar_SetInt is an internal write, so DVAR_INIT and DVAR_ROM accept it.
+static void Dvar_SetInt(dvar_s *dvar, int value)
+{
+    R.dvarSetIntValues.push_back(value);
+    if (dvar)
+        dvar->current.integer = value;
+}
+
+// Info_SetValueForKey replaces an existing pair for the key and appends the new
+// one, as src/universal/q_shared.cpp does. Only that behaviour is modelled, so
+// the extracted publishing helper can be pointed at a stale info string.
+static void Info_SetValueForKey(char *s, const char *key, const char *value)
+{
+    std::string text = s ? s : "";
+    const std::string pair = std::string("\\") + key + "\\";
+    const size_t at = text.find(pair);
+    if (at != std::string::npos)
+    {
+        const size_t end = text.find('\\', at + pair.size());
+        text.erase(at, end == std::string::npos ? std::string::npos : end - at);
+    }
+    if (value && *value)
+        text += pair + value;
+    std::strncpy(s, text.c_str(), 1023);
+    s[1023] = 0;
 }
 
 static char g_vaBuffers[4][2048];
@@ -926,6 +968,12 @@ static const char *SEH_StringEd_GetString(const char *pszReference)
 // exactly as a real process would experience it.
 static bool unverifiedGuidsCaptured = false;
 static bool unverifiedGuidsEnabled = false;
+
+// ---- sv_advertisedProtocol capture state -----------------------------------
+// Production freezes the validated value into these two statics when SV_Init()
+// registers the dvar.
+static bool advertisedProtocolCaptured = false;
+static int advertisedProtocolValue = 1;
 '''
 
 DRIVER_HEAD = r'''
@@ -1112,6 +1160,10 @@ static void ResetWorld()
     unverifiedGuidsCaptured = false;
     unverifiedGuidsEnabled = false;
     dvar_allowunverifiedguids.current.enabled = false;
+    advertisedProtocolCaptured = false;
+    advertisedProtocolValue = 1;
+    dvar_advertisedprotocol.current.integer = 1;
+    dvar_protocolinfo.current.integer = 1;
 
     svs.time = 1000;
 
@@ -2545,6 +2597,112 @@ static void TestUnverifiedGuidsCapture()
     Check(!SV_UnverifiedGuidsEnabled(), "turning the dvar on after start-up grants nothing");
 }
 
+// ---- sv_advertisedProtocol capture ----------------------------------------
+
+// The production setdvar script function reaches Dvar_SetFromStringByName(),
+// which is DVAR_SOURCE_INTERNAL. DVAR_INIT and DVAR_ROM refuse external and
+// script input but not this, so an internal write can change either dvar at any
+// point after the capture has run.
+static void InternalSetAdvertisedProtocol(int value)
+{
+    Dvar_SetInt((dvar_s *)sv_advertisedProtocol, value);
+}
+
+static void TestAdvertisedProtocolCapture()
+{
+    const char *valueWarning = "sv_advertisedProtocol must be 1 or 6";
+
+    // Shipped default: protocol 1, silent, and no write-back to the dvar.
+    CheckEq(SV_GetAdvertisedProtocol(), 1, "before the capture the accessor reports the built-in 1");
+    SV_CaptureAdvertisedProtocol();
+    CheckEq(SV_GetAdvertisedProtocol(), 1, "the shipped default captures protocol 1");
+    Check(!AnyLineContains(R.alwaysPrinted, valueWarning), "a default start prints no value warning");
+    CheckEq(static_cast<long long>(R.dvarSetIntValues.size()), 0,
+            "a valid default needs no write-back to the dvar");
+
+    // 6 is the other supported value and is captured unchanged.
+    ResetWorld();
+    dvar_advertisedprotocol.current.integer = 6;
+    SV_CaptureAdvertisedProtocol();
+    CheckEq(SV_GetAdvertisedProtocol(), 6, "6 is captured as 6");
+    Check(!AnyLineContains(R.alwaysPrinted, valueWarning), "6 is not an unsupported value");
+    CheckEq(static_cast<long long>(R.dvarSetIntValues.size()), 0, "6 needs no write-back either");
+
+    // An unsupported value warns, advertises the safe 1, and corrects the dvar.
+    ResetWorld();
+    dvar_advertisedprotocol.current.integer = 9;
+    SV_CaptureAdvertisedProtocol();
+    CheckEq(SV_GetAdvertisedProtocol(), 1, "an unsupported value advertises 1");
+    CheckEq(static_cast<long long>(dvar_advertisedprotocol.current.integer), 1,
+            "the fail-safe reset reaches the dvar through an internal write");
+    CheckEq(static_cast<long long>(R.dvarSetIntValues.size()), 1,
+            "exactly one internal write corrected the dvar");
+    if (!R.dvarSetIntValues.empty())
+        CheckEq(R.dvarSetIntValues[0], 1, "the corrective write stored 1");
+    Check(AnyLineContains(R.alwaysPrinted, valueWarning), "the value warning is printed");
+
+    // ...and only once, however often the engine re-runs the capture.
+    SV_CaptureAdvertisedProtocol();
+    SV_CaptureAdvertisedProtocol();
+    int warnings = 0;
+    for (size_t i = 0; i < R.alwaysPrinted.size(); ++i)
+        if (R.alwaysPrinted[i].find(valueWarning) != std::string::npos)
+            ++warnings;
+    CheckEq(warnings, 1, "the value warning is printed exactly once");
+    CheckEq(static_cast<long long>(R.dvarSetIntValues.size()), 1,
+            "a repeated capture performs no further write");
+
+    // ---- immutability under internal writes to BOTH dvars ------------------
+    // A frozen capture must ignore internal writes both to the dvar it was taken
+    // from and to the "protocol" serverinfo dvar that SV_Init seeded from it -
+    // the pair the two browse replies used to read separately.
+    ResetWorld();
+    dvar_advertisedprotocol.current.integer = 6;
+    SV_CaptureAdvertisedProtocol();
+    dvar_protocolinfo.current.integer = 6;              // SV_Init's own seeding
+    CheckEq(SV_GetAdvertisedProtocol(), 6, "the frozen 6 is reported");
+
+    InternalSetAdvertisedProtocol(1);                   // setdvar("sv_advertisedProtocol","1")
+    CheckEq(SV_GetAdvertisedProtocol(), 6, "an internal write to sv_advertisedProtocol changes nothing");
+    InternalSetAdvertisedProtocol(9);                   // setdvar("sv_advertisedProtocol","9")
+    CheckEq(SV_GetAdvertisedProtocol(), 6, "an internal write to an unsupported value changes nothing");
+    Dvar_SetInt((dvar_s *)protocolInfo, 9);             // setdvar("protocol","9")
+    CheckEq(SV_GetAdvertisedProtocol(), 6, "an internal write to the ROM protocol dvar changes nothing");
+    Dvar_SetInt((dvar_s *)protocolInfo, 1);             // and back again
+    CheckEq(SV_GetAdvertisedProtocol(), 6, "the frozen value survives it in both directions");
+
+    // Nothing re-runs the capture today: SV_Init runs once, and a map change or a
+    // net_restart never calls it. Call it again anyway to pin the hypothetical - a
+    // second capture must not adopt any of the writes above.
+    SV_CaptureAdvertisedProtocol();
+    CheckEq(SV_GetAdvertisedProtocol(), 6, "a repeated capture keeps the start-up answer");
+
+    // The published key, not just the accessor: SV_SetAdvertisedProtocolInfo() is
+    // the one helper both browse replies call, so a stale "protocol" pair is
+    // replaced by the captured value while the dvars hold anything at all.
+    CheckEq(static_cast<long long>(dvar_advertisedprotocol.current.integer), 9,
+            "the dvar really holds the written 9 before publishing");
+    CheckEq(static_cast<long long>(dvar_protocolinfo.current.integer), 1,
+            "the protocol dvar really holds the written 1 before publishing");
+    char info[1028];
+    std::strcpy(info, "\\protocol\\9\\hostname\\probe\\mapname\\mp_crash");
+    SV_SetAdvertisedProtocolInfo(info);
+    Check(std::string(info) == "\\hostname\\probe\\mapname\\mp_crash\\protocol\\6",
+          "the reply reports the captured 6 and leaves the other keys alone");
+    Check(std::strstr(info, "\\protocol\\9") == NULL, "the stale protocol pair is replaced");
+
+    // The mirror case: a start that captured 1 is never upgraded to 6.
+    ResetWorld();
+    SV_CaptureAdvertisedProtocol();
+    CheckEq(SV_GetAdvertisedProtocol(), 1, "a default start captures 1");
+    InternalSetAdvertisedProtocol(6);
+    Dvar_SetInt((dvar_s *)protocolInfo, 6);
+    SV_CaptureAdvertisedProtocol();
+    CheckEq(SV_GetAdvertisedProtocol(), 1, "a frozen 1 is never upgraded to 6 by a later write");
+    CheckEq(static_cast<long long>(R.dvarSetIntValues.size()), 2,
+            "only the two writes made by this test were performed");
+}
+
 // ---- SV_GetChallenge: retail GUIDs, switch off ----------------------------
 
 static void TestGetChallengeRetailGuidDisabled()
@@ -3029,6 +3187,7 @@ int main(void)
     Run("SV_ValidateSteamTicketBase64", TestValidateSteamTicketBase64);
     Run("SV_ParseRetailGuid", TestParseRetailGuid);
     Run("sv_allowUnverifiedGuids: capture and veto", TestUnverifiedGuidsCapture);
+    Run("sv_advertisedProtocol: capture immutability", TestAdvertisedProtocolCapture);
 #if defined(__linux__) && defined(KISAK_DEDICATED)
     Run("SV_IsLoopbackTestIdentity", TestLoopbackTestIdentity);
 #endif
@@ -3085,6 +3244,9 @@ def build_harness(client_functions: dict, base64_functions: dict) -> str:
     extracted_client += "uint32_t SV_FindFreeTempBanSlot();\n"
     extracted_client += client_functions["SV_CaptureUnverifiedGuids"] + "\n"
     extracted_client += client_functions["SV_UnverifiedGuidsEnabled"] + "\n"
+    extracted_client += client_functions["SV_CaptureAdvertisedProtocol"] + "\n"
+    extracted_client += client_functions["SV_GetAdvertisedProtocol"] + "\n"
+    extracted_client += client_functions["SV_SetAdvertisedProtocolInfo"] + "\n"
     extracted_client += "#if defined(__linux__) && defined(KISAK_DEDICATED)\n"
     extracted_client += client_functions["SV_RejectUnsafeTestHandshake"]
     extracted_client += "#endif\n\n"

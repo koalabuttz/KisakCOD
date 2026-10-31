@@ -684,7 +684,10 @@ void __cdecl SV_Init()
     SV_AddOperatorCommands();
     sv_gametype = Dvar_RegisterString("g_gametype", "war", DVAR_SERVERINFO | DVAR_LATCH, "Current game type");
     Dvar_RegisterString("sv_keywords", (char *)"", DVAR_SERVERINFO, "Server keywords");
-    Dvar_RegisterInt("protocol", 1, (DvarLimits)0x100000001LL, DVAR_SERVERINFO | DVAR_ROM, "Protocol version");
+    // Advertised in getstatus serverinfo; SV_Init sets it from
+    // sv_advertisedProtocol below (1 or 6).
+    const dvar_t *protocolInfo =
+        Dvar_RegisterInt("protocol", 1, (DvarLimits)0x600000001LL, DVAR_SERVERINFO | DVAR_ROM, "Protocol version");
     sv_mapname = Dvar_RegisterString("mapname", (char *)"", DVAR_SERVERINFO | DVAR_ROM, "Current map name");
     sv_privateClients = Dvar_RegisterInt(
         "sv_privateClients",
@@ -776,6 +779,24 @@ void __cdecl SV_Init()
         DVAR_INIT,
         "Accept retail CoD4 GUID handshakes without verification (startup only; spoofable, see documentation)");
     SV_CaptureUnverifiedGuids();
+    // Server browsers list a server only when getinfo's "protocol" equals their
+    // own: 1 for 1.0 clients, 6 for retail 1.7. Connecting is unaffected.
+    // The limits are the full int range, not 1..6, so a mistyped value reaches
+    // the check below instead of being saturated to a limit by Dvar_RegisterInt
+    // (which would turn e.g. 9 into 6 without a word).
+    sv_advertisedProtocol = Dvar_RegisterInt(
+        "sv_advertisedProtocol",
+        1,
+        (DvarLimits)0x7FFFFFFF80000000LL,
+        DVAR_INIT,
+        "Protocol advertised to server browsers: 1 (CoD4 1.0) or 6 (CoD4 1.7)");
+    // Validate and freeze the value here, once per process; the browse replies
+    // read the capture.
+    SV_CaptureAdvertisedProtocol();
+    if (SV_GetAdvertisedProtocol() == 6 && !sv_allowProtocol6->current.enabled)
+        Com_PrintWarning(CON_CHANNEL_SERVER,
+            "WARNING: sv_advertisedProtocol is 6 but sv_allowProtocol6 is off; 1.7 clients will see this server but cannot join.\n");
+    Dvar_SetInt((dvar_s *)protocolInfo, SV_GetAdvertisedProtocol());
     sv_pure = Dvar_RegisterBool("sv_pure", 0, DVAR_SERVERINFO | DVAR_SYSTEMINFO, "Cannot use modified IWD files");
     rcon_password = Dvar_RegisterString("rcon_password", (char *)"", DVAR_NOFLAG, "Password for the rcon command");
     sv_fps = Dvar_RegisterInt("sv_fps", 20, (DvarLimits)0x3E80000000ALL, DVAR_NOFLAG, "Server frames per second");

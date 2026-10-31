@@ -67,6 +67,7 @@ const dvar_t *sv_fps;
 const dvar_t *sv_botsPressAttackBtn;
 const dvar_t *sv_serverid;
 const dvar_t *sv_allowProtocol6;
+const dvar_t *sv_advertisedProtocol;
 const dvar_t *sv_allowUnverifiedGuids;
 const dvar_t *sv_mapRotation;
 
@@ -349,6 +350,8 @@ void __cdecl SVC_Status(netadr_t from)
     } while (v9);
     v1 = SV_Cmd_Argv(1);
     Info_SetValueForKey(s, "challenge", v1);
+    // The serverinfo copy above holds the "protocol" dvar; publish the capture instead.
+    SV_SetAdvertisedProtocolInfo(s);
     if (Dvar_GetBool("fs_restrict"))
     {
         v2 = Info_ValueForKey(s, "sv_keywords");
@@ -490,7 +493,6 @@ void __cdecl SVC_GameCompleteStatus(netadr_t from)
 void __cdecl SVC_Info(netadr_t from)
 {
     const char *v1; // eax
-    const char *v2; // eax
     const char *v3; // eax
     const char *v4; // eax
     const char *v5; // eax
@@ -535,8 +537,8 @@ void __cdecl SVC_Info(netadr_t from)
     infostring[0] = 0;
     v1 = SV_Cmd_Argv(1);
     Info_SetValueForKey(infostring, "challenge", v1);
-    v2 = va("%i", 1);
-    Info_SetValueForKey(infostring, "protocol", v2);
+    // Browsers drop infoResponses whose protocol differs from their own.
+    SV_SetAdvertisedProtocolInfo(infostring);
     Info_SetValueForKey(infostring, "hostname", sv_hostname->current.string);
     Info_SetValueForKey(infostring, "mapname", sv_mapname->current.string);
     if (clientCount)

@@ -68,8 +68,12 @@ def resource_growth(baseline, later):
 
 
 class Server:
-    def __init__(self, binary, game, work, output, timeout, startup_args=()):
+    def __init__(self, binary, game, work, output, timeout, startup_args=(), protocol="1"):
         self.timeout, self.output = timeout, output
+        # The protocol this server advertises for browsing; sv_advertisedProtocol
+        # can make it 6, but every check here expects the stock 1.0 value unless a
+        # session says otherwise.
+        self.protocol = protocol
         self.samples, self.stages, self.cycle_endpoints = [], [], []
         self.next_sample = 0.0
         self.log_path = output / "server.log"
@@ -154,8 +158,9 @@ class Server:
             hostname = values.get("hostname") if command == "getinfo" else values.get("sv_hostname")
             if hostname != self.hostname:
                 continue  # Never accept another process after a bind-port race.
-            if values.get("protocol") != "1":
-                raise CheckFailure(f"unexpected query protocol: {values.get('protocol')!r}")
+            if values.get("protocol") != self.protocol:
+                raise CheckFailure(f"unexpected query protocol: {values.get('protocol')!r}, "
+                                   f"expected {self.protocol!r}")
             return values
         raise CheckFailure(f"timed out waiting for fresh {command} reply on {expected_map}")
 
