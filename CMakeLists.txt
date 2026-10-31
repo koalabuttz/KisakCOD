@@ -39,11 +39,11 @@ option(KISAK_OPENAL "Build the sound system against OpenAL instead of Miles/MSS"
 
 # Opt-in, native Linux only: compile the portable network core of the real
 # multiplayer client as an OBJECT library, plus its asset-free test. This is a
-# compile-only foundation milestone -- it produces no client executable, no
-# renderer, no windowing and no game entry point, and it never changes the
+# foundation milestone with a standalone discovery diagnostic. No renderer,
+# windowing or game entry point is provided, and it never changes the
 # dedicated server build. See docs/linux-client.md.
 option(KISAK_BUILD_LINUX_CLIENT_CORE
-    "Build the native Linux client network core (opt-in, no client executable)" OFF)
+    "Build the native Linux client network core (opt-in, discovery diagnostic only; no game client executable)" OFF)
 
 # Set the gloabl directory variables
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)

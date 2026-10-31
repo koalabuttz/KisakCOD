@@ -2,25 +2,28 @@
 
 ## Status
 
-There is **no native Linux client executable**, and this document does not
-claim one. What exists is an opt-in, compile-and-test-only foundation: the
-portable network translation units of the real multiplayer client build
-natively, and the client/server network command codec plus bounded parser/input state are tested
-without assets, sockets, or a game loop.
+There is **no playable native Linux client**. The opt-in foundation now includes
+six full production client translation units, asset-free runtime integration tests,
+and a runnable Linux discovery diagnostic. The diagnostic starts real UDP/event
+handling and sends read-only `getinfo`; it explicitly reports `connected=false`
+and unavailable Linux authentication. It does not initialize `CL_Frame`, load game
+assets, authenticate, or join a server.
 
 The default native Linux build is still the dedicated multiplayer server. This
 work changes nothing about it.
 
 ## What the milestone builds
 
-`KISAK_BUILD_LINUX_CLIENT_CORE` (default `OFF`) adds four targets:
+`KISAK_BUILD_LINUX_CLIENT_CORE` (default `OFF`) adds six targets:
 
 | Target | Kind | Purpose |
 | --- | --- | --- |
-| `KisakCOD-client-core` | OBJECT library | Compiles four production client TUs |
+| `KisakCOD-client-core` | OBJECT library | Compiles six production client TUs |
 | `KisakCOD-client-netchan-test` | executable | Asset-free test of the real codec |
 | `KisakCOD-client-state-test` | executable | Real command-parser and key-state runtime checks |
 | `KisakCOD-client-packet-test` | executable | Production command emission, server decoding and prediction history integration |
+| `KisakCOD-client-auth-test` | executable | Challenge formatting and real resend state machine |
+| `KisakCOD-client-headless` | executable | Read-only UDP server discovery, no game admission |
 
 The object library compiles these files **unmodified**, from their production
 source paths:
@@ -29,6 +32,8 @@ source paths:
 - `src/client_mp/cl_parse_mp.cpp` — client message parsing
 - `src/client_mp/cl_input.cpp` — client input/command generation
 - `src/client_mp/cl_cgame_mp.cpp` — cgame state publication and history consumers
+- `src/client_mp/cl_auth.cpp` — challenge formatting and platform authentication boundary
+- `src/client_mp/cl_connection_mp.cpp` — production connection resend state machine
 
 Note the paths: the multiplayer client sources live under `client_mp/`.
 `src/client/cl_input.cpp` is the singleplayer/Windows-client variant and is
@@ -87,11 +92,12 @@ cmake -S . -B build-linux/client-core \
     -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$PWD/build-linux/client-core/bin"
 
 cmake --build build-linux/client-core \
-    --target KisakCOD-client-core KisakCOD-client-netchan-test KisakCOD-client-state-test KisakCOD-client-packet-test -j4
+    --target KisakCOD-client-core KisakCOD-client-netchan-test KisakCOD-client-state-test KisakCOD-client-packet-test KisakCOD-client-auth-test KisakCOD-client-headless -j4
 
 ./build-linux/client-core/bin/KisakCOD-client-netchan-test
 ./build-linux/client-core/bin/KisakCOD-client-state-test
 ./build-linux/client-core/bin/KisakCOD-client-packet-test
+./build-linux/client-core/bin/KisakCOD-client-auth-test
 ```
 
 Requires the same Clang and multilib toolchain as the native Linux server
@@ -112,9 +118,9 @@ The Linux workflow runs it separately for Debug and RelWithDebInfo, so the norma
 server checks do not silently opt into client targets. Hosted CI results still
 need to be checked separately from local validation.
 
-The checker verifies generated compile commands for all four client-core
+The checker verifies generated compile commands for all six client-core
 translation units (`-m32`, `KISAK_MP`, no dedicated defines), builds in an isolated
-output directory and executes all three runtime tests. The state-test compile commands
+output directory and executes all four runtime tests plus real socket tests. The state-test compile commands
 are also checked for production source paths, client flags and `RELEASE_ASSERTS`. Its default-OFF check uses a
 separate temporary tree. Compiler-name checks can run without a build:
 
@@ -221,7 +227,7 @@ fingerprint is checked even when a client build fails.
 
 ## What still blocks a real native client
 
-Compiling four client TUs is not a client. In rough order of weight:
+Compiling six client TUs is not a client. In rough order of weight:
 
 1. **Win32 windowing, input and startup.** The client startup path, window
    creation, and input handling are Win32. Startup also goes through
@@ -233,9 +239,10 @@ Compiling four client TUs is not a client. In rough order of weight:
 4. **The rest of the client TUs**, each of which needs its own compile proof
    before it can join the object library.
 
-The honest next step is to take one more TU at a time, proving compilation and
-adding a bounded test where a test can be bounded, rather than adding a fake
-game executable or presentation stubs to make a link succeed.
+The next connection milestone needs a supported Linux ticket provider and an
+engine host that drives the real connection receive/state loop. The diagnostic
+does not supply those services. Keep full-TU compile checks and production runtime
+tests while integrating that host.
 
 ## Relationship to the dedicated build
 
@@ -260,3 +267,23 @@ The transport is a capture double at `Netchan_Transmit`; no socket, fragment
 assembly, authentication, actual connection handshake, renderer, cgame simulation,
 or two-player gameplay is exercised. Command scheduling/ring insertion is supplied
 by the harness. Temporary allocation and host services are controlled doubles.
+
+### Runnable discovery diagnostic
+
+```sh
+./build-linux/client-core/bin/KisakCOD-client-headless --server 127.0.0.1:28960 --timeout-ms 3000
+```
+
+There is no default destination. The endpoint must be an explicit IPv4 address and
+port; the timeout is 1–10000 milliseconds. This sends one unauthenticated `getinfo`
+query and accepts only a response from that endpoint with the matching challenge.
+Malformed traffic does not reset the deadline. No ticket, challenge-auth request,
+or connect packet is sent. Linux currently prints `auth=unavailable`; successful
+discovery exits **3**, timeout **4**, transport failure **5**, invalid arguments
+**2**, and help **0**. Every status explicitly states `connected=false`.
+
+The diagnostic's POSIX startup and transport are independent of the engine's
+`NET_Init`/`CL_Frame`; the production code it shares is the authentication boundary
+and challenge formatter. The real `CL_CheckForResend` is tested separately with
+controlled host/transport doubles. See the [headless checkpoint](progress-2026-10-31-client-headless.md)
+for evidence, extraction details and remaining integration requirements.

@@ -35,6 +35,8 @@ set(CGAME_MP
 )
 
 set(CLIENT_MP
+    "${SRC_DIR}/client_mp/cl_auth.cpp"
+    "${SRC_DIR}/client_mp/cl_connection_mp.cpp"
     "${SRC_DIR}/client_mp/client_mp.h"
     "${SRC_DIR}/client_mp/cl_cgame_mp.cpp"
     "${SRC_DIR}/client_mp/cl_input.cpp"

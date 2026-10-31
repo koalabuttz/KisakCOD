@@ -62,7 +62,7 @@ include(${SCRIPTS_DIR}/extern/tracy.cmake)
 # Off by default. When enabled this compiles the portable network translation
 # units of the real multiplayer client into an OBJECT library -- nothing is
 # extracted, shimmed or rewritten -- so client network code can be built and
-# tested natively without a client executable, renderer, windowing layer or
+# tested natively without a playable client, renderer, windowing layer or
 # game entry point. The KISAK_DEDICATED/DEDICATED defines are deliberately
 # absent: this is the client side of the same sources.
 #
@@ -80,6 +80,8 @@ if(KISAK_BUILD_LINUX_CLIENT_CORE)
         "${SRC_DIR}/client_mp/cl_parse_mp.cpp"
         "${SRC_DIR}/client_mp/cl_input.cpp"
         "${SRC_DIR}/client_mp/cl_cgame_mp.cpp"
+        "${SRC_DIR}/client_mp/cl_auth.cpp"
+        "${SRC_DIR}/client_mp/cl_connection_mp.cpp"
     )
 
     add_library(KisakCOD-client-core OBJECT ${KISAK_CLIENT_CORE_SOURCES})
@@ -135,7 +137,24 @@ if(KISAK_BUILD_LINUX_CLIENT_CORE)
         "${SRC_DIR}/universal/com_shared.cpp"
         "${SRC_DIR}/universal/com_math.cpp"
     )
-    foreach(client_test KisakCOD-client-netchan-test KisakCOD-client-state-test KisakCOD-client-packet-test)
+    # Standalone startup/discovery diagnostic; not engine initialization.
+    # Kept below linux/client/ so the dedicated linux/*.cpp glob excludes main.
+    add_executable(KisakCOD-client-headless
+        "${SRC_DIR}/linux/client/headless_main.cpp"
+        "${SRC_DIR}/client_mp/cl_auth.cpp"
+        "${SRC_DIR}/universal/base64.cpp"
+    )
+    add_executable(KisakCOD-client-auth-test
+        "${TESTS_DIR}/linux_client_core/client_auth_test.cpp"
+        "${SRC_DIR}/qcommon/huffman.cpp"
+        "${SRC_DIR}/universal/com_shared.cpp"
+        "${SRC_DIR}/client_mp/cl_connection_mp.cpp"
+        "${SRC_DIR}/qcommon/msg_mp.cpp"
+        "${SRC_DIR}/universal/q_shared.cpp"
+        "${SRC_DIR}/client_mp/cl_auth.cpp"
+        "${SRC_DIR}/universal/base64.cpp"
+    )
+    foreach(client_test KisakCOD-client-auth-test KisakCOD-client-headless KisakCOD-client-netchan-test KisakCOD-client-state-test KisakCOD-client-packet-test)
         target_compile_features(${client_test} PRIVATE cxx_std_20)
         target_compile_definitions(${client_test} PRIVATE
             KISAK_MP KISAK_OPENAL RELEASE_ASSERTS
