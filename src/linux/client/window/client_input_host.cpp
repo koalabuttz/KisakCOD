@@ -16,6 +16,10 @@ clientStatic_t cls;
 uint32_t frame_msec;
 bool cl_waitingOnServerToLoadMap[1];
 const dvar_t *con_restricted;
+const dvar_t *cl_freelook;
+const dvar_t *cl_nodelta;
+extern const dvar_t *cl_analog_attack_threshold;
+extern const dvar_t *cl_stanceHoldTime;
 const dvar_t *sv_disableClientConsole;
 ScreenPlacement scrPlaceFull, scrPlaceView[1];
 static clientConnection_t connection;
@@ -25,7 +29,7 @@ clientConnection_t *CL_GetLocalClientConnection(int client) {
 }
 
 namespace kisak::window {
-namespace { ClientInputHost *owner=nullptr; cmd_function_s commands[9]{}; }
+namespace { ClientInputHost *owner=nullptr; cmd_function_s commands[5]{}; }
 ClientInputHost &ClientInputHost::Current() {
     if(!owner)throw std::logic_error("input services unavailable outside host lifetime");
     return *owner;
@@ -40,13 +44,16 @@ ClientInputHost::ClientInputHost() : EngineInput(MouseInput,ResetInput) {
     cl_bypassMouseInput=Dvar_RegisterBool("cl_bypassMouseInput",false,DVAR_NOFLAG,"Bypass UI mouse capture");
     clientUIActives[0].connectionState=CA_DISCONNECTED;
     g_consoleField.fixedSize=1;g_consoleField.charHeight=16;
+    cl_freelook=Dvar_RegisterBool("cl_freelook",true,DVAR_ARCHIVE,"Enable looking with mouse");
+    CL_InitInput();
     owner=this;Resize(640,480);previousTick_=Sys_Milliseconds();
-    const char *names[]={"echo","status","discover","net_restart","bind","+attack","-attack","+forward","-forward"};
-    void(*handlers[])()={EchoCommand,StatusCommand,DiscoverCommand,RestartCommand,BindCommand,IN_Attack_Down,IN_Attack_Up,IN_ForwardDown,IN_ForwardUp};
-    for(int i=0;i<9;++i)Cmd_AddCommandInternal(names[i],handlers[i],&commands[i]);
+    const char *names[]={"echo","status","discover","net_restart","bind"};
+    void(*handlers[])()={EchoCommand,StatusCommand,DiscoverCommand,RestartCommand,BindCommand};
+    for(int i=0;i<5;++i)Cmd_AddCommandInternal(names[i],handlers[i],&commands[i]);
 }
-ClientInputHost::~ClientInputHost() { discovery_.reset();Reset();Key_Shutdown();
-    con_restricted=sv_disableClientConsole=cl_bypassMouseInput=nullptr;owner=nullptr; }
+ClientInputHost::~ClientInputHost() { discovery_.reset();Reset();CL_ShutdownInput();Key_Shutdown();
+    con_restricted=sv_disableClientConsole=cl_bypassMouseInput=nullptr;
+    cl_freelook=cl_nodelta=cl_analog_attack_threshold=cl_stanceHoldTime=nullptr;owner=nullptr; }
 void ClientInputHost::ResetInput(int) { Current().Reset(); }
 void ClientInputHost::Reset() {
     runtime_.ClearCommands();Key_ClearStates(0);runtime_.ClearCommands();CL_ClearKeys(0);

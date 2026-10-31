@@ -245,6 +245,9 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
     add_executable(KisakCOD-client-input-test
         "${TESTS_DIR}/linux_window/client_input_test.cpp"
         ${KISAK_CLIENT_INPUT_SOURCES} ${KISAK_CLIENT_RUNTIME_SOURCES})
+    add_executable(KisakCOD-client-input-startup-test
+        "${TESTS_DIR}/linux_client_commands/input_startup_test.cpp"
+        ${KISAK_CLIENT_INPUT_SOURCES} ${KISAK_CLIENT_RUNTIME_SOURCES})
     add_executable(KisakCOD-client-command-test
         "${TESTS_DIR}/linux_client_commands/command_core_test.cpp"
         "${SRC_DIR}/qcommon/cmd.cpp"
@@ -256,7 +259,7 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
     add_executable(KisakCOD-shutdown-signal-test
         "${SRC_DIR}/linux/client/window/shutdown_signal.cpp"
         "${TESTS_DIR}/linux_window/shutdown_signal_test.cpp")
-    foreach(window_target KisakCOD-window-platform KisakCOD-client-window KisakCOD-window-test KisakCOD-client-input KisakCOD-client-input-test KisakCOD-shutdown-signal-test KisakCOD-client-command-test KisakCOD-client-runtime-test)
+    foreach(window_target KisakCOD-window-platform KisakCOD-client-window KisakCOD-window-test KisakCOD-client-input KisakCOD-client-input-test KisakCOD-shutdown-signal-test KisakCOD-client-command-test KisakCOD-client-runtime-test KisakCOD-client-input-startup-test)
         target_compile_features(${window_target} PRIVATE cxx_std_20)
         target_compile_definitions(${window_target} PRIVATE
             KISAK_MP KISAK_OPENAL RELEASE_ASSERTS _FILE_OFFSET_BITS=64 _GNU_SOURCE
@@ -270,6 +273,7 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
         target_link_libraries(${window_target} PRIVATE SDL2::SDL2 Threads::Threads)
         target_link_options(${window_target} PRIVATE -Wl,--gc-sections)
     endforeach()
+    target_link_libraries(KisakCOD-client-input-startup-test PRIVATE KisakCOD-window-platform)
     target_link_libraries(KisakCOD-client-input-test PRIVATE KisakCOD-window-platform)
     target_link_libraries(KisakCOD-client-input PRIVATE KisakCOD-window-platform)
     target_link_libraries(KisakCOD-client-window PRIVATE KisakCOD-window-platform)

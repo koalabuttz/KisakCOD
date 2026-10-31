@@ -21,6 +21,7 @@
 #include <cstdlib>
 #include <cstring>
 
+int com_frameTime;
 const dvar_t *com_dedicated;
 const dvar_t *com_sv_running;
 
@@ -106,7 +107,7 @@ Runtime::Runtime() {
     Sys_InitializeCriticalSections();Sys_InitMainThread();
     Cmd_InitCore();Cbuf_Init();
     try {
-        InitializeDvars();NET_Init();owner=this;
+        InitializeDvars();NET_Init();com_frameTime=Sys_Milliseconds();owner=this;
         std::puts("runtime=ready commands=engine network=engine-udp script_monitor=unavailable connected=false");
     } catch(...) {
         NET_Shutdown();Dvar_Shutdown();Cmd_ShutdownCore();ClearOwnedDvarPointers();throw;
@@ -115,10 +116,10 @@ Runtime::Runtime() {
 Runtime::~Runtime() {
     ClearCommands();Sys_ShutdownEvents();CL_CancelPlatformAuthTicket();
     NET_Shutdown();Cmd_ShutdownCore();Dvar_Shutdown();
-    ClearOwnedDvarPointers();owner=nullptr;
+    ClearOwnedDvarPointers();com_frameTime=0;owner=nullptr;
 }
 void Runtime::Tick() {
-    ++ticks_;
+    com_frameTime=Sys_Milliseconds();++ticks_;
     try { Cbuf_Execute(0,0); }catch(...) { ClearCommands();throw; }
 }
 void Runtime::Queue(const char *text) { Cbuf_AddText(0,text); }

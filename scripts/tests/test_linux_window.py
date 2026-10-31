@@ -78,7 +78,7 @@ def main():
             for flag in ("-m32", "-DKISAK_MP", "-DRELEASE_ASSERTS"):
                 check(bool(re.search(r"(?:^|\s)" + re.escape(flag) + r"(?:\s|$)", command)), f"{suffix} uses {flag}")
             check("-DKISAK_DEDICATED" not in command and "-DDEDICATED" not in command, f"{suffix} is a client compile")
-        command = ["cmake", "--build", build, "--target", "KisakCOD-client-window", "KisakCOD-window-test", "KisakCOD-client-input", "KisakCOD-client-input-test", "KisakCOD-shutdown-signal-test", "KisakCOD-client-command-test", "KisakCOD-client-runtime-test", "-j", args.jobs]
+        command = ["cmake", "--build", build, "--target", "KisakCOD-client-window", "KisakCOD-window-test", "KisakCOD-client-input", "KisakCOD-client-input-test", "KisakCOD-shutdown-signal-test", "KisakCOD-client-command-test", "KisakCOD-client-runtime-test", "KisakCOD-client-input-startup-test", "-j", args.jobs]
         run(command)
         run(command)
         check(True, "window targets build and incrementally rebuild")
@@ -94,7 +94,7 @@ def main():
         print(result.stdout, end="")
         summary = re.search(r"-- (\d+) checks, (\d+) failures --", result.stdout)
         check(summary and int(summary[1]) >= 40 and int(summary[2]) == 0, "actual client input lifecycle suite passes")
-        for name, minimum in (("command", 28), ("runtime", 42)):
+        for name, minimum in (("command", 28), ("runtime", 42), ("input-startup", 23)):
             result = run([build / f"bin/KisakCOD-client-{name}-test"], env=env, timeout=30)
             print(result.stdout, end="")
             summary = re.search(r"-- (\d+) checks, (\d+) failures --", result.stdout)

@@ -396,3 +396,17 @@ The window checker now includes `KisakCOD-client-command-test` and
 and unavailable game frames/authentication. See the
 [shared runtime checkpoint](progress-2026-10-31-client-command-host.md) for the
 reproduced command bugs, shared ownership, real socket tests and remaining limits.
+
+
+### Production input startup
+
+The integrated input frontend now calls the complete production `CL_InitInput`
+and `CL_ShutdownInput`, replacing its four manually registered IN handlers. This
+adds the normal movement/action/stance/ADS/talk registrations and input dvars while
+remaining disconnected. `KisakCOD-client-input-startup-test` verifies startup,
+actual command behavior, reset, input-only teardown and repeated ownership.
+The shared runtime supplies the real command-tick clock; this does not initialize
+`CL_Frame`, voice, renderer or cgame. See the
+[input-startup checkpoint](progress-2026-10-31-client-input-startup.md) and
+[frame dependency map](linux-client-frame-dependencies.md). The proposed central
+packet-dispatch milestone is paused and is not included in these changes.
