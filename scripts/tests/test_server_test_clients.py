@@ -12,7 +12,7 @@ The multi-player server can fill its own client slots with internal bots:
                         a bot would have sent, from the player's current weapon
                         and a few ``random()`` draws.
   ``SV_UpdateBots``     drives ``SV_BotUserMove`` once per frame for every
-                        connected ``NA_BOT`` client.
+                        active ``NA_BOT`` client, and re-enters retained internal clients after a map load.
 
 Those three function bodies are extracted from production text unchanged and
 compiled against doubles for the surrounding engine services (``svs``, the
@@ -54,7 +54,7 @@ What this pins down, and why each invariant matters for a load test:
                   ``sv_botsPressAttackBtn`` allows it, movement/angles follow the
                   documented draw order, and the delta message always tracks the
                   outgoing sequence
-  * dispatch      only connected ``NA_BOT`` clients are driven; free slots and
+  * dispatch      only active ``NA_BOT`` clients are driven; free/zombie slots and
                   real loopback/IP clients are skipped
 
 Explicit limitations:
@@ -266,6 +266,7 @@ struct DirectConnectRecord {
 };
 extern std::vector<DirectConnectRecord> gConnectCalls;
 extern std::vector<int> gGamestateCalls;
+extern bool gGamestateDropsClient;
 extern std::vector<int> gEnterWorldCalls;
 extern std::vector<usercmd_s> gEnterWorldCmds;
 extern std::vector<std::pair<int, usercmd_s> > gThinkCalls;
@@ -357,6 +358,7 @@ gentity_s gEntities[64];
 
 std::vector<DirectConnectRecord> gConnectCalls;
 std::vector<int> gGamestateCalls;
+bool gGamestateDropsClient;
 std::vector<int> gEnterWorldCalls;
 std::vector<usercmd_s> gEnterWorldCmds;
 std::vector<std::pair<int, usercmd_s> > gThinkCalls;
@@ -446,6 +448,7 @@ bool NET_CompareBaseAdr(netadr_t a, netadr_t b) {
 
 void SV_SendClientGameState(client_t *client) {
     gGamestateCalls.push_back(static_cast<int>(client - svs.clients));
+    client->header.state = gGamestateDropsClient ? CS_ZOMBIE : CS_CLIENTLOADING;
 }
 
 void SV_ClientEnterWorld(client_t *client, usercmd_s *cmd) {
@@ -510,6 +513,7 @@ static void Reset() {
     com_sv_running_storage.enabled = 1;
     gConnectCalls.clear();
     gGamestateCalls.clear();
+    gGamestateDropsClient = false;
     gEnterWorldCalls.clear();
     gEnterWorldCmds.clear();
     gThinkCalls.clear();
@@ -787,6 +791,43 @@ int main() {
     Check(gThinkCalls.size() == 1, "exactly one client was driven");
     Check(!gThinkCalls.empty() && gThinkCalls[0].first == 0, "only the NA_BOT client");
     Check(gResetSkeletonCacheCalls > 0, "the skeleton cache is reset per frame");
+
+    std::printf("\n== retained bots re-enter after full map load ==\n");
+    Reset();
+    sv_maxclients_storage.integer = 8;
+    for (int i = 0; i < 8; ++i) {
+        svs.clients[i].header.netchan.remoteAddress.type = NA_BOT;
+        svs.clients[i].bIsTestClient = 1;
+        svs.clients[i].gentity = &gEntities[i];
+    }
+    svs.clients[0].header.state = CS_CONNECTED;
+    svs.clients[1].header.state = CS_ACTIVE;
+    svs.clients[2].header.state = CS_ZOMBIE;
+    svs.clients[3].header.state = CS_FREE;
+    svs.clients[4].header.state = CS_CONNECTED;
+    svs.clients[4].header.netchan.remoteAddress.type = NA_IP;
+    svs.clients[5].header.state = CS_CONNECTED;
+    svs.clients[5].header.netchan.remoteAddress.type = NA_LOOPBACK;
+    svs.clients[6].header.state = CS_CONNECTED;
+    svs.clients[6].bIsTestClient = 0;
+    svs.clients[7].header.state = CS_CLIENTLOADING;
+    SV_UpdateBots();
+    Check(gGamestateCalls == std::vector<int>{0}, "only retained connected internal bot gets a new gamestate");
+    Check(gEnterWorldCalls == std::vector<int>{0}, "only successfully primed bot enters world");
+    usercmd_s zero{};
+    Check(gEnterWorldCmds.size() == 1 && !std::memcmp(&gEnterWorldCmds[0], &zero, sizeof(zero)),
+          "new map begins with a completely zeroed usercmd");
+    Check(gThinkCalls.size() == 2 && gThinkCalls[0].first == 0 && gThinkCalls[1].first == 1,
+          "only active bots think; zombie, free and unprimed clients do not");
+    SV_UpdateBots();
+    Check(gGamestateCalls.size() == 1 && gEnterWorldCalls.size() == 1, "active bots are not re-entered every frame");
+    gGamestateDropsClient = true;
+    svs.clients[0].header.state = CS_CONNECTED;
+    gThinkCalls.clear();
+    SV_UpdateBots();
+    Check(svs.clients[0].header.state == CS_ZOMBIE && gEnterWorldCalls.size() == 1,
+          "gamestate failure cannot resurrect a dropped bot");
+    Check(gThinkCalls.size() == 1 && gThinkCalls[0].first == 1, "dropped bot receives no movement");
 
     std::printf("\n== server-not-running is asserted, not silently accepted ==\n");
     Reset();

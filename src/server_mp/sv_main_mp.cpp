@@ -1101,9 +1101,20 @@ void __cdecl SV_UpdateBots()
     clients = svs.clients;
     while (i < sv_maxclients->current.integer)
     {
-        if (clients->header.state)
+        if (clients->header.netchan.remoteAddress.type == NA_BOT)
         {
-            if (clients->header.netchan.remoteAddress.type == NA_BOT)
+            // A full map load reconnects retained slots as CS_CONNECTED.
+            // Internal test clients send no packets to request a gamestate or
+            // enter the new world, so complete that transition here.
+            if (clients->bIsTestClient && clients->header.state == CS_CONNECTED)
+            {
+                usercmd_s nullcmd = {};
+                SV_SendClientGameState(clients);
+                // A failed gamestate can drop the client; never revive it.
+                if (clients->header.state == CS_CLIENTLOADING)
+                    SV_ClientEnterWorld(clients, &nullcmd);
+            }
+            if (clients->header.state == CS_ACTIVE)
                 SV_BotUserMove(clients);
         }
         ++i;
