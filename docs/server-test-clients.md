@@ -86,6 +86,14 @@ pass. `--hold-seconds` defaults to 5; it samples at the start and every second
 through the end. Missing or duplicate clients, a spectator/dead client, missing
 class/weapon, script errors in the console log, and a nonzero exit all fail.
 
+Add `--cycles 2 --timeout 90` to retain the same bots through two sequences of
+`map_restart`, `map mp_shipment`, and `map_rotate` back to the requested map.
+The timeout applies separately to each stage. Each map must report the original
+entity/name pairs and default authentication settings, followed by a full hold.
+Only the initial stage admits bots; replacements cannot hide losses. The fixture
+restores its recorded bots' stock marker before the original connect callback.
+This is isolated fixture continuity evidence, not proof of remote client identity.
+
 It uses a fresh temporary home/mod, symlinks installed assets read-only, binds
 an ephemeral `127.0.0.1` port and never edits the game installation. The fixture
 overrides registered `dm.gsc` and delegates initialization to stock `war::main`;

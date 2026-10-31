@@ -33,7 +33,12 @@ and submits normal team/class menu responses. It never sets sessionstate or
 calls spawn directly. Repeated hold samples require the same healthy, playing
 clients with the selected team, class and a weapon, followed by clean shutdown.
 
-NOT implemented or claimed: kill, drop, refill, map_restart, map change,
+With --cycles, the same admitted entity/name pairs are checked after repeated
+map_restart, map mp_shipment and map_rotate transitions. No replacements are
+admitted. A fixture connect callback restores the stock isBot script flag only
+for those exact pairs, before the normal callback checks retail class stats.
+
+NOT implemented or claimed: kill, drop, refill,
 client-side/snapshot decoding, retail/Steam compatibility, and AI.
 
 Usage:
@@ -130,6 +135,113 @@ def free_port() -> int:
         return probe.getsockname()[1]
 
 
+def transition_plan(map_name: str, cycles: int) -> list:
+    return [(None, map_name)] + [stage for _ in range(cycles) for stage in
+                               [("map_restart", map_name), ("map mp_shipment", "mp_shipment"),
+                                ("map_rotate", map_name)]]
+
+
+def transition_fixture() -> str:
+    """Keep the single-map fixture intact; add persistent, exact identities."""
+    fixture = FIXTURE_GSC.replace('    maps\\mp\\gametypes\\war::main();', '''    maps\\mp\\gametypes\\war::main();
+    level.botTestOriginalConnect = level.callbackPlayerConnect;
+    level.callbackPlayerConnect = ::botTest_RestoreConnecting;''')
+    fixture += '''
+botTest_RestoreConnecting()
+{
+    if (getdvarint("botTest_stage") > 0)
+    {
+        for (i = 0; i < {bots}; i++)
+        {
+            if (self getentitynumber() == getdvarint("botTest_entity_" + i)
+                && self.name == getdvar("botTest_name_" + i))
+                self.pers["isBot"] = true;
+        }
+    }
+    [[level.botTestOriginalConnect]]();
+}
+'''
+    fixture = fixture.replace('    wait 1;\n', '''    wait 1;
+    stage = getdvarint("botTest_stage");
+    botTest_Log("BOTFEATURE stage=" + stage + " map=" + getdvar("mapname"));
+''', 1)
+    start = fixture.index('    for (i = 0; i < {bots}; i++)')
+    end = fixture.index('    botTest_Log("BOTFEATURE count=', start)
+    create = fixture[start:end].replace('        level.botTestBots[i] = bot;', '''        level.botTestBots[i] = bot;
+        setdvar("botTest_entity_" + i, bot getentitynumber());
+        setdvar("botTest_name_" + i, bot.name);
+        botTest_Log("BOTFEATURE identity entity=" + bot getentitynumber() + " name=" + bot.name);''')
+    retained = '''    else
+    {
+        players = getentarray("player", "classname");
+        for (i = 0; i < {bots}; i++)
+        {
+            found = false;
+            for (j = 0; j < players.size; j++)
+            {
+                b = players[j];
+                if (b getentitynumber() == getdvarint("botTest_entity_" + i)
+                    && b.name == getdvar("botTest_name_" + i))
+                {
+                    // Restore the stock script marker only for the exact
+                    // internal client admitted by this fixture at stage zero.
+                    b.pers["isBot"] = true;
+                    level.botTestBots[level.botTestBots.size] = b;
+                    botTest_Log("BOTFEATURE retained entity=" + b getentitynumber());
+                    botTest_Log("BOTFEATURE identity entity=" + b getentitynumber() + " name=" + b.name);
+                    found = true;
+                }
+            }
+            if (!found)
+                botTest_Log("BOTFEATURE identity=missing index=" + i);
+        }
+    }
+'''
+    return fixture[:start] + '    if (stage == 0)\n    {\n' + create + '    }\n' + retained + fixture[end:]
+
+
+def validate_transitions(log_text: str, bots: int, hold_seconds: int,
+                         map_name: str, cycles: int) -> list:
+    """Require every planned stage once, with no re-admissions or identities lost."""
+    markers = list(re.finditer(r"BOTFEATURE stage=(\d+) map=(\S+)\s*$", log_text, re.M))
+    plan = transition_plan(map_name, cycles)
+    checks = [(len(markers) == len(plan), "exactly the planned transition stages occurred")]
+    initial = None
+    for index, (_, expected_map) in enumerate(plan):
+        if index >= len(markers):
+            checks.append((False, f"stage {index} exists"))
+            continue
+        marker = markers[index]
+        segment = log_text[marker.end():markers[index + 1].start() if index + 1 < len(markers) else len(log_text)]
+        label = f"stage {index} ({expected_map})"
+        checks.append((marker.group(1) == str(index) and marker.group(2) == expected_map,
+                       f"{label}: stage number and map match"))
+        identities = re.findall(r"BOTFEATURE identity entity=(\d+) name=(\S+)\s*$", segment, re.M)
+        distinct = len(identities) == bots and len(set(identities)) == bots
+        distinct = distinct and len({pair[0] for pair in identities}) == bots
+        if index == 0:
+            initial = set(identities)
+        checks.append((distinct and set(identities) == initial, f"{label}: original entity/name identities retained"))
+        checks.append((segment.count("BOTFEATURE auth_loopback=") == 1 and
+                       len(re.findall(r"BOTFEATURE auth_loopback=0 auth_unverified=0\s*$", segment, re.M)) == 1,
+                       f"{label}: authentication defaults retained"))
+        checks.append((len(re.findall(r"BOTFEATURE hold=done\s*$", segment, re.M)) == 1,
+                       f"{label}: hold completed once"))
+        admissions = re.findall(r"BOTFEATURE spawned entity=(\d+)\s*$", segment, re.M)
+        retained_ids = re.findall(r"BOTFEATURE retained entity=(\d+)\s*$", segment, re.M)
+        expected_ids = {pair[0] for pair in identities}
+        observed = admissions if index == 0 else retained_ids
+        checks.append((len(observed) == bots and set(observed) == expected_ids and
+                       not (retained_ids if index == 0 else admissions),
+                       f"{label}: initial admission only, no replacement clients"))
+        checks.append(("BOTFEATURE identity=missing" not in segment and
+                       "BOTFEATURE spawn=failed" not in segment and "BOTFEATURE held missing=" not in segment,
+                       f"{label}: no missing fixture clients"))
+        hold_log = segment.replace("BOTFEATURE retained entity=", "BOTFEATURE spawned entity=")
+        checks.extend((ok, f"{label}: {message}") for ok, message in validate_hold(hold_log, bots, hold_seconds))
+    return checks
+
+
 def read_text(path: Path) -> str:
     try:
         return path.read_text(errors="replace")
@@ -165,8 +277,10 @@ def main() -> int:
                         help="dedicated binary built from this tree (never the running bin/)")
     parser.add_argument("--bots", type=int, default=3)
     parser.add_argument("--map", dest="map_name", default="mp_crash")
-    parser.add_argument("--timeout", type=int, default=45, help="seconds to reach the final marker")
+    parser.add_argument("--timeout", type=int, default=45, help="seconds per stage to reach its hold marker")
     parser.add_argument("--hold-seconds", type=int, default=5)
+    parser.add_argument("--cycles", type=int, default=0,
+                        help="repeat restart, Shipment, rotation with retained bots (default: single map)")
     parser.add_argument("--keep", action="store_true", help="keep the temporary tree")
     args = parser.parse_args()
 
@@ -174,6 +288,10 @@ def main() -> int:
         parser.error("--hold-seconds must be positive")
     if args.timeout <= 0:
         parser.error("--timeout must be positive")
+    if args.cycles < 0:
+        parser.error("--cycles must be nonnegative")
+    if not re.fullmatch(r"mp_[a-z0-9_]+", args.map_name):
+        parser.error("--map must be a stock-style mp_ map name")
     if not 1 <= args.bots <= 8:
         parser.error("--bots must be between 1 and 8")
     game = args.game_dir.expanduser().resolve()
@@ -197,7 +315,8 @@ def main() -> int:
         scripts = mod / "maps" / "mp" / "gametypes"
         scripts.mkdir(parents=True)
         (scripts / "dm.gsc").write_text(
-            FIXTURE_GSC.replace("{bots}", str(args.bots)).replace("{team}", "allies")
+            (transition_fixture() if args.cycles else FIXTURE_GSC)
+            .replace("{bots}", str(args.bots)).replace("{team}", "allies")
             .replace("{hold_seconds}", str(args.hold_seconds))
         )
 
@@ -217,6 +336,9 @@ def main() -> int:
             "+set", "g_logSync", "1",
             "+map", args.map_name,
         ]
+        if args.cycles:
+            command[-2:-2] = ["+set", "botTest_stage", "0", "+set", "sv_mapRotation",
+                              f"gametype dm map {args.map_name}"]
         print(f"+ {binary}")
         print(f"+ 127.0.0.1:{port} map={args.map_name} gametype=dm(fixture) bots={args.bots}")
         print(f"+ isolated tree {work}")
@@ -234,15 +356,49 @@ def main() -> int:
             return 1
 
         marker_seen = False
+        stage_failure = ""
         try:
-            deadline = started + args.timeout
-            while time.monotonic() < deadline:
-                if process.poll() is not None:
+            plan = transition_plan(args.map_name, args.cycles)
+            for stage, (transition, expected_map) in enumerate(plan):
+                if transition:
+                    try:
+                        process.stdin.write(f"set botTest_stage {stage}\n{transition}\n".encode("ascii"))
+                        process.stdin.flush()
+                    except (BrokenPipeError, OSError) as error:
+                        stage_failure = f"stage {stage} command failed: {error}"
+                        break
+                deadline = time.monotonic() + args.timeout
+                reached = False
+                while time.monotonic() < deadline:
+                    if process.poll() is not None:
+                        break
+                    select.select([], [], [], 0.1)
+                    log = read_text(game_log)
+                    if args.cycles:
+                        marker = f"BOTFEATURE stage={stage} map={expected_map}"
+                        segment = log.split(marker, 1)[1] if marker in log else ""
+                    else:
+                        segment = log
+                    if "BOTFEATURE hold=done" in segment:
+                        reached = True
+                        break
+                if not reached:
+                    stage_failure = f"stage {stage} ({expected_map}) did not complete within {args.timeout}s"
                     break
-                # select() only waits for the marker source; the deadline above
-                # stays authoritative, so a silent server still fails in time.
-                select.select([], [], [], 0.1)
-                if "BOTFEATURE hold=done" in read_text(game_log):
+                if args.cycles:
+                    # Validate this hold before allowing another map to hide
+                    # missing or malformed samples. Full identity/auth/stage
+                    # validation follows after shutdown.
+                    segments = list(re.finditer(r"BOTFEATURE stage=\d+ map=\S+\s*$", log, re.M))
+                    if not segments or len(segments) != stage + 1:
+                        stage_failure = f"stage {stage}: duplicate or missing stage markers"
+                        break
+                    stage_log = log[segments[-1].end():].replace("BOTFEATURE retained entity=", "BOTFEATURE spawned entity=")
+                    if not all(ok for ok, _ in validate_hold(stage_log, args.bots, args.hold_seconds)):
+                        stage_failure = f"stage {stage}: invalid hold evidence"
+                        break
+                    print(f"PASS: live stage {stage} map={expected_map} hold reached", flush=True)
+                if stage == len(plan) - 1:
                     marker_seen = True
                     break
             if marker_seen:
@@ -291,7 +447,7 @@ def main() -> int:
         auth_lines = [line for line in log_text.splitlines() if "BOTFEATURE auth_loopback=" in line]
 
         checks = [
-            (marker_seen, f"fixture reached its final marker within {args.timeout}s"),
+            (marker_seen, f"fixture completed with a {args.timeout}s budget per stage"),
             (any("auth_loopback=0" in line and "auth_unverified=0" in line for line in auth_lines),
              "in-game dvars confirm default authentication (loopbackTestAuth 0, unverifiedGuids 0)"),
             ("is not a valid gametype" not in combined, "gametype dm is accepted as registered"),
@@ -299,7 +455,8 @@ def main() -> int:
             (len(spawned) == args.bots, f"{args.bots} test client(s) admitted (got {len(spawned)})"),
             (len(set(spawned)) == args.bots and len(spawned) == args.bots,
              "each admitted client has a distinct entity number"),
-            *validate_hold(log_text, args.bots, args.hold_seconds),
+            *(validate_transitions(log_text, args.bots, args.hold_seconds, args.map_name, args.cycles)
+              if args.cycles else validate_hold(log_text, args.bots, args.hold_seconds)),
             (len(spawned) == args.bots and (combined.count("Gamestate has") >= len(spawned) or
              combined.count("Going from CS_FREE to CS_CONNECTED for bot") >= len(spawned)),
              "the server sent gamestates / connected each bot"),
@@ -317,13 +474,17 @@ def main() -> int:
         ]
         for ok, message in checks:
             print(f"{'PASS' if ok else 'FAIL'}: {message}")
+        if stage_failure:
+            print(f"FAIL: {stage_failure}")
         print(f"\ncompleted in {elapsed:.1f}s on isolated port {port}")
-        print("NOT verified: kill, drop, refill, map_restart, map change under bots, "
+        print("NOT verified: kill, drop, refill, " +
+              ("map_restart, map change under bots, " if not args.cycles else "") +
               "client-side decode, retail/Steam compatibility, AI.")
 
         if all(ok for ok, _ in checks):
             success = True
-            print("\nBounded live test-client check passed (admit + hold + clean quit).")
+            print("\nBounded live test-client check passed (admit + hold + " +
+                  (f"{args.cycles} transition cycle(s) + " if args.cycles else "") + "clean quit).")
         else:
             print("\nEngine output (tail):\n" + combined[-5000:])
     finally:
