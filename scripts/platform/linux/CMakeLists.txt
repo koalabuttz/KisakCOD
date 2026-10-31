@@ -200,3 +200,42 @@ if(KISAK_BUILD_LINUX_CLIENT_CORE)
         target_link_options(${client_test} PRIVATE -Wl,--gc-sections)
     endforeach()
 endif()
+
+# Optional SDL2 window/input host. Never fetch or require SDL for dedicated/core builds.
+if(KISAK_BUILD_LINUX_WINDOW_HOST)
+    find_package(SDL2 2.0.18 CONFIG REQUIRED)
+    add_library(KisakCOD-window-platform STATIC
+        "${SRC_DIR}/linux/client/window/window_host.cpp"
+        "${SRC_DIR}/linux/client/window/engine_input.cpp"
+    )
+    set(KISAK_WINDOW_HOST_SERVICES
+        "${SRC_DIR}/linux/client/window/window_services.cpp"
+        "${SRC_DIR}/linux/sys_events.cpp"
+        "${SRC_DIR}/linux/sys_critical.cpp"
+        "${SRC_DIR}/linux/sys_posix.cpp"
+    )
+    add_executable(KisakCOD-client-window
+        "${SRC_DIR}/linux/client/window/window_main.cpp"
+        ${KISAK_WINDOW_HOST_SERVICES}
+    )
+    add_executable(KisakCOD-window-test
+        "${TESTS_DIR}/linux_window/window_test.cpp"
+        ${KISAK_WINDOW_HOST_SERVICES}
+    )
+    foreach(window_target KisakCOD-window-platform KisakCOD-client-window KisakCOD-window-test)
+        target_compile_features(${window_target} PRIVATE cxx_std_20)
+        target_compile_definitions(${window_target} PRIVATE
+            KISAK_MP KISAK_OPENAL RELEASE_ASSERTS _FILE_OFFSET_BITS=64 _GNU_SOURCE
+        )
+        target_include_directories(${window_target} PRIVATE "${SRC_DIR}" "${DEPS_DIR}" "${tracy_SOURCE_DIR}/public")
+        target_compile_options(${window_target} PRIVATE
+            -fms-extensions -msse2 -mfpmath=sse -fno-strict-aliasing
+            -ffunction-sections -fdata-sections
+            -Wno-c++11-narrowing -Wno-invalid-token-paste -Wno-ignored-attributes -Wno-format-security
+        )
+        target_link_libraries(${window_target} PRIVATE SDL2::SDL2 Threads::Threads)
+        target_link_options(${window_target} PRIVATE -Wl,--gc-sections)
+    endforeach()
+    target_link_libraries(KisakCOD-client-window PRIVATE KisakCOD-window-platform)
+    target_link_libraries(KisakCOD-window-test PRIVATE KisakCOD-window-platform)
+endif()

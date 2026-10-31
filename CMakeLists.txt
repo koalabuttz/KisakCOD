@@ -45,6 +45,10 @@ option(KISAK_OPENAL "Build the sound system against OpenAL instead of Miles/MSS"
 option(KISAK_BUILD_LINUX_CLIENT_CORE
     "Build the native Linux client network core (opt-in, discovery diagnostic only; no game client executable)" OFF)
 
+# Separate opt-in: installed SDL2 development files are required only here.
+option(KISAK_BUILD_LINUX_WINDOW_HOST
+    "Build the SDL2 Linux window/input shell and tests (no game renderer)" OFF)
+
 # Set the gloabl directory variables
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(DEPS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/deps)

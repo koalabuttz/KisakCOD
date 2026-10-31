@@ -1,0 +1,257 @@
+#!/usr/bin/env python3
+"""Opt-in OS-level test of the SDL window/input shell on a private Xvfb.
+
+Requires Xvfb, xdotool, and host libX11. Keys/buttons use synthetic XTest input
+sent through the X server by xdotool, not physical hardware input and not
+SDL_PushEvent. Motion/resize/focus use X requests; close uses WM_DELETE_WINDOW. This
+checks the software-surface shell and engine input queue boundary, not gameplay
+or the D3D renderer. No X access-control settings are changed.
+
+Pass --runner 'qemu-i386' when the client cannot execute directly. Configure any
+client libraries through that runner's environment (e.g. QEMU_SET_ENV), while
+--xdotool-library-path applies only to the host xdotool process.
+"""
+
+import argparse
+import ctypes
+import ctypes.util
+import os
+from pathlib import Path
+import re
+import select
+import shlex
+import subprocess
+import tempfile
+import time
+import uuid
+
+
+def read(path):
+    return path.read_text(errors="replace") if path.exists() else ""
+
+
+def wait_for(predicate, timeout, label, process=None):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        value = predicate()
+        if value:
+            return value
+        if process and process.poll() is not None:
+            raise RuntimeError(f"{label}: client exited early ({process.returncode})")
+        select.select([], [], [], 0.025)
+    raise RuntimeError(f"{label}: timed out after {timeout}s")
+
+
+def request_window_close(display, window):
+    """Send the same X11 protocol message a window manager's close button uses."""
+    class Data(ctypes.Union):
+        _fields_ = [("b", ctypes.c_char * 20), ("s", ctypes.c_short * 10),
+                    ("l", ctypes.c_long * 5)]
+
+    class Message(ctypes.Structure):
+        _fields_ = [("type", ctypes.c_int), ("serial", ctypes.c_ulong),
+                    ("send_event", ctypes.c_int), ("display", ctypes.c_void_p),
+                    ("window", ctypes.c_ulong), ("message_type", ctypes.c_ulong),
+                    ("format", ctypes.c_int), ("data", Data)]
+
+    class Event(ctypes.Union):
+        _fields_ = [("message", Message), ("pad", ctypes.c_long * 24)]
+
+    library = ctypes.util.find_library("X11")
+    if not library:
+        raise RuntimeError("host libX11 is required for WM_DELETE_WINDOW")
+    x11 = ctypes.CDLL(library)
+    x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
+    x11.XOpenDisplay.restype = ctypes.c_void_p
+    x11.XInternAtom.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int]
+    x11.XInternAtom.restype = ctypes.c_ulong
+    x11.XSendEvent.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int,
+                              ctypes.c_long, ctypes.POINTER(Event)]
+    x11.XSync.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
+    connection = x11.XOpenDisplay(display.encode())
+    if not connection:
+        raise RuntimeError("could not open the private X display for close request")
+    try:
+        event = Event()
+        event.message.type = 33  # ClientMessage
+        event.message.display = connection
+        event.message.window = window
+        event.message.message_type = x11.XInternAtom(connection, b"WM_PROTOCOLS", 0)
+        event.message.format = 32
+        event.message.data.l[0] = x11.XInternAtom(connection, b"WM_DELETE_WINDOW", 0)
+        if not x11.XSendEvent(connection, window, 0, 0, ctypes.byref(event)):
+            raise RuntimeError("XSendEvent rejected WM_DELETE_WINDOW")
+        x11.XSync(connection, 0)
+    finally:
+        x11.XCloseDisplay(connection)
+
+
+def stop(process):
+    if process and process.poll() is None:
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("binary", type=Path)
+    parser.add_argument("--runner", default="")
+    parser.add_argument("--xvfb", default="Xvfb")
+    parser.add_argument("--xdotool", default="xdotool")
+    parser.add_argument("--xdotool-library-path")
+    parser.add_argument("--relative", action="store_true", help="also verify OS relative-mouse capture lifecycle")
+    parser.add_argument("--log-dir", type=Path)
+    parser.add_argument("--timeout", type=float, default=10)
+    args = parser.parse_args()
+    if args.timeout <= 0 or not args.binary.is_file():
+        parser.error("provide an existing shell binary and a positive timeout")
+    logs = args.log_dir or Path(tempfile.mkdtemp(prefix="kisak-window-x11-"))
+    logs.mkdir(parents=True, exist_ok=True)
+    processes, streams = [], []
+    read_fd, write_fd = os.pipe()
+    try:
+        xvfb_log = (logs / "xvfb.log").open("w")
+        streams.append(xvfb_log)
+        xvfb = subprocess.Popen([args.xvfb, "-displayfd", str(write_fd), "-screen", "0",
+                                 "800x600x24", "-nolisten", "tcp"],
+                                pass_fds=(write_fd,), stdout=xvfb_log, stderr=subprocess.STDOUT)
+        processes.append(xvfb)
+        os.close(write_fd)
+        write_fd = None
+        if not select.select([read_fd], [], [], args.timeout)[0]:
+            raise RuntimeError("private Xvfb did not publish its display number")
+        number = os.read(read_fd, 64).decode().strip()
+        if not number.isdecimal():
+            raise RuntimeError(f"invalid Xvfb display response: {number!r}")
+        display = ":" + number
+        env = dict(os.environ, DISPLAY=display, SDL_VIDEODRIVER="x11")
+        tool_env = dict(env)
+        if args.xdotool_library_path:
+            tool_env["LD_LIBRARY_PATH"] = args.xdotool_library_path
+
+        def xdo(*command, check=True):
+            result = subprocess.run([args.xdotool, *map(str, command)], env=tool_env,
+                                    capture_output=True, text=True, timeout=args.timeout)
+            if check and result.returncode:
+                raise RuntimeError(f"xdotool {' '.join(map(str, command))}: {result.stderr.strip()}")
+            return result
+
+        def launch(name):
+            title = "KisakWindowTest-" + name + "-" + uuid.uuid4().hex
+            path = logs / (name + ".log")
+            stream = path.open("w")
+            streams.append(stream)
+            process = subprocess.Popen(shlex.split(args.runner) + [str(args.binary.resolve()),
+                                       "--run-ms", "60000", "--trace", "--title", title] +
+                                       (["--relative"] if args.relative and name == "main" else []),
+                                       env=env, stdout=stream, stderr=subprocess.STDOUT)
+            processes.append(process)
+            wait_for(lambda: "window=created driver=x11" in read(path) and
+                     re.search(r"window=ready .*driver=x11", read(path)), args.timeout,
+                     name + " X11 software-surface readiness", process)
+            ids = wait_for(lambda: xdo("search", "--onlyvisible", "--name", "^" + title + "$",
+                                      check=False).stdout.split(), args.timeout, name + " X11 window", process)
+            if len(ids) != 1:
+                raise RuntimeError(f"{name}: expected exactly one matching window, found {ids}")
+            return process, int(ids[0]), path
+
+        client, window, trace = launch("main")
+        peer, peer_window, peer_trace = launch("focus-peer")
+        print(f"Private X11 display {display}; main window {window}; focus peer {peer_window}", flush=True)
+        xdo("windowmove", peer_window, 650, 450)
+        xdo("windowmove", window, 10, 10)
+        xdo("windowraise", window)
+        xdo("windowfocus", "--sync", window)
+        if args.relative:
+            wait_for(lambda: "relative requested=1 active=1 error=\n" in read(trace),
+                     args.timeout, "relative capture enabled", client)
+        xdo("windowsize", "--sync", window, 640, 360)
+        wait_for(lambda: "resize 640 360\n" in read(trace), args.timeout, "OS resize", client)
+        print("PASS: real X11 window and resize", flush=True)
+
+        offset = len(read(trace))
+        xdo("key", "a")
+        wait_for(lambda: all(line in read(trace)[offset:] for line in
+                            ("key=97 down=1\n", "key=97 down=0\n", "character=97\n")),
+                 args.timeout, "XTest key/text through engine queue", client)
+        print("PASS: XTest keyboard and SDL text through engine queue", flush=True)
+
+        offset = len(read(trace))
+        if args.relative:
+            xdo("mousemove_relative", "--", 15, 9)
+        else:
+            xdo("mousemove", "--window", window, 100, 80)
+        xdo("click", 1)
+        xdo("click", 4)
+        wait_for(lambda: all(line in read(trace)[offset:] for line in
+                            ("key=200 down=1\n", "key=200 down=0\n",
+                             "key=206 down=1\n", "key=206 down=0\n")),
+                 args.timeout, "OS pointer/button/wheel dispatch", client)
+        if args.relative:
+            wait_for(lambda: any(int(dx) or int(dy) for dx, dy in
+                                 re.findall(r"mouse x=-?\d+ y=-?\d+ dx=(-?\d+) dy=(-?\d+)", read(trace)[offset:])),
+                     args.timeout, "relative pointer movement", client)
+        else:
+            wait_for(lambda: "mouse x=100 y=80 " in read(trace)[offset:], args.timeout, "absolute pointer movement", client)
+        print("PASS: X11 pointer motion and XTest button/wheel", flush=True)
+
+        offset = len(read(trace))
+        xdo("keydown", "w")
+        wait_for(lambda: "key=119 down=1\n" in read(trace)[offset:], args.timeout, "held key", client)
+        offset = len(read(trace))
+        xdo("windowfocus", "--sync", peer_window)
+        wait_for(lambda: "focus lost\n" in read(trace)[offset:] and "input=reset\n" in read(trace)[offset:],
+                 args.timeout, "focus loss resets held input", client)
+        if args.relative:
+            wait_for(lambda: "relative requested=1 active=0 error=\n" in read(trace)[offset:],
+                     args.timeout, "blur releases relative capture", client)
+        xdo("keyup", "w")
+        offset = len(read(trace))
+        xdo("windowfocus", "--sync", window)
+        wait_for(lambda: "focus gained\n" in read(trace)[offset:], args.timeout, "focus regained", client)
+        if args.relative:
+            wait_for(lambda: "relative requested=1 active=1 error=\n" in read(trace)[offset:],
+                     args.timeout, "focus restores requested capture", client)
+        xdo("key", "w")
+        wait_for(lambda: "key=119 down=1\n" in read(trace)[offset:] and "key=119 down=0\n" in read(trace)[offset:],
+                 args.timeout, "fresh press after focus loss", client)
+        print("PASS: real focus transfer clears held state and accepts a fresh press", flush=True)
+
+        offset = len(read(trace))
+        request_window_close(display, window)
+        if client.wait(timeout=args.timeout) != 0:
+            raise RuntimeError("main shell did not close cleanly")
+        summary = read(trace)
+        if "window=closing\n" not in summary or not re.search(r"window=closed .* held=0 .* game=false", summary):
+            raise RuntimeError("main shell lacks explicit close and empty-held-state evidence")
+        if args.relative:
+            if "relative requested=1 active=0 error=\n" not in summary[offset:]:
+                raise RuntimeError("close did not release relative capture")
+            print("PASS: relative capture active, released on blur, restored on focus, released on close", flush=True)
+        request_window_close(display, peer_window)
+        if peer.wait(timeout=args.timeout) != 0 or "window=closed " not in read(peer_trace):
+            raise RuntimeError("focus peer did not close cleanly")
+        print("PASS: WM_DELETE_WINDOW through X11, clean process exit, held=0", flush=True)
+        print("Verified software window/input shell only; no game renderer or gameplay.", flush=True)
+        return 0
+    except (OSError, RuntimeError, subprocess.SubprocessError) as error:
+        print(f"FAIL: {error}", flush=True)
+        return 1
+    finally:
+        for process in reversed(processes):
+            stop(process)
+        for stream in streams:
+            stream.close()
+        os.close(read_fd)
+        if write_fd is not None:
+            os.close(write_fd)
+        print(f"Evidence: {logs}", flush=True)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

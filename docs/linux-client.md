@@ -4,13 +4,13 @@
 
 There is **no playable native Linux client**. The opt-in foundation now includes
 eight full production client translation units, asset-free runtime integration tests,
-and a runnable Linux discovery diagnostic. The diagnostic starts real UDP/event
+a runnable Linux discovery diagnostic, and an independently opt-in SDL2 window/input shell. The diagnostic starts real UDP/event
 handling and sends read-only `getinfo`; it explicitly reports `connected=false`
 and unavailable Linux authentication. It does not initialize `CL_Frame`, load game
 assets, authenticate, or join a server.
 
 The default native Linux build is still the dedicated multiplayer server. This
-work changes nothing about it.
+window option adds no SDL dependency to it. The shared event queue is extracted without changing its normal overflow or console-polling behavior.
 
 ## What the milestone builds
 
@@ -235,9 +235,9 @@ fingerprint is checked even when a client build fails.
 
 Compiling eight client TUs is not a client. In rough order of weight:
 
-1. **Win32 windowing, input and startup.** The client startup path, window
-   creation, and input handling are Win32. Startup also goes through
-   Steam-error handling that has no Linux equivalent yet.
+1. **Engine startup integration.** A real SDL2 window/input host now exists, but
+   its shell does not drive `CL_Frame`, client key/UI consumption, or game startup.
+   Steam-error handling still has no supported Linux authentication provider.
 2. **D3D9 renderer.** The rendering path makes real D3D9 calls. This is not a
    stub-shaped problem.
 3. **Renderer backend choice** — out of scope for this milestone. Nothing here
@@ -252,7 +252,8 @@ tests while integrating that host.
 
 ## Relationship to the dedicated build
 
-- `KisakCOD-dedi` and its source lists are untouched.
+- `KisakCOD-dedi` retains its normal source selection; shared event-queue code is
+  now in `sys_events.cpp`, with console polling still in `main.cpp`.
 - With `KISAK_BUILD_LINUX_CLIENT_CORE=OFF` (the default) the targets do not
   exist at all — verified by the checker against `cmake --build --target help`.
 - The Windows build path is not touched.
@@ -297,3 +298,57 @@ services are explicit diagnostic adapters. The real receive/resend lifecycle run
 in a separate fixture with controlled game/transport services, not inside the
 runnable discovery path. See the [lifecycle checkpoint](progress-2026-10-31-client-lifecycle.md)
 for confirmed bugs, valid-wire coverage, render-thread work and remaining boundaries.
+
+
+## Runnable SDL2 window/input shell
+
+`KISAK_BUILD_LINUX_WINDOW_HOST=ON` independently adds `KisakCOD-window-platform`,
+`KisakCOD-client-window`, and `KisakCOD-window-test`. It defaults OFF and needs
+SDL2 >=2.0.18 development files and runtime matching the project's 32-bit build.
+The client-core option does not imply this option or require SDL.
+
+```sh
+cmake -S . -B build-linux/window \
+    -DKISAK_PLATFORM=linux -DCMAKE_BUILD_TYPE=Debug \
+    -DKISAK_BUILD_LINUX_WINDOW_HOST=ON \
+    -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+    -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$PWD/build-linux/window/bin"
+cmake --build build-linux/window --target KisakCOD-client-window KisakCOD-window-test -j4
+./build-linux/window/bin/KisakCOD-client-window --trace --run-ms 10000
+SDL_VIDEODRIVER=dummy ./build-linux/window/bin/KisakCOD-window-test
+python3 scripts/tests/test_linux_window.py --build-dir build-linux/window
+```
+
+Set `SDL2_DIR` to the matching SDK's `lib/.../cmake/SDL2` directory if CMake cannot
+find it. Keep `-m32` if overriding toolchain flags. Repeat with a separate
+RelWithDebInfo build directory. The checker defaults to SDL's dummy driver;
+`scripts/tests/test_linux_window_x11.py --help` describes the separate private
+Xvfb/XTest integration test and its optional `--relative` capture checks.
+
+The shell presents a plain SDL window surface, exits on close or Escape, and
+supports `--frames`, `--run-ms`, `--title`, `--trace`, and `--relative`. Capture
+failure is reported honestly; focus loss releases capture and focus gain restores
+the requested mode. `window=ready` is emitted after the first successful surface
+presentation, when the native window is ready for external automation. The shell
+requests software framebuffer presentation; it initializes no game renderer.
+
+The host translates SDL events through real `Sys_QueEvent` and shared engine
+locking. Its consumer is an explicit reporting recorder, not `CL_KeyEvent`,
+`CL_CharEvent`, or `CL_Frame`. The mouse callback has the actual `CL_MouseEvent`
+signature; the mandatory reset callback has the `Key_ClearStates` signature.
+A future game host must supply those consumers and drive the engine lifecycle.
+The discovery diagnostic and window shell are still separate programs.
+
+Focus loss, minimize and shutdown discard queued key/text events, preserve queued
+console payload ownership/order, and reset consumer input state. This recovers
+from a key-up lost to the existing 256-event ring overflow. Timestamps are
+calibrated from SDL's clock into engine milliseconds, including wraparound.
+Physical modifier keys sharing an engine binding retain independent held state.
+Text input validates UTF-8 and emits printable Latin-1 for the existing byte-based
+engine field API; other Unicode scalars are counted and rejected, not truncated.
+One host owns SDL's process-wide event queue; callbacks must not throw and their
+sink must outlive the host.
+
+See [the window checkpoint](progress-2026-10-31-client-window.md) for the measured
+SDL, X11, dedicated-build and integration limits. These tests do not establish
+hardware input, GPU rendering, authenticated joining, or native gameplay.

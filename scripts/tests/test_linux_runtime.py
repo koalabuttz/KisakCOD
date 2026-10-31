@@ -225,7 +225,7 @@ def check_translation_units(compiler="clang++"):
     flags, _ = project_compile_flags()
 
     clean = []
-    for source in ("sys_posix.cpp", "sys_console.cpp", "sys_files.cpp", "sys_threads.cpp", "main.cpp"):
+    for source in ("sys_posix.cpp", "sys_console.cpp", "sys_files.cpp", "sys_threads.cpp", "sys_events.cpp", "main.cpp"):
         completed = run(
             [compiler, *flags, "-fsyntax-only", str(LINUX_SRC / source)],
             stdout=subprocess.PIPE,
