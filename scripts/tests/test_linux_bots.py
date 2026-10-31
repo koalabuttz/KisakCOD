@@ -28,16 +28,13 @@ Markers use ``logprint`` (builtin flag 0), which reaches ``games_mp.log`` even
 with ``developer 0``; ``println`` is developer-gated (flag 1) and was silently
 discarded, which is why earlier runs showed live bots but no markers.
 
-This is a diagnostic probe, not a currently passing gameplay regression. It
-requires bots to remain valid, playing and healthy through the hold, and asks
-the server to quit cleanly. The observed stock-script fixture admits three bots
-but kicks them before the hold completes, so those checks deliberately fail.
+The fixture marks internal clients with the stock scripts' pers["isBot"] field
+and submits normal team/class menu responses. It never sets sessionstate or
+calls spawn directly. Repeated hold samples require the same healthy, playing
+clients with the selected team, class and a weapon, followed by clean shutdown.
 
 NOT implemented or claimed: kill, drop, refill, map_restart, map change,
-client-side/snapshot decoding, retail/Steam compatibility, class/loadout
-selection, and any AI. ``SV_BotUserMove`` presses random buttons and neither
-navigates nor aims. The fixture prefers available map spawn points, but does not
-execute stock team/class spawn selection.
+client-side/snapshot decoding, retail/Steam compatibility, and AI.
 
 Usage:
     python3 scripts/tests/test_linux_bots.py "/path/to/Call of Duty 4" \
@@ -45,6 +42,7 @@ Usage:
 """
 
 import argparse
+import re
 from pathlib import Path
 import select
 import shutil
@@ -77,8 +75,6 @@ botTest_Watch()
     botTest_Log("BOTFEATURE auth_loopback=" + getdvar("sv_loopbackTestAuth")
                 + " auth_unverified=" + getdvar("sv_allowUnverifiedGuids"));
     level.botTestBots = [];
-    spawns = getentarray("mp_tdm_spawn", "classname");
-    botTest_Log("BOTFEATURE spawnpoints=" + spawns.size);
     for (i = 0; i < {bots}; i++)
     {
         bot = addtestclient();
@@ -87,36 +83,41 @@ botTest_Watch()
             botTest_Log("BOTFEATURE spawn=failed index=" + i);
             continue;
         }
-        bot.sessionteam = "{team}";
-        bot.sessionstate = "playing";
-        // Prefer a real map spawn point over the raw origin: spawning inside
-        // geometry kills the bot and frees its entity reference.
-        if (isdefined(spawns) && spawns.size > 0)
-        {
-            sp = spawns[i % spawns.size];
-            bot spawn(sp.origin, sp.angles);
-        }
-        else
-        {
-            bot spawn(bot.origin, bot.angles);
-        }
+        // Stock scripts explicitly recognize this field for internal test
+        // clients, which have no persisted retail class-stat payload.
+        bot.pers["isBot"] = true;
         level.botTestBots[i] = bot;
         botTest_Log("BOTFEATURE spawned entity=" + bot getentitynumber());
     }
     botTest_Log("BOTFEATURE count=" + level.botTestBots.size);
-    wait 3;
+    // Let the normal connection callbacks finish before sending menu events.
+    wait 2;
     for (i = 0; i < level.botTestBots.size; i++)
+        level.botTestBots[i] notify("menuresponse", game["menu_team"], "{team}");
+    wait 0.5;
+    for (i = 0; i < level.botTestBots.size; i++)
+        level.botTestBots[i] notify("menuresponse", game["menu_changeclass"], "assault_mp,0");
+    wait 3;
+    for (sample = 0; sample <= {hold_seconds}; sample++)
     {
-        b = level.botTestBots[i];
-        if (isdefined(b))
+        for (i = 0; i < level.botTestBots.size; i++)
         {
-            botTest_Log("BOTFEATURE held entity=" + b getentitynumber()
-                        + " state=" + b.sessionstate + " health=" + b.health);
+            b = level.botTestBots[i];
+            if (isdefined(b))
+            {
+                botTest_Log("BOTFEATURE held entity=" + b getentitynumber()
+                            + " sample=" + sample + " state=" + b.sessionstate
+                            + " health=" + b.health + " team=" + b.sessionteam
+                            + " class=" + b.pers["class"]
+                            + " weapon=" + b getcurrentweapon());
+            }
+            else
+            {
+                botTest_Log("BOTFEATURE held missing=" + i + " sample=" + sample);
+            }
         }
-        else
-        {
-            botTest_Log("BOTFEATURE held missing=" + i);
-        }
+        if (sample < {hold_seconds})
+            wait 1;
     }
     botTest_Log("BOTFEATURE hold=done");
 }
@@ -136,6 +137,26 @@ def read_text(path: Path) -> str:
         return ""
 
 
+def validate_hold(log_text: str, bots: int, hold_seconds: int) -> list:
+    """Require an exact client set in every sample; duplicates cannot mask loss."""
+    spawned = re.findall(r"BOTFEATURE spawned entity=(\d+)\s*$", log_text, re.M)
+    rows = re.findall(r"BOTFEATURE held entity=(\d+) sample=(\d+) state=(\w+) "
+                      r"health=(-?\d+) team=(\w+) class=(\w+) weapon=(\S+)\s*$",
+                      log_text, re.M)
+    expected = set(spawned)
+    complete = len(spawned) == bots and len(expected) == bots
+    complete = complete and len(rows) == bots * (hold_seconds + 1)
+    for sample in range(hold_seconds + 1):
+        ids = [row[0] for row in rows if int(row[1]) == sample]
+        complete = complete and len(ids) == bots and set(ids) == expected
+    healthy = complete and all(row[2] == "playing" and int(row[3]) > 0 for row in rows)
+    loadout = complete and all(row[4] == "allies" and row[5] == "CLASS_ASSAULT"
+                              and row[6] not in ("none", "undefined") for row in rows)
+    return [(bool(complete), "the same distinct clients occur once in every hold sample"),
+            (bool(healthy), "every hold sample reports playing clients with positive health"),
+            (bool(loadout), "stock team/class flow equipped every client")]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -145,9 +166,12 @@ def main() -> int:
     parser.add_argument("--bots", type=int, default=3)
     parser.add_argument("--map", dest="map_name", default="mp_crash")
     parser.add_argument("--timeout", type=int, default=45, help="seconds to reach the final marker")
+    parser.add_argument("--hold-seconds", type=int, default=5)
     parser.add_argument("--keep", action="store_true", help="keep the temporary tree")
     args = parser.parse_args()
 
+    if args.hold_seconds < 1:
+        parser.error("--hold-seconds must be positive")
     if args.timeout <= 0:
         parser.error("--timeout must be positive")
     if not 1 <= args.bots <= 8:
@@ -174,6 +198,7 @@ def main() -> int:
         scripts.mkdir(parents=True)
         (scripts / "dm.gsc").write_text(
             FIXTURE_GSC.replace("{bots}", str(args.bots)).replace("{team}", "allies")
+            .replace("{hold_seconds}", str(args.hold_seconds))
         )
 
         port = free_port()
@@ -256,25 +281,13 @@ def main() -> int:
         elapsed = time.monotonic() - started
         output = read_text(stdout_path)
         log_text = read_text(game_log)
-        combined = output + "\n" + log_text
+        combined = output + "\n" + log_text + "\n" + read_text(mod / "console_mp.log")
 
         def marker_values(prefix: str) -> list:
             return [line.split(prefix, 1)[1].strip()
                     for line in log_text.splitlines() if prefix in line]
 
         spawned = marker_values("BOTFEATURE spawned entity=")
-        held = marker_values("BOTFEATURE held entity=")
-        held_ids = [entry.split(" ")[0] for entry in held]
-        held_playing = [e for e in held if "state=playing" in e]
-        held_healthy = []
-        for entry in held:
-            for token in entry.split():
-                if token.startswith("health="):
-                    try:
-                        if int(token.split("=", 1)[1]) > 0:
-                            held_healthy.append(entry)
-                    except ValueError:
-                        pass
         auth_lines = [line for line in log_text.splitlines() if "BOTFEATURE auth_loopback=" in line]
 
         checks = [
@@ -286,13 +299,9 @@ def main() -> int:
             (len(spawned) == args.bots, f"{args.bots} test client(s) admitted (got {len(spawned)})"),
             (len(set(spawned)) == args.bots and len(spawned) == args.bots,
              "each admitted client has a distinct entity number"),
-            (len(held_playing) == len(spawned) and len(spawned) > 0,
-             "each client is a live GSC object with sessionstate playing"),
-            (len(held_healthy) == len(spawned) and len(spawned) > 0,
-             "each client reports positive health at the end of the hold"),
-            (held_ids == spawned, "the same clients are present after the hold"),
-            (combined.count("Gamestate has") >= len(spawned) or
-             combined.count("Going from CS_FREE to CS_CONNECTED for bot") >= len(spawned),
+            *validate_hold(log_text, args.bots, args.hold_seconds),
+            (len(spawned) == args.bots and (combined.count("Gamestate has") >= len(spawned) or
+             combined.count("Going from CS_FREE to CS_CONNECTED for bot") >= len(spawned)),
              "the server sent gamestates / connected each bot"),
             (process.returncode == 0, f"clean exit (got {process.returncode})"),
             ("EXE_PLAYERKICKED" not in output.split("quitting...", 1)[0],
@@ -301,7 +310,8 @@ def main() -> int:
              "engine quit and game cleanup were recorded"),
             ("ASSERT FAILED" not in combined, "no assertion"),
             ("FATAL ERROR" not in combined, "no fatal error"),
-            ("Script error" not in combined and "script error" not in combined,
+            (not any(error in combined.lower() for error in
+                     ("script error", "script runtime error", "script compile error", "script exception")),
              "no GSC script error"),
             (game_log.is_file(), "game log written to the mod directory of the temp home"),
         ]
@@ -309,7 +319,7 @@ def main() -> int:
             print(f"{'PASS' if ok else 'FAIL'}: {message}")
         print(f"\ncompleted in {elapsed:.1f}s on isolated port {port}")
         print("NOT verified: kill, drop, refill, map_restart, map change under bots, "
-              "client-side decode, retail/Steam compatibility, class selection, AI.")
+              "client-side decode, retail/Steam compatibility, AI.")
 
         if all(ok for ok, _ in checks):
             success = True
