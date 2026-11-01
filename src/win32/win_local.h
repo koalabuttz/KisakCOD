@@ -305,7 +305,7 @@ enum CriticalSection : __int32
 
 #endif
 
-struct sysEvent_t // sizeof=0x18
+struct sysEvent_t // sizeof=0x18 on Windows, 0x20 on Linux
 {                                       // ...
 	int evTime;                         // ...
 	sysEventType_t evType;              // ...
@@ -313,6 +313,13 @@ struct sysEvent_t // sizeof=0x18
 	int evValue2;                       // ...
 	int evPtrLength;                    // ...
 	void *evPtr;                        // ...
+#ifndef _WIN32
+	// Linux only: SE_MOUSE keeps the absolute position in the same record as the
+	// relative delta, so one drained record describes one sample completely.
+	// Zero for every other event type, and absent from the Windows layout.
+	int evValue3;                       // absolute x
+	int evValue4;                       // absolute y
+#endif
 };
 
 struct FastCriticalSection

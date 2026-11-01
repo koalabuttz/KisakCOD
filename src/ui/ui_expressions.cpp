@@ -2552,53 +2552,7 @@ bool __cdecl IsOpAssociative(operationEnum op)
     return op < OP_DIVIDE || op > OP_MODULUS && op != OP_SUBTRACT;
 }
 
-int lastWarnTime;
-char *__cdecl GetExpressionResultString(int localClientNum, const statement_s *statement)
-{
-    static char resultString_2[256];
 
-    const char *v3; // eax
-    Operand result; // [esp+Ch] [ebp-Ch] BYREF
-    int len; // [esp+14h] [ebp-4h]
-
-    if (!EvaluateExpression(localClientNum, statement, &result))
-        return (char *)"";
-    len = 0;
-    if (result.dataType)
-    {
-        if (result.dataType == VAL_FLOAT)
-        {
-            len = Com_sprintf(resultString_2, 0x100u, "%f", result.internals.floatVal);
-        }
-        else
-        {
-            if (result.dataType != VAL_STRING)
-            {
-                if (!alwaysfails)
-                {
-                    v3 = va("Unknown result datatype of %i", result.dataType);
-                    MyAssertHandler(".\\ui\\ui_expressions.cpp", 2466, 0, v3);
-                }
-                return (char *)"";
-            }
-            len = Com_sprintf(resultString_2, 0x100u, "%s", result.internals.string);
-        }
-    }
-    else
-    {
-        len = Com_sprintf(resultString_2, 0x100u, "%i", result.internals.intVal);
-    }
-    if (len < 0 && (int)(Sys_Milliseconds() - lastWarnTime) > 5000)
-    {
-        lastWarnTime = Sys_Milliseconds();
-        Com_PrintWarning(
-            CON_CHANNEL_UI,
-            "Warning: Expression result string has been truncated, longer than %d characters: %s...\n",
-            256,
-            resultString_2);
-    }
-    return resultString_2;
-}
 
 const statement_s *g_releaseBuildStatement;
 Operand *__cdecl EvaluateExpression(int localClientNum, const statement_s *statement, Operand *result)

@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "r_rendercmds.h"
+#include "r_command_buffer.h"
 #include <qcommon/mem_track.h>
 #include <qcommon/threads.h>
 #include "rb_logfile.h"
@@ -408,13 +409,12 @@ void __cdecl R_BeginSharedCmdList()
 
 void __cdecl R_AddCmdEndOfList()
 {
-    R_GetCommandBuffer(RC_END_OF_LIST, 4);
+    R_EmitEndCommand(nullptr,[](void *,GfxRenderCommand id,int bytes) { return R_GetCommandBuffer(id,bytes); });
 }
 
 GfxCmdHeader *__cdecl R_GetCommandBuffer(GfxRenderCommand renderCmd, int bytes)
 {
     const char *v2; // eax
-    GfxCmdHeader *header; // [esp+8h] [ebp-8h]
     int sizeLimit; // [esp+Ch] [ebp-4h]
 
     if ((uint32_t)renderCmd >= RC_COUNT)
@@ -447,13 +447,7 @@ GfxCmdHeader *__cdecl R_GetCommandBuffer(GfxRenderCommand renderCmd, int bytes)
         sizeLimit -= 0x2000 - s_cmdList->usedCritical;
     if (bytes <= sizeLimit)
     {
-        header = (GfxCmdHeader *)&s_cmdList->cmds[s_cmdList->usedTotal];
-        s_cmdList->usedTotal += bytes;
-        s_cmdList->usedCritical += renderCmd >= RC_FIRST_NONCRITICAL ? 0 : bytes;
-        s_cmdList->lastCmd = header;
-        header->id = renderCmd;
-        header->byteCount = bytes;
-        return header;
+        return R_AppendCommand(*s_cmdList,s_renderCmdBufferSize,renderCmd,bytes);
     }
     else
     {
@@ -597,7 +591,6 @@ void __cdecl R_AddCmdDrawStretchPic(
     const char *Name; // eax
     Material *defaultMaterial; // [esp+0h] [ebp-1Ch]
     Material *actualMaterial; // [esp+14h] [ebp-8h]
-    GfxCmdStretchPic *cmd; // [esp+18h] [ebp-4h]
 
     if (material)
         defaultMaterial = (Material *)Material_FromHandle(material);
@@ -626,20 +619,9 @@ void __cdecl R_AddCmdDrawStretchPic(
         actualMaterial = rgp.defaultMaterial;
     }
     iassert( !Material_UsesDepthBuffer( actualMaterial ) );
-    cmd = (GfxCmdStretchPic *)R_GetCommandBuffer(RC_FIRST_NONCRITICAL, 44);
-    if (cmd)
-    {
-        cmd->material = actualMaterial;
-        cmd->x = x;
-        cmd->y = y;
-        cmd->w = w;
-        cmd->h = h;
-        cmd->s0 = s0;
-        cmd->t0 = t0;
-        cmd->s1 = s1;
-        cmd->t1 = t1;
-        R_ConvertColorToBytes(color, &cmd->color);
-    }
+    R_EmitStretchPicCommand(nullptr,[](void *,GfxRenderCommand id,int bytes) {
+        return R_GetCommandBuffer(id,bytes);
+    },x,y,w,h,s0,t0,s1,t1,color,actualMaterial);
 }
 
 bool __cdecl Material_HasAnyFogableTechnique(const Material *material)
@@ -851,50 +833,9 @@ GfxCmdDrawText2D *__cdecl AddBaseDrawTextCmd(
     int cursorPos,
     char cursor)
 {
-    uint32_t v13; // [esp+0h] [ebp-4Ch]
-    GfxCmdDrawText2D *cmd; // [esp+48h] [ebp-4h]
-
-    iassert( maxChars > 0 );
-    iassert( text );
-    if (!*text && cursorPos < 0)
-        return 0;
-    v13 = strlen(text);
-    cmd = (GfxCmdDrawText2D *)R_GetCommandBuffer(RC_DRAW_TEXT_2D, (v13 + 84) & 0xFFFFFFFC);
-    if (!cmd)
-        return 0;
-    cmd->x = x;
-    cmd->y = y;
-    cmd->rotation = rotation;
-    cmd->font = font;
-    cmd->xScale = xScale;
-    cmd->yScale = yScale;
-    R_ConvertColorToBytes(color, (uint32_t *)&cmd->color);
-    cmd->maxChars = maxChars;
-    cmd->renderFlags = 0;
-    switch (style)
-    {
-    case 3:
-        cmd->renderFlags |= 4u;
-        break;
-    case 6:
-        cmd->renderFlags |= 0xCu;
-        break;
-    case 128:
-        cmd->renderFlags |= 1u;
-        break;
-    }
-    if (cursorPos > -1)
-    {
-        cmd->renderFlags |= 2u;
-        cmd->cursorPos = cursorPos;
-        cmd->cursorLetter = cursor;
-    }
-    {
-        PROF_SCOPED("R_memcpy");
-        memcpy((uint8_t *)cmd->text, (uint8_t *)text, v13);
-    }
-    cmd->text[v13] = 0;
-    return cmd;
+    return R_EmitBaseTextCommand(nullptr,[](void *,GfxRenderCommand id,int bytes) {
+        return R_GetCommandBuffer(id,bytes);
+    },text,maxChars,font,x,y,xScale,yScale,rotation,color,style,cursorPos,cursor);
 }
 
 void __cdecl R_AddCmdDrawText(
@@ -1480,31 +1421,11 @@ void __cdecl R_EndFrame()
     }
 }
 
-void __cdecl R_AddCmdClearScreen(int whichToClear, const float *color, float depth, uint8_t stencil)
+void __cdecl R_AddCmdClearScreen(int whichToClear,const float *color,float depth,uint8_t stencil)
 {
-    GfxCmdClearScreen *cmd; // [esp+Ch] [ebp-4h]
-
-    iassert( whichToClear );
-    if ((whichToClear & 0xFFFFFFF8) != 0)
-        MyAssertHandler(
-            ".\\r_rendercmds.cpp",
-            2044,
-            0,
-            "%s\n\t(whichToClear) = %i",
-            "((whichToClear & ~(0x00000001l | 0x00000002l | 0x00000004l)) == 0)",
-            whichToClear);
-    iassert( color );
-    iassert( (depth >= 0.0f && depth <= 1.0f) );
-    cmd = (GfxCmdClearScreen *)R_GetCommandBuffer(RC_CLEAR_SCREEN, 28);
-    iassert( cmd );
-    cmd->whichToClear = whichToClear;
-    iassert( cmd->whichToClear == whichToClear );
-    cmd->stencil = stencil;
-    cmd->depth = depth;
-    cmd->color[0] = *color;
-    cmd->color[1] = color[1];
-    cmd->color[2] = color[2];
-    cmd->color[3] = color[3];
+    R_EmitClearScreenCommand(nullptr,[](void *,GfxRenderCommand id,int bytes) {
+        return R_GetCommandBuffer(id,bytes);
+    },whichToClear,color,depth,stencil);
 }
 
 void __cdecl R_AddCmdSaveScreen(uint32_t screenTimerId)
@@ -1763,21 +1684,9 @@ void __cdecl R_InitTempSkinBuf()
 
 void R_AddCmdSetViewportValues(int x, int y, int width, int height)
 {
-    GfxCmdHeader *cmd; // r30
-
-    iassert(width > 0);
-    iassert(height > 0);
-    
-    cmd = R_GetCommandBuffer(RC_SET_VIEWPORT, 20);
-
-    iassert(cmd);
-
-    _DWORD *writer = (_DWORD *)cmd; // hack
-
-    writer[1] = x;
-    writer[2] = y;
-    writer[3] = width;
-    writer[4] = height;
+    R_EmitSetViewportCommand(nullptr,[](void *,GfxRenderCommand id,int bytes) {
+        return R_GetCommandBuffer(id,bytes);
+    },x,y,width,height);
 }
 
 void __cdecl R_BeginDebugFrame()
@@ -2360,3 +2269,12 @@ void __cdecl R_AddCmdDraw2DImage(
     }
 }
 #endif // KISAK_RADIANT
+
+// Producer for the existing RB_StretchRawCmd format. The game caller owns RGBA
+// storage until backend consumption; the CPU host uses its own resource binding.
+void R_AddCmdStretchRaw(int x,int y,int width,int height,int columns,int rows,const uint8_t *rgba)
+{
+    R_EmitStretchRawCommand(nullptr,[](void *,GfxRenderCommand id,int bytes) {
+        return R_GetCommandBuffer(id,bytes);
+    },x,y,width,height,columns,rows,rgba);
+}

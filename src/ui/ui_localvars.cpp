@@ -183,9 +183,11 @@ void __cdecl UILocalVar_SetFloat(UILocalVar *var, float f)
 
 void __cdecl UILocalVar_SetString(UILocalVar *var, char *s)
 {
+    // Copy first: s may alias the existing value, and allocation may fail.
+    const char *replacement = CopyString(s);
     if (var->type == UILOCALVAR_STRING)
         FreeString(var->u.string);
+    var->u.string = replacement;
     var->type = UILOCALVAR_STRING;
-    var->u.integer = (int)CopyString(s);
 }
 

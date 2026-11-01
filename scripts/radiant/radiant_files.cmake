@@ -141,6 +141,7 @@ set(RADIANT_QCOMMON
 #   rb_logfile, rb_shadowcookie, rb_showcollision, r_draw_lit, r_draw_sunshadow,
 #   r_dpvs_dynmodel, r_fog, r_screenshot, r_texturemem.
 set(RADIANT_GFX_D3D
+    "${SRC_DIR}/gfx_d3d/r_command_buffer.cpp"
     "${SRC_DIR}/gfx_d3d/fxprimitives.h"
     "${SRC_DIR}/gfx_d3d/rb_backend.cpp"
     "${SRC_DIR}/gfx_d3d/rb_backend.h"
@@ -211,6 +212,7 @@ set(RADIANT_GFX_D3D
     "${SRC_DIR}/gfx_d3d/r_dvars.cpp"
     "${SRC_DIR}/gfx_d3d/r_dvars.h"
     "${SRC_DIR}/gfx_d3d/r_font.cpp"
+    "${SRC_DIR}/gfx_d3d/r_font_metrics.cpp"
     "${SRC_DIR}/gfx_d3d/r_font.h"
     "${SRC_DIR}/gfx_d3d/r_gfx.h"
     "${SRC_DIR}/gfx_d3d/r_image.cpp"
@@ -232,6 +234,8 @@ set(RADIANT_GFX_D3D
     "${SRC_DIR}/gfx_d3d/r_material.h"
     "${SRC_DIR}/gfx_d3d/r_material_load_db.h"
     "${SRC_DIR}/gfx_d3d/r_material_load_obj.cpp"
+    "${SRC_DIR}/gfx_d3d/r_material_clone.cpp"
+    "${SRC_DIR}/gfx_d3d/r_material_layered.cpp"
     "${SRC_DIR}/gfx_d3d/r_material_override.cpp"
     "${SRC_DIR}/gfx_d3d/r_meshdata.cpp"
     "${SRC_DIR}/gfx_d3d/r_meshdata.h"
@@ -275,12 +279,14 @@ set(RADIANT_GFX_D3D
     "${SRC_DIR}/gfx_d3d/r_state.cpp"
     "${SRC_DIR}/gfx_d3d/r_state.h"
     "${SRC_DIR}/gfx_d3d/r_state_utils.cpp"
+    "${SRC_DIR}/gfx_d3d/r_viewport.cpp"
     # r_staticmodel_load_obj.cpp folded into r_staticmodel.cpp in KisakCOD; use r_staticmodel.cpp
     "${SRC_DIR}/gfx_d3d/r_staticmodel.cpp"
     "${SRC_DIR}/gfx_d3d/r_staticmodelcache.cpp"
     "${SRC_DIR}/gfx_d3d/r_sunshadow.cpp"
     "${SRC_DIR}/gfx_d3d/r_sunshadow.h"
     "${SRC_DIR}/gfx_d3d/r_utils.cpp"
+    "${SRC_DIR}/gfx_d3d/r_color.cpp"
     "${SRC_DIR}/gfx_d3d/r_utils.h"
     "${SRC_DIR}/gfx_d3d/r_warn.cpp"
     "${SRC_DIR}/gfx_d3d/r_water.cpp"

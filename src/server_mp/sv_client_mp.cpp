@@ -2039,6 +2039,10 @@ gentity_s *__cdecl SV_AddTestClient()
         return 0;
     clienta->bIsTestClient = 1;
     SV_SendClientGameState(clienta);
+    // Sending an oversized/failed gamestate can drop the client. Do not enter
+    // the world or return an entity for a slot that did not finish priming.
+    if (clienta->header.state != CS_CLIENTLOADING)
+        return 0;
     memset(&nullcmd, 0, sizeof(nullcmd));
     SV_ClientEnterWorld(clienta, &nullcmd);
     return SV_GentityNum(i);

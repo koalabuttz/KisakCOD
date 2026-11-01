@@ -1,12 +1,11 @@
-name: Linux native server and client core
+name: Linux native server and client foundations
 
 # Builds and checks the 32-bit native Linux dedicated server (KISAK_PLATFORM=linux,
-# target KisakCOD-dedi) and the opt-in compile/test-only client core. This does
-# not build a graphical client. The checks are asset-free: they need no installed game
-# data, no Steam client, no credentials, and they never accept client
-# connections, so nothing licensed is downloaded and no game server is exposed.
-# Configuration fetches the pinned Tracy dependency over the network; that is the
-# only outbound access this workflow needs.
+# target KisakCOD-dedi), client core, and optional disconnected SDL window host.
+# This is not a playable graphical client. Checks need no installed game data,
+# Steam client or credentials. Window checks explicitly use SDL dummy video/audio.
+# Only isolated test fixtures accept local traffic; no public server is exposed.
+# Tool installation and the pinned Tracy dependency require network access.
 #
 # Configure and build stay in the workflow and never reuse the Windows output
 # paths: each configuration gets its own build directory and its own runtime
@@ -24,6 +23,8 @@ on:
       - deps/**
       - tests/linux_net/**
       - tests/linux_client_core/**
+      - tests/linux_client_commands/**
+      - tests/linux_window/**
       - .github/workflows/build-kisakcod-linux.yaml
   pull_request:
     branches: [ "master" ]
@@ -35,12 +36,60 @@ on:
       - deps/**
       - tests/linux_net/**
       - tests/linux_client_core/**
+      - tests/linux_client_commands/**
+      - tests/linux_window/**
       - .github/workflows/build-kisakcod-linux.yaml
 
 permissions:
   contents: read
 
 jobs:
+  window:
+    name: Linux SDL2 window ${{ matrix.config }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [Debug, RelWithDebInfo]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install 32-bit SDL2 build tools
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            cmake ninja-build clang g++-multilib python3 python3-yaml libsdl2-dev:i386
+          test -f /usr/lib/i386-linux-gnu/cmake/SDL2/sdl2-config.cmake
+      - name: Check graphical workflow contract
+        run: python3 scripts/tests/test_linux_window_workflow.py
+      - name: Build and test asset-free window host
+        timeout-minutes: 45
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 -u scripts/tests/test_linux_window.py \
+            --build-dir "$GITHUB_WORKSPACE/build-linux/window-${{ matrix.config }}" \
+            --build-type "${{ matrix.config }}" --cc clang --cxx clang++ --jobs 2 \
+            --sdl2-dir /usr/lib/i386-linux-gnu/cmake/SDL2 --video-driver dummy \
+            2>&1 | tee "artifacts/window-${{ matrix.config }}.log"
+      - name: Upload window check log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: KisakCOD-window-${{ matrix.config }}
+          path: artifacts/window-${{ matrix.config }}.log
+          if-no-files-found: warn
+          retention-days: 7
+
   native:
     name: Native Linux ${{ matrix.config }}
     runs-on: ubuntu-24.04
@@ -111,6 +160,7 @@ jobs:
         run: |
           python3 scripts/tests/test_linux_check_runner.py
           python3 scripts/tests/test_linux_fastfile_driver.py
+          python3 scripts/tests/test_linux_client_core_driver.py
 
       - name: Run asset-free native checks
         timeout-minutes: 30

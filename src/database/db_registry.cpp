@@ -2364,18 +2364,12 @@ void __cdecl DB_LoadXZone(XZoneInfo *zoneInfo, uint32_t zoneCount)
             I_strncpyz(g_zoneInfo[zoneInfoCount].name, zoneName, 64);
             Com_Printf(CON_CHANNEL_SYSTEM, "Loading fastfile %s\n", g_zoneInfo[zoneInfoCount].name);
             g_zoneInfo[zoneInfoCount++].flags = zoneInfo[j].allocFlags;
-            if (zoneInfoCount)
-            {
-                //g_loadingAssets = zoneInfoCount;
-                Sys_WakeDatabase2();
-                Sys_WakeDatabase();
-                //g_zoneInfoCount = zoneInfoCount;
-                Sys_NotifyDatabase();
-            }
         }
     }
     if (zoneInfoCount)
     {
+        // Publish the entire batch before waking the worker. An earlier signal
+        // can be consumed while the queue and loading count are inconsistent.
         g_loadingAssets = zoneInfoCount;
         Sys_WakeDatabase2();
         Sys_WakeDatabase();

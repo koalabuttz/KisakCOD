@@ -22,6 +22,7 @@
 #include "sys_memory.h"
 #include "sys_threads.h"
 #include "sys_time.h"
+#include "sys_events.h"
 
 #include <errno.h>
 #include <signal.h>
@@ -38,10 +39,6 @@ char sys_cmdline[1024];
 char sys_exitCmdLine[1024];
 
 HWND g_splashWnd = nullptr;
-
-sysEvent_t eventQue[0x100];
-int eventHead;
-int eventTail;
 
 SysInfo sys_info;
 
@@ -345,67 +342,12 @@ void Sys_FindInfo()
 // Event queue
 // ---------------------------------------------------------------------------
 
-void Sys_QueEvent(uint32_t time, sysEventType_t type, int value, int value2, int ptrLength, void *ptr)
-{
-    Sys_EnterCriticalSection(CRITSECT_SYS_EVENT_QUEUE);
-
-    sysEvent_t *ev = &eventQue[(unsigned char)eventHead];
-
-    if (eventHead - eventTail >= 256)
-    {
-        Com_Printf(CON_CHANNEL_SYSTEM, "Sys_QueEvent: overflow\n");
-        if (ev->evPtr)
-            Z_Free((char *)ev->evPtr, 10);
-        ++eventTail;
-    }
-
-    ++eventHead;
-
-    if (!time)
-        time = Sys_Milliseconds();
-
-    ev->evTime = (int)time;
-    ev->evType = type;
-    ev->evValue = value;
-    ev->evValue2 = value2;
-    ev->evPtrLength = ptrLength;
-    ev->evPtr = ptr;
-
-    Sys_LeaveCriticalSection(CRITSECT_SYS_EVENT_QUEUE);
-}
-
-void Sys_ShutdownEvents()
-{
-    Sys_EnterCriticalSection(CRITSECT_SYS_EVENT_QUEUE);
-
-    while (eventHead > eventTail)
-    {
-        sysEvent_t *ev = &eventQue[(unsigned char)eventTail++];
-        if (ev->evPtr)
-            Z_Free((char *)ev->evPtr, 10);
-    }
-
-    Sys_LeaveCriticalSection(CRITSECT_SYS_EVENT_QUEUE);
-}
-
 sysEvent_t *Win_GetEvent(sysEvent_t *result)
 {
     PROF_SCOPED("Win_GetEvent");
 
-    Sys_EnterCriticalSection(CRITSECT_SYS_EVENT_QUEUE);
-
-    sysEvent_t ev;
-    memset(&ev, 0, sizeof(ev));
-
-    if (eventHead > eventTail)
-    {
-        ev = eventQue[(unsigned char)eventTail++];
-        Sys_LeaveCriticalSection(CRITSECT_SYS_EVENT_QUEUE);
-        *result = ev;
-        return result;
-    }
-
-    Sys_LeaveCriticalSection(CRITSECT_SYS_EVENT_QUEUE);
+    if (Sys_PollQueuedEvent(result)) return result;
+    sysEvent_t ev{};
 
     // No window messages to pump; console input is the only external source.
     char *consoleLine = Sys_ConsoleInput();
@@ -416,11 +358,7 @@ sysEvent_t *Win_GetEvent(sysEvent_t *result)
         I_strncpyz(copy, consoleLine, (int)length + 1);
         Sys_QueEvent(0, SE_CONSOLE, 0, 0, (int)length + 1, copy);
 
-        Sys_EnterCriticalSection(CRITSECT_SYS_EVENT_QUEUE);
-        ev = eventQue[(unsigned char)eventTail++];
-        Sys_LeaveCriticalSection(CRITSECT_SYS_EVENT_QUEUE);
-        *result = ev;
-        return result;
+        if (Sys_PollQueuedEvent(result)) return result;
     }
 
     ev.evTime = (int)Sys_Milliseconds();

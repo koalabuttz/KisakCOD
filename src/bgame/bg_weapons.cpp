@@ -178,11 +178,15 @@ void __cdecl BG_FreeWeaponDefStrings()
 
 void __cdecl BG_ShutdownWeaponDefFiles()
 {
-    if (*(_BYTE *)fs_gameDirVar->current.integer)
+    // Match BG_LoadWeaponDef: dedicated servers always borrow fastfile assets,
+    // even with fs_game set. Their strings belong to the database, not to us.
+#ifndef DEDICATED
+    if (*fs_gameDirVar->current.string || !IsFastFileLoad())
     {
         BG_ClearSurfaceTypeSounds();
         BG_FreeWeaponDefStrings();
     }
+#endif
     bg_lastParsedWeaponIndex = 0;
 }
 

@@ -140,7 +140,6 @@ struct AlLocal
 // snd_driver
 void __cdecl TRACK_snd_driver();
 bool __cdecl SND_IsMultiChannel();
-char __cdecl SND_InitDriver();
 void __cdecl SND_ShutdownDriver();
 int __cdecl SND_GetDriverCPUPercentage();
 void __cdecl SND_Set3DPosition(int index, const float *org);

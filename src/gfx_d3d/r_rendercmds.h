@@ -901,3 +901,4 @@ void __cdecl R_EndDebugFrame();
 
 extern GfxBackEndData *frontEndDataOut;
 extern GfxBackEndData s_backEndData[2];
+void R_AddCmdStretchRaw(int x,int y,int width,int height,int columns,int rows,const uint8_t *rgba);

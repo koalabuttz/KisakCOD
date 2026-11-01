@@ -1,3 +1,6 @@
+#include <ui/ui_time.h>
+#include "ui_cursor.h"
+#include <ui/ui_font_selection.h>
 #ifndef KISAK_SP 
 #error This file is for SinglePlayer only 
 #endif
@@ -354,56 +357,6 @@ void __cdecl UI_DrawHighlightRect(
     R_AddCmdDrawQuadPic(verts, loColor, sharedUiInfo.assets.whiteMaterial);
 }
 
-int __cdecl UI_TextWidth(const char *text, int maxChars, Font_s *font, float scale)
-{
-    float actualScale; // [esp+8h] [ebp-4h]
-
-    actualScale = R_NormalizedTextScale(font, scale);
-    return (int)((double)R_TextWidth(text, maxChars, font) * actualScale);
-}
-
-int __cdecl UI_TextHeight(Font_s *font, float scale)
-{
-    float actualScale; // [esp+8h] [ebp-4h]
-
-    actualScale = R_NormalizedTextScale(font, scale);
-    return (int)((double)R_TextHeight(font) * actualScale);
-}
-
-void __cdecl UI_DrawText(
-    const ScreenPlacement *scrPlace,
-    const char *text,
-    int maxChars,
-    Font_s *font,
-    float x,
-    float y,
-    int horzAlign,
-    int vertAlign,
-    float scale,
-    const float *color,
-    int style)
-{
-    PROF_SCOPED("UI_DrawText");
-
-    float v11; // [esp+18h] [ebp-18h]
-    float v12; // [esp+1Ch] [ebp-14h]
-    float v13; // [esp+20h] [ebp-10h]
-    float v14; // [esp+24h] [ebp-Ch]
-    float xScale; // [esp+28h] [ebp-8h] BYREF
-    float yScale; // [esp+2Ch] [ebp-4h] BYREF
-
-    xScale = R_NormalizedTextScale(font, scale);
-    yScale = xScale;
-    ScrPlace_ApplyRect(scrPlace, &x, &y, &xScale, &yScale, horzAlign, vertAlign);
-    v14 = x + 0.5;
-    v12 = floor(v14);
-    x = v12;
-    v13 = y + 0.5;
-    v11 = floor(v13);
-    y = v11;
-    CL_DrawTextPhysical(text, maxChars, font, x, v11, xScale, yScale, color, style);
-}
-
 void __cdecl UI_DrawTextWithGlow(
     const ScreenPlacement *scrPlace,
     const char *text,
@@ -514,56 +467,6 @@ void __cdecl UI_DrawTextWithCursor(
     CL_DrawTextPhysicalWithCursor((char *)text, maxChars, font, x, v13, xScale, yScale, color, style, cursorPos, cursor);
 }
 
-Font_s *__cdecl UI_GetFontHandle(const ScreenPlacement *scrPlace, int fontEnum, float scale)
-{
-    float scalea; // [esp+10h] [ebp+10h]
-
-    switch (fontEnum)
-    {
-    case 2:
-        return sharedUiInfo.assets.bigFont;
-    case 3:
-        return sharedUiInfo.assets.smallFont;
-    case 5:
-        return sharedUiInfo.assets.consoleFont;
-    case 6:
-        return sharedUiInfo.assets.objectiveFont;
-    }
-    scalea = scrPlace->scaleVirtualToReal[1] * scale;
-    if (fontEnum == 4)
-    {
-        if (ui_smallFont->current.value < (double)scalea)
-        {
-            if (ui_bigFont->current.value > (double)scalea)
-                return sharedUiInfo.assets.textFont;
-            else
-                return sharedUiInfo.assets.boldFont;
-        }
-        else
-        {
-            return sharedUiInfo.assets.smallFont;
-        }
-    }
-    else if (ui_smallFont->current.value < (double)scalea)
-    {
-        if (ui_extraBigFont->current.value > (double)scalea)
-        {
-            if (ui_bigFont->current.value > (double)scalea)
-                return sharedUiInfo.assets.textFont;
-            else
-                return sharedUiInfo.assets.bigFont;
-        }
-        else
-        {
-            return sharedUiInfo.assets.extraBigFont;
-        }
-    }
-    else
-    {
-        return sharedUiInfo.assets.smallFont;
-    }
-}
-
 void UI_UpdateSaveUI()
 {
     int v0; // r3
@@ -600,21 +503,7 @@ void UI_UpdateSaveUI()
 
 void __cdecl UI_UpdateTime(int realtime)
 {
-    int v1; // r9
-    signed int v2; // r10
-    __int64 v3; // r10
-
-    v1 = realtime - uiInfo.uiDC.realTime;
-    uiInfo.uiDC.frameTime = realtime - uiInfo.uiDC.realTime;
-    uiInfo.uiDC.realTime = realtime;
-    uiInfo.previousTimes[uiInfo.timeIndex++ % 4] = v1;
-    if (uiInfo.timeIndex > 4)
-    {
-        v2 = uiInfo.previousTimes[0] + uiInfo.previousTimes[1] + uiInfo.previousTimes[2] + uiInfo.previousTimes[3];
-        if (!v2)
-            v2 = 1;
-        uiInfo.uiDC.FPS = (float)(4000 / v2);
-    }
+    UI_UpdateContextTime(&uiInfo.uiDC, &uiInfo.timeIndex, uiInfo.previousTimes, realtime);
 }
 
 void __cdecl UI_Shutdown()
@@ -1712,11 +1601,7 @@ void __cdecl UI_Refresh()
         {
             //if (!Dvar_GetBool("cl_bypassMouseInput"))
             {
-                float w = scrPlaceFull.scaleVirtualToReal[0] * 32.0 / scrPlaceFull.scaleVirtualToFull[0];
-                float h = scrPlaceFull.scaleVirtualToReal[1] * 32.0 / scrPlaceFull.scaleVirtualToFull[1];
-                float y = uiInfo.uiDC.cursor.y - h * 0.5;
-                float x = uiInfo.uiDC.cursor.x - w * 0.5;
-                UI_DrawHandlePic(&scrPlaceView[0], x, y, w, h, 4, 4, 0, sharedUiInfo.assets.cursor);
+                UI_DrawCursor(&uiInfo.uiDC, &scrPlaceFull, &scrPlaceView[0], sharedUiInfo.assets.cursor);
             }
         }
         // LWSS END
@@ -2935,15 +2820,7 @@ void __cdecl UI_OwnerDraw(
 
 void __cdecl UI_MouseEvent(int localClientNum, int x, int y)
 {
-    uiInfo.uiDC.cursor.x = x / scrPlaceFull.scaleVirtualToFull[0];
-    uiInfo.uiDC.cursor.y = y / scrPlaceFull.scaleVirtualToFull[1];
-
-    bool cursorInBounds = uiInfo.uiDC.cursor.x >= 0.0
-        && uiInfo.uiDC.cursor.x <= 640.0
-        && uiInfo.uiDC.cursor.y >= 0.0
-        && uiInfo.uiDC.cursor.y <= 480.0;
-
-    uiInfo.uiDC.isCursorVisible = cursorInBounds;
+    UI_UpdateCursorPosition(&uiInfo.uiDC, &scrPlaceFull, x, y);
 
     CL_ShowSystemCursor(uiInfo.uiDC.isCursorVisible == 0);
 
@@ -2952,4 +2829,9 @@ void __cdecl UI_MouseEvent(int localClientNum, int x, int y)
         if (Menu_Count(&uiInfo.uiDC) > 0)
             Display_MouseMove(&uiInfo.uiDC);
     }
+}
+Font_s *__cdecl UI_GetFontHandle(const ScreenPlacement *scrPlace,int fontEnum,float scale)
+{
+    return UI_SelectFont(scrPlace,fontEnum,scale,sharedUiInfo.assets,
+                         ui_smallFont,ui_bigFont,ui_extraBigFont);
 }

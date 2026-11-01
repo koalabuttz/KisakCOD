@@ -1,0 +1,268 @@
+{
+  "status": "passed",
+  "archive_sha256": "143c7c67c71520483691f0650bb17a5bc70c6dea949c256ea6e6c16d1016877f",
+  "patch_sha256": {
+    "client-cumulative.patch": "241549f1baece07411cb5eda44191f79192ff92f3fab1454a5ec8a94409b9677",
+    "server-cumulative.patch": "edb8f63282aef8147e5e055905ba5c7ff36ca9a2865cf18de664e5626a547f13"
+  },
+  "base_commit": "f8bde51a0e44ff464d97a03f24c9ce83429799c1",
+  "client_commit": "fef1422199729e9b58dbc11c14a523d533989da8",
+  "server_commit": "b5e3d408d683768d34842574c71bdf8db295eb04",
+  "source_fingerprint_sha256": "e7aa658eeb078ffa9fa0e7ec1740bfe573d8f53997a57c2be9a9a117820157cf",
+  "source_files": 1426,
+  "source_unchanged_during_tests": true,
+  "fresh_builds": true,
+  "reused_binaries_objects_or_build_caches": false,
+  "execution": "ELF32 under existing QEMU; native host64 sanitizer supplement",
+  "configurations": {
+    "debug": {
+      "stages_exit": {
+        "configure": 0,
+        "server-build": 0,
+        "window": 0,
+        "core": 0,
+        "server-aggregate": 0,
+        "live-bots": 0,
+        "genuine-owner": 0,
+        "genuine-failure": 0,
+        "genuine-iwi": 0
+      },
+      "tests": {
+        "window": {
+          "checks": 182,
+          "failures": 0
+        },
+        "core": {
+          "checks": 518,
+          "failures": 0
+        },
+        "genuine-owner": {
+          "checks": 64,
+          "failures": 0
+        },
+        "genuine-failure": {
+          "checks": 8,
+          "failures": 0
+        },
+        "genuine-iwi": {
+          "checks": 30,
+          "failures": 0
+        },
+        "string_owner": {
+          "checks": 9,
+          "failures": 0
+        },
+        "string_consumers": {
+          "checks": 51,
+          "failures": 0
+        },
+        "dvar_allocation_failure": {
+          "checks": 11,
+          "failures": 0,
+          "scenarios": [
+            "name",
+            "value"
+          ]
+        }
+      },
+      "server_aggregate_passed": 15,
+      "live_bots": {
+        "status": "passed",
+        "bots_and_slots": 3,
+        "full_cohort_refills": 3,
+        "map_transition_cycles": 2,
+        "hold_seconds": 5,
+        "clean_quit": true,
+        "g_loadingAssets_assertion_seen": false,
+        "duration_seconds": 131.6
+      },
+      "binary_sha256": {
+        "KisakCOD-dedi": "f9e4ef97ee49ffa863289f8d067d897f25b32db7b66fe431307e398e55961c67",
+        "KisakCOD-client-input": "d64f329bca4941223db499ba5e6e6b7052de7e1e43fe11fa848748533e16b12d"
+      },
+      "x11": {
+        "exit_code": 0,
+        "independent_pixel_comparisons": 5208,
+        "pixel_sizes": [
+          [
+            640,
+            480
+          ],
+          [
+            660,
+            500
+          ],
+          [
+            480,
+            640
+          ],
+          [
+            900,
+            675
+          ],
+          [
+            720,
+            540
+          ],
+          [
+            960,
+            540
+          ],
+          [
+            320,
+            240
+          ]
+        ],
+        "lifecycle": [
+          {
+            "actual_key_repeat_presses": 14,
+            "same_process_reopen_cycles": 5
+          },
+          {
+            "isolated_client_files": 0,
+            "processes": 4
+          }
+        ],
+        "evidence_sha256": "f72c67b55c1a25056c029ecfe0addc34140ab63339e4c96872a319389dd4a506",
+        "binary_sha256": "d64f329bca4941223db499ba5e6e6b7052de7e1e43fe11fa848748533e16b12d"
+      }
+    },
+    "release": {
+      "stages_exit": {
+        "configure": 0,
+        "server-build": 0,
+        "window": 0,
+        "core": 0,
+        "server-aggregate": 0,
+        "live-bots": 0,
+        "genuine-owner": 0,
+        "genuine-failure": 0,
+        "genuine-iwi": 0
+      },
+      "tests": {
+        "window": {
+          "checks": 182,
+          "failures": 0
+        },
+        "core": {
+          "checks": 518,
+          "failures": 0
+        },
+        "genuine-owner": {
+          "checks": 64,
+          "failures": 0
+        },
+        "genuine-failure": {
+          "checks": 8,
+          "failures": 0
+        },
+        "genuine-iwi": {
+          "checks": 30,
+          "failures": 0
+        },
+        "string_owner": {
+          "checks": 9,
+          "failures": 0
+        },
+        "string_consumers": {
+          "checks": 51,
+          "failures": 0
+        },
+        "dvar_allocation_failure": {
+          "checks": 11,
+          "failures": 0,
+          "scenarios": [
+            "name",
+            "value"
+          ]
+        }
+      },
+      "server_aggregate_passed": 15,
+      "live_bots": {
+        "status": "passed",
+        "bots_and_slots": 3,
+        "full_cohort_refills": 3,
+        "map_transition_cycles": 2,
+        "hold_seconds": 5,
+        "clean_quit": true,
+        "g_loadingAssets_assertion_seen": false,
+        "duration_seconds": 127.2
+      },
+      "binary_sha256": {
+        "KisakCOD-dedi": "019b33d1d8e966e3f577ecb1b3cb595c1ddfccdb1b4556d07c9dd48626be49ea",
+        "KisakCOD-client-input": "50dd255ab1d6c5a4d767e4f59e1ae8aa48d353f5ee08f2c910689a10e18bfa4b"
+      },
+      "x11": {
+        "exit_code": 0,
+        "independent_pixel_comparisons": 5208,
+        "pixel_sizes": [
+          [
+            640,
+            480
+          ],
+          [
+            660,
+            500
+          ],
+          [
+            480,
+            640
+          ],
+          [
+            900,
+            675
+          ],
+          [
+            720,
+            540
+          ],
+          [
+            960,
+            540
+          ],
+          [
+            320,
+            240
+          ]
+        ],
+        "lifecycle": [
+          {
+            "actual_key_repeat_presses": 12,
+            "same_process_reopen_cycles": 5
+          },
+          {
+            "isolated_client_files": 0,
+            "processes": 4
+          }
+        ],
+        "evidence_sha256": "b741a497f94a6f6be53fa4d585c069a2faecfb4d02847d54e643f4d355cf001d",
+        "binary_sha256": "50dd255ab1d6c5a4d767e4f59e1ae8aa48d353f5ee08f2c910689a10e18bfa4b"
+      }
+    }
+  },
+  "skipped_server_checks": {
+    "handshake_auth": "Existing default route requires unsupported direct ELF32 execution.",
+    "server_test_clients": "Default asks for unsupported 32-bit sanitizers; supported host64 sanitizers and ELF32/QEMU variants passed separately.",
+    "udp": "Existing direct-shell ELF32 execution is unsupported in this environment."
+  },
+  "supplemental_server_test_clients": {
+    "host64_fatal_asan_ubsan_and_mutations": "passed",
+    "elf32_qemu_without_sanitizers": "passed"
+  },
+  "private_inputs": {
+    "prepared_bundle": "unchanged authorized inputs from preceding fresh packaged reproduction",
+    "offline_export": "newly compiled and run against current combined source; exits before networking initialization",
+    "export_comparison": []
+  },
+  "limits": [
+    "Internal bots do not establish two-player gameplay or retail/Steam/CoD4x compatibility.",
+    "Software UI subset; no full game renderer or playable native client claim.",
+    "Dummy audio testing does not establish physical audibility.",
+    "No new packet/authentication implementation or equivalent denied work."
+  ],
+  "exporter_sha256": "d161a7f0d5d0167d709f5d2bd4e85872906cb63888a2b9984c68994dc9b37ba2",
+  "dedicated_binaries_unchanged_through_client_and_runtime_checks": true,
+  "additional_tests_needed": false,
+  "blockers": [],
+  "offline_export_files_identical_to_previous_fresh_export": 21
+}

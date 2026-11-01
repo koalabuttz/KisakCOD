@@ -1,3 +1,6 @@
+#include <ui/ui_time.h>
+#include <ui/ui_cursor.h>
+#include <ui/ui_font_selection.h>
 #ifndef KISAK_MP
 #error This File is MultiPlayer Only
 #endif
@@ -488,56 +491,6 @@ void __cdecl UI_DrawHighlightRect(
     R_AddCmdDrawQuadPic(verts, loColor, sharedUiInfo.assets.whiteMaterial);
 }
 
-int __cdecl UI_TextWidth(const char *text, int maxChars, Font_s *font, float scale)
-{
-    float actualScale; // [esp+8h] [ebp-4h]
-
-    actualScale = R_NormalizedTextScale(font, scale);
-    return (int)((double)R_TextWidth(text, maxChars, font) * actualScale);
-}
-
-int __cdecl UI_TextHeight(Font_s *font, float scale)
-{
-    float actualScale; // [esp+8h] [ebp-4h]
-
-    actualScale = R_NormalizedTextScale(font, scale);
-    return (int)((double)R_TextHeight(font) * actualScale);
-}
-
-void __cdecl UI_DrawText(
-    const ScreenPlacement *scrPlace,
-    const char *text,
-    int maxChars,
-    Font_s *font,
-    float x,
-    float y,
-    int horzAlign,
-    int vertAlign,
-    float scale,
-    const float *color,
-    int style)
-{
-    PROF_SCOPED("UI_DrawText");
-
-    float v11; // [esp+18h] [ebp-18h]
-    float v12; // [esp+1Ch] [ebp-14h]
-    float v13; // [esp+20h] [ebp-10h]
-    float v14; // [esp+24h] [ebp-Ch]
-    float xScale; // [esp+28h] [ebp-8h] BYREF
-    float yScale; // [esp+2Ch] [ebp-4h] BYREF
-
-    xScale = R_NormalizedTextScale(font, scale);
-    yScale = xScale;
-    ScrPlace_ApplyRect(scrPlace, &x, &y, &xScale, &yScale, horzAlign, vertAlign);
-    v14 = x + 0.5;
-    v12 = floor(v14);
-    x = v12;
-    v13 = y + 0.5;
-    v11 = floor(v13);
-    y = v11;
-    CL_DrawTextPhysical(text, maxChars, font, x, v11, xScale, yScale, color, style);
-}
-
 void __cdecl UI_DrawTextWithGlow(
     const ScreenPlacement *scrPlace,
     const char *text,
@@ -648,56 +601,6 @@ void __cdecl UI_DrawTextWithCursor(
     CL_DrawTextPhysicalWithCursor((char*)text, maxChars, font, x, v13, xScale, yScale, color, style, cursorPos, cursor);
 }
 
-Font_s *__cdecl UI_GetFontHandle(const ScreenPlacement *scrPlace, int fontEnum, float scale)
-{
-    float scalea; // [esp+10h] [ebp+10h]
-
-    switch (fontEnum)
-    {
-    case 2:
-        return sharedUiInfo.assets.bigFont;
-    case 3:
-        return sharedUiInfo.assets.smallFont;
-    case 5:
-        return sharedUiInfo.assets.consoleFont;
-    case 6:
-        return sharedUiInfo.assets.objectiveFont;
-    }
-    scalea = scrPlace->scaleVirtualToReal[1] * scale;
-    if (fontEnum == 4)
-    {
-        if (ui_smallFont->current.value < (double)scalea)
-        {
-            if (ui_bigFont->current.value > (double)scalea)
-                return sharedUiInfo.assets.textFont;
-            else
-                return sharedUiInfo.assets.boldFont;
-        }
-        else
-        {
-            return sharedUiInfo.assets.smallFont;
-        }
-    }
-    else if (ui_smallFont->current.value < (double)scalea)
-    {
-        if (ui_extraBigFont->current.value > (double)scalea)
-        {
-            if (ui_bigFont->current.value > (double)scalea)
-                return sharedUiInfo.assets.textFont;
-            else
-                return sharedUiInfo.assets.bigFont;
-        }
-        else
-        {
-            return sharedUiInfo.assets.extraBigFont;
-        }
-    }
-    else
-    {
-        return sharedUiInfo.assets.smallFont;
-    }
-}
-
 void __cdecl UI_MouseEvent(int localClientNum, int x, int y)
 {
     BOOL v3; // [esp+0h] [ebp-8h]
@@ -711,13 +614,7 @@ void __cdecl UI_MouseEvent(int localClientNum, int x, int y)
             "(localClientNum == 0)",
             localClientNum);
 
-    uiInfoArray.uiDC.cursor.x = x / scrPlaceFull.scaleVirtualToFull[0];
-    uiInfoArray.uiDC.cursor.y = y / scrPlaceFull.scaleVirtualToFull[1];
-    v3 = uiInfoArray.uiDC.cursor.x >= 0.0
-        && uiInfoArray.uiDC.cursor.x <= 640.0
-        && uiInfoArray.uiDC.cursor.y >= 0.0
-        && uiInfoArray.uiDC.cursor.y <= 480.0;
-    uiInfoArray.uiDC.isCursorVisible = v3;
+    UI_UpdateCursorPosition(&uiInfoArray.uiDC, &scrPlaceFull, x, y);
     CL_ShowSystemCursor(uiInfoArray.uiDC.isCursorVisible == 0);
     if (uiInfoArray.uiDC.isCursorVisible)
     {
@@ -728,9 +625,6 @@ void __cdecl UI_MouseEvent(int localClientNum, int x, int y)
 
 void __cdecl UI_UpdateTime(int localClientNum, int realtime)
 {
-    int frameTimeIndex; // [esp+4h] [ebp-Ch]
-    int frameTimeTotal; // [esp+Ch] [ebp-4h]
-
     if (localClientNum)
         MyAssertHandler(
             ".\\ui_mp\\ui_main_mp.cpp",
@@ -739,18 +633,7 @@ void __cdecl UI_UpdateTime(int localClientNum, int realtime)
             "%s\n\t(localClientNum) = %i",
             "(localClientNum == 0)",
             localClientNum);
-    uiInfoArray.uiDC.frameTime = realtime - uiInfoArray.uiDC.realTime;
-    uiInfoArray.uiDC.realTime = realtime;
-    uiInfoArray.previousTimes[uiInfoArray.timeIndex++ % 4] = uiInfoArray.uiDC.frameTime;
-    if (uiInfoArray.timeIndex > 4)
-    {
-        frameTimeTotal = 0;
-        for (frameTimeIndex = 0; frameTimeIndex < 4; ++frameTimeIndex)
-            frameTimeTotal += uiInfoArray.previousTimes[frameTimeIndex];
-        if (!frameTimeTotal)
-            frameTimeTotal = 1;
-        uiInfoArray.uiDC.FPS = (float)(4000 / frameTimeTotal);
-    }
+    UI_UpdateContextTime(&uiInfoArray.uiDC, &uiInfoArray.timeIndex, uiInfoArray.previousTimes, realtime);
 }
 
 void __cdecl UI_DrawBuildNumber(int localClientNum)
@@ -1112,11 +995,7 @@ void __cdecl UI_Refresh(int localClientNum)
         {
             if (!Dvar_GetBool("cl_bypassMouseInput") && UI_GetActiveMenu(localClientNum) != UIMENU_SCOREBOARD)
             {
-                w = scrPlaceFull.scaleVirtualToReal[0] * 32.0 / scrPlaceFull.scaleVirtualToFull[0];
-                h = scrPlaceFull.scaleVirtualToReal[1] * 32.0 / scrPlaceFull.scaleVirtualToFull[1];
-                y = uiInfoArray.uiDC.cursor.y - h * 0.5;
-                x = uiInfoArray.uiDC.cursor.x - w * 0.5;
-                UI_DrawHandlePic(&scrPlaceView[localClientNum], x, y, w, h, 4, 4, 0, sharedUiInfo.assets.cursor);
+                UI_DrawCursor(&uiInfoArray.uiDC, &scrPlaceFull, &scrPlaceView[localClientNum], sharedUiInfo.assets.cursor);
             }
         }
     }
@@ -6096,4 +5975,10 @@ bool __cdecl Menu_IsMenuOpenAndVisible(int localClientNum, const char *menuName)
 bool __cdecl UI_ShouldDrawCrosshair()
 {
     return ui_drawCrosshair->current.enabled;
+}
+
+Font_s *__cdecl UI_GetFontHandle(const ScreenPlacement *scrPlace,int fontEnum,float scale)
+{
+    return UI_SelectFont(scrPlace,fontEnum,scale,sharedUiInfo.assets,
+                         ui_smallFont,ui_bigFont,ui_extraBigFont);
 }

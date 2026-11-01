@@ -5,6 +5,13 @@
 #include "r_dvars.h"
 #include <universal/surfaceflags.h>
 
+#ifndef __linux__
+uint32_t __cdecl R_ReleaseD3DSurface(IDirect3DSurface9 *surface)
+{
+    return surface->Release();
+}
+#endif
+
 uint32_t __cdecl R_HashAssetName(const char *name)
 {
     const char *pos; // [esp+0h] [ebp-8h]
@@ -49,13 +56,7 @@ char __cdecl R_CullPointAndRadius(const float *pt, float radius, const DpvsPlane
     return 0;
 }
 
-void __cdecl R_ConvertColorToBytes(const float *colorFloat, uint32_t *colorBytes)
-{
-    if (colorFloat)
-        Byte4PackVertexColor(colorFloat, (unsigned char*)colorBytes);
-    else
-        *colorBytes = -1;
-}
+
 
 double __cdecl FresnelTerm(float n0, float n1, float cosIncidentAngle)
 {

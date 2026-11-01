@@ -36,14 +36,15 @@ client compatibility.
 
 `test_server_test_clients.py` checks the extracted internal bot functions with
 controlled connection and movement services; the native runner runs its 32-bit
-sanitizer configuration. The opt-in `test_linux_bots.py` is a diagnostic probe,
-not a green gameplay check: its current stock-script fixture admits bots but
-kicks them before the hold completes. See
+sanitizer configuration. The opt-in `test_linux_bots.py` uses stock bot/team/class setup, requires repeated healthy
+hold samples, and checks clean shutdown. The weapon-definition ownership and
+bot-driver regressions are part of the asset-free runner. See
 [Server-side test clients](../../docs/server-test-clients.md) for the exact
 coverage and blocker.
 
 The opt-in [native Linux client core](../../docs/linux-client.md) compiles actual
-client translation units and runs an asset-free client/server codec test. It is
+client translation units and runs asset-free client/server codec and bounded
+command-parser/key-state tests. Message readers are production code. It is
 checked separately from the dedicated-server suite and is not a playable client.
 
 These shared asset-free regression checks require Python 3 and a C++20 compiler:

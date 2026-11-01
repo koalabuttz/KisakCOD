@@ -1,0 +1,9 @@
+#pragma once
+#include "ui_shared.h"
+struct commandDef_t // sizeof=0x8
+{                                       // ...
+    const char *name;                   // ...
+    void(__cdecl *handler)(UiContext *, itemDef_s *, const char **); // ...
+};
+void UI_RunScriptCommands(UiContext*,itemDef_s*,char*,const commandDef_t*,unsigned,void(*)(int,const char**,const char*));
+UILocalVarContext *Script_ParseLocalVar(UiContext*,const char**);

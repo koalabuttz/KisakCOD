@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "client.h"
+#include "cl_input_services.h"
 #include <universal/assertive.h>
 #include <qcommon/mem_track.h>
 #include <qcommon/qcommon.h>
@@ -688,7 +689,7 @@ char __cdecl Field_KeyDownEvent(int32_t localClientNum, const ScreenPlacement *s
         }
     }
     if (cls.uiStarted)
-        Field_AdjustScroll(scrPlace, edit);
+        CL_GetInputServices().FieldLayout(scrPlace, edit);
     return isModified;
 }
 
@@ -766,7 +767,7 @@ bool __cdecl Field_CharEvent(int32_t localClientNum, const ScreenPlacement *scrP
         isModified = 1;
         break;
     }
-    Field_AdjustScroll(scrPlace, edit);
+    CL_GetInputServices().FieldLayout(scrPlace, edit);
     return isModified;
 }
 
@@ -1504,23 +1505,23 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
 
     if (CL_IsConsoleKey(key) || (clUI->keyCatchers & (KEYCATCH_CONSOLE | KEYCATCH_SCRIPT)) != 0)
     {
-        if (DevGui_IsActive())
-            DevGui_Toggle();
+        if (CL_GetInputServices().DevGuiActive())
+            CL_GetInputServices().DevGuiToggle();
     }
     else
     {
         kb = keys[key].binding;
         if (kb && !I_stricmp(kb, "devgui") && down && keys[key].repeats == 1)
         {
-            Cbuf_AddText(localClientNum, keys[key].binding);
+            CL_GetInputServices().QueueCommand(localClientNum, keys[key].binding);
             return;
         }
-        if (DevGui_IsActive())
+        if (CL_GetInputServices().DevGuiActive())
         {
             if (down)
             {
                 if (keys[key].repeats == 1)
-                    DevGui_KeyPressed(key);
+                    CL_GetInputServices().DevGuiKey(key);
             }
             return;
         }
@@ -1545,13 +1546,13 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
                     }
                     if (keys[K_SHIFT].down)
                     {
-                        if (!Con_IsActive(localClientNum))
-                            Con_ToggleConsole();
-                        Con_ToggleConsoleOutput();
+                        if (!CL_GetInputServices().ConsoleActive(localClientNum))
+                            CL_GetInputServices().ConsoleToggle();
+                        CL_GetInputServices().ConsoleToggleOutput();
                         return;
                     }
                 LABEL_45:
-                    Con_ToggleConsole();
+                    CL_GetInputServices().ConsoleToggle();
                     return;
                 }
             }
@@ -1585,7 +1586,7 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
                 && (CL_GetLocalClientConnection(localClientNum)->demoplaying || clcState == CA_CINEMATIC || clcState == CA_LOGO)
                 && !clUI->keyCatchers)
             {
-                Dvar_SetString(nextdemo, (char*)"");
+                CL_GetInputServices().ClearNextDemo();
                 key = K_ESCAPE;
             }
         }
@@ -1594,16 +1595,16 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
             if ((clUI->keyCatchers & KEYCATCH_SCRIPT) != 0)
             {
                 if ((clUI->keyCatchers & KEYCATCH_CONSOLE) != 0)
-                    Con_ToggleConsole();
+                    CL_GetInputServices().ConsoleToggle();
                 return;
             }
             if ((clUI->keyCatchers & KEYCATCH_MESSAGE) == 0)
             {
                 if ((clUI->keyCatchers & KEYCATCH_CONSOLE) != 0)
-                    Con_CancelAutoComplete();
+                    CL_GetInputServices().ConsoleCancelAutoComplete();
                 if ((clUI->keyCatchers & KEYCATCH_UI) != 0)
                 {
-                    UI_KeyEvent(localClientNum, K_ESCAPE, down);
+                    CL_GetInputServices().UiKey(localClientNum, K_ESCAPE, down);
                 }
                 else
                 {
@@ -1611,7 +1612,7 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
                     {
                     case CA_CINEMATIC:
                     case CA_LOGO:
-                        CL_StopLogoOrCinematic(localClientNum);
+                        CL_GetInputServices().StopCinematic(localClientNum);
                         break;
                     case CA_CONNECTING:
                     case CA_CHALLENGING:
@@ -1621,16 +1622,16 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
                         if (CL_GetLocalClientConnection(localClientNum)->demoplaying
                             || cl_waitingOnServerToLoadMap[localClientNum])
                         {
-                            UI_SetActiveMenu(localClientNum, UIMENU_MAIN);
+                            CL_GetInputServices().UiSetMenu(localClientNum, UIMENU_MAIN);
                         }
                         else
                         {
-                            UI_SetActiveMenu(localClientNum, UIMENU_INGAME);
+                            CL_GetInputServices().UiSetMenu(localClientNum, UIMENU_INGAME);
                         }
                         break;
                     default:
                         if (cls.uiStarted)
-                            UI_SetActiveMenu(localClientNum, UIMENU_MAIN);
+                            CL_GetInputServices().UiSetMenu(localClientNum, UIMENU_MAIN);
                         break;
                     }
                 }
@@ -1639,9 +1640,9 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
             goto LABEL_91;
         }
         if (clUI->cgameInitialized
-            && CG_IsScoreboardDisplayed(localClientNum)
+            && CL_GetInputServices().ScoreboardDisplayed(localClientNum)
             && down
-            && Scoreboard_HandleInput(localClientNum, key))
+            && CL_GetInputServices().ScoreboardInput(localClientNum, key))
         {
             return;
         }
@@ -1651,29 +1652,29 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
             if (kba && *kba == '+')
             {
                 Com_sprintf(cmd, 0x400u, "-%s %i %i\n", kba + 1, key, time);
-                Cbuf_AddText(localClientNum, cmd);
+                CL_GetInputServices().QueueCommand(localClientNum, cmd);
             }
             if ((clUI->keyCatchers & KEYCATCH_UI) != 0 && cls.uiStarted)
-                UI_KeyEvent(localClientNum, key, 0);
+                CL_GetInputServices().UiKey(localClientNum, key, 0);
             return;
         }
         if ((clUI->keyCatchers & KEYCATCH_CONSOLE) == 0)
         {
             if ((clUI->keyCatchers & KEYCATCH_SCRIPT) != 0)
             {
-                Scr_KeyEvent(key);
+                CL_GetInputServices().ScriptKey(key);
                 return;
             }
             if ((clUI->keyCatchers & KEYCATCH_UI) != 0 && !CL_MouseInputShouldBypassMenus(localClientNum, key))
             {
                 if (cls.uiStarted)
-                    UI_KeyEvent(localClientNum, key, down);
+                    CL_GetInputServices().UiKey(localClientNum, key, down);
                 return;
             }
             if ((clUI->keyCatchers & KEYCATCH_MESSAGE) != 0)
             {
             LABEL_91:
-                Message_Key(localClientNum, key);
+                CL_GetInputServices().MessageKey(localClientNum, key);
                 return;
             }
             if (clcState)
@@ -1684,23 +1685,23 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
                     if (*kbb == '+')
                     {
                         Com_sprintf(cmd, 0x400u, "%s %i %i\n", kbb, key, time);
-                        Cbuf_AddText(localClientNum, cmd);
+                        CL_GetInputServices().QueueCommand(localClientNum, cmd);
                     }
                     else
                     {
-                        Cbuf_AddText(localClientNum, kbb);
-                        Cbuf_AddText(localClientNum, "\n");
+                        CL_GetInputServices().QueueCommand(localClientNum, kbb);
+                        CL_GetInputServices().QueueCommand(localClientNum, "\n");
                     }
                 }
                 else if (key >= K_AUX1)
                 {
-                    v4 = Key_KeynumToString(key, 0);
+                    v4 = CL_GetInputServices().KeyName(key, 0);
                     Com_Printf(CON_CHANNEL_CLIENT, "%s is unbound, use controls menu to set.\n", v4);
                 }
                 return;
             }
         }
-        Console_Key(localClientNum, key);
+        CL_GetInputServices().ConsoleKey(localClientNum, key);
         return;
     }
     if ((clUI->keyCatchers & (KEYCATCH_CONSOLE | KEYCATCH_MESSAGE)) != 0)
@@ -1778,23 +1779,23 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
 
     if (CL_IsConsoleKey(key) || (clUI->keyCatchers & (KEYCATCH_CONSOLE | KEYCATCH_SCRIPT)) != 0)
     {
-        if (DevGui_IsActive())
-            DevGui_Toggle();
+        if (CL_GetInputServices().DevGuiActive())
+            CL_GetInputServices().DevGuiToggle();
     }
     else
     {
         kb = keys[key].binding;
         if (kb && !I_stricmp(kb, "devgui") && down && keys[key].repeats == 1)
         {
-            Cbuf_AddText(localClientNum, keys[key].binding);
+            CL_GetInputServices().QueueCommand(localClientNum, keys[key].binding);
             return;
         }
-        if (DevGui_IsActive())
+        if (CL_GetInputServices().DevGuiActive())
         {
             if (down)
             {
                 if (keys[key].repeats == 1)
-                    DevGui_KeyPressed(key);
+                    CL_GetInputServices().DevGuiKey(key);
             }
             return;
         }
@@ -1818,13 +1819,13 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
                     //}
                     if (keys[K_SHIFT].down)
                     {
-                        if (!Con_IsActive(localClientNum))
-                            Con_ToggleConsole();
-                        Con_ToggleConsoleOutput();
+                        if (!CL_GetInputServices().ConsoleActive(localClientNum))
+                            CL_GetInputServices().ConsoleToggle();
+                        CL_GetInputServices().ConsoleToggleOutput();
                         return;
                     }
                 LABEL_45:
-                    Con_ToggleConsole();
+                    CL_GetInputServices().ConsoleToggle();
                     return;
                 }
             }
@@ -1858,7 +1859,7 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
                 && (cls.demoplaying || clcState == CA_CINEMATIC || clcState == CA_LOGO)
                 && !clUI->keyCatchers)
             {
-                Dvar_SetString(nextdemo, (char *)"");
+                CL_GetInputServices().ClearNextDemo();
                 key = K_ESCAPE;
             }
         }
@@ -1867,16 +1868,16 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
             if ((clUI->keyCatchers & KEYCATCH_SCRIPT) != 0)
             {
                 if ((clUI->keyCatchers & KEYCATCH_CONSOLE) != 0)
-                    Con_ToggleConsole();
+                    CL_GetInputServices().ConsoleToggle();
                 return;
             }
             if ((clUI->keyCatchers & KEYCATCH_MESSAGE) == 0)
             {
                 if ((clUI->keyCatchers & KEYCATCH_CONSOLE) != 0)
-                    Con_CancelAutoComplete();
+                    CL_GetInputServices().ConsoleCancelAutoComplete();
                 if ((clUI->keyCatchers & KEYCATCH_UI) != 0)
                 {
-                    UI_KeyEvent(localClientNum, K_ESCAPE, down);
+                    CL_GetInputServices().UiKey(localClientNum, K_ESCAPE, down);
                 }
                 else
                 {
@@ -1884,16 +1885,16 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
                     {
                     case CA_CINEMATIC:
                     case CA_LOGO:
-                        CL_StopLogoOrCinematic(localClientNum);
+                        CL_GetInputServices().StopCinematic(localClientNum);
                         break;
                     case CA_ACTIVE:
                         {
-                            UI_SetActiveMenu(localClientNum, UIMENU_INGAME);
+                            CL_GetInputServices().UiSetMenu(localClientNum, UIMENU_INGAME);
                         }
                         break;
                     default:
                         if (cls.uiStarted)
-                            UI_SetActiveMenu(localClientNum, UIMENU_MAIN);
+                            CL_GetInputServices().UiSetMenu(localClientNum, UIMENU_MAIN);
                         break;
                     }
                 }
@@ -1908,29 +1909,29 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
             if (kba && *kba == '+')
             {
                 Com_sprintf(cmd, 0x400u, "-%s %i %i\n", kba + 1, key, time);
-                Cbuf_AddText(localClientNum, cmd);
+                CL_GetInputServices().QueueCommand(localClientNum, cmd);
             }
             if ((clUI->keyCatchers & KEYCATCH_UI) != 0 && cls.uiStarted)
-                UI_KeyEvent(localClientNum, key, 0);
+                CL_GetInputServices().UiKey(localClientNum, key, 0);
             return;
         }
         if ((clUI->keyCatchers & KEYCATCH_CONSOLE) == 0)
         {
             if ((clUI->keyCatchers & KEYCATCH_SCRIPT) != 0)
             {
-                Scr_KeyEvent(key);
+                CL_GetInputServices().ScriptKey(key);
                 return;
             }
             if ((clUI->keyCatchers & KEYCATCH_UI) != 0 && !CL_MouseInputShouldBypassMenus(localClientNum, key))
             {
                 if (cls.uiStarted)
-                    UI_KeyEvent(localClientNum, key, down);
+                    CL_GetInputServices().UiKey(localClientNum, key, down);
                 return;
             }
             if ((clUI->keyCatchers & KEYCATCH_MESSAGE) != 0)
             {
             LABEL_91:
-                Message_Key(localClientNum, key);
+                CL_GetInputServices().MessageKey(localClientNum, key);
                 return;
             }
             if (clcState)
@@ -1941,23 +1942,23 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
                     if (*kbb == '+')
                     {
                         Com_sprintf(cmd, 0x400u, "%s %i %i\n", kbb, key, time);
-                        Cbuf_AddText(localClientNum, cmd);
+                        CL_GetInputServices().QueueCommand(localClientNum, cmd);
                     }
                     else
                     {
-                        Cbuf_AddText(localClientNum, kbb);
-                        Cbuf_AddText(localClientNum, "\n");
+                        CL_GetInputServices().QueueCommand(localClientNum, kbb);
+                        CL_GetInputServices().QueueCommand(localClientNum, "\n");
                     }
                 }
                 else if (key >= K_AUX1)
                 {
-                    v4 = Key_KeynumToString(key, 0);
+                    v4 = CL_GetInputServices().KeyName(key, 0);
                     Com_Printf(CON_CHANNEL_CLIENT, "%s is unbound, use controls menu to set.\n", v4);
                 }
                 return;
             }
         }
-        Console_Key(localClientNum, key);
+        CL_GetInputServices().ConsoleKey(localClientNum, key);
         return;
     }
     if ((clUI->keyCatchers & (KEYCATCH_CONSOLE | KEYCATCH_MESSAGE)) != 0)
@@ -2045,13 +2046,13 @@ bool __cdecl CL_MouseInputShouldBypassMenus(int32_t localClientNum, int32_t key)
 #ifdef KISAK_SP
     return false; //KISAKTODO: Is this proper for PC?
 #elif KISAK_MP
-    if (UI_GetActiveMenu(localClientNum) == 10)
+    if (CL_GetInputServices().UiActiveMenu(localClientNum) == 10)
         return 1;
     if (!cl_bypassMouseInput || !cl_bypassMouseInput->current.enabled)
         return 0;
     if (key == K_MOUSE1 || key == K_MOUSE2 || key == K_MOUSE3)
         return 1;
-    return cls.uiStarted && !UI_CheckExecKey(localClientNum, key);
+    return cls.uiStarted && !CL_GetInputServices().UiCheckExecKey(localClientNum, key);
 #endif
 }
 
@@ -2059,16 +2060,16 @@ void __cdecl CL_CharEvent(int32_t localClientNum, int32_t key)
 {
     PROF_SCOPED("CL_CharEvent");
 
-    if (DevGui_IsActive() || key == '`' || key == '~')
+    if (CL_GetInputServices().DevGuiActive() || key == '`' || key == '~')
         return;
 
     clientUIActive_t *clUI = CL_GetLocalClientUIGlobals(localClientNum);
 
     if ((clUI->keyCatchers & KEYCATCH_CONSOLE) != 0)
     {
-        if (key == '\b' && Con_CancelAutoComplete())
+        if (key == '\b' && CL_GetInputServices().ConsoleCancelAutoComplete())
             return;
-        CL_ConsoleCharEvent(localClientNum, key);
+        CL_GetInputServices().ConsoleChar(localClientNum, key);
         return;
     }
     if ((clUI->keyCatchers & KEYCATCH_MESSAGE) != 0)
@@ -2078,20 +2079,20 @@ void __cdecl CL_CharEvent(int32_t localClientNum, int32_t key)
     }
     if ((clUI->keyCatchers & KEYCATCH_UI) != 0)
     {
-        UI_KeyEvent(localClientNum, key | K_CHAR_FLAG, 1);
+        CL_GetInputServices().UiKey(localClientNum, key | K_CHAR_FLAG, 1);
         return;
     }
     
     if (CL_GetLocalClientConnectionState(localClientNum) == CA_DISCONNECTED)
     {
-        CL_ConsoleCharEvent(localClientNum, key);
+        CL_GetInputServices().ConsoleChar(localClientNum, key);
     }
 }
 
 void __cdecl CL_ConsoleCharEvent(int32_t localClientNum, int32_t key)
 {
     if (Field_CharEvent(localClientNum, &scrPlaceFull, &g_consoleField, key))
-        Con_AllowAutoCompleteCycling(1);
+        CL_GetInputServices().ConsoleAllowAutoComplete(1);
 }
 
 void __cdecl Key_ClearStates(int32_t localClientNum)

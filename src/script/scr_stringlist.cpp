@@ -240,6 +240,11 @@ uint32_t SL_GetStringOfSize(const char* str, uint32_t user, uint32_t len, mtType
 
 	Sys_EnterCriticalSection(CRITSECT_SCRIPT_STRING);
 
+	// The standalone host unwinds Com_Error as a C++ exception. The catch
+	// handles that path only; no RAII guard or longjmp recovery is added.
+	try
+	{
+
 	RefString* refStr = NULL;
 
 	uint32_t stringValue = 0;
@@ -396,6 +401,13 @@ uint32_t SL_GetStringOfSize(const char* str, uint32_t user, uint32_t len, mtType
 //END_CLEANUP:
 	Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
 	return stringValue;
+
+	}
+	catch (...)
+	{
+		Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
+		throw;
+	}
 }
 
 const char* SL_ConvertToString(uint32_t stringValue)

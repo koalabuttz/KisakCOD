@@ -107,3 +107,10 @@ extern CmdArgs sv_cmd_args;
 bool __cdecl SV_RecordingDemo();
 
 void Cmd_Echo_f();
+// Minimal registry/tokenizer startup without filesystem or asset commands.
+// The owner must remove all users before ShutdownCore; neither API owns the
+// caller-provided cmd_function_s storage. Shutdown discards pending commands.
+void Cmd_InitCore();
+void Cmd_ShutdownCore();
+void Cbuf_Clear(int localClientNum);
+void Dvar_AddCoreCommands();

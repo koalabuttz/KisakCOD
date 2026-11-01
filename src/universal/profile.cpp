@@ -843,6 +843,8 @@ int __cdecl Profile_EndInternal(long double *duration)
     // KISAKTODO: Profiler
     return 0;
 
+    // The legacy profiler already returns above; its dormant tail uses Win32.
+#ifndef __linux__
     LARGE_INTEGER qpc;
 
     ProfileAtom end;
@@ -881,6 +883,7 @@ int __cdecl Profile_EndInternal(long double *duration)
         *duration = deltaa.value[0] * qpc2msec;
 
     return p - prof_stack->prof_array;
+#endif
 }
 
 void __cdecl Profile_BeginScripts(uint32_t profileFlags)
@@ -938,6 +941,8 @@ void __cdecl Profile_Begin(int index)
     // KISAKTODO: Profiler
 
     return;
+    // The legacy profiler already returns above; its dormant tail uses Win32.
+#ifndef __linux__
     LARGE_INTEGER qpc;
 
     ProfileStack* prof_stack = (ProfileStack*)Sys_GetValue(0);
@@ -951,6 +956,7 @@ void __cdecl Profile_Begin(int index)
 
     QueryPerformanceCounter(&qpc);
     p->write.start[p->write.nesting].value[0] = qpc.QuadPart;
+#endif
 }
 
 int __cdecl Profile_AddScriptName(char *profileName)

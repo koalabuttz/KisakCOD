@@ -2,23 +2,30 @@
 
 ## Status
 
-There is **no native Linux client executable**, and this document does not
-claim one. What exists is an opt-in, compile-and-test-only foundation: the
-portable network translation units of the real multiplayer client build
-natively, and the client/server network command codec is tested end to end
-without assets, sockets, or a game loop.
+There is **no playable native Linux client**. The opt-in foundation now includes
+eight full production client translation units, asset-free runtime integration tests,
+a runnable Linux discovery diagnostic, and an independently opt-in SDL2 window/input shell. The diagnostic starts real UDP/event
+handling and sends read-only `getinfo`; it explicitly reports `connected=false`
+and unavailable Linux authentication. It does not initialize `CL_Frame`, load game
+assets, authenticate, or join a server.
 
 The default native Linux build is still the dedicated multiplayer server. This
-work changes nothing about it.
+window option adds no SDL dependency to it. The shared event queue is extracted without changing its normal overflow or console-polling behavior.
 
 ## What the milestone builds
 
-`KISAK_BUILD_LINUX_CLIENT_CORE` (default `OFF`) adds two targets:
+`KISAK_BUILD_LINUX_CLIENT_CORE` (default `OFF`) adds eight targets:
 
 | Target | Kind | Purpose |
 | --- | --- | --- |
-| `KisakCOD-client-core` | OBJECT library | Compiles three production client TUs |
+| `KisakCOD-client-core` | OBJECT library | Compiles eight production client TUs |
 | `KisakCOD-client-netchan-test` | executable | Asset-free test of the real codec |
+| `KisakCOD-client-state-test` | executable | Real command-parser and key-state runtime checks |
+| `KisakCOD-client-packet-test` | executable | Production command emission, server decoding and prediction history integration |
+| `KisakCOD-client-auth-test` | executable | Challenge formatting and real resend state machine |
+| `KisakCOD-client-receive-test` | executable | Production reader/tokenizer/receive lifecycle and connection guards |
+| `KisakCOD-client-platform-test` | executable | Full client-main compilation and portable setenv behavior |
+| `KisakCOD-client-headless` | executable | Read-only UDP server discovery, no game admission |
 
 The object library compiles these files **unmodified**, from their production
 source paths:
@@ -26,6 +33,11 @@ source paths:
 - `src/client_mp/cl_net_chan_mp.cpp` — client netchan command encode/decode
 - `src/client_mp/cl_parse_mp.cpp` — client message parsing
 - `src/client_mp/cl_input.cpp` — client input/command generation
+- `src/client_mp/cl_cgame_mp.cpp` — cgame state publication and history consumers
+- `src/client_mp/cl_auth.cpp` — challenge formatting and platform authentication boundary
+- `src/client_mp/cl_connection_mp.cpp` — production connection resend state machine
+- `src/client_mp/cl_connection_receive_mp.cpp` — connectionless dispatch and timeout lifecycle
+- `src/client_mp/cl_main_mp.cpp` — full client-main TU, with portable environment handling
 
 Note the paths: the multiplayer client sources live under `client_mp/`.
 `src/client/cl_input.cpp` is the singleplayer/Windows-client variant and is
@@ -84,9 +96,14 @@ cmake -S . -B build-linux/client-core \
     -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$PWD/build-linux/client-core/bin"
 
 cmake --build build-linux/client-core \
-    --target KisakCOD-client-core KisakCOD-client-netchan-test -j4
+    --target KisakCOD-client-core KisakCOD-client-netchan-test KisakCOD-client-state-test KisakCOD-client-packet-test KisakCOD-client-auth-test KisakCOD-client-headless KisakCOD-client-receive-test KisakCOD-client-platform-test -j4
 
 ./build-linux/client-core/bin/KisakCOD-client-netchan-test
+./build-linux/client-core/bin/KisakCOD-client-state-test
+./build-linux/client-core/bin/KisakCOD-client-packet-test
+./build-linux/client-core/bin/KisakCOD-client-auth-test
+./build-linux/client-core/bin/KisakCOD-client-receive-test
+./build-linux/client-core/bin/KisakCOD-client-platform-test
 ```
 
 Requires the same Clang and multilib toolchain as the native Linux server
@@ -107,13 +124,15 @@ The Linux workflow runs it separately for Debug and RelWithDebInfo, so the norma
 server checks do not silently opt into client targets. Hosted CI results still
 need to be checked separately from local validation.
 
-The checker verifies generated compile commands for all three client-core
+The checker verifies generated compile commands for all eight client-core
 translation units (`-m32`, `KISAK_MP`, no dedicated defines), builds in an isolated
-output directory and executes the codec test. Its default-OFF check uses a
+output directory and executes all six runtime tests plus real socket tests. The state-test compile commands
+are also checked for production source paths, client flags and `RELEASE_ASSERTS`. Its default-OFF check uses a
 separate temporary tree. Compiler-name checks can run without a build:
 
 ```sh
 python3 scripts/tests/test_linux_client_core.py --self-test
+python3 scripts/tests/test_linux_client_core_driver.py
 python3 scripts/tests/test_linux_client_core.py --build-type RelWithDebInfo \
     --build-dir build-linux/client-core-relwithdebinfo
 ```
@@ -171,18 +190,54 @@ rather than faked. Only these boundary symbols exist:
   client encodes at `data + 9, length - 9` and the server at
   `data + 4, length - 4`. That fails if the header size ever changes, without
   inventing a fake call.
-- **Anything above the codec.** Fragmentation, ordering, socket I/O, the
-  handshake, and all client state are outside this milestone.
-- **Runtime behaviour of `cl_parse_mp.cpp` and `cl_input.cpp`.** These are
-  compile-verified only; nothing runs them.
+- **Transport and full game state.** Fragmentation, ordering, socket I/O and
+  handshake are outside the codec test. The separate state test below covers
+  bounded parser/input behavior, not the full client loop.
+
+## Command parser and input runtime checks
+
+`client_state_test.cpp` links the actual `cl_parse_mp.cpp`, `cl_input.cpp`,
+`msg_mp.cpp` and `q_shared.cpp` translation units with section GC. Message
+readers and string cleaning/copying are production code, not doubles. Independent
+wire bytes exercise command admission, duplicate/stale sequences, ring wrap,
+every truncation of a command, complete retransmission after rejection,
+preexisting overflow, bounded/oversized strings, following-byte preservation,
+all split-buffer boundaries, and untouched history/connection fields.
+
+This exposed a real defect: `MSG_ReadString` returns a terminated string even
+when input ends early. `CL_ParseCommandString` used to commit that partial text
+and its newer sequence before the enclosing parser discarded the overflowed
+message. It now checks overflow before changing command history. Valid commands
+and the existing 1023-character output limit retain their previous behavior.
+
+Input tests run production `IN_KeyDown`, `IN_KeyUp`, `CL_KeyState`, attack
+command wrappers, `CL_UpdateCmdButton` and `CL_ClearKeys`. They cover repeat
+presses, two keys bound to one button, third-source rejection, unrelated releases,
+time accounting across frames, missing timestamps, clamped fractions, short
+presses between frames, pulse consumption, held-button persistence and clearing.
+No input behavior was changed by this milestone.
+
+Boundary doubles supply connection lookup, command arguments, frame clocks,
+diagnostic printing and fatal assertion handling. The private key-state array
+is reached through real attack/clear wrappers. This does not test real keyboard
+or mouse devices, window events, prediction, snapshot parsing, complete server
+message parsing or command execution. Assertions remain active in both build
+configurations. Native 32-bit sanitizer and graphical-client validation remain
+required separately.
+
+The checker requires both named parser/input result sections, zero failures,
+nonempty sections and consistent totals. Its unit tests reject missing/empty
+sections, contradictory totals and nonzero process exits. The default build
+still exposes none of the optional client targets and the dedicated executable
+fingerprint is checked even when a client build fails.
 
 ## What still blocks a real native client
 
-Compiling three network TUs is not a client. In rough order of weight:
+Compiling eight client TUs is not a client. In rough order of weight:
 
-1. **Win32 windowing, input and startup.** The client startup path, window
-   creation, and input handling are Win32. Startup also goes through
-   Steam-error handling that has no Linux equivalent yet.
+1. **Engine startup integration.** A real SDL2 window/input host now exists, but
+   its shell does not drive `CL_Frame`, client key/UI consumption, or game startup.
+   Steam-error handling still has no supported Linux authentication provider.
 2. **D3D9 renderer.** The rendering path makes real D3D9 calls. This is not a
    stub-shaped problem.
 3. **Renderer backend choice** — out of scope for this milestone. Nothing here
@@ -190,15 +245,168 @@ Compiling three network TUs is not a client. In rough order of weight:
 4. **The rest of the client TUs**, each of which needs its own compile proof
    before it can join the object library.
 
-The honest next step is to take one more TU at a time, proving compilation and
-adding a bounded test where a test can be bounded, rather than adding a fake
-game executable or presentation stubs to make a link succeed.
+The next connection milestone needs a supported Linux ticket provider and a
+shared packet dispatcher driving the real connection receive/state loop. Shared
+input/command/network startup now exists, but discovery does not supply game
+admission or full frame services. Keep full-TU and runtime checks while integrating them.
 
 ## Relationship to the dedicated build
 
-- `KisakCOD-dedi` and its source lists are untouched.
+- `KisakCOD-dedi` retains its normal source selection; shared event-queue code is
+  now in `sys_events.cpp`, with console polling still in `main.cpp`.
 - With `KISAK_BUILD_LINUX_CLIENT_CORE=OFF` (the default) the targets do not
   exist at all — verified by the checker against `cmake --build --target help`.
 - The Windows build path is not touched.
 - The checker fingerprints `bin/KisakCOD-dedi` before and after and fails if it
   changed, so a running dedicated server is never disturbed.
+
+### Packet and prediction integration checkpoint
+
+`client_packet_test.cpp` exercises production cgame setters, `CL_FinishMove`,
+`CL_WritePacket`, Huffman compression, `CL_Netchan_Transmit` encoding,
+`SV_Netchan_Decode`, message readers, and the prediction/command history consumers.
+It crosses the 128-command, 32-packet and 256-prediction rings with 300 successive
+packets, checks command backlog capping, non-delta fallback, repeated prediction
+times, and expired/future history requests. See
+[the integration checkpoint](progress-2026-10-31-client-integration.md) for limits.
+
+The transport is a capture double at `Netchan_Transmit`; no socket, fragment
+assembly, authentication, actual connection handshake, renderer, cgame simulation,
+or two-player gameplay is exercised. Command scheduling/ring insertion is supplied
+by the harness. Temporary allocation and host services are controlled doubles.
+
+### Runnable discovery diagnostic
+
+```sh
+./build-linux/client-core/bin/KisakCOD-client-headless --server 127.0.0.1:28960 --timeout-ms 3000
+```
+
+There is no default destination. The endpoint must be an explicit IPv4 address and
+port; the timeout is 1–10000 milliseconds. This sends one unauthenticated `getinfo`
+query and accepts only a response from that endpoint with the matching challenge.
+Malformed traffic does not reset the deadline. No ticket, challenge-auth request,
+or connect packet is sent. Linux currently prints `auth=unavailable`; successful
+discovery exits **3**, timeout **4**, transport failure **5**, invalid arguments
+**2**, and help **0**. Every status explicitly states `connected=false`.
+
+The diagnostic uses the shared runtime and production `NET_Init`, `NET_OutOfBandPrint`,
+`NET_GetClientPacket`, `NET_Sleep`, `NET_Shutdown`, dvar registration and Linux
+TLS/locking. It prints `network=engine-udp`. “Sent” means the engine API accepted
+the query; only a valid reply proves discovery. It still does not host `CL_Frame`
+or the connection dispatcher. Logging, allocation and clock are shared runtime services; game console UI and
+network profiling remain unavailable. The real receive/resend lifecycle runs
+in a separate fixture with controlled game/transport services, not inside the
+runnable discovery path. See the [lifecycle checkpoint](progress-2026-10-31-client-lifecycle.md)
+for confirmed bugs, valid-wire coverage, render-thread work and remaining boundaries.
+
+
+## Runnable SDL2 window/input shell
+
+`KISAK_BUILD_LINUX_WINDOW_HOST=ON` independently adds `KisakCOD-window-platform`,
+`KisakCOD-client-window`, and `KisakCOD-window-test`. It defaults OFF and needs
+SDL2 >=2.0.18 development files and runtime matching the project's 32-bit build.
+The client-core option does not imply this option or require SDL.
+
+```sh
+cmake -S . -B build-linux/window \
+    -DKISAK_PLATFORM=linux -DCMAKE_BUILD_TYPE=Debug \
+    -DKISAK_BUILD_LINUX_WINDOW_HOST=ON \
+    -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+    -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$PWD/build-linux/window/bin"
+cmake --build build-linux/window --target KisakCOD-client-window KisakCOD-window-test -j4
+./build-linux/window/bin/KisakCOD-client-window --trace --run-ms 10000
+SDL_VIDEODRIVER=dummy ./build-linux/window/bin/KisakCOD-window-test
+python3 scripts/tests/test_linux_window.py --build-dir build-linux/window
+```
+
+Set `SDL2_DIR` to the matching SDK's `lib/.../cmake/SDL2` directory if CMake cannot
+find it. Keep `-m32` if overriding toolchain flags. Repeat with a separate
+RelWithDebInfo build directory. The checker defaults to SDL's dummy driver;
+`scripts/tests/test_linux_window_x11.py --help` describes the separate private
+Xvfb/XTest integration test and its optional `--relative` capture checks.
+
+The shell presents a plain SDL window surface, exits on close or Escape, and
+supports `--frames`, `--run-ms`, `--title`, `--trace`, and `--relative`. Capture
+failure is reported honestly; focus loss releases capture and focus gain restores
+the requested mode. `window=ready` is emitted after the first successful surface
+presentation, when the native window is ready for external automation. The shell
+requests software framebuffer presentation; it initializes no game renderer.
+
+The host translates SDL events through real `Sys_QueEvent` and shared engine
+locking. Its consumer is an explicit reporting recorder, not `CL_KeyEvent`,
+`CL_CharEvent`, or `CL_Frame`. The mouse callback has the actual `CL_MouseEvent`
+signature; the mandatory reset callback has the `Key_ClearStates` signature.
+A future game host must supply those consumers and drive the engine lifecycle.
+The platform recorder remains separate. The production input frontend now shares
+command/network startup with the discovery frontend; see the latest checkpoint below.
+
+Focus loss, minimize and shutdown discard queued key/text events, preserve queued
+console payload ownership/order, and reset consumer input state. This recovers
+from a key-up lost to the existing 256-event ring overflow. Timestamps are
+calibrated from SDL's clock into engine milliseconds, including wraparound.
+Physical modifier keys sharing an engine binding retain independent held state.
+Text input validates UTF-8 and emits printable Latin-1 for the existing byte-based
+engine field API; other Unicode scalars are counted and rejected, not truncated.
+One host owns SDL's process-wide event queue; callbacks must not throw and their
+sink must outlive the host.
+
+See [the window checkpoint](progress-2026-10-31-client-window.md) for the measured
+SDL, X11, dedicated-build and integration limits. These tests do not establish
+hardware input, GPU rendering, authenticated joining, or native gameplay.
+
+
+### Production input-consumer host
+
+The same window opt-in now also builds `KisakCOD-client-input`,
+`KisakCOD-client-input-test`, and `KisakCOD-shutdown-signal-test`.
+Run `KisakCOD-client-input --trace --relative --run-ms 10000` for actual engine
+key/character/mouse handling and disconnected field editing reported in stdout.
+It uses real `playerKeys` and field state; the earlier `KisakCOD-client-window`
+remains the platform-only recorder. The new host still presents a plain surface,
+not game UI. Its terminal-cell layout and unavailable clipboard/autocomplete services are
+explicit; local command execution is now provided by the shared runtime below. The normal game service adapter preserves the
+existing subsystem calls.
+
+Focus/quit clear actual key, button and mouse state; each input tick consumes
+mouse deltas. SIGINT/SIGTERM enter normal shutdown and restore previous handlers.
+`--frame` returns exit 5 with the unavailable `CL_Frame` dependencies, without
+pretending a game loop ran. No connection state is advanced. The window checker
+includes both hosts and the real-consumer lifecycle tests; the external X11
+checker selects the new path with `--engine-input`.
+
+See [the input-host checkpoint](progress-2026-10-31-client-input-host.md) for
+implementation boundaries, build commands, evidence and remaining startup work.
+
+
+### Shared command/network startup
+
+`KisakCOD-client-input` now executes local console text through actual Cmd/Cbuf and
+owns the same `Runtime` used by `KisakCOD-client-headless`. The input loop can run
+read-only discovery concurrently with window events using `--server IPv4:port` or
+`discover IPv4:port` in the editor. It never executes response text or advances
+admission state. Use `echo`, `status`, `wait`, core dvar commands, `net_restart`,
+one-ASCII-key `bind`, and registered attack/forward commands for local diagnostic
+behavior. Unknown commands report rejection; file/config execution and a full
+console UI are not imported. Focus/quit discard delayed command actions and wait
+state; bindings are freed before shared runtime teardown.
+
+The window checker now includes `KisakCOD-client-command-test` and
+`KisakCOD-client-runtime-test`. External X11 integration adds `--commands` to its
+`--engine-input --relative` path. Both frontends still report disconnected state
+and unavailable game frames/authentication. See the
+[shared runtime checkpoint](progress-2026-10-31-client-command-host.md) for the
+reproduced command bugs, shared ownership, real socket tests and remaining limits.
+
+
+### Production input startup
+
+The integrated input frontend now calls the complete production `CL_InitInput`
+and `CL_ShutdownInput`, replacing its four manually registered IN handlers. This
+adds the normal movement/action/stance/ADS/talk registrations and input dvars while
+remaining disconnected. `KisakCOD-client-input-startup-test` verifies startup,
+actual command behavior, reset, input-only teardown and repeated ownership.
+The shared runtime supplies the real command-tick clock; this does not initialize
+`CL_Frame`, voice, renderer or cgame. See the
+[input-startup checkpoint](progress-2026-10-31-client-input-startup.md) and
+[frame dependency map](linux-client-frame-dependencies.md). The proposed central
+packet-dispatch milestone is paused and is not included in these changes.

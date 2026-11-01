@@ -138,8 +138,8 @@ thread-local storage, reserved/committed memory, symlink-safe directory removal,
 command-line bounds, and batched console input. Its isolated engine dependencies
 are test doubles; it is not a complete server simulation.
 
-Internal bot support, asset-free slot/command tests and the currently failing
-installed-assets diagnostic probe are documented in
+Internal bot support, asset-free slot/command and ownership tests and the
+installed-assets bot hold probe are documented in
 [Server-side test clients](server-test-clients.md). Bots do not verify a second
 real client's prediction or snapshot decoding.
 

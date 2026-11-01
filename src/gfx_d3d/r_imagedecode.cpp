@@ -204,7 +204,7 @@ void __cdecl Image_DecompressDxt3(uint8_t *block, GfxRawImage *image, int x, int
 {
     int dy; // [esp+4h] [ebp-4h]
 
-    Image_DecompressDxt1_Internal((DdsBlock_Dxt1_t*)(block + 1), image, x, y, 1);
+    Image_DecompressDxt1_Internal((DdsBlock_Dxt1_t*)(block + 8), image, x, y, 1);
     for (dy = 0; dy < 4; ++dy)
     {
         image->pixels[x + image->width * (dy + y)].a = 17 * (block[2 * dy] & 0xF);
@@ -217,13 +217,11 @@ void __cdecl Image_DecompressDxt3(uint8_t *block, GfxRawImage *image, int x, int
 void __cdecl Image_DecompressDxt5(uint8_t *block, GfxRawImage *image, int x, int y)
 {
     int i; // [esp+F4h] [ebp-24h]
-    uint32_t used; // [esp+F8h] [ebp-20h]
-    int bit; // [esp+FCh] [ebp-1Ch]
     uint8_t a[8]; // [esp+104h] [ebp-14h]
     int dy; // [esp+110h] [ebp-8h]
-    int sample; // [esp+114h] [ebp-4h]
+    uint64_t selectors = 0;
 
-    Image_DecompressDxt1_Internal((DdsBlock_Dxt1_t*)(block + 1), image, x, y, 1);
+    Image_DecompressDxt1_Internal((DdsBlock_Dxt1_t*)(block + 8), image, x, y, 1);
 
     a[0] = block[0];
     a[1] = block[1];
@@ -246,26 +244,15 @@ void __cdecl Image_DecompressDxt5(uint8_t *block, GfxRawImage *image, int x, int
         a[6] = (unsigned char)SnapFloatToInt((5 * block[1] + 2 * block[0]) * 0.1428571492433548);
         a[7] = (unsigned char)SnapFloatToInt((6 * block[1] + block[0]) * 0.1428571492433548);
     }
-    sample = *(block + 1);
-    bit = 0;
-    used = 2;
+    // DXT5 stores sixteen 3-bit alpha selectors in bytes 2..7.
+    // Read all 48 bits explicitly: selectors can straddle byte boundaries.
+    for (i = 0; i < 6; ++i)
+        selectors |= uint64_t(block[i + 2]) << (8 * i);
     for (dy = 0; dy < 4; ++dy)
     {
         for (i = 0; i < 4; ++i)
-        {
-            image->pixels[image->width * (dy + y) + i + x].a = a[(sample >> bit) & 7];
-            bit += 3;
-            if (bit >= 8)
-            {
-                bit -= 8;
-                sample >>= 8;
-                if (used < 6)
-                {
-                    sample |= block[used + 2] << 8;
-                    ++used;
-                }
-            }
-        }
+            image->pixels[image->width * (dy + y) + i + x].a =
+                a[(selectors >> (3 * (dy * 4 + i))) & 7];
     }
 }
 
