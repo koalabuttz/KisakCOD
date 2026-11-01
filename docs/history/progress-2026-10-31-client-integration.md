@@ -2,8 +2,8 @@
 
 > **Historical checkpoint — not current state.** The results below record one
 > branch on one date and are not rewritten here; do not read them as today's
-> status. Current: [2026-11-01 checkpoint](progress-2026-11-01.md). Current guide:
-> [Native Linux client](linux-client.md).
+> status. Current: [2026-11-01 checkpoint](../progress-2026-11-01.md). Current guide:
+> [Native Linux client](../linux-client.md).
 
 Local branch `dot/client-integration-2026-10-31` starts from client-parser checkpoint
 `74d8eb94`. Server fixes stay independent. No push, PR, merge or deployment.

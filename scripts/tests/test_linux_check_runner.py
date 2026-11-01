@@ -117,6 +117,7 @@ class PlannedCommandTests(unittest.TestCase):
     def test_compiled_checks_receive_the_explicit_compiler_on_the_command_line(self):
         for name, flag in (("debugger", "--cxx"), ("fastfile", "--cxx"), ("net_deadline", "--cxx"),
                            ("huffman", "--cxx"), ("handshake_auth", "--cxx"),
+                           ("remote_input", "--cxx"),
                            ("random_range", "--cxx"), ("gameplay_lifecycle", "--cxx"),
                            ("server_test_clients", "--cxx")):
             argv = check_named(self.checks, name).commands[0].argv
@@ -126,6 +127,9 @@ class PlannedCommandTests(unittest.TestCase):
 
     def test_handshake_auth_requires_32_bit_execution(self):
         self.assertIn("--m32", check_named(self.checks, "handshake_auth").commands[0].argv)
+
+    def test_remote_input_requires_32_bit_execution(self):
+        self.assertIn("--m32", check_named(self.checks, "remote_input").commands[0].argv)
 
     def test_server_test_clients_require_32_bit_sanitized_execution(self):
         argv = check_named(self.checks, "server_test_clients").commands[0].argv
@@ -195,6 +199,7 @@ class PlannedCommandTests(unittest.TestCase):
             "runtime",
             "lifecycle_driver",
             "handshake_auth",
+            "remote_input",
             "debugger",
             "fastfile",
             "net_deadline",

@@ -3,9 +3,9 @@
 > **Historical checkpoint — not current state.** This is the handoff for the
 > combined review branch as it stood on that date, including its own validation
 > counts and limits. It is left as recorded; the tree has since moved on. Current:
-> [2026-11-01 checkpoint](progress-2026-11-01.md). Current guides:
-> [Linux dedicated server](linux-dedicated.md),
-> [Native Linux client](linux-client.md).
+> [2026-11-01 checkpoint](../progress-2026-11-01.md). Current guides:
+> [Linux dedicated server](../linux-dedicated.md),
+> [Native Linux client](../linux-client.md).
 
 This review branch combines the independently preserved client and server series.
 It does not update master. The combined code tree matches all 1,426 files in the
@@ -73,7 +73,7 @@ xdotool and Pillow. No new credentials or game downloads are required.
 
 ```sh
 export REPO="$PWD"
-export DELIVERY="$REPO/docs/overnight-review-2026-10-31"
+export DELIVERY="$REPO/docs/history/overnight-review-2026-10-31"
 export TRACY_SOURCE=/absolute/path/to/existing/tracy
 export SDL2_CMAKE_DIR=/absolute/path/to/i386/SDL2/cmake/SDL2
 export BUILD_ROOT=/absolute/path/to/new/review-build

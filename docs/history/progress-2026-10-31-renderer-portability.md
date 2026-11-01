@@ -2,9 +2,9 @@
 
 > **Historical checkpoint — not current state.** The results below record one
 > branch on one date and are not rewritten here; do not read them as today's
-> status. Current: [2026-11-01 checkpoint](progress-2026-11-01.md). Current guides:
-> [Native Linux client](linux-client.md),
-> [renderer validation](linux-renderer-validation.md).
+> status. Current: [2026-11-01 checkpoint](../progress-2026-11-01.md). Current guides:
+> [Native Linux client](../linux-client.md),
+> [renderer validation](../linux-renderer-validation.md).
 
 The Linux compiler can now compile the actual `r_rendercmds.cpp` translation unit
 for both MP and Radiant without inventing a D3D SDK or defining COM interfaces.

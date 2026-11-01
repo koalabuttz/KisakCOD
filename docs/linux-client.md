@@ -283,7 +283,7 @@ admission or full frame services. Keep full-TU and runtime checks while integrat
 It crosses the 128-command, 32-packet and 256-prediction rings with 300 successive
 packets, checks command backlog capping, non-delta fallback, repeated prediction
 times, and expired/future history requests. See
-[the integration checkpoint](progress-2026-10-31-client-integration.md) for limits.
+[the integration checkpoint](history/progress-2026-10-31-client-integration.md) for limits.
 
 The transport is a capture double at `Netchan_Transmit`; no socket, fragment
 assembly, authentication, actual connection handshake, renderer, cgame simulation,
@@ -311,7 +311,7 @@ the query; only a valid reply proves discovery. It still does not host `CL_Frame
 or the connection dispatcher. Logging, allocation and clock are shared runtime services; game console UI and
 network profiling remain unavailable. The real receive/resend lifecycle runs
 in a separate fixture with controlled game/transport services, not inside the
-runnable discovery path. See the [lifecycle checkpoint](progress-2026-10-31-client-lifecycle.md)
+runnable discovery path. See the [lifecycle checkpoint](history/progress-2026-10-31-client-lifecycle.md)
 for confirmed bugs, valid-wire coverage, render-thread work and remaining boundaries.
 
 
@@ -367,7 +367,7 @@ engine field API; other Unicode scalars are counted and rejected, not truncated.
 One host owns SDL's process-wide event queue; callbacks must not throw and their
 sink must outlive the host.
 
-See [the window checkpoint](progress-2026-10-31-client-window.md) for the measured
+See [the window checkpoint](history/progress-2026-10-31-client-window.md) for the measured
 SDL, X11, dedicated-build and integration limits. These tests do not establish
 hardware input, GPU rendering, authenticated joining, or native gameplay.
 
@@ -391,7 +391,7 @@ pretending a game loop ran. No connection state is advanced. The window checker
 includes both hosts and the real-consumer lifecycle tests; the external X11
 checker selects the new path with `--engine-input`.
 
-See [the input-host checkpoint](progress-2026-10-31-client-input-host.md) for
+See [the input-host checkpoint](history/progress-2026-10-31-client-input-host.md) for
 implementation boundaries, build commands, evidence and remaining startup work.
 
 
@@ -411,7 +411,7 @@ The window checker now includes `KisakCOD-client-command-test` and
 `KisakCOD-client-runtime-test`. External X11 integration adds `--commands` to its
 `--engine-input --relative` path. Both frontends still report disconnected state
 and unavailable game frames/authentication. See the
-[shared runtime checkpoint](progress-2026-10-31-client-command-host.md) for the
+[shared runtime checkpoint](history/progress-2026-10-31-client-command-host.md) for the
 reproduced command bugs, shared ownership, real socket tests and remaining limits.
 
 
@@ -424,6 +424,6 @@ remaining disconnected. `KisakCOD-client-input-startup-test` verifies startup,
 actual command behavior, reset, input-only teardown and repeated ownership.
 The shared runtime supplies the real command-tick clock; this does not initialize
 `CL_Frame`, voice, renderer or cgame. See the
-[input-startup checkpoint](progress-2026-10-31-client-input-startup.md) and
+[input-startup checkpoint](history/progress-2026-10-31-client-input-startup.md) and
 [frame dependency map](linux-client-frame-dependencies.md). The proposed central
 packet-dispatch milestone is paused and is not included in these changes.

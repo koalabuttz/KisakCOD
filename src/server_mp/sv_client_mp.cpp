@@ -1574,8 +1574,6 @@ void __cdecl SV_UpdateUserinfo_f(client_t *cl)
 
 void __cdecl SV_ClientThink(client_t *cl, usercmd_s *cmd)
 {
-    char *v2; // eax
-
     if (cmd->serverTime - svs.time <= 20000)
     {
         memcpy(&cl->lastUsercmd, cmd, sizeof(cl->lastUsercmd));
@@ -1595,8 +1593,8 @@ void __cdecl SV_ClientThink(client_t *cl, usercmd_s *cmd)
     }
     else
     {
-        v2 = va("Invalid command time %i from client %s, current server time is %i", cmd->serverTime, cl->name, svs.time);
-        Com_PrintError(CON_CHANNEL_SERVER, v2);
+        // KISAK: cl->name is client-chosen and must not become the format string.
+        Com_PrintError(CON_CHANNEL_SERVER, "Invalid command time %i from client %s, current server time is %i\n", cmd->serverTime, cl->name, svs.time);
     }
 }
 
