@@ -179,5 +179,69 @@ class AssetFreeWorldSurfaceWorkflowTests(unittest.TestCase):
         self.assertNotIn('test_linux_window.py', self.commands)
 
 
+class AssetFreeFreeCameraWorkflowTests(unittest.TestCase):
+    """The free-camera job: Clang -m32 standalone tests, no graphics stack or assets."""
+
+    JOB = 'free_camera'
+
+    @classmethod
+    def setUpClass(cls):
+        cls.workflow = yaml.load(
+            (ROOT / '.github/workflows/build-kisakcod-linux.yaml').read_text(),
+            Loader=yaml.BaseLoader)
+        cls.job = cls.workflow['jobs'][cls.JOB]
+        cls.commands = '\n'.join(step['run'] for step in cls.job['steps'] if 'run' in step)
+
+    def test_path_triggers_reach_the_test_tree(self):
+        for event in ('push', 'pull_request'):
+            self.assertIn('tests/linux_free_camera/**', self.workflow['on'][event]['paths'])
+
+    def test_exactly_two_explicit_configurations(self):
+        self.assertEqual(self.job['strategy']['matrix']['config'], ['Debug', 'RelWithDebInfo'])
+        self.assertEqual(self.job['runs-on'], 'ubuntu-24.04')
+        self.assertIn('timeout-minutes', self.job)
+
+    def test_only_the_32_bit_clang_toolchain_is_installed(self):
+        install = next(step for step in self.job['steps']
+                       if step.get('name') == 'Install 32-bit Clang toolchain')
+        for package in ('clang', 'g++-multilib', 'python3'):
+            self.assertIn(package, install['run'])
+        for package in ('libsdl', 'dxvk', 'vulkan', 'mesa', 'xvfb', 'libgl'):
+            self.assertNotIn(package, install['run'].lower())
+
+    def test_no_step_needs_a_graphics_stack_game_data_or_engine_build(self):
+        for step in self.job['steps']:
+            text = (step.get('name', '') + '\n' + step.get('run', '')).lower()
+            for forbidden in ('dxvk', 'sdl', 'vulkan', 'xvfb', 'steam', 'zone', 'main/',
+                              'cmake', 'build-linux.sh', 'ninja', 'pkg-config'):
+                with self.subTest(step=step.get('name'), forbidden=forbidden):
+                    self.assertNotIn(forbidden, text)
+
+    def test_probe_and_contract_test_gate_the_run(self):
+        names = [step.get('name') for step in self.job['steps']]
+        run = names.index('Run asset-free free camera checks')
+        self.assertLess(names.index('Verify the 32-bit C++20 toolchain'), run)
+        self.assertLess(names.index('Check free camera runner configuration and failure handling'), run)
+        self.assertIn('python3 scripts/tests/test_free_camera_check_runner.py', self.commands)
+
+    def test_runner_invocation_carries_its_exit_status(self):
+        step = next(step for step in self.job['steps']
+                    if step.get('name') == 'Run asset-free free camera checks')
+        for part in ('scripts/tests/run_free_camera_checks.py', '--config "${{ matrix.config }}"',
+                     '--cxx clang++', '--log-dir "artifacts/free-camera-${{ matrix.config }}"',
+                     'python3 -u', '2>&1 | tee'):
+            self.assertIn(part, step['run'])
+        for step in self.job['steps']:
+            if 'run' in step:
+                self.assertTrue(step['run'].lstrip().startswith('set -euo pipefail'), step.get('name'))
+
+    def test_logs_are_kept(self):
+        upload = next(step for step in self.job['steps']
+                      if step.get('uses', '').startswith('actions/upload-artifact@'))
+        self.assertEqual(upload['if'], 'always()')
+        self.assertIn('free-camera-${{ matrix.config }}', upload['with']['name'])
+        self.assertEqual(upload['with']['path'], 'artifacts/')
+
+
 if __name__ == '__main__':
     unittest.main()

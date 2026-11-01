@@ -27,6 +27,7 @@ on:
       - tests/linux_window/**
       - tests/linux_renderer/**
       - tests/linux_asset_export/**
+      - tests/linux_free_camera/**
       - .github/workflows/build-kisakcod-linux.yaml
   pull_request:
     branches: [ "master" ]
@@ -42,6 +43,7 @@ on:
       - tests/linux_window/**
       - tests/linux_renderer/**
       - tests/linux_asset_export/**
+      - tests/linux_free_camera/**
       - .github/workflows/build-kisakcod-linux.yaml
 
 permissions:
@@ -300,6 +302,74 @@ jobs:
           # Text logs only: the compiled test binaries live in a temporary
           # directory that the runner removes, so nothing binary is uploaded.
           name: KisakCOD-world-surface-${{ matrix.config }}
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 7
+
+  free_camera:
+    # Asset-free: the host free camera and its frame owner, compiled as two
+    # standalone -m32 tests with Clang and the production Linux flags, linked
+    # against the unmodified production AnglesToAxis unit. The renderer is a
+    # recording fake: no DXVK, no SDL, no GPU, no game assets, no CMake configure.
+    name: Asset-free free camera checks ${{ matrix.config }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [Debug, RelWithDebInfo]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install 32-bit Clang toolchain
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y clang g++-multilib python3
+
+      - name: Verify the 32-bit C++20 toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang++ --version
+          python3 --version
+          echo "target architecture probe:"
+          printf 'int main(){return 0;}\n' > "$RUNNER_TEMP/m32-probe.cpp"
+          clang++ -m32 -std=c++20 "$RUNNER_TEMP/m32-probe.cpp" -o "$RUNNER_TEMP/m32-probe"
+          "$RUNNER_TEMP/m32-probe"
+          echo "32-bit C++20 link works"
+
+      - name: Check free camera runner configuration and failure handling
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/tests/test_free_camera_check_runner.py
+
+      - name: Run asset-free free camera checks
+        timeout-minutes: 15
+        shell: bash
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 -u scripts/tests/run_free_camera_checks.py \
+            --config "${{ matrix.config }}" \
+            --cxx clang++ \
+            --log-dir "artifacts/free-camera-${{ matrix.config }}" \
+            2>&1 | tee "artifacts/free-camera-${{ matrix.config }}.log"
+
+      - name: Upload free camera check logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          # Text logs only; the runner removes its temporary binaries.
+          name: KisakCOD-free-camera-${{ matrix.config }}
           path: artifacts/
           if-no-files-found: warn
           retention-days: 7
