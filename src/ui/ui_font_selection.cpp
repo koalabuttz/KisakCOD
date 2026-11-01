@@ -3,7 +3,7 @@
 #include "ui_font_selection.h"
 #include <client/client.h>
 
-Font_s *UI_SelectFont(const ScreenPlacement *scrPlace,int fontEnum,float scale,const CachedAssets_t &assets,const dvar_s *small,const dvar_s *big,const dvar_s *extraBig)
+Font_s *UI_SelectFont(const ScreenPlacement *scrPlace,int fontEnum,float scale,const CachedAssets_t &assets,const dvar_s *smallDvar,const dvar_s *bigDvar,const dvar_s *extraBigDvar)
 {
     float scalea; // [esp+10h] [ebp+10h]
 
@@ -21,9 +21,9 @@ Font_s *UI_SelectFont(const ScreenPlacement *scrPlace,int fontEnum,float scale,c
     scalea = scrPlace->scaleVirtualToReal[1] * scale;
     if (fontEnum == 4)
     {
-        if (small->current.value < (double)scalea)
+        if (smallDvar->current.value < (double)scalea)
         {
-            if (big->current.value > (double)scalea)
+            if (bigDvar->current.value > (double)scalea)
                 return assets.textFont;
             else
                 return assets.boldFont;
@@ -33,11 +33,11 @@ Font_s *UI_SelectFont(const ScreenPlacement *scrPlace,int fontEnum,float scale,c
             return assets.smallFont;
         }
     }
-    else if (small->current.value < (double)scalea)
+    else if (smallDvar->current.value < (double)scalea)
     {
-        if (extraBig->current.value > (double)scalea)
+        if (extraBigDvar->current.value > (double)scalea)
         {
-            if (big->current.value > (double)scalea)
+            if (bigDvar->current.value > (double)scalea)
                 return assets.textFont;
             else
                 return assets.bigFont;
