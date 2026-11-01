@@ -28,6 +28,7 @@ on:
       - tests/linux_renderer/**
       - tests/linux_asset_export/**
       - tests/linux_compat/**
+      - tests/linux_world_frontend/**
       - .github/workflows/build-kisakcod-linux.yaml
   pull_request:
     branches: [ "master" ]
@@ -44,6 +45,7 @@ on:
       - tests/linux_renderer/**
       - tests/linux_asset_export/**
       - tests/linux_compat/**
+      - tests/linux_world_frontend/**
       - .github/workflows/build-kisakcod-linux.yaml
 
 permissions:
@@ -287,6 +289,71 @@ jobs:
         with:
           # Compiler diagnostics for failing sources only; no binaries.
           name: KisakCOD-client-census
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 7
+
+  world_frontend:
+    # Asset-free CPU test of the production renderer world front end: DPVS
+    # cell/portal visibility, the AABB-tree and cull-group walk, BSP draw-surface
+    # batching and the merge, run against a synthetic world. The runner compiles
+    # the test, its link boundary and an explicit list of unmodified production
+    # units with one -m32 compiler line and links with --gc-sections. No CMake
+    # configure, no engine build, no DXVK, no SDL, no GPU, no game data. OpenAL
+    # headers are needed because client sound headers include <AL/al.h>.
+    name: Asset-free world front-end checks ${{ matrix.config }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [Debug, RelWithDebInfo]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install world front-end tools
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            cmake clang g++-multilib python3 python3-yaml libopenal-dev
+          clang++ --version
+          printf 'int main(){return 0;}\n' > "$RUNNER_TEMP/m32-probe.cpp"
+          clang++ -m32 "$RUNNER_TEMP/m32-probe.cpp" -o "$RUNNER_TEMP/m32-probe"
+          "$RUNNER_TEMP/m32-probe"
+
+      - name: Check world front-end runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/tests/test_world_frontend_check_runner.py
+
+      - name: Run world front-end checks
+        timeout-minutes: 15
+        shell: bash
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 -u scripts/tests/run_world_frontend_checks.py \
+            --config "${{ matrix.config }}" \
+            --cxx clang++ --jobs 4 \
+            --log-dir "artifacts/world-frontend-${{ matrix.config }}" \
+            2>&1 | tee "artifacts/world-frontend-${{ matrix.config }}.log"
+
+      - name: Upload world front-end logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          # Compiler, link and test output only; the runner builds in a
+          # temporary directory it removes, so no binary is uploaded.
+          name: KisakCOD-world-frontend-${{ matrix.config }}
           path: artifacts/
           if-no-files-found: warn
           retention-days: 7

@@ -168,6 +168,27 @@ pkg-config modules before it configures anything. That project also builds the t
 GPU replay executables, which are a separate manual experiment; see
 [tests/linux_renderer/README.md](../../tests/linux_renderer/README.md).
 
+## World front-end checks
+
+```sh
+python3 scripts/tests/run_world_frontend_checks.py --config Debug
+python3 scripts/tests/run_world_frontend_checks.py --config RelWithDebInfo
+python3 scripts/tests/run_world_frontend_checks.py --list
+python3 scripts/tests/test_world_frontend_check_runner.py
+```
+
+`tests/linux_world_frontend/world_frontend_test.cpp` runs the production renderer
+front end (DPVS cell and portal visibility, the per-cell AABB-tree and cull-group
+walk, BSP draw-surface batching and the merge) against a ten-surface, two-cell
+synthetic world and checks 26 results derived from the geometry. The runner
+compiles the test, its link boundary and 40 unmodified production units with one
+`-m32` line per configuration (`Debug` is `-O0 -D_DEBUG`, `RelWithDebInfo` is
+`-O2 -DNDEBUG`, both with `RELEASE_ASSERTS`), links them with `--gc-sections` and
+runs the ELF32 result. Production assertions abort the run. No DXVK, SDL, GPU,
+assets or CMake configure are involved; clang, g++-multilib and the OpenAL
+headers are. See [the world front-end guide](../../docs/linux-world-frontend.md)
+for the link boundary rules and what a pass does not claim.
+
 ## Client compile census and CRT shims
 
 ```sh
