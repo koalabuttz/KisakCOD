@@ -121,6 +121,14 @@ def plan_checks(options, workdir, build_dir, binary, python, cxx):
 
     checks.append(
         Check(
+            "remote_input",
+            "production rcon password and download name validation",
+            [Command([python, TESTS / "test_server_remote_input.py", "--cxx", cxx, "--m32"], timeout=300)],
+        )
+    )
+
+    checks.append(
+        Check(
             "debugger",
             "script debugger boundary without a UI",
             [Command([python, TESTS / "test_linux_debugger.py", "--cxx", cxx], timeout=300)],
@@ -489,7 +497,7 @@ def main():
     parser.add_argument("--list", action="store_true", help="print the command list and exit without running")
     options = parser.parse_args()
 
-    known = ["bootstrap", "runtime", "lifecycle_driver", "handshake_auth", "debugger", "fastfile", "net_deadline", "huffman", "udp", "sys_fileio", "sys_virtualmem", "lexer_eof", "random_range", "gameplay_lifecycle", "server_test_clients", "weapon_def_ownership", "bot_driver", "database_publication"]
+    known = ["bootstrap", "runtime", "lifecycle_driver", "handshake_auth", "remote_input", "debugger", "fastfile", "net_deadline", "huffman", "udp", "sys_fileio", "sys_virtualmem", "lexer_eof", "random_range", "gameplay_lifecycle", "server_test_clients", "weapon_def_ownership", "bot_driver", "database_publication"]
     options.only = parse_names(options.only)
     options.skip = parse_names(options.skip)
     for name in options.only | options.skip:

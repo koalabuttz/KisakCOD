@@ -34,6 +34,13 @@ for a local-test client, and the retail-GUID opt-in for protocol 1 and protocol 
 clients. It decodes no gamestate and does not establish general stock/CoD4x
 client compatibility.
 
+`test_server_remote_input.py` compiles the production
+`src/server_mp/sv_remote_input.h` rules 64- and 32-bit: `rcon` is refused until
+`rcon_password` is set and matches exactly (an unset password used to accept
+`rcon "" <command>` from any address), and a `download <name>` client command
+is served only for a plain relative `.iwd`/`.ff` path with no `..`, `:` or
+leading separator (any file under `fs_homepath` used to be downloadable).
+
 `test_server_test_clients.py` checks the extracted internal bot functions with
 controlled connection and movement services; the native runner runs its 32-bit
 sanitizer configuration. The opt-in `test_linux_bots.py` uses stock bot/team/class setup, requires repeated healthy

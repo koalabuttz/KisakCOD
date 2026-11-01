@@ -4,6 +4,7 @@
 
 #include <universal/q_shared.h>
 #include "server_mp.h"
+#include "sv_remote_input.h"
 #include <game_mp/g_public_mp.h>
 #include <server/sv_game.h>
 #include <win32/win_local.h>
@@ -1583,6 +1584,22 @@ void __cdecl SV_WriteDownloadToClient(client_t *cl, msg_t *msg)
         {
             if (sv_allowDownload->current.enabled)
             {
+                // KISAK: the client chooses this name and FS_SV_FOpenFileRead only
+                // prepends fs_homepath, so without this check any file the server
+                // can read (server.cfg, "../../etc/passwd") was downloadable.  Only
+                // plain relative .iwd/.ff paths are game content; refuse the rest
+                // with the same reply the client gets for a missing file.
+                if (!SV_IsSafeDownloadName(cl->downloadName))
+                {
+                    Com_Printf(
+                        CON_CHANNEL_SERVER,
+                        "clientDownload: %d : \"%s\" refused: not a plain .iwd/.ff path\n",
+                        cl - svs.clients,
+                        cl->downloadName);
+                    Com_sprintf(errorMessage, 0x400u, "EXE_AUTODL_FILENOTONSERVER %s", cl->downloadName);
+                    SV_WriteDownloadErrorMessage(cl, msg, errorMessage);
+                    return;
+                }
                 if (FS_iwIwd(cl->downloadName, (char*)"main"))
                 {
                     Com_Printf(
