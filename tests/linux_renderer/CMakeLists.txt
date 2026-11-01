@@ -293,3 +293,86 @@ if(KDXK_WORLD_SURFACE_REPLAY)
     set_target_properties(world_surface_replay PROPERTIES BUILD_RPATH "${smoke_runtime_dirs}")
   endif()
 endif()
+
+# ---------------------------------------------------------------------------
+# world_surface_oracle_test: asset-free tests for world_surface_oracle.h, the CPU
+# prediction the replay compares its readback against.
+#
+# Deliberately outside the replay block and with no dependencies at all: it includes no
+# DXVK header, no SDL header, no engine header, and it needs neither a device nor a
+# prepared bundle. It builds its own synthetic matrices, triangle and texture, writes no
+# file, and runs anywhere a C++17 compiler does. That is what makes it safe to wire into
+# CI later without a GPU runner.
+#
+# It is shared by both consumers of the oracle: the replay includes the same header, so a
+# disagreement between the prediction and the replay's expectations shows up here first.
+# ---------------------------------------------------------------------------
+add_executable(world_surface_oracle_test world_surface_oracle_test.cpp)
+target_include_directories(world_surface_oracle_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(world_surface_oracle_test PROPERTIES
+    CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(world_surface_oracle_test PRIVATE -Wall -Wextra)
+endif()
+
+# ---------------------------------------------------------------------------
+# world_lit_replay: the separate TECHNIQUE_LIT profile.
+#
+# A distinct target rather than a mode of world_surface_replay, because the lit pass is a
+# different declaration (four elements, normal UBYTE4 at 36), a different constant set (codes
+# 60/76/41/42 and no code 40) and a different sampler closure (base map at s0, secondary
+# lightmap at s3). The two executables share only the build inputs: the engine's own IWI
+# decoder object library and the same DXVK Native / SDL3 / Vulkan configuration.
+#
+# Nothing here changes the unlit targets; this block only adds.
+# ---------------------------------------------------------------------------
+option(KDXK_WORLD_LIT_REPLAY "Build the lit world surface replay (needs KDXK_WORLD_SURFACE_REPLAY for the decoder)" OFF)
+
+if(KDXK_WORLD_LIT_REPLAY)
+  if(NOT TARGET kdxk_world_surface_decoder)
+    message(FATAL_ERROR
+      "KDXK_WORLD_LIT_REPLAY needs the engine IWI decoder object library, which is built by "
+      "-DKDXK_WORLD_SURFACE_REPLAY=ON. Configure both options together.")
+  endif()
+
+  # The loader's static fixtures. Header-only and device-free: this target links nothing but the
+  # standard library, so the refusals are exercised on hosts that cannot create a D3D9 device.
+  add_executable(world_lit_bundle_test world_lit_bundle_test.cpp)
+  set_target_properties(world_lit_bundle_test PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+  target_include_directories(world_lit_bundle_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(world_lit_bundle_test PRIVATE -Wall -Wextra)
+  endif()
+
+  add_executable(world_lit_replay
+                 world_lit_replay.cpp
+                 $<TARGET_OBJECTS:kdxk_world_surface_decoder>)
+
+  set_target_properties(world_lit_replay PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+
+  # Same deliberately narrow include set as the unlit replay: the lit program reaches the
+  # decoder through iwi_assets.h only, and never sees an engine header root.
+  target_include_directories(world_lit_replay PRIVATE
+                             ${CMAKE_CURRENT_SOURCE_DIR}
+                             ${KDXK_ENGINE_SOURCE_DIR}/linux/client/window
+                             ${KDXK_VULKAN_INCLUDE_DIR})
+
+  if(KDXK_SDL3_SDK_ROOT)
+    set(lit_replay_sdl3_target kdxk_sdl3)
+  else()
+    set(lit_replay_sdl3_target PkgConfig::SDL3)
+  endif()
+
+  target_link_libraries(world_lit_replay PRIVATE
+                        PkgConfig::DXVK_D3D9
+                        ${lit_replay_sdl3_target})
+
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(world_lit_replay PRIVATE -Wall -Wextra)
+    target_link_options(world_lit_replay PRIVATE -Wl,--gc-sections)
+  endif()
+
+  if(smoke_runtime_dirs)
+    set_target_properties(world_lit_replay PROPERTIES BUILD_RPATH "${smoke_runtime_dirs}")
+  endif()
+endif()

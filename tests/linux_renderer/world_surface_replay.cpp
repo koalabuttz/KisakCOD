@@ -61,6 +61,7 @@
 
 #include "world_surface_bundle.h"
 #include "world_surface_context.h"
+#include "world_surface_oracle.h"
 
 // The routing contract in world_surface_bundle.h transcribes code indices and destination
 // registers that world_surface_context.h also has to know, because that is where the values
@@ -449,7 +450,12 @@ struct Image
 {
     std::uint32_t width = 0;
     std::uint32_t height = 0;
-    std::vector<std::uint8_t> rgb; // width * height * 3
+    // `rgb` is the three-channel view the PPM writer and the statistics read. `rgba` is the
+    // full readback of the A8R8G8B8 target, alpha included, and it exists because the pixel
+    // oracle predicts four channels: the decoded program computes output alpha as
+    // texel.a * vertex.a and that value cannot be checked from a three-channel copy.
+    std::vector<std::uint8_t> rgb;  // width * height * 3
+    std::vector<std::uint8_t> rgba; // width * height * 4
 };
 
 bool WritePpm(const std::string& path, const Image& image, std::string* error)
@@ -588,6 +594,16 @@ struct Options
     float cameraDistanceScale = 3.0f;
     float tanHalfFov = 0.57735026f; // tan(30 deg)
 
+    // Explicit camera. When both points are given, the eye and the target are the caller's
+    // numbers and the synthetic derivation does not run at all: nothing is derived from the
+    // referenced triangle, so a surface with more than one triangle can be replayed without
+    // editing the bundle's indices. With neither given, every camera number is derived exactly
+    // as before. One without the other is refused rather than completed with a default.
+    bool cameraEyeSupplied = false;
+    Vec3 cameraEye{};
+    bool cameraTargetSupplied = false;
+    Vec3 cameraTarget{};
+
     // Material colour, i.e. the value of constant code 40. The bundle does not carry the
     // scene's value (its own colorTint literal has no register base), so it has to be stated
     // on the command line and is printed in the report.
@@ -627,6 +643,13 @@ void printUsage(std::FILE* out)
         "  --camera-distance SCALE   eye distance as a multiple of the longest triangle\n"
         "                            edge (default 3.0)\n"
         "  --tan-half-fov VALUE      projection half-angle tangent (default 0.57735026)\n"
+        "  --camera-eye X,Y,Z        explicit eye. Given together with --camera-target, the\n"
+        "                            camera is these numbers and nothing is derived from the\n"
+        "                            referenced triangle. This is the only way to replay a\n"
+        "                            surface with more than one triangle, whose indices are\n"
+        "                            never edited for the camera. One of the two flags without\n"
+        "                            the other is refused.\n"
+        "  --camera-target X,Y,Z     explicit look-at point, with --camera-eye\n"
         "  --material-color R,G,B,A  value of constant code 40, the material colour (required).\n"
         "                            The bundle does not carry it (the exporter records only a\n"
         "                            colorTint literal with no register base), so the run\n"
@@ -673,6 +696,37 @@ bool parseFloat(const char* text, float* value)
     if (!end || *end != '\0')
         return false;
     *value = static_cast<float>(parsed);
+    return true;
+}
+
+// Three comma-separated numbers, for a world-space point. Field by field with strtod and an
+// explicit delimiter check, so "1,2" and "1,2,3,4" are refused instead of being truncated or
+// accepted with a trailing component dropped. A non-finite component is refused too: an eye or
+// target of inf/nan would produce a camera the context builder has to reject later, and the
+// parser is where the caller can still be told which flag is wrong.
+bool parseVec3(const char* text, Vec3* value)
+{
+    if (!text || !*text)
+        return false;
+    const char* cursor = text;
+    for (int component = 0; component < 3; ++component)
+    {
+        char* end = nullptr;
+        const double parsed = std::strtod(cursor, &end);
+        if (!end || end == cursor || !std::isfinite(parsed))
+            return false;
+        value->value[component] = static_cast<float>(parsed);
+        if (component < 2)
+        {
+            if (*end != ',')
+                return false;
+            cursor = end + 1;
+        }
+        else if (*end != '\0')
+        {
+            return false;
+        }
+    }
     return true;
 }
 
@@ -736,6 +790,25 @@ bool parseArgs(int argc, char** argv, Options& options, bool* helpRequested, std
         else if (arg == "--texture")
         {
             options.texturePath = value;
+        }
+        else if (arg == "--camera-eye")
+        {
+            if (!parseVec3(value.c_str(), &options.cameraEye))
+            {
+                *error = "--camera-eye expects three comma-separated numbers, e.g. -3250,3375,1080";
+                return false;
+            }
+            options.cameraEyeSupplied = true;
+        }
+        else if (arg == "--camera-target")
+        {
+            if (!parseVec3(value.c_str(), &options.cameraTarget))
+            {
+                *error = "--camera-target expects three comma-separated numbers, "
+                         "e.g. -1984,2680,192";
+                return false;
+            }
+            options.cameraTargetSupplied = true;
         }
         else if (arg == "--material-color")
         {
@@ -1253,6 +1326,36 @@ bool CreateTargets(IDirect3DDevice9* device, Resources* resources, std::string* 
     return true;
 }
 
+// sRGB conversion is test context, not decoded bundle state.
+//
+// The recorded state block uses the engine's GFXS0_/GFXS1_ bit layout, and neither of
+// these two states has a bit there: R_ChangeState_0 never touches them, so the bundle
+// cannot say what they were. D3D9 leaves both at their device defaults, and a sampler with
+// SRGBTEXTURE set would convert the sampled 8-bit texel to linear before the shader saw
+// it, which would silently contradict every value the CPU oracle predicts -- the oracle
+// samples the uploaded texel bytes as they are.
+//
+// So both are disabled explicitly here, at the point where the frame is set up, and the
+// report records that this is a stated test input rather than a captured one. Doing it in
+// RenderOnce rather than once after device creation is deliberate: IDirect3DDevice9::Reset
+// returns the device to its defaults, and the device-reset check re-enters this path.
+bool DisableSrgbConversion(IDirect3DDevice9* device, std::string* error)
+{
+    HRESULT hr = device->SetSamplerState(0, D3DSAMP_SRGBTEXTURE, 0);
+    if (FAILED(hr))
+    {
+        *error = "SetSamplerState(D3DSAMP_SRGBTEXTURE) failed, hr=" + hrText(hr);
+        return false;
+    }
+    hr = device->SetRenderState(D3DRS_SRGBWRITEENABLE, FALSE);
+    if (FAILED(hr))
+    {
+        *error = "SetRenderState(D3DRS_SRGBWRITEENABLE) failed, hr=" + hrText(hr);
+        return false;
+    }
+    return true;
+}
+
 // Applies the decoded state block. Each assignment comes from DecodedState, so nothing
 // here reintroduces a default that the decode refused to produce.
 bool ApplyStateBlock(IDirect3DDevice9* device, const DecodedState& state, std::string* error)
@@ -1466,10 +1569,43 @@ bool ApplyArguments(const world_surface_bundle::Bundle& bundle, IDirect3DDevice9
 }
 
 // ---------------------------------------------------------------------------
+// How the recorded geometry is issued. Single is the recorded draw: one call covering every
+// triangle of the slice. PerTriangle issues one single-triangle call per triangle in the
+// recorded order, and Reverse issues them last-first. Both split modes address the same indices
+// through StartIndex = 3 * k, so the index buffer is never rewritten and the reversal cannot be
+// explained by an edited buffer. PerTriangle exists to show that splitting the call is not
+// itself a change: it has to reproduce the recorded image exactly, which is what leaves
+// Reverse, and Reverse with the depth test off, as the only remaining differences.
+enum class DrawOrder
+{
+    Single = 0,
+    PerTriangle,
+    Reverse,
+};
+
+// Every frame is built from this. A control differs from the baseline in exactly the inputs it
+// names here, and every control goes through CreateAll -> ApplyFrameState -> RenderOnce.
+struct FrameInputs
+{
+    const world_surface_context::Context* context = nullptr;
+    const kisak::window::IwiMipChain* mips = nullptr; // nullptr -> 1x1 white stand-in
+    const SamplerStates* sampler = nullptr;           // nullptr -> no sampler decode applied
+    bool issueDraw = true;
+    DrawOrder drawOrder = DrawOrder::Single;
+
+    // Frame-level depth-test override, applied in RenderOnce after the decoded state block has
+    // been uploaded. The recorded state stays what every other frame runs with, and the
+    // device-reset path is untouched. D3D9 ignores ZWRITEENABLE while ZENABLE is FALSE, so this
+    // also stops the frame writing depth.
+    bool overrideDepthTest = false;
+    bool depthTestEnabled = false;
+};
+
+// ---------------------------------------------------------------------------
 // One frame: draw, read back, and turn the SYSTEMEMEM lock into an RGB image.
 // ---------------------------------------------------------------------------
 bool RenderOnce(IDirect3DDevice9* device, const world_surface_bundle::Bundle& bundle,
-    Resources* resources, Image* image, bool issueDraw, std::string* error)
+    Resources* resources, Image* image, const FrameInputs& inputs, std::string* error)
 {
     HRESULT hr = device->SetRenderTarget(0, resources->renderTarget);
     if (FAILED(hr))
@@ -1499,6 +1635,25 @@ bool RenderOnce(IDirect3DDevice9* device, const world_surface_bundle::Bundle& bu
     }
 
     const D3DCOLOR clearColor = D3DCOLOR_XRGB(kClearRed, kClearGreen, kClearBlue);
+    // Test context, applied before anything is drawn: see DisableSrgbConversion. Both the
+    // sampler's sRGB decode and the target's sRGB write are off, which is what lets the
+    // CPU oracle predict the uploaded texel bytes directly.
+    if (!DisableSrgbConversion(device, error))
+        return false;
+
+    // Depth-test override, after the decoded block has been applied and before anything is
+    // cleared or drawn. Only the frame that asks for it sees this value.
+    if (inputs.overrideDepthTest)
+    {
+        hr = device->SetRenderState(
+            D3DRS_ZENABLE, inputs.depthTestEnabled ? D3DZB_TRUE : D3DZB_FALSE);
+        if (FAILED(hr))
+        {
+            *error = "SetRenderState(D3DRS_ZENABLE override) failed, hr=" + hrText(hr);
+            return false;
+        }
+    }
+
     hr = device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, clearColor, 1.0f, 0);
     if (FAILED(hr))
     {
@@ -1555,14 +1710,40 @@ bool RenderOnce(IDirect3DDevice9* device, const world_surface_bundle::Bundle& bu
     // issueDraw=false is the skip-draw control: every binding, state and constant above is
     // identical, and only the DrawIndexedPrimitive call is missing, so the readback must be
     // the clear colour exactly.
-    if (issueDraw)
+    if (inputs.issueDraw)
     {
-        hr = device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, bundle.vertex_count, 0, bundle.tri_count);
-        if (FAILED(hr))
+        if (inputs.drawOrder == DrawOrder::Single)
         {
-            device->EndScene();
-            *error = "DrawIndexedPrimitive failed, hr=" + hrText(hr);
-            return false;
+            hr = device->DrawIndexedPrimitive(
+                D3DPT_TRIANGLELIST, 0, 0, bundle.vertex_count, 0, bundle.tri_count);
+            if (FAILED(hr))
+            {
+                device->EndScene();
+                *error = "DrawIndexedPrimitive failed, hr=" + hrText(hr);
+                return false;
+            }
+        }
+        else
+        {
+            // One single-triangle call per triangle, walking the slice forwards or backwards.
+            // StartIndex = 3 * k names triangle k's three indices, so the reversal is a change
+            // of draw order and nothing else: no index is rewritten, reordered or duplicated.
+            for (std::uint32_t step = 0; step < bundle.tri_count; ++step)
+            {
+                const std::uint32_t triangle = inputs.drawOrder == DrawOrder::Reverse
+                    ? bundle.tri_count - 1u - step
+                    : step;
+                hr = device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, bundle.vertex_count,
+                    3u * triangle, 1);
+                if (FAILED(hr))
+                {
+                    device->EndScene();
+                    *error = "DrawIndexedPrimitive(triangle " + std::to_string(triangle)
+                        + ", StartIndex " + std::to_string(3u * triangle) + ") failed, hr="
+                        + hrText(hr);
+                    return false;
+                }
+            }
         }
     }
 
@@ -1605,6 +1786,7 @@ bool RenderOnce(IDirect3DDevice9* device, const world_surface_bundle::Bundle& bu
     image->width = kRenderWidth;
     image->height = kRenderHeight;
     image->rgb.assign(static_cast<std::size_t>(kRenderWidth) * kRenderHeight * 3u, 0);
+    image->rgba.assign(static_cast<std::size_t>(kRenderWidth) * kRenderHeight * 4u, 0);
     for (std::uint32_t row = 0; row < kRenderHeight; ++row)
     {
         const auto* source = reinterpret_cast<const std::uint32_t*>(
@@ -1616,6 +1798,13 @@ bool RenderOnce(IDirect3DDevice9* device, const world_surface_bundle::Bundle& bu
             image->rgb[offset + 0] = static_cast<std::uint8_t>((texel >> 16) & 0xFFu);
             image->rgb[offset + 1] = static_cast<std::uint8_t>((texel >> 8) & 0xFFu);
             image->rgb[offset + 2] = static_cast<std::uint8_t>(texel & 0xFFu);
+
+            // The A8R8G8B8 readback is the same texel with alpha kept. Written in the same
+            // pass so the two views cannot disagree.
+            image->rgba[offset / 3u * 4u + 0u] = image->rgb[offset + 0];
+            image->rgba[offset / 3u * 4u + 1u] = image->rgb[offset + 1];
+            image->rgba[offset / 3u * 4u + 2u] = image->rgb[offset + 2];
+            image->rgba[offset / 3u * 4u + 3u] = static_cast<std::uint8_t>((texel >> 24) & 0xFFu);
         }
     }
 
@@ -1714,18 +1903,10 @@ std::uint32_t SampleChannel(const Image& image, std::uint32_t column, std::uint3
 }
 
 // ---------------------------------------------------------------------------
-// One frame: build the objects the bundle describes, apply the recorded state and
-// constants, draw, read back. Every control uses this path, so a control differs from the
-// baseline in exactly the one input it is named for.
+// One frame, built and applied: every resource the bundle describes, then the recorded state,
+// sampler and constants. Every control enters here, so a control differs from the baseline in
+// exactly the input it is named for.
 // ---------------------------------------------------------------------------
-struct FrameInputs
-{
-    const world_surface_context::Context* context = nullptr;
-    const kisak::window::IwiMipChain* mips = nullptr; // nullptr -> 1x1 white stand-in
-    const SamplerStates* sampler = nullptr;           // nullptr -> no sampler decode applied
-    bool issueDraw = true;
-};
-
 bool CreateAll(const world_surface_bundle::Bundle& bundle, IDirect3DDevice9* device,
     const FrameInputs& inputs, Resources* resources, std::string* error)
 {
@@ -1778,7 +1959,7 @@ bool RunFrame(const world_surface_bundle::Bundle& bundle, IDirect3DDevice9* devi
     if (ok)
         ok = ApplyFrameState(bundle, device, state, inputs, resources.texture, stats, error);
     if (ok)
-        ok = RenderOnce(device, bundle, &resources, image, inputs.issueDraw, error);
+        ok = RenderOnce(device, bundle, &resources, image, inputs, error);
     resources.Release();
     return ok;
 }
@@ -1874,7 +2055,7 @@ bool ResetAndRebuild(const world_surface_bundle::Bundle& bundle, IDirect3DDevice
         resources.Release();
         return false;
     }
-    const bool rendered = RenderOnce(device, bundle, &resources, after, inputs.issueDraw, error);
+    const bool rendered = RenderOnce(device, bundle, &resources, after, inputs, error);
     resources.Release();
     return rendered;
 }
@@ -1891,13 +2072,62 @@ struct CameraDerivation
     std::uint16_t indexValues[3] = {0, 0, 0};
 };
 
+// The camera the caller stated, used as given. Nothing here reads the geometry: the eye and the
+// target are the numbers from the command line, the basis is built from eye -> target, and the
+// surface's index order is never consulted. That is what lets a surface with more than one
+// triangle be replayed without editing its indices, and it is also why the winding probe in main
+// does not run for this camera: the caller said where to look, so the replay does not move the
+// eye afterwards.
+bool DeriveExplicitCamera(const Options& options, CameraDerivation* derivation, std::string* error)
+{
+    const Vec3 direction = Subtract(options.cameraTarget, options.cameraEye);
+    const float distance = Length(direction);
+    if (!(distance > 0.0f))
+    {
+        *error = "--camera-eye and --camera-target are the same point";
+        return false;
+    }
+
+    world_surface_context::CameraInputs& camera = derivation->camera;
+    for (int component = 0; component < 3; ++component)
+        camera.origin[component] = options.cameraEye.value[component];
+
+    if (!BuildCameraBasis(direction, &camera, error))
+        return false;
+
+    camera.tanHalfFovX = options.tanHalfFov;
+    camera.tanHalfFovY = options.tanHalfFov;
+    // No captured near plane exists in either mode. Here it is a fixed fraction of the stated
+    // viewing distance, which stays well in front of the eye for any camera a caller states; the
+    // value is printed in the report rather than being assumed silently.
+    camera.zNear = std::max(0.01f, distance * 0.05f);
+
+    // The target stands in for the derived centroid in the two places that read it: the report,
+    // and the look-away control, which needs the point the camera is aimed at. `normal` and
+    // `indexValues` stay at zero because no triangle was consulted.
+    derivation->centroid = options.cameraTarget;
+    derivation->longestEdge = distance;
+    return true;
+}
+
 bool DeriveCamera(const world_surface_bundle::Bundle& bundle, const Options& options,
     CameraDerivation* derivation, std::string* error)
 {
+    if (options.cameraEyeSupplied != options.cameraTargetSupplied)
+    {
+        *error = "--camera-eye and --camera-target must be given together: one without the other "
+                 "would leave half the camera to be derived from the geometry";
+        return false;
+    }
+    if (options.cameraEyeSupplied)
+        return DeriveExplicitCamera(options, derivation, error);
+
     if (bundle.index_count != 3)
     {
         *error = "camera derivation expects exactly one triangle, the bundle has "
-            + std::to_string(bundle.index_count) + " indices";
+            + std::to_string(bundle.index_count)
+            + " indices; a surface with more triangles needs --camera-eye and --camera-target, "
+              "and its indices are not edited to fit a derived camera";
         return false;
     }
 
@@ -2028,6 +2258,10 @@ struct Report
     std::vector<std::string> lines;
     int checksPassed = 0;
     int checksFailed = 0;
+    // Lines already written to stdout. Flush is incremental so the report can be streamed
+    // as it is produced, which is how the oracle's prediction is shown to precede the frame
+    // it predicts rather than being reconstructed after it.
+    std::size_t flushedLines = 0;
 
     void Line(const std::string& text) { lines.push_back(text); }
 
@@ -2043,8 +2277,8 @@ struct Report
 
     void Flush()
     {
-        for (const std::string& line : lines)
-            std::printf("%s\n", line.c_str());
+        for (; flushedLines < lines.size(); ++flushedLines)
+            std::printf("%s\n", lines[flushedLines].c_str());
     }
 
     bool WriteTo(const std::string& path) const
@@ -2144,6 +2378,642 @@ int RunSelfTest()
 
     std::printf("[selftest] %s\n", ok ? "PASS" : "FAIL");
     return ok ? ExitPass : ExitFailure;
+}
+
+// ---------------------------------------------------------------------------
+// The CPU pixel oracle, as this replay uses it.
+//
+// The prediction is built here, from the bundle's vertex bytes, the constant payload this
+// run uploads and the mip0 texels the decoder returned, and it is printed before the device
+// exists. The readback is compared against it afterwards. Nothing in this path reads a
+// rendered image, so the comparison cannot be satisfied by construction, and the
+// expectations are not revised once the frame has been seen.
+//
+// Scope: the audited fixture only. world_surface_oracle.h transcribes one vs_3_0/ps_3_0
+// pair and reduces its pixel stage for all-white vertex colours, material (1,1,1,0), fog
+// colour zero and a disabled fog vector. A run that changes any of those is outside that
+// reduction, and CheckBaseline refuses it by name instead of predicting something nearby.
+// ---------------------------------------------------------------------------
+struct OracleDeclaration
+{
+    bool available = false;
+    std::string reason;
+    world_surface_oracle::ProgramCheck programs;
+    // The facts of the first triangle. Every triangle is gated; a later one that leaves the
+    // audited fixture refuses the whole declaration and is named in `reason`.
+    world_surface_oracle::BaselineFacts baseline;
+    world_surface_oracle::Selection selection;
+    // The geometry the selection was made from, and the vertex outputs behind it: the corner
+    // output of triangle t, corner c is outputs[3 * t + c].
+    std::vector<world_surface_oracle::TriangleInput> triangles;
+    std::vector<world_surface_oracle::VertexOutput> outputs;
+    world_surface_oracle::PixelConstants pixelConstants{};
+    world_surface_oracle::Mip0View mip0{};
+};
+
+// The uploaded payload, read straight out of the ConstantRows the context already built.
+// context.vsTransposeViewProjection is VS c0..c3 and context.vsTransposeWorld is c4..c7,
+// both already transposed by R_GetCodeMatrix, so nothing is transposed again here.
+world_surface_oracle::VertexConstants OracleVertexConstants(
+    const world_surface_context::Context& context)
+{
+    world_surface_oracle::VertexConstants constants{};
+    for (int row = 0; row < 4; ++row)
+    {
+        for (int column = 0; column < 4; ++column)
+        {
+            constants.clipRows[row][column] = context.vsTransposeViewProjection.rows[row][column];
+            constants.worldRows[row][column] = context.vsTransposeWorld.rows[row][column];
+        }
+    }
+    for (int component = 0; component < 4; ++component)
+        constants.fog[component] = context.vsFog[component];
+    return constants;
+}
+
+world_surface_oracle::PixelConstants OraclePixelConstants(const world_surface_context::Context& context)
+{
+    world_surface_oracle::PixelConstants constants{};
+    for (int component = 0; component < 4; ++component)
+    {
+        constants.fogColor[component] = context.psFogColor[component];
+        constants.material[component] = context.psMaterialColor[component];
+    }
+    return constants;
+}
+
+// ---------------------------------------------------------------------------
+// Plane grouping for a multi-triangle surface.
+//
+// Coplanar triangles are grouped by their plane, not by material index or by index order: the
+// normal comes from the triangle's own corners and the offset from dot(normal, p0). Neither
+// number is matched by float equality -- two triangles of one map plane arrive with independently
+// rounded positions, so the match is a tolerance on both -- and the number of groups is bounded,
+// because "one group per triangle" would turn the per-group quota into the aggregate sample
+// count and stop saying anything about the planes.
+// ---------------------------------------------------------------------------
+struct PlaneGroup
+{
+    Vec3 normal{};
+    float offset = 0.0f;
+    std::uint32_t group = 0;
+};
+
+constexpr std::uint32_t kMaxPlaneGroups = 32;
+// cos of about 2.6 degrees between two normals of one plane.
+constexpr float kPlaneNormalCosTolerance = 1.0f - 1e-3f;
+// World units. The surfaces this replay is used on put their planes hundreds of units apart,
+// while float rounding on positions around 1e3 is far below one tenth of a unit.
+constexpr float kPlaneOffsetTolerance = 0.125f;
+
+// The plane of one triangle in a canonical form, so both windings of one plane produce one
+// normal and one offset: the grouping asks which plane a triangle lies in, not which way it
+// faces, and facing is applied to the triangles themselves by the cull mode. False means the
+// triangle has zero area and therefore no plane.
+bool TrianglePlane(const world_surface_bundle::Bundle& bundle, const std::uint32_t index[3],
+    Vec3* normal, float* offset)
+{
+    Vec3 corners[3];
+    for (int corner = 0; corner < 3; ++corner)
+    {
+        const world_surface_bundle::WorldVertex vertex
+            = world_surface_bundle::ReadVertex(bundle, index[corner]);
+        for (int component = 0; component < 3; ++component)
+            corners[corner].value[component] = vertex.position[component];
+    }
+
+    if (!Normalize(Cross(Subtract(corners[1], corners[0]), Subtract(corners[2], corners[0])), normal))
+    {
+        *offset = 0.0f;
+        return false;
+    }
+
+    // The first component that is not effectively zero decides the sign.
+    int sign = 0;
+    for (int axis = 0; axis < 3 && sign == 0; ++axis)
+        if (std::fabs(normal->value[axis]) > 1e-6f)
+            sign = normal->value[axis] < 0.0f ? -1 : 1;
+    if (sign < 0)
+    {
+        for (int axis = 0; axis < 3; ++axis)
+            normal->value[axis] = -normal->value[axis];
+    }
+
+    // Offset from the canonical normal, so the sign flip above carries into it.
+    *offset = Dot(*normal, corners[0]);
+    return true;
+}
+
+// The group of the matching plane, or a new group. `overflow` is set when the surface needs more
+// groups than the bound allows; the caller refuses rather than merging planes silently.
+std::uint32_t FindOrAddPlaneGroup(const Vec3& normal, float offset,
+    std::vector<PlaneGroup>* groups, bool* overflow)
+{
+    for (const PlaneGroup& group : *groups)
+    {
+        if (Dot(group.normal, normal) < kPlaneNormalCosTolerance)
+            continue;
+        if (std::fabs(group.offset - offset) > kPlaneOffsetTolerance)
+            continue;
+        return group.group;
+    }
+    if (groups->size() >= kMaxPlaneGroups)
+    {
+        *overflow = true;
+        return 0;
+    }
+    PlaneGroup group;
+    group.normal = normal;
+    group.offset = offset;
+    group.group = static_cast<std::uint32_t>(groups->size());
+    groups->push_back(group);
+    return group.group;
+}
+
+// The winding the device keeps, from the decoded state block: D3DCULL_CCW removes the
+// counter-clockwise triangles, so the clockwise ones -- D3D's front face -- are what survives,
+// and D3DCULL_CW is the other way round. DecodeCull only ever produces these three values, so
+// false here means an unexpected mode reached this point rather than a mapping to a neighbour.
+bool CullModeFromState(D3DCULL cull, world_surface_oracle::CullMode* mode)
+{
+    if (cull == D3DCULL_CCW)
+    {
+        *mode = world_surface_oracle::CullMode::ClockwiseOnly;
+        return true;
+    }
+    if (cull == D3DCULL_CW)
+    {
+        *mode = world_surface_oracle::CullMode::CounterClockwiseOnly;
+        return true;
+    }
+    if (cull == D3DCULL_NONE)
+    {
+        *mode = world_surface_oracle::CullMode::None;
+        return true;
+    }
+    return false;
+}
+
+// The whole declaration: program identity, fixture gate, per-triangle vertex evaluation, then
+// the stratified sample set with its predicted colours.
+//
+// Every triangle of the bundle goes through the vertex stage. `available == false` means the
+// oracle refused and `reason` says why; the caller reports that as a failed check, never as a
+// skip. The single-triangle case is the same loop over one element, so there is no second code
+// path that could drift from it.
+bool BuildOracleDeclaration(const world_surface_bundle::Bundle& bundle, const DecodedState& state,
+    const world_surface_context::Context& context, const kisak::window::IwiMipChain* mips,
+    OracleDeclaration* declaration)
+{
+    *declaration = OracleDeclaration{};
+
+    declaration->programs = world_surface_oracle::CheckAuditedPrograms(
+        bundle.vertex_shader_bytes, bundle.pixel_shader_bytes);
+    if (!declaration->programs.ok)
+    {
+        declaration->reason = "shader pair is not the audited program: " + declaration->programs.reason;
+        return true;
+    }
+
+    if (bundle.tri_count == 0 || bundle.index_count != bundle.tri_count * 3u)
+    {
+        declaration->reason = "geometry does not declare whole triangles";
+        return true;
+    }
+
+    world_surface_oracle::CullMode cullMode = world_surface_oracle::CullMode::None;
+    if (!CullModeFromState(state.cull, &cullMode))
+    {
+        declaration->reason = "the decoded cull mode has no oracle equivalent";
+        return true;
+    }
+
+    const world_surface_oracle::VertexConstants vertexConstants = OracleVertexConstants(context);
+    declaration->pixelConstants = OraclePixelConstants(context);
+
+    std::vector<PlaneGroup> planeGroups;
+    declaration->triangles.reserve(bundle.tri_count);
+    declaration->outputs.resize(static_cast<std::size_t>(bundle.tri_count) * 3u);
+
+    for (std::uint32_t triangle = 0; triangle < bundle.tri_count; ++triangle)
+    {
+        world_surface_oracle::VertexInput vertices[3];
+        std::uint32_t indices[3] = {0, 0, 0};
+        for (int corner = 0; corner < 3; ++corner)
+        {
+            const std::uint16_t index = world_surface_bundle::ReadIndex(
+                bundle, triangle * 3u + static_cast<std::uint32_t>(corner));
+            if (index >= bundle.vertex_count)
+            {
+                declaration->reason = "triangle " + std::to_string(triangle) + " index "
+                    + std::to_string(index) + " is outside the slice";
+                return true;
+            }
+            indices[corner] = index;
+            const world_surface_bundle::WorldVertex vertex
+                = world_surface_bundle::ReadVertex(bundle, index);
+            for (int component = 0; component < 4; ++component)
+            {
+                vertices[corner].position[component] = vertex.position[component];
+                vertices[corner].texcoord[component] = vertex.texcoord[component];
+            }
+            vertices[corner].color = vertex.color;
+        }
+
+        // The audited fixture is a property of every triangle, not of the first one: the
+        // reduction this oracle performs holds for all-white vertex colours, material
+        // (1,1,1,0) and a disabled fog vector. The first triangle's facts are the ones printed;
+        // a later triangle that leaves the fixture is named and refuses the declaration.
+        const world_surface_oracle::BaselineFacts facts = world_surface_oracle::CheckBaseline(
+            vertices, declaration->pixelConstants, vertexConstants);
+        if (triangle == 0)
+            declaration->baseline = facts;
+        if (!facts.Ok())
+        {
+            declaration->reason = "triangle " + std::to_string(triangle)
+                + " is outside the audited fixture: " + facts.Describe();
+            return true;
+        }
+
+        world_surface_oracle::TriangleInput input;
+        for (int corner = 0; corner < 3; ++corner)
+        {
+            const std::size_t slot = static_cast<std::size_t>(triangle) * 3u
+                + static_cast<std::size_t>(corner);
+            if (!world_surface_oracle::EvalVertex(vertices[corner], vertexConstants,
+                    &declaration->outputs[slot]))
+            {
+                declaration->reason = "the vertex stage refused triangle "
+                    + std::to_string(triangle) + " corner " + std::to_string(corner)
+                    + " (non-finite, or a zero eye-relative distance)";
+                return true;
+            }
+            input.output[corner] = declaration->outputs[slot];
+            input.index[corner] = indices[corner];
+        }
+
+        Vec3 normal{};
+        float offset = 0.0f;
+        if (!TrianglePlane(bundle, indices, &normal, &offset))
+        {
+            // A zero-area triangle has no plane. It gets a group of its own so that it can never
+            // fill another plane's quota: the oracle counts and refuses it by name, and it covers
+            // no pixels, so the quota for that group is never demanded.
+            input.group = kMaxPlaneGroups + triangle;
+        }
+        else
+        {
+            bool overflow = false;
+            input.group = FindOrAddPlaneGroup(normal, offset, &planeGroups, &overflow);
+            if (overflow)
+            {
+                declaration->reason = "the surface's triangles do not fall into at most "
+                    + std::to_string(kMaxPlaneGroups) + " coplanar planes (triangle "
+                    + std::to_string(triangle) + " needed a new group); the grouping is bounded, "
+                    "so the declaration is refused rather than sampled without per-plane quotas";
+                return true;
+            }
+        }
+
+        declaration->triangles.push_back(input);
+    }
+
+    if (mips == nullptr || mips->empty())
+    {
+        declaration->reason = "no prepared texture: the oracle samples mip0 and there is none";
+        return true;
+    }
+
+    const kisak::window::PixelBufferView base = mips->front().View();
+    declaration->mip0.rgba = base.bytes.data();
+    declaration->mip0.width = static_cast<std::uint32_t>(base.width);
+    declaration->mip0.height = static_cast<std::uint32_t>(base.height);
+
+    world_surface_oracle::OracleConfig config;
+    config.viewportWidth = kRenderWidth;
+    config.viewportHeight = kRenderHeight;
+    // A sample whose nearest triangle is not separated from the next by this much NDC z is
+    // refused. The value is the oracle's own tie threshold, declared here rather than left at
+    // zero: a pixel inside that bound is one the depth test cannot arbitrate, so a prediction
+    // taken from it would be a coin flip dressed as a sample. It is an error bound on z/w, not a
+    // tolerance chosen to make a frame pass.
+    config.minDepthGap = world_surface_oracle::kDepthTieEpsilon;
+    // The winding the device keeps, so a triangle the device culls is not predicted as covering
+    // pixels. This is the recorded state's cull mode, not a choice made here.
+    config.cull = cullMode;
+    if (bundle.tri_count > 1)
+    {
+        // Every plane has to be represented by samples of its own: a four-plane surface predicted
+        // from samples that all landed on one plane is not a prediction of the surface. Four is
+        // the stated per-group minimum.
+        //
+        // The budget is raised with it, and this is the reason: maxSamples bounds the total, and
+        // the walk spends it cell by cell, group by group. Four planes x four samples is sixteen,
+        // so a sixteen-sample budget leaves no slack at all -- a plane whose candidates start one
+        // cell later than its neighbours' finds the budget already spent, which is what produced
+        // "covers 384 pixels but supplied only 2". Eight per plane keeps one large plane from
+        // taking the budget while giving every plane room, and the per-group cap makes the total
+        // bound (4 x 8) exact rather than incidental.
+        config.minSamplesPerGroup = 4;
+        config.maxSamplesPerGroup = 8;
+        config.maxSamples = 32;
+    }
+
+    declaration->selection = world_surface_oracle::SelectSamplesBounded(declaration->triangles,
+        declaration->mip0, declaration->pixelConstants, config);
+
+    if (!declaration->selection.Ok())
+    {
+        declaration->reason = std::string("sample selection refused: ")
+            + world_surface_oracle::SelectStatusName(declaration->selection.status) + ": "
+            + declaration->selection.message;
+        return true;
+    }
+
+    declaration->available = true;
+    return true;
+}
+
+std::string DescribeSample(const world_surface_oracle::Sample& sample)
+{
+    return format("pixel=(%3u,%3u) cell=(%u,%u) weights=(%.4f,%.4f,%.4f) uv=(%.6f,%.6f) "
+                  "texel=(%.3f,%.3f) texel_index=(%u,%u) expected=(%u,%u,%u,%u) "
+                  "edge=%.2fpx boundary=%.3ftexel",
+        sample.pixelX, sample.pixelY, sample.cellRow, sample.cellColumn, sample.weights[0],
+        sample.weights[1], sample.weights[2], sample.uv[0], sample.uv[1],
+        sample.texelCoordinate[0], sample.texelCoordinate[1], sample.texelX, sample.texelY,
+        sample.expected[0], sample.expected[1], sample.expected[2], sample.expected[3],
+        sample.edgeMarginPixels, sample.texelBoundaryMargin);
+}
+
+// Prints the declaration. Called before the device is created, and followed by a flush, so
+// the numbers are on stdout ahead of the frame that is supposed to agree with them.
+void PrintOracleDeclaration(Report& report, const char* label, const OracleDeclaration& declaration)
+{
+    report.Line(format("[oracle] %s: program gate vs=0x%016llx ps=0x%016llx words=%u/%u "
+                       "instructions=%u/%u",
+        label, static_cast<unsigned long long>(declaration.programs.vertexFnv),
+        static_cast<unsigned long long>(declaration.programs.pixelFnv),
+        declaration.programs.vertexWords, declaration.programs.pixelWords,
+        declaration.programs.vertexInstructions, declaration.programs.pixelInstructions));
+
+    if (!declaration.available)
+    {
+        report.Line(format("[oracle] %s: unavailable -- %s", label, declaration.reason.c_str()));
+        return;
+    }
+
+    report.Line(format("[oracle] %s: fixture %s", label, declaration.baseline.Describe().c_str()));
+    report.Line(format("[oracle] %s: mip0 %ux%u, grid %ux%u over the geometry bounding box "
+                       "(%d,%d)-(%d,%d), samples=%zu, occupied_cells=%u, eligible_pixels=%u of %u, "
+                       "margins >= %.1fpx interior and >= %.3f texel, tolerance %d level/channel",
+        label, declaration.mip0.width, declaration.mip0.height, declaration.selection.cellCount,
+        declaration.selection.cellCount, declaration.selection.boundingBox[0],
+        declaration.selection.boundingBox[1], declaration.selection.boundingBox[2],
+        declaration.selection.boundingBox[3], declaration.selection.samples.size(),
+        declaration.selection.occupiedCells, declaration.selection.eligiblePixels,
+        declaration.selection.consideredPixels, 2.0f, 0.25f, world_surface_oracle::kMaxChannelDelta));
+    // The triangle census, so what the device did with each triangle is on the record: culled by
+    // the recorded winding, wholly behind the eye (dropped, as the device drops it), degenerate,
+    // non-finite, or straddling the eye plane -- which would need clipping this oracle does not
+    // model and is refused rather than predicted.
+    report.Line(format("[oracle] %s: triangles %u of %u kept, %u culled, %u wholly behind the eye, "
+                       "%u degenerate, %u non-finite, %u straddling the eye plane",
+        label, declaration.selection.trianglesKept, declaration.selection.triangleCount,
+        declaration.selection.trianglesCulled, declaration.selection.trianglesBehindEye,
+        declaration.selection.trianglesDegenerate, declaration.selection.trianglesNonFinite,
+        declaration.selection.trianglesStraddlingEye));
+
+    for (std::size_t index = 0; index < declaration.selection.samples.size(); ++index)
+        report.Line(format("[oracle] %s: #%zu %s", label, index,
+            DescribeSample(declaration.selection.samples[index]).c_str()));
+}
+
+// Compares one readback against a declaration and prints every sample, numerically.
+bool CompareOracle(Report& report, const char* label, const OracleDeclaration& declaration,
+    const Image& image, world_surface_oracle::Comparison* comparison)
+{
+    *comparison = world_surface_oracle::CompareSamples(declaration.selection.samples,
+        image.rgba.data(), image.width, image.height, world_surface_oracle::kMaxChannelDelta);
+
+    for (std::size_t index = 0; index < comparison->results.size(); ++index)
+    {
+        const world_surface_oracle::SampleResult& result = comparison->results[index];
+        report.Line(format("[oracle-check] %s: #%zu pixel=(%3u,%3u) expected=(%u,%u,%u,%u) "
+                           "actual=(%u,%u,%u,%u) delta=(%+d,%+d,%+d,%+d) %s",
+            label, index, result.pixelX, result.pixelY, result.expected[0], result.expected[1],
+            result.expected[2], result.expected[3], result.actual[0], result.actual[1],
+            result.actual[2], result.actual[3], result.delta[0], result.delta[1], result.delta[2],
+            result.delta[3], result.matched ? "match" : "MISMATCH"));
+    }
+    return comparison->Ok();
+}
+
+// Negative controls, split into the two claims they can actually support.
+//
+//   * Sensitivity: the declared comparison can tell the baseline prediction apart from a
+//     prediction built from a deliberately wrong uv, or from swapped texel channels.
+//     Scored at the tolerance the comparison uses -- a one-level change is ACCEPTED by
+//     that rule, so counting "any nonzero difference" would claim a discrimination the
+//     comparison does not make.
+//   * Readback rejection: those altered expectations, scored against the baseline readback
+//     at the very pixel coordinates the baseline declared, are rejected. That is the test a
+//     wrong transcription would have to survive, and it goes through CompareSamples rather
+//     than through a second comparison written for the occasion.
+//
+// Neither is a wrong-shader experiment: no altered program is uploaded and no image of a
+// wrong shader exists in this run. The check names say so, and the report does not upgrade
+// CPU rejection into a statement about a GPU shader.
+struct ToleranceSensitivity
+{
+    std::uint32_t beyondTolerance = 0; // samples the declared comparison would reject
+    std::uint32_t total = 0;
+    int worstDelta = 0;
+};
+
+// Counts altered expectations that differ from the declared one by MORE than
+// kMaxChannelDelta on some channel -- exactly the rule CompareSamples applies.
+ToleranceSensitivity CountBeyondTolerance(const std::vector<world_surface_oracle::Sample>& declared,
+    const std::vector<world_surface_oracle::Sample>& altered)
+{
+    ToleranceSensitivity sensitivity;
+    sensitivity.total = static_cast<std::uint32_t>(std::min(declared.size(), altered.size()));
+    for (std::size_t index = 0; index < sensitivity.total; ++index)
+    {
+        int worst = 0;
+        for (int channel = 0; channel < 4; ++channel)
+        {
+            const int delta = std::abs(static_cast<int>(altered[index].expected[channel])
+                - static_cast<int>(declared[index].expected[channel]));
+            worst = std::max(worst, delta);
+        }
+        sensitivity.worstDelta = std::max(sensitivity.worstDelta, worst);
+        if (worst > world_surface_oracle::kMaxChannelDelta)
+            ++sensitivity.beyondTolerance;
+    }
+    return sensitivity;
+}
+
+struct NegativeRejection
+{
+    std::uint32_t rejected = 0;
+    std::uint32_t total = 0;
+    int worstDelta = 0;
+};
+
+// Scores altered expectations against a readback through the declared comparison. The
+// sample coordinates are the declaration's own, so no sample is reselected here.
+NegativeRejection RejectAgainstReadback(const std::vector<world_surface_oracle::Sample>& altered,
+    const Image& image)
+{
+    const world_surface_oracle::Comparison comparison = world_surface_oracle::CompareSamples(
+        altered, image.rgba.data(), image.width, image.height, world_surface_oracle::kMaxChannelDelta);
+    NegativeRejection rejection;
+    rejection.rejected = comparison.mismatched;
+    rejection.total = static_cast<std::uint32_t>(comparison.results.size());
+    rejection.worstDelta = comparison.worstDelta;
+    return rejection;
+}
+
+// The three vertex outputs one declared sample was interpolated from. A sample carries the
+// triangle it was predicted from, so an altered expectation recomputes exactly the varyings the
+// baseline used instead of the first triangle of the list. Null means the sample named a
+// triangle outside the declaration, which the altered-expectation builders treat as a failure.
+const world_surface_oracle::VertexOutput* SampleTriangleOutputs(
+    const OracleDeclaration& declaration, const world_surface_oracle::Sample& sample)
+{
+    const std::size_t base = static_cast<std::size_t>(sample.triangle) * 3u;
+    if (base + 3u > declaration.outputs.size())
+        return nullptr;
+    return &declaration.outputs[base];
+}
+
+// A copy of the declared samples with the interpolated u shifted by a stated number of
+// texels at mip0, and the expectation recomputed through the same pixel program. Pixel
+// coordinates are copied unchanged, so the result is scored against a readback at exactly
+// the positions the baseline declared. A flat region would not move, which is why the
+// channel swap below exists as the fallback.
+bool ShiftedUvExpectations(const OracleDeclaration& declaration, float shiftTexels,
+    std::vector<world_surface_oracle::Sample>* altered)
+{
+    altered->assign(declaration.selection.samples.begin(), declaration.selection.samples.end());
+    const float shift = shiftTexels / static_cast<float>(declaration.mip0.width);
+    for (world_surface_oracle::Sample& sample : *altered)
+    {
+        float color[4];
+        float uv[2];
+        float fog = 0.0f;
+        const world_surface_oracle::VertexOutput* outputs = SampleTriangleOutputs(declaration, sample);
+        if (!outputs)
+            return false;
+        world_surface_oracle::InterpolateVaryings(sample.weights, outputs, color, uv, &fog);
+        const float shifted[2] = {uv[0] + shift, uv[1]};
+        float out[4];
+        if (!world_surface_oracle::EvalPixelAt(shifted, fog, color, declaration.mip0,
+                declaration.pixelConstants, out))
+            return false;
+        for (int channel = 0; channel < 4; ++channel)
+            sample.expected[channel] = world_surface_oracle::QuantizeUnorm8(out[channel]);
+    }
+    return true;
+}
+
+// A copy of the declared samples with the red and blue channels of the sampled texel
+// swapped and the expectation recomputed. This changes the prediction even where the
+// texture is flat, unless the chosen texel happens to have r == b -- which is exactly the
+// case the synthetic test in world_surface_oracle_test.cpp pins, so that a one-level
+// swap cannot be mistaken for a discriminating control.
+bool ChannelSwappedExpectations(const OracleDeclaration& declaration,
+    std::vector<world_surface_oracle::Sample>* altered)
+{
+    altered->assign(declaration.selection.samples.begin(), declaration.selection.samples.end());
+    for (world_surface_oracle::Sample& sample : *altered)
+    {
+        float color[4];
+        float uv[2];
+        float fog = 0.0f;
+        const world_surface_oracle::VertexOutput* outputs = SampleTriangleOutputs(declaration, sample);
+        if (!outputs)
+            return false;
+        world_surface_oracle::InterpolateVaryings(sample.weights, outputs, color, uv, &fog);
+        float texel[4];
+        world_surface_oracle::Sample2DPointWrapMip0(declaration.mip0, uv[0], uv[1], texel);
+        const float swapped[4] = {texel[2], texel[1], texel[0], texel[3]};
+
+        // The pixel program with the swapped texel, in the token order EvalPixelAt uses.
+        const float* material = declaration.pixelConstants.material;
+        const float* fogColor = declaration.pixelConstants.fogColor;
+        float intermediate[3];
+        for (int channel = 0; channel < 3; ++channel)
+            intermediate[channel] = color[channel] * (-swapped[channel]) + material[channel];
+        float register0[4];
+        for (int channel = 0; channel < 4; ++channel)
+            register0[channel] = swapped[channel] * color[channel];
+        for (int channel = 0; channel < 3; ++channel)
+            register0[channel] = material[3] * intermediate[channel] + register0[channel];
+        for (int channel = 0; channel < 3; ++channel)
+            register0[channel] = register0[channel] - fogColor[channel];
+        float out[4];
+        out[3] = register0[3];
+        for (int channel = 0; channel < 3; ++channel)
+            out[channel] = fog * register0[channel] + fogColor[channel];
+
+        for (int channel = 0; channel < 4; ++channel)
+            sample.expected[channel] = world_surface_oracle::QuantizeUnorm8(out[channel]);
+    }
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// The moved-camera control.
+//
+// The control asks whether the image follows a change in the uploaded view-projection, so it
+// needs a moved frame the oracle can actually predict. A moved frame whose prediction was
+// refused is evidence of nothing, and letting it pass by being skipped would make the control
+// disappear exactly when it is hardest to satisfy.
+//
+// The perturbations are therefore fixed here, in order, and each is a stated fraction of the
+// eye-to-target distance along the camera's own axes. The list is bounded, the declarations are
+// all built before the moved frame is drawn, and the first entry that declares is the one that
+// is drawn; if none declares, the control fails.
+// ---------------------------------------------------------------------------
+struct CameraPerturbation
+{
+    float forward; // along the camera's forward axis, as a fraction of eye-to-target distance
+    float left;    // along the camera's left axis, same unit
+    const char* name;
+};
+
+constexpr CameraPerturbation kMovedCameraCandidates[] = {
+    {0.25f, 0.0f, "forward 0.25"},
+    {0.15f, 0.0f, "forward 0.15"},
+    {-0.20f, 0.0f, "back 0.20"},
+    {0.25f, 0.15f, "forward 0.25 + left 0.15"},
+};
+
+// The same Options with the eye moved by one candidate. An explicit camera is moved along the
+// reference camera's own basis; a derived camera is moved by scaling --camera-distance, which
+// puts the eye on the same normal axis the baseline used. A derived camera has no way to express
+// the sideways component, so only its forward component is applied -- and the report names the
+// candidate that was used, so the frame that was drawn is a stated one either way.
+Options PerturbCamera(const Options& options, const world_surface_context::CameraInputs& reference,
+    const CameraPerturbation& perturbation)
+{
+    Options moved = options;
+    if (!options.cameraEyeSupplied)
+    {
+        moved.cameraDistanceScale = options.cameraDistanceScale * (1.0f + perturbation.forward);
+        return moved;
+    }
+
+    const float distance = Length(Subtract(options.cameraTarget, options.cameraEye));
+    for (int axis = 0; axis < 3; ++axis)
+    {
+        moved.cameraEye.value[axis] = options.cameraEye.value[axis]
+            + reference.forward[axis] * distance * perturbation.forward
+            + reference.left[axis] * distance * perturbation.left;
+    }
+    return moved;
 }
 
 } // namespace
@@ -2325,7 +3195,14 @@ int main(int argc, char** argv)
     // makes that a negative NDC signed area. So: measure the winding from the +normal side,
     // and if that side is the back face the eye moves to the other side. The decision uses
     // geometry only, is printed with its number, and --camera-side overrides it.
-    if (!options.cameraSideSupplied)
+    if (options.cameraEyeSupplied)
+    {
+        report.Line("[camera] explicit: the eye and the target are the values on the command line,");
+        report.Line("[camera] and nothing is derived from the referenced triangle. The winding probe");
+        report.Line("[camera] is therefore not applied: the stated eye is kept even when the index");
+        report.Line("[camera] order faces away from it, which is what --camera-eye states.");
+    }
+    else if (!options.cameraSideSupplied)
     {
         world_surface_context::Inputs probeInputs{};
         probeInputs.camera = derivation.camera;
@@ -2368,15 +3245,29 @@ int main(int argc, char** argv)
                     "not applied");
     }
 
-    report.Line(format("[camera] indices=%u,%u,%u centroid=(%.4f, %.4f, %.4f) longest_edge=%.4f",
-        derivation.indexValues[0], derivation.indexValues[1], derivation.indexValues[2],
-        derivation.centroid.value[0], derivation.centroid.value[1], derivation.centroid.value[2],
-        derivation.longestEdge));
-    report.Line(format("[camera] normal=(%.4f, %.4f, %.4f) side=%s eye=(%.4f, %.4f, %.4f)",
-        derivation.normal.value[0], derivation.normal.value[1], derivation.normal.value[2],
-        options.cameraSideBack ? "back" : "front",
-        derivation.camera.origin[0], derivation.camera.origin[1], derivation.camera.origin[2]));
-    report.Line("[camera] synthetic: derived from the referenced triangle, not a captured refdef");
+    if (options.cameraEyeSupplied)
+    {
+        report.Line(format("[camera] eye=(%.4f, %.4f, %.4f) target=(%.4f, %.4f, %.4f) z_near=%.4f "
+                           "tan_half_fov=%.4f",
+            options.cameraEye.value[0], options.cameraEye.value[1], options.cameraEye.value[2],
+            options.cameraTarget.value[0], options.cameraTarget.value[1],
+            options.cameraTarget.value[2], derivation.camera.zNear, options.tanHalfFov));
+        report.Line(format("[camera] synthetic: stated with --camera-eye/--camera-target, not a "
+                           "captured refdef; cull=%d from the bundle",
+            static_cast<int>(state.cull)));
+    }
+    else
+    {
+        report.Line(format("[camera] indices=%u,%u,%u centroid=(%.4f, %.4f, %.4f) longest_edge=%.4f",
+            derivation.indexValues[0], derivation.indexValues[1], derivation.indexValues[2],
+            derivation.centroid.value[0], derivation.centroid.value[1], derivation.centroid.value[2],
+            derivation.longestEdge));
+        report.Line(format("[camera] normal=(%.4f, %.4f, %.4f) side=%s eye=(%.4f, %.4f, %.4f)",
+            derivation.normal.value[0], derivation.normal.value[1], derivation.normal.value[2],
+            options.cameraSideBack ? "back" : "front",
+            derivation.camera.origin[0], derivation.camera.origin[1], derivation.camera.origin[2]));
+        report.Line("[camera] synthetic: derived from the referenced triangle, not a captured refdef");
+    }
 
     world_surface_context::Inputs contextInputs{};
     contextInputs.camera = derivation.camera;
@@ -2427,6 +3318,93 @@ int main(int argc, char** argv)
     report.Line(format("[constant] vp m00=%.6f fog=(%.1f, %.1f, %.1f, %.1f)",
         context.vsTransposeViewProjection.rows[0][0], context.vsFog[0], context.vsFog[1],
         context.vsFog[2], context.vsFog[3]));
+    // The payload as uploaded, so the frame is analysable from the report alone. These are
+    // the exact values the vertex shader reads: c0..c3 the transposed view-projection rows,
+    // c4..c7 the transposed world rows, c21 the fog vector; PS c0 is the fog colour and
+    // PS c1 the material colour.
+    for (int row = 0; row < 4; ++row)
+        report.Line(format("[constant] VS c%d = (%.9g, %.9g, %.9g, %.9g)", row,
+            context.vsTransposeViewProjection.rows[row][0],
+            context.vsTransposeViewProjection.rows[row][1],
+            context.vsTransposeViewProjection.rows[row][2],
+            context.vsTransposeViewProjection.rows[row][3]));
+    for (int row = 0; row < 4; ++row)
+        report.Line(format("[constant] VS c%d = (%.9g, %.9g, %.9g, %.9g)", 4 + row,
+            context.vsTransposeWorld.rows[row][0], context.vsTransposeWorld.rows[row][1],
+            context.vsTransposeWorld.rows[row][2], context.vsTransposeWorld.rows[row][3]));
+    report.Line(format("[constant] VS c21 = (%.9g, %.9g, %.9g, %.9g)", context.vsFog[0],
+        context.vsFog[1], context.vsFog[2], context.vsFog[3]));
+    report.Line(format("[constant] PS c0 = (%.9g, %.9g, %.9g, %.9g)", context.psFogColor[0],
+        context.psFogColor[1], context.psFogColor[2], context.psFogColor[3]));
+    report.Line(format("[constant] PS c1 = (%.9g, %.9g, %.9g, %.9g)", context.psMaterialColor[0],
+        context.psMaterialColor[1], context.psMaterialColor[2], context.psMaterialColor[3]));
+
+    // --- CPU pixel oracle: declaration -------------------------------------
+    // Everything below is computed from the bundle, the uploaded payloads and the decoded
+    // mip0 texels. It runs before SDL is initialised, and its numbers are flushed to stdout
+    // here, so the expectation provably precedes the frame it describes.
+    OracleDeclaration oracleDeclaration;
+    if (!BuildOracleDeclaration(bundle, state, context, mips, &oracleDeclaration))
+    {
+        std::fprintf(stderr, "[fail] oracle: the declaration could not be built\n");
+        return ExitFailure;
+    }
+    PrintOracleDeclaration(report, "baseline", oracleDeclaration);
+    report.Check("oracle-declared", oracleDeclaration.available,
+        oracleDeclaration.available
+            ? format("%zu samples over %u of %ux%u cells, mip0 %ux%u",
+                oracleDeclaration.selection.samples.size(), oracleDeclaration.selection.occupiedCells,
+                oracleDeclaration.selection.cellCount, oracleDeclaration.selection.cellCount,
+                oracleDeclaration.mip0.width, oracleDeclaration.mip0.height)
+            : std::string("declined: ") + oracleDeclaration.reason);
+
+    // Negative controls, CPU only and before any frame exists: the declared comparison has
+    // to be able to tell an altered expectation from the declared one, at the tolerance it
+    // actually applies. A one-level change sits inside that tolerance, so the counts below
+    // are "beyond tolerance", not "different". A flat texture region defeats the uv shift,
+    // which is why the channel swap is measured as well.
+    //
+    // The altered lists are kept: after the frame is drawn they are scored against the
+    // readback at these same pixel coordinates, which is a rejection test rather than a
+    // sensitivity count.
+    std::vector<world_surface_oracle::Sample> wrongUvExpectations;
+    std::vector<world_surface_oracle::Sample> channelSwapExpectations;
+    ToleranceSensitivity wrongUvSensitivity;
+    ToleranceSensitivity channelSwapSensitivity;
+    bool negativeBuilt = false;
+    if (oracleDeclaration.available)
+    {
+        if (!ShiftedUvExpectations(oracleDeclaration, 17.0f, &wrongUvExpectations)
+            || !ChannelSwappedExpectations(oracleDeclaration, &channelSwapExpectations))
+        {
+            std::fprintf(stderr, "[fail] negative control: the altered prediction could not be built\n");
+            return ExitFailure;
+        }
+        wrongUvSensitivity
+            = CountBeyondTolerance(oracleDeclaration.selection.samples, wrongUvExpectations);
+        channelSwapSensitivity
+            = CountBeyondTolerance(oracleDeclaration.selection.samples, channelSwapExpectations);
+        negativeBuilt = true;
+
+        report.Line(format("[oracle] sensitivity wrong-uv(+17 texels of %u): %u of %u expectations "
+                           "differ by more than %d level/channel (worst %d)",
+            oracleDeclaration.mip0.width, wrongUvSensitivity.beyondTolerance,
+            wrongUvSensitivity.total, world_surface_oracle::kMaxChannelDelta,
+            wrongUvSensitivity.worstDelta));
+        report.Line(format("[oracle] sensitivity channel-swap(r<->b): %u of %u expectations differ "
+                           "by more than %d level/channel (worst %d)",
+            channelSwapSensitivity.beyondTolerance, channelSwapSensitivity.total,
+            world_surface_oracle::kMaxChannelDelta, channelSwapSensitivity.worstDelta));
+        report.Check("oracle-negative-cpu",
+            wrongUvSensitivity.beyondTolerance > 0 || channelSwapSensitivity.beyondTolerance > 0,
+            format("wrong-uv %u/%u, channel-swap %u/%u beyond the %d level/channel tolerance "
+                   "(at least one must be nonzero, or the expectation is texture-independent at "
+                   "the tolerance the comparison uses)",
+                wrongUvSensitivity.beyondTolerance, wrongUvSensitivity.total,
+                channelSwapSensitivity.beyondTolerance, channelSwapSensitivity.total,
+                world_surface_oracle::kMaxChannelDelta));
+    }
+    report.Flush();
 
     // --- device ------------------------------------------------------------
     if (!SDL_Init(SDL_INIT_VIDEO))
@@ -2525,6 +3503,47 @@ int main(int argc, char** argv)
         haveTexture ? format("%s decoded in-process", options.texturePath.c_str())
                     : std::string("no --texture: the run bound a 1x1 white stand-in"));
 
+    // --- pixel oracle: baseline comparison ---------------------------------
+    // The readback against the prediction printed before the device was created. A sample
+    // matches when every channel is within kMaxChannelDelta of the CPU value.
+    {
+        world_surface_oracle::Comparison oracleComparison;
+        const bool oracleOk = oracleDeclaration.available
+            && CompareOracle(report, "baseline", oracleDeclaration, rendered, &oracleComparison);
+        report.Check("oracle", oracleOk,
+            oracleDeclaration.available
+                ? format("%u of %zu samples matched within %d level/channel, worst delta %d",
+                    oracleComparison.matched, oracleComparison.results.size(),
+                    world_surface_oracle::kMaxChannelDelta, oracleComparison.worstDelta)
+                : std::string("declined: ") + oracleDeclaration.reason);
+    }
+
+    // --- pixel oracle: the altered expectations must be rejected by the readback --------
+    // The same two altered sample lists the sensitivity check counted, scored against the
+    // frame just drawn at the coordinates the baseline declared. This is the rejection a
+    // wrong transcription would have to survive, and it runs through CompareSamples: the
+    // comparison that accepted the baseline is the comparison that has to refuse these.
+    //
+    // The label states what is rejected -- a CPU expectation -- because no altered shader
+    // was uploaded and no image of a wrong shader exists in this run.
+    if (negativeBuilt)
+    {
+        const NegativeRejection wrongUv = RejectAgainstReadback(wrongUvExpectations, rendered);
+        const NegativeRejection channelSwap = RejectAgainstReadback(channelSwapExpectations, rendered);
+        report.Line(format("[oracle] rejection wrong-uv: %u of %u samples rejected, worst delta %d",
+            wrongUv.rejected, wrongUv.total, wrongUv.worstDelta));
+        report.Line(format("[oracle] rejection channel-swap: %u of %u samples rejected, worst delta %d",
+            channelSwap.rejected, channelSwap.total, channelSwap.worstDelta));
+        report.Check("oracle-negative-readback",
+            wrongUv.rejected > 0 || channelSwap.rejected > 0,
+            format("the readback rejects %u of %u wrong-uv and %u of %u channel-swapped CPU "
+                   "expectations at the declared pixel coordinates (worst delta %d and %d); at "
+                   "least one must be rejected, or the comparison would accept a prediction it "
+                   "cannot tell from the wrong one",
+                wrongUv.rejected, wrongUv.total, channelSwap.rejected, channelSwap.total,
+                wrongUv.worstDelta, channelSwap.worstDelta));
+    }
+
     // Spatial sampling: a triangle that covered the target with one flat value would pass
     // a coverage count and still be wrong, so sample three interior points.
     {
@@ -2546,49 +3565,103 @@ int main(int argc, char** argv)
     // under test? They always run. A control set that can be switched off is a control set
     // that will be switched off before the run that matters, so there is no such flag.
     {
-        // Constant control: move the eye, everything else identical.
-        Options moved = options;
-        moved.cameraDistanceScale = options.cameraDistanceScale * 1.25f;
+        // Constant control: move the eye, everything else identical. The perturbation comes from
+        // the fixed list above and its declaration is built here, before the moved frame is drawn;
+        // the first entry that declares is the one drawn and compared. A moved frame whose
+        // prediction was refused would be evidence of nothing, so a list that declares nothing
+        // fails the control rather than skipping it.
+        Options moved;
         CameraDerivation movedDerivation;
-        if (!DeriveCamera(bundle, moved, &movedDerivation, &error))
+        world_surface_context::Context movedContext{};
+        OracleDeclaration movedOracle;
+        std::string movedRejection;
+        const char* movedCandidate = nullptr;
+        bool movedChosen = false;
+        for (const CameraPerturbation& candidate : kMovedCameraCandidates)
         {
-            std::fprintf(stderr, "[fail] control camera: %s\n", error.c_str());
-            ok = false;
+            const Options trial = PerturbCamera(options, derivation.camera, candidate);
+            CameraDerivation trialDerivation;
+            if (!DeriveCamera(bundle, trial, &trialDerivation, &error))
+            {
+                movedRejection = std::string(candidate.name) + ": " + error;
+                continue;
+            }
+            world_surface_context::Inputs trialInputs = contextInputs;
+            trialInputs.camera = trialDerivation.camera;
+            world_surface_context::Context trialContext{};
+            world_surface_context::Error trialError = world_surface_context::Error::None;
+            if (!world_surface_context::Build(trialInputs, &trialContext, &trialError))
+            {
+                movedRejection = std::string(candidate.name) + ": context rejected ("
+                    + world_surface_context::ErrorName(trialError) + ")";
+                continue;
+            }
+            OracleDeclaration trialOracle;
+            if (!BuildOracleDeclaration(bundle, state, trialContext, mips, &trialOracle))
+            {
+                std::fprintf(stderr, "[fail] control oracle: declaration failed\n");
+                ok = false;
+                break;
+            }
+            if (!trialOracle.available)
+            {
+                movedRejection = std::string(candidate.name) + ": " + trialOracle.reason;
+                continue;
+            }
+            moved = trial;
+            movedDerivation = trialDerivation;
+            movedContext = trialContext;
+            movedOracle = trialOracle;
+            movedCandidate = candidate.name;
+            movedChosen = true;
+            break;
         }
+
+        report.Check("oracle-moved-camera-declared", movedChosen,
+            movedChosen
+                ? format("the moved camera ('%s') was declared on the CPU before its frame was "
+                         "drawn, at eye (%.4f, %.4f, %.4f)",
+                    movedCandidate, movedDerivation.camera.origin[0],
+                    movedDerivation.camera.origin[1], movedDerivation.camera.origin[2])
+                : std::string("no entry of the fixed perturbation list could be declared, so the "
+                              "moved-camera comparison has no prediction to make; last rejection: ")
+                    + movedRejection);
+        if (!movedChosen)
+            ok = false;
         else
         {
-            world_surface_context::Inputs movedInputs = contextInputs;
-            movedInputs.camera = movedDerivation.camera;
-            world_surface_context::Context movedContext{};
-            world_surface_context::Error movedError = world_surface_context::Error::None;
-            if (!world_surface_context::Build(movedInputs, &movedContext, &movedError))
+            // Declared before the frame is drawn, by the same a priori procedure as the baseline.
+            // This is the only control that changes the vertex transform, so a prediction that
+            // still matches shows the oracle tracks clip-space geometry rather than reproducing
+            // the texels.
+            PrintOracleDeclaration(report, "moved-camera", movedOracle);
+            FrameInputs movedFrame = frame;
+            movedFrame.context = &movedContext;
+            Image movedImage;
+            if (!RunFrame(bundle, device, state, movedFrame, &movedImage, &uploadStats, &error))
             {
-                std::fprintf(stderr, "[fail] control context: %s\n",
-                    world_surface_context::ErrorName(movedError));
+                std::fprintf(stderr, "[fail] control render: %s\n", error.c_str());
                 ok = false;
             }
             else
             {
-                // The device and every resource are built again from scratch inside
-                // RunFrame, so the comparison also exercises a second full resource build.
-                FrameInputs movedFrame = frame;
-                movedFrame.context = &movedContext;
-                Image movedImage;
-                if (!RunFrame(bundle, device, state, movedFrame, &movedImage, &uploadStats, &error))
-                {
-                    std::fprintf(stderr, "[fail] control render: %s\n", error.c_str());
-                    ok = false;
-                }
-                else
-                {
-                    const std::size_t differing = CountDifferingPixels(rendered, movedImage);
-                    const ImageStats movedStats = Measure(movedImage);
-                    report.Check("control-constant",
-                        differing > 0 && movedStats.coveredPixels > 0 && movedStats.brightestChannel > 8,
-                        format("%zu pixels changed when the camera-derived constants moved "
-                               "(covered=%zu brightest=%u)",
-                            differing, movedStats.coveredPixels, movedStats.brightestChannel));
-                }
+                const std::size_t differing = CountDifferingPixels(rendered, movedImage);
+                const ImageStats movedStats = Measure(movedImage);
+                report.Check("control-constant",
+                    differing > 0 && movedStats.coveredPixels > 0 && movedStats.brightestChannel > 8,
+                    format("%zu pixels changed when the eye moved ('%s') and the uploaded constants "
+                           "with it (covered=%zu brightest=%u)",
+                        differing, movedCandidate, movedStats.coveredPixels,
+                        movedStats.brightestChannel));
+
+                world_surface_oracle::Comparison movedComparison;
+                const bool movedOk = CompareOracle(
+                    report, "moved-camera", movedOracle, movedImage, &movedComparison);
+                report.Check("oracle-moved-camera", movedOk,
+                    format("%u of %zu samples of the moved camera matched within %d level/channel, "
+                           "worst delta %d",
+                        movedComparison.matched, movedComparison.results.size(),
+                        world_surface_oracle::kMaxChannelDelta, movedComparison.worstDelta));
             }
         }
 
@@ -2612,6 +3685,20 @@ int main(int argc, char** argv)
                     format("%zu pixels differ from the clear colour with the draw call "
                            "omitted (expected 0)",
                         emptyStats.coveredPixels));
+
+                // ...and the oracle must reject that same frame. This is what makes the
+                // baseline comparison non-vacuous: a comparison that also passed against a
+                // cleared target would be measuring nothing about the draw.
+                if (oracleDeclaration.available)
+                {
+                    world_surface_oracle::Comparison skipped;
+                    CompareOracle(report, "skip-draw", oracleDeclaration, emptyImage, &skipped);
+                    report.Check("oracle-skip-draw",
+                        !skipped.results.empty() && skipped.mismatched == skipped.results.size(),
+                        format("%u of %zu samples disagree with the prediction when the draw is "
+                               "omitted (expected all)",
+                            skipped.mismatched, skipped.results.size()));
+                }
             }
         }
 
@@ -2702,6 +3789,129 @@ int main(int argc, char** argv)
                         format("%zu pixels changed when the bound texture changed "
                                "(covered=%zu brightest=%u)",
                             differing, textureStats.coveredPixels, textureStats.brightestChannel));
+                }
+            }
+        }
+    }
+
+    // --- draw order and the depth test -------------------------------------
+    // These run only for geometry with more than one triangle: a single triangle has no other
+    // order to be drawn in, and the three frames would be identical by construction. The gate is
+    // the bundle's triangle count, not a flag, so the comparison cannot be switched off for a
+    // surface that has an order to get wrong.
+    if (bundle.tri_count > 1)
+    {
+        // Split draw in the recorded order: one call per triangle instead of one call over the
+        // slice. If this differs from the baseline, splitting the draw is a change of its own and
+        // the reversal below could not be attributed to the order.
+        FrameInputs splitOrder = frame;
+        splitOrder.drawOrder = DrawOrder::PerTriangle;
+        Image splitImage;
+        if (!RunFrame(bundle, device, state, splitOrder, &splitImage, &uploadStats, &error))
+        {
+            std::fprintf(stderr, "[fail] control split draw: %s\n", error.c_str());
+            ok = false;
+        }
+        else
+        {
+            const std::size_t differing = CountDifferingPixels(rendered, splitImage);
+            report.Check("control-split-draw", differing == 0 && splitImage.rgba == rendered.rgba,
+                format("%zu of %u pixels differ when the %u triangles are issued as %u single-"
+                       "triangle calls in the recorded order (expected 0, so the draw order "
+                       "control below is about the order and not about the call count)",
+                    differing, kRenderWidth * kRenderHeight, bundle.tri_count, bundle.tri_count));
+        }
+
+        // Reversed draw order with the recorded depth test still on. The depth buffer arbitrates
+        // the overlaps, so the image has to be the baseline again.
+        FrameInputs reversed = frame;
+        reversed.drawOrder = DrawOrder::Reverse;
+        Image reversedImage;
+        if (!RunFrame(bundle, device, state, reversed, &reversedImage, &uploadStats, &error))
+        {
+            std::fprintf(stderr, "[fail] control reversed order: %s\n", error.c_str());
+            ok = false;
+        }
+        else
+        {
+            const std::size_t differing = CountDifferingPixels(rendered, reversedImage);
+            report.Check("control-reverse-depth-on",
+                differing == 0 && reversedImage.rgba == rendered.rgba,
+                format("%zu pixels differ when the %u triangles are drawn last-first with the "
+                       "recorded depth test (expected 0: depth decides the overlap, not order)",
+                    differing, bundle.tri_count));
+
+            // Draw order with the depth test off, forward against reversed. This is the pair the
+            // oracle can declare a difference for: with the test gone the last triangle drawn wins
+            // each pixel, so the forward frame shows the last-drawn triangle's colour and the
+            // reversed frame shows the first-drawn one's. Before either frame was drawn, the
+            // selection counted the pixels where both of those cover with margin AND predict
+            // colours differing by more than the comparison's tolerance (orderContrastPixels).
+            // That count is the preregistered contrast, and it is a lower bound on the difference
+            // the two frames must show.
+            //
+            // Comparing the baseline against the reversed depth-disabled frame instead would not
+            // be sound: where the nearest triangle happens to be the one drawn first, or the two
+            // triangles paint the same colour, those two frames agree even though the pixels are
+            // order-sensitive. That is why the control is this pair and not "baseline differs".
+            FrameInputs forwardNoDepth = frame;
+            forwardNoDepth.drawOrder = DrawOrder::PerTriangle;
+            forwardNoDepth.overrideDepthTest = true;
+            forwardNoDepth.depthTestEnabled = false;
+            FrameInputs reversedNoDepth = reversed;
+            reversedNoDepth.overrideDepthTest = true;
+            reversedNoDepth.depthTestEnabled = false;
+            Image forwardNoDepthImage;
+            Image reversedNoDepthImage;
+            if (!RunFrame(bundle, device, state, forwardNoDepth, &forwardNoDepthImage,
+                    &uploadStats, &error)
+                || !RunFrame(bundle, device, state, reversedNoDepth, &reversedNoDepthImage,
+                    &uploadStats, &error))
+            {
+                std::fprintf(stderr, "[fail] control draw order without depth: %s\n", error.c_str());
+                ok = false;
+            }
+            else
+            {
+                const std::size_t differing
+                    = CountDifferingPixels(forwardNoDepthImage, reversedNoDepthImage);
+                const world_surface_oracle::Selection& selection = oracleDeclaration.selection;
+                report.Line(format("[control] overlapping=%u order-sensitive=%u contrast=%u "
+                                   "(box (%d,%d)-(%d,%d)) depth-ties=%u; forward and reversed "
+                                   "without the depth test differ on %zu pixels",
+                    selection.multiCoveredPixels, selection.orderSensitivePixels,
+                    selection.orderContrastPixels, selection.orderContrastBox[0],
+                    selection.orderContrastBox[1], selection.orderContrastBox[2],
+                    selection.orderContrastBox[3], selection.depthTiePixels, differing));
+
+                if (!oracleDeclaration.available)
+                {
+                    report.Line("[control] reverse-depth-off not claimed: the oracle declined for "
+                                "this run, so there is no a-priori count of order-sensitive pixels");
+                }
+                else if (selection.orderContrastPixels == 0)
+                {
+                    report.Line("[control] reverse-depth-off not claimed: no pixel is covered by two "
+                                "triangles that both put the sample point inside their own edges and "
+                                "predict different colours, so reversing the draw order has nothing "
+                                "to show");
+                }
+                else if (selection.depthTiePixels > 0)
+                {
+                    report.Line(format("[control] reverse-depth-off not claimed: %u pixel(s) have "
+                                       "their two nearest surfaces within the %.1e depth-tie "
+                                       "threshold, where the depth test cannot arbitrate either",
+                        selection.depthTiePixels, world_surface_oracle::kDepthTieEpsilon));
+                }
+                else
+                {
+                    report.Check("control-reverse-depth-off",
+                        differing > 0 && differing >= selection.orderContrastPixels,
+                        format("%zu pixels differ between the forward and reversed draws with the "
+                               "depth test disabled, against %u pixels the oracle declared as "
+                               "draw-order contrast before either frame was drawn (0 declared "
+                               "depth ties); the difference is the depth test's, not the order's",
+                            differing, selection.orderContrastPixels));
                 }
             }
         }
