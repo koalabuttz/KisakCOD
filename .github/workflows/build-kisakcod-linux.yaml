@@ -45,17 +45,18 @@ permissions:
 
 jobs:
   window:
-    name: Linux SDL2 window ${{ matrix.config }}
+    name: Linux SDL${{ matrix.sdl }} window ${{ matrix.config }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
         config: [Debug, RelWithDebInfo]
+        sdl: [2, 3]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Install 32-bit SDL2 build tools
+      - name: Install 32-bit window build tools
         timeout-minutes: 15
         shell: bash
         run: |
@@ -65,6 +66,31 @@ jobs:
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
             cmake ninja-build clang g++-multilib python3 python3-yaml libsdl2-dev:i386
           test -f /usr/lib/i386-linux-gnu/cmake/SDL2/sdl2-config.cmake
+      - name: Build pinned 32-bit SDL3 SDK
+        if: matrix.sdl == 3
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          # SDL release-3.2.10, pinned to its full source revision.
+          git init "$RUNNER_TEMP/SDL3-source"
+          git -C "$RUNNER_TEMP/SDL3-source" remote add origin https://github.com/libsdl-org/SDL.git
+          git -C "$RUNNER_TEMP/SDL3-source" fetch --depth 1 origin 877399b2b2cf21e67554ed9046410f268ce1d1b2
+          git -C "$RUNNER_TEMP/SDL3-source" checkout --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/SDL3-source" rev-parse HEAD)" = 877399b2b2cf21e67554ed9046410f268ce1d1b2
+          cmake -S "$RUNNER_TEMP/SDL3-source" -B "$RUNNER_TEMP/SDL3-build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_SHARED_LINKER_FLAGS=-m32 \
+            -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/SDL3-sdk" -DCMAKE_INSTALL_LIBDIR=lib \
+            -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TESTS=OFF -DSDL_TEST_LIBRARY=OFF \
+            -DSDL_EXAMPLES=OFF -DSDL_X11=OFF -DSDL_WAYLAND=OFF -DSDL_UNIX_CONSOLE_BUILD=ON \
+            -DSDL_ALSA=OFF -DSDL_PULSEAUDIO=OFF -DSDL_PIPEWIRE=OFF -DSDL_JACK=OFF \
+            2>&1 | tee artifacts/sdl3-configure.log
+          cmake --build "$RUNNER_TEMP/SDL3-build" --parallel 2
+          cmake --install "$RUNNER_TEMP/SDL3-build"
+          readelf -h "$RUNNER_TEMP/SDL3-sdk/lib/libSDL3.so.0" | tee artifacts/sdl3-elf.log
+          grep -q ELF32 artifacts/sdl3-elf.log
       - name: Check graphical workflow contract
         run: python3 scripts/tests/test_linux_window_workflow.py
       - name: Build and test asset-free window host
@@ -76,17 +102,22 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts
+          sdk_args=(--sdl2-dir /usr/lib/i386-linux-gnu/cmake/SDL2)
+          if [[ "${{ matrix.sdl }}" == 3 ]]; then
+            sdk_args=(--sdl3-dir "$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3")
+            export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          fi
           python3 -u scripts/tests/test_linux_window.py \
-            --build-dir "$GITHUB_WORKSPACE/build-linux/window-${{ matrix.config }}" \
+            --build-dir "$GITHUB_WORKSPACE/build-linux/window-sdl${{ matrix.sdl }}-${{ matrix.config }}" \
             --build-type "${{ matrix.config }}" --cc clang --cxx clang++ --jobs 2 \
-            --sdl2-dir /usr/lib/i386-linux-gnu/cmake/SDL2 --video-driver dummy \
-            2>&1 | tee "artifacts/window-${{ matrix.config }}.log"
+            --sdl-major "${{ matrix.sdl }}" "${sdk_args[@]}" --video-driver dummy \
+            2>&1 | tee "artifacts/window-sdl${{ matrix.sdl }}-${{ matrix.config }}.log"
       - name: Upload window check log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: KisakCOD-window-${{ matrix.config }}
-          path: artifacts/window-${{ matrix.config }}.log
+          name: KisakCOD-window-sdl${{ matrix.sdl }}-${{ matrix.config }}
+          path: artifacts/*.log
           if-no-files-found: warn
           retention-days: 7
 

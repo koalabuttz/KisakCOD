@@ -25,8 +25,13 @@ python3 scripts/tests/test_linux_window.py --build-dir build-linux/window-sdl3 \
 
 The underlying CMake selector is `KISAK_LINUX_SDL_MAJOR=2|3`, alongside
 `KISAK_BUILD_LINUX_WINDOW_HOST=ON`. Dedicated and client-core builds do not require
-SDL3. Each executable links only the selected SDL major. The existing hosted
-window job exercises SDL2; it does not establish SDL3 hosted coverage.
+SDL3. Each executable links only the selected SDL major. The hosted window job
+has an SDL2/SDL3 × Debug/RelWithDebInfo matrix. SDL3 is built from pinned upstream
+revision `877399b2b2cf21e67554ed9046410f268ce1d1b2` (release 3.2.10) with `-m32`,
+shared-library linkage and an ELF32 check. Its SDK deliberately disables native
+display/audio backends for dummy/disk tests; this is not X11, Wayland or physical
+audio coverage. Configure and checker logs are retained even on failure. Hosted
+execution of this matrix has not yet been observed.
 
 ## Preserved behavior and deliberate differences
 
