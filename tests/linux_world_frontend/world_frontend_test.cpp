@@ -6,6 +6,7 @@
 // expectations derived independently from the geometry:
 //
 //   R_InitSceneBuffers / R_InitSceneData / R_ClearDpvsScene   (r_dpvs.cpp)
+//   R_InitScene, R_SetViewParmsForScene                        (r_scene.cpp)
 //   R_SetupWorldSurfacesDpvs, R_CellForPoint                   (r_dpvs.cpp)
 //   R_AddWorldSurfacesDpvs: portal walk, frustum and portal
 //     clipping of each cell's AABB tree and cull groups        (r_dpvs.cpp, r_dpvs_static.cpp)
@@ -42,11 +43,9 @@
 //
 // What this does NOT claim: no device, texture, shader or pixel is involved. The
 // pre-tessellated path (r_pretess) needs GPU index buffers and is switched off
-// here; static models, entities, effects and shadows are absent. Two pieces of
-// orchestration are mirrored from r_scene.cpp because that file needs real D3D9
-// methods to compile until the native D3D9 boundary lands: R_InitScene's stage
-// table for the three stages used, and R_SetViewParmsForScene's four calls. Both
-// are marked below and use the same production math functions.
+// here; static models, entities, effects and shadows are absent. r_scene.cpp
+// calls the D3D9 API, so the runner compiles it through the native D3D9
+// boundary (DXVK Native's headers, no DXVK library); no D3D9 method runs.
 
 #include <universal/q_shared.h>
 #include <gfx_d3d/r_bsp.h>
@@ -331,34 +330,20 @@ std::unique_ptr<SyntheticWorld> BuildWorld()
 
 std::unique_ptr<GfxBackEndData> g_backEnd;
 
-// Mirror of R_InitScene for the stages this test uses (r_scene.cpp does not
-// compile natively until the D3D9 boundary lands).
-void InitSceneStages()
-{
-    scene.drawSurfs[DRAW_SURF_BSP_CAMERA_LIT] = reinterpret_cast<GfxDrawSurf *>(&scene); // as R_InitScene
-    scene.drawSurfs[DRAW_SURF_BSP_CAMERA_DECAL] = scene.bspDrawSurfsDecal;
-    scene.drawSurfs[DRAW_SURF_BSP_CAMERA_EMISSIVE] = scene.bspDrawSurfsEmissive;
-    scene.maxDrawSurfCount[DRAW_SURF_BSP_CAMERA_LIT] = 0x2000;
-    scene.maxDrawSurfCount[DRAW_SURF_BSP_CAMERA_DECAL] = 512;
-    scene.maxDrawSurfCount[DRAW_SURF_BSP_CAMERA_EMISSIVE] = 0x2000;
-}
-
-// Mirror of R_SetViewParmsForScene: the same production math in the same order.
+// The view a refdef describes, through the production R_SetViewParmsForScene.
+// zNear stays 0, so the near plane comes from r_znear (R_GetDefaultNearClip).
 void SetViewParms(const float *origin, const float (*axis)[3], float tanHalfFov, GfxViewParms *viewParms)
 {
-    std::memset(viewParms, 0, sizeof(*viewParms));
+    auto refdef = std::make_unique<refdef_s>(); // 16 KiB, zeroed
     for (int i = 0; i < 3; ++i)
     {
-        viewParms->origin[i] = origin[i];
+        refdef->vieworg[i] = origin[i];
         for (int j = 0; j < 3; ++j)
-            viewParms->axis[i][j] = axis[i][j];
+            refdef->viewaxis[i][j] = axis[i][j];
     }
-    viewParms->origin[3] = 1.0f;
-    MatrixForViewer(viewParms->viewMatrix.m, viewParms->origin, viewParms->axis);
-    viewParms->zNear = r_znear->current.value;
-    InfinitePerspectiveMatrix(viewParms->projectionMatrix.m, tanHalfFov, tanHalfFov, viewParms->zNear);
-    MatrixMultiply44(viewParms->viewMatrix.m, viewParms->projectionMatrix.m, viewParms->viewProjectionMatrix.m);
-    MatrixInverse44(viewParms->viewProjectionMatrix.m, viewParms->inverseViewProjectionMatrix.m);
+    refdef->tanHalfFovX = tanHalfFov;
+    refdef->tanHalfFovY = tanHalfFov;
+    R_SetViewParmsForScene(refdef.get(), viewParms);
 }
 
 struct DrawSurfBatch
@@ -537,10 +522,23 @@ int main()
     rgp.world = &sw->world;
     R_InitSceneBuffers();
     R_InitSceneData(0);
-    InitSceneStages();
+    R_InitScene();
+    Check(scene.drawSurfs[DRAW_SURF_BSP_CAMERA_DECAL] == scene.bspDrawSurfsDecal &&
+              scene.drawSurfs[DRAW_SURF_BSP_CAMERA_EMISSIVE] == scene.bspDrawSurfsEmissive &&
+              scene.maxDrawSurfCount[DRAW_SURF_BSP_CAMERA_LIT] == 0x2000 &&
+              scene.maxDrawSurfCount[DRAW_SURF_BSP_CAMERA_DECAL] == 512,
+          "R_InitScene points the BSP stages at the scene's own lists with their capacities");
 
     const float forward[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
     const float eye0[3] = {64, 0, 128};
+
+    {
+        GfxViewParms viewParms;
+        SetViewParms(eye0, forward, 1.0f, &viewParms);
+        Check(viewParms.zNear == r_znear->current.value && viewParms.origin[3] == 1.0f &&
+                  viewParms.depthHackNearClip == -r_znear_depthhack->current.value,
+              "R_SetViewParmsForScene takes the near planes from r_znear and r_znear_depthhack");
+    }
 
     // ---- view 1: inside cell 0 looking through the portal --------------------
     {
