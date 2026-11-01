@@ -15,10 +15,11 @@
 //     promise symbols that nothing provides. Declaring them is a deliberate
 //     later decision, not something this header presumes.
 //   * MSVC *CRT* entry points are different: _snprintf/_vsnprintf,
-//     _vsnprintf_s and _stricmp/_strnicmp are language-runtime surface with no
-//     Win32 API behind them, so they are implemented here (see the CRT section
-//     below). The Interlocked* intrinsics are NOT here: qcommon/
-//     threads_interlock.h owns those and q_shared.h includes it on Linux.
+//     _vsnprintf_s, _stricmp/_strnicmp, _itoa, the array strcpy_s and
+//     _time64/_localtime64 are language-runtime surface with no Win32 API
+//     behind them, so they are implemented here (see the CRT section below).
+//     The Interlocked* intrinsics are NOT here: qcommon/threads_interlock.h
+//     owns those and q_shared.h includes it on Linux.
 //   * D3D9 types live in <linux/d3d9_types.h>.
 //
 // Include order: platform headers (win32/win_local.h, qcommon/threads.h,
@@ -39,6 +40,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <strings.h> // strcasecmp / strncasecmp behind _stricmp/_strnicmp
+#include <time.h>    // time / localtime_r behind _time64/_localtime64
 
 // The Microsoft spellings used below (__stdcall, __cdecl, __intN) are keywords
 // in Clang under -fms-extensions. GCC has no such keywords, so the aliases from
@@ -280,6 +282,89 @@ inline int _stricmp(const char *string1, const char *string2)
 inline int _strnicmp(const char *string1, const char *string2, std::size_t count)
 {
     return strncasecmp(string1, string2, count);
+}
+
+// _itoa: the call sites are gfx_d3d/rb_stats.cpp (radix 10 into char[32]).
+// MSVC contract: write the digits of `value` in `radix` (2..36) plus a NUL into
+// `buffer` and return `buffer`; only radix 10 renders a negative value with a
+// leading '-', every other radix formats the 32-bit two's-complement pattern.
+// Like MSVC, the caller owns the buffer size (33 bytes always suffices). An
+// invalid radix or a null buffer fails closed: MSVC's default invalid-parameter
+// handler terminates the process, and so does this.
+inline char *_itoa(int value, char *buffer, int radix)
+{
+    if (buffer == nullptr || radix < 2 || radix > 36)
+        __builtin_trap();
+    char digits[33];
+    std::size_t count = 0;
+    const bool negative = radix == 10 && value < 0;
+    // Work in unsigned arithmetic so INT_MIN and non-decimal radices are exact.
+    std::uint32_t magnitude = negative ? 0u - static_cast<std::uint32_t>(value)
+                                       : static_cast<std::uint32_t>(value);
+    do
+    {
+        const std::uint32_t digit = magnitude % static_cast<std::uint32_t>(radix);
+        digits[count++] = static_cast<char>(digit < 10 ? '0' + digit : 'a' + (digit - 10));
+        magnitude /= static_cast<std::uint32_t>(radix);
+    } while (magnitude != 0);
+    char *out = buffer;
+    if (negative)
+        *out++ = '-';
+    while (count != 0)
+        *out++ = digits[--count];
+    *out = '\0';
+    return buffer;
+}
+
+// strcpy_s, the C++ array-template overload MSVC provides for `char dest[N]`.
+// The one call site is EffectsCore/fx_load_obj.cpp (copying an effect name into
+// a fixed array). MSVC copies and returns 0 when the source fits; a null source
+// or a source that does not fit is an invalid parameter, which the default
+// handler turns into process termination. Silently truncating an asset name
+// would let two effects alias, so this fails closed the same way.
+template <std::size_t N>
+inline int strcpy_s(char (&dest)[N], const char *src)
+{
+    static_assert(N != 0, "strcpy_s needs a destination with room for the terminator");
+    if (src == nullptr)
+        __builtin_trap();
+    std::size_t length = 0;
+    while (length < N && src[length] != '\0')
+        ++length;
+    if (length == N)
+        __builtin_trap(); // no room for the terminator
+    for (std::size_t i = 0; i <= length; ++i)
+        dest[i] = src[i];
+    return 0;
+}
+
+// _time64/_localtime64: the call site is gfx_d3d/rb_logfile.cpp, which stamps
+// the r_logFile output with the local time. The engine spells the argument
+// `__int64`, so these take `long long` (what that keyword is on i386).
+//
+// Limitation, stated rather than hidden: glibc's i386 time_t is 32-bit unless a
+// build opts into _TIME_BITS=64, which this one does not. _time64 therefore
+// reports the 32-bit time() value widened, and _localtime64 refuses (returns
+// null, the MSVC error result) a value that does not fit time_t, instead of
+// wrapping it to another date. The returned struct is per-thread, matching
+// MSVC's per-thread buffer, so the caller must not free it.
+inline long long _time64(long long *destTime)
+{
+    const long long now = static_cast<long long>(time(nullptr));
+    if (destTime != nullptr)
+        *destTime = now;
+    return now;
+}
+
+inline struct tm *_localtime64(const long long *sourceTime)
+{
+    if (sourceTime == nullptr)
+        return nullptr;
+    const time_t narrowed = static_cast<time_t>(*sourceTime);
+    if (static_cast<long long>(narrowed) != *sourceTime || *sourceTime < 0)
+        return nullptr; // MSVC also rejects times before the epoch
+    static thread_local struct tm result;
+    return localtime_r(&narrowed, &result);
 }
 
 // ---------------------------------------------------------------------------

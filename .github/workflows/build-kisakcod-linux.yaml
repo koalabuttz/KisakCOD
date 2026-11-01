@@ -27,6 +27,7 @@ on:
       - tests/linux_window/**
       - tests/linux_renderer/**
       - tests/linux_asset_export/**
+      - tests/linux_compat/**
       - .github/workflows/build-kisakcod-linux.yaml
   pull_request:
     branches: [ "master" ]
@@ -42,6 +43,7 @@ on:
       - tests/linux_window/**
       - tests/linux_renderer/**
       - tests/linux_asset_export/**
+      - tests/linux_compat/**
       - .github/workflows/build-kisakcod-linux.yaml
 
 permissions:
