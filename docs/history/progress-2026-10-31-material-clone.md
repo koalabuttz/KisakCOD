@@ -2,9 +2,9 @@
 
 > **Historical checkpoint — not current state.** The results below record one
 > branch on one date and are not rewritten here; do not read them as today's
-> status. Current: [2026-11-01 checkpoint](progress-2026-11-01.md). Current guides:
-> [Native Linux client](linux-client.md),
-> [renderer validation](linux-renderer-validation.md).
+> status. Current: [2026-11-01 checkpoint](../progress-2026-11-01.md). Current guides:
+> [Native Linux client](../linux-client.md),
+> [renderer validation](../linux-renderer-validation.md).
 
 The actual `Material_Duplicate` new-entry path allocated and copied a hardcoded
 80-byte material prefix, then stored the name at byte 80. Radiant extends that

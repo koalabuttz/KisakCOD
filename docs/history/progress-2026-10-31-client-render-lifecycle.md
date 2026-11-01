@@ -2,9 +2,9 @@
 
 > **Historical checkpoint — not current state.** The results below record one
 > branch on one date and are not rewritten here; do not read them as today's
-> status. Current: [2026-11-01 checkpoint](progress-2026-11-01.md). Current guides:
-> [Native Linux client](linux-client.md),
-> [renderer validation](linux-renderer-validation.md).
+> status. Current: [2026-11-01 checkpoint](../progress-2026-11-01.md). Current guides:
+> [Native Linux client](../linux-client.md),
+> [renderer validation](../linux-renderer-validation.md).
 
 This checkpoint connects the existing Linux input/window host to a narrow production rendering path: the engine's actual `GfxCmdArray`, `GfxCmdHeader`, `GfxCmdClearScreen`, clear/end command producers, and `Byte4PackRgba` color conversion. Its CPU backend supports full-surface color clears and end-of-list only. It does not initialize D3D9, materials, world geometry, depth/stencil, audio, full `R_Init`, or `CL_Frame`, and never sets renderer-registered or connected state to suggest otherwise.
 

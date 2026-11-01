@@ -2,9 +2,9 @@
 
 > **Historical checkpoint — not current state.** The results below record one
 > branch on one date and are not rewritten here; do not read them as today's
-> status. Current: [2026-11-01 checkpoint](progress-2026-11-01.md). Current guides:
-> [Native Linux client](linux-client.md),
-> [SDL3 platform prototype](linux-sdl3-prototype.md).
+> status. Current: [2026-11-01 checkpoint](../progress-2026-11-01.md). Current guides:
+> [Native Linux client](../linux-client.md),
+> [SDL3 platform prototype](../linux-sdl3-prototype.md).
 
 This checkpoint extends the existing optional `KisakCOD-client-input` host with a reusable CPU pixel resource and synchronous SDL window presentation. It does not initialize the game's D3D9 renderer, audio, cgame, or `CL_Frame`. The default dedicated build remains independent of SDL.
 
