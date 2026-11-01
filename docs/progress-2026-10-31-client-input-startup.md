@@ -1,5 +1,10 @@
 # Production Linux input startup prerequisite — 2026-10-31
 
+> **Historical checkpoint — not current state.** The results below record one
+> branch on one date and are not rewritten here; do not read them as today's
+> status. Current: [2026-11-01 checkpoint](progress-2026-11-01.md). Current guide:
+> [Native Linux client](linux-client.md).
+
 Branch `dot/client-input-startup-2026-10-31`, based on `6f4d13bd`.
 The worktree retains its original path `/workspace/KisakCOD-client-packet-host`.
 
@@ -70,8 +75,10 @@ execution. Its returned error was:
 
 > Agent errored: This content was flagged for possible cybersecurity risk. If this seems wrong, try rephrasing your request. Otherwise, confirm that the access_programs.cyber parameter is set to the appropriate tier, and note that some cybersecurity requests are still limited, even when Daybreak is on.
 
-The [recorded blocker](/workspace/kisakcod-client-input-startup-results/packet-work-blocker.json)
-contains the exact returned error and outcome. The target was proposed
+The original machine-local record
+`/workspace/kisakcod-client-input-startup-results/packet-work-blocker.json`
+contained the exact returned error and outcome; it is not a repository artifact
+or a portable link. The target was proposed
 `CL_PacketEvent` extraction and receive regression/fix work
 in this worktree. The worker executed no files or tests. No retry or alternate
 execution route was attempted. The parent explicitly paused that scope and its

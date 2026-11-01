@@ -1,5 +1,10 @@
 # Shared Linux command/network runtime — 2026-10-31
 
+> **Historical checkpoint — not current state.** The results below record one
+> branch on one date and are not rewritten here; do not read them as today's
+> status. Current: [2026-11-01 checkpoint](progress-2026-11-01.md). Current guide:
+> [Native Linux client](linux-client.md).
+
 Branch `dot/client-command-host-2026-10-31`, based on `c5021253`.
 
 ## Delivered production behavior

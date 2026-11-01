@@ -114,6 +114,10 @@ is added by this work.
 
 ## Validation checkpoint (2026-10-31)
 
+These counts describe this earlier asset milestone, not the current checker
+matrix. For later verification and present limits, see the
+[current handoff](progress-2026-11-01.md) and [SDL3 guide](linux-sdl3-prototype.md).
+
 Debug and RelWithDebInfo each passed the window aggregate (121/121), client-core
 aggregate (497/497), actual text fixture (19/19), renderer allocation/lifetime
 fixture (33/33), and synthetic IWI decoder checks (21/21). All nine genuinely

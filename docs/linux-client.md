@@ -120,9 +120,11 @@ python3 scripts/tests/test_linux_client_core.py --static-only
 ```
 
 It is deliberately **not** registered in `scripts/tests/run_linux_checks.py`.
-The Linux workflow runs it separately for Debug and RelWithDebInfo, so the normal
-server checks do not silently opt into client targets. Hosted CI results still
-need to be checked separately from local validation.
+The Linux workflow runs it separately for Debug and RelWithDebInfo in the same
+native jobs that run the dedicated-server checks, so those checks never silently
+opt into client targets. Hosted run
+[41267177207](https://github.com/koalabuttz/KisakCOD/actions/runs/41267177207)
+passed both native jobs with these client-core checks included.
 
 The checker verifies generated compile commands for all eight client-core
 translation units (`-m32`, `KISAK_MP`, no dedicated defines), builds in an isolated
@@ -240,10 +242,21 @@ Compiling eight client TUs is not a client. In rough order of weight:
    Steam-error handling still has no supported Linux authentication provider.
 2. **D3D9 renderer.** The rendering path makes real D3D9 calls. This is not a
    stub-shaped problem.
-3. **Renderer backend choice** — out of scope for this milestone. Nothing here
-   selects or recommends a backend.
+3. **Renderer backend.** No engine backend is selected, recommended or built
+   here, and the root build and game renderer are unchanged. Separate from them,
+   a private standalone experiment has since created a native D3D9 device through
+   DXVK Native 2.7.1 with SDL3 and replayed packaged `mp_crash` world surfaces:
+   see [the device probe](linux-renderer-probe.md),
+   [one packaged surface](linux-world-surface-probe.md) and
+   [the validation follow-up](linux-renderer-validation.md).
 4. **The rest of the client TUs**, each of which needs its own compile proof
    before it can join the object library.
+
+Those experiments replay genuine packaged shader pairs and BSP surfaces statically
+— one triangle, then a 16-triangle surface, then one technique-7 lit surface with
+16 predeclared samples — against bounded CPU pixel oracles. They are not engine
+integration, a world renderer, or a playable client, and nothing in them
+establishes how this client would render a scene.
 
 The next connection milestone needs a supported Linux ticket provider and a
 shared packet dispatcher driving the real connection receive/state loop. Shared
@@ -305,6 +318,8 @@ for confirmed bugs, valid-wire coverage, render-thread work and remaining bounda
 `KISAK_BUILD_LINUX_WINDOW_HOST=ON` independently adds `KisakCOD-window-platform`,
 `KisakCOD-client-window`, and `KisakCOD-window-test`. It defaults OFF and needs
 SDL2 >=2.0.18 development files and runtime matching the project's 32-bit build.
+SDL2 stays the default; `KISAK_LINUX_SDL_MAJOR=3` builds the same hosts against
+SDL3 >=3.2.10, as described in [the SDL3 prototype](linux-sdl3-prototype.md).
 The client-core option does not imply this option or require SDL.
 
 ```sh

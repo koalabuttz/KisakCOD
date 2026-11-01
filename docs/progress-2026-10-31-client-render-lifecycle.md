@@ -1,5 +1,11 @@
 # Linux CPU renderer command and resource lifecycle
 
+> **Historical checkpoint — not current state.** The results below record one
+> branch on one date and are not rewritten here; do not read them as today's
+> status. Current: [2026-11-01 checkpoint](progress-2026-11-01.md). Current guides:
+> [Native Linux client](linux-client.md),
+> [renderer validation](linux-renderer-validation.md).
+
 This checkpoint connects the existing Linux input/window host to a narrow production rendering path: the engine's actual `GfxCmdArray`, `GfxCmdHeader`, `GfxCmdClearScreen`, clear/end command producers, and `Byte4PackRgba` color conversion. Its CPU backend supports full-surface color clears and end-of-list only. It does not initialize D3D9, materials, world geometry, depth/stencil, audio, full `R_Init`, or `CL_Frame`, and never sets renderer-registered or connected state to suggest otherwise.
 
 The shared `r_command_buffer` implementation now backs both the original game wrappers and the explicit Linux command context. Game frame-state assertions, warning thresholds and critical-command reserve policy remain in their original wrapper. The explicit allocator checks its storage metadata before pointer arithmetic. Physical capacity cannot be enlarged by critical usage exceeding the reserve: the old subtraction could become negative and grant nonexistent space to later noncritical commands; the shared allocator clamps the remaining reserve at zero and the regression covers that boundary. Command IDs and structure layouts remain the existing engine definitions, including Radiant conditional IDs.

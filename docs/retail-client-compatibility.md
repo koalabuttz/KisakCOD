@@ -5,6 +5,14 @@ multiplayer clients with KisakCOD's networking source. It is not a claim of
 complete version equivalence or a successful 1.0 gameplay test. Server setup and
 opt-in authentication are described in [Linux dedicated server](linux-dedicated.md).
 
+The evidence here is unchanged since its 2026-10-31 checkpoint. Native Steam
+ticket verification is still unimplemented, so a retail client on this build needs
+one of the explicit authentication opt-ins from that guide. The retail 1.7 and
+CoD4x 21.1 sessions were separate brief single-player tests on loopback; no
+two-human or mixed-client session has been run, and none of the experimental
+renderer work in progress makes a native Linux client playable. Current status:
+[2026-11-01 checkpoint](progress-2026-11-01.md).
+
 ## Targets and method
 
 | Client | Size (bytes) | SHA-256 |

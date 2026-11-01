@@ -30,8 +30,10 @@ has an SDL2/SDL3 × Debug/RelWithDebInfo matrix. SDL3 is built from pinned upstr
 revision `877399b2b2cf21e67554ed9046410f268ce1d1b2` (release 3.2.10) with `-m32`,
 shared-library linkage and an ELF32 check. Its SDK deliberately disables native
 display/audio backends for dummy/disk tests; this is not X11, Wayland or physical
-audio coverage. Configure and checker logs are retained even on failure. Hosted
-execution of this matrix has not yet been observed.
+audio coverage. Configure and checker logs are retained even on failure. Hosted run
+[41267177207](https://github.com/koalabuttz/KisakCOD/actions/runs/41267177207)
+passed all four window jobs of this matrix — SDL2 and SDL3, Debug and
+RelWithDebInfo — alongside its two native dedicated/client-core jobs.
 
 ## Preserved behavior and deliberate differences
 
@@ -92,8 +94,15 @@ Neither failed attempt is counted as successful verification.
 
 Native Wayland interactive capture/reacquisition, non-US/IME text, resize and
 fractional-scale behavior, physical audio, game audio, full client frames and
-connected gameplay remain unverified. RelWithDebInfo and Windows builds of this
-prototype have not been established by these Debug results.
+connected gameplay remain unverified. RelWithDebInfo and Windows builds were not
+covered by these Debug results. The hosted window matrix now runs Debug and
+RelWithDebInfo, but its runners set the dummy video and audio drivers, so the
+Wayland and X11 evidence above remains local.
+
+The same SDL3 release also supplies the window system for the separate DXVK
+Native D3D9 experiments in `tests/linux_renderer`. Those probes do not use this
+host and are not engine rendering; see
+[the native D3D9 device experiment](linux-renderer-probe.md).
 
 ## Research basis
 

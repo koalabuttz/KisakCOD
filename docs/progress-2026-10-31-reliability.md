@@ -1,5 +1,11 @@
 # Reliability checkpoint — 2026-10-31
 
+> **Historical checkpoint — not current state.** The results below record one
+> branch on one date and are not rewritten here; do not read them as today's
+> status. Current: [2026-11-01 checkpoint](progress-2026-11-01.md). Current guides:
+> [Server-side test clients](server-test-clients.md),
+> [Linux dedicated server](linux-dedicated.md).
+
 Base: `f8bde51a` from `koalabuttz/KisakCOD` master. Local branch:
 `dot/server-reliability-2026-10-31`. Nothing pushed or merged.
 

@@ -17,4 +17,10 @@ These low-level methods remain available with their documented state contracts. 
 
 The focused fixture executes actual command producers, CPU replay and SDL dummy-surface presentation. It covers baseline failures, abandoned/throwing recording, nested scopes, wrong-thread finish, stale generations across cancel/resize/restart, ready-state stale resource handles, quit/presentation failure, and window recreation. Dummy SDL validates software lifecycle, not hardware display behavior; genuine X11 and asset-driven integration remain separate checks. Existing allocation-fault tests cover resize and resource failure paths.
 
-Full `R_Init`, renderer device/world startup, `CL_Frame`, authentication and packet processing remain outside this service. Existing partial-frame and unrendered-blur reporting is unchanged.
+Full `R_Init`, renderer device/world startup, `CL_Frame`, authentication and packet
+processing remain outside this service. The same CPU backend consumes the admitted
+`RC_SET_VIEWPORT` command for its image/font presentation path
+([native viewport commands](linux-viewport.md)); the standalone packaged-surface
+replays in `tests/linux_renderer` do not use these scopes and are not engine
+rendering ([one packaged surface](linux-world-surface-probe.md)). Existing
+partial-frame and unrendered-blur reporting is unchanged.

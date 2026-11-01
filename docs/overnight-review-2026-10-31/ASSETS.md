@@ -1,5 +1,12 @@
 # Optional private asset preparation
 
+> **Archived delivery — kept for reproducibility.** The commands and pinned counts
+> below belong to the 2026-10-31 review checkpoint. They are deliberately left as
+> recorded and must not be updated to match later runs. Current status:
+> [2026-11-01 checkpoint](../progress-2026-11-01.md). Current guides:
+> [Linux dedicated server](../linux-dedicated.md),
+> [Native Linux client](../linux-client.md).
+
 Use only an existing authorized CoD4 installation. No fonts, IWI files, PCM, IWD archives, fastfiles or exported menu/material inventories are included in this delivery. The screenshot is a rendered result, not an asset bundle.
 
 ## Offline export supported at the documented checkpoint

@@ -47,16 +47,17 @@ bash build-linux.sh
 python3 scripts/tests/test_linux_bootstrap.py
 ```
 
-The executable is `bin/KisakCOD-dedi` (native ELF, no Wine). This is not yet a
-playable server: **Linux Steam authentication is unavailable and ordinary client
-tickets are rejected**. Two explicit opt-ins can admit a client without a ticket:
-a loopback-only test mode, and `sv_allowUnverifiedGuids`, which accepts the retail
-GUID handshake from any address without verification - so with it on, GUIDs are
-spoofable and must not carry bans, privileges or persistent identity. With the
-loopback test mode plus the opt-in `sv_allowProtocol6`, one stock retail
-CoD4 1.7 client has joined and played briefly, but that single local session does
-not establish general multiplayer or CoD4x compatibility. Game assets, map
-loading and multiplayer compatibility require separate verification.
+The executable is `bin/KisakCOD-dedi` (native ELF, no Wine). Dedicated map/server
+lifecycle is working, but **Linux Steam authentication is unavailable and ordinary
+client tickets are rejected**. Two explicit opt-ins can admit a client without a
+ticket: a loopback-only test mode, and `sv_allowUnverifiedGuids`, which accepts the
+retail GUID handshake from any address without verification. With the latter on,
+GUIDs are spoofable and must not carry bans, privileges or persistent identity.
+Stock retail CoD4 1.7 and CoD4x 21.1 have each played in separate brief local
+sessions; grenade death, team switching and timer-driven rotation were retested.
+Native internal-bot refill/map-cycle checks also pass. These are not simultaneous
+human-player, mixed-client, public-server authentication or general compatibility
+proof. Licensed game assets remain external to the repository.
 See [Linux build and verification details](docs/linux-dedicated.md) for the
 supported scope, prerequisites, tests, and remaining work.
 
@@ -93,6 +94,19 @@ and reflection use the real D3DX APIs; an asset-free
 
 Radiant requires MSVC/MFC and is excluded from the MinGW configuration. A
 successful build does not establish full rendering or gameplay compatibility.
+
+### Renderer and world-surface experiments
+
+Rendering work is standalone. [`tests/linux_renderer`](tests/linux_renderer/README.md)
+replays individual exported world surfaces through DXVK Native 2.7.1 and SDL3 and
+compares bounded pixel readbacks against a CPU prediction. It is not a graphical
+client and not a playable game: a replay describes one surface, not a rendered
+level. The asset-free parts run in CI without a GPU, DXVK, SDL or game assets; the
+device experiments are run by hand on a machine with a real GPU.
+
+Status, limits and the evidence for each checkpoint are recorded in
+[renderer validation](docs/linux-renderer-validation.md) and the
+[packaged world-surface replay](docs/linux-world-surface-probe.md).
 
 ## Known Issues
 (Use the **[issues](https://github.com/SwagSoftware/KisakCOD/issues)** section)

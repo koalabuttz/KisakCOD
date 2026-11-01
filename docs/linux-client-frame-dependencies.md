@@ -45,3 +45,8 @@ The next useful startup step is genuine ownership of the remaining memory and
 client services, or a narrowly shared transport-maintenance phase with its real
 dvars and authentication lifetime. Neither requires weakening packet admission or
 adding fake renderer/voice/cgame handlers.
+
+The standalone renderer experiments do not change this boundary. They create their
+own D3D9 device and command buffers outside the engine ([device probe](linux-renderer-probe.md),
+[one packaged surface](linux-world-surface-probe.md)), so they satisfy none of the
+startup services listed above and provide no renderer to `CL_Frame`.

@@ -1,5 +1,12 @@
 # Overnight Linux review handoff — 2026-10-31
 
+> **Historical checkpoint — not current state.** This is the handoff for the
+> combined review branch as it stood on that date, including its own validation
+> counts and limits. It is left as recorded; the tree has since moved on. Current:
+> [2026-11-01 checkpoint](progress-2026-11-01.md). Current guides:
+> [Linux dedicated server](linux-dedicated.md),
+> [Native Linux client](linux-client.md).
+
 This review branch combines the independently preserved client and server series.
 It does not update master. The combined code tree matches all 1,426 files in the
 fresh tested reconstruction exactly; only this handoff and its supporting text

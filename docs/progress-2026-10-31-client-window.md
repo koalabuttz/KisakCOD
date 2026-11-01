@@ -1,5 +1,11 @@
 # Native Linux window/input checkpoint — 2026-10-31
 
+> **Historical checkpoint — not current state.** The results below record one
+> branch on one date and are not rewritten here; do not read them as today's
+> status. Current: [2026-11-01 checkpoint](progress-2026-11-01.md). Current guides:
+> [Native Linux client](linux-client.md),
+> [SDL3 platform prototype](linux-sdl3-prototype.md).
+
 Branch: `dot/client-window-2026-10-31`, based on client lifecycle checkpoint
 `43550e60`. Server reliability history remains independently reviewable.
 

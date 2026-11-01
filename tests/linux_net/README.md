@@ -74,6 +74,7 @@ Scenarios, one process each:
 | `net-ip-veto` | `net_ip` changed at runtime (`localhost`, empty, `0.0.0.0`, `127.0.0.2`, LAN) vetoes while the socket is untouched and still loopback; `dedicated` 0 and a NULL `com_dedicated` veto; `dedicated` 1/2 restore |
 | `restart-safe` | `net_restart` on a safe configuration re-binds the same loopback port and keeps the bypass; `net_noudp` through `net_restart` closes the socket and the gate, and clearing it brings both back |
 | `pending-latched` | a latched-but-unapplied `net_ip` neither revokes nor widens anything; applying it vetoes before any rebind; the rebind it asks for is refused before an unsafe socket exists |
+| `unverified-guids-conflict` | the documented safe configuration plus `sv_allowUnverifiedGuids`: start-up is refused with a diagnostic before any socket is bound, the bypass stays off for `127.0.0.1` from any source port, and a restart does not grant it either |
 | `unsafe-restart-matrix` | empty, `localhost`, `0.0.0.0`, `127.0.0.2`, `127.1.0.1`, `127.0.0.1 ` (trailing space), the host's LAN address and its host name are each refused with a diagnostic, no bypass, no socket, nothing received — repeated with `net_noudp 1` |
 | `unsafe-startup-empty`, `unsafe-startup-localhost`, `unsafe-startup-wildcard` | the same refusals on the very first bind of a process |
 | `dedicated-zero`, `dedicated-unset` | enabled and loopback but a listen server, or a process with no `com_dedicated`: refused, nothing bound |
@@ -95,7 +96,29 @@ the shim already had. `com_dedicated` is linked whenever a dvar named
 `dedicated` is registered or seeded, and `Shim_ClearComDedicated()` drops the
 pointer. `Shim_DvarSeedBool()` adds boolean seeding; seeding stands in for
 `+set <dvar> <value>` on the command line, because registration keeps the value
-that is already there.
+that is already there. `SV_UnverifiedGuidsEnabled()` is a plain seeded bool in the
+shim (`Shim_SeedUnverifiedGuidsEnabled()`), which is all the start-up conflict
+check reads.
+
+### Header agreement probe (`hdr_conflict_check.cpp`)
+
+`hdr_conflict_check.cpp` is a compile-only probe, not part of `run_tests.sh`. The
+engine's `qcommon/net_chan_mp.cpp` includes `<win32/win_local.h>` and
+`<win32/win_net.h>`, which declare the same entry points this port exports from
+`linux/net_internal.h`. If a signature drifted, the mismatch would otherwise
+surface as a confusing link-time error, because the return type is not part of the
+mangled name. The probe includes both sides and asserts they agree with
+`static_assert(__is_same(...))` on the exported functions, plus the `netadr_t`
+layout:
+
+```sh
+clang++ -m32 -fms-extensions -std=gnu++20 -DKISAK_MP -Isrc -fsyntax-only \
+    tests/linux_net/hdr_conflict_check.cpp
+```
+
+It needs `-fsyntax-only` and no linking; `-DKISAK_MP` selects the multiplayer
+declarations. It proves the two header sets still describe the same functions, and
+nothing about runtime behaviour.
 
 What this cannot show, and the full engine binary has to:
 

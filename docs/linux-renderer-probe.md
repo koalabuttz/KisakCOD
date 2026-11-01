@@ -1,5 +1,10 @@
 # Native D3D9 device experiment — 2026-11-01
 
+> Device-only checkpoint. The shader/surface gate described as next below has
+> since passed in bounded standalone tests; see
+> [renderer validation](linux-renderer-validation.md) and the
+> [current handoff](progress-2026-11-01.md). This page preserves the device-run evidence.
+
 ## Result
 
 The standalone `tests/linux_renderer` probe successfully created a native D3D9

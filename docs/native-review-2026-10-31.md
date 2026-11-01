@@ -1,5 +1,11 @@
 # Native follow-up validation — 2026-10-31
 
+> **Historical checkpoint — not current state.** These are this review branch's
+> native results on its own date; its counts and limits are not today's tree.
+> Current: [2026-11-01 checkpoint](progress-2026-11-01.md). Current guides:
+> [Linux dedicated server](linux-dedicated.md),
+> [Server-side test clients](server-test-clients.md).
+
 Reviewed branch: `dot/overnight-linux-review-2026-10-31`, baseline delivery
 `fd4d8da3`. No merge into master is part of this work.
 

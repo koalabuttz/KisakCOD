@@ -8,11 +8,19 @@ This is useful for testing server-side slot and command behavior without another
 Steam copy. It is **not** a second real client, a client decoder, or a navigating
 AI.
 
-The installed-assets fixture now uses stock team/class callbacks and holds the
-same healthy, equipped clients across one-second samples before quitting. The
-three-bot probe passed locally under QEMU i386 with the existing licensed assets.
-This is emulated server-side evidence, not native-host performance validation,
-a real client decoder, or proof of multi-player synchronization.
+The installed-assets fixture uses stock team/class callbacks and holds the same
+healthy, equipped clients across one-second samples before quitting. It now passes
+as native 32-bit execution, not QEMU: three bots, three full-capacity cohort
+refills, two map cycles, five-second holds per stage, twelve admissions, retained
+final-cohort identities, both authentication opt-ins zero and clean exit 0 in
+133 seconds with Clang 19. See
+[native follow-up validation](native-review-2026-10-31.md#results-reproduced-directly-on-this-machine);
+the earlier emulated runs stay recorded in the
+[2026-10-31 refill checkpoint](progress-2026-10-31-refill.md), and current status
+is in the [2026-11-01 checkpoint](progress-2026-11-01.md).
+
+These are internal server slots, not a real second client: this is not a client
+decoder, a human second player, or proof of multi-player synchronization.
 
 ## Existing implementation
 
@@ -147,6 +155,10 @@ cycles per build. Database/string services are checked doubles. The pre-fix
 source fails on releasing a borrowed string. Driver tests reject incomplete,
 duplicate, malformed and unhealthy hold evidence.
 
-Death/respawn, deliberate disconnect/refill and map changes with bots remain
-separate follow-up work. The independent lifecycle driver covers empty-server
-restart/rotation; it does not establish bot survival through those transitions.
+Death and respawn with bots remain separate follow-up work: refill mode keeps bot
+firing off so opposing cohorts do not kill each other, and no fixture covers a bot
+dying and returning. Deliberate disconnect/refill and retained-bot map changes are
+covered by `--refill-cycles` and `--cycles` above, including the native run in
+[native follow-up validation](native-review-2026-10-31.md). The independent
+lifecycle driver covers empty-server restart/rotation; neither fixture establishes
+survival of a real network client through those transitions.

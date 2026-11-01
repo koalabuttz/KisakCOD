@@ -1,5 +1,11 @@
 # Native UI image commands and layered material resources
 
+> **Historical checkpoint — not current state.** The results below record one
+> branch on one date and are not rewritten here; do not read them as today's
+> status. Current: [2026-11-01 checkpoint](progress-2026-11-01.md). Current guides:
+> [Native Linux client](linux-client.md),
+> [renderer validation](linux-renderer-validation.md).
+
 The Linux CPU renderer now runs an actual existing UI caller chain: `UI_DrawHandlePic` → `CL_DrawStretchPic` → `ScrPlace_ApplyRect` → `CL_DrawStretchPicPhysical` → the CPU implementation of `R_AddCmdDrawStretchPic`. Identical SP/MP client wrappers were extracted into one shared file. The real UI and screen-placement translation units compile and execute; standalone input globals now use the production screen-placement owner. This is a bounded unlit image capability, not initialization of the complete game menu, asset database, font renderer, cgame, audio or CL_Frame.
 
 The normal game renderer retains its original material technique/depth validation and fallback behavior. Both implementations share stretch-picture command emission and the unchanged actual `R_ConvertColorToBytes` packing implementation, now in a narrow shared source. Common game and explicit Radiant source lists include the new shared files where applicable. The CPU entry is deliberately selected at link time; it does not set game renderer registration flags or pretend to implement arbitrary shaders.

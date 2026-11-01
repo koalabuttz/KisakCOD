@@ -19,7 +19,9 @@ the integer viewport origin at rasterization. Coverage and bilinear UV sampling
 retain the existing pixel-center and half-open edge conventions. Clipping does
 not resize or resample the original rectangle. The implementation does not add
 unused projection matrices or claim D3D vertex-shader floating-point parity.
-Projection/device startup remains a separate task.
+Projection/device startup remains a separate task: the standalone
+[D3D9 device experiment](linux-renderer-probe.md) creates a native device outside
+the engine and supplies nothing to this backend.
 
 Whole-list preflight rejects negative origins, nonpositive dimensions, extents
 outside the owned target, malformed sizes and truncated commands before any

@@ -1,5 +1,10 @@
 # Packaged world-surface replay — 2026-11-01
 
+> Initial one-surface checkpoint. Later independent pixel, multi-triangle and lit
+> validation supersedes the next-gate section below; see
+> [renderer validation](linux-renderer-validation.md) and the
+> [current handoff](progress-2026-11-01.md). Counts here describe this initial run.
+
 ## Bounded result
 
 A native ELF32 DXVK Native 2.7.1/SDL3 replay executed one original packaged

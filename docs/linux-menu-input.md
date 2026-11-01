@@ -11,8 +11,13 @@ The host routes real client key/mouse consumers into the extracted production
 `Menu_HandleKey`, `Menu_HandleMouseMove`, focus and menu-stack routines.
 `Item_YesNo_HandleKey` changes the real `cl_freelook` and `m_filter` dvars.
 Actual item text/yes-no painters use the real font selector, placement, glyph
-metrics and shared rendering commands. This is a bounded local control view,
-not full `Menu_Paint`, `UI_Init`, `CL_Frame` or gameplay.
+metrics and shared rendering commands. The owner now schedules the real
+production `Menu_PaintAll` path over its admitted registry, so window painting and
+item dispatch run through `Menu_Paint`/`Item_Paint` instead of separate host
+loops; see [admitted traversal](linux-menu-traversal.md) and
+[offline frame scheduling](linux-offline-menu-frame.md). The genuine blur request
+is reported unrendered, and this is still not `UI_Init`, `CL_Frame`, renderer
+initialization, a complete compositor or gameplay.
 
 Escape executes the admitted close-self script. Once closed, the existing
 console command `menu_open` reopens the same menu through production menu

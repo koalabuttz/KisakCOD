@@ -119,6 +119,51 @@ restarts while preserving synchronous execution and existing wait semantics.
 Real nonlocal aborts also check reverse-order ownership cleanup, repeated and
 reentrant recovery, and bounded command nesting.
 
-GitHub Actions runs these checks alongside the Windows builds and native
-bootstrap check. Loading a map and quitting with licensed assets remain separate
-application checks.
+GitHub Actions runs these checks alongside the Windows builds, the native
+bootstrap check and the asset-free world surface checks (below). Loading a map and
+quitting with licensed assets remain separate application checks.
+
+## World surface checks
+
+```sh
+python3 scripts/tests/run_world_surface_checks.py --config Debug
+python3 scripts/tests/run_world_surface_checks.py --config RelWithDebInfo
+python3 scripts/tests/run_world_surface_checks.py --list
+```
+
+This runner performs no CMake configure and no engine build. It compiles six
+standalone test translation units directly with `-m32 -std=c++20 -Werror` and runs
+them, then runs the bundle prepare script, for seven checks:
+
+| Check | Source | Covers |
+| --- | --- | --- |
+| `world_surface_inventory` | `tests/linux_asset_export/world_surface_inventory_test.cpp` | inventory allowlist, declaration routing, slice bounds, bundle helper arithmetic |
+| `world_surface_context` | `tests/linux_renderer/world_surface_context_test.cpp` | shader-constant context for one unlit surface draw |
+| `world_surface_bundle` | `tests/linux_renderer/world_surface_bundle_test.cpp` | bundle loader, shader framing walk, vertex accessors |
+| `world_surface_oracle` | `tests/linux_renderer/world_surface_oracle_test.cpp` | oracle hashing, weights, sampling, colour and pixel arithmetic, sample selection |
+| `world_lit_bundle` | `tests/linux_renderer/world_lit_bundle_test.cpp` | lit loader refusals: program pair hash and length, widened geometry counts, index walk, colour-map sampler, exact constant set, lightmap layout |
+| `world_image_capture` | `tests/linux_asset_export/world_image_capture_test.cpp` | capture bounds, name filter, duplicate rule, disabled path |
+| `world_surface_prepare` | `test_world_surface_prepare.py` | the prepare step's trust boundary over archives it writes itself |
+
+`world_image_capture` is the only case with a second translation unit: the capture
+state lives behind a mutex in `src/linux/tools/world_image_capture.cpp`, so that
+unit is compiled beside the test and linked with `-pthread`. It stays engine-free:
+no engine header, no asset tree, no zone. Every other case is a single translation
+unit that includes one header and opens no file except bundles it writes itself.
+
+Configurations are explicit rather than inherited: `Debug` compiles at `-O0` and
+`RelWithDebInfo` at `-O2`, both with `-g`. Each command runs in its own process
+group with its own timeout, so a stuck check is killed instead of hanging a job. A
+check passes only when the process exits 0, the produced binary really is ELF32/i386,
+and its output contains no `FAIL` line.
+
+A passing run says the helpers behave as their tests state. It does not claim that
+any surface was rendered, that a captured frame was reproduced, or that the hosted
+workflow itself ran. It needs no DXVK, SDL, GPU, Steam client, credentials, game
+assets or network, which is why it can run on an ordinary hosted runner.
+
+The four renderer tests are compiled here directly because
+`tests/linux_renderer/CMakeLists.txt` requires the `dxvk-d3d9` and `sdl3`
+pkg-config modules before it configures anything. That project also builds the two
+GPU replay executables, which are a separate manual experiment; see
+[tests/linux_renderer/README.md](../../tests/linux_renderer/README.md).

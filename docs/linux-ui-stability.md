@@ -49,15 +49,18 @@ and resize. Exact matrix/viewport tests and current presentation readback would
 precede a real GPU vertex path. This is a proposal, not an implemented renderer
 or game-frame claim.
 
-The concrete observable integration candidate is the existing
-`CL_SetViewport -> R_AddCmdSetViewportValues -> RC_SET_VIEWPORT` command path.
-The current CPU consumer rejects that command. A bounded implementation would
-consume the actual command and shared viewport state to position and clip
-subviewport draws, with exact pixel readback and unchanged full-window output.
-It should use the production 2D projection where it affects coordinates, rather
-than merely retaining unused matrices. It must prevalidate the entire command
-list, reset full-window viewport state on resize, and keep unsupported 3D/device
-operations explicit. The current checkpoint implements none of this proposal.
+The concrete observable integration candidate was the existing
+`CL_SetViewport -> R_AddCmdSetViewportValues -> RC_SET_VIEWPORT` command path,
+which the CPU consumer used to reject. That bounded step has since been taken:
+the consumer now preflights whole lists, applies the integer viewport origin and
+clipping at rasterization, resets full-window state across lists and resize, and
+keeps unsupported 3D/device operations explicit. See
+[native viewport commands](linux-viewport.md). The production 2D projection and
+the `R_InitCmdBufSourceState`/`R_Set2D` sharing proposed above were deliberately
+not adopted there and remain unimplemented, as does any real GPU vertex path.
+`R_Init` and `CL_InitRenderer` still need a device the engine owns; the separate
+standalone [D3D9 device experiment](linux-renderer-probe.md) creates one but shares
+no ownership with this renderer.
 
 ## Window and audio ownership checks
 

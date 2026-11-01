@@ -232,7 +232,7 @@ jobs:
           retention-days: 7
 
   world_surface:
-    # Asset-free: compiles three standalone -m32 test translation units directly
+    # Asset-free: builds six standalone -m32 test cases directly
     # and runs the bundle prepare tests. No DXVK, no SDL, no GPU, no game assets,
     # no CMake configure. tests/linux_renderer/CMakeLists.txt is deliberately not
     # used here: it requires the dxvk-d3d9 and sdl3 pkg-config modules before it

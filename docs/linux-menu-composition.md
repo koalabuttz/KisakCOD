@@ -12,6 +12,10 @@ The owner resamples the actual SDL physical mouse position while focused and ins
 
 `UI_UpdateContextTime` is shared by actual SP/MP wrappers and the native owner. The owner samples once per presentation attempt; key and mouse events no longer overwrite its frame history. The original four-sample warmup/integer FPS behavior is retained. Defined 32-bit elapsed subtraction, widened history summation and bounded ring-counter rollover remove reproduced signed overflow in the clock helper. This does not claim that every legacy time consumer, including `Fade`'s next-time arithmetic, is wrap-safe.
 
-This is a genuine bounded UI composition/frame-service prerequisite. It is not complete `Menu_PaintAll`, MP `UI_Refresh`, `SCR_UpdateFrame`, a registered D3D renderer, authentication or gameplay. Unsupported scripts, expressions, widgets, material techniques and full-frame services remain explicit. No packet/receive/authentication work is included.
+This is a genuine bounded UI composition/frame-service prerequisite. Scheduling of
+the full `Menu_PaintAll` registry was added afterwards by
+[offline frame scheduling](linux-offline-menu-frame.md); this checkpoint itself is
+not MP `UI_Refresh`, `SCR_UpdateFrame`, a registered D3D renderer, authentication
+or gameplay. Unsupported scripts, expressions, widgets, material techniques and full-frame services remain explicit. No packet/receive/authentication work is included.
 
 The existing `--menu-controls DIR --ui-asset-dir DIR` invocation now requires the prepared composition bundle in addition to the genuine controls/fonts/audio resources. Missing or unsupported metadata fails; there is no synthetic composition fallback. `scripts/tools/prepare_linux_menu_composition.py` produces the bounded private composition metadata from an authorized offline inventory.

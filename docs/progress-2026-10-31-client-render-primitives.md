@@ -1,5 +1,11 @@
 # Renderer portability and owned raw-image commands
 
+> **Historical checkpoint — not current state.** The results below record one
+> branch on one date and are not rewritten here; do not read them as today's
+> status. Current: [2026-11-01 checkpoint](progress-2026-11-01.md). Current guides:
+> [Native Linux client](linux-client.md),
+> [renderer validation](linux-renderer-validation.md).
+
 This checkpoint combines bounded renderer portability and resource milestones, without initializing a complete game renderer or CL_Frame. The independent shared-header change in b850cdac separates real D3D surface release from shared header compilation. Linux has no fake successful GPU release implementation: actual release remains unavailable at link time. Radiant-only Material alignment matches the documented Windows layout while MP layout stays unchanged. See the separate portability checkpoint and compiler evidence for the actual legacy render-command translation unit.
 
 RC_STRETCH_RAW and GfxCmdStretchRaw already existed in the engine backend, where RGBA input is uploaded to an X8R8G8B8 surface. This change adds a producer for that existing format (R_EmitStretchRawCommand and game R_AddCmdStretchRaw); it does not claim a previous producer was already present. The Linux CPU renderer supports only clipped 1:1 blits. Scaling rejects explicitly rather than silently substituting for D3D linear filtering. Source alpha is ignored and output is opaque, matching the X8 surface semantics.

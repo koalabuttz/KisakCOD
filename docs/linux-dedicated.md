@@ -4,12 +4,16 @@ The native Linux target is a **32-bit x86 multiplayer dedicated server**. It
 produces an ELF executable, not a Windows executable, and does not use Wine.
 The Windows MP/SP/editor build paths remain separate.
 
-This is an initial port, not a gameplay-ready release. There is no native Linux
-graphical client. In particular, **Steam authentication is not implemented on
-Linux yet: ordinary client tickets are rejected**. An explicit startup-only,
-loopback-only test mode can skip ticket verification; it does not by itself
-establish playable-client compatibility. Separately, the opt-in boolean
-`sv_allowProtocol6` lets retail CoD4 1.7 clients through the connect-version check
+This is an initial port, not a gameplay-ready release. There is no playable
+native Linux graphical client: an optional experimental standalone renderer
+(SDL3 with DXVK) draws unlit and lit world surfaces and is checked against native
+GPU readout oracles, but it is a bounded harness, not a game client — see
+[renderer validation](linux-renderer-validation.md). In particular, **Steam
+authentication is not implemented on Linux yet: ordinary client tickets are
+rejected**. An explicit startup-only, loopback-only test mode can skip ticket
+verification; it does not by itself establish playable-client compatibility.
+Separately, the opt-in boolean `sv_allowProtocol6` lets retail CoD4 1.7 clients
+through the connect-version check
 (they advertise protocol 6). In that local test mode one stock 1.7 client has
 joined and played briefly; see
 [Retail 1.7 clients and `sv_allowProtocol6`](#retail-17-clients-and-sv_allowprotocol6).
@@ -140,8 +144,10 @@ are test doubles; it is not a complete server simulation.
 
 Internal bot support, asset-free slot/command and ownership tests and the
 installed-assets bot hold probe are documented in
-[Server-side test clients](server-test-clients.md). Bots do not verify a second
-real client's prediction or snapshot decoding.
+[Server-side test clients](server-test-clients.md); that probe now passes as
+native 32-bit execution with three bots, three full-capacity refills and two map
+cycles. Bots do not verify a second real client's prediction or snapshot
+decoding.
 
 The `gameplay_lifecycle` check executes production grenade-death, item-launch,
 item-update, origin-reset and trajectory functions with controlled engine
@@ -386,8 +392,12 @@ protocol it sent.
 
 Verified: with that fix plus `sv_allowProtocol6 1` and `sv_loopbackTestAuth 1`,
 one stock retail 1.7 client connected to `mp_crash` and played briefly with one
-player; no obvious problem was observed. Connection admission for protocol 6 is
-covered by the checks described below.
+player; no obvious problem was observed. In a separate restored CoD4x 21.1
+session, the player confirmed grenade death and team switching after the random-
+range fix, then timer-driven rotation while connected. Native internal-bot map
+cycles/refills are separately verified. These do not establish stock 1.7 rotation
+or simultaneous real-client synchronization. Connection admission for protocol 6
+is covered by the checks described below.
 
 Not verified:
 - more than one player, or a 1.7 client mixed with 1.0 clients.
