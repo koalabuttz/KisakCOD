@@ -64,6 +64,13 @@
 #include <EffectsCore/fx_system.h>
 #include <sound/snd_public.h>
 
+#if defined(KISAK_UI_ASSET_EXPORT_ONLY)
+// The offline export tool retains selected embedded image payloads. The dedicated
+// build does not compile this header, does not link the unit, and runs the
+// Load_Texture below unchanged.
+#include <linux/tools/world_image_capture.h>
+#endif
+
 // ---------------------------------------------------------------------------
 // Renderer globals the dedicated build still needs to define.
 //
@@ -659,6 +666,23 @@ void __cdecl Load_Texture(GfxTexture *remoteLoadDef, GfxImage *image)
 
     if (DedicatedRendererAllocates())
         Com_Error(ERR_FATAL, "Load_Texture: image '%s' wants a texture but this build has no renderer\n", image->name);
+
+#if defined(KISAK_UI_ASSET_EXPORT_ONLY)
+    // The export asks for a copy of this image's payload while the union still holds
+    // it: the GfxImageLoadDef header sits at `loadDef`, its bytes at `loadDef->data`,
+    // and the assignment below is what makes the payload unreachable from the image.
+    // The call is inert unless the export armed it, allocates nothing, does no I/O and
+    // cannot throw, so a run that captures nothing behaves exactly as before.
+    {
+        kisak_world_capture::CaptureRequest request;
+        request.loadDefIdentity = loadDef;
+        request.name = image->name;
+        request.mapType = int(image->mapType);
+        request.header = reinterpret_cast<const unsigned char *>(loadDef);
+        request.payload = loadDef->data;
+        kisak_world_capture::CaptureTable::Instance().Capture(request);
+    }
+#endif
 
     image->texture.basemap = 0;
 }
