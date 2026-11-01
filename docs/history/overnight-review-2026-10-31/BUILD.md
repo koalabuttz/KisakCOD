@@ -3,9 +3,9 @@
 > **Archived delivery — kept for reproducibility.** The commands and pinned counts
 > below belong to the 2026-10-31 review checkpoint. They are deliberately left as
 > recorded and must not be updated to match later runs. Current status:
-> [2026-11-01 checkpoint](../progress-2026-11-01.md). Current guides:
-> [Linux dedicated server](../linux-dedicated.md),
-> [Native Linux client](../linux-client.md).
+> [2026-11-01 checkpoint](../../progress-2026-11-01.md). Current guides:
+> [Linux dedicated server](../../linux-dedicated.md),
+> [Native Linux client](../../linux-client.md).
 
 This combined review branch already includes both series; do not apply their cumulative patches again. Commands below assume Bash and a host able to run ELF32. Paths are user-supplied, not paths from the original build machine. Builds and asset outputs should be outside any existing worktree used concurrently for other tasks.
 

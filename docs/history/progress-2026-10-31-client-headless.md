@@ -2,8 +2,8 @@
 
 > **Historical checkpoint — not current state.** The results below record one
 > branch on one date and are not rewritten here; do not read them as today's
-> status. Current: [2026-11-01 checkpoint](progress-2026-11-01.md). Current guide:
-> [Native Linux client](linux-client.md).
+> status. Current: [2026-11-01 checkpoint](../progress-2026-11-01.md). Current guide:
+> [Native Linux client](../linux-client.md).
 
 Branch `dot/client-headless-2026-10-31`, based on `7483565f`, independently follows
 the client parser and packet integration branches. Server reliability changes

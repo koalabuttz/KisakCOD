@@ -2,9 +2,9 @@
 
 > **Historical checkpoint — not current state.** The results below record one
 > branch on one date and are not rewritten here; do not read them as today's
-> status. Current: [2026-11-01 checkpoint](progress-2026-11-01.md). Current guides:
-> [Native Linux client](linux-client.md),
-> [renderer validation](linux-renderer-validation.md).
+> status. Current: [2026-11-01 checkpoint](../progress-2026-11-01.md). Current guides:
+> [Native Linux client](../linux-client.md),
+> [renderer validation](../linux-renderer-validation.md).
 
 This checkpoint combines bounded renderer portability and resource milestones, without initializing a complete game renderer or CL_Frame. The independent shared-header change in b850cdac separates real D3D surface release from shared header compilation. Linux has no fake successful GPU release implementation: actual release remains unavailable at link time. Radiant-only Material alignment matches the documented Windows layout while MP layout stays unchanged. See the separate portability checkpoint and compiler evidence for the actual legacy render-command translation unit.
 
@@ -22,7 +22,7 @@ Evidence: /workspace/kisakcod-client-render-primitives-results. KisakCOD-cpu-raw
 
 Packet/receive/authentication/network production paths remain unchanged. The previous packet action remains denied by the automated agent cybersecurity-risk check and was not retried; exact error: /workspace/kisakcod-client-input-startup-results/packet-work-blocker.json. Prior combined evidence remains tied to its recorded snapshot at /workspace/kisakcod-integration-check-results/REPORT.md. No new combined live-server result is claimed. Independent server patch: /workspace/kisakcod-refill-results/server-cumulative.patch.
 
-The companion portability change is detailed in `docs/progress-2026-10-31-renderer-portability.md`; translation-unit compilation does not establish complete renderer/editor runtime readiness.
+The companion portability change is detailed in `docs/history/progress-2026-10-31-renderer-portability.md`; translation-unit compilation does not establish complete renderer/editor runtime readiness.
 
 Final Debug and RelWithDebInfo results: core 478/478, window 90/90, owned-raw 16/16 and allocation-fault 16/16. Existing renderer 29/29, pixel 27/27, resource 20/20, deadline 14/14 and input/command/lifecycle checks remain included. X11 readback passes 16 actual pixel samples at each of 960x540, 640x360 and 620x340 in both configurations, covering image interiors/corners, immediately outside edges and distant background, plus existing input/focus/capture/shutdown. The prior clear-only executable fails actual image-color assertions as a negative control. Cadence observes 60 ticks over 0.9935s idle and 0.9611s under 919 XTest motions (895 callbacks), above the minimum 59 intervals of 16 ms. These are functional rendering-subset and event-host results, not a game performance guarantee.
 

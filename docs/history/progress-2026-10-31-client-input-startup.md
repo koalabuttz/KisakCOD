@@ -2,8 +2,8 @@
 
 > **Historical checkpoint — not current state.** The results below record one
 > branch on one date and are not rewritten here; do not read them as today's
-> status. Current: [2026-11-01 checkpoint](progress-2026-11-01.md). Current guide:
-> [Native Linux client](linux-client.md).
+> status. Current: [2026-11-01 checkpoint](../progress-2026-11-01.md). Current guide:
+> [Native Linux client](../linux-client.md).
 
 Branch `dot/client-input-startup-2026-10-31`, based on `6f4d13bd`.
 The worktree retains its original path `/workspace/KisakCOD-client-packet-host`.
@@ -28,7 +28,7 @@ for action/talk/stance state, focus-reset cancellation, input-only shutdown whil
 host commands remain alive, reinitialization and repeated complete ownership.
 Public state stays disconnected with renderer, game UI and `isRunning` unset.
 
-See [the frame dependency map](linux-client-frame-dependencies.md) for concrete
+See [the frame dependency map](../linux-client-frame-dependencies.md) for concrete
 remaining memory, voice/audio, DevGui, renderer, cgame, download and authentication
 requirements. `CL_Frame` and its production ordering are unchanged. This is a
 real startup prerequisite, not a claim that a game frame ran.

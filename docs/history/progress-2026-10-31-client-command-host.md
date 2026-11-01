@@ -2,8 +2,8 @@
 
 > **Historical checkpoint — not current state.** The results below record one
 > branch on one date and are not rewritten here; do not read them as today's
-> status. Current: [2026-11-01 checkpoint](progress-2026-11-01.md). Current guide:
-> [Native Linux client](linux-client.md).
+> status. Current: [2026-11-01 checkpoint](../progress-2026-11-01.md). Current guide:
+> [Native Linux client](../linux-client.md).
 
 Branch `dot/client-command-host-2026-10-31`, based on `c5021253`.
 
@@ -75,7 +75,7 @@ Each was reproduced against the prior production behavior before repair. Evidenc
 ## Build and run
 
 Use the same SDL/multilib setup and default-OFF window option from
-[linux-client.md](linux-client.md). Existing targets evolve; no additional parallel
+[linux-client.md](../linux-client.md). Existing targets evolve; no additional parallel
 frontend is introduced.
 
 ```sh

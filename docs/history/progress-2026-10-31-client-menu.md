@@ -2,8 +2,8 @@
 
 > **Historical checkpoint — not current state.** The results below record one
 > branch on one date and are not rewritten here; do not read them as today's
-> status. Current: [2026-11-01 checkpoint](progress-2026-11-01.md). Current guide:
-> [Native Linux client](linux-client.md).
+> status. Current: [2026-11-01 checkpoint](../progress-2026-11-01.md). Current guide:
+> [Native Linux client](../linux-client.md).
 
 This checkpoint runs a selected real menu item's auto-wrapped text painter in the
 existing Linux input/window host. It does not initialize `Menu_Paint`, execute menu
