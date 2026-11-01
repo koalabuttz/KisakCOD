@@ -7,6 +7,8 @@
 # compiles with the boundary. This list is a compile proof, not a renderer: none
 # of these units is linked into any executable.
 #
+# Compiled as gnu++20, the dialect CMake gives engine targets.
+#
 # Read by scripts/platform/linux/native_d3d9.cmake (KisakCOD-native-d3d9-renderer-proof)
 # and scripts/tests/run_native_d3d9_boundary_checks.py, so the CMake target and the
 # asset-free CI proof always cover the same files. Add a file only together with a
@@ -20,10 +22,12 @@ src/gfx_d3d/r_image_load_common.cpp
 src/gfx_d3d/r_material.cpp
 src/gfx_d3d/r_model_lighting.cpp
 src/gfx_d3d/r_rendertarget.cpp
+src/gfx_d3d/r_scene.cpp
 src/gfx_d3d/r_setstate_d3d.cpp
 src/gfx_d3d/r_shade.cpp
 src/gfx_d3d/r_state.cpp
 src/gfx_d3d/r_state_utils.cpp
+src/gfx_d3d/rb_backend.cpp
 src/gfx_d3d/rb_depthprepass.cpp
 src/gfx_d3d/rb_draw3d.cpp
 src/gfx_d3d/rb_imagetouch.cpp

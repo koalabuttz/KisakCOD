@@ -92,7 +92,8 @@ only stores them needs.
 - D3DX. `r_material_load_obj.cpp` includes D3DX headers; DXVK Native ships no
   D3DX library. Shader compilation/loading needs its own decision.
 - Win32 APIs that are not D3D9: `ddraw.h` (`r_texturemem.cpp`), `MONITORINFO`
-  (`r_screenshot.cpp`), `Sleep`, `_itoa`, `_time64`, Bink headers. These are
+  (`r_screenshot.cpp`), `HMONITOR`/window styles (`r_init.cpp`), `Sleep`
+  (`rb_sky.cpp`), `_itoa`, `_time64`, Bink textures (`r_cinematic.cpp`). These are
   ordinary Linux porting work in the renderer TUs, not boundary work.
 - Linking. No renderer unit is linked into an executable here, and
   `KISAK_DXVK_NATIVE_LIBRARY` is only passed through for future device-creating
@@ -143,7 +144,7 @@ and its version must be 2.7.1). It runs, per configuration:
 | `boundary_native-{gcc,clang}` | native mode under `-Werror`: a local `IDirect3DQuery9` implementation is called through DXVK's vtable; D3D9 struct sizes (`D3DPRESENT_PARAMETERS` 0x38, `D3DCAPS9` 0x130, `D3DADAPTER_IDENTIFIER9` 0x44C, ...); engine `__stdcall`/`WINAPI`/`CALLBACK` probes still end in `ret $0x8` **after** DXVK's headers, and the DXVK COM method ends in `ret` |
 | `reject_*-{gcc,clang}` | must not compile, for the stated reason: direct `d3d9_native.h` include, `<d3d9.h>` before the boundary, DXVK beside `compat.h` without the firewall, a D3D9 call without the opt-in |
 | `engine_layout_{standin,native,compare}` | documented x86-32 sizes/offsets of the D3D9-bearing engine structs in both views, and identical prints |
-| `renderer_proof-<unit>` | each listed production unit compiles unmodified (`-c`) to an ELF32/i386 object through the boundary |
+| `renderer_proof-<unit>` | each listed production unit compiles unmodified (`-c`, `-std=gnu++20` like every CMake engine target) to an ELF32/i386 object through the boundary |
 | `renderer_standin_control` | every listed unit fails without the boundary, so the list stays a list of units that need the D3D9 API |
 
 The `native_d3d9_boundary` job in `.github/workflows/build-kisakcod-linux.yaml`
@@ -165,7 +166,7 @@ Vulkan, SDL or game data, and never builds or changes `KisakCOD-dedi`.
 ## Verification boundary
 
 What the checks above establish: the boundary compiles with GCC 13 and Clang 18
-for i386; it keeps the engine's calling conventions and layouts; 19 production
+for i386; it keeps the engine's calling conventions and layouts; 21 production
 renderer units that call D3D9 compile unmodified through it. What they do not
 establish: device creation from engine code, any draw, linking of renderer units,
 behaviour on other DXVK versions, or anything on hardware. Those belong to the

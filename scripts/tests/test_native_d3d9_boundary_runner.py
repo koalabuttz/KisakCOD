@@ -94,17 +94,21 @@ class PlanTests(unittest.TestCase):
                             or name == "engine_layout_native":
                         self.assertTrue(native)
 
-    def test_every_compile_is_32_bit_cxx20_and_boundary_sources_are_strict(self):
+    def test_every_compile_is_32_bit_and_engine_units_use_the_cmake_dialect(self):
         for name, check in self.by_name.items():
             for step in check.steps:
                 if step.kind not in ("compile", "reject"):
                     continue
                 with self.subTest(check=name):
                     self.assertIn("-m32", step.argv)
-                    self.assertIn("-std=c++20", step.argv)
                     self.assertIn("-O0", step.argv)
                     if name.startswith(("boundary_", "reject_")):
+                        self.assertIn("-std=c++20", step.argv)
                         self.assertIn("-Werror", step.argv)
+                    else:
+                        # Engine units: the dialect CMake gives engine targets.
+                        self.assertIn("-std=gnu++20", step.argv)
+                        self.assertNotIn("-std=c++20", step.argv)
 
     def test_relwithdebinfo_is_o2(self):
         checks = runner.plan_checks(options(config="RelWithDebInfo"), ROOT, self.workdir, self.dxvk)

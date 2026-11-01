@@ -36,9 +36,11 @@ Checks, per configuration:
     the list stays a list of units that actually need the D3D9 API.
 
 The engine-header checks use ``--engine-cxx`` (clang++ by default, the compiler
-the engine builds with) and the flags of ``KisakCOD-client-core`` without Tracy,
-which needs a network fetch. The CMake targets in
-``scripts/platform/linux/native_d3d9.cmake`` build the same proofs with Tracy.
+the engine builds with), ``-std=gnu++20`` as CMake gives every engine target, and
+the flags of ``KisakCOD-client-core`` without Tracy, which needs a network fetch.
+The boundary's own test sources are compiled as strict ``-std=c++20``. The CMake
+targets in ``scripts/platform/linux/native_d3d9.cmake`` build the same proofs with
+Tracy.
 
 DXVK headers come from either ``--dxvk-include-dir`` (an installed
 ``<prefix>/include/dxvk``) or ``--dxvk-source`` (a DXVK source checkout with the
@@ -95,7 +97,12 @@ ELF_TYPE_EXEC = 2
 ELF_TYPE_DYN = 3
 
 NATIVE_DEFINE = "-DKISAK_LINUX_NATIVE_D3D9"
+# The boundary's own test sources are held to strict ISO C++20.
 BASE_FLAGS = ("-m32", "-std=c++20", "-g", "-fms-extensions")
+# Engine units get what CMake gives every engine target (cxx_std_20 with compiler
+# extensions on): gnu++20. It matters: only the GNU dialect predefines `linux`,
+# which deps/binklib/radbase.h uses to detect the platform.
+ENGINE_BASE_FLAGS = ("-m32", "-std=gnu++20", "-g", "-fms-extensions")
 # The boundary's own test sources are held to every warning.
 STRICT_FLAGS = ("-Wall", "-Wextra", "-Werror")
 # KisakCOD-client-core's definitions and options, minus Tracy.
@@ -361,7 +368,7 @@ def header_argv(cxx, repo, config, source, output, dxvk_include, native, compile
 def engine_argv(cxx, repo, config, source, output, dxvk_include, native, compile_only=False, syntax_only=False):
     argv = [
         cxx,
-        *BASE_FLAGS,
+        *ENGINE_BASE_FLAGS,
         *CONFIG_FLAGS[config],
         *ENGINE_DEFINES,
         *ENGINE_CONFIG_DEFINES[config],
