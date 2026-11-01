@@ -2,6 +2,8 @@
 #include <ui/keycodes.h>
 #include <algorithm>
 #include <atomic>
+#include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <cstdio>
 #include <stdexcept>
@@ -11,9 +13,9 @@ namespace kisak::window {
 namespace {
 std::atomic_flag hostActive=ATOMIC_FLAG_INIT;
 std::runtime_error Error(const char *operation) { return std::runtime_error(std::string(operation)+": "+SDL_GetError()); }
-int KeyCode(SDL_Scancode scan)
+int KeyCode(int scan)
 {
-    // Bindings use physical US positions; SDL_TEXTINPUT supplies layout-aware text.
+    // Bindings use physical US positions; SDL text input supplies layout-aware text.
     if (scan >= SDL_SCANCODE_A && scan <= SDL_SCANCODE_Z) return 'a'+scan-SDL_SCANCODE_A;
     if (scan >= SDL_SCANCODE_1 && scan <= SDL_SCANCODE_9) return '1'+scan-SDL_SCANCODE_1;
     if (scan >= SDL_SCANCODE_F1 && scan <= SDL_SCANCODE_F12) return K_F1+scan-SDL_SCANCODE_F1;
@@ -54,7 +56,7 @@ int KeyCode(SDL_Scancode scan)
     default: return K_NONE;
     }
 }
-int MouseKey(uint8_t button)
+int MouseKey(int button)
 {
     switch (button) {
     case SDL_BUTTON_LEFT: return K_MOUSE1; case SDL_BUTTON_RIGHT: return K_MOUSE2;
@@ -65,28 +67,31 @@ int MouseKey(uint8_t button)
 }
 
 WindowHost::WindowHost(EventSink &sink, const Config &config)
-    : sink_(sink), owner_(SDL_ThreadID()), width_(config.width), height_(config.height)
+    : sink_(sink), owner_(sdl::CurrentThread()), width_(config.width), height_(config.height)
 {
     if (width_ < 1 || height_ < 1 || width_ > 8192 || height_ > 8192)
         throw std::invalid_argument("Window dimensions must be between 1 and 8192");
     if (hostActive.test_and_set()) throw std::logic_error("Only one SDL window event host may own a process queue");
     bool initialized=false;
     try {
-        if (SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
+        if (!sdl::Ok(SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_EVENTS)))
             throw Error("SDL video initialization");
         initialized=true;
-        window_ = SDL_CreateWindow(config.title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-            width_, height_, SDL_WINDOW_RESIZABLE | (config.hidden ? SDL_WINDOW_HIDDEN : SDL_WINDOW_SHOWN));
+        window_ = sdl::CreateWindow(config.title, width_, height_, config.hidden);
         if (!window_) throw Error("SDL window creation");
-        initialCursorVisibility_=SDL_ShowCursor(SDL_QUERY);
+        initialCursorVisibility_=sdl::QueryCursor();
         if(initialCursorVisibility_<0)throw Error("SDL initial cursor visibility query");
-        clockOffset_ = sink_.NowMilliseconds() - SDL_GetTicks();
+        clockOffset_ = sink_.NowMilliseconds() - sdl::Ticks();
         focused_ = (SDL_GetWindowFlags(window_) & SDL_WINDOW_INPUT_FOCUS) != 0;
         pointerInside_ = (SDL_GetWindowFlags(window_) & SDL_WINDOW_MOUSE_FOCUS) != 0;
-        startedText_ = !SDL_IsTextInputActive();
-        if (startedText_) SDL_StartTextInput();
+        // SDL3 keeps text input per window, so the state being restored is this
+        // window's, not a process-wide flag. A refused start is a real failure:
+        // the engine would silently receive no text, so fail the construction
+        // and let the handler below release the window and subsystems.
+        startedText_ = !sdl::TextInputActive(window_);
+        if (startedText_ && !sdl::StartTextInput(window_)) throw Error("SDL text input start");
     } catch (...) {
-        if(startedText_)SDL_StopTextInput();
+        if(startedText_)sdl::StopTextInput(window_);
         if(window_)SDL_DestroyWindow(window_);
         if(initialized)SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_EVENTS);
         hostActive.clear();
@@ -106,36 +111,41 @@ WindowHost::~WindowHost() noexcept
     });
     engineCursorRequested_=false;
     attempt("native cursor restore",[&]{ ApplyEngineCursor(); });
-    uint32_t time=Time(SDL_GetTicks());
+    uint32_t time=Time(sdl::Ticks());
     attempt("clock",[&]{ time=sink_.NowMilliseconds(); });
     for(unsigned key=1;key<held_.size();++key)if(held_[key])
         attempt("key release",[&]{ sink_.Key(time,key,false); });
-    held_.fill(0);physical_.fill(false);mouseHeld_.fill(false);
+    held_.fill(0);physical_.fill(false);mouseHeld_.fill(false);ResetMotion();
     if(!quitComplete_)attempt("quit callback",[&]{ sink_.Quit();quitComplete_=true; });
     if(nativeCursorTouched_)attempt("initial cursor restore",[&]{
-        if(SDL_ShowCursor(initialCursorVisibility_)<0)throw Error("SDL initial cursor restore");
+        if(sdl::ShowCursor(initialCursorVisibility_)<0)throw Error("SDL initial cursor restore");
     });
-    if (startedText_) SDL_StopTextInput();
+    if (startedText_) sdl::StopTextInput(window_);
     SDL_DestroyWindow(window_);
     SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_EVENTS);
     hostActive.clear();
 }
 void WindowHost::CheckThread() const
 {
-    if (SDL_ThreadID() != owner_) throw std::logic_error("SDL window operations require the creating thread");
+    if (sdl::CurrentThread() != owner_) throw std::logic_error("SDL window operations require the creating thread");
 }
 bool WindowHost::ApplyRelativeMouse(bool active)
 {
     if (active==relativeActive_) return true;
-    if (SDL_SetRelativeMouseMode(active?SDL_TRUE:SDL_FALSE)<0) {
+    if (!sdl::SetRelative(window_,active)) {
         relativeError_=SDL_GetError();return false;
     }
-    SDL_SetWindowGrab(window_,active?SDL_TRUE:SDL_FALSE);
+    sdl::SetGrab(window_,active);
     relativeActive_=active;relativeError_.clear();return true;
 }
 bool WindowHost::SetRelativeMouse(bool requested)
 {
-    CheckThread();if(requested && engineCursorRequested_)throw std::logic_error("Relative capture cannot share engine cursor ownership");
+    CheckThread();
+    // A closed host no longer owns capture: quit already released it, so a
+    // later request cannot re-capture the window. This also covers a request
+    // made from the quit callback itself, which runs after running_ clears.
+    if (!running_) throw std::logic_error("Relative capture requires an open window");
+    if(requested && engineCursorRequested_)throw std::logic_error("Relative capture cannot share engine cursor ownership");
     relativeRequested_=requested;relativeError_.clear();
     return ApplyRelativeMouse(requested && focused_);
 }
@@ -144,12 +154,12 @@ void WindowHost::ApplyEngineCursor()
     const bool hide=engineCursorRequested_ && running_ && focused_ && pointerInside_;
     if(hide==cursorOwned_)return;
     if(hide) {
-        const int prior=SDL_ShowCursor(SDL_QUERY);
+        const int prior=sdl::QueryCursor();
         if(prior<0)throw Error("SDL cursor visibility query");
-        if(SDL_ShowCursor(SDL_DISABLE)<0)throw Error("SDL cursor hide");
+        if(sdl::ShowCursor(0)<0)throw Error("SDL cursor hide");
         priorCursorVisibility_=prior;cursorOwned_=true;nativeCursorTouched_=true;
     } else {
-        if(SDL_ShowCursor(priorCursorVisibility_)<0)throw Error("SDL cursor restore");
+        if(sdl::ShowCursor(priorCursorVisibility_)<0)throw Error("SDL cursor restore");
         cursorOwned_=false;
     }
 }
@@ -163,7 +173,7 @@ void WindowHost::NativeCursorRequest(bool show)
 {
     CheckThread();nativeCursorRequested_=show;
     if(cursorOwned_ || relativeActive_)return;
-    if(SDL_ShowCursor(SDL_ENABLE)<0)throw Error("SDL offline native cursor visibility");
+    if(sdl::ShowCursor(1)<0)throw Error("SDL offline native cursor visibility");
     nativeCursorTouched_=true;
 }
 void WindowHost::SetKey(uint32_t time, int key, bool down, bool repeat)
@@ -173,10 +183,14 @@ void WindowHost::SetKey(uint32_t time, int key, bool down, bool repeat)
     if (down) { if (!held_[key]++) sink_.Key(time,key,true); }
     else if (held_[key] && !--held_[key]) sink_.Key(time,key,false);
 }
+void WindowHost::ResetMotion()
+{
+    sdl::ResetResidual(residualDx_);sdl::ResetResidual(residualDy_);sdl::ResetResidual(residualWheel_);
+}
 void WindowHost::ReleaseHeld(uint32_t time)
 {
     for (unsigned key=1;key<held_.size();++key) if (held_[key]) sink_.Key(time,key,false);
-    held_.fill(0); physical_.fill(false); mouseHeld_.fill(false);
+    held_.fill(0); physical_.fill(false); mouseHeld_.fill(false); ResetMotion();
 }
 void WindowHost::RequestQuit()
 {
@@ -184,57 +198,102 @@ void WindowHost::RequestQuit()
     if (!running_) return;
     running_=false; ApplyEngineCursor(); ApplyRelativeMouse(false); ReleaseHeld(sink_.NowMilliseconds()); sink_.Quit();quitComplete_=true;
 }
-void WindowHost::Dispatch(const SDL_Event &event)
+void WindowHost::Motion(uint32_t time,float x,float y,float dx,float dy)
 {
-    if (event.type==SDL_QUIT) { RequestQuit(); return; }
-    const uint32_t time=Time(event.common.timestamp);
-    if (event.type==SDL_WINDOWEVENT && event.window.windowID==Id()) {
-        switch(event.window.event) {
-        case SDL_WINDOWEVENT_CLOSE: RequestQuit(); break;
-        case SDL_WINDOWEVENT_FOCUS_GAINED:
-            if (!focused_) { focused_=true; ApplyEngineCursor(); if(relativeRequested_)ApplyRelativeMouse(true); sink_.Focus(true); } break;
-        case SDL_WINDOWEVENT_FOCUS_LOST: case SDL_WINDOWEVENT_MINIMIZED:
-            focused_=false; ApplyEngineCursor(); ApplyRelativeMouse(false); ReleaseHeld(time); sink_.Focus(false); break;
-        case SDL_WINDOWEVENT_ENTER: case SDL_WINDOWEVENT_LEAVE: {
-            const bool inside=event.window.event==SDL_WINDOWEVENT_ENTER;
-            if(pointerInside_!=inside) { pointerInside_=inside;ApplyEngineCursor();sink_.PointerPresence(inside); }
-            break;
-        }
-        case SDL_WINDOWEVENT_SIZE_CHANGED: case SDL_WINDOWEVENT_RESIZED:
-            if (event.window.data1>0 && event.window.data2>0
-                && (width_!=event.window.data1 || height_!=event.window.data2)) {
-                width_=event.window.data1; height_=event.window.data2; sink_.Resize(width_,height_);
-            } break;
-        default: break;
-        }
+    int positionX=0,positionY=0;
+    if (!sdl::Position(x,positionX) || !sdl::Position(y,positionY)) return;
+    // Convert both axes before committing either fraction, so a rejected
+    // sample leaves the carried remainder untouched.
+    float carriedX=residualDx_,carriedY=residualDy_;
+    int stepX=0,stepY=0;
+    if (!sdl::Steps(carriedX,dx,sdl::kMaxAxis,stepX) || !sdl::Steps(carriedY,dy,sdl::kMaxAxis,stepY)) return;
+    residualDx_=carriedX;residualDy_=carriedY;
+    sink_.Mouse(time,positionX,positionY,stepX,stepY);
+}
+void WindowHost::Wheel(uint32_t time,float steps,bool flipped)
+{
+    // A flipped wheel reports the opposite direction; undo it before the
+    // fraction is carried so the residual stays in engine direction.
+    const float amount=flipped?-steps:steps;
+    if (!std::isfinite(amount)) { sdl::ResetResidual(residualWheel_); return; }
+    // Reversing direction abandons the pending fraction instead of combining a
+    // half step forward with a half step back.
+    if (amount!=0 && residualWheel_!=0 && ((amount>0)!=(residualWheel_>0))) sdl::ResetResidual(residualWheel_);
+    int whole=0;
+    if (!sdl::Steps(residualWheel_,amount,sdl::kMaxWheelSteps,whole)) return;
+    const int key=whole>0?K_MWHEELUP:K_MWHEELDOWN;
+    for (int n=0;n<std::abs(whole);++n) { sink_.Key(time,key,true); sink_.Key(time,key,false); }
+}
+void WindowHost::Dispatch(const SDL_Event &source)
+{
+    const sdl::Event event=sdl::Decode(source);
+    if (event.kind==sdl::Kind::None) return;
+    if (event.kind==sdl::Kind::Quit) { RequestQuit(); return; }
+    const uint32_t time=Time(event.time);
+    const bool own=event.window==Id();
+    switch (event.kind) {
+    case sdl::Kind::WindowClose:
+        if (own) RequestQuit();
+        return;
+    case sdl::Kind::WindowFocusGained:
+        if (!own) return;
+        if (!focused_) { focused_=true; ApplyEngineCursor(); if(relativeRequested_)ApplyRelativeMouse(true); sink_.Focus(true); }
+        return;
+    case sdl::Kind::WindowFocusLost: case sdl::Kind::WindowMinimized:
+        if (!own) return;
+        focused_=false; ApplyEngineCursor(); ApplyRelativeMouse(false); ReleaseHeld(time); sink_.Focus(false);
+        return;
+    case sdl::Kind::WindowEnter: case sdl::Kind::WindowLeave: {
+        if (!own) return;
+        const bool inside=event.kind==sdl::Kind::WindowEnter;
+        if(pointerInside_!=inside) { pointerInside_=inside;ApplyEngineCursor();sink_.PointerPresence(inside); }
         return;
     }
+    case sdl::Kind::WindowResized:
+        if (!own) return;
+        if (event.width>0 && event.height>0 && (width_!=event.width || height_!=event.height)) {
+            width_=event.width; height_=event.height; sink_.Resize(width_,height_);
+        }
+        return;
+    default: break;
+    }
     if (!focused_) return;
-    if ((event.type==SDL_KEYDOWN || event.type==SDL_KEYUP) && event.key.windowID==Id()) {
-        auto scan=event.key.keysym.scancode;
-        if (scan<0 || scan>=SDL_NUM_SCANCODES) return;
+    switch (event.kind) {
+    case sdl::Kind::KeyDown: case sdl::Kind::KeyUp: {
+        if (!own) return;
+        const int scan=event.scancode;
+        if (scan<0 || scan>=sdl::kScancodeCount) return;
         const int key=KeyCode(scan);
         if (!key) return;
-        if (event.type==SDL_KEYDOWN) {
-            if (event.key.repeat) SetKey(time,key,true,true);
+        if (event.kind==sdl::Kind::KeyDown) {
+            if (event.repeat) SetKey(time,key,true,true);
             else if (!physical_[scan]) { physical_[scan]=true; SetKey(time,key,true); }
         } else if (physical_[scan]) { physical_[scan]=false; SetKey(time,key,false); }
-    } else if (event.type==SDL_TEXTINPUT && event.text.windowID==Id()) {
-        const size_t size=strnlen(event.text.text,sizeof(event.text.text));
-        if (size<sizeof(event.text.text)) sink_.Text(time,{event.text.text,size});
-    } else if (event.type==SDL_MOUSEMOTION && event.motion.windowID==Id()) {
-        sink_.Mouse(time,event.motion.x,event.motion.y,event.motion.xrel,event.motion.yrel);
-    } else if ((event.type==SDL_MOUSEBUTTONDOWN || event.type==SDL_MOUSEBUTTONUP) && event.button.windowID==Id()) {
-        const int key=MouseKey(event.button.button);
+        return;
+    }
+    case sdl::Kind::Text:
+        // The text pointer is borrowed from SDL and is consumed here, before
+        // dispatch returns and SDL may release it.
+        if (!own || !event.size) return;
+        sink_.Text(time,{event.text,event.size});
+        return;
+    case sdl::Kind::MouseMotion:
+        if (!own) return;
+        Motion(time,event.x,event.y,event.dx,event.dy);
+        return;
+    case sdl::Kind::MouseButtonDown: case sdl::Kind::MouseButtonUp: {
+        if (!own) return;
+        const int key=MouseKey(event.button);
         if (!key) return;
-        const bool down=event.type==SDL_MOUSEBUTTONDOWN;
+        const bool down=event.kind==sdl::Kind::MouseButtonDown;
         if (mouseHeld_[key-K_MOUSE1]!=down) { mouseHeld_[key-K_MOUSE1]=down; SetKey(time,key,down); }
-    } else if (event.type==SDL_MOUSEWHEEL && event.wheel.windowID==Id()) {
-        int64_t steps=event.wheel.y;
-        if (event.wheel.direction==SDL_MOUSEWHEEL_FLIPPED) steps=-steps;
-        steps=std::clamp<int64_t>(steps,-16,16);
-        const int key=steps>0?K_MWHEELUP:K_MWHEELDOWN;
-        for (int n=0;n<std::abs(steps);++n) { sink_.Key(time,key,true); sink_.Key(time,key,false); }
+        return;
+    }
+    case sdl::Kind::MouseWheel:
+        if (!own) return;
+        Wheel(time,event.wheel,event.flipped);
+        return;
+    default: return;
     }
 }
 bool WindowHost::Pump(int waitMilliseconds)
@@ -246,10 +305,10 @@ bool WindowHost::Pump(int waitMilliseconds)
     int processed=0;
     if (waitMilliseconds>0) {
         SDL_ClearError();
-        if (SDL_WaitEventTimeout(&event,std::min(waitMilliseconds,100))) { Dispatch(event); ++processed; }
+        if (sdl::Got(SDL_WaitEventTimeout(&event,std::min(waitMilliseconds,100)))) { Dispatch(event); ++processed; }
         else if (*SDL_GetError()) throw Error("SDL event wait");
     }
-    while (running_ && processed<256 && SDL_PollEvent(&event)) { Dispatch(event); ++processed; }
+    while (running_ && processed<256 && sdl::Got(SDL_PollEvent(&event))) { Dispatch(event); ++processed; }
     return running_;
     } catch(...) {
         engineCursorRequested_=false;
@@ -263,8 +322,8 @@ void WindowHost::Present(uint8_t red,uint8_t green,uint8_t blue)
     if(!running_)throw std::logic_error("Cannot present a closed window");
     SDL_Surface *surface=SDL_GetWindowSurface(window_);
     if (!surface) throw Error("SDL software surface");
-    if (SDL_FillRect(surface,nullptr,SDL_MapRGB(surface->format,red,green,blue))<0
-        || SDL_UpdateWindowSurface(window_)<0) throw Error("SDL software presentation");
+    if (!sdl::FillSurface(surface,red,green,blue) || !sdl::UpdateWindowSurface(window_))
+        throw Error("SDL software presentation");
 }
 PixelExtent WindowHost::SurfaceExtent() const
 {
@@ -283,13 +342,13 @@ void WindowHost::Present(PixelBufferView frame)
     if(!surface)throw Error("SDL window surface");
     if(frame.width!=surface->w || frame.height!=surface->h)
         throw std::invalid_argument("Pixel dimensions do not match the current window surface");
-    const bool lock=SDL_MUSTLOCK(surface);
-    if(lock && SDL_LockSurface(surface)<0)throw Error("SDL surface lock");
-    const int converted=SDL_ConvertPixels(frame.width,frame.height,SDL_PIXELFORMAT_RGBA32,
-        frame.bytes.data(),static_cast<int>(frame.pitch),surface->format->format,surface->pixels,surface->pitch);
-    if(lock)SDL_UnlockSurface(surface);
-    if(converted<0)throw Error("SDL RGBA pixel conversion");
-    if(SDL_UpdateWindowSurface(window_)<0)throw Error("SDL pixel presentation");
+    const bool lock=sdl::MustLock(surface);
+    if(lock && !sdl::LockSurface(surface))throw Error("SDL surface lock");
+    const bool converted=sdl::ConvertRgbaToSurface(surface,frame.width,frame.height,
+        frame.bytes.data(),static_cast<int>(frame.pitch));
+    if(lock)sdl::UnlockSurface(surface);
+    if(!converted)throw Error("SDL RGBA pixel conversion");
+    if(!sdl::UpdateWindowSurface(window_))throw Error("SDL pixel presentation");
 }
 
 }

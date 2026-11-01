@@ -3,12 +3,12 @@
 #include <universal/q_shared.h>
 #include <qcommon/qcommon.h>
 #include <universal/assertive.h>
-#include <SDL.h>
+#include "sdl_api.h"
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
 
-uint32_t Sys_Milliseconds() { return SDL_GetTicks(); }
+uint32_t Sys_Milliseconds() { return kisak::sdl::Ticks(); }
 void Com_Printf(int,const char *format,...) {
     va_list args;va_start(args,format);std::vfprintf(stderr,format,args);va_end(args);
 }

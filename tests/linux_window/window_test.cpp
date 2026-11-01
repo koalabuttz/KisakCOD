@@ -1,6 +1,7 @@
 // Real SDL event queue -> production window/input adapter -> actual engine queue.
 // A small consumer records state instead of invoking CL_KeyEvent/game UI.
 #include <linux/client/window/window_host.h>
+#include <linux/client/window/sdl_api.h>
 #include <linux/client/window/engine_input.h>
 #include <linux/sys_events.h>
 #include <qcommon/qcommon.h>
@@ -18,7 +19,33 @@
 #include <thread>
 #include <vector>
 
+#if KISAK_LINUX_SDL_MAJOR == 3
+// SDL3 starts text input per window and reports refusal. The test injects that
+// refusal through the linker's wrap hook so the rollback path runs every time
+// instead of depending on a machine without text input support.
+extern "C" bool __real_SDL_StartTextInput(SDL_Window *window);
+static bool refuseTextInput=false;
+extern "C" bool __wrap_SDL_StartTextInput(SDL_Window *window)
+{
+    if(refuseTextInput) { SDL_SetError("fixture text input refusal"); return false; }
+    return __real_SDL_StartTextInput(window);
+}
+#endif
+
 namespace {
+// One spelling of the event kinds and cursor states these queue tests use. The
+// release that produced them is selected in sdl_api.h, so every assertion below
+// reads the same for SDL2 and SDL3.
+using Kind = kisak::sdl::Kind;
+constexpr Kind CLOSE = Kind::WindowClose;
+constexpr Kind FOCUS_GAINED = Kind::WindowFocusGained;
+constexpr Kind FOCUS_LOST = Kind::WindowFocusLost;
+constexpr Kind MINIMIZED = Kind::WindowMinimized;
+constexpr Kind ENTER = Kind::WindowEnter;
+constexpr Kind LEAVE = Kind::WindowLeave;
+constexpr Kind RESIZED = Kind::WindowResized;
+int CursorState() { return kisak::sdl::QueryCursor(); }
+int SetCursor(int state) { return kisak::sdl::ShowCursor(state); }
 int checks,failures,resets,mouseCalls,lastX,lastY,lastDx,lastDy;
 std::array<bool,256> consumerHeld{};
 void check(bool condition,const char *name) {
@@ -44,7 +71,7 @@ public:
     using EngineInput::MotionOf;
     using EngineInput::DeliverMouse;
     using EngineInput::DeliverPointerPresence;
-    uint32_t NowMilliseconds() const override { return SDL_GetTicks()+clockShift; }
+    uint32_t NowMilliseconds() const override { return kisak::sdl::Ticks()+clockShift; }
     void Resize(int w,int h) override { width=w;height=h;++resizeCalls; }
     void OnFocus(bool focused) override { focus=focused;++focusCalls; }
     void OnQuit() override { ++quitCalls; }
@@ -123,33 +150,25 @@ std::vector<sysEvent_t> SettleInput(kisak::window::WindowHost &host,Input &input
     }
     return events;
 }
-uint32_t Push(SDL_Event event) { if(SDL_PushEvent(&event)!=1)throw std::runtime_error(SDL_GetError());return event.common.timestamp; }
-void WindowEvent(uint32_t id,uint8_t kind,int a=0,int b=0) {
-    SDL_Event event{};event.type=SDL_WINDOWEVENT;event.window.windowID=id;event.window.event=kind;
-    event.window.data1=a;event.window.data2=b;Push(event);
+// Synthetic queue records come from the shared header, so a test states the
+// event it means instead of the release's struct layout. Push returns the
+// event's timestamp in engine milliseconds; SDL3 nanoseconds are divided once
+// there, so the same call calibrates the queue identically in both builds.
+uint32_t Push(SDL_Event event) { if(!kisak::sdl::PushEvent(event))throw std::runtime_error(SDL_GetError());return kisak::sdl::Milliseconds(event.common.timestamp); }
+void WindowEvent(uint32_t id,Kind kind,int a=0,int b=0) { Push(kisak::sdl::MakeWindow(id,kind,a,b)); }
+uint32_t Key(uint32_t id,int scan,bool down,bool repeat=false,uint32_t time=0) {
+    return Push(kisak::sdl::MakeKey(id,scan,down,repeat,time));
 }
-uint32_t Key(uint32_t id,SDL_Scancode scan,bool down,bool repeat=false,uint32_t time=0) {
-    SDL_Event event{};event.type=down?SDL_KEYDOWN:SDL_KEYUP;event.key.windowID=id;
-    event.key.keysym.scancode=scan;event.key.repeat=repeat;event.key.timestamp=time;return Push(event);
-}
-void Text(uint32_t id,const char *text) {
-    SDL_Event event{};event.type=SDL_TEXTINPUT;event.text.windowID=id;
-    std::strncpy(event.text.text,text,sizeof(event.text.text)-1);Push(event);
-}
-void Button(uint32_t id,uint8_t button,bool down) {
-    SDL_Event event{};event.type=down?SDL_MOUSEBUTTONDOWN:SDL_MOUSEBUTTONUP;event.button.windowID=id;
-    event.button.button=button;Push(event);
-}
-void Motion(uint32_t id,int x,int y,int dx,int dy) {
-    SDL_Event event{};event.type=SDL_MOUSEMOTION;event.motion.windowID=id;
-    event.motion.x=x;event.motion.y=y;event.motion.xrel=dx;event.motion.yrel=dy;Push(event);
-}
+void Text(uint32_t id,const char *text) { Push(kisak::sdl::MakeText(id,text)); }
+void Button(uint32_t id,int button,bool down) { Push(kisak::sdl::MakeButton(id,button,down)); }
+void Motion(uint32_t id,float x,float y,float dx,float dy) { Push(kisak::sdl::MakeMotion(id,x,y,dx,dy)); }
+void Wheel(uint32_t id,float steps,bool flipped=false) { Push(kisak::sdl::MakeWheel(id,steps,flipped)); }
 }
 int main()
 {
     Sys_InitializeCriticalSections();
     try {
-        check(SDL_InitSubSystem(SDL_INIT_EVENTS)==0,"external SDL event ownership initializes");
+        check(kisak::sdl::Ok(SDL_InitSubSystem(SDL_INIT_EVENTS)),"external SDL event ownership initializes");
         Input input;
         {
             kisak::window::Config config;config.hidden=true;config.width=320;config.height=200;
@@ -161,13 +180,13 @@ int main()
             check(secondRejected && host.Running(),"second host cannot silently steal the process-wide SDL event queue");
             host.Present(10,20,30);
             check(SDL_GetWindowSurface(host.NativeWindow())!=nullptr,"real software surface presents without game renderer");
-            SDL_FlushEvents(SDL_FIRSTEVENT,SDL_LASTEVENT);Sys_ShutdownEvents();
-            WindowEvent(host.Id(),SDL_WINDOWEVENT_FOCUS_GAINED);host.Pump();Drain();
+            kisak::sdl::FlushEvents();Sys_ShutdownEvents();
+            WindowEvent(host.Id(),FOCUS_GAINED);host.Pump();Drain();
             Key(host.Id(),SDL_SCANCODE_A,true);Key(host.Id(),SDL_SCANCODE_A,true,true);Key(host.Id(),SDL_SCANCODE_A,false);
             host.Pump();auto events=Drain();
             check(events.size()==3 && events[0].evType==SE_KEY && events[0].evValue=='a' && events[0].evValue2
                 && events[1].evValue2 && !events[2].evValue2,"physical key repeat and release reach actual engine queue");
-            uint32_t timestamp=SDL_GetTicks()+100;
+            uint32_t timestamp=kisak::sdl::Ticks()+100;
             timestamp=Key(host.Id(),SDL_SCANCODE_F1,true,false,timestamp);host.Pump();events=Drain();
             check(events.size()==1 && uint32_t(events[0].evTime)-timestamp>=4998
                 && uint32_t(events[0].evTime)-timestamp<=5002,"SDL timestamps are calibrated into the consumer clock domain");
@@ -187,13 +206,21 @@ int main()
                 "UTF-8 decodes to printable Latin-1 and rejects unrepresentable scalar without truncation");
             Text(host.Id(),"\xc0\xaf\xed\xa0\x80");host.Pump();
             check(Drain().empty() && input.UnsupportedCharacters()==4,"overlong UTF-8 and surrogate scalars do not enter byte-oriented engine text");
+#if KISAK_LINUX_SDL_MAJOR == 3
+            // SDL3 hands text over as a borrowed pointer, so the unusable forms
+            // are an absent pointer and a string with no terminator inside the
+            // accepted bound, not a full fixed-size buffer.
+            SDL_Event malformed{};malformed.type=SDL_EVENT_TEXT_INPUT;malformed.text.windowID=host.Id();
+            malformed.text.text=nullptr;Push(malformed);host.Pump();
+            check(Drain().empty(),"absent SDL text pointer is bounded and ignored");
+#else
             SDL_Event malformed{};malformed.type=SDL_TEXTINPUT;malformed.text.windowID=host.Id();
             std::memset(malformed.text.text,'x',sizeof(malformed.text.text));Push(malformed);host.Pump();
             check(Drain().empty(),"unterminated SDL text buffer is bounded and ignored");
-            Key(host.Id()+100,SDL_SCANCODE_W,true);Text(host.Id()+100,"foreign");WindowEvent(host.Id()+100,SDL_WINDOWEVENT_CLOSE);host.Pump();
+#endif
+            Key(host.Id()+100,SDL_SCANCODE_W,true);Text(host.Id()+100,"foreign");WindowEvent(host.Id()+100,CLOSE);host.Pump();
             check(Drain().empty() && host.Running(),"other-window events cannot mutate or close this host");
-            SDL_Event motion{};motion.type=SDL_MOUSEMOTION;motion.motion.windowID=host.Id();
-            motion.motion.x=30;motion.motion.y=40;motion.motion.xrel=-4;motion.motion.yrel=6;Push(motion);
+            Motion(host.Id(),30,40,-4,6);
             Button(host.Id(),SDL_BUTTON_RIGHT,true);Button(host.Id(),SDL_BUTTON_RIGHT,false);host.Pump();events=DrainApplied(input);
             check(mouseCalls==1 && lastX==30 && lastY==40 && lastDx==-4 && lastDy==6
                 && events.size()==3 && events[0].evType==SE_MOUSE && events[1].evValue==K_MOUSE2,"mouse coordinates and button mapping reach engine-compatible adapter");
@@ -238,7 +265,7 @@ int main()
                 check(consumerHeld['w'],"fixture delivers key-down before the pressure batch");
                 Key(host.Id(),SDL_SCANCODE_W,false);
                 for(int n=0;n<254;++n)Motion(host.Id(),200+n,300+n,1,1);
-                SDL_Event step{};step.type=SDL_MOUSEWHEEL;step.wheel.windowID=host.Id();step.wheel.y=1;Push(step);
+                Wheel(host.Id(),1);
                 host.Pump();
                 const auto pressured=DrainApplied(input);
                 check(!consumerHeld['w'],"key release survives 254 motion samples and a wheel in one batch");
@@ -260,7 +287,7 @@ int main()
                 Key(host.Id(),SDL_SCANCODE_W,false);
                 for(int n=0;n<86;++n) {
                     Motion(host.Id(),300+n,400+n,1,1);
-                    SDL_Event step{};step.type=SDL_MOUSEWHEEL;step.wheel.windowID=host.Id();step.wheel.y=1;Push(step);
+                    Wheel(host.Id(),1);
                 }
                 const auto interleaved=SettleInput(host,input);
                 int transitions=0,motions=0;
@@ -278,11 +305,11 @@ int main()
             // boundary is settled first because SDL may hand a pushed window event
             // to a following poll.
             {
-                WindowEvent(host.Id(),SDL_WINDOWEVENT_ENTER);host.Pump();DrainApplied(input);
+                WindowEvent(host.Id(),ENTER);host.Pump();DrainApplied(input);
                 SettlePointer(host,input,true);order.clear();
                 Motion(host.Id(),600,400,2,3);
                 Button(host.Id(),SDL_BUTTON_LEFT,true);Button(host.Id(),SDL_BUTTON_LEFT,false);
-                WindowEvent(host.Id(),SDL_WINDOWEVENT_LEAVE);
+                WindowEvent(host.Id(),LEAVE);
                 host.Pump();DrainApplied(input);SettlePointer(host,input,false);
                 const std::vector<std::string> leaving{
                     "mouse 600,400 d2,3",
@@ -291,7 +318,7 @@ int main()
                     "pointer left"};
                 checkTrace(order,leaving,"pointer leave is ordered after the motion and click that preceded it");
                 order.clear();
-                WindowEvent(host.Id(),SDL_WINDOWEVENT_ENTER);
+                WindowEvent(host.Id(),ENTER);
                 host.Pump();DrainApplied(input);SettlePointer(host,input,true);
                 Motion(host.Id(),700,500,-2,-3);
                 Button(host.Id(),SDL_BUTTON_LEFT,true);Button(host.Id(),SDL_BUTTON_LEFT,false);
@@ -303,25 +330,28 @@ int main()
                     "key "+std::to_string(K_MOUSE1)+" up 700,500"};
                 checkTrace(order,entering,"pointer entry is ordered before the motion and click that followed it");
             }
-            SDL_Event wheel{};wheel.type=SDL_MOUSEWHEEL;wheel.wheel.windowID=host.Id();wheel.wheel.y=-2;wheel.wheel.direction=SDL_MOUSEWHEEL_FLIPPED;
-            Push(wheel);host.Pump();events=Drain();
+            // The engine caps a wheel sample at 16 steps, so the largest
+            // representable count still yields the same 16 press-release pairs
+            // instead of overflowing the step count.
+            constexpr float kExtremeWheel=-2147483648.0f;
+            Wheel(host.Id(),-2,true);host.Pump();events=Drain();
             check(events.size()==4 && events[0].evValue==K_MWHEELUP && events[0].evValue2 && !events[1].evValue2,"flipped wheel emits bounded press-release pairs");
-            wheel.wheel.y=INT_MIN;Push(wheel);host.Pump();events=Drain();
+            Wheel(host.Id(),kExtremeWheel,true);host.Pump();events=Drain();
             check(events.size()==32 && events[0].evValue==K_MWHEELUP,"extreme wheel count is bounded without signed overflow");
-            WindowEvent(host.Id(),SDL_WINDOWEVENT_RESIZED,640,480);WindowEvent(host.Id(),SDL_WINDOWEVENT_SIZE_CHANGED,640,480);
-            WindowEvent(host.Id(),SDL_WINDOWEVENT_RESIZED,0,-1);host.Pump();
+            WindowEvent(host.Id(),RESIZED,640,480);WindowEvent(host.Id(),RESIZED,640,480);
+            WindowEvent(host.Id(),RESIZED,0,-1);host.Pump();
             check(input.resizeCalls==1 && input.width==640 && input.height==480,"resize duplicates and invalid dimensions do not duplicate state changes");
             Key(host.Id(),SDL_SCANCODE_W,true);Button(host.Id(),SDL_BUTTON_LEFT,true);host.Pump();Drain();
-            int before=resets;WindowEvent(host.Id(),SDL_WINDOWEVENT_FOCUS_LOST);host.Pump();
+            int before=resets;WindowEvent(host.Id(),FOCUS_LOST);host.Pump();
             check(resets==before+1 && !consumerHeld['w'] && !consumerHeld[K_MOUSE1] && Drain().empty(),"focus loss clears consumer and stale queued input");
             const int unfocusedCalls=mouseCalls;
-            Key(host.Id(),SDL_SCANCODE_A,true);Text(host.Id(),"background");Push(motion);host.Pump();
+            Key(host.Id(),SDL_SCANCODE_A,true);Text(host.Id(),"background");Motion(host.Id(),7,8,1,1);host.Pump();
             check(Drain().empty() && mouseCalls==unfocusedCalls,"unfocused keyboard text and mouse input are ignored");
-            WindowEvent(host.Id(),SDL_WINDOWEVENT_FOCUS_GAINED);Key(host.Id(),SDL_SCANCODE_W,true);host.Pump();Drain();
+            WindowEvent(host.Id(),FOCUS_GAINED);Key(host.Id(),SDL_SCANCODE_W,true);host.Pump();Drain();
             Key(host.Id(),SDL_SCANCODE_W,false);host.Pump();
             for(int n=0;n<256;++n)Sys_QueEvent(1,SE_CHAR,'x',0,0,nullptr);
             check(consumerHeld['w'],"fixture delivers key-down then evicts queued key-up through real ring overflow");
-            WindowEvent(host.Id(),SDL_WINDOWEVENT_FOCUS_LOST);host.Pump();
+            WindowEvent(host.Id(),FOCUS_LOST);host.Pump();
             check(!consumerHeld['w'] && Drain().empty(),"focus reset recovers delivered key whose release was evicted");
             char *console=static_cast<char *>(std::malloc(7));std::memcpy(console,"status",7);
             Sys_QueEvent(1,SE_CONSOLE,0,0,7,console);Sys_QueEvent(1,SE_KEY,'a',1,0,nullptr);Sys_QueEvent(1,SE_CHAR,'a',0,0,nullptr);
@@ -339,38 +369,161 @@ int main()
                 && !std::strcmp(first,"A") && !std::strcmp(last,"B"),
                 "full-ring input compaction preserves multiple console payloads in order");
             Z_Free(first,10);Z_Free(last,10);Sys_ShutdownEvents();
-            WindowEvent(host.Id(),SDL_WINDOWEVENT_FOCUS_GAINED);Key(host.Id(),SDL_SCANCODE_A,true);host.Pump();Drain();
-            WindowEvent(host.Id(),SDL_WINDOWEVENT_MINIMIZED);host.Pump();
+            WindowEvent(host.Id(),FOCUS_GAINED);Key(host.Id(),SDL_SCANCODE_A,true);host.Pump();Drain();
+            WindowEvent(host.Id(),MINIMIZED);host.Pump();
             check(!host.Focused() && !consumerHeld['a'] && Drain().empty(),"minimize resets input even without a separate focus-loss event");
             bool wrongThread=false;
             std::thread worker([&]{try{host.Pump();}catch(const std::logic_error &){wrongThread=true;}});worker.join();
             check(wrongThread,"event pumping enforces SDL creating-thread ownership");
-            WindowEvent(host.Id(),SDL_WINDOWEVENT_FOCUS_GAINED);host.Pump();
+            WindowEvent(host.Id(),FOCUS_GAINED);host.Pump();
             bool relative=host.SetRelativeMouse(true);
             check((relative && host.RelativeMouseActive()) || (!relative && !host.RelativeMouseError().empty()),
                 "relative mouse capture reports active backend or explicit unsupported error");
-            WindowEvent(host.Id(),SDL_WINDOWEVENT_FOCUS_LOST);host.Pump();
+            WindowEvent(host.Id(),FOCUS_LOST);host.Pump();
             check(!host.RelativeMouseActive() && host.RelativeMouseRequested(),"focus loss releases capture while retaining user request");
-            WindowEvent(host.Id(),SDL_WINDOWEVENT_FOCUS_GAINED);host.Pump();
+            WindowEvent(host.Id(),FOCUS_GAINED);host.Pump();
             check(!relative || host.RelativeMouseActive(),"supported relative capture resumes when focus returns");
             host.SetRelativeMouse(false);
             check(!host.RelativeMouseActive() && !host.RelativeMouseRequested(),"explicit capture disable clears active and requested state");
             host.SetRelativeMouse(true);
-            WindowEvent(host.Id(),SDL_WINDOWEVENT_CLOSE);host.Pump();host.RequestQuit();
-            check(!host.Running() && input.quitCalls==1 && !host.RelativeMouseActive() && !SDL_GetRelativeMouseMode(),"window close requests shutdown exactly once");
+            WindowEvent(host.Id(),CLOSE);host.Pump();host.RequestQuit();
+            check(!host.Running() && input.quitCalls==1 && !host.RelativeMouseActive() && !kisak::sdl::RelativeMode(host.NativeWindow()),"window close requests shutdown exactly once");
         }
         check(!SDL_WasInit(SDL_INIT_VIDEO) && SDL_WasInit(SDL_INIT_EVENTS),"window destruction releases owned video and preserves external SDL event lifetime");
         for(int n=0;n<3;++n) {
             Input sink;kisak::window::Config config;config.hidden=true;kisak::window::WindowHost host(sink,config);
-            SDL_Event quit{};quit.type=SDL_QUIT;Push(quit);host.Pump(1);
+            Push(kisak::sdl::MakeQuit());host.Pump(1);
             if(host.Running() || sink.quitCalls!=1)throw std::runtime_error("Repeated window lifecycle did not quit");
         }
         check(!SDL_WasInit(SDL_INIT_VIDEO),"repeated create quit destroy uses real SDL lifecycle without retained video ownership");
+        // A rejected push must not read as success: SDL2 signals it with 0 or a
+        // negative filter result, SDL3 with false.
+#if KISAK_LINUX_SDL_MAJOR == 3
+        check(kisak::sdl::Pushed(true) && !kisak::sdl::Pushed(false),"push result counts only true as success");
+#else
+        check(kisak::sdl::Pushed(1) && !kisak::sdl::Pushed(0) && !kisak::sdl::Pushed(-1),
+            "push result counts only the success code, not failure or a filtered event");
+#endif
+        // A closed host no longer owns capture, so a request made after quit - or
+        // from the quit callback the host itself runs - cannot recapture it.
         {
-            const uint32_t shift=uint32_t(0)-SDL_GetTicks()-10;
+            struct Probe : Input {
+                kisak::window::WindowHost *host=nullptr;
+                bool requested=false,rejected=false;
+                void OnQuit() override {
+                    Input::OnQuit();
+                    requested=true;
+                    try { host->SetRelativeMouse(true); }catch(const std::logic_error&){rejected=true;}
+                }
+            } probe;
+            kisak::window::Config config;config.hidden=true;kisak::window::WindowHost host(probe,config);
+            probe.host=&host;
+            kisak::sdl::FlushEvents();WindowEvent(host.Id(),FOCUS_GAINED);host.Pump();Drain();
+            host.RequestQuit();
+            check(probe.requested && probe.rejected && !host.RelativeMouseActive() && !host.RelativeMouseRequested(),
+                "quit callback cannot recapture a closed host");
+            bool closed=false;try{host.SetRelativeMouse(true);}catch(const std::logic_error&){closed=true;}
+            check(closed && !host.RelativeMouseActive() && !kisak::sdl::RelativeMode(host.NativeWindow()),
+                "closed host rejects a relative capture request and stays uncaptured");
+        }
+#if KISAK_LINUX_SDL_MAJOR == 3
+        // The host starts this window's text input itself, so a refused start must
+        // roll back the window it already created while leaving SDL ownership that
+        // predates it untouched, and a later window must still be creatable.
+        {
+            if(!kisak::sdl::Ok(SDL_InitSubSystem(SDL_INIT_EVENTS)))throw std::runtime_error(SDL_GetError());
+            Input probe;refuseTextInput=true;
+            bool rejected=false;
+            try { kisak::window::Config config;config.hidden=true;kisak::window::WindowHost host(probe,config); }
+            catch(const std::runtime_error &error) { rejected=true; }
+            check(rejected && !SDL_WasInit(SDL_INIT_VIDEO) && (SDL_WasInit(SDL_INIT_EVENTS)&SDL_INIT_EVENTS),
+                "refused text input start rolls back the window and preserves external event ownership");
+            refuseTextInput=false;
+            {
+                Input sink;kisak::window::Config config;config.hidden=true;kisak::window::WindowHost host(sink,config);
+                check(host.Running(),"window can be created after a refused text input start");
+            }
+            SDL_QuitSubSystem(SDL_INIT_EVENTS);
+        }
+#endif
+        // SDL3 event timestamps are whole nanoseconds and SDL2's are
+        // milliseconds. Dividing before narrowing keeps an event at the instant
+        // it happened instead of at the low 32 bits of that count. SDL re-stamps
+        // pushed events, so this is asserted on the decoder that reads both.
+        {
+            const uint64_t instant=UINT64_C(1790000000123);
+            const auto decoded=kisak::sdl::Decode(kisak::sdl::MakeKeyAt(0,SDL_SCANCODE_W,true,false,instant));
+            check(decoded.kind==Kind::KeyDown && decoded.time==1790000 && decoded.scancode==SDL_SCANCODE_W,
+                "sub-millisecond event timestamps divide into engine milliseconds");
+            check(uint32_t(instant)!=decoded.time,
+                "nanosecond event timestamps are not narrowed to their low 32 bits");
+        }
+#if KISAK_LINUX_SDL_MAJOR == 3
+        // SDL3 reports pointer and wheel motion as floats. Sub-pixel movement is
+        // carried to later samples, and an interrupted stream drops the carry so
+        // a slow drag does not resume from a stale fraction.
+        {
+            Input sink(0);kisak::window::Config config;config.hidden=true;kisak::window::WindowHost host(sink,config);
+            kisak::sdl::FlushEvents();WindowEvent(host.Id(),FOCUS_GAINED);host.Pump();Drain();
+            for(int n=0;n<3;++n)Motion(host.Id(),float(10+n),float(20+n),0.4f,-0.4f);
+            host.Pump();
+            int summedX=0,summedY=0;
+            for(const auto &record:Drain()) if(record.evType==SE_MOUSE) {
+                const auto motion=input.MotionOf(record);
+                summedX+=motion.dx;summedY+=motion.dy;
+            }
+            check(summedX==1 && summedY==-1,"sub-pixel motion accumulates into whole engine steps");
+            // Three 0.4 samples carry 0.2, so a 0.9 sample reaches a whole step
+            // only if that remainder survived the focus change.
+            WindowEvent(host.Id(),FOCUS_LOST);host.Pump();Drain();
+            WindowEvent(host.Id(),FOCUS_GAINED);host.Pump();Drain();
+            Motion(host.Id(),40,50,0.9f,0.9f);host.Pump();
+            summedX=0;summedY=0;
+            for(const auto &record:Drain()) if(record.evType==SE_MOUSE) {
+                const auto motion=input.MotionOf(record);
+                summedX+=motion.dx;summedY+=motion.dy;
+            }
+            check(summedX==0 && summedY==0,"an interrupted motion stream drops the carried sub-pixel remainder");
+            // A half-step wheel sample carries until a whole step is reached.
+            Wheel(host.Id(),0.5f);Wheel(host.Id(),0.5f);host.Pump();
+            const auto wheelEvents=Drain();
+            check(wheelEvents.size()==2 && wheelEvents[0].evValue==K_MWHEELUP && wheelEvents[0].evValue2
+                && !wheelEvents[1].evValue2,"half-step wheel samples accumulate into one engine step");
+            // 0.6 carries, so a 1.4 sample opposite in direction steps once only
+            // if the carry was dropped at the reversal.
+            Wheel(host.Id(),0.6f);host.Pump();Drain();
+            Wheel(host.Id(),-1.4f);host.Pump();
+            const auto reversed=Drain();
+            check(reversed.size()==2 && reversed[0].evValue==K_MWHEELDOWN && reversed[0].evValue2,
+                "reversing wheel direction drops the carried fraction");
+        }
+        // SDL3 hands text over as a borrowed pointer with no fixed buffer, so the
+        // window host bounds the text and consumes it during dispatch.
+        {
+            Input sink(0);kisak::window::Config config;config.hidden=true;kisak::window::WindowHost host(sink,config);
+            kisak::sdl::FlushEvents();WindowEvent(host.Id(),FOCUS_GAINED);host.Pump();Drain();
+            const std::string longText(40,'z');
+            Text(host.Id(),longText.c_str());host.Pump();
+            auto events=Drain();
+            check(events.size()==40 && events.front().evType==SE_CHAR && events.back().evValue=='z',
+                "text longer than SDL2's fixed buffer reaches the engine in one dispatch");
+            std::string borrowed(8,'q');
+            Push(kisak::sdl::MakeText(host.Id(),borrowed.c_str()));host.Pump();
+            std::fill(borrowed.begin(),borrowed.end(),'X');
+            events=Drain();
+            check(events.size()==8 && events.front().evValue=='q',
+                "borrowed text is consumed before the event that referenced it returns");
+            const std::string oversized(kisak::sdl::kMaxTextBytes+1,'z');
+            Text(host.Id(),oversized.c_str());host.Pump();
+            check(Drain().empty() && sink.UnsupportedCharacters()==0,
+                "text beyond the accepted bound is rejected without entering the engine queue");
+        }
+#endif
+        {
+            const uint32_t shift=uint32_t(0)-kisak::sdl::Ticks()-10;
             Input wrapped(shift);kisak::window::Config config;config.hidden=true;
             kisak::window::WindowHost host(wrapped,config);
-            SDL_FlushEvents(SDL_FIRSTEVENT,SDL_LASTEVENT);WindowEvent(host.Id(),SDL_WINDOWEVENT_FOCUS_GAINED);host.Pump();
+            kisak::sdl::FlushEvents();WindowEvent(host.Id(),FOCUS_GAINED);host.Pump();
             SDL_Delay(20);
             uint32_t timestamp=Key(host.Id(),SDL_SCANCODE_W,true);host.Pump();auto events=Drain();
             int32_t difference=events.empty()?100:int32_t(uint32_t(events[0].evTime)-(timestamp+shift));
@@ -390,8 +543,8 @@ int main()
             FaultInput sink;
             {
                 kisak::window::Config config;config.hidden=true;kisak::window::WindowHost host(sink,config);
-                SDL_FlushEvents(SDL_FIRSTEVENT,SDL_LASTEVENT);
-                WindowEvent(host.Id(),SDL_WINDOWEVENT_FOCUS_GAINED);Key(host.Id(),SDL_SCANCODE_A,true);Key(host.Id(),SDL_SCANCODE_B,true);host.Pump();Drain();
+                kisak::sdl::FlushEvents();
+                WindowEvent(host.Id(),FOCUS_GAINED);Key(host.Id(),SDL_SCANCODE_A,true);Key(host.Id(),SDL_SCANCODE_B,true);host.Pump();Drain();
                 sink.failClock=sink.failRelease=sink.failQuit=true;
             }
             check(sink.releaseAttempts==2 && sink.quitAttempts==1 && !SDL_WasInit(SDL_INIT_VIDEO),"destructor attempts every held release and quit despite callback errors and frees SDL");
@@ -411,35 +564,35 @@ int main()
         }
         {
             // Keep video alive around host destruction to inspect restored global state.
-            if(SDL_InitSubSystem(SDL_INIT_VIDEO)<0)throw std::runtime_error(SDL_GetError());
-            SDL_ShowCursor(SDL_ENABLE);
+            if(!kisak::sdl::Ok(SDL_InitSubSystem(SDL_INIT_VIDEO)))throw std::runtime_error(SDL_GetError());
+            SetCursor(1);
             Input sink;
             {
                 kisak::window::Config config;config.hidden=true;kisak::window::WindowHost host(sink,config);
-                SDL_FlushEvents(SDL_FIRSTEVENT,SDL_LASTEVENT);
-                WindowEvent(host.Id(),SDL_WINDOWEVENT_FOCUS_GAINED);WindowEvent(host.Id(),SDL_WINDOWEVENT_ENTER);host.Pump();DrainApplied(sink);
+                kisak::sdl::FlushEvents();
+                WindowEvent(host.Id(),FOCUS_GAINED);WindowEvent(host.Id(),ENTER);host.Pump();DrainApplied(sink);
                 host.SetEngineCursor(true);
-                check(host.PointerInside() && sink.pointer && host.EngineCursorActive() && SDL_ShowCursor(SDL_QUERY)==SDL_DISABLE,"engine cursor hides native cursor only in focused pointer-owning window");
+                check(host.PointerInside() && sink.pointer && host.EngineCursorActive() && CursorState()==0,"engine cursor hides native cursor only in focused pointer-owning window");
                 host.NativeCursorRequest(false);
-                check(!host.NativeCursorRequested() && host.EngineCursorActive() && SDL_ShowCursor(SDL_QUERY)==SDL_DISABLE,"legacy cursor request cannot override presented custom cursor ownership");
+                check(!host.NativeCursorRequested() && host.EngineCursorActive() && CursorState()==0,"legacy cursor request cannot override presented custom cursor ownership");
                 Key(host.Id(),SDL_SCANCODE_A,true);host.Pump();Drain();const int priorResets=resets;
-                WindowEvent(host.Id()+1,SDL_WINDOWEVENT_LEAVE);host.Pump();
+                WindowEvent(host.Id()+1,LEAVE);host.Pump();
                 check(host.PointerInside() && host.EngineCursorActive(),"foreign pointer boundary cannot release cursor ownership");
-                WindowEvent(host.Id(),SDL_WINDOWEVENT_LEAVE);host.Pump();DrainApplied(sink);
-                check(!host.PointerInside() && !sink.pointer && !host.EngineCursorActive() && SDL_ShowCursor(SDL_QUERY)==SDL_ENABLE && consumerHeld['a'] && resets==priorResets,"pointer leave restores native cursor without releasing held keys or keyboard focus");
-                WindowEvent(host.Id(),SDL_WINDOWEVENT_ENTER);host.Pump();DrainApplied(sink);
-                check(host.EngineCursorActive() && SDL_ShowCursor(SDL_QUERY)==SDL_DISABLE,"pointer reentry reacquires requested engine cursor");
-                WindowEvent(host.Id(),SDL_WINDOWEVENT_FOCUS_LOST);host.Pump();
-                check(!host.EngineCursorActive() && SDL_ShowCursor(SDL_QUERY)==SDL_ENABLE && !consumerHeld['a'],"focus loss restores cursor and still resets actual input consumer");
-                WindowEvent(host.Id(),SDL_WINDOWEVENT_FOCUS_GAINED);host.Pump();DrainApplied(sink);
+                WindowEvent(host.Id(),LEAVE);host.Pump();DrainApplied(sink);
+                check(!host.PointerInside() && !sink.pointer && !host.EngineCursorActive() && CursorState()==1 && consumerHeld['a'] && resets==priorResets,"pointer leave restores native cursor without releasing held keys or keyboard focus");
+                WindowEvent(host.Id(),ENTER);host.Pump();DrainApplied(sink);
+                check(host.EngineCursorActive() && CursorState()==0,"pointer reentry reacquires requested engine cursor");
+                WindowEvent(host.Id(),FOCUS_LOST);host.Pump();
+                check(!host.EngineCursorActive() && CursorState()==1 && !consumerHeld['a'],"focus loss restores cursor and still resets actual input consumer");
+                WindowEvent(host.Id(),FOCUS_GAINED);host.Pump();DrainApplied(sink);
                 check(host.EngineCursorActive(),"focus gain reacquires engine cursor when pointer remains inside");
                 host.SetEngineCursor(false);host.NativeCursorRequest(false);
-                check(SDL_ShowCursor(SDL_QUERY)==SDL_ENABLE && !host.EngineCursorActive(),"disconnected no-UI hide request records intent while keeping editor native cursor visible");
+                check(CursorState()==1 && !host.EngineCursorActive(),"disconnected no-UI hide request records intent while keeping editor native cursor visible");
                 host.SetEngineCursor(true);
                 bool conflict=false;try{host.SetRelativeMouse(true);}catch(const std::logic_error&){conflict=true;}
                 check(conflict && !host.RelativeMouseRequested(),"relative capture cannot silently override custom cursor ownership");
-                WindowEvent(host.Id(),SDL_WINDOWEVENT_LEAVE);host.Pump();DrainApplied(sink);
-                sink.failPointer=true;WindowEvent(host.Id(),SDL_WINDOWEVENT_ENTER);bool rejected=false;
+                WindowEvent(host.Id(),LEAVE);host.Pump();DrainApplied(sink);
+                sink.failPointer=true;WindowEvent(host.Id(),ENTER);bool rejected=false;
                 // The boundary is queued, so the poll cannot run the consumer: a
                 // failing callback surfaces when the ordered queue applies it.
                 host.Pump();
@@ -447,24 +600,24 @@ int main()
                 try{DrainApplied(sink);}catch(const std::runtime_error&){rejected=true;}
                 check(rejected,"throwing pointer callback reports failure when the queue applies it");
                 sink.failPointer=false;host.SetEngineCursor(false);
-                check(!host.EngineCursorActive() && SDL_ShowCursor(SDL_QUERY)==SDL_ENABLE,"cursor ownership stays with the window when a consumer callback fails");
+                check(!host.EngineCursorActive() && CursorState()==1,"cursor ownership stays with the window when a consumer callback fails");
                 sink.failPointer=false;host.SetEngineCursor(true);
                 host.RequestQuit();
-                check(!host.EngineCursorActive() && SDL_ShowCursor(SDL_QUERY)==SDL_ENABLE,"explicit close releases native cursor before sink teardown");
+                check(!host.EngineCursorActive() && CursorState()==1,"explicit close releases native cursor before sink teardown");
             }
-            SDL_ShowCursor(SDL_DISABLE);
+            SetCursor(0);
             {
                 Input fresh;kisak::window::Config config;config.hidden=true;kisak::window::WindowHost host(fresh,config);
-                SDL_FlushEvents(SDL_FIRSTEVENT,SDL_LASTEVENT);WindowEvent(host.Id(),SDL_WINDOWEVENT_FOCUS_GAINED);WindowEvent(host.Id(),SDL_WINDOWEVENT_ENTER);host.Pump();
+                kisak::sdl::FlushEvents();WindowEvent(host.Id(),FOCUS_GAINED);WindowEvent(host.Id(),ENTER);host.Pump();
                 host.NativeCursorRequest(false);host.SetEngineCursor(true);
             }
-            check(SDL_ShowCursor(SDL_QUERY)==SDL_DISABLE,"destruction restores a previously hidden external native cursor");
-            SDL_ShowCursor(SDL_ENABLE);
+            check(CursorState()==0,"destruction restores a previously hidden external native cursor");
+            SetCursor(1);
             {
                 FaultInput fresh;kisak::window::Config config;config.hidden=true;kisak::window::WindowHost host(fresh,config);
-                SDL_FlushEvents(SDL_FIRSTEVENT,SDL_LASTEVENT);WindowEvent(host.Id(),SDL_WINDOWEVENT_FOCUS_GAINED);WindowEvent(host.Id(),SDL_WINDOWEVENT_ENTER);host.Pump();host.SetEngineCursor(true);fresh.failQuit=true;
+                kisak::sdl::FlushEvents();WindowEvent(host.Id(),FOCUS_GAINED);WindowEvent(host.Id(),ENTER);host.Pump();host.SetEngineCursor(true);fresh.failQuit=true;
             }
-            check(SDL_ShowCursor(SDL_QUERY)==SDL_ENABLE,"throwing destructor sink cannot strand hidden native cursor");
+            check(CursorState()==1,"throwing destructor sink cannot strand hidden native cursor");
             SDL_QuitSubSystem(SDL_INIT_VIDEO);
         }
         SDL_QuitSubSystem(SDL_INIT_EVENTS);Sys_ShutdownEvents();

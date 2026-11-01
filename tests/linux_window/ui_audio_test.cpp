@@ -9,13 +9,22 @@
 using namespace kisak::window;
 namespace {
 int checks=0,failures=0;
+// SDL2 spells the environment setter SDL_setenv; SDL3 renamed it.
+#if KISAK_LINUX_SDL_MAJOR == 3
+void SetEnv(const char *name,const char *value){
+ if(std::strcmp(name,"SDL_AUDIODRIVER")==0)name="SDL_AUDIO_DRIVER";
+ (void)SDL_setenv_unsafe(name,value,1);
+}
+#else
+void SetEnv(const char *name,const char *value){SDL_setenv(name,value,1);}
+#endif
 void Check(bool ok,const char *name){++checks;failures+=!ok;std::printf("%s: %s\n",ok?"PASS":"FAIL",name);}
 template<class F> bool Reject(F f){try{f();return false;}catch(const std::exception&){return true;}}
 std::vector<uint8_t> Pcm(std::initializer_list<int16_t> samples){std::vector<uint8_t> bytes;for(auto sample:samples){const auto word=uint16_t(sample);bytes.push_back(word&255);bytes.push_back(word>>8);}return bytes;}
 }
 int main(int argc,char **argv) {try {
  if(argc==2 && std::string_view(argv[1])=="--unavailable") {
-  SDL_setenv("SDL_AUDIODRIVER","kisak_invalid_audio_driver",1);
+  SetEnv("SDL_AUDIODRIVER","kisak_invalid_audio_driver");
   Check(Reject([]{UiAudio audio;}),"unavailable SDL audio driver throws instead of reporting playback success");
  } else {
   UiAudioMixer mixer;auto pcm=Pcm({1000,-1000,32767,-32768});mixer.Load("mouse_click",pcm,.5f);std::fill(pcm.begin(),pcm.end(),0);
@@ -35,7 +44,7 @@ int main(int argc,char **argv) {try {
   Check(Reject([&]{invalid.Load("mouse_click",{},1);}) && Reject([&]{invalid.Load("mouse_click",std::array<uint8_t,1>{1},1);}),"empty and partial sample PCM reject");
   Check(Reject([&]{invalid.Load("mouse_click",Pcm({1}),-1);}) && Reject([&]{invalid.Load("mouse_click",Pcm({1}),std::numeric_limits<float>::quiet_NaN());}) && Reject([&]{invalid.Load("mouse_click",Pcm({1}),1.1f);}),"invalid volume rejects before resource publication");
   std::vector<uint8_t> oversized(44100*4+2);Check(Reject([&]{invalid.Load("mouse_click",oversized,1);}),"two-second per-alias resource bound enforced");
-  SDL_setenv("SDL_AUDIODRIVER","dummy",1);
+  SetEnv("SDL_AUDIODRIVER","dummy");
   std::puts("SDL dummy-driver checks verify callback/device lifecycle, NOT audibility.");
   for(int cycle=0;cycle<3;++cycle) {
    UiAudio audio;audio.Load("mouse_click",Pcm({1000,-1000}),.0971999988f);
@@ -45,6 +54,19 @@ int main(int argc,char **argv) {try {
    bool rejected=false;std::thread other([&]{rejected=Reject([&]{audio.Play("mouse_click");});});other.join();Check(rejected,"cross-thread playback rejects outside owner contract");
    audio.Play("mouse_click"); // Destruction must close/wait even with pending voice.
   }
+#if KISAK_LINUX_SDL_MAJOR == 3
+  {
+   // SDL3 gives every device stream its own logical device, so two menu audio
+   // providers coexist; the SDL2 dummy backend only admits one open.
+   UiAudio first,second;
+   first.Load("mouse_click",Pcm({1000,-1000}),.5f);second.Load("mouse_click",Pcm({1000,-1000}),.5f);
+   Check(first.Play("mouse_click")>0 && second.Play("mouse_click")>0,"SDL3 admits two providers on the default playback device at once");
+   const Uint32 both=SDL_GetTicks();while((first.ActiveVoices()||second.ActiveVoices()) && SDL_GetTicks()-both<2000)SDL_Delay(5);
+   Check(first.ActiveVoices()==0 && second.ActiveVoices()==0,"both coexisting SDL3 providers consume their submitted PCM");
+   Check(first.Play("mouse_click")>0 && second.Play("mouse_click")>0,"coexisting SDL3 providers keep independent playback after draining");
+   const Uint32 again=SDL_GetTicks();while((first.ActiveVoices()||second.ActiveVoices()) && SDL_GetTicks()-again<2000)SDL_Delay(5);
+  }
+#endif
   Check(!(SDL_WasInit(SDL_INIT_AUDIO)&SDL_INIT_AUDIO),"repeated device destroy returns acquired SDL audio subsystem reference");
   for(int arg=1;arg<argc;++arg){
    std::ifstream file(argv[arg],std::ios::binary|std::ios::ate);if(!file)throw std::runtime_error("Cannot open authorized PCM fixture");

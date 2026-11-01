@@ -153,7 +153,9 @@ def main():
         if not number.isdecimal():
             raise RuntimeError(f"invalid Xvfb display response: {number!r}")
         display = ":" + number
-        env = dict(os.environ, DISPLAY=display, SDL_VIDEODRIVER="x11")
+        # Select X11 explicitly for both supported SDL releases; never accept
+        # a native Wayland fallback as evidence from this XTest fixture.
+        env = dict(os.environ, DISPLAY=display, SDL_VIDEODRIVER="x11", SDL_VIDEO_DRIVER="x11")
         tool_env = dict(env)
         if args.xdotool_library_path:
             tool_env["LD_LIBRARY_PATH"] = args.xdotool_library_path

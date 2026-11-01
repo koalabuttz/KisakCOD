@@ -1,4 +1,5 @@
 #include "window_host.h"
+#include "sdl_api.h"
 #include "engine_input.h"
 #include <linux/sys_events.h>
 #include <qcommon/qcommon.h>
@@ -75,9 +76,11 @@ int main(int argc,char **argv)
     Sys_InitializeCriticalSections();
     try {
         ShellInput input;
-        // Diagnostic preference only; the reusable platform host does not choose
-        // the eventual game backend. SDL window surfaces may otherwise use GPU acceleration.
-        SDL_SetHint(SDL_HINT_FRAMEBUFFER_ACCELERATION,"0");
+        // Presentation goes through the window surface. SDL chooses how that
+        // surface is backed: forcing the direct framebuffer here breaks hosts
+        // without one (SDL3 on Wayland), so the backend stays SDL's default. The
+        // frame itself is still produced as CPU pixels; SDL may upload them. No
+        // game renderer or GPU render path is involved.
         kisak::window::WindowHost host(input,config);
         host.Present(host.Focused()?35:45,host.Focused()?65:45,host.Focused()?100:45);
         std::printf("window=created driver=%s id=%u title=%s game=false presentation=SDL-window-surface\n",
@@ -88,7 +91,7 @@ int main(int argc,char **argv)
         std::string lastRelativeError=host.RelativeMouseError();
         if(relative)std::printf("relative requested=1 active=%d error=%s\n",lastRelative,lastRelativeError.c_str());
         std::fflush(stdout);
-        const uint32_t started=SDL_GetTicks();
+        const uint32_t started=kisak::sdl::Ticks();
         unsigned drawn=0;
         while(host.Running()) {
             host.Pump(16);
@@ -116,7 +119,7 @@ int main(int argc,char **argv)
             if(!host.Running())break;
             host.Present(host.Focused()?35:45,host.Focused()?65:45,host.Focused()?100:45);
             ++drawn;
-            if((frames && drawn>=frames) || (runMilliseconds && SDL_GetTicks()-started>=runMilliseconds))host.RequestQuit();
+            if((frames && drawn>=frames) || (runMilliseconds && kisak::sdl::Ticks()-started>=runMilliseconds))host.RequestQuit();
             if(metrics.trace)std::fflush(stdout);
         }
         unsigned held=0;for(bool down:metrics.consumerHeld)held+=down;

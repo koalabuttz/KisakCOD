@@ -2,6 +2,9 @@
 #include <linux/client/window/menu_input_owner.h>
 #include <linux/client/window/client_input_host.h>
 #include <linux/client/window/window_host.h>
+// The shared header names the selected SDL release and its result convention, so
+// this fixture states one interposition instead of including an SDL release.
+#include <linux/client/window/sdl_api.h>
 #include <cstdio>
 #include <cstdlib>
 #include <new>
@@ -12,9 +15,17 @@ void Check(bool ok,const char *what){++checks;failures+=!ok;std::printf("%s: %s\
 void *operator new(size_t size){++attempted;if(rejectAllocation){rejectAllocation=false;throw std::bad_alloc();}if(auto*p=std::malloc(size?size:1))return p;throw std::bad_alloc();}
 void operator delete(void*p) noexcept{std::free(p);}void operator delete(void*p,size_t)noexcept{std::free(p);}
 void *operator new[](size_t size){return ::operator new(size);}void operator delete[](void*p)noexcept{::operator delete(p);}void operator delete[](void*p,size_t)noexcept{::operator delete(p);}
-// Only this test link wraps the backend call; normal calls use real SDL.
+// Only this test link wraps the backend call; normal calls use real SDL. The
+// interposed function takes the selected release's result type: SDL3 reports a
+// failed surface update as false, SDL2 as a negative integer. Returning SDL3's
+// bool through an int signature would keep the error text and lose the failure.
+#if KISAK_LINUX_SDL_MAJOR == 3
+extern "C" bool __real_SDL_UpdateWindowSurface(SDL_Window*);
+extern "C" bool __wrap_SDL_UpdateWindowSurface(SDL_Window *window){if(rejectSurface){rejectSurface=false;SDL_SetError("injected surface update failure");return false;}return __real_SDL_UpdateWindowSurface(window);}
+#else
 extern "C" int __real_SDL_UpdateWindowSurface(SDL_Window*);
 extern "C" int __wrap_SDL_UpdateWindowSurface(SDL_Window *window){if(rejectSurface){rejectSurface=false;SDL_SetError("injected surface update failure");return -1;}return __real_SDL_UpdateWindowSurface(window);}
+#endif
 int main(int argc,char**argv){if(argc!=3)return 2;Sys_InitializeCriticalSections();try{
  kisak::window::ClientInputHost input;kisak::window::Config cfg;cfg.width=640;cfg.height=480;
  kisak::window::WindowHost window(input,cfg);kisak::window::ClientInputHost::WindowCursorBinding cursorBinding(input,window);kisak::window::CpuRenderer renderer;

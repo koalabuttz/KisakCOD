@@ -1,6 +1,6 @@
 #pragma once
 
-#include <SDL.h>
+#include "sdl_api.h"
 #include "pixel_buffer.h"
 #include <array>
 #include <cstdint>
@@ -75,19 +75,26 @@ private:
     void CheckThread() const;
     bool ApplyRelativeMouse(bool active);
     void ApplyEngineCursor();
+    void Motion(uint32_t time, float x, float y, float dx, float dy);
+    void Wheel(uint32_t time, float steps, bool flipped);
+    // Sub-pixel motion and wheel fractions carried between samples. SDL2
+    // delivers integers, so the fractions stay zero there; SDL3 delivers floats
+    // and a slow drag must still accumulate. Any interruption clears them.
+    void ResetMotion();
     uint32_t Time(uint32_t sdlTime) const { return sdlTime + clockOffset_; }
     EventSink &sink_;
     SDL_Window *window_ = nullptr;
-    SDL_threadID owner_;
+    sdl::ThreadId owner_;
     uint32_t clockOffset_ = 0;
     bool running_ = true, focused_ = false, startedText_ = false, quitComplete_ = false;
     bool relativeRequested_=false,relativeActive_=false;
     std::string relativeError_;
     bool pointerInside_=false,engineCursorRequested_=false,cursorOwned_=false;
-    int priorCursorVisibility_=SDL_ENABLE,initialCursorVisibility_=SDL_ENABLE;
+    int priorCursorVisibility_=1,initialCursorVisibility_=1;
     bool nativeCursorTouched_=false,nativeCursorRequested_=true;
+    float residualDx_=0,residualDy_=0,residualWheel_=0;
     int width_, height_;
-    std::array<bool, SDL_NUM_SCANCODES> physical_{};
+    std::array<bool, sdl::kScancodeCount> physical_{};
     std::array<unsigned char, 256> held_{};
     std::array<bool, 5> mouseHeld_{};
 };
