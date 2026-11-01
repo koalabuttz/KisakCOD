@@ -25,6 +25,8 @@ on:
       - tests/linux_client_core/**
       - tests/linux_client_commands/**
       - tests/linux_window/**
+      - tests/linux_renderer/**
+      - tests/linux_asset_export/**
       - .github/workflows/build-kisakcod-linux.yaml
   pull_request:
     branches: [ "master" ]
@@ -38,6 +40,8 @@ on:
       - tests/linux_client_core/**
       - tests/linux_client_commands/**
       - tests/linux_window/**
+      - tests/linux_renderer/**
+      - tests/linux_asset_export/**
       - .github/workflows/build-kisakcod-linux.yaml
 
 permissions:
@@ -225,4 +229,77 @@ jobs:
             artifacts/checks-${{ matrix.config }}
           if-no-files-found: warn
           compression-level: 9
+          retention-days: 7
+
+  world_surface:
+    # Asset-free: compiles three standalone -m32 test translation units directly
+    # and runs the bundle prepare tests. No DXVK, no SDL, no GPU, no game assets,
+    # no CMake configure. tests/linux_renderer/CMakeLists.txt is deliberately not
+    # used here: it requires the dxvk-d3d9 and sdl3 pkg-config modules before it
+    # configures anything, so it cannot serve a check that must not need them.
+    name: Asset-free world surface checks ${{ matrix.config }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [Debug, RelWithDebInfo]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install 32-bit C++ toolchain
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y g++ g++-multilib python3
+
+      - name: Verify the 32-bit C++20 toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcc --version
+          g++ --version
+          python3 --version
+          echo "target architecture probe:"
+          printf 'int main(){return 0;}\n' > "$RUNNER_TEMP/m32-probe.cpp"
+          g++ -m32 -std=c++20 "$RUNNER_TEMP/m32-probe.cpp" -o "$RUNNER_TEMP/m32-probe"
+          "$RUNNER_TEMP/m32-probe"
+          echo "32-bit C++20 link works"
+
+      - name: Check world surface runner configuration and failure handling
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/tests/test_world_surface_check_runner.py
+
+      - name: Run asset-free world surface checks
+        timeout-minutes: 15
+        shell: bash
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          # pipefail is what carries the runner's exit status through tee, so a
+          # failed check fails the step instead of only decorating its log.
+          python3 -u scripts/tests/run_world_surface_checks.py \
+            --config "${{ matrix.config }}" \
+            --cxx g++ \
+            --log-dir "artifacts/world-surface-${{ matrix.config }}" \
+            2>&1 | tee "artifacts/world-surface-${{ matrix.config }}.log"
+
+      - name: Upload world surface check logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          # Text logs only: the compiled test binaries live in a temporary
+          # directory that the runner removes, so nothing binary is uploaded.
+          name: KisakCOD-world-surface-${{ matrix.config }}
+          path: artifacts/
+          if-no-files-found: warn
           retention-days: 7
