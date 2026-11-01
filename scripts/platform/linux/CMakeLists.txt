@@ -56,6 +56,7 @@ target_link_libraries(KisakCOD-dedi PRIVATE Threads::Threads ${CMAKE_DL_LIBS})
 add_dependencies(KisakCOD-dedi update_build_number)
 include(${SCRIPTS_DIR}/extern/tracy.cmake)
 include(${SCRIPTS_DIR}/platform/linux/asset_export.cmake)
+include(${SCRIPTS_DIR}/platform/linux/native_d3d9.cmake)
 
 # ---------------------------------------------------------------------------
 # Opt-in native Linux client network core (KISAK_BUILD_LINUX_CLIENT_CORE)

@@ -179,5 +179,115 @@ class AssetFreeWorldSurfaceWorkflowTests(unittest.TestCase):
         self.assertNotIn('test_linux_window.py', self.commands)
 
 
+class NativeD3D9BoundaryWorkflowTests(unittest.TestCase):
+    """The opt-in D3D9 boundary job: pinned DXVK headers only, no device, no assets."""
+
+    JOB = 'native_d3d9_boundary'
+    DXVK_REVISION = 'c3dd74be6baec53786d4e064a572185b70347a17'
+    DIRECTX_REVISION = '9df86f2341616ef1888ae59919feaa6d4fad693d'
+
+    @classmethod
+    def setUpClass(cls):
+        cls.workflow = yaml.load(
+            (ROOT / '.github/workflows/build-kisakcod-linux.yaml').read_text(),
+            Loader=yaml.BaseLoader)
+        cls.job = cls.workflow['jobs'][cls.JOB]
+        cls.names = [step.get('name') for step in cls.job['steps']]
+        cls.commands = '\n'.join(step.get('run', '') for step in cls.job['steps'])
+
+    def step(self, name):
+        return next(step for step in self.job['steps'] if step.get('name') == name)
+
+    def test_path_triggers_reach_the_boundary_tests(self):
+        for event in ('push', 'pull_request'):
+            paths = self.workflow['on'][event]['paths']
+            for path in ('src/**', 'scripts/**', 'tests/linux_d3d9_boundary/**'):
+                with self.subTest(event=event, path=path):
+                    self.assertIn(path, paths)
+
+    def test_exactly_two_explicit_configurations(self):
+        self.assertEqual(self.job['strategy']['matrix']['config'], ['Debug', 'RelWithDebInfo'])
+        self.assertEqual(self.job['runs-on'], 'ubuntu-24.04')
+        self.assertIn('timeout-minutes', self.job)
+        self.assertEqual(self.job['strategy']['fail-fast'], 'false')
+
+    def test_dxvk_and_its_directx_headers_are_pinned_and_verified(self):
+        self.assertEqual(self.job['env']['DXVK_REVISION'], self.DXVK_REVISION)
+        self.assertEqual(self.job['env']['DXVK_DIRECTX_HEADERS_REVISION'], self.DIRECTX_REVISION)
+        fetch = self.step('Fetch pinned DXVK Native 2.7.1 headers')['run']
+        self.assertIn('test "$(git -C "$src" rev-parse HEAD)" = "$DXVK_REVISION"', fetch)
+        self.assertIn('ls-tree HEAD include/native/directx', fetch)
+        self.assertIn('test "$recorded" = "$DXVK_DIRECTX_HEADERS_REVISION"', fetch)
+        self.assertIn('test "$(git -C "$headers" rev-parse HEAD)" = "$DXVK_DIRECTX_HEADERS_REVISION"', fetch)
+        self.assertIn("version : '2.7.1'", fetch)
+
+    def test_dxvk_is_never_built_and_no_graphics_stack_or_game_data_is_used(self):
+        for step in self.job['steps']:
+            text = step.get('run', '').lower()
+            for forbidden in ('meson setup', 'meson compile', 'ninja -c', 'libdxvk', 'vulkan', 'libsdl', 'xvfb', 'mesa',
+                              'steam', 'iw_', 'main/', 'dpkg --add-architecture'):
+                with self.subTest(step=step.get('name'), forbidden=forbidden):
+                    self.assertNotIn(forbidden, text)
+            self.assertNotIn('SDL_VIDEODRIVER', step.get('env', {}))
+            self.assertNotIn('DXVK_WSI_DRIVER', step.get('env', {}))
+        self.assertNotIn('KISAK_DXVK_NATIVE_LIBRARY', self.commands)
+
+    def test_toolchains_are_probed_before_any_check(self):
+        probe = self.step('Verify the 32-bit toolchains')['run']
+        self.assertIn('for cxx in g++ clang++', probe)
+        self.assertIn('-m32 -std=c++20', probe)
+        self.assertIn('objdump --version', probe)
+        self.assertLess(self.names.index('Verify the 32-bit toolchains'),
+                        self.names.index('Run asset-free native D3D9 boundary checks'))
+
+    def test_runner_contract_gates_the_run(self):
+        self.assertLess(self.names.index('Check native D3D9 runner configuration and failure handling'),
+                        self.names.index('Run asset-free native D3D9 boundary checks'))
+        self.assertIn('python3 scripts/tests/test_native_d3d9_boundary_runner.py', self.commands)
+
+    def test_runner_is_invoked_per_configuration_with_both_compilers_and_pipefail(self):
+        run = self.step('Run asset-free native D3D9 boundary checks')['run']
+        self.assertIn('scripts/tests/run_native_d3d9_boundary_checks.py', run)
+        self.assertIn('--config "${{ matrix.config }}"', run)
+        self.assertIn('--dxvk-source "$RUNNER_TEMP/dxvk-source"', run)
+        self.assertIn('--header-cxx g++ --header-cxx clang++ --engine-cxx clang++', run)
+        self.assertIn('--log-dir "artifacts/native-d3d9-${{ matrix.config }}"', run)
+        self.assertIn('2>&1 | tee', run)
+
+    def test_cmake_proofs_are_opt_in_and_never_build_the_server(self):
+        cmake = self.step('Configure and build the opt-in CMake boundary proofs')['run']
+        self.assertIn('-DKISAK_BUILD_LINUX_NATIVE_D3D9=ON', cmake)
+        self.assertIn('-DKISAK_DXVK_NATIVE_INCLUDE_DIR="$RUNNER_TEMP/dxvk-include/dxvk"', cmake)
+        self.assertIn('--stage-dxvk-headers "$RUNNER_TEMP/dxvk-include/dxvk"', cmake)
+        self.assertIn('--target KisakCOD-native-d3d9-proofs', cmake)
+        self.assertNotIn('KisakCOD-dedi', cmake)
+        self.assertIn('diff <(tail -n +2', cmake)
+        self.assertIn("grep -qx 'PASS engine D3D9 layouts'", cmake)
+
+    def test_every_command_block_propagates_failure(self):
+        for step in self.job['steps']:
+            if 'run' not in step:
+                continue
+            with self.subTest(step=step.get('name')):
+                self.assertTrue(step['run'].lstrip().startswith('set -euo pipefail'), step.get('name'))
+
+    def test_logs_are_kept_and_no_binary_is_uploaded(self):
+        upload = next(step for step in self.job['steps']
+                      if step.get('uses', '').startswith('actions/upload-artifact@'))
+        self.assertEqual(upload['if'], 'always()')
+        self.assertEqual(upload['with']['path'], 'artifacts/')
+        self.assertIn('native-d3d9-${{ matrix.config }}', upload['with']['name'])
+
+    def test_other_jobs_keep_their_defaults(self):
+        # The boundary stays opt-in: no other job turns it on or needs DXVK.
+        for name, job in self.workflow['jobs'].items():
+            if name == self.JOB:
+                continue
+            text = '\n'.join(step.get('run', '') for step in job['steps'])
+            with self.subTest(job=name):
+                self.assertNotIn('KISAK_BUILD_LINUX_NATIVE_D3D9', text)
+                self.assertNotIn('dxvk', text.lower())
+
+
 if __name__ == '__main__':
     unittest.main()

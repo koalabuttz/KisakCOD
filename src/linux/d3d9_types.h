@@ -1,23 +1,35 @@
-// d3d9_types.h -- the D3D9 public type surface that the engine's headers name,
-// declared for a native Linux build that has no D3D9 SDK.
+// d3d9_types.h -- the single entry point for D3D9 names on native Linux.
 //
-// What this is for: the gfx_d3d headers are part of the shared include web even
-// in a dedicated build (qcommon/threads.h pulls in gfx_d3d/rb_backend.h for
-// THREAD_CONTEXT_COUNT, database/database.h and client headers pull in the
-// rest). Those headers only ever hold D3D9 *types*: opaque interface pointers,
-// plus D3DFORMAT/D3DDISPLAYMODE fields whose sizes are part of GfxImage /
-// DxGlobals layouts.
+// Every engine header that names a D3D9 type includes this file under its
+// __linux__ guard (gfx_d3d/r_gfx.h, r_init.h, r_material.h, rb_backend.h, ...).
+// What this header provides depends on one per-translation-unit switch:
 //
-// What this is NOT: a D3D9 implementation. There are no interface method
-// declarations, no COM vtables and no functions of any kind, so nothing here
-// can be called and no call can quietly succeed. A dedicated build constructs
-// no device: the POSIX/dedicated renderer-absent path simply never instantiates
-// these types. When the renderer is built, the real d3d9.h must be used instead
-// of this header (see the __linux__ guards in gfx_d3d/*.h).
+//   * Default (KISAK_LINUX_NATIVE_D3D9 not defined): the D3D9 *type surface*
+//     declared below. The gfx_d3d headers are part of the shared include web even
+//     in a dedicated build (qcommon/threads.h pulls in gfx_d3d/rb_backend.h for
+//     THREAD_CONTEXT_COUNT, database/database.h and client headers pull in the
+//     rest). Those headers only ever hold D3D9 *types*: opaque interface pointers,
+//     plus D3DFORMAT/D3DDISPLAYMODE fields whose sizes are part of GfxImage /
+//     DxGlobals layouts. There are no interface method declarations, no COM
+//     vtables and no functions of any kind, so nothing can be called and no call
+//     can quietly succeed. A dedicated build constructs no device.
 //
-// Values for the enums are the D3D9 public values from d3d9types.h, and the
-// layouts asserted at the bottom are the x86-32 ones, because GfxImageLoadDef
-// and DxGlobals embed them by value.
+//   * KISAK_LINUX_NATIVE_D3D9 defined: <linux/d3d9_native.h>, which brings in the
+//     real DXVK Native D3D9 interface declarations behind a firewall that keeps the
+//     engine's stdcall convention and Win32 base types intact. Only translation
+//     units that call D3D9 get that define; the build system gives it to them
+//     through the opt-in kisak_linux_native_d3d9 interface target (see
+//     scripts/platform/linux/native_d3d9.cmake and docs/linux-native-d3d9.md).
+//     Every other translation unit, including everything that loads or lays out
+//     serialized assets and the script VM, keeps the stand-in below.
+//
+// The enumerator values both modes rely on are listed once, in the
+// KISAK_D3D9_*_VALUES lists below. The stand-in defines its enums from them, and
+// the native header static_asserts every one of them against DXVK's own
+// declaration, so the two views of the same enum cannot drift apart silently.
+// Values are the D3D9 public values from d3d9types.h, and the layouts asserted at
+// the bottom are the x86-32 ones, because GfxImageLoadDef and DxGlobals embed
+// them by value.
 
 #pragma once
 
@@ -25,9 +37,168 @@
 #error "src/linux/d3d9_types.h is the stand-in for <d3d9.h> on native Linux only"
 #endif
 
+// A D3D9 header that arrived first would have brought DXVK's windows_base.h macros
+// (an empty __stdcall among them) into this translation unit with no firewall.
+// Checked before compat.h, so this is the first diagnostic rather than the last.
+#if defined(_D3D9_H_) || defined(__WINE_D3D9TYPES_H) || defined(__WINE_D3D9CAPS_H)
+#error "a D3D9 header was included before the boundary; include <linux/d3d9_types.h> first"
+#endif
+
 #include <linux/compat.h>
 
+#include <cstddef>
 #include <cstdint>
+
+// ---------------------------------------------------------------------------
+// Shared enumerator values (macros only: no type is declared here)
+// ---------------------------------------------------------------------------
+
+// Four-character code arithmetic, as in d3d9types.h. Spelled under a Kisak name
+// so the lists can use it in either mode: DXVK's d3d9types.h defines MAKEFOURCC
+// itself, and only the stand-in below defines the public spelling.
+#define KISAK_D3D9_FOURCC(ch0, ch1, ch2, ch3)             \
+    ((std::uint32_t)(std::uint8_t)(ch0) |                 \
+     ((std::uint32_t)(std::uint8_t)(ch1) << 8) |          \
+     ((std::uint32_t)(std::uint8_t)(ch2) << 16) |         \
+     ((std::uint32_t)(std::uint8_t)(ch3) << 24))
+
+// D3DFORMAT. The engine embeds this by value (GfxImageLoadDef::format,
+// DxGlobals::depthStencilFormat), so it must stay a 4-byte unscoped enum, which
+// it does because every enumerator below fits in an int.
+#define KISAK_D3D9_FORMAT_VALUES(X)                                   \
+    X(D3DFMT_UNKNOWN, 0)                                              \
+    /* Uncompressed colour/indexed formats. */                        \
+    X(D3DFMT_R8G8B8, 20)                                              \
+    X(D3DFMT_A8R8G8B8, 21)                                            \
+    X(D3DFMT_X8R8G8B8, 22)                                            \
+    X(D3DFMT_R5G6B5, 23)                                              \
+    X(D3DFMT_X1R5G5B5, 24)                                            \
+    X(D3DFMT_A1R5G5B5, 25)                                            \
+    X(D3DFMT_A4R4G4B4, 26)                                            \
+    X(D3DFMT_R3G3B2, 27)                                              \
+    X(D3DFMT_A8, 28)                                                  \
+    X(D3DFMT_A8R3G3B2, 29)                                            \
+    X(D3DFMT_X4R4G4B4, 30)                                            \
+    X(D3DFMT_A2B10G10R10, 31)                                         \
+    X(D3DFMT_A8B8G8R8, 32)                                            \
+    X(D3DFMT_X8B8G8R8, 33)                                            \
+    X(D3DFMT_G16R16, 34)                                              \
+    X(D3DFMT_A2R10G10B10, 35)                                         \
+    X(D3DFMT_A16B16G16R16, 36)                                        \
+    /* Palette formats. */                                            \
+    X(D3DFMT_A8P8, 40)                                                \
+    X(D3DFMT_P8, 41)                                                  \
+    /* Luminance and bump formats. */                                 \
+    X(D3DFMT_L8, 50)                                                  \
+    X(D3DFMT_A8L8, 51)                                                \
+    X(D3DFMT_A4L4, 52)                                                \
+    X(D3DFMT_V8U8, 60)                                                \
+    X(D3DFMT_L6V5U5, 61)                                              \
+    X(D3DFMT_X8L8V8U8, 62)                                            \
+    X(D3DFMT_Q8W8V8U8, 63)                                            \
+    X(D3DFMT_V16U16, 64)                                              \
+    X(D3DFMT_A2W10V10U10, 67)                                         \
+    /* FourCC formats: the block-compressed set the image loader names. */ \
+    X(D3DFMT_UYVY, KISAK_D3D9_FOURCC('U', 'Y', 'V', 'Y'))             \
+    X(D3DFMT_R8G8_B8G8, KISAK_D3D9_FOURCC('R', 'G', 'B', 'G'))        \
+    X(D3DFMT_YUY2, KISAK_D3D9_FOURCC('Y', 'U', 'Y', '2'))             \
+    X(D3DFMT_G8R8_G8B8, KISAK_D3D9_FOURCC('G', 'R', 'G', 'B'))        \
+    X(D3DFMT_DXT1, KISAK_D3D9_FOURCC('D', 'X', 'T', '1'))             \
+    X(D3DFMT_DXT2, KISAK_D3D9_FOURCC('D', 'X', 'T', '2'))             \
+    X(D3DFMT_DXT3, KISAK_D3D9_FOURCC('D', 'X', 'T', '3'))             \
+    X(D3DFMT_DXT4, KISAK_D3D9_FOURCC('D', 'X', 'T', '4'))             \
+    X(D3DFMT_DXT5, KISAK_D3D9_FOURCC('D', 'X', 'T', '5'))             \
+    /* Depth/stencil and the remaining render-target formats. */      \
+    X(D3DFMT_D16_LOCKABLE, 70)                                        \
+    X(D3DFMT_D32, 71)                                                 \
+    X(D3DFMT_D15S1, 73)                                               \
+    X(D3DFMT_D24S8, 75)                                               \
+    X(D3DFMT_D24X8, 77)                                               \
+    X(D3DFMT_D24X4S4, 79)                                             \
+    X(D3DFMT_D16, 80)                                                 \
+    X(D3DFMT_L16, 81)                                                 \
+    X(D3DFMT_D32F_LOCKABLE, 82)                                       \
+    X(D3DFMT_D24FS8, 83)                                              \
+    /* Vertex buffer and index buffer formats. */                     \
+    X(D3DFMT_VERTEXDATA, 100)                                         \
+    X(D3DFMT_INDEX16, 101)                                            \
+    X(D3DFMT_INDEX32, 102)                                            \
+    /* Floating-point formats. */                                     \
+    X(D3DFMT_Q16W16V16U16, 110)                                       \
+    X(D3DFMT_R16F, 111)                                               \
+    X(D3DFMT_G16R16F, 112)                                            \
+    X(D3DFMT_A16B16G16R16F, 113)                                      \
+    X(D3DFMT_R32F, 114)                                               \
+    X(D3DFMT_G32R32F, 115)                                            \
+    X(D3DFMT_A32B32G32R32F, 116)                                      \
+    X(D3DFMT_CxV8U8, 117)
+
+#define KISAK_D3D9_MULTISAMPLE_VALUES(X)                              \
+    X(D3DMULTISAMPLE_NONE, 0)                                         \
+    X(D3DMULTISAMPLE_NONMASKABLE, 1)                                  \
+    X(D3DMULTISAMPLE_2_SAMPLES, 2)                                    \
+    X(D3DMULTISAMPLE_3_SAMPLES, 3)                                    \
+    X(D3DMULTISAMPLE_4_SAMPLES, 4)                                    \
+    X(D3DMULTISAMPLE_5_SAMPLES, 5)                                    \
+    X(D3DMULTISAMPLE_6_SAMPLES, 6)                                    \
+    X(D3DMULTISAMPLE_7_SAMPLES, 7)                                    \
+    X(D3DMULTISAMPLE_8_SAMPLES, 8)                                    \
+    X(D3DMULTISAMPLE_9_SAMPLES, 9)                                    \
+    X(D3DMULTISAMPLE_10_SAMPLES, 10)                                  \
+    X(D3DMULTISAMPLE_11_SAMPLES, 11)                                  \
+    X(D3DMULTISAMPLE_12_SAMPLES, 12)                                  \
+    X(D3DMULTISAMPLE_13_SAMPLES, 13)                                  \
+    X(D3DMULTISAMPLE_14_SAMPLES, 14)                                  \
+    X(D3DMULTISAMPLE_15_SAMPLES, 15)                                  \
+    X(D3DMULTISAMPLE_16_SAMPLES, 16)
+
+#define KISAK_D3D9_TEXTUREFILTER_VALUES(X)                            \
+    X(D3DTEXF_NONE, 0)                                                \
+    X(D3DTEXF_POINT, 1)                                               \
+    X(D3DTEXF_LINEAR, 2)                                              \
+    X(D3DTEXF_ANISOTROPIC, 3)                                         \
+    X(D3DTEXF_PYRAMIDALQUAD, 6)                                       \
+    X(D3DTEXF_GAUSSIANQUAD, 7)
+
+#define KISAK_D3D9_CUBEMAP_FACE_VALUES(X)                             \
+    X(D3DCUBEMAP_FACE_POSITIVE_X, 0)                                  \
+    X(D3DCUBEMAP_FACE_NEGATIVE_X, 1)                                  \
+    X(D3DCUBEMAP_FACE_POSITIVE_Y, 2)                                  \
+    X(D3DCUBEMAP_FACE_NEGATIVE_Y, 3)                                  \
+    X(D3DCUBEMAP_FACE_POSITIVE_Z, 4)                                  \
+    X(D3DCUBEMAP_FACE_NEGATIVE_Z, 5)
+
+// Layout facts both modes must satisfy for everything the engine embeds by value.
+// DxGlobals' documented size comment (sizeof=0x2CE0) depends on
+// displayModes[256] being 256 * 16 bytes.
+#define KISAK_D3D9_ASSERT_EMBEDDED_LAYOUTS()                                                        \
+    static_assert(sizeof(_D3DFORMAT) == 4, "D3DFORMAT is a 4-byte enum in d3d9types.h");           \
+    static_assert(sizeof(_D3DMULTISAMPLE_TYPE) == 4, "D3DMULTISAMPLE_TYPE is a 4-byte enum");      \
+    static_assert(sizeof(_D3DTEXTUREFILTERTYPE) == 4, "D3DTEXTUREFILTERTYPE is a 4-byte enum");    \
+    static_assert(sizeof(_D3DCUBEMAP_FACES) == 4, "D3DCUBEMAP_FACES is a 4-byte enum");            \
+    static_assert(sizeof(D3DDISPLAYMODE) == 16, "D3DDISPLAYMODE must match d3d9types.h");          \
+    static_assert(alignof(D3DDISPLAYMODE) == 4, "D3DDISPLAYMODE alignment");                       \
+    static_assert(offsetof(D3DDISPLAYMODE, Width) == 0, "D3DDISPLAYMODE.Width offset");            \
+    static_assert(offsetof(D3DDISPLAYMODE, Height) == 4, "D3DDISPLAYMODE.Height offset");          \
+    static_assert(offsetof(D3DDISPLAYMODE, RefreshRate) == 8, "D3DDISPLAYMODE.RefreshRate offset"); \
+    static_assert(offsetof(D3DDISPLAYMODE, Format) == 12, "D3DDISPLAYMODE.Format offset");         \
+    static_assert(sizeof(D3DFMT_DXT1) == 4, "D3DFMT_* enumerator width");                          \
+    static_assert(sizeof(IDirect3DDevice9 *) == 4, "D3D9 interface pointers are 32-bit")
+
+#if defined(KISAK_LINUX_NATIVE_D3D9)
+
+// ---------------------------------------------------------------------------
+// Opt-in: the real DXVK Native D3D9 API, behind the boundary header.
+// ---------------------------------------------------------------------------
+#define KISAK_LINUX_D3D9_TYPES_DISPATCH 1
+#include <linux/d3d9_native.h>
+#undef KISAK_LINUX_D3D9_TYPES_DISPATCH
+
+#else // !KISAK_LINUX_NATIVE_D3D9
+
+// ---------------------------------------------------------------------------
+// Default: the type surface only.
+// ---------------------------------------------------------------------------
 
 // D3D9 marks its COM interfaces as `struct IDirect3DDevice9 : public IUnknown`.
 // The engine only ever stores pointers to them, so declaring the tags is the
@@ -68,138 +239,36 @@ typedef struct IDirect3DStateBlock9 *LPDIRECT3DSTATEBLOCK9, *PDIRECT3DSTATEBLOCK
 
 // Four-character codes, as in d3d9types.h.
 #ifndef MAKEFOURCC
-#define MAKEFOURCC(ch0, ch1, ch2, ch3)                    \
-    ((std::uint32_t)(std::uint8_t)(ch0) |                 \
-     ((std::uint32_t)(std::uint8_t)(ch1) << 8) |          \
-     ((std::uint32_t)(std::uint8_t)(ch2) << 16) |         \
-     ((std::uint32_t)(std::uint8_t)(ch3) << 24))
+#define MAKEFOURCC(ch0, ch1, ch2, ch3) KISAK_D3D9_FOURCC(ch0, ch1, ch2, ch3)
 #endif
 
-// D3DFORMAT. The engine embeds this by value (GfxImageLoadDef::format,
-// DxGlobals::depthStencilFormat), so it must stay a 4-byte unscoped enum, which
-// it does because every enumerator below fits in an int.
+#define KISAK_D3D9_STANDIN_ENUMERATOR(name, value) name = value,
+
 enum _D3DFORMAT
 {
-    D3DFMT_UNKNOWN = 0,
-
-    // Uncompressed colour/indexed formats.
-    D3DFMT_R8G8B8 = 20,
-    D3DFMT_A8R8G8B8 = 21,
-    D3DFMT_X8R8G8B8 = 22,
-    D3DFMT_R5G6B5 = 23,
-    D3DFMT_X1R5G5B5 = 24,
-    D3DFMT_A1R5G5B5 = 25,
-    D3DFMT_A4R4G4B4 = 26,
-    D3DFMT_R3G3B2 = 27,
-    D3DFMT_A8 = 28,
-    D3DFMT_A8R3G3B2 = 29,
-    D3DFMT_X4R4G4B4 = 30,
-    D3DFMT_A2B10G10R10 = 31,
-    D3DFMT_A8B8G8R8 = 32,
-    D3DFMT_X8B8G8R8 = 33,
-    D3DFMT_G16R16 = 34,
-    D3DFMT_A2R10G10B10 = 35,
-    D3DFMT_A16B16G16R16 = 36,
-
-    // Palette formats.
-    D3DFMT_A8P8 = 40,
-    D3DFMT_P8 = 41,
-
-    // Luminance and bump formats.
-    D3DFMT_L8 = 50,
-    D3DFMT_A8L8 = 51,
-    D3DFMT_A4L4 = 52,
-    D3DFMT_V8U8 = 60,
-    D3DFMT_L6V5U5 = 61,
-    D3DFMT_X8L8V8U8 = 62,
-    D3DFMT_Q8W8V8U8 = 63,
-    D3DFMT_V16U16 = 64,
-    D3DFMT_A2W10V10U10 = 67,
-
-    // FourCC formats: the block-compressed texture set the engine's image
-    // loader names.
-    D3DFMT_UYVY = MAKEFOURCC('U', 'Y', 'V', 'Y'),
-    D3DFMT_R8G8_B8G8 = MAKEFOURCC('R', 'G', 'B', 'G'),
-    D3DFMT_YUY2 = MAKEFOURCC('Y', 'U', 'Y', '2'),
-    D3DFMT_G8R8_G8B8 = MAKEFOURCC('G', 'R', 'G', 'B'),
-    D3DFMT_DXT1 = MAKEFOURCC('D', 'X', 'T', '1'),
-    D3DFMT_DXT2 = MAKEFOURCC('D', 'X', 'T', '2'),
-    D3DFMT_DXT3 = MAKEFOURCC('D', 'X', 'T', '3'),
-    D3DFMT_DXT4 = MAKEFOURCC('D', 'X', 'T', '4'),
-    D3DFMT_DXT5 = MAKEFOURCC('D', 'X', 'T', '5'),
-
-    // Depth/stencil and the remaining render-target formats.
-    D3DFMT_D16_LOCKABLE = 70,
-    D3DFMT_D32 = 71,
-    D3DFMT_D15S1 = 73,
-    D3DFMT_D24S8 = 75,
-    D3DFMT_D24X8 = 77,
-    D3DFMT_D24X4S4 = 79,
-    D3DFMT_D16 = 80,
-    D3DFMT_L16 = 81,
-    D3DFMT_D32F_LOCKABLE = 82,
-    D3DFMT_D24FS8 = 83,
-
-    // Vertex buffer and index buffer formats.
-    D3DFMT_VERTEXDATA = 100,
-    D3DFMT_INDEX16 = 101,
-    D3DFMT_INDEX32 = 102,
-
-    // Floating-point formats.
-    D3DFMT_Q16W16V16U16 = 110,
-    D3DFMT_R16F = 111,
-    D3DFMT_G16R16F = 112,
-    D3DFMT_A16B16G16R16F = 113,
-    D3DFMT_R32F = 114,
-    D3DFMT_G32R32F = 115,
-    D3DFMT_A32B32G32R32F = 116,
-    D3DFMT_CxV8U8 = 117,
+    KISAK_D3D9_FORMAT_VALUES(KISAK_D3D9_STANDIN_ENUMERATOR)
 };
 typedef enum _D3DFORMAT D3DFORMAT;
 
 enum _D3DMULTISAMPLE_TYPE
 {
-    D3DMULTISAMPLE_NONE = 0,
-    D3DMULTISAMPLE_NONMASKABLE = 1,
-    D3DMULTISAMPLE_2_SAMPLES = 2,
-    D3DMULTISAMPLE_3_SAMPLES = 3,
-    D3DMULTISAMPLE_4_SAMPLES = 4,
-    D3DMULTISAMPLE_5_SAMPLES = 5,
-    D3DMULTISAMPLE_6_SAMPLES = 6,
-    D3DMULTISAMPLE_7_SAMPLES = 7,
-    D3DMULTISAMPLE_8_SAMPLES = 8,
-    D3DMULTISAMPLE_9_SAMPLES = 9,
-    D3DMULTISAMPLE_10_SAMPLES = 10,
-    D3DMULTISAMPLE_11_SAMPLES = 11,
-    D3DMULTISAMPLE_12_SAMPLES = 12,
-    D3DMULTISAMPLE_13_SAMPLES = 13,
-    D3DMULTISAMPLE_14_SAMPLES = 14,
-    D3DMULTISAMPLE_15_SAMPLES = 15,
-    D3DMULTISAMPLE_16_SAMPLES = 16,
+    KISAK_D3D9_MULTISAMPLE_VALUES(KISAK_D3D9_STANDIN_ENUMERATOR)
 };
 typedef enum _D3DMULTISAMPLE_TYPE D3DMULTISAMPLE_TYPE;
 
 enum _D3DTEXTUREFILTERTYPE
 {
-    D3DTEXF_NONE = 0,
-    D3DTEXF_POINT = 1,
-    D3DTEXF_LINEAR = 2,
-    D3DTEXF_ANISOTROPIC = 3,
-    D3DTEXF_PYRAMIDALQUAD = 6,
-    D3DTEXF_GAUSSIANQUAD = 7,
+    KISAK_D3D9_TEXTUREFILTER_VALUES(KISAK_D3D9_STANDIN_ENUMERATOR)
 };
 typedef enum _D3DTEXTUREFILTERTYPE D3DTEXTUREFILTERTYPE;
 
 enum _D3DCUBEMAP_FACES
 {
-    D3DCUBEMAP_FACE_POSITIVE_X = 0,
-    D3DCUBEMAP_FACE_NEGATIVE_X = 1,
-    D3DCUBEMAP_FACE_POSITIVE_Y = 2,
-    D3DCUBEMAP_FACE_NEGATIVE_Y = 3,
-    D3DCUBEMAP_FACE_POSITIVE_Z = 4,
-    D3DCUBEMAP_FACE_NEGATIVE_Z = 5,
+    KISAK_D3D9_CUBEMAP_FACE_VALUES(KISAK_D3D9_STANDIN_ENUMERATOR)
 };
 typedef enum _D3DCUBEMAP_FACES D3DCUBEMAP_FACES;
+
+#undef KISAK_D3D9_STANDIN_ENUMERATOR
 
 struct _D3DDISPLAYMODE
 {
@@ -219,12 +288,7 @@ typedef struct _D3DPRESENT_PARAMETERS_ D3DPRESENT_PARAMETERS;
 struct _D3DCAPS9;
 typedef struct _D3DCAPS9 D3DCAPS9;
 
-// Layout assertions for what the engine embeds by value. DxGlobals' documented
-// size comment (sizeof=0x2CE0) depends on displayModes[256] being 256 * 16 bytes.
-static_assert(sizeof(_D3DFORMAT) == 4, "D3DFORMAT is a 4-byte enum in d3d9types.h");
-static_assert(sizeof(_D3DMULTISAMPLE_TYPE) == 4, "D3DMULTISAMPLE_TYPE is a 4-byte enum");
-static_assert(sizeof(_D3DTEXTUREFILTERTYPE) == 4, "D3DTEXTUREFILTERTYPE is a 4-byte enum");
-static_assert(sizeof(_D3DCUBEMAP_FACES) == 4, "D3DCUBEMAP_FACES is a 4-byte enum");
-static_assert(sizeof(D3DDISPLAYMODE) == 16, "D3DDISPLAYMODE must match d3d9types.h");
-static_assert(offsetof(D3DDISPLAYMODE, Format) == 12, "D3DDISPLAYMODE.Format offset");
-static_assert(sizeof(D3DFMT_DXT1) == 4, "D3DFMT_* enumerator width");
+// Layout assertions for what the engine embeds by value.
+KISAK_D3D9_ASSERT_EMBEDDED_LAYOUTS();
+
+#endif // KISAK_LINUX_NATIVE_D3D9
