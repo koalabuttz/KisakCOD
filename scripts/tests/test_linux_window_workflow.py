@@ -278,15 +278,31 @@ class NativeD3D9BoundaryWorkflowTests(unittest.TestCase):
         self.assertEqual(upload['with']['path'], 'artifacts/')
         self.assertIn('native-d3d9-${{ matrix.config }}', upload['with']['name'])
 
+    # Asset-free renderer tests that compile production units through the boundary
+    # with DXVK's headers (never its library). Every other job stays DXVK-free.
+    HEADER_CONSUMERS = ('world_frontend',)
+
     def test_other_jobs_keep_their_defaults(self):
-        # The boundary stays opt-in: no other job turns it on or needs DXVK.
+        # The boundary stays opt-in: no other job turns the CMake option on, and
+        # only the named header consumers fetch DXVK at all.
         for name, job in self.workflow['jobs'].items():
             if name == self.JOB:
                 continue
             text = '\n'.join(step.get('run', '') for step in job['steps'])
             with self.subTest(job=name):
                 self.assertNotIn('KISAK_BUILD_LINUX_NATIVE_D3D9', text)
-                self.assertNotIn('dxvk', text.lower())
+                if name not in self.HEADER_CONSUMERS:
+                    self.assertNotIn('dxvk', text.lower())
+
+    def test_header_consumers_use_the_same_pins_and_build_nothing(self):
+        for name in self.HEADER_CONSUMERS:
+            job = self.workflow['jobs'][name]
+            text = '\n'.join(step.get('run', '') for step in job['steps']).lower()
+            with self.subTest(job=name):
+                for key in ('DXVK_REVISION', 'DXVK_DIRECTX_HEADERS_REVISION'):
+                    self.assertEqual(job['env'][key], self.job['env'][key])
+                for forbidden in ('meson setup', 'ninja', 'libdxvk', 'cmake --build', '-dkisak_dxvk_native'):
+                    self.assertNotIn(forbidden, text)
 
 
 if __name__ == '__main__':

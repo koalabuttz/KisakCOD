@@ -1,31 +1,36 @@
 // Link boundary for world_frontend_test.cpp.
 //
 // The test links the production renderer front end (DPVS, BSP draw-surface
-// batching, the draw-surface merge) and the runtime it needs (dvars, commands,
-// strings, math, memory, threads). Everything else those translation units can
-// reach is defined here, in exactly three kinds, so nothing is silently faked:
+// batching, the draw-surface merge), the scene setup in r_scene.cpp and the
+// buffer storage in r_buffers.cpp (both compiled through the native D3D9
+// boundary), and the runtime they need (dvars, commands, strings, math, memory,
+// threads). Everything else those translation units can reach is defined here,
+// in exactly three kinds, so nothing is silently faked:
 //
 //  1. Host services the test owns, as every native test host in this tree does
 //     (src/linux/client/diagnostic_host.cpp): console output, and assertions and
 //     errors that FAIL the run instead of being survived.
 //
 //  2. Global storage whose owning translation unit cannot be linked here:
-//     r_init.cpp, r_scene.cpp and r_buffers.cpp need real D3D9 methods until the
-//     native D3D9 boundary lands; db_registry.cpp, common.cpp, sv_main_mp.cpp and
-//     the Windows window code pull in the whole engine. Each object below has the
+//     r_init.cpp does not compile on Linux yet (monitor and window-style code the
+//     SDL host replaces); db_registry.cpp, common.cpp, sv_main_mp.cpp and the
+//     Windows window code pull in the whole engine. Each object below has the
 //     owner's exact type and is zero-initialized, which is what the owner's
 //     definition is before its init code runs. Dvar pointers are registered by
 //     R_RegisterDvars or by the test's main(), or stay null as they do before
 //     their owner's init. (Where the owner links cleanly it is linked instead:
-//     the collision map `cm` comes from cm_load.cpp and the dynamic-entity
-//     accessors from DynEntity_load_obj.cpp, so an empty world returns what a
-//     real one with no dynamic entities would.)
+//     `scene` comes from r_scene.cpp and `gfxBuf` from r_buffers.cpp (both
+//     through the boundary), the collision map `cm` from cm_load.cpp and the
+//     dynamic-entity accessors from DynEntity_load_obj.cpp, so an empty world
+//     returns what a real one with no dynamic entities would.)
 //
-//  3. Functions the synthetic world must never reach: entities, dynamic
-//     entities, effects, model lighting, skinning, shadows, debug drawing and
-//     fences. Each one aborts with its name. The world has no entities, effects
-//     or static models and the debug dvars stay at their defaults, so reaching
-//     any of these is a test failure, not a skipped feature.
+//  3. Functions the synthetic world must never reach: entity posing and
+//     culling, effects, model lighting, skinning, shadows, debug drawing and
+//     localization. Each one aborts with its name. The world has no entities,
+//     effects or static models and the debug dvars stay at their defaults, so
+//     reaching any of these is a test failure, not a skipped feature. (The
+//     model, brush-model and DObj surface adders are production code from
+//     r_scene.cpp now, with their accessors linked from their owners.)
 
 #include <universal/q_shared.h>
 #include <EffectsCore/fx_system.h>
@@ -120,8 +125,6 @@ DxGlobals dx;                         // r_init.cpp
 r_global_permanent_t rgp;             // r_init.cpp
 GfxConfiguration gfxCfg;              // r_init.cpp
 r_globals_t rg;                       // db_registry.cpp (moved there for DEDICATED)
-GfxScene scene;                       // r_scene.cpp
-GfxBuffers gfxBuf;                    // r_buffers.cpp
 const dvar_t *sys_smp_allowed;        // common.cpp, registered by the test
 const dvar_t *com_statmon;            // common.cpp
 const dvar_t *com_logfile;            // common.cpp
@@ -148,7 +151,6 @@ KISAK_UNREACHABLE(int, BoxOnPlaneSide, (const float *, const float *, const cpla
 KISAK_UNREACHABLE(void, NET_Sleep, (int))
 KISAK_UNREACHABLE(int, CG_CullIn, (cpose_t *))
 KISAK_UNREACHABLE(void, CG_UsedDObjCalcPose, (cpose_t *))
-KISAK_UNREACHABLE(GfxBrushModel *, R_GetBrushModel, (uint32_t))
 KISAK_UNREACHABLE(void, FX_GenerateVerts, (FxGenerateVertsCmd *))
 KISAK_UNREACHABLE(void, FX_GenerateMarkVertsForWorld, (int))
 KISAK_UNREACHABLE(void, R_ProcessCmd_UpdateFxSpotLight, (FxCmd *))
@@ -156,7 +158,6 @@ KISAK_UNREACHABLE(void, R_ProcessCmd_UpdateFxNonDependent, (FxCmd *))
 KISAK_UNREACHABLE(void, R_ProcessCmd_UpdateFxRemaining, (FxCmd *))
 KISAK_UNREACHABLE(void, R_GenerateShadowCookiesCmd, (ShadowCookieCmd *))
 KISAK_UNREACHABLE(void, R_AddSpotShadowEntCmd, (const GfxSpotShadowEntCmd *))
-KISAK_UNREACHABLE(bool, R_EndFencePending, ())
 KISAK_UNREACHABLE(void, R_ShowLightVisCachePoints, (const float *, const DpvsPlane *, int))
 KISAK_UNREACHABLE(void, R_SkinXModelCmd, (uint16_t *))
 KISAK_UNREACHABLE(void, R_SkinGfxEntityCmd, (GfxSceneEntity **))
@@ -169,12 +170,6 @@ KISAK_UNREACHABLE(uint32_t, R_AllocModelLighting_Box,
 KISAK_UNREACHABLE(uint32_t, R_AllocModelLighting_Sphere,
                   (const GfxViewInfo *, float *, const float *, float, uint16_t *, GfxLightingInfo *))
 KISAK_UNREACHABLE(uint32_t, R_AllocModelLighting_PrimaryLight, (float *, uint32_t, uint16_t *, GfxLightingInfo *))
-KISAK_UNREACHABLE(void, R_AddDObjSurfacesCamera, (GfxSceneEntity *, int16_t, uint8_t, GfxDrawSurf **, GfxDrawSurf **))
-KISAK_UNREACHABLE(void, R_AddXModelSurfacesCamera,
-                  (XModelDrawInfo *, const XModel *, float *, uint16_t, uint32_t, uint8_t, char, int, GfxDrawSurf **,
-                   GfxDrawSurf **, uint32_t))
-KISAK_UNREACHABLE(void, R_AddBModelSurfacesCamera,
-                  (BModelDrawInfo *, const GfxBrushModel *, GfxDrawSurf **, GfxDrawSurf **, uint32_t))
 KISAK_UNREACHABLE(void, Material_PreventOverrideTechniqueGeneration, ())
 // Only the setfromlocstring console command reaches localization; the test runs no console commands.
 KISAK_UNREACHABLE(char *, SEH_LocalizeTextMessage, (const char *, const char *, msgLocErrType_t))

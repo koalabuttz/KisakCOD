@@ -44,17 +44,28 @@ not under the `-std=c++20` #15's runner first used (Bink's platform detection
 needs the `linux` macro). #15 moved its engine compiles to `gnu++20` and lists
 both.
 
+## Follow-up: `r_scene.cpp` linked
+
+After #17 merged, the front-end test links `r_scene.cpp` and `r_buffers.cpp`
+through the native D3D9 boundary (DXVK Native 2.7.1 headers only, the rest of the
+link keeps the stand-in). The two mirrors are gone: the test calls the production
+`R_InitScene` and `R_SetViewParmsForScene`, with two new checks on them (28 in
+all). `scene` and `gfxBuf` storage and five traps left the link boundary because
+their owners are linked now, together with the four small owners the real
+surface adders need (`r_draw_method.cpp`, `r_xsurface.cpp`, `xmodel_utils.cpp`,
+`dobj_utils.cpp`). The `world_frontend` CI job fetches the same pinned DXVK
+headers as `native_d3d9_boundary`.
+
 ## Not done
 
-- No `r_scene.cpp` link yet: the test mirrors two small pieces of it
-  (`R_InitScene`'s stage table, `R_SetViewParmsForScene`), marked in the source.
 - No real `GfxWorld`, no device, no resource creation, no draw, no GPU evidence.
+- `R_GenerateSortedDrawSurfs` is not called as a whole: its lighting, fog, sun,
+  shadow and entity stages need world data the synthetic world lacks.
 - The census compiles with the D3D9 stand-in only.
 
 ## Next
 
 Follow the order in [linux-world-frontend.md](linux-world-frontend.md#order-of-work-toward-one-static-map-view):
-link `r_scene.cpp` through the boundary and delete the mirrors; run the front
-end over one real world from an explicit private asset path; then device,
-resources, one fixed-view draw behind the free-camera `SceneRenderer` interface,
-and GPU evidence on a developer machine.
+run the front end over one real world from an explicit private asset path;
+then device, resources, one fixed-view draw behind the free-camera
+`SceneRenderer` interface, and GPU evidence on a developer machine.

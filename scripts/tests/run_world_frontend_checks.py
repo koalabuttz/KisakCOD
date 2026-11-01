@@ -10,12 +10,21 @@ GfxWorld, and checks each result against expectations derived from the geometry.
 This runner performs **no CMake configure and no engine build**. It compiles the
 test, its link boundary (``frontend_link_boundary.cpp``) and an explicit list of
 unmodified production translation units with one 32-bit compiler line, links them
-with ``--gc-sections`` and runs the result. No DXVK, SDL, GPU, Steam client,
+with ``--gc-sections`` and runs the result. No SDL, GPU, Steam client,
 credentials, game assets or network are involved, and none is looked for.
 
+``r_scene.cpp`` (the scene setup the test drives: ``R_InitScene``,
+``R_SetViewParmsForScene``) and ``r_buffers.cpp`` (the ``gfxBuf`` storage) call
+the D3D9 API, so they are compiled through the native D3D9 boundary:
+``KISAK_LINUX_NATIVE_D3D9`` plus the pinned DXVK Native 2.7.1 *headers*
+(``--dxvk-source`` or ``--dxvk-include-dir``, exactly as
+``run_native_d3d9_boundary_checks.py`` takes them). Only those units see DXVK;
+every other unit keeps the type-only stand-in, which is the per-unit opt-in the
+boundary documents (docs/linux-native-d3d9.md). No DXVK library is linked and no
+D3D9 method is called.
+
 Why an explicit source list: the renderer front end lives beside the D3D9 back
-end in ``src/gfx_d3d``, and r_init.cpp, r_scene.cpp and r_buffers.cpp do not
-compile on Linux until the native D3D9 boundary lands (see
+end in ``src/gfx_d3d``, and r_init.cpp does not compile on Linux yet (see
 ``scripts/tests/client_compile_census_blocked.txt``). The list below is the exact
 closure that links: every production unit here compiles unmodified, and
 everything else those units can reach is defined by the boundary file as host
@@ -33,13 +42,15 @@ compiler and configuration. It says nothing about drawing a real map, and the
 hosted workflow that invokes this script is not verified by it.
 
 Usage:
-    python3 scripts/tests/run_world_frontend_checks.py --config Debug
+    python3 scripts/tests/run_world_frontend_checks.py --config Debug \\
+        --dxvk-source <dxvk-2.7.1-checkout>
     python3 scripts/tests/run_world_frontend_checks.py --config RelWithDebInfo \\
-        --log-dir artifacts/world-frontend-RelWithDebInfo
+        --dxvk-include-dir <prefix>/include/dxvk --log-dir artifacts/world-frontend-RelWithDebInfo
     python3 scripts/tests/run_world_frontend_checks.py --list   # print, run nothing
 
-Requires clang++ with a working ``-m32`` link (clang and g++-multilib on Ubuntu)
-and the OpenAL headers (libopenal-dev), which the client sound headers include.
+Requires clang++ with a working ``-m32`` link (clang and g++-multilib on Ubuntu),
+the OpenAL headers (libopenal-dev), which the client sound headers include, and
+the DXVK Native 2.7.1 headers for the two boundary units.
 """
 
 import argparse
@@ -56,6 +67,13 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from run_client_compile_census import CLIENT_DEFINES  # noqa: E402  (one client define set)
+from run_native_d3d9_boundary_checks import (  # noqa: E402  (one way to find the DXVK headers)
+    EXPECTED_DXVK_VERSION,
+    NATIVE_DEFINE,
+    dxvk_source_version,
+    missing_dxvk_headers,
+    stage_dxvk_headers,
+)
 
 TEST_SOURCE = "tests/linux_world_frontend/world_frontend_test.cpp"
 BOUNDARY_SOURCE = "tests/linux_world_frontend/frontend_link_boundary.cpp"
@@ -98,9 +116,19 @@ PRODUCTION_SOURCES = (
     "src/script/scr_stringlist.cpp",
     "src/script/scr_memorytree.cpp",
     # Owners linked instead of faked: the collision map storage and the
-    # dynamic-entity accessors the per-cell dynamic model walk calls.
+    # dynamic-entity accessors the per-cell dynamic model walk calls; the draw
+    # method and the XSurface, XModel and DObj accessors r_scene.cpp's surface
+    # adders call.
     "src/qcommon/cm_load.cpp",
     "src/DynEntity/DynEntity_load_obj.cpp",
+    "src/gfx_d3d/r_draw_method.cpp",
+    "src/gfx_d3d/r_xsurface.cpp",
+    "src/xanim/xmodel_utils.cpp",
+    "src/xanim/dobj_utils.cpp",
+    # Compiled through the native D3D9 boundary (NATIVE_D3D9_SOURCES): the scene
+    # setup and `scene` storage, and the `gfxBuf` storage.
+    "src/gfx_d3d/r_scene.cpp",
+    "src/gfx_d3d/r_buffers.cpp",
     # Native platform layer, as the dedicated Linux target links it.
     "src/linux/sys_threads.cpp",
     "src/linux/sys_critical.cpp",
@@ -111,6 +139,11 @@ PRODUCTION_SOURCES = (
     "src/linux/sys_fileio.cpp",
     "src/linux/sys_console.cpp",
 )
+
+# Production units that call the D3D9 API and so see DXVK's real d3d9.h through
+# the boundary. Each must also be on the boundary's own proof list
+# (scripts/platform/linux/native_d3d9_renderer_sources.txt).
+NATIVE_D3D9_SOURCES = ("src/gfx_d3d/r_scene.cpp", "src/gfx_d3d/r_buffers.cpp")
 
 CONFIG_FLAGS = {
     "Debug": ("-O0", "-D_DEBUG"),
@@ -145,10 +178,11 @@ def all_sources():
     return (TEST_SOURCE, BOUNDARY_SOURCE, *PRODUCTION_SOURCES)
 
 
-def compile_argv(cxx, source, config, output):
+def compile_argv(cxx, source, config, output, dxvk_include):
     own = source in (TEST_SOURCE, BOUNDARY_SOURCE)
+    native = [NATIVE_DEFINE, "-isystem", str(dxvk_include)] if source in NATIVE_D3D9_SOURCES else []
     return [cxx, *CLIENT_DEFINES, *COMMON_FLAGS, *CONFIG_FLAGS[config],
-            *(TEST_FLAGS if own else PRODUCTION_FLAGS), "-c", source, "-o", str(output)]
+            *(TEST_FLAGS if own else PRODUCTION_FLAGS), *native, "-c", source, "-o", str(output)]
 
 
 def run(argv, timeout):
@@ -183,6 +217,9 @@ def check_sources():
         seen.add(source)
         if not (ROOT / source).is_file():
             problems.append(f"{source} does not exist")
+    for source in NATIVE_D3D9_SOURCES:
+        if source not in PRODUCTION_SOURCES:
+            problems.append(f"{source} is compiled through the boundary but is not a production source")
     return problems
 
 
@@ -200,6 +237,10 @@ def main(argv=None):
     parser.add_argument("--compile-timeout", type=int, default=DEFAULT_COMPILE_TIMEOUT)
     parser.add_argument("--run-timeout", type=int, default=DEFAULT_RUN_TIMEOUT)
     parser.add_argument("--log-dir", type=Path)
+    dxvk = parser.add_mutually_exclusive_group()
+    dxvk.add_argument("--dxvk-include-dir", type=Path, help="installed DXVK Native <prefix>/include/dxvk")
+    dxvk.add_argument("--dxvk-source", type=Path, help="DXVK source checkout with the include/native/directx submodule")
+    parser.add_argument("--allow-dxvk-version", help=f"accept this DXVK source version instead of {EXPECTED_DXVK_VERSION}")
     parser.add_argument("--list", action="store_true", help="print the sources and compile lines, run nothing")
     options = parser.parse_args(argv)
 
@@ -210,21 +251,45 @@ def main(argv=None):
         return 1
 
     if options.list:
+        include = options.dxvk_include_dir or Path("<dxvk-include-dir>")
         for source in all_sources():
-            print(shlex.join(compile_argv(options.cxx, source, options.config, Path("<obj>"))))
+            print(shlex.join(compile_argv(options.cxx, source, options.config, Path("<obj>"), include)))
         return 0
 
+    if not (options.dxvk_source or options.dxvk_include_dir):
+        print("FAIL: pass --dxvk-source or --dxvk-include-dir (the boundary units need the DXVK Native headers)")
+        return 1
+
     with tempfile.TemporaryDirectory(prefix="kisak-world-frontend-") as workdir:
+        if options.dxvk_source:
+            source_dir = options.dxvk_source.expanduser().resolve()
+            version = dxvk_source_version(source_dir)
+            wanted = options.allow_dxvk_version or EXPECTED_DXVK_VERSION
+            if version != wanted:
+                print(f"FAIL: DXVK source version is {version!r}, expected {wanted!r}")
+                return 1
+            dxvk_include = Path(workdir) / "dxvk-include" / "dxvk"
+            problems = stage_dxvk_headers(source_dir, dxvk_include)
+        else:
+            dxvk_include = options.dxvk_include_dir.expanduser().resolve()
+            problems = missing_dxvk_headers(dxvk_include)
+        if problems:
+            for problem in problems:
+                print(f"FAIL: DXVK headers: {problem}")
+            return 1
+
         objects = {source: Path(workdir) / (source.replace("/", "_") + ".o") for source in all_sources()}
 
+        def argv_for(source):
+            return compile_argv(options.cxx, source, options.config, objects[source], dxvk_include)
+
         def build(source):
-            return source, run(compile_argv(options.cxx, source, options.config, objects[source]),
-                               options.compile_timeout)
+            return source, run(argv_for(source), options.compile_timeout)
 
         failed = []
         with ThreadPoolExecutor(max_workers=max(1, options.jobs)) as pool:
             for source, (status, output) in pool.map(build, all_sources()):
-                argv = compile_argv(options.cxx, source, options.config, objects[source])
+                argv = argv_for(source)
                 write_log(options.log_dir, source.replace("/", "_") + ".log",
                           f"$ {shlex.join(argv)}\n{output}")
                 if status != "ok":

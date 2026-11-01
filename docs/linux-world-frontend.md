@@ -9,11 +9,15 @@ production code. Nothing here creates a device, loads a map or draws a pixel.
 ## What runs
 
 `tests/linux_world_frontend/world_frontend_test.cpp` drives, in order, the same
-functions `R_GenerateSortedDrawSurfs` calls for the world:
+functions `R_GenerateSortedDrawSurfs` calls for the world. It does not call
+`R_GenerateSortedDrawSurfs` itself: that function also sets up model lighting,
+fog, sun and shadow state and files entities into cells, which needs world data
+(sun light, primary lights) the synthetic world does not have.
 
 | Stage | Production code |
 | --- | --- |
 | scene buffers and DPVS state | `R_InitSceneBuffers`, `R_InitSceneData`, `R_ClearDpvsScene` (`r_dpvs.cpp`) |
+| scene stages and view | `R_InitScene`, `R_SetViewParmsForScene` from a `refdef_s` (`r_scene.cpp`, through the native D3D9 boundary) |
 | camera cell | `R_CellForPoint` over the uint16 BSP node stream (`r_dpvs.cpp`) |
 | world visibility | `R_SetupWorldSurfacesDpvs`, `R_AddWorldSurfacesDpvs`: portal walk, frustum and portal clipping, per-cell AABB trees, cull groups, the no-decal ranges (`r_dpvs.cpp`, `r_dpvs_static.cpp`) |
 | per-cell worker commands | `R_AddWorkerCmd` running inline with `r_smp_worker` off (`r_workercmds.cpp`), including the dynamic-model, scene-entity and dynamic-brush cell commands |
@@ -37,11 +41,23 @@ non-decal surface (1).
 ## How it links
 
 `scripts/tests/run_world_frontend_checks.py` compiles the test, its boundary file
-and 40 unmodified production units with the client definitions and the flags of
+and 46 unmodified production units with the client definitions and the flags of
 the native Linux targets, links with `--gc-sections`, and runs the ELF32 result.
 The production list is the exact closure: the runner's self-test fails if a
 listed unit is missing or listed twice, and each unit was confirmed necessary
-when the list was written.
+when it was added.
+
+Two of those units call the D3D9 API: `r_scene.cpp` (the scene setup and the
+`scene` storage) and `r_buffers.cpp` (the `gfxBuf` storage). They are compiled
+through the [native D3D9 boundary](linux-native-d3d9.md), with
+`KISAK_LINUX_NATIVE_D3D9` and the pinned DXVK Native 2.7.1 headers
+(`--dxvk-source` or `--dxvk-include-dir`, as the boundary runner takes them); every
+other unit keeps the type-only stand-in, the per-unit opt-in the boundary
+documents. They are the first renderer units with D3D9 calls linked into an
+executable on Linux. No DXVK library is linked: the D3D9 methods they call sit in
+functions the test never reaches, and `--gc-sections` drops them. Both must be on
+the boundary's proof list (`native_d3d9_renderer_sources.txt`), which the runner's
+self-test checks.
 
 `tests/linux_world_frontend/frontend_link_boundary.cpp` defines everything else
 those units reach, in exactly three kinds:
@@ -49,25 +65,24 @@ those units reach, in exactly three kinds:
 1. **Host services**: console output, and an assertion handler and `Com_Error`
    that abort the run. `RELEASE_ASSERTS` keeps production assertions live in
    both configurations.
-2. **Storage** whose owner cannot be linked yet (`dx`, `rgp`, `gfxCfg`, `rg`,
-   `scene`, `gfxBuf` and a few dvar pointers), each with the owner's exact type,
-   zero-initialized as the owner's definition is before its init runs. Where the
-   owner links cleanly it is linked instead: the collision map `cm` comes from
-   `cm_load.cpp` and the dynamic-entity accessors from `DynEntity_load_obj.cpp`.
-3. **Traps**: functions the synthetic world must never reach (entities, effects,
-   model lighting, skinning, shadows, debug drawing, fences, localization). Each
-   one aborts with its name, and each signature is checked against the
-   production header. Every trap was confirmed necessary for the link.
-
-Two pieces of orchestration are mirrored from `r_scene.cpp` and marked in the
-test: three stages of `R_InitScene`'s stage table and the four calls of
-`R_SetViewParmsForScene`. `r_scene.cpp` needs the D3D9 query interface, so it
-cannot be linked with the type-only stand-in. With the native D3D9 boundary it
-compiles (see below), and the mirrors should then be replaced by the real file.
+2. **Storage** whose owner cannot be linked yet (`dx`, `rgp`, `gfxCfg` from
+   `r_init.cpp`, which does not compile on Linux yet; `rg`; a few dvar
+   pointers), each with the owner's exact type, zero-initialized as the owner's
+   definition is before its init runs. Where the owner links cleanly it is
+   linked instead: `scene` comes from `r_scene.cpp`, `gfxBuf` from
+   `r_buffers.cpp`, `gfxDrawMethod` from `r_draw_method.cpp`, the collision map
+   `cm` from `cm_load.cpp`, and the dynamic-entity, XModel, XSurface and DObj
+   accessors from their own units.
+3. **Traps**: functions the synthetic world must never reach (entity posing and
+   culling, effects, model lighting, skinning, shadows, debug drawing,
+   localization). Each one aborts with its name, and each signature is checked
+   against the production header. Every trap was confirmed necessary for the
+   link.
 
 ## What a pass does not claim
 
-- No device, texture, shader, draw call or pixel is involved.
+- No device, texture, shader, draw call or pixel is involved. DXVK contributes
+  headers only; no D3D9 method is called and no DXVK library is linked.
 - The pre-tessellated index path (`r_pretess`) writes GPU index buffers and is
   switched off; static models, entities, effects and shadows are absent.
 - A synthetic world is not a real map. Real BSP data exercises deeper trees,
@@ -87,7 +102,8 @@ follows:
 
 | Unit | Through the boundary |
 | --- | --- |
-| `r_scene.cpp`, `rb_backend.cpp` | compile unmodified and are on the boundary's proof list. They need `-std=gnu++20`: under strict `-std=c++20` the `linux` macro is not predefined and `deps/binklib/radbase.h` fails platform detection |
+| `r_scene.cpp`, `r_buffers.cpp` | compile unmodified, are on the proof list, and are linked into this test |
+| `rb_backend.cpp` | compiles unmodified and is on the proof list. Like `r_scene.cpp` it needs `-std=gnu++20`: under strict `-std=c++20` the `linux` macro is not predefined and `deps/binklib/radbase.h` fails platform detection |
 | `r_init.cpp` | `HMONITOR`, `WS_*` window styles: window ownership, which the SDL host replaces |
 | `r_screenshot.cpp` | `MONITORINFO`, `ClientToScreen` |
 | `rb_sky.cpp` | `Sleep` |
@@ -101,8 +117,9 @@ census mode with the boundary is the way to ratchet those.
 
 ## Order of work toward one static map view
 
-1. Link `r_scene.cpp` through the boundary into this test and delete the two
-   mirrors, so `R_RenderScene`'s front half is the production file end to end.
+1. *Done:* `r_scene.cpp` is linked through the boundary and the two mirrors of
+   it (`R_InitScene`'s stage table, `R_SetViewParmsForScene`) are deleted; the
+   test calls the production functions.
 2. Feed the front end a real `GfxWorld`: load one map's world from an explicit
    private asset path (never committed, never searched for) and check
    invariants that hold for any map: every visible surface index is in range,

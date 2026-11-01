@@ -93,11 +93,15 @@ only stores them needs.
   D3DX library. Shader compilation/loading needs its own decision.
 - Win32 APIs that are not D3D9: `ddraw.h` (`r_texturemem.cpp`), `MONITORINFO`
   (`r_screenshot.cpp`), `HMONITOR`/window styles (`r_init.cpp`), `Sleep`
-  (`rb_sky.cpp`), `_itoa`, `_time64`, Bink textures (`r_cinematic.cpp`). These are
-  ordinary Linux porting work in the renderer TUs, not boundary work.
-- Linking. No renderer unit is linked into an executable here, and
+  (`rb_sky.cpp`), Bink textures (`r_cinematic.cpp`). These are ordinary Linux
+  porting work in the renderer TUs, not boundary work. (`_itoa` and `_time64`,
+  once listed here, are now shimmed in `src/linux/compat.h`.)
+- Linking. The boundary's own checks link no renderer unit, and
   `KISAK_DXVK_NATIVE_LIBRARY` is only passed through for future device-creating
-  targets.
+  targets. The first consumer that links boundary units is the asset-free world
+  front-end test ([linux-world-frontend.md](linux-world-frontend.md)): it links
+  `r_scene.cpp` and `r_buffers.cpp` built this way, with DXVK's headers and no
+  DXVK library.
 
 ## Build
 
