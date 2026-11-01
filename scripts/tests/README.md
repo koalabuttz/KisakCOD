@@ -195,3 +195,45 @@ the production renderer units in
 `scripts/platform/linux/native_d3d9_renderer_sources.txt` must compile through the
 boundary and fail without it. See [docs/linux-native-d3d9.md](../../docs/linux-native-d3d9.md).
 A pass does not claim a device, a draw, linking or the hosted run.
+
+## World front-end checks
+
+```sh
+python3 scripts/tests/run_world_frontend_checks.py --config Debug
+python3 scripts/tests/run_world_frontend_checks.py --config RelWithDebInfo
+python3 scripts/tests/run_world_frontend_checks.py --list
+python3 scripts/tests/test_world_frontend_check_runner.py
+```
+
+`tests/linux_world_frontend/world_frontend_test.cpp` runs the production renderer
+front end (DPVS cell and portal visibility, the per-cell AABB-tree and cull-group
+walk, BSP draw-surface batching and the merge) against a ten-surface, two-cell
+synthetic world and checks 26 results derived from the geometry. The runner
+compiles the test, its link boundary and 40 unmodified production units with one
+`-m32` line per configuration (`Debug` is `-O0 -D_DEBUG`, `RelWithDebInfo` is
+`-O2 -DNDEBUG`, both with `RELEASE_ASSERTS`), links them with `--gc-sections` and
+runs the ELF32 result. Production assertions abort the run. No DXVK, SDL, GPU,
+assets or CMake configure are involved; clang, g++-multilib and the OpenAL
+headers are. See [the world front-end guide](../../docs/linux-world-frontend.md)
+for the link boundary rules and what a pass does not claim.
+
+## Client compile census and CRT shims
+
+```sh
+python3 scripts/tests/run_client_compile_census.py --cxx clang++ --jobs 4
+python3 scripts/tests/test_client_compile_census.py
+python3 scripts/tests/test_linux_crt_shims.py --cxx clang++
+```
+
+The census runs one syntax-only `-m32` pass with the client definitions over
+every multiplayer client source and compares the result with
+`client_compile_census_blocked.txt` in both directions: a listed source that now
+compiles is a stale entry and an unlisted source that stops compiling is a
+regression. Each blocked entry names what the compiler stops on. The
+build-generated `buildnumber.h` is written by the build's own
+`scripts/extern/write_build_number.cmake` into a private directory, so a fresh
+checkout needs no prior build. It compiles, it does not link, so a pass is not a
+claim that a client binary builds. The CRT
+shim test covers the MSVC CRT names `src/linux/compat.h` supplies to client
+sources (`_itoa`, the array `strcpy_s`, `_time64`, `_localtime64`), including the
+fail-closed cases; `run_linux_checks.py` runs it as `crt_shims`.

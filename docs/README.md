@@ -33,6 +33,8 @@ what is verified and where, and the next milestone. Build steps are in the
 - [Native D3D9 device experiment](linux-renderer-probe.md)
 - [Packaged world-surface replay](linux-world-surface-probe.md)
 - [Renderer frame ownership](linux-render-frame-owner.md)
+- [Native D3D9 engine boundary](linux-native-d3d9.md) (opt-in, DXVK Native headers)
+- [Renderer world front end](linux-world-frontend.md): asset-free proof of DPVS/BSP batching, and the [static map view handoff](progress-2026-11-01-static-map-view.md)
 - [Standalone renderer build/run](../tests/linux_renderer/README.md)
 
 ## Tests
