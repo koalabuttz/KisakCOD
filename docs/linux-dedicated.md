@@ -549,6 +549,11 @@ digits, so with this switch on:
 - Use a strong `g_password`/`sv_privatePassword` and do not treat either as an
   identity mechanism; both are unchanged by this switch and both remain the only
   admission control you actually have besides the GUID.
+- `rcon` is refused until `rcon_password` is set, and the password travels in
+  clear text in every rcon packet; use a long one and do not reuse it. With
+  `sv_allowDownload 1` (the default) a connected client can fetch any plain
+  relative `.iwd`/`.ff` path under `fs_homepath`/`fs_basepath`; other names,
+  `..` and absolute paths are refused.
 
 Example launch for retail 1.7 hosting:
 
