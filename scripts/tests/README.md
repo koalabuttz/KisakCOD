@@ -120,7 +120,8 @@ Real nonlocal aborts also check reverse-order ownership cleanup, repeated and
 reentrant recovery, and bounded command nesting.
 
 GitHub Actions runs these checks alongside the Windows builds, the native
-bootstrap check and the asset-free world surface checks (below). Loading a map and
+bootstrap check, the asset-free world surface checks and the native D3D9 boundary
+checks (below). Loading a map and
 quitting with licensed assets remain separate application checks.
 
 ## World surface checks
@@ -167,3 +168,23 @@ The four renderer tests are compiled here directly because
 pkg-config modules before it configures anything. That project also builds the two
 GPU replay executables, which are a separate manual experiment; see
 [tests/linux_renderer/README.md](../../tests/linux_renderer/README.md).
+
+## Native D3D9 boundary checks
+
+```sh
+python3 scripts/tests/test_native_d3d9_boundary_runner.py
+python3 scripts/tests/run_native_d3d9_boundary_checks.py --config Debug --dxvk-source <dxvk-2.7.1-checkout>
+python3 scripts/tests/run_native_d3d9_boundary_checks.py --config RelWithDebInfo --dxvk-source <dxvk-2.7.1-checkout>
+```
+
+These check the opt-in boundary through which renderer code reaches DXVK Native
+D3D9 (`src/linux/d3d9_native.h`). They need DXVK Native 2.7.1 **headers** only:
+no DXVK build or library, no Vulkan, SDL, GPU, Steam client, credentials or game
+assets, and no CMake configure. The boundary header is built with g++ and clang++
+in both modes and disassembled to confirm the engine's stdcall survives DXVK's
+headers; four sources must fail to compile for their stated reason; the
+D3D9-bearing engine layouts must be identical in the stand-in and DXVK views; and
+the production renderer units in
+`scripts/platform/linux/native_d3d9_renderer_sources.txt` must compile through the
+boundary and fail without it. See [docs/linux-native-d3d9.md](../../docs/linux-native-d3d9.md).
+A pass does not claim a device, a draw, linking or the hosted run.

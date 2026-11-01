@@ -241,7 +241,9 @@ Compiling eight client TUs is not a client. In rough order of weight:
    its shell does not drive `CL_Frame`, client key/UI consumption, or game startup.
    Steam-error handling still has no supported Linux authentication provider.
 2. **D3D9 renderer.** The rendering path makes real D3D9 calls. This is not a
-   stub-shaped problem.
+   stub-shaped problem. The opt-in [native D3D9 boundary](linux-native-d3d9.md)
+   now lets those calls compile against DXVK Native's interfaces without
+   changing engine conventions or layouts; it creates no device and draws nothing.
 3. **Renderer backend.** No engine backend is selected, recommended or built
    here, and the root build and game renderer are unchanged. Separate from them,
    a private standalone experiment has since created a native D3D9 device through
