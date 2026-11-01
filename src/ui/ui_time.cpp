@@ -15,7 +15,8 @@ void UI_UpdateContextTime(UiContext *dc,int *timeIndex,int previousTimes[4],int 
     previousTimes[uint32_t(*timeIndex) % 4] = dc->frameTime;
     // Keep the original warmup and ring phase when the lifetime count fills.
     // INT_MAX occupies slot 3; 4 resumes at slot 0 with a warmed history.
-    *timeIndex = *timeIndex==std::numeric_limits<int>::max()?4:*timeIndex+1;
+    // Parenthesized: q_shared.h defines a function-like max() macro on Windows.
+    *timeIndex = *timeIndex==(std::numeric_limits<int>::max)()?4:*timeIndex+1;
     if (historyReady)
     {
         int64_t frameTimeTotal = 0;
