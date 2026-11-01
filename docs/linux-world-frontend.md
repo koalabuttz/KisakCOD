@@ -84,7 +84,7 @@ against the pinned DXVK 2.7.1 headers with the engine's own dialect
 
 | Unit | Through the boundary |
 | --- | --- |
-| `r_scene.cpp`, `rb_backend.cpp` | compile unmodified. The boundary runner uses `-std=c++20`, where the `linux` macro is not predefined and `deps/binklib/radbase.h` fails platform detection, so they are not in its list yet |
+| `r_scene.cpp`, `rb_backend.cpp` | compile unmodified. They need `-std=gnu++20`: under strict `-std=c++20` the `linux` macro is not predefined and `deps/binklib/radbase.h` fails platform detection. #15 switched its engine compiles to `gnu++20` and lists both (21 units) |
 | `r_init.cpp` | `HMONITOR`, `WS_*` window styles: window ownership, which the SDL host replaces |
 | `r_screenshot.cpp` | `MONITORINFO`, `ClientToScreen` |
 | `rb_sky.cpp` | `Sleep` |

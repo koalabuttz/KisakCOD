@@ -94,6 +94,9 @@ CLIENT_FLAGS = (
     "-Wno-ignored-attributes", "-Wno-format-security", "-fsyntax-only",
 )
 
+# The build's generator for src/buildnumber.h (see generate_build_header).
+BUILD_HEADER_SCRIPT = SCRIPTS / "extern" / "write_build_number.cmake"
+
 LIST_SCRIPT = """
 set(SRC_DIR "{src}")
 set(SCRIPTS_DIR "{scripts}")
@@ -200,8 +203,29 @@ def compare(results, blocked):
     return regressions, stale
 
 
-def compile_one(cxx, source, timeout):
-    argv = [cxx, *CLIENT_DEFINES, "-I", str(SRC), "-I", str(ROOT / "deps"), *CLIENT_FLAGS, str(source)]
+def generate_build_header(cmake, directory):
+    """Write buildnumber.h into directory with the build's own generator.
+
+    The engine build writes src/buildnumber.h at build time (it is not in git),
+    and five client sources include it. A fresh checkout has none, so the census
+    runs the same script into a private directory instead of touching src/.
+    """
+    completed = subprocess.run(
+        [cmake, f"-DSRC_DIR={Path(directory).as_posix()}", "-DBUILD_NUMBER=0", "-P", str(BUILD_HEADER_SCRIPT)],
+        capture_output=True, text=True, check=False)
+    header = Path(directory) / "buildnumber.h"
+    if completed.returncode != 0 or not header.is_file():
+        raise CensusError(f"{BUILD_HEADER_SCRIPT.name} did not write buildnumber.h "
+                          f"({completed.returncode}):\n{completed.stderr}")
+    return header
+
+
+def compile_one(cxx, source, timeout, generated_dir=None):
+    # The generated directory comes first, so <buildnumber.h> never resolves to a
+    # stale header a local build left in src/.
+    generated = ["-I", str(generated_dir)] if generated_dir else []
+    argv = [cxx, *CLIENT_DEFINES, *generated, "-I", str(SRC), "-I", str(ROOT / "deps"), *CLIENT_FLAGS,
+            str(source)]
     process = subprocess.Popen(argv, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                text=True, start_new_session=True)
     try:
@@ -251,8 +275,15 @@ def main(argv=None):
         print(f"FAIL: compiler {options.cxx} not found")
         return 1
     print(f"census: {len(sources)} client sources, {options.jobs} jobs, {options.cxx}")
-    with ThreadPoolExecutor(max_workers=options.jobs) as pool:
-        outcomes = list(pool.map(lambda item: (item, compile_one(options.cxx, item[1], options.timeout)), sources))
+    with tempfile.TemporaryDirectory(prefix="kisak-census-generated-") as generated_dir:
+        try:
+            generate_build_header(options.cmake, generated_dir)
+        except (CensusError, OSError, subprocess.SubprocessError) as error:
+            print(f"FAIL: census setup: {error}")
+            return 1
+        with ThreadPoolExecutor(max_workers=options.jobs) as pool:
+            outcomes = list(pool.map(
+                lambda item: (item, compile_one(options.cxx, item[1], options.timeout, generated_dir)), sources))
 
     results = {}
     timeouts = []

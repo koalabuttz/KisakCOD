@@ -179,6 +179,24 @@ class FakeCompilerTests(unittest.TestCase):
         self.assertEqual(status, 1)
         self.assertIn("timeout: src/gfx_d3d/r_bsp.cpp", output)
 
+    def test_the_build_number_header_is_generated_privately(self):
+        before = (ROOT / "src" / "buildnumber.h").exists()
+        header = census.generate_build_header("cmake", self.dir)
+        self.assertEqual(header, self.dir / "buildnumber.h")
+        self.assertIn("#define BUILD_NUMBER 0", header.read_text(encoding="utf-8"))
+        self.assertEqual((ROOT / "src" / "buildnumber.h").exists(), before)
+
+    def test_compiles_see_the_generated_header_before_src(self):
+        cxx = self.fake_compiler(failing=["src/buildnumber.cpp"])
+        log_dir = self.dir / "logs"
+        status, _ = run_main(["--cxx", str(cxx), "--jobs", "8", "--log-dir", str(log_dir),
+                              "--blocked", str(self.blocked(["src/buildnumber.cpp"]))])
+        self.assertEqual(status, 0)
+        command = (log_dir / "src_buildnumber.cpp.log").read_text(encoding="utf-8").splitlines()[0].split()
+        includes = [command[i + 1] for i, arg in enumerate(command) if arg == "-I"]
+        self.assertIn("kisak-census-generated-", includes[0])
+        self.assertEqual(includes[1], str(ROOT / "src"))
+
     def test_a_missing_compiler_fails_instead_of_passing(self):
         status, output = run_main(["--cxx", str(self.dir / "no-such-cxx"),
                                    "--blocked", str(self.blocked([]))])

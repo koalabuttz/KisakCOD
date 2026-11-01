@@ -201,8 +201,11 @@ The census runs one syntax-only `-m32` pass with the client definitions over
 every multiplayer client source and compares the result with
 `client_compile_census_blocked.txt` in both directions: a listed source that now
 compiles is a stale entry and an unlisted source that stops compiling is a
-regression. Each blocked entry names what the compiler stops on. It compiles,
-it does not link, so a pass is not a claim that a client binary builds. The CRT
+regression. Each blocked entry names what the compiler stops on. The
+build-generated `buildnumber.h` is written by the build's own
+`scripts/extern/write_build_number.cmake` into a private directory, so a fresh
+checkout needs no prior build. It compiles, it does not link, so a pass is not a
+claim that a client binary builds. The CRT
 shim test covers the MSVC CRT names `src/linux/compat.h` supplies to client
 sources (`_itoa`, the array `strcpy_s`, `_time64`, `_localtime64`), including the
 fail-closed cases; `run_linux_checks.py` runs it as `crt_shims`.

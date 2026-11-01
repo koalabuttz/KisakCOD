@@ -25,7 +25,7 @@ assets:
   RelWithDebInfo (`-O2 -DNDEBUG`), both with `RELEASE_ASSERTS`.
 - Four hand-made breakages of the synthetic world each fail the test.
 - `run_client_compile_census.py` passes (411 sources, 41 expected failures).
-- Runner self-tests: 25 for the front-end runner, 23 for the census.
+- Runner self-tests: 25 for the front-end runner, 25 for the census.
 - The repository's required native checks for a renderer change (see the commit
   message for the exact list and results).
 
@@ -33,9 +33,9 @@ The two new CI jobs have not been observed hosted yet.
 
 Also checked locally, not committed: with the boundary branch of PR #15 and the
 pinned DXVK 2.7.1 headers, `r_scene.cpp` and `rb_backend.cpp` compile unmodified
-under the engine's `-std=gnu++20`. The boundary runner uses `-std=c++20`, which
-hides them (Bink's platform detection needs the `linux` macro); this was passed
-to the boundary work.
+under the engine's `-std=gnu++20`. #15's runner first used `-std=c++20`, which
+hid them (Bink's platform detection needs the `linux` macro); after this was
+reported, #15 moved its engine compiles to `gnu++20` and now lists both.
 
 ## Not done
 
