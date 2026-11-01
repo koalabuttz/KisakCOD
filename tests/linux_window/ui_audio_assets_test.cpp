@@ -9,6 +9,15 @@
 using namespace kisak::window;
 namespace {
 int checks=0,failures=0;
+// SDL2 spells the environment setter SDL_setenv; SDL3 renamed it.
+#if KISAK_LINUX_SDL_MAJOR == 3
+void SetEnv(const char *name,const char *value){
+ if(std::strcmp(name,"SDL_AUDIODRIVER")==0)name="SDL_AUDIO_DRIVER";
+ (void)SDL_setenv_unsafe(name,value,1);
+}
+#else
+void SetEnv(const char *name,const char *value){SDL_setenv(name,value,1);}
+#endif
 void Check(bool ok,const char *name){++checks;failures+=!ok;std::printf("%s: %s\n",ok?"PASS":"FAIL",name);}
 template<class F>bool Reject(F f){try{f();return false;}catch(const std::exception&){return true;}}
 void Word(std::vector<uint8_t>&bytes,size_t index,uint32_t value){for(unsigned i=0;i<4;++i)bytes[8+index*4+i]=value>>(8*i);}
@@ -31,13 +40,13 @@ int main(int argc,char **argv){try{
   struct Cleanup { fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);} } cleanup{path};
   auto write=[&](const char *name,const std::vector<uint8_t>&data){std::ofstream file(path/name,std::ios::binary);file.write(reinterpret_cast<const char*>(data.data()),data.size());if(!file)throw std::runtime_error("Cannot write fixture resource");};
   write("mouse_click.sound",Valid());auto invalid=Valid();invalid[0]='X';write("mouse_over.sound",invalid);
-  SDL_setenv("SDL_AUDIODRIVER","dummy",1);UiAudio audio;
+  SetEnv("SDL_AUDIODRIVER","dummy");UiAudio audio;
   Check(Reject([&]{LoadMenuAudio(audio,path.string());}),"invalid second alias rejects complete bundle");
   Check(Reject([&]{audio.Play("mouse_click");}) && Reject([&]{audio.Play("mouse_over");}),"metadata validation failure publishes neither sound to provider");
   write("mouse_over.sound",Valid());LoadMenuAudio(audio,path.string());
   Check(audio.Play("mouse_click")>0 && audio.Play("mouse_over")>0,"valid retry loads both aliases after prior validation failure (dummy device)");
  }
- if(argc==2){SDL_setenv("SDL_AUDIODRIVER","dummy",1);UiAudio audio;LoadMenuAudio(audio,argv[1]);Check(audio.Play("mouse_click")>0 && audio.Play("mouse_over")>0,"actual prepared bundle loads both aliases into real SDL dummy callback (not audibility)");}
+ if(argc==2){SetEnv("SDL_AUDIODRIVER","dummy");UiAudio audio;LoadMenuAudio(audio,argv[1]);Check(audio.Play("mouse_click")>0 && audio.Play("mouse_over")>0,"actual prepared bundle loads both aliases into real SDL dummy callback (not audibility)");}
  }catch(const std::exception&e){std::fprintf(stderr,"audio assets: %s\n",e.what());++failures;}
  std::printf("UI audio assets: %d checks, %d failures\n",checks,failures);return failures?1:0;
 }

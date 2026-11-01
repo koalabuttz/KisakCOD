@@ -216,9 +216,22 @@ if(KISAK_BUILD_LINUX_CLIENT_CORE)
     endforeach()
 endif()
 
-# Optional SDL2 window/input host. Never fetch or require SDL for dedicated/core builds.
+# Optional SDL window/input host. Never fetch or require SDL for dedicated/core builds.
 if(KISAK_BUILD_LINUX_WINDOW_HOST)
-    find_package(SDL2 2.0.18 CONFIG REQUIRED)
+    # SDL2 stays the default. SDL3 is the prototype release: it is only looked
+    # for when this build actually asks for it, so no other configuration gains a
+    # dependency on it.
+    if(KISAK_LINUX_SDL_MAJOR STREQUAL "2")
+        find_package(SDL2 2.0.18 CONFIG REQUIRED)
+        set(KISAK_SDL_TARGET SDL2::SDL2)
+        message(STATUS "Linux window host: SDL2 (default)")
+    elseif(KISAK_LINUX_SDL_MAJOR STREQUAL "3")
+        find_package(SDL3 3.2.10 CONFIG REQUIRED)
+        set(KISAK_SDL_TARGET SDL3::SDL3)
+        message(STATUS "Linux window host: SDL3 (window, input, software presentation and UI audio)")
+    else()
+        message(FATAL_ERROR "KISAK_LINUX_SDL_MAJOR must be 2 or 3, got '${KISAK_LINUX_SDL_MAJOR}'")
+    endif()
     add_library(KisakCOD-window-platform STATIC
         "${SRC_DIR}/linux/client/window/window_host.cpp"
         "${SRC_DIR}/linux/client/window/pixel_buffer.cpp"
@@ -306,6 +319,14 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
     add_executable(KisakCOD-ui-audio-failure-test "${TESTS_DIR}/linux_window/ui_audio_failure_test.cpp" "${SRC_DIR}/linux/client/window/ui_audio.cpp")
     add_executable(KisakCOD-ui-audio-test "${TESTS_DIR}/linux_window/ui_audio_test.cpp" "${SRC_DIR}/linux/client/window/ui_audio.cpp")
     add_executable(KisakCOD-ui-audio-assets-test "${TESTS_DIR}/linux_window/ui_audio_assets_test.cpp" "${SRC_DIR}/linux/client/window/ui_audio.cpp" "${SRC_DIR}/linux/client/window/ui_audio_assets.cpp")
+    # SDL3 submits menu audio through an SDL_AudioStream, so the failure test
+    # wraps that submission to inject a fault. SDL2 has no such call.
+    if(KISAK_LINUX_SDL_MAJOR STREQUAL "3")
+        target_link_options(KisakCOD-ui-audio-failure-test PRIVATE -Wl,--wrap=SDL_PutAudioStreamData)
+        # SDL3 starts text input per window and reports refusal; the window test
+        # wraps that start to exercise the rollback deterministically.
+        target_link_options(KisakCOD-window-test PRIVATE -Wl,--wrap=SDL_StartTextInput)
+    endif()
     add_executable(KisakCOD-menu-script-test "${TESTS_DIR}/linux_window/menu_script_test.cpp" "${SRC_DIR}/ui/ui_input_core.cpp" "${SRC_DIR}/stringed/stringed_hooks.cpp" "${SRC_DIR}/linux/client/window/menu_unavailable_services.cpp" ${KISAK_MENU_SCRIPT_SOURCES} ${KISAK_CLIENT_RUNTIME_SOURCES})
     add_executable(KisakCOD-client-input-test
         "${TESTS_DIR}/linux_window/client_input_test.cpp"
@@ -449,6 +470,7 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
         target_compile_features(${window_target} PRIVATE cxx_std_20)
         target_compile_definitions(${window_target} PRIVATE
             KISAK_OPENAL RELEASE_ASSERTS _FILE_OFFSET_BITS=64 _GNU_SOURCE
+            KISAK_LINUX_SDL_MAJOR=${KISAK_LINUX_SDL_MAJOR}
         )
         if(window_target MATCHES "^KisakCOD-material-.*-radiant-test$")
             target_compile_definitions(${window_target} PRIVATE KISAK_RADIANT MAX_GENTITIES=2176)
@@ -463,7 +485,7 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
             -ffunction-sections -fdata-sections
             -Wno-c++11-narrowing -Wno-invalid-token-paste -Wno-ignored-attributes -Wno-format-security
         )
-        target_link_libraries(${window_target} PRIVATE SDL2::SDL2 Threads::Threads)
+        target_link_libraries(${window_target} PRIVATE ${KISAK_SDL_TARGET} Threads::Threads)
         target_link_options(${window_target} PRIVATE -Wl,--gc-sections)
     endforeach()
     target_link_libraries(KisakCOD-menu-input-failure-test PRIVATE KisakCOD-window-platform)

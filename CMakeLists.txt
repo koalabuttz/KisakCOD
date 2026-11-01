@@ -45,9 +45,16 @@ option(KISAK_OPENAL "Build the sound system against OpenAL instead of Miles/MSS"
 option(KISAK_BUILD_LINUX_CLIENT_CORE
     "Build the native Linux client network core (opt-in, discovery diagnostic only; no game client executable)" OFF)
 
-# Separate opt-in: installed SDL2 development files are required only here.
+# Separate opt-in: installed SDL development files are required only here.
 option(KISAK_BUILD_LINUX_WINDOW_HOST
-    "Build the SDL2 Linux window/input shell and tests (no game renderer)" OFF)
+    "Build the SDL Linux window/input shell and tests (no game renderer)" OFF)
+
+# Selects the SDL release the window host above builds against. 2 is the default
+# and is unchanged. 3 builds the same targets against SDL3: window, input,
+# software presentation and the UI audio backend. Neither release is fetched or
+# required unless KISAK_BUILD_LINUX_WINDOW_HOST is ON.
+set(KISAK_LINUX_SDL_MAJOR 2 CACHE STRING "SDL release for the opt-in Linux window/input host: 2 or 3")
+set_property(CACHE KISAK_LINUX_SDL_MAJOR PROPERTY STRINGS 2 3)
 
 # Set the gloabl directory variables
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)

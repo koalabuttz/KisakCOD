@@ -3,6 +3,8 @@
 #include <linux/client/window/menu_input_owner.h>
 #include <linux/client/window/client_input_host.h>
 #include <linux/client/window/window_host.h>
+// The shared header names the selected SDL release and one spelling per event.
+#include <linux/client/window/sdl_api.h>
 #include <client_mp/client_mp.h>
 #include <ui/ui_input_core.h>
 #include <ui/ui_registration.h>
@@ -57,8 +59,10 @@ int main(int argc,char **argv){
     owner.Open();owner.Present(window);Check(owner.Opened() && Dvar_GetBool("cl_freelook")==savedLook && Dvar_GetBool("m_filter")==savedFilter,"same owner reopens preserving only live dvar settings");
     CL_KeyEvent(0,K_DOWNARROW,1,Sys_Milliseconds());CL_KeyEvent(0,K_DOWNARROW,0,Sys_Milliseconds());owner.Present(window);
     Check((owner.FocusIndex()==106||owner.FocusIndex()==112) && UILocalVar_Find(&owner.Context().localVars,"ui_highlight") && input.Held()==0,"reloaded registry supports actual client key dispatch and recreates focus-script localvars");
-    SDL_Event focus{};focus.type=SDL_WINDOWEVENT;focus.window.windowID=window.Id();focus.window.event=SDL_WINDOWEVENT_FOCUS_GAINED;SDL_PushEvent(&focus);
-    SDL_Event enter=focus;enter.window.event=SDL_WINDOWEVENT_ENTER;SDL_PushEvent(&enter);window.Pump(0);window.SetEngineCursor(true);
+    // The shared header names one spelling of each window event, so the focus and
+    // pointer-entry boundary reads the same in an SDL2 and an SDL3 build.
+    auto focus=kisak::sdl::MakeWindow(window.Id(),kisak::sdl::Kind::WindowFocusGained);kisak::sdl::PushEvent(focus);
+    auto enter=kisak::sdl::MakeWindow(window.Id(),kisak::sdl::Kind::WindowEnter);kisak::sdl::PushEvent(enter);window.Pump(0);window.SetEngineCursor(true);
     Check(window.EngineCursorActive(),"same-window teardown fixture owns an active engine cursor lease");
     renderer.BeginFrame();const float black[4]={0,0,0,1};renderer.Clear(black);renderer.Submit();
    }

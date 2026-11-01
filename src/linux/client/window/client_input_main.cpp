@@ -1,4 +1,5 @@
 #include "window_host.h"
+#include "sdl_api.h"
 #include "client_input_host.h"
 #include "shutdown_signal.h"
 #include "frame_deadline.h"
@@ -155,9 +156,11 @@ int main(int argc,char **argv)
     try {
         ShellInput input;
         if(requestFrame) { std::string reason;input.RequestFrame(reason);std::fprintf(stderr,"frame=unavailable %s\n",reason.c_str());return 5; }
-        // Diagnostic preference only; the reusable platform host does not choose
-        // the eventual game backend. SDL window surfaces may otherwise use GPU acceleration.
-        SDL_SetHint(SDL_HINT_FRAMEBUFFER_ACCELERATION,"0");
+        // Presentation goes through the window surface. SDL chooses how that
+        // surface is backed: forcing the direct framebuffer here breaks hosts
+        // without one (SDL3 on Wayland), so the backend stays SDL's default. The
+        // frame itself is still produced as CPU pixels; SDL may upload them. No
+        // game renderer or GPU render path is involved.
         kisak::window::WindowHost host(input,config);
         kisak::window::ClientInputHost::WindowCursorBinding cursorBinding(input,host);
         kisak::window::ShutdownSignal signals;
@@ -199,7 +202,7 @@ int main(int argc,char **argv)
         std::string lastRelativeError=host.RelativeMouseError();
         if(relative)std::printf("relative requested=1 active=%d error=%s\n",lastRelative,lastRelativeError.c_str());
         std::fflush(stdout);
-        const uint32_t started=SDL_GetTicks();
+        const uint32_t started=kisak::sdl::Ticks();
         unsigned drawn=0;
         kisak::window::FrameDeadline cadence;
         while(host.Running()) {
@@ -238,7 +241,7 @@ int main(int argc,char **argv)
                 ++drawn;
             }
             if(!host.Running())break;
-            if((frames && drawn>=frames) || (runMilliseconds && SDL_GetTicks()-started>=runMilliseconds))host.RequestQuit();
+            if((frames && drawn>=frames) || (runMilliseconds && kisak::sdl::Ticks()-started>=runMilliseconds))host.RequestQuit();
             if(metrics.trace)std::fflush(stdout);
         }
         std::printf("window=closed keys=%u characters=%u mouse=%u resizes=%u focus=%u resets=%u held=%d unsupported_text=%u relative_active=%d presented=%u input=engine frame=unavailable game=false\n",

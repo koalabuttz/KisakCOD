@@ -112,7 +112,12 @@ void MenuInputOwner::Trace(const char *phase) {
 void MenuInputOwner::Present(WindowHost &window){CheckThread();if(renderer_.Status()!=CpuRenderer::State::ready)throw std::logic_error("Menu frame already active");const auto extent=window.SurfaceExtent();if(extent.width!=width_||extent.height!=height_)Resize(extent.width,extent.height);
     const auto before=renderer_.Pixels();if(before.width!=width_||before.height!=height_)renderer_.Resize(width_,height_);
     focused_=window.Focused();pointerInside_=window.PointerInside();
-    if(focused_&&pointerInside_)SDL_GetMouseState(&pointerX_,&pointerY_);
+    if(focused_&&pointerInside_){float x=0,y=0;sdl::MouseState(x,y);
+        // SDL3 reports the pointer as floats: round it into the menu's integer
+        // cursor only when the sample is finite and inside the accepted range.
+        int sampleX=pointerX_,sampleY=pointerY_;
+        if(sdl::Position(x,sampleX)&&sdl::Position(y,sampleY)){pointerX_=sampleX;pointerY_=sampleY;}
+    }
     UI_UpdateCursorPosition(&dc_,&placement_,pointerX_,pointerY_);
     if(!focused_||!pointerInside_)dc_.isCursorVisible=false;
     const auto beforeMenu=assets_->menu;const auto beforeBlur=dc_.blurRadiusOut;const auto beforeResult=paintResult_;

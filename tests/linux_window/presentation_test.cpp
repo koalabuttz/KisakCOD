@@ -1,5 +1,6 @@
 // Actual SDL window-surface presentation. This exercises no game renderer.
 #include <linux/client/window/window_host.h>
+#include <linux/client/window/sdl_api.h>
 #include <algorithm>
 #include <array>
 #include <climits>
@@ -15,24 +16,19 @@ int checks=0,failures=0;
 void Check(bool ok,const char *name) { ++checks;failures+=!ok;std::printf("%s: %s\n",ok?"PASS":"FAIL",name); }
 template<class F> bool Rejected(F action) { try { action();return false; }catch(const std::exception&) { return true; } }
 struct Sink final : EventSink {
-    uint32_t NowMilliseconds() const override { return SDL_GetTicks(); }
+    uint32_t NowMilliseconds() const override { return kisak::sdl::Ticks(); }
     void Key(uint32_t,int,bool) override {} void Text(uint32_t,std::string_view) override {}
     void Mouse(uint32_t,int,int,int,int) override {} void Resize(int,int) override {}
     void Focus(bool) override {} void Quit() override {}
 };
+// Reads a window-surface pixel back through the shared surface helper: SDL2
+// describes a pixel with the surface's SDL_PixelFormat and SDL3 with separate
+// format details, so the conversion lives in sdl_api.h rather than here.
 std::array<uint8_t,3> Sample(WindowHost &host,int x,int y) {
-    SDL_Surface *surface=SDL_GetWindowSurface(host.NativeWindow());
-    if(!surface)throw std::runtime_error(SDL_GetError());
-    const bool lock=SDL_MUSTLOCK(surface);
-    if(lock && SDL_LockSurface(surface)<0)throw std::runtime_error(SDL_GetError());
-    const auto *p=static_cast<uint8_t*>(surface->pixels)+y*surface->pitch+x*surface->format->BytesPerPixel;
-    uint32_t pixel=0;std::memcpy(&pixel,p,surface->format->BytesPerPixel);
-#if SDL_BYTEORDER == SDL_BIG_ENDIAN
-    if(surface->format->BytesPerPixel==3)pixel=(uint32_t(p[0])<<16)|(uint32_t(p[1])<<8)|p[2];
-#endif
-    uint8_t r,g,b;SDL_GetRGB(pixel,surface->format,&r,&g,&b);
-    if(lock)SDL_UnlockSurface(surface);
-    return {r,g,b};
+    uint8_t red=0,green=0,blue=0;
+    if(!kisak::sdl::ReadPixel(SDL_GetWindowSurface(host.NativeWindow()),x,y,red,green,blue))
+        throw std::runtime_error(SDL_GetError());
+    return {red,green,blue};
 }
 }
 int main() {
@@ -73,7 +69,10 @@ int main() {
             Check(Rejected([&]{host.Present(mismatch.View());}),"resource extent must match current surface");
             bool wrongThread=false;std::thread worker([&]{wrongThread=Rejected([&]{host.Present({7,5,pitch,source});}) && Rejected([&]{host.SurfaceExtent();});});worker.join();
             Check(wrongThread,"presentation and surface query require SDL owner thread");
-            SDL_SetWindowSize(host.NativeWindow(),11,3);host.Pump();
+            // SDL3 applies a resize asynchronously, so wait for it before
+            // asking for the extent the surface will have.
+            kisak::sdl::SetWindowSize(host.NativeWindow(),11,3);host.Pump();
+            kisak::sdl::SyncWindow(host.NativeWindow());
             auto resized=host.SurfaceExtent();
             Check(resized.width==11 && resized.height==3 && Rejected([&]{host.Present({7,5,pitch,source});}),"real resize reacquires new surface and rejects stale extent");
             buffer.Resize(resized.width,resized.height);

@@ -28,6 +28,18 @@ class WindowWorkflowTests(unittest.TestCase):
         self.assertEqual(self.job['strategy']['matrix']['config'],
                          ['Debug', 'RelWithDebInfo'])
         self.assertEqual(self.job['runs-on'], 'ubuntu-24.04')
+        self.assertEqual(self.job['strategy']['matrix']['sdl'], ['2', '3'])
+
+    def test_sdl3_sdk_is_pinned_and_32_bit(self):
+        step = next(step for step in self.job['steps']
+                    if step.get('name') == 'Build pinned 32-bit SDL3 SDK')
+        self.assertEqual(step['if'], 'matrix.sdl == 3')
+        self.assertIn('877399b2b2cf21e67554ed9046410f268ce1d1b2', step['run'])
+        for flag in ('-DCMAKE_C_FLAGS=-m32', '-DCMAKE_CXX_FLAGS=-m32',
+                     '-DCMAKE_SHARED_LINKER_FLAGS=-m32', '-DSDL_SHARED=ON',
+                     '-DSDL_X11=OFF', '-DSDL_WAYLAND=OFF'):
+            self.assertIn(flag, step['run'])
+        self.assertIn('grep -q ELF32', step['run'])
 
     def test_matching_i386_sdk_is_explicit(self):
         commands = '\n'.join(step.get('run', '') for step in self.job['steps'])
@@ -42,14 +54,18 @@ class WindowWorkflowTests(unittest.TestCase):
         self.assertEqual(step['env']['SDL_AUDIODRIVER'], 'dummy')
         self.assertIn('set -euo pipefail', step['run'])
         self.assertIn('--video-driver dummy', step['run'])
-        self.assertIn('window-${{ matrix.config }}', step['run'])
+        self.assertIn('window-sdl${{ matrix.sdl }}-${{ matrix.config }}', step['run'])
+        self.assertIn('--sdl-major "${{ matrix.sdl }}"', step['run'])
+        self.assertIn('--sdl3-dir "$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3"', step['run'])
+        self.assertIn('export LD_LIBRARY_PATH=', step['run'])
         self.assertNotIn('--bundle', step['run'])
 
     def test_failure_logs_are_retained(self):
         upload = next(step for step in self.job['steps']
                       if step.get('uses', '').startswith('actions/upload-artifact@'))
         self.assertEqual(upload['if'], 'always()')
-        self.assertEqual(upload['with']['path'], 'artifacts/window-${{ matrix.config }}.log')
+        self.assertEqual(upload['with']['path'], 'artifacts/*.log')
+        self.assertIn('sdl${{ matrix.sdl }}', upload['with']['name'])
 
 
 if __name__ == '__main__':

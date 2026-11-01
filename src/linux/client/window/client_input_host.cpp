@@ -3,7 +3,7 @@
 #include <client_mp/client_mp.h>
 #include <ui/keycodes.h>
 #include <qcommon/cmd.h>
-#include <SDL.h>
+#include "sdl_api.h"
 #include <algorithm>
 #include <cstring>
 #include <cstdio>
