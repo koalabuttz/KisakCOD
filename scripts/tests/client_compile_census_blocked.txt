@@ -1,0 +1,60 @@
+# Multiplayer client sources that do not compile for native i386 Linux yet.
+#
+# Read by scripts/tests/run_client_compile_census.py. Format: `path: reason`.
+# The census fails when a source NOT listed here stops compiling (regression) and
+# when a source listed here starts compiling (stale entry: delete the line in the
+# same change). Keep each reason to what the compiler actually stops on.
+
+# --- Renderer: needs real D3D9 methods, enums or Win32 rect/monitor types. ---
+# The native D3D9 boundary (DXVK Native behind src/linux/d3d9_types.h) is what
+# unblocks these; with the stand-in header they only see opaque interface tags.
+src/gfx_d3d/r_buffers.cpp: calls IDirect3DDevice9 buffer methods, D3DPOOL_* enums
+src/gfx_d3d/r_draw_bsp.cpp: calls IDirect3DDevice9 draw methods
+src/gfx_d3d/r_draw_lit.cpp: tagRECT scissor and IDirect3DDevice9 render states
+src/gfx_d3d/r_draw_sunshadow.cpp: RECT and D3DCLEAR_* for shadow map clears
+src/gfx_d3d/r_image.cpp: IDirect3DDevice9/texture creation and lock methods
+src/gfx_d3d/r_image_load_common.cpp: _D3DLOCKED_BOX and volume texture locks
+src/gfx_d3d/r_init.cpp: Win32 window/monitor API and IDirect3D9 device creation
+src/gfx_d3d/r_material.cpp: IDirect3DDevice9 shader/declaration creation, _D3DVERTEXELEMENT9
+src/gfx_d3d/r_material_load_obj.cpp: includes <d3d9.h> directly
+src/gfx_d3d/r_model_lighting.cpp: _D3DLOCKED_BOX/_D3DBOX volume texture updates
+src/gfx_d3d/r_rendertarget.cpp: IDirect3D9 format queries, D3DDEVTYPE_HAL
+src/gfx_d3d/r_scene.cpp: IDirect3DQuery9 methods
+src/gfx_d3d/r_screenshot.cpp: tagMONITORINFO/HMONITOR and _D3DLOCKED_RECT
+src/gfx_d3d/r_setstate_d3d.cpp: IDirect3DQuery9 methods
+src/gfx_d3d/r_shade.cpp: D3DLOCK_* flags and IDirect3DDevice9 methods
+src/gfx_d3d/r_state.cpp: IDirect3DDevice9 state methods
+src/gfx_d3d/r_state_utils.cpp: IDirect3DDevice9 render states, D3DRS_* enums
+src/gfx_d3d/rb_backend.cpp: IDirect3DQuery9/IDirect3DSurface9/device methods
+src/gfx_d3d/rb_depthprepass.cpp: tagRECT scissor and IDirect3DDevice9 render states
+src/gfx_d3d/rb_draw3d.cpp: IDirect3DQuery9 issue, D3DISSUE_END, tagRECT
+src/gfx_d3d/rb_imagetouch.cpp: IDirect3DDevice9 draw methods
+src/gfx_d3d/rb_pixelcost.cpp: IDirect3DQuery9 issue, D3DISSUE_END
+src/gfx_d3d/rb_shade.cpp: IDirect3DDevice9 methods
+src/gfx_d3d/rb_sky.cpp: IDirect3DDevice9/IDirect3DQuery9 methods
+src/gfx_d3d/rb_uploadshaders.cpp: IDirect3DDevice9 draw, D3DPT_TRIANGLELIST
+
+# --- Renderer, but not a D3D9 boundary problem. ---
+src/gfx_d3d/r_cinematic.cpp: Bink texture helpers (Lock_Bink_textures, BinkSetMemory) are Windows-only in deps/binklib
+src/gfx_d3d/r_texturemem.cpp: includes <ddraw.h> for video-memory queries
+
+# --- Windows platform implementations. The dedicated Linux target already
+#     supplies native equivalents in src/linux/ (sys_threads, sys_time,
+#     sys_memory/sys_virtualmem, sys_files/sys_posix, sys_assert); a client
+#     target links those instead of compiling these. ---
+src/qcommon/threads.cpp: includes <windows.h> (native: src/linux/sys_threads.cpp)
+src/universal/assertive.cpp: Win32 clipboard/HGLOBAL assert dialog (native: src/linux/sys_assert.cpp)
+src/universal/physicalmemory.cpp: includes <windows.h> (native: src/linux/sys_memory.cpp)
+src/universal/timing.cpp: includes <windows.h> (native: src/linux/sys_time.cpp)
+src/universal/win_common.cpp: includes <direct.h> (native: src/linux/sys_files.cpp, sys_posix.cpp)
+src/universal/win_shared.cpp: includes <windows.h> (native: src/linux/sys_posix.cpp)
+
+# --- Client services without a native implementation yet. ---
+src/client_mp/cl_main_pc_mp.cpp: deliberate #error "Steam Auth for Arch"; native Steam authentication is unimplemented
+src/qcommon/dl_main.cpp: includes <curl/curl.h>
+src/groupvoice/decode.cpp: DirectSound voice headers include <windows.h>
+src/groupvoice/encode.cpp: DirectSound voice headers include <windows.h>
+src/groupvoice/play_dsound.cpp: DirectSound playback
+src/groupvoice/record_dsound.cpp: DirectSound capture
+src/ui/ui_component.cpp: MSVC thiscall member definitions conflict with their declarations under Clang
+src/ui/ui_shared_obj.cpp: _ctime64 for __DATE__/__TIME__ tokens; the caller then free()s the CRT's static buffer, so no shim is added

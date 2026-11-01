@@ -233,6 +233,64 @@ jobs:
           compression-level: 9
           retention-days: 7
 
+  client_census:
+    # Asset-free compile proof for the multiplayer client sources: one syntax-only
+    # -m32 front-end pass per production .cpp with the client definitions, checked
+    # against scripts/tests/client_compile_census_blocked.txt in both directions.
+    # No link, no engine build, no DXVK, no SDL, no GPU, no game data. OpenAL
+    # headers are needed because the sound sources include <AL/al.h>. One job:
+    # a front-end pass has no optimization level, so Debug and RelWithDebInfo
+    # would compile identically.
+    name: Asset-free client compile census
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install client census tools
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            cmake clang g++-multilib python3 python3-yaml libopenal-dev
+          clang++ --version
+          printf 'int main(){return 0;}\n' > "$RUNNER_TEMP/m32-probe.cpp"
+          clang++ -m32 "$RUNNER_TEMP/m32-probe.cpp" -o "$RUNNER_TEMP/m32-probe"
+          "$RUNNER_TEMP/m32-probe"
+
+      - name: Check client census runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/tests/test_client_compile_census.py
+
+      - name: Run client compile census
+        timeout-minutes: 20
+        shell: bash
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 -u scripts/tests/run_client_compile_census.py \
+            --cxx clang++ --jobs 4 \
+            --log-dir artifacts/client-census \
+            2>&1 | tee artifacts/client-census.log
+
+      - name: Upload client census logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          # Compiler diagnostics for failing sources only; no binaries.
+          name: KisakCOD-client-census
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 7
+
   world_surface:
     # Asset-free: builds six standalone -m32 test cases directly
     # and runs the bundle prepare tests. No DXVK, no SDL, no GPU, no game assets,

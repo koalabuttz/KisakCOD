@@ -167,3 +167,21 @@ The four renderer tests are compiled here directly because
 pkg-config modules before it configures anything. That project also builds the two
 GPU replay executables, which are a separate manual experiment; see
 [tests/linux_renderer/README.md](../../tests/linux_renderer/README.md).
+
+## Client compile census and CRT shims
+
+```sh
+python3 scripts/tests/run_client_compile_census.py --cxx clang++ --jobs 4
+python3 scripts/tests/test_client_compile_census.py
+python3 scripts/tests/test_linux_crt_shims.py --cxx clang++
+```
+
+The census runs one syntax-only `-m32` pass with the client definitions over
+every multiplayer client source and compares the result with
+`client_compile_census_blocked.txt` in both directions: a listed source that now
+compiles is a stale entry and an unlisted source that stops compiling is a
+regression. Each blocked entry names what the compiler stops on. It compiles,
+it does not link, so a pass is not a claim that a client binary builds. The CRT
+shim test covers the MSVC CRT names `src/linux/compat.h` supplies to client
+sources (`_itoa`, the array `strcpy_s`, `_time64`, `_localtime64`), including the
+fail-closed cases; `run_linux_checks.py` runs it as `crt_shims`.
