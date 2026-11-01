@@ -174,3 +174,205 @@ message(STATUS "d3d9_sdl3_smoke: dxvk-d3d9 ${DXVK_D3D9_VERSION} "
                "includes=${DXVK_D3D9_INCLUDE_DIRS} libraries=${DXVK_D3D9_LIBRARIES}")
 message(STATUS "d3d9_sdl3_smoke: sdl3 ${kdxk_sdl3_version}")
 message(STATUS "d3d9_sdl3_smoke: vulkan headers ${KDXK_VULKAN_INCLUDE_DIR}")
+
+# ---------------------------------------------------------------------------
+# world_surface_bundle_test: asset-free tests for the bundle loader and the SM3 framing
+# walk. No DXVK, no SDL, no device, no committed assets: it writes its own bundles into a
+# temporary directory. Always built, and the only target that runs without a GPU.
+# ---------------------------------------------------------------------------
+add_executable(world_surface_bundle_test world_surface_bundle_test.cpp)
+target_include_directories(world_surface_bundle_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(world_surface_bundle_test PRIVATE -Wall -Wextra)
+endif()
+
+# ---------------------------------------------------------------------------
+# world_surface_replay: replays one exported world surface through the same device.
+#
+# The IWI decoder (src/linux/client/window/iwi_assets.cpp) is the engine's own DXT path, and
+# it cannot be compiled by the replay's translation unit: it includes src/gfx_d3d/r_image.h,
+# which pulls xanim -> sound -> deps/msslib/mss.h and src/gfx_d3d/r_rendercmds.h. Those
+# headers are decompiled and need the engine's platform defines (KISAK_MP, KISAK_OPENAL so
+# msslib is not selected) plus its include roots (src, deps) and its extension flags
+# (-fms-extensions; several headers declare `const struct X {...}`).
+#
+# So the decoder is compiled once, into its own object library, with exactly the flags the
+# engine's own linux window targets use. The replay executable then links those objects and
+# never puts the engine's include roots or defines on its own compile line: the DXVK/SDL3
+# translation unit stays clean, and the only engine-facing declaration it sees is
+# iwi_assets.h, which includes just pixel_buffer.h (std::span plus a value-type buffer).
+#
+# The GPU driver side of the engine is deliberately absent: the replay sets D3D9 state from
+# the bundle and never calls into r_state/r_image. Only the CPU decoder crosses over.
+# ---------------------------------------------------------------------------
+option(KDXK_WORLD_SURFACE_REPLAY "Build the world surface replay (needs the engine decoder sources)" OFF)
+
+if(KDXK_WORLD_SURFACE_REPLAY)
+  if(NOT KDXK_ENGINE_SOURCE_DIR)
+    message(FATAL_ERROR
+      "KDXK_WORLD_SURFACE_REPLAY needs -DKDXK_ENGINE_SOURCE_DIR=<repo>/src so the IWI "
+      "decoder and its headers can be compiled into the decoder object library.")
+  endif()
+
+  get_filename_component(KDXK_REPO_DIR "${KDXK_ENGINE_SOURCE_DIR}" DIRECTORY)
+
+  # The engine compiles these headers with clang. GCC rejects `const struct X { ... };` in
+  # the decompiled GfxViewInfo/GfxBackEndData declarations, which are reached through
+  # r_image.h, so refuse early instead of failing deep inside a header.
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    message(FATAL_ERROR
+      "The engine's decompiled headers do not compile with GCC: configure with clang "
+      "(-DCMAKE_CXX_COMPILER=clang++-19), as the engine build itself does.")
+  endif()
+
+  # r_imagedecode.cpp is the engine's pixel decode that iwi_assets.cpp calls into
+  # (Image_CopyDxtcData / Image_CopyBitmapData); the two are only meaningful together.
+  set(KDXK_WORLD_SURFACE_DECODER_SOURCES
+      ${KDXK_ENGINE_SOURCE_DIR}/linux/client/window/iwi_assets.cpp
+      ${KDXK_ENGINE_SOURCE_DIR}/linux/client/window/pixel_buffer.cpp
+      ${KDXK_ENGINE_SOURCE_DIR}/gfx_d3d/r_imagedecode.cpp)
+
+  add_library(kdxk_world_surface_decoder OBJECT ${KDXK_WORLD_SURFACE_DECODER_SOURCES})
+  set_target_properties(kdxk_world_surface_decoder PROPERTIES
+      CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+  # One function per section, and --gc-sections at link time: r_imagedecode.cpp also carries
+  # the file-loading decode entry points, which reference the whole engine runtime
+  # (FS_ReadFile, Com_Error, ...). Those functions are never reachable from
+  # DecodeIwiMipChain, so the section GC drops them instead of forcing the engine runtime
+  # into this standalone binary. This is the same pair of flags the engine build uses.
+  # Same definitions as the engine's linux window targets: KISAK_MP selects the multiplayer
+  # data layout, KISAK_OPENAL keeps the Miles/MSS platform header out of the include graph.
+  target_compile_definitions(kdxk_world_surface_decoder PRIVATE
+      KISAK_MP KISAK_OPENAL RELEASE_ASSERTS
+      _FILE_OFFSET_BITS=64 _GNU_SOURCE KISAK_LINUX_SDL_MAJOR=3)
+  target_include_directories(kdxk_world_surface_decoder PRIVATE
+      ${KDXK_ENGINE_SOURCE_DIR}
+      ${KDXK_REPO_DIR}/deps)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    target_compile_options(kdxk_world_surface_decoder PRIVATE
+        -fms-extensions -msse2 -mfpmath=sse -fno-strict-aliasing
+        -ffunction-sections -fdata-sections
+        -Wno-c++11-narrowing -Wno-invalid-token-paste -Wno-ignored-attributes
+        -Wno-format-security)
+  endif()
+
+  add_executable(world_surface_replay
+                 world_surface_replay.cpp
+                 $<TARGET_OBJECTS:kdxk_world_surface_decoder>)
+
+  # Companion to the per-function sections in the decoder object library.
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_link_options(world_surface_replay PRIVATE -Wl,--gc-sections)
+  endif()
+
+  # std::span in pixel_buffer.h and the small std::string_view use in the loader.
+  set_target_properties(world_surface_replay PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+
+  # Deliberately no engine include root here: the replay reaches the decoder through
+  # iwi_assets.h only.
+  target_include_directories(world_surface_replay PRIVATE
+                             ${CMAKE_CURRENT_SOURCE_DIR}
+                             ${KDXK_ENGINE_SOURCE_DIR}/linux/client/window
+                             ${KDXK_VULKAN_INCLUDE_DIR})
+
+  if(KDXK_SDL3_SDK_ROOT)
+    set(replay_sdl3_target kdxk_sdl3)
+  else()
+    set(replay_sdl3_target PkgConfig::SDL3)
+  endif()
+
+  target_link_libraries(world_surface_replay PRIVATE
+                        PkgConfig::DXVK_D3D9
+                        ${replay_sdl3_target})
+
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(world_surface_replay PRIVATE -Wall -Wextra)
+  endif()
+
+  if(smoke_runtime_dirs)
+    set_target_properties(world_surface_replay PROPERTIES BUILD_RPATH "${smoke_runtime_dirs}")
+  endif()
+endif()
+
+# ---------------------------------------------------------------------------
+# world_surface_oracle_test: asset-free tests for world_surface_oracle.h, the CPU
+# prediction the replay compares its readback against.
+#
+# Deliberately outside the replay block and with no dependencies at all: it includes no
+# DXVK header, no SDL header, no engine header, and it needs neither a device nor a
+# prepared bundle. It builds its own synthetic matrices, triangle and texture, writes no
+# file, and runs anywhere a C++17 compiler does. That is what makes it safe to wire into
+# CI later without a GPU runner.
+#
+# It is shared by both consumers of the oracle: the replay includes the same header, so a
+# disagreement between the prediction and the replay's expectations shows up here first.
+# ---------------------------------------------------------------------------
+add_executable(world_surface_oracle_test world_surface_oracle_test.cpp)
+target_include_directories(world_surface_oracle_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(world_surface_oracle_test PROPERTIES
+    CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(world_surface_oracle_test PRIVATE -Wall -Wextra)
+endif()
+
+# ---------------------------------------------------------------------------
+# world_lit_replay: the separate TECHNIQUE_LIT profile.
+#
+# A distinct target rather than a mode of world_surface_replay, because the lit pass is a
+# different declaration (four elements, normal UBYTE4 at 36), a different constant set (codes
+# 60/76/41/42 and no code 40) and a different sampler closure (base map at s0, secondary
+# lightmap at s3). The two executables share only the build inputs: the engine's own IWI
+# decoder object library and the same DXVK Native / SDL3 / Vulkan configuration.
+#
+# Nothing here changes the unlit targets; this block only adds.
+# ---------------------------------------------------------------------------
+option(KDXK_WORLD_LIT_REPLAY "Build the lit world surface replay (needs KDXK_WORLD_SURFACE_REPLAY for the decoder)" OFF)
+
+if(KDXK_WORLD_LIT_REPLAY)
+  if(NOT TARGET kdxk_world_surface_decoder)
+    message(FATAL_ERROR
+      "KDXK_WORLD_LIT_REPLAY needs the engine IWI decoder object library, which is built by "
+      "-DKDXK_WORLD_SURFACE_REPLAY=ON. Configure both options together.")
+  endif()
+
+  # The loader's static fixtures. Header-only and device-free: this target links nothing but the
+  # standard library, so the refusals are exercised on hosts that cannot create a D3D9 device.
+  add_executable(world_lit_bundle_test world_lit_bundle_test.cpp)
+  set_target_properties(world_lit_bundle_test PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+  target_include_directories(world_lit_bundle_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(world_lit_bundle_test PRIVATE -Wall -Wextra)
+  endif()
+
+  add_executable(world_lit_replay
+                 world_lit_replay.cpp
+                 $<TARGET_OBJECTS:kdxk_world_surface_decoder>)
+
+  set_target_properties(world_lit_replay PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+
+  # Same deliberately narrow include set as the unlit replay: the lit program reaches the
+  # decoder through iwi_assets.h only, and never sees an engine header root.
+  target_include_directories(world_lit_replay PRIVATE
+                             ${CMAKE_CURRENT_SOURCE_DIR}
+                             ${KDXK_ENGINE_SOURCE_DIR}/linux/client/window
+                             ${KDXK_VULKAN_INCLUDE_DIR})
+
+  if(KDXK_SDL3_SDK_ROOT)
+    set(lit_replay_sdl3_target kdxk_sdl3)
+  else()
+    set(lit_replay_sdl3_target PkgConfig::SDL3)
+  endif()
+
+  target_link_libraries(world_lit_replay PRIVATE
+                        PkgConfig::DXVK_D3D9
+                        ${lit_replay_sdl3_target})
+
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(world_lit_replay PRIVATE -Wall -Wextra)
+    target_link_options(world_lit_replay PRIVATE -Wl,--gc-sections)
+  endif()
+
+  if(smoke_runtime_dirs)
+    set_target_properties(world_lit_replay PROPERTIES BUILD_RPATH "${smoke_runtime_dirs}")
+  endif()
+endif()

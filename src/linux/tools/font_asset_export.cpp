@@ -16,6 +16,7 @@
 #include <iomanip>
 #include <sstream>
 #include "font_asset_export.h"
+#include "world_surface_export.h"
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -248,13 +249,24 @@ void ExportFont(Font_s *font,size_t index,const std::filesystem::path &directory
   if(created)std::filesystem::permissions(directory,std::filesystem::perms::owner_all,std::filesystem::perm_options::replace);
   Require((std::filesystem::status(directory).permissions() & std::filesystem::perms::mask)==std::filesystem::perms::owner_all,"export directory must have private 0700 permissions");
   Require(std::filesystem::is_empty(directory),"export directory must be empty");
+  // Mode selection happens before any engine initialization work: the environment
+  // decides whether this process exports UI/font assets or inventories one map.
+  const char *menusOption=std::getenv("KISAK_UI_ASSET_EXPORT_MENUS");
+  const char *worldMap=std::getenv("KISAK_WORLD_SURFACE_MAP");
+  Require(!menusOption || !std::strcmp(menusOption,"1"),"KISAK_UI_ASSET_EXPORT_MENUS must be 1 or unset");
+  Require(!worldMap || !menusOption,"KISAK_WORLD_SURFACE_MAP and KISAK_UI_ASSET_EXPORT_MENUS are mutually exclusive");
   std::puts("asset_export=offline database=engine networking=not-initialized renderer=dedicated");
   Scr_InitVariables();Scr_Init();Com_SetScriptSettings();XAnimInit();DObjInit();
   PMem_EndAlloc(initAllocationName,1u);DB_SetInitializing(0);DB_SyncXAssets();
-  const char *menusOption=std::getenv("KISAK_UI_ASSET_EXPORT_MENUS");
-  Require(!menusOption || !std::strcmp(menusOption,"1"),"KISAK_UI_ASSET_EXPORT_MENUS must be 1 or unset");
   if(menusOption){XZoneInfo zone{"ui_mp",DB_ZONE_GAME,0};DB_LoadXAssets(&zone,1,1);DB_SyncXAssets();}
   outputDirectory=directory;
+  // World inventory runs before the font assets are required: a map zone does not
+  // have to carry fonts, and the world branch owns its own zone load and output.
+  if(worldMap){
+   Kisak_ExportWorldSurfaceInventory(directory,worldMap);
+   std::printf("asset_export=complete mode=world_surface_inventory map=%s networking=not-initialized\n",worldMap);
+   std::fflush(nullptr);std::_Exit(0);
+  }
   Fonts fonts;DB_EnumXAssets(ASSET_TYPE_FONT,CollectFont,&fonts,false);
   Require(!fonts.overflow && fonts.count,"no fonts or font inventory exceeds bound");
   std::ofstream manifest(directory/"manifest.json");Require(bool(manifest),"cannot create font manifest");
