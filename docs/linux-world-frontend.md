@@ -73,18 +73,21 @@ compiles (see below), and the mirrors should then be replaced by the real file.
 - A synthetic world is not a real map. Real BSP data exercises deeper trees,
   many portals, solid leaves and static models that this world does not have.
 - Local results are not hosted CI evidence. The `world_frontend` workflow job
-  runs the runner in Debug and RelWithDebInfo; it has to be observed hosted.
+  runs the runner in Debug and RelWithDebInfo on hosted runners; both passed
+  there when the job was added (2026-11-01).
 
 ## Integration with the native D3D9 boundary
 
-The boundary (PR #15, documented in its `docs/linux-native-d3d9.md`) proves 19
-renderer units compile through DXVK Native's real `d3d9.h`. Checked locally
-against the pinned DXVK 2.7.1 headers with the engine's own dialect
-(`-std=gnu++20`, which is what CMake gives the engine targets):
+The boundary ([linux-native-d3d9.md](linux-native-d3d9.md)) proves 21 renderer
+units compile through DXVK Native's real `d3d9.h`, `r_scene.cpp` and
+`rb_backend.cpp` among them. Checked locally against the pinned DXVK 2.7.1
+headers with the engine's own dialect (`-std=gnu++20`, which is what CMake gives
+the engine targets), the renderer units that matter for a map view stand as
+follows:
 
 | Unit | Through the boundary |
 | --- | --- |
-| `r_scene.cpp`, `rb_backend.cpp` | compile unmodified. They need `-std=gnu++20`: under strict `-std=c++20` the `linux` macro is not predefined and `deps/binklib/radbase.h` fails platform detection. #15 switched its engine compiles to `gnu++20` and lists both (21 units) |
+| `r_scene.cpp`, `rb_backend.cpp` | compile unmodified and are on the boundary's proof list. They need `-std=gnu++20`: under strict `-std=c++20` the `linux` macro is not predefined and `deps/binklib/radbase.h` fails platform detection |
 | `r_init.cpp` | `HMONITOR`, `WS_*` window styles: window ownership, which the SDL host replaces |
 | `r_screenshot.cpp` | `MONITORINFO`, `ClientToScreen` |
 | `rb_sky.cpp` | `Sleep` |
@@ -93,8 +96,8 @@ against the pinned DXVK 2.7.1 headers with the engine's own dialect
 | `r_texturemem.cpp` | `<ddraw.h>` |
 
 The client census (`run_client_compile_census.py`) compiles with the stand-in,
-so its 25 D3D9 entries stay blocked after the boundary merges; a second census
-mode with the boundary is the way to ratchet those.
+so its 25 D3D9 entries stay blocked even with the boundary on master; a second
+census mode with the boundary is the way to ratchet those.
 
 ## Order of work toward one static map view
 

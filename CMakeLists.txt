@@ -49,6 +49,17 @@ option(KISAK_BUILD_LINUX_CLIENT_CORE
 option(KISAK_BUILD_LINUX_WINDOW_HOST
     "Build the SDL Linux window/input shell and tests (no game renderer)" OFF)
 
+# Opt-in, native Linux only: the build boundary through which renderer code
+# reaches DXVK Native D3D9 (i386), plus its compile proofs. Needs the DXVK Native
+# include directory; nothing is fetched, no device is created, and neither the
+# dedicated server nor any other target changes. See docs/linux-native-d3d9.md.
+option(KISAK_BUILD_LINUX_NATIVE_D3D9
+    "Build the native DXVK D3D9 boundary target and its compile proofs (no renderer)" OFF)
+set(KISAK_DXVK_NATIVE_INCLUDE_DIR "" CACHE PATH
+    "DXVK Native include directory holding d3d9.h and windows.h (<prefix>/include/dxvk)")
+set(KISAK_DXVK_NATIVE_LIBRARY "" CACHE FILEPATH
+    "Optional i386 libdxvk_d3d9.so for targets that create a device; the proofs do not link it")
+
 # Selects the SDL release the window host above builds against. 2 is the default
 # and is unchanged. 3 builds the same targets against SDL3: window, input,
 # software presentation and the UI audio backend. Neither release is fetched or
