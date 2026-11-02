@@ -600,14 +600,26 @@ void Kisak_DrawWorld(const std::filesystem::path &directory, const char *mapName
     RequireCodeImages();
     Say("world_draw_graphics_zones=loaded zones=%d seconds=%.2f\n", g_zoneCount, startSeconds);
 
-    // 1. The map zone, the fast-file branch of a map load, then the renderer's own
-    // world registration.
+    // 1. The map zone, then the map load the cgame does before its first frame
+    // (CG_Init): the collision map as the client's CL_CM_LoadMap loads it when no
+    // local server runs, then the renderer's own world registration (LoadWorld).
+    // The renderer traces against the collision map while it lights models, so the
+    // trace data CM_LoadMap sets up must exist before any scene is drawn.
     const auto mapStarted = std::chrono::steady_clock::now();
     XZoneInfo zone{mapName, DB_ZONE_GAME, DB_ZONE_GAME};
     DB_LoadXAssets(&zone, 1, 1);
     DB_SyncXAssets();
     GfxWorld *packaged = FindPackagedWorld(mapName);
     std::string worldName = packaged->name;
+    Require(com_sv_running && !com_sv_running->current.enabled, "world", "a local server is running");
+    int collisionChecksum = 0;
+    CM_LoadMap(worldName.c_str(), &collisionChecksum);
+    CM_LinkWorld();
+    Com_LoadWorld(worldName.data());
+    Require(cm.isInUse && cm.name && worldName == cm.name, "world",
+            "CM_LoadMap did not load the map's collision map");
+    Require(comWorld.isInUse && comWorld.name && worldName == comWorld.name, "world",
+            "Com_LoadWorld did not find the map's world data");
     int checksum = 0;
     R_LoadWorld(worldName.data(), &checksum, 0);
     Require(rgp.world == packaged, "world", "R_LoadWorld did not register the packaged world");
