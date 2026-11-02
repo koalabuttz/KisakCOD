@@ -22,9 +22,9 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / "scripts" / "tests" / "run_world_surface_checks.py"
 
-# The smallest tree the compiled checks need: the test headers, the eight test
-# sources, the src headers the inventory, front-end invariants, device rules and
-# capture tests include, and the one src unit the capture test links against.
+# The smallest tree the compiled checks need: the test headers, the nine test
+# sources, the src headers the inventory, front-end invariants, device rules, draw
+# rules and capture tests include, and the one src unit the capture test links against.
 TREE_FILES = (
     "tests/linux_asset_export/world_surface_inventory_test.cpp",
     "tests/linux_renderer/world_surface_context_test.cpp",
@@ -40,6 +40,8 @@ TREE_FILES = (
     "src/linux/tools/world_frontend_invariants.h",
     "tests/linux_asset_export/world_device_rules_test.cpp",
     "src/linux/tools/world_device_rules.h",
+    "tests/linux_asset_export/world_draw_rules_test.cpp",
+    "src/linux/tools/world_draw_rules.h",
     "tests/linux_asset_export/world_image_capture_test.cpp",
     "src/linux/tools/world_image_capture.h",
     "src/linux/tools/world_image_capture.cpp",
@@ -54,6 +56,7 @@ CASE_NAMES = [
     "world_lit_bundle",
     "world_frontend_invariants",
     "world_device_rules",
+    "world_draw_rules",
     "world_image_capture",
 ]
 
@@ -125,7 +128,7 @@ class RunnerPlanTests(unittest.TestCase):
         capture = cases["world_image_capture"]
         self.assertEqual(capture.extra_sources, ("src/linux/tools/world_image_capture.cpp",))
         # Nothing else in the table gained a second unit, so the compile lines of the
-        # seven single-unit checks are unchanged.
+        # eight single-unit checks are unchanged.
         for name in CASE_NAMES[:-1]:
             self.assertEqual(cases[name].extra_sources, (), name)
         # The capture unit is one file from src/linux/tools. An engine source here
@@ -232,8 +235,8 @@ class RunnerPlanTests(unittest.TestCase):
         work = Path("/tmp/plan-work")
         checks = self.runner.plan_checks(
             Options(), work, ROOT, "/usr/bin/python3", "g++", set(self.runner.KNOWN_NAMES))
-        # Eight compiled cases plus the prepare script: every name in the table, in order.
-        self.assertEqual(len(checks), 9)
+        # Nine compiled cases plus the prepare script: every name in the table, in order.
+        self.assertEqual(len(checks), 10)
         self.assertEqual([check.name for check in checks], [*CASE_NAMES, self.runner.PREPARE_NAME])
         for check in checks[:-1]:
             self.assertEqual(len(check.commands), 2, check.name)

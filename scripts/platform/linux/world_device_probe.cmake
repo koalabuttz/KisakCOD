@@ -30,6 +30,10 @@
 #     renderer and registers its dvars but creates nothing and loads no zone.
 #   * src/linux/server_renderer_counterparts.cpp is left out too, as in the
 #     world front-end probe: its owners are in the front-end objects.
+#   * src/linux/server_draw_counterparts.cpp stays: R_RegisterModel, the
+#     shader-cache clears, the static model cache check and Load_PicmipWater
+#     belong to units this probe does not draw with. The world draw probe
+#     (world_draw_probe.cmake) links those owners and leaves the file out.
 #   * The renderer units use the client definitions (RELEASE_ASSERTS keeps
 #     assertions live). Units that call D3D9 go through kisak_linux_native_d3d9;
 #     the rest keep the type-only stand-in.

@@ -340,6 +340,8 @@ class DeviceProbeWorkflowTests(unittest.TestCase):
     BUILD_STEP = 'Build the device probe against the stand-in D3D9 library'
     WORLD_BUILD_STEP = 'Build the world device probe against the stand-in D3D9 library'
     WORLD_RUN_STEP = "Run the world device probe's fail-closed paths"
+    DRAW_BUILD_STEP = 'Build the world draw probe against the stand-in D3D9 library'
+    DRAW_RUN_STEP = "Run the world draw probe's fail-closed paths"
 
     @classmethod
     def setUpClass(cls):
@@ -389,6 +391,7 @@ class DeviceProbeWorkflowTests(unittest.TestCase):
             text = step.get('run', '').lower()
             for forbidden in ('meson setup', 'meson compile', 'ninja -c', 'libdxvk', 'vulkan', 'mesa', 'lavapipe', 'xvfb', 'steam', 'iw_', 'main/',
                               'fs_basepath', 'kisak_world_frontend_map', 'kisak_ui_asset_export_dir',
+                              'kisak_world_draw_map', 'kisak_world_draw_show_seconds',
                               'dpkg --add-architecture', 'kisakcod-dedi'):
                 with self.subTest(step=step.get('name'), forbidden=forbidden):
                     self.assertNotIn(forbidden, text)
@@ -458,6 +461,46 @@ class DeviceProbeWorkflowTests(unittest.TestCase):
         # checked by their exact last lines.
         self.assertIn('stage=direct3d: ', script)
         self.assertIn('no zone is queued without a device', script)
+        self.assertIn('stage=arguments: ', script)
+
+    def test_the_world_draw_probe_links_only_the_stand_in_after_the_world_device_probe(self):
+        self.assertLess(self.names.index(self.WORLD_RUN_STEP), self.names.index(self.DRAW_BUILD_STEP))
+        self.assertLess(self.names.index(self.DRAW_BUILD_STEP), self.names.index(self.DRAW_RUN_STEP))
+        build = self.step(self.DRAW_BUILD_STEP)['run']
+        # The same build directory, so the same stand-in library, SDL3 and the
+        # world device probe the draw probe requires.
+        self.assertIn('cmake -S . -B "$BUILD_DIR" -DKISAK_BUILD_WORLD_DRAW_PROBE=ON', build)
+        self.assertIn('--target KisakCOD-world-draw-probe', build)
+        self.assertIn('Class:[[:space:]]+ELF32', build)
+        self.assertIn('Machine:[[:space:]]+Intel 80386', build)
+        self.assertIn("grep -qx 'libSDL3.so.0'", build)
+        self.assertIn("grep -qx 'libd3d9_unavailable.so'", build)
+        self.assertIn('the world draw probe needs a library beyond SDL3, D3D9 and the runtimes', build)
+
+    def test_the_world_draw_run_is_the_asset_free_script_on_dummy_drivers(self):
+        step = self.step(self.DRAW_RUN_STEP)
+        self.assertEqual(step['env']['SDL_VIDEODRIVER'], 'dummy')
+        self.assertEqual(step['env']['SDL_AUDIODRIVER'], 'dummy')
+        run = step['run']
+        self.assertIn('python3 -u scripts/tests/test_world_draw_probe.py', run)
+        self.assertIn('--probe "$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-world-draw-probe"',
+                      run)
+        self.assertIn('export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/d3d9-unavailable"', run)
+
+    def test_the_world_draw_script_builds_its_own_tree_and_takes_no_game_directory(self):
+        script = (ROOT / 'scripts/tests/test_world_draw_probe.py').read_text()
+        self.assertIn('tempfile.TemporaryDirectory(prefix="kisak-world-draw-")', script)
+        self.assertEqual(script.count('.write_text('), 1)
+        self.assertIn('"// stub written by the check; no game data\\n"', script)
+        self.assertEqual(script.count('add_argument('), 2)
+        self.assertIn('add_argument("--probe"', script)
+        self.assertIn('add_argument("--timeout"', script)
+        for forbidden in ('steam', 'game_dir', '.ff"', '.iwd', 'symlink'):
+            self.assertNotIn(forbidden, script.lower())
+        # The first run stops before the renderer starts; the refusals are
+        # checked by their exact last lines.
+        self.assertIn('stage=direct3d: ', script)
+        self.assertIn('R_Init does not run without a Direct3D 9 interface', script)
         self.assertIn('stage=arguments: ', script)
 
     def test_every_command_block_propagates_failure(self):

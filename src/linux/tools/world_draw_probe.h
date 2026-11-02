@@ -1,0 +1,38 @@
+#pragma once
+
+#include <filesystem>
+
+#include "world_frontend_layout.h"
+
+// World draw probe: the offline asset exporter with the whole renderer, drawing
+// one fixed view of a real map. The probe's CL_InitDedicated configures the
+// renderer for one thread (sys_smp_allowed off, which makes the worker thread
+// dvars default off), registers the renderer and effects dvars, and turns
+// fx_marks off; unlike the dedicated server's it latches nothing off and loads
+// no zone.
+//
+// Kisak_StartWorldDraw runs where a client's CL_InitRenderer would, inside
+// $init. After its own checks (the shared struct layouts agree, a Direct3D 9
+// interface can be had at all) it starts the renderer with r_init.cpp's own
+// R_Init: the window, the device, the graphics zones queued behind it, render
+// targets, initial state, the scene, the code images and materials. It does not
+// call R_BeginRegistration, which would hand the device to a render thread for
+// loading screens; the renderer stays on this thread.
+//
+// Kisak_DrawWorld runs after $init: it loads one allowlisted map zone,
+// registers the world with R_LoadWorld, and draws views of it from the map's own
+// cameras, frame by frame as the engine's cgame-free scene render
+// (R_GenerateReflectionRawData in r_reflection_probe.cpp) does. After each frame
+// it reads the back buffer into memory, as the engine's R_GetBackBufferData
+// does after its cubemap frames, and measures it. It writes world-draw-probe.json
+// (counts and measurements, no pixels) into the private output directory and
+// throws std::runtime_error on any failure.
+//
+// loaderLayout is KISAK_WORLD_FRONTEND_LAYOUT() as the caller's translation unit
+// (compiled with the dedicated definitions, like the database loader) sees it.
+//
+// Built only by KISAK_BUILD_WORLD_DRAW_PROBE
+// (scripts/platform/linux/world_draw_probe.cmake). See
+// docs/linux-world-draw-probe.md.
+void Kisak_StartWorldDraw(const char *mapName, const kisak_world_frontend::Layout &loaderLayout);
+void Kisak_DrawWorld(const std::filesystem::path &directory, const char *mapName);

@@ -641,8 +641,11 @@ jobs:
     # world front end on a D3D9 device) gets the same treatment: linked against
     # the stand-in, then run by scripts/tests/test_world_device_probe.py from a
     # temporary tree with no game data, so it must stop at Direct3DCreate9 and
-    # refuse a missing or unknown map before any zone loads. Creating a device
-    # and loading a map onto it need a GPU and a game install, and run on a
+    # refuse a missing or unknown map before any zone loads. The world draw
+    # probe (scripts/platform/linux/world_draw_probe.cmake, the whole renderer
+    # drawing views of a map) is built and run the same way by
+    # scripts/tests/test_world_draw_probe.py. Creating a device, loading a map
+    # onto it and drawing it need a GPU and a game install, and run on a
     # developer machine.
     name: D3D9 device probe without a GPU ${{ matrix.config }}
     runs-on: ubuntu-24.04
@@ -829,6 +832,51 @@ jobs:
           python3 -u scripts/tests/test_world_device_probe.py \
             --probe "$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-world-device-probe" \
             2>&1 | tee "artifacts/world-device-run-${{ matrix.config }}.log"
+
+      - name: Build the world draw probe against the stand-in D3D9 library
+        timeout-minutes: 30
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The same build directory again, with the draw probe on top of the
+          # world device probe: the whole renderer except the four units the
+          # client census still blocks. Only built and inspected here.
+          cmake -S . -B "$BUILD_DIR" -DKISAK_BUILD_WORLD_DRAW_PROBE=ON \
+            2>&1 | tee "artifacts/world-draw-probe-${{ matrix.config }}.log"
+          cmake --build "$BUILD_DIR" --target KisakCOD-world-draw-probe --parallel 2 \
+            2>&1 | tee -a "artifacts/world-draw-probe-${{ matrix.config }}.log"
+          probe="$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-world-draw-probe"
+          readelf -h "$probe" | grep -Eq 'Class:[[:space:]]+ELF32'
+          readelf -h "$probe" | grep -Eq 'Machine:[[:space:]]+Intel 80386'
+          # SDL3, the D3D9 library and the C and C++ runtimes, nothing else.
+          readelf -d "$probe" | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p' > "$RUNNER_TEMP/world-draw-needed.txt"
+          cat "$RUNNER_TEMP/world-draw-needed.txt"
+          grep -qx 'libSDL3.so.0' "$RUNNER_TEMP/world-draw-needed.txt"
+          grep -qx 'libd3d9_unavailable.so' "$RUNNER_TEMP/world-draw-needed.txt"
+          if grep -Ev '^(libSDL3\.so\.0|libd3d9_unavailable\.so|libstdc\+\+\.so\.6|libm\.so\.6|libgcc_s\.so\.1|libc\.so\.6|libpthread\.so\.0|libdl\.so\.2)$' \
+              "$RUNNER_TEMP/world-draw-needed.txt"; then
+            echo "the world draw probe needs a library beyond SDL3, D3D9 and the runtimes" >&2
+            exit 1
+          fi
+
+      - name: Run the world draw probe's fail-closed paths
+        timeout-minutes: 10
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/d3d9-unavailable"
+          # The same temporary tree with no game data as the world device probe's
+          # run. An allowlisted map must stop at Direct3DCreate9 before R_Init
+          # starts the renderer; no map, an unknown map and a show time over 60
+          # seconds must be refused first. Nothing may land in the output
+          # directories.
+          python3 -u scripts/tests/test_world_draw_probe.py \
+            --probe "$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-world-draw-probe" \
+            2>&1 | tee "artifacts/world-draw-run-${{ matrix.config }}.log"
 
       - name: Upload device probe logs
         if: always()
