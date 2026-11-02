@@ -8,6 +8,7 @@
 // each drawn frame back to measure it. It saves no image.
 
 #include <universal/q_shared.h>
+#include <qcommon/com_pack.h>
 #include <qcommon/qcommon.h>
 #include <gfx_d3d/r_bsp.h>
 #include <gfx_d3d/r_dpvs.h>
@@ -29,6 +30,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <deque>
@@ -393,6 +395,258 @@ void SayCell(const std::string &where, const float *eye, int cellIndex)
             cell.portalCount - kMaxReportedPortals);
 }
 
+// The cells whose bounds hold the eye. Cells are convex, their boxes overlap.
+void SayBoundsHolding(const std::string &where, const float *eye)
+{
+    std::string cells;
+    for (int c = 0; c < rgp.world->dpvsPlanes.cellCount; ++c)
+    {
+        const GfxCell &cell = rgp.world->cells[c];
+        if (eye[0] >= cell.mins[0] && eye[0] <= cell.maxs[0] && eye[1] >= cell.mins[1] && eye[1] <= cell.maxs[1] &&
+            eye[2] >= cell.mins[2] && eye[2] <= cell.maxs[2])
+            cells += (cells.empty() ? "" : ",") + std::to_string(c);
+    }
+    Say("free_camera_visibility_bounds_holding %s cells=%s\n", where.c_str(), cells.empty() ? "none" : cells.c_str());
+}
+
+// The portal graph once per map: each cell's bounds and the cells its portals
+// lead to, then every portal from A to B that B has none back to A for.
+void SayPortalGraph()
+{
+    const GfxWorld &world = *rgp.world;
+    const int cellCount = world.dpvsPlanes.cellCount;
+    unsigned portals = 0, oneWay = 0, outOfRange = 0;
+    for (int a = 0; a < cellCount; ++a)
+    {
+        const GfxCell &cell = world.cells[a];
+        std::string to;
+        for (int p = 0; p < cell.portalCount; ++p)
+        {
+            const int b = cell.portals[p].cell ? int(cell.portals[p].cell - world.cells) : -1;
+            to += (p ? "," : "") + std::to_string(b);
+        }
+        Say("free_camera_visibility_cell_links cell=%d mins=%.1f,%.1f,%.1f maxs=%.1f,%.1f,%.1f portals=%d to=%s\n", a,
+            cell.mins[0], cell.mins[1], cell.mins[2], cell.maxs[0], cell.maxs[1], cell.maxs[2], cell.portalCount,
+            to.empty() ? "none" : to.c_str());
+    }
+    for (int a = 0; a < cellCount; ++a)
+    {
+        const GfxCell &cell = world.cells[a];
+        for (int p = 0; p < cell.portalCount; ++p)
+        {
+            ++portals;
+            const int b = cell.portals[p].cell ? int(cell.portals[p].cell - world.cells) : -1;
+            if (b < 0 || b >= cellCount)
+            {
+                ++outOfRange;
+                continue;
+            }
+            bool back = false;
+            for (int q = 0; q < world.cells[b].portalCount && !back; ++q)
+                back = world.cells[b].portals[q].cell == &cell;
+            if (!back && ++oneWay <= 16)
+                Say("free_camera_visibility_one_way_portal from=%d portal=%d to=%d\n", a, p, b);
+        }
+    }
+    Say("free_camera_visibility_portals cells=%d portals=%u one_way=%u out_of_range=%u\n", cellCount, portals, oneWay,
+        outOfRange);
+}
+
+// ---- rays from the eye ---------------------------------------------------------
+//
+// Apart from the visibility walk: the world's triangles and the collision world,
+// traced from the eye along the view's centre and towards its corners. The
+// nearest triangle is what the eye has in front of it there; it faces the eye
+// when its vertices' stored normals point back at the eye (its winding is
+// reported too). The nearest triangle that faces the eye, and the cells whose
+// surface lists hold each, say whether the walk should have reached it.
+
+struct RayVec
+{
+    double x = 0.0, y = 0.0, z = 0.0;
+};
+
+RayVec operator+(RayVec a, RayVec b) { return {a.x + b.x, a.y + b.y, a.z + b.z}; }
+RayVec operator-(RayVec a, RayVec b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
+RayVec operator*(RayVec a, double s) { return {a.x * s, a.y * s, a.z * s}; }
+double RayDot(RayVec a, RayVec b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+RayVec RayCross(RayVec a, RayVec b) { return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x}; }
+RayVec RayFrom(const float *v) { return {v[0], v[1], v[2]}; }
+
+// Moller-Trumbore, either side of the triangle.
+bool RayTriangle(RayVec eye, RayVec dir, RayVec a, RayVec b, RayVec c, double &distance)
+{
+    const RayVec e1 = b - a, e2 = c - a;
+    const RayVec p = RayCross(dir, e2);
+    const double det = RayDot(e1, p);
+    if (std::fabs(det) < 1e-12)
+        return false;
+    const double inv = 1.0 / det;
+    const RayVec s = eye - a;
+    const double u = RayDot(s, p) * inv;
+    if (u < 0.0 || u > 1.0)
+        return false;
+    const RayVec q = RayCross(s, e1);
+    const double v = RayDot(dir, q) * inv;
+    if (v < 0.0 || u + v > 1.0)
+        return false;
+    distance = RayDot(e2, q) * inv;
+    return distance > 1e-3;
+}
+
+struct RayHit
+{
+    double distance = -1.0;
+    int surface = -1;
+    int triangle = -1;
+    bool windingFacesEye = false;
+    bool normalFacesEye = false;
+};
+
+struct RayTrace
+{
+    RayHit nearest, nearestFacing;
+    unsigned facingCrossings = 0, backCrossings = 0;
+    double cmDistance = -1.0;
+    bool cmStartSolid = false, cmAllSolid = false;
+    std::string cmMaterial;
+    float cmNormal[3] = {0.0f, 0.0f, 0.0f};
+};
+
+constexpr double kRayLength = 16384.0;
+
+RayTrace TraceRay(const float *eye, RayVec dir)
+{
+    const GfxWorld &world = *rgp.world;
+    RayTrace trace;
+    const RayVec origin = RayFrom(eye);
+    for (int s = 0; s < world.surfaceCount; ++s)
+    {
+        const srfTriangles_t &tris = world.dpvs.surfaces[s].tris;
+        if (tris.baseIndex < 0 || tris.firstVertex < 0)
+            continue;
+        for (unsigned t = 0; t < tris.triCount; ++t)
+        {
+            const size_t base = size_t(tris.baseIndex) + 3 * size_t(t);
+            if (base + 2 >= size_t(world.indexCount))
+                break;
+            const GfxWorldVertex *corner[3] = {};
+            bool inside = true;
+            for (int k = 0; k < 3 && inside; ++k)
+            {
+                const size_t index = size_t(tris.firstVertex) + world.indices[base + k];
+                inside = index < world.vertexCount;
+                if (inside)
+                    corner[k] = &world.vd.vertices[index];
+            }
+            if (!inside)
+                continue;
+            const RayVec v[3] = {RayFrom(corner[0]->xyz), RayFrom(corner[1]->xyz), RayFrom(corner[2]->xyz)};
+            double distance = 0.0;
+            if (!RayTriangle(origin, dir, v[0], v[1], v[2], distance) || distance > kRayLength)
+                continue;
+            RayVec normal;
+            for (const GfxWorldVertex *vertex : corner)
+            {
+                float unpacked[3];
+                Vec3UnpackUnitVec(vertex->normal, unpacked);
+                normal = normal + RayFrom(unpacked);
+            }
+            RayHit hit;
+            hit.distance = distance;
+            hit.surface = s;
+            hit.triangle = int(t);
+            hit.windingFacesEye = RayDot(RayCross(v[1] - v[0], v[2] - v[0]), dir) < 0.0;
+            hit.normalFacesEye = RayDot(normal, dir) < 0.0;
+            ++(hit.normalFacesEye ? trace.facingCrossings : trace.backCrossings);
+            if (trace.nearest.surface < 0 || distance < trace.nearest.distance)
+                trace.nearest = hit;
+            if (hit.normalFacesEye && (trace.nearestFacing.surface < 0 || distance < trace.nearestFacing.distance))
+                trace.nearestFacing = hit;
+        }
+    }
+
+    trace_t cm;
+    const float zero[3] = {0.0f, 0.0f, 0.0f};
+    const float end[3] = {eye[0] + float(dir.x * kRayLength), eye[1] + float(dir.y * kRayLength),
+                          eye[2] + float(dir.z * kRayLength)};
+    CM_BoxTrace(&cm, eye, end, zero, zero, 0, MASK_SOLID);
+    trace.cmDistance = cm.fraction < 1.0f ? double(cm.fraction) * kRayLength : -1.0;
+    trace.cmStartSolid = cm.startsolid;
+    trace.cmAllSolid = cm.allsolid;
+    trace.cmMaterial = cm.material ? cm.material : "(none)";
+    for (int k = 0; k < 3; ++k)
+        trace.cmNormal[k] = cm.normal[k];
+    return trace;
+}
+
+// The cells whose AABB tree leaves list a surface.
+std::string CellsHolding(int surface)
+{
+    const GfxWorld &world = *rgp.world;
+    std::string cells;
+    for (int c = 0; c < world.dpvsPlanes.cellCount; ++c)
+    {
+        const GfxCell &cell = world.cells[c];
+        bool holds = false;
+        for (int t = 0; t < cell.aabbTreeCount && cell.aabbTree && !holds; ++t)
+        {
+            const GfxAabbTree &tree = cell.aabbTree[t];
+            if (tree.childCount != 0)
+                continue;
+            for (unsigned i = 0; i < tree.surfaceCount && !holds; ++i)
+                holds = world.dpvs.sortedSurfIndex[tree.startSurfIndex + i] == surface;
+        }
+        if (holds)
+            cells += (cells.empty() ? "" : ",") + std::to_string(c);
+    }
+    return cells.empty() ? "none" : cells;
+}
+
+std::string DescribeHit(const RayHit &hit)
+{
+    if (hit.surface < 0)
+        return "none";
+    const GfxSurface &surface = rgp.world->dpvs.surfaces[hit.surface];
+    const char *material = surface.material && surface.material->info.name ? surface.material->info.name : "(none)";
+    char text[512];
+    std::snprintf(text, sizeof(text), "%.2f/surface=%d/tri=%d/material=%s/winding_faces_eye=%s/normal_faces_eye=%s/"
+                  "brush_model=%s/cells=%s",
+                  hit.distance, hit.surface, hit.triangle, material, hit.windingFacesEye ? "yes" : "no",
+                  hit.normalFacesEye ? "yes" : "no",
+                  unsigned(hit.surface) >= rgp.world->dpvs.staticSurfaceCount ? "yes" : "no",
+                  CellsHolding(hit.surface).c_str());
+    return text;
+}
+
+void SayRays(const std::string &where, const char *variant, const kv::FreeCamera &camera, kv::ViewExtent extent,
+             float aspect)
+{
+    const kv::CameraView view = camera.View(extent, kSceneTime, aspect);
+    struct Ray
+    {
+        const char *name;
+        float left, up; // fractions of the half view; viewaxis[1] points left
+    };
+    static const Ray rays[] = {
+        {"centre", 0.0f, 0.0f},       {"upper_left", 0.8f, 0.8f},   {"upper_right", -0.8f, 0.8f},
+        {"lower_left", 0.8f, -0.8f}, {"lower_right", -0.8f, -0.8f},
+    };
+    for (const Ray &ray : rays)
+    {
+        RayVec dir = RayFrom(view.viewaxis[0]) + RayFrom(view.viewaxis[1]) * double(ray.left * view.tanHalfFovX) +
+                     RayFrom(view.viewaxis[2]) * double(ray.up * view.tanHalfFovY);
+        dir = dir * (1.0 / std::sqrt(RayDot(dir, dir)));
+        const RayTrace trace = TraceRay(view.vieworg, dir);
+        Say("free_camera_visibility_ray %s variant=%s ray=%s dir=%.3f,%.3f,%.3f crossings=%u/%u nearest=%s "
+            "nearest_facing=%s cm=%.2f/start_solid=%s/all_solid=%s/material=%s/normal=%.3f,%.3f,%.3f\n",
+            where.c_str(), variant, ray.name, dir.x, dir.y, dir.z, trace.facingCrossings, trace.backCrossings,
+            DescribeHit(trace.nearest).c_str(), DescribeHit(trace.nearestFacing).c_str(), trace.cmDistance,
+            trace.cmStartSolid ? "yes" : "no", trace.cmAllSolid ? "yes" : "no", trace.cmMaterial.c_str(),
+            trace.cmNormal[0], trace.cmNormal[1], trace.cmNormal[2]);
+    }
+}
+
 void ReportVisibility(const std::string &legName, unsigned frame, const kv::CameraPose &pose,
                       const kv::CameraTuning &tuning, kv::ViewExtent extent, float aspect)
 {
@@ -403,6 +657,8 @@ void ReportVisibility(const std::string &legName, unsigned frame, const kv::Came
     for (const std::string &surface : asDrawn.litSurfaces)
         Say("free_camera_visibility_surface %s %s\n", where.c_str(), surface.c_str());
     SayCell(where, pose.origin, asDrawn.cell);
+    SayBoundsHolding(where, pose.origin);
+    SayRays(where, "as_drawn", camera, extent, aspect);
 
     SayVisibility(where, "single_cell", pose, DrawWith(r_singleCell, true, camera, extent, aspect));
     SayVisibility(where, "no_pretess", pose, DrawWith(r_pretess, false, camera, extent, aspect));
@@ -414,15 +670,19 @@ void ReportVisibility(const std::string &legName, unsigned frame, const kv::Came
         const char *name;
         float origin[3];
         float yaw;
+        bool rays; // also trace rays from this pose, as a control
     };
     static const Offset offsets[] = {
-        {"x-32", {-32, 0, 0}, 0}, {"x-8", {-8, 0, 0}, 0},   {"x-1", {-1, 0, 0}, 0}, {"x+1", {1, 0, 0}, 0},
-        {"x+8", {8, 0, 0}, 0},    {"x+32", {32, 0, 0}, 0},  {"y-32", {0, -32, 0}, 0}, {"y-8", {0, -8, 0}, 0},
-        {"y-1", {0, -1, 0}, 0},   {"y+1", {0, 1, 0}, 0},    {"y+8", {0, 8, 0}, 0},  {"y+32", {0, 32, 0}, 0},
-        {"z-8", {0, 0, -8}, 0},   {"z+8", {0, 0, 8}, 0},    {"yaw-90", {0, 0, 0}, -90}, {"yaw-45", {0, 0, 0}, -45},
-        {"yaw-15", {0, 0, 0}, -15}, {"yaw-5", {0, 0, 0}, -5}, {"yaw-1", {0, 0, 0}, -1}, {"yaw+1", {0, 0, 0}, 1},
-        {"yaw+5", {0, 0, 0}, 5},  {"yaw+15", {0, 0, 0}, 15}, {"yaw+45", {0, 0, 0}, 45}, {"yaw+90", {0, 0, 0}, 90},
+        {"x-32", {-32, 0, 0}, 0, true},    {"x-8", {-8, 0, 0}, 0, false},     {"x-1", {-1, 0, 0}, 0, false},
+        {"x+1", {1, 0, 0}, 0, false},      {"x+8", {8, 0, 0}, 0, false},      {"x+32", {32, 0, 0}, 0, true},
+        {"y-32", {0, -32, 0}, 0, true},    {"y-8", {0, -8, 0}, 0, false},     {"y-1", {0, -1, 0}, 0, false},
+        {"y+1", {0, 1, 0}, 0, false},      {"y+8", {0, 8, 0}, 0, false},      {"y+32", {0, 32, 0}, 0, true},
+        {"z-8", {0, 0, -8}, 0, false},     {"z+8", {0, 0, 8}, 0, false},      {"yaw-90", {0, 0, 0}, -90, true},
+        {"yaw-45", {0, 0, 0}, -45, false}, {"yaw-15", {0, 0, 0}, -15, true},  {"yaw-5", {0, 0, 0}, -5, false},
+        {"yaw-1", {0, 0, 0}, -1, false},   {"yaw+1", {0, 0, 0}, 1, false},    {"yaw+5", {0, 0, 0}, 5, false},
+        {"yaw+15", {0, 0, 0}, 15, false},  {"yaw+45", {0, 0, 0}, 45, false},  {"yaw+90", {0, 0, 0}, 90, true},
     };
+    std::vector<int> otherCells;
     for (const Offset &offset : offsets)
     {
         kv::CameraPose moved = pose;
@@ -430,8 +690,16 @@ void ReportVisibility(const std::string &legName, unsigned frame, const kv::Came
             moved.origin[k] += offset.origin[k];
         moved.angles[1] += offset.yaw;
         const kv::FreeCamera movedCamera(tuning, moved);
-        SayVisibility(where, offset.name, movedCamera.Pose(), DrawPose(movedCamera, extent, aspect));
+        const VisibilityDraw draw = DrawPose(movedCamera, extent, aspect);
+        SayVisibility(where, offset.name, movedCamera.Pose(), draw);
+        if (offset.rays)
+            SayRays(where, offset.name, movedCamera, extent, aspect);
+        if (draw.cell != asDrawn.cell && std::find(otherCells.begin(), otherCells.end(), draw.cell) == otherCells.end())
+            otherCells.push_back(draw.cell);
     }
+    // The cells the moved eyes fell in, with their portals measured from this eye.
+    for (int cell : otherCells)
+        SayCell(where, pose.origin, cell);
 }
 } // namespace
 
@@ -595,9 +863,15 @@ void Kisak_ReplayFreeCamera(const std::filesystem::path &directory, const char *
         // The visibility report on the frames in motion that drew no world call.
         // Path B's map is the one loaded now; path A's frames were drawn from the
         // same map, which a reload restores as it was.
+        bool portalGraphSaid = false;
         for (const Leg &leg : replay.Legs())
             for (const auto &[frame, pose] : leg.noWorld)
+            {
+                if (!portalGraphSaid)
+                    SayPortalGraph();
+                portalGraphSaid = true;
                 ReportVisibility(leg.name, frame, pose, owner.Camera().Tuning(), base, vidConfig.aspectRatioWindow);
+            }
 
         // 6. The report's view of the replay, then the owner's shutdown: the map's
         // unload, then the client's renderer shutdown.
