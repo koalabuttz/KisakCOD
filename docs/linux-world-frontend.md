@@ -247,6 +247,36 @@ KISAK_UI_ASSET_EXPORT_DIR=/private/new-output KISAK_WORLD_FRONTEND_MAP=mp_crash 
   +set dedicated 2 +set useFastFile 1
 ```
 
+### Evidence: mp_crash, 2026-11-02
+
+Local only, on David's laptop: Intel Processor U300 (the GPU is not used; the
+probe has no device), Debian 13, clang 19.1.7, i386 binaries, the owner's
+installed `mp_crash.ff` read in place. Commit 629c67d, RelWithDebInfo and Debug.
+Not CI evidence: hosted CI only builds the probe and runs its asset-free test.
+
+- Both builds exit 0: `world_frontend_probe=passed failed_views=0 of 178`. The
+  two JSON reports are identical once `seconds` is removed (0.99 s and 2.78 s of
+  probe time; 2.7 s and 5.1 s wall).
+- Shader path: 1332 materials, 509 techniques and 722 vertex and pixel shaders,
+  all built for shader model 3. Material_Sort sorts the 1332 materials.
+- World: `maps/mp/mp_crash.d3dbsp`, 5558 surfaces (lit 0..5516, decal
+  5516..5558, emissive empty), 23 cells, no cull groups, 4038 static models, 272
+  distinct draw-surface keys.
+- Views: 178 of the map's 309 entities (177 player spawns of 17 classes and the
+  intermission camera), every eye inside a cell, 13 distinct camera cells. The
+  portal walk sees 36 to 2469 surfaces (mean 1315.2); the frustum-only walk from
+  the same eyes sees 2707.0 on average.
+- Batching: on average 139.5 lit and 1.6 decal batches per view; no key
+  descents and no visible surface outside a stage range in any view.
+- Portal-only surfaces: 16 views keep 1 to 9 surfaces (61 in all) that the
+  frustum-only walk culls. These are the views that failed the subset rule
+  described above before it was replaced; no view breaks the camera-cell rule.
+
+The runs before 629c67d found three defects in the probe, not the engine: it had
+not chosen a shader path, so `Material_GetTechnique` asserted; it bounded world
+model 0 by `surfaceVisDataCount`, which is a bit-set word count; and the subset
+rule. Each fix is its own commit.
+
 ### What a pass does not claim
 
 - No device, texture, shader or pixel. Shaders are checked only for the path
@@ -287,12 +317,13 @@ census mode with the boundary is the way to ratchet those.
 1. *Done:* `r_scene.cpp` is linked through the boundary and the two mirrors of
    it (`R_InitScene`'s stage table, `R_SetViewParmsForScene`) are deleted; the
    test calls the production functions.
-2. Feed the front end a real `GfxWorld`: the
+2. *Done:* feed the front end a real `GfxWorld`: the
    [offline probe](#a-real-map-the-offline-front-end-probe) loads one map's world
    from an explicit private game folder (never committed, never searched for) and
    holds every spawn-point view to rules that hold for any map. Batch key order
-   turned out not to be one of them (a single stage is emitted in surface order),
-   so it is reported, not enforced.
+   and a portal-subset rule turned out not to be among them, so both are
+   reported, not enforced. mp_crash passes all 178 views in RelWithDebInfo and
+   Debug on a developer machine ([evidence](#evidence-mp_crash-2026-11-02)).
 3. Device-side: create the device through the boundary from the SDL window host,
    run `R_InitGraphicsApi`-level resource creation for the world's vertex and
    index buffers, images and the techniques the world's materials use; refuse

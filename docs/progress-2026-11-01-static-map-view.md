@@ -56,9 +56,35 @@ surface adders need (`r_draw_method.cpp`, `r_xsurface.cpp`, `xmodel_utils.cpp`,
 `dobj_utils.cpp`). The `world_frontend` CI job fetches the same pinned DXVK
 headers as `native_d3d9_boundary`.
 
+## Follow-up: a real map, 2026-11-02
+
+`KisakCOD-world-frontend-probe` (opt-in `KISAK_BUILD_WORLD_FRONTEND_PROBE`, on top
+of the native D3D9 boundary) is the offline asset exporter with the renderer
+front end linked in. It loads one allowlisted map from an explicit private game
+folder, picks the shader model 3 path and checks every shader the materials
+reach, runs `Material_Sort` and `R_SortWorldSurfaces`, then walks, batches and
+merges a view from every player spawn and the intermission camera. Each frame is
+held to `world_frontend_invariants.h`. The dedicated server's renderer stand-ins
+moved to `src/linux/server_renderer_counterparts.cpp` so the probe can link the
+real owners instead.
+
+Verified locally on David's laptop (Intel Processor U300, Debian 13, clang 19.1.7,
+the owner's `mp_crash.ff` read in place): at 629c67d, mp_crash passes all 178
+views in RelWithDebInfo and Debug, with identical reports apart from timing.
+The numbers are in
+[linux-world-frontend.md](linux-world-frontend.md#evidence-mp_crash-2026-11-02).
+Hosted CI builds the probe in both configurations, checks it is a 32-bit i386
+binary needing only the C and C++ runtimes, and runs its asset-free test; it
+never runs the probe.
+
+The first runs found three probe defects (no shader path chosen, a visibility
+bound read from a word count, and a portal-subset rule that the engine's
+portal culling does not satisfy), each fixed in its own commit.
+
 ## Not done
 
-- No real `GfxWorld`, no device, no resource creation, no draw, no GPU evidence.
+- No device, no resource creation, no draw, no GPU evidence. The real
+  `GfxWorld` is walked offline only.
 - `R_GenerateSortedDrawSurfs` is not called as a whole: its lighting, fog, sun,
   shadow and entity stages need world data the synthetic world lacks.
 - The census compiles with the D3D9 stand-in only.
@@ -66,6 +92,6 @@ headers as `native_d3d9_boundary`.
 ## Next
 
 Follow the order in [linux-world-frontend.md](linux-world-frontend.md#order-of-work-toward-one-static-map-view):
-run the front end over one real world from an explicit private asset path;
-then device, resources, one fixed-view draw behind the free-camera
-`SceneRenderer` interface, and GPU evidence on a developer machine.
+device and resources through the boundary from the SDL window host, one
+fixed-view draw behind the free-camera `SceneRenderer` interface, and GPU
+evidence on a developer machine.
