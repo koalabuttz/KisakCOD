@@ -161,6 +161,10 @@ FrameResult DrawView(const Camera &camera, refdef_s &refdef)
 std::chrono::steady_clock::time_point g_started;
 // KISAK_WORLD_DRAW_SHOW_SECONDS, read with the other arguments before any device work.
 int g_showSeconds = 0;
+// KISAK_FREE_CAMERA_INPUT and KISAK_FREE_CAMERA_SECONDS, read the same way.
+FreeCameraInput g_cameraInput = FreeCameraInput::Replay;
+int g_cameraSeconds = 0;
+constexpr int kMaxCameraSeconds = 3600;
 } // namespace
 
 // The client's renderer configuration (src/client_mp/cl_main_mp.cpp CL_InitRef:
@@ -210,8 +214,27 @@ void Kisak_StartWorldDraw(WorldDrawMode drawMode, const char *mapName, const wf:
 {
     g_started = std::chrono::steady_clock::now();
     const bool freeCamera = drawMode == WorldDrawMode::FreeCamera;
+    const char *const input = std::getenv("KISAK_FREE_CAMERA_INPUT");
+    const char *const cameraSeconds = std::getenv("KISAK_FREE_CAMERA_SECONDS");
+    if (freeCamera && input && !std::strcmp(input, "window"))
+        g_cameraInput = FreeCameraInput::Window;
+    else if (freeCamera && input && !std::strcmp(input, "script"))
+        g_cameraInput = FreeCameraInput::Script;
     if (freeCamera)
-        SetTool("free_camera_replay");
+        SetTool(g_cameraInput == FreeCameraInput::Replay ? "free_camera_replay" : "free_camera_window");
+    Require(!input || freeCamera, "arguments", "KISAK_FREE_CAMERA_INPUT belongs to KISAK_FREE_CAMERA_MAP");
+    Require(!input || g_cameraInput != FreeCameraInput::Replay, "arguments",
+            "KISAK_FREE_CAMERA_INPUT must be window or script");
+    Require(!cameraSeconds || g_cameraInput == FreeCameraInput::Window, "arguments",
+            "KISAK_FREE_CAMERA_SECONDS belongs to KISAK_FREE_CAMERA_INPUT=window");
+    if (cameraSeconds)
+    {
+        char *end = nullptr;
+        const long value = std::strtol(cameraSeconds, &end, 10);
+        Require(end != cameraSeconds && *end == '\0' && value >= 1 && value <= kMaxCameraSeconds, "arguments",
+                "KISAK_FREE_CAMERA_SECONDS must be a whole number from 1 to " + std::to_string(kMaxCameraSeconds));
+        g_cameraSeconds = int(value);
+    }
     const char *const mapVariable = freeCamera ? "KISAK_FREE_CAMERA_MAP" : "KISAK_WORLD_DRAW_MAP";
     Require(mapName && kisak_world_inventory::IsAllowedMapName(mapName), "arguments",
             std::string(mapVariable) + " must name an allowlisted map");
@@ -285,6 +308,16 @@ void Kisak_StartWorldDraw(WorldDrawMode drawMode, const char *mapName, const wf:
         std::memcpy(description, id.Description, sizeof(id.Description));
     Say("world_draw_renderer=started renderer=shader_model_3 window=%s scene=%ux%u adapter=\"%s\" seconds=%.2f\n",
         mode.c_str(), vidConfig.sceneWidth, vidConfig.sceneHeight, description, Seconds(g_started));
+}
+
+FreeCameraInput Kisak_FreeCameraInput()
+{
+    return g_cameraInput;
+}
+
+int Kisak_FreeCameraSeconds()
+{
+    return g_cameraSeconds;
 }
 
 double WorldDrawStartSeconds()

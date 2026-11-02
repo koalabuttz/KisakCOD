@@ -4,7 +4,7 @@
 The world draw probe (scripts/platform/linux/world_draw_probe.cmake) is the
 offline asset exporter with the whole renderer. CI links it against
 tests/linux_device_probe/d3d9_unavailable.cpp, whose Direct3DCreate9 answers like
-DXVK Native's does without a Vulkan device, and this script runs it eight times.
+DXVK Native's does without a Vulkan device, and this script runs it fifteen times.
 In the draw mode (KISAK_WORLD_DRAW_MAP):
 
   * with an allowlisted map: the engine starts, the layout check passes, and the
@@ -24,6 +24,16 @@ In the free-camera replay (KISAK_FREE_CAMERA_MAP):
   * with a map outside the allowlist: refused before any device work;
   * with a show time, which belongs to the draw mode: refused with the other
     arguments, before any device work.
+
+With the free camera's window input (KISAK_FREE_CAMERA_INPUT):
+
+  * window and script, with an allowlisted map: the same stop at
+    Direct3DCreate9, named by the window driver; no window is made;
+  * an input that is neither: refused with the other arguments, before any
+    device work;
+  * an input in the draw mode: refused the same way;
+  * a time limit (KISAK_FREE_CAMERA_SECONDS) outside 1 to 3600, or with the
+    scripted input, which ends by itself: refused the same way.
 
 Each run exits 1 and writes nothing to its private output directory.
 
@@ -54,14 +64,18 @@ NO_MAP = ("Offline asset export failed: KisakCOD-world-draw-probe needs KISAK_WO
 BOTH_MAPS = "Offline asset export failed: KISAK_WORLD_DRAW_MAP and KISAK_FREE_CAMERA_MAP are mutually exclusive"
 UNKNOWN_MAP = "Offline asset export failed: world_draw_probe stage=arguments: "
 CAMERA_ARGUMENTS = "Offline asset export failed: free_camera_replay stage=arguments: "
+WINDOW_DEVICE_FAILURE = "Offline asset export failed: free_camera_window stage=direct3d: "
+WINDOW_ARGUMENTS = "Offline asset export failed: free_camera_window stage=arguments: "
 # Every export mode the exporter reads; a stray one in the caller's environment
 # would change which refusal the probe gives.
 MODE_VARIABLES = ("KISAK_WORLD_DRAW_MAP", "KISAK_FREE_CAMERA_MAP", "KISAK_WORLD_DEVICE_MAP",
                   "KISAK_WORLD_SURFACE_MAP", "KISAK_WORLD_FRONTEND_MAP", "KISAK_UI_ASSET_EXPORT_MENUS",
-                  "KISAK_UI_ASSET_EXPORT_DIR", "KISAK_WORLD_DRAW_SHOW_SECONDS")
+                  "KISAK_UI_ASSET_EXPORT_DIR", "KISAK_WORLD_DRAW_SHOW_SECONDS", "KISAK_FREE_CAMERA_INPUT",
+                  "KISAK_FREE_CAMERA_SECONDS")
 
 
-def run_probe(probe, tree, output, map_name, timeout, show_seconds=None, camera_map=None):
+def run_probe(probe, tree, output, map_name, timeout, show_seconds=None, camera_map=None, camera_input=None,
+              camera_seconds=None):
     environment = {key: value for key, value in os.environ.items() if key not in MODE_VARIABLES}
     environment["KISAK_UI_ASSET_EXPORT_DIR"] = str(output)
     if map_name is not None:
@@ -70,6 +84,10 @@ def run_probe(probe, tree, output, map_name, timeout, show_seconds=None, camera_
         environment["KISAK_FREE_CAMERA_MAP"] = camera_map
     if show_seconds is not None:
         environment["KISAK_WORLD_DRAW_SHOW_SECONDS"] = show_seconds
+    if camera_input is not None:
+        environment["KISAK_FREE_CAMERA_INPUT"] = camera_input
+    if camera_seconds is not None:
+        environment["KISAK_FREE_CAMERA_SECONDS"] = camera_seconds
     command = [str(probe), "+set", "fs_basepath", str(tree / "base"), "+set", "fs_homepath", str(tree / "home"),
                "+set", "dedicated", "2", "+set", "useFastFile", "1"]
     print("$ " + " ".join(command), flush=True)
@@ -176,6 +194,42 @@ def main():
               "the replay refuses a show time at the arguments stage")
         check(not any(line.startswith("world_draw_layout=") for line in text.splitlines()),
               "the replay refuses a show time before the layout check and any device work")
+
+        # The window input: the same start, named by the window driver, and its own
+        # two arguments refused before any device work.
+        for camera_input in ("window", "script"):
+            status, text = run_probe(probe, tree, outputs / ("window-" + camera_input), None, args.timeout,
+                                     camera_map="mp_crash", camera_input=camera_input)
+            check(status == 1, f"the {camera_input} input with no device exits 1 (got {status})")
+            lines = text.splitlines()
+            check(CAMERA_START in lines and any(line.startswith("world_draw_layout=agreed types=") for line in lines),
+                  f"the {camera_input} input starts the engine in free-camera mode and agrees on the layouts")
+            check(last_line(text).startswith(WINDOW_DEVICE_FAILURE),
+                  f"the {camera_input} input's last line names the window driver's direct3d stage")
+            check(not any(line.startswith(("world_draw_renderer=starting", "free_camera_window=")) for line in lines),
+                  f"the {camera_input} input runs neither R_Init nor the window host without an interface")
+
+        refusals = (
+            ("window-unknown", None, "mp_crash", "mouse", None,
+             CAMERA_ARGUMENTS + "KISAK_FREE_CAMERA_INPUT must be window or script", "an unknown input"),
+            ("window-draw", "mp_crash", None, "window", None,
+             UNKNOWN_MAP + "KISAK_FREE_CAMERA_INPUT belongs to KISAK_FREE_CAMERA_MAP", "an input in the draw mode"),
+            ("window-zero", None, "mp_crash", "window", "0",
+             WINDOW_ARGUMENTS + "KISAK_FREE_CAMERA_SECONDS must be a whole number from 1 to 3600", "a zero limit"),
+            ("window-long", None, "mp_crash", "window", "3601",
+             WINDOW_ARGUMENTS + "KISAK_FREE_CAMERA_SECONDS must be a whole number from 1 to 3600",
+             "a limit over an hour"),
+            ("window-script-limit", None, "mp_crash", "script", "10",
+             WINDOW_ARGUMENTS + "KISAK_FREE_CAMERA_SECONDS belongs to KISAK_FREE_CAMERA_INPUT=window",
+             "a limit on the scripted input"),
+        )
+        for name, draw_map, camera_map, camera_input, camera_seconds, refusal, what in refusals:
+            status, text = run_probe(probe, tree, outputs / name, draw_map, args.timeout, camera_map=camera_map,
+                                     camera_input=camera_input, camera_seconds=camera_seconds)
+            check(status == 1, f"{what} exits 1 (got {status})")
+            check(last_line(text) == refusal, f"{what} is refused at the arguments stage")
+            check(not any(line.startswith(("world_draw_layout=", "direct3d=")) for line in text.splitlines()),
+                  f"{what} is refused before the layout check and any device work")
 
         written = sorted(str(path.relative_to(outputs)) for path in outputs.rglob("*") if path.is_file())
         check(not written, f"nothing is written to the private output directories ({written})")

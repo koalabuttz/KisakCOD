@@ -23,6 +23,10 @@
 #        renderer (src/linux/tools/engine_scene_renderer.cpp) replays the free
 #        camera's reference traversals on the map, with a resize, a minimize,
 #        a device reset and a reload (src/linux/tools/free_camera_replay.cpp).
+#        With KISAK_FREE_CAMERA_INPUT=window the camera is flown through the
+#        renderer's own window instead, and with =script that window is driven
+#        by SDL events the run pushes and checks
+#        (src/linux/tools/free_camera_window_driver.cpp).
 #
 # How it links:
 #
@@ -174,15 +178,22 @@ endforeach()
 # counterpart asks the device.
 # The free-camera replay (KISAK_FREE_CAMERA_MAP) adds the free camera's own
 # sources (src/linux/client/view), its engine adapter and the replay driver.
+# Its window input (KISAK_FREE_CAMERA_INPUT) adds the window host that adopts
+# the renderer's window (src/linux/client/window, as KISAK_BUILD_LINUX_WINDOW_HOST
+# builds it for SDL3) and the window driver.
 set(KISAK_WORLD_DRAW_OWN_NATIVE_SOURCES
     "${SRC_DIR}/linux/tools/world_draw_engine.cpp"
     "${SRC_DIR}/linux/tools/world_draw_probe.cpp"
     "${SRC_DIR}/linux/tools/world_draw_probe_boundary.cpp"
     "${SRC_DIR}/linux/tools/engine_scene_renderer.cpp"
     "${SRC_DIR}/linux/tools/free_camera_replay.cpp"
+    "${SRC_DIR}/linux/tools/free_camera_window_driver.cpp"
     "${SRC_DIR}/linux/client/view/free_camera.cpp"
     "${SRC_DIR}/linux/client/view/free_camera_controls.cpp"
     "${SRC_DIR}/linux/client/view/frame_owner.cpp"
+    "${SRC_DIR}/linux/client/view/free_camera_window.cpp"
+    "${SRC_DIR}/linux/client/window/window_host.cpp"
+    "${SRC_DIR}/linux/client/window/pixel_buffer.cpp"
     "${SRC_DIR}/linux/client/window/win32_window_sdl3.cpp"
 )
 
