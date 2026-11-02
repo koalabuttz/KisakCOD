@@ -303,3 +303,35 @@ claim that a client binary builds. The CRT
 shim test covers the MSVC CRT names `src/linux/compat.h` supplies to client
 sources (`_itoa`, the array `strcpy_s`, `_time64`, `_localtime64`), including the
 fail-closed cases; `run_linux_checks.py` runs it as `crt_shims`.
+
+## Free camera checks
+
+```sh
+python3 scripts/tests/test_free_camera_check_runner.py
+python3 scripts/tests/run_free_camera_checks.py --config Debug
+python3 scripts/tests/run_free_camera_checks.py --config RelWithDebInfo
+```
+
+Like the world surface runner this needs no CMake configure, engine build, DXVK,
+SDL, GPU, Steam client or game assets. It compiles with `clang++ -m32` (the Linux
+engine build's compiler, `--cxx` overrides it) and the production Linux client
+flags, in three checks:
+
+| Check | Source | Covers |
+| --- | --- | --- |
+| `production_math_object` | `src/universal/com_math_anglevectors.cpp` | the original AnglesToAxis/AngleVectors unit, unmodified, production flags only |
+| `free_camera` | `tests/linux_free_camera/free_camera_test.cpp` | pose, mouse/key turning, movement, CG_UpdateFov projection, refdef fill, key bindings |
+| `frame_owner` | `tests/linux_free_camera/frame_owner_test.cpp` | frame order against a recording renderer: resize/minimize, device loss/reset, load/reload/unload, shutdown, fail-closed paths, focus/capture, reference traversals, seeded randomized lifecycle |
+
+The new sources and tests are built with `-Wall -Wextra -Werror`; the original
+engine unit is not, because its existing warnings are the original source's. It is
+linked with `--gc-sections`, as the production targets are, so its unused
+AnglesToQuat does not pull in more of the engine. A pass says the camera and frame
+ordering behave as tested against a fake renderer; it does not claim a map was
+drawn or a real device was reset. See [docs/linux-free-camera.md](../../docs/linux-free-camera.md).
+
+For a sanitized run use GCC: `--cxx g++ --cxx-flag=-fsanitize=address,undefined
+--cxx-flag=-fno-sanitize-recover=all`. Clang's sanitizer instrumentation keeps the
+production unit's unused AnglesToQuat alive through `--gc-sections`, so a sanitized
+Clang link stops at the missing AxisToQuat; that is a property of the sanitized
+link, not of the checks.
