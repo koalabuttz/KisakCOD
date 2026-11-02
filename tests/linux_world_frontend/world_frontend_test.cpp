@@ -131,7 +131,9 @@ struct SyntheticWorld
     GfxSurface surfaces[kSurfaceCount]{};
     uint16_t sortedSurfIndex[kSurfaceCount + 1]{};
     GfxDrawSurf surfaceMaterials[kSurfaceCount]{};
-    uint32_t surfaceCastsSunShadow[1]{};
+    // A bit per surface in 32-bit words, rounded up to 128 surfaces
+    // (R_InitDynamicData in r_bsp_load_obj.cpp); surfaceVisDataCount counts them.
+    uint32_t surfaceCastsSunShadow[4 * ((kSurfaceCount + 127) >> 7)]{};
     GfxCullGroup cullGroups[1]{};
     int cell0CullGroups[1]{};
     uint8_t surfaceVis[3][kSurfaceCount + 4]{};
@@ -301,7 +303,7 @@ std::unique_ptr<SyntheticWorld> BuildWorld()
     dpvs.decalSurfsEnd = kDecalEnd;
     dpvs.emissiveSurfsBegin = kEmissiveBegin;
     dpvs.emissiveSurfsEnd = kEmissiveEnd;
-    dpvs.surfaceVisDataCount = kSurfaceCount;
+    dpvs.surfaceVisDataCount = std::size(sw->surfaceCastsSunShadow);
     for (int v = 0; v < 3; ++v)
     {
         dpvs.surfaceVisData[v] = sw->surfaceVis[v];

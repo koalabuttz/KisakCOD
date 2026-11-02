@@ -166,7 +166,9 @@ full list may have dropped surfaces.
 It fails closed before reading anything it cannot bound: the map name must be on
 the exporter's allowlist; at most 1024 cells (the width of
 `dpvsGlob.cellVisibleBits`); world model 0 must start at surface 0 and fit the
-visibility and sort tables; every AABB node and cull group range must lie inside
+static surface table, whose length is also that of the per-surface visibility
+bytes (`surfaceVisDataCount` is not: it counts the 32-bit words of the
+per-surface bit sets); every AABB node and cull group range must lie inside
 `sortedSurfIndex`; the zone's `COMWORLD` must be loaded under the world's name
 and hold at least as many primary lights as the world names; every shader the
 loaded materials reach must be built for shader model 3; `r_loadForRenderer`

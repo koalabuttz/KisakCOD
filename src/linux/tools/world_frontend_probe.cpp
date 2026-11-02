@@ -231,10 +231,14 @@ wf::WorldShape ReadWorldShape(const GfxWorld &world)
     // surfaceCount is a uint16_t, so kMaxSurfaces bounds it by type.
     static_assert(sizeof(worldModel.surfaceCount) == 2 && kMaxSurfaces == 65536);
     Require(worldModel.surfaceCount > 0, "world model 0 has no surfaces");
-    Require(worldModel.surfaceCount <= dpvs.surfaceVisDataCount,
-            "world model 0 has more surfaces than the visibility arrays hold");
+    // The zone loads surfaceVisData[0..2] with one byte per static surface
+    // (Load_GfxWorldDpvsStatic, db_load.cpp), and the DPVS walk marks them by
+    // sorted surface index. surfaceVisDataCount is not their length: it counts the
+    // 32-bit words of the per-surface bit sets (surfaceCastsSunShadow), rounded up
+    // to 128 surfaces, as R_InitDynamicData (r_bsp_load_obj.cpp) computes it.
     Require(worldModel.surfaceCount <= dpvs.staticSurfaceCount,
-            "world model 0 has more surfaces than the static surface table");
+            "world model 0 has " + std::to_string(worldModel.surfaceCount) +
+                " surfaces, more than the static surface table's " + std::to_string(dpvs.staticSurfaceCount));
     Require(dpvs.surfaces && dpvs.surfaceMaterials && dpvs.sortedSurfIndex && dpvs.surfaceVisData[0],
             "a world surface table is absent");
     const int cellCount = world.dpvsPlanes.cellCount;
@@ -363,8 +367,10 @@ FrameRun RunFrame(const GfxWorld &world, const wf::WorldShape &shape, GfxBackEnd
     R_AddWorldSurfacesDpvs(&view.viewParms, forcedCell == kUseCameraCell ? frame.cameraCell : forcedCell);
     R_WaitWorkerCmdsOfType(WRKCMD_DPVS_CELL_STATIC);
 
+    // One byte per static surface. All of it is read, so a mark past world
+    // model 0 shows up as a visible surface no visible cell lists.
     const uint8_t *vis = world.dpvs.surfaceVisData[0];
-    for (uint32_t s = 0; s < world.dpvs.surfaceVisDataCount; ++s)
+    for (uint32_t s = 0; s < world.dpvs.staticSurfaceCount; ++s)
         if (vis[s])
             frame.visibleSurfaces.push_back(s);
     for (int c = 0; c < int(shape.cellSurfaces.size()); ++c)
