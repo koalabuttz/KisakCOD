@@ -160,13 +160,22 @@ void CheckMonitors()
     Check(none.monitors.empty(), "refused enumerations call nothing");
 
     EnumMonitors engine{1, nullptr};
-    // The engine's own cast, which GCC reports under -Wextra.
-#if defined(__GNUC__) && !defined(__clang__)
+    // The engine's own cast, which GCC reports under -Wextra as
+    // -Wcast-function-type and Clang 19 and later as -Wcast-function-type-mismatch.
+#if defined(__clang__)
+#pragma clang diagnostic push
+#if __has_warning("-Wcast-function-type-mismatch")
+#pragma clang diagnostic ignored "-Wcast-function-type-mismatch"
+#endif
+#pragma clang diagnostic ignored "-Wcast-function-type"
+#elif defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-function-type"
 #endif
     EnumDisplayMonitors(nullptr, nullptr, (MONITORENUMPROC)EngineShapedCallback, (LPARAM)&engine);
-#if defined(__GNUC__) && !defined(__clang__)
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#elif defined(__GNUC__)
 #pragma GCC diagnostic pop
 #endif
     Check(Value(engine.foundMonitor) == displays[0], "the engine's callback finds monitor 1, the first display");

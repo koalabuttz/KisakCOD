@@ -133,6 +133,19 @@ void SelectWsi()
     std::printf("dxvk_wsi_driver=SDL3\n");
 }
 
+// DXVK's SDL3 WSI starts SDL video inside Direct3DCreate9 and throws when it
+// cannot. That exception does not unwind out of libdxvk_d3d9.so (its unwinder
+// is linked into it), so the process would abort with no stage named. Starting
+// video here first makes a missing display this stage's failure. SDL counts
+// the reference; the window layer takes its own on first use.
+void StartVideo()
+{
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+        Fail("environment", std::string("SDL video did not start (no display?): ") + SDL_GetError());
+    const char *const driver = SDL_GetCurrentVideoDriver();
+    std::printf("video_driver=%s\n", driver ? driver : "none");
+}
+
 void StartEngineRuntime(const Options &options)
 {
     Sys_InitializeCriticalSections();
@@ -284,8 +297,9 @@ void PresentFrames(int frames)
 
 // R_ShutdownDirect3D's order for what was created: device, windows, Direct3D.
 // It is not called itself because it also releases the render targets and Bink
-// state that R_InitHardware would have made.
-void ReleaseDevice(GfxWindowParms &window)
+// state that R_InitHardware would have made. After an earlier failure it only
+// reports what it found, so that failure stays the one the probe names.
+void ReleaseDevice(GfxWindowParms &window, bool failOnLeak)
 {
     ULONG deviceRefs = 0;
     ULONG d3dRefs = 0;
@@ -304,13 +318,14 @@ void ReleaseDevice(GfxWindowParms &window)
     std::printf("shutdown device_refs_left=%lu window_destroyed=%d d3d9_refs_left=%lu open_windows=%zu\n",
                 static_cast<unsigned long>(deviceRefs), destroyed ? 1 : 0, static_cast<unsigned long>(d3dRefs),
                 kisak::win32_window::OpenWindowCount());
-    if (deviceRefs || d3dRefs || kisak::win32_window::OpenWindowCount())
+    if (failOnLeak && (deviceRefs || d3dRefs || kisak::win32_window::OpenWindowCount()))
         Fail("shutdown", "something outlived the probe's release");
 }
 
 void Run(const Options &options)
 {
     SelectWsi();
+    StartVideo();
     StartEngineRuntime(options);
 
     if (!R_PreCreateWindow())
@@ -345,10 +360,10 @@ void Run(const Options &options)
     }
     catch (...)
     {
-        ReleaseDevice(window);
+        ReleaseDevice(window, false);
         throw;
     }
-    ReleaseDevice(window);
+    ReleaseDevice(window, true);
 }
 
 } // namespace

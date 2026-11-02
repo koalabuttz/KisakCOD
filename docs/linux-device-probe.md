@@ -15,7 +15,7 @@ then checks on what it produced (`src/linux/tools/device_probe.cpp`):
 
 | Stage | Code | Fails closed when |
 | --- | --- | --- |
-| `environment` | the probe | `DXVK_WSI_DRIVER` is set to anything but `SDL3` (an unset variable is set to `SDL3`; any other WSI would misread every `HWND`) |
+| `environment` | the probe; then `SDL_InitSubSystem(SDL_INIT_VIDEO)` | `DXVK_WSI_DRIVER` is set to anything but `SDL3` (an unset variable is set to `SDL3`; any other WSI would misread every `HWND`), or SDL video does not start (no display). Video is started here because DXVK would otherwise start it inside `Direct3DCreate9` and abort (see Limits) |
 | engine runtime | `Sys_InitMainThread`, `SL_Init`, `Dvar_Init`, `sys_smp_allowed` as `Com_InitDvars` registers it, `R_RegisterDvars`; then `r_fullscreen` off and `r_customMode` set to the requested size, latched values made current | an engine assertion or `Com_Error` |
 | `direct3d` | `R_PreCreateWindow`: `Direct3DCreate9`, `R_ChooseAdapter` (monitor selection), `R_StoreDirect3DCaps` (`R_PickRenderer`, shadow-map formats), `R_EnumDisplayModes` | no D3D9 interface; no display mode of at least 640x480 (the engine's own check) |
 | `adapter`, `renderer` | `GetAdapterIdentifier`, `GetDeviceCaps` | `R_PickRenderer` did not choose the shader model 3 path. The game's zones carry shader model 3 shaders only (checked on mp_crash by the [front-end probe](linux-world-frontend.md#a-real-map-the-offline-front-end-probe)) |
@@ -35,6 +35,7 @@ line is `device_probe=passed renderer=shader_model_3 frames=N` or
 `device_probe=failed stage=<stage> reason=<text>`. Exit status: 0 passed, 1 a
 stage failed, 2 a usage error. An engine assertion prints
 `device_probe=failed stage=assert reason=<file>:<line>: <message>` and aborts.
+DXVK's own fatal errors abort too (see Limits).
 
 ## The Win32 window layer
 
@@ -156,10 +157,21 @@ Local only, in the cloud sandbox, 2026-11-02, on the branch that adds the probe
 - DXVK reports lavapipe as "AMD Radeon RX 6700 XT" (0x1002/0x73DF): it gives any
   vendor other than AMD, NVIDIA and Intel that identity. The adapter line is not
   evidence of the hardware.
-- The stand-in library run stops at `stage=direct3d` with exit 1, as in CI.
+- A RelWithDebInfo build with clang 19.1.1 (the laptop's compiler major) passes
+  too.
+- Fail-closed paths: the stand-in library stops at `stage=direct3d` with exit 1,
+  as in CI; no display stops at `stage=environment` ("SDL video did not start");
+  `DXVK_WSI_DRIVER=SDL2` stops at `stage=environment`; an 8000x6000 window stops
+  at `stage=window`. Each exits 1.
 
 ## Limits
 
+- DXVK reports a failure to create its Vulkan instance or adapter (for example
+  no Vulkan driver) by throwing inside `Direct3DCreate9`. DXVK Native links
+  libgcc and libstdc++ statically, so the exception cannot unwind into the probe:
+  the process aborts (status 134) after DXVK's own log lines, with no
+  `device_probe=` line. The probe starts SDL video first, so a missing display
+  is reported as a stage instead; a missing Vulkan driver still ends this way.
 - SDL's `offscreen` driver lists no fullscreen modes, so `R_EnumDisplayModes`
   reports "No valid resolutions of 640 x 480 or above found" and the engine
   stops in its fatal-error path (`Sys_DirectXFatalError`'s assertion,
