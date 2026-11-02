@@ -28,11 +28,25 @@
 // (counts and measurements, no pixels) into the private output directory and
 // throws std::runtime_error on any failure.
 //
+// Kisak_ReplayFreeCamera is the build's second mode (KISAK_FREE_CAMERA_MAP): the
+// same renderer start, then the free camera's FrameOwner over the engine renderer
+// (engine_scene_renderer.h) replays the free camera's reference traversals on the
+// map, with a resize, a minimize, a device reset and a reload along the way. It
+// writes free-camera-replay.json. See docs/linux-free-camera.md.
+//
 // loaderLayout is KISAK_WORLD_FRONTEND_LAYOUT() as the caller's translation unit
 // (compiled with the dedicated definitions, like the database loader) sees it.
 //
 // Built only by KISAK_BUILD_WORLD_DRAW_PROBE
 // (scripts/platform/linux/world_draw_probe.cmake). See
 // docs/linux-world-draw-probe.md.
-void Kisak_StartWorldDraw(const char *mapName, const kisak_world_frontend::Layout &loaderLayout);
+enum class WorldDrawMode
+{
+    Draw,       // KISAK_WORLD_DRAW_MAP: Kisak_DrawWorld
+    FreeCamera, // KISAK_FREE_CAMERA_MAP: Kisak_ReplayFreeCamera
+};
+void Kisak_StartWorldDraw(WorldDrawMode mode, const char *mapName, const kisak_world_frontend::Layout &loaderLayout);
 void Kisak_DrawWorld(const std::filesystem::path &directory, const char *mapName);
+void Kisak_ReplayFreeCamera(const std::filesystem::path &directory, const char *mapName);
+// Seconds since Kisak_StartWorldDraw began.
+double WorldDrawStartSeconds();
