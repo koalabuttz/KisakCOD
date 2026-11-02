@@ -304,11 +304,15 @@ class NativeD3D9BoundaryWorkflowTests(unittest.TestCase):
     # with DXVK's headers (never its library). Every other job stays DXVK-free.
     HEADER_CONSUMERS = ('world_frontend',)
 
+    # Jobs that turn the boundary's CMake option on. device_probe does it to link
+    # the device probe against a stand-in D3D9 library (DeviceProbeWorkflowTests).
+    BOUNDARY_JOBS = ('native_d3d9_boundary', 'device_probe')
+
     def test_other_jobs_keep_their_defaults(self):
         # The boundary stays opt-in: no other job turns the CMake option on, and
         # only the named header consumers fetch DXVK at all.
         for name, job in self.workflow['jobs'].items():
-            if name == self.JOB:
+            if name in self.BOUNDARY_JOBS:
                 continue
             text = '\n'.join(step.get('run', '') for step in job['steps'])
             with self.subTest(job=name):
@@ -325,6 +329,105 @@ class NativeD3D9BoundaryWorkflowTests(unittest.TestCase):
                     self.assertEqual(job['env'][key], self.job['env'][key])
                 for forbidden in ('meson setup', 'ninja', 'libdxvk', 'cmake --build', '-dkisak_dxvk_native'):
                     self.assertNotIn(forbidden, text)
+
+
+
+class DeviceProbeWorkflowTests(unittest.TestCase):
+    """The device probe without a GPU: a link proof and its fail-closed run."""
+
+    JOB = 'device_probe'
+    RUN_STEP = "Run the Win32 window layer test and the probe's fail-closed path"
+    BUILD_STEP = 'Build the device probe against the stand-in D3D9 library'
+
+    @classmethod
+    def setUpClass(cls):
+        cls.workflow = yaml.load(
+            (ROOT / '.github/workflows/build-kisakcod-linux.yaml').read_text(),
+            Loader=yaml.BaseLoader)
+        cls.job = cls.workflow['jobs'][cls.JOB]
+        cls.names = [step.get('name') for step in cls.job['steps']]
+        cls.commands = '\n'.join(step.get('run', '') for step in cls.job['steps'])
+
+    def step(self, name):
+        return next(step for step in self.job['steps'] if step.get('name') == name)
+
+    def test_path_triggers_reach_the_stand_in_library(self):
+        for event in ('push', 'pull_request'):
+            paths = self.workflow['on'][event]['paths']
+            for path in ('src/**', 'scripts/**', 'tests/linux_window/**', 'tests/linux_device_probe/**'):
+                with self.subTest(event=event, path=path):
+                    self.assertIn(path, paths)
+
+    def test_exactly_two_explicit_configurations(self):
+        self.assertEqual(self.job['strategy']['matrix']['config'], ['Debug', 'RelWithDebInfo'])
+        self.assertEqual(self.job['runs-on'], 'ubuntu-24.04')
+        self.assertIn('timeout-minutes', self.job)
+        self.assertEqual(self.job['strategy']['fail-fast'], 'false')
+
+    def test_pins_match_the_window_and_boundary_jobs(self):
+        boundary = self.workflow['jobs']['native_d3d9_boundary']
+        for key in ('DXVK_REVISION', 'DXVK_DIRECTX_HEADERS_REVISION'):
+            self.assertEqual(self.job['env'][key], boundary['env'][key])
+        self.assertEqual(self.job['env']['SDL3_REVISION'], '877399b2b2cf21e67554ed9046410f268ce1d1b2')
+        window_sdl = next(step for step in self.workflow['jobs']['window']['steps']
+                          if step.get('name') == 'Build pinned 32-bit SDL3 SDK')['run']
+        self.assertIn(self.job['env']['SDL3_REVISION'], window_sdl)
+        sdl = self.step('Build pinned 32-bit SDL3 SDK')['run']
+        self.assertIn('test "$(git -C "$RUNNER_TEMP/SDL3-source" rev-parse HEAD)" = "$SDL3_REVISION"', sdl)
+        for flag in ('-DCMAKE_C_FLAGS=-m32', '-DSDL_SHARED=ON', '-DSDL_X11=OFF', '-DSDL_WAYLAND=OFF'):
+            self.assertIn(flag, sdl)
+        self.assertIn('grep -q ELF32', sdl)
+        fetch = self.step('Fetch pinned DXVK Native 2.7.1 headers')['run']
+        self.assertIn('test "$(git -C "$src" rev-parse HEAD)" = "$DXVK_REVISION"', fetch)
+        self.assertIn('test "$recorded" = "$DXVK_DIRECTX_HEADERS_REVISION"', fetch)
+        self.assertIn('--stage-dxvk-headers "$RUNNER_TEMP/dxvk-include/dxvk"', fetch)
+
+    def test_no_dxvk_build_no_gpu_stack_and_no_game_data(self):
+        for step in self.job['steps']:
+            text = step.get('run', '').lower()
+            for forbidden in ('meson setup', 'meson compile', 'ninja -c', 'libdxvk', 'vulkan', 'mesa', 'lavapipe', 'xvfb', 'steam', 'iw_', 'main/',
+                              'fs_basepath', 'kisak_world_frontend_map', 'kisak_ui_asset_export_dir',
+                              'dpkg --add-architecture', 'kisakcod-dedi'):
+                with self.subTest(step=step.get('name'), forbidden=forbidden):
+                    self.assertNotIn(forbidden, text)
+            self.assertNotIn('DXVK_WSI_DRIVER', step.get('env', {}))
+
+    def test_the_probe_links_only_the_stand_in_d3d9_library(self):
+        build = self.step(self.BUILD_STEP)['run']
+        self.assertIn('tests/linux_device_probe/d3d9_unavailable.cpp', build)
+        self.assertIn('-DKISAK_DXVK_NATIVE_LIBRARY="$stand_in"', build)
+        self.assertIn('-DKISAK_BUILD_LINUX_NATIVE_D3D9=ON', build)
+        self.assertIn('-DKISAK_BUILD_DEVICE_PROBE=ON', build)
+        self.assertIn('-DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3"', build)
+        self.assertIn('--target KisakCOD-device-probe KisakCOD-win32-window-test', build)
+        self.assertIn('Machine:[[:space:]]+Intel 80386', build)
+        self.assertIn("grep -F 'Shared library: [libd3d9_unavailable.so]'", build)
+        self.assertIn("the Win32 layer's test must not need the D3D9 library", build)
+
+    def test_the_run_uses_dummy_drivers_and_expects_the_fail_closed_result(self):
+        self.assertLess(self.names.index(self.BUILD_STEP), self.names.index(self.RUN_STEP))
+        step = self.step(self.RUN_STEP)
+        self.assertEqual(step['env']['SDL_VIDEODRIVER'], 'dummy')
+        self.assertEqual(step['env']['SDL_AUDIODRIVER'], 'dummy')
+        run = step['run']
+        self.assertIn('"$out/KisakCOD-win32-window-test"', run)
+        self.assertIn('test "$status" -eq 1', run)
+        self.assertIn("grep -q '^device_probe=failed stage=direct3d '", run)
+        self.assertIn('test "$status" -eq 2', run)
+
+    def test_every_command_block_propagates_failure(self):
+        for step in self.job['steps']:
+            if 'run' not in step:
+                continue
+            with self.subTest(step=step.get('name')):
+                self.assertTrue(step['run'].lstrip().startswith('set -euo pipefail'), step.get('name'))
+
+    def test_logs_are_kept_and_no_binary_is_uploaded(self):
+        upload = next(step for step in self.job['steps']
+                      if step.get('uses', '').startswith('actions/upload-artifact@'))
+        self.assertEqual(upload['if'], 'always()')
+        self.assertEqual(upload['with']['path'], 'artifacts/')
+        self.assertIn('device-probe-${{ matrix.config }}', upload['with']['name'])
 
 
 if __name__ == '__main__':

@@ -103,6 +103,12 @@ struct HINSTANCE__;
 typedef struct HWND__ *HWND;
 typedef struct HINSTANCE__ *HINSTANCE;
 typedef HINSTANCE HMODULE;
+// The renderer names these in its monitor selection (r_init.cpp keeps
+// IDirect3D9::GetAdapterMonitor's result in an HMONITOR__ *).
+struct HMONITOR__;
+struct HDC__;
+typedef struct HMONITOR__ *HMONITOR;
+typedef struct HDC__ *HDC;
 
 typedef void *LPVOID, *PVOID;
 typedef const void *LPCVOID, *PCVOID;

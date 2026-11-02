@@ -101,7 +101,7 @@ class SourceListTests(unittest.TestCase):
 
     def test_r_init_stays_out(self):
         # r_init.cpp owns dx, rgp and gfxCfg, which the boundary file defines; it
-        # does not compile on Linux yet (monitor and window-style code).
+        # creates the window and the device, and this check makes neither.
         self.assertNotIn("src/gfx_d3d/r_init.cpp", runner.PRODUCTION_SOURCES)
 
     def test_a_boundary_unit_outside_the_production_list_is_rejected(self):

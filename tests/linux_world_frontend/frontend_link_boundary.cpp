@@ -12,9 +12,10 @@
 //     errors that FAIL the run instead of being survived.
 //
 //  2. Global storage whose owning translation unit cannot be linked here:
-//     r_init.cpp does not compile on Linux yet (monitor and window-style code the
-//     SDL host replaces); db_registry.cpp, common.cpp, sv_main_mp.cpp and the
-//     Windows window code pull in the whole engine. Each object below has the
+//     r_init.cpp creates the window and the device, which this test does not
+//     (it compiles through the boundary and the device probe links it), and
+//     db_registry.cpp, common.cpp, sv_main_mp.cpp and the Windows window code
+//     pull in the whole engine. Each object below has the
 //     owner's exact type and is zero-initialized, which is what the owner's
 //     definition is before its init code runs. Dvar pointers are registered by
 //     R_RegisterDvars or by the test's main(), or stay null as they do before

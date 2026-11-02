@@ -39,6 +39,15 @@
 //      declare, keeps DXVK's layout under the Windows tag name tagRECT, because
 //      that is the spelling engine code uses.
 //
+//      HMONITOR and HDC are handled in two phases. DXVK's windows_base.h
+//      declares them as void * under the renamed names, and then d3d9.h is read
+//      with the engine's names visible, so IDirect3D9::GetAdapterMonitor returns
+//      the engine's HMONITOR and IDirect3DSurface9::GetDC/ReleaseDC take its HDC.
+//      r_init.cpp stores the monitor in an HMONITOR__ * and compares it with
+//      the one it chose itself; both are pointer-sized handles returned and
+//      passed in registers or stack slots identically, so the declarations
+//      differ only in the pointee name the engine sees.
+//
 //   3. Shared macros. compat.h's sys_fileio.h defines INVALID_HANDLE_VALUE and
 //      the WAIT_* results with the same values but different spellings; the
 //      engine's definitions are kept.
@@ -55,7 +64,11 @@
 //     once engine code calls Direct3DCreate9 and IDirect3D9::CreateDevice.
 //   * It does not include a window-system header. The DXVK WSI headers
 //     (wsi/native_sdl2.h, wsi/native_sdl3.h) belong to the window host, which
-//     hands DXVK an SDL_Window * cast to HWND.
+//     hands DXVK an SDL_Window * cast to HWND. What it does add, last, is
+//     <linux/win32_window.h>: declarations of the Win32 window, monitor and
+//     process calls the renderer units make, so that they compile unmodified.
+//     Only a target that links src/linux/client/window/win32_window_sdl3.cpp
+//     can call them.
 
 #pragma once
 
@@ -116,6 +129,13 @@
 // struct is given the Windows tag name and RECT becomes the Windows typedef of it.
 #define RECT tagRECT
 
+// HMONITOR and HDC, phase one: windows_base.h declares DXVK's under these names.
+#define HMONITOR KisakDxvkHMONITOR
+#define HDC KisakDxvkHDC
+#include <windows.h>
+#undef HMONITOR
+#undef HDC
+
 // DXVK's pshpack4.h/poppack.h bracket d3d9types.h and d3d9caps.h with
 // pack(push, 4)/pack(pop); Clang reports every such bracket in an included file.
 #if defined(__clang__)
@@ -123,6 +143,8 @@
 #pragma clang diagnostic ignored "-Wpragma-pack"
 #endif
 
+// HMONITOR and HDC, phase two: windows.h is already read, so d3d9.h's are the
+// engine's compat.h handle types.
 #include <d3d9.h>
 
 #if defined(__clang__)
@@ -202,6 +224,19 @@ static_assert(std::is_convertible_v<HWND, KisakDxvkHWND>, "engine HWND converts 
 static_assert(std::is_same_v<decltype(D3DPRESENT_PARAMETERS::hDeviceWindow), KisakDxvkHWND>,
               "D3DPRESENT_PARAMETERS keeps DXVK's own HWND type");
 
+// HMONITOR and HDC: DXVK's own spellings are void *, and the D3D9 methods that
+// name them use the engine's handle types (see the two phases above).
+static_assert(std::is_same_v<HMONITOR, struct HMONITOR__ *>, "HMONITOR keeps the engine's opaque handle type");
+static_assert(std::is_same_v<HDC, struct HDC__ *>, "HDC keeps the engine's opaque handle type");
+static_assert(std::is_same_v<KisakDxvkHMONITOR, void *> && std::is_same_v<KisakDxvkHDC, void *>,
+              "DXVK's HMONITOR and HDC are void *");
+static_assert(sizeof(HMONITOR) == sizeof(KisakDxvkHMONITOR) && sizeof(HDC) == sizeof(KisakDxvkHDC),
+              "the engine and DXVK monitor and DC handles are the same size");
+static_assert(std::is_same_v<decltype(&IDirect3D9::GetAdapterMonitor), HMONITOR (IDirect3D9::*)(UINT)>,
+              "IDirect3D9::GetAdapterMonitor returns the engine's HMONITOR");
+static_assert(std::is_same_v<decltype(&IDirect3DSurface9::GetDC), HRESULT (IDirect3DSurface9::*)(HDC *)>,
+              "IDirect3DSurface9::GetDC takes the engine's HDC");
+
 // The macros the engine owns kept the engine's spelling and value.
 static_assert(WAIT_OBJECT_0 == 0 && WAIT_TIMEOUT == 258, "engine WAIT_* values");
 
@@ -220,3 +255,6 @@ KISAK_D3D9_CUBEMAP_FACE_VALUES(KISAK_D3D9_CHECK_ENUMERATOR)
 // layout here as in the stand-in.
 KISAK_D3D9_ASSERT_EMBEDDED_LAYOUTS();
 } // namespace kisak_d3d9_boundary
+
+// --- 5. The Win32 window surface the renderer units call ---------------------
+#include <linux/win32_window.h>
