@@ -273,6 +273,15 @@ void Kisak_StartWorldDraw(WorldDrawMode drawMode, const char *mapName, const wf:
                 !r_smp_worker_thread[1]->current.enabled,
             "start", "the renderer is not configured for one thread");
     Require(fx_marks && !fx_marks->current.enabled, "start", "fx_marks is not off");
+    // The free camera holds every frame's static models and sun shadow to rules
+    // (world_draw_rules.h CheckSceneCounts, CheckSceneInView), so it refuses to
+    // start with their switches off, as a command-line +set could leave them,
+    // rather than pass without them. The draw mode keeps them as diagnostics.
+    if (freeCamera)
+        for (const dvar_s *dvar : {r_drawSModels, sm_enable, sm_sunEnable})
+            Require(dvar && dvar->current.enabled, "start",
+                    std::string(dvar ? dvar->name : "a draw switch") +
+                        " is off; the free camera checks the static models and sun shadow it draws");
     Require(frontEndDataOut && frontEndDataOut->commands && frontEndDataOut->commands->cmds, "start",
             "the render commands are not set up (R_ConfigureRenderer did not run)");
 
