@@ -68,9 +68,10 @@ those units reach, in exactly three kinds:
 1. **Host services**: console output, and an assertion handler and `Com_Error`
    that abort the run. `RELEASE_ASSERTS` keeps production assertions live in
    both configurations.
-2. **Storage** whose owner cannot be linked yet (`dx`, `rgp`, `gfxCfg` from
-   `r_init.cpp`, which does not compile on Linux yet; `rg`; a few dvar
-   pointers), each with the owner's exact type, zero-initialized as the owner's
+2. **Storage** whose owner cannot be linked here (`dx`, `rgp`, `gfxCfg` from
+   `r_init.cpp`, which creates the window and the device and is linked only by
+   the [device probe](linux-device-probe.md); `rg`; a few dvar pointers), each
+   with the owner's exact type, zero-initialized as the owner's
    definition is before its init runs. Where the owner links cleanly it is
    linked instead: `scene` comes from `r_scene.cpp`, `gfxBuf` from
    `r_buffers.cpp`, `gfxDrawMethod` from `r_draw_method.cpp`, the collision map
@@ -218,8 +219,9 @@ reaches (`r_bsp_load_obj.cpp`, `r_primarylights.cpp`), `rb_logfile.cpp`, and:
   generated unit behind a `#line` directive, and refuses if the marker is missing
   or repeated, a helper disappears, or the span gains an `#include`.
 - **A two-kind link boundary** (`src/linux/tools/world_frontend_probe_boundary.cpp`):
-  zero-initialized storage whose owner (`r_init.cpp`, the window code) does not
-  compile on Linux yet, and functions the probe must never reach, each aborting
+  zero-initialized storage whose owner this probe does not link (`r_init.cpp`,
+  which creates the window and the device, and the window code, which does not
+  compile on Linux), and functions the probe must never reach, each aborting
   with its name. The dedicated server already owns the host services,
   `Com_Error`, the database, `rg`, `rgp` and `s_world`.
 
@@ -290,7 +292,7 @@ rule. Each fix is its own commit.
 
 ## Integration with the native D3D9 boundary
 
-The boundary ([linux-native-d3d9.md](linux-native-d3d9.md)) proves 21 renderer
+The boundary ([linux-native-d3d9.md](linux-native-d3d9.md)) proves 23 renderer
 units compile through DXVK Native's real `d3d9.h`, `r_scene.cpp` and
 `rb_backend.cpp` among them. Checked locally against the pinned DXVK 2.7.1
 headers with the engine's own dialect (`-std=gnu++20`, which is what CMake gives
@@ -301,9 +303,9 @@ follows:
 | --- | --- |
 | `r_scene.cpp`, `r_buffers.cpp` | compile unmodified, are on the proof list, and are linked into this test |
 | `rb_backend.cpp` | compiles unmodified and is on the proof list. Like `r_scene.cpp` it needs `-std=gnu++20`: under strict `-std=c++20` the `linux` macro is not predefined and `deps/binklib/radbase.h` fails platform detection |
-| `r_init.cpp` | `HMONITOR`, `WS_*` window styles: window ownership, which the SDL host replaces |
-| `r_screenshot.cpp` | `MONITORINFO`, `ClientToScreen` |
-| `rb_sky.cpp` | `Sleep` |
+| `r_init.cpp` | compiles unmodified and is on the proof list; its window and monitor calls are declared by `<linux/win32_window.h>` and implemented over SDL3, and the [device probe](linux-device-probe.md) links it and creates the device through it |
+| `rb_sky.cpp` | compiles unmodified and is on the proof list (`Sleep` is in `<linux/win32_window.h>`) |
+| `r_screenshot.cpp` | `MonitorFromWindow`, `ClientToScreen` |
 | `r_material_load_obj.cpp` | D3DX (`ID3DXFile`, `TEXTMETRICA`) |
 | `r_cinematic.cpp` | Windows-only Bink texture helpers |
 | `r_texturemem.cpp` | `<ddraw.h>` |
@@ -324,8 +326,11 @@ census mode with the boundary is the way to ratchet those.
    and a portal-subset rule turned out not to be among them, so both are
    reported, not enforced. mp_crash passes all 178 views in RelWithDebInfo and
    Debug on a developer machine ([evidence](#evidence-mp_crash-2026-11-02)).
-3. Device-side: create the device through the boundary from the SDL window host,
-   run `R_InitGraphicsApi`-level resource creation for the world's vertex and
+3. Device-side. *Device creation done:* the
+   [device probe](linux-device-probe.md) runs `r_init.cpp`'s own
+   `R_PreCreateWindow`, `R_SetWndParms`, `R_CreateWindow` and `R_CreateDevice`
+   from an SDL3 window, checks the shader model 3 path was chosen, and clears,
+   reads back and presents. *Next:* resource creation for the world's vertex and
    index buffers, images and the techniques the world's materials use; refuse
    any technique or vertex declaration not yet supported, by name.
 4. Draw one fixed view through `RB_Draw3D`, `R_DrawLit` and `R_DrawBspDrawSurfs`

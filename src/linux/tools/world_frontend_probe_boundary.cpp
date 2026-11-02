@@ -8,9 +8,11 @@
 // src/linux/server_renderer_counterparts.cpp. What is left, the symbols no
 // linked unit defines, is defined here in exactly two kinds:
 //
-//  1. Storage whose owner does not compile on Linux yet: r_init.cpp holds the
-//     device globals and the render-thread state, and win_wndproc.cpp the window
-//     dvars. Each object has the owner's exact type and is zero-initialized,
+//  1. Storage whose owner this probe does not link: r_init.cpp holds the
+//     device globals and the render-thread state (it compiles through the
+//     native D3D9 boundary and the device probe links it, but this probe makes
+//     no device), and win_wndproc.cpp, which does not compile on Linux, the
+//     window dvars. Each object has the owner's exact type and is zero-initialized,
 //     which is what the owner's definition is before its init code runs: no
 //     device, no render thread, rendering not disabled. With r_glob zeroed, the
 //     real R_BeginRemoteScreenUpdate, R_SyncRenderThread and
@@ -41,7 +43,7 @@
 #include <cstdio>
 #include <cstdlib>
 
-// ---- 1. storage owned by units that do not compile on Linux yet ---------------
+// ---- 1. storage whose owner this probe does not link ------------------------
 
 DxGlobals dx;                 // r_init.cpp
 GfxGlobals r_glob;            // r_init.cpp

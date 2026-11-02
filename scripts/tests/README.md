@@ -197,6 +197,26 @@ the production renderer units in
 boundary and fail without it. See [docs/linux-native-d3d9.md](../../docs/linux-native-d3d9.md).
 A pass does not claim a device, a draw, linking or the hosted run.
 
+## D3D9 device probe and Win32 window layer
+
+These are CMake targets, not a runner: configure with
+`-DKISAK_BUILD_LINUX_NATIVE_D3D9=ON -DKISAK_BUILD_DEVICE_PROBE=ON`, the DXVK Native
+headers, a D3D9 library (`KISAK_DXVK_NATIVE_LIBRARY`) and `SDL3_DIR`, then build
+`KisakCOD-win32-window-test` and `KisakCOD-device-probe`
+([guide](../../docs/linux-device-probe.md)).
+
+```sh
+SDL_VIDEODRIVER=dummy LD_LIBRARY_PATH=<sdl3-sdk>/lib <bin>/KisakCOD-win32-window-test
+LD_LIBRARY_PATH=<dxvk-prefix>/lib32:<sdl3-sdk>/lib <bin>/KisakCOD-device-probe --frames 60
+```
+
+The window test checks the Win32 window and monitor calls `r_init.cpp` makes, as
+implemented over SDL3, on SDL's dummy driver: no display, GPU, Vulkan or D3D9
+library. The probe creates the device through `r_init.cpp` and needs DXVK Native
+2.7.1, a Vulkan driver and a display. CI builds both against a stand-in D3D9
+library whose `Direct3DCreate9` returns null, runs the window test, and checks the
+probe fails closed at `stage=direct3d`; it never creates a device.
+
 ## World front-end checks
 
 ```sh

@@ -81,10 +81,28 @@ The first runs found three probe defects (no shader path chosen, a visibility
 bound read from a word count, and a portal-subset rule that the engine's
 portal culling does not satisfy), each fixed in its own commit.
 
+## Follow-up: the device, 2026-11-02
+
+`KisakCOD-device-probe` (opt-in `KISAK_BUILD_DEVICE_PROBE`, on top of the native
+D3D9 boundary, with DXVK Native and SDL3) runs `r_init.cpp`'s own
+`R_PreCreateWindow`, `R_SetWndParms`, `R_CreateWindow` and `R_CreateDevice`,
+requires the shader model 3 path, reads a cleared back buffer back in memory,
+presents frames and releases everything. `r_init.cpp` and `rb_sky.cpp` now
+compile unmodified through the boundary (23 units): the Win32 window, monitor and
+`Sleep` calls are declared in `src/linux/win32_window.h` and implemented over
+SDL3 in `src/linux/client/window/win32_window_sdl3.cpp`, with an asset-free test
+on SDL's dummy driver. CI builds both in Debug and RelWithDebInfo against a
+stand-in D3D9 library and checks the probe fails closed.
+
+Verified locally in the sandbox only (DXVK 2.7.1 i386 on Mesa lavapipe, a
+software Vulkan driver, under Xvfb): the probe passes in Debug and
+RelWithDebInfo with 0 mismatched read-back pixels and 60 frames presented. No hardware run yet. Details and limits:
+[linux-device-probe.md](linux-device-probe.md).
+
 ## Not done
 
-- No device, no resource creation, no draw, no GPU evidence. The real
-  `GfxWorld` is walked offline only.
+- No resource creation, no draw, no GPU evidence. The device exists only in the
+  device probe, which loads no zone; the real `GfxWorld` is walked offline only.
 - `R_GenerateSortedDrawSurfs` is not called as a whole: its lighting, fog, sun,
   shadow and entity stages need world data the synthetic world lacks.
 - The census compiles with the D3D9 stand-in only.
@@ -92,6 +110,7 @@ portal culling does not satisfy), each fixed in its own commit.
 ## Next
 
 Follow the order in [linux-world-frontend.md](linux-world-frontend.md#order-of-work-toward-one-static-map-view):
-device and resources through the boundary from the SDL window host, one
-fixed-view draw behind the free-camera `SceneRenderer` interface, and GPU
-evidence on a developer machine.
+the device probe on a developer machine's GPU, then the world's resources
+created on that device (vertex and index buffers, images, the techniques its
+materials use), one fixed-view draw behind the free-camera `SceneRenderer`
+interface, and GPU evidence on a developer machine.

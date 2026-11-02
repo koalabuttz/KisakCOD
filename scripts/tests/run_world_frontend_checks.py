@@ -24,8 +24,10 @@ boundary documents (docs/linux-native-d3d9.md). No DXVK library is linked and no
 D3D9 method is called.
 
 Why an explicit source list: the renderer front end lives beside the D3D9 back
-end in ``src/gfx_d3d``, and r_init.cpp does not compile on Linux yet (see
-``scripts/tests/client_compile_census_blocked.txt``). The list below is the exact
+end in ``src/gfx_d3d``, and r_init.cpp, which creates the window and the device,
+is not linked: it compiles only through the native D3D9 boundary with the Win32
+window layer (docs/linux-device-probe.md), and this check makes no device. The
+list below is the exact
 closure that links: every production unit here compiles unmodified, and
 everything else those units can reach is defined by the boundary file as host
 services, zero-initialized storage, or functions that abort with their name.

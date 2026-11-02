@@ -2,9 +2,13 @@
 
 This is the one build boundary through which engine renderer code reaches
 DXVK Native 2.7.1 D3D9 on 32-bit Linux. It is opt-in and off by default. It
-compiles engine code against the real D3D9 interfaces. It does **not** create a
-device, draw anything, or link a renderer into any executable. The next milestone
-(a static genuine map view through the engine renderer) builds on top of it.
+compiles engine code against the real D3D9 interfaces. The boundary itself
+creates no device and draws nothing; the targets built on it do. The world
+front-end test and probe link renderer units through it with no D3D9 library
+([linux-world-frontend.md](linux-world-frontend.md)), and the device probe links
+`r_init.cpp` through it and creates a real device
+([linux-device-probe.md](linux-device-probe.md)). The static map view milestone
+builds on those.
 
 ## The problem it solves
 
@@ -45,16 +49,29 @@ gfx_d3d/*.h (unchanged)
    `HINSTANCE`, `HMODULE`, `POINT`, `LPPOINT` to `KisakDxvk*` while DXVK's headers
    are read, so DXVK's declarations keep exactly the types `libdxvk_d3d9.so` was
    built with. DXVK's `struct RECT` is given the Windows tag `tagRECT`, and `RECT`
-   becomes the Windows typedef of it, because engine code spells `tagRECT`;
+   becomes the Windows typedef of it, because engine code spells `tagRECT`.
+   `HMONITOR` and `HDC` take two phases: DXVK's `<windows.h>` is read with them
+   renamed (DXVK's are `void *`), then `<d3d9.h>` is read with the engine's
+   `HMONITOR__ *`/`HDC__ *` from `compat.h` visible, so
+   `IDirect3D9::GetAdapterMonitor` returns the handle type `r_init.cpp` stores and
+   compares. Both are pointer-sized handles passed and returned identically;
 3. includes DXVK's `<d3d9.h>` with DXVK's own (empty) conventions in effect;
 4. undoes the renames and restores the engine's macros (`#pragma pop_macro`);
 5. static_asserts, in every unit that uses it: `__stdcall` and `WINAPI` still
    mean stdcall; `Direct3DCreate9` is cdecl; `HWND`/`HINSTANCE`/`WCHAR`/`POINT`
    keep the engine's types and Windows layouts; `DWORD`/`UINT`/`LONG`/`BOOL`/
    `HRESULT`/`HANDLE` are the same types on both sides; `D3DPRESENT_PARAMETERS`
-   keeps DXVK's `HWND`; **every enumerator value the stand-in declares equals
-   DXVK's**; and the embedded layouts (`D3DDISPLAYMODE`, enum widths, interface
-   pointers) match the stand-in.
+   keeps DXVK's `HWND`; `GetAdapterMonitor` and `IDirect3DSurface9::GetDC` use
+   the engine's `HMONITOR` and `HDC`; **every enumerator value the stand-in
+   declares equals DXVK's**; and the embedded layouts (`D3DDISPLAYMODE`, enum
+   widths, interface pointers) match the stand-in;
+6. includes `<linux/win32_window.h>` last: the Win32 window, monitor and process
+   calls the renderer units make (`CreateWindowExA`, `MonitorFromPoint`,
+   `EnumDisplayMonitors`, `GetMonitorInfoA`, `Sleep`, ...) with the engine's
+   stdcall convention and Windows layouts. Declaring them lets `r_init.cpp` and
+   `rb_sky.cpp` compile unmodified; only a target that links
+   `src/linux/client/window/win32_window_sdl3.cpp` can call them (see
+   [linux-device-probe.md](linux-device-probe.md)).
 
 DXVK's COM helper macros (`interface`, `STDMETHOD`, `PURE`, `THIS`, `FAILED`,
 `SUCCEEDED`, `S_OK`, `D3DERR_*`, `__uuidof`, ...) stay defined in opt-in units, as
@@ -91,17 +108,18 @@ only stores them needs.
 
 - D3DX. `r_material_load_obj.cpp` includes D3DX headers; DXVK Native ships no
   D3DX library. Shader compilation/loading needs its own decision.
-- Win32 APIs that are not D3D9: `ddraw.h` (`r_texturemem.cpp`), `MONITORINFO`
-  (`r_screenshot.cpp`), `HMONITOR`/window styles (`r_init.cpp`), `Sleep`
-  (`rb_sky.cpp`), Bink textures (`r_cinematic.cpp`). These are ordinary Linux
-  porting work in the renderer TUs, not boundary work. (`_itoa` and `_time64`,
-  once listed here, are now shimmed in `src/linux/compat.h`.)
-- Linking. The boundary's own checks link no renderer unit, and
-  `KISAK_DXVK_NATIVE_LIBRARY` is only passed through for future device-creating
-  targets. The first consumer that links boundary units is the asset-free world
-  front-end test ([linux-world-frontend.md](linux-world-frontend.md)): it links
-  `r_scene.cpp` and `r_buffers.cpp` built this way, with DXVK's headers and no
-  DXVK library.
+- Win32 APIs that are not D3D9 and are not declared yet: `ddraw.h`
+  (`r_texturemem.cpp`), `MonitorFromWindow` and `ClientToScreen`
+  (`r_screenshot.cpp`), Bink textures (`r_cinematic.cpp`). These are ordinary
+  Linux porting work in the renderer TUs. (`_itoa` and `_time64` are shimmed in
+  `src/linux/compat.h`; the window and monitor calls of `r_init.cpp` and the
+  `Sleep` of `rb_sky.cpp` are in `<linux/win32_window.h>`.)
+- Linking. The boundary's own checks link no renderer unit.
+  `KISAK_DXVK_NATIVE_LIBRARY` is linked by targets that link the interface target
+  and need a device: today only the opt-in device probe
+  ([linux-device-probe.md](linux-device-probe.md)). The asset-free world front-end
+  test ([linux-world-frontend.md](linux-world-frontend.md)) links `r_scene.cpp`
+  and `r_buffers.cpp` built this way, with DXVK's headers and no DXVK library.
 
 ## Build
 
@@ -170,8 +188,9 @@ Vulkan, SDL or game data, and never builds or changes `KisakCOD-dedi`.
 ## Verification boundary
 
 What the checks above establish: the boundary compiles with GCC 13 and Clang 18
-for i386; it keeps the engine's calling conventions and layouts; 21 production
+for i386; it keeps the engine's calling conventions and layouts; 23 production
 renderer units that call D3D9 compile unmodified through it. What they do not
-establish: device creation from engine code, any draw, linking of renderer units,
-behaviour on other DXVK versions, or anything on hardware. Those belong to the
+establish: device creation from engine code, any draw, behaviour on other DXVK
+versions, or anything on hardware. Device creation is the device probe's
+evidence ([linux-device-probe.md](linux-device-probe.md)); drawing belongs to the
 static map view milestone and must be verified there.
