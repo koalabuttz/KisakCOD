@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compile and run the asset-free world surface checks for one configuration.
 
-This runner performs **no CMake configure and no engine build**. It compiles eight
+This runner performs **no CMake configure and no engine build**. It compiles nine
 standalone test translation units directly with a 32-bit C++20 compiler and runs
 them, then runs the bundle prepare tests. Everything here works without DXVK, SDL,
 a GPU, a Steam client, credentials, game assets or a network:
@@ -29,6 +29,11 @@ a GPU, a Steam client, credentials, game assets or a network:
     device probe holds each texture, shader and vertex/index buffer to, as pure
     functions over plain numbers, built against ``src`` for
     ``src/linux/tools/world_device_rules.h``, which includes no D3D9 header;
+  * ``tests/linux_asset_export/world_draw_rules_test.cpp`` -- what the world draw
+    probe holds a drawn frame to (the back-buffer measurement, the colour, coverage,
+    brightness, repeat and camera rules, and the renderer's own draw counts), on
+    frames built in memory, built against ``src`` for
+    ``src/linux/tools/world_draw_rules.h``, which includes no engine or D3D9 header;
   * ``tests/linux_asset_export/world_image_capture_test.cpp`` -- the image capture's
     bounds, name filter, duplicate rule and disabled path. This one is the only case
     that is not a single translation unit: the capture state lives behind a mutex in
@@ -45,7 +50,7 @@ check that must not need DXVK, SDL or a device. The four renderer tests
 (``world_surface_context``, ``world_surface_bundle``, ``world_surface_oracle`` and
 ``world_lit_bundle``) are asset-free by construction -- they include one header each
 and open no file except temporary bundles they write themselves -- and the image
-capture test compiles its own unit and nothing else from ``src``, so all eight are
+capture test compiles its own unit and nothing else from ``src``, so all nine are
 built here with an explicit compiler line instead.
 
 Configurations are explicit rather than inherited from a build system: ``Debug``
@@ -199,6 +204,14 @@ CASES = (
         "world_device_rules",
         "world device texture, shader and buffer rules",
         "tests/linux_asset_export/world_device_rules_test.cpp",
+        ("src",),
+    ),
+    # Header only: what the world draw probe holds a drawn frame to, checked on
+    # frames built in memory. No engine header, no D3D9 header, no stored image.
+    Case(
+        "world_draw_rules",
+        "world draw frame measurement and rules",
+        "tests/linux_asset_export/world_draw_rules_test.cpp",
         ("src",),
     ),
     # The one case with a second translation unit. The capture state, its arena and

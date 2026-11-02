@@ -37,8 +37,8 @@ NO_MAP = "Offline asset export failed: KisakCOD-world-device-probe needs KISAK_W
 UNKNOWN_MAP = "Offline asset export failed: world_device_probe stage=arguments: "
 # Every export mode the exporter reads; a stray one in the caller's environment
 # would change which refusal the probe gives.
-MODE_VARIABLES = ("KISAK_WORLD_DEVICE_MAP", "KISAK_WORLD_SURFACE_MAP", "KISAK_WORLD_FRONTEND_MAP",
-                  "KISAK_UI_ASSET_EXPORT_MENUS", "KISAK_UI_ASSET_EXPORT_DIR")
+MODE_VARIABLES = ("KISAK_WORLD_DEVICE_MAP", "KISAK_WORLD_DRAW_MAP", "KISAK_WORLD_SURFACE_MAP",
+                  "KISAK_WORLD_FRONTEND_MAP", "KISAK_UI_ASSET_EXPORT_MENUS", "KISAK_UI_ASSET_EXPORT_DIR")
 
 
 def run_probe(probe, tree, output, map_name, timeout):

@@ -63,6 +63,8 @@ include(${SCRIPTS_DIR}/platform/linux/world_frontend_probe.cmake)
 include(${SCRIPTS_DIR}/platform/linux/device_probe.cmake)
 # After both probes: the world device probe needs both and reuses their source lists.
 include(${SCRIPTS_DIR}/platform/linux/world_device_probe.cmake)
+# After the world device probe: the draw probe needs it and extends its source lists.
+include(${SCRIPTS_DIR}/platform/linux/world_draw_probe.cmake)
 
 # ---------------------------------------------------------------------------
 # Opt-in native Linux client network core (KISAK_BUILD_LINUX_CLIENT_CORE)

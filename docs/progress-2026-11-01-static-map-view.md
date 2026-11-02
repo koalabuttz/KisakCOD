@@ -129,10 +129,38 @@ vertex buffers are on the device, and so is everything the world's 5,558
 surfaces draw with. Details and limits:
 [linux-world-device-probe.md](linux-world-device-probe.md).
 
+## Follow-up: the first draw, 2026-11-02
+
+`KisakCOD-world-draw-probe` (opt-in `KISAK_BUILD_WORLD_DRAW_PROBE`, on top of
+the world device probe) links the whole renderer except the four units the
+client compile census blocks. It starts the renderer with `r_init.cpp`'s own
+`R_Init` (window, device, graphics zones, render targets, initial state, scene,
+code images and materials) on one thread, loads one allowlisted map, registers
+it with `R_LoadWorld`, and draws it from two of the map's cameras the way
+`R_GenerateReflectionRawData` does: `R_RenderScene`, then the backend's material
+passes and a present. It reads each frame back into memory and holds it to pure
+rules with an asset-free test (`world_draw_rules`). Nothing but a JSON report is
+written.
+
+What the linked renderer reaches in client systems that never start here
+(effects, dynamic entity physics, sound, cgame, cinematics) is in one boundary
+file, each entry either doing what its owner does when that system is empty or
+aborting with its name.
+
+Supporting change: the renderer-owned definitions the dedicated server needs
+from a drawing unit (`R_RegisterModel`, the shader-cache clears, the static
+model cache check, `Load_PicmipWater`) moved from `server_assets.cpp` to
+`server_draw_counterparts.cpp`, unchanged, so the draw probe can link their
+owners instead.
+
+CI builds the probe against the stand-in D3D9 library and checks it fails
+closed. Details, limits and evidence:
+[linux-world-draw-probe.md](linux-world-draw-probe.md).
+
 ## Not done
 
-- No draw. The world's device objects exist only in the world device probe,
-  which stops after checking them.
+- No draw outside the world draw probe, and no free camera: the probe draws
+  fixed spawn-point views at scene time 0 with no effects, entities or 2D.
 - `R_GenerateSortedDrawSurfs` is not called as a whole: its lighting, fog, sun,
   shadow and entity stages need world data the synthetic world lacks.
 - The census compiles with the D3D9 stand-in only.

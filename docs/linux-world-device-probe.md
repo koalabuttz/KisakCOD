@@ -100,6 +100,10 @@ device probe options on as well, because it starts from their source lists:
     owns here.
 
   The configure stops if the dedicated target no longer lists one of them.
+  `server_draw_counterparts.cpp` stays, because the owners of what it holds
+  (`R_RegisterModel`, the shader-cache clears, the static model cache check and
+  `Load_PicmipWater`) are units this probe does not draw with; the
+  [world draw probe](linux-world-draw-probe.md) links those owners instead.
   `server_assets.cpp` keeps what every target needs and no device touches.
 - **The link boundary.** `src/linux/tools/world_device_probe_boundary.cpp` holds:
   - storage whose owner is not linked (`onlinegame`, `r_fullscreen`,

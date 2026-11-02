@@ -139,9 +139,9 @@ python3 scripts/tests/run_world_surface_checks.py --config RelWithDebInfo
 python3 scripts/tests/run_world_surface_checks.py --list
 ```
 
-This runner performs no CMake configure and no engine build. It compiles eight
+This runner performs no CMake configure and no engine build. It compiles nine
 standalone test translation units directly with `-m32 -std=c++20 -Werror` and runs
-them, then runs the bundle prepare script, for nine checks:
+them, then runs the bundle prepare script, for ten checks:
 
 | Check | Source | Covers |
 | --- | --- | --- |
@@ -152,6 +152,7 @@ them, then runs the bundle prepare script, for nine checks:
 | `world_lit_bundle` | `tests/linux_renderer/world_lit_bundle_test.cpp` | lit loader refusals: program pair hash and length, widened geometry counts, index walk, colour-map sampler, exact constant set, lightmap layout |
 | `world_frontend_invariants` | `tests/linux_asset_export/world_frontend_invariants_test.cpp` | the rules the offline world front-end probe holds each frame to, and its spawn-point camera scan ([guide](../../docs/linux-world-frontend.md#a-real-map-the-offline-front-end-probe)) |
 | `world_device_rules` | `tests/linux_asset_export/world_device_rules_test.cpp` | the rules the world device probe holds each texture, shader and vertex/index buffer to ([guide](../../docs/linux-world-device-probe.md)) |
+| `world_draw_rules` | `tests/linux_asset_export/world_draw_rules_test.cpp` | what the world draw probe holds a drawn frame to: the back-buffer measurement, the colour, coverage, brightness, repeat and camera rules, and the draw counts, on frames built in memory ([guide](../../docs/linux-world-draw-probe.md)) |
 | `world_image_capture` | `tests/linux_asset_export/world_image_capture_test.cpp` | capture bounds, name filter, duplicate rule, disabled path |
 | `world_surface_prepare` | `test_world_surface_prepare.py` | the prepare step's trust boundary over archives it writes itself |
 
@@ -238,6 +239,25 @@ without), and runs the probe three times: an allowlisted map must stop at
 refused first. All three exit 1 and write nothing. It takes no game directory and
 is meant for the stand-in library: with a working DXVK and a Vulkan device the
 first run gets past `Direct3DCreate9` and the script fails.
+
+### World draw probe
+
+`KisakCOD-world-draw-probe` (`-DKISAK_BUILD_WORLD_DRAW_PROBE=ON`, on top of the
+world device probe) draws views of one map through the engine's own renderer and
+checks each frame it reads back
+([guide](../../docs/linux-world-draw-probe.md)). Its frame rules have an
+asset-free test in the world surface runner (`world_draw_rules`). Without a
+device:
+
+```sh
+LD_LIBRARY_PATH=<sdl3-sdk>/lib:<stand-in dir> SDL_VIDEODRIVER=dummy \
+  python3 scripts/tests/test_world_draw_probe.py --probe <bin>/KisakCOD-world-draw-probe
+```
+
+The script uses the same kind of temporary tree as the world device probe's and
+runs the probe four times: an allowlisted map must stop at `stage=direct3d`
+before `R_Init` runs, and no map, an unknown map and a show time over 60 seconds
+must be refused first. All four exit 1 and write nothing.
 
 ## World front-end checks
 
