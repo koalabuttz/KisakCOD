@@ -67,6 +67,11 @@ struct Leg
     double seconds = 0;
     double minLuma = 1e9, maxLuma = -1e9;
     size_t minColors = SIZE_MAX;
+    // The leg's frame with the fewest colours and the pose it was drawn from: a
+    // flat frame in motion is worth finding even when the checkpoints settle.
+    int fewestColorsFrame = -1;
+    kv::CameraPose fewestColorsPose{};
+    FrameResult fewestColors{};
 };
 
 struct Interruption
@@ -110,6 +115,12 @@ public:
                 leg.name + " frame " + std::to_string(leg.frames) + " was " + kv::FrameOutcomeName(outcome) +
                     (owner_.Error().empty() ? std::string() : ": " + owner_.Error()));
         const FrameResult &frame = renderer_.LastFrame();
+        if (leg.fewestColorsFrame < 0 || frame.stats.distinctColors < leg.fewestColors.stats.distinctColors)
+        {
+            leg.fewestColorsFrame = int(leg.frames);
+            leg.fewestColorsPose = owner_.Camera().Pose();
+            leg.fewestColors = frame;
+        }
         ++leg.frames;
         leg.seconds += frame.seconds;
         leg.minLuma = std::min(leg.minLuma, frame.stats.meanLuma);
@@ -119,8 +130,13 @@ public:
 
     void Finish(Leg &leg)
     {
-        Say("free_camera_leg name=%s frames=%u seconds=%.3f luma=%.1f..%.1f min_colors=%zu\n", leg.name.c_str(),
-            leg.frames, leg.seconds, leg.minLuma, leg.maxLuma, leg.minColors);
+        const kv::CameraPose &pose = leg.fewestColorsPose;
+        Say("free_camera_leg name=%s frames=%u seconds=%.3f luma=%.1f..%.1f min_colors=%zu fewest_colors_frame=%d "
+            "origin=%.2f,%.2f,%.2f angles=%.3f,%.3f,%.3f\n",
+            leg.name.c_str(), leg.frames, leg.seconds, leg.minLuma, leg.maxLuma, leg.minColors,
+            leg.fewestColorsFrame, pose.origin[0], pose.origin[1], pose.origin[2], pose.angles[0], pose.angles[1],
+            pose.angles[2]);
+        SayFrame((leg.name + ".fewest_colors").c_str(), leg.fewestColorsFrame, leg.fewestColors);
         legs_.push_back(leg);
     }
 
@@ -385,7 +401,9 @@ void Kisak_ReplayFreeCamera(const std::filesystem::path &directory, const char *
             std::snprintf(luma, sizeof(luma), "[%.2f,%.2f]", leg.minLuma, leg.maxLuma);
             body << (first ? "" : ",") << "{\"name\":" << Json(leg.name) << ",\"frames\":" << leg.frames
                  << ",\"seconds\":" << leg.seconds << ",\"mean_luma_range\":" << luma
-                 << ",\"min_distinct_colors\":" << leg.minColors << "}";
+                 << ",\"min_distinct_colors\":" << leg.minColors << ",\"fewest_colors\":{\"frame\":"
+                 << leg.fewestColorsFrame << ",\"pose\":" << PoseJson(leg.fewestColorsPose)
+                 << ",\"result\":" << FrameJson(leg.fewestColors) << "}}";
             first = false;
         }
         body << "],\"interruptions\":[";
