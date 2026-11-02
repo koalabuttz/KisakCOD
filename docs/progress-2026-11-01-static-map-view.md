@@ -122,14 +122,17 @@ Supporting changes:
   real.
 
 CI builds the probe against the stand-in D3D9 library and checks it fails
-closed. The sandbox (lavapipe, no game data) gets as far as the device and the
-queued graphics zones. The mp_crash run on a GPU is the open evidence. Details
-and limits: [linux-world-device-probe.md](linux-world-device-probe.md).
+closed. Verified locally, not in CI: on David's laptop GPU (Intel Raptor Lake-P,
+Mesa ANV 25.0.7, DXVK 2.7.1 i386) mp_crash passes in Debug and RelWithDebInfo
+with no problems. 1,630 images, 1,270 shader model 3 shaders and both world
+vertex buffers are on the device, and so is everything the world's 5,558
+surfaces draw with. Details and limits:
+[linux-world-device-probe.md](linux-world-device-probe.md).
 
 ## Not done
 
-- No draw. The world's device objects exist only in the world device probe, and
-  its mp_crash run on a GPU is still to come.
+- No draw. The world's device objects exist only in the world device probe,
+  which stops after checking them.
 - `R_GenerateSortedDrawSurfs` is not called as a whole: its lighting, fog, sun,
   shadow and entity stages need world data the synthetic world lacks.
 - The census compiles with the D3D9 stand-in only.
@@ -137,7 +140,6 @@ and limits: [linux-world-device-probe.md](linux-world-device-probe.md).
 ## Next
 
 Follow the order in [linux-world-frontend.md](linux-world-frontend.md#order-of-work-toward-one-static-map-view):
-the world device probe's mp_crash run on a GPU, then one fixed-view draw behind
-the free-camera `SceneRenderer` interface (which needs `R_InitHardware`'s later
-steps: render targets, initial state, scene and `R_InitSystems`), and GPU
-evidence of that draw on a developer machine.
+one fixed-view draw behind the free-camera `SceneRenderer` interface (which
+needs `R_InitHardware`'s later steps: render targets, initial state, scene and
+`R_InitSystems`), and GPU evidence of that draw on a developer machine.

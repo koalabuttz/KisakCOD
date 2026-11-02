@@ -128,15 +128,21 @@ cmake -S . -B ~/kisak-build/world-device-rel -G Ninja -DKISAK_PLATFORM=linux \
 cmake --build ~/kisak-build/world-device-rel --target KisakCOD-world-device-probe
 ```
 
-Run it like the front-end probe, from a staging tree that links the game's
-`main`, `zone` and `localization.txt` read-only, with a separate writable home:
+Run it from a staging tree that holds only symlinks to the game's `main`, `zone`
+and `localization.txt`, with a separate empty writable home as the working
+directory. Mesa caches compiled shaders under `~/.cache` unless
+`MESA_SHADER_CACHE_DIR` points elsewhere:
 
 ```sh
+MESA_SHADER_CACHE_DIR=~/kisak-private/mesa-cache \
 LD_LIBRARY_PATH=<dxvk-prefix>/lib32:<sdl3-sdk>/lib \
-KISAK_UI_ASSET_EXPORT_DIR=~/kisak-private/device-world-1 KISAK_WORLD_DEVICE_MAP=mp_crash \
+KISAK_UI_ASSET_EXPORT_DIR=$HOME/kisak-private/device-world-1 KISAK_WORLD_DEVICE_MAP=mp_crash \
   ~/kisak-build/world-device-rel/bin/KisakCOD-world-device-probe \
   +set fs_basepath <staging> +set fs_homepath <home> +set dedicated 2 +set useFastFile 1
 ```
+
+Keep the log outside the output directory: the probe needs that directory new
+or empty.
 
 The output directory must be absolute, new or empty, and mode 0700.
 `KISAK_WORLD_DEVICE_MAP` is required, and the probe refuses every other export
@@ -184,10 +190,59 @@ This is not hardware evidence and not a map load. The sandbox has no game data.
   3 checks, because the device is created there. This shows the script does
   detect a run that gets past `Direct3DCreate9`.
 
-### A GPU and mp_crash
+### A GPU and mp_crash: David's laptop, 2026-11-02
 
-Not run yet. This is the evidence the probe exists for, and it needs the game
-data on a developer machine.
+Commit c2aea46, local evidence, not CI.
+
+| | |
+| --- | --- |
+| Machine | Debian 13, GNOME Wayland (`video_driver=wayland`); Intel Processor U300 with Raptor Lake-P graphics (Vulkan "Intel(R) Graphics (RPL-U)") |
+| Graphics stack | Mesa ANV 25.0.7; DXVK Native 2.7.1 i386; SDL 3.2.10 i386 |
+| Compiler | clang 19.1.7; no warnings from `src/linux/` in either build |
+| Data | the owner's installed game, read through symlinks; the game folder listing was identical before and after |
+
+**Both runs pass.** RelWithDebInfo and Debug each exit 0 with
+`world_device_probe=passed problems=0` in about 11 s. The two reports are
+identical apart from timings, and so are the engine's log lines apart from
+paths, times and the build tag. No line has `ERROR`, `FATAL`, `ASSERT` or
+`Couldn't`, and DXVK printed no warning or error.
+
+- **Device.** DXVK skipped llvmpipe and created the device on the Intel GPU
+  (the adapter line shows its AMD stand-in identity again). Shader model 3,
+  640x480 windowed, 4086 MB of texture memory reported.
+- **Zones.** The four graphics zones loaded in 4.2 s (4.7 s in Debug), then
+  mp_crash in 6.2 s (6.0 s). Each zone's vertex and index blocks are in buffers
+  of their size:
+
+  | Zone | Vertex bytes | Index bytes |
+  | --- | ---: | ---: |
+  | `code_post_gfx_mp` | 12,224 | 1,264 |
+  | `localized_code_post_gfx_mp` | 0 | 0 |
+  | `common_mp` | 9,572,992 | 1,128,448 |
+  | `localized_common_mp` | 0 | 0 |
+  | `mp_crash` | 13,404,672 | 2,100,116 |
+
+- **Images.** All 1,630 have a texture of the recorded kind and size: 1,608 2D,
+  1 volume and 21 cube maps, 344.5 MB on the card. By category, 1,601 were
+  loaded from file, 27 are auto-generated and 2 are lightmaps. None was
+  substituted.
+- **Shaders.** 352 technique sets, 1,412 techniques and 1,414 passes. All 420
+  vertex and 850 pixel programs built for shader model 3 have device shaders,
+  and the 242 and 424 built for shader model 2 have none. Each of the 32 vertex
+  declarations was built. Not every declaration has every vertex type (per
+  type: 16, 23, 23, 32 ... 5, 32), which is why the world rule asks for the one
+  type the BSP path selects rather than all of them.
+- **The world.** `maps/mp/mp_crash.d3dbsp`: 5,558 surfaces use 134 materials.
+  Their 2,333 techniques and 2,503 passes all have device shaders and the world
+  vertex declaration the BSP path selects. Their 334 textures and the world's
+  23 lightmap, reflection-probe, sky and outdoor images all exist. The world
+  vertex buffer holds all 166,418 vertices (7,322,392 bytes), and the vertex
+  layer buffer holds its 4 bytes.
+- **Left behind.** The private output holds the 1,170-byte report (mode 0600)
+  and the homes hold only `main/console_mp.log`. DXVK wrote no log file.
+
+What this does not show: that anything renders, the shader model 2 path, other
+GPUs or drivers, or any map but mp_crash.
 
 ## Limits
 
