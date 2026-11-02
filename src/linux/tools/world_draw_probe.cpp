@@ -64,9 +64,13 @@ constexpr float kHalfFovXDegrees = 32.5f;
 // The scene time every frame is drawn at. R_GenerateReflectionRawData draws at
 // 0 too; one fixed time makes a repeated draw of a view comparable.
 constexpr int kSceneTime = 0;
-// View A is drawn this many times: the first draw may differ from later ones
-// while per-frame caches settle, and the last two must match.
-constexpr int kRepeatDraws = 3;
+// Each view is drawn until two draws in a row give the same pixels, at most this
+// many times. The first draws of a view differ while the renderer's per-frame
+// state settles: the static model cache, for one, takes at most 256 surfaces and
+// 8192 vertices a frame (R_CacheStaticModelSurface), so a view's models move to
+// it over several frames. The GPU run of mp_crash is in
+// docs/linux-world-draw-probe.md.
+constexpr int kMaxSettleDraws = 32;
 constexpr size_t kMaxSpawnViews = 256;
 constexpr int kMaxShowSeconds = 60;
 
@@ -227,6 +231,9 @@ struct FrameResult
 {
     wdr::FrameStats stats;
     wdr::DrawCounts counts;
+    // Surfaces this frame moved into the static model cache (R_CacheStaticModelSurface);
+    // reported, not checked: it shows the cache filling while a view settles.
+    uint32_t smcPatches = 0;
     double seconds = 0;
 };
 
@@ -318,6 +325,7 @@ FrameResult DrawView(const Camera &camera, refdef_s &refdef)
     result.counts.litSurfaces = view.litInfo.drawSurfCount;
     result.counts.decalSurfaces = view.decalInfo.drawSurfCount;
     result.counts.emissiveSurfaces = view.emissiveInfo.drawSurfCount;
+    result.smcPatches = uint32_t(frontEndDataOut->smcPatchCount);
 
     R_EndFrame();
     R_IssueRenderCommands(0xFFFFFFFF);
@@ -455,7 +463,8 @@ std::string FrameJson(const FrameResult &frame)
          << ",\"detail_tiles\":" << s.detailTiles << ",\"digest\":\"" << Hex64(s.digest) << "\""
          << ",\"lit_surfaces\":" << c.litSurfaces << ",\"decal_surfaces\":" << c.decalSurfaces
          << ",\"emissive_surfaces\":" << c.emissiveSurfaces << ",\"world_draw_calls\":" << c.worldDrawCalls
-         << ",\"world_triangles\":" << c.worldTriangles << ",\"seconds\":" << frame.seconds << "}";
+         << ",\"world_triangles\":" << c.worldTriangles << ",\"smc_patches\":" << frame.smcPatches
+         << ",\"seconds\":" << frame.seconds << "}";
     return json.str();
 }
 
@@ -464,10 +473,10 @@ void SayFrame(const char *label, int draw, const FrameResult &frame)
     const wdr::FrameStats &s = frame.stats;
     const wdr::DrawCounts &c = frame.counts;
     Say("world_draw_frame view=%s draw=%d size=%ux%u colors=%zu dominant=%.3f luma=%.1f+-%.1f detail_tiles=%u "
-        "digest=%s lit=%u decal=%u emissive=%u world_calls=%u world_tris=%u seconds=%.3f\n",
+        "digest=%s lit=%u decal=%u emissive=%u world_calls=%u world_tris=%u smc_patches=%u seconds=%.3f\n",
         label, draw, s.width, s.height, s.distinctColors, s.dominantShare, s.meanLuma, s.lumaStdDev, s.detailTiles,
         Hex64(s.digest).c_str(), c.litSurfaces, c.decalSurfaces, c.emissiveSurfaces, c.worldDrawCalls,
-        c.worldTriangles, frame.seconds);
+        c.worldTriangles, frame.smcPatches, frame.seconds);
 }
 
 std::chrono::steady_clock::time_point g_started;
@@ -635,18 +644,26 @@ void Kisak_DrawWorld(const std::filesystem::path &directory, const char *mapName
     Say("world_draw_camera view=B classname=%s eye=%.1f,%.1f,%.1f angles=%.1f,%.1f,%.1f\n", b.classname.c_str(),
         b.eye[0], b.eye[1], b.eye[2], b.angles[0], b.angles[1], b.angles[2]);
 
-    // 3. The frames: view A until it repeats, then view B once.
+    // 3. The frames: view A until it settles, then view B until it settles.
     auto refdef = std::make_unique<refdef_s>();
-    std::vector<FrameResult> framesA;
-    std::vector<uint64_t> digestsA;
-    for (int draw = 0; draw < kRepeatDraws; ++draw)
-    {
-        framesA.push_back(DrawView(a, *refdef));
-        digestsA.push_back(framesA.back().stats.digest);
-        SayFrame("A", draw, framesA.back());
-    }
-    const FrameResult frameB = DrawView(b, *refdef);
-    SayFrame("B", 0, frameB);
+    auto drawUntilSettled = [&](const Camera &camera, const char *label, std::vector<FrameResult> &frames,
+                                std::vector<uint64_t> &digests) {
+        for (int draw = 0; draw < kMaxSettleDraws; ++draw)
+        {
+            frames.push_back(DrawView(camera, *refdef));
+            digests.push_back(frames.back().stats.digest);
+            SayFrame(label, draw, frames.back());
+            if (digests.size() >= 2 && digests[digests.size() - 1] == digests[digests.size() - 2])
+                break;
+        }
+        Say("world_draw_view view=%s draws=%zu settled=%s\n", label, frames.size(),
+            wdr::CheckRepeatable(digests).empty() ? "yes" : "no");
+    };
+    std::vector<FrameResult> framesA, framesB;
+    std::vector<uint64_t> digestsA, digestsB;
+    drawUntilSettled(a, "A", framesA, digestsA);
+    drawUntilSettled(b, "B", framesB, digestsB);
+    const FrameResult &frameB = framesB.back();
 
     // 4. The rules.
     std::vector<std::string> problems;
@@ -659,6 +676,7 @@ void Kisak_DrawWorld(const std::filesystem::path &directory, const char *mapName
     check("view A", wdr::CheckRepeatable(digestsA));
     check("view B", wdr::CheckFrame(frameB.stats, vidConfig.sceneWidth, vidConfig.sceneHeight));
     check("view B", wdr::CheckDrawCounts(frameB.counts));
+    check("view B", wdr::CheckRepeatable(digestsB));
     check("views A and B", wdr::CheckViewsDiffer(framesA.back().stats.digest, frameB.stats.digest));
 
     // 5. Optionally keep view A on screen. Each frame presents; nothing is saved.
@@ -686,7 +704,10 @@ void Kisak_DrawWorld(const std::filesystem::path &directory, const char *mapName
          << ",\"cameras\":{\"A\":" << CameraJson(a) << ",\"B\":" << CameraJson(b) << "},\"frames\":{\"A\":[";
     for (size_t i = 0; i < framesA.size(); ++i)
         json << (i ? "," : "") << FrameJson(framesA[i]);
-    json << "],\"B\":[" << FrameJson(frameB) << "]},\"shown_frames\":" << shownFrames
+    json << "],\"B\":[";
+    for (size_t i = 0; i < framesB.size(); ++i)
+        json << (i ? "," : "") << FrameJson(framesB[i]);
+    json << "]},\"max_settle_draws\":" << kMaxSettleDraws << ",\"shown_frames\":" << shownFrames
          << ",\"start_seconds\":" << startSeconds << ",\"map_seconds\":" << mapSeconds << ",\"seconds\":" << seconds
          << ",\"problem_count\":" << problems.size() << ",\"problems\":[";
     for (size_t i = 0; i < problems.size(); ++i)

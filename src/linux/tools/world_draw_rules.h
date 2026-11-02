@@ -151,15 +151,17 @@ inline std::string CheckFrame(const FrameStats &frame, uint32_t width, uint32_t 
 }
 
 // The same view drawn again with the same scene time: a renderer that draws from
-// the scene, not from leftovers, gives the same pixels. The first draw of a view
-// may differ from later ones while per-frame caches settle (sun visibility
-// queries, model lighting uploads), so the rule compares the last two draws.
+// the scene, not from leftovers, settles on the same pixels. The first draws of a
+// view differ while per-frame state settles (the static model cache fills a
+// bounded amount each frame), so the probe draws a view until two draws in a row
+// match, up to a limit, and this rule asks that the last two match.
 inline std::string CheckRepeatable(const std::vector<uint64_t> &digests)
 {
     if (digests.size() < 2)
         return "the view was drawn fewer than two times";
     if (digests[digests.size() - 1] != digests[digests.size() - 2])
-        return "drawing the same view again gave different pixels";
+        return "the view never settled: the last two of " + std::to_string(digests.size()) +
+               " draws gave different pixels";
     return {};
 }
 

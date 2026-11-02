@@ -50,7 +50,7 @@ probe's own code is in `src/linux/tools/world_draw_probe.cpp`.
 | `direct3d` | the probe's own `Direct3DCreate9`, released at once | no Direct3D 9 interface. `R_InitGraphicsApi` goes on without one, so the probe asks first |
 | renderer start | `R_Init`: the window and device for a 640x480 window, the graphics zones queued behind them, render targets, initial state, the scene, code images and materials | the engine's own errors |
 | `renderer` | after `R_Init` | no device, not registered, not the shader model 3 path, the scene not 640x480 windowed, or the device not `D3D_OK`; a code image (white, black, identity normal map) without a texture |
-| `graphics`, `world` | the map zone (`DB_LoadXAssets`, synchronous), then `R_LoadWorld` and `R_EndRegistration` | no graphics zone loaded; not exactly one packaged GfxWorld naming the map, or `R_LoadWorld` registers another |
+| `graphics`, `world` | the map zone (`DB_LoadXAssets`, synchronous), then the map load the cgame does before its first frame: `CM_LoadMap`, `CM_LinkWorld` and `Com_LoadWorld` as `CL_CM_LoadMap` does with no local server, then `R_LoadWorld` and `R_EndRegistration` | no graphics zone loaded; not exactly one packaged GfxWorld naming the map; a local server runs; the collision map or world data is not the map's; `R_LoadWorld` registers another world |
 | `cameras` | the map's entity string, scanned as the front-end probe does | no spawn point; fewer than two distinct cameras |
 | `frame`, `readback` | each frame (below) | the front end did not produce exactly one view; the device is not `D3D_OK` after the frame; the back buffer cannot be read or is not 32-bit RGB |
 | `check` | the rules below | a frame breaks a rule |
@@ -74,7 +74,11 @@ buffer. The back buffer is read the way the engine's `R_GetBackBufferData` reads
 it after its cubemap frames: `GetBackBuffer`, an offscreen plain surface,
 `GetRenderTargetData`, `LockRect`.
 
-View A is drawn three times, then view B once.
+Each view is drawn until two draws in a row give the same pixels, at most 32
+times: view A first, then view B. The first draws of a view differ while the
+renderer's per-frame state settles. The static model cache, for one, takes at
+most 256 surfaces and 8192 vertices a frame (`R_CacheStaticModelSurface`), so a
+view's static models move into it over several frames.
 
 ## What a frame is held to
 
@@ -92,10 +96,10 @@ built in memory.
 | coverage | each checked frame | at least 12 of 16 tiles (4x4) hold more than one colour |
 | brightness | each checked frame | mean luma (Rec. 601) between 4 and 251 |
 | emitted and drawn | each checked frame | the front end emitted at least one world surface, and the backend counted world draw calls and triangles |
-| repeatable | view A | the last two of its three draws have the same pixels (the first may differ while per-frame caches settle) |
+| settles | views A and B | the last two draws of the view have the same pixels |
 | follows the camera | views A and B | different pixels |
 
-The last draw of view A and the draw of view B are checked. The thresholds are
+The last draw of each view is checked. The thresholds are
 first estimates for a 640x480 view; the evidence below says what mp_crash gives.
 
 The output is `key=value` lines between the engine's own messages, flushed as
@@ -105,7 +109,8 @@ they happen:
   `world_draw_graphics_zones`, `world_draw_map`;
 - two `world_draw_camera` lines;
 - one `world_draw_frame` line per draw, with the measurements and counts and a
-  64-bit digest of the pixels;
+  64-bit digest of the pixels, and one `world_draw_view` line per view with its
+  number of draws and whether it settled;
 - `world_draw_problem` lines, then `world_draw_probe=passed|failed problems=N`.
 
 A pass ends with `asset_export=complete mode=world_draw_probe map=<map>` and exit
