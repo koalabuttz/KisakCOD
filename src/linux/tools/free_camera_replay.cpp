@@ -10,6 +10,7 @@
 #include <universal/q_shared.h>
 #include <qcommon/qcommon.h>
 #include <gfx_d3d/r_bsp.h>
+#include <gfx_d3d/r_dpvs.h>
 #include <gfx_d3d/r_init.h>
 #include <ui/keycodes.h>
 #include <linux/client/window/sdl_api.h>
@@ -72,6 +73,13 @@ struct Leg
     int fewestColorsFrame = -1;
     kv::CameraPose fewestColorsPose{};
     FrameResult fewestColors{};
+    // Where that frame's eye was: its visibility cell (R_CellForPoint, -1 for
+    // none) and its collision contents (CM_PointContents).
+    int fewestColorsCell = -1;
+    int fewestColorsContents = 0;
+    // Frames whose eye was inside solid collision, and frames with no world draw call.
+    unsigned solidFrames = 0;
+    unsigned noWorldFrames = 0;
 };
 
 struct Interruption
@@ -115,11 +123,19 @@ public:
                 leg.name + " frame " + std::to_string(leg.frames) + " was " + kv::FrameOutcomeName(outcome) +
                     (owner_.Error().empty() ? std::string() : ": " + owner_.Error()));
         const FrameResult &frame = renderer_.LastFrame();
+        const kv::CameraPose &pose = owner_.Camera().Pose();
+        const int contents = CM_PointContents(pose.origin, 0);
+        if (contents & CONTENTS_SOLID)
+            ++leg.solidFrames;
+        if (frame.counts.worldDrawCalls == 0)
+            ++leg.noWorldFrames;
         if (leg.fewestColorsFrame < 0 || frame.stats.distinctColors < leg.fewestColors.stats.distinctColors)
         {
             leg.fewestColorsFrame = int(leg.frames);
-            leg.fewestColorsPose = owner_.Camera().Pose();
+            leg.fewestColorsPose = pose;
             leg.fewestColors = frame;
+            leg.fewestColorsCell = R_CellForPoint(rgp.world, pose.origin);
+            leg.fewestColorsContents = contents;
         }
         ++leg.frames;
         leg.seconds += frame.seconds;
@@ -131,11 +147,12 @@ public:
     void Finish(Leg &leg)
     {
         const kv::CameraPose &pose = leg.fewestColorsPose;
-        Say("free_camera_leg name=%s frames=%u seconds=%.3f luma=%.1f..%.1f min_colors=%zu fewest_colors_frame=%d "
-            "origin=%.2f,%.2f,%.2f angles=%.3f,%.3f,%.3f\n",
-            leg.name.c_str(), leg.frames, leg.seconds, leg.minLuma, leg.maxLuma, leg.minColors,
-            leg.fewestColorsFrame, pose.origin[0], pose.origin[1], pose.origin[2], pose.angles[0], pose.angles[1],
-            pose.angles[2]);
+        Say("free_camera_leg name=%s frames=%u seconds=%.3f luma=%.1f..%.1f min_colors=%zu solid_frames=%u "
+            "no_world_frames=%u fewest_colors_frame=%d origin=%.2f,%.2f,%.2f angles=%.3f,%.3f,%.3f cell=%d "
+            "contents=%s\n",
+            leg.name.c_str(), leg.frames, leg.seconds, leg.minLuma, leg.maxLuma, leg.minColors, leg.solidFrames,
+            leg.noWorldFrames, leg.fewestColorsFrame, pose.origin[0], pose.origin[1], pose.origin[2], pose.angles[0],
+            pose.angles[1], pose.angles[2], leg.fewestColorsCell, Hex(uint32_t(leg.fewestColorsContents)).c_str());
         SayFrame((leg.name + ".fewest_colors").c_str(), leg.fewestColorsFrame, leg.fewestColors);
         legs_.push_back(leg);
     }
@@ -401,8 +418,10 @@ void Kisak_ReplayFreeCamera(const std::filesystem::path &directory, const char *
             std::snprintf(luma, sizeof(luma), "[%.2f,%.2f]", leg.minLuma, leg.maxLuma);
             body << (first ? "" : ",") << "{\"name\":" << Json(leg.name) << ",\"frames\":" << leg.frames
                  << ",\"seconds\":" << leg.seconds << ",\"mean_luma_range\":" << luma
-                 << ",\"min_distinct_colors\":" << leg.minColors << ",\"fewest_colors\":{\"frame\":"
+                 << ",\"min_distinct_colors\":" << leg.minColors << ",\"solid_frames\":" << leg.solidFrames
+                 << ",\"no_world_frames\":" << leg.noWorldFrames << ",\"fewest_colors\":{\"frame\":"
                  << leg.fewestColorsFrame << ",\"pose\":" << PoseJson(leg.fewestColorsPose)
+                 << ",\"cell\":" << leg.fewestColorsCell << ",\"contents\":" << leg.fewestColorsContents
                  << ",\"result\":" << FrameJson(leg.fewestColors) << "}}";
             first = false;
         }
