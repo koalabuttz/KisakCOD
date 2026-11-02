@@ -392,7 +392,7 @@ jobs:
           retention-days: 7
 
   world_surface:
-    # Asset-free: builds six standalone -m32 test cases directly
+    # Asset-free: builds seven standalone -m32 test cases directly
     # and runs the bundle prepare tests. No DXVK, no SDL, no GPU, no game assets,
     # no CMake configure. tests/linux_renderer/CMakeLists.txt is deliberately not
     # used here: it requires the dxvk-d3d9 and sdl3 pkg-config modules before it
@@ -470,6 +470,9 @@ jobs:
     # are used: no DXVK build, no libdxvk_d3d9.so, no Vulkan, no SDL, no GPU, no
     # device and no game assets. The CMake configure fetches Tracy, like the
     # native job. Nothing here runs the dedicated server or changes its build.
+    # The last build step links the opt-in offline world front-end probe on top of
+    # the boundary and runs its asset-free invariants test; the probe itself is
+    # not run, because running it needs a game install.
     name: Native D3D9 boundary ${{ matrix.config }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -581,6 +584,35 @@ jobs:
           # Only the first (mode) line may differ between the two views.
           diff <(tail -n +2 "$RUNNER_TEMP/layout-standin.txt") <(tail -n +2 "$RUNNER_TEMP/layout-native.txt")
           tail -n 1 "$RUNNER_TEMP/layout-native.txt" | grep -qx 'PASS engine D3D9 layouts'
+
+      - name: Build the offline world front-end probe
+        timeout-minutes: 30
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Link proof for the opt-in probe (scripts/platform/linux/
+          # world_frontend_probe.cmake): the asset exporter with the production
+          # renderer front end linked in. It is only built and inspected here;
+          # running it needs a game install, which CI never has or looks for.
+          cmake -S . -B "$BUILD_DIR" -DKISAK_BUILD_WORLD_FRONTEND_PROBE=ON \
+            2>&1 | tee "artifacts/world-frontend-probe-${{ matrix.config }}.log"
+          cmake --build "$BUILD_DIR" \
+            --target KisakCOD-world-frontend-probe KisakCOD-world-frontend-invariants-test --parallel 2 \
+            2>&1 | tee -a "artifacts/world-frontend-probe-${{ matrix.config }}.log"
+          out="$GITHUB_WORKSPACE/out/native-d3d9-${{ matrix.config }}"
+          "$out/KisakCOD-world-frontend-invariants-test"
+          probe="$out/KisakCOD-world-frontend-probe"
+          readelf -h "$probe" | grep -Eq 'Class:[[:space:]]+ELF32'
+          readelf -h "$probe" | grep -Eq 'Machine:[[:space:]]+Intel 80386'
+          # The probe creates no device: it may need the C and C++ runtimes and
+          # nothing else.
+          readelf -d "$probe" | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p' > "$RUNNER_TEMP/probe-needed.txt"
+          cat "$RUNNER_TEMP/probe-needed.txt"
+          if grep -Ev '^(libstdc\+\+\.so\.6|libm\.so\.6|libgcc_s\.so\.1|libc\.so\.6|libpthread\.so\.0|libdl\.so\.2)$' \
+              "$RUNNER_TEMP/probe-needed.txt"; then
+            echo "the offline probe needs a library beyond the C and C++ runtimes" >&2
+            exit 1
+          fi
 
       - name: Upload native D3D9 boundary logs
         if: always()

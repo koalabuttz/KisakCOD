@@ -17,6 +17,11 @@
 #include <sstream>
 #include "font_asset_export.h"
 #include "world_surface_export.h"
+#ifdef KISAK_WORLD_FRONTEND_PROBE
+#include <gfx_d3d/r_bsp.h>
+#include <gfx_d3d/r_init.h>
+#include "world_frontend_probe.h"
+#endif
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -253,8 +258,14 @@ void ExportFont(Font_s *font,size_t index,const std::filesystem::path &directory
   // decides whether this process exports UI/font assets or inventories one map.
   const char *menusOption=std::getenv("KISAK_UI_ASSET_EXPORT_MENUS");
   const char *worldMap=std::getenv("KISAK_WORLD_SURFACE_MAP");
+  const char *frontEndMap=std::getenv("KISAK_WORLD_FRONTEND_MAP");
   Require(!menusOption || !std::strcmp(menusOption,"1"),"KISAK_UI_ASSET_EXPORT_MENUS must be 1 or unset");
   Require(!worldMap || !menusOption,"KISAK_WORLD_SURFACE_MAP and KISAK_UI_ASSET_EXPORT_MENUS are mutually exclusive");
+  Require(!frontEndMap || (!worldMap && !menusOption),"KISAK_WORLD_FRONTEND_MAP cannot be combined with another export mode");
+#ifndef KISAK_WORLD_FRONTEND_PROBE
+  // Only the probe target links the renderer front end; this build refuses the mode before any engine work.
+  Require(!frontEndMap,"KISAK_WORLD_FRONTEND_MAP needs the KisakCOD-world-frontend-probe build (KISAK_BUILD_WORLD_FRONTEND_PROBE)");
+#endif
   std::puts("asset_export=offline database=engine networking=not-initialized renderer=dedicated");
   Scr_InitVariables();Scr_Init();Com_SetScriptSettings();XAnimInit();DObjInit();
   PMem_EndAlloc(initAllocationName,1u);DB_SetInitializing(0);DB_SyncXAssets();
@@ -262,6 +273,15 @@ void ExportFont(Font_s *font,size_t index,const std::filesystem::path &directory
   outputDirectory=directory;
   // World inventory runs before the font assets are required: a map zone does not
   // have to carry fonts, and the world branch owns its own zone load and output.
+#ifdef KISAK_WORLD_FRONTEND_PROBE
+  // The front-end probe owns its own zone load and report, like the world inventory below.
+  if(frontEndMap){
+   // KISAK_WORLD_FRONTEND_LAYOUT() here is the loader's view of the shared structs.
+   Kisak_ProbeWorldFrontEnd(directory,frontEndMap,KISAK_WORLD_FRONTEND_LAYOUT());
+   std::printf("asset_export=complete mode=world_frontend_probe map=%s networking=not-initialized\n",frontEndMap);
+   std::fflush(nullptr);std::_Exit(0);
+  }
+#endif
   if(worldMap){
    Kisak_ExportWorldSurfaceInventory(directory,worldMap);
    std::printf("asset_export=complete mode=world_surface_inventory map=%s networking=not-initialized\n",worldMap);
@@ -276,7 +296,7 @@ void ExportFont(Font_s *font,size_t index,const std::filesystem::path &directory
   ExportFontRoles(directory,fonts);
   if(menusOption){ExportMenus(directory);ExportUiSounds(directory);}
   std::printf("asset_export=complete fonts=%zu networking=not-initialized\n",fonts.count);status=0;
- }catch(const std::exception &error){std::fprintf(stderr,"Offline font export failed: %s\n",error.what());}
+ }catch(const std::exception &error){std::fprintf(stderr,"Offline asset export failed: %s\n",error.what());}
  // File streams above are closed. This isolated one-shot tool owns DB arenas
  // and workers until process exit; it does not claim normal game shutdown.
  std::fflush(nullptr);std::_Exit(status);
