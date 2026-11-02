@@ -338,6 +338,8 @@ class DeviceProbeWorkflowTests(unittest.TestCase):
     JOB = 'device_probe'
     RUN_STEP = "Run the Win32 window layer test and the probe's fail-closed path"
     BUILD_STEP = 'Build the device probe against the stand-in D3D9 library'
+    WORLD_BUILD_STEP = 'Build the world device probe against the stand-in D3D9 library'
+    WORLD_RUN_STEP = "Run the world device probe's fail-closed paths"
 
     @classmethod
     def setUpClass(cls):
@@ -414,6 +416,49 @@ class DeviceProbeWorkflowTests(unittest.TestCase):
         self.assertIn('test "$status" -eq 1', run)
         self.assertIn("grep -q '^device_probe=failed stage=direct3d '", run)
         self.assertIn('test "$status" -eq 2', run)
+
+    def test_the_world_device_probe_links_only_the_stand_in_after_the_device_probe(self):
+        self.assertLess(self.names.index(self.RUN_STEP), self.names.index(self.WORLD_BUILD_STEP))
+        self.assertLess(self.names.index(self.WORLD_BUILD_STEP), self.names.index(self.WORLD_RUN_STEP))
+        build = self.step(self.WORLD_BUILD_STEP)['run']
+        # The same build directory, so the same stand-in library and SDL3.
+        self.assertIn('cmake -S . -B "$BUILD_DIR"', build)
+        self.assertIn('-DKISAK_BUILD_WORLD_FRONTEND_PROBE=ON -DKISAK_BUILD_WORLD_DEVICE_PROBE=ON', build)
+        self.assertIn('--target KisakCOD-world-device-probe', build)
+        self.assertIn('Class:[[:space:]]+ELF32', build)
+        self.assertIn('Machine:[[:space:]]+Intel 80386', build)
+        self.assertIn("grep -qx 'libSDL3.so.0'", build)
+        self.assertIn("grep -qx 'libd3d9_unavailable.so'", build)
+        self.assertIn('the world device probe needs a library beyond SDL3, D3D9 and the runtimes', build)
+
+    def test_the_world_device_run_is_the_asset_free_script_on_dummy_drivers(self):
+        step = self.step(self.WORLD_RUN_STEP)
+        self.assertEqual(step['env']['SDL_VIDEODRIVER'], 'dummy')
+        self.assertEqual(step['env']['SDL_AUDIODRIVER'], 'dummy')
+        run = step['run']
+        self.assertIn('python3 -u scripts/tests/test_world_device_probe.py', run)
+        self.assertIn('--probe "$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-world-device-probe"',
+                      run)
+        self.assertIn('export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/d3d9-unavailable"', run)
+
+    def test_the_world_device_script_builds_its_own_tree_and_takes_no_game_directory(self):
+        script = (ROOT / 'scripts/tests/test_world_device_probe.py').read_text()
+        # Its tree is a temporary directory it removes, and the stub is the one
+        # file it writes there.
+        self.assertIn('tempfile.TemporaryDirectory(prefix="kisak-world-device-")', script)
+        self.assertEqual(script.count('.write_text('), 1)
+        self.assertIn('"// stub written by the check; no game data\\n"', script)
+        # One option names a path, and it is the probe; no game directory argument.
+        self.assertEqual(script.count('add_argument('), 2)
+        self.assertIn('add_argument("--probe"', script)
+        self.assertIn('add_argument("--timeout"', script)
+        for forbidden in ('steam', 'game_dir', '.ff"', '.iwd', 'symlink'):
+            self.assertNotIn(forbidden, script.lower())
+        # The first run stops at the device, before any zone; the refusals are
+        # checked by their exact last lines.
+        self.assertIn('stage=direct3d: ', script)
+        self.assertIn('no zone is queued without a device', script)
+        self.assertIn('stage=arguments: ', script)
 
     def test_every_command_block_propagates_failure(self):
         for step in self.job['steps']:

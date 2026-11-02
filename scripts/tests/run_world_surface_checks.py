@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compile and run the asset-free world surface checks for one configuration.
 
-This runner performs **no CMake configure and no engine build**. It compiles seven
+This runner performs **no CMake configure and no engine build**. It compiles eight
 standalone test translation units directly with a 32-bit C++20 compiler and runs
 them, then runs the bundle prepare tests. Everything here works without DXVK, SDL,
 a GPU, a Steam client, credentials, game assets or a network:
@@ -25,6 +25,10 @@ a GPU, a Steam client, credentials, game assets or a network:
     batch keys and stage ranges, completeness, no duplicates) and the entity-string
     scan that picks its spawn-point cameras, built against ``src`` for the one
     header it includes (``src/linux/tools/world_frontend_invariants.h``);
+  * ``tests/linux_asset_export/world_device_rules_test.cpp`` -- the rules the world
+    device probe holds each texture, shader and vertex/index buffer to, as pure
+    functions over plain numbers, built against ``src`` for
+    ``src/linux/tools/world_device_rules.h``, which includes no D3D9 header;
   * ``tests/linux_asset_export/world_image_capture_test.cpp`` -- the image capture's
     bounds, name filter, duplicate rule and disabled path. This one is the only case
     that is not a single translation unit: the capture state lives behind a mutex in
@@ -41,7 +45,7 @@ check that must not need DXVK, SDL or a device. The four renderer tests
 (``world_surface_context``, ``world_surface_bundle``, ``world_surface_oracle`` and
 ``world_lit_bundle``) are asset-free by construction -- they include one header each
 and open no file except temporary bundles they write themselves -- and the image
-capture test compiles its own unit and nothing else from ``src``, so all seven are
+capture test compiles its own unit and nothing else from ``src``, so all eight are
 built here with an explicit compiler line instead.
 
 Configurations are explicit rather than inherited from a build system: ``Debug``
@@ -186,6 +190,15 @@ CASES = (
         "world_frontend_invariants",
         "world front-end frame rules and the spawn-point camera scan",
         "tests/linux_asset_export/world_frontend_invariants_test.cpp",
+        ("src",),
+    ),
+    # Header only as well: the rules the world device probe holds each texture,
+    # shader and vertex/index buffer to, over plain numbers. No D3D9 header, no
+    # device, no zone.
+    Case(
+        "world_device_rules",
+        "world device texture, shader and buffer rules",
+        "tests/linux_asset_export/world_device_rules_test.cpp",
         ("src",),
     ),
     # The one case with a second translation unit. The capture state, its arena and

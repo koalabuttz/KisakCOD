@@ -5,7 +5,9 @@
 #include "r_dvars.h"
 #include <universal/surfaceflags.h>
 
-#ifndef __linux__
+// On Linux this needs the D3D9 API: the native boundary (KISAK_LINUX_NATIVE_D3D9)
+// provides it; with the type-only stand-in nothing may release a device object.
+#if !defined(__linux__) || defined(KISAK_LINUX_NATIVE_D3D9)
 uint32_t __cdecl R_ReleaseD3DSurface(IDirect3DSurface9 *surface)
 {
     return surface->Release();

@@ -100,10 +100,36 @@ both Wayland and XWayland: shader model 3 path, 0 of 307,200 read-back pixels
 wrong, 120 frames presented. It also passes in the sandbox on Mesa lavapipe
 under Xvfb. Details and limits: [linux-device-probe.md](linux-device-probe.md).
 
+## Follow-up: a map on the device, 2026-11-02
+
+`KisakCOD-world-device-probe` (opt-in `KISAK_BUILD_WORLD_DEVICE_PROBE`, on top
+of both earlier probes) is the asset exporter with the renderer's device code
+linked in. It creates the device through `r_init.cpp`, then loads
+`code_post_gfx_mp`, `common_mp`, their localized zones and one allowlisted map
+with `r_loadForRenderer` on, so the engine's own loaders create every texture,
+shader, vertex declaration and vertex/index buffer on the device.
+
+It then checks all of them, and everything the world's surfaces draw with, as
+pure rules with an asset-free test. It writes one report into a private
+directory.
+
+Supporting changes:
+
+- The dedicated server's renderer start and its device counterparts moved from
+  `server_assets.cpp` to `server_device_counterparts.cpp`, unchanged, so the
+  probe can leave them out.
+- `r_utils.cpp`'s `R_ReleaseD3DSurface` now compiles wherever the D3D9 API is
+  real.
+
+CI builds the probe against the stand-in D3D9 library and checks it fails
+closed. The sandbox (lavapipe, no game data) gets as far as the device and the
+queued graphics zones. The mp_crash run on a GPU is the open evidence. Details
+and limits: [linux-world-device-probe.md](linux-world-device-probe.md).
+
 ## Not done
 
-- No resource creation and no draw. The device exists only in the device
-  probe, which loads no zone; the real `GfxWorld` is walked offline only.
+- No draw. The world's device objects exist only in the world device probe, and
+  its mp_crash run on a GPU is still to come.
 - `R_GenerateSortedDrawSurfs` is not called as a whole: its lighting, fog, sun,
   shadow and entity stages need world data the synthetic world lacks.
 - The census compiles with the D3D9 stand-in only.
@@ -111,7 +137,7 @@ under Xvfb. Details and limits: [linux-device-probe.md](linux-device-probe.md).
 ## Next
 
 Follow the order in [linux-world-frontend.md](linux-world-frontend.md#order-of-work-toward-one-static-map-view):
-the world's resources created on the probe's device (vertex and index buffers,
-images, the techniques its materials use), one fixed-view draw behind the
-free-camera `SceneRenderer` interface, and GPU evidence of that draw on a
-developer machine.
+the world device probe's mp_crash run on a GPU, then one fixed-view draw behind
+the free-camera `SceneRenderer` interface (which needs `R_InitHardware`'s later
+steps: render targets, initial state, scene and `R_InitSystems`), and GPU
+evidence of that draw on a developer machine.

@@ -12,8 +12,13 @@
 // each side reports the sizes it was compiled with, and the probe refuses to run
 // when any differs.
 //
+// The world device probe (world_device_probe.h) holds its own side to the same
+// list: it is compiled with the D3D9 types from DXVK's headers, the loader with
+// the type-only stand-in, and both hand each other images, shaders, vertex
+// declarations, imageGlobals and the zone table as well.
+//
 // Include the engine headers that define these types first (r_bsp.h, r_init.h,
-// r_material.h, xanim.h, q_shared.h).
+// r_image.h, r_material.h, xanim.h, q_shared.h).
 
 #include <cstddef>
 #include <cstdint>
@@ -41,7 +46,16 @@
     X(GfxConfiguration)                      \
     X(r_global_permanent_t)                  \
     X(r_globals_t)                           \
-    X(dvar_s)
+    X(dvar_s)                                \
+    X(GfxImage)                              \
+    X(GfxImageLoadDef)                       \
+    X(ImgGlobals)                            \
+    X(MaterialVertexDeclaration)             \
+    X(MaterialVertexShader)                  \
+    X(MaterialPixelShader)                   \
+    X(MaterialTextureDef)                    \
+    X(water_t)                               \
+    X(XZone)
 
 namespace kisak_world_frontend
 {

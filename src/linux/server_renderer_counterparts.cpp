@@ -14,10 +14,13 @@
 //
 // The dedicated server and the offline asset export link this file through the
 // src/linux/*.cpp glob. A target that links those owners instead -- the world
-// front-end probe (scripts/platform/linux/world_frontend_probe.cmake) -- leaves
-// this file out, so every name keeps exactly one definition in each link and the
-// linker reports any overlap or gap. Everything else the database needs from the
-// renderer stays in server_assets.cpp, which every native target links.
+// front-end probe (scripts/platform/linux/world_frontend_probe.cmake) and the
+// world device probe (world_device_probe.cmake) -- leaves this file out, so every
+// name keeps exactly one definition in each link and the linker reports any
+// overlap or gap. The dedicated renderer start and the counterparts for the
+// owners that create device objects are in server_device_counterparts.cpp;
+// everything else the database needs from the renderer is in server_assets.cpp,
+// which every native target links.
 
 #include <universal/q_shared.h>
 #include <universal/assertive.h>
@@ -315,7 +318,7 @@ void __cdecl R_SyncRenderThread()
 // ---------------------------------------------------------------------------
 // XSurface vertex accessors (src/gfx_d3d/r_xsurface.cpp:8/38).
 //
-// R_GetXModelBounds in server_assets.cpp reads them. Both are vertex maths over
+// R_GetXModelBounds below reads them. Both are vertex maths over
 // the XModel data the database already holds -- no device, no shader -- so they
 // are the real bodies, not stubs.
 // ---------------------------------------------------------------------------

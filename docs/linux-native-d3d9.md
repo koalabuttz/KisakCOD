@@ -185,6 +185,14 @@ Vulkan, SDL or game data, and never builds or changes `KisakCOD-dedi`.
 3. A unit that compiles with the stand-in does not need the boundary; keep it out
    of the list (the control check enforces this).
 
+One unit compiles both ways on purpose. `r_utils.cpp` guards
+`R_ReleaseD3DSurface` with `!defined(__linux__) || defined(KISAK_LINUX_NATIVE_D3D9)`:
+with the stand-in it compiles without the function, so nothing in those builds
+can release a device object, and through the boundary it has the real one. It
+stays out of the list. The world front end compiles it with the stand-in, and the
+[world device probe](linux-world-device-probe.md), which releases static buffers
+and shaders on a real device, compiles it through the boundary.
+
 ## Verification boundary
 
 What the checks above establish: the boundary compiles with GCC 13 and Clang 18

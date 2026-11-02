@@ -330,9 +330,13 @@ census mode with the boundary is the way to ratchet those.
    [device probe](linux-device-probe.md) runs `r_init.cpp`'s own
    `R_PreCreateWindow`, `R_SetWndParms`, `R_CreateWindow` and `R_CreateDevice`
    from an SDL3 window, checks the shader model 3 path was chosen, and clears,
-   reads back and presents; it passes on a developer machine's Intel GPU. *Next:* resource creation for the world's vertex and
-   index buffers, images and the techniques the world's materials use; refuse
-   any technique or vertex declaration not yet supported, by name.
+   reads back and presents; it passes on a developer machine's Intel GPU.
+   *Resource creation in progress:* the
+   [world device probe](linux-world-device-probe.md) loads the graphics zones
+   and one map onto that device through the engine's own loaders and checks
+   every texture, shader, vertex declaration and vertex/index buffer they
+   created, including everything the world's surfaces draw with. It builds and
+   fails closed in CI; the mp_crash run on a GPU is next.
 4. Draw one fixed view through `RB_Draw3D`, `R_DrawLit` and `R_DrawBspDrawSurfs`
    and present it, behind the free-camera frame owner's `SceneRenderer`
    interface (`LoadMap`, `DrawFrame` returning false is terminal). The adapter

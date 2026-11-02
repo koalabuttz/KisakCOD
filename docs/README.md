@@ -36,6 +36,7 @@ what is verified and where, and the next milestone. Build steps are in the
 - [Native D3D9 engine boundary](linux-native-d3d9.md) (opt-in, DXVK Native headers)
 - [Renderer world front end](linux-world-frontend.md): asset-free proof of DPVS/BSP batching, the offline probe that runs it over a real map's world, and the [static map view handoff](progress-2026-11-01-static-map-view.md)
 - [D3D9 device probe](linux-device-probe.md) (opt-in): the engine's `r_init.cpp` creates the device through DXVK Native from an SDL3 window
+- [World device probe](linux-world-device-probe.md) (opt-in): the graphics zones and one map loaded onto that device through the engine's own loaders, and every device object they create checked
 - [Standalone renderer build/run](../tests/linux_renderer/README.md)
 
 ## Tests

@@ -8,7 +8,7 @@
 //     gameplay code,
 //   * dereference an image's GfxTexture. A lit run retains the payload of the one world
 //     lightmap resource it selects, and it does so inside Load_Texture
-//     (src/linux/server_assets.cpp) through world_image_capture.h, before the loader clears
+//     (src/linux/server_device_counterparts.cpp) through world_image_capture.h, before the loader clears
 //     the union; this file reads that capture's records, never the union. Every other image
 //     is described from metadata the database keeps, with no format, size or payload claim,
 //   * write shader bytecode,
@@ -697,7 +697,7 @@ void RoutingFacts(std::ostream &out, const MaterialVertexDeclaration *declaratio
         out << "null";
         return;
     }
-    // Load_BuildVertexDecl (src/linux/server_assets.cpp) leaves routing.data as the
+    // Load_BuildVertexDecl (src/linux/server_device_counterparts.cpp) leaves routing.data as the
     // zone provided it and nulls only the per-type D3D handles, so the routing rows
     // are readable even though no IDirect3DVertexDeclaration9 exists.
     const unsigned streams = declaration->streamCount;

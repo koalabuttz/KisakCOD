@@ -6,8 +6,8 @@
 // GfxImage inside the zone, and stores that pointer in the image's own GfxTexture
 // union (src/database/db_load.cpp:2091-2121). Load_Texture is the one place where
 // the header, the payload and the image identity are all reachable, and it ends by
-// writing the null device handle over the union (src/linux/server_assets.cpp:654),
-// after which the payload cannot be named from the image any more. Reading it out
+// writing the null device handle over the union (the dedicated Load_Texture in
+// src/linux/server_device_counterparts.cpp), after which the payload cannot be named from the image any more. Reading it out
 // of the zone file instead would mean re-implementing the fast-file stream, so the
 // payload is copied here, while the union still holds it.
 //
@@ -18,9 +18,9 @@
 // database: the arena is reserved when the run arms the capture, and every bound is
 // checked before a byte is copied.
 //
-// The engine-free part is deliberate. src/linux/server_assets.cpp fills in one POD
-// CaptureRequest from the engine types, and this unit - plus its test - compiles
-// with no engine header, no asset tree and no zone.
+// The engine-free part is deliberate. src/linux/server_device_counterparts.cpp
+// fills in one POD CaptureRequest from the engine types, and this unit - plus its
+// test - compiles with no engine header, no asset tree and no zone.
 // ---------------------------------------------------------------------------
 
 #pragma once
