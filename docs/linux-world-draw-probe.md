@@ -52,11 +52,36 @@ probe's own code is in `src/linux/tools/world_draw_probe.cpp`.
 | `renderer` | after `R_Init` | no device, not registered, not the shader model 3 path, the scene not 640x480 windowed, or the device not `D3D_OK`; a code image (white, black, identity normal map) without a texture |
 | `graphics`, `world` | the map zone (`DB_LoadXAssets`, synchronous), then the map load the cgame does before its first frame: `CM_LoadMap`, `CM_LinkWorld` and `Com_LoadWorld` as `CL_CM_LoadMap` does with no local server, then `R_LoadWorld` and `R_EndRegistration` | no graphics zone loaded; not exactly one packaged GfxWorld naming the map; a local server runs; the collision map or world data is not the map's; `R_LoadWorld` registers another world |
 | `cameras` | the map's entity string, scanned as the front-end probe does | no spawn point; fewer than two distinct cameras |
-| `frame`, `readback` | each frame (below) | the front end did not produce exactly one view; the device is not `D3D_OK` after the frame; the back buffer cannot be read or is not 32-bit RGB |
+| `frame`, `readback` | the empty first frame, then each frame (below) | before a frame, the backend would draw the pre-tessellated surfaces from another index buffer than the one the front end fills; the front end did not produce exactly one view; the device is not `D3D_OK` after the frame; the back buffer cannot be read or is not 32-bit RGB |
 | `check` | the rules below | a frame breaks a rule |
 
 Camera A is `mp_global_intermission` when the map has one, else the first spawn
 point. Camera B is the first spawn point that is not camera A.
+
+### The first frame
+
+Before the first world frame the probe presents one empty frame:
+`R_BeginFrame`, `R_BeginSharedCmdList`, `R_ClearClientCmdList2D`, `R_EndFrame`
+and `R_IssueRenderCommands(0xFFFFFFFF)` with nothing added, as a client's menu
+or loading screen frame is. A client never draws a world as its first frame,
+and the renderer depends on that.
+
+The front end writes the indices of the world's batched (pre-tessellated)
+surfaces into `gfxBuf.preTessIndexBuffer`, and the backend draws them from the
+frame data's `preTessIb` (`R_TessTrianglesPreTessList`). `R_ToggleSmpFrame`
+moves both to the next buffer of a pair at the end of every frame. But
+`R_ConfigureRenderer` runs `R_InitRenderCommands`, whose toggle sets `preTessIb`
+before any device or buffer exists, and `R_Init`'s `R_InitRenderBuffers` then
+creates the buffers and points only the front end at one. A world frame drawn
+straight after the map load writes its batched surfaces into one buffer and
+draws them from none. The empty frame's toggle pairs them. A lost-device
+recovery leaves them the same way (`R_ShutdownRenderBuffers` clears `preTessIb`)
+and the engine drops that frame and toggles too, so anything that resets the
+device must not draw a world frame before one toggle either.
+
+The probe reports `world_draw_first_frame=empty pretess_ib_before=agreed|differed
+pretess_ib_after=agreed`, and checks before every frame that the two agree
+(stage `frame`).
 
 ### One frame
 
@@ -110,7 +135,7 @@ they happen:
 
 - `world_draw_layout`, `world_draw_renderer=starting|started`,
   `world_draw_graphics_zones`, `world_draw_map`;
-- two `world_draw_camera` lines;
+- two `world_draw_camera` lines, then `world_draw_first_frame`;
 - one `world_draw_frame` line per draw, with the measurements and counts, the
   surfaces it moved into the static model cache (`smc_patches`) and a 64-bit
   digest of the pixels, and one `world_draw_view` line per view with its number
@@ -124,6 +149,14 @@ A pass ends with `asset_export=complete mode=world_draw_probe map=<map>` and exi
 `KISAK_WORLD_DRAW_SHOW_SECONDS=<n>` (0 to 60) keeps drawing view A for that many
 seconds after a pass, so a person at the machine can see it. Each frame is only
 presented; nothing is saved.
+
+With `+set r_logFile <n>` the engine writes its own D3D9 call log, `dx.log`, in
+the working directory. The engine opens it only after a frame it presented, so
+the probe opens it before the empty frame and writes
+`===== world_draw_probe view <A|B> draw <n> =====` into it before each draw. The
+log names the calls and the game's images and materials they use, though not
+their contents. Keep it in the private home with the rest of the output and
+out of the repository.
 
 ## How it links
 
