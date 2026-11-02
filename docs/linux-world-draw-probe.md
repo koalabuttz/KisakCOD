@@ -74,11 +74,14 @@ buffer. The back buffer is read the way the engine's `R_GetBackBufferData` reads
 it after its cubemap frames: `GetBackBuffer`, an offscreen plain surface,
 `GetRenderTargetData`, `LockRect`.
 
-Each view is drawn until two draws in a row give the same pixels, at most 32
-times: view A first, then view B. The first draws of a view differ while the
-renderer's per-frame state settles. The static model cache, for one, takes at
-most 256 surfaces and 8192 vertices a frame (`R_CacheStaticModelSurface`), so a
-view's static models move into it over several frames.
+Each view is drawn until it settles, at most 64 times: view A first, then view
+B. A view has settled when two draws in a row give the same pixels and the
+second moved nothing new into the static model cache. The first draws of a view
+differ while the renderer's per-frame state settles. The static model cache
+takes at most 256 surfaces and 8192 vertices a frame
+(`R_CacheStaticModelSurface`), for the camera and for the sun shadow map, so a
+view's static models move into it over several frames. Pixels can match by
+chance while it is still filling, which is why the cache counts too.
 
 ## What a frame is held to
 
@@ -96,7 +99,7 @@ built in memory.
 | coverage | each checked frame | at least 12 of 16 tiles (4x4) hold more than one colour |
 | brightness | each checked frame | mean luma (Rec. 601) between 4 and 251 |
 | emitted and drawn | each checked frame | the front end emitted at least one world surface, and the backend counted world draw calls and triangles |
-| settles | views A and B | the last two draws of the view have the same pixels |
+| settles | views A and B | the last two draws of the view have the same pixels, and the last one moved nothing into the static model cache |
 | follows the camera | views A and B | different pixels |
 
 The last draw of each view is checked. The thresholds are
@@ -108,9 +111,10 @@ they happen:
 - `world_draw_layout`, `world_draw_renderer=starting|started`,
   `world_draw_graphics_zones`, `world_draw_map`;
 - two `world_draw_camera` lines;
-- one `world_draw_frame` line per draw, with the measurements and counts and a
-  64-bit digest of the pixels, and one `world_draw_view` line per view with its
-  number of draws and whether it settled;
+- one `world_draw_frame` line per draw, with the measurements and counts, the
+  surfaces it moved into the static model cache (`smc_patches`) and a 64-bit
+  digest of the pixels, and one `world_draw_view` line per view with its number
+  of draws and whether it settled;
 - `world_draw_problem` lines, then `world_draw_probe=passed|failed problems=N`.
 
 A pass ends with `asset_export=complete mode=world_draw_probe map=<map>` and exit

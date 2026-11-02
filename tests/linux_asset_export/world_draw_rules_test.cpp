@@ -191,6 +191,10 @@ void CheckRepeatsAndViews()
     Fails(wdr::CheckRepeatable({1, 2, 3}), "a view whose last two draws differ");
     Fails(wdr::CheckRepeatable({4}), "a view drawn once");
     Fails(wdr::CheckRepeatable({}), "a view never drawn");
+    Passes(wdr::CheckSettled({1, 2, 2}, 0), "a view whose last two draws match with the cache full");
+    Fails(wdr::CheckSettled({1, 2, 2}, 256), "a view whose pixels match while the cache still fills");
+    Fails(wdr::CheckSettled({1, 2, 3}, 0), "a view whose last two draws differ, cache full or not");
+    Fails(wdr::CheckSettled({7}, 0), "a view drawn once");
     Passes(wdr::CheckViewsDiffer(1, 2), "two cameras with different pixels");
     Fails(wdr::CheckViewsDiffer(3, 3), "two cameras with the same pixels");
 }

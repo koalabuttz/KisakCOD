@@ -165,6 +165,21 @@ inline std::string CheckRepeatable(const std::vector<uint64_t> &digests)
     return {};
 }
 
+// A view has settled when two draws in a row give the same pixels and the second
+// moved nothing new into the static model cache: the cache is the per-frame state
+// known to change a view's surfaces from draw to draw, and pixels can match by
+// chance while it is still filling.
+inline std::string CheckSettled(const std::vector<uint64_t> &digests, uint32_t lastCachePatches)
+{
+    std::string problem = CheckRepeatable(digests);
+    if (!problem.empty())
+        return problem;
+    if (lastCachePatches != 0)
+        return "the static model cache was still filling on the last draw (" + std::to_string(lastCachePatches) +
+               " surfaces)";
+    return {};
+}
+
 // Two different cameras over the same map: the image must follow the camera.
 inline std::string CheckViewsDiffer(uint64_t first, uint64_t second)
 {

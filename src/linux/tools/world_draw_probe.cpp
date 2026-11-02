@@ -64,13 +64,14 @@ constexpr float kHalfFovXDegrees = 32.5f;
 // The scene time every frame is drawn at. R_GenerateReflectionRawData draws at
 // 0 too; one fixed time makes a repeated draw of a view comparable.
 constexpr int kSceneTime = 0;
-// Each view is drawn until two draws in a row give the same pixels, at most this
-// many times. The first draws of a view differ while the renderer's per-frame
-// state settles: the static model cache, for one, takes at most 256 surfaces and
-// 8192 vertices a frame (R_CacheStaticModelSurface), so a view's models move to
-// it over several frames. The GPU run of mp_crash is in
-// docs/linux-world-draw-probe.md.
-constexpr int kMaxSettleDraws = 32;
+// Each view is drawn until it settles (wdr::CheckSettled: two draws in a row with
+// the same pixels, the second moving nothing new into the static model cache), at
+// most this many times. The first draws of a view differ while the renderer's
+// per-frame state settles: the static model cache takes at most 256 surfaces and
+// 8192 vertices a frame (R_CacheStaticModelSurface), for the camera and the sun
+// shadow map, so a view's models move into it over several frames. The GPU runs
+// of mp_crash are in docs/linux-world-draw-probe.md.
+constexpr int kMaxSettleDraws = 64;
 constexpr size_t kMaxSpawnViews = 256;
 constexpr int kMaxShowSeconds = 60;
 
@@ -231,8 +232,8 @@ struct FrameResult
 {
     wdr::FrameStats stats;
     wdr::DrawCounts counts;
-    // Surfaces this frame moved into the static model cache (R_CacheStaticModelSurface);
-    // reported, not checked: it shows the cache filling while a view settles.
+    // Surfaces this frame moved into the static model cache (R_CacheStaticModelSurface):
+    // a view has not settled while it is filling.
     uint32_t smcPatches = 0;
     double seconds = 0;
 };
@@ -653,11 +654,11 @@ void Kisak_DrawWorld(const std::filesystem::path &directory, const char *mapName
             frames.push_back(DrawView(camera, *refdef));
             digests.push_back(frames.back().stats.digest);
             SayFrame(label, draw, frames.back());
-            if (digests.size() >= 2 && digests[digests.size() - 1] == digests[digests.size() - 2])
+            if (wdr::CheckSettled(digests, frames.back().smcPatches).empty())
                 break;
         }
         Say("world_draw_view view=%s draws=%zu settled=%s\n", label, frames.size(),
-            wdr::CheckRepeatable(digests).empty() ? "yes" : "no");
+            wdr::CheckSettled(digests, frames.back().smcPatches).empty() ? "yes" : "no");
     };
     std::vector<FrameResult> framesA, framesB;
     std::vector<uint64_t> digestsA, digestsB;
@@ -673,10 +674,10 @@ void Kisak_DrawWorld(const std::filesystem::path &directory, const char *mapName
     };
     check("view A", wdr::CheckFrame(framesA.back().stats, vidConfig.sceneWidth, vidConfig.sceneHeight));
     check("view A", wdr::CheckDrawCounts(framesA.back().counts));
-    check("view A", wdr::CheckRepeatable(digestsA));
+    check("view A", wdr::CheckSettled(digestsA, framesA.back().smcPatches));
     check("view B", wdr::CheckFrame(frameB.stats, vidConfig.sceneWidth, vidConfig.sceneHeight));
     check("view B", wdr::CheckDrawCounts(frameB.counts));
-    check("view B", wdr::CheckRepeatable(digestsB));
+    check("view B", wdr::CheckSettled(digestsB, frameB.smcPatches));
     check("views A and B", wdr::CheckViewsDiffer(framesA.back().stats.digest, frameB.stats.digest));
 
     // 5. Optionally keep view A on screen. Each frame presents; nothing is saved.
