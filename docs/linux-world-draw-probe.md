@@ -28,9 +28,11 @@ Like the device probes, it sets `DXVK_LOG_PATH=none` unless the caller set it.
 The exporter's normal start runs: `Com_Init`, the file system, and the probe's
 own `CL_InitDedicated`. That `CL_InitDedicated`:
 
-- gives the renderer the client's configuration (`code_post_gfx_mp`,
+- configures the renderer as the client's `CL_InitRef` does, with
+  `R_ConfigureRenderer`: the client's configuration (`code_post_gfx_mp`,
   `common_mp`, the localized zones, `mod` if present, no `ui_mp`, one client
-  view);
+  view), then `R_InitRenderCommands`, which sizes the model lighting atlas and
+  allocates the render command and scene buffers;
 - turns `sys_smp_allowed` off before the renderer registers its dvars, so the
   two worker thread dvars default off. Worker commands then run inline, the
   backend runs on the main thread, and `R_InitHardware` starts no worker;
@@ -43,7 +45,7 @@ probe's own code is in `src/linux/tools/world_draw_probe.cpp`.
 | --- | --- | --- |
 | `arguments` | before any device work | `KISAK_WORLD_DRAW_MAP` is unset, combined with another export mode, or not an allowlisted map name; `KISAK_WORLD_DRAW_SHOW_SECONDS` is set and not a whole number from 0 to 60 |
 | `layout` | the probe and the database loader are compiled with different definitions | any of the shared structs differs in size between the two views, as in the world device probe |
-| `start` | inside `$init`, where a client's `CL_InitRenderer` runs | a zone, a D3D object, a world or a registration exists already; `r_loadForRenderer` is off; the renderer would start threads; `fx_marks` is on |
+| `start` | inside `$init`, where a client's `CL_InitRenderer` runs | a zone, a D3D object, a world or a registration exists already; `r_loadForRenderer` is off; the renderer would start threads; `fx_marks` is on; the render commands are not set up |
 | `environment` | `DXVK_WSI_DRIVER`, `DXVK_LOG_PATH`, SDL video | the WSI is set to something other than SDL3, or SDL video cannot start |
 | `direct3d` | the probe's own `Direct3DCreate9`, released at once | no Direct3D 9 interface. `R_InitGraphicsApi` goes on without one, so the probe asks first |
 | renderer start | `R_Init`: the window and device for a 640x480 window, the graphics zones queued behind them, render targets, initial state, the scene, code images and materials | the engine's own errors |

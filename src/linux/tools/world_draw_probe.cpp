@@ -475,9 +475,9 @@ std::chrono::steady_clock::time_point g_started;
 int g_showSeconds = 0;
 } // namespace
 
-// The client's renderer configuration (src/client_mp/cl_main_mp.cpp SetupGfxConfig
-// and CL_SetFastFileNames) with the dedicated server's zone set (no ui_mp), for a
-// renderer that runs on this thread alone. Unlike the dedicated server's
+// The client's renderer configuration (src/client_mp/cl_main_mp.cpp CL_InitRef:
+// SetupGfxConfig, CL_SetFastFileNames, R_ConfigureRenderer) with the dedicated
+// server's zone set (no ui_mp), for a renderer that runs on this thread alone. Unlike the dedicated server's
 // CL_InitDedicated (src/linux/server_device_counterparts.cpp) it latches nothing
 // off and loads no zone: Kisak_StartWorldDraw starts the renderer.
 void __cdecl CL_InitDedicated()
@@ -503,7 +503,10 @@ void __cdecl CL_InitDedicated()
     config.localizedCodeFastFileName = "localized_code_post_gfx_mp";
     config.localizedCommonFastFileName = "localized_common_mp";
     config.modFastFileName = DB_ModFileExists() ? "mod" : nullptr;
-    SetGfxConfig(&config);
+    // As the client's CL_InitRef: SetGfxConfig, then R_InitRenderCommands, which
+    // sizes the model lighting atlas and allocates the render command buffers
+    // and scene buffers that R_Init and every frame use.
+    R_ConfigureRenderer(&config);
     if (!r_loadForRenderer)
         R_RegisterDvars();
     // The effects dvars the scene reads every frame. No effects system starts,
@@ -551,6 +554,8 @@ void Kisak_StartWorldDraw(const char *mapName, const wf::Layout &loaderLayout)
                 !r_smp_worker_thread[1]->current.enabled,
             "start", "the renderer is not configured for one thread");
     Require(fx_marks && !fx_marks->current.enabled, "start", "fx_marks is not off");
+    Require(frontEndDataOut && frontEndDataOut->commands && frontEndDataOut->commands->cmds, "start",
+            "the render commands are not set up (R_ConfigureRenderer did not run)");
 
     SelectWsi();
     KeepDxvkLogOnStderr();
