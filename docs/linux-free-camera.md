@@ -1,15 +1,16 @@
 # Linux free camera: frame ownership, camera and input
 
 Status on 2026-11-02: **camera, frame owner and window input exist, and the
-frame owner drives the engine renderer; not yet run on a GPU.** The camera, its
+frame owner drives the engine renderer on a GPU with a real map.** The camera, its
 key bindings, the frame owner and the window input that feeds them are covered by
 asset-free tests. The `SceneRenderer` adapter over the engine renderer the
 [world draw probe](linux-world-draw-probe.md) brought up is written
 ([below](#the-renderer-contract)), with a replay that drives the owner through
 the reference traversals on a real map ([the replay](#the-replay)). Both build
 in the opt-in `KisakCOD-world-draw-probe` target and fail closed without a
-device; no GPU, map or device result is claimed for them yet. A driver joining
-the adapter, the owner and the window input is the next step.
+device. The replay passed on one laptop GPU with `mp_crash`
+([what is verified](#what-is-verified)). A driver joining the adapter, the owner
+and the window input is the next step.
 
 ## Why a host camera
 
@@ -196,7 +197,9 @@ Rules, any of which fails the run:
   left.
 
 Every frame of a leg must be drawn; a frame the owner reports as anything else
-stops the run with its stage. The run prints `free_camera_leg`,
+stops the run with its stage. The run prints `free_camera_leg` (with the leg's
+frame of fewest colours, its index and pose, followed by that frame's
+`world_draw_frame` line labelled `<leg>.fewest_colors`),
 `free_camera_checkpoint` (with the pose and digest), `free_camera_interruption`
 (`same=yes|no`), the settle frames as `world_draw_frame` lines,
 `free_camera_counters`, `free_camera_shutdown` and finally
@@ -294,11 +297,45 @@ replay against the stand-in D3D9 library: it must stop at its own
 `stage=direct3d` before `R_Init`, and refuse an unknown map, both map variables
 at once and a show time first, writing nothing.
 
+Adapter and replay on a GPU (David's laptop: Intel Raptor Lake-U graphics, Mesa
+ANV 25.0.7, Debian 13 under GNOME Wayland, DXVK 2.7.1 and SDL 3.2.10 for i386,
+Clang 19.1.7; the owner's installed `mp_crash`; local runs, not CI evidence), on
+head 39be5b4 in RelWithDebInfo and Debug, and again on c6e8164 with the leg
+reports below (the same digests and counts): every run passed with no problem. All
+twelve checkpoints settled (within 2 to 9 draws); the resize, minimize, device
+reset and reload each came back to `A.rise`'s digest; the counts were 4 loads, 4
+unloads, 2 resizes, 1 reset, 4 empty frames and 153 draws by both the owner and
+the renderer, with 3 minimized frames that drew nothing; after the shutdown no
+device, map or zone was left. The two builds printed the same checkpoint and
+frame lines and wrote the same report apart from times. The run took 10.8 s in
+RelWithDebInfo and 21.7 s in Debug, both including the map's four loads. DXVK
+printed `D3D9Cursor::ResetCursor: Not supported on current platform` at each of
+the three device resets; nothing else was a warning or an error.
+
+At the same eye and angles, the replay's settled `A.start` and `B.start` are not
+bit for bit the probe's views A and B (a few pixels apart: for A, 63,428
+colours against 63,434 and the same mean luma). The only refdef field that differs is the
+vertical tangent: the camera computes it as `CG_UpdateFov` does (0.47780272),
+the probe as width over height (0.4778027), one float step apart.
+
+One frame in motion is flat. Path B's frame 22, the end of the square's third
+side, at (-155.6, 205.8, 222) facing yaw 179.76, is a single black colour: the
+front end emitted one lit surface and the backend issued no world draw call.
+The eye there is in visibility cell 1 and not in solid (its contents are
+`CONTENTS_STRUCTURAL`, as at the normal frames of path A), so it is not a camera
+inside a wall; one other frame of that leg also drew no world call. The leg
+frames whose eye is in solid (two in `A.fast`, four in `A.rise`) drew normally.
+Every checkpoint settled on a full picture. Whether the game draws nothing from
+that pose too, or the visibility walk misses a portal there, is not known yet.
+
 ## What is not verified
 
-- The replay has not run on a GPU, so no map has been loaded or drawn through
-  this owner and no real device has been reset or resized yet.
+- The replay has run on one GPU and one map. Its interruptions are forced: DXVK
+  never reports a windowed device lost, so a real loss, and a reset it makes
+  necessary, has not been seen.
 - Nothing is compared with a captured game frame.
+- Path B's flat frame (above) is unexplained: the visibility walk's cells and
+  portals from that pose have not been looked at.
 - The window input has only seen SDL's dummy driver: no real desktop's focus,
   minimize or relative-capture behaviour, and no window made by `R_CreateWindow`
   itself. The replay does not use it: it drives the owner directly.
@@ -307,7 +344,8 @@ at once and a show time first, writing nothing.
 
 Run on named hardware with a private map, keeping screenshots and exports out of
 the repository. The replay covers items 1 and 2, item 3 without a map switch,
-and the shutdown order of item 4; its GPU run is still to come.
+and the shutdown order of item 4; it passed on David's laptop (see What is
+verified).
 
 1. Replay reference traversal A (forward, mouse turn left 818 counts, fast forward,
    rise) and B (four arrow-key turns) through the real renderer; record the pose and
