@@ -151,6 +151,8 @@ enum class Kind : uint8_t {
     WindowFocusGained,
     WindowFocusLost,
     WindowMinimized,
+    // Back from minimized: restored or maximized.
+    WindowRestored,
     WindowEnter,
     WindowLeave,
     WindowResized,
@@ -190,6 +192,8 @@ inline Event Decode(const SDL_Event &source)
     case SDL_EVENT_WINDOW_FOCUS_GAINED:
     case SDL_EVENT_WINDOW_FOCUS_LOST:
     case SDL_EVENT_WINDOW_MINIMIZED:
+    case SDL_EVENT_WINDOW_RESTORED:
+    case SDL_EVENT_WINDOW_MAXIMIZED:
     case SDL_EVENT_WINDOW_MOUSE_ENTER:
     case SDL_EVENT_WINDOW_MOUSE_LEAVE:
     case SDL_EVENT_WINDOW_RESIZED:
@@ -202,6 +206,8 @@ inline Event Decode(const SDL_Event &source)
         case SDL_EVENT_WINDOW_FOCUS_GAINED: event.kind = Kind::WindowFocusGained; break;
         case SDL_EVENT_WINDOW_FOCUS_LOST: event.kind = Kind::WindowFocusLost; break;
         case SDL_EVENT_WINDOW_MINIMIZED: event.kind = Kind::WindowMinimized; break;
+        case SDL_EVENT_WINDOW_RESTORED:
+        case SDL_EVENT_WINDOW_MAXIMIZED: event.kind = Kind::WindowRestored; break;
         case SDL_EVENT_WINDOW_MOUSE_ENTER: event.kind = Kind::WindowEnter; break;
         case SDL_EVENT_WINDOW_MOUSE_LEAVE: event.kind = Kind::WindowLeave; break;
         default: event.kind = Kind::WindowResized; break;
@@ -260,6 +266,8 @@ inline Event Decode(const SDL_Event &source)
         case SDL_WINDOWEVENT_FOCUS_GAINED: event.kind = Kind::WindowFocusGained; break;
         case SDL_WINDOWEVENT_FOCUS_LOST: event.kind = Kind::WindowFocusLost; break;
         case SDL_WINDOWEVENT_MINIMIZED: event.kind = Kind::WindowMinimized; break;
+        case SDL_WINDOWEVENT_RESTORED:
+        case SDL_WINDOWEVENT_MAXIMIZED: event.kind = Kind::WindowRestored; break;
         case SDL_WINDOWEVENT_ENTER: event.kind = Kind::WindowEnter; break;
         case SDL_WINDOWEVENT_LEAVE: event.kind = Kind::WindowLeave; break;
         case SDL_WINDOWEVENT_SIZE_CHANGED:
@@ -323,6 +331,7 @@ inline SDL_Event MakeWindow(uint32_t window, Kind kind, int first = 0, int secon
     case Kind::WindowFocusGained: event.type = SDL_EVENT_WINDOW_FOCUS_GAINED; break;
     case Kind::WindowFocusLost: event.type = SDL_EVENT_WINDOW_FOCUS_LOST; break;
     case Kind::WindowMinimized: event.type = SDL_EVENT_WINDOW_MINIMIZED; break;
+    case Kind::WindowRestored: event.type = SDL_EVENT_WINDOW_RESTORED; break;
     case Kind::WindowEnter: event.type = SDL_EVENT_WINDOW_MOUSE_ENTER; break;
     case Kind::WindowLeave: event.type = SDL_EVENT_WINDOW_MOUSE_LEAVE; break;
     default: event.type = SDL_EVENT_WINDOW_RESIZED; break;
@@ -338,6 +347,7 @@ inline SDL_Event MakeWindow(uint32_t window, Kind kind, int first = 0, int secon
     case Kind::WindowFocusGained: event.window.event = SDL_WINDOWEVENT_FOCUS_GAINED; break;
     case Kind::WindowFocusLost: event.window.event = SDL_WINDOWEVENT_FOCUS_LOST; break;
     case Kind::WindowMinimized: event.window.event = SDL_WINDOWEVENT_MINIMIZED; break;
+    case Kind::WindowRestored: event.window.event = SDL_WINDOWEVENT_RESTORED; break;
     case Kind::WindowEnter: event.window.event = SDL_WINDOWEVENT_ENTER; break;
     case Kind::WindowLeave: event.window.event = SDL_WINDOWEVENT_LEAVE; break;
     default: event.window.event = SDL_WINDOWEVENT_RESIZED; break;
@@ -477,6 +487,31 @@ inline SDL_Window *CreateWindow(const char *title, int width, int height, bool h
     const Uint32 flags = SDL_WINDOW_RESIZABLE | (hidden ? SDL_WINDOW_HIDDEN : SDL_WINDOW_SHOWN);
     return SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, flags);
 #endif
+}
+
+// The window's drawable size in pixels, read from the window itself rather than
+// from a software surface, so it is safe on a window another API presents to.
+// SDL2 before 2.26 has no pixel query; there the logical size is the answer,
+// which is the same on X11 where SDL2 does no display scaling.
+inline bool PixelSize(SDL_Window *window, int &width, int &height)
+{
+    width = height = 0;
+#if KISAK_LINUX_SDL_MAJOR == 3
+    return Ok(SDL_GetWindowSizeInPixels(window, &width, &height));
+#elif SDL_VERSION_ATLEAST(2, 26, 0)
+    if (!window) return false;
+    SDL_GetWindowSizeInPixels(window, &width, &height);
+    return true;
+#else
+    if (!window) return false;
+    SDL_GetWindowSize(window, &width, &height);
+    return true;
+#endif
+}
+
+inline bool WindowMinimizedFlag(SDL_Window *window)
+{
+    return (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED) != 0;
 }
 
 inline bool SetWindowSize(SDL_Window *window, int width, int height)

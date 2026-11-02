@@ -260,6 +260,20 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
         "${TESTS_DIR}/linux_window/window_test.cpp"
         ${KISAK_WINDOW_HOST_SERVICES}
     )
+    # The free camera fed by an adopted window's SDL events. This test is the
+    # compile proof for the view sources in a window target; the production
+    # angle math they call is compiled unmodified beside them.
+    set(KISAK_FREE_CAMERA_WINDOW_SOURCES
+        "${SRC_DIR}/linux/client/view/free_camera.cpp"
+        "${SRC_DIR}/linux/client/view/free_camera_controls.cpp"
+        "${SRC_DIR}/linux/client/view/frame_owner.cpp"
+        "${SRC_DIR}/linux/client/view/free_camera_window.cpp"
+        "${SRC_DIR}/universal/com_math_anglevectors.cpp"
+    )
+    add_executable(KisakCOD-free-camera-window-test
+        "${TESTS_DIR}/linux_free_camera/free_camera_window_test.cpp"
+        ${KISAK_FREE_CAMERA_WINDOW_SOURCES}
+    )
     set(KISAK_CLIENT_INPUT_SOURCES
         "${SRC_DIR}/linux/client/window/client_input_host.cpp"
         "${SRC_DIR}/client/screen_placement.cpp"
@@ -335,6 +349,11 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
         # SDL3 starts text input per window and reports refusal; the window test
         # wraps that start to exercise the rollback deterministically.
         target_link_options(KisakCOD-window-test PRIVATE -Wl,--wrap=SDL_StartTextInput)
+        # The free camera window test refuses relative capture the same way;
+        # SDL3 sets it per window, SDL2 for the process.
+        target_link_options(KisakCOD-free-camera-window-test PRIVATE -Wl,--wrap=SDL_SetWindowRelativeMouseMode)
+    else()
+        target_link_options(KisakCOD-free-camera-window-test PRIVATE -Wl,--wrap=SDL_SetRelativeMouseMode)
     endif()
     add_executable(KisakCOD-menu-script-test "${TESTS_DIR}/linux_window/menu_script_test.cpp" "${SRC_DIR}/ui/ui_input_core.cpp" "${SRC_DIR}/stringed/stringed_hooks.cpp" "${SRC_DIR}/linux/client/window/menu_unavailable_services.cpp" ${KISAK_MENU_SCRIPT_SOURCES} ${KISAK_CLIENT_RUNTIME_SOURCES})
     add_executable(KisakCOD-client-input-test
@@ -475,7 +494,7 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
     # Exercise actual clock/Fade with signed arithmetic traps, without any
     # sanitizer runtime or platform-specific device dependencies.
     target_compile_options(KisakCOD-ui-time-test PRIVATE -ftrapv)
-    foreach(window_target KisakCOD-string-consumers-test KisakCOD-dvar-string-failure-test KisakCOD-string-owner-test KisakCOD-cpu-frame-owner-test KisakCOD-cpu-menu-frame-test KisakCOD-ui-registration-test KisakCOD-cpu-traversal-test KisakCOD-menu-composition-assets-test KisakCOD-ui-time-test KisakCOD-cpu-composition-test KisakCOD-cpu-viewport-test KisakCOD-ui-audio-failure-test KisakCOD-menu-input-failure-test KisakCOD-menu-input-owner-test KisakCOD-menu-control-assets-test KisakCOD-ui-audio-test KisakCOD-ui-audio-assets-test KisakCOD-menu-script-test KisakCOD-window-platform KisakCOD-client-window KisakCOD-window-test KisakCOD-client-input KisakCOD-client-input-test KisakCOD-shutdown-signal-test KisakCOD-client-command-test KisakCOD-client-runtime-test KisakCOD-client-input-startup-test KisakCOD-presentation-test KisakCOD-frame-deadline-test KisakCOD-pixel-resource-test KisakCOD-cpu-renderer-test KisakCOD-cpu-renderer-fault-test KisakCOD-cpu-raw-test KisakCOD-material-clone-mp-test KisakCOD-material-clone-radiant-test KisakCOD-cpu-ui-test KisakCOD-material-layered-mp-test KisakCOD-material-layered-sp-test KisakCOD-material-layered-radiant-test KisakCOD-cpu-text-test KisakCOD-cpu-menu-test KisakCOD-menu-assets-test KisakCOD-ui-material-assets-test KisakCOD-iwi-assets-test KisakCOD-font-assets-test)
+    foreach(window_target KisakCOD-string-consumers-test KisakCOD-dvar-string-failure-test KisakCOD-string-owner-test KisakCOD-cpu-frame-owner-test KisakCOD-cpu-menu-frame-test KisakCOD-ui-registration-test KisakCOD-cpu-traversal-test KisakCOD-menu-composition-assets-test KisakCOD-ui-time-test KisakCOD-cpu-composition-test KisakCOD-cpu-viewport-test KisakCOD-ui-audio-failure-test KisakCOD-menu-input-failure-test KisakCOD-menu-input-owner-test KisakCOD-menu-control-assets-test KisakCOD-ui-audio-test KisakCOD-ui-audio-assets-test KisakCOD-menu-script-test KisakCOD-window-platform KisakCOD-client-window KisakCOD-window-test KisakCOD-free-camera-window-test KisakCOD-client-input KisakCOD-client-input-test KisakCOD-shutdown-signal-test KisakCOD-client-command-test KisakCOD-client-runtime-test KisakCOD-client-input-startup-test KisakCOD-presentation-test KisakCOD-frame-deadline-test KisakCOD-pixel-resource-test KisakCOD-cpu-renderer-test KisakCOD-cpu-renderer-fault-test KisakCOD-cpu-raw-test KisakCOD-material-clone-mp-test KisakCOD-material-clone-radiant-test KisakCOD-cpu-ui-test KisakCOD-material-layered-mp-test KisakCOD-material-layered-sp-test KisakCOD-material-layered-radiant-test KisakCOD-cpu-text-test KisakCOD-cpu-menu-test KisakCOD-menu-assets-test KisakCOD-ui-material-assets-test KisakCOD-iwi-assets-test KisakCOD-font-assets-test)
         target_compile_features(${window_target} PRIVATE cxx_std_20)
         target_compile_definitions(${window_target} PRIVATE
             KISAK_OPENAL RELEASE_ASSERTS _FILE_OFFSET_BITS=64 _GNU_SOURCE
@@ -519,4 +538,5 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
     target_link_libraries(KisakCOD-client-input PRIVATE KisakCOD-window-platform)
     target_link_libraries(KisakCOD-client-window PRIVATE KisakCOD-window-platform)
     target_link_libraries(KisakCOD-window-test PRIVATE KisakCOD-window-platform)
+    target_link_libraries(KisakCOD-free-camera-window-test PRIVATE KisakCOD-window-platform)
 endif()

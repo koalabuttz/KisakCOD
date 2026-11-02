@@ -33,9 +33,22 @@ struct Config {
     bool hidden = false;
 };
 
+// A window someone else created and keeps, such as the one the engine renderer
+// makes through R_CreateWindow for DXVK to present to. A host built on it pumps
+// that window's events like any other host, but never presents to it, never
+// creates a software surface on it and never destroys it. The window must
+// outlive the host, so the host is destroyed before the renderer shuts down.
+// Named explicitly at the call site, so a braced Config such as `{}` never
+// reads as an adopted window.
+struct AdoptedWindow {
+    explicit AdoptedWindow(SDL_Window *borrowed) : window(borrowed) {}
+    SDL_Window *window;
+};
+
 class WindowHost {
 public:
     WindowHost(EventSink &sink, const Config &config = {});
+    WindowHost(EventSink &sink, AdoptedWindow adopted);
     ~WindowHost() noexcept;
     WindowHost(const WindowHost &) = delete;
     WindowHost &operator=(const WindowHost &) = delete;
@@ -48,11 +61,19 @@ public:
     bool RelativeMouseActive() const { return relativeActive_; }
     const std::string &RelativeMouseError() const { return relativeError_; }
     // SDL window-surface presentation only. No game renderer is initialized.
+    // An adopted window is presented by its own renderer, so both Present calls
+    // refuse it.
     void Present(uint8_t red, uint8_t green, uint8_t blue);
     // Pixel extent comes from the current SDL surface, not logical resize events.
     // A view must match this extent. Presentation copies synchronously; no view
-    // or SDL surface pointer is retained across resize or another frame.
+    // or SDL surface pointer is retained across resize or another frame. For an
+    // adopted window it is the window's pixel size, and no surface is created.
     PixelExtent SurfaceExtent() const;
+    bool Adopted() const { return adopted_; }
+    // Minimized as the window events last said, starting from the window's own
+    // flag. A minimized window keeps its size, so a renderer that must not draw
+    // while minimized asks this rather than looking for an empty extent.
+    bool Minimized() const { return minimized_; }
     void Present(PixelBufferView frame);
     uint32_t Id() const { return SDL_GetWindowID(window_); }
     bool Running() const { return running_; }
@@ -69,6 +90,7 @@ public:
     bool EngineCursorActive() const { return cursorOwned_; }
     SDL_Window *NativeWindow() const { return window_; }
 private:
+    void Open(const Config &config, SDL_Window *adopted);
     void Dispatch(const SDL_Event &event);
     void ReleaseHeld(uint32_t time);
     void SetKey(uint32_t time, int key, bool down, bool repeat = false);
@@ -87,6 +109,7 @@ private:
     sdl::ThreadId owner_;
     uint32_t clockOffset_ = 0;
     bool running_ = true, focused_ = false, startedText_ = false, quitComplete_ = false;
+    bool adopted_ = false, minimized_ = false;
     bool relativeRequested_=false,relativeActive_=false;
     std::string relativeError_;
     bool pointerInside_=false,engineCursorRequested_=false,cursorOwned_=false;
