@@ -15,8 +15,10 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <string>
 
+struct GfxViewInfo;
 struct GfxWorld;
 struct refdef_s;
 
@@ -80,8 +82,10 @@ void PrepareRefdef(refdef_s &refdef);
 // One frame of that view, call for call as R_GenerateReflectionRawData draws a
 // cubemap face (without the effects update), then the draw counts and, when
 // readBack is set, the measured back buffer. Requires the pre-tessellated index
-// buffers to agree before the frame and a ready device after it.
-FrameResult DrawRefdef(refdef_s &refdef, bool readBack = true);
+// buffers to agree before the frame and a ready device after it. inspect, when
+// given, sees the front end's view after R_RenderScene, before the backend runs.
+FrameResult DrawRefdef(refdef_s &refdef, bool readBack = true,
+                       const std::function<void(const GfxViewInfo &)> &inspect = {});
 
 // ---- the map ----------------------------------------------------------------
 

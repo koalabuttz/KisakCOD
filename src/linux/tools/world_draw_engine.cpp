@@ -284,7 +284,7 @@ void PrepareRefdef(refdef_s &refdef)
     R_InitPrimaryLights(refdef.primaryLights);
 }
 
-FrameResult DrawRefdef(refdef_s &refdef, bool readBack)
+FrameResult DrawRefdef(refdef_s &refdef, bool readBack, const std::function<void(const GfxViewInfo &)> &inspect)
 {
     const auto started = std::chrono::steady_clock::now();
     Require(PreTessBuffersAgree(), "frame",
@@ -307,6 +307,8 @@ FrameResult DrawRefdef(refdef_s &refdef, bool readBack)
     result.counts.decalSurfaces = view.decalInfo.drawSurfCount;
     result.counts.emissiveSurfaces = view.emissiveInfo.drawSurfCount;
     result.smcPatches = uint32_t(frontEndDataOut->smcPatchCount);
+    if (inspect)
+        inspect(view);
 
     R_EndFrame();
     R_IssueRenderCommands(0xFFFFFFFF);

@@ -11,7 +11,13 @@
 #include <qcommon/qcommon.h>
 #include <gfx_d3d/r_bsp.h>
 #include <gfx_d3d/r_dpvs.h>
+#include <gfx_d3d/r_dvars.h>
 #include <gfx_d3d/r_init.h>
+#include <gfx_d3d/r_material.h>
+#include <gfx_d3d/r_rendercmds.h>
+#include <gfx_d3d/r_scene.h>
+#include <gfx_d3d/rb_stats.h>
+#include <universal/com_math.h>
 #include <ui/keycodes.h>
 #include <linux/client/window/sdl_api.h>
 #include <linux/client/view/frame_owner.h>
@@ -27,6 +33,7 @@
 #include <cstdio>
 #include <deque>
 #include <exception>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -80,7 +87,13 @@ struct Leg
     // Frames whose eye was inside solid collision, and frames with no world draw call.
     unsigned solidFrames = 0;
     unsigned noWorldFrames = 0;
+    // The first frames that drew no world call and their poses, for the visibility
+    // report after the replay.
+    std::vector<std::pair<unsigned, kv::CameraPose>> noWorld{};
 };
+
+// The no-world frames of a leg the visibility report looks at.
+constexpr size_t kMaxNoWorldPoses = 4;
 
 struct Interruption
 {
@@ -128,7 +141,11 @@ public:
         if (contents & CONTENTS_SOLID)
             ++leg.solidFrames;
         if (frame.counts.worldDrawCalls == 0)
+        {
             ++leg.noWorldFrames;
+            if (leg.noWorld.size() < kMaxNoWorldPoses)
+                leg.noWorld.emplace_back(leg.frames, pose);
+        }
         if (leg.fewestColorsFrame < 0 || frame.stats.distinctColors < leg.fewestColors.stats.distinctColors)
         {
             leg.fewestColorsFrame = int(leg.frames);
@@ -234,6 +251,187 @@ bool ResizeWindow(EngineSceneRenderer &renderer, kv::ViewExtent extent)
 void RequireLoaded(bool loaded, const kv::FrameOwner &owner, const char *what)
 {
     Require(loaded, "replay", std::string(what) + ": " + owner.Error());
+}
+
+// ---- the visibility report ----------------------------------------------------
+//
+// A leg frame that drew no world call is drawn again from its pose, outside the
+// owner and the adapter's counters, with what the visibility walk saw: the eye's
+// cell and that cell's portals, the cells marked visible, the lit surfaces, and
+// the same view with single-cell visibility, without pretessellation, without the
+// static model cache and without shadows, then from poses around it. Reported,
+// never a rule.
+
+struct VisibilityDraw
+{
+    FrameResult first, last;
+    int cell = -1;
+    unsigned visibleCells = 0;
+    uint32_t otherCalls = 0; // backend draws into the scene outside the world bucket
+    std::vector<std::string> litSurfaces;
+};
+
+constexpr size_t kMaxReportedSurfaces = 4;
+constexpr int kMaxReportedPortals = 64;
+constexpr int kVisibilityDraws = 3;
+
+VisibilityDraw DrawPose(const kv::FreeCamera &camera, kv::ViewExtent extent, float aspect)
+{
+    const kv::CameraView view = camera.View(extent, kSceneTime, aspect);
+    auto refdef = std::make_unique<refdef_s>();
+    VisibilityDraw draw;
+    draw.cell = R_CellForPoint(rgp.world, camera.Pose().origin);
+    for (int i = 0; i < kVisibilityDraws; ++i)
+    {
+        const bool last = i + 1 == kVisibilityDraws;
+        PrepareRefdef(*refdef);
+        kv::FillRefdef(view, *refdef);
+        auto inspect = [&](const GfxViewInfo &info) {
+            if (!last)
+                return;
+            const int cellCount = rgp.world->dpvsPlanes.cellCount;
+            draw.visibleCells = 0;
+            for (int cell = 0; cell < cellCount && cell < 32 * 32; ++cell)
+                if (dpvsGlob.cellVisibleBits[cell >> 5] & (1u << (cell & 31)))
+                    ++draw.visibleCells;
+            for (uint32_t s = 0; s < info.litInfo.drawSurfCount && s < kMaxReportedSurfaces; ++s)
+            {
+                const GfxDrawSurf &surf = info.litInfo.drawSurfs[s];
+                const Material *material = rgp.sortedMaterials[surf.fields.materialSortedIndex];
+                char text[256];
+                std::snprintf(text, sizeof(text), "surf_type=%u object=%u material=%s",
+                              unsigned(surf.fields.surfType), unsigned(surf.fields.objectId),
+                              material && material->info.name ? material->info.name : "(none)");
+                draw.litSurfaces.push_back(text);
+            }
+        };
+        const FrameResult frame = DrawRefdef(*refdef, true, inspect);
+        if (i == 0)
+            draw.first = frame;
+        if (last)
+        {
+            draw.last = frame;
+            draw.otherCalls = 0;
+            for (int bucket = GFX_PRIM_STATS_WORLD + 1; bucket < GFX_PRIM_STATS_COUNT; ++bucket)
+                draw.otherCalls += uint32_t(g_frameStatsCur.viewStats[0].primStats[bucket].primCount);
+        }
+    }
+    return draw;
+}
+
+void SayVisibility(const std::string &where, const char *variant, const kv::CameraPose &pose,
+                   const VisibilityDraw &draw)
+{
+    const FrameResult &f = draw.last;
+    Say("free_camera_visibility %s variant=%s origin=%.2f,%.2f,%.2f angles=%.3f,%.3f,%.3f cell=%d visible_cells=%u "
+        "lit=%u decal=%u emissive=%u world_calls=%u/%u world_tris=%u other_calls=%u colors=%zu luma=%.1f\n",
+        where.c_str(), variant, pose.origin[0], pose.origin[1], pose.origin[2], pose.angles[0], pose.angles[1],
+        pose.angles[2], draw.cell, draw.visibleCells, f.counts.litSurfaces, f.counts.decalSurfaces,
+        f.counts.emissiveSurfaces, draw.first.counts.worldDrawCalls, f.counts.worldDrawCalls, f.counts.worldTriangles,
+        draw.otherCalls, f.stats.distinctColors, f.stats.meanLuma);
+}
+
+// The view with a boolean dvar set, then the dvar as it was.
+VisibilityDraw DrawWith(const dvar_t *dvar, bool value, const kv::FreeCamera &camera, kv::ViewExtent extent,
+                        float aspect)
+{
+    Require(dvar != nullptr, "visibility", "a dvar the visibility report sets is not registered");
+    const bool was = dvar->current.enabled;
+    Dvar_SetBool(dvar, value);
+    VisibilityDraw draw;
+    try
+    {
+        draw = DrawPose(camera, extent, aspect);
+    }
+    catch (...)
+    {
+        Dvar_SetBool(dvar, was);
+        throw;
+    }
+    Dvar_SetBool(dvar, was);
+    return draw;
+}
+
+void SayCell(const std::string &where, const float *eye, int cellIndex)
+{
+    if (cellIndex < 0 || cellIndex >= rgp.world->dpvsPlanes.cellCount)
+    {
+        Say("free_camera_visibility_cell %s cell=%d (none)\n", where.c_str(), cellIndex);
+        return;
+    }
+    const GfxCell &cell = rgp.world->cells[cellIndex];
+    const bool inBounds = eye[0] >= cell.mins[0] && eye[0] <= cell.maxs[0] && eye[1] >= cell.mins[1] &&
+                          eye[1] <= cell.maxs[1] && eye[2] >= cell.mins[2] && eye[2] <= cell.maxs[2];
+    Say("free_camera_visibility_cell %s cell=%d of=%d mins=%.1f,%.1f,%.1f maxs=%.1f,%.1f,%.1f eye_in_bounds=%s "
+        "portals=%d aabb_trees=%d cull_groups=%d\n",
+        where.c_str(), cellIndex, rgp.world->dpvsPlanes.cellCount, cell.mins[0], cell.mins[1], cell.mins[2],
+        cell.maxs[0], cell.maxs[1], cell.maxs[2], inBounds ? "yes" : "no", cell.portalCount, cell.aabbTreeCount,
+        cell.cullGroupCount);
+    for (int p = 0; p < cell.portalCount && p < kMaxReportedPortals; ++p)
+    {
+        const GfxPortal &portal = cell.portals[p];
+        // As R_ShouldSkipPortal and R_VisitPortalsForCell measure it: the plane's
+        // value at the eye, positive on the side the walk skips.
+        const float *c = portal.plane.coeffs;
+        const float dist = c[0] * eye[0] + c[1] * eye[1] + c[2] * eye[2] + c[3];
+        float center[3] = {0, 0, 0};
+        for (unsigned v = 0; v < portal.vertexCount; ++v)
+            for (int k = 0; k < 3; ++k)
+                center[k] += portal.vertices[v][k] / float(portal.vertexCount);
+        int x = 0, y = 0;
+        Vec3ProjectionCoords(c, &x, &y);
+        const bool inWinding = portal.vertexCount >= 3 &&
+                               ProjectedWindingContainsCoplanarPoint(portal.vertices, portal.vertexCount, x, y, eye);
+        Say("free_camera_visibility_portal %s cell=%d portal=%d to_cell=%d verts=%u eye_dist=%.3f "
+            "eye_in_winding=%s normal=%.3f,%.3f,%.3f center=%.1f,%.1f,%.1f\n",
+            where.c_str(), cellIndex, p, portal.cell ? int(portal.cell - rgp.world->cells) : -1,
+            unsigned(portal.vertexCount), dist, inWinding ? "yes" : "no", c[0], c[1], c[2], center[0], center[1],
+            center[2]);
+    }
+    if (cell.portalCount > kMaxReportedPortals)
+        Say("free_camera_visibility_portal %s cell=%d more=%d\n", where.c_str(), cellIndex,
+            cell.portalCount - kMaxReportedPortals);
+}
+
+void ReportVisibility(const std::string &legName, unsigned frame, const kv::CameraPose &pose,
+                      const kv::CameraTuning &tuning, kv::ViewExtent extent, float aspect)
+{
+    const std::string where = "leg=" + legName + " frame=" + std::to_string(frame);
+    const kv::FreeCamera camera(tuning, pose);
+    const VisibilityDraw asDrawn = DrawPose(camera, extent, aspect);
+    SayVisibility(where, "as_drawn", pose, asDrawn);
+    for (const std::string &surface : asDrawn.litSurfaces)
+        Say("free_camera_visibility_surface %s %s\n", where.c_str(), surface.c_str());
+    SayCell(where, pose.origin, asDrawn.cell);
+
+    SayVisibility(where, "single_cell", pose, DrawWith(r_singleCell, true, camera, extent, aspect));
+    SayVisibility(where, "no_pretess", pose, DrawWith(r_pretess, false, camera, extent, aspect));
+    SayVisibility(where, "no_smc", pose, DrawWith(r_smc_enable, false, camera, extent, aspect));
+    SayVisibility(where, "no_shadows", pose, DrawWith(sm_enable, false, camera, extent, aspect));
+
+    struct Offset
+    {
+        const char *name;
+        float origin[3];
+        float yaw;
+    };
+    static const Offset offsets[] = {
+        {"x-32", {-32, 0, 0}, 0}, {"x-8", {-8, 0, 0}, 0},   {"x-1", {-1, 0, 0}, 0}, {"x+1", {1, 0, 0}, 0},
+        {"x+8", {8, 0, 0}, 0},    {"x+32", {32, 0, 0}, 0},  {"y-32", {0, -32, 0}, 0}, {"y-8", {0, -8, 0}, 0},
+        {"y-1", {0, -1, 0}, 0},   {"y+1", {0, 1, 0}, 0},    {"y+8", {0, 8, 0}, 0},  {"y+32", {0, 32, 0}, 0},
+        {"z-8", {0, 0, -8}, 0},   {"z+8", {0, 0, 8}, 0},    {"yaw-90", {0, 0, 0}, -90}, {"yaw-45", {0, 0, 0}, -45},
+        {"yaw-15", {0, 0, 0}, -15}, {"yaw-5", {0, 0, 0}, -5}, {"yaw-1", {0, 0, 0}, -1}, {"yaw+1", {0, 0, 0}, 1},
+        {"yaw+5", {0, 0, 0}, 5},  {"yaw+15", {0, 0, 0}, 15}, {"yaw+45", {0, 0, 0}, 45}, {"yaw+90", {0, 0, 0}, 90},
+    };
+    for (const Offset &offset : offsets)
+    {
+        kv::CameraPose moved = pose;
+        for (int k = 0; k < 3; ++k)
+            moved.origin[k] += offset.origin[k];
+        moved.angles[1] += offset.yaw;
+        const kv::FreeCamera movedCamera(tuning, moved);
+        SayVisibility(where, offset.name, movedCamera.Pose(), DrawPose(movedCamera, extent, aspect));
+    }
 }
 } // namespace
 
@@ -393,6 +591,13 @@ void Kisak_ReplayFreeCamera(const std::filesystem::path &directory, const char *
             if (interruption.before != interruption.after)
                 check(interruption.name, "the settled picture after it (" + Hex64(interruption.after) +
                                              ") is not the one before it (" + Hex64(interruption.before) + ")");
+
+        // The visibility report on the frames in motion that drew no world call.
+        // Path B's map is the one loaded now; path A's frames were drawn from the
+        // same map, which a reload restores as it was.
+        for (const Leg &leg : replay.Legs())
+            for (const auto &[frame, pose] : leg.noWorld)
+                ReportVisibility(leg.name, frame, pose, owner.Camera().Tuning(), base, vidConfig.aspectRatioWindow);
 
         // 6. The report's view of the replay, then the owner's shutdown: the map's
         // unload, then the client's renderer shutdown.
