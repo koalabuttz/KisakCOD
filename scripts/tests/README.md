@@ -34,6 +34,13 @@ for a local-test client, and the retail-GUID opt-in for protocol 1 and protocol 
 clients. It decodes no gamestate and does not establish general stock/CoD4x
 client compatibility.
 
+`test_server_remote_input.py` compiles the production
+`src/server_mp/sv_remote_input.h` rules 64- and 32-bit: `rcon` is refused until
+`rcon_password` is set and matches exactly (an unset password used to accept
+`rcon "" <command>` from any address), and a `download <name>` client command
+is served only for a plain relative `.iwd`/`.ff` path with no `..`, `:` or
+leading separator (any file under `fs_homepath` used to be downloadable).
+
 `test_server_test_clients.py` checks the extracted internal bot functions with
 controlled connection and movement services; the native runner runs its 32-bit
 sanitizer configuration. The opt-in `test_linux_bots.py` uses stock bot/team/class setup, requires repeated healthy
@@ -120,7 +127,8 @@ Real nonlocal aborts also check reverse-order ownership cleanup, repeated and
 reentrant recovery, and bounded command nesting.
 
 GitHub Actions runs these checks alongside the Windows builds, the native
-bootstrap check and the asset-free world surface checks (below). Loading a map and
+bootstrap check, the asset-free world surface checks and the native D3D9 boundary
+checks (below). Loading a map and
 quitting with licensed assets remain separate application checks.
 
 ## World surface checks
@@ -131,9 +139,9 @@ python3 scripts/tests/run_world_surface_checks.py --config RelWithDebInfo
 python3 scripts/tests/run_world_surface_checks.py --list
 ```
 
-This runner performs no CMake configure and no engine build. It compiles six
+This runner performs no CMake configure and no engine build. It compiles nine
 standalone test translation units directly with `-m32 -std=c++20 -Werror` and runs
-them, then runs the bundle prepare script, for seven checks:
+them, then runs the bundle prepare script, for ten checks:
 
 | Check | Source | Covers |
 | --- | --- | --- |
@@ -142,6 +150,9 @@ them, then runs the bundle prepare script, for seven checks:
 | `world_surface_bundle` | `tests/linux_renderer/world_surface_bundle_test.cpp` | bundle loader, shader framing walk, vertex accessors |
 | `world_surface_oracle` | `tests/linux_renderer/world_surface_oracle_test.cpp` | oracle hashing, weights, sampling, colour and pixel arithmetic, sample selection |
 | `world_lit_bundle` | `tests/linux_renderer/world_lit_bundle_test.cpp` | lit loader refusals: program pair hash and length, widened geometry counts, index walk, colour-map sampler, exact constant set, lightmap layout |
+| `world_frontend_invariants` | `tests/linux_asset_export/world_frontend_invariants_test.cpp` | the rules the offline world front-end probe holds each frame to, and its spawn-point camera scan ([guide](../../docs/linux-world-frontend.md#a-real-map-the-offline-front-end-probe)) |
+| `world_device_rules` | `tests/linux_asset_export/world_device_rules_test.cpp` | the rules the world device probe holds each texture, shader and vertex/index buffer to ([guide](../../docs/linux-world-device-probe.md)) |
+| `world_draw_rules` | `tests/linux_asset_export/world_draw_rules_test.cpp` | what the world draw probe holds a drawn frame to: the back-buffer measurement, the colour, coverage, brightness, repeat and camera rules, and the draw counts, on frames built in memory ([guide](../../docs/linux-world-draw-probe.md)) |
 | `world_image_capture` | `tests/linux_asset_export/world_image_capture_test.cpp` | capture bounds, name filter, duplicate rule, disabled path |
 | `world_surface_prepare` | `test_world_surface_prepare.py` | the prepare step's trust boundary over archives it writes itself |
 
@@ -167,6 +178,131 @@ The four renderer tests are compiled here directly because
 pkg-config modules before it configures anything. That project also builds the two
 GPU replay executables, which are a separate manual experiment; see
 [tests/linux_renderer/README.md](../../tests/linux_renderer/README.md).
+
+## Native D3D9 boundary checks
+
+```sh
+python3 scripts/tests/test_native_d3d9_boundary_runner.py
+python3 scripts/tests/run_native_d3d9_boundary_checks.py --config Debug --dxvk-source <dxvk-2.7.1-checkout>
+python3 scripts/tests/run_native_d3d9_boundary_checks.py --config RelWithDebInfo --dxvk-source <dxvk-2.7.1-checkout>
+```
+
+These check the opt-in boundary through which renderer code reaches DXVK Native
+D3D9 (`src/linux/d3d9_native.h`). They need DXVK Native 2.7.1 **headers** only:
+no DXVK build or library, no Vulkan, SDL, GPU, Steam client, credentials or game
+assets, and no CMake configure. The boundary header is built with g++ and clang++
+in both modes and disassembled to confirm the engine's stdcall survives DXVK's
+headers; four sources must fail to compile for their stated reason; the
+D3D9-bearing engine layouts must be identical in the stand-in and DXVK views; and
+the production renderer units in
+`scripts/platform/linux/native_d3d9_renderer_sources.txt` must compile through the
+boundary and fail without it. See [docs/linux-native-d3d9.md](../../docs/linux-native-d3d9.md).
+A pass does not claim a device, a draw, linking or the hosted run.
+
+## D3D9 device probe and Win32 window layer
+
+These are CMake targets, not a runner: configure with
+`-DKISAK_BUILD_LINUX_NATIVE_D3D9=ON -DKISAK_BUILD_DEVICE_PROBE=ON`, the DXVK Native
+headers, a D3D9 library (`KISAK_DXVK_NATIVE_LIBRARY`) and `SDL3_DIR`, then build
+`KisakCOD-win32-window-test` and `KisakCOD-device-probe`
+([guide](../../docs/linux-device-probe.md)).
+
+```sh
+SDL_VIDEODRIVER=dummy LD_LIBRARY_PATH=<sdl3-sdk>/lib <bin>/KisakCOD-win32-window-test
+LD_LIBRARY_PATH=<dxvk-prefix>/lib32:<sdl3-sdk>/lib <bin>/KisakCOD-device-probe --frames 60
+```
+
+The window test checks the Win32 window and monitor calls `r_init.cpp` makes, as
+implemented over SDL3, on SDL's dummy driver: no display, GPU, Vulkan or D3D9
+library. The probe creates the device through `r_init.cpp` and needs DXVK Native
+2.7.1, a Vulkan driver and a display. CI builds both against a stand-in D3D9
+library whose `Direct3DCreate9` returns null, runs the window test, and checks the
+probe fails closed at `stage=direct3d`; it never creates a device.
+
+### World device probe
+
+`KisakCOD-world-device-probe` (`-DKISAK_BUILD_WORLD_DEVICE_PROBE=ON`, on top of the
+device and world front-end probes) loads the graphics zones and one map onto a
+D3D9 device and checks every device object they asked for
+([guide](../../docs/linux-world-device-probe.md)). Its rules have an asset-free
+test in the world surface runner (`world_device_rules`). Without a device:
+
+```sh
+LD_LIBRARY_PATH=<sdl3-sdk>/lib:<stand-in dir> SDL_VIDEODRIVER=dummy \
+  python3 scripts/tests/test_world_device_probe.py --probe <bin>/KisakCOD-world-device-probe
+```
+
+The script starts the engine from a temporary tree it creates and removes, holding
+only a one-line stub `fileSysCheck.cfg` (the file the engine refuses to start
+without), and runs the probe three times: an allowlisted map must stop at
+`stage=direct3d` before any zone is queued, and no map and an unknown map must be
+refused first. All three exit 1 and write nothing. It takes no game directory and
+is meant for the stand-in library: with a working DXVK and a Vulkan device the
+first run gets past `Direct3DCreate9` and the script fails.
+
+### World draw probe
+
+`KisakCOD-world-draw-probe` (`-DKISAK_BUILD_WORLD_DRAW_PROBE=ON`, on top of the
+world device probe) draws views of one map through the engine's own renderer and
+checks each frame it reads back
+([guide](../../docs/linux-world-draw-probe.md)). Its frame rules have an
+asset-free test in the world surface runner (`world_draw_rules`). Without a
+device:
+
+```sh
+LD_LIBRARY_PATH=<sdl3-sdk>/lib:<stand-in dir> SDL_VIDEODRIVER=dummy \
+  python3 scripts/tests/test_world_draw_probe.py --probe <bin>/KisakCOD-world-draw-probe
+```
+
+The script uses the same kind of temporary tree as the world device probe's and
+runs the probe four times: an allowlisted map must stop at `stage=direct3d`
+before `R_Init` runs, and no map, an unknown map and a show time over 60 seconds
+must be refused first. All four exit 1 and write nothing.
+
+## World front-end checks
+
+```sh
+python3 scripts/tests/run_world_frontend_checks.py --config Debug --dxvk-source <dxvk-2.7.1-checkout>
+python3 scripts/tests/run_world_frontend_checks.py --config RelWithDebInfo --dxvk-source <dxvk-2.7.1-checkout>
+python3 scripts/tests/run_world_frontend_checks.py --list
+python3 scripts/tests/test_world_frontend_check_runner.py
+```
+
+`tests/linux_world_frontend/world_frontend_test.cpp` runs the production renderer
+front end (scene and view setup, DPVS cell and portal visibility, the per-cell
+AABB-tree and cull-group walk, BSP draw-surface batching and the merge) against a
+ten-surface, two-cell synthetic world and checks 28 results, the batches derived
+from the geometry. The runner compiles the test, its link boundary and 46
+unmodified production units with one `-m32` line per configuration (`Debug` is
+`-O0 -D_DEBUG`, `RelWithDebInfo` is `-O2 -DNDEBUG`, both with `RELEASE_ASSERTS`),
+links them with `--gc-sections` and runs the ELF32 result. Production assertions
+abort the run. `r_scene.cpp` and `r_buffers.cpp` are compiled through the native
+D3D9 boundary, so the pinned DXVK Native 2.7.1 **headers** are needed
+(`--dxvk-source` or `--dxvk-include-dir`, as for the boundary checks); no DXVK
+library, D3D9 call, SDL, GPU, assets or CMake configure is involved. See
+[the world front-end guide](../../docs/linux-world-frontend.md) for the link
+boundary rules and what a pass does not claim.
+
+## Client compile census and CRT shims
+
+```sh
+python3 scripts/tests/run_client_compile_census.py --cxx clang++ --jobs 4
+python3 scripts/tests/test_client_compile_census.py
+python3 scripts/tests/test_linux_crt_shims.py --cxx clang++
+```
+
+The census runs one syntax-only `-m32` pass with the client definitions over
+every multiplayer client source and compares the result with
+`client_compile_census_blocked.txt` in both directions: a listed source that now
+compiles is a stale entry and an unlisted source that stops compiling is a
+regression. Each blocked entry names what the compiler stops on. The
+build-generated `buildnumber.h` is written by the build's own
+`scripts/extern/write_build_number.cmake` into a private directory, so a fresh
+checkout needs no prior build. It compiles, it does not link, so a pass is not a
+claim that a client binary builds. The CRT
+shim test covers the MSVC CRT names `src/linux/compat.h` supplies to client
+sources (`_itoa`, the array `strcpy_s`, `_time64`, `_localtime64`), including the
+fail-closed cases; `run_linux_checks.py` runs it as `crt_shims`.
 
 ## Free camera checks
 

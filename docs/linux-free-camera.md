@@ -1,10 +1,11 @@
 # Linux free camera: frame ownership, camera and input
 
-Status on 2026-11-01: **groundwork only.** The camera, its key bindings and the
-frame owner exist and are covered by asset-free tests. Nothing draws a map yet: the
-engine-renderer static map view and the native D3D9 boundary are separate work in
-progress, and this layer is written to sit on top of them without depending on
-either. No hardware, map or device result is claimed here.
+Status on 2026-11-02: **groundwork, not yet wired to the renderer.** The camera,
+its key bindings and the frame owner exist and are covered by asset-free tests.
+The engine renderer now draws a real map in the opt-in
+[world draw probe](linux-world-draw-probe.md) (#23); the `SceneRenderer` adapter
+that connects that renderer to this owner is the next step and is not here. No
+hardware, map or device result is claimed for this layer.
 
 ## Why a host camera
 
@@ -91,13 +92,30 @@ bool DrawFrame(const CameraView &view, std::string &error);
 void Shutdown() noexcept;
 ```
 
-The static map view work plans to implement it as: `LoadMap` loads the map zone
-with the production DB loader and calls `R_LoadWorld`; `UnloadMap` is
+The adapter planned on top of the world draw probe implements it as: `LoadMap`
+loads the map with `CM_LoadMap` and `R_LoadWorld`; `UnloadMap` is
 `R_ShutdownWorld` plus the zone unload; `Device`/`ResetDevice` use the renderer's
 own lost-device and reset path; `DrawFrame` zeroes a `refdef_s`, sets
-`localClientNum` 0, calls `FillRefdef`, then `R_BeginFrame`, `R_RenderScene`,
-`R_EndFrame` and `R_IssueRenderCommands`. Unsupported materials or techniques
-return `false` with a reason rather than being skipped silently.
+`localClientNum` 0, calls `FillRefdef`, then the probe's frame sequence
+(`R_BeginFrame`, `R_RenderScene`, `R_EndFrame`, `R_IssueRenderCommands`).
+Unsupported materials or techniques return `false` with a reason rather than being
+skipped silently.
+
+Points for that adapter, from the probe as merged:
+
+- The renderer runs single-threaded there (`sys_smp_allowed` off before
+  `R_RegisterDvars`). The owner is single-threaded too and never calls the
+  renderer from another thread.
+- The probe sets `tanHalfFovY = tanHalfFovX x height/width` (fixed 65-degree
+  horizontal). `FillRefdef` uses `CG_UpdateFov` instead (fixed vertical, horizontal
+  widens with aspect). The two agree at 4:3 and differ at other aspects, so a
+  probe digest is not a reference for this camera except at 4:3.
+- The probe draws at `vidConfig.sceneWidth/Height`. The adapter's `Resize` should
+  leave the scene extent equal to the extent it was given, so the view rectangle
+  the owner passes matches the renderer's scene.
+- The first draw after a map load is currently dark and a view takes a few draws
+  before the static model cache settles. The owner draws every frame anyway;
+  acceptance below must compare settled frames, not frame one.
 
 `FillRefdef` writes only the camera's fields (rectangle, both half-FOV tangents,
 origin, axis, `zNear`, `time`) and is a template, so this layer never includes a
@@ -121,8 +139,10 @@ The existing window host already delivers ordered engine events. The plan:
 
 ## What is verified
 
-Asset-free, in this checkout (not yet hosted CI), Clang 18 `-m32`, Debug (`-O0`)
-and RelWithDebInfo (`-O2`), and again with GCC 13 under ASan/UBSan:
+Asset-free, Clang 18 `-m32`, Debug (`-O0`) and RelWithDebInfo (`-O2`): locally,
+locally again with GCC 13 under ASan/UBSan, and in the hosted `free_camera` job
+([run 41327486090](https://github.com/koalabuttz/KisakCOD/actions/runs/41327486090),
+both configurations, on the pre-merge head 5144bf4):
 
 - `free_camera`: 106 checks: tuning defaults equal the dvar defaults, validation,
   the production axis convention at fixed and 2000 random poses, mouse and key
@@ -146,19 +166,19 @@ and RelWithDebInfo (`-O2`), and again with GCC 13 under ASan/UBSan:
 
 ## What is not verified
 
-- No map is loaded or drawn, no real device is reset, and nothing is compared with a
-  captured game frame. Those wait for the static map view and the D3D9 boundary.
+- No map is loaded or drawn through this owner, no real device is reset, and
+  nothing is compared with a captured game frame. That waits for the adapter.
 - The window/input integration above is not written.
-- No hosted CI run has executed the new job yet.
 
-## Acceptance once the static map view lands
+## Acceptance once the adapter lands
 
 Run on named hardware with a private map, keeping screenshots and exports out of
 the repository:
 
 1. Replay reference traversal A (forward, mouse turn left 818 counts, fast forward,
    rise) and B (four arrow-key turns) through the real renderer; record the pose and
-   a frame hash at fixed checkpoints.
+   a frame hash at fixed checkpoints, after the view has settled by the world
+   draw probe's rule.
 2. Resize during traversal, minimize and restore, and force a device reset at a
    checkpoint; the frame after each must match the uninterrupted run at that pose.
 3. Reload the map mid-traversal and switch maps; the pose is kept and no resource

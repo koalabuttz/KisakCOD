@@ -31,5 +31,8 @@ void Scroll_ListBox_AutoFunc(UiContext*,void*);
 void Scroll_ListBox_ThumbFunc(UiContext*,void*);
 int Item_Slider_OverSlider(int,itemDef_s*,float,float);
 void Scroll_Slider_ThumbFunc(UiContext*,itemDef_s**);
-BOOL Menu_HandleMouseMove(UiContext*,menuDef_t*);
-BOOL Item_ContainsMouse(UiContext*,itemDef_s*);
+// Defined as BOOL (int). Spelled int so this header does not depend on
+// <windows.h> having been included first: MSVC otherwise takes BOOL as an
+// implicit-int name and later rejects the SDK's typedef.
+int Menu_HandleMouseMove(UiContext*,menuDef_t*);
+int Item_ContainsMouse(UiContext*,itemDef_s*);

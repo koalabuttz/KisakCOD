@@ -56,6 +56,15 @@ target_link_libraries(KisakCOD-dedi PRIVATE Threads::Threads ${CMAKE_DL_LIBS})
 add_dependencies(KisakCOD-dedi update_build_number)
 include(${SCRIPTS_DIR}/extern/tracy.cmake)
 include(${SCRIPTS_DIR}/platform/linux/asset_export.cmake)
+include(${SCRIPTS_DIR}/platform/linux/native_d3d9.cmake)
+# After the boundary: the probe links two units through kisak_linux_native_d3d9.
+include(${SCRIPTS_DIR}/platform/linux/world_frontend_probe.cmake)
+# After the boundary: the device probe links r_init.cpp through it, with SDL3.
+include(${SCRIPTS_DIR}/platform/linux/device_probe.cmake)
+# After both probes: the world device probe needs both and reuses their source lists.
+include(${SCRIPTS_DIR}/platform/linux/world_device_probe.cmake)
+# After the world device probe: the draw probe needs it and extends its source lists.
+include(${SCRIPTS_DIR}/platform/linux/world_draw_probe.cmake)
 
 # ---------------------------------------------------------------------------
 # Opt-in native Linux client network core (KISAK_BUILD_LINUX_CLIENT_CORE)

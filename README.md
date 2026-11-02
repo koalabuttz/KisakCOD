@@ -11,14 +11,23 @@ Aimed towards mod developers and COD4 enthusiasts.
 Learn about the Development of KisakCOD here: [https://lwss.github.io/Duty-Of-Kisak/](https://lwss.github.io/Duty-Of-Kisak/)
 
 ## Current Requirements
+
+Windows game and tools:
 - Windows OS
 - Visual Studio 2022
 - CMake >= 3.18
 - [DirectX SDK 2010](https://www.microsoft.com/en-us/download/details.aspx?id=6812)
 - Steam with a copy of [Call of Duty 4](https://store.steampowered.com/app/7940/Call_of_Duty_4_Modern_Warfare_2007/)
 
+Native Linux dedicated server: CMake, Ninja, Clang and the 32-bit C++
+development libraries (see [Linux](#linux-native-i386-dedicated-server) below).
+Licensed game assets are only needed to run a server, not to build or test it.
+
 
 ## How to build
+
+### Windows (Visual Studio)
+
 1) Install the above requirements and Clone repo
 2) Open a terminal and run `generate-project.bat`
 3) Open .sln projects that are generated in `build-sp`, `build-mp`, and `build-dedi` respectively. 
@@ -34,32 +43,57 @@ Keep in Mind: This is a ~20 year old game with some known exploits. We will try 
 However, there is a non-zero chance of some type of binary exploitation when playing online. Use a sandbox (Sandboxie?) for peace of mind. 
 ```
 
-### Native Linux dedicated server
+### Linux (native i386 dedicated server)
 
-The initial native Linux port builds the **32-bit x86 multiplayer dedicated
-server**, not a graphical client. Install CMake, Ninja, Clang and the 32-bit C++
-development libraries, then run:
+The native Linux port builds the **32-bit x86 multiplayer dedicated server**
+(native ELF, no Wine), not a graphical client.
 
-```sh
-# Debian/Ubuntu
-sudo apt-get install cmake ninja-build clang g++-multilib
-bash build-linux.sh
-python3 scripts/tests/test_linux_bootstrap.py
-```
+1) Install the build tools (Debian/Ubuntu shown):
 
-The executable is `bin/KisakCOD-dedi` (native ELF, no Wine). Dedicated map/server
-lifecycle is working, but **Linux Steam authentication is unavailable and ordinary
-client tickets are rejected**. Two explicit opt-ins can admit a client without a
-ticket: a loopback-only test mode, and `sv_allowUnverifiedGuids`, which accepts the
-retail GUID handshake from any address without verification. With the latter on,
-GUIDs are spoofable and must not carry bans, privileges or persistent identity.
-Stock retail CoD4 1.7 and CoD4x 21.1 have each played in separate brief local
-sessions; grenade death, team switching and timer-driven rotation were retested.
-Native internal-bot refill/map-cycle checks also pass. These are not simultaneous
-human-player, mixed-client, public-server authentication or general compatibility
-proof. Licensed game assets remain external to the repository.
-See [Linux build and verification details](docs/linux-dedicated.md) for the
-supported scope, prerequisites, tests, and remaining work.
+   ```sh
+   sudo apt-get install cmake ninja-build clang g++-multilib
+   ```
+
+2) Build. The optional arguments are a build directory (default `build-linux`)
+   and a configuration (`Debug`, `Release`, `RelWithDebInfo` (default) or
+   `MinSizeRel`). Use one build directory per configuration.
+
+   ```sh
+   bash build-linux.sh
+   # or, for example:
+   bash build-linux.sh build-linux-debug Debug
+   ```
+
+   The executable is `bin/KisakCOD-dedi`.
+
+3) Run the asset-free checks:
+
+   ```sh
+   python3 scripts/tests/test_linux_bootstrap.py
+   python3 scripts/tests/run_linux_checks.py --build-dir build-linux --binary bin/KisakCOD-dedi
+   ```
+
+4) To run a server, point it at your own copy of the CoD4 game files. Licensed
+   game assets remain external to the repository.
+
+Dedicated map/server lifecycle is working, but **Linux Steam authentication is
+unavailable and ordinary client tickets are rejected**. Two explicit opt-ins can
+admit a client without a ticket: a loopback-only test mode, and
+`sv_allowUnverifiedGuids`, which accepts the retail GUID handshake from any
+address without verification. With the latter on, GUIDs are spoofable and must
+not carry bans, privileges or persistent identity. Stock retail CoD4 1.7 and
+CoD4x 21.1 have each played in separate brief local sessions; grenade death,
+team switching and timer-driven rotation were retested. Native internal-bot
+refill/map-cycle checks also pass. These are not simultaneous human-player,
+mixed-client, public-server authentication or general compatibility proof.
+
+Further reading:
+- [Current Linux status and next milestone](docs/progress-2026-11-01.md)
+- [Linux build and verification details](docs/linux-dedicated.md): supported
+  scope, prerequisites, tests and remaining work
+- [Opt-in native client pieces](docs/linux-client.md) (window host, input, menus)
+- [All Linux docs](docs/README.md), including the [history](docs/history/README.md)
+  of earlier progress notes
 
 ### Cross-build from Linux with LLVM-MinGW
 

@@ -14,9 +14,9 @@ as native 32-bit execution, not QEMU: three bots, three full-capacity cohort
 refills, two map cycles, five-second holds per stage, twelve admissions, retained
 final-cohort identities, both authentication opt-ins zero and clean exit 0 in
 133 seconds with Clang 19. See
-[native follow-up validation](native-review-2026-10-31.md#results-reproduced-directly-on-this-machine);
+[native follow-up validation](history/native-review-2026-10-31.md#results-reproduced-directly-on-this-machine);
 the earlier emulated runs stay recorded in the
-[2026-10-31 refill checkpoint](progress-2026-10-31-refill.md), and current status
+[2026-10-31 refill checkpoint](history/progress-2026-10-31-refill.md), and current status
 is in the [2026-11-01 checkpoint](progress-2026-11-01.md).
 
 These are internal server slots, not a real second client: this is not a client
@@ -159,6 +159,6 @@ Death and respawn with bots remain separate follow-up work: refill mode keeps bo
 firing off so opposing cohorts do not kill each other, and no fixture covers a bot
 dying and returning. Deliberate disconnect/refill and retained-bot map changes are
 covered by `--refill-cycles` and `--cycles` above, including the native run in
-[native follow-up validation](native-review-2026-10-31.md). The independent
+[native follow-up validation](history/native-review-2026-10-31.md). The independent
 lifecycle driver covers empty-server restart/rotation; neither fixture establishes
 survival of a real network client through those transitions.

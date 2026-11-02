@@ -94,7 +94,8 @@ Material *__cdecl Material_CreateLayered(
     constTableSize = sizeof(MaterialConstantDef) * constantCount;
     const uint64_t allocationSize = uint64_t(sizeof(Material)) + texTableSize +
         constTableSize + uint64_t(nameLength) + 1;
-    if (allocationSize > std::numeric_limits<uint32_t>::max())
+    // Parenthesized: q_shared.h defines a function-like max() macro on Windows.
+    if (allocationSize > (std::numeric_limits<uint32_t>::max)())
     {
         Com_PrintError(8, "Material_CreateLayered: allocation size exceeds arena limit\n");
         return nullptr;

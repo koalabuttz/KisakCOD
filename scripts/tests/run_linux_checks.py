@@ -16,7 +16,8 @@ client, credentials, or a listening game server:
   * the message Huffman tree, which must match the one Windows clients build;
   * the file I/O and virtual-memory self-tests shipped in the platform sources;
   * the script lexer EOF regression, which ends a scan with no local clients;
-  * the random-helper ranges, which must stay 15-bit where Linux rand() is 31-bit.
+  * the random-helper ranges, which must stay 15-bit where Linux rand() is 31-bit;
+  * the MSVC CRT shims in ``src/linux/compat.h`` that client sources call.
 
 Each command runs in its own process group with its own timeout, so a stuck
 check is killed instead of hanging the job. Every command prints the exact argv
@@ -116,6 +117,14 @@ def plan_checks(options, workdir, build_dir, binary, python, cxx):
             "handshake_auth",
             "production server authentication parsing and local handshake safeguards",
             [Command([python, TESTS / "test_server_handshake_auth.py", "--cxx", cxx, "--m32"], timeout=300)],
+        )
+    )
+
+    checks.append(
+        Check(
+            "remote_input",
+            "production rcon password and download name validation",
+            [Command([python, TESTS / "test_server_remote_input.py", "--cxx", cxx, "--m32"], timeout=300)],
         )
     )
 
@@ -288,6 +297,16 @@ def plan_checks(options, workdir, build_dir, binary, python, cxx):
             "database_publication",
             "complete database batch publication before worker notification",
             [Command([python, TESTS / "test_database_work_publication.py", "--cxx", cxx], timeout=120)],
+        )
+    )
+
+    # Client sources call a few MSVC CRT entry points directly; compat.h maps
+    # them, and the fail-closed cases must still terminate on Linux.
+    checks.append(
+        Check(
+            "crt_shims",
+            "MSVC CRT shims for client sources, including fail-closed cases",
+            [Command([python, TESTS / "test_linux_crt_shims.py", "--cxx", cxx], timeout=300)],
         )
     )
 
@@ -489,7 +508,7 @@ def main():
     parser.add_argument("--list", action="store_true", help="print the command list and exit without running")
     options = parser.parse_args()
 
-    known = ["bootstrap", "runtime", "lifecycle_driver", "handshake_auth", "debugger", "fastfile", "net_deadline", "huffman", "udp", "sys_fileio", "sys_virtualmem", "lexer_eof", "random_range", "gameplay_lifecycle", "server_test_clients", "weapon_def_ownership", "bot_driver", "database_publication"]
+    known = ["bootstrap", "runtime", "lifecycle_driver", "handshake_auth", "remote_input", "debugger", "fastfile", "net_deadline", "huffman", "udp", "sys_fileio", "sys_virtualmem", "lexer_eof", "random_range", "gameplay_lifecycle", "server_test_clients", "weapon_def_ownership", "bot_driver", "database_publication"]
     options.only = parse_names(options.only)
     options.skip = parse_names(options.skip)
     for name in options.only | options.skip:

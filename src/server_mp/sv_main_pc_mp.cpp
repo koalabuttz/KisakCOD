@@ -4,6 +4,7 @@
 
 #include <universal/q_shared.h>
 #include "server_mp.h"
+#include "sv_remote_input.h"
 #include <qcommon/cmd.h>
 
 #include <cgame_mp/cg_local_mp.h>
@@ -258,7 +259,10 @@ void __cdecl SVC_RemoteCommand(netadr_t from)
     {
         lasttime = time;
         password = SV_Cmd_Argv(1);
-        if (rcon_password->current.integer && !strcmp(password, rcon_password->current.string))
+        // KISAK: `current.integer` on a string dvar is the string pointer and never 0,
+        // so an unset rcon_password used to accept `rcon "" <command>` from anyone.
+        // The password must be set and match; see SV_RconPasswordAccepted.
+        if (SV_RconPasswordAccepted(rcon_password->current.string, password))
         {
             valid = 1;
             v6 = SV_Cmd_Argv(2);
@@ -274,7 +278,7 @@ void __cdecl SVC_RemoteCommand(netadr_t from)
         }
         svs.redirectAddress = from;
         Com_BeginRedirect(sv_outputbuf, 0x7F0u, SV_FlushRedirect);
-        if (rcon_password->current.integer)
+        if (rcon_password->current.string && rcon_password->current.string[0])
         {
             if (valid)
             {
