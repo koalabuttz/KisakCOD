@@ -17,6 +17,7 @@
 #include <filesystem>
 #include <functional>
 #include <string>
+#include <vector>
 
 struct GfxViewInfo;
 struct GfxWorld;
@@ -55,6 +56,7 @@ struct FrameResult
 {
     wdr::FrameStats stats;
     wdr::DrawCounts counts;
+    wdr::SceneCounts scene;
     // Surfaces this frame moved into the static model cache (R_CacheStaticModelSurface):
     // a view has not settled while it is filling.
     uint32_t smcPatches = 0;
@@ -86,6 +88,10 @@ void PrepareRefdef(refdef_s &refdef);
 // given, sees the front end's view after R_RenderScene, before the backend runs.
 FrameResult DrawRefdef(refdef_s &refdef, bool readBack = true,
                        const std::function<void(const GfxViewInfo &)> &inspect = {});
+// The renderer warnings that say something was not drawn ("... - not drawing
+// model", "Too many visible static models", ...) which R_WarnOncePerFrame has
+// printed since the process started, by their R_WARN_ names. Empty when none.
+std::vector<std::string> DroppedDrawWarnings();
 
 // ---- the map ----------------------------------------------------------------
 

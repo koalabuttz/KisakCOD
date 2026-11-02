@@ -209,4 +209,80 @@ inline std::string CheckDrawCounts(const DrawCounts &counts)
         return "the backend's world draw calls drew no triangle";
     return {};
 }
+
+// The static models and the sun's shadow map in the same frame, as the renderer
+// counted them. The front end's counts are read after R_RenderScene, the
+// backend's after the frame was issued.
+struct SceneCounts
+{
+    uint32_t staticModels = 0;          // the world's static models (dpvs.smodelCount)
+    uint32_t staticModelsDrawn = 0;     // the ones the camera's front end kept (smodelVisData[0] still set)
+    uint32_t staticModelSurfaces = 0;   // their camera draw surfaces: lit, decal and emissive
+    uint32_t staticModelDrawCalls = 0;  // primStats[SMODELCACHED] + [SMODELRIGID] primCount, both stats views
+    uint32_t staticModelTriangles = 0;  // .triCount
+    bool sunLight = false;              // the world has a sun (sunPrimaryLightIndex)
+    bool sunUsed = false;               // the camera's surfaces are lit by it (scene.shadowableLightIsUsed)
+    bool shadowMaps = false;            // shadow maps are on (sm_enable) and the scene is drawn the standard way
+    bool sunShadowDrawn = false;        // the front end set the sun's shadow map up (rg.drawSunShadow)
+    uint32_t sunShadowSurfaces = 0;     // its draw surfaces, both partitions
+    uint32_t sunShadowStaticModelSurfaces = 0; // of those, the static models'
+};
+
+// What every frame's counts must agree on: static models the front end kept have
+// surfaces, the backend drew them, and the sun's shadow map is drawn exactly when
+// the sun lights the view with shadow maps on, and then has something in it.
+inline std::string CheckSceneCounts(const SceneCounts &counts)
+{
+    if (counts.staticModelsDrawn > counts.staticModels)
+        return "the camera kept " + std::to_string(counts.staticModelsDrawn) + " static models, but the world has " +
+               std::to_string(counts.staticModels);
+    if (counts.staticModelsDrawn > 0 && counts.staticModelSurfaces == 0)
+        return "the camera kept " + std::to_string(counts.staticModelsDrawn) +
+               " static models, but the front end emitted no surface for them";
+    if (counts.staticModelSurfaces > 0 && counts.staticModelDrawCalls == 0)
+        return "the front end emitted " + std::to_string(counts.staticModelSurfaces) +
+               " static model surfaces, but the backend issued no static model draw call";
+    if (counts.staticModelDrawCalls > 0 && counts.staticModelTriangles == 0)
+        return "the backend's static model draw calls drew no triangle";
+    if (counts.sunUsed && !counts.sunLight)
+        return "the camera's surfaces use a sun the world does not have";
+    const bool wanted = counts.sunUsed && counts.shadowMaps;
+    if (wanted && !counts.sunShadowDrawn)
+        return "the sun lights the view with shadow maps on, but its shadow map was not drawn";
+    if (!wanted && counts.sunShadowDrawn)
+        return "the sun's shadow map was drawn for a view it does not light, or with shadow maps off";
+    if (counts.sunShadowDrawn && counts.sunShadowSurfaces == 0)
+        return "the sun's shadow map was drawn with nothing in it";
+    if (counts.sunShadowStaticModelSurfaces > counts.sunShadowSurfaces)
+        return "the sun's shadow map has more static model surfaces than surfaces";
+    return {};
+}
+
+// What a map's own camera must see of a map that has them: some of its static
+// models, and the sun's shadow. Applied only at the cameras the map author placed
+// (intermission and spawn points), which look at the playable, sunlit map.
+inline std::string CheckSceneInView(const SceneCounts &counts)
+{
+    if (counts.staticModels > 0 && counts.staticModelsDrawn == 0)
+        return "the world has " + std::to_string(counts.staticModels) + " static models and the camera drew none";
+    if (counts.sunLight && !counts.sunShadowDrawn)
+        return "the world has a sun and the camera drew no sun shadow map";
+    return {};
+}
+
+// A switch that takes something out of the scene: the frame without it must say
+// so in its counts and look different, and the frame with it back must be the one
+// before. before/after are the settled digests with it on; without is the settled
+// digest with it off.
+inline std::string CheckSwitchedOff(const char *what, bool goneFromCounts, uint64_t before, uint64_t without,
+                                    uint64_t after)
+{
+    if (!goneFromCounts)
+        return std::string("with ") + what + " off, the renderer still counted them";
+    if (without == before)
+        return std::string("turning ") + what + " off did not change the picture";
+    if (after != before)
+        return std::string("turning ") + what + " back on did not bring the same picture back";
+    return {};
+}
 } // namespace kisak_world_draw

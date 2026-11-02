@@ -217,6 +217,7 @@ struct Checkpoint
     unsigned draws = 0;
     uint64_t digest = 0;
     uint32_t width = 0, height = 0;
+    wdr::SceneCounts scene{};
 };
 
 struct Step
@@ -285,7 +286,12 @@ public:
                 what + ": the frame was " + kv::FrameOutcomeName(*outcome) +
                     (owner_.Error().empty() ? std::string() : ": " + owner_.Error()));
         ++frames_;
+        const std::string problem = wdr::CheckSceneCounts(renderer_.LastFrame().scene);
+        if (!problem.empty() && sceneProblem_.empty())
+            sceneProblem_ = what + ": " + problem;
     }
+    // The first drawn frame whose static model and shadow counts disagree.
+    const std::string &SceneProblem() const { return sceneProblem_; }
     // The same frame for the reference owner.
     void Expect(int msec) { reference_.Frame(msec, kSceneTime); }
 
@@ -314,6 +320,7 @@ public:
         checkpoint.digest = last.stats.digest;
         checkpoint.width = last.stats.width;
         checkpoint.height = last.stats.height;
+        checkpoint.scene = last.scene;
         checkpoint.extent = owner_.AppliedExtent();
         Require(SamePose(owner_.Camera().Pose(), checkpoint.pose), "script", name + ": settling moved the camera");
         Say("free_camera_window_checkpoint name=%s extent=%s draws=%u settled=%s digest=%s pose_matches=%s %s\n",
@@ -377,6 +384,7 @@ private:
     std::deque<Checkpoint> checkpoints_;
     std::vector<Step> steps_;
     unsigned frames_ = 0;
+    std::string sceneProblem_;
 };
 
 // The window's logical size, the unit SDL_SetWindowSize takes.
@@ -651,6 +659,10 @@ std::string RunScript(EngineSceneRenderer &renderer, AspectFollower &follower, k
                                        std::to_string(checkpoint.height) + ", not " + ExtentText(checkpoint.extent));
     }
     check("path A", wdr::CheckViewsDiffer(script.Find("W.start").digest, riseDigest));
+    // The map's static models and sun shadow at its own camera, and counts that
+    // agree on every frame the script drew.
+    check("W.start", wdr::CheckSceneInView(script.Find("W.start").scene));
+    check("scene", script.SceneProblem());
     // Input from outside the script is not a fault by itself (a desktop may send
     // pointer motion as the window appears under the pointer, and the owner
     // ignores motion while nothing is captured), but it explains a pose that
@@ -673,7 +685,9 @@ std::string RunScript(EngineSceneRenderer &renderer, AspectFollower &follower, k
              << checkpoint.extent.width << "," << checkpoint.extent.height << "],\"pose\":" << PoseJson(checkpoint.pose)
              << ",\"pose_matches\":" << (checkpoint.poseMatches ? "true" : "false")
              << ",\"settled\":" << (checkpoint.settled ? "true" : "false") << ",\"draws\":" << checkpoint.draws
-             << ",\"digest\":\"" << Hex64(checkpoint.digest) << "\"}";
+             << ",\"digest\":\"" << Hex64(checkpoint.digest) << "\",\"static_models_drawn\":"
+             << checkpoint.scene.staticModelsDrawn
+             << ",\"sun_shadow_drawn\":" << (checkpoint.scene.sunShadowDrawn ? "true" : "false") << "}";
         first = false;
     }
     body << "],\"steps\":[";
@@ -693,8 +707,10 @@ std::string RunScript(EngineSceneRenderer &renderer, AspectFollower &follower, k
 
 // ---- the live run ---------------------------------------------------------------
 
-// Returns the report's live part, starting with a comma.
-std::string RunLive(kv::FrameOwner &owner, kv::FreeCameraWindow &window, int secondsLimit)
+// Returns the report's live part, starting with a comma. A drawn frame whose
+// static model and shadow counts disagree is a problem.
+std::string RunLive(EngineSceneRenderer &renderer, kv::FrameOwner &owner, kv::FreeCameraWindow &window,
+                    int secondsLimit, std::vector<std::string> &problems)
 {
     const std::string limitText = secondsLimit ? " limit=" + std::to_string(secondsLimit) + "s" : std::string();
     Say("free_camera_window_controls click=capture escape=release escape_again=quit w/a/s/d=move space/c=up/down "
@@ -703,6 +719,8 @@ std::string RunLive(kv::FrameOwner &owner, kv::FreeCameraWindow &window, int sec
     const auto started = std::chrono::steady_clock::now();
     const auto limit = started + std::chrono::seconds(secondsLimit);
     std::map<kv::FrameOutcome, unsigned> outcomes;
+    unsigned sceneProblems = 0, noStaticModelFrames = 0, noSunShadowFrames = 0;
+    std::string firstSceneProblem;
     long long lastMilliseconds = 0;
     std::string ending = "quit";
     kv::FrameOutcome last = kv::FrameOutcome::Drawn;
@@ -727,6 +745,16 @@ std::string RunLive(kv::FrameOwner &owner, kv::FreeCameraWindow &window, int sec
             break;
         ++outcomes[*outcome];
         last = *outcome;
+        if (*outcome == kv::FrameOutcome::Drawn)
+        {
+            const wdr::SceneCounts &scene = renderer.LastFrame().scene;
+            noStaticModelFrames += scene.staticModelsDrawn == 0;
+            noSunShadowFrames += !scene.sunShadowDrawn;
+            const std::string problem = wdr::CheckSceneCounts(scene);
+            if (!problem.empty() && sceneProblems++ == 0)
+                firstSceneProblem = "drawn frame " + std::to_string(outcomes[kv::FrameOutcome::Drawn] - 1) + ": " +
+                                    problem;
+        }
         if (*outcome == kv::FrameOutcome::Failed || *outcome == kv::FrameOutcome::Stopped)
         {
             ending = kv::FrameOutcomeName(*outcome);
@@ -736,9 +764,13 @@ std::string RunLive(kv::FrameOwner &owner, kv::FreeCameraWindow &window, int sec
     const double seconds = Seconds(started);
     const unsigned drawn = outcomes[kv::FrameOutcome::Drawn];
     Say("free_camera_window_live ending=%s seconds=%.2f drawn=%u minimized=%u device_lost=%u fps=%.1f "
-        "capture_requests=%u\n",
+        "capture_requests=%u no_static_model_frames=%u no_sun_shadow_frames=%u scene_problems=%u\n",
         ending.c_str(), seconds, drawn, outcomes[kv::FrameOutcome::Minimized], outcomes[kv::FrameOutcome::DeviceLost],
-        seconds > 0 ? drawn / seconds : 0.0, window.CaptureRequests());
+        seconds > 0 ? drawn / seconds : 0.0, window.CaptureRequests(), noStaticModelFrames, noSunShadowFrames,
+        sceneProblems);
+    if (sceneProblems)
+        problems.push_back("scene: " + std::to_string(sceneProblems) + " drawn frame(s) with counts that disagree; " +
+                           firstSceneProblem);
     std::ostringstream body;
     body << ",\"ending\":" << Json(ending) << ",\"live_seconds\":" << seconds << ",\"outcomes\":{";
     bool first = true;
@@ -747,7 +779,9 @@ std::string RunLive(kv::FrameOwner &owner, kv::FreeCameraWindow &window, int sec
         body << (first ? "" : ",") << Json(kv::FrameOutcomeName(outcome)) << ":" << count;
         first = false;
     }
-    body << "},\"capture_requests\":" << window.CaptureRequests() << ",\"final_pose\":" << PoseJson(owner.Camera().Pose());
+    body << "},\"capture_requests\":" << window.CaptureRequests() << ",\"no_static_model_frames\":" << noStaticModelFrames
+         << ",\"no_sun_shadow_frames\":" << noSunShadowFrames << ",\"scene_problems\":" << sceneProblems
+         << ",\"final_pose\":" << PoseJson(owner.Camera().Pose());
     return body.str();
 }
 } // namespace
@@ -802,7 +836,7 @@ void Kisak_RunFreeCameraWindow(const std::filesystem::path &directory, const cha
             if (scripted)
                 modeBody = RunScript(renderer, follower, owner, window, sdlWindow, start, mapName, problems);
             else
-                modeBody = RunLive(owner, window, secondsLimit);
+                modeBody = RunLive(renderer, owner, window, secondsLimit, problems);
         }
         Require(SDL_GetWindowFromID(windowId) == sdlWindow, "window",
                 "the window was gone before the renderer's shutdown (the window host must not destroy it)");
@@ -827,6 +861,12 @@ void Kisak_RunFreeCameraWindow(const std::filesystem::path &directory, const cha
         if (owned.resizes != engine.resizes)
             check("lifecycle", "the owner counted " + std::to_string(owned.resizes) + " resizes, the renderer " +
                                    std::to_string(engine.resizes));
+        const std::vector<std::string> warnings = DroppedDrawWarnings();
+        std::string warningNames;
+        for (const std::string &name : warnings)
+            warningNames += (warningNames.empty() ? "" : ", ") + name;
+        if (!warnings.empty())
+            check("renderer", "it warned that it left something out of a frame: " + warningNames);
 
         const double seconds = Seconds(started);
         Say("free_camera_counters loads=%u unloads=%u resizes=%u resets=%u draws=%u empty_frames=%u frames=%u "
@@ -847,7 +887,10 @@ void Kisak_RunFreeCameraWindow(const std::filesystem::path &directory, const cha
              << ",\"resizes\":" << owned.resizes << ",\"resets\":" << owned.resets
              << "},\"renderer\":{\"draws\":" << engine.draws << ",\"empty_frames\":" << engine.emptyFrames
              << ",\"resizes\":" << engine.resizes << ",\"resets\":" << engine.resets
-             << "},\"aspect_updates\":" << follower.Updates() << ",\"start_seconds\":" << startSeconds
+             << "},\"aspect_updates\":" << follower.Updates() << ",\"dropped_draw_warnings\":[";
+        for (size_t i = 0; i < warnings.size(); ++i)
+            json << (i ? "," : "") << Json(warnings[i]);
+        json << "],\"start_seconds\":" << startSeconds
              << ",\"seconds\":" << seconds << ",\"problem_count\":" << problems.size() << ",\"problems\":[";
         for (size_t i = 0; i < problems.size(); ++i)
             json << (i ? "," : "") << "\n" << Json(problems[i]);

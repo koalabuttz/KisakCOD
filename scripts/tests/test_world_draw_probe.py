@@ -4,7 +4,7 @@
 The world draw probe (scripts/platform/linux/world_draw_probe.cmake) is the
 offline asset exporter with the whole renderer. CI links it against
 tests/linux_device_probe/d3d9_unavailable.cpp, whose Direct3DCreate9 answers like
-DXVK Native's does without a Vulkan device, and this script runs it fifteen times.
+DXVK Native's does without a Vulkan device, and this script runs it nineteen times.
 In the draw mode (KISAK_WORLD_DRAW_MAP):
 
   * with an allowlisted map: the engine starts, the layout check passes, and the
@@ -34,6 +34,12 @@ With the free camera's window input (KISAK_FREE_CAMERA_INPUT):
   * an input in the draw mode: refused the same way;
   * a time limit (KISAK_FREE_CAMERA_SECONDS) outside 1 to 3600, or with the
     scripted input, which ends by itself: refused the same way.
+
+The free camera holds the static models and the sun's shadow in every frame to
+rules, so with any of their switches (r_drawSModels, sm_enable, sm_sunEnable)
+turned off on the command line, the replay and the window driver refuse at the
+start stage, before any device work. The draw mode keeps those switches as
+diagnostics and still stops at Direct3DCreate9.
 
 Each run exits 1 and writes nothing to its private output directory.
 
@@ -66,6 +72,9 @@ UNKNOWN_MAP = "Offline asset export failed: world_draw_probe stage=arguments: "
 CAMERA_ARGUMENTS = "Offline asset export failed: free_camera_replay stage=arguments: "
 WINDOW_DEVICE_FAILURE = "Offline asset export failed: free_camera_window stage=direct3d: "
 WINDOW_ARGUMENTS = "Offline asset export failed: free_camera_window stage=arguments: "
+CAMERA_SWITCH_OFF = "Offline asset export failed: free_camera_replay stage=start: "
+WINDOW_SWITCH_OFF = "Offline asset export failed: free_camera_window stage=start: "
+SWITCH_OFF_REASON = " is off; the free camera checks the static models and sun shadow it draws"
 # Every export mode the exporter reads; a stray one in the caller's environment
 # would change which refusal the probe gives.
 MODE_VARIABLES = ("KISAK_WORLD_DRAW_MAP", "KISAK_FREE_CAMERA_MAP", "KISAK_WORLD_DEVICE_MAP",
@@ -75,7 +84,7 @@ MODE_VARIABLES = ("KISAK_WORLD_DRAW_MAP", "KISAK_FREE_CAMERA_MAP", "KISAK_WORLD_
 
 
 def run_probe(probe, tree, output, map_name, timeout, show_seconds=None, camera_map=None, camera_input=None,
-              camera_seconds=None):
+              camera_seconds=None, dvars=()):
     environment = {key: value for key, value in os.environ.items() if key not in MODE_VARIABLES}
     environment["KISAK_UI_ASSET_EXPORT_DIR"] = str(output)
     if map_name is not None:
@@ -90,6 +99,8 @@ def run_probe(probe, tree, output, map_name, timeout, show_seconds=None, camera_
         environment["KISAK_FREE_CAMERA_SECONDS"] = camera_seconds
     command = [str(probe), "+set", "fs_basepath", str(tree / "base"), "+set", "fs_homepath", str(tree / "home"),
                "+set", "dedicated", "2", "+set", "useFastFile", "1"]
+    for name, value in dvars:
+        command += ["+set", name, value]
     print("$ " + " ".join(command), flush=True)
     try:
         completed = subprocess.run(command, cwd=tree, env=environment, stdout=subprocess.PIPE,
@@ -230,6 +241,25 @@ def main():
             check(last_line(text) == refusal, f"{what} is refused at the arguments stage")
             check(not any(line.startswith(("world_draw_layout=", "direct3d=")) for line in text.splitlines()),
                   f"{what} is refused before the layout check and any device work")
+
+        # The draw switches: the free camera refuses to start without them, the
+        # draw mode keeps them as diagnostics.
+        switch_runs = (
+            ("switch-replay", None, "r_drawSModels", CAMERA_SWITCH_OFF, "the replay without static models"),
+            ("switch-window", "window", "sm_enable", WINDOW_SWITCH_OFF, "the live camera without shadow maps"),
+            ("switch-script", "script", "sm_sunEnable", WINDOW_SWITCH_OFF, "the scripted camera without the sun's shadow"),
+        )
+        for name, camera_input, dvar, prefix, what in switch_runs:
+            status, text = run_probe(probe, tree, outputs / name, None, args.timeout, camera_map="mp_crash",
+                                     camera_input=camera_input, dvars=((dvar, "0"),))
+            check(status == 1, f"{what} exits 1 (got {status})")
+            check(last_line(text) == prefix + dvar + SWITCH_OFF_REASON, f"{what} is refused at the start stage")
+            check(not any(line.startswith("direct3d=") for line in text.splitlines()),
+                  f"{what} is refused before any device work")
+        status, text = run_probe(probe, tree, outputs / "switch-draw", "mp_crash", args.timeout,
+                                 dvars=(("r_drawSModels", "0"), ("sm_sunEnable", "0")))
+        check(status == 1 and last_line(text).startswith(DEVICE_FAILURE),
+              "the draw mode with static models and the sun's shadow off still stops at the direct3d stage")
 
         written = sorted(str(path.relative_to(outputs)) for path in outputs.rglob("*") if path.is_file())
         check(not written, f"nothing is written to the private output directories ({written})")
