@@ -16,12 +16,14 @@
 #include <client_mp/client_mp.h>
 #include <EffectsCore/fx_system.h>
 #include <gfx_d3d/r_bsp.h>
+#include <gfx_d3d/r_buffers.h>
 #include <gfx_d3d/r_dvars.h>
 #include <gfx_d3d/r_image.h>
 #include <gfx_d3d/r_init.h>
 #include <gfx_d3d/r_material.h>
 #include <gfx_d3d/r_rendercmds.h>
 #include <gfx_d3d/r_scene.h>
+#include <gfx_d3d/rb_logfile.h>
 #include <gfx_d3d/rb_stats.h>
 #include <linux/d3d9_types.h>
 #include <linux/client/window/sdl_api.h>
@@ -285,6 +287,31 @@ wdr::FrameStats ReadBackBuffer()
     return stats;
 }
 
+// Whether the backend will draw this frame's pre-tessellated surfaces from the
+// index buffer the front end fills for it. The front end writes the indices of
+// the world's batched surfaces into gfxBuf.preTessIndexBuffer (R_BeginPreTess,
+// R_AllocPreTessIndices), and R_TessTrianglesPreTessList binds the frame data's
+// preTessIb. R_ToggleSmpFrame moves both to the next buffer of the pair at the
+// end of every frame.
+bool PreTessBuffersAgree()
+{
+    const GfxIndexBufferState *filled = gfxBuf.preTessIndexBuffer;
+    return filled && filled->buffer && frontEndDataOut && frontEndDataOut->preTessIb == filled->buffer;
+}
+
+// A frame with no scene in it, as a client presents for its menu or loading
+// screen: R_BeginFrame to R_IssueRenderCommands with nothing added.
+void PresentEmptyFrame()
+{
+    R_BeginFrame();
+    R_BeginSharedCmdList();
+    R_ClearClientCmdList2D();
+    R_EndFrame();
+    R_IssueRenderCommands(0xFFFFFFFF);
+    const HRESULT level = dx.device->TestCooperativeLevel();
+    Require(level == D3D_OK, "frame", "the device is not ready after the empty frame: " + Hex(uint32_t(level)));
+}
+
 // One frame, call for call as R_GenerateReflectionRawData draws a cubemap face,
 // without the effects update (no effects system runs here) and with the view
 // values the cgame's CG_CalcViewValues would give a player standing at the
@@ -302,6 +329,9 @@ FrameResult DrawView(const Camera &camera, refdef_s &refdef)
     refdef.useScissorViewport = false;
     R_InitPrimaryLights(refdef.primaryLights);
 
+    Require(PreTessBuffersAgree(), "frame",
+            "the backend would draw the pre-tessellated surfaces from another index buffer than the one the front "
+            "end fills");
     R_BeginFrame();
     R_BeginSharedCmdList();
     R_ClearClientCmdList2D();
@@ -645,12 +675,45 @@ void Kisak_DrawWorld(const std::filesystem::path &directory, const char *mapName
     Say("world_draw_camera view=B classname=%s eye=%.1f,%.1f,%.1f angles=%.1f,%.1f,%.1f\n", b.classname.c_str(),
         b.eye[0], b.eye[1], b.eye[2], b.angles[0], b.angles[1], b.angles[2]);
 
-    // 3. The frames: view A until it settles, then view B until it settles.
+    // The engine opens its own D3D9 call log (r_logFile > 0, dx.log in the working
+    // directory) only after a frame it presents; opening it here records the
+    // empty frame and the first world frame too.
+    if (r_logFile && r_logFile->current.integer > 0)
+    {
+        RB_OpenLogFile();
+        Say("world_draw_diag log=dx.log frames=%d\n", r_logFile->current.integer);
+    }
+
+    // 3. The renderer's first frame. CL_InitDedicated's R_ConfigureRenderer set up
+    // the frame data before the device existed, so the backend's pre-tessellated
+    // index buffer for the coming frame is still unset (R_ToggleSmpFrame copied a
+    // buffer that did not exist yet), while R_Init's R_InitRenderBuffers created
+    // the buffers and pointed the front end at one of them. A world frame drawn
+    // now would write its batched world surfaces into one buffer and draw them
+    // from none, and come out dark (docs/linux-world-draw-probe.md has the GPU
+    // runs that showed it). A client never draws a world
+    // as its first frame: it presents its menu and loading screen first, and
+    // each frame's R_IssueRenderCommands moves both pointers on together. One
+    // empty frame does the same here.
+    const bool agreedBefore = PreTessBuffersAgree();
+    PresentEmptyFrame();
+    Require(PreTessBuffersAgree(), "frame",
+            "after the empty frame the backend's pre-tessellated index buffer is still not the front end's");
+    Say("world_draw_first_frame=empty pretess_ib_before=%s pretess_ib_after=agreed\n",
+        agreedBefore ? "agreed" : "differed");
+
+    // 4. The frames: view A until it settles, then view B until it settles.
     auto refdef = std::make_unique<refdef_s>();
     auto drawUntilSettled = [&](const Camera &camera, const char *label, std::vector<FrameResult> &frames,
                                 std::vector<uint64_t> &digests) {
         for (int draw = 0; draw < kMaxSettleDraws; ++draw)
         {
+            if (RB_IsLogging())
+            {
+                char marker[96];
+                std::snprintf(marker, sizeof(marker), "===== world_draw_probe view %s draw %d =====\n", label, draw);
+                RB_LogPrint(marker);
+            }
             frames.push_back(DrawView(camera, *refdef));
             digests.push_back(frames.back().stats.digest);
             SayFrame(label, draw, frames.back());
@@ -666,7 +729,7 @@ void Kisak_DrawWorld(const std::filesystem::path &directory, const char *mapName
     drawUntilSettled(b, "B", framesB, digestsB);
     const FrameResult &frameB = framesB.back();
 
-    // 4. The rules.
+    // 5. The rules.
     std::vector<std::string> problems;
     auto check = [&](const std::string &what, const std::string &problem) {
         if (!problem.empty())
@@ -680,7 +743,7 @@ void Kisak_DrawWorld(const std::filesystem::path &directory, const char *mapName
     check("view B", wdr::CheckSettled(digestsB, frameB.smcPatches));
     check("views A and B", wdr::CheckViewsDiffer(framesA.back().stats.digest, frameB.stats.digest));
 
-    // 5. Optionally keep view A on screen. Each frame presents; nothing is saved.
+    // 6. Optionally keep view A on screen. Each frame presents; nothing is saved.
     const int showSeconds = g_showSeconds;
     size_t shownFrames = 0;
     if (showSeconds > 0 && problems.empty())
@@ -696,7 +759,7 @@ void Kisak_DrawWorld(const std::filesystem::path &directory, const char *mapName
     }
     const double seconds = Seconds(g_started);
 
-    // 6. The report: the cameras, counts and measurements. No pixels.
+    // 7. The report: the cameras, counts and measurements. No pixels.
     std::ostringstream json;
     json << "{\"schema\":1,\"tool\":\"world_draw_probe\",\"map\":" << Json(mapName)
          << ",\"world\":" << Json(worldName) << ",\"renderer\":\"shader_model_3\",\"window\":[" << kWindowWidth

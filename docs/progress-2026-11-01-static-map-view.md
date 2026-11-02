@@ -162,15 +162,15 @@ closed. Verified locally, not in CI: on David's laptop GPU (Intel Raptor Lake-P,
 Mesa ANV 25.0.7, DXVK 2.7.1 i386) mp_crash passes in Debug and RelWithDebInfo
 with no problems and bit-identical frames. The intermission view settles after
 9 draws at 63,434 colours, 399 world draw calls and 43,788 triangles, and a
-spawn view after 6. The first draw after the map load is dark, for a reason not
-yet known. Details, limits and evidence:
+spawn view after 6. The first draw after the map load was dark until the probe
+presented an empty frame first (explained in the probe's doc). Details, limits
+and evidence:
 [linux-world-draw-probe.md](linux-world-draw-probe.md).
 
 ## Not done
 
 - No draw outside the world draw probe, and no free camera: the probe draws
   fixed spawn-point views at scene time 0 with no effects, entities or 2D.
-- The dark first draw after a map load is not explained.
 - The frame rules say a frame looks like a drawn view; no pixel is compared with
   an independent prediction or the retail game yet.
 - `R_GenerateSortedDrawSurfs` is not called as a whole: its lighting, fog, sun,
@@ -182,5 +182,4 @@ yet known. Details, limits and evidence:
 Follow the order in [linux-world-frontend.md](linux-world-frontend.md#order-of-work-toward-one-static-map-view):
 put the world draw probe's start, map load and frame behind the free-camera
 `SceneRenderer` interface, then GPU evidence of selected pixels against
-independent predictions. Explaining the dark first draw belongs with that
-evidence.
+independent predictions.

@@ -52,11 +52,36 @@ probe's own code is in `src/linux/tools/world_draw_probe.cpp`.
 | `renderer` | after `R_Init` | no device, not registered, not the shader model 3 path, the scene not 640x480 windowed, or the device not `D3D_OK`; a code image (white, black, identity normal map) without a texture |
 | `graphics`, `world` | the map zone (`DB_LoadXAssets`, synchronous), then the map load the cgame does before its first frame: `CM_LoadMap`, `CM_LinkWorld` and `Com_LoadWorld` as `CL_CM_LoadMap` does with no local server, then `R_LoadWorld` and `R_EndRegistration` | no graphics zone loaded; not exactly one packaged GfxWorld naming the map; a local server runs; the collision map or world data is not the map's; `R_LoadWorld` registers another world |
 | `cameras` | the map's entity string, scanned as the front-end probe does | no spawn point; fewer than two distinct cameras |
-| `frame`, `readback` | each frame (below) | the front end did not produce exactly one view; the device is not `D3D_OK` after the frame; the back buffer cannot be read or is not 32-bit RGB |
+| `frame`, `readback` | the empty first frame, then each frame (below) | before a frame, the backend would draw the pre-tessellated surfaces from another index buffer than the one the front end fills; the front end did not produce exactly one view; the device is not `D3D_OK` after the frame; the back buffer cannot be read or is not 32-bit RGB |
 | `check` | the rules below | a frame breaks a rule |
 
 Camera A is `mp_global_intermission` when the map has one, else the first spawn
 point. Camera B is the first spawn point that is not camera A.
+
+### The first frame
+
+Before the first world frame the probe presents one empty frame:
+`R_BeginFrame`, `R_BeginSharedCmdList`, `R_ClearClientCmdList2D`, `R_EndFrame`
+and `R_IssueRenderCommands(0xFFFFFFFF)` with nothing added, as a client's menu
+or loading screen frame is. A client never draws a world as its first frame,
+and the renderer depends on that.
+
+The front end writes the indices of the world's batched (pre-tessellated)
+surfaces into `gfxBuf.preTessIndexBuffer`, and the backend draws them from the
+frame data's `preTessIb` (`R_TessTrianglesPreTessList`). `R_ToggleSmpFrame`
+moves both to the next buffer of a pair at the end of every frame. But
+`R_ConfigureRenderer` runs `R_InitRenderCommands`, whose toggle sets `preTessIb`
+before any device or buffer exists, and `R_Init`'s `R_InitRenderBuffers` then
+creates the buffers and points only the front end at one. A world frame drawn
+straight after the map load writes its batched surfaces into one buffer and
+draws them from none. The empty frame's toggle pairs them. A lost-device
+recovery leaves them the same way (`R_ShutdownRenderBuffers` clears `preTessIb`)
+and the engine drops that frame and toggles too, so anything that resets the
+device must not draw a world frame before one toggle either.
+
+The probe reports `world_draw_first_frame=empty pretess_ib_before=agreed|differed
+pretess_ib_after=agreed`, and checks before every frame that the two agree
+(stage `frame`).
 
 ### One frame
 
@@ -110,7 +135,7 @@ they happen:
 
 - `world_draw_layout`, `world_draw_renderer=starting|started`,
   `world_draw_graphics_zones`, `world_draw_map`;
-- two `world_draw_camera` lines;
+- two `world_draw_camera` lines, then `world_draw_first_frame`;
 - one `world_draw_frame` line per draw, with the measurements and counts, the
   surfaces it moved into the static model cache (`smc_patches`) and a 64-bit
   digest of the pixels, and one `world_draw_view` line per view with its number
@@ -124,6 +149,14 @@ A pass ends with `asset_export=complete mode=world_draw_probe map=<map>` and exi
 `KISAK_WORLD_DRAW_SHOW_SECONDS=<n>` (0 to 60) keeps drawing view A for that many
 seconds after a pass, so a person at the machine can see it. Each frame is only
 presented; nothing is saved.
+
+With `+set r_logFile <n>` the engine writes its own D3D9 call log, `dx.log`, in
+the working directory. The engine opens it only after a frame it presented, so
+the probe opens it before the empty frame and writes
+`===== world_draw_probe view <A|B> draw <n> =====` into it before each draw. The
+log names the calls and the game's images and materials they use, though not
+their contents. Keep it in the private home with the rest of the output and
+out of the repository.
 
 ## How it links
 
@@ -301,28 +334,54 @@ once timings are removed. No line has `ERROR`, `FATAL`, `ASSERT` or
   filling, which is why the settle rule counts the cache too. The lit surface
   count moves by a few (260 to 264 for A) as static models move between their
   rigid and cached forms.
-- **The first draw of A is dark.** It has mean luma 28.5 against 122.0 for every
-  later draw, 21,646 colours and one colour on 5.2% of the frame, with the same
-  draw calls and triangles. It is not the sun shadow maps or the static model
-  cache (below), and B's first draw, the second view of the process, is not
-  dark. Its cause is not known yet; it passes the frame rules, but no rule is
-  checked on it.
+- **The first draw of A was dark.** It had mean luma 28.5 against 122.0 for
+  every later draw, 21,646 colours and one colour on 5.2% of the frame, with
+  the same draw calls and triangles. The probe now presents an empty frame
+  first, and the first draw is right ([below](#the-dark-first-frame-2026-11-02)).
 - **On screen.** At 4145c00 (the same draw, with the earlier settle rule), a run
   with `KISAK_WORLD_DRAW_SHOW_SECONDS=20` kept view A on the laptop's screen for
   20 s: 350 frames, about 17.5 a second including the read-back of each. No
   image was saved.
-
-Two diagnostic runs (RelWithDebInfo, one extra dvar each) both passed:
-
-| Run | First draw of A | A settles after | B settles after | What changed |
-| --- | --- | ---: | ---: | --- |
-| `+set sm_enable 0` | luma 29.2, still dark | 9 draws | 5 draws | A 276 world draw calls and 26,031 triangles, B 280 and 23,982: the shadow map passes are gone |
-| `+set r_smc_enable 0` | luma 28.3, still dark | 3 draws | 2 draws | no cache surfaces on any draw, and the lit surface counts stay put (A 259, B 265) |
-
-So the draws after the first change only while the static model cache fills.
 
 The fixes it took to get here, each found on this machine: the probe now
 configures the renderer with `R_ConfigureRenderer` as the client's `CL_InitRef`
 does (without it `R_Init` stopped on the model lighting atlas's size), and
 loads the collision map as `CL_CM_LoadMap` does before the first scene (static
 model lighting traces against it).
+
+### The dark first frame, 2026-11-02
+
+Same laptop, local evidence, not CI. Runs at ea9d953 to 552ef1e looked for the
+cause, all RelWithDebInfo with one change each. Every run passed:
+
+| Run | First draw of A (mean luma) | What it showed |
+| --- | --- | --- |
+| baseline | 28.5 | dark, with the same draw calls and triangles as later draws |
+| `+set sm_enable 0` | 29.2 | not the sun shadow maps |
+| `+set r_smc_enable 0` | 28.3 | not the static model cache |
+| `+set r_drawSModels 0` | 0.0, 15 colours | without the static models nothing is left on that frame: the world's surfaces are missing, not just dark |
+| `+set r_pretess 0` | 122.0 | right: only the pre-tessellated (batched) world path goes wrong |
+| PreLoad on all 23 of the world's images | still dark | not texture residency |
+| device state against the engine's state cache, before draws 0 and 1 of each view | 28.5 | every render state, sampler state, texture and the viewport matched; setting the cache's values on the device changed nothing |
+| only the first draw with `r_pretess 0` | 122.0, and 122.0 for the next | the first pre-tessellated draw after one plain frame is right, with the baseline's second-draw digest |
+
+So the trouble was the first frame of the process, not the first
+pre-tessellated one. That points at the frame data's index buffer pair, which
+the first frame is the only one to use before a toggle: see
+[The first frame](#the-first-frame). The device-state and residency checks were
+temporary and are not in the probe.
+
+At 6dc8198 the probe presents one empty frame first. It reports
+`pretess_ib_before=differed pretess_ib_after=agreed`, and:
+
+| Build | First draw of A | A settles | B settles | Wall time |
+| --- | --- | --- | --- | ---: |
+| RelWithDebInfo | 63,431 colours, luma 122.0 ± 44.6, digest `46a7517b8c271058` | 9 draws, `7e8468e89644e49f` | 6 draws, `5162ef64555f566c` | 4.1 s |
+| Debug | the same, every frame bit-identical to RelWithDebInfo | the same | the same | 5.6 s |
+
+The settled digests are the ones the probe gave before the fix, so only the
+first draw changed. A's first draw is now the image `r_pretess 0` gives for it.
+With `r_pretess 0` the run also passes with that path's own settled images. A
+run with `KISAK_WORLD_DRAW_SHOW_SECONDS=10` presented 207 frames of view A on
+the screen. No image was saved, no line had `ERROR`, `FATAL`, `ASSERT` or
+`Couldn't`, and the game folder listing was identical before and after.
