@@ -203,15 +203,36 @@ Rules, any of which fails the run:
   left.
 
 Every frame of a leg must be drawn; a frame the owner reports as anything else
-stops the run with its stage. The run prints `free_camera_leg` (with the leg's
-frame of fewest colours, its index and pose, followed by that frame's
-`world_draw_frame` line labelled `<leg>.fewest_colors`),
+stops the run with its stage. The run prints `free_camera_leg` (with how many of
+the leg's frames had the eye in solid and drew no world call, and its frame of
+fewest colours: index, pose, visibility cell and contents, followed by that
+frame's `world_draw_frame` line labelled `<leg>.fewest_colors`),
 `free_camera_checkpoint` (with the pose and digest), `free_camera_interruption`
 (`same=yes|no`), the settle frames as `world_draw_frame` lines,
 `free_camera_counters`, `free_camera_shutdown` and finally
 `free_camera_replay=passed|failed`, and writes `free-camera-replay.json` (cameras,
 checkpoints with every settle frame's measurements, legs, interruptions,
 counters, problems; no pixels).
+
+A leg frame that drew no world call is looked at again after path B, as a
+report and never as a rule (up to four per leg, drawn outside the owner's
+counters). Before the first, the portal graph: each cell's bounds and the cells
+its portals lead to (`free_camera_visibility_cell_links`), any portal with no
+portal back (`free_camera_visibility_one_way_portal`) and the totals
+(`free_camera_visibility_portals`). For each frame, `free_camera_visibility`
+lines draw its pose as it was, with single-cell visibility, without
+pretessellation, without the static model cache and without shadows, then moved
+by 1 to 32 units and turned by 1 to 90 degrees, each with the eye's cell, the
+cells marked visible, the draw counts and the picture's colours;
+`free_camera_visibility_cell` and `free_camera_visibility_portal` give the
+eye's cell and every portal's distance from the eye, and
+`free_camera_visibility_bounds_holding` the cells whose bounds hold it.
+`free_camera_visibility_ray` traces, apart from the visibility walk, the view's
+centre and four corners through every world triangle and through the collision
+world (`MASK_SOLID`): the nearest triangle, whether its stored normals face the
+eye, the nearest one that does, the cells whose surface lists hold each, and the
+first collision face with its material. The rays run from the pose as it was and
+from six of the moved poses.
 
 Run it as the [world draw probe](linux-world-draw-probe.md#running-it) runs,
 with `KISAK_FREE_CAMERA_MAP=mp_crash` in place of `KISAK_WORLD_DRAW_MAP`, a new
@@ -401,15 +422,33 @@ colours against 63,434 and the same mean luma). The only refdef field that diffe
 vertical tangent: the camera computes it as `CG_UpdateFov` does (0.47780272),
 the probe as width over height (0.4778027), one float step apart.
 
-One frame in motion is flat. Path B's frame 22, the end of the square's third
-side, at (-155.6, 205.8, 222) facing yaw 179.76, is a single black colour: the
-front end emitted one lit surface and the backend issued no world draw call.
-The eye there is in visibility cell 1 and not in solid (its contents are
-`CONTENTS_STRUCTURAL`, as at the normal frames of path A), so it is not a camera
-inside a wall; one other frame of that leg also drew no world call. The leg
-frames whose eye is in solid (two in `A.fast`, four in `A.rise`) drew normally.
-Every checkpoint settled on a full picture. Whether the game draws nothing from
-that pose too, or the visibility walk misses a portal there, is not known yet.
+Two frames in motion are flat because path B flies into a closed pocket whose
+walls are drawn only on their far sides. Frame 22, the end of the
+square's third side, at (-155.6, 205.8, 222) facing yaw 179.76, and frame 29 at
+(-156.32, 91.8, 222) facing yaw -90.36 are each a single black colour: the
+front end emitted at most one lit surface (a static model) and the backend
+issued no world draw call. The visibility report (run N=44 in Debug on 4a0049c;
+N=43 on 2b2aaf3 gave the same draws) shows why:
+
+- Both eyes are in visibility cell 1, the open ground to their east, and only
+  cell 1 is marked visible. Single-cell visibility, no pretessellation, no
+  static model cache and no shadows all draw the same nothing.
+- Every ray from both eyes, centre and corners, first meets a collision face of
+  the `caulk` material, 16 to 64 units away and facing the eye. 12 to 34 units
+  further it meets the back of a drawn wall (`wc/me_cinderblock_wall2`, once
+  `wc/me_metal_rust_02`) listed by cell 10, to the west, or cell 21, to the
+  south. Caulk faces are not part of the drawn world, back faces are culled,
+  and cell 1 has no portal to cells 10 or 21, so nothing in view can be drawn.
+- The pocket is closed on the east the same way: a caulk face with the back of
+  a roll-up door (`wc/me_door_rollup1`) behind it. Turned by 90 degrees towards
+  cell 1's own surfaces, each eye draws a full picture (4 to 8 cells). Moved 32
+  units south through the wall, frame 29's eye is in cell 21 and draws 7 cells.
+- The portal graph is whole: 23 cells and 180 portals, each with a portal back.
+
+The eye is not in solid (its contents are `CONTENTS_STRUCTURAL`, as at path A's
+normal frames): the free camera has no collision and flew through a wall into
+the air behind it. The leg frames whose eye is in solid (two in `A.fast`, four
+in `A.rise`) drew normally, and every checkpoint settled on a full picture.
 
 Window driver, in the cloud sandbox only: it builds into the same target in
 Debug and RelWithDebInfo with `-Wall -Wextra -Werror`, and
@@ -459,8 +498,8 @@ window. DXVK printed no warning or error.
   never reports a windowed device lost, so a real loss, and a reset it makes
   necessary, has not been seen.
 - Nothing is compared with a captured game frame.
-- Path B's flat frame (above) is unexplained: the visibility walk's cells and
-  portals from that pose have not been looked at.
+- That the game also draws nothing inside path B's pocket follows from the
+  map's faces and the visibility walk's rules; it has not been seen on Windows.
 - The window input has met a real desktop through the window driver: its
   script (Wayland in RelWithDebInfo, X11 in Debug) and one 70 s live flight
   (Wayland), with the window `R_CreateWindow` made. The live flight was not
