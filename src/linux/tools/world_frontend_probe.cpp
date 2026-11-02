@@ -49,6 +49,7 @@
 #include <gfx_d3d/r_dpvs.h>
 #include <gfx_d3d/r_drawsurf.h>
 #include <gfx_d3d/r_dvars.h>
+#include <gfx_d3d/r_image.h>
 #include <gfx_d3d/r_init.h>
 #include <gfx_d3d/r_material.h>
 #include <gfx_d3d/r_pretess.h>
@@ -425,7 +426,7 @@ void SetBool(const dvar_s *dvar, bool value)
 //
 // The probe stands in for R_PickRenderer and takes the shader model 3 path, the
 // only one it can check: the loader's technique remap (the dedicated
-// Material_OriginalRemapTechniqueSet in src/linux/server_assets.cpp) maps every
+// Material_OriginalRemapTechniqueSet in src/linux/server_device_counterparts.cpp) maps every
 // set to itself, which is what the client's remap (r_material_override.cpp)
 // does on that path. On the shader model 2 path the client would substitute
 // "sm2/" sets instead.

@@ -139,9 +139,9 @@ python3 scripts/tests/run_world_surface_checks.py --config RelWithDebInfo
 python3 scripts/tests/run_world_surface_checks.py --list
 ```
 
-This runner performs no CMake configure and no engine build. It compiles seven
+This runner performs no CMake configure and no engine build. It compiles eight
 standalone test translation units directly with `-m32 -std=c++20 -Werror` and runs
-them, then runs the bundle prepare script, for eight checks:
+them, then runs the bundle prepare script, for nine checks:
 
 | Check | Source | Covers |
 | --- | --- | --- |
@@ -151,6 +151,7 @@ them, then runs the bundle prepare script, for eight checks:
 | `world_surface_oracle` | `tests/linux_renderer/world_surface_oracle_test.cpp` | oracle hashing, weights, sampling, colour and pixel arithmetic, sample selection |
 | `world_lit_bundle` | `tests/linux_renderer/world_lit_bundle_test.cpp` | lit loader refusals: program pair hash and length, widened geometry counts, index walk, colour-map sampler, exact constant set, lightmap layout |
 | `world_frontend_invariants` | `tests/linux_asset_export/world_frontend_invariants_test.cpp` | the rules the offline world front-end probe holds each frame to, and its spawn-point camera scan ([guide](../../docs/linux-world-frontend.md#a-real-map-the-offline-front-end-probe)) |
+| `world_device_rules` | `tests/linux_asset_export/world_device_rules_test.cpp` | the rules the world device probe holds each texture, shader and vertex/index buffer to ([guide](../../docs/linux-world-device-probe.md)) |
 | `world_image_capture` | `tests/linux_asset_export/world_image_capture_test.cpp` | capture bounds, name filter, duplicate rule, disabled path |
 | `world_surface_prepare` | `test_world_surface_prepare.py` | the prepare step's trust boundary over archives it writes itself |
 
@@ -216,6 +217,27 @@ library. The probe creates the device through `r_init.cpp` and needs DXVK Native
 2.7.1, a Vulkan driver and a display. CI builds both against a stand-in D3D9
 library whose `Direct3DCreate9` returns null, runs the window test, and checks the
 probe fails closed at `stage=direct3d`; it never creates a device.
+
+### World device probe
+
+`KisakCOD-world-device-probe` (`-DKISAK_BUILD_WORLD_DEVICE_PROBE=ON`, on top of the
+device and world front-end probes) loads the graphics zones and one map onto a
+D3D9 device and checks every device object they asked for
+([guide](../../docs/linux-world-device-probe.md)). Its rules have an asset-free
+test in the world surface runner (`world_device_rules`). Without a device:
+
+```sh
+LD_LIBRARY_PATH=<sdl3-sdk>/lib:<stand-in dir> SDL_VIDEODRIVER=dummy \
+  python3 scripts/tests/test_world_device_probe.py --probe <bin>/KisakCOD-world-device-probe
+```
+
+The script starts the engine from a temporary tree it creates and removes, holding
+only a one-line stub `fileSysCheck.cfg` (the file the engine refuses to start
+without), and runs the probe three times: an allowlisted map must stop at
+`stage=direct3d` before any zone is queued, and no map and an unknown map must be
+refused first. All three exit 1 and write nothing. It takes no game directory and
+is meant for the stand-in library: with a working DXVK and a Vulkan device the
+first run gets past `Direct3DCreate9` and the script fails.
 
 ## World front-end checks
 

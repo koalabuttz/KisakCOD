@@ -22,6 +22,11 @@
 #include <gfx_d3d/r_init.h>
 #include "world_frontend_probe.h"
 #endif
+#ifdef KISAK_WORLD_DEVICE_PROBE
+#include <gfx_d3d/r_bsp.h>
+#include <gfx_d3d/r_init.h>
+#include "world_device_probe.h"
+#endif
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -259,6 +264,7 @@ void ExportFont(Font_s *font,size_t index,const std::filesystem::path &directory
   const char *menusOption=std::getenv("KISAK_UI_ASSET_EXPORT_MENUS");
   const char *worldMap=std::getenv("KISAK_WORLD_SURFACE_MAP");
   const char *frontEndMap=std::getenv("KISAK_WORLD_FRONTEND_MAP");
+  const char *deviceMap=std::getenv("KISAK_WORLD_DEVICE_MAP");
   Require(!menusOption || !std::strcmp(menusOption,"1"),"KISAK_UI_ASSET_EXPORT_MENUS must be 1 or unset");
   Require(!worldMap || !menusOption,"KISAK_WORLD_SURFACE_MAP and KISAK_UI_ASSET_EXPORT_MENUS are mutually exclusive");
   Require(!frontEndMap || (!worldMap && !menusOption),"KISAK_WORLD_FRONTEND_MAP cannot be combined with another export mode");
@@ -266,11 +272,30 @@ void ExportFont(Font_s *font,size_t index,const std::filesystem::path &directory
   // Only the probe target links the renderer front end; this build refuses the mode before any engine work.
   Require(!frontEndMap,"KISAK_WORLD_FRONTEND_MAP needs the KisakCOD-world-frontend-probe build (KISAK_BUILD_WORLD_FRONTEND_PROBE)");
 #endif
+#ifdef KISAK_WORLD_DEVICE_PROBE
+  // This build's CL_InitDedicated loaded no zone and left the renderer on: the device
+  // mode below is the only one it can run, and it owns every zone load.
+  Require(deviceMap && *deviceMap,"KisakCOD-world-device-probe needs KISAK_WORLD_DEVICE_MAP=<map>");
+  Require(!worldMap && !menusOption && !frontEndMap,"KISAK_WORLD_DEVICE_MAP cannot be combined with another export mode");
+  std::puts("asset_export=offline database=engine networking=not-initialized renderer=device");
+#else
+  Require(!deviceMap,"KISAK_WORLD_DEVICE_MAP needs the KisakCOD-world-device-probe build (KISAK_BUILD_WORLD_DEVICE_PROBE)");
   std::puts("asset_export=offline database=engine networking=not-initialized renderer=dedicated");
+#endif
   Scr_InitVariables();Scr_Init();Com_SetScriptSettings();XAnimInit();DObjInit();
+#ifdef KISAK_WORLD_DEVICE_PROBE
+  // Where a client's CL_InitRenderer runs, inside $init: the window, the device, and the
+  // graphics zones queued behind it. KISAK_WORLD_FRONTEND_LAYOUT() is the loader's view.
+  Kisak_StartWorldDevice(deviceMap,KISAK_WORLD_FRONTEND_LAYOUT());
+#endif
   PMem_EndAlloc(initAllocationName,1u);DB_SetInitializing(0);DB_SyncXAssets();
   if(menusOption){XZoneInfo zone{"ui_mp",DB_ZONE_GAME,0};DB_LoadXAssets(&zone,1,1);DB_SyncXAssets();}
   outputDirectory=directory;
+#ifdef KISAK_WORLD_DEVICE_PROBE
+  Kisak_ProbeWorldDevice(directory,deviceMap);
+  std::printf("asset_export=complete mode=world_device_probe map=%s networking=not-initialized\n",deviceMap);
+  std::fflush(nullptr);std::_Exit(0);
+#endif
   // World inventory runs before the font assets are required: a map zone does not
   // have to carry fonts, and the world branch owns its own zone load and output.
 #ifdef KISAK_WORLD_FRONTEND_PROBE

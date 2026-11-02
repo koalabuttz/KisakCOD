@@ -29,6 +29,8 @@ then checks on what it produced (`src/linux/tools/device_probe.cpp`):
 
 `R_InitHardware`'s later steps (zones, render targets, Bink, initial state,
 scene, systems) are not run: they need assets or units that are not linked yet.
+The [world device probe](linux-world-device-probe.md) takes the next one: it
+loads the graphics zones and a map onto the device.
 `R_ShutdownDirect3D` is not called for the same reason (it also releases what
 those steps make).
 

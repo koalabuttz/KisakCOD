@@ -61,6 +61,8 @@ include(${SCRIPTS_DIR}/platform/linux/native_d3d9.cmake)
 include(${SCRIPTS_DIR}/platform/linux/world_frontend_probe.cmake)
 # After the boundary: the device probe links r_init.cpp through it, with SDL3.
 include(${SCRIPTS_DIR}/platform/linux/device_probe.cmake)
+# After both probes: the world device probe needs both and reuses their source lists.
+include(${SCRIPTS_DIR}/platform/linux/world_device_probe.cmake)
 
 # ---------------------------------------------------------------------------
 # Opt-in native Linux client network core (KISAK_BUILD_LINUX_CLIENT_CORE)
