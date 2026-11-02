@@ -874,8 +874,9 @@ jobs:
           # The same temporary tree with no game data as the world device probe's
           # run. An allowlisted map must stop at Direct3DCreate9 before R_Init
           # starts the renderer; no map, an unknown map and a show time over 60
-          # seconds must be refused first. Nothing may land in the output
-          # directories.
+          # seconds must be refused first. The free-camera replay and window
+          # driver must stop the same way and refuse their own bad arguments.
+          # Nothing may land in the output directories.
           python3 -u scripts/tests/test_world_draw_probe.py \
             --probe "$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-world-draw-probe" \
             2>&1 | tee "artifacts/world-draw-run-${{ matrix.config }}.log"

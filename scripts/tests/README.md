@@ -255,13 +255,18 @@ LD_LIBRARY_PATH=<sdl3-sdk>/lib:<stand-in dir> SDL_VIDEODRIVER=dummy \
 ```
 
 The script uses the same kind of temporary tree as the world device probe's and
-runs the probe eight times. In the draw mode an allowlisted map must stop at
+runs the probe fifteen times. In the draw mode an allowlisted map must stop at
 `stage=direct3d` before `R_Init` runs, and no map, an unknown map and a show time
 over 60 seconds must be refused first. In the free-camera replay
 (`KISAK_FREE_CAMERA_MAP`, [guide](../../docs/linux-free-camera.md#the-replay)) an
 allowlisted map must stop at the replay's own `stage=direct3d`, and both map
-variables at once, an unknown map and a show time must be refused first. All
-eight exit 1 and write nothing.
+variables at once, an unknown map and a show time must be refused first. With
+the window driver's inputs (`KISAK_FREE_CAMERA_INPUT=window` and `script`,
+[guide](../../docs/linux-free-camera.md#the-window-driver)) the map must stop at
+the driver's own `stage=direct3d` before the window is adopted, and an unknown
+input, an input in the draw mode, a time limit outside 1 to 3600 seconds and a
+time limit on the script must be refused first. All fifteen exit 1 and write
+nothing.
 
 ## World front-end checks
 
