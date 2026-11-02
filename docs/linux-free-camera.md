@@ -13,7 +13,7 @@ device. The replay passed on one laptop GPU with `mp_crash`
 [window driver](#the-window-driver) joins the adapter, the owner and the window
 input: the camera flown through the renderer's own window, live or by a checked
 script of SDL events. Its scripted run has passed on the same laptop under
-Wayland and X11; the live camera has not been flown yet.
+Wayland and X11, and David has flown the live camera there.
 
 ## Why a host camera
 
@@ -446,6 +446,13 @@ draw, and after the restore the capture came back and the settled picture
 no input came from outside the script, and no window was left after the
 shutdown.
 
+The live camera, `KISAK_FREE_CAMERA_INPUT=window` with a 900 s limit, from the
+same RelWithDebInfo build under Wayland (run N=42): David flew `mp_crash` for
+70 s and quit with Escape. The run passed with no problem: 3,443 frames, all
+drawn (49 per second), none minimized or with a lost device, one capture
+request; the shutdown released the device and every zone and destroyed the
+window. DXVK printed no warning or error.
+
 ## What is not verified
 
 - The replay has run on one GPU and one map. Its interruptions are forced: DXVK
@@ -454,10 +461,11 @@ shutdown.
 - Nothing is compared with a captured game frame.
 - Path B's flat frame (above) is unexplained: the visibility walk's cells and
   portals from that pose have not been looked at.
-- The window input has met a real desktop only through the window driver's
-  script (Wayland in RelWithDebInfo, X11 in Debug), with the window
-  `R_CreateWindow` made. The live camera with a person at the keyboard has not
-  been flown, and focus changes other than the minimize's were the script's own.
+- The window input has met a real desktop through the window driver: its
+  script (Wayland in RelWithDebInfo, X11 in Debug) and one 70 s live flight
+  (Wayland), with the window `R_CreateWindow` made. The live flight was not
+  resized or minimized, and in the script focus changes other than the
+  minimize's were the script's own.
 
 ## Acceptance on a GPU
 
