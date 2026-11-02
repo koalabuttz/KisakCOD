@@ -90,6 +90,11 @@ SUITES: Tuple[Suite, ...] = (
     # the driver it actually created, which is what proves the environment
     # below reached the window host.
     Suite("window-test", "real SDL event/engine queue suite passes", 54),
+    # The free camera fed by an adopted window: the window is made the way the
+    # engine's window layer makes it, and WindowHost only pumps its events. SDL3
+    # adds two checks (no software surface, text input stopped).
+    Suite("free-camera-window-test", "free camera follows an adopted window's SDL input", 66,
+          summary="free camera window: ", sdl3_minimum=68),
     Suite("client-input-test", "actual client input lifecycle suite passes", 54),
     Suite("client-command-test", "actual command lifecycle suite passes", 28),
     Suite("client-runtime-test", "actual runtime lifecycle suite passes", 42),
@@ -164,6 +169,12 @@ COMPILED: Tuple[Tuple[str, str], ...] = (
     ("linux/sys_critical.cpp", "KisakCOD-client-window"),
     ("linux/sys_posix.cpp", "KisakCOD-client-window"),
     ("tests/linux_window/window_test.cpp", "KisakCOD-window-test"),
+    ("view/free_camera_window.cpp", "KisakCOD-free-camera-window-test"),
+    ("view/frame_owner.cpp", "KisakCOD-free-camera-window-test"),
+    ("view/free_camera.cpp", "KisakCOD-free-camera-window-test"),
+    ("view/free_camera_controls.cpp", "KisakCOD-free-camera-window-test"),
+    ("universal/com_math_anglevectors.cpp", "KisakCOD-free-camera-window-test"),
+    ("tests/linux_free_camera/free_camera_window_test.cpp", "KisakCOD-free-camera-window-test"),
     ("client/cl_keys.cpp", "KisakCOD-client-input"),
     ("client_mp/cl_input.cpp", "KisakCOD-client-input"),
     ("qcommon/field.cpp", "KisakCOD-client-input"),

@@ -1,13 +1,15 @@
 # Linux free camera: frame ownership, camera and input
 
-Status on 2026-11-02: **the frame owner drives the engine renderer, not yet
-run on a GPU.** The camera, its key bindings and the frame owner are covered by
+Status on 2026-11-02: **camera, frame owner and window input exist, and the
+frame owner drives the engine renderer; not yet run on a GPU.** The camera, its
+key bindings, the frame owner and the window input that feeds them are covered by
 asset-free tests. The `SceneRenderer` adapter over the engine renderer the
 [world draw probe](linux-world-draw-probe.md) brought up is written
 ([below](#the-renderer-contract)), with a replay that drives the owner through
 the reference traversals on a real map ([the replay](#the-replay)). Both build
 in the opt-in `KisakCOD-world-draw-probe` target and fail closed without a
-device; no GPU, map or device result is claimed for them yet.
+device; no GPU, map or device result is claimed for them yet. A driver joining
+the adapter, the owner and the window input is the next step.
 
 ## Why a host camera
 
@@ -29,17 +31,22 @@ view changes the source of the numbers, not their meaning.
 | `src/linux/client/view/free_camera.{h,cpp}` | Pose, mouse/key turning, movement, projection, `FillRefdef` |
 | `src/linux/client/view/free_camera_controls.{h,cpp}` | Engine key codes (`SE_KEY`) and pointer counts to movement intent |
 | `src/linux/client/view/frame_owner.{h,cpp}` | Frame order, `SceneRenderer` contract, map and shutdown lifetime |
-| `tests/linux_free_camera/` | Asset-free tests, run by `scripts/tests/run_free_camera_checks.py` |
+| `src/linux/client/view/free_camera_window.{h,cpp}` | The renderer's own window, adopted: its keys, pointer, focus, extent and quit into the owner |
+| `tests/linux_free_camera/` | Asset-free tests: the camera and owner by `scripts/tests/run_free_camera_checks.py`, the window input by `scripts/tests/test_linux_window.py` |
 | `src/linux/tools/engine_scene_renderer.{h,cpp}` | `EngineSceneRenderer`, the `SceneRenderer` over the engine renderer |
 | `src/linux/tools/free_camera_replay.cpp` | The replay of the reference traversals on a real map |
 | `src/linux/tools/world_draw_engine.{h,cpp}` | Frame, readback, map load and unload, shared with the world draw probe |
 
-The three files in `src/linux/client/view` keep their standalone compile proof
-(Clang, `-m32`, production client flags, `-Werror`, Debug and RelWithDebInfo),
-with the production unit `src/universal/com_math_anglevectors.cpp` compiled
-unmodified beside them. They and the adapter also build in the opt-in
-`KisakCOD-world-draw-probe` target (`KISAK_BUILD_WORLD_DRAW_PROBE`), with the
-client definitions and `-Wall -Wextra -Werror`. No default target includes them.
+The camera, controls and owner are compiled by the standalone runner (Clang,
+`-m32`, production client flags, `-Werror`) in Debug and RelWithDebInfo. The window
+input needs SDL, so it is compiled in the opt-in window host build
+(`KISAK_BUILD_LINUX_WINDOW_HOST`) as `KisakCOD-free-camera-window-test`, with SDL2
+and SDL3, which is the compile proof for all four view sources in a CMake target.
+The camera, controls and owner also build, with the adapter and the replay, in
+the opt-in `KisakCOD-world-draw-probe` target (`KISAK_BUILD_WORLD_DRAW_PROBE`),
+with the client definitions and `-Wall -Wextra -Werror`. No shipped binary links
+them yet. The production unit `src/universal/com_math_anglevectors.cpp` is
+compiled unmodified beside them in every place.
 
 ## Conventions and where they come from
 
@@ -203,23 +210,59 @@ with `KISAK_FREE_CAMERA_MAP=mp_crash` in place of `KISAK_WORLD_DRAW_MAP`, a new
 the run; a window manager that refuses the size changes only the
 `window_resized` field, because the back buffer follows the owner's extent.
 
-## Input integration (next step, not done)
+## Window input
 
-The existing window host already delivers ordered engine events. The plan:
+The renderer's window is the one `R_CreateWindow` makes through
+`src/linux/client/window/win32_window_sdl3.cpp`; DXVK presents to it, and nothing
+else pumps its events (the world draw probe and the adapter never do).
+`FreeCameraWindow` adopts that window with `WindowHost`'s adopted mode
+(`AdoptedWindow`) and is the only event pump in the process:
 
-- after `ClientInputHost::Dispatch` drains an `SE_KEY`, forward it to
-  `FrameOwner::Key` only when no menu or console holds input;
-- on each host tick, pass `ClientInputHost::ConsumeMouse()` (the production
-  `CL_MouseEvent` accumulation) to `FrameOwner::Mouse`;
-- `WindowHost::RelativeMouseActive()` drives `SetLookCaptured`, focus events drive
-  `Focus`, `SurfaceExtent()` (pixels, not logical size) drives `Resize`, and
-  `vidConfig.aspectRatioWindow` drives `SetAspect`;
-- `FrameDeadline` supplies `msec`; quit and signals call `Shutdown` before the
-  window and renderer are destroyed.
+- The host pumps the window's SDL events through the same translation as the
+  window host (physical US key positions, sub-pixel pointer carry, focus and
+  pointer boundaries). It never creates a software surface on the window, never
+  presents to it and never destroys it. Its SDL video reference is its own, so the
+  window layer's reference survives it.
+- Keys go to `FrameOwner::Key`, pointer counts to `FrameOwner::Mouse`. Look
+  follows the window's actual relative capture: a left click in the focused
+  window asks for capture, Escape releases it, and Escape without capture asks to
+  quit. Those three presses are not passed on.
+- Focus loss releases held keys and capture (the host keeps the request and
+  re-applies it when focus returns); nothing is pressed again on focus gain.
+- Each tick gives the owner the window's pixel size, or an empty extent while the
+  window is minimized (tracked from minimize, restore and focus events, starting
+  from the window's flag), so the owner skips draws instead of resizing to
+  nothing. The adapter's `Resize` resets the back buffer and scene size to exactly
+  that extent and never resizes the window.
+- The caller times frames (`Tick(wait, msec, time)`, with `msec` from
+  `FrameDeadline` or a clock; the owner caps a step at 200 ms). The aspect stays
+  the owner's default, width/height, until the driver passes
+  `vidConfig.aspectRatioWindow` through `FrameOwner::SetAspect`.
+- Quitting (Escape, window close, `RequestQuit`) only stops the loop. The order on
+  the way out is: destroy `FreeCameraWindow` (capture and keys released, window
+  left alone), then `FrameOwner::Shutdown` (unload, then the renderer, which may
+  destroy the window).
+
+There is no console or menu in this loop, so no key catcher decides who owns a
+key. When one is added, keys must go through `ClientInputHost` and its catchers
+before they reach the camera.
 
 ## What is verified
 
-Asset-free, Clang 18 `-m32`, Debug (`-O0`) and RelWithDebInfo (`-O2`): locally,
+Window input, asset-free, Clang 18 `-m32`, the dummy video driver of SDL 3.2.10
+(built as CI builds it) and of Ubuntu 24.04's SDL2 2.30, locally in Debug: `free_camera_window` adopts a window made the way the engine's window
+layer makes one and drives the owner through synthetic SDL events, with the same
+recording renderer: adoption without a surface, present or destroy; keys and
+pointer counts; click to capture, Escape to release, Escape to quit; focus loss;
+minimize and restore; a real window resize reaching the renderer once in pixels;
+another window's events ignored; quit and window close leaving the renderer
+alone; teardown releasing held input before the owner shuts down. Both dummy
+drivers grant relative capture; a refusal is injected at the SDL call (linker
+`--wrap`) to check that it is reported with SDL's reason and look stays off.
+Fourteen deliberate defects in the adopted host and the bridge were each made in
+turn and each was caught.
+
+Camera and owner, asset-free, Clang 18 `-m32`, Debug (`-O0`) and RelWithDebInfo (`-O2`): locally,
 locally again with GCC 13 under ASan/UBSan, and in the hosted `free_camera` job
 ([run 41327486090](https://github.com/koalabuttz/KisakCOD/actions/runs/41327486090),
 both configurations, on the pre-merge head 5144bf4):
@@ -256,8 +299,9 @@ at once and a show time first, writing nothing.
 - The replay has not run on a GPU, so no map has been loaded or drawn through
   this owner and no real device has been reset or resized yet.
 - Nothing is compared with a captured game frame.
-- The window/input integration above is not written here (the window side is
-  its own work).
+- The window input has only seen SDL's dummy driver: no real desktop's focus,
+  minimize or relative-capture behaviour, and no window made by `R_CreateWindow`
+  itself. The replay does not use it: it drives the owner directly.
 
 ## Acceptance on a GPU
 
