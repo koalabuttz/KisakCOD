@@ -111,13 +111,24 @@ game install, which CI neither has nor looks for.
 initialization (which latches `r_loadForRenderer` off, so zones keep geometry in
 CPU memory):
 
+0. `r_rendererInUse` is set to the shader model 3 path, as `R_PickRenderer`
+   (`r_init.cpp`) sets it on a client before any zone loads. `Material_GetTechnique`
+   asserts that a technique was built for that path, and without a device the
+   dvar would keep its registration default, "unspecified". Shader model 3 is the
+   only path the probe can check: the loader's technique remap (the dedicated
+   `Material_OriginalRemapTechniqueSet`) maps every set to itself, which is what a
+   client does on that path; on the shader model 2 path it would swap in `sm2/`
+   sets.
 1. `DB_LoadXAssets` for the map zone, the fast-file branch of the server's map
    load. Exactly one packaged `GFXWORLD` naming the map must be in the zone,
    found by enumeration so a default asset cannot stand in for it.
 2. `R_SetWorldPtr_FastFile` (`r_bsp.cpp`), the lookup `R_LoadWorld` makes, must
    land on that asset. The rest of `R_LoadWorld` prepares lighting and device data
    the surface walk does not read, and is not run.
-3. The first frame's sort from `R_BeginFrame`: `Material_Sort`, then
+3. Every vertex and pixel shader of every pass of every technique that a loaded
+   material reaches must be built for that path (a device would create only
+   those), and no more materials may be loaded than `Material_Sort` has room for.
+   Then the first frame's sort from `R_BeginFrame`: `Material_Sort`, then
    `R_SortWorldSurfaces`, which writes every surface's draw-surface key into
    `dpvs.surfaceMaterials` and ends by filing each shadow-casting surface under
    the primary lights that reach it (`R_SetPrimaryLightShadowSurfaces`, culled
@@ -157,10 +168,12 @@ the exporter's allowlist; at most 1024 cells (the width of
 `dpvsGlob.cellVisibleBits`); world model 0 must start at surface 0 and fit the
 visibility and sort tables; every AABB node and cull group range must lie inside
 `sortedSurfIndex`; the zone's `COMWORLD` must be loaded under the world's name
-and hold at least as many primary lights as the world names; `r_loadForRenderer`
-must be off and no device may exist; and the loader and the front end, which are
-compiled with different definitions, must agree on the size of every struct they
-hand each other (`world_frontend_layout.h`).
+and hold at least as many primary lights as the world names; every shader the
+loaded materials reach must be built for shader model 3; `r_loadForRenderer`
+must be off, `r_rendererInUse` must still be unchosen when the probe starts, and
+no device may exist; and the loader and the front end, which are compiled with
+different definitions, must agree on the size of every struct they hand each
+other (`world_frontend_layout.h`).
 
 The report, `world-frontend-probe.json` in the private output directory (created
 exclusively, mode 0600), holds counts and the map's own name only: no geometry,
@@ -221,7 +234,8 @@ KISAK_UI_ASSET_EXPORT_DIR=/private/new-output KISAK_WORLD_FRONTEND_MAP=mp_crash 
 
 ### What a pass does not claim
 
-- No device, texture, shader or pixel. Static models, entities, effects, lighting
+- No device, texture, shader or pixel. Shaders are checked only for the path
+  they were built for; none is created. Static models, entities, effects, lighting
   and shadows are not checked; the walk reaches static models only to mark them
   visible.
 - The spawn-point views are where a player stands, not a sweep of the map.

@@ -2,6 +2,9 @@
 //
 // What runs, in order, and where it comes from:
 //
+//   0. r_rendererInUse is set to the shader model 3 path, as R_PickRenderer
+//      (r_init.cpp) sets it on a client before any zone loads (see
+//      UseShaderModel3Path for why that is the only path this probe can check).
 //   1. DB_LoadXAssets for XZoneInfo{map, DB_ZONE_GAME, DB_ZONE_GAME}: the
 //      fast-file branch of the server's map load (src/server_mp/sv_init_mp.cpp),
 //      the same zone operation the world surface inventory performs. Device
@@ -12,11 +15,13 @@
 //      model lighting, BSP images, the dynamic entity filter, shadow-caster cells,
 //      lightmap and probe textures) prepares lighting and device data that the
 //      surface walk below does not read, and is not run.
-//   3. The needSortMaterials branch of R_BeginFrame (r_rendercmds.cpp):
-//      Material_Sort, then R_SortWorldSurfaces, which writes every world
-//      surface's draw-surface key into dpvs.surfaceMaterials and ends by filing
-//      each shadow-casting surface under the primary lights that reach it
-//      (R_SetPrimaryLightShadowSurfaces, against the zone's COMWORLD lights).
+//   3. Every vertex and pixel shader the loaded materials reach must be built
+//      for that path. Then the needSortMaterials branch of R_BeginFrame
+//      (r_rendercmds.cpp): Material_Sort, then R_SortWorldSurfaces, which writes
+//      every world surface's draw-surface key into dpvs.surfaceMaterials and
+//      ends by filing each shadow-casting surface under the primary lights that
+//      reach it (R_SetPrimaryLightShadowSurfaces, against the zone's COMWORLD
+//      lights).
 //   4. The scene setup the synthetic front-end test performs (R_InitSceneBuffers,
 //      R_InitSceneData, R_InitScene), with worker commands run on this thread and
 //      the pre-tessellated path off, then per view: R_UpdateLodParms,
@@ -66,6 +71,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include <cerrno>
@@ -404,6 +410,90 @@ void SetBool(const dvar_s *dvar, bool value)
     Dvar_SetBool(const_cast<dvar_s *>(dvar), value);
 }
 
+// The shader path. A client sets r_rendererInUse in R_PickRenderer (r_init.cpp)
+// once it knows the device caps, before any zone loads; until then the dvar holds
+// its registration default, GFX_RENDERER_UNSPECIFIED. Material_GetTechnique
+// (r_rendercmds.cpp), which the material sort and the surface walk call, asserts
+// that a technique's first pixel shader was built for that path, and the shader
+// upload (r_material.cpp) creates only shaders built for it.
+//
+// The probe stands in for R_PickRenderer and takes the shader model 3 path, the
+// only one it can check: the loader's technique remap (the dedicated
+// Material_OriginalRemapTechniqueSet in src/linux/server_assets.cpp) maps every
+// set to itself, which is what the client's remap (r_material_override.cpp)
+// does on that path. On the shader model 2 path the client would substitute
+// "sm2/" sets instead.
+void UseShaderModel3Path()
+{
+    Require(r_rendererInUse != nullptr, "r_rendererInUse is not registered");
+    Require(r_rendererInUse->current.integer == GFX_RENDERER_UNSPECIFIED,
+            "r_rendererInUse was chosen before the probe (" + std::to_string(r_rendererInUse->current.integer) + ")");
+    Dvar_SetInt(const_cast<dvar_s *>(r_rendererInUse), GFX_RENDERER_SHADER_3);
+    Require(r_rendererInUse->current.integer == GFX_RENDERER_SHADER_3, "r_rendererInUse did not switch to shader model 3");
+}
+
+struct ShaderPathCounts
+{
+    size_t materials = 0;
+    size_t techniques = 0;
+    size_t shaders = 0;
+};
+
+// Every shader that a loaded material reaches through its technique set must be
+// built for the path in use. The materials are the ones Material_Sort sorts,
+// enumerated by the same DB_GetAllXAssetOfType call. Material_GetTechnique checks
+// only the first pixel shader of a technique; a device would need every vertex
+// and pixel shader of every pass, so all of them are held to it here, and the
+// probe fails before the sort if any differs.
+ShaderPathCounts RequireTechniquesOnPathInUse()
+{
+    const int path = r_rendererInUse->current.integer;
+    const int count = DB_GetAllXAssetOfType(ASSET_TYPE_MATERIAL, nullptr, 0);
+    Require(count > 0, "no material is loaded");
+    Require(size_t(count) <= std::size(rgp.sortedMaterials),
+            std::to_string(count) + " materials are loaded; Material_Sort has room for " +
+                std::to_string(std::size(rgp.sortedMaterials)));
+    std::vector<XAssetHeader> materials(static_cast<size_t>(count));
+    Require(DB_GetAllXAssetOfType(ASSET_TYPE_MATERIAL, materials.data(), count) == count,
+            "the material count changed between two enumerations");
+
+    ShaderPathCounts counts;
+    counts.materials = materials.size();
+    std::unordered_set<const MaterialTechnique *> seenTechniques; // sets share techniques
+    std::unordered_set<const void *> seenShaders;                 // and techniques share shaders
+    for (const XAssetHeader &header : materials)
+    {
+        const Material *material = header.material;
+        Require(material && material->techniqueSet && material->techniqueSet->remappedTechniqueSet,
+                "a material has no technique set");
+        const MaterialTechniqueSet &techSet = *material->techniqueSet->remappedTechniqueSet;
+        for (const MaterialTechnique *technique : techSet.techniques)
+        {
+            if (!technique || !seenTechniques.insert(technique).second)
+                continue;
+            const std::string where =
+                std::string("technique '") + technique->name + "' of set '" + techSet.name + "'";
+            Require(technique->passCount >= 1, where + " has no pass");
+            const MaterialPass *passes = technique->passArray;
+            for (uint32_t p = 0; p < technique->passCount; ++p)
+            {
+                const MaterialVertexShader *vs = passes[p].vertexShader;
+                const MaterialPixelShader *ps = passes[p].pixelShader;
+                Require(vs && ps, where + " pass " + std::to_string(p) + " lacks a vertex or pixel shader");
+                const int vsPath = vs->prog.loadDef.loadForRenderer;
+                const int psPath = ps->prog.loadDef.loadForRenderer;
+                Require(vsPath == path && psPath == path,
+                        where + " pass " + std::to_string(p) + " has shaders built for renderer " +
+                            std::to_string(vsPath) + "/" + std::to_string(psPath) + ", not " + std::to_string(path));
+                counts.shaders += seenShaders.insert(vs).second;
+                counts.shaders += seenShaders.insert(ps).second;
+            }
+        }
+    }
+    counts.techniques = seenTechniques.size();
+    return counts;
+}
+
 // A frame from a walk that starts in no cell (camera cell -1): every cell is
 // tested against the frustum, so the surface and batch rules apply with every
 // cell counted as visited, and the camera-cell rules do not.
@@ -516,6 +606,8 @@ void Kisak_ProbeWorldFrontEnd(const std::filesystem::path &directory, const char
     Require(r_loadForRenderer && !r_loadForRenderer->current.enabled,
             "r_loadForRenderer must be latched off before a zone is loaded");
     Require(dx.device == nullptr, "a D3D device exists in the offline probe");
+    // A client picks its shader path before any zone loads.
+    UseShaderModel3Path();
 
     // 1. Zone load.
     XZoneInfo zone{mapName, DB_ZONE_GAME, DB_ZONE_GAME};
@@ -548,7 +640,11 @@ void Kisak_ProbeWorldFrontEnd(const std::filesystem::path &directory, const char
     Require(world.primaryLightCount == 0 || (world.shadowGeom && world.lightRegion),
             "the world's per-light shadow or region tables are absent");
 
-    // 3. The first frame's material and world-surface sort.
+    // 3. The first frame's material and world-surface sort, once every technique
+    // the materials reach is known to be built for the path in use.
+    const ShaderPathCounts shaderPath = RequireTechniquesOnPathInUse();
+    std::printf("world_frontend_renderer=shader_model_3 materials=%zu techniques=%zu shaders=%zu\n",
+                shaderPath.materials, shaderPath.techniques, shaderPath.shaders);
     rgp.needSortMaterials = 0;
     Material_Sort();
     R_SortWorldSurfaces();
@@ -629,7 +725,9 @@ void Kisak_ProbeWorldFrontEnd(const std::filesystem::path &directory, const char
     json << "{\"schema\":1,\"tool\":\"world_frontend_probe\",\"map\":" << Json(mapName)
          << ",\"world\":" << Json(world.name) << ",\"surfaces\":" << shape.surfaceCount
          << ",\"cells\":" << shape.cellSurfaces.size() << ",\"cull_groups\":" << world.cullGroupCount
-         << ",\"static_models\":" << world.dpvs.smodelCount << ",\"materials_sorted\":" << rgp.materialCount
+         << ",\"static_models\":" << world.dpvs.smodelCount << ",\"renderer\":\"shader_model_3\""
+         << ",\"techniques_checked\":" << shaderPath.techniques << ",\"shaders_checked\":" << shaderPath.shaders
+         << ",\"materials_sorted\":" << rgp.materialCount
          << ",\"distinct_surface_keys\":" << distinctKeys << ",\"stage_ranges\":{";
     for (unsigned stage = 0; stage < wf::kStageCount; ++stage)
         json << (stage ? "," : "") << Json(wf::StageName(stage)) << ":[" << shape.stageRange[stage].begin << ","
