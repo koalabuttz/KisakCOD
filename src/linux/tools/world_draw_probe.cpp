@@ -22,6 +22,7 @@
 #include <gfx_d3d/r_material.h>
 #include <gfx_d3d/r_rendercmds.h>
 #include <gfx_d3d/r_scene.h>
+#include <gfx_d3d/rb_logfile.h>
 #include <gfx_d3d/rb_stats.h>
 #include <linux/d3d9_types.h>
 #include <linux/client/window/sdl_api.h>
@@ -483,6 +484,74 @@ void SayFrame(const char *label, int draw, const FrameResult &frame)
 std::chrono::steady_clock::time_point g_started;
 // KISAK_WORLD_DRAW_SHOW_SECONDS, read with the other arguments before any device work.
 int g_showSeconds = 0;
+
+// KISAK_WORLD_DRAW_DIAG, also read with the arguments. Off by default; it never
+// changes what is checked.
+enum class Diag
+{
+    Off,
+    Describe, // print the D3D9 description of the world's own images
+    Preload,  // the same, then ask the device to make each one resident
+};
+Diag g_diag = Diag::Off;
+
+// One line per image the world itself owns (lightmaps, reflection probes, sky,
+// outdoor): what the device holds for it.
+void DescribeWorldImages(bool preload)
+{
+    unsigned described = 0;
+    unsigned preloaded = 0;
+    auto describe = [&](const char *role, unsigned index, const GfxImage *image) {
+        if (!image)
+            return;
+        IDirect3DBaseTexture9 *texture = image->texture.basemap;
+        const char *name = image->name ? image->name : "";
+        if (!texture)
+        {
+            Say("world_draw_diag_image role=%s index=%u name=\"%s\" texture=none\n", role, index, name);
+            return;
+        }
+        D3DSURFACE_DESC desc{};
+        D3DVOLUME_DESC volume{};
+        HRESULT hr = D3DERR_INVALIDCALL;
+        const D3DRESOURCETYPE type = texture->GetType();
+        if (type == D3DRTYPE_TEXTURE)
+            hr = static_cast<IDirect3DTexture9 *>(texture)->GetLevelDesc(0, &desc);
+        else if (type == D3DRTYPE_CUBETEXTURE)
+            hr = static_cast<IDirect3DCubeTexture9 *>(texture)->GetLevelDesc(0, &desc);
+        else if (type == D3DRTYPE_VOLUMETEXTURE)
+        {
+            hr = static_cast<IDirect3DVolumeTexture9 *>(texture)->GetLevelDesc(0, &volume);
+            desc.Format = volume.Format;
+            desc.Pool = volume.Pool;
+            desc.Usage = volume.Usage;
+            desc.Width = volume.Width;
+            desc.Height = volume.Height;
+        }
+        Say("world_draw_diag_image role=%s index=%u name=\"%s\" type=%d hr=%s format=%u pool=%u usage=%s size=%ux%u "
+            "levels=%lu\n",
+            role, index, name, int(type), Hex(uint32_t(hr)).c_str(), unsigned(desc.Format), unsigned(desc.Pool),
+            Hex(uint32_t(desc.Usage)).c_str(), unsigned(desc.Width), unsigned(desc.Height),
+            static_cast<unsigned long>(texture->GetLevelCount()));
+        ++described;
+        if (preload)
+        {
+            texture->PreLoad();
+            ++preloaded;
+        }
+    };
+    const GfxWorld &world = *rgp.world;
+    for (int i = 0; i < world.lightmapCount; ++i)
+    {
+        describe("lightmap_primary", unsigned(i), world.lightmaps[i].primary);
+        describe("lightmap_secondary", unsigned(i), world.lightmaps[i].secondary);
+    }
+    for (uint32_t i = 0; i < world.reflectionProbeCount; ++i)
+        describe("reflection_probe", i, world.reflectionProbes[i].reflectionImage);
+    describe("sky", 0, world.skyImage);
+    describe("outdoor", 0, world.outdoorImage);
+    Say("world_draw_diag images=%u preloaded=%u\n", described, preloaded);
+}
 } // namespace
 
 // The client's renderer configuration (src/client_mp/cl_main_mp.cpp CL_InitRef:
@@ -540,6 +609,13 @@ void Kisak_StartWorldDraw(const char *mapName, const wf::Layout &loaderLayout)
         Require(end != show && *end == '\0' && value >= 0 && value <= kMaxShowSeconds, "arguments",
                 "KISAK_WORLD_DRAW_SHOW_SECONDS must be a whole number from 0 to " + std::to_string(kMaxShowSeconds));
         g_showSeconds = int(value);
+    }
+    if (const char *diag = std::getenv("KISAK_WORLD_DRAW_DIAG"))
+    {
+        const std::string value = diag;
+        Require(value == "describe" || value == "preload", "arguments",
+                "KISAK_WORLD_DRAW_DIAG must be describe or preload");
+        g_diag = value == "describe" ? Diag::Describe : Diag::Preload;
     }
     // The loader and this probe are compiled with different definitions, and this
     // side sees the D3D9 types through DXVK's headers: both must agree on every
@@ -645,12 +721,29 @@ void Kisak_DrawWorld(const std::filesystem::path &directory, const char *mapName
     Say("world_draw_camera view=B classname=%s eye=%.1f,%.1f,%.1f angles=%.1f,%.1f,%.1f\n", b.classname.c_str(),
         b.eye[0], b.eye[1], b.eye[2], b.angles[0], b.angles[1], b.angles[2]);
 
+    // Diagnostics, off unless asked for. The engine opens its own D3D9 call log
+    // (r_logFile > 0, dx.log in the working directory) only after the first frame
+    // it presents; opening it here records the first frame too.
+    if (g_diag != Diag::Off)
+        DescribeWorldImages(g_diag == Diag::Preload);
+    if (r_logFile && r_logFile->current.integer > 0)
+    {
+        RB_OpenLogFile();
+        Say("world_draw_diag log=dx.log frames=%d\n", r_logFile->current.integer);
+    }
+
     // 3. The frames: view A until it settles, then view B until it settles.
     auto refdef = std::make_unique<refdef_s>();
     auto drawUntilSettled = [&](const Camera &camera, const char *label, std::vector<FrameResult> &frames,
                                 std::vector<uint64_t> &digests) {
         for (int draw = 0; draw < kMaxSettleDraws; ++draw)
         {
+            if (RB_IsLogging())
+            {
+                char marker[96];
+                std::snprintf(marker, sizeof(marker), "===== world_draw_probe view %s draw %d =====\n", label, draw);
+                RB_LogPrint(marker);
+            }
             frames.push_back(DrawView(camera, *refdef));
             digests.push_back(frames.back().stats.digest);
             SayFrame(label, draw, frames.back());
