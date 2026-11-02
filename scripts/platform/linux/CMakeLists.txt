@@ -57,6 +57,8 @@ add_dependencies(KisakCOD-dedi update_build_number)
 include(${SCRIPTS_DIR}/extern/tracy.cmake)
 include(${SCRIPTS_DIR}/platform/linux/asset_export.cmake)
 include(${SCRIPTS_DIR}/platform/linux/native_d3d9.cmake)
+# After the boundary: the probe links two units through kisak_linux_native_d3d9.
+include(${SCRIPTS_DIR}/platform/linux/world_frontend_probe.cmake)
 
 # ---------------------------------------------------------------------------
 # Opt-in native Linux client network core (KISAK_BUILD_LINUX_CLIENT_CORE)

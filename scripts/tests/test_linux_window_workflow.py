@@ -264,6 +264,28 @@ class NativeD3D9BoundaryWorkflowTests(unittest.TestCase):
         self.assertIn('diff <(tail -n +2', cmake)
         self.assertIn("grep -qx 'PASS engine D3D9 layouts'", cmake)
 
+    def test_world_frontend_probe_is_linked_inspected_and_never_run(self):
+        # The offline probe builds on the boundary's configure, after its proofs. It
+        # needs a game install to run, so CI only links it, runs its asset-free
+        # invariants test and checks what the executable depends on.
+        name = 'Build the offline world front-end probe'
+        self.assertLess(self.names.index('Configure and build the opt-in CMake boundary proofs'),
+                        self.names.index(name))
+        build = self.step(name)['run']
+        self.assertIn('-DKISAK_BUILD_WORLD_FRONTEND_PROBE=ON', build)
+        self.assertIn('--target KisakCOD-world-frontend-probe KisakCOD-world-frontend-invariants-test', build)
+        self.assertIn('"$out/KisakCOD-world-frontend-invariants-test"', build)
+        self.assertIn("Class:[[:space:]]+ELF32", build)
+        self.assertIn("Machine:[[:space:]]+Intel 80386", build)
+        self.assertIn('Shared library', build)
+        # Never run: no map, no game path, no output directory for an export, and
+        # no command line that starts with the probe itself.
+        for forbidden in ('KISAK_WORLD_FRONTEND_MAP', 'KISAK_UI_ASSET_EXPORT_DIR', 'fs_basepath'):
+            self.assertNotIn(forbidden, build)
+        for line in build.splitlines():
+            self.assertFalse(line.strip().startswith(('"$probe"', '$probe')), line)
+        self.assertNotIn('KisakCOD-dedi', build)
+
     def test_every_command_block_propagates_failure(self):
         for step in self.job['steps']:
             if 'run' not in step:

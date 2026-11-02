@@ -139,9 +139,9 @@ python3 scripts/tests/run_world_surface_checks.py --config RelWithDebInfo
 python3 scripts/tests/run_world_surface_checks.py --list
 ```
 
-This runner performs no CMake configure and no engine build. It compiles six
+This runner performs no CMake configure and no engine build. It compiles seven
 standalone test translation units directly with `-m32 -std=c++20 -Werror` and runs
-them, then runs the bundle prepare script, for seven checks:
+them, then runs the bundle prepare script, for eight checks:
 
 | Check | Source | Covers |
 | --- | --- | --- |
@@ -150,6 +150,7 @@ them, then runs the bundle prepare script, for seven checks:
 | `world_surface_bundle` | `tests/linux_renderer/world_surface_bundle_test.cpp` | bundle loader, shader framing walk, vertex accessors |
 | `world_surface_oracle` | `tests/linux_renderer/world_surface_oracle_test.cpp` | oracle hashing, weights, sampling, colour and pixel arithmetic, sample selection |
 | `world_lit_bundle` | `tests/linux_renderer/world_lit_bundle_test.cpp` | lit loader refusals: program pair hash and length, widened geometry counts, index walk, colour-map sampler, exact constant set, lightmap layout |
+| `world_frontend_invariants` | `tests/linux_asset_export/world_frontend_invariants_test.cpp` | the rules the offline world front-end probe holds each frame to, and its spawn-point camera scan ([guide](../../docs/linux-world-frontend.md#a-real-map-the-offline-front-end-probe)) |
 | `world_image_capture` | `tests/linux_asset_export/world_image_capture_test.cpp` | capture bounds, name filter, duplicate rule, disabled path |
 | `world_surface_prepare` | `test_world_surface_prepare.py` | the prepare step's trust boundary over archives it writes itself |
 

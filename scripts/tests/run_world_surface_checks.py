@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compile and run the asset-free world surface checks for one configuration.
 
-This runner performs **no CMake configure and no engine build**. It compiles six
+This runner performs **no CMake configure and no engine build**. It compiles seven
 standalone test translation units directly with a 32-bit C++20 compiler and runs
 them, then runs the bundle prepare tests. Everything here works without DXVK, SDL,
 a GPU, a Steam client, credentials, game assets or a network:
@@ -20,6 +20,11 @@ a GPU, a Steam client, credentials, game assets or a network:
     index walk, the colour-map sampler and its dependency, the exact constant set, and
     the captured lightmap's layout. It includes ``world_lit_bundle.h``, which reuses
     the reader in ``world_surface_bundle.h`` and adds no graphics header of its own;
+  * ``tests/linux_asset_export/world_frontend_invariants_test.cpp`` -- the rules the
+    offline world front-end probe holds every frame to (visible cells and surfaces,
+    batch keys and stage ranges, completeness, no duplicates) and the entity-string
+    scan that picks its spawn-point cameras, built against ``src`` for the one
+    header it includes (``src/linux/tools/world_frontend_invariants.h``);
   * ``tests/linux_asset_export/world_image_capture_test.cpp`` -- the image capture's
     bounds, name filter, duplicate rule and disabled path. This one is the only case
     that is not a single translation unit: the capture state lives behind a mutex in
@@ -36,8 +41,8 @@ check that must not need DXVK, SDL or a device. The four renderer tests
 (``world_surface_context``, ``world_surface_bundle``, ``world_surface_oracle`` and
 ``world_lit_bundle``) are asset-free by construction -- they include one header each
 and open no file except temporary bundles they write themselves -- and the image
-capture test compiles its own unit and nothing else from ``src``, so all six are built
-here with an explicit compiler line instead.
+capture test compiles its own unit and nothing else from ``src``, so all seven are
+built here with an explicit compiler line instead.
 
 Configurations are explicit rather than inherited from a build system: ``Debug``
 compiles at ``-O0`` and ``RelWithDebInfo`` at ``-O2``, both with ``-g``. Nothing is
@@ -173,6 +178,15 @@ CASES = (
         "lit bundle loader refusals: program pair, widened geometry, colour map and lightmap",
         "tests/linux_renderer/world_lit_bundle_test.cpp",
         ("tests/linux_renderer",),
+    ),
+    # Header only, like the inventory case: the rules the offline world front-end
+    # probe holds each frame to, and the scan that turns a map's entity string into
+    # spawn-point cameras. No engine header, no asset tree, no zone.
+    Case(
+        "world_frontend_invariants",
+        "world front-end frame rules and the spawn-point camera scan",
+        "tests/linux_asset_export/world_frontend_invariants_test.cpp",
+        ("src",),
     ),
     # The one case with a second translation unit. The capture state, its arena and
     # its mutex live in the unit beside its header, so the test cannot see them

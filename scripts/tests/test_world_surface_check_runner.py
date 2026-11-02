@@ -22,9 +22,9 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / "scripts" / "tests" / "run_world_surface_checks.py"
 
-# The smallest tree the compiled checks need: the six test headers, the six test
-# sources, the one src header the inventory test includes, and the one src unit the
-# capture test links against.
+# The smallest tree the compiled checks need: the test headers, the seven test
+# sources, the src headers the inventory, front-end invariants and capture tests
+# include, and the one src unit the capture test links against.
 TREE_FILES = (
     "tests/linux_asset_export/world_surface_inventory_test.cpp",
     "tests/linux_renderer/world_surface_context_test.cpp",
@@ -36,6 +36,8 @@ TREE_FILES = (
     "tests/linux_renderer/world_lit_bundle_test.cpp",
     "tests/linux_renderer/world_lit_bundle.h",
     "src/linux/tools/world_surface_export.h",
+    "tests/linux_asset_export/world_frontend_invariants_test.cpp",
+    "src/linux/tools/world_frontend_invariants.h",
     "tests/linux_asset_export/world_image_capture_test.cpp",
     "src/linux/tools/world_image_capture.h",
     "src/linux/tools/world_image_capture.cpp",
@@ -48,6 +50,7 @@ CASE_NAMES = [
     "world_surface_bundle",
     "world_surface_oracle",
     "world_lit_bundle",
+    "world_frontend_invariants",
     "world_image_capture",
 ]
 
@@ -119,7 +122,7 @@ class RunnerPlanTests(unittest.TestCase):
         capture = cases["world_image_capture"]
         self.assertEqual(capture.extra_sources, ("src/linux/tools/world_image_capture.cpp",))
         # Nothing else in the table gained a second unit, so the compile lines of the
-        # five single-unit renderer checks are unchanged.
+        # six single-unit checks are unchanged.
         for name in CASE_NAMES[:-1]:
             self.assertEqual(cases[name].extra_sources, (), name)
         # The capture unit is one file from src/linux/tools. An engine source here
@@ -137,6 +140,8 @@ class RunnerPlanTests(unittest.TestCase):
         self.assertEqual(cases["world_surface_inventory"].include_dirs, ("src",))
         # The capture test includes <linux/tools/world_image_capture.h> from src too.
         self.assertEqual(cases["world_image_capture"].include_dirs, ("src",))
+        # The front-end invariants test includes <linux/tools/world_frontend_invariants.h>.
+        self.assertEqual(cases["world_frontend_invariants"].include_dirs, ("src",))
         # The renderer tests include their own header beside them.
         for name in ("world_surface_context", "world_surface_bundle", "world_surface_oracle",
                      "world_lit_bundle"):
@@ -222,8 +227,8 @@ class RunnerPlanTests(unittest.TestCase):
         work = Path("/tmp/plan-work")
         checks = self.runner.plan_checks(
             Options(), work, ROOT, "/usr/bin/python3", "g++", set(self.runner.KNOWN_NAMES))
-        # Six compiled cases plus the prepare script: every name in the table, in order.
-        self.assertEqual(len(checks), 7)
+        # Seven compiled cases plus the prepare script: every name in the table, in order.
+        self.assertEqual(len(checks), 8)
         self.assertEqual([check.name for check in checks], [*CASE_NAMES, self.runner.PREPARE_NAME])
         for check in checks[:-1]:
             self.assertEqual(len(check.commands), 2, check.name)
