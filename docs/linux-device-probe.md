@@ -6,7 +6,9 @@ the [native D3D9 boundary](linux-native-d3d9.md), with DXVK Native 2.7.1 as the
 D3D9 implementation and an SDL3 window. It is the device step of the static map
 view milestone ([order of work](linux-world-frontend.md#order-of-work-toward-one-static-map-view)).
 It reads no game data, writes nothing, and keeps no image: the one read-back is
-compared in memory.
+compared in memory. DXVK Native would write `KisakCOD-device-probe_d3d9.log`
+into the working directory, so the probe sets `DXVK_LOG_PATH=none` unless the
+caller set it; DXVK's lines still go to stderr.
 
 ## What runs
 
@@ -15,7 +17,7 @@ then checks on what it produced (`src/linux/tools/device_probe.cpp`):
 
 | Stage | Code | Fails closed when |
 | --- | --- | --- |
-| `environment` | the probe; then `SDL_InitSubSystem(SDL_INIT_VIDEO)` | `DXVK_WSI_DRIVER` is set to anything but `SDL3` (an unset variable is set to `SDL3`; any other WSI would misread every `HWND`), or SDL video does not start (no display). Video is started here because DXVK would otherwise start it inside `Direct3DCreate9` and abort (see Limits) |
+| `environment` | the probe (`DXVK_WSI_DRIVER`, `DXVK_LOG_PATH`); then `SDL_InitSubSystem(SDL_INIT_VIDEO)` | `DXVK_WSI_DRIVER` is set to anything but `SDL3` (an unset variable is set to `SDL3`; any other WSI would misread every `HWND`), or SDL video does not start (no display). Video is started here because DXVK would otherwise start it inside `Direct3DCreate9` and abort (see Limits) |
 | engine runtime | `Sys_InitMainThread`, `SL_Init`, `Dvar_Init`, `sys_smp_allowed` as `Com_InitDvars` registers it, `R_RegisterDvars`; then `r_fullscreen` off and `r_customMode` set to the requested size, latched values made current | an engine assertion or `Com_Error` |
 | `direct3d` | `R_PreCreateWindow`: `Direct3DCreate9`, `R_ChooseAdapter` (monitor selection), `R_StoreDirect3DCaps` (`R_PickRenderer`, shadow-map formats), `R_EnumDisplayModes` | no D3D9 interface; no display mode of at least 640x480 (the engine's own check) |
 | `adapter`, `renderer` | `GetAdapterIdentifier`, `GetDeviceCaps` | `R_PickRenderer` did not choose the shader model 3 path. The game's zones carry shader model 3 shaders only (checked on mp_crash by the [front-end probe](linux-world-frontend.md#a-real-map-the-offline-front-end-probe)) |
@@ -140,8 +142,54 @@ about a device.
 
 ## Evidence
 
-Local only, in the cloud sandbox, 2026-11-02, on the branch that adds the probe
-(based on 91116b8). Not CI evidence, and not hardware evidence: there is no GPU.
+Both runs are local, not CI evidence. CI only shows that the probe builds and
+fails closed.
+
+### A GPU: David's laptop, 2026-11-02
+
+Commit 5c691bc, on a GNOME Wayland session.
+
+| | |
+| --- | --- |
+| Machine | Debian 13; Intel Processor U300 with Raptor Lake-P graphics (Vulkan "Intel(R) Graphics (RPL-U)", 8086:a7a9) |
+| Graphics stack | Mesa ANV 25.0.7; DXVK Native 2.7.1 i386 (built with GCC 14.2.0); SDL 3.2.10 i386 |
+| Compiler | clang 19.1.7 |
+
+- **All four runs pass.** RelWithDebInfo and Debug each ran on Wayland
+  (`video_driver=wayland`) and on XWayland (`video_driver=x11`), 120 frames
+  each. All four exit 0 with identical probe lines apart from timing.
+- **DXVK picked the real GPU.** It created the device on the Intel GPU and
+  skipped llvmpipe as a software driver. The adapter line shows DXVK's AMD
+  stand-in identity (it logs "Hiding actual GPU"), not the hardware.
+- **Engine path:**
+  - shader model 3, with pixel and vertex shader 3.0;
+  - maximum texture 16384, 8 texture units, hardware shadow map with D24S8;
+  - 19 display modes on Wayland and 28 on XWayland;
+  - the adapter's native size is 1280x800 on Wayland (the scaled desktop) and
+    2560x1600 on XWayland.
+- **Device and frames:**
+  - device created, cooperative level `D3D_OK`;
+  - read-back 640x480 A8R8G8B8 with 0 of 307,200 pixels wrong;
+  - 120 frames presented in 2.40 to 2.47 s, on a FIFO B8G8R8A8 swap chain;
+  - nothing left open at shutdown.
+- **It fails closed.** Both checks exit 1:
+  - `DXVK_WSI_DRIVER=SDL2` stops at `stage=environment`;
+  - an 8000x6000 request stops at `stage=window`, because the engine's own
+    `R_SetWndParms` fell back to 640x480.
+- **Builds are clean.** The window test passes (54 checks) in both builds. The
+  probe's own sources and the test build with no warnings under clang 19 with
+  `-Wall -Wextra -Werror`.
+- **What the run caught.** This run found two problems, both fixed since:
+  - the window test did not build with clang 19 (fixed in 5c691bc, the commit
+    the run used);
+  - DXVK wrote its log file into the working directory. The probe now sets
+    `DXVK_LOG_PATH=none` by default. That change came after this run and was
+    checked in the sandbox.
+
+### Software Vulkan: the cloud sandbox, 2026-11-02
+
+This run used the branch that adds the probe (based on 91116b8). It is not
+hardware evidence.
 
 - Ubuntu 24.04, clang 18.1.3. DXVK Native 2.7.1 built for i386 from c3dd74be
   (d3d9 only, `-Dnative_sdl3=enabled`); SDL 3.2.10 i386 built with X11; Xvfb
@@ -180,5 +228,5 @@ Local only, in the cloud sandbox, 2026-11-02, on the branch that adds the probe
   dvars' defaults (no multisampling) and the first adapter are exercised.
 - Device loss, reset, resize and fullscreen are not exercised. No resource is
   created and nothing is drawn but clears.
-- On hardware it has not run yet; that evidence belongs on a developer machine
-  and is recorded here when it exists.
+- Hardware evidence is one integrated Intel GPU on Mesa ANV. Other vendors and
+  drivers have not run it.

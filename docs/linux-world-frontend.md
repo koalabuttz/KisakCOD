@@ -330,7 +330,7 @@ census mode with the boundary is the way to ratchet those.
    [device probe](linux-device-probe.md) runs `r_init.cpp`'s own
    `R_PreCreateWindow`, `R_SetWndParms`, `R_CreateWindow` and `R_CreateDevice`
    from an SDL3 window, checks the shader model 3 path was chosen, and clears,
-   reads back and presents. *Next:* resource creation for the world's vertex and
+   reads back and presents; it passes on a developer machine's Intel GPU. *Next:* resource creation for the world's vertex and
    index buffers, images and the techniques the world's materials use; refuse
    any technique or vertex declaration not yet supported, by name.
 4. Draw one fixed view through `RB_Draw3D`, `R_DrawLit` and `R_DrawBspDrawSurfs`

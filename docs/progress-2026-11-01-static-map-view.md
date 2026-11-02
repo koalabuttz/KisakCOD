@@ -94,15 +94,16 @@ SDL3 in `src/linux/client/window/win32_window_sdl3.cpp`, with an asset-free test
 on SDL's dummy driver. CI builds both in Debug and RelWithDebInfo against a
 stand-in D3D9 library and checks the probe fails closed.
 
-Verified locally in the sandbox only (DXVK 2.7.1 i386 on Mesa lavapipe, a
-software Vulkan driver, under Xvfb): the probe passes in Debug and
-RelWithDebInfo with 0 mismatched read-back pixels and 60 frames presented. No hardware run yet. Details and limits:
-[linux-device-probe.md](linux-device-probe.md).
+Verified locally, not in CI. On David's laptop GPU (Intel Raptor Lake-P, Mesa
+ANV 25.0.7, DXVK 2.7.1 i386), the probe passes in Debug and RelWithDebInfo on
+both Wayland and XWayland: shader model 3 path, 0 of 307,200 read-back pixels
+wrong, 120 frames presented. It also passes in the sandbox on Mesa lavapipe
+under Xvfb. Details and limits: [linux-device-probe.md](linux-device-probe.md).
 
 ## Not done
 
-- No resource creation, no draw, no GPU evidence. The device exists only in the
-  device probe, which loads no zone; the real `GfxWorld` is walked offline only.
+- No resource creation and no draw. The device exists only in the device
+  probe, which loads no zone; the real `GfxWorld` is walked offline only.
 - `R_GenerateSortedDrawSurfs` is not called as a whole: its lighting, fog, sun,
   shadow and entity stages need world data the synthetic world lacks.
 - The census compiles with the D3D9 stand-in only.
@@ -110,7 +111,7 @@ RelWithDebInfo with 0 mismatched read-back pixels and 60 frames presented. No ha
 ## Next
 
 Follow the order in [linux-world-frontend.md](linux-world-frontend.md#order-of-work-toward-one-static-map-view):
-the device probe on a developer machine's GPU, then the world's resources
-created on that device (vertex and index buffers, images, the techniques its
-materials use), one fixed-view draw behind the free-camera `SceneRenderer`
-interface, and GPU evidence on a developer machine.
+the world's resources created on the probe's device (vertex and index buffers,
+images, the techniques its materials use), one fixed-view draw behind the
+free-camera `SceneRenderer` interface, and GPU evidence of that draw on a
+developer machine.

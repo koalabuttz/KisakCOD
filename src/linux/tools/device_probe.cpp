@@ -19,7 +19,8 @@
 // code that is not linked yet, and the probe says so instead of pretending.
 //
 // No game file is read, nothing is written, and no image leaves the process:
-// the read-back is compared in memory. Output is key=value lines on stdout; the
+// the read-back is compared in memory, and DXVK's log file is switched off
+// unless DXVK_LOG_PATH asks for one (DXVK Native still logs to stderr). Output is key=value lines on stdout; the
 // engine's own messages are printed as they come. Exit status 0 means every
 // check passed, 1 a failed stage (the last line names it), 2 a usage error.
 
@@ -131,6 +132,22 @@ void SelectWsi()
         Fail("environment", std::string("DXVK_WSI_DRIVER is '") + current +
                                 "'; the engine's windows are SDL3 windows, so it must be SDL3 or unset");
     std::printf("dxvk_wsi_driver=SDL3\n");
+}
+
+// DXVK Native writes <exe>_d3d9.log into the working directory unless
+// DXVK_LOG_PATH says otherwise, and logs every line to stderr as well. The
+// probe writes nothing, so it turns the file off unless the caller chose a path.
+void KeepDxvkLogOnStderr()
+{
+    const char *const current = std::getenv("DXVK_LOG_PATH");
+    if (current)
+    {
+        std::printf("dxvk_log_path=%s\n", current);
+        return;
+    }
+    if (setenv("DXVK_LOG_PATH", "none", 1) != 0)
+        Fail("environment", "cannot set DXVK_LOG_PATH=none");
+    std::printf("dxvk_log_path=none (set by the probe; DXVK logs to stderr)\n");
 }
 
 // DXVK's SDL3 WSI starts SDL video inside Direct3DCreate9 and throws when it
@@ -325,6 +342,7 @@ void ReleaseDevice(GfxWindowParms &window, bool failOnLeak)
 void Run(const Options &options)
 {
     SelectWsi();
+    KeepDxvkLogOnStderr();
     StartVideo();
     StartEngineRuntime(options);
 
