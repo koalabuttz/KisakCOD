@@ -261,3 +261,68 @@ This is not hardware evidence and not a draw. The sandbox has no game data.
   `Initializing render targets...`. The engine then stopped with its own fatal
   error, `Could not find zone .../code_post_gfx_mp.ff`, exit 1.
 - **Stand-in library.** The fail-closed script passes 16 of 16 checks.
+
+### A GPU and mp_crash: David's laptop, 2026-11-02
+
+Commit ea9d953, local evidence, not CI.
+
+| | |
+| --- | --- |
+| Machine | Debian 13, GNOME Wayland (`video_driver=wayland`); Intel Processor U300 with Raptor Lake-P graphics (Vulkan "Intel(R) Graphics (RPL-U)") |
+| Graphics stack | Mesa ANV 25.0.7; DXVK Native 2.7.1 i386; SDL 3.2.10 i386 |
+| Compiler | clang 19.1.7; no warnings from `src/linux/` in either build |
+| Data | the owner's installed game, read through symlinks; the game folder listing was identical before and after every run |
+
+**Both runs pass.** RelWithDebInfo and Debug each exit 0 with
+`world_draw_probe=passed problems=0`, in 5.1 s and 7.1 s of wall time. Every
+frame is bit-identical between the two builds, and the two reports are equal
+once timings are removed. No line has `ERROR`, `FATAL`, `ASSERT` or
+`Couldn't`, and DXVK printed no warning or error.
+
+- **Start.** `R_Init` created the device on the Intel GPU (DXVK reports its AMD
+  stand-in identity as the adapter name), shader model 3, 640x480 windowed, in
+  0.65 s. The four graphics zones were loaded 2.6 s after the start, and
+  mp_crash 1.3 s later.
+- **Cameras.** A is `mp_global_intermission` at (336, 60, 260), yaw 65. B is the
+  first `mp_tdm_spawn`, at (-156, 15, 222), yaw 0.
+- **Frames.** Each view's last draw:
+
+  | View | Draws | Colours | Dominant colour | Mean luma | Detail tiles | Lit / decal / emissive surfaces | World draw calls | World triangles |
+  | --- | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: |
+  | A | 9 | 63,434 | 0.3% | 122.0 ± 44.6 | 16 of 16 | 262 / 7 / 0 | 399 | 43,788 |
+  | B | 6 | 49,968 | 0.2% | 117.3 ± 38.8 | 16 of 16 | 276 / 3 / 0 | 387 | 36,864 |
+
+  A's settled digest is `7e8468e89644e49f` and B's `5162ef64555f566c`. The
+  first draw of A took 0.23 s and later draws about 0.06 s (0.1 s in Debug).
+- **Settling.** The world draw calls and triangles are the same on every draw
+  of a view. The static model cache took 102, 21, 52, 86, 148, 256, 94, 55 and
+  0 surfaces over A's nine draws, and 92, 52, 114, 56, 3 and 0 over B's. Draws 4
+  and 5 of A, and 0 and 1 of B, had the same pixels while the cache was still
+  filling, which is why the settle rule counts the cache too. The lit surface
+  count moves by a few (260 to 264 for A) as static models move between their
+  rigid and cached forms.
+- **The first draw of A is dark.** It has mean luma 28.5 against 122.0 for every
+  later draw, 21,646 colours and one colour on 5.2% of the frame, with the same
+  draw calls and triangles. It is not the sun shadow maps or the static model
+  cache (below), and B's first draw, the second view of the process, is not
+  dark. Its cause is not known yet; it passes the frame rules, but no rule is
+  checked on it.
+- **On screen.** At 4145c00 (the same draw, with the earlier settle rule), a run
+  with `KISAK_WORLD_DRAW_SHOW_SECONDS=20` kept view A on the laptop's screen for
+  20 s: 350 frames, about 17.5 a second including the read-back of each. No
+  image was saved.
+
+Two diagnostic runs (RelWithDebInfo, one extra dvar each) both passed:
+
+| Run | First draw of A | A settles after | B settles after | What changed |
+| --- | --- | ---: | ---: | --- |
+| `+set sm_enable 0` | luma 29.2, still dark | 9 draws | 5 draws | A 276 world draw calls and 26,031 triangles, B 280 and 23,982: the shadow map passes are gone |
+| `+set r_smc_enable 0` | luma 28.3, still dark | 3 draws | 2 draws | no cache surfaces on any draw, and the lit surface counts stay put (A 259, B 265) |
+
+So the draws after the first change only while the static model cache fills.
+
+The fixes it took to get here, each found on this machine: the probe now
+configures the renderer with `R_ConfigureRenderer` as the client's `CL_InitRef`
+does (without it `R_Init` stopped on the model lighting atlas's size), and
+loads the collision map as `CL_CM_LoadMap` does before the first scene (static
+model lighting traces against it).

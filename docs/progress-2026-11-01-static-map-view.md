@@ -153,14 +153,26 @@ model cache check, `Load_PicmipWater`) moved from `server_assets.cpp` to
 `server_draw_counterparts.cpp`, unchanged, so the draw probe can link their
 owners instead.
 
+Two things the client does before its first frame turned out to be needed, and
+the probe now does them the client's way: `R_ConfigureRenderer` (as
+`CL_InitRef`) and the collision map load (as `CL_CM_LoadMap`).
+
 CI builds the probe against the stand-in D3D9 library and checks it fails
-closed. Details, limits and evidence:
+closed. Verified locally, not in CI: on David's laptop GPU (Intel Raptor Lake-P,
+Mesa ANV 25.0.7, DXVK 2.7.1 i386) mp_crash passes in Debug and RelWithDebInfo
+with no problems and bit-identical frames. The intermission view settles after
+9 draws at 63,434 colours, 399 world draw calls and 43,788 triangles, and a
+spawn view after 6. The first draw after the map load is dark, for a reason not
+yet known. Details, limits and evidence:
 [linux-world-draw-probe.md](linux-world-draw-probe.md).
 
 ## Not done
 
 - No draw outside the world draw probe, and no free camera: the probe draws
   fixed spawn-point views at scene time 0 with no effects, entities or 2D.
+- The dark first draw after a map load is not explained.
+- The frame rules say a frame looks like a drawn view; no pixel is compared with
+  an independent prediction or the retail game yet.
 - `R_GenerateSortedDrawSurfs` is not called as a whole: its lighting, fog, sun,
   shadow and entity stages need world data the synthetic world lacks.
 - The census compiles with the D3D9 stand-in only.
@@ -168,6 +180,7 @@ closed. Details, limits and evidence:
 ## Next
 
 Follow the order in [linux-world-frontend.md](linux-world-frontend.md#order-of-work-toward-one-static-map-view):
-one fixed-view draw behind the free-camera `SceneRenderer` interface (which
-needs `R_InitHardware`'s later steps: render targets, initial state, scene and
-`R_InitSystems`), and GPU evidence of that draw on a developer machine.
+put the world draw probe's start, map load and frame behind the free-camera
+`SceneRenderer` interface, then GPU evidence of selected pixels against
+independent predictions. Explaining the dark first draw belongs with that
+evidence.

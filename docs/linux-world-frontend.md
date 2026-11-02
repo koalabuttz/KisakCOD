@@ -342,7 +342,14 @@ census mode with the boundary is the way to ratchet those.
 4. Draw one fixed view through `RB_Draw3D`, `R_DrawLit` and `R_DrawBspDrawSurfs`
    and present it, behind the free-camera frame owner's `SceneRenderer`
    interface (`LoadMap`, `DrawFrame` returning false is terminal). The adapter
-   zeroes its `refdef_s` and uses local client 0.
+   zeroes its `refdef_s` and uses local client 0. *The draw done, outside the
+   interface:* the [world draw probe](linux-world-draw-probe.md) starts the
+   renderer with `R_Init`, loads a map as the client does, draws spawn-point
+   views through `R_RenderScene` and the backend, and checks each frame it
+   reads back. mp_crash passes on a developer machine's Intel GPU in Debug and
+   RelWithDebInfo
+   ([evidence](linux-world-draw-probe.md#a-gpu-and-mp_crash-davids-laptop-2026-11-02)).
+   The `SceneRenderer` adapter is next.
 5. GPU evidence on a real machine, accepted the way the standalone lit and unlit
    replays are (selected pixels against independent predictions, plus controls),
    stated per device and map.
