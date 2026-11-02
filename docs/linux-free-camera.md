@@ -113,9 +113,14 @@ Points for that adapter, from the probe as merged:
 - The probe draws at `vidConfig.sceneWidth/Height`. The adapter's `Resize` should
   leave the scene extent equal to the extent it was given, so the view rectangle
   the owner passes matches the renderer's scene.
-- The first draw after a map load is currently dark and a view takes a few draws
-  before the static model cache settles. The owner draws every frame anyway;
-  acceptance below must compare settled frames, not frame one.
+- A view takes a few draws before the static model cache settles. The owner
+  draws every frame anyway; acceptance below must compare settled frames, not
+  frame one.
+- The renderer must present one frame without a world after `R_Init` and after
+  any device reset before it draws a world, or that world frame's batched
+  surfaces are drawn from no index buffer
+  ([why](linux-world-draw-probe.md#the-first-frame)). The probe does this with an
+  empty frame; the adapter's `LoadMap`, `Resize` and `ResetDevice` must keep it.
 
 `FillRefdef` writes only the camera's fields (rectangle, both half-FOV tangents,
 origin, axis, `zNear`, `time`) and is a template, so this layer never includes a
