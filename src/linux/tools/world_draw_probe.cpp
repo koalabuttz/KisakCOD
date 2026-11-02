@@ -22,7 +22,9 @@
 #include <gfx_d3d/r_material.h>
 #include <gfx_d3d/r_rendercmds.h>
 #include <gfx_d3d/r_scene.h>
+#include <gfx_d3d/r_state.h>
 #include <gfx_d3d/rb_logfile.h>
+#include <gfx_d3d/rb_state.h>
 #include <gfx_d3d/rb_stats.h>
 #include <linux/d3d9_types.h>
 #include <linux/client/window/sdl_api.h>
@@ -51,6 +53,8 @@
 
 // The zone table (src/database/db_registry.cpp). Read only.
 extern int32_t g_zoneCount;
+// src/gfx_d3d/r_state_utils.cpp; no header declares it. Used only by KISAK_WORLD_DRAW_DIAG.
+void __cdecl R_HW_ForceSamplerState(IDirect3DDevice9 *device, uint32_t samplerIndex, uint32_t samplerState);
 
 namespace
 {
@@ -485,15 +489,36 @@ std::chrono::steady_clock::time_point g_started;
 // KISAK_WORLD_DRAW_SHOW_SECONDS, read with the other arguments before any device work.
 int g_showSeconds = 0;
 
-// KISAK_WORLD_DRAW_DIAG, also read with the arguments. Off by default; it never
-// changes what is checked.
-enum class Diag
+// KISAK_WORLD_DRAW_DIAG, also read with the arguments: a comma list of the
+// diagnostics below. All are off by default, and none changes what is checked.
+struct DiagOptions
 {
-    Off,
-    Describe, // print the D3D9 description of the world's own images
-    Preload,  // the same, then ask the device to make each one resident
+    bool describe = false; // the D3D9 description of the world's own images
+    bool preload = false;  // the same, then ask the device to make each one resident
+    bool texptr = false;   // whether each world image and the world's own copy of its texture agree
+    bool state = false;    // before draws 0 and 1 of each view, the device state the engine's cache does not match
+    bool resync = false;   // the same, and leave the cache's values set on the device
+    bool warm = false;     // draw view A's first frame with r_pretess off
 };
-Diag g_diag = Diag::Off;
+DiagOptions g_diag;
+constexpr const char *kDiagNames = "describe, preload, texptr, state, resync and warm";
+
+bool *DiagFlag(const std::string &name)
+{
+    if (name == "describe")
+        return &g_diag.describe;
+    if (name == "preload")
+        return &g_diag.preload;
+    if (name == "texptr")
+        return &g_diag.texptr;
+    if (name == "state")
+        return &g_diag.state;
+    if (name == "resync")
+        return &g_diag.resync;
+    if (name == "warm")
+        return &g_diag.warm;
+    return nullptr;
+}
 
 // One line per image the world itself owns (lightmaps, reflection probes, sky,
 // outdoor): what the device holds for it.
@@ -551,6 +576,230 @@ void DescribeWorldImages(bool preload)
     describe("sky", 0, world.skyImage);
     describe("outdoor", 0, world.outdoorImage);
     Say("world_draw_diag images=%u preloaded=%u\n", described, preloaded);
+}
+
+// The two ways the backend binds a world texture: the pre-tessellated lit path
+// binds the image's own texture (R_SetLightmap, R_SetReflectionProbe), the other
+// lit path binds the copy R_LoadWorld made of it (lightmapPrimaryTextures and the
+// like). One line per image: whether the two still name the same texture.
+void CompareWorldTextureCopies()
+{
+    const GfxWorld &world = *rgp.world;
+    unsigned compared = 0;
+    unsigned differ = 0;
+    auto compare = [&](const char *role, unsigned index, const GfxImage *image, const GfxTexture *copy) {
+        const void *own = image ? static_cast<const void *>(image->texture.basemap) : nullptr;
+        const void *copied = copy ? static_cast<const void *>(copy->basemap) : nullptr;
+        const bool same = own == copied;
+        Say("world_draw_diag_texptr role=%s index=%u name=\"%s\" same=%s image=%p copy=%p\n", role, index,
+            image && image->name ? image->name : "", same ? "yes" : "no", own, copied);
+        ++compared;
+        differ += same ? 0 : 1;
+    };
+    for (int i = 0; i < world.lightmapCount; ++i)
+    {
+        compare("lightmap_primary", unsigned(i), world.lightmaps[i].primary,
+                world.lightmapPrimaryTextures ? &world.lightmapPrimaryTextures[i] : nullptr);
+        compare("lightmap_secondary", unsigned(i), world.lightmaps[i].secondary,
+                world.lightmapSecondaryTextures ? &world.lightmapSecondaryTextures[i] : nullptr);
+    }
+    for (uint32_t i = 0; i < world.reflectionProbeCount; ++i)
+        compare("reflection_probe", i, world.reflectionProbes[i].reflectionImage,
+                world.reflectionProbeTextures ? &world.reflectionProbeTextures[i] : nullptr);
+    Say("world_draw_diag texptr compared=%u differ=%u\n", compared, differ);
+}
+
+// ---- device state against the engine's state cache ---------------------------
+//
+// The backend sets a render state, sampler state or texture only when the value
+// it wants differs from the one its cache (gfxCmdBufState) says the device holds.
+// If the device holds something else, the backend never corrects it. This reads
+// what the device holds, sets every value the cache describes, reads again, and
+// prints each difference. Unless resync is asked for, it then puts the device's
+// own values back, so the frame draws as it would have.
+
+constexpr DWORD kLastRenderState = D3DRS_BLENDOPALPHA;
+constexpr DWORD kLastSamplerState = D3DSAMP_DMAPOFFSET;
+constexpr DWORD kSamplerCount = 16;
+
+struct DeviceSnapshot
+{
+    DWORD render[kLastRenderState + 1]{};
+    DWORD sampler[kSamplerCount][kLastSamplerState + 1]{};
+    IDirect3DBaseTexture9 *texture[kSamplerCount]{};
+    D3DVIEWPORT9 viewport{};
+
+    explicit DeviceSnapshot(IDirect3DDevice9 *device)
+    {
+        for (DWORD state = D3DRS_ZENABLE; state <= kLastRenderState; ++state)
+            device->GetRenderState(D3DRENDERSTATETYPE(state), &render[state]);
+        for (DWORD index = 0; index < kSamplerCount; ++index)
+        {
+            for (DWORD type = D3DSAMP_ADDRESSU; type <= kLastSamplerState; ++type)
+                device->GetSamplerState(index, D3DSAMPLERSTATETYPE(type), &sampler[index][type]);
+            device->GetTexture(index, &texture[index]);
+        }
+        device->GetViewport(&viewport);
+    }
+    DeviceSnapshot(const DeviceSnapshot &) = delete;
+    DeviceSnapshot &operator=(const DeviceSnapshot &) = delete;
+    ~DeviceSnapshot()
+    {
+        for (IDirect3DBaseTexture9 *held : texture)
+            if (held)
+                held->Release();
+    }
+};
+
+const char *RenderStateName(DWORD state)
+{
+    switch (state)
+    {
+    case D3DRS_ZENABLE: return "ZENABLE";
+    case D3DRS_FILLMODE: return "FILLMODE";
+    case D3DRS_ZWRITEENABLE: return "ZWRITEENABLE";
+    case D3DRS_ALPHATESTENABLE: return "ALPHATESTENABLE";
+    case D3DRS_SRCBLEND: return "SRCBLEND";
+    case D3DRS_DESTBLEND: return "DESTBLEND";
+    case D3DRS_CULLMODE: return "CULLMODE";
+    case D3DRS_ZFUNC: return "ZFUNC";
+    case D3DRS_ALPHAREF: return "ALPHAREF";
+    case D3DRS_ALPHAFUNC: return "ALPHAFUNC";
+    case D3DRS_ALPHABLENDENABLE: return "ALPHABLENDENABLE";
+    case D3DRS_STENCILENABLE: return "STENCILENABLE";
+    case D3DRS_STENCILFAIL: return "STENCILFAIL";
+    case D3DRS_STENCILZFAIL: return "STENCILZFAIL";
+    case D3DRS_STENCILPASS: return "STENCILPASS";
+    case D3DRS_STENCILFUNC: return "STENCILFUNC";
+    case D3DRS_COLORWRITEENABLE: return "COLORWRITEENABLE";
+    case D3DRS_BLENDOP: return "BLENDOP";
+    case D3DRS_SLOPESCALEDEPTHBIAS: return "SLOPESCALEDEPTHBIAS";
+    case D3DRS_TWOSIDEDSTENCILMODE: return "TWOSIDEDSTENCILMODE";
+    case D3DRS_CCW_STENCILFAIL: return "CCW_STENCILFAIL";
+    case D3DRS_CCW_STENCILZFAIL: return "CCW_STENCILZFAIL";
+    case D3DRS_CCW_STENCILPASS: return "CCW_STENCILPASS";
+    case D3DRS_CCW_STENCILFUNC: return "CCW_STENCILFUNC";
+    case D3DRS_DEPTHBIAS: return "DEPTHBIAS";
+    case D3DRS_SEPARATEALPHABLENDENABLE: return "SEPARATEALPHABLENDENABLE";
+    case D3DRS_SRCBLENDALPHA: return "SRCBLENDALPHA";
+    case D3DRS_DESTBLENDALPHA: return "DESTBLENDALPHA";
+    case D3DRS_BLENDOPALPHA: return "BLENDOPALPHA";
+    default: return "other";
+    }
+}
+
+// The name of the image whose texture this is, for the report.
+std::string TextureName(IDirect3DBaseTexture9 *texture)
+{
+    if (!texture)
+        return "none";
+    auto named = [&](const GfxImage *image) {
+        return image && image->texture.basemap == texture;
+    };
+    Collected<GfxImage> images;
+    DB_EnumXAssets(ASSET_TYPE_IMAGE, Collect<GfxImage>, &images, true);
+    for (const GfxImage *image : images.items)
+        if (named(image))
+            return image->name ? image->name : "unnamed";
+    for (const GfxImage &image : g_imageProgs)
+        if (named(&image))
+            return image.name ? image.name : "unnamed";
+    for (const GfxRenderTarget &target : gfxRenderTargets)
+        if (named(target.image))
+            return target.image->name ? target.image->name : "unnamed";
+    char pointer[32];
+    std::snprintf(pointer, sizeof(pointer), "unknown(%p)", static_cast<void *>(texture));
+    return pointer;
+}
+
+// Every value gfxCmdBufState describes, set on the device: R_SetCompleteState's
+// render states (without its assert that alpha testing is off, which holds only
+// at start-up), each sampler's filter and address modes, each texture the cache
+// names (a sampler it holds no texture for is left alone: the backend binds one
+// before it draws), and the viewport.
+void ApplyEngineStateCache(IDirect3DDevice9 *device)
+{
+    const GfxCmdBufState &state = gfxCmdBufState;
+    const uint32_t bits0 = state.activeStateBits[0];
+    const uint32_t bits1 = state.activeStateBits[1];
+    R_HW_SetColorMask(device, bits0);
+    R_HW_SetAlphaTestEnable(device, int16_t(bits0));
+    R_HW_SetCullFace(device, int16_t(bits0));
+    R_HW_SetPolygonMode(device, int(bits0));
+    R_ForceSetBlendState(device, bits0);
+    R_HW_SetDepthWriteEnable(device, char(bits1));
+    R_HW_SetDepthTestEnable(device, char(bits1));
+    R_HW_SetDepthTestFunction(device, char(bits1));
+    R_ForceSetPolygonOffset(device, char(bits1));
+    R_ForceSetStencilState(device, bits1);
+    for (DWORD index = 0; index < kSamplerCount; ++index)
+    {
+        R_HW_ForceSamplerState(device, index, state.samplerState[index]);
+        if (state.samplerTexture[index])
+            device->SetTexture(index, state.samplerTexture[index]->basemap);
+    }
+    if (state.viewport.width > 0 && state.viewport.height > 0)
+        R_HW_SetViewport(device, &state.viewport, state.depthRangeNear, state.depthRangeFar);
+}
+
+void CheckEngineStateCache(const char *label, int draw, bool resync)
+{
+    IDirect3DDevice9 *device = dx.device;
+    const DeviceSnapshot held(device);
+    ApplyEngineStateCache(device);
+    const DeviceSnapshot wanted(device);
+    unsigned differences = 0;
+    for (DWORD state = D3DRS_ZENABLE; state <= kLastRenderState; ++state)
+    {
+        if (held.render[state] == wanted.render[state])
+            continue;
+        ++differences;
+        Say("world_draw_diag_state view=%s draw=%d render_state=%lu name=%s device=%s engine=%s\n", label, draw,
+            static_cast<unsigned long>(state), RenderStateName(state), Hex(uint32_t(held.render[state])).c_str(),
+            Hex(uint32_t(wanted.render[state])).c_str());
+        if (!resync)
+            device->SetRenderState(D3DRENDERSTATETYPE(state), held.render[state]);
+    }
+    for (DWORD index = 0; index < kSamplerCount; ++index)
+    {
+        for (DWORD type = D3DSAMP_ADDRESSU; type <= kLastSamplerState; ++type)
+        {
+            if (held.sampler[index][type] == wanted.sampler[index][type])
+                continue;
+            ++differences;
+            Say("world_draw_diag_state view=%s draw=%d sampler=%lu sampler_state=%lu device=%s engine=%s\n", label,
+                draw, static_cast<unsigned long>(index), static_cast<unsigned long>(type),
+                Hex(uint32_t(held.sampler[index][type])).c_str(), Hex(uint32_t(wanted.sampler[index][type])).c_str());
+            if (!resync)
+                device->SetSamplerState(index, D3DSAMPLERSTATETYPE(type), held.sampler[index][type]);
+        }
+        if (held.texture[index] != wanted.texture[index])
+        {
+            ++differences;
+            Say("world_draw_diag_state view=%s draw=%d sampler=%lu texture device=\"%s\" engine=\"%s\"\n", label, draw,
+                static_cast<unsigned long>(index), TextureName(held.texture[index]).c_str(),
+                TextureName(wanted.texture[index]).c_str());
+            if (!resync)
+                device->SetTexture(index, held.texture[index]);
+        }
+    }
+    const D3DVIEWPORT9 &a = held.viewport;
+    const D3DVIEWPORT9 &b = wanted.viewport;
+    if (a.X != b.X || a.Y != b.Y || a.Width != b.Width || a.Height != b.Height || a.MinZ != b.MinZ ||
+        a.MaxZ != b.MaxZ)
+    {
+        ++differences;
+        Say("world_draw_diag_state view=%s draw=%d viewport device=%lu,%lu,%lux%lu,%.3f-%.3f "
+            "engine=%lu,%lu,%lux%lu,%.3f-%.3f\n",
+            label, draw, static_cast<unsigned long>(a.X), static_cast<unsigned long>(a.Y),
+            static_cast<unsigned long>(a.Width), static_cast<unsigned long>(a.Height), a.MinZ, a.MaxZ,
+            static_cast<unsigned long>(b.X), static_cast<unsigned long>(b.Y), static_cast<unsigned long>(b.Width),
+            static_cast<unsigned long>(b.Height), b.MinZ, b.MaxZ);
+        if (!resync)
+            device->SetViewport(&held.viewport);
+    }
+    Say("world_draw_diag_state view=%s draw=%d differences=%u device=%s\n", label, draw, differences,
+        resync ? "set_to_engine" : "left_as_found");
 }
 } // namespace
 
@@ -612,10 +861,18 @@ void Kisak_StartWorldDraw(const char *mapName, const wf::Layout &loaderLayout)
     }
     if (const char *diag = std::getenv("KISAK_WORLD_DRAW_DIAG"))
     {
-        const std::string value = diag;
-        Require(value == "describe" || value == "preload", "arguments",
-                "KISAK_WORLD_DRAW_DIAG must be describe or preload");
-        g_diag = value == "describe" ? Diag::Describe : Diag::Preload;
+        std::istringstream list(diag);
+        std::string name;
+        bool any = false;
+        while (std::getline(list, name, ','))
+        {
+            bool *flag = DiagFlag(name);
+            Require(flag != nullptr, "arguments",
+                    std::string("KISAK_WORLD_DRAW_DIAG must be a comma list of ") + kDiagNames);
+            *flag = true;
+            any = true;
+        }
+        Require(any, "arguments", std::string("KISAK_WORLD_DRAW_DIAG must be a comma list of ") + kDiagNames);
     }
     // The loader and this probe are compiled with different definitions, and this
     // side sees the D3D9 types through DXVK's headers: both must agree on every
@@ -724,8 +981,10 @@ void Kisak_DrawWorld(const std::filesystem::path &directory, const char *mapName
     // Diagnostics, off unless asked for. The engine opens its own D3D9 call log
     // (r_logFile > 0, dx.log in the working directory) only after the first frame
     // it presents; opening it here records the first frame too.
-    if (g_diag != Diag::Off)
-        DescribeWorldImages(g_diag == Diag::Preload);
+    if (g_diag.describe || g_diag.preload)
+        DescribeWorldImages(g_diag.preload);
+    if (g_diag.texptr)
+        CompareWorldTextureCopies();
     if (r_logFile && r_logFile->current.integer > 0)
     {
         RB_OpenLogFile();
@@ -744,7 +1003,18 @@ void Kisak_DrawWorld(const std::filesystem::path &directory, const char *mapName
                 std::snprintf(marker, sizeof(marker), "===== world_draw_probe view %s draw %d =====\n", label, draw);
                 RB_LogPrint(marker);
             }
+            if ((g_diag.state || g_diag.resync) && draw < 2)
+                CheckEngineStateCache(label, draw, g_diag.resync);
+            const bool warm = g_diag.warm && draw == 0 && std::strcmp(label, "A") == 0;
+            const bool preTess = r_pretess->current.enabled;
+            if (warm)
+            {
+                SetBool(r_pretess, false);
+                Say("world_draw_diag warm view=%s draw=%d r_pretess=0\n", label, draw);
+            }
             frames.push_back(DrawView(camera, *refdef));
+            if (warm)
+                SetBool(r_pretess, preTess);
             digests.push_back(frames.back().stats.digest);
             SayFrame(label, draw, frames.back());
             if (wdr::CheckSettled(digests, frames.back().smcPatches).empty())
