@@ -330,6 +330,13 @@ AnglesToQuat does not pull in more of the engine. A pass says the camera and fra
 ordering behave as tested against a fake renderer; it does not claim a map was
 drawn or a real device was reset. See [docs/linux-free-camera.md](../../docs/linux-free-camera.md).
 
+The window input that feeds the owner (`src/linux/client/view/free_camera_window.cpp`)
+needs SDL, so it is not in this runner. It is built and run by
+`test_linux_window.py` as `KisakCOD-free-camera-window-test`, with SDL2 and SDL3 and
+the dummy video driver: a window made the way the engine's window layer makes one
+is adopted by the window host and driven with synthetic SDL events, against the
+same recording renderer.
+
 For a sanitized run use GCC: `--cxx g++ --cxx-flag=-fsanitize=address,undefined
 --cxx-flag=-fno-sanitize-recover=all`. Clang's sanitizer instrumentation keeps the
 production unit's unused AnglesToQuat alive through `--gc-sections`, so a sanitized

@@ -71,14 +71,35 @@ WindowHost::WindowHost(EventSink &sink, const Config &config)
 {
     if (width_ < 1 || height_ < 1 || width_ > 8192 || height_ > 8192)
         throw std::invalid_argument("Window dimensions must be between 1 and 8192");
+    Open(config, nullptr);
+}
+WindowHost::WindowHost(EventSink &sink, AdoptedWindow adopted)
+    : sink_(sink), owner_(sdl::CurrentThread()), adopted_(true), width_(0), height_(0)
+{
+    if (!adopted.window) throw std::invalid_argument("An adopted window must already exist");
+    Open({}, adopted.window);
+}
+void WindowHost::Open(const Config &config, SDL_Window *adopted)
+{
     if (hostActive.test_and_set()) throw std::logic_error("Only one SDL window event host may own a process queue");
     bool initialized=false;
     try {
+        // SDL counts subsystem initializations, so this is balanced by the
+        // destructor also when the window's owner initialized video first.
         if (!sdl::Ok(SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_EVENTS)))
             throw Error("SDL video initialization");
         initialized=true;
-        window_ = sdl::CreateWindow(config.title, width_, height_, config.hidden);
-        if (!window_) throw Error("SDL window creation");
+        if (adopted) {
+            // The ID is how events are matched to this window; zero means SDL
+            // does not know the window, so nothing it sends could be claimed.
+            if (!SDL_GetWindowID(adopted)) throw Error("SDL adopted window identity");
+            window_ = adopted;
+            SDL_GetWindowSize(window_, &width_, &height_);
+            minimized_ = sdl::WindowMinimizedFlag(window_);
+        } else {
+            window_ = sdl::CreateWindow(config.title, width_, height_, config.hidden);
+            if (!window_) throw Error("SDL window creation");
+        }
         initialCursorVisibility_=sdl::QueryCursor();
         if(initialCursorVisibility_<0)throw Error("SDL initial cursor visibility query");
         clockOffset_ = sink_.NowMilliseconds() - sdl::Ticks();
@@ -92,7 +113,7 @@ WindowHost::WindowHost(EventSink &sink, const Config &config)
         if (startedText_ && !sdl::StartTextInput(window_)) throw Error("SDL text input start");
     } catch (...) {
         if(startedText_)sdl::StopTextInput(window_);
-        if(window_)SDL_DestroyWindow(window_);
+        if(window_ && !adopted_)SDL_DestroyWindow(window_);
         if(initialized)SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_EVENTS);
         hostActive.clear();
         throw;
@@ -121,7 +142,8 @@ WindowHost::~WindowHost() noexcept
         if(sdl::ShowCursor(initialCursorVisibility_)<0)throw Error("SDL initial cursor restore");
     });
     if (startedText_) sdl::StopTextInput(window_);
-    SDL_DestroyWindow(window_);
+    // An adopted window belongs to its renderer, which destroys it later.
+    if (!adopted_) SDL_DestroyWindow(window_);
     SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_EVENTS);
     hostActive.clear();
 }
@@ -237,10 +259,17 @@ void WindowHost::Dispatch(const SDL_Event &source)
         return;
     case sdl::Kind::WindowFocusGained:
         if (!own) return;
+        // A window with keyboard focus is on screen, also where a window
+        // manager restores without saying so.
+        minimized_=false;
         if (!focused_) { focused_=true; ApplyEngineCursor(); if(relativeRequested_)ApplyRelativeMouse(true); sink_.Focus(true); }
+        return;
+    case sdl::Kind::WindowRestored:
+        if (own) minimized_=false;
         return;
     case sdl::Kind::WindowFocusLost: case sdl::Kind::WindowMinimized:
         if (!own) return;
+        if (event.kind==sdl::Kind::WindowMinimized) minimized_=true;
         focused_=false; ApplyEngineCursor(); ApplyRelativeMouse(false); ReleaseHeld(time); sink_.Focus(false);
         return;
     case sdl::Kind::WindowEnter: case sdl::Kind::WindowLeave: {
@@ -319,6 +348,7 @@ bool WindowHost::Pump(int waitMilliseconds)
 void WindowHost::Present(uint8_t red,uint8_t green,uint8_t blue)
 {
     CheckThread();
+    if(adopted_)throw std::logic_error("An adopted window is presented by its own renderer");
     if(!running_)throw std::logic_error("Cannot present a closed window");
     SDL_Surface *surface=SDL_GetWindowSurface(window_);
     if (!surface) throw Error("SDL software surface");
@@ -329,6 +359,13 @@ PixelExtent WindowHost::SurfaceExtent() const
 {
     CheckThread();
     if(!running_)throw std::logic_error("Cannot query a closed window surface");
+    if(adopted_) {
+        // Never SDL_GetWindowSurface here: that would give a window DXVK
+        // presents to a second, software presentation path.
+        int width=0,height=0;
+        if(!sdl::PixelSize(window_,width,height))throw Error("SDL window pixel size");
+        return {width,height};
+    }
     SDL_Surface *surface=SDL_GetWindowSurface(window_);
     if(!surface)throw Error("SDL window surface");
     return {surface->w,surface->h};
@@ -336,6 +373,7 @@ PixelExtent WindowHost::SurfaceExtent() const
 void WindowHost::Present(PixelBufferView frame)
 {
     CheckThread();
+    if(adopted_)throw std::logic_error("An adopted window is presented by its own renderer");
     if(!running_)throw std::logic_error("Cannot present a closed window");
     ValidatePixelBuffer(frame);
     SDL_Surface *surface=SDL_GetWindowSurface(window_);
