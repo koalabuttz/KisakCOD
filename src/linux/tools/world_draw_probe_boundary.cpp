@@ -150,6 +150,12 @@ void __cdecl R_Cinematic_EndLostDevice()
 {
 }
 
+// R_ShutdownDirect3D's: with no playback and no Bink textures there is nothing to
+// stop or release (the free-camera adapter's Shutdown reaches it through R_Shutdown).
+void __cdecl R_Cinematic_Shutdown()
+{
+}
+
 // src/gfx_d3d/r_texturemem.cpp:150 and R_DetectCurrentTextureMemory below it,
 // with R_VideoMemory's DirectDraw query answering 0: DirectDraw does not exist
 // on Linux, and 0 is what R_VideoMemory returns when DirectDraw cannot tell. The
@@ -214,6 +220,8 @@ KISAK_UNREACHABLE(MaterialTechniqueSet *, Material_FindTechniqueSet_LoadObj, (co
 KISAK_UNREACHABLE(void, Material_PreLoadAllShaderText, ())
 KISAK_UNREACHABLE(Material *, R_GetBspMaterial, (uint32_t))
 KISAK_UNREACHABLE(void, SCR_UpdateLoadScreen, ())
+// R_Shutdown's Material_Shutdown, which it calls only when not loading from fast files.
+KISAK_UNREACHABLE(void, Material_FreeAll, ())
 // The screenshot console command (r_screenshot.cpp is not linked). The probe
 // takes no screenshot and runs no console command.
 KISAK_UNREACHABLE(void, R_ScreenshotCommand, (GfxScreenshotType))

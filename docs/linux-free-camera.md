@@ -1,11 +1,13 @@
 # Linux free camera: frame ownership, camera and input
 
-Status on 2026-11-02: **groundwork, not yet wired to the renderer.** The camera,
-its key bindings and the frame owner exist and are covered by asset-free tests.
-The engine renderer now draws a real map in the opt-in
-[world draw probe](linux-world-draw-probe.md) (#23); the `SceneRenderer` adapter
-that connects that renderer to this owner is the next step and is not here. No
-hardware, map or device result is claimed for this layer.
+Status on 2026-11-02: **the frame owner drives the engine renderer, not yet
+run on a GPU.** The camera, its key bindings and the frame owner are covered by
+asset-free tests. The `SceneRenderer` adapter over the engine renderer the
+[world draw probe](linux-world-draw-probe.md) brought up is written
+([below](#the-renderer-contract)), with a replay that drives the owner through
+the reference traversals on a real map ([the replay](#the-replay)). Both build
+in the opt-in `KisakCOD-world-draw-probe` target and fail closed without a
+device; no GPU, map or device result is claimed for them yet.
 
 ## Why a host camera
 
@@ -28,12 +30,16 @@ view changes the source of the numbers, not their meaning.
 | `src/linux/client/view/free_camera_controls.{h,cpp}` | Engine key codes (`SE_KEY`) and pointer counts to movement intent |
 | `src/linux/client/view/frame_owner.{h,cpp}` | Frame order, `SceneRenderer` contract, map and shutdown lifetime |
 | `tests/linux_free_camera/` | Asset-free tests, run by `scripts/tests/run_free_camera_checks.py` |
+| `src/linux/tools/engine_scene_renderer.{h,cpp}` | `EngineSceneRenderer`, the `SceneRenderer` over the engine renderer |
+| `src/linux/tools/free_camera_replay.cpp` | The replay of the reference traversals on a real map |
+| `src/linux/tools/world_draw_engine.{h,cpp}` | Frame, readback, map load and unload, shared with the world draw probe |
 
-None of these files is in a CMake target yet. Following the project rule, each
-joins a Linux target only with its own compile proof, which today is the
-standalone runner (Clang, `-m32`, production client flags, `-Werror`) in Debug and
-RelWithDebInfo. The production unit `src/universal/com_math_anglevectors.cpp` is
-compiled unmodified beside them.
+The three files in `src/linux/client/view` keep their standalone compile proof
+(Clang, `-m32`, production client flags, `-Werror`, Debug and RelWithDebInfo),
+with the production unit `src/universal/com_math_anglevectors.cpp` compiled
+unmodified beside them. They and the adapter also build in the opt-in
+`KisakCOD-world-draw-probe` target (`KISAK_BUILD_WORLD_DRAW_PROBE`), with the
+client definitions and `-Wall -Wextra -Werror`. No default target includes them.
 
 ## Conventions and where they come from
 
@@ -92,41 +98,110 @@ bool DrawFrame(const CameraView &view, std::string &error);
 void Shutdown() noexcept;
 ```
 
-The adapter planned on top of the world draw probe implements it as: `LoadMap`
-loads the map with `CM_LoadMap` and `R_LoadWorld`; `UnloadMap` is
-`R_ShutdownWorld` plus the zone unload; `Device`/`ResetDevice` use the renderer's
-own lost-device and reset path; `DrawFrame` zeroes a `refdef_s`, sets
-`localClientNum` 0, calls `FillRefdef`, then the probe's frame sequence
-(`R_BeginFrame`, `R_RenderScene`, `R_EndFrame`, `R_IssueRenderCommands`).
-Unsupported materials or techniques return `false` with a reason rather than being
-skipped silently.
+`EngineSceneRenderer` (`src/linux/tools/engine_scene_renderer.h`) implements it
+over the engine renderer that `R_Init` started, on the thread that started it:
 
-Points for that adapter, from the probe as merged:
+| Call | What the engine does |
+| --- | --- |
+| `LoadMap` | The map zone (`DB_ZONE_GAME`), `CM_LoadMap`, `CM_LinkWorld`, `Com_LoadWorld`, `R_LoadWorld`, `R_EndRegistration`: the cgame's map load, as the probe does it. The map must be allowlisted. On failure every part already loaded is released again. |
+| `UnloadMap` | `R_ShutdownWorld`, `Com_ShutdownWorld`, `CM_Shutdown`, then the map zone is freed (a zone list with no name and `DB_ZONE_GAME` as the free flags). The asset owners refuse to unload a world still in use, so the order is fixed. |
+| `Resize` | `dx.windows[0]` (which `R_ResetDevice` reads) and the video config (`R_StoreWindowSettings`) take the extent as both display and scene size, then the device is reset as below. The window is never resized or moved here: that is the window host's. |
+| `Device` | `TestCooperativeLevel`: `D3D_OK` is ready, `D3DERR_DEVICELOST` lost, `D3DERR_DEVICENOTRESET` needs a reset; any other answer throws, and the owner fails closed. |
+| `ResetDevice` | `R_RecoverLostDevice`'s sequence, call for call: release the lost images, materials and world buffers, `R_ResetDevice`, reload them. `R_RecoverLostDevice` itself cannot be called, because `R_CanRecoverLostDevice` asserts that the device says it is lost. A device that is still lost answers `StillLost`. |
+| `DrawFrame` | A zeroed `refdef_s` (local client 0, `R_InitPrimaryLights`), `FillRefdef`, then the probe's frame: `R_BeginFrame`, `R_ClearScene`, `R_SetLodOrigin`, `R_RenderScene`, `R_EndFrame`, `R_IssueRenderCommands`. The view must cover the whole scene at the renderer's extent. |
+| `Shutdown` | `UnloadMap`, then `R_Shutdown(1)`, the client's renderer shutdown: graphics zones, render targets, the window and the device. |
 
-- The renderer runs single-threaded there (`sys_smp_allowed` off before
-  `R_RegisterDvars`). The owner is single-threaded too and never calls the
-  renderer from another thread.
-- The probe sets `tanHalfFovY = tanHalfFovX x height/width` (fixed 65-degree
-  horizontal). `FillRefdef` uses `CG_UpdateFov` instead (fixed vertical, horizontal
-  widens with aspect). The two agree at 4:3 and differ at other aspects, so a
-  probe digest is not a reference for this camera except at 4:3.
-- The probe draws at `vidConfig.sceneWidth/Height`. The adapter's `Resize` should
-  leave the scene extent equal to the extent it was given, so the view rectangle
-  the owner passes matches the renderer's scene.
-- A view takes a few draws before the static model cache settles. The owner
-  draws every frame anyway; acceptance below must compare settled frames, not
-  frame one.
-- The renderer must present one frame without a world after `R_Init` and after
-  any device reset before it draws a world, or that world frame's batched
-  surfaces are drawn from no index buffer
-  ([why](linux-world-draw-probe.md#the-first-frame)). The probe does this with an
-  empty frame; the adapter's `LoadMap`, `Resize` and `ResetDevice` must keep it.
+DXVK never reports a windowed device lost, so `RequestReset()` makes the next
+`Device()` answer `NeedsReset` once; the replay uses it. `Window()` returns the
+`SDL_Window*` `R_CreateWindow` made, for a window host to adopt; it is valid
+until `Shutdown`.
+
+Points the adapter keeps:
+
+- One thread: the renderer runs with `sys_smp_allowed` off, and the owner never
+  calls it from another thread.
+- After `R_Init` and after every device reset, the backend's pre-tessellated
+  index buffer is unset until a frame has been presented
+  ([why](linux-world-draw-probe.md#the-first-frame)). The constructor, `Resize`
+  and `ResetDevice` each present one empty frame, and every draw first requires
+  the two buffers to agree (stage `frame`), so a missed case fails closed
+  instead of drawing dark.
+- `Resize` leaves the scene extent equal to the extent it was given, so the
+  view rectangle the owner passes matches the renderer's scene. A size larger
+  than the device's largest texture is refused.
+- The projection is `CG_UpdateFov`'s (fixed vertical field of view; horizontal
+  widens with aspect), not the probe's fixed 65-degree horizontal. The two agree
+  at 4:3. `SetAspect` should get `vidConfig.aspectRatioWindow` after a resize,
+  as the cgame reads it.
+- A view takes a few draws before the static model cache settles; comparisons
+  use settled frames.
+- An engine error (`Com_Error`, `Sys_Error`, `R_FatalInitError` when
+  `IDirect3DDevice9::Reset` fails) ends the process, as it does in the client.
+  Everything the adapter checks itself is a refusal with a reason.
+- `r_vc_makelog` must be off: `R_LoadWorld` would start a light visibility log
+  only `R_Shutdown` saves.
 
 `FillRefdef` writes only the camera's fields (rectangle, both half-FOV tangents,
 origin, axis, `zNear`, `time`) and is a template, so this layer never includes a
 renderer or D3D9 header and never puts a native DXVK type into an engine
 structure. The owner never asks for a view at an empty extent, so
 `R_RenderScene`'s positive width/height/tangent assertions hold.
+
+## The replay
+
+`KISAK_FREE_CAMERA_MAP=<map>` runs `KisakCOD-world-draw-probe` as the free-camera
+replay (`src/linux/tools/free_camera_replay.cpp`). After the probe's renderer
+start it builds an `EngineSceneRenderer` at the window's 640x480, puts a
+`FrameOwner` over it, and acts only as a window host would: keys, mouse counts,
+extents and frames. Every frame is drawn at scene time 0 and read back into
+memory to be measured; nothing is saved.
+
+1. Load the map, choose its cameras as the probe does (A: the intermission
+   camera, B: a player spawn), then load it again with camera A's pose.
+2. Path A, as `frame_owner_test.cpp`'s reference traversal: `w` for 60 frames of
+   16 to 17 ms, an 818-count mouse turn left, `w` with shift for 10 frames of
+   100 ms, then space for 5 frames of 100 ms. The view is settled (the probe's
+   rule) at the start and after each leg: `A.start`, `A.forward`, `A.turn`,
+   `A.fast`, `A.rise`.
+3. At `A.rise`, four interruptions, each followed by a settled view that must
+   be the same picture as `A.rise` (same digest):
+   - resize: the window and the owner go to 800x600 (drawn and settled there,
+     `A.rise@800x600`), then back to 640x480;
+   - minimize: an empty extent for three frames, which must draw nothing, then
+     640x480 again, which needs no reset;
+   - device reset: `RequestReset`, so the owner's next frame resets the device;
+   - reload: the map is unloaded and loaded again; the camera must not move.
+4. Path B from camera B: the arrow-key square, four sides of `w` for 5 frames of
+   200 ms and a 642 ms turn left. Settled at `B.start` and `B.square`.
+5. The owner's shutdown: the map's unload, then `R_Shutdown(1)`.
+
+Rules, any of which fails the run:
+
+- `A.start` and `B.start`, the map's own cameras, pass the probe's frame and
+  draw count rules;
+- every checkpoint settles within 64 draws and is drawn at its extent;
+- each path changes the picture (start and end digests differ);
+- each interruption comes back to the same settled picture;
+- the counts agree: four loads and four unloads, two resizes, one reset, an
+  empty frame after `R_Init` and after each reset, as many draws by the owner as
+  by the renderer;
+- after the shutdown no device, Direct3D interface, registration, map or zone is
+  left.
+
+Every frame of a leg must be drawn; a frame the owner reports as anything else
+stops the run with its stage. The run prints `free_camera_leg`,
+`free_camera_checkpoint` (with the pose and digest), `free_camera_interruption`
+(`same=yes|no`), the settle frames as `world_draw_frame` lines,
+`free_camera_counters`, `free_camera_shutdown` and finally
+`free_camera_replay=passed|failed`, and writes `free-camera-replay.json` (cameras,
+checkpoints with every settle frame's measurements, legs, interruptions,
+counters, problems; no pixels).
+
+Run it as the [world draw probe](linux-world-draw-probe.md#running-it) runs,
+with `KISAK_FREE_CAMERA_MAP=mp_crash` in place of `KISAK_WORLD_DRAW_MAP`, a new
+0700 output directory, and the same staging tree. The window is resized during
+the run; a window manager that refuses the size changes only the
+`window_resized` field, because the back buffer follows the owner's extent.
 
 ## Input integration (next step, not done)
 
@@ -169,16 +244,26 @@ both configurations, on the pre-merge head 5144bf4):
   each made in a scratch copy and each was caught. The runner's own contract test
   repeats the first one on every run.
 
+Adapter and replay, in the cloud sandbox only (no GPU, no game data): the
+target builds in Debug and RelWithDebInfo against DXVK Native with
+`-Wall -Wextra -Werror`, and `scripts/tests/test_world_draw_probe.py` runs the
+replay against the stand-in D3D9 library: it must stop at its own
+`stage=direct3d` before `R_Init`, and refuse an unknown map, both map variables
+at once and a show time first, writing nothing.
+
 ## What is not verified
 
-- No map is loaded or drawn through this owner, no real device is reset, and
-  nothing is compared with a captured game frame. That waits for the adapter.
-- The window/input integration above is not written.
+- The replay has not run on a GPU, so no map has been loaded or drawn through
+  this owner and no real device has been reset or resized yet.
+- Nothing is compared with a captured game frame.
+- The window/input integration above is not written here (the window side is
+  its own work).
 
-## Acceptance once the adapter lands
+## Acceptance on a GPU
 
 Run on named hardware with a private map, keeping screenshots and exports out of
-the repository:
+the repository. The replay covers items 1 and 2, item 3 without a map switch,
+and the shutdown order of item 4; its GPU run is still to come.
 
 1. Replay reference traversal A (forward, mouse turn left 818 counts, fast forward,
    rise) and B (four arrow-key turns) through the real renderer; record the pose and

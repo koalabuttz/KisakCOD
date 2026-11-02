@@ -28,26 +28,21 @@
 #include <linux/d3d9_types.h>
 #include <linux/client/window/sdl_api.h>
 
+#include "world_draw_engine.h"
 #include "world_draw_probe.h"
 #include "world_draw_rules.h"
 #include "world_frontend_invariants.h"
 #include "world_surface_export.h"
 
-#include <cerrno>
 #include <chrono>
-#include <cinttypes>
 #include <cmath>
-#include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <fcntl.h>
 #include <memory>
 #include <sstream>
-#include <stdexcept>
 #include <string>
 #include <thread>
-#include <unistd.h>
 #include <vector>
 
 // The zone table (src/database/db_registry.cpp). Read only.
@@ -57,6 +52,7 @@ namespace
 {
 namespace wf = kisak_world_frontend;
 namespace wdr = kisak_world_draw;
+using namespace kisak_world_draw_engine;
 
 constexpr int kWindowWidth = 640;
 constexpr int kWindowHeight = 480;
@@ -74,93 +70,11 @@ constexpr int kSceneTime = 0;
 // shadow map, so a view's models move into it over several frames. The GPU runs
 // of mp_crash are in docs/linux-world-draw-probe.md.
 constexpr int kMaxSettleDraws = 64;
-constexpr size_t kMaxSpawnViews = 256;
 constexpr int kMaxShowSeconds = 60;
-
-[[gnu::format(printf, 1, 2)]] void Say(const char *format, ...)
-{
-    va_list args;
-    va_start(args, format);
-    std::vprintf(format, args);
-    va_end(args);
-    std::fflush(stdout);
-}
-
-[[noreturn]] void Fail(const char *stage, const std::string &reason)
-{
-    std::fflush(stdout);
-    throw std::runtime_error(std::string("world_draw_probe stage=") + stage + ": " + reason);
-}
-
-void Require(bool ok, const char *stage, const std::string &why)
-{
-    if (!ok)
-        Fail(stage, why);
-}
-
-std::string Hex(uint32_t value)
-{
-    char text[16];
-    std::snprintf(text, sizeof(text), "0x%08" PRIX32, value);
-    return text;
-}
-
-std::string Hex64(uint64_t value)
-{
-    char text[24];
-    std::snprintf(text, sizeof(text), "%016" PRIx64, value);
-    return text;
-}
-
-std::string Json(const std::string &text)
-{
-    std::string out = "\"";
-    for (unsigned char c : text)
-    {
-        if (c == '"' || c == '\\')
-            out += '\\', out += char(c);
-        else if (c < 0x20 || c >= 0x7F)
-        {
-            char escaped[8];
-            std::snprintf(escaped, sizeof(escaped), "\\u%04x", c);
-            out += escaped;
-        }
-        else
-            out += char(c);
-    }
-    return out + "\"";
-}
-
-// The report is created exclusively with owner-only permissions, inside the
-// private directory the export entry point already checked.
-void WriteExclusiveFile(const std::filesystem::path &file, const std::string &text)
-{
-    const int fd = ::open(file.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
-    Require(fd >= 0, "report", "cannot create " + file.string() + ": " + std::strerror(errno));
-    size_t written = 0;
-    while (written < text.size())
-    {
-        const ssize_t n = ::write(fd, text.data() + written, text.size() - written);
-        if (n < 0 && errno == EINTR)
-            continue;
-        if (n <= 0)
-        {
-            ::close(fd);
-            Fail("report", "cannot write " + file.string());
-        }
-        written += size_t(n);
-    }
-    Require(::close(fd) == 0, "report", "cannot close " + file.string());
-}
 
 void SetBool(const dvar_s *dvar, bool value)
 {
     Dvar_SetBool(const_cast<dvar_s *>(dvar), value);
-}
-
-double Seconds(std::chrono::steady_clock::time_point since)
-{
-    return std::chrono::duration<double>(std::chrono::steady_clock::now() - since).count();
 }
 
 // ---- the environment ----------------------------------------------------------
@@ -223,119 +137,14 @@ void RequireDirect3D()
 
 // ---- the frame ------------------------------------------------------------
 
-struct Camera
-{
-    std::string classname;
-    float eye[3] = {};
-    float angles[3] = {};
-};
-
-struct FrameResult
-{
-    wdr::FrameStats stats;
-    wdr::DrawCounts counts;
-    // Surfaces this frame moved into the static model cache (R_CacheStaticModelSurface):
-    // a view has not settled while it is filling.
-    uint32_t smcPatches = 0;
-    double seconds = 0;
-};
-
-// What R_GetBackBufferData (src/gfx_d3d/r_screenshot.cpp) reads after the
-// engine's cubemap frames: the back buffer, which a windowed device with one
-// back buffer and D3DSWAPEFFECT_DISCARD keeps through Present (DXVK keeps it
-// too: d3d9_swapchain.h, SwapWithFrontBuffer). Copied to system memory, locked
-// read-only and measured; the pixels are not kept.
-wdr::FrameStats ReadBackBuffer()
-{
-    IDirect3DSurface9 *backBuffer = nullptr;
-    HRESULT hr = dx.device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuffer);
-    Require(SUCCEEDED(hr) && backBuffer, "readback", "GetBackBuffer failed: " + Hex(uint32_t(hr)));
-    D3DSURFACE_DESC desc{};
-    hr = backBuffer->GetDesc(&desc);
-    if (FAILED(hr) || (desc.Format != D3DFMT_X8R8G8B8 && desc.Format != D3DFMT_A8R8G8B8))
-    {
-        backBuffer->Release();
-        Fail("readback", "the back buffer's format " + std::to_string(int(desc.Format)) +
-                             " is not X8R8G8B8 or A8R8G8B8 (" + Hex(uint32_t(hr)) + ")");
-    }
-    IDirect3DSurface9 *copy = nullptr;
-    hr = dx.device->CreateOffscreenPlainSurface(desc.Width, desc.Height, desc.Format, D3DPOOL_SYSTEMMEM, &copy,
-                                                nullptr);
-    if (FAILED(hr) || !copy)
-    {
-        backBuffer->Release();
-        Fail("readback", "CreateOffscreenPlainSurface failed: " + Hex(uint32_t(hr)));
-    }
-    hr = dx.device->GetRenderTargetData(backBuffer, copy);
-    backBuffer->Release();
-    if (FAILED(hr))
-    {
-        copy->Release();
-        Fail("readback", "GetRenderTargetData failed: " + Hex(uint32_t(hr)));
-    }
-    D3DLOCKED_RECT locked{};
-    hr = copy->LockRect(&locked, nullptr, D3DLOCK_READONLY);
-    if (FAILED(hr) || !locked.pBits || locked.Pitch < INT(desc.Width * 4))
-    {
-        copy->Release();
-        Fail("readback", "LockRect failed: " + Hex(uint32_t(hr)));
-    }
-    const wdr::FrameStats stats = wdr::MeasureFrame(static_cast<const uint8_t *>(locked.pBits), desc.Width,
-                                                    desc.Height, size_t(locked.Pitch));
-    copy->UnlockRect();
-    copy->Release();
-    return stats;
-}
-
-// Whether the backend will draw this frame's pre-tessellated surfaces from the
-// index buffer the front end fills for it. The front end writes the indices of
-// the world's batched surfaces into gfxBuf.preTessIndexBuffer (R_BeginPreTess,
-// R_AllocPreTessIndices), and R_TessTrianglesPreTessList binds the frame data's
-// preTessIb. R_ToggleSmpFrame moves both to the next buffer of the pair at the
-// end of every frame.
-bool PreTessBuffersAgree()
-{
-    const GfxIndexBufferState *filled = gfxBuf.preTessIndexBuffer;
-    return filled && filled->buffer && frontEndDataOut && frontEndDataOut->preTessIb == filled->buffer;
-}
-
-// A frame with no scene in it, as a client presents for its menu or loading
-// screen: R_BeginFrame to R_IssueRenderCommands with nothing added.
-void PresentEmptyFrame()
-{
-    R_BeginFrame();
-    R_BeginSharedCmdList();
-    R_ClearClientCmdList2D();
-    R_EndFrame();
-    R_IssueRenderCommands(0xFFFFFFFF);
-    const HRESULT level = dx.device->TestCooperativeLevel();
-    Require(level == D3D_OK, "frame", "the device is not ready after the empty frame: " + Hex(uint32_t(level)));
-}
-
 // One frame, call for call as R_GenerateReflectionRawData draws a cubemap face,
 // without the effects update (no effects system runs here) and with the view
 // values the cgame's CG_CalcViewValues would give a player standing at the
 // camera: the whole scene viewport, cg_fov's default, zNear 0.
 FrameResult DrawView(const Camera &camera, refdef_s &refdef)
 {
-    const auto started = std::chrono::steady_clock::now();
-    std::memset(&refdef, 0, sizeof(refdef));
-    refdef.vieworg[0] = camera.eye[0];
-    refdef.vieworg[1] = camera.eye[1];
-    refdef.vieworg[2] = camera.eye[2];
-    refdef.localClientNum = 0;
+    PrepareRefdef(refdef);
     refdef.time = kSceneTime;
-    refdef.blurRadius = 0.0f;
-    refdef.useScissorViewport = false;
-    R_InitPrimaryLights(refdef.primaryLights);
-
-    Require(PreTessBuffersAgree(), "frame",
-            "the backend would draw the pre-tessellated surfaces from another index buffer than the one the front "
-            "end fills");
-    R_BeginFrame();
-    R_BeginSharedCmdList();
-    R_ClearClientCmdList2D();
-    R_ClearScene(0);
     refdef.x = 0;
     refdef.y = 0;
     refdef.width = vidConfig.sceneWidth;
@@ -343,171 +152,10 @@ FrameResult DrawView(const Camera &camera, refdef_s &refdef)
     refdef.tanHalfFovX = std::tan(kHalfFovXDegrees * float(M_PI) / 180.0f);
     refdef.tanHalfFovY = refdef.tanHalfFovX * float(refdef.height) / float(refdef.width);
     refdef.zNear = 0.0f;
+    for (int i = 0; i < 3; ++i)
+        refdef.vieworg[i] = camera.eye[i];
     AnglesToAxis(camera.angles, refdef.viewaxis);
-    R_SetLodOrigin(&refdef);
-    R_RenderScene(&refdef);
-
-    // What the front end emitted for this view, read before R_IssueRenderCommands
-    // hands the frame's data to the backend and flips to the other buffer.
-    FrameResult result;
-    Require(frontEndDataOut && frontEndDataOut->viewInfoCount == 1, "frame",
-            "R_RenderScene did not produce exactly one view");
-    const GfxViewInfo &view = frontEndDataOut->viewInfo[0];
-    result.counts.litSurfaces = view.litInfo.drawSurfCount;
-    result.counts.decalSurfaces = view.decalInfo.drawSurfCount;
-    result.counts.emissiveSurfaces = view.emissiveInfo.drawSurfCount;
-    result.smcPatches = uint32_t(frontEndDataOut->smcPatchCount);
-
-    R_EndFrame();
-    R_IssueRenderCommands(0xFFFFFFFF);
-
-    // RB_BeginFrame zeroed the counters at the start of this frame's backend work.
-    // viewStats[0] counts draws into the scene's own targets; viewStats[1] counts
-    // the shadow maps (R_UpdateStatsTarget), which are not the camera's view.
-    const GfxPrimStats &world = g_frameStatsCur.viewStats[0].primStats[GFX_PRIM_STATS_WORLD];
-    result.counts.worldDrawCalls = uint32_t(world.primCount);
-    result.counts.worldTriangles = uint32_t(world.triCount);
-    const HRESULT level = dx.device->TestCooperativeLevel();
-    Require(level == D3D_OK, "frame", "the device is not ready after the frame: " + Hex(uint32_t(level)));
-    result.stats = ReadBackBuffer();
-    result.seconds = Seconds(started);
-    return result;
-}
-
-// ---- the map ----------------------------------------------------------------
-
-template <class Asset> struct Collected
-{
-    std::vector<Asset *> items;
-};
-
-template <class Asset> void Collect(XAssetHeader header, void *context)
-{
-    static_cast<Collected<Asset> *>(context)->items.push_back(reinterpret_cast<Asset *>(header.data));
-}
-
-GfxWorld *FindPackagedWorld(const char *mapName)
-{
-    Collected<GfxWorld> worlds;
-    DB_EnumXAssets(ASSET_TYPE_GFXWORLD, Collect<GfxWorld>, &worlds, true);
-    GfxWorld *world = nullptr;
-    unsigned packaged = 0;
-    for (GfxWorld *candidate : worlds.items)
-    {
-        if (!candidate || !candidate->name || DB_IsXAssetDefault(ASSET_TYPE_GFXWORLD, candidate->name))
-            continue;
-        ++packaged;
-        world = candidate;
-    }
-    Require(packaged == 1, "world",
-            "expected exactly one packaged GFXWORLD in the map zone, found " + std::to_string(packaged));
-    const std::string name = world->name;
-    const std::string baseName = world->baseName ? world->baseName : "";
-    Require(name.find(mapName) != std::string::npos || baseName.find(mapName) != std::string::npos, "world",
-            "loaded GFXWORLD '" + name + "' does not name the requested map '" + mapName + "'");
-    return world;
-}
-
-const MapEnts *FindMapEnts(const char *worldName)
-{
-    Collected<MapEnts> ents;
-    DB_EnumXAssets(ASSET_TYPE_MAP_ENTS, Collect<MapEnts>, &ents, true);
-    const MapEnts *found = nullptr;
-    for (const MapEnts *candidate : ents.items)
-    {
-        if (!candidate || !candidate->name || std::strcmp(candidate->name, worldName))
-            continue;
-        Require(!found, "cameras", std::string("more than one MAP_ENTS asset is named ") + worldName);
-        found = candidate;
-    }
-    Require(found != nullptr, "cameras", std::string("no MAP_ENTS asset is named ") + worldName);
-    Require(found->entityString != nullptr && found->numEntityChars > 0, "cameras",
-            "the map's entity string is empty");
-    return found;
-}
-
-// View A is the map author's intermission camera, the map's own overview, when
-// the map has one; otherwise the first player spawn. View B is the first player
-// spawn that is not view A. Both come from the entity string in file order, with
-// the eye rule of the world front-end probe (world_frontend_invariants.h).
-void ChooseCameras(const GfxWorld &world, Camera &a, Camera &b)
-{
-    const MapEnts *ents = FindMapEnts(world.name);
-    const wf::SpawnScan scan = wf::ScanSpawnViews(ents->entityString, size_t(ents->numEntityChars), kMaxSpawnViews);
-    Require(scan.error.empty(), "cameras", "entity string: " + scan.error);
-    const wf::SpawnView *intermission = nullptr;
-    std::vector<const wf::SpawnView *> spawns;
-    for (const wf::SpawnView &view : scan.views)
-    {
-        if (view.classname == "mp_global_intermission")
-        {
-            if (!intermission)
-                intermission = &view;
-        }
-        else
-            spawns.push_back(&view);
-    }
-    Require(!spawns.empty(), "cameras", "the map has no player spawn");
-    auto copy = [](const wf::SpawnView &from, Camera &to) {
-        to.classname = from.classname;
-        for (int i = 0; i < 3; ++i)
-            to.eye[i] = from.eye[i], to.angles[i] = from.angles[i];
-    };
-    copy(intermission ? *intermission : *spawns[0], a);
-    copy(intermission ? *spawns[0] : *spawns[spawns.size() > 1 ? 1 : 0], b);
-    Require(std::memcmp(a.eye, b.eye, sizeof(a.eye)) || std::memcmp(a.angles, b.angles, sizeof(a.angles)), "cameras",
-            "the map has only one distinct camera");
-}
-
-void RequireCodeImages()
-{
-    const struct
-    {
-        const char *name;
-        const GfxImage *image;
-    } images[] = {{"white", rgp.whiteImage}, {"black", rgp.blackImage}, {"identity normal map", rgp.identityNormalMapImage}};
-    for (const auto &entry : images)
-        Require(entry.image && entry.image->texture.basemap, "renderer",
-                std::string("R_InitSystems left the code image '") + entry.name + "' without a texture");
-}
-
-std::string CameraJson(const Camera &camera)
-{
-    std::ostringstream json;
-    json << "{\"classname\":" << Json(camera.classname) << ",\"eye\":[" << camera.eye[0] << "," << camera.eye[1]
-         << "," << camera.eye[2] << "],\"angles\":[" << camera.angles[0] << "," << camera.angles[1] << ","
-         << camera.angles[2] << "]}";
-    return json.str();
-}
-
-std::string FrameJson(const FrameResult &frame)
-{
-    const wdr::FrameStats &s = frame.stats;
-    const wdr::DrawCounts &c = frame.counts;
-    std::ostringstream json;
-    char share[32], luma[32], deviation[32];
-    std::snprintf(share, sizeof(share), "%.4f", s.dominantShare);
-    std::snprintf(luma, sizeof(luma), "%.2f", s.meanLuma);
-    std::snprintf(deviation, sizeof(deviation), "%.2f", s.lumaStdDev);
-    json << "{\"width\":" << s.width << ",\"height\":" << s.height << ",\"distinct_colors\":" << s.distinctColors
-         << ",\"dominant_share\":" << share << ",\"mean_luma\":" << luma << ",\"luma_std_dev\":" << deviation
-         << ",\"detail_tiles\":" << s.detailTiles << ",\"digest\":\"" << Hex64(s.digest) << "\""
-         << ",\"lit_surfaces\":" << c.litSurfaces << ",\"decal_surfaces\":" << c.decalSurfaces
-         << ",\"emissive_surfaces\":" << c.emissiveSurfaces << ",\"world_draw_calls\":" << c.worldDrawCalls
-         << ",\"world_triangles\":" << c.worldTriangles << ",\"smc_patches\":" << frame.smcPatches
-         << ",\"seconds\":" << frame.seconds << "}";
-    return json.str();
-}
-
-void SayFrame(const char *label, int draw, const FrameResult &frame)
-{
-    const wdr::FrameStats &s = frame.stats;
-    const wdr::DrawCounts &c = frame.counts;
-    Say("world_draw_frame view=%s draw=%d size=%ux%u colors=%zu dominant=%.3f luma=%.1f+-%.1f detail_tiles=%u "
-        "digest=%s lit=%u decal=%u emissive=%u world_calls=%u world_tris=%u smc_patches=%u seconds=%.3f\n",
-        label, draw, s.width, s.height, s.distinctColors, s.dominantShare, s.meanLuma, s.lumaStdDev, s.detailTiles,
-        Hex64(s.digest).c_str(), c.litSurfaces, c.decalSurfaces, c.emissiveSurfaces, c.worldDrawCalls,
-        c.worldTriangles, frame.smcPatches, frame.seconds);
+    return DrawRefdef(refdef);
 }
 
 std::chrono::steady_clock::time_point g_started;
@@ -558,12 +206,20 @@ void __cdecl CL_InitDedicated()
     Sys_NormalExit();
 }
 
-void Kisak_StartWorldDraw(const char *mapName, const wf::Layout &loaderLayout)
+void Kisak_StartWorldDraw(WorldDrawMode drawMode, const char *mapName, const wf::Layout &loaderLayout)
 {
     g_started = std::chrono::steady_clock::now();
+    const bool freeCamera = drawMode == WorldDrawMode::FreeCamera;
+    if (freeCamera)
+        SetTool("free_camera_replay");
+    const char *const mapVariable = freeCamera ? "KISAK_FREE_CAMERA_MAP" : "KISAK_WORLD_DRAW_MAP";
     Require(mapName && kisak_world_inventory::IsAllowedMapName(mapName), "arguments",
-            "KISAK_WORLD_DRAW_MAP must name an allowlisted map");
-    if (const char *show = std::getenv("KISAK_WORLD_DRAW_SHOW_SECONDS"))
+            std::string(mapVariable) + " must name an allowlisted map");
+    const char *const show = std::getenv("KISAK_WORLD_DRAW_SHOW_SECONDS");
+    Require(!show || !freeCamera, "arguments",
+            "KISAK_WORLD_DRAW_SHOW_SECONDS belongs to KISAK_WORLD_DRAW_MAP; the free-camera replay shows every "
+            "frame it draws");
+    if (show)
     {
         char *end = nullptr;
         const long value = std::strtol(show, &end, 10);
@@ -631,13 +287,16 @@ void Kisak_StartWorldDraw(const char *mapName, const wf::Layout &loaderLayout)
         mode.c_str(), vidConfig.sceneWidth, vidConfig.sceneHeight, description, Seconds(g_started));
 }
 
+double WorldDrawStartSeconds()
+{
+    return Seconds(g_started);
+}
+
 void Kisak_DrawWorld(const std::filesystem::path &directory, const char *mapName)
 {
     // The export entry point has synced the graphics zones.
     const double startSeconds = Seconds(g_started);
-    Require(dx.device != nullptr && rg.registered, "start", "Kisak_StartWorldDraw did not run");
-    Require(g_zoneCount > 0, "graphics", "no graphics zone loaded");
-    RequireCodeImages();
+    RequireStartedRenderer();
     Say("world_draw_graphics_zones=loaded zones=%d seconds=%.2f\n", g_zoneCount, startSeconds);
 
     // 1. The map zone, then the map load the cgame does before its first frame
@@ -646,24 +305,7 @@ void Kisak_DrawWorld(const std::filesystem::path &directory, const char *mapName
     // The renderer traces against the collision map while it lights models, so the
     // trace data CM_LoadMap sets up must exist before any scene is drawn.
     const auto mapStarted = std::chrono::steady_clock::now();
-    XZoneInfo zone{mapName, DB_ZONE_GAME, DB_ZONE_GAME};
-    DB_LoadXAssets(&zone, 1, 1);
-    DB_SyncXAssets();
-    GfxWorld *packaged = FindPackagedWorld(mapName);
-    std::string worldName = packaged->name;
-    Require(com_sv_running && !com_sv_running->current.enabled, "world", "a local server is running");
-    int collisionChecksum = 0;
-    CM_LoadMap(worldName.c_str(), &collisionChecksum);
-    CM_LinkWorld();
-    Com_LoadWorld(worldName.data());
-    Require(cm.isInUse && cm.name && worldName == cm.name, "world",
-            "CM_LoadMap did not load the map's collision map");
-    Require(comWorld.isInUse && comWorld.name && worldName == comWorld.name, "world",
-            "Com_LoadWorld did not find the map's world data");
-    int checksum = 0;
-    R_LoadWorld(worldName.data(), &checksum, 0);
-    Require(rgp.world == packaged, "world", "R_LoadWorld did not register the packaged world");
-    R_EndRegistration();
+    const std::string worldName = LoadMap(mapName);
     const double mapSeconds = Seconds(mapStarted);
     Say("world_draw_map=loaded map=%s world=%s seconds=%.2f\n", mapName, worldName.c_str(), mapSeconds);
 

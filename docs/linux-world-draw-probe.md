@@ -23,6 +23,14 @@ given. It writes one report, `world-draw-probe.json` (cameras, counts and frame
 measurements, no pixels), into a private output directory. No frame is saved.
 Like the device probes, it sets `DXVK_LOG_PATH=none` unless the caller set it.
 
+The same binary has a second mode, the free-camera replay
+(`KISAK_FREE_CAMERA_MAP=<map>` instead of `KISAK_WORLD_DRAW_MAP`). It starts the
+renderer the same way, then hands it to the free camera's frame owner through
+the `SceneRenderer` adapter and replays the free camera's reference traversals
+on the map. [Linux free camera](linux-free-camera.md#the-replay) describes it.
+The frame, map load and camera code both modes use is in
+`src/linux/tools/world_draw_engine.{h,cpp}`.
+
 ## What runs
 
 The exporter's normal start runs: `Com_Init`, the file system, and the probe's
@@ -198,18 +206,25 @@ out of the repository.
      `DynEntCl_ProcessEntities` checks its claim: it aborts if any client
      dynamic entity of the map has a physics body;
   3. the two Windows-only renderer services as Linux has them: no cinematic
-     ever plays, and `R_AvailableTextureMemory` is `r_texturemem.cpp`'s own
-     branch for when DirectDraw cannot report video memory;
-  4. 28 functions the probe must never reach, each aborting with its name: the
+     ever plays (so `R_Cinematic_Shutdown`, which the free-camera replay's
+     `R_Shutdown` reaches, has nothing to stop), and `R_AvailableTextureMemory`
+     is `r_texturemem.cpp`'s own branch for when DirectDraw cannot report video
+     memory;
+  4. 29 functions the probe must never reach, each aborting with its name: the
      client screen and loading screen, scene entities and effects (the probe
      adds none, and only the cgame queues effects work), mark generation
-     (`fx_marks` is off), material and BSP loading from source, and the
-     screenshot command.
+     (`fx_marks` is off), material and BSP loading from source (including
+     `Material_FreeAll`, which `R_Shutdown` calls only without fast files), and
+     the screenshot command.
 - **Libraries.** The executable links the D3D9 library and SDL3 for their
   symbols only. The dedicated sources compiled into it never see
   `KISAK_LINUX_NATIVE_D3D9` or SDL's include path.
 
-The probe's own sources build with `-Wall -Wextra -Werror`.
+The probe's own sources build with `-Wall -Wextra -Werror`: the probe, the
+shared engine code, the boundary, the SDL3 window functions, and for the
+free-camera replay the adapter (`engine_scene_renderer.cpp`), the replay
+(`free_camera_replay.cpp`) and the free camera's own sources
+(`src/linux/client/view`).
 
 ## Limits
 
@@ -273,7 +288,10 @@ temporary tree holding nothing but a one-line stub `fileSysCheck.cfg`:
   `R_Init` runs;
 - an unset map, an unknown map and a show time over 60 seconds must be refused
   first;
-- all four runs exit 1 and write nothing.
+- the free-camera replay with `mp_crash` must stop at its own
+  `stage=direct3d`, and both map variables at once, an unknown map and a show
+  time (which belongs to the draw mode) must be refused first;
+- all eight runs exit 1 and write nothing.
 
 No DXVK library, Vulkan, GPU or game data is involved. A pass there means the
 probe builds and fails closed. It says nothing about a device, a map or a frame.

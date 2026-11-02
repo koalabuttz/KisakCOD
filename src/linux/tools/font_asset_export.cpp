@@ -271,6 +271,7 @@ void ExportFont(Font_s *font,size_t index,const std::filesystem::path &directory
   const char *frontEndMap=std::getenv("KISAK_WORLD_FRONTEND_MAP");
   const char *deviceMap=std::getenv("KISAK_WORLD_DEVICE_MAP");
   const char *drawMap=std::getenv("KISAK_WORLD_DRAW_MAP");
+  const char *cameraMap=std::getenv("KISAK_FREE_CAMERA_MAP");
   Require(!menusOption || !std::strcmp(menusOption,"1"),"KISAK_UI_ASSET_EXPORT_MENUS must be 1 or unset");
   Require(!worldMap || !menusOption,"KISAK_WORLD_SURFACE_MAP and KISAK_UI_ASSET_EXPORT_MENUS are mutually exclusive");
   Require(!frontEndMap || (!worldMap && !menusOption),"KISAK_WORLD_FRONTEND_MAP cannot be combined with another export mode");
@@ -286,16 +287,21 @@ void ExportFont(Font_s *font,size_t index,const std::filesystem::path &directory
   std::puts("asset_export=offline database=engine networking=not-initialized renderer=device");
 #elif defined(KISAK_WORLD_DRAW_PROBE)
   // This build's CL_InitDedicated loaded no zone and left the renderer on: the draw
-  // mode below is the only one it can run, and it owns every zone load.
-  Require(drawMap && *drawMap,"KisakCOD-world-draw-probe needs KISAK_WORLD_DRAW_MAP=<map>");
-  Require(!worldMap && !menusOption && !frontEndMap && !deviceMap,"KISAK_WORLD_DRAW_MAP cannot be combined with another export mode");
-  std::puts("asset_export=offline database=engine networking=not-initialized renderer=draw");
+  // mode and the free-camera replay below are the only ones it can run, and each
+  // owns every zone load.
+  Require((drawMap && *drawMap) || (cameraMap && *cameraMap),"KisakCOD-world-draw-probe needs KISAK_WORLD_DRAW_MAP=<map> or KISAK_FREE_CAMERA_MAP=<map>");
+  Require(!drawMap || !cameraMap,"KISAK_WORLD_DRAW_MAP and KISAK_FREE_CAMERA_MAP are mutually exclusive");
+  Require(!worldMap && !menusOption && !frontEndMap && !deviceMap,cameraMap ? "KISAK_FREE_CAMERA_MAP cannot be combined with another export mode" : "KISAK_WORLD_DRAW_MAP cannot be combined with another export mode");
+  const WorldDrawMode drawMode=cameraMap ? WorldDrawMode::FreeCamera : WorldDrawMode::Draw;
+  const char *const viewMap=cameraMap ? cameraMap : drawMap;
+  std::puts(cameraMap ? "asset_export=offline database=engine networking=not-initialized renderer=free_camera" : "asset_export=offline database=engine networking=not-initialized renderer=draw");
 #else
   Require(!deviceMap,"KISAK_WORLD_DEVICE_MAP needs the KisakCOD-world-device-probe build (KISAK_BUILD_WORLD_DEVICE_PROBE)");
   std::puts("asset_export=offline database=engine networking=not-initialized renderer=dedicated");
 #endif
 #ifndef KISAK_WORLD_DRAW_PROBE
   Require(!drawMap,"KISAK_WORLD_DRAW_MAP needs the KisakCOD-world-draw-probe build (KISAK_BUILD_WORLD_DRAW_PROBE)");
+  Require(!cameraMap,"KISAK_FREE_CAMERA_MAP needs the KisakCOD-world-draw-probe build (KISAK_BUILD_WORLD_DRAW_PROBE)");
 #endif
   Scr_InitVariables();Scr_Init();Com_SetScriptSettings();XAnimInit();DObjInit();
 #ifdef KISAK_WORLD_DEVICE_PROBE
@@ -306,7 +312,7 @@ void ExportFont(Font_s *font,size_t index,const std::filesystem::path &directory
 #ifdef KISAK_WORLD_DRAW_PROBE
   // Where a client's CL_InitRenderer runs, inside $init: r_init.cpp's R_Init, which
   // queues the graphics zones behind the device. KISAK_WORLD_FRONTEND_LAYOUT() is the loader's view.
-  Kisak_StartWorldDraw(drawMap,KISAK_WORLD_FRONTEND_LAYOUT());
+  Kisak_StartWorldDraw(drawMode,viewMap,KISAK_WORLD_FRONTEND_LAYOUT());
 #endif
   PMem_EndAlloc(initAllocationName,1u);DB_SetInitializing(0);DB_SyncXAssets();
   if(menusOption){XZoneInfo zone{"ui_mp",DB_ZONE_GAME,0};DB_LoadXAssets(&zone,1,1);DB_SyncXAssets();}
@@ -317,8 +323,13 @@ void ExportFont(Font_s *font,size_t index,const std::filesystem::path &directory
   std::fflush(nullptr);std::_Exit(0);
 #endif
 #ifdef KISAK_WORLD_DRAW_PROBE
-  Kisak_DrawWorld(directory,drawMap);
-  std::printf("asset_export=complete mode=world_draw_probe map=%s networking=not-initialized\n",drawMap);
+  if(drawMode==WorldDrawMode::FreeCamera){
+   Kisak_ReplayFreeCamera(directory,viewMap);
+   std::printf("asset_export=complete mode=free_camera_replay map=%s networking=not-initialized\n",viewMap);
+  }else{
+   Kisak_DrawWorld(directory,viewMap);
+   std::printf("asset_export=complete mode=world_draw_probe map=%s networking=not-initialized\n",viewMap);
+  }
   std::fflush(nullptr);std::_Exit(0);
 #endif
   // World inventory runs before the font assets are required: a map zone does not
