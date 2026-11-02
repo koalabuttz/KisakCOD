@@ -27,9 +27,21 @@
 //     visible surfaces is left out.
 //
 // Two further properties compare frames and are checked by the probe with the
-// helpers at the end: the walk from a camera cell sees a subset of what the
-// frustum alone sees from the same eye (portals only add planes), and the same
-// view run twice gives the same frame.
+// helpers at the end: the same view run twice gives the same frame, and the
+// camera cell is culled the same way by the portal walk and by the
+// frustum-only walk (camera cell -1) from the same eye. R_VisitPortals tests
+// the camera cell against the view frustum's planes, and the frustum-only walk
+// tests every cell against those planes, so a surface the frustum-only walk
+// sees and no cell but the camera cell lists is seen by the portal walk too.
+//
+// Not a rule: that the portal walk sees a subset of what the frustum-only walk
+// sees. A cell reached through a portal is culled against that portal's planes
+// alone (R_PortalClipPlanes: side planes through the portal hull pushed out by
+// 0.001, or bevel planes when the hull has more than ten points, the near plane
+// moved up to the portal and the far plane), never against the view frustum's
+// side planes, and the box tests are conservative per plane. So the portal walk
+// can keep a surface just outside the frustum. The probe counts those surfaces
+// (PortalOnlySurfaces) as an observation.
 //
 // Not a rule here: that emitted keys ascend. A BSP stage is emitted in surface
 // order (R_MergeAndEmitDrawSurfLists does not sort a single list), so key order
@@ -40,6 +52,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -269,9 +282,45 @@ inline size_t CountKeyDescents(const std::vector<Batch> &batches)
     return descents;
 }
 
-inline bool IsSubset(const std::vector<uint32_t> &sortedSmall, const std::vector<uint32_t> &sortedLarge)
+// Surfaces the portal walk sees and the frustum-only walk does not.
+inline std::vector<uint32_t> PortalOnlySurfaces(const Frame &portal, const Frame &frustumOnly)
 {
-    return std::includes(sortedLarge.begin(), sortedLarge.end(), sortedSmall.begin(), sortedSmall.end());
+    std::vector<uint32_t> out;
+    std::set_difference(portal.visibleSurfaces.begin(), portal.visibleSurfaces.end(),
+                        frustumOnly.visibleSurfaces.begin(), frustumOnly.visibleSurfaces.end(),
+                        std::back_inserter(out));
+    return out;
+}
+
+// The camera-cell rule from the header comment. Empty when it holds, or when
+// the portal walk has no camera cell (then it is the frustum-only walk, and
+// CheckFrame reports a camera cell out of range).
+inline std::string CheckCameraCellAgainstFrustum(const WorldShape &world, const Frame &portal,
+                                                 const Frame &frustumOnly)
+{
+    const int cellCount = int(world.cellSurfaces.size());
+    if (portal.cameraCell < 0 || portal.cameraCell >= cellCount)
+        return {};
+    const std::vector<uint32_t> &own = world.cellSurfaces[size_t(portal.cameraCell)];
+    size_t missing = 0;
+    uint32_t first = 0;
+    for (uint32_t surface : frustumOnly.visibleSurfaces)
+    {
+        if (!Contains(own, surface) || Contains(portal.visibleSurfaces, surface))
+            continue;
+        bool listedElsewhere = false;
+        for (int cell = 0; cell < cellCount && !listedElsewhere; ++cell)
+            listedElsewhere = cell != portal.cameraCell && Contains(world.cellSurfaces[size_t(cell)], surface);
+        if (listedElsewhere)
+            continue;
+        if (missing++ == 0)
+            first = surface;
+    }
+    if (!missing)
+        return {};
+    return "the portal walk misses " + std::to_string(missing) +
+           " surface(s) only the camera cell lists that the frustum-only walk sees (first " + std::to_string(first) +
+           ")";
 }
 
 inline bool SameFrame(const Frame &a, const Frame &b)

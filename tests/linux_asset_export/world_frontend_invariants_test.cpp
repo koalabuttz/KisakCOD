@@ -207,8 +207,33 @@ void CheckRules()
         Check(wf::CountVisibleOutsideStages(narrow, outside) == 1, "a visible surface in no stage range is counted");
         Check(wf::CountVisibleOutsideStages(world, frame) == 0, "every visible surface is in a stage range");
 
-        Check(wf::IsSubset({0, 2}, {0, 1, 2}), "a subset is a subset");
-        Check(!wf::IsSubset({0, 3}, {0, 1, 2}), "a missing element is not a subset");
+        // The portal walk against the frustum-only walk from the same eye.
+        wf::Frame frustumOnly = MakeFrame();
+        frustumOnly.cameraCell = -1;
+        frustumOnly.visibleSurfaces = {0, 1, 2, 3, 4, 5, 6, 7};
+        Check(wf::PortalOnlySurfaces(frame, frustumOnly).empty(), "a narrower portal walk has no portal-only surface");
+        Check(wf::CheckCameraCellAgainstFrustum(world, frame, frustumOnly).empty(),
+              "a surface culled in a cell reached through a portal breaks no rule");
+        wf::Frame wider = MakeFrame();
+        wider.visibleSurfaces = {0, 1, 2, 3, 4, 5, 6, 7};
+        frustumOnly.visibleSurfaces = {0, 1, 2, 3, 5, 6, 7};
+        Check(wf::PortalOnlySurfaces(wider, frustumOnly) == std::vector<uint32_t>{4},
+              "a surface only the portal walk keeps is counted, not refused");
+        Check(wf::CheckCameraCellAgainstFrustum(world, wider, frustumOnly).empty(),
+              "portal planes may keep a surface the frustum culls");
+        wf::Frame missing = MakeFrame();
+        missing.visibleSurfaces = {0, 2, 3, 5, 6, 7};
+        frustumOnly.visibleSurfaces = {0, 1, 2, 3, 5, 6, 7};
+        const std::string line = wf::CheckCameraCellAgainstFrustum(world, missing, frustumOnly);
+        Check(line.find("misses 1 surface(s)") != std::string::npos && line.find("(first 1)") != std::string::npos,
+              "a camera-cell surface the frustum-only walk sees and the portal walk misses is refused: " + line);
+        wf::WorldShape shared = world;
+        shared.cellSurfaces[1] = {1, 3, 4, 5};
+        Check(wf::CheckCameraCellAgainstFrustum(shared, missing, frustumOnly).empty(),
+              "a surface another cell also lists may have been seen through that cell");
+        missing.cameraCell = -1;
+        Check(wf::CheckCameraCellAgainstFrustum(world, missing, frustumOnly).empty(),
+              "an eye in no cell has no camera-cell rule");
         Check(wf::SameFrame(frame, MakeFrame()), "a frame equals itself");
         wf::Frame shifted = MakeFrame();
         for (wf::Batch &batch : shifted.batches[wf::kStageLit])

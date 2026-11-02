@@ -32,8 +32,8 @@
 //
 // Each view runs three frames: the portal walk from the camera cell, the same
 // view again (it must give the same frame), and the frustum-only walk (camera
-// cell -1), whose visible surfaces must include the portal walk's. Every frame
-// is held to world_frontend_invariants.h.
+// cell -1), which must see no camera-cell surface the portal walk misses. Every
+// frame is held to world_frontend_invariants.h.
 //
 // What this does not claim: no device, texture, shader or pixel is involved.
 // Static models, entities, effects, shadows and lighting are walked by the
@@ -520,6 +520,7 @@ struct ViewResult
     size_t visibleCells = 0;
     size_t visibleSurfaces = 0;
     size_t frustumOnlySurfaces = 0;
+    size_t portalOnlySurfaces = 0;
     size_t visibleOutsideStages = 0;
     size_t batches[wf::kStageCount] = {};
     size_t emitted[wf::kStageCount] = {};
@@ -578,8 +579,13 @@ ViewResult ProbeView(const GfxWorld &world, const wf::WorldShape &shape, GfxBack
         result.problems.push_back("the same view run twice gave different frames");
     if (frustum.error.empty())
     {
-        if (!wf::IsSubset(frame.visibleSurfaces, frustum.frame.visibleSurfaces))
-            result.problems.push_back("the portal walk sees a surface the frustum-only walk does not");
+        // Portal planes are not clipped to the frustum, so the portal walk may
+        // keep surfaces the frustum-only walk culls; that is counted. The camera
+        // cell is culled against the frustum's own planes in both walks.
+        result.portalOnlySurfaces = wf::PortalOnlySurfaces(frame, frustum.frame).size();
+        const std::string cameraCellRule = wf::CheckCameraCellAgainstFrustum(shape, frame, frustum.frame);
+        if (!cameraCellRule.empty())
+            result.problems.push_back(cameraCellRule);
         // The frustum-only walk starts from no cell and tests every cell against
         // the frustum, so it is held to the surface and batch rules with every
         // cell counted as visited and the camera-cell rules taken out.
@@ -711,7 +717,7 @@ void Kisak_ProbeWorldFrontEnd(const std::filesystem::path &directory, const char
             cellsSeen += c;
     }
     size_t maxVisible = 0, minVisible = SIZE_MAX, descentViews = 0, outsideViews = 0, outsideCellViews = 0;
-    size_t frustumSeen = 0;
+    size_t frustumSeen = 0, portalOnlyViews = 0, portalOnlyMax = 0;
     size_t batchesSeen[wf::kStageCount] = {};
     for (const ViewResult &r : results)
     {
@@ -724,6 +730,8 @@ void Kisak_ProbeWorldFrontEnd(const std::filesystem::path &directory, const char
         descentViews += (r.keyDescents[0] + r.keyDescents[1] + r.keyDescents[2]) != 0;
         outsideViews += r.visibleOutsideStages != 0;
         outsideCellViews += r.cameraCell < 0;
+        portalOnlyViews += r.portalOnlySurfaces != 0;
+        portalOnlyMax = std::max(portalOnlyMax, r.portalOnlySurfaces);
     }
     const double viewCount = double(results.size());
 
@@ -748,7 +756,8 @@ void Kisak_ProbeWorldFrontEnd(const std::filesystem::path &directory, const char
         json << (i ? "," : "") << "\n{\"index\":" << i << ",\"class\":" << Json(r.classname)
              << ",\"camera_cell\":" << r.cameraCell << ",\"visible_cells\":" << r.visibleCells
              << ",\"visible_surfaces\":" << r.visibleSurfaces << ",\"frustum_only_surfaces\":"
-             << r.frustumOnlySurfaces << ",\"visible_outside_stages\":" << r.visibleOutsideStages;
+             << r.frustumOnlySurfaces << ",\"portal_only_surfaces\":" << r.portalOnlySurfaces
+             << ",\"visible_outside_stages\":" << r.visibleOutsideStages;
         for (unsigned stage = 0; stage < wf::kStageCount; ++stage)
             json << ",\"" << wf::StageName(stage) << "\":{\"batches\":" << r.batches[stage]
                  << ",\"surfaces\":" << r.emitted[stage] << ",\"key_descents\":" << r.keyDescents[stage] << "}";
@@ -757,7 +766,8 @@ void Kisak_ProbeWorldFrontEnd(const std::filesystem::path &directory, const char
             json << (p ? "," : "") << Json(r.problems[p]);
         json << "]}";
     }
-    json << "],\"views_outside_cells\":" << outsideCellViews << ",\"failed_views\":" << failedViews
+    json << "],\"views_outside_cells\":" << outsideCellViews << ",\"views_with_portal_only_surfaces\":"
+         << portalOnlyViews << ",\"portal_only_surfaces_max\":" << portalOnlyMax << ",\"failed_views\":" << failedViews
          << ",\"seconds\":" << seconds << "}\n";
     WriteExclusiveFile(directory / "world-frontend-probe.json", json.str());
 
@@ -770,9 +780,10 @@ void Kisak_ProbeWorldFrontEnd(const std::filesystem::path &directory, const char
                 results.size(), scan.matching, cellsSeen, outsideCellViews, minVisible, maxVisible,
                 double(surfacesSeen) / viewCount, double(frustumSeen) / viewCount);
     std::printf("world_frontend_batches_mean lit=%.1f decal=%.1f emissive=%.1f views_with_key_descents=%zu "
-                "views_with_unstaged_visible=%zu seconds=%.2f\n",
+                "views_with_unstaged_visible=%zu views_with_portal_only=%zu portal_only_max=%zu seconds=%.2f\n",
                 double(batchesSeen[wf::kStageLit]) / viewCount, double(batchesSeen[wf::kStageDecal]) / viewCount,
-                double(batchesSeen[wf::kStageEmissive]) / viewCount, descentViews, outsideViews, seconds);
+                double(batchesSeen[wf::kStageEmissive]) / viewCount, descentViews, outsideViews, portalOnlyViews,
+                portalOnlyMax, seconds);
     // Every problem is in the JSON; the console gets the first few.
     constexpr size_t kMaxPrintedProblems = 48;
     size_t printed = 0, problemCount = 0;

@@ -154,13 +154,26 @@ The rules hold for any map because they follow from the code, not from the data
 - Each emitted batch holds visible surfaces of its own stage's surface range, and
   every surface's key matches the batch key outside the objectId bits.
 - Every visible surface of a stage's range is emitted exactly once.
-- The same view run twice gives the same frame, and the portal walk sees a subset
-  of what the frustum-only walk (no camera cell) sees from the same eye. The
-  frustum-only frame is held to the surface and batch rules too.
+- The same view run twice gives the same frame.
+- The camera cell is culled the same way by the portal walk and by the
+  frustum-only walk (no camera cell) from the same eye: both test it against the
+  view frustum's planes, so a surface the frustum-only walk sees that no other
+  cell lists must be seen by the portal walk. The frustum-only frame is held to
+  the surface and batch rules too.
 
-Not a rule: that emitted keys ascend. A single BSP stage is emitted in surface
-order, so key order belongs to the map compiler; the probe reports descents as an
-observation. A stage whose draw-surface list fills up fails the view, because a
+Not a rule: that the portal walk sees a subset of what the frustum-only walk
+sees. A cell reached through a portal is culled against that portal's planes
+alone (`R_PortalClipPlanes`: side planes through the portal hull pushed out by
+0.001, or bevel planes when the hull has more than ten points, plus the near
+plane moved up to the portal and the far plane), not against the view frustum's
+side planes, and the box tests are conservative per plane. So the portal walk can
+keep a surface just outside the frustum. The probe first held the walks to that
+subset and the first real-map run disproved it (16 of 178 mp_crash views, on
+David's laptop); it now counts those surfaces per view (`portal_only_surfaces`).
+
+Not a rule either: that emitted keys ascend. A single BSP stage is emitted in
+surface order, so key order belongs to the map compiler; the probe reports
+descents as an observation. A stage whose draw-surface list fills up fails the view, because a
 full list may have dropped surfaces.
 
 It fails closed before reading anything it cannot bound: the map name must be on
