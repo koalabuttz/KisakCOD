@@ -323,7 +323,10 @@ void ExportFont(Font_s *font,size_t index,const std::filesystem::path &directory
   std::fflush(nullptr);std::_Exit(0);
 #endif
 #ifdef KISAK_WORLD_DRAW_PROBE
-  if(drawMode==WorldDrawMode::FreeCamera){
+  if(drawMode==WorldDrawMode::FreeCamera&&Kisak_FreeCameraInput()!=FreeCameraInput::Replay){
+   Kisak_RunFreeCameraWindow(directory,viewMap,Kisak_FreeCameraInput(),Kisak_FreeCameraSeconds());
+   std::printf("asset_export=complete mode=free_camera_window input=%s map=%s networking=not-initialized\n",Kisak_FreeCameraInput()==FreeCameraInput::Script?"script":"window",viewMap);
+  }else if(drawMode==WorldDrawMode::FreeCamera){
    Kisak_ReplayFreeCamera(directory,viewMap);
    std::printf("asset_export=complete mode=free_camera_replay map=%s networking=not-initialized\n",viewMap);
   }else{

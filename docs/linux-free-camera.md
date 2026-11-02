@@ -9,8 +9,11 @@ asset-free tests. The `SceneRenderer` adapter over the engine renderer the
 the reference traversals on a real map ([the replay](#the-replay)). Both build
 in the opt-in `KisakCOD-world-draw-probe` target and fail closed without a
 device. The replay passed on one laptop GPU with `mp_crash`
-([what is verified](#what-is-verified)). A driver joining the adapter, the owner
-and the window input is the next step.
+([what is verified](#what-is-verified)). The
+[window driver](#the-window-driver) joins the adapter, the owner and the window
+input: the camera flown through the renderer's own window, live or by a checked
+script of SDL events. Its scripted run has passed on the same laptop under
+Wayland and X11; the live camera has not been flown yet.
 
 ## Why a host camera
 
@@ -36,6 +39,7 @@ view changes the source of the numbers, not their meaning.
 | `tests/linux_free_camera/` | Asset-free tests: the camera and owner by `scripts/tests/run_free_camera_checks.py`, the window input by `scripts/tests/test_linux_window.py` |
 | `src/linux/tools/engine_scene_renderer.{h,cpp}` | `EngineSceneRenderer`, the `SceneRenderer` over the engine renderer |
 | `src/linux/tools/free_camera_replay.cpp` | The replay of the reference traversals on a real map |
+| `src/linux/tools/free_camera_window_driver.cpp` | The window driver: the renderer's window adopted, flown live or by a checked script |
 | `src/linux/tools/world_draw_engine.{h,cpp}` | Frame, readback, map load and unload, shared with the world draw probe |
 
 The camera, controls and owner are compiled by the standalone runner (Clang,
@@ -43,7 +47,9 @@ The camera, controls and owner are compiled by the standalone runner (Clang,
 input needs SDL, so it is compiled in the opt-in window host build
 (`KISAK_BUILD_LINUX_WINDOW_HOST`) as `KisakCOD-free-camera-window-test`, with SDL2
 and SDL3, which is the compile proof for all four view sources in a CMake target.
-The camera, controls and owner also build, with the adapter and the replay, in
+The camera, controls and owner also build, with the adapter, the replay, the
+window input (`free_camera_window.cpp` and the SDL3 window host it adopts the
+window with, `window_host.cpp` and `pixel_buffer.cpp`) and the window driver, in
 the opt-in `KisakCOD-world-draw-probe` target (`KISAK_BUILD_WORLD_DRAW_PROBE`),
 with the client definitions and `-Wall -Wextra -Werror`. No shipped binary links
 them yet. The production unit `src/universal/com_math_anglevectors.cpp` is
@@ -238,9 +244,10 @@ else pumps its events (the world draw probe and the adapter never do).
   nothing. The adapter's `Resize` resets the back buffer and scene size to exactly
   that extent and never resizes the window.
 - The caller times frames (`Tick(wait, msec, time)`, with `msec` from
-  `FrameDeadline` or a clock; the owner caps a step at 200 ms). The aspect stays
-  the owner's default, width/height, until the driver passes
-  `vidConfig.aspectRatioWindow` through `FrameOwner::SetAspect`.
+  `FrameDeadline` or a clock; the owner caps a step at 200 ms). The aspect is the
+  owner's default, width/height, unless the caller passes
+  `vidConfig.aspectRatioWindow` through `FrameOwner::SetAspect`, as the
+  [window driver](#the-window-driver) does after every resize.
 - Quitting (Escape, window close, `RequestQuit`) only stops the loop. The order on
   the way out is: destroy `FreeCameraWindow` (capture and keys released, window
   left alone), then `FrameOwner::Shutdown` (unload, then the renderer, which may
@@ -249,6 +256,82 @@ else pumps its events (the world draw probe and the adapter never do).
 There is no console or menu in this loop, so no key catcher decides who owns a
 key. When one is added, keys must go through `ClientInputHost` and its catchers
 before they reach the camera.
+
+## The window driver
+
+`KISAK_FREE_CAMERA_INPUT` turns the free-camera mode of
+`KisakCOD-world-draw-probe` from the replay into the window driver
+(`src/linux/tools/free_camera_window_driver.cpp`). It starts the renderer as the
+replay does, loads the map at camera A, then adopts the renderer's window
+(`EngineSceneRenderer::Window()`) with `FreeCameraWindow`, and every frame is a
+`Tick` of that window. On the way out `FreeCameraWindow` is destroyed first (the
+window must still exist afterwards), then the owner shuts down, which unloads
+the map and runs `R_Shutdown(1)`; after that the window, the device, the map
+and every zone must be gone.
+
+The engine picks the aspect for a size itself (`R_StoreWindowSettings`: with
+`r_aspectRatio` auto a windowed size snaps to 4:3, 16:10 or 16:9). The driver
+gives the owner that aspect after every resize from inside the renderer's
+`Resize`, which the owner calls at the start of a frame before it builds the
+view, so the first frame at a new size is already drawn with the engine's
+aspect.
+
+`KISAK_FREE_CAMERA_INPUT=window` is the live camera. Click in the window to
+capture the pointer, then `w`/`a`/`s`/`d` to move, space and `c` for up and
+down, shift for fast, the arrow keys to turn; Escape releases the pointer and
+Escape again (or closing the window) quits. Frames are timed from a monotonic
+clock and drawn at the elapsed time without reading back. An optional
+`KISAK_FREE_CAMERA_SECONDS` (1 to 3600) quits by itself. It prints
+`free_camera_window_controls` at the start and `free_camera_window_live` (how it
+ended, frames by outcome, frames per second) at the end.
+
+`KISAK_FREE_CAMERA_INPUT=script` drives the same window with SDL events it
+pushes into the window's own queue (`SDL_PushEvent`), so every key, click and
+pointer motion goes through SDL, `WindowHost` and `FreeCameraWindow` as a
+desktop's would. Window size and minimize go through the window system itself
+(`SDL_SetWindowSize`, `SDL_MinimizeWindow`, `SDL_RestoreWindow`). A second
+`FrameOwner`, over a renderer that draws nothing, is given the same input
+directly, as the replay gives it, and the camera must be at exactly the same pose
+at every checkpoint. Frames are drawn at scene time 0 and read back, and each
+checkpoint settles by the world draw probe's rule.
+
+1. Focus (pushed: a desktop may not focus a new window), settle `W.start`, then a
+   left click, which must capture the pointer.
+2. Path A of the replay as events: `w` for 60 frames of 16 to 17 ms, an 818-count
+   pointer motion, `w` with left shift for 10 frames of 100 ms, space for 5 frames
+   of 100 ms; settled at `A.forward`, `A.turn`, `A.fast`, `A.rise`.
+3. Resize: the window is set to 16:9 at its height (854x480 from 640x480), the
+   back buffer must follow its pixel size and the owner the engine's new aspect
+   (`A.rise.wide`); back at its size the picture must be `A.rise`'s again.
+4. Minimize: no frame may draw while the window is minimized; after the restore
+   the capture must come back and the picture be `A.rise`'s. Wayland neither tells
+   a client that it was minimized nor lets it restore itself, so there this step
+   is recorded as not taken.
+5. Focus loss while `w` is held: the camera stops and the capture is released;
+   focus back re-applies the capture and presses nothing.
+6. Escape releases the pointer, Escape again quits, and no frame runs after.
+
+A window manager that refuses the 16:9 size is recorded the same way, as a step
+not taken; each step prints `free_camera_window_step name=... exercised=yes|no`.
+Any other difference fails the run: a checkpoint that does not settle, a pose
+that differs from the directly fed owner's, a back buffer that is not the
+window's pixel size, a picture that does not come back, a frame drawn while
+minimized or after quitting, or a capture that does not follow. The counts must
+agree as for the replay, and after the shutdown the window must be destroyed and
+no device, map or zone left. Input the script did not push is counted, not
+refused: every pushed event carries a marker device id, an SDL event watch
+counts key, pointer and wheel events for the window without it, and focus losses
+that came from the desktop are counted too. A desktop may send pointer motion as
+a window appears under the pointer, which the owner ignores while nothing is
+captured; real input that does reach the camera shows up as a pose difference,
+and the count is then named beside it.
+
+Both write `free-camera-window.json` (the camera, the counts, and for the script
+its checkpoints with poses and digests and its steps; no pixels) and end with
+`free_camera_window_run=passed|failed`. Run them like the replay, adding
+`KISAK_FREE_CAMERA_INPUT`. The scripted run moves, resizes, minimizes and captures
+the pointer of a window on the desktop for a few seconds; nobody should use the
+mouse or keyboard meanwhile, because input that reaches the camera fails the run.
 
 ## What is verified
 
@@ -328,6 +411,41 @@ frames whose eye is in solid (two in `A.fast`, four in `A.rise`) drew normally.
 Every checkpoint settled on a full picture. Whether the game draws nothing from
 that pose too, or the visibility walk misses a portal there, is not known yet.
 
+Window driver, in the cloud sandbox only: it builds into the same target in
+Debug and RelWithDebInfo with `-Wall -Wextra -Werror`, and
+`test_world_draw_probe.py` runs both inputs against the stand-in library (each
+must stop at `free_camera_window stage=direct3d` before `R_Init` and before the
+window host exists) and refuses an unknown input, an input in the draw mode, a
+time limit outside 1 to 3600 seconds and a time limit on the script, before any
+device work. That SDL 3.2.10 keeps the marker device id on pushed events and
+that the event watch sees both kinds was checked with a small program on the
+dummy driver.
+
+Window driver on a GPU, on the same laptop (local runs, not CI evidence).
+`KISAK_FREE_CAMERA_INPUT=script` from b0209da in RelWithDebInfo (run N=40,
+2026-11-02) passed with no problem in 7.1 s: SDL chose its Wayland driver, the
+adopted window started unfocused at 640x480, and every checkpoint (`W.start`,
+`A.forward`, `A.turn`, `A.fast`, `A.rise`, `A.rise.wide`, `A.rise.resized`,
+`A.focus`) settled with the camera at exactly the directly fed owner's pose. The
+path A digests are the replay's own on the same machine. The 16:9 resize reached
+the back buffer at 854x480, the engine's aspect went from 1.3333 to 1.7778 with
+it, and back at 640x480 the picture was `A.rise`'s again. Focus loss and the two
+Escapes behaved as above. The minimize step was not taken (Wayland). The event
+watch counted two pointer or key events the script did not push, with nobody at
+the laptop; they reached no camera (every pose matched). After the shutdown the
+window was destroyed and no device or zone was left. DXVK logged
+`D3D9Cursor::ResetCursor: Not supported on current platform` once per device
+reset, as in the replay's runs.
+
+The same script from c54596a (the same driver) in Debug with
+`SDL_VIDEODRIVER=x11` (GNOME's XWayland, run N=41) passed with no problem in
+14.3 s. Every checkpoint's digest was N=40's, and the minimize step ran: the
+window manager reported the window minimized, five frames were skipped without a
+draw, and after the restore the capture came back and the settled picture
+(`A.rise.restored`) was `A.rise`'s. The desktop took focus once (the minimize),
+no input came from outside the script, and no window was left after the
+shutdown.
+
 ## What is not verified
 
 - The replay has run on one GPU and one map. Its interruptions are forced: DXVK
@@ -336,16 +454,19 @@ that pose too, or the visibility walk misses a portal there, is not known yet.
 - Nothing is compared with a captured game frame.
 - Path B's flat frame (above) is unexplained: the visibility walk's cells and
   portals from that pose have not been looked at.
-- The window input has only seen SDL's dummy driver: no real desktop's focus,
-  minimize or relative-capture behaviour, and no window made by `R_CreateWindow`
-  itself. The replay does not use it: it drives the owner directly.
+- The window input has met a real desktop only through the window driver's
+  script (Wayland in RelWithDebInfo, X11 in Debug), with the window
+  `R_CreateWindow` made. The live camera with a person at the keyboard has not
+  been flown, and focus changes other than the minimize's were the script's own.
 
 ## Acceptance on a GPU
 
 Run on named hardware with a private map, keeping screenshots and exports out of
 the repository. The replay covers items 1 and 2, item 3 without a map switch,
 and the shutdown order of item 4; it passed on David's laptop (see What is
-verified).
+verified). The window driver's script repeats path A, the resize and the
+minimize through the renderer's own window, with quitting from the keyboard; it
+passed there too.
 
 1. Replay reference traversal A (forward, mouse turn left 818 counts, fast forward,
    rise) and B (four arrow-key turns) through the real renderer; record the pose and

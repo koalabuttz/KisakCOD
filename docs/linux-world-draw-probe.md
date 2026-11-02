@@ -28,6 +28,9 @@ The same binary has a second mode, the free-camera replay
 renderer the same way, then hands it to the free camera's frame owner through
 the `SceneRenderer` adapter and replays the free camera's reference traversals
 on the map. [Linux free camera](linux-free-camera.md#the-replay) describes it.
+With `KISAK_FREE_CAMERA_INPUT=window` or `script` the same mode flies the camera
+through the renderer's own window instead, live or by a checked script of SDL
+events ([the window driver](linux-free-camera.md#the-window-driver)).
 The frame, map load and camera code both modes use is in
 `src/linux/tools/world_draw_engine.{h,cpp}`.
 
@@ -224,7 +227,9 @@ The probe's own sources build with `-Wall -Wextra -Werror`: the probe, the
 shared engine code, the boundary, the SDL3 window functions, and for the
 free-camera replay the adapter (`engine_scene_renderer.cpp`), the replay
 (`free_camera_replay.cpp`) and the free camera's own sources
-(`src/linux/client/view`).
+(`src/linux/client/view`), and for its window input the window driver
+(`free_camera_window_driver.cpp`) and the SDL3 window host
+(`src/linux/client/window/window_host.cpp`, `pixel_buffer.cpp`).
 
 ## Limits
 
@@ -291,7 +296,11 @@ temporary tree holding nothing but a one-line stub `fileSysCheck.cfg`:
 - the free-camera replay with `mp_crash` must stop at its own
   `stage=direct3d`, and both map variables at once, an unknown map and a show
   time (which belongs to the draw mode) must be refused first;
-- all eight runs exit 1 and write nothing.
+- the window driver's `window` and `script` inputs with `mp_crash` must stop at
+  their own `stage=direct3d`, before the window is adopted, and an unknown
+  input, an input in the draw mode and a bad or misplaced time limit must be
+  refused first;
+- all fifteen runs exit 1 and write nothing.
 
 No DXVK library, Vulkan, GPU or game data is involved. A pass there means the
 probe builds and fails closed. It says nothing about a device, a map or a frame.

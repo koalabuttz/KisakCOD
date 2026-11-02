@@ -34,6 +34,15 @@
 // map, with a resize, a minimize, a device reset and a reload along the way. It
 // writes free-camera-replay.json. See docs/linux-free-camera.md.
 //
+// KISAK_FREE_CAMERA_INPUT chooses where the free camera's input comes from:
+// unset, the replay above; `window`, the renderer's own window, adopted by the
+// free camera's window host (src/linux/client/view/free_camera_window.h), until
+// it quits or KISAK_FREE_CAMERA_SECONDS (1 to 3600, live input only) run out;
+// `script`, the same window driven by SDL events the run pushes into its queue
+// and checks. Kisak_RunFreeCameraWindow runs both and writes
+// free-camera-window.json. Kisak_StartWorldDraw reads and checks both variables
+// with the other arguments.
+//
 // loaderLayout is KISAK_WORLD_FRONTEND_LAYOUT() as the caller's translation unit
 // (compiled with the dedicated definitions, like the database loader) sees it.
 //
@@ -48,5 +57,17 @@ enum class WorldDrawMode
 void Kisak_StartWorldDraw(WorldDrawMode mode, const char *mapName, const kisak_world_frontend::Layout &loaderLayout);
 void Kisak_DrawWorld(const std::filesystem::path &directory, const char *mapName);
 void Kisak_ReplayFreeCamera(const std::filesystem::path &directory, const char *mapName);
+enum class FreeCameraInput
+{
+    Replay, // KISAK_FREE_CAMERA_INPUT unset: Kisak_ReplayFreeCamera
+    Window, // window: Kisak_RunFreeCameraWindow, live
+    Script, // script: Kisak_RunFreeCameraWindow, scripted
+};
+// What Kisak_StartWorldDraw read; Replay outside the free-camera mode.
+FreeCameraInput Kisak_FreeCameraInput();
+// KISAK_FREE_CAMERA_SECONDS, or 0 for no limit.
+int Kisak_FreeCameraSeconds();
+void Kisak_RunFreeCameraWindow(const std::filesystem::path &directory, const char *mapName, FreeCameraInput input,
+                               int secondsLimit);
 // Seconds since Kisak_StartWorldDraw began.
 double WorldDrawStartSeconds();
