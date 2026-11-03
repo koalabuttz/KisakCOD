@@ -61,9 +61,9 @@ python3 scripts/tests/run_x64_compile_census.py --jobs 4 --report-dir artifacts/
 ```
 
 `-DKISAK_LINUX_ARCH=x86_64` (default `i386`) configures the Linux build with
-`-m64` instead of `-m32`. It exists for the census: it accepts a 64-bit compiler
-only when asked, refuses every other opt-in Linux target, and warns that
-`KisakCOD-dedi` does not compile 64-bit yet. The runner configures such a build
+`-m64` instead of `-m32`. It accepts a 64-bit compiler only when asked, refuses
+every other opt-in Linux target, and builds `KisakCOD-dedi` (see
+[the x86_64 dedicated server](#x86_64-dedicated-server) below). The runner configures such a build
 directory, takes the exact `KisakCOD-dedi` compile commands, adds the multiplayer
 client sources from the i386 client census with `-m64`, and runs one
 `-fsyntax-only -ferror-limit=0` Clang pass per unit with these hazard warnings on:
@@ -191,6 +191,53 @@ It is a Clang front-end pass on Linux x86_64: not a link, not a run, not MSVC
 x64, and not proof that a unit that compiles behaves correctly with 8-byte
 pointers. The fastfile loader, for one, compiles today and is still wrong at
 64 bits.
+
+## x86_64 dedicated server
+
+Step two. `KisakCOD-dedi` builds and links as an ELF64 x86_64 program, and it
+boots without game data to the same end state as the i386 build: `FS_Startup`
+runs and the server stops on the missing `fileSysCheck.cfg`.
+
+```sh
+cmake -S . -B build-x64 -G Ninja -DKISAK_PLATFORM=linux -DKISAK_LINUX_ARCH=x86_64 \
+    -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+cmake --build build-x64 --target KisakCOD-dedi
+python3 scripts/tests/test_linux_bootstrap.py --arch x86_64 bin/KisakCOD-dedi
+```
+
+`build-linux.sh` stays i386-only. Both architectures write `bin/KisakCOD-dedi`
+unless `CMAKE_RUNTIME_OUTPUT_DIRECTORY` says otherwise, so keep one build
+directory per architecture and configuration. The build string is
+`linux-x86_64` (`linux-x86_64-debug` in Debug builds).
+
+The CI job `x86_64 dedicated server` builds Debug and RelWithDebInfo and runs
+the bootstrap test against each binary with `--arch x86_64`.
+
+### What had to change to boot
+
+Every crash on the asset-free path was a dvar string pointer stored in a
+32-bit integer, the decompiler's way of moving a `DvarValue`:
+
+- `value.integer = (int)string` and `(char *)dvar->current.integer` became
+  `value.string`, here and in every module that read string dvars that way.
+- String ownership in `dvar.cpp` (`Dvar_ShouldFree*String`, the current,
+  latched and reset string swaps) compared and copied `.integer`, which moves
+  only the low 4 bytes of the pointer; it now uses `.string`.
+- Enum dvars read their string table as `*(const char **)(domain.integer.max +
+  4 * index)`; they use `domain.enumeration.strings[index]`, which is the same
+  field on i386.
+- Domain functions were called through a cast that split the `DvarValue` into
+  four 32-bit arguments; they are called with the `DvarValue` itself.
+
+On i386 each of these produces the same code as before.
+
+### Not 64-bit yet
+
+Loading game data. The fastfile loader copies retail 32-bit pointers into
+8-byte fields, and the pointer/integer cast sites the census lists (about 400 on
+the dedicated path: `com_memory`, `com_files`, the script VM, the xanim and
+fastfile loaders) are still there. The bootstrap test does not reach any of
+them. Next: a 64-bit fastfile loader, then a map load on real data.
 
 ## Windows MSVC x64 census
 

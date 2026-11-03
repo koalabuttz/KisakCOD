@@ -341,7 +341,7 @@ class FakeCompilerTests(unittest.TestCase):
 
 
 class CMakeKnobTests(unittest.TestCase):
-    """i386 stays the default; x86_64 is opt-in and census-only."""
+    """i386 stays the default; x86_64 is opt-in (dedicated server and census)."""
 
     def test_i386_is_the_default_and_x86_64_is_opt_in(self):
         text = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
@@ -392,6 +392,33 @@ class WorkflowTests(unittest.TestCase):
         upload = next(step for step in self.job["steps"]
                       if step.get("uses", "").startswith("actions/upload-artifact@"))
         self.assertEqual(upload["if"], "always()")
+
+
+class X64DedicatedWorkflowTests(unittest.TestCase):
+    """The x86_64 dedicated server job builds each config and boots it."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.workflow = yaml.load(WORKFLOW.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+        cls.job = cls.workflow["jobs"]["x64_dedicated"]
+        cls.commands = "\n".join(step.get("run", "") for step in cls.job["steps"])
+
+    def test_both_configs_build_and_boot_as_x86_64(self):
+        self.assertEqual(self.job["strategy"]["matrix"]["config"], ["Debug", "RelWithDebInfo"])
+        self.assertIn("-DKISAK_LINUX_ARCH=x86_64", self.commands)
+        self.assertIn("--target KisakCOD-dedi", self.commands)
+        self.assertIn('scripts/tests/test_linux_bootstrap.py --arch x86_64 "$BINARY"', self.commands)
+
+    def test_every_command_block_propagates_failure(self):
+        for step in self.job["steps"]:
+            if "run" in step:
+                with self.subTest(step=step.get("name")):
+                    self.assertTrue(step["run"].lstrip().startswith("set -euo pipefail"))
+
+    def test_the_job_needs_no_i386_toolchain_graphics_or_assets(self):
+        for forbidden in ("multilib", "-m32", "dxvk", "sdl", "vulkan", "xvfb", "steam", "build-linux.sh"):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, self.commands.lower())
 
 
 if __name__ == "__main__":

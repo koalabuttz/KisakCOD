@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Smoke-test the native Linux dedicated server binary.
 
-The build produces an asset-free ELF32 i386 executable at bin/KisakCOD-dedi. No
-game data is needed to prove it is the right artefact and that it reaches its own
-startup code, so every check here works from the binary alone:
+The build produces an asset-free ELF32 i386 executable at bin/KisakCOD-dedi (or,
+with --arch x86_64, the opt-in ELF64 build from docs/linux-x64.md). No game data
+is needed to prove it is the right artefact and that it reaches its own startup
+code, so every check here works from the binary alone:
 
-  * the header bytes say ELF, 32-bit, little-endian, machine 3 (i386);
+  * the header bytes say ELF, little-endian, and the class and machine of the
+    requested architecture: 32-bit machine 3 (i386, the default) or 64-bit
+    machine 62 (x86_64);
   * --help and --version answer without touching the engine;
   * an asset-free launch reaches FS_Startup and then fails on the missing
     fileSysCheck.cfg, which is the expected end state for a data-less tree;
@@ -20,7 +23,7 @@ checkout and the temporary directory is removed afterwards, taking the log with
 it.
 
 Usage:
-    python3 scripts/tests/test_linux_bootstrap.py [path/to/binary]
+    python3 scripts/tests/test_linux_bootstrap.py [--arch i386|x86_64] [path/to/binary]
 """
 
 import argparse
@@ -40,8 +43,16 @@ EI_DATA = 5
 EHDR_MACHINE_OFFSET = 18
 ELF_MAGIC = b"\x7fELF"
 ELFCLASS32 = 1
+ELFCLASS64 = 2
 ELFDATA2LSB = 1
 EM_386 = 3
+EM_X86_64 = 62
+
+# --arch value -> (EI_CLASS, class label, e_machine, machine label)
+ARCHITECTURES = {
+    "i386": (ELFCLASS32, "ELFCLASS32 (EI_CLASS == 1)", EM_386, "e_machine EM_386 (3, i386)"),
+    "x86_64": (ELFCLASS64, "ELFCLASS64 (EI_CLASS == 2)", EM_X86_64, "e_machine EM_X86_64 (62, x86_64)"),
+}
 
 HELP_TIMEOUT = 10
 LAUNCH_TIMEOUT = 30
@@ -106,7 +117,7 @@ def run(binary, arguments, cwd, timeout):
     return completed.returncode, completed.stdout.decode("utf-8", "replace"), False
 
 
-def check_elf_header(checker, binary):
+def check_elf_header(checker, binary, arch="i386"):
     """Read the header bytes directly: no objdump or `file` involved."""
     try:
         with binary.open("rb") as handle:
@@ -120,9 +131,10 @@ def check_elf_header(checker, binary):
         return
 
     checker.require(header[:4] == ELF_MAGIC, "ELF magic 0x7f 'E' 'L' 'F'")
+    elf_class, class_label, elf_machine, machine_label = ARCHITECTURES[arch]
     checker.require(
-        header[EI_CLASS] == ELFCLASS32,
-        "ELFCLASS32 (EI_CLASS == 1)",
+        header[EI_CLASS] == elf_class,
+        class_label,
         f"EI_CLASS is {header[EI_CLASS]}",
     )
     checker.require(
@@ -132,7 +144,7 @@ def check_elf_header(checker, binary):
     )
 
     machine = struct.unpack_from("<H", header, EHDR_MACHINE_OFFSET)[0]
-    checker.require(machine == EM_386, "e_machine EM_386 (3, i386)", f"e_machine is {machine}")
+    checker.require(machine == elf_machine, machine_label, f"e_machine is {machine}")
 
 
 def no_engine_start(checker, output, label):
@@ -309,6 +321,12 @@ def main():
         default=str(DEFAULT_BINARY),
         help="dedicated server binary (default: bin/KisakCOD-dedi)",
     )
+    parser.add_argument(
+        "--arch",
+        choices=sorted(ARCHITECTURES),
+        default="i386",
+        help="architecture the binary must be built for (default: i386, the shipping build)",
+    )
     arguments = parser.parse_args()
 
     binary = Path(arguments.binary).expanduser().resolve()
@@ -316,6 +334,7 @@ def main():
     print("Native Linux dedicated server bootstrap smoke test", flush=True)
     print("===================================================", flush=True)
     print(f"binary: {binary}", flush=True)
+    print(f"arch:   {arguments.arch}", flush=True)
 
     if not binary.is_file():
         print(f"FAIL: binary not found at {binary}", flush=True)
@@ -324,7 +343,7 @@ def main():
     checker = Checker()
 
     print("\nbinary format", flush=True)
-    check_elf_header(checker, binary)
+    check_elf_header(checker, binary, arguments.arch)
 
     print("\ncommand-line exits", flush=True)
     with tempfile.TemporaryDirectory(prefix="kisakcod-bootstrap-cli-") as temporary:

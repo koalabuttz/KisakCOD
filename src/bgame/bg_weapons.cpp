@@ -4544,7 +4544,7 @@ bool BG_ThrowingBackGrenade(const playerState_s *ps)
 WeaponDef *BG_LoadWeaponDef(const char *name)
 {
 #ifndef DEDICATED
-    if (*(_BYTE *)fs_gameDirVar->current.integer || !IsFastFileLoad())
+    if (*(_BYTE *)fs_gameDirVar->current.string || !IsFastFileLoad())
         return BG_LoadWeaponDef_LoadObj(name);
     else
         return BG_LoadWeaponDef_FastFile(name);

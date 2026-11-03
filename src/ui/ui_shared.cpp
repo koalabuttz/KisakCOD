@@ -2577,7 +2577,7 @@ int Item_DvarEnum_EnumIndex(itemDef_s *item)
         return enumIndex;
     for (enumIndexa = 0; enumIndexa < enumDvar->domain.enumeration.stringCount; ++enumIndexa)
     {
-        if (!I_stricmp(enumString, *(const char **)(enumDvar->domain.integer.max + 4 * enumIndexa)))
+        if (!I_stricmp(enumString, enumDvar->domain.enumeration.strings[enumIndexa]))
             return enumIndexa;
     }
     return 0;
@@ -3222,7 +3222,7 @@ const char *Item_DvarEnum_Setting(itemDef_s *item)
             "enumIndex >= 0 && enumIndex < enumDvar->domain.enumeration.stringCount",
             v2);
     }
-    return *(const char **)(enumDvar->domain.integer.max + 4 * enumIndex);
+    return enumDvar->domain.enumeration.strings[enumIndex];
 }
 
 void Item_Slider_Paint(UiContext *dc, itemDef_s *item)

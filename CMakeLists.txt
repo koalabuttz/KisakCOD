@@ -2,11 +2,12 @@ cmake_minimum_required(VERSION 3.18)
 
 # The serialized assets and VM currently require a 32-bit process. Set the
 # architecture before project() so CMake tests the actual Linux compiler ABI.
-# i386 is the shipping Linux build. x86_64 is an opt-in 64-bit track that only
-# configures for the compile census (scripts/tests/run_x64_compile_census.py):
-# the engine does not build or run 64-bit yet. See docs/linux-x64.md.
+# i386 is the shipping Linux build. x86_64 is an opt-in 64-bit track: the
+# dedicated server builds and boots without game data, and the compile census
+# (scripts/tests/run_x64_compile_census.py) covers the rest. Fastfile loading is
+# not 64-bit yet. See docs/linux-x64.md.
 set(KISAK_LINUX_ARCH "i386" CACHE STRING
-    "Native Linux architecture: i386 (shipping) or x86_64 (opt-in compile census only)")
+    "Native Linux architecture: i386 (shipping) or x86_64 (opt-in 64-bit track: dedicated server and compile census)")
 set_property(CACHE KISAK_LINUX_ARCH PROPERTY STRINGS i386 x86_64)
 if(NOT DEFINED KISAK_PLATFORM)
     if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")

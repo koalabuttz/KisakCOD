@@ -2,9 +2,10 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
     message(FATAL_ERROR "KISAK_PLATFORM=linux requires a Linux target toolchain.")
 endif()
 if(KISAK_LINUX_ARCH STREQUAL "x86_64")
-    # Opt-in 64-bit track: configures KisakCOD-dedi so the compile census can
-    # read its exact compile commands. The target does not build yet, and every
-    # other opt-in Linux target still describes the i386 engine.
+    # Opt-in 64-bit track: KisakCOD-dedi builds and boots without game data, and
+    # the compile census reads its compile commands. Fastfile loading is not
+    # 64-bit yet, and every other opt-in Linux target still describes the i386
+    # engine. See docs/linux-x64.md.
     if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
         message(FATAL_ERROR "KISAK_LINUX_ARCH=x86_64 requires a 64-bit toolchain (-m64). Use a new build directory.")
     endif()
@@ -13,11 +14,11 @@ if(KISAK_LINUX_ARCH STREQUAL "x86_64")
             KISAK_BUILD_UI_ASSET_EXPORT KISAK_BUILD_WORLD_FRONTEND_PROBE KISAK_BUILD_DEVICE_PROBE
             KISAK_BUILD_WORLD_DEVICE_PROBE KISAK_BUILD_WORLD_DRAW_PROBE)
         if(${kisak_i386_only})
-            message(FATAL_ERROR "${kisak_i386_only} is i386-only; KISAK_LINUX_ARCH=x86_64 supports the compile census only")
+            message(FATAL_ERROR "${kisak_i386_only} is i386-only; KISAK_LINUX_ARCH=x86_64 supports only KisakCOD-dedi and the compile census")
         endif()
     endforeach()
-    message(WARNING "KISAK_LINUX_ARCH=x86_64 is the opt-in 64-bit compile census configuration. "
-        "KisakCOD-dedi does not compile 64-bit yet; run scripts/tests/run_x64_compile_census.py instead of building it.")
+    message(WARNING "KISAK_LINUX_ARCH=x86_64 is the opt-in 64-bit track. KisakCOD-dedi builds and boots "
+        "without game data, but fastfile (map) loading is not 64-bit yet; ship the i386 build. See docs/linux-x64.md.")
 elseif(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
     message(FATAL_ERROR "The Linux dedicated server requires a 32-bit toolchain (-m32). Use a new build directory.")
 endif()

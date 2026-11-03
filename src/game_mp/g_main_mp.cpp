@@ -258,12 +258,12 @@ void G_InitGame(int32_t levelTime, int32_t randomSeed, int32_t restart, int32_t 
     level_bgs.SafeDObjFree = G_SafeDObjFree;
     level_bgs.AllocXAnim = (void *(*)(int))Hunk_AllocXAnimServer;
     level_bgs.anim_user = 1;
-    if (*(_BYTE *)g_log->current.integer)
+    if (*(_BYTE *)g_log->current.string)
     {
         if (g_logSync->current.enabled)
-            FS_FOpenFileByMode((char *)g_log->current.integer, &level.logFile, FS_APPEND_SYNC);
+            FS_FOpenFileByMode((char *)g_log->current.string, &level.logFile, FS_APPEND_SYNC);
         else
-            FS_FOpenFileByMode((char *)g_log->current.integer, &level.logFile, FS_APPEND);
+            FS_FOpenFileByMode((char *)g_log->current.string, &level.logFile, FS_APPEND);
         if (level.logFile)
         {
             SV_GetServerinfo(serverinfo, 1024);
