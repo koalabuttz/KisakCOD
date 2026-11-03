@@ -1669,7 +1669,8 @@ XAssetEntry *DB_CreateDefaultEntry(XAssetType type, char *name)
         newEntry->asset.header.sound->head = NULL;
     }
     newEntry->nextHash = db_hashTable[DB_HashForName(name, type)];
-    db_hashTable[DB_HashForName(name, type)] = ((char *)newEntry - (char *)g_assetEntryPool) >> 4;
+    db_hashTable[DB_HashForName(name, type)] = (XAssetEntryPoolEntry *)newEntry - g_assetEntryPool;
+    iassert(&g_assetEntryPool[db_hashTable[DB_HashForName(name, type)]].entry == newEntry);
     DB_SetXAssetName(&newEntry->asset, SL_ConvertToString(SL_GetString(name, 4)));
     newEntry->inuse = 1;
     return newEntry;
@@ -2327,7 +2328,8 @@ void DB_Init()
     for (XAssetType type = (XAssetType)0; type < ASSET_TYPE_COUNT; ++type)
         DB_InitPoolHeader(type);
 
-    g_freeAssetEntryHead = g_assetEntryPool + 16;
+    // Entry 0 is the null hash link; the free list starts at entry 1.
+    g_freeAssetEntryHead = &g_assetEntryPool[1];
 
     for (int32_t i = 1; i < 0x7FFF; ++i)
         g_assetEntryPool[i].next = &g_assetEntryPool[i + 1];
