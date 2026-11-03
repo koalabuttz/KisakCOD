@@ -647,7 +647,7 @@ void TRACK_db_registry()
 void DB_GetIndexBufferAndBase(uint8_t zoneHandle, void *indices, void **ib, int32_t *baseIndex)
 {
     *ib = g_zones[zoneHandle].mem.indexBuffer;
-    *baseIndex = ((uint32_t)indices - (uint32_t)g_zones[zoneHandle].mem.blocks[8].data) >> 1;
+    *baseIndex = (int32_t)(((uint8_t *)indices - g_zones[zoneHandle].mem.blocks[8].data) >> 1);
 }
 
 void DB_GetVertexBufferAndOffset(uint8_t zoneHandle, _BYTE *verts, void **vb, int32_t *vertexOffset)

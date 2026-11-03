@@ -767,24 +767,14 @@ void Info_RemoveKey_Big(char *s, const char *key)
 
 bool Info_Validate(const char *s)
 {
-    int v1; // eax
-    int v3; // eax
-
-    v1 = (int)strchr(s, 0x22u);
-
-    if (v1)
+    if (strchr(s, 0x22u))
         return 0;
 
-    v3 = (int)strchr(s, 0x3Bu);
-
-    return v3 == 0;
+    return strchr(s, 0x3Bu) == 0;
 }
 
 void Info_SetValueForKey(char *s, const char *key, const char *value)
 {
-    int v3; // eax
-    int v4; // eax
-    int v5; // eax
     int j; // [esp+54h] [ebp-818h]
     char c; // [esp+5Bh] [ebp-811h]
     char cleanValue[1028]; // [esp+5Ch] [ebp-810h] BYREF
@@ -812,22 +802,19 @@ void Info_SetValueForKey(char *s, const char *key, const char *value)
         if (j >= 1024)
             MyAssertHandler(".\\universal\\q_shared.cpp", 1275, 0, "%s", "j < MAX_INFO_STRING");
         cleanValue[j] = 0;
-        v3 = (int)strchr(key, 0x5Cu);
-        if (v3)
+        if (strchr(key, 0x5Cu))
         {
             Com_Printf(CON_CHANNEL_SYSTEM, "Can't use keys with a \\ key: %s value: %s", key, value);
         }
         else
         {
-            v4 = (int)strchr(key, 0x3Bu);
-            if (v4)
+            if (strchr(key, 0x3Bu))
             {
                 Com_Printf(CON_CHANNEL_SYSTEM, "Can't use keys with a semicolon. key: %s value: %s", key, value);
             }
             else
             {
-                v5 = (int)strchr(key, 0x22u);
-                if (v5)
+                if (strchr(key, 0x22u))
                 {
                     Com_Printf(CON_CHANNEL_SYSTEM, "Can't use keys with a \". key: %s value: %s", key, value);
                 }
@@ -1043,14 +1030,14 @@ bool ParseConfigStringToStructCustomSize(
 #endif
                     {
                         v9 = FX_Register(src);
-                        *(uint32_t *)&pStruct[v20->iOffset] = (uint32_t)v9;
+                        *(decltype(v9) *)&pStruct[v20->iOffset] = v9;
                     }
 #endif
                     break;
                 case CSPFT_XMODEL:
                     I_strncpyz(dest, src, 0x2000);
                     v22 = R_RegisterModel(dest);
-                    *(uint32_t *)&pStruct[v20->iOffset] = (uint32_t)v22;
+                    *(decltype(v22) *)&pStruct[v20->iOffset] = v22;
                     if (!v22)
                         v18 = 1;
                     break;
@@ -1065,13 +1052,13 @@ bool ParseConfigStringToStructCustomSize(
 #endif
                     {
                         v10 = Material_RegisterHandle(src, IMAGE_TRACK_MISC);
-                        *(uint32_t *)&pStruct[v20->iOffset] = (uint32_t)v10;
+                        *(decltype(v10) *)&pStruct[v20->iOffset] = v10;
                     }
 #endif
                     break;
                 case CSPFT_SOUND:
                     SoundAlias = Com_FindSoundAlias(src);
-                    *(uint32_t *)&pStruct[v20->iOffset] = (uint32_t)SoundAlias;
+                    *(decltype(SoundAlias) *)&pStruct[v20->iOffset] = SoundAlias;
                     break;
                 default:
                     if (v20->iFieldType >= CSPFT_STRING)
