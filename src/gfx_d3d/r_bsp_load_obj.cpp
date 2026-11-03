@@ -3144,7 +3144,7 @@ void R_SortGfxAabbTree(GfxWorld *world, GfxAabbTree *tree)
     int count; // [esp+84h] [ebp-8h]
     int smodelIndex; // [esp+88h] [ebp-4h]
 
-    qsort(tree->smodelIndexes, tree->smodelIndexCount, 2u, (int(*)(const void *, const void *))CompareStaticModels);
+    qsort(tree->smodelIndexes, tree->smodelIndexCount, sizeof(tree->smodelIndexes[0]), (int(*)(const void *, const void *))CompareStaticModels);
     if (tree->childCount)
     {
         children = (tree + tree->childrenOffset);

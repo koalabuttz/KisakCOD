@@ -1574,7 +1574,7 @@ void FS_AddIwdFilesForGameDirectory(char *path, char *pszGameFolder)
             *((_WORD *)v2 + 4) = 8224;
         }
     }
-    qsort(s0, numfiles, 4u, (int(*)(const void *, const void *))iwdsort);
+    qsort(s0, numfiles, sizeof(s0[0]), (int(*)(const void *, const void *))iwdsort);
     for (i = 0; i < numfiles; ++i)
     {
         if (I_strncmp(s0[i], "          ", 10))

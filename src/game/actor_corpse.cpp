@@ -343,7 +343,7 @@ void G_PruneLoadedCorpses()
         iassert(ent);
         iassert(ent->sentient);
         Sentient_GetEyePosition(ent->sentient, playerEyePos);
-        qsort(corpseIndices, v2, 4u, (int(*)(const void *, const void *))G_PruneCorpsesSortCmp);
+        qsort(corpseIndices, v2, sizeof(corpseIndices[0]), (int(*)(const void *, const void *))G_PruneCorpsesSortCmp);
         v7 = v2 - 6;
         v8 = &corpseIndices[6]; // was: (int*)&v12 — really &v11[6] after stack-slot fix
         do

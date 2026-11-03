@@ -911,7 +911,7 @@ void CalculateRanks()
                 ++level.numVotingClients;
         }
     }
-    qsort(level.sortedClients, level.numConnectedClients, 4u, (int(*)(const void *, const void *))SortRanks);
+    qsort(level.sortedClients, level.numConnectedClients, sizeof(level.sortedClients[0]), (int(*)(const void *, const void *))SortRanks);
     level.bUpdateScoresForIntermission = 1;
 }
 

@@ -2533,7 +2533,7 @@ char Material_SetShaderArguments(
 
     if (*argCount + usedCount <= argLimit)
     {
-        qsort(localArgs, usedCount, 8u, (int(*)(const void*, const void*))Material_CompareShaderArgumentsForCombining);
+        qsort(localArgs, usedCount, sizeof(localArgs[0]), (int(*)(const void*, const void*))Material_CompareShaderArgumentsForCombining);
         usedCounta = Material_CombineShaderArguments(usedCount, localArgs);
         memcpy(&args[*argCount], localArgs, 8 * usedCounta);
         *argCount += usedCounta;
@@ -4195,7 +4195,7 @@ bool Material_LoadPass(
         {
             if (!Material_LoadPassPixelShader(text, renderer, techFlags, &pixelParamSet, pass, 0x40u, &argCount, args))
                 goto LABEL_8;
-            qsort(args, argCount, 8u, (int(*)(const void*, const void*))Material_CompareShaderArgumentsForRuntime);
+            qsort(args, argCount, sizeof(args[0]), (int(*)(const void*, const void*))Material_CompareShaderArgumentsForRuntime);
             firstArg = 0;
             pass->perPrimArgCount = Material_CountArgsWithUpdateFrequency(MTL_UPDATE_PER_PRIM, args, argCount, &firstArg);
             pass->perObjArgCount = Material_CountArgsWithUpdateFrequency(MTL_UPDATE_PER_OBJECT, args, argCount, &firstArg);
@@ -5414,7 +5414,7 @@ bool Material_FinishLoadingInstance(
             return 0;
     }
     mtlLoadGlob.sortMtlRaw = mtlRaw;
-    qsort(constantTable, mtlRaw->constantCount, 0x14u, (int(*)(const void *, const void *))CompareRawMaterialTextures);
+    qsort(constantTable, mtlRaw->constantCount, sizeof(constantTable[0]), (int(*)(const void *, const void *))CompareRawMaterialTextures);
     mtlLoadGlob.sortMtlRaw = 0;
     Com_sprintf(techniqueSetName, 0x100u, "%s%s", techniqueSetVertDeclPrefix, (char*) mtlRaw + mtlRaw->techSetNameOffset);
     *techniqueSet = Material_RegisterTechniqueSet(techniqueSetName);

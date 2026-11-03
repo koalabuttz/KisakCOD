@@ -575,7 +575,7 @@ void DynEnt_LoadEntities()
         }
         if (dynEntCount)
         {
-            qsort(dynEntDefList, dynEntCount, 0x60u, (int(*)(const void *, const void *))DynEnt_CompareEntities);
+            qsort(dynEntDefList, dynEntCount, sizeof(DynEntityDef), (int(*)(const void *, const void *))DynEnt_CompareEntities);
             for (dynEntIndex = 0; dynEntIndex < dynEntCount; ++dynEntIndex)
             {
                 dynEntDef = (DynEntityDef *)&dynEntDefList[96 * dynEntIndex];
