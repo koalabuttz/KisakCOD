@@ -965,7 +965,7 @@ uint8_t *MemFile_CopySegments(MemoryFile *memFile, int index, void *buf)
     iassert(!memFile->memoryOverflow);
 
     SegmentAddess = MemFile_GetSegmentAddess(memFile, index);
-    v7 = &memFile->buffer[memFile->bufferSize - (_DWORD)SegmentAddess];
+    v7 = &memFile->buffer[memFile->bufferSize - (uintptr_t)SegmentAddess];
     if (buf)
         memcpy(buf, SegmentAddess, (size_t)v7);
     return v7;

@@ -1434,7 +1434,6 @@ const dvar_s *ShowEntityInfo()
         i = 0;
         while (1)
         {
-            result = (const dvar_s *)i;
             if (i >= level.num_entities)
                 break;
             if (ent->s.eType < ET_EVENTS && ent->r.inuse && ent->r.linked)
