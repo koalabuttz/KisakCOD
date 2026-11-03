@@ -1869,16 +1869,16 @@ void __cdecl MdlPrvSpin_(unsigned int yprIdx, double deg)
     AxisCopy((const mat3x3&)v14, (mat3x3&)v12);
     AxisToQuat(v12, g_mdlprv.model.currentEntity.placement.base.quat);
     AxisToAngles((const mat3x3&)v12, &v9);
-    v2 = (float)((float)(v10 + (float)180.0) * (float)0.0027777778);
-    *(double *)&v3 = (float)((float)((float)(v10 + (float)180.0) * (float)0.0027777778) + (float)0.5);
+    v2 = (float)((float)(v10 + (float)180.0) * TURNS_PER_DEGREE_F);
+    *(double *)&v3 = (float)((float)((float)(v10 + (float)180.0) * TURNS_PER_DEGREE_F) + (float)0.5);
     v4 = floor(v3);
-    v5 = (float)(v9 * (float)0.0027777778);
+    v5 = (float)(v9 * TURNS_PER_DEGREE_F);
     v10 = (float)((float)v2 - (float)*(double *)&v4) * (float)360.0;
-    *(double *)&v4 = (float)((float)(v9 * (float)0.0027777778) + (float)0.5);
+    *(double *)&v4 = (float)((float)(v9 * TURNS_PER_DEGREE_F) + (float)0.5);
     v6 = floor(v4);
-    v7 = (float)(v11 * (float)0.0027777778);
+    v7 = (float)(v11 * TURNS_PER_DEGREE_F);
     v9 = (float)((float)v5 - (float)*(double *)&v6) * (float)360.0;
-    *(double *)&v6 = (float)((float)(v11 * (float)0.0027777778) + (float)0.5);
+    *(double *)&v6 = (float)((float)(v11 * TURNS_PER_DEGREE_F) + (float)0.5);
     v8 = floor(v6);
     v11 = (float)((float)v7 - (float)*(double *)&v8) * (float)360.0;
     Dvar_SetVec3((dvar_s*)modPrvRotationAngles, v9, v10, v11);
@@ -2092,13 +2092,13 @@ void __cdecl MdlPrvFreeRot(double yaw, double pitch)
     double v6; // fp31
     long double v7; // fp2
 
-    v3 = (float)((float)(g_mdlprv.viewer.freeModeAngles[1] + yaw) * (float)0.0027777778);
+    v3 = (float)((float)(g_mdlprv.viewer.freeModeAngles[1] + yaw) * TURNS_PER_DEGREE_F);
     g_mdlprv.viewer.freeModeAngles[1] = g_mdlprv.viewer.freeModeAngles[1] + (float)yaw;
     g_mdlprv.viewer.freeModeAngles[0] = g_mdlprv.viewer.freeModeAngles[0] + (float)pitch;
     v4 = (float)((float)v3 + (float)0.5);
-    v6 = (float)(g_mdlprv.viewer.freeModeAngles[0] * (float)0.0027777778);
+    v6 = (float)(g_mdlprv.viewer.freeModeAngles[0] * TURNS_PER_DEGREE_F);
     g_mdlprv.viewer.freeModeAngles[1] = (float)((float)v3 - floorf(pitch) * (float)360.0);
-    v7 = floor((float)((float)(g_mdlprv.viewer.freeModeAngles[0] * (float)0.0027777778) + (float)0.5));
+    v7 = floor((float)((float)(g_mdlprv.viewer.freeModeAngles[0] * TURNS_PER_DEGREE_F) + (float)0.5));
     g_mdlprv.viewer.freeModeAngles[0] = (float)((float)v6 - (float)*(double *)&v7) * (float)360.0;
 }
 
@@ -3130,8 +3130,8 @@ void __cdecl CG_ModPrvLoadModel(const cg_s *cgameGlob, const char *modelFilename
     g_mdlprv.model.currentEntity.placement.base.origin[1] = v47;
     g_mdlprv.model.currentEntity.placement.base.origin[2] = v48;
     Dvar_SetVec3((dvar_s*)modPrvOrigin, 0.0, 0.0, 0.0);
-    v49 = (float)(*(float *)(v44 + 170872) * (float)0.0027777778);
-    *(double *)&v50 = (float)((float)(*(float *)(v44 + 170872) * (float)0.0027777778) + (float)0.5);
+    v49 = (float)(*(float *)(v44 + 170872) * TURNS_PER_DEGREE_F);
+    *(double *)&v50 = (float)((float)(*(float *)(v44 + 170872) * TURNS_PER_DEGREE_F) + (float)0.5);
     v51 = floor(v50);
     g_mdlprv.model.initialYaw = (float)((float)v49 - (float)*(double *)&v51) * (float)360.0;
     Dvar_SetVec3((dvar_s*)modPrvCenterOffset, 0.0, 0.0, 0.0);

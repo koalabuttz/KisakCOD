@@ -1073,7 +1073,7 @@ void __cdecl CalcViewValuesVehicleDriver(int32_t localClientNum)
     focusPoint[1] = cgameGlob->predictedPlayerState.origin[1];
     focusPoint[2] = cgameGlob->predictedPlayerState.origin[2];
     Vec3Add(focusPoint, TEMP_OFFSET, focusPoint);
-    v4 = LocalClientGlobals->vehicleViewPitch * 0.002777777845039964;
+    v4 = LocalClientGlobals->vehicleViewPitch * TURNS_PER_DEGREE;
     v3 = v4 + 0.5;
     v2 = floor(v3);
     pitch = (v4 - v2) * 360.0;

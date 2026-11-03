@@ -645,8 +645,8 @@ void __cdecl Actor_Pain(
             v18);
     actor->iDamageTaken = iDamage;
     v19 = vectoyaw(vDir);
-    v20 = (float)((float)((float)v19 - self->r.currentAngles[1]) * (float)0.0027777778);
-    *(double *)&v21 = (float)((float)((float)((float)v19 - self->r.currentAngles[1]) * (float)0.0027777778) + (float)0.5);
+    v20 = (float)((float)((float)v19 - self->r.currentAngles[1]) * TURNS_PER_DEGREE_F);
+    *(double *)&v21 = (float)((float)((float)((float)v19 - self->r.currentAngles[1]) * TURNS_PER_DEGREE_F) + (float)0.5);
     v22 = floor(v21);
     actor->iDamageYaw = (int)(float)((float)((float)v20 - (float)*(double *)&v22) * (float)360.0);
     actor->damageDir[0] = *vDir;
@@ -764,8 +764,8 @@ void __cdecl Actor_Die(
         actor->damageDir[1] = vDir[1];
         actor->damageDir[2] = vDir[2];
         v18 = vectoyaw(vDir);
-        v19 = (float)((float)((float)v18 - self->r.currentAngles[1]) * (float)0.0027777778);
-        *(double *)&v20 = (float)((float)((float)((float)v18 - self->r.currentAngles[1]) * (float)0.0027777778) + (float)0.5);
+        v19 = (float)((float)((float)v18 - self->r.currentAngles[1]) * TURNS_PER_DEGREE_F);
+        *(double *)&v20 = (float)((float)((float)((float)v18 - self->r.currentAngles[1]) * TURNS_PER_DEGREE_F) + (float)0.5);
         v21 = floor(v20);
         actor->iDamageYaw = (int)(float)((float)((float)v19 - (float)*(double *)&v21) * (float)360.0);
         HitLocationString = G_GetHitLocationString(hitLoc);
@@ -1057,9 +1057,9 @@ void __cdecl Actor_UpdateProneInformation(actor_s *self, int bDoProneCheck)
             50.0f);
     else
         self->fProneLastDiff = 360.0;
-    v7 = (float)((float)(self->ProneInfo.fWaistPitch - self->ProneInfo.fTorsoPitch) * (float)0.0027777778);
+    v7 = (float)((float)(self->ProneInfo.fWaistPitch - self->ProneInfo.fTorsoPitch) * TURNS_PER_DEGREE_F);
     v8 = floor((float)((float)((float)(self->ProneInfo.fWaistPitch - self->ProneInfo.fTorsoPitch)
-        * (float)0.0027777778)
+        * TURNS_PER_DEGREE_F)
         + (float)0.5));
     v9 = (float)((float)((float)v7 - (float)*(double *)&v8) * (float)360.0);
     if (self->fProneLastDiff != v9)

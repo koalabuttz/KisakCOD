@@ -60,12 +60,12 @@ void __cdecl Reached_ScriptMover(gentity_s *pEnt)
         SV_LinkEntity(pEnt);
         if (bMoveFinisheda)
         {
-            v6 = pEnt->r.currentAngles[0] * 0.002777777845039964;
+            v6 = pEnt->r.currentAngles[0] * TURNS_PER_DEGREE;
             v4 = v6 + 0.5;
             v3 = floor(v4);
             pEnt->r.currentAngles[0] = (v6 - v3) * 360.0;
             pEnt->r.currentAngles[1] = AngleNormalize360(pEnt->r.currentAngles[1]);
-            v5 = pEnt->r.currentAngles[2] * 0.002777777845039964;
+            v5 = pEnt->r.currentAngles[2] * TURNS_PER_DEGREE;
             v2 = v5 + 0.5;
             v1 = floor(v2);
             pEnt->r.currentAngles[2] = (v5 - v1) * 360.0;

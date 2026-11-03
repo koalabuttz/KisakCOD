@@ -256,16 +256,32 @@ float AngleSubtract(float a1, float a2);
 // 65536 steps. The _F constants are floats; the plain ones are doubles for
 // expressions that multiply in double.
 //
-// SHORTS_PER_DEGREE is the float factor as the decompiler printed it (16
-// digits), which is one double ulp above the float widened exactly. The code
-// has always multiplied by this double, so it keeps that value.
+// TURNS_PER_DEGREE and SHORTS_PER_DEGREE are the float factors as the
+// decompiler printed them (16 digits), which is one double ulp above the float
+// widened exactly. The code has always multiplied by these doubles, so they keep
+// that value; changing it changes a handful of results in the last bit.
+inline constexpr float TURNS_PER_DEGREE_F = 1.0f / 360.0f;
+inline constexpr double TURNS_PER_DEGREE = 0.002777777845039964;
 inline constexpr float DEGREES_PER_SHORT_F = 360.0f / 65536.0f;
 inline constexpr double DEGREES_PER_SHORT = 360.0 / 65536.0;
 inline constexpr float SHORTS_PER_DEGREE_F = 65536.0f / 360.0f;
 inline constexpr double SHORTS_PER_DEGREE = 182.0444488525391;
+static_assert(TURNS_PER_DEGREE_F == 0.0027777778f && TURNS_PER_DEGREE_F == (float)0.0027777778);
 static_assert(DEGREES_PER_SHORT_F == 0.0054931641f && DEGREES_PER_SHORT == 0.0054931640625);
 static_assert(SHORTS_PER_DEGREE_F == 182.04445f && SHORTS_PER_DEGREE_F == (float)182.04445);
-static_assert((float)SHORTS_PER_DEGREE == SHORTS_PER_DEGREE_F);
+static_assert((float)TURNS_PER_DEGREE == TURNS_PER_DEGREE_F && (float)SHORTS_PER_DEGREE == SHORTS_PER_DEGREE_F);
+
+// Wraps an angle in degrees into [-180, 180] by removing the nearest whole
+// turn: the angle wrap the game code inlines (decompiled as "x * 0.0027777778",
+// "floor(+ 0.5)", "* 360"). It is not AngleNormalize180(), which uses fmodf
+// and can give a different last bit for the same input. Inline copies that
+// scale by the double TURNS_PER_DEGREE differ from this for two inputs out of
+// 2^32, so they stay written out.
+inline float AngleWrap180(float angle)
+{
+    const float turns = angle * TURNS_PER_DEGREE_F;
+    return (turns - floorf(turns + 0.5f)) * 360.0f;
+}
 
 void FastSinCos(float radians, float *s, float *c);
 void MatrixRotationX(float mat[3][3], float degree);

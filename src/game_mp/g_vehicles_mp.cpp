@@ -1312,7 +1312,7 @@ char __cdecl VEH_PlayerRotation(gentity_s *player, vehicle_physic_t *phys)
     v7 = phys->angles[1];
     yawCurrent = AngleNormalize360(v7);
     v6 = yawWanted - yawCurrent;
-    v9 = v6 * 0.002777777845039964;
+    v9 = v6 * TURNS_PER_DEGREE;
     v5 = v9 + 0.5;
     v4 = floor(v5);
     yawDelta = (v9 - v4) * 360.0;
@@ -1529,10 +1529,7 @@ void __cdecl VEH_DebugLine(float *start, float *end, float r, float g, float b)
 
 void __cdecl AdvanceVehicleRotation(gentity_s *ent, float frameTime)
 {
-    float v2; // [esp+8h] [ebp-24h]
-    float v3; // [esp+Ch] [ebp-20h]
     float v4; // [esp+10h] [ebp-1Ch]
-    float v5; // [esp+14h] [ebp-18h]
     float turningMod; // [esp+1Ch] [ebp-10h]
     float mph; // [esp+20h] [ebp-Ch]
     scr_vehicle_s *veh; // [esp+28h] [ebp-4h]
@@ -1556,10 +1553,7 @@ void __cdecl AdvanceVehicleRotation(gentity_s *ent, float frameTime)
     }
     veh->phys.rotVel[1] = -veh->phys.driverSteer * 90.0f * turningMod;
     v4 = frameTime * veh->phys.rotVel[1] + veh->phys.prevAngles[1];
-    v5 = v4 * 0.002777777845039964f;
-    v3 = v5 + 0.5f;
-    v2 = floor(v3);
-    veh->phys.angles[1] = (v5 - v2) * 360.0f;
+    veh->phys.angles[1] = AngleWrap180(v4);
     veh->phys.angles[0] = 0.0f;
     veh->phys.angles[2] = 0.0f;
 }

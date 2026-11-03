@@ -740,7 +740,7 @@ void __cdecl PM_UpdateViewAngles_Clamp(playerState_s *ps, usercmd_s *cmd)
     for (i = 0; i < 3; ++i)
     {
         v7 = ps->delta_angles[i] + (double)cmd->angles[i] * DEGREES_PER_SHORT;
-        v8 = v7 * 0.002777777845039964;
+        v8 = v7 * TURNS_PER_DEGREE;
         v5 = v8 + 0.5;
         v4 = floor(v5);
         temp = (v8 - v4) * 360.0;
@@ -760,7 +760,7 @@ void __cdecl PM_UpdateViewAngles_Clamp(playerState_s *ps, usercmd_s *cmd)
                 temp = maxPitch;
             }
         }
-        v6 = temp * 0.002777777845039964;
+        v6 = temp * TURNS_PER_DEGREE;
         v3 = v6 + 0.5;
         v2 = floor(v3);
         ps->viewangles[i] = (v6 - v2) * 360.0;
@@ -1033,13 +1033,13 @@ LABEL_46:
 
 static float BG_PitchFromDelta(const float *delta)
 {
-	float turns = vectopitch(delta) * 0.002777777845039964;
+	float turns = vectopitch(delta) * TURNS_PER_DEGREE;
 	return (turns - floor(turns + 0.5)) * 360.0;
 }
 
 static float BG_PitchFromAngle(float pitch)
 {
-	float turns = pitch * 0.002777777845039964;
+	float turns = pitch * TURNS_PER_DEGREE;
 	return (turns - floor(turns + 0.5)) * 360.0;
 }
 
@@ -1392,7 +1392,7 @@ void __cdecl PM_UpdateViewAngles_PronePitchClamp(playerState_s *ps)
         if (deltaa <= 0.0)
         {
             v6 = ps->proneTorsoPitch + 45.0;
-            v7 = v6 * 0.002777777845039964;
+            v7 = v6 * TURNS_PER_DEGREE;
             v3 = v7 + 0.5;
             v2 = floor(v3);
             ps->viewangles[0] = (v7 - v2) * 360.0;
@@ -1400,7 +1400,7 @@ void __cdecl PM_UpdateViewAngles_PronePitchClamp(playerState_s *ps)
         else
         {
             v8 = ps->proneTorsoPitch - 45.0;
-            v9 = v8 * 0.002777777845039964;
+            v9 = v8 * TURNS_PER_DEGREE;
             v5 = v9 + 0.5;
             v4 = floor(v5);
             ps->viewangles[0] = (v9 - v4) * 360.0;
@@ -1530,7 +1530,7 @@ void __cdecl PM_UpdatePronePitch(pmove_t *pm, pml_t *pml)
                     v12 = 1.0;
                 ps->proneDirectionPitch = pml->frametime * 70.0 * v12 + ps->proneDirectionPitch;
             }
-            v16 = ps->proneDirectionPitch * 0.002777777845039964;
+            v16 = ps->proneDirectionPitch * TURNS_PER_DEGREE;
             v11 = v16 + 0.5;
             v10 = floor(v11);
             ps->proneDirectionPitch = (v16 - v10) * 360.0;
@@ -1561,7 +1561,7 @@ void __cdecl PM_UpdatePronePitch(pmove_t *pm, pml_t *pml)
                     v7 = 1.0;
                 ps->proneTorsoPitch = pml->frametime * 70.0 * v7 + ps->proneTorsoPitch;
             }
-            v15 = ps->proneTorsoPitch * 0.002777777845039964;
+            v15 = ps->proneTorsoPitch * TURNS_PER_DEGREE;
             v6 = v15 + 0.5;
             v5 = floor(v6);
             ps->proneTorsoPitch = (v15 - v5) * 360.0;
@@ -2589,7 +2589,7 @@ void __cdecl PM_SetMovementDir(pmove_t *pm, pml_t *pml)
                 if (pm->cmd.forwardmove < 0)
                 {
                     v5 = (double)moveyaw + 180.0;
-                    v6 = v5 * 0.002777777845039964;
+                    v6 = v5 * TURNS_PER_DEGREE;
                     v4 = v6 + 0.5;
                     v3 = floor(v4);
                     v2 = (v6 - v3) * 360.0;

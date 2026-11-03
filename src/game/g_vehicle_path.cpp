@@ -705,9 +705,9 @@ LABEL_13:
     for (i = 0; i < 3; ++i)
     {
         v8 = LerpAngle(anglesStart[i], anglesEnd[i], vpp->frac);
-        v9 = (float)((float)v8 * (float)0.0027777778);
+        v9 = (float)((float)v8 * TURNS_PER_DEGREE_F);
         angles[i] = v8;
-        *(double *)&v10 = (float)((float)((float)v8 * (float)0.0027777778) + (float)0.5);
+        *(double *)&v10 = (float)((float)((float)v8 * TURNS_PER_DEGREE_F) + (float)0.5);
         v11 = floor(v10);
         angles[i] = (float)((float)v9 - (float)*(double *)&v11) * (float)360.0;
     }

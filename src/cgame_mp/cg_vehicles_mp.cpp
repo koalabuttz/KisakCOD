@@ -445,7 +445,7 @@ void __cdecl SetupPoseControllers(int32_t localClientNum, DObj_s *obj, centity_s
         fxInfo->tireActive[tireIdx] = 0;
     v55 = p_currentState->u.vehicle.bodyPitch;
     v41 = ns->lerp.u.vehicle.bodyPitch - v55;
-    v56 = v41 * 0.002777777845039964;
+    v56 = v41 * TURNS_PER_DEGREE;
     v40 = v56 + 0.5;
     frameInterpolation = cgameGlob->frameInterpolation;
     v38 = floor(v40);
@@ -456,7 +456,7 @@ void __cdecl SetupPoseControllers(int32_t localClientNum, DObj_s *obj, centity_s
     cent->pose.vehicle.pitch = (int)v35;
     v52 = p_currentState->u.vehicle.bodyRoll;
     v34 = ns->lerp.u.vehicle.bodyRoll - v52;
-    v53 = v34 * 0.002777777845039964;
+    v53 = v34 * TURNS_PER_DEGREE;
     v33 = v53 + 0.5;
     v32 = cgameGlob->frameInterpolation;
     v31 = floor(v33);
@@ -467,7 +467,7 @@ void __cdecl SetupPoseControllers(int32_t localClientNum, DObj_s *obj, centity_s
     cent->pose.vehicle.roll = (int)v28;
     gunPitch = p_currentState->u.vehicle.gunPitch;
     v27 = ns->lerp.u.vehicle.gunPitch - gunPitch;
-    v50 = v27 * 0.002777777845039964;
+    v50 = v27 * TURNS_PER_DEGREE;
     v26 = v50 + 0.5;
     v25 = cgameGlob->frameInterpolation;
     v24 = floor(v26);
@@ -478,7 +478,7 @@ void __cdecl SetupPoseControllers(int32_t localClientNum, DObj_s *obj, centity_s
     cent->pose.vehicle.barrelPitch = (int)v21;
     gunYaw = p_currentState->u.vehicle.gunYaw;
     v20 = ns->lerp.u.vehicle.gunYaw - gunYaw;
-    v47 = v20 * 0.002777777845039964;
+    v47 = v20 * TURNS_PER_DEGREE;
     v19 = v47 + 0.5;
     v18 = cgameGlob->frameInterpolation;
     v17 = floor(v19);
@@ -490,7 +490,7 @@ void __cdecl SetupPoseControllers(int32_t localClientNum, DObj_s *obj, centity_s
     cent->pose.turret.barrelPitch = Veh_GetTurretBarrelRoll(localClientNum, cent);
     v43 = p_currentState->u.vehicle.steerYaw;
     v13 = ns->lerp.u.vehicle.steerYaw - v43;
-    v44 = v13 * 0.002777777845039964;
+    v44 = v13 * TURNS_PER_DEGREE;
     v12 = v44 + 0.5;
     v11 = cgameGlob->frameInterpolation;
     v10 = floor(v12);

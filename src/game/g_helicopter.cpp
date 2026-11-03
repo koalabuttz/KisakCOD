@@ -78,7 +78,7 @@ void __cdecl VEH_UpdateClientChopper(gentity_s *ent)
     HELI_CalcAccel(ent, move, bodyAccel, rotAccel);
     veh->phys.rotVel[1] = rotAccel[1] * 0.05000000074505806 + veh->phys.rotVel[1];
     v5 = veh->phys.rotVel[1] * 0.05000000074505806 + veh->phys.prevAngles[1];
-    v6 = v5 * 0.002777777845039964;
+    v6 = v5 * TURNS_PER_DEGREE;
     v4 = v6 + 0.5;
     v3 = floor(v4);
     veh->phys.angles[1] = (v6 - v3) * 360.0;
@@ -258,7 +258,7 @@ LABEL_27:
     HELI_CalcAccel(ent, move, bodyAccel, rotAccel);
     veh->phys.rotVel[1] = rotAccel[1] * 0.05000000074505806 + veh->phys.rotVel[1];
     v5 = veh->phys.rotVel[1] * 0.05000000074505806 + veh->phys.prevAngles[1];
-    v6 = v5 * 0.002777777845039964;
+    v6 = v5 * TURNS_PER_DEGREE;
     v4 = v6 + 0.5;
     v3 = floor(v4);
     veh->phys.angles[1] = (v6 - v3) * 360.0;
