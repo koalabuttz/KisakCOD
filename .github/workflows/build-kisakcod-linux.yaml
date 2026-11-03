@@ -39,6 +39,7 @@ on:
       - tests/linux_world_frontend/**
       - tests/linux_device_probe/**
       - tests/linux_free_camera/**
+      - tests/linux_mp_client/**
       - .github/workflows/build-kisakcod-linux.yaml
       - .github/workflows/build-kisarcod-win.yaml
   pull_request:
@@ -60,6 +61,7 @@ on:
       - tests/linux_world_frontend/**
       - tests/linux_device_probe/**
       - tests/linux_free_camera/**
+      - tests/linux_mp_client/**
       - .github/workflows/build-kisakcod-linux.yaml
       - .github/workflows/build-kisarcod-win.yaml
 
@@ -910,10 +912,14 @@ jobs:
     # drawing views of a map) is built and run the same way by
     # scripts/tests/test_world_draw_probe.py. Creating a device, loading a map
     # onto it and drawing it need a GPU and a game install, and run on a
-    # developer machine.
+    # developer machine. The multiplayer client KisakCOD-mp
+    # (scripts/platform/linux/mp_client.cmake) is built in the same directory
+    # with an OpenAL stand-in as well, and run by
+    # scripts/tests/test_linux_mp_client.py from temporary trees with no game
+    # data, where it must stop at the file system check or at autoconfigure.
     name: D3D9 device probe without a GPU ${{ matrix.config }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 75
 
     strategy:
       fail-fast: false
@@ -1165,6 +1171,57 @@ jobs:
           python3 -u scripts/tests/test_world_draw_probe.py \
             --probe "$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-world-draw-probe" \
             2>&1 | tee "artifacts/world-draw-run-${{ matrix.config }}.log"
+
+      - name: Build the multiplayer client against the stand-in D3D9 and OpenAL libraries
+        timeout-minutes: 40
+        shell: bash
+        run: |
+          set -euo pipefail
+          # KisakCOD-mp (scripts/platform/linux/mp_client.cmake): the whole game
+          # in one i386 process, its renderer units through the native D3D9
+          # boundary. It links the same D3D9 stand-in as the probes and an
+          # OpenAL stand-in whose alcOpenDevice finds no device, so no OpenAL
+          # package is installed. Only built and inspected here.
+          mkdir -p "$RUNNER_TEMP/openal-unavailable"
+          openal="$RUNNER_TEMP/openal-unavailable/libopenal_unavailable.so"
+          clang++ -m32 -shared -fPIC -Wall -Wextra -Werror -Wl,-soname,libopenal_unavailable.so \
+            tests/linux_mp_client/openal_unavailable.cpp -o "$openal"
+          cmake -S . -B "$BUILD_DIR" -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_OPENAL_LIBRARY="$openal" \
+            2>&1 | tee "artifacts/mp-client-${{ matrix.config }}.log"
+          cmake --build "$BUILD_DIR" --target KisakCOD-mp --parallel "$(nproc)" \
+            2>&1 | tee -a "artifacts/mp-client-${{ matrix.config }}.log"
+          client="$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-mp"
+          readelf -h "$client" | grep -Eq 'Class:[[:space:]]+ELF32'
+          readelf -h "$client" | grep -Eq 'Machine:[[:space:]]+Intel 80386'
+          # SDL3, the D3D9 and OpenAL libraries and the C and C++ runtimes.
+          readelf -d "$client" | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p' > "$RUNNER_TEMP/mp-client-needed.txt"
+          cat "$RUNNER_TEMP/mp-client-needed.txt"
+          grep -qx 'libSDL3.so.0' "$RUNNER_TEMP/mp-client-needed.txt"
+          grep -qx 'libd3d9_unavailable.so' "$RUNNER_TEMP/mp-client-needed.txt"
+          grep -qx 'libopenal_unavailable.so' "$RUNNER_TEMP/mp-client-needed.txt"
+          if grep -Ev '^(libSDL3\.so\.0|libd3d9_unavailable\.so|libopenal_unavailable\.so|libstdc\+\+\.so\.6|libm\.so\.6|libgcc_s\.so\.1|libc\.so\.6|libpthread\.so\.0|libdl\.so\.2)$' \
+              "$RUNNER_TEMP/mp-client-needed.txt"; then
+            echo "the multiplayer client needs a library beyond SDL3, D3D9, OpenAL and the runtimes" >&2
+            exit 1
+          fi
+
+      - name: Run the multiplayer client's fail-closed start
+        timeout-minutes: 10
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/d3d9-unavailable:$RUNNER_TEMP/openal-unavailable"
+          # The script starts the client from temporary trees with no game data:
+          # an empty one must be refused at the file system check, one holding a
+          # stub of the file the engine checks for must stop at the client's
+          # autoconfigure step for want of a game file. No connection is tried.
+          python3 -u scripts/tests/test_linux_mp_client.py \
+            --binary "$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-mp" \
+            2>&1 | tee "artifacts/mp-client-run-${{ matrix.config }}.log"
 
       - name: Upload device probe logs
         if: always()

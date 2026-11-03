@@ -65,6 +65,9 @@ include(${SCRIPTS_DIR}/platform/linux/device_probe.cmake)
 include(${SCRIPTS_DIR}/platform/linux/world_device_probe.cmake)
 # After the world device probe: the draw probe needs it and extends its source lists.
 include(${SCRIPTS_DIR}/platform/linux/world_draw_probe.cmake)
+# After the native D3D9 boundary: the multiplayer client links its renderer units
+# through it, with SDL3.
+include(${SCRIPTS_DIR}/platform/linux/mp_client.cmake)
 
 # ---------------------------------------------------------------------------
 # Opt-in native Linux client network core (KISAK_BUILD_LINUX_CLIENT_CORE)

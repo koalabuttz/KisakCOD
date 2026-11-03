@@ -349,6 +349,8 @@ class DeviceProbeWorkflowTests(unittest.TestCase):
     WORLD_RUN_STEP = "Run the world device probe's fail-closed paths"
     DRAW_BUILD_STEP = 'Build the world draw probe against the stand-in D3D9 library'
     DRAW_RUN_STEP = "Run the world draw probe's fail-closed paths"
+    MP_BUILD_STEP = 'Build the multiplayer client against the stand-in D3D9 and OpenAL libraries'
+    MP_RUN_STEP = "Run the multiplayer client's fail-closed start"
 
     @classmethod
     def setUpClass(cls):
@@ -365,7 +367,8 @@ class DeviceProbeWorkflowTests(unittest.TestCase):
     def test_path_triggers_reach_the_stand_in_library(self):
         for event in ('push', 'pull_request'):
             paths = self.workflow['on'][event]['paths']
-            for path in ('src/**', 'scripts/**', 'tests/linux_window/**', 'tests/linux_device_probe/**'):
+            for path in ('src/**', 'scripts/**', 'tests/linux_window/**', 'tests/linux_device_probe/**',
+                         'tests/linux_mp_client/**'):
                 with self.subTest(event=event, path=path):
                     self.assertIn(path, paths)
 
@@ -509,6 +512,41 @@ class DeviceProbeWorkflowTests(unittest.TestCase):
         self.assertIn('stage=direct3d: ', script)
         self.assertIn('R_Init does not run without a Direct3D 9 interface', script)
         self.assertIn('stage=arguments: ', script)
+
+    def test_the_client_links_only_stand_ins_after_the_draw_probe(self):
+        self.assertLess(self.names.index(self.DRAW_RUN_STEP), self.names.index(self.MP_BUILD_STEP))
+        self.assertLess(self.names.index(self.MP_BUILD_STEP), self.names.index(self.MP_RUN_STEP))
+        build = self.step(self.MP_BUILD_STEP)['run']
+        # The same build directory, so the same D3D9 stand-in, SDL3 and boundary.
+        self.assertIn('tests/linux_mp_client/openal_unavailable.cpp', build)
+        self.assertIn('cmake -S . -B "$BUILD_DIR" -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_OPENAL_LIBRARY="$openal"',
+                      build)
+        self.assertIn('--target KisakCOD-mp', build)
+        self.assertIn('Class:[[:space:]]+ELF32', build)
+        self.assertIn('Machine:[[:space:]]+Intel 80386', build)
+        for library in ('libSDL3.so.0', 'libd3d9_unavailable.so', 'libopenal_unavailable.so'):
+            self.assertIn(f"grep -qx '{library}'", build)
+        self.assertIn('the multiplayer client needs a library beyond SDL3, D3D9, OpenAL and the runtimes', build)
+
+    def test_the_client_run_is_the_asset_free_script_on_dummy_drivers(self):
+        step = self.step(self.MP_RUN_STEP)
+        self.assertEqual(step['env']['SDL_VIDEODRIVER'], 'dummy')
+        self.assertEqual(step['env']['SDL_AUDIODRIVER'], 'dummy')
+        run = step['run']
+        self.assertIn('python3 -u scripts/tests/test_linux_mp_client.py', run)
+        self.assertIn('--binary "$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-mp"', run)
+        self.assertIn('export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/d3d9-unavailable:'
+                      '$RUNNER_TEMP/openal-unavailable"', run)
+
+    def test_the_client_script_builds_its_own_trees_and_takes_no_game_directory(self):
+        script = (ROOT / 'scripts/tests/test_linux_mp_client.py').read_text()
+        self.assertIn('tempfile.TemporaryDirectory(prefix="kisak-mp-client-")', script)
+        self.assertEqual(script.count('.write_text('), 1)
+        self.assertIn('"// stub written by the check; no game data\\n"', script)
+        self.assertEqual(script.count('add_argument('), 1)
+        self.assertIn('add_argument("--binary"', script)
+        for forbidden in ('game_dir', '.ff"', '.iwd', 'symlink'):
+            self.assertNotIn(forbidden, script.lower())
 
     def test_every_command_block_propagates_failure(self):
         for step in self.job['steps']:

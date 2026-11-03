@@ -357,7 +357,7 @@ class CMakeKnobTests(unittest.TestCase):
         self.assertIn('elseif(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)', text)
         for option in ("KISAK_BUILD_LINUX_CLIENT_CORE", "KISAK_BUILD_LINUX_WINDOW_HOST",
                        "KISAK_BUILD_LINUX_NATIVE_D3D9", "KISAK_BUILD_DEVICE_PROBE",
-                       "KISAK_BUILD_WORLD_DRAW_PROBE"):
+                       "KISAK_BUILD_WORLD_DRAW_PROBE", "KISAK_BUILD_LINUX_MP_CLIENT"):
             with self.subTest(option=option):
                 self.assertIn(option, text)
 

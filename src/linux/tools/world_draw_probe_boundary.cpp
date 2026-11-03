@@ -20,13 +20,14 @@
 //      server_assets.cpp's sound archiving no-ops.
 //   3. The two renderer services whose owners are Windows-only, as Linux has
 //      them: cinematics (r_cinematic.cpp, Bink) are unavailable, so none is
-//      ever playing; video memory (r_texturemem.cpp, DirectDraw) is the
-//      engine's own branch for when DirectDraw reports none.
+//      ever playing. Video memory (r_texturemem.cpp, DirectDraw) is the
+//      engine's own branch for when DirectDraw reports none, in
+//      src/linux/client/texture_memory.cpp.
 //   4. Functions the probe must never reach. Each aborts with its name, so a
 //      path that reaches one fails loudly instead of running invented code.
 //
 // Every entry was needed for the link when it was added. Compiled through the
-// native D3D9 boundary, because R_AvailableTextureMemory asks the device.
+// native D3D9 boundary with the probe's other own units.
 
 #include <universal/q_shared.h>
 #include <qcommon/qcommon.h>
@@ -194,25 +195,8 @@ void R_Cinematic_Shutdown()
 {
 }
 
-// src/gfx_d3d/r_texturemem.cpp:150 and R_DetectCurrentTextureMemory below it,
-// with R_VideoMemory's DirectDraw query answering 0: DirectDraw does not exist
-// on Linux, and 0 is what R_VideoMemory returns when DirectDraw cannot tell. The
-// rest is the original's own branch for that case and its reporting cache.
-static uint32_t s_maxReportedTexMem;
-
-uint32_t R_AvailableTextureMemory()
-{
-    iassert(dx.device);
-    const uint32_t texMemInMegs = dx.device->GetAvailableTextureMem() >> 20;
-    Com_Printf(CON_CHANNEL_GFX,
-               "DirectX reports %i MB of available texture memory, but wouldn't tell available video memory.\n",
-               texMemInMegs);
-    if (s_maxReportedTexMem >= texMemInMegs)
-        Com_Printf(CON_CHANNEL_GFX, "Using previously reported texture memory size of %i MB.\n", s_maxReportedTexMem);
-    else
-        s_maxReportedTexMem = texMemInMegs;
-    return s_maxReportedTexMem;
-}
+// R_AvailableTextureMemory (r_texturemem.cpp, DirectDraw) is
+// src/linux/client/texture_memory.cpp, shared with KisakCOD-mp.
 
 // ---- 4. functions this probe must never reach --------------------------------
 
