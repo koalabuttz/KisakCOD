@@ -19,7 +19,7 @@ void Scroll_ListBox_AutoFunc(UiContext*,void*) { Unavailable("listbox auto scrol
 void Scroll_ListBox_ThumbFunc(UiContext*,void*) { Unavailable("listbox drag scrolling"); }
 int Item_Slider_OverSlider(int,itemDef_s*,float,float) { Unavailable("slider hit testing"); }
 int Item_Slider_HandleKey(UiContext*,itemDef_s*,int,int) { Unavailable("slider key input"); }
-void Scroll_Slider_ThumbFunc(UiContext*,itemDef_s**) { Unavailable("slider dragging"); }
+void Scroll_Slider_ThumbFunc(UiContext*,void*) { Unavailable("slider dragging"); }
 int Item_Bind_HandleKey(UiContext*,itemDef_s*,int,int) { Unavailable("binding editor"); }
 bool Item_TextField_HandleKey(UiContext*,itemDef_s*,int) { Unavailable("text-field input"); }
 void Item_TextField_BeginEdit(int,itemDef_s*) { Unavailable("text-field editing"); }

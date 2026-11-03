@@ -826,9 +826,8 @@ int UI_GetServerStatusInfo(char *serverAddress, serverStatusInfo_t *info)
 
 int numFound;
 int numTimeOuts;
-uiInfo_s *UI_BuildFindPlayerList()
+void UI_BuildFindPlayerList()
 {
-    uiInfo_s *result; // eax
     const char *v1; // eax
     int j; // [esp+4h] [ebp-1144h]
     serverStatusInfo_t info; // [esp+8h] [ebp-1140h] BYREF
@@ -838,11 +837,9 @@ uiInfo_s *UI_BuildFindPlayerList()
     char buf[1028]; // [esp+D40h] [ebp-408h] BYREF
 
     uiInfo = &uiInfoArray;
-    result = &uiInfoArray;
     if (uiInfoArray.nextFindPlayerRefresh)
     {
-        result = (uiInfo_s *)uiInfo->nextFindPlayerRefresh;
-        if ((int)result <= uiInfo->uiDC.realTime)
+        if (uiInfo->nextFindPlayerRefresh <= uiInfo->uiDC.realTime)
         {
             UI_UpdateDisplayServers(uiInfo);
             for (i = 0; i < 16; ++i)
@@ -853,11 +850,11 @@ uiInfo_s *UI_BuildFindPlayerList()
                     ++numFound;
                     for (j = 0; j < info.numLines; ++j)
                     {
-                        if (*(_DWORD *)&info.text[16 * j - 2040])
+                        if (info.lines[j][2])
                         {
-                            if (**(_BYTE **)&info.text[16 * j - 2040])
+                            if (*info.lines[j][2])
                             {
-                                I_strncpyz(dest, *(char **)&info.text[16 * j - 2036], 34);
+                                I_strncpyz(dest, info.lines[j][3], 34);
                                 I_CleanStr(dest);
                                 if (stristr(dest, uiInfo->findPlayerName))
                                 {
@@ -930,7 +927,7 @@ uiInfo_s *UI_BuildFindPlayerList()
                 if (uiInfo->numFoundPlayerServers)
                 {
                     if (uiInfo->numFoundPlayerServers == 2)
-                        result = (uiInfo_s *)Com_sprintf(
+                        Com_sprintf(
                             uiInfo->foundPlayerServerAddresses[uiInfo->numFoundPlayerServers + 15],
                             0x40u,
                             "%d server%s found with player %s",
@@ -938,7 +935,7 @@ uiInfo_s *UI_BuildFindPlayerList()
                             "",
                             uiInfo->findPlayerName);
                     else
-                        result = (uiInfo_s *)Com_sprintf(
+                        Com_sprintf(
                             uiInfo->foundPlayerServerAddresses[uiInfo->numFoundPlayerServers + 15],
                             0x40u,
                             "%d server%s found with player %s",
@@ -948,7 +945,7 @@ uiInfo_s *UI_BuildFindPlayerList()
                 }
                 else
                 {
-                    result = (uiInfo_s *)Com_sprintf(
+                    Com_sprintf(
                         uiInfo->foundPlayerServerAddresses[uiInfo->numFoundPlayerServers + 15],
                         0x40u,
                         "no servers found");
@@ -957,12 +954,10 @@ uiInfo_s *UI_BuildFindPlayerList()
             }
             else
             {
-                result = uiInfo;
                 uiInfo->nextFindPlayerRefresh = uiInfo->uiDC.realTime + 25;
             }
         }
     }
-    return result;
 }
 
 void UI_Refresh(int localClientNum)
@@ -1140,7 +1135,7 @@ char *UI_GetMapDisplayName(const char *pszMap)
 
     for (i = 0; i < sharedUiInfo.mapCount; ++i)
     {
-        if (!I_stricmp(pszMap, (const char *)sharedUiInfo.serverHardwareIconList[40 * i - 5119]))
+        if (!I_stricmp(pszMap, sharedUiInfo.mapList[i].mapLoadName))
             return UI_SafeTranslateString((char *)sharedUiInfo.mapList[i].mapName);
     }
     return (char *)pszMap;
@@ -1154,8 +1149,8 @@ char *UI_GetMapDisplayNameFromPartialLoadNameMatch(const char *mapName, int *map
         MyAssertHandler(".\\ui_mp\\ui_main_mp.cpp", 1043, 0, "%s", "mapLoadNameLen");
     for (i = 0; i < sharedUiInfo.mapCount; ++i)
     {
-        *mapLoadNameLen = strlen((const char *)sharedUiInfo.serverHardwareIconList[40 * i - 5119]);
-        if (!I_strnicmp(mapName, (const char *)sharedUiInfo.serverHardwareIconList[40 * i - 5119], *mapLoadNameLen))
+        *mapLoadNameLen = strlen(sharedUiInfo.mapList[i].mapLoadName);
+        if (!I_strnicmp(mapName, sharedUiInfo.mapList[i].mapLoadName, *mapLoadNameLen))
             return UI_SafeTranslateString((char *)sharedUiInfo.mapList[i].mapName);
     }
     return 0;
@@ -2033,7 +2028,7 @@ BOOL UI_IsMapActive(int mapIndex)
             "%s\n\t(mapIndex) = %i",
             "(mapIndex >= 0 && mapIndex < sharedUiInfo.mapCount)",
             mapIndex);
-    return sharedUiInfo.serverHardwareIconList[40 * mapIndex - 5081] != 0;
+    return sharedUiInfo.mapList[mapIndex].active != 0;
 }
 
 void UI_SelectListIndexForMapIndex(int mapIndex)
@@ -2050,7 +2045,7 @@ void UI_SelectFirstActiveMap()
 
     for (mapIndex = 0; mapIndex < sharedUiInfo.mapCount; ++mapIndex)
     {
-        if (sharedUiInfo.serverHardwareIconList[40 * mapIndex - 5081])
+        if (sharedUiInfo.mapList[mapIndex].active)
         {
             Menu_SetFeederSelection(&uiInfoArray.uiDC, 0, 4, 0, "createserver_maps");
             Dvar_SetInt(ui_currentNetMap, mapIndex);
@@ -2080,7 +2075,7 @@ void UI_SelectCurrentMap(int localClientNum)
             iCount = 0;
             for (i = 0; i < sharedUiInfo.mapCount; ++i)
             {
-                if (sharedUiInfo.serverHardwareIconList[40 * i - 5081])
+                if (sharedUiInfo.mapList[i].active)
                 {
                     if (!I_stricmp(szMap, sharedUiInfo.mapList[i].mapName))
                     {
@@ -2423,9 +2418,8 @@ int UI_GetPlayerProfileListIndexFromName(const char *name)
     return -1;
 }
 
-const char *UI_LoadMods()
+void UI_LoadMods()
 {
-    const char *result; // eax
     int numdirs; // [esp+20h] [ebp-818h]
     const char *dirptr; // [esp+24h] [ebp-814h]
     char dirlist[2048]; // [esp+28h] [ebp-810h] BYREF
@@ -2437,21 +2431,16 @@ const char *UI_LoadMods()
     sharedUiInfo.modIndex = 0;
     numdirs = FS_GetFileList("$modlist", "", FS_LIST_ALL, dirlist, 2048);
     dirptr = dirlist;
-    for (i = 0; ; ++i)
+    for (i = 0; i < numdirs; ++i)
     {
-        result = (const char *)i;
-        if (i >= numdirs)
-            break;
         dirlen = strlen(dirptr) + 1;
         descptr = (char *)&dirptr[dirlen];
         sharedUiInfo.modList[sharedUiInfo.modCount].modName = String_Alloc(dirptr);
         sharedUiInfo.modList[sharedUiInfo.modCount].modDescr = String_Alloc(descptr);
-        result = &dirptr[strlen(descptr) + 1 + dirlen];
-        dirptr = result;
+        dirptr = &dirptr[strlen(descptr) + 1 + dirlen];
         if (++sharedUiInfo.modCount >= 64)
             break;
     }
-    return result;
 }
 
 static int UI_PlayerProfilesQsortCompare(const void *a, const void *b)
@@ -3148,8 +3137,7 @@ void UI_RunMenuScript(int localClientNum, const char **args, const char *actualS
                                     {
                                         v13 = va(
                                             "callvote map %s\n",
-                                            (const char *)sharedUiInfo.serverHardwareIconList[40 * ui_currentNetMap->current.integer
-                                            - 5119]);
+                                            sharedUiInfo.mapList[ui_currentNetMap->current.integer].mapLoadName);
                                         Cbuf_AddText(localClientNum, v13);
                                     }
                                 }
@@ -3158,8 +3146,7 @@ void UI_RunMenuScript(int localClientNum, const char **args, const char *actualS
                                     v12 = va(
                                         "callvote typemap %s %s\n",
                                         sharedUiInfo.gameTypes[ui_netGameType->current.integer].gameType,
-                                        (const char *)sharedUiInfo.serverHardwareIconList[40 * ui_currentNetMap->current.integer
-                                        - 5119]);
+                                        sharedUiInfo.mapList[ui_currentNetMap->current.integer].mapLoadName);
                                     Cbuf_AddText(localClientNum, v12);
                                 }
                             }
@@ -3247,7 +3234,7 @@ void UI_RunMenuScript(int localClientNum, const char **args, const char *actualS
             Dvar_SetStringByName("g_gametype", (char *)sharedUiInfo.gameTypes[ui_netGameType->current.integer].gameType);
             v4 = va(
                 "wait ; wait ; map %s\n",
-                (const char *)sharedUiInfo.serverHardwareIconList[40 * ui_currentNetMap->current.integer - 5119]);
+                sharedUiInfo.mapList[ui_currentNetMap->current.integer].mapLoadName);
             Cbuf_AddText(localClientNum, v4);
         }
         else
@@ -3765,11 +3752,11 @@ int UI_MapCountByGameType()
     c = 0;
     for (i = 0; i < sharedUiInfo.mapCount; ++i)
     {
-        sharedUiInfo.serverHardwareIconList[40 * i - 5081] = 0;
-        if (((int)sharedUiInfo.serverHardwareIconList[40 * i - 5115] & (1 << game)) != 0)
+        sharedUiInfo.mapList[i].active = 0;
+        if ((sharedUiInfo.mapList[i].typeBits & (1 << game)) != 0)
         {
             ++c;
-            sharedUiInfo.serverHardwareIconList[40 * i - 5081] = (Material *)1;
+            sharedUiInfo.mapList[i].active = 1;
         }
     }
     return c;
@@ -4103,11 +4090,11 @@ Material *UI_GetLevelShot(int index)
 {
     if (index < 0 || index >= sharedUiInfo.mapCount)
         index = 0;
-    if (!sharedUiInfo.serverHardwareIconList[40 * index - 5082])
-        sharedUiInfo.serverHardwareIconList[40 * index - 5082] = Material_RegisterHandle(
-            (char *)sharedUiInfo.serverHardwareIconList[40 * index - 5118],
+    if (!sharedUiInfo.mapList[index].levelShot)
+        sharedUiInfo.mapList[index].levelShot = Material_RegisterHandle(
+            sharedUiInfo.mapList[index].imageName,
             IMAGE_TRACK_UI);
-    return sharedUiInfo.serverHardwareIconList[40 * index - 5082];
+    return sharedUiInfo.mapList[index].levelShot;
 }
 
 Material *UI_FeederItemImage(float feederID, int index)
@@ -4165,7 +4152,7 @@ int UI_GetListIndexFromMapIndex(int testMapIndex)
     listIndex = 0;
     for (mapIndex = 0; mapIndex < sharedUiInfo.mapCount; ++mapIndex)
     {
-        if (sharedUiInfo.serverHardwareIconList[40 * mapIndex - 5081])
+        if (sharedUiInfo.mapList[mapIndex].active)
         {
             if (mapIndex == testMapIndex)
                 return listIndex;
@@ -4227,7 +4214,7 @@ char *UI_SelectedMap(int index, int *actual)
     *actual = 0;
     for (i = 0; i < sharedUiInfo.mapCount; ++i)
     {
-        if (sharedUiInfo.serverHardwareIconList[40 * i - 5081])
+        if (sharedUiInfo.mapList[i].active)
         {
             if (c == index)
             {
@@ -5719,7 +5706,6 @@ void UI_ReplaceConversions(
     char *outputString,
     int outputStringSize)
 {
-    int v4; // eax
     int v5; // edx
     signed int v6; // [esp+0h] [ebp-38h]
     int argIndex; // [esp+24h] [ebp-14h]
@@ -5730,8 +5716,7 @@ void UI_ReplaceConversions(
 
     if (!sourceString)
         MyAssertHandler(".\\ui_mp\\ui_main_mp.cpp", 7349, 0, "%s", "sourceString");
-    v4 = (int)strstr(sourceString, "&&");
-    if (v4)
+    if (strstr(sourceString, "&&"))
     {
         if (!arguments)
             MyAssertHandler(".\\ui_mp\\ui_main_mp.cpp", 7357, 0, "%s", "arguments");

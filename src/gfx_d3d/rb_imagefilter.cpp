@@ -184,7 +184,7 @@ int RB_PickSymmetricFilterMaterial(int halfTapCount, const Material **material)
             "%s\n\t(halfTapCount) = %i",
             "(halfTapCount > 0 && halfTapCount <= 8)",
             halfTapCount);
-    *material = (const Material *)*((uint32_t *)&rgp.postFxMaterial + halfTapCount);
+    *material = rgp.symmetricFilterMaterial[halfTapCount - 1];
     return halfTapCount;
 }
 

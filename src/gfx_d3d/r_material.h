@@ -707,7 +707,7 @@ void Material_LoadBuiltIn(const BuiltInMaterialTable* mtlTable, int mtlTableCoun
 void Material_ForEachTechniqueSet_FastFile(void(* callback)(MaterialTechniqueSet*));
 bool IsValidMaterialHandle(Material* const handle);
 
-//void R_GetMaterialList(XAssetHeader header, char *data);
+//void R_GetMaterialList(XAssetHeader header, void *data);
 //void Material_CollateTechniqueSets(XAssetHeader header, XAssetHeader *userData);
 //void Material_ReleaseTechniqueSet(XAssetHeader header, void* crap);
 

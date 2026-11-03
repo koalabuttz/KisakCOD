@@ -672,7 +672,7 @@ void Item_StartCapture(UiContext *dc, itemDef_s *item, int key)
         scrollInfo.xStart = dc->cursor.x;
         scrollInfo.yStart = dc->cursor.y;
         captureData = &scrollInfo;
-        captureFunc = (void(*)(UiContext *, void *))Scroll_Slider_ThumbFunc;
+        captureFunc = Scroll_Slider_ThumbFunc;
         itemCapture = item;
     }
 }

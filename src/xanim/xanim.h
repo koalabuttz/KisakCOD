@@ -1476,6 +1476,6 @@ struct TechniqueSetList
     MaterialTechniqueSet *hashTable[1024];
     int count;
 };
-void R_GetMaterialList(XAssetHeader header, char *data);
+void R_GetMaterialList(XAssetHeader header, void *data);
 void Material_CollateTechniqueSets(XAssetHeader header, TechniqueSetList *techSetList);
 void Material_ReleaseTechniqueSet(XAssetHeader header, void *crap);

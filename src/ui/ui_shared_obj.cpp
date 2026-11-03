@@ -4404,7 +4404,7 @@ void free_expression(statement_s *statement)
         {
             entry = statement->entries[entryNum];
             if (entry->type == 1 && entry->data.op == OP_MULTIPLY)
-                Z_Free((char *)entry->data.operand.internals.intVal, 34);
+                Z_Free((char *)entry->data.operand.internals.string, 34);
             Z_Free((char *)entry, 34);
             statement->entries[entryNum] = 0;
         }
@@ -4505,8 +4505,9 @@ void Statement_AddStringOperand(statement_s *statement, char *str)
     entry = (expressionEntry *)Z_Malloc(sizeof(expressionEntry), "Statement_AddStringOperand", 34);
     entry->type = 1;
     entry->data.op = OP_MULTIPLY;
-    entry->data.operand.internals.intVal = (int)Z_Malloc(strlen(str) + 1, "Statement_AddStringOperand", 34);
-    I_strncpyz((char *)entry->data.operand.internals.intVal, str, strlen(str) + 1);
+    char *operandString = (char *)Z_Malloc(strlen(str) + 1, "Statement_AddStringOperand", 34);
+    I_strncpyz(operandString, str, strlen(str) + 1);
+    entry->data.operand.internals.string = operandString;
     Statement_AddEntry(statement, entry);
 }
 

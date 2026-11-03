@@ -523,16 +523,16 @@ void Script_SetItemColor(UiContext *dc, itemDef_s *item, const char **args)
 
 int Menu_ItemsMatchingGroup(menuDef_t *menu, char *name)
 {
-    int v2; // eax
+    const char *star;
     int wildcard; // [esp+4h] [ebp-Ch]
     int i; // [esp+8h] [ebp-8h]
     int count; // [esp+Ch] [ebp-4h]
 
     count = 0;
     wildcard = -1;
-    v2 = (int)strstr(name, "*");
-    if (v2)
-        wildcard = v2 - (uint32_t)name;
+    star = strstr(name, "*");
+    if (star)
+        wildcard = star - name;
     for (i = 0; i < menu->itemCount; ++i)
     {
         if (wildcard == -1)
@@ -554,16 +554,16 @@ int Menu_ItemsMatchingGroup(menuDef_t *menu, char *name)
 
 itemDef_s *Menu_GetMatchingItemByNumber(menuDef_t *menu, int index, char *name)
 {
-    int v3; // eax
+    const char *star;
     int wildcard; // [esp+4h] [ebp-Ch]
     int i; // [esp+8h] [ebp-8h]
     int count; // [esp+Ch] [ebp-4h]
 
     count = 0;
     wildcard = -1;
-    v3 = (int)strstr(name, "*");
-    if (v3)
-        wildcard = v3 - (uint32_t)name;
+    star = strstr(name, "*");
+    if (star)
+        wildcard = star - name;
     for (i = 0; i < menu->itemCount; ++i)
     {
         if (wildcard == -1)
@@ -1992,55 +1992,47 @@ void Item_TextField_EnsureCursorVisible(int localClientNum, itemDef_s *item, con
     }
 }
 
+// p is the scrollInfo_s that Item_HandleKey captured (ui_input_core.cpp).
 void Scroll_ListBox_AutoFunc(UiContext *dc, void *p)
 {
-    if (dc->realTime > *(_DWORD *)p)
+    scrollInfo_s *si = (scrollInfo_s *)p;
+
+    if (dc->realTime > si->nextScrollTime)
     {
-        Item_ListBox_HandleKey(dc, *((itemDef_s **)p + 6), *((_DWORD *)p + 3), 1, 0);
-        *(_DWORD *)p = *((_DWORD *)p + 2) + dc->realTime;
+        Item_ListBox_HandleKey(dc, si->item, si->scrollKey, 1, 0);
+        si->nextScrollTime = si->adjustValue + dc->realTime;
     }
-    if (dc->realTime > *((_DWORD *)p + 1))
+    if (dc->realTime > si->nextAdjustTime)
     {
-        *((_DWORD *)p + 1) = dc->realTime + 150;
-        if (*((int *)p + 2) > 20)
-            *((_DWORD *)p + 2) -= 40;
+        si->nextAdjustTime = dc->realTime + 150;
+        if (si->adjustValue > 20)
+            si->adjustValue -= 40;
     }
 }
 
 void Scroll_ListBox_ThumbFunc(UiContext *dc, void *p)
 {
-    int v2; // [esp+0h] [ebp-3Ch]
-    int v3; // [esp+4h] [ebp-38h]
-    int v4; // [esp+8h] [ebp-34h]
+    scrollInfo_s *si = (scrollInfo_s *)p;
     int pos; // [esp+10h] [ebp-2Ch]
-    int posa; // [esp+10h] [ebp-2Ch]
     int max; // [esp+14h] [ebp-28h]
-    int maxa; // [esp+14h] [ebp-28h]
     float r; // [esp+18h] [ebp-24h]
-    float r_4; // [esp+1Ch] [ebp-20h]
-    float r_8; // [esp+20h] [ebp-1Ch]
-    float r_12; // [esp+24h] [ebp-18h]
+    float r_w; // [esp+20h] [ebp-1Ch]
     listBoxDef_s *listPtr; // [esp+34h] [ebp-8h]
 
     if (dc->isCursorVisible)
     {
-        listPtr = Item_GetListBoxDef(*((itemDef_s **)p + 6));
+        listPtr = Item_GetListBoxDef(si->item);
         if (listPtr)
         {
-            v4 = *((_DWORD *)p + 6);
-            if (!v4)
-                MyAssertHandler("c:\\trees\\cod3\\src\\ui\\../ui/ui_utils.h", 53, 0, "%s", "w");
-            if ((*(_DWORD *)(v4 + 76) & 0x200000) != 0)
+            iassert(si->item);
+            if ((si->item->window.staticFlags & 0x200000) != 0)
             {
-                if (*((float *)p + 4) == dc->cursor.x)
+                if (si->xStart == dc->cursor.x)
                     return;
-                v3 = *((_DWORD *)p + 6);
-                if (!v3)
-                    MyAssertHandler("c:\\trees\\cod3\\src\\ui\\ui_utils_api.h", 36, 0, "%s", "w");
-                r = *(float *)(v3 + 4) + 16.0 + 1.0;
-                r_8 = *(float *)(v3 + 12) - 32.0 - 2.0;
-                max = Item_ListBox_MaxScroll(dc->localClientNum, *((itemDef_s **)p + 6));
-                pos = (int)((dc->cursor.x - r - 8.0) * (double)max / (r_8 - 16.0));
+                r = si->item->window.rect.x + 16.0 + 1.0;
+                r_w = si->item->window.rect.w - 32.0 - 2.0;
+                max = Item_ListBox_MaxScroll(dc->localClientNum, si->item);
+                pos = (int)((dc->cursor.x - r - 8.0) * (double)max / (r_w - 16.0));
                 if (pos >= 0)
                 {
                     if (pos > max)
@@ -2051,39 +2043,36 @@ void Scroll_ListBox_ThumbFunc(UiContext *dc, void *p)
                     pos = 0;
                 }
                 listPtr->startPos[dc->localClientNum] = pos;
-                *((float *)p + 4) = dc->cursor.x;
+                si->xStart = dc->cursor.x;
             }
-            else if (*((float *)p + 5) != dc->cursor.y)
+            else if (si->yStart != dc->cursor.y)
             {
-                v2 = *((_DWORD *)p + 6);
-                if (!v2)
-                    MyAssertHandler("c:\\trees\\cod3\\src\\ui\\ui_utils_api.h", 36, 0, "%s", "w");
-                r_4 = *(float *)(v2 + 8) + 16.0 + 1.0;
-                r_12 = *(float *)(v2 + 16) - 32.0 - 2.0;
-                maxa = Item_ListBox_MaxScroll(dc->localClientNum, *((itemDef_s **)p + 6));
-                posa = (int)((dc->cursor.y - r_4 - 8.0) * (double)maxa / (r_12 - 16.0));
-                if (posa >= 0)
+                r = si->item->window.rect.y + 16.0 + 1.0;
+                r_w = si->item->window.rect.h - 32.0 - 2.0;
+                max = Item_ListBox_MaxScroll(dc->localClientNum, si->item);
+                pos = (int)((dc->cursor.y - r - 8.0) * (double)max / (r_w - 16.0));
+                if (pos >= 0)
                 {
-                    if (posa > maxa)
-                        posa = maxa;
+                    if (pos > max)
+                        pos = max;
                 }
                 else
                 {
-                    posa = 0;
+                    pos = 0;
                 }
-                listPtr->startPos[dc->localClientNum] = posa;
-                *((float *)p + 5) = dc->cursor.y;
+                listPtr->startPos[dc->localClientNum] = pos;
+                si->yStart = dc->cursor.y;
             }
-            if (dc->realTime > *(_DWORD *)p)
+            if (dc->realTime > si->nextScrollTime)
             {
-                Item_ListBox_HandleKey(dc, *((itemDef_s **)p + 6), *((_DWORD *)p + 3), 1, 0);
-                *(_DWORD *)p = *((_DWORD *)p + 2) + dc->realTime;
+                Item_ListBox_HandleKey(dc, si->item, si->scrollKey, 1, 0);
+                si->nextScrollTime = si->adjustValue + dc->realTime;
             }
-            if (dc->realTime > *((_DWORD *)p + 1))
+            if (dc->realTime > si->nextAdjustTime)
             {
-                *((_DWORD *)p + 1) = dc->realTime + 150;
-                if (*((int *)p + 2) > 20)
-                    *((_DWORD *)p + 2) -= 40;
+                si->nextAdjustTime = dc->realTime + 150;
+                if (si->adjustValue > 20)
+                    si->adjustValue -= 40;
             }
         }
     }
@@ -2111,9 +2100,9 @@ int Item_Slider_OverSlider(int localClientNum, itemDef_s *item, float x, float y
 
 void Scroll_Slider_SetThumbPos(UiContext *dc, itemDef_s *item);
 
-void Scroll_Slider_ThumbFunc(UiContext *dc, itemDef_s **p)
+void Scroll_Slider_ThumbFunc(UiContext *dc, void *p)
 {
-    Scroll_Slider_SetThumbPos(dc, p[6]);
+    Scroll_Slider_SetThumbPos(dc, ((scrollInfo_s *)p)->item);
 }
 
 int Item_OwnerDraw_HandleKey(itemDef_s *item, int key)
