@@ -90,6 +90,8 @@ jobs:
         run: python3 scripts/tests/test_script_console_watchdog.py
       - name: Config command ownership
         run: python3 scripts/tests/test_exec_command_ownership.py
+      - name: MSVC x64 census summarizer
+        run: python3 scripts/ci/test_summarize_msvc_x64.py
 
   build:
     name: Build with DirectX SDK
@@ -178,3 +180,85 @@ jobs:
           path: ${{ github.workspace }}/bin
           compression-level: 9
           retention-days: 1
+
+  x64-census:
+    # The Windows x64 row of the CI matrix upstream issue 1 asks for, ahead of a
+    # working x64 build (docs/linux-x64.md). Configures the normal project with
+    # -A x64, builds the SP, MP and dedicated targets, which do not compile for
+    # x64 yet, and publishes what stopped them in the same categories as the
+    # Linux x86_64 census. Report only: compile errors never fail this job; a
+    # broken configure or a missing log does. It runs after a merge and on
+    # manual runs, not on every pull request push.
+    name: MSVC x64 compile census
+    if: github.event_name != 'pull_request'
+    runs-on: windows-2022
+    timeout-minutes: 75
+
+    env:
+      NUGET_PACKAGES: ${{ github.workspace }}\.nuget\packages
+      DXSDK_PKG: Microsoft.DXSDK.D3DX
+      DXSDK_VER: 9.29.952.8
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install .NET SDK (for nuget usage)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.x'
+
+      - name: Restore DXSDK NuGet package
+        run: |
+          dotnet new classlib -o dxsdk-temp
+          cd dxsdk-temp
+          dotnet add package $env:DXSDK_PKG --version $env:DXSDK_VER
+          cd ..
+
+      - name: Extract DXSDK paths from NuGet
+        shell: powershell
+        run: |
+          $pkgPath = Join-Path "${env:NUGET_PACKAGES}" "$env:DXSDK_PKG\$env:DXSDK_VER"
+          $sdkDir = Join-Path $pkgPath "build\native"
+          echo "DXSDK_DIR=$sdkDir" >> $env:GITHUB_ENV
+
+      - name: Install latest CMake
+        uses: lukka/get-cmake@latest
+
+      - name: Check the MSVC x64 summarizer
+        run: |
+          python scripts/ci/test_summarize_msvc_x64.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Configure x64
+        run: |
+          cmake -S . -B build-x64 -G "Visual Studio 17 2022" -A x64 -DDXSDK_DIR="${{ env.DXSDK_DIR }}" -DCICD=1 -DCMAKE_BUILD_TYPE=Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build x64 (expected to fail; logs kept)
+        run: |
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          foreach ($target in @("KisakCOD-sp", "KisakCOD-mp", "KisakCOD-dedi")) {
+            $log = Join-Path $PWD "artifacts\msvc-x64-$target.log"
+            cmake --build build-x64 --config Release --target $target -- /m "/flp:LogFile=$log;Verbosity=minimal;Encoding=UTF-8"
+            Write-Host "$target exit code: $LASTEXITCODE"
+          }
+          exit 0
+
+      - name: Summarize x64 compile
+        run: |
+          python scripts/ci/summarize_msvc_x64.py --root "${{ github.workspace }}" --report-dir artifacts/msvc-x64 `
+            "KisakCOD-sp=artifacts/msvc-x64-KisakCOD-sp.log" `
+            "KisakCOD-mp=artifacts/msvc-x64-KisakCOD-mp.log" `
+            "KisakCOD-dedi=artifacts/msvc-x64-KisakCOD-dedi.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-Content artifacts/msvc-x64/msvc-x64-census.md | Add-Content $env:GITHUB_STEP_SUMMARY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          # MSBuild logs and the report; no binaries.
+          name: KisakCOD-msvc-x64-census
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 7
