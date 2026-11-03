@@ -124,7 +124,7 @@ void UI_LoadArenas()
 const char *UI_LoadArenasFromFile_LoadObj()
 {
     char *result; // eax
-    const char *v1; // [esp+14h] [ebp-24A4h]
+    int fileCount; // [esp+14h] [ebp-24A4h]
     char string[132]; // [esp+18h] [ebp-24A0h] BYREF
     char *v3; // [esp+9Ch] [ebp-241Ch]
     char listbuf[1024]; // [esp+A0h] [ebp-2418h] BYREF
@@ -135,11 +135,11 @@ const char *UI_LoadArenasFromFile_LoadObj()
     uint32_t v9; // [esp+24B4h] [ebp-4h]
 
     ui_numArenas = 0;
-    result = (char *)FS_GetFileList("mp", "arena", FS_LIST_PURE_ONLY, listbuf, 1024);
-    v1 = result;
+    fileCount = FS_GetFileList("mp", "arena", FS_LIST_PURE_ONLY, listbuf, 1024);
+    result = nullptr;
     v3 = listbuf;
     v8 = 0;
-    while (v8 < (int)v1)
+    while (v8 < fileCount)
     {
         v9 = strlen(v3);
         snprintf(string, ARRAYSIZE(string), "%s/%s", "mp", v3);

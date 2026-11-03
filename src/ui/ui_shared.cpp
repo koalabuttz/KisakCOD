@@ -523,16 +523,16 @@ void Script_SetItemColor(UiContext *dc, itemDef_s *item, const char **args)
 
 int Menu_ItemsMatchingGroup(menuDef_t *menu, char *name)
 {
-    int v2; // eax
+    const char *star;
     int wildcard; // [esp+4h] [ebp-Ch]
     int i; // [esp+8h] [ebp-8h]
     int count; // [esp+Ch] [ebp-4h]
 
     count = 0;
     wildcard = -1;
-    v2 = (int)strstr(name, "*");
-    if (v2)
-        wildcard = v2 - (uint32_t)name;
+    star = strstr(name, "*");
+    if (star)
+        wildcard = star - name;
     for (i = 0; i < menu->itemCount; ++i)
     {
         if (wildcard == -1)
@@ -554,16 +554,16 @@ int Menu_ItemsMatchingGroup(menuDef_t *menu, char *name)
 
 itemDef_s *Menu_GetMatchingItemByNumber(menuDef_t *menu, int index, char *name)
 {
-    int v3; // eax
+    const char *star;
     int wildcard; // [esp+4h] [ebp-Ch]
     int i; // [esp+8h] [ebp-8h]
     int count; // [esp+Ch] [ebp-4h]
 
     count = 0;
     wildcard = -1;
-    v3 = (int)strstr(name, "*");
-    if (v3)
-        wildcard = v3 - (uint32_t)name;
+    star = strstr(name, "*");
+    if (star)
+        wildcard = star - name;
     for (i = 0; i < menu->itemCount; ++i)
     {
         if (wildcard == -1)

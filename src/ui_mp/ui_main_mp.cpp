@@ -2418,9 +2418,8 @@ int UI_GetPlayerProfileListIndexFromName(const char *name)
     return -1;
 }
 
-const char *UI_LoadMods()
+void UI_LoadMods()
 {
-    const char *result; // eax
     int numdirs; // [esp+20h] [ebp-818h]
     const char *dirptr; // [esp+24h] [ebp-814h]
     char dirlist[2048]; // [esp+28h] [ebp-810h] BYREF
@@ -2432,21 +2431,16 @@ const char *UI_LoadMods()
     sharedUiInfo.modIndex = 0;
     numdirs = FS_GetFileList("$modlist", "", FS_LIST_ALL, dirlist, 2048);
     dirptr = dirlist;
-    for (i = 0; ; ++i)
+    for (i = 0; i < numdirs; ++i)
     {
-        result = (const char *)i;
-        if (i >= numdirs)
-            break;
         dirlen = strlen(dirptr) + 1;
         descptr = (char *)&dirptr[dirlen];
         sharedUiInfo.modList[sharedUiInfo.modCount].modName = String_Alloc(dirptr);
         sharedUiInfo.modList[sharedUiInfo.modCount].modDescr = String_Alloc(descptr);
-        result = &dirptr[strlen(descptr) + 1 + dirlen];
-        dirptr = result;
+        dirptr = &dirptr[strlen(descptr) + 1 + dirlen];
         if (++sharedUiInfo.modCount >= 64)
             break;
     }
-    return result;
 }
 
 static int UI_PlayerProfilesQsortCompare(const void *a, const void *b)
@@ -5712,7 +5706,6 @@ void UI_ReplaceConversions(
     char *outputString,
     int outputStringSize)
 {
-    int v4; // eax
     int v5; // edx
     signed int v6; // [esp+0h] [ebp-38h]
     int argIndex; // [esp+24h] [ebp-14h]
@@ -5723,8 +5716,7 @@ void UI_ReplaceConversions(
 
     if (!sourceString)
         MyAssertHandler(".\\ui_mp\\ui_main_mp.cpp", 7349, 0, "%s", "sourceString");
-    v4 = (int)strstr(sourceString, "&&");
-    if (v4)
+    if (strstr(sourceString, "&&"))
     {
         if (!arguments)
             MyAssertHandler(".\\ui_mp\\ui_main_mp.cpp", 7357, 0, "%s", "arguments");
