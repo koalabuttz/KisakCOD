@@ -3,8 +3,9 @@
 
 The lexer, grammar tables, parser, source reader, and parse-tree builders are
 extracted from production. String interning and node allocation are test doubles.
-The host model widens the enum alias in sval_u to pointer width so the original
-32-bit pointer/enum aliasing also works on 64-bit regression runners.
+sval_u keeps production widths: a 4-byte Enum_t beside pointer-sized node
+pointers, so a grammar action that passes a node pointer through a 4-byte field
+fails here on 64-bit runners just as the x86_64 server would.
 """
 
 import argparse
@@ -47,6 +48,8 @@ PREFIX = r"""
 #include <cstdlib>
 #include <cstring>
 #include <map>
+#include <new>
+#include <sys/mman.h>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -104,8 +107,25 @@ struct {
     const char* parseBuf;
     int far_function_count;
 } scrCompilePub;
+// Parse nodes come from an arena whose addresses have the top bit of their low
+// half set (0x...80000000 upward), so a node pointer cut to 32 bits can never be
+// mistaken for a source position, string id or small integer.
+static uint8_t* nodeArena;
+static size_t nodeArenaUsed;
+constexpr size_t kNodeArenaSize = size_t(512) << 20;
 sval_u* Scr_AllocNode(int size) {
-    auto node = new sval_u[size];
+    if (!nodeArena) {
+        void* hint = reinterpret_cast<void*>(uintptr_t(0x7e0080000000ull));
+        void* arena = mmap(hint, kNodeArenaSize, PROT_READ | PROT_WRITE,
+                           MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_FIXED_NOREPLACE, -1, 0);
+        if (arena == MAP_FAILED) throw std::runtime_error("cannot map the parse node arena");
+        nodeArena = static_cast<uint8_t*>(arena);
+    }
+    size_t bytes = sizeof(sval_u) * size;
+    if (nodeArenaUsed + bytes > kNodeArenaSize) throw std::runtime_error("parse node arena exhausted");
+    auto node = reinterpret_cast<sval_u*>(nodeArena + nodeArenaUsed);
+    for (int i = 0; i < size; ++i) new (&node[i]) sval_u();
+    nodeArenaUsed += bytes;
     nodes.emplace(node, size);
     return node;
 }
@@ -126,8 +146,26 @@ void yy_init_buffer(yy_buffer_state*, FILE*);
 
 SCENARIOS = r"""
 void clearNodes() {
-    for (const auto& pair : nodes) delete[] pair.first;
     nodes.clear();
+    nodeArenaUsed = 0;
+}
+// A node pointer stored through a 4-byte field keeps only its low half. Look
+// for any slot that holds exactly that: the low 32 bits of a live node with the
+// high half cleared.
+void assertNoTruncatedNodePointers() {
+    if (sizeof(void*) <= 4) return;
+    std::map<uint32_t, sval_u*> lowHalves;
+    for (const auto& pair : nodes) {
+        auto address = reinterpret_cast<uintptr_t>(pair.first);
+        if (address >> 32) lowHalves.emplace(uint32_t(address), pair.first);
+    }
+    for (const auto& pair : nodes) {
+        for (int i = 0; i < pair.second; ++i) {
+            auto value = reinterpret_cast<uintptr_t>(pair.first[i].node);
+            if (value >> 32 || !lowHalves.count(uint32_t(value))) continue;
+            throw std::runtime_error("parse tree slot holds a node pointer cut to 32 bits");
+        }
+    }
 }
 sval_u parse(const std::string& text) {
     clearNodes();
@@ -136,6 +174,7 @@ sval_u parse(const std::string& text) {
     scrCompilePub.far_function_count = 0;
     sval_u result;
     ScriptParse(&result, 0);
+    assertNoTruncatedNodePointers();
     return result;
 }
 sval_u* checked(sval_u value, int minimum) {
@@ -233,6 +272,14 @@ void elseChain(unsigned count) {
     assignments(list(final[1]));
     std::printf("PASS: %u else-if branches preserve every condition and final body\n", count);
 }
+void callArguments() {
+    // Call argument lists are built from { expression, source position } items.
+    auto functions = threads(parse("main(){f(7,9);g();h(1);x=(1,2,3);}"));
+    assert(functions.size() == 1);
+    auto main = checked(functions[0], 7);
+    assert(list(main[3]).size() == 4);
+    std::puts("PASS: call arguments and vectors keep whole expression pointers");
+}
 void invalid(const std::string& text, const char* description) {
     bool rejected = false;
     try { parse(text); }
@@ -245,6 +292,7 @@ int main() {
     try {
         assert(threads(parse("")).empty());
         std::puts("PASS: empty program");
+        callArguments();
         for (unsigned depth : {0, 10, 190, 200, 205, 206, 207, 208, 209, 210, 400, 830, 1700, 3300})
             nestedExpression(depth);
         for (unsigned count : {1, 32, 40, 100, 400}) elseChain(count);
@@ -266,13 +314,13 @@ int main() {
 def harness(repo, parser, scenarios=SCENARIOS):
     yacc = (repo / "src/script/scr_yacc.h").read_text()
     declarations = yacc[yacc.index("enum Enum_t"):re.search(r"\bint\s+(?:__cdecl\s+)?yyparse\b", yacc).start()]
-    declarations = declarations.replace("__int32", "intptr_t")
+    declarations = declarations.replace("__int32", "int32_t")
     vm = (repo / "src/script/scr_vm.h").read_text()
     opcode = vm[vm.index("enum Opcode_t"):]
     opcode = opcode[:opcode.index("};") + 2].replace("__int32", "int32_t")
     tree = (repo / "src/script/scr_parsetree.cpp").read_text()
     builders = "\n".join(function(tree, name) for name in [
-        *(f"node{i}" for i in range(9)), "linked_list_end", "prepend_node", "append_node",
+        *(f"node{i}" for i in range(9)), "node2_", "linked_list_end", "prepend_node", "append_node",
     ])
     reader = function((repo / "src/script/scr_main.cpp").read_text(), "Scr_ScanFile")
     tables = (repo / "src/script/scr_yacc_structs.h").read_text()
