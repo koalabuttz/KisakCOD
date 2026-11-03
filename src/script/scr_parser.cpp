@@ -546,7 +546,7 @@ void __cdecl Scr_AddSourceBufferInternal(
     {
         size = strlen(extFilename) + 1;
         dest = (char *)Hunk_AllocDebugMem(size + len + 2);
-        strcpy(dest, extFilename);
+        memcpy(dest, extFilename, size);
 
         if (sourceBuf)
             source = &dest[size];
@@ -1389,7 +1389,7 @@ void CompileError(uint32_t sourcePos, const char *msg, ...)
     va_list va; // [esp+81Ch] [ebp+10h] BYREF
 
     va_start(va, msg);
-    _vsnprintf(text, 0x400u, msg, va);
+    vsnprintf(text, 0x400u, msg, va);
     if (scrVarPub.evaluate)
     {
         if (!scrVarPub.error_message)
@@ -1446,7 +1446,7 @@ void CompileError2(char *codePos, const char *msg, ...)
     Scr_IgnoreLeaks();
     Com_PrintError(CON_CHANNEL_PARSERSCRIPT, "\n");
     Com_PrintError(CON_CHANNEL_PARSERSCRIPT, "******* script compile error *******\n");
-    _vsnprintf(text, 0x400u, msg, va);
+    vsnprintf(text, 0x400u, msg, va);
     Com_PrintError(CON_CHANNEL_PARSERSCRIPT, "%s: ", text);
     Scr_PrintPrevCodePos(CON_CHANNEL_PARSERSCRIPT, codePos, 0);
     Com_Printf(CON_CHANNEL_PARSERSCRIPT, "************************************\n");

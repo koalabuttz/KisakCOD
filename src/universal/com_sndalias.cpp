@@ -1280,8 +1280,7 @@ void Com_InitSpeakerMaps()
         len = strlen(fileNames[fileIndex]) - 8;
         if (len >= 64)
             Com_Error(ERR_DROP, "Speaker map %s name too long", fileNames[fileIndex]);
-        strncpy(name, fileNames[fileIndex], len);
-        name[len] = 0;
+        I_strncpyz(name, fileNames[fileIndex], len + 1);
         if (!Com_LoadSpkrMapFile(name, &g_sa.speakerMaps[fileIndex + 1]))
             Com_Error(ERR_DROP, "Failed to load speaker map %s", fileNames[fileIndex]);
     }

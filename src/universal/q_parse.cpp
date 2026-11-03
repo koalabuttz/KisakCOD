@@ -160,7 +160,7 @@ void Com_ScriptErrorDrop(const char *msg, ...)
     ParseThreadInfo = Com_GetParseThreadInfo();
     v3 = &ParseThreadInfo->parseInfo[ParseThreadInfo->parseInfoNum];
     va_copy(ap, va);
-    _vsnprintf(string, 0x1000u, msg, va);
+    vsnprintf(string, 0x1000u, msg, va);
     ap = 0;
     if (ParseThreadInfo->parseInfoNum)
         Com_Error(ERR_DROP, "%sFile %s, line %i: %s", v3->errorPrefix, v3->parseFile, v3->lines, string);
@@ -180,7 +180,7 @@ void Com_ScriptError(const char *msg, ...)
     ParseThreadInfo = Com_GetParseThreadInfo();
     v3 = &ParseThreadInfo->parseInfo[ParseThreadInfo->parseInfoNum];
     va_copy(ap, va);
-    _vsnprintf(string, 0x1000u, msg, va);
+    vsnprintf(string, 0x1000u, msg, va);
     ap = 0;
     if (ParseThreadInfo->parseInfoNum)
         Com_PrintError(CON_CHANNEL_PARSERSCRIPT, "%sFile %s, line %i: %s", v3->warningPrefix, v3->parseFile, v3->lines, string);
