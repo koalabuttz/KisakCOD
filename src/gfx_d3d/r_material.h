@@ -1,5 +1,7 @@
 #pragma once
 
+#include <universal/layout_assert.h>
+
 #ifdef __linux__
 #include <linux/d3d9_types.h> // native Linux: D3D9 type surface only, no D3D9 API
 #else
@@ -320,7 +322,7 @@ struct MaterialPixelShaderProgram // sizeof=0xC
     IDirect3DPixelShader9 *ps;
     GfxPixelShaderLoadDef loadDef;
 };
-static_assert(sizeof(MaterialPixelShaderProgram) == 12);
+static_assert(LAYOUT_32BIT(sizeof(MaterialPixelShaderProgram) == 12));
 
 struct MaterialPixelShader // sizeof=0x10
 {                                       // ...
@@ -511,7 +513,7 @@ struct MaterialTechniqueSet // sizeof=0x94
     MaterialTechniqueSet *remappedTechniqueSet;
     MaterialTechnique *techniques[TECHNIQUE_COUNT];
 };
-static_assert(sizeof(MaterialTechniqueSet) == 148);
+static_assert(LAYOUT_32BIT(sizeof(MaterialTechniqueSet) == 148));
 
 #ifdef KISAK_RADIANT
 // MSVC aligns the embedded 64-bit draw-surface key to eight bytes. Preserve
@@ -571,7 +573,7 @@ static_assert(offsetof(Material, editorToolFlags) == 84);
 static_assert(offsetof(Material, editorUsage) == 86);
 static_assert(offsetof(Material, editorLocale) == 88);
 #else
-static_assert(sizeof(Material) == 80);
+static_assert(LAYOUT_32BIT(sizeof(Material) == 80));
 #endif
 
 struct MaterialMemory // sizeof=0x8

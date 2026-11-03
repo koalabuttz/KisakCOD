@@ -3,6 +3,7 @@
 #endif
 
 #include <universal/q_shared.h>
+#include <universal/layout_assert.h>
 #include "actor_fields.h"
 #include "actor.h"
 #include <script/scr_vm.h>
@@ -13,11 +14,11 @@
 #include "g_main.h"
 
 static_assert(offsetof(actor_s, ent) == 0, "actor_s::ent must be first (field offsets rebase here)");
-static_assert(offsetof(actor_s, grenadeAwareness) == 3604, "actor_s script-field offset drift: grenadeawareness");
-static_assert(offsetof(actor_s, pGrenade) == 3608, "actor_s script-field offset drift: grenade");
-static_assert(offsetof(actor_s, iGrenadeWeaponIndex) == 3612, "actor_s script-field offset drift: grenadeweapon");
-static_assert(offsetof(actor_s, iGrenadeAmmo) == 3628, "actor_s script-field offset drift: grenadeammo");
-static_assert(offsetof(actor_s, suppressionMeter) == 3580, "actor_s script-field offset drift: suppressionmeter");
+static_assert(LAYOUT_32BIT(offsetof(actor_s, grenadeAwareness) == 3604), "actor_s script-field offset drift: grenadeawareness");
+static_assert(LAYOUT_32BIT(offsetof(actor_s, pGrenade) == 3608), "actor_s script-field offset drift: grenade");
+static_assert(LAYOUT_32BIT(offsetof(actor_s, iGrenadeWeaponIndex) == 3612), "actor_s script-field offset drift: grenadeweapon");
+static_assert(LAYOUT_32BIT(offsetof(actor_s, iGrenadeAmmo) == 3628), "actor_s script-field offset drift: grenadeammo");
+static_assert(LAYOUT_32BIT(offsetof(actor_s, suppressionMeter) == 3580), "actor_s script-field offset drift: suppressionmeter");
 
 const actor_fields_s aifields[82] =
 {

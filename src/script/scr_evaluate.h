@@ -1,4 +1,6 @@
 #pragma once
+
+#include <universal/layout_assert.h>
 #include "scr_variable.h"
 #include "scr_debugger.h"
 #include <setjmp.h>
@@ -10,7 +12,7 @@ struct ArchivedCanonicalStringInfo // sizeof=0x8
     // padding byte
     const char *value;
 };
-static_assert(sizeof(ArchivedCanonicalStringInfo) == 0x8);
+static_assert(LAYOUT_32BIT(sizeof(ArchivedCanonicalStringInfo) == 0x8));
 
 struct scrEvaluateGlob_t // sizeof=0x10
 {                                       // ...
@@ -22,7 +24,7 @@ struct scrEvaluateGlob_t // sizeof=0x10
     bool objectChanged;                 // ...
     // padding byte
 };
-static_assert(sizeof(scrEvaluateGlob_t) == 0x10);
+static_assert(LAYOUT_32BIT(sizeof(scrEvaluateGlob_t) == 0x10));
 
 void __cdecl TRACK_scr_evaluate();
 uint32_t __cdecl Scr_GetBuiltin(sval_u func_name);

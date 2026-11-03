@@ -1,5 +1,7 @@
 #pragma once
 
+#include <universal/layout_assert.h>
+
 
 #include <universal/com_memory.h>
 #include "scr_variable.h"
@@ -70,7 +72,7 @@ struct scrVarPub_t // sizeof=0x2007C
     int totalObjectRefCount;
     volatile uint32_t totalVectorRefCount;
 };
-static_assert(sizeof(scrVarPub_t) == 0x2007C);
+static_assert(LAYOUT_32BIT(sizeof(scrVarPub_t) == 0x2007C));
 
 struct PrecacheEntry // sizeof=0x8
 {                                       // ...

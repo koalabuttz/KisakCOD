@@ -1,5 +1,7 @@
 #pragma once
 
+#include <universal/layout_assert.h>
+
 // q_shared.h -- included first by ALL program modules.
 // A user mod should never modify this file
 
@@ -1184,7 +1186,7 @@ struct StringTable // sizeof=0x10
 	int rowCount;
 	const char **values;
 };
-static_assert(sizeof(StringTable) == 16);
+static_assert(LAYOUT_32BIT(sizeof(StringTable) == 16));
 
 const char *__cdecl StringTable_GetColumnValueForRow(const StringTable *table, int row, int column);
 const char *__cdecl StringTable_Lookup(

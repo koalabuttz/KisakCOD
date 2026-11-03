@@ -1,4 +1,6 @@
 #pragma once
+
+#include <universal/layout_assert.h>
 #include <xanim/xanim.h>
 #include <bgame/bg_local.h>
 
@@ -17,7 +19,7 @@ struct scrAnimPub_t // sizeof=0x41C
     // padding byte
     // padding byte
 };
-static_assert(sizeof(scrAnimPub_t) == 0x41C);
+static_assert(LAYOUT_32BIT(sizeof(scrAnimPub_t) == 0x41C));
 
 struct scrAnimGlob_t // sizeof=0x20C
 {                                       // ...
@@ -26,7 +28,7 @@ struct scrAnimGlob_t // sizeof=0x20C
     uint16_t using_xanim_lookup[2][MAX_XANIMTREE_NUM]; // ...
     int bAnimCheck;                     // ...
 };
-static_assert(sizeof(scrAnimGlob_t) == 0x20C);
+static_assert(LAYOUT_32BIT(sizeof(scrAnimGlob_t) == 0x20C));
 
 void __cdecl TRACK_scr_animtree();
 void __cdecl SetAnimCheck(int bAnimCheck);

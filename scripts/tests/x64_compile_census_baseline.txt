@@ -6,10 +6,14 @@
 # an unlisted source that starts compiling is reported as progress. Regenerate
 # with `run_x64_compile_census.py --update-baseline` and review the diff.
 
+client src/buildnumber.cpp
 client src/client_mp/cl_auth.cpp
+client src/gfx_d3d/r_devgui.cpp
+client src/gfx_d3d/r_font_metrics.cpp
 client src/physics/ode/collision_quadtreespace.cpp
 client src/physics/ode/collision_space.cpp
 client src/physics/ode/collision_std.cpp
+client src/physics/ode/collision_trimesh_box.cpp
 client src/physics/ode/collision_util.cpp
 client src/physics/ode/error.cpp
 client src/physics/ode/export-dif.cpp
@@ -20,8 +24,19 @@ client src/physics/ode/odemath.cpp
 client src/physics/ode/rotation.cpp
 client src/physics/ode/timer.cpp
 client src/physics/ode/util.cpp
+client src/qcommon/huffman.cpp
+client src/qcommon/md4.cpp
+client src/qcommon/unzip.cpp
 client src/sound/snd_driver.cpp
 client src/sound/snd_mss.cpp
+client src/universal/base64.cpp
+client src/universal/com_constantconfigstrings.cpp
+client src/universal/com_convexhull.cpp
+client src/universal/com_math_anglevectors.cpp
+client src/universal/com_strings.cpp
+client src/universal/fft.cpp
+client src/universal/pool_allocator.cpp
+client src/universal/surfaceflags.cpp
 dedi deps/zlib/adler32.c
 dedi deps/zlib/compress.c
 dedi deps/zlib/crc32.c
@@ -36,12 +51,16 @@ dedi deps/zlib/infutil.c
 dedi deps/zlib/trees.c
 dedi deps/zlib/uncompr.c
 dedi deps/zlib/zutil.c
+dedi src/buildnumber.cpp
+dedi src/linux/sys_fileio.cpp
 dedi src/linux/sys_posix.cpp
 dedi src/linux/sys_runtime_test.cpp
 dedi src/linux/sys_selftest.cpp
+dedi src/linux/sys_virtualmem.cpp
 dedi src/physics/ode/collision_quadtreespace.cpp
 dedi src/physics/ode/collision_space.cpp
 dedi src/physics/ode/collision_std.cpp
+dedi src/physics/ode/collision_trimesh_box.cpp
 dedi src/physics/ode/collision_util.cpp
 dedi src/physics/ode/error.cpp
 dedi src/physics/ode/export-dif.cpp
@@ -56,3 +75,14 @@ dedi src/physics/ode/odemath.cpp
 dedi src/physics/ode/rotation.cpp
 dedi src/physics/ode/timer.cpp
 dedi src/physics/ode/util.cpp
+dedi src/qcommon/huffman.cpp
+dedi src/qcommon/md4.cpp
+dedi src/qcommon/unzip.cpp
+dedi src/universal/base64.cpp
+dedi src/universal/com_constantconfigstrings.cpp
+dedi src/universal/com_convexhull.cpp
+dedi src/universal/com_math_anglevectors.cpp
+dedi src/universal/com_strings.cpp
+dedi src/universal/fft.cpp
+dedi src/universal/pool_allocator.cpp
+dedi src/universal/surfaceflags.cpp

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <universal/layout_assert.h>
+
 #include <universal/com_math.h>
 
 constexpr size_t MAX_EFFECTS = 1024;
@@ -75,7 +77,7 @@ struct FxEffectDef // sizeof=0x20
     int elemDefCountEmission;
     const FxElemDef *elemDefs;
 };
-static_assert(sizeof(FxEffectDef) == 32);
+static_assert(LAYOUT_32BIT(sizeof(FxEffectDef) == 32));
 
 struct FxEffect // sizeof=0x80
 {                                       // ...
@@ -477,7 +479,7 @@ struct FxImpactTable // sizeof=0x8
     const char *name;
     FxImpactEntry *table;
 };
-static_assert(sizeof(FxImpactTable) == 8);
+static_assert(LAYOUT_32BIT(sizeof(FxImpactTable) == 8));
 
 struct FxSystemBuffers // sizeof=0x47480
 {                                       // ...

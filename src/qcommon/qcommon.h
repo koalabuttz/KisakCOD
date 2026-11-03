@@ -1,4 +1,6 @@
 #pragma once
+
+#include <universal/layout_assert.h>
 #include <cstdint>
 #include <iostream>
 #include <format>
@@ -1174,7 +1176,7 @@ struct SpawnVar // sizeof=0xA0C
     int32_t numSpawnVarChars;
     char spawnVarChars[2048];
 };
-static_assert(sizeof(SpawnVar) == 0xA0C);
+static_assert(LAYOUT_32BIT(sizeof(SpawnVar) == 0xA0C));
 
 void __cdecl CM_LoadMapData_LoadObj(const char *name);
 struct cplane_s *__cdecl CM_GetPlanes();

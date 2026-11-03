@@ -114,6 +114,8 @@ class DiagnosticTests(unittest.TestCase):
             (("src/q.cpp", "error", "cannot initialize a parameter of type '__va_list_tag *' with an lvalue", None),
              "compiler-types"),
             (("src/q.h", "error", "definition of builtin function '_BitScanReverse'", None), "compiler-types"),
+            (("src/qcommon/threads_interlock.h", "error", "static assertion failed due to requirement "
+              "'sizeof(long) == 4': InterlockedIncrement needs a 4-byte integer type", None), "compiler-types"),
             (("src/q.cpp", "error", "invalid operand for instruction", None), "inline-asm"),
             (("src/q.cpp", "error", "no matching function for call to 'R_SyncGpu'", None), "other-error"),
             (("src/q.cpp", "warning", "cast", "-Wint-to-pointer-cast"), "pointer-truncation"),

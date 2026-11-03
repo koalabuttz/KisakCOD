@@ -1,4 +1,6 @@
 #pragma once
+
+#include <universal/layout_assert.h>
 #include "scr_stringlist.h"
 #include <cstdint>
 
@@ -11,7 +13,7 @@ struct OpcodeLookup // sizeof=0x18
     int profileBuiltInTime;
     int profileUsage;
 };
-static_assert(sizeof(OpcodeLookup) == 0x18);
+static_assert(LAYOUT_32BIT(sizeof(OpcodeLookup) == 0x18));
 
 struct Scr_SourcePos_t // sizeof=0xC
 {                                       // ...
@@ -38,7 +40,7 @@ struct SourceBufferInfo // sizeof=0x2C
     float totalTime;
     float totalBuiltIn;
 };
-static_assert(sizeof(SourceBufferInfo) == 44);
+static_assert(LAYOUT_32BIT(sizeof(SourceBufferInfo) == 44));
 
 struct SourceLookup // sizeof=0x8
 {
@@ -52,7 +54,7 @@ struct SaveSourceBufferInfo // sizeof=0x8
     char *sourceBuf;
     int len;
 };
-static_assert(sizeof(SaveSourceBufferInfo) == 0x8);
+static_assert(LAYOUT_32BIT(sizeof(SaveSourceBufferInfo) == 0x8));
 
 struct scrParserGlob_t // sizeof=0x34
 {                                       // ...
@@ -70,7 +72,7 @@ struct scrParserGlob_t // sizeof=0x34
     int delayedSourceIndex;             // ...
     int threadStartSourceIndex;         // ...
 };
-static_assert(sizeof(scrParserGlob_t) == 0x34);
+static_assert(LAYOUT_32BIT(sizeof(scrParserGlob_t) == 0x34));
 
 struct scrParserPub_t // sizeof=0x10
 {                                       // ...
@@ -79,7 +81,7 @@ struct scrParserPub_t // sizeof=0x10
     const char *scriptfilename;         // ...
     const char *sourceBuf;              // ...
 };
-static_assert(sizeof(scrParserPub_t) == 0x10);
+static_assert(LAYOUT_32BIT(sizeof(scrParserPub_t) == 0x10));
 
 void __cdecl TRACK_scr_parser();
 void __cdecl Scr_InitOpcodeLookup();

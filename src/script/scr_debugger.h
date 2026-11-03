@@ -1,4 +1,6 @@
 #pragma once
+
+#include <universal/layout_assert.h>
 #include "scr_variable.h"
 #include "scr_parser.h"
 #include "scr_yacc.h"
@@ -11,7 +13,7 @@ struct debugger_sval_s // sizeof=0x4
 {
     debugger_sval_s *next;
 };
-static_assert(sizeof(debugger_sval_s) == 0x4);
+static_assert(LAYOUT_32BIT(sizeof(debugger_sval_s) == 0x4));
 
 struct scr_localVar_t // sizeof=0x8
 {                                       // ...
@@ -67,7 +69,7 @@ union sval_u // sizeof=0x4
     const char *debugString;
     scr_block_s *block;
 };
-static_assert(sizeof(sval_u) == 0x4);
+static_assert(LAYOUT_32BIT(sizeof(sval_u) == 0x4));
 
 struct ScriptExpression_t // sizeof=0xC
 {                                       // ...
@@ -75,7 +77,7 @@ struct ScriptExpression_t // sizeof=0xC
     int breakonExpr;                    // ...
     debugger_sval_s *exprHead;          // ...
 };
-static_assert(sizeof(ScriptExpression_t) == 0xC);
+static_assert(LAYOUT_32BIT(sizeof(ScriptExpression_t) == 0xC));
 
 struct Scr_SelectedLineInfo // sizeof=0xC
 {                                       // ...
@@ -98,7 +100,7 @@ struct Scr_Breakpoint // sizeof=0x1C
     Scr_Breakpoint *next;               // ...
     Scr_Breakpoint **prev;
 };
-static_assert(sizeof(Scr_Breakpoint) == 0x1C);
+static_assert(LAYOUT_32BIT(sizeof(Scr_Breakpoint) == 0x1C));
 
 struct Scr_WatchElement_s // sizeof=0x64
 {
@@ -137,28 +139,28 @@ struct Scr_WatchElement_s // sizeof=0x64
     Scr_WatchElement_s *childHead;
     Scr_WatchElement_s *next;
 };
-static_assert(sizeof(Scr_WatchElement_s) == 0x64);
+static_assert(LAYOUT_32BIT(sizeof(Scr_WatchElement_s) == 0x64));
 
 struct Scr_OpcodeList_s // sizeof=0x8
 {
     char *codePos;
     Scr_OpcodeList_s *next;
 };
-static_assert(sizeof(Scr_OpcodeList_s) == 0x8);
+static_assert(LAYOUT_32BIT(sizeof(Scr_OpcodeList_s) == 0x8));
 
 struct Scr_WatchElementNode_s // sizeof=0x8
 {
     Scr_WatchElement_s *element;
     Scr_WatchElementNode_s *next;
 };
-static_assert(sizeof(Scr_WatchElementNode_s) == 0x8);
+static_assert(LAYOUT_32BIT(sizeof(Scr_WatchElementNode_s) == 0x8));
 
 struct Scr_WatchElementDoubleNode_t // sizeof=0x8
 {
     Scr_WatchElementNode_s *list;
     Scr_WatchElementNode_s *removedList;
 };
-static_assert(sizeof(Scr_WatchElementDoubleNode_t) == 0x8);
+static_assert(LAYOUT_32BIT(sizeof(Scr_WatchElementDoubleNode_t) == 0x8));
 
 #if defined(__linux__) && defined(KISAK_DEDICATED)
 // The native Linux dedicated server does not build the script debugger windows
@@ -183,7 +185,7 @@ struct ScrDebuggerWatchStorage
     int dirty;
     void Evaluate();
     void UpdateBreakpoints(bool add);
-    alignas(Scr_ScriptWatch) unsigned char windowStorage[sizeof(Scr_ScriptWatch) - 3 * sizeof(uint32_t)];
+    alignas(Scr_ScriptWatch) unsigned char windowStorage[sizeof(Scr_ScriptWatch) - sizeof(Scr_WatchElement_s *) - 2 * sizeof(uint32_t)];
 };
 static_assert(sizeof(ScrDebuggerWatchStorage) == sizeof(Scr_ScriptWatch), "watch storage must match Scr_ScriptWatch");
 #endif
@@ -258,7 +260,7 @@ struct scrDebuggerGlob_t // sizeof=0x2B8
     int breakpointCount;                // ...
     int gainFocusTime;                  // ...
 };
-static_assert(sizeof(scrDebuggerGlob_t) == 0x2B8);
+static_assert(LAYOUT_32BIT(sizeof(scrDebuggerGlob_t) == 0x2B8));
 
 void __cdecl TRACK_scr_debugger();
 void __cdecl Scr_KeyEvent(int key);
