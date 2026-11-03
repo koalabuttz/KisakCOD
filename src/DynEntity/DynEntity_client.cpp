@@ -1,3 +1,4 @@
+#include <physics/phys_objid.h>
 #include <universal/q_shared.h>
 #include <universal/surfaceflags.h>
 #include <qcommon/qcommon.h>
@@ -455,12 +456,12 @@ void DynEntCl_ProcessEntities(int32_t localClientNum)
                 dynEntPose = DynEnt_GetClientPose(dynEntId, DYNENT_DRAW_MODEL);
                 Phys_ObjGetInterpolatedState(
                     PHYS_WORLD_DYNENT,
-                    (dxBody *)dynEntClient->physObjId,
+                    Phys_ObjFromId(dynEntClient->physObjId),
                     origin,
                     dynEntPose->pose.quat);
-                if (Phys_ObjIsAsleep((dxBody *)dynEntClient->physObjId))
+                if (Phys_ObjIsAsleep(Phys_ObjFromId(dynEntClient->physObjId)))
                 {
-                    Phys_ObjDestroy(PHYS_WORLD_DYNENT, (dxBody *)dynEntClient->physObjId);
+                    Phys_ObjDestroy(PHYS_WORLD_DYNENT, Phys_ObjFromId(dynEntClient->physObjId));
                     dynEntClient->physObjId = 0;
                 }
                 if (!VecNCompareCustomEpsilon(origin, dynEntPose->pose.origin, 0.0099999998f, 3))
@@ -481,12 +482,12 @@ void DynEntCl_ProcessEntities(int32_t localClientNum)
                 dynEntPosea = DynEnt_GetClientPose(dynEntId, DYNENT_DRAW_BRUSH);
                 Phys_ObjGetInterpolatedState(
                     PHYS_WORLD_DYNENT,
-                    (dxBody *)dynEntClient->physObjId,
+                    Phys_ObjFromId(dynEntClient->physObjId),
                     origin,
                     dynEntPosea->pose.quat);
-                if (Phys_ObjIsAsleep((dxBody *)dynEntClient->physObjId))
+                if (Phys_ObjIsAsleep(Phys_ObjFromId(dynEntClient->physObjId)))
                 {
-                    Phys_ObjDestroy(PHYS_WORLD_DYNENT, (dxBody *)dynEntClient->physObjId);
+                    Phys_ObjDestroy(PHYS_WORLD_DYNENT, Phys_ObjFromId(dynEntClient->physObjId));
                     dynEntClient->physObjId = 0;
                 }
                 if (!VecNCompareCustomEpsilon(origin, dynEntPosea->pose.origin, 0.0099999998f, 3))
@@ -524,7 +525,7 @@ void DynEntCl_Shutdown(int32_t localClientNum)
             {
                 if (dynEntClient->physObjId)
                 {
-                    Phys_ObjDestroy(PHYS_WORLD_DYNENT, (dxBody *)dynEntClient->physObjId);
+                    Phys_ObjDestroy(PHYS_WORLD_DYNENT, Phys_ObjFromId(dynEntClient->physObjId));
                     dynEntClient->physObjId = 0;
                     dynEntClient->flags &= ~1u;
                 }
@@ -536,7 +537,7 @@ void DynEntCl_Shutdown(int32_t localClientNum)
             dynEntClienta = DynEnt_GetClientEntity(dynEntIda, DYNENT_DRAW_BRUSH);
             if ((dynEntClienta->flags & 1) != 0 && dynEntClienta->physObjId)
             {
-                Phys_ObjDestroy(PHYS_WORLD_DYNENT, (dxBody *)dynEntClienta->physObjId);
+                Phys_ObjDestroy(PHYS_WORLD_DYNENT, Phys_ObjFromId(dynEntClienta->physObjId));
                 dynEntClienta->physObjId = 0;
                 dynEntClienta->flags &= ~1u;
             }
@@ -1007,7 +1008,7 @@ void DynEntCl_EntityImpactEvent(
                 MyAssertHandler(".\\DynEntity\\DynEntity_client.cpp", 1013, 0, "%s", "physPreset");
             Phys_ObjBulletImpact(
                 PHYS_WORLD_DYNENT,
-                (dxBody *)cent->pose.physObjId,
+                Phys_ObjFromId(cent->pose.physObjId),
                 hitPos,
                 hitDir,
                 dynEnt_bulletForce->current.value,
@@ -1192,12 +1193,12 @@ char DynEntCl_DynEntImpactEvent(
         if (!dynEntClient->physObjId)
         {
             PhysObj = DynEntCl_CreatePhysObj(dynEntDef, &dynEntPose->pose);
-            dynEntClient->physObjId = (int)PhysObj;
+            dynEntClient->physObjId = Phys_IdFromObj(PhysObj);
         }
         if (dynEntClient->physObjId)
             Phys_ObjBulletImpact(
                 PHYS_WORLD_DYNENT,
-                (dxBody *)dynEntClient->physObjId,
+                Phys_ObjFromId(dynEntClient->physObjId),
                 hitPos,
                 hitDir,
                 dynEnt_bulletForce->current.value,
@@ -1296,7 +1297,7 @@ void DynEntCl_Damage(
         dynEntClient->flags &= 0xFFFCu;
         if (dynEntClient->physObjId)
         {
-            Phys_ObjDestroy(PHYS_WORLD_DYNENT, (dxBody *)dynEntClient->physObjId);
+            Phys_ObjDestroy(PHYS_WORLD_DYNENT, Phys_ObjFromId(dynEntClient->physObjId));
             dynEntClient->physObjId = 0;
         }
         DynEntCl_UnlinkEntity(dynEntId, drawType);
@@ -1493,18 +1494,18 @@ void DynEntCl_ExplosionEvent(
                         if (!dynEntClient->physObjId)
                         {
                             PhysObj = DynEntCl_CreatePhysObj(dynEntDef, &dynEntPose->pose);
-                            dynEntClient->physObjId = (int)PhysObj;
+                            dynEntClient->physObjId = Phys_IdFromObj(PhysObj);
                         }
                         if (dynEntClient->physObjId)
                         {
-                            Phys_ObjGetCenterOfMass((dxBody *)dynEntClient->physObjId, outPosition);
+                            Phys_ObjGetCenterOfMass(Phys_ObjFromId(dynEntClient->physObjId), outPosition);
                             v10 = flrand(-1.0, 1.0);
                             outPosition[0] = v10 * dynEnt_explodeSpinScale->current.value + outPosition[0];
                             v11 = flrand(-1.0, 1.0);
                             outPosition[1] = v11 * dynEnt_explodeSpinScale->current.value + outPosition[1];
                             v12 = flrand(-1.0, 1.0);
                             outPosition[2] = v12 * dynEnt_explodeSpinScale->current.value + outPosition[2];
-                            Phys_ObjAddForce(PHYS_WORLD_DYNENT, (dxBody *)dynEntClient->physObjId, outPosition, result);
+                            Phys_ObjAddForce(PHYS_WORLD_DYNENT, Phys_ObjFromId(dynEntClient->physObjId), outPosition, result);
                         }
                     }
                     if (DynEnt_GetEntityProps(dynEntDef->type)->destroyable)
@@ -1657,7 +1658,7 @@ void DynEntCl_JitterEvent(
                 {
                     dynEntPosea = DynEnt_GetClientPose(dynEntList[i], drawType);
                     PhysObj = DynEntCl_CreatePhysObj(dynEntDef, &dynEntPosea->pose);
-                    ClientEntity->physObjId = (int)PhysObj;
+                    ClientEntity->physObjId = Phys_IdFromObj(PhysObj);
                 }
             }
         }

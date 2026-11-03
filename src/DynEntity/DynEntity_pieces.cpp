@@ -1,3 +1,4 @@
+#include <physics/phys_objid.h>
 #include <universal/q_shared.h>
 #include "DynEntity_client.h"
 #include <win32/win_local.h>
@@ -60,7 +61,7 @@ void DynEntPieces_AddDrawSurfs()
             Sys_EnterCriticalSection(CRITSECT_PHYSICS);
             Phys_ObjGetInterpolatedState(
                 PHYS_WORLD_FX,
-                (dxBody *)g_breakablePieces[i].physObjId,
+                Phys_ObjFromId(g_breakablePieces[i].physObjId),
                 placement.base.origin,
                 placement.base.quat);
             placement.scale = 1.0;
@@ -133,7 +134,7 @@ bool DynEntPieces_SpawnPhysicsModel(
         angularVelocity[2] = dynEntPieces_angularVelocity->current.vector[2];
         velocity[2] = velocity[2] + model->physPreset->piecesUpwardVelocity;
         Sys_EnterCriticalSection(CRITSECT_PHYSICS);
-        physObjId = (int)DynEntPieces_SpawnPhysObj(
+        physObjId = Phys_IdFromObj(DynEntPieces_SpawnPhysObj(
             model->name,
             mins,
             maxs,
@@ -141,14 +142,14 @@ bool DynEntPieces_SpawnPhysicsModel(
             quat,
             velocity,
             angularVelocity,
-            model->physPreset);
+            model->physPreset));
         Sys_LeaveCriticalSection(CRITSECT_PHYSICS);
         if (physObjId)
         {
             DynEntPieces_CalcForceDir(hitDir, model->physPreset->piecesSpreadFraction, forceDir);
             Phys_ObjBulletImpact(
                 PHYS_WORLD_DYNENT,
-                (dxBody *)physObjId,
+                Phys_ObjFromId(physObjId),
                 hitPos,
                 forceDir,
                 dynEntPieces_impactForce->current.value,

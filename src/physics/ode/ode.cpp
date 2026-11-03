@@ -1470,6 +1470,16 @@ void ODE_Init()
 
 // MOD
 #include <xanim/dobj.h>
+#include <physics/phys_objid.h>
+
+#if !(defined(__i386__) || defined(_M_IX86))
+#include <qcommon/qcommon.h>
+
+void Phys_ObjIdTableFull(int slots)
+{
+    Com_Error(ERR_DROP, "more than %i physics bodies", slots);
+}
+#endif
 
 dxBody *dBodyCreate(dxWorld *w)
 {
@@ -1482,6 +1492,7 @@ dxBody *dBodyCreate(dxWorld *w)
     dxBody *b = new dxBody;
 #endif
 
+    Phys_RegisterObj(b);
     initObject(b, w);
     b->firstjoint = 0;
     b->flags = 0;
@@ -1601,6 +1612,7 @@ void dWorldDestroy(dxWorld* w)
     while (b)
     {
         nextb = (dxBody*)b->next;
+        Phys_UnregisterObj(b);
 #ifdef USE_POOL_ALLOCATOR
         Pool_Free((freenode*)b, &odeGlob.bodyPool);
 #else
@@ -1657,6 +1669,7 @@ void dBodyDestroy(dxBody* b)
 
     b->world->nb--;
 
+    Phys_UnregisterObj(b);
 #ifdef USE_POOL_ALLOCATOR
     Sys_EnterCriticalSection(CRITSECT_PHYSICS);
     Pool_Free((freenode*)b, &odeGlob.bodyPool);

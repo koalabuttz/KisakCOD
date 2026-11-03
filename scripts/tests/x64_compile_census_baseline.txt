@@ -246,6 +246,7 @@ client src/physics/phys_coll_boxbrush.cpp
 client src/physics/phys_coll_capsulebrush.cpp
 client src/physics/phys_coll_cylinderbrush.cpp
 client src/physics/phys_contacts.cpp
+client src/physics/phys_objid.cpp
 client src/physics/phys_ode.cpp
 client src/physics/phys_world_collision.cpp
 client src/physics/physpreset_load_obj.cpp
@@ -497,6 +498,7 @@ dedi src/physics/phys_coll_boxbrush.cpp
 dedi src/physics/phys_coll_capsulebrush.cpp
 dedi src/physics/phys_coll_cylinderbrush.cpp
 dedi src/physics/phys_contacts.cpp
+dedi src/physics/phys_objid.cpp
 dedi src/physics/phys_ode.cpp
 dedi src/physics/phys_world_collision.cpp
 dedi src/physics/physpreset_load_obj.cpp

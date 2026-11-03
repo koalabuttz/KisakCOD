@@ -2,6 +2,7 @@
 #error This File is MultiPlayer Only
 #endif
 
+#include <physics/phys_objid.h>
 #include <universal/q_shared.h>
 #include "cg_local_mp.h"
 #include "cg_public_mp.h"
@@ -2135,7 +2136,7 @@ void CG_Shutdown(int32_t localClientNum)
         {
             if (cent->pose.physObjId != -1)
             {
-                Phys_ObjDestroy(PHYS_WORLD_FX, (dxBody*)cent->pose.physObjId);
+                Phys_ObjDestroy(PHYS_WORLD_FX, Phys_ObjFromId(cent->pose.physObjId));
                 cent->pose.physObjId = 0;
             }
         }

@@ -316,6 +316,14 @@ def plan_checks(options, workdir, build_dir, binary, python, cxx):
             [Command([python, TESTS / "test_linux_sl_trace.py", "--cxx", cxx], timeout=300)],
         )
     )
+    # Game structs keep a physics body in a 32-bit field; x86_64 needs an id table.
+    checks.append(
+        Check(
+            "phys_objid",
+            "physics object ids in 32-bit fields on i386 and x86_64",
+            [Command([python, TESTS / "test_linux_phys_objid.py", "--cxx", cxx], timeout=300)],
+        )
+    )
 
     if options.only:
         checks = [check for check in checks if check.name in options.only]
