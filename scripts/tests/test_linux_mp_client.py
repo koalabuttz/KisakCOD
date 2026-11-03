@@ -60,6 +60,9 @@ def source_checks(checker):
     module = TARGET_MODULE.read_text(encoding="utf-8")
     checker.require(re.search(r'option\(KISAK_BUILD_LINUX_MP_CLIENT\s+"[^"]*"\s+OFF\)', module) is not None,
                     "KISAK_BUILD_LINUX_MP_CLIENT is off by default")
+    checker.require('set(KISAK_OPENAL_INCLUDE_DIR "" CACHE PATH' in module
+                    and 'NOT EXISTS "${KISAK_OPENAL_INCLUDE_DIR}/AL/al.h"' in module,
+                    "the optional OpenAL header directory is checked for AL/al.h")
     fence = (ROOT / "scripts" / "platform" / "linux" / "platform.cmake").read_text(encoding="utf-8")
     checker.require("KISAK_BUILD_LINUX_MP_CLIENT)" in fence, "the 64-bit configuration refuses the client target")
 
