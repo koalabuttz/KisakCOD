@@ -128,10 +128,20 @@ def run(binary, arguments, cwd, env):
                           capture_output=True, text=True, errors="replace", timeout=RUN_TIMEOUT, check=False)
 
 
+STUB_TEXT = "// stub written by the check; no game data\n"
+
+
+def write_stub_files(root, files):
+    """Writes each relative path under root with the given text (one-line stubs, no game data)."""
+    for relative, text in files.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+
+
 def make_stub_tree(base):
     """A base path holding only a one-line stub of fileSysCheck.cfg."""
-    (base / "main").mkdir(parents=True)
-    (base / "main" / "fileSysCheck.cfg").write_text("// stub written by the check; no game data\n")
+    write_stub_files(base, {"main/fileSysCheck.cfg": STUB_TEXT})
 
 
 def tree_files(root):
@@ -211,6 +221,31 @@ def run_checks(checker, binary):
         checker.require(not any(cwd.iterdir()), "nothing lands in the working directory",
                         str(tree_files(cwd)))
         checker.require(not unused_home.exists(), "a run given fs_homepath leaves the default home folder alone")
+
+        # Player profiles: the client writes them under fs_homepath/players, so
+        # it reads them from there before the game folder's players/.
+        profiles = work / "profiles"
+        make_stub_tree(profiles / "base")
+        write_stub_files(profiles, {
+            "base/players/profiles/active.txt": "GameFolder\n",
+            "base/players/profiles/GameFolder/config_mp.cfg": STUB_TEXT,
+            "home/players/profiles/active.txt": "HomeFolder\n",
+            "home/players/profiles/HomeFolder/config_mp.cfg": STUB_TEXT,
+        })
+        before = {entry: (profiles / "base" / entry).read_bytes() for entry in tree_files(profiles / "base")}
+        completed = run(binary, ["+set", "fs_basepath", str(profiles / "base"), "+set", "fs_homepath",
+                                 str(profiles / "home")], cwd, env)
+        err = completed.stderr
+        search = err[err.find("Current search path:"):]
+        home_players, base_players = str(profiles / "home" / "players"), str(profiles / "base" / "players")
+        checker.require(home_players in search and base_players in search
+                        and search.index(home_players) < search.index(base_players),
+                        "fs_homepath/players comes before the game folder's players/ in the search path",
+                        search[:2000])
+        checker.require("profiles/HomeFolder/config_mp.cfg" in err and "profiles/GameFolder" not in err,
+                        "the home folder's active profile is the one used", err[-3000:])
+        checker.require({entry: (profiles / "base" / entry).read_bytes() for entry in tree_files(profiles / "base")}
+                        == before, "the game folder's players/ is left as it was")
 
         # Without fs_homepath the client keeps out of the game folder: it writes
         # to $XDG_DATA_HOME/KisakCOD, or ~/.local/share/KisakCOD without one.

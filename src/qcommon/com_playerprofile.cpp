@@ -166,7 +166,8 @@ char Com_DeletePlayerProfile(const char *profileName)
     if (!Com_IsValidPlayerProfileDir(profileName))
         return 0;
     Com_BuildPlayerProfilePathForPlayer(profilePath, 64, profileName, "");
-    FS_BuildOSPath((char *)fs_basepath->current.string, (char*)"players", profilePath, osPath);
+    // Under fs_homepath, where every other players/ write goes.
+    FS_BuildOSPath((char *)fs_homepath->current.string, (char*)"players", profilePath, osPath);
     if (!Sys_RemoveDirTree(osPath))
         return 0;
     if (!I_stricmp(profileName, com_playerProfile->current.string))
@@ -203,7 +204,8 @@ char Com_NewPlayerProfile(const char *profileName)
     else
     {
         Com_BuildPlayerProfilePathForPlayer(profilePath, 64, profileName, "");
-        FS_BuildOSPath((char *)fs_basepath->current.string, (char*)"players", profilePath, osPath);
+        // Under fs_homepath, where every other players/ write goes.
+        FS_BuildOSPath((char *)fs_homepath->current.string, (char*)"players", profilePath, osPath);
         if (FS_CreatePath(osPath))
         {
             Com_Printf(CON_CHANNEL_SYSTEM, "Unable to create new profile path: %s\n", osPath);
