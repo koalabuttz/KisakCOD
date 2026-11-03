@@ -9,8 +9,9 @@ engine's in-process loopback (see [linux-client.md](linux-client.md#joining-serv
 Status: it links and starts, and its game window takes keyboard and mouse
 input. Without game files it stops where the engine needs them. On a developer
 laptop with the game files and a GPU (not CI evidence), `+devmap mp_crash`
-creates the device, loads the map and runs server and game initialization;
-the in-game state is not reached yet.
+reaches the in-game state, the team and class menus spawn the player in first
+person, and the player can move, shoot and throw grenades. See
+[On the laptop](#on-the-laptop).
 
 ## Building
 
@@ -32,6 +33,12 @@ CI links stand-ins for the last two parts instead: the device probe's
 `libd3d9_unavailable.so`, and `tests/linux_mp_client/openal_unavailable.cpp`,
 whose `alcOpenDevice` finds no device. The 64-bit configuration refuses the
 option.
+
+The SDL3 3.2 SDK build used on the laptop links its own i386 `libpipewire`,
+found next to `libSDL3.so`. The client's run path covers its own libraries,
+not their dependencies, so keep the SDK's `lib` directory on `LD_LIBRARY_PATH`
+when running the client. OpenAL may then log a PipeWire error while it opens
+the device and still play sound through another backend.
 
 The OpenAL headers (`AL/al.h`) are needed too, whichever library is linked,
 because the sound headers include them. Without `libopenal-dev` installed, unpack
@@ -187,11 +194,24 @@ CI builds both in the device-probe job with the stand-ins and runs both.
 
 ## On the laptop
 
-These steps need a GPU and the game files, so they run on a developer machine
-and are not CI evidence:
+These steps need a GPU and the game files, so they ran on a developer laptop
+(i386 build, DXVK Native over SDL3, system OpenAL Soft) and are not CI
+evidence. All three pass as of master `998344d`:
 
 1. `+set fs_basepath <game folder> +devmap mp_crash` reaches the in-game state
-   (`CA_ACTIVE`).
-2. Picking a team and class (`mr` menu responses from the console) spawns the
-   player, and the frame is first-person.
-3. Input and prediction work.
+   (`clientinfo` shows state 9), with sound.
+2. Picking a team and class spawns the player, in first person. From the
+   console: `mr <serverid> 8 autoassign`, then `mr <serverid> 15 assault_mp,0`.
+   Read `<serverid>` with `sv_serverid`. The second number is the menu's index
+   among the script menu configstrings; on mp_crash 8 is the team menu and 15
+   the class menu. The menus in the window work as well.
+3. Moving works from the console (`+forward`, `+moveright`, `+right`), and by
+   hand: the player runs, aims with the mouse, shoots and throws grenades.
+   With `cg_showmiss 1`, scripted moves printed no prediction errors. Four
+   minutes of play printed about 140 prediction misses, 1.2 units on average
+   and 7.7 at most. There is no Windows figure to compare them with yet.
+
+Run it windowed (`+set r_fullscreen 0 +set r_mode 1024x768`) and with
+`+set net_ip 127.0.0.1`. The listen server then opens no outside port. The
+first map load with an existing retail profile drops once (see
+[Where it writes](#where-it-writes)).
