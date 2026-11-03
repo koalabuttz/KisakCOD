@@ -310,6 +310,27 @@ width baked into decompiled code:
   i386 offsets into `gentity_s` and `gclient_s`; both use typed indices and
   `offsetof`.
 
+### Hosting bots
+
+With bots connected, two more 32-bit assumptions showed up:
+
+- `G_GetClientSize()` returned the retail 12676. The server strides archived
+  client and player states by that value, so on x86_64 (where `gclient_s` is
+  12680 bytes) every client after the first was read a few bytes early. It now
+  returns `sizeof(gclient_s)`.
+- `&scrVmPub.top[-paramcount]` with a `uint32_t` count: the negated count is
+  2^32 - n, which wraps back on i386 but on x86_64 points about 2^32 values
+  past the stack. Engine-started script threads with arguments (the first
+  damage callback) crashed. These read `top - paramcount` now, and the CI check
+  below rejects the pattern:
+
+```sh
+/usr/bin/python3 scripts/tools/check_unsigned_negation.py --build-dir build-x64
+```
+
+It parses every source in the build with libclang and reports a unary minus on
+an `unsigned int` that is used as an index or added to a pointer.
+
 Still i386-shaped and off the dedicated path: the SP save game stack format in
 `scr_readwrite.cpp`, client-side literal offset and size tables (effects,
 devgui, static model cache, server browser), and the pointer/integer casts the

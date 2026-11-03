@@ -333,8 +333,8 @@ void PrefetchArray_XSurfaceCollisionNode_(const XSurfaceCollisionNode *mem, uint
 
     if (!elementCount)
         MyAssertHandler(".\\xanim\\xmodel.cpp", 883, 0, "%s", "elementCount");
-    for (memIter = (const unsigned __int8 *)((uintptr_t)mem & 0xFFFFFF80); 
-        memIter <= (const unsigned __int8 *)(((uintptr_t) & mem[elementCount - 1].childCount + 1) & 0xFFFFFF80);
+    for (memIter = (const unsigned __int8 *)((uintptr_t)mem & ~(uintptr_t)127); 
+        memIter <= (const unsigned __int8 *)(((uintptr_t) & mem[elementCount - 1].childCount + 1) & ~(uintptr_t)127);
         memIter += 128)
         ;
 }
@@ -444,8 +444,8 @@ void PrefetchArray_GfxPackedVertex_(const GfxPackedVertex *mem, uint32_t element
 
     if (!elementCount)
         MyAssertHandler(".\\xanim\\xmodel.cpp", 883, 0, "%s", "elementCount");
-    for (memIter = (const unsigned __int8*)((uintptr_t)mem & 0xFFFFFF80); 
-        memIter <= (const unsigned __int8*)(((uintptr_t) & mem[elementCount - 1].tangent + 3) & 0xFFFFFF80);
+    for (memIter = (const unsigned __int8*)((uintptr_t)mem & ~(uintptr_t)127); 
+        memIter <= (const unsigned __int8*)(((uintptr_t) & mem[elementCount - 1].tangent + 3) & ~(uintptr_t)127);
         memIter += 128)
         ;
 }
@@ -485,8 +485,8 @@ void PrefetchArray_XSurfaceCollisionLeaf_(const XSurfaceCollisionLeaf *mem, uint
 
     if (!elementCount)
         MyAssertHandler(".\\xanim\\xmodel.cpp", 883, 0, "%s", "elementCount");
-    for (memIter = (const unsigned __int8*)((uintptr_t)mem & 0xFFFFFF80);
-        memIter <= (const unsigned __int8*)(((uintptr_t) & mem[elementCount - 1].triangleBeginIndex + 1) & 0xFFFFFF80);
+    for (memIter = (const unsigned __int8*)((uintptr_t)mem & ~(uintptr_t)127);
+        memIter <= (const unsigned __int8*)(((uintptr_t) & mem[elementCount - 1].triangleBeginIndex + 1) & ~(uintptr_t)127);
         memIter += 128)
     {
         ;

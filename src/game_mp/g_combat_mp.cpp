@@ -439,12 +439,14 @@ void DamageNotify(
         Scr_AddString((char *)"");
     if (modelIndex)
     {
-        if (!targ->attachModelNames[modelIndex + 18])
-            MyAssertHandler(".\\game_mp\\g_combat_mp.cpp", 515, 0, "%s", "targ->attachTagNames[modelIndex - 1]");
-        modelName = SV_GetConfigstringConst(*((uint16_t *)&targ->tagChildren + modelIndex + 1) + CS_MODELS);
+        // modelIndex counts the entity's own model as 0, so attachment N is
+        // modelIndex N + 1. The decompiled form indexed past attachModelNames
+        // and offset from tagChildren, which only lines up with 4-byte pointers.
+        iassert(targ->attachTagNames[modelIndex - 1]);
+        modelName = SV_GetConfigstringConst(targ->attachModelNames[modelIndex - 1] + CS_MODELS);
         if (!modelName)
             MyAssertHandler(".\\game_mp\\g_combat_mp.cpp", 518, 1, "%s", "modelName");
-        Scr_AddConstString(targ->attachModelNames[modelIndex + 18]);
+        Scr_AddConstString(targ->attachTagNames[modelIndex - 1]);
         Scr_AddConstString(modelName);
     }
     else

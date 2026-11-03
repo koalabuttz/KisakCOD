@@ -415,7 +415,8 @@ def main() -> int:
                         help="dedicated binary built from this tree (never the running bin/)")
     parser.add_argument("--bots", type=int, default=3)
     parser.add_argument("--map", dest="map_name", default="mp_crash")
-    parser.add_argument("--timeout", type=int, default=45, help="seconds per stage to reach its hold marker")
+    parser.add_argument("--timeout", type=int, default=None,
+                        help="seconds per stage to reach its hold marker (default: hold seconds + 45)")
     parser.add_argument("--hold-seconds", type=int, default=5)
     parser.add_argument("--cycles", type=int, default=0,
                         help="repeat restart, Shipment, rotation with retained bots (default: single map)")
@@ -426,6 +427,10 @@ def main() -> int:
 
     if args.hold_seconds < 1:
         parser.error("--hold-seconds must be positive")
+    if args.timeout is None:
+        # Each stage loads a map and then holds; a fixed budget is too tight on
+        # slow machines once the hold is long.
+        args.timeout = args.hold_seconds + 45
     if args.timeout <= 0:
         parser.error("--timeout must be positive")
     if args.cycles < 0:

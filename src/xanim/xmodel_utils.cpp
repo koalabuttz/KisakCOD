@@ -76,7 +76,9 @@ int XModelGetNumLods(const XModel *model)
 
 double XModelGetLodOutDist(const XModel *model)
 {
-    return *((float *)&model->parentList + 7 * XModelGetNumLods(model));
+    // The last LOD's distance; the decompiled form offset from parentList by
+    // retail pointer sizes.
+    return model->lodInfo[XModelGetNumLods(model) - 1].dist;
 }
 
 int XModelNumBones(const XModel *model)

@@ -3508,7 +3508,7 @@ uint32_t VM_Execute(uint32_t localId, const char *pos, uint32_t paramcount)
 
     iassert(paramcount <= scrVmPub.inparamcount);
     Scr_ClearOutParams();
-    startTop = &scrVmPub.top[-paramcount];
+    startTop = scrVmPub.top - paramcount;
     paramcounta = scrVmPub.inparamcount - paramcount;
     if (scrVmPub.function_count >= 30)
     {
@@ -5127,7 +5127,7 @@ uint32_t Scr_GetFunc(uint32_t index)
 
     if (index < scrVmPub.outparamcount)
     {
-        value = &scrVmPub.top[-index];
+        value = scrVmPub.top - index;
         if (value->type == VAR_FUNCTION)
         {
             if (!Scr_IsInOpcodeMemory(value->u.codePosValue))
@@ -5181,7 +5181,7 @@ XAnim_s * Scr_GetAnimTree(uint32_t index)
 
     if (index < scrVmPub.outparamcount)
     {
-        v3 = &scrVmPub.top[-index];
+        v3 = scrVmPub.top - index;
         type = v3->type;
         if (type == VAR_INTEGER)
         {

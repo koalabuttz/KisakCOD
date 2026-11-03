@@ -544,6 +544,17 @@ jobs:
           cmake --build "$BUILD_DIR" --target KisakCOD-dedi --parallel "$(nproc)"
           ls -l "$BINARY"
 
+      # &ptr[-n] with a uint32_t n wraps back on i386 but jumps ~2^32 elements
+      # forward on x86_64. The scan is the same for both configurations. It runs
+      # after the build because common.cpp includes the generated buildnumber.h.
+      - name: Check for negated 32-bit unsigned indexes
+        if: matrix.config == 'Debug'
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/bin/python3 scripts/tools/check_unsigned_negation.py --build-dir "$BUILD_DIR"
+
       - name: Bootstrap x86_64 KisakCOD-dedi
         timeout-minutes: 5
         shell: bash
