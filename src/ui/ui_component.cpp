@@ -278,7 +278,7 @@ void Scr_ScriptWatch::CloneSelectedElement()
     }
 }
 
-Scr_WatchElement_s *__thiscall Scr_ScriptWatch::CloneElement(Scr_WatchElement_s *element)
+Scr_WatchElement_s *Scr_ScriptWatch::CloneElement(Scr_WatchElement_s *element)
 {
     Scr_WatchElement_s *ElementRoot; // eax
     Scr_WatchElement_s **ElementRef; // eax
@@ -682,7 +682,7 @@ void Scr_ScriptWatch::DeleteElementInternal(Scr_WatchElement_s *element)
     }
 }
 
-void __thiscall Scr_ScriptWatch::ToggleWatchElementBreakpoint(
+void Scr_ScriptWatch::ToggleWatchElementBreakpoint(
     Scr_WatchElement_s *element,
     uint8_t type)
 {
@@ -727,7 +727,7 @@ void Scr_ScriptWatch::ToggleBreakpoint(Scr_WatchElement_s *element, uint8_t type
     }
 }
 
-void __thiscall Scr_ScriptWatch::ToggleBreakpointInternal(
+void Scr_ScriptWatch::ToggleBreakpointInternal(
     Scr_WatchElement_s *element,
     uint8_t type)
 {
@@ -941,7 +941,7 @@ void Scr_ScriptWatch::EditElement(Scr_ConsoleOpenMode openMode)
     }
 }
 
-Scr_WatchElement_s *__thiscall Scr_ScriptWatch::BackspaceElementInternal(Scr_WatchElement_s *element)
+Scr_WatchElement_s *Scr_ScriptWatch::BackspaceElementInternal(Scr_WatchElement_s *element)
 {
     Scr_WatchElement_s **pElement; // [esp+4h] [ebp-8h]
     Scr_WatchElement_s *prevElement; // [esp+8h] [ebp-4h]
@@ -1044,7 +1044,7 @@ void UI_LinesComponent::ClearFocus()
     this->focusOnSelectedLine = 0;
 }
 
-void __thiscall UI_LinesComponent::IncSelectedLineFocus(bool wrap)
+void UI_LinesComponent::IncSelectedLineFocus(bool wrap)
 {
     if (this->selectedLine < 0 || wrap && this->selectedLine >= this->numLines - 1)
         this->SetSelectedLineFocus(0, 0);
@@ -1052,7 +1052,7 @@ void __thiscall UI_LinesComponent::IncSelectedLineFocus(bool wrap)
         this->SetSelectedLineFocus(this->selectedLine + 1, 0);
 }
 
-void __thiscall UI_LinesComponent::DecSelectedLineFocus(bool wrap)
+void UI_LinesComponent::DecSelectedLineFocus(bool wrap)
 {
     if (this->selectedLine < 0 || wrap && this->selectedLine <= 0)
         this->SetSelectedLineFocus(this->numLines - 1, 0);
@@ -1116,7 +1116,7 @@ void Scr_ScriptWatch::FreeWatchElement(Scr_WatchElement_s *element)
     Scr_FreeDebugMem(element);
 }
 
-Scr_WatchElement_s *__thiscall Scr_ScriptWatch::AddBreakpoint(Scr_WatchElement_s *element, uint8_t type)
+Scr_WatchElement_s *Scr_ScriptWatch::AddBreakpoint(Scr_WatchElement_s *element, uint8_t type)
 {
     if (element->breakpointType == type)
         MyAssertHandler(".\\script\\scr_debugger.cpp", 7396, 0, "%s", "element->breakpointType != type");
@@ -1137,7 +1137,7 @@ Scr_WatchElement_s * Scr_ScriptWatch::RemoveBreakpoint(Scr_WatchElement_s *eleme
     return element;
 }
 
-bool __thiscall Scr_ScriptWatch::SetSelectedElement_r(
+bool Scr_ScriptWatch::SetSelectedElement_r(
     Scr_WatchElement_s *selElement,
     Scr_WatchElement_s *element,
     int *currentLine,
@@ -1187,7 +1187,7 @@ bool UI_LinesComponent::SetSelectedLineFocus(int newSelectedLine, bool user)
     }
 }
 
-void __thiscall Scr_ScriptWatch::DisplayThreadPos(Scr_WatchElement_s *element)
+void Scr_ScriptWatch::DisplayThreadPos(Scr_WatchElement_s *element)
 {
     uint32_t bufferIndex; // [esp+4h] [ebp-10h]
     uint32_t lineNum; // [esp+8h] [ebp-Ch]
@@ -1210,7 +1210,7 @@ void __thiscall Scr_ScriptWatch::DisplayThreadPos(Scr_WatchElement_s *element)
     }
 }
 
-Scr_WatchElement_s *__thiscall Scr_ScriptWatch::CreateWatchElement(
+Scr_WatchElement_s *Scr_ScriptWatch::CreateWatchElement(
     char *text,
     Scr_WatchElement_s **prevElem,
     const char *name)
@@ -1226,7 +1226,7 @@ Scr_WatchElement_s *__thiscall Scr_ScriptWatch::CreateWatchElement(
     return element;
 }
 
-Scr_WatchElement_s *__thiscall Scr_ScriptWatch::CreateBreakpointElement(
+Scr_WatchElement_s *Scr_ScriptWatch::CreateBreakpointElement(
     Scr_WatchElement_s *element,
     uint32_t bufferIndex,
     uint32_t sourcePos,
@@ -1295,7 +1295,7 @@ void Scr_ScriptWatch::UpdateBreakpoint(bool add)
     }
 }
 
-void __thiscall Scr_ScriptWatch::SortHitBreakpointsTop()
+void Scr_ScriptWatch::SortHitBreakpointsTop()
 {
     Scr_WatchElement_s **pElement; // [esp+8h] [ebp-14h]
     Scr_WatchElement_s **pInsertPoint; // [esp+Ch] [ebp-10h]
@@ -1305,7 +1305,11 @@ void __thiscall Scr_ScriptWatch::SortHitBreakpointsTop()
     if (Sys_IsRemoteDebugClient())
     {
         scrDebuggerGlob.gainFocusTime = Sys_Milliseconds() + 500;
+#ifdef _WIN32
+        // Native Linux has no remote debug client yet (Sys_IsRemoteDebugClient
+        // returns 0 there), so there is no window to raise.
         SetForegroundWindow(g_wv.hWnd);
+#endif
     }
     scrDebuggerGlob.atBreakpoint = 1;
     hitBreakpoint = 0;
@@ -1537,7 +1541,7 @@ bool Scr_ScriptCallStack::KeyEvent(float *point, int key)
     return UI_LinesComponent::KeyEvent(point, key);
 }
 
-bool __thiscall Scr_ScriptCallStack::SetSelectedLineFocus(int newSelectedLine, bool user)
+bool Scr_ScriptCallStack::SetSelectedLineFocus(int newSelectedLine, bool user)
 {
     uint32_t LineNum; // eax
     uint32_t bufferIndex; // [esp+4h] [ebp-8h]
@@ -1619,7 +1623,7 @@ void Scr_ScriptCallStack::Draw(
     }
 }
 
-void __thiscall Scr_ScriptCallStack::UpdateStack()
+void Scr_ScriptCallStack::UpdateStack()
 {
     Scr_SourcePos2_t *pos; // [esp+4h] [ebp-14h]
     uint32_t index; // [esp+Ch] [ebp-Ch]
@@ -2053,7 +2057,7 @@ void Scr_ScriptWatch::PasteElementInternal(
     }
 }
 
-Scr_WatchElement_s *__thiscall Scr_ScriptWatch::PasteNonBreakpointElement(
+Scr_WatchElement_s *Scr_ScriptWatch::PasteNonBreakpointElement(
     Scr_WatchElement_s *element,
     char *text,
     bool user)
@@ -2098,7 +2102,7 @@ void Scr_ScriptWatch::SaveSelectedLine(Scr_SelectedLineInfo *info)
     info->oldFocusOnSelectedLine = this->focusOnSelectedLine;
 }
 
-void __thiscall Scr_ScriptWatch::LoadSelectedLine(Scr_SelectedLineInfo *info)
+void Scr_ScriptWatch::LoadSelectedLine(Scr_SelectedLineInfo *info)
 {
     Scr_WatchElement_s *selectedElement; // [esp+8h] [ebp-4h]
 
@@ -2541,7 +2545,7 @@ void  Scr_ScriptWatch::EvaluateWatchElementExpression(
 }
 
 
-bool __thiscall Scr_ScriptWatch::PostEvaluateWatchElement(
+bool Scr_ScriptWatch::PostEvaluateWatchElement(
     Scr_WatchElement_s *element,
     VariableValue *value)
 {
@@ -4083,7 +4087,7 @@ void Scr_ScriptWindow::ToggleBreakpoint(
     }
 }
 
-char *__thiscall Scr_ScriptWindow::GetBreakpointCodePos()
+char *Scr_ScriptWindow::GetBreakpointCodePos()
 {
     uint32_t startSourcePos; // [esp+4h] [ebp-1Ch]
     SourceBufferInfo *sourceBufData; // [esp+8h] [ebp-18h]
@@ -4183,7 +4187,7 @@ bool Scr_ScriptWatch::ReadFromFile()
     return success;
 }
 
-Scr_WatchElement_s *__thiscall Scr_ScriptWatch::GetSelectedNonConditionalElement()
+Scr_WatchElement_s *Scr_ScriptWatch::GetSelectedNonConditionalElement()
 {
     Scr_WatchElement_s *element; // [esp+4h] [ebp-4h]
 

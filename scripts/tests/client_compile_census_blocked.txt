@@ -55,5 +55,3 @@ src/groupvoice/decode.cpp: DirectSound voice headers include <windows.h>
 src/groupvoice/encode.cpp: DirectSound voice headers include <windows.h>
 src/groupvoice/play_dsound.cpp: DirectSound playback
 src/groupvoice/record_dsound.cpp: DirectSound capture
-src/ui/ui_component.cpp: MSVC thiscall member definitions conflict with their declarations under Clang
-src/ui/ui_shared_obj.cpp: _ctime64 for __DATE__/__TIME__ tokens; the caller then free()s the CRT's static buffer, so no shim is added

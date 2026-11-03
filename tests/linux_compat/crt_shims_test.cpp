@@ -134,6 +134,31 @@ int main()
         }
     }
 
+    // _ctime64: the ui_shared_obj.cpp __DATE__/__TIME__ call shape, which slices
+    // "Www Mmm dd hh:mm:ss yyyy\n" by fixed offsets and does not free the result.
+    {
+        const long long stamp = _time64(nullptr);
+        const time_t narrowed = static_cast<time_t>(stamp);
+        char expected[26];
+        const char *text = _ctime64(&stamp);
+        Check(text != nullptr && ctime_r(&narrowed, expected) != nullptr && std::strcmp(text, expected) == 0,
+              "_ctime64 matches ctime_r for the current time");
+        Check(text != nullptr && std::strlen(text) == 25 && text[24] == '\n' && text[3] == ' ' && text[13] == ':' &&
+                  text[19] == ' ',
+              "_ctime64 has the fixed layout the __DATE__/__TIME__ slices read");
+
+        const long long epoch = 0;
+        Check(_ctime64(&epoch) != nullptr, "_ctime64 accepts the epoch");
+        const long long negative = -1;
+        Check(_ctime64(&negative) == nullptr, "_ctime64 rejects a time before the epoch, as MSVC does");
+        Check(_ctime64(nullptr) == nullptr, "_ctime64 rejects a null source");
+        if (sizeof(time_t) == 4)
+        {
+            const long long beyond = static_cast<long long>(INT_MAX) + 1;
+            Check(_ctime64(&beyond) == nullptr, "_ctime64 refuses a value 32-bit time_t cannot hold");
+        }
+    }
+
     std::printf("%d checks, %d failures\n", g_checks, g_failures);
     if (g_failures == 0)
         std::printf("PASS: CRT shims\n");
