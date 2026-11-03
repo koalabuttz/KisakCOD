@@ -40,12 +40,12 @@
 // ---------------------------------------------------------------------------
 
 // src/gfx_d3d/r_model.cpp:151.
-XModel *__cdecl R_RegisterModel(const char *name)
+XModel *R_RegisterModel(const char *name)
 {
     return XModelPrecache(
         (char *)name,
-        (void *(__cdecl *)(int))Hunk_AllocXModelPrecache,
-        (void *(__cdecl *)(int))Hunk_AllocXModelPrecacheColl);
+        (void *(*)(int))Hunk_AllocXModelPrecache,
+        (void *(*)(int))Hunk_AllocXModelPrecacheColl);
 }
 
 // ---------------------------------------------------------------------------
@@ -56,15 +56,15 @@ XModel *__cdecl R_RegisterModel(const char *name)
 // cached in gfxCmdBufState. Only drawing binds them, and nothing here draws: the
 // dedicated build has no device and the world device probe issues no draw. The
 // original's own assertion (prim.vertexDecl == NULL) holds trivially.
-void __cdecl RB_ClearPixelShader()
+void RB_ClearPixelShader()
 {
 }
 
-void __cdecl RB_ClearVertexShader()
+void RB_ClearVertexShader()
 {
 }
 
-void __cdecl RB_ClearVertexDecl()
+void RB_ClearVertexDecl()
 {
 }
 
@@ -73,7 +73,7 @@ void __cdecl RB_ClearVertexDecl()
 // null), which is the single condition the original body tests. The world device
 // probe gets here from its synchronous map load (DB_LoadXAssets archives assets
 // first) before it registers the map's world, and it unloads no zone afterwards.
-void __cdecl R_ClearAllStaticModelCacheRefs()
+void R_ClearAllStaticModelCacheRefs()
 {
     if (rgp.world)
         Com_Error(ERR_FATAL, "R_ClearAllStaticModelCacheRefs: a GfxWorld was registered in a dedicated build\n");
@@ -83,7 +83,7 @@ void __cdecl R_ClearAllStaticModelCacheRefs()
 // simulation grid stored in the zone, not device work, and the shared material
 // loader calls it for every water texture, so the grid is reduced to the same
 // dimensions the client would produce.
-void __cdecl Load_PicmipWater(water_t **waterRef)
+void Load_PicmipWater(water_t **waterRef)
 {
     complex_s *H0;
     float real;

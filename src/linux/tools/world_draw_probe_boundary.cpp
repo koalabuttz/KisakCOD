@@ -83,23 +83,23 @@ namespace
 // src/client_mp/cl_main_mp.cpp: SND_PlayFXSounds, SND_UpdateLoopingSounds,
 // SND_Update. No sound system is started here (src/sound is not linked), so no
 // sound plays and no listener exists to move.
-void __cdecl CL_UpdateSound()
+void CL_UpdateSound()
 {
 }
 
 // src/client/cl_debugdata.cpp: both bodies are guarded by cls.rendererStarted,
 // which is false in a process with no client, so they do nothing.
-void __cdecl CL_FlushDebugClientData()
+void CL_FlushDebugClientData()
 {
 }
 
-void __cdecl CL_UpdateDebugClientData()
+void CL_UpdateDebugClientData()
 {
 }
 
 // src/cgame/cg_draw_debug.cpp: appends the frame time to the cgame's FPS
 // history, which only the cgame's FPS display reads. No cgame runs here.
-void __cdecl CG_CalculateFPS()
+void CG_CalculateFPS()
 {
 }
 
@@ -107,17 +107,17 @@ void __cdecl CG_CalculateFPS()
 // effects: the local entities' tracer beams (CG_AddLocalEntityTracerBeams),
 // then the players' sprites and the 3D HUD elements. No cgame runs here, so no
 // weapon fires a tracer, no player is in the scene and no HUD exists.
-void __cdecl CG_AddSceneTracerBeams(int32_t)
+void CG_AddSceneTracerBeams(int32_t)
 {
 }
 
-void __cdecl CG_GenerateSceneVerts(int32_t)
+void CG_GenerateSceneVerts(int32_t)
 {
 }
 
 // src/sound/snd.cpp: whether any sound listener is active. No sound system is
 // started here, so none is, and FX_SpawnSound plays none of an effect's sounds.
-char __cdecl SND_AnyActiveListeners()
+char SND_AnyActiveListeners()
 {
     return 0;
 }
@@ -136,7 +136,7 @@ void FX_UnregisterAll()
 // dynamic entities come with its clip map, posed where the map placed them; only
 // the cgame's physics gives one a body, and no cgame runs here. The loop then
 // does nothing, which this checks.
-void __cdecl DynEntCl_ProcessEntities(int32_t localClientNum)
+void DynEntCl_ProcessEntities(int32_t localClientNum)
 {
     if (localClientNum != 0)
         return;
@@ -152,7 +152,7 @@ void __cdecl DynEntCl_ProcessEntities(int32_t localClientNum)
 // src/DynEntity/DynEntity_pieces.cpp: draws the pieces of broken dynamic
 // entities. Only damage breaks one, and nothing here deals damage or links the
 // pieces pool, so there are none to draw.
-void __cdecl DynEntPieces_AddDrawSurfs()
+void DynEntPieces_AddDrawSurfs()
 {
 }
 
@@ -162,35 +162,35 @@ void __cdecl DynEntPieces_AddDrawSurfs()
 // Cinematics are unavailable on Linux: none ever starts, so the per-frame update
 // has nothing to advance, the lost-device pair has no Bink textures to release
 // or remake, and the scene's cinematic warning never shows.
-void __cdecl R_Cinematic_Init()
+void R_Cinematic_Init()
 {
 }
 
-void __cdecl R_Cinematic_UpdateFrame()
+void R_Cinematic_UpdateFrame()
 {
 }
 
-bool __cdecl R_Cinematic_IsStarted()
-{
-    return false;
-}
-
-bool __cdecl R_Cinematic_IsUnderrun()
+bool R_Cinematic_IsStarted()
 {
     return false;
 }
 
-void __cdecl R_Cinematic_BeginLostDevice()
+bool R_Cinematic_IsUnderrun()
+{
+    return false;
+}
+
+void R_Cinematic_BeginLostDevice()
 {
 }
 
-void __cdecl R_Cinematic_EndLostDevice()
+void R_Cinematic_EndLostDevice()
 {
 }
 
 // R_ShutdownDirect3D's: with no playback and no Bink textures there is nothing to
 // stop or release (the free-camera adapter's Shutdown reaches it through R_Shutdown).
-void __cdecl R_Cinematic_Shutdown()
+void R_Cinematic_Shutdown()
 {
 }
 
@@ -200,7 +200,7 @@ void __cdecl R_Cinematic_Shutdown()
 // rest is the original's own branch for that case and its reporting cache.
 static uint32_t s_maxReportedTexMem;
 
-uint32_t __cdecl R_AvailableTextureMemory()
+uint32_t R_AvailableTextureMemory()
 {
     iassert(dx.device);
     const uint32_t texMemInMegs = dx.device->GetAvailableTextureMem() >> 20;

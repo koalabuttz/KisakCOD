@@ -51,7 +51,7 @@ const dvar_t *hud_healthOverlay_regenPauseTime;
 const dvar_t *hud_enable;
 
 
-void __cdecl CG_AntiBurnInHUD_RegisterDvars()
+void CG_AntiBurnInHUD_RegisterDvars()
 {
     hud_fadeout_speed = Dvar_RegisterFloat("hud_fadeout_speed", 0.1f, 0.0f, 1.0f, DVAR_ARCHIVE, "The speed that the HUD will fade at");
     hud_enable = Dvar_RegisterBool("hud_enable", 1, DVAR_ARCHIVE, "Enable hud elements");
@@ -85,7 +85,7 @@ void __cdecl CG_AntiBurnInHUD_RegisterDvars()
     hud_gasMaskOverlay = Dvar_RegisterBool("hud_gasMaskOverlay", 0, 0x1000u, "Signals the \"FacemaskOverlay\" menu to draw, meant to be changed by script.");
 }
 
-unsigned int __cdecl CG_GetSelectedWeaponIndex(const cg_s *cgameGlob)
+unsigned int CG_GetSelectedWeaponIndex(const cg_s *cgameGlob)
 {
     const unsigned int *p_weaponSelect; // r29
     unsigned int weaponSelect; // r30
@@ -98,7 +98,7 @@ unsigned int __cdecl CG_GetSelectedWeaponIndex(const cg_s *cgameGlob)
         return cgameGlob->predictedPlayerState.weapon;
 }
 
-int __cdecl CG_IsHudHidden()
+int CG_IsHudHidden()
 {
     unsigned __int8 v0; // r11
 
@@ -110,7 +110,7 @@ int __cdecl CG_IsHudHidden()
     return v0;
 }
 
-int __cdecl CG_CheckPlayerForLowAmmoSpecific(const cg_s *cgameGlob, unsigned int weapIndex)
+int CG_CheckPlayerForLowAmmoSpecific(const cg_s *cgameGlob, unsigned int weapIndex)
 {
     const playerState_s *p_predictedPlayerState; // r30
     int TotalAmmoReserve; // r29
@@ -142,7 +142,7 @@ int __cdecl CG_CheckPlayerForLowAmmoSpecific(const cg_s *cgameGlob, unsigned int
     return 0;
 }
 
-int __cdecl CG_CheckPlayerForLowAmmo(const cg_s *cgameGlob)
+int CG_CheckPlayerForLowAmmo(const cg_s *cgameGlob)
 {
     const unsigned int *p_weaponSelect; // r29
     unsigned int weaponSelect; // r30
@@ -155,7 +155,7 @@ int __cdecl CG_CheckPlayerForLowAmmo(const cg_s *cgameGlob)
         return CG_CheckPlayerForLowAmmoSpecific(cgameGlob, cgameGlob->predictedPlayerState.weapon);
 }
 
-int __cdecl CG_CheckPlayerForLowClipSpecific(const cg_s *cgameGlob, unsigned int weapIndex)
+int CG_CheckPlayerForLowClipSpecific(const cg_s *cgameGlob, unsigned int weapIndex)
 {
     if (!weapIndex)
         return 0;
@@ -179,7 +179,7 @@ int __cdecl CG_CheckPlayerForLowClipSpecific(const cg_s *cgameGlob, unsigned int
     return (float)currentClip <= threshold;
 }
 
-int __cdecl CG_CheckPlayerForLowClip(const cg_s *cgameGlob)
+int CG_CheckPlayerForLowClip(const cg_s *cgameGlob)
 {
     const unsigned int *p_weaponSelect; // r29
     unsigned int weaponSelect; // r30
@@ -192,7 +192,7 @@ int __cdecl CG_CheckPlayerForLowClip(const cg_s *cgameGlob)
         return CG_CheckPlayerForLowClipSpecific(cgameGlob, cgameGlob->predictedPlayerState.weapon);
 }
 
-void __cdecl CG_CalcPlayerSprintColor(const cg_s *cgameGlob, const playerState_s *ps, float *color)
+void CG_CalcPlayerSprintColor(const cg_s *cgameGlob, const playerState_s *ps, float *color)
 {
     float frac; // [esp+8h] [ebp-18h]
     const DvarValue *p_current; // [esp+Ch] [ebp-14h]
@@ -228,7 +228,7 @@ void __cdecl CG_CalcPlayerSprintColor(const cg_s *cgameGlob, const playerState_s
     }
 }
 
-void __cdecl CG_DrawStanceIcon(
+void CG_DrawStanceIcon(
     int32_t localClientNum,
     const rectDef_s *rect,
     float *drawColor,
@@ -290,7 +290,7 @@ void __cdecl CG_DrawStanceIcon(
     }
 }
 
-void __cdecl CG_DrawStanceHintPrints(
+void CG_DrawStanceHintPrints(
     int32_t localClientNum,
     const rectDef_s *rect,
     float x,
@@ -486,7 +486,7 @@ float CG_CalcPlayerHealth(const playerState_s *ps)
         return 0.0f;
 }
 
-float __cdecl CG_FadeLowHealthOverlay(const cg_s *cgameGlob)
+float CG_FadeLowHealthOverlay(const cg_s *cgameGlob)
 {
     int elapsed = cgameGlob->time - cgameGlob->healthOverlayPulseTime;
     if (elapsed < 0)
@@ -515,7 +515,7 @@ float __cdecl CG_FadeLowHealthOverlay(const cg_s *cgameGlob)
     return (float)healthOverlayToAlpha;
 }
 
-void __cdecl CG_PulseLowHealthOverlay(cg_s *cgameGlob, double healthRatio)
+void CG_PulseLowHealthOverlay(cg_s *cgameGlob, double healthRatio)
 {
 #if 1
     int *p_healthOverlayPulseDuration; // r29
@@ -737,7 +737,7 @@ LABEL_16:
 #endif
 }
 
-void __cdecl CG_DrawPlayerLowHealthOverlay(
+void CG_DrawPlayerLowHealthOverlay(
     int localClientNum,
     const rectDef_s *rect,
     Material *material,
@@ -770,7 +770,7 @@ void __cdecl CG_DrawPlayerLowHealthOverlay(
     }
 }
 
-int __cdecl CG_ServerMaterialName(int localClientNum, int index, char *materialName, unsigned int maxLen)
+int CG_ServerMaterialName(int localClientNum, int index, char *materialName, unsigned int maxLen)
 {
     const char *ConfigString; // r3
     char *v7; // r11
@@ -796,7 +796,7 @@ int __cdecl CG_ServerMaterialName(int localClientNum, int index, char *materialN
     return 1;
 }
 
-Material *__cdecl CG_ObjectiveIcon(int icon, unsigned int type)
+Material *CG_ObjectiveIcon(int icon, unsigned int type)
 {
     char v5[72]; // [sp+50h] [-60h] BYREF
 
@@ -814,7 +814,7 @@ Material *__cdecl CG_ObjectiveIcon(int icon, unsigned int type)
         return cgMedia.objectiveMaterials[type];
 }
 
-void __cdecl CG_UpdateCursorHints(int localClientNum)
+void CG_UpdateCursorHints(int localClientNum)
 {
     if (localClientNum)
         MyAssertHandler(
@@ -833,7 +833,7 @@ void __cdecl CG_UpdateCursorHints(int localClientNum)
     }
 }
 
-char *__cdecl CG_GetWeaponUseString(int localClientNum, const char **secondaryString)
+char *CG_GetWeaponUseString(int localClientNum, const char **secondaryString)
 {
     int cursorHintIcon; // r11
     int v5; // r30
@@ -896,7 +896,7 @@ char *__cdecl CG_GetWeaponUseString(int localClientNum, const char **secondarySt
     return UI_ReplaceConversionString(v8, v11);
 }
 
-char *__cdecl CG_GetUseString(int localClientNum)
+char *CG_GetUseString(int localClientNum)
 {
     int cursorHintString; // r11
     const char *ConfigString; // r3
@@ -937,7 +937,7 @@ char *__cdecl CG_GetUseString(int localClientNum)
     return UI_ReplaceConversionString(v6, v8);
 }
 
-void __cdecl CG_DrawCursorhint(
+void CG_DrawCursorhint(
     int32_t localClientNum,
     const rectDef_s *rect,
     Font_s *font,
@@ -1294,7 +1294,7 @@ void __cdecl CG_DrawCursorhint(
     }
 }
 
-void __cdecl CG_DrawHoldBreathHint(
+void CG_DrawHoldBreathHint(
     int localClientNum,
     const rectDef_s *rect,
     Font_s *font,
@@ -1349,7 +1349,7 @@ void __cdecl CG_DrawHoldBreathHint(
     }
 }
 
-void __cdecl CG_DrawMantleHint(
+void CG_DrawMantleHint(
     int32_t localClientNum,
     const rectDef_s *rect,
     Font_s *font,
@@ -1411,7 +1411,7 @@ void __cdecl CG_DrawMantleHint(
     }
 }
 
-void __cdecl CG_DrawSaving(int localClientNum, const rectDef_s *rect, float *color, Material *material)
+void CG_DrawSaving(int localClientNum, const rectDef_s *rect, float *color, Material *material)
 {
 	if (!ui_isSaving->current.enabled)
 		return;
@@ -1422,12 +1422,12 @@ void __cdecl CG_DrawSaving(int localClientNum, const rectDef_s *rect, float *col
 	UI_DrawHandlePic(&scrPlaceView[localClientNum], rect->x, rect->y, rect->w, rect->h, rect->horzAlign, rect->vertAlign, color, material);
 }
 
-int __cdecl CG_OwnerDrawVisible(int flags)
+int CG_OwnerDrawVisible(int flags)
 {
     return 0;
 }
 
-void __cdecl CG_DrawTankBody(int localClientNum, rectDef_s *rect, Material *material, float *color)
+void CG_DrawTankBody(int localClientNum, rectDef_s *rect, Material *material, float *color)
 {
     centity_s *Entity; // r3
     double angle; // fp31
@@ -1460,7 +1460,7 @@ void __cdecl CG_DrawTankBody(int localClientNum, rectDef_s *rect, Material *mate
 }
 
 // local variable allocation has failed, the output may be wrong!
-void __cdecl CG_DrawDeadQuote(
+void CG_DrawDeadQuote(
     const cg_s *cgameGlob,
     rectDef_s *rect,
     Font_s *font,
@@ -1513,7 +1513,7 @@ void __cdecl CG_DrawDeadQuote(
 		&textrect);
 }
 
-void __cdecl CG_DrawTankBarrel(int localClientNum, const rectDef_s *rect, Material *material, const float *color)
+void CG_DrawTankBarrel(int localClientNum, const rectDef_s *rect, Material *material, const float *color)
 {
     centity_s *Entity; // r3
     const cpose_t *p_pose; // r28
@@ -1578,7 +1578,7 @@ void __cdecl CG_DrawTankBarrel(int localClientNum, const rectDef_s *rect, Materi
 }
 
 // local variable allocation has failed, the output may be wrong!
-void __cdecl CG_DrawInvalidCmdHint(
+void CG_DrawInvalidCmdHint(
     int localClientNum,
     const rectDef_s *rect,
     Font_s *font,
@@ -1649,7 +1649,7 @@ void __cdecl CG_DrawInvalidCmdHint(
     }
 }
 
-void __cdecl CG_ArchiveState(int localClientNum, MemoryFile *memFile)
+void CG_ArchiveState(int localClientNum, MemoryFile *memFile)
 {
     cg_s *cgameGlob = CG_GetLocalClientGlobals(localClientNum);
 
@@ -1678,7 +1678,7 @@ void __cdecl CG_ArchiveState(int localClientNum, MemoryFile *memFile)
     MemFile_ArchiveData(memFile, 128, cgameGlob->hudElemSound);
 }
 
-float __cdecl CG_FadeHudMenu(int localClientNum, const dvar_s *fadeDvar, int displayStartTime, int duration)
+float CG_FadeHudMenu(int localClientNum, const dvar_s *fadeDvar, int displayStartTime, int duration)
 {
     if (CG_GetPredictedPlayerState(localClientNum)->pm_type == PM_MPVIEWER)
 		return 0.0f;
@@ -1696,7 +1696,7 @@ float __cdecl CG_FadeHudMenu(int localClientNum, const dvar_s *fadeDvar, int dis
 	return 0.0f;
 }
 
-void __cdecl CG_DrawPlayerAmmoBackdrop(int localClientNum, const rectDef_s *rect, float *color, Material *material)
+void CG_DrawPlayerAmmoBackdrop(int localClientNum, const rectDef_s *rect, float *color, Material *material)
 {
     cg_s *cgameGlob = CG_GetLocalClientGlobals(localClientNum);
 	float drawColor[4];
@@ -1728,7 +1728,7 @@ void __cdecl CG_DrawPlayerAmmoBackdrop(int localClientNum, const rectDef_s *rect
 }
 
 // local variable allocation has failed, the output may be wrong!
-void __cdecl CG_DrawPlayerAmmoValue(
+void CG_DrawPlayerAmmoValue(
     int localClientNum,
     const rectDef_s *rect,
     Font_s *font,
@@ -2391,7 +2391,7 @@ if (color[3] != 0.0)
 #endif
 }
 
-void __cdecl CG_DrawPlayerWeaponName(
+void CG_DrawPlayerWeaponName(
     int localClientNum,
     const rectDef_s *rect,
     Font_s *font,
@@ -2453,7 +2453,7 @@ void __cdecl CG_DrawPlayerWeaponName(
     }
 }
 
-void __cdecl CG_DrawPlayerWeaponNameBack(
+void CG_DrawPlayerWeaponNameBack(
     int localClientNum,
     const rectDef_s *rect,
     Font_s *font,
@@ -2516,7 +2516,7 @@ void __cdecl CG_DrawPlayerWeaponNameBack(
 }
 
 // local variable allocation has failed, the output may be wrong!
-void __cdecl CG_DrawPlayerStance(
+void CG_DrawPlayerStance(
     int32_t localClientNum,
     const rectDef_s *rect,
     const float *color,
@@ -2745,7 +2745,7 @@ if (fadeAlpha != 0.0)
 #endif
 }
 
-void __cdecl CG_DrawPlayerSprintBack(
+void CG_DrawPlayerSprintBack(
     int localClientNum,
     const rectDef_s *rect,
     Material *material,
@@ -2784,7 +2784,7 @@ void __cdecl CG_DrawPlayerSprintBack(
     }
 }
 
-void __cdecl CG_DrawPlayerSprintMeter(
+void CG_DrawPlayerSprintMeter(
     int localClientNum,
     const rectDef_s *rect,
     Material *material,
@@ -2842,7 +2842,7 @@ void __cdecl CG_DrawPlayerSprintMeter(
     }
 }
 
-void __cdecl CG_DrawPlayerBarHealth(int localClientNum, const rectDef_s *rect, Material *material, float *color)
+void CG_DrawPlayerBarHealth(int localClientNum, const rectDef_s *rect, Material *material, float *color)
 {
     float v4; // [esp+30h] [ebp-4Ch]
     float v5; // [esp+34h] [ebp-48h]
@@ -2972,7 +2972,7 @@ void __cdecl CG_DrawPlayerBarHealth(int localClientNum, const rectDef_s *rect, M
     }
 }
 
-void __cdecl CG_DrawPlayerBarHealthBack(
+void CG_DrawPlayerBarHealthBack(
     int localClientNum,
     const rectDef_s *rect,
     Material *material,
@@ -3068,7 +3068,7 @@ void __cdecl CG_DrawPlayerBarHealthBack(
 }
 
 // local variable allocation has failed, the output may be wrong!
-void __cdecl CG_OwnerDraw(
+void CG_OwnerDraw(
     int32_t localClientNum,
     rectDef_s parentRect,
     float x,

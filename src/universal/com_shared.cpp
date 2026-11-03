@@ -9,7 +9,7 @@
 #include <time.h>   // time, localtime_r
 #endif
 
-char __cdecl Com_Filter(const char *filter, char *name, int casesensitive)
+char Com_Filter(const char *filter, char *name, int casesensitive)
 {
     const char *v3; // eax
     int v5; // esi
@@ -124,7 +124,7 @@ char __cdecl Com_Filter(const char *filter, char *name, int casesensitive)
     return 1;
 }
 
-char __cdecl Com_FilterPath(const char *filter, const char *name, int casesensitive)
+char Com_FilterPath(const char *filter, const char *name, int casesensitive)
 {
     char new_filter[64]; // [esp+0h] [ebp-88h] BYREF
     char new_name[64]; // [esp+40h] [ebp-48h] BYREF
@@ -149,7 +149,7 @@ char __cdecl Com_FilterPath(const char *filter, const char *name, int casesensit
     return Com_Filter(new_filter, new_name, casesensitive);
 }
 
-int __cdecl Com_HashKey(const char *string, int maxlen)
+int Com_HashKey(const char *string, int maxlen)
 {
     int hash; // [esp+0h] [ebp-8h]
     int i; // [esp+4h] [ebp-4h]
@@ -160,7 +160,7 @@ int __cdecl Com_HashKey(const char *string, int maxlen)
     return (hash >> 20) ^ hash ^ (hash >> 10);
 }
 
-int __cdecl Com_RealTime(qtime_s *qtime)
+int Com_RealTime(qtime_s *qtime)
 {
 #if defined(__linux__)
     time_t t; // [esp+0h] [ebp-10h] BYREF
@@ -207,7 +207,7 @@ int __cdecl Com_RealTime(qtime_s *qtime)
 #endif
 }
 
-static void __cdecl Com_Prefetch(const char *s, signed int bytes)
+static void Com_Prefetch(const char *s, signed int bytes)
 {
     signed int v3; // ecx
     uint32_t i; // ecx
@@ -219,7 +219,7 @@ static void __cdecl Com_Prefetch(const char *s, signed int bytes)
         s += 32;
 }
 
-void __cdecl Com_Memcpy(void *dest_p, const void *src_p, const size_t count)
+void Com_Memcpy(void *dest_p, const void *src_p, const size_t count)
 {
     char *dest = (char *)dest_p;
     const char *src = (const char *)src_p;
@@ -317,7 +317,7 @@ void __cdecl Com_Memcpy(void *dest_p, const void *src_p, const size_t count)
 }
 
 
-void __cdecl Com_Memset(void *dest_p, const int val, const size_t count)
+void Com_Memset(void *dest_p, const int val, const size_t count)
 {
     uint32_t *dest = (uint32_t *)dest_p;
 

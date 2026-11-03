@@ -26,7 +26,7 @@ struct ClGuiGlob // $1629A71A7F425F55F16AD3AC356BC9AE // sizeof=0x248
 
 ClGuiGlob clGuiGlob;
 
-void __cdecl CL_DevGuiFrame(int32_t localClientNum)
+void CL_DevGuiFrame(int32_t localClientNum)
 {
     int32_t v1; // eax
     int32_t dvarIndex; // [esp+0h] [ebp-14h]
@@ -81,7 +81,7 @@ int32_t CL_UnregisterDevGuiDvars()
     return result;
 }
 
-void __cdecl CL_AddMapDirSlider(char *dir, int32_t locationFlags, const char *locationName)
+void CL_AddMapDirSlider(char *dir, int32_t locationFlags, const char *locationName)
 {
     char *devguiPath; // [esp+0h] [ebp-18h]
     char *fullDir; // [esp+4h] [ebp-14h]
@@ -113,7 +113,7 @@ void __cdecl CL_AddMapDirSlider(char *dir, int32_t locationFlags, const char *lo
     }
 }
 
-void __cdecl CL_CreateMapMenuEntriesForLocation(int32_t locationFlags, const char *locationName)
+void CL_CreateMapMenuEntriesForLocation(int32_t locationFlags, const char *locationName)
 {
     int32_t dirCount; // [esp+0h] [ebp-Ch] BYREF
     const char **dirList; // [esp+4h] [ebp-8h]
@@ -136,7 +136,7 @@ void CL_CreateMapMenuEntries()
     CL_CreateMapMenuEntriesForLocation(4, "temp*");
 }
 
-void __cdecl CL_CreateDevGui()
+void CL_CreateDevGui()
 {
     if (clGuiGlob.inited)
         MyAssertHandler(".\\client\\cl_devgui.cpp", 179, 0, "%s", "!clGuiGlob.inited");
@@ -151,7 +151,7 @@ void __cdecl CL_CreateDevGui()
     CG_InitVisionSetsMenu();
 }
 
-void __cdecl CL_DestroyDevGui()
+void CL_DestroyDevGui()
 {
     int32_t dvarIndex; // [esp+0h] [ebp-4h]
 

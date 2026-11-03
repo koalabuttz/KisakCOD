@@ -10,7 +10,7 @@
 #include "ui.h"
 #endif
 
-void __cdecl Window_Paint(
+void Window_Paint(
     UiContext *dc,
     windowDef_t *w,
     float fadeAmount,

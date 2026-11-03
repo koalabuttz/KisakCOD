@@ -67,44 +67,44 @@ struct BspSpotLightCallback // sizeof=0x64
     float planes[6][4];                 // ...
 };
 
-GfxLightDef *__cdecl R_RegisterLightDef(const char *name);
-GfxLightDef *__cdecl R_RegisterLightDef_FastFile(const char *name);
-void __cdecl R_EnumLightDefs(void(__cdecl *func)(GfxLightDef *, void *), void *data);
-void __cdecl R_InitLightDefs();
-void __cdecl R_ShutdownLightDefs();
-int __cdecl R_GetPointLightPartitions(const GfxLight **visibleLights);
-void __cdecl R_MostImportantLights(const GfxLight **lights, int lightCount, int keepCount);
-bool __cdecl R_LightImportanceGreaterEqual(const GfxLight *light0, const GfxLight *light1);
-void __cdecl R_GetBspLightSurfs(const GfxLight **visibleLights, int visibleCount);
-void __cdecl R_GetBspOmniLightSurfs(const GfxLight *light, int lightIndex, GfxBspDrawSurfData *surfData);
-int __cdecl R_AllowBspOmniLight(int surfIndex, void *bspLightCallbackAsVoid);
-void __cdecl R_GetBspSpotLightSurfs(const GfxLight *light, int lightIndex, GfxBspDrawSurfData *surfData);
-int __cdecl R_AllowBspSpotLightShadows(int surfIndex, void *bspLightCallbackAsVoid);
-int __cdecl R_BoxInPlanes(const float (*planes)[4], const float *mins, const float *maxs);
-int __cdecl R_AllowBspSpotLight(int surfIndex, void *bspLightCallbackAsVoid);
-void __cdecl R_CalcSpotLightPlanes(const GfxLight *light, float (*planes)[4]);
-void __cdecl R_CalcPlaneFromPointDir(float *plane, const float *origin, const float *dir);
-void __cdecl R_ComputeSpotLightCrossDirs(const GfxLight *light, float (*crossDirs)[3]);
-void __cdecl R_CalcPlaneFromCosSinPointDirs(
+GfxLightDef *R_RegisterLightDef(const char *name);
+GfxLightDef *R_RegisterLightDef_FastFile(const char *name);
+void R_EnumLightDefs(void(*func)(GfxLightDef *, void *), void *data);
+void R_InitLightDefs();
+void R_ShutdownLightDefs();
+int R_GetPointLightPartitions(const GfxLight **visibleLights);
+void R_MostImportantLights(const GfxLight **lights, int lightCount, int keepCount);
+bool R_LightImportanceGreaterEqual(const GfxLight *light0, const GfxLight *light1);
+void R_GetBspLightSurfs(const GfxLight **visibleLights, int visibleCount);
+void R_GetBspOmniLightSurfs(const GfxLight *light, int lightIndex, GfxBspDrawSurfData *surfData);
+int R_AllowBspOmniLight(int surfIndex, void *bspLightCallbackAsVoid);
+void R_GetBspSpotLightSurfs(const GfxLight *light, int lightIndex, GfxBspDrawSurfData *surfData);
+int R_AllowBspSpotLightShadows(int surfIndex, void *bspLightCallbackAsVoid);
+int R_BoxInPlanes(const float (*planes)[4], const float *mins, const float *maxs);
+int R_AllowBspSpotLight(int surfIndex, void *bspLightCallbackAsVoid);
+void R_CalcSpotLightPlanes(const GfxLight *light, float (*planes)[4]);
+void R_CalcPlaneFromPointDir(float *plane, const float *origin, const float *dir);
+void R_ComputeSpotLightCrossDirs(const GfxLight *light, float (*crossDirs)[3]);
+void R_CalcPlaneFromCosSinPointDirs(
     float *plane,
     float fCos,
     float fSin,
     const float *origin,
     const float *forward,
     const float *lateral);
-void __cdecl R_GetStaticModelLightSurfs(const GfxLight **visibleLights, int visibleCount);
-int __cdecl R_AllowStaticModelOmniLight(int smodelIndex);
-int __cdecl R_AllowStaticModelSpotLight(int smodelIndex);
-void __cdecl R_GetSceneEntLightSurfs(const GfxLight **visibleLights, int visibleCount);
-int __cdecl R_SphereInPlanes(const float (*planes)[4], const float *center, float radius);
-bool __cdecl R_SpotLightIsAttachedToDobj(const DObj_s *obj);
-int __cdecl R_EmitPointLightPartitionSurfs(
+void R_GetStaticModelLightSurfs(const GfxLight **visibleLights, int visibleCount);
+int R_AllowStaticModelOmniLight(int smodelIndex);
+int R_AllowStaticModelSpotLight(int smodelIndex);
+void R_GetSceneEntLightSurfs(const GfxLight **visibleLights, int visibleCount);
+int R_SphereInPlanes(const float (*planes)[4], const float *center, float radius);
+bool R_SpotLightIsAttachedToDobj(const DObj_s *obj);
+int R_EmitPointLightPartitionSurfs(
     GfxViewInfo *viewInfo,
     const GfxLight **visibleLights,
     int visibleCount,
     const float *viewOrigin);
-int __cdecl R_GetTechniqueForLightType(const GfxLight *light, const GfxViewInfo *viewInfo);
-void __cdecl R_EmitShadowedLightPartitionSurfs(
+int R_GetTechniqueForLightType(const GfxLight *light, const GfxViewInfo *viewInfo);
+void R_EmitShadowedLightPartitionSurfs(
     GfxViewInfo *viewInfo,
     uint32_t lightDrawSurfCount,
     GfxDrawSurf *lightDrawSurfs,
@@ -113,9 +113,9 @@ void __cdecl R_EmitShadowedLightPartitionSurfs(
 
 
 // r_light_load_obj
-void __cdecl R_LoadLightGridColors(uint32_t bspVersion);
+void R_LoadLightGridColors(uint32_t bspVersion);
 void R_LoadLightGridRowData();
 uint8_t *R_LoadLightGridEntries();
 void R_LoadLightGridHeader();
-void __cdecl R_LoadLightGridPoints_Version15(uint32_t bspVersion);
-GfxLightDef *__cdecl R_LoadLightDef(const char *name);
+void R_LoadLightGridPoints_Version15(uint32_t bspVersion);
+GfxLightDef *R_LoadLightDef(const char *name);

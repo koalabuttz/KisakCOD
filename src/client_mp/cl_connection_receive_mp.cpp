@@ -33,7 +33,7 @@ bool ReadHandshakeInteger(const char *text, int32_t *value)
 }
 }
 
-char __cdecl CL_ConnectionlessPacket(int localClientNum, netadr_t from, msg_t *msg, int32_t time)
+char CL_ConnectionlessPacket(int localClientNum, netadr_t from, msg_t *msg, int32_t time)
 {
     const char *v5; // eax
     char success; // [esp+3h] [ebp-9h]
@@ -87,7 +87,7 @@ char __cdecl CL_ConnectionlessPacket(int localClientNum, netadr_t from, msg_t *m
 }
 
 char printBuf[2048];
-char __cdecl CL_DispatchConnectionlessPacket(int localClientNum, netadr_t from, msg_t *msg, int32_t time)
+char CL_DispatchConnectionlessPacket(int localClientNum, netadr_t from, msg_t *msg, int32_t time)
 {
     const char *v5; // eax
     const char *v6; // eax
@@ -414,7 +414,7 @@ char __cdecl CL_DispatchConnectionlessPacket(int localClientNum, netadr_t from, 
     }
 }
 
-void __cdecl CL_DisconnectPacket(int32_t localClientNum, netadr_t from, char *reason)
+void CL_DisconnectPacket(int32_t localClientNum, netadr_t from, char *reason)
 {
     if (CL_GetLocalClientConnectionState(localClientNum) >= CA_CONNECTING)
     {
@@ -440,7 +440,7 @@ void __cdecl CL_DisconnectPacket(int32_t localClientNum, netadr_t from, char *re
     }
 }
 
-void __cdecl CL_CheckTimeout(int32_t localClientNum)
+void CL_CheckTimeout(int32_t localClientNum)
 {
     clientActive_t *LocalClientGlobals; // [esp+8h] [ebp-Ch]
     clientConnection_t *clc; // [esp+10h] [ebp-4h]
@@ -488,7 +488,7 @@ void __cdecl CL_CheckTimeout(int32_t localClientNum)
     }
 }
 
-void __cdecl CL_ServerTimedOut()
+void CL_ServerTimedOut()
 {
     Com_Error(ERR_DROP, "EXE_ERR_SERVER_TIMEOUT");
 }

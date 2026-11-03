@@ -41,7 +41,7 @@ const float sign[8][2] =
 
 float color_0[4];
 
-void __cdecl CG_DrawRotatedPicPhysical(
+void CG_DrawRotatedPicPhysical(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -93,7 +93,7 @@ void __cdecl CG_DrawRotatedPicPhysical(
     R_AddCmdDrawQuadPic(verts, color, material);
 }
 
-void __cdecl CG_DrawRotatedPic(
+void CG_DrawRotatedPic(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -109,7 +109,7 @@ void __cdecl CG_DrawRotatedPic(
     CG_DrawRotatedPicPhysical(scrPlace, x, y, width, height, angle, color, material);
 }
 
-void __cdecl CG_DrawRotatedQuadPic(
+void CG_DrawRotatedQuadPic(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -151,7 +151,7 @@ void __cdecl CG_DrawRotatedQuadPic(
     R_AddCmdDrawQuadPic(xy, color, material);
 }
 
-void __cdecl CG_DrawVLine(
+void CG_DrawVLine(
     const ScreenPlacement *scrPlace,
     float x,
     float top,
@@ -181,7 +181,7 @@ void __cdecl CG_DrawVLine(
     R_AddCmdDrawQuadPic(verts, color, material);
 }
 
-void __cdecl CG_DrawStringExt(
+void CG_DrawStringExt(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -203,7 +203,7 @@ void __cdecl CG_DrawStringExt(
     UI_DrawText(scrPlace, string, 0x7FFFFFFF, font, x, ya, 1, 1, fontScale, setColor, shadow != 0 ? 3 : 0);
 }
 
-int32_t __cdecl CG_DrawDevString(
+int32_t CG_DrawDevString(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -244,7 +244,7 @@ int32_t __cdecl CG_DrawDevString(
     return (int)((float)step * effYScale);
 }
 
-int32_t __cdecl CG_DrawBigDevString(const ScreenPlacement *scrPlace, float x, float y, char *s, float alpha, char align)
+int32_t CG_DrawBigDevString(const ScreenPlacement *scrPlace, float x, float y, char *s, float alpha, char align)
 {
     float color[4]; // [esp+14h] [ebp-10h] BYREF
 
@@ -255,7 +255,7 @@ int32_t __cdecl CG_DrawBigDevString(const ScreenPlacement *scrPlace, float x, fl
     return CG_DrawBigDevStringColor(scrPlace, x, y, s, color, align);
 }
 
-int32_t __cdecl CG_DrawBigDevStringColor(
+int32_t CG_DrawBigDevStringColor(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -266,7 +266,7 @@ int32_t __cdecl CG_DrawBigDevStringColor(
     return CG_DrawDevString(scrPlace, x, y, 1.0, 1.0, s, color, align, cgMedia.bigDevFont);
 }
 
-int32_t __cdecl CG_DrawSmallDevStringColor(
+int32_t CG_DrawSmallDevStringColor(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -277,7 +277,7 @@ int32_t __cdecl CG_DrawSmallDevStringColor(
     return CG_DrawDevString(scrPlace, x, y, 1.0, 1.0, s, color, align, cgMedia.smallDevFont);
 }
 
-double __cdecl CG_FadeAlpha(int32_t timeNow, int32_t startMsec, int32_t totalMsec, int32_t fadeMsec)
+double CG_FadeAlpha(int32_t timeNow, int32_t startMsec, int32_t totalMsec, int32_t fadeMsec)
 {
     int32_t t; // [esp+8h] [ebp-4h]
 
@@ -287,7 +287,7 @@ double __cdecl CG_FadeAlpha(int32_t timeNow, int32_t startMsec, int32_t totalMse
     return (float)((double)(totalMsec - t) * 1.0 / (double)fadeMsec);
 }
 
-float *__cdecl CG_FadeColor(int32_t timeNow, int32_t startMsec, int32_t totalMsec, int32_t fadeMsec)
+float *CG_FadeColor(int32_t timeNow, int32_t startMsec, int32_t totalMsec, int32_t fadeMsec)
 {
     if (!startMsec)
         return 0;
@@ -300,7 +300,7 @@ float *__cdecl CG_FadeColor(int32_t timeNow, int32_t startMsec, int32_t totalMse
     return color_0;
 }
 
-void __cdecl CG_MiniMapChanged(int32_t localClientNum)
+void CG_MiniMapChanged(int32_t localClientNum)
 {
     parseInfo_t* v1; // eax
     parseInfo_t* v2; // eax
@@ -340,7 +340,7 @@ void __cdecl CG_MiniMapChanged(int32_t localClientNum)
         cgameGlob->compassMapWorldSize[1] = 1000.0;
 }
 
-void __cdecl CG_NorthDirectionChanged(int32_t localClientNum)
+void CG_NorthDirectionChanged(int32_t localClientNum)
 {
     float v1; // [esp+8h] [ebp-Ch]
     const char *pszString; // [esp+10h] [ebp-4h]
@@ -355,17 +355,17 @@ void __cdecl CG_NorthDirectionChanged(int32_t localClientNum)
     CG_MiniMapChanged(localClientNum);
 }
 
-void __cdecl CG_DebugLine(const float *start, const float *end, const float *color, int32_t depthTest, int32_t duration)
+void CG_DebugLine(const float *start, const float *end, const float *color, int32_t depthTest, int32_t duration)
 {
     CL_AddDebugLine(start, end, color, depthTest, duration, 0);
 }
 
-void __cdecl CG_DebugStar(const float *point, const float *color, int32_t duration)
+void CG_DebugStar(const float *point, const float *color, int32_t duration)
 {
     CL_AddDebugStar(point, color, duration, 0);
 }
 
-void __cdecl CG_DebugStarWithText(
+void CG_DebugStarWithText(
     const float *point,
     const float *starColor,
     const float *textColor,
@@ -376,7 +376,7 @@ void __cdecl CG_DebugStarWithText(
     CL_AddDebugStarWithText(point, starColor, textColor, string, fontsize, duration, 0);
 }
 
-void __cdecl CG_DebugBox(
+void CG_DebugBox(
     const float *origin,
     const float *mins,
     const float *maxs,
@@ -419,7 +419,7 @@ void __cdecl CG_DebugBox(
         CG_DebugLine(&v[3 * iEdgePairs[ia][0]], &v[3 * iEdgePairs[ia][1]], color, depthTest, duration);
 }
 
-void __cdecl CG_DebugBoxOriented(
+void CG_DebugBoxOriented(
     const float *origin,
     const float *mins,
     const float *maxs,
@@ -456,7 +456,7 @@ void __cdecl CG_DebugBoxOriented(
         CG_DebugLine(v[iEdgePairs[i][0]], v[iEdgePairs[i][1]], color, depthTest, duration);
 }
 
-void __cdecl CG_DebugCircle(
+void CG_DebugCircle(
     const float *center,
     float radius,
     const float *dir,
@@ -492,7 +492,7 @@ void __cdecl CG_DebugCircle(
         CG_DebugLine(v[i], v[(i + 1) % 0x10], color, depthTest, duration);
 }
 
-void __cdecl CG_TeamColor(int32_t team, const char *prefix, float *color)
+void CG_TeamColor(int32_t team, const char *prefix, float *color)
 {
     const char *v3; // eax
     char dvarName[32]; // [esp+4h] [ebp-24h] BYREF
@@ -524,7 +524,7 @@ void __cdecl CG_TeamColor(int32_t team, const char *prefix, float *color)
 }
 
 #ifdef KISAK_MP
-void __cdecl CG_RelativeTeamColor(int32_t clientNum, const char *prefix, float *color, int32_t localClientNum)
+void CG_RelativeTeamColor(int32_t clientNum, const char *prefix, float *color, int32_t localClientNum)
 {
     char dvarName[32]; // [esp+Ch] [ebp-28h] BYREF
     float savedAlpha; // [esp+30h] [ebp-4h]

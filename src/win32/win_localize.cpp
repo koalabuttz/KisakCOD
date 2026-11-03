@@ -9,19 +9,19 @@ static LocalizationData localization;
 #define LANGUAGE_BUF_SIZE 0x1000
 static char language_buffer[LANGUAGE_BUF_SIZE];
 
-char* __cdecl Win_CopyLocalizationString(const char* string)
+char* Win_CopyLocalizationString(const char* string)
 {
 	return va("%s", string);
 }
 
-char* __cdecl Win_GetLanguage()
+char* Win_GetLanguage()
 {
 	if (!localization.language)
 		MyAssertHandler(".\\win32\\win_localize.cpp", 145, 0, "%s", "localization.language");
 	return localization.language;
 }
 
-int __cdecl Win_InitLocalization()
+int Win_InitLocalization()
 {
     signed int size; // [esp+0h] [ebp-10h]
     int sizea; // [esp+0h] [ebp-10h]
@@ -70,7 +70,7 @@ int __cdecl Win_InitLocalization()
     }
 }
 
-char* __cdecl Win_LocalizeRef(const char* ref)
+char* Win_LocalizeRef(const char* ref)
 {
     const char* v1; // eax
     const char* v3; // eax
@@ -110,7 +110,7 @@ char* __cdecl Win_LocalizeRef(const char* ref)
     return Win_CopyLocalizationString(token);
 }
 
-void __cdecl Win_ShutdownLocalization()
+void Win_ShutdownLocalization()
 {
     localization.language = 0;
     localization.strings = 0;

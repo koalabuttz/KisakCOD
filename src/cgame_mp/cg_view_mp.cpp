@@ -45,13 +45,13 @@ const dvar_t *cg_airstrikeKillCamFarBlurDist;
 const dvar_t *cg_airstrikeKillCamNearBlurStart;
 const dvar_t *cg_airstrikeKillCamNearBlurEnd;
 
-void __cdecl TRACK_cg_view()
+void TRACK_cg_view()
 {
     track_static_alloc_internal(s_testEffect, 84, "s_testEffect", 9);
     track_static_alloc_internal(clientViewParamsArray, 16, "clientViewParamsArray", 10);
 }
 
-void __cdecl CG_FxSetTestPosition()
+void CG_FxSetTestPosition()
 {
     const cg_s *cgameGlob;
 
@@ -69,7 +69,7 @@ void __cdecl CG_FxSetTestPosition()
     }
 }
 
-void __cdecl CG_FxTest()
+void CG_FxTest()
 {
     char *v0; // eax
     const char *v1; // eax
@@ -105,7 +105,7 @@ void __cdecl CG_FxTest()
     }
 }
 
-void __cdecl CG_PlayTestFx(int32_t localClientNum)
+void CG_PlayTestFx(int32_t localClientNum)
 {
     TestEffect *testEffect; // [esp+8h] [ebp-30h]
     const FxEffectDef *fxDef; // [esp+Ch] [ebp-2Ch]
@@ -133,7 +133,7 @@ void __cdecl CG_PlayTestFx(int32_t localClientNum)
     testEffect->time = time;
 }
 
-double __cdecl CG_GetViewFov(int32_t localClientNum)
+double CG_GetViewFov(int32_t localClientNum)
 {
     float v3; // [esp+Ch] [ebp-2Ch]
     float value; // [esp+10h] [ebp-28h]
@@ -206,7 +206,7 @@ double __cdecl CG_GetViewFov(int32_t localClientNum)
         return value;
 }
 
-void __cdecl CG_ViewRegisterDvars()
+void CG_ViewRegisterDvars()
 {
     DvarLimits min; // [esp+4h] [ebp-10h]
     DvarLimits mina; // [esp+4h] [ebp-10h]
@@ -382,7 +382,7 @@ void __cdecl CG_ViewRegisterDvars()
         "Airstrike kill camera distance above the airplane.");
 }
 
-void __cdecl CG_UpdateHelicopterKillCam(int32_t localClientNum)
+void CG_UpdateHelicopterKillCam(int32_t localClientNum)
 {
     float scale; // [esp+0h] [ebp-70h]
     float *v2; // [esp+18h] [ebp-58h]
@@ -436,7 +436,7 @@ void __cdecl CG_UpdateHelicopterKillCam(int32_t localClientNum)
     CG_UpdateFov(localClientNum, cg_heliKillCamFov->current.value);
 }
 
-void __cdecl CG_UpdateFov(int32_t localClientNum, float fov_x)
+void CG_UpdateFov(int32_t localClientNum, float fov_x)
 {
     float dxDzAtDefaultAspectRatio; // [esp+0h] [ebp-1Ch]
     float dxDz; // [esp+8h] [ebp-14h]
@@ -458,7 +458,7 @@ void __cdecl CG_UpdateFov(int32_t localClientNum, float fov_x)
     cgameGlob->zoomSensitivity = dxDzAtDefaultAspectRatio / tan(DEG2RAD(cg_fov->current.value) * 0.5f);
 }
 
-void __cdecl CG_UpdateHelicopterKillCamDof(float distance, GfxDepthOfField *dof)
+void CG_UpdateHelicopterKillCamDof(float distance, GfxDepthOfField *dof)
 {
     dof->nearBlur = cg_heliKillCamNearBlur->current.value;
     dof->farBlur = cg_heliKillCamFarBlur->current.value;
@@ -471,7 +471,7 @@ void __cdecl CG_UpdateHelicopterKillCamDof(float distance, GfxDepthOfField *dof)
         + cg_heliKillCamFarBlurDist->current.value;
 }
 
-void __cdecl CG_UpdateAirstrikeKillCam(int32_t localClientNum)
+void CG_UpdateAirstrikeKillCam(int32_t localClientNum)
 {
     float scale; // [esp+0h] [ebp-60h]
     centity_s* centBomb; // [esp+34h] [ebp-2Ch]
@@ -520,7 +520,7 @@ void __cdecl CG_UpdateAirstrikeKillCam(int32_t localClientNum)
     CG_UpdateFov(localClientNum, cg_airstrikeKillCamFov->current.value);
 }
 
-void __cdecl CG_UpdateAirstrikeKillCamDof(float distance, GfxDepthOfField *dof)
+void CG_UpdateAirstrikeKillCamDof(float distance, GfxDepthOfField *dof)
 {
     dof->nearBlur = cg_airstrikeKillCamNearBlur->current.value;
     dof->farBlur = cg_airstrikeKillCamFarBlur->current.value;
@@ -532,7 +532,7 @@ void __cdecl CG_UpdateAirstrikeKillCamDof(float distance, GfxDepthOfField *dof)
         + cg_airstrikeKillCamFarBlurDist->current.value;
 }
 
-void __cdecl CG_InitView(int32_t localClientNum)
+void CG_InitView(int32_t localClientNum)
 {
     float zfar; // [esp+0h] [ebp-8h]
     cg_s *cgameGlob;
@@ -549,7 +549,7 @@ void __cdecl CG_InitView(int32_t localClientNum)
     FX_SetNextUpdateCamera(localClientNum, &cgameGlob->refdef, zfar);
 }
 
-void __cdecl CG_CalcViewValues(int32_t localClientNum)
+void CG_CalcViewValues(int32_t localClientNum)
 {
     float f; // [esp+40h] [ebp-10h]
     float uiBlurRadius; // [esp+48h] [ebp-8h]
@@ -646,7 +646,7 @@ void __cdecl CG_CalcViewValues(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_OffsetThirdPersonView(cg_s *cgameGlob)
+void CG_OffsetThirdPersonView(cg_s *cgameGlob)
 {
     float scale; // [esp+0h] [ebp-80h]
     float v2; // [esp+Ch] [ebp-74h]
@@ -700,7 +700,7 @@ void __cdecl CG_OffsetThirdPersonView(cg_s *cgameGlob)
 
 const float MYMINS[3] = { -4.0f, -4.0f, -4.0f };
 const float MYMAXS[3] = { 4.0f, 4.0f, 4.0f };
-void __cdecl ThirdPersonViewTrace(cg_s *cgameGlob, float *start, float *end, int32_t contentMask, float *result)
+void ThirdPersonViewTrace(cg_s *cgameGlob, float *start, float *end, int32_t contentMask, float *result)
 {
     float testEnd[3]; // [esp+8h] [ebp-38h] BYREF
     trace_t trace; // [esp+14h] [ebp-2Ch] BYREF
@@ -735,7 +735,7 @@ void __cdecl ThirdPersonViewTrace(cg_s *cgameGlob, float *start, float *end, int
     }
 }
 
-void __cdecl CG_CalcVrect(int32_t localClientNum)
+void CG_CalcVrect(int32_t localClientNum)
 {
     cg_s *cgameGlob;
     const cgs_t *cgs;
@@ -750,7 +750,7 @@ void __cdecl CG_CalcVrect(int32_t localClientNum)
     cgameGlob->refdef.useScissorViewport = 0;
 }
 
-void __cdecl CG_SmoothCameraZ(cg_s *cgameGlob)
+void CG_SmoothCameraZ(cg_s *cgameGlob)
 {
     float diff; // [esp+0h] [ebp-14h]
     int32_t timeSinceStart; // [esp+4h] [ebp-10h]
@@ -777,7 +777,7 @@ void __cdecl CG_SmoothCameraZ(cg_s *cgameGlob)
     }
 }
 
-void __cdecl CG_OffsetFirstPersonView(cg_s *cgameGlob)
+void CG_OffsetFirstPersonView(cg_s *cgameGlob)
 {
     int32_t v1; // [esp+14h] [ebp-54h]
     float delta; // [esp+1Ch] [ebp-4Ch]
@@ -850,7 +850,7 @@ void __cdecl CG_OffsetFirstPersonView(cg_s *cgameGlob)
     }
 }
 
-void __cdecl CG_CalcFov(int32_t localClientNum)
+void CG_CalcFov(int32_t localClientNum)
 {
     float fov_x; // [esp+4h] [ebp-4h]
 
@@ -858,7 +858,7 @@ void __cdecl CG_CalcFov(int32_t localClientNum)
     CG_UpdateFov(localClientNum, fov_x);
 }
 
-void __cdecl CG_CalcCubemapViewValues(cg_s *cgameGlob) // KISAKTODO: de-dup? R_CalcCubeMapViewValues()
+void CG_CalcCubemapViewValues(cg_s *cgameGlob) // KISAKTODO: de-dup? R_CalcCubeMapViewValues()
 {
     cgameGlob->refdef.x = 0;
     cgameGlob->refdef.y = 0;
@@ -943,7 +943,7 @@ void __cdecl CG_CalcCubemapViewValues(cg_s *cgameGlob) // KISAKTODO: de-dup? R_C
     }
 }
 
-void __cdecl CG_CalcTurretViewValues(int32_t localClientNum)
+void CG_CalcTurretViewValues(int32_t localClientNum)
 {
     double v1; // [esp+0h] [ebp-20h]
     double v2; // [esp+8h] [ebp-18h]
@@ -979,7 +979,7 @@ void __cdecl CG_CalcTurretViewValues(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_ApplyViewAnimation(int32_t localClientNum)
+void CG_ApplyViewAnimation(int32_t localClientNum)
 {
     weaponInfo_s* weapInfo; // [esp+20h] [ebp-10h]
     int32_t weaponIndex; // [esp+28h] [ebp-8h]
@@ -1026,7 +1026,7 @@ void __cdecl CG_ApplyViewAnimation(int32_t localClientNum)
     }
 }
 
-void __cdecl CalcViewValuesVehicle(int32_t localClientNum)
+void CalcViewValuesVehicle(int32_t localClientNum)
 {
     int32_t slot; // [esp+4h] [ebp-4h]
 
@@ -1052,7 +1052,7 @@ void __cdecl CalcViewValuesVehicle(int32_t localClientNum)
 }
 
 const float TEMP_OFFSET[3] = { 0.0f, 0.0f, 55.0f };
-void __cdecl CalcViewValuesVehicleDriver(int32_t localClientNum)
+void CalcViewValuesVehicleDriver(int32_t localClientNum)
 {
     float v1; // [esp+10h] [ebp-4Ch]
     float v2; // [esp+14h] [ebp-48h]
@@ -1138,7 +1138,7 @@ void CalcViewValuesVehicleGunner(int32_t localClientNum)
     CG_CalcFov(localClientNum);
 }
 
-bool __cdecl CG_HelicopterKillCamEnabled(int32_t localClientNum)
+bool CG_HelicopterKillCamEnabled(int32_t localClientNum)
 {
     centity_s* cent; // [esp+4h] [ebp-4h]
     cg_s *cgameGlob;
@@ -1156,7 +1156,7 @@ bool __cdecl CG_HelicopterKillCamEnabled(int32_t localClientNum)
     return cent->nextValid && cent->pose.eType == ET_HELICOPTER;
 }
 
-bool __cdecl CG_AirstrikeKillCamEnabled(int32_t localClientNum)
+bool CG_AirstrikeKillCamEnabled(int32_t localClientNum)
 {
     cg_s *cgameGlob;
 
@@ -1171,7 +1171,7 @@ bool __cdecl CG_AirstrikeKillCamEnabled(int32_t localClientNum)
     return CG_GetEntity(localClientNum, cgameGlob->predictedPlayerState.killCamEntity)->nextValid;
 }
 
-void __cdecl CG_UpdateThirdPerson(int32_t localClientNum)
+void CG_UpdateThirdPerson(int32_t localClientNum)
 {
     BOOL v1; // [esp+0h] [ebp-8h]
     cg_s *cgameGlob;
@@ -1186,7 +1186,7 @@ void __cdecl CG_UpdateThirdPerson(int32_t localClientNum)
         cgameGlob->renderingThirdPerson = 1;
 }
 
-bool __cdecl CG_KillCamEntityEnabled(int32_t localClientNum)
+bool CG_KillCamEntityEnabled(int32_t localClientNum)
 {
     cg_s *cgameGlob;
 
@@ -1201,7 +1201,7 @@ bool __cdecl CG_KillCamEntityEnabled(int32_t localClientNum)
     return CG_GetEntity(localClientNum, cgameGlob->predictedPlayerState.killCamEntity)->nextValid;
 }
 
-const ClientViewParams *__cdecl CG_GetLocalClientViewParams(int32_t localClientNum)
+const ClientViewParams *CG_GetLocalClientViewParams(int32_t localClientNum)
 {
     int32_t activeClientCountArrayIndex; // [esp+0h] [ebp-8h]
     int32_t activeClientIndex; // [esp+4h] [ebp-4h]
@@ -1235,7 +1235,7 @@ const ClientViewParams *__cdecl CG_GetLocalClientViewParams(int32_t localClientN
     return &clientViewParamsArray[activeClientCountArrayIndex][activeClientIndex];
 }
 
-void __cdecl CG_UpdateViewOffset(int32_t localClientNum)
+void CG_UpdateViewOffset(int32_t localClientNum)
 {
     cg_s *cgameGlob;
 
@@ -1257,7 +1257,7 @@ void __cdecl CG_UpdateViewOffset(int32_t localClientNum)
     CL_ResetSkeletonCache(localClientNum);
 }
 
-void __cdecl CG_UpdateKillCamEntityViewOffset(int32_t localClientNum)
+void CG_UpdateKillCamEntityViewOffset(int32_t localClientNum)
 {
     centity_s* cent; // [esp+Ch] [ebp-4h]
 
@@ -1275,12 +1275,12 @@ void __cdecl CG_UpdateKillCamEntityViewOffset(int32_t localClientNum)
     cgameGlob->refdef.viewOffset[2] = cent->pose.origin[2];
 }
 
-void __cdecl CL_SyncGpu(int(__cdecl *WorkCallback)(uint64_t))
+void CL_SyncGpu(int(*WorkCallback)(uint64_t))
 {
     R_SyncGpu(WorkCallback);
 }
 
-int32_t __cdecl CG_DrawActiveFrame(
+int32_t CG_DrawActiveFrame(
     int32_t localClientNum,
     int32_t serverTime,
     DemoType demoType,
@@ -1514,7 +1514,7 @@ int32_t __cdecl CG_DrawActiveFrame(
     }
 }
 
-void __cdecl CG_UpdateTestFX(int32_t localClientNum)
+void CG_UpdateTestFX(int32_t localClientNum)
 {
     if (s_testEffect[localClientNum].respawnTime >= 1)
     {
@@ -1523,7 +1523,7 @@ void __cdecl CG_UpdateTestFX(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_KickAngles(cg_s *cgameGlob)
+void CG_KickAngles(cg_s *cgameGlob)
 {
     double v1; // st7
     float v2; // [esp+0h] [ebp-38h]
@@ -1605,7 +1605,7 @@ void __cdecl CG_KickAngles(cg_s *cgameGlob)
     }
 }
 
-void __cdecl CG_UpdateEntInfo(int32_t localClientNum)
+void CG_UpdateEntInfo(int32_t localClientNum)
 {
     DObj_s* obj; // [esp+30h] [ebp-10h]
     int32_t num; // [esp+38h] [ebp-8h]
@@ -1628,7 +1628,7 @@ void __cdecl CG_UpdateEntInfo(int32_t localClientNum)
     }
 }
 
-void __cdecl GetCeilingHeight(cg_s *cgameGlob)
+void GetCeilingHeight(cg_s *cgameGlob)
 {
     trace_t result; // [esp+Ch] [ebp-3Ch] BYREF
     float endPos[4]; // [esp+38h] [ebp-10h] BYREF
@@ -1657,7 +1657,7 @@ void __cdecl GetCeilingHeight(cg_s *cgameGlob)
     }
 }
 
-void __cdecl DumpAnims(int32_t localClientNum)
+void DumpAnims(int32_t localClientNum)
 {
     const DObj_s *obj; // [esp+0h] [ebp-4h]
 
@@ -1677,7 +1677,7 @@ void __cdecl DumpAnims(int32_t localClientNum)
     }
 }
 
-void __cdecl DrawShellshockBlend(int32_t localClientNum)
+void DrawShellshockBlend(int32_t localClientNum)
 {
     cg_s *cgameGlob = CG_GetLocalClientGlobals(localClientNum);
 
@@ -1703,7 +1703,7 @@ void __cdecl DrawShellshockBlend(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_UpdateSceneDepthOfField(int32_t localClientNum)
+void CG_UpdateSceneDepthOfField(int32_t localClientNum)
 {
     playerState_s* ps; // [esp+Ch] [ebp-4h]
 
@@ -1733,7 +1733,7 @@ void __cdecl CG_UpdateSceneDepthOfField(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_UpdateAdsDof(int32_t localClientNum, GfxDepthOfField *dof)
+void CG_UpdateAdsDof(int32_t localClientNum, GfxDepthOfField *dof)
 {
     uint32_t ScreenTargetEntity; // eax
     float v[4]; // [esp+2Ch] [ebp-8Ch] BYREF
@@ -1854,7 +1854,7 @@ void __cdecl CG_UpdateAdsDof(int32_t localClientNum, GfxDepthOfField *dof)
     }
 }
 
-double __cdecl CG_UpdateAdsDofValue(float currentValue, float targetValue, float maxChange, float dt)
+double CG_UpdateAdsDofValue(float currentValue, float targetValue, float maxChange, float dt)
 {
     float changeVal; // [esp+0h] [ebp-4h]
     float changeVala; // [esp+0h] [ebp-4h]

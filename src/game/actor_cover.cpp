@@ -26,14 +26,14 @@ unsigned int debugNodeIndex;
 
 int debugNodeTimestamp;
 
-void __cdecl TRACK_actor_cover()
+void TRACK_actor_cover()
 {
     track_static_alloc_internal(debugCoverNodeColors, 0x2000, "debugCoverNodeColors", 5);
     track_static_alloc_internal(debugCoverNodeMsg, 10752, "debugCoverNodeMsg", 5);
     track_static_alloc_internal(debugCoverNode, 2048, "debugCoverNode", 5);
 }
 
-void __cdecl DebugDrawNodeSelectionOverlay()
+void DebugDrawNodeSelectionOverlay()
 {
     unsigned int v0; // r24
     float *v1; // r28
@@ -162,7 +162,7 @@ void DebugDrawNodePicking(const char *msg, actor_s *self, const pathnode_t *node
 }
 
 
-int __cdecl Actor_Cover_IsWithinNodeAngle(
+int Actor_Cover_IsWithinNodeAngle(
     const float *pos,
     const pathnode_t *node,
     const pathnodeRange_t *range)
@@ -196,7 +196,7 @@ int __cdecl Actor_Cover_IsWithinNodeAngle(
     return 1;
 }
 
-int __cdecl Actor_Cover_NodeRangeValid(const float *pos, const pathnode_t *node, pathnodeRange_t *range)
+int Actor_Cover_NodeRangeValid(const float *pos, const pathnode_t *node, pathnodeRange_t *range)
 {
     iassert(node);
     iassert(range);
@@ -205,7 +205,7 @@ int __cdecl Actor_Cover_NodeRangeValid(const float *pos, const pathnode_t *node,
         && Actor_Cover_IsWithinNodeAngle(pos, node, range);
 }
 
-void __cdecl Actor_Cover_InitRange(pathnodeRange_t *rangeOut, const pathnode_t *node)
+void Actor_Cover_InitRange(pathnodeRange_t *rangeOut, const pathnode_t *node)
 {
     if (!rangeOut)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_cover.cpp", 195, 0, "%s", "rangeOut");
@@ -260,7 +260,7 @@ void __cdecl Actor_Cover_InitRange(pathnodeRange_t *rangeOut, const pathnode_t *
     }
 }
 
-bool __cdecl Actor_Cover_GetAttackScript(
+bool Actor_Cover_GetAttackScript(
     actor_s *self,
     const pathnode_t *node,
     scr_animscript_t **pAttackScriptFunc)
@@ -333,7 +333,7 @@ bool __cdecl Actor_Cover_GetAttackScript(
     return result;
 }
 
-bool __cdecl Actor_Cover_CheckWithEnemy(actor_s *self, const pathnode_t *node, bool checkEnemyRange)
+bool Actor_Cover_CheckWithEnemy(actor_s *self, const pathnode_t *node, bool checkEnemyRange)
 {
     gentity_s *TargetEntity; // r31
     sentient_s *TargetSentient; // r3
@@ -434,7 +434,7 @@ float Actor_Cover_ScoreOnDistance(actor_s *self, const pathnode_t *node)
 }
 
 
-float __cdecl Actor_Cover_ScoreOnEngagement(actor_s *self, const pathnode_t *node)
+float Actor_Cover_ScoreOnEngagement(actor_s *self, const pathnode_t *node)
 {
     gentity_s *TargetEntity; // r3
     double v5; // fp0
@@ -497,7 +497,7 @@ float __cdecl Actor_Cover_ScoreOnEngagement(actor_s *self, const pathnode_t *nod
     return score;
 }
 
-float __cdecl Actor_Cover_ScoreOnNodeAngle(actor_s *self, const pathnode_t *node)
+float Actor_Cover_ScoreOnNodeAngle(actor_s *self, const pathnode_t *node)
 {
     bool PotentialThreat; // r28
     gentity_s *TargetEntity; // r29
@@ -531,7 +531,7 @@ float __cdecl Actor_Cover_ScoreOnNodeAngle(actor_s *self, const pathnode_t *node
     return 1.0f;
 }
 
-float __cdecl Actor_Cover_ScoreOnTargetDir(actor_s *self, const pathnode_t *node)
+float Actor_Cover_ScoreOnTargetDir(actor_s *self, const pathnode_t *node)
 {
     gentity_s *TargetEntity; // r29
     gentity_s *ent; // r11
@@ -568,7 +568,7 @@ float __cdecl Actor_Cover_ScoreOnTargetDir(actor_s *self, const pathnode_t *node
     return 0.0f;
 }
 
-float __cdecl Actor_Cover_ScoreOnPriority(actor_s *self, const pathnode_t *node)
+float Actor_Cover_ScoreOnPriority(actor_s *self, const pathnode_t *node)
 {
     if ((node->constant.spawnflags & 0x40) != 0)
         return 1.0f;
@@ -576,7 +576,7 @@ float __cdecl Actor_Cover_ScoreOnPriority(actor_s *self, const pathnode_t *node)
         return 0.0f;
 }
 
-float __cdecl Actor_Cover_ScoreOnPlayerLOS(actor_s *self, const pathnode_t *node)
+float Actor_Cover_ScoreOnPlayerLOS(actor_s *self, const pathnode_t *node)
 {
     if (node->dynamic.inPlayerLOSTime >= level.time && self->sentient->eTeam == TEAM_ALLIES)
         return 0.0f;
@@ -584,7 +584,7 @@ float __cdecl Actor_Cover_ScoreOnPlayerLOS(actor_s *self, const pathnode_t *node
         return 1.0f;
 }
 
-float __cdecl Actor_Cover_ScoreOnVisibility(actor_s *self, const pathnode_t *node)
+float Actor_Cover_ScoreOnVisibility(actor_s *self, const pathnode_t *node)
 {
     sentient_s *TargetSentient; // r3
     const pathnode_t *v4; // r4
@@ -597,7 +597,7 @@ float __cdecl Actor_Cover_ScoreOnVisibility(actor_s *self, const pathnode_t *nod
         return 1.0f;
 }
 
-float __cdecl Actor_Cover_ScoreOnCoverType(actor_s *self, const pathnode_t *node)
+float Actor_Cover_ScoreOnCoverType(actor_s *self, const pathnode_t *node)
 {
     if (((1 << node->constant.type) & 0x1C00) != 0)
         return 0.0f;
@@ -624,7 +624,7 @@ float Actor_Cover_GetNodeDistMetric(actor_s *self, const pathnode_t *node)
     return (1.0f - score) * ai_coverScore_distance->current.value;
 }
 
-float __cdecl Actor_Cover_GetNodeMetric(actor_s *self, const pathnode_t *node)
+float Actor_Cover_GetNodeMetric(actor_s *self, const pathnode_t *node)
 {
     double NodeDistMetric; // fp31
     double v5; // fp31
@@ -666,7 +666,7 @@ float __cdecl Actor_Cover_GetNodeMetric(actor_s *self, const pathnode_t *node)
     return  (float)((float)(ai_coverScore_priority->current.value * (float)v13) + (float)v12);
 }
 
-float __cdecl Actor_Cover_FromPoint_GetNodeMetric(actor_s *self, const pathnode_t *node)
+float Actor_Cover_FromPoint_GetNodeMetric(actor_s *self, const pathnode_t *node)
 {
     double NodeDistMetric; // fp31
     double v5; // fp1
@@ -698,7 +698,7 @@ float __cdecl Actor_Cover_FromPoint_GetNodeMetric(actor_s *self, const pathnode_
         + (float)((float)((float)v8 * ai_coverScore_nodeAngle->current.value) + (float)v7));
 }
 
-int __cdecl Actor_Cover_IsValidReacquire(actor_s *self, const pathnode_t *node)
+int Actor_Cover_IsValidReacquire(actor_s *self, const pathnode_t *node)
 {
     int result; // r3
     sentient_s *TargetSentient; // r3
@@ -722,7 +722,7 @@ int __cdecl Actor_Cover_IsValidReacquire(actor_s *self, const pathnode_t *node)
     return result;
 }
 
-int __cdecl Actor_Cover_IsValidCoverDir(actor_s *self, const pathnode_t *node)
+int Actor_Cover_IsValidCoverDir(actor_s *self, const pathnode_t *node)
 {
     gentity_s *TargetEntity; // r3
     int result; // r3
@@ -739,7 +739,7 @@ int __cdecl Actor_Cover_IsValidCoverDir(actor_s *self, const pathnode_t *node)
     return result;
 }
 
-int __cdecl Actor_Cover_IsValidCover(actor_s *self, const pathnode_t *node)
+int Actor_Cover_IsValidCover(actor_s *self, const pathnode_t *node)
 {
     sentient_s *TargetSentient; // r3
     scr_animscript_t *v6[12]; // [sp+50h] [-30h] BYREF
@@ -776,7 +776,7 @@ int __cdecl Actor_Cover_IsValidCover(actor_s *self, const pathnode_t *node)
     return 1;
 }
 
-float __cdecl Actor_Cover_MinHeightAtCover(pathnode_t *node)
+float Actor_Cover_MinHeightAtCover(pathnode_t *node)
 {
     iassert(node);
 
@@ -786,7 +786,7 @@ float __cdecl Actor_Cover_MinHeightAtCover(pathnode_t *node)
         return 36.0f;
 }
 
-pathnode_t *__cdecl Actor_Cover_FindCoverFromPoint(actor_s *self, const float *vPoint, double fMinSafeDist)
+pathnode_t *Actor_Cover_FindCoverFromPoint(actor_s *self, const float *vPoint, double fMinSafeDist)
 {
     int nodeCount; // r3
     pathnode_t *bestNode; // r23
@@ -840,7 +840,7 @@ pathnode_t *__cdecl Actor_Cover_FindCoverFromPoint(actor_s *self, const float *v
     return bestNode;
 }
 
-int __cdecl isNodeInRegion(pathnode_t *node, gentity_s *volume)
+int isNodeInRegion(pathnode_t *node, gentity_s *volume)
 {
     iassert(node);
     iassert(volume);
@@ -848,7 +848,7 @@ int __cdecl isNodeInRegion(pathnode_t *node, gentity_s *volume)
     return SV_EntityContact(node->constant.vOrigin, node->constant.vOrigin, volume);
 }
 
-int __cdecl Actor_Cover_FindBestCoverListInList(actor_s *self, pathsort_t *nodes, int iNodeCount, gentity_s *volume)
+int Actor_Cover_FindBestCoverListInList(actor_s *self, pathsort_t *nodes, int iNodeCount, gentity_s *volume)
 {
     int count = iNodeCount;
     int numValid = 0;
@@ -897,14 +897,14 @@ int __cdecl Actor_Cover_FindBestCoverListInList(actor_s *self, pathsort_t *nodes
     return count;
 }
 
-int __cdecl compare_node_sort(const void *a, const void *b)
+int compare_node_sort(const void *a, const void *b)
 {
     const pathsort_t *left = (const pathsort_t *)a;
     const pathsort_t *right = (const pathsort_t *)b;
     return (left->metric > right->metric) - (left->metric < right->metric);
 }
 
-int __cdecl Actor_Cover_FindBestCoverList(actor_s *self, pathnode_t **bestNodes, int bestNodesInList)
+int Actor_Cover_FindBestCoverList(actor_s *self, pathnode_t **bestNodes, int bestNodesInList)
 {
     int v6; // r5
     pathsort_t *v7; // r4
@@ -988,7 +988,7 @@ int __cdecl Actor_Cover_FindBestCoverList(actor_s *self, pathnode_t **bestNodes,
     return v22;
 }
 
-void __cdecl Actor_Cover_FindCoverNode(actor_s *self)
+void Actor_Cover_FindCoverNode(actor_s *self)
 {
     if (Actor_GetTargetEntity(self) && self->eState[self->stateLevel] == AIS_EXPOSED)
         self->iPotentialCoverNodeCount = Actor_Cover_FindBestCoverList(self, self->pPotentialCoverNode, 1000);
@@ -996,7 +996,7 @@ void __cdecl Actor_Cover_FindCoverNode(actor_s *self)
         self->iPotentialCoverNodeCount = 0;
 }
 
-pathnode_t *__cdecl Actor_Cover_GetCoverNode(actor_s *self)
+pathnode_t *Actor_Cover_GetCoverNode(actor_s *self)
 {
     int v2; // r11
 
@@ -1023,7 +1023,7 @@ pathnode_t *__cdecl Actor_Cover_GetCoverNode(actor_s *self)
     return 0;
 }
 
-int __cdecl Actor_Cover_UseCoverNode(actor_s *self, pathnode_t *node)
+int Actor_Cover_UseCoverNode(actor_s *self, pathnode_t *node)
 {
     ai_state_t v4; // r11
     unsigned int v6; // r11
@@ -1053,7 +1053,7 @@ int __cdecl Actor_Cover_UseCoverNode(actor_s *self, pathnode_t *node)
     return 1;
 }
 
-void __cdecl Actor_DebugDrawNodesInVolume(actor_s *self)
+void Actor_DebugDrawNodesInVolume(actor_s *self)
 {
     gentity_s *volume; // r28
     int nodeCount; // r3
@@ -1084,7 +1084,7 @@ void __cdecl Actor_DebugDrawNodesInVolume(actor_s *self)
     }
 }
 
-pathnode_t *__cdecl Actor_Cover_FindBestCover(actor_s *self)
+pathnode_t *Actor_Cover_FindBestCover(actor_s *self)
 {
     pathnode_t *result; // r3
     bool v2; // zf

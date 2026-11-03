@@ -32,7 +32,7 @@
 
 r_globals_load_t rgl;
 
-void __cdecl R_InterpretSunLightParseParamsIntoLights(SunLightParseParams *sunParse, GfxLight *sunLight)
+void R_InterpretSunLightParseParamsIntoLights(SunLightParseParams *sunParse, GfxLight *sunLight)
 {
     float scale; // [esp+8h] [ebp-20h]
     float sunColor[3]; // [esp+Ch] [ebp-1Ch] BYREF
@@ -47,7 +47,7 @@ void __cdecl R_InterpretSunLightParseParamsIntoLights(SunLightParseParams *sunPa
         R_SetUpSunLight(sunColor, sunDirection, sunLight);
 }
 
-void __cdecl R_SetUpSunLight(const float *sunColor, const float *sunDirection, GfxLight *light)
+void R_SetUpSunLight(const float *sunColor, const float *sunDirection, GfxLight *light)
 {
     iassert( light );
     memset(&light->type, 0, sizeof(GfxLight));
@@ -60,7 +60,7 @@ void __cdecl R_SetUpSunLight(const float *sunColor, const float *sunDirection, G
     light->color[2] = sunColor[2];
 }
 
-void __cdecl R_InitPrimaryLights(GfxLight *primaryLights)
+void R_InitPrimaryLights(GfxLight *primaryLights)
 {
     GfxLight *out; // [esp+20h] [ebp-Ch]
     const ComPrimaryLight *in; // [esp+24h] [ebp-8h]
@@ -95,7 +95,7 @@ void __cdecl R_InitPrimaryLights(GfxLight *primaryLights)
         memcpy(&primaryLights[rgp.world->sunPrimaryLightIndex], rgp.world->sunLight, sizeof(GfxLight));
 }
 
-void __cdecl R_AddShadowSurfaceToPrimaryLight(
+void R_AddShadowSurfaceToPrimaryLight(
     GfxWorld *world,
     uint32_t primaryLightIndex,
     uint32_t sortedSurfIndex)
@@ -117,11 +117,11 @@ void __cdecl R_AddShadowSurfaceToPrimaryLight(
     }
 }
 
-void __cdecl R_ForEachPrimaryLightAffectingSurface(
+void R_ForEachPrimaryLightAffectingSurface(
     GfxWorld *world,
     const GfxSurface *surface,
     uint32_t sortedSurfIndex,
-    void(__cdecl *Callback)(GfxWorld *, uint32_t, uint32_t))
+    void(*Callback)(GfxWorld *, uint32_t, uint32_t))
 {
     char v4; // [esp+3h] [ebp-35h]
     GfxLightRegion *v5; // [esp+4h] [ebp-34h]
@@ -176,7 +176,7 @@ void __cdecl R_ForEachPrimaryLightAffectingSurface(
     }
 }
 
-BOOL __cdecl R_ChooseTrisContextType()
+BOOL R_ChooseTrisContextType()
 {
     if (Com_GetBspVersion() <= 0x12)
         return 0;
@@ -185,7 +185,7 @@ BOOL __cdecl R_ChooseTrisContextType()
     return 0;
 }
 
-void __cdecl R_LoadStep(const char *description)
+void R_LoadStep(const char *description)
 {
     Com_Printf(CON_CHANNEL_GFX, "Loading %s...\n", description);
 #ifndef KISAK_RADIANT
@@ -193,12 +193,12 @@ void __cdecl R_LoadStep(const char *description)
 #endif
 }
 
-void __cdecl R_LoadMaterials(GfxBspLoad *load)
+void R_LoadMaterials(GfxBspLoad *load)
 {
     load->diskMaterials = (const dmaterial_t*)Com_GetBspLump(LUMP_MATERIALS, 0x48u, &load->materialCount);
 }
 
-char *__cdecl R_ParseSunLight(SunLightParseParams *params, char *text)
+char *R_ParseSunLight(SunLightParseParams *params, char *text)
 {
     parseInfo_t *src; // [esp+1Ch] [ebp-100Ch]
     parseInfo_t *srca; // [esp+1Ch] [ebp-100Ch]
@@ -324,7 +324,7 @@ void R_LoadSunSettings()
     R_InterpretSunLightParseParamsIntoLights(&s_world.sunParse, s_world.sunLight);
 }
 
-void __cdecl R_LoadPrimaryLights(uint32_t bspVersion)
+void R_LoadPrimaryLights(uint32_t bspVersion)
 {
     const ComPrimaryLight *primaryLight; // [esp+0h] [ebp-8h]
     uint32_t lightIndex; // [esp+4h] [ebp-4h]
@@ -424,7 +424,7 @@ void R_LoadLightRegions()
     }
 }
 
-DiskTriangleSoup *__cdecl R_UpdateDiskSurfaces_Version8(const DiskTriangleSoup_Version8 *oldSurfs, int surfCount)
+DiskTriangleSoup *R_UpdateDiskSurfaces_Version8(const DiskTriangleSoup_Version8 *oldSurfs, int surfCount)
 {
     int surfIndex; // [esp+4h] [ebp-8h]
     DiskTriangleSoup *newSurfs; // [esp+8h] [ebp-4h]
@@ -445,7 +445,7 @@ DiskTriangleSoup *__cdecl R_UpdateDiskSurfaces_Version8(const DiskTriangleSoup_V
     return newSurfs;
 }
 
-DiskTriangleSoup *__cdecl R_UpdateDiskSurfaces_Version12(
+DiskTriangleSoup *R_UpdateDiskSurfaces_Version12(
     const DiskTriangleSoup_Version12 *oldSurfs,
     int surfCount)
 {
@@ -468,7 +468,7 @@ DiskTriangleSoup *__cdecl R_UpdateDiskSurfaces_Version12(
     return newSurfs;
 }
 
-DiskTriangleSoup *__cdecl R_UpdateDiskSurfaces_Version14(DiskTriangleSoup *oldSurfs, int surfCount)
+DiskTriangleSoup *R_UpdateDiskSurfaces_Version14(DiskTriangleSoup *oldSurfs, int surfCount)
 {
     int surfIndex; // [esp+0h] [ebp-8h]
     DiskTriangleSoup *newSurfs; // [esp+4h] [ebp-4h]
@@ -485,7 +485,7 @@ DiskTriangleSoup *__cdecl R_UpdateDiskSurfaces_Version14(DiskTriangleSoup *oldSu
     return newSurfs;
 }
 
-void __cdecl R_LoadTriangleSurfaces(
+void R_LoadTriangleSurfaces(
     uint32_t bspVersion,
     TrisType trisType,
     DiskTriangleSoup **diskSurfaces,
@@ -524,13 +524,13 @@ void __cdecl R_LoadTriangleSurfaces(
     }
 }
 
-void __cdecl R_UnloadTriangleSurfaces(uint32_t bspVersion, DiskTriangleSoup *diskSurfaces)
+void R_UnloadTriangleSurfaces(uint32_t bspVersion, DiskTriangleSoup *diskSurfaces)
 {
     if (bspVersion <= 0xE)
         Hunk_FreeTempMemory((char*)diskSurfaces);
 }
 
-uint32_t __cdecl R_DetermineLightmapCoupling(GfxBspLoad *load, int (*coupling)[31])
+uint32_t R_DetermineLightmapCoupling(GfxBspLoad *load, int (*coupling)[31])
 {
     uint32_t otherLmapIndex; // [esp+4h] [ebp-A4h]
     uint32_t lmapIndex; // [esp+8h] [ebp-A0h]
@@ -596,7 +596,7 @@ uint32_t __cdecl R_DetermineLightmapCoupling(GfxBspLoad *load, int (*coupling)[3
     return origLmapCount;
 }
 
-int __cdecl R_BuildLightmapMergability(GfxBspLoad *load, r_lightmapGroup_t *groupInfo, int *reorder)
+int R_BuildLightmapMergability(GfxBspLoad *load, r_lightmapGroup_t *groupInfo, int *reorder)
 {
     int otherLmapIndex; // [esp+Ch] [ebp-F58h]
     int otherLmapIndexa; // [esp+Ch] [ebp-F58h]
@@ -694,7 +694,7 @@ int __cdecl R_BuildLightmapMergability(GfxBspLoad *load, r_lightmapGroup_t *grou
     return origLmapCount;
 }
 
-void __cdecl R_CopyLightmap(
+void R_CopyLightmap(
     char *srcImage,
     int srcWidth,
     int srcHeight,
@@ -716,7 +716,7 @@ void __cdecl R_CopyLightmap(
     }
 }
 
-void __cdecl R_CopyLightDefAttenuationImage(GfxLightDef *def, _DWORD *anonymousConfig)
+void R_CopyLightDefAttenuationImage(GfxLightDef *def, _DWORD *anonymousConfig)
 {
     int endCount; // [esp+30h] [ebp-7Ch]
     uint8_t *dstPixel; // [esp+38h] [ebp-74h]
@@ -803,7 +803,7 @@ void __cdecl R_CopyLightDefAttenuationImage(GfxLightDef *def, _DWORD *anonymousC
     Image_FreeRawPixels(&rawImage);
 }
 
-void __cdecl R_LoadLightmaps(GfxBspLoad *load)
+void R_LoadLightmaps(GfxBspLoad *load)
 {
     char *v1; // eax
     GfxImage *v2; // eax
@@ -945,7 +945,7 @@ GfxShadowGeometry *R_AllocShadowGeometryHeaderMemory()
     return result;
 }
 
-void __cdecl R_LoadSubmodels(TrisType trisType)
+void R_LoadSubmodels(TrisType trisType)
 {
     uint16_t v1; // [esp+4h] [ebp-18h]
     GfxBrushModel *out; // [esp+8h] [ebp-14h]
@@ -976,7 +976,7 @@ void __cdecl R_LoadSubmodels(TrisType trisType)
     }
 }
 
-void __cdecl R_SurfCalculateMagicPortalVerts(
+void R_SurfCalculateMagicPortalVerts(
     const Material *material,
     GfxSurface *surface,
     const DiskGfxVertex *vertsDisk,
@@ -1082,7 +1082,7 @@ void __cdecl R_SurfCalculateMagicPortalVerts(
     }
 }
 
-void __cdecl R_FinalizeSurfVerts(
+void R_FinalizeSurfVerts(
     const Material *material,
     GfxSurface *surface,
     const DiskGfxVertex *vertsDisk,
@@ -1132,12 +1132,12 @@ void __cdecl R_FinalizeSurfVerts(
         R_SurfCalculateMagicPortalVerts(material, surface, vertsDisk, merge, vertsMem);
 }
 
-uint8_t *__cdecl R_LoadSurfaceAlloc(uint32_t bytes)
+uint8_t *R_LoadSurfaceAlloc(uint32_t bytes)
 {
     return Hunk_Alloc(bytes, "R_LoadSurfaces", 20);
 }
 
-MaterialUsage *__cdecl R_GetMaterialUsageData(Material *material)
+MaterialUsage *R_GetMaterialUsageData(Material *material)
 {
     MaterialUsage *materialUsage; // [esp+0h] [ebp-Ch]
     bool exists; // [esp+7h] [ebp-5h] BYREF
@@ -1152,7 +1152,7 @@ MaterialUsage *__cdecl R_GetMaterialUsageData(Material *material)
     return materialUsage;
 }
 
-void __cdecl R_MaterialUsage(Material *material, uint32_t firstVertex, int vertexCount, int surfPlusIndexSize)
+void R_MaterialUsage(Material *material, uint32_t firstVertex, int vertexCount, int surfPlusIndexSize)
 {
     uint32_t *v4; // eax
     VertUsage *vertUsage; // [esp+0h] [ebp-8h]
@@ -1175,7 +1175,7 @@ void __cdecl R_MaterialUsage(Material *material, uint32_t firstVertex, int verte
     }
 }
 
-void __cdecl R_ValidateSurfaceLightmapUsage(const GfxSurface *surface)
+void R_ValidateSurfaceLightmapUsage(const GfxSurface *surface)
 {
     const MaterialTechnique *technique; // [esp+8h] [ebp-Ch]
     MaterialTechniqueType techType; // [esp+Ch] [ebp-8h]
@@ -1202,7 +1202,7 @@ void __cdecl R_ValidateSurfaceLightmapUsage(const GfxSurface *surface)
     }
 }
 
-void __cdecl R_SetSkyImage(const Material *skyMaterial)
+void R_SetSkyImage(const Material *skyMaterial)
 {
     uint32_t colorMapHash; // [esp+0h] [ebp-Ch]
     int textureIndex; // [esp+4h] [ebp-8h]
@@ -1227,7 +1227,7 @@ void __cdecl R_SetSkyImage(const Material *skyMaterial)
     }
 }
 
-void __cdecl R_CalculateWorldBounds(float *mins, float *maxs)
+void R_CalculateWorldBounds(float *mins, float *maxs)
 {
     int surfIndex; // [esp+0h] [ebp-8h]
 
@@ -1248,7 +1248,7 @@ void __cdecl R_CalculateWorldBounds(float *mins, float *maxs)
     }
 }
 
-void __cdecl R_CalculateOutdoorBounds(GfxBspLoad *load, const DiskTriangleSoup *diskSurfaces)
+void R_CalculateOutdoorBounds(GfxBspLoad *load, const DiskTriangleSoup *diskSurfaces)
 {
     int surfIndex; // [esp+0h] [ebp-10h]
     int surfCount; // [esp+4h] [ebp-Ch]
@@ -1278,7 +1278,7 @@ void __cdecl R_CalculateOutdoorBounds(GfxBspLoad *load, const DiskTriangleSoup *
     }
 }
 
-void __cdecl R_CreateMaterialList()
+void R_CreateMaterialList()
 {
     int memory; // [esp+4h] [ebp-10h]
     uint16_t hashIndex; // [esp+8h] [ebp-Ch]
@@ -1312,7 +1312,7 @@ void __cdecl R_CreateMaterialList()
     }
 }
 
-void __cdecl R_LoadSurfaces(GfxBspLoad *load)
+void R_LoadSurfaces(GfxBspLoad *load)
 {
     float v1; // [esp+4h] [ebp-94h]
     PackedUnitVec v2; // [esp+10h] [ebp-88h]
@@ -1561,7 +1561,7 @@ void __cdecl R_LoadSurfaces(GfxBspLoad *load)
     R_CreateMaterialList();
 }
 
-void __cdecl R_LoadCullGroups(TrisType trisType)
+void R_LoadCullGroups(TrisType trisType)
 {
     uint32_t firstSurface; // [esp+4h] [ebp-20h]
     GfxCullGroup *out; // [esp+8h] [ebp-1Ch]
@@ -1617,7 +1617,7 @@ void R_LoadPortalVerts()
     Com_Memcpy(rgl.portalVerts, in, 12 * vertCount);
 }
 
-int __cdecl R_FinishLoadingAabbTrees_r(GfxAabbTree *tree, int totalTreesUsed)
+int R_FinishLoadingAabbTrees_r(GfxAabbTree *tree, int totalTreesUsed)
 {
     GfxAabbTree *children; // [esp+0h] [ebp-10h]
     int childIndex; // [esp+4h] [ebp-Ch]
@@ -1653,7 +1653,7 @@ int __cdecl R_FinishLoadingAabbTrees_r(GfxAabbTree *tree, int totalTreesUsed)
     return totalTreesUsed;
 }
 
-void __cdecl R_LoadAabbTrees(TrisType trisType)
+void R_LoadAabbTrees(TrisType trisType)
 {
     GfxAabbTree *out; // [esp+4h] [ebp-18h]
     uint32_t aabbTreeIndex; // [esp+8h] [ebp-14h]
@@ -1705,7 +1705,7 @@ void __cdecl R_LoadAabbTrees(TrisType trisType)
     }
 }
 
-void __cdecl R_LoadCells(uint32_t bspVersion, TrisType trisType)
+void R_LoadCells(uint32_t bspVersion, TrisType trisType)
 {
     int *v2; // [esp+0h] [ebp-18h]
     GfxCell *out; // [esp+4h] [ebp-14h]
@@ -1837,7 +1837,7 @@ uint32_t R_LoadPortals()
     return result;
 }
 
-void __cdecl R_SetParentAndCell_r(mnode_load_t *node)
+void R_SetParentAndCell_r(mnode_load_t *node)
 {
     int cellIndex; // [esp+0h] [ebp-8h]
 
@@ -1852,7 +1852,7 @@ void __cdecl R_SetParentAndCell_r(mnode_load_t *node)
     }
 }
 
-uint32_t __cdecl R_CountNodes_r(mnode_load_t *node)
+uint32_t R_CountNodes_r(mnode_load_t *node)
 {
     uint32_t v2; // esi
 
@@ -1862,7 +1862,7 @@ uint32_t __cdecl R_CountNodes_r(mnode_load_t *node)
     return v2 + R_CountNodes_r(&rgl.nodes[node->children[1]]) + 2;
 }
 
-mnode_t *__cdecl R_SortNodes_r(mnode_load_t *node, mnode_t *out)
+mnode_t *R_SortNodes_r(mnode_load_t *node, mnode_t *out)
 {
     mnode_t *outb; // [esp+14h] [ebp+Ch]
 
@@ -1890,7 +1890,7 @@ mnode_t *__cdecl R_SortNodes_r(mnode_load_t *node, mnode_t *out)
     }
 }
 
-void __cdecl R_LoadNodesAndLeafs(uint32_t bspVersion)
+void R_LoadNodesAndLeafs(uint32_t bspVersion)
 {
     char *inNode; // [esp+0h] [ebp-30h]
     mnode_load_t *out; // [esp+4h] [ebp-2Ch]
@@ -1965,7 +1965,7 @@ void __cdecl R_LoadNodesAndLeafs(uint32_t bspVersion)
     Z_Free((char *)rgl.nodes, 22);
 }
 
-BOOL __cdecl R_CompareSurfaces(const GfxSurface &surf0, const GfxSurface &surf1)
+BOOL R_CompareSurfaces(const GfxSurface &surf0, const GfxSurface &surf1)
 {
     const MaterialTechnique *techniqueEmissive; // [esp+28h] [ebp-64h]
     int surfIndex; // [esp+30h] [ebp-5Ch]
@@ -2090,7 +2090,7 @@ uint32_t R_SortSurfaces()
         surface->tris.vertexCount = surfIndex;
         iassert( surface->tris.vertexCount == surfIndex );
     }
-    //std::_Sort<GfxSurface *, int, bool(__cdecl *)(GfxSurface const &, GfxSurface const &)>(
+    //std::_Sort<GfxSurface *, int, bool(*)(GfxSurface const &, GfxSurface const &)>(
     //    s_world.dpvs.surfaces,
     //    &s_world.dpvs.surfaces[surfaceCount],
     //    48 * surfaceCount / 48,
@@ -2155,7 +2155,7 @@ uint32_t R_SortSurfaces()
     return result;
 }
 
-char __cdecl R_DoWorldTrisCoincide(const float **xyz0, const float **xyz1)
+char R_DoWorldTrisCoincide(const float **xyz0, const float **xyz1)
 {
     char v3; // [esp+0h] [ebp-78h]
     BOOL v5; // [esp+8h] [ebp-70h]
@@ -2245,7 +2245,7 @@ char __cdecl R_DoWorldTrisCoincide(const float **xyz0, const float **xyz1)
     }
 }
 
-char __cdecl R_DoesTriCoverAnyOtherTri(
+char R_DoesTriCoverAnyOtherTri(
     uint32_t modelSurfIndexBegin,
     uint32_t modelSurfIndexEnd,
     uint32_t firstVertex,
@@ -2290,7 +2290,7 @@ char __cdecl R_DoesTriCoverAnyOtherTri(
     return 0;
 }
 
-char __cdecl R_IsSurfaceDecalLayer(
+char R_IsSurfaceDecalLayer(
     uint32_t surfIndex,
     uint32_t modelSurfIndexBegin,
     uint32_t modelSurfIndexEnd)
@@ -2314,7 +2314,7 @@ char __cdecl R_IsSurfaceDecalLayer(
     return 1;
 }
 
-uint32_t __cdecl R_BuildNoDecalAabbTree_r(GfxAabbTree *tree, uint32_t startSurfIndex)
+uint32_t R_BuildNoDecalAabbTree_r(GfxAabbTree *tree, uint32_t startSurfIndex)
 {
     int startSurfIndexNoDecal; // eax
     int v4; // [esp+0h] [ebp-18h]
@@ -2402,7 +2402,7 @@ void R_BuildNoDecalSubModels()
             startSurfIndex - s_world.models->surfaceCount);
 }
 
-char *__cdecl R_ValueForKey(const char *key, char *(*spawnVars)[2], int spawnVarCount)
+char *R_ValueForKey(const char *key, char *(*spawnVars)[2], int spawnVarCount)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -2414,7 +2414,7 @@ char *__cdecl R_ValueForKey(const char *key, char *(*spawnVars)[2], int spawnVar
     return 0;
 }
 
-bool __cdecl R_VectorForKey(const char *key, char *defaultString, char *(*spawnVars)[2], int spawnVarCount, float *v)
+bool R_VectorForKey(const char *key, char *defaultString, char *(*spawnVars)[2], int spawnVarCount, float *v)
 {
     char *string; // [esp+0h] [ebp-8h]
     bool success; // [esp+7h] [ebp-1h]
@@ -2434,7 +2434,7 @@ bool __cdecl R_VectorForKey(const char *key, char *defaultString, char *(*spawnV
     return success;
 }
 
-static void __cdecl R_CheckValidStaticModel(char *(*spawnVars)[2], int spawnVarCount, XModel **model, float *origin)
+static void R_CheckValidStaticModel(char *(*spawnVars)[2], int spawnVarCount, XModel **model, float *origin)
 {
     bool v4; // [esp+1Bh] [ebp-15h]
     char *modelName; // [esp+1Ch] [ebp-14h]
@@ -2474,7 +2474,7 @@ static void __cdecl R_CheckValidStaticModel(char *(*spawnVars)[2], int spawnVarC
     origin[2] = tempOrigin[2];
 }
 
-double __cdecl R_FloatForKey(const char *key, float defaultValue, char *(*spawnVars)[2], int spawnVarCount)
+double R_FloatForKey(const char *key, float defaultValue, char *(*spawnVars)[2], int spawnVarCount)
 {
     char *string; // [esp+4h] [ebp-4h]
 
@@ -2484,7 +2484,7 @@ double __cdecl R_FloatForKey(const char *key, float defaultValue, char *(*spawnV
     return atof(string);
 }
 
-int __cdecl R_IntForKey(const char *key, int defaultValue, char *(*spawnVars)[2], int spawnVarCount)
+int R_IntForKey(const char *key, int defaultValue, char *(*spawnVars)[2], int spawnVarCount)
 {
     char *string; // [esp+0h] [ebp-4h]
 
@@ -2495,7 +2495,7 @@ int __cdecl R_IntForKey(const char *key, int defaultValue, char *(*spawnVars)[2]
         return defaultValue;
 }
 
-void __cdecl R_GetXModelBounds(XModel *model, const float (*axes)[3], float *mins, float *maxs)
+void R_GetXModelBounds(XModel *model, const float (*axes)[3], float *mins, float *maxs)
 {
     float coord; // [esp+0h] [ebp-24h]
     int surfaceCount; // [esp+4h] [ebp-20h]
@@ -2540,7 +2540,7 @@ void __cdecl R_GetXModelBounds(XModel *model, const float (*axes)[3], float *min
     Hunk_FreeTempMemory((char*)vert);
 }
 
-void __cdecl R_CreateStaticModel(
+void R_CreateStaticModel(
     XModel *model,
     const float *origin,
     const float (*axis)[3],
@@ -2564,12 +2564,12 @@ void __cdecl R_CreateStaticModel(
     smodelDrawInst->flags = staticModelFlags;
 }
 
-uint8_t __cdecl XModelGetFlags(const XModel *model)
+uint8_t XModelGetFlags(const XModel *model)
 {
     return model->flags;
 }
 
-bool __cdecl R_DecodeGroundLighting(
+bool R_DecodeGroundLighting(
     const char *key,
     const char *defaultString,
     char *(*spawnVars)[2],
@@ -2625,7 +2625,7 @@ bool __cdecl R_DecodeGroundLighting(
     return success;
 }
 
-static void __cdecl R_LoadMiscModel(char *(*spawnVars)[2], int spawnVarCount, int bspVersion)
+static void R_LoadMiscModel(char *(*spawnVars)[2], int spawnVarCount, int bspVersion)
 {
     bool groundLightContainsValidData; // [esp+13h] [ebp-69h]
     GfxStaticModelDrawInst *smodelDrawInst; // [esp+14h] [ebp-68h]
@@ -2701,7 +2701,7 @@ static void __cdecl R_LoadMiscModel(char *(*spawnVars)[2], int spawnVarCount, in
     ++s_world.shadowGeom[smodelDrawInst->primaryLightIndex].smodelCount;
 }
 
-void __cdecl R_LoadEntities(uint32_t bspVersion)
+void R_LoadEntities(uint32_t bspVersion)
 {
     int spawnVarCount; // [esp+44h] [ebp-228h]
     char *startPos; // [esp+48h] [ebp-224h]
@@ -2838,7 +2838,7 @@ void R_AddAllProbesToAllCells()
     }
 }
 
-void __cdecl R_SetStaticModelReflectionProbe(
+void R_SetStaticModelReflectionProbe(
     const GfxWorld *world,
     const GfxStaticModelInst *smodelInst,
     GfxStaticModelDrawInst *smodelDrawInst)
@@ -2864,7 +2864,7 @@ void R_SetStaticModelReflectionProbes()
     rgl.staticModelReflectionProbesLoaded = 1;
 }
 
-void __cdecl R_AddStaticModelToAabbTree_r(GfxWorld *world, GfxAabbTree *tree, int smodelIndex)
+void R_AddStaticModelToAabbTree_r(GfxWorld *world, GfxAabbTree *tree, int smodelIndex)
 {
     int v3; // [esp+4h] [ebp-30h]
     uint8_t *children; // [esp+14h] [ebp-20h]
@@ -2951,7 +2951,7 @@ void __cdecl R_AddStaticModelToAabbTree_r(GfxWorld *world, GfxAabbTree *tree, in
     }
 }
 
-void __cdecl R_AddStaticModelToCell(GfxWorld *world, GfxStaticModelInst *smodelInst, int cellIndex)
+void R_AddStaticModelToCell(GfxWorld *world, GfxStaticModelInst *smodelInst, int cellIndex)
 {
     GfxCell *cell; // [esp+0h] [ebp-Ch]
     GfxAabbTree *tree; // [esp+4h] [ebp-8h]
@@ -2973,7 +2973,7 @@ void __cdecl R_AddStaticModelToCell(GfxWorld *world, GfxStaticModelInst *smodelI
         R_AddStaticModelToAabbTree_r(world, cell->aabbTree, smodelIndex);
 }
 
-void __cdecl R_FilterStaticModelIntoCells_r(
+void R_FilterStaticModelIntoCells_r(
     GfxWorld *world,
     mnode_t *node,
     GfxStaticModelInst *smodelInst,
@@ -3058,7 +3058,7 @@ void __cdecl R_FilterStaticModelIntoCells_r(
         R_AddStaticModelToCell(world, smodelInst, cellIndex - 1);
 }
 
-void __cdecl R_AllocStaticModels(GfxAabbTree *tree)
+void R_AllocStaticModels(GfxAabbTree *tree)
 {
     GfxAabbTree *children; // [esp+0h] [ebp-Ch]
     int childIndex; // [esp+4h] [ebp-8h]
@@ -3075,12 +3075,12 @@ void __cdecl R_AllocStaticModels(GfxAabbTree *tree)
         R_AllocStaticModels(&children[childIndex]);
 }
 
-int __cdecl CompareStaticModels(uint16_t *smodel0, uint16_t *smodel1)
+int CompareStaticModels(uint16_t *smodel0, uint16_t *smodel1)
 {
     return *smodel0 - *smodel1;
 }
 
-int __cdecl R_SortGfxAabbTreeChildren(
+int R_SortGfxAabbTreeChildren(
     GfxWorld *world,
     float *mins,
     float *maxs,
@@ -3122,7 +3122,7 @@ int __cdecl R_SortGfxAabbTreeChildren(
     return childCount < 2 ? 0 : childCount;
 }
 
-void __cdecl R_SortGfxAabbTree(GfxWorld *world, GfxAabbTree *tree)
+void R_SortGfxAabbTree(GfxWorld *world, GfxAabbTree *tree)
 {
     float *v2; // [esp+8h] [ebp-84h]
     int j; // [esp+14h] [ebp-78h]
@@ -3285,7 +3285,7 @@ void __cdecl R_SortGfxAabbTree(GfxWorld *world, GfxAabbTree *tree)
     }
 }
 
-int __cdecl R_AabbTreeChildrenCount_r(GfxAabbTree *tree)
+int R_AabbTreeChildrenCount_r(GfxAabbTree *tree)
 {
     GfxAabbTree *children; // [esp+0h] [ebp-Ch]
     uint32_t childIndex; // [esp+4h] [ebp-8h]
@@ -3298,7 +3298,7 @@ int __cdecl R_AabbTreeChildrenCount_r(GfxAabbTree *tree)
     return count;
 }
 
-GfxAabbTree *__cdecl R_AabbTreeMove_r(GfxAabbTree *tree, GfxAabbTree *newTree, GfxAabbTree *newChildren)
+GfxAabbTree *R_AabbTreeMove_r(GfxAabbTree *tree, GfxAabbTree *newTree, GfxAabbTree *newChildren)
 {
     GfxAabbTree *children; // [esp+8h] [ebp-Ch]
     uint32_t childIndex; // [esp+Ch] [ebp-8h]
@@ -3313,7 +3313,7 @@ GfxAabbTree *__cdecl R_AabbTreeMove_r(GfxAabbTree *tree, GfxAabbTree *newTree, G
     return allocChildren;
 }
 
-void __cdecl R_FixupGfxAabbTrees(GfxCell *cell)
+void R_FixupGfxAabbTrees(GfxCell *cell)
 {
     GfxAabbTree *tree; // [esp+0h] [ebp-Ch]
     GfxAabbTree *newTree; // [esp+4h] [ebp-8h]
@@ -3348,7 +3348,7 @@ int R_PostLoadEntities()
             &s_world.dpvs.smodelInsts[smodelIndex],
             sizeof(smodelCombinedInsts[smodelIndex].smodelInst));
     }
-    //std::_Sort<GfxStaticModelCombinedInst *, int, bool(__cdecl *)(GfxStaticModelCombinedInst const &, GfxStaticModelCombinedInst const &)>(
+    //std::_Sort<GfxStaticModelCombinedInst *, int, bool(*)(GfxStaticModelCombinedInst const &, GfxStaticModelCombinedInst const &)>(
     //    smodelCombinedInsts,
     //    &smodelCombinedInsts[s_world.dpvs.smodelCount],
     //    (104 * s_world.dpvs.smodelCount) / 104,
@@ -3389,7 +3389,7 @@ int R_PostLoadEntities()
     return result;
 }
 
-void __cdecl R_ForEachShadowCastingSurfaceOnEachLight(void(__cdecl *Callback)(GfxWorld *, uint32_t, uint32_t))
+void R_ForEachShadowCastingSurfaceOnEachLight(void(*Callback)(GfxWorld *, uint32_t, uint32_t))
 {
     uint32_t sortedSurfIndex; // [esp+0h] [ebp-8h]
 
@@ -3406,7 +3406,7 @@ void __cdecl R_ForEachShadowCastingSurfaceOnEachLight(void(__cdecl *Callback)(Gf
     }
 }
 
-void __cdecl R_IncrementShadowGeometryCount(GfxWorld *world, uint32_t primaryLightIndex, uint32_t idk)
+void R_IncrementShadowGeometryCount(GfxWorld *world, uint32_t primaryLightIndex, uint32_t idk)
 {
     ++world->shadowGeom[primaryLightIndex].surfaceCount;
 }
@@ -3471,7 +3471,7 @@ uint32_t R_InitShadowGeometryArrays()
     return result;
 }
 
-void __cdecl R_LoadSun(const char *name, sunflare_t *sun)
+void R_LoadSun(const char *name, sunflare_t *sun)
 {
     char *v2; // eax
     const char *nameIter; // [esp+0h] [ebp-54h]
@@ -3611,12 +3611,12 @@ struct GfxSModelSurfStats // sizeof=0x10
     uint32_t useCount;              // ...
 };
 
-BOOL __cdecl R_CompareSModels_Model(const GfxStaticModelDrawInst *s0, const GfxStaticModelDrawInst *s1)
+BOOL R_CompareSModels_Model(const GfxStaticModelDrawInst *s0, const GfxStaticModelDrawInst *s1)
 {
     return s0->model < s1->model;
 }
 
-int __cdecl R_GetSModelCacheAllocBits(const XModel *model, uint32_t lod)
+int R_GetSModelCacheAllocBits(const XModel *model, uint32_t lod)
 {
     DWORD v3; // eax
     int v6; // [esp+4h] [ebp-30h]
@@ -3649,7 +3649,7 @@ int __cdecl R_GetSModelCacheAllocBits(const XModel *model, uint32_t lod)
         return 4;
 }
 
-uint32_t __cdecl R_MaxModelsInDistRange(
+uint32_t R_MaxModelsInDistRange(
     const GfxStaticModelDrawInst **drawInstArray,
     uint32_t drawInstCount,
     const float *mins,
@@ -3717,7 +3717,7 @@ uint32_t __cdecl R_MaxModelsInDistRange(
     return maxModelsInRange;
 }
 
-uint32_t __cdecl R_AddSModelListStats(
+uint32_t R_AddSModelListStats(
     const GfxStaticModelDrawInst **drawInstArray,
     uint32_t drawInstCount,
     GfxSModelSurfStats *stats,
@@ -3767,7 +3767,7 @@ uint32_t __cdecl R_AddSModelListStats(
     return statsCount;
 }
 
-uint32_t __cdecl R_OptimalSModelResourceStats(GfxWorld *world, GfxSModelSurfStats *stats, uint32_t statLimit)
+uint32_t R_OptimalSModelResourceStats(GfxWorld *world, GfxSModelSurfStats *stats, uint32_t statLimit)
 {
     const GfxStaticModelDrawInst **drawInstArray; // [esp+ECh] [ebp-14h]
     uint32_t smodelIter; // [esp+F0h] [ebp-10h]
@@ -3781,7 +3781,7 @@ uint32_t __cdecl R_OptimalSModelResourceStats(GfxWorld *world, GfxSModelSurfStat
     drawInstArray = (const GfxStaticModelDrawInst **)Hunk_AllocateTempMemory(4 * world->dpvs.smodelCount, "R_AssignSModelCacheResources");
     for (smodelIter = 0; smodelIter != world->dpvs.smodelCount; ++smodelIter)
         drawInstArray[smodelIter] = &world->dpvs.smodelDrawInsts[smodelIter];
-    //std::_Sort<int *, int, bool(__cdecl *)(int, int)>(
+    //std::_Sort<int *, int, bool(*)(int, int)>(
     //    drawInstArray,
     //    &drawInstArray[world->dpvs.smodelCount],
     //    (4 * world->dpvs.smodelCount) >> 2,
@@ -3808,12 +3808,12 @@ uint32_t __cdecl R_OptimalSModelResourceStats(GfxWorld *world, GfxSModelSurfStat
     return statCount;
 }
 
-static BOOL __cdecl R_CompareSModelStats_Score(const GfxSModelSurfStats &s0, const GfxSModelSurfStats &s1)
+static BOOL R_CompareSModelStats_Score(const GfxSModelSurfStats &s0, const GfxSModelSurfStats &s1)
 {
     return s1.useCount << s0.smcAllocBits < s0.useCount << s1.smcAllocBits;
 }
 
-uint32_t __cdecl R_GetEntryCount(GfxSModelSurfStats *stats)
+uint32_t R_GetEntryCount(GfxSModelSurfStats *stats)
 {
     if (1 << (16 - LOBYTE(stats->smcAllocBits)) < stats->useCount)
         return 1 << (16 - LOBYTE(stats->smcAllocBits));
@@ -3821,7 +3821,7 @@ uint32_t __cdecl R_GetEntryCount(GfxSModelSurfStats *stats)
         return stats->useCount;
 }
 
-uint8_t __cdecl R_AssignSModelCacheIndex(
+uint8_t R_AssignSModelCacheIndex(
     char smcAllocBits,
     uint32_t maxEntryCount,
     uint32_t *smcUseCount)
@@ -3839,7 +3839,7 @@ uint8_t __cdecl R_AssignSModelCacheIndex(
     return leastUsedCache;
 }
 
-void __cdecl XModelSetSModelCacheForLod(
+void XModelSetSModelCacheForLod(
     XModel *model,
     uint32_t lod,
     uint32_t smcIndex,
@@ -3873,7 +3873,7 @@ void __cdecl XModelSetSModelCacheForLod(
     model->lodInfo[lod].smcAllocBits = smcAllocBits;
 }
 
-void __cdecl R_AssignSModelCacheResources(GfxWorld *world)
+void R_AssignSModelCacheResources(GfxWorld *world)
 {
     uint8_t v1; // [esp+17Bh] [ebp-2029h]
     XModel *model; // [esp+17Ch] [ebp-2028h]
@@ -3887,7 +3887,7 @@ void __cdecl R_AssignSModelCacheResources(GfxWorld *world)
     iassert( world );
     memset(smcUseCount, 0, sizeof(smcUseCount));
     v7 = R_OptimalSModelResourceStats(world, stats, 0x200u);
-    //std::_Sort<DBReorderAssetEntry *, int, bool(__cdecl *)(DBReorderAssetEntry const &, DBReorderAssetEntry const &)>(
+    //std::_Sort<DBReorderAssetEntry *, int, bool(*)(DBReorderAssetEntry const &, DBReorderAssetEntry const &)>(
     //    stats,
     //    &stats[v7],
     //    (16 * v7) >> 4,
@@ -3903,7 +3903,7 @@ void __cdecl R_AssignSModelCacheResources(GfxWorld *world)
     }
 }
 
-GfxWorld *__cdecl R_LoadWorldInternal(const char *name)
+GfxWorld *R_LoadWorldInternal(const char *name)
 {
     char *FilenameSubString; // eax
     uint16_t EntityCount; // ax

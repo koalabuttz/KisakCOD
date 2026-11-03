@@ -22,7 +22,7 @@ int g_dumpStaticModelCount;
 int g_dumpStaticModelFileHandle;
 char g_dumpStaticModelFilePath[20] = "staticModelInfo.csv";
 
-char __cdecl R_PreTessStaticModelCachedList(
+char R_PreTessStaticModelCachedList(
     const XModel *model,
     uint16_t *list,
     uint32_t count,
@@ -87,7 +87,7 @@ char __cdecl R_PreTessStaticModelCachedList(
     return 1;
 }
 
-GfxStaticModelId __cdecl R_GetStaticModelId(uint32_t smodelIndex, int lod)
+GfxStaticModelId R_GetStaticModelId(uint32_t smodelIndex, int lod)
 {
     const XModelLodInfo *lodInfo; // [esp+8h] [ebp-20h]
     XModel *model; // [esp+10h] [ebp-18h]
@@ -139,7 +139,7 @@ GfxStaticModelId __cdecl R_GetStaticModelId(uint32_t smodelIndex, int lod)
     }
 }
 
-void __cdecl R_AddDelayedStaticModelDrawSurf(
+void R_AddDelayedStaticModelDrawSurf(
     GfxDelayedCmdBuf *delayedCmdBuf,
     XSurface *xsurf,
     uint8_t *list,
@@ -150,7 +150,7 @@ void __cdecl R_AddDelayedStaticModelDrawSurf(
     R_WritePrimDrawSurfData(delayedCmdBuf, list, (count + 1) >> 1);
 }
 
-void __cdecl R_EndDumpStaticModelLodInfo()
+void R_EndDumpStaticModelLodInfo()
 {
     char *basePath; // [esp+0h] [ebp-4h]
 
@@ -170,7 +170,7 @@ void __cdecl R_EndDumpStaticModelLodInfo()
     }
 }
 
-void __cdecl R_AddAllStaticModelSurfacesCamera()
+void R_AddAllStaticModelSurfacesCamera()
 {
     char* Name; // eax
     float dist; // [esp+8h] [ebp-1104h]
@@ -341,7 +341,7 @@ void __cdecl R_AddAllStaticModelSurfacesCamera()
     scene.drawSurfCount[DRAW_SURF_SMODEL_CAMERA_EMISSIVE] = surfData.drawSurf[2].current - scene.drawSurfs[DRAW_SURF_SMODEL_CAMERA_EMISSIVE];
 }
 
-void __cdecl R_SkinStaticModelsCameraForLod(
+void R_SkinStaticModelsCameraForLod(
     const XModel *model,
     uint8_t primaryLightIndex,
     uint8_t *list,
@@ -404,7 +404,7 @@ void __cdecl R_SkinStaticModelsCameraForLod(
     }
 }
 
-void __cdecl R_SkinStaticModelsCamera(
+void R_SkinStaticModelsCamera(
     const XModel *model,
     uint8_t primaryLightIndex,
     uint16_t (*staticModelLodList)[4][128],
@@ -423,7 +423,7 @@ void __cdecl R_SkinStaticModelsCamera(
             surfData);
 }
 
-void __cdecl R_SkinStaticModelsCameraForSurface(
+void R_SkinStaticModelsCameraForSurface(
     const XModel *model,
     uint8_t primaryLightIndex,
     uint16_t (*staticModelLodList)[128],
@@ -447,7 +447,7 @@ void __cdecl R_SkinStaticModelsCameraForSurface(
     }
 }
 
-void __cdecl R_ShowCountsStaticModel(int smodelIndex, int lod)
+void R_ShowCountsStaticModel(int smodelIndex, int lod)
 {
     char *v2; // eax
     char *v3; // eax
@@ -500,7 +500,7 @@ void __cdecl R_ShowCountsStaticModel(int smodelIndex, int lod)
     }
 }
 
-void __cdecl R_DumpStaticModelLodInfo(const GfxStaticModelDrawInst *smodelDrawInst, float dist)
+void R_DumpStaticModelLodInfo(const GfxStaticModelDrawInst *smodelDrawInst, float dist)
 {
     if (g_dumpStaticModelFileHandle != -1)
     {
@@ -525,7 +525,7 @@ void __cdecl R_DumpStaticModelLodInfo(const GfxStaticModelDrawInst *smodelDrawIn
 
 uint32_t _S1_0; 
 float radius2pixels;
-void __cdecl R_StaticModelWriteInfo(int fileHandle, const GfxStaticModelDrawInst *smodelDrawInst, const float dist)
+void R_StaticModelWriteInfo(int fileHandle, const GfxStaticModelDrawInst *smodelDrawInst, const float dist)
 {
     float v3; // [esp+5Ch] [ebp-101Ch]
     char dest; // [esp+60h] [ebp-1018h] BYREF
@@ -571,7 +571,7 @@ void __cdecl R_StaticModelWriteInfo(int fileHandle, const GfxStaticModelDrawInst
     FS_Write(&dest, &v5[strlen(&dest)] - v5, fileHandle);
 }
 
-void __cdecl R_SortAllStaticModelSurfacesCamera()
+void R_SortAllStaticModelSurfacesCamera()
 {
     KISAK_NULLSUB();
     R_SortDrawSurfs(scene.drawSurfs[DRAW_SURF_SMODEL_CAMERA_LIT], scene.drawSurfCount[DRAW_SURF_SMODEL_CAMERA_LIT]);
@@ -581,7 +581,7 @@ void __cdecl R_SortAllStaticModelSurfacesCamera()
     R_SortDrawSurfs(scene.drawSurfs[DRAW_SURF_SMODEL_CAMERA_EMISSIVE], scene.drawSurfCount[DRAW_SURF_SMODEL_CAMERA_EMISSIVE]);
 }
 
-void __cdecl R_SortAllStaticModelSurfacesSunShadow()
+void R_SortAllStaticModelSurfacesSunShadow()
 {
     KISAK_NULLSUB();
     R_SortDrawSurfs(scene.drawSurfs[DRAW_SURF_SMODEL_SUNSHADOW_0], scene.drawSurfCount[DRAW_SURF_SMODEL_SUNSHADOW_0]);
@@ -589,13 +589,13 @@ void __cdecl R_SortAllStaticModelSurfacesSunShadow()
     R_SortDrawSurfs(scene.drawSurfs[DRAW_SURF_SMODEL_SUNSHADOW_1], scene.drawSurfCount[DRAW_SURF_SMODEL_SUNSHADOW_1]);
 }
 
-void __cdecl R_AddAllStaticModelSurfacesSunShadow()
+void R_AddAllStaticModelSurfacesSunShadow()
 {
     R_AddAllStaticModelSurfacesRangeSunShadow(0, 0x1000u);
     R_AddAllStaticModelSurfacesRangeSunShadow(1u, 0x2000u);
 }
 
-void __cdecl R_AddAllStaticModelSurfacesRangeSunShadow(uint32_t partitionIndex, uint32_t maxDrawSurfCount)
+void R_AddAllStaticModelSurfacesRangeSunShadow(uint32_t partitionIndex, uint32_t maxDrawSurfCount)
 {
     float dist; // [esp+4h] [ebp-10E4h]
     GfxStaticModelId StaticModelId; // [esp+50h] [ebp-1098h]
@@ -732,7 +732,7 @@ void __cdecl R_AddAllStaticModelSurfacesRangeSunShadow(uint32_t partitionIndex, 
     scene.drawSurfCount[stage] = surfData.drawSurfList.current - scene.drawSurfs[stage];
 }
 
-void __cdecl R_SkinStaticModelsShadowForLod(
+void R_SkinStaticModelsShadowForLod(
     const XModel *model,
     uint8_t *list,
     uint32_t count,
@@ -807,7 +807,7 @@ void __cdecl R_SkinStaticModelsShadowForLod(
     }
 }
 
-void __cdecl R_SkinStaticModelsShadow(
+void R_SkinStaticModelsShadow(
     const XModel *model,
     uint16_t (*staticModelLodList)[4][128],
     uint16_t (*staticModelLodCount)[4],
@@ -824,7 +824,7 @@ void __cdecl R_SkinStaticModelsShadow(
             surfData);
 }
 
-void __cdecl R_SkinStaticModelsShadowForSurface(
+void R_SkinStaticModelsShadowForSurface(
     const XModel *model,
     uint16_t (*staticModelLodList)[128],
     uint16_t *staticModelLodCount,
@@ -846,7 +846,7 @@ void __cdecl R_SkinStaticModelsShadowForSurface(
     }
 }
 
-void __cdecl R_AddAllStaticModelSurfacesSpotShadow(uint32_t spotShadowIndex, uint32_t primaryLightIndex)
+void R_AddAllStaticModelSurfacesSpotShadow(uint32_t spotShadowIndex, uint32_t primaryLightIndex)
 {
     double v2; // st7
     float dist; // [esp+4h] [ebp-10B4h]

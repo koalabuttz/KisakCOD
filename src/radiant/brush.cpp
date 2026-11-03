@@ -1766,7 +1766,7 @@ extern void     vectoangles( float *angles, int vec );
 extern void     sub_4AA220( const float *in, const float *anglesDeg, float *out );
 // 0x4A59C0 (com_math.cpp:1399) is the engine's ClosestApproachOfTwoLines — the
 // radiant binary carried its own copy; the port calls the engine fn (com_math.cpp).
-extern void __cdecl ClosestApproachOfTwoLines( const float *p1, const float *dir1,
+extern void ClosestApproachOfTwoLines( const float *p1, const float *dir1,
                                                const float *p2, const float *dir2,
                                                float *s, float *t );
 
@@ -5865,7 +5865,7 @@ void Face_AddWindingToTriBatch( face_t *face, const float *packedColor,
                                 float ( *normal )[3], float *colorArr,
                                 float ( *st )[2] )
 {
-    extern void __cdecl R_AddRenderCmdDrawTris(
+    extern void R_AddRenderCmdDrawTris(
         Material *material, MaterialTechniqueType techType, short indexCount,
         const uint16_t *indices, short vertexCount,
         const float (*xyzw)[4], const float (*normal)[3], float *color,
@@ -6591,7 +6591,7 @@ void DrawAngles( int drawType, const orientation_t *orient, GfxColor *col )
 extern char *ValueForKey2( int e, const char *key );                 // entity.cpp 0x4825C0
 extern int   ScriptGroup_Unreachable( const char *a1 );              // scriptgroup.cpp 0x451170
 extern bool  ScriptGroup_BrushIsTrigger( selbrush_t *b );            // scriptgroup.cpp 0x453FD0
-extern void  __cdecl R_AddRenderCmdDrawTris(
+extern void  R_AddRenderCmdDrawTris(
     Material *material, MaterialTechniqueType techType, short indexCount,
     const uint16_t *indices, short vertexCount,
     const float (*xyzw)[4], const float (*normal)[3], float *color,

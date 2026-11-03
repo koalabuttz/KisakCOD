@@ -11,7 +11,7 @@
 int ui_numArenas;
 char *ui_arenaInfos[64];
 
-int __cdecl UI_ParseInfos(const char *buf, int max, char **infos)
+int UI_ParseInfos(const char *buf, int max, char **infos)
 {
     uint8_t *v3; // eax
     char v5; // [esp+3h] [ebp-865h]
@@ -72,7 +72,7 @@ int __cdecl UI_ParseInfos(const char *buf, int max, char **infos)
     }
 }
 
-void __cdecl UI_LoadArenas()
+void UI_LoadArenas()
 {
     const char *v0; // eax
     const char *v1; // eax

@@ -87,7 +87,7 @@ void SL_TransferSystem(uint32_t from, uint32_t to);
 void SL_BeginLoadScripts();
 void SL_EndLoadScripts();
 
-void __cdecl SL_AddUser(uint32_t stringValue, uint32_t user);
+void SL_AddUser(uint32_t stringValue, uint32_t user);
 void SL_AddUserInternal(RefString* refStr, uint32_t user);
 
 void SL_AddRefToString(uint32_t stringValue);
@@ -108,7 +108,7 @@ uint32_t SL_GetString(const char* str, uint32_t user);
 uint32_t SL_GetLowercaseString_(const char* str, uint32_t user, mtType_t type);
 uint32_t SL_GetLowercaseString(const char* str, uint32_t user);
 
-void __cdecl SL_TransferRefToUser(uint32_t stringValue, uint32_t user);
+void SL_TransferRefToUser(uint32_t stringValue, uint32_t user);
 
 int SL_GetRefStringLen(RefString* refString);
 int SL_GetStringLen(uint32_t stringValue);
@@ -124,13 +124,13 @@ void SL_RemoveRefToStringOfSize(uint32_t stringValue, uint32_t len);
 
 int SL_IsLowercaseString(uint32_t stringValue);
 
-void __cdecl Scr_SetString(uint16_t *to, uint32_t from);
+void Scr_SetString(uint16_t *to, uint32_t from);
 
-uint32_t __cdecl SL_ConvertToLowercase(uint32_t stringValue, uint32_t user, mtType_t type);
+uint32_t SL_ConvertToLowercase(uint32_t stringValue, uint32_t user, mtType_t type);
 
-uint32_t __cdecl Scr_CreateCanonicalFilename(const char *filename);
+uint32_t Scr_CreateCanonicalFilename(const char *filename);
 
 void Scr_SetStringFromCharString(uint16_t *to, const char *from);
 uint32_t SL_GetUser(uint32_t stringValue);
 
-uint32_t __cdecl Scr_AllocString(char *s, int sys);
+uint32_t Scr_AllocString(char *s, int sys);

@@ -31,7 +31,7 @@ uint16_t *wheelTags[4] =
     &scr_const.tag_wheel_back_right
 };
 
-void __cdecl CG_VehRegisterDvars()
+void CG_VehRegisterDvars()
 {
     DvarLimits min; // [esp+4h] [ebp-10h]
     DvarLimits mina; // [esp+4h] [ebp-10h]
@@ -72,7 +72,7 @@ void __cdecl CG_VehRegisterDvars()
     heli_barrelSlowdown = Dvar_RegisterFloat("heli_barrelSlowdown", 360.0, mind, DVAR_NOFLAG, "");
 }
 
-DObj_s *__cdecl GetVehicleEntDObj(int32_t localClientNum, centity_s *centVeh)
+DObj_s *GetVehicleEntDObj(int32_t localClientNum, centity_s *centVeh)
 {
     cgs_t *cgs;
 
@@ -87,7 +87,7 @@ DObj_s *__cdecl GetVehicleEntDObj(int32_t localClientNum, centity_s *centVeh)
         cgs->gameModels[centVeh->nextState.un2.hintString]);
 }
 
-void __cdecl CG_VehGunnerPOV(int32_t localClientNum, float *resultOrigin, float *resultAngles)
+void CG_VehGunnerPOV(int32_t localClientNum, float *resultOrigin, float *resultAngles)
 {
     clientInfo_t *ci; // [esp+4h] [ebp-28h]
     float tagMtx[3][3]; // [esp+8h] [ebp-24h] BYREF
@@ -101,7 +101,7 @@ void __cdecl CG_VehGunnerPOV(int32_t localClientNum, float *resultOrigin, float 
     AxisToAngles(tagMtx, resultAngles);
 }
 
-void __cdecl GetTagMatrix(
+void GetTagMatrix(
     int32_t localClientNum,
     uint32_t vehEntNum,
     uint16_t tagName,
@@ -139,7 +139,7 @@ void __cdecl GetTagMatrix(
     }
 }
 
-bool __cdecl CG_VehLocalClientUsingVehicle(int32_t localClientNum)
+bool CG_VehLocalClientUsingVehicle(int32_t localClientNum)
 {
     clientInfo_t *ci; // [esp+0h] [ebp-4h]
 
@@ -150,7 +150,7 @@ bool __cdecl CG_VehLocalClientUsingVehicle(int32_t localClientNum)
     return ci->attachedVehEntNum != ENTITYNUM_NONE;
 }
 
-bool __cdecl CG_VehLocalClientDriving(int32_t localClientNum)
+bool CG_VehLocalClientDriving(int32_t localClientNum)
 {
     clientInfo_t *ci; // [esp+0h] [ebp-4h]
 
@@ -161,7 +161,7 @@ bool __cdecl CG_VehLocalClientDriving(int32_t localClientNum)
     return ci->attachedVehEntNum != ENTITYNUM_NONE && ci->attachedVehSlotIndex == VEHICLE_RIDESLOT_DRIVER;
 }
 
-bool __cdecl CG_VehEntityUsingVehicle(int32_t localClientNum, uint32_t entNum)
+bool CG_VehEntityUsingVehicle(int32_t localClientNum, uint32_t entNum)
 {
     clientInfo_t *ci; // [esp+0h] [ebp-4h]
 
@@ -170,7 +170,7 @@ bool __cdecl CG_VehEntityUsingVehicle(int32_t localClientNum, uint32_t entNum)
     return ci && ci->attachedVehEntNum != ENTITYNUM_NONE;
 }
 
-clientInfo_t *__cdecl ClientInfoForEntity(int32_t localClientNum, uint32_t entNum)
+clientInfo_t *ClientInfoForEntity(int32_t localClientNum, uint32_t entNum)
 {
     centity_s *cent; // [esp+0h] [ebp-4h]
 
@@ -190,7 +190,7 @@ clientInfo_t *__cdecl ClientInfoForEntity(int32_t localClientNum, uint32_t entNu
     return &bgs->clientinfo[cent->nextState.clientNum];
 }
 
-int32_t __cdecl CG_VehLocalClientVehicleSlot(int32_t localClientNum)
+int32_t CG_VehLocalClientVehicleSlot(int32_t localClientNum)
 {
     clientInfo_t *ci; // [esp+0h] [ebp-4h]
 
@@ -202,7 +202,7 @@ int32_t __cdecl CG_VehLocalClientVehicleSlot(int32_t localClientNum)
     return ci->attachedVehSlotIndex;
 }
 
-int32_t __cdecl CG_VehPlayerVehicleSlot(int32_t localClientNum, uint32_t entNum)
+int32_t CG_VehPlayerVehicleSlot(int32_t localClientNum, uint32_t entNum)
 {
     clientInfo_t *ci; // [esp+0h] [ebp-4h]
 
@@ -214,7 +214,7 @@ int32_t __cdecl CG_VehPlayerVehicleSlot(int32_t localClientNum, uint32_t entNum)
     return ci->attachedVehSlotIndex;
 }
 
-void __cdecl CG_VehSeatTransformForPlayer(
+void CG_VehSeatTransformForPlayer(
     int32_t localClientNum,
     uint32_t entNum,
     float *resultOrigin,
@@ -232,7 +232,7 @@ void __cdecl CG_VehSeatTransformForPlayer(
     SeatTransformForClientInfo(localClientNum, ci, resultOrigin, resultAngles);
 }
 
-void __cdecl SeatTransformForClientInfo(int32_t localClientNum, clientInfo_t *ci, float *resultOrigin, float *resultAngles)
+void SeatTransformForClientInfo(int32_t localClientNum, clientInfo_t *ci, float *resultOrigin, float *resultAngles)
 {
     iassert(ci);
     iassert(ci->attachedVehEntNum != ENTITYNUM_NONE);
@@ -240,7 +240,7 @@ void __cdecl SeatTransformForClientInfo(int32_t localClientNum, clientInfo_t *ci
     SeatTransformForSlot(localClientNum, ci->attachedVehEntNum, ci->attachedVehSlotIndex, resultOrigin, resultAngles);
 }
 
-void __cdecl SeatTransformForSlot(
+void SeatTransformForSlot(
     int32_t localClientNum,
     uint32_t vehEntNum,
     uint32_t vehSlotIdx,
@@ -266,7 +266,7 @@ void __cdecl SeatTransformForSlot(
     }
 }
 
-void __cdecl CG_VehSeatOriginForLocalClient(int32_t localClientNum, float *result)
+void CG_VehSeatOriginForLocalClient(int32_t localClientNum, float *result)
 {
     clientInfo_t *ci; // [esp+0h] [ebp-4h]
 
@@ -276,7 +276,7 @@ void __cdecl CG_VehSeatOriginForLocalClient(int32_t localClientNum, float *resul
     SeatTransformForClientInfo(localClientNum, ci, result, 0);
 }
 
-double __cdecl Veh_GetTurretBarrelRoll(int32_t localClientNum, centity_s *cent)
+double Veh_GetTurretBarrelRoll(int32_t localClientNum, centity_s *cent)
 {
     int32_t entityNum; // [esp+0h] [ebp-10h]
     vehicleEffects *vehFx; // [esp+8h] [ebp-8h]
@@ -297,13 +297,13 @@ double __cdecl Veh_GetTurretBarrelRoll(int32_t localClientNum, centity_s *cent)
     return vehFx->barrelPos;
 }
 
-int32_t __cdecl CG_GetEntityIndex(int32_t localClientNum, const centity_s *cent)
+int32_t CG_GetEntityIndex(int32_t localClientNum, const centity_s *cent)
 {
     iassert(cent->nextState.number == (cent - &cg_entitiesArray[localClientNum][0]) % MAX_GENTITIES);
     return cent->nextState.number;
 }
 
-//void __cdecl Veh_IncTurretBarrelRoll(int32_t localClientNum, int32_t entityNum, float rotation)
+//void Veh_IncTurretBarrelRoll(int32_t localClientNum, int32_t entityNum, float rotation)
 //{
 //    float v3; // [esp+0h] [ebp-14h]
 //    float v4; // [esp+4h] [ebp-10h]
@@ -322,7 +322,7 @@ int32_t __cdecl CG_GetEntityIndex(int32_t localClientNum, const centity_s *cent)
 //    vehFx->barrelVelocity = v3;
 //}
 
-void __cdecl CG_VehProcessEntity(int32_t localClientNum, centity_s *cent)
+void CG_VehProcessEntity(int32_t localClientNum, centity_s *cent)
 {
     DObj_s *obj; // [esp+10h] [ebp-78h]
     vehfx_t fxInfo; // [esp+18h] [ebp-70h] BYREF
@@ -366,7 +366,7 @@ void __cdecl CG_VehProcessEntity(int32_t localClientNum, centity_s *cent)
     }
 }
 
-void __cdecl SetupPoseControllers(int32_t localClientNum, DObj_s *obj, centity_s *cent, vehfx_t *fxInfo)
+void SetupPoseControllers(int32_t localClientNum, DObj_s *obj, centity_s *cent, vehfx_t *fxInfo)
 {
     const XModel *Model; // eax
     uint16_t v5; // ax
@@ -555,7 +555,7 @@ void __cdecl SetupPoseControllers(int32_t localClientNum, DObj_s *obj, centity_s
     }
 }
 
-void __cdecl VehicleFXTest(int32_t localClientNum, const DObj_s *obj, centity_s *cent, vehfx_t *fxInfo)
+void VehicleFXTest(int32_t localClientNum, const DObj_s *obj, centity_s *cent, vehfx_t *fxInfo)
 {
     char *v4; // eax
     entityState_s_un1 v6; // [esp+18h] [ebp-10Ch]
@@ -688,7 +688,7 @@ void __cdecl VehicleFXTest(int32_t localClientNum, const DObj_s *obj, centity_s 
     }
 }
 
-void __cdecl CG_VehSphereCoordsToPos(float sphereDistance, float sphereYaw, float sphereAltitude, float *result)
+void CG_VehSphereCoordsToPos(float sphereDistance, float sphereYaw, float sphereAltitude, float *result)
 {
     float v4; // [esp+8h] [ebp-20h]
     float v5; // [esp+14h] [ebp-14h]
@@ -708,7 +708,7 @@ void __cdecl CG_VehSphereCoordsToPos(float sphereDistance, float sphereYaw, floa
     result[2] = sphereDistance * altitudeCos;
 }
 
-void __cdecl CG_Veh_Init()
+void CG_Veh_Init()
 {
     memset((uint8_t *)vehEffects, 0, sizeof(vehEffects));
 }

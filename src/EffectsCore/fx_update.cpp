@@ -21,7 +21,7 @@
 
 #include <universal/profile.h>
 
-void __cdecl FX_SpawnlAlFutureLooping(
+void FX_SpawnlAlFutureLooping(
     FxSystem *system,
     FxEffect *effect,
     int32_t elemDefFirst,
@@ -51,7 +51,7 @@ void __cdecl FX_SpawnlAlFutureLooping(
                 0x7FFFFFFF);
     }
 }
-void __cdecl FX_SpawnTrailLoopingElems(
+void FX_SpawnTrailLoopingElems(
     FxSystem* system,
     FxEffect* effect,
     FxTrail* trail,
@@ -151,7 +151,7 @@ void __cdecl FX_SpawnTrailLoopingElems(
     }
 }
 
-void __cdecl FX_SpawnLoopingElems(
+void FX_SpawnLoopingElems(
     FxSystem *system,
     FxEffect *effect,
     int32_t elemDefIndex,
@@ -208,7 +208,7 @@ void __cdecl FX_SpawnLoopingElems(
     }
 }
 
-void __cdecl FX_SpawnAllFutureLooping(
+void FX_SpawnAllFutureLooping(
     FxSystem *system,
     FxEffect *effect,
     int32_t elemDefFirst,
@@ -232,7 +232,7 @@ void __cdecl FX_SpawnAllFutureLooping(
     }
 }
 
-int32_t __cdecl FX_LimitStabilizeTimeForElemDef_Recurse(
+int32_t FX_LimitStabilizeTimeForElemDef_Recurse(
     const FxElemDef *elemDef,
     bool needToSpawnSystem,
     int32_t originalUpdateTime)
@@ -316,7 +316,7 @@ int32_t __cdecl FX_LimitStabilizeTimeForElemDef_Recurse(
     return maxStabilizeTime;
 }
 
-int32_t __cdecl FX_LimitStabilizeTimeForElemDef_SelfOnly(const FxElemDef *elemDef, bool needToSpawnSystem)
+int32_t FX_LimitStabilizeTimeForElemDef_SelfOnly(const FxElemDef *elemDef, bool needToSpawnSystem)
 {
     int32_t result; // [esp+4h] [ebp-4h]
 
@@ -335,7 +335,7 @@ int32_t __cdecl FX_LimitStabilizeTimeForElemDef_SelfOnly(const FxElemDef *elemDe
     return result;
 }
 
-int32_t __cdecl FX_LimitStabilizeTimeForEffectDef_Recurse(const FxEffectDef *remoteEffectDef, int32_t originalUpdateTime)
+int32_t FX_LimitStabilizeTimeForEffectDef_Recurse(const FxEffectDef *remoteEffectDef, int32_t originalUpdateTime)
 {
     int32_t v3; // [esp+0h] [ebp-1Ch]
     int32_t v4; // [esp+4h] [ebp-18h]
@@ -366,7 +366,7 @@ int32_t __cdecl FX_LimitStabilizeTimeForEffectDef_Recurse(const FxEffectDef *rem
     return maxStabilizeTime;
 }
 
-void __cdecl FX_BeginLooping(
+void FX_BeginLooping(
     FxSystem* system,
     FxEffect* effect,
     int32_t elemDefFirst,
@@ -434,7 +434,7 @@ void __cdecl FX_BeginLooping(
     }
 }
 
-void __cdecl FX_TriggerOneShot(
+void FX_TriggerOneShot(
     FxSystem *system,
     FxEffect *effect,
     int32_t elemDefFirst,
@@ -470,7 +470,7 @@ void __cdecl FX_TriggerOneShot(
         FX_SpawnOneShotElems(system, effect, elemDefIndex, frameWhenPlayed, msecWhenPlayed);
 }
 
-void __cdecl FX_SpawnOneShotElems(
+void FX_SpawnOneShotElems(
     FxSystem* system,
     FxEffect* effect,
     int32_t elemDefIndex,
@@ -498,7 +498,7 @@ void __cdecl FX_SpawnOneShotElems(
     }
 }
 
-void __cdecl FX_StartNewEffect(FxSystem* system, FxEffect* effect)
+void FX_StartNewEffect(FxSystem* system, FxEffect* effect)
 {
     const FxEffectDef* def; // [esp+0h] [ebp-4h]
 
@@ -523,12 +523,12 @@ void __cdecl FX_StartNewEffect(FxSystem* system, FxEffect* effect)
     FX_SortNewElemsInEffect(system, effect);
 }
 
-bool __cdecl FX_GetBoltTemporalBits(int32_t localClientNum, int32_t dobjHandle)
+bool FX_GetBoltTemporalBits(int32_t localClientNum, int32_t dobjHandle)
 {
     return dobjHandle < ENTITYNUM_WORLD && (CG_GetEntity(localClientNum, dobjHandle)->nextState.lerp.eFlags & 2) != 0;
 }
 
-char __cdecl FX_GetBoneOrientation(int32_t localClientNum, uint32_t dobjHandle, int32_t boneIndex, orientation_t *orient)
+char FX_GetBoneOrientation(int32_t localClientNum, uint32_t dobjHandle, int32_t boneIndex, orientation_t *orient)
 {
     DObj_s *obj; // [esp+60h] [ebp-8h]
     centity_s *pose; // [esp+64h] [ebp-4h]
@@ -661,12 +661,12 @@ char __cdecl FX_GetBoneOrientation(int32_t localClientNum, uint32_t dobjHandle, 
     }
 }
 
-bool __cdecl FX_GetBoneOrientation_IsDObjEntityValid(int32_t localClientNum, int32_t dobjHandle)
+bool FX_GetBoneOrientation_IsDObjEntityValid(int32_t localClientNum, int32_t dobjHandle)
 {
     return dobjHandle >= ENTITYNUM_WORLD || CG_GetEntity(localClientNum, dobjHandle)->nextValid;
 }
 
-void __cdecl FX_UpdateEffectPartial(
+void FX_UpdateEffectPartial(
     FxSystem* system,
     FxEffect* effect,
     int32_t msecUpdateBegin,
@@ -761,7 +761,7 @@ void __cdecl FX_UpdateEffectPartial(
     effect->msecLastUpdate = msecUpdateEnd;
 }
 
-void __cdecl FX_ProcessLooping(
+void FX_ProcessLooping(
     FxSystem* system,
     FxEffect* effect,
     int32_t elemDefFirst,
@@ -817,7 +817,7 @@ void __cdecl FX_ProcessLooping(
 }
 
 
-void __cdecl FX_UpdateEffectPartialForClass(
+void FX_UpdateEffectPartialForClass(
     FxSystem* system,
     FxEffect* effect,
     int32_t msecUpdateBegin,
@@ -914,7 +914,7 @@ void __cdecl FX_UpdateEffectPartialForClass(
     } while (elemHandleFirstExisting != elemHandleStop);
 }
 
-FxUpdateResult __cdecl FX_UpdateElement(
+FxUpdateResult FX_UpdateElement(
     FxSystem *system,
     FxEffect *effect,
     FxElem *elem,
@@ -992,14 +992,14 @@ FxUpdateResult __cdecl FX_UpdateElement(
     return updateResult;
 }
 
-const FxElemDef *__cdecl FX_GetUpdateElemDef(const FxUpdateElem *update)
+const FxElemDef *FX_GetUpdateElemDef(const FxUpdateElem *update)
 {
     if (!update->effect)
         MyAssertHandler(".\\EffectsCore\\fx_update.cpp", 79, 0, "%s", "update->effect");
     return &update->effect->def->elemDefs[update->elemIndex];
 }
 
-double __cdecl FX_GetAtRestFraction(const FxUpdateElem *update, float msec)
+double FX_GetAtRestFraction(const FxUpdateElem *update, float msec)
 {
     float v4; // [esp+Ch] [ebp-8h]
     float v5; // [esp+10h] [ebp-4h]
@@ -1009,7 +1009,7 @@ double __cdecl FX_GetAtRestFraction(const FxUpdateElem *update, float msec)
     return (float)ceil(v5);
 }
 
-int32_t __cdecl FX_UpdateElementPosition(FxSystem* system, FxUpdateElem* update)
+int32_t FX_UpdateElementPosition(FxSystem* system, FxUpdateElem* update)
 {
     const FxElemDef* elemDef; // [esp+4h] [ebp-4h]
 
@@ -1023,7 +1023,7 @@ int32_t __cdecl FX_UpdateElementPosition(FxSystem* system, FxUpdateElem* update)
     return FX_UpdateElementPosition_Local(update);
 }
 
-int32_t __cdecl FX_UpdateElementPosition_Colliding(FxSystem* system, FxUpdateElem* update)
+int32_t FX_UpdateElementPosition_Colliding(FxSystem* system, FxUpdateElem* update)
 {
     int32_t msecUpdateBegin; // [esp+0h] [ebp-14h]
     float xyzWorldOld[3]; // [esp+4h] [ebp-10h] BYREF
@@ -1048,7 +1048,7 @@ int32_t __cdecl FX_UpdateElementPosition_Colliding(FxSystem* system, FxUpdateEle
     }
 }
 
-int32_t __cdecl FX_UpdateElementPosition_CollidingStep(
+int32_t FX_UpdateElementPosition_CollidingStep(
         FxSystem *system,
         FxUpdateElem *update,
         int32_t msecUpdateBegin,
@@ -1088,7 +1088,7 @@ int32_t __cdecl FX_UpdateElementPosition_CollidingStep(
   return 1;
 }
 
-void __cdecl FX_NextElementPosition(FxUpdateElem* update, int32_t msecUpdateBegin, int32_t msecUpdateEnd)
+void FX_NextElementPosition(FxUpdateElem* update, int32_t msecUpdateBegin, int32_t msecUpdateEnd)
 {
     const char* v3; // eax
     float* elemOrigin; // [esp+18h] [ebp-20h]
@@ -1117,7 +1117,7 @@ void __cdecl FX_NextElementPosition(FxUpdateElem* update, int32_t msecUpdateBegi
     update->posWorld[2] = update->posWorld[2] - deltaVelFromGravity * secDuration * 0.5;
 }
 
-void __cdecl FX_NextElementPosition_NoExternalForces(
+void FX_NextElementPosition_NoExternalForces(
     FxUpdateElem* update,
     int32_t msecUpdateBegin,
     int32_t msecUpdateEnd,
@@ -1140,7 +1140,7 @@ void __cdecl FX_NextElementPosition_NoExternalForces(
     FX_IntegrateVelocity(update, normUpdateBegin, normUpdateEnd, posLocal, posWorld);
 }
 
-void __cdecl FX_IntegrateVelocity(const FxUpdateElem *update, float t0, float t1, float *posLocal, float *posWorld)
+void FX_IntegrateVelocity(const FxUpdateElem *update, float t0, float t1, float *posLocal, float *posWorld)
 {
     const char *v5; // eax
     const char *v6; // eax
@@ -1267,7 +1267,7 @@ void __cdecl FX_IntegrateVelocity(const FxUpdateElem *update, float t0, float t1
     }
 }
 
-void __cdecl FX_IntegrateVelocityAcrossSegments(
+void FX_IntegrateVelocityAcrossSegments(
     int32_t elemDefFlags,
     const orientation_t *orient,
     const FxElemVelStateSample *velState0,
@@ -1351,7 +1351,7 @@ void __cdecl FX_IntegrateVelocityAcrossSegments(
     }
 }
 
-void __cdecl FX_IntegrateVelocityFromZeroInSegment(
+void FX_IntegrateVelocityFromZeroInSegment(
     const FxElemVelStateInFrame *statePrev,
     const FxElemVelStateInFrame *stateNext,
     float *weight,
@@ -1372,7 +1372,7 @@ void __cdecl FX_IntegrateVelocityFromZeroInSegment(
     pos[2] = (amplitudeScale[2] * stateNext->velocity.amplitude[2] + stateNext->velocity.base[2]) * weight[1] + pos[2];
 }
 
-void __cdecl FX_IntegrateVelocityInSegment(
+void FX_IntegrateVelocityInSegment(
     int32_t elemDefFlags,
     const orientation_t *orient,
     const FxElemVelStateSample *velState,
@@ -1410,7 +1410,7 @@ void __cdecl FX_IntegrateVelocityInSegment(
             posWorld);
 }
 
-void __cdecl FX_IntegrateVelocityInSegmentInFrame(
+void FX_IntegrateVelocityInSegmentInFrame(
     const FxElemVelStateInFrame *statePrev,
     const FxElemVelStateInFrame *stateNext,
     const float *weight,
@@ -1426,14 +1426,14 @@ void __cdecl FX_IntegrateVelocityInSegmentInFrame(
     pos[2] = (amplitudeScale[2] * stateNext->velocity.amplitude[2] + stateNext->velocity.base[2]) * weight[1] + pos[2];
 }
 
-bool __cdecl FX_TraceHitSomething(const trace_t *trace)
+bool FX_TraceHitSomething(const trace_t *trace)
 {
     if (!trace)
         MyAssertHandler(".\\EffectsCore\\fx_update.cpp", 843, 0, "%s", "trace");
     return !trace->startsolid && !trace->allsolid && trace->fraction != 1.0;
 }
 
-int32_t __cdecl FX_CollisionResponse(
+int32_t FX_CollisionResponse(
     FxSystem *system,
     FxUpdateElem *update,
     const trace_t *trace,
@@ -1564,7 +1564,7 @@ int32_t __cdecl FX_CollisionResponse(
     }
 }
 
-void __cdecl FX_SpawnImpactEffect(
+void FX_SpawnImpactEffect(
     FxSystem *system,
     const FxUpdateElem *update,
     const FxEffectDef *impactEffect,
@@ -1593,14 +1593,14 @@ void __cdecl FX_SpawnImpactEffect(
         FX_DelRefToEffect(system, effect);
 }
 
-int32_t __cdecl FX_UpdateElementPosition_NonColliding(FxUpdateElem *update)
+int32_t FX_UpdateElementPosition_NonColliding(FxUpdateElem *update)
 {
     FX_NextElementPosition(update, update->msecUpdateBegin, update->msecUpdateEnd);
     FX_OrientationPosFromWorldPos(&update->orient, update->posWorld, update->elemOrigin);
     return 1;
 }
 
-int32_t __cdecl FX_UpdateElementPosition_Local(FxUpdateElem* update)
+int32_t FX_UpdateElementPosition_Local(FxUpdateElem* update)
 {
     const char* v1; // eax
     float* elemBaseVel; // [esp+1Ch] [ebp-4h]
@@ -1632,7 +1632,7 @@ int32_t __cdecl FX_UpdateElementPosition_Local(FxUpdateElem* update)
     return 1;
 }
 
-void __cdecl FX_SpawnDeathEffect(FxSystem* system, FxUpdateElem* update)
+void FX_SpawnDeathEffect(FxSystem* system, FxUpdateElem* update)
 {
     FxEffect* effect; // [esp+10h] [ebp-54h]
     FxSpatialFrame frame; // [esp+14h] [ebp-50h] BYREF
@@ -1657,7 +1657,7 @@ void __cdecl FX_SpawnDeathEffect(FxSystem* system, FxUpdateElem* update)
         FX_DelRefToEffect(system, effect);
 }
 
-char __cdecl FX_UpdateElement_SetupUpdate(
+char FX_UpdateElement_SetupUpdate(
     FxEffect *effect,
     int32_t msecUpdateBegin,
     int32_t msecUpdateEnd,
@@ -1710,7 +1710,7 @@ char __cdecl FX_UpdateElement_SetupUpdate(
     return 1;
 }
 
-void __cdecl FX_UpdateElement_TruncateToElemEnd(FxUpdateElem *update, FxUpdateResult *outUpdateResult)
+void FX_UpdateElement_TruncateToElemEnd(FxUpdateElem *update, FxUpdateResult *outUpdateResult)
 {
     if (update->msecUpdateEnd >= update->msecElemEnd)
     {
@@ -1733,7 +1733,7 @@ void __cdecl FX_UpdateElement_TruncateToElemEnd(FxUpdateElem *update, FxUpdateRe
     }
 }
 
-void __cdecl FX_UpdateElement_HandleEmitting(
+void FX_UpdateElement_HandleEmitting(
     FxSystem* system,
     FxElem* elem,
     FxUpdateElem* update,
@@ -1763,7 +1763,7 @@ void __cdecl FX_UpdateElement_HandleEmitting(
     }
 }
 
-uint8_t __cdecl FX_ProcessEmitting(
+uint8_t FX_ProcessEmitting(
     FxSystem* system,
     FxUpdateElem* update,
     uint8_t emitResidual,
@@ -1852,7 +1852,7 @@ uint8_t __cdecl FX_ProcessEmitting(
     }
     return SnapFloatToInt(residual * 256.0f / maxDistPerEmit);}
 
-void __cdecl FX_GetQuatForOrientation(
+void FX_GetQuatForOrientation(
     const FxEffect *effect,
     const FxElemDef *elemDef,
     const FxSpatialFrame *frameNow,
@@ -1900,7 +1900,7 @@ void __cdecl FX_GetQuatForOrientation(
     }
 }
 
-char __cdecl FX_UpdateElement_TruncateToElemBegin(FxUpdateElem* update, FxUpdateResult* outUpdateResult)
+char FX_UpdateElement_TruncateToElemBegin(FxUpdateElem* update, FxUpdateResult* outUpdateResult)
 {
     const char* v3; // eax
     const FxElemDef* UpdateElemDef; // eax
@@ -1943,7 +1943,7 @@ char __cdecl FX_UpdateElement_TruncateToElemBegin(FxUpdateElem* update, FxUpdate
     }
 }
 
-void __cdecl FX_UpdateEffectPartialTrail(
+void FX_UpdateEffectPartialTrail(
     FxSystem *system,
     FxEffect *effect,
     FxTrail *trail,
@@ -2010,7 +2010,7 @@ void __cdecl FX_UpdateEffectPartialTrail(
     }
 }
 
-void __cdecl FX_TrailElem_CompressBasis(const float (*inBasis)[3], char (*outBasis)[3])
+void FX_TrailElem_CompressBasis(const float (*inBasis)[3], char (*outBasis)[3])
 {
     int32_t v2; // [esp+0h] [ebp-10h]
     int32_t v3; // [esp+4h] [ebp-Ch]
@@ -2038,7 +2038,7 @@ void __cdecl FX_TrailElem_CompressBasis(const float (*inBasis)[3], char (*outBas
     }
 }
 
-FxUpdateResult __cdecl FX_UpdateTrailElement(
+FxUpdateResult FX_UpdateTrailElement(
     FxSystem *system,
     FxEffect *effect,
     FxTrail *trail,
@@ -2099,7 +2099,7 @@ FxUpdateResult __cdecl FX_UpdateTrailElement(
     return updateResult;
 }
 
-void __cdecl FX_UpdateSpotLight(FxCmd* cmd)
+void FX_UpdateSpotLight(FxCmd* cmd)
 {
     FxEffect* effect; // [esp+8h] [ebp-8h]
     FxSystem* system; // [esp+Ch] [ebp-4h]
@@ -2130,7 +2130,7 @@ void __cdecl FX_UpdateSpotLight(FxCmd* cmd)
     }
 }
 
-void __cdecl FX_UpdateSpotLightEffect(FxSystem* system, FxEffect* effect)
+void FX_UpdateSpotLightEffect(FxSystem* system, FxEffect* effect)
 {
     float v2; // [esp+20h] [ebp-28h]
     float diff[3]; // [esp+28h] [ebp-20h] BYREF
@@ -2165,7 +2165,7 @@ void __cdecl FX_UpdateSpotLightEffect(FxSystem* system, FxEffect* effect)
     }
 }
 
-void __cdecl FX_UpdateSpotLightEffectPartial(
+void FX_UpdateSpotLightEffectPartial(
     FxSystem* system,
     FxEffect* effect,
     int32_t msecUpdateBegin,
@@ -2202,7 +2202,7 @@ void __cdecl FX_UpdateSpotLightEffectPartial(
     }
 }
 
-void __cdecl FX_UpdateEffectBolt(FxSystem *system, FxEffect *effect)
+void FX_UpdateEffectBolt(FxSystem *system, FxEffect *effect)
 {
     int32_t localClientNum; // [esp+4h] [ebp-38h]
     orientation_t orient; // [esp+8h] [ebp-34h] BYREF
@@ -2233,13 +2233,13 @@ void __cdecl FX_UpdateEffectBolt(FxSystem *system, FxEffect *effect)
     }
 }
 
-void __cdecl FX_UpdateNonDependent(FxCmd *cmd)
+void FX_UpdateNonDependent(FxCmd *cmd)
 {
     if (fx_enable->current.enabled)
         FX_Update(cmd->system, cmd->localClientNum, 1);
 }
 
-void __cdecl FX_Update(FxSystem* system, int32_t localClientNum, bool nonBoltedEffectsOnly)
+void FX_Update(FxSystem* system, int32_t localClientNum, bool nonBoltedEffectsOnly)
 {
     FxEffect* localEffect; // [esp+48h] [ebp-Ch]
     volatile int32_t activeIndex; // [esp+4Ch] [ebp-8h]
@@ -2264,7 +2264,7 @@ void __cdecl FX_Update(FxSystem* system, int32_t localClientNum, bool nonBoltedE
         FX_RunGarbageCollection(system);
 }
 
-void __cdecl FX_UpdateEffect(FxSystem* system, FxEffect* effect)
+void FX_UpdateEffect(FxSystem* system, FxEffect* effect)
 {
     float v2; // [esp+20h] [ebp-28h]
     float diff[3]; // [esp+28h] [ebp-20h] BYREF
@@ -2297,13 +2297,13 @@ void __cdecl FX_UpdateEffect(FxSystem* system, FxEffect* effect)
     }
 }
 
-bool __cdecl FX_ShouldProcessEffect(FxSystem *system, FxEffect *effect, bool nonBoltedEffectsOnly)
+bool FX_ShouldProcessEffect(FxSystem *system, FxEffect *effect, bool nonBoltedEffectsOnly)
 {
     return (!nonBoltedEffectsOnly || effect->boltAndSortOrder.boneIndex == FX_BONE_INDEX_NONE)
         && InterlockedExchange(&effect->frameCount, system->frameCount) != system->frameCount;
 }
 
-void __cdecl FX_RunPhysics(int32_t localClientNum)
+void FX_RunPhysics(int32_t localClientNum)
 {
     FxSystem *system; // [esp+0h] [ebp-4h]
 
@@ -2313,7 +2313,7 @@ void __cdecl FX_RunPhysics(int32_t localClientNum)
     Sys_LeaveCriticalSection(CRITSECT_PHYSICS);
 }
 
-void __cdecl FX_UpdateRemaining(FxCmd *cmd)
+void FX_UpdateRemaining(FxCmd *cmd)
 {
     if (fx_enable->current.enabled)
         FX_Update(cmd->system, cmd->localClientNum, 0);
@@ -2321,7 +2321,7 @@ void __cdecl FX_UpdateRemaining(FxCmd *cmd)
     CG_GenerateSceneVerts(cmd->localClientNum);
 }
 
-void __cdecl FX_BeginUpdate(int32_t localClientNum)
+void FX_BeginUpdate(int32_t localClientNum)
 {
     FX_BeginMarks(localClientNum);
     FX_Beam_Begin();
@@ -2329,7 +2329,7 @@ void __cdecl FX_BeginUpdate(int32_t localClientNum)
     FX_SpriteBegin();
 }
 
-void __cdecl FX_EndUpdate(int32_t localClientNum)
+void FX_EndUpdate(int32_t localClientNum)
 {
     FxSystem *system;
 
@@ -2346,7 +2346,7 @@ void __cdecl FX_EndUpdate(int32_t localClientNum)
     iassert(system->cameraPrev.isValid);
 }
 
-void __cdecl FX_AddNonSpriteDrawSurfs(FxCmd *cmd)
+void FX_AddNonSpriteDrawSurfs(FxCmd *cmd)
 {
     FxSystem *system;
 
@@ -2362,7 +2362,7 @@ void __cdecl FX_AddNonSpriteDrawSurfs(FxCmd *cmd)
     }
 }
 
-void __cdecl FX_RewindTo(int32_t localClientNum, int32_t time)
+void FX_RewindTo(int32_t localClientNum, int32_t time)
 {
     volatile long *Destination; // [esp+4h] [ebp-10ACh]
     volatile long Comperand; // [esp+8h] [ebp-10A8h]
@@ -2436,7 +2436,7 @@ void __cdecl FX_RewindTo(int32_t localClientNum, int32_t time)
     }
 }
 
-void __cdecl FX_SetNextUpdateCamera(int32_t localClientNum, const refdef_s *refdef, float zfar)
+void FX_SetNextUpdateCamera(int32_t localClientNum, const refdef_s *refdef, float zfar)
 {
     const char *v3; // eax
     float scale1; // [esp+14h] [ebp-50h]
@@ -2513,7 +2513,7 @@ void __cdecl FX_SetNextUpdateCamera(int32_t localClientNum, const refdef_s *refd
     InterlockedExchange(&system->camera.isValid, 1);
 }
 
-void __cdecl FX_SetNextUpdateTime(int32_t localClientNum, int32_t time)
+void FX_SetNextUpdateTime(int32_t localClientNum, int32_t time)
 {
     FxSystem *system; // [esp+0h] [ebp-4h]
 
@@ -2533,7 +2533,7 @@ void __cdecl FX_SetNextUpdateTime(int32_t localClientNum, int32_t time)
         system->frameCount = 1;
 }
 
-void __cdecl FX_FillUpdateCmd(int32_t localClientNum, FxCmd *cmd)
+void FX_FillUpdateCmd(int32_t localClientNum, FxCmd *cmd)
 {
     cmd->system = FX_GetSystem(localClientNum);
     cmd->localClientNum = localClientNum;

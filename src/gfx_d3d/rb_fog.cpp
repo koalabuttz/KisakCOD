@@ -5,7 +5,7 @@
 #include "r_state.h"
 
 
-void __cdecl R_SetFrameFog(GfxCmdBufInput *input)
+void R_SetFrameFog(GfxCmdBufInput *input)
 {
     float fogColorVec[4]; // [esp+1Ch] [ebp-28h] BYREF
     const GfxBackEndData *data; // [esp+2Ch] [ebp-18h]

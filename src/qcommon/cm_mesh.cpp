@@ -3,7 +3,7 @@
 #include <EffectsCore/fx_system.h>
 #include <xanim/xanim.h>
 
-void __cdecl CM_TraceThroughAabbTree(const traceWork_t *tw, const CollisionAabbTree *aabbTree, trace_t *trace)
+void CM_TraceThroughAabbTree(const traceWork_t *tw, const CollisionAabbTree *aabbTree, trace_t *trace)
 {
     dmaterial_t *materialInfo; // [esp+0h] [ebp-8h]
     float oldFraction; // [esp+4h] [ebp-4h]
@@ -22,7 +22,7 @@ void __cdecl CM_TraceThroughAabbTree(const traceWork_t *tw, const CollisionAabbT
     }
 }
 
-void __cdecl CM_TraceThroughAabbTree_r(const traceWork_t *tw, const CollisionAabbTree *aabbTree, trace_t *trace)
+void CM_TraceThroughAabbTree_r(const traceWork_t *tw, const CollisionAabbTree *aabbTree, trace_t *trace)
 {
     int borderIndex; // [esp+50h] [ebp-1Ch]
     int childIndex; // [esp+54h] [ebp-18h]
@@ -74,7 +74,7 @@ void __cdecl CM_TraceThroughAabbTree_r(const traceWork_t *tw, const CollisionAab
     }
 }
 
-bool __cdecl CM_CullBox(const traceWork_t *tw, const float *origin, const float *halfSize)
+bool CM_CullBox(const traceWork_t *tw, const float *origin, const float *halfSize)
 {
     float v4; // [esp+0h] [ebp-78h]
     float v5; // [esp+4h] [ebp-74h]
@@ -126,7 +126,7 @@ bool __cdecl CM_CullBox(const traceWork_t *tw, const float *origin, const float 
     return v5 > (double)v4;
 }
 
-void __cdecl CM_TracePointThroughTriangle(const traceWork_t *tw, const uint16_t *indices, trace_t *trace)
+void CM_TracePointThroughTriangle(const traceWork_t *tw, const uint16_t *indices, trace_t *trace)
 {
     const float *v0; // [esp+8h] [ebp-50h]
     float t; // [esp+Ch] [ebp-4Ch]
@@ -174,7 +174,7 @@ void __cdecl CM_TracePointThroughTriangle(const traceWork_t *tw, const uint16_t 
     }
 }
 
-void __cdecl CM_TraceCapsuleThroughTriangle(
+void CM_TraceCapsuleThroughTriangle(
     const traceWork_t *tw,
     int triIndex,
     const uint16_t *indices,
@@ -357,7 +357,7 @@ void __cdecl CM_TraceCapsuleThroughTriangle(
     }
 }
 
-SphereEdgeTraceResult __cdecl CM_TraceSphereThroughEdge(
+SphereEdgeTraceResult CM_TraceSphereThroughEdge(
     const traceWork_t *tw,
     const float *sphereStart,
     const float *v0,
@@ -497,7 +497,7 @@ SphereEdgeTraceResult __cdecl CM_TraceSphereThroughEdge(
     }
 }
 
-bool __cdecl Vec3IsNormalizedEpsilon(const float *v, float epsilon)
+bool Vec3IsNormalizedEpsilon(const float *v, float epsilon)
 {
     float v3; // [esp+4h] [ebp-Ch]
     float v4; // [esp+8h] [ebp-8h]
@@ -509,7 +509,7 @@ bool __cdecl Vec3IsNormalizedEpsilon(const float *v, float epsilon)
     return v3 < (double)v4;
 }
 
-void __cdecl CM_TraceSphereThroughVertex(
+void CM_TraceSphereThroughVertex(
     const traceWork_t *tw,
     bool isWalkable,
     const float *sphereStart,
@@ -604,7 +604,7 @@ void __cdecl CM_TraceSphereThroughVertex(
     }
 }
 
-void __cdecl CM_TraceCapsuleThroughBorder(const traceWork_t *tw, CollisionBorder *border, trace_t *trace)
+void CM_TraceCapsuleThroughBorder(const traceWork_t *tw, CollisionBorder *border, trace_t *trace)
 {
     const char *v3; // eax
     const char *v4; // eax
@@ -844,7 +844,7 @@ void __cdecl CM_TraceCapsuleThroughBorder(const traceWork_t *tw, CollisionBorder
     }
 }
 
-void __cdecl CM_TraceSphereThroughBorder(
+void CM_TraceSphereThroughBorder(
     const traceWork_t *tw,
     const CollisionBorder *border,
     float offsetZ,
@@ -878,13 +878,13 @@ void __cdecl CM_TraceSphereThroughBorder(
     }
 }
 
-void __cdecl CM_SightTraceThroughAabbTree(const traceWork_t *tw, const CollisionAabbTree *aabbTree, trace_t *trace)
+void CM_SightTraceThroughAabbTree(const traceWork_t *tw, const CollisionAabbTree *aabbTree, trace_t *trace)
 {
     if ((cm.materials[aabbTree->materialIndex].contentFlags & tw->contents) != 0)
         CM_TraceThroughAabbTree(tw, aabbTree, trace);
 }
 
-void __cdecl CM_MeshTestInLeaf(const traceWork_t *tw, cLeaf_t *leaf, trace_t *trace)
+void CM_MeshTestInLeaf(const traceWork_t *tw, cLeaf_t *leaf, trace_t *trace)
 {
     dmaterial_t *materialInfo; // [esp+0h] [ebp-Ch]
     int k; // [esp+4h] [ebp-8h]
@@ -910,7 +910,7 @@ void __cdecl CM_MeshTestInLeaf(const traceWork_t *tw, cLeaf_t *leaf, trace_t *tr
     }
 }
 
-void __cdecl CM_PositionTestInAabbTree_r(const traceWork_t *tw, CollisionAabbTree *aabbTree, trace_t *trace)
+void CM_PositionTestInAabbTree_r(const traceWork_t *tw, CollisionAabbTree *aabbTree, trace_t *trace)
 {
     int childIndex; // [esp+0h] [ebp-1Ch]
     int triCount; // [esp+4h] [ebp-18h]
@@ -952,7 +952,7 @@ void __cdecl CM_PositionTestInAabbTree_r(const traceWork_t *tw, CollisionAabbTre
     }
 }
 
-void __cdecl CM_PositionTestCapsuleInTriangle(const traceWork_t *tw, const uint16_t *indices, trace_t *trace)
+void CM_PositionTestCapsuleInTriangle(const traceWork_t *tw, const uint16_t *indices, trace_t *trace)
 {
     float v3; // [esp+8h] [ebp-3Ch]
     float radiusSq; // [esp+Ch] [ebp-38h]
@@ -997,7 +997,7 @@ void __cdecl CM_PositionTestCapsuleInTriangle(const traceWork_t *tw, const uint1
     }
 }
 
-double __cdecl CM_DistanceSquaredFromPointToTriangle(const float *pt, const uint16_t *indices)
+double CM_DistanceSquaredFromPointToTriangle(const float *pt, const uint16_t *indices)
 {
     float diff[3]; // [esp+10h] [ebp-48h] BYREF
     const float *v0; // [esp+1Ch] [ebp-3Ch]
@@ -1023,7 +1023,7 @@ double __cdecl CM_DistanceSquaredFromPointToTriangle(const float *pt, const uint
     return Vec3LengthSq(diff);
 }
 
-void __cdecl CM_ClosestPointOnTri(
+void CM_ClosestPointOnTri(
     const float *pt,
     const float *v0,
     const float *e0,
@@ -1162,7 +1162,7 @@ region_5:
     }
 }
 
-bool __cdecl CM_DoesCapsuleIntersectTriangle(
+bool CM_DoesCapsuleIntersectTriangle(
     const float *start,
     const float *end,
     float radiusSq,
@@ -1316,7 +1316,7 @@ bool __cdecl CM_DoesCapsuleIntersectTriangle(
     return radiusSq > (double)distSqToEdge;
 }
 
-double __cdecl CM_DistanceSquaredBetweenSegments(
+double CM_DistanceSquaredBetweenSegments(
     const float *start0,
     const float *delta0,
     const float *start1,

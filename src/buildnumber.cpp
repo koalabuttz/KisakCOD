@@ -11,7 +11,7 @@ char buildnumbuf[128];
 
 // LWSS: shared between SP/MP for simplicity
 
-char *__cdecl getBuildNumber()
+char *getBuildNumber()
 {
 #ifndef ARRAYSIZE
 #define ARRAYSIZE(x) (sizeof(x) / sizeof(x[0]))

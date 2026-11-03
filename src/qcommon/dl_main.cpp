@@ -85,12 +85,12 @@ namespace
     }
 }
 
-void __cdecl DL_CancelDownload()
+void DL_CancelDownload()
 {
     DL_Release(true);
 }
 
-void __cdecl DL_InitDownload()
+void DL_InitDownload()
 {
     if (!curlInitialized)
     {
@@ -121,7 +121,7 @@ void __cdecl DL_InitDownload()
     }
 }
 
-int __cdecl DL_BeginDownload(char *localName, char *remoteName)
+int DL_BeginDownload(char *localName, char *remoteName)
 {
     DL_CancelDownload();
     if (!localName || !*localName || strlen(localName) >= sizeof(download.path)
@@ -210,7 +210,7 @@ int __cdecl DL_BeginDownload(char *localName, char *remoteName)
     return 1;
 }
 
-int __cdecl DL_DownloadLoop()
+int DL_DownloadLoop()
 {
     if (!download.running)
         return DL_FAILED;
@@ -252,12 +252,12 @@ int __cdecl DL_DownloadLoop()
     return success ? DL_DONE : DL_FAILED;
 }
 
-bool __cdecl DL_InProgress()
+bool DL_InProgress()
 {
     return download.running;
 }
 
-bool __cdecl DL_DLIsMotd()
+bool DL_DLIsMotd()
 {
     // There is no MOTD download entry point. Every current caller starts a
     // server-requested map/mod download and must follow that completion path.

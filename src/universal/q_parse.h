@@ -43,44 +43,44 @@ struct com_parse_mark_t // sizeof=0x14
 };
 static_assert(LAYOUT_32BIT(sizeof(struct com_parse_mark_t) == 0x14));
 
-void __cdecl TRACK_q_parse();
-void __cdecl Com_InitParse();
-void __cdecl Com_InitParseInfo(parseInfo_t *pi);
-void __cdecl Com_BeginParseSession(const char *filename);
-ParseThreadInfo *__cdecl Com_GetParseThreadInfo();
-void __cdecl Com_EndParseSession();
-void __cdecl Com_ResetParseSessions();
-void __cdecl Com_SetSpaceDelimited(int spaceDelimited);
-void __cdecl Com_SetKeepStringQuotes(int keepStringQuotes);
-void __cdecl Com_SetCSV(int csv);
-void __cdecl Com_SetParseNegativeNumbers(int negativeNumbers);
-int __cdecl Com_GetCurrentParseLine();
-void __cdecl Com_SetScriptWarningPrefix(const char *prefix);
+void TRACK_q_parse();
+void Com_InitParse();
+void Com_InitParseInfo(parseInfo_t *pi);
+void Com_BeginParseSession(const char *filename);
+ParseThreadInfo *Com_GetParseThreadInfo();
+void Com_EndParseSession();
+void Com_ResetParseSessions();
+void Com_SetSpaceDelimited(int spaceDelimited);
+void Com_SetKeepStringQuotes(int keepStringQuotes);
+void Com_SetCSV(int csv);
+void Com_SetParseNegativeNumbers(int negativeNumbers);
+int Com_GetCurrentParseLine();
+void Com_SetScriptWarningPrefix(const char *prefix);
 void Com_ScriptErrorDrop(const char *msg, ...);
 void Com_ScriptError(const char *msg, ...);
-void __cdecl Com_UngetToken();
-void __cdecl Com_ParseSetMark(const char **text, com_parse_mark_t *mark);
-void __cdecl Com_ParseReturnToMark(const char **text, com_parse_mark_t *mark);
-int __cdecl Com_Compress(char *data_p);
-const char *__cdecl Com_GetLastTokenPos();
-parseInfo_t *__cdecl Com_Parse(const char **data_p);
+void Com_UngetToken();
+void Com_ParseSetMark(const char **text, com_parse_mark_t *mark);
+void Com_ParseReturnToMark(const char **text, com_parse_mark_t *mark);
+int Com_Compress(char *data_p);
+const char *Com_GetLastTokenPos();
+parseInfo_t *Com_Parse(const char **data_p);
 inline parseInfo_t *Com_Parse(char **data_p)
 {
     return Com_Parse((const char **)data_p);
 }
-parseInfo_t *__cdecl Com_ParseExt(const char **data_p, int allowLineBreaks);
-const char *__cdecl SkipWhitespace(const char *data, int *hasNewLines);
-parseInfo_t *__cdecl Com_ParseCSV(const char **data_p, int allowLineBreaks);
-parseInfo_t *__cdecl Com_ParseOnLine(const char **data_p);
-inline parseInfo_t *__cdecl Com_ParseOnLine(char **data_p)
+parseInfo_t *Com_ParseExt(const char **data_p, int allowLineBreaks);
+const char *SkipWhitespace(const char *data, int *hasNewLines);
+parseInfo_t *Com_ParseCSV(const char **data_p, int allowLineBreaks);
+parseInfo_t *Com_ParseOnLine(const char **data_p);
+inline parseInfo_t *Com_ParseOnLine(char **data_p)
 {
     return Com_ParseOnLine((const char **)data_p);
 }
-int __cdecl Com_MatchToken(const char **buf_p, const char *match, int warning);
-int __cdecl Com_SkipBracedSection(const char **program, uint32_t startDepth, int iMaxNesting);
-void __cdecl Com_SkipRestOfLine(const char **data);
-int __cdecl Com_GetArgCountOnLine(const char **data_p);
-double __cdecl Com_ParseFloat(const char **buf_p);
-double __cdecl Com_ParseFloatOnLine(const char **buf_p);
-int __cdecl Com_ParseInt(const char **buf_p);
-void __cdecl Com_Parse1DMatrix(const char **buf_p, int x, float *m);
+int Com_MatchToken(const char **buf_p, const char *match, int warning);
+int Com_SkipBracedSection(const char **program, uint32_t startDepth, int iMaxNesting);
+void Com_SkipRestOfLine(const char **data);
+int Com_GetArgCountOnLine(const char **data_p);
+double Com_ParseFloat(const char **buf_p);
+double Com_ParseFloatOnLine(const char **buf_p);
+int Com_ParseInt(const char **buf_p);
+void Com_Parse1DMatrix(const char **buf_p, int x, float *m);

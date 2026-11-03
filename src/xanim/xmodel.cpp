@@ -12,7 +12,7 @@
 #include <devgui/devgui.h>
 #include <physics/phys_local.h>
 
-void __cdecl XModelPartsFree(XModelPartsLoad *modelParts)
+void XModelPartsFree(XModelPartsLoad *modelParts)
 {
     int size; // [esp+0h] [ebp-Ch]
     int i; // [esp+4h] [ebp-8h]
@@ -26,7 +26,7 @@ void __cdecl XModelPartsFree(XModelPartsLoad *modelParts)
         SL_RemoveRefToString(boneNames[i]);
 }
 
-bool __cdecl XModelBad(const XModel *model)
+bool XModelBad(const XModel *model)
 {
     iassert(model);
 
@@ -36,7 +36,7 @@ bool __cdecl XModelBad(const XModel *model)
         return model->bad;
 }
 
-XModel *__cdecl XModelPrecache(char *name, void *(__cdecl *Alloc)(int), void *(__cdecl *AllocColl)(int))
+XModel *XModelPrecache(char *name, void *(*Alloc)(int), void *(*AllocColl)(int))
 {
     if (IsFastFileLoad())
         return XModelPrecache_FastFile(name);
@@ -44,17 +44,17 @@ XModel *__cdecl XModelPrecache(char *name, void *(__cdecl *Alloc)(int), void *(_
         return XModelPrecache_LoadObj(name, Alloc, AllocColl);
 }
 
-XModel *__cdecl XModelPrecache_FastFile(const char *name)
+XModel *XModelPrecache_FastFile(const char *name)
 {
     return DB_FindXAssetHeader(ASSET_TYPE_XMODEL, name).model;
 }
 
-double __cdecl XModelGetRadius(const XModel *model)
+double XModelGetRadius(const XModel *model)
 {
     return model->radius;
 }
 
-void __cdecl XModelGetBounds(const XModel *model, float *mins, float *maxs)
+void XModelGetBounds(const XModel *model, float *mins, float *maxs)
 {
     mins[0] = model->mins[0];
     mins[1] = model->mins[1];
@@ -65,12 +65,12 @@ void __cdecl XModelGetBounds(const XModel *model, float *mins, float *maxs)
     maxs[2] = model->maxs[2];
 }
 
-int __cdecl XModelGetMemUsage(const XModel *model)
+int XModelGetMemUsage(const XModel *model)
 {
     return model->memUsage;
 }
 
-int __cdecl XModelTraceLine(
+int XModelTraceLine(
     const XModel *model,
     trace_t *results,
     const float *localStart,
@@ -162,7 +162,7 @@ int __cdecl XModelTraceLine(
     return partIndex;
 }
 
-int __cdecl XModelTraceLineAnimated(
+int XModelTraceLineAnimated(
     const DObj_s *obj,
     uint32_t modelIndex,
     int baseBoneIndex,
@@ -297,7 +297,7 @@ int __cdecl XModelTraceLineAnimated(
     return partIndex;
 }
 
-void __cdecl XModelTraceLineAnimatedPartBits(
+void XModelTraceLineAnimatedPartBits(
     const DObj_s *obj,
     uint32_t modelIndex,
     int baseBoneIndex,
@@ -327,7 +327,7 @@ void __cdecl XModelTraceLineAnimatedPartBits(
     }
 }
 
-void __cdecl PrefetchArray_XSurfaceCollisionNode_(const XSurfaceCollisionNode *mem, uint32_t elementCount)
+void PrefetchArray_XSurfaceCollisionNode_(const XSurfaceCollisionNode *mem, uint32_t elementCount)
 {
     const unsigned __int8 *memIter; // [esp+0h] [ebp-8h]
 
@@ -339,12 +339,12 @@ void __cdecl PrefetchArray_XSurfaceCollisionNode_(const XSurfaceCollisionNode *m
         ;
 }
 
-char __cdecl XSurfaceVisitTrianglesInAabb(
+char XSurfaceVisitTrianglesInAabb(
     const XSurface *surface,
     uint32_t vertListIndex,
     const float *aabbMins,
     const float *aabbMaxs,
-    bool(__cdecl *visitorFunc)(void *, const GfxPackedVertex **, const GfxPackedVertex **),
+    bool(*visitorFunc)(void *, const GfxPackedVertex **, const GfxPackedVertex **),
     void *visitorContext)
 {
     XSurfaceGetTriCandidatesLocals locals; // [esp+6Ch] [ebp-2B0h] BYREF
@@ -397,7 +397,7 @@ char __cdecl XSurfaceVisitTrianglesInAabb(
     return 1;
 }
 
-void __cdecl XSurfaceVisitTrianglesInAabb_ConvertAabb(
+void XSurfaceVisitTrianglesInAabb_ConvertAabb(
     const XSurfaceCollisionTree *tree,
     const float *aabbMins,
     const float *aabbMaxs,
@@ -426,7 +426,7 @@ void __cdecl XSurfaceVisitTrianglesInAabb_ConvertAabb(
     maxs[2] = CLAMP((transformedMaxs[2] + 0.5), minfloat, maxfloat);
 }
 
-bool __cdecl XSurfaceVisitTrianglesInAabb_ProcessVertices(XSurfaceGetTriCandidatesLocals *locals)
+bool XSurfaceVisitTrianglesInAabb_ProcessVertices(XSurfaceGetTriCandidatesLocals *locals)
 {
     const GfxPackedVertex *verts0[3]; // [esp+4h] [ebp-10h] BYREF
     uint32_t vertIter; // [esp+10h] [ebp-4h]
@@ -438,7 +438,7 @@ bool __cdecl XSurfaceVisitTrianglesInAabb_ProcessVertices(XSurfaceGetTriCandidat
     return locals->visitorFunc(locals->visitorContext,verts0,verts0);
 }
 
-void __cdecl PrefetchArray_GfxPackedVertex_(const GfxPackedVertex *mem, uint32_t elementCount)
+void PrefetchArray_GfxPackedVertex_(const GfxPackedVertex *mem, uint32_t elementCount)
 {
     const unsigned __int8 *memIter; // [esp+0h] [ebp-8h]
 
@@ -449,7 +449,7 @@ void __cdecl PrefetchArray_GfxPackedVertex_(const GfxPackedVertex *mem, uint32_t
         memIter += 128)
         ;
 }
-char __cdecl XSurfaceVisitTrianglesInAabb_ProcessTriangles(XSurfaceGetTriCandidatesLocals *locals)
+char XSurfaceVisitTrianglesInAabb_ProcessTriangles(XSurfaceGetTriCandidatesLocals *locals)
 {
     uint16_t index; // [esp+1Ch] [ebp-18h]
     uint32_t vertIter; // [esp+20h] [ebp-14h]
@@ -479,7 +479,7 @@ char __cdecl XSurfaceVisitTrianglesInAabb_ProcessTriangles(XSurfaceGetTriCandida
     return 1;
 }
 
-void __cdecl PrefetchArray_XSurfaceCollisionLeaf_(const XSurfaceCollisionLeaf *mem, uint32_t elementCount)
+void PrefetchArray_XSurfaceCollisionLeaf_(const XSurfaceCollisionLeaf *mem, uint32_t elementCount)
 {
     const unsigned __int8 *memIter; // [esp+0h] [ebp-8h]
 
@@ -493,7 +493,7 @@ void __cdecl PrefetchArray_XSurfaceCollisionLeaf_(const XSurfaceCollisionLeaf *m
     }
 }
 
-char __cdecl XSurfaceVisitTrianglesInAabb_ProcessLeaf(XSurfaceGetTriCandidatesLocals *locals)
+char XSurfaceVisitTrianglesInAabb_ProcessLeaf(XSurfaceGetTriCandidatesLocals *locals)
 {
     XSurfaceCollisionLeaf *leaf; // [esp+3Ch] [ebp-18h]
     uint32_t indexCount; // [esp+40h] [ebp-14h]
@@ -533,7 +533,7 @@ char __cdecl XSurfaceVisitTrianglesInAabb_ProcessLeaf(XSurfaceGetTriCandidatesLo
     return 1;
 }
 
-char __cdecl XSurfaceVisitTrianglesInAabb_ProcessNode(XSurfaceGetTriCandidatesLocals *locals)
+char XSurfaceVisitTrianglesInAabb_ProcessNode(XSurfaceGetTriCandidatesLocals *locals)
 {
     uint32_t childBeginIndex; // [esp+48h] [ebp-1Ch]
     uint32_t childCount; // [esp+4Ch] [ebp-18h]
@@ -582,7 +582,7 @@ char __cdecl XSurfaceVisitTrianglesInAabb_ProcessNode(XSurfaceGetTriCandidatesLo
     return 1;
 }
 
-int __cdecl XModelGetBoneIndex(const XModel *model, uint32_t name, uint32_t offset, unsigned __int8 *index)
+int XModelGetBoneIndex(const XModel *model, uint32_t name, uint32_t offset, unsigned __int8 *index)
 {
     uint32_t numBones; // [esp+0h] [ebp-Ch]
     uint32_t localBoneIndex; // [esp+4h] [ebp-8h]
@@ -608,7 +608,7 @@ int __cdecl XModelGetBoneIndex(const XModel *model, uint32_t name, uint32_t offs
     return 1;
 }
 
-int __cdecl XModelGetStaticBounds(const XModel *model, mat3x3 &axis, float *mins, float *maxs)
+int XModelGetStaticBounds(const XModel *model, mat3x3 &axis, float *mins, float *maxs)
 {
     float v5; // [esp+0h] [ebp-34h]
     float v6; // [esp+4h] [ebp-30h]

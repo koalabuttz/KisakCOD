@@ -8,7 +8,7 @@
 #include <universal/com_math.h>
 #include "actor_state.h"
 
-bool __cdecl Actor_Negotiation_Start(actor_s *pSelf, ai_state_t ePrevState)
+bool Actor_Negotiation_Start(actor_s *pSelf, ai_state_t ePrevState)
 {
     int result; // r3
 
@@ -22,7 +22,7 @@ bool __cdecl Actor_Negotiation_Start(actor_s *pSelf, ai_state_t ePrevState)
     return result;
 }
 
-actor_think_result_t __cdecl Actor_Negotiation_Think(actor_s *pSelf)
+actor_think_result_t Actor_Negotiation_Think(actor_s *pSelf)
 {
     ai_animmode_t v2; // r28
     ai_traverse_mode_t eTraverseMode; // r4

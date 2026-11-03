@@ -8,7 +8,7 @@
 #include <server/sv_world.h>
 
 
-int __cdecl G_GetPlayerCorpseIndex(gentity_s *ent)
+int G_GetPlayerCorpseIndex(gentity_s *ent)
 {
     int i; // [esp+4h] [ebp-4h]
 
@@ -22,7 +22,7 @@ int __cdecl G_GetPlayerCorpseIndex(gentity_s *ent)
     return 0;
 }
 
-int __cdecl G_GetFreePlayerCorpseIndex()
+int G_GetFreePlayerCorpseIndex()
 {
     float diff[4]; // [esp+0h] [ebp-30h] BYREF
     float playerPos[3]; // [esp+10h] [ebp-20h] BYREF
@@ -60,7 +60,7 @@ int __cdecl G_GetFreePlayerCorpseIndex()
     return bestIndex;
 }
 
-void __cdecl PlayerCorpse_Free(gentity_s *ent)
+void PlayerCorpse_Free(gentity_s *ent)
 {
     int playerCorpseIndex; // [esp+0h] [ebp-4h]
 
@@ -75,7 +75,7 @@ void __cdecl PlayerCorpse_Free(gentity_s *ent)
     g_scr_data.playerCorpseInfo[playerCorpseIndex].entnum = -1;
 }
 
-void __cdecl G_RunCorpseMove(gentity_s *ent)
+void G_RunCorpseMove(gentity_s *ent)
 {
     int v1; // eax
     int passEntityNum; // [esp+14h] [ebp-E0h]
@@ -235,7 +235,7 @@ void __cdecl G_RunCorpseMove(gentity_s *ent)
     }
 }
 
-void __cdecl G_BounceCorpse(gentity_s *ent, corpseInfo_t *corpseInfo, trace_t *trace, float *endpos)
+void G_BounceCorpse(gentity_s *ent, corpseInfo_t *corpseInfo, trace_t *trace, float *endpos)
 {
     float vAngles[3]; // [esp+24h] [ebp-34h] BYREF
     float vAxis[3][3]; // [esp+30h] [ebp-28h] BYREF
@@ -293,7 +293,7 @@ void __cdecl G_BounceCorpse(gentity_s *ent, corpseInfo_t *corpseInfo, trace_t *t
     }
 }
 
-char __cdecl G_GetAnimDeltaForCorpse(gentity_s *ent, float *originChange)
+char G_GetAnimDeltaForCorpse(gentity_s *ent, float *originChange)
 {
     DObj_s *obj; // [esp+18h] [ebp-10h]
     float rot[3]; // [esp+1Ch] [ebp-Ch] BYREF
@@ -307,14 +307,14 @@ char __cdecl G_GetAnimDeltaForCorpse(gentity_s *ent, float *originChange)
     return 1;
 }
 
-void __cdecl G_RunCorpse(gentity_s *ent)
+void G_RunCorpse(gentity_s *ent)
 {
     G_RunCorpseMove(ent);
     G_RunCorpseAnimate(ent);
     G_RunThink(ent);
 }
 
-void __cdecl G_RunCorpseAnimate(gentity_s *ent)
+void G_RunCorpseAnimate(gentity_s *ent)
 {
     DObj_s *ServerDObj; // eax
     int corpseIndex; // [esp+4h] [ebp-8h]

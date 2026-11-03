@@ -17,12 +17,12 @@
 
 SunFlareDynamic sunFlareArray[4];
 
-void __cdecl TRACK_rb_sky()
+void TRACK_rb_sky()
 {
     track_static_alloc_internal(sunFlareArray, 160, "sunFlareArray", 18);
 }
 
-uint32_t __cdecl RB_CalcSunSpriteSamples()
+uint32_t RB_CalcSunSpriteSamples()
 {
     const char *v1; // eax
     const char *v2; // eax
@@ -136,7 +136,7 @@ uint32_t __cdecl RB_CalcSunSpriteSamples()
     return sampleCount;
 }
 
-void __cdecl RB_DrawSun(uint32_t localClientNum)
+void RB_DrawSun(uint32_t localClientNum)
 {
     SunFlareDynamic *sunFlare; // [esp+0h] [ebp-4h]
 
@@ -160,7 +160,7 @@ void __cdecl RB_DrawSun(uint32_t localClientNum)
     }
 }
 
-void __cdecl RB_DrawSunQuerySprite(SunFlareDynamic *sunFlare)
+void RB_DrawSunQuerySprite(SunFlareDynamic *sunFlare)
 {
     float v2; // [esp+10h] [ebp-74h]
     float v3; // [esp+14h] [ebp-70h]
@@ -233,13 +233,13 @@ void __cdecl RB_DrawSunQuerySprite(SunFlareDynamic *sunFlare)
     }
 }
 
-void __cdecl RB_HW_BeginOcclusionQuery(IDirect3DQuery9 *query)
+void RB_HW_BeginOcclusionQuery(IDirect3DQuery9 *query)
 {
     iassert(query);
     query->Issue(D3DISSUE_BEGIN);
 }
 
-uint32_t __cdecl RB_HW_ReadOcclusionQuery(IDirect3DQuery9 *query)
+uint32_t RB_HW_ReadOcclusionQuery(IDirect3DQuery9 *query)
 {
     HRESULT hr; // [esp+4h] [ebp-8h]
     uint32_t pixelCount; // [esp+8h] [ebp-4h] BYREF
@@ -257,7 +257,7 @@ uint32_t __cdecl RB_HW_ReadOcclusionQuery(IDirect3DQuery9 *query)
         return -1;
 }
 
-void __cdecl RB_TessSunBillboard(float widthInClipSpace, float heightInClipSpace, GfxColor color)
+void RB_TessSunBillboard(float widthInClipSpace, float heightInClipSpace, GfxColor color)
 {
     GfxVertex *v3; // eax
     float v4; // [esp+Ch] [ebp-34h]
@@ -317,7 +317,7 @@ void __cdecl RB_TessSunBillboard(float widthInClipSpace, float heightInClipSpace
     v3[3].xyzw[2] = v3[3].xyzw[2] + v6;
 }
 
-GfxVertex *__cdecl RB_SetTessQuad(GfxColor color)
+GfxVertex *RB_SetTessQuad(GfxColor color)
 {
     uint16_t vertCount; // [esp+10h] [ebp-8h]
     GfxVertex *vert; // [esp+14h] [ebp-4h]
@@ -353,7 +353,7 @@ GfxVertex *__cdecl RB_SetTessQuad(GfxColor color)
     return vert;
 }
 
-void __cdecl RB_UpdateSunVisibilityWithoutQuery(SunFlareDynamic *sunFlare)
+void RB_UpdateSunVisibilityWithoutQuery(SunFlareDynamic *sunFlare)
 {
     float sunTraceEnd[3]; // [esp+Ch] [ebp-Ch] BYREF
 
@@ -375,7 +375,7 @@ void __cdecl RB_UpdateSunVisibilityWithoutQuery(SunFlareDynamic *sunFlare)
     }
 }
 
-double __cdecl RB_GetSunSampleRectRelativeArea(int widthInPixels, int heightInPixels)
+double RB_GetSunSampleRectRelativeArea(int widthInPixels, int heightInPixels)
 {
     float v4; // [esp+Ch] [ebp-50h]
     float v5; // [esp+1Ch] [ebp-40h]
@@ -423,7 +423,7 @@ double __cdecl RB_GetSunSampleRectRelativeArea(int widthInPixels, int heightInPi
     return (float)((double)((bottom - top) * (right - left)) / (double)(heightInPixels * widthInPixels));
 }
 
-void __cdecl RB_AddSunEffects(SunFlareDynamic *sunFlare)
+void RB_AddSunEffects(SunFlareDynamic *sunFlare)
 {
     iassert( rgp.world );
     iassert( sunFlare );
@@ -432,7 +432,7 @@ void __cdecl RB_AddSunEffects(SunFlareDynamic *sunFlare)
         RB_DrawSunSprite();
 }
 
-void __cdecl RB_FreeSunSpriteQueries()
+void RB_FreeSunSpriteQueries()
 {
     IDirect3DQuery9 *varCopy; // [esp+0h] [ebp-Ch]
     uint32_t viewIndex; // [esp+4h] [ebp-8h]
@@ -514,7 +514,7 @@ void RB_DrawSunSprite()
     RB_EndTessSurface();
 }
 
-void __cdecl RB_DrawSunPostEffects(uint32_t localClientNum)
+void RB_DrawSunPostEffects(uint32_t localClientNum)
 {
     int frameTime; // [esp+0h] [ebp-8h]
     SunFlareDynamic *sunFlare; // [esp+4h] [ebp-4h]
@@ -544,7 +544,7 @@ void __cdecl RB_DrawSunPostEffects(uint32_t localClientNum)
     }
 }
 
-void __cdecl RB_DrawSunFlare(SunFlareDynamic *sunFlare, int frameTime)
+void RB_DrawSunFlare(SunFlareDynamic *sunFlare, int frameTime)
 {
     float v2; // [esp+14h] [ebp-10h]
     float lerp; // [esp+18h] [ebp-Ch]
@@ -606,7 +606,7 @@ void __cdecl RB_DrawSunFlare(SunFlareDynamic *sunFlare, int frameTime)
     }
 }
 
-double __cdecl R_UpdateOverTime(float fCurrent, float fGoal, int iFadeInTime, int iFadeOutTime, int frametime)
+double R_UpdateOverTime(float fCurrent, float fGoal, int iFadeInTime, int iFadeOutTime, int frametime)
 {
     iassert( (frametime >= 0) );
     iassert( (iFadeInTime >= 0) );
@@ -633,7 +633,7 @@ double __cdecl R_UpdateOverTime(float fCurrent, float fGoal, int iFadeInTime, in
     return fCurrent;
 }
 
-void __cdecl RB_DrawSunFlareCore(float alpha, float sizeIn640x480)
+void RB_DrawSunFlareCore(float alpha, float sizeIn640x480)
 {
     float widthInClipSpace; // [esp+Ch] [ebp-28h]
     float heightInClipSpace; // [esp+10h] [ebp-24h]
@@ -653,7 +653,7 @@ void __cdecl RB_DrawSunFlareCore(float alpha, float sizeIn640x480)
             | 0xFF000000));
 }
 
-void __cdecl RB_DrawBlindAndGlare(SunFlareDynamic *sunFlare, int frameTime)
+void RB_DrawBlindAndGlare(SunFlareDynamic *sunFlare, int frameTime)
 {
     float colorVec[4]; // [esp+14h] [ebp-1Ch] BYREF
     float blind; // [esp+24h] [ebp-Ch] BYREF
@@ -670,7 +670,7 @@ void __cdecl RB_DrawBlindAndGlare(SunFlareDynamic *sunFlare, int frameTime)
     RB_DrawFullScreenColoredQuad(rgp.glareBlindMaterial, 0.0, 0.0, 1.0, 1.0, color.packed);
 }
 
-void __cdecl RB_CalcSunBlind(SunFlareDynamic *sunFlare, int frameTime, float *blind, float *glare)
+void RB_CalcSunBlind(SunFlareDynamic *sunFlare, int frameTime, float *blind, float *glare)
 {
     float blindLerp; // [esp+14h] [ebp-Ch]
     float blindLerpa; // [esp+14h] [ebp-Ch]
@@ -755,7 +755,7 @@ void __cdecl RB_CalcSunBlind(SunFlareDynamic *sunFlare, int frameTime, float *bl
     }
 }
 
-void __cdecl RB_AllocSunSpriteQueries()
+void RB_AllocSunSpriteQueries()
 {
     uint32_t viewIndex; // [esp+8h] [ebp-8h]
     uint32_t queryIndex; // [esp+Ch] [ebp-4h]

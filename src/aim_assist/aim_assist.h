@@ -124,77 +124,77 @@ struct AimOutput // sizeof=0x10
 };
 static_assert(sizeof(AimOutput) == 0x10);
 
-void __cdecl TRACK_aim_assist();
-void __cdecl AimAssist_Init(int32_t localClientNum);
+void TRACK_aim_assist();
+void AimAssist_Init(int32_t localClientNum);
 void AimAssist_RegisterDvars();
-void __cdecl AimAssist_Setup(int32_t localClientNum);
-void __cdecl AimAssist_UpdateScreenTargets(
+void AimAssist_Setup(int32_t localClientNum);
+void AimAssist_UpdateScreenTargets(
     int32_t localClientNum,
     const float *viewOrg,
     const float *viewAngles,
     float tanHalfFovX,
     float tanHalfFovY);
-void __cdecl AimAssist_FovScale(AimAssistGlobals *aaGlob, float tanHalfFovY);
-void __cdecl AimAssist_CreateScreenMatrix(AimAssistGlobals *aaGlob, float tanHalfFovX, float tanHalfFovY);
-char __cdecl AimAssist_ConvertToClipBounds(
+void AimAssist_FovScale(AimAssistGlobals *aaGlob, float tanHalfFovY);
+void AimAssist_CreateScreenMatrix(AimAssistGlobals *aaGlob, float tanHalfFovX, float tanHalfFovY);
+char AimAssist_ConvertToClipBounds(
     const AimAssistGlobals *aaGlob,
     const float (*bounds)[3],
     const mat4x3& mtx,
     float (*clipBounds)[3]);
-char __cdecl AimAssist_XfmWorldPointToClipSpace(const AimAssistGlobals *aaGlob, const float *in, float *out);
-double __cdecl AimAssist_GetCrosshairDistSqr(const float *clipMins, const float *clipMaxs);
-void __cdecl AimAssist_AddToTargetList(AimAssistGlobals *aaGlob, const AimScreenTarget *screenTarget);
-int32_t __cdecl AimAssist_CompareTargets(const AimScreenTarget *screenTargetA, const AimScreenTarget *screenTargetB);
-int32_t __cdecl AimAssist_CalcAimPos(
+char AimAssist_XfmWorldPointToClipSpace(const AimAssistGlobals *aaGlob, const float *in, float *out);
+double AimAssist_GetCrosshairDistSqr(const float *clipMins, const float *clipMaxs);
+void AimAssist_AddToTargetList(AimAssistGlobals *aaGlob, const AimScreenTarget *screenTarget);
+int32_t AimAssist_CompareTargets(const AimScreenTarget *screenTargetA, const AimScreenTarget *screenTargetB);
+int32_t AimAssist_CalcAimPos(
     int32_t localClientNum,
     const centity_s *targetEnt,
     const AimTarget *target,
     float *aimPos);
-int32_t __cdecl AimTarget_GetTagPos(int32_t localClientNum, const centity_s *cent, uint32_t tagName, float *pos);
-void __cdecl AimTarget_GetTagPos(const centity_s *ent, uint32_t tagName, float *pos);
-int32_t __cdecl AimAssist_GetScreenTargetCount(int32_t localClientNum);
-int32_t __cdecl AimAssist_GetScreenTargetEntity(int32_t localClientNum, uint32_t targetIndex);
-void __cdecl AimAssist_ClearEntityReference(int32_t localClientNum, int32_t entIndex);
-void __cdecl AimAssist_UpdateTweakables(const AimInput *input);
-void __cdecl AimAssist_UpdateAdsLerp(const AimInput *input);
-uint32_t __cdecl AimAssist_GetWeaponIndex(int32_t localClientNum, const playerState_s *ps);
-const AimScreenTarget *__cdecl AimAssist_GetBestTarget(
+int32_t AimTarget_GetTagPos(int32_t localClientNum, const centity_s *cent, uint32_t tagName, float *pos);
+void AimTarget_GetTagPos(const centity_s *ent, uint32_t tagName, float *pos);
+int32_t AimAssist_GetScreenTargetCount(int32_t localClientNum);
+int32_t AimAssist_GetScreenTargetEntity(int32_t localClientNum, uint32_t targetIndex);
+void AimAssist_ClearEntityReference(int32_t localClientNum, int32_t entIndex);
+void AimAssist_UpdateTweakables(const AimInput *input);
+void AimAssist_UpdateAdsLerp(const AimInput *input);
+uint32_t AimAssist_GetWeaponIndex(int32_t localClientNum, const playerState_s *ps);
+const AimScreenTarget *AimAssist_GetBestTarget(
     const AimAssistGlobals *aaGlob,
     float range,
     float regionWidth,
     float regionHeight);
-const AimScreenTarget *__cdecl AimAssist_GetTargetFromEntity(const AimAssistGlobals *aaGlob, int32_t entIndex);
-void __cdecl AimAssist_ApplyAutoMelee(const AimInput *input, AimOutput *output);
-void __cdecl AimAssist_ClearAutoMeleeTarget(AimAssistGlobals *aaGlob);
-char __cdecl AimAssist_UpdateAutoMeleeTarget(AimAssistGlobals *aaGlob);
-void __cdecl AimAssist_SetAutoMeleeTarget(AimAssistGlobals *aaGlob, const AimScreenTarget *screenTarget);
-void __cdecl AimAssist_ApplyMeleeCharge(const AimInput *input, AimOutput *output);
-void __cdecl AimAssist_UpdateMouseInput(const AimInput *input, AimOutput *output);
-void __cdecl AimAssist_DrawDebugOverlay(uint32_t localClientNum);
-void __cdecl AimAssist_DrawCenterBox(
+const AimScreenTarget *AimAssist_GetTargetFromEntity(const AimAssistGlobals *aaGlob, int32_t entIndex);
+void AimAssist_ApplyAutoMelee(const AimInput *input, AimOutput *output);
+void AimAssist_ClearAutoMeleeTarget(AimAssistGlobals *aaGlob);
+char AimAssist_UpdateAutoMeleeTarget(AimAssistGlobals *aaGlob);
+void AimAssist_SetAutoMeleeTarget(AimAssistGlobals *aaGlob, const AimScreenTarget *screenTarget);
+void AimAssist_ApplyMeleeCharge(const AimInput *input, AimOutput *output);
+void AimAssist_UpdateMouseInput(const AimInput *input, AimOutput *output);
+void AimAssist_DrawDebugOverlay(uint32_t localClientNum);
+void AimAssist_DrawCenterBox(
     const AimAssistGlobals *aaGlob,
     float clipHalfWidth,
     float clipHalfHeight,
     const float *color);
-void __cdecl AimAssist_DrawTargets(int64_t localClientNum, const float *color);
+void AimAssist_DrawTargets(int64_t localClientNum, const float *color);
 
 
 // aim_target_mp
 struct cg_s;
-int32_t __cdecl AimTarget_GetTagPos(int32_t localClientNum, const centity_s *cent, uint32_t tagName, float *pos);
-void __cdecl TRACK_aim_target();
-void __cdecl AimTarget_Init(int32_t localClientNum);
+int32_t AimTarget_GetTagPos(int32_t localClientNum, const centity_s *cent, uint32_t tagName, float *pos);
+void TRACK_aim_target();
+void AimTarget_Init(int32_t localClientNum);
 const dvar_s *AimTarget_RegisterDvars();
-void __cdecl AimTarget_ClearTargetList(int32_t localClientNum);
-void __cdecl AimTarget_ProcessEntity(int32_t localClientNum, const centity_s *ent);
+void AimTarget_ClearTargetList(int32_t localClientNum);
+void AimTarget_ProcessEntity(int32_t localClientNum, const centity_s *ent);
 bool AimTarget_IsTargetValid(const cg_s *cgameGlob, const centity_s *targetEnt);
-double __cdecl AimTarget_GetTargetRadius(const centity_s *targetEnt);
-void __cdecl AimTarget_GetTargetBounds(const centity_s *targetEnt, float *mins, float *maxs);
-char __cdecl AimTarget_IsTargetVisible(int32_t localClientNum, const centity_s *targetEnt, uint32_t visBone);
-void __cdecl AimTarget_GetTargetCenter(const centity_s *targetEnt, float *center);
-void __cdecl AimTarget_CreateTarget(int32_t localClientNum, const centity_s *targetEnt, AimTarget *target);
-void __cdecl AimTarget_AddTargetToList(int32_t localClientNum, const AimTarget *target);
-int __cdecl AimTarget_CompareTargets(const AimTarget *targetA, const AimTarget *targetB);
-bool __cdecl AimTarget_PlayerInValidState(const playerState_s *ps);
-void __cdecl AimTarget_UpdateClientTargets(int32_t localClientNum);
-void __cdecl AimTarget_GetClientTargetList(int32_t localClientNum, AimTarget **targetList, int32_t*targetCount);
+double AimTarget_GetTargetRadius(const centity_s *targetEnt);
+void AimTarget_GetTargetBounds(const centity_s *targetEnt, float *mins, float *maxs);
+char AimTarget_IsTargetVisible(int32_t localClientNum, const centity_s *targetEnt, uint32_t visBone);
+void AimTarget_GetTargetCenter(const centity_s *targetEnt, float *center);
+void AimTarget_CreateTarget(int32_t localClientNum, const centity_s *targetEnt, AimTarget *target);
+void AimTarget_AddTargetToList(int32_t localClientNum, const AimTarget *target);
+int AimTarget_CompareTargets(const AimTarget *targetA, const AimTarget *targetB);
+bool AimTarget_PlayerInValidState(const playerState_s *ps);
+void AimTarget_UpdateClientTargets(int32_t localClientNum);
+void AimTarget_GetClientTargetList(int32_t localClientNum, AimTarget **targetList, int32_t*targetCount);

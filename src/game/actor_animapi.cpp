@@ -13,14 +13,14 @@
 #include "g_main.h"
 #include "actor_cover.h"
 
-void __cdecl Actor_InitAnim(actor_s *self)
+void Actor_InitAnim(actor_s *self)
 {
     iassert(self->AnimScriptHandle == 0);
     iassert(self->pAnimScriptFunc == NULL);
     iassert(self->eAnimMode == AI_ANIM_UNKNOWN);
 }
 
-unsigned int __cdecl Actor_IsAnimScriptAlive(actor_s *self)
+unsigned int Actor_IsAnimScriptAlive(actor_s *self)
 {
     unsigned int result; // r3
 
@@ -30,7 +30,7 @@ unsigned int __cdecl Actor_IsAnimScriptAlive(actor_s *self)
     return result;
 }
 
-void __cdecl Actor_KillAnimScript(actor_s *self)
+void Actor_KillAnimScript(actor_s *self)
 {
     int AnimScriptHandle; // r11
 
@@ -53,7 +53,7 @@ void __cdecl Actor_KillAnimScript(actor_s *self)
     }
 }
 
-void __cdecl Actor_SetAnimScript(
+void Actor_SetAnimScript(
     actor_s *self,
     scr_animscript_t *pAnimScriptFunc,
     ai_movemode_t moveMode,
@@ -103,7 +103,7 @@ void __cdecl Actor_SetAnimScript(
     }
 }
 
-void __cdecl Actor_AnimMoveAway(actor_s *self, scr_animscript_t *pAnimScriptFunc)
+void Actor_AnimMoveAway(actor_s *self, scr_animscript_t *pAnimScriptFunc)
 {
     iassert(pAnimScriptFunc);
     
@@ -119,7 +119,7 @@ void __cdecl Actor_AnimMoveAway(actor_s *self, scr_animscript_t *pAnimScriptFunc
     self->bUseGoalWeight = 0;
 }
 
-void __cdecl Actor_AnimStop(actor_s *self, scr_animscript_t *pAnimScriptFunc)
+void Actor_AnimStop(actor_s *self, scr_animscript_t *pAnimScriptFunc)
 {
     iassert(pAnimScriptFunc);
 
@@ -137,7 +137,7 @@ void __cdecl Actor_AnimStop(actor_s *self, scr_animscript_t *pAnimScriptFunc)
     }
 }
 
-void __cdecl Actor_AnimWalk(actor_s *self, scr_animscript_t *pAfterMoveAnimScriptFunc)
+void Actor_AnimWalk(actor_s *self, scr_animscript_t *pAfterMoveAnimScriptFunc)
 {
     iassert(Actor_HasPath(self));
     iassert(pAfterMoveAnimScriptFunc);
@@ -154,7 +154,7 @@ void __cdecl Actor_AnimWalk(actor_s *self, scr_animscript_t *pAfterMoveAnimScrip
     self->bUseGoalWeight = 0;
 }
 
-scr_animscript_t *__cdecl Actor_GetStopAnim(actor_s *self)
+scr_animscript_t *Actor_GetStopAnim(actor_s *self)
 {
     AISpecies species; // r10
     pathnode_t *pClaimedNode; // r30
@@ -181,7 +181,7 @@ scr_animscript_t *__cdecl Actor_GetStopAnim(actor_s *self)
     return &g_animScriptTable[species]->stop;
 }
 
-void __cdecl Actor_AnimTryWalk(actor_s *self)
+void Actor_AnimTryWalk(actor_s *self)
 {
     if (self->pCloseEnt.isDefined())
     {
@@ -203,7 +203,7 @@ void __cdecl Actor_AnimTryWalk(actor_s *self)
     }
 }
 
-void __cdecl Actor_AnimRun(actor_s *self, scr_animscript_t *pAfterMoveAnimScriptFunc)
+void Actor_AnimRun(actor_s *self, scr_animscript_t *pAfterMoveAnimScriptFunc)
 {
     iassert(Actor_HasPath(self));
     iassert(pAfterMoveAnimScriptFunc);
@@ -220,7 +220,7 @@ void __cdecl Actor_AnimRun(actor_s *self, scr_animscript_t *pAfterMoveAnimScript
     self->bUseGoalWeight = 0;
 }
 
-void __cdecl Actor_AnimTryRun(actor_s *self)
+void Actor_AnimTryRun(actor_s *self)
 {
     if (self->pCloseEnt.isDefined())
     {
@@ -242,7 +242,7 @@ void __cdecl Actor_AnimTryRun(actor_s *self)
     }
 }
 
-void __cdecl Actor_AnimCombat(actor_s *self)
+void Actor_AnimCombat(actor_s *self)
 {
     sentient_s *sentient; // r10
     bool fixedNode; // r11
@@ -289,13 +289,13 @@ LABEL_18:
     Actor_SetAnimScript(self, &v5->combat, AI_MOVE_STOP, v7);
 }
 
-void __cdecl Actor_AnimPain(actor_s *self)
+void Actor_AnimPain(actor_s *self)
 {
     Actor_SetAnimScript(self, &g_animScriptTable[self->species]->pain, AI_MOVE_STOP, AI_ANIM_USE_BOTH_DELTAS);
     self->bUseGoalWeight = 0;
 }
 
-void __cdecl Actor_AnimDeath(actor_s *self)
+void Actor_AnimDeath(actor_s *self)
 {
     ai_animmode_t eScriptSetAnimMode; // r6
 
@@ -306,7 +306,7 @@ void __cdecl Actor_AnimDeath(actor_s *self)
     self->bUseGoalWeight = 0;
 }
 
-void __cdecl Actor_AnimSpecific(actor_s *self, scr_animscript_t *func, ai_animmode_t eAnimMode, bool bUseGoalWeight)
+void Actor_AnimSpecific(actor_s *self, scr_animscript_t *func, ai_animmode_t eAnimMode, bool bUseGoalWeight)
 {
     ai_animmode_t eScriptSetAnimMode; // r6
 
@@ -318,7 +318,7 @@ void __cdecl Actor_AnimSpecific(actor_s *self, scr_animscript_t *func, ai_animmo
     self->bUseGoalWeight = bUseGoalWeight;
 }
 
-void __cdecl Actor_AnimScripted(actor_s *self)
+void Actor_AnimScripted(actor_s *self)
 {
     Actor_SetAnimScript(self, &g_animScriptTable[self->species]->scripted, AI_MOVE_STOP, AI_ANIM_USE_BOTH_DELTAS);
     self->bUseGoalWeight = 1;

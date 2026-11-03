@@ -138,29 +138,29 @@ struct AlLocal
 #endif
 
 // snd_driver
-void __cdecl TRACK_snd_driver();
-bool __cdecl SND_IsMultiChannel();
-void __cdecl SND_ShutdownDriver();
-int __cdecl SND_GetDriverCPUPercentage();
-void __cdecl SND_Set3DPosition(int index, const float *org);
-void __cdecl SND_Stop2DChannel(int index);
-void __cdecl SND_Pause2DChannel(int index);
-void __cdecl SND_Unpause2DChannel(int index, int timeshift);
-bool __cdecl SND_Is2DChannelFree(int index);
-void __cdecl SND_Stop3DChannel(int index);
-void __cdecl SND_Pause3DChannel(int index);
-void __cdecl SND_Unpause3DChannel(int index, int timeshift);
-bool __cdecl SND_Is3DChannelFree(int index);
-void __cdecl SND_StopStreamChannel(int index);
-void __cdecl SND_PauseStreamChannel(int index);
-void __cdecl SND_UnpauseStreamChannel(int index, int timeshift);
-bool __cdecl SND_IsStreamChannelFree(int index);
-int __cdecl SND_StartAlias2DSample(SndStartAliasInfo *startAliasInfo, int *pChannel);
-int __cdecl SND_StartAlias3DSample(SndStartAliasInfo *startAliasInfo, int *pChannel);
-int __cdecl SND_StartAliasStreamOnChannel(SndStartAliasInfo *startAliasInfo, int index);
-void __cdecl SND_SetRoomtype(int roomtype);
-void __cdecl SND_UpdateEqs();
-void __cdecl SND_SetEqParams(
+void TRACK_snd_driver();
+bool SND_IsMultiChannel();
+void SND_ShutdownDriver();
+int SND_GetDriverCPUPercentage();
+void SND_Set3DPosition(int index, const float *org);
+void SND_Stop2DChannel(int index);
+void SND_Pause2DChannel(int index);
+void SND_Unpause2DChannel(int index, int timeshift);
+bool SND_Is2DChannelFree(int index);
+void SND_Stop3DChannel(int index);
+void SND_Pause3DChannel(int index);
+void SND_Unpause3DChannel(int index, int timeshift);
+bool SND_Is3DChannelFree(int index);
+void SND_StopStreamChannel(int index);
+void SND_PauseStreamChannel(int index);
+void SND_UnpauseStreamChannel(int index, int timeshift);
+bool SND_IsStreamChannelFree(int index);
+int SND_StartAlias2DSample(SndStartAliasInfo *startAliasInfo, int *pChannel);
+int SND_StartAlias3DSample(SndStartAliasInfo *startAliasInfo, int *pChannel);
+int SND_StartAliasStreamOnChannel(SndStartAliasInfo *startAliasInfo, int index);
+void SND_SetRoomtype(int roomtype);
+void SND_UpdateEqs();
+void SND_SetEqParams(
     uint32_t entchannel,
     int eqIndex,
     uint32_t band,
@@ -168,42 +168,42 @@ void __cdecl SND_SetEqParams(
     float gain,
     float freq,
     float q);
-void __cdecl SND_SetEqType(uint32_t entchannel, int eqIndex, uint32_t band, SND_EQTYPE type);
-void __cdecl SND_SetEqFreq(uint32_t entchannel, int eqIndex, uint32_t band, float freq);
-void __cdecl SND_SetEqGain(uint32_t entchannel, int eqIndex, uint32_t band, float gain);
-void __cdecl SND_SetEqQ(uint32_t entchannel, int eqIndex, uint32_t band, float q);
-void __cdecl SND_DisableEq(uint32_t entchannel, int eqIndex, uint32_t band);
-void __cdecl SND_SaveEq(MemoryFile *memFile);
-void __cdecl SND_RestoreEq(MemoryFile *memFile);
-void __cdecl SND_PrintEqParams();
-float __cdecl SND_Get2DChannelVolume(int index);
-void __cdecl SND_Set2DChannelVolume(int index, float volume);
-float __cdecl SND_Get3DChannelVolume(int index);
-void __cdecl SND_Set3DChannelVolume(int index, float volume);
-float __cdecl SND_GetStreamChannelVolume(int index);
-void __cdecl SND_SetStreamChannelVolume(int index, float volume);
-int __cdecl SND_Get2DChannelPlaybackRate(int index);
-void __cdecl SND_Set2DChannelPlaybackRate(int index, int rate);
-int __cdecl SND_Get3DChannelPlaybackRate(int index);
-void __cdecl SND_Set3DChannelPlaybackRate(int index, int rate);
-int __cdecl SND_GetStreamChannelPlaybackRate(int index);
-void __cdecl SND_SetStreamChannelPlaybackRate(int index, int rate);
-void __cdecl SND_Update2DChannelReverb(int index);
-void __cdecl SND_Update3DChannelReverb(int index);
-void __cdecl SND_UpdateStreamChannelReverb(int index);
-int __cdecl SND_Get2DChannelLength(int index);
-int __cdecl SND_Get3DChannelLength(int index);
-int __cdecl SND_GetStreamChannelLength(int index);
-void __cdecl SND_Get2DChannelSaveInfo(int index, snd_save_2D_sample_t *info);
-void __cdecl SND_Set2DChannelFromSaveInfo(int index, snd_save_2D_sample_t *info);
-void __cdecl SND_Get3DChannelSaveInfo(int index, snd_save_3D_sample_t *info);
-void __cdecl SND_GetStreamChannelSaveInfo(int index, snd_save_stream_t *info);
-void __cdecl SND_SetStreamChannelFromSaveInfo(int index, snd_save_stream_t *info);
-int __cdecl SND_GetSoundFileSize(uint32_t *pSoundFile);
-void __cdecl SND_DriverPostUpdate();
-void __cdecl SND_Update2DChannel(int i, int frametime);
-void __cdecl SND_Update3DChannel(int i, int frametime);
-void __cdecl SND_UpdateStreamChannel(int i, int frametime);
+void SND_SetEqType(uint32_t entchannel, int eqIndex, uint32_t band, SND_EQTYPE type);
+void SND_SetEqFreq(uint32_t entchannel, int eqIndex, uint32_t band, float freq);
+void SND_SetEqGain(uint32_t entchannel, int eqIndex, uint32_t band, float gain);
+void SND_SetEqQ(uint32_t entchannel, int eqIndex, uint32_t band, float q);
+void SND_DisableEq(uint32_t entchannel, int eqIndex, uint32_t band);
+void SND_SaveEq(MemoryFile *memFile);
+void SND_RestoreEq(MemoryFile *memFile);
+void SND_PrintEqParams();
+float SND_Get2DChannelVolume(int index);
+void SND_Set2DChannelVolume(int index, float volume);
+float SND_Get3DChannelVolume(int index);
+void SND_Set3DChannelVolume(int index, float volume);
+float SND_GetStreamChannelVolume(int index);
+void SND_SetStreamChannelVolume(int index, float volume);
+int SND_Get2DChannelPlaybackRate(int index);
+void SND_Set2DChannelPlaybackRate(int index, int rate);
+int SND_Get3DChannelPlaybackRate(int index);
+void SND_Set3DChannelPlaybackRate(int index, int rate);
+int SND_GetStreamChannelPlaybackRate(int index);
+void SND_SetStreamChannelPlaybackRate(int index, int rate);
+void SND_Update2DChannelReverb(int index);
+void SND_Update3DChannelReverb(int index);
+void SND_UpdateStreamChannelReverb(int index);
+int SND_Get2DChannelLength(int index);
+int SND_Get3DChannelLength(int index);
+int SND_GetStreamChannelLength(int index);
+void SND_Get2DChannelSaveInfo(int index, snd_save_2D_sample_t *info);
+void SND_Set2DChannelFromSaveInfo(int index, snd_save_2D_sample_t *info);
+void SND_Get3DChannelSaveInfo(int index, snd_save_3D_sample_t *info);
+void SND_GetStreamChannelSaveInfo(int index, snd_save_stream_t *info);
+void SND_SetStreamChannelFromSaveInfo(int index, snd_save_stream_t *info);
+int SND_GetSoundFileSize(uint32_t *pSoundFile);
+void SND_DriverPostUpdate();
+void SND_Update2DChannel(int i, int frametime);
+void SND_Update3DChannel(int i, int frametime);
+void SND_UpdateStreamChannel(int i, int frametime);
 
 #ifdef KISAK_SP
 void SND_SetEqLerp(float lerp);
@@ -226,29 +226,29 @@ void __stdcall MSS_FileCloseCallback(UINTa hFileHandle);
 int __stdcall MSS_FileSeekCallback(UINTa hFileHandle, int offset, uint32_t type);
 uint32_t __stdcall MSS_FileReadCallback(UINTa hFileHandle, void *pBuffer, uint32_t bytes);
 
-_DIG_DRIVER *__cdecl MSS_open_digital_driver(int hertz, int bits, int channels);
+_DIG_DRIVER *MSS_open_digital_driver(int hertz, int bits, int channels);
 #endif
 void MSS_InitFailed();
-char __cdecl MSS_Init();
+char MSS_Init();
 void MSS_InitChannels();
 void MSS_InitEq();
-bool __cdecl MSS_Startup();
+bool MSS_Startup();
 void MSS_ShutdownCleanup();
 float MSS_GetDryLevel();
 float MSS_GetWetLevel(const snd_alias_t *pAlias);
 #ifndef KISAK_OPENAL
-void __cdecl MSS_ApplyEqFilter(_SAMPLE *s, int entchannel);
+void MSS_ApplyEqFilter(_SAMPLE *s, int entchannel);
 #else
-void __cdecl MSS_ApplyEqFilter(ALuint source, int entchannel);
+void MSS_ApplyEqFilter(ALuint source, int entchannel);
 #endif
-void __cdecl MSS_ResumeSample(int i, int frametime);
+void MSS_ResumeSample(int i, int frametime);
 #ifndef KISAK_OPENAL
-_DIG_DRIVER *__cdecl MSS_GetDriver();
+_DIG_DRIVER *MSS_GetDriver();
 #endif
-int __cdecl MSS_DigitalFormatType(int waveFormat, int bits, int channels);
-uint8_t *__cdecl MSS_Alloc(uint32_t bytes, uint32_t rate);
-uint8_t *__cdecl MSS_Alloc_LoadObj(uint32_t bytes, uint32_t rate);
-uint32_t *__cdecl MSS_Alloc_FastFile(int bytes);
+int MSS_DigitalFormatType(int waveFormat, int bits, int channels);
+uint8_t *MSS_Alloc(uint32_t bytes, uint32_t rate);
+uint8_t *MSS_Alloc_LoadObj(uint32_t bytes, uint32_t rate);
+uint32_t *MSS_Alloc_FastFile(int bytes);
 
 
 #ifndef KISAK_OPENAL

@@ -9,7 +9,7 @@
 uint8_t *s_imageLoadBuf;
 uint32_t s_imageLoadBytesUsed;
 
-uint8_t *__cdecl Image_AllocTempMemory(int bytes)
+uint8_t *Image_AllocTempMemory(int bytes)
 {
     uint8_t *mem; // [esp+10h] [ebp-4h]
     uint32_t bytesa; // [esp+1Ch] [ebp+8h]
@@ -30,14 +30,14 @@ uint8_t *__cdecl Image_AllocTempMemory(int bytes)
     return mem;
 }
 
-void __cdecl Image_FreeTempMemory(uint8_t *mem, int bytes)
+void Image_FreeTempMemory(uint8_t *mem, int bytes)
 {
     bytes = (bytes + 3) & 0xFFFFFFFC;
     iassert( mem + bytes == s_imageLoadBuf + s_imageLoadBytesUsed );
     s_imageLoadBytesUsed -= bytes;
 }
 
-void __cdecl Image_Generate2D(GfxImage *image, uint8_t *pixels, int width, int height, _D3DFORMAT imageFormat)
+void Image_Generate2D(GfxImage *image, uint8_t *pixels, int width, int height, _D3DFORMAT imageFormat)
 {
     iassert( pixels );
     if (width <= 0 || (width & (width - 1)) != 0)
@@ -61,7 +61,7 @@ void __cdecl Image_Generate2D(GfxImage *image, uint8_t *pixels, int width, int h
     Image_UploadData(image, imageFormat, D3DCUBEMAP_FACE_POSITIVE_X, 0, pixels);
 }
 
-void __cdecl Image_ExpandBgr(const uint8_t *src, uint32_t count, uint8_t *dst)
+void Image_ExpandBgr(const uint8_t *src, uint32_t count, uint8_t *dst)
 {
     iassert( src );
     iassert( dst );
@@ -78,7 +78,7 @@ void __cdecl Image_ExpandBgr(const uint8_t *src, uint32_t count, uint8_t *dst)
     } while (count);
 }
 
-uint32_t __cdecl Image_GetCardMemoryAmountForMipLevel(
+uint32_t Image_GetCardMemoryAmountForMipLevel(
     _D3DFORMAT format,
     uint32_t mipWidth,
     uint32_t mipHeight,
@@ -134,7 +134,7 @@ uint32_t __cdecl Image_GetCardMemoryAmountForMipLevel(
     return result;
 }
 
-uint32_t __cdecl Image_GetCardMemoryAmount(
+uint32_t Image_GetCardMemoryAmount(
     char imageFlags,
     _D3DFORMAT format,
     uint32_t width,
@@ -174,13 +174,13 @@ uint32_t __cdecl Image_GetCardMemoryAmount(
     return memory;
 }
 
-void __cdecl Image_TrackTotalMemory(GfxImage *image, int platform, int memory)
+void Image_TrackTotalMemory(GfxImage *image, int platform, int memory)
 {
     if (!Image_IsCodeImage(image->track))
         imageGlobals.totalMemory.platform[platform] += memory - image->cardMemory.platform[platform];
 }
 
-void __cdecl Image_TrackTexture(GfxImage *image, char imageFlags, _D3DFORMAT format, int width, int height, int depth)
+void Image_TrackTexture(GfxImage *image, char imageFlags, _D3DFORMAT format, int width, int height, int depth)
 {
     uint32_t CardMemoryAmount; // eax
     uint32_t v7; // [esp+0h] [ebp-2Ch]
@@ -225,7 +225,7 @@ void __cdecl Image_TrackTexture(GfxImage *image, char imageFlags, _D3DFORMAT for
     }
 }
 
-void __cdecl Image_SetupFromFile(GfxImage *image, const GfxImageFileHeader *fileHeader, _D3DFORMAT imageFormat)
+void Image_SetupFromFile(GfxImage *image, const GfxImageFileHeader *fileHeader, _D3DFORMAT imageFormat)
 {
     uint32_t v3; // [esp+0h] [ebp-2Ch]
     uint32_t v4; // [esp+4h] [ebp-28h]
@@ -251,7 +251,7 @@ void __cdecl Image_SetupFromFile(GfxImage *image, const GfxImageFileHeader *file
     iassert( image->cardMemory.platform[PICMIP_PLATFORM_USED] > 0 );
 }
 
-GfxImage *__cdecl Image_FindExisting_LoadObj(const char *name)
+GfxImage *Image_FindExisting_LoadObj(const char *name)
 {
     GfxImage *image; // [esp+14h] [ebp-8h]
     int hashIndex; // [esp+18h] [ebp-4h]
@@ -269,12 +269,12 @@ GfxImage *__cdecl Image_FindExisting_LoadObj(const char *name)
     return !Image_IsProg(image) ? image : 0;
 }
 
-bool __cdecl Image_IsProg(GfxImage *image)
+bool Image_IsProg(GfxImage *image)
 {
     return image >= g_imageProgs && image < &g_imageProgs[ARRAY_COUNT(g_imageProgs)];
 }
 
-void __cdecl Image_Generate3D(
+void Image_Generate3D(
     GfxImage *image,
     uint8_t *pixels,
     int width,
@@ -312,7 +312,7 @@ void __cdecl Image_Generate3D(
     Image_UploadData(image, imageFormat, D3DCUBEMAP_FACE_POSITIVE_X, 0, pixels);
 }
 
-void __cdecl Image_GenerateCube(
+void Image_GenerateCube(
     GfxImage *image,
     const uint8_t *(*pixels)[15],
     int edgeLen,
@@ -341,13 +341,13 @@ void __cdecl Image_GenerateCube(
     }
 }
 
-void __cdecl Image_BuildWaterMap(GfxImage *image)
+void Image_BuildWaterMap(GfxImage *image)
 {
     iassert( image );
     Image_SetupAndLoad(image, image->width, image->height, 1, IMG_FLAG_NOPICMIP | IMG_FLAG_DYNAMIC, D3DFMT_L8);
 }
 
-void __cdecl Image_LoadDxtc(
+void Image_LoadDxtc(
     GfxImage *image,
     const GfxImageFileHeader *fileHeader,
     const uint8_t *data,
@@ -401,7 +401,7 @@ void __cdecl Image_LoadDxtc(
     }
 }
 
-static GfxImage *__cdecl Image_Load(char *name, uint8_t semantic, uint8_t imageTrack)
+static GfxImage *Image_Load(char *name, uint8_t semantic, uint8_t imageTrack)
 {
     GfxImage *image; // [esp+0h] [ebp-4h]
 
@@ -416,12 +416,12 @@ static GfxImage *__cdecl Image_Load(char *name, uint8_t semantic, uint8_t imageT
         return 0;
 }
 
-static void __cdecl Image_PrintTruncatedFileError(const char *filepath)
+static void Image_PrintTruncatedFileError(const char *filepath)
 {
     Com_PrintError(CON_CHANNEL_GFX, "ERROR: image '%s' is truncated.  Delete the file and run converter to fix.\n", filepath);
 }
 
-char __cdecl Image_LoadFromFileWithReader(GfxImage *image, int(__cdecl *OpenFileRead)(const char *, int *))
+char Image_LoadFromFileWithReader(GfxImage *image, int(*OpenFileRead)(const char *, int *))
 {
     int v4; // [esp+0h] [ebp-84h]
     uint8_t *imageData; // [esp+Ch] [ebp-78h]
@@ -513,7 +513,7 @@ char __cdecl Image_LoadFromFileWithReader(GfxImage *image, int(__cdecl *OpenFile
     }
 }
 
-void __cdecl Image_LoadBitmap(
+void Image_LoadBitmap(
     GfxImage *image,
     const GfxImageFileHeader *fileHeader,
     uint8_t *data,
@@ -576,7 +576,7 @@ void __cdecl Image_LoadBitmap(
         Image_FreeTempMemory(expandedData, expandedSize);
 }
 
-void __cdecl Image_LoadFromData(GfxImage *image, GfxImageFileHeader *fileHeader, uint8_t *srcData)
+void Image_LoadFromData(GfxImage *image, GfxImageFileHeader *fileHeader, uint8_t *srcData)
 {
     const char *v3; // eax
 
@@ -632,7 +632,7 @@ void __cdecl Image_LoadFromData(GfxImage *image, GfxImageFileHeader *fileHeader,
     }
 }
 
-GfxImage *__cdecl Image_Register_LoadObj(char *imageName, uint8_t semantic, uint8_t imageTrack)
+GfxImage *Image_Register_LoadObj(char *imageName, uint8_t semantic, uint8_t imageTrack)
 {
     GfxImage *image; // [esp+0h] [ebp-4h]
 

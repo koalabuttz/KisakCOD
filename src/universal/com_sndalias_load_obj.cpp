@@ -9,12 +9,12 @@
 SoundAliasLoadGlobals saLoadObjGlob;
 
 cmd_function_s Com_RefreshVolumeModGroups_f_VAR;
-void __cdecl Com_RefreshVolumeModGroups_f()
+void Com_RefreshVolumeModGroups_f()
 {
     saLoadObjGlob.volumeModGroupsInitialized = 0;
 }
 
-void __cdecl Com_LoadVolumeModGroups(VolumeModGroup *volumeModGroups)
+void Com_LoadVolumeModGroups(VolumeModGroup *volumeModGroups)
 {
     char filename[68]; // [esp+2Ch] [ebp-2068h] BYREF
     signed int v6; // [esp+70h] [ebp-2024h]
@@ -107,17 +107,17 @@ void __cdecl Com_LoadVolumeModGroups(VolumeModGroup *volumeModGroups)
     }
 }
 
-SndCurve *__cdecl Com_GetDefaultSoundAliasVolumeFalloffCurve()
+SndCurve *Com_GetDefaultSoundAliasVolumeFalloffCurve()
 {
     return g_sa.volumeFalloffCurves;
 }
 
-SpeakerMap *__cdecl Com_GetDefaultSoundAliasSpeakerMap()
+SpeakerMap *Com_GetDefaultSoundAliasSpeakerMap()
 {
     return &g_sa.speakerMaps[0].speakerMap;
 }
 
-void __cdecl Com_LoadSoundAliasDefaults(snd_alias_build_s *alias, const char *sourceFile, const char *loadspec)
+void Com_LoadSoundAliasDefaults(snd_alias_build_s *alias, const char *sourceFile, const char *loadspec)
 {
     I_strncpyz(alias->szSourceFile, sourceFile, 64);
 
@@ -154,10 +154,10 @@ void __cdecl Com_LoadSoundAliasDefaults(snd_alias_build_s *alias, const char *so
     alias->pNext = 0;
 }
 
-BOOL __cdecl Com_IsValidName(
+BOOL Com_IsValidName(
     const char *token,
     uint32_t maxLength,
-    int(__cdecl *validityFunction)(const char *),
+    int(*validityFunction)(const char *),
     snd_alias_build_s *alias,
     snd_alias_members_t field,
     const char *sourceFile)
@@ -185,7 +185,7 @@ BOOL __cdecl Com_IsValidName(
     return !alias->error;
 }
 
-int __cdecl Com_IsValidAliasName(const char *pszName)
+int Com_IsValidAliasName(const char *pszName)
 {
     const char *pszNamea; // [esp+8h] [ebp+8h]
 
@@ -201,7 +201,7 @@ int __cdecl Com_IsValidAliasName(const char *pszName)
     return 1;
 }
 
-double __cdecl Com_ParseFloatInRange(
+double Com_ParseFloatInRange(
     const char *token,
     float min,
     float max,
@@ -245,7 +245,7 @@ double __cdecl Com_ParseFloatInRange(
         return min;
 }
 
-double __cdecl Com_GetSoundAliasVolumeModGroupValue(const char *volumeModGroupName, const char *sourceFile)
+double Com_GetSoundAliasVolumeModGroupValue(const char *volumeModGroupName, const char *sourceFile)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -262,7 +262,7 @@ double __cdecl Com_GetSoundAliasVolumeModGroupValue(const char *volumeModGroupNa
     return 0.0;
 }
 
-void __cdecl Com_SoundAliasChannelForName(char *name, const char *sourceFile, snd_alias_build_s *alias)
+void Com_SoundAliasChannelForName(char *name, const char *sourceFile, snd_alias_build_s *alias)
 {
     int v3; // [esp+0h] [ebp-400Ch]
     char string[16384]; // [esp+4h] [ebp-4008h] BYREF
@@ -301,7 +301,7 @@ void __cdecl Com_SoundAliasChannelForName(char *name, const char *sourceFile, sn
     alias->error = 1;
 }
 
-void __cdecl Com_SoundAliasTypeForName(const char *name, const char *sourceFile, snd_alias_build_s *alias)
+void Com_SoundAliasTypeForName(const char *name, const char *sourceFile, snd_alias_build_s *alias)
 {
     if (!alias)
         MyAssertHandler(".\\universal\\com_sndalias_load_obj.cpp", 422, 0, "%s", "alias");
@@ -331,7 +331,7 @@ void __cdecl Com_SoundAliasTypeForName(const char *name, const char *sourceFile,
     }
 }
 
-void __cdecl Com_SoundAliasLoop(const char *token, const char *sourceFile, snd_alias_build_s *alias)
+void Com_SoundAliasLoop(const char *token, const char *sourceFile, snd_alias_build_s *alias)
 {
     if (!alias)
         MyAssertHandler(".\\universal\\com_sndalias_load_obj.cpp", 449, 0, "%s", "alias");
@@ -369,7 +369,7 @@ void __cdecl Com_SoundAliasLoop(const char *token, const char *sourceFile, snd_a
     }
 }
 
-char __cdecl Com_SoundAliasLoadSpec(
+char Com_SoundAliasLoadSpec(
     const char *loadspecLevel,
     const char *loadspecCurGame,
     const char *loadlist,
@@ -504,7 +504,7 @@ char __cdecl Com_SoundAliasLoadSpec(
     }
 }
 
-void __cdecl Com_SoundAliasMasterSlave(const char *token, const char *sourceFile, snd_alias_build_s *alias)
+void Com_SoundAliasMasterSlave(const char *token, const char *sourceFile, snd_alias_build_s *alias)
 {
     if (!alias)
         MyAssertHandler(".\\universal\\com_sndalias_load_obj.cpp", 615, 0, "%s", "alias");
@@ -536,7 +536,7 @@ void __cdecl Com_SoundAliasMasterSlave(const char *token, const char *sourceFile
     }
 }
 
-char __cdecl Com_FinishBuildingSoundAlias(snd_alias_build_s *build)
+char Com_FinishBuildingSoundAlias(snd_alias_build_s *build)
 {
     float fSwapTemp; // [esp+10h] [ebp-8h]
     float fSwapTempa; // [esp+10h] [ebp-8h]
@@ -624,7 +624,7 @@ char __cdecl Com_FinishBuildingSoundAlias(snd_alias_build_s *build)
     }
 }
 
-SndCurve *__cdecl Com_RegisterSoundAliasVolumeFalloffCurve(const char *filename, const char *sourceFile)
+SndCurve *Com_RegisterSoundAliasVolumeFalloffCurve(const char *filename, const char *sourceFile)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -642,7 +642,7 @@ SndCurve *__cdecl Com_RegisterSoundAliasVolumeFalloffCurve(const char *filename,
     return 0;
 }
 
-SpeakerMap *__cdecl Com_RegisterSoundAliasSpeakerMap(const char *token, const char *sourceFile)
+SpeakerMap *Com_RegisterSoundAliasSpeakerMap(const char *token, const char *sourceFile)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -657,7 +657,7 @@ SpeakerMap *__cdecl Com_RegisterSoundAliasSpeakerMap(const char *token, const ch
     return 0;
 }
 
-void __cdecl Com_SoundAliasReverb(char *token, snd_alias_build_s *alias)
+void Com_SoundAliasReverb(char *token, snd_alias_build_s *alias)
 {
     if (!alias)
         MyAssertHandler(".\\universal\\com_sndalias_load_obj.cpp", 644, 0, "%s", "alias");
@@ -669,7 +669,7 @@ void __cdecl Com_SoundAliasReverb(char *token, snd_alias_build_s *alias)
         alias->bNoWetLevel = 1;
 }
 
-void __cdecl Com_LoadSoundAliasField(
+void Com_LoadSoundAliasField(
     const char *loadspec,
     const char *loadspecCurGame,
     const char *sourceFile,
@@ -864,12 +864,12 @@ void __cdecl Com_LoadSoundAliasField(
     }
 }
 
-uint32_t *__cdecl Com_AllocateTempSoundMemory(int size, const char *name)
+uint32_t *Com_AllocateTempSoundMemory(int size, const char *name)
 {
     return Hunk_AllocateTempMemory(size, name);
 }
 
-void __cdecl Com_AddBuildSoundAlias(snd_alias_build_s *build)
+void Com_AddBuildSoundAlias(snd_alias_build_s *build)
 {
     snd_alias_build_s *alias; // [esp+8h] [ebp-4h]
 
@@ -880,7 +880,7 @@ void __cdecl Com_AddBuildSoundAlias(snd_alias_build_s *build)
     ++saLoadObjGlob.tempAliasCount;
 }
 
-void __cdecl Com_LoadSoundAliasFile(const char *loadspec, const char *loadspecCurGame, const char *sourceFile)
+void Com_LoadSoundAliasFile(const char *loadspec, const char *loadspecCurGame, const char *sourceFile)
 {
     int bHasName; // [esp+4h] [ebp-620h]
     int bHasFile; // [esp+8h] [ebp-61Ch]
@@ -1012,7 +1012,7 @@ void __cdecl Com_LoadSoundAliasFile(const char *loadspec, const char *loadspecCu
     }
 }
 
-bool __cdecl Com_ParseSndCurveFile(const char *buffer, const char *fileName, SndCurve *curve)
+bool Com_ParseSndCurveFile(const char *buffer, const char *fileName, SndCurve *curve)
 {
     int v3; // eax
     long double v5; // st7
@@ -1138,10 +1138,10 @@ bool __cdecl Com_ParseSndCurveFile(const char *buffer, const char *fileName, Snd
     }
 }
 
-snd_alias_build_s *__cdecl Com_SortTempSoundAliases_r(
+snd_alias_build_s *Com_SortTempSoundAliases_r(
     snd_alias_build_s *pAliasList,
     int *piAliasCount,
-    int(__cdecl *test)(snd_alias_build_s *, snd_alias_build_s *),
+    int(*test)(snd_alias_build_s *, snd_alias_build_s *),
     bool isRemovingDups)
 {
     snd_alias_build_s *pFrontList; // [esp+0h] [ebp-18h]
@@ -1240,12 +1240,12 @@ snd_alias_build_s *__cdecl Com_SortTempSoundAliases_r(
     }
 }
 
-int __cdecl AliasNameCompare(snd_alias_build_s *pFrontList, snd_alias_build_s *pBackList)
+int AliasNameCompare(snd_alias_build_s *pFrontList, snd_alias_build_s *pBackList)
 {
     return I_stricmp(pFrontList->aliasName, pBackList->aliasName);
 }
 
-int __cdecl FileNameTypeCompare(snd_alias_build_s *frontList, snd_alias_build_s *backList)
+int FileNameTypeCompare(snd_alias_build_s *frontList, snd_alias_build_s *backList)
 {
     int fileComp; // [esp+4h] [ebp-4h]
 
@@ -1257,7 +1257,7 @@ int __cdecl FileNameTypeCompare(snd_alias_build_s *frontList, snd_alias_build_s 
     return frontList->eType - backList->eType;
 }
 
-void __cdecl Com_SameFileWarning(snd_alias_build_s *alias1, snd_alias_build_s *alias2)
+void Com_SameFileWarning(snd_alias_build_s *alias1, snd_alias_build_s *alias2)
 {
     const char *alias1TypeString; // [esp+20h] [ebp-Ch]
 
@@ -1294,7 +1294,7 @@ void __cdecl Com_SameFileWarning(snd_alias_build_s *alias1, snd_alias_build_s *a
             alias2->aliasName);
 }
 
-void __cdecl Com_AddSoundAlias(
+void Com_AddSoundAlias(
     snd_alias_build_s *build,
     snd_alias_t *alias,
     const char *aliasName,
@@ -1403,7 +1403,7 @@ void __cdecl Com_AddSoundAlias(
     alias->startDelay = build->startDelay;
 }
 
-void __cdecl Com_AddLoadedSoundFile(SoundFile *soundFile, char *fileName)
+void Com_AddLoadedSoundFile(SoundFile *soundFile, char *fileName)
 {
     I_strlwr(fileName);
     soundFile->u.loadSnd = SND_LoadSoundFile(fileName);
@@ -1419,7 +1419,7 @@ void __cdecl Com_AddLoadedSoundFile(SoundFile *soundFile, char *fileName)
     }
 }
 
-void __cdecl Com_AddStreamedSoundFile(SoundFile *soundFile, char *fileName)
+void Com_AddStreamedSoundFile(SoundFile *soundFile, char *fileName)
 {
     const char *name; // [esp+0h] [ebp-4h]
 
@@ -1433,7 +1433,7 @@ void __cdecl Com_AddStreamedSoundFile(SoundFile *soundFile, char *fileName)
     soundFile->u.streamSnd.filename.info.raw.name = name;
 }
 
-void __cdecl Com_MakeSoundAliasesPermanent(snd_alias_list_t *aliasInfo, SoundFileInfo *soundFileInfo)
+void Com_MakeSoundAliasesPermanent(snd_alias_list_t *aliasInfo, SoundFileInfo *soundFileInfo)
 {
     char v2; // [esp+13h] [ebp-D5h]
     char *v3; // [esp+18h] [ebp-D0h]
@@ -1626,7 +1626,7 @@ void __cdecl Com_MakeSoundAliasesPermanent(snd_alias_list_t *aliasInfo, SoundFil
     }
 }
 
-int __cdecl Com_LoadSoundAliasSounds(SoundFileInfo *soundFileInfo)
+int Com_LoadSoundAliasSounds(SoundFileInfo *soundFileInfo)
 {
     uint8_t v1; // al
     char filepath[256]; // [esp+0h] [ebp-110h] BYREF
@@ -1677,7 +1677,7 @@ int __cdecl Com_LoadSoundAliasSounds(SoundFileInfo *soundFileInfo)
     return numMissing;
 }
 
-void __cdecl Com_ParseEntChannelFile(const char *buffer)
+void Com_ParseEntChannelFile(const char *buffer)
 {
     int i; // [esp+20h] [ebp-8h]
     parseInfo_t *value; // [esp+24h] [ebp-4h]
@@ -1726,7 +1726,7 @@ void __cdecl Com_ParseEntChannelFile(const char *buffer)
     Com_EndParseSession();
 }
 
-void __cdecl Com_SetChannelMapEntry(
+void Com_SetChannelMapEntry(
     MSSChannelMap *entry,
     uint32_t inputChannel,
     uint32_t outputChannel,
@@ -1783,7 +1783,7 @@ void Com_InitSoundDevGuiGraphs_LoadObj()
     }
 }
 
-void __cdecl Com_PreLoadSpkrMapFile(SpeakerMapInfo *info)
+void Com_PreLoadSpkrMapFile(SpeakerMapInfo *info)
 {
     info->speakerMap.channelMaps[0][0].speakerCount = 2;
     info->speakerMap.channelMaps[1][0].speakerCount = 2;
@@ -1792,7 +1792,7 @@ void __cdecl Com_PreLoadSpkrMapFile(SpeakerMapInfo *info)
     info->speakerMap.name = info->name;
 }
 
-char __cdecl Com_LoadSpkrMapParseBuffer(char *fileName, char *buffer)
+char Com_LoadSpkrMapParseBuffer(char *fileName, char *buffer)
 {
     signed int fileLength; // [esp+10h] [ebp-10h]
     int fileHandle; // [esp+18h] [ebp-8h] BYREF
@@ -1851,7 +1851,7 @@ int sa_spkrMapIdentifierValues[9] =
 { 0, 0, 1, 0, 1, 2, 3, 4, 5 };
 
 
-char __cdecl Com_ParseChannelMapEntry(
+char Com_ParseChannelMapEntry(
     const char *fileName,
     MSSChannelMap *entry,
     SA_SPKRMAPIDENTIFIERS inputChannel,
@@ -1930,7 +1930,7 @@ char __cdecl Com_ParseChannelMapEntry(
     }
 }
 
-bool __cdecl Com_ParseMonoSourceStereoOutput(const char *fileName, SpeakerMap *speakerMap)
+bool Com_ParseMonoSourceStereoOutput(const char *fileName, SpeakerMap *speakerMap)
 {
     if (!g_spkrMapParseBuffer)
         MyAssertHandler(".\\universal\\com_sndalias_load_obj.cpp", 2702, 0, "%s", "g_spkrMapParseBuffer");
@@ -1942,7 +1942,7 @@ bool __cdecl Com_ParseMonoSourceStereoOutput(const char *fileName, SpeakerMap *s
         && Com_ParseChannelMapEntry(fileName, speakerMap->channelMaps[0], SA_MONOSOURCE, SA_RIGHTSPEAKER) != 0;
 }
 
-bool __cdecl Com_ParseStereoSourceStereoOutput(const char *fileName, SpeakerMap *speakerMap)
+bool Com_ParseStereoSourceStereoOutput(const char *fileName, SpeakerMap *speakerMap)
 {
     MSSChannelMap *entries; // [esp+0h] [ebp-4h]
 
@@ -1962,7 +1962,7 @@ bool __cdecl Com_ParseStereoSourceStereoOutput(const char *fileName, SpeakerMap 
     return 0;
 }
 
-bool __cdecl Com_ParseMonoSource51Output(const char *fileName, SpeakerMap *speakerMap)
+bool Com_ParseMonoSource51Output(const char *fileName, SpeakerMap *speakerMap)
 {
     MSSChannelMap *entries; // [esp+0h] [ebp-4h]
 
@@ -1986,7 +1986,7 @@ bool __cdecl Com_ParseMonoSource51Output(const char *fileName, SpeakerMap *speak
     return 0;
 }
 
-bool __cdecl Com_ParseStereoSource51Output(const char *fileName, SpeakerMap *speakerMap)
+bool Com_ParseStereoSource51Output(const char *fileName, SpeakerMap *speakerMap)
 {
     MSSChannelMap *entries; // [esp+0h] [ebp-4h]
 
@@ -2022,7 +2022,7 @@ bool __cdecl Com_ParseStereoSource51Output(const char *fileName, SpeakerMap *spe
     return 0;
 }
 
-char __cdecl Com_ParseSpkrMapFile(const char *buffer, const char *fileName, SpeakerMap *speakerMap)
+char Com_ParseSpkrMapFile(const char *buffer, const char *fileName, SpeakerMap *speakerMap)
 {
     if (!buffer)
         MyAssertHandler(".\\universal\\com_sndalias_load_obj.cpp", 2824, 0, "%s", "buffer");
@@ -2049,7 +2049,7 @@ char __cdecl Com_ParseSpkrMapFile(const char *buffer, const char *fileName, Spea
     }
 }
 
-char __cdecl Com_LoadSpkrMapFile(char *name, SpeakerMapInfo *info)
+char Com_LoadSpkrMapFile(char *name, SpeakerMapInfo *info)
 {
     char dest[64]; // [esp+0h] [ebp-2048h] BYREF
     char buffer[8196]; // [esp+40h] [ebp-2008h] BYREF
@@ -2068,7 +2068,7 @@ char __cdecl Com_LoadSpkrMapFile(char *name, SpeakerMapInfo *info)
     }
 }
 
-void __cdecl Com_InitSoundAlias()
+void Com_InitSoundAlias()
 {
     saLoadObjGlob.tempAliases = 0;
     saLoadObjGlob.tempAliasCount = 0;

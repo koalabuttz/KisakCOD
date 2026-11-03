@@ -21,7 +21,7 @@ void Sys_DetectVideoCard(int descLimit, char* description)
     }
 }
 
-uint32_t __cdecl Sys_AddApicIdIfUnique(
+uint32_t Sys_AddApicIdIfUnique(
     uint32_t apicId,
     uint32_t *existingApicId,
     uint32_t existingCount)
@@ -45,7 +45,7 @@ uint32_t __cdecl Sys_AddApicIdIfUnique(
     return existingCount + 1;
 }
 
-void __cdecl Sys_GetPhysicalCpuCount(SysInfo* sysInfo)
+void Sys_GetPhysicalCpuCount(SysInfo* sysInfo)
 {
     bool v1; // cf
     DWORD v8; // eax
@@ -166,7 +166,7 @@ LABEL_8:
     }
 }
 
-long double __cdecl Sys_BenchmarkGHz()
+long double Sys_BenchmarkGHz()
 {
     uint32_t i; // ecx
     unsigned __int64 v1; // kr00_8
@@ -234,14 +234,14 @@ void Sys_SetAutoConfigureGHz(SysInfo* sysInfo)
     sysInfo->configureGHz = Sys_BenchmarkGHz() * multiCpuFactor;
 }
 
-void __cdecl Sys_DetectCpuVendorAndName(char *vendor, char *name)
+void Sys_DetectCpuVendorAndName(char *vendor, char *name)
 {
     // Sizes of sys_info.cpuVendor and sys_info.cpuName, as the Linux build uses.
     I_strncpyz(vendor, "KisakTech", 13);
     I_strncpyz(name, "KSK-2900x 5.0khz (No AMD PSP or Intel ME)", 49);
 }
 #if 0 // KISAKTODO gotta do this ourselves
-void __cdecl Sys_DetectCpuVendorAndName(char* vendor, char* name)
+void Sys_DetectCpuVendorAndName(char* vendor, char* name)
 {
     int _EAX; // eax
     uint32_t _EDX; // edx

@@ -26,7 +26,7 @@
 #include <cgame/cg_local.h>
 #endif
 
-void __cdecl R_AddSpotShadowEntCmd(const GfxSpotShadowEntCmd *data)
+void R_AddSpotShadowEntCmd(const GfxSpotShadowEntCmd *data)
 {
     DObjAnimMat *boneMatrix; // [esp+Ch] [ebp-30h]
     const DObj_s *obj; // [esp+10h] [ebp-2Ch] BYREF
@@ -63,7 +63,7 @@ void __cdecl R_AddSpotShadowEntCmd(const GfxSpotShadowEntCmd *data)
     }
 }
 
-char __cdecl R_AddSpotShadowsForLight(
+char R_AddSpotShadowsForLight(
     GfxViewInfo *viewInfo,
     GfxLight *light,
     uint32_t shadowableLightIndex,
@@ -139,7 +139,7 @@ char __cdecl R_AddSpotShadowsForLight(
     return 1;
 }
 
-void __cdecl R_SetViewParmsForLight(const GfxLight *light, GfxViewParms *viewParms, float nearPlaneBias)
+void R_SetViewParmsForLight(const GfxLight *light, GfxViewParms *viewParms, float nearPlaneBias)
 {
     float zNear; // [esp+10h] [ebp-24h]
     float v4; // [esp+14h] [ebp-20h]
@@ -171,7 +171,7 @@ void __cdecl R_SetViewParmsForLight(const GfxLight *light, GfxViewParms *viewPar
     viewParms->depthHackNearClip = viewParms->projectionMatrix.m[3][2];
 }
 
-void __cdecl R_GetSpotShadowLookupMatrix(
+void R_GetSpotShadowLookupMatrix(
     const GfxViewParms *shadowViewParms,
     uint32_t spotShadowIndex,
     uint32_t tileCount,
@@ -217,7 +217,7 @@ void __cdecl R_GetSpotShadowLookupMatrix(
     lookupMatrix->m[3][3] = shadowViewParms->viewProjectionMatrix.m[3][3];
 }
 
-void __cdecl R_AddSpotShadowModelEntities(
+void R_AddSpotShadowModelEntities(
     uint32_t localClientNum,
     uint32_t primaryLightIndex,
     const GfxLight *light)
@@ -258,7 +258,7 @@ void __cdecl R_AddSpotShadowModelEntities(
     }
 }
 
-void __cdecl R_GenerateAllSortedSpotShadowDrawSurfs(GfxViewInfo *viewInfo)
+void R_GenerateAllSortedSpotShadowDrawSurfs(GfxViewInfo *viewInfo)
 {
     uint32_t spotShadowIndex; // [esp+4h] [ebp-4h]
 
@@ -273,7 +273,7 @@ void __cdecl R_GenerateAllSortedSpotShadowDrawSurfs(GfxViewInfo *viewInfo)
     R_EmitSpotShadowMapSurfs(viewInfo);
 }
 
-void __cdecl R_GenerateSortedPrimarySpotShadowDrawSurfs(
+void R_GenerateSortedPrimarySpotShadowDrawSurfs(
     const GfxViewInfo *viewInfo,
     uint32_t spotShadowIndex,
     uint32_t shadowableLightIndex)
@@ -294,7 +294,7 @@ void __cdecl R_GenerateSortedPrimarySpotShadowDrawSurfs(
     }
 }
 
-void __cdecl R_EmitSpotShadowMapSurfs(GfxViewInfo *viewInfo)
+void R_EmitSpotShadowMapSurfs(GfxViewInfo *viewInfo)
 {
     const float *origin; // [esp+20h] [ebp-28h]
     int firstDrawSurf; // [esp+38h] [ebp-10h]
@@ -393,7 +393,7 @@ uint32_t R_InitSpotShadowMeshes()
     return result;
 }
 
-void __cdecl R_ShutdownSpotShadowMeshes()
+void R_ShutdownSpotShadowMeshes()
 {
     uint32_t sunShadowIndex; // [esp+0h] [ebp-8h]
     uint32_t spotShadowIndex; // [esp+4h] [ebp-4h]
@@ -404,7 +404,7 @@ void __cdecl R_ShutdownSpotShadowMeshes()
         R_ShutdownDynamicMesh(&gfxMeshGlob.sunShadowClearMeshData[sunShadowIndex]);
 }
 
-void __cdecl R_DrawSpotShadowMapCallback(
+void R_DrawSpotShadowMapCallback(
     const void *userData,
     GfxCmdBufContext context,
     GfxCmdBufContext prepassContext)
@@ -421,7 +421,7 @@ void __cdecl R_DrawSpotShadowMapCallback(
 
     R_DrawSurfs(context, 0, &shadow->info);
 }
-void __cdecl R_DrawSpotShadowMapArray(const GfxViewInfo *viewInfo, GfxCmdBuf *cmdBuf)
+void R_DrawSpotShadowMapArray(const GfxViewInfo *viewInfo, GfxCmdBuf *cmdBuf)
 {
     GfxCmdBufSourceState state; // [sp+50h] [-F10h] BYREF
 

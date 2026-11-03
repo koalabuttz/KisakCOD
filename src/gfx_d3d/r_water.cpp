@@ -15,12 +15,12 @@ long volatile g_waterLock;//          85b3ac80     gfx_d3d : r_water.obj
 //struct __vector4 const g_selectByteFromInt 85b45900     gfx_d3d : r_water.obj
 
 
-void __cdecl TRACK_r_water()
+void TRACK_r_water()
 {
     track_static_alloc_internal(&waterGlob, 36864, "waterGlob", 18);
 }
 
-void __cdecl R_UploadWaterTextureInternal(water_t **data)
+void R_UploadWaterTextureInternal(water_t **data)
 {
     water_t *water; // [esp+68h] [ebp-4h]
 
@@ -48,7 +48,7 @@ void __cdecl R_UploadWaterTextureInternal(water_t **data)
     InterlockedExchangeAdd(&g_waterLock, -1);
 }
 
-void __cdecl WaterFrequenciesAtTime(complex_s *H, const water_t *water, float t)
+void WaterFrequenciesAtTime(complex_s *H, const water_t *water, float t)
 {
     __int64 v3; // [esp+0h] [ebp-44h]
     float sinReal; // [esp+28h] [ebp-1Ch]
@@ -96,7 +96,7 @@ void __cdecl WaterFrequenciesAtTime(complex_s *H, const water_t *water, float t)
     }
 }
 
-void __cdecl WaterAmplitudesFromFrequencies(complex_s *H, const water_t *water)
+void WaterAmplitudesFromFrequencies(complex_s *H, const water_t *water)
 {
     int fftIndex; // [esp+0h] [ebp-Ch]
     int fftIndexa; // [esp+0h] [ebp-Ch]
@@ -127,7 +127,7 @@ void __cdecl WaterAmplitudesFromFrequencies(complex_s *H, const water_t *water)
     TransposeArray(H, water->M);
 }
 
-void __cdecl TransposeArray(complex_s *H, uint32_t M)
+void TransposeArray(complex_s *H, uint32_t M)
 {
     uint32_t v2; // edx
     float real; // ecx
@@ -153,7 +153,7 @@ void __cdecl TransposeArray(complex_s *H, uint32_t M)
     }
 }
 
-void __cdecl WaterPixelsFromAmplitudes(GfxColor *pixels, complex_s *H, const water_t *water)
+void WaterPixelsFromAmplitudes(GfxColor *pixels, complex_s *H, const water_t *water)
 {
     float v3; // [esp+Ch] [ebp-9Ch]
     float v4; // [esp+10h] [ebp-98h]
@@ -235,7 +235,7 @@ void __cdecl WaterPixelsFromAmplitudes(GfxColor *pixels, complex_s *H, const wat
     }
 }
 
-void __cdecl GenerateMipMaps(_D3DFORMAT format, uint8_t *pixels, water_t *water)
+void GenerateMipMaps(_D3DFORMAT format, uint8_t *pixels, water_t *water)
 {
     int srcWidth;
     uint32_t mipIndex;
@@ -264,7 +264,7 @@ void __cdecl GenerateMipMaps(_D3DFORMAT format, uint8_t *pixels, water_t *water)
     }
 }
 
-void __cdecl R_UploadWaterTexture(water_t *water, float floatTime)
+void R_UploadWaterTexture(water_t *water, float floatTime)
 {
     iassert( water );
     if (floatTime != water->writable.floatTime)
@@ -274,7 +274,7 @@ void __cdecl R_UploadWaterTexture(water_t *water, float floatTime)
     }
 }
 
-void __cdecl R_InitWater()
+void R_InitWater()
 {
     float v0; // [esp+0h] [ebp-Ch]
     float v1; // [esp+4h] [ebp-8h]
@@ -289,7 +289,7 @@ void __cdecl R_InitWater()
     FFT_Init(waterGlobStatic.fftBitswap, waterGlobStatic.fftTrigTable);
 }
 
-void __cdecl Load_PicmipWater(water_t **waterRef)
+void Load_PicmipWater(water_t **waterRef)
 {
     complex_s *H0; // edx
     float real; // ecx

@@ -4,7 +4,7 @@
 #include "xanim.h"
 #include "xanim_calc.h"
 
-void __cdecl DObjCalcSkel(const DObj_s *obj, int *partBits)
+void DObjCalcSkel(const DObj_s *obj, int *partBits)
 {
     const unsigned __int8 *pos; // [esp+54h] [ebp-64h]
     int j; // [esp+58h] [ebp-60h]
@@ -83,7 +83,7 @@ void __cdecl DObjCalcSkel(const DObj_s *obj, int *partBits)
     }
 }
 
-void __cdecl GetControlAndDuplicatePartBits(
+void GetControlAndDuplicatePartBits(
     const DObj_s *obj,
     const int *partBits,
     const int *ignorePartBits,
@@ -126,7 +126,7 @@ void __cdecl GetControlAndDuplicatePartBits(
     }
 }
 
-const unsigned __int8 *__cdecl CalcSkelDuplicateBones(
+const unsigned __int8 *CalcSkelDuplicateBones(
     const XModel *model,
     DSkel *skel,
     int minBoneIndex,
@@ -152,7 +152,7 @@ const unsigned __int8 *__cdecl CalcSkelDuplicateBones(
     return pos;
 }
 
-void __cdecl CalcSkelRootBonesNoParentOrDuplicate(
+void CalcSkelRootBonesNoParentOrDuplicate(
     const XModel *model,
     DSkel *skel,
     int minBoneIndex,
@@ -217,7 +217,7 @@ void __cdecl CalcSkelRootBonesNoParentOrDuplicate(
     }
 }
 
-void __cdecl CalcSkelRootBonesWithParent(
+void CalcSkelRootBonesWithParent(
     const XModel *model,
     DSkel *skel,
     uint32_t minBoneIndex,
@@ -303,7 +303,7 @@ void __cdecl CalcSkelRootBonesWithParent(
     }
 }
 
-void __cdecl CalcSkelNonRootBones(
+void CalcSkelNonRootBones(
     const XModel *model,
     DSkel *skel,
     int minBoneIndex,
@@ -399,7 +399,7 @@ void __cdecl CalcSkelNonRootBones(
     }
 }
 
-void __cdecl DObjCalcBaseSkel(const DObj_s *obj, DObjAnimMat *mat, int *partBits)
+void DObjCalcBaseSkel(const DObj_s *obj, DObjAnimMat *mat, int *partBits)
 {
     const unsigned __int8 *pos; // [esp+8h] [ebp-94h]
     int j; // [esp+Ch] [ebp-90h]
@@ -461,7 +461,7 @@ void __cdecl DObjCalcBaseSkel(const DObj_s *obj, DObjAnimMat *mat, int *partBits
     }
 }
 
-void __cdecl DObjCalcBaseAnim(const DObj_s *obj, DObjAnimMat *mat, int *partBits)
+void DObjCalcBaseAnim(const DObj_s *obj, DObjAnimMat *mat, int *partBits)
 {
     int j; // [esp+18h] [ebp-14h]
     int boneIndex; // [esp+1Ch] [ebp-10h]
@@ -512,7 +512,7 @@ void __cdecl DObjCalcBaseAnim(const DObj_s *obj, DObjAnimMat *mat, int *partBits
     }
 }
 
-void __cdecl DObjGetBaseControlAndDuplicatePartBits(
+void DObjGetBaseControlAndDuplicatePartBits(
     const DObj_s *obj,
     const int *partBits,
     const int *ignorePartBits,

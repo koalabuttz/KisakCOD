@@ -13,7 +13,7 @@ int g_waitingForKey;
 int g_editingField;
 struct itemDef_s *g_editItem;
 int g_debugMode;
-void(__cdecl *captureFunc)(UiContext *, void *);
+void(*captureFunc)(UiContext *, void *);
 void *captureData;
 itemDef_s *itemCapture;
 itemDef_s *g_bindItem;
@@ -21,7 +21,7 @@ int inHandleKey;
 scrollInfo_s scrollInfo;
 rectDef_s rect;
 
-bool __cdecl Window_IsVisible(int localClientNum, const windowDef_t *w)
+bool Window_IsVisible(int localClientNum, const windowDef_t *w)
 {
     if (!w)
         MyAssertHandler("c:\\trees\\cod3\\src\\ui\\../ui/ui_utils.h", 60, 0, "%s", "w");
@@ -36,7 +36,7 @@ bool __cdecl Window_IsVisible(int localClientNum, const windowDef_t *w)
     return (w->dynamicFlags[localClientNum] & 4) != 0;
 }
 
-bool __cdecl Window_HasFocus(int localClientNum, const windowDef_t *w)
+bool Window_HasFocus(int localClientNum, const windowDef_t *w)
 {
     if (!w)
         MyAssertHandler("c:\\trees\\cod3\\src\\ui\\../ui/ui_utils.h", 70, 0, "%s", "w");
@@ -68,12 +68,12 @@ bool __cdecl Window_HasFocus(int localClientNum, const windowDef_t *w)
     }
 }
 
-BOOL __cdecl IsVisible(char flags)
+BOOL IsVisible(char flags)
 {
     return (flags & 4) != 0 && (flags & 0x10) == 0;
 }
 
-void __cdecl Item_MouseEnter(UiContext *dc, itemDef_s *item, float x, float y)
+void Item_MouseEnter(UiContext *dc, itemDef_s *item, float x, float y)
 {
     int localClientNum; // [esp+8h] [ebp-24h]
     rectDef_s r; // [esp+Ch] [ebp-20h] BYREF
@@ -134,7 +134,7 @@ void __cdecl Item_MouseEnter(UiContext *dc, itemDef_s *item, float x, float y)
     }
 }
 
-void __cdecl Item_MouseLeave(UiContext *dc, itemDef_s *item)
+void Item_MouseLeave(UiContext *dc, itemDef_s *item)
 {
     int localClientNum; // [esp+4h] [ebp-4h]
 
@@ -163,7 +163,7 @@ void __cdecl Item_MouseLeave(UiContext *dc, itemDef_s *item)
     }
 }
 
-void __cdecl Item_SetMouseOver(const UiContext *dc, itemDef_s *item, int focus)
+void Item_SetMouseOver(const UiContext *dc, itemDef_s *item, int focus)
 {
     if (item)
     {
@@ -178,7 +178,7 @@ void __cdecl Item_SetMouseOver(const UiContext *dc, itemDef_s *item, int focus)
     }
 }
 
-BOOL __cdecl Menu_HandleMouseMove(UiContext *dc, menuDef_t *menu)
+BOOL Menu_HandleMouseMove(UiContext *dc, menuDef_t *menu)
 {
     const rectDef_s *v3; // eax
     itemDef_s *v4; // [esp+Ch] [ebp-4Ch]
@@ -301,7 +301,7 @@ BOOL __cdecl Menu_HandleMouseMove(UiContext *dc, menuDef_t *menu)
     return focusSet != 0;
 }
 
-int __cdecl Item_SetFocus(UiContext *dc, itemDef_s *item, float x, float y)
+int Item_SetFocus(UiContext *dc, itemDef_s *item, float x, float y)
 {
     rectDef_s r; // [esp+28h] [ebp-2Ch] BYREF
     const rectDef_s *textRect; // [esp+40h] [ebp-14h]
@@ -375,7 +375,7 @@ int __cdecl Item_SetFocus(UiContext *dc, itemDef_s *item, float x, float y)
     return 1;
 }
 
-const rectDef_s *__cdecl Item_GetTextRect(int localClientNum, const itemDef_s *item)
+const rectDef_s *Item_GetTextRect(int localClientNum, const itemDef_s *item)
 {
     if (localClientNum)
         MyAssertHandler(
@@ -390,7 +390,7 @@ const rectDef_s *__cdecl Item_GetTextRect(int localClientNum, const itemDef_s *i
     return &item->textRect[localClientNum];
 }
 
-itemDef_s *__cdecl Menu_ClearFocus(UiContext *dc, menuDef_t *menu)
+itemDef_s *Menu_ClearFocus(UiContext *dc, menuDef_t *menu)
 {
     itemDef_s *ret; // [esp+Ch] [ebp-8h]
     int i; // [esp+10h] [ebp-4h]
@@ -413,7 +413,7 @@ itemDef_s *__cdecl Menu_ClearFocus(UiContext *dc, menuDef_t *menu)
     return ret;
 }
 
-bool __cdecl Rect_ContainsPoint(int localClientNum, const rectDef_s *rect, float x, float y)
+bool Rect_ContainsPoint(int localClientNum, const rectDef_s *rect, float x, float y)
 {
     float compareY; // [esp+8h] [ebp-24h]
     rectDef_s compareRect; // [esp+Ch] [ebp-20h] BYREF
@@ -443,7 +443,7 @@ bool __cdecl Rect_ContainsPoint(int localClientNum, const rectDef_s *rect, float
         && compareY <= compareRect.y + compareRect.h;
 }
 
-bool __cdecl Item_IsTextField(const itemDef_s *item)
+bool Item_IsTextField(const itemDef_s *item)
 {
     bool result; // al
 
@@ -463,7 +463,7 @@ bool __cdecl Item_IsTextField(const itemDef_s *item)
     return result;
 }
 
-void __cdecl Menu_HandleKey(UiContext *dc, menuDef_t *menu, int key, int down)
+void Menu_HandleKey(UiContext *dc, menuDef_t *menu, int key, int down)
 {
     int v4; // eax
     const rectDef_s *v5; // eax
@@ -633,7 +633,7 @@ void __cdecl Menu_HandleKey(UiContext *dc, menuDef_t *menu, int key, int down)
     }
 }
 
-void __cdecl Item_StartCapture(UiContext *dc, itemDef_s *item, int key)
+void Item_StartCapture(UiContext *dc, itemDef_s *item, int key)
 {
     int type; // [esp+8h] [ebp-8h]
     __int16 flags; // [esp+Ch] [ebp-4h]
@@ -672,7 +672,7 @@ void __cdecl Item_StartCapture(UiContext *dc, itemDef_s *item, int key)
         scrollInfo.xStart = dc->cursor.x;
         scrollInfo.yStart = dc->cursor.y;
         captureData = &scrollInfo;
-        captureFunc = (void(__cdecl *)(UiContext *, void *))Scroll_Slider_ThumbFunc;
+        captureFunc = (void(*)(UiContext *, void *))Scroll_Slider_ThumbFunc;
         itemCapture = item;
     }
 }
@@ -725,7 +725,7 @@ int Item_HandleKey(UiContext *dc, itemDef_s *item, int key, int down)
     return result;
 }
 
-int __cdecl Item_YesNo_HandleKey(UiContext *dc, itemDef_s *item, int key)
+int Item_YesNo_HandleKey(UiContext *dc, itemDef_s *item, int key)
 {
     char *VariantString; // eax
     int v5; // eax
@@ -757,7 +757,7 @@ int __cdecl Item_YesNo_HandleKey(UiContext *dc, itemDef_s *item, int key)
     return 1;
 }
 
-BOOL __cdecl Item_ContainsMouse(UiContext *dc, itemDef_s *item)
+BOOL Item_ContainsMouse(UiContext *dc, itemDef_s *item)
 {
     if (!dc->isCursorVisible)
         return 0;
@@ -766,20 +766,20 @@ BOOL __cdecl Item_ContainsMouse(UiContext *dc, itemDef_s *item)
     return Rect_ContainsPoint(dc->localClientNum, &item->window.rect, dc->cursor.x, dc->cursor.y);
 }
 
-bool __cdecl Item_ShouldHandleKey(UiContext *dc, itemDef_s *item, int key)
+bool Item_ShouldHandleKey(UiContext *dc, itemDef_s *item, int key)
 {
     if (!Window_HasFocus(dc->localClientNum, &item->window))
         return 0;
     return key != K_MOUSE1 && key != K_MOUSE2 && key != K_MOUSE3 || Item_ContainsMouse(dc, item);
 }
 
-void __cdecl Item_Action(UiContext *dc, itemDef_s *item)
+void Item_Action(UiContext *dc, itemDef_s *item)
 {
     if (item)
         Item_RunScript(dc, item, (char*)item->action);
 }
 
-itemDef_s *__cdecl Menu_SetPrevCursorItem(UiContext *dc, menuDef_t *menu)
+itemDef_s *Menu_SetPrevCursorItem(UiContext *dc, menuDef_t *menu)
 {
     int v3; // [esp+Ch] [ebp-40h]
     int v4; // [esp+14h] [ebp-38h]
@@ -891,7 +891,7 @@ itemDef_s *__cdecl Menu_SetPrevCursorItem(UiContext *dc, menuDef_t *menu)
     return menu->items[menu->cursorItem[v3]];
 }
 
-itemDef_s *__cdecl Menu_SetNextCursorItem(UiContext *dc, menuDef_t *menu)
+itemDef_s *Menu_SetNextCursorItem(UiContext *dc, menuDef_t *menu)
 {
     int v3; // [esp+Ch] [ebp-38h]
     int v4; // [esp+14h] [ebp-30h]
@@ -992,7 +992,7 @@ itemDef_s *__cdecl Menu_SetNextCursorItem(UiContext *dc, menuDef_t *menu)
     return menu->items[menu->cursorItem[v3]];
 }
 
-rectDef_s *__cdecl Item_CorrectedTextRect(int localClientNum, itemDef_s *item)
+rectDef_s *Item_CorrectedTextRect(int localClientNum, itemDef_s *item)
 {
     rect.x = 0.0;
     rect.y = 0.0;
@@ -1009,7 +1009,7 @@ rectDef_s *__cdecl Item_CorrectedTextRect(int localClientNum, itemDef_s *item)
     return &rect;
 }
 
-int __cdecl Menu_CheckOnKey(UiContext *dc, menuDef_t *menu, int key)
+int Menu_CheckOnKey(UiContext *dc, menuDef_t *menu, int key)
 {
     itemDef_s *item; // [esp+14h] [ebp-184h]
     int i; // [esp+18h] [ebp-180h]
@@ -1044,7 +1044,7 @@ int __cdecl Menu_CheckOnKey(UiContext *dc, menuDef_t *menu, int key)
     return 0;
 }
 
-menuDef_t *__cdecl Menu_GetFocused(UiContext *dc)
+menuDef_t *Menu_GetFocused(UiContext *dc)
 {
     int i; // [esp+10h] [ebp-4h]
 
@@ -1059,7 +1059,7 @@ menuDef_t *__cdecl Menu_GetFocused(UiContext *dc)
     return 0;
 }
 
-int __cdecl Menus_MenuIsInStack(UiContext *dc, menuDef_t *menu)
+int Menus_MenuIsInStack(UiContext *dc, menuDef_t *menu)
 {
     PROF_SCOPED("Menus_MenuIsInStack");
 
@@ -1076,7 +1076,7 @@ int __cdecl Menus_MenuIsInStack(UiContext *dc, menuDef_t *menu)
     return 0;
 }
 
-menuDef_t *__cdecl Menus_FindByName(const UiContext *dc, const char *p)
+menuDef_t *Menus_FindByName(const UiContext *dc, const char *p)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -1088,7 +1088,7 @@ menuDef_t *__cdecl Menus_FindByName(const UiContext *dc, const char *p)
     return 0;
 }
 
-void __cdecl Menus_CloseByName(UiContext *dc, const char *p)
+void Menus_CloseByName(UiContext *dc, const char *p)
 {
     menuDef_t *menu; // [esp+0h] [ebp-4h]
 
@@ -1097,7 +1097,7 @@ void __cdecl Menus_CloseByName(UiContext *dc, const char *p)
         Menus_Close(dc, menu);
 }
 
-void __cdecl Menus_Close(UiContext *dc, menuDef_t *menu)
+void Menus_Close(UiContext *dc, menuDef_t *menu)
 {
     bool noFocus; // [esp+1Eh] [ebp-Ah]
     bool hadFocus; // [esp+1Fh] [ebp-9h]
@@ -1154,7 +1154,7 @@ void __cdecl Menus_Close(UiContext *dc, menuDef_t *menu)
     Window_RemoveDynamicFlags(dc->localClientNum, &menu->window, 6);
 }
 
-int __cdecl Menus_RemoveFromStack(UiContext *dc, menuDef_t *pMenu)
+int Menus_RemoveFromStack(UiContext *dc, menuDef_t *pMenu)
 {
     int i; // [esp+4h] [ebp-4h]
 
@@ -1174,7 +1174,7 @@ int __cdecl Menus_RemoveFromStack(UiContext *dc, menuDef_t *pMenu)
     return 1;
 }
 
-void __cdecl Menu_GainFocusDueToClose(UiContext *dc, menuDef_t *menu)
+void Menu_GainFocusDueToClose(UiContext *dc, menuDef_t *menu)
 {
     if (!dc)
         MyAssertHandler(".\\ui\\ui_shared.cpp", 904, 0, "%s", "dc");
@@ -1186,7 +1186,7 @@ void __cdecl Menu_GainFocusDueToClose(UiContext *dc, menuDef_t *menu)
     Menu_CallOnFocusDueToOpen(dc, menu);
 }
 
-void __cdecl Menu_CallOnFocusDueToOpen(UiContext *dc, menuDef_t *menu)
+void Menu_CallOnFocusDueToOpen(UiContext *dc, menuDef_t *menu)
 {
     bool anyFound; // [esp+Fh] [ebp-5h]
     int i; // [esp+10h] [ebp-4h]
@@ -1205,7 +1205,7 @@ void __cdecl Menu_CallOnFocusDueToOpen(UiContext *dc, menuDef_t *menu)
     }
 }
 
-void __cdecl Menu_RunCloseScript(UiContext *dc, menuDef_t *menu)
+void Menu_RunCloseScript(UiContext *dc, menuDef_t *menu)
 {
     itemDef_s item; // [esp+4h] [ebp-178h] BYREF
 
@@ -1221,7 +1221,7 @@ void __cdecl Menu_RunCloseScript(UiContext *dc, menuDef_t *menu)
     }
 }
 
-void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
+void Menus_Open(UiContext *dc, menuDef_t *menu)
 {
     menuDef_t *v2; // [esp+4h] [ebp-188h]
     int localClientNum; // [esp+8h] [ebp-184h]
@@ -1264,7 +1264,7 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
         UI_PlayLocalSoundAliasByName(dc->localClientNum, menu->soundName);
 }
 
-void __cdecl Menus_AddToStack(UiContext *dc, menuDef_t *pMenu)
+void Menus_AddToStack(UiContext *dc, menuDef_t *pMenu)
 {
     Menus_RemoveFromStack(dc, pMenu);
     if (dc->openMenuCount == 16)
@@ -1272,7 +1272,7 @@ void __cdecl Menus_AddToStack(UiContext *dc, menuDef_t *pMenu)
     dc->menuStack[dc->openMenuCount++] = pMenu;
 }
 
-void __cdecl Menu_LoseFocusDueToOpen(UiContext *dc, menuDef_t *menu)
+void Menu_LoseFocusDueToOpen(UiContext *dc, menuDef_t *menu)
 {
     bool anyFound; // [esp+1Bh] [ebp-5h]
     int i; // [esp+1Ch] [ebp-4h]

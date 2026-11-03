@@ -16,7 +16,7 @@ extern int g_waitingForKey;
 extern int g_editingField;
 extern struct itemDef_s *g_editItem;
 extern int g_debugMode;
-extern void(__cdecl *captureFunc)(UiContext *, void *);
+extern void(*captureFunc)(UiContext *, void *);
 extern void *captureData;
 extern itemDef_s *itemCapture;
 extern itemDef_s *g_bindItem;

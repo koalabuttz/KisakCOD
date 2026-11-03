@@ -5,18 +5,18 @@
 #include <gfx_d3d/r_utils.h>
 #include <universal/profile.h>
 
-DObjAnimMat *__cdecl DObjGetRotTransArray(const DObj_s *obj)
+DObjAnimMat *DObjGetRotTransArray(const DObj_s *obj)
 {
     iassert(obj);
     return obj->skel.mat;
 }
 
-int __cdecl DObjGetNumModels(const DObj_s *obj)
+int DObjGetNumModels(const DObj_s *obj)
 {
     return obj->numModels;
 }
 
-int __cdecl DObjGetSurfaces(const DObj_s *obj, int *partBits, const char *lods)
+int DObjGetSurfaces(const DObj_s *obj, int *partBits, const char *lods)
 {
     int j; // [esp+0h] [ebp-4Ch]
     int numBones; // [esp+4h] [ebp-48h]
@@ -97,7 +97,7 @@ int __cdecl DObjGetSurfaces(const DObj_s *obj, int *partBits, const char *lods)
     return surfaceCount;
 }
 
-void __cdecl DObjGetSurfaceData(const DObj_s *obj, const float *origin, float scale, char *lods)
+void DObjGetSurfaceData(const DObj_s *obj, const float *origin, float scale, char *lods)
 {
     XModelLodRampType lodRampType; // [esp+Ch] [ebp-18h]
     XModel *model; // [esp+10h] [ebp-14h]
@@ -125,7 +125,7 @@ void __cdecl DObjGetSurfaceData(const DObj_s *obj, const float *origin, float sc
     }
 }
 
-void __cdecl DObjGetBoneInfo(const DObj_s *obj, XBoneInfo **boneInfo)
+void DObjGetBoneInfo(const DObj_s *obj, XBoneInfo **boneInfo)
 {
     int j; // [esp+0h] [ebp-14h]
     XModel *model; // [esp+4h] [ebp-10h]
@@ -143,17 +143,17 @@ void __cdecl DObjGetBoneInfo(const DObj_s *obj, XBoneInfo **boneInfo)
     }
 }
 
-int __cdecl DObjNumBones(const DObj_s *obj)
+int DObjNumBones(const DObj_s *obj)
 {
     return obj->numBones;
 }
 
-int __cdecl DObjGetLodForDist(const DObj_s *obj, int modelIndex, float dist)
+int DObjGetLodForDist(const DObj_s *obj, int modelIndex, float dist)
 {
     return XModelGetLodForDist(obj->models[modelIndex], dist);
 }
 
-void __cdecl DObjGetSetBones(const DObj_s *obj, int *setPartBits)
+void DObjGetSetBones(const DObj_s *obj, int *setPartBits)
 {
     setPartBits[0] = obj->skel.partBits.anim[0];
     setPartBits[1] = obj->skel.partBits.anim[1];
@@ -161,7 +161,7 @@ void __cdecl DObjGetSetBones(const DObj_s *obj, int *setPartBits)
     setPartBits[3] = obj->skel.partBits.anim[3];
 }
 
-uint32_t __cdecl DObjGetRootBoneCount(const DObj_s *obj)
+uint32_t DObjGetRootBoneCount(const DObj_s *obj)
 {
     XModel *model;
 
@@ -170,7 +170,7 @@ uint32_t __cdecl DObjGetRootBoneCount(const DObj_s *obj)
     return model->numRootBones;
 }
 
-int __cdecl DObjSetRotTransIndex(DObj_s *obj, const int *partBits, int boneIndex)
+int DObjSetRotTransIndex(DObj_s *obj, const int *partBits, int boneIndex)
 {
     DSkel *skel; // [esp+0h] [ebp-Ch]
     int boneIndexHigh; // [esp+4h] [ebp-8h]
@@ -195,7 +195,7 @@ int __cdecl DObjSetRotTransIndex(DObj_s *obj, const int *partBits, int boneIndex
     return 1;
 }
 
-char __cdecl DObjSetSkelRotTransIndex(DObj_s *obj, const int *partBits, int boneIndex)
+char DObjSetSkelRotTransIndex(DObj_s *obj, const int *partBits, int boneIndex)
 {
     DSkel *skel; // [esp+0h] [ebp-Ch]
     int boneIndexHigh; // [esp+4h] [ebp-8h]
@@ -223,7 +223,7 @@ char __cdecl DObjSetSkelRotTransIndex(DObj_s *obj, const int *partBits, int bone
     return true;
 }
 
-void __cdecl DObjSetControlTagAngles(DObj_s *obj, int *partBits, uint32_t boneIndex, float *angles)
+void DObjSetControlTagAngles(DObj_s *obj, int *partBits, uint32_t boneIndex, float *angles)
 {
     if (boneIndex < 254)
     {
@@ -236,7 +236,7 @@ void __cdecl DObjSetControlTagAngles(DObj_s *obj, int *partBits, uint32_t boneIn
     iassert((boneIndex == 254) || (boneIndex == 255));
 }
 
-XModel *__cdecl DObjGetModel(const DObj_s *obj, int modelIndex)
+XModel *DObjGetModel(const DObj_s *obj, int modelIndex)
 {
     iassert(obj);
     iassert(modelIndex < obj->numModels);
@@ -248,7 +248,7 @@ XModel *__cdecl DObjGetModel(const DObj_s *obj, int modelIndex)
     return obj->models[modelIndex];
 }
 
-void __cdecl DObjSetLocalTag(
+void DObjSetLocalTag(
     DObj_s *obj,
     int *partBits,
     uint32_t boneIndex,
@@ -266,7 +266,7 @@ void __cdecl DObjSetLocalTag(
     iassert((boneIndex == 254) || (boneIndex == 255));
 }
 
-void __cdecl DObjSetLocalTagInternal(const DObj_s *obj, const float *trans, const float *angles, int boneIndex)
+void DObjSetLocalTagInternal(const DObj_s *obj, const float *trans, const float *angles, int boneIndex)
 {
     DObjAnimMat *rotTrans; // [esp+0h] [ebp-4h]
     DObjAnimMat *rotTransa; // [esp+0h] [ebp-4h]
@@ -283,7 +283,7 @@ void __cdecl DObjSetLocalTagInternal(const DObj_s *obj, const float *trans, cons
     }
 }
 
-void __cdecl DObjSetAngles(DObjAnimMat *rotTrans, const float *angles)
+void DObjSetAngles(DObjAnimMat *rotTrans, const float *angles)
 {
     float v2; // [esp+8h] [ebp-44h]
     float v3; // [esp+14h] [ebp-38h]
@@ -318,7 +318,7 @@ void __cdecl DObjSetAngles(DObjAnimMat *rotTrans, const float *angles)
     rotTrans->quat[3] = rollQuat_4 * tempQuat_12 - rollQuat * tempQuat;
 }
 
-void __cdecl DObjClearAngles(DObjAnimMat *rotTrans)
+void DObjClearAngles(DObjAnimMat *rotTrans)
 {
     rotTrans->quat[0] = 0.0f;
     rotTrans->quat[1] = 0.0f;
@@ -326,7 +326,7 @@ void __cdecl DObjClearAngles(DObjAnimMat *rotTrans)
     rotTrans->quat[3] = 1.0f;
 }
 
-void __cdecl DObjSetTrans(DObjAnimMat *rotTrans, const float *trans)
+void DObjSetTrans(DObjAnimMat *rotTrans, const float *trans)
 {
     rotTrans->transWeight = 0.0;
     rotTrans->trans[0] = trans[0];
@@ -334,7 +334,7 @@ void __cdecl DObjSetTrans(DObjAnimMat *rotTrans, const float *trans)
     rotTrans->trans[2] = trans[2];
 }
 
-void __cdecl DObjCompleteHierarchyBits(const DObj_s *obj, int *partBits)
+void DObjCompleteHierarchyBits(const DObj_s *obj, int *partBits)
 {
     int j; // [esp+38h] [ebp-B4h]
     const unsigned __int8 *pos; // [esp+3Ch] [ebp-B0h]
@@ -427,7 +427,7 @@ void __cdecl DObjCompleteHierarchyBits(const DObj_s *obj, int *partBits)
     }
 }
 
-int __cdecl DObjSetControlRotTransIndex(DObj_s *obj, const int *partBits, int boneIndex)
+int DObjSetControlRotTransIndex(DObj_s *obj, const int *partBits, int boneIndex)
 {
     DSkel *skel; // [esp+0h] [ebp-Ch]
     int boneIndexHigh; // [esp+4h] [ebp-8h]
@@ -456,7 +456,7 @@ int __cdecl DObjSetControlRotTransIndex(DObj_s *obj, const int *partBits, int bo
     return 1;
 }
 
-bool __cdecl DObjSkelExists(const DObj_s *obj, int timeStamp)
+bool DObjSkelExists(const DObj_s *obj, int timeStamp)
 {
     if (obj->skel.timeStamp == timeStamp)
         return obj->skel.mat != 0;
@@ -464,12 +464,12 @@ bool __cdecl DObjSkelExists(const DObj_s *obj, int timeStamp)
     return 0;
 }
 
-void __cdecl DObjClearSkel(const DObj_s *obj)
+void DObjClearSkel(const DObj_s *obj)
 {
     memset((unsigned __int8 *)&obj->skel.partBits, 0, sizeof(DSkelPartBits));
 }
 
-int __cdecl DObjSkelAreBonesUpToDate(const DObj_s *obj, int *partBits)
+int DObjSkelAreBonesUpToDate(const DObj_s *obj, int *partBits)
 {
     int i; // [esp+4h] [ebp-4h]
 
@@ -483,12 +483,12 @@ int __cdecl DObjSkelAreBonesUpToDate(const DObj_s *obj, int *partBits)
     return 1;
 }
 
-int __cdecl DObjGetAllocSkelSize(const DObj_s *obj)
+int DObjGetAllocSkelSize(const DObj_s *obj)
 {
     return 32 * obj->numBones;
 }
 
-void __cdecl DObjCreateSkel(DObj_s *obj, char *buf, int timeStamp)
+void DObjCreateSkel(DObj_s *obj, char *buf, int timeStamp)
 {
     uint32_t AllocSkelSize; // eax
     int i; // [esp+30h] [ebp-4h]
@@ -509,13 +509,13 @@ void __cdecl DObjCreateSkel(DObj_s *obj, char *buf, int timeStamp)
     }
 }
 
-DObjAnimMat *__cdecl I_dmaGetDObjSkel(const DObj_s *obj)
+DObjAnimMat *I_dmaGetDObjSkel(const DObj_s *obj)
 {
     iassert(obj->skel.mat);
     return obj->skel.mat;
 }
 
-void __cdecl DObjGetHidePartBits(const DObj_s *obj, uint32_t *partBits)
+void DObjGetHidePartBits(const DObj_s *obj, uint32_t *partBits)
 {
     partBits[0] = obj->hidePartBits[0];
     partBits[1] = obj->hidePartBits[1];
@@ -523,7 +523,7 @@ void __cdecl DObjGetHidePartBits(const DObj_s *obj, uint32_t *partBits)
     partBits[3] = obj->hidePartBits[3];
 }
 
-void __cdecl DObjLock(DObj_s *obj)
+void DObjLock(DObj_s *obj)
 {
     volatile uint32_t *Destination; // [esp+0h] [ebp-4h]
 
@@ -535,7 +535,7 @@ void __cdecl DObjLock(DObj_s *obj)
     } while (InterlockedCompareExchange(Destination, 1, 0));
 }
 
-void __cdecl DObjUnlock(DObj_s *obj)
+void DObjUnlock(DObj_s *obj)
 {
     iassert(obj->locked);
 
@@ -543,7 +543,7 @@ void __cdecl DObjUnlock(DObj_s *obj)
 }
 
 // seems blops specific
-//int __cdecl DObjGetChildBones(const DObj_s *obj, unsigned __int8 parentBone, unsigned __int8 *children, int maxChildren)
+//int DObjGetChildBones(const DObj_s *obj, unsigned __int8 parentBone, unsigned __int8 *children, int maxChildren)
 //{
 //    unsigned __int8 child_index; // [esp+7h] [ebp-1Dh]
 //    int j; // [esp+8h] [ebp-1Ch]

@@ -14,7 +14,7 @@
 #endif
 
 #ifdef KISAK_MP
-void __cdecl Scr_MouseEvent(int x, int y);
+void Scr_MouseEvent(int x, int y);
 #endif
 
 namespace {

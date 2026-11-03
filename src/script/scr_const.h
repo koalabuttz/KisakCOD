@@ -426,7 +426,7 @@ struct scr_const_t
     uint16_t dog;
 };
 #endif
-void __cdecl GScr_LoadConsts(void);
+void GScr_LoadConsts(void);
 
 
 extern scr_const_t scr_const;

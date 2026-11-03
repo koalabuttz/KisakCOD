@@ -246,7 +246,7 @@ dGeomID dGeomTransformGetGeom (dGeomID g)
 //}
 
 // LWSS ADD
-void __cdecl ODE_GeomTransformSetRotation(dxGeom *g, const float *origin, const float (*rotation)[3])
+void ODE_GeomTransformSetRotation(dxGeom *g, const float *origin, const float (*rotation)[3])
 {
 	iassert(g);
 	vassert(g->type == dGeomTransformClass, "type = %d", g->type);
@@ -258,7 +258,7 @@ void __cdecl ODE_GeomTransformSetRotation(dxGeom *g, const float *origin, const 
 	tf->localPos[2] = origin[2];
 	tf->finalR[0] = 0.0;
 }
-void __cdecl ODE_GeomTransformGetOffset(dxGeom *g, float *origin)
+void ODE_GeomTransformGetOffset(dxGeom *g, float *origin)
 {
 	iassert(g);
 	vassert(g->type == dGeomTransformClass, "type = %d", g->type);
@@ -268,7 +268,7 @@ void __cdecl ODE_GeomTransformGetOffset(dxGeom *g, float *origin)
 	origin[1] = tf->localPos[1];
 	origin[2] = tf->localPos[2];
 }
-void __cdecl ODE_GeomTransformSetOffset(dxGeom *g, const float *origin)
+void ODE_GeomTransformSetOffset(dxGeom *g, const float *origin)
 {
 	iassert(g);
 	vassert(g->type == dGeomTransformClass, "type = %d", g->type);
@@ -279,11 +279,11 @@ void __cdecl ODE_GeomTransformSetOffset(dxGeom *g, const float *origin)
 	tf->localPos[2] = origin[2];
 	tf->finalR[0] = 0.0;
 }
-dxWorld *__cdecl ODE_BodyGetWorld(dxBody *b)
+dxWorld *ODE_BodyGetWorld(dxBody *b)
 {
 	return b->world;
 }
-dxGeom *__cdecl ODE_GeomTransformUpdateGeomOrientation(dxGeomTransform *g)
+dxGeom *ODE_GeomTransformUpdateGeomOrientation(dxGeomTransform *g)
 {
 	if (!g)
 		MyAssertHandler(".\\physics\\ode\\src\\collision_transform.cpp", 310, 0, "%s", "g");

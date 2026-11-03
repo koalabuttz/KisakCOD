@@ -22,7 +22,7 @@ struct PrintChannelGlob // sizeof=0x21E0
 
 PrintChannelGlob pcGlob;
 
-char __cdecl Con_OpenChannel(char *name, bool allowScript)
+char Con_OpenChannel(char *name, bool allowScript)
 {
     int32_t index; // [esp+0h] [ebp-8h]
     bool alreadyExists; // [esp+7h] [ebp-1h]
@@ -46,7 +46,7 @@ char __cdecl Con_OpenChannel(char *name, bool allowScript)
     return 1;
 }
 
-bool __cdecl Con_ScriptHasPermission(uint32_t channel)
+bool Con_ScriptHasPermission(uint32_t channel)
 {
     if (channel >= 0x100)
         return 0;
@@ -55,7 +55,7 @@ bool __cdecl Con_ScriptHasPermission(uint32_t channel)
     return 0;
 }
 
-bool __cdecl Con_GetChannel(const char *name, int32_t *channel_result)
+bool Con_GetChannel(const char *name, int32_t *channel_result)
 {
     int32_t channel; // [esp+0h] [ebp-4h]
 
@@ -70,12 +70,12 @@ bool __cdecl Con_GetChannel(const char *name, int32_t *channel_result)
     return channel < 256;
 }
 
-bool __cdecl Con_IsChannelOpen(uint32_t channel)
+bool Con_IsChannelOpen(uint32_t channel)
 {
     return channel < 0x100 && pcGlob.openChannels[channel].name[0] != 0;
 }
 
-bool __cdecl Con_IsChannelVisible(print_msg_dest_t dest, uint32_t channel, int32_t errorflags)
+bool Con_IsChannelVisible(print_msg_dest_t dest, uint32_t channel, int32_t errorflags)
 {
     int32_t error; // [esp+4h] [ebp-4h]
 
@@ -103,7 +103,7 @@ bool __cdecl Con_IsChannelVisible(print_msg_dest_t dest, uint32_t channel, int32
     return (error == 3 || error == 2) && Com_BitCheckAssert(pcGlob.filters[dest], CON_CHANNEL_ERROR, 32);
 }
 
-void __cdecl Con_WriteFilterConfigString(int32_t f)
+void Con_WriteFilterConfigString(int32_t f)
 {
     int32_t channel; // [esp+0h] [ebp-4h]
 
@@ -126,7 +126,7 @@ const char *defaultGameWindowFilters[4] =
     "subtitle",
     ""
 };
-void __cdecl Con_InitGameMsgChannels()
+void Con_InitGameMsgChannels()
 {
     uint32_t gameWindowIndex; // [esp+24h] [ebp-8h]
     uint32_t gameWindowIndexa; // [esp+24h] [ebp-8h]
@@ -167,7 +167,7 @@ void __cdecl Con_InitGameMsgChannels()
             con_gameMsgWindowNFilter[gameWindowIndexa]->current.string);
 }
 
-void __cdecl Con_InitChannelsForDestFromList(print_msg_dest_t dest, const char *channelNames)
+void Con_InitChannelsForDestFromList(print_msg_dest_t dest, const char *channelNames)
 {
     char channelName[256]; // [esp+10h] [ebp-118h] BYREF
     uint32_t channelNamesLen; // [esp+114h] [ebp-14h]
@@ -205,7 +205,7 @@ void __cdecl Con_InitChannelsForDestFromList(print_msg_dest_t dest, const char *
     }
 }
 
-void __cdecl Con_FilterShowChannel(print_msg_dest_t dest, const char *channelName, bool show)
+void Con_FilterShowChannel(print_msg_dest_t dest, const char *channelName, bool show)
 {
     int32_t channel; // [esp+0h] [ebp-8h]
     int32_t count; // [esp+4h] [ebp-4h]
@@ -271,7 +271,7 @@ cmd_function_s Con_FilterRemove_f_VAR;
 cmd_function_s Con_FilterList_f_VAR;
 
 const dvar_t *con_default_console_filter;
-void __cdecl Con_InitChannels()
+void Con_InitChannels()
 {
     uint32_t channel; // [esp+0h] [ebp-4h]
 
@@ -295,7 +295,7 @@ void __cdecl Con_InitChannels()
     Cmd_AddCommandInternal("con_visiblechannellist", Con_FilterList_f, &Con_FilterList_f_VAR);
 }
 
-void __cdecl Con_ChannelList_f()
+void Con_ChannelList_f()
 {
     int32_t channel; // [esp+0h] [ebp-4h]
 
@@ -309,12 +309,12 @@ void __cdecl Con_ChannelList_f()
     }
 }
 
-void __cdecl Con_FilterAdd_f()
+void Con_FilterAdd_f()
 {
     Con_FilterAdd(1);
 }
 
-void __cdecl Con_FilterAdd(bool show)
+void Con_FilterAdd(bool show)
 {
     const char *v1; // eax
     const char *v2; // eax
@@ -338,12 +338,12 @@ void __cdecl Con_FilterAdd(bool show)
     }
 }
 
-void __cdecl Con_FilterRemove_f()
+void Con_FilterRemove_f()
 {
     Con_FilterAdd(0);
 }
 
-void __cdecl Con_FilterList_f()
+void Con_FilterList_f()
 {
     int32_t channel; // [esp+0h] [ebp-4h]
 
@@ -357,7 +357,7 @@ void __cdecl Con_FilterList_f()
     }
 }
 
-void __cdecl Con_ShutdownChannels()
+void Con_ShutdownChannels()
 {
     int32_t channel; // [esp+0h] [ebp-4h]
 
@@ -365,7 +365,7 @@ void __cdecl Con_ShutdownChannels()
         Con_CloseChannelInternal(channel);
 }
 
-void __cdecl Con_CloseChannelInternal(uint32_t channel)
+void Con_CloseChannelInternal(uint32_t channel)
 {
     uint32_t filter; // [esp+0h] [ebp-4h]
 

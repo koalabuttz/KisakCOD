@@ -495,21 +495,21 @@ struct CStringEdPackage // sizeof=0x78
     std::map<std::string, std::string> m_StringEntries;
 };
 
-const char *__cdecl SE_GetString(const char *psPackageAndStringReference);
-const char *__cdecl SE_GetString_FastFile(const char *psPackageAndStringReference);
-char *__cdecl SE_Load(char *psFileName, bool forceEnglish);
-const char *__cdecl SE_GetString_LoadObj(const char *psPackageAndStringReference);
-void __cdecl SE_NewLanguage();
-void __cdecl SE_Init();
-void __cdecl SE_ShutDown();
-char *__cdecl SE_LoadLanguage(bool forceEnglish);
-char *__cdecl SE_GetFoundFile(std::string *strResult);
-uint8_t *__cdecl SE_LoadFileData(const char *psFileName);
-void __cdecl SE_FreeFileDataAfterLoad(uint8_t *psLoadedFile);
-int __cdecl SE_BuildFileList(
+const char *SE_GetString(const char *psPackageAndStringReference);
+const char *SE_GetString_FastFile(const char *psPackageAndStringReference);
+char *SE_Load(char *psFileName, bool forceEnglish);
+const char *SE_GetString_LoadObj(const char *psPackageAndStringReference);
+void SE_NewLanguage();
+void SE_Init();
+void SE_ShutDown();
+char *SE_LoadLanguage(bool forceEnglish);
+char *SE_GetFoundFile(std::string *strResult);
+uint8_t *SE_LoadFileData(const char *psFileName);
+void SE_FreeFileDataAfterLoad(uint8_t *psLoadedFile);
+int SE_BuildFileList(
     const char *psStartDir,
     std::string *strResults);
-void __cdecl SE_R_ListFiles(
+void SE_R_ListFiles(
     const char *psExtension,
     const char *psDir,
     std::string *strResults);

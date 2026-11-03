@@ -23,7 +23,7 @@ const float standardFrustumSidePlanes[4][4] =
 
 int s_lmapPixelsUsedForFalloff;
 
-void __cdecl R_ModernizeLegacyLightGridColors(const uint8_t *legacyColors, GfxLightGridColors *modernColors)
+void R_ModernizeLegacyLightGridColors(const uint8_t *legacyColors, GfxLightGridColors *modernColors)
 {
     float v2; // [esp+18h] [ebp-BCh]
     float scale; // [esp+1Ch] [ebp-B8h]
@@ -128,7 +128,7 @@ void __cdecl R_ModernizeLegacyLightGridColors(const uint8_t *legacyColors, GfxLi
     iassert( basisIndex == GFX_LIGHTGRID_SAMPLE_COUNT );
 }
 
-void __cdecl R_LoadDefaultLightGridColors(GfxLightGridColors *colors)
+void R_LoadDefaultLightGridColors(GfxLightGridColors *colors)
 {
     float scale; // [esp+2Ch] [ebp-70h]
     float v2; // [esp+30h] [ebp-6Ch]
@@ -189,7 +189,7 @@ void __cdecl R_LoadDefaultLightGridColors(GfxLightGridColors *colors)
     iassert( basisIndex == GFX_LIGHTGRID_SAMPLE_COUNT );
 }
 
-void __cdecl R_LoadLightGridColors(uint32_t bspVersion)
+void R_LoadLightGridColors(uint32_t bspVersion)
 {
     char *rawColorData; // [esp+0h] [ebp-Ch]
     uint32_t colorIndex; // [esp+8h] [ebp-4h]
@@ -250,7 +250,7 @@ uint8_t *R_LoadLightGridEntries()
     return result;
 }
 
-void __cdecl R_AssertLightGridValid(const GfxLightGrid *lightGrid)
+void R_AssertLightGridValid(const GfxLightGrid *lightGrid)
 {
     uint32_t rowCount; // [esp+0h] [ebp-Ch]
     const GfxLightGridRow *row; // [esp+4h] [ebp-8h]
@@ -382,7 +382,7 @@ void R_LoadLightGridHeader()
         R_InitEmptyLightGrid();
 }
 
-bool __cdecl R_AnnotatedLightGridPointSortsBefore(const AnnotatedLightGridPoint& p0, const AnnotatedLightGridPoint& p1)
+bool R_AnnotatedLightGridPointSortsBefore(const AnnotatedLightGridPoint& p0, const AnnotatedLightGridPoint& p1)
 {
     if (p0.pos[s_world.lightGrid.rowAxis] < p1.pos[s_world.lightGrid.rowAxis])
         return 1;
@@ -395,7 +395,7 @@ bool __cdecl R_AnnotatedLightGridPointSortsBefore(const AnnotatedLightGridPoint&
     return 0;
 }
 
-void __cdecl R_EmitLightGridEntry_Version15(const AnnotatedLightGridPoint *point)
+void R_EmitLightGridEntry_Version15(const AnnotatedLightGridPoint *point)
 {
     s_world.lightGrid.entries[s_world.lightGrid.entryCount++] = point->entry;
 }
@@ -411,7 +411,7 @@ uint32_t R_EmitDefaultLightGridEntry_Version15()
     return result;
 }
 
-char __cdecl R_EmitLightGridBlock_Version15(
+char R_EmitLightGridBlock_Version15(
     const AnnotatedLightGridPoint *pointsArray,
     signed int runCount,
     const uint16_t *zSubRange,
@@ -495,7 +495,7 @@ char __cdecl R_EmitLightGridBlock_Version15(
     }
 }
 
-void __cdecl R_EmitEmptyLightGridBlock_Version15(uint32_t emptyCount)
+void R_EmitEmptyLightGridBlock_Version15(uint32_t emptyCount)
 {
     while (emptyCount > 0xFF)
     {
@@ -523,7 +523,7 @@ void __cdecl R_EmitEmptyLightGridBlock_Version15(uint32_t emptyCount)
     s_world.lightGrid.rawRowDataSize += 2;
 }
 
-char __cdecl R_CompressLightGridRow_Version15(
+char R_CompressLightGridRow_Version15(
     const AnnotatedLightGridPoint *pointsArray,
     uint32_t beginRow,
     uint32_t endRow,
@@ -585,7 +585,7 @@ char __cdecl R_CompressLightGridRow_Version15(
     return 1;
 }
 
-char __cdecl R_EncodeLightGrid_Version15(const AnnotatedLightGridPoint *pointsArray, uint32_t pointsArrayCount)
+char R_EncodeLightGrid_Version15(const AnnotatedLightGridPoint *pointsArray, uint32_t pointsArrayCount)
 {
     uint32_t pointIndex; // [esp+0h] [ebp-18h]
     uint16_t zRange[2]; // [esp+4h] [ebp-14h] BYREF
@@ -643,7 +643,7 @@ char __cdecl R_EncodeLightGrid_Version15(const AnnotatedLightGridPoint *pointsAr
     return 1;
 }
 
-void __cdecl R_LoadLightGridPoints_Version15(uint32_t bspVersion)
+void R_LoadLightGridPoints_Version15(uint32_t bspVersion)
 {
     uint8_t v1; // [esp+14h] [ebp-2E4h]
     uint32_t dstEntryIndex; // [esp+1D8h] [ebp-120h]
@@ -794,7 +794,7 @@ void __cdecl R_LoadLightGridPoints_Version15(uint32_t bspVersion)
                 s_world.lightGrid.rowAxis = 1;
                 s_world.lightGrid.colAxis = 0;
             }
-            //std::_Sort<AnnotatedLightGridPoint *, int, bool(__cdecl *)(AnnotatedLightGridPoint const &, AnnotatedLightGridPoint const &)>(
+            //std::_Sort<AnnotatedLightGridPoint *, int, bool(*)(AnnotatedLightGridPoint const &, AnnotatedLightGridPoint const &)>(
             //    points,
             //    &points[entryCount],
             //    (10 * entryCount) / 10,
@@ -847,7 +847,7 @@ void __cdecl R_LoadLightGridPoints_Version15(uint32_t bspVersion)
     }
 }
 
-void __cdecl R_AllocateFalloffSpaceInLightmaps(GfxLightDef *def)
+void R_AllocateFalloffSpaceInLightmaps(GfxLightDef *def)
 {
     int pixelsNeeded; // [esp+0h] [ebp-4h]
 
@@ -864,7 +864,7 @@ void __cdecl R_AllocateFalloffSpaceInLightmaps(GfxLightDef *def)
     s_lmapPixelsUsedForFalloff += pixelsNeeded;
 }
 
-uint8_t *__cdecl R_LoadLightImage(uint8_t *readPos, GfxLightImage *lightImage)
+uint8_t *R_LoadLightImage(uint8_t *readPos, GfxLightImage *lightImage)
 {
     uint32_t v3; // [esp+0h] [ebp-18h]
     uint8_t *readPosa; // [esp+20h] [ebp+8h]
@@ -879,7 +879,7 @@ uint8_t *__cdecl R_LoadLightImage(uint8_t *readPos, GfxLightImage *lightImage)
     return &readPosa[v3 + 1];
 }
 
-GfxLightDef *__cdecl R_LoadLightDef(const char *name)
+GfxLightDef *R_LoadLightDef(const char *name)
 {
     char v2; // [esp+3h] [ebp-31h]
     char *v3; // [esp+8h] [ebp-2Ch]

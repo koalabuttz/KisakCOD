@@ -26,12 +26,12 @@ const dvar_t *sv_loadMyChanges;
 
 client_t g_sv_clients[1];
 
-void __cdecl TRACK_sv_init()
+void TRACK_sv_init()
 {
     track_static_alloc_internal(g_sv_clients, 55080, "g_sv_clients", 9);
 }
 
-void __cdecl SV_GetConfigstring(unsigned int index, char *buffer, int bufferSize)
+void SV_GetConfigstring(unsigned int index, char *buffer, int bufferSize)
 {
     if (bufferSize < 1)
         Com_Error(ERR_DROP, "SV_GetConfigstring: bufferSize == %i", bufferSize);
@@ -42,7 +42,7 @@ void __cdecl SV_GetConfigstring(unsigned int index, char *buffer, int bufferSize
     I_strncpyz(buffer, SL_ConvertToString(sv.configstrings[index]), bufferSize);
 }
 
-unsigned int __cdecl SV_GetConfigstringConst(unsigned int index)
+unsigned int SV_GetConfigstringConst(unsigned int index)
 {
     iassert((unsigned)index < MAX_CONFIGSTRINGS);
     iassert(sv.configstrings[index]);
@@ -50,17 +50,17 @@ unsigned int __cdecl SV_GetConfigstringConst(unsigned int index)
     return sv.configstrings[index];
 }
 
-void __cdecl SV_InitReliableCommandsForClient(client_t *cl)
+void SV_InitReliableCommandsForClient(client_t *cl)
 {
     Com_Memset(&cl->reliableCommands.header, 0, sizeof(serverCommandsHeader_t));
 }
 
-void __cdecl SV_FreeReliableCommandsForClient(client_t *cl)
+void SV_FreeReliableCommandsForClient(client_t *cl)
 {
     Com_Memset(&cl->reliableCommands.header, 0, sizeof(serverCommandsHeader_t));
 }
 
-void __cdecl SV_AddReliableCommand(client_t *cl, int index, const char *cmd)
+void SV_AddReliableCommand(client_t *cl, int index, const char *cmd)
 {
     const char *v5; // r11
     int v8; // r30
@@ -91,7 +91,7 @@ void __cdecl SV_AddReliableCommand(client_t *cl, int index, const char *cmd)
     cl->reliableCommands.header.rover += v8 + 1;
 }
 
-void __cdecl SV_Startup()
+void SV_Startup()
 {
     if (svs.initialized)
         Com_Error(ERR_FATAL, "SV_Startup() - already initialized");
@@ -102,7 +102,7 @@ void __cdecl SV_Startup()
     Dvar_SetBool(com_sv_running, 1);
 }
 
-void __cdecl SV_ClearServer()
+void SV_ClearServer()
 {
     unsigned __int16 *configstrings; // r31
 
@@ -122,7 +122,7 @@ void __cdecl SV_ClearServer()
     com_inServerFrame = 0;
 }
 
-void __cdecl SV_StartMap(int randomSeed)
+void SV_StartMap(int randomSeed)
 {
     com_inServerFrame = 0;
     sv.state = SS_LOADING;
@@ -131,7 +131,7 @@ void __cdecl SV_StartMap(int randomSeed)
     Dvar_SetInt(cl_paused, 1);
 }
 
-void __cdecl SV_Settle()
+void SV_Settle()
 {
     int v0; // r30
 
@@ -147,7 +147,7 @@ void __cdecl SV_Settle()
     } while (v0);
 }
 
-int __cdecl SV_SaveImmediately(const char *levelName)
+int SV_SaveImmediately(const char *levelName)
 {
     int v3; // r3
 
@@ -165,7 +165,7 @@ int __cdecl SV_SaveImmediately(const char *levelName)
     return SV_ProcessPendingSaves();
 }
 
-void __cdecl SV_LoadLevelAssets(const char *mapname)
+void SV_LoadLevelAssets(const char *mapname)
 {
     XZoneInfo zoneInfo; // [sp+50h] [-20h] BYREF
 
@@ -184,12 +184,12 @@ void __cdecl SV_LoadLevelAssets(const char *mapname)
     }
 }
 
-bool __cdecl SV_Loaded()
+bool SV_Loaded()
 {
     return sv.state == SS_GAME;
 }
 
-void __cdecl SV_Init()
+void SV_Init()
 {
     const char *v0; // r5
     unsigned __int16 v1; // r4
@@ -252,7 +252,7 @@ void __cdecl SV_Init()
         "Slow down server frame time to allow good client frame rate with server bound.");
 }
 
-void __cdecl SV_Shutdown(const char *finalmsg)
+void SV_Shutdown(const char *finalmsg)
 {
     serverStatic_t *v1; // r11
     int v2; // ctr
@@ -282,7 +282,7 @@ void __cdecl SV_Shutdown(const char *finalmsg)
     }
 }
 
-void __cdecl SV_SetConfigstring(unsigned int index, const char *val)
+void SV_SetConfigstring(unsigned int index, const char *val)
 {
     unsigned int v4; // r31
     const char *v5; // r3
@@ -373,7 +373,7 @@ void SV_SaveSystemInfo()
     dvar_modifiedFlags &= ~4u;
 }
 
-void __cdecl SV_SetExpectedHunkUsage(char *mapname)
+void SV_SetExpectedHunkUsage(char *mapname)
 {
     int handle; // [esp+0h] [ebp-18h] BYREF
     char *buf; // [esp+8h] [ebp-10h]
@@ -414,7 +414,7 @@ void __cdecl SV_SetExpectedHunkUsage(char *mapname)
     }
 }
 
-void __cdecl SV_SpawnServer(const char *mapname, int savegame)
+void SV_SpawnServer(const char *mapname, int savegame)
 {
     int startTime; // r21
     int seed; // r22

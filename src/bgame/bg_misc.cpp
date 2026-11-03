@@ -202,7 +202,7 @@ const char *bg_soundRoomTypes[27] =
 
 char bgShockChannelNames[64][80];
 
-void __cdecl BG_RegisterShockVolumeDvars()
+void BG_RegisterShockVolumeDvars()
 {
     DvarLimits min; // [esp+4h] [ebp-28h]
     snd_entchannel_info_t *channelName; // [esp+24h] [ebp-8h]
@@ -222,7 +222,7 @@ void __cdecl BG_RegisterShockVolumeDvars()
     }
 }
 
-void __cdecl BG_RegisterDvars()
+void BG_RegisterDvars()
 {
     DvarLimits min; // [esp+8h] [ebp-18h]
     DvarLimits mina; // [esp+8h] [ebp-18h]
@@ -1224,7 +1224,7 @@ void __cdecl BG_RegisterDvars()
 #endif
 }
 
-char *__cdecl BG_GetEntityTypeName(int32_t eType)
+char *BG_GetEntityTypeName(int32_t eType)
 {
     if (eType < ET_EVENTS)
         return (char*)entityTypeNames[eType];
@@ -1234,14 +1234,14 @@ char *__cdecl BG_GetEntityTypeName(int32_t eType)
     return va("Event %s (%i)", eventnames[eType - ET_EVENTS], eType - ET_EVENTS);
 }
 
-const gitem_s *__cdecl BG_FindItemForWeapon(uint32_t weapon, int32_t model)
+const gitem_s *BG_FindItemForWeapon(uint32_t weapon, int32_t model)
 {
 
     bcassert(weapon, BG_GetNumWeapons());
     return &bg_itemlist[(weapon + (model * 128))];
 }
 
-const gitem_s *__cdecl G_FindItem(const char *pickupName, int32_t model)
+const gitem_s *G_FindItem(const char *pickupName, int32_t model)
 {
     uint32_t iIndex; // [esp+0h] [ebp-4h]
 
@@ -1252,7 +1252,7 @@ const gitem_s *__cdecl G_FindItem(const char *pickupName, int32_t model)
         return 0;
 }
 
-bool __cdecl BG_PlayerTouchesItem(const playerState_s *ps, const entityState_s *item, int32_t atTime)
+bool BG_PlayerTouchesItem(const playerState_s *ps, const entityState_s *item, int32_t atTime)
 {
     float origin[3]; // [esp+0h] [ebp-Ch] BYREF
 
@@ -1265,7 +1265,7 @@ bool __cdecl BG_PlayerTouchesItem(const playerState_s *ps, const entityState_s *
         && ps->origin[2] - origin[2] >= -88.0;
 }
 
-bool __cdecl BG_PlayerCanPickUpWeaponType(const WeaponDef *weapDef, const playerState_s *ps)
+bool BG_PlayerCanPickUpWeaponType(const WeaponDef *weapDef, const playerState_s *ps)
 {
     iassert(weapDef);
     iassert(ps);
@@ -1276,7 +1276,7 @@ bool __cdecl BG_PlayerCanPickUpWeaponType(const WeaponDef *weapDef, const player
     return weapDef->offhandClass != OFFHAND_CLASS_SMOKE_GRENADE || ps->offhandSecondary == PLAYER_OFFHAND_SECONDARY_SMOKE;
 }
 
-bool __cdecl BG_CanItemBeGrabbed(const entityState_s *ent, const playerState_s *ps, int32_t touched)
+bool BG_CanItemBeGrabbed(const entityState_s *ent, const playerState_s *ps, int32_t touched)
 {
     int32_t weapIdx; // [esp+0h] [ebp-8h]
     const WeaponDef *weapDef; // [esp+4h] [ebp-4h]
@@ -1311,7 +1311,7 @@ bool __cdecl BG_CanItemBeGrabbed(const entityState_s *ent, const playerState_s *
     return weapDef->altWeaponIndex && WeaponEntCanBeGrabbed(ent, ps, touched, weapDef->altWeaponIndex);
 }
 
-bool __cdecl WeaponEntCanBeGrabbed(
+bool WeaponEntCanBeGrabbed(
     const entityState_s *weaponEntState,
     const playerState_s *ps,
     int32_t touched,
@@ -1345,7 +1345,7 @@ bool __cdecl WeaponEntCanBeGrabbed(
     return false;
 }
 
-bool __cdecl HaveRoomForAmmo(const playerState_s *ps, uint32_t weaponIndex)
+bool HaveRoomForAmmo(const playerState_s *ps, uint32_t weaponIndex)
 {
     int32_t ammoIndex; // [esp+0h] [ebp-14h]
     int32_t weapCount; // [esp+4h] [ebp-10h]
@@ -1369,7 +1369,7 @@ bool __cdecl HaveRoomForAmmo(const playerState_s *ps, uint32_t weaponIndex)
     return false;
 }
 
-bool __cdecl BG_PlayerHasRoomForEntAllAmmoTypes(const entityState_s *ent, const playerState_s *ps)
+bool BG_PlayerHasRoomForEntAllAmmoTypes(const entityState_s *ent, const playerState_s *ps)
 {
     const char *v2; // eax
     int v3; // ecx
@@ -1400,7 +1400,7 @@ bool __cdecl BG_PlayerHasRoomForEntAllAmmoTypes(const entityState_s *ent, const 
     return !weapDef->altWeaponIndex || BG_GetMaxPickupableAmmo(ps, weapDef->altWeaponIndex);
 }
 
-void __cdecl BG_EvaluateTrajectory(const trajectory_t *tr, int32_t atTime, float *result)
+void BG_EvaluateTrajectory(const trajectory_t *tr, int32_t atTime, float *result)
 {
     float v3; // [esp+Ch] [ebp-7Ch]
     float v4; // [esp+14h] [ebp-74h]
@@ -1484,7 +1484,7 @@ void __cdecl BG_EvaluateTrajectory(const trajectory_t *tr, int32_t atTime, float
     iassert(!IS_NAN((tr->trDelta)[0]) && !IS_NAN((tr->trDelta)[1]) && !IS_NAN((tr->trDelta)[2]));
 }
 
-void __cdecl BG_EvaluateTrajectoryDelta(const trajectory_t *tr, int32_t atTime, float *result)
+void BG_EvaluateTrajectoryDelta(const trajectory_t *tr, int32_t atTime, float *result)
 {
     float scale; // [esp+Ch] [ebp-60h]
     float v4; // [esp+18h] [ebp-54h]
@@ -1567,7 +1567,7 @@ void __cdecl BG_EvaluateTrajectoryDelta(const trajectory_t *tr, int32_t atTime, 
     }
 }
 
-void __cdecl BG_AddPredictableEventToPlayerstate(entity_event_t newEvent, uint32_t eventParm, playerState_s *ps)
+void BG_AddPredictableEventToPlayerstate(entity_event_t newEvent, uint32_t eventParm, playerState_s *ps)
 {
     if (newEvent)
     {
@@ -1595,7 +1595,7 @@ void __cdecl BG_AddPredictableEventToPlayerstate(entity_event_t newEvent, uint32
     }
 }
 
-void __cdecl BG_PlayerStateToEntityState(playerState_s *ps, entityState_s *s, int32_t snap, uint8_t handler)
+void BG_PlayerStateToEntityState(playerState_s *ps, entityState_s *s, int32_t snap, uint8_t handler)
 {
     BG_PlayerToEntitySetTrajectory(ps, s, snap);
     BG_PlayerToEntitySetFlags(ps, s);
@@ -1605,7 +1605,7 @@ void __cdecl BG_PlayerStateToEntityState(playerState_s *ps, entityState_s *s, in
     BG_PlayerToEntityProcessEvents(ps, s, handler);
 }
 
-void __cdecl BG_PlayerToEntityEventParm(playerState_s *ps, entityState_s *s)
+void BG_PlayerToEntityEventParm(playerState_s *ps, entityState_s *s)
 {
 #ifdef KISAK_MP
     int32_t v2; // [esp+4h] [ebp-Ch]
@@ -1648,12 +1648,12 @@ void __cdecl BG_PlayerToEntityEventParm(playerState_s *ps, entityState_s *s)
 #endif
 }
 
-void __cdecl BG_PlayerToEntityProcessEvents(playerState_s *ps, entityState_s *s, uint8_t handler)
+void BG_PlayerToEntityProcessEvents(playerState_s *ps, entityState_s *s, uint8_t handler)
 {
     int32_t j; // [esp+4h] [ebp-10h]
     int32_t ja; // [esp+4h] [ebp-10h]
     uint8_t event; // [esp+Bh] [ebp-9h]
-    void(__cdecl * playerEvent)(int32_t, int32_t); // [esp+Ch] [ebp-8h]
+    void(* playerEvent)(int32_t, int32_t); // [esp+Ch] [ebp-8h]
     int32_t i; // [esp+10h] [ebp-4h]
 
     if (ps->eventSequence - ps->oldEventSequence > 4)
@@ -1690,7 +1690,7 @@ void __cdecl BG_PlayerToEntityProcessEvents(playerState_s *ps, entityState_s *s,
     ps->oldEventSequence = ps->eventSequence;
 }
 
-void __cdecl BG_PlayerToEntitySetFlags(playerState_s *ps, entityState_s *s)
+void BG_PlayerToEntitySetFlags(playerState_s *ps, entityState_s *s)
 {
     int v2; // edx
     int v3; // ecx
@@ -1708,7 +1708,7 @@ void __cdecl BG_PlayerToEntitySetFlags(playerState_s *ps, entityState_s *s)
     s->lerp.eFlags = v3;
 }
 
-void __cdecl BG_PlayerToEntitySetPitchAngles(playerState_s *ps, entityState_s *s)
+void BG_PlayerToEntitySetPitchAngles(playerState_s *ps, entityState_s *s)
 {
 #ifdef KISAK_MP
     float v2; // [esp+8h] [ebp-34h]
@@ -1762,7 +1762,7 @@ void __cdecl BG_PlayerToEntitySetPitchAngles(playerState_s *ps, entityState_s *s
 #endif
 }
 
-void __cdecl BG_PlayerToEntitySetMisc(playerState_s *ps, entityState_s *s)
+void BG_PlayerToEntitySetMisc(playerState_s *ps, entityState_s *s)
 {
 #ifdef KISAK_MP
     s->legsAnim = ps->legsAnim;
@@ -1786,7 +1786,7 @@ void __cdecl BG_PlayerToEntitySetMisc(playerState_s *ps, entityState_s *s)
 #endif
 }
 
-void __cdecl BG_PlayerToEntitySetTrajectory(playerState_s *ps, entityState_s *s, int32_t snap)
+void BG_PlayerToEntitySetTrajectory(playerState_s *ps, entityState_s *s, int32_t snap)
 {
     s->lerp.pos.trType = TR_INTERPOLATE;
     s->lerp.pos.trDuration = 0;
@@ -1818,7 +1818,7 @@ void __cdecl BG_PlayerToEntitySetTrajectory(playerState_s *ps, entityState_s *s,
 #endif
 }
 
-bool __cdecl BG_CheckProneValid(
+bool BG_CheckProneValid(
     int32_t passEntityNum,
     const float *vPos,
     float fSize,
@@ -1847,7 +1847,7 @@ bool __cdecl BG_CheckProneValid(
     float vFeetPos[3]; // [esp+48h] [ebp-C4h] BYREF
     int32_t bFirstTraceHit; // [esp+54h] [ebp-B8h]
     float fWaistTraceDist; // [esp+58h] [ebp-B4h]
-    void(__cdecl * traceFunc)(trace_t *, const float *, const float *, const float *, const float *, int, int); // [esp+5Ch] [ebp-B0h]
+    void(* traceFunc)(trace_t *, const float *, const float *, const float *, const float *, int, int); // [esp+5Ch] [ebp-B0h]
     float vEnd[3]; // [esp+60h] [ebp-ACh] BYREF
     float fTraceHeight; // [esp+6Ch] [ebp-A0h]
     float vTorsoPos[3]; // [esp+70h] [ebp-9Ch] BYREF
@@ -2079,7 +2079,7 @@ fail:
     return true;
 }
 
-void __cdecl BG_GetPlayerViewOrigin(const playerState_s *ps, float *origin, int32_t time)
+void BG_GetPlayerViewOrigin(const playerState_s *ps, float *origin, int32_t time)
 {
     float v3; // [esp+10h] [ebp-24h]
     float delta; // [esp+18h] [ebp-1Ch]
@@ -2111,12 +2111,12 @@ void __cdecl BG_GetPlayerViewOrigin(const playerState_s *ps, float *origin, int3
         origin[2] = ps->origin[2] + 8.0;
 }
 
-void __cdecl BG_GetPlayerViewDirection(const playerState_s *ps, float *forward, float *right, float *up)
+void BG_GetPlayerViewDirection(const playerState_s *ps, float *forward, float *right, float *up)
 {
     AngleVectors(ps->viewangles, forward, right, up);
 }
 
-char __cdecl BG_CheckProne(
+char BG_CheckProne(
     int32_t passEntityNum,
     const float *vPos,
     float fSize,
@@ -2147,7 +2147,7 @@ char __cdecl BG_CheckProne(
         prone_feet_dist);
 }
 
-void __cdecl BG_LerpHudColors(const hudelem_s *elem, int32_t time, hudelem_color_t *toColor)
+void BG_LerpHudColors(const hudelem_s *elem, int32_t time, hudelem_color_t *toColor)
 {
     float lerp; // [esp+58h] [ebp-8h]
     int32_t timeSinceFadeStarted; // [esp+5Ch] [ebp-4h]
@@ -2172,7 +2172,7 @@ void __cdecl BG_LerpHudColors(const hudelem_s *elem, int32_t time, hudelem_color
     }
 }
 
-int __cdecl BG_LoadShellShockDvars(const char *name)
+int BG_LoadShellShockDvars(const char *name)
 {
     int EntChannelCount; // eax
     char *filebuf; // [esp+0h] [ebp-1C4h]
@@ -2208,7 +2208,7 @@ int __cdecl BG_LoadShellShockDvars(const char *name)
     }
 }
 
-void __cdecl BG_SetShellShockParmsFromDvars(shellshock_parms_t *parms)
+void BG_SetShellShockParmsFromDvars(shellshock_parms_t *parms)
 {
     const char *v1; // eax
     float v2; // [esp+8h] [ebp-ECh]
@@ -2289,7 +2289,7 @@ void __cdecl BG_SetShellShockParmsFromDvars(shellshock_parms_t *parms)
     parms->movement.affect = bg_shock_movement->current.enabled;
 }
 
-int __cdecl BG_SaveShellShockDvars(const char *name)
+int BG_SaveShellShockDvars(const char *name)
 {
     int EntChannelCount; // eax
     const char *bg_shock_dvar_names[91]; // [esp+10h] [ebp-180h] BYREF
@@ -2312,28 +2312,28 @@ int __cdecl BG_SaveShellShockDvars(const char *name)
     return 1;
 }
 
-shellshock_parms_t *__cdecl BG_GetShellshockParms(uint32_t index)
+shellshock_parms_t *BG_GetShellshockParms(uint32_t index)
 {
     iassert(index >= 0 && index < 16);
 
     return &bg_shellshockParms[index];
 }
 
-void __cdecl BG_CreateXAnim(XAnim_s *anims, uint32_t animIndex, const char *name)
+void BG_CreateXAnim(XAnim_s *anims, uint32_t animIndex, const char *name)
 {
     if (!IsFastFileLoad())
     {
-        XAnimPrecache(name, (void *(__cdecl *)(int))Hunk_AllocXAnimPrecache);
+        XAnimPrecache(name, (void *(*)(int))Hunk_AllocXAnimPrecache);
     }
     XAnimCreate(anims, animIndex, name);
 }
 
-void __cdecl BG_CheckThread()
+void BG_CheckThread()
 {
     iassert(Sys_IsMainThread());
 }
 
-int __cdecl BG_GetMaxSprintTime(const playerState_s *ps)
+int BG_GetMaxSprintTime(const playerState_s *ps)
 {
     float maxSprintTime; // [esp+14h] [ebp-4h]
 

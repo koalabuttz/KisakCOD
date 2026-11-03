@@ -212,121 +212,121 @@ enum $DC3485627FCD5339F6A2D1EEC8B74E34 : __int32
     SAMPLER_CLAMP_MASK = 0xE0,
 };
 
-void __cdecl R_ChangeIndices(GfxCmdBufPrimState *state, IDirect3DIndexBuffer9 *ib);
-void __cdecl R_ChangeStreamSource(
+void R_ChangeIndices(GfxCmdBufPrimState *state, IDirect3DIndexBuffer9 *ib);
+void R_ChangeStreamSource(
     GfxCmdBufPrimState *state,
     uint32_t streamIndex,
     IDirect3DVertexBuffer9 *vb,
     uint32_t vertexOffset,
     uint32_t vertexStride);
-void __cdecl R_SetTexFilter();
-void __cdecl R_SetInitialContextState(IDirect3DDevice9 *device);
-void __cdecl R_ChangeDepthHackNearClip(GfxCmdBufSourceState *source, uint32_t depthHackFlags);
-void __cdecl R_DepthHackNearClipChanged(GfxCmdBufSourceState *source);
-GfxCmdBufSourceState *__cdecl R_GetCodeMatrix(
+void R_SetTexFilter();
+void R_SetInitialContextState(IDirect3DDevice9 *device);
+void R_ChangeDepthHackNearClip(GfxCmdBufSourceState *source, uint32_t depthHackFlags);
+void R_DepthHackNearClipChanged(GfxCmdBufSourceState *source);
+GfxCmdBufSourceState *R_GetCodeMatrix(
     GfxCmdBufSourceState *source,
     uint32_t sourceIndex,
     uint32_t firstRow);
-void __cdecl R_DeriveCodeMatrix(GfxCmdBufSourceState *source, GfxCodeMatrices *activeMatrices, uint32_t baseIndex);
-void __cdecl R_DeriveViewMatrix(GfxCmdBufSourceState *source);
+void R_DeriveCodeMatrix(GfxCmdBufSourceState *source, GfxCodeMatrices *activeMatrices, uint32_t baseIndex);
+void R_DeriveViewMatrix(GfxCmdBufSourceState *source);
 void  R_DeriveWorldViewMatrix(GfxCmdBufSourceState *source);
-void __cdecl R_DeriveProjectionMatrix(GfxCmdBufSourceState *source);
-void __cdecl R_DeriveViewProjectionMatrix(GfxCmdBufSourceState *source);
+void R_DeriveProjectionMatrix(GfxCmdBufSourceState *source);
+void R_DeriveViewProjectionMatrix(GfxCmdBufSourceState *source);
 void  R_DeriveWorldViewProjectionMatrix(GfxCmdBufSourceState *source);
-void __cdecl R_DeriveShadowLookupMatrix(GfxCmdBufSourceState *source);
+void R_DeriveShadowLookupMatrix(GfxCmdBufSourceState *source);
 void  R_GenerateWorldOutdoorLookupMatrix(
     GfxCmdBufSourceState *source,
     float (*outMatrix)[4]);
-const GfxImage *__cdecl R_GetTextureFromCode(
+const GfxImage *R_GetTextureFromCode(
     GfxCmdBufSourceState *source,
     MaterialTextureSource codeTexture,
     uint8_t *samplerState);
-void __cdecl R_TextureFromCodeError(GfxCmdBufSourceState *source, uint32_t codeTexture);
-const GfxImage *__cdecl R_OverrideGrayscaleImage(const dvar_s *dvar);
-void __cdecl R_SetLightmap(GfxCmdBufContext context, uint32_t lmapIndex);
-void __cdecl R_SetReflectionProbe(GfxCmdBufContext context, uint32_t reflectionProbeIndex);
-void __cdecl R_ChangeDepthRange(GfxCmdBufState *state, GfxDepthRangeType depthRangeType);
-void __cdecl R_HW_SetViewport(IDirect3DDevice9 *device, const GfxViewport *viewport, float nearValue, float farValue);
-int __cdecl R_BeginMaterial(GfxCmdBufState *state, const Material *material, MaterialTechniqueType techType);
-void __cdecl R_ClearAllStreamSources(GfxCmdBufPrimState *state);
-void __cdecl R_DrawIndexedPrimitive(GfxCmdBufPrimState *state, const GfxDrawPrimArgs *args);
-void __cdecl R_ChangeState_0(GfxCmdBufState *state, uint32_t stateBits0);
-void __cdecl R_HW_SetAlphaTestEnable(IDirect3DDevice9 *device, __int16 stateBits0);
-void __cdecl R_HW_SetColorMask(IDirect3DDevice9 *device, uint32_t stateBits0);
-void __cdecl R_HW_SetCullFace(IDirect3DDevice9 *device, __int16 stateBits0);
-void __cdecl R_HW_SetPolygonMode(IDirect3DDevice9 *device, signed int stateBits0);
-void __cdecl R_HW_DisableBlend(IDirect3DDevice9 *device);
-void __cdecl R_HW_SetBlend(
+void R_TextureFromCodeError(GfxCmdBufSourceState *source, uint32_t codeTexture);
+const GfxImage *R_OverrideGrayscaleImage(const dvar_s *dvar);
+void R_SetLightmap(GfxCmdBufContext context, uint32_t lmapIndex);
+void R_SetReflectionProbe(GfxCmdBufContext context, uint32_t reflectionProbeIndex);
+void R_ChangeDepthRange(GfxCmdBufState *state, GfxDepthRangeType depthRangeType);
+void R_HW_SetViewport(IDirect3DDevice9 *device, const GfxViewport *viewport, float nearValue, float farValue);
+int R_BeginMaterial(GfxCmdBufState *state, const Material *material, MaterialTechniqueType techType);
+void R_ClearAllStreamSources(GfxCmdBufPrimState *state);
+void R_DrawIndexedPrimitive(GfxCmdBufPrimState *state, const GfxDrawPrimArgs *args);
+void R_ChangeState_0(GfxCmdBufState *state, uint32_t stateBits0);
+void R_HW_SetAlphaTestEnable(IDirect3DDevice9 *device, __int16 stateBits0);
+void R_HW_SetColorMask(IDirect3DDevice9 *device, uint32_t stateBits0);
+void R_HW_SetCullFace(IDirect3DDevice9 *device, __int16 stateBits0);
+void R_HW_SetPolygonMode(IDirect3DDevice9 *device, signed int stateBits0);
+void R_HW_DisableBlend(IDirect3DDevice9 *device);
+void R_HW_SetBlend(
     IDirect3DDevice9 *device,
     bool blendWasEnabled,
     uint32_t changedBits,
     uint32_t stateBits0);
-void __cdecl R_SetAlphaTestFunction(GfxCmdBufState *state, __int16 stateBits0);
-void __cdecl R_ChangeState_1(GfxCmdBufState *state, uint32_t stateBits1);
-void __cdecl R_HW_SetDepthWriteEnable(IDirect3DDevice9 *device, char stateBits1);
-void __cdecl R_HW_SetDepthTestEnable(IDirect3DDevice9 *device, char stateBits1);
-void __cdecl R_HW_SetDepthTestFunction(IDirect3DDevice9 *device, char stateBits1);
-void __cdecl R_HW_EnableStencil(IDirect3DDevice9 *device);
-void __cdecl R_HW_DisableStencil(IDirect3DDevice9 *device);
-void __cdecl R_HW_SetFrontStencilOp(
+void R_SetAlphaTestFunction(GfxCmdBufState *state, __int16 stateBits0);
+void R_ChangeState_1(GfxCmdBufState *state, uint32_t stateBits1);
+void R_HW_SetDepthWriteEnable(IDirect3DDevice9 *device, char stateBits1);
+void R_HW_SetDepthTestEnable(IDirect3DDevice9 *device, char stateBits1);
+void R_HW_SetDepthTestFunction(IDirect3DDevice9 *device, char stateBits1);
+void R_HW_EnableStencil(IDirect3DDevice9 *device);
+void R_HW_DisableStencil(IDirect3DDevice9 *device);
+void R_HW_SetFrontStencilOp(
     IDirect3DDevice9 *device,
     uint32_t stencilOpPass,
     uint32_t stencilOpFail,
     uint32_t stencilOpZFail);
-void __cdecl R_HW_SetBackStencilOp(
+void R_HW_SetBackStencilOp(
     IDirect3DDevice9 *device,
     uint32_t stencilOpPass,
     uint32_t stencilOpFail,
     uint32_t stencilOpZFail);
-void __cdecl R_HW_SetFrontStencilFunc(IDirect3DDevice9 *device, uint32_t stencilFunc);
-void __cdecl R_HW_SetBackStencilFunc(IDirect3DDevice9 *device, uint32_t stencilFunc);
-void __cdecl R_SetSampler(
+void R_HW_SetFrontStencilFunc(IDirect3DDevice9 *device, uint32_t stencilFunc);
+void R_HW_SetBackStencilFunc(IDirect3DDevice9 *device, uint32_t stencilFunc);
+void R_SetSampler(
     GfxCmdBufContext context,
     uint32_t samplerIndex,
     uint8_t samplerState,
     const GfxImage *image);
-uint32_t __cdecl R_HW_SetSamplerState(
+uint32_t R_HW_SetSamplerState(
     IDirect3DDevice9 *device,
     uint32_t samplerIndex,
     uint32_t samplerState,
     uint32_t oldSamplerState);
-uint32_t __cdecl R_DecodeSamplerState(uint8_t samplerState);
-void __cdecl R_SetSamplerState(GfxCmdBufState *state, uint32_t samplerIndex, uint8_t samplerState);
-void __cdecl R_ForceSetBlendState(IDirect3DDevice9 *device, uint32_t stateBits0);
-void __cdecl R_ForceSetStencilState(IDirect3DDevice9 *device, uint32_t stateBits1);
-void __cdecl R_GetViewport(GfxCmdBufSourceState *source, GfxViewport *outViewport);
-void __cdecl R_SetViewport(GfxCmdBufState *state, const GfxViewport *viewport);
-void __cdecl R_SetViewportStruct(GfxCmdBufSourceState *source, const GfxViewport *viewport);
-void __cdecl R_SetViewportValues(GfxCmdBufSourceState *source, int x, int y, int width, int height);
-void __cdecl R_UpdateViewport(GfxCmdBufSourceState *source, GfxViewport *viewport);
-void __cdecl R_DisableSampler(GfxCmdBufState *state, uint32_t samplerIndex);
-void __cdecl R_HW_DisableSampler(IDirect3DDevice9 *device, uint32_t samplerIndex);
-void __cdecl R_UnbindImage(GfxCmdBufState *state, const GfxImage *image);
-void __cdecl R_SetRenderTargetSize(GfxCmdBufSourceState *source, GfxRenderTargetId newTargetId);
-GfxViewportBehavior __cdecl R_ViewportBehaviorForRenderTarget(GfxRenderTargetId renderTargetId);
-void __cdecl R_SetRenderTarget(GfxCmdBufContext context, GfxRenderTargetId newTargetId);
-void __cdecl R_HW_SetRenderTarget(GfxCmdBufState *state, GfxRenderTargetId newTargetId);
-void __cdecl R_UpdateStatsTarget(int newTargetId);
-void __cdecl R_ClearScreenInternal(
+uint32_t R_DecodeSamplerState(uint8_t samplerState);
+void R_SetSamplerState(GfxCmdBufState *state, uint32_t samplerIndex, uint8_t samplerState);
+void R_ForceSetBlendState(IDirect3DDevice9 *device, uint32_t stateBits0);
+void R_ForceSetStencilState(IDirect3DDevice9 *device, uint32_t stateBits1);
+void R_GetViewport(GfxCmdBufSourceState *source, GfxViewport *outViewport);
+void R_SetViewport(GfxCmdBufState *state, const GfxViewport *viewport);
+void R_SetViewportStruct(GfxCmdBufSourceState *source, const GfxViewport *viewport);
+void R_SetViewportValues(GfxCmdBufSourceState *source, int x, int y, int width, int height);
+void R_UpdateViewport(GfxCmdBufSourceState *source, GfxViewport *viewport);
+void R_DisableSampler(GfxCmdBufState *state, uint32_t samplerIndex);
+void R_HW_DisableSampler(IDirect3DDevice9 *device, uint32_t samplerIndex);
+void R_UnbindImage(GfxCmdBufState *state, const GfxImage *image);
+void R_SetRenderTargetSize(GfxCmdBufSourceState *source, GfxRenderTargetId newTargetId);
+GfxViewportBehavior R_ViewportBehaviorForRenderTarget(GfxRenderTargetId renderTargetId);
+void R_SetRenderTarget(GfxCmdBufContext context, GfxRenderTargetId newTargetId);
+void R_HW_SetRenderTarget(GfxCmdBufState *state, GfxRenderTargetId newTargetId);
+void R_UpdateStatsTarget(int newTargetId);
+void R_ClearScreenInternal(
     IDirect3DDevice9 *device,
     uint8_t whichToClear,
     const float *color,
     float depth,
     uint8_t stencil,
     const GfxViewport *viewport);
-void __cdecl R_ClearScreen(
+void R_ClearScreen(
     IDirect3DDevice9 *device,
     uint8_t whichToClear,
     const float *color,
     float depth,
     uint8_t stencil,
     const GfxViewport *viewport);
-void __cdecl R_ForceSetPolygonOffset(IDirect3DDevice9 *device, char stateBits1);
-void __cdecl R_HW_SetPolygonOffset(IDirect3DDevice9 *device, float scale, float bias);
-void __cdecl R_SetMeshStream(GfxCmdBufState *state, GfxMeshData *mesh);
-void __cdecl R_SetCompleteState(IDirect3DDevice9 *device, uint32_t *stateBits);
+void R_ForceSetPolygonOffset(IDirect3DDevice9 *device, char stateBits1);
+void R_HW_SetPolygonOffset(IDirect3DDevice9 *device, float scale, float bias);
+void R_SetMeshStream(GfxCmdBufState *state, GfxMeshData *mesh);
+void R_SetCompleteState(IDirect3DDevice9 *device, uint32_t *stateBits);
 
-typedef void (__cdecl*DrawCallCallback)(const void*, GfxCmdBufContext, GfxCmdBufContext);
+typedef void (*DrawCallCallback)(const void*, GfxCmdBufContext, GfxCmdBufContext);
 void R_DrawCall(
     DrawCallCallback callback,
     const void* userData,
@@ -337,20 +337,20 @@ void R_DrawCall(
     GfxCmdBuf* cmdBufEA,
     GfxCmdBuf* prepassCmdBufEA);
 
-void __cdecl R_SetCodeConstant(GfxCmdBufSourceState *source, CodeConstant constant, float x, float y, float z, float w);
-void __cdecl R_UpdateCodeConstant(
+void R_SetCodeConstant(GfxCmdBufSourceState *source, CodeConstant constant, float x, float y, float z, float w);
+void R_UpdateCodeConstant(
     GfxCmdBufSourceState *source,
     CodeConstant constant,
     float x,
     float y,
     float z,
     float w);
-void __cdecl R_DirtyCodeConstant(GfxCmdBufSourceState *source, CodeConstant constant);
-void __cdecl R_SetCodeConstantFromVec4(GfxCmdBufSourceState *source, CodeConstant constant, float *value);
+void R_DirtyCodeConstant(GfxCmdBufSourceState *source, CodeConstant constant);
+void R_SetCodeConstantFromVec4(GfxCmdBufSourceState *source, CodeConstant constant, float *value);
 
 
 
-void __cdecl R_SetAlphaAntiAliasingState(IDirect3DDevice9 *device, __int16 stateBits0);
+void R_SetAlphaAntiAliasingState(IDirect3DDevice9 *device, __int16 stateBits0);
 
 
 inline bool R_IsMatrixConstantUpToDate(GfxCmdBufSourceState *source, int version)

@@ -203,17 +203,17 @@ const char ERRMSG_SINGLE[83] =
   '\0'
 }; // idb
 
-char *__cdecl SV_GetMapBaseName(char *mapname)
+char *SV_GetMapBaseName(char *mapname)
 {
     return FS_GetMapBaseName(mapname);
 }
 
-void __cdecl SV_Heartbeat_f()
+void SV_Heartbeat_f()
 {
     svs.nextHeartbeatTime = 0x80000000;
 }
 
-void __cdecl SV_GameCompleteStatus_f()
+void SV_GameCompleteStatus_f()
 {
     SV_MasterGameCompleteStatus();
 }
@@ -274,7 +274,7 @@ cmd_function_s SV_SetPerk_f_VAR;
 cmd_function_s SV_SetPerk_f_VAR_SERVER;
 
 
-void __cdecl SV_ScriptDebugger_f()
+void SV_ScriptDebugger_f()
 {
     if (Sys_IsRemoteDebugClient())
     {
@@ -286,7 +286,7 @@ void __cdecl SV_ScriptDebugger_f()
     }
 }
 
-void __cdecl SV_AddOperatorCommands()
+void SV_AddOperatorCommands()
 {
     static int initialized_0 = 0;
     if (!initialized_0)
@@ -358,7 +358,7 @@ void __cdecl SV_AddOperatorCommands()
     }
 }
 
-char __cdecl SV_CheckMapExists(const char *map)
+char SV_CheckMapExists(const char *map)
 {
     char expanded[68]; // [esp+0h] [ebp-48h] BYREF
 
@@ -369,7 +369,7 @@ char __cdecl SV_CheckMapExists(const char *map)
     return 0;
 }
 
-void __cdecl SV_Map_f()
+void SV_Map_f()
 {
     const char *v0; // eax
     char *v1; // eax
@@ -427,7 +427,7 @@ void __cdecl SV_Map_f()
     }
 }
 
-void __cdecl ShowLoadErrorsSummary(const char *mapName, uint32_t count)
+void ShowLoadErrorsSummary(const char *mapName, uint32_t count)
 {
     if (com_errorPrintsCount)
     {
@@ -449,12 +449,12 @@ void __cdecl ShowLoadErrorsSummary(const char *mapName, uint32_t count)
     }
 }
 
-void __cdecl SV_MapRestart_f()
+void SV_MapRestart_f()
 {
     SV_MapRestart(0);
 }
 
-void __cdecl SV_MapRestart(int fast_restart)
+void SV_MapRestart(int fast_restart)
 {
     char *String; // eax
     char *v2; // eax
@@ -534,12 +534,12 @@ void __cdecl SV_MapRestart(int fast_restart)
     }
 }
 
-void __cdecl SV_FastRestart_f()
+void SV_FastRestart_f()
 {
     SV_MapRestart(1);
 }
 
-parseInfo_t *__cdecl SV_GetMapRotationToken()
+parseInfo_t *SV_GetMapRotationToken()
 {
     parseInfo_t *token; // [esp+0h] [ebp-8h]
     const char *value; // [esp+4h] [ebp-4h] BYREF
@@ -558,7 +558,7 @@ parseInfo_t *__cdecl SV_GetMapRotationToken()
     }
 }
 
-void __cdecl SV_MapRotate_f()
+void SV_MapRotate_f()
 {
     char *v0; // eax
     parseInfo_t *token; // [esp+0h] [ebp-4h]
@@ -622,7 +622,7 @@ void __cdecl SV_MapRotate_f()
     }
 }
 
-void __cdecl SV_TempBan_f()
+void SV_TempBan_f()
 {
     char cdkeyHash[36]; // [esp+0h] [ebp-6Ch] BYREF
     char playerName[68]; // [esp+24h] [ebp-48h] BYREF
@@ -634,7 +634,7 @@ void __cdecl SV_TempBan_f()
     }
 }
 
-int __cdecl SV_KickUser_f(char *playerName, int maxPlayerNameLen, char *cdkeyHash)
+int SV_KickUser_f(char *playerName, int maxPlayerNameLen, char *cdkeyHash)
 {
     const char *v4; // eax
     client_t *PlayerByName; // [esp+0h] [ebp-Ch]
@@ -683,7 +683,7 @@ int __cdecl SV_KickUser_f(char *playerName, int maxPlayerNameLen, char *cdkeyHas
     }
 }
 
-client_t *__cdecl SV_GetPlayerByName()
+client_t *SV_GetPlayerByName()
 {
     client_t *clients; // [esp+0h] [ebp-54h]
     const char *s; // [esp+4h] [ebp-50h]
@@ -721,7 +721,7 @@ client_t *__cdecl SV_GetPlayerByName()
     }
 }
 
-int __cdecl SV_KickClient(client_t *cl, char *playerName, int maxPlayerNameLen, char *cdkeyHash)
+int SV_KickClient(client_t *cl, char *playerName, int maxPlayerNameLen, char *cdkeyHash)
 {
     if (!cl)
         MyAssertHandler(".\\server_mp\\sv_ccmds_mp.cpp", 537, 0, "%s", "cl");
@@ -744,7 +744,7 @@ int __cdecl SV_KickClient(client_t *cl, char *playerName, int maxPlayerNameLen, 
     }
 }
 
-void __cdecl SV_Ban_f()
+void SV_Ban_f()
 {
     client_t *PlayerByName; // [esp+0h] [ebp-4h]
 
@@ -767,7 +767,7 @@ void __cdecl SV_Ban_f()
     }
 }
 
-void __cdecl SV_BanNum_f()
+void SV_BanNum_f()
 {
     client_t *PlayerByNum; // [esp+0h] [ebp-4h]
 
@@ -790,7 +790,7 @@ void __cdecl SV_BanNum_f()
     }
 }
 
-client_t *__cdecl SV_GetPlayerByNum()
+client_t *SV_GetPlayerByNum()
 {
     int idnum; // [esp+4h] [ebp-Ch]
     const char *s; // [esp+8h] [ebp-8h]
@@ -835,7 +835,7 @@ client_t *__cdecl SV_GetPlayerByNum()
     }
 }
 
-void __cdecl SV_Unban_f()
+void SV_Unban_f()
 {
     char *v0; // eax
 
@@ -850,21 +850,21 @@ void __cdecl SV_Unban_f()
     }
 }
 
-void __cdecl SV_Drop_f()
+void SV_Drop_f()
 {
     char cdkeyHash[36]; // [esp+0h] [ebp-28h] BYREF
 
     SV_KickUser_f(0, 0, cdkeyHash);
 }
 
-void __cdecl SV_DropNum_f()
+void SV_DropNum_f()
 {
     char cdkeyHash[36]; // [esp+0h] [ebp-28h] BYREF
 
     SV_KickClient_f(0, 0, cdkeyHash);
 }
 
-int __cdecl SV_KickClient_f(char *playerName, int maxPlayerNameLen, char *cdkeyHash)
+int SV_KickClient_f(char *playerName, int maxPlayerNameLen, char *cdkeyHash)
 {
     const char *v4; // eax
     client_t *PlayerByNum; // [esp+0h] [ebp-4h]
@@ -893,7 +893,7 @@ int __cdecl SV_KickClient_f(char *playerName, int maxPlayerNameLen, char *cdkeyH
     }
 }
 
-void __cdecl SV_TempBanNum_f()
+void SV_TempBanNum_f()
 {
     char cdkeyHash[36]; // [esp+0h] [ebp-6Ch] BYREF
     char playerName[68]; // [esp+24h] [ebp-48h] BYREF
@@ -905,7 +905,7 @@ void __cdecl SV_TempBanNum_f()
     }
 }
 
-void __cdecl SV_Status_f()
+void SV_Status_f()
 {
     int ClientScore; // eax
     uint32_t v1; // kr00_4
@@ -977,7 +977,7 @@ void __cdecl SV_Status_f()
     }
 }
 
-void __cdecl SV_Serverinfo_f()
+void SV_Serverinfo_f()
 {
     char *v0; // eax
 
@@ -986,7 +986,7 @@ void __cdecl SV_Serverinfo_f()
     Info_Print(v0);
 }
 
-void __cdecl SV_Systeminfo_f()
+void SV_Systeminfo_f()
 {
     char *v0; // eax
 
@@ -995,7 +995,7 @@ void __cdecl SV_Systeminfo_f()
     Info_Print(v0);
 }
 
-void __cdecl SV_DumpUser_f()
+void SV_DumpUser_f()
 {
     client_t *PlayerByName; // [esp+0h] [ebp-4h]
 
@@ -1022,22 +1022,22 @@ void __cdecl SV_DumpUser_f()
     }
 }
 
-void __cdecl SV_KillServer_f()
+void SV_KillServer_f()
 {
     Com_Shutdown("EXE_SERVERKILLED");
 }
 
-void __cdecl SV_ScriptUsage_f()
+void SV_ScriptUsage_f()
 {
     Scr_DumpScriptThreads();
 }
 
-void __cdecl SV_ScriptVarUsage_f()
+void SV_ScriptVarUsage_f()
 {
     Scr_DumpScriptVariablesDefault();
 }
 
-void __cdecl SV_ScriptProfile_f()
+void SV_ScriptProfile_f()
 {
   const char *v0; // eax
   float minTime; // [esp+4h] [ebp-4h]
@@ -1047,7 +1047,7 @@ void __cdecl SV_ScriptProfile_f()
   Scr_DoProfile(minTime);
 }
 
-void __cdecl SV_ScriptBuiltin_f()
+void SV_ScriptBuiltin_f()
 {
     const char *v0; // eax
     float minTime; // [esp+4h] [ebp-4h]
@@ -1057,12 +1057,12 @@ void __cdecl SV_ScriptBuiltin_f()
     Scr_DoProfileBuiltin(minTime);
 }
 
-void __cdecl SV_StringUsage_f()
+void SV_StringUsage_f()
 {
     MT_DumpTree();
 }
 
-void __cdecl SV_SetPerk_f()
+void SV_SetPerk_f()
 {
     clientState_s *ClientState; // eax
     client_t *PlayerByName; // [esp+0h] [ebp-18h]
@@ -1107,7 +1107,7 @@ cmd_function_s SV_ConSay_f_VAR_SERVER;
 cmd_function_s SV_ConTell_f_VAR;
 cmd_function_s SV_ConTell_f_VAR_SERVER;
 
-void __cdecl SV_AddDedicatedCommands()
+void SV_AddDedicatedCommands()
 {
     SV_RemoveDedicatedCommands();
     Cmd_AddCommandInternal("say", Cbuf_AddServerText_f, &SV_ConSay_f_VAR);
@@ -1117,7 +1117,7 @@ void __cdecl SV_AddDedicatedCommands()
 }
 
 const char aC_5[] = "%c \""; // idb
-void __cdecl SV_ConSay_f()
+void SV_ConSay_f()
 {
     char text[1028]; // [esp+0h] [ebp-408h] BYREF
 
@@ -1135,7 +1135,7 @@ void __cdecl SV_ConSay_f()
     }
 }
 
-void __cdecl SV_AssembleConSayMessage(int firstArg, char *text, int sizeofText)
+void SV_AssembleConSayMessage(int firstArg, char *text, int sizeofText)
 {
     uint32_t textLen; // [esp+10h] [ebp-4h]
 
@@ -1155,7 +1155,7 @@ void __cdecl SV_AssembleConSayMessage(int firstArg, char *text, int sizeofText)
     }
 }
 
-void __cdecl SV_ConTell_f()
+void SV_ConTell_f()
 {
     const char *v0; // eax
     int clientNum; // [esp+4h] [ebp-40Ch]
@@ -1180,7 +1180,7 @@ void __cdecl SV_ConTell_f()
     }
 }
 
-void __cdecl SV_RemoveDedicatedCommands()
+void SV_RemoveDedicatedCommands()
 {
     Cmd_RemoveCommand("say");
     Cmd_RemoveCommand("tell");

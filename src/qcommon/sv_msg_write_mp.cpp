@@ -873,7 +873,7 @@ const NetFieldList s_netFieldList[18] =
   { &eventEntityStateFields[0], 59u }
 };
 
-void __cdecl TRACK_msg()
+void TRACK_msg()
 {
     track_static_alloc_internal(&msgHuff, 19476, "msgHuff", 9);
     //track_static_alloc_internal(kbitmask, 132, "kbitmask", 9);
@@ -889,7 +889,7 @@ void __cdecl TRACK_msg()
     track_static_alloc_internal((void *)msg_hData, 1024, "msg_hData", 9);
 }
 
-const NetFieldList *__cdecl MSG_GetStateFieldListForEntityType(int eType)
+const NetFieldList *MSG_GetStateFieldListForEntityType(int eType)
 {
     int v2; // [esp+0h] [ebp-4h]
 
@@ -900,7 +900,7 @@ const NetFieldList *__cdecl MSG_GetStateFieldListForEntityType(int eType)
     return &s_netFieldList[v2];
 }
 
-void __cdecl MSG_WriteReliableCommandToBuffer(const char *pszCommand, char *pszBuffer, int iBufferSize)
+void MSG_WriteReliableCommandToBuffer(const char *pszCommand, char *pszBuffer, int iBufferSize)
 {
     signed int v3; // ecx
     char *v4; // [esp+10h] [ebp-Ch]
@@ -932,7 +932,7 @@ void __cdecl MSG_WriteReliableCommandToBuffer(const char *pszCommand, char *pszB
         pszBuffer[i] = 0;
 }
 
-void __cdecl MSG_WriteEntityIndex(SnapshotInfo_s *snapInfo, msg_t *msg, int index, int indexBits)
+void MSG_WriteEntityIndex(SnapshotInfo_s *snapInfo, msg_t *msg, int index, int indexBits)
 {
     iassert( !msg->readOnly );
 
@@ -974,7 +974,7 @@ void __cdecl MSG_WriteEntityIndex(SnapshotInfo_s *snapInfo, msg_t *msg, int inde
     msg->lastEntityRef = index;
 }
 
-void __cdecl MSG_WriteOriginFloat(const int clientNum, msg_t *msg, int bits, float value, float oldValue)
+void MSG_WriteOriginFloat(const int clientNum, msg_t *msg, int bits, float value, float oldValue)
 {
     int v5; // eax
     int MinBitCountForNum; // [esp+58h] [ebp-20h]
@@ -1090,7 +1090,7 @@ void __cdecl MSG_WriteOriginFloat(const int clientNum, msg_t *msg, int bits, flo
     }
 }
 
-void __cdecl MSG_WriteOriginZFloat(const int clientNum, msg_t *msg, float value, float oldValue)
+void MSG_WriteOriginZFloat(const int clientNum, msg_t *msg, float value, float oldValue)
 {
     int v4; // eax
     int MinBitCountForNum; // eax
@@ -1152,7 +1152,7 @@ void __cdecl MSG_WriteOriginZFloat(const int clientNum, msg_t *msg, float value,
     }
 }
 
-bool __cdecl MSG_ValuesAreEqual(const SnapshotInfo_s *snapInfo, int bits, const int *fromF, const int *toF)
+bool MSG_ValuesAreEqual(const SnapshotInfo_s *snapInfo, int bits, const int *fromF, const int *toF)
 {
     bool result; // al
 
@@ -1179,7 +1179,7 @@ bool __cdecl MSG_ValuesAreEqual(const SnapshotInfo_s *snapInfo, int bits, const 
     return result;
 }
 
-void __cdecl MSG_WriteLastChangedField(msg_t *msg, int lastChangedFieldNum, uint32_t numFields)
+void MSG_WriteLastChangedField(msg_t *msg, int lastChangedFieldNum, uint32_t numFields)
 {
     uint32_t idealBits; // [esp+0h] [ebp-4h]
 
@@ -1189,7 +1189,7 @@ void __cdecl MSG_WriteLastChangedField(msg_t *msg, int lastChangedFieldNum, uint
     MSG_WriteBits(msg, lastChangedFieldNum, idealBits);
 }
 
-void __cdecl MSG_WriteEventNum(int clientNum, msg_t *msg, uint8_t eventNum)
+void MSG_WriteEventNum(int clientNum, msg_t *msg, uint8_t eventNum)
 {
     iassert( !msg->readOnly );
     SV_PacketDataIsData(clientNum, msg);
@@ -1197,7 +1197,7 @@ void __cdecl MSG_WriteEventNum(int clientNum, msg_t *msg, uint8_t eventNum)
     SV_PacketDataIsUnknown(clientNum, msg);
 }
 
-void __cdecl MSG_WriteEventParam(int clientNum, msg_t *msg, uint8_t eventParam)
+void MSG_WriteEventParam(int clientNum, msg_t *msg, uint8_t eventParam)
 {
     iassert( !msg->readOnly );
     SV_PacketDataIsData(clientNum, msg);
@@ -1205,7 +1205,7 @@ void __cdecl MSG_WriteEventParam(int clientNum, msg_t *msg, uint8_t eventParam)
     SV_PacketDataIsUnknown(clientNum, msg);
 }
 
-PacketEntityType __cdecl MSG_GetPacketEntityTypeForEType(int eType)
+PacketEntityType MSG_GetPacketEntityTypeForEType(int eType)
 {
     PacketEntityType result; // eax
 
@@ -1269,7 +1269,7 @@ PacketEntityType __cdecl MSG_GetPacketEntityTypeForEType(int eType)
     return result;
 }
 
-uint32_t __cdecl MSG_GetBitCount(int bits, bool *estimate, int from, int to)
+uint32_t MSG_GetBitCount(int bits, bool *estimate, int from, int to)
 {
     const char *v5; // eax
 
@@ -1350,7 +1350,7 @@ uint32_t __cdecl MSG_GetBitCount(int bits, bool *estimate, int from, int to)
     }
 }
 
-void __cdecl MSG_WriteEntity(
+void MSG_WriteEntity(
     SnapshotInfo_s *snapInfo,
     msg_t *msg,
     int time,
@@ -1384,7 +1384,7 @@ void __cdecl MSG_WriteEntity(
     }
 }
 
-void __cdecl MSG_WriteEntityRemoval(
+void MSG_WriteEntityRemoval(
     SnapshotInfo_s *snapInfo,
     msg_t *msg,
     const uint8_t *from,
@@ -1409,7 +1409,7 @@ void __cdecl MSG_WriteEntityRemoval(
     SV_PacketDataIsUnknown(snapInfo->clientNum, msg);
 }
 
-void __cdecl MSG_WriteEntityDeltaForEType(
+void MSG_WriteEntityDeltaForEType(
     SnapshotInfo_s *snapInfo,
     msg_t *msg,
     int time,
@@ -1452,7 +1452,7 @@ void __cdecl MSG_WriteEntityDeltaForEType(
     }
 }
 
-int __cdecl MSG_WriteEntityDelta(
+int MSG_WriteEntityDelta(
     SnapshotInfo_s *snapInfo,
     msg_t *msg,
     int time,
@@ -1552,7 +1552,7 @@ int __cdecl MSG_WriteEntityDelta(
     }
 }
 
-void __cdecl MSG_WriteDeltaField(
+void MSG_WriteDeltaField(
     SnapshotInfo_s *snapInfo,
     msg_t *msg,
     int time,
@@ -1883,7 +1883,7 @@ LABEL_103:
     SV_PacketDataIsUnknown(snapInfo->clientNum, msg);
 }
 
-void __cdecl MSG_WriteDeltaTime(int clientNum, msg_t *msg, int timeBase, int time)
+void MSG_WriteDeltaTime(int clientNum, msg_t *msg, int timeBase, int time)
 {
     iassert( !msg->readOnly );
     if (time - timeBase > 0 || time - timeBase <= -256)
@@ -1904,7 +1904,7 @@ void __cdecl MSG_WriteDeltaTime(int clientNum, msg_t *msg, int timeBase, int tim
     }
 }
 
-void __cdecl MSG_Write24BitFlag(int clientNum, msg_t *msg, int oldFlags, int newFlags)
+void MSG_Write24BitFlag(int clientNum, msg_t *msg, int oldFlags, int newFlags)
 {
     int bits; // [esp+0h] [ebp-10h]
     uint32_t changedBitIndex; // [esp+4h] [ebp-Ch]
@@ -1960,7 +1960,7 @@ void __cdecl MSG_Write24BitFlag(int clientNum, msg_t *msg, int oldFlags, int new
     SV_PacketDataIsUnknown(clientNum, msg);
 }
 
-void __cdecl MSG_WriteGroundEntityNum(int clientNum, msg_t *msg, int groundEntityNum)
+void MSG_WriteGroundEntityNum(int clientNum, msg_t *msg, int groundEntityNum)
 {
     int bits; // [esp+0h] [ebp-Ch]
     int value; // [esp+8h] [ebp-4h]
@@ -1988,7 +1988,7 @@ void __cdecl MSG_WriteGroundEntityNum(int clientNum, msg_t *msg, int groundEntit
     SV_PacketDataIsUnknown(clientNum, msg);
 }
 
-bool __cdecl MSG_CheckWritingEnoughBits(int value, uint32_t bits)
+bool MSG_CheckWritingEnoughBits(int value, uint32_t bits)
 {
     DWORD v3; // eax
     uint32_t checkBits; // [esp+4h] [ebp-8h]
@@ -2009,7 +2009,7 @@ bool __cdecl MSG_CheckWritingEnoughBits(int value, uint32_t bits)
     return checkBits >= 32 - (v3 ^ 0x1Fu);
 }
 
-void __cdecl MSG_WriteDeltaArchivedEntity(
+void MSG_WriteDeltaArchivedEntity(
     SnapshotInfo_s *snapInfo,
     msg_t *msg,
     int time,
@@ -2033,7 +2033,7 @@ void __cdecl MSG_WriteDeltaArchivedEntity(
         0);
 }
 
-int __cdecl MSG_WriteDeltaStruct(
+int MSG_WriteDeltaStruct(
     SnapshotInfo_s *snapInfo,
     msg_t *msg,
     int time,
@@ -2139,7 +2139,7 @@ int __cdecl MSG_WriteDeltaStruct(
     }
 }
 
-void __cdecl MSG_WriteDeltaClient(
+void MSG_WriteDeltaClient(
     SnapshotInfo_s *snapInfo,
     msg_t *msg,
     int time,
@@ -2184,7 +2184,7 @@ void __cdecl MSG_WriteDeltaClient(
     }
 }
 
-void __cdecl MSG_WriteDeltaPlayerstate(
+void MSG_WriteDeltaPlayerstate(
     SnapshotInfo_s *snapInfo,
     msg_t *msg,
     int time,
@@ -2531,7 +2531,7 @@ void __cdecl MSG_WriteDeltaPlayerstate(
     SV_TrackPSBits(v6 - UsedBitCount);
 }
 
-bool __cdecl MSG_ShouldSendPSField(
+bool MSG_ShouldSendPSField(
     const SnapshotInfo_s *snapInfo,
     bool sendOriginAndVel,
     const playerState_s *ps,
@@ -2567,7 +2567,7 @@ bool __cdecl MSG_ShouldSendPSField(
     }
 }
 
-void __cdecl MSG_WriteDeltaFields(
+void MSG_WriteDeltaFields(
     SnapshotInfo_s *snapInfo,
     msg_t *msg,
     int time,
@@ -2609,7 +2609,7 @@ void __cdecl MSG_WriteDeltaFields(
     }
 }
 
-void __cdecl MSG_WriteDeltaHudElems(
+void MSG_WriteDeltaHudElems(
     SnapshotInfo_s *snapInfo,
     msg_t *msg,
     int time,

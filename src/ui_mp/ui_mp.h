@@ -130,78 +130,78 @@ struct sharedUiInfo_t // sizeof=0x1C5B0
 
 
 
-XModelPiece *__cdecl GetMenuBuffer_FastFile(const char *filename);
-MenuList *__cdecl Load_ScriptMenuInternal(const char *pszMenu, int imageTrack);
-char *__cdecl UI_GetMapDisplayName(const char *pszMap);
-char *__cdecl UI_GetMapDisplayNameFromPartialLoadNameMatch(const char *mapName, int *mapLoadNameLen);
-char *__cdecl UI_GetGameTypeDisplayName(const char *pszGameType);
-int __cdecl UI_OwnerDrawWidth(int ownerDraw, Font_s *font, float scale);
-bool __cdecl UI_OwnerDrawVisible(__int16 flags);
-int __cdecl UI_OwnerDrawHandleKey(int ownerDraw, int flags, float *special, int key);
+XModelPiece *GetMenuBuffer_FastFile(const char *filename);
+MenuList *Load_ScriptMenuInternal(const char *pszMenu, int imageTrack);
+char *UI_GetMapDisplayName(const char *pszMap);
+char *UI_GetMapDisplayNameFromPartialLoadNameMatch(const char *mapName, int *mapLoadNameLen);
+char *UI_GetGameTypeDisplayName(const char *pszGameType);
+int UI_OwnerDrawWidth(int ownerDraw, Font_s *font, float scale);
+bool UI_OwnerDrawVisible(__int16 flags);
+int UI_OwnerDrawHandleKey(int ownerDraw, int flags, float *special, int key);
 
-void __cdecl UI_UpdateTime(int localClientNum, int realtime);
-void __cdecl UI_DrawBuildNumber(int localClientNum);
-void __cdecl UI_Refresh(int localClientNum);
-void __cdecl UI_Shutdown(int localClientNum);
-char *__cdecl GetMenuBuffer(char *filename);
-int __cdecl Load_ScriptMenu(int localClientNum, const char *pszMenu, int imageTrack);
-void __cdecl UI_DrawMapLevelshot(int localClientNum);
-void __cdecl UI_LoadIngameMenus(int localClientNum);
-void __cdecl UI_SetMap(char *mapname, char *gametype);
-int __cdecl UI_GetTalkerClientNum(int localClientNum, int num);
-char __cdecl UI_DrawRecordLevel(int localClientNum, rectDef_s *rect);
-void __cdecl UI_DrawGameType(
+void UI_UpdateTime(int localClientNum, int realtime);
+void UI_DrawBuildNumber(int localClientNum);
+void UI_Refresh(int localClientNum);
+void UI_Shutdown(int localClientNum);
+char *GetMenuBuffer(char *filename);
+int Load_ScriptMenu(int localClientNum, const char *pszMenu, int imageTrack);
+void UI_DrawMapLevelshot(int localClientNum);
+void UI_LoadIngameMenus(int localClientNum);
+void UI_SetMap(char *mapname, char *gametype);
+int UI_GetTalkerClientNum(int localClientNum, int num);
+char UI_DrawRecordLevel(int localClientNum, rectDef_s *rect);
+void UI_DrawGameType(
     int localClientNum,
     const rectDef_s *rect,
     Font_s *font,
     float scale,
     const float *color,
     int textStyle);
-void __cdecl UI_DrawNetGameType(
+void UI_DrawNetGameType(
     int localClientNum,
     const rectDef_s *rect,
     Font_s *font,
     float scale,
     const float *color,
     int textStyle);
-void __cdecl UI_DrawJoinGameType(
+void UI_DrawJoinGameType(
     int localClientNum,
     const rectDef_s *rect,
     Font_s *font,
     float scale,
     const float *color,
     int textStyle);
-void __cdecl UI_DrawNetFilter(
+void UI_DrawNetFilter(
     int localClientNum,
     const rectDef_s *rect,
     Font_s *font,
     float scale,
     const float *color,
     int textStyle);
-void __cdecl UI_DrawNetSource(
+void UI_DrawNetSource(
     int localClientNum,
     const rectDef_s *rect,
     Font_s *font,
     float scale,
     const float *color,
     int textStyle);
-void __cdecl UI_DrawMapPreview(int localClientNum, const rectDef_s *rect, float scale, const float *color);
-void __cdecl UI_DrawServerRefreshDate(
+void UI_DrawMapPreview(int localClientNum, const rectDef_s *rect, float scale, const float *color);
+void UI_DrawServerRefreshDate(
     int localClientNum,
     rectDef_s *rect,
     Font_s *font,
     float scale,
     float *color,
     int textStyle);
-void __cdecl UI_DrawKeyBindStatus(
+void UI_DrawKeyBindStatus(
     int localClientNum,
     rectDef_s *rect,
     Font_s *font,
     float scale,
     float *color,
     int textStyle);
-void __cdecl UI_DrawLocalTalking(int localClientNum, const rectDef_s *rect, const float *color);
-void __cdecl UI_DrawTalkerNum(
+void UI_DrawLocalTalking(int localClientNum, const rectDef_s *rect, const float *color);
+void UI_DrawTalkerNum(
     int localClientNum,
     int num,
     rectDef_s *rect,
@@ -210,12 +210,12 @@ void __cdecl UI_DrawTalkerNum(
     float textScale,
     int style);
 
-int __cdecl UI_CheckExecKey(int localClientNum, int key);
-void __cdecl UI_ServersSort(int column, int force);
-int __cdecl UI_ServersQsortCompare(uint32_t *arg1, uint32_t *arg2);
+int UI_CheckExecKey(int localClientNum, int key);
+void UI_ServersSort(int column, int force);
+int UI_ServersQsortCompare(uint32_t *arg1, uint32_t *arg2);
 void UI_VerifyLanguage();
-void __cdecl UI_UpdateDisplayServers(uiInfo_s *uiInfo);
-char __cdecl UI_GetOpenOrCloseMenuOnDvarArgs(
+void UI_UpdateDisplayServers(uiInfo_s *uiInfo);
+char UI_GetOpenOrCloseMenuOnDvarArgs(
     const char **args,
     const char *cmd,
     char *dvarName,
@@ -224,38 +224,38 @@ char __cdecl UI_GetOpenOrCloseMenuOnDvarArgs(
     int testValueLen,
     char *menuName,
     int menuNameLen);
-void __cdecl UI_OpenMenuOnDvar(
+void UI_OpenMenuOnDvar(
     uiInfo_s *uiInfo,
     const char *cmd,
     const char *menuName,
     const char *dvarName,
     const char *testValue);
-bool __cdecl UI_DvarValueTest(const char *cmd, const char *dvarName, const char *testValue, bool wantMatch);
-void __cdecl UI_CloseMenuOnDvar(
+bool UI_DvarValueTest(const char *cmd, const char *dvarName, const char *testValue, bool wantMatch);
+void UI_CloseMenuOnDvar(
     uiInfo_s *uiInfo,
     const char *cmd,
     const char *menuName,
     const char *dvarName,
     const char *testValue);
-void __cdecl UI_BuildServerDisplayList(uiInfo_s *uiInfo, int force);
-void __cdecl UI_BinaryServerInsertion(uint32_t num);
-void __cdecl UI_InsertServerIntoDisplayList(uint32_t num, int position);
+void UI_BuildServerDisplayList(uiInfo_s *uiInfo, int force);
+void UI_BinaryServerInsertion(uint32_t num);
+void UI_InsertServerIntoDisplayList(uint32_t num, int position);
 int UI_ClearDisplayedServers();
-void __cdecl UI_BuildServerStatus(uiInfo_s *uiInfo, int force);
-void __cdecl UI_BuildPlayerList(int localClientNum);
-Material *__cdecl UI_FeederItemImage(float feederID, int index);
+void UI_BuildServerStatus(uiInfo_s *uiInfo, int force);
+void UI_BuildPlayerList(int localClientNum);
+Material *UI_FeederItemImage(float feederID, int index);
 
 void UI_GetGameTypesList();
 void UI_GetGameTypesList_FastFile();
-void __cdecl UI_OpenMenu_f();
-void __cdecl UI_ListMenus_f();
-void __cdecl CL_SelectStringTableEntryInDvar_f();
-void __cdecl UI_CloseMenu_f();
-void __cdecl UI_Init(int localClientNum);
+void UI_OpenMenu_f();
+void UI_ListMenus_f();
+void CL_SelectStringTableEntryInDvar_f();
+void UI_CloseMenu_f();
+void UI_Init(int localClientNum);
 void UI_AssetCache();
-int __cdecl UI_IsFullscreen(int localClientNum);
-void __cdecl UI_DrawConnectScreen(int localClientNum);
-void __cdecl Text_PaintCenter(
+int UI_IsFullscreen(int localClientNum);
+void UI_DrawConnectScreen(int localClientNum);
+void Text_PaintCenter(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -264,7 +264,7 @@ void __cdecl Text_PaintCenter(
     const float *color,
     char *text,
     const float *glowColor);
-void __cdecl Text_PaintCenterWithDots(
+void Text_PaintCenterWithDots(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -273,27 +273,27 @@ void __cdecl Text_PaintCenterWithDots(
     const float *color,
     const char *text,
     const float *glowColor);
-double __cdecl UI_GetBlurRadius(int localClientNum);
+double UI_GetBlurRadius(int localClientNum);
 void UI_StopServerRefresh();
-void __cdecl UI_DoServerRefresh(uiInfo_s *uiInfo);
-void __cdecl UI_UpdatePendingPings(uiInfo_s *uiInfo);
-char *__cdecl UI_SafeTranslateString(const char *reference);
-char *__cdecl UI_ReplaceConversionString(char *sourceString, const char *replaceString);
-char *__cdecl UI_ReplaceConversionInt(char *sourceString, int replaceInt);
-void __cdecl UI_ReplaceConversions(
+void UI_DoServerRefresh(uiInfo_s *uiInfo);
+void UI_UpdatePendingPings(uiInfo_s *uiInfo);
+char *UI_SafeTranslateString(const char *reference);
+char *UI_ReplaceConversionString(char *sourceString, const char *replaceString);
+char *UI_ReplaceConversionInt(char *sourceString, int replaceInt);
+void UI_ReplaceConversions(
     char *sourceString,
     ConversionArguments *arguments,
     char *outputString,
     int outputStringSize);
-void __cdecl UI_CloseAll(int localClientNum);
-void __cdecl UI_CloseFocusedMenu(int localClientNum);
-int __cdecl UI_PopupScriptMenu(int localClientNum, const char *menuName, bool useMouse);
-void __cdecl UI_CloseInGameMenu(int localClientNum);
-void __cdecl UI_CloseAllMenus(int localClientNum);
-bool __cdecl UI_ShouldDrawCrosshair();
-void __cdecl UI_MouseEvent(int localClientNum, int x, int y);
+void UI_CloseAll(int localClientNum);
+void UI_CloseFocusedMenu(int localClientNum);
+int UI_PopupScriptMenu(int localClientNum, const char *menuName, bool useMouse);
+void UI_CloseInGameMenu(int localClientNum);
+void UI_CloseAllMenus(int localClientNum);
+bool UI_ShouldDrawCrosshair();
+void UI_MouseEvent(int localClientNum, int x, int y);
 
-void __cdecl UI_StartServerRefresh(int localClientNum, int full);
+void UI_StartServerRefresh(int localClientNum, int full);
 
 extern const dvar_t *ui_customClassName;
 extern const dvar_t *ui_mapname;
@@ -325,7 +325,7 @@ extern LegacyHacks legacyHacks;
 
 
 // ui_gameinfo_mp
-int __cdecl UI_ParseInfos(const char *buf, int max, char **infos);
-void __cdecl UI_LoadArenas();
+int UI_ParseInfos(const char *buf, int max, char **infos);
+void UI_LoadArenas();
 void UI_LoadArenasFromFile();
 void UI_LoadArenasFromFile_FastFile();

@@ -11,7 +11,7 @@
 
 $C28D828B354D71D7584331F40DBDE744 mtlUploadGlob;
 
-void __cdecl Material_UploadShaders(MaterialTechniqueSet *techSet)
+void Material_UploadShaders(MaterialTechniqueSet *techSet)
 {
     iassert( Sys_IsDatabaseThread() );
     if (mtlUploadGlob.put - mtlUploadGlob.get >= 0x400)
@@ -29,7 +29,7 @@ void __cdecl Material_UploadShaders(MaterialTechniqueSet *techSet)
     }
 }
 
-void __cdecl RB_SetUploadMaterialArg(const MaterialShaderArgument *arg)
+void RB_SetUploadMaterialArg(const MaterialShaderArgument *arg)
 {
     switch (arg->type)
     {
@@ -64,7 +64,7 @@ void __cdecl RB_SetUploadMaterialArg(const MaterialShaderArgument *arg)
     }
 }
 
-uint32_t __cdecl RB_UploadMaterialPassVertexDecl(
+uint32_t RB_UploadMaterialPassVertexDecl(
     GfxCmdBufPrimState *primState,
     MaterialVertexDeclaration *vertexDecl,
     MaterialVertexDeclType vertDeclType,
@@ -122,7 +122,7 @@ uint32_t RB_UploadMaterialPass(
     return v4;
 }
 
-uint32_t __cdecl RB_UploadMaterialTechnique(const MaterialTechnique *tech, uint32_t techType)
+uint32_t RB_UploadMaterialTechnique(const MaterialTechnique *tech, uint32_t techType)
 {
     uint32_t uploadCount; // [esp+0h] [ebp-Ch]
     MaterialVertexDeclType vertDeclType; // [esp+4h] [ebp-8h]
@@ -150,7 +150,7 @@ uint32_t __cdecl RB_UploadMaterialTechnique(const MaterialTechnique *tech, uint3
     return uploadCount;
 }
 
-void __cdecl RB_UploadShaderStep()
+void RB_UploadShaderStep()
 {
     uint32_t uploadCount; // [esp+0h] [ebp-Ch]
     MaterialTechnique *tech; // [esp+4h] [ebp-8h]

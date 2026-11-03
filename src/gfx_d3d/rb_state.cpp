@@ -18,7 +18,7 @@ const uint32_t s_blendTable_21[11] = { 0u, 1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 9u, 1
 const uint32_t s_stencilOpTable_21[8] = { 1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u }; // idb
 const uint32_t s_stencilFuncTable_21[8] = { 1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u }; // idb
 
-void __cdecl TRACK_rb_state()
+void TRACK_rb_state()
 {
     track_static_alloc_internal((void *)s_blendTable_21, 44, "s_blendTable", 18);
     track_static_alloc_internal((void *)s_cullTable_21, 16, "s_cullTable", 18);
@@ -26,7 +26,7 @@ void __cdecl TRACK_rb_state()
     track_static_alloc_internal((void *)s_stencilFuncTable_21, 32, "s_stencilFuncTable", 18);
 }
 
-void __cdecl RB_SetInitialState()
+void RB_SetInitialState()
 {
     memset((uint8_t *)&gfxCmdBufInput, 0, sizeof(gfxCmdBufInput));
     R_InitCmdBufSourceState(&gfxCmdBufSourceState, &gfxCmdBufInput, 0);
@@ -63,7 +63,7 @@ void __cdecl RB_SetInitialState()
     iassert( gfxCmdBufState.alphaRef == 0 );
 }
 
-void __cdecl RB_InitSceneViewport()
+void RB_InitSceneViewport()
 {
     gfxCmdBufSourceState.sceneViewport.x = 0;
     gfxCmdBufSourceState.sceneViewport.y = 0;
@@ -71,7 +71,7 @@ void __cdecl RB_InitSceneViewport()
     gfxCmdBufSourceState.sceneViewport.height = vidConfig.displayHeight;
 }
 
-void __cdecl RB_InitImages()
+void RB_InitImages()
 {
     RB_InitCodeImages();
     RB_BindDefaultImages();

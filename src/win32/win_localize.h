@@ -6,8 +6,8 @@ struct LocalizationData // sizeof=0x8
     char* strings;                      // ...
 };
 
-char* __cdecl Win_CopyLocalizationString(const char* string);
-char* __cdecl Win_GetLanguage();
-int __cdecl Win_InitLocalization();
-char* __cdecl Win_LocalizeRef(const char* ref);
-void __cdecl Win_ShutdownLocalization();
+char* Win_CopyLocalizationString(const char* string);
+char* Win_GetLanguage();
+int Win_InitLocalization();
+char* Win_LocalizeRef(const char* ref);
+void Win_ShutdownLocalization();

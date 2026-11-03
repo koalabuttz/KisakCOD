@@ -106,7 +106,7 @@ static void Editor_InitFaceIndices()
 // ── front-end accumulation ────────────────────────────────────────────────────
 
 // 0x4FDA50  Editor_AddMeshCmd — append one cached mesh + its surf entry.
-void __cdecl Editor_AddMeshCmd(Material *handle, int techType, int sortKey,
+void Editor_AddMeshCmd(Material *handle, int techType, int sortKey,
                                int vertCount, int vbIndexAndOffs, int indexCount, int indexTable)
 {
     iassert(techType >= TECHNIQUE_DEPTH_PREPASS);         // 0x4fda66 (level 0)
@@ -142,7 +142,7 @@ void __cdecl Editor_AddMeshCmd(Material *handle, int techType, int sortKey,
 }
 
 // 0x4FEEF0  sub_4FEEF0 — emit a front-facing fan (edFaceIndices) for one face.
-void __cdecl Editor_AddGeoFace(Material *handle, int techType, int sortKey, int vertCount, int vbIndexAndOffs)
+void Editor_AddGeoFace(Material *handle, int techType, int sortKey, int vertCount, int vbIndexAndOffs)
 {
     if (!s_edFaceIndicesInit)
         Editor_InitFaceIndices();
@@ -154,7 +154,7 @@ void __cdecl Editor_AddGeoFace(Material *handle, int techType, int sortKey, int 
 }
 
 // 0x4FEF50  sub_4FEF50 — emit a back-facing fan (edBackFaceIndices) for one face.
-void __cdecl Editor_AddGeoBackFace(Material *handle, int techType, int sortKey, int vertCount, int vbIndexAndOffs)
+void Editor_AddGeoBackFace(Material *handle, int techType, int sortKey, int vertCount, int vbIndexAndOffs)
 {
     if (!s_edFaceIndicesInit)
         Editor_InitFaceIndices();
@@ -169,7 +169,7 @@ void __cdecl Editor_AddGeoBackFace(Material *handle, int techType, int sortKey, 
 // 100 × the material's primary sort bucket. IDA extracts packed bits 29..40, but Kisak's
 // shared GfxDrawSurf layout stores the same material sort bucket in fields.primarySortKey.
 // Per-layer visuals of one face get consecutive keys (base+layerIndex) so layer order survives.
-int __cdecl Editor_MaterialSortKey(Material *handle)
+int Editor_MaterialSortKey(Material *handle)
 {
     return 100 * (int)Material_FromHandle(handle)->info.drawSurf.fields.primarySortKey;
 }
@@ -178,7 +178,7 @@ int __cdecl Editor_MaterialSortKey(Material *handle)
 // editorMesh_s and editorSurf_sub share the first three fields (material@0, techType@4,
 // sortKey@8) at identical offsets, so the primary sort works on both surf types; the
 // firstIndex (handle) tiebreak only applies to MESH surfs (model surfs key on 0 there).
-static int __cdecl Editor_SurfCompare(const void *pa, const void *pb)
+static int Editor_SurfCompare(const void *pa, const void *pb)
 {
     const editorSurf_s *a = (const editorSurf_s *)pa;
     const editorSurf_s *b = (const editorSurf_s *)pb;
@@ -199,7 +199,7 @@ static int __cdecl Editor_SurfCompare(const void *pa, const void *pb)
 // 0x4FD300  Editor_AddCmd_DrawSkinnedCached — emit the backend command.
 struct GfxCmdEditorSkinnedCached { GfxCmdHeader header; int index; int amount; };
 
-void *__cdecl Editor_AddCmd_DrawSkinnedCached(int index, int amount)
+void *Editor_AddCmd_DrawSkinnedCached(int index, int amount)
 {
     GfxCmdEditorSkinnedCached *cmd =
         (GfxCmdEditorSkinnedCached *)R_GetCommandBuffer(RC_DRAW_EDITOR_SKINNEDCACHED, sizeof(GfxCmdEditorSkinnedCached));
@@ -212,7 +212,7 @@ void *__cdecl Editor_AddCmd_DrawSkinnedCached(int index, int amount)
 
 // 0x4FDA10  R_AddEditorSurfsCmd — sort the surfs added since the last flush and emit
 // one RC_DRAW_EDITOR_SKINNEDCACHED for them.
-void *__cdecl R_AddEditorSurfsCmd()
+void *R_AddEditorSurfsCmd()
 {
     int first = edSceneGlobals.sceneSurfCount_saved;
     int count = edSceneGlobals.sceneSurfCount - first;
@@ -253,7 +253,7 @@ static EdMapGlobals edMapGlobals;
 
 // 0x4FDBE0  AddModelToModelInstBuff — find a free slot, store {model, origin, quat, scale},
 // return its 1-based handle.
-int __cdecl AddModelToModelInstBuff(XModel *model, float *axis, float scale)
+int AddModelToModelInstBuff(XModel *model, float *axis, float scale)
 {
     iassert(model);                                       // 0x4fdbe0 (level 0)
     if (XModelBad(model))
@@ -286,7 +286,7 @@ int __cdecl AddModelToModelInstBuff(XModel *model, float *axis, float scale)
 }
 
 // 0x4FDD80  ModelInstUpdate — re-pose an existing instance.
-void __cdecl ModelInstUpdate(int instanceHandle, float (*axis)[3], float scale)
+void ModelInstUpdate(int instanceHandle, float (*axis)[3], float scale)
 {
     iassert(instanceHandle > 0 && instanceHandle <= edMapGlobals.modelInstMax);
     model_inst *v3 = &edMapGlobals.modelInst[instanceHandle - 1];
@@ -299,7 +299,7 @@ void __cdecl ModelInstUpdate(int instanceHandle, float (*axis)[3], float scale)
 }
 
 // 0x4FDCE0  RemoveModelInstFromBuf — free a slot, shrink modelInstMax past trailing frees.
-void __cdecl RemoveModelInstFromBuf(int instanceHandle)
+void RemoveModelInstFromBuf(int instanceHandle)
 {
     iassert(instanceHandle > 0 && instanceHandle <= edMapGlobals.modelInstMax);
     iassert(edMapGlobals.modelInst[instanceHandle - 1].inuse);   // r_ed_scene.cpp:309
@@ -314,7 +314,7 @@ void __cdecl RemoveModelInstFromBuf(int instanceHandle)
 // 0x4FDE10  Entity_GetModelInstBounds (sub_4FDE10) — local-space mins/maxs of an instance's
 // model (xmodel bounds rotated by the instance quat, scaled by modelscale).
 extern void OrientationPosToWorldPos(float *out, const float *pos, const orientation_t *orient);
-void __cdecl Entity_GetModelInstBounds(int instanceHandle, float *out_mins, float *out_maxs)
+void Entity_GetModelInstBounds(int instanceHandle, float *out_mins, float *out_maxs)
 {
     iassert(instanceHandle > 0 && instanceHandle <= edMapGlobals.modelInstMax);
     model_inst *mi = &edMapGlobals.modelInst[instanceHandle - 1];
@@ -350,7 +350,7 @@ void __cdecl Entity_GetModelInstBounds(int instanceHandle, float *out_mins, floa
 // per-vertex colour stamp (0x4fe455) writes the copy and never the shared asset verts0.
 // skinnedCachedOffset = -1 (rigid/uncached).  tempSkinPos is reset each editor frame by
 // R_ToggleSmpFrame; on overflow the binary drops the model (return 0) — kept verbatim.
-void __cdecl Z_VirtualCommit(void *ptr, int size);    // com_memory.cpp (0x4AC210 == sub_4AC210)
+void Z_VirtualCommit(void *ptr, int size);    // com_memory.cpp (0x4AC210 == sub_4AC210)
 static bool AddSurfTempSkinBuf(XSurface *xsurf, GfxModelSkinnedSurface *out, XModel *model)
 {
     iassert(model);
@@ -429,7 +429,7 @@ static bool Editor_SurfFilter(int drawFlags, const Material *material)
 
 // 0x4FDFA0  Editor_AddSurfCmd — queue one ED_SURF_MODEL surf (a built skinned surface +
 // the instance placement) into the scene surf list.
-void __cdecl Editor_AddSurfCmd(int drawFlags, Material *material, model_inst *inst,
+void Editor_AddSurfCmd(int drawFlags, Material *material, model_inst *inst,
                                GfxModelSkinnedSurface *surf, int techType)
 {
     iassert(surf);
@@ -465,7 +465,7 @@ void __cdecl Editor_AddSurfCmd(int drawFlags, Material *material, model_inst *in
 //   instanceHandle = 1-based handle into edMapGlobals.modelInst[]
 //   checkhandle    = optional material override (Material handle), else use model's own
 //   techType (a3) / colorPtr (a4) / drawFlags
-void __cdecl SkinModelInst(int instanceHandle, Material *checkhandle, int techType,
+void SkinModelInst(int instanceHandle, Material *checkhandle, int techType,
                            const int *colorPtr, int drawFlags)
 {
     iassert(instanceHandle > 0 && instanceHandle <= edMapGlobals.modelInstMax);
@@ -810,7 +810,7 @@ static void RB_DrawEditorSkinnedCached_Sub(int index, int amount)
 }
 
 // 0x533880  RB_DrawEditorSkinnedCached — RC_DRAW_EDITOR_SKINNEDCACHED handler.
-void __cdecl RB_DrawEditorSkinnedCachedCmd(GfxRenderCommandExecState *execState)
+void RB_DrawEditorSkinnedCachedCmd(GfxRenderCommandExecState *execState)
 {
     const GfxCmdEditorSkinnedCached *cmd = (const GfxCmdEditorSkinnedCached *)execState->cmd;
     // KISAK: differs from 0x533880 — clear the persisted material first.  Sub's batch-start
@@ -826,7 +826,7 @@ void __cdecl RB_DrawEditorSkinnedCachedCmd(GfxRenderCommandExecState *execState)
 // ── per-frame reset ───────────────────────────────────────────────────────────
 // 0x4FD910  R_SortMaterials — sorts newly-registered materials and, once per
 // front-end frame, resets the editor scene accumulation for the next view.
-void __cdecl R_SortMaterials()
+void R_SortMaterials()
 {
     bool inFrame = rg.inFrame;
     rg.inFrame = 1;

@@ -130,8 +130,8 @@ struct scrCompilePub_t
     int func_table[SCR_FUNC_TABLE_SIZE];
 };
 
-void __cdecl Scr_CompileStatement(sval_u parseData);
-void __cdecl ScriptCompile(
+void Scr_CompileStatement(sval_u parseData);
+void ScriptCompile(
     sval_u val,
     uint32_t fileId,
     uint32_t scriptId,

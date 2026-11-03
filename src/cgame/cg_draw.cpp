@@ -17,14 +17,14 @@ CenterPrint s_centerPrint[1];
 ScreenBlur s_screenBlur[1];
 ScreenFade s_screenFade[1];
 
-void __cdecl TRACK_cg_draw()
+void TRACK_cg_draw()
 {
     track_static_alloc_internal(s_centerPrint, 1028, "s_centerPrint", 9);
     track_static_alloc_internal(s_screenBlur, 28, "s_screenBlur", 9);
     track_static_alloc_internal(s_screenFade, 16, "s_screenFade", 9);
 }
 
-void __cdecl CG_CenterPrint(int localClientNum, const char *str)
+void CG_CenterPrint(int localClientNum, const char *str)
 {
     CenterPrint *v3; // r30
     const char *v4; // r3
@@ -43,7 +43,7 @@ void __cdecl CG_CenterPrint(int localClientNum, const char *str)
     v3->time = cgArray[0].time;
 }
 
-void __cdecl CG_DrawCenterString(
+void CG_DrawCenterString(
     int localClientNum,
     const rectDef_s *rect,
     Font_s *font,
@@ -91,7 +91,7 @@ void __cdecl CG_DrawCenterString(
     }
 }
 
-int __cdecl CG_DrawFriendlyFire(const cg_s *cgameGlob)
+int CG_DrawFriendlyFire(const cg_s *cgameGlob)
 {
     const playerState_s *p_predictedPlayerState; // r31
     double fWeaponPosFrac; // fp30
@@ -137,7 +137,7 @@ int __cdecl CG_DrawFriendlyFire(const cg_s *cgameGlob)
 }
 
 static int lastTime;
-void __cdecl CG_DrawFlashFade(int localClientNum)
+void CG_DrawFlashFade(int localClientNum)
 {
     ScreenFade *fade;
     float alpha;
@@ -198,7 +198,7 @@ LABEL_12:
 }
 
 // local variable allocation has failed, the output may be wrong!
-//int __cdecl CG_CheckPlayerMovement(
+//int CG_CheckPlayerMovement(
 //    __int64 newCmd,
 //    __int64 a2,
 //    __int64 a3,
@@ -252,7 +252,7 @@ LABEL_12:
 //    return result;
 //}
 
-int __cdecl CG_CheckPlayerMovement(usercmd_s oldCmd, usercmd_s newCmd)
+int CG_CheckPlayerMovement(usercmd_s oldCmd, usercmd_s newCmd)
 {
     if (memcmp(oldCmd.angles, newCmd.angles, 20))
         return 1;
@@ -260,7 +260,7 @@ int __cdecl CG_CheckPlayerMovement(usercmd_s oldCmd, usercmd_s newCmd)
     return newCmd.forwardmove || newCmd.rightmove;
 }
 
-int __cdecl CG_CheckPlayerStanceChange(int localClientNum, __int16 newButtons, __int16 changedButtons)
+int CG_CheckPlayerStanceChange(int localClientNum, __int16 newButtons, __int16 changedButtons)
 {
     if ((changedButtons & (BUTTON_PRONE | BUTTON_CROUCH | BUTTON_TEMP_STANCE)) != 0)
     {
@@ -275,7 +275,7 @@ int __cdecl CG_CheckPlayerStanceChange(int localClientNum, __int16 newButtons, _
     }
 }
 
-int __cdecl CG_CheckPlayerTryReload(int localClientNum, char buttons)
+int CG_CheckPlayerTryReload(int localClientNum, char buttons)
 {
     int result; // r3
 
@@ -297,7 +297,7 @@ int __cdecl CG_CheckPlayerTryReload(int localClientNum, char buttons)
     return result;
 }
 
-int __cdecl CG_CheckPlayerFireNonTurret(int localClientNum, char buttons)
+int CG_CheckPlayerFireNonTurret(int localClientNum, char buttons)
 {
     int result; // r3
 
@@ -317,7 +317,7 @@ int __cdecl CG_CheckPlayerFireNonTurret(int localClientNum, char buttons)
     return result;
 }
 
-int __cdecl CG_CheckPlayerWeaponUsage(int localClientNum, char buttons)
+int CG_CheckPlayerWeaponUsage(int localClientNum, char buttons)
 {
     int result; // r3
 
@@ -330,7 +330,7 @@ int __cdecl CG_CheckPlayerWeaponUsage(int localClientNum, char buttons)
     return result;
 }
 
-int __cdecl CG_CheckPlayerOffHandUsage(int localClientNum, __int16 buttons)
+int CG_CheckPlayerOffHandUsage(int localClientNum, __int16 buttons)
 {
     if ((buttons & (BUTTON_FRAG | BUTTON_SMOKE)) == 0)
         return 0;
@@ -338,12 +338,12 @@ int __cdecl CG_CheckPlayerOffHandUsage(int localClientNum, __int16 buttons)
     return 1;
 }
 
-unsigned int __cdecl CG_CheckPlayerMiscInput(int buttons)
+unsigned int CG_CheckPlayerMiscInput(int buttons)
 {
     return buttons & ~(BUTTON_PRONE | BUTTON_CROUCH | BUTTON_TEMP_STANCE);
 }
 
-void __cdecl CG_CheckForPlayerInput(int localClientNum)
+void CG_CheckForPlayerInput(int localClientNum)
 {
     usercmd_s v1; // [esp-40h] [ebp-9Ch] BYREF
     usercmd_s v2; // [esp-20h] [ebp-7Ch] BYREF
@@ -420,7 +420,7 @@ void __cdecl CG_CheckForPlayerInput(int localClientNum)
 #endif
 }
 
-void __cdecl CG_CheckHudHealthDisplay(int localClientNum)
+void CG_CheckHudHealthDisplay(int localClientNum)
 {
     __int64 v2; // r11
 
@@ -450,7 +450,7 @@ void __cdecl CG_CheckHudHealthDisplay(int localClientNum)
     }
 }
 
-void __cdecl CG_CheckHudAmmoDisplay(int localClientNum)
+void CG_CheckHudAmmoDisplay(int localClientNum)
 {
     __int64 v2; // r11
 
@@ -476,7 +476,7 @@ void __cdecl CG_CheckHudAmmoDisplay(int localClientNum)
     }
 }
 
-void __cdecl CG_CheckHudCompassDisplay(int localClientNum)
+void CG_CheckHudCompassDisplay(int localClientNum)
 {
     const dvar_s *v1; // r11
     __int64 v2; // r9
@@ -507,7 +507,7 @@ void __cdecl CG_CheckHudCompassDisplay(int localClientNum)
     }
 }
 
-void __cdecl CG_CheckHudStanceDisplay(int localClientNum)
+void CG_CheckHudStanceDisplay(int localClientNum)
 {
     int eFlags; // r11
     __int64 v3; // r11
@@ -534,7 +534,7 @@ void __cdecl CG_CheckHudStanceDisplay(int localClientNum)
     }
 }
 
-void __cdecl CG_CheckHudSprintDisplay(int localClientNum)
+void CG_CheckHudSprintDisplay(int localClientNum)
 {
     playerState_s *p_ps; // r30
     __int64 v3; // r11
@@ -573,7 +573,7 @@ void __cdecl CG_CheckHudSprintDisplay(int localClientNum)
     }
 }
 
-void __cdecl CG_CheckHudOffHandDisplay(int localClientNum)
+void CG_CheckHudOffHandDisplay(int localClientNum)
 {
     const dvar_s *v1; // r11
     __int64 v2; // r9
@@ -604,7 +604,7 @@ void __cdecl CG_CheckHudOffHandDisplay(int localClientNum)
     }
 }
 
-void __cdecl CG_CheckHudObjectiveDisplay(int localClientNum)
+void CG_CheckHudObjectiveDisplay(int localClientNum)
 {
     if (localClientNum)
         MyAssertHandler(
@@ -624,7 +624,7 @@ void __cdecl CG_CheckHudObjectiveDisplay(int localClientNum)
     }
 }
 
-void __cdecl CG_CheckTimedMenus(int localClientNum)
+void CG_CheckTimedMenus(int localClientNum)
 {
     if (localClientNum)
         MyAssertHandler(
@@ -649,7 +649,7 @@ void __cdecl CG_CheckTimedMenus(int localClientNum)
     CG_CheckHudSprintDisplay(localClientNum);
 }
 
-void __cdecl CG_Blur(
+void CG_Blur(
     int localClientNum,
     int time,
     double endBlur,
@@ -712,7 +712,7 @@ void __cdecl CG_Blur(
     }
 }
 
-void __cdecl CG_ClearBlur(int localClientNum)
+void CG_ClearBlur(int localClientNum)
 {
     ScreenBlur *v1; // r11
 
@@ -725,12 +725,12 @@ void __cdecl CG_ClearBlur(int localClientNum)
     v1->priority = BLUR_PRIORITY_NONE;
 }
 
-float __cdecl CG_GetBlurRadius(int localClientNum)
+float CG_GetBlurRadius(int localClientNum)
 {
     return s_screenBlur[localClientNum].radius;
 }
 
-void __cdecl CG_ScreenBlur(int localClientNum)
+void CG_ScreenBlur(int localClientNum)
 {
     ScreenBlur *scrBlur;
     int time;
@@ -776,7 +776,7 @@ void __cdecl CG_ScreenBlur(int localClientNum)
     }
 }
 
-void __cdecl CG_Fade(int localClientNum, int r, int g, int b, int a, int startTime, int duration)
+void CG_Fade(int localClientNum, int r, int g, int b, int a, int startTime, int duration)
 {
     ScreenFade *v6; // r31
 
@@ -809,7 +809,7 @@ void CG_DrawErrorMessages()
     Con_DrawErrors(0, 2, 300, 1.0);
 }
 
-void __cdecl CG_DrawFadeInCinematic(int localClientNum)
+void CG_DrawFadeInCinematic(int localClientNum)
 {
     char v2; // r31
 
@@ -830,7 +830,7 @@ void __cdecl CG_DrawFadeInCinematic(int localClientNum)
     }
 }
 
-void __cdecl CG_DrawFriendOverlay(int localClientNum)
+void CG_DrawFriendOverlay(int localClientNum)
 {
     cg_s *LocalClientGlobals; // r30
     const char *ConfigString; // r3
@@ -928,7 +928,7 @@ void __cdecl CG_DrawFriendOverlay(int localClientNum)
     }
 }
 
-void __cdecl CG_DrawPaused(int localClientNum)
+void CG_DrawPaused(int localClientNum)
 {
     if (cg_paused->current.integer)
     {
@@ -937,7 +937,7 @@ void __cdecl CG_DrawPaused(int localClientNum)
     }
 }
 
-void __cdecl CG_AlterTimescale(int localClientNum, int time, double startScale, double endScale)
+void CG_AlterTimescale(int localClientNum, int time, double startScale, double endScale)
 {
     cg_s *cgameGlob = CG_GetLocalClientGlobals(localClientNum);
 
@@ -947,7 +947,7 @@ void __cdecl CG_AlterTimescale(int localClientNum, int time, double startScale, 
     cgameGlob->timeScaleEnd = endScale;
 }
 
-void __cdecl CG_UpdateTimeScale(int localClientNum)
+void CG_UpdateTimeScale(int localClientNum)
 {
     cg_s *cgameGlob = CG_GetLocalClientGlobals(localClientNum);
 
@@ -1171,7 +1171,7 @@ void DrawViewmodelInfo(int localClientNum)
     }
 }
 
-void __cdecl CG_Draw2D(int localClientNum)
+void CG_Draw2D(int localClientNum)
 {
     snapshot_s *nextSnap; // r29
     int integer; // r11
@@ -1235,7 +1235,7 @@ void __cdecl CG_Draw2D(int localClientNum)
     }
 }
 
-void __cdecl CG_DrawActive(int localClientNum)
+void CG_DrawActive(int localClientNum)
 {
     double zoomSensitivity; // fp1
 
@@ -1265,13 +1265,13 @@ void __cdecl CG_DrawActive(int localClientNum)
 }
 
 // attributes: thunk
-void __cdecl CG_AddSceneTracerBeams(int localClientNum)
+void CG_AddSceneTracerBeams(int localClientNum)
 {
     CG_AddLocalEntityTracerBeams(localClientNum);
 }
 
 // attributes: thunk
-void __cdecl CG_GenerateSceneVerts(int localClientNum)
+void CG_GenerateSceneVerts(int localClientNum)
 {
     CG_AddDrawSurfsFor3dHudElems(localClientNum);
 }

@@ -704,26 +704,26 @@ struct client_t // sizeof=0xA5638
 };
 
 //sv_init_mp
-void __cdecl SV_SetConfigstring(int index, const char *val);
-void __cdecl SV_GetConfigstring(uint32_t index, char *buffer, int bufferSize);
-uint32_t __cdecl SV_GetConfigstringConst(uint32_t index);
-void __cdecl SV_SetConfigValueForKey(int start, int max, char *key, char *value);
-void __cdecl SV_SetUserinfo(int index, char *val);
-void __cdecl SV_GetUserinfo(int index, char *buffer, int bufferSize);
-void __cdecl SV_CreateBaseline();
-void __cdecl SV_BoundMaxClients(int minimum);
-void __cdecl SV_Startup();
-void __cdecl SV_ClearServer();
-void __cdecl SV_InitArchivedSnapshot();
-void __cdecl SV_InitDvar();
-void __cdecl SV_SpawnServer(char *server);
+void SV_SetConfigstring(int index, const char *val);
+void SV_GetConfigstring(uint32_t index, char *buffer, int bufferSize);
+uint32_t SV_GetConfigstringConst(uint32_t index);
+void SV_SetConfigValueForKey(int start, int max, char *key, char *value);
+void SV_SetUserinfo(int index, char *val);
+void SV_GetUserinfo(int index, char *buffer, int bufferSize);
+void SV_CreateBaseline();
+void SV_BoundMaxClients(int minimum);
+void SV_Startup();
+void SV_ClearServer();
+void SV_InitArchivedSnapshot();
+void SV_InitDvar();
+void SV_SpawnServer(char *server);
 void SV_SaveSystemInfo();
-bool __cdecl SV_Loaded();
-void __cdecl SV_Init();
-void __cdecl SV_DropAllClients();
-void __cdecl SV_Shutdown(const char *finalmsg);
-void __cdecl SV_FinalMessage(const char *message);
-void __cdecl SV_CheckThread();
+bool SV_Loaded();
+void SV_Init();
+void SV_DropAllClients();
+void SV_Shutdown(const char *finalmsg);
+void SV_FinalMessage(const char *message);
+void SV_CheckThread();
 
 
 
@@ -855,36 +855,36 @@ struct server_t // sizeof=0x5FC60
     // padding byte
     const char *killReason;             // ...
 };
-void __cdecl TRACK_sv_main();
-char *__cdecl SV_ExpandNewlines(char *in);
-void __cdecl SV_AddServerCommand(client_t *client, svscmd_type type, char *cmd);
-int __cdecl SV_CanReplaceServerCommand(client_t *client, const char *cmd);
-bool __cdecl SV_IsFirstTokenEqual(const char *str1, const char *str2);
-void __cdecl SV_CullIgnorableServerCommands(client_t *client);
+void TRACK_sv_main();
+char *SV_ExpandNewlines(char *in);
+void SV_AddServerCommand(client_t *client, svscmd_type type, char *cmd);
+int SV_CanReplaceServerCommand(client_t *client, const char *cmd);
+bool SV_IsFirstTokenEqual(const char *str1, const char *str2);
+void SV_CullIgnorableServerCommands(client_t *client);
 void SV_SendServerCommand(client_t *cl, svscmd_type type, const char *fmt, ...);
-client_t *__cdecl SV_FindClientByAddress(netadr_t from, int qport);
-void __cdecl SVC_Status(netadr_t from);
-void __cdecl SVC_GameCompleteStatus(netadr_t from);
-void __cdecl SVC_Info(netadr_t from);
-void __cdecl SV_ConnectionlessPacket(netadr_t from, msg_t *msg);
-void __cdecl SV_PacketEvent(netadr_t from, msg_t *msg);
-void __cdecl SV_CalcPings();
-void __cdecl SV_FreeClientScriptId(client_t *cl);
-void __cdecl SV_CheckTimeouts();
-int __cdecl SV_CheckPaused();
-void __cdecl SV_RunFrame();
-void __cdecl SV_UpdatePerformanceFrame(float time);
-void __cdecl SV_BotUserMove(client_t *cl);
-void __cdecl SV_UpdateBots();
-void __cdecl SV_WaitServer();
-void __cdecl SV_InitSnapshot();
-void __cdecl SV_KillLocalServer();
-void __cdecl SV_SetSystemInfoConfig();
-void __cdecl SV_PreFrame();
-int __cdecl SV_Frame(int msec);
-void __cdecl SV_FrameInternal(int msec);
+client_t *SV_FindClientByAddress(netadr_t from, int qport);
+void SVC_Status(netadr_t from);
+void SVC_GameCompleteStatus(netadr_t from);
+void SVC_Info(netadr_t from);
+void SV_ConnectionlessPacket(netadr_t from, msg_t *msg);
+void SV_PacketEvent(netadr_t from, msg_t *msg);
+void SV_CalcPings();
+void SV_FreeClientScriptId(client_t *cl);
+void SV_CheckTimeouts();
+int SV_CheckPaused();
+void SV_RunFrame();
+void SV_UpdatePerformanceFrame(float time);
+void SV_BotUserMove(client_t *cl);
+void SV_UpdateBots();
+void SV_WaitServer();
+void SV_InitSnapshot();
+void SV_KillLocalServer();
+void SV_SetSystemInfoConfig();
+void SV_PreFrame();
+int SV_Frame(int msec);
+void SV_FrameInternal(int msec);
 void SV_PostFrame();
-char __cdecl SV_CheckOverflow();
+char SV_CheckOverflow();
 
 extern server_t sv;
 
@@ -959,21 +959,21 @@ extern const dvar_t *sv_clientArchive;
 
 
 // sv_net_chan_mp
-bool __cdecl SV_Netchan_TransmitNextFragment(client_t *client, netchan_t *chan);
-void __cdecl SV_Netchan_OutgoingSequenceIncremented(client_t *client, netchan_t *chan);
-bool __cdecl SV_Netchan_Transmit(client_t *client, uint8_t *data, int length);
-void __cdecl SV_Netchan_AddOOBProfilePacket(int iLength);
-void __cdecl SV_Netchan_UpdateProfileStats();
-void __cdecl SV_Netchan_PrintProfileStats(int bPrintToConsole);
-void __cdecl SV_Netchan_Decode(client_t *client, uint8_t *data, int size);
+bool SV_Netchan_TransmitNextFragment(client_t *client, netchan_t *chan);
+void SV_Netchan_OutgoingSequenceIncremented(client_t *client, netchan_t *chan);
+bool SV_Netchan_Transmit(client_t *client, uint8_t *data, int length);
+void SV_Netchan_AddOOBProfilePacket(int iLength);
+void SV_Netchan_UpdateProfileStats();
+void SV_Netchan_PrintProfileStats(int bPrintToConsole);
+void SV_Netchan_Decode(client_t *client, uint8_t *data, int size);
 
 
 
 // sv_archive_mp
-void __cdecl SV_ArchiveSnapshot(msg_t *msg);
-gentity_s *__cdecl SV_GentityNumLocal(int num);
-const clientState_s *__cdecl G_GetClientStateLocal(int clientNum);
-int __cdecl GetFollowPlayerStateLocal(int clientNum, playerState_s *ps);
+void SV_ArchiveSnapshot(msg_t *msg);
+gentity_s *SV_GentityNumLocal(int num);
+const clientState_s *G_GetClientStateLocal(int clientNum);
+int GetFollowPlayerStateLocal(int clientNum, playerState_s *ps);
 
 
 // sv_snapshot_mp
@@ -982,142 +982,142 @@ struct snapshotEntityNumbers_t // sizeof=0x1004
     int numSnapshotEntities;            // ...
     int snapshotEntities[1024];         // ...
 };
-void __cdecl SV_Download_Clear(client_t *cl);
-void __cdecl SV_WriteSnapshotToClient(client_t *client, msg_t *msg);
-void __cdecl SV_EmitPacketEntities(
+void SV_Download_Clear(client_t *cl);
+void SV_WriteSnapshotToClient(client_t *client, msg_t *msg);
+void SV_EmitPacketEntities(
     SnapshotInfo_s *snapInfo,
     int from_num_entities,
     int from_first_entity,
     int to_num_entities,
     int to_first_entity,
     msg_t *msg);
-void __cdecl SV_EmitPacketClients(
+void SV_EmitPacketClients(
     SnapshotInfo_s *snapInfo,
     int from_num_clients,
     int from_first_client,
     int to_num_clients,
     int to_first_client,
     msg_t *msg);
-void __cdecl SV_UpdateServerCommandsToClient(client_t *client, msg_t *msg);
-void __cdecl SV_UpdateServerCommandsToClient_PreventOverflow(client_t *client, msg_t *msg, int iMsgSize);
-char __cdecl SV_GetClientPositionAtTime(int client, int gametime, float *pos);
-int __cdecl SV_GetArchivedClientInfo(int clientNum, int *pArchiveTime, playerState_s *ps, clientState_s *cs);
-cachedSnapshot_t *__cdecl SV_GetCachedSnapshot(int *pArchiveTime);
-cachedSnapshot_t *__cdecl SV_GetCachedSnapshotInternal(int archivedFrame);
-int __cdecl SV_GetCurrentClientInfo(int clientNum, playerState_s *ps, clientState_s *cs);
-void __cdecl SV_BuildClientSnapshot(client_t *client);
-void __cdecl SV_AddEntitiesVisibleFromPoint(float *org, int clientNum, snapshotEntityNumbers_t *eNums);
-void __cdecl SV_AddCachedEntitiesVisibleFromPoint(
+void SV_UpdateServerCommandsToClient(client_t *client, msg_t *msg);
+void SV_UpdateServerCommandsToClient_PreventOverflow(client_t *client, msg_t *msg, int iMsgSize);
+char SV_GetClientPositionAtTime(int client, int gametime, float *pos);
+int SV_GetArchivedClientInfo(int clientNum, int *pArchiveTime, playerState_s *ps, clientState_s *cs);
+cachedSnapshot_t *SV_GetCachedSnapshot(int *pArchiveTime);
+cachedSnapshot_t *SV_GetCachedSnapshotInternal(int archivedFrame);
+int SV_GetCurrentClientInfo(int clientNum, playerState_s *ps, clientState_s *cs);
+void SV_BuildClientSnapshot(client_t *client);
+void SV_AddEntitiesVisibleFromPoint(float *org, int clientNum, snapshotEntityNumbers_t *eNums);
+void SV_AddCachedEntitiesVisibleFromPoint(
     int from_num_entities,
     int from_first_entity,
     float *org,
     int clientNum,
     snapshotEntityNumbers_t *eNums);
-void __cdecl SV_AddArchivedEntToSnapshot(int e, snapshotEntityNumbers_t *eNums);
-void __cdecl SV_SendMessageToClient(msg_t *msg, client_t *client);
-int __cdecl SV_RateMsec(client_t *client, int messageSize);
-void __cdecl SV_BeginClientSnapshot(client_t *client, msg_t *msg);
-void __cdecl SV_EndClientSnapshot(client_t *client, msg_t *msg);
-void __cdecl SV_PrintServerCommandsForClient(client_t *client);
-void __cdecl SV_SetServerStaticHeader();
-void __cdecl SV_GetServerStaticHeader();
-void __cdecl SV_SendClientMessages();
+void SV_AddArchivedEntToSnapshot(int e, snapshotEntityNumbers_t *eNums);
+void SV_SendMessageToClient(msg_t *msg, client_t *client);
+int SV_RateMsec(client_t *client, int messageSize);
+void SV_BeginClientSnapshot(client_t *client, msg_t *msg);
+void SV_EndClientSnapshot(client_t *client, msg_t *msg);
+void SV_PrintServerCommandsForClient(client_t *client);
+void SV_SetServerStaticHeader();
+void SV_GetServerStaticHeader();
+void SV_SendClientMessages();
 
 
 // sv_client_mp
-void __cdecl SV_GetChallenge(netadr_t from);
-void __cdecl SV_CaptureUnverifiedGuids();
+void SV_GetChallenge(netadr_t from);
+void SV_CaptureUnverifiedGuids();
 bool SV_UnverifiedGuidsEnabled();
-void __cdecl SV_CaptureAdvertisedProtocol();
+void SV_CaptureAdvertisedProtocol();
 int SV_GetAdvertisedProtocol();
-void __cdecl SV_SetAdvertisedProtocolInfo(char *info);
-int __cdecl SV_IsBannedGuid(const char *cdkeyHash);
-void __cdecl SV_ReceiveStats(netadr_t from, msg_t *msg);
-void __cdecl SV_SetClientStat(int clientNum, int index, uint32_t value);
-int __cdecl SV_GetClientStat(int clientNum, int index);
-void __cdecl SV_BanGuidBriefly(const char *cdkeyHash);
-uint32_t __cdecl SV_FindFreeTempBanSlot();
-void __cdecl SV_BanClient(client_t *cl);
-void __cdecl SV_UnbanClient(char *name);
-void __cdecl SV_FreeClient(client_t *cl);
-void __cdecl SV_FreeClients();
-void __cdecl SV_DirectConnect(netadr_t from);
-void __cdecl SV_FreeClientScriptPers();
-void __cdecl SV_SendDisconnect(
+void SV_SetAdvertisedProtocolInfo(char *info);
+int SV_IsBannedGuid(const char *cdkeyHash);
+void SV_ReceiveStats(netadr_t from, msg_t *msg);
+void SV_SetClientStat(int clientNum, int index, uint32_t value);
+int SV_GetClientStat(int clientNum, int index);
+void SV_BanGuidBriefly(const char *cdkeyHash);
+uint32_t SV_FindFreeTempBanSlot();
+void SV_BanClient(client_t *cl);
+void SV_UnbanClient(char *name);
+void SV_FreeClient(client_t *cl);
+void SV_FreeClients();
+void SV_DirectConnect(netadr_t from);
+void SV_FreeClientScriptPers();
+void SV_SendDisconnect(
     client_t *client,
     int state,
     const char *reason,
     bool translationForReason,
     const char *clientName);
-void __cdecl SV_DropClient(client_t *drop, const char *reason, bool tellThem);
-void __cdecl SV_DelayDropClient(client_t *drop, const char *reason);
-void __cdecl SV_SendClientGameState(client_t *client);
-void __cdecl SV_ClientEnterWorld(client_t *client, usercmd_s *cmd);
-void __cdecl SV_Disconnect_f(client_t *cl);
-void __cdecl SV_UserinfoChanged(client_t *cl);
-void __cdecl SV_UpdateUserinfo_f(client_t *cl);
-void __cdecl SV_ClientThink(client_t *cl, usercmd_s *cmd);
-void __cdecl SV_UserMove(client_t *cl, msg_t *msg, int delta);
-void __cdecl SV_ExecuteClientMessage(client_t *cl, msg_t *msg);
-int __cdecl SV_ClientCommand(client_t *cl, msg_t *msg, int fromOldServer);
-void __cdecl SV_ExecuteClientCommand(client_t *cl, char *s, int clientOK, int fromOldServer);
-gentity_s *__cdecl SV_AddTestClient();
-void __cdecl SV_CloseDownload(client_t *cl);
+void SV_DropClient(client_t *drop, const char *reason, bool tellThem);
+void SV_DelayDropClient(client_t *drop, const char *reason);
+void SV_SendClientGameState(client_t *client);
+void SV_ClientEnterWorld(client_t *client, usercmd_s *cmd);
+void SV_Disconnect_f(client_t *cl);
+void SV_UserinfoChanged(client_t *cl);
+void SV_UpdateUserinfo_f(client_t *cl);
+void SV_ClientThink(client_t *cl, usercmd_s *cmd);
+void SV_UserMove(client_t *cl, msg_t *msg, int delta);
+void SV_ExecuteClientMessage(client_t *cl, msg_t *msg);
+int SV_ClientCommand(client_t *cl, msg_t *msg, int fromOldServer);
+void SV_ExecuteClientCommand(client_t *cl, char *s, int clientOK, int fromOldServer);
+gentity_s *SV_AddTestClient();
+void SV_CloseDownload(client_t *cl);
 
 extern serverStaticHeader_t svsHeader;
 
 
 // sv_ccmds_mp
-char *__cdecl SV_GetMapBaseName(char *mapname);
-void __cdecl SV_Heartbeat_f();
-void __cdecl SV_GameCompleteStatus_f();
-void __cdecl SV_AddOperatorCommands();
-void __cdecl SV_Map_f();
-void __cdecl ShowLoadErrorsSummary(const char *mapName, uint32_t count);
-void __cdecl SV_MapRestart_f();
-void __cdecl SV_MapRestart(int fast_restart);
-void __cdecl SV_FastRestart_f();
-void __cdecl SV_MapRotate_f();
-void __cdecl SV_TempBan_f();
-int __cdecl SV_KickUser_f(char *playerName, int maxPlayerNameLen, char *cdkeyHash);
-client_t *__cdecl SV_GetPlayerByName();
-int __cdecl SV_KickClient(client_t *cl, char *playerName, int maxPlayerNameLen, char *cdkeyHash);
-void __cdecl SV_Ban_f();
-void __cdecl SV_BanNum_f();
-client_t *__cdecl SV_GetPlayerByNum();
-void __cdecl SV_Unban_f();
-void __cdecl SV_Drop_f();
-void __cdecl SV_DropNum_f();
-int __cdecl SV_KickClient_f(char *playerName, int maxPlayerNameLen, char *cdkeyHash);
-void __cdecl SV_TempBanNum_f();
-void __cdecl SV_Status_f();
-void __cdecl SV_Serverinfo_f();
-void __cdecl SV_Systeminfo_f();
-void __cdecl SV_DumpUser_f();
-void __cdecl SV_KillServer_f();
-void __cdecl SV_ScriptUsage_f();
-void __cdecl SV_ScriptVarUsage_f();
-void __cdecl SV_ScriptProfile_f();
-void __cdecl SV_ScriptBuiltin_f();
-void __cdecl SV_StringUsage_f();
-void __cdecl SV_SetPerk_f();
-void __cdecl SV_AddDedicatedCommands();
-void __cdecl SV_ConSay_f();
-void __cdecl SV_AssembleConSayMessage(int firstArg, char *text, int sizeofText);
-void __cdecl SV_ConTell_f();
-void __cdecl SV_RemoveDedicatedCommands();
+char *SV_GetMapBaseName(char *mapname);
+void SV_Heartbeat_f();
+void SV_GameCompleteStatus_f();
+void SV_AddOperatorCommands();
+void SV_Map_f();
+void ShowLoadErrorsSummary(const char *mapName, uint32_t count);
+void SV_MapRestart_f();
+void SV_MapRestart(int fast_restart);
+void SV_FastRestart_f();
+void SV_MapRotate_f();
+void SV_TempBan_f();
+int SV_KickUser_f(char *playerName, int maxPlayerNameLen, char *cdkeyHash);
+client_t *SV_GetPlayerByName();
+int SV_KickClient(client_t *cl, char *playerName, int maxPlayerNameLen, char *cdkeyHash);
+void SV_Ban_f();
+void SV_BanNum_f();
+client_t *SV_GetPlayerByNum();
+void SV_Unban_f();
+void SV_Drop_f();
+void SV_DropNum_f();
+int SV_KickClient_f(char *playerName, int maxPlayerNameLen, char *cdkeyHash);
+void SV_TempBanNum_f();
+void SV_Status_f();
+void SV_Serverinfo_f();
+void SV_Systeminfo_f();
+void SV_DumpUser_f();
+void SV_KillServer_f();
+void SV_ScriptUsage_f();
+void SV_ScriptVarUsage_f();
+void SV_ScriptProfile_f();
+void SV_ScriptBuiltin_f();
+void SV_StringUsage_f();
+void SV_SetPerk_f();
+void SV_AddDedicatedCommands();
+void SV_ConSay_f();
+void SV_AssembleConSayMessage(int firstArg, char *text, int sizeofText);
+void SV_ConTell_f();
+void SV_RemoveDedicatedCommands();
 
 extern int sv_serverId_value;
 
 // sv_main_pc_mp
-const netadr_t *__cdecl SV_MasterAddress();
-void __cdecl SV_MasterGameCompleteStatus();
-void __cdecl SV_MasterHeartbeat(const char *hbname);
-void __cdecl SV_MasterShutdown();
-void __cdecl SV_UpdateLastTimeMasterServerCommunicated(netadr_t from);
-void __cdecl SV_AuthorizeIpPacket(netadr_t from);
-void __cdecl SVC_RemoteCommand(netadr_t from);
-void __cdecl SV_VoicePacket(netadr_t from, msg_t *msg);
+const netadr_t *SV_MasterAddress();
+void SV_MasterGameCompleteStatus();
+void SV_MasterHeartbeat(const char *hbname);
+void SV_MasterShutdown();
+void SV_UpdateLastTimeMasterServerCommunicated(netadr_t from);
+void SV_AuthorizeIpPacket(netadr_t from);
+void SVC_RemoteCommand(netadr_t from);
+void SV_VoicePacket(netadr_t from, msg_t *msg);
 
 
 // sv_snapshot_profile_mp
@@ -1163,90 +1163,90 @@ enum PacketDataType : __int32
     ANALYZE_SNAPSHOT_SERVERCMDS = 0xC,
     ANALYZE_SNAPSHOT_DATATYPE_COUNT = 0xD,
 };
-void __cdecl SV_ClearPacketAnalysis();
-void __cdecl SV_TrackETypeBytes(uint32_t eType, int bits);
-void __cdecl SV_TrackPSBits(int bits);
-void __cdecl SV_TrackPSFieldDeltasBits(int bits);
-void __cdecl SV_TrackPSHudelemBits(int bits);
-void __cdecl SV_TrackPSStatsBits(int bits);
-void __cdecl SV_TrackPSAmmoBits(int bits);
-void __cdecl SV_TrackPSObjectivesBits(int bits);
-void __cdecl SV_TrackPSWeaponModelBits(int bits);
-void __cdecl SV_TrackFieldsChanged(int lc);
-void __cdecl SV_DisablePacketData();
-void __cdecl SV_EnablePacketData();
-void __cdecl SV_ResetPacketData(int clientNum, const msg_t *msg);
-bool __cdecl SV_IsPacketDataNetworkData();
-void __cdecl SV_PacketDataIsGroundEntity(int clientNum, const msg_t *msg);
-void __cdecl SV_PacketDataIsType(int clientNum, const msg_t *msg, packetModeList mode);
-const char *__cdecl SV_GetPacketDataTypeName(int dataType);
-void __cdecl SV_PacketDataIsEntityNum(int clientNum, const msg_t *msg);
-void __cdecl SV_PacketDataIsLastFieldChanged(int clientNum, const msg_t *msg);
-void __cdecl SV_PacketDataIsUnknown(int clientNum, const msg_t *msg);
-void __cdecl SV_PacketDataIsHeader(int clientNum, const msg_t *msg);
-void __cdecl SV_PacketDataIsNotNetworkData(int clientNum, const msg_t *msg);
-void __cdecl SV_PacketDataIsOverhead(int clientNum, const msg_t *msg);
-void __cdecl SV_PacketDataIs24BitFlagIndex(int clientNum, const msg_t *msg);
-void __cdecl SV_PacketDataIsTimeDelta(int clientNum, const msg_t *msg);
-void __cdecl SV_PacketDataIsTime(int clientNum, const msg_t *msg);
-void __cdecl SV_PacketDataIsReliableData(int clientNum, const msg_t *msg);
-void __cdecl SV_PacketDataIsData(int clientNum, const msg_t *msg);
-void __cdecl SV_PacketDataIsZeroFloat(int clientNum, const msg_t *msg);
-void __cdecl SV_PacketDataIsSmallFloat(int clientNum, const msg_t *msg);
-void __cdecl SV_PacketDataIsLargeFloat(int clientNum, const msg_t *msg);
-void __cdecl SV_PacketDataIsOriginDelta(int clientNum, const msg_t *msg);
-void __cdecl SV_PacketDataIsOrigin(int clientNum, const msg_t *msg);
-void __cdecl SV_PacketDataIsZeroAngle(int clientNum, const msg_t *msg);
-void __cdecl SV_PacketDataIsSmallAngle(int clientNum, const msg_t *msg);
-void __cdecl SV_PacketDataIsZeroInt(int clientNum, const msg_t *msg);
-void __cdecl SV_TrackFloatCompressedBits(uint32_t bits);
-void __cdecl SV_TrackOriginDeltaBits(int bits);
-void __cdecl SV_TrackOriginZDeltaBits(int bits);
-void __cdecl SV_TrackOriginZFullBits(int bits);
-void __cdecl SV_TrackOriginFullBits(int bits);
-const char *__cdecl SV_GetEntityTypeString(uint32_t packetEntityType);
-void __cdecl SV_AnalyzePacketData(int clientNum, const msg_t *msg);
-int __cdecl SV_TrackPacketData(
+void SV_ClearPacketAnalysis();
+void SV_TrackETypeBytes(uint32_t eType, int bits);
+void SV_TrackPSBits(int bits);
+void SV_TrackPSFieldDeltasBits(int bits);
+void SV_TrackPSHudelemBits(int bits);
+void SV_TrackPSStatsBits(int bits);
+void SV_TrackPSAmmoBits(int bits);
+void SV_TrackPSObjectivesBits(int bits);
+void SV_TrackPSWeaponModelBits(int bits);
+void SV_TrackFieldsChanged(int lc);
+void SV_DisablePacketData();
+void SV_EnablePacketData();
+void SV_ResetPacketData(int clientNum, const msg_t *msg);
+bool SV_IsPacketDataNetworkData();
+void SV_PacketDataIsGroundEntity(int clientNum, const msg_t *msg);
+void SV_PacketDataIsType(int clientNum, const msg_t *msg, packetModeList mode);
+const char *SV_GetPacketDataTypeName(int dataType);
+void SV_PacketDataIsEntityNum(int clientNum, const msg_t *msg);
+void SV_PacketDataIsLastFieldChanged(int clientNum, const msg_t *msg);
+void SV_PacketDataIsUnknown(int clientNum, const msg_t *msg);
+void SV_PacketDataIsHeader(int clientNum, const msg_t *msg);
+void SV_PacketDataIsNotNetworkData(int clientNum, const msg_t *msg);
+void SV_PacketDataIsOverhead(int clientNum, const msg_t *msg);
+void SV_PacketDataIs24BitFlagIndex(int clientNum, const msg_t *msg);
+void SV_PacketDataIsTimeDelta(int clientNum, const msg_t *msg);
+void SV_PacketDataIsTime(int clientNum, const msg_t *msg);
+void SV_PacketDataIsReliableData(int clientNum, const msg_t *msg);
+void SV_PacketDataIsData(int clientNum, const msg_t *msg);
+void SV_PacketDataIsZeroFloat(int clientNum, const msg_t *msg);
+void SV_PacketDataIsSmallFloat(int clientNum, const msg_t *msg);
+void SV_PacketDataIsLargeFloat(int clientNum, const msg_t *msg);
+void SV_PacketDataIsOriginDelta(int clientNum, const msg_t *msg);
+void SV_PacketDataIsOrigin(int clientNum, const msg_t *msg);
+void SV_PacketDataIsZeroAngle(int clientNum, const msg_t *msg);
+void SV_PacketDataIsSmallAngle(int clientNum, const msg_t *msg);
+void SV_PacketDataIsZeroInt(int clientNum, const msg_t *msg);
+void SV_TrackFloatCompressedBits(uint32_t bits);
+void SV_TrackOriginDeltaBits(int bits);
+void SV_TrackOriginZDeltaBits(int bits);
+void SV_TrackOriginZFullBits(int bits);
+void SV_TrackOriginFullBits(int bits);
+const char *SV_GetEntityTypeString(uint32_t packetEntityType);
+void SV_AnalyzePacketData(int clientNum, const msg_t *msg);
+int SV_TrackPacketData(
     uint32_t clientNum,
     PacketDataType datatype,
     int eType,
     int entNum,
     int bitsUsedPrev,
     const msg_t *msg);
-void __cdecl SV_SetNextEntityStart(int eType, int entNum);
-bool __cdecl SV_NewPacketAnalysisReady();
-void __cdecl SV_TrackFieldChange(int clientNum, int entityType, uint32_t field);
-void __cdecl SV_WriteEntityFieldNumbers();
-void __cdecl SV_GetAnalyzeEntityFields(int analyzeEntityType, NetFieldList *stateFields, uint32_t *numFields);
-int __cdecl SV_GetClientSnapshotPing(int clientNum, char snapshotNum);
-void __cdecl SV_TrackSnapshotSize(int size);
-void __cdecl SV_TrackPacketCompression(uint32_t clientNum, int originalSize, int compressedSize);
-int __cdecl SV_GetPacketCompressionForClient(int clientNum);
-void __cdecl SV_Netchan_PrintProfileStats(int bPrintToConsole);
-void __cdecl SV_ProfDraw(int y, char *string, bool showHighlight);
+void SV_SetNextEntityStart(int eType, int entNum);
+bool SV_NewPacketAnalysisReady();
+void SV_TrackFieldChange(int clientNum, int entityType, uint32_t field);
+void SV_WriteEntityFieldNumbers();
+void SV_GetAnalyzeEntityFields(int analyzeEntityType, NetFieldList *stateFields, uint32_t *numFields);
+int SV_GetClientSnapshotPing(int clientNum, char snapshotNum);
+void SV_TrackSnapshotSize(int size);
+void SV_TrackPacketCompression(uint32_t clientNum, int originalSize, int compressedSize);
+int SV_GetPacketCompressionForClient(int clientNum);
+void SV_Netchan_PrintProfileStats(int bPrintToConsole);
+void SV_ProfDraw(int y, char *string, bool showHighlight);
 
 
 //sv_voice_mp
-void __cdecl G_BroadcastVoice(gentity_s *talker, VoicePacket_t *voicePacket);
-bool __cdecl SV_ClientHasClientMuted(uint32_t listener, uint32_t talker);
-bool __cdecl SV_ClientWantsVoiceData(uint32_t clientNum);
-void __cdecl SV_UserVoice(client_t *cl, msg_t *msg);
-void __cdecl SV_QueueVoicePacket(int talkerNum, int clientNum, VoicePacket_t *voicePacket);
-void __cdecl SV_PreGameUserVoice(client_t *cl, msg_t *msg);
+void G_BroadcastVoice(gentity_s *talker, VoicePacket_t *voicePacket);
+bool SV_ClientHasClientMuted(uint32_t listener, uint32_t talker);
+bool SV_ClientWantsVoiceData(uint32_t clientNum);
+void SV_UserVoice(client_t *cl, msg_t *msg);
+void SV_QueueVoicePacket(int talkerNum, int clientNum, VoicePacket_t *voicePacket);
+void SV_PreGameUserVoice(client_t *cl, msg_t *msg);
 
 
 // ucmds
-void __cdecl SV_UnmutePlayer_f(client_t *cl);
-void __cdecl SV_MutePlayer_f(client_t *cl);
-void __cdecl SV_WWWDownLoad_Clear(client_t *cl);
-void __cdecl SV_WWWDownload_f(client_t *cl);
-void __cdecl SV_RetransmitDownload_f(client_t *cl);
-void __cdecl SV_DoneDownload_f(client_t *cl);
-void __cdecl SV_StopDownload_f(client_t *cl);
-void __cdecl SV_ResetPureClient_f(client_t *cl);
-void __cdecl SV_NextDownload_f(client_t *cl);
-void __cdecl SV_BeginDownload_f(client_t *cl);
-void __cdecl SV_VerifyIwds_f(client_t *cl);
+void SV_UnmutePlayer_f(client_t *cl);
+void SV_MutePlayer_f(client_t *cl);
+void SV_WWWDownLoad_Clear(client_t *cl);
+void SV_WWWDownload_f(client_t *cl);
+void SV_RetransmitDownload_f(client_t *cl);
+void SV_DoneDownload_f(client_t *cl);
+void SV_StopDownload_f(client_t *cl);
+void SV_ResetPureClient_f(client_t *cl);
+void SV_NextDownload_f(client_t *cl);
+void SV_BeginDownload_f(client_t *cl);
+void SV_VerifyIwds_f(client_t *cl);
 
 
 

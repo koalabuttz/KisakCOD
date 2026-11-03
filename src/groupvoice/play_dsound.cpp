@@ -11,12 +11,12 @@ bool dsoundplay_initialized;
 
 LPDIRECTSOUND8 lpds;
 
-int32_t __cdecl DSound_GetBytesLeft(dsound_sample_t *sample)
+int32_t DSound_GetBytesLeft(dsound_sample_t *sample)
 {
     return sample->bytesBuffered;
 }
 
-uint32_t __cdecl DSound_UpdateSample(dsound_sample_t *sample, char *data, int32_t data_len)
+uint32_t DSound_UpdateSample(dsound_sample_t *sample, char *data, int32_t data_len)
 {
     int32_t v4; // [esp+8h] [ebp-2Ch]
     HRESULT hr; // [esp+10h] [ebp-24h]
@@ -132,7 +132,7 @@ uint32_t __cdecl DSound_UpdateSample(dsound_sample_t *sample, char *data, int32_
     }
 }
 
-void __cdecl DSound_AdjustSamplePlayback(dsound_sample_t *sample, int32_t bytesLeft)
+void DSound_AdjustSamplePlayback(dsound_sample_t *sample, int32_t bytesLeft)
 {
     uint8_t playMode; // [esp+20h] [ebp-8h]
 
@@ -171,12 +171,12 @@ void __cdecl DSound_AdjustSamplePlayback(dsound_sample_t *sample, int32_t bytesL
     }
 }
 
-bool __cdecl DSound_BufferUnderrunOccurred(dsound_sample_t *sample)
+bool DSound_BufferUnderrunOccurred(dsound_sample_t *sample)
 {
     return sample->bytesBuffered <= 0;
 }
 
-void __cdecl DSound_HandleBufferUnderrun(dsound_sample_t *sample)
+void DSound_HandleBufferUnderrun(dsound_sample_t *sample)
 {
     DSound_GetBytesLeft(sample);
     sample->DSB->Stop();
@@ -194,7 +194,7 @@ void __cdecl DSound_HandleBufferUnderrun(dsound_sample_t *sample)
     sample->bytesBuffered = 0;
 }
 
-void __cdecl DSound_SampleFrame(dsound_sample_t *sample)
+void DSound_SampleFrame(dsound_sample_t *sample)
 {
     DWORD dwWritePos; // [esp+4h] [ebp-14h] BYREF
     HRESULT hr; // [esp+8h] [ebp-10h]
@@ -256,7 +256,7 @@ void __cdecl DSound_SampleFrame(dsound_sample_t *sample)
     }
 }
 
-HRESULT __cdecl CreateBasicBuffer(
+HRESULT CreateBasicBuffer(
     IDirectSound8 *lpDirectSound,
     IDirectSoundBuffer **ppDsb,
     uint32_t sampleRate,
@@ -286,7 +286,7 @@ HRESULT __cdecl CreateBasicBuffer(
     return hr;
 }
 
-dsound_sample_t *__cdecl DSound_NewSample()
+dsound_sample_t *DSound_NewSample()
 {
     dsound_sample_t *sample; // [esp+4h] [ebp-4h]
 
@@ -307,7 +307,7 @@ dsound_sample_t *__cdecl DSound_NewSample()
     return 0;
 }
 
-char __cdecl DSound_StopSample(dsound_sample_t *sample)
+char DSound_StopSample(dsound_sample_t *sample)
 {
     if (!dsoundplay_initialized)
         return 0;
@@ -323,7 +323,7 @@ char __cdecl DSound_StopSample(dsound_sample_t *sample)
     return 1;
 }
 
-int32_t __cdecl DSound_Init(bool callDsoundInit, HWND__ *handle)
+int32_t DSound_Init(bool callDsoundInit, HWND__ *handle)
 {
     if (dsoundplay_initialized)
         return 1;
@@ -349,7 +349,7 @@ int32_t __cdecl DSound_Init(bool callDsoundInit, HWND__ *handle)
     }
 }
 
-void __cdecl DSound_Shutdown()
+void DSound_Shutdown()
 {
     if (lpds)
         lpds->Release();

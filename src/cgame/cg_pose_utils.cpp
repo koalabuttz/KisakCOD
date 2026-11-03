@@ -4,13 +4,13 @@
 
 #include <bgame/bg_local.h>
 
-void __cdecl CG_UsedDObjCalcPose(cpose_t *pose)
+void CG_UsedDObjCalcPose(cpose_t *pose)
 {
     iassert(pose);
     InterlockedCompareExchange((volatile uint32_t*)&pose->cullIn, 1, 0);
 }
 
-void __cdecl CG_CullIn(cpose_t *pose)
+void CG_CullIn(cpose_t *pose)
 {
     iassert(pose);
     pose->cullIn = 2;

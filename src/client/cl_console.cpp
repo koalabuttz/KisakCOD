@@ -94,12 +94,12 @@ const float con_outputVertStart = 32.0f;
 const float con_outputTextPad = 6.0f;
 const float con_outputBarSize = 10.0f;
 
-void __cdecl TRACK_cl_console()
+void TRACK_cl_console()
 {
     track_static_alloc_internal(&con, 84684, "con", 10);
 }
 
-void __cdecl Con_ToggleConsole()
+void Con_ToggleConsole()
 {
     int32_t localClientNum; // [esp+0h] [ebp-4h]
 
@@ -113,25 +113,25 @@ void __cdecl Con_ToggleConsole()
         clientUIActives[localClientNum].keyCatchers ^= KEYCATCH_CONSOLE;
 }
 
-void __cdecl Con_OpenConsole(int32_t localClientNum)
+void Con_OpenConsole(int32_t localClientNum)
 {
     if (!Key_IsCatcherActive(localClientNum, KEYCATCH_CONSOLE))
         Con_ToggleConsole();
 }
 
-void __cdecl Con_OpenConsoleOutput(int32_t localClientNum)
+void Con_OpenConsoleOutput(int32_t localClientNum)
 {
     if (Key_IsCatcherActive(localClientNum, KEYCATCH_CONSOLE))
         con.outputVisible = 1;
 }
 
-void __cdecl Con_CloseConsole(int32_t localClientNum)
+void Con_CloseConsole(int32_t localClientNum)
 {
     if (Key_IsCatcherActive(localClientNum, KEYCATCH_CONSOLE))
         Con_ToggleConsole();
 }
 
-void __cdecl Con_GetTextCopy(char *text, int32_t maxSize)
+void Con_GetTextCopy(char *text, int32_t maxSize)
 {
     uint32_t end; // [esp+0h] [ebp-Ch]
     int32_t begin; // [esp+4h] [ebp-8h]
@@ -177,7 +177,7 @@ void __cdecl Con_GetTextCopy(char *text, int32_t maxSize)
     }
 }
 
-void __cdecl Con_TimeJumped(int32_t localClientNum, int32_t serverTime)
+void Con_TimeJumped(int32_t localClientNum, int32_t serverTime)
 {
     Con_ResetMessageWindowTimes(&con.consoleWindow, serverTime);
 
@@ -190,7 +190,7 @@ void __cdecl Con_TimeJumped(int32_t localClientNum, int32_t serverTime)
     Con_ResetMessageWindowTimes(&con.messageBuffer[localClientNum].errorWindow, serverTime);
 }
 
-void __cdecl Con_ResetMessageWindowTimes(MessageWindow *msgwnd, int32_t serverTime)
+void Con_ResetMessageWindowTimes(MessageWindow *msgwnd, int32_t serverTime)
 {
     int32_t duration; // [esp+0h] [ebp-14h]
     Message *message; // [esp+4h] [ebp-10h]
@@ -213,7 +213,7 @@ void __cdecl Con_ResetMessageWindowTimes(MessageWindow *msgwnd, int32_t serverTi
 }
 
 #ifdef KISAK_MP
-void __cdecl Con_TimeNudged(int32_t localClientNum, int32_t serverTimeNudge)
+void Con_TimeNudged(int32_t localClientNum, int32_t serverTimeNudge)
 {
     int serverTime = CL_GetLocalClientGlobals(localClientNum)->serverTime;
     Con_NudgeMessageWindowTimes(&con.consoleWindow, serverTimeNudge, serverTime);
@@ -228,7 +228,7 @@ void __cdecl Con_TimeNudged(int32_t localClientNum, int32_t serverTimeNudge)
 }
 #endif
 
-void __cdecl Con_NudgeMessageWindowTimes(MessageWindow *msgwnd, int32_t serverTimeNudge, int32_t serverTime)
+void Con_NudgeMessageWindowTimes(MessageWindow *msgwnd, int32_t serverTimeNudge, int32_t serverTime)
 {
     int32_t duration; // [esp+0h] [ebp-18h]
     Message *message; // [esp+4h] [ebp-14h]
@@ -266,7 +266,7 @@ void __cdecl Con_NudgeMessageWindowTimes(MessageWindow *msgwnd, int32_t serverTi
     }
 }
 
-void __cdecl Con_ClearNotify(int32_t localClientNum)
+void Con_ClearNotify(int32_t localClientNum)
 {
     for (uint gameWindowIndex = 0; gameWindowIndex < 4; ++gameWindowIndex)
     {
@@ -274,7 +274,7 @@ void __cdecl Con_ClearNotify(int32_t localClientNum)
     }
 }
 
-void __cdecl Con_ClearMessageWindow(MessageWindow *msgwnd)
+void Con_ClearMessageWindow(MessageWindow *msgwnd)
 {
     iassert(msgwnd);
     iassert(msgwnd->messages);
@@ -285,12 +285,12 @@ void __cdecl Con_ClearMessageWindow(MessageWindow *msgwnd)
     msgwnd->activeLineCount = 0;
 }
 
-void __cdecl Con_ClearErrors(int32_t localClientNum)
+void Con_ClearErrors(int32_t localClientNum)
 {
     Con_ClearMessageWindow(&con.messageBuffer[localClientNum].errorWindow);
 }
 
-void __cdecl Con_CheckResize()
+void Con_CheckResize()
 {
     float x; // [esp+0h] [ebp-2Ch]
     float xa; // [esp+0h] [ebp-2Ch]
@@ -337,7 +337,7 @@ cmd_function_s Con_ChatModePublic_f_VAR;
 cmd_function_s Con_ChatModeTeam_f_VAR;
 cmd_function_s Con_Clear_f_VAR;
 
-void __cdecl Con_Init()
+void Con_Init()
 {
     int32_t i; // [esp+0h] [ebp-4h]
 
@@ -364,7 +364,7 @@ void __cdecl Con_Init()
     Cmd_AddCommandInternal("clear", Con_Clear_f, &Con_Clear_f_VAR);
 }
 
-void __cdecl SetupChatField(int32_t localClientNum, int32_t teamChat, int32_t widthInPixels)
+void SetupChatField(int32_t localClientNum, int32_t teamChat, int32_t widthInPixels)
 {
     PlayerKeyState *chatField; // [esp+4h] [ebp-10h]
     int32_t width; // [esp+8h] [ebp-Ch] BYREF
@@ -385,29 +385,29 @@ void __cdecl SetupChatField(int32_t localClientNum, int32_t teamChat, int32_t wi
     clientUIActives[0].keyCatchers ^= KEYCATCH_MESSAGE;
 }
 
-void __cdecl Con_ChatModePublic_f()
+void Con_ChatModePublic_f()
 {
     SetupChatField(0, 0, 588);
 }
 
-void __cdecl Con_ChatModeTeam_f()
+void Con_ChatModeTeam_f()
 {
     SetupChatField(0, 1, 543);
 }
 
-void __cdecl Con_Clear_f()
+void Con_Clear_f()
 {
     Con_ClearMessageWindow(&con.consoleWindow);
     con.lineOffset = 0;
     con.displayLineOffset = 0;
 }
 
-void __cdecl Con_InitClientAssets()
+void Con_InitClientAssets()
 {
     Con_CheckResize();
 }
 
-void __cdecl Con_InitMessageBuffer()
+void Con_InitMessageBuffer()
 {
     int32_t localClientNum; // [esp+38h] [ebp-14h]
     MessageBuffer *msgBuf; // [esp+40h] [ebp-Ch]
@@ -455,7 +455,7 @@ void __cdecl Con_InitMessageBuffer()
     }
 }
 
-void __cdecl Con_InitMessageWindow(
+void Con_InitMessageWindow(
     MessageWindow *msgwnd,
     Message *messages,
     MessageLine *lines,
@@ -486,7 +486,7 @@ void __cdecl Con_InitMessageWindow(
     msgwnd->fadeOut = fadeOut;
 }
 
-void __cdecl CL_ConsolePrint(int32_t localClientNum, int32_t channel, const char *txt, int32_t duration, int32_t pixelWidth, int32_t flags)
+void CL_ConsolePrint(int32_t localClientNum, int32_t channel, const char *txt, int32_t duration, int32_t pixelWidth, int32_t flags)
 {
     iassert(txt);
 
@@ -794,7 +794,7 @@ void Con_OneTimeInit()
     con.initialized = 1;
 }
 
-char __cdecl CL_ConsolePrint_AddLine(
+char CL_ConsolePrint_AddLine(
     int32_t localClientNum,
     int32_t channel,
     const char *txt,
@@ -966,7 +966,7 @@ char __cdecl CL_ConsolePrint_AddLine(
     return color;
 }
 
-void __cdecl Con_UpdateNotifyMessage(int32_t localClientNum, uint32_t channel, int32_t duration, int32_t flags)
+void Con_UpdateNotifyMessage(int32_t localClientNum, uint32_t channel, int32_t duration, int32_t flags)
 {
     print_msg_dest_t dest; // [esp+0h] [ebp-4h]
 
@@ -979,7 +979,7 @@ void __cdecl Con_UpdateNotifyMessage(int32_t localClientNum, uint32_t channel, i
         Con_UpdateNotifyMessageWindow(localClientNum, channel, duration, flags, CON_DEST_ERROR);
 }
 
-void __cdecl Con_UpdateNotifyMessageWindow(
+void Con_UpdateNotifyMessageWindow(
     int32_t localClientNum,
     uint32_t channel,
     int32_t duration,
@@ -999,7 +999,7 @@ void __cdecl Con_UpdateNotifyMessageWindow(
     }
 }
 
-int32_t __cdecl Con_GetDefaultMsgDuration(print_msg_dest_t dest)
+int32_t Con_GetDefaultMsgDuration(print_msg_dest_t dest)
 {
     if (dest == CON_DEST_MINICON)
     {
@@ -1016,7 +1016,7 @@ int32_t __cdecl Con_GetDefaultMsgDuration(print_msg_dest_t dest)
     }
 }
 
-void __cdecl Con_UpdateMessage(int32_t localClientNum, MessageWindow *msgwnd, int32_t duration)
+void Con_UpdateMessage(int32_t localClientNum, MessageWindow *msgwnd, int32_t duration)
 {
     Message *message; // [esp+0h] [ebp-4h]
 
@@ -1032,7 +1032,7 @@ void __cdecl Con_UpdateMessage(int32_t localClientNum, MessageWindow *msgwnd, in
     message->endTime = duration + message->startTime;
 }
 
-MessageWindow *__cdecl Con_GetDestWindow(int32_t localClientNum, print_msg_dest_t dest)
+MessageWindow *Con_GetDestWindow(int32_t localClientNum, print_msg_dest_t dest)
 {
     switch (dest)
     {
@@ -1047,7 +1047,7 @@ MessageWindow *__cdecl Con_GetDestWindow(int32_t localClientNum, print_msg_dest_
     return &con.messageBuffer[localClientNum].gamemsgWindows[dest - CON_DEST_GAME_FIRST];
 }
 
-void __cdecl Con_UpdateNotifyLine(int32_t localClientNum, uint32_t channel, bool lineFeed, int32_t flags)
+void Con_UpdateNotifyLine(int32_t localClientNum, uint32_t channel, bool lineFeed, int32_t flags)
 {
     print_msg_dest_t dest; // [esp+0h] [ebp-4h]
 
@@ -1061,7 +1061,7 @@ void __cdecl Con_UpdateNotifyLine(int32_t localClientNum, uint32_t channel, bool
         Con_UpdateNotifyLineWindow(localClientNum, channel, lineFeed, flags, CON_DEST_ERROR);
 }
 
-void __cdecl Con_UpdateNotifyLineWindow(
+void Con_UpdateNotifyLineWindow(
     int32_t localClientNum,
     uint32_t channel,
     bool lineFeed,
@@ -1077,7 +1077,7 @@ void __cdecl Con_UpdateNotifyLineWindow(
     }
 }
 
-void __cdecl Con_UpdateMessageWindowLine(int32_t localClientNum, MessageWindow *msgwnd, int32_t linefeed, int32_t flags)
+void Con_UpdateMessageWindowLine(int32_t localClientNum, MessageWindow *msgwnd, int32_t linefeed, int32_t flags)
 {
     int32_t newPadLineOffset; // [esp+0h] [ebp-14h]
     Message *message; // [esp+4h] [ebp-10h]
@@ -1123,7 +1123,7 @@ void __cdecl Con_UpdateMessageWindowLine(int32_t localClientNum, MessageWindow *
     }
 }
 
-void __cdecl Con_FreeFirstMessageWindowLine(MessageWindow *msgwnd)
+void Con_FreeFirstMessageWindowLine(MessageWindow *msgwnd)
 {
     int32_t activeLineCount; // [esp+0h] [ebp-4h]
 
@@ -1141,7 +1141,7 @@ void __cdecl Con_FreeFirstMessageWindowLine(MessageWindow *msgwnd)
     }
 }
 
-void __cdecl Con_CopyCurrentConsoleLineText(MessageWindow *msgwnd, MessageLine *msgLine)
+void Con_CopyCurrentConsoleLineText(MessageWindow *msgwnd, MessageLine *msgLine)
 {
     uint32_t poolRemaining; // [esp+0h] [ebp-4h]
 
@@ -1176,7 +1176,7 @@ void __cdecl Con_CopyCurrentConsoleLineText(MessageWindow *msgwnd, MessageLine *
     msgwnd->textBufPos = (msgwnd->textBufSize - 1) & (msgwnd->textBufPos + 1);
 }
 
-bool __cdecl Con_NeedToFreeMessageWindowLine(MessageWindow *msgwnd, int32_t charCount)
+bool Con_NeedToFreeMessageWindowLine(MessageWindow *msgwnd, int32_t charCount)
 {
     int32_t pastLastChar; // [esp+8h] [ebp-8h]
     MessageLine *line; // [esp+Ch] [ebp-4h]
@@ -1193,7 +1193,7 @@ bool __cdecl Con_NeedToFreeMessageWindowLine(MessageWindow *msgwnd, int32_t char
         return line->textBufPos >= msgwnd->textBufPos && line->textBufPos < pastLastChar;
 }
 
-int32_t __cdecl PrintTimeTotal(MessageWindow *msgwnd, MessageLine *line)
+int32_t PrintTimeTotal(MessageWindow *msgwnd, MessageLine *line)
 {
     int32_t time; // [esp+4h] [ebp-4h]
 
@@ -1205,7 +1205,7 @@ int32_t __cdecl PrintTimeTotal(MessageWindow *msgwnd, MessageLine *line)
     return con_typewriterDecayDuration->current.integer + time;
 }
 
-int32_t __cdecl PrintableCharsCount(const MessageWindow *msgwnd, MessageLine *line)
+int32_t PrintableCharsCount(const MessageWindow *msgwnd, MessageLine *line)
 {
     bool v3; // [esp+0h] [ebp-18h]
     int32_t usedCharCnt; // [esp+4h] [ebp-14h] BYREF
@@ -1241,7 +1241,7 @@ int32_t __cdecl PrintableCharsCount(const MessageWindow *msgwnd, MessageLine *li
     return printedCnt;
 }
 
-int32_t __cdecl GetNextValidPrintTimeForLine(int32_t localClientNum, MessageWindow *msgwnd, char flags)
+int32_t GetNextValidPrintTimeForLine(int32_t localClientNum, MessageWindow *msgwnd, char flags)
 {
     int32_t nextPrintTime; // [esp+0h] [ebp-10h]
     MessageLine *line; // [esp+4h] [ebp-Ch]
@@ -1262,7 +1262,7 @@ int32_t __cdecl GetNextValidPrintTimeForLine(int32_t localClientNum, MessageWind
         return serverTime + 250;
 }
 
-int32_t __cdecl LatestActiveTypewrittenLineIdx(MessageWindow *msgwnd)
+int32_t LatestActiveTypewrittenLineIdx(MessageWindow *msgwnd)
 {
     int32_t idx; // [esp+8h] [ebp-4h]
 
@@ -1276,7 +1276,7 @@ int32_t __cdecl LatestActiveTypewrittenLineIdx(MessageWindow *msgwnd)
     return -1;
 }
 
-int32_t __cdecl PrintTimeWriteOut(MessageWindow *msgwnd, MessageLine *line)
+int32_t PrintTimeWriteOut(MessageWindow *msgwnd, MessageLine *line)
 {
     if ((line->flags & 1) != 0)
         return con_typewriterPrintSpeed->current.integer * PrintableCharsCount(msgwnd, line);
@@ -1284,7 +1284,7 @@ int32_t __cdecl PrintTimeWriteOut(MessageWindow *msgwnd, MessageLine *line)
         return 0;
 }
 
-void __cdecl Con_Linefeed(int32_t localClientNum, uint32_t channel, int32_t flags)
+void Con_Linefeed(int32_t localClientNum, uint32_t channel, int32_t flags)
 {
     Con_UpdateNotifyLine(localClientNum, channel, 1, flags);
     con.lineOffset = 0;
@@ -1292,13 +1292,13 @@ void __cdecl Con_Linefeed(int32_t localClientNum, uint32_t channel, int32_t flag
         ++con.displayLineOffset;
 }
 
-void __cdecl CL_ConsoleFixPosition()
+void CL_ConsoleFixPosition()
 {
     CL_ConsolePrint(0, CON_CHANNEL_DONT_FILTER, "\n", 0, 0, 0);
     con.displayLineOffset = con.consoleWindow.activeLineCount - 1;
 }
 
-void __cdecl CL_DeathMessagePrint(
+void CL_DeathMessagePrint(
     int32_t localClientNum,
     char *attackerName,
     char attackerColorIndex,
@@ -1386,7 +1386,7 @@ void __cdecl CL_DeathMessagePrint(
     }
 }
 
-uint32_t __cdecl CL_AddDeathMessageString(
+uint32_t CL_AddDeathMessageString(
     char *deathMsg,
     uint32_t deathMsgLen,
     uint32_t deathMsgMaxLen,
@@ -1405,7 +1405,7 @@ uint32_t __cdecl CL_AddDeathMessageString(
 }
 
 #if defined(KISAK_PURE)
-uint32_t __cdecl CL_AddDeathMessageIcon(
+uint32_t CL_AddDeathMessageIcon(
     char *deathMsg,
     uint32_t deathMsgLen,
     uint32_t deathMsgMaxLen,
@@ -1462,7 +1462,7 @@ uint32_t __cdecl CL_AddDeathMessageIcon(
     return deathMsgLene;
 }
 #else
-uint32_t __cdecl CL_AddDeathMessageIcon(
+uint32_t CL_AddDeathMessageIcon(
     char* deathMsg,
     uint32_t deathMsgLen,
     uint32_t deathMsgMaxLen,
@@ -1498,7 +1498,7 @@ uint32_t __cdecl CL_AddDeathMessageIcon(
 }
 #endif
 
-int32_t __cdecl CL_DeathMessageIconDimension(float size)
+int32_t CL_DeathMessageIconDimension(float size)
 {
     int32_t v2; // [esp+0h] [ebp-1Ch]
     int32_t v3; // [esp+4h] [ebp-18h]
@@ -1514,7 +1514,7 @@ int32_t __cdecl CL_DeathMessageIconDimension(float size)
     return v2 + 16;
 }
 
-void __cdecl Con_AutoCompleteFromList(
+void Con_AutoCompleteFromList(
     const char **strings,
     uint32_t stringCount,
     const char *prefix,
@@ -1547,7 +1547,7 @@ void __cdecl Con_AutoCompleteFromList(
     }
 }
 
-const char *__cdecl Con_TokenizeInput()
+const char *Con_TokenizeInput()
 {
     const char *cmd; // [esp+0h] [ebp-4h]
 
@@ -1560,7 +1560,7 @@ const char *__cdecl Con_TokenizeInput()
     return cmd;
 }
 
-char __cdecl Con_AnySpaceAfterCommand()
+char Con_AnySpaceAfterCommand()
 {
     int32_t charIndex; // [esp+0h] [ebp-4h]
 
@@ -1575,7 +1575,7 @@ char __cdecl Con_AnySpaceAfterCommand()
     return 0;
 }
 
-bool __cdecl Con_IsAutoCompleteMatch(const char *query, const char *matchToText, int32_t matchTextLen)
+bool Con_IsAutoCompleteMatch(const char *query, const char *matchToText, int32_t matchTextLen)
 {
     int32_t matchLetter; // [esp+0h] [ebp-Ch]
     int32_t matchTextPos; // [esp+4h] [ebp-8h]
@@ -1608,12 +1608,12 @@ bool __cdecl Con_IsAutoCompleteMatch(const char *query, const char *matchToText,
     return 0;
 }
 
-bool __cdecl Con_HasTooManyMatchesToShow()
+bool Con_HasTooManyMatchesToShow()
 {
     return conDrawInputGlob.matchCount > con_inputMaxMatchesShown;
 }
 
-bool __cdecl Con_IsDvarCommand(const char *cmd)
+bool Con_IsDvarCommand(const char *cmd)
 {
     if (!I_stricmp(cmd, "set"))
         return 1;
@@ -1628,7 +1628,7 @@ bool __cdecl Con_IsDvarCommand(const char *cmd)
     return 1;
 }
 
-char __cdecl Con_CycleAutoComplete(int32_t step)
+char Con_CycleAutoComplete(int32_t step)
 {
     if (!conDrawInputGlob.mayAutoComplete
         || conDrawInputGlob.matchCount <= 1
@@ -1650,12 +1650,12 @@ char __cdecl Con_CycleAutoComplete(int32_t step)
     return 1;
 }
 
-bool __cdecl Con_HasActiveAutoComplete()
+bool Con_HasActiveAutoComplete()
 {
     return conDrawInputGlob.matchIndex >= 0 && conDrawInputGlob.autoCompleteChoice[0];
 }
 
-char __cdecl Con_CommitToAutoComplete()
+char Con_CommitToAutoComplete()
 {
     const char *originalCommand; // [esp+20h] [ebp-4h]
 
@@ -1679,7 +1679,7 @@ char __cdecl Con_CommitToAutoComplete()
     return 1;
 }
 
-char __cdecl Con_CancelAutoComplete()
+char Con_CancelAutoComplete()
 {
     if (!Con_HasActiveAutoComplete())
         return 0;
@@ -1688,12 +1688,12 @@ char __cdecl Con_CancelAutoComplete()
     return 1;
 }
 
-void __cdecl Con_AllowAutoCompleteCycling(bool isAllowed)
+void Con_AllowAutoCompleteCycling(bool isAllowed)
 {
     conDrawInputGlob.mayAutoComplete = isAllowed;
 }
 
-void __cdecl Con_DrawGameMessageWindow(
+void Con_DrawGameMessageWindow(
     int32_t localClientNum,
     uint32_t windowIndex,
     int32_t xPos,
@@ -1728,7 +1728,7 @@ void __cdecl Con_DrawGameMessageWindow(
     }
 }
 
-void __cdecl Con_DrawMessageWindow(
+void Con_DrawMessageWindow(
     int32_t localClientNum,
     MessageWindow *msgwnd,
     int32_t x,
@@ -1790,7 +1790,7 @@ void __cdecl Con_DrawMessageWindow(
     }
 }
 
-void __cdecl Con_DrawMessageWindowNewToOld(
+void Con_DrawMessageWindowNewToOld(
     int32_t localClientNum,
     MessageWindow *msgwnd,
     int32_t x,
@@ -1898,7 +1898,7 @@ void __cdecl Con_DrawMessageWindowNewToOld(
 
 float MY_GLOWCOLOR[4] = { 0.0f, 0.3f, 0.0f, 1.0f };
 
-void __cdecl Con_DrawMessageLineOnHUD(
+void Con_DrawMessageLineOnHUD(
     int32_t localClientNum,
     const ScreenPlacement *scrPlace,
     int32_t x,
@@ -2048,13 +2048,13 @@ void __cdecl Con_DrawMessageLineOnHUD(
     }
 }
 
-bool __cdecl LineVisible(const MessageWindow *msgwnd, int32_t lineIdx, int32_t time)
+bool LineVisible(const MessageWindow *msgwnd, int32_t lineIdx, int32_t time)
 {
     iassert(msgwnd);
     return time >= msgwnd->lines[lineIdx].typingStartTime;
 }
 
-void __cdecl TypewriterSounds(int32_t localClientNum, const MessageWindow *msgwnd, MessageLine *line)
+void TypewriterSounds(int32_t localClientNum, const MessageWindow *msgwnd, MessageLine *line)
 {
     clientActive_t *LocalClientGlobals; // [esp+0h] [ebp-8h]
     int32_t strLength; // [esp+4h] [ebp-4h]
@@ -2071,7 +2071,7 @@ void __cdecl TypewriterSounds(int32_t localClientNum, const MessageWindow *msgwn
         &line->lastTypingSoundTime);
 }
 
-void __cdecl Con_CullFinishedLines(int32_t serverTime, MessageWindow *msgwnd)
+void Con_CullFinishedLines(int32_t serverTime, MessageWindow *msgwnd)
 {
     const MessageLine *line; // [esp+4h] [ebp-4h]
 
@@ -2087,7 +2087,7 @@ void __cdecl Con_CullFinishedLines(int32_t serverTime, MessageWindow *msgwnd)
     }
 }
 
-double __cdecl Con_GetMessageAlpha(Message *message, MessageWindow *msgwnd, int32_t serverTime, bool scrollsIntoPlace)
+double Con_GetMessageAlpha(Message *message, MessageWindow *msgwnd, int32_t serverTime, bool scrollsIntoPlace)
 {
     float v6; // [esp+4h] [ebp-14h]
     float curalpha; // [esp+14h] [ebp-4h]
@@ -2123,7 +2123,7 @@ double __cdecl Con_GetMessageAlpha(Message *message, MessageWindow *msgwnd, int3
         return (float)0.0;
 }
 
-void __cdecl Con_DrawMessageWindowOldToNew(
+void Con_DrawMessageWindowOldToNew(
     int32_t localClientNum,
     MessageWindow *msgwnd,
     int32_t x,
@@ -2212,7 +2212,7 @@ void __cdecl Con_DrawMessageWindowOldToNew(
     }
 }
 
-bool __cdecl CL_ShouldntDrawMessageWindow(int32_t localClientNum)
+bool CL_ShouldntDrawMessageWindow(int32_t localClientNum)
 {
 #ifdef KISAK_MP
     return CL_GetLocalClientGlobals(localClientNum)->snap.ps.pm_type != PM_INTERMISSION && !CL_ShouldDisplayHud(localClientNum);
@@ -2229,7 +2229,7 @@ bool __cdecl CL_ShouldntDrawMessageWindow(int32_t localClientNum)
 #endif
 }
 
-void __cdecl Con_DrawMiniConsole(int32_t localClientNum, int32_t xPos, int32_t yPos, float alpha)
+void Con_DrawMiniConsole(int32_t localClientNum, int32_t xPos, int32_t yPos, float alpha)
 {
     Font_s *font; // [esp+Ch] [ebp-18h]
     float color[4]; // [esp+14h] [ebp-10h] BYREF
@@ -2261,12 +2261,12 @@ void __cdecl Con_DrawMiniConsole(int32_t localClientNum, int32_t xPos, int32_t y
         4);
 }
 
-void __cdecl Con_ClearMiniConsole(int32_t localClientNum)
+void Con_ClearMiniConsole(int32_t localClientNum)
 {
     Con_ClearMessageWindow(&con.messageBuffer[localClientNum].miniconWindow);
 }
 
-void __cdecl Con_DrawErrors(int32_t localClientNum, int32_t xPos, int32_t yPos, float alpha)
+void Con_DrawErrors(int32_t localClientNum, int32_t xPos, int32_t yPos, float alpha)
 {
     Font_s *font; // [esp+Ch] [ebp-14h]
     float color[4]; // [esp+10h] [ebp-10h] BYREF
@@ -2292,18 +2292,18 @@ void __cdecl Con_DrawErrors(int32_t localClientNum, int32_t xPos, int32_t yPos, 
         4);
 }
 
-bool __cdecl Con_IsValidGameMessageWindow(uint32_t windowIndex)
+bool Con_IsValidGameMessageWindow(uint32_t windowIndex)
 {
     return windowIndex < 4;
 }
 
-bool __cdecl Con_IsGameMessageWindowActive(int32_t localClientNum, uint32_t windowIndex)
+bool Con_IsGameMessageWindowActive(int32_t localClientNum, uint32_t windowIndex)
 {
     bcassert(windowIndex, GAMEMSG_WINDOW_COUNT); // 4
     return con.messageBuffer[localClientNum].gamemsgWindows[windowIndex].activeLineCount > 0;
 }
 
-void __cdecl Con_DrawSay(int32_t localClientNum, int32_t x, int32_t y)
+void Con_DrawSay(int32_t localClientNum, int32_t x, int32_t y)
 {
     char *v3; // eax
     int32_t v4; // eax
@@ -2344,19 +2344,19 @@ void __cdecl Con_DrawSay(int32_t localClientNum, int32_t x, int32_t y)
     }
 }
 
-void __cdecl Con_ToggleConsoleOutput()
+void Con_ToggleConsoleOutput()
 {
     con.outputVisible = !con.outputVisible;
 }
 
-void __cdecl Con_DrawConsole(int32_t localClientNum)
+void Con_DrawConsole(int32_t localClientNum)
 {
     Con_CheckResize();
     if (Key_IsCatcherActive(localClientNum, KEYCATCH_CONSOLE))
         Con_DrawSolidConsole(localClientNum);
 }
 
-void __cdecl Con_DrawSolidConsole(int32_t localClientNum)
+void Con_DrawSolidConsole(int32_t localClientNum)
 {
     Sys_EnterCriticalSection(CRITSECT_CONSOLE);
     if (con.lineOffset)
@@ -2370,7 +2370,7 @@ void __cdecl Con_DrawSolidConsole(int32_t localClientNum)
 }
 
 
-void __cdecl Con_DrawInput(int32_t localClientNum)
+void Con_DrawInput(int32_t localClientNum)
 {
     bool v1; // [esp+10h] [ebp-3Ch]
     int32_t matchCount; // [esp+34h] [ebp-18h]
@@ -2417,24 +2417,24 @@ void __cdecl Con_DrawInput(int32_t localClientNum)
                 conDrawInputGlob.hasExactMatch = 0;
                 conDrawInputGlob.matchCount = 0;
                 con_ignoreMatchPrefixOnly = 1;
-                Dvar_ForEachName((void(__cdecl *)(const char *))ConDrawInput_IncrMatchCounter);
+                Dvar_ForEachName((void(*)(const char *))ConDrawInput_IncrMatchCounter);
                 if (!v1)
-                    Cmd_ForEach((void(__cdecl *)(const char *))ConDrawInput_IncrMatchCounter);
+                    Cmd_ForEach((void(*)(const char *))ConDrawInput_IncrMatchCounter);
                 if (conDrawInputGlob.matchCount > con_inputMaxMatchesShown)
                 {
                     conDrawInputGlob.hasExactMatch = 0;
                     conDrawInputGlob.matchCount = 0;
                     con_ignoreMatchPrefixOnly = 0;
-                    Dvar_ForEachName((void(__cdecl *)(const char *))ConDrawInput_IncrMatchCounter);
-                    Cmd_ForEach((void(__cdecl *)(const char *))ConDrawInput_IncrMatchCounter);
+                    Dvar_ForEachName((void(*)(const char *))ConDrawInput_IncrMatchCounter);
+                    Cmd_ForEach((void(*)(const char *))ConDrawInput_IncrMatchCounter);
                     if (!conDrawInputGlob.matchCount)
                     {
                         conDrawInputGlob.hasExactMatch = 0;
                         conDrawInputGlob.matchCount = 0;
                         con_ignoreMatchPrefixOnly = 1;
-                        Dvar_ForEachName((void(__cdecl *)(const char *))ConDrawInput_IncrMatchCounter);
+                        Dvar_ForEachName((void(*)(const char *))ConDrawInput_IncrMatchCounter);
                         if (!v1)
-                            Cmd_ForEach((void(__cdecl *)(const char *))ConDrawInput_IncrMatchCounter);
+                            Cmd_ForEach((void(*)(const char *))ConDrawInput_IncrMatchCounter);
                     }
                 }
             }
@@ -2443,9 +2443,9 @@ void __cdecl Con_DrawInput(int32_t localClientNum)
                 conDrawInputGlob.hasExactMatch = 0;
                 conDrawInputGlob.matchCount = 0;
                 con_ignoreMatchPrefixOnly = 0;
-                Dvar_ForEachName((void(__cdecl *)(const char *))ConDrawInput_IncrMatchCounter);
+                Dvar_ForEachName((void(*)(const char *))ConDrawInput_IncrMatchCounter);
                 if (!v1)
-                    Cmd_ForEach((void(__cdecl *)(const char *))ConDrawInput_IncrMatchCounter);
+                    Cmd_ForEach((void(*)(const char *))ConDrawInput_IncrMatchCounter);
             }
             matchCount = conDrawInputGlob.matchCount;
             if (conDrawInputGlob.matchCount)
@@ -2463,16 +2463,16 @@ void __cdecl Con_DrawInput(int32_t localClientNum)
                 {
                     if (matchCount == 1 || conDrawInputGlob.hasExactMatch && Con_AnySpaceAfterCommand())
                     {
-                        Dvar_ForEachName((void(__cdecl *)(const char *))ConDrawInput_DetailedDvarMatch);
+                        Dvar_ForEachName((void(*)(const char *))ConDrawInput_DetailedDvarMatch);
                         if (!v1)
-                            Cmd_ForEach((void(__cdecl *)(const char *))ConDrawInput_DetailedCmdMatch);
+                            Cmd_ForEach((void(*)(const char *))ConDrawInput_DetailedCmdMatch);
                     }
                     else
                     {
                         ConDrawInput_Box(matchCount, &con_inputHintBoxColor->current.value);
-                        Dvar_ForEachName((void(__cdecl *)(const char *))ConDrawInput_DvarMatch);
+                        Dvar_ForEachName((void(*)(const char *))ConDrawInput_DvarMatch);
                         if (!v1)
-                            Cmd_ForEach((void(__cdecl *)(const char *))ConDrawInput_CmdMatch);
+                            Cmd_ForEach((void(*)(const char *))ConDrawInput_CmdMatch);
                     }
                 }
                 else
@@ -2500,7 +2500,7 @@ void __cdecl Con_DrawInput(int32_t localClientNum)
     }
 }
 
-void __cdecl ConDrawInput_Text(char *str, const float *color)
+void ConDrawInput_Text(char *str, const float *color)
 {
     float y; // [esp+1Ch] [ebp-4h]
 
@@ -2509,20 +2509,20 @@ void __cdecl ConDrawInput_Text(char *str, const float *color)
     R_AddCmdDrawText(str, 0x7FFFFFFF, cls.consoleFont, conDrawInputGlob.x, y, 1.0, 1.0, 0.0, color, 0);
 }
 
-void __cdecl ConDrawInput_TextAndOver(char *str, const float *color)
+void ConDrawInput_TextAndOver(char *str, const float *color)
 {
     iassert(str);
     ConDrawInput_Text(str, color);
     conDrawInputGlob.x = (double)ConDrawInput_TextWidth(str) + conDrawInputGlob.x;
 }
 
-int32_t __cdecl ConDrawInput_TextWidth(const char *text)
+int32_t ConDrawInput_TextWidth(const char *text)
 {
     iassert(text);
     return R_TextWidth(text, 0, cls.consoleFont);
 }
 
-void __cdecl ConDrawInput_Box(int32_t lines, const float *color)
+void ConDrawInput_Box(int32_t lines, const float *color)
 {
     float x; // [esp+14h] [ebp-10h]
     float y; // [esp+18h] [ebp-Ch]
@@ -2536,7 +2536,7 @@ void __cdecl ConDrawInput_Box(int32_t lines, const float *color)
     ConDraw_Box(x, y, w, h, color);
 }
 
-void __cdecl ConDraw_Box(float x, float y, float w, float h, const float *color)
+void ConDraw_Box(float x, float y, float w, float h, const float *color)
 {
     float v5; // [esp+28h] [ebp-18h]
     float v6; // [esp+2Ch] [ebp-14h]
@@ -2553,7 +2553,7 @@ void __cdecl ConDraw_Box(float x, float y, float w, float h, const float *color)
     R_AddCmdDrawStretchPic(x, v5, w, 2.0, 0.0, 0.0, 0.0, 0.0, darkColor, cls.whiteMaterial);
 }
 
-void __cdecl ConDrawInput_IncrMatchCounter(char *str)
+void ConDrawInput_IncrMatchCounter(char *str)
 {
     if (Con_IsAutoCompleteMatch(str, conDrawInputGlob.inputText, conDrawInputGlob.inputTextLen))
     {
@@ -2565,7 +2565,7 @@ void __cdecl ConDrawInput_IncrMatchCounter(char *str)
     }
 }
 
-void __cdecl ConDrawInput_DvarMatch(char *str)
+void ConDrawInput_DvarMatch(char *str)
 {
     char *VariantString; // eax
 
@@ -2581,7 +2581,7 @@ void __cdecl ConDrawInput_DvarMatch(char *str)
     }
 }
 
-void __cdecl ConDrawInput_TextLimitChars(char *str, int32_t maxChars, const float *color)
+void ConDrawInput_TextLimitChars(char *str, int32_t maxChars, const float *color)
 {
     float y; // [esp+1Ch] [ebp-4h]
 
@@ -2590,7 +2590,7 @@ void __cdecl ConDrawInput_TextLimitChars(char *str, int32_t maxChars, const floa
     R_AddCmdDrawText(str, maxChars, cls.consoleFont, conDrawInputGlob.x, y, 1.0, 1.0, 0.0, color, 0);
 }
 
-void __cdecl ConDrawInput_DetailedDvarMatch(char *str)
+void ConDrawInput_DetailedDvarMatch(char *str)
 {
     char *v1; // eax
     char *v2; // eax
@@ -2658,7 +2658,7 @@ void __cdecl ConDrawInput_DetailedDvarMatch(char *str)
     }
 }
 
-void __cdecl ConDrawInput_AutoCompleteArg(const char **stringList, int32_t stringCount)
+void ConDrawInput_AutoCompleteArg(const char **stringList, int32_t stringCount)
 {
     int32_t ArgChar; // eax
     Font_s *consoleFont; // [esp+10h] [ebp-4B0h]
@@ -2701,7 +2701,7 @@ void __cdecl ConDrawInput_AutoCompleteArg(const char **stringList, int32_t strin
         }
         if (matchCount)
         {
-            qsort(matches, matchCount, 4u, (int(__cdecl *)(const void *, const void *))ConDrawInput_CompareStrings);
+            qsort(matches, matchCount, 4u, (int(*)(const void *, const void *))ConDrawInput_CompareStrings);
             consoleFont = cls.consoleFont;
             ArgChar = ConDrawInput_TextFieldFirstArgChar();
             x = (double)R_TextWidth(g_consoleField.buffer, ArgChar, consoleFont) + conDrawInputGlob.leftX - 6.0;
@@ -2722,12 +2722,12 @@ void __cdecl ConDrawInput_AutoCompleteArg(const char **stringList, int32_t strin
     }
 }
 
-int32_t __cdecl ConDrawInput_CompareStrings(const char **e0, const char **e1)
+int32_t ConDrawInput_CompareStrings(const char **e0, const char **e1)
 {
     return I_stricmp(*e0, *e1);
 }
 
-int32_t __cdecl ConDrawInput_TextFieldFirstArgChar()
+int32_t ConDrawInput_TextFieldFirstArgChar()
 {
     int32_t charIndex; // [esp+0h] [ebp-4h]
 
@@ -2740,7 +2740,7 @@ int32_t __cdecl ConDrawInput_TextFieldFirstArgChar()
     return charIndex;
 }
 
-int32_t __cdecl ConDrawInput_GetDvarDescriptionLines(const dvar_s *dvar)
+int32_t ConDrawInput_GetDvarDescriptionLines(const dvar_s *dvar)
 {
     int32_t v1; // kr00_4
     int32_t linecount; // [esp+10h] [ebp-Ch]
@@ -2757,7 +2757,7 @@ int32_t __cdecl ConDrawInput_GetDvarDescriptionLines(const dvar_s *dvar)
     return linecount;
 }
 
-void __cdecl ConDrawInput_DetailedCmdMatch(char *str)
+void ConDrawInput_DetailedCmdMatch(char *str)
 {
     int32_t fileCount; // [esp+0h] [ebp-8h] BYREF
     const char **files; // [esp+4h] [ebp-4h]
@@ -2782,7 +2782,7 @@ void __cdecl ConDrawInput_DetailedCmdMatch(char *str)
     }
 }
 
-void __cdecl ConDrawInput_CmdMatch(char *str)
+void ConDrawInput_CmdMatch(char *str)
 {
     iassert(str);
     if (Con_IsAutoCompleteMatch(str, conDrawInputGlob.inputText, conDrawInputGlob.inputTextLen))
@@ -2793,7 +2793,7 @@ void __cdecl ConDrawInput_CmdMatch(char *str)
     }
 }
 
-void __cdecl Con_DrawAutoCompleteChoice(int32_t localClientNum, bool isDvarCommand, const char *originalCommand)
+void Con_DrawAutoCompleteChoice(int32_t localClientNum, bool isDvarCommand, const char *originalCommand)
 {
     int32_t drawLen; // [esp+10h] [ebp-114h]
     char colorCodedLine[256]; // [esp+14h] [ebp-110h] BYREF
@@ -2817,7 +2817,7 @@ void __cdecl Con_DrawAutoCompleteChoice(int32_t localClientNum, bool isDvarComma
     Field_DrawTextOverride(localClientNum, &g_consoleField, x, y, 5, 5, colorCodedLine, drawLen, cursorPos);
 }
 
-uint32_t __cdecl Con_GetAutoCompleteColorCodedString(
+uint32_t Con_GetAutoCompleteColorCodedString(
     char *query,
     const char *matchToText,
     int32_t matchTextLen,
@@ -2842,7 +2842,7 @@ uint32_t __cdecl Con_GetAutoCompleteColorCodedString(
             query, matchToText, matchTextLen, &colorCoded[prefixLen], colorCodedSize - prefixLen);
 }
 
-int32_t __cdecl Con_GetAutoCompleteColorCodedStringDiscontiguous(
+int32_t Con_GetAutoCompleteColorCodedStringDiscontiguous(
     const char *query,
     const char *matchToText,
     int32_t matchTextLen,
@@ -2883,7 +2883,7 @@ int32_t __cdecl Con_GetAutoCompleteColorCodedStringDiscontiguous(
     return colorCodedPos;
 }
 
-int32_t __cdecl Con_GetAutoCompleteColorCodedStringContiguous(
+int32_t Con_GetAutoCompleteColorCodedStringContiguous(
     char *query,
     const char *matchToText,
     int32_t matchTextLen,
@@ -2924,7 +2924,7 @@ int32_t __cdecl Con_GetAutoCompleteColorCodedStringContiguous(
     return colorCodedPos;
 }
 
-void __cdecl Con_DrawInputPrompt(int32_t localClientNum)
+void Con_DrawInputPrompt(int32_t localClientNum)
 {
     Field_Draw(localClientNum, &g_consoleField, (int)conDrawInputGlob.x, (int)conDrawInputGlob.y, 5, 5);
 }
@@ -2956,7 +2956,7 @@ void Con_DrawOuputWindow()
     Con_DrawOutputText(xa, ya);
 }
 
-void __cdecl Con_DrawOutputScrollBar(float x, float y, float width, float height)
+void Con_DrawOutputScrollBar(float x, float y, float width, float height)
 {
     float h; // [esp+14h] [ebp-3Ch]
     float v5; // [esp+18h] [ebp-38h]
@@ -3003,7 +3003,7 @@ void __cdecl Con_DrawOutputScrollBar(float x, float y, float width, float height
     }
 }
 
-void __cdecl Con_DrawOutputText(float x, float y)
+void Con_DrawOutputText(float x, float y)
 {
     int32_t rowCount; // [esp+1Ch] [ebp-24h]
     int32_t firstRow; // [esp+20h] [ebp-20h]
@@ -3044,7 +3044,7 @@ void __cdecl Con_DrawOutputText(float x, float y)
     }
 }
 
-void __cdecl Con_DrawOutputVersion(float x, float y, float width, float height)
+void Con_DrawOutputVersion(float x, float y, float width, float height)
 {
     char *VersionString; // [esp-8h] [ebp-Ch]
     float ya; // [esp+10h] [ebp+Ch]
@@ -3054,12 +3054,12 @@ void __cdecl Con_DrawOutputVersion(float x, float y, float width, float height)
     SCR_DrawSmallStringExt((int)x, (int)ya, VersionString, con_versionColor);
 }
 
-char *__cdecl Con_GetVersionString()
+char *Con_GetVersionString()
 {
 	return va("Build %s %s", getBuildNumber(), CPUSTRING);
 }
 
-void __cdecl Con_PageUp()
+void Con_PageUp()
 {
     int32_t activeLineCount; // [esp+0h] [ebp-4h]
 
@@ -3074,7 +3074,7 @@ void __cdecl Con_PageUp()
     }
 }
 
-void __cdecl Con_PageDown()
+void Con_PageDown()
 {
     int32_t activeLineCount; // [esp+0h] [ebp-8h]
 
@@ -3085,7 +3085,7 @@ void __cdecl Con_PageDown()
     con.displayLineOffset = activeLineCount;
 }
 
-void __cdecl Con_Top()
+void Con_Top()
 {
     int32_t activeLineCount; // [esp+0h] [ebp-4h]
 
@@ -3096,12 +3096,12 @@ void __cdecl Con_Top()
     con.displayLineOffset = activeLineCount;
 }
 
-void __cdecl Con_Bottom()
+void Con_Bottom()
 {
     con.displayLineOffset = con.consoleWindow.activeLineCount;
 }
 
-void __cdecl Con_Close(int32_t localClientNum)
+void Con_Close(int32_t localClientNum)
 {
     iassert(localClientNum == 0);
     if (clientUIActives[0].isRunning)
@@ -3116,12 +3116,12 @@ void __cdecl Con_Close(int32_t localClientNum)
     }
 }
 
-bool __cdecl Con_IsActive(int32_t localClientNum)
+bool Con_IsActive(int32_t localClientNum)
 {
     return Key_IsCatcherActive(localClientNum, KEYCATCH_CONSOLE);
 }
 
-void __cdecl CL_PlayTextFXPulseSounds(
+void CL_PlayTextFXPulseSounds(
     uint32_t localClientNum,
     int32_t currentTime,
     int32_t strLength,

@@ -59,41 +59,41 @@ struct GfxStaticModelId // sizeof=0x4
     uint16_t objectId;          // ...
 };
 
-void __cdecl R_InitStaticModelCache();
-void __cdecl R_ShutdownStaticModelCache();
+void R_InitStaticModelCache();
+void R_ShutdownStaticModelCache();
 
 static_model_leaf_t *SMC_GetLeaf(uint32_t cacheIndex);
 
-GfxStaticModelId __cdecl R_GetStaticModelId(uint32_t smodelIndex, int lod);
+GfxStaticModelId R_GetStaticModelId(uint32_t smodelIndex, int lod);
 
-void __cdecl R_CacheStaticModelIndices(uint32_t smodelIndex, uint32_t lod, uint32_t cacheBaseVertIndex);
-char __cdecl SMC_ForceFreeBlock(uint32_t smcIndex);
-char __cdecl SMC_GetFreeBlockOfSize(uint32_t smcIndex, uint32_t listIndex);
-uint16_t __cdecl SMC_Allocate(uint32_t smcIndex, uint32_t bitCount);
+void R_CacheStaticModelIndices(uint32_t smodelIndex, uint32_t lod, uint32_t cacheBaseVertIndex);
+char SMC_ForceFreeBlock(uint32_t smcIndex);
+char SMC_GetFreeBlockOfSize(uint32_t smcIndex, uint32_t listIndex);
+uint16_t SMC_Allocate(uint32_t smcIndex, uint32_t bitCount);
 
 const GfxBackEndData *RB_PatchStaticModelCache();
 
-uint16_t __cdecl R_CacheStaticModelSurface(
+uint16_t R_CacheStaticModelSurface(
     uint32_t smcIndex,
     uint32_t smodelIndex,
     const XModelLodInfo *lodInfo);
 
-void __cdecl SMC_FreeCachedSurface_r(
+void SMC_FreeCachedSurface_r(
     static_model_tree_t *tree,
     static_model_leaf_t *leafs,
     int nodeIndex,
     int levelsToLeaf);
 
 void SMC_ClearCache();
-void __cdecl R_FlushStaticModelCache();
+void R_FlushStaticModelCache();
 
 
-void __cdecl R_StaticModelCacheStats_f();
-void __cdecl R_StaticModelCacheFlush_f();
-void __cdecl R_ClearAllStaticModelCacheRefs();
+void R_StaticModelCacheStats_f();
+void R_StaticModelCacheFlush_f();
+void R_ClearAllStaticModelCacheRefs();
 
-void __cdecl R_UncacheStaticModel(uint32_t smodelIndex);
+void R_UncacheStaticModel(uint32_t smodelIndex);
 
-GfxCachedSModelSurf *__cdecl R_GetCachedSModelSurf(uint32_t cacheIndex);
+GfxCachedSModelSurf *R_GetCachedSModelSurf(uint32_t cacheIndex);
 
-void __cdecl R_SkinCachedStaticModelCmd(SkinCachedStaticModelCmd *skinCmd);
+void R_SkinCachedStaticModelCmd(SkinCachedStaticModelCmd *skinCmd);

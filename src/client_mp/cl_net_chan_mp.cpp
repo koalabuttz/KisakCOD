@@ -8,7 +8,7 @@
 #include <qcommon/qcommon.h>
 #include <cgame_mp/cg_local_mp.h>
 
-void __cdecl CL_Netchan_Decode(uint8_t *data, int size)
+void CL_Netchan_Decode(uint8_t *data, int size)
 {
     int i, index;
     byte key, * string;
@@ -35,7 +35,7 @@ void __cdecl CL_Netchan_Decode(uint8_t *data, int size)
     }
 }
 
-void __cdecl CL_Netchan_Encode(uint8_t *data, int size)
+void CL_Netchan_Encode(uint8_t *data, int size)
 {
     int i, index;
     byte key, * string;
@@ -63,18 +63,18 @@ void __cdecl CL_Netchan_Encode(uint8_t *data, int size)
     }
 }
 
-void __cdecl CL_Netchan_TransmitNextFragment(netchan_t *chan)
+void CL_Netchan_TransmitNextFragment(netchan_t *chan)
 {
     Netchan_TransmitNextFragment(chan);
 }
 
-void __cdecl CL_Netchan_Transmit(netchan_t *chan, uint8_t *data, int length)
+void CL_Netchan_Transmit(netchan_t *chan, uint8_t *data, int length)
 {
     CL_Netchan_Encode(data + 9, length - 9);
     Netchan_Transmit(chan, length, (char *)data);
 }
 
-void __cdecl CL_Netchan_AddOOBProfilePacket(int localClientNum, int iLength)
+void CL_Netchan_AddOOBProfilePacket(int localClientNum, int iLength)
 {
     clientConnection_t *clc; // [esp+0h] [ebp-4h]
 
@@ -89,7 +89,7 @@ void __cdecl CL_Netchan_AddOOBProfilePacket(int localClientNum, int iLength)
     }
 }
 
-void __cdecl CL_Netchan_PrintProfileStats(int localClientNum, int bPrintToConsole)
+void CL_Netchan_PrintProfileStats(int localClientNum, int bPrintToConsole)
 {
     char szLine[1024]; // [esp+0h] [ebp-420h] BYREF
     int iYPos; // [esp+404h] [ebp-1Ch]
@@ -222,7 +222,7 @@ void __cdecl CL_Netchan_PrintProfileStats(int localClientNum, int bPrintToConsol
         CL_ProfDraw(iYPos + 10, szLine);
 }
 
-void __cdecl CL_Netchan_UpdateProfileStats(int localClientNum)
+void CL_Netchan_UpdateProfileStats(int localClientNum)
 {
     clientConnection_t *clc; // [esp+0h] [ebp-4h]
 
@@ -233,7 +233,7 @@ void __cdecl CL_Netchan_UpdateProfileStats(int localClientNum)
     NetProf_UpdateStatistics(&clc->OOBProf.recieve);
 }
 
-void __cdecl CL_ProfDraw(int y, char *pszString)
+void CL_ProfDraw(int y, char *pszString)
 {
     CL_DrawString(32, y, pszString, 0, cl_profileTextHeight->current.integer);
 }

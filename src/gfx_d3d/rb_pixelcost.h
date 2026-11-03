@@ -16,19 +16,19 @@ enum GfxPixelCostMode : __int32
 
 extern GfxPixelCostMode pixelCostMode;
 
-const Material *__cdecl R_PixelCost_GetAccumulationMaterial(const Material *material);
-void __cdecl R_PixelCost_BeginSurface(GfxCmdBufContext context);
-void __cdecl R_PixelCost_SetConstant(GfxCmdBufSourceState *source, int cost);
-int __cdecl RB_PixelCost_GetCostForRecordIndex(int recordIndex);
-unsigned __int64 __cdecl R_PixelCost_PackedKeyForMaterial(__int64 material);
-bool __cdecl RB_PixelCost_DoesPrimMatch(unsigned __int64 packedKey);
-void __cdecl RB_PixelCost_ResetPrim(unsigned __int64 packedKey);
+const Material *R_PixelCost_GetAccumulationMaterial(const Material *material);
+void R_PixelCost_BeginSurface(GfxCmdBufContext context);
+void R_PixelCost_SetConstant(GfxCmdBufSourceState *source, int cost);
+int RB_PixelCost_GetCostForRecordIndex(int recordIndex);
+unsigned __int64 R_PixelCost_PackedKeyForMaterial(__int64 material);
+bool RB_PixelCost_DoesPrimMatch(unsigned __int64 packedKey);
+void RB_PixelCost_ResetPrim(unsigned __int64 packedKey);
 unsigned __int64 RB_PixelCost_BeginTiming();
-void __cdecl R_HW_FinishGpu();
-void __cdecl R_PixelCost_EndSurface(GfxCmdBufContext context);
+void R_HW_FinishGpu();
+void R_PixelCost_EndSurface(GfxCmdBufContext context);
 int RB_PixelCost_AccumulateMsec();
 void RB_PixelCost_EndTiming();
-GfxRenderTargetId __cdecl RB_PixelCost_OverrideRenderTarget(GfxRenderTargetId targetId);
+GfxRenderTargetId RB_PixelCost_OverrideRenderTarget(GfxRenderTargetId targetId);
 
 
 inline bool RB_PixelCost_IsAccumulating()

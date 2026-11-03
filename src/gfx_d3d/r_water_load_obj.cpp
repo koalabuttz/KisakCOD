@@ -11,7 +11,7 @@
 int sceneWaterMapSetupsCount;
 water_t sceneWaterMapSetups[16];
 
-BOOL __cdecl R_WatersEquivalent(const water_t *w0, const water_t *w1)
+BOOL R_WatersEquivalent(const water_t *w0, const water_t *w1)
 {
     float v3; // [esp+0h] [ebp-4Ch]
     float v4; // [esp+4h] [ebp-48h]
@@ -59,12 +59,12 @@ BOOL __cdecl R_WatersEquivalent(const water_t *w0, const water_t *w1)
     return v3 <= EQUAL_EPSILON;
 }
 
-void __cdecl R_ShutdownLoadWater()
+void R_ShutdownLoadWater()
 {
     sceneWaterMapSetupsCount = 0;
 }
 
-void __cdecl R_PickWaterFrequencies(water_t *water)
+void R_PickWaterFrequencies(water_t *water)
 {
     float v1; // [esp+0h] [ebp-68h]
     float v2; // [esp+4h] [ebp-64h]
@@ -129,7 +129,7 @@ void __cdecl R_PickWaterFrequencies(water_t *water)
     }
 }
 
-GfxImage *__cdecl R_CreateWaterMap(char *name, uint16_t imageWidth, uint16_t imageHeight)
+GfxImage *R_CreateWaterMap(char *name, uint16_t imageWidth, uint16_t imageHeight)
 {
     GfxImage *image; // [esp+0h] [ebp-4h]
 
@@ -141,7 +141,7 @@ GfxImage *__cdecl R_CreateWaterMap(char *name, uint16_t imageWidth, uint16_t ima
     return image;
 }
 
-void __cdecl R_CreateWaterSetup(const water_t *source, int waterMapSetupIndex, water_t *destination)
+void R_CreateWaterSetup(const water_t *source, int waterMapSetupIndex, water_t *destination)
 {
     char *v3; // eax
     uint16_t M; // [esp-8h] [ebp-18h]
@@ -164,7 +164,7 @@ void __cdecl R_CreateWaterSetup(const water_t *source, int waterMapSetupIndex, w
     destination->image = image;
 }
 
-water_t *__cdecl R_LoadWaterSetup(const water_t *water)
+water_t *R_LoadWaterSetup(const water_t *water)
 {
     int waterMapSetupIndex; // [esp+0h] [ebp-4h]
 
@@ -196,7 +196,7 @@ water_t *__cdecl R_LoadWaterSetup(const water_t *water)
     }
 }
 
-void __cdecl R_InitLoadWater()
+void R_InitLoadWater()
 {
     iassert( sceneWaterMapSetupsCount == 0 );
 }

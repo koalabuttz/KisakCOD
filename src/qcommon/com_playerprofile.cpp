@@ -20,7 +20,7 @@ const dvar_t *sys_configSum;
 const dvar_t *sys_SSE;
 
 
-int __cdecl Com_BuildPlayerProfilePath_Internal(
+int Com_BuildPlayerProfilePath_Internal(
     char *path,
     int pathSize,
     const char *playerName,
@@ -69,7 +69,7 @@ int __cdecl Com_BuildPlayerProfilePath_Internal(
     return totalLengtha;
 }
 
-bool __cdecl Com_HasPlayerProfile()
+bool Com_HasPlayerProfile()
 {
     iassert( com_playerProfile );
     return *(char *)com_playerProfile->current.integer != 0;
@@ -95,7 +95,7 @@ int Com_BuildPlayerProfilePathForPlayer(char *path, int pathSize, const char *pl
     return Com_BuildPlayerProfilePath_Internal(path, pathSize, playerName, format, va);
 }
 
-bool __cdecl Com_IsValidPlayerProfileDir(const char *profileName)
+bool Com_IsValidPlayerProfileDir(const char *profileName)
 {
     int dirCount; // [esp+0h] [ebp-10h] BYREF
     bool isValid; // [esp+7h] [ebp-9h]
@@ -119,7 +119,7 @@ bool __cdecl Com_IsValidPlayerProfileDir(const char *profileName)
     return isValid;
 }
 
-void __cdecl Com_SetPlayerProfile(int localClientNum, char *profileName)
+void Com_SetPlayerProfile(int localClientNum, char *profileName)
 {
     char configFile[64]; // [esp+0h] [ebp-48h] BYREF
     const char *name; // [esp+44h] [ebp-4h]
@@ -140,7 +140,7 @@ void __cdecl Com_SetPlayerProfile(int localClientNum, char *profileName)
     LiveStorage_NewUser();
 }
 
-char __cdecl Com_SetInitialPlayerProfile(int localClientNum)
+char Com_SetInitialPlayerProfile(int localClientNum)
 {
     parseInfo_t *activeProfileName; // [esp+0h] [ebp-Ch]
     const char *parse; // [esp+4h] [ebp-8h] BYREF
@@ -158,7 +158,7 @@ char __cdecl Com_SetInitialPlayerProfile(int localClientNum)
 }
 
 
-char __cdecl Com_DeletePlayerProfile(const char *profileName)
+char Com_DeletePlayerProfile(const char *profileName)
 {
     char profilePath[64]; // [esp+0h] [ebp-148h] BYREF
     char osPath[260]; // [esp+40h] [ebp-108h] BYREF
@@ -174,7 +174,7 @@ char __cdecl Com_DeletePlayerProfile(const char *profileName)
     return 1;
 }
 
-void __cdecl Com_InitPlayerProfiles(int localClientNum)
+void Com_InitPlayerProfiles(int localClientNum)
 {
     DvarValue v1; // [esp-10h] [ebp-24h]
 
@@ -190,7 +190,7 @@ void __cdecl Com_InitPlayerProfiles(int localClientNum)
         Com_ExecStartupConfigs(localClientNum, 0);
 }
 
-char __cdecl Com_NewPlayerProfile(const char *profileName)
+char Com_NewPlayerProfile(const char *profileName)
 {
     char profilePath[64]; // [esp+0h] [ebp-148h] BYREF
     char osPath[260]; // [esp+40h] [ebp-108h] BYREF
@@ -216,12 +216,12 @@ char __cdecl Com_NewPlayerProfile(const char *profileName)
     }
 }
 
-void __cdecl Sys_GetInfo(SysInfo *info)
+void Sys_GetInfo(SysInfo *info)
 {
     qmemcpy(info, &sys_info, sizeof(SysInfo));
 }
 
-int __cdecl Com_GetConfigureDvarNames(const char **text, char (*dvarNames)[32])
+int Com_GetConfigureDvarNames(const char **text, char (*dvarNames)[32])
 {
     int dvarCount; // [esp+10h] [ebp-8h]
     parseInfo_t *token; // [esp+14h] [ebp-4h]
@@ -242,7 +242,7 @@ int __cdecl Com_GetConfigureDvarNames(const char **text, char (*dvarNames)[32])
     return dvarCount;
 }
 
-void __cdecl Com_GetConfigureDvarValues(int dvarCount, const char **text, char (*dvarValues)[32])
+void Com_GetConfigureDvarValues(int dvarCount, const char **text, char (*dvarValues)[32])
 {
     int dvarIndex; // [esp+10h] [ebp-8h]
     parseInfo_t *token; // [esp+14h] [ebp-4h]
@@ -265,7 +265,7 @@ void __cdecl Com_GetConfigureDvarValues(int dvarCount, const char **text, char (
         Com_Error(ERR_FATAL, "configure_mp.csv: extra dvar value column(s): value = %s", tokena);
 }
 
-void __cdecl Com_SetConfigureDvars(int dvarCount, const char (*dvarNames)[32], const char (*dvarValues)[32])
+void Com_SetConfigureDvars(int dvarCount, const char (*dvarNames)[32], const char (*dvarValues)[32])
 {
     int dvarIndex; // [esp+0h] [ebp-8h]
     const dvar_s *dvar; // [esp+4h] [ebp-4h]
@@ -282,7 +282,7 @@ void __cdecl Com_SetConfigureDvars(int dvarCount, const char (*dvarNames)[32], c
     }
 }
 
-char __cdecl Com_SetRecommendedCpu(int localClientNum, const SysInfo *info, char **text)
+char Com_SetRecommendedCpu(int localClientNum, const SysInfo *info, char **text)
 {
     char dvarValues[64][32]{ 0 }; // [esp+14h] [ebp-14D8h] BYREF
     char dvarNames[64][32]{ 0 }; // [esp+814h] [ebp-CD8h] BYREF
@@ -353,7 +353,7 @@ char __cdecl Com_SetRecommendedCpu(int localClientNum, const SysInfo *info, char
     return 1;
 }
 
-int __cdecl Com_GpuStringCompare(const char *wild, const char *s)
+int Com_GpuStringCompare(const char *wild, const char *s)
 {
     int v3; // esi
     char charWild; // [esp+7h] [ebp-9h]
@@ -392,7 +392,7 @@ int __cdecl Com_GpuStringCompare(const char *wild, const char *s)
     return 0;
 }
 
-BOOL __cdecl Com_DoesGpuStringMatch(const char *find, const char *ref)
+BOOL Com_DoesGpuStringMatch(const char *find, const char *ref)
 {
     int wildcardLen; // [esp+0h] [ebp-40Ch]
     char wildcardTemplate[1024]; // [esp+4h] [ebp-408h] BYREF
@@ -423,7 +423,7 @@ BOOL __cdecl Com_DoesGpuStringMatch(const char *find, const char *ref)
     return Com_GpuStringCompare(wildcardTemplate, ref) == 0;
 }
 
-char __cdecl Com_SetRecommendedGpu(const SysInfo *info, char **text)
+char Com_SetRecommendedGpu(const SysInfo *info, char **text)
 {
     char dvarValues[64][32]; // [esp+0h] [ebp-1010h] BYREF
     char dvarNames[64][32]; // [esp+800h] [ebp-810h] BYREF
@@ -469,7 +469,7 @@ char __cdecl Com_SetRecommendedGpu(const SysInfo *info, char **text)
     }
 }
 
-int __cdecl Com_ConfigureChecksum(const char *csv, int filesize)
+int Com_ConfigureChecksum(const char *csv, int filesize)
 {
     int checksum; // [esp+0h] [ebp-8h]
     int i; // [esp+4h] [ebp-4h]
@@ -505,7 +505,7 @@ void Sys_RegisterInfoDvars()
     Dvar_RegisterString("sys_cpuName", sys_info.cpuName, DVAR_ROM, "CPU name description");
 }
 
-void __cdecl Sys_ArchiveInfo(int checksum)
+void Sys_ArchiveInfo(int checksum)
 {
     float value; // [esp+4h] [ebp-4h]
 
@@ -517,7 +517,7 @@ void __cdecl Sys_ArchiveInfo(int checksum)
     Dvar_SetInt(sys_configSum, checksum);
 }
 
-void __cdecl Com_SetRecommended(int localClientNum, int restart)
+void Com_SetRecommended(int localClientNum, int restart)
 {
     int filesize; // [esp+Ch] [ebp-274h]
     SysInfo info; // [esp+10h] [ebp-270h] BYREF
@@ -583,18 +583,18 @@ static bool Sys_ConfirmChangePrompt(const char *titleRef, const char *bodyRef)
 #endif
 }
 
-bool __cdecl Sys_ShouldUpdateForInfoChange()
+bool Sys_ShouldUpdateForInfoChange()
 {
     Sys_ArchiveInfo(0);
     return Sys_ConfirmChangePrompt("WIN_COMPUTER_CHANGE_TITLE", "WIN_COMPUTER_CHANGE_BODY");
 }
 
-bool __cdecl Sys_ShouldUpdateForConfigChange()
+bool Sys_ShouldUpdateForConfigChange()
 {
     return Sys_ConfirmChangePrompt("WIN_CONFIGURE_UPDATED_TITLE", "WIN_CONFIGURE_UPDATED_BODY");
 }
 
-bool __cdecl Sys_HasInfoChanged()
+bool Sys_HasInfoChanged()
 {
     Sys_RegisterInfoDvars();
     return (sys_info.configureGHz * 1.100000023841858 < sys_configureGHz->current.value
@@ -605,7 +605,7 @@ bool __cdecl Sys_HasInfoChanged()
         && Sys_ShouldUpdateForInfoChange();
 }
 
-bool __cdecl Sys_HasConfigureChecksumChanged(int checksum)
+bool Sys_HasConfigureChecksumChanged(int checksum)
 {
     bool changed; // [esp+3h] [ebp-1h]
 
@@ -618,7 +618,7 @@ bool __cdecl Sys_HasConfigureChecksumChanged(int checksum)
     return changed;
 }
 
-bool __cdecl Com_HasConfigureFileChanged()
+bool Com_HasConfigureFileChanged()
 {
     int filesize; // [esp+0h] [ebp-Ch]
     int checksum; // [esp+4h] [ebp-8h]
@@ -632,7 +632,7 @@ bool __cdecl Com_HasConfigureFileChanged()
     return Sys_HasConfigureChecksumChanged(checksum);
 }
 
-void __cdecl Com_CheckSetRecommended(int localClientNum)
+void Com_CheckSetRecommended(int localClientNum)
 {
     if (!com_recommendedSet->current.enabled || Com_HasConfigureFileChanged())
     {
@@ -643,7 +643,7 @@ void __cdecl Com_CheckSetRecommended(int localClientNum)
         Com_SetRecommended(localClientNum, 0);
 }
 
-void __cdecl Com_ChangePlayerProfile(int localClientNum, char *profileName)
+void Com_ChangePlayerProfile(int localClientNum, char *profileName)
 {
     char cachedName[68]; // [esp+10h] [ebp-48h] BYREF
 

@@ -363,7 +363,7 @@ LABEL_21:
 // two record pointers sorts case-insensitively by name.  (The IDB symbol was the
 // /OPT:ICF fold name _WinMain@16; its only live use is this qsort callback.)
 // ─────────────────────────────────────────────────────────────────────────────
-static int __cdecl LayeredMaterial_NameCompare( const void *a, const void *b )
+static int LayeredMaterial_NameCompare( const void *a, const void *b )
 {
     return I_stricmp( (const char *)a, (const char *)b );
 }

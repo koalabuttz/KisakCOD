@@ -2,7 +2,7 @@
 #include "qcommon.h"
 #include <xanim/xanim.h>
 
-int __cdecl CM_PointLeafnum_r(const float *p, int num)
+int CM_PointLeafnum_r(const float *p, int num)
 {
     cNode_t *node; // [esp+0h] [ebp-Ch]
     cplane_s *plane; // [esp+4h] [ebp-8h]
@@ -24,13 +24,13 @@ int __cdecl CM_PointLeafnum_r(const float *p, int num)
     return -1 - num;
 }
 
-int __cdecl CM_PointLeafnum(const float *p)
+int CM_PointLeafnum(const float *p)
 {
     iassert( cm.numNodes );
     return CM_PointLeafnum_r(p, 0);
 }
 
-void __cdecl CM_BoxLeafnums_r(leafList_s *ll, int nodenum)
+void CM_BoxLeafnums_r(leafList_s *ll, int nodenum)
 {
     cNode_t *node; // [esp+0h] [ebp-Ch]
     int s; // [esp+8h] [ebp-4h]
@@ -55,7 +55,7 @@ void __cdecl CM_BoxLeafnums_r(leafList_s *ll, int nodenum)
     CM_StoreLeafs(ll, nodenum);
 }
 
-void __cdecl CM_StoreLeafs(leafList_s *ll, int nodenum)
+void CM_StoreLeafs(leafList_s *ll, int nodenum)
 {
     int leafNum; // [esp+0h] [ebp-4h]
 
@@ -73,7 +73,7 @@ void __cdecl CM_StoreLeafs(leafList_s *ll, int nodenum)
     }
 }
 
-int __cdecl CM_BoxLeafnums(const float *mins, const float *maxs, uint16_t *list, int listsize, int *lastLeaf)
+int CM_BoxLeafnums(const float *mins, const float *maxs, uint16_t *list, int listsize, int *lastLeaf)
 {
     leafList_s ll; // [esp+4h] [ebp-2Ch] BYREF
 
@@ -93,7 +93,7 @@ int __cdecl CM_BoxLeafnums(const float *mins, const float *maxs, uint16_t *list,
     return ll.count;
 }
 
-int __cdecl CM_PointContents(const float *p, uint32_t model)
+int CM_PointContents(const float *p, uint32_t model)
 {
     cLeaf_t *leaf; // [esp+0h] [ebp-10h]
     int i; // [esp+Ch] [ebp-4h]
@@ -115,7 +115,7 @@ int __cdecl CM_PointContents(const float *p, uint32_t model)
     return CM_PointContentsLeafBrushNode_r(p, &cm.leafbrushNodes[leaf->leafBrushNode]);
 }
 
-int __cdecl CM_PointContentsLeafBrushNode_r(const float *p, cLeafBrushNode_s *node)
+int CM_PointContentsLeafBrushNode_r(const float *p, cLeafBrushNode_s *node)
 {
     cbrushside_t *side; // [esp+4h] [ebp-18h]
     int contents; // [esp+8h] [ebp-14h]
@@ -161,7 +161,7 @@ int __cdecl CM_PointContentsLeafBrushNode_r(const float *p, cLeafBrushNode_s *no
     return contents;
 }
 
-int __cdecl CM_TransformedPointContents(const float *p, uint32_t model, const float *origin, const float *angles)
+int CM_TransformedPointContents(const float *p, uint32_t model, const float *origin, const float *angles)
 {
     float temp[3]; // [esp+0h] [ebp-3Ch] BYREF
     float axis[3][3]; // [esp+Ch] [ebp-30h] BYREF
@@ -181,7 +181,7 @@ int __cdecl CM_TransformedPointContents(const float *p, uint32_t model, const fl
     return CM_PointContents(p_l, model);
 }
 
-uint8_t *__cdecl CM_ClusterPVS(int cluster)
+uint8_t *CM_ClusterPVS(int cluster)
 {
     if (!cm.vised)
         return cm.visibility;

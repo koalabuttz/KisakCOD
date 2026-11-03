@@ -16,7 +16,7 @@
 #include <aim_assist/aim_assist.h>
 #include <universal/profile.h>
 
-void __cdecl CG_ShutdownEntity(int localClientNum, centity_s *cent)
+void CG_ShutdownEntity(int localClientNum, centity_s *cent)
 {
     if (cent->pose.isRagdoll || Com_IsRagdollTrajectory(&cent->currentState.pos))
     {
@@ -48,7 +48,7 @@ void __cdecl CG_ShutdownEntity(int localClientNum, centity_s *cent)
     }
 }
 
-void __cdecl CG_SetInitialSnapshot(int localClientNum, snapshot_s *snap)
+void CG_SetInitialSnapshot(int localClientNum, snapshot_s *snap)
 {
     float clientViewAxis[3][3]; // [esp+10h] [ebp-34h] BYREF
     float clientViewOrigin[3]; // [esp+34h] [ebp-10h] BYREF
@@ -82,7 +82,7 @@ void __cdecl CG_SetInitialSnapshot(int localClientNum, snapshot_s *snap)
     cgameGlob->nextSnap = 0;
 }
 
-void __cdecl CG_ExtractTransPlayerState(const playerState_s *ps, transPlayerState_t *transPs)
+void CG_ExtractTransPlayerState(const playerState_s *ps, transPlayerState_t *transPs)
 {
     transPs->damageEvent = ps->damageEvent;
     transPs->eventSequence = ps->eventSequence;
@@ -92,7 +92,7 @@ void __cdecl CG_ExtractTransPlayerState(const playerState_s *ps, transPlayerStat
     transPs->events[3] = ps->events[3];
 }
 
-void __cdecl CG_SetNextSnap(int localClientNum, snapshot_s *snap)
+void CG_SetNextSnap(int localClientNum, snapshot_s *snap)
 {
     const char *v4; // eax
     XModel *v5; // eax
@@ -371,7 +371,7 @@ void __cdecl CG_SetNextSnap(int localClientNum, snapshot_s *snap)
     }
 }
 
-void __cdecl CG_ResetEntity(int localClientNum, centity_s *cent, int newEntity)
+void CG_ResetEntity(int localClientNum, centity_s *cent, int newEntity)
 {
     float *v3; // [esp+Ch] [ebp-30h]
     DObj_s *obj; // [esp+1Ch] [ebp-20h]
@@ -503,7 +503,7 @@ void __cdecl CG_ResetEntity(int localClientNum, centity_s *cent, int newEntity)
     }
 }
 
-void __cdecl CG_CopyCorpseInfo(clientInfo_t *corpseInfo, const clientInfo_t *ci)
+void CG_CopyCorpseInfo(clientInfo_t *corpseInfo, const clientInfo_t *ci)
 {
     int attachIndex; // [esp+8h] [ebp-4h]
 
@@ -518,7 +518,7 @@ void __cdecl CG_CopyCorpseInfo(clientInfo_t *corpseInfo, const clientInfo_t *ci)
     }
 }
 
-void __cdecl CG_TransitionKillcam(int localClientNum)
+void CG_TransitionKillcam(int localClientNum)
 {
     XAnimTree_s *pXAnimTree; // [esp+Ch] [ebp-24h]
     centity_s *cent; // [esp+10h] [ebp-20h]
@@ -560,7 +560,7 @@ void __cdecl CG_TransitionKillcam(int localClientNum)
     }
 }
 
-void __cdecl CG_ProcessSnapshots(int localClientNum)
+void CG_ProcessSnapshots(int localClientNum)
 {
     snapshot_s *snap; // [esp+34h] [ebp-8h]
     snapshot_s *snapa; // [esp+34h] [ebp-8h]
@@ -632,7 +632,7 @@ LABEL_28:
     iassert(cgameGlob->nextSnap == cgameGlob->snap || cgameGlob->nextSnap->serverTime - cgameGlob->time > 0);
 }
 
-void __cdecl CG_TransitionSnapshot(int localClientNum)
+void CG_TransitionSnapshot(int localClientNum)
 {
     centity_s *cent; // [esp+Ch] [ebp-18h]
     centity_s *centa; // [esp+Ch] [ebp-18h]
@@ -684,7 +684,7 @@ void __cdecl CG_TransitionSnapshot(int localClientNum)
     }
 }
 
-snapshot_s *__cdecl CG_ReadNextSnapshot(int localClientNum)
+snapshot_s *CG_ReadNextSnapshot(int localClientNum)
 {
     snapshot_s *dest; // [esp+Ch] [ebp-4h]
     cg_s *cgameGlob;

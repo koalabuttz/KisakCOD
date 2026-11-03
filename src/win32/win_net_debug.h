@@ -1,30 +1,30 @@
 #pragma once
 
-int __cdecl Sys_IsRemoteDebugClient();
+int Sys_IsRemoteDebugClient();
 
-void __cdecl NET_ShutdownDebug();
+void NET_ShutdownDebug();
 void NET_InitDebug();
 void NET_RestartDebug();
 
 void        NET_RestartDebug();
 
-void __cdecl Sys_Listen_f();
+void Sys_Listen_f();
 
 void Sys_DebugSocketError(const char *message);
 
-int __cdecl Sys_ReadDebugSocketInt();
-void __cdecl Sys_WriteDebugSocketInt(int value);
-void __cdecl Sys_WriteDebugSocketString(char *text);
-int __cdecl Sys_ReadDebugSocketMessageType(unsigned __int8 *type, int blocking);
-int __cdecl Sys_UpdateDebugSocket();
-int __cdecl Sys_ReadDebugSocketData(char *buffer, int len, int blocking);
-void __cdecl Sys_ReadDebugSocketStringBuffer(char *buffer, int len);
-void __cdecl Sys_FlushDebugSocketData();
-void __cdecl Sys_AckDebugSocket();
-char *__cdecl Sys_ReadDebugSocketString();
+int Sys_ReadDebugSocketInt();
+void Sys_WriteDebugSocketInt(int value);
+void Sys_WriteDebugSocketString(char *text);
+int Sys_ReadDebugSocketMessageType(unsigned __int8 *type, int blocking);
+int Sys_UpdateDebugSocket();
+int Sys_ReadDebugSocketData(char *buffer, int len, int blocking);
+void Sys_ReadDebugSocketStringBuffer(char *buffer, int len);
+void Sys_FlushDebugSocketData();
+void Sys_AckDebugSocket();
+char *Sys_ReadDebugSocketString();
 
-void __cdecl Sys_WriteDebugSocketData(unsigned __int8 *buffer, int len);
-void __cdecl Sys_WriteDebugSocketMessageType(unsigned __int8 type);
-void __cdecl Sys_EndWriteDebugSocket();
+void Sys_WriteDebugSocketData(unsigned __int8 *buffer, int len);
+void Sys_WriteDebugSocketMessageType(unsigned __int8 type);
+void Sys_EndWriteDebugSocket();
 
 extern unsigned __int8 g_debugPacket[1][8192];

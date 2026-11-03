@@ -32,7 +32,7 @@ static const NetField objectiveFields[6] =
 int msgInit;
 uint32_t huffBytesSeen[256];
 
-int __cdecl GetMinBitCountForNum(uint32_t num)
+int GetMinBitCountForNum(uint32_t num)
 {
     int v2; // eax
 
@@ -45,7 +45,7 @@ int __cdecl GetMinBitCountForNum(uint32_t num)
     return 32 - (v2 ^ 0x1F);
 }
 
-void __cdecl MSG_Init(msg_t *buf, uint8_t *data, int length)
+void MSG_Init(msg_t *buf, uint8_t *data, int length)
 {
     if (!msgInit)
         MSG_InitHuffman();
@@ -56,7 +56,7 @@ void __cdecl MSG_Init(msg_t *buf, uint8_t *data, int length)
     buf->maxsize = length;
 }
 
-void __cdecl MSG_InitReadOnly(msg_t *buf, uint8_t *data, int length)
+void MSG_InitReadOnly(msg_t *buf, uint8_t *data, int length)
 {
     iassert( data );
     if (!msgInit)
@@ -69,7 +69,7 @@ void __cdecl MSG_InitReadOnly(msg_t *buf, uint8_t *data, int length)
     buf->splitSize = 0;
 }
 
-void __cdecl MSG_InitReadOnlySplit(msg_t *buf, uint8_t *data, int length, uint8_t *data2, int length2)
+void MSG_InitReadOnlySplit(msg_t *buf, uint8_t *data, int length, uint8_t *data2, int length2)
 {
     iassert( data );
     iassert( data2 );
@@ -83,26 +83,26 @@ void __cdecl MSG_InitReadOnlySplit(msg_t *buf, uint8_t *data, int length, uint8_
     buf->splitSize = length2;
 }
 
-void __cdecl MSG_BeginReading(msg_t *msg)
+void MSG_BeginReading(msg_t *msg)
 {
     msg->overflowed = 0;
     msg->readcount = 0;
     msg->bit = 0;
 }
 
-void __cdecl MSG_Discard(msg_t *msg)
+void MSG_Discard(msg_t *msg)
 {
     msg->overflowed = 1;
     msg->cursize = msg->readcount;
     msg->splitSize = 0;
 }
 
-int __cdecl MSG_GetUsedBitCount(const msg_t *msg)
+int MSG_GetUsedBitCount(const msg_t *msg)
 {
     return 8 * (msg->splitSize + msg->cursize) - ((8 - msg->bit) & 7);
 }
 
-void __cdecl MSG_WriteBits(msg_t *msg, int value, uint32_t bits)
+void MSG_WriteBits(msg_t *msg, int value, uint32_t bits)
 {
     int bit; // [esp+4h] [ebp-4h]
 
@@ -131,7 +131,7 @@ void __cdecl MSG_WriteBits(msg_t *msg, int value, uint32_t bits)
     }
 }
 
-void __cdecl MSG_WriteBit0(msg_t *msg)
+void MSG_WriteBit0(msg_t *msg)
 {
     iassert( !msg->readOnly );
     if ((msg->bit & 7) == 0)
@@ -147,7 +147,7 @@ void __cdecl MSG_WriteBit0(msg_t *msg)
     ++msg->bit;
 }
 
-void __cdecl MSG_WriteBit1(msg_t *msg)
+void MSG_WriteBit1(msg_t *msg)
 {
     int bit; // [esp+4h] [ebp-4h]
 
@@ -166,7 +166,7 @@ void __cdecl MSG_WriteBit1(msg_t *msg)
     msg->data[msg->bit++ >> 3] |= 1 << bit;
 }
 
-int __cdecl MSG_ReadBits(msg_t *msg, uint32_t bits)
+int MSG_ReadBits(msg_t *msg, uint32_t bits)
 {
     int bit; // [esp+0h] [ebp-Ch]
     int i; // [esp+4h] [ebp-8h]
@@ -192,7 +192,7 @@ int __cdecl MSG_ReadBits(msg_t *msg, uint32_t bits)
     return value;
 }
 
-int __cdecl MSG_GetByte(msg_t *msg, int where)
+int MSG_GetByte(msg_t *msg, int where)
 {
     if (where < msg->cursize)
         return msg->data[where];
@@ -200,7 +200,7 @@ int __cdecl MSG_GetByte(msg_t *msg, int where)
     return msg->splitData[where - msg->cursize];
 }
 
-int __cdecl MSG_ReadBit(msg_t *msg)
+int MSG_ReadBit(msg_t *msg)
 {
     int Byte; // eax
     int bit; // [esp+0h] [ebp-8h]
@@ -220,7 +220,7 @@ int __cdecl MSG_ReadBit(msg_t *msg)
     return (Byte >> bit) & 1;
 }
 
-int __cdecl MSG_WriteBitsCompress(bool trainHuffman, const uint8_t *from, uint8_t *to, int size, int maxSize)
+int MSG_WriteBitsCompress(bool trainHuffman, const uint8_t *from, uint8_t *to, int size, int maxSize)
 {
     int bit; // [esp+0h] [ebp-8h] BYREF
     int i; // [esp+4h] [ebp-4h]
@@ -245,7 +245,7 @@ int __cdecl MSG_WriteBitsCompress(bool trainHuffman, const uint8_t *from, uint8_
     return (bit + 7) >> 3;
 }
 
-int __cdecl MSG_ReadBitsCompress(const uint8_t *from, uint8_t *to, int size, int maxSize)
+int MSG_ReadBitsCompress(const uint8_t *from, uint8_t *to, int size, int maxSize)
 {
     int bit; // [esp+0h] [ebp-14h] BYREF
     int bits; // [esp+8h] [ebp-Ch]
@@ -270,7 +270,7 @@ int __cdecl MSG_ReadBitsCompress(const uint8_t *from, uint8_t *to, int size, int
     return outputSize;
 }
 
-void __cdecl MSG_WriteByte(msg_t *msg, uint8_t c)
+void MSG_WriteByte(msg_t *msg, uint8_t c)
 {
     iassert( !msg->readOnly );
     if (msg->cursize >= msg->maxsize)
@@ -279,7 +279,7 @@ void __cdecl MSG_WriteByte(msg_t *msg, uint8_t c)
         msg->data[msg->cursize++] = c;
 }
 
-void __cdecl MSG_WriteData(msg_t *buf, uint8_t *data, uint32_t length)
+void MSG_WriteData(msg_t *buf, uint8_t *data, uint32_t length)
 {
     int newsize; // [esp+0h] [ebp-4h]
 
@@ -296,7 +296,7 @@ void __cdecl MSG_WriteData(msg_t *buf, uint8_t *data, uint32_t length)
     }
 }
 
-void __cdecl MSG_WriteShort(msg_t *msg, __int16 c)
+void MSG_WriteShort(msg_t *msg, __int16 c)
 {
     int newsize; // [esp+0h] [ebp-4h]
 
@@ -313,7 +313,7 @@ void __cdecl MSG_WriteShort(msg_t *msg, __int16 c)
     }
 }
 
-void __cdecl MSG_WriteLong(msg_t *msg, int c)
+void MSG_WriteLong(msg_t *msg, int c)
 {
     int newsize; // [esp+0h] [ebp-4h]
 
@@ -330,7 +330,7 @@ void __cdecl MSG_WriteLong(msg_t *msg, int c)
     }
 }
 
-void __cdecl MSG_WriteString(msg_t *sb, const char *s)
+void MSG_WriteString(msg_t *sb, const char *s)
 {
     uint8_t v2; // al
     int l; // [esp+10h] [ebp-40Ch]
@@ -357,7 +357,7 @@ void __cdecl MSG_WriteString(msg_t *sb, const char *s)
     }
 }
 
-void __cdecl MSG_WriteBigString(msg_t *sb, char *s)
+void MSG_WriteBigString(msg_t *sb, char *s)
 {
     uint8_t v2; // al
     int v3; // [esp+10h] [ebp-200Ch]
@@ -384,13 +384,13 @@ void __cdecl MSG_WriteBigString(msg_t *sb, char *s)
     }
 }
 
-void __cdecl MSG_WriteAngle16(msg_t *sb, float f)
+void MSG_WriteAngle16(msg_t *sb, float f)
 {
     iassert( !sb->readOnly );
     MSG_WriteShort(sb, (int)(f * SHORTS_PER_DEGREE));
 }
 
-int __cdecl MSG_ReadByte(msg_t *msg)
+int MSG_ReadByte(msg_t *msg)
 {
     int c; // [esp+0h] [ebp-4h]
 
@@ -409,7 +409,7 @@ int __cdecl MSG_ReadByte(msg_t *msg)
     }
 }
 
-int __cdecl MSG_ReadShort(msg_t *msg)
+int MSG_ReadShort(msg_t *msg)
 {
     int where; // [esp+0h] [ebp-14h]
     int i; // [esp+4h] [ebp-10h]
@@ -434,7 +434,7 @@ int __cdecl MSG_ReadShort(msg_t *msg)
     }
 }
 
-int __cdecl MSG_ReadLong(msg_t *msg)
+int MSG_ReadLong(msg_t *msg)
 {
     int where; // [esp+0h] [ebp-10h]
     int i; // [esp+4h] [ebp-Ch]
@@ -458,7 +458,7 @@ int __cdecl MSG_ReadLong(msg_t *msg)
 }
 
 static char string[1024];
-char *__cdecl MSG_ReadString(msg_t *msg)
+char *MSG_ReadString(msg_t *msg)
 {
     int c; // [esp+0h] [ebp-8h]
     uint32_t l; // [esp+4h] [ebp-4h]
@@ -478,7 +478,7 @@ char *__cdecl MSG_ReadString(msg_t *msg)
 }
 
 static char bigstring[8192];
-char *__cdecl MSG_ReadBigString(msg_t *msg)
+char *MSG_ReadBigString(msg_t *msg)
 {
     int c; // [esp+0h] [ebp-8h]
     uint32_t l; // [esp+4h] [ebp-4h]
@@ -504,7 +504,7 @@ char *__cdecl MSG_ReadBigString(msg_t *msg)
 }
 
 static char stringread[1024];
-char *__cdecl MSG_ReadStringLine(msg_t *msg)
+char *MSG_ReadStringLine(msg_t *msg)
 {
     int c; // [esp+0h] [ebp-8h]
     uint32_t l; // [esp+4h] [ebp-4h]
@@ -529,12 +529,12 @@ char *__cdecl MSG_ReadStringLine(msg_t *msg)
     return stringread;
 }
 
-double __cdecl MSG_ReadAngle16(msg_t *msg)
+double MSG_ReadAngle16(msg_t *msg)
 {
     return (float)((double)MSG_ReadShort(msg) * DEGREES_PER_SHORT);
 }
 
-void __cdecl MSG_ReadData(msg_t *msg, uint8_t *data, int len)
+void MSG_ReadData(msg_t *msg, uint8_t *data, int len)
 {
     int newcount; // [esp+0h] [ebp-8h]
     signed int cursize; // [esp+4h] [ebp-4h]
@@ -574,7 +574,7 @@ void __cdecl MSG_ReadData(msg_t *msg, uint8_t *data, int len)
     }
 }
 
-void __cdecl MSG_WriteDeltaKey(msg_t *msg, int key, int oldV, int newV, uint32_t bits)
+void MSG_WriteDeltaKey(msg_t *msg, int key, int oldV, int newV, uint32_t bits)
 {
     iassert( !msg->readOnly );
     if (oldV == newV)
@@ -588,7 +588,7 @@ void __cdecl MSG_WriteDeltaKey(msg_t *msg, int key, int oldV, int newV, uint32_t
     }
 }
 
-uint32_t __cdecl MSG_ReadDeltaKey(msg_t *msg, int key, int oldV, uint32_t bits)
+uint32_t MSG_ReadDeltaKey(msg_t *msg, int key, int oldV, uint32_t bits)
 {
     if (MSG_ReadBit(msg))
         return kbitmask[bits] & key ^ MSG_ReadBits(msg, bits);
@@ -596,18 +596,18 @@ uint32_t __cdecl MSG_ReadDeltaKey(msg_t *msg, int key, int oldV, uint32_t bits)
         return oldV;
 }
 
-void __cdecl MSG_WriteKey(msg_t *msg, int key, int newV, uint32_t bits)
+void MSG_WriteKey(msg_t *msg, int key, int newV, uint32_t bits)
 {
     iassert( !msg->readOnly );
     MSG_WriteBits(msg, key ^ newV, bits);
 }
 
-uint32_t __cdecl MSG_ReadKey(msg_t *msg, int key, uint32_t bits)
+uint32_t MSG_ReadKey(msg_t *msg, int key, uint32_t bits)
 {
     return kbitmask[bits] & key ^ MSG_ReadBits(msg, bits);
 }
 
-void __cdecl MSG_WriteDeltaKeyByte(msg_t *msg, char key, char oldV, char newV)
+void MSG_WriteDeltaKeyByte(msg_t *msg, char key, char oldV, char newV)
 {
     iassert( !msg->readOnly );
     if (oldV == newV)
@@ -621,7 +621,7 @@ void __cdecl MSG_WriteDeltaKeyByte(msg_t *msg, char key, char oldV, char newV)
     }
 }
 
-int __cdecl MSG_ReadDeltaKeyByte(msg_t *msg, uint8_t key, int oldV)
+int MSG_ReadDeltaKeyByte(msg_t *msg, uint8_t key, int oldV)
 {
     if (MSG_ReadBit(msg))
         return key ^ (uint8_t)MSG_ReadByte(msg);
@@ -629,7 +629,7 @@ int __cdecl MSG_ReadDeltaKeyByte(msg_t *msg, uint8_t key, int oldV)
         return oldV;
 }
 
-void __cdecl MSG_WriteDeltaKeyShort(msg_t *msg, __int16 key, __int16 oldV, __int16 newV)
+void MSG_WriteDeltaKeyShort(msg_t *msg, __int16 key, __int16 oldV, __int16 newV)
 {
     iassert( !msg->readOnly );
     if (oldV == newV)
@@ -643,7 +643,7 @@ void __cdecl MSG_WriteDeltaKeyShort(msg_t *msg, __int16 key, __int16 oldV, __int
     }
 }
 
-int __cdecl MSG_ReadDeltaKeyShort(msg_t *msg, __int16 key, int oldV)
+int MSG_ReadDeltaKeyShort(msg_t *msg, __int16 key, int oldV)
 {
     if (MSG_ReadBit(msg))
         return key ^ (uint16_t)MSG_ReadShort(msg);
@@ -651,7 +651,7 @@ int __cdecl MSG_ReadDeltaKeyShort(msg_t *msg, __int16 key, int oldV)
         return oldV;
 }
 
-void __cdecl MSG_SetDefaultUserCmd(playerState_s *ps, usercmd_s *cmd)
+void MSG_SetDefaultUserCmd(playerState_s *ps, usercmd_s *cmd)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -693,7 +693,7 @@ void __cdecl MSG_SetDefaultUserCmd(playerState_s *ps, usercmd_s *cmd)
     }
 }
 
-static int __cdecl MSG_HorMoveTo(int iForwardMove, int iRightMove)
+static int MSG_HorMoveTo(int iForwardMove, int iRightMove)
 {
     int iFlags; // [esp+0h] [ebp-4h]
 
@@ -714,7 +714,7 @@ static int __cdecl MSG_HorMoveTo(int iForwardMove, int iRightMove)
     return iFlags;
 }
 
-void __cdecl MSG_HorMoveFrom(char iFlags, char *pForwardMove, char *pRightMove)
+void MSG_HorMoveFrom(char iFlags, char *pForwardMove, char *pRightMove)
 {
     if ((iFlags & 1) != 0)
     {
@@ -742,7 +742,7 @@ void __cdecl MSG_HorMoveFrom(char iFlags, char *pForwardMove, char *pRightMove)
     }
 }
 
-void __cdecl MSG_WriteDeltaUsercmdKey(msg_t *msg, int key, const usercmd_s *from, const usercmd_s *to)
+void MSG_WriteDeltaUsercmdKey(msg_t *msg, int key, const usercmd_s *from, const usercmd_s *to)
 {
     int horToMove; // [esp+4h] [ebp-Ch]
     uint32_t delta; // [esp+8h] [ebp-8h]
@@ -825,7 +825,7 @@ void __cdecl MSG_WriteDeltaUsercmdKey(msg_t *msg, int key, const usercmd_s *from
     }
 }
 
-void __cdecl MSG_ReadDeltaUsercmdKey(msg_t *msg, int key, const usercmd_s *from, usercmd_s *to)
+void MSG_ReadDeltaUsercmdKey(msg_t *msg, int key, const usercmd_s *from, usercmd_s *to)
 {
     char horToMove; // [esp+Ch] [ebp-8h]
     char horToMovea; // [esp+Ch] [ebp-8h]
@@ -902,12 +902,12 @@ void __cdecl MSG_ReadDeltaUsercmdKey(msg_t *msg, int key, const usercmd_s *from,
     }
 }
 
-void __cdecl MSG_ClearLastReferencedEntity(msg_t *msg)
+void MSG_ClearLastReferencedEntity(msg_t *msg)
 {
     msg->lastEntityRef = -1;
 }
 
-int __cdecl MSG_ReadEntityIndex(msg_t *msg, uint32_t indexBits)
+int MSG_ReadEntityIndex(msg_t *msg, uint32_t indexBits)
 {
     if (MSG_ReadBit(msg))
     {
@@ -940,7 +940,7 @@ int __cdecl MSG_ReadEntityIndex(msg_t *msg, uint32_t indexBits)
     return msg->lastEntityRef;
 }
 
-void __cdecl MSG_ReadDeltaField(
+void MSG_ReadDeltaField(
     msg_t *msg,
     int time,
     const char * const from,
@@ -1203,7 +1203,7 @@ void __cdecl MSG_ReadDeltaField(
     }
 }
 
-int __cdecl MSG_ReadDeltaTime(msg_t *msg, int timeBase)
+int MSG_ReadDeltaTime(msg_t *msg, int timeBase)
 {
     if (MSG_ReadBit(msg))
         return MSG_ReadLong(msg);
@@ -1211,7 +1211,7 @@ int __cdecl MSG_ReadDeltaTime(msg_t *msg, int timeBase)
         return timeBase - MSG_ReadBits(msg, 8u);
 }
 
-int __cdecl MSG_ReadDeltaGroundEntity(msg_t *msg)
+int MSG_ReadDeltaGroundEntity(msg_t *msg)
 {
     int j; // [esp+4h] [ebp-10h]
     int value; // [esp+10h] [ebp-4h]
@@ -1226,12 +1226,12 @@ int __cdecl MSG_ReadDeltaGroundEntity(msg_t *msg)
     return value;
 }
 
-int __cdecl MSG_ReadDeltaEventParamField(msg_t *msg)
+int MSG_ReadDeltaEventParamField(msg_t *msg)
 {
     return MSG_ReadByte(msg);
 }
 
-int __cdecl MSG_Read24BitFlag(msg_t *msg, int oldFlags)
+int MSG_Read24BitFlag(msg_t *msg, int oldFlags)
 {
     uint32_t bitChanged; // [esp+0h] [ebp-10h]
     int j; // [esp+4h] [ebp-Ch]
@@ -1260,7 +1260,7 @@ int __cdecl MSG_Read24BitFlag(msg_t *msg, int oldFlags)
     return value;
 }
 
-double __cdecl MSG_ReadOriginFloat(int bits, msg_t *msg, float oldValue)
+double MSG_ReadOriginFloat(int bits, msg_t *msg, float oldValue)
 {
     int roundedCenter; // [esp+8h] [ebp-14h]
     int index; // [esp+Ch] [ebp-10h]
@@ -1292,7 +1292,7 @@ double __cdecl MSG_ReadOriginFloat(int bits, msg_t *msg, float oldValue)
     }
 }
 
-double __cdecl MSG_ReadOriginZFloat(msg_t *msg, float oldValue)
+double MSG_ReadOriginZFloat(msg_t *msg, float oldValue)
 {
     int roundedCenter; // [esp+8h] [ebp-10h]
 
@@ -1313,12 +1313,12 @@ double __cdecl MSG_ReadOriginZFloat(msg_t *msg, float oldValue)
     }
 }
 
-int __cdecl MSG_ReadDeltaEntity(msg_t *msg, int time, const entityState_s *from, entityState_s *to, uint32_t number)
+int MSG_ReadDeltaEntity(msg_t *msg, int time, const entityState_s *from, entityState_s *to, uint32_t number)
 {
     return MSG_ReadDeltaEntityStruct(msg, time, (const char *)from, (char *)to, number);
 }
 
-int __cdecl MSG_ReadDeltaEntityStruct(msg_t *msg, int time, const char *from, char *to, uint32_t number)
+int MSG_ReadDeltaEntityStruct(msg_t *msg, int time, const char *from, char *to, uint32_t number)
 {
     char *EntityTypeName; // eax
     const NetFieldList *stateFieldList; // [esp+38h] [ebp-20h]
@@ -1426,7 +1426,7 @@ const int numObjectiveFields = 6;
 const int numHudElemFields = 40;
 
 
-int __cdecl MSG_ReadDeltaArchivedEntity(
+int MSG_ReadDeltaArchivedEntity(
     msg_t *msg,
     int time,
     const archivedEntity_s *from,
@@ -1445,7 +1445,7 @@ int __cdecl MSG_ReadDeltaArchivedEntity(
         numArchivedEntityFields);
 }
 
-int __cdecl MSG_ReadDeltaStruct(
+int MSG_ReadDeltaStruct(
     msg_t *msg,
     int time,
     const char *from,
@@ -1522,7 +1522,7 @@ int __cdecl MSG_ReadDeltaStruct(
     }
 }
 
-int __cdecl MSG_ReadDeltaClient(msg_t *msg, int time, const clientState_s *from, clientState_s *to, uint32_t number)
+int MSG_ReadDeltaClient(msg_t *msg, int time, const clientState_s *from, clientState_s *to, uint32_t number)
 {
     static constexpr clientState_s dummy{};
     if (!from)
@@ -1541,7 +1541,7 @@ int __cdecl MSG_ReadDeltaClient(msg_t *msg, int time, const clientState_s *from,
         numClientStateFields);
 }
 
-static void __cdecl MSG_ReadDeltaFields(
+static void MSG_ReadDeltaFields(
     msg_t *msg,
     int time,
     const char *const from,
@@ -1562,7 +1562,7 @@ static void __cdecl MSG_ReadDeltaFields(
     //}
 }
 
-static void __cdecl MSG_ReadDeltaHudElems(msg_t *msg, int time, const hudelem_s *from, hudelem_s *to, int count)
+static void MSG_ReadDeltaHudElems(msg_t *msg, int time, const hudelem_s *from, hudelem_s *to, int count)
 {
     uint32_t j; // [esp+8h] [ebp-18h]
     uint32_t lc; // [esp+Ch] [ebp-14h]
@@ -1627,7 +1627,7 @@ static void __cdecl MSG_ReadDeltaHudElems(msg_t *msg, int time, const hudelem_s 
     }
 }
 
-void __cdecl MSG_ReadDeltaPlayerstate(
+void MSG_ReadDeltaPlayerstate(
     int localClientNum,
     msg_t *msg,
     int time,
@@ -1800,7 +1800,7 @@ void __cdecl MSG_ReadDeltaPlayerstate(
     }
 }
 
-void __cdecl MSG_InitHuffman()
+void MSG_InitHuffman()
 {
     msgInit = 1;
     MSG_initHuffmanInternal();
@@ -2080,7 +2080,7 @@ void MSG_initHuffmanInternal()
     Com_Printf(CON_CHANNEL_SYSTEM, "Huffman Took %d Milliseconds\n", time2 - time);
 }
 
-void __cdecl MSG_DumpNetFieldChanges_f()
+void MSG_DumpNetFieldChanges_f()
 {
     int arraySize[6]; // [esp+0h] [ebp-58h]
     const int *array; // [esp+18h] [ebp-40h]

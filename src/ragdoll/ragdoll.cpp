@@ -34,13 +34,13 @@ BOOL ragdollInited;
 RagdollDef ragdollDefs[2];
 RagdollBody ragdollBodies[32];
 
-void __cdecl TRACK_ragdoll()
+void TRACK_ragdoll()
 {
     track_static_alloc_internal(ragdollDefs, 7584, "ragdollDefs", 10);
     track_static_alloc_internal(ragdollBodies, 80512, "ragdollBodies", 10);
 }
 
-void __cdecl Ragdoll_DebugDraw()
+void Ragdoll_DebugDraw()
 {
     if (!ragdoll_debug->current.integer)
         return;
@@ -68,7 +68,7 @@ void __cdecl Ragdoll_DebugDraw()
         colorGreen, 0, 1, 12.0);
 }
 
-RagdollDef *__cdecl Ragdoll_BodyDef(RagdollBody *body)
+RagdollDef *Ragdoll_BodyDef(RagdollBody *body)
 {
     iassert( body );
     if (body->ragdollDef >= 2u)
@@ -82,7 +82,7 @@ RagdollDef *__cdecl Ragdoll_BodyDef(RagdollBody *body)
     return &ragdollDefs[body->ragdollDef];
 }
 
-DObj_s *__cdecl Ragdoll_BodyDObj(RagdollBody *body)
+DObj_s *Ragdoll_BodyDObj(RagdollBody *body)
 {
     iassert( body );
     if (body->obj)
@@ -91,7 +91,7 @@ DObj_s *__cdecl Ragdoll_BodyDObj(RagdollBody *body)
     return Com_GetClientDObj(body->dobj, body->localClientNum);
 }
 
-const cpose_t *__cdecl Ragdoll_BodyPose(RagdollBody *body)
+const cpose_t *Ragdoll_BodyPose(RagdollBody *body)
 {
     iassert( body );
     if (body->pose)
@@ -100,7 +100,7 @@ const cpose_t *__cdecl Ragdoll_BodyPose(RagdollBody *body)
     return CG_GetPose(body->localClientNum, body->dobj);
 }
 
-void __cdecl Ragdoll_BodyRootOrigin(RagdollBody *body, float *origin)
+void Ragdoll_BodyRootOrigin(RagdollBody *body, float *origin)
 {
     BoneOrientation *boneOrientation; // [esp+0h] [ebp-4h]
 
@@ -114,7 +114,7 @@ void __cdecl Ragdoll_BodyRootOrigin(RagdollBody *body, float *origin)
     }
 }
 
-void __cdecl Ragdoll_GetRootOrigin(int ragdollHandle, float *origin)
+void Ragdoll_GetRootOrigin(int ragdollHandle, float *origin)
 {
     RagdollBody *body; // [esp+0h] [ebp-4h]
 
@@ -125,7 +125,7 @@ void __cdecl Ragdoll_GetRootOrigin(int ragdollHandle, float *origin)
         Ragdoll_BodyRootOrigin(body, origin);
 }
 
-int __cdecl Ragdoll_CountPhysicsBodies()
+int Ragdoll_CountPhysicsBodies()
 {
     RagdollBody *body; // [esp+0h] [ebp-Ch]
     int i; // [esp+4h] [ebp-8h]
@@ -142,13 +142,13 @@ int __cdecl Ragdoll_CountPhysicsBodies()
     return running;
 }
 
-bool __cdecl Ragdoll_BodyHasPhysics(RagdollBody *body)
+bool Ragdoll_BodyHasPhysics(RagdollBody *body)
 {
     iassert( body );
     return body->state >= BS_TUNNEL_TEST && body->state <= BS_RUNNING;
 }
 
-int __cdecl Ragdoll_CreateRagdollForDObj(int localClientNum, int ragdollDef, int dobj, bool reset, bool share)
+int Ragdoll_CreateRagdollForDObj(int localClientNum, int ragdollDef, int dobj, bool reset, bool share)
 {
     int ragdoll; // [esp+0h] [ebp-8h]
     RagdollBody *body; // [esp+4h] [ebp-4h]
@@ -189,7 +189,7 @@ int __cdecl Ragdoll_CreateRagdollForDObj(int localClientNum, int ragdollDef, int
     }
 }
 
-int __cdecl Ragdoll_GetUnusedBody()
+int Ragdoll_GetUnusedBody()
 {
     RagdollBody *body; // [esp+0h] [ebp-8h]
     int i; // [esp+4h] [ebp-4h]
@@ -210,13 +210,13 @@ int __cdecl Ragdoll_GetUnusedBody()
     return 0;
 }
 
-void __cdecl Ragdoll_InitBody(RagdollBody *body)
+void Ragdoll_InitBody(RagdollBody *body)
 {
     iassert( body );
     memset((uint8_t *)body, 0, sizeof(RagdollBody));
 }
 
-int __cdecl Ragdoll_ReferenceDObjBody(int dobj)
+int Ragdoll_ReferenceDObjBody(int dobj)
 {
     RagdollBody *body; // [esp+0h] [ebp-8h]
     int i; // [esp+4h] [ebp-4h]
@@ -235,7 +235,7 @@ int __cdecl Ragdoll_ReferenceDObjBody(int dobj)
     return 0;
 }
 
-char __cdecl Ragdoll_BindDef(uint32_t ragdollDef)
+char Ragdoll_BindDef(uint32_t ragdollDef)
 {
     RagdollDef *def; // [esp+0h] [ebp-18h]
     int nameIdx; // [esp+4h] [ebp-14h]
@@ -296,7 +296,7 @@ char __cdecl Ragdoll_BindDef(uint32_t ragdollDef)
     return 1;
 }
 
-bool __cdecl Ragdoll_ValidateDef(uint32_t ragdollDef)
+bool Ragdoll_ValidateDef(uint32_t ragdollDef)
 {
     if (ragdollDef >= 2)
         MyAssertHandler(
@@ -309,7 +309,7 @@ bool __cdecl Ragdoll_ValidateDef(uint32_t ragdollDef)
     return ragdollDefs[ragdollDef].numBones != 0;
 }
 
-void __cdecl Ragdoll_Remove(int ragdoll)
+void Ragdoll_Remove(int ragdoll)
 {
     RagdollBody *body; // [esp+0h] [ebp-4h]
 
@@ -327,7 +327,7 @@ void __cdecl Ragdoll_Remove(int ragdoll)
     }
 }
 
-void __cdecl Ragdoll_FreeBody(int ragdollBody)
+void Ragdoll_FreeBody(int ragdollBody)
 {
     RagdollBody *body; // [esp+0h] [ebp-4h]
 
@@ -337,7 +337,7 @@ void __cdecl Ragdoll_FreeBody(int ragdollBody)
     body->references = 0;
 }
 
-void __cdecl Ragdoll_InitDvars()
+void Ragdoll_InitDvars()
 {
     DvarLimits min; // [esp+4h] [ebp-10h]
     DvarLimits mina; // [esp+4h] [ebp-10h]
@@ -445,7 +445,7 @@ void __cdecl Ragdoll_InitDvars()
 
 bool ragdollFirstInit = false;
 
-void __cdecl Ragdoll_ResetBodiesUsingDef()
+void Ragdoll_ResetBodiesUsingDef()
 {
     RagdollBody *body; // [esp+0h] [ebp-8h]
     int i; // [esp+4h] [ebp-4h]
@@ -459,7 +459,7 @@ void __cdecl Ragdoll_ResetBodiesUsingDef()
     }
 }
 
-char __cdecl Ragdoll_ReadGeomType(int arg, BoneDef *bone)
+char Ragdoll_ReadGeomType(int arg, BoneDef *bone)
 {
     const char *name; // [esp+14h] [ebp-8h]
     int idx; // [esp+18h] [ebp-4h]
@@ -485,7 +485,7 @@ char __cdecl Ragdoll_ReadGeomType(int arg, BoneDef *bone)
     }
 }
 
-char __cdecl Ragdoll_ReadJointType(int arg, JointDef *joint)
+char Ragdoll_ReadJointType(int arg, JointDef *joint)
 {
     const char *name; // [esp+0h] [ebp-8h]
     int idx; // [esp+4h] [ebp-4h]
@@ -525,7 +525,7 @@ AxisTable axisTable[4] =
   { "n", { 0.0, 0.0, 0.0 } }
 }; // idb
 
-char __cdecl Ragdoll_ReadAxis(int arg, float *dest)
+char Ragdoll_ReadAxis(int arg, float *dest)
 {
     float *axis; // [esp+0h] [ebp-10h]
     bool negate; // [esp+7h] [ebp-9h]
@@ -573,7 +573,7 @@ char __cdecl Ragdoll_ReadAxis(int arg, float *dest)
     }
 }
 
-void __cdecl Ragdoll_Clear_f()
+void Ragdoll_Clear_f()
 {
     const char *v0; // eax
     uint32_t ragdoll; // [esp+0h] [ebp-4h]
@@ -590,7 +590,7 @@ void __cdecl Ragdoll_Clear_f()
     }
 }
 
-void __cdecl Ragdoll_Bone_f()
+void Ragdoll_Bone_f()
 {
     const char *v0; // eax
     const char *v1; // eax
@@ -666,7 +666,7 @@ void __cdecl Ragdoll_Bone_f()
     }
 }
 
-void __cdecl Ragdoll_BaseLerpBone_f()
+void Ragdoll_BaseLerpBone_f()
 {
     const char *v0; // eax
     const char *v1; // eax
@@ -727,7 +727,7 @@ void __cdecl Ragdoll_BaseLerpBone_f()
         }
     }
 }
-void __cdecl Ragdoll_PinBone_f()
+void Ragdoll_PinBone_f()
 {
     const char *v0; // eax
     const char *v1; // eax
@@ -774,7 +774,7 @@ void __cdecl Ragdoll_PinBone_f()
         }
     }
 }
-void __cdecl Ragdoll_Joint_f()
+void Ragdoll_Joint_f()
 {
     const char *v0; // eax
     const char *v1; // eax
@@ -822,7 +822,7 @@ void __cdecl Ragdoll_Joint_f()
     }
 }
 
-void __cdecl Ragdoll_Limit_f()
+void Ragdoll_Limit_f()
 {
     const char *v0; // eax
     const char *v1; // eax
@@ -916,7 +916,7 @@ void __cdecl Ragdoll_Limit_f()
         }
     }
 }
-void __cdecl Ragdoll_Selfpair_f()
+void Ragdoll_Selfpair_f()
 {
     const char *v0; // eax
     const char *v1; // eax
@@ -964,7 +964,7 @@ cmd_function_s Ragdoll_Joint_f_VAR;
 cmd_function_s Ragdoll_Limit_f_VAR;
 cmd_function_s Ragdoll_Selfpair_f_VAR;
 
-static void __cdecl Ragdoll_InitCommands()
+static void Ragdoll_InitCommands()
 {
     Cmd_AddCommandInternal("ragdoll_clear", Ragdoll_Clear_f, &Ragdoll_Clear_f_VAR);
     Cmd_AddCommandInternal("ragdoll_bone", Ragdoll_Bone_f, &Ragdoll_Bone_f_VAR);
@@ -975,7 +975,7 @@ static void __cdecl Ragdoll_InitCommands()
     Cmd_AddCommandInternal("ragdoll_selfpair", Ragdoll_Selfpair_f, &Ragdoll_Selfpair_f_VAR);
 }
 
-void __cdecl Ragdoll_Register()
+void Ragdoll_Register()
 {
     int v0; // eax
 
@@ -988,7 +988,7 @@ void __cdecl Ragdoll_Register()
     ragdollFirstInit = 1;
 }
 
-void __cdecl Ragdoll_Init()
+void Ragdoll_Init()
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -1008,7 +1008,7 @@ void __cdecl Ragdoll_Init()
     }
 }
 
-void __cdecl Ragdoll_Shutdown()
+void Ragdoll_Shutdown()
 {
     iassert( Sys_IsMainThread() );
     ragdollInited = 0;

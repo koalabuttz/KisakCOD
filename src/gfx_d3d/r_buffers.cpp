@@ -12,12 +12,12 @@
 //struct GfxBuffers gfxBuf   85b3aa20     gfx_d3d : r_buffers.obj
 GfxBuffers gfxBuf;
 
-void __cdecl TRACK_r_buffers()
+void TRACK_r_buffers()
 {
     track_static_alloc_internal(&gfxBuf, 2359456, "gfxBuf", 18);
 }
 
-void *__cdecl R_AllocDynamicVertexBuffer(IDirect3DVertexBuffer9 **vb, int sizeInBytes)
+void *R_AllocDynamicVertexBuffer(IDirect3DVertexBuffer9 **vb, int sizeInBytes)
 {
     int hr; // [esp+0h] [ebp-4h]
 
@@ -35,7 +35,7 @@ void *__cdecl R_AllocDynamicVertexBuffer(IDirect3DVertexBuffer9 **vb, int sizeIn
     return 0;
 }
 
-void *__cdecl R_AllocStaticVertexBuffer(IDirect3DVertexBuffer9 **vb, int sizeInBytes)
+void *R_AllocStaticVertexBuffer(IDirect3DVertexBuffer9 **vb, int sizeInBytes)
 {
     const char *v3; // eax
     const char *v4; // eax
@@ -67,7 +67,7 @@ void *__cdecl R_AllocStaticVertexBuffer(IDirect3DVertexBuffer9 **vb, int sizeInB
     return vertexBufferData;
 }
 
-void *__cdecl R_AllocDynamicIndexBuffer(IDirect3DIndexBuffer9 **ib, uint32_t sizeInBytes)
+void *R_AllocDynamicIndexBuffer(IDirect3DIndexBuffer9 **ib, uint32_t sizeInBytes)
 {
     const char *v3; // eax
     const char *v4; // eax
@@ -86,7 +86,7 @@ void *__cdecl R_AllocDynamicIndexBuffer(IDirect3DIndexBuffer9 **ib, uint32_t siz
     return 0;
 }
 
-void *__cdecl R_AllocStaticIndexBuffer(IDirect3DIndexBuffer9 **ib, int sizeInBytes)
+void *R_AllocStaticIndexBuffer(IDirect3DIndexBuffer9 **ib, int sizeInBytes)
 {
     void *indexBufferData; // [esp+4h] [ebp-4h] BYREF
 
@@ -119,7 +119,7 @@ void *__cdecl R_AllocStaticIndexBuffer(IDirect3DIndexBuffer9 **ib, int sizeInByt
     return 0;
 }
 
-void __cdecl Load_VertexBuffer(IDirect3DVertexBuffer9 **vb, uint8_t *bufferData, int sizeInBytes)
+void Load_VertexBuffer(IDirect3DVertexBuffer9 **vb, uint8_t *bufferData, int sizeInBytes)
 {
     uint8_t *v3; // eax
 
@@ -135,7 +135,7 @@ void __cdecl Load_VertexBuffer(IDirect3DVertexBuffer9 **vb, uint8_t *bufferData,
     }
 }
 
-void __cdecl R_InitDynamicVertexBufferState(GfxVertexBufferState *vb, int bytes)
+void R_InitDynamicVertexBufferState(GfxVertexBufferState *vb, int bytes)
 {
     uint8_t *verts; // [esp+0h] [ebp-4h]
 
@@ -147,7 +147,7 @@ void __cdecl R_InitDynamicVertexBufferState(GfxVertexBufferState *vb, int bytes)
     vb->verts = verts;
 }
 
-void __cdecl R_InitDynamicIndexBufferState(GfxIndexBufferState *ib, int indexCount)
+void R_InitDynamicIndexBufferState(GfxIndexBufferState *ib, int indexCount)
 {
     iassert( ib );
     ib->used = 0;
@@ -156,7 +156,7 @@ void __cdecl R_InitDynamicIndexBufferState(GfxIndexBufferState *ib, int indexCou
         MyAssertHandler(".\\r_buffers.cpp", 441, 1, "%s", "indices == NULL");
 }
 
-void __cdecl R_InitDynamicIndices(GfxDynamicIndices *ib, int indexCount)
+void R_InitDynamicIndices(GfxDynamicIndices *ib, int indexCount)
 {
     uint16_t *indices; // [esp+0h] [ebp-8h]
 
@@ -168,14 +168,14 @@ void __cdecl R_InitDynamicIndices(GfxDynamicIndices *ib, int indexCount)
     ib->indices = indices;
 }
 
-void __cdecl R_ShutdownDynamicIndices(GfxDynamicIndices *ib)
+void R_ShutdownDynamicIndices(GfxDynamicIndices *ib)
 {
     iassert( ib->indices );
     Z_VirtualFree(ib->indices);
     ib->indices = 0;
 }
 
-void __cdecl R_CreateDynamicBuffers()
+void R_CreateDynamicBuffers()
 {
     int bufferIter; // [esp+0h] [ebp-4h]
     int bufferItera; // [esp+0h] [ebp-4h]
@@ -209,7 +209,7 @@ void __cdecl R_CreateDynamicBuffers()
     gfxBuf.preTessBufferFrame = 0;
 }
 
-void __cdecl R_FinishStaticIndexBuffer(IDirect3DIndexBuffer9 *ib)
+void R_FinishStaticIndexBuffer(IDirect3DIndexBuffer9 *ib)
 {
     const char *v1; // eax
     int hr; // [esp+0h] [ebp-4h]
@@ -232,7 +232,7 @@ void __cdecl R_FinishStaticIndexBuffer(IDirect3DIndexBuffer9 *ib)
     } while (alwaysfails);
 }
 
-void __cdecl R_CreateParticleCloudBuffer()
+void R_CreateParticleCloudBuffer()
 {
     double *v0; // [esp+10h] [ebp-70h]
     float cornerTexCoords[4][2]; // [esp+14h] [ebp-6Ch] BYREF
@@ -311,7 +311,7 @@ void __cdecl R_CreateParticleCloudBuffer()
 
 
 
-void __cdecl R_FinishStaticVertexBuffer(IDirect3DVertexBuffer9 *vb)
+void R_FinishStaticVertexBuffer(IDirect3DVertexBuffer9 *vb)
 {
     const char *v1; // eax
     int hr; // [esp+0h] [ebp-4h]
@@ -334,13 +334,13 @@ void __cdecl R_FinishStaticVertexBuffer(IDirect3DVertexBuffer9 *vb)
     } while (alwaysfails);
 }
 
-void __cdecl R_UnlockVertexBuffer(IDirect3DVertexBuffer9* handle)
+void R_UnlockVertexBuffer(IDirect3DVertexBuffer9* handle)
 {
     iassert( handle );
     handle->Unlock();
 }
 
-void *__cdecl R_LockVertexBuffer(IDirect3DVertexBuffer9 *handle, int offset, int bytes, int lockFlags)
+void *R_LockVertexBuffer(IDirect3DVertexBuffer9 *handle, int offset, int bytes, int lockFlags)
 {
     int hr; // [esp+0h] [ebp-8h]
     void *bufferData; // [esp+4h] [ebp-4h] BYREF
@@ -360,7 +360,7 @@ void *__cdecl R_LockVertexBuffer(IDirect3DVertexBuffer9 *handle, int offset, int
     return bufferData;
 }
 
-void __cdecl R_ShutdownTempSkinBuf()
+void R_ShutdownTempSkinBuf()
 {
     GfxBackEndData *data; // [esp+0h] [ebp-8h]
     uint32_t i; // [esp+4h] [ebp-4h]
@@ -377,7 +377,7 @@ void __cdecl R_ShutdownTempSkinBuf()
     }
 }
 
-void __cdecl R_FreeStaticVertexBuffer(IDirect3DVertexBuffer9 *vb)
+void R_FreeStaticVertexBuffer(IDirect3DVertexBuffer9 *vb)
 {
     IDirect3DVertexBuffer9 *varCopy; // [esp+0h] [ebp-4h]
 
@@ -394,7 +394,7 @@ void __cdecl R_FreeStaticVertexBuffer(IDirect3DVertexBuffer9 *vb)
     } while (alwaysfails);
 }
 
-void __cdecl R_FreeStaticIndexBuffer(IDirect3DIndexBuffer9 *ib)
+void R_FreeStaticIndexBuffer(IDirect3DIndexBuffer9 *ib)
 {
     IDirect3DIndexBuffer9 *varCopy; // [esp+0h] [ebp-4h]
 
@@ -411,7 +411,7 @@ void __cdecl R_FreeStaticIndexBuffer(IDirect3DIndexBuffer9 *ib)
     } while (alwaysfails);
 }
 
-void __cdecl R_DestroyParticleCloudBuffer()
+void R_DestroyParticleCloudBuffer()
 {
     if (gfxBuf.particleCloudVertexBuffer)
     {
@@ -425,7 +425,7 @@ void __cdecl R_DestroyParticleCloudBuffer()
     }
 }
 
-void __cdecl R_DestroyDynamicBuffers()
+void R_DestroyDynamicBuffers()
 {
     IDirect3DSurface9 *v0; // [esp+0h] [ebp-14h]
     IDirect3DSurface9 *buffer; // [esp+4h] [ebp-10h]
@@ -514,7 +514,7 @@ void __cdecl R_DestroyDynamicBuffers()
     R_ShutdownTempSkinBuf();
 }
 
-void *__cdecl R_LockIndexBuffer(IDirect3DIndexBuffer9 *handle, int offset, int bytes, int lockFlags)
+void *R_LockIndexBuffer(IDirect3DIndexBuffer9 *handle, int offset, int bytes, int lockFlags)
 {
     int hr; // [esp+0h] [ebp-8h]
     void *bufferData; // [esp+4h] [ebp-4h] BYREF
@@ -534,13 +534,13 @@ void *__cdecl R_LockIndexBuffer(IDirect3DIndexBuffer9 *handle, int offset, int b
     return bufferData;
 }
 
-void __cdecl R_UnlockIndexBuffer(IDirect3DIndexBuffer9 *handle)
+void R_UnlockIndexBuffer(IDirect3DIndexBuffer9 *handle)
 {
     iassert( handle );
     handle->Unlock();
 }
 
-void __cdecl R_CreateWorldVertexBuffer(IDirect3DVertexBuffer9 **vb, int *srcData, uint32_t sizeInBytes)
+void R_CreateWorldVertexBuffer(IDirect3DVertexBuffer9 **vb, int *srcData, uint32_t sizeInBytes)
 {
     int dummyData; // [esp+30h] [ebp-8h] BYREF
     void *dstData; // [esp+34h] [ebp-4h]

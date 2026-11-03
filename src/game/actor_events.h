@@ -44,21 +44,21 @@ struct gentity_s;
 struct actor_s;
 
 
-float __cdecl Actor_EventDefaultRadiusSqrd(ai_event_t eType);
-float __cdecl Actor_EventDefaultHeightDiff(ai_event_t eType);
-const char *__cdecl Actor_NameForEvent(ai_event_t eType);
-void __cdecl Actor_DumpEvents(actor_s *self, ai_event_t event, gentity_s *originator);
-int __cdecl Actor_EventForName(const char *name);
-void __cdecl Actor_GetPerfectInfo(actor_s *self, sentient_s *pOther);
-void __cdecl Actor_WasAttackedBy(actor_s *self, sentient_s *pOther);
-void __cdecl Actor_EventFootstep(actor_s *self, sentient_s *originator, const float *vOrigin);
-void __cdecl Actor_EventNewEnemy(actor_s *self, sentient_s *originator);
-void __cdecl Actor_EventPain(actor_s *self, sentient_s *pCasualty, sentient_s *pAttacker);
-void __cdecl Actor_EventDeath(actor_s *self, sentient_s *pCasualty, sentient_s *pAttacker);
-void __cdecl Actor_EventExplosion(actor_s *self, gentity_s *originator, const float *vOrigin);
-void __cdecl Actor_EventGrenadePing(actor_s *self, gentity_s *originator, const float *vOrigin);
-void __cdecl Actor_EventGunshot(actor_s *self, sentient_s *originator, const float *vOrigin);
-void __cdecl Actor_EventBullet(
+float Actor_EventDefaultRadiusSqrd(ai_event_t eType);
+float Actor_EventDefaultHeightDiff(ai_event_t eType);
+const char *Actor_NameForEvent(ai_event_t eType);
+void Actor_DumpEvents(actor_s *self, ai_event_t event, gentity_s *originator);
+int Actor_EventForName(const char *name);
+void Actor_GetPerfectInfo(actor_s *self, sentient_s *pOther);
+void Actor_WasAttackedBy(actor_s *self, sentient_s *pOther);
+void Actor_EventFootstep(actor_s *self, sentient_s *originator, const float *vOrigin);
+void Actor_EventNewEnemy(actor_s *self, sentient_s *originator);
+void Actor_EventPain(actor_s *self, sentient_s *pCasualty, sentient_s *pAttacker);
+void Actor_EventDeath(actor_s *self, sentient_s *pCasualty, sentient_s *pAttacker);
+void Actor_EventExplosion(actor_s *self, gentity_s *originator, const float *vOrigin);
+void Actor_EventGrenadePing(actor_s *self, gentity_s *originator, const float *vOrigin);
+void Actor_EventGunshot(actor_s *self, sentient_s *originator, const float *vOrigin);
+void Actor_EventBullet(
     actor_s *self,
     gentity_s *originator,
     const float *vStart,
@@ -67,14 +67,14 @@ void __cdecl Actor_EventBullet(
     double fDistSqrd,
     double fRadiusSqrd,
     PARM_SUPPRESSION suppression);
-void __cdecl Actor_ReceivePointEvent(
+void Actor_ReceivePointEvent(
     actor_s *self,
     gentity_s *originator,
     ai_event_t eType,
     const float *vOrigin,
     double fDistSqrd,
     double fRadiusSqrd);
-void __cdecl Actor_ReceiveLineEvent(
+void Actor_ReceiveLineEvent(
     actor_s *self,
     gentity_s *originator,
     ai_event_t eType,
@@ -83,7 +83,7 @@ void __cdecl Actor_ReceiveLineEvent(
     const float *vClosest,
     double fDistSqrd,
     double fRadiusSqrd);
-void __cdecl Actor_ReceiveArcEvent(
+void Actor_ReceiveArcEvent(
     actor_s *self,
     gentity_s *originator,
     ai_event_t eType,
@@ -93,21 +93,21 @@ void __cdecl Actor_ReceiveArcEvent(
     double angle0,
     double angle1,
     double halfHeight);
-void __cdecl Actor_ReceiveVolumeEvent(actor_s *self, gentity_s *originator, ai_event_t eType);
-void __cdecl Actor_BroadcastPointEvent(
+void Actor_ReceiveVolumeEvent(actor_s *self, gentity_s *originator, ai_event_t eType);
+void Actor_BroadcastPointEvent(
     gentity_s *originator,
     int eType,
     int teamFlags,
     const float *vOrigin,
     double fRadiusSqrd);
-void __cdecl Actor_BroadcastLineEvent(
+void Actor_BroadcastLineEvent(
     gentity_s *originator,
     int eType,
     int teamFlags,
     const float *vStart,
     const float *vEnd,
     double fRadiusSqrd);
-void __cdecl Actor_BroadcastArcEvent(
+void Actor_BroadcastArcEvent(
     gentity_s *originator,
     __int32 eventType,
     int teamFlags,
@@ -116,10 +116,10 @@ void __cdecl Actor_BroadcastArcEvent(
     double angle0,
     double angle1,
     double halfHeight);
-void __cdecl Actor_BroadcastVolumeEvent(
+void Actor_BroadcastVolumeEvent(
     gentity_s *originator,
     __int32 eventType,
     int teamFlags,
     gentity_s *volumeEnt,
     double radius);
-void __cdecl Actor_BroadcastTeamEvent(sentient_s *sentient, int eType);
+void Actor_BroadcastTeamEvent(sentient_s *sentient, int eType);

@@ -12,12 +12,12 @@
 #include <game/bullet.h>
 
 
-void __cdecl SP_info_notnull(gentity_s *self)
+void SP_info_notnull(gentity_s *self)
 {
     G_SetOrigin(self, self->r.currentOrigin);
 }
 
-void __cdecl SP_light(gentity_s *self)
+void SP_light(gentity_s *self)
 {
     int32_t primaryLightIndex; // [esp+A0h] [ebp-2Ch] BYREF
     const ComPrimaryLight *light; // [esp+A4h] [ebp-28h]
@@ -69,7 +69,7 @@ void __cdecl SP_light(gentity_s *self)
     }
 }
 
-void __cdecl TeleportPlayer(gentity_s *player, float *origin, float *angles)
+void TeleportPlayer(gentity_s *player, float *origin, float *angles)
 {
     float *v3; // [esp+4h] [ebp-Ch]
     float *v4; // [esp+8h] [ebp-8h]
@@ -101,7 +101,7 @@ void __cdecl TeleportPlayer(gentity_s *player, float *origin, float *angles)
 
 turretInfo_s turretInfo[32];
 
-void __cdecl G_InitTurrets()
+void G_InitTurrets()
 {
     int32_t i; // [esp+0h] [ebp-4h]
 
@@ -109,7 +109,7 @@ void __cdecl G_InitTurrets()
         turretInfo[i].inuse = 0;
 }
 
-void __cdecl G_ClientStopUsingTurret(gentity_s *self)
+void G_ClientStopUsingTurret(gentity_s *self)
 {
     gentity_s *owner; // [esp+0h] [ebp-Ch]
     turretInfo_s *pTurretInfo; // [esp+4h] [ebp-8h]
@@ -162,7 +162,7 @@ void __cdecl G_ClientStopUsingTurret(gentity_s *self)
     pTurretInfo->flags &= ~TURRET_INIT_VIEW;
 }
 
-void __cdecl turret_think_client(gentity_s *self)
+void turret_think_client(gentity_s *self)
 {
     gentity_s *owner; // [esp+0h] [ebp-4h]
 
@@ -183,7 +183,7 @@ void __cdecl turret_think_client(gentity_s *self)
     }
 }
 
-void __cdecl turret_track(gentity_s *self, gentity_s *other)
+void turret_track(gentity_s *self, gentity_s *other)
 {
     turretInfo_s *turretInfo; // [esp+0h] [ebp-8h]
     WeaponDef *weapDef; // [esp+4h] [ebp-4h]
@@ -218,7 +218,7 @@ void __cdecl turret_track(gentity_s *self, gentity_s *other)
     }
 }
 
-void __cdecl G_PlayerTurretPositionAndBlend(gentity_s *ent, gentity_s *pTurretEnt)
+void G_PlayerTurretPositionAndBlend(gentity_s *ent, gentity_s *pTurretEnt)
 {
     char *AnimDebugName; // eax
     char *v3; // eax
@@ -475,7 +475,7 @@ void __cdecl G_PlayerTurretPositionAndBlend(gentity_s *ent, gentity_s *pTurretEn
         }
     }
 }
-void __cdecl turret_clientaim(gentity_s *self, gentity_s *other)
+void turret_clientaim(gentity_s *self, gentity_s *other)
 {
     float v2; // [esp+8h] [ebp-48h]
     float v3; // [esp+Ch] [ebp-44h]
@@ -552,7 +552,7 @@ void __cdecl turret_clientaim(gentity_s *self, gentity_s *other)
     }
 }
 
-void __cdecl turret_shoot_internal(gentity_s *self, gentity_s *other)
+void turret_shoot_internal(gentity_s *self, gentity_s *other)
 {
     if (!self->pTurretInfo)
         MyAssertHandler(".\\game_mp\\g_misc_mp.cpp", 428, 0, "%s", "self->pTurretInfo");
@@ -566,7 +566,7 @@ void __cdecl turret_shoot_internal(gentity_s *self, gentity_s *other)
     }
 }
 
-void __cdecl Fire_Lead(gentity_s *ent, gentity_s *activator)
+void Fire_Lead(gentity_s *ent, gentity_s *activator)
 {
     gentity_s *v2; // [esp+14h] [ebp-4Ch]
     weaponParms wp; // [esp+20h] [ebp-40h] BYREF
@@ -586,7 +586,7 @@ void __cdecl Fire_Lead(gentity_s *ent, gentity_s *activator)
     G_AddEvent(ent, EV_FIRE_WEAPON_MG42, v2->s.number);
 }
 
-void __cdecl Turret_FillWeaponParms(gentity_s *ent, gentity_s *activator, weaponParms *wp)
+void Turret_FillWeaponParms(gentity_s *ent, gentity_s *activator, weaponParms *wp)
 {
     float diff[3]; // [esp+1Ch] [ebp-4Ch] BYREF
     float playerPos[3]; // [esp+28h] [ebp-40h] BYREF
@@ -609,7 +609,7 @@ void __cdecl Turret_FillWeaponParms(gentity_s *ent, gentity_s *activator, weapon
     Vec3Mad(playerPos, len, wp->forward, wp->muzzleTrace);
 }
 
-void __cdecl turret_UpdateSound(gentity_s *self)
+void turret_UpdateSound(gentity_s *self)
 {
     turretInfo_s *pTurretInfo; // [esp+0h] [ebp-4h]
 
@@ -632,7 +632,7 @@ void __cdecl turret_UpdateSound(gentity_s *self)
     }
 }
 
-void __cdecl turret_think(gentity_s *self)
+void turret_think(gentity_s *self)
 {
     gentity_s *v1; // [esp+0h] [ebp-Ch]
 
@@ -653,7 +653,7 @@ void __cdecl turret_think(gentity_s *self)
     }
 }
 
-int32_t __cdecl turret_ReturnToDefaultPos(gentity_s *self, int32_t bManned)
+int32_t turret_ReturnToDefaultPos(gentity_s *self, int32_t bManned)
 {
     float dropPitch; // [esp+0h] [ebp-10h]
     float desiredAngles[2]; // [esp+4h] [ebp-Ch] BYREF
@@ -671,7 +671,7 @@ int32_t __cdecl turret_ReturnToDefaultPos(gentity_s *self, int32_t bManned)
     return turret_UpdateTargetAngles(self, desiredAngles, bManned);
 }
 
-int32_t __cdecl turret_UpdateTargetAngles(gentity_s *self, float *desiredAngles, int32_t bManned)
+int32_t turret_UpdateTargetAngles(gentity_s *self, float *desiredAngles, int32_t bManned)
 {
     double v3; // st7
     float desiredPitch; // [esp+10h] [ebp-20h]
@@ -768,7 +768,7 @@ LABEL_29:
     return bComplete;
 }
 
-void __cdecl turret_think_init(gentity_s *self)
+void turret_think_init(gentity_s *self)
 {
     DObjAnimMat *weaponMtx; // [esp+8h] [ebp-D0h]
     float mtx[3][3]; // [esp+Ch] [ebp-CCh] BYREF
@@ -829,7 +829,7 @@ void __cdecl turret_think_init(gentity_s *self)
     }
 }
 
-void __cdecl turret_controller(const gentity_s *self, int32_t *partBits)
+void turret_controller(const gentity_s *self, int32_t *partBits)
 {
     uint8_t boneIndex; // [esp+3h] [ebp-11h] BYREF
     DObj_s *obj; // [esp+4h] [ebp-10h]
@@ -856,7 +856,7 @@ void __cdecl turret_controller(const gentity_s *self, int32_t *partBits)
     DObjSetControlTagAngles(obj, partBits, boneIndex, angles);
 }
 
-void __cdecl G_FreeTurret(gentity_s *self)
+void G_FreeTurret(gentity_s *self)
 {
     gentity_s *v1; // [esp+0h] [ebp-Ch]
 
@@ -873,7 +873,7 @@ void __cdecl G_FreeTurret(gentity_s *self)
     self->pTurretInfo = 0;
 }
 
-bool __cdecl G_IsTurretUsable(gentity_s *self, gentity_s *owner)
+bool G_IsTurretUsable(gentity_s *self, gentity_s *owner)
 {
     if (self->active || !self->pTurretInfo)
         return 0;
@@ -884,7 +884,7 @@ bool __cdecl G_IsTurretUsable(gentity_s *self, gentity_s *owner)
     return owner->client->ps.groundEntityNum != ENTITYNUM_NONE;
 }
 
-bool __cdecl turret_behind(gentity_s *self, gentity_s *other)
+bool turret_behind(gentity_s *self, gentity_s *other)
 {
     double v2; // st7
     float v4; // [esp+10h] [ebp-78h]
@@ -937,7 +937,7 @@ bool __cdecl turret_behind(gentity_s *self, gentity_s *other)
     return yawSpan >= (double)angle;
 }
 
-void __cdecl turret_use(gentity_s *self, gentity_s *owner, gentity_s* activator)
+void turret_use(gentity_s *self, gentity_s *owner, gentity_s* activator)
 {
     uint32_t v2; // ecx
     float v3; // [esp+8h] [ebp-60h]
@@ -1050,7 +1050,7 @@ void __cdecl turret_use(gentity_s *self, gentity_s *owner, gentity_s* activator)
     ps->ps.viewAngleClampBase[1] = AngleNormalize360(v3);
 }
 
-void __cdecl G_SpawnTurret(gentity_s *self, const char *weaponinfoname)
+void G_SpawnTurret(gentity_s *self, const char *weaponinfoname)
 {
     const char *v2; // eax
     const char *v3; // eax
@@ -1166,7 +1166,7 @@ void __cdecl G_SpawnTurret(gentity_s *self, const char *weaponinfoname)
     SV_LinkEntity(self);
 }
 
-void __cdecl SP_turret(gentity_s *self)
+void SP_turret(gentity_s *self)
 {
     const char *weaponinfoname; // [esp+0h] [ebp-4h] BYREF
 

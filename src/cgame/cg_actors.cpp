@@ -14,7 +14,7 @@
 #include "cg_local.h"
 #include "cg_compassfriendlies.h"
 
-void __cdecl CG_Actor_PreControllers(centity_s *cent)
+void CG_Actor_PreControllers(centity_s *cent)
 {
     int EntityIndex; // r3
     actor_prone_info_s *ClientActorProneInfo; // r3
@@ -52,7 +52,7 @@ void __cdecl CG_Actor_PreControllers(centity_s *cent)
     }
 }
 
-void __cdecl CG_Actor(int localClientNum, centity_s *cent)
+void CG_Actor(int localClientNum, centity_s *cent)
 {
     entityState_s *p_nextState; // r30
     DObj_s *ClientDObj; // r29
@@ -93,7 +93,7 @@ void __cdecl CG_Actor(int localClientNum, centity_s *cent)
     }
 }
 
-void __cdecl CG_ActorSpawner(centity_s *cent)
+void CG_ActorSpawner(centity_s *cent)
 {
     float mins[3]; // [sp+50h] [-30h] BYREF
     float maxs[3]; // [sp+60h] [-20h] BYREF

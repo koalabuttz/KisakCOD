@@ -8,13 +8,13 @@
 // On Linux this needs the D3D9 API: the native boundary (KISAK_LINUX_NATIVE_D3D9)
 // provides it; with the type-only stand-in nothing may release a device object.
 #if !defined(__linux__) || defined(KISAK_LINUX_NATIVE_D3D9)
-uint32_t __cdecl R_ReleaseD3DSurface(IDirect3DSurface9 *surface)
+uint32_t R_ReleaseD3DSurface(IDirect3DSurface9 *surface)
 {
     return surface->Release();
 }
 #endif
 
-uint32_t __cdecl R_HashAssetName(const char *name)
+uint32_t R_HashAssetName(const char *name)
 {
     const char *pos; // [esp+0h] [ebp-8h]
     uint32_t hash; // [esp+4h] [ebp-4h]
@@ -29,7 +29,7 @@ uint32_t __cdecl R_HashAssetName(const char *name)
     return hash;
 }
 
-uint32_t __cdecl R_HashString(const char *string)
+uint32_t R_HashString(const char *string)
 {
     uint32_t hash; // [esp+4h] [ebp-4h]
 
@@ -39,12 +39,12 @@ uint32_t __cdecl R_HashString(const char *string)
     return hash;
 }
 
-char *__cdecl R_AllocGlobalVariable(uint32_t bytes, const char *name)
+char *R_AllocGlobalVariable(uint32_t bytes, const char *name)
 {
     return Z_VirtualAlloc(bytes, name, 18);
 }
 
-char __cdecl R_CullPointAndRadius(const float *pt, float radius, const DpvsPlane *clipPlanes, int clipPlaneCount)
+char R_CullPointAndRadius(const float *pt, float radius, const DpvsPlane *clipPlanes, int clipPlaneCount)
 {
     float dist; // [esp+0h] [ebp-8h]
     int planeIndex; // [esp+4h] [ebp-4h]
@@ -60,7 +60,7 @@ char __cdecl R_CullPointAndRadius(const float *pt, float radius, const DpvsPlane
 
 
 
-double __cdecl FresnelTerm(float n0, float n1, float cosIncidentAngle)
+double FresnelTerm(float n0, float n1, float cosIncidentAngle)
 {
     float v4; // [esp+10h] [ebp-5Ch]
     float v5; // [esp+14h] [ebp-58h]
@@ -117,7 +117,7 @@ double __cdecl FresnelTerm(float n0, float n1, float cosIncidentAngle)
     return 1.0;
 }
 
-char __cdecl R_GetClearColor(float *unpackedRgba)
+char R_GetClearColor(float *unpackedRgba)
 {
     if (r_clear->current.integer && (r_clear->current.integer != 1 || developer->current.integer))
     {
@@ -153,7 +153,7 @@ char __cdecl R_GetClearColor(float *unpackedRgba)
     }
 }
 
-void __cdecl Byte4UnpackBgra(const uint8_t *from, float *to)
+void Byte4UnpackBgra(const uint8_t *from, float *to)
 {
     *to = (double)from[2] * 0.003921568859368563;
     to[1] = (double)from[1] * 0.003921568859368563;

@@ -8,7 +8,7 @@
 #include <gfx_d3d/r_scene.h>
 #include <xanim/dobj_utils.h>
 
-char *__cdecl CL_AllocSkelMemory(uint32_t size)
+char *CL_AllocSkelMemory(uint32_t size)
 {
     volatile uint32_t *Addend; // [esp+0h] [ebp-Ch]
     char *result; // [esp+4h] [ebp-8h]
@@ -32,13 +32,13 @@ char *__cdecl CL_AllocSkelMemory(uint32_t size)
     return result;
 }
 
-int __cdecl CL_GetSkelTimeStamp()
+int CL_GetSkelTimeStamp()
 {
     return clients[R_GetLocalClientNum()].skelTimeStamp;
 }
 
 int warnCount_0;
-int __cdecl CL_DObjCreateSkelForBones(const DObj_s *obj, int *partBits, DObjAnimMat **pMatOut)
+int CL_DObjCreateSkelForBones(const DObj_s *obj, int *partBits, DObjAnimMat **pMatOut)
 {
     char *buf; // [esp+0h] [ebp-Ch]
     uint32_t len; // [esp+4h] [ebp-8h]

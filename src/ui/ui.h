@@ -92,89 +92,89 @@ struct sharedUiInfo_t // sizeof=0x1C5B0
 // LWSS: one of the main differences is that SP doesn't have `localClientNum` because there is no splitscreen
 void UI_AssetCache();
 
-Font_s *__cdecl UI_GetFontHandle(const ScreenPlacement *scrPlace, int fontEnum, float scale);
+Font_s *UI_GetFontHandle(const ScreenPlacement *scrPlace, int fontEnum, float scale);
 void UI_UpdateSaveUI();
-void __cdecl UI_UpdateTime(int realtime);
-void __cdecl UI_Shutdown();
-MenuList *__cdecl Load_ScriptMenuInternal(const char *pszMenu, int imageTrack);
-MenuList *__cdecl Load_ScriptMenu(const char *pszMenu, int imageTrack);
-int __cdecl UI_SavegameIndexFromFilename(const char *filename);
-int __cdecl UI_SavegameIndexFromFilename2(const char *filename);
-void __cdecl UI_DrawSaveGameShot(rectDef_s *rect, double scale, float *color);
-void __cdecl UI_DrawSaveGameName(int localClientNum, rectDef_s *rect, Font_s *font, float scale, float *color, int textStyle);
-void __cdecl UI_DrawGLInfo(int localClientNum, rectDef_s *rect, Font_s *font, float scale, float *color, int textStyle);
+void UI_UpdateTime(int realtime);
+void UI_Shutdown();
+MenuList *Load_ScriptMenuInternal(const char *pszMenu, int imageTrack);
+MenuList *Load_ScriptMenu(const char *pszMenu, int imageTrack);
+int UI_SavegameIndexFromFilename(const char *filename);
+int UI_SavegameIndexFromFilename2(const char *filename);
+void UI_DrawSaveGameShot(rectDef_s *rect, double scale, float *color);
+void UI_DrawSaveGameName(int localClientNum, rectDef_s *rect, Font_s *font, float scale, float *color, int textStyle);
+void UI_DrawGLInfo(int localClientNum, rectDef_s *rect, Font_s *font, float scale, float *color, int textStyle);
 void UI_DrawCinematic();
-void __cdecl UI_LoadIngameMenus();
-void __cdecl UI_SetMap(const char *mapname);
-int __cdecl UI_OwnerDrawVisible(int flags);
-int __cdecl UI_OwnerDrawHandleKey(int ownerDraw, int flags, float *special, int key);
-int __cdecl UI_CompareTimes(qtime_s *tm1, qtime_s *tm2);
-int __cdecl UI_SavegamesQsortCompare(uint32_t *arg1, uint32_t *arg2);
-void __cdecl UI_Update(const char *name);
+void UI_LoadIngameMenus();
+void UI_SetMap(const char *mapname);
+int UI_OwnerDrawVisible(int flags);
+int UI_OwnerDrawHandleKey(int ownerDraw, int flags, float *special, int key);
+int UI_CompareTimes(qtime_s *tm1, qtime_s *tm2);
+int UI_SavegamesQsortCompare(uint32_t *arg1, uint32_t *arg2);
+void UI_Update(const char *name);
 void UI_SaveComplete();
 void *UI_SaveRevert();
 void UI_VerifyLanguage();
-int __cdecl UI_GetOpenOrCloseMenuOnDvarArgs(
+int UI_GetOpenOrCloseMenuOnDvarArgs(
     const char **args,
     const char *cmd,
     char *dvarName,
     char *testValue,
     char *menuName);
-bool __cdecl UI_DvarValueTest(const char *cmd, const char *dvarName, const char *testValue, bool wantMatch);
-void __cdecl UI_OpenMenuOnDvar(const char *cmd, const char *menuName, const char *dvarName, const char *testValue);
-void __cdecl UI_CloseMenuOnDvar(const char *cmd, const char *menuName, const char *dvarName, const char *testValue);
-bool __cdecl UI_AutoContinue();
-int __cdecl UI_FeederItemEnabled(int localClientNum, double feederID, int index);
-Material *__cdecl UI_FeederItemImage(double feederID, int index);
-const char *__cdecl UI_GetSavegameInfo();
+bool UI_DvarValueTest(const char *cmd, const char *dvarName, const char *testValue, bool wantMatch);
+void UI_OpenMenuOnDvar(const char *cmd, const char *menuName, const char *dvarName, const char *testValue);
+void UI_CloseMenuOnDvar(const char *cmd, const char *menuName, const char *dvarName, const char *testValue);
+bool UI_AutoContinue();
+int UI_FeederItemEnabled(int localClientNum, double feederID, int index);
+Material *UI_FeederItemImage(double feederID, int index);
+const char *UI_GetSavegameInfo();
 int UI_OpenMenu_f();
 void UI_CloseMenu_f();
-void __cdecl UI_OpenMenu(int localClientNum, const char *menuName);
-void __cdecl UI_CloseMenu(int localClientNum, const char *menuName);
-void __cdecl UI_Init();
-void __cdecl UI_ShowAcceptInviteWarning();
-void __cdecl UI_ShowReadingSaveDevicePopup();
-void __cdecl UI_HideReadingSaveDevicePopup();
-int __cdecl UI_IsFullscreen();
-float __cdecl UI_GetBlurRadius();
-char *__cdecl UI_SafeTranslateString(const char *reference);
-int __cdecl UI_AnyFullScreenMenuVisible(int localClientNum);
-void __cdecl UI_FilterStringForButtonAnimation(char *str, uint32_t strMaxSize);
-void __cdecl UI_ReplaceConversions(
+void UI_OpenMenu(int localClientNum, const char *menuName);
+void UI_CloseMenu(int localClientNum, const char *menuName);
+void UI_Init();
+void UI_ShowAcceptInviteWarning();
+void UI_ShowReadingSaveDevicePopup();
+void UI_HideReadingSaveDevicePopup();
+int UI_IsFullscreen();
+float UI_GetBlurRadius();
+char *UI_SafeTranslateString(const char *reference);
+int UI_AnyFullScreenMenuVisible(int localClientNum);
+void UI_FilterStringForButtonAnimation(char *str, uint32_t strMaxSize);
+void UI_ReplaceConversions(
     const char *sourceString,
     ConversionArguments *arguments,
     char *outputString,
     size_t outputStringSize);
-void __cdecl UI_CloseFocusedMenu();
-int __cdecl UI_PopupScriptMenu(const char *menuName, bool useMouse);
+void UI_CloseFocusedMenu();
+int UI_PopupScriptMenu(const char *menuName, bool useMouse);
 void UI_PlayerStart();
-void __cdecl UI_Refresh();
+void UI_Refresh();
 
-void __cdecl UI_LoadSavegames(int filter);
-void __cdecl UI_DelSavegame();
+void UI_LoadSavegames(int filter);
+void UI_DelSavegame();
 
 void UI_AddPlayerProfiles();
 void UI_CreatePlayerProfile();
 void UI_DeletePlayerProfile();
-void __cdecl UI_LoadPlayerProfile(int localClientNum);
+void UI_LoadPlayerProfile(int localClientNum);
 void UI_SelectActivePlayerProfile();
-void __cdecl UI_SortPlayerProfiles(int selectIndex);
-void __cdecl UI_SelectPlayerProfileIndex(int index);
-int __cdecl UI_GetPlayerProfileListIndexFromName(const char *name);
-int __cdecl UI_OwnerDrawWidth(int ownerDraw, Font_s *font, double scale);
-void __cdecl UI_DrawKeyBindStatus(
+void UI_SortPlayerProfiles(int selectIndex);
+void UI_SelectPlayerProfileIndex(int index);
+int UI_GetPlayerProfileListIndexFromName(const char *name);
+int UI_OwnerDrawWidth(int ownerDraw, Font_s *font, double scale);
+void UI_DrawKeyBindStatus(
     int localClientNum,
     rectDef_s *rect,
     Font_s *font,
     float scale,
     float *color,
     int textStyle);
-void __cdecl UI_DrawLoggedInUserName(rectDef_s *rect, Font_s *font, double scale, float *color, int textStyle);
-void __cdecl UI_SavegameSort(int column, int force);
-void __cdecl UI_DrawConnectScreen();
-char *__cdecl UI_ReplaceConversionString(const char *sourceString, const char *replaceString);
-char *__cdecl UI_ReplaceConversionInt(const char *sourceString, int replaceInt);
-char *__cdecl UI_ReplaceConversionInts(
+void UI_DrawLoggedInUserName(rectDef_s *rect, Font_s *font, double scale, float *color, int textStyle);
+void UI_SavegameSort(int column, int force);
+void UI_DrawConnectScreen();
+char *UI_ReplaceConversionString(const char *sourceString, const char *replaceString);
+char *UI_ReplaceConversionInt(const char *sourceString, int replaceInt);
+char *UI_ReplaceConversionInts(
     const char *sourceString,
     int numInts,
     char *replaceInts,
@@ -182,9 +182,9 @@ char *__cdecl UI_ReplaceConversionInts(
     int a5,
     int a6,
     __int64 a7);
-int __cdecl UI_Popup(int localClientNum, const char *menu);
-void __cdecl UI_DrawLoggedInUser(rectDef_s *rect, Font_s *font, double scale, float *color, int textStyle);
-void __cdecl UI_MouseEvent(int localClientNum, int x, int y);
+int UI_Popup(int localClientNum, const char *menu);
+void UI_DrawLoggedInUser(rectDef_s *rect, Font_s *font, double scale, float *color, int textStyle);
+void UI_MouseEvent(int localClientNum, int x, int y);
 
 extern const dvar_t *ui_showList;
 extern const dvar_t *ui_isSaving;

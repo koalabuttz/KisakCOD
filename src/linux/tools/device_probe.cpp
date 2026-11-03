@@ -48,7 +48,7 @@
 #include <string>
 
 // r_init.cpp defines this without declaring it in r_init.h.
-char __cdecl R_CreateWindow(GfxWindowParms *wndParms);
+char R_CreateWindow(GfxWindowParms *wndParms);
 
 namespace
 {

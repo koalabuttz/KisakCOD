@@ -11,7 +11,7 @@
 #include "r_image.h"
 
 
-int __cdecl R_ReserveIndexData(GfxCmdBufPrimState *state, int triCount)
+int R_ReserveIndexData(GfxCmdBufPrimState *state, int triCount)
 {
     uint32_t v2; // edx
     int indexCount; // [esp+8h] [ebp-4h]
@@ -37,7 +37,7 @@ int __cdecl R_ReserveIndexData(GfxCmdBufPrimState *state, int triCount)
     return gfxBuf.dynamicIndexBuffer->used;
 }
 
-int __cdecl R_SetIndexData(GfxCmdBufPrimState *state, uint8_t *indices, int triCount)
+int R_SetIndexData(GfxCmdBufPrimState *state, uint8_t *indices, int triCount)
 {
     int baseIndex; // [esp+60h] [ebp-18h]
     int indexDataSize; // [esp+64h] [ebp-14h]
@@ -73,7 +73,7 @@ int __cdecl R_SetIndexData(GfxCmdBufPrimState *state, uint8_t *indices, int triC
     return baseIndex;
 }
 
-void __cdecl R_SetupPassPerPrimArgs(GfxCmdBufContext context)
+void R_SetupPassPerPrimArgs(GfxCmdBufContext context)
 {
     const MaterialPass *pass; // [esp+0h] [ebp-4h]
 
@@ -82,7 +82,7 @@ void __cdecl R_SetupPassPerPrimArgs(GfxCmdBufContext context)
         R_SetPassShaderPrimArguments(context, pass->perPrimArgCount, pass->args);
 }
 
-void __cdecl R_HW_SetVertexShaderConstant(
+void R_HW_SetVertexShaderConstant(
     IDirect3DDevice9 *device,
     uint32_t dest,
     const float *data,
@@ -124,7 +124,7 @@ void __cdecl R_HW_SetVertexShaderConstant(
     }
 }
 
-void __cdecl R_SetVertexShaderConstantFromCode(GfxCmdBufContext context, const MaterialShaderArgument *routingData)
+void R_SetVertexShaderConstantFromCode(GfxCmdBufContext context, const MaterialShaderArgument *routingData)
 {
     const float *data; // [esp+8h] [ebp-4h]
 
@@ -138,7 +138,7 @@ void __cdecl R_SetVertexShaderConstantFromCode(GfxCmdBufContext context, const M
     }
 }
 
-float *__cdecl R_GetCodeConstant(GfxCmdBufContext context, uint32_t constant)
+float *R_GetCodeConstant(GfxCmdBufContext context, uint32_t constant)
 {
     iassert(context.state);
     iassert(context.source);
@@ -159,7 +159,7 @@ float *__cdecl R_GetCodeConstant(GfxCmdBufContext context, uint32_t constant)
     return context.source->input.consts[constant];
 }
 
-char __cdecl R_IsVertexShaderConstantUpToDate(GfxCmdBufContext context, const MaterialShaderArgument *routingData)
+char R_IsVertexShaderConstantUpToDate(GfxCmdBufContext context, const MaterialShaderArgument *routingData)
 {
     bcassert(routingData->dest, ARRAY_COUNT(context.state->vertexShaderConstState));
 
@@ -175,7 +175,7 @@ char __cdecl R_IsVertexShaderConstantUpToDate(GfxCmdBufContext context, const Ma
             routingData);
 }
 
-char __cdecl R_IsShaderMatrixUpToDate(
+char R_IsShaderMatrixUpToDate(
     const GfxCmdBufSourceState *source,
     GfxShaderConstantState *constant,
     const MaterialShaderArgument *routingData)
@@ -199,7 +199,7 @@ char __cdecl R_IsShaderMatrixUpToDate(
     return 0;
 }
 
-char __cdecl R_IsShaderConstantUpToDate(
+char R_IsShaderConstantUpToDate(
     const GfxCmdBufSourceState *source,
     GfxShaderConstantState *constant,
     const MaterialShaderArgument *routingData)
@@ -216,7 +216,7 @@ char __cdecl R_IsShaderConstantUpToDate(
     return 0;
 }
 
-void __cdecl R_SetupPassPerObjectArgs(GfxCmdBufContext context)
+void R_SetupPassPerObjectArgs(GfxCmdBufContext context)
 {
     const MaterialPass *pass; // [esp+0h] [ebp-4h]
 
@@ -225,7 +225,7 @@ void __cdecl R_SetupPassPerObjectArgs(GfxCmdBufContext context)
         R_SetPassShaderObjectArguments(context, pass->perObjArgCount, &pass->args[pass->perPrimArgCount]);
 }
 
-void __cdecl R_SetPixelShaderConstantFromLiteral(GfxCmdBufState *state, uint32_t dest, const float *literal)
+void R_SetPixelShaderConstantFromLiteral(GfxCmdBufState *state, uint32_t dest, const float *literal)
 {
     if (dest >= 0x100)
         MyAssertHandler(
@@ -240,7 +240,7 @@ void __cdecl R_SetPixelShaderConstantFromLiteral(GfxCmdBufState *state, uint32_t
     R_HW_SetPixelShaderConstant(state->prim.device, dest, literal, 1u);
 }
 
-void __cdecl R_HW_SetPixelShaderConstant(
+void R_HW_SetPixelShaderConstant(
     IDirect3DDevice9 *device,
     uint32_t dest,
     const float *data,
@@ -270,7 +270,7 @@ void __cdecl R_HW_SetPixelShaderConstant(
     } while (alwaysfails);
 }
 
-int __cdecl R_IsPixelShaderConstantUpToDate(GfxCmdBufContext context, const MaterialShaderArgument *routingData)
+int R_IsPixelShaderConstantUpToDate(GfxCmdBufContext context, const MaterialShaderArgument *routingData)
 {
     GfxShaderConstantState newState; // [esp+4h] [ebp-10h]
 
@@ -290,7 +290,7 @@ int __cdecl R_IsPixelShaderConstantUpToDate(GfxCmdBufContext context, const Mate
     return 0;
 }
 
-void __cdecl R_SetPixelShaderConstantFromCode(GfxCmdBufContext context, const MaterialShaderArgument *routingData)
+void R_SetPixelShaderConstantFromCode(GfxCmdBufContext context, const MaterialShaderArgument *routingData)
 {
     iassert(context.source->constVersions[routingData->u.codeConst.index]);
     bcassert(routingData->u.codeConst.index, CONST_SRC_FIRST_CODE_MATRIX);
@@ -302,7 +302,7 @@ void __cdecl R_SetPixelShaderConstantFromCode(GfxCmdBufContext context, const Ma
         routingData->u.codeConst.rowCount);
 }
 
-void __cdecl R_SetupPassCriticalPixelShaderArgs(GfxCmdBufContext context)
+void R_SetupPassCriticalPixelShaderArgs(GfxCmdBufContext context)
 {
     const MaterialPass *pass; // [esp+0h] [ebp-4h]
 
@@ -314,7 +314,7 @@ void __cdecl R_SetupPassCriticalPixelShaderArgs(GfxCmdBufContext context)
             &pass->args[pass->perPrimArgCount + pass->perObjArgCount]);
 }
 
-void __cdecl R_SetupPassVertexShaderArgs(GfxCmdBufContext context)
+void R_SetupPassVertexShaderArgs(GfxCmdBufContext context)
 {
     const MaterialPass *pass; // [esp+0h] [ebp-4h]
 
@@ -326,7 +326,7 @@ void __cdecl R_SetupPassVertexShaderArgs(GfxCmdBufContext context)
             &pass->args[pass->perPrimArgCount + pass->perObjArgCount]);
 }
 
-void __cdecl R_OverrideImage(GfxImage **image, const MaterialTextureDef *texdef)
+void R_OverrideImage(GfxImage **image, const MaterialTextureDef *texdef)
 {
     iassert(image);
     iassert(texdef);
@@ -435,7 +435,7 @@ static void R_ApplyShaderDefConstants(GfxCmdBufState *state, const void *bytecod
 }
 #endif
 
-void __cdecl R_SetPixelShader(GfxCmdBufState *state, const MaterialPixelShader *pixelShader)
+void R_SetPixelShader(GfxCmdBufState *state, const MaterialPixelShader *pixelShader)
 {
     iassert(pixelShader);
     iassert(pixelShader->prog.ps);
@@ -453,7 +453,7 @@ void __cdecl R_SetPixelShader(GfxCmdBufState *state, const MaterialPixelShader *
     }
 }
 
-void __cdecl R_SetVertexShader(GfxCmdBufState *state, const MaterialVertexShader *vertexShader)
+void R_SetVertexShader(GfxCmdBufState *state, const MaterialVertexShader *vertexShader)
 {
     if (state->vertexShader != vertexShader)
     {
@@ -471,7 +471,7 @@ void __cdecl R_SetVertexShader(GfxCmdBufState *state, const MaterialVertexShader
     }
 }
 
-void __cdecl R_UpdateVertexDecl(GfxCmdBufState *state)
+void R_UpdateVertexDecl(GfxCmdBufState *state)
 {
     const MaterialPass *pass; // [esp+40h] [ebp-8h]
     const MaterialVertexShader *vertexShader; // [esp+44h] [ebp-4h]
@@ -493,7 +493,7 @@ void __cdecl R_UpdateVertexDecl(GfxCmdBufState *state)
     R_SetVertexShader(state, vertexShader);
 }
 
-void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
+void R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
 {
     const char *v2; // eax
     const char *v3; // eax
@@ -551,7 +551,7 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
             &pass->args[pass->perPrimArgCount + pass->perObjArgCount]);
 }
 
-void __cdecl R_SetState(GfxCmdBufState *state, uint32_t *stateBits)
+void R_SetState(GfxCmdBufState *state, uint32_t *stateBits)
 {
     if (*stateBits != state->refStateBits[0])
     {
@@ -565,7 +565,7 @@ void __cdecl R_SetState(GfxCmdBufState *state, uint32_t *stateBits)
     }
 }
 
-void __cdecl R_SetVertexShaderConstantFromLiteral(GfxCmdBufState *state, uint32_t dest, const float *literal)
+void R_SetVertexShaderConstantFromLiteral(GfxCmdBufState *state, uint32_t dest, const float *literal)
 {
     if (dest >= 0x20)
         MyAssertHandler(
@@ -580,7 +580,7 @@ void __cdecl R_SetVertexShaderConstantFromLiteral(GfxCmdBufState *state, uint32_
     R_HW_SetVertexShaderConstant(state->prim.device, dest, literal, 1u);
 }
 
-const MaterialTextureDef *__cdecl R_SetPixelSamplerFromMaterial(
+const MaterialTextureDef *R_SetPixelSamplerFromMaterial(
     GfxCmdBufContext context,
     const MaterialShaderArgument *arg,
     const MaterialTextureDef *texDef)
@@ -618,7 +618,7 @@ const MaterialTextureDef *__cdecl R_SetPixelSamplerFromMaterial(
     return texDef;
 }
 
-void __cdecl R_SetPassShaderPrimArguments(
+void R_SetPassShaderPrimArguments(
     GfxCmdBufContext context,
     uint32_t argCount,
     const MaterialShaderArgument *arg)
@@ -685,7 +685,7 @@ static const GfxImage *R_GetCaseTexture(const Material *material)
 }
 #endif
 
-void __cdecl R_SetPassShaderObjectArguments(
+void R_SetPassShaderObjectArguments(
     GfxCmdBufContext context,
     uint32_t argCount,
     const MaterialShaderArgument *arg)
@@ -726,7 +726,7 @@ void __cdecl R_SetPassShaderObjectArguments(
         MyAssertHandler(".\\r_shade.cpp", 232, 0, "unreachable");
 }
 
-void __cdecl R_SetPassPixelShaderStableArguments(
+void R_SetPassPixelShaderStableArguments(
     GfxCmdBufContext context,
     uint32_t argCount,
     const MaterialShaderArgument *arg)
@@ -783,7 +783,7 @@ void __cdecl R_SetPassPixelShaderStableArguments(
         MyAssertHandler(".\\r_shade.cpp", 300, 0, "unreachable");
 }
 
-void __cdecl R_SetPassVertexShaderStableArguments(
+void R_SetPassVertexShaderStableArguments(
     GfxCmdBufContext context,
     uint32_t argCount,
     const MaterialShaderArgument *arg)
@@ -803,7 +803,7 @@ void __cdecl R_SetPassVertexShaderStableArguments(
     } while (argCount);
 }
 
-void __cdecl R_SetPassShaderStableArguments(
+void R_SetPassShaderStableArguments(
     GfxCmdBufContext context,
     uint32_t argCount,
     const MaterialShaderArgument *arg)
@@ -879,7 +879,7 @@ void __cdecl R_SetPassShaderStableArguments(
     } while (argCount);
 }
 
-void __cdecl R_ChangeObjectPlacement(GfxCmdBufSourceState *source, const GfxScaledPlacement *placement)
+void R_ChangeObjectPlacement(GfxCmdBufSourceState *source, const GfxScaledPlacement *placement)
 {
     const char *v2; // eax
     const char *v3; // eax
@@ -918,7 +918,7 @@ void __cdecl R_ChangeObjectPlacement(GfxCmdBufSourceState *source, const GfxScal
     source->objectPlacement = placement;
 }
 
-int __cdecl R_SetVertexData(GfxCmdBufState *state, const void *data, int vertexCount, int stride)
+int R_SetVertexData(GfxCmdBufState *state, const void *data, int vertexCount, int stride)
 {
     IDirect3DVertexBuffer9 *vb; // [esp+6Ch] [ebp-14h]
     volatile int vertexOffset; // [esp+70h] [ebp-10h]

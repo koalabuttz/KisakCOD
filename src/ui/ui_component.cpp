@@ -27,14 +27,14 @@ UI_Component_data_t UI_Component::g;
 UI_Component* UI_Component::selectionComp = NULL;
 
 
-bool __cdecl Scr_ElementChildrenExist(Scr_WatchElement_s *element)
+bool Scr_ElementChildrenExist(Scr_WatchElement_s *element)
 {
     if (element->threadList || element->endonList)
         return 1;
     return element->childHead && element->expand && element->objectType && element->objectType < VAR_DEAD_THREAD;
 }
 
-void __cdecl UI_Component::InitAssets()
+void UI_Component::InitAssets()
 {
     memset(&UI_Component::g, 0, sizeof(UI_Component::g));
     UI_Component::g.screenWidth = cls.vidConfig.displayWidth;
@@ -66,7 +66,7 @@ void UI_Component::DrawText(float x, float y, float width, int fontEnum, const f
     R_AddCmdDrawText(text, maxChars, cls.consoleFont, v7, v6, 1.0, 1.0, 0.0, color, 0);
 }
 
-Material *__cdecl UI_Component::RegisterMaterialNoMip(char *name, int imageTrack)
+Material *UI_Component::RegisterMaterialNoMip(char *name, int imageTrack)
 {
     return Material_RegisterHandle(name, imageTrack);
 }
@@ -85,12 +85,12 @@ void UI_Component::MouseEvent(int x, int y)
     }
 }
 
-void __cdecl UI_Component_Init()
+void UI_Component_Init()
 {
 	UI_Component::InitAssets();
 }
 
-char *__cdecl Scr_GetElementArchiveText(Scr_WatchElement_s *element)
+char *Scr_GetElementArchiveText(Scr_WatchElement_s *element)
 {
     char *result; // eax
 
@@ -292,7 +292,7 @@ Scr_WatchElement_s *__thiscall Scr_ScriptWatch::CloneElement(Scr_WatchElement_s 
     return newElement;
 }
 
-void __cdecl Scr_PrintElementText(Scr_WatchElement_s *element, int bufLen, int depth, char *buf)
+void Scr_PrintElementText(Scr_WatchElement_s *element, int bufLen, int depth, char *buf)
 {
     uint8_t objectType; // [esp+30h] [ebp-10h]
     int threadIdSize; // [esp+34h] [ebp-Ch]
@@ -654,7 +654,7 @@ void Scr_ScriptWatch::DeleteElement()
     }
 }
 
-int __cdecl Scr_GetWatchElementSize(Scr_WatchElement_s *element)
+int Scr_GetWatchElementSize(Scr_WatchElement_s *element)
 {
     int size; // [esp+0h] [ebp-4h]
 
@@ -873,7 +873,7 @@ Scr_WatchElement_s *Scr_ScriptWatch::GetElementPrev(Scr_WatchElement_s *element)
     return 0;
 }
 
-static int __cdecl Scr_GetElementDepth(Scr_WatchElement_s *element)
+static int Scr_GetElementDepth(Scr_WatchElement_s *element)
 {
     int depth; // [esp+0h] [ebp-4h]
 
@@ -1937,7 +1937,7 @@ void Scr_ScriptWatch::PasteBreakpointElement(
     }
 }
 
-static uint8_t __cdecl Scr_GetBreakpointType(const char **pText)
+static uint8_t Scr_GetBreakpointType(const char **pText)
 {
     switch (**pText)
     {
@@ -2182,7 +2182,7 @@ bool Scr_ScriptWatch::EvaluateWatchChildElement(
     return Scr_ScriptWatch::PostEvaluateWatchElement(childElement, &value);
 }
 
-int __cdecl CompareThreadIndices(uint32_t *arg1, uint32_t *arg2);
+int CompareThreadIndices(uint32_t *arg1, uint32_t *arg2);
 
 void Scr_ScriptWatch::EvaluateWatchChildren(Scr_WatchElement_s *parentElement)
 {
@@ -2194,7 +2194,7 @@ void Scr_ScriptWatch::EvaluateWatchChildren(Scr_WatchElement_s *parentElement)
     bool v7; // [esp+8h] [ebp-128h]
     int v8; // [esp+Ch] [ebp-124h]
     bool v9; // [esp+10h] [ebp-120h]
-    int(__cdecl * v10)(uint32_t *, uint32_t *); // [esp+14h] [ebp-11Ch]
+    int(* v10)(uint32_t *, uint32_t *); // [esp+14h] [ebp-11Ch]
     uint8_t v11; // [esp+18h] [ebp-118h]
     uint8_t objectType; // [esp+1Ch] [ebp-114h]
     bool oldHardcodedField; // [esp+2Fh] [ebp-101h]
@@ -2203,7 +2203,7 @@ void Scr_ScriptWatch::EvaluateWatchChildren(Scr_WatchElement_s *parentElement)
     Scr_WatchElement_s *childElement; // [esp+D0h] [ebp-60h]
     uint32_t newIndex; // [esp+D4h] [ebp-5Ch]
     uint32_t oldChildCount; // [esp+D8h] [ebp-58h]
-    int(__cdecl * compare)(uint32_t*, uint32_t*); // [esp+DCh] [ebp-54h]
+    int(* compare)(uint32_t*, uint32_t*); // [esp+DCh] [ebp-54h]
     uint8_t oldObjectType; // [esp+E2h] [ebp-4Eh]
     bool isArray; // [esp+E3h] [ebp-4Dh]
     Scr_WatchElement_s *newElements; // [esp+E4h] [ebp-4Ch]
@@ -2328,7 +2328,7 @@ void Scr_ScriptWatch::EvaluateWatchChildren(Scr_WatchElement_s *parentElement)
                     v10 = Scr_CompareCanonicalStrings;
                 compare = v10;
             }
-            qsort(&names[hardcodedCount], count - hardcodedCount, 4u, (int(__cdecl *)(void const *, void const *))compare);
+            qsort(&names[hardcodedCount], count - hardcodedCount, 4u, (int(*)(void const *, void const *))compare);
             oldElements = parentElement->childArrayHead;
             oldChildCount = parentElement->childCount;
             newElements = (Scr_WatchElement_s*)Scr_AllocDebugMem(100 * count, "Scr_ScriptWatch::EvaluateWatchChildren3");
@@ -2697,7 +2697,7 @@ void Scr_ScriptList::Init()
         &scriptWindowsNames[1],
         this->numLines - 1,
         4u,
-        (int(__cdecl *)(const void *, const void *))ConDrawInput_CompareStrings);
+        (int(*)(const void *, const void *))ConDrawInput_CompareStrings);
     this->scriptWindows = (Scr_ScriptWindow **)Scr_AllocDebugMem(4 * this->numLines, "Scr_ScriptList::Init2");
     memset(&info, 0, sizeof(info));
     Hunk_CheckTempMemoryHighClear();
@@ -3372,7 +3372,7 @@ void UI_ScrollPane::Draw(
     }
 }
 
-char __cdecl InRect(float *point, float *pos, float *size)
+char InRect(float *point, float *pos, float *size)
 {
     int i; // [esp+0h] [ebp-4h]
 

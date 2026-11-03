@@ -13,7 +13,7 @@ SpeexBits decodeBits;
 int32_t g_decode_frame_size;
 
 
-char __cdecl Decode_Init(int32_t bandwidthEnum)
+char Decode_Init(int32_t bandwidthEnum)
 {
     const SpeexMode *mode; // [esp+8h] [ebp-4h]
 
@@ -49,12 +49,12 @@ char __cdecl Decode_Init(int32_t bandwidthEnum)
     return 1;
 }
 
-void __cdecl Decode_SetOptions()
+void Decode_SetOptions()
 {
     speex_decoder_ctl(g_decoder, SPEEX_SET_SAMPLING_RATE, &g_encoder_samplerate);
 }
 
-void __cdecl Decode_Shutdown()
+void Decode_Shutdown()
 {
     if (g_decoder)
     {
@@ -64,7 +64,7 @@ void __cdecl Decode_Shutdown()
     g_decoder = 0;
 }
 
-int32_t __cdecl Decode_Sample(char *buffer, int32_t maxLength, int16_t *out, int32_t frame_size)
+int32_t Decode_Sample(char *buffer, int32_t maxLength, int16_t *out, int32_t frame_size)
 {
     int32_t v5; // [esp+0h] [ebp-400Ch]
     float v6[4097]; // [esp+4h] [ebp-4008h]

@@ -33,18 +33,18 @@ int cl_connectedToPureServer;
 
 constexpr size_t CLIENT_ARCHIVE_SIZE = 256;
 
-void __cdecl TRACK_cl_parse()
+void TRACK_cl_parse()
 {
     track_static_alloc_internal(svc_strings, 1024, "svc_strings", 9);
 }
 
-void __cdecl SHOWNET(msg_t *msg, const char *s)
+void SHOWNET(msg_t *msg, const char *s)
 {
     if (cl_shownet->current.integer >= 2)
         Com_Printf(CON_CHANNEL_CLIENT, "%3i:%s\n", msg->readcount - 1, s);
 }
 
-void __cdecl CL_SavePredictedOriginForServerTime(
+void CL_SavePredictedOriginForServerTime(
     clientActive_t *cl,
     int serverTime,
     float *predictedOrigin,
@@ -96,7 +96,7 @@ void __cdecl CL_SavePredictedOriginForServerTime(
     }
 }
 
-bool __cdecl CL_GetPredictedOriginForServerTime(
+bool CL_GetPredictedOriginForServerTime(
     clientActive_t *cl,
     int serverTime,
     float *predictedOrigin,
@@ -146,7 +146,7 @@ bool __cdecl CL_GetPredictedOriginForServerTime(
     return false;
 }
 
-void __cdecl CL_DeltaClient(
+void CL_DeltaClient(
     clientActive_t *cl,
     msg_t *msg,
     int time,
@@ -170,7 +170,7 @@ void __cdecl CL_DeltaClient(
     ++frame->numClients;
 }
 
-void __cdecl CL_SystemInfoChanged(int localClientNum)
+void CL_SystemInfoChanged(int localClientNum)
 {
     const char *v1; // eax
     const char *v2; // eax
@@ -238,7 +238,7 @@ void __cdecl CL_SystemInfoChanged(int localClientNum)
     }
 }
 
-void __cdecl CL_ParseMapCenter(int localClientNum)
+void CL_ParseMapCenter(int localClientNum)
 {
     const char *mapCenterString; // [esp+0h] [ebp-4h]
 
@@ -246,7 +246,7 @@ void __cdecl CL_ParseMapCenter(int localClientNum)
     sscanf(mapCenterString, "%f %f %f", cls.mapCenter, &cls.mapCenter[1], &cls.mapCenter[2]);
 }
 
-void __cdecl CL_ParseWWWDownload(int localClientNum, msg_t *msg)
+void CL_ParseWWWDownload(int localClientNum, msg_t *msg)
 {
     char *String; // eax
     char *fs_homepath; // [esp+10h] [ebp-10Ch]
@@ -296,7 +296,7 @@ void __cdecl CL_ParseWWWDownload(int localClientNum, msg_t *msg)
     }
 }
 
-void __cdecl CL_BeginDownload(char *localName, char *remoteName)
+void CL_BeginDownload(char *localName, char *remoteName)
 {
     const char *v2; // eax
 
@@ -318,7 +318,7 @@ void __cdecl CL_BeginDownload(char *localName, char *remoteName)
     CL_AddReliableCommand(0, v2);
 }
 
-void __cdecl CL_NextDownload(int localClientNum)
+void CL_NextDownload(int localClientNum)
 {
     char *localName; // [esp+24h] [ebp-Ch]
     char *s; // [esp+28h] [ebp-8h]
@@ -363,7 +363,7 @@ void __cdecl CL_NextDownload(int localClientNum)
 }
 
 char parseDownloadData[2048];
-void __cdecl CL_ParseDownload(int localClientNum, msg_t *msg)
+void CL_ParseDownload(int localClientNum, msg_t *msg)
 {
     int block; // [esp+0h] [ebp-Ch]
     int size; // [esp+4h] [ebp-8h]
@@ -466,7 +466,7 @@ void __cdecl CL_ParseDownload(int localClientNum, msg_t *msg)
 }
 
 uint8_t msgCompressed_buf[0x20000];
-void __cdecl CL_ParseServerMessage(int localClientNum, msg_t *msg)
+void CL_ParseServerMessage(int localClientNum, msg_t *msg)
 {
     if (cl_shownet->current.integer == 1)
     {
@@ -551,7 +551,7 @@ void __cdecl CL_ParseServerMessage(int localClientNum, msg_t *msg)
 }
 
 clSnapshot_t newSnap;
-void __cdecl CL_ParseSnapshot(int localClientNum, msg_t *msg)
+void CL_ParseSnapshot(int localClientNum, msg_t *msg)
 {
     const char *v2; // eax
     clientActive_t *LocalClientGlobals; // [esp+0h] [ebp-20h]
@@ -668,7 +668,7 @@ void __cdecl CL_ParseSnapshot(int localClientNum, msg_t *msg)
     }
 }
 
-void __cdecl CL_ParsePacketEntities(
+void CL_ParsePacketEntities(
     clientActive_t *cl,
     msg_t *msg,
     int time,
@@ -817,7 +817,7 @@ void __cdecl CL_ParsePacketEntities(
         Com_Printf(CON_CHANNEL_CLIENT, "Entities in packet: %i\n", newframe->numEntities);
 }
 
-void __cdecl CL_DeltaEntity(
+void CL_DeltaEntity(
     clientActive_t *cl,
     msg_t *msg,
     int time,
@@ -832,7 +832,7 @@ void __cdecl CL_DeltaEntity(
     }
 }
 
-void __cdecl CL_CopyOldEntity(clientActive_t *cl, clSnapshot_t *frame, const entityState_s *old)
+void CL_CopyOldEntity(clientActive_t *cl, clSnapshot_t *frame, const entityState_s *old)
 {
     memcpy(
         &cl->parseEntities[cl->parseEntitiesNum++ & 0x7FF],
@@ -841,7 +841,7 @@ void __cdecl CL_CopyOldEntity(clientActive_t *cl, clSnapshot_t *frame, const ent
     ++frame->numEntities;
 }
 
-void __cdecl CL_ParsePacketClients(
+void CL_ParsePacketClients(
     clientActive_t *cl,
     msg_t *msg,
     int time,
@@ -962,7 +962,7 @@ void __cdecl CL_ParsePacketClients(
         Com_Printf(CON_CHANNEL_CLIENT, "Clients in packet: %i\n", newframe->numClients);
 }
 
-void __cdecl CL_InitDownloads(int localClientNum)
+void CL_InitDownloads(int localClientNum)
 {
     char *v1; // eax
     const char *dir; // [esp+10h] [ebp-414h]
@@ -1024,7 +1024,7 @@ void __cdecl CL_InitDownloads(int localClientNum)
     CL_DownloadsComplete(localClientNum);
 }
 
-void __cdecl CL_ParseGamestate(int localClientNum, msg_t *msg)
+void CL_ParseGamestate(int localClientNum, msg_t *msg)
 {
     Con_Close(localClientNum);
 
@@ -1168,7 +1168,7 @@ END_LOOP:
     Dvar_SetInt(cl_paused, 0);
 }
 
-void __cdecl CL_ParseCommandString(int localClientNum, msg_t *msg)
+void CL_ParseCommandString(int localClientNum, msg_t *msg)
 {
     int seq = MSG_ReadLong(msg);
     char *s = MSG_ReadString(msg);

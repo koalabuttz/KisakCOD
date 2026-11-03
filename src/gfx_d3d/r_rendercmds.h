@@ -573,46 +573,46 @@ const struct alignas(16) GfxBackEndData // sizeof=0x11E780
     // padding byte
 };
 
-void __cdecl TRACK_r_rendercmds();
-void __cdecl R_FreeGlobalVariable(void *var);
-void __cdecl R_InitRenderCommands();
-void __cdecl R_InitRenderBuffers();
-void __cdecl R_InitDynamicMesh(
+void TRACK_r_rendercmds();
+void R_FreeGlobalVariable(void *var);
+void R_InitRenderCommands();
+void R_InitRenderBuffers();
+void R_InitDynamicMesh(
     GfxMeshData *mesh,
     uint32_t indexCount,
     uint32_t vertCount,
     uint32_t vertSize);
-void __cdecl R_InitRenderThread();
-void __cdecl R_SyncRenderThread();
+void R_InitRenderThread();
+void R_SyncRenderThread();
 GfxCmdArray *R_ClearCmdList();
-void __cdecl R_ReleaseThreadOwnership();
-void __cdecl R_IssueRenderCommands(uint32_t type);
+void R_ReleaseThreadOwnership();
+void R_IssueRenderCommands(uint32_t type);
 void R_PerformanceCounters();
 bool R_UpdateSkinCacheUsage();
-char __cdecl R_HandOffToBackend(char type);
-void __cdecl R_ToggleSmpFrameCmd(char type);
-void __cdecl R_AbortRenderCommands();
-void __cdecl R_BeginClientCmdList2D();
-void __cdecl R_ClearClientCmdList2D();
-void __cdecl R_BeginSharedCmdList();
-void __cdecl R_AddCmdEndOfList();
-GfxCmdHeader *__cdecl R_GetCommandBuffer(GfxRenderCommand renderCmd, int bytes);
+char R_HandOffToBackend(char type);
+void R_ToggleSmpFrameCmd(char type);
+void R_AbortRenderCommands();
+void R_BeginClientCmdList2D();
+void R_ClearClientCmdList2D();
+void R_BeginSharedCmdList();
+void R_AddCmdEndOfList();
+GfxCmdHeader *R_GetCommandBuffer(GfxRenderCommand renderCmd, int bytes);
 #ifdef KISAK_RADIANT
 // Editor line-batching bridge (cod3src\src\gfx_d3d\r_rendercmds.cpp). See the
 // implementation at the end of r_rendercmds.cpp for the §11 signature notes.
 struct GfxPointVertex;
-void *__cdecl R_AddMultipleRendercommands(int bytes);
-void __cdecl R_AddLineCmd(short count, char width, char dimension, GfxPointVertex *verts);
-void __cdecl R_AddCmd_Line3D(short count, char width, GfxPointVertex *verts);
-void __cdecl R_AddCmd_Line3DNoDepth(short count, char width, GfxPointVertex *verts);
-void __cdecl R_AddCmd_Line2D(short count, char width, GfxPointVertex *verts);  // IDB 0x4fd180 (2D sibling)
+void *R_AddMultipleRendercommands(int bytes);
+void R_AddLineCmd(short count, char width, char dimension, GfxPointVertex *verts);
+void R_AddCmd_Line3D(short count, char width, GfxPointVertex *verts);
+void R_AddCmd_Line3DNoDepth(short count, char width, GfxPointVertex *verts);
+void R_AddCmd_Line2D(short count, char width, GfxPointVertex *verts);  // IDB 0x4fd180 (2D sibling)
 // Editor point-batching bridge — IDB R_AddPointCmd @ 0x4fcf60 / R_AddPointCmd_W
 // @ 0x4fd080 (the latter a thin dimension=3 wrapper). Emits RC_DRAW_POINTS (kisak
 // already has RB_DrawPointsCmd). The clipper draws its 1-3 placed clip points as
 // screen-space squares through R_AddPointCmd_W.
 struct GfxCmdDrawPoints;
-GfxCmdDrawPoints *__cdecl R_AddPointCmd(short pointCount, char size, char dimension, const GfxPointVertex *verts);
-GfxCmdDrawPoints *__cdecl R_AddPointCmd_W(short pointCount, char size, const GfxPointVertex *verts);
+GfxCmdDrawPoints *R_AddPointCmd(short pointCount, char size, char dimension, const GfxPointVertex *verts);
+GfxCmdDrawPoints *R_AddPointCmd_W(short pointCount, char size, const GfxPointVertex *verts);
 
 // Editor begin-view command — IDB R_AddBeginViewCmd @ 0x4fc3a0 (r_rendercmds.cpp).
 // Emits an RC_BEGIN_VIEW carrying the scene def + the GfxViewParms* the backend
@@ -623,43 +623,43 @@ struct GfxCmdBeginView // 28 bytes: header(4) + GfxSceneDef(0x14) + viewParms(4)
     GfxSceneDef sceneDef;
     const GfxViewParms *viewParms;
 };
-void __cdecl R_AddBeginViewCmd(const GfxSceneDef *sceneDef, const GfxViewParms *viewParms);
-void __cdecl RB_BeginViewCmd(GfxRenderCommandExecState *execState);
+void R_AddBeginViewCmd(const GfxSceneDef *sceneDef, const GfxViewParms *viewParms);
+void RB_BeginViewCmd(GfxRenderCommandExecState *execState);
 // Editor surface-cache flush command (RC_DRAW_EDITOR_SKINNEDCACHED). Front-end emit
 // is R_AddEditorSurfsCmd (r_ed_scene.cpp); the backend handler draws the accumulated
 // brush/world meshes from the per-material editor vertex-buffer pool (r_ed_vertbuf.cpp).
-void __cdecl RB_DrawEditorSkinnedCachedCmd(GfxRenderCommandExecState *execState);
+void RB_DrawEditorSkinnedCachedCmd(GfxRenderCommandExecState *execState);
 // Editor material-colour command — feeds CONST_SRC_CODE_MATERIAL_COLOR to the $line
 // shader (the editor's bare line draw skips normal per-material constant setup).
-void __cdecl R_AddCmdSetMaterialColor(const float *color);
+void R_AddCmdSetMaterialColor(const float *color);
 // Editor sun-preview custom shader-constant command — IDB R_AddCmdSetCustomShaderConstant
 // @ 0x4fd330 (#26 layer C2). Injects the parsed worldspawn sun (CONST_SRC_CODE_SUN_*) into
 // the source-state for the SUNLIGHT_PREVIEW pass; RB_SetCustomConstantCmd consumes it.
-void __cdecl R_AddCmdSetCustomShaderConstant(unsigned int constant, float x, float y, float z, float w);
+void R_AddCmdSetCustomShaderConstant(unsigned int constant, float x, float y, float z, float w);
 // Editor full-screen colored quad — IDB R_AddCmdDrawFullScreenColoredQuad @ 0x4fc260
 // (#26 sun-preview, R_SunPrev_Main). Emits RC_DRAW_FULL_SCREEN_COLORED_QUAD (the backend
 // RB_DrawFullScreenColoredQuadCmd already exists in the CoD3 base). Used for the black-world
 // multiply quad + the clear-stencil quad that frame the SUNLIGHT_PREVIEW lit draw.
-void __cdecl R_AddCmdDrawFullScreenColoredQuad(
+void R_AddCmdDrawFullScreenColoredQuad(
     float s0, float t0, float s1, float t1, const float *color, const Material *material);
 // Editor world-space text command — IDB R_AddCmdDrawTextAtPosition @ 0x4fbe20.
 // Emits an RC_DRAW_TEXT_3D (kisak already has RB_DrawText3DCmd); XY coordinate /
 // view-name / entity-name labels go through this (P5.5 text path).
 struct Font_s;
-void __cdecl R_AddCmdDrawTextAtPosition(
+void R_AddCmdDrawTextAtPosition(
     const char *text, Font_s *font, const float *origin,
     const float *xPixelStep, const float *yPixelStep, const float *color);
 // Editor 2D image command — IDB R_AddCmdDraw2DImage @ 0x4fb5e0. A non-rejecting
 // R_AddCmdDrawStretchPic: draws a world ("wc/") material's colormap into the 2D pass
 // (the texture-window thumbnail grid). See the .cpp for the depth-buffer-rejection note.
-void __cdecl R_AddCmdDraw2DImage(
+void R_AddCmdDraw2DImage(
     float x, float y, float w, float h,
     float s0, float t0, float s1, float t1,
     const float *color, Material *material);
 #endif
 DebugGlobals *R_ToggleSmpFrame();
-GfxViewParms *__cdecl R_AllocViewParms();
-void __cdecl R_AddCmdDrawStretchPic(
+GfxViewParms *R_AllocViewParms();
+void R_AddCmdDrawStretchPic(
     float x,
     float y,
     float w,
@@ -670,10 +670,10 @@ void __cdecl R_AddCmdDrawStretchPic(
     float t1,
     const float *color,
     Material *material);
-bool __cdecl Material_HasAnyFogableTechnique(const Material *material);
-const MaterialTechnique *__cdecl Material_GetTechnique(const Material *material, MaterialTechniqueType techType);
-MaterialTechniqueSet *__cdecl Material_GetTechniqueSet(const Material *material);
-void __cdecl R_AddCmdDrawStretchPicFlipST(
+bool Material_HasAnyFogableTechnique(const Material *material);
+const MaterialTechnique *Material_GetTechnique(const Material *material, MaterialTechniqueType techType);
+MaterialTechniqueSet *Material_GetTechniqueSet(const Material *material);
+void R_AddCmdDrawStretchPicFlipST(
     float x,
     float y,
     float w,
@@ -684,7 +684,7 @@ void __cdecl R_AddCmdDrawStretchPicFlipST(
     float t1,
     const float *color,
     Material *material);
-void __cdecl R_AddCmdDrawStretchPicRotateXY(
+void R_AddCmdDrawStretchPicRotateXY(
     float x,
     float y,
     float w,
@@ -696,7 +696,7 @@ void __cdecl R_AddCmdDrawStretchPicRotateXY(
     float angle,
     const float *color,
     Material *material);
-void __cdecl R_AddCmdDrawStretchPicRotateST(
+void R_AddCmdDrawStretchPicRotateST(
     float x,
     float y,
     float w,
@@ -709,7 +709,7 @@ void __cdecl R_AddCmdDrawStretchPicRotateST(
     float angle,
     const float *color,
     Material *material);
-void __cdecl R_AddCmdDrawTextWithCursor(
+void R_AddCmdDrawTextWithCursor(
     const char *text,
     int maxChars,
     Font_s *font,
@@ -722,7 +722,7 @@ void __cdecl R_AddCmdDrawTextWithCursor(
     int style,
     int cursorPos,
     char cursor);
-GfxCmdDrawText2D *__cdecl AddBaseDrawTextCmd(
+GfxCmdDrawText2D *AddBaseDrawTextCmd(
     const char *text,
     int maxChars,
     Font_s *font,
@@ -735,7 +735,7 @@ GfxCmdDrawText2D *__cdecl AddBaseDrawTextCmd(
     int style,
     int cursorPos,
     char cursor);
-void __cdecl R_AddCmdDrawText(
+void R_AddCmdDrawText(
     const char *text,
     int maxChars,
     Font_s *font,
@@ -746,7 +746,7 @@ void __cdecl R_AddCmdDrawText(
     float rotation,
     const float *color,
     int style);
-void __cdecl R_AddCmdDrawTextSubtitle(
+void R_AddCmdDrawTextSubtitle(
     const char *text,
     int maxChars,
     Font_s *font,
@@ -759,8 +759,8 @@ void __cdecl R_AddCmdDrawTextSubtitle(
     int style,
     const float *glowColor,
     bool cinematic);
-char __cdecl SetDrawText2DGlowParms(GfxCmdDrawText2D *cmd, const float *color, const float *glowColor);
-void __cdecl R_AddCmdDrawTextWithEffects(
+char SetDrawText2DGlowParms(GfxCmdDrawText2D *cmd, const float *color, const float *glowColor);
+void R_AddCmdDrawTextWithEffects(
     const char *text,
     int maxChars,
     Font_s *font,
@@ -778,7 +778,7 @@ void __cdecl R_AddCmdDrawTextWithEffects(
     int fxLetterTime,
     int fxDecayStartTime,
     int fxDecayDuration);
-char __cdecl SetDrawText2DPulseFXParms(
+char SetDrawText2DPulseFXParms(
     GfxCmdDrawText2D *cmd,
     Material *fxMaterial,
     Material *fxMaterialGlow,
@@ -786,7 +786,7 @@ char __cdecl SetDrawText2DPulseFXParms(
     int fxLetterTime,
     int fxDecayStartTime,
     int fxDecayDuration);
-void __cdecl R_AddCmdDrawConsoleText(
+void R_AddCmdDrawConsoleText(
     char *textPool,
     int poolSize,
     int firstChar,
@@ -798,7 +798,7 @@ void __cdecl R_AddCmdDrawConsoleText(
     float yScale,
     const float *color,
     int style);
-GfxCmdDrawText2D *__cdecl AddBaseDrawConsoleTextCmd(
+GfxCmdDrawText2D *AddBaseDrawConsoleTextCmd(
     char *textPool,
     int poolSize,
     int firstChar,
@@ -810,8 +810,8 @@ GfxCmdDrawText2D *__cdecl AddBaseDrawConsoleTextCmd(
     float yScale,
     const float *color,
     int style);
-void __cdecl CopyPoolTextToCmd(char *textPool, int poolSize, int firstChar, int charCount, GfxCmdDrawText2D *cmd);
-void __cdecl R_AddCmdDrawConsoleTextSubtitle(
+void CopyPoolTextToCmd(char *textPool, int poolSize, int firstChar, int charCount, GfxCmdDrawText2D *cmd);
+void R_AddCmdDrawConsoleTextSubtitle(
     char *textPool,
     int poolSize,
     int firstChar,
@@ -824,7 +824,7 @@ void __cdecl R_AddCmdDrawConsoleTextSubtitle(
     const float *color,
     int style,
     const float *glowColor);
-void __cdecl R_AddCmdDrawConsoleTextPulseFX(
+void R_AddCmdDrawConsoleTextPulseFX(
     char *textPool,
     int poolSize,
     int firstChar,
@@ -843,61 +843,61 @@ void __cdecl R_AddCmdDrawConsoleTextPulseFX(
     int fxDecayDuration,
     Material *fxMaterial,
     Material *fxMaterialGlow);
-void __cdecl R_AddCmdDrawQuadPic(const float (*verts)[2], const float *color, Material *material);
-void __cdecl R_BeginFrame();
+void R_AddCmdDrawQuadPic(const float (*verts)[2], const float *color, Material *material);
+void R_BeginFrame();
 void R_UpdateFrontEndDvarOptions();
-void __cdecl R_SetInputCodeConstantFromVec4(GfxCmdBufInput *input, CodeConstant constant, const float *value);
-void __cdecl R_SetInputCodeImageTexture(GfxCmdBufInput *input, MaterialTextureSource codeTexture, const GfxImage *image);
-bool __cdecl R_LightTweaksModified();
+void R_SetInputCodeConstantFromVec4(GfxCmdBufInput *input, CodeConstant constant, const float *value);
+void R_SetInputCodeImageTexture(GfxCmdBufInput *input, MaterialTextureSource codeTexture, const GfxImage *image);
+bool R_LightTweaksModified();
 void R_SetTestLods();
-bool __cdecl R_AreAnyImageOverridesActive();
+bool R_AreAnyImageOverridesActive();
 void R_SetOutdoorFeatherConst();
-void __cdecl R_SetInputCodeConstant(GfxCmdBufInput *input, CodeConstant constant, float x, float y, float z, float w);
+void R_SetInputCodeConstant(GfxCmdBufInput *input, CodeConstant constant, float x, float y, float z, float w);
 void R_EnvMapOverrideConstants();
-void __cdecl R_EndFrame();
-void __cdecl R_AddCmdClearScreen(int whichToClear, const float *color, float depth, uint8_t stencil);
-void __cdecl R_AddCmdSaveScreen(uint32_t screenTimerId);
-void __cdecl R_AddCmdSaveScreenSection(
+void R_EndFrame();
+void R_AddCmdClearScreen(int whichToClear, const float *color, float depth, uint8_t stencil);
+void R_AddCmdSaveScreen(uint32_t screenTimerId);
+void R_AddCmdSaveScreenSection(
     float viewX,
     float viewY,
     float viewWidth,
     float viewHeight,
     uint32_t screenTimerId);
-void __cdecl R_AddCmdBlendSavedScreenShockBlurred(
+void R_AddCmdBlendSavedScreenShockBlurred(
     int fadeMsec,
     float viewX,
     float viewY,
     float viewWidth,
     float viewHeight,
     uint32_t screenTimerId);
-void __cdecl R_AddCmdBlendSavedScreenShockFlashed(
+void R_AddCmdBlendSavedScreenShockFlashed(
     float intensityWhiteout,
     float intensityScreengrab,
     float viewX,
     float viewY,
     float viewWidth,
     float viewHeight);
-void __cdecl R_AddCmdDrawProfile();
-void __cdecl R_AddCmdProjectionSet2D();
-void __cdecl R_AddCmdProjectionSet3D(); // KISAK_SP
-void __cdecl R_AddCmdProjectionSet(GfxProjectionTypes projection);
-void __cdecl R_BeginRemoteScreenUpdate();
-void __cdecl R_EndRemoteScreenUpdate();
-void __cdecl R_PushRemoteScreenUpdate(int remoteScreenUpdateNesting);
-int __cdecl R_PopRemoteScreenUpdate();
-bool __cdecl R_IsInRemoteScreenUpdate();
+void R_AddCmdDrawProfile();
+void R_AddCmdProjectionSet2D();
+void R_AddCmdProjectionSet3D(); // KISAK_SP
+void R_AddCmdProjectionSet(GfxProjectionTypes projection);
+void R_BeginRemoteScreenUpdate();
+void R_EndRemoteScreenUpdate();
+void R_PushRemoteScreenUpdate(int remoteScreenUpdateNesting);
+int R_PopRemoteScreenUpdate();
+bool R_IsInRemoteScreenUpdate();
 
-void __cdecl R_InitTempSkinBuf();
+void R_InitTempSkinBuf();
 
 void R_AddCmdSetViewportValues(int x, int y, int width, int height);
 
-void __cdecl R_ShutdownDynamicMesh(GfxMeshData *mesh);
-void __cdecl R_ShutdownRenderBuffers();
+void R_ShutdownDynamicMesh(GfxMeshData *mesh);
+void R_ShutdownRenderBuffers();
 
-void __cdecl R_ShutdownRenderCommands();
+void R_ShutdownRenderCommands();
 
-void __cdecl R_BeginDebugFrame();
-void __cdecl R_EndDebugFrame();
+void R_BeginDebugFrame();
+void R_EndDebugFrame();
 
 extern GfxBackEndData *frontEndDataOut;
 extern GfxBackEndData s_backEndData[2];

@@ -2,7 +2,7 @@
 
 // LWSS ADD
 
-int __cdecl dCollideBoxTriangleList(
+int dCollideBoxTriangleList(
     const unsigned __int16 *indices,
     const float (*verts)[3],
     int triCount,

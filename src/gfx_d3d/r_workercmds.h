@@ -49,29 +49,29 @@ struct WorkerCmds // sizeof=0x80
     uint32_t pad[23];
 };
 
-int __cdecl R_FXNonDependentOrSpotLightPending(void* args);
-bool __cdecl R_FXSpotLightPending();
-bool __cdecl R_FXNonDependentPending();
-int __cdecl R_EndFenceBusy(void* args);
-void __cdecl TRACK_r_workercmds();
-void __cdecl R_WaitWorkerCmdsOfType(WorkerCmdType type);
-void __cdecl R_NotifyWorkerCmdType(WorkerCmdType type);
-int __cdecl R_WorkerCmdsFinished();
-void __cdecl R_ProcessWorkerCmds();
-int __cdecl R_ProcessWorkerCmd(WorkerCmdType type);
-void __cdecl R_ProcessWorkerCmdInternal(WorkerCmdType type, void *data);
+int R_FXNonDependentOrSpotLightPending(void* args);
+bool R_FXSpotLightPending();
+bool R_FXNonDependentPending();
+int R_EndFenceBusy(void* args);
+void TRACK_r_workercmds();
+void R_WaitWorkerCmdsOfType(WorkerCmdType type);
+void R_NotifyWorkerCmdType(WorkerCmdType type);
+int R_WorkerCmdsFinished();
+void R_ProcessWorkerCmds();
+int R_ProcessWorkerCmd(WorkerCmdType type);
+void R_ProcessWorkerCmdInternal(WorkerCmdType type, void *data);
 void R_InitWorkerThreads();
 int R_InitWorkerCmds();
 int R_InitWorkerCmdsPos();
-void __cdecl  R_WorkerThread();
-void __cdecl R_AddWorkerCmd(WorkerCmdType type, uint8_t *data);
-void __cdecl R_UpdateActiveWorkerThreads();
-void __cdecl R_WaitFrontendWorkerCmds();
-int __cdecl R_FinishedWorkerCmds();
-void __cdecl R_WaitWorkerCmds();
-void __cdecl R_ProcessWorkerCmdsWithTimeout(int(__cdecl *timeout)(), int forever);
+void R_WorkerThread();
+void R_AddWorkerCmd(WorkerCmdType type, uint8_t *data);
+void R_UpdateActiveWorkerThreads();
+void R_WaitFrontendWorkerCmds();
+int R_FinishedWorkerCmds();
+void R_WaitWorkerCmds();
+void R_ProcessWorkerCmdsWithTimeout(int(*timeout)(), int forever);
 
-static int(__cdecl *g_cmdOutputBusy[17])(void *) =
+static int(*g_cmdOutputBusy[17])(void *) =
 {
   NULL,
   NULL,

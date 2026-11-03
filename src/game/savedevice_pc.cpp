@@ -13,46 +13,46 @@
 #include <qcommon/com_playerprofile.h>
 #endif
 
-// void __cdecl SaveDevice_Init(void)    8227fb88 f   savedevice_xenon.obj
-// void __cdecl SV_DisplaySaveErrorUI(void) 8227fba8 f   savedevice_xenon.obj
-// BOOL __cdecl BuildCleanSavePath(char *, unsigned int, char const *, enum SaveType) 8227fbf8 f   savedevice_xenon.obj
-// BOOL __cdecl SaveDevice_IsAccessingDevice(void) 8227fdf0 f   savedevice_xenon.obj
-// void __cdecl WriteSaveToDeviceCleanup(void) 8227fe00 f   savedevice_xenon.obj
-// BOOL __cdecl SaveDevice_IsSaveSuccessful(void) 822800c8 f   savedevice_xenon.obj
-// int __cdecl ReadFromDevice(void *, int, void *) 822800d8 f   savedevice_xenon.obj
-// int __cdecl OpenDevice(char const *, void **) 82280140 f   savedevice_xenon.obj
-// void __cdecl CloseDevice(void *)     822801e0 f   savedevice_xenon.obj
-// BOOL __cdecl SaveExists(char const *)     82280280 f   savedevice_xenon.obj
-// int __cdecl WriteSaveToDevice(unsigned char *, struct SaveHeader const *, BOOL) 82280448 f   savedevice_xenon.obj
-// void __cdecl SV_ForceSelectSaveDevice_f(void) 823cfd38 f   sv_ccmds.obj
-// void __cdecl SV_SelectSaveDevice_f(void) 823cfd90 f   sv_ccmds.obj
+// void SaveDevice_Init(void)    8227fb88 f   savedevice_xenon.obj
+// void SV_DisplaySaveErrorUI(void) 8227fba8 f   savedevice_xenon.obj
+// BOOL BuildCleanSavePath(char *, unsigned int, char const *, enum SaveType) 8227fbf8 f   savedevice_xenon.obj
+// BOOL SaveDevice_IsAccessingDevice(void) 8227fdf0 f   savedevice_xenon.obj
+// void WriteSaveToDeviceCleanup(void) 8227fe00 f   savedevice_xenon.obj
+// BOOL SaveDevice_IsSaveSuccessful(void) 822800c8 f   savedevice_xenon.obj
+// int ReadFromDevice(void *, int, void *) 822800d8 f   savedevice_xenon.obj
+// int OpenDevice(char const *, void **) 82280140 f   savedevice_xenon.obj
+// void CloseDevice(void *)     822801e0 f   savedevice_xenon.obj
+// BOOL SaveExists(char const *)     82280280 f   savedevice_xenon.obj
+// int WriteSaveToDevice(unsigned char *, struct SaveHeader const *, BOOL) 82280448 f   savedevice_xenon.obj
+// void SV_ForceSelectSaveDevice_f(void) 823cfd38 f   sv_ccmds.obj
+// void SV_SelectSaveDevice_f(void) 823cfd90 f   sv_ccmds.obj
 // char const *const CONSOLE_DEFAULT_SAVE_NAME 826969a4     savedevice_xenon.obj
 // int marker_savedevice_pc 82e2081c     savedevice_pc.obj
 // int marker_savedevice_xenon 82e208b4     savedevice_xenon.obj
-// BOOL __cdecl SaveDevice_CheckForError(struct MemcardError const *) 8227fba0 f   savedevice_xenon.obj
-// int __cdecl WriteSaveToDeviceInternal(struct SaveHeader const *) 8227fe48 f   savedevice_xenon.obj
-// void __cdecl BeginScreenUpdateIfSupported(void) 82280218 f   savedevice_xenon.obj
-// void __cdecl EndScreenUpdateIfSupported(void) 82280220 f   savedevice_xenon.obj
-// void *__cdecl SaveExists_OpenContextFile(char const *) 82280228 f   savedevice_xenon.obj
+// BOOL SaveDevice_CheckForError(struct MemcardError const *) 8227fba0 f   savedevice_xenon.obj
+// int WriteSaveToDeviceInternal(struct SaveHeader const *) 8227fe48 f   savedevice_xenon.obj
+// void BeginScreenUpdateIfSupported(void) 82280218 f   savedevice_xenon.obj
+// void EndScreenUpdateIfSupported(void) 82280220 f   savedevice_xenon.obj
+// void *SaveExists_OpenContextFile(char const *) 82280228 f   savedevice_xenon.obj
 
 
 static bool g_saveDevice_lastSaveSucceeded = true;
 
-void __cdecl Memcard_InitializeSystem(void)
+void Memcard_InitializeSystem(void)
 {
 }
 
-void __cdecl SaveDevice_Init(void)
+void SaveDevice_Init(void)
 {
 	g_saveDevice_lastSaveSucceeded = true;
 }
 
-void __cdecl SV_DisplaySaveErrorUI(void)
+void SV_DisplaySaveErrorUI(void)
 {
 	Com_PrintError(CON_CHANNEL_FILES, "SV_DisplaySaveErrorUI: a save operation failed\n");
 }
 
-bool __cdecl BuildCleanSavePath(char *cleanSavePath, unsigned int cleanSavePathSize, char const *filename, enum SaveType saveType)
+bool BuildCleanSavePath(char *cleanSavePath, unsigned int cleanSavePathSize, char const *filename, enum SaveType saveType)
 {
 	if (!filename)
 		MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\savedevice_xenon.cpp", 83, 0, "%s", "filename");
@@ -131,21 +131,21 @@ bool __cdecl BuildCleanSavePath(char *cleanSavePath, unsigned int cleanSavePathS
 #endif
 }
 
-bool __cdecl SaveDevice_IsAccessingDevice(void)
+bool SaveDevice_IsAccessingDevice(void)
 {
 	return false;
 }
 
-void __cdecl WriteSaveToDeviceCleanup(void)
+void WriteSaveToDeviceCleanup(void)
 {
 }
 
-bool __cdecl SaveDevice_IsSaveSuccessful(void)
+bool SaveDevice_IsSaveSuccessful(void)
 {
 	return g_saveDevice_lastSaveSucceeded;
 }
 
-int __cdecl OpenDevice(char const *name, void **fileHandle)
+int OpenDevice(char const *name, void **fileHandle)
 {
 	if (!fileHandle)
 		return -1;
@@ -160,14 +160,14 @@ int __cdecl OpenDevice(char const *name, void **fileHandle)
 	return (int)size;
 }
 
-void __cdecl CloseDevice(void *fileHandle)
+void CloseDevice(void *fileHandle)
 {
 	int handle = (int)(intptr_t)fileHandle;
 	if (handle)
 		FS_FCloseFile(handle);
 }
 
-int __cdecl ReadFromDevice(void *buffer, int size, void *fileHandle)
+int ReadFromDevice(void *buffer, int size, void *fileHandle)
 {
 	int handle = (int)(intptr_t)fileHandle;
 	if (!handle || !buffer || size <= 0)
@@ -193,7 +193,7 @@ static bool SaveExistsValidated(char const *path)
 	return bytesRead == (int)sizeof(SaveHeader) && header.saveVersion == 287;
 }
 
-bool __cdecl SaveExists(char const *savename)
+bool SaveExists(char const *savename)
 {
 	char pathWithExt[256];
 	const char *ext;
@@ -217,7 +217,7 @@ bool __cdecl SaveExists(char const *savename)
 #endif
 }
 
-int __cdecl WriteSaveToDevice(unsigned char *data, struct SaveHeader const *saveHeader, bool /*suppressPlayerNotify*/)
+int WriteSaveToDevice(unsigned char *data, struct SaveHeader const *saveHeader, bool /*suppressPlayerNotify*/)
 {
 	if (!data || !saveHeader)
 	{
@@ -278,12 +278,12 @@ int __cdecl WriteSaveToDevice(unsigned char *data, struct SaveHeader const *save
 	return 0;
 }
 
-bool __cdecl SaveDevice_CheckForError(struct MemcardError const *)
+bool SaveDevice_CheckForError(struct MemcardError const *)
 {
 	return false;
 }
 
-int __cdecl WriteSaveToDeviceInternal(struct SaveHeader const *saveHeader)
+int WriteSaveToDeviceInternal(struct SaveHeader const *saveHeader)
 {
 	if (!saveHeader)
 		return -1;
@@ -292,15 +292,15 @@ int __cdecl WriteSaveToDeviceInternal(struct SaveHeader const *saveHeader)
 	return -1;
 }
 
-void __cdecl BeginScreenUpdateIfSupported(void)
+void BeginScreenUpdateIfSupported(void)
 {
 }
 
-void __cdecl EndScreenUpdateIfSupported(void)
+void EndScreenUpdateIfSupported(void)
 {
 }
 
-void *__cdecl SaveExists_OpenContextFile(char const *savename)
+void *SaveExists_OpenContextFile(char const *savename)
 {
 	if (!savename || !*savename)
 		return 0;

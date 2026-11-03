@@ -543,7 +543,7 @@ void Profile_Init()
 }
 
 #ifndef TRACY_ENABLE
-void __cdecl Profile_Unguard(int id)
+void Profile_Unguard(int id)
 {
 #if 0
     const char *v1; // eax
@@ -573,7 +573,7 @@ void __cdecl Profile_Unguard(int id)
 #endif
 }
 
-void __cdecl Profile_SetTotal(int index, int total)
+void Profile_SetTotal(int index, int total)
 {
 #if 0
     ProfileStack* prof_stack = (ProfileStack*)Sys_GetValue(0);
@@ -602,7 +602,7 @@ void Profile_ResetScriptCounters()
 #endif
 }
 
-void __cdecl Profile_ResetCounters(int system)
+void Profile_ResetCounters(int system)
 {
 #if 0
     ProfileStack *prof_stack; // [esp+30h] [ebp-Ch]
@@ -631,7 +631,7 @@ void __cdecl Profile_ResetCounters(int system)
 #endif
 }
 
-void __cdecl Profile_Recover(int id)
+void Profile_Recover(int id)
 {
 #if 0
     ProfileStack *prof_stack; // [esp+0h] [ebp-4h]
@@ -670,7 +670,7 @@ void __cdecl Profile_Recover(int id)
 #endif
 }
 
-void __cdecl Profile_InitContext(int profileContext)
+void Profile_InitContext(int profileContext)
 {
 #if 0
     ProfileStack *prof_stack; // [esp+50h] [ebp-18h]
@@ -717,7 +717,7 @@ void __cdecl Profile_InitContext(int profileContext)
 #endif
 }
 
-void __cdecl Profile_Guard(int id)
+void Profile_Guard(int id)
 {
 #if 0
     int i; // [esp+0h] [ebp-8h]
@@ -757,17 +757,17 @@ void __cdecl Profile_Guard(int id)
 #endif
 }
 
-ProfileStack *__cdecl Profile_GetStackForContext(int profileContext)
+ProfileStack *Profile_GetStackForContext(int profileContext)
 {
     return &g_prof_stack[profileContext];
 }
 
-ProfileScript *__cdecl Profile_GetScript()
+ProfileScript *Profile_GetScript()
 {
     return &profileScript;
 }
 
-int __cdecl Profile_GetEnumParity(uint32_t profEnum)
+int Profile_GetEnumParity(uint32_t profEnum)
 {
     if (profEnum >= 0x1B0)
         MyAssertHandler(
@@ -780,14 +780,14 @@ int __cdecl Profile_GetEnumParity(uint32_t profEnum)
     return prof_parity[prof_enumSystems[profEnum]];
 }
 
-int __cdecl Profile_GetDisplayThread()
+int Profile_GetDisplayThread()
 {
     if (!profile_thread)
         MyAssertHandler(".\\universal\\profile.cpp", 668, 0, "%s", "profile_thread");
     return profile_thread->current.integer;
 }
 
-void __cdecl Profile_EndScripts(uint32_t profileFlags)
+void Profile_EndScripts(uint32_t profileFlags)
 {
 #if 0
     int profileIndex; // [esp+10h] [ebp-4h]
@@ -818,7 +818,7 @@ void __cdecl Profile_EndScripts(uint32_t profileFlags)
 #endif
 }
 
-void __cdecl Profile_EndScript(int profileIndex)
+void Profile_EndScript(int profileIndex)
 {
 #if 0
     ProfileScriptWritable *write; // [esp+8h] [ebp-8h]
@@ -838,7 +838,7 @@ void __cdecl Profile_EndScript(int profileIndex)
 #endif
 }
 
-int __cdecl Profile_EndInternal(long double *duration)
+int Profile_EndInternal(long double *duration)
 {
     // KISAKTODO: Profiler
     return 0;
@@ -886,7 +886,7 @@ int __cdecl Profile_EndInternal(long double *duration)
 #endif
 }
 
-void __cdecl Profile_BeginScripts(uint32_t profileFlags)
+void Profile_BeginScripts(uint32_t profileFlags)
 {
     // KISAKTODO: profiler
     int profileIndex; // [esp+Ch] [ebp-4h]
@@ -916,7 +916,7 @@ void __cdecl Profile_BeginScripts(uint32_t profileFlags)
     } while (profileFlags);
 }
 
-void __cdecl Profile_BeginScript(int profileIndex)
+void Profile_BeginScript(int profileIndex)
 {
 #if 0
     // KISAKTODO: profiler
@@ -936,7 +936,7 @@ void __cdecl Profile_BeginScript(int profileIndex)
 #endif
 }
 
-void __cdecl Profile_Begin(int index)
+void Profile_Begin(int index)
 {
     // KISAKTODO: Profiler
 
@@ -959,7 +959,7 @@ void __cdecl Profile_Begin(int index)
 #endif
 }
 
-int __cdecl Profile_AddScriptName(char *profileName)
+int Profile_AddScriptName(char *profileName)
 {
     char *name; // [esp+0h] [ebp-8h]
     uint32_t i; // [esp+4h] [ebp-4h]
@@ -981,7 +981,7 @@ int __cdecl Profile_AddScriptName(char *profileName)
     return -1;
 }
 
-void __cdecl Profile_ResetCountersForContext(int profileContext, int system)
+void Profile_ResetCountersForContext(int profileContext, int system)
 {
 #if 0
     int atomType; // [esp+8h] [ebp-Ch]
@@ -1011,7 +1011,7 @@ void __cdecl Profile_ResetCountersForContext(int profileContext, int system)
 #endif
 }
 
-const char *__cdecl Profile_MissingEnd()
+const char *Profile_MissingEnd()
 {
     ProfileStack *prof_stack; // [esp+0h] [ebp-Ch]
     char *msg; // [esp+4h] [ebp-8h]

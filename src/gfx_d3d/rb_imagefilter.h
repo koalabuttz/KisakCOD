@@ -21,12 +21,12 @@ struct GfxImageFilter // sizeof=0x130C
 };
 
 
-void __cdecl RB_GaussianFilterImage(
+void RB_GaussianFilterImage(
     float radius,
     GfxRenderTargetId srcRenderTargetId,
     GfxRenderTargetId dstRenderTargetId);
-void __cdecl RB_VirtualToSceneRadius(float radius, float *radiusX, float *radiusY);
-int __cdecl RB_GenerateGaussianFilterChain(
+void RB_VirtualToSceneRadius(float radius, float *radiusX, float *radiusY);
+int RB_GenerateGaussianFilterChain(
     float radiusX,
     float radiusY,
     uint32_t srcWidth,
@@ -35,21 +35,21 @@ int __cdecl RB_GenerateGaussianFilterChain(
     int dstHeight,
     int passLimit,
     GfxImageFilterPass *filterPass);
-void __cdecl RB_GenerateGaussianFilter1D(float radius, int *res, int axis, GfxImageFilterPass *filterPass);
-int __cdecl RB_PickSymmetricFilterMaterial(int halfTapCount, const Material **material);
-int __cdecl RB_GaussianFilterPoints1D(float pixels, int srcRes, int dstRes, int tapLimit, float *tapOffsets, float *tapWeights);
-void __cdecl RB_GenerateGaussianFilter2D(
+void RB_GenerateGaussianFilter1D(float radius, int *res, int axis, GfxImageFilterPass *filterPass);
+int RB_PickSymmetricFilterMaterial(int halfTapCount, const Material **material);
+int RB_GaussianFilterPoints1D(float pixels, int srcRes, int dstRes, int tapLimit, float *tapOffsets, float *tapWeights);
+void RB_GenerateGaussianFilter2D(
     float radius,
     uint32_t srcWidth,
     uint32_t srcHeight,
     int dstWidth,
     int dstHeight,
     GfxImageFilterPass *filterPass);
-void __cdecl RB_FilterImage(GfxImageFilter *filter);
-void __cdecl RB_SetupFilterPass(const GfxImageFilterPass *filterPass);
-void __cdecl RB_FilterPingPong(const GfxImageFilter *filter, int passIndex);
-void __cdecl RB_GlowFilterImage(float radius);
-GfxRenderTargetId __cdecl RB_ApplyGlowFilter(
+void RB_FilterImage(GfxImageFilter *filter);
+void RB_SetupFilterPass(const GfxImageFilterPass *filterPass);
+void RB_FilterPingPong(const GfxImageFilter *filter, int passIndex);
+void RB_GlowFilterImage(float radius);
+GfxRenderTargetId RB_ApplyGlowFilter(
     float radius,
     GfxRenderTargetId srcRenderTarget,
     GfxRenderTargetId dstRenderTarget);

@@ -2,7 +2,7 @@
 #include "r_material.h"
 #include "r_init.h"
 
-Material *__cdecl Material_Duplicate(Material *source, char *name)
+Material *Material_Duplicate(Material *source, char *name)
 {
     iassert(source);
     iassert(name);

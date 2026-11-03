@@ -11,7 +11,7 @@
 #include "ui.h"
 #endif
 
-double __cdecl UI_LoadBarProgress_LoadObj()
+double UI_LoadBarProgress_LoadObj()
 {
     float v2; // [esp+4h] [ebp-14h]
     double v3; // [esp+Ch] [ebp-Ch]
@@ -28,7 +28,7 @@ double __cdecl UI_LoadBarProgress_LoadObj()
         return (float)1.0;
 }
 
-void __cdecl UI_DrawHandlePic(
+void UI_DrawHandlePic(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -71,7 +71,7 @@ void __cdecl UI_DrawHandlePic(
     CL_DrawStretchPic(scrPlace, x, y, w, h, horzAlign, vertAlign, s0, t0, s1, t1, color, material);
 }
 
-void __cdecl UI_DrawLoadBar(
+void UI_DrawLoadBar(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -95,18 +95,18 @@ void __cdecl UI_DrawLoadBar(
     CL_DrawStretchPic(scrPlace, x, y, v9, h, horzAlign, vertAlign, 0.0, 0.0, percentDone, 1.0, color, material);
 }
 
-double __cdecl UI_LoadBarProgress_FastFile()
+double UI_LoadBarProgress_FastFile()
 {
     return DB_GetLoadedFraction();
 }
 
-void __cdecl UI_FillRectPhysical(float x, float y, float width, float height, const float *color)
+void UI_FillRectPhysical(float x, float y, float width, float height, const float *color)
 {
     if (sharedUiInfo.assets.whiteMaterial)
         CL_DrawStretchPicPhysical(x, y, width, height, 0.0, 0.0, 0.0, 0.0, color, sharedUiInfo.assets.whiteMaterial);
 }
 
-void __cdecl UI_FillRect(
+void UI_FillRect(
     const ScreenPlacement *scrPlace,
     float x,
     float y,

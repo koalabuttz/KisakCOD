@@ -10,7 +10,7 @@
 
 bool cin_skippable;
 
-int32_t __cdecl CIN_PlayCinematic(int32_t localClientNum, char *arg)
+int32_t CIN_PlayCinematic(int32_t localClientNum, char *arg)
 {
     float volume; // [esp+4h] [ebp-4h]
 
@@ -33,7 +33,7 @@ int32_t __cdecl CIN_PlayCinematic(int32_t localClientNum, char *arg)
     return 1;
 }
 
-void __cdecl CL_PlayCinematic_f()
+void CL_PlayCinematic_f()
 {
     char *arg1; // [esp+0h] [ebp-Ch]
 
@@ -46,13 +46,13 @@ void __cdecl CL_PlayCinematic_f()
         Com_Printf(CON_CHANNEL_DONT_FILTER, "No cinematic file specified: cinematic filename [1/2/3]\n");
 }
 
-void __cdecl CL_PlayUnskippableCinematic_f()
+void CL_PlayUnskippableCinematic_f()
 {
     CL_PlayCinematic_f();
     cin_skippable = 0;
 }
 
-void __cdecl SCR_DrawCinematic(int32_t localClientNum)
+void SCR_DrawCinematic(int32_t localClientNum)
 {
     if (R_Cinematic_IsNextReady())
         R_Cinematic_StartNextPlayback();
@@ -62,7 +62,7 @@ void __cdecl SCR_DrawCinematic(int32_t localClientNum)
         R_Cinematic_DrawStretchPic_Letterboxed();
 }
 
-void __cdecl SCR_StopCinematic(int32_t localClientNum)
+void SCR_StopCinematic(int32_t localClientNum)
 {
     if (cin_skippable || R_Cinematic_IsFinished())
     {

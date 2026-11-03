@@ -1,20 +1,20 @@
 #include <universal/q_shared.h>
 #include "r_material_layered.h"
 #include "r_image.h"
-uint32_t __cdecl R_HashString(const char *);
+uint32_t R_HashString(const char *);
 #include <cstring>
 #include <cstdlib>
 #include <limits>
 #include <qcommon/qcommon.h>
 
 // Shader/state derivation remains in the full material loader.
-char __cdecl Material_HasConstant(const Material *, uint32_t);
-uint32_t __cdecl Material_CreateLayeredStateBitsTable(const Material **, uint32_t,
+char Material_HasConstant(const Material *, uint32_t);
+uint32_t Material_CreateLayeredStateBitsTable(const Material **, uint32_t,
     const MaterialTechniqueSet *, uint8_t *, uint32_t (*)[2]);
-void __cdecl Material_AppendCharToConstName(char *, char);
-int __cdecl CompareHashedMaterialTextures(_DWORD *, _DWORD *);
+void Material_AppendCharToConstName(char *, char);
+int CompareHashedMaterialTextures(_DWORD *, _DWORD *);
 
-Material *__cdecl Material_CreateLayered(
+Material *Material_CreateLayered(
     char *name,
     const Material **layerMtl,
     uint32_t layerCount,

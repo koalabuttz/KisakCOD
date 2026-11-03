@@ -13,7 +13,7 @@
 #endif
 
 #ifdef KISAK_MP
-void __cdecl CG_LoadingString(int32_t localClientNum, const char *s)
+void CG_LoadingString(int32_t localClientNum, const char *s)
 {
     CG_GetLocalClientGlobals(localClientNum)->isLoading = *s != 0;
     if (s && *s)
@@ -24,14 +24,14 @@ void __cdecl CG_LoadingString(int32_t localClientNum, const char *s)
 }
 #endif
 
-BOOL __cdecl CG_IsShowingProgress_LoadObj()
+BOOL CG_IsShowingProgress_LoadObj()
 {
     return com_expectedHunkUsage > 0;
 }
 
 static bool drawInformationCalled = false;
 static int lastDraw = 0;
-void __cdecl CG_DrawInformation(int32_t localClientNum)
+void CG_DrawInformation(int32_t localClientNum)
 {
 #ifdef KISAK_MP
     int32_t v1; // [esp+20h] [ebp-30h]
@@ -118,7 +118,7 @@ void __cdecl CG_DrawInformation(int32_t localClientNum)
 #endif
 }
 
-bool __cdecl CG_IsShowingProgress_FastFile()
+bool CG_IsShowingProgress_FastFile()
 {
     return DB_GetLoadedFraction() > 0.0;
 }

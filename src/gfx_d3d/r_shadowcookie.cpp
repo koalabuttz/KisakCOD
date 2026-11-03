@@ -17,7 +17,7 @@
 #include <universal/profile.h>
 
 #ifdef KISAK_RADIANT
-int __cdecl CL_GetLocalClientActiveCount()
+int CL_GetLocalClientActiveCount()
 {
     return 1;
 }
@@ -35,12 +35,12 @@ struct ShadowCookieGlob // sizeof=0x8
 
 ShadowCookieGlob shadowCookieGlob;
 
-bool __cdecl R_SortBspShadowReceiverSurfaces(GfxSurface *surface0, GfxSurface *surface1)
+bool R_SortBspShadowReceiverSurfaces(GfxSurface *surface0, GfxSurface *surface1)
 {
     return surface0 < surface1;
 }
 
-void __cdecl R_EmitShadowCookieSurfs(GfxViewInfo *viewInfo)
+void R_EmitShadowCookieSurfs(GfxViewInfo *viewInfo)
 {
     ShadowCookie *cookie; // [esp+14h] [ebp-28h]
     int firstCasterDrawSurf; // [esp+1Ch] [ebp-20h]
@@ -91,13 +91,13 @@ void __cdecl R_EmitShadowCookieSurfs(GfxViewInfo *viewInfo)
     }
 }
 
-void __cdecl R_GenerateShadowCookiesCmd(ShadowCookieCmd *cmd)
+void R_GenerateShadowCookiesCmd(ShadowCookieCmd *cmd)
 {
     R_GenerateShadowCookies(cmd->localClientNum, cmd->viewParmsDpvs, cmd->viewParmsDraw, cmd->shadowCookieList);
 }
 
 
-void __cdecl R_PopulateCandidates(const GfxViewParms *viewParmsDraw, ShadowCandidate *candidates)
+void R_PopulateCandidates(const GfxViewParms *viewParmsDraw, ShadowCandidate *candidates)
 {
     double Radius; // st7
     float diff[3]; // [esp+4h] [ebp-38h] BYREF
@@ -186,7 +186,7 @@ void __cdecl R_PopulateCandidates(const GfxViewParms *viewParmsDraw, ShadowCandi
     }
 }
 
-bool __cdecl R_ShadowCandidatePred(const ShadowCandidate &a, const ShadowCandidate &b)
+bool R_ShadowCandidatePred(const ShadowCandidate &a, const ShadowCandidate &b)
 {
     return b.weight > a.weight;
 }
@@ -200,7 +200,7 @@ const float shadowFrustumSidePlanes[5][4] =
   { 0.0, 0.0, 1.0, 0.0 }
 }; // idb
 
-void __cdecl R_GenerateShadowCookies(
+void R_GenerateShadowCookies(
     int localClientNum,
     const GfxViewParms *viewParmsDpvs,
     const GfxViewParms *viewParmsDraw,
@@ -241,7 +241,7 @@ void __cdecl R_GenerateShadowCookies(
     }
 }
 
-void __cdecl R_AddCasters(
+void R_AddCasters(
     int localClientNum,
     const GfxViewParms *viewParmsDraw,
     ShadowCandidate *candidates,
@@ -335,7 +335,7 @@ LABEL_24:
     shadowCookieList->cookieCount = unsignedInt;
 }
 
-void __cdecl R_AddShadowCookie(
+void R_AddShadowCookie(
     int localClientNum,
     const GfxViewParms *viewParms,
     uint32_t sceneEntIndex,
@@ -429,7 +429,7 @@ void __cdecl R_AddShadowCookie(
     }
 }
 
-static void __cdecl R_GetSunAxes(float (*sunAxis)[3][3])
+static void R_GetSunAxes(float (*sunAxis)[3][3])
 {
     float v1; // [esp+0h] [ebp-1Ch]
     float *dir; // [esp+18h] [ebp-4h]
@@ -464,7 +464,7 @@ static void __cdecl R_GetSunAxes(float (*sunAxis)[3][3])
     Vec3Cross((const float *)sunAxis, (*sunAxis)[1], (*sunAxis)[2]);
 }
 
-void __cdecl R_GenerateShadowCookieViewParms(float *modelMin, float *modelMax, GfxViewParms *shadowViewParms)
+void R_GenerateShadowCookieViewParms(float *modelMin, float *modelMax, GfxViewParms *shadowViewParms)
 {
     float width; // [esp+10h] [ebp-90h]
     float v4; // [esp+14h] [ebp-8Ch]
@@ -567,7 +567,7 @@ void __cdecl R_GenerateShadowCookieViewParms(float *modelMin, float *modelMax, G
     R_SetupViewProjectionMatrices(shadowViewParms);
 }
 
-void __cdecl R_GenerateBspShadowReceivers(ShadowCookieList *shadowCookieList)
+void R_GenerateBspShadowReceivers(ShadowCookieList *shadowCookieList)
 {
     uint16_t triSurfList[2]; // [esp+A0h] [ebp-64h] BYREF
     ShadowCookie *cookie; // [esp+A4h] [ebp-60h]
@@ -612,7 +612,7 @@ void __cdecl R_GenerateBspShadowReceivers(ShadowCookieList *shadowCookieList)
             radius,
             scene.cookie[cookieIndex].planes,
             5u,
-            (int(__cdecl *)(int, void *))R_AllowBspShadowReceiver,
+            (int(*)(int, void *))R_AllowBspShadowReceiver,
             &shadowReceiverCallback,
             (GfxSurface **)&drawSurfs[128],
             0x100u);
@@ -620,11 +620,11 @@ void __cdecl R_GenerateBspShadowReceivers(ShadowCookieList *shadowCookieList)
         {
             surfData.drawSurfList.current = drawSurfs;
             surfData.drawSurfList.end = (GfxDrawSurf *)&scene.cookie[cookieIndex + 1];
-            //std::_Sort<int *, int, bool(__cdecl *)(int, int)>(
+            //std::_Sort<int *, int, bool(*)(int, int)>(
             //    (const GfxStaticModelDrawInst **)surfaces,
             //    (const GfxStaticModelDrawInst **)&surfaces[cookieDrawSurfCount],
             //    (int)(4 * cookieDrawSurfCount) >> 2,
-            //    (bool(__cdecl *)(const GfxStaticModelDrawInst *, const GfxStaticModelDrawInst *))R_SortBspShadowReceiverSurfaces);
+            //    (bool(*)(const GfxStaticModelDrawInst *, const GfxStaticModelDrawInst *))R_SortBspShadowReceiverSurfaces);
             std::sort(surfaces, surfaces + cookieDrawSurfCount, R_SortBspShadowReceiverSurfaces);
             for (listSurfIndex = 0; listSurfIndex < cookieDrawSurfCount; ++listSurfIndex)
             {
@@ -646,13 +646,13 @@ void __cdecl R_GenerateBspShadowReceivers(ShadowCookieList *shadowCookieList)
     }
 }
 
-bool __cdecl R_AllowBspShadowReceiver(int surfIndex, uint32_t *shadowReceiverCallbackAsVoid)
+bool R_AllowBspShadowReceiver(int surfIndex, uint32_t *shadowReceiverCallbackAsVoid)
 {
     return *(_BYTE *)(*shadowReceiverCallbackAsVoid + surfIndex)
         && Material_GetTechnique(rgp.world->dpvs.surfaces[surfIndex].material, TECHNIQUE_SHADOWCOOKIE_RECEIVER) != 0;
 }
 
-void __cdecl R_GenerateSceneEntShadowReceivers(ShadowCookieList *shadowCookieList)
+void R_GenerateSceneEntShadowReceivers(ShadowCookieList *shadowCookieList)
 {
     volatile uint32_t sceneEntCount; // [esp+48h] [ebp-28h]
     uint32_t cookieIndex; // [esp+50h] [ebp-20h]
@@ -702,7 +702,7 @@ void __cdecl R_GenerateSceneEntShadowReceivers(ShadowCookieList *shadowCookieLis
     }
 }
 
-char __cdecl R_OutsideOfShadowFrustumPlanes(const DpvsPlane *planes, const float *minmax)
+char R_OutsideOfShadowFrustumPlanes(const DpvsPlane *planes, const float *minmax)
 {
     int plane; // [esp+8h] [ebp-4h]
 
@@ -717,7 +717,7 @@ char __cdecl R_OutsideOfShadowFrustumPlanes(const DpvsPlane *planes, const float
     return 0;
 }
 
-void __cdecl R_ResetShadowCookies()
+void R_ResetShadowCookies()
 {
     shadowCookieGlob.weightCap = 10.0;
     shadowCookieGlob.lastTime = -1;

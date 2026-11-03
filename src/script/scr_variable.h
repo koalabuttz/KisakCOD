@@ -285,7 +285,7 @@ struct VariableDebugInfo // sizeof=0x10
 static_assert(LAYOUT_32BIT(sizeof(VariableDebugInfo) == 0x10));
 
 //void  TRACK_scr_variable(void);
-void __cdecl Scr_Cleanup();
+void Scr_Cleanup();
 bool  IsObject(VariableValueInternal* entryValue);
 bool  IsObject(VariableValue* value);
 void  Scr_InitVariables(void);

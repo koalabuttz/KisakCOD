@@ -273,7 +273,7 @@ const BuiltInMaterialTable s_builtInMaterials[50] =
 bool g_generateOverrideTechniques = true;
 bool g_alwaysUseDefaultMaterial;
 
-void __cdecl TRACK_r_material()
+void TRACK_r_material()
 {
     track_static_alloc_internal(&materialGlobals, 4100, "materialGlobals", 18);
     track_static_alloc_internal((void *)s_streamSourceInfo, 432, "s_streamSourceInfo", 18);
@@ -281,12 +281,12 @@ void __cdecl TRACK_r_material()
     track_static_alloc_internal((void *)s_builtInMaterials, 400, "s_builtInMaterials", 18);
 }
 
-uint8_t *__cdecl Material_Alloc(uint32_t size)
+uint8_t *Material_Alloc(uint32_t size)
 {
     return Hunk_Alloc(size, "Material_Alloc", 22);
 }
 
-void __cdecl Load_CreateMaterialPixelShader(GfxPixelShaderLoadDef *loadDef, MaterialPixelShader *mtlShader)
+void Load_CreateMaterialPixelShader(GfxPixelShaderLoadDef *loadDef, MaterialPixelShader *mtlShader)
 {
     iassert( loadDef == &mtlShader->prog.loadDef );
     if (r_loadForRenderer->current.enabled && loadDef->loadForRenderer == r_rendererInUse->current.integer)
@@ -301,7 +301,7 @@ void __cdecl Load_CreateMaterialPixelShader(GfxPixelShaderLoadDef *loadDef, Mate
     }
 }
 
-void __cdecl Load_CreateMaterialVertexShader(GfxVertexShaderLoadDef *loadDef, MaterialVertexShader *mtlShader)
+void Load_CreateMaterialVertexShader(GfxVertexShaderLoadDef *loadDef, MaterialVertexShader *mtlShader)
 {
     iassert( loadDef == &mtlShader->prog.loadDef );
     if (r_loadForRenderer->current.enabled && loadDef->loadForRenderer == r_rendererInUse->current.integer)
@@ -316,7 +316,7 @@ void __cdecl Load_CreateMaterialVertexShader(GfxVertexShaderLoadDef *loadDef, Ma
     }
 }
 
-void __cdecl AssertValidVertexDeclOffsets(const stream_source_info_t *streamTable)
+void AssertValidVertexDeclOffsets(const stream_source_info_t *streamTable)
 {
     int thisIndex; // [esp+0h] [ebp-10h]
     uint32_t stream; // [esp+4h] [ebp-Ch]
@@ -350,7 +350,7 @@ void __cdecl AssertValidVertexDeclOffsets(const stream_source_info_t *streamTabl
     }
 }
 
-void __cdecl Load_BuildVertexDecl(MaterialVertexDeclaration **mtlVertDecl)
+void Load_BuildVertexDecl(MaterialVertexDeclaration **mtlVertDecl)
 {
     IDirect3DVertexDeclaration9 *v1; // eax
     MaterialStreamRouting data[16]; // [esp+8h] [ebp-28h] BYREF
@@ -372,7 +372,7 @@ void __cdecl Load_BuildVertexDecl(MaterialVertexDeclaration **mtlVertDecl)
     (*mtlVertDecl)->isLoaded = 1;
 }
 
-IDirect3DVertexDeclaration9 *__cdecl Material_BuildVertexDecl(
+IDirect3DVertexDeclaration9 *Material_BuildVertexDecl(
     const MaterialStreamRouting *routingData,
     int streamCount,
     const stream_source_info_t *sourceTable)
@@ -453,7 +453,7 @@ IDirect3DVertexDeclaration9 *__cdecl Material_BuildVertexDecl(
     return decl;
 }
 
-MaterialTechniqueSet *__cdecl Material_FindTechniqueSet(const char *name, MtlTechSetNotFoundBehavior notFoundBehavior)
+MaterialTechniqueSet *Material_FindTechniqueSet(const char *name, MtlTechSetNotFoundBehavior notFoundBehavior)
 {
     if (IsFastFileLoad())
         return Material_FindTechniqueSet_FastFile(name, notFoundBehavior);
@@ -461,7 +461,7 @@ MaterialTechniqueSet *__cdecl Material_FindTechniqueSet(const char *name, MtlTec
         return Material_FindTechniqueSet_LoadObj(name, notFoundBehavior);
 }
 
-MaterialTechniqueSet *__cdecl Material_FindTechniqueSet_FastFile(
+MaterialTechniqueSet *Material_FindTechniqueSet_FastFile(
     const char *name,
     MtlTechSetNotFoundBehavior notFoundBehavior)
 {
@@ -474,12 +474,12 @@ MaterialTechniqueSet *__cdecl Material_FindTechniqueSet_FastFile(
         return 0;
 }
 
-void __cdecl Material_DirtySort()
+void Material_DirtySort()
 {
     rgp.needSortMaterials = 1;
 }
 
-bool __cdecl Material_IsDefault(const Material *material)
+bool Material_IsDefault(const Material *material)
 {
     iassert( material );
     iassert( rgp.defaultMaterial );
@@ -490,12 +490,12 @@ bool __cdecl Material_IsDefault(const Material *material)
     return 0;
 }
 
-Material *__cdecl Material_Register_FastFile(const char *name)
+Material *Material_Register_FastFile(const char *name)
 {
     return DB_FindXAssetHeader(ASSET_TYPE_MATERIAL, name).material;
 }
 
-void __cdecl Material_GetHashIndex(const char *name, uint16_t *hashIndex, bool *exists)
+void Material_GetHashIndex(const char *name, uint16_t *hashIndex, bool *exists)
 {
     uint16_t beginHashIndex; // [esp+14h] [ebp-4h]
 
@@ -518,7 +518,7 @@ void __cdecl Material_GetHashIndex(const char *name, uint16_t *hashIndex, bool *
     *exists = 0;
 }
 
-Material *__cdecl Material_MakeDefault(char *name)
+Material *Material_MakeDefault(char *name)
 {
     iassert( name );
     if (!rgp.defaultMaterial)
@@ -531,7 +531,7 @@ Material *__cdecl Material_MakeDefault(char *name)
     return Material_Duplicate(rgp.defaultMaterial, name);
 }
 
-void __cdecl Material_Add(Material *material, uint16_t hashIndex)
+void Material_Add(Material *material, uint16_t hashIndex)
 {
 
     iassert(material);
@@ -552,7 +552,7 @@ void __cdecl Material_Add(Material *material, uint16_t hashIndex)
         Com_Error(ERR_FATAL, "Too many unique materials (%i or more)\n", 2048);
 }
 
-Material *__cdecl Material_Register_LoadObj(char *name, int imageTrack)
+Material *Material_Register_LoadObj(char *name, int imageTrack)
 {
     Material *material; // [esp+0h] [ebp-Ch]
     bool exists; // [esp+7h] [ebp-5h] BYREF
@@ -574,7 +574,7 @@ Material *__cdecl Material_Register_LoadObj(char *name, int imageTrack)
     return material;
 }
 
-Material *__cdecl Material_Register(const char *name, int imageTrack)
+Material *Material_Register(const char *name, int imageTrack)
 {
     if (IsFastFileLoad())
         return Material_Register_FastFile(name);
@@ -582,7 +582,7 @@ Material *__cdecl Material_Register(const char *name, int imageTrack)
         return Material_Register_LoadObj((char*)name, imageTrack);
 }
 
-Material *__cdecl Material_RegisterHandle(const char *name, int imageTrack)
+Material *Material_RegisterHandle(const char *name, int imageTrack)
 {
     PROF_SCOPED("Material_RegisterHandle");
 
@@ -596,11 +596,11 @@ Material *__cdecl Material_RegisterHandle(const char *name, int imageTrack)
         return rgp.defaultMaterial;
 }
 
-bool __cdecl R_MaterialCompare(const MaterialMemory &material0, const MaterialMemory &material1)
+bool R_MaterialCompare(const MaterialMemory &material0, const MaterialMemory &material1)
 {
     return material0.memory < material1.memory;
 }
-void __cdecl R_MaterialList_f()
+void R_MaterialList_f()
 {
     const char *fmt; // [esp+8h] [ebp-4150h]
     uint32_t i; // [esp+138h] [ebp-4020h]
@@ -614,8 +614,8 @@ void __cdecl R_MaterialList_f()
     v3 = 0;
     Com_Printf(CON_CHANNEL_GFX, "-----------------------\n");
     inData = 0;
-    DB_EnumXAssets(ASSET_TYPE_MATERIAL, (void(__cdecl *)(XAssetHeader, void*))R_GetMaterialList, &inData, 0);
-    // std::_Sort<ShadowCandidate *, int, bool(__cdecl *)(ShadowCandidate const &, ShadowCandidate const &)>(
+    DB_EnumXAssets(ASSET_TYPE_MATERIAL, (void(*)(XAssetHeader, void*))R_GetMaterialList, &inData, 0);
+    // std::_Sort<ShadowCandidate *, int, bool(*)(ShadowCandidate const &, ShadowCandidate const &)>(
     //     (ShadowCandidate *)v6,
     //     (ShadowCandidate *)&v6[inData],
     //     (int)(8 * inData) >> 3,
@@ -642,7 +642,7 @@ void __cdecl R_MaterialList_f()
     Com_Printf(CON_CHANNEL_GFX, "Related commands: meminfo, imagelist, gfx_world, gfx_model, cg_drawfps, com_statmon, tempmeminfo\n");
 }
 
-void __cdecl R_GetMaterialList(XAssetHeader header, char *data)
+void R_GetMaterialList(XAssetHeader header, char *data)
 {
     int memory; // [esp+0h] [ebp-Ch]
     XAssetHeader *materialMemory; // [esp+4h] [ebp-8h]
@@ -658,7 +658,7 @@ void __cdecl R_GetMaterialList(XAssetHeader header, char *data)
     }
 }
 
-int __cdecl R_GetMaterialMemory(Material *material)
+int R_GetMaterialMemory(Material *material)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -672,7 +672,7 @@ int __cdecl R_GetMaterialMemory(Material *material)
     return 0;
 }
 
-const char *__cdecl Material_GetName(Material *handle)
+const char *Material_GetName(Material *handle)
 {
     iassert( handle );
     return Material_FromHandle(handle)->info.name;
@@ -682,7 +682,7 @@ const char *__cdecl Material_GetName(Material *handle)
 // constantTable (linear scan, hash-compared) and copy its vec4 literal into outValue.
 // Faithful transcription of CoD4Radiant.exe sub_51AD50.  NOTE: this takes a RESOLVED
 // Material* (it does NOT call Material_FromHandle); callers pass the resolved pointer.
-char __cdecl Material_GetConstantValue(Material *material, const char *name, float *outValue)
+char Material_GetConstantValue(Material *material, const char *name, float *outValue)
 {
     int nameHash = R_HashString(name);
     unsigned int i = 0;
@@ -714,7 +714,7 @@ char __cdecl Material_GetConstantValue(Material *material, const char *name, flo
 // from the KISAK_RADIANT trailing Material field (CoD4 stores it in the 56B MaterialInfo
 // at info+0x2C; kisak's 24B MaterialInfo lacks it — see r_material.h / Material_LoadRaw).
 // Only consumer is MaterialDef_10_LayeredMatHandle (radiant/materialdef.cpp).
-bool __cdecl Material_CastsStencilShadow(Material *handle)
+bool Material_CastsStencilShadow(Material *handle)
 {
     const Material *m = Material_FromHandle(handle);
     if ((m->surfaceFlags & SURF_NOCASTSHADOW) != 0)
@@ -731,7 +731,7 @@ bool __cdecl Material_CastsStencilShadow(Material *handle)
 }
 #endif // KISAK_RADIANT
 
-void __cdecl Material_ReleasePassResources(MaterialPass *pass)
+void Material_ReleasePassResources(MaterialPass *pass)
 {
     IDirect3DSurface9 *v1; // [esp+0h] [ebp-10h]
     IDirect3DSurface9 *var; // [esp+4h] [ebp-Ch]
@@ -794,7 +794,7 @@ void __cdecl Material_ReleasePassResources(MaterialPass *pass)
     }
 }
 
-void __cdecl Material_ReleaseTechniqueSetResources(MaterialTechniqueSet *techniqueSet)
+void Material_ReleaseTechniqueSetResources(MaterialTechniqueSet *techniqueSet)
 {
     MaterialTechnique *technique; // [esp+10h] [ebp-Ch]
     int techType; // [esp+14h] [ebp-8h]
@@ -811,7 +811,7 @@ void __cdecl Material_ReleaseTechniqueSetResources(MaterialTechniqueSet *techniq
     }
 }
 
-void __cdecl Material_ReloadPassResources(MaterialPass *pass)
+void Material_ReloadPassResources(MaterialPass *pass)
 {
     iassert( pass->pixelShader );
     if (!pass->pixelShader->prog.ps)
@@ -827,7 +827,7 @@ void __cdecl Material_ReloadPassResources(MaterialPass *pass)
     }
 }
 
-void __cdecl Material_ReloadTechniqueSetResources(MaterialTechniqueSet *techniqueSet)
+void Material_ReloadTechniqueSetResources(MaterialTechniqueSet *techniqueSet)
 {
     MaterialTechnique *technique; // [esp+0h] [ebp-Ch]
     int techType; // [esp+4h] [ebp-8h]
@@ -844,27 +844,27 @@ void __cdecl Material_ReloadTechniqueSetResources(MaterialTechniqueSet *techniqu
     }
 }
 
-void __cdecl Material_ReloadTechniqueSet(XAssetHeader header)
+void Material_ReloadTechniqueSet(XAssetHeader header)
 {
     Material_ReloadTechniqueSetResources(header.techniqueSet);
 }
 
-void __cdecl Material_ReleaseTechniqueSet(XAssetHeader header, void* crap)
+void Material_ReleaseTechniqueSet(XAssetHeader header, void* crap)
 {
     Material_ReleaseTechniqueSetResources(header.techniqueSet);
 }
 
-void __cdecl Material_ReloadAll()
+void Material_ReloadAll()
 {
-    DB_EnumXAssets(ASSET_TYPE_TECHNIQUE_SET, (void(__cdecl *)(XAssetHeader, void *))Material_ReloadTechniqueSet, 0, 1);
+    DB_EnumXAssets(ASSET_TYPE_TECHNIQUE_SET, (void(*)(XAssetHeader, void *))Material_ReloadTechniqueSet, 0, 1);
 }
 
-void __cdecl Material_ReleaseAll()
+void Material_ReleaseAll()
 {
-    DB_EnumXAssets(ASSET_TYPE_TECHNIQUE_SET, (void(__cdecl *)(XAssetHeader, void *))Material_ReleaseTechniqueSet, 0, 1);
+    DB_EnumXAssets(ASSET_TYPE_TECHNIQUE_SET, (void(*)(XAssetHeader, void *))Material_ReleaseTechniqueSet, 0, 1);
 }
 
-const Material *__cdecl Material_FromHandle(Material *handle)
+const Material *Material_FromHandle(Material *handle)
 {
     iassert(handle);
     iassert(handle->info.name);
@@ -873,7 +873,7 @@ const Material *__cdecl Material_FromHandle(Material *handle)
     return handle;
 }
 
-void __cdecl Material_Init()
+void Material_Init()
 {
     if (!IsFastFileLoad())
     {
@@ -884,7 +884,7 @@ void __cdecl Material_Init()
     Material_Register("statmon_warning_tris", IMAGE_TRACK_DEBUG);
 }
 
-void __cdecl Material_Shutdown()
+void Material_Shutdown()
 {
     Material_FreeAll();
     memset((uint8_t *)&materialGlobals, 0, sizeof(materialGlobals));
@@ -892,7 +892,7 @@ void __cdecl Material_Shutdown()
     rgp.materialCount = 0;
 }
 
-void __cdecl Material_LoadBuiltIn(const BuiltInMaterialTable *mtlTable, int mtlTableCount)
+void Material_LoadBuiltIn(const BuiltInMaterialTable *mtlTable, int mtlTableCount)
 {
     int builtInMtlIndex; // [esp+0h] [ebp-4h]
 
@@ -905,7 +905,7 @@ void __cdecl Material_LoadBuiltIn(const BuiltInMaterialTable *mtlTable, int mtlT
     }
 }
 
-void __cdecl Material_CollateTechniqueSets(XAssetHeader header, TechniqueSetList *techSetList)
+void Material_CollateTechniqueSets(XAssetHeader header, TechniqueSetList *techSetList)
 {
     iassert(techSetList->count < 1024);
     //if (userData[1024] >= 0x400)
@@ -920,18 +920,18 @@ void __cdecl Material_CollateTechniqueSets(XAssetHeader header, TechniqueSetList
     //userData[userData[1024]++] = (DWORD)header.xmodelPieces;
 }
 
-bool __cdecl IsValidMaterialHandle(Material *const handle)
+bool IsValidMaterialHandle(Material *const handle)
 {
     iassert( ( 0x0003 & reinterpret_cast<int>( handle ) ) == 0x0 );
     return handle && handle->info.name && *handle->info.name;
 }
 
-void __cdecl Material_PreventOverrideTechniqueGeneration()
+void Material_PreventOverrideTechniqueGeneration()
 {
     g_generateOverrideTechniques = 0;
 }
 
-void __cdecl Material_UpdatePicmipForTexdef(const MaterialTextureDef *texdef)
+void Material_UpdatePicmipForTexdef(const MaterialTextureDef *texdef)
 {
     iassert( texdef );
     if (texdef->semantic != TS_WATER_MAP)
@@ -942,7 +942,7 @@ void __cdecl Material_UpdatePicmipForTexdef(const MaterialTextureDef *texdef)
 }
 
 
-void __cdecl Material_UpdatePicmipSingle(XAssetHeader header)
+void Material_UpdatePicmipSingle(XAssetHeader header)
 {
     int textureIndex; // [esp+4h] [ebp-4h]
 
@@ -950,14 +950,14 @@ void __cdecl Material_UpdatePicmipSingle(XAssetHeader header)
         Material_UpdatePicmipForTexdef((MaterialTextureDef*)header.xmodelPieces[5].pieces + textureIndex);
 }
 
-void __cdecl Material_UpdatePicmipAll()
+void Material_UpdatePicmipAll()
 {
     R_SyncRenderThread();
     R_SetPicmip();
-    DB_EnumXAssets(ASSET_TYPE_MATERIAL, (void(__cdecl *)(XAssetHeader, void *))Material_UpdatePicmipSingle, 0, 1);
+    DB_EnumXAssets(ASSET_TYPE_MATERIAL, (void(*)(XAssetHeader, void *))Material_UpdatePicmipSingle, 0, 1);
 }
 
-Material *__cdecl Material_Find(const char *name)
+Material *Material_Find(const char *name)
 {
     Material *material; // [esp+0h] [ebp-Ch]
     uint16_t hashIndex[3]; // [esp+4h] [ebp-8h] BYREF
@@ -971,7 +971,7 @@ Material *__cdecl Material_Find(const char *name)
     return material;
 }
 
-void __cdecl Material_ReloadTextures(const Material *material)
+void Material_ReloadTextures(const Material *material)
 {
     GfxImage *image; // [esp+0h] [ebp-18h]
     GfxImage *maxConvert; // [esp+4h] [ebp-14h]
@@ -1003,7 +1003,7 @@ void __cdecl Material_ReloadTextures(const Material *material)
     }
 }
 
-void __cdecl R_Cmd_ReloadMaterialTextures()
+void R_Cmd_ReloadMaterialTextures()
 {
     char *v0; // eax
     Material *material; // [esp+0h] [ebp-8h]

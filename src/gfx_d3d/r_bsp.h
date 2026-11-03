@@ -207,18 +207,18 @@ struct GfxWorld // sizeof=0x2DC
 static_assert(LAYOUT_32BIT(sizeof(GfxWorld) == 0x2DC));
 
 // r_bsp
-void __cdecl R_ReloadWorld();
-void __cdecl R_ReleaseWorld();
-void __cdecl R_ShutdownWorld();
-void __cdecl R_InterpretSunLightParseParams(SunLightParseParams *sunParse);
-void __cdecl R_UpdateLightsFromDvars();
-void __cdecl R_CopyParseParamsFromDvars(SunLightParseParams *sunParse);
-void __cdecl R_GetNormalizedColorFromDvar(const dvar_s *dvar, float *outVec);
-void __cdecl R_LoadWorld(char *name, int *checksum, int savegame);
-void __cdecl R_CopyParseParamsToDvars(const SunLightParseParams *sunParse, int savegame);
+void R_ReloadWorld();
+void R_ReleaseWorld();
+void R_ShutdownWorld();
+void R_InterpretSunLightParseParams(SunLightParseParams *sunParse);
+void R_UpdateLightsFromDvars();
+void R_CopyParseParamsFromDvars(SunLightParseParams *sunParse);
+void R_GetNormalizedColorFromDvar(const dvar_s *dvar, float *outVec);
+void R_LoadWorld(char *name, int *checksum, int savegame);
+void R_CopyParseParamsToDvars(const SunLightParseParams *sunParse, int savegame);
 void R_InitDynamicData();
-void __cdecl R_SetWorldPtr_FastFile(const char *name);
-void __cdecl R_SetWorldPtr_LoadObj(const char *name);
+void R_SetWorldPtr_FastFile(const char *name);
+void R_SetWorldPtr_LoadObj(const char *name);
 void R_SetSunLightOverride(float *sunColor);
 void R_ResetSunLightOverride();
 void R_SetSunDirectionOverride(float *sunDir);
@@ -232,21 +232,21 @@ extern GfxWorld s_world;
 extern r_globals_load_t rgl;
 
 // r_bsp_load_obj
-void __cdecl R_ModernizeLegacyLightGridColors(const uint8_t *legacyColors, GfxLightGridColors *modernColors);
-GfxWorld *__cdecl R_LoadWorldInternal(const char *name);
-void __cdecl R_InterpretSunLightParseParamsIntoLights(SunLightParseParams *sunParse, GfxLight *sunLight);
-void __cdecl R_SetUpSunLight(const float *sunColor, const float *sunDirection, GfxLight *light);
-void __cdecl R_InitPrimaryLights(GfxLight *primaryLights);
-void __cdecl R_AddShadowSurfaceToPrimaryLight(
+void R_ModernizeLegacyLightGridColors(const uint8_t *legacyColors, GfxLightGridColors *modernColors);
+GfxWorld *R_LoadWorldInternal(const char *name);
+void R_InterpretSunLightParseParamsIntoLights(SunLightParseParams *sunParse, GfxLight *sunLight);
+void R_SetUpSunLight(const float *sunColor, const float *sunDirection, GfxLight *light);
+void R_InitPrimaryLights(GfxLight *primaryLights);
+void R_AddShadowSurfaceToPrimaryLight(
     GfxWorld *world,
     uint32_t primaryLightIndex,
     uint32_t sortedSurfIndex);
-void __cdecl R_ForEachPrimaryLightAffectingSurface(
+void R_ForEachPrimaryLightAffectingSurface(
     GfxWorld *world,
     const GfxSurface *surface,
     uint32_t sortedSurfIndex,
-    void(__cdecl *Callback)(GfxWorld *, uint32_t, uint32_t));
-void __cdecl R_GetXModelBounds(XModel *model, const float (*axes)[3], float *mins, float *maxs);
+    void(*Callback)(GfxWorld *, uint32_t, uint32_t));
+void R_GetXModelBounds(XModel *model, const float (*axes)[3], float *mins, float *maxs);
 
 
 
@@ -256,38 +256,38 @@ struct GfxSModelDrawSurfLightingData // sizeof=0x28
     GfxDelayedCmdBuf delayedCmdBuf;
     GfxDrawSurfList drawSurf[3];        // ...
 };
-void __cdecl R_InitBspDrawSurf(GfxBspDrawSurfData *surfData);
-void __cdecl R_AddBspDrawSurfs(
+void R_InitBspDrawSurf(GfxBspDrawSurfData *surfData);
+void R_AddBspDrawSurfs(
     GfxDrawSurf drawSurf,
     uint8_t *list,
     uint32_t count,
     GfxBspDrawSurfData *surfData);
-void __cdecl R_AddAllBspDrawSurfacesCamera();
-void __cdecl R_AddAllBspDrawSurfacesRangeCamera(
+void R_AddAllBspDrawSurfacesCamera();
+void R_AddAllBspDrawSurfacesRangeCamera(
     uint32_t beginSurface,
     uint32_t endSurface,
     uint32_t stage,
     uint32_t maxDrawSurfCount);
-void __cdecl R_AddAllBspDrawSurfacesCameraNonlit(
+void R_AddAllBspDrawSurfacesCameraNonlit(
     uint32_t beginSurface,
     uint32_t endSurface,
     uint32_t stage);
-void __cdecl R_AddAllBspDrawSurfacesSunShadow();
-void __cdecl R_AddAllBspDrawSurfacesRangeSunShadow(
+void R_AddAllBspDrawSurfacesSunShadow();
+void R_AddAllBspDrawSurfacesRangeSunShadow(
     uint32_t partitionIndex,
     uint32_t beginSurface,
     uint32_t endSurface,
     uint32_t maxDrawSurfCount);
-void __cdecl R_AddAllBspDrawSurfacesSpotShadow(uint32_t spotShadowIndex, uint32_t primaryLightIndex);
+void R_AddAllBspDrawSurfacesSpotShadow(uint32_t spotShadowIndex, uint32_t primaryLightIndex);
 
 
 // r_add_cmdbuf
-void __cdecl R_InitDelayedCmdBuf(GfxDelayedCmdBuf *delayedCmdBuf);
-void __cdecl R_EndCmdBuf(GfxDelayedCmdBuf *delayedCmdBuf);
-int __cdecl R_AllocDrawSurf(
+void R_InitDelayedCmdBuf(GfxDelayedCmdBuf *delayedCmdBuf);
+void R_EndCmdBuf(GfxDelayedCmdBuf *delayedCmdBuf);
+int R_AllocDrawSurf(
     GfxDelayedCmdBuf *delayedCmdBuf,
     GfxDrawSurf drawSurf,
     GfxDrawSurfList *drawSurfList,
     uint32_t size);
-void __cdecl R_WritePrimDrawSurfInt(GfxDelayedCmdBuf *delayedCmdBuf, uint32_t value);
-void __cdecl R_WritePrimDrawSurfData(GfxDelayedCmdBuf *delayedCmdBuf, uint8_t *data, uint32_t count);
+void R_WritePrimDrawSurfInt(GfxDelayedCmdBuf *delayedCmdBuf, uint32_t value);
+void R_WritePrimDrawSurfData(GfxDelayedCmdBuf *delayedCmdBuf, uint8_t *data, uint32_t count);

@@ -69,5 +69,5 @@ struct infoParm_t // sizeof=0x14
 
 extern const infoParm_t infoParms[60];
 
-const char *__cdecl Com_SurfaceTypeToName(int iTypeIndex);
-int __cdecl Com_SurfaceTypeFromName(const char *name);
+const char *Com_SurfaceTypeToName(int iTypeIndex);
+int Com_SurfaceTypeFromName(const char *name);

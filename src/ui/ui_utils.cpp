@@ -7,12 +7,12 @@
 
 stringDef_s *g_strHandle[2048];
 
-void __cdecl TRACK_ui_utils()
+void TRACK_ui_utils()
 {
     track_static_alloc_internal(g_strHandle, 0x2000, "g_strHandle", 34);
 }
 
-void __cdecl Window_SetDynamicFlags(int localClientNum, windowDef_t *w, int flags)
+void Window_SetDynamicFlags(int localClientNum, windowDef_t *w, int flags)
 {
     if (localClientNum)
         MyAssertHandler(
@@ -29,7 +29,7 @@ void __cdecl Window_SetDynamicFlags(int localClientNum, windowDef_t *w, int flag
     w->dynamicFlags[localClientNum] = flags;
 }
 
-void __cdecl Window_AddDynamicFlags(int localClientNum, windowDef_t *w, int newFlags)
+void Window_AddDynamicFlags(int localClientNum, windowDef_t *w, int newFlags)
 {
     if (localClientNum)
         MyAssertHandler(
@@ -42,7 +42,7 @@ void __cdecl Window_AddDynamicFlags(int localClientNum, windowDef_t *w, int newF
     Window_SetDynamicFlags(localClientNum, w, newFlags | w->dynamicFlags[localClientNum]);
 }
 
-void __cdecl Window_RemoveDynamicFlags(int localClientNum, windowDef_t *w, int newFlags)
+void Window_RemoveDynamicFlags(int localClientNum, windowDef_t *w, int newFlags)
 {
     int modifiedFlags; // [esp+0h] [ebp-8h]
 
@@ -60,7 +60,7 @@ void __cdecl Window_RemoveDynamicFlags(int localClientNum, windowDef_t *w, int n
     Window_SetDynamicFlags(localClientNum, w, w->dynamicFlags[localClientNum] & ~modifiedFlags);
 }
 
-void __cdecl Window_SetStaticFlags(windowDef_t *w, int flags)
+void Window_SetStaticFlags(windowDef_t *w, int flags)
 {
     if (flags && (flags & 0xFFF00000) == 0)
         MyAssertHandler(".\\ui\\ui_utils.cpp", 82, 0, "%s\n\t(flags) = %i", "(flags == 0 || flags & 0xFFF00000)", flags);
@@ -69,7 +69,7 @@ void __cdecl Window_SetStaticFlags(windowDef_t *w, int flags)
     w->staticFlags = flags;
 }
 
-void __cdecl Menu_SetCursorItem(int localClientNum, menuDef_t *menu, int cursorItem)
+void Menu_SetCursorItem(int localClientNum, menuDef_t *menu, int cursorItem)
 {
     if (localClientNum)
         MyAssertHandler(
@@ -84,7 +84,7 @@ void __cdecl Menu_SetCursorItem(int localClientNum, menuDef_t *menu, int cursorI
     menu->cursorItem[localClientNum] = cursorItem;
 }
 
-int __cdecl Item_IsVisible(int localClientNum, itemDef_s *item)
+int Item_IsVisible(int localClientNum, itemDef_s *item)
 {
     PROF_SCOPED("Item_IsVisible");
 
@@ -104,7 +104,7 @@ int __cdecl Item_IsVisible(int localClientNum, itemDef_s *item)
     return 0;
 }
 
-bool __cdecl Item_EnableShowViaDvar(const itemDef_s *item, int flag)
+bool Item_EnableShowViaDvar(const itemDef_s *item, int flag)
 {
     const char *testValue; // [esp+0h] [ebp-40Ch]
     char val[1024]; // [esp+4h] [ebp-408h] BYREF
@@ -124,7 +124,7 @@ bool __cdecl Item_EnableShowViaDvar(const itemDef_s *item, int flag)
     return (flag & item->dvarFlags) != 0;
 }
 
-void __cdecl Item_SetTextRect(int localClientNum, itemDef_s *item, const rectDef_s *textRect)
+void Item_SetTextRect(int localClientNum, itemDef_s *item, const rectDef_s *textRect)
 {
     rectDef_s *v3; // edx
 
@@ -165,7 +165,7 @@ void __cdecl Item_SetTextRect(int localClientNum, itemDef_s *item, const rectDef
     v3->vertAlign = textRect->vertAlign;
 }
 
-int __cdecl Item_GetCursorPosOffset(int localClientNum, const itemDef_s *item, const char *text, int delta)
+int Item_GetCursorPosOffset(int localClientNum, const itemDef_s *item, const char *text, int delta)
 {
     int pos; // [esp+0h] [ebp-4h]
 
@@ -219,7 +219,7 @@ int __cdecl Item_GetCursorPosOffset(int localClientNum, const itemDef_s *item, c
     return pos;
 }
 
-bool __cdecl ListBox_HasValidCursorPos(int localClientNum, itemDef_s *item)
+bool ListBox_HasValidCursorPos(int localClientNum, itemDef_s *item)
 {
     const listBoxDef_s *listPtr; // [esp+4h] [ebp-8h]
     int cursorPos; // [esp+8h] [ebp-4h]
@@ -237,7 +237,7 @@ bool __cdecl ListBox_HasValidCursorPos(int localClientNum, itemDef_s *item)
     return cursorPos >= listPtr->startPos[localClientNum] && cursorPos < listPtr->endPos[localClientNum];
 }
 
-void __cdecl Menu_UpdatePosition(int localClientNum, menuDef_t *menu)
+void Menu_UpdatePosition(int localClientNum, menuDef_t *menu)
 {
     int i; // [esp+10h] [ebp-10h]
     float x; // [esp+14h] [ebp-Ch]
@@ -263,7 +263,7 @@ void __cdecl Menu_UpdatePosition(int localClientNum, menuDef_t *menu)
     }
 }
 
-void __cdecl Item_SetScreenCoords(int localClientNum, itemDef_s *item, float x, float y, int horzAlign, int vertAlign)
+void Item_SetScreenCoords(int localClientNum, itemDef_s *item, float x, float y, int horzAlign, int vertAlign)
 {
     rectDef_s newRect; // [esp+0h] [ebp-1Ch] BYREF
     const rectDef_s *textRect; // [esp+18h] [ebp-4h]
@@ -295,7 +295,7 @@ void __cdecl Item_SetScreenCoords(int localClientNum, itemDef_s *item, float x, 
     }
 }
 
-int __cdecl Item_IsEditFieldDef(itemDef_s *item)
+int Item_IsEditFieldDef(itemDef_s *item)
 {
     int result; // eax
 
@@ -319,7 +319,7 @@ int __cdecl Item_IsEditFieldDef(itemDef_s *item)
     return result;
 }
 
-listBoxDef_s *__cdecl Item_GetListBoxDef(itemDef_s *item)
+listBoxDef_s *Item_GetListBoxDef(itemDef_s *item)
 {
     if (item->dataType == 6)
         return item->typeData.listBox;
@@ -327,7 +327,7 @@ listBoxDef_s *__cdecl Item_GetListBoxDef(itemDef_s *item)
     return 0;
 }
 
-editFieldDef_s *__cdecl Item_GetEditFieldDef(itemDef_s *item)
+editFieldDef_s *Item_GetEditFieldDef(itemDef_s *item)
 {
     if (Item_IsEditFieldDef(item))
         return item->typeData.editField;
@@ -338,7 +338,7 @@ editFieldDef_s *__cdecl Item_GetEditFieldDef(itemDef_s *item)
     return 0;
 }
 
-multiDef_s *__cdecl Item_GetMultiDef(itemDef_s *item)
+multiDef_s *Item_GetMultiDef(itemDef_s *item)
 {
     if (!item)
         MyAssertHandler(".\\ui\\ui_utils.cpp", 408, 0, "%s", "item");
@@ -353,18 +353,18 @@ multiDef_s *__cdecl Item_GetMultiDef(itemDef_s *item)
     return item->typeData.multi;
 }
 
-uint8_t *__cdecl UI_Alloc(uint32_t size, int alignment)
+uint8_t *UI_Alloc(uint32_t size, int alignment)
 {
     return Hunk_AllocAlign(size, alignment, "UI_Alloc", 34);
 }
 
-void __cdecl String_Init()
+void String_Init()
 {
     memset((uint8_t *)g_strHandle, 0, sizeof(g_strHandle));
 }
 
 const char *staticNULL = "";
-const char *__cdecl String_Alloc(const char *p)
+const char *String_Alloc(const char *p)
 {
     char v2; // [esp+3h] [ebp-45h]
     uint8_t *v3; // [esp+8h] [ebp-40h]
@@ -415,7 +415,7 @@ const char *__cdecl String_Alloc(const char *p)
     return (const char *)s;
 }
 
-int __cdecl hashForString(const char *str)
+int hashForString(const char *str)
 {
     int hash; // [esp+0h] [ebp-Ch]
     int i; // [esp+8h] [ebp-4h]
@@ -426,7 +426,7 @@ int __cdecl hashForString(const char *str)
     return hash & 0x7FF;
 }
 
-int __cdecl Int_Parse(const char **p, int *i)
+int Int_Parse(const char **p, int *i)
 {
     parseInfo_t *token; // [esp+0h] [ebp-4h]
 
@@ -437,7 +437,7 @@ int __cdecl Int_Parse(const char **p, int *i)
     return 1;
 }
 
-int __cdecl Float_Parse(const char **p, float *f)
+int Float_Parse(const char **p, float *f)
 {
     parseInfo_t *token; // [esp+0h] [ebp-4h]
 

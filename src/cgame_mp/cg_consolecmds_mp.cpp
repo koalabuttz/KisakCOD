@@ -8,7 +8,7 @@
 #include <qcommon/cmd.h>
 
 
-void __cdecl CG_ScoresUp(int32_t localClientNum)
+void CG_ScoresUp(int32_t localClientNum)
 {
     cg_s *cgameGlob;
 
@@ -67,7 +67,7 @@ cmd_function_s VisionSetNaked_VAR;
 cmd_function_s VisionSetNight_VAR;
 
 
-void __cdecl CG_InitConsoleCommands()
+void CG_InitConsoleCommands()
 {
     Cmd_AddCommandInternal("viewpos", CG_Viewpos_f, &CG_Viewpos_f_VAR);
     Cmd_AddCommandInternal("+scores", CG_ScoresDown_f, &CG_ScoresDown_f_VAR);
@@ -115,7 +115,7 @@ void __cdecl CG_InitConsoleCommands()
     Cmd_AddCommandInternal("VisionSetNight", 0, &VisionSetNight_VAR);
 }
 
-void __cdecl CG_Viewpos_f()
+void CG_Viewpos_f()
 {
     const cg_s *cgameGlob;
 
@@ -132,7 +132,7 @@ void __cdecl CG_Viewpos_f()
             cgameGlob->refdefViewAngles[0]);
 }
 
-void __cdecl CG_ScoresUp_f()
+void CG_ScoresUp_f()
 {
     const cg_s *cgameGlob;
 
@@ -146,7 +146,7 @@ void __cdecl CG_ScoresUp_f()
     }
 }
 
-void __cdecl CG_ScoresDown_f()
+void CG_ScoresDown_f()
 {
     const cg_s *cgameGlob;
 
@@ -160,7 +160,7 @@ void __cdecl CG_ScoresDown_f()
     }
 }
 
-void __cdecl CG_ScoresDown(int32_t localClientNum)
+void CG_ScoresDown(int32_t localClientNum)
 {
     cg_s *cgameGlob;
 
@@ -183,7 +183,7 @@ void __cdecl CG_ScoresDown(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_ShellShock_f()
+void CG_ShellShock_f()
 {
     const char *v0; // eax
     const char *v1; // eax
@@ -219,7 +219,7 @@ void __cdecl CG_ShellShock_f()
     }
 }
 
-void __cdecl CG_ShellShock_Load_f()
+void CG_ShellShock_Load_f()
 {
     const char *name; // [esp+0h] [ebp-4h]
 
@@ -241,7 +241,7 @@ void __cdecl CG_ShellShock_Load_f()
     }
 }
 
-void __cdecl CG_ShellShock_Save_f()
+void CG_ShellShock_Save_f()
 {
     const char *name; // [esp+0h] [ebp-4h]
 
@@ -263,7 +263,7 @@ void __cdecl CG_ShellShock_Save_f()
     }
 }
 
-void __cdecl CG_QuickMessage_f()
+void CG_QuickMessage_f()
 {
     const cg_s *cgameGlob;
 
@@ -276,7 +276,7 @@ void __cdecl CG_QuickMessage_f()
     }
 }
 
-void __cdecl CG_VoiceChat_f()
+void CG_VoiceChat_f()
 {
     char *v0; // eax
     const char *v1; // eax
@@ -302,7 +302,7 @@ void __cdecl CG_VoiceChat_f()
     }
 }
 
-void __cdecl CG_TeamVoiceChat_f()
+void CG_TeamVoiceChat_f()
 {
     char *v0; // eax
     const char *v1; // eax
@@ -328,22 +328,22 @@ void __cdecl CG_TeamVoiceChat_f()
     }
 }
 
-void __cdecl CG_RestartSmokeGrenades_f()
+void CG_RestartSmokeGrenades_f()
 {
     CG_RestartSmokeGrenades(0);
 }
 
-void __cdecl UpdateGlowTweaks_f()
+void UpdateGlowTweaks_f()
 {
     CG_VisionSetUpdateTweaksFromFile_Glow();
 }
 
-void __cdecl UpdateFilmTweaks_f()
+void UpdateFilmTweaks_f()
 {
     CG_VisionSetUpdateTweaksFromFile_Film();
 }
 
-void __cdecl CG_ShutdownConsoleCommands()
+void CG_ShutdownConsoleCommands()
 {
     Cmd_RemoveCommand("viewpos");
     Cmd_RemoveCommand("+scores");

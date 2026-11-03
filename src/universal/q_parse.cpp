@@ -8,12 +8,12 @@
 
 ParseThreadInfo g_parse[4]; // LWSS: increase from 3 to 4 for SP's SERVER thread
 
-void __cdecl TRACK_q_parse()
+void TRACK_q_parse()
 {
     //track_static_alloc_internal(g_parse, 53796, "g_parse", 10);
 }
 
-void __cdecl Com_InitParse()
+void Com_InitParse()
 {
     uint32_t i; // [esp+0h] [ebp-4h]
 
@@ -21,7 +21,7 @@ void __cdecl Com_InitParse()
         Com_InitParseInfo(g_parse[i].parseInfo);
 }
 
-void __cdecl Com_InitParseInfo(parseInfo_t *pi)
+void Com_InitParseInfo(parseInfo_t *pi)
 {
     pi->lines = 1;
     pi->ungetToken = 0;
@@ -35,7 +35,7 @@ void __cdecl Com_InitParseInfo(parseInfo_t *pi)
     pi->backup_text = 0;
 }
 
-void __cdecl Com_BeginParseSession(const char *filename)
+void Com_BeginParseSession(const char *filename)
 {
     parseInfo_t *pi; // [esp+0h] [ebp-Ch]
     ParseThreadInfo *parse; // [esp+4h] [ebp-8h]
@@ -54,7 +54,7 @@ void __cdecl Com_BeginParseSession(const char *filename)
     pi->parseFile = filename;
 }
 
-ParseThreadInfo *__cdecl Com_GetParseThreadInfo()
+ParseThreadInfo *Com_GetParseThreadInfo()
 {
     if (Sys_IsMainThread())
         return &g_parse[0];
@@ -73,7 +73,7 @@ ParseThreadInfo *__cdecl Com_GetParseThreadInfo()
     return 0;
 }
 
-void __cdecl Com_EndParseSession()
+void Com_EndParseSession()
 {
     ParseThreadInfo *parse; // [esp+0h] [ebp-4h]
 
@@ -83,12 +83,12 @@ void __cdecl Com_EndParseSession()
     --parse->parseInfoNum;
 }
 
-void __cdecl Com_ResetParseSessions()
+void Com_ResetParseSessions()
 {
     Com_GetParseThreadInfo()->parseInfoNum = 0;
 }
 
-void __cdecl Com_SetSpaceDelimited(int spaceDelimited)
+void Com_SetSpaceDelimited(int spaceDelimited)
 {
     ParseThreadInfo *parse; // [esp+4h] [ebp-4h]
 
@@ -96,7 +96,7 @@ void __cdecl Com_SetSpaceDelimited(int spaceDelimited)
     parse->parseInfo[parse->parseInfoNum].spaceDelimited = spaceDelimited != 0;
 }
 
-void __cdecl Com_SetKeepStringQuotes(int keepStringQuotes)
+void Com_SetKeepStringQuotes(int keepStringQuotes)
 {
     ParseThreadInfo *parse; // [esp+4h] [ebp-4h]
 
@@ -104,7 +104,7 @@ void __cdecl Com_SetKeepStringQuotes(int keepStringQuotes)
     parse->parseInfo[parse->parseInfoNum].keepStringQuotes = keepStringQuotes != 0;
 }
 
-void __cdecl Com_SetCSV(int csv)
+void Com_SetCSV(int csv)
 {
     ParseThreadInfo *parse; // [esp+4h] [ebp-4h]
 
@@ -112,7 +112,7 @@ void __cdecl Com_SetCSV(int csv)
     parse->parseInfo[parse->parseInfoNum].csv = csv != 0;
 }
 
-void __cdecl Com_SetParseNegativeNumbers(int negativeNumbers)
+void Com_SetParseNegativeNumbers(int negativeNumbers)
 {
     ParseThreadInfo *parse; // [esp+4h] [ebp-4h]
 
@@ -120,7 +120,7 @@ void __cdecl Com_SetParseNegativeNumbers(int negativeNumbers)
     parse->parseInfo[parse->parseInfoNum].negativeNumbers = negativeNumbers != 0;
 }
 
-int __cdecl Com_GetCurrentParseLine()
+int Com_GetCurrentParseLine()
 {
     ParseThreadInfo *parse; // [esp+4h] [ebp-4h]
 
@@ -128,7 +128,7 @@ int __cdecl Com_GetCurrentParseLine()
     return parse->parseInfo[parse->parseInfoNum].lines;
 }
 
-void __cdecl Com_SetScriptWarningPrefix(const char *prefix)
+void Com_SetScriptWarningPrefix(const char *prefix)
 {
     parseInfo_t *pi; // [esp+0h] [ebp-8h]
     ParseThreadInfo *parse; // [esp+4h] [ebp-4h]
@@ -188,7 +188,7 @@ void Com_ScriptError(const char *msg, ...)
         Com_PrintError(CON_CHANNEL_PARSERSCRIPT, "%s", string);
 }
 
-void __cdecl Com_UngetToken()
+void Com_UngetToken()
 {
     parseInfo_t *pi; // [esp+0h] [ebp-8h]
     ParseThreadInfo *parse; // [esp+4h] [ebp-4h]
@@ -201,7 +201,7 @@ void __cdecl Com_UngetToken()
     parse->tokenPos = parse->prevTokenPos;
 }
 
-void __cdecl Com_ParseSetMark(const char **text, com_parse_mark_t *mark)
+void Com_ParseSetMark(const char **text, com_parse_mark_t *mark)
 {
     parseInfo_t *pi; // [esp+0h] [ebp-8h]
     ParseThreadInfo *parse; // [esp+4h] [ebp-4h]
@@ -219,7 +219,7 @@ void __cdecl Com_ParseSetMark(const char **text, com_parse_mark_t *mark)
     mark->backup_text = pi->backup_text;
 }
 
-void __cdecl Com_ParseReturnToMark(const char **text, com_parse_mark_t *mark)
+void Com_ParseReturnToMark(const char **text, com_parse_mark_t *mark)
 {
     parseInfo_t *pi; // [esp+0h] [ebp-8h]
     ParseThreadInfo *parse; // [esp+4h] [ebp-4h]
@@ -237,7 +237,7 @@ void __cdecl Com_ParseReturnToMark(const char **text, com_parse_mark_t *mark)
     pi->backup_text = mark->backup_text;
 }
 
-int __cdecl Com_Compress(char *data_p)
+int Com_Compress(char *data_p)
 {
     char c; // [esp+7h] [ebp-Dh]
     char *datai; // [esp+8h] [ebp-Ch]
@@ -291,12 +291,12 @@ int __cdecl Com_Compress(char *data_p)
     return size;
 }
 
-const char *__cdecl Com_GetLastTokenPos()
+const char *Com_GetLastTokenPos()
 {
     return Com_GetParseThreadInfo()->tokenPos;
 }
 
-parseInfo_t *__cdecl Com_Parse(const char **data_p)
+parseInfo_t *Com_Parse(const char **data_p)
 {
     parseInfo_t *pi; // [esp+0h] [ebp-8h]
     ParseThreadInfo *parse; // [esp+4h] [ebp-4h]
@@ -330,7 +330,7 @@ const char *punctuation[15] =
     "!=",
     NULL // 14
 };
-parseInfo_t *__cdecl Com_ParseExt(const char **data_p, int allowLineBreaks)
+parseInfo_t *Com_ParseExt(const char **data_p, int allowLineBreaks)
 {
     int j; // [esp+14h] [ebp-24h]
     signed int l; // [esp+18h] [ebp-20h]
@@ -506,7 +506,7 @@ parseInfo_t *__cdecl Com_ParseExt(const char **data_p, int allowLineBreaks)
     }
 }
 
-const char *__cdecl SkipWhitespace(const char *data, int *hasNewLines)
+const char *SkipWhitespace(const char *data, int *hasNewLines)
 {
     int c; // [esp+0h] [ebp-Ch]
     parseInfo_t *pi; // [esp+4h] [ebp-8h]
@@ -531,7 +531,7 @@ const char *__cdecl SkipWhitespace(const char *data, int *hasNewLines)
     return data;
 }
 
-parseInfo_t *__cdecl Com_ParseCSV(const char **data_p, int allowLineBreaks)
+parseInfo_t *Com_ParseCSV(const char **data_p, int allowLineBreaks)
 {
     const char *v3; // [esp+0h] [ebp-14h]
     const char *data; // [esp+4h] [ebp-10h]
@@ -597,7 +597,7 @@ parseInfo_t *__cdecl Com_ParseCSV(const char **data_p, int allowLineBreaks)
     return pi;
 }
 
-parseInfo_t *__cdecl Com_ParseOnLine(const char **data_p)
+parseInfo_t *Com_ParseOnLine(const char **data_p)
 {
     parseInfo_t *pi; // [esp+0h] [ebp-8h]
     ParseThreadInfo *parse; // [esp+4h] [ebp-4h]
@@ -615,7 +615,7 @@ parseInfo_t *__cdecl Com_ParseOnLine(const char **data_p)
     return Com_ParseExt(data_p, 0);
 }
 
-int __cdecl Com_MatchToken(const char **buf_p, const char *match, int warning)
+int Com_MatchToken(const char **buf_p, const char *match, int warning)
 {
     parseInfo_t *token; // [esp+14h] [ebp-4h]
 
@@ -629,7 +629,7 @@ int __cdecl Com_MatchToken(const char **buf_p, const char *match, int warning)
     return 0;
 }
 
-int __cdecl Com_SkipBracedSection(const char **program, uint32_t startDepth, int iMaxNesting)
+int Com_SkipBracedSection(const char **program, uint32_t startDepth, int iMaxNesting)
 {
     int bNestingExceeded; // [esp+4h] [ebp-8h]
     parseInfo_t *token; // [esp+8h] [ebp-4h]
@@ -656,7 +656,7 @@ int __cdecl Com_SkipBracedSection(const char **program, uint32_t startDepth, int
     return bNestingExceeded;
 }
 
-void __cdecl Com_SkipRestOfLine(const char **data)
+void Com_SkipRestOfLine(const char **data)
 {
     int c; // [esp+0h] [ebp-10h]
     ParseThreadInfo *parse; // [esp+8h] [ebp-8h]
@@ -682,7 +682,7 @@ void __cdecl Com_SkipRestOfLine(const char **data)
     }
 }
 
-int __cdecl Com_GetArgCountOnLine(const char **data_p)
+int Com_GetArgCountOnLine(const char **data_p)
 {
     com_parse_mark_t mark; // [esp+0h] [ebp-1Ch] BYREF
     const char *token; // [esp+14h] [ebp-8h]
@@ -699,7 +699,7 @@ int __cdecl Com_GetArgCountOnLine(const char **data_p)
     return count;
 }
 
-double __cdecl Com_ParseFloat(const char **buf_p)
+double Com_ParseFloat(const char **buf_p)
 {
     parseInfo_t *token; // [esp+4h] [ebp-4h]
 
@@ -707,7 +707,7 @@ double __cdecl Com_ParseFloat(const char **buf_p)
     return (float)atof(token->token);
 }
 
-double __cdecl Com_ParseFloatOnLine(const char **buf_p)
+double Com_ParseFloatOnLine(const char **buf_p)
 {
     parseInfo_t *token; // [esp+4h] [ebp-4h]
 
@@ -715,7 +715,7 @@ double __cdecl Com_ParseFloatOnLine(const char **buf_p)
     return (float)atof(token->token);
 }
 
-int __cdecl Com_ParseInt(const char **buf_p)
+int Com_ParseInt(const char **buf_p)
 {
     parseInfo_t *token; // [esp+0h] [ebp-4h]
 
@@ -723,7 +723,7 @@ int __cdecl Com_ParseInt(const char **buf_p)
     return atoi(token->token);
 }
 
-void __cdecl Com_Parse1DMatrix(const char **buf_p, int x, float *m)
+void Com_Parse1DMatrix(const char **buf_p, int x, float *m)
 {
     parseInfo_t *token; // [esp+0h] [ebp-8h]
     int i; // [esp+4h] [ebp-4h]

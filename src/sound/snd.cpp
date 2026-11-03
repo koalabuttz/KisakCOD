@@ -50,23 +50,23 @@ snd_physics g_sndPhysics;
 uint32_t g_FXPlaySoundCount;
 AsyncPlaySound g_FXPlaySounds[32];
 
-void __cdecl TRACK_snd()
+void TRACK_snd()
 {
     track_static_alloc_internal(&g_snd, 32504, "g_snd", 13);
 }
 
-void __cdecl SND_DebugAliasPrint(bool condition, const snd_alias_t *alias, const char *msg)
+void SND_DebugAliasPrint(bool condition, const snd_alias_t *alias, const char *msg)
 {
     if (condition && !I_stricmp(snd_debugAlias->current.string, alias->aliasName))
         Com_DPrintf(CON_CHANNEL_SOUND, "^5SND_DEBUG_ALIAS (%s): %s\n", alias->aliasName, msg);
 }
 
-int __cdecl SND_GetEntChannelCount()
+int SND_GetEntChannelCount()
 {
     return g_snd.entchannel_count;
 }
 
-bool __cdecl SND_IsStreamChannelLoading(int index)
+bool SND_IsStreamChannelLoading(int index)
 {
     iassert(g_snd.max_stream_channels);
     iassert((index >= ((0 + 8) + 32) && index < ((0 + 8) + 32) + g_snd.max_stream_channels));
@@ -74,7 +74,7 @@ bool __cdecl SND_IsStreamChannelLoading(int index)
     return g_snd.chaninfo[index].soundFileInfo.loadingState == SFLS_LOADING;
 }
 
-bool __cdecl SND_HasFreeVoice(int entchannel)
+bool SND_HasFreeVoice(int entchannel)
 {
     int loadingStreamCount; // [esp+0h] [ebp-8h]
     int index; // [esp+4h] [ebp-4h]
@@ -94,7 +94,7 @@ bool __cdecl SND_HasFreeVoice(int entchannel)
     return loadingStreamCount + g_snd.entchaninfo[entchannel].voiceCount < g_snd.entchaninfo[entchannel].maxVoices;
 }
 
-void __cdecl SND_AddVoice(int entchannel)
+void SND_AddVoice(int entchannel)
 {
     iassert(entchannel >= 0 && entchannel < g_snd.entchannel_count);
     vassert(g_snd.entchaninfo[entchannel].voiceCount < g_snd.entchaninfo[entchannel].maxVoices,
@@ -105,7 +105,7 @@ void __cdecl SND_AddVoice(int entchannel)
     g_snd.entchaninfo[entchannel].voiceCount++;
 }
 
-void __cdecl SND_RemoveVoice(int entchannel)
+void SND_RemoveVoice(int entchannel)
 {
     iassert(entchannel >= 0 && entchannel < g_snd.entchannel_count);
     iassert(g_snd.entchaninfo[entchannel].voiceCount > 0);
@@ -113,42 +113,42 @@ void __cdecl SND_RemoveVoice(int entchannel)
     --g_snd.entchaninfo[entchannel].voiceCount;
 }
 
-int __cdecl SND_GetPriority(int entchannel)
+int SND_GetPriority(int entchannel)
 {
     iassert(entchannel >= 0 && entchannel < g_snd.entchannel_count);
 
     return g_snd.entchaninfo[entchannel].priority;
 }
 
-bool __cdecl SND_IsRestricted(int entchannel)
+bool SND_IsRestricted(int entchannel)
 {
     iassert(entchannel >= 0 && entchannel < g_snd.entchannel_count);
 
     return g_snd.entchaninfo[entchannel].isRestricted;
 }
 
-bool __cdecl SND_IsAliasChannel3D(int entchannel)
+bool SND_IsAliasChannel3D(int entchannel)
 {
     iassert(entchannel >= 0 && entchannel < g_snd.entchannel_count);
 
     return g_snd.entchaninfo[entchannel].is3d;
 }
 
-bool __cdecl SND_IsPausable(int entchannel)
+bool SND_IsPausable(int entchannel)
 {
     iassert(entchannel >= 0 && entchannel < g_snd.entchannel_count);
 
     return g_snd.entchaninfo[entchannel].isPausable;
 }
 
-snd_entchannel_info_t *__cdecl SND_GetEntChannelName(int entchannel)
+snd_entchannel_info_t *SND_GetEntChannelName(int entchannel)
 {
     iassert(entchannel >= 0 && entchannel < g_snd.entchannel_count);
 
     return &g_snd.entchaninfo[entchannel];
 }
 
-int __cdecl SND_GetEntChannelFromName(const char *channelName)
+int SND_GetEntChannelFromName(const char *channelName)
 {
     iassert(channelName);
 
@@ -161,7 +161,7 @@ int __cdecl SND_GetEntChannelFromName(const char *channelName)
     return SND_PLAYBACKID_NOTPLAYED;
 }
 
-char __cdecl SND_ValidateEnvEffectsPriorityValue(const char *priorityName, int *priority)
+char SND_ValidateEnvEffectsPriorityValue(const char *priorityName, int *priority)
 {
     const char *priorityStrings[SND_ENVEFFECTPRIO_COUNT]; // [esp+0h] [ebp-10h]
     int stringIndex; // [esp+Ch] [ebp-4h]
@@ -188,7 +188,7 @@ char __cdecl SND_ValidateEnvEffectsPriorityValue(const char *priorityName, int *
     return 0;
 }
 
-void __cdecl SND_SetEnvironmentEffects_f()
+void SND_SetEnvironmentEffects_f()
 {
     const char *roomstring; // [esp+Ch] [ebp-18h]
     float drylevel; // [esp+14h] [ebp-10h]
@@ -236,7 +236,7 @@ void __cdecl SND_SetEnvironmentEffects_f()
     }
 }
 
-int __cdecl SND_RoomtypeFromString(const char *string)
+int SND_RoomtypeFromString(const char *string)
 {
     int stringIndex; // [esp+0h] [ebp-4h]
     int stringIndexa; // [esp+0h] [ebp-4h]
@@ -260,7 +260,7 @@ int __cdecl SND_RoomtypeFromString(const char *string)
     return 0;
 }
 
-void __cdecl SND_DeactivateEnvironmentEffects_f()
+void SND_DeactivateEnvironmentEffects_f()
 {
     int priority;
     int fademsec;
@@ -282,7 +282,7 @@ void __cdecl SND_DeactivateEnvironmentEffects_f()
     }
 }
 
-void __cdecl SND_SetEq_f()
+void SND_SetEq_f()
 {
     int band; // [esp+Ch] [ebp-1Ch] BYREF
     float q; // [esp+10h] [ebp-18h]
@@ -323,7 +323,7 @@ void __cdecl SND_SetEq_f()
     }
 }
 
-SND_EQTYPE __cdecl SND_EqTypeFromString(const char *typeString)
+SND_EQTYPE SND_EqTypeFromString(const char *typeString)
 {
     int stringIndex; // [esp+0h] [ebp-4h]
     int stringIndexa; // [esp+0h] [ebp-4h]
@@ -347,7 +347,7 @@ SND_EQTYPE __cdecl SND_EqTypeFromString(const char *typeString)
     return (SND_EQTYPE)5; // SND_EQTYPE_COUNT
 }
 
-char __cdecl SND_ParseChannelAndBand_f(int *entchannel, int *eqIndex, int *band)
+char SND_ParseChannelAndBand_f(int *entchannel, int *eqIndex, int *band)
 {
     iassert(entchannel);
     iassert(band);
@@ -386,7 +386,7 @@ char __cdecl SND_ParseChannelAndBand_f(int *entchannel, int *eqIndex, int *band)
     }
 }
 
-void __cdecl SND_SetEqFreq_f()
+void SND_SetEqFreq_f()
 {
     int band; // [esp+Ch] [ebp-10h] BYREF
     int entchannel; // [esp+10h] [ebp-Ch] BYREF
@@ -410,7 +410,7 @@ void __cdecl SND_SetEqFreq_f()
     }
 }
 
-void __cdecl SND_SetEqType_f()
+void SND_SetEqType_f()
 {
     int band; // [esp+0h] [ebp-10h] BYREF
     int entchannel; // [esp+4h] [ebp-Ch] BYREF
@@ -432,7 +432,7 @@ void __cdecl SND_SetEqType_f()
     }
 }
 
-void __cdecl SND_SetEqGain_f()
+void SND_SetEqGain_f()
 {
     int band; // [esp+4h] [ebp-10h] BYREF
     int entchannel; // [esp+8h] [ebp-Ch] BYREF
@@ -453,7 +453,7 @@ void __cdecl SND_SetEqGain_f()
     }
 }
 
-void __cdecl SND_SetEqQ_f()
+void SND_SetEqQ_f()
 {
     int band; // [esp+8h] [ebp-10h] BYREF
     float q; // [esp+Ch] [ebp-Ch]
@@ -477,7 +477,7 @@ void __cdecl SND_SetEqQ_f()
     }
 }
 
-void __cdecl SND_DeactivateEq_f()
+void SND_DeactivateEq_f()
 {
     const char *channelName; // [esp+4h] [ebp-10h]
     const char *channelNamea; // [esp+4h] [ebp-10h]
@@ -521,7 +521,7 @@ void __cdecl SND_DeactivateEq_f()
     }
 }
 
-char __cdecl SND_AnyActiveListeners()
+char SND_AnyActiveListeners()
 {
     int listenerIndex; // [esp+0h] [ebp-4h]
 
@@ -533,7 +533,7 @@ char __cdecl SND_AnyActiveListeners()
     return 0;
 }
 
-int __cdecl SND_GetListenerIndexNearestToOrigin(const float *origin)
+int SND_GetListenerIndexNearestToOrigin(const float *origin)
 {
     float v2; // [esp+4h] [ebp-20h]
     float diff[3]; // [esp+8h] [ebp-1Ch] BYREF
@@ -569,14 +569,14 @@ int __cdecl SND_GetListenerIndexNearestToOrigin(const float *origin)
     return nearest;
 }
 
-void __cdecl SND_DisconnectListener(int localClientNum)
+void SND_DisconnectListener(int localClientNum)
 {
     bcassert(localClientNum, 1);
 
     memset((uint8_t *)&g_snd.listeners[localClientNum], 0, sizeof(g_snd.listeners[localClientNum]));
 }
 
-void __cdecl SND_SetListener(int localClientNum, int clientNum, const float *origin, const float (*axis)[3])
+void SND_SetListener(int localClientNum, int clientNum, const float *origin, const float (*axis)[3])
 {
     if (g_snd.Initialized2d)
     {
@@ -593,21 +593,21 @@ void __cdecl SND_SetListener(int localClientNum, int clientNum, const float *ori
     }
 }
 
-void __cdecl SND_SaveListeners(snd_listener *listeners)
+void SND_SaveListeners(snd_listener *listeners)
 {
     iassert(listeners);
 
     memcpy(listeners, g_snd.listeners, 0x70u);
 }
 
-void __cdecl SND_RestoreListeners(snd_listener *listeners)
+void SND_RestoreListeners(snd_listener *listeners)
 {
     iassert(listeners);
 
     memcpy(g_snd.listeners, listeners, sizeof(g_snd.listeners));
 }
 
-int __cdecl SND_SetPlaybackIdNotPlayed(uint32_t index)
+int SND_SetPlaybackIdNotPlayed(uint32_t index)
 {
     iassert(index >= 0 && index < SND_MAX_CHANNELS);
 
@@ -615,7 +615,7 @@ int __cdecl SND_SetPlaybackIdNotPlayed(uint32_t index)
     return SND_PLAYBACKID_NOTPLAYED;
 }
 
-int __cdecl SND_AcquirePlaybackId(uint32_t index, int totalMsec)
+int SND_AcquirePlaybackId(uint32_t index, int totalMsec)
 {
     snd_channel_info_t *chanInfo; // [esp+0h] [ebp-4h]
 
@@ -639,7 +639,7 @@ int __cdecl SND_AcquirePlaybackId(uint32_t index, int totalMsec)
     return chanInfo->playbackId;
 }
 
-char __cdecl SND_AddLengthNotify(int playbackId, const snd_alias_t *lengthNotifyData, SndLengthId id)
+char SND_AddLengthNotify(int playbackId, const snd_alias_t *lengthNotifyData, SndLengthId id)
 {
     snd_channel_info_t *chanInfo; // [esp+0h] [ebp-Ch]
     int lengthNotifyIndex; // [esp+4h] [ebp-8h]
@@ -688,7 +688,7 @@ char __cdecl SND_AddLengthNotify(int playbackId, const snd_alias_t *lengthNotify
     }
 }
 
-void __cdecl DoLengthNotify(int msec, const snd_alias_t *lengthNotifyData, SndLengthId id)
+void DoLengthNotify(int msec, const snd_alias_t *lengthNotifyData, SndLengthId id)
 {
 #ifdef KISAK_SP
     if (id == SndLengthNotify_Script)
@@ -707,7 +707,7 @@ void __cdecl DoLengthNotify(int msec, const snd_alias_t *lengthNotifyData, SndLe
     }
 }
 
-char __cdecl SND_GetKnownLength(int playbackId, int *msec)
+char SND_GetKnownLength(int playbackId, int *msec)
 {
     int chanInfoIndex; // [esp+0h] [ebp-4h]
 
@@ -731,12 +731,12 @@ char __cdecl SND_GetKnownLength(int playbackId, int *msec)
     return 1;
 }
 
-float __cdecl SND_GetLerpedSlavePercentage(float baseSlavePercentage)
+float SND_GetLerpedSlavePercentage(float baseSlavePercentage)
 {
     return (float)(1.0f - (1.0f - baseSlavePercentage) * g_snd.slaveLerp);
 }
 
-float __cdecl SND_Attenuate(SndCurve *volumeFalloffCurve, float radius, float mindist, float maxdist)
+float SND_Attenuate(SndCurve *volumeFalloffCurve, float radius, float mindist, float maxdist)
 {
     float radiusa; // [esp+10h] [ebp+Ch]
     float radiusb; // [esp+10h] [ebp+Ch]
@@ -757,7 +757,7 @@ float __cdecl SND_Attenuate(SndCurve *volumeFalloffCurve, float radius, float mi
         return 0.0f;
 }
 
-void __cdecl SND_GetCurrent3DPosition(SndEntHandle sndEnt, float *offset, float *pos_out)
+void SND_GetCurrent3DPosition(SndEntHandle sndEnt, float *offset, float *pos_out)
 {
     float org[3]; // [esp+Ch] [ebp-30h] BYREF
     float axis[3][3]; // [esp+18h] [ebp-24h] BYREF
@@ -772,7 +772,7 @@ void __cdecl SND_GetCurrent3DPosition(SndEntHandle sndEnt, float *offset, float 
     Vec3Copy(org, pos_out);
 }
 
-void __cdecl SND_ResetChannelInfo(int index)
+void SND_ResetChannelInfo(int index)
 {
     iassert(g_snd.chaninfo[index].entchannel >= 0 && g_snd.chaninfo[index].entchannel < g_snd.entchannel_count);
 
@@ -782,7 +782,7 @@ void __cdecl SND_ResetChannelInfo(int index)
     g_snd.chaninfo[index].alias0 = 0;
 }
 
-void __cdecl SND_SetChannelStartInfo(uint32_t index, SndStartAliasInfo *SndStartAliasInfo)
+void SND_SetChannelStartInfo(uint32_t index, SndStartAliasInfo *SndStartAliasInfo)
 {
     sndLengthNotifyInfo *p_lengthNotifyInfo; // ecx
     float offset[3]; // [esp+8h] [ebp-40h] BYREF
@@ -835,7 +835,7 @@ void __cdecl SND_SetChannelStartInfo(uint32_t index, SndStartAliasInfo *SndStart
     p_lengthNotifyInfo->count = 0;
 }
 
-void __cdecl SND_SetSoundFileChannelInfo(
+void SND_SetSoundFileChannelInfo(
     uint32_t index,
     int srcChannelCount,
     int baserate,
@@ -851,7 +851,7 @@ void __cdecl SND_SetSoundFileChannelInfo(
     g_snd.chaninfo[index].soundFileInfo.endtime = total_msec + g_snd.time - start_msec;
 }
 
-int __cdecl SND_FindFree2DChannel(SndStartAliasInfo *startAliasInfo, int entchannel)
+int SND_FindFree2DChannel(SndStartAliasInfo *startAliasInfo, int entchannel)
 {
     snd_entchannel_info_t *EntChannelName; // eax
     bool HasFreeVoice; // al
@@ -935,7 +935,7 @@ int __cdecl SND_FindFree2DChannel(SndStartAliasInfo *startAliasInfo, int entchan
     return ia;
 }
 
-int __cdecl SND_FindReplaceableChannel(
+int SND_FindReplaceableChannel(
     SndStartAliasInfo *startAliasInfo,
     int entchannel,
     uint32_t first,
@@ -1056,7 +1056,7 @@ int __cdecl SND_FindReplaceableChannel(
     return replaceable;
 }
 
-int __cdecl SND_FindFree3DChannel(SndStartAliasInfo *startAliasInfo, int entchannel)
+int SND_FindFree3DChannel(SndStartAliasInfo *startAliasInfo, int entchannel)
 {
     int v3; // eax
     bool v4; // al
@@ -1145,13 +1145,13 @@ int __cdecl SND_FindFree3DChannel(SndStartAliasInfo *startAliasInfo, int entchan
     return i;
 }
 
-void __cdecl DB_SaveSounds()
+void DB_SaveSounds()
 {
     for (int i = 0; i < SND_MAX_CHANNELS; ++i)
         SND_Archive(&g_snd.chaninfo[i]);
 }
 
-void __cdecl SND_Archive(snd_channel_info_t *chaninfo)
+void SND_Archive(snd_channel_info_t *chaninfo)
 {
     snd_alias_list_t *aliasList; // [esp+8h] [ebp-8h]
     const snd_alias_t *alias; // [esp+Ch] [ebp-4h]
@@ -1177,13 +1177,13 @@ void __cdecl SND_Archive(snd_channel_info_t *chaninfo)
     }
 }
 
-void __cdecl DB_LoadSounds()
+void DB_LoadSounds()
 {
     for (int i = 0; i < SND_MAX_CHANNELS; ++i)
         SND_Unarchive(&g_snd.chaninfo[i]);
 }
 
-void __cdecl SND_Unarchive(snd_channel_info_t *chaninfo)
+void SND_Unarchive(snd_channel_info_t *chaninfo)
 {
     snd_alias_list_t *aliasList; // [esp+0h] [ebp-4h]
 
@@ -1203,18 +1203,18 @@ void __cdecl SND_Unarchive(snd_channel_info_t *chaninfo)
     }
 }
 
-void __cdecl SND_StopSoundAliasOnEnt(SndEntHandle sndEnt, const char *aliasName)
+void SND_StopSoundAliasOnEnt(SndEntHandle sndEnt, const char *aliasName)
 {
     StopSoundAliasesOnEnt(sndEnt, aliasName);
 }
 
-void __cdecl StopSoundAliasesOnEnt(SndEntHandle sndEnt, const char *aliasName)
+void StopSoundAliasesOnEnt(SndEntHandle sndEnt, const char *aliasName)
 {
     int v2; // eax
     int v3; // eax
     const snd_alias_t *alias0; // [esp-8h] [ebp-14h]
     const snd_alias_t *alias1; // [esp-8h] [ebp-14h]
-    void(__cdecl * stopChannel)(int); // [esp+0h] [ebp-Ch]
+    void(* stopChannel)(int); // [esp+0h] [ebp-Ch]
     int chanIdx; // [esp+4h] [ebp-8h]
     snd_channel_info_t *chaninfo; // [esp+8h] [ebp-4h]
 
@@ -1279,17 +1279,17 @@ void __cdecl StopSoundAliasesOnEnt(SndEntHandle sndEnt, const char *aliasName)
     }
 }
 
-void __cdecl SND_StopSoundsOnEnt(SndEntHandle sndEnt)
+void SND_StopSoundsOnEnt(SndEntHandle sndEnt)
 {
     StopSoundAliasesOnEnt(sndEnt, 0);
 }
 
-void __cdecl SND_InitFXSounds()
+void SND_InitFXSounds()
 {
     g_FXPlaySoundCount = 0;
 }
 
-void __cdecl SND_AddPlayFXSoundAlias(snd_alias_t *alias, SndEntHandle sndEnt, const float *origin)
+void SND_AddPlayFXSoundAlias(snd_alias_t *alias, SndEntHandle sndEnt, const float *origin)
 {
     if (g_FXPlaySoundCount == 32)
     {
@@ -1305,13 +1305,13 @@ void __cdecl SND_AddPlayFXSoundAlias(snd_alias_t *alias, SndEntHandle sndEnt, co
     }
 }
 
-void __cdecl Snd_AssertAliasValid(snd_alias_t *alias)
+void Snd_AssertAliasValid(snd_alias_t *alias)
 {
     iassert(alias);
     bcassert(SNDALIASFLAGS_GET_CHANNEL(alias->flags), g_snd.entchannel_count);
 }
 
-void __cdecl SND_PlayFXSounds()
+void SND_PlayFXSounds()
 {
     for (uint soundIndex = 0; soundIndex < g_FXPlaySoundCount; ++soundIndex)
         SND_PlaySoundAlias(
@@ -1322,7 +1322,7 @@ void __cdecl SND_PlayFXSounds()
             SASYS_CGAME);
 }
 
-int __cdecl SND_PlaySoundAlias(
+int SND_PlaySoundAlias(
     const snd_alias_t *alias,
     SndEntHandle sndEnt,
     const float *org,
@@ -1337,7 +1337,7 @@ int __cdecl SND_PlaySoundAlias(
         return SND_PLAYBACKID_NOTPLAYED;
 }
 
-int __cdecl SND_PlaySoundAlias_Internal(
+int SND_PlaySoundAlias_Internal(
     const snd_alias_t *alias0,
     const snd_alias_t *alias1,
     float lerp,
@@ -1518,7 +1518,7 @@ int __cdecl SND_PlaySoundAlias_Internal(
     return playbackId;
 }
 
-void __cdecl SND_StopEntityChannel(SndEntHandle sndEnt, int entchannel)
+void SND_StopEntityChannel(SndEntHandle sndEnt, int entchannel)
 {
     for (int i = 8; i < g_snd.max_3D_channels + 8; ++i)
     {
@@ -1552,7 +1552,7 @@ void __cdecl SND_StopEntityChannel(SndEntHandle sndEnt, int entchannel)
     }
 }
 
-int __cdecl SND_StartAliasSample(SndStartAliasInfo *startAliasInfo, int *pChannel)
+int SND_StartAliasSample(SndStartAliasInfo *startAliasInfo, int *pChannel)
 {
     char filename[132]; // [esp+0h] [ebp-88h] BYREF
 
@@ -1609,7 +1609,7 @@ int __cdecl SND_StartAliasSample(SndStartAliasInfo *startAliasInfo, int *pChanne
     }
 }
 
-int __cdecl SND_StartAliasStream(SndStartAliasInfo *startAliasInfo, int *pChannel)
+int SND_StartAliasStream(SndStartAliasInfo *startAliasInfo, int *pChannel)
 {
     iassert(startAliasInfo->alias0);
     iassert(SNDALIASFLAGS_GET_TYPE(startAliasInfo->alias0->flags) == SAT_STREAMED);
@@ -1638,7 +1638,7 @@ int __cdecl SND_StartAliasStream(SndStartAliasInfo *startAliasInfo, int *pChanne
     return SND_StartAliasStreamOnChannel(startAliasInfo, index);
 }
 
-int __cdecl SND_FindFreeStreamChannel(SndStartAliasInfo *startAliasInfo, int entchannel)
+int SND_FindFreeStreamChannel(SndStartAliasInfo *startAliasInfo, int entchannel)
 {
     const char *v9; // [esp+8h] [ebp-68h]
     int v10; // [esp+Ch] [ebp-64h]
@@ -1729,7 +1729,7 @@ int __cdecl SND_FindFreeStreamChannel(SndStartAliasInfo *startAliasInfo, int ent
     return i;
 }
 
-void __cdecl SND_ChoosePitchAndVolume(
+void SND_ChoosePitchAndVolume(
     const snd_alias_t *alias0,
     const snd_alias_t *alias1,
     float lerp,
@@ -1776,7 +1776,7 @@ void __cdecl SND_ChoosePitchAndVolume(
     *pitch = random() * (pitchMax - pitchMin) + pitchMin;
 }
 
-char __cdecl SND_ContinueLoopingSound(
+char SND_ContinueLoopingSound(
     const snd_alias_t *alias0,
     const snd_alias_t *alias1,
     float lerp,
@@ -1838,12 +1838,12 @@ char __cdecl SND_ContinueLoopingSound(
     return 0;
 }
 
-void __cdecl SND_ContinueLoopingSound_Internal(
+void SND_ContinueLoopingSound_Internal(
     uint32_t chanIndex,
     float lerp,
     float volumeScale,
     int *pChannel,
-    void(__cdecl *setPlaybackRateFunc)(int, int))
+    void(*setPlaybackRateFunc)(int, int))
 {
     float v6; // [esp+8h] [ebp-40h]
     float v7; // [esp+Ch] [ebp-3Ch]
@@ -1890,12 +1890,12 @@ void __cdecl SND_ContinueLoopingSound_Internal(
         *pChannel = chanIndex;
 }
 
-BOOL __cdecl StreamFileNameIsNullSound(const StreamFileName *streamFileName)
+BOOL StreamFileNameIsNullSound(const StreamFileName *streamFileName)
 {
     return !*streamFileName->info.raw.dir && !I_stricmp("null.wav", streamFileName->info.raw.name);
 }
 
-bool __cdecl SND_IsNullSoundFile(const SoundFile *soundFile)
+bool SND_IsNullSoundFile(const SoundFile *soundFile)
 {
     if (soundFile->type == SAT_STREAMED)
         return StreamFileNameIsNullSound((const StreamFileName *)&soundFile->u);
@@ -1905,7 +1905,7 @@ bool __cdecl SND_IsNullSoundFile(const SoundFile *soundFile)
     return I_stricmp("null.wav", soundFile->u.loadSnd->name) == 0;
 }
 
-int __cdecl SND_PlaySoundAliasAsMaster(
+int SND_PlaySoundAliasAsMaster(
     const snd_alias_t *alias,
     SndEntHandle sndEnt,
     const float *org,
@@ -1920,7 +1920,7 @@ int __cdecl SND_PlaySoundAliasAsMaster(
         return SND_PLAYBACKID_NOTPLAYED;
 }
 
-int __cdecl SND_PlayBlendedSoundAliases(
+int SND_PlayBlendedSoundAliases(
     const snd_alias_t *alias0,
     const snd_alias_t *alias1,
     float lerp,
@@ -1939,7 +1939,7 @@ int __cdecl SND_PlayBlendedSoundAliases(
     return SND_PlaySoundAlias_Internal(alias0, alias1, lerp, volumeScale, sndEnt, org, 0, timeshift, 0, 1, system);
 }
 
-char __cdecl SND_ValidateSoundAliasBlend(const snd_alias_t *alias0, const snd_alias_t *alias1, bool bReport)
+char SND_ValidateSoundAliasBlend(const snd_alias_t *alias0, const snd_alias_t *alias1, bool bReport)
 {
     iassert(alias0);
     iassert(alias1);
@@ -2078,7 +2078,7 @@ char __cdecl SND_ValidateSoundAliasBlend(const snd_alias_t *alias0, const snd_al
     }
 }
 
-int __cdecl SND_PlayLocalSoundAlias(uint32_t localClientNum, const snd_alias_t *alias, snd_alias_system_t system)
+int SND_PlayLocalSoundAlias(uint32_t localClientNum, const snd_alias_t *alias, snd_alias_system_t system)
 {
     bcassert(system, SASYS_COUNT);
     bcassert(localClientNum, ARRAY_COUNT(g_snd.listeners));
@@ -2097,7 +2097,7 @@ int __cdecl SND_PlayLocalSoundAlias(uint32_t localClientNum, const snd_alias_t *
         system);
 }
 
-int __cdecl SND_PlayLocalSoundAliasByName(
+int SND_PlayLocalSoundAliasByName(
     uint32_t localClientNum,
     const char *aliasname,
     snd_alias_system_t system)
@@ -2110,13 +2110,13 @@ int __cdecl SND_PlayLocalSoundAliasByName(
         return SND_PLAYBACKID_NOTPLAYED;
 }
 
-void __cdecl SND_ResetPauseSettingsToDefaults()
+void SND_ResetPauseSettingsToDefaults()
 {
     for (int i = 0; i < 64; ++i)
         g_snd.pauseSettings[i] = g_snd.defaultPauseSettings[i];
 }
 
-void __cdecl SND_PlayMusicAlias(
+void SND_PlayMusicAlias(
     int localClientNum,
     const snd_alias_t *alias,
     bool useTimescale,
@@ -2131,7 +2131,7 @@ void __cdecl SND_PlayMusicAlias(
     }
 }
 
-void __cdecl SND_StartBackground(
+void SND_StartBackground(
     int localClientNum,
     uint32_t track,
     const snd_alias_t *alias,
@@ -2284,13 +2284,13 @@ void SND_UnpauseSounds()
     }
 }
 
-void __cdecl SND_StopMusic(int fadetime)
+void SND_StopMusic(int fadetime)
 {
     if (g_snd.Initialized2d)
         SND_StopBackground(SND_TRACK_MUSIC, fadetime);
 }
 
-void __cdecl SND_StopBackground(uint32_t track, int fadetime)
+void SND_StopBackground(uint32_t track, int fadetime)
 {
     iassert(track >= 0 && track < SND_TRACK_COUNT);
     iassert(fadetime >= 0);
@@ -2312,7 +2312,7 @@ void __cdecl SND_StopBackground(uint32_t track, int fadetime)
     }
 }
 
-void __cdecl SND_PlayAmbientAlias(
+void SND_PlayAmbientAlias(
     int localClientNum,
     const snd_alias_t *alias,
     int fadetime,
@@ -2406,7 +2406,7 @@ void __cdecl SND_PlayAmbientAlias(
     }
 }
 
-void __cdecl SND_StopAmbient(int localClientNum, int fadetime)
+void SND_StopAmbient(int localClientNum, int fadetime)
 {
     if (g_snd.Initialized2d)
     {
@@ -2419,7 +2419,7 @@ void __cdecl SND_StopAmbient(int localClientNum, int fadetime)
     }
 }
 
-void __cdecl SND_FadeAllSounds(float volume, int fadetime)
+void SND_FadeAllSounds(float volume, int fadetime)
 {
     iassert(volume >= 0);
     iassert(fadetime >= 0);
@@ -2436,7 +2436,7 @@ void __cdecl SND_FadeAllSounds(float volume, int fadetime)
     }
 }
 
-void __cdecl SND_SetChannelVolumes(int priority, const float *channelvolume, int fademsec)
+void SND_SetChannelVolumes(int priority, const float *channelvolume, int fademsec)
 {
     float v3; // [esp+4h] [ebp-Ch]
     snd_channelvolgroup *channelVolGroup; // [esp+8h] [ebp-8h]
@@ -2472,7 +2472,7 @@ void __cdecl SND_SetChannelVolumes(int priority, const float *channelvolume, int
     }
 }
 
-void __cdecl SND_DeactivateChannelVolumes(int priority, int fademsec)
+void SND_DeactivateChannelVolumes(int priority, int fademsec)
 {
     snd_channelvolgroup *channelVolGroup; // [esp+4h] [ebp-8h]
     int i; // [esp+8h] [ebp-4h]
@@ -2504,7 +2504,7 @@ void __cdecl SND_DeactivateChannelVolumes(int priority, int fademsec)
     }
 }
 
-void __cdecl SND_UpdateLoopingSounds()
+void SND_UpdateLoopingSounds()
 {
     if (g_snd.Initialized2d && !g_snd.paused)
     {
@@ -2546,7 +2546,7 @@ void __cdecl SND_UpdateLoopingSounds()
     }
 }
 
-char __cdecl SND_UpdateBackgroundVolume(uint32_t track, int frametime)
+char SND_UpdateBackgroundVolume(uint32_t track, int frametime)
 {
     float volume; // [esp+0h] [ebp-8h]
     int channel; // [esp+4h] [ebp-4h]
@@ -2585,7 +2585,7 @@ char __cdecl SND_UpdateBackgroundVolume(uint32_t track, int frametime)
     return 1;
 }
 
-void __cdecl SND_SetEnvironmentEffects(
+void SND_SetEnvironmentEffects(
     int priority,
     const char *roomstring,
     float drylevel,
@@ -2633,7 +2633,7 @@ void __cdecl SND_SetEnvironmentEffects(
     }
 }
 
-void __cdecl SND_DeactivateEnvironmentEffects(int priority, int fademsec)
+void SND_DeactivateEnvironmentEffects(int priority, int fademsec)
 {
     snd_enveffect *effect; // [esp+0h] [ebp-8h]
     int i; // [esp+4h] [ebp-4h]
@@ -2661,7 +2661,7 @@ void __cdecl SND_DeactivateEnvironmentEffects(int priority, int fademsec)
     }
 }
 
-void __cdecl SND_UpdateReverbs()
+void SND_UpdateReverbs()
 {
     for (int i = 8; i < g_snd.max_3D_channels + 8; ++i)
     {
@@ -2682,7 +2682,7 @@ void __cdecl SND_UpdateReverbs()
     }
 }
 
-void __cdecl SND_DeactivateAllEq(int eqIndex)
+void SND_DeactivateAllEq(int eqIndex)
 {
     for (int entchannel = 0; entchannel < 64; ++entchannel)
     {
@@ -2691,7 +2691,7 @@ void __cdecl SND_DeactivateAllEq(int eqIndex)
     }
 }
 
-void __cdecl SND_DeactivateChannelEq(const char *channelName, int eqIndex)
+void SND_DeactivateChannelEq(const char *channelName, int eqIndex)
 {
     signed int band; // [esp+0h] [ebp-4h]
 
@@ -2699,7 +2699,7 @@ void __cdecl SND_DeactivateChannelEq(const char *channelName, int eqIndex)
         SND_DeactivateEq(channelName, eqIndex, band);
 }
 
-void __cdecl SND_DeactivateEq(const char *channelName, int eqIndex, uint32_t band)
+void SND_DeactivateEq(const char *channelName, int eqIndex, uint32_t band)
 {
     signed int entchannel; // [esp+0h] [ebp-4h]
 
@@ -2710,7 +2710,7 @@ void __cdecl SND_DeactivateEq(const char *channelName, int eqIndex, uint32_t ban
         Com_PrintError(CON_CHANNEL_SOUND, "Unknown channel name (%s), please check channel definitions file\n", channelName);
 }
 
-void __cdecl SND_Update()
+void SND_Update()
 {
     int frametime; // [esp+30h] [ebp-20h]
     MemoryFile memFile; // [esp+34h] [ebp-1Ch] BYREF
@@ -2749,7 +2749,7 @@ void __cdecl SND_Update()
     }
 }
 
-void __cdecl SND_UpdateMasterVolumes(int frametime)
+void SND_UpdateMasterVolumes(int frametime)
 {
     for (int i = 0; i < SND_GetEntChannelCount(); ++i)
     {
@@ -2772,7 +2772,7 @@ void __cdecl SND_UpdateMasterVolumes(int frametime)
     g_snd.volume = g_snd.mastervol.volume * snd_volume->current.value * 0.75;
 }
 
-void __cdecl SND_UpdateVolume(snd_volume_info_t *volinfo, int frametime)
+void SND_UpdateVolume(snd_volume_info_t *volinfo, int frametime)
 {
     volinfo->volume = (double)frametime * volinfo->goalrate + volinfo->volume;
     if (volinfo->goalrate >= 0.0)
@@ -2790,7 +2790,7 @@ void __cdecl SND_UpdateVolume(snd_volume_info_t *volinfo, int frametime)
     }
 }
 
-void __cdecl SND_UpdateAllChannels(int frametime)
+void SND_UpdateAllChannels(int frametime)
 {
     SND_UpdateSlaveLerp(frametime);
     for (int i = 8; i < g_snd.max_3D_channels + 8; ++i)
@@ -2812,7 +2812,7 @@ void __cdecl SND_UpdateAllChannels(int frametime)
     }
 }
 
-void __cdecl SND_UpdateSlaveLerp(int frametime)
+void SND_UpdateSlaveLerp(int frametime)
 {
     double v1; // st7
     float v2; // [esp+0h] [ebp-1Ch]
@@ -2870,28 +2870,28 @@ void __cdecl SND_UpdateSlaveLerp(int frametime)
     }
 }
 
-bool __cdecl SND_Is2DChannelPlaying(int index)
+bool SND_Is2DChannelPlaying(int index)
 {
     iassert(index >= 0 && index < 0 + g_snd.max_2D_channels);
 
     return !SND_Is2DChannelFree(index) && !g_snd.chaninfo[index].startDelay;
 }
 
-bool __cdecl SND_Is3DChannelPlaying(int index)
+bool SND_Is3DChannelPlaying(int index)
 {
     iassert(index >= (0 + 8) && index < (0 + 8) + g_snd.max_3D_channels);
 
     return !SND_Is3DChannelFree(index) && !g_snd.chaninfo[index].startDelay;
 }
 
-bool __cdecl SND_IsStreamChannelPlaying(int index)
+bool SND_IsStreamChannelPlaying(int index)
 {
     iassert(index >= ((0 + 8) + 32) && index < ((0 + 8) + 32) + g_snd.max_stream_channels);
 
     return !SND_IsStreamChannelFree(index) && g_snd.chaninfo[index].startDelay <= 0;
 }
 
-void __cdecl SND_UpdateRoomEffects(int frametime)
+void SND_UpdateRoomEffects(int frametime)
 {
     if (g_snd.effect->dryrate != 0.0 || g_snd.effect->wetrate != 0.0)
     {
@@ -2973,7 +2973,7 @@ void SND_UpdateTimeScale()
     }
 }
 
-void __cdecl DebugDrawWorldSounds(int debugDrawStyle)
+void DebugDrawWorldSounds(int debugDrawStyle)
 {
     int closestId; // [esp+0h] [ebp-1214h] BYREF
     int dst[0x1200]; // [esp+4h] [ebp-1210h] BYREF
@@ -3009,7 +3009,7 @@ void __cdecl DebugDrawWorldSounds(int debugDrawStyle)
     }
 }
 
-void __cdecl DebugDrawWorldSound3D(
+void DebugDrawWorldSound3D(
     uint32_t idx,
     int debugDrawStyle,
     int *offsets,
@@ -3119,7 +3119,7 @@ LABEL_35:
     offsets[chaninfo->sndEnt.field.entIndex] = (int)(org[2] - fontsize * 1.25 * 12.0 - origZ);
 }
 
-double __cdecl FontSizeForDistance(float distance)
+double FontSizeForDistance(float distance)
 {
     if (distance < 10.0)
         return 0.050000001;
@@ -3148,7 +3148,7 @@ void SND_UpdatePhysics()
     Sys_LeaveCriticalSection(CRITSECT_AUDIO_PHYSICS);
 }
 
-bool __cdecl SND_ShouldGiveCpuWarning()
+bool SND_ShouldGiveCpuWarning()
 {
     if (g_snd.cpu > 2)
         return clientUIActives[0].connectionState >= CA_ACTIVE;
@@ -3156,7 +3156,7 @@ bool __cdecl SND_ShouldGiveCpuWarning()
         return false;
 }
 
-void __cdecl SND_StopSounds(snd_stopsounds_arg_t which)
+void SND_StopSounds(snd_stopsounds_arg_t which)
 {
     char v1; // [esp+0h] [ebp-8h]
 
@@ -3213,7 +3213,7 @@ cmd_function_s SND_SetEqQ_f_VAR;
 cmd_function_s SND_SetEqType_f_VAR;
 cmd_function_s SND_DeactivateEq_f_VAR;
 
-void __cdecl SND_Init()
+void SND_Init()
 {
     DvarLimits min; // [esp+4h] [ebp-20h]
     DvarLimits mina; // [esp+4h] [ebp-20h]
@@ -3341,7 +3341,7 @@ void __cdecl SND_Init()
 #endif
 }
 
-void __cdecl SND_PlayLocal_f()
+void SND_PlayLocal_f()
 {
     const char *v0; // eax
     const char *v1; // eax
@@ -3421,7 +3421,7 @@ void __cdecl SND_PlayLocal_f()
     }
 }
 
-void __cdecl RelativeToListener(const snd_listener *listener, float yaw, float pitch, float dist, float *result)
+void RelativeToListener(const snd_listener *listener, float yaw, float pitch, float dist, float *result)
 {
     float inputAngles[3]; // [esp+8h] [ebp-24h] BYREF
     float sndDir[3]; // [esp+14h] [ebp-18h] BYREF
@@ -3449,7 +3449,7 @@ void SND_InitEntChannels()
     BG_RegisterShockVolumeDvars();
 }
 
-void __cdecl SND_ParseEntChannelFile(const char *buffer)
+void SND_ParseEntChannelFile(const char *buffer)
 {
     char v1; // [esp+3h] [ebp-7Dh]
     snd_entchannel_info_t *v2; // [esp+8h] [ebp-78h]
@@ -3558,7 +3558,7 @@ void __cdecl SND_ParseEntChannelFile(const char *buffer)
     Com_EndParseSession();
 }
 
-char __cdecl SND_BooleanFromString(const char *value, const char *trueValue, const char *falseValue, bool defaultValue)
+char SND_BooleanFromString(const char *value, const char *trueValue, const char *falseValue, bool defaultValue)
 {
     if (!*value)
         return defaultValue;
@@ -3580,7 +3580,7 @@ char __cdecl SND_BooleanFromString(const char *value, const char *trueValue, con
     return defaultValue;
 }
 
-void __cdecl SND_Shutdown()
+void SND_Shutdown()
 {
 #ifdef KISAK_MP
     Voice_Shutdown();
@@ -3604,18 +3604,18 @@ void __cdecl SND_Shutdown()
     }
 }
 
-void __cdecl SND_ShutdownChannels()
+void SND_ShutdownChannels()
 {
     SND_StopSounds(SND_STOP_ALL);
     memset((uint8_t *)g_snd.chaninfo, 0, sizeof(g_snd.chaninfo));
 }
 
-void __cdecl SND_ErrorCleanup()
+void SND_ErrorCleanup()
 {
     g_snd.restore.size = 0;
 }
 
-void __cdecl SND_Save(MemoryFile *memFile)
+void SND_Save(MemoryFile *memFile)
 {
     for (int i = 1; i < SND_CHANNELVOLPRIO_COUNT; ++i)
         MemFile_WriteData(memFile, 772, &g_snd.channelVolGroups[i]);
@@ -3651,7 +3651,7 @@ void __cdecl SND_Save(MemoryFile *memFile)
     MemFile_WriteCString(memFile, (char *)"");
 }
 
-void __cdecl SND_Save3DChannel(int chanIndex, MemoryFile *memFile)
+void SND_Save3DChannel(int chanIndex, MemoryFile *memFile)
 {
     snd_save_3D_sample_t info; // [esp+0h] [ebp-18h] BYREF
 
@@ -3672,7 +3672,7 @@ void __cdecl SND_Save3DChannel(int chanIndex, MemoryFile *memFile)
     }
 }
 
-void __cdecl SND_SaveSoundAlias(const snd_alias_t *alias, MemoryFile *memFile)
+void SND_SaveSoundAlias(const snd_alias_t *alias, MemoryFile *memFile)
 {
     __int16 p; // [esp+2h] [ebp-2h] BYREF
 
@@ -3681,7 +3681,7 @@ void __cdecl SND_SaveSoundAlias(const snd_alias_t *alias, MemoryFile *memFile)
     MemFile_WriteData(memFile, 2, &p);
 }
 
-void __cdecl SND_SaveChanInfo(const snd_channel_info_t *chaninfo, MemoryFile *memFile)
+void SND_SaveChanInfo(const snd_channel_info_t *chaninfo, MemoryFile *memFile)
 {
     float lerp; // [esp+0h] [ebp-18h] BYREF
     float basevolume; // [esp+4h] [ebp-14h] BYREF
@@ -3716,7 +3716,7 @@ void __cdecl SND_SaveChanInfo(const snd_channel_info_t *chaninfo, MemoryFile *me
     SND_SaveLengthNotifyInfo(&chaninfo->lengthNotifyInfo, memFile);
 }
 
-void __cdecl SND_SaveLengthNotifyInfo(const sndLengthNotifyInfo *info, MemoryFile *memFile)
+void SND_SaveLengthNotifyInfo(const sndLengthNotifyInfo *info, MemoryFile *memFile)
 {
     SndLengthId v2; // [esp+0h] [ebp-14h]
     void *v3; // [esp+4h] [ebp-10h] BYREF
@@ -3751,7 +3751,7 @@ void __cdecl SND_SaveLengthNotifyInfo(const sndLengthNotifyInfo *info, MemoryFil
     }
 }
 
-void __cdecl SND_Save2DChannel(int chanIndex, MemoryFile *memFile)
+void SND_Save2DChannel(int chanIndex, MemoryFile *memFile)
 {
     snd_save_2D_sample_t info; // [esp+0h] [ebp-10h] BYREF
 
@@ -3772,7 +3772,7 @@ void __cdecl SND_Save2DChannel(int chanIndex, MemoryFile *memFile)
     }
 }
 
-void __cdecl SND_SaveStreamChannel(int chanIndex, MemoryFile *memFile)
+void SND_SaveStreamChannel(int chanIndex, MemoryFile *memFile)
 {
     snd_save_stream_t info; // [esp+8h] [ebp-24h] BYREF
     bool isStreamForUi; // [esp+2Bh] [ebp-1h]
@@ -3808,7 +3808,7 @@ void __cdecl SND_SaveStreamChannel(int chanIndex, MemoryFile *memFile)
     }
 }
 
-void __cdecl SND_Restore(MemoryFile *memFile)
+void SND_Restore(MemoryFile *memFile)
 {
     if (g_snd.Initialized2d)
     {
@@ -3852,7 +3852,7 @@ void __cdecl SND_Restore(MemoryFile *memFile)
     }
 }
 
-char __cdecl SND_Restore3DChannel(MemoryFile *memFile)
+char SND_Restore3DChannel(MemoryFile *memFile)
 {
     float *offset; // [esp+Ch] [ebp-F4h]
     snd_save_3D_sample_t info; // [esp+10h] [ebp-F0h] BYREF
@@ -3917,7 +3917,7 @@ char __cdecl SND_Restore3DChannel(MemoryFile *memFile)
     return 1;
 }
 
-snd_alias_t *__cdecl SND_RestoreSoundAlias(MemoryFile *memFile)
+snd_alias_t *SND_RestoreSoundAlias(MemoryFile *memFile)
 {
     _WORD p[4]; // [esp+0h] [ebp-10h] BYREF
     const char *name; // [esp+8h] [ebp-8h]
@@ -3936,7 +3936,7 @@ snd_alias_t *__cdecl SND_RestoreSoundAlias(MemoryFile *memFile)
     return alias;
 }
 
-void __cdecl SND_RestoreChanInfo(snd_channel_info_t *chaninfo, MemoryFile *memFile)
+void SND_RestoreChanInfo(snd_channel_info_t *chaninfo, MemoryFile *memFile)
 {
     int v2; // [esp+2Ch] [ebp-10h] BYREF
     int v3; // [esp+30h] [ebp-Ch] BYREF
@@ -3966,7 +3966,7 @@ void __cdecl SND_RestoreChanInfo(snd_channel_info_t *chaninfo, MemoryFile *memFi
     SND_RestoreLengthNotifyInfo(memFile, &chaninfo->lengthNotifyInfo);
 }
 
-void __cdecl SND_RestoreLengthNotifyInfo(MemoryFile *memFile, sndLengthNotifyInfo *info)
+void SND_RestoreLengthNotifyInfo(MemoryFile *memFile, sndLengthNotifyInfo *info)
 {
     snd_alias_t *v2; // eax
     void *v3; // [esp+4h] [ebp-14h] BYREF
@@ -4009,7 +4009,7 @@ void __cdecl SND_RestoreLengthNotifyInfo(MemoryFile *memFile, sndLengthNotifyInf
     }
 }
 
-char __cdecl SND_Restore2DChannel(MemoryFile *memFile)
+char SND_Restore2DChannel(MemoryFile *memFile)
 {
     snd_save_2D_sample_t info; // [esp+10h] [ebp-E8h] BYREF
     int playbackId; // [esp+20h] [ebp-D8h]
@@ -4067,7 +4067,7 @@ char __cdecl SND_Restore2DChannel(MemoryFile *memFile)
     return 1;
 }
 
-char __cdecl SND_RestoreStreamChannel(int channel, MemoryFile *memFile)
+char SND_RestoreStreamChannel(int channel, MemoryFile *memFile)
 {
     const char *v3; // eax
     const char *v4; // eax
@@ -4157,7 +4157,7 @@ char __cdecl SND_RestoreStreamChannel(int channel, MemoryFile *memFile)
     return 1;
 }
 
-int __cdecl SND_GetSoundOverlay(snd_overlay_type_t type, snd_overlay_info_t *info, int maxcount, int *cpu)
+int SND_GetSoundOverlay(snd_overlay_type_t type, snd_overlay_info_t *info, int maxcount, int *cpu)
 {
     iassert(info);
 
@@ -4182,7 +4182,7 @@ int __cdecl SND_GetSoundOverlay(snd_overlay_type_t type, snd_overlay_info_t *inf
     return 0;
 }
 
-int __cdecl SND_GetSoundOverlay2D(snd_overlay_info_t *info, int maxcount)
+int SND_GetSoundOverlay2D(snd_overlay_info_t *info, int maxcount)
 {
     snd_entchannel_info_t *EntChannelName; // eax
     int rate; // [esp+0h] [ebp-Ch]
@@ -4224,7 +4224,7 @@ int __cdecl SND_GetSoundOverlay2D(snd_overlay_info_t *info, int maxcount)
     return maxcount;
 }
 
-int __cdecl SND_GetSoundOverlay3D(snd_overlay_info_t *info, int maxcount)
+int SND_GetSoundOverlay3D(snd_overlay_info_t *info, int maxcount)
 {
     snd_entchannel_info_t *EntChannelName; // eax
     double v3; // st7
@@ -4277,7 +4277,7 @@ int __cdecl SND_GetSoundOverlay3D(snd_overlay_info_t *info, int maxcount)
     return maxcount;
 }
 
-int __cdecl SND_GetSoundOverlayStream(snd_overlay_info_t *info, int maxcount)
+int SND_GetSoundOverlayStream(snd_overlay_info_t *info, int maxcount)
 {
     snd_entchannel_info_t *EntChannelName; // eax
     double StreamChannelVolume; // st7
@@ -4334,7 +4334,7 @@ int __cdecl SND_GetSoundOverlayStream(snd_overlay_info_t *info, int maxcount)
     return maxcount;
 }
 
-void __cdecl SND_StopChannelAndPlayChainAlias(uint32_t chanId)
+void SND_StopChannelAndPlayChainAlias(uint32_t chanId)
 {
     snd_alias_t *chainAlias; // [esp+0h] [ebp-18h]
     uint32_t sndEnt; // [esp+4h] [ebp-14h]
@@ -4372,7 +4372,7 @@ void __cdecl SND_StopChannelAndPlayChainAlias(uint32_t chanId)
     }
 }
 
-void __cdecl StopChannel(int chanId)
+void StopChannel(int chanId)
 {
     iassert(((chanId >= 0) && (chanId < (32 + (SND_TRACK_COUNT + 8) + 8))));
 
@@ -4389,7 +4389,7 @@ void __cdecl StopChannel(int chanId)
     }
 }
 
-void __cdecl SND_AddPhysicsSound(snd_alias_list_t *aliasList, float *org)
+void SND_AddPhysicsSound(snd_alias_list_t *aliasList, float *org)
 {
     iassert(aliasList);
 
@@ -4403,7 +4403,7 @@ void __cdecl SND_AddPhysicsSound(snd_alias_list_t *aliasList, float *org)
     Sys_LeaveCriticalSection(CRITSECT_AUDIO_PHYSICS);
 }
 
-double __cdecl SND_GetVolumeNormalized()
+double SND_GetVolumeNormalized()
 {
     return (float)(g_snd.volume * 1.333333373069763);
 }

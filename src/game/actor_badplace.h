@@ -40,38 +40,38 @@ struct actor_s;
 enum actor_think_result_t : __int32;
 enum ai_state_t : __int32;
 
-void __cdecl TRACK_actor_badplace();
-void __cdecl Path_UpdateBadPlaceCount(badplace_t *place, int delta);
-void __cdecl Path_FreeBadPlace(int index);
-int __cdecl Path_FindBadPlace(unsigned int name);
-badplace_t *__cdecl Path_AllocBadPlace(unsigned int name, int duration);
+void TRACK_actor_badplace();
+void Path_UpdateBadPlaceCount(badplace_t *place, int delta);
+void Path_FreeBadPlace(int index);
+int Path_FindBadPlace(unsigned int name);
+badplace_t *Path_AllocBadPlace(unsigned int name, int duration);
 void Path_MakeBadPlace(unsigned int name, int duration, int teamflags, int type, badplace_parms_t *parms);
-void __cdecl Path_MakeArcBadPlace(unsigned int name, int duration, int teamflags, badplace_arc_t *arc);
-void __cdecl Path_MakeBrushBadPlace(unsigned int name, int duration, int teamflags, gentity_s *volume);
-void __cdecl Path_RemoveBadPlaceEntity(gentity_s *entity);
-void __cdecl Path_DrawBadPlace(badplace_t *place);
-void __cdecl Path_InitBadPlaces();
-void __cdecl Path_ShutdownBadPlaces();
-void __cdecl Actor_Badplace_Ping(actor_s *self);
-int __cdecl Actor_IsInAnyBadPlace(actor_s *self);
+void Path_MakeArcBadPlace(unsigned int name, int duration, int teamflags, badplace_arc_t *arc);
+void Path_MakeBrushBadPlace(unsigned int name, int duration, int teamflags, gentity_s *volume);
+void Path_RemoveBadPlaceEntity(gentity_s *entity);
+void Path_DrawBadPlace(badplace_t *place);
+void Path_InitBadPlaces();
+void Path_ShutdownBadPlaces();
+void Actor_Badplace_Ping(actor_s *self);
+int Actor_IsInAnyBadPlace(actor_s *self);
 actor_s *Actor_BadPlace_UpdateFleeingActors();
-float __cdecl Actor_BadPlace_GetMaximumFleeRadius();
-int __cdecl Actor_BadPlace_HasPotentialNodeDuplicates(
+float Actor_BadPlace_GetMaximumFleeRadius();
+int Actor_BadPlace_HasPotentialNodeDuplicates(
     pathsort_t *potentialNodes,
     int potentialNodeCount,
     pathnode_t *checkNode);
-int __cdecl Actor_BadPlace_IsNodeInAnyBadPlace(pathnode_t *node);
-pathnode_t *__cdecl Actor_BadPlace_FindSafeNodeAlongPath(actor_s *self);
-void __cdecl Actor_BadPlace_Flee_Finish(actor_s *self, ai_state_t eNextState);
-void __cdecl Path_RemoveBadPlace(unsigned int name);
-void __cdecl Path_RunBadPlaces();
-int __cdecl Actor_BadPlace_FindSafeNodeOutsideBadPlace(
+int Actor_BadPlace_IsNodeInAnyBadPlace(pathnode_t *node);
+pathnode_t *Actor_BadPlace_FindSafeNodeAlongPath(actor_s *self);
+void Actor_BadPlace_Flee_Finish(actor_s *self, ai_state_t eNextState);
+void Path_RemoveBadPlace(unsigned int name);
+void Path_RunBadPlaces();
+int Actor_BadPlace_FindSafeNodeOutsideBadPlace(
     actor_s *self,
     pathsort_t *potentialNodes,
     double maxFleeDist);
-int __cdecl Actor_BadPlace_AttemptEscape(actor_s *self);
-bool __cdecl Actor_BadPlace_Flee_Start(actor_s *self, ai_state_t ePrevState);
-actor_think_result_t __cdecl Actor_BadPlace_Flee_Think(actor_s *self);
+int Actor_BadPlace_AttemptEscape(actor_s *self);
+bool Actor_BadPlace_Flee_Start(actor_s *self, ai_state_t ePrevState);
+actor_think_result_t Actor_BadPlace_Flee_Think(actor_s *self);
 
 
 extern badplace_t g_badplaces[32];

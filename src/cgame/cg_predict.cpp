@@ -13,12 +13,12 @@
 
 pmove_t cg_pmove;
 
-void __cdecl TRACK_cg_predict()
+void TRACK_cg_predict()
 {
     track_static_alloc_internal(&cg_pmove, 292, "cg_pmove", 9);
 }
 
-char __cdecl CG_ShouldInterpolatePlayerStateViewClamp(int localClientNum, const snapshot_s *prevSnap)
+char CG_ShouldInterpolatePlayerStateViewClamp(int localClientNum, const snapshot_s *prevSnap)
 {
     //const vehicle_info_t *vehInfo; // [esp+8h] [ebp-8h]
     centity_s *cent; // [esp+Ch] [ebp-4h]
@@ -54,7 +54,7 @@ char __cdecl CG_ShouldInterpolatePlayerStateViewClamp(int localClientNum, const 
 }
 
 // taken from blops, modified
-static void __cdecl CG_InterpolatePlayerStateViewAngles(int localClientNum, playerState_s *out, usercmd_s *cmd)
+static void CG_InterpolatePlayerStateViewAngles(int localClientNum, playerState_s *out, usercmd_s *cmd)
 {
     const char *v3; // eax
     float v4; // [esp+10h] [ebp-F0h]
@@ -177,7 +177,7 @@ static void __cdecl CG_InterpolatePlayerStateViewAngles(int localClientNum, play
     //}
 }
 
-void __cdecl CG_InterpolatePlayerState(int localClientNum, int grabAngles, int grabStance)
+void CG_InterpolatePlayerState(int localClientNum, int grabAngles, int grabStance)
 {
     snapshot_s *nextSnap; // r27
     snapshot_s *prevSnap; // r31
@@ -297,7 +297,7 @@ void __cdecl CG_InterpolatePlayerState(int localClientNum, int grabAngles, int g
     }
 }
 
-void __cdecl CG_RestorePlayerOrientation(cg_s *cgameGlob)
+void CG_RestorePlayerOrientation(cg_s *cgameGlob)
 {
     double v2; // fp0
     double v3; // fp13
@@ -321,7 +321,7 @@ void __cdecl CG_RestorePlayerOrientation(cg_s *cgameGlob)
         - cgameGlob->predictedPlayerState.viewHeightCurrent;
 }
 
-void __cdecl CG_UpdateFreeMove(cg_s *cgameGlob)
+void CG_UpdateFreeMove(cg_s *cgameGlob)
 {
     const dvar_s *v2; // r11
     int v3; // r10
@@ -366,7 +366,7 @@ void __cdecl CG_UpdateFreeMove(cg_s *cgameGlob)
         CG_DebugBox(origin, cg_pmove.mins, cg_pmove.maxs, yaw, colorRed, 1, 0);
 }
 
-void __cdecl CG_InterpolateGroundTilt(int localClientNum)
+void CG_InterpolateGroundTilt(int localClientNum)
 {
     snapshot_s *nextSnap; // r28
     snapshot_s *snap; // r29
@@ -389,7 +389,7 @@ void __cdecl CG_InterpolateGroundTilt(int localClientNum)
     }
 }
 
-void __cdecl CG_PredictPlayerState_Internal(int localClientNum) // KISAKTODO: use the MP version to further clean this up
+void CG_PredictPlayerState_Internal(int localClientNum) // KISAKTODO: use the MP version to further clean this up
 {
     playerState_s *Buf; // r20
     int v3; // r11
@@ -636,7 +636,7 @@ LABEL_81:
     //LargeLocal::~LargeLocal(&v31);
 }
 
-void __cdecl CG_PredictPlayerState(int localClientNum)
+void CG_PredictPlayerState(int localClientNum)
 {
     centity_s *Entity; // r3
 

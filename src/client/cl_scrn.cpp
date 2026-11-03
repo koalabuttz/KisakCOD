@@ -55,22 +55,22 @@ const char *szShotName[6] =
 int scr_initialized;
 bool updateScreenCalled;
 
-void __cdecl TRACK_cl_srcn()
+void TRACK_cl_srcn()
 {
     ;
 }
 
-void __cdecl SCR_DrawSmallStringExt(unsigned int x, int y, const char *string, const float *setColor)
+void SCR_DrawSmallStringExt(unsigned int x, int y, const char *string, const float *setColor)
 {
     R_AddCmdDrawText(string, 0x7FFFFFFF, cls.consoleFont, x, y, 1.0f, 1.0f, 0.0f, setColor, 0);
 }
 
-void __cdecl SCR_Init()
+void SCR_Init()
 {
     scr_initialized = 1;
 }
 
-bool __cdecl CL_IsCGameRendering()
+bool CL_IsCGameRendering()
 {
     return cls.uiStarted && !UI_IsFullscreen() && clientUIActives[0].connectionState == CA_ACTIVE;
 }
@@ -83,7 +83,7 @@ DemoType CL_GetDemoType()
         return (DemoType)CL_DemoPlaying();
 }
 
-int __cdecl CL_CGameRendering()
+int CL_CGameRendering()
 {
     int animFrametime; // r31
     DemoType DemoType; // r3
@@ -121,7 +121,7 @@ static void SCR_ClearScreen()
     R_AddCmdClearScreen(1, colorBlack, 1.0, 0);
 }
 
-void __cdecl SCR_DrawScreenField(int refreshedUI)
+void SCR_DrawScreenField(int refreshedUI)
 {
     connstate_t connectionState; // r31
     Material *v4; // r4
@@ -185,7 +185,7 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
     }
 }
 
-float __cdecl CL_GetMenuBlurRadius(int localClientNum)
+float CL_GetMenuBlurRadius(int localClientNum)
 {
     double BlurRadius; // fp1
 
@@ -204,7 +204,7 @@ float __cdecl CL_GetMenuBlurRadius(int localClientNum)
     return *((float *)&BlurRadius + 1);
 }
 
-void __cdecl SCR_UpdateRumble()
+void SCR_UpdateRumble()
 {
     // KISAKTODO
     //int v0; // r3
@@ -257,7 +257,7 @@ void SCR_UpdateFrame()
     //Profile_EndInternal(0);
 }
 
-void __cdecl SCR_UpdateScreen()
+void SCR_UpdateScreen()
 {
     if (!updateScreenCalled)
     {
@@ -277,7 +277,7 @@ void __cdecl SCR_UpdateScreen()
     }
 }
 
-void __cdecl SCR_UpdateLoadScreen()
+void SCR_UpdateLoadScreen()
 {
 #ifndef KISAK_XBOX
 	if (!IsFastFileLoad())
@@ -300,7 +300,7 @@ void CL_CubemapShotUsage()
     Com_Printf(CON_CHANNEL_DONT_FILTER, "  This is always calculated, and defaults to air-water interface (n0 = 1, n1 = 1.333).\n");
 }
 
-void __cdecl CL_CubemapShot_f()
+void CL_CubemapShot_f()
 {
     const char *v0; // r3
     const char *v1; // r11

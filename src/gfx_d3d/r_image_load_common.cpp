@@ -4,13 +4,13 @@
 #include <universal/profile.h>
 #include "r_init.h"
 
-uint32_t __cdecl Image_CubemapFace(uint32_t faceIndex)
+uint32_t Image_CubemapFace(uint32_t faceIndex)
 {
     iassert(faceIndex < 6);
     return faceIndex;
 }
 
-void __cdecl Image_GetPicmip(const GfxImage *image, Picmip *picmip)
+void Image_GetPicmip(const GfxImage *image, Picmip *picmip)
 {
     iassert(image);
     iassert(picmip);
@@ -21,7 +21,7 @@ void __cdecl Image_GetPicmip(const GfxImage *image, Picmip *picmip)
         Image_PicmipForSemantic(image->semantic, picmip);
 }
 
-void __cdecl Image_PicmipForSemantic(uint8_t semantic, Picmip *picmip)
+void Image_PicmipForSemantic(uint8_t semantic, Picmip *picmip)
 {
     int picmipUsed; // [esp+4h] [ebp-4h]
 
@@ -63,7 +63,7 @@ void __cdecl Image_PicmipForSemantic(uint8_t semantic, Picmip *picmip)
     }
 }
 
-int __cdecl Image_SourceBytesPerSlice_PC(_D3DFORMAT format, int width, int height)
+int Image_SourceBytesPerSlice_PC(_D3DFORMAT format, int width, int height)
 {
     switch (format)
     {
@@ -99,7 +99,7 @@ int __cdecl Image_SourceBytesPerSlice_PC(_D3DFORMAT format, int width, int heigh
 }
 
 
-void __cdecl Image_Upload2D_CopyDataBlock_PC(
+void Image_Upload2D_CopyDataBlock_PC(
     int width,
     int height,
     uint8_t *src,
@@ -177,7 +177,7 @@ LABEL_17:
     }
 }
 
-void __cdecl Image_Upload3D_CopyData_PC(
+void Image_Upload3D_CopyData_PC(
     const GfxImage *image,
     _D3DFORMAT format,
     uint32_t mipLevel,
@@ -262,7 +262,7 @@ void __cdecl Image_Upload3D_CopyData_PC(
     } while (alwaysfails);
 }
 
-void __cdecl Image_Upload2D_CopyData_PC(
+void Image_Upload2D_CopyData_PC(
     const GfxImage *image,
     _D3DFORMAT format,
     _D3DCUBEMAP_FACES face,
@@ -380,7 +380,7 @@ void __cdecl Image_Upload2D_CopyData_PC(
 }
 
 
-int __cdecl Image_GetPlatformScreenWidth(int platform, int screenWidth)
+int Image_GetPlatformScreenWidth(int platform, int screenWidth)
 {
     if (platform == 1)
         return 640;
@@ -388,7 +388,7 @@ int __cdecl Image_GetPlatformScreenWidth(int platform, int screenWidth)
     return screenWidth;
 }
 
-int __cdecl Image_GetPlatformScreenHeight(int platform, int screenHeight)
+int Image_GetPlatformScreenHeight(int platform, int screenHeight)
 {
     if (platform == 1)
         return 480;
@@ -396,7 +396,7 @@ int __cdecl Image_GetPlatformScreenHeight(int platform, int screenHeight)
     return screenHeight;
 }
 
-void __cdecl Image_GetMipmapResolution(
+void Image_GetMipmapResolution(
     int baseWidth,
     int baseHeight,
     int mipmap,
@@ -423,7 +423,7 @@ void __cdecl Image_GetMipmapResolution(
     iassert(*mipHeight > 0);
 }
 
-void __cdecl Image_TrackFullscreenTexture(
+void Image_TrackFullscreenTexture(
     GfxImage *image,
     int fullscreenWidth,
     int fullscreenHeight,

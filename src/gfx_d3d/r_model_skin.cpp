@@ -11,7 +11,7 @@
 //uint32_t const *const g_shortBoneWeightPerm__uint4 820f4950     gfx_d3d : r_model_skin.obj
 //struct __vector4 const g_shortBoneWeightPerm 85b981d0     gfx_d3d : r_model_skin.obj
 
-static void __cdecl R_MultiplySkelMat(const DObjSkelMat *mat0, const DObjSkelMat *mat1, DObjSkelMat *out)
+static void R_MultiplySkelMat(const DObjSkelMat *mat0, const DObjSkelMat *mat1, DObjSkelMat *out)
 {
     out->axis[0][0] = mat0->axis[0][0] * mat1->axis[0][0]
         + mat0->axis[0][1] * mat1->axis[1][0]
@@ -168,7 +168,7 @@ void R_SkinXModelCmd(_WORD *data)
 }
 
 
-void __cdecl R_SkinXSurfaceSkinned(
+void R_SkinXSurfaceSkinned(
     const XSurface *xsurf,
     const DObjSkelMat *boneMatrix,
     GfxPackedVertex *skinVerticesOut)
@@ -179,7 +179,7 @@ void __cdecl R_SkinXSurfaceSkinned(
         R_SkinXSurfaceRigid(xsurf, xsurf->vertCount, boneMatrix, skinVerticesOut);
 }
 
-void __cdecl R_SkinXSurfaceWeight(
+void R_SkinXSurfaceWeight(
     const GfxPackedVertex *inVerts,
     const XSurfaceVertexInfo *vertexInfo,
     const DObjSkelMat *boneMatrix,
@@ -215,7 +215,7 @@ void __cdecl R_SkinXSurfaceWeight(
 }
 
 
-static void __cdecl MatrixTransformVertexAndBasis(
+static void MatrixTransformVertexAndBasis(
     const float *offset,
     float binormalSign,
     PackedUnitVec normal,
@@ -257,7 +257,7 @@ static void __cdecl MatrixTransformVertexAndBasis(
     vert->tangent = tangent;
 }
 
-void __cdecl R_SkinXSurfaceWeight0(
+void R_SkinXSurfaceWeight0(
     const GfxPackedVertex *vertsIn,
     const uint16_t *vertexBlend,
     int vertCount,
@@ -286,7 +286,7 @@ void __cdecl R_SkinXSurfaceWeight0(
     }
 }
 
-void __cdecl R_SkinXSurfaceWeight1(
+void R_SkinXSurfaceWeight1(
     const GfxPackedVertex *vertsIn,
     const uint16_t *vertexBlend,
     int vertCount,
@@ -324,7 +324,7 @@ void __cdecl R_SkinXSurfaceWeight1(
     }
 }
 
-void __cdecl R_SkinXSurfaceWeight2(
+void R_SkinXSurfaceWeight2(
     const GfxPackedVertex *vertsIn,
     const uint16_t *vertexBlend,
     int vertCount,
@@ -370,7 +370,7 @@ void __cdecl R_SkinXSurfaceWeight2(
     }
 }
 
-void __cdecl R_SkinXSurfaceWeight3(
+void R_SkinXSurfaceWeight3(
     const GfxPackedVertex *vertsIn,
     const uint16_t *vertexBlend,
     int vertCount,
@@ -422,7 +422,7 @@ void __cdecl R_SkinXSurfaceWeight3(
     }
 }
 
-void __cdecl R_SkinXSurfaceRigid(
+void R_SkinXSurfaceRigid(
     const XSurface *surf,
     int totalVertCount,
     const DObjSkelMat *boneMatrix,

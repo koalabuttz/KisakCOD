@@ -39,12 +39,12 @@ struct stype_t // sizeof=0x8
 };
 
 // KISAKTODO ICF'd function that just returns first arg. 
-sval_u __cdecl node1_(unsigned int pool)
+sval_u node1_(unsigned int pool)
 {
     return pool;
 }
 
-void __cdecl _yy_memcpy(char *to, char *from, unsigned int count)
+void _yy_memcpy(char *to, char *from, unsigned int count)
 {
     int v3; // eax
 
@@ -6060,12 +6060,12 @@ void *RETURN_ARG1(void *crap)
     return crap;
 }
 
-HashEntry_unnamed_type_u __cdecl LowerCase(unsigned int stringValue)
+HashEntry_unnamed_type_u LowerCase(unsigned int stringValue)
 {
     return SL_ConvertToLowercase(stringValue, g_parse_user, 14);
 }
 
-int __cdecl yyparse()
+int yyparse()
 {
     void *v1; // esp
     void *v2; // esp
@@ -7059,7 +7059,7 @@ yyacceptlab:
     return 0;
 }
 
-int __cdecl yylex()
+int yylex()
 {
     int next_buffer; // [esp+0h] [ebp-24h]
     int yy_next_state; // [esp+8h] [ebp-1Ch]
@@ -7676,12 +7676,12 @@ int __cdecl yylex()
     }
 }
 
-void __cdecl TextValue(char *str, int len)
+void TextValue(char *str, int len)
 {
     yylval.val.stringValue = SL_GetStringOfSize(str, 0, len + 1, 14).prev;
 }
 
-int __cdecl StringValue(char *str, int len)
+int StringValue(char *str, int len)
 {
     char v3; // [esp+0h] [ebp-200Ch]
     char stra[8192]; // [esp+4h] [ebp-2008h] BYREF
@@ -7737,17 +7737,17 @@ int __cdecl StringValue(char *str, int len)
     }
 }
 
-void __cdecl IntegerValue(char *str)
+void IntegerValue(char *str)
 {
     sscanf(str, "%d", &yylval);
 }
 
-void __cdecl FloatValue(char *str)
+void FloatValue(char *str)
 {
     sscanf(str, "%f", &yylval);
 }
 
-int __cdecl yy_get_next_buffer()
+int yy_get_next_buffer()
 {
     int yy_c_buf_p_offset; // [esp+4h] [ebp-20h]
     yy_buffer_state *b; // [esp+8h] [ebp-1Ch]
@@ -7831,7 +7831,7 @@ int __cdecl yy_get_next_buffer()
     }
 }
 
-int __cdecl yy_get_previous_state()
+int yy_get_previous_state()
 {
     int v1; // [esp+0h] [ebp-10h]
     unsigned __int8 yy_c; // [esp+7h] [ebp-9h]
@@ -7862,7 +7862,7 @@ int __cdecl yy_get_previous_state()
     return yy_current_state;
 }
 
-int __cdecl yy_try_NUL_trans(int yy_current_state)
+int yy_try_NUL_trans(int yy_current_state)
 {
     unsigned __int8 yy_c; // [esp+7h] [ebp-5h]
     int yy_current_statea; // [esp+14h] [ebp+8h]
@@ -7883,7 +7883,7 @@ int __cdecl yy_try_NUL_trans(int yy_current_state)
     return yy_current_statea != 257 ? yy_current_statea : 0;
 }
 
-void __cdecl yyrestart(FILE *input_file)
+void yyrestart(FILE *input_file)
 {
     if (!yy_current_buffer)
         yy_current_buffer = yy_create_buffer(yyin, 0x4000u);
@@ -7891,7 +7891,7 @@ void __cdecl yyrestart(FILE *input_file)
     yy_load_buffer_state();
 }
 
-void __cdecl yy_load_buffer_state()
+void yy_load_buffer_state()
 {
     yy_n_chars = yy_current_buffer->yy_n_chars;
     yy_c_buf_p = yy_current_buffer->yy_buf_pos;
@@ -7900,7 +7900,7 @@ void __cdecl yy_load_buffer_state()
     yy_hold_char = *yy_c_buf_p;
 }
 
-yy_buffer_state *__cdecl yy_create_buffer(FILE *file, unsigned int size)
+yy_buffer_state *yy_create_buffer(FILE *file, unsigned int size)
 {
     yy_buffer_state *b; // [esp+0h] [ebp-4h]
 
@@ -7916,7 +7916,7 @@ yy_buffer_state *__cdecl yy_create_buffer(FILE *file, unsigned int size)
     return b;
 }
 
-void __cdecl yy_init_buffer(yy_buffer_state *b, FILE *file)
+void yy_init_buffer(yy_buffer_state *b, FILE *file)
 {
     yy_flush_buffer(b);
     b->yy_input_file = file;
@@ -7924,7 +7924,7 @@ void __cdecl yy_init_buffer(yy_buffer_state *b, FILE *file)
     b->yy_is_interactive = 0;
 }
 
-void __cdecl yy_flush_buffer(yy_buffer_state *b)
+void yy_flush_buffer(yy_buffer_state *b)
 {
     if (b)
     {
@@ -7939,7 +7939,7 @@ void __cdecl yy_flush_buffer(yy_buffer_state *b)
     }
 }
 
-void __cdecl  yy_fatal_error(const char *msg)
+void yy_fatal_error(const char *msg)
 {
     FILE *v1; // eax
 
@@ -7949,17 +7949,17 @@ void __cdecl  yy_fatal_error(const char *msg)
     exit(2);
 }
 
-LPVOID __cdecl yy_flex_alloc(unsigned int size)
+LPVOID yy_flex_alloc(unsigned int size)
 {
     return malloc(size);
 }
 
-void *__cdecl yy_flex_realloc(void *ptr, unsigned int size)
+void *yy_flex_realloc(void *ptr, unsigned int size)
 {
     return realloc(ptr, size);
 }
 
-int __cdecl yyerror()
+int yyerror()
 {
     if (yychar)
     {
@@ -7973,7 +7973,7 @@ int __cdecl yyerror()
     return 0;
 }
 
-void __cdecl ScriptParse(sval_u *parseData, unsigned __int8 user)
+void ScriptParse(sval_u *parseData, unsigned __int8 user)
 {
     yy_buffer_state buffer_state; // [esp+0h] [ebp-28h] BYREF
 

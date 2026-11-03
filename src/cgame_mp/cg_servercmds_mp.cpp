@@ -32,7 +32,7 @@ struct $59835072FC2CD3936CE4A4C9F556010B // sizeof=0x48
 };
 $59835072FC2CD3936CE4A4C9F556010B cg_waitingScriptMenu[1];
 
-void __cdecl CG_ParseServerInfo(int32_t localClientNum)
+void CG_ParseServerInfo(int32_t localClientNum)
 {
     const char *info; // [esp+0h] [ebp-Ch]
     const char *mapname; // [esp+8h] [ebp-4h]
@@ -50,7 +50,7 @@ void __cdecl CG_ParseServerInfo(int32_t localClientNum)
     Com_GetBspFilename(cgs->mapname, 0x40u, mapname);
 }
 
-void __cdecl CG_ParseCodInfo(int32_t localClientNum)
+void CG_ParseCodInfo(int32_t localClientNum)
 {
     const char *key; // [esp+4h] [ebp-Ch]
     int32_t i; // [esp+8h] [ebp-8h]
@@ -72,7 +72,7 @@ void __cdecl CG_ParseCodInfo(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_ParseFog(int32_t localClientNum)
+void CG_ParseFog(int32_t localClientNum)
 {
     parseInfo_t *v1; // eax
     parseInfo_t *v2; // eax
@@ -122,7 +122,7 @@ void __cdecl CG_ParseFog(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_SetConfigValues(int32_t localClientNum)
+void CG_SetConfigValues(int32_t localClientNum)
 {
     const char *ConfigString; // eax
     int32_t i; // [esp+8h] [ebp-4h]
@@ -163,7 +163,7 @@ void __cdecl CG_SetConfigValues(int32_t localClientNum)
     CG_VisionSetConfigString_Night(localClientNum);
 }
 
-void __cdecl CG_ParseGameEndTime(int32_t localClientNum)
+void CG_ParseGameEndTime(int32_t localClientNum)
 {
     const char *ConfigString; // eax
 
@@ -171,7 +171,7 @@ void __cdecl CG_ParseGameEndTime(int32_t localClientNum)
     CG_GetLocalClientStaticGlobals(localClientNum)->gameEndTime = atoi(ConfigString);
 }
 
-void __cdecl CG_PrecacheScriptMenu(int32_t localClientNum, int32_t configStringIndex)
+void CG_PrecacheScriptMenu(int32_t localClientNum, int32_t configStringIndex)
 {
     const char *configString; // [esp+0h] [ebp-4h]
 
@@ -190,7 +190,7 @@ void __cdecl CG_PrecacheScriptMenu(int32_t localClientNum, int32_t configStringI
     }
 }
 
-void __cdecl CG_RegisterServerMaterial(int32_t localClientNum, int32_t configStringIndex)
+void CG_RegisterServerMaterial(int32_t localClientNum, int32_t configStringIndex)
 {
     const char *materialName; // [esp+0h] [ebp-4h]
 
@@ -207,7 +207,7 @@ void __cdecl CG_RegisterServerMaterial(int32_t localClientNum, int32_t configStr
         Material_RegisterHandle(materialName, IMAGE_TRACK_HUD);
 }
 
-void __cdecl CG_MapRestart(int32_t localClientNum, int32_t savepersist)
+void CG_MapRestart(int32_t localClientNum, int32_t savepersist)
 {
     cg_s *cgameGlob;
     cgs_t *cgs;
@@ -263,7 +263,7 @@ void __cdecl CG_MapRestart(int32_t localClientNum, int32_t savepersist)
     CG_StartClientSideEffects(localClientNum);
 }
 
-void __cdecl CG_ClearEntityFxHandles(int32_t localClientNum)
+void CG_ClearEntityFxHandles(int32_t localClientNum)
 {
     centity_s *cent; // [esp+4h] [ebp-10h]
     int32_t num; // [esp+Ch] [ebp-8h]
@@ -282,7 +282,7 @@ void __cdecl CG_ClearEntityFxHandles(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_CheckOpenWaitingScriptMenu(int32_t localClientNum)
+void CG_CheckOpenWaitingScriptMenu(int32_t localClientNum)
 {
     if (cg_waitingScriptMenu[localClientNum].name[0])
     {
@@ -296,13 +296,13 @@ void __cdecl CG_CheckOpenWaitingScriptMenu(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_CloseScriptMenu(int32_t localClientNum, bool allowResponse)
+void CG_CloseScriptMenu(int32_t localClientNum, bool allowResponse)
 {
     UI_ClosePopupScriptMenu(localClientNum, allowResponse);
     cg_waitingScriptMenu[localClientNum].name[0] = 0;
 }
 
-void __cdecl CG_MenuShowNotify(int32_t localClientNum, int32_t menuToShow)
+void CG_MenuShowNotify(int32_t localClientNum, int32_t menuToShow)
 {
     cg_s *cgameGlob;
 
@@ -386,13 +386,13 @@ void __cdecl CG_MenuShowNotify(int32_t localClientNum, int32_t menuToShow)
     }
 }
 
-void __cdecl CG_ServerCommand(int32_t localClientNum)
+void CG_ServerCommand(int32_t localClientNum)
 {
     CG_DeployServerCommand(localClientNum);
     Cmd_EndTokenizedString();
 }
 
-void __cdecl CG_DeployServerCommand(int32_t localClientNum)
+void CG_DeployServerCommand(int32_t localClientNum)
 {
     const char *v1; // eax
     int32_t v2; // eax
@@ -685,7 +685,7 @@ void __cdecl CG_DeployServerCommand(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_ParseScores(int32_t localClientNum)
+void CG_ParseScores(int32_t localClientNum)
 {
     const char *v1; // eax
     const char *v2; // eax
@@ -786,7 +786,7 @@ void __cdecl CG_ParseScores(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_SetSingleClientScore(int32_t localClientNum, int32_t clientIndex, int32_t newScore)
+void CG_SetSingleClientScore(int32_t localClientNum, int32_t clientIndex, int32_t newScore)
 {
     bool foundScoreIndex; // [esp+3h] [ebp-9h]
     int32_t scoreIndex; // [esp+8h] [ebp-4h]
@@ -814,7 +814,7 @@ void __cdecl CG_SetSingleClientScore(int32_t localClientNum, int32_t clientIndex
     }
 }
 
-void __cdecl CG_SortSingleClientScore(cg_s *cgameGlob, int32_t scoreIndex)
+void CG_SortSingleClientScore(cg_s *cgameGlob, int32_t scoreIndex)
 {
     while (scoreIndex > 0
         && CG_ClientScoreIsBetter(&cgameGlob->scores[scoreIndex], &cgameGlob->scores[scoreIndex - 1]))
@@ -834,7 +834,7 @@ void __cdecl CG_SortSingleClientScore(cg_s *cgameGlob, int32_t scoreIndex)
     }
 }
 
-bool __cdecl CG_ClientScoreIsBetter(score_t *scoreA, score_t *scoreB)
+bool CG_ClientScoreIsBetter(score_t *scoreA, score_t *scoreB)
 {
     if (scoreA->team != scoreB->team && (scoreA->team == TEAM_SPECTATOR || scoreB->team == TEAM_SPECTATOR))
         return 0;
@@ -845,7 +845,7 @@ bool __cdecl CG_ClientScoreIsBetter(score_t *scoreA, score_t *scoreB)
     return 0;
 }
 
-void __cdecl CG_ConfigStringModified(int32_t localClientNum)
+void CG_ConfigStringModified(int32_t localClientNum)
 {
     const char *v1; // eax
     shellshock_parms_t *ShellshockParms; // eax
@@ -976,7 +976,7 @@ void __cdecl CG_ConfigStringModified(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_UpdateVoteString(int32_t localClientNum, const char *rawVoteString)
+void CG_UpdateVoteString(int32_t localClientNum, const char *rawVoteString)
 {
     char *v2; // eax
     int32_t mapNameIndex; // [esp+0h] [ebp-120h]
@@ -1007,7 +1007,7 @@ void __cdecl CG_UpdateVoteString(int32_t localClientNum, const char *rawVoteStri
     I_strncpyz(cgs->voteString, v2, 256);
 }
 
-void __cdecl CG_AddToTeamChat(int32_t localClientNum, const char *str)
+void CG_AddToTeamChat(int32_t localClientNum, const char *str)
 {
     char *ls; // [esp+8h] [ebp-18h]
     int32_t len; // [esp+Ch] [ebp-14h]
@@ -1080,7 +1080,7 @@ void __cdecl CG_AddToTeamChat(int32_t localClientNum, const char *str)
     }
 }
 
-void __cdecl CG_OpenScriptMenu(int32_t localClientNum)
+void CG_OpenScriptMenu(int32_t localClientNum)
 {
     int32_t v4; // eax
     const char *v5; // eax
@@ -1137,7 +1137,7 @@ void __cdecl CG_OpenScriptMenu(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_RemoveChatEscapeChar(char *text)
+void CG_RemoveChatEscapeChar(char *text)
 {
     int32_t l; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
@@ -1151,7 +1151,7 @@ void __cdecl CG_RemoveChatEscapeChar(char *text)
     text[l] = 0;
 }
 
-void __cdecl CG_SetTeamScore(int32_t localClientNum, uint32_t team, int32_t score)
+void CG_SetTeamScore(int32_t localClientNum, uint32_t team, int32_t score)
 {
     iassert(team >= TEAM_FREE && team < TEAM_NUM_TEAMS);
     CG_GetLocalClientGlobals(localClientNum)->teamScores[team] = score;
@@ -1219,7 +1219,7 @@ void CG_DeactivateReverbCmd()
     }
 }
 
-void __cdecl CG_SetChannelVolCmd(int32_t localClientNum)
+void CG_SetChannelVolCmd(int32_t localClientNum)
 {
     const char *v1; // eax
     const char *v2; // eax
@@ -1296,7 +1296,7 @@ void CG_DeactivateChannelVolCmd()
     }
 }
 
-char __cdecl LocalSound(int32_t localClientNum)
+char LocalSound(int32_t localClientNum)
 {
     const char *aliasName; // [esp+0h] [ebp-Ch]
     int32_t index; // [esp+4h] [ebp-8h]
@@ -1329,7 +1329,7 @@ char __cdecl LocalSound(int32_t localClientNum)
     }
 }
 
-void __cdecl LocalSoundStop(int32_t localClientNum)
+void LocalSoundStop(int32_t localClientNum)
 {
     const char *aliasName; // [esp+0h] [ebp-8h]
     int32_t index; // [esp+4h] [ebp-4h]
@@ -1357,7 +1357,7 @@ void __cdecl LocalSoundStop(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_SetClientDvarFromServer(cg_s *cgameGlob, const char *dvarname, char *value)
+void CG_SetClientDvarFromServer(cg_s *cgameGlob, const char *dvarname, char *value)
 {
     uint32_t v3; // eax
 
@@ -1382,12 +1382,12 @@ void __cdecl CG_SetClientDvarFromServer(cg_s *cgameGlob, const char *dvarname, c
     }
 }
 
-void __cdecl CG_SetObjectiveText(cg_s *cgameGlob, char *text)
+void CG_SetObjectiveText(cg_s *cgameGlob, char *text)
 {
     I_strncpyz(cgameGlob->objectiveText, text, 1024);
 }
 
-void __cdecl CG_SetDrawHud(cg_s *cgameGlob, uint32_t value)
+void CG_SetDrawHud(cg_s *cgameGlob, uint32_t value)
 {
     if (value > 1)
         MyAssertHandler(
@@ -1400,14 +1400,14 @@ void __cdecl CG_SetDrawHud(cg_s *cgameGlob, uint32_t value)
     cgameGlob->drawHud = value;
 }
 
-void __cdecl CG_SetScriptMainMenu(cg_s *cgameGlob, char *text)
+void CG_SetScriptMainMenu(cg_s *cgameGlob, char *text)
 {
     if (!text)
         MyAssertHandler(".\\cgame_mp\\cg_servercmds_mp.cpp", 1471, 0, "%s", "text");
     I_strncpyz(cgameGlob->scriptMainMenu, text, 256);
 }
 
-void __cdecl CG_ExecuteNewServerCommands(int32_t localClientNum, int32_t latestSequence)
+void CG_ExecuteNewServerCommands(int32_t localClientNum, int32_t latestSequence)
 {
     int32_t nesting; // [esp+4h] [ebp-4h]
     cgs_t *cgs;

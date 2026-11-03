@@ -11,7 +11,7 @@
 #include <xanim/xanim.h>
 #include <universal/profile.h>
 
-int __cdecl GScr_LoadScriptAndLabel(const char *filename, const char *label, ScriptFunctions *functions)
+int GScr_LoadScriptAndLabel(const char *filename, const char *label, ScriptFunctions *functions)
 {
     int FunctionHandle; // r3
 
@@ -41,7 +41,7 @@ int __cdecl GScr_LoadScriptAndLabel(const char *filename, const char *label, Scr
     return 0;
 }
 
-void __cdecl GScr_LoadSingleAnimScript(const char *name, ScriptFunctions *functions)
+void GScr_LoadSingleAnimScript(const char *name, ScriptFunctions *functions)
 {
     char filename[72]; // [sp+50h] [-60h] BYREF
 
@@ -51,7 +51,7 @@ void __cdecl GScr_LoadSingleAnimScript(const char *name, ScriptFunctions *functi
     GScr_LoadScriptAndLabel(filename, "main", functions);
 }
 
-void __cdecl GScr_LoadAnimScripts(ScriptFunctions *functions)
+void GScr_LoadAnimScripts(ScriptFunctions *functions)
 {
     GScr_LoadSingleAnimScript("combat", functions);
     GScr_LoadSingleAnimScript("concealment_crouch", functions);
@@ -77,7 +77,7 @@ void __cdecl GScr_LoadAnimScripts(ScriptFunctions *functions)
     GScr_LoadScriptAndLabel("animscripts/scripted", "init", functions);
 }
 
-void __cdecl GScr_LoadDogAnimScripts(ScriptFunctions *functions)
+void GScr_LoadDogAnimScripts(ScriptFunctions *functions)
 {
     GScr_LoadSingleAnimScript("dog_combat", functions);
     GScr_LoadSingleAnimScript("dog_death", functions);
@@ -89,7 +89,7 @@ void __cdecl GScr_LoadDogAnimScripts(ScriptFunctions *functions)
     GScr_LoadSingleAnimScript("dog_flashed", functions);
 }
 
-void __cdecl GScr_LoadLevelScript(const char *mapname, ScriptFunctions *functions)
+void GScr_LoadLevelScript(const char *mapname, ScriptFunctions *functions)
 {
     char filename[64]; // [sp+50h] [-50h] BYREF
 
@@ -97,7 +97,7 @@ void __cdecl GScr_LoadLevelScript(const char *mapname, ScriptFunctions *function
     GScr_LoadScriptAndLabel(filename, "main", functions);
 }
 
-void __cdecl GScr_LoadScriptsForPathNode(pathnode_t *loadNode, void *data)
+void GScr_LoadScriptsForPathNode(pathnode_t *loadNode, void *data)
 {
     ScriptFunctions *functions; // r28
     unsigned int count; // r27
@@ -144,7 +144,7 @@ void __cdecl GScr_LoadScriptsForPathNode(pathnode_t *loadNode, void *data)
     }
 }
 
-void __cdecl GScr_LoadScriptsForPathNodes(ScriptFunctions *functions)
+void GScr_LoadScriptsForPathNodes(ScriptFunctions *functions)
 {
     unsigned int inited; // [sp+54h] [-1Ch]
 
@@ -153,7 +153,7 @@ void __cdecl GScr_LoadScriptsForPathNodes(ScriptFunctions *functions)
     Scr_ShutdownStringSet(inited);
 }
 
-void __cdecl GScr_LoadScriptsForEntities(ScriptFunctions *functions)
+void GScr_LoadScriptsForEntities(ScriptFunctions *functions)
 {
     int hadDog; // r17
     unsigned int stringset; // r16
@@ -235,7 +235,7 @@ void __cdecl GScr_LoadScriptsForEntities(ScriptFunctions *functions)
     G_ResetEntityParsePoint();
 }
 
-void __cdecl GScr_LoadEntities()
+void GScr_LoadEntities()
 {
     const char *v0; // [sp+50h] [-A50h] BYREF
     const char *v1; // [sp+54h] [-A4Ch] BYREF
@@ -255,7 +255,7 @@ void __cdecl GScr_LoadEntities()
     G_ResetEntityParsePoint();
 }
 
-void __cdecl GScr_LoadScripts(const char *mapname, ScriptFunctions *functions)
+void GScr_LoadScripts(const char *mapname, ScriptFunctions *functions)
 {
     unsigned int inited; // [sp+54h] [-7Ch]
     char filename[112]; // [sp+60h] [-70h] BYREF

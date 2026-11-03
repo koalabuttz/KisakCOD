@@ -65,7 +65,7 @@ SaveTimeGlob ui_saveTimeGlob;
 uiMenuCommand_t g_currentMenuType;
 
 
-UILocalVarContext *__cdecl UI_GetLocalVarsContext(int localClientNum)
+UILocalVarContext *UI_GetLocalVarsContext(int localClientNum)
 {
     return &uiInfo.uiDC.localVars;
 }
@@ -120,7 +120,7 @@ void UI_RegisterDvars()
     ui_cinematicsTimestamp = Dvar_RegisterBool("ui_cinematicsTimestamp", 0, 0, "Shows cinematics timestamp on subtitle UI elements.");
 }
 
-void __cdecl TRACK_ui_main()
+void TRACK_ui_main()
 {
     track_static_alloc_internal(&uiInfo, 37664, "uiInfo", 34);
 }
@@ -148,7 +148,7 @@ void UI_AssetCache()
     sharedUiInfo.assets.objectiveFont = CL_RegisterFont("fonts/objectivefont", IMAGE_TRACK_MISC);
 }
 
-void __cdecl UI_DrawSides(
+void UI_DrawSides(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -192,7 +192,7 @@ void __cdecl UI_DrawSides(
         sharedUiInfo.assets.whiteMaterial);
 }
 
-void __cdecl UI_DrawTopBottom(
+void UI_DrawTopBottom(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -237,7 +237,7 @@ void __cdecl UI_DrawTopBottom(
 }
 
 
-void __cdecl UI_DrawRect(
+void UI_DrawRect(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -259,7 +259,7 @@ void __cdecl UI_DrawRect(
     UI_DrawSides(scrPlace, x, v9, width, h, horzAlign, vertAlign, size, color);
 }
 
-void __cdecl UI_DrawHighlightRect(
+void UI_DrawHighlightRect(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -357,7 +357,7 @@ void __cdecl UI_DrawHighlightRect(
     R_AddCmdDrawQuadPic(verts, loColor, sharedUiInfo.assets.whiteMaterial);
 }
 
-void __cdecl UI_DrawTextWithGlow(
+void UI_DrawTextWithGlow(
     const ScreenPlacement *scrPlace,
     const char *text,
     int maxChars,
@@ -411,7 +411,7 @@ void __cdecl UI_DrawTextWithGlow(
             0);
 }
 
-void __cdecl UI_DrawTextNoSnap(
+void UI_DrawTextNoSnap(
     const ScreenPlacement *scrPlace,
     const char *text,
     int maxChars,
@@ -433,7 +433,7 @@ void __cdecl UI_DrawTextNoSnap(
     CL_DrawTextPhysical(text, maxChars, font, x, y, xScale, yScale, color, style);
 }
 
-void __cdecl UI_DrawTextWithCursor(
+void UI_DrawTextWithCursor(
     const ScreenPlacement *scrPlace,
     const char *text,
     int maxChars,
@@ -501,12 +501,12 @@ void UI_UpdateSaveUI()
     }
 }
 
-void __cdecl UI_UpdateTime(int realtime)
+void UI_UpdateTime(int realtime)
 {
     UI_UpdateContextTime(&uiInfo.uiDC, &uiInfo.timeIndex, uiInfo.previousTimes, realtime);
 }
 
-void __cdecl UI_Shutdown()
+void UI_Shutdown()
 {
     Menus_CloseAll(&uiInfo.uiDC);
     UILocalVar_Shutdown(&uiInfo.uiDC.localVars);
@@ -514,7 +514,7 @@ void __cdecl UI_Shutdown()
     Cmd_RemoveCommand("closemenu");
 }
 
-MenuList *__cdecl Load_ScriptMenuInternal(const char *pszMenu, int imageTrack)
+MenuList *Load_ScriptMenuInternal(const char *pszMenu, int imageTrack)
 {
     char v4[264]; // [sp+50h] [-120h] BYREF
 
@@ -524,7 +524,7 @@ MenuList *__cdecl Load_ScriptMenuInternal(const char *pszMenu, int imageTrack)
     return UI_LoadMenu(v4, imageTrack);
 }
 
-MenuList *__cdecl Load_ScriptMenu(const char *pszMenu, int imageTrack)
+MenuList *Load_ScriptMenu(const char *pszMenu, int imageTrack)
 {
     MenuList *result; // r3
 
@@ -537,7 +537,7 @@ MenuList *__cdecl Load_ScriptMenu(const char *pszMenu, int imageTrack)
     return result;
 }
 
-int __cdecl UI_SavegameIndexFromFilename(const char *filename)
+int UI_SavegameIndexFromFilename(const char *filename)
 {
     int v2; // r29
     int *i; // r31
@@ -555,7 +555,7 @@ int __cdecl UI_SavegameIndexFromFilename(const char *filename)
     return v2;
 }
 
-int __cdecl UI_SavegameIndexFromFilename2(const char *filename)
+int UI_SavegameIndexFromFilename2(const char *filename)
 {
     int v1; // r3
 
@@ -566,7 +566,7 @@ int __cdecl UI_SavegameIndexFromFilename2(const char *filename)
         return uiInfo.savegameStatus.displaySavegames[v1];
 }
 
-void __cdecl UI_DrawSaveGameShot(rectDef_s *rect, double scale, float *color)
+void UI_DrawSaveGameShot(rectDef_s *rect, double scale, float *color)
 {
     int v4; // r3
     int v5; // r30
@@ -601,7 +601,7 @@ LABEL_14:
     UI_DrawHandlePic(&scrPlaceFull, rect->x, rect->y, rect->w, rect->h, rect->horzAlign, rect->vertAlign, color, uiInfo.sshotImage);
 }
 
-void __cdecl UI_DrawSaveGameName(int localClientNum, rectDef_s *rect, Font_s *font, float scale, float *color, int textStyle)
+void UI_DrawSaveGameName(int localClientNum, rectDef_s *rect, Font_s *font, float scale, float *color, int textStyle)
 {
 	int idx = UI_SavegameIndexFromFilename(uiInfo.savegameName);
 	if (idx < 0)
@@ -618,7 +618,7 @@ void __cdecl UI_DrawSaveGameName(int localClientNum, rectDef_s *rect, Font_s *fo
 	UI_DrawWrappedText(&scrPlaceView[localClientNum], name, rect, font, rect->x, rect->y, scale, color, textStyle, ITEM_ALIGN_CENTER, NULL);
 }
 
-void __cdecl UI_DrawGLInfo(int localClientNum, rectDef_s *rect, Font_s *font, float scale, float *color, int textStyle)
+void UI_DrawGLInfo(int localClientNum, rectDef_s *rect, Font_s *font, float scale, float *color, int textStyle)
 {
 	char info[1024];
 
@@ -631,7 +631,7 @@ void UI_DrawCinematic()
     R_Cinematic_DrawStretchPic_Letterboxed();
 }
 
-void __cdecl UI_LoadIngameMenus()
+void UI_LoadIngameMenus()
 {
     MenuList *Menus; // r3
 
@@ -641,22 +641,22 @@ void __cdecl UI_LoadIngameMenus()
     UI_AddMenuList(&uiInfo.uiDC, Menus);
 }
 
-void __cdecl UI_SetMap(const char *mapname)
+void UI_SetMap(const char *mapname)
 {
     I_strncpyz(g_mapname, mapname, 64);
 }
 
-int __cdecl UI_OwnerDrawVisible(int flags)
+int UI_OwnerDrawVisible(int flags)
 {
     return 1;
 }
 
-int __cdecl UI_OwnerDrawHandleKey(int ownerDraw, int flags, float *special, int key)
+int UI_OwnerDrawHandleKey(int ownerDraw, int flags, float *special, int key)
 {
     return 0;
 }
 
-int __cdecl UI_CompareTimes(qtime_s *tm1, qtime_s *tm2)
+int UI_CompareTimes(qtime_s *tm1, qtime_s *tm2)
 {
     int tm_year; // r9
     int v4; // r10
@@ -694,7 +694,7 @@ int __cdecl UI_CompareTimes(qtime_s *tm1, qtime_s *tm2)
     return result;
 }
 
-int __cdecl UI_SavegamesQsortCompare(unsigned int *arg1, unsigned int *arg2)
+int UI_SavegamesQsortCompare(unsigned int *arg1, unsigned int *arg2)
 {
     int result; // r3
     SavegameInfo *v3; // r10
@@ -720,7 +720,7 @@ int __cdecl UI_SavegamesQsortCompare(unsigned int *arg1, unsigned int *arg2)
     return result;
 }
 
-void __cdecl UI_Update(const char *name)
+void UI_Update(const char *name)
 {
     const char *v2; // r3
     const char *String; // r3
@@ -801,7 +801,7 @@ void UI_VerifyLanguage()
     Dvar_SetBoolByName("ui_languagechanged", v1 != Int);
 }
 
-int __cdecl UI_GetOpenOrCloseMenuOnDvarArgs(
+int UI_GetOpenOrCloseMenuOnDvarArgs(
     const char **args,
     const char *cmd,
     char *dvarName,
@@ -835,7 +835,7 @@ int __cdecl UI_GetOpenOrCloseMenuOnDvarArgs(
     }
 }
 
-bool __cdecl UI_DvarValueTest(const char *cmd, const char *dvarName, const char *testValue, bool wantMatch)
+bool UI_DvarValueTest(const char *cmd, const char *dvarName, const char *testValue, bool wantMatch)
 {
     const char *VariantString; // r3
 
@@ -857,7 +857,7 @@ bool __cdecl UI_DvarValueTest(const char *cmd, const char *dvarName, const char 
     }
 }
 
-void __cdecl UI_OpenMenuOnDvar(const char *cmd, const char *menuName, const char *dvarName, const char *testValue)
+void UI_OpenMenuOnDvar(const char *cmd, const char *menuName, const char *dvarName, const char *testValue)
 {
     int v8; // r3
 
@@ -878,7 +878,7 @@ void __cdecl UI_OpenMenuOnDvar(const char *cmd, const char *menuName, const char
         Menus_OpenByName(&uiInfo.uiDC, menuName);
 }
 
-void __cdecl UI_CloseMenuOnDvar(const char *cmd, const char *menuName, const char *dvarName, const char *testValue)
+void UI_CloseMenuOnDvar(const char *cmd, const char *menuName, const char *dvarName, const char *testValue)
 {
     int v8; // r3
 
@@ -899,12 +899,12 @@ void __cdecl UI_CloseMenuOnDvar(const char *cmd, const char *menuName, const cha
         Menus_CloseByName(&uiInfo.uiDC, menuName);
 }
 
-bool __cdecl UI_AutoContinue()
+bool UI_AutoContinue()
 {
     return CL_TimeDemoPlaying() || ui_autoContinue->current.color[0] != 0;
 }
 
-void __cdecl UI_OverrideCursorPos(int localClientNum, itemDef_s *item)
+void UI_OverrideCursorPos(int localClientNum, itemDef_s *item)
 {
     //listBoxDef_s *ListBoxDef; // r29
     //int v5; // r3
@@ -919,7 +919,7 @@ void __cdecl UI_OverrideCursorPos(int localClientNum, itemDef_s *item)
     //}
 }
 
-int __cdecl UI_FeederCount(int localClientNum, float feederID)
+int UI_FeederCount(int localClientNum, float feederID)
 {
 	if (feederID == 9.0f)
 		return sharedUiInfo.modCount;
@@ -930,7 +930,7 @@ int __cdecl UI_FeederCount(int localClientNum, float feederID)
     return 0;
 }
 
-const char *__cdecl UI_FeederItemText(
+const char *UI_FeederItemText(
     int localClientNum,
     itemDef_s *item,
     const float feederID,
@@ -971,17 +971,17 @@ const char *__cdecl UI_FeederItemText(
     return "";
 }
 
-int __cdecl UI_FeederItemEnabled(int localClientNum, double feederID, int index)
+int UI_FeederItemEnabled(int localClientNum, double feederID, int index)
 {
     return 1;
 }
 
-Material *__cdecl UI_FeederItemImage(double feederID, int index)
+Material *UI_FeederItemImage(double feederID, int index)
 {
     return 0;
 }
 
-void __cdecl UI_FeederItemColor(
+void UI_FeederItemColor(
     int localClientNum,
     itemDef_s *item,
     float feederID,
@@ -995,7 +995,7 @@ void __cdecl UI_FeederItemColor(
     color[3] = item->window.foreColor[3];
 }
 
-void __cdecl UI_FeederSelection(int localClientNum, float feederID, int index)
+void UI_FeederSelection(int localClientNum, float feederID, int index)
 {
     if (feederID == 16.0f)
     {
@@ -1026,12 +1026,12 @@ void __cdecl UI_FeederSelection(int localClientNum, float feederID, int index)
     }
 }
 
-const char *__cdecl UI_GetSavegameInfo()
+const char *UI_GetSavegameInfo()
 {
     return SEH_LocalizeTextMessage(uiInfo.savegameInfo, "Savegame Description Text", LOCMSG_SAFE);
 }
 
-void __cdecl UI_Pause(int localClientNum, int b)
+void UI_Pause(int localClientNum, int b)
 {
     if (b)
     {
@@ -1062,17 +1062,17 @@ void UI_CloseMenu_f()
     Menus_CloseByName(&uiInfo.uiDC, v0);
 }
 
-void __cdecl UI_OpenMenu(int localClientNum, const char *menuName)
+void UI_OpenMenu(int localClientNum, const char *menuName)
 {
     Menus_OpenByName(&uiInfo.uiDC, menuName);
 }
 
-void __cdecl UI_CloseMenu(int localClientNum, const char *menuName)
+void UI_CloseMenu(int localClientNum, const char *menuName)
 {
     Menus_CloseByName(&uiInfo.uiDC, menuName);
 }
 
-void __cdecl UI_ParseMenuMaterial(const char *key, char *value)
+void UI_ParseMenuMaterial(const char *key, char *value)
 {
     Material *material; // [esp+0h] [ebp-4Ch]
     char name[68]; // [esp+4h] [ebp-48h] BYREF
@@ -1083,7 +1083,7 @@ void __cdecl UI_ParseMenuMaterial(const char *key, char *value)
     Material_Duplicate(material, name);
 }
 
-void __cdecl UI_MapLoadInfo(const char *filename)
+void UI_MapLoadInfo(const char *filename)
 {
     const char *parse; // [esp+14h] [ebp-118h] BYREF
     int tokenLen; // [esp+18h] [ebp-114h]
@@ -1134,7 +1134,7 @@ void __cdecl UI_MapLoadInfo(const char *filename)
 cmd_function_s UI_OpenMenu_f_VAR;
 cmd_function_s UI_CloseMenu_f_VAR;
 
-void __cdecl UI_Init()
+void UI_Init()
 {
     __int64 v0; // r10 OVERLAPPED
     int v1; // r8
@@ -1155,7 +1155,7 @@ void __cdecl UI_Init()
 
     UI_RegisterDvars();
     uiInfo.allowScriptMenuResponse = 1;
-    Cmd_AddCommandInternal("openmenu", (void(__cdecl *)())UI_OpenMenu_f, &UI_OpenMenu_f_VAR);
+    Cmd_AddCommandInternal("openmenu", (void(*)())UI_OpenMenu_f, &UI_OpenMenu_f_VAR);
     Cmd_AddCommandInternal("closemenu", UI_CloseMenu_f, &UI_CloseMenu_f_VAR);
 
     String_Init();
@@ -1196,7 +1196,7 @@ void __cdecl UI_Init()
     uiscript_debug = Dvar_RegisterInt("uiscript_debug", 0, 0, 2, 0, "spam debug info for the ui script");
 }
 
-void __cdecl UI_KeyEvent(int localClientNum, int key, int down)
+void UI_KeyEvent(int localClientNum, int key, int down)
 {
     menuDef_t *Focused; // r30
 
@@ -1220,12 +1220,12 @@ void __cdecl UI_KeyEvent(int localClientNum, int key, int down)
     }
 }
 
-uiMenuCommand_t __cdecl UI_GetActiveMenu(int localClientNum)
+uiMenuCommand_t UI_GetActiveMenu(int localClientNum)
 {
     return g_currentMenuType;
 }
 
-const char *__cdecl UI_GetTopActiveMenuName(int localClientNum)
+const char *UI_GetTopActiveMenuName(int localClientNum)
 {
     int v1; // r10
     int v2; // r31
@@ -1244,30 +1244,30 @@ const char *__cdecl UI_GetTopActiveMenuName(int localClientNum)
     return uiInfo.uiDC.menuStack[v2]->window.name;
 }
 
-void __cdecl UI_ShowAcceptInviteWarning()
+void UI_ShowAcceptInviteWarning()
 {
     Dvar_SetIntByName("cl_paused", 1);
     Key_SetCatcher(0, KEYCATCH_UI);
     Menus_OpenByName(&uiInfo.uiDC, "sp_acceptinvite_warning");
 }
 
-void __cdecl UI_ShowReadingSaveDevicePopup()
+void UI_ShowReadingSaveDevicePopup()
 {
     Key_SetCatcher(0, KEYCATCH_UI);
     Menus_OpenByName(&uiInfo.uiDC, "readingsavedevice");
 }
 
-void __cdecl UI_HideReadingSaveDevicePopup()
+void UI_HideReadingSaveDevicePopup()
 {
     Menus_CloseByName(&uiInfo.uiDC, "readingsavedevice");
 }
 
-int __cdecl UI_IsFullscreen()
+int UI_IsFullscreen()
 {
     return Menus_AnyFullScreenVisible(&uiInfo.uiDC);
 }
 
-float __cdecl UI_GetBlurRadius()
+float UI_GetBlurRadius()
 {
     double blurRadiusOut; // fp1
 
@@ -1276,7 +1276,7 @@ float __cdecl UI_GetBlurRadius()
 }
 
 static char errorString[1024];
-char *__cdecl UI_SafeTranslateString(const char *reference)
+char *UI_SafeTranslateString(const char *reference)
 {
     const char *v1; // r30
     char *result; // r3
@@ -1326,17 +1326,17 @@ char *__cdecl UI_SafeTranslateString(const char *reference)
     return errorString;
 }
 
-int __cdecl UI_AnyFullScreenMenuVisible(int localClientNum)
+int UI_AnyFullScreenMenuVisible(int localClientNum)
 {
     return Menus_AnyFullScreenVisible(&uiInfo.uiDC);
 }
 
-bool __cdecl UI_AnyMenuVisible(int localClientNum)
+bool UI_AnyMenuVisible(int localClientNum)
 {
     return uiInfo.uiDC.openMenuCount != 0;
 }
 
-void __cdecl UI_FilterStringForButtonAnimation(char *str, unsigned int strMaxSize)
+void UI_FilterStringForButtonAnimation(char *str, unsigned int strMaxSize)
 {
     unsigned int v4; // r11
     int v5; // r10
@@ -1365,7 +1365,7 @@ void __cdecl UI_FilterStringForButtonAnimation(char *str, unsigned int strMaxSiz
     }
 }
 
-void __cdecl UI_ReplaceConversions(
+void UI_ReplaceConversions(
     const char *sourceString,
     ConversionArguments *arguments,
     char *outputString,
@@ -1470,13 +1470,13 @@ void __cdecl UI_ReplaceConversions(
     }
 }
 
-void __cdecl UI_CloseFocusedMenu()
+void UI_CloseFocusedMenu()
 {
     if (Menu_Count(&uiInfo.uiDC) > 0 && Menu_GetFocused(&uiInfo.uiDC) && !Menus_AnyFullScreenVisible(&uiInfo.uiDC))
         Menus_CloseAll(&uiInfo.uiDC);
 }
 
-bool __cdecl Menu_IsMenuOpenAndVisible(const int localClientNum, const char *menuName)
+bool Menu_IsMenuOpenAndVisible(const int localClientNum, const char *menuName)
 {
     menuDef_t *v2; // r3
     menuDef_t *v3; // r30
@@ -1486,7 +1486,7 @@ bool __cdecl Menu_IsMenuOpenAndVisible(const int localClientNum, const char *men
     return v2 && Menus_MenuIsInStack(&uiInfo.uiDC, v2) && Menu_IsVisible(&uiInfo.uiDC, v3);
 }
 
-int __cdecl UI_PopupScriptMenu(const char *menuName, bool useMouse)
+int UI_PopupScriptMenu(const char *menuName, bool useMouse)
 {
     menuDef_t *Focused; // r3
     double v6; // fp0
@@ -1518,7 +1518,7 @@ int __cdecl UI_PopupScriptMenu(const char *menuName, bool useMouse)
     return 1;
 }
 
-void __cdecl UI_ClosePopupScriptMenu(int localClientNum, bool allowResponse)
+void UI_ClosePopupScriptMenu(int localClientNum, bool allowResponse)
 {
     if (g_currentMenuType == UIMENU_SCRIPT_POPUP)
     {
@@ -1528,7 +1528,7 @@ void __cdecl UI_ClosePopupScriptMenu(int localClientNum, bool allowResponse)
     }
 }
 
-bool __cdecl UI_AllowScriptMenuResponse(int localClientNum)
+bool UI_AllowScriptMenuResponse(int localClientNum)
 {
     return uiInfo.allowScriptMenuResponse;
 }
@@ -1581,7 +1581,7 @@ void UI_LoadModsList()
 	}
 }
 
-void __cdecl UI_Refresh()
+void UI_Refresh()
 {
     UI_UpdateSaveUI();
     if (Menu_Count(&uiInfo.uiDC) > 0)
@@ -1608,7 +1608,7 @@ void __cdecl UI_Refresh()
     }
 }
 
-int __cdecl UI_OwnerDrawWidth(int ownerDraw, Font_s *font, double scale)
+int UI_OwnerDrawWidth(int ownerDraw, Font_s *font, double scale)
 {
     const char *v5; // r3
     char *v6; // r3
@@ -1624,7 +1624,7 @@ int __cdecl UI_OwnerDrawWidth(int ownerDraw, Font_s *font, double scale)
     }
 }
 
-void __cdecl UI_DrawKeyBindStatus(
+void UI_DrawKeyBindStatus(
     int localClientNum,
     rectDef_s *rect,
     Font_s *font,
@@ -1651,7 +1651,7 @@ void __cdecl UI_DrawKeyBindStatus(
     UI_DrawText(&scrPlaceView[localClientNum], v6, 0x7FFFFFFF, font, x, y, horzAlign, vertAlign, scale, color, textStyle);
 }
 
-void __cdecl UI_DrawLoggedInUserName(rectDef_s *rect, Font_s *font, double scale, float *color, int textStyle)
+void UI_DrawLoggedInUserName(rectDef_s *rect, Font_s *font, double scale, float *color, int textStyle)
 {
 #if 0
     int v8; // r8
@@ -1769,7 +1769,7 @@ void __cdecl UI_DrawLoggedInUserName(rectDef_s *rect, Font_s *font, double scale
 #endif
 }
 
-void __cdecl UI_SavegameSort(int column, int force)
+void UI_SavegameSort(int column, int force)
 {
     int v2; // r6
 
@@ -1782,7 +1782,7 @@ void __cdecl UI_SavegameSort(int column, int force)
                 uiInfo.savegameStatus.displaySavegames,
                 uiInfo.savegameCount,
                 4u,
-                (int(__cdecl *)(const void *, const void *))UI_SavegamesQsortCompare);
+                (int(*)(const void *, const void *))UI_SavegamesQsortCompare);
             if (uiInfo.savegameName[0])
             {
                 v2 = UI_SavegameIndexFromFilename(uiInfo.savegameName);
@@ -1804,7 +1804,7 @@ void __cdecl UI_SavegameSort(int column, int force)
     }
 }
 
-void __cdecl UI_LoadSavegames(int /*unused*/)
+void UI_LoadSavegames(int /*unused*/)
 {
     int saveCount = 0;
 #ifdef KISAK_XBOX
@@ -1857,7 +1857,7 @@ void __cdecl UI_LoadSavegames(int /*unused*/)
     }
 }
 
-void __cdecl UI_DelSavegame()
+void UI_DelSavegame()
 {
     if (uiInfo.savegameCount <= 0 || !uiInfo.savegameName[0])
         return;
@@ -1898,7 +1898,7 @@ void __cdecl UI_DelSavegame()
     }
 }
 
-int __cdecl UI_GetPlayerProfileListIndexFromName(const char *name)
+int UI_GetPlayerProfileListIndexFromName(const char *name)
 {
     unsigned int nameIndex; // [esp+4h] [ebp-8h]
     int profileIndex; // [esp+8h] [ebp-4h]
@@ -1938,7 +1938,7 @@ static int UI_PlayerProfilesQsortCompare(const void *a, const void *b)
         return -result;
 }
 
-void __cdecl UI_SelectPlayerProfileIndex(int index)
+void UI_SelectPlayerProfileIndex(int index)
 {
     for (int menuIndex = uiInfo.uiDC.openMenuCount - 1; menuIndex >= 0; --menuIndex)
     {
@@ -1947,7 +1947,7 @@ void __cdecl UI_SelectPlayerProfileIndex(int index)
     }
 }
 
-void __cdecl UI_SortPlayerProfiles(int selectIndex)
+void UI_SortPlayerProfiles(int selectIndex)
 {
     if (uiInfo.playerProfileCount)
     {
@@ -2066,7 +2066,7 @@ void UI_DeletePlayerProfile()
     }
 }
 
-void __cdecl UI_LoadPlayerProfile(int localClientNum)
+void UI_LoadPlayerProfile(int localClientNum)
 {
     iassert(ui_playerProfileSelected);
 
@@ -2088,7 +2088,7 @@ void UI_SelectActivePlayerProfile()
         UI_SelectPlayerProfileIndex(selIndex);
 }
 
-void __cdecl UI_RunMenuScript(int localClientNum, const char **args, const char *actualScript)
+void UI_RunMenuScript(int localClientNum, const char **args, const char *actualScript)
 {
     char v10[16];                  // mis_difficulty char scratch
     char missionDifficulty[128];
@@ -2365,7 +2365,7 @@ void __cdecl UI_RunMenuScript(int localClientNum, const char **args, const char 
     Com_Printf(CON_CHANNEL_UI, "unknown UI script %s in block:\n%s\n", out, actualScript);
 }
 
-int __cdecl UI_SetActiveMenu(int localClientNum, uiMenuCommand_t menu)
+int UI_SetActiveMenu(int localClientNum, uiMenuCommand_t menu)
 {
     int result; // r3
     uiMenuCommand_t v4; // r11
@@ -2487,7 +2487,7 @@ int __cdecl UI_SetActiveMenu(int localClientNum, uiMenuCommand_t menu)
     return result;
 }
 
-void __cdecl UI_DrawConnectScreen()
+void UI_DrawConnectScreen()
 {
     if (Menu_Count(&uiInfo.uiDC) > 0 && g_currentMenuType != UIMENU_BRIEFING)
     {
@@ -2498,7 +2498,7 @@ void __cdecl UI_DrawConnectScreen()
     SCR_UpdateLoadScreen();
 }
 
-char *__cdecl UI_ReplaceConversionString(const char *sourceString, const char *replaceString)
+char *UI_ReplaceConversionString(const char *sourceString, const char *replaceString)
 {
     int v2[2]; // r10
     ConversionArguments v4; // [sp+50h] [-440h] BYREF
@@ -2516,7 +2516,7 @@ char *__cdecl UI_ReplaceConversionString(const char *sourceString, const char *r
     return va(v5);
 }
 
-char *__cdecl UI_ReplaceConversionInt(const char *sourceString, int replaceInt)
+char *UI_ReplaceConversionInt(const char *sourceString, int replaceInt)
 {
     __int64 v2; // r10
     ConversionArguments v5; // [sp+50h] [-460h] BYREF
@@ -2536,7 +2536,7 @@ char *__cdecl UI_ReplaceConversionInt(const char *sourceString, int replaceInt)
     return va(v7);
 }
 
-char *__cdecl UI_ReplaceConversionInts(
+char *UI_ReplaceConversionInts(
     const char *sourceString,
     int numInts,
     char *replaceInts,
@@ -2579,7 +2579,7 @@ char *__cdecl UI_ReplaceConversionInts(
     return va(v15);
 }
 
-int __cdecl UI_Popup(int localClientNum, const char *menu)
+int UI_Popup(int localClientNum, const char *menu)
 {
     const char *v3; // r30
 
@@ -2609,7 +2609,7 @@ int __cdecl UI_Popup(int localClientNum, const char *menu)
     return 1;
 }
 
-void __cdecl UI_DrawLoggedInUser(rectDef_s *rect, Font_s *font, double scale, float *color, int textStyle)
+void UI_DrawLoggedInUser(rectDef_s *rect, Font_s *font, double scale, float *color, int textStyle)
 {
 #if 0
     const char *LocalClientName; // r27
@@ -2731,7 +2731,7 @@ void __cdecl UI_DrawLoggedInUser(rectDef_s *rect, Font_s *font, double scale, fl
 #endif
 }
 
-void __cdecl UI_OwnerDraw(
+void UI_OwnerDraw(
     int localClientNum,
     float x,
     float y,
@@ -2818,7 +2818,7 @@ void __cdecl UI_OwnerDraw(
     }
 }
 
-void __cdecl UI_MouseEvent(int localClientNum, int x, int y)
+void UI_MouseEvent(int localClientNum, int x, int y)
 {
     UI_UpdateCursorPosition(&uiInfo.uiDC, &scrPlaceFull, x, y);
 
@@ -2830,7 +2830,7 @@ void __cdecl UI_MouseEvent(int localClientNum, int x, int y)
             Display_MouseMove(&uiInfo.uiDC);
     }
 }
-Font_s *__cdecl UI_GetFontHandle(const ScreenPlacement *scrPlace,int fontEnum,float scale)
+Font_s *UI_GetFontHandle(const ScreenPlacement *scrPlace,int fontEnum,float scale)
 {
     return UI_SelectFont(scrPlace,fontEnum,scale,sharedUiInfo.assets,
                          ui_smallFont,ui_bigFont,ui_extraBigFont);

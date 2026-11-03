@@ -6,7 +6,7 @@
 int numLocalContacts;
 LocalContactData localContacts[32];
 
-void __cdecl Phys_InfoToCapsule(const objInfo *info, Capsule *capsule)
+void Phys_InfoToCapsule(const objInfo *info, Capsule *capsule)
 {
     float scale; // [esp+0h] [ebp-20h]
     uint32_t dir; // [esp+1Ch] [ebp-4h]
@@ -36,7 +36,7 @@ void __cdecl Phys_InfoToCapsule(const objInfo *info, Capsule *capsule)
     Vec3Mad(capsule->center, info->u.sideExtents[2], capsule->axis, capsule->p1);
 }
 
-double __cdecl Phys_DistanceOfCapsuleFromPlane(const float *plane, const Capsule *capsule)
+double Phys_DistanceOfCapsuleFromPlane(const float *plane, const Capsule *capsule)
 {
     double v3; // st7
     float v5; // [esp+4h] [ebp-10h]
@@ -57,7 +57,7 @@ double __cdecl Phys_DistanceOfCapsuleFromPlane(const float *plane, const Capsule
         return p0Dist;
 }
 
-bool __cdecl Phys_SimilarContacts(const LocalContactData *ca, const LocalContactData *cb)
+bool Phys_SimilarContacts(const LocalContactData *ca, const LocalContactData *cb)
 {
     int dirNear; // [esp+Ch] [ebp-8h]
     int posNear; // [esp+10h] [ebp-4h]
@@ -67,7 +67,7 @@ bool __cdecl Phys_SimilarContacts(const LocalContactData *ca, const LocalContact
     return posNear && dirNear;
 }
 
-bool __cdecl Phys_ContactBetter(const LocalContactData *ca, const LocalContactData *cb)
+bool Phys_ContactBetter(const LocalContactData *ca, const LocalContactData *cb)
 {
     return cb->depth < ca->depth;
 }
@@ -89,7 +89,7 @@ void Phys_CancelSimilarContacts()
     }
 }
 
-void __cdecl Phys_CapsuleOptimizeLocalResults(Results *results)
+void Phys_CapsuleOptimizeLocalResults(Results *results)
 {
     int i; // [esp+1Ch] [ebp-4h]
 
@@ -110,7 +110,7 @@ void __cdecl Phys_CapsuleOptimizeLocalResults(Results *results)
     }
 }
 
-void __cdecl Phys_CollideCapsuleWithBrush(const cbrush_t *brush, const objInfo *info, Results *results)
+void Phys_CollideCapsuleWithBrush(const cbrush_t *brush, const objInfo *info, Results *results)
 {
     int v3; // [esp+2Ch] [ebp-D5Ch]
     cplane_s *v4; // [esp+30h] [ebp-D58h]
@@ -237,7 +237,7 @@ LABEL_24:
     }
 }
 
-void __cdecl Phys_CapsuleCenterEdgePts(
+void Phys_CapsuleCenterEdgePts(
     const AxisTestResults *axisResults,
     const Capsule *capsule,
     float *edge0,
@@ -252,7 +252,7 @@ void __cdecl Phys_CapsuleCenterEdgePts(
     Vec3Mad(center, scale, capsule->axis, edge1);
 }
 
-char __cdecl Phys_CapsuleClipEdgeToPlane(float *p0, float *p1, float *plane)
+char Phys_CapsuleClipEdgeToPlane(float *p0, float *p1, float *plane)
 {
     float delta[3]; // [esp+0h] [ebp-24h] BYREF
     float dist1; // [esp+Ch] [ebp-18h]
@@ -288,7 +288,7 @@ char __cdecl Phys_CapsuleClipEdgeToPlane(float *p0, float *p1, float *plane)
     return 1;
 }
 
-void __cdecl Phys_AddLocalContactData(float depth, float *normal, const float *pos, int surfFlags)
+void Phys_AddLocalContactData(float depth, float *normal, const float *pos, int surfFlags)
 {
     LocalContactData *contact; // [esp+10h] [ebp-4h]
 
@@ -318,7 +318,7 @@ void __cdecl Phys_AddLocalContactData(float depth, float *normal, const float *p
     }
 }
 
-void __cdecl Phys_CapsuleBuildContactsForTri(
+void Phys_CapsuleBuildContactsForTri(
     Results *results,
     const float *plane,
     const Capsule *capsule,
@@ -399,7 +399,7 @@ void __cdecl Phys_CapsuleBuildContactsForTri(
     }
 }
 
-void __cdecl Phys_CalcAxis(const float *v0, const float *v1, const float *v2, float *result)
+void Phys_CalcAxis(const float *v0, const float *v1, const float *v2, float *result)
 {
     float t0[3]; // [esp+0h] [ebp-18h] BYREF
     float t1[3]; // [esp+Ch] [ebp-Ch] BYREF
@@ -409,7 +409,7 @@ void __cdecl Phys_CalcAxis(const float *v0, const float *v1, const float *v2, fl
     Vec3Cross(t1, v2, result);
 }
 
-bool __cdecl Phys_CapsuleSeparatingAxisTest(
+bool Phys_CapsuleSeparatingAxisTest(
     AxisTestResults *axisResults,
     const float *plane,
     const Capsule *capsule,
@@ -525,7 +525,7 @@ bool __cdecl Phys_CapsuleSeparatingAxisTest(
     return Phys_TestAxis(axisResults, capsule, p0, p1, p2, testAxis, 1, 1) != 0;
 }
 
-char __cdecl Phys_TestAxis(
+char Phys_TestAxis(
     AxisTestResults *axisResults,
     const Capsule *capsule,
     const float *p0,
@@ -600,7 +600,7 @@ char __cdecl Phys_TestAxis(
     return 1;
 }
 
-void __cdecl Phys_CapsuleBuildContactsForTriEndEdges(
+void Phys_CapsuleBuildContactsForTriEndEdges(
     Results *results,
     const float *plane,
     const Capsule *capsule,
@@ -676,7 +676,7 @@ void __cdecl Phys_CapsuleBuildContactsForTriEndEdges(
     }
 }
 
-bool __cdecl Phys_CapsuleSeparatingAxisTestEndEdges(
+bool Phys_CapsuleSeparatingAxisTestEndEdges(
     AxisTestResults *axisResults,
     const float *plane,
     const Capsule *capsule,
@@ -765,7 +765,7 @@ bool __cdecl Phys_CapsuleSeparatingAxisTestEndEdges(
     return Phys_TestAxis(axisResults, capsule, p0, p1, p2, testAxis, 19, 0) != 0;
 }
 
-void __cdecl Phys_CapsuleBuildContactsForTriMiddleEdge(
+void Phys_CapsuleBuildContactsForTriMiddleEdge(
     Results *results,
     const float *plane,
     const Capsule *capsule,
@@ -834,7 +834,7 @@ void __cdecl Phys_CapsuleBuildContactsForTriMiddleEdge(
     }
 }
 
-bool __cdecl Phys_CapsuleSeparatingAxisTestMiddleEdge(
+bool Phys_CapsuleSeparatingAxisTestMiddleEdge(
     AxisTestResults *axisResults,
     const float *plane,
     const Capsule *capsule,
@@ -895,7 +895,7 @@ bool __cdecl Phys_CapsuleSeparatingAxisTestMiddleEdge(
     return Phys_TestAxis(axisResults, capsule, p0, p1, p2, testAxis, 18, 0) != 0;
 }
 
-bool __cdecl Phys_TestCapsulePlane(const float *plane, const Capsule *capsule)
+bool Phys_TestCapsulePlane(const float *plane, const Capsule *capsule)
 {
     float v3; // [esp+4h] [ebp-20h]
     float v4; // [esp+8h] [ebp-1Ch]
@@ -918,7 +918,7 @@ bool __cdecl Phys_TestCapsulePlane(const float *plane, const Capsule *capsule)
     return capsule->radius > v3;
 }
 
-void __cdecl Phys_CollideCapsuleWithTriangleList(
+void Phys_CollideCapsuleWithTriangleList(
     const unsigned __int16 *a_indices,
     const float (*verts)[3],
     uint32_t triCount,

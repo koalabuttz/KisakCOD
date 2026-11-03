@@ -3,7 +3,7 @@
 #include "r_dvars.h"
 #include <cgame/cg_local.h>
 
-void __cdecl R_AddAabbTreeSurfacesInFrustum_r(const GfxAabbTree *tree, const DpvsClipPlaneSet *clipSet)
+void R_AddAabbTreeSurfacesInFrustum_r(const GfxAabbTree *tree, const DpvsClipPlaneSet *clipSet)
 {
     int v2; // [esp+10h] [ebp-D0h]
     int v3; // [esp+14h] [ebp-CCh]
@@ -194,9 +194,9 @@ void __cdecl R_AddAabbTreeSurfacesInFrustum_r(const GfxAabbTree *tree, const Dpv
     }
 }
 
-void __cdecl R_CopyClipPlane(const DpvsPlane *in, DpvsPlane *out);
+void R_CopyClipPlane(const DpvsPlane *in, DpvsPlane *out);
 
-void __cdecl R_AddCellStaticSurfacesInFrustum(DpvsStaticCellCmd *dpvsCell)
+void R_AddCellStaticSurfacesInFrustum(DpvsStaticCellCmd *dpvsCell)
 {
     DpvsPlane clipPlanePool[16]; // [esp+CCh] [ebp-1A0h] BYREF
     const GfxAabbTree *tree; // [esp+210h] [ebp-5Ch]
@@ -221,7 +221,7 @@ void __cdecl R_AddCellStaticSurfacesInFrustum(DpvsStaticCellCmd *dpvsCell)
     }
 }
 
-void __cdecl R_AddCullGroupSurfacesInFrustum(int cullGroupIndex, const DpvsPlane *planes, int planeCount)
+void R_AddCullGroupSurfacesInFrustum(int cullGroupIndex, const DpvsPlane *planes, int planeCount)
 {
     int v3; // [esp+4h] [ebp-20h]
     int i; // [esp+Ch] [ebp-18h]
@@ -260,7 +260,7 @@ LABEL_7:
     }
 }
 
-void __cdecl R_AddCellCullGroupsInFrustum(DpvsStaticCellCmd *dpvsCell)
+void R_AddCellCullGroupsInFrustum(DpvsStaticCellCmd *dpvsCell)
 {
     const GfxCell *cell; // [esp+0h] [ebp-10h]
     int *cullGroup; // [esp+8h] [ebp-8h]
@@ -277,7 +277,7 @@ void __cdecl R_AddCellCullGroupsInFrustum(DpvsStaticCellCmd *dpvsCell)
     }
 }
 
-void __cdecl R_AddCellStaticSurfacesInFrustumCmd(DpvsStaticCellCmd *data)
+void R_AddCellStaticSurfacesInFrustumCmd(DpvsStaticCellCmd *data)
 {
     uint32_t viewIndex; // [esp+4h] [ebp-4h]
 

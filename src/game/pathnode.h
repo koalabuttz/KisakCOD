@@ -240,157 +240,157 @@ struct PathData // sizeof=0x28
 struct actor_s;
 
 
-void __cdecl TRACK_pathnode();
-int __cdecl NodeTypeCanHavePriority(nodeType type);
-void __cdecl TurretNode_GetAngles(const pathnode_t *node, float *angleMin, float *angleMax);
-bool __cdecl TurretNode_HasTurret(const pathnode_t *node);
-void __cdecl Path_ReadOnly(int offset);
-void __cdecl Path_NonNegativeFloat(pathnode_t *node, int offset);
-void __cdecl Path_GetType(pathnode_t *node, int offset);
-void __cdecl Scr_SetPathnodeField(uint32_t entnum, uint32_t offset);
-void __cdecl Scr_GetPathnodeField(uint32_t entnum, uint32_t offset);
-void __cdecl PathNode_ClearStringField(uint16_t *destScrString);
-void __cdecl PathNode_UpdateStringField(
+void TRACK_pathnode();
+int NodeTypeCanHavePriority(nodeType type);
+void TurretNode_GetAngles(const pathnode_t *node, float *angleMin, float *angleMax);
+bool TurretNode_HasTurret(const pathnode_t *node);
+void Path_ReadOnly(int offset);
+void Path_NonNegativeFloat(pathnode_t *node, int offset);
+void Path_GetType(pathnode_t *node, int offset);
+void Scr_SetPathnodeField(uint32_t entnum, uint32_t offset);
+void Scr_GetPathnodeField(uint32_t entnum, uint32_t offset);
+void PathNode_ClearStringField(uint16_t *destScrString);
+void PathNode_UpdateStringField(
     const char *destKey,
     uint16_t *destScrString,
     const char *key,
     const char *value);
-void __cdecl PathNode_UpdateFloatField(const char *destKey, float *destFloat, const char *key, const char *value);
-void __cdecl PathNode_OriginMatches(const char *value, const float *nodeOrigin);
-void __cdecl node_droptofloor(pathnode_t *node);
-void __cdecl G_UpdateTrackExtraNodes();
-void __cdecl GScr_AddFieldsForPathnode();
-pathnode_t *__cdecl Scr_GetPathnode(uint32_t index);
-void __cdecl G_FreePathnodesScriptInfo();
-bool __cdecl Path_CompareNodesIncreasing(const pathsort_t &ps1, const pathsort_t &ps2);
-uint32_t __cdecl Path_ConvertNodeToIndex(const pathnode_t *node);
-pathnode_t *__cdecl Path_ConvertIndexToNode(uint32_t index);
-uint32_t __cdecl Path_NodeCount();
-void __cdecl Path_Init(int restart);
-int __cdecl NodeVisCacheEntry(int i, int j);
-int __cdecl ExpandedNodeVisCacheEntry(int i, int j);
-void __cdecl Path_NodesInCylinder_r(pathnode_tree_t *tree);
+void PathNode_UpdateFloatField(const char *destKey, float *destFloat, const char *key, const char *value);
+void PathNode_OriginMatches(const char *value, const float *nodeOrigin);
+void node_droptofloor(pathnode_t *node);
+void G_UpdateTrackExtraNodes();
+void GScr_AddFieldsForPathnode();
+pathnode_t *Scr_GetPathnode(uint32_t index);
+void G_FreePathnodesScriptInfo();
+bool Path_CompareNodesIncreasing(const pathsort_t &ps1, const pathsort_t &ps2);
+uint32_t Path_ConvertNodeToIndex(const pathnode_t *node);
+pathnode_t *Path_ConvertIndexToNode(uint32_t index);
+uint32_t Path_NodeCount();
+void Path_Init(int restart);
+int NodeVisCacheEntry(int i, int j);
+int ExpandedNodeVisCacheEntry(int i, int j);
+void Path_NodesInCylinder_r(pathnode_tree_t *tree);
 
 // returns nodecount
-int __cdecl Path_NodesInCylinder(
+int Path_NodesInCylinder(
     const float *origin,
     float maxDist,
     float maxHeight,
     pathsort_t *nodes,
     int maxNodes,
     int typeFlags);
-int __cdecl Path_NodesInRadius(
+int Path_NodesInRadius(
     float *origin,
     double maxDist,
     pathsort_t *nodes,
     int maxNodes,
     int typeFlags);
-int __cdecl Path_IsDynamicBlockingEntity(gentity_s *ent);
-bool __cdecl Path_IsBadPlaceLink(uint32_t nodeNumFrom, uint32_t nodeNumTo, team_t eTeam);
+int Path_IsDynamicBlockingEntity(gentity_s *ent);
+bool Path_IsBadPlaceLink(uint32_t nodeNumFrom, uint32_t nodeNumTo, team_t eTeam);
 uint32_t Path_InitLinkCounts();
 void Path_InitLinkInfoArray();
-void __cdecl Path_InitNodeDynamic(pathnode_t *loadNode);
-void __cdecl Path_InitNodesDynamic();
-void __cdecl Path_PreSpawnInitPaths();
-void __cdecl Path_DrawDebugNoLinks(const pathnode_t *node, const float (*color)[4], int duration);
-void __cdecl Path_DrawDebugLink(const pathnode_t *node, const int i, bool bShowAll);
-float __cdecl Path_GetDebugStringScale(const float *cameraPos, const float *origin);
-void __cdecl Path_DrawDebugNodeBox(const pathnode_t *node);
-void __cdecl Path_DrawDebugNode(const float *cameraPos, const pathnode_t *node);
-void __cdecl Path_DrawDebugFindPath(float *vOrigin);
-void __cdecl Path_DrawFriendlyChain();
-bool __cdecl Path_IsNodeIndex(const pathnode_t *node, uint32_t nodeIndexToCheck);
-int __cdecl Path_NodesVisible(const pathnode_t *node0, const pathnode_t *node1);
-int __cdecl Path_ExpandedNodeVisible(const pathnode_t *node0, const pathnode_t *node1);
-pathnode_t *__cdecl Path_FindChainPos(const float *vOrigin, pathnode_t *pPrevChainPos);
-void __cdecl Path_UpdateBestChainNode(pathnode_t *node, pathnode_t **bestNode, uint32_t *foundCount);
-int __cdecl Path_CanSetDesiredChainPos(actor_s *claimer, const pathnode_t *node);
-void __cdecl Path_AttachSentientToChainNode(sentient_s *sentient, uint16_t targetname);
-pathnode_t *__cdecl Path_FirstNode(int typeFlags);
-pathnode_t *__cdecl Path_NextNode(pathnode_t *prevNode, int typeFlags);
-sentient_s *__cdecl Path_GetNodeOwner(const pathnode_t *node);
-int __cdecl Path_CanStealPriorityNode(const pathnode_t *node, sentient_s *claimer);
-int __cdecl Path_CanStealNode(const pathnode_t *node, sentient_s *claimer);
-void __cdecl Path_ClaimNodeInternal(pathnode_t *node, sentient_s *claimer);
-void __cdecl Path_MarkNodeOverlap(pathnode_t *node);
-void __cdecl Path_ClaimNode(pathnode_t *node, sentient_s *claimer);
-void __cdecl Path_RevokeClaim(pathnode_t *node, sentient_s *pNewClaimer);
-void __cdecl Path_RelinquishNode(sentient_s *claimer, int timeUntilRelinquished);
-int __cdecl Path_AllowedStancesForNode(pathnode_t *node);
-int __cdecl Path_SaveIndex(const pathnode_t *node);
-pathnode_t *__cdecl Path_LoadNode(uint32_t index);
-void __cdecl Path_ValidateNode(pathnode_t *node);
-void __cdecl Path_ValidateAllNodes();
-void __cdecl Path_CheckLinkLeaks();
-void __cdecl Path_CheckUserCountLeaks();
-void __cdecl Path_DisconnectPath(pathnode_t *node, pathlink_s *link);
-void __cdecl Path_ConnectPath(pathnode_t *node, pathlink_s *link);
-void __cdecl Path_ConnectPathsForEntity(gentity_s *ent);
-void __cdecl Path_DisconnectPathsForEntity(gentity_s *ent);
-void __cdecl Path_UpdateBadPlaceCountForLink(pathlink_s *link, int teamflags, int delta);
-void __cdecl Path_UpdateArcBadPlaceCount(badplace_arc_t *arc, int teamflags, int delta);
-void __cdecl Path_UpdateBrushBadPlaceCount(gentity_s *brushEnt, int teamflags, int delta);
-int __cdecl Path_IsNodeInArc(
+void Path_InitNodeDynamic(pathnode_t *loadNode);
+void Path_InitNodesDynamic();
+void Path_PreSpawnInitPaths();
+void Path_DrawDebugNoLinks(const pathnode_t *node, const float (*color)[4], int duration);
+void Path_DrawDebugLink(const pathnode_t *node, const int i, bool bShowAll);
+float Path_GetDebugStringScale(const float *cameraPos, const float *origin);
+void Path_DrawDebugNodeBox(const pathnode_t *node);
+void Path_DrawDebugNode(const float *cameraPos, const pathnode_t *node);
+void Path_DrawDebugFindPath(float *vOrigin);
+void Path_DrawFriendlyChain();
+bool Path_IsNodeIndex(const pathnode_t *node, uint32_t nodeIndexToCheck);
+int Path_NodesVisible(const pathnode_t *node0, const pathnode_t *node1);
+int Path_ExpandedNodeVisible(const pathnode_t *node0, const pathnode_t *node1);
+pathnode_t *Path_FindChainPos(const float *vOrigin, pathnode_t *pPrevChainPos);
+void Path_UpdateBestChainNode(pathnode_t *node, pathnode_t **bestNode, uint32_t *foundCount);
+int Path_CanSetDesiredChainPos(actor_s *claimer, const pathnode_t *node);
+void Path_AttachSentientToChainNode(sentient_s *sentient, uint16_t targetname);
+pathnode_t *Path_FirstNode(int typeFlags);
+pathnode_t *Path_NextNode(pathnode_t *prevNode, int typeFlags);
+sentient_s *Path_GetNodeOwner(const pathnode_t *node);
+int Path_CanStealPriorityNode(const pathnode_t *node, sentient_s *claimer);
+int Path_CanStealNode(const pathnode_t *node, sentient_s *claimer);
+void Path_ClaimNodeInternal(pathnode_t *node, sentient_s *claimer);
+void Path_MarkNodeOverlap(pathnode_t *node);
+void Path_ClaimNode(pathnode_t *node, sentient_s *claimer);
+void Path_RevokeClaim(pathnode_t *node, sentient_s *pNewClaimer);
+void Path_RelinquishNode(sentient_s *claimer, int timeUntilRelinquished);
+int Path_AllowedStancesForNode(pathnode_t *node);
+int Path_SaveIndex(const pathnode_t *node);
+pathnode_t *Path_LoadNode(uint32_t index);
+void Path_ValidateNode(pathnode_t *node);
+void Path_ValidateAllNodes();
+void Path_CheckLinkLeaks();
+void Path_CheckUserCountLeaks();
+void Path_DisconnectPath(pathnode_t *node, pathlink_s *link);
+void Path_ConnectPath(pathnode_t *node, pathlink_s *link);
+void Path_ConnectPathsForEntity(gentity_s *ent);
+void Path_DisconnectPathsForEntity(gentity_s *ent);
+void Path_UpdateBadPlaceCountForLink(pathlink_s *link, int teamflags, int delta);
+void Path_UpdateArcBadPlaceCount(badplace_arc_t *arc, int teamflags, int delta);
+void Path_UpdateBrushBadPlaceCount(gentity_s *brushEnt, int teamflags, int delta);
+int Path_IsNodeInArc(
     pathnode_t *pNode,
     const float *origin,
     double radius,
     double angle0,
     double angle1,
     double halfHeight);
-void __cdecl WriteEntityDisconnectedLinks(gentity_s *ent, SaveGame *save);
-void __cdecl ReadEntityDisconnectedLinks(gentity_s *ent, SaveGame *save);
-void __cdecl Scr_SetNodePriority();
-void __cdecl Scr_IsNodeOccupied();
-void __cdecl Scr_SetTurretNode();
-void __cdecl Scr_UnsetTurretNode();
-void __cdecl GScr_SetDynamicPathnodeField(pathnode_t *node, uint32_t index);
-void __cdecl G_DropPathnodesToFloor();
-void __cdecl Scr_FreePathnode(pathnode_t *node);
-void __cdecl Scr_AddPathnode(pathnode_t *node);
-void __cdecl Scr_GetNode();
-void __cdecl Scr_GetNodeArray();
-void __cdecl Scr_GetAllNodes();
-void __cdecl Path_Shutdown();
-void __cdecl Path_AutoDisconnectPaths();
-void __cdecl Path_InitPaths();
-void __cdecl Path_DrawVisData();
-void __cdecl Path_RelinquishNodeNow(sentient_s *claimer);
-void __cdecl Path_RelinquishNodeSoon(sentient_s *claimer);
-void __cdecl Path_MarkNodeInvalid(pathnode_t *node, team_t eTeam);
-void __cdecl G_SetPathnodeScriptVariable(const char *key, const char *value, pathnode_t *ent);
-void __cdecl G_ParsePathnodeScriptField(const char *key, const char *value, pathnode_t *node);
-void __cdecl G_ParsePathnodeScriptFields(pathnode_t *node);
-void __cdecl G_SpawnPathnodeDynamic();
-int __cdecl Path_CanClaimNode(const pathnode_t *node, sentient_s *claimer);
-void __cdecl Path_ForceClaimNode(pathnode_t *node, sentient_s *claimer);
-pathnode_t *__cdecl Path_ChooseSubsequentChainNode_r(
+void WriteEntityDisconnectedLinks(gentity_s *ent, SaveGame *save);
+void ReadEntityDisconnectedLinks(gentity_s *ent, SaveGame *save);
+void Scr_SetNodePriority();
+void Scr_IsNodeOccupied();
+void Scr_SetTurretNode();
+void Scr_UnsetTurretNode();
+void GScr_SetDynamicPathnodeField(pathnode_t *node, uint32_t index);
+void G_DropPathnodesToFloor();
+void Scr_FreePathnode(pathnode_t *node);
+void Scr_AddPathnode(pathnode_t *node);
+void Scr_GetNode();
+void Scr_GetNodeArray();
+void Scr_GetAllNodes();
+void Path_Shutdown();
+void Path_AutoDisconnectPaths();
+void Path_InitPaths();
+void Path_DrawVisData();
+void Path_RelinquishNodeNow(sentient_s *claimer);
+void Path_RelinquishNodeSoon(sentient_s *claimer);
+void Path_MarkNodeInvalid(pathnode_t *node, team_t eTeam);
+void G_SetPathnodeScriptVariable(const char *key, const char *value, pathnode_t *ent);
+void G_ParsePathnodeScriptField(const char *key, const char *value, pathnode_t *node);
+void G_ParsePathnodeScriptFields(pathnode_t *node);
+void G_SpawnPathnodeDynamic();
+int Path_CanClaimNode(const pathnode_t *node, sentient_s *claimer);
+void Path_ForceClaimNode(pathnode_t *node, sentient_s *claimer);
+pathnode_t *Path_ChooseSubsequentChainNode_r(
     int depthMin,
     int depthMax,
     pathnode_t *pParent,
     actor_s *claimer);
-pathnode_t *__cdecl Path_ChooseAnyChainNodeIfDeadEnd(
+pathnode_t *Path_ChooseAnyChainNodeIfDeadEnd(
     int depthMin,
     int depthMax,
     pathnode_t *chainPos,
     actor_s *claimer);
-pathnode_t *__cdecl Path_ChoosePreviousChainNode(int depthMin, int depthMax, pathnode_t *chainPos, actor_s *claimer);
-pathnode_t *__cdecl Path_ChooseDesperationChainNode(
+pathnode_t *Path_ChoosePreviousChainNode(int depthMin, int depthMax, pathnode_t *chainPos, actor_s *claimer);
+pathnode_t *Path_ChooseDesperationChainNode(
     int depthMin,
     int depthMax,
     pathnode_t *refPos,
     actor_s *claimer);
-pathnode_t *__cdecl Path_ChooseDesperationNewChainNode(
+pathnode_t *Path_ChooseDesperationNewChainNode(
     int depthMin,
     int depthMax,
     pathnode_t *refPos,
     actor_s *claimer);
-pathnode_t *__cdecl Path_ChooseChainPos(
+pathnode_t *Path_ChooseChainPos(
     pathnode_t *refPos,
     int iFollowMin,
     int iFollowMax,
     actor_s *claimer,
     int chainFallback);
-pathnode_t *__cdecl Path_NearestNodeNotCrossPlanes(
+pathnode_t *Path_NearestNodeNotCrossPlanes(
     const float * const vOrigin,
     pathsort_t *nodes,
     int typeFlags,
@@ -401,7 +401,7 @@ pathnode_t *__cdecl Path_NearestNodeNotCrossPlanes(
     int *returnCount,
     int maxNodes,
     nearestNodeHeightCheck heightCheck);
-pathnode_t *__cdecl Path_NearestNode(
+pathnode_t *Path_NearestNode(
     const float * const vOrigin,
     pathsort_t *nodes,
     int typeFlags,
@@ -409,9 +409,9 @@ pathnode_t *__cdecl Path_NearestNode(
     int *returnCount,
     int maxNodes,
     nearestNodeHeightCheck heightCheck);
-void __cdecl Path_DrawDebugNearestNode(float *vOrigin, int numNodes);
-void __cdecl Path_DrawDebugClaimedNodes(float *origin, int numNodes);
-void __cdecl Path_DrawDebug();
+void Path_DrawDebugNearestNode(float *vOrigin, int numNodes);
+void Path_DrawDebugClaimedNodes(float *origin, int numNodes);
+void Path_DrawDebug();
 
 void Path_CallFunctionForNodes(void(*function)(pathnode_t *, void *), void *data);
 

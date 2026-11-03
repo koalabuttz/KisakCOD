@@ -5,7 +5,7 @@
 #error This file is for SinglePlayer only
 #endif
 
-int __cdecl BG_ActorIsProne(actor_prone_info_s *pInfo, int iCurrentTime)
+int BG_ActorIsProne(actor_prone_info_s *pInfo, int iCurrentTime)
 {
     int iProneTrans; // r10
     int iProneTime; // r9
@@ -30,7 +30,7 @@ int __cdecl BG_ActorIsProne(actor_prone_info_s *pInfo, int iCurrentTime)
     return 1;
 }
 
-int __cdecl BG_ActorGoalIsProne(actor_prone_info_s *pInfo)
+int BG_ActorGoalIsProne(actor_prone_info_s *pInfo)
 {
     int iProneTrans; // r11
     int result; // r3
@@ -48,7 +48,7 @@ int __cdecl BG_ActorGoalIsProne(actor_prone_info_s *pInfo)
     return result;
 }
 
-float __cdecl BG_GetActorProneFraction(actor_prone_info_s *pInfo, int iCurrentTime)
+float BG_GetActorProneFraction(actor_prone_info_s *pInfo, int iCurrentTime)
 {
     if (!pInfo->prone)
         return 0.0f;

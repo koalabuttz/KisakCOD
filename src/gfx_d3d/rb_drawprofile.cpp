@@ -11,12 +11,12 @@ DrawProfileGlobals drawProfGlob;
 float g_tally;
 
 
-void __cdecl TRACK_rb_drawprofile()
+void TRACK_rb_drawprofile()
 {
     track_static_alloc_internal(&drawProfGlob, 33192, "drawProfGlob", 0);
 }
 
-void __cdecl RB_AddProfileThread(int threadContext)
+void RB_AddProfileThread(int threadContext)
 {
 #if 0
     ProfileStack *prof_stack; // [esp+10h] [ebp-14h]
@@ -43,7 +43,7 @@ void __cdecl RB_AddProfileThread(int threadContext)
 #endif
 }
 
-char __cdecl RB_IsUsingAnyProfile()
+char RB_IsUsingAnyProfile()
 {
     return false;
 #if 0
@@ -60,7 +60,7 @@ char __cdecl RB_IsUsingAnyProfile()
 #endif
 }
 
-void __cdecl RB_DrawSlowProfileOverlay(int(__cdecl *compare)(const void *, const void *))
+void RB_DrawSlowProfileOverlay(int(*compare)(const void *, const void *))
 {
 #if 0
     int row; // [esp+8h] [ebp-10h]
@@ -86,7 +86,7 @@ void __cdecl RB_DrawSlowProfileOverlay(int(__cdecl *compare)(const void *, const
 #endif
 }
 
-void __cdecl RB_DrawProfile()
+void RB_DrawProfile()
 {
 #if 0
     ProfileReadable *p_read; // edx
@@ -156,22 +156,22 @@ void __cdecl RB_DrawProfile()
             RB_DrawProfileHistory(0);
             break;
         case 1:
-            RB_DrawSlowProfileOverlay((int(__cdecl *)(const void *, const void *))CompareSelfTimes);
+            RB_DrawSlowProfileOverlay((int(*)(const void *, const void *))CompareSelfTimes);
             break;
         case 2:
-            RB_DrawSlowProfileOverlay((int(__cdecl *)(const void *, const void *))CompareTotalTimes);
+            RB_DrawSlowProfileOverlay((int(*)(const void *, const void *))CompareTotalTimes);
             break;
         case 3:
-            RB_DrawSlowProfileOverlay((int(__cdecl *)(const void *, const void *))CompareAvgSelfTimes);
+            RB_DrawSlowProfileOverlay((int(*)(const void *, const void *))CompareAvgSelfTimes);
             break;
         case 4:
-            RB_DrawSlowProfileOverlay((int(__cdecl *)(const void *, const void *))CompareAvgTotalTimes);
+            RB_DrawSlowProfileOverlay((int(*)(const void *, const void *))CompareAvgTotalTimes);
             break;
         case 5:
-            RB_DrawSlowProfileOverlay((int(__cdecl *)(const void *, const void *))CompareMaxTimes);
+            RB_DrawSlowProfileOverlay((int(*)(const void *, const void *))CompareMaxTimes);
             break;
         case 6:
-            RB_DrawSlowProfileOverlay((int(__cdecl *)(const void *, const void *))CompareMaxSelfTimes);
+            RB_DrawSlowProfileOverlay((int(*)(const void *, const void *))CompareMaxSelfTimes);
             break;
         default:
             RB_DrawProfileOverlay();
@@ -183,7 +183,7 @@ void __cdecl RB_DrawProfile()
 #endif
 }
 
-void __cdecl RB_DrawProfileHistory(const ProfileSettings *profSettings)
+void RB_DrawProfileHistory(const ProfileSettings *profSettings)
 {
 #if 0
     int ProfileHistoryProbeIndex; // eax
@@ -224,7 +224,7 @@ void __cdecl RB_DrawProfileHistory(const ProfileSettings *profSettings)
 #endif
 }
 
-void __cdecl RB_DrawProfileHistoryGraph(const ProfileReadable *read, int parity, int probeIndex, float x, float y)
+void RB_DrawProfileHistoryGraph(const ProfileReadable *read, int parity, int probeIndex, float x, float y)
 {
 #if 0
     float v5; // [esp+14h] [ebp-44h]
@@ -279,14 +279,14 @@ void __cdecl RB_DrawProfileHistoryGraph(const ProfileReadable *read, int parity,
 #endif
 }
 
-void __cdecl RB_DrawProfileRect(float x, float y, float width, float height, GfxColor color)
+void RB_DrawProfileRect(float x, float y, float width, float height, GfxColor color)
 {
 #if 0
     RB_DrawStretchPic(rgp.whiteMaterial, x, y, width, height, 0.0, 0.0, 1.0, 1.0, color.packed, GFX_PRIM_STATS_DEBUG);
 #endif
 }
 
-void __cdecl RB_DrawProfileBar(float x, float y, float pixelsPerClock, uint32_t clockCount, GfxColor color)
+void RB_DrawProfileBar(float x, float y, float pixelsPerClock, uint32_t clockCount, GfxColor color)
 {
 #if 0
     float v5; // [esp+14h] [ebp-10h]
@@ -307,7 +307,7 @@ void __cdecl RB_DrawProfileBar(float x, float y, float pixelsPerClock, uint32_t 
 #endif
 }
 
-void __cdecl RB_DrawProfileHistoryLabel(int profEnum, float x, float y)
+void RB_DrawProfileHistoryLabel(int profEnum, float x, float y)
 {
 #if 0
     float v3; // [esp+10h] [ebp-94h]
@@ -323,7 +323,7 @@ void __cdecl RB_DrawProfileHistoryLabel(int profEnum, float x, float y)
 #endif
 }
 
-int __cdecl RB_GetProfileHistoryProbeIndex(int historyIndex, const ProfileSettings *profSettings)
+int RB_GetProfileHistoryProbeIndex(int historyIndex, const ProfileSettings *profSettings)
 {
     return 0;
 
@@ -356,7 +356,7 @@ int RB_DrawProfileOverlay()
     return result;
 }
 
-void __cdecl RB_DrawAllProfileBackgrounds(const ProfileSettings *profSettings, int rowCount)
+void RB_DrawAllProfileBackgrounds(const ProfileSettings *profSettings, int rowCount)
 {
 #if 0
     float y; // [esp+4h] [ebp-8h]
@@ -380,7 +380,7 @@ void __cdecl RB_DrawAllProfileBackgrounds(const ProfileSettings *profSettings, i
 #endif
 }
 
-void __cdecl RB_DrawProfileBackground(float y)
+void RB_DrawProfileBackground(float y)
 {
 #if 0
     float v1; // [esp+28h] [ebp-18h]
@@ -396,7 +396,7 @@ void __cdecl RB_DrawProfileBackground(float y)
 #endif
 }
 
-double __cdecl RB_DrawProfileLabels()
+double RB_DrawProfileLabels()
 {
     float y; // [esp+10h] [ebp-4h]
 
@@ -417,7 +417,7 @@ double __cdecl RB_DrawProfileLabels()
     return (float)(y + drawProfGlob.fontHeight);
 }
 
-void __cdecl RB_DrawProfileString(int column, float y, const char *s, GfxColor textColor)
+void RB_DrawProfileString(int column, float y, const char *s, GfxColor textColor)
 {
     float v4; // [esp+Ch] [ebp-8h]
     float x; // [esp+10h] [ebp-4h]
@@ -427,7 +427,7 @@ void __cdecl RB_DrawProfileString(int column, float y, const char *s, GfxColor t
     RB_DrawText(s, drawProfGlob.font, x, v4, textColor);
 }
 
-double __cdecl RB_DrawProfileRow(int probeIndex, int indentation, float y)
+double RB_DrawProfileRow(int probeIndex, int indentation, float y)
 {
     const char *v3; // eax
     const char *v4; // eax
@@ -542,7 +542,7 @@ double __cdecl RB_DrawProfileRow(int probeIndex, int indentation, float y)
     return (float)(y + drawProfGlob.fontHeight);
 }
 
-int __cdecl CompareSelfTimes(uint32_t *e0, uint32_t *e1)
+int CompareSelfTimes(uint32_t *e0, uint32_t *e1)
 {
     if (drawProfGlob.global[*e1].read.self.value[0] == drawProfGlob.global[*e0].read.self.value[0])
         return *e1 - *e0;
@@ -550,7 +550,7 @@ int __cdecl CompareSelfTimes(uint32_t *e0, uint32_t *e1)
         return drawProfGlob.global[*e1].read.self.value[0] - drawProfGlob.global[*e0].read.self.value[0];
 }
 
-int __cdecl CompareTotalTimes(uint32_t *e0, uint32_t *e1)
+int CompareTotalTimes(uint32_t *e0, uint32_t *e1)
 {
     if (drawProfGlob.global[*e1].read.total.value[0] == drawProfGlob.global[*e0].read.total.value[0])
         return *e1 - *e0;
@@ -558,7 +558,7 @@ int __cdecl CompareTotalTimes(uint32_t *e0, uint32_t *e1)
         return drawProfGlob.global[*e1].read.total.value[0] - drawProfGlob.global[*e0].read.total.value[0];
 }
 
-int __cdecl CompareAvgTotalTimes(int *e0, int *e1)
+int CompareAvgTotalTimes(int *e0, int *e1)
 {
     double delta; // [esp+0h] [ebp-10h]
     int i0; // [esp+8h] [ebp-8h]
@@ -575,7 +575,7 @@ int __cdecl CompareAvgTotalTimes(int *e0, int *e1)
     return 1;
 }
 
-int __cdecl CompareMaxTimes(uint32_t *e0, uint32_t *e1)
+int CompareMaxTimes(uint32_t *e0, uint32_t *e1)
 {
     int delta; // [esp+0h] [ebp-Ch]
 
@@ -587,7 +587,7 @@ int __cdecl CompareMaxTimes(uint32_t *e0, uint32_t *e1)
     return 1;
 }
 
-int __cdecl CompareAvgSelfTimes(int *e0, int *e1)
+int CompareAvgSelfTimes(int *e0, int *e1)
 {
     double delta; // [esp+0h] [ebp-10h]
     int i0; // [esp+8h] [ebp-8h]
@@ -604,7 +604,7 @@ int __cdecl CompareAvgSelfTimes(int *e0, int *e1)
     return 1;
 }
 
-int __cdecl CompareMaxSelfTimes(uint32_t *e0, uint32_t *e1)
+int CompareMaxSelfTimes(uint32_t *e0, uint32_t *e1)
 {
     int delta; // [esp+0h] [ebp-Ch]
 
@@ -616,7 +616,7 @@ int __cdecl CompareMaxSelfTimes(uint32_t *e0, uint32_t *e1)
     return 1;
 }
 
-void __cdecl RB_DrawProfileScript()
+void RB_DrawProfileScript()
 {
     const char *v0; // eax
     const char *v1; // eax
@@ -763,7 +763,7 @@ void __cdecl RB_DrawProfileScript()
     }
 }
 
-void __cdecl RB_ProfileInit()
+void RB_ProfileInit()
 {
     drawProfGlob.font = R_RegisterFont("fonts/consoleFont", IMAGE_TRACK_UI);
     drawProfGlob.fontWidth = (float)R_TextWidth("#", 1, drawProfGlob.font);

@@ -27,13 +27,13 @@ struct lagometer_t // sizeof=0x608
 
 lagometer_t lagometer;
 
-void __cdecl CG_AddLagometerFrameInfo(const cg_s *cgameGlob)
+void CG_AddLagometerFrameInfo(const cg_s *cgameGlob)
 {
     lagometer.frameSamples[lagometer.frameCount & 0x7F] = cgameGlob->time - cgameGlob->latestSnapshotTime;
     ++lagometer.frameCount;
 }
 
-void __cdecl CG_AddLagometerSnapshotInfo(snapshot_s *snap)
+void CG_AddLagometerSnapshotInfo(snapshot_s *snap)
 {
     if (snap)
     {
@@ -47,7 +47,7 @@ void __cdecl CG_AddLagometerSnapshotInfo(snapshot_s *snap)
     ++lagometer.snapshotCount;
 }
 
-void __cdecl CG_DrawSnapshotAnalysis(int32_t localClientNum)
+void CG_DrawSnapshotAnalysis(int32_t localClientNum)
 {
     int32_t v1; // eax
     float v2; // [esp+Ch] [ebp-D8h]
@@ -172,7 +172,7 @@ void __cdecl CG_DrawSnapshotAnalysis(int32_t localClientNum)
                     s_clientAnalysisData = cgameGlob->bitsSent[arrayFrameb];
                     for (fielda = 0; fielda < 13; ++fielda)
                         sortedSamples[fielda] = fielda;
-                    qsort(sortedSamples, 0xDu, 4u, (int(__cdecl *)(const void *, const void *))CG_ComparePacketAnalysisSamples);
+                    qsort(sortedSamples, 0xDu, 4u, (int(*)(const void *, const void *))CG_ComparePacketAnalysisSamples);
                     for (column = 0; column < 13; ++column)
                     {
                         fieldb = sortedSamples[column];
@@ -345,7 +345,7 @@ void __cdecl CG_DrawSnapshotAnalysis(int32_t localClientNum)
     }
 }
 
-int32_t __cdecl CG_ComparePacketAnalysisSamples(int32_t *a, int32_t *b)
+int32_t CG_ComparePacketAnalysisSamples(int32_t *a, int32_t *b)
 {
     int32_t field0; // [esp+0h] [ebp-8h]
     int32_t field1; // [esp+4h] [ebp-4h]
@@ -357,7 +357,7 @@ int32_t __cdecl CG_ComparePacketAnalysisSamples(int32_t *a, int32_t *b)
     return s_clientAnalysisData[field1] - s_clientAnalysisData[field0];
 }
 
-void __cdecl CG_DrawSnapshotEntityAnalysis(int32_t localClientNum)
+void CG_DrawSnapshotEntityAnalysis(int32_t localClientNum)
 {
     const char *v3; // eax
     char *v4; // eax
@@ -587,7 +587,7 @@ void __cdecl CG_DrawSnapshotEntityAnalysis(int32_t localClientNum)
                 s_sampleNum = sample;
                 for (field = 0; field <= 17; ++field)
                     sortedSamples[field] = field;
-                qsort(sortedSamples, 0x12u, 4u, (int(__cdecl *)(const void *, const void *))CG_CompareEntityAnalysisSamples);
+                qsort(sortedSamples, 0x12u, 4u, (int(*)(const void *, const void *))CG_CompareEntityAnalysisSamples);
                 for (fielda = 0; fielda <= 17; ++fielda)
                 {
                     eType = sortedSamples[fielda];
@@ -685,12 +685,12 @@ void __cdecl CG_DrawSnapshotEntityAnalysis(int32_t localClientNum)
     }
 }
 
-int32_t __cdecl CG_CompareEntityAnalysisSamples(uint32_t *a, uint32_t *b)
+int32_t CG_CompareEntityAnalysisSamples(uint32_t *a, uint32_t *b)
 {
     return s_entitySamples[s_sampleNum][*b] - s_entitySamples[s_sampleNum][*a];
 }
 
-void __cdecl CG_DrawPingAnalysis(int32_t localClientNum)
+void CG_DrawPingAnalysis(int32_t localClientNum)
 {
     float v1; // [esp+30h] [ebp-60h]
     float v2; // [esp+38h] [ebp-58h]
@@ -804,7 +804,7 @@ void __cdecl CG_DrawPingAnalysis(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_DrawLagometer(int32_t localClientNum)
+void CG_DrawLagometer(int32_t localClientNum)
 {
     float v1; // [esp+30h] [ebp-64h]
     float v2; // [esp+34h] [ebp-60h]
@@ -910,12 +910,12 @@ void __cdecl CG_DrawLagometer(int32_t localClientNum)
     CG_DrawDisconnect(localClientNum);
 }
 
-bool __cdecl CL_IsServerRestarting(int32_t localClientNum)
+bool CL_IsServerRestarting(int32_t localClientNum)
 {
     return CL_GetLocalClientConnection(localClientNum)->isServerRestarting;
 
 }
-void __cdecl CG_DrawDisconnect(int32_t localClientNum)
+void CG_DrawDisconnect(int32_t localClientNum)
 {
     Material *disconnectMaterial; // [esp+24h] [ebp-48h]
     Font_s *font; // [esp+28h] [ebp-44h]

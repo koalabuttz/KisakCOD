@@ -146,88 +146,88 @@ struct GfxImageFileHeader // sizeof=0x1C
     int fileSizeForPicmip[4];           // ...
 };
 
-void __cdecl TRACK_r_image();
-void __cdecl R_DelayLoadImage(XAssetHeader header);
-void __cdecl R_ShutdownImages();
-void __cdecl Image_SetupAndLoad(
+void TRACK_r_image();
+void R_DelayLoadImage(XAssetHeader header);
+void R_ShutdownImages();
+void Image_SetupAndLoad(
     GfxImage *image,
     int width,
     int height,
     int depth,
     int imageFlags,
     _D3DFORMAT imageFormat);
-GfxImage *__cdecl Image_Alloc(
+GfxImage *Image_Alloc(
     char *name,
     uint8_t category,
     uint8_t semantic,
     uint8_t imageTrack);
-void __cdecl Image_Free(GfxImage *image);
-void __cdecl R_GetImageList(ImageList *imageList);
-void __cdecl R_AddImageToList(XAssetHeader header, ImageList *data);
-void __cdecl R_SumOfUsedImages(Image_MemUsage *usage);
-void __cdecl Image_Release(GfxImage *image);
-GfxImage *__cdecl Image_AllocProg(int imageProgType, uint8_t category, uint8_t semantic);
-void __cdecl Image_SetupRenderTarget(
+void Image_Free(GfxImage *image);
+void R_GetImageList(ImageList *imageList);
+void R_AddImageToList(XAssetHeader header, ImageList *data);
+void R_SumOfUsedImages(Image_MemUsage *usage);
+void Image_Release(GfxImage *image);
+GfxImage *Image_AllocProg(int imageProgType, uint8_t category, uint8_t semantic);
+void Image_SetupRenderTarget(
     GfxImage *image,
     uint16_t width,
     uint16_t height,
     _D3DFORMAT imageFormat);
-void __cdecl Load_Texture(GfxTexture *remoteLoadDef, GfxImage *image);
-GfxImage *__cdecl Image_FindExisting(const char *name);
-GfxImage *__cdecl Image_FindExisting_FastFile(const char *name);
-GfxImage *__cdecl Image_Register(const char *imageName, uint8_t semantic, int imageTrack);
-GfxImage *__cdecl Image_Register_FastFile(const char *imageName);
-char __cdecl Image_ValidateHeader(GfxImageFileHeader *imageFile, const char *filepath);
-IDirect3DSurface9 *__cdecl Image_GetSurface(GfxImage *image);
-void __cdecl R_InitImages();
+void Load_Texture(GfxTexture *remoteLoadDef, GfxImage *image);
+GfxImage *Image_FindExisting(const char *name);
+GfxImage *Image_FindExisting_FastFile(const char *name);
+GfxImage *Image_Register(const char *imageName, uint8_t semantic, int imageTrack);
+GfxImage *Image_Register_FastFile(const char *imageName);
+char Image_ValidateHeader(GfxImageFileHeader *imageFile, const char *filepath);
+IDirect3DSurface9 *Image_GetSurface(GfxImage *image);
+void R_InitImages();
 void R_InitCodeImages();
 #ifdef KISAK_RADIANT
-void __cdecl R_LoadCaseTextures();   // editor-only (idb 0x513690); loads bin/case_textures.txt
+void R_LoadCaseTextures();   // editor-only (idb 0x513690); loads bin/case_textures.txt
 #endif
-void __cdecl R_ImageList_f();
-bool __cdecl Image_IsCodeImage(int track);
-bool __cdecl imagecompare(GfxImage *image1, GfxImage *image2);
-_D3DFORMAT __cdecl R_ImagePixelFormat(const GfxImage *image);
+void R_ImageList_f();
+bool Image_IsCodeImage(int track);
+bool imagecompare(GfxImage *image1, GfxImage *image2);
+_D3DFORMAT R_ImagePixelFormat(const GfxImage *image);
 
-char __cdecl Image_LoadFromFile(GfxImage *image);
-char __cdecl Image_AssignDefaultTexture(GfxImage *image);
-int __cdecl Image_GetAvailableHashLocation(const char *name);
-void __cdecl Image_LoadSolid(
+char Image_LoadFromFile(GfxImage *image);
+char Image_AssignDefaultTexture(GfxImage *image);
+int Image_GetAvailableHashLocation(const char *name);
+void Image_LoadSolid(
     GfxImage *image,
     uint8_t r,
     uint8_t g,
     uint8_t b,
     uint8_t a);
-GfxImage *__cdecl Image_LoadBuiltin(char *name, uint8_t semantic, uint8_t imageTrack);
-double __cdecl Outdoor_TraceHeightInWorld(float worldX, float worldY);
-int __cdecl Outdoor_TransformToTextureClamped(int dimension, float inWorld);
-void __cdecl Image_LoadWhite(GfxImage *image);
-void __cdecl Image_LoadBlack(GfxImage *image);
-void __cdecl Image_LoadBlack3D(GfxImage *image);
-void __cdecl Image_LoadBlackCube(GfxImage *image);
-void __cdecl Image_LoadPixelCostColorCode(GfxImage *image);
-void __cdecl Image_LoadGray(GfxImage *image);
-void __cdecl Image_LoadIdentityNormalMap(GfxImage *image);
-void __cdecl Outdoor_SetRendererOutdoorLookupMatrix(GfxWorld *world);
+GfxImage *Image_LoadBuiltin(char *name, uint8_t semantic, uint8_t imageTrack);
+double Outdoor_TraceHeightInWorld(float worldX, float worldY);
+int Outdoor_TransformToTextureClamped(int dimension, float inWorld);
+void Image_LoadWhite(GfxImage *image);
+void Image_LoadBlack(GfxImage *image);
+void Image_LoadBlack3D(GfxImage *image);
+void Image_LoadBlackCube(GfxImage *image);
+void Image_LoadPixelCostColorCode(GfxImage *image);
+void Image_LoadGray(GfxImage *image);
+void Image_LoadIdentityNormalMap(GfxImage *image);
+void Outdoor_SetRendererOutdoorLookupMatrix(GfxWorld *world);
 
 
-void __cdecl R_ReleaseLostImages();
-void __cdecl R_ReloadLostImages();
+void R_ReleaseLostImages();
+void R_ReloadLostImages();
 
-void __cdecl Image_UploadData(
+void Image_UploadData(
     const GfxImage *image,
     _D3DFORMAT format,
     _D3DCUBEMAP_FACES face,
     uint32_t mipLevel,
     uint8_t *src);
 
-void __cdecl Image_CreateCubeTexture_PC(
+void Image_CreateCubeTexture_PC(
     GfxImage *image,
     uint16_t edgeLen,
     uint32_t mipmapCount,
     _D3DFORMAT imageFormat);
 
-void __cdecl Image_Create3DTexture_PC(
+void Image_Create3DTexture_PC(
     GfxImage *image,
     uint16_t width,
     uint16_t height,
@@ -236,7 +236,7 @@ void __cdecl Image_Create3DTexture_PC(
     int imageFlags,
     _D3DFORMAT imageFormat);
 
-void __cdecl Image_Create2DTexture_PC(
+void Image_Create2DTexture_PC(
     GfxImage *image,
     uint16_t width,
     uint16_t height,
@@ -244,20 +244,20 @@ void __cdecl Image_Create2DTexture_PC(
     int imageFlags,
     _D3DFORMAT imageFormat);
 
-void __cdecl RB_UnbindAllImages();
-void __cdecl R_SetPicmip();
+void RB_UnbindAllImages();
+void R_SetPicmip();
 
-void __cdecl R_DelayLoadImage(XAssetHeader header);
+void R_DelayLoadImage(XAssetHeader header);
 
 // r_image_utils
-void __cdecl R_DownsampleMipMapBilinear(
+void R_DownsampleMipMapBilinear(
     const uint8_t *src,
     int srcWidth,
     int srcHeight,
     int texelPitch,
     uint8_t *dst);
 
-inline uint32_t __cdecl Image_GetUsage(int imageFlags, _D3DFORMAT imageFormat)
+inline uint32_t Image_GetUsage(int imageFlags, _D3DFORMAT imageFormat)
 {
     if ((imageFlags & IMG_FLAG_RENDER_TARGET) != 0)
     {
@@ -278,57 +278,57 @@ inline uint32_t __cdecl Image_GetUsage(int imageFlags, _D3DFORMAT imageFormat)
 
 
 // r_image_load_obj
-void __cdecl Image_BuildWaterMap(GfxImage *image);
-void __cdecl Image_SetupFromFile(GfxImage *image, const GfxImageFileHeader *fileHeader, _D3DFORMAT imageFormat);
-uint32_t __cdecl Image_CountMipmaps(char imageFlags, uint32_t width, uint32_t height, uint32_t depth);
-void __cdecl Image_Setup(GfxImage *image, int width, int height, int depth, int imageFlags, _D3DFORMAT imageFormat);
-void __cdecl Image_TrackTexture(GfxImage *image, char imageFlags, _D3DFORMAT format, int width, int height, int depth);
-uint32_t __cdecl Image_GetCardMemoryAmount(
+void Image_BuildWaterMap(GfxImage *image);
+void Image_SetupFromFile(GfxImage *image, const GfxImageFileHeader *fileHeader, _D3DFORMAT imageFormat);
+uint32_t Image_CountMipmaps(char imageFlags, uint32_t width, uint32_t height, uint32_t depth);
+void Image_Setup(GfxImage *image, int width, int height, int depth, int imageFlags, _D3DFORMAT imageFormat);
+void Image_TrackTexture(GfxImage *image, char imageFlags, _D3DFORMAT format, int width, int height, int depth);
+uint32_t Image_GetCardMemoryAmount(
     char imageFlags,
     _D3DFORMAT format,
     uint32_t width,
     uint32_t height,
     uint32_t depth);
-uint32_t __cdecl Image_GetCardMemoryAmountForMipLevel(
+uint32_t Image_GetCardMemoryAmountForMipLevel(
     _D3DFORMAT format,
     uint32_t mipWidth,
     uint32_t mipHeight,
     uint32_t mipDepth);
-void __cdecl Image_TrackTotalMemory(GfxImage *image, int platform, int memory);
-uint8_t *__cdecl Image_AllocTempMemory(int bytes);
-void __cdecl Image_FreeTempMemory(uint8_t *mem, int bytes);
-GfxImage *__cdecl Image_FindExisting_LoadObj(const char *name);
-bool __cdecl Image_IsProg(GfxImage *image);
-void __cdecl Image_ExpandBgr(const uint8_t *src, uint32_t count, uint8_t *dst);
-void __cdecl Image_Generate2D(GfxImage *image, uint8_t *pixels, int width, int height, _D3DFORMAT imageFormat);
-void __cdecl Image_Generate3D(
+void Image_TrackTotalMemory(GfxImage *image, int platform, int memory);
+uint8_t *Image_AllocTempMemory(int bytes);
+void Image_FreeTempMemory(uint8_t *mem, int bytes);
+GfxImage *Image_FindExisting_LoadObj(const char *name);
+bool Image_IsProg(GfxImage *image);
+void Image_ExpandBgr(const uint8_t *src, uint32_t count, uint8_t *dst);
+void Image_Generate2D(GfxImage *image, uint8_t *pixels, int width, int height, _D3DFORMAT imageFormat);
+void Image_Generate3D(
     GfxImage *image,
     uint8_t *pixels,
     int width,
     int height,
     int depth,
     _D3DFORMAT imageFormat);
-void __cdecl Image_GenerateCube(
+void Image_GenerateCube(
     GfxImage *image,
     const uint8_t *(*pixels)[15],
     int edgeLen,
     _D3DFORMAT imageFormat,
     uint32_t mipCount);
-void __cdecl Image_LoadBitmap(
+void Image_LoadBitmap(
     GfxImage *image,
     const GfxImageFileHeader *fileHeader,
     uint8_t *data,
     _D3DFORMAT format,
     int bytesPerPixel);
-void __cdecl Image_LoadDxtc(
+void Image_LoadDxtc(
     GfxImage *image,
     const GfxImageFileHeader *fileHeader,
     const uint8_t *data,
     _D3DFORMAT format,
     int bytesPerBlock);
-void __cdecl Image_LoadFromData(GfxImage *image, GfxImageFileHeader *fileHeader, uint8_t *srcData);
-GfxImage *__cdecl Image_Register_LoadObj(char *imageName, uint8_t semantic, uint8_t imageTrack);
-char __cdecl Image_LoadFromFileWithReader(GfxImage *image, int(__cdecl *OpenFileRead)(const char *, int *));
+void Image_LoadFromData(GfxImage *image, GfxImageFileHeader *fileHeader, uint8_t *srcData);
+GfxImage *Image_Register_LoadObj(char *imageName, uint8_t semantic, uint8_t imageTrack);
+char Image_LoadFromFileWithReader(GfxImage *image, int(*OpenFileRead)(const char *, int *));
 
 // r_image_decode
 struct ddscolor_t_s // sizeof=0x2
@@ -353,13 +353,13 @@ struct DdsBlock_Dxt3_t // sizeof=0x10
     uint8_t alpha[8];
     DdsBlock_Dxt1_t color;
 };
-void __cdecl Image_FreeRawPixels(GfxRawImage *image);
-void __cdecl Image_GetRawPixels(char *imageName, GfxRawImage *image);
-uint32_t __cdecl Image_CountMipmapsForFile(const GfxImageFileHeader *fileHeader);
-int __cdecl Image_CountMipmapsForFile_0(GfxImageFileHeader *imageFile);
-int __cdecl Image_CountMipmapsForFile(GfxImageFileHeader *imageFile);
-void __cdecl Image_CopyBitmapData(GfxRawImage *image, GfxImageFileHeader *imageFile, uint8_t *imageData);
-void __cdecl Image_DecodeWavelet(
+void Image_FreeRawPixels(GfxRawImage *image);
+void Image_GetRawPixels(char *imageName, GfxRawImage *image);
+uint32_t Image_CountMipmapsForFile(const GfxImageFileHeader *fileHeader);
+int Image_CountMipmapsForFile_0(GfxImageFileHeader *imageFile);
+int Image_CountMipmapsForFile(GfxImageFileHeader *imageFile);
+void Image_CopyBitmapData(GfxRawImage *image, GfxImageFileHeader *imageFile, uint8_t *imageData);
+void Image_DecodeWavelet(
     GfxRawImage *image,
     GfxImageFileHeader *imageFile,
     uint8_t *imageData,
@@ -381,26 +381,26 @@ struct WaveletDecode // sizeof=0x20
     // padding byte
     // padding byte
 };
-void __cdecl Image_LoadWavelet(
+void Image_LoadWavelet(
     GfxImage *image,
     const GfxImageFileHeader *fileHeader,
     const unsigned char *data,
     _D3DFORMAT format,
     int bytesPerPixel);
-void __cdecl Wavelet_DecompressLevel(uint8_t *src, uint8_t *dst, WaveletDecode *decode);
-void __cdecl Wavelet_ConsumeBits(uint16_t bitCount, WaveletDecode *decode);
-int __cdecl Wavelet_DecodeValue(
+void Wavelet_DecompressLevel(uint8_t *src, uint8_t *dst, WaveletDecode *decode);
+void Wavelet_ConsumeBits(uint16_t bitCount, WaveletDecode *decode);
+int Wavelet_DecodeValue(
     const struct WaveletHuffmanDecode *decodeTable,
     uint16_t bitCount,
     int bias,
     WaveletDecode *decode);
-void __cdecl Wavelet_AddDeltaToMipmap(
+void Wavelet_AddDeltaToMipmap(
     uint8_t *inout,
     int size,
     WaveletDecode *decode,
     const int *dstChanOffset);
-void __cdecl Wavelet_DecompressLevel(uint8_t *src, uint8_t *dst, WaveletDecode *decode);
-void __cdecl Image_DecodeWavelet(
+void Wavelet_DecompressLevel(uint8_t *src, uint8_t *dst, WaveletDecode *decode);
+void Image_DecodeWavelet(
     GfxRawImage *image,
     GfxImageFileHeader *imageFile,
     uint8_t *imageData,
@@ -414,42 +414,42 @@ extern GfxImage g_imageProgs[14];
 
 
 // r_image_load_common
-uint32_t __cdecl Image_CubemapFace(uint32_t faceIndex);
-void __cdecl Image_GetPicmip(const GfxImage *image, Picmip *picmip);
-void __cdecl Image_PicmipForSemantic(uint8_t semantic, Picmip *picmip);
-int __cdecl Image_SourceBytesPerSlice_PC(_D3DFORMAT format, int width, int height);
-void __cdecl Image_Upload3D_CopyData_PC(
+uint32_t Image_CubemapFace(uint32_t faceIndex);
+void Image_GetPicmip(const GfxImage *image, Picmip *picmip);
+void Image_PicmipForSemantic(uint8_t semantic, Picmip *picmip);
+int Image_SourceBytesPerSlice_PC(_D3DFORMAT format, int width, int height);
+void Image_Upload3D_CopyData_PC(
     const GfxImage *image,
     _D3DFORMAT format,
     uint32_t mipLevel,
     uint8_t *src);
-void __cdecl Image_Upload2D_CopyDataBlock_PC(
+void Image_Upload2D_CopyDataBlock_PC(
     int width,
     int height,
     uint8_t *src,
     _D3DFORMAT format,
     int dstPitch,
     uint8_t *dst);
-void __cdecl Image_Upload2D_CopyData_PC(
+void Image_Upload2D_CopyData_PC(
     const GfxImage *image,
     _D3DFORMAT format,
     _D3DCUBEMAP_FACES face,
     uint32_t mipLevel,
     uint8_t *src);
 
-void __cdecl Image_TrackFullscreenTexture(
+void Image_TrackFullscreenTexture(
     GfxImage *image,
     int fullscreenWidth,
     int fullscreenHeight,
     int picmip,
     _D3DFORMAT format);
 
-void __cdecl Image_Reload(GfxImage *image);
-void __cdecl Image_UpdatePicmip(GfxImage *image);
+void Image_Reload(GfxImage *image);
+void Image_UpdatePicmip(GfxImage *image);
 
 #ifdef KISAK_RADIANT
 // Editor texture-refresh / resolution (Textures→Refresh F5, Texture Resolution).
 // idb R_ReloadImages @ 0x513D70 / R_UpdateMipMap @ 0x5139A0.
-void __cdecl R_ReloadImages();
-void __cdecl R_UpdateMipMap();
+void R_ReloadImages();
+void R_UpdateMipMap();
 #endif

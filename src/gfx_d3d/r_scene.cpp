@@ -44,7 +44,7 @@
 #endif
 
 #ifdef KISAK_RADIANT
-void __cdecl CL_UpdateSound();
+void CL_UpdateSound();
 #endif
 #include "r_state.h"
 #include "r_draw_sunshadow.h"
@@ -53,12 +53,12 @@ void __cdecl CL_UpdateSound();
 GfxViewParms lockPvsViewParms;
 GfxScene scene;
 
-void __cdecl TRACK_r_scene()
+void TRACK_r_scene()
 {
     track_static_alloc_internal(&scene, 1395968, "scene", 18);
 }
 
-uint32_t __cdecl R_AllocSceneDObj()
+uint32_t R_AllocSceneDObj()
 {
     uint32_t sceneEntIndex; // [esp+0h] [ebp-4h]
 
@@ -73,7 +73,7 @@ uint32_t __cdecl R_AllocSceneDObj()
     return sceneEntIndex;
 }
 
-uint32_t __cdecl R_AllocSceneModel()
+uint32_t R_AllocSceneModel()
 {
     uint32_t sceneEntIndex; // [esp+0h] [ebp-4h]
 
@@ -88,7 +88,7 @@ uint32_t __cdecl R_AllocSceneModel()
     return sceneEntIndex;
 }
 
-uint32_t __cdecl R_AllocSceneBrush()
+uint32_t R_AllocSceneBrush()
 {
     uint32_t sceneEntIndex; // [esp+0h] [ebp-4h]
 
@@ -103,7 +103,7 @@ uint32_t __cdecl R_AllocSceneBrush()
     return sceneEntIndex;
 }
 
-GfxBrushModel *__cdecl R_GetBrushModel(uint32_t modelIndex)
+GfxBrushModel *R_GetBrushModel(uint32_t modelIndex)
 {
     iassert( rgp.world );
     if (modelIndex >= rgp.world->modelCount)
@@ -117,7 +117,7 @@ GfxBrushModel *__cdecl R_GetBrushModel(uint32_t modelIndex)
     return &rgp.world->models[modelIndex];
 }
 
-void __cdecl R_AddBrushModelToSceneFromAngles(
+void R_AddBrushModelToSceneFromAngles(
     const GfxBrushModel *bmodel,
     const float *origin,
     const float *angles,
@@ -143,7 +143,7 @@ void __cdecl R_AddBrushModelToSceneFromAngles(
     }
 }
 
-void __cdecl R_AddDObjToScene(
+void R_AddDObjToScene(
     const DObj_s *obj,
     const cpose_t *pose,
     uint32_t entnum,
@@ -240,7 +240,7 @@ void __cdecl R_AddDObjToScene(
     }
 }
 
-GfxParticleCloud *__cdecl R_AddParticleCloudToScene(Material *material)
+GfxParticleCloud *R_AddParticleCloudToScene(Material *material)
 {
     volatile uint32_t cloudIndex; // [esp+Ch] [ebp-4h]
 
@@ -260,7 +260,7 @@ GfxParticleCloud *__cdecl R_AddParticleCloudToScene(Material *material)
     }
 }
 
-void __cdecl R_AddOmniLightToScene(const float *org, float radius, float r, float g, float b)
+void R_AddOmniLightToScene(const float *org, float radius, float r, float g, float b)
 {
     GfxLight *dst; // [esp+8h] [ebp-4h]
 
@@ -293,7 +293,7 @@ void __cdecl R_AddOmniLightToScene(const float *org, float radius, float r, floa
     }
 }
 
-void __cdecl R_AddSpotLightToScene(const float *org, const float *dir, float radius, float r, float g, float b)
+void R_AddSpotLightToScene(const float *org, const float *dir, float radius, float r, float g, float b)
 {
     float v6; // [esp+Ch] [ebp-38h]
     float v7; // [esp+10h] [ebp-34h]
@@ -361,7 +361,7 @@ void __cdecl R_AddSpotLightToScene(const float *org, const float *dir, float rad
     }
 }
 
-double __cdecl R_GetDefaultNearClip()
+double R_GetDefaultNearClip()
 {
     float v2; // [esp+4h] [ebp-8h]
     float value; // [esp+8h] [ebp-4h]
@@ -374,13 +374,13 @@ double __cdecl R_GetDefaultNearClip()
         return (float)0.0099999998;
 }
 
-void __cdecl R_SetupViewProjectionMatrices(GfxViewParms *viewParms)
+void R_SetupViewProjectionMatrices(GfxViewParms *viewParms)
 {
     MatrixMultiply44(viewParms->viewMatrix.m, viewParms->projectionMatrix.m, viewParms->viewProjectionMatrix.m);
     MatrixInverse44(viewParms->viewProjectionMatrix.m, viewParms->inverseViewProjectionMatrix.m);
 }
 
-void __cdecl R_AddBModelSurfacesCamera(
+void R_AddBModelSurfacesCamera(
     BModelDrawInfo *bmodelInfo,
     const GfxBrushModel *bmodel,
     GfxDrawSurf **drawSurfs,
@@ -459,7 +459,7 @@ void __cdecl R_AddBModelSurfacesCamera(
     }
 }
 
-GfxDrawSurf *__cdecl R_AddBModelSurfaces(
+GfxDrawSurf *R_AddBModelSurfaces(
     BModelDrawInfo *bmodelInfo,
     const GfxBrushModel *bmodel,
     MaterialTechniqueType techType,
@@ -503,14 +503,14 @@ GfxDrawSurf *__cdecl R_AddBModelSurfaces(
     return drawSurf;
 }
 
-const XSurface *__cdecl R_GetXSurface(uint32_t *modelSurf, surfaceType_t surfType)
+const XSurface *R_GetXSurface(uint32_t *modelSurf, surfaceType_t surfType)
 {
     iassert( modelSurf );
     iassert( R_IsModelSurfaceType( surfType ) );
     return (const XSurface *)modelSurf[1];
 }
 
-void __cdecl R_AddXModelSurfacesCamera(
+void R_AddXModelSurfacesCamera(
     XModelDrawInfo *modelInfo,
     const XModel *model,
     float *origin,
@@ -659,12 +659,12 @@ void __cdecl R_AddXModelSurfacesCamera(
     }
 }
 
-void __cdecl R_AddXModelDebugString(const float *origin, char *string)
+void R_AddXModelDebugString(const float *origin, char *string)
 {
     R_AddScaledDebugString(&frontEndDataOut->debugGlobals, rg.debugViewParms, origin, colorCyan, string);
 }
 
-GfxDrawSurf *__cdecl R_AddXModelSurfaces(
+GfxDrawSurf *R_AddXModelSurfaces(
     XModelDrawInfo *modelInfo,
     const XModel *model,
     MaterialTechniqueType techType,
@@ -746,7 +746,7 @@ GfxDrawSurf *__cdecl R_AddXModelSurfaces(
     return drawSurf;
 }
 
-void __cdecl R_AddDObjSurfacesCamera(
+void R_AddDObjSurfacesCamera(
     GfxSceneEntity *sceneEnt,
     __int16 lightingHandle,
     uint8_t primaryLightIndex,
@@ -907,7 +907,7 @@ LABEL_15:
     }
 }
 
-GfxDrawSurf *__cdecl R_AddDObjSurfaces(
+GfxDrawSurf *R_AddDObjSurfaces(
     GfxSceneEntity *sceneEnt,
     MaterialTechniqueType techType,
     GfxDrawSurf *drawSurf,
@@ -1010,19 +1010,19 @@ GfxDrawSurf *__cdecl R_AddDObjSurfaces(
     return drawSurf;
 }
 
-bool __cdecl R_EndFencePending()
+bool R_EndFencePending()
 {
     _BYTE v2[4]; // [esp+Ch] [ebp-4h] BYREF
 
     return frontEndDataOut->endFence && frontEndDataOut->endFence->GetData(v2, 4u, 1u) == 1;
 }
 
-void __cdecl R_SetEndTime(int endTime)
+void R_SetEndTime(int endTime)
 {
     rg.endTime = endTime;
 }
 
-void __cdecl R_WaitEndTime()
+void R_WaitEndTime()
 {
     //KISAK_NULLSUB();
     PROF_SCOPED("MaxFPSSpin");
@@ -1031,7 +1031,7 @@ void __cdecl R_WaitEndTime()
         NET_Sleep(1);
 }
 
-void __cdecl R_InitScene()
+void R_InitScene()
 {
     scene.drawSurfs[0] = (GfxDrawSurf *)&scene;
     scene.drawSurfs[1] = scene.smodelDrawSurfsLight;
@@ -1103,7 +1103,7 @@ void __cdecl R_InitScene()
     scene.maxDrawSurfCount[33] = 512;
 }
 
-void __cdecl R_ClearScene(uint32_t localClientNum)
+void R_ClearScene(uint32_t localClientNum)
 {
     uint32_t viewIndex; // [esp+0h] [ebp-4h]
 
@@ -1124,12 +1124,12 @@ void __cdecl R_ClearScene(uint32_t localClientNum)
         R_ClearDpvsScene();
 }
 
-uint32_t __cdecl R_GetLocalClientNum()
+uint32_t R_GetLocalClientNum()
 {
     return scene.dpvs.localClientNum;
 }
 
-void __cdecl R_SetLodOrigin(const refdef_s *refdef)
+void R_SetLodOrigin(const refdef_s *refdef)
 {
     if (r_lockPvs->modified)
     {
@@ -1203,12 +1203,12 @@ void R_UpdateFrameFog()
     }
 }
 
-uint8_t __cdecl LerpByte(uint8_t from, uint8_t to, float frac)
+uint8_t LerpByte(uint8_t from, uint8_t to, float frac)
 {
     return (int)((double)from + (double)(to - from) * frac);
 }
 
-void __cdecl R_SetViewParmsForScene(const refdef_s *refdef, GfxViewParms *viewParms)
+void R_SetViewParmsForScene(const refdef_s *refdef, GfxViewParms *viewParms)
 {
     float DefaultNearClip; // [esp+Ch] [ebp-24h]
 
@@ -1237,7 +1237,7 @@ void __cdecl R_SetViewParmsForScene(const refdef_s *refdef, GfxViewParms *viewPa
     R_SetupViewProjectionMatrices(viewParms);
 }
 
-void __cdecl R_SetupProjection(float tanHalfFovX, float tanHalfFovY, GfxViewParms *viewParms)
+void R_SetupProjection(float tanHalfFovX, float tanHalfFovY, GfxViewParms *viewParms)
 {
     InfinitePerspectiveMatrix(viewParms->projectionMatrix.m, tanHalfFovX, tanHalfFovY, viewParms->zNear);
     viewParms->depthHackNearClip = -r_znear_depthhack->current.value;
@@ -1306,7 +1306,7 @@ bool R_UpdateFrameSun()
     return result;
 }
 
-void __cdecl R_LerpDir(
+void R_LerpDir(
     const float *dirBegin,
     const float *dirEnd,
     int beginLerpTime,
@@ -1336,7 +1336,7 @@ void __cdecl R_LerpDir(
     Vec3Normalize(result);
 }
 
-void __cdecl R_UpdateLodParms(const refdef_s *refdef, GfxLodParms *lodParms)
+void R_UpdateLodParms(const refdef_s *refdef, GfxLodParms *lodParms)
 {
     float v2; // [esp+8h] [ebp-18h]
     float value; // [esp+14h] [ebp-Ch]
@@ -1364,12 +1364,12 @@ void __cdecl R_UpdateLodParms(const refdef_s *refdef, GfxLodParms *lodParms)
     lodParms->valid = 1;
 }
 
-void __cdecl R_CorrectLodScale(const refdef_s *refdef)
+void R_CorrectLodScale(const refdef_s *refdef)
 {
     R_UpdateLodParms(refdef, &rg.correctedLodParms);
 }
 
-void __cdecl R_RenderScene(const refdef_s *refdef)
+void R_RenderScene(const refdef_s *refdef)
 {
     GfxViewParms *dpvs; // [esp+0h] [ebp-E8h]
     GfxSceneParms sceneParms; // [esp+40h] [ebp-A8h] BYREF
@@ -1415,7 +1415,7 @@ void __cdecl R_RenderScene(const refdef_s *refdef)
     }
 }
 
-char __cdecl R_DoesDrawSurfListInfoNeedFloatz(GfxDrawSurfListInfo *emissiveInfo)
+char R_DoesDrawSurfListInfoNeedFloatz(GfxDrawSurfListInfo *emissiveInfo)
 {
     const MaterialTechnique *technique; // [esp+38h] [ebp-Ch]
     uint32_t surfIndex; // [esp+3Ch] [ebp-8h]
@@ -1442,7 +1442,7 @@ char __cdecl R_DoesDrawSurfListInfoNeedFloatz(GfxDrawSurfListInfo *emissiveInfo)
     return 1;
 }
 
-void __cdecl R_GenerateSortedDrawSurfs(
+void R_GenerateSortedDrawSurfs(
     const GfxSceneParms *sceneParms,
     const GfxViewParms *viewParmsDpvs,
     const GfxViewParms *viewParmsDraw)
@@ -1760,13 +1760,13 @@ void __cdecl R_GenerateSortedDrawSurfs(
 
 // LWSS: not sure why this variable was here, guess from initial development. (no xref's)
 //static bool g_allowShadowMaps = true;
-bool __cdecl R_GetAllowShadowMaps()
+bool R_GetAllowShadowMaps()
 {
     //return sm_enable->current.enabled && g_allowShadowMaps;
     return sm_enable->current.enabled;
 }
 
-ShadowType __cdecl R_DynamicShadowType()
+ShadowType R_DynamicShadowType()
 {
     if (R_GetAllowShadowMaps())
         return SHADOW_MAP;
@@ -1774,7 +1774,7 @@ ShadowType __cdecl R_DynamicShadowType()
         return sc_enable->current.enabled ? SHADOW_COOKIE : SHADOW_NONE;
 }
 
-void __cdecl R_SetDepthOfField(GfxViewInfo *viewInfo, const GfxSceneParms *sceneParms)
+void R_SetDepthOfField(GfxViewInfo *viewInfo, const GfxSceneParms *sceneParms)
 {
     Font_s *font; // [esp+24h] [ebp-4h]
 
@@ -1828,7 +1828,7 @@ void __cdecl R_SetDepthOfField(GfxViewInfo *viewInfo, const GfxSceneParms *scene
     }
 }
 
-void __cdecl R_SetFilmInfo(GfxViewInfo *viewInfo, const GfxSceneParms *sceneParms)
+void R_SetFilmInfo(GfxViewInfo *viewInfo, const GfxSceneParms *sceneParms)
 {
     iassert( viewInfo );
     iassert( sceneParms );
@@ -1860,7 +1860,7 @@ void __cdecl R_SetFilmInfo(GfxViewInfo *viewInfo, const GfxSceneParms *sceneParm
     R_UpdateColorManipulation(viewInfo);
 }
 
-void __cdecl R_UpdateColorManipulation(GfxViewInfo *viewInfo)
+void R_UpdateColorManipulation(GfxViewInfo *viewInfo)
 {
     float v1; // [esp+10h] [ebp-50h]
     float v2; // [esp+14h] [ebp-4Ch]
@@ -1905,7 +1905,7 @@ void __cdecl R_UpdateColorManipulation(GfxViewInfo *viewInfo)
     }
 }
 
-void __cdecl R_SetGlowInfo(GfxViewInfo *viewInfo, const GfxSceneParms *sceneParms)
+void R_SetGlowInfo(GfxViewInfo *viewInfo, const GfxSceneParms *sceneParms)
 {
     Font_s *font; // [esp+24h] [ebp-10h]
     float bloomCutoffRescale; // [esp+28h] [ebp-Ch]
@@ -1946,7 +1946,7 @@ void __cdecl R_SetGlowInfo(GfxViewInfo *viewInfo, const GfxSceneParms *sceneParm
     }
 }
 
-void __cdecl R_SetFullSceneViewMesh(int viewInfoIndex, GfxViewInfo *viewInfo)
+void R_SetFullSceneViewMesh(int viewInfoIndex, GfxViewInfo *viewInfo)
 {
     float width; // [esp+24h] [ebp-14h]
     float height; // [esp+28h] [ebp-10h]
@@ -1974,13 +1974,13 @@ void __cdecl R_SetFullSceneViewMesh(int viewInfoIndex, GfxViewInfo *viewInfo)
     }
 }
 
-void __cdecl R_GenerateSortedSunShadowDrawSurfs(GfxViewInfo *viewInfo)
+void R_GenerateSortedSunShadowDrawSurfs(GfxViewInfo *viewInfo)
 {
     PROF_SCOPED("GenerateSunShadow");
     R_MergeAndEmitSunShadowMapsSurfs(viewInfo);
 }
 
-void __cdecl R_AddEmissiveSpotLight(GfxViewInfo *viewInfo)
+void R_AddEmissiveSpotLight(GfxViewInfo *viewInfo)
 {
     bool v1; // [esp+8h] [ebp-8h]
 
@@ -2064,7 +2064,7 @@ void R_GenerateMarkVertsForDynamicModels()
     FX_EndGeneratingMarkVertsForEntModels(scene.dpvs.localClientNum);
 }
 
-int __cdecl R_GetVisibleDLights(const GfxLight **visibleLights)
+int R_GetVisibleDLights(const GfxLight **visibleLights)
 {
     int visibleLightCount; // [esp+4h] [ebp-4h]
 
@@ -2079,7 +2079,7 @@ int __cdecl R_GetVisibleDLights(const GfxLight **visibleLights)
     return visibleLightCount;
 }
 
-void __cdecl R_GetLightSurfs(int visibleLightCount, const GfxLight **visibleLights)
+void R_GetLightSurfs(int visibleLightCount, const GfxLight **visibleLights)
 {
     if (visibleLightCount)
     {
@@ -2099,7 +2099,7 @@ void __cdecl R_GetLightSurfs(int visibleLightCount, const GfxLight **visibleLigh
     }
 }
 
-void __cdecl R_GetPointLightShadowSurfs(GfxViewInfo *viewInfo, GfxVisibleLight *visibleLights, const GfxLight **lights)
+void R_GetPointLightShadowSurfs(GfxViewInfo *viewInfo, GfxVisibleLight *visibleLights, const GfxLight **lights)
 {
     if (viewInfo->emissiveSpotLightCount)
     {
@@ -2119,7 +2119,7 @@ void __cdecl R_GetPointLightShadowSurfs(GfxViewInfo *viewInfo, GfxVisibleLight *
     }
 }
 
-MaterialTechniqueType __cdecl R_GetEmissiveTechnique(const GfxViewInfo *viewInfo, MaterialTechniqueType baseTech)
+MaterialTechniqueType R_GetEmissiveTechnique(const GfxViewInfo *viewInfo, MaterialTechniqueType baseTech)
 {
     if (baseTech != TECHNIQUE_EMISSIVE)
         return baseTech;
@@ -2139,13 +2139,13 @@ MaterialTechniqueType __cdecl R_GetEmissiveTechnique(const GfxViewInfo *viewInfo
     return TECHNIQUE_EMISSIVE_SHADOW;
 }
 
-void __cdecl R_SetSunShadowConstants(GfxCmdBufInput *input, const GfxSunShadowProjection *sunProj)
+void R_SetSunShadowConstants(GfxCmdBufInput *input, const GfxSunShadowProjection *sunProj)
 {
     R_SetInputCodeConstantFromVec4(input, CONST_SRC_CODE_SHADOWMAP_SWITCH_PARTITION, sunProj->switchPartition);
     R_SetInputCodeConstantFromVec4(input, CONST_SRC_CODE_SHADOWMAP_SCALE, sunProj->shadowmapScale);
 }
 
-void __cdecl R_SetSunConstants(GfxCmdBufInput *input)
+void R_SetSunConstants(GfxCmdBufInput *input)
 {
     const GfxLight *sun; // [esp+1Ch] [ebp-10h]
     float specularColor[3]; // [esp+20h] [ebp-Ch] BYREF
@@ -2173,7 +2173,7 @@ void R_DrawCineWarning()
     }
 }
 
-void __cdecl R_SetSceneParms(const refdef_s *refdef, GfxSceneParms *sceneParms)
+void R_SetSceneParms(const refdef_s *refdef, GfxSceneParms *sceneParms)
 {
     bool v2; // [esp+10h] [ebp-4h]
 
@@ -2217,31 +2217,31 @@ void __cdecl R_SetSceneParms(const refdef_s *refdef, GfxSceneParms *sceneParms)
     sceneParms->primaryLights = refdef->primaryLights;
 }
 
-void __cdecl R_LinkDObjEntity(uint32_t localClientNum, uint32_t entnum, float *origin, float radius)
+void R_LinkDObjEntity(uint32_t localClientNum, uint32_t entnum, float *origin, float radius)
 {
     R_FilterDObjIntoCells(localClientNum, entnum, origin, radius);
     R_LinkSphereEntityToPrimaryLights(localClientNum, entnum, origin, radius);
 }
 
-void __cdecl R_LinkBModelEntity(uint32_t localClientNum, uint32_t entnum, GfxBrushModel *bmodel)
+void R_LinkBModelEntity(uint32_t localClientNum, uint32_t entnum, GfxBrushModel *bmodel)
 {
     R_FilterBModelIntoCells(localClientNum, entnum, bmodel);
     R_LinkBoxEntityToPrimaryLights(localClientNum, entnum, bmodel->writable.mins, bmodel->writable.maxs);
 }
 
-void __cdecl R_UnlinkEntity(uint32_t localClientNum, uint32_t entnum)
+void R_UnlinkEntity(uint32_t localClientNum, uint32_t entnum)
 {
     R_UnfilterEntFromCells(localClientNum, entnum);
     R_UnlinkEntityFromPrimaryLights(localClientNum, entnum);
 }
 
-void __cdecl R_LinkDynEnt(uint32_t dynEntId, DynEntityDrawType drawType, float *mins, float *maxs)
+void R_LinkDynEnt(uint32_t dynEntId, DynEntityDrawType drawType, float *mins, float *maxs)
 {
     R_FilterDynEntIntoCells(dynEntId, drawType, mins, maxs);
     R_LinkDynEntToPrimaryLights(dynEntId, drawType, mins, maxs);
 }
 
-void __cdecl R_UnlinkDynEnt(uint32_t dynEntId, DynEntityDrawType drawType)
+void R_UnlinkDynEnt(uint32_t dynEntId, DynEntityDrawType drawType)
 {
     R_UnfilterDynEntFromCells(dynEntId, drawType);
     R_UnlinkDynEntFromPrimaryLights(dynEntId, drawType);
@@ -2379,7 +2379,7 @@ bool R_Ed_ProjectionWouldBeValid(const float *org, const float (*axis)[3], const
     return Ed_InvertAndCheckVP((const float (*)[4])scratch.viewProjectionMatrix.m, nullptr);
 }
 
-void __cdecl R_Ed_SetSceneParms(const float *org, const float (*axis)[3], const GfxMatrix *projection)
+void R_Ed_SetSceneParms(const float *org, const float (*axis)[3], const GfxMatrix *projection)
 {
     iassert( org );
     iassert( axis );

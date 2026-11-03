@@ -15,7 +15,7 @@ ScreenPlacement scrPlaceFullUnsafe;
 const dvar_t *safeArea_horizontal;
 const dvar_t *safeArea_vertical;
 
-void __cdecl ScrPlace_Init()
+void ScrPlace_Init()
 {
     safeArea_horizontal = Dvar_RegisterFloat(
         "safeArea_horizontal",
@@ -34,7 +34,7 @@ void __cdecl ScrPlace_Init()
 }
 #endif
 
-void __cdecl ScrPlace_SetupFloatViewportForDisplay(
+void ScrPlace_SetupFloatViewportForDisplay(
     ScreenPlacement *scrPlace,
     float viewportX,
     float viewportY,
@@ -81,7 +81,7 @@ void __cdecl ScrPlace_SetupFloatViewportForDisplay(
     scrPlace->subScreenLeft = horzAspectPixelDiff * 0.5;
 }
 
-void __cdecl ScrPlace_SetupFloatViewport(ScreenPlacement *scrPlace,float viewportX,float viewportY,float viewportWidth,float viewportHeight)
+void ScrPlace_SetupFloatViewport(ScreenPlacement *scrPlace,float viewportX,float viewportY,float viewportWidth,float viewportHeight)
 {
     ScrPlace_SetupFloatViewportForDisplay(scrPlace,viewportX,viewportY,viewportWidth,viewportHeight,cls.vidConfig.aspectRatioDisplayPixel,cls.vidConfig.displayWidth,cls.vidConfig.displayHeight);
 }
@@ -235,12 +235,12 @@ static void ScrPlace_CalcSafeAreaOffsetsForDisplay(
     virtualViewableMax[1] = 480.0 / viewportHeight * realViewableMax[1];
 }
 
-void __cdecl ScrPlace_CalcSafeAreaOffsets(float x,float y,float width,float height,float aspect,float *realMin,float *realMax,float *virtualMin,float *virtualMax)
+void ScrPlace_CalcSafeAreaOffsets(float x,float y,float width,float height,float aspect,float *realMin,float *realMax,float *virtualMin,float *virtualMax)
 {
     ScrPlace_CalcSafeAreaOffsetsForDisplay(x,y,width,height,aspect,realMin,realMax,virtualMin,virtualMax,cls.vidConfig.displayWidth,cls.vidConfig.displayHeight);
 }
 
-void __cdecl ScrPlace_SetupViewport(
+void ScrPlace_SetupViewport(
     ScreenPlacement *scrPlace,
     int32_t viewportX,
     int32_t viewportY,
@@ -272,7 +272,7 @@ void __cdecl ScrPlace_SetupViewport(
 #endif
 }
 
-void __cdecl ScrPlace_SetupUnsafeViewport(
+void ScrPlace_SetupUnsafeViewport(
     ScreenPlacement *scrPlace,
     int32_t viewportX,
     int32_t viewportY,
@@ -304,7 +304,7 @@ void __cdecl ScrPlace_SetupUnsafeViewport(
 #endif
 }
 
-double __cdecl ScrPlace_ApplyX(const ScreenPlacement *scrPlace, float x, int32_t horzAlign)
+double ScrPlace_ApplyX(const ScreenPlacement *scrPlace, float x, int32_t horzAlign)
 {
     double result; // st7
     float v4; // [esp+0h] [ebp-20h]
@@ -360,7 +360,7 @@ double __cdecl ScrPlace_ApplyX(const ScreenPlacement *scrPlace, float x, int32_t
     return result;
 }
 
-double __cdecl ScrPlace_ApplyY(const ScreenPlacement *scrPlace, float y, int32_t vertAlign)
+double ScrPlace_ApplyY(const ScreenPlacement *scrPlace, float y, int32_t vertAlign)
 {
     double result; // st7
     float v4; // [esp+0h] [ebp-20h]
@@ -416,7 +416,7 @@ double __cdecl ScrPlace_ApplyY(const ScreenPlacement *scrPlace, float y, int32_t
     return result;
 }
 
-void __cdecl ScrPlace_ApplyRect(
+void ScrPlace_ApplyRect(
     const ScreenPlacement *scrPlace,
     float *x,
     float *y,

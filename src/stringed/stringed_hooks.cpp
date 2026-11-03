@@ -44,19 +44,19 @@ int g_currentAsian;
 
 char szErrorString[1024];
 
-void __cdecl TRACK_stringed_hooks()
+void TRACK_stringed_hooks()
 {
     track_static_alloc_internal(g_languages, 120, "g_languages", 33);
 }
 
-int __cdecl SEH_GetCurrentLanguage()
+int SEH_GetCurrentLanguage()
 {
     if (!loc_language)
         MyAssertHandler(".\\stringed\\stringed_hooks.cpp", 130, 0, "%s", "loc_language");
     return loc_language->current.integer;
 }
 
-void __cdecl SEH_InitLanguage()
+void SEH_InitLanguage()
 {
     loc_language = Dvar_RegisterInt("loc_language", 0, (DvarLimits)0xE00000000LL, DVAR_ARCHIVE | DVAR_LATCH, "Language");
     loc_forceEnglish = Dvar_RegisterBool("loc_forceEnglish", 0, DVAR_ARCHIVE | DVAR_LATCH, "Force english localized strings");
@@ -81,7 +81,7 @@ const dvar_s *SEH_UpdateCurrentLanguage()
     return result;
 }
 
-int __cdecl SEH_VerifyLanguageSelection(int iLanguageSelection)
+int SEH_VerifyLanguageSelection(int iLanguageSelection)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -95,7 +95,7 @@ int __cdecl SEH_VerifyLanguageSelection(int iLanguageSelection)
     return 0;
 }
 
-const char *__cdecl SEH_StringEd_GetString(const char *pszReference)
+const char *SEH_StringEd_GetString(const char *pszReference)
 {
     if (!loc_translate || !loc_translate->current.enabled)
         return pszReference;
@@ -104,7 +104,7 @@ const char *__cdecl SEH_StringEd_GetString(const char *pszReference)
     return pszReference;
 }
 
-char *__cdecl SEH_SafeTranslateString(char *pszReference)
+char *SEH_SafeTranslateString(char *pszReference)
 {
     const char *pszTranslation; // [esp+0h] [ebp-4h]
 
@@ -133,7 +133,7 @@ char *__cdecl SEH_SafeTranslateString(char *pszReference)
 int iCurrString;
 char szStrings[10][1024];
 
-char *__cdecl SEH_LocalizeTextMessage(const char *pszInputBuffer, const char *pszMessageType, msgLocErrType_t errType)
+char *SEH_LocalizeTextMessage(const char *pszInputBuffer, const char *pszMessageType, msgLocErrType_t errType)
 {
     char v4; // [esp+3h] [ebp-885h]
     char *v5; // [esp+8h] [ebp-880h]
@@ -303,7 +303,7 @@ char *__cdecl SEH_LocalizeTextMessage(const char *pszInputBuffer, const char *ps
     return pszString;
 }
 
-int __cdecl SEH_GetLocalizedTokenReference(
+int SEH_GetLocalizedTokenReference(
     char *token,
     int tokenSize,
     const char *reference,
@@ -336,25 +336,25 @@ int __cdecl SEH_GetLocalizedTokenReference(
     return 1;
 }
 
-bool __cdecl Taiwanese_ValidBig5Code(__int16 uiCode)
+bool Taiwanese_ValidBig5Code(__int16 uiCode)
 {
     return (HIBYTE(uiCode) >= 0xA1u && HIBYTE(uiCode) <= 0xC6u || HIBYTE(uiCode) >= 0xC9u && HIBYTE(uiCode) <= 0xF9u)
         && ((uint8_t)uiCode >= 0x40u && (uint8_t)uiCode <= 0x7Eu
             || (uint8_t)uiCode >= 0xA1u && (uint8_t)uiCode != 255);
 }
 
-bool __cdecl Japanese_ValidShiftJISCode(uint32_t _iHi, uint32_t _iLo)
+bool Japanese_ValidShiftJISCode(uint32_t _iHi, uint32_t _iLo)
 {
     return (_iHi >= 0x81 && _iHi <= 0x9F || _iHi >= 0xE0 && _iHi <= 0xEF)
         && (_iLo >= 0x40 && _iLo <= 0x7E || _iLo >= 0x80 && _iLo <= 0xFC);
 }
 
-bool __cdecl Chinese_ValidGBCode(uint8_t _iHi, uint8_t _iLo)
+bool Chinese_ValidGBCode(uint8_t _iHi, uint8_t _iLo)
 {
     return _iHi >= 0x81u && _iHi != 255 && _iLo > 0x40u && _iLo != 255;
 }
 
-uint32_t __cdecl SEH_DecodeLetter(
+uint32_t SEH_DecodeLetter(
     uint32_t firstChar,
     uint32_t secondChar,
     int *usedCount,
@@ -422,22 +422,22 @@ uint32_t __cdecl SEH_DecodeLetter(
     return result;
 }
 
-bool __cdecl Taiwanese_IsTrailingPunctuation(uint32_t uiCode)
+bool Taiwanese_IsTrailingPunctuation(uint32_t uiCode)
 {
     return uiCode >= 0xA140 && uiCode < 0xA154;
 }
 
-bool __cdecl Japanese_IsTrailingPunctuation(uint32_t uiCode)
+bool Japanese_IsTrailingPunctuation(uint32_t uiCode)
 {
     return uiCode >= 0x8140 && uiCode < 0x8152;
 }
 
-bool __cdecl Chinese_IsTrailingPunctuation(uint32_t uiCode)
+bool Chinese_IsTrailingPunctuation(uint32_t uiCode)
 {
     return uiCode > 0x8140 && uiCode < 0x814E;
 }
 
-uint32_t __cdecl SEH_ReadCharFromString(const char **text, int *isTrailingPunctuation)
+uint32_t SEH_ReadCharFromString(const char **text, int *isTrailingPunctuation)
 {
     int usedCount; // [esp+0h] [ebp-8h] BYREF
     uint32_t letter; // [esp+4h] [ebp-4h]
@@ -451,12 +451,12 @@ uint32_t __cdecl SEH_ReadCharFromString(const char **text, int *isTrailingPunctu
     return letter;
 }
 
-int __cdecl Language_IsAsian()
+int Language_IsAsian()
 {
     return g_currentAsian;
 }
 
-int __cdecl SEH_PrintStrlen(const char *string)
+int SEH_PrintStrlen(const char *string)
 {
     uint32_t c; // [esp+0h] [ebp-Ch]
     int len; // [esp+4h] [ebp-8h]
@@ -481,7 +481,7 @@ int __cdecl SEH_PrintStrlen(const char *string)
     return len;
 }
 
-const char *__cdecl SEH_GetLanguageName(uint32_t iLanguage)
+const char *SEH_GetLanguageName(uint32_t iLanguage)
 {
     if (iLanguage <= 0xE)
         return g_languages[iLanguage].pszName;
@@ -489,7 +489,7 @@ const char *__cdecl SEH_GetLanguageName(uint32_t iLanguage)
         return g_languages[0].pszName;
 }
 
-int __cdecl SEH_GetLanguageIndexForName(const char *pszLanguageName, int *piLanguageIndex)
+int SEH_GetLanguageIndexForName(const char *pszLanguageName, int *piLanguageIndex)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -505,17 +505,17 @@ int __cdecl SEH_GetLanguageIndexForName(const char *pszLanguageName, int *piLang
     return 0;
 }
 
-void __cdecl SEH_Init_StringEd()
+void SEH_Init_StringEd()
 {
     SE_Init();
 }
 
-void __cdecl SEH_Shutdown_StringEd()
+void SEH_Shutdown_StringEd()
 {
     SE_ShutDown();
 }
 
-int __cdecl FS_LanguageHasAssets(int iLanguage)
+int FS_LanguageHasAssets(int iLanguage)
 {
     searchpath_s *pSearch; // [esp+0h] [ebp-4h]
 
@@ -527,7 +527,7 @@ int __cdecl FS_LanguageHasAssets(int iLanguage)
     return 0;
 }
 
-int __cdecl SEH_StringEd_SetLanguageStrings(uint32_t iLanguage)
+int SEH_StringEd_SetLanguageStrings(uint32_t iLanguage)
 {
     const char *LanguageName; // eax
     const char *v3; // eax
@@ -556,7 +556,7 @@ int __cdecl SEH_StringEd_SetLanguageStrings(uint32_t iLanguage)
     return 1;
 }
 
-void __cdecl SEH_UpdateLanguageInfo()
+void SEH_UpdateLanguageInfo()
 {
     int iNumLanguages; // [esp+0h] [ebp-8h]
     int i; // [esp+4h] [ebp-4h]

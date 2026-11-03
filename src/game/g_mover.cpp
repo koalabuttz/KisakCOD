@@ -29,13 +29,13 @@ struct pushed_t // sizeof=0x2C
 pushed_t pushed[1024];
 pushed_t *pushed_p;
 
-void __cdecl TRACK_g_mover()
+void TRACK_g_mover()
 {
     track_static_alloc_internal(pushed, 45056, "pushed", 9);
     track_static_alloc_internal(hintStrings, 20, "hintStrings", 9);
 }
 
-gentity_s *__cdecl G_TestEntityPosition(gentity_s *ent, float *vOrigin)
+gentity_s *G_TestEntityPosition(gentity_s *ent, float *vOrigin)
 {
     int passEntityNum; // [esp+0h] [ebp-38h]
     trace_t tr; // [esp+4h] [ebp-34h] BYREF
@@ -75,7 +75,7 @@ gentity_s *__cdecl G_TestEntityPosition(gentity_s *ent, float *vOrigin)
         return 0;
 }
 
-void __cdecl G_CreateRotationMatrix(const float *angles, float (*matrix)[3])
+void G_CreateRotationMatrix(const float *angles, float (*matrix)[3])
 {
     AngleVectors(angles, (float *)matrix, &(*matrix)[3], &(*matrix)[6]);
     (*matrix)[3] = -(*matrix)[3];
@@ -83,7 +83,7 @@ void __cdecl G_CreateRotationMatrix(const float *angles, float (*matrix)[3])
     (*matrix)[5] = -(*matrix)[5];
 }
 
-void __cdecl G_TransposeMatrix(float (*matrix)[3], float (*transpose)[3])
+void G_TransposeMatrix(float (*matrix)[3], float (*transpose)[3])
 {
     int j; // [esp+4h] [ebp-8h]
     int i; // [esp+8h] [ebp-4h]
@@ -95,7 +95,7 @@ void __cdecl G_TransposeMatrix(float (*matrix)[3], float (*transpose)[3])
     }
 }
 
-int __cdecl G_TryPushingEntity(gentity_s *check, gentity_s *pusher, float *move, float *amove)
+int G_TryPushingEntity(gentity_s *check, gentity_s *pusher, float *move, float *amove)
 {
     float *origin; // [esp+0h] [ebp-ACh]
     float *v6; // [esp+Ch] [ebp-A0h]
@@ -253,7 +253,7 @@ int __cdecl G_TryPushingEntity(gentity_s *check, gentity_s *pusher, float *move,
     }
 }
 
-void __cdecl G_MoverTeam(gentity_s *ent)
+void G_MoverTeam(gentity_s *ent)
 {
     float *v2; // [esp+Ch] [ebp-60h]
     float *v3; // [esp+10h] [ebp-5Ch]
@@ -266,8 +266,8 @@ void __cdecl G_MoverTeam(gentity_s *ent)
     float amove[3]; // [esp+40h] [ebp-2Ch] BYREF
     gentity_s *obstacle; // [esp+4Ch] [ebp-20h] BYREF
     float angles[3]; // [esp+50h] [ebp-1Ch] BYREF
-    void(__cdecl * blocked)(gentity_s *, gentity_s *); // [esp+5Ch] [ebp-10h]
-    void(__cdecl * reached)(gentity_s *); // [esp+60h] [ebp-Ch]
+    void(* blocked)(gentity_s *, gentity_s *); // [esp+5Ch] [ebp-10h]
+    void(* reached)(gentity_s *); // [esp+60h] [ebp-Ch]
     gentity_s *check; // [esp+64h] [ebp-8h]
     pushed_t *p; // [esp+68h] [ebp-4h]
 
@@ -363,7 +363,7 @@ void __cdecl G_MoverTeam(gentity_s *ent)
     }
 }
 
-char __cdecl G_MoverPush(gentity_s *pusher, float *move, float *amove, gentity_s **obstacle)
+char G_MoverPush(gentity_s *pusher, float *move, float *amove, gentity_s **obstacle)
 {
     float *origin; // [esp+8h] [ebp-208Ch]
     float *currentOrigin; // [esp+Ch] [ebp-2088h]
@@ -525,7 +525,7 @@ char __cdecl G_MoverPush(gentity_s *pusher, float *move, float *amove, gentity_s
     return v18;
 }
 
-void __cdecl G_RunMover(gentity_s *ent)
+void G_RunMover(gentity_s *ent)
 {
 #ifdef KISAK_MP
     if (ent->tagInfo)
@@ -581,13 +581,13 @@ void __cdecl G_RunMover(gentity_s *ent)
 #endif
 }
 
-void __cdecl trigger_use(gentity_s *ent)
+void trigger_use(gentity_s *ent)
 {
     trigger_use_shared(ent);
 }
 
 #ifdef KISAK_MP
-void __cdecl trigger_use_shared(gentity_s *self)
+void trigger_use_shared(gentity_s *self)
 {
     char szConfigString[1028]; // [esp+34h] [ebp-410h] BYREF
     const char *cursorhint; // [esp+43Ch] [ebp-8h] BYREF
@@ -760,7 +760,7 @@ void trigger_use_shared(gentity_s *self)
 }
 #endif
 
-void __cdecl G_RotatePoint(float *point, float (*matrix)[3])
+void G_RotatePoint(float *point, float (*matrix)[3])
 {
     float tvec[3]; // [esp+0h] [ebp-Ch] BYREF
 

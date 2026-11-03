@@ -19,7 +19,7 @@
 #endif
 
 GfxShadowedLightHistory s_shadowHistory[4];
-void __cdecl R_ClearShadowedPrimaryLightHistory(int localClientNum)
+void R_ClearShadowedPrimaryLightHistory(int localClientNum)
 {
     GfxShadowedLightHistory *history; // [esp+0h] [ebp-4h]
 
@@ -29,7 +29,7 @@ void __cdecl R_ClearShadowedPrimaryLightHistory(int localClientNum)
     Com_Memset(history->shadowableLightWasUsed, 0, 32);
 }
 
-void __cdecl R_AddDynamicShadowableLight(GfxViewInfo *viewInfo, const GfxLight *visibleLight)
+void R_AddDynamicShadowableLight(GfxViewInfo *viewInfo, const GfxLight *visibleLight)
 {
     if (viewInfo->shadowableLightCount == 255)
     {
@@ -45,19 +45,19 @@ void __cdecl R_AddDynamicShadowableLight(GfxViewInfo *viewInfo, const GfxLight *
     }
 }
 
-bool __cdecl R_IsDynamicShadowedLight(uint32_t shadowableLightIndex)
+bool R_IsDynamicShadowedLight(uint32_t shadowableLightIndex)
 {
     iassert( comWorld.isInUse );
     return shadowableLightIndex >= comWorld.primaryLightCount;
 }
 
-bool __cdecl R_IsPrimaryLight(uint32_t shadowableLightIndex)
+bool R_IsPrimaryLight(uint32_t shadowableLightIndex)
 {
     iassert( comWorld.isInUse );
     return shadowableLightIndex < comWorld.primaryLightCount;
 }
 
-void __cdecl R_ChooseShadowedLights(GfxViewInfo *viewInfo)
+void R_ChooseShadowedLights(GfxViewInfo *viewInfo)
 {
     DWORD v2; // eax
     GfxCandidateShadowedLight candidateLights[5]; // [esp+14h] [ebp-74h] BYREF
@@ -130,7 +130,7 @@ void __cdecl R_ChooseShadowedLights(GfxViewInfo *viewInfo)
     }
 }
 
-uint32_t __cdecl R_AddPotentiallyShadowedLight(
+uint32_t R_AddPotentiallyShadowedLight(
     const GfxViewInfo *viewInfo,
     uint32_t shadowableLightIndex,
     GfxCandidateShadowedLight *candidateLights,
@@ -172,7 +172,7 @@ uint32_t __cdecl R_AddPotentiallyShadowedLight(
 }
 
 const float vec3_colorintensity[3] = { 0.2989f, 0.587f, 0.114f };
-double __cdecl R_ShadowedSpotLightScore(const GfxViewParms *viewParms, const GfxLight *light)
+double R_ShadowedSpotLightScore(const GfxViewParms *viewParms, const GfxLight *light)
 {
     float scale; // [esp+10h] [ebp-34h]
     float intensity; // [esp+18h] [ebp-2Ch]
@@ -190,7 +190,7 @@ double __cdecl R_ShadowedSpotLightScore(const GfxViewParms *viewParms, const Gfx
     return (float)(light->radius * intensity / (distToLightFocus + 1.0));
 }
 
-void __cdecl R_AddShadowsForLight(GfxViewInfo *viewInfo, uint32_t shadowableLightIndex, float spotShadowFade)
+void R_AddShadowsForLight(GfxViewInfo *viewInfo, uint32_t shadowableLightIndex, float spotShadowFade)
 {
     if (R_AddSpotShadowsForLight(
         viewInfo,
@@ -202,7 +202,7 @@ void __cdecl R_AddShadowsForLight(GfxViewInfo *viewInfo, uint32_t shadowableLigh
     }
 }
 
-void __cdecl R_AddShadowedLightToShadowHistory(
+void R_AddShadowedLightToShadowHistory(
     GfxShadowedLightHistory *shadowHistory,
     uint32_t shadowableLightIndex,
     float fadeDelta)
@@ -247,7 +247,7 @@ void __cdecl R_AddShadowedLightToShadowHistory(
     }
 }
 
-void __cdecl R_FadeOutShadowHistoryEntries(GfxShadowedLightHistory *shadowHistory, float fadeDelta)
+void R_FadeOutShadowHistoryEntries(GfxShadowedLightHistory *shadowHistory, float fadeDelta)
 {
     uint32_t v2; // eax
     int v3; // edx
@@ -284,7 +284,7 @@ void __cdecl R_FadeOutShadowHistoryEntries(GfxShadowedLightHistory *shadowHistor
     }
 }
 
-void __cdecl R_LinkSphereEntityToPrimaryLights(
+void R_LinkSphereEntityToPrimaryLights(
     uint32_t localClientNum,
     uint32_t entityNum,
     const float *origin,
@@ -324,7 +324,7 @@ void __cdecl R_LinkSphereEntityToPrimaryLights(
     }
 }
 
-uint32_t __cdecl R_GetPrimaryLightEntityShadowBit(
+uint32_t R_GetPrimaryLightEntityShadowBit(
     uint32_t localClientNum,
     uint32_t entnum,
     uint32_t primaryLightIndex)
@@ -353,7 +353,7 @@ uint32_t __cdecl R_GetPrimaryLightEntityShadowBit(
         * (entnum + gfxCfg.entCount * localClientNum);
 }
 
-void __cdecl R_LinkBoxEntityToPrimaryLights(
+void R_LinkBoxEntityToPrimaryLights(
     uint32_t localClientNum,
     uint32_t entityNum,
     const float *mins,
@@ -421,7 +421,7 @@ void __cdecl R_LinkBoxEntityToPrimaryLights(
     }
 }
 
-char __cdecl R_CullBoxFromLightRegionHull(
+char R_CullBoxFromLightRegionHull(
     const GfxLightRegionHull *hull,
     const float *boxMidPoint,
     const float *boxHalfSize)
@@ -538,7 +538,7 @@ char __cdecl R_CullBoxFromLightRegionHull(
     return 0;
 }
 
-void __cdecl R_LinkDynEntToPrimaryLights(
+void R_LinkDynEntToPrimaryLights(
     uint32_t dynEntId,
     DynEntityDrawType drawType,
     const float *mins,
@@ -624,7 +624,7 @@ void __cdecl R_LinkDynEntToPrimaryLights(
     }
 }
 
-bool __cdecl Com_CullBoxFromPrimaryLight(
+bool Com_CullBoxFromPrimaryLight(
     const ComPrimaryLight *light,
     const float *boxMidPoint,
     const float *boxHalfSize)
@@ -641,7 +641,7 @@ bool __cdecl Com_CullBoxFromPrimaryLight(
         return CullBoxFromSphere(light->origin, light->radius, boxMidPoint, boxHalfSize);
 }
 
-uint32_t __cdecl R_GetPrimaryLightDynEntShadowBit(uint32_t entnum, uint32_t primaryLightIndex)
+uint32_t R_GetPrimaryLightDynEntShadowBit(uint32_t entnum, uint32_t primaryLightIndex)
 {
     if (rgp.world->sunPrimaryLightIndex > 1)
         MyAssertHandler(
@@ -664,7 +664,7 @@ uint32_t __cdecl R_GetPrimaryLightDynEntShadowBit(uint32_t entnum, uint32_t prim
         + (rgp.world->primaryLightCount - (rgp.world->sunPrimaryLightIndex + 1)) * entnum;
 }
 
-void __cdecl R_UnlinkEntityFromPrimaryLights(uint32_t localClientNum, uint32_t entityNum)
+void R_UnlinkEntityFromPrimaryLights(uint32_t localClientNum, uint32_t entityNum)
 {
     uint32_t primaryLightIndex; // [esp+Ch] [ebp-8h]
     uint32_t bitIndex; // [esp+10h] [ebp-4h]
@@ -678,7 +678,7 @@ void __cdecl R_UnlinkEntityFromPrimaryLights(uint32_t localClientNum, uint32_t e
     }
 }
 
-void __cdecl R_UnlinkDynEntFromPrimaryLights(uint32_t dynEntId, DynEntityDrawType drawType)
+void R_UnlinkDynEntFromPrimaryLights(uint32_t dynEntId, DynEntityDrawType drawType)
 {
     uint32_t primaryLightIndex; // [esp+Ch] [ebp-8h]
     uint32_t bitIndex; // [esp+10h] [ebp-4h]
@@ -692,7 +692,7 @@ void __cdecl R_UnlinkDynEntFromPrimaryLights(uint32_t dynEntId, DynEntityDrawTyp
     }
 }
 
-bool __cdecl R_IsEntityVisibleToPrimaryLight(
+bool R_IsEntityVisibleToPrimaryLight(
     uint32_t localClientNum,
     uint32_t entityNum,
     uint32_t primaryLightIndex)
@@ -703,7 +703,7 @@ bool __cdecl R_IsEntityVisibleToPrimaryLight(
     return Com_BitCheckAssert(rgp.world->primaryLightEntityShadowVis, bitIndex, 0xFFFFFFF);
 }
 
-bool __cdecl R_IsDynEntVisibleToPrimaryLight(
+bool R_IsDynEntVisibleToPrimaryLight(
     uint32_t dynEntId,
     DynEntityDrawType drawType,
     uint32_t primaryLightIndex)
@@ -714,7 +714,7 @@ bool __cdecl R_IsDynEntVisibleToPrimaryLight(
     return Com_BitCheckAssert(rgp.world->primaryLightDynEntShadowVis[drawType], bitIndex, 0xFFFFFFF);
 }
 
-int __cdecl R_IsEntityVisibleToAnyShadowedPrimaryLight(const GfxViewInfo *viewInfo, uint32_t entityNum)
+int R_IsEntityVisibleToAnyShadowedPrimaryLight(const GfxViewInfo *viewInfo, uint32_t entityNum)
 {
     uint32_t baseBitIndex; // [esp+0h] [ebp-10h]
     uint32_t relevantPrimaryLightCount; // [esp+4h] [ebp-Ch]
@@ -745,13 +745,13 @@ int __cdecl R_IsEntityVisibleToAnyShadowedPrimaryLight(const GfxViewInfo *viewIn
     return 0;
 }
 
-bool __cdecl R_IsEntityVisibleToShadowedPrimaryLight(uint32_t baseBitIndex, uint32_t shadowableLightIndex)
+bool R_IsEntityVisibleToShadowedPrimaryLight(uint32_t baseBitIndex, uint32_t shadowableLightIndex)
 {
     return R_IsPrimaryLight(shadowableLightIndex)
         && Com_BitCheckAssert(rgp.world->primaryLightEntityShadowVis, shadowableLightIndex + baseBitIndex, 0xFFFFFFF);
 }
 
-int __cdecl R_IsDynEntVisibleToAnyShadowedPrimaryLight(
+int R_IsDynEntVisibleToAnyShadowedPrimaryLight(
     const GfxViewInfo *viewInfo,
     uint32_t dynEntId,
     DynEntityDrawType drawType)
@@ -783,7 +783,7 @@ int __cdecl R_IsDynEntVisibleToAnyShadowedPrimaryLight(
     return 0;
 }
 
-bool __cdecl R_IsDynEntVisibleToShadowedPrimaryLight(
+bool R_IsDynEntVisibleToShadowedPrimaryLight(
     uint32_t baseBitIndex,
     DynEntityDrawType drawType,
     uint32_t shadowableLightIndex)
@@ -795,7 +795,7 @@ bool __cdecl R_IsDynEntVisibleToShadowedPrimaryLight(
             0xFFFFFFF);
 }
 
-uint32_t __cdecl R_GetNonSunPrimaryLightForBox(
+uint32_t R_GetNonSunPrimaryLightForBox(
     const GfxViewInfo *viewInfo,
     const float *boxMidPoint,
     const float *boxHalfSize)
@@ -841,7 +841,7 @@ uint32_t __cdecl R_GetNonSunPrimaryLightForBox(
     return 0;
 }
 
-uint32_t __cdecl R_GetNonSunPrimaryLightForSphere(const GfxViewInfo *viewInfo, const float *origin, float radius)
+uint32_t R_GetNonSunPrimaryLightForSphere(const GfxViewInfo *viewInfo, const float *origin, float radius)
 {
     char v4; // [esp+7h] [ebp-89h]
     GfxLightRegion *v5; // [esp+8h] [ebp-88h]
@@ -891,7 +891,7 @@ uint32_t __cdecl R_GetNonSunPrimaryLightForSphere(const GfxViewInfo *viewInfo, c
     return 0;
 }
 
-char __cdecl R_CullSphereFromLightRegionHull(const GfxLightRegionHull *hull, const float *origin, float radius)
+char R_CullSphereFromLightRegionHull(const GfxLightRegionHull *hull, const float *origin, float radius)
 {
     float v4; // [esp+0h] [ebp-ACh]
     float v5; // [esp+4h] [ebp-A8h]
@@ -997,7 +997,7 @@ char __cdecl R_CullSphereFromLightRegionHull(const GfxLightRegionHull *hull, con
     return 0;
 }
 
-bool __cdecl Com_CullSphereFromPrimaryLight(const ComPrimaryLight *light, const float *origin, float radius)
+bool Com_CullSphereFromPrimaryLight(const ComPrimaryLight *light, const float *origin, float radius)
 {
     float v4; // [esp+Ch] [ebp-10h]
     float diff[3]; // [esp+10h] [ebp-Ch] BYREF

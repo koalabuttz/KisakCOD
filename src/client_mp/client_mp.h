@@ -520,89 +520,89 @@ struct ping_t // sizeof=0x41C
 };
 
 // cl_main_mp
-//void __cdecl TRACK_cl_main();
-void __cdecl CL_SortGlobalServers();
-void __cdecl CL_GetAutoUpdate();
-struct serverStatus_s *__cdecl CL_GetServerStatus(netadr_t from);
-char __cdecl CL_IsLocalClientActive(int32_t localClientNum);
-int32_t __cdecl CL_LocalActiveIndexFromClientNum(int32_t localClientNum);
-int32_t __cdecl CL_ControllerIndexFromClientNum(int32_t clientIndex);
-char __cdecl CL_AllLocalClientsDisconnected();
-char __cdecl CL_AnyLocalClientChallenging();
-const char *__cdecl CL_GetUsernameForLocalClient();
-void __cdecl CL_AddReliableCommand(int32_t localClientNum, const char *cmd);
-void __cdecl CL_ShutdownDevGui();
-void __cdecl CL_ShutdownHunkUsers();
-void __cdecl CL_ShutdownAll(bool destroyWindow);
-char __cdecl CL_AnyLocalClientsRunning();
-void __cdecl CL_MapLoading(const char *mapname);
-void __cdecl CL_ResetSkeletonCache(int32_t localClientNum);
-void __cdecl CL_ClearState(int32_t localClientNum);
-void __cdecl CL_Disconnect(int32_t localClientNum);
-void __cdecl CL_ClearStaticDownload();
-void __cdecl CL_ForwardCommandToServer(int32_t localClientNum, const char *string);
-void __cdecl CL_RequestAuthorization(int localClientNum);
-void __cdecl CL_ForwardToServer_f();
-void __cdecl CL_Setenv_f();
-void __cdecl CL_DisconnectLocalClient(int32_t localClientNum);
-void __cdecl CL_Reconnect_f();
-void __cdecl CL_Vid_Restart_f();
-void __cdecl CL_Snd_Restart_f();
-void __cdecl CL_Configstrings_f();
-void __cdecl CL_Clientinfo_f();
-bool __cdecl CL_WasMapAlreadyLoaded();
-void __cdecl CL_DownloadsComplete(int32_t localClientNum);
-void __cdecl CL_CheckForResend(int localClientNum);
-int32_t __cdecl CL_HighestPriorityStatPacket(clientConnection_t *clc);
-void __cdecl CL_DisconnectError(char *message);
-char __cdecl CL_ConnectionlessPacket(int localClientNum, netadr_t from, msg_t *msg, int32_t time);
-char __cdecl CL_DispatchConnectionlessPacket(int localClientNum, netadr_t from, msg_t *msg, int32_t time);
-void __cdecl CL_DisconnectPacket(int32_t localClientNum, netadr_t from, char *reason);
-void __cdecl CL_InitLoad(const char *mapname, const char *gametype);
-char __cdecl CL_PacketEvent(int localClientNum, netadr_t from, msg_t *msg, int32_t time);
-void __cdecl CL_VoiceTransmit(int32_t localClientNum);
-void __cdecl CL_RunOncePerClientFrame(int32_t localClientNum, int32_t msec);
-void __cdecl CL_Frame(int localClientNum);
-void __cdecl CL_CheckTimeout(int32_t localClientNum);
-void __cdecl CL_ServerTimedOut();
-void __cdecl CL_CheckUserinfo(int32_t localClientNum);
-void __cdecl CL_UpdateInGameState(int32_t localClientNum);
-void __cdecl CL_VoiceFrame(int32_t localClientNum);
-bool __cdecl CL_IsLocalClientInGame(int32_t localClientNum);
-bool __cdecl CL_IsClientLocal(int32_t clientNum);
-void __cdecl CL_ParseBadPacket_f();
-void __cdecl CL_ShutdownRef();
-void __cdecl CL_InitRenderer();
-void __cdecl CL_ShutdownRenderer(int32_t destroyWindow);
-void __cdecl CL_StartHunkUsers();
+//void TRACK_cl_main();
+void CL_SortGlobalServers();
+void CL_GetAutoUpdate();
+struct serverStatus_s *CL_GetServerStatus(netadr_t from);
+char CL_IsLocalClientActive(int32_t localClientNum);
+int32_t CL_LocalActiveIndexFromClientNum(int32_t localClientNum);
+int32_t CL_ControllerIndexFromClientNum(int32_t clientIndex);
+char CL_AllLocalClientsDisconnected();
+char CL_AnyLocalClientChallenging();
+const char *CL_GetUsernameForLocalClient();
+void CL_AddReliableCommand(int32_t localClientNum, const char *cmd);
+void CL_ShutdownDevGui();
+void CL_ShutdownHunkUsers();
+void CL_ShutdownAll(bool destroyWindow);
+char CL_AnyLocalClientsRunning();
+void CL_MapLoading(const char *mapname);
+void CL_ResetSkeletonCache(int32_t localClientNum);
+void CL_ClearState(int32_t localClientNum);
+void CL_Disconnect(int32_t localClientNum);
+void CL_ClearStaticDownload();
+void CL_ForwardCommandToServer(int32_t localClientNum, const char *string);
+void CL_RequestAuthorization(int localClientNum);
+void CL_ForwardToServer_f();
+void CL_Setenv_f();
+void CL_DisconnectLocalClient(int32_t localClientNum);
+void CL_Reconnect_f();
+void CL_Vid_Restart_f();
+void CL_Snd_Restart_f();
+void CL_Configstrings_f();
+void CL_Clientinfo_f();
+bool CL_WasMapAlreadyLoaded();
+void CL_DownloadsComplete(int32_t localClientNum);
+void CL_CheckForResend(int localClientNum);
+int32_t CL_HighestPriorityStatPacket(clientConnection_t *clc);
+void CL_DisconnectError(char *message);
+char CL_ConnectionlessPacket(int localClientNum, netadr_t from, msg_t *msg, int32_t time);
+char CL_DispatchConnectionlessPacket(int localClientNum, netadr_t from, msg_t *msg, int32_t time);
+void CL_DisconnectPacket(int32_t localClientNum, netadr_t from, char *reason);
+void CL_InitLoad(const char *mapname, const char *gametype);
+char CL_PacketEvent(int localClientNum, netadr_t from, msg_t *msg, int32_t time);
+void CL_VoiceTransmit(int32_t localClientNum);
+void CL_RunOncePerClientFrame(int32_t localClientNum, int32_t msec);
+void CL_Frame(int localClientNum);
+void CL_CheckTimeout(int32_t localClientNum);
+void CL_ServerTimedOut();
+void CL_CheckUserinfo(int32_t localClientNum);
+void CL_UpdateInGameState(int32_t localClientNum);
+void CL_VoiceFrame(int32_t localClientNum);
+bool CL_IsLocalClientInGame(int32_t localClientNum);
+bool CL_IsClientLocal(int32_t clientNum);
+void CL_ParseBadPacket_f();
+void CL_ShutdownRef();
+void CL_InitRenderer();
+void CL_ShutdownRenderer(int32_t destroyWindow);
+void CL_StartHunkUsers();
 void CL_InitDevGui();
-void __cdecl CL_DevGuiDvar_f();
-void __cdecl CL_DevGuiCmd_f();
-void __cdecl CL_DevGuiOpen_f();
-int32_t __cdecl CL_ScaledMilliseconds();
-void __cdecl CL_InitRef();
-void __cdecl CL_startSingleplayer_f();
-void __cdecl CL_DrawLogo(int32_t localClientNum);
-void __cdecl CL_StopLogo(int32_t localClientNum);
-void __cdecl CL_PlayLogo_f();
-void __cdecl CL_StopLogoOrCinematic(int32_t localClientNum);
-void __cdecl CL_ToggleMenu_f();
-void __cdecl CL_InitOnceForAllClients();
-void __cdecl CL_Disconnect_f();
-void __cdecl CL_Init(int32_t localClientNum);
-// int32_t __cdecl CountBitsEnabled(uint32_t num);
-void __cdecl CL_Shutdown(int32_t localClientNum);
-void __cdecl CL_LocalServers_f();
-void __cdecl CL_GetPing(int32_t n, char *buf, int32_t buflen, int32_t *pingtime);
-void __cdecl CL_ClearPing(uint32_t n);
-int32_t __cdecl CL_GetPingQueueCount();
-int32_t __cdecl CL_UpdateDirtyPings(int localClientNum, uint32_t source);
-void __cdecl CL_ShowIP_f();
-void __cdecl CL_SetupForNewServerMap(char *pszMapName, char *pszGametype);
-bool __cdecl CL_IsServerLoadingMap();
-bool __cdecl CL_IsWaitingOnServerToLoadMap(int32_t localClientNum);
-void __cdecl CL_SetWaitingOnServerToLoadMap(int32_t localClientNum, bool waiting);
-void __cdecl CL_DrawTextPhysical(
+void CL_DevGuiDvar_f();
+void CL_DevGuiCmd_f();
+void CL_DevGuiOpen_f();
+int32_t CL_ScaledMilliseconds();
+void CL_InitRef();
+void CL_startSingleplayer_f();
+void CL_DrawLogo(int32_t localClientNum);
+void CL_StopLogo(int32_t localClientNum);
+void CL_PlayLogo_f();
+void CL_StopLogoOrCinematic(int32_t localClientNum);
+void CL_ToggleMenu_f();
+void CL_InitOnceForAllClients();
+void CL_Disconnect_f();
+void CL_Init(int32_t localClientNum);
+// int32_t CountBitsEnabled(uint32_t num);
+void CL_Shutdown(int32_t localClientNum);
+void CL_LocalServers_f();
+void CL_GetPing(int32_t n, char *buf, int32_t buflen, int32_t *pingtime);
+void CL_ClearPing(uint32_t n);
+int32_t CL_GetPingQueueCount();
+int32_t CL_UpdateDirtyPings(int localClientNum, uint32_t source);
+void CL_ShowIP_f();
+void CL_SetupForNewServerMap(char *pszMapName, char *pszGametype);
+bool CL_IsServerLoadingMap();
+bool CL_IsWaitingOnServerToLoadMap(int32_t localClientNum);
+void CL_SetWaitingOnServerToLoadMap(int32_t localClientNum, bool waiting);
+void CL_DrawTextPhysical(
     const char *text,
     int32_t maxChars,
     Font_s *font,
@@ -612,7 +612,7 @@ void __cdecl CL_DrawTextPhysical(
     float yScale,
     const float *color,
     int32_t style);
-void __cdecl CL_DrawTextPhysicalWithEffects(
+void CL_DrawTextPhysicalWithEffects(
     const char *text,
     int32_t maxChars,
     Font_s *font,
@@ -629,7 +629,7 @@ void __cdecl CL_DrawTextPhysicalWithEffects(
     int32_t fxLetterTime,
     int32_t fxDecayStartTime,
     int32_t fxDecayDuration);
-void __cdecl CL_DrawText(
+void CL_DrawText(
     const ScreenPlacement *scrPlace,
     const char *text,
     int32_t maxChars,
@@ -642,7 +642,7 @@ void __cdecl CL_DrawText(
     float yScale,
     const float *color,
     int32_t style);
-void __cdecl CL_DrawTextRotate(
+void CL_DrawTextRotate(
     const ScreenPlacement *scrPlace,
     const char *text,
     int32_t maxChars,
@@ -656,7 +656,7 @@ void __cdecl CL_DrawTextRotate(
     float yScale,
     const float *color,
     int32_t style);
-void __cdecl CL_DrawTextPhysicalWithCursor(
+void CL_DrawTextPhysicalWithCursor(
     char *text,
     int32_t maxChars,
     Font_s *font,
@@ -668,7 +668,7 @@ void __cdecl CL_DrawTextPhysicalWithCursor(
     int32_t style,
     int32_t cursorPos,
     char cursor);
-void __cdecl CL_DrawTextWithCursor(
+void CL_DrawTextWithCursor(
     const ScreenPlacement *scrPlace,
     const char *text,
     int32_t maxChars,
@@ -683,14 +683,14 @@ void __cdecl CL_DrawTextWithCursor(
     int32_t style,
     int32_t cursorPos,
     char cursor);
-bool __cdecl CL_ShouldDisplayHud(int32_t localClientNum);
-bool __cdecl CL_IsUIActive(int32_t localClientNum);
-struct Font_s *__cdecl CL_RegisterFont(const char *fontName, int32_t imageTrack);
-void __cdecl CL_UpdateSound();
-float (*__cdecl CL_GetMapCenter())[3];
-void __cdecl KISAK_NULLSUB();
-int32_t __cdecl CL_GetLocalClientActiveCount();
-void __cdecl CL_InitDedicated();
+bool CL_ShouldDisplayHud(int32_t localClientNum);
+bool CL_IsUIActive(int32_t localClientNum);
+struct Font_s *CL_RegisterFont(const char *fontName, int32_t imageTrack);
+void CL_UpdateSound();
+float (*CL_GetMapCenter())[3];
+void KISAK_NULLSUB();
+int32_t CL_GetLocalClientActiveCount();
+void CL_InitDedicated();
 
 extern const dvar_t *cl_conXOffset;
 extern const dvar_t *cl_hudDrawsBehindsUI;
@@ -779,7 +779,7 @@ extern char autoupdateFilename[64];
 extern int32_t cl_connectedToPureServer;
 
 
-inline clientActive_t *__cdecl CL_GetLocalClientGlobals(int32_t localClientNum)
+inline clientActive_t *CL_GetLocalClientGlobals(int32_t localClientNum)
 {
     iassert(clients);
     iassert(localClientNum == 0);
@@ -793,7 +793,7 @@ inline clientUIActive_t *CL_GetLocalClientUIGlobals(int localClientNum) // line:
     return &clientUIActives[localClientNum];
 }
 
-inline connstate_t __cdecl CL_GetLocalClientConnectionState(int localClientNum) // line: 1112
+inline connstate_t CL_GetLocalClientConnectionState(int localClientNum) // line: 1112
 {
     iassert(localClientNum == 0);
     return clientUIActives[localClientNum].connectionState;
@@ -805,36 +805,36 @@ struct snd_alias_t;
 struct refdef_s;
 struct MemoryFile;
 
-void __cdecl TRACK_cl_cgame();
-void __cdecl CL_ReadDemoMessage(int32_t localClientNum);
-void __cdecl CL_GetScreenDimensions(int32_t *width, int32_t *height, float *aspect);
-double __cdecl CL_GetScreenAspectRatioDisplayPixel();
-int32_t __cdecl CL_GetUserCmd(int32_t localClientNum, int32_t cmdNumber, usercmd_s *ucmd);
-int32_t __cdecl CL_GetCurrentCmdNumber(int32_t localClientNum);
-void __cdecl CL_GetCurrentSnapshotNumber(int32_t localClientNum, int32_t *snapshotNumber, int32_t *serverTime);
-int32_t __cdecl CL_GetSnapshot(int32_t localClientNum, int32_t snapshotNumber, snapshot_s *snapshot);
-void __cdecl CL_SetUserCmdWeapons(int32_t localClientNum, int32_t weapon, int32_t offHandIndex);
-void __cdecl CL_SetUserCmdAimValues(int32_t localClientNum, const float *kickAngles);
-void __cdecl CL_SetUserCmdOrigin(
+void TRACK_cl_cgame();
+void CL_ReadDemoMessage(int32_t localClientNum);
+void CL_GetScreenDimensions(int32_t *width, int32_t *height, float *aspect);
+double CL_GetScreenAspectRatioDisplayPixel();
+int32_t CL_GetUserCmd(int32_t localClientNum, int32_t cmdNumber, usercmd_s *ucmd);
+int32_t CL_GetCurrentCmdNumber(int32_t localClientNum);
+void CL_GetCurrentSnapshotNumber(int32_t localClientNum, int32_t *snapshotNumber, int32_t *serverTime);
+int32_t CL_GetSnapshot(int32_t localClientNum, int32_t snapshotNumber, snapshot_s *snapshot);
+void CL_SetUserCmdWeapons(int32_t localClientNum, int32_t weapon, int32_t offHandIndex);
+void CL_SetUserCmdAimValues(int32_t localClientNum, const float *kickAngles);
+void CL_SetUserCmdOrigin(
     int32_t localClientNum,
     const float *origin,
     const float *velocity,
     const float *viewangles,
     int32_t bobCycle,
     int32_t movementDir);
-void __cdecl CL_SetFOVSensitivityScale(int32_t localClientNum, float scale);
-void __cdecl CL_SetExtraButtons(int32_t localClientNum, int32_t buttons);
-void __cdecl CL_DumpReliableCommands(int32_t localClientNum);
-int32_t __cdecl CL_CGameNeedsServerCommand(int32_t localClientNum, int32_t serverCommandNumber);
-void __cdecl CL_ConfigstringModified(int32_t localClientNum);
-void __cdecl CL_CM_LoadMap(char *mapname);
-void __cdecl CL_ShutdownCGame(int32_t localClientNum);
-bool __cdecl CL_DObjCreateSkelForBone(DObj_s *obj, int32_t boneIndex);
-void __cdecl CL_SubtitlePrint(int32_t localClientNum, const char *text, int32_t duration, int32_t lineWidth);
-const char *__cdecl CL_GetConfigString(int32_t localClientNum, uint32_t configStringIndex);
-snd_alias_t *__cdecl CL_PickSoundAlias(const char *aliasname);
-void __cdecl CL_RenderScene(const refdef_s *fd);
-void __cdecl CL_DrawStretchPicPhysical(
+void CL_SetFOVSensitivityScale(int32_t localClientNum, float scale);
+void CL_SetExtraButtons(int32_t localClientNum, int32_t buttons);
+void CL_DumpReliableCommands(int32_t localClientNum);
+int32_t CL_CGameNeedsServerCommand(int32_t localClientNum, int32_t serverCommandNumber);
+void CL_ConfigstringModified(int32_t localClientNum);
+void CL_CM_LoadMap(char *mapname);
+void CL_ShutdownCGame(int32_t localClientNum);
+bool CL_DObjCreateSkelForBone(DObj_s *obj, int32_t boneIndex);
+void CL_SubtitlePrint(int32_t localClientNum, const char *text, int32_t duration, int32_t lineWidth);
+const char *CL_GetConfigString(int32_t localClientNum, uint32_t configStringIndex);
+snd_alias_t *CL_PickSoundAlias(const char *aliasname);
+void CL_RenderScene(const refdef_s *fd);
+void CL_DrawStretchPicPhysical(
     float x,
     float y,
     float w,
@@ -845,7 +845,7 @@ void __cdecl CL_DrawStretchPicPhysical(
     float t2,
     const float *color,
     Material *material);
-void __cdecl CL_DrawStretchPicPhysicalRotateXY(
+void CL_DrawStretchPicPhysicalRotateXY(
     float x,
     float y,
     float w,
@@ -857,7 +857,7 @@ void __cdecl CL_DrawStretchPicPhysicalRotateXY(
     float angle,
     const float *color,
     Material *material);
-void __cdecl CL_DrawStretchPicPhysicalFlipST(
+void CL_DrawStretchPicPhysicalFlipST(
     float x,
     float y,
     float w,
@@ -868,7 +868,7 @@ void __cdecl CL_DrawStretchPicPhysicalFlipST(
     float t2,
     const float *color,
     Material *material);
-void __cdecl CL_DrawStretchPic(
+void CL_DrawStretchPic(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -882,7 +882,7 @@ void __cdecl CL_DrawStretchPic(
     float t2,
     const float *color,
     Material *material);
-void __cdecl CL_DrawStretchPicFlipST(
+void CL_DrawStretchPicFlipST(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -896,7 +896,7 @@ void __cdecl CL_DrawStretchPicFlipST(
     float t2,
     const float *color,
     Material *material);
-void __cdecl CL_DrawStretchPicRotatedST(
+void CL_DrawStretchPicRotatedST(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -912,42 +912,42 @@ void __cdecl CL_DrawStretchPicRotatedST(
     float angle,
     const float *color,
     Material *material);
-void __cdecl CL_CapTurnRate(int32_t localClientNum, float maxPitchSpeed, float maxYawSpeed);
-void __cdecl CL_SyncTimes(int32_t localClientNum);
-int32_t __cdecl LoadWorld(char *mapname);
-void __cdecl CL_StartLoading();
-void __cdecl CL_InitCGame(int32_t localClientNum);
-void __cdecl CL_FirstSnapshot(int32_t localClientNum);
-void __cdecl CL_SetCGameTime(int localClientNum);
-void __cdecl CL_AdjustTimeDelta(int32_t localClientNum);
-void __cdecl CL_SetADS(int32_t localClientNum, bool ads);
-void __cdecl CL_DrawString(int32_t x, int32_t y, char *pszString, int32_t bShadow, int32_t iCharHeight);
-void __cdecl CL_DrawRect(int32_t x, int32_t y, int32_t width, int32_t height, const float *color);
-void __cdecl CL_ArchiveClientState(int32_t localClientNum, MemoryFile *memFile);
-void __cdecl CL_LookupColor(int32_t localClientNum, uint8_t c, float *color);
-void __cdecl CL_UpdateColor(int32_t localClientNum);
-void __cdecl CL_UpdateColorInternal(const char *var_name, float *color);
-bool __cdecl CL_IsCgameInitialized(int32_t localClientNum);
+void CL_CapTurnRate(int32_t localClientNum, float maxPitchSpeed, float maxYawSpeed);
+void CL_SyncTimes(int32_t localClientNum);
+int32_t LoadWorld(char *mapname);
+void CL_StartLoading();
+void CL_InitCGame(int32_t localClientNum);
+void CL_FirstSnapshot(int32_t localClientNum);
+void CL_SetCGameTime(int localClientNum);
+void CL_AdjustTimeDelta(int32_t localClientNum);
+void CL_SetADS(int32_t localClientNum, bool ads);
+void CL_DrawString(int32_t x, int32_t y, char *pszString, int32_t bShadow, int32_t iCharHeight);
+void CL_DrawRect(int32_t x, int32_t y, int32_t width, int32_t height, const float *color);
+void CL_ArchiveClientState(int32_t localClientNum, MemoryFile *memFile);
+void CL_LookupColor(int32_t localClientNum, uint8_t c, float *color);
+void CL_UpdateColor(int32_t localClientNum);
+void CL_UpdateColorInternal(const char *var_name, float *color);
+bool CL_IsCgameInitialized(int32_t localClientNum);
 
 
 
 // cl_net_chan_mp
-void __cdecl CL_Netchan_TransmitNextFragment(netchan_t *chan);
-void __cdecl CL_Netchan_Transmit(netchan_t *chan, uint8_t *data, int32_t length);
-void __cdecl CL_Netchan_AddOOBProfilePacket(int32_t localClientNum, int32_t iLength);
-void __cdecl CL_Netchan_PrintProfileStats(int32_t localClientNum, int32_t bPrintToConsole);
-void __cdecl CL_Netchan_UpdateProfileStats(int32_t localClientNum);
-void __cdecl CL_ProfDraw(int32_t y, char *pszString);
-void __cdecl CL_Netchan_Encode(uint8_t *data, int32_t size);
-void __cdecl CL_Netchan_Decode(uint8_t *data, int32_t size);
+void CL_Netchan_TransmitNextFragment(netchan_t *chan);
+void CL_Netchan_Transmit(netchan_t *chan, uint8_t *data, int32_t length);
+void CL_Netchan_AddOOBProfilePacket(int32_t localClientNum, int32_t iLength);
+void CL_Netchan_PrintProfileStats(int32_t localClientNum, int32_t bPrintToConsole);
+void CL_Netchan_UpdateProfileStats(int32_t localClientNum);
+void CL_ProfDraw(int32_t y, char *pszString);
+void CL_Netchan_Encode(uint8_t *data, int32_t size);
+void CL_Netchan_Decode(uint8_t *data, int32_t size);
 
 
 
 
 // cl_parse_mp
-void __cdecl TRACK_cl_parse();
-void __cdecl SHOWNET(msg_t *msg, const char *s);
-void __cdecl CL_SavePredictedOriginForServerTime(
+void TRACK_cl_parse();
+void SHOWNET(msg_t *msg, const char *s);
+void CL_SavePredictedOriginForServerTime(
     clientActive_t *cl,
     int32_t serverTime,
     float *predictedOrigin,
@@ -955,7 +955,7 @@ void __cdecl CL_SavePredictedOriginForServerTime(
     float *viewangles,
     int32_t bobCycle,
     int32_t movementDir);
-bool __cdecl CL_GetPredictedOriginForServerTime(
+bool CL_GetPredictedOriginForServerTime(
     clientActive_t *cl,
     int32_t serverTime,
     float *predictedOrigin,
@@ -963,7 +963,7 @@ bool __cdecl CL_GetPredictedOriginForServerTime(
     float *viewangles,
     int32_t *bobCycle,
     int32_t *movementDir);
-void __cdecl CL_DeltaClient(
+void CL_DeltaClient(
     clientActive_t *cl,
     msg_t *msg,
     int32_t time,
@@ -971,39 +971,39 @@ void __cdecl CL_DeltaClient(
     uint32_t newnum,
     const clientState_s *old,
     int32_t unchanged);
-void __cdecl CL_SystemInfoChanged(int32_t localClientNum);
-void __cdecl CL_ParseMapCenter(int32_t localClientNum);
-void __cdecl CL_ParseServerMessage(int localClientNum, msg_t *msg);
-void __cdecl CL_ParseSnapshot(int32_t localClientNum, msg_t *msg);
-void __cdecl CL_ParsePacketEntities(
+void CL_SystemInfoChanged(int32_t localClientNum);
+void CL_ParseMapCenter(int32_t localClientNum);
+void CL_ParseServerMessage(int localClientNum, msg_t *msg);
+void CL_ParseSnapshot(int32_t localClientNum, msg_t *msg);
+void CL_ParsePacketEntities(
     clientActive_t *cl,
     msg_t *msg,
     int32_t time,
     clSnapshot_t *oldframe,
     clSnapshot_t *newframe);
-void __cdecl CL_DeltaEntity(
+void CL_DeltaEntity(
     clientActive_t *cl,
     msg_t *msg,
     int32_t time,
     clSnapshot_t *frame,
     uint32_t newnum,
     const entityState_s *old);
-void __cdecl CL_CopyOldEntity(clientActive_t *cl, clSnapshot_t *frame, const entityState_s *old);
-void __cdecl CL_ParsePacketClients(
+void CL_CopyOldEntity(clientActive_t *cl, clSnapshot_t *frame, const entityState_s *old);
+void CL_ParsePacketClients(
     clientActive_t *cl,
     msg_t *msg,
     int32_t time,
     clSnapshot_t *oldframe,
     clSnapshot_t *newframe);
-void __cdecl CL_ParseGamestate(int localClientNum, msg_t *msg);
-void __cdecl CL_ParseCommandString(int32_t localClientNum, msg_t *msg);
+void CL_ParseGamestate(int localClientNum, msg_t *msg);
+void CL_ParseCommandString(int32_t localClientNum, msg_t *msg);
 
 
 
 // cl_pose_mp
-char *__cdecl CL_AllocSkelMemory(uint32_t size);
-int32_t __cdecl CL_GetSkelTimeStamp();
-int32_t __cdecl CL_DObjCreateSkelForBones(const DObj_s *obj, int32_t *partBits, DObjAnimMat **pMatOut);
+char *CL_AllocSkelMemory(uint32_t size);
+int32_t CL_GetSkelTimeStamp();
+int32_t CL_DObjCreateSkelForBones(const DObj_s *obj, int32_t *partBits, DObjAnimMat **pMatOut);
 
 
 
@@ -1027,15 +1027,15 @@ enum rankTableColumns_t : __int32
     MP_RANKTABLE_DISPLAYLEVEL = 0xE,
     MP_RANKTABLE_COUNT = 0xF,
 };
-int32_t __cdecl CL_GetRankForXp(int32_t xp);
-const char *__cdecl CL_GetRankData(int32_t rank, rankTableColumns_t column);
-void __cdecl CL_GetRankIcon(int32_t rank, int32_t prestige, Material **handle);
+int32_t CL_GetRankForXp(int32_t xp);
+const char *CL_GetRankData(int32_t rank, rankTableColumns_t column);
+void CL_GetRankIcon(int32_t rank, int32_t prestige, Material **handle);
 
 
 // cl_voice (different on PC)
-void __cdecl CL_WriteVoicePacket(int32_t localClientNum);
-void __cdecl CL_VoicePacket(int32_t localClientNum, msg_t *msg);
-bool __cdecl CL_IsPlayerTalking(int32_t localClientNum, int32_t talkingClientIndex);
+void CL_WriteVoicePacket(int32_t localClientNum);
+void CL_VoicePacket(int32_t localClientNum, msg_t *msg);
+bool CL_IsPlayerTalking(int32_t localClientNum, int32_t talkingClientIndex);
 
 
 //
@@ -1049,107 +1049,107 @@ typedef struct {
     qboolean	wasPressed;		// set when down, not cleared when up
 } kbutton_t;
 
-void __cdecl TRACK_cl_input();
-void __cdecl CL_ShowSystemCursor(BOOL show);
-int32_t __cdecl CL_MouseEvent(int32_t x, int32_t y, int32_t dx, int32_t dy);
-void __cdecl CL_SetStance(int32_t localClientNum, StanceState stance);
-void __cdecl IN_CenterView();
-void __cdecl CL_UpdateCmdButton(int32_t localClientNum, int32_t *cmdButtons, int32_t kbButton, int32_t buttonFlag);
-void __cdecl CL_WritePacket(int32_t localClientNum);
-void __cdecl CL_SendCmd(int32_t localClientNum);
-bool __cdecl CL_ReadyToSendPacket(int32_t localClientNum);
-void __cdecl CL_CreateCmdsDuringConnection(int32_t localClientNum);
-void __cdecl CL_CreateNewCommands(int32_t localClientNum);
-usercmd_s *__cdecl CL_CreateCmd(usercmd_s *result, int32_t localClientNum);
-void __cdecl CL_AdjustAngles(int32_t localClientNum);
-float __cdecl CL_KeyState(kbutton_t *key);
-void __cdecl CL_KeyMove(int32_t localClientNum, usercmd_s *cmd);
-void __cdecl CL_StanceButtonUpdate(int32_t localClientNum);
-void __cdecl CL_AddCurrentStanceToCmd(int32_t localClientNum, usercmd_s *cmd);
-void __cdecl CL_MouseMove(int32_t localClientNum, usercmd_s *cmd);
-void __cdecl CL_GetMouseMovement(clientActive_t *cl, float *mx, float *my);
-void __cdecl CL_CmdButtons(int32_t localClientNum, usercmd_s *cmd);
-void __cdecl CL_FinishMove(int32_t localClientNum, usercmd_s *cmd);
-char __cdecl CG_HandleLocationSelectionInput(int32_t localClientNum, usercmd_s *cmd);
-void __cdecl CL_Input(int32_t localClientNum);
-void __cdecl CL_InitInput();
-void __cdecl IN_MLookDown();
-void __cdecl IN_MLookUp();
-void __cdecl IN_UpDown();
-void __cdecl IN_KeyDown(kbutton_t *b);
-void __cdecl IN_UpUp();
-void __cdecl IN_KeyUp(kbutton_t *b);
-void __cdecl IN_DownDown();
-void __cdecl IN_DownUp();
-void __cdecl IN_LeftDown();
-void __cdecl IN_LeftUp();
-void __cdecl IN_RightDown();
-void __cdecl IN_RightUp();
-void __cdecl IN_ForwardDown();
-void __cdecl IN_ForwardUp();
-void __cdecl IN_BackDown();
-void __cdecl IN_BackUp();
-void __cdecl IN_LookupDown();
-void __cdecl IN_LookupUp();
-void __cdecl IN_LookdownDown();
-void __cdecl IN_LookdownUp();
-void __cdecl IN_MoveleftDown();
-void __cdecl IN_MoveleftUp();
-void __cdecl IN_MoverightDown();
-void __cdecl IN_MoverightUp();
-void __cdecl IN_SpeedDown();
-void __cdecl IN_SpeedUp();
-void __cdecl IN_StrafeDown();
-void __cdecl IN_StrafeUp();
-void __cdecl IN_Attack_Down();
-void __cdecl IN_Attack_Up();
-void __cdecl IN_Breath_Down();
-void __cdecl IN_Breath_Up();
-void __cdecl IN_MeleeBreath_Down();
-void __cdecl IN_MeleeBreath_Up();
-void __cdecl IN_Frag_Down();
-void __cdecl IN_Frag_Up();
-void __cdecl IN_Smoke_Down();
-void __cdecl IN_Smoke_Up();
-void __cdecl IN_BreathSprint_Down();
-void __cdecl IN_BreathSprint_Up();
-void __cdecl IN_Melee_Down();
-void __cdecl IN_Melee_Up();
-void __cdecl IN_Activate_Down();
-void __cdecl IN_Activate_Up();
-void __cdecl IN_Reload_Down();
-void __cdecl IN_Reload_Up();
-void __cdecl IN_UseReload_Down();
-void __cdecl IN_UseReload_Up();
-void __cdecl IN_LeanLeft_Down();
-void __cdecl IN_LeanLeft_Up();
-void __cdecl IN_LeanRight_Down();
-void __cdecl IN_LeanRight_Up();
-void __cdecl IN_Prone_Down();
-void __cdecl IN_Prone_Up();
-void __cdecl IN_Stance_Down();
-void __cdecl IN_Stance_Up();
-void __cdecl IN_ToggleADS();
-void __cdecl IN_LeaveADS();
-void __cdecl IN_Throw_Down();
-void __cdecl IN_Throw_Up();
-void __cdecl IN_ToggleADS_Throw_Down();
-void __cdecl IN_ToggleADS_Throw_Up();
-void __cdecl IN_Speed_Throw_Down();
-void __cdecl IN_Speed_Throw_Up();
-void __cdecl IN_LowerStance();
-void __cdecl IN_RaiseStance();
-void __cdecl IN_ToggleCrouch();
-void __cdecl CL_ToggleStance(int32_t localClientNum, StanceState preferredStance);
-void __cdecl IN_ToggleProne();
-void __cdecl IN_GoProne();
-void __cdecl IN_GoCrouch();
-void __cdecl IN_GoStandDown();
-void __cdecl IN_GoStandUp();
-void __cdecl IN_SprintDown();
-void __cdecl IN_SprintUp();
-void __cdecl CL_ShutdownInput();
-void __cdecl CL_ClearKeys(int32_t localClientNum);
+void TRACK_cl_input();
+void CL_ShowSystemCursor(BOOL show);
+int32_t CL_MouseEvent(int32_t x, int32_t y, int32_t dx, int32_t dy);
+void CL_SetStance(int32_t localClientNum, StanceState stance);
+void IN_CenterView();
+void CL_UpdateCmdButton(int32_t localClientNum, int32_t *cmdButtons, int32_t kbButton, int32_t buttonFlag);
+void CL_WritePacket(int32_t localClientNum);
+void CL_SendCmd(int32_t localClientNum);
+bool CL_ReadyToSendPacket(int32_t localClientNum);
+void CL_CreateCmdsDuringConnection(int32_t localClientNum);
+void CL_CreateNewCommands(int32_t localClientNum);
+usercmd_s *CL_CreateCmd(usercmd_s *result, int32_t localClientNum);
+void CL_AdjustAngles(int32_t localClientNum);
+float CL_KeyState(kbutton_t *key);
+void CL_KeyMove(int32_t localClientNum, usercmd_s *cmd);
+void CL_StanceButtonUpdate(int32_t localClientNum);
+void CL_AddCurrentStanceToCmd(int32_t localClientNum, usercmd_s *cmd);
+void CL_MouseMove(int32_t localClientNum, usercmd_s *cmd);
+void CL_GetMouseMovement(clientActive_t *cl, float *mx, float *my);
+void CL_CmdButtons(int32_t localClientNum, usercmd_s *cmd);
+void CL_FinishMove(int32_t localClientNum, usercmd_s *cmd);
+char CG_HandleLocationSelectionInput(int32_t localClientNum, usercmd_s *cmd);
+void CL_Input(int32_t localClientNum);
+void CL_InitInput();
+void IN_MLookDown();
+void IN_MLookUp();
+void IN_UpDown();
+void IN_KeyDown(kbutton_t *b);
+void IN_UpUp();
+void IN_KeyUp(kbutton_t *b);
+void IN_DownDown();
+void IN_DownUp();
+void IN_LeftDown();
+void IN_LeftUp();
+void IN_RightDown();
+void IN_RightUp();
+void IN_ForwardDown();
+void IN_ForwardUp();
+void IN_BackDown();
+void IN_BackUp();
+void IN_LookupDown();
+void IN_LookupUp();
+void IN_LookdownDown();
+void IN_LookdownUp();
+void IN_MoveleftDown();
+void IN_MoveleftUp();
+void IN_MoverightDown();
+void IN_MoverightUp();
+void IN_SpeedDown();
+void IN_SpeedUp();
+void IN_StrafeDown();
+void IN_StrafeUp();
+void IN_Attack_Down();
+void IN_Attack_Up();
+void IN_Breath_Down();
+void IN_Breath_Up();
+void IN_MeleeBreath_Down();
+void IN_MeleeBreath_Up();
+void IN_Frag_Down();
+void IN_Frag_Up();
+void IN_Smoke_Down();
+void IN_Smoke_Up();
+void IN_BreathSprint_Down();
+void IN_BreathSprint_Up();
+void IN_Melee_Down();
+void IN_Melee_Up();
+void IN_Activate_Down();
+void IN_Activate_Up();
+void IN_Reload_Down();
+void IN_Reload_Up();
+void IN_UseReload_Down();
+void IN_UseReload_Up();
+void IN_LeanLeft_Down();
+void IN_LeanLeft_Up();
+void IN_LeanRight_Down();
+void IN_LeanRight_Up();
+void IN_Prone_Down();
+void IN_Prone_Up();
+void IN_Stance_Down();
+void IN_Stance_Up();
+void IN_ToggleADS();
+void IN_LeaveADS();
+void IN_Throw_Down();
+void IN_Throw_Up();
+void IN_ToggleADS_Throw_Down();
+void IN_ToggleADS_Throw_Up();
+void IN_Speed_Throw_Down();
+void IN_Speed_Throw_Up();
+void IN_LowerStance();
+void IN_RaiseStance();
+void IN_ToggleCrouch();
+void CL_ToggleStance(int32_t localClientNum, StanceState preferredStance);
+void IN_ToggleProne();
+void IN_GoProne();
+void IN_GoCrouch();
+void IN_GoStandDown();
+void IN_GoStandUp();
+void IN_SprintDown();
+void IN_SprintUp();
+void CL_ShutdownInput();
+void CL_ClearKeys(int32_t localClientNum);
 
 // cl_ui_mp
 struct uiClientState_s // sizeof=0xC08
@@ -1160,43 +1160,43 @@ struct uiClientState_s // sizeof=0xC08
     char updateInfoString[1024];
     char messageString[1024];           // ...
 };
-void __cdecl CL_GetClientState(int32_t localClientNum, uiClientState_s* state);
-void __cdecl CL_SetDisplayHUDWithKeycatchUI(int32_t localClientNum, bool display);
-bool __cdecl CL_AllowPopup(int32_t localClientNum);
-void __cdecl LAN_ResetPings(int32_t source);
-int32_t __cdecl LAN_GetServerCount(int32_t source);
-int32_t __cdecl LAN_WaitServerResponse(int32_t source);
-void __cdecl LAN_GetServerInfo(int32_t source, uint32_t n, char* buf, int32_t buflen);
-int32_t __cdecl LAN_GetServerPing(int32_t source, uint32_t n);
-serverInfo_t* __cdecl LAN_GetServerPtr(int32_t source, uint32_t n);
-void __cdecl LAN_CleanHostname(const char* hostName, char* cleanHostName);
-int32_t __cdecl LAN_CompareHostname(const char* hostName1, const char* hostName2);
-int32_t __cdecl LAN_CompareServers(int32_t source, int32_t sortKey, int32_t sortDir, uint32_t s1, uint32_t s2);
-void __cdecl LAN_MarkServerDirty(int32_t source, uint32_t n, uint8_t dirty);
-int32_t __cdecl LAN_ServerIsDirty(int32_t source, uint32_t n);
-int32_t __cdecl LAN_UpdateDirtyPings(int localClientNum, uint32_t source);
-void __cdecl Key_KeynumToStringBuf(int32_t keynum, char* buf, int32_t buflen);
-int32_t __cdecl CL_GetClientName(int32_t localClientNum, int32_t index, char* buf, int32_t size);
-int32_t __cdecl CL_ShutdownUI();
-void __cdecl CL_InitUI();
+void CL_GetClientState(int32_t localClientNum, uiClientState_s* state);
+void CL_SetDisplayHUDWithKeycatchUI(int32_t localClientNum, bool display);
+bool CL_AllowPopup(int32_t localClientNum);
+void LAN_ResetPings(int32_t source);
+int32_t LAN_GetServerCount(int32_t source);
+int32_t LAN_WaitServerResponse(int32_t source);
+void LAN_GetServerInfo(int32_t source, uint32_t n, char* buf, int32_t buflen);
+int32_t LAN_GetServerPing(int32_t source, uint32_t n);
+serverInfo_t* LAN_GetServerPtr(int32_t source, uint32_t n);
+void LAN_CleanHostname(const char* hostName, char* cleanHostName);
+int32_t LAN_CompareHostname(const char* hostName1, const char* hostName2);
+int32_t LAN_CompareServers(int32_t source, int32_t sortKey, int32_t sortDir, uint32_t s1, uint32_t s2);
+void LAN_MarkServerDirty(int32_t source, uint32_t n, uint8_t dirty);
+int32_t LAN_ServerIsDirty(int32_t source, uint32_t n);
+int32_t LAN_UpdateDirtyPings(int localClientNum, uint32_t source);
+void Key_KeynumToStringBuf(int32_t keynum, char* buf, int32_t buflen);
+int32_t CL_GetClientName(int32_t localClientNum, int32_t index, char* buf, int32_t size);
+int32_t CL_ShutdownUI();
+void CL_InitUI();
 
 
 
 // cl_main_pc_mp
-int32_t __cdecl CL_ServerStatus(char *serverAddress, char *serverStatusString, int32_t maxLen);
-void __cdecl CL_SetServerInfoByAddress(netadr_t from, char *info, __int16 ping);
-void __cdecl CL_SetServerInfo(serverInfo_t *server, char *info, __int16 ping);
-void __cdecl CL_ServerInfoPacket(netadr_t from, msg_t *msg, int32_t time);
-void __cdecl CL_Connect_f();
-//bool __cdecl CL_CDKeyValidate(const char *key, const char *checksum);
-bool __cdecl CL_CDKeyValidate(netadr_t addr);
+int32_t CL_ServerStatus(char *serverAddress, char *serverStatusString, int32_t maxLen);
+void CL_SetServerInfoByAddress(netadr_t from, char *info, __int16 ping);
+void CL_SetServerInfo(serverInfo_t *server, char *info, __int16 ping);
+void CL_ServerInfoPacket(netadr_t from, msg_t *msg, int32_t time);
+void CL_Connect_f();
+//bool CL_CDKeyValidate(const char *key, const char *checksum);
+bool CL_CDKeyValidate(netadr_t addr);
 
-void __cdecl CL_GlobalServers_f();
-void __cdecl CL_ServerStatusResponse(netadr_t from, msg_t *msg);
-void __cdecl CL_ResetPlayerMuting(uint32_t muteClientIndex);
-void __cdecl CL_MutePlayer(int32_t localClientNum, uint32_t muteClientIndex);
-bool __cdecl CL_IsPlayerMuted(int32_t localClientNum, uint32_t muteClientIndex);
-void __cdecl CL_ClearMutedList();
+void CL_GlobalServers_f();
+void CL_ServerStatusResponse(netadr_t from, msg_t *msg);
+void CL_ResetPlayerMuting(uint32_t muteClientIndex);
+void CL_MutePlayer(int32_t localClientNum, uint32_t muteClientIndex);
+bool CL_IsPlayerMuted(int32_t localClientNum, uint32_t muteClientIndex);
+void CL_ClearMutedList();
 
 
 extern voiceCommunication_t cl_voiceCommunication;

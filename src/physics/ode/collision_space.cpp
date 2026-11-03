@@ -805,8 +805,8 @@ void dxSpace::clear()
 }
 
 // LWSS ADD
-void __cdecl Phys_NearCallback(void *userData, dxGeom *geom1, dxGeom *geom2); // phys_ode.cpp
-void __cdecl ODE_CollideSimpleSpaceWithGeomNoAABBTest(dxSpace *space, dxGeom *geom, void *data)
+void Phys_NearCallback(void *userData, dxGeom *geom1, dxGeom *geom2); // phys_ode.cpp
+void ODE_CollideSimpleSpaceWithGeomNoAABBTest(dxSpace *space, dxGeom *geom, void *data)
 {
     dxGeom *geom2; // [esp+0h] [ebp-8h]
 

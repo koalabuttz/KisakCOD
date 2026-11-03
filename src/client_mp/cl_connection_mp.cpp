@@ -41,7 +41,7 @@ bool CL_ChallengeResponseAllowed(int localClientNum, netadr_t from)
 }
 
 uint8_t msgBuffer[2048];
-void __cdecl CL_CheckForResend(int localClientNum)
+void CL_CheckForResend(int localClientNum)
 {
     const char *v2; // eax
     char *v3; // eax
@@ -184,7 +184,7 @@ void __cdecl CL_CheckForResend(int localClientNum)
     }
 }
 
-int32_t __cdecl CL_HighestPriorityStatPacket(clientConnection_t *clc)
+int32_t CL_HighestPriorityStatPacket(clientConnection_t *clc)
 {
     int32_t packet; // [esp+0h] [ebp-Ch]
     int32_t oldestPacketTime; // [esp+4h] [ebp-8h]

@@ -14,7 +14,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 // Forward declarations from engine / other radiant TUs
 // ────────────────────────────────────────────────────────────────────────────
-void __cdecl Com_Error(int code, const char *fmt, ...);
+void Com_Error(int code, const char *fmt, ...);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 0x499ce0  TranslateString - convert '\n' to '\r\n' in a static buffer (byte_240a590, a

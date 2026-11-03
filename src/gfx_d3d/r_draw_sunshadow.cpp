@@ -7,7 +7,7 @@
 #include "rb_postfx.h"
 
 
-void __cdecl R_DrawSunShadowMapCallback(const void *userData, GfxCmdBufContext context, GfxCmdBufContext prepassContext)
+void R_DrawSunShadowMapCallback(const void *userData, GfxCmdBufContext context, GfxCmdBufContext prepassContext)
 {
     int height; // [esp+10h] [ebp-28h]
     int width; // [esp+14h] [ebp-24h]
@@ -73,7 +73,7 @@ void R_DrawSunShadowMap(
 }
 
 // LWSS ADD from blops
-void __cdecl DrawSunDirectionDebug(const float *viewOrg, const float *viewForward)
+void DrawSunDirectionDebug(const float *viewOrg, const float *viewForward)
 {
     float boxColor[4]; // [esp+4h] [ebp-A4h] BYREF
     float lineEnd[3]; // [esp+14h] [ebp-94h] BYREF

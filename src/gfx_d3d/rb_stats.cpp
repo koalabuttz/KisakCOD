@@ -61,12 +61,12 @@ const uint32_t s_stencilOpTable_52[8] =
 
 
 
-void __cdecl TRACK_rb_stats()
+void TRACK_rb_stats()
 {
     track_static_alloc_internal(histogramHistory, 0x2000, "histogramHistory", 10);
 }
 
-void __cdecl R_TrackPrims(GfxCmdBufState *state, GfxPrimStatsTarget target)
+void R_TrackPrims(GfxCmdBufState *state, GfxPrimStatsTarget target)
 {
     iassert( backupPrimStats == NULL );
     iassert( g_viewStats );
@@ -81,7 +81,7 @@ void __cdecl R_TrackPrims(GfxCmdBufState *state, GfxPrimStatsTarget target)
     g_primStats = &g_viewStats->primStats[target];
 }
 
-void __cdecl RB_TrackImmediatePrims(GfxPrimStatsTarget target)
+void RB_TrackImmediatePrims(GfxPrimStatsTarget target)
 {
     iassert( backupPrimStats == NULL );
     iassert( g_viewStats );
@@ -89,13 +89,13 @@ void __cdecl RB_TrackImmediatePrims(GfxPrimStatsTarget target)
     g_primStats = &g_viewStats->primStats[target];
 }
 
-void __cdecl RB_EndTrackImmediatePrims()
+void RB_EndTrackImmediatePrims()
 {
     g_primStats = backupPrimStats;
     backupPrimStats = 0;
 }
 
-void __cdecl RB_TrackDrawPrimCall(int triCount)
+void RB_TrackDrawPrimCall(int triCount)
 {
     int histogramIndex; // [esp+0h] [ebp-4h]
 
@@ -107,7 +107,7 @@ void __cdecl RB_TrackDrawPrimCall(int triCount)
     ++g_viewStats->drawPrimHistogram[histogramIndex];
 }
 
-int __cdecl RB_Stats_TotalIndexCount()
+int RB_Stats_TotalIndexCount()
 {
     int totalIndexCount; // [esp+0h] [ebp-14h]
     int primIndex; // [esp+Ch] [ebp-8h]
@@ -123,7 +123,7 @@ int __cdecl RB_Stats_TotalIndexCount()
     return totalIndexCount;
 }
 
-int __cdecl RB_Stats_TotalVertexCount()
+int RB_Stats_TotalVertexCount()
 {
     int totalVertexCount; // [esp+0h] [ebp-14h]
     int primIndex; // [esp+Ch] [ebp-8h]
@@ -139,7 +139,7 @@ int __cdecl RB_Stats_TotalVertexCount()
     return totalVertexCount;
 }
 
-int __cdecl RB_Stats_TotalPrimCount()
+int RB_Stats_TotalPrimCount()
 {
     int totalPrimCount; // [esp+4h] [ebp-10h]
     int primIndex; // [esp+Ch] [ebp-8h]
@@ -154,7 +154,7 @@ int __cdecl RB_Stats_TotalPrimCount()
     return totalPrimCount;
 }
 
-int __cdecl RB_Stats_ViewIndexCount(const GfxViewStats *viewStats)
+int RB_Stats_ViewIndexCount(const GfxViewStats *viewStats)
 {
     int totalIndexCount; // [esp+0h] [ebp-Ch]
     int primIndex; // [esp+8h] [ebp-4h]
@@ -166,7 +166,7 @@ int __cdecl RB_Stats_ViewIndexCount(const GfxViewStats *viewStats)
     return totalIndexCount;
 }
 
-void __cdecl RB_Stats_f()
+void RB_Stats_f()
 {
     const char *v0; // eax
     const char *v1; // eax
@@ -195,7 +195,7 @@ void __cdecl RB_Stats_f()
     RB_Stats_Display(&g_frameStatsCur);
 }
 
-void __cdecl RB_Stats_Display(const GfxFrameStats *frameStats)
+void RB_Stats_Display(const GfxFrameStats *frameStats)
 {
     int v1; // eax
     int v2; // eax
@@ -215,7 +215,7 @@ void __cdecl RB_Stats_Display(const GfxFrameStats *frameStats)
     Com_Printf(CON_CHANNEL_GFX, "%i total prims\n", v2);
 }
 
-void __cdecl RB_Stats_Summarize(const char *label, const GfxViewStats *viewStats)
+void RB_Stats_Summarize(const char *label, const GfxViewStats *viewStats)
 {
     int barBlocks; // [esp+8h] [ebp-30h]
     GfxPrimStats total; // [esp+Ch] [ebp-2Ch] BYREF
@@ -267,7 +267,7 @@ void __cdecl RB_Stats_Summarize(const char *label, const GfxViewStats *viewStats
     }
 }
 
-void __cdecl RB_Stats_AccumulatePrimStats(const GfxPrimStats *primStats, GfxPrimStats *total)
+void RB_Stats_AccumulatePrimStats(const GfxPrimStats *primStats, GfxPrimStats *total)
 {
     total->primCount += primStats->primCount;
     total->triCount += primStats->triCount;
@@ -277,7 +277,7 @@ void __cdecl RB_Stats_AccumulatePrimStats(const GfxPrimStats *primStats, GfxPrim
     total->dynamicVertexCount += primStats->dynamicVertexCount;
 }
 
-void __cdecl RB_Stats_SummarizePrimStats(const char *label, const GfxPrimStats *primStats)
+void RB_Stats_SummarizePrimStats(const char *label, const GfxPrimStats *primStats)
 {
     char *v2; // [esp+0h] [ebp-3Ch]
     char *v3; // [esp+4h] [ebp-38h]
@@ -350,7 +350,7 @@ void __cdecl RB_Stats_SummarizePrimStats(const char *label, const GfxPrimStats *
     }
 }
 
-void __cdecl RB_Stats_UpdateMaxs(const GfxFrameStats *frameStatsCur, GfxFrameStats *frameStatsMax)
+void RB_Stats_UpdateMaxs(const GfxFrameStats *frameStatsCur, GfxFrameStats *frameStatsMax)
 {
     int index; // [esp+8h] [ebp-Ch]
 
@@ -364,7 +364,7 @@ void __cdecl RB_Stats_UpdateMaxs(const GfxFrameStats *frameStatsCur, GfxFrameSta
 }
 
 int histogramHistoryIndex;
-void __cdecl RB_DrawPrimHistogramOverlay()
+void RB_DrawPrimHistogramOverlay()
 {
     const char *v0; // eax
     Font_s *s1; // [esp+18h] [ebp-104h]

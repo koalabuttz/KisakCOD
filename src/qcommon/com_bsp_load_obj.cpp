@@ -7,13 +7,13 @@
 
 BspGlob comBspGlob;
 
-uint32_t __cdecl Com_GetBspVersion()
+uint32_t Com_GetBspVersion()
 {
     iassert( Com_IsBspLoaded() );
     return comBspGlob.header->version;
 }
 
-char __cdecl Com_CheckVersionLumpCountError(int version)
+char Com_CheckVersionLumpCountError(int version)
 {
     if (version < 6 || version > 22)
         MyAssertHandler(
@@ -36,7 +36,7 @@ char __cdecl Com_CheckVersionLumpCountError(int version)
     return 0;
 }
 
-bool __cdecl Com_BspError()
+bool Com_BspError()
 {
     return comBspGlob.header->ident != 'PSBI'
         || comBspGlob.header->version < 6
@@ -44,7 +44,7 @@ bool __cdecl Com_BspError()
         || Com_CheckVersionLumpCountError(comBspGlob.header->version) != 0;
 }
 
-void __cdecl Com_CleanupBsp()
+void Com_CleanupBsp()
 {
     comBspGlob.loadedLumpData = 0;
     if (Com_IsBspLoaded())
@@ -52,7 +52,7 @@ void __cdecl Com_CleanupBsp()
     iassert( !Com_IsBspLoaded() );
 }
 
-bool __cdecl Com_BspHasLump(LumpType type)
+bool Com_BspHasLump(LumpType type)
 {
     uint32_t count; // [esp+0h] [ebp-4h] BYREF
 
@@ -60,7 +60,7 @@ bool __cdecl Com_BspHasLump(LumpType type)
     return count != 0;
 }
 
-char *__cdecl Com_GetBspLump(LumpType type, uint32_t elemSize, uint32_t *count)
+char *Com_GetBspLump(LumpType type, uint32_t elemSize, uint32_t *count)
 {
     uint32_t chunkIter; // [esp+0h] [ebp-10h]
     uint32_t offset; // [esp+4h] [ebp-Ch]
@@ -94,12 +94,12 @@ char *__cdecl Com_GetBspLump(LumpType type, uint32_t elemSize, uint32_t *count)
     }
 }
 
-bool __cdecl Com_IsBspLoaded()
+bool Com_IsBspLoaded()
 {
     return comBspGlob.header != 0;
 }
 
-void __cdecl Com_LoadBsp(char *filename)
+void Com_LoadBsp(char *filename)
 {
     uint32_t bytesRead; // [esp+18h] [ebp-Ch]
     uint32_t len; // [esp+1Ch] [ebp-8h]
@@ -143,7 +143,7 @@ void __cdecl Com_LoadBsp(char *filename)
     iassert( Com_IsBspLoaded() );
 }
 
-void __cdecl Com_UnloadBsp()
+void Com_UnloadBsp()
 {
     iassert( Com_IsBspLoaded() );
     iassert( comBspGlob.loadedLumpData == NULL );
@@ -160,7 +160,7 @@ uint32_t lumpsForVersion[13] =
 { 41u, 41u, 42u, 43u, 43u, 43u, 43u, 44u, 44u, 44u, 46u, 46u, 47u };
 
 
-uint32_t __cdecl Com_GetBspLumpCountForVersion(int version)
+uint32_t Com_GetBspLumpCountForVersion(int version)
 {
     if (version < 6 || version > 18)
         MyAssertHandler(
@@ -175,7 +175,7 @@ uint32_t __cdecl Com_GetBspLumpCountForVersion(int version)
     return lumpsForVersion[version - 6];
 }
 
-char *__cdecl Com_ValidateBspLumpData(
+char *Com_ValidateBspLumpData(
     LumpType type,
     uint32_t offset,
     uint32_t length,
@@ -199,7 +199,7 @@ char *__cdecl Com_ValidateBspLumpData(
     }
 }
 
-int __cdecl Com_BlockChecksumKey32(const uint8_t *data, uint32_t length, uint32_t initialCrc)
+int Com_BlockChecksumKey32(const uint8_t *data, uint32_t length, uint32_t initialCrc)
 {
     const uint8_t *dataIter; // [esp+8h] [ebp-8h]
     uint32_t crc; // [esp+Ch] [ebp-4h]
@@ -225,7 +225,7 @@ int __cdecl Com_BlockChecksumKey32(const uint8_t *data, uint32_t length, uint32_
     return ~crc;
 }
 
-char *__cdecl Com_EntityString(int *numEntityChars)
+char *Com_EntityString(int *numEntityChars)
 {
     char *entityString; // [esp+0h] [ebp-8h]
     uint32_t count; // [esp+4h] [ebp-4h] BYREF
@@ -237,7 +237,7 @@ char *__cdecl Com_EntityString(int *numEntityChars)
     return entityString;
 }
 
-const char *__cdecl Com_GetHunkStringCopy(char *string)
+const char *Com_GetHunkStringCopy(char *string)
 {
     uint32_t v2; // [esp+0h] [ebp-18h]
     uint8_t *hunkCopy; // [esp+14h] [ebp-4h]
@@ -248,7 +248,7 @@ const char *__cdecl Com_GetHunkStringCopy(char *string)
     return (const char *)hunkCopy;
 }
 
-const char *__cdecl Com_GetLightDefName(
+const char *Com_GetLightDefName(
     char *defName,
     const ComPrimaryLight *primaryLights,
     uint32_t primaryLightCount)
@@ -433,7 +433,7 @@ ComPrimaryLight *Com_LoadPrimaryLights()
     return result;
 }
 
-void __cdecl Com_LoadWorld_LoadObj(char *name)
+void Com_LoadWorld_LoadObj(char *name)
 {
     iassert( Com_IsBspLoaded() );
     Com_LoadPrimaryLights();
@@ -441,7 +441,7 @@ void __cdecl Com_LoadWorld_LoadObj(char *name)
     comWorld.isInUse = 1;
 }
 
-void __cdecl Com_LoadWorld(char *name)
+void Com_LoadWorld(char *name)
 {
     if (IsFastFileLoad())
         Com_LoadWorld_FastFile(name);
@@ -449,19 +449,19 @@ void __cdecl Com_LoadWorld(char *name)
         Com_LoadWorld_LoadObj(name);
 }
 
-void __cdecl Com_LoadWorld_FastFile(const char *name)
+void Com_LoadWorld_FastFile(const char *name)
 {
     if (DB_FindXAssetHeader(ASSET_TYPE_COMWORLD, name).comWorld != &comWorld)
         MyAssertHandler(".\\qcommon\\com_bsp_load_obj.cpp", 640, 0, "%s", "asset == &comWorld");
     iassert( comWorld.isInUse );
 }
 
-void __cdecl Com_ShutdownWorld()
+void Com_ShutdownWorld()
 {
     comWorld.isInUse = 0;
 }
 
-void __cdecl Com_SaveLump(LumpType type, const void *newLump, uint32_t size, ComSaveLumpBehavior behavior)
+void Com_SaveLump(LumpType type, const void *newLump, uint32_t size, ComSaveLumpBehavior behavior)
 {
     char v4; // [esp+3h] [ebp-535h]
     char *v5; // [esp+8h] [ebp-530h]

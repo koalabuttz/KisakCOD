@@ -15,9 +15,9 @@ bool g_currently_recording;
 LPDIRECTSOUNDCAPTURE g_pDSCaptureInstance;
 
 
-int(__cdecl *current_audioCallback)(audioSample_t *);
+int(*current_audioCallback)(audioSample_t *);
 
-void __cdecl DSOUNDRecord_UpdateSample(dsound_sample_t *pRecSample)
+void DSOUNDRecord_UpdateSample(dsound_sample_t *pRecSample)
 {
     int lLockSize; // [esp+8h] [ebp-48h]
     uint32_t lLockSizea; // [esp+8h] [ebp-48h]
@@ -112,7 +112,7 @@ void __cdecl DSOUNDRecord_UpdateSample(dsound_sample_t *pRecSample)
     }
 }
 
-void __cdecl DSOUNDRecord_Frame()
+void DSOUNDRecord_Frame()
 {
     if (g_recording_initialized && g_currently_recording)
     {
@@ -121,7 +121,7 @@ void __cdecl DSOUNDRecord_Frame()
     }
 }
 
-dsound_sample_t *__cdecl DSOUNDRecord_NewSample()
+dsound_sample_t *DSOUNDRecord_NewSample()
 {
     dsound_sample_t *pRecSample; // [esp+0h] [ebp-4h]
 
@@ -142,7 +142,7 @@ dsound_sample_t *__cdecl DSOUNDRecord_NewSample()
     return pRecSample;
 }
 
-int __cdecl DSOUNDRecord_DestroySample(dsound_sample_t *pRecSample)
+int DSOUNDRecord_DestroySample(dsound_sample_t *pRecSample)
 {
     if (!pRecSample)
         return 0;
@@ -169,7 +169,7 @@ int __cdecl DSOUNDRecord_DestroySample(dsound_sample_t *pRecSample)
     return 1;
 }
 
-HRESULT __cdecl DSOUNDRecord_Start(dsound_sample_t *pRecSample)
+HRESULT DSOUNDRecord_Start(dsound_sample_t *pRecSample)
 {
     HRESULT hr; // [esp+4h] [ebp-34h]
     HRESULT hra; // [esp+4h] [ebp-34h]
@@ -252,7 +252,7 @@ HRESULT __cdecl DSOUNDRecord_Start(dsound_sample_t *pRecSample)
     }
 }
 
-HRESULT __cdecl DSOUNDRecord_Stop(dsound_sample_t *pRecSample)
+HRESULT DSOUNDRecord_Stop(dsound_sample_t *pRecSample)
 {
     HRESULT hr; // [esp+0h] [ebp-4h]
 
@@ -277,7 +277,7 @@ HRESULT __cdecl DSOUNDRecord_Stop(dsound_sample_t *pRecSample)
     return hr;
 }
 
-int __cdecl DSOUNDRecord_Init(bool bCallDsoundInit)
+int DSOUNDRecord_Init(bool bCallDsoundInit)
 {
     HRESULT hr; // [esp+0h] [ebp-4h]
 
@@ -295,7 +295,7 @@ int __cdecl DSOUNDRecord_Init(bool bCallDsoundInit)
     }
 }
 
-void __cdecl DSOUNDRecord_Shutdown()
+void DSOUNDRecord_Shutdown()
 {
     HRESULT hr; // [esp+0h] [ebp-4h]
 
@@ -311,7 +311,7 @@ void __cdecl DSOUNDRecord_Shutdown()
         Com_PrintError(CON_CHANNEL_SOUND, "Error releasing direct sound instance!  %s\n", hr);
 }
 
-void __cdecl Record_SetRecordingCallback(int32_t(__cdecl *new_audioCallback)(audioSample_t *))
+void Record_SetRecordingCallback(int32_t(*new_audioCallback)(audioSample_t *))
 {
     current_audioCallback = new_audioCallback;
 }

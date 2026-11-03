@@ -43,14 +43,14 @@ const char *g_HitLocNames[19] =
   "gun"
 }; // idb
 
-void __cdecl TRACK_g_combat()
+void TRACK_g_combat()
 {
     track_static_alloc_internal(g_fHitLocDamageMult, 76, "g_fHitLocDamageMult", 9);
     track_static_alloc_internal(g_HitLocNames, 76, "g_HitLocNames", 9);
     track_static_alloc_internal(g_HitLocConstNames, 38, "g_HitLocConstNames", 9);
 }
 
-void __cdecl G_ParseHitLocDmgTable()
+void G_ParseHitLocDmgTable()
 {
     uint16_t prev; // ax
     char *pszBuffer; // [esp+4h] [ebp-20F4h]
@@ -80,7 +80,7 @@ void __cdecl G_ParseHitLocDmgTable()
         Com_Error(ERR_DROP, "Error parsing hitloc damage table %s", "info/mp_lochit_dmgtable");
 }
 
-void __cdecl LookAtKiller(gentity_s *self, gentity_s *inflictor, gentity_s *attacker)
+void LookAtKiller(gentity_s *self, gentity_s *inflictor, gentity_s *attacker)
 {
     float dir[3]; // [esp+0h] [ebp-18h] BYREF
 
@@ -102,7 +102,7 @@ void __cdecl LookAtKiller(gentity_s *self, gentity_s *inflictor, gentity_s *atta
     self->client->ps.stats[STAT_DEAD_YAW] = (int)self->r.currentAngles[1];
 }
 
-int32_t __cdecl G_MeansOfDeathFromScriptParam(uint32_t scrParam)
+int32_t G_MeansOfDeathFromScriptParam(uint32_t scrParam)
 {
     uint16_t modName; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
@@ -117,7 +117,7 @@ int32_t __cdecl G_MeansOfDeathFromScriptParam(uint32_t scrParam)
     return 0;
 }
 
-void __cdecl player_die(
+void player_die(
     gentity_s *self,
     gentity_s *inflictor,
     gentity_s *attacker,
@@ -195,7 +195,7 @@ void __cdecl player_die(
     }
 }
 
-void __cdecl DeathGrenadeDrop(gentity_s *self, int32_t meansOfDeath)
+void DeathGrenadeDrop(gentity_s *self, int32_t meansOfDeath)
 {
     WeaponDef *weapDef; // [esp+14h] [ebp-20h]
     int32_t grenadeWeaponIndex; // [esp+18h] [ebp-1Ch]
@@ -256,7 +256,7 @@ void __cdecl DeathGrenadeDrop(gentity_s *self, int32_t meansOfDeath)
     }
 }
 
-double __cdecl G_GetWeaponHitLocationMultiplier(hitLocation_t hitLoc, uint32_t weapon)
+double G_GetWeaponHitLocationMultiplier(hitLocation_t hitLoc, uint32_t weapon)
 {
     WeaponDef *weapDef; // [esp+0h] [ebp-4h]
 
@@ -271,7 +271,7 @@ double __cdecl G_GetWeaponHitLocationMultiplier(hitLocation_t hitLoc, uint32_t w
         return weapDef->locationDamageMultipliers[hitLoc];
 }
 
-void __cdecl G_DamageClient(
+void G_DamageClient(
     gentity_s *targ,
     gentity_s *inflictor,
     gentity_s *attacker,
@@ -329,7 +329,7 @@ void __cdecl G_DamageClient(
     }
 }
 
-uint32_t __cdecl G_GetWeaponIndexForEntity(const gentity_s *ent)
+uint32_t G_GetWeaponIndexForEntity(const gentity_s *ent)
 {
     gclient_s *client; // [esp+8h] [ebp-4h]
 
@@ -347,7 +347,7 @@ uint32_t __cdecl G_GetWeaponIndexForEntity(const gentity_s *ent)
     return g_entities[client->ps.viewlocked_entNum].s.weapon;
 }
 
-void __cdecl G_Damage(
+void G_Damage(
     gentity_s *targ,
     gentity_s *inflictor,
     gentity_s *attacker,
@@ -363,8 +363,8 @@ void __cdecl G_Damage(
     int32_t timeOffset)
 {
     float localdir[3]; // [esp+0h] [ebp-14h] BYREF
-    void(__cdecl * die)(gentity_s *, gentity_s *, gentity_s *, int, int, const int, const float *, const hitLocation_t, int); // [esp+Ch] [ebp-8h]
-    void(__cdecl * pain)(gentity_s *, gentity_s *, int, const float *, const int, const float *, const hitLocation_t, const int); // [esp+10h] [ebp-4h]
+    void(* die)(gentity_s *, gentity_s *, gentity_s *, int, int, const int, const float *, const hitLocation_t, int); // [esp+Ch] [ebp-8h]
+    void(* pain)(gentity_s *, gentity_s *, int, const float *, const int, const float *, const hitLocation_t, const int); // [esp+10h] [ebp-4h]
 
     if (targ->client)
     {
@@ -418,7 +418,7 @@ void __cdecl G_Damage(
     }
 }
 
-void __cdecl DamageNotify(
+void DamageNotify(
     uint16_t notify,
     gentity_s *targ,
     gentity_s *attacker,
@@ -466,7 +466,7 @@ void __cdecl DamageNotify(
     Scr_Notify(targ, notify, 9u);
 }
 
-double __cdecl CanDamage(
+double CanDamage(
     gentity_s *targ,
     gentity_s *inflictor,
     float *centerPos,
@@ -662,7 +662,7 @@ double __cdecl CanDamage(
     }
 }
 
-void __cdecl G_FlashbangBlast(float *origin, float radius_max, float radius_min, gentity_s *attacker, team_t team)
+void G_FlashbangBlast(float *origin, float radius_max, float radius_min, gentity_s *attacker, team_t team)
 {
     int32_t i; // [esp+7Ch] [ebp-100Ch]
     int32_t entList[1024]; // [esp+80h] [ebp-1008h] BYREF
@@ -683,7 +683,7 @@ void __cdecl G_FlashbangBlast(float *origin, float radius_max, float radius_min,
     }
 }
 
-void __cdecl GetEntListForRadius(
+void GetEntListForRadius(
     const float *origin,
     float radius_max,
     float radius_min,
@@ -704,7 +704,7 @@ void __cdecl GetEntListForRadius(
     *entListCount = CM_AreaEntities(mins, maxs, entList, 1024, -1);
 }
 
-void __cdecl FlashbangBlastEnt(
+void FlashbangBlastEnt(
     gentity_s *ent,
     float *blastOrigin,
     float radius_max,
@@ -758,7 +758,7 @@ void __cdecl FlashbangBlastEnt(
     }
 }
 
-double __cdecl EntDistToPoint(const float *origin, gentity_s *ent)
+double EntDistToPoint(const float *origin, gentity_s *ent)
 {
     uint32_t i; // [esp+8h] [ebp-10h]
     float v[3]; // [esp+Ch] [ebp-Ch] BYREF
@@ -788,7 +788,7 @@ double __cdecl EntDistToPoint(const float *origin, gentity_s *ent)
     }
 }
 
-void __cdecl AddScrTeamName(team_t team)
+void AddScrTeamName(team_t team)
 {
     switch (team)
     {
@@ -811,7 +811,7 @@ void __cdecl AddScrTeamName(team_t team)
     }
 }
 
-bool __cdecl G_WithinDamageRadius(const float *damageOrigin, float radiusSquared, gentity_s *ent)
+bool G_WithinDamageRadius(const float *damageOrigin, float radiusSquared, gentity_s *ent)
 {
     float distSqrd; // [esp+4h] [ebp-4h]
 
@@ -821,7 +821,7 @@ bool __cdecl G_WithinDamageRadius(const float *damageOrigin, float radiusSquared
     return radiusSquared > (double)distSqrd;
 }
 
-double __cdecl G_GetRadiusDamageDistanceSquared(const float *damageOrigin, gentity_s *ent)
+double G_GetRadiusDamageDistanceSquared(const float *damageOrigin, gentity_s *ent)
 {
     int32_t i; // [esp+0h] [ebp-10h]
     float v[3]; // [esp+4h] [ebp-Ch] BYREF
@@ -852,7 +852,7 @@ double __cdecl G_GetRadiusDamageDistanceSquared(const float *damageOrigin, genti
     return Vec3LengthSq(v);
 }
 
-int32_t __cdecl G_RadiusDamage(
+int32_t G_RadiusDamage(
     float *origin,
     gentity_s *inflictor,
     gentity_s *attacker,
@@ -921,14 +921,14 @@ int32_t __cdecl G_RadiusDamage(
     return v27;
 }
 
-uint16_t __cdecl G_GetHitLocationString(hitLocation_t hitLoc)
+uint16_t G_GetHitLocationString(hitLocation_t hitLoc)
 {
     if ((uint32_t)hitLoc >= HITLOC_NUM)
         MyAssertHandler(".\\game_mp\\g_combat_mp.cpp", 1165, 0, "%s", "(unsigned)hitLoc < HITLOC_NUM");
     return g_HitLocConstNames[hitLoc];
 }
 
-int32_t __cdecl G_GetHitLocationIndexFromString(uint16_t sString)
+int32_t G_GetHitLocationIndexFromString(uint16_t sString)
 {
     int32_t i; // [esp+0h] [ebp-4h]
 

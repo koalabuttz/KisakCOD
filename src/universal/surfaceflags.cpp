@@ -65,7 +65,7 @@ const infoParm_t infoParms[60] =
 };
 
 
-int __cdecl Com_SurfaceTypeFromName(const char *name)
+int Com_SurfaceTypeFromName(const char *name)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -89,7 +89,7 @@ int __cdecl Com_SurfaceTypeFromName(const char *name)
 }
 
 
-const char *__cdecl Com_SurfaceTypeToName(int iTypeIndex)
+const char *Com_SurfaceTypeToName(int iTypeIndex)
 {
     if (iTypeIndex <= 0 || iTypeIndex >= 29)
         return "default";

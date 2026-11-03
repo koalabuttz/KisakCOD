@@ -10,12 +10,12 @@
 
 DebugGlobals debugGlobals;
 
-void __cdecl TRACK_r_debug()
+void TRACK_r_debug()
 {
     track_static_alloc_internal(&debugGlobals, 84, "debugGlobals", 0);
 }
 
-void __cdecl R_AddDebugPolygon(DebugGlobals *debugGlobalsEntry, const float *color, int pointCount, float (*points)[3])
+void R_AddDebugPolygon(DebugGlobals *debugGlobalsEntry, const float *color, int pointCount, float (*points)[3])
 {
     GfxDebugPoly *v4; // [esp+30h] [ebp-4h]
 
@@ -61,7 +61,7 @@ void __cdecl R_AddDebugPolygon(DebugGlobals *debugGlobalsEntry, const float *col
     }
 }
 
-void __cdecl R_AddDebugLine(DebugGlobals *debugGlobalsEntry, const float *start, const float *end, const float *color)
+void R_AddDebugLine(DebugGlobals *debugGlobalsEntry, const float *start, const float *end, const float *color)
 {
     trDebugLine_t *pDebugLine; // [esp+8h] [ebp-4h]
 
@@ -94,7 +94,7 @@ void __cdecl R_AddDebugLine(DebugGlobals *debugGlobalsEntry, const float *start,
     }
 }
 
-void __cdecl R_AddDebugBox(DebugGlobals *debugGlobalsEntry, const float *mins, const float *maxs, const float *color)
+void R_AddDebugBox(DebugGlobals *debugGlobalsEntry, const float *mins, const float *maxs, const float *color)
 {
     float v4; // [esp+0h] [ebp-6Ch]
     uint32_t j; // [esp+4h] [ebp-68h]
@@ -117,7 +117,7 @@ void __cdecl R_AddDebugBox(DebugGlobals *debugGlobalsEntry, const float *mins, c
         R_AddDebugLine(debugGlobalsEntry, v[iEdgePairs[ia][0]], v[iEdgePairs[ia][1]], color);
 }
 
-void __cdecl R_AddDebugString(
+void R_AddDebugString(
     DebugGlobals *debugGlobalsEntry,
     const float *origin,
     const float *color,
@@ -153,7 +153,7 @@ void __cdecl R_AddDebugString(
     }
 }
 
-void __cdecl R_AddScaledDebugString(
+void R_AddScaledDebugString(
     DebugGlobals *debugGlobalsEntry,
     const GfxViewParms *viewParms,
     const float *origin,
@@ -173,7 +173,7 @@ void __cdecl R_AddScaledDebugString(
     R_AddDebugString(debugGlobalsEntry, origin, color, scale, string);
 }
 
-void __cdecl R_InitDebugEntry(DebugGlobals *debugGlobalsEntry)
+void R_InitDebugEntry(DebugGlobals *debugGlobalsEntry)
 {
     memset((uint8_t *)debugGlobalsEntry, 0, sizeof(DebugGlobals));
     debugGlobalsEntry->vertLimit = 4096;
@@ -183,12 +183,12 @@ void __cdecl R_InitDebugEntry(DebugGlobals *debugGlobalsEntry)
     debugGlobalsEntry->plumeLimit = 4096;
 }
 
-void __cdecl R_InitDebug()
+void R_InitDebug()
 {
     R_InitDebugEntry(&debugGlobals);
 }
 
-void __cdecl R_ShutdownDebugEntry(DebugGlobals *debugGlobalsEntry)
+void R_ShutdownDebugEntry(DebugGlobals *debugGlobalsEntry)
 {
     R_DebugFree((void **)&debugGlobalsEntry->polys);
     R_DebugFree((void **)&debugGlobalsEntry->verts);
@@ -199,7 +199,7 @@ void __cdecl R_ShutdownDebugEntry(DebugGlobals *debugGlobalsEntry)
     R_DebugFree((void **)&debugGlobalsEntry->plumes);
 }
 
-void __cdecl R_TransferDebugGlobals(DebugGlobals *debugGlobalsEntry)
+void R_TransferDebugGlobals(DebugGlobals *debugGlobalsEntry)
 {
     int dt; // [esp+8h] [ebp-8h]
     int plumeIndex; // [esp+Ch] [ebp-4h]
@@ -231,12 +231,12 @@ void __cdecl R_TransferDebugGlobals(DebugGlobals *debugGlobalsEntry)
     }
 }
 
-void __cdecl R_ShutdownDebug()
+void R_ShutdownDebug()
 {
     R_ShutdownDebugEntry(&debugGlobals);
 }
 
-void __cdecl R_CopyDebugStrings(
+void R_CopyDebugStrings(
     trDebugString_t *clStrings,
     int clStringCnt,
     trDebugString_t *svStrings,
@@ -264,7 +264,7 @@ void __cdecl R_CopyDebugStrings(
     }
 }
 
-void __cdecl R_CopyDebugLines(
+void R_CopyDebugLines(
     trDebugLine_t *clLines,
     int clLineCnt,
     trDebugLine_t *svLines,

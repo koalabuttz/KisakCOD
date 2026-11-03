@@ -14,7 +14,7 @@
 #include <cgame/cg_main.h>
 #endif
 
-RagdollBody *__cdecl Ragdoll_HandleBody(int ragdollHandle)
+RagdollBody *Ragdoll_HandleBody(int ragdollHandle)
 {
     if ((uint32_t)(ragdollHandle - 1) >= 0x20)
         MyAssertHandler(
@@ -27,7 +27,7 @@ RagdollBody *__cdecl Ragdoll_HandleBody(int ragdollHandle)
     return &ragdollBodies[ragdollHandle - 1];
 }
 
-BoneOrientation *__cdecl Ragdoll_BodyBoneOrientations(RagdollBody *body)
+BoneOrientation *Ragdoll_BodyBoneOrientations(RagdollBody *body)
 {
     iassert( body );
     if (body->curOrientationBuffer >= 2u)
@@ -41,7 +41,7 @@ BoneOrientation *__cdecl Ragdoll_BodyBoneOrientations(RagdollBody *body)
     return body->boneOrientations[body->curOrientationBuffer];
 }
 
-BoneOrientation *__cdecl Ragdoll_BodyPrevBoneOrientations(RagdollBody *body)
+BoneOrientation *Ragdoll_BodyPrevBoneOrientations(RagdollBody *body)
 {
     iassert( body );
     if (body->curOrientationBuffer >= 2u)
@@ -55,7 +55,7 @@ BoneOrientation *__cdecl Ragdoll_BodyPrevBoneOrientations(RagdollBody *body)
     return body->boneOrientations[body->curOrientationBuffer ^ 1];
 }
 
-void __cdecl Ragdoll_DoControllers(const cpose_t *pose, DObj_s *obj, int *partBits)
+void Ragdoll_DoControllers(const cpose_t *pose, DObj_s *obj, int *partBits)
 {
     float v4; // [esp+0h] [ebp-48h]
     float v5; // [esp+8h] [ebp-40h]

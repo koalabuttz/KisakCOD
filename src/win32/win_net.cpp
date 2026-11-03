@@ -255,7 +255,7 @@ Sys_GetPacket
 Never called by the game logic, just the system event queing
 ==================
 */
-int __cdecl Sys_GetPacket(netadr_t *net_from, msg_t *net_message)
+int Sys_GetPacket(netadr_t *net_from, msg_t *net_message)
 {
 	sockaddr from; // [esp+8h] [ebp-28h] BYREF
 	int err; // [esp+1Ch] [ebp-14h]
@@ -391,7 +391,7 @@ static char socksBuf[4096];
 Sys_SendPacket
 ==================
 */
-char __cdecl Sys_SendPacket(int length, unsigned __int8 *data, netadr_t to)
+char Sys_SendPacket(int length, unsigned __int8 *data, netadr_t to)
 {
 	const char *v4; // eax
 	int err; // [esp+0h] [ebp-20h]
@@ -461,7 +461,7 @@ char __cdecl Sys_SendPacket(int length, unsigned __int8 *data, netadr_t to)
 
 //=============================================================================
 
-bool __cdecl Sys_IsLANAddress_IgnoreSubnet(netadr_t adr)
+bool Sys_IsLANAddress_IgnoreSubnet(netadr_t adr)
 {
 	switch (adr.type)
 	{
@@ -492,7 +492,7 @@ Sys_IsLANAddress
 LAN clients will have their rate var ignored
 ==================
 */
-bool __cdecl Sys_IsLANAddress(netadr_t adr)
+bool Sys_IsLANAddress(netadr_t adr)
 {
 	int i; // [esp+0h] [ebp-8h]
 
@@ -528,7 +528,7 @@ void Sys_ShowIP(void) {
 NET_IPSocket
 ====================
 */
-uint32_t __cdecl NET_IPSocket(const char *net_interface, int port)
+uint32_t NET_IPSocket(const char *net_interface, int port)
 {
 	const char *v2; // eax
 	const char *v4; // eax
@@ -598,7 +598,7 @@ uint32_t __cdecl NET_IPSocket(const char *net_interface, int port)
 NET_OpenSocks
 ====================
 */
-void __cdecl NET_OpenSocks(u_short port)
+void NET_OpenSocks(u_short port)
 {
 	const char *v1; // eax
 	const char *v2; // eax
@@ -840,7 +840,7 @@ void NET_GetLocalAddress( bool force )
 NET_OpenIP
 ====================
 */
-void __cdecl NET_OpenIP()
+void NET_OpenIP()
 {
 	const dvar_s *v0; // [esp+0h] [ebp-Ch]
 	int i; // [esp+4h] [ebp-8h]
@@ -872,7 +872,7 @@ NET_IPXSocket
 ====================
 */
 // NOTE(mrsteyk): who the fuck has IPX in 21st century? @Cleanup
-uint32_t __cdecl NET_IPXSocket(int port)
+uint32_t NET_IPXSocket(int port)
 {
 	const char *v1; // eax
 	const char *v3; // eax
@@ -945,7 +945,7 @@ void NET_OpenIPX( void ) {
 //===================================================================
 
 
-BOOL __cdecl NET_GetDvars()
+BOOL NET_GetDvars()
 {
 	BOOL modified; // [esp+0h] [ebp-4h]
 
@@ -979,7 +979,7 @@ BOOL __cdecl NET_GetDvars()
 NET_Config
 ====================
 */
-void __cdecl NET_Config(int enableNetworking)
+void NET_Config(int enableNetworking)
 {
 	int start; // [esp+0h] [ebp-Ch]
 	int stop; // [esp+4h] [ebp-8h]
@@ -1051,7 +1051,7 @@ void __cdecl NET_Config(int enableNetworking)
 NET_Init
 ====================
 */
-void __cdecl NET_Init()
+void NET_Init()
 {
 	int r; // [esp+0h] [ebp-4h]
 
@@ -1111,12 +1111,12 @@ void NET_Restart( void ) {
 }
 
 
-void __cdecl TRACK_win_net()
+void TRACK_win_net()
 {
 	track_static_alloc_internal(&winsockdata, 400, "winsockdata", 9);
 }
 
-int __cdecl NET_Select(uint32_t socket)
+int NET_Select(uint32_t socket)
 {
 	const char* v2; // eax
 	fd_set readfds; // [esp+0h] [ebp-220h] BYREF
@@ -1151,7 +1151,7 @@ int __cdecl NET_Select(uint32_t socket)
 	}
 }
 
-uint32_t __cdecl NET_TCPIPSocket(const char* net_interface, int port, int type)
+uint32_t NET_TCPIPSocket(const char* net_interface, int port, int type)
 {
 	const char* v3; // eax
 	const char* v5; // eax

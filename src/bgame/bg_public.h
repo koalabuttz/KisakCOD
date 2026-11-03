@@ -457,8 +457,8 @@ struct pmove_t // sizeof=0x110
 #ifdef KISAK_MP
 struct pmoveHandler_t // sizeof=0x8
 {
-    void(__cdecl *trace)(trace_t *, const float *, const float *, const float *, const float *, int, int);
-    void(__cdecl *playerEvent)(int, int);
+    void(*trace)(trace_t *, const float *, const float *, const float *, const float *, int, int);
+    void(*playerEvent)(int, int);
 };
 #elif KISAK_SP
 struct pmoveHandler_t
@@ -1021,7 +1021,7 @@ struct gentity_s
 };
 #endif
 
-void __cdecl G_TraceCapsule(
+void G_TraceCapsule(
     trace_t *results,
     const float *start,
     const float *mins,
@@ -1031,9 +1031,9 @@ void __cdecl G_TraceCapsule(
     int contentmask);
 
 #ifdef KISAK_MP
-void __cdecl G_PlayerEvent(int clientNum, int event);
+void G_PlayerEvent(int clientNum, int event);
 #endif
-void __cdecl CG_TraceCapsule(
+void CG_TraceCapsule(
     trace_t *results,
     const float *start,
     const float *mins,

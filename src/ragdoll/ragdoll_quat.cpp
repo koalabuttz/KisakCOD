@@ -3,7 +3,7 @@
 
 //float *unitQuaternion     827c055c     ragdoll_quat.obj
 
-void __cdecl Ragdoll_QuatMul(const float *qa, const float *qb, float *dest)
+void Ragdoll_QuatMul(const float *qa, const float *qb, float *dest)
 {
     float w0; // [esp+0h] [ebp-8h]
     float w1; // [esp+4h] [ebp-4h]
@@ -17,7 +17,7 @@ void __cdecl Ragdoll_QuatMul(const float *qa, const float *qb, float *dest)
     dest[3] = w0 * w1 - qa[0] * qb[0] - qa[1] * qb[1] - qa[2] * qb[2];
 }
 
-void __cdecl Ragdoll_QuatMulInvSecond(const float *qa, const float *qb, float *dest)
+void Ragdoll_QuatMulInvSecond(const float *qa, const float *qb, float *dest)
 {
     float qinv[4]; // [esp+0h] [ebp-10h] BYREF
 
@@ -25,7 +25,7 @@ void __cdecl Ragdoll_QuatMulInvSecond(const float *qa, const float *qb, float *d
     Ragdoll_QuatMul(qa, qinv, dest);
 }
 
-void __cdecl Ragdoll_QuatConjugate(const float *src, float *dest)
+void Ragdoll_QuatConjugate(const float *src, float *dest)
 {
     dest[0] = -src[0];
     dest[1] = -src[1];
@@ -33,7 +33,7 @@ void __cdecl Ragdoll_QuatConjugate(const float *src, float *dest)
     dest[3] = src[3];
 }
 
-void __cdecl Ragdoll_QuatInverse(const float *src, float *dest)
+void Ragdoll_QuatInverse(const float *src, float *dest)
 {
     iassert(Vec4IsNormalized(src));
 
@@ -43,7 +43,7 @@ void __cdecl Ragdoll_QuatInverse(const float *src, float *dest)
     dest[3] = src[3];
 }
 
-void __cdecl Ragdoll_QuatPointRotate(const float *p, const float *q, float *dest)
+void Ragdoll_QuatPointRotate(const float *p, const float *q, float *dest)
 {
     float tmp0[4]; // [esp+0h] [ebp-40h] BYREF
     float qp[4]; // [esp+10h] [ebp-30h] BYREF
@@ -62,12 +62,12 @@ void __cdecl Ragdoll_QuatPointRotate(const float *p, const float *q, float *dest
     dest[2] = tmp1[2];
 }
 
-void __cdecl Ragdoll_QuatNormalize(float *quat)
+void Ragdoll_QuatNormalize(float *quat)
 {
     Vec4Normalize(quat);
 }
 
-void __cdecl Ragdoll_Mat33ToQuat(const float (*axis)[3], float *quat)
+void Ragdoll_Mat33ToQuat(const float (*axis)[3], float *quat)
 {
     double v2; // st7
     float v3; // [esp+0h] [ebp-24h]
@@ -132,7 +132,7 @@ void __cdecl Ragdoll_Mat33ToQuat(const float (*axis)[3], float *quat)
     }
 }
 
-void __cdecl Ragdoll_QuatToAxisAngle(const float *quat, float *axisAngle)
+void Ragdoll_QuatToAxisAngle(const float *quat, float *axisAngle)
 {
     float sinHalfTheta; // [esp+8h] [ebp-14h]
     float angleMag;     // [esp+Ch] [ebp-10h]
@@ -151,7 +151,7 @@ void __cdecl Ragdoll_QuatToAxisAngle(const float *quat, float *axisAngle)
     }
 }
 
-void __cdecl Ragdoll_QuatLerp(const float *qa, const float *qb, float t, float *dest)
+void Ragdoll_QuatLerp(const float *qa, const float *qb, float t, float *dest)
 {
     Vec4Lerp(qa, qb, t, dest);
     Vec4Normalize(dest);

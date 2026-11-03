@@ -14,27 +14,27 @@ enum
     CG_ENT_SECTOR_HEAD = 1
 };
 
-void __cdecl TRACK_CG_CollWorld()
+void TRACK_CG_CollWorld()
 {
     track_static_alloc_internal(cgEntCollWorld, 16412, "cgEntCollWorld", 25);
     track_static_alloc_internal(cgEntCollNodes, 20480, "cgEntCollNodes", 25);
 }
 
-void __cdecl CG_SetCollWorldLocalClientNum(int32_t localClientNum)
+void CG_SetCollWorldLocalClientNum(int32_t localClientNum)
 {
     iassert(Sys_IsMainThread());
 
     cgCollWorldLocalClientNum = localClientNum;
 }
 
-int32_t __cdecl CG_GetCollWorldLocalClientNum()
+int32_t CG_GetCollWorldLocalClientNum()
 {
     iassert(Sys_IsMainThread());
 
     return cgCollWorldLocalClientNum;
 }
 
-void __cdecl CG_ClearEntityCollWorld(int32_t localClientNum)
+void CG_ClearEntityCollWorld(int32_t localClientNum)
 {
     float worldSize; // [esp+8h] [ebp-14h]
     float worldSize_4; // [esp+Ch] [ebp-10h]
@@ -61,7 +61,7 @@ void __cdecl CG_ClearEntityCollWorld(int32_t localClientNum)
         * 0.5;
 }
 
-const CgEntCollSector *__cdecl CG_GetEntityCollSector(int32_t localClientNum, uint16_t sectorIndex)
+const CgEntCollSector *CG_GetEntityCollSector(int32_t localClientNum, uint16_t sectorIndex)
 {
     //bcassert(localClientNum, STATIC_MAX_LOCAL_CLIENTS);
     iassert(sectorIndex);
@@ -71,19 +71,19 @@ const CgEntCollSector *__cdecl CG_GetEntityCollSector(int32_t localClientNum, ui
     return &cgEntCollWorld[localClientNum].sectors[sectorIndex];
 }
 
-const CgEntCollNode *__cdecl CG_GetEntityCollNode(int32_t localClientNum, uint32_t entIndex)
+const CgEntCollNode *CG_GetEntityCollNode(int32_t localClientNum, uint32_t entIndex)
 {
     return CG_GetCollNode(localClientNum, entIndex);
 }
 
-CgEntCollNode *__cdecl CG_GetCollNode(int32_t localClientNum, uint32_t entIndex)
+CgEntCollNode *CG_GetCollNode(int32_t localClientNum, uint32_t entIndex)
 {
     //bcassert(localClientNum, STATIC_MAX_LOCAL_CLIENTS);
     bcassert(entIndex, MAX_GENTITIES);
     return &cgEntCollNodes[localClientNum][entIndex];
 }
 
-void __cdecl CG_UnlinkEntityColl(int32_t localClientNum, uint32_t entIndex)
+void CG_UnlinkEntityColl(int32_t localClientNum, uint32_t entIndex)
 {
     CgEntCollNode *node; // [esp+0h] [ebp-1Ch]
     CgEntCollSector *sector; // [esp+4h] [ebp-18h]
@@ -157,7 +157,7 @@ void __cdecl CG_UnlinkEntityColl(int32_t localClientNum, uint32_t entIndex)
     }
 }
 
-void __cdecl CG_LinkEntityColl(int32_t localClientNum, uint32_t entIndex, const float *absMins, const float *absMaxs)
+void CG_LinkEntityColl(int32_t localClientNum, uint32_t entIndex, const float *absMins, const float *absMaxs)
 {
     CgEntCollNode *node; // [esp+14h] [ebp-28h]
     CgEntCollSector *sector; // [esp+18h] [ebp-24h]
@@ -226,7 +226,7 @@ LABEL_26:
     CG_SortEntityCollSector(localClientNum, sectorIndex, mins, maxs);
 }
 
-void __cdecl CG_AddEntityToCollSector(int32_t localClientNum, uint32_t entIndex, uint16_t sectorIndex)
+void CG_AddEntityToCollSector(int32_t localClientNum, uint32_t entIndex, uint16_t sectorIndex)
 {
     CgEntCollNode *node; // [esp+0h] [ebp-18h]
     uint16_t *prevListIndex; // [esp+Ch] [ebp-Ch]
@@ -247,7 +247,7 @@ void __cdecl CG_AddEntityToCollSector(int32_t localClientNum, uint32_t entIndex,
     *prevListIndex = entIndex + 1;
 }
 
-void __cdecl CG_SortEntityCollSector(
+void CG_SortEntityCollSector(
     int32_t localClientNum,
     uint16_t sectorIndex,
     const float *mins,
@@ -334,7 +334,7 @@ void __cdecl CG_SortEntityCollSector(
     }
 }
 
-uint16_t __cdecl CG_AllocEntityCollSector(int32_t localClientNum, const float *mins, const float *maxs)
+uint16_t CG_AllocEntityCollSector(int32_t localClientNum, const float *mins, const float *maxs)
 {
     CgEntCollSector *sector; // [esp+4h] [ebp-18h]
     float size[2]; // [esp+8h] [ebp-14h]

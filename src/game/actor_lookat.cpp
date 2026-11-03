@@ -8,7 +8,7 @@
 #include "g_main.h"
 #include "g_local.h"
 
-void __cdecl Actor_InitLookAt(actor_s *self)
+void Actor_InitLookAt(actor_s *self)
 {
     self->lookAtInfo.bDoLookAt = 0;
     self->lookAtInfo.vLookAtPos[0] = 0.0;
@@ -22,7 +22,7 @@ void __cdecl Actor_InitLookAt(actor_s *self)
     self->lookAtInfo.fLookAtYawLimit = 90.0;
 }
 
-void __cdecl Actor_SetLookAtAnimNodes(
+void Actor_SetLookAtAnimNodes(
     actor_s *self,
     unsigned __int16 animStraight,
     unsigned __int16 animLeft,
@@ -47,7 +47,7 @@ void __cdecl Actor_SetLookAtAnimNodes(
     self->lookAtInfo.bLookAtSetup = 1;
 }
 
-void __cdecl Actor_SetLookAt(actor_s *self, float *vPosition, double fTurnAccel)
+void Actor_SetLookAt(actor_s *self, float *vPosition, double fTurnAccel)
 {
     double fLookAtTurnAccel; // fp13
 
@@ -62,7 +62,7 @@ void __cdecl Actor_SetLookAt(actor_s *self, float *vPosition, double fTurnAccel)
         self->lookAtInfo.fLookAtTurnAccel = 20.0;
 }
 
-float __cdecl Actor_CurrentLookAtAnimYawMax(actor_s *self)
+float Actor_CurrentLookAtAnimYawMax(actor_s *self)
 {
     int remaining = self->lookAtInfo.iLookAtBlendEndTime - level.time;
     if (remaining < 0)
@@ -75,7 +75,7 @@ float __cdecl Actor_CurrentLookAtAnimYawMax(actor_s *self)
     return v3;
 }
 
-float __cdecl Actor_CurrentLookAtYawMax(actor_s *self)
+float Actor_CurrentLookAtYawMax(actor_s *self)
 {
     int remaining = self->lookAtInfo.iLookAtBlendEndTime - level.time;
     if (remaining < 0)
@@ -88,7 +88,7 @@ float __cdecl Actor_CurrentLookAtYawMax(actor_s *self)
     return v3;
 }
 
-void __cdecl Actor_SetLookAtYawLimits(actor_s *self, double fAnimYawLimit, double fYawLimit, double fBlendTime)
+void Actor_SetLookAtYawLimits(actor_s *self, double fAnimYawLimit, double fYawLimit, double fBlendTime)
 {
     __int64 v4; // r11
     double v5; // fp0
@@ -127,14 +127,14 @@ void __cdecl Actor_SetLookAtYawLimits(actor_s *self, double fAnimYawLimit, doubl
     }
 }
 
-void __cdecl Actor_StopLookAt(actor_s *self, double fTurnAccel)
+void Actor_StopLookAt(actor_s *self, double fTurnAccel)
 {
     self->lookAtInfo.bDoLookAt = 0;
     if (fTurnAccel > 20.0)
         self->lookAtInfo.fLookAtTurnAccel = fTurnAccel;
 }
 
-void __cdecl Actor_UpdateLookAt(actor_s *self)
+void Actor_UpdateLookAt(actor_s *self)
 {
     int v2; // r30
     double v3; // fp31

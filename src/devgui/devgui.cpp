@@ -30,12 +30,12 @@ const dvar_t *devgui_colorGraphKnotNormal;
 
 devguiGlob_t devguiGlob;
 
-void __cdecl TRACK_devgui()
+void TRACK_devgui()
 {
     track_static_alloc_internal(&devguiGlob, 24080, "devguiGlob", 0);
 }
 
-void __cdecl DevGui_AddDvar(const char *path, const dvar_s *dvar)
+void DevGui_AddDvar(const char *path, const dvar_s *dvar)
 {
     uint16_t handle; // [esp+0h] [ebp-8h]
     devguiGlob_t *menu; // [esp+4h] [ebp-4h]
@@ -67,7 +67,7 @@ void __cdecl DevGui_AddDvar(const char *path, const dvar_s *dvar)
     }
 }
 
-devguiGlob_t *__cdecl DevGui_GetMenu(uint16_t handle)
+devguiGlob_t *DevGui_GetMenu(uint16_t handle)
 {
     if (!handle || handle > 0x258u)
         MyAssertHandler(
@@ -81,7 +81,7 @@ devguiGlob_t *__cdecl DevGui_GetMenu(uint16_t handle)
     return (devguiGlob_t *)((char *)&devguiGlob + 40 * handle - 40);
 }
 
-uint16_t __cdecl DevGui_ConstructPath_r(uint16_t parent, const char *path)
+uint16_t DevGui_ConstructPath_r(uint16_t parent, const char *path)
 {
     char label[28]; // [esp+0h] [ebp-28h] BYREF
     DevGuiTokenResult tokResult; // [esp+20h] [ebp-8h]
@@ -97,7 +97,7 @@ uint16_t __cdecl DevGui_ConstructPath_r(uint16_t parent, const char *path)
     return parent;
 }
 
-uint16_t __cdecl DevGui_RegisterMenu(uint16_t parentHandle, const char *label, __int16 sortKey)
+uint16_t DevGui_RegisterMenu(uint16_t parentHandle, const char *label, __int16 sortKey)
 {
     uint16_t childHandle; // [esp+0h] [ebp-4h]
 
@@ -107,7 +107,7 @@ uint16_t __cdecl DevGui_RegisterMenu(uint16_t parentHandle, const char *label, _
     return childHandle;
 }
 
-uint16_t __cdecl DevGui_CreateMenu(uint16_t parentHandle, const char *label, __int16 sortKey)
+uint16_t DevGui_CreateMenu(uint16_t parentHandle, const char *label, __int16 sortKey)
 {
     char v4; // [esp+3h] [ebp-25h]
     DevMenuItem *v5; // [esp+8h] [ebp-20h]
@@ -157,7 +157,7 @@ uint16_t __cdecl DevGui_CreateMenu(uint16_t parentHandle, const char *label, __i
     return handle;
 }
 
-uint16_t __cdecl DevGui_GetMenuHandle(DevMenuItem *menu)
+uint16_t DevGui_GetMenuHandle(DevMenuItem *menu)
 {
     uint16_t handle; // [esp+0h] [ebp-4h]
 
@@ -174,7 +174,7 @@ uint16_t __cdecl DevGui_GetMenuHandle(DevMenuItem *menu)
     return ((char *)menu - (char *)&devguiGlob) / 40 + 1;
 }
 
-int32_t __cdecl DevGui_CompareMenus(const DevMenuItem *menu0, const DevMenuItem *menu1)
+int32_t DevGui_CompareMenus(const DevMenuItem *menu0, const DevMenuItem *menu1)
 {
     if (!menu0)
         MyAssertHandler(".\\devgui\\devgui.cpp", 175, 0, "%s", "menu0");
@@ -186,7 +186,7 @@ int32_t __cdecl DevGui_CompareMenus(const DevMenuItem *menu0, const DevMenuItem 
         return menu0->sortKey - menu1->sortKey;
 }
 
-uint16_t __cdecl DevGui_FindMenu(uint16_t parentHandle, const char *label)
+uint16_t DevGui_FindMenu(uint16_t parentHandle, const char *label)
 {
     devguiGlob_t *childMenu; // [esp+0h] [ebp-Ch]
     uint16_t childHandle; // [esp+4h] [ebp-8h]
@@ -215,7 +215,7 @@ uint16_t __cdecl DevGui_FindMenu(uint16_t parentHandle, const char *label)
     return 0;
 }
 
-DevGuiTokenResult __cdecl DevGui_PathToken(const char **pathInOut, char *label, __int16 *sortKeyOut)
+DevGuiTokenResult DevGui_PathToken(const char **pathInOut, char *label, __int16 *sortKeyOut)
 {
     const char *path; // [esp+0h] [ebp-10h]
     __int16 sign; // [esp+4h] [ebp-Ch]
@@ -279,7 +279,7 @@ DevGuiTokenResult __cdecl DevGui_PathToken(const char **pathInOut, char *label, 
     return (DevGuiTokenResult)2;
 }
 
-char __cdecl DevGui_IsValidPath(const char *path)
+char DevGui_IsValidPath(const char *path)
 {
     char label[28]; // [esp+20h] [ebp-2Ch] BYREF
     const char *originalPath; // [esp+40h] [ebp-Ch]
@@ -321,7 +321,7 @@ char __cdecl DevGui_IsValidPath(const char *path)
     }
 }
 
-void __cdecl DevGui_AddCommand(const char *path, char *command)
+void DevGui_AddCommand(const char *path, char *command)
 {
     uint16_t handle; // [esp+0h] [ebp-8h]
     devguiGlob_t *menu; // [esp+4h] [ebp-4h]
@@ -353,7 +353,7 @@ void __cdecl DevGui_AddCommand(const char *path, char *command)
     }
 }
 
-void __cdecl DevGui_AddGraph(const char *path, DevGraph *graph)
+void DevGui_AddGraph(const char *path, DevGraph *graph)
 {
     uint16_t handle; // [esp+0h] [ebp-8h]
     devguiGlob_t *menu; // [esp+4h] [ebp-4h]
@@ -395,7 +395,7 @@ void __cdecl DevGui_AddGraph(const char *path, DevGraph *graph)
     }
 }
 
-void __cdecl DevGui_RemoveMenu(const char *path)
+void DevGui_RemoveMenu(const char *path)
 {
     const char *v1; // eax
     uint16_t handle; // [esp+0h] [ebp-38h]
@@ -455,7 +455,7 @@ void __cdecl DevGui_RemoveMenu(const char *path)
     }
 }
 
-void __cdecl DevGui_FreeMenu_r(uint16_t handle)
+void DevGui_FreeMenu_r(uint16_t handle)
 {
     devguiGlob_t *menu; // [esp+0h] [ebp-4h]
 
@@ -485,7 +485,7 @@ void __cdecl DevGui_FreeMenu_r(uint16_t handle)
     }
 }
 
-void __cdecl DevGui_OpenMenu(const char *path)
+void DevGui_OpenMenu(const char *path)
 {
     uint16_t handle; // [esp+0h] [ebp-30h]
     char label[28]; // [esp+4h] [ebp-2Ch] BYREF
@@ -526,7 +526,7 @@ void __cdecl DevGui_OpenMenu(const char *path)
     }
 }
 
-bool __cdecl DevGui_EditableMenuItem(const DevMenuItem *menu)
+bool DevGui_EditableMenuItem(const DevMenuItem *menu)
 {
     if (menu->childType == 3)
         return 1;
@@ -537,7 +537,7 @@ bool __cdecl DevGui_EditableMenuItem(const DevMenuItem *menu)
     return *((_BYTE *)menu->child.command + 10) != 6 || *((uint32_t *)menu->child.command + 15);
 }
 
-void __cdecl DevGui_Draw(int32_t localClientNum)
+void DevGui_Draw(int32_t localClientNum)
 {
     int32_t origin[2]; // [esp+0h] [ebp-10h] BYREF
     DevMenuItem *menuItem; // [esp+8h] [ebp-8h]
@@ -574,12 +574,12 @@ void __cdecl DevGui_Draw(int32_t localClientNum)
     }
 }
 
-uint16_t __cdecl DevGui_GetMenuParent(uint16_t handle)
+uint16_t DevGui_GetMenuParent(uint16_t handle)
 {
     return DevGui_GetMenu(handle)->menus[0].parent;
 }
 
-void __cdecl DevGui_DrawMenu(uint16_t menuHandle, uint16_t activeChild, int32_t *origin)
+void DevGui_DrawMenu(uint16_t menuHandle, uint16_t activeChild, int32_t *origin)
 {
     devguiGlob_t *menu; // [esp+0h] [ebp-4h]
 
@@ -595,7 +595,7 @@ void __cdecl DevGui_DrawMenu(uint16_t menuHandle, uint16_t activeChild, int32_t 
     DevGui_DrawMenuVertically(menu->menus, activeChild, origin);
 }
 
-void __cdecl DevGui_DrawMenuVertically(const DevMenuItem *menu, uint16_t activeChild, int32_t *origin)
+void DevGui_DrawMenuVertically(const DevMenuItem *menu, uint16_t activeChild, int32_t *origin)
 {
     devguiGlob_t *childMenu; // [esp+Ch] [ebp-38h]
     devguiGlob_t *childMenua; // [esp+Ch] [ebp-38h]
@@ -691,17 +691,17 @@ void __cdecl DevGui_DrawMenuVertically(const DevMenuItem *menu, uint16_t activeC
     }
 }
 
-bool __cdecl DevGui_MenuItemDisabled(const DevMenuItem *menu)
+bool DevGui_MenuItemDisabled(const DevMenuItem *menu)
 {
     return menu->childType == 1 && !DevGui_EditableMenuItem(menu);
 }
 
-int32_t __cdecl DevGui_SubMenuTextWidth()
+int32_t DevGui_SubMenuTextWidth()
 {
     return R_TextWidth(" >", 0, cls.consoleFont);
 }
 
-int32_t __cdecl DevGui_MaxChildMenuWidth(const DevMenuItem *menu)
+int32_t DevGui_MaxChildMenuWidth(const DevMenuItem *menu)
 {
     devguiGlob_t *childMenu; // [esp+0h] [ebp-10h]
     int32_t widthCur; // [esp+4h] [ebp-Ch]
@@ -723,7 +723,7 @@ int32_t __cdecl DevGui_MaxChildMenuWidth(const DevMenuItem *menu)
     return widthMax;
 }
 
-int32_t __cdecl DevGui_MenuItemWidth(const DevMenuItem *menu)
+int32_t DevGui_MenuItemWidth(const DevMenuItem *menu)
 {
     int32_t width; // [esp+0h] [ebp-4h]
 
@@ -733,7 +733,7 @@ int32_t __cdecl DevGui_MenuItemWidth(const DevMenuItem *menu)
     return width;
 }
 
-void __cdecl DevGui_DrawMenuHorizontally(const DevMenuItem *menu, uint16_t activeChild, int32_t *origin)
+void DevGui_DrawMenuHorizontally(const DevMenuItem *menu, uint16_t activeChild, int32_t *origin)
 {
     devguiGlob_t *childMenu; // [esp+8h] [ebp-20h]
     uint8_t bgndColor[4]; // [esp+Ch] [ebp-1Ch] BYREF
@@ -771,7 +771,7 @@ void __cdecl DevGui_DrawMenuHorizontally(const DevMenuItem *menu, uint16_t activ
     }
 }
 
-void __cdecl DevGui_ChooseOrigin(int32_t *origin)
+void DevGui_ChooseOrigin(int32_t *origin)
 {
     uint16_t handle; // [esp+0h] [ebp-18h]
     devguiGlob_t *childMenu; // [esp+4h] [ebp-14h]
@@ -803,7 +803,7 @@ void __cdecl DevGui_ChooseOrigin(int32_t *origin)
         *origin -= w - (devguiGlob.right - devguiGlob.left);
 }
 
-void __cdecl DevGui_DrawSliders(const DevMenuItem *menu)
+void DevGui_DrawSliders(const DevMenuItem *menu)
 {
     const char *v1; // eax
     const char *v2; // eax
@@ -934,7 +934,7 @@ void __cdecl DevGui_DrawSliders(const DevMenuItem *menu)
     DevGui_DrawDvarValue(x, x_4 + rowHeight + 2, dvar);
 }
 
-void __cdecl DevGui_DrawSliderPath(int32_t x, int32_t y)
+void DevGui_DrawSliderPath(int32_t x, int32_t y)
 {
     char path[132]; // [esp+0h] [ebp-88h] BYREF
 
@@ -942,7 +942,7 @@ void __cdecl DevGui_DrawSliderPath(int32_t x, int32_t y)
     DevGui_DrawFont(x, y, (const uint8_t *)&devgui_colorText->current, path);
 }
 
-int32_t __cdecl DevGui_GetSliderPath(uint16_t menuHandle, char *path, int32_t pathLen)
+int32_t DevGui_GetSliderPath(uint16_t menuHandle, char *path, int32_t pathLen)
 {
     int32_t SliderPath; // eax
     uint32_t v5; // [esp+0h] [ebp-18h]
@@ -970,7 +970,7 @@ int32_t __cdecl DevGui_GetSliderPath(uint16_t menuHandle, char *path, int32_t pa
     return v5 + pathLen;
 }
 
-void __cdecl DevGui_DrawSingleSlider(
+void DevGui_DrawSingleSlider(
     int32_t x,
     int32_t y,
     int32_t rowWidth,
@@ -987,7 +987,7 @@ void __cdecl DevGui_DrawSingleSlider(
         (const uint8_t *)&devgui_colorSliderBgnd->current);
     DevGui_DrawBevelBox(SnapFloatToInt(fraction * (float)(rowWidth - 8) + (float)x), y, 8, rowHeight, devgui_bevelShade->current.value, knobColor);}
 
-void __cdecl DevGui_DrawDvarValue(int32_t x, int32_t y, const dvar_s *dvar)
+void DevGui_DrawDvarValue(int32_t x, int32_t y, const dvar_s *dvar)
 {
     const char *v3; // eax
     const char *v4; // [esp+0h] [ebp-8h]
@@ -1016,7 +1016,7 @@ void __cdecl DevGui_DrawDvarValue(int32_t x, int32_t y, const dvar_s *dvar)
     }
 }
 
-int32_t __cdecl DevGui_DvarRowCount(const dvar_s *dvar)
+int32_t DevGui_DvarRowCount(const dvar_s *dvar)
 {
     int32_t result; // eax
 
@@ -1067,7 +1067,7 @@ void DevGui_DrawBindNextKey()
 
 const char *MYINSTRUCTIONS = "<Y> Edits node,  <LB> Adds new node,  <RB> Removes node,  <START> Saves to disk"; // idb
 
-void __cdecl DevGui_DrawGraph(const DevMenuItem *menu, int32_t localClientNum)
+void DevGui_DrawGraph(const DevMenuItem *menu, int32_t localClientNum)
 {
     const char *v2; // eax
     float *v3; // ecx
@@ -1160,7 +1160,7 @@ void __cdecl DevGui_DrawGraph(const DevMenuItem *menu, int32_t localClientNum)
     knot[0] = *v3;
     knot[1] = v3[1];
     if (graph->textCallback)
-        ((void(__cdecl *)(DevGraph *, _DWORD, _DWORD, char *, int))graph->textCallback)(
+        ((void(*)(DevGraph *, _DWORD, _DWORD, char *, int))graph->textCallback)(
             graph,
             LODWORD(knot[0]),
             LODWORD(knot[1]),
@@ -1175,7 +1175,7 @@ void __cdecl DevGui_DrawGraph(const DevMenuItem *menu, int32_t localClientNum)
         graph->eventCallback(graph, EVENT_DRAW, localClientNum);
 }
 
-void __cdecl DevGui_Init()
+void DevGui_Init()
 {
     uint32_t menuIndex; // [esp+0h] [ebp-Ch]
     int32_t screen_yPad; // [esp+4h] [ebp-8h]
@@ -1323,7 +1323,7 @@ const dvar_s *DevGui_RegisterDvars()
     return result;
 }
 
-void __cdecl DevGui_Shutdown()
+void DevGui_Shutdown()
 {
     DevGui_InputShutdown();
     DevGui_MenuShutdown();
@@ -1334,7 +1334,7 @@ void DevGui_MenuShutdown()
     DevGui_FreeMenu_r(devguiGlob.topmostMenu.child.menu);
 }
 
-void __cdecl DevGui_KeyPressed(int32_t key)
+void DevGui_KeyPressed(int32_t key)
 {
     char *v1; // eax
     uint16_t handle; // [esp+0h] [ebp-8Ch]
@@ -1368,7 +1368,7 @@ void __cdecl DevGui_KeyPressed(int32_t key)
     }
 }
 
-void __cdecl DevGui_Update(int32_t localClientNum, float deltaTime)
+void DevGui_Update(int32_t localClientNum, float deltaTime)
 {
     devguiGlob_t *selMenuItem; // [esp+4h] [ebp-4h]
 
@@ -1495,7 +1495,7 @@ void DevGui_SelectTopLevelChild()
     }
 }
 
-void __cdecl DevGui_AdvanceChildNum(int32_t numberToAdvance)
+void DevGui_AdvanceChildNum(int32_t numberToAdvance)
 {
     devguiGlob_t *menu; // [esp+0h] [ebp-8h]
     int32_t numberIter; // [esp+4h] [ebp-4h]
@@ -1615,7 +1615,7 @@ void DevGui_MoveDown()
     DevGui_SelectNextMenuItem();
 }
 
-void __cdecl DevGui_Accept(int32_t localClientNum)
+void DevGui_Accept(int32_t localClientNum)
 {
     devguiGlob_t *menu; // [esp+4h] [ebp-4h]
 
@@ -1647,7 +1647,7 @@ void __cdecl DevGui_Accept(int32_t localClientNum)
         devguiGlob.editingMenuItem = !devguiGlob.editingMenuItem;
         devguiGlob.selRow = 0;
         if (menu->menus[0].child.command && *((uint32_t *)menu->menus[0].child.command + 4))
-            (*((void(__cdecl **)(DevMenuChild, uint32_t, int))menu->menus[0].child.command + 4))(
+            (*((void(**)(DevMenuChild, uint32_t, int))menu->menus[0].child.command + 4))(
                 menu->menus[0].child,
                 0,
                 localClientNum);
@@ -1725,7 +1725,7 @@ int32_t DevGui_ScrollUp()
     return result;
 }
 
-const dvar_s *__cdecl DevGui_SelectedDvar()
+const dvar_s *DevGui_SelectedDvar()
 {
     const char *v0; // eax
     devguiGlob_t *menu; // [esp+0h] [ebp-8h]
@@ -1797,7 +1797,7 @@ int32_t DevGui_ScrollDownInternal()
     return result;
 }
 
-void __cdecl DevGui_UpdateDvar(float deltaTime)
+void DevGui_UpdateDvar(float deltaTime)
 {
     const char *v1; // eax
     float floatValue; // [esp+38h] [ebp-34h]
@@ -1920,7 +1920,7 @@ void __cdecl DevGui_UpdateDvar(float deltaTime)
     }
 }
 
-float __cdecl DevGui_PickFloatScrollStep(float min, float max)
+float DevGui_PickFloatScrollStep(float min, float max)
 {
     float v3; // [esp+0h] [ebp-44h]
     float v4; // [esp+4h] [ebp-40h]
@@ -1951,7 +1951,7 @@ float __cdecl DevGui_PickFloatScrollStep(float min, float max)
     return step;
 }
 
-void __cdecl DevGui_UpdateGraph(int32_t localClientNum, float deltaTime)
+void DevGui_UpdateGraph(int32_t localClientNum, float deltaTime)
 {
     float v2; // [esp+18h] [ebp-A0h]
     float v3; // [esp+1Ch] [ebp-9Ch]
@@ -2138,7 +2138,7 @@ void __cdecl DevGui_UpdateGraph(int32_t localClientNum, float deltaTime)
     }
 }
 
-void __cdecl DevGui_AddGraphKnot(DevGraph *graph, int32_t localClientNum)
+void DevGui_AddGraphKnot(DevGraph *graph, int32_t localClientNum)
 {
     float *v2; // [esp+4h] [ebp-20h]
     float *v3; // [esp+Ch] [ebp-18h]
@@ -2200,7 +2200,7 @@ void __cdecl DevGui_AddGraphKnot(DevGraph *graph, int32_t localClientNum)
     }
 }
 
-void __cdecl DevGui_RemoveGraphKnot(DevGraph *graph, int32_t localClientNum)
+void DevGui_RemoveGraphKnot(DevGraph *graph, int32_t localClientNum)
 {
     float *v2; // [esp+0h] [ebp-10h]
     int32_t currentKnotCount; // [esp+8h] [ebp-8h]
@@ -2235,7 +2235,7 @@ void __cdecl DevGui_RemoveGraphKnot(DevGraph *graph, int32_t localClientNum)
     }
 }
 
-void __cdecl DevGui_Toggle()
+void DevGui_Toggle()
 {
     if (devguiGlob.topmostMenu.child.menu)
     {
@@ -2266,7 +2266,7 @@ void DevGui_Reset()
     devguiGlob.selectedMenu = 0;
 }
 
-bool __cdecl DevGui_IsActive()
+bool DevGui_IsActive()
 {
     return devguiGlob.isActive;
 }

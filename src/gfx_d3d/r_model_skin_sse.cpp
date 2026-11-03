@@ -439,7 +439,7 @@ static void R_SkinXSurfaceRigidSseInOut(const XSurface *surf, int totalVertCount
 // public entry point
 // ---------------------------------------------------------------------------
 
-void __cdecl R_SkinXSurfaceSkinnedSse(const XSurface *xsurf, const DObjSkelMat *boneMatrix,
+void R_SkinXSurfaceSkinnedSse(const XSurface *xsurf, const DObjSkelMat *boneMatrix,
                                       GfxPackedVertexNormal *skinVertNormalIn, GfxPackedVertexNormal *skinVertNormalOut,
                                       GfxPackedVertex *skinVerticesOut)
 {

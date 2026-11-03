@@ -22,7 +22,7 @@
 #include "rb_shade.h"
 #include "r_meshdata.h"
 
-void __cdecl R_HW_InsertFence(IDirect3DQuery9 **fence)
+void R_HW_InsertFence(IDirect3DQuery9 **fence)
 {
     const char *v1; // eax
     int hr; // [esp+0h] [ebp-4h]
@@ -50,7 +50,7 @@ void __cdecl R_HW_InsertFence(IDirect3DQuery9 **fence)
     } while (alwaysfails);
 }
 
-void __cdecl R_ShowTris(GfxCmdBufContext context, const GfxDrawSurfListInfo *info)
+void R_ShowTris(GfxCmdBufContext context, const GfxDrawSurfListInfo *info)
 {
     GfxDrawSurfListInfo debugInfo; // [esp+14h] [ebp-28h] BYREF
 
@@ -64,7 +64,7 @@ void __cdecl R_ShowTris(GfxCmdBufContext context, const GfxDrawSurfListInfo *inf
     }
 }
 
-void __cdecl RB_Draw3DInternal(const GfxViewInfo *viewInfo)
+void RB_Draw3DInternal(const GfxViewInfo *viewInfo)
 {
     PROF_SCOPED("RB_Draw3D");
 
@@ -104,7 +104,7 @@ void __cdecl RB_Draw3DInternal(const GfxViewInfo *viewInfo)
     }
 }
 
-void __cdecl RB_FullbrightDrawCommands(const GfxViewInfo *viewInfo)
+void RB_FullbrightDrawCommands(const GfxViewInfo *viewInfo)
 {
     const GfxBackEndData *data; // [esp+10h] [ebp-8h]
     GfxCmdBuf cmdBuf; // [esp+14h] [ebp-4h] BYREF
@@ -126,7 +126,7 @@ void __cdecl RB_FullbrightDrawCommands(const GfxViewInfo *viewInfo)
     RB_EndSceneRendering(gfxCmdBufContext, &viewInfo->input, viewInfo);
 }
 
-void __cdecl RB_EndSceneRendering(GfxCmdBufContext context, const GfxCmdBufInput *input, const GfxViewInfo *viewInfo)
+void RB_EndSceneRendering(GfxCmdBufContext context, const GfxCmdBufInput *input, const GfxViewInfo *viewInfo)
 {
     R_HW_InsertFence((IDirect3DQuery9 **)&backEndData->endFence);
     R_InitCmdBufSourceState(context.source, input, 0);
@@ -154,7 +154,7 @@ void __cdecl RB_EndSceneRendering(GfxCmdBufContext context, const GfxCmdBufInput
     memcpy(&gfxCmdBufState, context.state, sizeof(gfxCmdBufState));
 }
 
-void __cdecl R_SetAndClearSceneTarget(const GfxViewport *viewport)
+void R_SetAndClearSceneTarget(const GfxViewport *viewport)
 {
     memcpy(&gfxCmdBufState, &gfxCmdBufState, sizeof(gfxCmdBufState));
     memset((uint8_t *)gfxCmdBufState.vertexShaderConstState, 0, sizeof(gfxCmdBufState.vertexShaderConstState));
@@ -166,7 +166,7 @@ void __cdecl R_SetAndClearSceneTarget(const GfxViewport *viewport)
     memcpy(&gfxCmdBufState, &gfxCmdBufState, sizeof(gfxCmdBufState));
 }
 
-void __cdecl R_ClearForFrameBuffer(IDirect3DDevice9 *device, const GfxViewport *viewport)
+void R_ClearForFrameBuffer(IDirect3DDevice9 *device, const GfxViewport *viewport)
 {
     float clearColor[4]; // [esp+10h] [ebp-10h] BYREF
 
@@ -175,7 +175,7 @@ void __cdecl R_ClearForFrameBuffer(IDirect3DDevice9 *device, const GfxViewport *
 }
 
 void R_DrawFullbrightOrDebugShader(
-    void(__cdecl *callback)(const void *, GfxCmdBufContext, GfxCmdBufContext),
+    void(*callback)(const void *, GfxCmdBufContext, GfxCmdBufContext),
     const GfxViewInfo *viewInfo,
     const GfxDrawSurfListInfo *info,
     GfxCmdBuf *cmdBuf)
@@ -188,7 +188,7 @@ void R_DrawFullbrightOrDebugShader(
     R_DrawCall(callback, viewInfo, &v8, viewInfo, info, &viewInfo->viewParms, cmdBuf, 0);
 }
 
-void __cdecl R_DrawFullbright(const GfxViewInfo *viewInfo, GfxCmdBufInput *input, GfxCmdBuf *cmdBuf)
+void R_DrawFullbright(const GfxViewInfo *viewInfo, GfxCmdBufInput *input, GfxCmdBuf *cmdBuf)
 {
 
     R_DrawFullbrightOrDebugShader(
@@ -208,7 +208,7 @@ void __cdecl R_DrawFullbright(const GfxViewInfo *viewInfo, GfxCmdBufInput *input
         cmdBuf);
 }
 
-void __cdecl R_DrawDebugShaderLitCallback(const void *data, GfxCmdBufContext context, GfxCmdBufContext prepassContext)
+void R_DrawDebugShaderLitCallback(const void *data, GfxCmdBufContext context, GfxCmdBufContext prepassContext)
 {
     int height; // [esp+4h] [ebp-28h]
     int width; // [esp+8h] [ebp-24h]
@@ -240,7 +240,7 @@ void __cdecl R_DrawDebugShaderLitCallback(const void *data, GfxCmdBufContext con
     context.state->prim.device->SetRenderState(D3DRS_SCISSORTESTENABLE, 0);
 }
 
-void __cdecl R_DrawFullbrightDecalCallback(const void *data, GfxCmdBufContext context, GfxCmdBufContext prepassContext)
+void R_DrawFullbrightDecalCallback(const void *data, GfxCmdBufContext context, GfxCmdBufContext prepassContext)
 {
     int height; // [esp+4h] [ebp-28h]
     int width; // [esp+8h] [ebp-24h]
@@ -271,7 +271,7 @@ void __cdecl R_DrawFullbrightDecalCallback(const void *data, GfxCmdBufContext co
     context.state->prim.device->SetRenderState(D3DRS_SCISSORTESTENABLE, 0);
 }
 
-void __cdecl R_DrawDebugShaderEmissiveCallback(const void *data, GfxCmdBufContext context, GfxCmdBufContext prepassContext)
+void R_DrawDebugShaderEmissiveCallback(const void *data, GfxCmdBufContext context, GfxCmdBufContext prepassContext)
 {
     int height; // [esp+4h] [ebp-28h]
     int width; // [esp+8h] [ebp-24h]
@@ -304,7 +304,7 @@ void __cdecl R_DrawDebugShaderEmissiveCallback(const void *data, GfxCmdBufContex
     context.state->prim.device->SetRenderState(D3DRS_SCISSORTESTENABLE, 0);
 }
 
-void __cdecl RB_DebugShaderDrawCommands(const GfxViewInfo *viewInfo)
+void RB_DebugShaderDrawCommands(const GfxViewInfo *viewInfo)
 {
     const GfxBackEndData *data; // [esp+8h] [ebp-8h]
     GfxCmdBuf cmdBuf; // [esp+Ch] [ebp-4h] BYREF
@@ -316,7 +316,7 @@ void __cdecl RB_DebugShaderDrawCommands(const GfxViewInfo *viewInfo)
     RB_EndSceneRendering(gfxCmdBufContext, &viewInfo->input, viewInfo);
 }
 
-void __cdecl R_DrawDebugShader(const GfxViewInfo *viewInfo, GfxCmdBuf *cmdBuf)
+void R_DrawDebugShader(const GfxViewInfo *viewInfo, GfxCmdBuf *cmdBuf)
 {
     R_DrawFullbrightOrDebugShader(
         R_DrawDebugShaderLitCallback,
@@ -335,13 +335,13 @@ void __cdecl R_DrawDebugShader(const GfxViewInfo *viewInfo, GfxCmdBuf *cmdBuf)
         cmdBuf);
 }
 
-void __cdecl R_DrawDebugShaderDecalCallback(const void *data, GfxCmdBufContext context, GfxCmdBufContext prepassContext)
+void R_DrawDebugShaderDecalCallback(const void *data, GfxCmdBufContext context, GfxCmdBufContext prepassContext)
 {
     R_SetRenderTarget(context, R_RENDERTARGET_SCENE);
     R_DrawSurfs(context, 0, &((const GfxViewInfo*)data)->decalInfo);
 }
 
-void __cdecl RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
+void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
 {
     GfxRenderTargetId setupRenderTargetId; // [esp+44h] [ebp-2Ch]
     const GfxBackEndData *data; // [esp+48h] [ebp-28h]
@@ -451,7 +451,7 @@ void  R_DrawLights(const GfxViewInfo *viewInfo, GfxCmdBuf *cmdBuf)
     R_DrawPointLitSurfs(&v4, viewInfo, cmdBuf);
 }
 
-void __cdecl R_DrawPointLitSurfs(GfxCmdBufSourceState *source, const GfxViewInfo *viewInfo, GfxCmdBuf *cmdBuf)
+void R_DrawPointLitSurfs(GfxCmdBufSourceState *source, const GfxViewInfo *viewInfo, GfxCmdBuf *cmdBuf)
 {
     double v3; // st7
     float s1; // [esp+18h] [ebp-144h]
@@ -608,7 +608,7 @@ void __cdecl R_DrawPointLitSurfs(GfxCmdBufSourceState *source, const GfxViewInfo
     }
 }
 
-void __cdecl R_DrawPointLitSurfsCallback(const void *userData, GfxCmdBufContext context, GfxCmdBufContext prepassContext)
+void R_DrawPointLitSurfsCallback(const void *userData, GfxCmdBufContext context, GfxCmdBufContext prepassContext)
 {
     uint32_t h; // [esp+4h] [ebp-28h]
     uint32_t w; // [esp+8h] [ebp-24h]
@@ -641,7 +641,7 @@ void __cdecl R_DrawPointLitSurfsCallback(const void *userData, GfxCmdBufContext 
     context.state->prim.device->SetRenderState(D3DRS_SCISSORTESTENABLE, 0);
 }
 
-void __cdecl R_DrawEmissiveCallback(const void *userData, GfxCmdBufContext context, GfxCmdBufContext prepassContext)
+void R_DrawEmissiveCallback(const void *userData, GfxCmdBufContext context, GfxCmdBufContext prepassContext)
 {
     int height; // [esp+4h] [ebp-28h]
     int width; // [esp+8h] [ebp-24h]
@@ -681,7 +681,7 @@ void R_DrawEmissive(const GfxViewInfo *viewInfo, GfxCmdBuf *cmdBuf)
     R_DrawCall(R_DrawEmissiveCallback, viewInfo, &v4, viewInfo, &viewInfo->emissiveInfo, &viewInfo->viewParms, cmdBuf, 0);
 }
 
-void __cdecl RB_Draw3DCommon()
+void RB_Draw3DCommon()
 {
     PROF_SCOPED("RB_Draw3D");
 
@@ -708,7 +708,7 @@ void __cdecl RB_Draw3DCommon()
     }
 }
 
-void __cdecl R_SetResolvedScene(GfxCmdBufContext context)
+void R_SetResolvedScene(GfxCmdBufContext context)
 {
     R_SetRenderTargetSize(context.source, R_RENDERTARGET_SCENE);
     R_SetRenderTarget(context, R_RENDERTARGET_SCENE);
@@ -817,7 +817,7 @@ void RB_StandardDrawCommandsCommon()
     }
 }
 
-void __cdecl RB_ApplyLatePostEffects(const GfxViewInfo *viewInfo)
+void RB_ApplyLatePostEffects(const GfxViewInfo *viewInfo)
 {
     PROF_SCOPED("RB_ApplyLatePostEffects");
 

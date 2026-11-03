@@ -5,7 +5,7 @@
 #include <universal/q_shared.h>
 #include "client_mp.h"
 
-int __cdecl CL_GetRankForXp(int xp)
+int CL_GetRankForXp(int xp)
 {
   const char *ColumnValueForRow; // eax
   const char *v2; // eax
@@ -49,7 +49,7 @@ int __cdecl CL_GetRankForXp(int xp)
   return atoi(v3);
 }
 
-const char *__cdecl CL_GetRankData(int rank, rankTableColumns_t column)
+const char *CL_GetRankData(int rank, rankTableColumns_t column)
 {
   StringTable *table; // [esp+4h] [ebp-8h] BYREF
   char level[4]; // [esp+8h] [ebp-4h] BYREF
@@ -61,7 +61,7 @@ const char *__cdecl CL_GetRankData(int rank, rankTableColumns_t column)
   return StringTable_Lookup(table, 0, level, column);
 }
 
-void __cdecl CL_GetRankIcon(int rank, int prestige, Material **handle)
+void CL_GetRankIcon(int rank, int prestige, Material **handle)
 {
   StringTable *table; // [esp+0h] [ebp-Ch] BYREF
   const char *rankIconName; // [esp+4h] [ebp-8h]

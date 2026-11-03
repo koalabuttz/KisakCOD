@@ -28,7 +28,7 @@ const dvar_t *vehHudReticleBouncingDiamondSize;
 const dvar_t *vehHudReticleBouncingRadius;
 const dvar_t *vehHudReticleBouncingSpeed;
 
-bool __cdecl ClampScreenPosToEdges(
+bool ClampScreenPosToEdges(
     const float *localClientNum,
     Material *point,
     double padLeft,
@@ -243,7 +243,7 @@ LABEL_40:
     return v22 != 0;
 }
 
-void __cdecl CG_VehicleHudRegisterDvars()
+void CG_VehicleHudRegisterDvars()
 {
     // KISAKTODO: grab descriptions from the assembly (enjoy!)
     vehHudReticlePipOnAStickCenterCircle = (dvar_t *)Dvar_RegisterFloat(
@@ -332,7 +332,7 @@ void __cdecl CG_VehicleHudRegisterDvars()
         0);
 }
 
-int __cdecl WorldDirToScreenPos(int localClientNum, const float *worldDir, float *outScreenPos)
+int WorldDirToScreenPos(int localClientNum, const float *worldDir, float *outScreenPos)
 {
     double v5; // fp28
     double v6; // fp30
@@ -503,7 +503,7 @@ LABEL_16:
     return result;
 }
 
-void __cdecl CG_DrawVehicleTargets(int localClientNum, rectDef_s *rect, float *color, Material *defaultMaterial)
+void CG_DrawVehicleTargets(int localClientNum, rectDef_s *rect, float *color, Material *defaultMaterial)
 {
     int targetIndex;
 
@@ -601,7 +601,7 @@ void __cdecl CG_DrawVehicleTargets(int localClientNum, rectDef_s *rect, float *c
     }
 }
 
-void __cdecl CG_DrawJavelinTargets(int localClientNum, rectDef_s *rect, float *color, Material *defaultMaterial)
+void CG_DrawJavelinTargets(int localClientNum, rectDef_s *rect, float *color, Material *defaultMaterial)
 {
     const playerState_s *ps;
     centity_s *targetEnt;
@@ -844,7 +844,7 @@ void CG_DrawPipOnAStickReticle(int localClientNum, rectDef_s *rect, float *color
     }
 }
 
-void __cdecl CG_InitVehicleReticle(int localClientNum)
+void CG_InitVehicleReticle(int localClientNum)
 {
     if (localClientNum)
         MyAssertHandler(
@@ -861,7 +861,7 @@ void __cdecl CG_InitVehicleReticle(int localClientNum)
     cgArray[0].vehReticleVel[1] = 0.0;
 }
 
-void __cdecl CG_ReticleStartLockOn(int localClientNum, int targetEntNum, int msecDuration)
+void CG_ReticleStartLockOn(int localClientNum, int targetEntNum, int msecDuration)
 {
     if (localClientNum)
         MyAssertHandler(
@@ -876,7 +876,7 @@ void __cdecl CG_ReticleStartLockOn(int localClientNum, int targetEntNum, int mse
     cgArray[0].vehReticleLockOnDuration = msecDuration;
 }
 
-int __cdecl CG_GetTargetPos(int localClientNum, int targetEntNum, float *outPos)
+int CG_GetTargetPos(int localClientNum, int targetEntNum, float *outPos)
 {
     int v6; // r30
     targetInfo_t *targets; // r11
@@ -1042,7 +1042,7 @@ void CG_DrawBouncingDiamond(int localClientNum, rectDef_s *rect, float *color)
 }
 
 
-void __cdecl CG_DrawVehicleReticle(int localClientNum, rectDef_s *rect, float *color)
+void CG_DrawVehicleReticle(int localClientNum, rectDef_s *rect, float *color)
 {
     centity_s *vehicle; // r30
     activeReticleType_t activeReticleType; // r11
@@ -1076,7 +1076,7 @@ void __cdecl CG_DrawVehicleReticle(int localClientNum, rectDef_s *rect, float *c
     }
 }
 
-void __cdecl CG_TargetsChanged(int localClientNum, unsigned int num)
+void CG_TargetsChanged(int localClientNum, unsigned int num)
 {
     const char *ConfigString; // r3
     unsigned int v5; // r31

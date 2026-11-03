@@ -6,7 +6,7 @@
 
 
 
-void __cdecl R_AddEntitySurfacesInFrustumCmd(uint16_t *data)
+void R_AddEntitySurfacesInFrustumCmd(uint16_t *data)
 {
     int v1; // [esp+4h] [ebp-28h]
     const DpvsPlane *plane; // [esp+Ch] [ebp-20h]
@@ -70,12 +70,12 @@ void __cdecl R_AddEntitySurfacesInFrustumCmd(uint16_t *data)
     }
 }
 
-bool __cdecl R_BoundsInCell(mnode_t *node, int findCellIndex, const float *mins, const float *maxs)
+bool R_BoundsInCell(mnode_t *node, int findCellIndex, const float *mins, const float *maxs)
 {
     return R_BoundsInCell_r(node, findCellIndex, mins, maxs);
 }
 
-bool __cdecl R_BoundsInCell_r(mnode_t *node, int findCellIndex, const float *mins, const float *maxs)
+bool R_BoundsInCell_r(mnode_t *node, int findCellIndex, const float *mins, const float *maxs)
 {
     float localmaxs[3]; // [esp+0h] [ebp-58h]
     float dist; // [esp+Ch] [ebp-4Ch]

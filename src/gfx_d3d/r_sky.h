@@ -72,14 +72,14 @@ struct SunFlareDynamic // sizeof=0x28
     int hitNum;
 };
 
-uint32_t __cdecl R_GetSunDvarCount();
-void __cdecl R_RegisterSunDvars();
-void __cdecl R_SetSunFromDvars(sunflare_t *sun);
-void __cdecl R_LoadSunThroughDvars(const char *sunName, sunflare_t *sun);
-void __cdecl R_Cmd_LoadSun();
-void __cdecl R_Cmd_SaveSun();
-void __cdecl R_SaveSunFromDvars(const char *sunName);
-void __cdecl R_FlushSun();
+uint32_t R_GetSunDvarCount();
+void R_RegisterSunDvars();
+void R_SetSunFromDvars(sunflare_t *sun);
+void R_LoadSunThroughDvars(const char *sunName, sunflare_t *sun);
+void R_Cmd_LoadSun();
+void R_Cmd_SaveSun();
+void R_SaveSunFromDvars(const char *sunName);
+void R_FlushSun();
 
 extern const dvar_t *r_sunflare_min_size;
 extern const dvar_t *r_sunsprite_shader;

@@ -8,7 +8,7 @@
 #include <cstring>
 #include <qcommon/net_chan_mp.h>
 
-void __cdecl SV_Netchan_Decode(client_t *client, uint8_t *data, int size)
+void SV_Netchan_Decode(client_t *client, uint8_t *data, int size)
 {
     int i, index;
     byte key, * string;
@@ -35,7 +35,7 @@ void __cdecl SV_Netchan_Decode(client_t *client, uint8_t *data, int size)
     }
 }
 
-void __cdecl SV_Netchan_Encode(client_t *client, uint8_t *data, int size)
+void SV_Netchan_Encode(client_t *client, uint8_t *data, int size)
 {
     int i, index;
     byte key, * string;
@@ -60,7 +60,7 @@ void __cdecl SV_Netchan_Encode(client_t *client, uint8_t *data, int size)
     }
 }
 
-void __cdecl SV_Netchan_OutgoingSequenceIncremented(client_t *client, netchan_t *chan)
+void SV_Netchan_OutgoingSequenceIncremented(client_t *client, netchan_t *chan)
 {
     clientSnapshot_t *frame; // [esp+0h] [ebp-4h]
 
@@ -70,7 +70,7 @@ void __cdecl SV_Netchan_OutgoingSequenceIncremented(client_t *client, netchan_t 
     frame->first_client = svs.nextSnapshotClients;
 }
 
-bool __cdecl SV_Netchan_TransmitNextFragment(client_t *client, netchan_t *chan)
+bool SV_Netchan_TransmitNextFragment(client_t *client, netchan_t *chan)
 {
     bool res; // [esp+3h] [ebp-1h]
 
@@ -80,7 +80,7 @@ bool __cdecl SV_Netchan_TransmitNextFragment(client_t *client, netchan_t *chan)
     return res;
 }
 
-bool __cdecl SV_Netchan_Transmit(client_t *client, uint8_t *data, int length)
+bool SV_Netchan_Transmit(client_t *client, uint8_t *data, int length)
 {
     bool res; // [esp+3h] [ebp-1h]
 
@@ -91,7 +91,7 @@ bool __cdecl SV_Netchan_Transmit(client_t *client, uint8_t *data, int length)
     return res;
 }
 
-void __cdecl SV_Netchan_AddOOBProfilePacket(int iLength)
+void SV_Netchan_AddOOBProfilePacket(int iLength)
 {
     if (net_profile->current.integer)
     {
@@ -100,7 +100,7 @@ void __cdecl SV_Netchan_AddOOBProfilePacket(int iLength)
     }
 }
 
-void __cdecl SV_Netchan_UpdateProfileStats()
+void SV_Netchan_UpdateProfileStats()
 {
     client_t *pClient; // [esp+0h] [ebp-8h]
     int i; // [esp+4h] [ebp-4h]

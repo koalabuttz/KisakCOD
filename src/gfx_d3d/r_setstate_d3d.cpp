@@ -3,7 +3,7 @@
 #include "r_init.h"
 
 
-bool __cdecl RB_IsGpuFinished()
+bool RB_IsGpuFinished()
 {
     const char *v1; // eax
     int hr; // [esp+0h] [ebp-8h]
@@ -48,7 +48,7 @@ bool __cdecl RB_IsGpuFinished()
     }
 }
 
-bool __cdecl RB_IsGpuFenceFinished()
+bool RB_IsGpuFenceFinished()
 {
     if (dx.flushGpuQueryIssued)
     {

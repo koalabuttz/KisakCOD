@@ -10,30 +10,30 @@ struct GfxSpotShadowEntCmd // sizeof=0x8
     const GfxLight *light;              // ...
 };
 
-void __cdecl R_AddSpotShadowEntCmd(const GfxSpotShadowEntCmd *data);
-char __cdecl R_AddSpotShadowsForLight(
+void R_AddSpotShadowEntCmd(const GfxSpotShadowEntCmd *data);
+char R_AddSpotShadowsForLight(
     GfxViewInfo *viewInfo,
     GfxLight *light,
     uint32_t shadowableLightIndex,
     float spotShadowFade);
-void __cdecl R_SetViewParmsForLight(const GfxLight *light, GfxViewParms *viewParms, float nearPlaneBias);
-void __cdecl R_GetSpotShadowLookupMatrix(
+void R_SetViewParmsForLight(const GfxLight *light, GfxViewParms *viewParms, float nearPlaneBias);
+void R_GetSpotShadowLookupMatrix(
     const GfxViewParms *shadowViewParms,
     uint32_t spotShadowIndex,
     uint32_t tileCount,
     GfxMatrix *lookupMatrix);
-void __cdecl R_AddSpotShadowModelEntities(
+void R_AddSpotShadowModelEntities(
     uint32_t localClientNum,
     uint32_t primaryLightIndex,
     const GfxLight *light);
-void __cdecl R_GenerateAllSortedSpotShadowDrawSurfs(GfxViewInfo *viewInfo);
-void __cdecl R_GenerateSortedPrimarySpotShadowDrawSurfs(
+void R_GenerateAllSortedSpotShadowDrawSurfs(GfxViewInfo *viewInfo);
+void R_GenerateSortedPrimarySpotShadowDrawSurfs(
     const GfxViewInfo *viewInfo,
     uint32_t spotShadowIndex,
     uint32_t shadowableLightIndex);
-void __cdecl R_EmitSpotShadowMapSurfs(GfxViewInfo *viewInfo);
+void R_EmitSpotShadowMapSurfs(GfxViewInfo *viewInfo);
 
 
 uint32_t R_InitSpotShadowMeshes();
-void __cdecl R_ShutdownSpotShadowMeshes();
+void R_ShutdownSpotShadowMeshes();
 void RB_SpotShadowMaps(const GfxBackEndData *data, const GfxViewInfo *viewInfo);

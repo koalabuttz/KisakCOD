@@ -31,34 +31,34 @@ char *g_sv_skel_memory_start;
 int gameInitialized;
 
 
-void __cdecl TRACK_sv_game()
+void TRACK_sv_game()
 {
     track_static_alloc_internal(g_sv_skel_memory, SKEL_MEMORY_SIZE, "g_sv_skel_memory", 11);
 }
 
-gentity_s *__cdecl SV_GentityNum(int num)
+gentity_s *SV_GentityNum(int num)
 {
     return (gentity_s *)((char *)sv.gentities + num * sv.gentitySize);
 }
 
-playerState_s *__cdecl SV_GameClientNum(int num)
+playerState_s *SV_GameClientNum(int num)
 {
     return (playerState_s *)((char *)sv.gameClients + num * sv.gameClientSize);
 }
 
-svEntity_s *__cdecl SV_SvEntityForGentity(const gentity_s *gEnt)
+svEntity_s *SV_SvEntityForGentity(const gentity_s *gEnt)
 {
     if (!gEnt || gEnt->s.number >= ARRAY_COUNT(sv.svEntities))
         Com_Error(ERR_DROP, "SV_SvEntityForGentity: bad gEnt");
     return &sv.svEntities[gEnt->s.number];
 }
 
-gentity_s *__cdecl SV_GEntityForSvEntity(svEntity_s *svEnt)
+gentity_s *SV_GEntityForSvEntity(svEntity_s *svEnt)
 {
     return SV_GentityNum(svEnt - sv.svEntities);
 }
 
-bool __cdecl SV_EntityContact(const float *mins, const float *maxs, const gentity_s *gEnt)
+bool SV_EntityContact(const float *mins, const float *maxs, const gentity_s *gEnt)
 {
     uint32_t model; // [esp+8h] [ebp-40h]
     float dist; // [esp+Ch] [ebp-3Ch]
@@ -136,7 +136,7 @@ bool __cdecl SV_EntityContact(const float *mins, const float *maxs, const gentit
     }
 }
 
-void __cdecl SV_GetServerinfo(char *buffer, int bufferSize)
+void SV_GetServerinfo(char *buffer, int bufferSize)
 {
     if (bufferSize < 1)
         Com_Error(ERR_DROP, "SV_GetServerinfo: bufferSize == %i", bufferSize);
@@ -144,7 +144,7 @@ void __cdecl SV_GetServerinfo(char *buffer, int bufferSize)
     I_strncpyz(buffer, Dvar_InfoString(0, 4), bufferSize);
 }
 
-void __cdecl SV_LocateGameData(
+void SV_LocateGameData(
     gentity_s *gEnts,
     int numGEntities,
     int sizeofGEntity_t,
@@ -158,7 +158,7 @@ void __cdecl SV_LocateGameData(
     sv.gameClientSize = sizeofGameClient;
 }
 
-void __cdecl SV_GetUsercmd(int clientNum, usercmd_s *cmd)
+void SV_GetUsercmd(int clientNum, usercmd_s *cmd)
 {
     iassert(clientNum >= 0);
 #ifdef KISAK_MP
@@ -168,25 +168,25 @@ void __cdecl SV_GetUsercmd(int clientNum, usercmd_s *cmd)
     memcpy(cmd, &svs.clients[clientNum].lastUsercmd, sizeof(usercmd_s));
 }
 
-XModel *__cdecl SV_XModelGet(char *name)
+XModel *SV_XModelGet(char *name)
 {
     return XModelPrecache(
         name,
-        (void *(__cdecl *)(int))SV_AllocXModelPrecache,
-        (void *(__cdecl *)(int))SV_AllocXModelPrecacheColl);
+        (void *(*)(int))SV_AllocXModelPrecache,
+        (void *(*)(int))SV_AllocXModelPrecacheColl);
 }
 
-uint8_t *__cdecl SV_AllocXModelPrecache(uint32_t size)
+uint8_t *SV_AllocXModelPrecache(uint32_t size)
 {
     return Hunk_Alloc(size, "SV_AllocXModelPrecache", 21);
 }
 
-uint8_t *__cdecl SV_AllocXModelPrecacheColl(uint32_t size)
+uint8_t *SV_AllocXModelPrecacheColl(uint32_t size)
 {
     return Hunk_Alloc(size, "SV_AllocXModelPrecacheColl", 27);
 }
 
-void __cdecl SV_DObjDumpInfo(gentity_s *ent)
+void SV_DObjDumpInfo(gentity_s *ent)
 {
     const DObj_s *obj; // [esp+0h] [ebp-4h]
 
@@ -200,7 +200,7 @@ void __cdecl SV_DObjDumpInfo(gentity_s *ent)
     }
 }
 
-void __cdecl SV_ResetSkeletonCache()
+void SV_ResetSkeletonCache()
 {
     if (!++sv.skelTimeStamp)
         sv.skelTimeStamp = 1;
@@ -208,7 +208,7 @@ void __cdecl SV_ResetSkeletonCache()
     sv.skelMemPos = 0;
 }
 
-bool __cdecl SV_DObjCreateSkelForBone(DObj_s *obj, int boneIndex)
+bool SV_DObjCreateSkelForBone(DObj_s *obj, int boneIndex)
 {
     char *buf; // [esp+0h] [ebp-8h]
     uint32_t len; // [esp+4h] [ebp-4h]
@@ -222,7 +222,7 @@ bool __cdecl SV_DObjCreateSkelForBone(DObj_s *obj, int boneIndex)
 }
 
 int warnCount_2;
-char *__cdecl SV_AllocSkelMemory(uint32_t size)
+char *SV_AllocSkelMemory(uint32_t size)
 {
     char *result; // [esp+0h] [ebp-4h]
     uint32_t sizea; // [esp+Ch] [ebp+8h]
@@ -250,7 +250,7 @@ char *__cdecl SV_AllocSkelMemory(uint32_t size)
     return result;
 }
 
-int __cdecl SV_DObjCreateSkelForBones(DObj_s *obj, int *partBits)
+int SV_DObjCreateSkelForBones(DObj_s *obj, int *partBits)
 {
     char *buf; // [esp+0h] [ebp-8h]
     uint32_t len; // [esp+4h] [ebp-4h]
@@ -263,7 +263,7 @@ int __cdecl SV_DObjCreateSkelForBones(DObj_s *obj, int *partBits)
     return 0;
 }
 
-int __cdecl SV_DObjUpdateServerTime(gentity_s *ent, float dtime, int bNotify)
+int SV_DObjUpdateServerTime(gentity_s *ent, float dtime, int bNotify)
 {
     DObj_s *obj; // [esp+8h] [ebp-4h]
 
@@ -274,7 +274,7 @@ int __cdecl SV_DObjUpdateServerTime(gentity_s *ent, float dtime, int bNotify)
         return 0;
 }
 
-void __cdecl SV_DObjInitServerTime(gentity_s *ent, float dtime)
+void SV_DObjInitServerTime(gentity_s *ent, float dtime)
 {
     DObj_s *obj; // [esp+4h] [ebp-4h]
 
@@ -283,7 +283,7 @@ void __cdecl SV_DObjInitServerTime(gentity_s *ent, float dtime)
         DObjInitServerTime(obj, dtime);
 }
 
-int __cdecl SV_DObjGetBoneIndex(const gentity_s *ent, uint32_t boneName)
+int SV_DObjGetBoneIndex(const gentity_s *ent, uint32_t boneName)
 {
     const DObj_s *obj; // [esp+0h] [ebp-8h]
     uint8_t index; // [esp+7h] [ebp-1h] BYREF
@@ -298,7 +298,7 @@ int __cdecl SV_DObjGetBoneIndex(const gentity_s *ent, uint32_t boneName)
         return -1;
 }
 
-DObjAnimMat *__cdecl SV_DObjGetMatrixArray(const gentity_s *ent)
+DObjAnimMat *SV_DObjGetMatrixArray(const gentity_s *ent)
 {
     const DObj_s *obj; // [esp+0h] [ebp-4h]
 
@@ -306,7 +306,7 @@ DObjAnimMat *__cdecl SV_DObjGetMatrixArray(const gentity_s *ent)
     iassert(obj);
     return DObjGetRotTransArray(obj);
 }
-void __cdecl SV_DObjDisplayAnim(gentity_s *ent, const char *header)
+void SV_DObjDisplayAnim(gentity_s *ent, const char *header)
 {
     DObj_s *obj; // [esp+0h] [ebp-4h]
 
@@ -314,7 +314,7 @@ void __cdecl SV_DObjDisplayAnim(gentity_s *ent, const char *header)
     if (obj)
         DObjDisplayAnim(obj, header);
 }
-void __cdecl SV_DObjGetBounds(gentity_s *ent, float *mins, float *maxs)
+void SV_DObjGetBounds(gentity_s *ent, float *mins, float *maxs)
 {
     const DObj_s *obj; // [esp+0h] [ebp-4h]
 
@@ -323,7 +323,7 @@ void __cdecl SV_DObjGetBounds(gentity_s *ent, float *mins, float *maxs)
     DObjGetBounds(obj, mins, maxs);
 }
 
-XAnimTree_s *__cdecl SV_DObjGetTree(gentity_s *ent)
+XAnimTree_s *SV_DObjGetTree(gentity_s *ent)
 {
     const DObj_s *obj; // [esp+4h] [ebp-4h]
 
@@ -362,7 +362,7 @@ int boxVerts_0[24][3] =
   { 1, 1, 1 }
 }; // idb
 
-void __cdecl SV_XModelDebugBoxes(gentity_s *ent)
+void SV_XModelDebugBoxes(gentity_s *ent)
 {
     const XModel *Model; // eax
     float v2; // [esp+24h] [ebp-2F0h]
@@ -485,16 +485,16 @@ void __cdecl SV_XModelDebugBoxes(gentity_s *ent)
         }
     }
 }
-bool __cdecl SV_DObjExists(gentity_s *ent)
+bool SV_DObjExists(gentity_s *ent)
 {
     return Com_GetServerDObj(ent->s.number) != 0;
 }
-void __cdecl SV_track_shutdown()
+void SV_track_shutdown()
 {
     track_shutdown(2);
 }
 
-int __cdecl SV_GameCommand()
+int SV_GameCommand()
 {
     if (sv.state == SS_GAME)
         return ConsoleCommand();
@@ -510,7 +510,7 @@ int __cdecl SV_GameCommand()
 #include <client/cl_input.h>
 #include <universal/profile.h>
 
-void __cdecl SV_CheckLoadLevel(SaveGame *save)
+void SV_CheckLoadLevel(SaveGame *save)
 {
     G_CheckLoadGame(sv.checksum, save);
     com_time = G_GetTime();
@@ -541,7 +541,7 @@ static void SV_ShutdownGameVM(int clearScripts)
     SV_FreeReliableCommandsForClient(svs.clients);
 }
 
-void __cdecl SV_ShutdownGameProgs()
+void SV_ShutdownGameProgs()
 {
     iassert(Sys_IsMainThread());
 
@@ -558,7 +558,7 @@ void __cdecl SV_ShutdownGameProgs()
     }
 }
 
-void __cdecl SV_InitGameVM(uint32_t randomSeed, int restart, int savegame, SaveGame **save, int loadScripts)
+void SV_InitGameVM(uint32_t randomSeed, int restart, int savegame, SaveGame **save, int loadScripts)
 {
     iassert(save);
 
@@ -609,7 +609,7 @@ void __cdecl SV_InitGameVM(uint32_t randomSeed, int restart, int savegame, SaveG
     }
 }
 
-void __cdecl SV_RestartGameProgs(uint32_t randomSeed, int savegame, SaveGame **save, int loadScripts)
+void SV_RestartGameProgs(uint32_t randomSeed, int savegame, SaveGame **save, int loadScripts)
 {
     iassert(Sys_IsMainThread());
     iassert(gameInitialized);
@@ -625,7 +625,7 @@ void __cdecl SV_RestartGameProgs(uint32_t randomSeed, int savegame, SaveGame **s
     SV_InitGameVM(randomSeed, 1, savegame, save, loadScripts);
 }
 
-void __cdecl SV_InitGameProgs(uint32_t randomSeed, int savegame, SaveGame **save)
+void SV_InitGameProgs(uint32_t randomSeed, int savegame, SaveGame **save)
 {
     iassert(save);
     gameInitialized = 1;
@@ -710,7 +710,7 @@ void SV_SetUsercmdButtonsWeapons(int buttons, int weapon, int offhand)
 #endif // KISAK_SP
 
 #ifdef KISAK_MP
-bool __cdecl SV_inSnapshot(const float *origin, int iEntityNum)
+bool SV_inSnapshot(const float *origin, int iEntityNum)
 {
     int clientcluster; // [esp+4h] [ebp-24h]
     float fogOpaqueDistSqrd; // [esp+8h] [ebp-20h]
@@ -757,7 +757,7 @@ bool __cdecl SV_inSnapshot(const float *origin, int iEntityNum)
         || !BoxDistSqrdExceeds(ent->r.absmin, ent->r.absmax, origin, fogOpaqueDistSqrd);
 }
 
-void __cdecl SV_SetGameEndTime(int gameEndTime)
+void SV_SetGameEndTime(int gameEndTime)
 {
     char *v1; // eax
     char lastGameEndTime[12]; // [esp+0h] [ebp-10h] BYREF
@@ -770,7 +770,7 @@ void __cdecl SV_SetGameEndTime(int gameEndTime)
     }
 }
 
-void __cdecl SV_SetMapCenter(float *mapCenter)
+void SV_SetMapCenter(float *mapCenter)
 {
     char *v1; // eax
 
@@ -781,7 +781,7 @@ void __cdecl SV_SetMapCenter(float *mapCenter)
     SV_SetConfigstring(12, v1);
 }
 
-void __cdecl SV_GameDropClient(int clientNum, const char *reason)
+void SV_GameDropClient(int clientNum, const char *reason)
 {
     if (sv_maxclients->current.integer < 1 || sv_maxclients->current.integer > 64)
         MyAssertHandler(
@@ -795,7 +795,7 @@ void __cdecl SV_GameDropClient(int clientNum, const char *reason)
         SV_DropClient(&svs.clients[clientNum], reason, 1);
 }
 
-bool __cdecl SV_MapExists(char *name)
+bool SV_MapExists(char *name)
 {
     char fullpath[256]; // [esp+0h] [ebp-108h] BYREF
     const char *basename; // [esp+104h] [ebp-4h]
@@ -805,7 +805,7 @@ bool __cdecl SV_MapExists(char *name)
     return FS_ReadFile(fullpath, 0) >= 0;
 }
 
-char *__cdecl SV_GetGuid(int clientNum)
+char *SV_GetGuid(int clientNum)
 {
     if (!sv_maxclients)
         MyAssertHandler(".\\server\\sv_game.cpp", 981, 0, "%s", "sv_maxclients");
@@ -815,17 +815,17 @@ char *__cdecl SV_GetGuid(int clientNum)
         return svs.clients[clientNum].cdkeyHash;
 }
 
-int __cdecl SV_GetClientPing(int clientNum)
+int SV_GetClientPing(int clientNum)
 {
     return svs.clients[clientNum].ping;
 }
 
-bool __cdecl SV_IsLocalClient(int clientNum)
+bool SV_IsLocalClient(int clientNum)
 {
     return NET_IsLocalAddress(svs.clients[clientNum].header.netchan.remoteAddress);
 }
 
-void __cdecl SV_SetGametype()
+void SV_SetGametype()
 {
     char gametype[64]; // [esp+0h] [ebp-48h] BYREF
     char *s; // [esp+44h] [ebp-4h]
@@ -845,7 +845,7 @@ void __cdecl SV_SetGametype()
     Dvar_SetString((dvar_s *)sv_gametype, gametype);
 }
 
-void __cdecl SV_InitGameVM(int restart, int savepersist)
+void SV_InitGameVM(int restart, int savepersist)
 {
     uint32_t v2; // eax
     int i; // [esp+0h] [ebp-4h]
@@ -866,7 +866,7 @@ void __cdecl SV_InitGameVM(int restart, int savepersist)
         svs.clients[i].gentity = 0;
 }
 
-void __cdecl SV_GameSendServerCommand(int clientNum, svscmd_type type, const char *text)
+void SV_GameSendServerCommand(int clientNum, svscmd_type type, const char *text)
 {
     if (clientNum == -1)
     {
@@ -880,7 +880,7 @@ void __cdecl SV_GameSendServerCommand(int clientNum, svscmd_type type, const cha
     }
 }
 
-bool __cdecl SV_SetBrushModel(gentity_s *ent)
+bool SV_SetBrushModel(gentity_s *ent)
 {
     float mins[3]; // [esp+8h] [ebp-18h] BYREF
     float maxs[3]; // [esp+14h] [ebp-Ch] BYREF
@@ -909,7 +909,7 @@ bool __cdecl SV_SetBrushModel(gentity_s *ent)
     return 1;
 }
 
-void __cdecl SV_ShutdownGameProgs()
+void SV_ShutdownGameProgs()
 {
     Com_SyncThreads();
     sv.state = SS_DEAD;
@@ -921,13 +921,13 @@ void __cdecl SV_ShutdownGameProgs()
     }
 }
 
-void __cdecl SV_InitGameProgs(int savepersist)
+void SV_InitGameProgs(int savepersist)
 {
     gameInitialized = 1;
     SV_InitGameVM(0, savepersist);
 }
 
-void __cdecl SV_RestartGameProgs(int savepersist)
+void SV_RestartGameProgs(int savepersist)
 {
     Com_SyncThreads();
     G_ShutdownGame(0);

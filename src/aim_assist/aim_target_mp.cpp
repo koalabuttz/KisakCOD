@@ -12,12 +12,12 @@ AimTargetGlob atGlobArray[1];
 
 const dvar_t *aim_target_sentient_radius;
 
-void __cdecl TRACK_aim_target()
+void TRACK_aim_target()
 {
     track_static_alloc_internal(atGlobArray, 5640, "atGlobArray", 10);
 }
 
-void __cdecl AimTarget_Init(int32_t localClientNum)
+void AimTarget_Init(int32_t localClientNum)
 {
     memset((uint8_t*)&atGlobArray[localClientNum], 0, sizeof(AimTargetGlob));
     AimTarget_RegisterDvars();
@@ -50,12 +50,12 @@ const dvar_s *AimTarget_RegisterDvars()
     return result;
 }
 
-void __cdecl AimTarget_ClearTargetList(int32_t localClientNum)
+void AimTarget_ClearTargetList(int32_t localClientNum)
 {
     atGlobArray[localClientNum].targetCount = 0;
 }
 
-void __cdecl AimTarget_ProcessEntity(int32_t localClientNum, const centity_s *ent)
+void AimTarget_ProcessEntity(int32_t localClientNum, const centity_s *ent)
 {
     AimTarget target;
     uint32_t visBone;
@@ -138,7 +138,7 @@ LABEL_26:
     return (dot >= 0.0f);
 }
 
-double __cdecl AimTarget_GetTargetRadius(const centity_s *targetEnt)
+double AimTarget_GetTargetRadius(const centity_s *targetEnt)
 {
     float mins[3] = { 0 }; // [esp+0h] [ebp-1Ch] BYREF
     float maxs[3] = { 0 }; // [esp+10h] [ebp-Ch] BYREF
@@ -153,7 +153,7 @@ double __cdecl AimTarget_GetTargetRadius(const centity_s *targetEnt)
     return RadiusFromBounds(mins, maxs);
 }
 
-void __cdecl AimTarget_GetTargetBounds(const centity_s *targetEnt, float *mins, float *maxs)
+void AimTarget_GetTargetBounds(const centity_s *targetEnt, float *mins, float *maxs)
 {
     float highBonePos[3]; // [esp+0h] [ebp-Ch] BYREF
 
@@ -179,7 +179,7 @@ void __cdecl AimTarget_GetTargetBounds(const centity_s *targetEnt, float *mins, 
     }
 }
 
-void __cdecl AimTarget_GetTagPos(const centity_s *ent, uint32_t tagName, float *pos)
+void AimTarget_GetTagPos(const centity_s *ent, uint32_t tagName, float *pos)
 {
     DObj_s* dobj = Com_GetClientDObj(ent->nextState.number, ent->pose.localClientNum); // [esp+0h] [ebp-4h]
     iassert(dobj);
@@ -190,7 +190,7 @@ void __cdecl AimTarget_GetTagPos(const centity_s *ent, uint32_t tagName, float *
     }
 }
 
-char __cdecl AimTarget_IsTargetVisible(int32_t localClientNum, const centity_s *targetEnt, uint32_t visBone)
+char AimTarget_IsTargetVisible(int32_t localClientNum, const centity_s *targetEnt, uint32_t visBone)
 {
     float endPos[4]; // [esp+58h] [ebp-58h] BYREF
     trace_t trace; // [esp+68h] [ebp-48h] BYREF
@@ -247,7 +247,7 @@ char __cdecl AimTarget_IsTargetVisible(int32_t localClientNum, const centity_s *
     return 1;
 }
 
-void __cdecl AimTarget_GetTargetCenter(const centity_s *targetEnt, float *center)
+void AimTarget_GetTargetCenter(const centity_s *targetEnt, float *center)
 {
     float mins[3]; // [esp+8h] [ebp-18h] BYREF
     float maxs[3]; // [esp+14h] [ebp-Ch] BYREF
@@ -261,7 +261,7 @@ void __cdecl AimTarget_GetTargetCenter(const centity_s *targetEnt, float *center
     Vec3Add(targetEnt->pose.origin, center, center);
 }
 
-void __cdecl AimTarget_CreateTarget(int32_t localClientNum, const centity_s *targetEnt, AimTarget *target)
+void AimTarget_CreateTarget(int32_t localClientNum, const centity_s *targetEnt, AimTarget *target)
 {
     float scale; // [esp+8h] [ebp-70h]
     float diff[8]; // [esp+30h] [ebp-48h] BYREF
@@ -302,7 +302,7 @@ void __cdecl AimTarget_CreateTarget(int32_t localClientNum, const centity_s *tar
     AimTarget_AddTargetToList(localClientNum, target);
 }
 
-void __cdecl AimTarget_AddTargetToList(int32_t localClientNum, const AimTarget *target)
+void AimTarget_AddTargetToList(int32_t localClientNum, const AimTarget *target)
 {
     int32_t targetIndex; // [esp+8h] [ebp-14h]
     int32_t low; // [esp+Ch] [ebp-10h]
@@ -337,7 +337,7 @@ void __cdecl AimTarget_AddTargetToList(int32_t localClientNum, const AimTarget *
     }
 }
 
-int __cdecl AimTarget_CompareTargets(const AimTarget *targetA, const AimTarget *targetB)
+int AimTarget_CompareTargets(const AimTarget *targetA, const AimTarget *targetB)
 {
     iassert(targetA);
     iassert(targetB);
@@ -349,7 +349,7 @@ int __cdecl AimTarget_CompareTargets(const AimTarget *targetA, const AimTarget *
     return -1;
 }
 
-bool __cdecl AimTarget_PlayerInValidState(const playerState_s *ps)
+bool AimTarget_PlayerInValidState(const playerState_s *ps)
 {
     bool result; // al
     
@@ -381,7 +381,7 @@ bool __cdecl AimTarget_PlayerInValidState(const playerState_s *ps)
 #endif
 }
 
-void __cdecl AimTarget_UpdateClientTargets(int32_t localClientNum)
+void AimTarget_UpdateClientTargets(int32_t localClientNum)
 {
     atGlobArray[localClientNum].clientTargetCount = atGlobArray[localClientNum].targetCount;
     memcpy(
@@ -390,7 +390,7 @@ void __cdecl AimTarget_UpdateClientTargets(int32_t localClientNum)
         44 * atGlobArray[localClientNum].targetCount);
 }
 
-void __cdecl AimTarget_GetClientTargetList(int32_t localClientNum, AimTarget **targetList, int32_t*targetCount)
+void AimTarget_GetClientTargetList(int32_t localClientNum, AimTarget **targetList, int32_t*targetCount)
 {
     iassert(targetList);
     iassert(targetCount);

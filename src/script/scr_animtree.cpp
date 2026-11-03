@@ -31,18 +31,18 @@ scrAnimGlob_t scrAnimGlob;
 scrAnimPub_t scrAnimPub;
 
 
-void __cdecl TRACK_scr_animtree()
+void TRACK_scr_animtree()
 {
     track_static_alloc_internal(&scrAnimGlob, sizeof(scrAnimGlob_t), "scrAnimGlob", 7);
     track_static_alloc_internal(&scrAnimPub, sizeof(scrAnimPub_t), "scrAnimPub", 7);
 }
 
-void __cdecl SetAnimCheck(int bAnimCheck)
+void SetAnimCheck(int bAnimCheck)
 {
     scrAnimGlob.bAnimCheck = bAnimCheck;
 }
 
-void __cdecl Scr_EmitAnimation(char *pos, uint32_t animName, uint32_t sourcePos)
+void Scr_EmitAnimation(char *pos, uint32_t animName, uint32_t sourcePos)
 {
     if (scrAnimPub.animTreeNames)
         Scr_EmitAnimationInternal(pos, animName, scrAnimPub.animTreeNames);
@@ -50,7 +50,7 @@ void __cdecl Scr_EmitAnimation(char *pos, uint32_t animName, uint32_t sourcePos)
         CompileError(sourcePos, "#using_animtree was not specified");
 }
 
-void __cdecl Scr_EmitAnimationInternal(char *pos, uint32_t animName, uint32_t names)
+void Scr_EmitAnimationInternal(char *pos, uint32_t animName, uint32_t names)
 {
     uint32_t NewVariable; // eax
     VariableValueInternal_u *value; // [esp+0h] [ebp-10h]
@@ -76,7 +76,7 @@ void __cdecl Scr_EmitAnimationInternal(char *pos, uint32_t animName, uint32_t na
     }
 }
 
-int __cdecl Scr_GetAnimsIndex(const XAnim_s *anims)
+int Scr_GetAnimsIndex(const XAnim_s *anims)
 {
     int i; // [esp+4h] [ebp-4h]
 
@@ -86,14 +86,14 @@ int __cdecl Scr_GetAnimsIndex(const XAnim_s *anims)
     return i;
 }
 
-XAnim_s *__cdecl Scr_GetAnims(uint32_t index)
+XAnim_s *Scr_GetAnims(uint32_t index)
 {
     iassert(index && index <= scrAnimPub.xanim_num[SCR_XANIM_SERVER]);
     //return (XAnim_s *)scrAnimPub.xanim_num[index - 128];
     return scrAnimPub.xanim_lookup[1][index].anims;
 }
 
-void __cdecl Scr_UsingTree(const char *filename, uint32_t sourcePos)
+void Scr_UsingTree(const char *filename, uint32_t sourcePos)
 {
     if (Scr_IsIdentifier(filename))
         scrAnimPub.animTreeNames = Scr_UsingTreeInternal(filename, &scrAnimPub.animTreeIndex, 1);
@@ -101,7 +101,7 @@ void __cdecl Scr_UsingTree(const char *filename, uint32_t sourcePos)
         CompileError(sourcePos, "bad anim tree name");
 }
 
-uint32_t __cdecl Scr_UsingTreeInternal(const char *filename, uint32_t *index, int user)
+uint32_t Scr_UsingTreeInternal(const char *filename, uint32_t *index, int user)
 {
     uint32_t Variable; // eax
     uint32_t name; // [esp+0h] [ebp-18h]
@@ -151,7 +151,7 @@ uint32_t __cdecl Scr_UsingTreeInternal(const char *filename, uint32_t *index, in
     return names;
 }
 
-void __cdecl Scr_PrecacheAnimationTree(uint32_t parentNode)
+void Scr_PrecacheAnimationTree(uint32_t parentNode)
 {
     VariableValueInternal_u Object; // eax
     uint32_t node; // [esp+0h] [ebp-8h]
@@ -169,13 +169,13 @@ void __cdecl Scr_PrecacheAnimationTree(uint32_t parentNode)
             }
             else
             {
-                XAnimPrecache(SL_ConvertToString(name), (void *(__cdecl *)(int))Hunk_AllocXAnimPrecache);
+                XAnimPrecache(SL_ConvertToString(name), (void *(*)(int))Hunk_AllocXAnimPrecache);
             }
         }
     }
 }
 
-void __cdecl Scr_LoadAnimTreeAtIndex(uint32_t index, void *(__cdecl *Alloc)(int), int user)
+void Scr_LoadAnimTreeAtIndex(uint32_t index, void *(*Alloc)(int), int user)
 {
     uint32_t Variable; // eax
     uint32_t animtree_node; // [esp-8h] [ebp-30h]
@@ -251,7 +251,7 @@ void __cdecl Scr_LoadAnimTreeAtIndex(uint32_t index, void *(__cdecl *Alloc)(int)
     }
 }
 
-int __cdecl Scr_GetAnimTreeSize(uint32_t parentNode)
+int Scr_GetAnimTreeSize(uint32_t parentNode)
 {
     VariableValueInternal_u Object; // eax
     uint32_t node; // [esp+0h] [ebp-Ch]
@@ -278,7 +278,7 @@ int __cdecl Scr_GetAnimTreeSize(uint32_t parentNode)
     return size;
 }
 
-void __cdecl ConnectScriptToAnim(
+void ConnectScriptToAnim(
     uint32_t names,
     uint16_t index,
     uint32_t filename,
@@ -313,7 +313,7 @@ void __cdecl ConnectScriptToAnim(
     }
 }
 
-int __cdecl Scr_CreateAnimationTree(
+int Scr_CreateAnimationTree(
     uint32_t parentNode,
     uint32_t names,
     XAnim_s *anims,
@@ -415,7 +415,7 @@ LABEL_13:
     return childIndexa;
 }
 
-void __cdecl Scr_CheckAnimsDefined(uint32_t names, uint32_t filename)
+void Scr_CheckAnimsDefined(uint32_t names, uint32_t filename)
 {
     uint32_t name; // [esp+0h] [ebp-10h]
     char *msg; // [esp+4h] [ebp-Ch]
@@ -440,7 +440,7 @@ void __cdecl Scr_CheckAnimsDefined(uint32_t names, uint32_t filename)
     }
 }
 
-bool __cdecl Scr_LoadAnimTreeInternal(const char *filename, uint32_t parentNode, uint32_t names)
+bool Scr_LoadAnimTreeInternal(const char *filename, uint32_t parentNode, uint32_t names)
 {
     char extFilename[64]; // [esp+10h] [ebp-50h] BYREF
     char *sourceBuffer; // [esp+54h] [ebp-Ch]
@@ -465,7 +465,7 @@ bool __cdecl Scr_LoadAnimTreeInternal(const char *filename, uint32_t parentNode,
     return GetArraySize(parentNode) != 0;
 }
 
-void __cdecl Scr_AnimTreeParse(const char *pos, uint32_t parentNode, uint32_t names)
+void Scr_AnimTreeParse(const char *pos, uint32_t parentNode, uint32_t names)
 {
     Com_BeginParseSession("Scr_AnimTreeParse");
     scrAnimGlob.pos = pos;
@@ -475,7 +475,7 @@ void __cdecl Scr_AnimTreeParse(const char *pos, uint32_t parentNode, uint32_t na
     Com_EndParseSession();
 }
 
-void __cdecl AnimTreeCompileError(const char *msg)
+void AnimTreeCompileError(const char *msg)
 {
     const char *pos; // [esp+0h] [ebp-4h]
 
@@ -484,7 +484,7 @@ void __cdecl AnimTreeCompileError(const char *msg)
     CompileError(pos - scrAnimGlob.start, "%s", msg);
 }
 
-bool __cdecl AnimTreeParseInternal(
+bool AnimTreeParseInternal(
     uint32_t parentNode,
     uint32_t names,
     bool bIncludeParent,
@@ -621,7 +621,7 @@ end:
 }
 
 
-int __cdecl GetAnimTreeParseProperties()
+int GetAnimTreeParseProperties()
 {
     parseInfo_t *token; // [esp+4h] [ebp-Ch]
     uint32_t i; // [esp+8h] [ebp-8h]
@@ -659,7 +659,7 @@ int __cdecl GetAnimTreeParseProperties()
     return flags;
 }
 
-scr_animtree_t __cdecl Scr_FindAnimTree(const char *filename)
+scr_animtree_t Scr_FindAnimTree(const char *filename)
 {
     VariableValue tempValue; // [esp+0h] [ebp-20h]
     uint32_t xanimId; // [esp+Ch] [ebp-14h]
@@ -700,7 +700,7 @@ scr_animtree_t __cdecl Scr_FindAnimTree(const char *filename)
     return tree;
 }
 
-void __cdecl Scr_FindAnim(const char *filename, const char *animName, scr_anim_s *anim, int user)
+void Scr_FindAnim(const char *filename, const char *animName, scr_anim_s *anim, int user)
 {
     uint32_t name; // [esp+0h] [ebp-8h]
     uint32_t index; // [esp+4h] [ebp-4h] BYREF

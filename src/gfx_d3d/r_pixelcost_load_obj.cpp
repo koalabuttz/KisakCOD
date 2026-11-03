@@ -21,7 +21,7 @@ const GfxPixelCostColorCode s_pixelCostColorCodeTable[6] =
   { 255u, 255u, 255u, 255u, "white" }
 }; // idb
 
-void __cdecl R_PixelCost_PrintColorCodeKey()
+void R_PixelCost_PrintColorCodeKey()
 {
     float percentage; // [esp+10h] [ebp-8h]
     uint32_t codeIndex; // [esp+14h] [ebp-4h]
@@ -35,7 +35,7 @@ void __cdecl R_PixelCost_PrintColorCodeKey()
     Com_Printf(CON_CHANNEL_GFX, "----------------------\n\n");
 }
 
-void __cdecl RB_PixelCost_BuildColorCodeMap(uint8_t (*pixels)[4], int pixelCount)
+void RB_PixelCost_BuildColorCodeMap(uint8_t (*pixels)[4], int pixelCount)
 {
     float v2; // [esp+1Ch] [ebp-5Ch]
     float v3; // [esp+30h] [ebp-48h]

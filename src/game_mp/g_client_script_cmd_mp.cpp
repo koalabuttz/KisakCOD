@@ -11,7 +11,7 @@
 #include "g_utils_mp.h"
 #include <xanim/dobj.h>
 
-void __cdecl PlayerCmd_giveWeapon(scr_entref_t entref)
+void PlayerCmd_giveWeapon(scr_entref_t entref)
 {
     int32_t wasGivenWeapon; // eax
     byte weaponModel; // [esp+0h] [ebp-60h]
@@ -73,7 +73,7 @@ LABEL_20:
     }
 }
 
-void __cdecl G_InitializeAmmo(gentity_s *pSelf, int32_t weaponIndex, uint8_t weaponModel, int32_t hadWeapon)
+void G_InitializeAmmo(gentity_s *pSelf, int32_t weaponIndex, uint8_t weaponModel, int32_t hadWeapon)
 {
     gclient_s *client; // [esp+0h] [ebp-14h]
     int32_t numWeapons; // [esp+4h] [ebp-10h]
@@ -122,7 +122,7 @@ void __cdecl G_InitializeAmmo(gentity_s *pSelf, int32_t weaponIndex, uint8_t wea
     } while (Com_BitCheckAssert(client->ps.weapons, weaponIndex, 16));
 }
 
-int32_t __cdecl G_GetNeededStartAmmo(gentity_s *pSelf, WeaponDef *weapDef)
+int32_t G_GetNeededStartAmmo(gentity_s *pSelf, WeaponDef *weapDef)
 {
     WeaponDef *thisWeapDef; // [esp+0h] [ebp-14h]
     int32_t applicableOwnedAmmo; // [esp+8h] [ebp-Ch]
@@ -156,7 +156,7 @@ int32_t __cdecl G_GetNeededStartAmmo(gentity_s *pSelf, WeaponDef *weapDef)
     return weapDef->iStartAmmo - applicableOwnedAmmo;
 }
 
-void __cdecl PlayerCmd_takeWeapon(scr_entref_t entref)
+void PlayerCmd_takeWeapon(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-Ch]
@@ -184,7 +184,7 @@ void __cdecl PlayerCmd_takeWeapon(scr_entref_t entref)
     BG_TakePlayerWeapon(&pSelf->client->ps, iWeaponIndex, 1);
 }
 
-void __cdecl PlayerCmd_takeAllWeapons(scr_entref_t entref)
+void PlayerCmd_takeAllWeapons(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-8h]
@@ -211,7 +211,7 @@ void __cdecl PlayerCmd_takeAllWeapons(scr_entref_t entref)
         BG_TakePlayerWeapon(&pSelf->client->ps, weapIndex, 1);
 }
 
-void __cdecl PlayerCmd_getCurrentWeapon(scr_entref_t entref)
+void PlayerCmd_getCurrentWeapon(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-10h]
@@ -245,7 +245,7 @@ void __cdecl PlayerCmd_getCurrentWeapon(scr_entref_t entref)
     }
 }
 
-bool __cdecl ClientPlaying(gentity_s *pSelf)
+bool ClientPlaying(gentity_s *pSelf)
 {
     if (!pSelf->client)
         MyAssertHandler(".\\game_mp\\g_client_script_cmd_mp.cpp", 179, 0, "%s", "pSelf->client");
@@ -259,7 +259,7 @@ bool __cdecl ClientPlaying(gentity_s *pSelf)
     return pSelf->client->sess.sessionState == SESS_STATE_PLAYING;
 }
 
-void __cdecl PlayerCmd_getCurrentOffhand(scr_entref_t entref)
+void PlayerCmd_getCurrentOffhand(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-8h]
@@ -292,7 +292,7 @@ void __cdecl PlayerCmd_getCurrentOffhand(scr_entref_t entref)
     }
 }
 
-void __cdecl PlayerCmd_setOffhandSecondaryClass(scr_entref_t entref)
+void PlayerCmd_setOffhandSecondaryClass(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+4h] [ebp-8h]
@@ -336,7 +336,7 @@ void __cdecl PlayerCmd_setOffhandSecondaryClass(scr_entref_t entref)
     }
 }
 
-void __cdecl PlayerCmd_getOffhandSecondaryClass(scr_entref_t entref)
+void PlayerCmd_getOffhandSecondaryClass(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-4h]
@@ -374,7 +374,7 @@ void __cdecl PlayerCmd_getOffhandSecondaryClass(scr_entref_t entref)
     }
 }
 
-void __cdecl PlayerCmd_hasWeapon(scr_entref_t entref)
+void PlayerCmd_hasWeapon(scr_entref_t entref)
 {
     const char *v1; // eax
     gclient_s *client; // [esp+0h] [ebp-10h]
@@ -412,7 +412,7 @@ void __cdecl PlayerCmd_hasWeapon(scr_entref_t entref)
     Scr_AddBool(0);
 }
 
-void __cdecl PlayerCmd_switchToWeapon(scr_entref_t entref)
+void PlayerCmd_switchToWeapon(scr_entref_t entref)
 {
     gclient_s *client; // [esp+0h] [ebp-10h]
     gentity_s *pSelf; // [esp+4h] [ebp-Ch]
@@ -454,7 +454,7 @@ void __cdecl PlayerCmd_switchToWeapon(scr_entref_t entref)
     }
 }
 
-void __cdecl PlayerCmd_switchToOffhand(scr_entref_t entref)
+void PlayerCmd_switchToOffhand(scr_entref_t entref)
 {
     gclient_s *client; // [esp+0h] [ebp-10h]
     gentity_s *pSelf; // [esp+4h] [ebp-Ch]
@@ -495,7 +495,7 @@ void __cdecl PlayerCmd_switchToOffhand(scr_entref_t entref)
     }
 }
 
-void __cdecl PlayerCmd_giveStartAmmo(scr_entref_t entref)
+void PlayerCmd_giveStartAmmo(scr_entref_t entref)
 {
     const char *v1; // eax
     gclient_s *client; // [esp+0h] [ebp-10h]
@@ -528,7 +528,7 @@ void __cdecl PlayerCmd_giveStartAmmo(scr_entref_t entref)
         G_InitializeAmmo(pSelf, iWeaponIndex, pSelf->client->ps.weaponmodels[iWeaponIndex], 0);
 }
 
-void __cdecl PlayerCmd_giveMaxAmmo(scr_entref_t entref)
+void PlayerCmd_giveMaxAmmo(scr_entref_t entref)
 {
     gclient_s *client; // [esp+0h] [ebp-1Ch]
     gentity_s *pSelf; // [esp+4h] [ebp-18h]
@@ -566,7 +566,7 @@ void __cdecl PlayerCmd_giveMaxAmmo(scr_entref_t entref)
     }
 }
 
-void __cdecl PlayerCmd_getFractionStartAmmo(scr_entref_t entref)
+void PlayerCmd_getFractionStartAmmo(scr_entref_t entref)
 {
     const char *v1; // eax
     gclient_s *client; // [esp+4h] [ebp-18h]
@@ -616,7 +616,7 @@ void __cdecl PlayerCmd_getFractionStartAmmo(scr_entref_t entref)
     }
 }
 
-void __cdecl PlayerCmd_getFractionMaxAmmo(scr_entref_t entref)
+void PlayerCmd_getFractionMaxAmmo(scr_entref_t entref)
 {
     const char *v1; // eax
     gclient_s *client; // [esp+4h] [ebp-18h]
@@ -666,7 +666,7 @@ void __cdecl PlayerCmd_getFractionMaxAmmo(scr_entref_t entref)
     }
 }
 
-void __cdecl PlayerCmd_setOrigin(scr_entref_t entref)
+void PlayerCmd_setOrigin(scr_entref_t entref)
 {
     const char *v1; // eax
     float *v2; // [esp+4h] [ebp-18h]
@@ -706,7 +706,7 @@ void __cdecl PlayerCmd_setOrigin(scr_entref_t entref)
     SV_LinkEntity(pSelf);
 }
 
-void __cdecl PlayerCmd_GetVelocity(scr_entref_t entref)
+void PlayerCmd_GetVelocity(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-4h]
@@ -730,7 +730,7 @@ void __cdecl PlayerCmd_GetVelocity(scr_entref_t entref)
     Scr_AddVector(pSelf->client->ps.velocity);
 }
 
-void __cdecl PlayerCmd_setAngles(scr_entref_t entref)
+void PlayerCmd_setAngles(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-10h]
@@ -758,7 +758,7 @@ void __cdecl PlayerCmd_setAngles(scr_entref_t entref)
         pSelf->r.currentAngles[0] = 0.0;
 }
 
-void __cdecl PlayerCmd_getAngles(scr_entref_t entref)
+void PlayerCmd_getAngles(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-4h]
@@ -782,7 +782,7 @@ void __cdecl PlayerCmd_getAngles(scr_entref_t entref)
     Scr_AddVector(pSelf->client->ps.viewangles);
 }
 
-void __cdecl PlayerCmd_useButtonPressed(scr_entref_t entref)
+void PlayerCmd_useButtonPressed(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-4h]
@@ -809,7 +809,7 @@ void __cdecl PlayerCmd_useButtonPressed(scr_entref_t entref)
         Scr_AddInt(0);
 }
 
-void __cdecl PlayerCmd_attackButtonPressed(scr_entref_t entref)
+void PlayerCmd_attackButtonPressed(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-4h]
@@ -836,7 +836,7 @@ void __cdecl PlayerCmd_attackButtonPressed(scr_entref_t entref)
         Scr_AddInt(0);
 }
 
-void __cdecl PlayerCmd_adsButtonPressed(scr_entref_t entref)
+void PlayerCmd_adsButtonPressed(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-4h]
@@ -863,7 +863,7 @@ void __cdecl PlayerCmd_adsButtonPressed(scr_entref_t entref)
         Scr_AddInt(0);
 }
 
-void __cdecl PlayerCmd_meleeButtonPressed(scr_entref_t entref)
+void PlayerCmd_meleeButtonPressed(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-4h]
@@ -890,7 +890,7 @@ void __cdecl PlayerCmd_meleeButtonPressed(scr_entref_t entref)
         Scr_AddInt(0);
 }
 
-void __cdecl PlayerCmd_fragButtonPressed(scr_entref_t entref)
+void PlayerCmd_fragButtonPressed(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-4h]
@@ -917,7 +917,7 @@ void __cdecl PlayerCmd_fragButtonPressed(scr_entref_t entref)
         Scr_AddInt(0);
 }
 
-void __cdecl PlayerCmd_secondaryOffhandButtonPressed(scr_entref_t entref)
+void PlayerCmd_secondaryOffhandButtonPressed(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-4h]
@@ -944,12 +944,12 @@ void __cdecl PlayerCmd_secondaryOffhandButtonPressed(scr_entref_t entref)
         Scr_AddInt(0);
 }
 
-void __cdecl PlayerCmd_buttonPressedDEVONLY(scr_entref_t entref)
+void PlayerCmd_buttonPressedDEVONLY(scr_entref_t entref)
 {
     Scr_AddInt(0);
 }
 
-void __cdecl PlayerCmd_playerADS(scr_entref_t entref)
+void PlayerCmd_playerADS(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+4h] [ebp-4h]
@@ -973,7 +973,7 @@ void __cdecl PlayerCmd_playerADS(scr_entref_t entref)
     Scr_AddFloat(pSelf->client->ps.fWeaponPosFrac);
 }
 
-void __cdecl PlayerCmd_isOnGround(scr_entref_t entref)
+void PlayerCmd_isOnGround(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-4h]
@@ -1000,7 +1000,7 @@ void __cdecl PlayerCmd_isOnGround(scr_entref_t entref)
         Scr_AddInt(0);
 }
 
-void __cdecl PlayerCmd_pingPlayer(scr_entref_t entref)
+void PlayerCmd_pingPlayer(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-4h]
@@ -1025,7 +1025,7 @@ void __cdecl PlayerCmd_pingPlayer(scr_entref_t entref)
     pSelf->client->compassPingTime = level.time + 3000;
 }
 
-void __cdecl PlayerCmd_SetViewmodel(scr_entref_t entref)
+void PlayerCmd_SetViewmodel(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-Ch]
@@ -1062,7 +1062,7 @@ void __cdecl PlayerCmd_SetViewmodel(scr_entref_t entref)
     pSelf->client->sess.viewmodelIndex = modelIndex;
 }
 
-void __cdecl PlayerCmd_GetViewmodel(scr_entref_t entref)
+void PlayerCmd_GetViewmodel(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-8h]
@@ -1088,7 +1088,7 @@ void __cdecl PlayerCmd_GetViewmodel(scr_entref_t entref)
     Scr_AddConstString(modelName);
 }
 
-void __cdecl PlayerCmd_showScoreboard(scr_entref_t entref)
+void PlayerCmd_showScoreboard(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-4h]
@@ -1112,7 +1112,7 @@ void __cdecl PlayerCmd_showScoreboard(scr_entref_t entref)
     Cmd_Score_f(pSelf);
 }
 
-void __cdecl PlayerCmd_setSpawnWeapon(scr_entref_t entref)
+void PlayerCmd_setSpawnWeapon(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-Ch]
@@ -1146,7 +1146,7 @@ void __cdecl PlayerCmd_setSpawnWeapon(scr_entref_t entref)
     }
 }
 
-void __cdecl PlayerCmd_dropItem(scr_entref_t entref)
+void PlayerCmd_dropItem(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *v2; // eax
@@ -1203,7 +1203,7 @@ void __cdecl PlayerCmd_dropItem(scr_entref_t entref)
     }
 }
 
-void __cdecl PlayerCmd_finishPlayerDamage(scr_entref_t entref)
+void PlayerCmd_finishPlayerDamage(scr_entref_t entref)
 {
     uint16_t floatValue; // ax
     uint8_t v4; // al
@@ -1233,8 +1233,8 @@ void __cdecl PlayerCmd_finishPlayerDamage(scr_entref_t entref)
     float flinchYawDir; // [esp+88h] [ebp-2Ch]
     gentity_s *inflictor; // [esp+8Ch] [ebp-28h]
     hitLocation_t hitLoc; // [esp+90h] [ebp-24h]
-    void(__cdecl * die)(gentity_s *, gentity_s *, gentity_s *, int, int, const int, const float *, const hitLocation_t, int); // [esp+94h] [ebp-20h]
-    void(__cdecl * pain)(gentity_s *, gentity_s *, int, const float *, const int, const float *, const hitLocation_t, const int); // [esp+98h] [ebp-1Ch]
+    void(* die)(gentity_s *, gentity_s *, gentity_s *, int, int, const int, const float *, const hitLocation_t, int); // [esp+94h] [ebp-20h]
+    void(* pain)(gentity_s *, gentity_s *, int, const float *, const int, const float *, const hitLocation_t, const int); // [esp+98h] [ebp-1Ch]
     float kvel[3]; // [esp+9Ch] [ebp-18h] BYREF
     float max_damage_time; // [esp+A8h] [ebp-Ch]
     const float *point; // [esp+ACh] [ebp-8h]
@@ -1468,7 +1468,7 @@ void __cdecl PlayerCmd_finishPlayerDamage(scr_entref_t entref)
     }
 }
 
-bool __cdecl IsBulletImpactMOD(meansOfDeath_t mod)
+bool IsBulletImpactMOD(meansOfDeath_t mod)
 {
     if ((uint32_t)mod >= MOD_NUM)
         MyAssertHandler(
@@ -1481,7 +1481,7 @@ bool __cdecl IsBulletImpactMOD(meansOfDeath_t mod)
     return mod == MOD_PISTOL_BULLET || mod == MOD_RIFLE_BULLET || mod == MOD_HEAD_SHOT;
 }
 
-void __cdecl PlayerCmd_Suicide(scr_entref_t entref)
+void PlayerCmd_Suicide(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-4h]
@@ -1508,7 +1508,7 @@ void __cdecl PlayerCmd_Suicide(scr_entref_t entref)
     player_die(pSelf, pSelf, pSelf, 100000, 12, 0, 0, HITLOC_NONE, 0);
 }
 
-void __cdecl PlayerCmd_OpenMenu(scr_entref_t entref)
+void PlayerCmd_OpenMenu(scr_entref_t entref)
 {
     gentity_s *pSelf; // [esp+0h] [ebp-50h]
     uint32_t iMenuIndex; // [esp+4h] [ebp-4Ch]
@@ -1549,7 +1549,7 @@ void __cdecl PlayerCmd_OpenMenu(scr_entref_t entref)
     }
 }
 
-void __cdecl PlayerCmd_OpenMenuNoMouse(scr_entref_t entref)
+void PlayerCmd_OpenMenuNoMouse(scr_entref_t entref)
 {
     gentity_s *pSelf; // [esp+0h] [ebp-50h]
     uint32_t iMenuIndex; // [esp+4h] [ebp-4Ch]
@@ -1590,7 +1590,7 @@ void __cdecl PlayerCmd_OpenMenuNoMouse(scr_entref_t entref)
     }
 }
 
-void __cdecl PlayerCmd_CloseMenu(scr_entref_t entref)
+void PlayerCmd_CloseMenu(scr_entref_t entref)
 {
     const char *v1; // eax
     char svcmd[68]; // [esp+4h] [ebp-48h] BYREF
@@ -1614,7 +1614,7 @@ void __cdecl PlayerCmd_CloseMenu(scr_entref_t entref)
     SV_GameSendServerCommand(entref.entnum, SV_CMD_RELIABLE, svcmd);
 }
 
-void __cdecl PlayerCmd_CloseInGameMenu(scr_entref_t entref)
+void PlayerCmd_CloseInGameMenu(scr_entref_t entref)
 {
     const char *v1; // eax
     char svcmd[32]; // [esp+4h] [ebp-24h] BYREF
@@ -1638,7 +1638,7 @@ void __cdecl PlayerCmd_CloseInGameMenu(scr_entref_t entref)
     SV_GameSendServerCommand(entref.entnum, SV_CMD_RELIABLE, svcmd);
 }
 
-void __cdecl PlayerCmd_SetWeaponAmmoClip(scr_entref_t entref)
+void PlayerCmd_SetWeaponAmmoClip(scr_entref_t entref)
 {
     const char *v1; // eax
     int32_t ammoCount; // [esp+0h] [ebp-18h]
@@ -1690,7 +1690,7 @@ void __cdecl PlayerCmd_SetWeaponAmmoClip(scr_entref_t entref)
     }
 }
 
-void __cdecl PlayerCmd_SetWeaponAmmoStock(scr_entref_t entref)
+void PlayerCmd_SetWeaponAmmoStock(scr_entref_t entref)
 {
     VariableUnion v2; // [esp+0h] [ebp-38h]
     VariableUnion v3; // [esp+4h] [ebp-34h]
@@ -1763,7 +1763,7 @@ void __cdecl PlayerCmd_SetWeaponAmmoStock(scr_entref_t entref)
     }
 }
 
-void __cdecl PlayerCmd_GetWeaponAmmoClip(scr_entref_t entref)
+void PlayerCmd_GetWeaponAmmoClip(scr_entref_t entref)
 {
     gentity_s *pSelf; // [esp+0h] [ebp-10h]
     const char *weapName; // [esp+4h] [ebp-Ch]
@@ -1798,7 +1798,7 @@ void __cdecl PlayerCmd_GetWeaponAmmoClip(scr_entref_t entref)
     }
 }
 
-void __cdecl PlayerCmd_GetWeaponAmmoStock(scr_entref_t entref)
+void PlayerCmd_GetWeaponAmmoStock(scr_entref_t entref)
 {
     int32_t ammoIdx; // [esp+0h] [ebp-14h]
     int32_t clipIdx; // [esp+4h] [ebp-10h]
@@ -1842,7 +1842,7 @@ void __cdecl PlayerCmd_GetWeaponAmmoStock(scr_entref_t entref)
     }
 }
 
-void __cdecl PlayerCmd_AnyAmmoForWeaponModes(scr_entref_t entref)
+void PlayerCmd_AnyAmmoForWeaponModes(scr_entref_t entref)
 {
     gentity_s *pSelf; // [esp+0h] [ebp-14h]
     const char *weapName; // [esp+4h] [ebp-10h]
@@ -1878,7 +1878,7 @@ void __cdecl PlayerCmd_AnyAmmoForWeaponModes(scr_entref_t entref)
         Scr_AddInt(0);
 }
 
-void __cdecl iclientprintln(scr_entref_t entref)
+void iclientprintln(scr_entref_t entref)
 {
     const char *v1; // eax
     char svcmd[32]; // [esp+4h] [ebp-24h] BYREF
@@ -1902,7 +1902,7 @@ void __cdecl iclientprintln(scr_entref_t entref)
     Scr_MakeGameMessage(entref.entnum, svcmd);
 }
 
-void __cdecl iclientprintlnbold(scr_entref_t entref)
+void iclientprintlnbold(scr_entref_t entref)
 {
     const char *v1; // eax
     char svcmd[32]; // [esp+4h] [ebp-24h] BYREF
@@ -1926,7 +1926,7 @@ void __cdecl iclientprintlnbold(scr_entref_t entref)
     Scr_MakeGameMessage(entref.entnum, svcmd);
 }
 
-void __cdecl PlayerCmd_spawn(scr_entref_t entref)
+void PlayerCmd_spawn(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-1Ch]
@@ -1954,7 +1954,7 @@ void __cdecl PlayerCmd_spawn(scr_entref_t entref)
     ClientSpawn(pSelf, spawn_origin, spawn_angles);
 }
 
-void __cdecl PlayerCmd_setEnterTime(scr_entref_t entref)
+void PlayerCmd_setEnterTime(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-4h]
@@ -1978,14 +1978,14 @@ void __cdecl PlayerCmd_setEnterTime(scr_entref_t entref)
     pSelf->client->sess.enterTime = Scr_GetInt(0);
 }
 
-void __cdecl BodyEnd(gentity_s *ent)
+void BodyEnd(gentity_s *ent)
 {
     ent->s.lerp.eFlags &= ~0x80000u;
     ent->r.contents = CONTENTS_CORPSE;
     ent->r.svFlags = 0;
 }
 
-void __cdecl PlayerCmd_ClonePlayer(scr_entref_t entref)
+void PlayerCmd_ClonePlayer(scr_entref_t entref)
 {
     const char *v1; // eax
     gclient_s *client; // [esp+48h] [ebp-24h]
@@ -2107,7 +2107,7 @@ void __cdecl PlayerCmd_ClonePlayer(scr_entref_t entref)
     GScr_AddEntity(body);
 }
 
-void __cdecl PlayerCmd_SetClientDvar(scr_entref_t entref)
+void PlayerCmd_SetClientDvar(scr_entref_t entref)
 {
     uint32_t NumParam; // eax
     const char *v3; // eax
@@ -2167,7 +2167,7 @@ void __cdecl PlayerCmd_SetClientDvar(scr_entref_t entref)
     }
 }
 
-void __cdecl PlayerCmd_SetClientDvars(scr_entref_t entref)
+void PlayerCmd_SetClientDvars(scr_entref_t entref)
 {
     const char *v1; // eax
     const char *v2; // eax
@@ -2222,7 +2222,7 @@ void __cdecl PlayerCmd_SetClientDvars(scr_entref_t entref)
     SV_GameSendServerCommand(entref.entnum, SV_CMD_RELIABLE, finalString);
 }
 
-void __cdecl PlayerCmd_IsTalking(scr_entref_t entref)
+void PlayerCmd_IsTalking(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-8h]
@@ -2251,7 +2251,7 @@ void __cdecl PlayerCmd_IsTalking(scr_entref_t entref)
         Scr_AddInt(1);
 }
 
-void __cdecl PlayerCmd_FreezeControls(scr_entref_t entref)
+void PlayerCmd_FreezeControls(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-4h]
@@ -2275,7 +2275,7 @@ void __cdecl PlayerCmd_FreezeControls(scr_entref_t entref)
     pSelf->client->bFrozen = Scr_GetInt(0);
 }
 
-void __cdecl PlayerCmd_DisableWeapons(scr_entref_t entref)
+void PlayerCmd_DisableWeapons(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-4h]
@@ -2299,7 +2299,7 @@ void __cdecl PlayerCmd_DisableWeapons(scr_entref_t entref)
     pSelf->client->ps.weapFlags |= 0x80u;
 }
 
-void __cdecl PlayerCmd_EnableWeapons(scr_entref_t entref)
+void PlayerCmd_EnableWeapons(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-4h]
@@ -2323,7 +2323,7 @@ void __cdecl PlayerCmd_EnableWeapons(scr_entref_t entref)
     pSelf->client->ps.weapFlags &= ~0x80u;
 }
 
-void __cdecl PlayerCmd_SetReverb(scr_entref_t entref)
+void PlayerCmd_SetReverb(scr_entref_t entref)
 {
     const char *v1; // eax
     const char *v2; // eax
@@ -2394,8 +2394,8 @@ void __cdecl PlayerCmd_SetReverb(scr_entref_t entref)
     }
 }
 
-//void __cdecl PlayerCmd_DeactivateReverb(scr_entref_t *entref)
-void __cdecl PlayerCmd_DeactivateReverb(scr_entref_t e)
+//void PlayerCmd_DeactivateReverb(scr_entref_t *entref)
+void PlayerCmd_DeactivateReverb(scr_entref_t e)
 {
     scr_entref_t *entref = &e; // HACK
 
@@ -2438,7 +2438,7 @@ LABEL_6:
     SV_GameSendServerCommand(v1, SV_CMD_RELIABLE, va("%c %i \"%s\" %g %g %g", 68, Float));
 }
 
-void __cdecl PlayerCmd_SetChannelVolumes(scr_entref_t entref)
+void PlayerCmd_SetChannelVolumes(scr_entref_t entref)
 {
     uint32_t NumParam; // [esp+8h] [ebp-18h]
     float fadetime; // [esp+10h] [ebp-10h]
@@ -2502,8 +2502,8 @@ void __cdecl PlayerCmd_SetChannelVolumes(scr_entref_t entref)
     SV_GameSendServerCommand(entref.entnum, SV_CMD_RELIABLE, va("%c %i %i %g", 69, prio, shockIndex, fadetime));
 }
 
-//void __cdecl PlayerCmd_DeactivateChannelVolumes(scr_entref_t *entref)
-void __cdecl PlayerCmd_DeactivateChannelVolumes(scr_entref_t e)
+//void PlayerCmd_DeactivateChannelVolumes(scr_entref_t *entref)
+void PlayerCmd_DeactivateChannelVolumes(scr_entref_t e)
 {
     scr_entref_t *entref = &e; // HACK
 
@@ -2551,7 +2551,7 @@ LABEL_6:
     SV_GameSendServerCommand(v1, SV_CMD_RELIABLE, va("%c %i \"%s\" %g %g %g", 70, Float));
 }
 
-void __cdecl ScrCmd_PlayLocalSound(scr_entref_t entref)
+void ScrCmd_PlayLocalSound(scr_entref_t entref)
 {
     const char *pszSoundName; // [esp+4h] [ebp-4Ch]
     char svcmd[64]; // [esp+8h] [ebp-48h] BYREF
@@ -2576,7 +2576,7 @@ void __cdecl ScrCmd_PlayLocalSound(scr_entref_t entref)
     SV_GameSendServerCommand(entref.entnum, SV_CMD_CAN_IGNORE, svcmd);
 }
 
-void __cdecl ScrCmd_StopLocalSound(scr_entref_t entref)
+void ScrCmd_StopLocalSound(scr_entref_t entref)
 {
     const char *pszSoundName; // [esp+4h] [ebp-4Ch]
     char svcmd[64]; // [esp+8h] [ebp-48h] BYREF
@@ -2602,7 +2602,7 @@ void __cdecl ScrCmd_StopLocalSound(scr_entref_t entref)
     SV_GameSendServerCommand(entref.entnum, SV_CMD_CAN_IGNORE, svcmd);
 }
 
-void __cdecl PlayerCmd_SayAll(scr_entref_t entref)
+void PlayerCmd_SayAll(scr_entref_t entref)
 {
     const char *v1; // eax
     uint32_t NumParam; // eax
@@ -2631,7 +2631,7 @@ void __cdecl PlayerCmd_SayAll(scr_entref_t entref)
     G_Say(pSelf, 0, 0, szString);
 }
 
-void __cdecl PlayerCmd_SayTeam(scr_entref_t entref)
+void PlayerCmd_SayTeam(scr_entref_t entref)
 {
     const char *v1; // eax
     uint32_t NumParam; // eax
@@ -2660,7 +2660,7 @@ void __cdecl PlayerCmd_SayTeam(scr_entref_t entref)
     G_Say(pSelf, 0, 1, szString);
 }
 
-void __cdecl PlayerCmd_AllowADS(scr_entref_t entref)
+void PlayerCmd_AllowADS(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-4h]
@@ -2699,7 +2699,7 @@ void __cdecl PlayerCmd_AllowADS(scr_entref_t entref)
     }
 }
 
-void __cdecl PlayerCmd_AllowJump(scr_entref_t entref)
+void PlayerCmd_AllowJump(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-4h]
@@ -2726,7 +2726,7 @@ void __cdecl PlayerCmd_AllowJump(scr_entref_t entref)
         pSelf->client->ps.pm_flags |= PMF_NO_JUMP;
 }
 
-void __cdecl PlayerCmd_AllowSprint(scr_entref_t entref)
+void PlayerCmd_AllowSprint(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-4h]
@@ -2753,7 +2753,7 @@ void __cdecl PlayerCmd_AllowSprint(scr_entref_t entref)
         pSelf->client->ps.pm_flags |= PMF_NO_SPRINT;
 }
 
-void __cdecl PlayerCmd_SetSpreadOverride(scr_entref_t entref)
+void PlayerCmd_SetSpreadOverride(scr_entref_t entref)
 {
     const char *v1; // eax
     const char *v2; // eax
@@ -2803,7 +2803,7 @@ void __cdecl PlayerCmd_SetSpreadOverride(scr_entref_t entref)
     }
 }
 
-void __cdecl PlayerCmd_ResetSpreadOverride(scr_entref_t entref)
+void PlayerCmd_ResetSpreadOverride(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-4h]
@@ -2830,7 +2830,7 @@ void __cdecl PlayerCmd_ResetSpreadOverride(scr_entref_t entref)
         Scr_Error("USAGE: <player> resetspreadoverride()\n");
 }
 
-void __cdecl PlayerCmd_AllowSpectateTeam(scr_entref_t entref)
+void PlayerCmd_AllowSpectateTeam(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-10h]
@@ -2881,7 +2881,7 @@ void __cdecl PlayerCmd_AllowSpectateTeam(scr_entref_t entref)
         pSelf->client->sess.noSpectate |= teamBit;
 }
 
-void __cdecl PlayerCmd_GetGuid(scr_entref_t entref)
+void PlayerCmd_GetGuid(scr_entref_t entref)
 {
     const char *v1; // eax
     char *Guid; // eax
@@ -2906,7 +2906,7 @@ void __cdecl PlayerCmd_GetGuid(scr_entref_t entref)
     Scr_AddString(Guid);
 }
 
-void __cdecl PlayerCmd_GetXuid(scr_entref_t entref)
+void PlayerCmd_GetXuid(scr_entref_t entref)
 {
     const char *v1; // eax
 
@@ -2929,7 +2929,7 @@ void __cdecl PlayerCmd_GetXuid(scr_entref_t entref)
     Scr_AddString("0");
 }
 
-void __cdecl PlayerCmd_BeginLocationSelection(scr_entref_t entref)
+void PlayerCmd_BeginLocationSelection(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+10h] [ebp-14h]
@@ -3013,7 +3013,7 @@ void __cdecl PlayerCmd_BeginLocationSelection(scr_entref_t entref)
     pSelf->client->ps.locationSelectionInfo = locSelIndex | (4 * radiusBits);
 }
 
-void __cdecl PlayerCmd_EndLocationSelection(scr_entref_t entref)
+void PlayerCmd_EndLocationSelection(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-4h]
@@ -3046,7 +3046,7 @@ void __cdecl PlayerCmd_EndLocationSelection(scr_entref_t entref)
     pSelf->client->ps.locationSelectionInfo = 0;
 }
 
-void __cdecl PlayerCmd_SetActionSlot(scr_entref_t entref)
+void PlayerCmd_SetActionSlot(scr_entref_t entref)
 {
     uint32_t weaponIdx; // [esp+0h] [ebp-10h]
     const char *str; // [esp+4h] [ebp-Ch]
@@ -3116,7 +3116,7 @@ void __cdecl PlayerCmd_SetActionSlot(scr_entref_t entref)
     }
 }
 
-void __cdecl PlayerCmd_GetWeaponsList(scr_entref_t entref)
+void PlayerCmd_GetWeaponsList(scr_entref_t entref)
 {
     const char *v1; // eax
     gclient_s *client; // [esp+0h] [ebp-14h]
@@ -3157,7 +3157,7 @@ void __cdecl PlayerCmd_GetWeaponsList(scr_entref_t entref)
     }
 }
 
-void __cdecl PlayerCmd_GetWeaponsListPrimaries(scr_entref_t entref)
+void PlayerCmd_GetWeaponsListPrimaries(scr_entref_t entref)
 {
     const char *v1; // eax
     gclient_s *client; // [esp+0h] [ebp-14h]
@@ -3201,7 +3201,7 @@ void __cdecl PlayerCmd_GetWeaponsListPrimaries(scr_entref_t entref)
     }
 }
 
-void __cdecl PlayerCmd_SetPerk(scr_entref_t entref)
+void PlayerCmd_SetPerk(scr_entref_t entref)
 {
     gentity_s *pSelf; // [esp+0h] [ebp-Ch]
     const char *perkName; // [esp+4h] [ebp-8h]
@@ -3232,7 +3232,7 @@ void __cdecl PlayerCmd_SetPerk(scr_entref_t entref)
     BG_SetPerk(&pSelf->client->sess.cs.perks, perkIndex);
 }
 
-void __cdecl BG_SetPerk(int32_t *perks, uint32_t perkIndex)
+void BG_SetPerk(int32_t *perks, uint32_t perkIndex)
 {
     iassert(perks);
     bcassert(perkIndex, PERK_COUNT);
@@ -3240,7 +3240,7 @@ void __cdecl BG_SetPerk(int32_t *perks, uint32_t perkIndex)
     *perks |= 1 << perkIndex;
 }
 
-void __cdecl PlayerCmd_HasPerk(scr_entref_t entref)
+void PlayerCmd_HasPerk(scr_entref_t entref)
 {
     int32_t perks; // [esp+0h] [ebp-10h]
     gentity_s *pSelf; // [esp+4h] [ebp-Ch]
@@ -3280,7 +3280,7 @@ void __cdecl PlayerCmd_HasPerk(scr_entref_t entref)
     Scr_AddBool((perks & (1 << perkIndex)) != 0);
 }
 
-void __cdecl PlayerCmd_UnsetPerk(scr_entref_t entref)
+void PlayerCmd_UnsetPerk(scr_entref_t entref)
 {
     gentity_s *pSelf; // [esp+0h] [ebp-Ch]
     const char *perkName; // [esp+4h] [ebp-8h]
@@ -3311,7 +3311,7 @@ void __cdecl PlayerCmd_UnsetPerk(scr_entref_t entref)
     BG_UnsetPerk(&pSelf->client->sess.cs.perks, perkIndex);
 }
 
-void __cdecl BG_UnsetPerk(int32_t *perks, uint32_t perkIndex)
+void BG_UnsetPerk(int32_t *perks, uint32_t perkIndex)
 {
     if (!perks)
         MyAssertHandler("c:\\trees\\cod3\\src\\bgame\\../bgame/bg_perks_mp.h", 55, 0, "%s", "perks");
@@ -3326,7 +3326,7 @@ void __cdecl BG_UnsetPerk(int32_t *perks, uint32_t perkIndex)
     *perks &= ~(1 << perkIndex);
 }
 
-void __cdecl PlayerCmd_ClearPerks(scr_entref_t entref)
+void PlayerCmd_ClearPerks(scr_entref_t entref)
 {
     const char *v1; // eax
     gclient_s *client; // eax
@@ -3363,7 +3363,7 @@ void __cdecl PlayerCmd_ClearPerks(scr_entref_t entref)
     *v4 = 0;
 }
 
-void __cdecl PlayerCmd_UpdateScores(scr_entref_t entref)
+void PlayerCmd_UpdateScores(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-4Ch]
@@ -3393,7 +3393,7 @@ void __cdecl PlayerCmd_UpdateScores(scr_entref_t entref)
     SV_GameSendServerCommand(pSelf - g_entities, SV_CMD_CAN_IGNORE, svcmd);
 }
 
-void __cdecl PlayerCmd_UpdateDMScores(scr_entref_t entref)
+void PlayerCmd_UpdateDMScores(scr_entref_t entref)
 {
     const char *v1; // eax
     int32_t i; // [esp+4h] [ebp-58h]
@@ -3441,7 +3441,7 @@ void __cdecl PlayerCmd_UpdateDMScores(scr_entref_t entref)
     }
 }
 
-void __cdecl PlayerCmd_SetRank(scr_entref_t entref)
+void PlayerCmd_SetRank(scr_entref_t entref)
 {
     const char *v1; // eax
     const char *v2; // eax
@@ -3582,7 +3582,7 @@ const BuiltinMethodDef methods[83] =
   { "setrank", &PlayerCmd_SetRank, 0 }
 }; // idb
 
-void(__cdecl *__cdecl Player_GetMethod(const char **pName))(scr_entref_t)
+void(*Player_GetMethod(const char **pName))(scr_entref_t)
 {
     uint32_t i; // [esp+18h] [ebp-4h]
 

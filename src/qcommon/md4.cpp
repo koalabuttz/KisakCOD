@@ -72,7 +72,7 @@ uint8_t PADDING[64] =
   0u
 }; // idb
 
-void __cdecl Encode(uint8_t *output, uint32_t *input, uint32_t len)
+void Encode(uint8_t *output, uint32_t *input, uint32_t len)
 {
     uint32_t j; // [esp+0h] [ebp-8h]
     uint32_t i; // [esp+4h] [ebp-4h]
@@ -86,7 +86,7 @@ void __cdecl Encode(uint8_t *output, uint32_t *input, uint32_t len)
     }
 }
 
-void __cdecl Decode(uint32_t *output, uint8_t *input, uint32_t len)
+void Decode(uint32_t *output, uint8_t *input, uint32_t len)
 {
     uint32_t j; // [esp+0h] [ebp-8h]
     uint32_t i; // [esp+4h] [ebp-4h]
@@ -96,7 +96,7 @@ void __cdecl Decode(uint32_t *output, uint8_t *input, uint32_t len)
         output[i++] = (input[j + 3] << 24) | (input[j + 2] << 16) | *(uint16_t *)&input[j];
 }
 
-void __cdecl MD4Init(MD4_CTX *context)
+void MD4Init(MD4_CTX *context)
 {
     context->count[1] = 0;
     context->count[0] = 0;
@@ -106,7 +106,7 @@ void __cdecl MD4Init(MD4_CTX *context)
     context->state[3] = 271733878;
 }
 
-void __cdecl MD4Update(MD4_CTX *context, uint8_t *input, uint32_t inputLen)
+void MD4Update(MD4_CTX *context, uint8_t *input, uint32_t inputLen)
 {
     uint32_t index; // [esp+4h] [ebp-8h]
     uint32_t i; // [esp+8h] [ebp-4h]
@@ -131,7 +131,7 @@ void __cdecl MD4Update(MD4_CTX *context, uint8_t *input, uint32_t inputLen)
     memcpy(&context->buffer[index], &input[i], inputLen - i);
 }
 
-void __cdecl MD4Final(uint8_t *digest, MD4_CTX *context)
+void MD4Final(uint8_t *digest, MD4_CTX *context)
 {
     uint32_t v2; // [esp+0h] [ebp-18h]
     uint8_t bits[8]; // [esp+8h] [ebp-10h] BYREF
@@ -149,7 +149,7 @@ void __cdecl MD4Final(uint8_t *digest, MD4_CTX *context)
     memset((uint8_t *)context, 0, sizeof(MD4_CTX));
 }
 
-void __cdecl MD4Transform(uint32_t *state, uint8_t *block)
+void MD4Transform(uint32_t *state, uint8_t *block)
 {
     uint32_t c; // [esp+0h] [ebp-50h]
     uint32_t ca; // [esp+0h] [ebp-50h]
@@ -361,7 +361,7 @@ void __cdecl MD4Transform(uint32_t *state, uint8_t *block)
 
 
 
-void __cdecl Com_BlockChecksum128Cat(
+void Com_BlockChecksum128Cat(
     uint8_t *buffer0,
     uint32_t length0,
     uint8_t *buffer1,
@@ -376,7 +376,7 @@ void __cdecl Com_BlockChecksum128Cat(
     MD4Final(outChecksum, &ctx);
 }
 
-void __cdecl Com_BlockChecksum128(uint8_t *buffer, uint32_t length, int key, uint8_t *outChecksum)
+void Com_BlockChecksum128(uint8_t *buffer, uint32_t length, int key, uint8_t *outChecksum)
 {
     MD4_CTX ctx; // [esp+0h] [ebp-60h] BYREF
 

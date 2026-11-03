@@ -27,17 +27,17 @@ uint32_t g_breakonString;
 scrEvaluateGlob_t scrEvaluateGlob;
 int g_script_error_level;
 
-void __cdecl TRACK_scr_evaluate()
+void TRACK_scr_evaluate()
 {
     track_static_alloc_internal(&scrEvaluateGlob, 16, "scrEvaluateGlob", 7);
 }
 
-int __cdecl Scr_CompareCanonicalStrings(uint32_t *arg1, uint32_t *arg2)
+int Scr_CompareCanonicalStrings(uint32_t *arg1, uint32_t *arg2)
 {
     return scrEvaluateGlob.canonicalStringLookup[*arg1] - scrEvaluateGlob.canonicalStringLookup[*arg2];
 }
 
-void __cdecl Scr_ArchiveCanonicalStrings()
+void Scr_ArchiveCanonicalStrings()
 {
     char v0; // [esp+13h] [ebp-35h]
     char *v1; // [esp+18h] [ebp-30h]
@@ -91,7 +91,7 @@ void __cdecl Scr_ArchiveCanonicalStrings()
         scrEvaluateGlob.archivedCanonicalStrings,
         scrVarPub.canonicalStrCount,
         8u,
-        (int(__cdecl *)(const void *, const void *))CompareCanonicalStrings);
+        (int(*)(const void *, const void *))CompareCanonicalStrings);
     for (ia = 0; ia < (int)scrVarPub.canonicalStrCount; ++ia)
     {
         if (!scrEvaluateGlob.archivedCanonicalStrings[ia].canonicalStr)
@@ -113,12 +113,12 @@ void __cdecl Scr_ArchiveCanonicalStrings()
     *scrEvaluateGlob.canonicalStringLookup = 0;
 }
 
-int __cdecl CompareCanonicalStrings(const char **arg1, const char **arg2)
+int CompareCanonicalStrings(const char **arg1, const char **arg2)
 {
     return strcmp(arg1[1], arg2[1]);
 }
 
-const char *__cdecl Scr_GetCanonicalString(uint32_t fieldName)
+const char *Scr_GetCanonicalString(uint32_t fieldName)
 {
     if (!fieldName)
         MyAssertHandler(".\\script\\scr_evaluate.cpp", 183, 0, "%s", "fieldName");
@@ -134,7 +134,7 @@ const char *__cdecl Scr_GetCanonicalString(uint32_t fieldName)
     return scrEvaluateGlob.archivedCanonicalStrings[scrEvaluateGlob.canonicalStringLookup[fieldName]].value;
 }
 
-void __cdecl Scr_InitEvaluate()
+void Scr_InitEvaluate()
 {
     scrEvaluateGlob.archivedCanonicalStringsBuf = 0;
     scrEvaluateGlob.archivedCanonicalStrings = 0;
@@ -142,13 +142,13 @@ void __cdecl Scr_InitEvaluate()
     KISAK_NULLSUB();
 }
 
-void __cdecl Scr_EndLoadEvaluate()
+void Scr_EndLoadEvaluate()
 {
     if (scrVarPub.developer)
         Scr_ArchiveCanonicalStrings();
 }
 
-void __cdecl Scr_ShutdownEvaluate()
+void Scr_ShutdownEvaluate()
 {
     if (scrEvaluateGlob.archivedCanonicalStringsBuf)
     {
@@ -168,7 +168,7 @@ void __cdecl Scr_ShutdownEvaluate()
     KISAK_NULLSUB();
 }
 
-uint16_t __cdecl Scr_CompileCanonicalString(uint32_t stringValue)
+uint16_t Scr_CompileCanonicalString(uint32_t stringValue)
 {
     int v2; // [esp+4h] [ebp-24h]
     int low; // [esp+18h] [ebp-10h]
@@ -197,7 +197,7 @@ uint16_t __cdecl Scr_CompileCanonicalString(uint32_t stringValue)
     return 0;
 }
 
-void __cdecl Scr_GetFieldValue(uint32_t objectId, const char *fieldName, int len, char *text)
+void Scr_GetFieldValue(uint32_t objectId, const char *fieldName, int len, char *text)
 {
     uint16_t v4; // ax
     uint32_t stringValue; // [esp+0h] [ebp-Ch]
@@ -232,7 +232,7 @@ void __cdecl Scr_GetFieldValue(uint32_t objectId, const char *fieldName, int len
     }
 }
 
-void __cdecl Scr_GetValueString(uint32_t localId, VariableValue *value, int len, char *s)
+void Scr_GetValueString(uint32_t localId, VariableValue *value, int len, char *s)
 {
     const XAnim_s *Anims; // eax
     char *AnimDebugName; // eax
@@ -331,7 +331,7 @@ void __cdecl Scr_GetValueString(uint32_t localId, VariableValue *value, int len,
     }
 }
 
-void __cdecl Scr_EvalArrayVariable(uint32_t arrayId, VariableValue *value)
+void Scr_EvalArrayVariable(uint32_t arrayId, VariableValue *value)
 {
     VariableValue parentValue; // [esp+0h] [ebp-8h] BYREF
 
@@ -343,7 +343,7 @@ void __cdecl Scr_EvalArrayVariable(uint32_t arrayId, VariableValue *value)
     Scr_EvalArrayVariableInternal(&parentValue, value);
 }
 
-void __cdecl Scr_EvalArrayVariableInternal(VariableValue *parentValue, VariableValue *value)
+void Scr_EvalArrayVariableInternal(VariableValue *parentValue, VariableValue *value)
 {
     if (scrVarPub.error_message || (Scr_EvalArray(parentValue, value), scrVarPub.error_message))
     {
@@ -352,13 +352,13 @@ void __cdecl Scr_EvalArrayVariableInternal(VariableValue *parentValue, VariableV
     }
 }
 
-void __cdecl Scr_ClearValue(VariableValue *value)
+void Scr_ClearValue(VariableValue *value)
 {
     RemoveRefToValue(value->type, value->u);
     value->type = VAR_UNDEFINED;
 }
 
-void __cdecl Scr_EvalFieldVariableInternal(uint32_t objectId, uint32_t fieldName, VariableValue *value)
+void Scr_EvalFieldVariableInternal(uint32_t objectId, uint32_t fieldName, VariableValue *value)
 {
     uint32_t outparamcount; // [esp+8h] [ebp-8h]
     VariableValue *savedTop; // [esp+Ch] [ebp-4h]
@@ -383,14 +383,14 @@ void __cdecl Scr_EvalFieldVariableInternal(uint32_t objectId, uint32_t fieldName
     }
 }
 
-void __cdecl Scr_EvalFieldVariable(uint32_t fieldName, VariableValue *value, uint32_t objectId)
+void Scr_EvalFieldVariable(uint32_t fieldName, VariableValue *value, uint32_t objectId)
 {
     if (!scrVarPub.evaluate)
         MyAssertHandler(".\\script\\scr_evaluate.cpp", 1122, 0, "%s", "scrVarPub.evaluate");
     Scr_EvalFieldVariableInternal(objectId, fieldName, value);
 }
 
-void __cdecl Scr_CompileExpression(sval_u *expr)
+void Scr_CompileExpression(sval_u *expr)
 {
     switch (expr->node[0].type)
     {
@@ -426,7 +426,7 @@ void __cdecl Scr_CompileExpression(sval_u *expr)
     }
 }
 
-void __cdecl Scr_CompilePrimitiveExpression(sval_u *expr)
+void Scr_CompilePrimitiveExpression(sval_u *expr)
 {
     sval_u tempVariableId; // [esp+2Ch] [ebp-8h]
     sval_u tempVariableIda; // [esp+2Ch] [ebp-8h]
@@ -492,7 +492,7 @@ void __cdecl Scr_CompilePrimitiveExpression(sval_u *expr)
     }
 }
 
-void __cdecl Scr_CompileVariableExpression(sval_u *expr)
+void Scr_CompileVariableExpression(sval_u *expr)
 {
     signed int ObjectType; // [esp+14h] [ebp-54h]
     int argumentIndex; // [esp+48h] [ebp-20h]
@@ -575,7 +575,7 @@ void __cdecl Scr_CompileVariableExpression(sval_u *expr)
     }
 }
 
-void __cdecl Scr_CompilePrimitiveExpressionFieldObject(sval_u *expr)
+void Scr_CompilePrimitiveExpressionFieldObject(sval_u *expr)
 {
     sval_u tempVariableId; // [esp+18h] [ebp-8h]
     sval_u tempVariableIda; // [esp+18h] [ebp-8h]
@@ -605,7 +605,7 @@ void __cdecl Scr_CompilePrimitiveExpressionFieldObject(sval_u *expr)
     }
 }
 
-//int __cdecl GetExpressionCount(sval_u exprlist)
+//int GetExpressionCount(sval_u exprlist)
 //{
 //    sval_u *node; // [esp+0h] [ebp-8h]
 //    int expr_count; // [esp+4h] [ebp-4h]
@@ -616,7 +616,7 @@ void __cdecl Scr_CompilePrimitiveExpressionFieldObject(sval_u *expr)
 //    return expr_count;
 //}
 
-void __cdecl Scr_CompilePrimitiveExpressionList(sval_u *exprlist)
+void Scr_CompilePrimitiveExpressionList(sval_u *exprlist)
 {
     sval_u *nodea; // [esp+8h] [ebp-18h]
     sval_u *node; // [esp+8h] [ebp-18h]
@@ -647,7 +647,7 @@ void __cdecl Scr_CompilePrimitiveExpressionList(sval_u *exprlist)
     }
 }
 
-char __cdecl Scr_CompileCallExpression(sval_u *expr)
+char Scr_CompileCallExpression(sval_u *expr)
 {
     Enum_t type = expr->node[0].type;
 
@@ -671,7 +671,7 @@ char __cdecl Scr_CompileCallExpression(sval_u *expr)
     return 0;
 }
 
-uint32_t __cdecl Scr_GetBuiltin(sval_u func_name)
+uint32_t Scr_GetBuiltin(sval_u func_name)
 {
     if (func_name.node[0].type != ENUM_script_call)
         return 0;
@@ -694,9 +694,9 @@ uint32_t __cdecl Scr_GetBuiltin(sval_u func_name)
     return 0;
 }
 
-char __cdecl Scr_CompileFunction(sval_u *func_name, sval_u *params)
+char Scr_CompileFunction(sval_u *func_name, sval_u *params)
 {
-    void(__cdecl * func)(); // [esp+0h] [ebp-10h]
+    void(* func)(); // [esp+0h] [ebp-10h]
     uint32_t name; // [esp+4h] [ebp-Ch]
     const char *pName; // [esp+8h] [ebp-8h] BYREF
     int type; // [esp+Ch] [ebp-4h] BYREF
@@ -714,7 +714,7 @@ char __cdecl Scr_CompileFunction(sval_u *func_name, sval_u *params)
     return 1;
 }
 
-void __cdecl Scr_CompileCallExpressionList(sval_u *exprlist)
+void Scr_CompileCallExpressionList(sval_u *exprlist)
 {
     sval_u *node; // [esp+8h] [ebp-8h]
     sval_u expr; // [esp+Ch] [ebp-4h]
@@ -728,9 +728,9 @@ void __cdecl Scr_CompileCallExpressionList(sval_u *exprlist)
     exprlist->type = expr.type;
 }
 
-char __cdecl Scr_CompileMethod(sval_u *expr, sval_u *func_name, sval_u *params)
+char Scr_CompileMethod(sval_u *expr, sval_u *func_name, sval_u *params)
 {
-    void(__cdecl * meth)(scr_entref_t); // [esp+0h] [ebp-10h]
+    void(* meth)(scr_entref_t); // [esp+0h] [ebp-10h]
     uint32_t name; // [esp+4h] [ebp-Ch]
     const char *pName; // [esp+8h] [ebp-8h] BYREF
     int type; // [esp+Ch] [ebp-4h] BYREF
@@ -749,7 +749,7 @@ char __cdecl Scr_CompileMethod(sval_u *expr, sval_u *func_name, sval_u *params)
     return 1;
 }
 
-void __cdecl Scr_CompileText(const char *text, ScriptExpression_t *scriptExpr)
+void Scr_CompileText(const char *text, ScriptExpression_t *scriptExpr)
 {
     g_debugExprHead = 0;
     g_breakonExpr = 0;
@@ -760,7 +760,7 @@ void __cdecl Scr_CompileText(const char *text, ScriptExpression_t *scriptExpr)
     scriptExpr->breakonExpr = g_breakonExpr;
 }
 
-void __cdecl Scr_CompileTextInternal(const char *text, ScriptExpression_t *scriptExpr)
+void Scr_CompileTextInternal(const char *text, ScriptExpression_t *scriptExpr)
 {
     const char *varUsagePos; // [esp+24h] [ebp-18h]
     char *start; // [esp+28h] [ebp-14h]
@@ -833,7 +833,7 @@ void __cdecl Scr_CompileTextInternal(const char *text, ScriptExpression_t *scrip
     }
 }
 
-bool __cdecl Scr_EvalScriptExpression(
+bool Scr_EvalScriptExpression(
     ScriptExpression_t *expr,
     uint32_t localId,
     VariableValue *value,
@@ -848,7 +848,7 @@ bool __cdecl Scr_EvalScriptExpression(
     return scrEvaluateGlob.objectChanged;
 }
 
-void __cdecl Scr_EvalExpression(sval_u expr, uint32_t localId, VariableValue *value)
+void Scr_EvalExpression(sval_u expr, uint32_t localId, VariableValue *value)
 {
     switch (expr.node[0].type)
     {
@@ -917,7 +917,7 @@ void __cdecl Scr_EvalExpression(sval_u expr, uint32_t localId, VariableValue *va
     }
 }
 
-void __cdecl Scr_EvalPrimitiveExpression(sval_u expr, uint32_t localId, VariableValue *value)
+void Scr_EvalPrimitiveExpression(sval_u expr, uint32_t localId, VariableValue *value)
 {
     VariableValue stringValue; // [esp+Ch] [ebp-14h] BYREF
     VariableValue objectValue; // [esp+14h] [ebp-Ch] BYREF
@@ -1049,7 +1049,7 @@ void __cdecl Scr_EvalPrimitiveExpression(sval_u expr, uint32_t localId, Variable
     }
 }
 
-void __cdecl Scr_EvalVariableExpression(sval_u expr, uint32_t localId, VariableValue *value)
+void Scr_EvalVariableExpression(sval_u expr, uint32_t localId, VariableValue *value)
 {
     uint32_t objectId; // [esp+4h] [ebp-4h]
     uint32_t objectIda; // [esp+4h] [ebp-4h]
@@ -1188,7 +1188,7 @@ void __cdecl Scr_EvalVariableExpression(sval_u expr, uint32_t localId, VariableV
     }
 }
 
-void __cdecl Scr_EvalArrayVariableExpression(sval_u array, sval_u index, uint32_t localId, VariableValue *value)
+void Scr_EvalArrayVariableExpression(sval_u array, sval_u index, uint32_t localId, VariableValue *value)
 {
     VariableValue exprValue; // [esp+0h] [ebp-8h] BYREF
 
@@ -1197,7 +1197,7 @@ void __cdecl Scr_EvalArrayVariableExpression(sval_u array, sval_u index, uint32_
     Scr_EvalArrayVariableInternal(&exprValue, value);
 }
 
-void __cdecl Scr_EvalLocalVariable(sval_u expr, uint32_t localId, VariableValue *value)
+void Scr_EvalLocalVariable(sval_u expr, uint32_t localId, VariableValue *value)
 {
     uint32_t varId; // [esp+8h] [ebp-4h]
 
@@ -1215,7 +1215,7 @@ void __cdecl Scr_EvalLocalVariable(sval_u expr, uint32_t localId, VariableValue 
     }
 }
 
-VariableValueInternal_u __cdecl Scr_EvalObject(sval_u classnum, sval_u entnum, VariableValue *value)
+VariableValueInternal_u Scr_EvalObject(sval_u classnum, sval_u entnum, VariableValue *value)
 {
     uint32_t objectId; // [esp+0h] [ebp-4h]
 
@@ -1235,7 +1235,7 @@ VariableValueInternal_u __cdecl Scr_EvalObject(sval_u classnum, sval_u entnum, V
     }
 }
 
-void __cdecl Scr_EvalSelfValue(VariableValue *value)
+void Scr_EvalSelfValue(VariableValue *value)
 {
     const char *v1; // eax
     signed int ObjectType; // [esp+0h] [ebp-8h]
@@ -1269,7 +1269,7 @@ void __cdecl Scr_EvalSelfValue(VariableValue *value)
     }
 }
 
-void __cdecl Scr_GetValue(uint32_t index, VariableValue *value)
+void Scr_GetValue(uint32_t index, VariableValue *value)
 {
     VariableValue *v2; // edx
     Vartype_t type; // ecx
@@ -1296,7 +1296,7 @@ VariableValue* Scr_GetValue(uint32_t param)
 	return &scrVmPub.top[-int(param)];
 }
 
-uint32_t __cdecl Scr_EvalPrimitiveExpressionFieldObject(sval_u expr, uint32_t localId)
+uint32_t Scr_EvalPrimitiveExpressionFieldObject(sval_u expr, uint32_t localId)
 {
     uint32_t result; // eax
     VariableValue value; // [esp+4h] [ebp-Ch] BYREF
@@ -1358,7 +1358,7 @@ uint32_t __cdecl Scr_EvalPrimitiveExpressionFieldObject(sval_u expr, uint32_t lo
     return result;
 }
 
-void __cdecl Scr_EvalCallExpression(sval_u expr, uint32_t localId, VariableValue *value)
+void Scr_EvalCallExpression(sval_u expr, uint32_t localId, VariableValue *value)
 {
     if (expr.node[0].type == ENUM_call)
     {
@@ -1370,7 +1370,7 @@ void __cdecl Scr_EvalCallExpression(sval_u expr, uint32_t localId, VariableValue
     }
 }
 
-void __cdecl Scr_EvalFunction(sval_u func_name, sval_u params, uint32_t localId, VariableValue *value)
+void Scr_EvalFunction(sval_u func_name, sval_u params, uint32_t localId, VariableValue *value)
 {
     Scr_PreEvalBuiltin(params, localId);
     if ((uint32_t)++g_script_error_level >= 0x21)
@@ -1396,7 +1396,7 @@ void __cdecl Scr_EvalFunction(sval_u func_name, sval_u params, uint32_t localId,
     Scr_PostEvalBuiltin(value);
 }
 
-void __cdecl Scr_PreEvalBuiltin(sval_u params, uint32_t localId)
+void Scr_PreEvalBuiltin(sval_u params, uint32_t localId)
 {
     sval_u *node; // [esp+0h] [ebp-Ch]
     uint32_t expr_count; // [esp+4h] [ebp-8h]
@@ -1426,7 +1426,7 @@ void __cdecl Scr_PreEvalBuiltin(sval_u params, uint32_t localId)
     scrVmPub.debugCode = 1;
 }
 
-void __cdecl Scr_PostEvalBuiltin(VariableValue *value)
+void Scr_PostEvalBuiltin(VariableValue *value)
 {
     Vartype_t type; // ecx
 
@@ -1453,7 +1453,7 @@ void __cdecl Scr_PostEvalBuiltin(VariableValue *value)
     }
 }
 
-void __cdecl Scr_EvalMethod(sval_u expr, sval_u func_name, sval_u params, uint32_t localId, VariableValue *value)
+void Scr_EvalMethod(sval_u expr, sval_u func_name, sval_u params, uint32_t localId, VariableValue *value)
 {
     const char *v5; // eax
     const char *v6; // eax
@@ -1494,7 +1494,7 @@ void __cdecl Scr_EvalMethod(sval_u expr, sval_u func_name, sval_u params, uint32
         }
         entref = Scr_GetEntityIdRef(objectId.stringValue);
         RemoveRefToObject(objectId.stringValue);
-        ((void(__cdecl *)(uint32_t))func_name.type)(entref.entnum); // KISAKTODO: fubar'd union 'entref'
+        ((void(*)(uint32_t))func_name.type)(entref.entnum); // KISAKTODO: fubar'd union 'entref'
     }
     if (g_script_error_level < 0)
         MyAssertHandler(
@@ -1508,7 +1508,7 @@ void __cdecl Scr_EvalMethod(sval_u expr, sval_u func_name, sval_u params, uint32
     Scr_PostEvalBuiltin(value);
 }
 
-void __cdecl Scr_EvalBoolOrExpression(sval_u expr1, sval_u expr2, uint32_t localId, VariableValue *value)
+void Scr_EvalBoolOrExpression(sval_u expr1, sval_u expr2, uint32_t localId, VariableValue *value)
 {
     bool v4; // [esp+0h] [ebp-Ch]
     bool v5; // [esp+4h] [ebp-8h]
@@ -1525,7 +1525,7 @@ void __cdecl Scr_EvalBoolOrExpression(sval_u expr1, sval_u expr2, uint32_t local
     value->u.intValue = v4;
 }
 
-void __cdecl Scr_EvalBoolAndExpression(sval_u expr1, sval_u expr2, uint32_t localId, VariableValue *value)
+void Scr_EvalBoolAndExpression(sval_u expr1, sval_u expr2, uint32_t localId, VariableValue *value)
 {
     bool v4; // [esp+0h] [ebp-Ch]
     bool v5; // [esp+4h] [ebp-8h]
@@ -1542,7 +1542,7 @@ void __cdecl Scr_EvalBoolAndExpression(sval_u expr1, sval_u expr2, uint32_t loca
     value->u.intValue = v4;
 }
 
-void __cdecl Scr_EvalBinaryOperatorExpression(
+void Scr_EvalBinaryOperatorExpression(
     sval_u expr1,
     sval_u expr2,
     sval_u opcode,
@@ -1556,7 +1556,7 @@ void __cdecl Scr_EvalBinaryOperatorExpression(
     Scr_EvalBinaryOperator(opcode.type, value, &value2);
 }
 
-void __cdecl Scr_EvalVector(sval_u expr1, sval_u expr2, sval_u expr3, uint32_t localId, VariableValue *value)
+void Scr_EvalVector(sval_u expr1, sval_u expr2, sval_u expr3, uint32_t localId, VariableValue *value)
 {
     VariableValue vectorValue[3]; // [esp+0h] [ebp-18h] BYREF
 
@@ -1567,7 +1567,7 @@ void __cdecl Scr_EvalVector(sval_u expr1, sval_u expr2, sval_u expr3, uint32_t l
     *value = vectorValue[0];
 }
 
-void __cdecl Scr_ClearDebugExprValue(sval_u val)
+void Scr_ClearDebugExprValue(sval_u val)
 {
     switch (val.node[0].type)
     {
@@ -1586,7 +1586,7 @@ void __cdecl Scr_ClearDebugExprValue(sval_u val)
     }
 }
 
-bool __cdecl Scr_RefScriptExpression(ScriptExpression_t *expr)
+bool Scr_RefScriptExpression(ScriptExpression_t *expr)
 {
     bool result; // [esp+3h] [ebp-1h]
 
@@ -1599,7 +1599,7 @@ bool __cdecl Scr_RefScriptExpression(ScriptExpression_t *expr)
     return result;
 }
 
-bool __cdecl Scr_RefExpression(sval_u expr)
+bool Scr_RefExpression(sval_u expr)
 {
     bool result; // al
 
@@ -1630,7 +1630,7 @@ bool __cdecl Scr_RefExpression(sval_u expr)
     return result;
 }
 
-bool __cdecl Scr_RefPrimitiveExpression(sval_u expr)
+bool Scr_RefPrimitiveExpression(sval_u expr)
 {
     bool result; // al
 
@@ -1676,7 +1676,7 @@ bool __cdecl Scr_RefPrimitiveExpression(sval_u expr)
     return result;
 }
 
-bool __cdecl Scr_RefVariableExpression(sval_u expr)
+bool Scr_RefVariableExpression(sval_u expr)
 {
     bool result; // al
 
@@ -1746,7 +1746,7 @@ bool __cdecl Scr_RefVariableExpression(sval_u expr)
     return result;
 }
 
-bool __cdecl Scr_RefArrayVariableExpression(sval_u array, sval_u index)
+bool Scr_RefArrayVariableExpression(sval_u array, sval_u index)
 {
     bool arrayRemoved; // [esp+6h] [ebp-2h]
     bool indexRemoved; // [esp+7h] [ebp-1h]
@@ -1756,7 +1756,7 @@ bool __cdecl Scr_RefArrayVariableExpression(sval_u array, sval_u index)
     return indexRemoved || arrayRemoved;
 }
 
-bool __cdecl Scr_RefBreakonExpression(sval_u expr, sval_u param)
+bool Scr_RefBreakonExpression(sval_u expr, sval_u param)
 {
     bool expr1Removed; // [esp+6h] [ebp-2h]
     bool expr2Removed; // [esp+7h] [ebp-1h]
@@ -1766,7 +1766,7 @@ bool __cdecl Scr_RefBreakonExpression(sval_u expr, sval_u param)
     return expr1Removed || expr2Removed;
 }
 
-bool __cdecl Scr_RefCallExpression(sval_u expr)
+bool Scr_RefCallExpression(sval_u expr)
 {
     if (expr.node[0].type == ENUM_call)
         return Scr_RefCall(expr.node[2]);
@@ -1777,7 +1777,7 @@ bool __cdecl Scr_RefCallExpression(sval_u expr)
     return 0;
 }
 
-bool __cdecl Scr_RefCall(sval_u params)
+bool Scr_RefCall(sval_u params)
 {
     sval_u *node; // [esp+0h] [ebp-8h]
     bool exprRemoved; // [esp+7h] [ebp-1h]
@@ -1791,7 +1791,7 @@ bool __cdecl Scr_RefCall(sval_u params)
     return exprRemoved;
 }
 
-bool __cdecl Scr_RefMethod(sval_u expr, sval_u params)
+bool Scr_RefMethod(sval_u expr, sval_u params)
 {
     bool expr1Removed; // [esp+6h] [ebp-2h]
     bool expr2Removed; // [esp+7h] [ebp-1h]
@@ -1801,7 +1801,7 @@ bool __cdecl Scr_RefMethod(sval_u expr, sval_u params)
     return expr1Removed || expr2Removed;
 }
 
-bool __cdecl Scr_RefBinaryOperatorExpression(sval_u expr1, sval_u expr2)
+bool Scr_RefBinaryOperatorExpression(sval_u expr1, sval_u expr2)
 {
     bool expr1Removed; // [esp+6h] [ebp-2h]
     bool expr2Removed; // [esp+7h] [ebp-1h]
@@ -1811,7 +1811,7 @@ bool __cdecl Scr_RefBinaryOperatorExpression(sval_u expr1, sval_u expr2)
     return expr1Removed || expr2Removed;
 }
 
-bool __cdecl Scr_RefVector(sval_u expr1, sval_u expr2, sval_u expr3)
+bool Scr_RefVector(sval_u expr1, sval_u expr2, sval_u expr3)
 {
     bool expr1Removed; // [esp+5h] [ebp-3h]
     bool expr2Removed; // [esp+6h] [ebp-2h]
@@ -1823,7 +1823,7 @@ bool __cdecl Scr_RefVector(sval_u expr1, sval_u expr2, sval_u expr3)
     return expr1Removed || expr2Removed || expr3Removed;
 }
 
-void __cdecl Scr_FreeDebugExprValue(sval_u val)
+void Scr_FreeDebugExprValue(sval_u val)
 {
     switch (val.node[0].type)
     {

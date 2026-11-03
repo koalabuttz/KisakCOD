@@ -16,12 +16,12 @@ DevGuiInput s_input;
 
 
 cmd_function_s DevGui_Toggle_VAR;
-void __cdecl DevGui_InputInit()
+void DevGui_InputInit()
 {
     Cmd_AddCommandInternal("devgui", DevGui_Toggle, &DevGui_Toggle_VAR);
 }
 
-void __cdecl DevGui_InputShutdown()
+void DevGui_InputShutdown()
 {
     Cmd_RemoveCommand("devgui");
 }
@@ -32,7 +32,7 @@ void DevGui_InputUpdateMouse()
     s_input.sliderScrollMaxTimeStep = 0.30000001f;
 }
 
-char __cdecl DevGui_InputUpdate(int32_t localClientNum, float deltaTime)
+char DevGui_InputUpdate(int32_t localClientNum, float deltaTime)
 {
     int32_t butIndex; // [esp+10h] [ebp-8h]
 
@@ -49,7 +49,7 @@ char __cdecl DevGui_InputUpdate(int32_t localClientNum, float deltaTime)
     return 1;
 }
 
-void __cdecl DevGui_UpdateScrollInputs(int32_t localClientNum)
+void DevGui_UpdateScrollInputs(int32_t localClientNum)
 {
     float v1; // [esp+0h] [ebp-38h]
     float v2; // [esp+4h] [ebp-34h]
@@ -109,7 +109,7 @@ void __cdecl DevGui_UpdateScrollInputs(int32_t localClientNum)
     s_input.analogAxis[1] = ly;
 }
 
-void __cdecl DevGui_UpdateScrollStates(float deltaTime, DevGuiInputState *states, float *axis, float *times)
+void DevGui_UpdateScrollStates(float deltaTime, DevGuiInputState *states, float *axis, float *times)
 {
     float v4; // [esp+0h] [ebp-10h]
     DevGuiInputState v5; // [esp+4h] [ebp-Ch]
@@ -156,7 +156,7 @@ void __cdecl DevGui_UpdateScrollStates(float deltaTime, DevGuiInputState *states
     }
 }
 
-void __cdecl DevGui_UpdateMenuScroll(float deltaTime)
+void DevGui_UpdateMenuScroll(float deltaTime)
 {
     float v1; // [esp+4h] [ebp-40h]
     float v2; // [esp+8h] [ebp-3Ch]
@@ -217,18 +217,18 @@ void __cdecl DevGui_UpdateMenuScroll(float deltaTime)
     }
 }
 
-void __cdecl DevGui_MouseEvent(int32_t dx, int32_t dy)
+void DevGui_MouseEvent(int32_t dx, int32_t dy)
 {
     s_input.mousePos[0] = (float)dx;
     s_input.mousePos[1] = (float)dy;
 }
 
-__int16 __cdecl DevGui_GetMenuScroll(DevGuiInputAxis axis)
+__int16 DevGui_GetMenuScroll(DevGuiInputAxis axis)
 {
     return s_input.menuScroll[axis];
 }
 
-int32_t __cdecl DevGui_UpdateIntScroll(float deltaTime, int32_t value, int32_t min, int32_t max, DevGuiInputAxis axis)
+int32_t DevGui_UpdateIntScroll(float deltaTime, int32_t value, int32_t min, int32_t max, DevGuiInputAxis axis)
 {
     float v6; // [esp+0h] [ebp-4Ch]
     float v7; // [esp+4h] [ebp-48h]
@@ -304,7 +304,7 @@ int32_t __cdecl DevGui_UpdateIntScroll(float deltaTime, int32_t value, int32_t m
     return max;
 }
 
-double __cdecl DevGui_UpdateFloatScroll(
+double DevGui_UpdateFloatScroll(
     float deltaTime,
     float value,
     float min,
@@ -351,17 +351,17 @@ double __cdecl DevGui_UpdateFloatScroll(
     return max;
 }
 
-bool __cdecl DevGui_IsButtonDown(DevGuiInputButton button)
+bool DevGui_IsButtonDown(DevGuiInputButton button)
 {
     return s_input.buttonDown[button];
 }
 
-bool __cdecl DevGui_IsButtonPressed(DevGuiInputButton button)
+bool DevGui_IsButtonPressed(DevGuiInputButton button)
 {
     return s_input.buttonDown[button] && !s_input.prevButtonDown[button];
 }
 
-bool __cdecl DevGui_IsButtonReleased(DevGuiInputButton button)
+bool DevGui_IsButtonReleased(DevGuiInputButton button)
 {
     return !s_input.buttonDown[button] && s_input.prevButtonDown[button];
 }

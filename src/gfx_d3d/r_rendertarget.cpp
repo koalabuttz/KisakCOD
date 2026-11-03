@@ -9,7 +9,7 @@
 
 //GfxRenderTarget *gfxRenderTargets 85b5db38     gfx_d3d : r_rendertarget.obj
 
-void __cdecl AssertUninitializedRenderTarget(const GfxRenderTarget *renderTarget)
+void AssertUninitializedRenderTarget(const GfxRenderTarget *renderTarget)
 {
     iassert(renderTarget);
     iassert(renderTarget->image == NULL);
@@ -19,7 +19,7 @@ void __cdecl AssertUninitializedRenderTarget(const GfxRenderTarget *renderTarget
     iassert(renderTarget->height == 0);
 }
 
-bool __cdecl R_IsDepthStencilFormatOk(_D3DFORMAT renderTargetFormat, _D3DFORMAT depthStencilFormat)
+bool R_IsDepthStencilFormatOk(_D3DFORMAT renderTargetFormat, _D3DFORMAT depthStencilFormat)
 {
     return dx.d3d9->CheckDeviceFormat(
         dx.adapterIndex,
@@ -37,7 +37,7 @@ bool __cdecl R_IsDepthStencilFormatOk(_D3DFORMAT renderTargetFormat, _D3DFORMAT 
             depthStencilFormat) >= 0;
 }
 
-int __cdecl R_GetDepthStencilFormat(_D3DFORMAT renderTargetFormat)
+int R_GetDepthStencilFormat(_D3DFORMAT renderTargetFormat)
 {
     if (R_IsDepthStencilFormatOk(renderTargetFormat, D3DFMT_D24FS8))
         return 83;
@@ -45,7 +45,7 @@ int __cdecl R_GetDepthStencilFormat(_D3DFORMAT renderTargetFormat)
         return 75;
 }
 
-void __cdecl R_InitRenderTargets()
+void R_InitRenderTargets()
 {
     R_InitRenderTargets_PC();
 }
@@ -109,7 +109,7 @@ void R_InitRenderTargets_PC()
     }
 }
 
-void __cdecl R_ShareRenderTarget(GfxRenderTargetId idFrom, GfxRenderTargetId idTo)
+void R_ShareRenderTarget(GfxRenderTargetId idFrom, GfxRenderTargetId idTo)
 {
     GfxRenderTarget *v2; // ecx
     GfxRenderTarget *v3; // edx
@@ -128,7 +128,7 @@ void __cdecl R_ShareRenderTarget(GfxRenderTargetId idFrom, GfxRenderTargetId idT
         gfxRenderTargets[idTo].surface.depthStencil->AddRef();
 }
 
-void __cdecl R_InitFullscreenRenderTargetImage(
+void R_InitFullscreenRenderTargetImage(
     int imageProgType,
     FullscreenType screenType,
     int picmip,
@@ -167,7 +167,7 @@ void __cdecl R_InitFullscreenRenderTargetImage(
     Image_TrackFullscreenTexture(renderTarget->image, fullscreenWidth, fullscreenHeight, picmip, format);
 }
 
-void __cdecl R_GetFullScreenRes(FullscreenType screenType, int *fullscreenWidth, int *fullscreenHeight)
+void R_GetFullScreenRes(FullscreenType screenType, int *fullscreenWidth, int *fullscreenHeight)
 {
     uint32_t sceneHeight; // [esp+0h] [ebp-8h]
     uint32_t sceneWidth; // [esp+4h] [ebp-4h]
@@ -192,7 +192,7 @@ void __cdecl R_GetFullScreenRes(FullscreenType screenType, int *fullscreenWidth,
     *fullscreenHeight = sceneHeight;
 }
 
-void __cdecl R_GetFrameBufferDepthStencilRes(int *depthStencilWidth, int *depthStencilHeight)
+void R_GetFrameBufferDepthStencilRes(int *depthStencilWidth, int *depthStencilHeight)
 {
 #ifdef KISAK_RADIANT
     // P5.3 multi-window: the editor shares ONE depth-stencil surface across all child
@@ -214,7 +214,7 @@ void __cdecl R_GetFrameBufferDepthStencilRes(int *depthStencilWidth, int *depthS
 #endif
 }
 
-IDirect3DSurface9 *__cdecl R_AssignSingleSampleDepthStencilSurface()
+IDirect3DSurface9 *R_AssignSingleSampleDepthStencilSurface()
 {
     const char *v1; // eax
     int hr; // [esp+0h] [ebp-Ch]
@@ -255,12 +255,12 @@ IDirect3DSurface9 *__cdecl R_AssignSingleSampleDepthStencilSurface()
     }
 }
 
-void __cdecl R_AssignImageToRenderTargetDepthStencil(GfxRenderTargetSurface *surface, GfxImage *image)
+void R_AssignImageToRenderTargetDepthStencil(GfxRenderTargetSurface *surface, GfxImage *image)
 {
     surface->depthStencil = Image_GetSurface(image);
 }
 
-void __cdecl R_InitRenderTargetImage(
+void R_InitRenderTargetImage(
     int imageProgType,
     uint16_t width,
     uint16_t height,
@@ -293,12 +293,12 @@ void __cdecl R_InitRenderTargetImage(
     renderTarget->height = height;
 }
 
-void __cdecl R_AssignImageToRenderTargetColor(GfxRenderTargetSurface *surface, GfxImage *image)
+void R_AssignImageToRenderTargetColor(GfxRenderTargetSurface *surface, GfxImage *image)
 {
     surface->color = Image_GetSurface(image);
 }
 
-void __cdecl R_InitShadowmapRenderTarget(
+void R_InitShadowmapRenderTarget(
     int imageProgType,
     uint16_t tileRes,
     uint16_t tileRowCount,
@@ -373,7 +373,7 @@ void __cdecl R_InitShadowmapRenderTarget(
     }
 }
 
-void __cdecl R_InitAndTrackRenderTargetImage(
+void R_InitAndTrackRenderTargetImage(
     int imageProgType,
     uint16_t width,
     uint16_t height,
@@ -385,14 +385,14 @@ void __cdecl R_InitAndTrackRenderTargetImage(
     Image_TrackTexture(renderTarget->image, IMG_FLAG_NOPICMIP | IMG_FLAG_NOMIPMAPS, format, width, height, 1);
 }
 
-void __cdecl R_InitShadowCookieBlurRenderTarget(GfxRenderTarget *renderTarget)
+void R_InitShadowCookieBlurRenderTarget(GfxRenderTarget *renderTarget)
 {
     AssertUninitializedRenderTarget(renderTarget);
     R_InitAndTrackRenderTargetImage(1, 0x80u, 0x80u, D3DFMT_A8R8G8B8, RENDERTARGET_USAGE_RENDER, renderTarget);
     R_AssignShadowCookieDepthStencilSurface(&renderTarget->surface);
 }
 
-void __cdecl R_InitShadowCookieRenderTarget(GfxRenderTarget *renderTarget)
+void R_InitShadowCookieRenderTarget(GfxRenderTarget *renderTarget)
 {
     AssertUninitializedRenderTarget(renderTarget);
     R_InitAndTrackRenderTargetImage(0, 0x80u, 0x80u, D3DFMT_A8R8G8B8, RENDERTARGET_USAGE_RENDER, renderTarget);
@@ -400,7 +400,7 @@ void __cdecl R_InitShadowCookieRenderTarget(GfxRenderTarget *renderTarget)
     R_AssignShadowCookieDepthStencilSurface(&renderTarget->surface);
 }
 
-void __cdecl R_AssignShadowCookieDepthStencilSurface(GfxRenderTargetSurface *surface)
+void R_AssignShadowCookieDepthStencilSurface(GfxRenderTargetSurface *surface)
 {
     const char *v1; // eax
     int hr; // [esp+0h] [ebp-8h]
@@ -431,7 +431,7 @@ void __cdecl R_AssignShadowCookieDepthStencilSurface(GfxRenderTargetSurface *sur
     }
 }
 
-const char *__cdecl R_DescribeFormat(_D3DFORMAT format)
+const char *R_DescribeFormat(_D3DFORMAT format)
 {
     const char *result; // eax
 
@@ -467,7 +467,7 @@ const char *__cdecl R_DescribeFormat(_D3DFORMAT format)
     return result;
 }
 
-void __cdecl R_InitFrameBufferRenderTarget_Win32(GfxRenderTarget *renderTarget)
+void R_InitFrameBufferRenderTarget_Win32(GfxRenderTarget *renderTarget)
 {
     const char *v1; // eax
     const char *v2; // eax
@@ -540,7 +540,7 @@ void __cdecl R_InitFrameBufferRenderTarget_Win32(GfxRenderTarget *renderTarget)
     }
 }
 
-_D3DFORMAT __cdecl R_InitFrameBufferRenderTarget()
+_D3DFORMAT R_InitFrameBufferRenderTarget()
 {
     const char *v0; // eax
     const char *v1; // eax
@@ -565,7 +565,7 @@ _D3DFORMAT __cdecl R_InitFrameBufferRenderTarget()
     return surfaceDesc.Format;
 }
 
-void __cdecl R_ShutdownRenderTargets()
+void R_ShutdownRenderTargets()
 {
     int renderTargetId; // [esp+0h] [ebp-4h]
 
@@ -601,7 +601,7 @@ const char *s_renderTargetNames[15] =
   "R_RENDERTARGET_SHADOWMAP_SUN",
   "R_RENDERTARGET_SHADOWMAP_SPOT"
 }; // idb
-const char *__cdecl R_RenderTargetName(GfxRenderTargetId renderTargetId)
+const char *R_RenderTargetName(GfxRenderTargetId renderTargetId)
 {
     return s_renderTargetNames[renderTargetId];
 }

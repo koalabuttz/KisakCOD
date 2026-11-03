@@ -12,7 +12,7 @@
 #include <gfx_d3d/r_scene.h>
 #include <universal/profile.h>
 
-void __cdecl PitchToQuat(float pitch, float *quat)
+void PitchToQuat(float pitch, float *quat)
 {
     pitch = pitch * 0.0087266462f;
 
@@ -22,7 +22,7 @@ void __cdecl PitchToQuat(float pitch, float *quat)
     quat[3] = cos(pitch);
 }
 
-void __cdecl RollToQuat(float roll, float *quat)
+void RollToQuat(float roll, float *quat)
 {
     roll = roll * 0.0087266462f;
 
@@ -32,7 +32,7 @@ void __cdecl RollToQuat(float roll, float *quat)
     quat[3] = cos(roll);
 }
 
-void __cdecl LocalMatrixTransformVectorQuatTrans(const float *in, const DObjAnimMat *mat, float *out)
+void LocalMatrixTransformVectorQuatTrans(const float *in, const DObjAnimMat *mat, float *out)
 {
     double v6; // fp8
     double v7; // fp7
@@ -58,7 +58,7 @@ void __cdecl LocalMatrixTransformVectorQuatTrans(const float *in, const DObjAnim
         + mat->trans[2];
 }
 
-void __cdecl NormalizeQuatTrans(DObjAnimMat *mat)
+void NormalizeQuatTrans(DObjAnimMat *mat)
 {
     if ((float)((float)(mat->quat[3] * mat->quat[3])
         + (float)((float)(mat->quat[2] * mat->quat[2])
@@ -77,7 +77,7 @@ void __cdecl NormalizeQuatTrans(DObjAnimMat *mat)
     }
 }
 
-void __cdecl CG_mg42_DoControllers(const cpose_t *pose, const DObj_s *obj, int *partBits)
+void CG_mg42_DoControllers(const cpose_t *pose, const DObj_s *obj, int *partBits)
 {
     bool playerUsing; // r10
     float *turretViewAngles; // r30
@@ -208,7 +208,7 @@ void CG_Vehicle_DoControllers(const cpose_t *pose, const DObj_s *obj, int *partB
     }
 }
 
-void __cdecl CG_Actor_DoControllers(const cpose_t *pose, const DObj_s *obj, int *partBits)
+void CG_Actor_DoControllers(const cpose_t *pose, const DObj_s *obj, int *partBits)
 {
     DObjAnimMat *mat; // r28
     int proneType; // r8
@@ -248,7 +248,7 @@ void __cdecl CG_Actor_DoControllers(const cpose_t *pose, const DObj_s *obj, int 
     }
 }
 
-void __cdecl CG_DoBaseOriginController(const cpose_t *pose, const DObj_s *obj, int *setPartBits)
+void CG_DoBaseOriginController(const cpose_t *pose, const DObj_s *obj, int *setPartBits)
 {
     unsigned int rootBoneCount; // r31
     DObjAnimMat *mat; // r30
@@ -332,7 +332,7 @@ notSet:
     }
 }
 
-void __cdecl CG_DoControllers(const cpose_t *pose, const DObj_s *obj, int *partBits)
+void CG_DoControllers(const cpose_t *pose, const DObj_s *obj, int *partBits)
 {
     int setPartBits[4];
 
@@ -360,7 +360,7 @@ void __cdecl CG_DoControllers(const cpose_t *pose, const DObj_s *obj, int *partB
         Ragdoll_DoControllers(pose, (DObj_s*)obj, partBits);
 }
 
-DObjAnimMat *__cdecl CG_DObjCalcPose(const cpose_t *pose, const DObj_s *obj, int *partBits)
+DObjAnimMat *CG_DObjCalcPose(const cpose_t *pose, const DObj_s *obj, int *partBits)
 {
     DObjAnimMat *boneMatrix; // [sp+50h] [-40h] BYREF
 

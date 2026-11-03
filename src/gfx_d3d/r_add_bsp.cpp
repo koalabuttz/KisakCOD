@@ -8,12 +8,12 @@
 #include "r_add_staticmodel.h"
 #include <universal/profile.h>
 
-void __cdecl R_InitBspDrawSurf(GfxBspDrawSurfData* surfData)
+void R_InitBspDrawSurf(GfxBspDrawSurfData* surfData)
 {
     R_InitDelayedCmdBuf(&surfData->delayedCmdBuf);
 }
 
-char __cdecl R_PreTessBspDrawSurfs(
+char R_PreTessBspDrawSurfs(
     GfxDrawSurf drawSurf,
     const uint16_t *list,
     uint32_t count,
@@ -92,7 +92,7 @@ char __cdecl R_PreTessBspDrawSurfs(
     return 1;
 }
 
-void __cdecl R_AddBspDrawSurfs(
+void R_AddBspDrawSurfs(
     GfxDrawSurf drawSurf,
     uint8_t *list,
     uint32_t count,
@@ -112,13 +112,13 @@ void __cdecl R_AddBspDrawSurfs(
     }
 }
 
-void __cdecl R_AddAllBspDrawSurfacesCamera()
+void R_AddAllBspDrawSurfacesCamera()
 {
     R_AddAllBspDrawSurfacesRangeCamera(rgp.world->dpvs.litSurfsBegin, rgp.world->dpvs.litSurfsEnd, 0, 0x2000u);
     R_AddAllBspDrawSurfacesRangeCamera(rgp.world->dpvs.decalSurfsBegin, rgp.world->dpvs.decalSurfsEnd, 3u, 0x200u);
 }
 
-void __cdecl R_AddAllBspDrawSurfacesRangeCamera(
+void R_AddAllBspDrawSurfacesRangeCamera(
     uint32_t beginSurface,
     uint32_t endSurface,
     uint32_t stage,
@@ -185,7 +185,7 @@ void __cdecl R_AddAllBspDrawSurfacesRangeCamera(
     scene.drawSurfCount[stage] = surfData.drawSurfList.current - scene.drawSurfs[stage];
 }
 
-void __cdecl R_AddAllBspDrawSurfacesCameraNonlit(
+void R_AddAllBspDrawSurfacesCameraNonlit(
     uint32_t beginSurface,
     uint32_t endSurface,
     uint32_t stage)
@@ -239,7 +239,7 @@ void __cdecl R_AddAllBspDrawSurfacesCameraNonlit(
     scene.drawSurfCount[stage] = drawSurfCount;
 }
 
-void __cdecl R_AddAllBspDrawSurfacesSunShadow()
+void R_AddAllBspDrawSurfacesSunShadow()
 {
     iassert(rgp.world->dpvs.litSurfsEnd == rgp.world->dpvs.decalSurfsBegin);
     iassert(rgp.world->dpvs.decalSurfsEnd == rgp.world->dpvs.emissiveSurfsBegin);
@@ -248,7 +248,7 @@ void __cdecl R_AddAllBspDrawSurfacesSunShadow()
     R_AddAllBspDrawSurfacesRangeSunShadow(1, rgp.world->dpvs.litSurfsBegin, rgp.world->dpvs.emissiveSurfsEnd, 0x2000);
 }
 
-void __cdecl R_AddAllBspDrawSurfacesRangeSunShadow(
+void R_AddAllBspDrawSurfacesRangeSunShadow(
     uint32_t partitionIndex,
     uint32_t beginSurface,
     uint32_t endSurface,
@@ -360,7 +360,7 @@ void __cdecl R_AddAllBspDrawSurfacesRangeSunShadow(
     scene.drawSurfCount[stage] = surfData.drawSurfList.current - scene.drawSurfs[stage];
 }
 
-void __cdecl R_AddAllBspDrawSurfacesSpotShadow(uint32_t spotShadowIndex, uint32_t primaryLightIndex)
+void R_AddAllBspDrawSurfacesSpotShadow(uint32_t spotShadowIndex, uint32_t primaryLightIndex)
 {
     uint16_t triSurfList[128]; // [esp+0h] [ebp-158h] BYREF
     GfxDrawSurf drawSurf; // [esp+108h] [ebp-50h]

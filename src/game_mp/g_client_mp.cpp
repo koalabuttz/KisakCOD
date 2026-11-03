@@ -11,7 +11,7 @@
 #include <script/scr_vm.h>
 
 
-void __cdecl SetClientViewAngle(gentity_s *ent, const float *angle)
+void SetClientViewAngle(gentity_s *ent, const float *angle)
 {
     double v2; // st7
     double v3; // st7
@@ -94,7 +94,7 @@ void __cdecl SetClientViewAngle(gentity_s *ent, const float *angle)
     viewangles[2] = ent->r.currentAngles[2];
 }
 
-void __cdecl G_GetPlayerViewOrigin(const playerState_s *ps, float *origin)
+void G_GetPlayerViewOrigin(const playerState_s *ps, float *origin)
 {
     if ((ps->eFlags & 0x300) != 0)
     {
@@ -109,7 +109,7 @@ void __cdecl G_GetPlayerViewOrigin(const playerState_s *ps, float *origin)
     }
 }
 
-void __cdecl ClientUserinfoChanged(uint32_t clientNum)
+void ClientUserinfoChanged(uint32_t clientNum)
 {
     gclient_s *client; // [esp+0h] [ebp-814h]
     char oldname[1024]; // [esp+4h] [ebp-810h] BYREF
@@ -165,7 +165,7 @@ void __cdecl ClientUserinfoChanged(uint32_t clientNum)
     ci->team = client->sess.cs.team;
 }
 
-void __cdecl ClientCleanName(const char *in, char *out, int32_t outSize)
+void ClientCleanName(const char *in, char *out, int32_t outSize)
 {
     char v3; // [esp+3h] [ebp-11h]
     int32_t len; // [esp+4h] [ebp-10h]
@@ -216,7 +216,7 @@ void __cdecl ClientCleanName(const char *in, char *out, int32_t outSize)
         I_strncpyz(p, "UnnamedPlayer", outSizea);
 }
 
-char *__cdecl ClientConnect(uint32_t clientNum, uint16_t scriptPersId)
+char *ClientConnect(uint32_t clientNum, uint16_t scriptPersId)
 {
     gclient_s *client; // [esp+14h] [ebp-418h]
     XAnimTree_s *pXAnimTree; // [esp+18h] [ebp-414h]
@@ -282,12 +282,12 @@ char *__cdecl ClientConnect(uint32_t clientNum, uint16_t scriptPersId)
     }
 }
 
-void __cdecl ClientClearFields(gclient_s *client)
+void ClientClearFields(gclient_s *client)
 {
     client->useHoldEntity.setEnt(NULL);
 }
 
-void __cdecl ClientBegin(int32_t clientNum)
+void ClientBegin(int32_t clientNum)
 {
     gclient_s *client; // [esp+0h] [ebp-4h]
 
@@ -298,7 +298,7 @@ void __cdecl ClientBegin(int32_t clientNum)
     Scr_Notify(&g_entities[clientNum], scr_const.begin, 0);
 }
 
-void __cdecl ClientSpawn(gentity_s *ent, const float *spawn_origin, const float *spawn_angles)
+void ClientSpawn(gentity_s *ent, const float *spawn_origin, const float *spawn_angles)
 {
     gclient_s *client; // [esp+14h] [ebp-12Ch]
     int32_t index; // [esp+18h] [ebp-128h]
@@ -387,7 +387,7 @@ void __cdecl ClientSpawn(gentity_s *ent, const float *spawn_origin, const float 
     BG_PlayerStateToEntityState(&client->ps, &ent->s, 1, 1u);
 }
 
-void __cdecl ClientDisconnect(int32_t clientNum)
+void ClientDisconnect(int32_t clientNum)
 {
     gclient_s *client; // [esp+0h] [ebp-Ch]
     gentity_s *ent; // [esp+4h] [ebp-8h]
@@ -427,7 +427,7 @@ void __cdecl ClientDisconnect(int32_t clientNum)
         MyAssertHandler(".\\game_mp\\g_client_mp.cpp", 612, 0, "%s", "ent->client == client");
 }
 
-uint32_t __cdecl G_GetNonPVSPlayerInfo(gentity_s *pSelf, float *vPosition, int32_t iLastUpdateEnt)
+uint32_t G_GetNonPVSPlayerInfo(gentity_s *pSelf, float *vPosition, int32_t iLastUpdateEnt)
 {
     bool v4; // [esp+4h] [ebp-3Ch]
     team_t team; // [esp+14h] [ebp-2Ch]

@@ -22,14 +22,14 @@
 
 XModel *cached_models[512]{ NULL };
 
-void __cdecl TRACK_g_utils()
+void TRACK_g_utils()
 {
     track_static_alloc_internal(entityTypeNames, 68, "entityTypeNames", 9);
     track_static_alloc_internal(cached_models, 2048, "cached_models", 9);
 }
 
 static bool dumpedOnce = false;
-void __cdecl G_DumpConfigStrings(int start, int max)
+void G_DumpConfigStrings(int start, int max)
 {
     int v4; // r31
     unsigned int ConfigstringConst; // r3
@@ -47,7 +47,7 @@ void __cdecl G_DumpConfigStrings(int start, int max)
     }
 }
 
-int __cdecl G_FindConfigstringIndex(const char *name, int start, int max, int create, const char *errormsg)
+int G_FindConfigstringIndex(const char *name, int start, int max, int create, const char *errormsg)
 {
     unsigned int String; // r3
     unsigned int v11; // r26
@@ -99,7 +99,7 @@ LABEL_16:
 }
 
 static const char *origErrorMsg = "localized string";
-int __cdecl G_LocalizedStringIndex(const char *string)
+int G_LocalizedStringIndex(const char *string)
 {
     const char *v3; // r29
     int initializing; // r28
@@ -204,7 +204,7 @@ LABEL_24:
     return 0;
 }
 
-int __cdecl G_MaterialIndex(const char *name)
+int G_MaterialIndex(const char *name)
 {
     char *v2; // r11
     int v3; // r10
@@ -223,14 +223,14 @@ int __cdecl G_MaterialIndex(const char *name)
     return G_FindConfigstringIndex(v5, 2551, 128, level.initializing, "material"); // CS_SERVER_MATERIALS (PC SP, was Xbox 2583)
 }
 
-void __cdecl G_SetModelIndex(int modelIndex, const char *name)
+void G_SetModelIndex(int modelIndex, const char *name)
 {
     iassert(modelIndex > 0 && modelIndex < (1 << 9));
     cached_models[modelIndex] = SV_XModelGet((char*)name);
     SV_SetConfigstring(CS_MODELS + modelIndex, name);
 }
 
-int __cdecl G_ModelIndex(const char *name)
+int G_ModelIndex(const char *name)
 {
     unsigned int LowercaseString; // r29
     int v4; // r31
@@ -280,7 +280,7 @@ int __cdecl G_ModelIndex(const char *name)
     return v4;
 }
 
-XModel *__cdecl G_GetModel(int index)
+XModel *G_GetModel(int index)
 {
     if (index <= 0)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_utils.cpp", 282, 0, "%s", "index > 0");
@@ -289,7 +289,7 @@ XModel *__cdecl G_GetModel(int index)
     return cached_models[index];
 }
 
-bool __cdecl G_GetModelBounds(int index, float *outMins, float *outMaxs)
+bool G_GetModelBounds(int index, float *outMins, float *outMaxs)
 {
     const XModel *Model; // r29
     float v8[8][3]; // [sp+50h] [-60h] BYREF
@@ -306,7 +306,7 @@ bool __cdecl G_GetModelBounds(int index, float *outMins, float *outMaxs)
     return XModelGetStaticBounds(Model, (mat3x3&)v8, outMins, outMaxs) != 0;
 }
 
-int __cdecl G_XModelBad(int index)
+int G_XModelBad(int index)
 {
     const XModel *Model; // r3
 
@@ -316,14 +316,14 @@ int __cdecl G_XModelBad(int index)
     return XModelBad(Model);
 }
 
-unsigned int __cdecl G_ModelName(unsigned int index)
+unsigned int G_ModelName(unsigned int index)
 {
     if (index >= 0x200)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_utils.cpp", 316, 0, "%s", "(unsigned)index < MAX_MODELS");
     return SV_GetConfigstringConst(index + 1123); // CS_MODELS (PC SP, was Xbox 1155)
 }
 
-void __cdecl G_EntityCentroidWithBounds(const gentity_s *ent, const float *mins, const float *maxs, float *centroid)
+void G_EntityCentroidWithBounds(const gentity_s *ent, const float *mins, const float *maxs, float *centroid)
 {
     double v8; // fp11
     double v9; // fp13
@@ -346,7 +346,7 @@ void __cdecl G_EntityCentroidWithBounds(const gentity_s *ent, const float *mins,
     centroid[2] = ent->r.currentOrigin[2] + centroid[2];
 }
 
-void __cdecl G_EntityCentroid(const gentity_s *ent, float *centroid)
+void G_EntityCentroid(const gentity_s *ent, float *centroid)
 {
     double v4; // fp10
     double v5; // fp13
@@ -369,7 +369,7 @@ void __cdecl G_EntityCentroid(const gentity_s *ent, float *centroid)
     centroid[2] = ent->r.currentOrigin[2] + centroid[2];
 }
 
-int __cdecl G_EffectIndex(const char *name)
+int G_EffectIndex(const char *name)
 {
     if (!name)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_utils.cpp", 357, 0, "%s", "name");
@@ -384,14 +384,14 @@ int __cdecl G_EffectIndex(const char *name)
     return G_FindConfigstringIndex(name, 2147, 100, level.initializing, "effect"); // CS_EFFECT_NAMES (PC SP, was Xbox 2179)
 }
 
-int __cdecl G_ShellShockIndex(const char *name)
+int G_ShellShockIndex(const char *name)
 {
     if (!name)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_utils.cpp", 365, 0, "%s", "name");
     return G_FindConfigstringIndex(name, 2503, 16, 1, 0); // CS_SHELLSHOCKS (PC SP, was Xbox 2535)
 }
 
-unsigned int __cdecl G_SoundAliasIndexTransientAdvance(unsigned __int16 aliasIndex, int offset)
+unsigned int G_SoundAliasIndexTransientAdvance(unsigned __int16 aliasIndex, int offset)
 {
     unsigned int v4; // r31
 
@@ -425,7 +425,7 @@ unsigned int __cdecl G_SoundAliasIndexTransientAdvance(unsigned __int16 aliasInd
     return v4;
 }
 
-unsigned int __cdecl G_SoundAliasIndexTransient(const char *name)
+unsigned int G_SoundAliasIndexTransient(const char *name)
 {
     unsigned __int16 soundAliasFirst; // r11
     unsigned __int16 soundAliasLast; // r3
@@ -602,20 +602,20 @@ unsigned int __cdecl G_SoundAliasIndexTransient(const char *name)
     return v8;
 }
 
-int __cdecl G_SoundAliasIndexPermanent(const char *name)
+int G_SoundAliasIndexPermanent(const char *name)
 {
     if (!name)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_utils.cpp", 424, 0, "%s", "name");
     return (unsigned __int16)G_FindConfigstringIndex(name, 1635, 256, 1, 0);
 }
 
-int __cdecl G_RumbleIndex(const char *name)
+int G_RumbleIndex(const char *name)
 {
     iassert(name);
     return G_FindConfigstringIndex(name, CS_RUMBLES, 32, 1, 0);
 }
 
-void __cdecl G_SetClientDemoTime(int time)
+void G_SetClientDemoTime(int time)
 {
     level.framenum = time / 50;
     if (time - 50 > 0)
@@ -625,12 +625,12 @@ void __cdecl G_SetClientDemoTime(int time)
     level.time = time;
 }
 
-void __cdecl G_SetClientDemoServerSnapTime(int time)
+void G_SetClientDemoServerSnapTime(int time)
 {
     level.snapTime = time;
 }
 
-void __cdecl G_ClearDemoEntities()
+void G_ClearDemoEntities()
 {
     int v0; // r20
     gentity_s *ent; // r31
@@ -705,7 +705,7 @@ void __cdecl G_ClearDemoEntities()
     }
 }
 
-void __cdecl G_UpdateDemoEntity(entityState_s *es)
+void G_UpdateDemoEntity(entityState_s *es)
 {
     unsigned int number; // r26
     gentity_s *v3; // r31
@@ -808,7 +808,7 @@ void __cdecl G_UpdateDemoEntity(entityState_s *es)
     }
 }
 
-unsigned int __cdecl G_GetEntAnimTreeId(int entnum)
+unsigned int G_GetEntAnimTreeId(int entnum)
 {
     gentity_s *v2; // r31
     int eType; // r11
@@ -855,7 +855,7 @@ LABEL_18:
     return Scr_GetAnimsIndex(Anims);
 }
 
-XAnimTree_s *__cdecl G_GetEntAnimTreeForId(int entnum, unsigned int id)
+XAnimTree_s *G_GetEntAnimTreeForId(int entnum, unsigned int id)
 {
     gentity_s *v4; // r30
     int eType; // r11
@@ -922,7 +922,7 @@ LABEL_14:
     return v4->pAnimTree;
 }
 
-void __cdecl G_ShutdownClientDemo()
+void G_ShutdownClientDemo()
 {
     int v0; // r29
     int num_entities; // r11
@@ -948,7 +948,7 @@ void __cdecl G_ShutdownClientDemo()
     }
 }
 
-XAnimTree_s *__cdecl G_GetEntAnimTree(gentity_s *ent)
+XAnimTree_s *G_GetEntAnimTree(gentity_s *ent)
 {
     int eType; // r11
 
@@ -962,7 +962,7 @@ XAnimTree_s *__cdecl G_GetEntAnimTree(gentity_s *ent)
     return G_GetActorCorpseAnimTree(ent);
 }
 
-void __cdecl G_CheckDObjUpdate(gentity_s *ent)
+void G_CheckDObjUpdate(gentity_s *ent)
 {
     const DObj_s *ServerDObj; // r3
     int model; // r29
@@ -1089,7 +1089,7 @@ void __cdecl G_CheckDObjUpdate(gentity_s *ent)
     }
 }
 
-void __cdecl G_SetModel(gentity_s *ent, const char *modelName)
+void G_SetModel(gentity_s *ent, const char *modelName)
 {
     int v3; // r3
     unsigned __int16 v4; // r31
@@ -1114,12 +1114,12 @@ void __cdecl G_SetModel(gentity_s *ent, const char *modelName)
 }
 
 // attributes: thunk
-void __cdecl G_ReplaceModel_FastFile(const char *originalName, const char *replacementName)
+void G_ReplaceModel_FastFile(const char *originalName, const char *replacementName)
 {
     DB_ReplaceModel(originalName, replacementName);
 }
 
-void __cdecl G_OverrideModel(unsigned int modelindex, const char *defaultModelName)
+void G_OverrideModel(unsigned int modelindex, const char *defaultModelName)
 {
     int v4; // r4
     const char *v5; // r7
@@ -1147,7 +1147,7 @@ LABEL_6:
     DB_ReplaceModel(v7, defaultModelName);
 }
 
-void __cdecl G_PrecacheDefaultModels()
+void G_PrecacheDefaultModels()
 {
     G_ModelIndex("defaultactor");
 #ifndef KISAK_NO_FASTFILES
@@ -1155,7 +1155,7 @@ void __cdecl G_PrecacheDefaultModels()
 #endif
 }
 
-int __cdecl G_EntIsLinkedTo(gentity_s *ent, gentity_s *parent)
+int G_EntIsLinkedTo(gentity_s *ent, gentity_s *parent)
 {
     tagInfo_s *tagInfo; // r11
     int result; // r3
@@ -1169,7 +1169,7 @@ int __cdecl G_EntIsLinkedTo(gentity_s *ent, gentity_s *parent)
     return result;
 }
 
-void __cdecl G_UpdateViewAngleClamp(gclient_s *client, const float *worldAnglesCenter)
+void G_UpdateViewAngleClamp(gclient_s *client, const float *worldAnglesCenter)
 {
     double v4; // fp0
     double v5; // fp13
@@ -1198,7 +1198,7 @@ void __cdecl G_UpdateViewAngleClamp(gclient_s *client, const float *worldAnglesC
     client->ps.viewAngleClampBase[1] = AngleNormalize360((float)((float)v9 - (float)v8));
 }
 
-void __cdecl G_UpdateGroundTilt(gclient_s *client)
+void G_UpdateGroundTilt(gclient_s *client)
 {
     int groundTiltEntNum = client->groundTiltEntNum;
     if (groundTiltEntNum == ENTITYNUM_NONE)
@@ -1215,7 +1215,7 @@ void __cdecl G_UpdateGroundTilt(gclient_s *client)
     }
 }
 
-bool __cdecl G_SlideMove(
+bool G_SlideMove(
     float deltaT,
     float *origin,
     float *velocity,
@@ -1375,7 +1375,7 @@ bool __cdecl G_SlideMove(
     return bumpCount != 0;
 }
 
-void __cdecl G_StepSlideMove(
+void G_StepSlideMove(
     float deltaT,
     float *origin,
     float *velocity,
@@ -1448,7 +1448,7 @@ void __cdecl G_StepSlideMove(
     }
 }
 
-void __cdecl G_SafeDObjFree(gentity_s *ent)
+void G_SafeDObjFree(gentity_s *ent)
 {
     if (ent->s.number == level.cachedTagMat.entnum)
         level.cachedTagMat.entnum = ENTITYNUM_NONE;
@@ -1457,16 +1457,16 @@ void __cdecl G_SafeDObjFree(gentity_s *ent)
     Com_SafeServerDObjFree(ent->s.number);
 }
 
-int __cdecl G_DObjUpdateServerTime(gentity_s *ent, int bNotify)
+int G_DObjUpdateServerTime(gentity_s *ent, int bNotify)
 {
     ent->flags &= ~(FL_REPEAT_ANIM_UPDATE);
     return SV_DObjUpdateServerTime(ent, 0.05f, bNotify);
 }
 
-void __cdecl G_DObjCalcPose(gentity_s *ent, int *partBits)
+void G_DObjCalcPose(gentity_s *ent, int *partBits)
 {
     DObj_s *ServerDObj; // r29
-    void(__cdecl * controller)(const gentity_s *, int *); // r11
+    void(* controller)(const gentity_s *, int *); // r11
 
     ServerDObj = Com_GetServerDObj(ent->s.number);
     if (!ServerDObj)
@@ -1480,10 +1480,10 @@ void __cdecl G_DObjCalcPose(gentity_s *ent, int *partBits)
     }
 }
 
-void __cdecl G_DObjCalcBone(const gentity_s *ent, int boneIndex)
+void G_DObjCalcBone(const gentity_s *ent, int boneIndex)
 {
     DObj_s *ServerDObj; // r31
-    void(__cdecl * controller)(const gentity_s *, int *); // r11
+    void(* controller)(const gentity_s *, int *); // r11
     int v6[12]; // [sp+50h] [-30h] BYREF
 
     ServerDObj = Com_GetServerDObj(ent->s.number);
@@ -1499,7 +1499,7 @@ void __cdecl G_DObjCalcBone(const gentity_s *ent, int boneIndex)
     }
 }
 
-DObjAnimMat *__cdecl G_DObjGetLocalBoneIndexMatrix(const gentity_s *ent, int boneIndex)
+DObjAnimMat *G_DObjGetLocalBoneIndexMatrix(const gentity_s *ent, int boneIndex)
 {
     //Profile_Begin(318);
     G_DObjCalcBone(ent, boneIndex);
@@ -1507,7 +1507,7 @@ DObjAnimMat *__cdecl G_DObjGetLocalBoneIndexMatrix(const gentity_s *ent, int bon
     return &SV_DObjGetMatrixArray(ent)[boneIndex];
 }
 
-void __cdecl G_DObjGetWorldBoneIndexMatrix(const gentity_s *ent, int boneIndex, float (*tagMat)[3])
+void G_DObjGetWorldBoneIndexMatrix(const gentity_s *ent, int boneIndex, float (*tagMat)[3])
 {
     DObjAnimMat *mat; // r30
     mat4x3 ent_axis;
@@ -1524,7 +1524,7 @@ void __cdecl G_DObjGetWorldBoneIndexMatrix(const gentity_s *ent, int boneIndex, 
     MatrixTransformVector43(mat->trans, ent_axis, &(*tagMat)[9]);
 }
 
-void __cdecl G_DObjGetWorldBoneIndexPos(const gentity_s *ent, int boneIndex, float *pos)
+void G_DObjGetWorldBoneIndexPos(const gentity_s *ent, int boneIndex, float *pos)
 {
     DObjAnimMat *MatrixArray; // r28
     float v7[24]; // [sp+50h] [-60h] BYREF
@@ -1540,7 +1540,7 @@ void __cdecl G_DObjGetWorldBoneIndexPos(const gentity_s *ent, int boneIndex, flo
     MatrixTransformVector43(MatrixArray[boneIndex].trans, (const mat4x3&)v7, pos);
 }
 
-DObjAnimMat *__cdecl G_DObjGetLocalTagMatrix(const gentity_s *ent, unsigned int tagName)
+DObjAnimMat *G_DObjGetLocalTagMatrix(const gentity_s *ent, unsigned int tagName)
 {
     int BoneIndex; // r30
 
@@ -1553,7 +1553,7 @@ DObjAnimMat *__cdecl G_DObjGetLocalTagMatrix(const gentity_s *ent, unsigned int 
     return &SV_DObjGetMatrixArray(ent)[BoneIndex];
 }
 
-int __cdecl G_DObjGetWorldTagMatrix(const gentity_s *ent, unsigned int tagName, float (*tagMat)[3])
+int G_DObjGetWorldTagMatrix(const gentity_s *ent, unsigned int tagName, float (*tagMat)[3])
 {
     int BoneIndex; // r4
 
@@ -1564,7 +1564,7 @@ int __cdecl G_DObjGetWorldTagMatrix(const gentity_s *ent, unsigned int tagName, 
     return 1;
 }
 
-int __cdecl G_DObjGetWorldTagPos(const gentity_s *ent, unsigned int tagName, float *pos)
+int G_DObjGetWorldTagPos(const gentity_s *ent, unsigned int tagName, float *pos)
 {
     int BoneIndex; // r30
     DObjAnimMat *MatrixArray; // r29
@@ -1585,7 +1585,7 @@ int __cdecl G_DObjGetWorldTagPos(const gentity_s *ent, unsigned int tagName, flo
     return 1;
 }
 
-void __cdecl G_DObjGetWorldTagPos_CheckTagExists(const gentity_s *ent, unsigned int tagName, float *pos)
+void G_DObjGetWorldTagPos_CheckTagExists(const gentity_s *ent, unsigned int tagName, float *pos)
 {
     const DObj_s *ServerDObj; // r3
     const DObj_s *v6; // r30
@@ -1615,7 +1615,7 @@ void __cdecl G_DObjGetWorldTagPos_CheckTagExists(const gentity_s *ent, unsigned 
     }
 }
 
-gentity_s *__cdecl G_Find(gentity_s *from, int fieldofs, unsigned __int16 match)
+gentity_s *G_Find(gentity_s *from, int fieldofs, unsigned __int16 match)
 {
     //gentity_s *result; // r3
     //gentity_s *v4; // r9
@@ -1661,7 +1661,7 @@ gentity_s *__cdecl G_Find(gentity_s *from, int fieldofs, unsigned __int16 match)
     return 0;
 }
 
-void __cdecl G_InitGentity(gentity_s *e)
+void G_InitGentity(gentity_s *e)
 {
     e->nextFree = 0;
     iassert(!e->r.inuse);
@@ -1675,7 +1675,7 @@ void __cdecl G_InitGentity(gentity_s *e)
     e->angleLerpRate = 540.0;
 }
 
-void __cdecl G_PrintEntities()
+void G_PrintEntities()
 {
     int v0; // r30
     unsigned __int16 *p_model; // r31
@@ -1742,7 +1742,7 @@ void __cdecl G_PrintEntities()
     }
 }
 
-gentity_s *__cdecl G_Spawn()
+gentity_s *G_Spawn()
 {
     gentity_s *e; // r30
 
@@ -1770,7 +1770,7 @@ gentity_s *__cdecl G_Spawn()
     return e;
 }
 
-void __cdecl G_FreeEntityRefs(gentity_s *ed)
+void G_FreeEntityRefs(gentity_s *ed)
 {
     int number; // r29
     int num_entities; // r10
@@ -1805,7 +1805,7 @@ void __cdecl G_FreeEntityRefs(gentity_s *ed)
         Targ_Remove(ed);
 }
 
-void __cdecl G_FreeAllEntityRefs()
+void G_FreeAllEntityRefs()
 {
     actor_s *actors; // r11
     int i; // r31
@@ -1830,7 +1830,7 @@ void __cdecl G_FreeAllEntityRefs()
     Targ_RemoveAll();
 }
 
-void __cdecl G_FreeEntityDelay(gentity_s *ed)
+void G_FreeEntityDelay(gentity_s *ed)
 {
     unsigned __int16 hThread; // [esp+0h] [ebp-4h]
 
@@ -1850,17 +1850,17 @@ void __cdecl G_FreeEntityDelay(gentity_s *ed)
     //Scr_FreeThread(v3);
 }
 
-void __cdecl G_BroadcastEntity(gentity_s *ent)
+void G_BroadcastEntity(gentity_s *ent)
 {
     ;
 }
 
-void __cdecl G_FreeEntityAfterEvent(gentity_s *ent)
+void G_FreeEntityAfterEvent(gentity_s *ent)
 {
     ent->r.eventType |= 1u;
 }
 
-int __cdecl G_SaveFreeEntities(unsigned __int8 *buf)
+int G_SaveFreeEntities(unsigned __int8 *buf)
 {
     gentity_s *firstFreeEnt; // r9
     int result; // r3
@@ -1893,7 +1893,7 @@ int __cdecl G_SaveFreeEntities(unsigned __int8 *buf)
     return result;
 }
 
-void __cdecl G_LoadFreeEntities(unsigned __int8 *buf)
+void G_LoadFreeEntities(unsigned __int8 *buf)
 {
     _BYTE *v2; // r11
     bool v3; // cr58
@@ -1922,7 +1922,7 @@ void __cdecl G_LoadFreeEntities(unsigned __int8 *buf)
     }
 }
 
-void __cdecl G_AddPredictableEvent(gentity_s *ent, entity_event_t event, unsigned int eventParm)
+void G_AddPredictableEvent(gentity_s *ent, entity_event_t event, unsigned int eventParm)
 {
     gclient_s *client; // r5
 
@@ -1931,7 +1931,7 @@ void __cdecl G_AddPredictableEvent(gentity_s *ent, entity_event_t event, unsigne
         BG_AddPredictableEventToPlayerstate(event, eventParm, &client->ps);
 }
 
-void __cdecl G_AddEvent(gentity_s *ent, unsigned int event, unsigned int eventParm)
+void G_AddEvent(gentity_s *ent, unsigned int event, unsigned int eventParm)
 {
     unsigned __int8 v3; // r30
     gclient_s *client; // r11
@@ -1968,7 +1968,7 @@ void __cdecl G_AddEvent(gentity_s *ent, unsigned int event, unsigned int eventPa
     ent->r.eventTime = level.time;
 }
 
-void __cdecl G_RegisterSoundWait(gentity_s *ent, unsigned __int16 index, unsigned int notifyString, int stoppable)
+void G_RegisterSoundWait(gentity_s *ent, unsigned __int16 index, unsigned int notifyString, int stoppable)
 {
     int time; // r11
     unsigned __int16 v14[8]; // [sp+80h] [-890h] BYREF
@@ -2020,7 +2020,7 @@ void __cdecl G_RegisterSoundWait(gentity_s *ent, unsigned __int16 index, unsigne
     ent->snd_wait.basetime = time;
 }
 
-void __cdecl G_PlaySoundAliasWithNotify(
+void G_PlaySoundAliasWithNotify(
     gentity_s *ent,
     unsigned __int16 index,
     unsigned int notifyString,
@@ -2058,7 +2058,7 @@ void __cdecl G_PlaySoundAliasWithNotify(
     }
 }
 
-void __cdecl G_PlaySoundAlias(gentity_s *ent, unsigned __int16 index)
+void G_PlaySoundAlias(gentity_s *ent, unsigned __int16 index)
 {
     if (!ent)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_utils.cpp", 2773, 0, "%s", "ent");
@@ -2066,7 +2066,7 @@ void __cdecl G_PlaySoundAlias(gentity_s *ent, unsigned __int16 index)
         G_AddEvent(ent, EV_SOUND_ALIAS, index);
 }
 
-void __cdecl G_SetOrigin(gentity_s *ent, float *origin)
+void G_SetOrigin(gentity_s *ent, float *origin)
 {
     if ((COERCE_UNSIGNED_INT(*origin) & 0x7F800000) == 0x7F800000
         || (COERCE_UNSIGNED_INT(origin[1]) & 0x7F800000) == 0x7F800000
@@ -2093,7 +2093,7 @@ void __cdecl G_SetOrigin(gentity_s *ent, float *origin)
     ent->r.currentOrigin[2] = origin[2];
 }
 
-void __cdecl G_SetAngle(gentity_s *ent, float *angle)
+void G_SetAngle(gentity_s *ent, float *angle)
 {
     ent->s.lerp.apos.trBase[0] = *angle;
     ent->s.lerp.apos.trBase[1] = angle[1];
@@ -2109,13 +2109,13 @@ void __cdecl G_SetAngle(gentity_s *ent, float *angle)
     ent->r.currentAngles[2] = angle[2];
 }
 
-void __cdecl G_SetConstString(unsigned __int16 *to, const char *from)
+void G_SetConstString(unsigned __int16 *to, const char *from)
 {
     Scr_SetString(to, 0);
     *to = SL_GetString(from, 0);
 }
 
-const char *__cdecl G_GetEntityTypeName(const gentity_s *ent)
+const char *G_GetEntityTypeName(const gentity_s *ent)
 {
     if (ent->s.eType >= ET_EVENTS)
         MyAssertHandler(
@@ -2129,22 +2129,22 @@ const char *__cdecl G_GetEntityTypeName(const gentity_s *ent)
 
 unsigned int holdrand;
 
-void __cdecl G_SetPM_MPViewer(bool setting)
+void G_SetPM_MPViewer(bool setting)
 {
     level.mpviewer = setting;
 }
 
-void __cdecl G_srand(unsigned int seed)
+void G_srand(unsigned int seed)
 {
     holdrand = seed;
 }
 
-unsigned int __cdecl G_GetRandomSeed()
+unsigned int G_GetRandomSeed()
 {
     return holdrand;
 }
 
-//unsigned int __cdecl G_rand()
+//unsigned int G_rand()
 //{
 //    unsigned int result; // r3
 //
@@ -2153,13 +2153,13 @@ unsigned int __cdecl G_GetRandomSeed()
 //    return result;
 //}
 
-unsigned int __cdecl G_rand()
+unsigned int G_rand()
 {
     holdrand = 214013 * holdrand + 2531011;
     return holdrand >> 17;
 }
 
-//float __cdecl G_flrand(double min, double max)
+//float G_flrand(double min, double max)
 //{
 //    __int64 v2; // r11
 //    double v3; // fp1
@@ -2171,12 +2171,12 @@ unsigned int __cdecl G_rand()
 //    return *((float *)&v3 + 1);
 //}
 
-float __cdecl G_flrand(float min, float max)
+float G_flrand(float min, float max)
 {
     return (float)G_rand() * (max - min) / 32768.0f + min;
 }
 
-//int __cdecl G_irand(int min, int max)
+//int G_irand(int min, int max)
 //{
 //    __int128 v2; // r11
 //
@@ -2187,12 +2187,12 @@ float __cdecl G_flrand(float min, float max)
 //    return ((__int64)(v2 * *(_QWORD *)((char *)&v2 + 4)) >> 15) + min;
 //}
 
-int __cdecl G_irand(int min, int max)
+int G_irand(int min, int max)
 {
     return ((G_rand() * (__int64)(max - min)) >> 15) + min;
 }
 
-//float __cdecl G_random()
+//float G_random()
 //{
 //    __int64 v0; // r11
 //    double v1; // fp1
@@ -2204,12 +2204,12 @@ int __cdecl G_irand(int min, int max)
 //    return *((float *)&v1 + 1);
 //}
 
-float __cdecl G_random()
+float G_random()
 {
     return (float)G_rand() / 32768.0f;
 }
 
-//float __cdecl G_crandom()
+//float G_crandom()
 //{
 //    __int64 v0; // r11
 //    double v1; // fp1
@@ -2221,12 +2221,12 @@ float __cdecl G_random()
 //    return *((float *)&v1 + 1);
 //}
 
-float __cdecl G_crandom()
+float G_crandom()
 {
     return G_random() * 2.0 - 1.0;
 }
 
-void __cdecl G_CalcTagParentAxis(gentity_s *ent, float (*parentAxis)[3])
+void G_CalcTagParentAxis(gentity_s *ent, float (*parentAxis)[3])
 {
     tagInfo_s *tagInfo; // r29
     const gentity_s *parent; // r31
@@ -2320,7 +2320,7 @@ void __cdecl G_CalcTagParentAxis(gentity_s *ent, float (*parentAxis)[3])
     //Profile_EndInternal(0);
 }
 
-void __cdecl G_CalcTagParentRelAxis(gentity_s *ent, float (*parentRelAxis)[3])
+void G_CalcTagParentRelAxis(gentity_s *ent, float (*parentRelAxis)[3])
 {
     tagInfo_s *tagInfo; // r30
     float v5[6][3]; // [sp+50h] [-50h] BYREF
@@ -2335,7 +2335,7 @@ void __cdecl G_CalcTagParentRelAxis(gentity_s *ent, float (*parentRelAxis)[3])
     MatrixMultiply43(tagInfo->parentInvAxis, (const mat4x3&)v5, (mat4x3&)*parentRelAxis);
 }
 
-void __cdecl G_CalcTagAxis(gentity_s *ent, int bAnglesOnly)
+void G_CalcTagAxis(gentity_s *ent, int bAnglesOnly)
 {
     tagInfo_s *tagInfo; // r30
     float v5[12]; // [sp+50h] [-B0h] BYREF
@@ -2362,7 +2362,7 @@ void __cdecl G_CalcTagAxis(gentity_s *ent, int bAnglesOnly)
     }
 }
 
-void __cdecl G_SetFixedLink(gentity_s *ent, unsigned int eAngles)
+void G_SetFixedLink(gentity_s *ent, unsigned int eAngles)
 {
     tagInfo_s *tagInfo; // r30
     double v5; // fp13
@@ -2408,7 +2408,7 @@ void __cdecl G_SetFixedLink(gentity_s *ent, unsigned int eAngles)
     }
 }
 
-void __cdecl G_SetPlayerFixedLink(gentity_s *ent)
+void G_SetPlayerFixedLink(gentity_s *ent)
 {
     gclient_s *client; // r28
     float *viewangles; // r31
@@ -2540,7 +2540,7 @@ void __cdecl G_SetPlayerFixedLink(gentity_s *ent)
     SV_LinkEntity(ent);
 }
 
-void __cdecl G_GeneralLink(gentity_s *ent)
+void G_GeneralLink(gentity_s *ent)
 {
     tagInfo_s *tagInfo; // r28
     double v3; // fp13
@@ -2577,7 +2577,7 @@ void __cdecl G_GeneralLink(gentity_s *ent)
     SV_LinkEntity(ent);
 }
 
-gentity_s *__cdecl G_TempEntity(float *origin, int event)
+gentity_s *G_TempEntity(float *origin, int event)
 {
     gentity_s *v4; // r3
     gentity_s *v5; // r31
@@ -2606,7 +2606,7 @@ gentity_s *__cdecl G_TempEntity(float *origin, int event)
     return v5;
 }
 
-void __cdecl G_PlaySoundAliasAtPoint(float *origin, unsigned __int16 index)
+void G_PlaySoundAliasAtPoint(float *origin, unsigned __int16 index)
 {
     if (!origin)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_utils.cpp", 2756, 0, "%s", "origin");
@@ -2614,7 +2614,7 @@ void __cdecl G_PlaySoundAliasAtPoint(float *origin, unsigned __int16 index)
         G_TempEntity(origin, 3)->s.eventParm = index;
 }
 
-void __cdecl G_EntUnlink(gentity_s *ent)
+void G_EntUnlink(gentity_s *ent)
 {
     tagInfo_s *tagInfo; // r22
     animscripted_s *scripted; // r30
@@ -2719,7 +2719,7 @@ void __cdecl G_EntUnlink(gentity_s *ent)
     //Profile_EndInternal(0);
 }
 
-void __cdecl G_UpdateTagInfo(gentity_s *ent, int bParentHasDObj)
+void G_UpdateTagInfo(gentity_s *ent, int bParentHasDObj)
 {
     tagInfo_s *tagInfo; // r31
     int BoneIndex; // r3
@@ -2745,7 +2745,7 @@ void __cdecl G_UpdateTagInfo(gentity_s *ent, int bParentHasDObj)
     //Profile_EndInternal(0);
 }
 
-void __cdecl G_UpdateTagInfoOfChildren(gentity_s *parent, int bHasDObj)
+void G_UpdateTagInfoOfChildren(gentity_s *parent, int bHasDObj)
 {
     gentity_s *tagChildren; // r3
     gentity_s *next; // r31
@@ -2764,7 +2764,7 @@ void __cdecl G_UpdateTagInfoOfChildren(gentity_s *parent, int bHasDObj)
     //Profile_EndInternal(0);
 }
 
-void __cdecl G_EntUnlinkFree(gentity_s *ent)
+void G_EntUnlinkFree(gentity_s *ent)
 {
     animscripted_s *scripted; // r3
 
@@ -2777,7 +2777,7 @@ void __cdecl G_EntUnlinkFree(gentity_s *ent)
     G_EntUnlink(ent);
 }
 
-void __cdecl G_FreeEntity(gentity_s *ed)
+void G_FreeEntity(gentity_s *ed)
 {
     animscripted_s *scripted; // r3
     gentity_s *tagChildren; // r30
@@ -2903,14 +2903,14 @@ void __cdecl G_FreeEntity(gentity_s *ed)
     //Profile_EndInternal(0);
 }
 
-void __cdecl G_UpdateTags(gentity_s *ent, int bHasDObj)
+void G_UpdateTags(gentity_s *ent, int bHasDObj)
 {
     if (ent->scr_vehicle)
         G_UpdateVehicleTags(ent);
     G_UpdateTagInfoOfChildren(ent, bHasDObj);
 }
 
-void __cdecl G_DObjUpdate(gentity_s *ent)
+void G_DObjUpdate(gentity_s *ent)
 {
     int modelIndex; // r31
     XAnimTree_s *pAnimTree; // r19
@@ -2995,7 +2995,7 @@ LABEL_17:
     //Profile_EndInternal(0);
 }
 
-int __cdecl G_EntDetach(gentity_s *ent, const char *modelName, unsigned int tagName)
+int G_EntDetach(gentity_s *ent, const char *modelName, unsigned int tagName)
 {
     unsigned int LowercaseString; // r3
     unsigned int v7; // r24
@@ -3080,7 +3080,7 @@ int __cdecl G_EntDetach(gentity_s *ent, const char *modelName, unsigned int tagN
     }
 }
 
-void __cdecl G_EntDetachAll(gentity_s *ent)
+void G_EntDetachAll(gentity_s *ent)
 {
     unsigned __int16 *attachTagNames; // r31
     int v3; // r30
@@ -3100,7 +3100,7 @@ void __cdecl G_EntDetachAll(gentity_s *ent)
     //Profile_EndInternal(0);
 }
 
-int __cdecl G_EntLinkToInternal(gentity_s *ent, gentity_s *parent, unsigned int tagName)
+int G_EntLinkToInternal(gentity_s *ent, gentity_s *parent, unsigned int tagName)
 {
     int BoneIndex; // r24
     int result; // r3
@@ -3202,7 +3202,7 @@ int __cdecl G_EntLinkToInternal(gentity_s *ent, gentity_s *parent, unsigned int 
     return 0;
 }
 
-int __cdecl G_EntLinkTo(gentity_s *ent, gentity_s *parent, unsigned int tagName)
+int G_EntLinkTo(gentity_s *ent, gentity_s *parent, unsigned int tagName)
 {
     //Profile_Begin(254);
     if (G_EntLinkToInternal(ent, parent, tagName))
@@ -3218,7 +3218,7 @@ int __cdecl G_EntLinkTo(gentity_s *ent, gentity_s *parent, unsigned int tagName)
     }
 }
 
-int __cdecl G_EntLinkToWithOffset(
+int G_EntLinkToWithOffset(
     gentity_s *ent,
     gentity_s *parent,
     unsigned int tagName,
@@ -3245,7 +3245,7 @@ int __cdecl G_EntLinkToWithOffset(
     }
 }
 
-int __cdecl G_EntAttach(gentity_s *ent, const char *modelName, unsigned int tagName, int ignoreCollision)
+int G_EntAttach(gentity_s *ent, const char *modelName, unsigned int tagName, int ignoreCollision)
 {
     int v8; // r31
     unsigned __int16 *i; // r11

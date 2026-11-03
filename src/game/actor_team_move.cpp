@@ -9,12 +9,12 @@
 #include <server/server.h> // gentity_s 
 #include "actor_cover_arrival.h"
 
-void __cdecl Actor_TeamMoveBlocked(actor_s *self)
+void Actor_TeamMoveBlocked(actor_s *self)
 {
     self->iTeamMoveWaitTime = level.time + 500;
 }
 
-void __cdecl Actor_TeamMoveBlockedClear(actor_s *self)
+void Actor_TeamMoveBlockedClear(actor_s *self)
 {
     self->iTeamMoveWaitTime = 0;
 }
@@ -44,7 +44,7 @@ bool Actor_TeamMoveCheckWaitTimer(actor_s *self, ai_teammove_t *result)
     }
 }
 
-bool __cdecl Actor_TeamMoveNeedToCheckWait(unsigned __int8 moveMode, path_t *pPath)
+bool Actor_TeamMoveNeedToCheckWait(unsigned __int8 moveMode, path_t *pPath)
 {
     int v2; // r11
     bool result; // r3
@@ -64,12 +64,12 @@ bool __cdecl Actor_TeamMoveNeedToCheckWait(unsigned __int8 moveMode, path_t *pPa
     return result;
 }
 
-bool __cdecl Actor_IsEnemy(actor_s *self, sentient_s *other)
+bool Actor_IsEnemy(actor_s *self, sentient_s *other)
 {
     return ((1 << other->eTeam) & ~(1 << Sentient_EnemyTeam(self->sentient->eTeam))) == 0;
 }
 
-void __cdecl Actor_CalcInterval(
+void Actor_CalcInterval(
     actor_s *self,
     bool bUseInterval,
     float *fIntervalSqrdOut,
@@ -98,7 +98,7 @@ void __cdecl Actor_CalcInterval(
     }
 }
 
-int __cdecl Actor_TeamMoveCalcMovementDir(team_move_context_t *context, ai_teammove_t *result)
+int Actor_TeamMoveCalcMovementDir(team_move_context_t *context, ai_teammove_t *result)
 {
     float *vVelDirSelf; // r30
     actor_s *self; // r29
@@ -140,7 +140,7 @@ int __cdecl Actor_TeamMoveCalcMovementDir(team_move_context_t *context, ai_teamm
     return v7;
 }
 
-float __cdecl Actor_TeamMoveDeltaCorrection(actor_s *self, double fVelSelfSqrd)
+float Actor_TeamMoveDeltaCorrection(actor_s *self, double fVelSelfSqrd)
 {
     double v2; // fp1
 
@@ -156,7 +156,7 @@ float __cdecl Actor_TeamMoveDeltaCorrection(actor_s *self, double fVelSelfSqrd)
     return (float)v2;
 }
 
-void __cdecl Actor_AddToList(int *dodgeEntities, int *dodgeEntityCount, int arraysz, actor_s *pOtherActor)
+void Actor_AddToList(int *dodgeEntities, int *dodgeEntityCount, int arraysz, actor_s *pOtherActor)
 {
     if (!pOtherActor->ent)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_team_move.cpp", 192, 0, "%s", "pOtherActor->ent");
@@ -170,13 +170,13 @@ void __cdecl Actor_AddToList(int *dodgeEntities, int *dodgeEntityCount, int arra
     dodgeEntities[(*dodgeEntityCount)++] = pOtherActor->ent->s.number;
 }
 
-void __cdecl Actor_TeamMoveSetDodge(team_move_context_t *context, team_move_other_context_t *context_other)
+void Actor_TeamMoveSetDodge(team_move_context_t *context, team_move_other_context_t *context_other)
 {
     context->fDodgePosDeltaLengthSqrd = context_other->fPosDeltaLengthSqrd;
     context->pDodgeOther = context_other->other;
 }
 
-int __cdecl Actor_TeamMoveShouldTryDodgeSentient(
+int Actor_TeamMoveShouldTryDodgeSentient(
     team_move_context_t *context,
     team_move_other_context_t *context_other)
 {
@@ -333,7 +333,7 @@ LABEL_48:
     return 1;
 }
 
-int __cdecl Actor_TeamMoveTryDodge(team_move_context_t *context, team_move_other_context_t *context_other)
+int Actor_TeamMoveTryDodge(team_move_context_t *context, team_move_other_context_t *context_other)
 {
     actor_s *self; // r10
     sentient_s *other; // r9
@@ -446,7 +446,7 @@ int __cdecl Actor_TeamMoveTryDodge(team_move_context_t *context, team_move_other
     return 1;
 }
 
-int __cdecl Actor_TeamMoveConsiderSlowDown(team_move_context_t *context, ai_teammove_t *eResult)
+int Actor_TeamMoveConsiderSlowDown(team_move_context_t *context, ai_teammove_t *eResult)
 {
     double fSlowDownPosDeltaLengthSqrd; // fp0
     sentient_s *pSlowDownOther; // r8
@@ -480,7 +480,7 @@ int __cdecl Actor_TeamMoveConsiderSlowDown(team_move_context_t *context, ai_team
     }
 }
 
-ai_teammove_t __cdecl Actor_TeamMoveNoDodge(team_move_context_t *context, ai_teammove_t eResult)
+ai_teammove_t Actor_TeamMoveNoDodge(team_move_context_t *context, ai_teammove_t eResult)
 {
     actor_s *self; // r29
     path_t *p_Path; // r31
@@ -529,7 +529,7 @@ ai_teammove_t __cdecl Actor_TeamMoveNoDodge(team_move_context_t *context, ai_tea
     return result;
 }
 
-void __cdecl Actor_TeamMoveInitializeContext(
+void Actor_TeamMoveInitializeContext(
     actor_s *self,
     bool bUseInterval,
     bool bAllowGoalPileUp,
@@ -590,7 +590,7 @@ void __cdecl Actor_TeamMoveInitializeContext(
         context->fDeltaCorrection = 0.0;
 }
 
-int __cdecl Actor_TeamMoveTrimPath(path_t *pPath, const team_move_context_t *context)
+int Actor_TeamMoveTrimPath(path_t *pPath, const team_move_context_t *context)
 {
     __int16 wDodgeCount; // r9
     int wPathLen; // r10
@@ -640,7 +640,7 @@ int __cdecl Actor_TeamMoveTrimPath(path_t *pPath, const team_move_context_t *con
     return lookaheadNextNode;
 }
 
-void __cdecl Actor_TeamMoveTooCloseMoveAway(const actor_s *self, int mask, team_move_context_t *context)
+void Actor_TeamMoveTooCloseMoveAway(const actor_s *self, int mask, team_move_context_t *context)
 {
     gentity_s *ent; // r11
     float vOrgDodge[3]; // fp31
@@ -675,7 +675,7 @@ void __cdecl Actor_TeamMoveTooCloseMoveAway(const actor_s *self, int mask, team_
     }
 }
 
-int __cdecl Actor_TeamMoveCheckPileup(actor_s *self, actor_s *pOtherActor)
+int Actor_TeamMoveCheckPileup(actor_s *self, actor_s *pOtherActor)
 {
     actor_s *pPileUpActor; // r11
     int result; // r3
@@ -703,7 +703,7 @@ int __cdecl Actor_TeamMoveCheckPileup(actor_s *self, actor_s *pOtherActor)
     return result;
 }
 
-void __cdecl Actor_DodgeDebug(
+void Actor_DodgeDebug(
     actor_s *self,
     actor_s *otherActor,
     const char *debugString,
@@ -724,7 +724,7 @@ void __cdecl Actor_DodgeDebug(
     }
 }
 
-ai_teammove_t __cdecl Actor_GetTeamMoveStatus(actor_s *self, bool bUseInterval, bool bAllowGoalPileUp)
+ai_teammove_t Actor_GetTeamMoveStatus(actor_s *self, bool bUseInterval, bool bAllowGoalPileUp)
 {
     gentity_s *ent; // r11
     ai_teammove_t result; // r3
@@ -1032,7 +1032,7 @@ LABEL_114:
     return AI_TEAMMOVE_WAIT;
 }
 
-void __cdecl Actor_MoveAlongPathWithTeam(actor_s *self, bool bRun, bool bUseInterval, bool bAllowGoalPileUp)
+void Actor_MoveAlongPathWithTeam(actor_s *self, bool bRun, bool bUseInterval, bool bAllowGoalPileUp)
 {
     char IsMoving; // r26
     ai_teammove_t TeamMoveStatus; // r4

@@ -61,7 +61,7 @@ cmd_function_s CG_ModPrvExit_f_VAR;
 
 static const char *mpDefaultDrawBoneOptions[4] = { "Draw None", "Draw All Tags", "Draw All Bones", "Draw All" };
 
-void __cdecl CG_ModPrvUpdateMru(const dvar_s **mruDvars, const char **stringTable, const dvar_s *dvar)
+void CG_ModPrvUpdateMru(const dvar_s **mruDvars, const char **stringTable, const dvar_s *dvar)
 {
     const dvar_s **v3; // r31
     int v6; // r30
@@ -94,7 +94,7 @@ void __cdecl CG_ModPrvUpdateMru(const dvar_s **mruDvars, const char **stringTabl
         Dvar_UpdateEnumDomain((dvar_s*)(dvar_s*)dvar, stringTable);
 }
 
-void __cdecl CG_ModPrvPushMruEntry(
+void CG_ModPrvPushMruEntry(
     const char *entry,
     const dvar_s **mruDvars,
     const char **stringTable,
@@ -150,7 +150,7 @@ void __cdecl CG_ModPrvPushMruEntry(
     CG_ModPrvUpdateMru(mruDvars, stringTable, dvar);
 }
 
-void __cdecl CG_ModPrvRemoveMruEntry(const dvar_s **mruDvars, const char **stringTable, const dvar_s *dvar)
+void CG_ModPrvRemoveMruEntry(const dvar_s **mruDvars, const char **stringTable, const dvar_s *dvar)
 {
     int v6; // r11
     int v7; // r30
@@ -323,7 +323,7 @@ void CG_ModPrvRegisterDvars()
     modPrvDrawDistanceToModel = Dvar_RegisterBool("modPrvDrawDistanceToModel", 1, 0x80u, "Print viewer's distance to model.");
 }
 
-void __cdecl CG_ModPrvSetEntityAxis(float *angles, float *quat)
+void CG_ModPrvSetEntityAxis(float *angles, float *quat)
 {
     double v2; // fp13
     float v3[6]; // [sp+50h] [-20h] BYREF
@@ -335,7 +335,7 @@ void __cdecl CG_ModPrvSetEntityAxis(float *angles, float *quat)
     AnglesToQuat(v3, quat);
 }
 
-void __cdecl MdlPrvGetBounds(float *mins, float *maxs, float *center)
+void MdlPrvGetBounds(float *mins, float *maxs, float *center)
 {
     *mins = g_mdlprv.model.currentEntity.cull.mins[0] - g_mdlprv.model.currentEntity.placement.base.origin[0];
     mins[1] = g_mdlprv.model.currentEntity.cull.mins[1] - g_mdlprv.model.currentEntity.placement.base.origin[1];
@@ -410,7 +410,7 @@ void CG_ModPrvResetOrientation_f()
 }
 
 // attributes: thunk
-void __cdecl SetViewerActive(bool active)
+void SetViewerActive(bool active)
 {
     G_SetPM_MPViewer(active);
 }
@@ -421,7 +421,7 @@ void CG_ModPrvUnregisterCmds()
     Cmd_RemoveCommand("modPrvExit");
 }
 
-void *__cdecl CG_ModPrvAlloc(int size)
+void *CG_ModPrvAlloc(int size)
 {
     HunkUser *v2; // r3
 
@@ -434,7 +434,7 @@ void *__cdecl CG_ModPrvAlloc(int size)
     return Hunk_UserAlloc(v2, size, 4);
 }
 
-void __cdecl CG_ModPrvFree(void *allocated, int size)
+void CG_ModPrvFree(void *allocated, int size)
 {
     if (!allocated)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\cgame\\cg_modelpreviewer.cpp", 608, 0, "%s", "allocated");
@@ -514,7 +514,7 @@ void CG_ModPrvResetGlobals()
     Dvar_Reset(modPrvLightSetup, DVAR_SOURCE_INTERNAL);
 }
 
-bool __cdecl CG_ModPrvCompareString(const char *string1, const char *string2)
+bool CG_ModPrvCompareString(const char *string1, const char *string2)
 {
     unsigned int v3; // r9
 
@@ -529,7 +529,7 @@ bool __cdecl CG_ModPrvCompareString(const char *string1, const char *string2)
     return (int)v3 < 0;
 }
 
-void __cdecl CG_ModPrvGetAssetName(const XModel *header, unsigned int *data)
+void CG_ModPrvGetAssetName(const XModel *header, unsigned int *data)
 {
     const char *Name; // r3
 
@@ -612,7 +612,7 @@ void CG_ModPrvShutdown()
     }
 }
 
-void __cdecl CG_ModPrvDrawViewAxis(const float *centerPos)
+void CG_ModPrvDrawViewAxis(const float *centerPos)
 {
     int i; // r31
     double v3; // fp13
@@ -698,7 +698,7 @@ void CG_ModPrvModelResetRotationXY()
     AnglesToQuat(&value, g_mdlprv.model.currentEntity.placement.base.quat);
 }
 
-int __cdecl CG_ModPrvGetNumTotalBones(DObj_s *dobj)
+int CG_ModPrvGetNumTotalBones(DObj_s *dobj)
 {
     int v2; // r30
     int NumModels; // r29
@@ -714,7 +714,7 @@ int __cdecl CG_ModPrvGetNumTotalBones(DObj_s *dobj)
     return v2;
 }
 
-int __cdecl CG_ModPrvGetNumSurfaces(DObj_s *obj, int lod)
+int CG_ModPrvGetNumSurfaces(DObj_s *obj, int lod)
 {
     int NumModels; // r29
     char *v5; // r11
@@ -746,7 +746,7 @@ int __cdecl CG_ModPrvGetNumSurfaces(DObj_s *obj, int lod)
     return DObjGetNumSurfaces(obj, v8);
 }
 
-const char *__cdecl CG_ModPrvModelGetBoneName(DObj_s *dobj, int modelIndex, int boneIndex)
+const char *CG_ModPrvModelGetBoneName(DObj_s *dobj, int modelIndex, int boneIndex)
 {
     XModel *Model; // r3
     unsigned __int16 *v7; // r29
@@ -914,7 +914,7 @@ void CG_ModPrvDrawBones()
     }
 }
 
-void __cdecl CG_ModPrvLoadAnimations(const char *animationFilename)
+void CG_ModPrvLoadAnimations(const char *animationFilename)
 {
     const XAnimTree_s *Tree; // r3
     XAnimTree_s *v3; // r30
@@ -1007,7 +1007,7 @@ void __cdecl CG_ModPrvLoadAnimations(const char *animationFilename)
     }
 }
 
-void __cdecl CG_ModPrvApplyAnimationBlend(double deltaTime)
+void CG_ModPrvApplyAnimationBlend(double deltaTime)
 {
     double Time; // fp31
     int v2; // r7
@@ -1040,7 +1040,7 @@ void __cdecl CG_ModPrvApplyAnimationBlend(double deltaTime)
     }
 }
 
-void __cdecl CG_ModPrvApplyDelta(double deltaTime)
+void CG_ModPrvApplyDelta(double deltaTime)
 {
     float v1; // [sp+50h] [-50h] BYREF
     float v2; // [sp+54h] [-4Ch]
@@ -1085,7 +1085,7 @@ void __cdecl CG_ModPrvApplyDelta(double deltaTime)
     }
 }
 
-int __cdecl CG_ModPrvLoopAnimation()
+int CG_ModPrvLoopAnimation()
 {
     double v0; // fp28
     double v1; // fp30
@@ -1191,7 +1191,7 @@ LABEL_15:
     return 1;
 }
 
-void __cdecl CG_ModPrvAnimRecentAccept(const dvar_s *dvar, int *currentIndex)
+void CG_ModPrvAnimRecentAccept(const dvar_s *dvar, int *currentIndex)
 {
     const char *v4; // r3
     const char *v5; // r29
@@ -1251,7 +1251,7 @@ void __cdecl CG_ModPrvAnimRecentAccept(const dvar_s *dvar, int *currentIndex)
     }
 }
 
-void __cdecl CG_ModPrvLoadAnimAccept(const dvar_s *dvar, int *currentIndex)
+void CG_ModPrvLoadAnimAccept(const dvar_s *dvar, int *currentIndex)
 {
     if (!dvar)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\cgame\\cg_modelpreviewer.cpp", 1636, 0, "%s", "dvar");
@@ -1420,7 +1420,7 @@ void CG_ModPrvLightSetupModified()
     }
 }
 
-bool __cdecl CG_ModPrvAnyLightValuesChanged()
+bool CG_ModPrvAnyLightValuesChanged()
 {
     return modPrvSunDirection->modified
         || modPrvSunColor->modified
@@ -1467,14 +1467,14 @@ void CG_ModPrvLightValuesUpdate()
     R_InterpretSunLightParseParams(&g_mdlprv.light.tweakableSunLight);
 }
 
-void __cdecl TRACK_cg_modelpreviewer()
+void TRACK_cg_modelpreviewer()
 {
     track_static_alloc_internal(&g_mdlprv, 34904, "g_mdlprv", 0);
     track_static_alloc_internal(mpDefaultDrawBoneOptions, 16, "mpDefaultDrawBoneOptions", 0);
     track_static_alloc_internal(modPrvAnimBlendModeNames, 12, "modPrvAnimBlendModeNames", 0);
 }
 
-void __cdecl CG_ModelPreviewerPauseAnim()
+void CG_ModelPreviewerPauseAnim()
 {
     if (g_mdlprv.model.currentObj && (g_mdlprv.anim.fromCurrentIndex >= 0 || g_mdlprv.anim.toCurrentIndex >= 0))
     {
@@ -1484,7 +1484,7 @@ void __cdecl CG_ModelPreviewerPauseAnim()
 }
 
 // aislop
-//void __cdecl CG_ModelPreviewerStepAnim(double deltaTime)
+//void CG_ModelPreviewerStepAnim(double deltaTime)
 //{
 //    if (g_mdlprv.model.currentObj && (g_mdlprv.anim.fromCurrentIndex >= 0 || g_mdlprv.anim.toCurrentIndex >= 0))
 //    {
@@ -1494,7 +1494,7 @@ void __cdecl CG_ModelPreviewerPauseAnim()
 //    }
 //}
 
-void __cdecl CG_ModelPreviewerStepAnim(float deltaTime)
+void CG_ModelPreviewerStepAnim(float deltaTime)
 {
     if (g_mdlprv.model.currentObj &&
         (g_mdlprv.anim.fromCurrentIndex >= 0 || g_mdlprv.anim.toCurrentIndex >= 0))
@@ -1506,12 +1506,12 @@ void __cdecl CG_ModelPreviewerStepAnim(float deltaTime)
     }
 }
 
-//int __cdecl MdlPrvPrint(double x, double y, const char *txt, const float *a5, int a6, Font_s *a7)
+//int MdlPrvPrint(double x, double y, const char *txt, const float *a5, int a6, Font_s *a7)
 //{
 //    return CG_DrawDevString(&scrPlaceFull, x, y, 0.5, 0.5, txt, a4, a5, a6, a7);
 //}
 
-//int __cdecl MdlPrvPrintColor(
+//int MdlPrvPrintColor(
 //    double x,
 //    double y,
 //    const char *txt,
@@ -1585,7 +1585,7 @@ const ButtonInfo g_buttons[27] =
 
 
 
-int __cdecl MdlPrvPrintHelpLine(ButtonNames idx, float vPos)
+int MdlPrvPrintHelpLine(ButtonNames idx, float vPos)
 {
     Font_s *v6; // r7
     int v7; // r6
@@ -1622,7 +1622,7 @@ void DrawDistFromModel()
     }
 }
 
-void __cdecl MdlPrvDrawOverlayGamepad()
+void MdlPrvDrawOverlayGamepad()
 {
     const float *v0; // r5
     const char *v1; // r4
@@ -1780,18 +1780,18 @@ void __cdecl MdlPrvDrawOverlayGamepad()
 }
 
 // attributes: thunk
-void __cdecl CG_ModelPreviewerDrawInfo()
+void CG_ModelPreviewerDrawInfo()
 {
     MdlPrvDrawOverlayGamepad();
 }
 
-void __cdecl CG_ModelPreviewerRotateCamera(double dx, double dy)
+void CG_ModelPreviewerRotateCamera(double dx, double dy)
 {
     g_mdlprv.viewer.vertical = g_mdlprv.viewer.vertical - (float)dy;
     g_mdlprv.viewer.horizontal = g_mdlprv.viewer.horizontal - (float)dx;
 }
 
-void __cdecl CG_ModelPreviewerZoomCamera(double dx, double dy)
+void CG_ModelPreviewerZoomCamera(double dx, double dy)
 {
     double v2; // fp11
     double v3; // fp0
@@ -1817,7 +1817,7 @@ void __cdecl CG_ModelPreviewerZoomCamera(double dx, double dy)
         g_mdlprv.viewer.zNear = 0.0099999998;
 }
 
-void __cdecl MdlPrvModelOriginSet(float *origin)
+void MdlPrvModelOriginSet(float *origin)
 {
     Dvar_SetVec3((dvar_s *)modPrvOrigin, 0.0f, 0.0f, 0.0f);
 
@@ -1830,7 +1830,7 @@ void __cdecl MdlPrvModelOriginSet(float *origin)
     g_mdlprv.model.currentEntity.placement.base.origin[2] = origin[2];
 }
 
-void __cdecl MdlPrvModelOriginOffset(double dx, double dy, double dz)
+void MdlPrvModelOriginOffset(double dx, double dy, double dz)
 {
     g_mdlprv.model.initialOrigin[0] = g_mdlprv.model.initialOrigin[0] + (float)dx;
     g_mdlprv.model.initialOrigin[1] = g_mdlprv.model.initialOrigin[1] + (float)dy;
@@ -1843,7 +1843,7 @@ void __cdecl MdlPrvModelOriginOffset(double dx, double dy, double dz)
         + (float)dz;
 }
 
-void __cdecl MdlPrvSpin_(unsigned int yprIdx, double deg)
+void MdlPrvSpin_(unsigned int yprIdx, double deg)
 {
     double v2; // fp29
     long double v3; // fp2
@@ -1884,22 +1884,22 @@ void __cdecl MdlPrvSpin_(unsigned int yprIdx, double deg)
     Dvar_SetVec3((dvar_s*)modPrvRotationAngles, v9, v10, v11);
 }
 
-void __cdecl MdlPrvSpinYaw(double deg)
+void MdlPrvSpinYaw(double deg)
 {
     MdlPrvSpin_(1u, deg);
 }
 
-void __cdecl MdlPrvSpinPitch(double deg)
+void MdlPrvSpinPitch(double deg)
 {
     MdlPrvSpin_(0, deg);
 }
 
-void __cdecl MdlPrvSpinRoll(double deg)
+void MdlPrvSpinRoll(double deg)
 {
     MdlPrvSpin_(2u, deg);
 }
 
-void __cdecl MdlPrvSpinYawOffset(double deg)
+void MdlPrvSpinYawOffset(double deg)
 {
     double v1; // fp0
     double v2; // fp30
@@ -1966,7 +1966,7 @@ void MdlPrvSpinClearPitchRoll()
     AxisToQuat(v2, g_mdlprv.model.currentEntity.placement.base.quat);
 }
 
-void __cdecl MdlPrvMoveModelUpDown(double dist)
+void MdlPrvMoveModelUpDown(double dist)
 {
     g_mdlprv.model.initialOrigin[2] = g_mdlprv.model.initialOrigin[2] + (float)dist;
     g_mdlprv.model.currentEntity.placement.base.origin[2] = g_mdlprv.model.currentEntity.placement.base.origin[2]
@@ -1974,7 +1974,7 @@ void __cdecl MdlPrvMoveModelUpDown(double dist)
 }
 
 // some aislop
-void __cdecl MdlPrvMoveModel2D(const cg_s *cgGlob, float away, float left)
+void MdlPrvMoveModel2D(const cg_s *cgGlob, float away, float left)
 {
     float lenHorz, lenVert;
     float invLenHorz, invLenVert;
@@ -2001,7 +2001,7 @@ void __cdecl MdlPrvMoveModel2D(const cg_s *cgGlob, float away, float left)
 }
 
 
-void __cdecl MdlPrvMoveFocusUpDown(double dist)
+void MdlPrvMoveFocusUpDown(double dist)
 {
     Dvar_SetVec3(
         (dvar_s *)modPrvCenterOffset,
@@ -2011,7 +2011,7 @@ void __cdecl MdlPrvMoveFocusUpDown(double dist)
 }
 
 // aislop
-void __cdecl MdlPrvMoveFocus2D(const cg_s *cgGlob, float away, float left)
+void MdlPrvMoveFocus2D(const cg_s *cgGlob, float away, float left)
 {
     float forward[3];
     float right[3];
@@ -2058,7 +2058,7 @@ void MdlPrvMoveFocusReset()
     }
 }
 
-void __cdecl MdlPrvFreeMove(const cg_s *cgGlob, double dx, double dy)
+void MdlPrvFreeMove(const cg_s *cgGlob, double dx, double dy)
 {
     float v5[4]; // [sp+50h] [-50h] BYREF
     float v6[4]; // [sp+60h] [-40h] BYREF
@@ -2073,7 +2073,7 @@ void __cdecl MdlPrvFreeMove(const cg_s *cgGlob, double dx, double dy)
         + (float)(v6[2] * (float)dx);
 }
 
-void __cdecl MdlPrvFreeMoveVertical(const cg_s *cgGlob, double dz)
+void MdlPrvFreeMoveVertical(const cg_s *cgGlob, double dz)
 {
     float v3[4]; // [sp+50h] [-40h] BYREF
     float v4[4]; // [sp+60h] [-30h] BYREF
@@ -2085,7 +2085,7 @@ void __cdecl MdlPrvFreeMoveVertical(const cg_s *cgGlob, double dz)
     g_mdlprv.viewer.freeModeOrigin[2] = (float)(v3[2] * (float)dz) + g_mdlprv.viewer.freeModeOrigin[2];
 }
 
-void __cdecl MdlPrvFreeRot(double yaw, double pitch)
+void MdlPrvFreeRot(double yaw, double pitch)
 {
     double v3; // fp30
     double v4; // fp1
@@ -2103,12 +2103,12 @@ void __cdecl MdlPrvFreeRot(double yaw, double pitch)
 }
 
 // attributes: thunk
-void __cdecl MdlPrvFreePlaceModel(float *pos)
+void MdlPrvFreePlaceModel(float *pos)
 {
     MdlPrvModelOriginSet(pos);
 }
 
-void __cdecl MdlPrvFreePlaceModelInFrontCamera(const cg_s *cgGlob)
+void MdlPrvFreePlaceModelInFrontCamera(const cg_s *cgGlob)
 {
     float forward[3]; // [sp+50h] [-60h] BYREF // v8
     float origin[3]; // [sp+60h] [-50h] BYREF
@@ -2187,7 +2187,7 @@ void MdlPrvDropToFloor()
     }
 }
 
-void __cdecl MdlPrvCloneClear(MdlPrvClone *clone)
+void MdlPrvCloneClear(MdlPrvClone *clone)
 {
     DObj_s *obj; // r3
 
@@ -2218,7 +2218,7 @@ void MdlPrvCloneClearAll()
     } while (v0);
 }
 
-void __cdecl MdlPrvCloneModel(const cg_s *cgGlob)
+void MdlPrvCloneModel(const cg_s *cgGlob)
 {
     int cloneNextIdx; // r11
     MdlPrvClone *pClone; // r30
@@ -2299,7 +2299,7 @@ void MdlPrvRagdollToggle()
     }
 }
 
-void __cdecl MdlPrvControlsGamepad(int localClientNum, double forward, double side, double pitch, double yaw)
+void MdlPrvControlsGamepad(int localClientNum, double forward, double side, double pitch, double yaw)
 {
     int v10; // r29
     __int64 v11; // r11
@@ -2500,7 +2500,7 @@ void __cdecl MdlPrvControlsGamepad(int localClientNum, double forward, double si
 }
 
 // attributes: thunk
-void __cdecl CG_ModelPreviewerHandleGamepadEvents(
+void CG_ModelPreviewerHandleGamepadEvents(
     int localClientNum,
     double forward,
     double side,
@@ -2510,7 +2510,7 @@ void __cdecl CG_ModelPreviewerHandleGamepadEvents(
     MdlPrvControlsGamepad(localClientNum, forward, side, pitch, yaw);
 }
 
-void __cdecl CG_ModelPreviewerHandleKeyEvents(int localClientNum, int key, int down, unsigned int time)
+void CG_ModelPreviewerHandleKeyEvents(int localClientNum, int key, int down, unsigned int time)
 {
     if (localClientNum)
         MyAssertHandler(
@@ -2545,7 +2545,7 @@ void __cdecl CG_ModelPreviewerHandleKeyEvents(int localClientNum, int key, int d
     }
 }
 
-void __cdecl MdlPrvUpdateViewFocused(float *viewOrigin, float (*viewAxis)[3], float *viewAngles, float *zNear)
+void MdlPrvUpdateViewFocused(float *viewOrigin, float (*viewAxis)[3], float *viewAngles, float *zNear)
 {
     const dvar_s *v8; // r11
     double v9; // fp0
@@ -2637,7 +2637,7 @@ void __cdecl MdlPrvUpdateViewFocused(float *viewOrigin, float (*viewAxis)[3], fl
     *zNear = g_mdlprv.viewer.zNear;
 }
 
-void __cdecl MdlPrvUpdateViewFree(float *viewOrigin, float (*viewAxis)[3], float *viewAngles, float *zNear)
+void MdlPrvUpdateViewFree(float *viewOrigin, float (*viewAxis)[3], float *viewAngles, float *zNear)
 {
     *viewOrigin = g_mdlprv.viewer.freeModeOrigin[0];
     viewOrigin[1] = g_mdlprv.viewer.freeModeOrigin[1];
@@ -2648,7 +2648,7 @@ void __cdecl MdlPrvUpdateViewFree(float *viewOrigin, float (*viewAxis)[3], float
     AnglesToAxis(viewAngles, viewAxis);
 }
 
-void __cdecl CG_ModelPreviewerUpdateView(float *viewOrigin, float (*viewAxis)[3], float *viewAngles, float *zNear)
+void CG_ModelPreviewerUpdateView(float *viewOrigin, float (*viewAxis)[3], float *viewAngles, float *zNear)
 {
     if (g_mdlprv.system.uiModeGPad)
     {
@@ -2672,7 +2672,7 @@ void __cdecl CG_ModelPreviewerUpdateView(float *viewOrigin, float (*viewAxis)[3]
     }
 }
 
-bool __cdecl CG_ModelPreviewerNeedsVieworgInterpSkipped(int localClientNum)
+bool CG_ModelPreviewerNeedsVieworgInterpSkipped(int localClientNum)
 {
     if (localClientNum)
         MyAssertHandler(
@@ -2685,7 +2685,7 @@ bool __cdecl CG_ModelPreviewerNeedsVieworgInterpSkipped(int localClientNum)
     return cgArray[0].predictedPlayerState.pm_type == PM_MPVIEWER;
 }
 
-void __cdecl CG_AddModelPreviewerModel(int frametime)
+void CG_AddModelPreviewerModel(int frametime)
 {
     // KISAKTODO: pending rework to fix stack
 #if 0
@@ -2789,14 +2789,14 @@ void __cdecl CG_AddModelPreviewerModel(int frametime)
 #endif
 }
 
-void __cdecl CG_ModelPreviewerDestroyDevGui()
+void CG_ModelPreviewerDestroyDevGui()
 {
     Cmd_RemoveCommand("modPrvResetOrientation");
     Cmd_RemoveCommand("modPrvExit");
     CG_ModPrvShutdown();
 }
 
-void __cdecl CG_ModelPreviewerBuildInfoStr(char *buffer, int bufferSize)
+void CG_ModelPreviewerBuildInfoStr(char *buffer, int bufferSize)
 {
     int modelCount; // r29
     int v5; // r27
@@ -2912,7 +2912,7 @@ void __cdecl CG_ModelPreviewerBuildInfoStr(char *buffer, int bufferSize)
     }
 }
 
-void __cdecl CG_ModelPreviewerBuildViewPosStr(char *buffer, int bufferSize)
+void CG_ModelPreviewerBuildViewPosStr(char *buffer, int bufferSize)
 {
     if (modPrvCenterOffset)
         Com_sprintf(
@@ -2929,7 +2929,7 @@ void __cdecl CG_ModelPreviewerBuildViewPosStr(char *buffer, int bufferSize)
         Com_sprintf(buffer, bufferSize, "#ERROR-NotInGame");
 }
 
-void __cdecl CG_ModPrvSaveDObjs()
+void CG_ModPrvSaveDObjs()
 {
     int v0; // r30
     DObj_s **p_obj; // r31
@@ -2947,7 +2947,7 @@ void __cdecl CG_ModPrvSaveDObjs()
         DObjArchive(g_mdlprv.model.currentObj);
 }
 
-void __cdecl CG_ModPrvLoadDObjs()
+void CG_ModPrvLoadDObjs()
 {
     int v0; // r30
     DObj_s **p_obj; // r31
@@ -3054,7 +3054,7 @@ void CG_ModPrvModelGetBoneNameList()
     Dvar_UpdateEnumDomain((dvar_s*)v9, g_mdlprv.model.boneNameTable);
 }
 
-void __cdecl CG_ModPrvLoadModel(const cg_s *cgameGlob, const char *modelFilename)
+void CG_ModPrvLoadModel(const cg_s *cgameGlob, const char *modelFilename)
 {
 #if 0 // KISAKTODO: particularlly nasty
     __int64 v43; // r4
@@ -3281,7 +3281,7 @@ void __cdecl CG_ModPrvLoadModel(const cg_s *cgameGlob, const char *modelFilename
 #endif
 }
 
-void __cdecl CG_ModPrvModelRecentAccepted(const cg_s *cgameGlob)
+void CG_ModPrvModelRecentAccepted(const cg_s *cgameGlob)
 {
     const char *v2; // r3
     double v3; // fp8
@@ -3385,7 +3385,7 @@ static void CG_ModPrvModelLoadUpdate(const cg_s *cgameGlob)
     }
 }
 
-void __cdecl CG_ModelPreviewerFrame(const cg_s *cgameGlob)
+void CG_ModelPreviewerFrame(const cg_s *cgameGlob)
 {
     if (modPrvLoadModel->modified)
         CG_ModPrvModelLoadAccepted(cgameGlob);
@@ -3442,7 +3442,7 @@ void CG_ModPrvEnumerateModels_FastFile()
         v1[0] = 0;
         DB_EnumXAssets(
             ASSET_TYPE_XMODEL,
-            (void(__cdecl *)(XAssetHeader, void *))CG_ModPrvGetAssetName,
+            (void(*)(XAssetHeader, void *))CG_ModPrvGetAssetName,
             v1,
             0);
 
@@ -3481,7 +3481,7 @@ void CG_ModPrvEnumerateAnimations_FastFile()
         v1[0] = 0;
         DB_EnumXAssets(
             ASSET_TYPE_XANIMPARTS,
-            (void(__cdecl *)(XAssetHeader, void *))CG_ModPrvGetAssetName,
+            (void(*)(XAssetHeader, void *))CG_ModPrvGetAssetName,
             v1,
             0);
         std::sort(
@@ -3497,7 +3497,7 @@ void CG_ModPrvEnumerateAnimations()
     CG_ModPrvEnumerateAnimations_FastFile();
 }
 
-void __cdecl CG_ModelPreviewerEnumerateAssets()
+void CG_ModelPreviewerEnumerateAssets()
 {
     if (g_mdlprv.inited)
     {
@@ -3509,7 +3509,7 @@ void __cdecl CG_ModelPreviewerEnumerateAssets()
     }
 }
 
-void __cdecl CG_ModPrvStartup(int localClientNum)
+void CG_ModPrvStartup(int localClientNum)
 {
     CG_ModPrvEnumerateModels_FastFile();
     CG_ModPrvEnumerateAnimations_FastFile();
@@ -3519,7 +3519,7 @@ void __cdecl CG_ModPrvStartup(int localClientNum)
     g_mdlprv.inited = 1;
 }
 
-void __cdecl CG_ModelPreviewerCreateDevGui(int localClientNum)
+void CG_ModelPreviewerCreateDevGui(int localClientNum)
 {
     memset(&g_mdlprv, 0, sizeof(g_mdlprv));
     CG_ModPrvEnumerateModels_FastFile();

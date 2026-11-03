@@ -204,7 +204,7 @@ const char ERRMSG_SINGLE[83] =
 
 
 
-void __cdecl SV_SetValuesFromSkill()
+void SV_SetValuesFromSkill()
 {
     unsigned int unsignedInt; // r11
     __int64 v1; // r11
@@ -272,7 +272,7 @@ void SV_DifficultyFu()
     SV_SetValuesFromSkill();
 }
 
-int __cdecl ReadSaveHeader(const char *filename, SaveHeader *header)
+int ReadSaveHeader(const char *filename, SaveHeader *header)
 {
     if (!filename)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\server\\sv_ccmds.cpp", 143, 0, "%s", "filename");
@@ -296,7 +296,7 @@ int __cdecl ReadSaveHeader(const char *filename, SaveHeader *header)
     return 0;
 }
 
-int __cdecl ExtractMapStringFromSaveGame(const char *filename, char *mapname)
+int ExtractMapStringFromSaveGame(const char *filename, char *mapname)
 {
     char *v5; // r11
     int v6; // r10
@@ -320,7 +320,7 @@ int __cdecl ExtractMapStringFromSaveGame(const char *filename, char *mapname)
     return 1;
 }
 
-void __cdecl ShowLoadErrorsSummary(const char *mapName, unsigned int count)
+void ShowLoadErrorsSummary(const char *mapName, unsigned int count)
 {
     int showError; // r11
     char *v5; // r11
@@ -361,14 +361,14 @@ void __cdecl ShowLoadErrorsSummary(const char *mapName, unsigned int count)
         Com_Error(ERR_MAPLOADERRORSUMMARY, errstr);
 }
 
-void __cdecl SV_ClearLoadGame()
+void SV_ClearLoadGame()
 {
     sv_save_filename[0] = 0;
     sv_map_restart = 0;
     sv_loadScripts = 0;
 }
 
-void __cdecl SV_MapRestart(int savegame, int loadScripts)
+void SV_MapRestart(int savegame, int loadScripts)
 {
     int integer; // r28
     int v5; // r3
@@ -411,7 +411,7 @@ void __cdecl SV_MapRestart(int savegame, int loadScripts)
     }
 }
 
-int __cdecl CheckForSaveGame(char *mapname, char *filename)
+int CheckForSaveGame(char *mapname, char *filename)
 {
     char *v4; // r11
     int v5; // r10
@@ -468,7 +468,7 @@ int __cdecl CheckForSaveGame(char *mapname, char *filename)
     }
 }
 
-int __cdecl SV_CheckLoadGame()
+int SV_CheckLoadGame()
 {
     int result; // r3
     bool v1; // zf
@@ -511,7 +511,7 @@ int __cdecl SV_CheckLoadGame()
     return result;
 }
 
-void __cdecl SV_RequestMapRestart(int loadScripts)
+void SV_RequestMapRestart(int loadScripts)
 {
     CL_FlushDebugServerData();
     CL_UpdateDebugServerData();
@@ -522,7 +522,7 @@ void __cdecl SV_RequestMapRestart(int loadScripts)
         SV_CheckLoadGame();
 }
 
-void __cdecl SV_FastRestart_f()
+void SV_FastRestart_f()
 {
     CL_FlushDebugServerData();
     CL_UpdateDebugServerData();
@@ -533,7 +533,7 @@ void __cdecl SV_FastRestart_f()
         SV_CheckLoadGame();
 }
 
-void __cdecl SV_MapRestart_f()
+void SV_MapRestart_f()
 {
     CL_FlushDebugServerData();
     CL_UpdateDebugServerData();
@@ -545,12 +545,12 @@ void __cdecl SV_MapRestart_f()
 }
 
 // attributes: thunk
-void __cdecl SV_NextLevel_f()
+void SV_NextLevel_f()
 {
     G_LoadNextMap();
 }
 
-void __cdecl SV_LoadGame_f()
+void SV_LoadGame_f()
 {
     int nesting; // r7
     const char *v1; // r31
@@ -618,13 +618,13 @@ void __cdecl SV_LoadGame_f()
 }
 
 #ifdef KISAK_XBOX
-void __cdecl SV_ForceSelectSaveDevice_f()
+void SV_ForceSelectSaveDevice_f()
 {
     bool exists = SaveExists(CONSOLE_DEFAULT_SAVE_NAME);
     Dvar_SetBool(sv_saveGameAvailable, exists);
 }
 
-void __cdecl SV_SelectSaveDevice_f()
+void SV_SelectSaveDevice_f()
 {
     Dvar_SetBool(sv_saveGameAvailable, 0);
     if (CL_IsLocalClientInGame(0))
@@ -638,7 +638,7 @@ void __cdecl SV_SelectSaveDevice_f()
 }
 #endif
 
-void __cdecl CheckSaveExists(const char *filename)
+void CheckSaveExists(const char *filename)
 {
     if (!SaveMemory_IsCommittedSaveAvailable(filename, sv.checksum)
         && !SaveExists(filename))
@@ -651,7 +651,7 @@ void __cdecl CheckSaveExists(const char *filename)
     }
 }
 
-void __cdecl SV_LoadGameContinue_f()
+void SV_LoadGameContinue_f()
 {
 
     if (SV_IsDemoPlaying() && SV_DemoHasMark())
@@ -686,7 +686,7 @@ void __cdecl SV_LoadGameContinue_f()
 }
 
 // attributes: thunk
-void __cdecl SV_ScriptUsage_f()
+void SV_ScriptUsage_f()
 {
     Scr_DumpScriptThreads();
 }
@@ -950,13 +950,13 @@ void SV_ScriptProfileReset_f()
 }
 
 // attributes: thunk
-void __cdecl SV_ScriptProfileFile_f()
+void SV_ScriptProfileFile_f()
 {
     //Scr_PrintScriptProfileTimesForScriptFile();
 }
 
 // attributes: thunk
-void __cdecl SV_StringUsage_f()
+void SV_StringUsage_f()
 {
     MT_DumpTree();
 }
@@ -1014,7 +1014,7 @@ void SV_SaveGame_f()
     }
 }
 
-void __cdecl SV_SaveGameLastCommit_f()
+void SV_SaveGameLastCommit_f()
 {
     SaveGame *LastCommittedSave; // r31
 
@@ -1025,7 +1025,7 @@ void __cdecl SV_SaveGameLastCommit_f()
         SV_DisplaySaveErrorUI();
 }
 
-void __cdecl SV_RemoveOperatorCommands()
+void SV_RemoveOperatorCommands()
 {
     ;
 }
@@ -1131,7 +1131,7 @@ cmd_function_s SV_FastRestart_f_VAR;
 
 
 static int initialized_0 = 0;
-void __cdecl SV_AddOperatorCommands()
+void SV_AddOperatorCommands()
 {
     if (!initialized_0)
     {

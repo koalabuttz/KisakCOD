@@ -10,7 +10,7 @@ CStringEdPackage *TheStringPackage;
 int giFilesFound;
 char sTemp[64];
 
-const char *__cdecl SE_GetString(const char *psPackageAndStringReference)
+const char *SE_GetString(const char *psPackageAndStringReference)
 {
     if (IsFastFileLoad())
         return SE_GetString_FastFile(psPackageAndStringReference);
@@ -18,7 +18,7 @@ const char *__cdecl SE_GetString(const char *psPackageAndStringReference)
         return (const char *)SE_GetString_LoadObj(psPackageAndStringReference);
 }
 
-const char *__cdecl SE_GetString_FastFile(const char *psPackageAndStringReference)
+const char *SE_GetString_FastFile(const char *psPackageAndStringReference)
 {
     LocalizeEntry *localize; // [esp+8h] [ebp-4h]
 
@@ -29,7 +29,7 @@ const char *__cdecl SE_GetString_FastFile(const char *psPackageAndStringReferenc
         return 0;
 }
 
-char *__cdecl SE_Load(char *psFileName, bool forceEnglish)
+char *SE_Load(char *psFileName, bool forceEnglish)
 {
     char *psParsePos; // [esp+14h] [ebp-4014h] BYREF
     char psDest[16388]; // [esp+20h] [ebp-4010h] BYREF
@@ -62,7 +62,7 @@ char *__cdecl SE_Load(char *psFileName, bool forceEnglish)
     return (char *)errorMsg;
 }
 
-const char *__cdecl SE_GetString_LoadObj(const char *psPackageAndStringReference)
+const char *SE_GetString_LoadObj(const char *psPackageAndStringReference)
 {
     auto itEntry = TheStringPackage->m_StringEntries.find(psPackageAndStringReference);
 
@@ -74,14 +74,14 @@ const char *__cdecl SE_GetString_LoadObj(const char *psPackageAndStringReference
     return itEntry->second.c_str();
 }
 
-void __cdecl SE_NewLanguage()
+void SE_NewLanguage()
 {
     iassert(TheStringPackage);
 
     TheStringPackage->Clear();
 }
 
-void __cdecl SE_Init()
+void SE_Init()
 {
     iassert(!TheStringPackage);
 
@@ -102,7 +102,7 @@ void __cdecl SE_Init()
     TheStringPackage->Clear();
 }
 
-void __cdecl SE_ShutDown()
+void SE_ShutDown()
 {
     if (TheStringPackage)
     {
@@ -118,7 +118,7 @@ void __cdecl SE_ShutDown()
     }
 }
 
-char *__cdecl SE_LoadLanguage(bool forceEnglish)
+char *SE_LoadLanguage(bool forceEnglish)
 {
     char *psErrorMessage; // [esp+30h] [ebp-28h]
     std::string strResults;
@@ -138,7 +138,7 @@ char *__cdecl SE_LoadLanguage(bool forceEnglish)
     return psErrorMessage;
 }
 
-char *__cdecl SE_GetFoundFile(std::string *strResult)
+char *SE_GetFoundFile(std::string *strResult)
 {
     _BYTE *v2; // eax
 
@@ -161,7 +161,7 @@ char *__cdecl SE_GetFoundFile(std::string *strResult)
     return sTemp;
 }
 
-uint8_t *__cdecl SE_LoadFileData(const char *psFileName)
+uint8_t *SE_LoadFileData(const char *psFileName)
 {
     int len; // [esp+0h] [ebp-8h]
     uint8_t *pvLoadedData; // [esp+4h] [ebp-4h] BYREF
@@ -170,13 +170,13 @@ uint8_t *__cdecl SE_LoadFileData(const char *psFileName)
     return len <= 0 ? 0 : pvLoadedData;
 }
 
-void __cdecl SE_FreeFileDataAfterLoad(uint8_t *psLoadedFile)
+void SE_FreeFileDataAfterLoad(uint8_t *psLoadedFile)
 {
     iassert(psLoadedFile);
     FS_FreeFile((char *)psLoadedFile);
 }
 
-int __cdecl SE_BuildFileList(
+int SE_BuildFileList(
     const char *psStartDir,
     std::string *strResults)
 {
@@ -186,7 +186,7 @@ int __cdecl SE_BuildFileList(
     return giFilesFound;
 }
 
-void __cdecl SE_R_ListFiles(
+void SE_R_ListFiles(
     const char *psExtension,
     const char *psDir,
     std::string *strResults)

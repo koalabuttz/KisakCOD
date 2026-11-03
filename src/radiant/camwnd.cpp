@@ -33,7 +33,7 @@ extern bool       Ed_BrushFloorRay( brush_t *def, const float *start,
                                      const float *dir, float *outDist );
 
 // R_AddRenderCmdDrawTris — r_rendercmds.cpp KISAK_RADIANT editor delta (P5.4).
-extern void __cdecl R_AddRenderCmdDrawTris(
+extern void R_AddRenderCmdDrawTris(
     Material *material, MaterialTechniqueType techType, short indexCount,
     const uint16_t *indices, short vertexCount,
     const float (*xyzw)[4], const float (*normal)[3], float *color,
@@ -55,8 +55,8 @@ extern int  Sys_Printf( const char *fmt, ... );               // win_qe3.cpp —
 extern entity_s *world_entity;   // entity.cpp 0x25D5B30 — worldspawn (carries the sun keys)
 // kisak's BSP sun-light parser/interpreter (r_bsp_load_obj.cpp) — the same pair the binary's
 // R_SunPrev_SetSunConstants feeds the worldspawn text to.  Not header-declared for the editor.
-extern "C++" char *__cdecl R_ParseSunLight( SunLightParseParams *params, char *text );
-extern void __cdecl R_InterpretSunLightParseParamsIntoLights( SunLightParseParams *sunParse, GfxLight *sunLight );
+extern "C++" char *R_ParseSunLight( SunLightParseParams *params, char *text );
+extern void R_InterpretSunLightParseParamsIntoLights( SunLightParseParams *sunParse, GfxLight *sunLight );
 
 // 0x403470  Cam_BuildMatrix — view basis from the angles.  AngleVectors wants pitch NEGATED;
 // forward/right are the yaw-plane movement basis (the binary's AngleVectors_YawPlane).
@@ -2796,7 +2796,7 @@ static const char *Cam_MaterialHandleName( Material *handle )
 // 0x404BA0  the sub_408CA0 (std::sort) comparator: order two hit faces by their base material's
 // sort layer DESCENDING; a face-less hit sorts last.  The layer is the 12-bit field at drawSurf
 // bits 29..40 (`>> 29 & 0xFFF`).  qsort wants a tri-state int, so derive it from two `<`.
-static int __cdecl Cam_TraceMtlLess( const edTrace_t *a, const edTrace_t *b )
+static int Cam_TraceMtlLess( const edTrace_t *a, const edTrace_t *b )
 {
     faceVis_s *fa = a->hit.face;
     faceVis_s *fb = b->hit.face;
@@ -2857,7 +2857,7 @@ void CCamWnd::Cam_ContextMenu( CCamWnd *cam, int x, int y )
     int   nUnselected = 0;                               // var_28 — hits not yet selected
 
     // std::sort the 20-slot list by material layer (descending). Face-less trailing slots go last.
-    qsort( camera_trace, CAM_TRACE_COUNT, sizeof( edTrace_t ), (int(__cdecl*)(const void*,const void*))Cam_TraceMtlLess );
+    qsort( camera_trace, CAM_TRACE_COUNT, sizeof( edTrace_t ), (int(*)(const void*,const void*))Cam_TraceMtlLess );
 
     for ( int i = 0; i < CAM_TRACE_COUNT; ++i )          // 0x404e31..0x404ed7
     {

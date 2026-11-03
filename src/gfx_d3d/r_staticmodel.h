@@ -7,11 +7,11 @@ struct GfxStaticModelCombinedInst // sizeof=0x68
     GfxStaticModelInst smodelInst;
 };
 
-void __cdecl R_StaticModelWriteInfoHeader(int fileHandle);
-void __cdecl R_StaticModelWriteInfo(int fileHandle, const GfxStaticModelDrawInst *smodelDrawInst, const float dist);
-BOOL __cdecl R_StaticModelHasLighting(uint32_t smodelIndex);
-int __cdecl R_StaticModelGetMemoryUsageInst();
-int __cdecl R_StaticModelGetMemoryUsage(XModel *model, int *modelCount);
-BOOL __cdecl R_StaticModelCompare(
+void R_StaticModelWriteInfoHeader(int fileHandle);
+void R_StaticModelWriteInfo(int fileHandle, const GfxStaticModelDrawInst *smodelDrawInst, const float dist);
+BOOL R_StaticModelHasLighting(uint32_t smodelIndex);
+int R_StaticModelGetMemoryUsageInst();
+int R_StaticModelGetMemoryUsage(XModel *model, int *modelCount);
+BOOL R_StaticModelCompare(
     const GfxStaticModelCombinedInst &smodelInst0,
     const GfxStaticModelCombinedInst &smodelInst1);

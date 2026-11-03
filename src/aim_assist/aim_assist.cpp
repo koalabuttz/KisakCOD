@@ -60,13 +60,13 @@ const dvar_t *aim_lockon_region_width = nullptr;
 const dvar_t *aim_lockon_region_height = nullptr;
 const dvar_t *aim_scale_view_axis = nullptr;
 
-void __cdecl TRACK_aim_assist()
+void TRACK_aim_assist()
 {
     TRACK_STATIC_ARR(aaGlobArray, 10);
     TRACK_STATIC_ARR(aaInputGraph, 10);
 }
 
-void __cdecl AimAssist_Init(int32_t localClientNum)
+void AimAssist_Init(int32_t localClientNum)
 {
     char graphName[128] = { 0 }; // [esp+4h] [ebp-88h] BYREF
     int graphIndex = 0; // [esp+88h] [ebp-4h]
@@ -363,7 +363,7 @@ void AimAssist_RegisterDvars()
 #endif
 }
 
-static bool __cdecl AimAssist_DoBoundsIntersectCenterBox(
+static bool AimAssist_DoBoundsIntersectCenterBox(
     const float *clipMins,
     const float *clipMaxs,
     float clipHalfWidth,
@@ -376,7 +376,7 @@ static bool __cdecl AimAssist_DoBoundsIntersectCenterBox(
         && (clipHalfHeight >= (double)clipMins[1] && clipMaxs[1] >= -clipHalfHeight);
 }
 
-void __cdecl AimAssist_Setup(int32_t localClientNum)
+void AimAssist_Setup(int32_t localClientNum)
 {
     AimAssistGlobals* aaGlob = &aaGlobArray[localClientNum]; // [esp+0h] [ebp-4h]
     memset((uint8_t*)aaGlob, 0, sizeof(AimAssistGlobals));
@@ -391,7 +391,7 @@ void __cdecl AimAssist_Setup(int32_t localClientNum)
     aaGlob->lockOnTargetEnt = ENTITYNUM_NONE;
 }
 
-void __cdecl AimAssist_UpdateScreenTargets(
+void AimAssist_UpdateScreenTargets(
     int32_t localClientNum,
     const float *viewOrg,
     const float *viewAngles,
@@ -466,7 +466,7 @@ void __cdecl AimAssist_UpdateScreenTargets(
     }
 }
 
-void __cdecl AimAssist_FovScale(AimAssistGlobals *aaGlob, float tanHalfFovY)
+void AimAssist_FovScale(AimAssistGlobals *aaGlob, float tanHalfFovY)
 {
     float v2; // [esp+8h] [ebp-Ch]
     float v3; // [esp+Ch] [ebp-8h]
@@ -481,7 +481,7 @@ void __cdecl AimAssist_FovScale(AimAssistGlobals *aaGlob, float tanHalfFovY)
     aaGlob->fovScaleInv = tanHalfBaseFovY / tanHalfFovY;
 }
 
-void __cdecl AimAssist_CreateScreenMatrix(AimAssistGlobals *aaGlob, float tanHalfFovX, float tanHalfFovY)
+void AimAssist_CreateScreenMatrix(AimAssistGlobals *aaGlob, float tanHalfFovX, float tanHalfFovY)
 {
     float viewMtx[4][4]; // [esp+Ch] [ebp-C0h] BYREF
     float projMtx[4][4]; // [esp+4Ch] [ebp-80h] BYREF
@@ -496,7 +496,7 @@ void __cdecl AimAssist_CreateScreenMatrix(AimAssistGlobals *aaGlob, float tanHal
     MatrixInverse44(aaGlob->screenMtx, aaGlob->invScreenMtx);
 }
 
-char __cdecl AimAssist_ConvertToClipBounds(
+char AimAssist_ConvertToClipBounds(
     const AimAssistGlobals *aaGlob,
     const float (*bounds)[3],
     const mat4x3 &mtx,
@@ -636,7 +636,7 @@ char __cdecl AimAssist_ConvertToClipBounds(
     return 1;
 }
 
-char __cdecl AimAssist_XfmWorldPointToClipSpace(const AimAssistGlobals *aaGlob, const float *in, float *out)
+char AimAssist_XfmWorldPointToClipSpace(const AimAssistGlobals *aaGlob, const float *in, float *out)
 {
     float clip; // [esp+0h] [ebp-20h]
     float clip_4; // [esp+4h] [ebp-1Ch]
@@ -664,7 +664,7 @@ char __cdecl AimAssist_XfmWorldPointToClipSpace(const AimAssistGlobals *aaGlob, 
     return 1;
 }
 
-double __cdecl AimAssist_GetCrosshairDistSqr(const float *clipMins, const float *clipMaxs)
+double AimAssist_GetCrosshairDistSqr(const float *clipMins, const float *clipMaxs)
 {
     float center; // [esp+4h] [ebp-8h]
     float centera; // [esp+4h] [ebp-8h]
@@ -681,7 +681,7 @@ double __cdecl AimAssist_GetCrosshairDistSqr(const float *clipMins, const float 
     return (float)(center_4a * center_4a + centera * centera);
 }
 
-void __cdecl AimAssist_AddToTargetList(AimAssistGlobals *aaGlob, const AimScreenTarget *screenTarget)
+void AimAssist_AddToTargetList(AimAssistGlobals *aaGlob, const AimScreenTarget *screenTarget)
 {
     int low; // [esp+8h] [ebp-Ch]
     int high; // [esp+10h] [ebp-4h]
@@ -711,7 +711,7 @@ void __cdecl AimAssist_AddToTargetList(AimAssistGlobals *aaGlob, const AimScreen
     }
 }
 
-int32_t __cdecl AimAssist_CompareTargets(const AimScreenTarget *screenTargetA, const AimScreenTarget *screenTargetB)
+int32_t AimAssist_CompareTargets(const AimScreenTarget *screenTargetA, const AimScreenTarget *screenTargetB)
 {
     iassert(screenTargetA);
     iassert(screenTargetB);
@@ -723,7 +723,7 @@ int32_t __cdecl AimAssist_CompareTargets(const AimScreenTarget *screenTargetA, c
     return -1;
 }
 
-int32_t __cdecl AimAssist_CalcAimPos(
+int32_t AimAssist_CalcAimPos(
     int32_t localClientNum,
     const centity_s *targetEnt,
     const AimTarget *target,
@@ -742,7 +742,7 @@ int32_t __cdecl AimAssist_CalcAimPos(
     return 1;
 }
 
-int32_t __cdecl AimTarget_GetTagPos(int32_t localClientNum, const centity_s *cent, uint32_t tagName, float *pos)
+int32_t AimTarget_GetTagPos(int32_t localClientNum, const centity_s *cent, uint32_t tagName, float *pos)
 {
     iassert(cent);
     iassert(pos);
@@ -758,12 +758,12 @@ int32_t __cdecl AimTarget_GetTagPos(int32_t localClientNum, const centity_s *cen
     return 1;
 }
 
-int32_t __cdecl AimAssist_GetScreenTargetCount(int32_t localClientNum)
+int32_t AimAssist_GetScreenTargetCount(int32_t localClientNum)
 {
     return aaGlobArray[localClientNum].screenTargetCount;
 }
 
-int32_t __cdecl AimAssist_GetScreenTargetEntity(int32_t localClientNum, uint32_t targetIndex)
+int32_t AimAssist_GetScreenTargetEntity(int32_t localClientNum, uint32_t targetIndex)
 {
     const AimAssistGlobals * aaGlob = &aaGlobArray[localClientNum]; // [esp+0h] [ebp-4h]
 
@@ -772,7 +772,7 @@ int32_t __cdecl AimAssist_GetScreenTargetEntity(int32_t localClientNum, uint32_t
     return aaGlob->screenTargets[targetIndex].entIndex;
 }
 
-void __cdecl AimAssist_ClearEntityReference(int32_t localClientNum, int32_t entIndex)
+void AimAssist_ClearEntityReference(int32_t localClientNum, int32_t entIndex)
 {
     AimAssistGlobals* aaGlob = &aaGlobArray[localClientNum]; // [esp+0h] [ebp-4h]
 
@@ -784,7 +784,7 @@ void __cdecl AimAssist_ClearEntityReference(int32_t localClientNum, int32_t entI
         aaGlob->lockOnTargetEnt = ENTITYNUM_NONE;
 }
 
-void __cdecl AimAssist_UpdateTweakables(const AimInput *input)
+void AimAssist_UpdateTweakables(const AimInput *input)
 {
     float v1; // [esp+0h] [ebp-58h]
     float v2; // [esp+4h] [ebp-54h]
@@ -841,7 +841,7 @@ void __cdecl AimAssist_UpdateTweakables(const AimInput *input)
     aaGlob->tweakables.lockOnRegionHeight = v1 / aaGlobArray[v13].screenHeight;
 }
 
-void __cdecl AimAssist_UpdateAdsLerp(const AimInput *input)
+void AimAssist_UpdateAdsLerp(const AimInput *input)
 {
     AimAssistGlobals *aaGlob; // [esp+0h] [ebp-4h]
 
@@ -853,7 +853,7 @@ void __cdecl AimAssist_UpdateAdsLerp(const AimInput *input)
         aaGlob->adsLerp = 1.0;
 }
 
-uint32_t __cdecl AimAssist_GetWeaponIndex(int32_t localClientNum, const playerState_s *ps)
+uint32_t AimAssist_GetWeaponIndex(int32_t localClientNum, const playerState_s *ps)
 {
     uint32_t NumWeapons = 0; // eax
     uint32_t weapIndex = 0; // [esp+0h] [ebp-8h]
@@ -874,7 +874,7 @@ uint32_t __cdecl AimAssist_GetWeaponIndex(int32_t localClientNum, const playerSt
     return weapIndex;
 }
 
-const AimScreenTarget *__cdecl AimAssist_GetBestTarget(
+const AimScreenTarget *AimAssist_GetBestTarget(
     const AimAssistGlobals *aaGlob,
     float range,
     float regionWidth,
@@ -902,7 +902,7 @@ const AimScreenTarget *__cdecl AimAssist_GetBestTarget(
     return 0;
 }
 
-const AimScreenTarget *__cdecl AimAssist_GetTargetFromEntity(const AimAssistGlobals *aaGlob, int32_t entIndex)
+const AimScreenTarget *AimAssist_GetTargetFromEntity(const AimAssistGlobals *aaGlob, int32_t entIndex)
 {
     iassert(aaGlob);
 
@@ -918,7 +918,7 @@ const AimScreenTarget *__cdecl AimAssist_GetTargetFromEntity(const AimAssistGlob
     return 0;
 }
 
-void __cdecl AimAssist_ApplyAutoMelee(const AimInput *input, AimOutput *output)
+void AimAssist_ApplyAutoMelee(const AimInput *input, AimOutput *output)
 {
     const AimScreenTarget *screenTarget; // [esp+18h] [ebp-28h]
     bool meleeing; // [esp+1Fh] [ebp-21h]
@@ -982,7 +982,7 @@ void __cdecl AimAssist_ApplyAutoMelee(const AimInput *input, AimOutput *output)
     }
 }
 
-void __cdecl AimAssist_ClearAutoMeleeTarget(AimAssistGlobals *aaGlob)
+void AimAssist_ClearAutoMeleeTarget(AimAssistGlobals *aaGlob)
 {
     iassert(aaGlob);
 
@@ -994,7 +994,7 @@ void __cdecl AimAssist_ClearAutoMeleeTarget(AimAssistGlobals *aaGlob)
     aaGlob->autoMeleeYawTarget = 0.0;
 }
 
-char __cdecl AimAssist_UpdateAutoMeleeTarget(AimAssistGlobals *aaGlob)
+char AimAssist_UpdateAutoMeleeTarget(AimAssistGlobals *aaGlob)
 {
     float targetDir[3] = { 0 }; // [esp+0h] [ebp-1Ch] BYREF
     float targetAngles[3] = { 0 }; // [esp+10h] [ebp-Ch] BYREF
@@ -1014,7 +1014,7 @@ char __cdecl AimAssist_UpdateAutoMeleeTarget(AimAssistGlobals *aaGlob)
     return 1;
 }
 
-void __cdecl AimAssist_SetAutoMeleeTarget(AimAssistGlobals *aaGlob, const AimScreenTarget *screenTarget)
+void AimAssist_SetAutoMeleeTarget(AimAssistGlobals *aaGlob, const AimScreenTarget *screenTarget)
 {
     iassert(aaGlob);
     iassert(screenTarget);
@@ -1027,7 +1027,7 @@ void __cdecl AimAssist_SetAutoMeleeTarget(AimAssistGlobals *aaGlob, const AimScr
     AimAssist_UpdateAutoMeleeTarget(aaGlob);
 }
 
-void __cdecl AimAssist_ApplyMeleeCharge(const AimInput *input, AimOutput *output)
+void AimAssist_ApplyMeleeCharge(const AimInput *input, AimOutput *output)
 {
     float v2; // [esp+18h] [ebp-30h]
     float v3; // [esp+1Ch] [ebp-2Ch]
@@ -1071,7 +1071,7 @@ void __cdecl AimAssist_ApplyMeleeCharge(const AimInput *input, AimOutput *output
     }
 }
 
-void __cdecl AimAssist_UpdateMouseInput(const AimInput *input, AimOutput *output)
+void AimAssist_UpdateMouseInput(const AimInput *input, AimOutput *output)
 {
     PROF_SCOPED("AimAssist_UpdateMouseInput");
 
@@ -1091,7 +1091,7 @@ void __cdecl AimAssist_UpdateMouseInput(const AimInput *input, AimOutput *output
     }
 }
 
-void __cdecl AimAssist_DrawDebugOverlay(uint32_t localClientNum)
+void AimAssist_DrawDebugOverlay(uint32_t localClientNum)
 {
     float green[4] = { 0.0, 1.0, 0.0, 0.25 }; // [esp+Ch] [ebp-2Ch] BYREF
     float red[4] = { 1.0, 0.0, 0.0, 0.25 }; // [esp+1Ch] [ebp-1Ch] BYREF
@@ -1125,7 +1125,7 @@ void __cdecl AimAssist_DrawDebugOverlay(uint32_t localClientNum)
     }
 }
 
-void __cdecl AimAssist_DrawCenterBox(
+void AimAssist_DrawCenterBox(
     const AimAssistGlobals *aaGlob,
     float clipHalfWidth,
     float clipHalfHeight,
@@ -1146,7 +1146,7 @@ void __cdecl AimAssist_DrawCenterBox(
     CL_DrawStretchPicPhysical(x, y, width, height, 0.0, 0.0, 1.0, 1.0, color, cgMedia.whiteMaterial);
 }
 
-void __cdecl AimAssist_DrawTargets(int64_t localClientNum, const float *color)
+void AimAssist_DrawTargets(int64_t localClientNum, const float *color)
 {
     char *v2; // eax
     char *v3; // eax

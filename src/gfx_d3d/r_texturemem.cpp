@@ -8,7 +8,7 @@
 
 uint32_t s_maxReportedTexMem;
 
-uint32_t __cdecl R_VideoMemoryForDevice(_GUID *lpGUID)
+uint32_t R_VideoMemoryForDevice(_GUID *lpGUID)
 {
     _DDSCAPS2 caps; // [esp+0h] [ebp-20h] BYREF
     HRESULT hr; // [esp+10h] [ebp-10h]
@@ -46,7 +46,7 @@ int __stdcall R_DDEnumCallback(
     return 1;
 }
 
-uint32_t __cdecl R_DrasticVideoMemoryForDevice(_GUID *lpGUID)
+uint32_t R_DrasticVideoMemoryForDevice(_GUID *lpGUID)
 {
     HMODULE ModuleHandleA; // eax
     _DDSCAPS2 caps; // [esp+0h] [ebp-24h] BYREF
@@ -112,7 +112,7 @@ int __stdcall R_DDEnumDrasticCallback(
     return 1;
 }
 
-uint32_t __cdecl R_VideoMemory()
+uint32_t R_VideoMemory()
 {
     uint32_t total; // [esp+0h] [ebp-8h] BYREF
     uint32_t size; // [esp+4h] [ebp-4h]
@@ -140,7 +140,7 @@ uint32_t __cdecl R_VideoMemory()
     return size;
 }
 
-uint32_t __cdecl R_AvailableTextureMemory()
+uint32_t R_AvailableTextureMemory()
 {
     uint32_t currentTexMem; // [esp+0h] [ebp-4h]
 
@@ -152,7 +152,7 @@ uint32_t __cdecl R_AvailableTextureMemory()
     return s_maxReportedTexMem;
 }
 
-uint32_t __cdecl R_DetectCurrentTextureMemory()
+uint32_t R_DetectCurrentTextureMemory()
 {
     uint32_t texMemInMegs; // [esp+0h] [ebp-Ch]
     uint32_t vidMemInMegs; // [esp+8h] [ebp-4h]

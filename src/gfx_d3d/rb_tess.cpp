@@ -22,7 +22,7 @@
 
 GfxScaledPlacement s_manualObjectPlacement;
 
-void __cdecl RB_ShowTess(GfxCmdBufContext context, const float *center, const char *tessName, const float *color)
+void RB_ShowTess(GfxCmdBufContext context, const float *center, const char *tessName, const float *color)
 {
     const GfxBackEndData *data; // [esp+14h] [ebp-2Ch]
     float TEXT_TECH_MEAN; // [esp+18h] [ebp-28h]
@@ -99,7 +99,7 @@ void __cdecl RB_ShowTess(GfxCmdBufContext context, const float *center, const ch
     R_AddDebugString((DebugGlobals*)&data->debugGlobals, offsetCenter, color, TEXT_SIZE, (char*)va("%s:%s=%s", tessName, infoIdString, infoString));
 }
 
-uint32_t __cdecl R_TessCodeMeshList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext)
+uint32_t R_TessCodeMeshList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext)
 {
     const char *v2; // eax
     GfxDepthRangeType depthRangeType; // [esp+24h] [ebp-6Ch]
@@ -206,13 +206,13 @@ uint32_t __cdecl R_TessCodeMeshList(const GfxDrawSurfListArgs *listArgs, GfxCmdB
     return drawSurfIndex;
 }
 
-void __cdecl R_SetVertexDeclTypeNormal(GfxCmdBufState *state, MaterialVertexDeclType vertDeclType)
+void R_SetVertexDeclTypeNormal(GfxCmdBufState *state, MaterialVertexDeclType vertDeclType)
 {
     state->prim.vertDeclType = vertDeclType;
     R_UpdateVertexDecl(state);
 }
 
-void __cdecl R_TessCodeMeshList_AddCodeMeshArgs(
+void R_TessCodeMeshList_AddCodeMeshArgs(
     GfxCmdBufSourceState *source,
     const GfxBackEndData *data,
     const FxCodeMeshData *codeMesh)
@@ -264,7 +264,7 @@ void __cdecl R_TessCodeMeshList_AddCodeMeshArgs(
     }
 }
 
-uint32_t __cdecl R_TessMarkMeshList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext)
+uint32_t R_TessMarkMeshList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext)
 {
     int objId; // eax
     bool v5; // [esp+10h] [ebp-B4h]
@@ -440,7 +440,7 @@ uint32_t __cdecl R_TessMarkMeshList(const GfxDrawSurfListArgs *listArgs, GfxCmdB
     return drawSurfIndex;
 }
 
-uint32_t __cdecl R_TessParticleCloudList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext)
+uint32_t R_TessParticleCloudList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext)
 {
     const char *v2; // eax
     GfxDepthRangeType depthRangeType; // [esp+24h] [ebp-5Ch]
@@ -511,7 +511,7 @@ uint32_t __cdecl R_TessParticleCloudList(const GfxDrawSurfListArgs *listArgs, Gf
     return 1;
 }
 
-void __cdecl R_SetParticleCloudConstants(GfxCmdBufSourceState *source, const GfxParticleCloud *cloud)
+void R_SetParticleCloudConstants(GfxCmdBufSourceState *source, const GfxParticleCloud *cloud)
 {
     float v3; // [esp+34h] [ebp-60h]
     float scaledWorldUp[3]; // [esp+40h] [ebp-54h] BYREF
@@ -548,7 +548,7 @@ void __cdecl R_SetParticleCloudConstants(GfxCmdBufSourceState *source, const Gfx
     R_SetCodeConstantFromVec4(source, CONST_SRC_CODE_PARTICLE_CLOUD_COLOR, particleColor);
 }
 
-void __cdecl RB_Vec3DirWorldToView(const GfxCmdBufSourceState *source, const float *worldDir, float *viewDir)
+void RB_Vec3DirWorldToView(const GfxCmdBufSourceState *source, const float *worldDir, float *viewDir)
 {
     float v3; // [esp+8h] [ebp-4Ch]
     float v4; // [esp+Ch] [ebp-48h]
@@ -584,7 +584,7 @@ void __cdecl RB_Vec3DirWorldToView(const GfxCmdBufSourceState *source, const flo
     Vec3RotateTranspose(worldDir, viewAxis, viewDir);
 }
 
-void __cdecl RB_CreateParticleCloud2dAxis(const GfxParticleCloud *cloud, const float *viewUp, float (*viewAxis)[2][2])
+void RB_CreateParticleCloud2dAxis(const GfxParticleCloud *cloud, const float *viewUp, float (*viewAxis)[2][2])
 {
     iassert(cloud);
 
@@ -618,7 +618,7 @@ void __cdecl RB_CreateParticleCloud2dAxis(const GfxParticleCloud *cloud, const f
     }
 }
 
-uint32_t __cdecl R_TessXModelSkinnedDrawSurfList(
+uint32_t R_TessXModelSkinnedDrawSurfList(
     const GfxDrawSurfListArgs *listArgs,
     GfxCmdBufContext prepassContext)
 {
@@ -825,7 +825,7 @@ uint32_t __cdecl R_TessXModelSkinnedDrawSurfList(
     return drawSurfIndex;
 }
 
-void __cdecl R_DrawXModelSkinnedUncached(GfxCmdBufContext context, XSurface *xsurf, GfxPackedVertex *skinnedVert)
+void R_DrawXModelSkinnedUncached(GfxCmdBufContext context, XSurface *xsurf, GfxPackedVertex *skinnedVert)
 {
     const char *v3; // eax
     GfxCmdBufSourceState *ActiveWorldMatrix; // eax
@@ -861,7 +861,7 @@ void __cdecl R_DrawXModelSkinnedUncached(GfxCmdBufContext context, XSurface *xsu
     }
 }
 
-void __cdecl R_DrawXModelSkinnedModelSurf(GfxCmdBufContext context, const GfxModelSkinnedSurface *modelSurf)
+void R_DrawXModelSkinnedModelSurf(GfxCmdBufContext context, const GfxModelSkinnedSurface *modelSurf)
 {
     iassert(modelSurf);
 
@@ -871,7 +871,7 @@ void __cdecl R_DrawXModelSkinnedModelSurf(GfxCmdBufContext context, const GfxMod
         R_DrawXModelSkinnedCached(context, modelSurf);
 }
 
-void __cdecl R_DrawXModelSkinnedCached(GfxCmdBufContext context, const GfxModelSkinnedSurface *modelSurf)
+void R_DrawXModelSkinnedCached(GfxCmdBufContext context, const GfxModelSkinnedSurface *modelSurf)
 {
     GfxCmdBufSourceState *ActiveWorldMatrix; // eax
     const GfxBackEndData *data; // [esp+48h] [ebp-18h]
@@ -910,7 +910,7 @@ void __cdecl R_DrawXModelSkinnedCached(GfxCmdBufContext context, const GfxModelS
     }
 }
 
-uint32_t __cdecl R_TessXModelRigidDrawSurfList(
+uint32_t R_TessXModelRigidDrawSurfList(
     const GfxDrawSurfListArgs *listArgs,
     GfxCmdBufContext prepassContext)
 {
@@ -1015,7 +1015,7 @@ uint32_t __cdecl R_TessXModelRigidDrawSurfList(
     return drawSurfIndex;
 }
 
-uint32_t __cdecl R_TessStaticModelCachedList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext)
+uint32_t R_TessStaticModelCachedList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext)
 {
     const char *v2; // eax
     GfxDepthRangeType depthRangeType; // [esp+1Ch] [ebp-34h]
@@ -1055,7 +1055,7 @@ uint32_t __cdecl R_TessStaticModelCachedList(const GfxDrawSurfListArgs *listArgs
     return 1;
 }
 
-void __cdecl R_DrawStaticModelPreTessSurfLit(const uint32_t *primDrawSurfPos, GfxCmdBufContext context)
+void R_DrawStaticModelPreTessSurfLit(const uint32_t *primDrawSurfPos, GfxCmdBufContext context)
 {
     GfxReadCmdBuf readCmdBuf; // [esp+0h] [ebp-10h] BYREF
     uint32_t firstIndex; // [esp+4h] [ebp-Ch] BYREF
@@ -1070,7 +1070,7 @@ void __cdecl R_DrawStaticModelPreTessSurfLit(const uint32_t *primDrawSurfPos, Gf
         R_DrawStaticModelsPreTessDrawSurfLighting(pretessSurf, firstIndex, count, context);
 }
 
-void __cdecl R_DrawStaticModelPreTessSurf(const uint32_t *primDrawSurfPos, GfxCmdBufContext context)
+void R_DrawStaticModelPreTessSurf(const uint32_t *primDrawSurfPos, GfxCmdBufContext context)
 {
     GfxReadCmdBuf readCmdBuf; // [esp+0h] [ebp-10h] BYREF
     uint32_t firstIndex; // [esp+4h] [ebp-Ch] BYREF
@@ -1083,7 +1083,7 @@ void __cdecl R_DrawStaticModelPreTessSurf(const uint32_t *primDrawSurfPos, GfxCm
         R_DrawStaticModelsPreTessDrawSurf(pretessSurf, firstIndex, count, context);
 }
 
-uint32_t __cdecl R_TessStaticModelPreTessList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext)
+uint32_t R_TessStaticModelPreTessList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext)
 {
     const char *v2; // eax
     GfxDepthRangeType depthRangeType; // [esp+1Ch] [ebp-34h]
@@ -1123,7 +1123,7 @@ uint32_t __cdecl R_TessStaticModelPreTessList(const GfxDrawSurfListArgs *listArg
     return 1;
 }
 
-uint32_t __cdecl R_TessStaticModelSkinnedDrawSurfList(
+uint32_t R_TessStaticModelSkinnedDrawSurfList(
     const GfxDrawSurfListArgs *listArgs,
     GfxCmdBufContext prepassContext)
 {
@@ -1164,7 +1164,7 @@ uint32_t __cdecl R_TessStaticModelSkinnedDrawSurfList(
     return 1;
 }
 
-uint32_t __cdecl R_TessStaticModelRigidDrawSurfList(
+uint32_t R_TessStaticModelRigidDrawSurfList(
     const GfxDrawSurfListArgs *listArgs,
     GfxCmdBufContext prepassContext)
 {
@@ -1232,7 +1232,7 @@ uint32_t __cdecl R_TessStaticModelRigidDrawSurfList(
 }
 
 
-uint32_t __cdecl R_TessXModelRigidSkinnedDrawSurfList(
+uint32_t R_TessXModelRigidSkinnedDrawSurfList(
     const GfxDrawSurfListArgs *listArgs,
     GfxCmdBufContext prepassContext)
 {
@@ -1347,7 +1347,7 @@ uint32_t __cdecl R_TessXModelRigidSkinnedDrawSurfList(
     return drawSurfIndex;
 }
 
-uint32_t __cdecl R_TessTrianglesPreTessList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext)
+uint32_t R_TessTrianglesPreTessList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext)
 {
     IDirect3DIndexBuffer9 *ib; // [esp+1Ch] [ebp-44h]
     GfxDepthRangeType depthRangeType; // [esp+2Ch] [ebp-34h]
@@ -1387,7 +1387,7 @@ uint32_t __cdecl R_TessTrianglesPreTessList(const GfxDrawSurfListArgs *listArgs,
     return 1;
 }
 
-uint32_t __cdecl R_TessTrianglesList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext)
+uint32_t R_TessTrianglesList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext)
 {
     GfxDepthRangeType v3; // [esp+20h] [ebp-38h]
     GfxDepthRangeType depthRangeType; // [esp+24h] [ebp-34h]
@@ -1452,7 +1452,7 @@ uint32_t __cdecl R_TessTrianglesList(const GfxDrawSurfListArgs *listArgs, GfxCmd
     return 1;
 }
 
-void __cdecl R_SetVertexDeclTypeWorld(GfxCmdBufState *state)
+void R_SetVertexDeclTypeWorld(GfxCmdBufState *state)
 {
     if ((state->technique->flags & 8) != 0)
         R_SetVertexDeclTypeNormal(state, (MaterialVertexDeclType)(state->material->techniqueSet->worldVertFormat + 2));
@@ -1460,7 +1460,7 @@ void __cdecl R_SetVertexDeclTypeWorld(GfxCmdBufState *state)
         R_SetVertexDeclTypeNormal(state, VERTDECL_WORLD);
 }
 
-uint32_t __cdecl R_TessBModel(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext)
+uint32_t R_TessBModel(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext)
 {
     GfxDepthRangeType v3; // [esp+34h] [ebp-88h]
     GfxDepthRangeType depthRangeType; // [esp+38h] [ebp-84h]

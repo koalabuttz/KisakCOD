@@ -17,7 +17,7 @@ const dvar_t *fx_profile;
 const dvar_t *fx_cull_elem_spawn;
 const dvar_t *fx_marks_ents;
 
-void __cdecl FX_RegisterDvars(void)
+void FX_RegisterDvars(void)
 {
     DvarLimits min; // [esp+4h] [ebp-10h]
     DvarLimits mina; // [esp+4h] [ebp-10h]
