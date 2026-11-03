@@ -67,10 +67,12 @@ permissions:
   contents: read
 
 # A newer push to a pull request cancels that pull request's older run, so a
-# quick fix does not wait behind a run that no longer matters. Every other run
-# (pushes to master, manual runs) gets a group of its own and always finishes.
+# quick fix does not wait behind a run that no longer matters. A newer push to
+# master does the same to an older master run: it checks everything merged so
+# far, so the older run only held runners. Manual runs get a group of their own
+# and always finish.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
   cancel-in-progress: true
 
 jobs:

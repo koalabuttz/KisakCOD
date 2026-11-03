@@ -134,7 +134,9 @@ quitting with licensed assets remain separate application checks.
 When the hosted workflows run:
 
 - A newer push to a pull request cancels that pull request's older Linux and
-  Windows runs. Pushes to master and manual runs always finish.
+  Windows runs, and a newer push to master cancels an older master run that has
+  not finished (the newer run checks everything merged so far). Manual runs
+  always finish.
 - The Windows workflow skips changes that cannot reach the MSVC builds or its
   regression checks: documentation and Markdown, `src/linux`, `tests/linux_*`,
   `scripts/platform/linux`, `build-linux.sh`, the Linux workflow, and the Linux

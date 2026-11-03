@@ -626,7 +626,7 @@ class CiTriggerTests(unittest.TestCase):
     """When the Linux and Windows workflows run, and which runs a newer push cancels."""
 
     CONCURRENCY = {
-        'group': "${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}",
+        'group': "${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}",
         'cancel-in-progress': 'true',
     }
 
@@ -670,7 +670,7 @@ class CiTriggerTests(unittest.TestCase):
         cls.windows = load('build-kisarcod-win.yaml')
         cls.windows_paths = cls.windows['on']['pull_request']['paths']
 
-    def test_a_newer_pull_request_push_cancels_only_that_pull_requests_run(self):
+    def test_a_newer_push_cancels_only_the_same_branchs_older_run(self):
         for name, workflow in (('linux', self.linux), ('windows', self.windows)):
             with self.subTest(workflow=name):
                 self.assertEqual(workflow['concurrency'], self.CONCURRENCY)
