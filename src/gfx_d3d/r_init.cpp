@@ -316,7 +316,7 @@ const dvar_t *r_mode;
 const dvar_t *r_displayRefresh;
 const dvar_t* r_noborder;
 
-void R_SyncGpu(int(*WorkCallback)(unsigned __int64))
+void R_SyncGpu(int(*WorkCallback)(uint64_t))
 {
     int useWorkCallback; // [esp+30h] [ebp-4h]
 

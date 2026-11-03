@@ -101,7 +101,7 @@ void CG_FxTest()
 {
     const char *v0; // r3
     const char *v1; // r3
-    long double v2; // fp2
+    double v2; // fp2
 
     if (cmd_args.nesting >= 8u)
         MyAssertHandler(

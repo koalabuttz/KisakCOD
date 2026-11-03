@@ -630,7 +630,7 @@ int turret_CanTargetPoint(const gentity_s *self, const float *vPoint, float *vSo
 {
     int result; // r3
     TurretInfo *pTurretInfo; // r27
-    long double v10; // fp2
+    double v10; // fp2
     float *arcmin; // r30
     int v12; // r27
     int v13; // r28
@@ -693,8 +693,8 @@ int turret_CanTargetSentient(
 {
     TurretInfo *pTurretInfo; // r30
     double v11; // fp31
-    long double v12; // fp2
-    long double v13; // fp2
+    double v12; // fp2
+    double v13; // fp2
     double v14; // fp0
     double v15; // fp0
     double v16; // fp13
@@ -1084,7 +1084,7 @@ int turret_aimat_Sentient(gentity_s *self, sentient_s *enemy, int bShoot, int mi
 
 int turret_aimat_Ent(gentity_s *self, gentity_s *ent, int bShoot)
 {
-    long double v6; // fp2
+    double v6; // fp2
     float v8[12]; // [sp+50h] [-30h] BYREF
 
     turret_SetTargetEnt(self, ent);
@@ -1124,15 +1124,15 @@ int turret_isTargetTooCloseToPlayer(
     double v15; // fp5
     double v16; // fp4
     int result; // r3
-    long double v18; // fp2
+    double v18; // fp2
     double v19; // fp13
     double v20; // fp12
     double v21; // fp11
     double v24; // fp0
-    long double v25; // fp2
+    double v25; // fp2
     double v26; // fp12
     double v27; // fp30
-    long double v28; // fp2
+    double v28; // fp2
 
     player = G_GetPlayer();
 
@@ -1341,7 +1341,7 @@ void turret_think_auto_nonai(gentity_s *self)
     TurretInfo *pTurretInfo; // r28
     sentient_s *BestTarget; // r29
     gentity_s *v4; // r30
-    long double v5; // fp2
+    double v5; // fp2
     int v6; // r3
     float v7[16]; // [sp+50h] [-40h] BYREF
 
@@ -1418,13 +1418,13 @@ int turret_think_auto(gentity_s *self, actor_s *actor)
     sentient_s *sentient; // r29
     char *v28; // r11
     double v29; // fp0
-    long double v30; // fp2
+    double v30; // fp2
     double v31; // fp0
     double v32; // fp13
     double v33; // fp12
     sentient_s *v34; // r4
     TurretInfo *v35; // r28
-    long double v36; // fp2
+    double v36; // fp2
     float v37[2]; // [sp+50h] [-C0h] BYREF
     float v38[4]; // [sp+58h] [-B8h] BYREF
     float v39[4]; // [sp+68h] [-A8h] BYREF
@@ -1650,7 +1650,7 @@ int turret_think_manual(gentity_s *self, actor_s *actor)
     double v18; // fp12
     sentient_s *sentient; // r4
     TurretInfo *v20; // r30
-    long double v21; // fp2
+    double v21; // fp2
     float v22[4]; // [sp+50h] [-50h] BYREF
 
     pTurretInfo = self->pTurretInfo;

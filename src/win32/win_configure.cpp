@@ -166,7 +166,7 @@ LABEL_8:
     }
 }
 
-long double Sys_BenchmarkGHz()
+double Sys_BenchmarkGHz()
 {
     uint32_t i; // ecx
     unsigned __int64 v1; // kr00_8

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <universal/win_long.h>
+
 #include <xanim/xanim.h>
 
 #include "r_init.h"
@@ -166,7 +168,7 @@ struct alignas(64) GfxScene // sizeof=0x154D00
     GfxDrawSurf shadowDrawSurfs[512];   // ...
     uint32_t shadowableLightIsUsed[32]; // ...
     int maxDrawSurfCount[34];           // DRAW_SURF_TYPE_COUNT
-    volatile long drawSurfCount[34];     // DRAW_SURF_TYPE_COUNT
+    volatile LONG drawSurfCount[34];     // DRAW_SURF_TYPE_COUNT
     GfxDrawSurf *drawSurfs[34];         // DRAW_SURF_TYPE_COUNT
     GfxDrawSurf fxDrawSurfsLight[8192]; // ...
     GfxDrawSurf fxDrawSurfsLightAuto[8192]; // ...

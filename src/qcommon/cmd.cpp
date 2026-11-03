@@ -317,7 +317,6 @@ static void WriteWAVHeader(FILE *f, uint32_t dataSize, uint32_t sampleRate, uint
 static bool Cmd_OpenRawDump(FILE **out, const char *path, const char *mode)
 {
     *out = NULL;
-#if defined(__linux__)
     *out = fopen(path, mode);
     if (!*out)
     {
@@ -325,17 +324,6 @@ static bool Cmd_OpenRawDump(FILE **out, const char *path, const char *mode)
         return false;
     }
     return true;
-#else
-    {
-        errno_t err = fopen_s(out, path, mode);
-        if (err != 0)
-        {
-            Com_PrintError(CON_CHANNEL_ERROR, "Cmd_Dumpraw: cannot open '%s' (%s): error %d\n", path, mode, (int)err);
-            return false;
-        }
-        return true;
-    }
-#endif
 }
 
 void Cmd_Dumpraw_f(void)

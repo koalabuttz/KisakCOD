@@ -1605,8 +1605,13 @@ inline T Buf_Read(unsigned char **pos)
 #include <xmmintrin.h>  // SSE
 #ifdef __linux__
 #include <x86intrin.h>
-// Clang's Microsoft intrinsic takes unsigned long*, while Linux DWORD is an
-// unsigned int. Keep Windows-sized fields intact and adapt the local result.
+// Clang's Microsoft intrinsic takes a pointer to the Windows 32-bit LONG type:
+// unsigned long* on i386, where Linux DWORD is an unsigned int, so this overload
+// adapts it. On x86_64 that type is unsigned int: the builtin already has the
+// signature below, so it is declared (Clang lowers it inline) instead of defined.
+#if defined(__clang__) && defined(__x86_64__)
+extern "C" unsigned char _BitScanReverse(unsigned int* index, unsigned int mask);
+#else
 inline unsigned char _BitScanReverse(unsigned int* index, unsigned int mask)
 {
     if (!mask)
@@ -1614,6 +1619,7 @@ inline unsigned char _BitScanReverse(unsigned int* index, unsigned int mask)
     *index = 31u - static_cast<unsigned int>(__builtin_clz(mask));
     return 1;
 }
+#endif
 #else
 #include <intrin.h>
 #endif

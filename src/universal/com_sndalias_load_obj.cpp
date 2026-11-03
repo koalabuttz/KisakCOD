@@ -1015,8 +1015,8 @@ void Com_LoadSoundAliasFile(const char *loadspec, const char *loadspecCurGame, c
 bool Com_ParseSndCurveFile(const char *buffer, const char *fileName, SndCurve *curve)
 {
     int v3; // eax
-    long double v5; // st7
-    long double v6; // st7
+    double v5; // st7
+    double v6; // st7
     int knotCountIndex; // [esp+8h] [ebp-8h]
     int knotCountIndexa; // [esp+8h] [ebp-8h]
     parseInfo_t *tokenb; // [esp+Ch] [ebp-4h]

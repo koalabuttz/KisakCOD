@@ -11,7 +11,7 @@ WaterGlob waterGlob;
 WaterGlobStatic waterGlobStatic;
 
 //uint32_t const *const g_selectByteFromInt__uint4 820e3810     gfx_d3d : r_water.obj
-long volatile g_waterLock;//          85b3ac80     gfx_d3d : r_water.obj
+LONG volatile g_waterLock;//          85b3ac80     gfx_d3d : r_water.obj
 //struct __vector4 const g_selectByteFromInt 85b45900     gfx_d3d : r_water.obj
 
 

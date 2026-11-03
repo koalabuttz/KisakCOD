@@ -416,7 +416,7 @@ FrameResult RunFrame(SyntheticWorld &sw, const float *origin, const float (*axis
     FrameResult result;
     std::memset(g_backEnd.get(), 0, sizeof(GfxBackEndData));
     frontEndDataOut = g_backEnd.get();
-    for (volatile long &count : scene.drawSurfCount)
+    for (volatile LONG &count : scene.drawSurfCount)
         count = 0;
 
     R_ClearDpvsScene();

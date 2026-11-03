@@ -97,7 +97,7 @@ int G_LevelSpawnString(const char *key, const char *defaultString, const char **
 int G_SpawnFloat(const char *key, const char *defaultString, float *out)
 {
     int v4; // r30
-    long double v5; // fp2
+    double v5; // fp2
     int result; // r3
     const char *v7; // [sp+50h] [-20h] BYREF
 

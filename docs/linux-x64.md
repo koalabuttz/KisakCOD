@@ -156,6 +156,35 @@ counters, `va_list` and `_vsnprintf` mismatches (all upstream issue 28), six
 `align(N)` requests below the x86_64 minimum alignment (upstream issue 2), and
 three follow-on errors.
 
+### After the standard types cleanup
+
+Local run, 2026-11-03, after the upstream issue 28 cleanup on top of the
+per-platform asserts: all 585 units (215 dedicated, 370 MP client) compile for
+x86_64, and i386 is unchanged. What changed:
+
+- **`long` where retail meant 32 bits.** The `volatile long` counters handed to
+  `Interlocked*` became `volatile LONG` (4 bytes on both Windows ABIs and in the
+  Linux shim), `sint32` became `int32_t`, and the `_BitScanReverse` callers pass
+  `DWORD`. `com_files.cpp` read a zip offset through an `unsigned long` straight
+  into a `uint32_t` field, an 8-byte write on LP64; it now goes through a local.
+- **`long double` became `double`.** MSVC's `long double` is `double`, so retail
+  never had 80-bit values; on Linux it was 80-bit with 16-byte alignment, which
+  is what the six `align(N)` errors were.
+- **`va_list` and `*_s`.** Variadic helpers that kept a decompiled `char *`
+  take `va_list`. The remaining `*_s` calls (`sscanf_s`, `strcpy_s`,
+  `sprintf_s`, `vsnprintf_s`, `_vsnprintf_s`, `fopen_s`) became the portable
+  call or `I_strncpyz`.
+- **`_BitScanReverse`.** Clang on x86_64 already provides it as a builtin, so
+  the Linux fallback is declared, not defined, there.
+- **Kept on purpose.** `HRESULT`, `LRESULT`, `DWORD` and the other Windows types
+  in D3D9 and Win32 signatures stay: they are API types with fixed sizes on
+  both Windows ABIs and in the Linux shim. Upstream issue 28 targets engine
+  data, not API boundaries.
+
+The compile wall is gone; the rest is the run-time work above. Pointer/integer
+cast warnings are unchanged at 613 sites, and 64-to-32 narrowing fell from 534
+to 490.
+
 ### What the census does not claim
 
 It is a Clang front-end pass on Linux x86_64: not a link, not a run, not MSVC

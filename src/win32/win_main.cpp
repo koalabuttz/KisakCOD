@@ -166,7 +166,7 @@ static int Sys_GetSemaphoreFileName()
 		}
 	}
 
-	return sprintf_s(sys_processSemaphoreFile, "__%s", moduleName);
+	return snprintf(sys_processSemaphoreFile, sizeof(sys_processSemaphoreFile), "__%s", moduleName);
 }
 
 void Sys_QuitAndStartProcess(const char *exeName, const char *parameters)
@@ -323,7 +323,7 @@ void Sys_Error(const char *error, ...)
 	Com_PrintStackTrace();
 	com_errorEntered = 1;
 	Sys_SuspendOtherThreads();
-	vsnprintf_s(string, 0x1000u, error, va);
+	vsnprintf(string, 0x1000u, error, va);
 	
 	// random gamma crap we don't care about
 	// FixWindowsDesktop();

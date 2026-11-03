@@ -1,5 +1,7 @@
 #pragma once
 
+#include <universal/win_long.h>
+
 #include <qcommon/qcommon.h>
 
 #include "r_debug.h"
@@ -527,24 +529,24 @@ const struct alignas(16) GfxBackEndData // sizeof=0x11E780
     uint32_t smcPatchCount;
     uint32_t smcPatchVertsUsed;
     GfxModelLightingPatch modelLightingPatchList[4096];
-    volatile long modelLightingPatchCount;
+    volatile LONG modelLightingPatchCount;
     GfxBackEndPrimitiveData prim;
     uint32_t shadowableLightHasShadowMap[8];
     uint32_t frameCount;
     int drawSurfCount;
-    volatile long surfPos;
-    volatile long gfxEntCount;
+    volatile LONG surfPos;
+    volatile LONG gfxEntCount;
     GfxEntity gfxEnts[128];
-    volatile long cloudCount;
-    volatile long codeMeshCount;
-    volatile long codeMeshArgsCount;
-    volatile long markMeshCount;
+    volatile LONG cloudCount;
+    volatile LONG codeMeshCount;
+    volatile LONG codeMeshArgsCount;
+    volatile LONG markMeshCount;
     FxMarkMeshData markMeshes[1536];
     GfxMeshData markMesh;
     GfxVertexBufferState *skinnedCacheVb;
     IDirect3DQuery9 *endFence;
     uint8_t *tempSkinBuf;
-    volatile long tempSkinPos;
+    volatile LONG tempSkinPos;
     IDirect3DIndexBuffer9 *preTessIb;
     int viewParmCount;
     GfxFog fogSettings;
