@@ -176,7 +176,7 @@ void AimAssist_DrawCenterBox(
     float clipHalfWidth,
     float clipHalfHeight,
     const float *color);
-void AimAssist_DrawTargets(int64_t localClientNum, const float *color);
+void AimAssist_DrawTargets(int32_t localClientNum, const playerState_s *ps, const float *color);
 
 
 // aim_target_mp
