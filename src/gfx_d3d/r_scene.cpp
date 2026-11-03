@@ -1450,7 +1450,7 @@ void R_GenerateSortedDrawSurfs(
     MaterialTechniqueType EmissiveTechnique; // eax
     char DoesDrawSurfListInfoNeedFloatz; // al
     float *viewOrigin; // [esp+BCh] [ebp-BCh]
-    uint32_t data[20]; // [esp+C4h] [ebp-B4h] BYREF
+    ShadowCookieCmd shadowCookieCmd; // [esp+C4h] [ebp-B4h] BYREF
     float bestError; // [esp+120h] [ebp-58h]
     uint32_t bestNum; // [esp+124h] [ebp-54h]
     float error; // [esp+128h] [ebp-50h]
@@ -1662,11 +1662,11 @@ void R_GenerateSortedDrawSurfs(
         }
         else if (dynamicShadowType == SHADOW_COOKIE)
         {
-            data[0] = (uint32_t)viewParmsDpvs;
-            data[1] = (uint32_t)viewParmsDraw;
-            data[2] = (uint32_t)&viewInfo->shadowCookieList;
-            data[3] = viewInfo->localClientNum;
-            R_AddWorkerCmd(WRKCMD_SHADOW_COOKIE, (uint8_t *)data);
+            shadowCookieCmd.viewParmsDpvs = viewParmsDpvs;
+            shadowCookieCmd.viewParmsDraw = viewParmsDraw;
+            shadowCookieCmd.shadowCookieList = &viewInfo->shadowCookieList;
+            shadowCookieCmd.localClientNum = viewInfo->localClientNum;
+            R_AddWorkerCmd(WRKCMD_SHADOW_COOKIE, (uint8_t *)&shadowCookieCmd);
         }
     }
     R_SetAllStaticModelLighting();
