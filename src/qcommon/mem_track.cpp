@@ -838,15 +838,15 @@ void track_PrintInfo()
         ++nodeCount;
     nodeCount += g_physicalMemInfoCount;
     len2 += nodeCount;
-    sorted_mem_track = (mem_track_t*)malloc(20 * len2);
+    sorted_mem_track = (mem_track_t*)malloc(sizeof(mem_track_t) * len2);
     if (sorted_mem_track)
     {
         len = 0;
-        Com_Memcpy((char*)sorted_mem_track, (char*)g_mem_track, 20 * g_mem_track_count);
+        Com_Memcpy((char*)sorted_mem_track, (char*)g_mem_track, sizeof(mem_track_t) * g_mem_track_count);
         len += g_mem_track_count;
-        Com_Memcpy((char*)&sorted_mem_track[len], (char*)g_hunk_track, 20 * g_hunk_track_count);
+        Com_Memcpy((char*)&sorted_mem_track[len], (char*)g_hunk_track, sizeof(mem_track_t) * g_hunk_track_count);
         len += g_hunk_track_count;
-        Com_Memcpy((char*)&sorted_mem_track[len], (char*)g_hunklow_track, 20 * g_hunklow_track_count);
+        Com_Memcpy((char*)&sorted_mem_track[len], (char*)g_hunklow_track, sizeof(mem_track_t) * g_hunklow_track_count);
         len += g_hunklow_track_count;
         if (minSpecImageMemory)
         {

@@ -247,7 +247,7 @@ void CM_LoadStaticModels()
     }
     if (numStaticModels)
     {
-        cm.staticModelList = (cStaticModel_s *)CM_Hunk_Alloc(80 * numStaticModels, "CM_CreateStaticModel", 27);
+        cm.staticModelList = (cStaticModel_s *)CM_Hunk_Alloc(sizeof(cStaticModel_s) * numStaticModels, "CM_CreateStaticModel", 27);
         ptr = Com_EntityString(0);
         iassert( ptr );
         ProfLoad_Begin("Create static model collision");
@@ -502,7 +502,7 @@ void CMod_LoadNodes()
     in = Com_GetBspLump(LUMP_NODES, 0x24u, &count);
     if (!count)
         Com_Error(ERR_DROP, "Map has no nodes");
-    cm.nodes = (cNode_t*)CM_Hunk_Alloc(8 * count, "CMod_LoadNodes", 25);
+    cm.nodes = (cNode_t*)CM_Hunk_Alloc(sizeof(cNode_t) * count, "CMod_LoadNodes", 25);
     result = (cNode_t*)count;
     cm.numNodes = count;
     out = cm.nodes;
@@ -664,7 +664,7 @@ MapEnts *MapEnts_GetFromString(char *name, const char *entityString, int numEnti
     const char *begin; // [esp+A38h] [ebp-4h]
     char *entityStringa; // [esp+A48h] [ebp+Ch]
 
-    mapEnts = (MapEnts*)CM_Hunk_Alloc(0xCu, "CMod_LoadEntityString", 30);
+    mapEnts = (MapEnts*)CM_Hunk_Alloc(sizeof(MapEnts), "CMod_LoadEntityString", 30);
     nameLen = strlen(name);
     mapEnts->name = (const char*)CM_Hunk_Alloc(nameLen + 1, "CMod_LoadEntityString", 30);
     memcpy((void*)mapEnts->name, name, nameLen + 1);
@@ -814,8 +814,8 @@ void CMod_LoadBrushRelated(uint32_t version, bool usePvs)
     ++cm.leafbrushNodes;
     leafbrushNodesCount = (TempMalloc(0) - (char*)cm.leafbrushNodes) / 20;
     cm.leafbrushNodesCount = leafbrushNodesCount + 1;
-    leafbrushNodes = (cLeafBrushNode_s*)CM_Hunk_Alloc(20 * (leafbrushNodesCount + 1), "CMod_LoadBrushRelated", 26);
-    memcpy(&leafbrushNodes[1].axis, &cm.leafbrushNodes->axis, 20 * leafbrushNodesCount);
+    leafbrushNodes = (cLeafBrushNode_s*)CM_Hunk_Alloc(sizeof(cLeafBrushNode_s) * (leafbrushNodesCount + 1), "CMod_LoadBrushRelated", 26);
+    memcpy(&leafbrushNodes[1], cm.leafbrushNodes, sizeof(cLeafBrushNode_s) * leafbrushNodesCount);
     cm.leafbrushNodes = leafbrushNodes;
     Hunk_UserDestroy(user);
 }
@@ -1150,7 +1150,7 @@ cLeafBrushNode_s *CMod_AllocLeafBrushNode()
 {
     cLeafBrushNode_s *result; // eax
 
-    result = (cLeafBrushNode_s*)TempMalloc(0x14u);
+    result = (cLeafBrushNode_s*)TempMalloc(sizeof(cLeafBrushNode_s));
     result->axis = 0;
     result->leafBrushCount = 0;
     result->contents = 0;

@@ -27,7 +27,7 @@ void Scr_ShutdownAllocNode()
 sval_u *Scr_AllocNode(int size)
 {
     iassert(g_allocNodeUser);
-    return (sval_u *)Hunk_UserAlloc(g_allocNodeUser, 4 * size, 4);
+    return (sval_u *)Hunk_UserAlloc(g_allocNodeUser, sizeof(sval_u) * size, alignof(sval_u));
 }
 
 sval_u node0(Enum_t type)

@@ -2397,7 +2397,7 @@ void Scr_DumpScriptThreads(void)
 	}
 	if (num)
 	{
-		infoArray = (ThreadDebugInfo*)Z_TryVirtualAlloc(140 * num, "Scr_DumpScriptThreads", 0);
+		infoArray = (ThreadDebugInfo*)Z_TryVirtualAlloc(sizeof(ThreadDebugInfo) * num, "Scr_DumpScriptThreads", 0);
 		if (infoArray)
 		{
 			num = 0;

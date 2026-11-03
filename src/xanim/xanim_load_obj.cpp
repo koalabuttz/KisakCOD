@@ -251,7 +251,7 @@ XModelPieces *XModelPiecesLoadFile(const char *name, void *(*Alloc)(int))
 
     if (version == 1)
     {
-        xmodelPieces = (XModelPieces *)Alloc(12);
+        xmodelPieces = (XModelPieces *)Alloc(sizeof(XModelPieces));
         iassert(xmodelPieces);
         xmodelPieces->numpieces = Buf_Read<unsigned short>(&pos);
         xmodelPieces->pieces = (XModelPiece *)Alloc(sizeof(XModelPiece) * xmodelPieces->numpieces);
@@ -663,7 +663,7 @@ unsigned __int8 *GetQuaternions(
                     quat[2] = -quat[2];
                     quat[3] = -quat[3];
                 }
-                part->quat = (XAnimPartQuat *)XAnimTempAlloc(0xCu);
+                part->quat = (XAnimPartQuat *)XAnimTempAlloc(sizeof(XAnimPartQuat));
                 //part->quat->u = *(XAnimPartQuatData*)quat;
                 part->quat->u.frame0[0] = quat[0];
                 part->quat->u.frame0[1] = quat[1];

@@ -340,7 +340,7 @@ char **Sys_ListFiles(
 
         if (nfiles)
         {
-            char **listCopy = (char **)Hunk_UserAlloc(user, 4 * nfiles + 8, 4);
+            char **listCopy = (char **)Hunk_UserAlloc(user, sizeof(char *) * (nfiles + 2), alignof(char *));
             *listCopy++ = (char *)user;
             for (int i = 0; i < nfiles; ++i)
                 listCopy[i] = list[i];
@@ -423,7 +423,7 @@ char **Sys_ListFiles(
 
     if (nfiles)
     {
-        char **listCopy = (char **)Hunk_UserAlloc(user, 4 * nfiles + 8, 4);
+        char **listCopy = (char **)Hunk_UserAlloc(user, sizeof(char *) * (nfiles + 2), alignof(char *));
         *listCopy++ = (char *)user;
         for (int i = 0; i < nfiles; ++i)
             listCopy[i] = list[i];
