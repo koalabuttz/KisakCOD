@@ -1,4 +1,5 @@
-// d3d9_native.h -- the engine-facing boundary to DXVK Native D3D9 (i386).
+// d3d9_native.h -- the engine-facing boundary to DXVK Native D3D9 (i386, and x86_64
+// for the opt-in 64-bit track).
 //
 // Reached only through <linux/d3d9_types.h> in a translation unit compiled with
 // KISAK_LINUX_NATIVE_D3D9 (the opt-in kisak_linux_native_d3d9 CMake target sets
@@ -81,8 +82,8 @@
 #if !defined(KISAK_LINUX_D3D9_TYPES_DISPATCH)
 #error "include <linux/d3d9_types.h> (or a gfx_d3d header), the single D3D9 entry point, not d3d9_native.h"
 #endif
-#if !defined(__i386__)
-#error "the DXVK Native D3D9 boundary is validated for i386 only: build with -m32"
+#if !defined(__i386__) && !defined(__x86_64__)
+#error "the DXVK Native D3D9 boundary is validated for i386 and x86_64 only"
 #endif
 
 #include <linux/compat.h>
@@ -184,6 +185,7 @@ typedef struct tagRECT RECT;
 namespace kisak_d3d9_boundary
 {
 // The engine's stdcall survived DXVK's `#define __stdcall`.
+#if defined(__i386__)
 using EngineStdcall = void(__attribute__((stdcall)) *)(int);
 using EngineCdecl = void(__attribute__((cdecl)) *)(int);
 using SpelledStdcall = void(__stdcall *)(int);
@@ -193,6 +195,12 @@ static_assert(std::is_same_v<SpelledStdcall, EngineStdcall>,
 static_assert(std::is_same_v<SpelledWinapi, EngineStdcall>,
               "WINAPI must still mean stdcall for engine declarations after the DXVK headers");
 static_assert(!std::is_same_v<EngineStdcall, EngineCdecl>, "the compiler distinguishes stdcall from cdecl");
+#else
+// x86_64 has one C calling convention, so stdcall and cdecl are the same type
+// and the engine's spellings only have to survive as macros.
+static_assert(std::is_same_v<void(__stdcall *)(int), void (*)(int)>, "__stdcall is the x86_64 C convention");
+static_assert(std::is_same_v<void(WINAPI *)(int), void (*)(int)>, "WINAPI is the x86_64 C convention");
+#endif
 
 // DXVK's exports keep DXVK's (cdecl) convention, which is how libdxvk_d3d9.so
 // implements them on i386.

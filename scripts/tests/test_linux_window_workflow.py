@@ -312,8 +312,9 @@ class NativeD3D9BoundaryWorkflowTests(unittest.TestCase):
     HEADER_CONSUMERS = ('world_frontend',)
 
     # Jobs that turn the boundary's CMake option on. device_probe does it to link
-    # the device probe against a stand-in D3D9 library (DeviceProbeWorkflowTests).
-    BOUNDARY_JOBS = ('native_d3d9_boundary', 'device_probe')
+    # the device probe against a stand-in D3D9 library (DeviceProbeWorkflowTests);
+    # x64_client does it to build the x86_64 multiplayer client against stand-ins.
+    BOUNDARY_JOBS = ('native_d3d9_boundary', 'device_probe', 'x64_client')
 
     def test_other_jobs_keep_their_defaults(self):
         # The boundary stays opt-in: no other job turns the CMake option on, and
@@ -813,7 +814,8 @@ class CiCacheTests(unittest.TestCase):
     """The build caches only skip unchanged compiles; every check still runs."""
 
     # Jobs that configure and build the engine with CMake.
-    CCACHE_JOBS = ('window', 'native', 'native_d3d9_boundary', 'device_probe', 'x64_dedicated')
+    CCACHE_JOBS = ('window', 'native', 'native_d3d9_boundary', 'device_probe', 'x64_dedicated',
+                   'x64_client')
     SDL3_JOBS = ('window', 'device_probe')
 
     @classmethod
@@ -845,7 +847,8 @@ class CiCacheTests(unittest.TestCase):
                 # and configuration (this branch first, then master) is restored.
                 self.assertTrue(restore['with']['key'].endswith('-${{ github.run_id }}-${{ github.run_attempt }}'))
                 self.assertTrue(restore['with']['key'].startswith(restore['with']['restore-keys']))
-                self.assertIn('${{ matrix.config }}', restore['with']['restore-keys'])
+                if 'strategy' in job:
+                    self.assertIn('${{ matrix.config }}', restore['with']['restore-keys'])
                 self.assertEqual(use['id'], 'ccache')
                 self.assertIn('scripts/ci/use-ccache.sh', use['run'])
                 self.assertEqual(save['if'], "${{ !cancelled() && steps.ccache.outcome == 'success' }}")

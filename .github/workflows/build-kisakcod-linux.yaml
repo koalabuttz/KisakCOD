@@ -575,6 +575,169 @@ jobs:
           path: ${{ runner.temp }}/ccache
           key: ccache-x64-dedicated-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
 
+  x64_client:
+    # Opt-in 64-bit track, step three (docs/linux-x64.md): build the multiplayer
+    # client KisakCOD-mp with -DKISAK_LINUX_ARCH=x86_64 against x86_64 SDL3 and
+    # the D3D9 and OpenAL stand-ins (built -m64), then run the same asset-free
+    # checks as the i386 client: the game window test and the client's start
+    # from temporary trees with no game data. It is not playable yet; nothing
+    # here draws a frame. The i386 client job is untouched.
+    name: x86_64 multiplayer client
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    env:
+      DXVK_REVISION: c3dd74be6baec53786d4e064a572185b70347a17
+      DXVK_DIRECTX_HEADERS_REVISION: 9df86f2341616ef1888ae59919feaa6d4fad693d
+      SDL3_REVISION: 877399b2b2cf21e67554ed9046410f268ce1d1b2
+      BUILD_DIR: build-x64/mp-client
+      OUT_DIR: ${{ github.workspace }}/out/x64-mp-client
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install x86_64 build tools
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          # libopenal-dev only for <AL/al.h>; the client links the OpenAL stand-in.
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            cmake ninja-build clang binutils python3 ccache libopenal-dev
+
+      - name: Restore compiler cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-x64-mp-client-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-x64-mp-client-
+      - name: Use compiler cache
+        id: ccache
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/ci/use-ccache.sh
+
+      - name: Restore pinned x86_64 SDL3 SDK
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/SDL3-sdk
+          key: sdl3-sdk-x86_64-${{ env.SDL3_REVISION }}-${{ hashFiles('.github/workflows/build-kisakcod-linux.yaml') }}
+
+      - name: Build pinned x86_64 SDL3 SDK
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The same pin and options as the i386 client job, built -m64.
+          if [[ ! -f "$RUNNER_TEMP/SDL3-sdk/lib/libSDL3.so.0" ]]; then
+            git init "$RUNNER_TEMP/SDL3-source"
+            git -C "$RUNNER_TEMP/SDL3-source" remote add origin https://github.com/libsdl-org/SDL.git
+            git -C "$RUNNER_TEMP/SDL3-source" fetch --depth 1 origin "$SDL3_REVISION"
+            git -C "$RUNNER_TEMP/SDL3-source" checkout --detach FETCH_HEAD
+            test "$(git -C "$RUNNER_TEMP/SDL3-source" rev-parse HEAD)" = "$SDL3_REVISION"
+            cmake -S "$RUNNER_TEMP/SDL3-source" -B "$RUNNER_TEMP/SDL3-build" -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang \
+              -DCMAKE_C_FLAGS=-m64 -DCMAKE_SHARED_LINKER_FLAGS=-m64 \
+              -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/SDL3-sdk" -DCMAKE_INSTALL_LIBDIR=lib \
+              -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TESTS=OFF -DSDL_TEST_LIBRARY=OFF \
+              -DSDL_EXAMPLES=OFF -DSDL_X11=OFF -DSDL_WAYLAND=OFF -DSDL_UNIX_CONSOLE_BUILD=ON \
+              -DSDL_ALSA=OFF -DSDL_PULSEAUDIO=OFF -DSDL_PIPEWIRE=OFF -DSDL_JACK=OFF
+            cmake --build "$RUNNER_TEMP/SDL3-build" --parallel "$(nproc)"
+            cmake --install "$RUNNER_TEMP/SDL3-build"
+          fi
+          readelf -h "$RUNNER_TEMP/SDL3-sdk/lib/libSDL3.so.0" | grep -Eq 'Class:[[:space:]]+ELF64'
+
+      - name: Fetch pinned DXVK Native 2.7.1 headers
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The same source-only fetch as the i386 client job. Nothing is built.
+          src="$RUNNER_TEMP/dxvk-source"
+          git init "$src"
+          git -C "$src" remote add origin https://github.com/doitsujin/dxvk.git
+          git -C "$src" fetch --depth 1 origin "$DXVK_REVISION"
+          git -C "$src" checkout --detach FETCH_HEAD
+          test "$(git -C "$src" rev-parse HEAD)" = "$DXVK_REVISION"
+          recorded="$(git -C "$src" ls-tree HEAD include/native/directx | awk '{print $3}')"
+          test "$recorded" = "$DXVK_DIRECTX_HEADERS_REVISION"
+          headers="$src/include/native/directx"
+          git init "$headers"
+          git -C "$headers" remote add origin https://github.com/Joshua-Ashton/mingw-directx-headers.git
+          git -C "$headers" fetch --depth 1 origin "$DXVK_DIRECTX_HEADERS_REVISION"
+          git -C "$headers" checkout --detach FETCH_HEAD
+          test "$(git -C "$headers" rev-parse HEAD)" = "$DXVK_DIRECTX_HEADERS_REVISION"
+          grep -q "version : '2.7.1'" "$src/meson.build"
+          python3 scripts/tests/run_native_d3d9_boundary_checks.py \
+            --dxvk-source "$src" --stage-dxvk-headers "$RUNNER_TEMP/dxvk-include/dxvk"
+
+      - name: Build the x86_64 multiplayer client against the stand-ins
+        timeout-minutes: 40
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/stand-ins"
+          d3d9="$RUNNER_TEMP/stand-ins/libd3d9_unavailable.so"
+          openal="$RUNNER_TEMP/stand-ins/libopenal_unavailable.so"
+          clang++ -m64 -shared -fPIC -Wall -Wextra -Werror -Wl,-soname,libd3d9_unavailable.so \
+            tests/linux_device_probe/d3d9_unavailable.cpp -o "$d3d9"
+          clang++ -m64 -shared -fPIC -Wall -Wextra -Werror -Wl,-soname,libopenal_unavailable.so \
+            tests/linux_mp_client/openal_unavailable.cpp -o "$openal"
+          cmake -S . -B "$BUILD_DIR" -G Ninja \
+            -DKISAK_PLATFORM=linux -DKISAK_LINUX_ARCH=x86_64 \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$OUT_DIR" \
+            -DKISAK_BUILD_LINUX_NATIVE_D3D9=ON \
+            -DKISAK_DXVK_NATIVE_INCLUDE_DIR="$RUNNER_TEMP/dxvk-include/dxvk" \
+            -DKISAK_DXVK_NATIVE_LIBRARY="$d3d9" \
+            -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_OPENAL_LIBRARY="$openal" \
+            -DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3"
+          cmake --build "$BUILD_DIR" --target KisakCOD-mp KisakCOD-mp-client-window-test --parallel "$(nproc)"
+          for binary in "$OUT_DIR/KisakCOD-mp" "$OUT_DIR/KisakCOD-mp-client-window-test"; do
+            readelf -h "$binary" | grep -Eq 'Class:[[:space:]]+ELF64'
+            readelf -h "$binary" | grep -Eq 'Machine:[[:space:]]+Advanced Micro Devices X86-64'
+          done
+          readelf -d "$OUT_DIR/KisakCOD-mp" | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p' > "$RUNNER_TEMP/x64-mp-client-needed.txt"
+          cat "$RUNNER_TEMP/x64-mp-client-needed.txt"
+          grep -qx 'libSDL3.so.0' "$RUNNER_TEMP/x64-mp-client-needed.txt"
+          grep -qx 'libd3d9_unavailable.so' "$RUNNER_TEMP/x64-mp-client-needed.txt"
+          grep -qx 'libopenal_unavailable.so' "$RUNNER_TEMP/x64-mp-client-needed.txt"
+          if grep -Ev '^(libSDL3\.so\.0|libd3d9_unavailable\.so|libopenal_unavailable\.so|libstdc\+\+\.so\.6|libm\.so\.6|libgcc_s\.so\.1|libc\.so\.6|libpthread\.so\.0|libdl\.so\.2)$' \
+              "$RUNNER_TEMP/x64-mp-client-needed.txt"; then
+            echo "the multiplayer client needs a library beyond SDL3, D3D9, OpenAL and the runtimes" >&2
+            exit 1
+          fi
+
+      - name: Run the x86_64 multiplayer client's fail-closed start
+        timeout-minutes: 10
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/stand-ins"
+          "$OUT_DIR/KisakCOD-mp-client-window-test"
+          python3 -u scripts/tests/test_linux_mp_client.py --binary "$OUT_DIR/KisakCOD-mp"
+
+      - name: Report compiler cache
+        if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ccache --show-stats
+      - name: Save compiler cache
+        if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-x64-mp-client-${{ github.run_id }}-${{ github.run_attempt }}
+
   world_frontend:
     # Asset-free CPU test of the production renderer world front end: scene and
     # view setup, DPVS cell/portal visibility, the AABB-tree and cull-group walk,

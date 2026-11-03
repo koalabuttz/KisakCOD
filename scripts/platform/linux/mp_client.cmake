@@ -2,7 +2,8 @@
 # Opt-in native Linux multiplayer client (KISAK_BUILD_LINUX_MP_CLIENT)
 #
 # Off by default. Builds KisakCOD-mp, the multiplayer game itself (server, game,
-# cgame, client, UI, sound and renderer in one i386 process, as the Windows
+# cgame, client, UI, sound and renderer in one process (i386; x86_64 under
+# KISAK_LINUX_ARCH=x86_64, see docs/linux-x64.md), as the Windows
 # KisakCOD-mp target is), for the player-spawn milestone: a listen server whose
 # own client joins over the engine's in-process loopback.
 #
@@ -56,10 +57,10 @@ if(NOT KISAK_DXVK_NATIVE_LIBRARY)
     message(FATAL_ERROR
         "KISAK_BUILD_LINUX_MP_CLIENT needs KISAK_DXVK_NATIVE_LIBRARY (libdxvk_d3d9.so, or the CI stand-in)")
 endif()
-set(KISAK_OPENAL_LIBRARY "" CACHE FILEPATH "i386 OpenAL library KisakCOD-mp links (libopenal.so.1, or the CI stand-in)")
+set(KISAK_OPENAL_LIBRARY "" CACHE FILEPATH "OpenAL library KisakCOD-mp links, built for the target architecture (libopenal.so.1, or the CI stand-in)")
 if(NOT KISAK_OPENAL_LIBRARY OR NOT EXISTS "${KISAK_OPENAL_LIBRARY}")
     message(FATAL_ERROR
-        "KISAK_BUILD_LINUX_MP_CLIENT needs KISAK_OPENAL_LIBRARY: an i386 OpenAL library to link "
+        "KISAK_BUILD_LINUX_MP_CLIENT needs KISAK_OPENAL_LIBRARY: an OpenAL library for the target architecture "
         "(got '${KISAK_OPENAL_LIBRARY}')")
 endif()
 # The client's sound headers include <AL/al.h> (src/sound/snd_local.h), also when

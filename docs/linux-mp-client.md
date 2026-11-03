@@ -165,7 +165,7 @@ LD_LIBRARY_PATH=<sdl3-sdk>/lib:<d3d9 stand-in dir>:<openal stand-in dir> SDL_VID
 ```
 
 `scripts/tests/test_linux_mp_client.py` checks the sources first: the option
-is off by default and i386-only, `CINEMA` is read only by `r_cinematic.cpp`, the
+is off by default (i386, or x86_64 under `KISAK_LINUX_ARCH=x86_64`), `CINEMA` is read only by `r_cinematic.cpp`, the
 platform list names real `src/win32` files, and the stand-ins do not touch
 authentication. With `--binary` it then runs the client from temporary trees
 with no game data:
