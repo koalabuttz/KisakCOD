@@ -696,7 +696,8 @@ jobs:
             -DKISAK_DXVK_NATIVE_LIBRARY="$d3d9" \
             -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_OPENAL_LIBRARY="$openal" \
             -DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3"
-          cmake --build "$BUILD_DIR" --target KisakCOD-mp KisakCOD-mp-client-window-test --parallel "$(nproc)"
+          cmake --build "$BUILD_DIR" --target KisakCOD-mp KisakCOD-mp-client-window-test \
+            KisakCOD-native-d3d9-proofs --parallel "$(nproc)"
           for binary in "$OUT_DIR/KisakCOD-mp" "$OUT_DIR/KisakCOD-mp-client-window-test"; do
             readelf -h "$binary" | grep -Eq 'Class:[[:space:]]+ELF64'
             readelf -h "$binary" | grep -Eq 'Machine:[[:space:]]+Advanced Micro Devices X86-64'

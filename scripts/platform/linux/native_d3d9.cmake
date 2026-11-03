@@ -19,6 +19,9 @@
 #                                         renderer units listed in
 #                                         native_d3d9_renderer_sources.txt
 #
+# The first three describe the i386 layouts and calling conventions; under
+# KISAK_LINUX_ARCH=x86_64 only the renderer proof is built.
+#
 # scripts/tests/run_native_d3d9_boundary_checks.py runs the same proofs without
 # CMake and compares the two layout views. The dedicated server never sees any
 # of this. See docs/linux-native-d3d9.md.
@@ -76,27 +79,35 @@ set(KISAK_NATIVE_D3D9_ENGINE_OPTIONS
     -Wno-ignored-attributes -Wno-format-security
 )
 
-# The boundary header alone, in its native mode.
-add_executable(KisakCOD-native-d3d9-boundary-check
-    "${TESTS_DIR}/linux_d3d9_boundary/boundary_header_check.cpp")
-target_compile_features(KisakCOD-native-d3d9-boundary-check PRIVATE cxx_std_20)
-target_include_directories(KisakCOD-native-d3d9-boundary-check PRIVATE "${SRC_DIR}")
-target_compile_options(KisakCOD-native-d3d9-boundary-check PRIVATE
-    $<$<COMPILE_LANGUAGE:CXX>:-fms-extensions> -Wall -Wextra -Werror)
-target_link_libraries(KisakCOD-native-d3d9-boundary-check PRIVATE kisak_linux_native_d3d9)
+# The boundary header alone, and the D3D9-bearing engine layouts once per view.
+# Both check the documented Windows x86-32 sizes and the i386 stdcall/cdecl
+# split, so the x86_64 track builds the renderer proof only; there every unit
+# that includes the boundary checks that __stdcall is the plain C convention.
+set(native_d3d9_i386_checks "")
+if(NOT KISAK_LINUX_ARCH STREQUAL "x86_64")
+    add_executable(KisakCOD-native-d3d9-boundary-check
+        "${TESTS_DIR}/linux_d3d9_boundary/boundary_header_check.cpp")
+    target_compile_features(KisakCOD-native-d3d9-boundary-check PRIVATE cxx_std_20)
+    target_include_directories(KisakCOD-native-d3d9-boundary-check PRIVATE "${SRC_DIR}")
+    target_compile_options(KisakCOD-native-d3d9-boundary-check PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:-fms-extensions> -Wall -Wextra -Werror)
+    target_link_libraries(KisakCOD-native-d3d9-boundary-check PRIVATE kisak_linux_native_d3d9)
 
-# The D3D9-bearing engine layouts, once per view.
-foreach(layout_view standin native)
-    set(layout_target KisakCOD-native-d3d9-layout-${layout_view})
-    add_executable(${layout_target} "${TESTS_DIR}/linux_d3d9_boundary/engine_layout_check.cpp")
-    target_compile_features(${layout_target} PRIVATE cxx_std_20)
-    target_compile_definitions(${layout_target} PRIVATE ${KISAK_NATIVE_D3D9_ENGINE_DEFINITIONS})
-    target_include_directories(${layout_target} PRIVATE "${SRC_DIR}" "${DEPS_DIR}" "${tracy_SOURCE_DIR}/public")
-    target_compile_options(${layout_target} PRIVATE ${KISAK_NATIVE_D3D9_ENGINE_OPTIONS})
-    if(layout_view STREQUAL "native")
-        target_link_libraries(${layout_target} PRIVATE kisak_linux_native_d3d9)
-    endif()
-endforeach()
+    # The D3D9-bearing engine layouts, once per view.
+    foreach(layout_view standin native)
+        set(layout_target KisakCOD-native-d3d9-layout-${layout_view})
+        add_executable(${layout_target} "${TESTS_DIR}/linux_d3d9_boundary/engine_layout_check.cpp")
+        target_compile_features(${layout_target} PRIVATE cxx_std_20)
+        target_compile_definitions(${layout_target} PRIVATE ${KISAK_NATIVE_D3D9_ENGINE_DEFINITIONS})
+        target_include_directories(${layout_target} PRIVATE "${SRC_DIR}" "${DEPS_DIR}" "${tracy_SOURCE_DIR}/public")
+        target_compile_options(${layout_target} PRIVATE ${KISAK_NATIVE_D3D9_ENGINE_OPTIONS})
+        if(layout_view STREQUAL "native")
+            target_link_libraries(${layout_target} PRIVATE kisak_linux_native_d3d9)
+        endif()
+    endforeach()
+    list(APPEND native_d3d9_i386_checks KisakCOD-native-d3d9-boundary-check
+        KisakCOD-native-d3d9-layout-standin KisakCOD-native-d3d9-layout-native)
+endif()
 
 # Production renderer units that call D3D9, compiled unmodified through the
 # boundary. An OBJECT library: nothing links these objects.
@@ -126,8 +137,6 @@ message(STATUS "Native D3D9: ${native_d3d9_proof_count} renderer unit(s) in the 
 
 add_custom_target(KisakCOD-native-d3d9-proofs
     DEPENDS
-        KisakCOD-native-d3d9-boundary-check
-        KisakCOD-native-d3d9-layout-standin
-        KisakCOD-native-d3d9-layout-native
+        ${native_d3d9_i386_checks}
         KisakCOD-native-d3d9-renderer-proof
 )
