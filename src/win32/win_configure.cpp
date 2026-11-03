@@ -11,12 +11,12 @@ void Sys_DetectVideoCard(int descLimit, char* description)
     _D3DADAPTER_IDENTIFIER9 id;
     vassert(descLimit  == sizeof(id.Description), "descLimit = %d", descLimit);
 
-    strcpy(description, "Unknown video card");
+    I_strncpyz(description, "Unknown video card", descLimit);
     IDirect3D9 *d3d9 = Direct3DCreate9(D3D_SDK_VERSION);
     if (d3d9)
     {
         if (d3d9->GetAdapterIdentifier(0, 0, &id) >= 0)
-            strcpy_s(description, descLimit - 1, id.Description);
+            I_strncpyz(description, id.Description, descLimit);
         d3d9->Release();
     }
 }
@@ -236,8 +236,9 @@ void Sys_SetAutoConfigureGHz(SysInfo* sysInfo)
 
 void __cdecl Sys_DetectCpuVendorAndName(char *vendor, char *name)
 {
-    strcpy(vendor, "KisakTech");
-    strcpy(name, "KSK-2900x 5.0khz (No AMD PSP or Intel ME)");
+    // Sizes of sys_info.cpuVendor and sys_info.cpuName, as the Linux build uses.
+    I_strncpyz(vendor, "KisakTech", 13);
+    I_strncpyz(name, "KSK-2900x 5.0khz (No AMD PSP or Intel ME)", 49);
 }
 #if 0 // KISAKTODO gotta do this ourselves
 void __cdecl Sys_DetectCpuVendorAndName(char* vendor, char* name)
