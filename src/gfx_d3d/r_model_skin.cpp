@@ -82,7 +82,7 @@ void R_SkinXModelCmd(_WORD *data)
 
         if (skinnedSurf->skinnedCachedOffset == -3)
         {
-            surfPos = (GfxModelSkinnedSurface *)((char *)surfPos + 4);
+            surfPos = (GfxModelSkinnedSurface *)((char *)surfPos + GFX_MODEL_SURF_HIDDEN_SIZE);
             continue;
         }
 
@@ -117,7 +117,7 @@ void R_SkinXModelCmd(_WORD *data)
 
         if (skinnedSurf->skinnedCachedOffset == -2)
         {
-            surfPos = (GfxModelSkinnedSurface *)((char *)surfPos + 56);
+            surfPos = (GfxModelSkinnedSurface *)((char *)surfPos + sizeof(GfxModelRigidSurface));
             continue;
         }
 
@@ -128,13 +128,13 @@ void R_SkinXModelCmd(_WORD *data)
 
         if (skinnedSurf->skinnedCachedOffset < 0)
         {
-            iassert((reinterpret_cast<uint>(skinnedSurf->skinnedVert) & 15) == 0);
+            iassert((reinterpret_cast<uintptr_t>(skinnedSurf->skinnedVert) & 15) == 0);
             skinVerticesOut = skinnedSurf->skinnedVert;
         }
         else
         {
             iassert(gfxBuf.skinnedCacheLockAddr);
-            iassert(((reinterpret_cast<uint>(gfxBuf.skinnedCacheLockAddr) & 15) == 0));
+            iassert(((reinterpret_cast<uintptr_t>(gfxBuf.skinnedCacheLockAddr) & 15) == 0));
             iassert(((skinnedSurf->skinnedCachedOffset & 15) == 0));
             skinVerticesOut = (GfxPackedVertex*)&gfxBuf.skinnedCacheLockAddr[skinnedSurf->skinnedCachedOffset];
         }
@@ -152,8 +152,10 @@ void R_SkinXModelCmd(_WORD *data)
             {
                 if (skinnedSurf->skinnedCachedOffset >= 0)
                     skinVertNormalOut = &gfxBuf.skinnedCacheNormalsAddr[skinnedSurf->skinnedCachedOffset >> 5];
-                if (skinnedSurf->skinnedVert)
-                    skinVertNormalIn = &gfxBuf.oldSkinnedCacheNormalsAddr[(int)skinnedSurf->skinnedVert >> 5];
+                // The union holds last frame's cache offset here (R_SkinSceneDObjModels),
+                // written as an int; on x86_64 the pointer's upper half is not part of it.
+                if (skinnedSurf->oldSkinnedCachedOffset)
+                    skinVertNormalIn = &gfxBuf.oldSkinnedCacheNormalsAddr[skinnedSurf->oldSkinnedCachedOffset >> 5];
             }
             R_SkinXSurfaceSkinnedSse(xsurf, &boneSkelMats[boneIndex], skinVertNormalIn, skinVertNormalOut, skinVerticesOut);
         }
@@ -437,8 +439,8 @@ void R_SkinXSurfaceRigid(
     const DObjSkelMat *bone; // [esp+5Ch] [ebp-4h]
 
     iassert(vertices);
-    iassert(!(reinterpret_cast<unsigned>(vertices) & 15));
-    iassert(!(reinterpret_cast<unsigned>(boneMatrix) & 15));
+    iassert(!(reinterpret_cast<uintptr_t>(vertices) & 15));
+    iassert(!(reinterpret_cast<uintptr_t>(boneMatrix) & 15));
 
     PROF_SCOPED("SkinXSurfaceWeight");
 

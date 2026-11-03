@@ -72,13 +72,21 @@ static bool R_ModelSort(XModel *model1, XModel *model2)
     return MemUsage < XModelGetMemUsage(model2);
 }
 
+// R_ModelList_f's list. Retail kept the count in the 4 bytes just before the
+// array and the callback treated both as one array of XAssetHeader, which only
+// works while a pointer is 4 bytes.
+struct ModelList
+{
+    int count;
+    XModel *sorted[2050];
+};
+
 void R_ModelList_f()
 {
     const char *Name; // eax
     const char *v1; // [esp+Ch] [ebp-212Ch]
     const char *fmt; // [esp+10h] [ebp-2128h]
-    int inData; // [esp+108h] [ebp-2030h] BYREF
-    XModel *v4[2050]; // [esp+10Ch] [ebp-202Ch] BYREF
+    ModelList modelList; // [esp+108h] [ebp-2030h] BYREF
     XModel *model; // [esp+2114h] [ebp-24h]
     int v6; // [esp+2118h] [ebp-20h]
     int v7; // [esp+211Ch] [ebp-1Ch]
@@ -91,18 +99,17 @@ void R_ModelList_f()
 
     v7 = 0;
     v6 = 0;
-    inData = 0;
-    DB_EnumXAssets(ASSET_TYPE_XMODEL, (void(*)(XAssetHeader, void *))R_GetModelList, &inData, 1);
-    //std::_Sort<XModel **, int, bool(*)(XModel *&, XModel *&)>(v4, &v4[inData], (4 * inData) >> 2, R_ModelSort);
-    std::sort(&v4[0], &v4[inData], R_ModelSort);
+    modelList.count = 0;
+    DB_EnumXAssets(ASSET_TYPE_XMODEL, R_GetModelList, &modelList, 1);
+    std::sort(&modelList.sorted[0], &modelList.sorted[modelList.count], R_ModelSort);
     Com_Printf(CON_CHANNEL_GFX, "---------------------------\n");
     Com_Printf(CON_CHANNEL_GFX, "SM# is the number of static model instances\n");
     Com_Printf(CON_CHANNEL_GFX, "instKB is static model instance usage\n");
     Com_Printf(CON_CHANNEL_GFX, "DE# is the number of dyn entity instances\n");
     Com_Printf(CON_CHANNEL_GFX, "   SM#  instKB   DE#   geoKB  name\n");
-    for (i = 0; i < inData; ++i)
+    for (i = 0; i < modelList.count; ++i)
     {
-        model = v4[i];
+        model = modelList.sorted[i];
         MemUsage = XModelGetMemUsage(model);
         v7 += MemUsage;
         MemoryUsage = R_StaticModelGetMemoryUsage(model, &modelCount);
@@ -142,10 +149,12 @@ void R_ModelList_f()
     Com_Printf(CON_CHANNEL_GFX, "Related commands: meminfo, imagelist, gfx_world, gfx_model, cg_drawfps, com_statmon, tempmeminfo\n");
 }
 
-void R_GetModelList(XAssetHeader header, XAssetHeader *data)
+void R_GetModelList(XAssetHeader header, void *data)
 {
-    //iassert( modelList->count < ARRAY_COUNT( modelList->sorted ) ); // KISAKTODO
-    data[(int)data->xmodelPieces++ + 1] = header;
+    ModelList *modelList = static_cast<ModelList *>(data);
+    iassert(modelList->count < ARRAY_COUNT(modelList->sorted));
+    if (modelList->count < ARRAY_COUNT(modelList->sorted))
+        modelList->sorted[modelList->count++] = header.model;
 }
 
 XModel *R_RegisterModel(const char *name)
@@ -282,7 +291,8 @@ int R_SkinXModel(
     XSurface* xsurf; // [esp+38h] [ebp-E4Ch]
     int surfaceIndex; // [esp+40h] [ebp-E44h]
     uint16_t* surfPos; // [esp+44h] [ebp-E40h]
-    uint8_t surfBuf[3580]; // [esp+48h] [ebp-E3Ch] BYREF
+    // Retail: 3580 bytes, room for 64 rigid records (the last one 4 bytes short).
+    alignas(16) uint8_t surfBuf[64 * sizeof(GfxModelRigidSurface)]; // [esp+48h] [ebp-E3Ch] BYREF
     uint32_t hidePartBits[4]; // [esp+E4Ch] [ebp-38h] BYREF
     //XSurface* surfaces; // [esp+E5Ch] [ebp-28h]
     XSurface* surfaces; // [esp+E60h] [ebp-24h] BYREF
@@ -313,6 +323,7 @@ int R_SkinXModel(
 
     int surfaceCount = XModelGetSurfaces(model, &surfaces, lodForDist);
     iassert(surfaceCount);
+    iassert(surfaceCount * sizeof(GfxModelRigidSurface) <= sizeof(surfBuf));
 
     if (obj)
         DObjGetHidePartBits(obj, hidePartBits);
@@ -327,8 +338,8 @@ int R_SkinXModel(
             | xsurf->partBits[1] & hidePartBits[1]
             | xsurf->partBits[0] & hidePartBits[0])
         {
-            *(_DWORD*)surfPos = -3;
-            surfPos += 2;
+            *(int32_t *)surfPos = -3;
+            surfPos = (uint16_t *)((char *)surfPos + GFX_MODEL_SURF_HIDDEN_SIZE);
         }
         else
         {
@@ -336,14 +347,15 @@ int R_SkinXModel(
                 startSurfPos = -2;
             else
                 startSurfPos = -1;
-            *(_DWORD*)surfPos = startSurfPos;
-            // @Correctness
-            *((_DWORD*)surfPos + 1) = (_DWORD)xsurf;
-            surfPos[7] = gfxEntIndex;
-            surfPos[8] = 0;
-            qmemcpy(surfPos + 12, placement, 0x1Cu);
-            *((float*)surfPos + 13) = val;
-            surfPos += 28;
+            // Every record here is rigid-sized, as in retail.
+            GfxModelRigidSurface *rigidSurf = (GfxModelRigidSurface *)surfPos;
+            rigidSurf->surf.skinnedCachedOffset = startSurfPos;
+            rigidSurf->surf.xsurf = xsurf;
+            rigidSurf->surf.info.gfxEntIndex = gfxEntIndex;
+            rigidSurf->surf.info.lightingHandle = 0;
+            rigidSurf->placement.base = *placement;
+            rigidSurf->placement.scale = val;
+            surfPos = (uint16_t *)(rigidSurf + 1);
         }
     }
     startSurfPos = InterlockedExchangeAdd(&frontEndDataOut->surfPos, (char*)surfPos - (char*)surfBuf);
@@ -412,7 +424,7 @@ void R_LockSkinnedCache()
         PROF_SCOPED("LockSkinnedCache");
 
         gfxBuf.skinnedCacheLockAddr = (unsigned char *)R_LockVertexBuffer(vb, 0, 0, 0x2000);
-        if (((uint32_t)gfxBuf.skinnedCacheLockAddr & 0xF) != 0)
+        if (((uintptr_t)gfxBuf.skinnedCacheLockAddr & 0xF) != 0)
         {
             R_UnlockVertexBuffer(vb);
             gfxBuf.skinnedCacheLockAddr = 0;

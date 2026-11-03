@@ -224,7 +224,7 @@ void R_AddDObjToScene(
                 sceneModel->obj = obj;
                 sceneModel->entnum = entnum;
                 scene.dpvs.sceneXModelIndex[entnum] = sceneEntIndex;
-                sceneModel->cachedLightingHandle = (uint16_t *)LongNoSwap((uint32_t)pose);
+                sceneModel->cachedLightingHandle = (uint16_t *)pose; // pose->lightingHandle
                 radius = XModelGetRadius(model);
                 CG_GetPoseOrigin(pose, sceneModel->placement.base.origin);
                 CG_GetPoseAngles(pose, angles);
@@ -507,7 +507,8 @@ const XSurface *R_GetXSurface(uint32_t *modelSurf, surfaceType_t surfType)
 {
     iassert( modelSurf );
     iassert( R_IsModelSurfaceType( surfType ) );
-    return (const XSurface *)modelSurf[1];
+    // Rigid and skinned records both start with a GfxModelSkinnedSurface.
+    return ((const GfxModelSkinnedSurface *)modelSurf)->xsurf;
 }
 
 void R_AddXModelSurfacesCamera(
@@ -557,8 +558,8 @@ void R_AddXModelSurfacesCamera(
         skinnedCachedOffset = modelSurf->surf.skinnedCachedOffset;
         if (modelSurf->surf.skinnedCachedOffset == -3)
         {
-            ++surfId;
-            modelSurf = (GfxModelRigidSurface*)((char*)modelSurf + 4);
+            surfId += GFX_MODEL_SURF_HIDDEN_SIZE / 4;
+            modelSurf = (GfxModelRigidSurface*)((char*)modelSurf + GFX_MODEL_SURF_HIDDEN_SIZE);
         }
         else
         {
@@ -693,8 +694,8 @@ GfxDrawSurf *R_AddXModelSurfaces(
         skinnedCachedOffset = modelSurf->surf.skinnedCachedOffset;
         if (modelSurf->surf.skinnedCachedOffset == -3)
         {
-            ++surfId;
-            modelSurf = (GfxModelRigidSurface *)((char *)modelSurf + 4);
+            surfId += GFX_MODEL_SURF_HIDDEN_SIZE / 4;
+            modelSurf = (GfxModelRigidSurface *)((char *)modelSurf + GFX_MODEL_SURF_HIDDEN_SIZE);
         }
         else
         {
@@ -826,17 +827,17 @@ LABEL_15:
             if (*(uint32_t *)modelSurf == -2)
             {
                 surfType = SF_BEGIN_XMODEL;
-                surfSize = 56;
+                surfSize = sizeof(GfxModelRigidSurface);
             }
             else
             {
                 if (*(uint32_t *)modelSurf == -3)
                 {
-                    surfSize = 4;
+                    surfSize = GFX_MODEL_SURF_HIDDEN_SIZE;
                     goto LABEL_22;
                 }
                 surfType = SF_XMODEL_SKINNED;
-                surfSize = 24;
+                surfSize = sizeof(GfxModelSkinnedSurface);
             }
             iassert(*material);
             iassert(rgp.sortedMaterials[(*material)->info.drawSurf.fields.materialSortedIndex] == *material);
@@ -848,8 +849,8 @@ LABEL_15:
                     R_WarnOncePerFrame(R_WARN_MAX_SCENE_DRAWSURFS, "R_AddDObjSurfacesCamera");
                     goto LABEL_45;
                 }
-                *((_WORD *)modelSurf + 7) = gfxEntIndex;
-                *((_WORD *)modelSurf + 8) = lightingHandle;
+                ((GfxModelSkinnedSurface *)modelSurf)->info.gfxEntIndex = gfxEntIndex;
+                ((GfxModelSkinnedSurface *)modelSurf)->info.lightingHandle = lightingHandle;
                 surfId = modelSurf - (char *)frontEndDataOut;
                 iassert( !(surfId & 3) );
                 surfId = surfId >> 2;
@@ -955,13 +956,13 @@ GfxDrawSurf *R_AddDObjSurfaces(
             if (*(uint32_t *)modelSurf == -2)
             {
                 surfType = SF_XMODEL_RIGID;
-                surfSize = 56;
+                surfSize = sizeof(GfxModelRigidSurface);
             }
             else
             {
                 if (*(uint32_t *)modelSurf == -3)
                 {
-                    surfSize = 4;
+                    surfSize = GFX_MODEL_SURF_HIDDEN_SIZE;
                 LABEL_17:
                     ++subMatIndex;
                     ++material;
@@ -969,7 +970,7 @@ GfxDrawSurf *R_AddDObjSurfaces(
                     goto LABEL_18;
                 }
                 surfType = SF_XMODEL_SKINNED;
-                surfSize = 24;
+                surfSize = sizeof(GfxModelSkinnedSurface);
             }
             iassert(*material);
             iassert(rgp.sortedMaterials[(*material)->info.drawSurf.fields.materialSortedIndex] == *material);
@@ -2021,7 +2022,7 @@ void R_GenerateMarkVertsForDynamicModels()
         entnum = sceneEntity->entnum;
         if (entnum < gfxCfg.entnumOrdinaryEnd && (scene.sceneDObjVisData[0][dobjIndex] & 1) != 0)
         {
-            lightHandle = *(_WORD *)LongNoSwap((uint32_t)sceneEntity->info.pose);
+            lightHandle = *(_WORD *)sceneEntity->info.pose; // pose->lightingHandle
             FX_GenerateMarkVertsForEntDObj(
                 scene.dpvs.localClientNum,
                 entnum,
