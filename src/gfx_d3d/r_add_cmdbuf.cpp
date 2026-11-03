@@ -108,3 +108,11 @@ void R_WritePrimDrawSurfData(GfxDelayedCmdBuf *delayedCmdBuf, uint8_t *data, uin
     delayedCmdBuf->primDrawSurfPos += count;
 }
 
+void R_WritePrimDrawSurfPointer(GfxDelayedCmdBuf *delayedCmdBuf, const void *ptr)
+{
+    uint32_t words[PRIM_DRAW_SURF_PTR_WORDS];
+    static_assert(sizeof(words) == sizeof(ptr));
+    memcpy(words, &ptr, sizeof(ptr));
+    R_WritePrimDrawSurfData(delayedCmdBuf, (uint8_t *)words, PRIM_DRAW_SURF_PTR_WORDS);
+}
+

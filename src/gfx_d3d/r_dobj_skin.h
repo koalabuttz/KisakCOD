@@ -35,6 +35,17 @@ struct GfxModelRigidSurface // sizeof=0x38
 };
 static_assert(LAYOUT_32BIT(sizeof(GfxModelRigidSurface) == 56));
 
+// Model surface records in the front end's surface buffer, addressed by surfId
+// in 4-byte units. skinnedCachedOffset -2 starts a GfxModelRigidSurface, -3 a
+// hidden surface that is only that int, anything else a GfxModelSkinnedSurface.
+// The records hold 8-byte pointers on x86_64, so there a hidden surface takes
+// 8 bytes to keep the next record aligned. On i386 it is the retail 4.
+inline constexpr int GFX_MODEL_SURF_HIDDEN_SIZE =
+    alignof(GfxModelSkinnedSurface) > 4 ? (int)alignof(GfxModelSkinnedSurface) : 4;
+static_assert(LAYOUT_32BIT(GFX_MODEL_SURF_HIDDEN_SIZE == 4));
+static_assert(sizeof(GfxModelSkinnedSurface) % GFX_MODEL_SURF_HIDDEN_SIZE == 0
+    && sizeof(GfxModelRigidSurface) % GFX_MODEL_SURF_HIDDEN_SIZE == 0);
+
 struct SkinXModelCmd // sizeof=0x1C
 {                                       // ...
     void *modelSurfs;

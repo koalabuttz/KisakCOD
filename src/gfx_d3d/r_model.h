@@ -5,7 +5,7 @@
 
 void TRACK_r_model();
 void R_ModelList_f();
-void R_GetModelList(XAssetHeader header, XAssetHeader *data);
+void R_GetModelList(XAssetHeader header, void *data);
 XModel *R_RegisterModel(const char *name);
 void R_XModelDebug(const DObj_s *obj, int *partBits);
 void R_XModelDebugBoxes(const DObj_s *obj, int *partBits);

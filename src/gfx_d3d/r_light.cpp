@@ -337,9 +337,11 @@ void R_GetBspOmniLightSurfs(const GfxLight *light, int lightIndex, GfxBspDrawSur
 
 int R_AllowBspOmniLight(int surfIndex, void *bspLightCallbackAsVoid)
 {
-    return *(_BYTE *)(*(uint32_t *)bspLightCallbackAsVoid + surfIndex)
-        && *((float *)bspLightCallbackAsVoid + 4) >= PointToBoxDistSq(
-            (const float *)bspLightCallbackAsVoid + 1,
+    const BspOmniLightCallback *bspLightCallback = (const BspOmniLightCallback *)bspLightCallbackAsVoid;
+
+    return bspLightCallback->surfaceVisData[surfIndex]
+        && bspLightCallback->radiusSq >= PointToBoxDistSq(
+            bspLightCallback->position,
             rgp.world->dpvs.surfaces[surfIndex].bounds[0],
             rgp.world->dpvs.surfaces[surfIndex].bounds[1]);
 }
@@ -448,9 +450,11 @@ void R_GetBspSpotLightSurfs(const GfxLight *light, int lightIndex, GfxBspDrawSur
 
 int R_AllowBspSpotLightShadows(int surfIndex, void *bspLightCallbackAsVoid)
 {
+    const BspSpotLightCallback *bspLightCallback = (const BspSpotLightCallback *)bspLightCallbackAsVoid;
+
     if (r_spotLightShadows->current.enabled)
         return R_BoxInPlanes(
-            (const float (*)[4])((uint32_t)bspLightCallbackAsVoid + 4),
+            bspLightCallback->planes,
             rgp.world->dpvs.surfaces[surfIndex].bounds[0],
             rgp.world->dpvs.surfaces[surfIndex].bounds[1]);
     else
@@ -545,9 +549,11 @@ int R_BoxInPlanes(const float (*planes)[4], const float *mins, const float *maxs
 
 int R_AllowBspSpotLight(int surfIndex, void *bspLightCallbackAsVoid)
 {
-    if (*(_BYTE *)(*(uint32_t *)bspLightCallbackAsVoid + surfIndex))
+    const BspSpotLightCallback *bspLightCallback = (const BspSpotLightCallback *)bspLightCallbackAsVoid;
+
+    if (bspLightCallback->surfaceVisData[surfIndex])
         return R_BoxInPlanes(
-            (const float (*)[4])((uint32_t)bspLightCallbackAsVoid + 4),
+            bspLightCallback->planes,
             rgp.world->dpvs.surfaces[surfIndex].bounds[0],
             rgp.world->dpvs.surfaces[surfIndex].bounds[1]);
     else
@@ -722,12 +728,12 @@ void R_GetStaticModelLightSurfs(const GfxLight **visibleLights, int visibleCount
                     drawSurf = material->info.drawSurf;
                     //HIDWORD(drawSurf.packed) = ((staticModelId.surfType & 0xF) << 18) | HIDWORD(drawSurf.packed) & 0xFFC3FFFF;
                     drawSurf.fields.surfType = staticModelId.surfType;
-                    if (!R_AllocDrawSurf(&surfData.delayedCmdBuf, drawSurf, &surfData.drawSurfList, 3u))
+                    if (!R_AllocDrawSurf(&surfData.delayedCmdBuf, drawSurf, &surfData.drawSurfList, 2u + PRIM_DRAW_SURF_PTR_WORDS))
                         break;
                     R_AddDelayedStaticModelDrawSurf(&surfData.delayedCmdBuf, &surfaces[surfaceIndex], (uint8_t*)list, 1u);
                     if (light->type == GFX_LIGHT_TYPE_SPOT && r_spotLightShadows->current.enabled && r_spotLightSModelShadows->current.enabled)
                     {
-                        if (!R_AllocDrawSurf(&shadowSurfData.delayedCmdBuf, drawSurf, &shadowSurfData.drawSurfList, 3u))
+                        if (!R_AllocDrawSurf(&shadowSurfData.delayedCmdBuf, drawSurf, &shadowSurfData.drawSurfList, 2u + PRIM_DRAW_SURF_PTR_WORDS))
                             break;
                         R_AddDelayedStaticModelDrawSurf(
                             &shadowSurfData.delayedCmdBuf,

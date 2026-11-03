@@ -47,7 +47,7 @@ void  R_DrawEmissive(const GfxViewInfo *viewInfo, GfxCmdBuf *cmdBuf);
 void R_DrawEmissiveCallback(const void *userData, GfxCmdBufContext context, GfxCmdBufContext prepassContext);
 void RB_Draw3DCommon();
 void R_SetResolvedScene(GfxCmdBufContext context);
-GfxCmdBufSourceState *RB_DebugShaderDrawCommandsCommon();
+void RB_DebugShaderDrawCommandsCommon();
 void RB_StandardDrawCommandsCommon();
 void RB_ApplyLatePostEffects(const GfxViewInfo *viewInfo);
 void RB_DrawDebugPostEffects();

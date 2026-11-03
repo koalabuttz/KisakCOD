@@ -116,7 +116,6 @@ uint8_t *Outdoor_ComputeTexels()
         yWorld = outdoorGlob.invScale[1] * ((double)y + 0.5 - outdoorGlob.add[1]);
         for (x = 0; ; ++x)
         {
-            result = (uint8_t *)x;
             if (x == outdoorMapSize[0])
                 break;
             xWorld = outdoorGlob.invScale[0] * ((double)x + 0.5 - outdoorGlob.add[0]);

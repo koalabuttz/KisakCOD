@@ -291,3 +291,8 @@ int R_AllocDrawSurf(
     uint32_t size);
 void R_WritePrimDrawSurfInt(GfxDelayedCmdBuf *delayedCmdBuf, uint32_t value);
 void R_WritePrimDrawSurfData(GfxDelayedCmdBuf *delayedCmdBuf, uint8_t *data, uint32_t count);
+
+// The static model draw stream stores an XSurface pointer. It takes as many
+// 32-bit words as a pointer does: one on i386 (the retail layout), two on x86_64.
+inline constexpr uint32_t PRIM_DRAW_SURF_PTR_WORDS = sizeof(void *) / sizeof(uint32_t);
+void R_WritePrimDrawSurfPointer(GfxDelayedCmdBuf *delayedCmdBuf, const void *ptr);
