@@ -3,6 +3,8 @@
 #include <universal/layout_assert.h>
 #include "scr_stringlist.h"
 
+#include <string.h>
+
 #undef GetObject
 
 // LWSS: Custom enum typename
@@ -100,12 +102,16 @@ static_assert(LAYOUT_32BIT(sizeof(VariableStackBuffer) == 0xC));
 
 union VariableUnion // sizeof=0x4
 {                                       // ...
+    // Clear the whole union first: on 64-bit builds it is pointer sized,
+    // and a 32-bit store would leave the upper half undefined.
     VariableUnion(float f)
     {
+        codePosValue = nullptr;
         floatValue = f;
     }
     VariableUnion(int i)
     {
+        codePosValue = nullptr;
         intValue = i;
     }
     VariableUnion(char *str)
@@ -118,7 +124,7 @@ union VariableUnion // sizeof=0x4
     }
     VariableUnion()
     {
-        intValue = 0;
+        codePosValue = nullptr;
     }
 
     int intValue;
@@ -131,6 +137,23 @@ union VariableUnion // sizeof=0x4
     uint32_t entityOffset;
 };
 static_assert(LAYOUT_32BIT(sizeof(VariableUnion) == 0x4));
+
+// An archived thread stack (VariableStackBuffer::buf) holds one unaligned entry
+// per value: the type byte, then the whole VariableUnion. 5 bytes on i386.
+#define SCR_STACK_ENTRY_SIZE (1 + (int)sizeof(VariableUnion))
+#define SCR_STACK_VALUE_SIZE ((int)sizeof(VariableUnion))
+
+inline VariableUnion Scr_ReadStackValue(const char *p)
+{
+    VariableUnion u;
+    memcpy(&u, p, sizeof(u));
+    return u;
+}
+
+inline void Scr_WriteStackValue(char *p, VariableUnion u)
+{
+    memcpy(p, &u, sizeof(u));
+}
 
 struct VariableValue // sizeof=0x8
 {   
@@ -464,9 +487,9 @@ void  Scr_KillThread(uint32_t parentId);
 void  Scr_CheckLeakRange(uint32_t begin, uint32_t end);
 void  Scr_CheckLeaks(void);
 
-int  ThreadInfoCompare(_DWORD* info1, _DWORD* info2);
+int  ThreadInfoCompare(const void* info1, const void* info2);
 //int  VariableInfoCompare(void const*, void const*);
-int VariableInfoFileNameCompare(_DWORD* info1, _DWORD* info2);
+int VariableInfoFileNameCompare(const void* info1, const void* info2);
 int VariableInfoCountCompare(_DWORD* info1, _DWORD* info2);
 int VariableInfoFileLineCompare(_DWORD* info1, _DWORD* info2);
 uint32_t  FindVariableIndexInternal2(uint32_t name, uint32_t index);

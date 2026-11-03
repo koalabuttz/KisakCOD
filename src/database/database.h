@@ -1,13 +1,15 @@
 #pragma once
 #include <cstdint>
 #include <cstddef>
+#include <type_traits>
 
 #include <zlib/zlib.h>
 
 #include <xanim/xanim.h>
 #include <xanim/xmodel.h>
 #include <win32/win_local.h>
-#
+
+#include "db_disk_layout.h"
 
 extern bool g_anyFastFileLoaded;
 
@@ -191,6 +193,9 @@ void DB_LoadXFile(
     int32_t allocType);
 
 // db_memory
+#if KISAK_DB_CONVERT_RECORDS
+uint32_t DB_NativeBlockSize(uint32_t retailSize);
+#endif
 void DB_RecoverGeometryBuffers(XZoneMemory *zoneMem);
 void DB_ReleaseGeometryBuffers(XZoneMemory *zoneMem);
 void DB_AllocXZoneMemory(
@@ -208,12 +213,77 @@ uint8_t *DB_GetStreamPos();
 uint8_t *DB_AllocStreamPos(int32_t alignment);
 void DB_IncStreamPos(int32_t size);
 const void **DB_InsertPointer();
+#if KISAK_DB_CONVERT_RECORDS
+void DB_IncStreamPosConverted(int32_t nativeSize, int32_t diskSize, const DBDiskLayout *layout);
+uint8_t *DB_ResolveDiskOffset(uint32_t offset);
+#endif
 
 // db_stream_load
 void Load_Stream(bool atStreamStart, uint8_t *ptr, int32_t size);
 void Load_DelayStream();
+#if !KISAK_DB_CONVERT_RECORDS
 void DB_ConvertOffsetToAlias(uint32_t *data);
 void DB_ConvertOffsetToPointer(uint32_t *data);
+#endif
+#if KISAK_DB_CONVERT_RECORDS
+void Load_StreamConverted(bool atStreamStart, uint8_t *ptr, int32_t diskSize, const DBDiskLayout *layout);
+void DB_LoadXFileRecord(uint8_t *dest, int32_t diskSize, const DBDiskLayout *layout);
+uintptr_t DB_WidenDiskPointer(uint32_t value);
+#endif
+
+// Streams `size` retail bytes of records of type T to `ptr`. On 32-bit targets
+// this is the byte copy above; on 64-bit targets each record is expanded to the
+// native layout (db_disk_layout.h). `size` stays the retail byte count.
+inline void Load_Stream(bool atStreamStart, void *ptr, int32_t size)
+{
+    Load_Stream(atStreamStart, (uint8_t *)ptr, size);
+}
+
+template <typename T>
+inline void Load_Stream(bool atStreamStart, T *ptr, int32_t size)
+{
+#if KISAK_DB_CONVERT_RECORDS
+    Load_StreamConverted(atStreamStart, (uint8_t *)ptr, size, &DB_DiskLayoutOf<std::remove_cv_t<T>>::layout);
+#else
+    Load_Stream(atStreamStart, (uint8_t *)ptr, size);
+#endif
+}
+
+// Reads one retail record straight from the file, outside the block streams.
+template <typename T>
+inline void DB_LoadXFileRecord(T *dest)
+{
+#if KISAK_DB_CONVERT_RECORDS
+    const DBDiskLayout *layout = &DB_DiskLayoutOf<std::remove_cv_t<T>>::layout;
+    DB_LoadXFileRecord((uint8_t *)dest, layout->diskSize, layout);
+#else
+    DB_LoadXFileData((uint8_t *)dest, sizeof(T));
+#endif
+}
+
+// A pointer field that holds a retail block offset (block << 28 | position, + 1)
+// becomes the address of what was loaded there.
+template <typename T>
+inline void DB_ConvertOffsetToPointer(T **data)
+{
+#if KISAK_DB_CONVERT_RECORDS
+    *data = (T *)DB_ResolveDiskOffset((uint32_t)(uintptr_t)*data);
+#else
+    DB_ConvertOffsetToPointer((uint32_t *)data);
+#endif
+}
+
+// A pointer field that holds a retail block offset of a pointer slot becomes
+// the pointer stored in that slot.
+template <typename T>
+inline void DB_ConvertOffsetToAlias(T **data)
+{
+#if KISAK_DB_CONVERT_RECORDS
+    *data = *(T **)DB_ResolveDiskOffset((uint32_t)(uintptr_t)*data);
+#else
+    DB_ConvertOffsetToAlias((uint32_t *)data);
+#endif
+}
 void Load_XStringCustom(char **str);
 void Load_TempStringCustom(char **str);
 

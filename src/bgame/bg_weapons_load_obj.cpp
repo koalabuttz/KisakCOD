@@ -941,7 +941,7 @@ snd_alias_list_t **BG_RegisterSurfaceTypeSounds(const char *surfaceSoundBase)
     if (surfaceTypeSoundListCount == 16)
         Com_Error(ERR_DROP, "Exceeded MAX_SURFACE_TYPE_SOUND_LISTS (%d)", 16);
 
-    result = (snd_alias_list_t **)Hunk_AllocLow(0x74u, "BG_RegisterSurfaceTypeSounds", 15);
+    result = (snd_alias_list_t **)Hunk_AllocLow(sizeof(snd_alias_list_t *) * SURF_TYPECOUNT, "BG_RegisterSurfaceTypeSounds", 15);
     Com_sprintf(aliasName, 0x100u, "%s_default", surfaceSoundBase);
     defaultAliasList = Com_FindSoundAlias(aliasName);
     for (i = 0; i < 29; ++i)
@@ -1236,7 +1236,7 @@ WeaponDef *BG_LoadWeaponDefInternal(const char *one, const char *two)
     WeaponDef *weapDef; // [esp+2870h] [ebp-4h]
 
     len = strlen("WEAPONFILE");
-    weapDef = (WeaponDef *)Hunk_AllocLow(0x878u, "BG_LoadWeaponDefInternal", 9);
+    weapDef = (WeaponDef *)Hunk_AllocLow(sizeof(WeaponDef), "BG_LoadWeaponDefInternal", 9);
     InitWeaponDef(weapDef);
     Com_sprintf(dest, 0x40u, "weapons/%s/%s", one, two);
     v11 = FS_FOpenFileByMode(dest, &f, FS_READ);

@@ -79,7 +79,7 @@ void RB_TouchAllImages()
     if (tess.indexCount)
         RB_EndTessSurface();
     R_GetImageList(&imageList);
-    qsort(imageList.image, imageList.count, 4u, (int(*)(const void *, const void *))RB_CompareTouchImages);
+    qsort(imageList.image, imageList.count, sizeof(imageList.image[0]), (int(*)(const void *, const void *))RB_CompareTouchImages);
     v6 = 0;
     for (i = 0; i < imageList.count && imageList.image[i]->semantic; ++i)
     {

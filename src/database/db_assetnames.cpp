@@ -96,105 +96,63 @@ static const char *DB_StringTableGetName(const XAssetHeader *header);
 static const char *DB_LocalizeEntryGetName(const XAssetHeader *header);
 static void DB_LocalizeEntrySetName(XAssetHeader *header, const char *name);
 
-int32_t DB_SizeofXAsset_RawFile_()
+// Size of the asset struct each pool holds, used to clone an asset into its
+// pool slot. The retail binary folded the size functions of types that share a
+// 32-bit size (the decompiled table named PhysPreset's "GameWorldSp", for
+// example), which only holds on i386; each slot now names its own type.
+template <typename T>
+static int32_t DB_SizeofXAsset()
 {
-    return sizeof(RawFile);
+    return sizeof(T);
 }
-int32_t DB_SizeofXAsset_GameWorldSp_()
-{
-    return sizeof(GameWorldSp);
-}
-int32_t DB_SizeofXAsset_XAnimParts_()
-{
-    return sizeof(XAnimParts);
-}
-int32_t DB_SizeofXAsset_XModel_()
-{
-    return sizeof(XModel);
-}
-int32_t DB_SizeofXAsset_Material_()
-{
-    return sizeof(Material);
-}
-int32_t DB_SizeofXAsset_MaterialTechniqueSet_()
-{
-    return sizeof(MaterialTechniqueSet);
-}
-int32_t DB_SizeofXAsset_GfxImage_()
-{
-    return sizeof(GfxImage);
-}
-int32_t DB_SizeofXAsset_SndCurve_()
-{
-    return sizeof(SndCurve);
-}
-int32_t DB_SizeofXAsset_menuDef_t_()
-{
-    return sizeof(menuDef_t);
-}
-int32_t DB_SizeofXAsset_StringTable_()
-{
-    return sizeof(StringTable);
-}
-int32_t DB_SizeofXAsset_GameWorldMp_()
-{
-    return sizeof(GameWorldMp);
-}
-int32_t DB_SizeofXAsset_GfxWorld_()
-{
-    return sizeof(GfxWorld);
-}
-int32_t DB_SizeofXAsset_Font_s_()
-{
-    return sizeof(Font_s);
-}
-int32_t DB_SizeofXAsset_FxImpactTable_()
-{
-    return sizeof(FxImpactTable);
-}
-int32_t DB_SizeofXAsset_WeaponDef_()
-{
-    return sizeof(WeaponDef);
-}
-int32_t DB_SizeofXAsset_FxEffectDef_()
-{
-    return sizeof(FxEffectDef);
-}
+
+// The retail size sharing the folded table relied on, still true on i386.
+static_assert(LAYOUT_32BIT(sizeof(PhysPreset) == sizeof(GameWorldSp)));
+static_assert(LAYOUT_32BIT(sizeof(LoadedSound) == sizeof(GameWorldSp)));
+static_assert(LAYOUT_32BIT(sizeof(MapEnts) == sizeof(RawFile)));
+static_assert(LAYOUT_32BIT(sizeof(XModelPieces) == sizeof(RawFile)));
+static_assert(LAYOUT_32BIT(sizeof(snd_alias_list_t) == sizeof(RawFile)));
+static_assert(LAYOUT_32BIT(sizeof(MenuList) == sizeof(RawFile)));
+static_assert(LAYOUT_32BIT(sizeof(clipMap_t) == sizeof(menuDef_t)));
+static_assert(LAYOUT_32BIT(sizeof(ComWorld) == sizeof(StringTable)));
+static_assert(LAYOUT_32BIT(sizeof(GfxLightDef) == sizeof(StringTable)));
+static_assert(LAYOUT_32BIT(sizeof(LocalizeEntry) == sizeof(FxImpactTable)));
+
 int(*DB_GetXAssetSizeHandler[33])() =
 {
-    DB_SizeofXAsset_RawFile_,
-    DB_SizeofXAsset_GameWorldSp_,
-    DB_SizeofXAsset_XAnimParts_,
-    DB_SizeofXAsset_XModel_,
-    DB_SizeofXAsset_Material_,
-    DB_SizeofXAsset_MaterialTechniqueSet_,
-    DB_SizeofXAsset_GfxImage_,
-    DB_SizeofXAsset_RawFile_,
-    DB_SizeofXAsset_SndCurve_,
-    DB_SizeofXAsset_GameWorldSp_,
-    DB_SizeofXAsset_menuDef_t_,
-    DB_SizeofXAsset_menuDef_t_,
-    DB_SizeofXAsset_StringTable_,
-    DB_SizeofXAsset_GameWorldSp_,
-    DB_SizeofXAsset_GameWorldMp_,
-    DB_SizeofXAsset_RawFile_,
-    DB_SizeofXAsset_GfxWorld_,
-    DB_SizeofXAsset_StringTable_,
-    0,
-    DB_SizeofXAsset_Font_s_,
-    DB_SizeofXAsset_RawFile_,
-    DB_SizeofXAsset_menuDef_t_,
-    DB_SizeofXAsset_FxImpactTable_,
-    DB_SizeofXAsset_WeaponDef_,
-    0,
-    DB_SizeofXAsset_FxEffectDef_,
-    DB_SizeofXAsset_FxImpactTable_,
-    0,
-    0,
-    0,
-    0,
-    DB_SizeofXAsset_RawFile_,
-    DB_SizeofXAsset_StringTable_,
+    DB_SizeofXAsset<XModelPieces>,      // ASSET_TYPE_XMODELPIECES
+    DB_SizeofXAsset<PhysPreset>,        // ASSET_TYPE_PHYSPRESET
+    DB_SizeofXAsset<XAnimParts>,        // ASSET_TYPE_XANIMPARTS
+    DB_SizeofXAsset<XModel>,            // ASSET_TYPE_XMODEL
+    DB_SizeofXAsset<Material>,          // ASSET_TYPE_MATERIAL
+    DB_SizeofXAsset<MaterialTechniqueSet>, // ASSET_TYPE_TECHNIQUE_SET
+    DB_SizeofXAsset<GfxImage>,          // ASSET_TYPE_IMAGE
+    DB_SizeofXAsset<snd_alias_list_t>,  // ASSET_TYPE_SOUND
+    DB_SizeofXAsset<SndCurve>,          // ASSET_TYPE_SOUND_CURVE
+    DB_SizeofXAsset<LoadedSound>,       // ASSET_TYPE_LOADED_SOUND
+    DB_SizeofXAsset<clipMap_t>,         // ASSET_TYPE_CLIPMAP
+    DB_SizeofXAsset<clipMap_t>,         // ASSET_TYPE_CLIPMAP_PVS
+    DB_SizeofXAsset<ComWorld>,          // ASSET_TYPE_COMWORLD
+    DB_SizeofXAsset<GameWorldSp>,       // ASSET_TYPE_GAMEWORLD_SP
+    DB_SizeofXAsset<GameWorldMp>,       // ASSET_TYPE_GAMEWORLD_MP
+    DB_SizeofXAsset<MapEnts>,           // ASSET_TYPE_MAP_ENTS
+    DB_SizeofXAsset<GfxWorld>,          // ASSET_TYPE_GFXWORLD
+    DB_SizeofXAsset<GfxLightDef>,       // ASSET_TYPE_LIGHT_DEF
+    0,                                  // ASSET_TYPE_UI_MAP
+    DB_SizeofXAsset<Font_s>,            // ASSET_TYPE_FONT
+    DB_SizeofXAsset<MenuList>,          // ASSET_TYPE_MENULIST
+    DB_SizeofXAsset<menuDef_t>,         // ASSET_TYPE_MENU
+    DB_SizeofXAsset<LocalizeEntry>,     // ASSET_TYPE_LOCALIZE_ENTRY
+    DB_SizeofXAsset<WeaponDef>,         // ASSET_TYPE_WEAPON
+    0,                                  // ASSET_TYPE_SNDDRIVER_GLOBALS
+    DB_SizeofXAsset<FxEffectDef>,       // ASSET_TYPE_FX
+    DB_SizeofXAsset<FxImpactTable>,     // ASSET_TYPE_IMPACT_FX
+    0,                                  // ASSET_TYPE_AITYPE
+    0,                                  // ASSET_TYPE_MPTYPE
+    0,                                  // ASSET_TYPE_CHARACTER
+    0,                                  // ASSET_TYPE_XMODELALIAS
+    DB_SizeofXAsset<RawFile>,           // ASSET_TYPE_RAWFILE
+    DB_SizeofXAsset<StringTable>,       // ASSET_TYPE_STRINGTABLE
 };
 
 static void DB_StringTableSetName(XAssetHeader *header, const char *name)

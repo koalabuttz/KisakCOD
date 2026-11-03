@@ -120,7 +120,7 @@ nodetype *Huff_initNode(huff_t *huff, int ch, int weight)
 
 int nodeCmp(const void *left, const void *right)
 {
-    return *(uint32_t *)(*(uint32_t *)left + 12) - *(uint32_t *)(*(uint32_t *)right + 12);
+    return (*(nodetype *const *)left)->weight - (*(nodetype *const *)right)->weight;
 }
 
 // ---------------------------------------------------------------------------

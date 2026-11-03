@@ -206,8 +206,8 @@ void Scr_InitDebuggerMain()
         return;
 
     scrDebuggerGlob.variableBreakpoints =
-        (Scr_WatchElementDoubleNode_t **)Hunk_AllocDebugMem(4 * SCR_VARIABLE_BREAKPOINT_COUNT);
-    memset((uint8_t *)scrDebuggerGlob.variableBreakpoints, 0, 4 * SCR_VARIABLE_BREAKPOINT_COUNT);
+        (Scr_WatchElementDoubleNode_t **)Hunk_AllocDebugMem(sizeof(Scr_WatchElementDoubleNode_t *) * SCR_VARIABLE_BREAKPOINT_COUNT);
+    memset((uint8_t *)scrDebuggerGlob.variableBreakpoints, 0, sizeof(Scr_WatchElementDoubleNode_t *) * SCR_VARIABLE_BREAKPOINT_COUNT);
 
     scrDebuggerGlob.assignHead = 0;
     scrDebuggerGlob.assignHeadCodePos = 0;

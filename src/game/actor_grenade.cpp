@@ -769,7 +769,7 @@ int Actor_Grenade_CheckDesperateToss(actor_s *self, float *vFrom, float *vVelOut
             qsort(
                 g_vGrenadeHint,
                 level.grenadeHintCount,
-                0xCu,
+                sizeof(g_vGrenadeHint[0]),
                 (int(*)(const void *, const void *))compare_desperate_hints),
             v6 = 0,
             level.grenadeHintCount))

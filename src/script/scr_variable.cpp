@@ -48,14 +48,14 @@ int  VariableInfoFunctionCompare(void *p_info1, void *p_info2)
 	const char *functionName1; // [esp+4h] [ebp-8h]
 	int fileNameCompare; // [esp+8h] [ebp-4h]
 
-	_DWORD *info1 = (_DWORD *)p_info1;
-	_DWORD *info2 = (_DWORD *)p_info2;
+	const VariableDebugInfo *info1 = (const VariableDebugInfo *)p_info1;
+	const VariableDebugInfo *info2 = (const VariableDebugInfo *)p_info2;
 
-	fileNameCompare = VariableInfoFileNameCompare(info1, info2);
+	fileNameCompare = VariableInfoFileNameCompare(p_info1, p_info2);
 	if (fileNameCompare)
 		return fileNameCompare;
-	functionName1 = (const char *)info1[2];
-	functionName2 = (const char *)info2[2];
+	functionName1 = info1->functionName;
+	functionName2 = info2->functionName;
 	if (!functionName1)
 		return 1;
 	if (functionName2)
@@ -1102,7 +1102,7 @@ uint32_t  Scr_FindAllThreads(uint32_t selfId, uint32_t* threads, uint32_t localI
 		entryValue = &scrVarGlob.variableList[id + VARIABLELIST_CHILD_BEGIN];
 		if ((entryValue->w.status & VAR_STAT_MASK) != 0 && (entryValue->w.status & VAR_MASK) == VAR_STACK)
 		{
-			for (threadId = *(uint32_t*)(entryValue->u.u.intValue + 8);
+			for (threadId = entryValue->u.u.stackValue->localId;
 				threadId;
 				threadId = GetSafeParentLocalId(threadId))
 			{
@@ -1130,7 +1130,7 @@ uint32_t  Scr_FindAllThreads(uint32_t selfId, uint32_t* threads, uint32_t localI
 			{
 				if (GetValueType(stackId) == VAR_STACK)
 				{
-					for (threadId = *(uint32_t*)(GetVariableValueAddress(stackId)->u.intValue + 8);
+					for (threadId = GetVariableValueAddress(stackId)->u.stackValue->localId;
 						threadId;
 						threadId = GetSafeParentLocalId(threadId))
 					{
@@ -1250,17 +1250,17 @@ void  Scr_DumpScriptVariables(bool spreadsheet,
 				if (summary)
 				{
 					VariableInfoCompareCallBack = (int(*)(const void *, const void *))VariableInfoFileNameCompare;
-					qsort(infoArray, num, 0x10u, (int(*)(const void *, const void *))VariableInfoFileNameCompare);
+					qsort(infoArray, num, sizeof(VariableDebugInfo), VariableInfoFileNameCompare);
 				}
 				else if (functionSummary)
 				{
 					VariableInfoCompareCallBack = (int(*)(const void *, const void *))VariableInfoFunctionCompare;
-					qsort(infoArray, num, 0x10u, (int(*)(const void *, const void *))VariableInfoFunctionCompare);
+					qsort(infoArray, num, sizeof(VariableDebugInfo), (int(*)(const void *, const void *))VariableInfoFunctionCompare);
 				}
 				else
 				{
 					VariableInfoCompareCallBack = (int(*)(const void *, const void *))CompareThreadIndices;
-					qsort(infoArray, num, 0x10u, (int(*)(const void *, const void *))CompareThreadIndices);
+					qsort(infoArray, num, sizeof(VariableDebugInfo), (int(*)(const void *, const void *))CompareThreadIndices);
 				}
 				i = 0;
 				while (i < num)
@@ -1273,9 +1273,9 @@ void  Scr_DumpScriptVariables(bool spreadsheet,
 					} while (i < num && !VariableInfoCompareCallBack(pInfoa, &infoArray[i]));
 				}
 				if (lineSort)
-					qsort(infoArray, num, 0x10u, (int(*)(const void *, const void *))VariableInfoFileLineCompare);
+					qsort(infoArray, num, sizeof(VariableDebugInfo), (int(*)(const void *, const void *))VariableInfoFileLineCompare);
 				else
-					qsort(infoArray, num, 0x10u, (int(*)(const void *, const void *))VariableInfoCountCompare);
+					qsort(infoArray, num, sizeof(VariableDebugInfo), (int(*)(const void *, const void *))VariableInfoCountCompare);
 				Com_Printf(CON_CHANNEL_PARSERSCRIPT, "********************************\n");
 				if (spreadsheet)
 				{
@@ -1668,7 +1668,7 @@ void  SetVariableEntityFieldValue(uint32_t entId, uint32_t fieldName, VariableVa
 		iassert(!(entryValue->w.type & VAR_MASK));
 
 		entryValue->w.status |= value->type;
-		entryValue->u.u.intValue = value->u.intValue;
+		entryValue->u.u = value->u;
 	}
 }
 
@@ -1872,7 +1872,7 @@ uint32_t  Scr_EvalFieldObject(uint32_t tempVariable, VariableValue* value)
 			iassert(type >= FIRST_OBJECT);
 
 			tempValue.type = VAR_POINTER;
-			tempValue.u.intValue = value->u.intValue;
+			tempValue.u = value->u;
 
 			SetVariableValue(tempVariable, &tempValue);
 			return tempValue.u.pointerValue;
@@ -2069,12 +2069,12 @@ void  Scr_EvalPlus(VariableValue* value1, VariableValue* value2)
 		break;
 	case VAR_VECTOR:
 		v11 = Scr_AllocVector();
-		*v11 = *(float*)value1->u.intValue + *(float*)value2->u.intValue;
-		v11[1] = *(float*)(value1->u.intValue + 4) + *(float*)(value2->u.intValue + 4);
-		v11[2] = *(float*)(value1->u.intValue + 8) + *(float*)(value2->u.intValue + 8);
+		*v11 = value1->u.vectorValue[0] + value2->u.vectorValue[0];
+		v11[1] = value1->u.vectorValue[1] + value2->u.vectorValue[1];
+		v11[2] = value1->u.vectorValue[2] + value2->u.vectorValue[2];
 		RemoveRefToVector(value1->u.vectorValue);
 		RemoveRefToVector(value2->u.vectorValue);
-		value1->u.intValue = (int)v11;
+		value1->u.vectorValue = v11;
 		break;
 	case VAR_FLOAT:
 		value1->u.floatValue = value1->u.floatValue + value2->u.floatValue;
@@ -2101,12 +2101,12 @@ void  Scr_EvalMinus(VariableValue* value1, VariableValue* value2)
 	{
 	case VAR_VECTOR:
 		tempVector = Scr_AllocVector();
-		*tempVector = *(float*)value1->u.intValue - *(float*)value2->u.intValue;
-		tempVector[1] = *(float*)(value1->u.intValue + 4) - *(float*)(value2->u.intValue + 4);
-		tempVector[2] = *(float*)(value1->u.intValue + 8) - *(float*)(value2->u.intValue + 8);
+		*tempVector = value1->u.vectorValue[0] - value2->u.vectorValue[0];
+		tempVector[1] = value1->u.vectorValue[1] - value2->u.vectorValue[1];
+		tempVector[2] = value1->u.vectorValue[2] - value2->u.vectorValue[2];
 		RemoveRefToVector(value1->u.vectorValue);
 		RemoveRefToVector(value2->u.vectorValue);
-		value1->u.intValue = (int)tempVector;
+		value1->u.vectorValue = tempVector;
 		break;
 	case VAR_FLOAT:
 		value1->u.floatValue = value1->u.floatValue - value2->u.floatValue;
@@ -2131,12 +2131,12 @@ void  Scr_EvalMultiply(VariableValue* value1, VariableValue* value2)
 	{
 	case VAR_VECTOR:
 		tempVector = Scr_AllocVector();
-		*tempVector = *(float*)value1->u.intValue * *(float*)value2->u.intValue;
-		tempVector[1] = *(float*)(value1->u.intValue + 4) * *(float*)(value2->u.intValue + 4);
-		tempVector[2] = *(float*)(value1->u.intValue + 8) * *(float*)(value2->u.intValue + 8);
+		*tempVector = value1->u.vectorValue[0] * value2->u.vectorValue[0];
+		tempVector[1] = value1->u.vectorValue[1] * value2->u.vectorValue[1];
+		tempVector[2] = value1->u.vectorValue[2] * value2->u.vectorValue[2];
 		RemoveRefToVector(value1->u.vectorValue);
 		RemoveRefToVector(value2->u.vectorValue);
-		value1->u.intValue = (int)tempVector;
+		value1->u.vectorValue = tempVector;
 		break;
 	case VAR_FLOAT:
 		value1->u.floatValue = value1->u.floatValue * value2->u.floatValue;
@@ -2163,26 +2163,26 @@ void  Scr_EvalDivide(VariableValue* value1, VariableValue* value2)
 	{
 	case VAR_VECTOR:
 		tempVector = Scr_AllocVector();
-		if (*(float*)value2->u.intValue == 0.0
-			|| *(float*)(value2->u.intValue + 4) == 0.0
-			|| *(float*)(value2->u.intValue + 8) == 0.0)
+		if (value2->u.vectorValue[0] == 0.0
+			|| value2->u.vectorValue[1] == 0.0
+			|| value2->u.vectorValue[2] == 0.0)
 		{
 			*tempVector = 0.0;
 			tempVector[1] = 0.0;
 			tempVector[2] = 0.0;
 			RemoveRefToVector(value1->u.vectorValue);
 			RemoveRefToVector(value2->u.vectorValue);
-			value1->u.intValue = (int)tempVector;
+			value1->u.vectorValue = tempVector;
 			Scr_Error("divide by 0");
 		}
 		else
 		{
-			*tempVector = *(float*)value1->u.intValue / *(float*)value2->u.intValue;
-			tempVector[1] = *(float*)(value1->u.intValue + 4) / *(float*)(value2->u.intValue + 4);
-			tempVector[2] = *(float*)(value1->u.intValue + 8) / *(float*)(value2->u.intValue + 8);
+			*tempVector = value1->u.vectorValue[0] / value2->u.vectorValue[0];
+			tempVector[1] = value1->u.vectorValue[1] / value2->u.vectorValue[1];
+			tempVector[2] = value1->u.vectorValue[2] / value2->u.vectorValue[2];
 			RemoveRefToVector(value1->u.vectorValue);
 			RemoveRefToVector(value2->u.vectorValue);
-			value1->u.intValue = (int)tempVector;
+			value1->u.vectorValue = tempVector;
 		}
 		break;
 	case VAR_FLOAT:
@@ -2397,7 +2397,7 @@ void Scr_DumpScriptThreads(void)
 	}
 	if (num)
 	{
-		infoArray = (ThreadDebugInfo*)Z_TryVirtualAlloc(140 * num, "Scr_DumpScriptThreads", 0);
+		infoArray = (ThreadDebugInfo*)Z_TryVirtualAlloc(sizeof(ThreadDebugInfo) * num, "Scr_DumpScriptThreads", 0);
 		if (infoArray)
 		{
 			num = 0;
@@ -2416,8 +2416,8 @@ void Scr_DumpScriptThreads(void)
 					{
 						--size;
 						type = *buf++;
-						u.intValue = *(int*)buf;
-						buf += 4;
+						u = Scr_ReadStackValue(buf);
+						buf += SCR_STACK_VALUE_SIZE;
 						if (type == VAR_CODEPOS)
 							info.pos[info.posSize++] = u.codePosValue;
 					}
@@ -2429,7 +2429,7 @@ void Scr_DumpScriptThreads(void)
 						pInfo->pos[j] = info.pos[info.posSize - j];
 				}
 			}
-			qsort(infoArray, num, 0x8Cu, (int(*)(const void*, const void*))ThreadInfoCompare);
+			qsort(infoArray, num, sizeof(ThreadDebugInfo), ThreadInfoCompare);
 			Com_Printf(CON_CHANNEL_PARSERSCRIPT, "********************************\n");
 			varUsage = 0.0;
 			endonUsage = 0.0;
@@ -2445,7 +2445,7 @@ void Scr_DumpScriptThreads(void)
 					++count;
 					info.varUsage = info.varUsage + infoArray[i].varUsage;
 					info.endonUsage = info.endonUsage + infoArray[i++].endonUsage;
-				} while (i < num && !ThreadInfoCompare((uint32*)pInfo, (uint32*)&infoArray[i]));
+				} while (i < num && !ThreadInfoCompare(pInfo, &infoArray[i]));
 				varUsage = varUsage + info.varUsage;
 				endonUsage = endonUsage + info.endonUsage;
 				Com_Printf(CON_CHANNEL_PARSERSCRIPT, "count: %d, var usage: %d, endon usage: %d\n", count, (int)info.varUsage, (int)info.endonUsage);
@@ -2678,9 +2678,9 @@ void  Scr_EvalEquality(VariableValue* value1, VariableValue* value2)
 		break;
 	case VAR_VECTOR:
 		value1->type = VAR_INTEGER;
-		v2 = *(float*)value2->u.intValue == *(float*)value1->u.intValue
-			&& *(float*)(value2->u.intValue + 4) == *(float*)(value1->u.intValue + 4)
-			&& *(float*)(value2->u.intValue + 8) == *(float*)(value1->u.intValue + 8);
+		v2 = value2->u.vectorValue[0] == value1->u.vectorValue[0]
+			&& value2->u.vectorValue[1] == value1->u.vectorValue[1]
+			&& value2->u.vectorValue[2] == value1->u.vectorValue[2];
 		RemoveRefToVector(value1->u.vectorValue);
 		RemoveRefToVector(value2->u.vectorValue);
 		value1->u.intValue = v2;
@@ -2696,7 +2696,7 @@ void  Scr_EvalEquality(VariableValue* value1, VariableValue* value2)
 		break;
 	case VAR_FUNCTION:
 		value1->type = VAR_INTEGER;
-		value1->u.intValue = value1->u.intValue == value2->u.intValue;
+		value1->u.intValue = value1->u.codePosValue == value2->u.codePosValue;
 		break;
 	case VAR_ANIMATION:
 		value1->type = VAR_INTEGER;
@@ -2915,7 +2915,7 @@ uint32_t Scr_EvalArrayRef(uint32_t parentId)
 		varValue.type = (Vartype_t)(parentValue->w.type & VAR_MASK);
 		if (varValue.type)
 		{
-			varValue.u.intValue = parentValue->u.u.intValue;
+			varValue.u = parentValue->u.u;
 		add_array:
 			if (varValue.type == VAR_POINTER)
 			{
@@ -2931,7 +2931,7 @@ uint32_t Scr_EvalArrayRef(uint32_t parentId)
 						varValue.u.pointerValue = Scr_AllocArray();
 						CopyArray(id, varValue.u.pointerValue);
 						iassert(parentValue);
-						parentValue->u.u.intValue = varValue.u.intValue;
+						parentValue->u.u = varValue.u;
 					}
 					return varValue.u.pointerValue;
 				}
@@ -3015,7 +3015,7 @@ void  ClearArray(uint32_t parentId, VariableValue* value)
 		parentValue = &scrVarGlob.variableList[parentId + VARIABLELIST_CHILD_BEGIN];
 		iassert((parentValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
 		varValue.type = (Vartype_t)(parentValue->w.status & 0x1F);
-		varValue.u.intValue = parentValue->u.u.intValue;
+		varValue.u = parentValue->u.u;
 	}
 	else
 	{
@@ -3064,7 +3064,7 @@ void  ClearArray(uint32_t parentId, VariableValue* value)
 			varValue.u.intValue = Scr_AllocArray();
 			CopyArray(id.stringValue, varValue.u.stringValue);
 			iassert(parentValue);
-			parentValue->u.u.intValue = varValue.u.intValue;
+			parentValue->u.u = varValue.u;
 		}
 		if (value->type == VAR_INTEGER)
 		{
@@ -3264,31 +3264,33 @@ void  Scr_CheckLeaks(void)
 	}
 }
 
-int  ThreadInfoCompare(_DWORD* info1, _DWORD* info2)
+int  ThreadInfoCompare(const void* p_info1, const void* p_info2)
 {
+	const ThreadDebugInfo *info1 = (const ThreadDebugInfo *)p_info1;
+	const ThreadDebugInfo *info2 = (const ThreadDebugInfo *)p_info2;
 	const char* pos1; // [esp+0h] [ebp-Ch]
 	int i; // [esp+4h] [ebp-8h]
 	const char* pos2; // [esp+8h] [ebp-4h]
 
 	for (i = 0; ; ++i)
 	{
-		if (i >= info1[32] || i >= info2[32])
-			return info1[32] - info2[32];
-		pos1 = (const char*)info1[i];
-		pos2 = (const char*)info2[i];
+		if (i >= info1->posSize || i >= info2->posSize)
+			return info1->posSize - info2->posSize;
+		pos1 = info1->pos[i];
+		pos2 = info2->pos[i];
 		if (pos1 != pos2)
 			break;
 	}
-	return pos1 - pos2;
+	return pos1 < pos2 ? -1 : 1;
 }
 
-int VariableInfoFileNameCompare(_DWORD* info1, _DWORD* info2)
+int VariableInfoFileNameCompare(const void* p_info1, const void* p_info2)
 {
 	const char* fileName1; // [esp+0h] [ebp-8h]
 	const char* fileName2; // [esp+4h] [ebp-4h]
 
-	fileName1 = (const char*)info1[1];
-	fileName2 = (const char*)info2[1];
+	fileName1 = ((const VariableDebugInfo *)p_info1)->fileName;
+	fileName2 = ((const VariableDebugInfo *)p_info2)->fileName;
 	if (!fileName1)
 		return 1;
 	if (fileName2)
@@ -3298,7 +3300,7 @@ int VariableInfoFileNameCompare(_DWORD* info1, _DWORD* info2)
 
 int VariableInfoCountCompare(_DWORD* info1, _DWORD* info2)
 {
-	return info1[3] - info2[3];
+	return ((const VariableDebugInfo *)info1)->varUsage - ((const VariableDebugInfo *)info2)->varUsage;
 }
 
 int VariableInfoFileLineCompare(_DWORD* info1, _DWORD* info2)
@@ -3639,7 +3641,6 @@ void  Scr_AddFieldsForFile(char const* filename)
 		SourceFile_FastFile_DONE = (const char*)Scr_GetSourceFile_FastFile(filename);
 	else
 		SourceFile_FastFile_DONE = Scr_GetSourceFile_LoadObj(filename);
-	tempType[1] = (int)SourceFile_FastFile_DONE;
 	sourcePos = SourceFile_FastFile_DONE;
 	Com_BeginParseSession("Scr_AddFields");
 	for (targetPos = TempMalloc(0); ; *targetPos = 0)
@@ -4346,7 +4347,7 @@ void  Scr_CastWeakerStringPair(VariableValue* value1, VariableValue* value2)
 				{
 				case VAR_VECTOR:
 					value2->type = VAR_STRING;
-					constTempVector = (const float*)value2->u.intValue;
+					constTempVector = value2->u.vectorValue;
 					value2->u.stringValue = SL_GetStringForVector(value2->u.vectorValue);
 					RemoveRefToVector(constTempVector);
 					return;
@@ -4380,7 +4381,7 @@ void  Scr_CastWeakerStringPair(VariableValue* value1, VariableValue* value2)
 			{
 			case VAR_VECTOR:
 				value1->type = VAR_STRING;
-				constTempVectora = (const float*)value1->u.intValue;
+				constTempVectora = value1->u.vectorValue;
 				value1->u.stringValue = SL_GetStringForVector(value1->u.vectorValue);
 				RemoveRefToVector(constTempVectora);
 				return;
@@ -4434,14 +4435,14 @@ float  Scr_GetThreadUsage(const VariableStackBuffer* stackBuf, float* endonUsage
 	VariableUnion u; // [esp+10h] [ebp-8h]
 
 	size = stackBuf->size;
-	buf = &stackBuf->buf[5 * size];
+	buf = &stackBuf->buf[SCR_STACK_ENTRY_SIZE * size];
 	usage = Scr_GetObjectUsage(stackBuf->localId);
 	*endonUsage = Scr_GetEndonUsage(stackBuf->localId);
 	localId = stackBuf->localId;
 	while (size)
 	{
-		bufa = buf - 4;
-		u.intValue = *(int*)bufa;
+		bufa = buf - SCR_STACK_VALUE_SIZE;
+		u = Scr_ReadStackValue(bufa);
 		buf = bufa - 1;
 		--size;
 		if (*buf == 7)

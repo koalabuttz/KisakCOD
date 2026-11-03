@@ -59,7 +59,7 @@ void Scr_ArchiveCanonicalStrings()
             len += strlen(SL_ConvertToString(stringValue)) + 1;
     }
     scrEvaluateGlob.archivedCanonicalStringsBuf = (char *)Hunk_AllocDebugMem(len);
-    scrEvaluateGlob.archivedCanonicalStrings = (ArchivedCanonicalStringInfo *)Hunk_AllocDebugMem(8 * scrVarPub.canonicalStrCount);
+    scrEvaluateGlob.archivedCanonicalStrings = (ArchivedCanonicalStringInfo *)Hunk_AllocDebugMem(sizeof(ArchivedCanonicalStringInfo) * scrVarPub.canonicalStrCount);
     scrEvaluateGlob.canonicalStringLookup = (int *)Hunk_AllocDebugMem(4 * scrVarPub.canonicalStrCount + 4);
     i = 0;
     lena = 0;
@@ -90,7 +90,7 @@ void Scr_ArchiveCanonicalStrings()
     qsort(
         scrEvaluateGlob.archivedCanonicalStrings,
         scrVarPub.canonicalStrCount,
-        8u,
+        sizeof(scrEvaluateGlob.archivedCanonicalStrings[0]),
         (int(*)(const void *, const void *))CompareCanonicalStrings);
     for (ia = 0; ia < (int)scrVarPub.canonicalStrCount; ++ia)
     {
@@ -115,7 +115,7 @@ void Scr_ArchiveCanonicalStrings()
 
 int CompareCanonicalStrings(const char **arg1, const char **arg2)
 {
-    return strcmp(arg1[1], arg2[1]);
+    return strcmp(((const ArchivedCanonicalStringInfo *)arg1)->value, ((const ArchivedCanonicalStringInfo *)arg2)->value);
 }
 
 const char *Scr_GetCanonicalString(uint32_t fieldName)
@@ -1285,7 +1285,7 @@ void Scr_GetValue(uint32_t index, VariableValue *value)
     {
         v2 = &scrVmPub.top[-(int)index];
         type = v2->type;
-        value->u.intValue = v2->u.intValue;
+        value->u = v2->u;
         value->type = type;
         AddRefToValue(value->type, value->u);
     }
@@ -1443,7 +1443,7 @@ void Scr_PostEvalBuiltin(VariableValue *value)
             MyAssertHandler(".\\script\\scr_evaluate.cpp", 1619, 0, "%s", "scrVmPub.inparamcount == 1");
         scrVmPub.inparamcount = 0;
         type = scrVmPub.top->type;
-        value->u.intValue = scrVmPub.top->u.intValue;
+        value->u = scrVmPub.top->u;
         value->type = type;
         --scrVmPub.top;
     }

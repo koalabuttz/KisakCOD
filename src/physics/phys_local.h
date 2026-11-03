@@ -77,6 +77,8 @@ struct objInfo // sizeof=0xA8
     // padding byte
     // padding byte
 };
+static_assert(LAYOUT_32BIT(offsetof(objInfo, type) == 52));
+static_assert(LAYOUT_32BIT(offsetof(objInfo, u) == 140));
 struct Results // sizeof=0x10
 {                                       // ...
     struct dContactGeomExt *contacts;          // ...
@@ -482,7 +484,7 @@ void CM_PositionGeomTestInAabbTree_r(CollisionAabbTree *aabbTree, const objInfo 
 bool CM_CullBox2(const objInfo *input, const float *origin, const float *halfSize);
 void CM_TestGeomInLeaf(cLeaf_t *leaf, const objInfo *input, Results *results);
 void CM_TestGeomInLeafBrushNode(cLeaf_t *leaf, const objInfo *input, Results *results);
-void Phys_TestGeomInBrush(const cbrush_t *brush, uint32_t *userData);
+void Phys_TestGeomInBrush(const cbrush_t *brush, void *userData);
 void Phys_TestAgainstEntities(const objInfo *input, Results *results);
 void Phys_InitWorldCollision();
 void Phys_InitBrushmodelGeomClass();

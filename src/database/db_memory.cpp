@@ -76,6 +76,19 @@ void DB_ReleaseGeometryBuffers(XZoneMemory *zoneMem)
     }
 }
 
+#if KISAK_DB_CONVERT_RECORDS
+uint32_t DB_NativeBlockSize(uint32_t retailSize)
+{
+    // Pointers double in size and anything 4-aligned becomes 8-aligned: no
+    // streamed record grows past twice its retail size (db_disk_layout_gen.h),
+    // and the slack covers alignment padding between small allocations.
+    uint64_t size = (uint64_t)retailSize * 5 / 2 + 0x10000;
+    if (size > 0xF0000000u)
+        Com_Error(ERR_DROP, "Fastfile block of %u bytes is too large to convert", retailSize);
+    return (uint32_t)size;
+}
+#endif
+
 void DB_AllocXZoneMemory(
     uint32_t *blockSize,
     const char *filename,
@@ -91,6 +104,14 @@ void DB_AllocXZoneMemory(
     {
         iassert(zoneMem->blocks[blockIndex].size == 0);
         size = blockSize[blockIndex];
+#if KISAK_DB_CONVERT_RECORDS
+        // Block sizes in the fastfile header are retail (32-bit) sizes. Native
+        // records are larger (8-byte pointers, pointer alignment), so reserve
+        // room for the expansion; DB_IncStreamPosConverted stops the load with
+        // an error rather than overrun a block.
+        if (size)
+            size = DB_NativeBlockSize(size);
+#endif
         if (size)
         {
             buf = DB_MemAlloc(size, g_block_mem_type[blockIndex], allocType);

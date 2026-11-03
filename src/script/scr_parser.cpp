@@ -610,7 +610,7 @@ SourceBufferInfo *Scr_GetNewSourceBuffer()
         iassert(scrParserPub.sourceBufferLookupLen < scrParserGlob.sourceBufferLookupMaxLen);
 
         newSourceBufferInfo = (char *)Hunk_AllocDebugMem(sizeof(SourceBufferInfo) * scrParserGlob.sourceBufferLookupMaxLen);
-        Com_Memcpy(newSourceBufferInfo, (char *)scrParserPub.sourceBufferLookup, 44 * scrParserPub.sourceBufferLookupLen);
+        Com_Memcpy(newSourceBufferInfo, (char *)scrParserPub.sourceBufferLookup, sizeof(SourceBufferInfo) * scrParserPub.sourceBufferLookupLen);
         Hunk_FreeDebugMem();
         scrParserPub.sourceBufferLookup = (SourceBufferInfo *)newSourceBufferInfo;
     }
@@ -1330,11 +1330,10 @@ char Scr_PrintProfileTimes(float minTime)
             maxNameLength = 0;
         for (profileIndexa = 0; profileIndexa < 40; ++profileIndexa)
         {
-            v4 = (int)&profile->profileScriptNames[profileIndexa][1];
-            v5 = (uint32_t)&profile->profileScriptNames[profileIndexa][strlen(profile->profileScriptNames[profileIndexa])
-                + 1];
-            if (v5 - v4 > maxNameLength)
-                maxNameLength = v5 - v4;
+            // Name length, as the decompiled pointer difference computed it.
+            v4 = (int)strlen(profile->profileScriptNames[profileIndexa]);
+            if (v4 > maxNameLength)
+                maxNameLength = v4;
         }
         for (profileIndexb = 0; profileIndexb < 40; ++profileIndexb)
         {
@@ -1535,7 +1534,7 @@ void RuntimeErrorInternal(int channel, char *codePos, uint32_t index, const char
             Com_PrintError(channel, "called from:\n");
             Scr_PrintPrevCodePos(
                 CON_CHANNEL_DONT_FILTER,
-                (char *)scrVmPub.stack[3 * i - 96].u.intValue,
+                (char *)scrVmPub.function_frame_start[i].fs.pos,
                 scrVmPub.function_frame_start[i].fs.localId == 0);
         }
         Com_PrintError(channel, "started from:\n");

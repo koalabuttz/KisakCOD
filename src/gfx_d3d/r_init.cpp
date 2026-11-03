@@ -3128,7 +3128,7 @@ void R_EnumDisplayModes(uint32_t adapterIndex)
             ++dx.displayModeCount;
         }
     }
-    qsort(dx.displayModes, dx.displayModeCount, 0x10u, (int(*)(const void *, const void *))R_CompareDisplayModes);
+    qsort(dx.displayModes, dx.displayModeCount, sizeof(dx.displayModes[0]), (int(*)(const void *, const void *))R_CompareDisplayModes);
     resolutionCount = 0;
     refreshRateCount = 0;
     for (modeIndex = 0; modeIndex < dx.displayModeCount; ++modeIndex)
@@ -3165,7 +3165,7 @@ void R_EnumDisplayModes(uint32_t adapterIndex)
         defaultResolutionIndex,
         DVAR_ARCHIVE | DVAR_LATCH,
         "Direct X resolution mode");
-    qsort(availableRefreshRates, refreshRateCount, 4u, (int(*)(const void *, const void *))R_CompareRefreshRates);
+    qsort(availableRefreshRates, refreshRateCount, sizeof(availableRefreshRates[0]), (int(*)(const void *, const void *))R_CompareRefreshRates);
     defaultRefreshRateIndex = 0;
     for (refreshRateIndex = 0; refreshRateIndex < refreshRateCount; ++refreshRateIndex)
     {

@@ -88,9 +88,9 @@ static bool PickAabbSplitPlane(
                 sortedMaxs[minMaxCount++] = (*maxs)[3 * remap[i] + axisIndex];
             }
         }
-        qsort(sortedMins, minMaxCount, 4u, (int(*)(const void*, const void*))compare_floats);
-        qsort(sortedMaxs, minMaxCount, 4u, (int(*)(const void *, const void *))compare_floats);
-        qsort(sortedCoplanar, coplanarCount, 4u, (int(*)(const void *, const void *))compare_floats);
+        qsort(sortedMins, minMaxCount, sizeof(sortedMins[0]), (int(*)(const void*, const void*))compare_floats);
+        qsort(sortedMaxs, minMaxCount, sizeof(sortedMaxs[0]), (int(*)(const void *, const void *))compare_floats);
+        qsort(sortedCoplanar, coplanarCount, sizeof(sortedCoplanar[0]), (int(*)(const void *, const void *))compare_floats);
         sideFrontCount = 0;
         sideBackCount = count;
         sideSplitCount = 0;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <universal/layout_assert.h>
+#include <type_traits>
 #include "scr_variable.h"
 #include "scr_parser.h"
 #include "scr_yacc.h"
@@ -38,24 +39,16 @@ static_assert(sizeof(scr_block_s) == 0x218);
 
 union sval_u // sizeof=0x4
 {                                       // ...
-    sval_u& operator=(const sval_u &other)
-    {
-        this->type = other.type;
-        return *this;
-    }
-    sval_u &operator=(sval_u &other)
-    {
-        this->type = other.type;
-        return *this;
-    }
-
-
-
+    // Assignment copies the whole union: on x86_64 the pointer members are
+    // wider than type/intValue. The constructors clear the pointer width first
+    // so a 4-byte value never leaves stale high bytes behind.
     sval_u()
     {
+        node = nullptr;
     }
     sval_u(int i)
     {
+        node = nullptr;
         intValue = i;
     }
     Enum_t type;
@@ -70,6 +63,8 @@ union sval_u // sizeof=0x4
     scr_block_s *block;
 };
 static_assert(LAYOUT_32BIT(sizeof(sval_u) == 0x4));
+static_assert(sizeof(sval_u) == sizeof(void *));
+static_assert(std::is_trivially_copy_assignable_v<sval_u>);
 
 struct ScriptExpression_t // sizeof=0xC
 {                                       // ...

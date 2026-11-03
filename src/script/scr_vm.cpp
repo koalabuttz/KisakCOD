@@ -187,8 +187,8 @@ int Scr_GetFunctionHandle(const char* filename, const char* name)
             "pos.type == VAR_CODE::pos || pos.type == VAR_DEVELOPER_CODE::pos");
     if (!Scr_IsInOpcodeMemory(v3.u.codePosValue))
         return 0;
-    result = v3.u.intValue - (uint32_t)scrVarPub.programBuffer;
-    if ((const char*)v3.u.intValue == scrVarPub.programBuffer)
+    result = (int)(v3.u.codePosValue - scrVarPub.programBuffer);
+    if (v3.u.codePosValue == scrVarPub.programBuffer)
         MyAssertHandler(".\\script\\scr_main.cpp", 106, 0, "%s", "result");
     return result;
 }
@@ -388,7 +388,7 @@ char* Scr_GetNextCodepos(VariableValue* top, const char* pos, int opcode, int mo
                 if (top->type != VAR_FUNCTION || scrVmPub.function_count >= 32)
                     goto LABEL_19;
                 *localId = 0;
-                result = (char*)top->u.intValue;
+                result = (char*)top->u.codePosValue;
                 break;
             default:
                 goto LABEL_19;
@@ -501,15 +501,19 @@ char* Scr_GetNextCodepos(VariableValue* top, const char* pos, int opcode, int mo
             case 74:
                 pos += 2;
                 goto LABEL_67;
-            case 8:
-            case 19:
+            case 8: // OP_GetInteger
+                pos += sizeof(int);
+                goto LABEL_67;
+            case 19: // OP_GetAnimation
+            case 85: // OP_ScriptThreadCallPointer
+            case 87: // OP_ScriptMethodThreadCallPointer
+                pos += sizeof(uintptr_t);
+                goto LABEL_67;
             case 21:
             case 79:
             case 80:
             case 82:
-            case 85:
-            case 87:
-                pos += 4;
+                pos += sizeof(const char *);
                 goto LABEL_67;
             case 9:
                 pos += 4;
@@ -545,12 +549,12 @@ char* Scr_GetNextCodepos(VariableValue* top, const char* pos, int opcode, int mo
             case 84:
             case 86:
             case 129:
-                pos += 8;
+                pos += 2 * sizeof(uintptr_t);
                 goto LABEL_67;
             case 94:
             case 96:
                 type = top->type;
-                value.u.intValue = top->u.intValue;
+                value.u = top->u;
                 value.type = (Vartype_t)type;
                 AddRefToValue(type, value.u);
                 Scr_CastBool(&value);
@@ -567,7 +571,7 @@ char* Scr_GetNextCodepos(VariableValue* top, const char* pos, int opcode, int mo
             case 95:
             case 97:
                 v7 = top->type;
-                value.u.intValue = top->u.intValue;
+                value.u = top->u;
                 value.type = (Vartype_t)v7;
                 AddRefToValue(v7, value.u);
                 Scr_CastBool(&value);
@@ -581,12 +585,12 @@ char* Scr_GetNextCodepos(VariableValue* top, const char* pos, int opcode, int mo
                     return (char*)&pos[v13];
                 else
                     return (char*)pos;
-            case 98:
-                return (char*)&pos[*(_DWORD*)pos + 4];
+            case 98: // OP_jump
+                return (char*)&pos[*(const intptr_t*)pos + sizeof(intptr_t)];
             case 99:
                 return (char*)&pos[-*(uint16_t*)pos + 2];
             case 124:
-                posb = &pos[*(_DWORD*)pos + 4];
+                posb = &pos[*(const intptr_t*)pos + sizeof(intptr_t)];
                 v12 = *(_WORD*)posb;
                 posa = posb + 2;
                 caseCount = v12;
@@ -598,9 +602,9 @@ char* Scr_GetNextCodepos(VariableValue* top, const char* pos, int opcode, int mo
                 else
                 {
                     if (v9 != VAR_INTEGER)
-                        return (char*)&posa[8 * v12];
+                        return (char*)&posa[2 * sizeof(uintptr_t) * v12];
                     if (!IsValidArrayIndex(top->u.intValue))
-                        return (char*)&posa[8 * v12];
+                        return (char*)&posa[2 * sizeof(uintptr_t) * v12];
                     caseValue = GetInternalVariableIndex(top->u.intValue);
                 }
                 if (!v12)
@@ -609,7 +613,7 @@ char* Scr_GetNextCodepos(VariableValue* top, const char* pos, int opcode, int mo
                     MyAssertHandler(".\\script\\scr_vm.cpp", 2516, 0, "%s", "caseValue");
                 break;
             case 125:
-                return (char*)&pos[8 * *(uint16_t*)pos + 2];
+                return (char*)&pos[2 * sizeof(uintptr_t) * *(uint16_t*)pos + 2];
             default:
                 if (!alwaysfails)
                 {
@@ -625,10 +629,10 @@ char* Scr_GetNextCodepos(VariableValue* top, const char* pos, int opcode, int mo
             }
             do
             {
-                v11 = *(_DWORD*)posa;
-                posc = posa + 4;
+                v11 = (int)*(const uintptr_t*)posa;
+                posc = posa + sizeof(uintptr_t);
                 v10 = *(const char**)posc;
-                posa = posc + 4;
+                posa = posc + sizeof(const char *);
                 if (v11 == caseValue)
                 {
                     if (!v10)
@@ -833,12 +837,12 @@ const char* Scr_GetStackThreadPos(uint32_t endLocalId, VariableStackBuffer* stac
         MyAssertHandler(".\\script\\scr_vm.cpp", 3012, 0, "%s", "startLocalId");
     size = stackValue->size;
     localId = stackValue->localId;
-    buf = &stackValue->buf[5 * size];
+    buf = &stackValue->buf[SCR_STACK_ENTRY_SIZE * size];
     pos = stackValue->pos;
     while (size)
     {
-        bufa = buf - 4;
-        u.intValue = *(int*)bufa;
+        bufa = buf - SCR_STACK_VALUE_SIZE;
+        u = Scr_ReadStackValue(bufa);
         buf = bufa - 1;
         --size;
         if (*buf == VAR_CODEPOS)
@@ -855,7 +859,7 @@ const char* Scr_GetStackThreadPos(uint32_t endLocalId, VariableStackBuffer* stac
             localId = parentLocalId;
             if (!u.codePosValue)
                 MyAssertHandler(".\\script\\scr_vm.cpp", 3039, 0, "%s", "u.codePosValue");
-            pos = (const char*)u.intValue;
+            pos = u.codePosValue;
         }
     }
 #ifndef DEDICATED
@@ -876,8 +880,8 @@ const char* Scr_GetRunningThreadPos(uint32_t localId)
     for (function_count = scrVmPub.function_count; function_count; --function_count)
     {
         if (scrVmPub.function_frame_start[function_count].fs.localId == localId)
-            return &g_EndPos != (char*)scrVmPub.stack[3 * function_count - 96].u.intValue
-            ? (const char*)scrVmPub.stack[3 * function_count - 96].u.intValue
+            return &g_EndPos != scrVmPub.function_frame_start[function_count].fs.pos
+            ? scrVmPub.function_frame_start[function_count].fs.pos
             : 0;
     }
     if (!alwaysfails)
@@ -1021,7 +1025,7 @@ void VM_Notify(uint32_t notifyListOwnerId, uint32_t stringValue, VariableValue* 
                         size = *stackValue->pos;
                         iassert(size >= 0);
                         iassert(size <= stackValue->size);
-                        buf = &stackValue->buf[5 * (stackValue->size - size)];
+                        buf = &stackValue->buf[SCR_STACK_ENTRY_SIZE * (stackValue->size - size)];
 
                         for (currentValue = top; size; --currentValue)
                         {
@@ -1040,8 +1044,8 @@ LABEL_30:
                             if (tempValue3.type == VAR_PRECODEPOS)
                                 break;
 
-                            tempValue3.u.codePosValue = *(const char**)buf;
-                            buf += 4;
+                            tempValue3.u = Scr_ReadStackValue(buf);
+                            buf += SCR_STACK_VALUE_SIZE;
 
                             AddRefToValue(tempValue3.type, tempValue3.u);
                             type = currentValue->type;
@@ -1108,9 +1112,9 @@ LABEL_30:
 
                         iassert(newSize >= 0 && newSize < (1 << 16));
 
-                        len = 5 * size;
+                        len = SCR_STACK_ENTRY_SIZE * size;
                         //bufLen = 5 * newSize + 11;
-                        bufLen = 5 * newSize + (sizeof(VariableStackBuffer)-1);
+                        bufLen = SCR_STACK_ENTRY_SIZE * newSize + offsetof(VariableStackBuffer, buf);
 
                         if (!MT_Realloc(stackValue->bufLen, bufLen))
                         {
@@ -1136,8 +1140,8 @@ LABEL_30:
                             AddRefToValue(currentValue->type, currentValue->u);
                             iassert((unsigned)currentValue->type < VAR_COUNT);
                             *buf++ = currentValue->type;
-                            *(const char**)buf = currentValue->u.codePosValue;
-                            buf += 4;
+                            Scr_WriteStackValue(buf, currentValue->u);
+                            buf += SCR_STACK_VALUE_SIZE;
                             --newSize;
                         } while (newSize);
 
@@ -1269,11 +1273,11 @@ void VM_TerminateStack(uint32_t endLocalId, uint32_t startLocalId, VariableStack
         MyAssertHandler(".\\script\\scr_vm.cpp", 2932, 0, "%s", "startLocalId");
     size = stackValue->size;
     localId = stackValue->localId;
-    buf = &stackValue->buf[5 * size];
+    buf = &stackValue->buf[SCR_STACK_ENTRY_SIZE * size];
     while (size)
     {
-        bufa = buf - 4;
-        u = *(const char**)bufa;
+        bufa = buf - SCR_STACK_VALUE_SIZE;
+        u = Scr_ReadStackValue(bufa).codePosValue;
         buf = (char*)bufa - 1;
         --size;
         if (*buf == 7)
@@ -1355,7 +1359,7 @@ void Scr_TerminateWaittillThread(uint32_t localId, uint32_t startLocalId)
             MyAssertHandler(".\\script\\scr_vm.cpp", 3276, 0, "%s", "stackId");
         if (GetValueType(stackId) != VAR_STACK)
             MyAssertHandler(".\\script\\scr_vm.cpp", 3277, 0, "%s", "GetValueType( stackId ) == VAR_STACK");
-        stackValue = (VariableStackBuffer*)GetVariableValueAddress(stackId)->u.intValue;
+        stackValue = GetVariableValueAddress(stackId)->u.stackValue;
         if (scrVarPub.developer)
             Scr_GetStackThreadPos(localId, stackValue, 1);
         VM_CancelNotifyInternal(notifyListOwnerId.stringValue, startLocalId, notifyListId, notifyNameListId, stringValue);
@@ -1370,7 +1374,7 @@ void Scr_TerminateWaittillThread(uint32_t localId, uint32_t startLocalId)
             MyAssertHandler(".\\script\\scr_vm.cpp", 3293, 0, "%s", "stackId");
         if (GetValueType(stackIda) != VAR_STACK)
             MyAssertHandler(".\\script\\scr_vm.cpp", 3294, 0, "%s", "GetValueType( stackId ) == VAR_STACK");
-        stackValue = (VariableStackBuffer*)GetVariableValueAddress(stackIda)->u.intValue;
+        stackValue = GetVariableValueAddress(stackIda)->u.stackValue;
         if (scrVarPub.developer)
             Scr_GetStackThreadPos(localId, stackValue, 1);
         RemoveVariable(startLocalId, 0x18001u);
@@ -1408,7 +1412,7 @@ void Scr_CancelNotifyList(uint32_t notifyListOwnerId)
         iassert(startLocalId);
         if (GetValueType(stackId) == VAR_STACK)
         {
-            stackValue = (VariableStackBuffer*)GetVariableValueAddress(stackId)->u.intValue;
+            stackValue = GetVariableValueAddress(stackId)->u.stackValue;
             Scr_CancelWaittill(startLocalId);
             VM_TrimStack(startLocalId, stackValue, 0);
         }
@@ -1424,7 +1428,7 @@ void Scr_CancelNotifyList(uint32_t notifyListOwnerId)
                 iassert(!Scr_GetThreadNotifyName(selfStartLocalId));
                 iassert(GetValueType(stackId) == VAR_STACK);
                 VariableValueAddress = GetVariableValueAddress(stackId);
-                stackValue = (VariableStackBuffer*)VariableValueAddress->u.intValue;
+                stackValue = VariableValueAddress->u.stackValue;
                 iassert(!stackValue->pos);
                 VM_TrimStack(selfStartLocalId, stackValue, 1);
             }
@@ -1449,11 +1453,11 @@ void VM_TrimStack(uint32_t startLocalId, VariableStackBuffer* stackValue, bool f
 
     size = stackValue->size;
     localId = stackValue->localId;
-    buf = &stackValue->buf[5 * size];
+    buf = &stackValue->buf[SCR_STACK_ENTRY_SIZE * size];
     while (size)
     {
-        bufa = buf - 4;
-        u.intValue = *(int*)bufa;
+        bufa = buf - SCR_STACK_VALUE_SIZE;
+        u = Scr_ReadStackValue(bufa);
         buf = bufa - 1;
         --size;
         if (*buf == 7)
@@ -1469,7 +1473,7 @@ void VM_TrimStack(uint32_t startLocalId, VariableStackBuffer* stackValue, bool f
                     Scr_SetThreadNotifyName(startLocalId, 0);
                     stackValue->pos = 0;
                     tempValue.type = VAR_STACK;
-                    tempValue.u.intValue = (int)stackValue;
+                    tempValue.u.stackValue = stackValue;
                     NewVariable = GetNewVariable(startLocalId, 0x18001u);
                     SetNewVariableValue(NewVariable, &tempValue);
                 }
@@ -1546,7 +1550,7 @@ VariableStackBuffer *VM_ArchiveStack()
     size = fs.top - fs.startTop;
     if (size != (uint16_t)size)
         MyAssertHandler(".\\script\\scr_vm.cpp", 2768, 0, "%s", "size == (unsigned short)size");
-    bufLen = 5 * size + 11;
+    bufLen = SCR_STACK_ENTRY_SIZE * size + offsetof(VariableStackBuffer, buf);
     if (bufLen != (uint16_t)bufLen)
         MyAssertHandler(".\\script\\scr_vm.cpp", 2770, 0, "%s", "bufLen == (unsigned short)bufLen");
     stackValue = (VariableStackBuffer*) MT_Alloc(bufLen, MT_TYPE_THREAD);
@@ -1558,22 +1562,22 @@ VariableStackBuffer *VM_ArchiveStack()
     stackValue->pos = fs.pos;
     stackValue->time = scrVarPub.time;
     scrVmPub.localVars -= fs.localVarCount;
-    buf = &stackValue->buf[5 * size];
+    buf = &stackValue->buf[SCR_STACK_ENTRY_SIZE * size];
     while (size)
     {
-        buf -= 4;
+        buf -= SCR_STACK_VALUE_SIZE;
         if (top->type == VAR_CODEPOS)
         {
             --scrVmPub.function_count;
             --scrVmPub.function_frame;
             //*bufa = scrVmPub.function_frame->fs.pos;
-            *(uintptr_t *)buf = (uintptr_t)scrVmPub.function_frame->fs.pos;
+            Scr_WriteStackValue(buf, scrVmPub.function_frame->fs.pos);
             scrVmPub.localVars -= scrVmPub.function_frame->fs.localVarCount;
             localId = GetParentLocalId(localId);
         }
         else
         {
-            *(uintptr_t*)buf = top->u.pointerValue;
+            Scr_WriteStackValue(buf, top->u);
         }
         --buf;
         if (top->type >= 0x100u)
@@ -1705,7 +1709,7 @@ VariableStackBuffer *VM_ArchiveStack2(int size, const char *codePos, VariableVal
     int bufLen;
 
     //bufLen = 5 * size + 11;
-    bufLen = 5 * size + sizeof(VariableStackBuffer);
+    bufLen = SCR_STACK_ENTRY_SIZE * size + sizeof(VariableStackBuffer);
 
     iassert(size == (unsigned short)size);
     iassert(bufLen == (unsigned short)bufLen);
@@ -1719,23 +1723,23 @@ VariableStackBuffer *VM_ArchiveStack2(int size, const char *codePos, VariableVal
     stackBuf->pos = codePos;
     stackBuf->time = scrVarPub.time;
     scrVmPub.localVars -= localVarCount;
-    buf = &stackBuf->buf[5 * size];
+    buf = &stackBuf->buf[SCR_STACK_ENTRY_SIZE * size];
 
     while (size)
     {
-        pos = buf - 4;
+        pos = buf - SCR_STACK_VALUE_SIZE;
 
         if (top->type == VAR_CODEPOS)
         {
             --scrVmPub.function_count;
             --scrVmPub.function_frame;
-            *(intptr_t *)pos = (intptr_t)scrVmPub.function_frame->fs.pos;
+            Scr_WriteStackValue(pos, scrVmPub.function_frame->fs.pos);
             scrVmPub.localVars -= scrVmPub.function_frame->fs.localVarCount;
             id = GetParentLocalId(id);
         }
         else
         {
-            *(intptr_t *)pos = (intptr_t)top->u.codePosValue;
+            Scr_WriteStackValue(pos, top->u);
         }
 
         buf = pos - 1;
@@ -2311,7 +2315,9 @@ thread_return:
         case OP_GetAnimation:
             INC_TOP();
             fs.top->type = VAR_ANIMATION;
-            fs.top->u.intValue = Scr_ReadInt(&fs.pos);
+            // The slot is pointer sized: it links unresolved uses until the
+            // animtree loads, then holds a scr_anim_s in its low 32 bits.
+            fs.top->u.intValue = (int)(uint32_t)Scr_ReadUnsigned(&fs.pos);
             continue;
 
         case OP_GetGameRef:
@@ -3028,7 +3034,7 @@ function_call:
             continue;
 
         case OP_jump:
-            jumpOffset = Scr_ReadInt(&fs.pos);
+            jumpOffset = (int)(intptr_t)Scr_ReadUnsigned(&fs.pos);
             fs.pos += jumpOffset;
             continue;
 
@@ -3398,7 +3404,7 @@ function_call:
 
         case OP_endswitch:
             caseCount = Scr_ReadUnsignedShort(&fs.pos);
-            Scr_ReadIntArray(&fs.pos, 2 * caseCount);
+            fs.pos += 2 * sizeof(uintptr_t) * caseCount;
             continue;
 
         case OP_vector:
@@ -3866,7 +3872,7 @@ void VM_TerminateTime(uint32_t timeId)
             MyAssertHandler(".\\script\\scr_vm.cpp", 3803, 0, "%s", "startLocalId");
         if (GetValueType(stackId) != VAR_STACK)
             MyAssertHandler(".\\script\\scr_vm.cpp", 3805, 0, "%s", "GetValueType( stackId ) == VAR_STACK");
-        stackValue = (VariableStackBuffer*)GetVariableValueAddress(stackId)->u.intValue;
+        stackValue = GetVariableValueAddress(stackId)->u.stackValue;
         RemoveObjectVariable(timeId, startLocalId);
         Scr_ClearWaitTime(startLocalId);
         VM_TerminateStack(startLocalId, startLocalId, stackValue);
@@ -4379,7 +4385,7 @@ void Scr_AddVector(const float* value)
 {
     IncInParam();
     scrVmPub.top->type = VAR_VECTOR;
-    scrVmPub.top->u.intValue = (int)Scr_AllocVector(value);
+    scrVmPub.top->u.vectorValue = Scr_AllocVector(value);
 }
 
 void Scr_MakeArray()
@@ -4728,16 +4734,16 @@ void VM_UnarchiveStack(uint32_t startLocalId, VariableStackBuffer* stackValue)
         {
             iassert(scrVmPub.function_count < 32 /*MAX_VM_STACK_DEPTH*/);
 
-            scrVmPub.function_frame->fs.pos = *(const char**)buf;
+            scrVmPub.function_frame->fs.pos = Scr_ReadStackValue(buf).codePosValue;
             ++scrVmPub.function_count;
             ++scrVmPub.function_frame;
         }
         else
         {
-            top->u.codePosValue = *(const char**)buf;
+            top->u = Scr_ReadStackValue(buf);
         }
 
-        buf += 4;
+        buf += SCR_STACK_VALUE_SIZE;
     }
     fs.pos = stackValue->pos;
     fs.top = top;
@@ -4812,10 +4818,10 @@ void VM_UnarchiveStack2(uint32_t startLocalId, function_stack_t *stack, Variable
         }
         else
         {
-            startTop->u.intValue = *(int *)pos;
+            startTop->u = Scr_ReadStackValue(pos);
         }
 
-        buf = (pos + 4);
+        buf = (pos + SCR_STACK_VALUE_SIZE);
     }
 
     stack->pos = stackValue->pos;
@@ -5003,7 +5009,7 @@ char Scr_PrintProfileBuiltinTimes(float minTime)
         order = (int*)Z_VirtualAlloc(4 * scrCompilePub.func_table_size, "Scr_PrintProfileBuiltinTimes", 0);
         for (ib = 0; ib < scrCompilePub.func_table_size; ++ib)
             order[ib] = ib;
-        qsort(order, scrCompilePub.func_table_size, 4u, (int(*)(const void*, const void*))Scr_BuiltinCompare);
+        qsort(order, scrCompilePub.func_table_size, sizeof(order[0]), (int(*)(const void*, const void*))Scr_BuiltinCompare);
         for (ic = 0; ic < scrCompilePub.func_table_size; ++ic)
         {
             j = order[ic];
@@ -5131,7 +5137,7 @@ uint32_t Scr_GetFunc(uint32_t index)
                     0,
                     "%s",
                     "Scr_IsInOpcodeMemory( value->u.codePosValue )");
-            return value->u.intValue - (uint32_t)scrVarPub.programBuffer;
+            return (int)(value->u.codePosValue - scrVarPub.programBuffer);
         }
         scrVarPub.error_index = index + 1;
         Scr_Error(va("type %s is not a function", var_typename[value->type]));
@@ -5181,9 +5187,8 @@ XAnim_s * Scr_GetAnimTree(uint32_t index)
         {
             if (v3->u.intValue <= scrAnimPub.xanim_num[1])
             {
-                v5 = (VariableUnion *)(4 * v3->u.intValue);
-                if (*(uint32_t *)((char *)&scrAnimPub.xanim_num[-128] + (_DWORD)v5))
-                    return *(XAnim_s **)((char *)&scrAnimPub.xanim_num[-128] + (_DWORD)v5);
+                if (scrAnimPub.xanim_lookup[1][v3->u.intValue].anims)
+                    return scrAnimPub.xanim_lookup[1][v3->u.intValue].anims;
             }
             scrVarPub.error_message = "bad anim tree";
         }

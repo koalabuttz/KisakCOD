@@ -237,7 +237,7 @@ void Scr_LoadAnimTreeAtIndex(uint32_t index, void *(*Alloc)(int), int user)
             RemoveRefToObject(scrAnimPub.animtree_node);
             scrAnimPub.animtree_node = 0;
             tempValue.type = VAR_CODEPOS;
-            tempValue.u.intValue = (int)animtree;
+            tempValue.u.codePosValue = (const char *)animtree;
             Variable = GetVariable(fileId, 1);
             SetVariableValue(Variable, &tempValue);
             XAnimSetupSyncNodes(animtree);
@@ -433,7 +433,7 @@ void Scr_CheckAnimsDefined(uint32_t names, uint32_t filename)
         {
             msg = va("animation '%s' not defined in anim tree '%s'", SL_ConvertToString(name), SL_ConvertToString(filename));
             if (Scr_IsInOpcodeMemory(value->u.codePosValue))
-                CompileError2((char *)value->u.intValue, "%s", msg);
+                CompileError2((char *)value->u.codePosValue, "%s", msg);
             else
                 Com_Error(ERR_DROP, "%s", msg);
         }

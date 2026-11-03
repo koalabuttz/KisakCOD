@@ -1095,7 +1095,7 @@ void CL_SortGlobalServers()
     qsort(
         cls.globalServers,
         cls.numglobalservers,
-        0x94u,
+        sizeof(cls.globalServers[0]),
         (int(*)(const void *, const void *))CL_CompareAdrSigned);
 }
 

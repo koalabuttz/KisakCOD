@@ -135,7 +135,7 @@ char DynEnt_Create(DynEntityDef *dynEntDef, const DynEntityCreateParams *params)
             "%s",
             "!IS_NAN((params->angles)[0]) && !IS_NAN((params->angles)[1]) && !IS_NAN((params->angles)[2])");
     }
-    Com_Memset((uint32_t *)dynEntDef, 0, 96);
+    Com_Memset((uint32_t *)dynEntDef, 0, sizeof(*dynEntDef));
     if (params->typeName[0])
     {
         dynEntDef->type = (DynEntityType)DynEnt_GetType(params->typeName);
@@ -396,7 +396,7 @@ void DynEnt_LoadEntities()
         Com_Error(ERR_DROP, "Found [%d] Dyn Entities, Max is [%d]\n", dynEntStringCount, 4095);
     if (dynEntStringCount)
     {
-        dynEntDefList = Hunk_Alloc(96 * dynEntStringCount, "DynEnt_LoadDefs", 9);
+        dynEntDefList = Hunk_Alloc(sizeof(DynEntityDef) * dynEntStringCount, "DynEnt_LoadDefs", 9);
         dynEntCount = 0;
         ptr = Com_EntityString(0);
         while (1)
@@ -405,7 +405,7 @@ void DynEnt_LoadEntities()
             if (!ptr || *token != 123)
                 break;
             isDynEnt = 0;
-            Com_Memset((uint32_t *)&params, 0, 448);
+            Com_Memset((uint32_t *)&params, 0, sizeof(params));
             while (1)
             {
                 token = (const char *)Com_Parse(&ptr);
@@ -575,7 +575,7 @@ void DynEnt_LoadEntities()
         }
         if (dynEntCount)
         {
-            qsort(dynEntDefList, dynEntCount, 0x60u, (int(*)(const void *, const void *))DynEnt_CompareEntities);
+            qsort(dynEntDefList, dynEntCount, sizeof(DynEntityDef), (int(*)(const void *, const void *))DynEnt_CompareEntities);
             for (dynEntIndex = 0; dynEntIndex < dynEntCount; ++dynEntIndex)
             {
                 dynEntDef = (DynEntityDef *)&dynEntDefList[96 * dynEntIndex];

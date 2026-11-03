@@ -189,7 +189,7 @@ void CG_RegisterImpactEffectsForDir(char *dir, EffectFile *effectFile, char *lis
             base[i] = qpath;
             qpath += strlen(qpath) + 1;
         }
-        qsort(base, num, 4u, (int(*)(const void *, const void *))compare_impact_files);
+        qsort(base, num, sizeof(base[0]), (int(*)(const void *, const void *))compare_impact_files);
         for (i = 0; i < num; ++i)
         {
             qpath = va("%s/%s", dir, (const char *)base[i]);

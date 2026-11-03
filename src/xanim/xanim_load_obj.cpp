@@ -251,7 +251,7 @@ XModelPieces *XModelPiecesLoadFile(const char *name, void *(*Alloc)(int))
 
     if (version == 1)
     {
-        xmodelPieces = (XModelPieces *)Alloc(12);
+        xmodelPieces = (XModelPieces *)Alloc(sizeof(XModelPieces));
         iassert(xmodelPieces);
         xmodelPieces->numpieces = Buf_Read<unsigned short>(&pos);
         xmodelPieces->pieces = (XModelPiece *)Alloc(sizeof(XModelPiece) * xmodelPieces->numpieces);
@@ -663,7 +663,7 @@ unsigned __int8 *GetQuaternions(
                     quat[2] = -quat[2];
                     quat[3] = -quat[3];
                 }
-                part->quat = (XAnimPartQuat *)XAnimTempAlloc(0xCu);
+                part->quat = (XAnimPartQuat *)XAnimTempAlloc(sizeof(XAnimPartQuat));
                 //part->quat->u = *(XAnimPartQuatData*)quat;
                 part->quat->u.frame0[0] = quat[0];
                 part->quat->u.frame0[1] = quat[1];
@@ -1107,7 +1107,7 @@ XAnimParts *XAnimLoadFile(char *name, void *(*Alloc)(int))
         g_simpleQuatBits = (char *)dst;
         parts->names = (uint16_t *)Alloc(2 * numBones);
         memset(v51, 0, sizeof(v51));
-        qsort(base, numBones, 2u, XAnimCompareQuatParts);
+        qsort(base, numBones, sizeof(base[0]), XAnimCompareQuatParts);
         for (i = 0; i < numBones; ++i)
         {
             animPartIndex = (uint16_t)base[i];
@@ -1204,7 +1204,7 @@ XAnimParts *XAnimLoadFile(char *name, void *(*Alloc)(int))
 
 
         memcpy(boneIndexes, (unsigned __int8 *)base, 2 * numBones);
-        qsort(boneIndexes, numBones, 2, XAnimCompareTransParts);
+        qsort(boneIndexes, numBones, sizeof(boneIndexes[0]), XAnimCompareTransParts);
         for (i = 0; i < numBones; ++i)
         {
             //animPartIndex = *(uint16_t *)&v72[2 * i];

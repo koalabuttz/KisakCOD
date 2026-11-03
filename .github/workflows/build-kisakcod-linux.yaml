@@ -453,10 +453,12 @@ jobs:
           retention-days: 7
 
   x64_dedicated:
-    # Opt-in 64-bit track, step two (docs/linux-x64.md): build KisakCOD-dedi with
+    # Opt-in 64-bit track, step two (docs/linux-x64.md): check the generated
+    # fastfile record layout tables against the struct definitions, run the
+    # asset-free 64-bit record conversion test, build KisakCOD-dedi with
     # -DKISAK_LINUX_ARCH=x86_64 and run the asset-free bootstrap test against the
-    # ELF64 binary. No game data, so fastfile and map loading are not covered
-    # here. The i386 build and its checks are untouched.
+    # ELF64 binary. No game data, so loading a real map is not covered here. The
+    # i386 build and its checks are untouched.
     name: x86_64 dedicated server ${{ matrix.config }}
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -482,7 +484,16 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            cmake ninja-build clang python3 ccache
+            cmake ninja-build clang python3 python3-clang-18 ccache
+
+      # The layout check parses db_load.cpp as i386 and as x86_64, so it needs
+      # the i386 C and C++ headers. Nothing in this job builds i386 code.
+      - name: Install i386 headers for the layout check
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y g++-multilib
 
       - name: Restore compiler cache
         uses: actions/cache/restore@v4
@@ -507,7 +518,23 @@ jobs:
             -DKISAK_PLATFORM=linux -DKISAK_LINUX_ARCH=x86_64 \
             -DCMAKE_BUILD_TYPE=${{ matrix.config }} \
             -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$CMAKE_RUNTIME_OUTPUT_DIRECTORY"
+
+      - name: Check fastfile record layout tables
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          # libclang's Python bindings come with the system Python.
+          /usr/bin/python3 scripts/tools/gen_db_disk_layout.py --build-dir "$BUILD_DIR" --check
+
+      - name: Check 64-bit fastfile record conversion
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/tests/test_db_record_conversion.py --cxx clang++
 
       - name: Build x86_64 KisakCOD-dedi
         timeout-minutes: 30

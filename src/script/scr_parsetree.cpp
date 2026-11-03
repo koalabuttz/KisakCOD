@@ -27,7 +27,7 @@ void Scr_ShutdownAllocNode()
 sval_u *Scr_AllocNode(int size)
 {
     iassert(g_allocNodeUser);
-    return (sval_u *)Hunk_UserAlloc(g_allocNodeUser, 4 * size, 4);
+    return (sval_u *)Hunk_UserAlloc(g_allocNodeUser, sizeof(sval_u) * size, alignof(sval_u));
 }
 
 sval_u node0(Enum_t type)
@@ -46,6 +46,20 @@ sval_u node1(Enum_t type, sval_u val1)
     result.node = Scr_AllocNode(2);
     result.node[0].type = type;
     result.node[1] = val1;
+    return result;
+}
+
+// A two-slot node of whole values: expression and parameter list items
+// ({ value, source position }) and the script root ({ includes, threads }).
+// The decompiled grammar built these with node1, passing the first value as
+// its 4-byte type, which drops the top half of a node pointer on x86_64.
+sval_u node2_(sval_u val1, sval_u val2)
+{
+    sval_u result;
+
+    result.node = Scr_AllocNode(2);
+    result.node[0] = val1;
+    result.node[1] = val2;
     return result;
 }
 
@@ -324,7 +338,7 @@ sval_u debugger_buffer(Enum_t type, char *buf, uint32_t size, int alignment)
     sval_u *result = Scr_AllocDebugExpr(type, size + alignMask + 2 * sizeof(sval_u), "debugger_buffer");
     uint8_t *bufCopy = (uint8_t *)(((uintptr_t)&result[2] + alignMask) & ~(uintptr_t)alignMask);
     memcpy(bufCopy, buf, size);
-    result[1].intValue = (int)bufCopy;
+    result[1].codePosValue = (const char *)bufCopy;
     return result[0];
 }
 

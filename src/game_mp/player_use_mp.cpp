@@ -422,7 +422,7 @@ int32_t Player_GetUseList(gentity_s *ent, useList_t *useList, int32_t prevHintEn
             }
         }
     }
-    qsort(useList, num, 8u, (int(*)(const void *, const void *))compare_use);
+    qsort(useList, num, sizeof(useList[0]), (int(*)(const void *, const void *))compare_use);
     num -= v31;
     v28 = 0;
     for (i = 0; i < (int)num; ++i)
@@ -441,7 +441,7 @@ int32_t Player_GetUseList(gentity_s *ent, useList_t *useList, int32_t prevHintEn
             }
         }
     }
-    qsort(useList, num, 8u, (int(*)(const void *, const void *))compare_use);
+    qsort(useList, num, sizeof(useList[0]), (int(*)(const void *, const void *))compare_use);
     return num - v28;
 }
 

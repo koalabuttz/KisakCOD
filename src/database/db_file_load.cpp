@@ -8,6 +8,8 @@
 #include <gfx_d3d/r_image.h>
 #include <gfx_d3d/r_buffers.h>
 
+#include "db_disk_layout_gen.h"
+
 #if defined(__linux__)
 #include <linux/compat.h>
 #include <qcommon/threads_interlock.h>
@@ -369,7 +371,7 @@ void Load_XAssetListCustom()
 {
     varXAssetList = &g_varXAssetList;
     
-    DB_LoadXFileData((uint8_t *)&g_varXAssetList, sizeof(XAssetList));
+    DB_LoadXFileRecord(&g_varXAssetList);
     DB_PushStreamPos(4);
     varScriptStringList = &varXAssetList->stringList;
     Load_ScriptStringList(0);
@@ -381,7 +383,7 @@ void Load_XAssetArrayCustom(int32_t count)
     XAsset *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
-    Load_Stream(1, (uint8_t *)varXAsset, 8 * count);
+    Load_Stream(1, varXAsset, 8 * count);
     var = varXAsset;
     for (i = 0; i < count; ++i)
     {

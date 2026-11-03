@@ -194,9 +194,9 @@ pointers. The fastfile loader, for one, compiles today and is still wrong at
 
 ## x86_64 dedicated server
 
-Step two. `KisakCOD-dedi` builds and links as an ELF64 x86_64 program, and it
-boots without game data to the same end state as the i386 build: `FS_Startup`
-runs and the server stops on the missing `fileSysCheck.cfg`.
+Step two. `KisakCOD-dedi` builds and links as an ELF64 x86_64 program. Without
+game data it boots to the same end state as the i386 build, and with the retail
+files it loads a map (see [Loading a retail map](#loading-a-retail-map)).
 
 ```sh
 cmake -S . -B build-x64 -G Ninja -DKISAK_PLATFORM=linux -DKISAK_LINUX_ARCH=x86_64 \
@@ -231,13 +231,89 @@ Every crash on the asset-free path was a dvar string pointer stored in a
 
 On i386 each of these produces the same code as before.
 
-### Not 64-bit yet
+### Fastfile records
 
-Loading game data. The fastfile loader copies retail 32-bit pointers into
-8-byte fields, and the pointer/integer cast sites the census lists (about 400 on
-the dedicated path: `com_memory`, `com_files`, the script VM, the xanim and
-fastfile loaders) are still there. The bootstrap test does not reach any of
-them. Next: a 64-bit fastfile loader, then a map load on real data.
+Fastfiles store every record exactly as the 32-bit retail executable held it in
+memory: 4-byte pointers, 4-byte alignment, block offsets that count retail
+bytes. The i386 build streams records straight into engine structs. A 64-bit
+build expands them while loading (upstream issue 2 calls this the "conversions"
+route; the closed Android PR kept 32-bit records and resolved pointers at use,
+which cannot hold DXVK objects later):
+
+- `scripts/tools/gen_db_disk_layout.py` asks Clang for the i386 and x86_64
+  layout of every type the loader streams (the pointee of each `var*` global in
+  `db_load.cpp`) and writes `src/database/db_disk_layout_gen.h`: per type, the
+  retail size and a list of copy and pointer-widen operations. Disk offsets are
+  numbers; native offsets are `offsetof` expressions, so each compiler works
+  them out for its own ABI. 166 of 341 types are identical on both targets and
+  are copied as they are; 175 are converted.
+- On i386 the table is only checked, at compile time: every native offset must
+  equal its disk offset and every type must keep its retail size. A struct
+  change that would break fastfile loading stops the i386 build.
+- `Load_Stream(atStreamStart, varXModel, 220)` keeps the retail byte count and
+  now takes the typed pointer. On 64-bit targets it reads the retail bytes,
+  widens pointers (keeping the `-1`/`-2` "data follows" markers), and advances
+  the native stream by native bytes. The xanim loaders' record heads (4 retail
+  bytes of `XAnimPartTrans`, then its union) work the same way.
+- Every stream also keeps its retail position, and records which native bytes
+  each retail range became. `DB_ConvertOffsetToPointer` and
+  `DB_ConvertOffsetToAlias` map a retail offset to the native record, field or
+  one-past-the-end address through those records.
+- Unions that mix pointers and data follow one fixed member per union
+  (`UNION_POLICY` in the generator). A widened pointer keeps the retail value in
+  its low 4 bytes, so an int or float member at offset 0 reads the same.
+  `cLeafBrushNodeData_t` is the exception: it is copied as data, and the loader
+  widens the leaf pointer once the node says it is a leaf.
+- Zone blocks are reserved at 2.5 times their retail size plus 64 KB (no record
+  more than doubles), the Linux physical memory arena is 512 MB instead of
+  128 MB on x86_64, and a block that would still overflow stops the load with an
+  error.
+
+Checks, all asset-free:
+
+```sh
+/usr/bin/python3 scripts/tools/gen_db_disk_layout.py --build-dir build-x64 --check
+python3 scripts/tests/test_db_record_conversion.py
+```
+
+The generator needs the libclang Python bindings (`python3-clang-18`, run with
+the system Python) and any configured Linux build directory. The conversion
+test compiles `db_stream.cpp` and `db_stream_load.cpp` unmodified for x86_64
+with ASan and UBSan and feeds them retail bytes from memory. CI runs both in the
+`x86_64 dedicated server` job.
+
+### Loading a retail map
+
+The x86_64 dedicated server loads `mp_crash` from the retail game files, runs
+the gametype scripts and its first server frames, and shuts down cleanly, with
+the same 18 checks as i386 (`scripts/tests/test_linux_asset_startup.py --map
+mp_crash`). A `developer 1` / `developer_script 1` run prints no asserts or
+script errors on either architecture, and the two logs match apart from timing.
+This runs on a machine with the game installed, not in CI.
+
+What the map load needed beyond the record conversion, each a 32-bit size or
+width baked into decompiled code:
+
+- Hunk user headers and the `qsort` element sizes used `uint32_t` and literal
+  sizes; they use pointer-sized fields and `sizeof`.
+- The asset clone table folded size functions of types that share a retail size
+  (`LoadedSound` cloned at the `GameWorldSp` size); every slot names its type.
+- About 60 allocations, clears and copies used retail struct sizes (`XAnim_s`
+  entries, DObj model lists, `client_t`, file handles); they use `sizeof`.
+- Script compiler and VM: operand and saved-stack widths (codepos, jumps, case
+  tables, `SCR_STACK_ENTRY_SIZE`), parse tree values copied through their 4-byte
+  `type` member or passed as a node's `Enum_t`, and script values copied as
+  `u.intValue`. `test_script_parser_stack.py` now fails on any parse tree slot
+  that holds a node pointer cut to 32 bits.
+- Index math and offset tables: a default asset was linked into the hash with a
+  byte difference `>> 4`, and the script entity and player field tables held
+  i386 offsets into `gentity_s` and `gclient_s`; both use typed indices and
+  `offsetof`.
+
+Still i386-shaped and off the dedicated path: the SP save game stack format in
+`scr_readwrite.cpp`, client-side literal offset and size tables (effects,
+devgui, static model cache, server browser), and the pointer/integer casts the
+census lists in the raw asset (`*_load_obj.cpp`) loaders.
 
 ## Windows MSVC x64 census
 

@@ -1238,7 +1238,7 @@ void Com_InitSoundAliasHash(uint32_t aliasCount)
 {
     g_sa.hashUsed = 0;
     g_sa.hashSize = (3 * aliasCount + 1) >> 1;
-    g_sa.hash = (snd_alias_list_t**)CM_Hunk_Alloc(4 * ((3 * aliasCount + 1) >> 1), "Com_InitSoundAliasHash", 15);
+    g_sa.hash = (snd_alias_list_t**)CM_Hunk_Alloc(sizeof(snd_alias_list_t *) * ((3 * aliasCount + 1) >> 1), "Com_InitSoundAliasHash", 15);
     memset(g_sa.hash, 0, 4 * ((3 * aliasCount + 1) >> 1));
 }
 

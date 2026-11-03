@@ -543,7 +543,7 @@ void FS_FCloseFile(int h)
         f = FS_FileForHandle(h);
         FS_FileClose(f);
     }
-    Com_Memset((uint32_t *)&fsh[h], 0, 284);
+    Com_Memset((uint32_t *)&fsh[h], 0, sizeof(fsh[h]));
 }
 
 void FS_FCloseLogFile(int h)
@@ -965,7 +965,9 @@ uint32_t FS_FOpenFileReadForThread(const char *filename, int *file, FsThread thr
     filetemp = zfi->file;
     ziptemp = zfi->pfile_in_zip_read;
     unzSetCurrentFileInfoPosition(iwd->handle, iwdFile->pos);
-    Com_Memcpy((char *)zfi, (char *)iwd->handle, 128);
+    // Copy the shared zip state up to the per-handle read buffer.
+    static_assert(LAYOUT_32BIT(offsetof(unz_s, tmpFile) == 128));
+    Com_Memcpy((char *)zfi, (char *)iwd->handle, offsetof(unz_s, tmpFile));
     zfi->file = filetemp;
     zfi->pfile_in_zip_read = ziptemp;
     unzOpenCurrentFile(fsh[*file].handleFiles.file.z);
@@ -1574,7 +1576,7 @@ void FS_AddIwdFilesForGameDirectory(char *path, char *pszGameFolder)
             *((_WORD *)v2 + 4) = 8224;
         }
     }
-    qsort(s0, numfiles, 4u, (int(*)(const void *, const void *))iwdsort);
+    qsort(s0, numfiles, sizeof(s0[0]), (int(*)(const void *, const void *))iwdsort);
     for (i = 0; i < numfiles; ++i)
     {
         if (I_strncmp(s0[i], "          ", 10))
@@ -1631,7 +1633,7 @@ void FS_AddIwdFilesForGameDirectory(char *path, char *pszGameFolder)
                 v4 = *v6;
                 *iwdGamename++ = *v6++;
             } while (v4);
-            search = (searchpath_s *)Z_Malloc(28, "FS_AddIwdFilesForGameDirectory", 3);
+            search = (searchpath_s *)Z_Malloc(sizeof(searchpath_s), "FS_AddIwdFilesForGameDirectory", 3);
             search->iwd = ZipFile;
             search->bLocalized = v10;
             search->language = piLanguageIndex;
@@ -1772,7 +1774,7 @@ void FS_AddGameDirectory(char *path, char *dir, int bLanguageDirectory, int iLan
     {
         I_strncpyz(fs_gamedir, szGameFolder, 256);
     }
-    search = (searchpath_s *)Z_Malloc(28, "FS_AddGameDirectory", 3);
+    search = (searchpath_s *)Z_Malloc(sizeof(searchpath_s), "FS_AddGameDirectory", 3);
     v4 = (uint32_t*)Z_Malloc(512, "FS_AddGameDirectory", 3);
     search->dir = (directory_t *)v4;
     I_strncpyz(search->dir->path, path, 256);

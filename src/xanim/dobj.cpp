@@ -8,6 +8,13 @@
 #include "dobj_utils.h"
 #include <universal/profile.h>
 
+// A DObj's model list holds one XModel pointer per model followed by one
+// parent byte per model (5 bytes a model on i386).
+static int DObjModelListSize(uint32_t numModels)
+{
+    return (int)((sizeof(XModel *) + 1) * numModels);
+}
+
 struct SavedDObjModel // sizeof=0x2
 {                                       // ...
     uint16_t boneName;
@@ -339,8 +346,8 @@ void DObjCreateDuplicateParts(DObj_s *obj, DObjModel_s *dobjModels, uint32_t num
     iassert(boneCount == (byte)boneCount);
     obj->numBones = boneCount;
     iassert(numModels > 0);
-    obj->models = (XModel **)MT_Alloc(5 * numModels, MT_TYPE_MODEL_LIST);
-    memcpy((unsigned __int8 *)obj->models, (unsigned __int8 *)models, 4 * numModels);
+    obj->models = (XModel **)MT_Alloc(DObjModelListSize(numModels), MT_TYPE_MODEL_LIST);
+    memcpy((unsigned __int8 *)obj->models, (unsigned __int8 *)models, sizeof(XModel *) * numModels);
     memcpy((unsigned __int8 *)&obj->models[numModels], modelParents, numModels);
     iassert(g_empty);
     iassert(!obj->duplicateParts);
@@ -413,7 +420,7 @@ void DObjFree(DObj_s *obj)
     models = obj->models;
     if (models)
     {
-        MT_Free((byte*)models, 5 * obj->numModels);
+        MT_Free((byte*)models, DObjModelListSize(obj->numModels));
         obj->models = 0;
     }
     obj->numModels = 0; // LWSS: blops backport
@@ -546,7 +553,7 @@ void DObjUnarchive(DObj_s *obj)
         model->model = savedObj.models[modelIndex];
         model->ignoreCollision = (savedObj.ignoreCollision & (1 << modelIndex)) != 0;
     }
-    MT_Free((_BYTE *)savedObj.models, 5 * savedObj.numModels);
+    MT_Free((_BYTE *)savedObj.models, DObjModelListSize(savedObj.numModels));
     DObjCreate(dobjModels, savedObj.numModels, savedObj.tree, obj, savedObj.entnum);
     DObjSetHidePartBits(obj, savedObj.hidePartBits);
 }
@@ -1267,7 +1274,7 @@ void DObjClone(const DObj_s *from, DObj_s *obj)
     if (obj->duplicateParts && duplicateParts != g_empty)
         SL_AddRefToString(duplicateParts);
     obj->tree = 0;
-    v5 = (XModel **)MT_Alloc(from->numModels + __ROL4__(from->numModels, 2), MT_TYPE_MODEL_LIST);
+    v5 = (XModel **)MT_Alloc(DObjModelListSize(from->numModels), MT_TYPE_MODEL_LIST);
     obj->models = v5;
-    memcpy(v5, from->models, from->numModels + __ROL4__(from->numModels, 2));
+    memcpy(v5, from->models, DObjModelListSize(from->numModels));
 }
