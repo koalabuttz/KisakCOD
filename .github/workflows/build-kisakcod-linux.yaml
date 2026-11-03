@@ -33,6 +33,7 @@ on:
       - tests/linux_device_probe/**
       - tests/linux_free_camera/**
       - .github/workflows/build-kisakcod-linux.yaml
+      - .github/workflows/build-kisarcod-win.yaml
   pull_request:
     branches: [ "master" ]
     paths:
@@ -53,9 +54,17 @@ on:
       - tests/linux_device_probe/**
       - tests/linux_free_camera/**
       - .github/workflows/build-kisakcod-linux.yaml
+      - .github/workflows/build-kisarcod-win.yaml
 
 permissions:
   contents: read
+
+# A newer push to a pull request cancels that pull request's older run, so a
+# quick fix does not wait behind a run that no longer matters. Every other run
+# (pushes to master, manual runs) gets a group of its own and always finishes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
   window:
@@ -66,7 +75,10 @@ jobs:
       fail-fast: false
       matrix:
         config: [Debug, RelWithDebInfo]
-        sdl: [2, 3]
+        # Pull requests build and test the SDL3 window host in both configurations.
+        # The older SDL2 path, the slowest pair of jobs, runs on pushes to master
+        # and on manual runs, so it is still checked after every merge.
+        sdl: ${{ fromJSON(github.event_name == 'pull_request' && '[3]' || '[2, 3]') }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

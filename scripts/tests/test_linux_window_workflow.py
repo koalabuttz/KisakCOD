@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
 """Static workflow contract; does not claim hosted execution or graphical coverage."""
 from pathlib import Path
+import json
+import re
+import subprocess
 import unittest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
+
+# Pull requests run only the SDL3 window jobs; pushes to master and manual runs
+# also run SDL2 (CiTriggerTests checks what the expression gives).
+WINDOW_SDL_MATRIX = "${{ fromJSON(github.event_name == 'pull_request' && '[3]' || '[2, 3]') }}"
 
 
 class WindowWorkflowTests(unittest.TestCase):
@@ -28,7 +35,7 @@ class WindowWorkflowTests(unittest.TestCase):
         self.assertEqual(self.job['strategy']['matrix']['config'],
                          ['Debug', 'RelWithDebInfo'])
         self.assertEqual(self.job['runs-on'], 'ubuntu-24.04')
-        self.assertEqual(self.job['strategy']['matrix']['sdl'], ['2', '3'])
+        self.assertEqual(self.job['strategy']['matrix']['sdl'], WINDOW_SDL_MATRIX)
 
     def test_sdl3_sdk_is_pinned_and_32_bit(self):
         step = next(step for step in self.job['steps']
@@ -172,7 +179,7 @@ class AssetFreeWorldSurfaceWorkflowTests(unittest.TestCase):
         # The existing window job keeps its own two SDL variants and its pinned SDK
         # step; the asset-free job must not become a second copy of it.
         window = self.workflow['jobs']['window']
-        self.assertEqual(window['strategy']['matrix']['sdl'], ['2', '3'])
+        self.assertEqual(window['strategy']['matrix']['sdl'], WINDOW_SDL_MATRIX)
         window_commands = '\n'.join(step.get('run', '') for step in window['steps'])
         self.assertIn('Build pinned 32-bit SDL3 SDK', [step.get('name') for step in window['steps']])
         self.assertNotIn('run_world_surface_checks.py', window_commands)
@@ -580,6 +587,164 @@ class AssetFreeFreeCameraWorkflowTests(unittest.TestCase):
         self.assertEqual(upload['if'], 'always()')
         self.assertIn('free-camera-${{ matrix.config }}', upload['with']['name'])
         self.assertEqual(upload['with']['path'], 'artifacts/')
+
+
+def _github_glob(pattern):
+    """A GitHub Actions path pattern as a regular expression.
+
+    Covers the forms the workflows use: '**' (any characters, '/' included),
+    a leading or inner '**/' (zero or more directories), '*' (any characters
+    but '/') and literal text.
+    """
+    out, i = '', 0
+    while i < len(pattern):
+        if pattern.startswith('**/', i):
+            out, i = out + '(?:.*/)?', i + 3
+        elif pattern.startswith('**', i):
+            out, i = out + '.*', i + 2
+        elif pattern[i] == '*':
+            out, i = out + '[^/]*', i + 1
+        else:
+            out, i = out + re.escape(pattern[i]), i + 1
+        if pattern[i - 1:i] in '?+[]':
+            raise ValueError(f'unsupported pattern character in {pattern!r}')
+    return re.compile(out + r'\Z')
+
+
+def _selected(path, patterns):
+    """Whether a changed path triggers a workflow with this 'paths' list:
+    patterns apply in order, and a later match overrides an earlier one."""
+    selected = False
+    for pattern in patterns:
+        negated = pattern.startswith('!')
+        if _github_glob(pattern[1:] if negated else pattern).match(path):
+            selected = not negated
+    return selected
+
+
+class CiTriggerTests(unittest.TestCase):
+    """When the Linux and Windows workflows run, and which runs a newer push cancels."""
+
+    CONCURRENCY = {
+        'group': "${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}",
+        'cancel-in-progress': 'true',
+    }
+
+    # Changes that cannot reach the MSVC builds or the Windows regression checks.
+    WINDOWS_SKIPS = (
+        'README.md',
+        'docs/linux-free-camera.md',
+        'docs/history/progress-2026-10-31-client-window.md',
+        'src/linux/tools/world_draw_probe.cpp',
+        'src/linux/compat.h',
+        'tests/linux_compat/msvc_rand_test.cpp',
+        'tests/linux_renderer/README.md',
+        'scripts/platform/linux/world_draw_probe.cmake',
+        'scripts/tests/run_world_surface_checks.py',
+        'scripts/tests/test_world_draw_probe.py',
+        'scripts/tests/README.md',
+        'build-linux.sh',
+        '.github/workflows/build-kisakcod-linux.yaml',
+    )
+    # Changes that must still build Windows.
+    WINDOWS_RUNS = (
+        'CMakeLists.txt',
+        'src/gfx_d3d/r_image.cpp',
+        'src/universal/q_shared.h',
+        'src/win32/win_main.cpp',
+        'scripts/common_files.cmake',
+        'scripts/platform/win32/platform.cmake',
+        'scripts/ci/check-windows-bootstrap.ps1',
+        'scripts/tests/d3dx/CMakeLists.txt',
+        'scripts/tests/test_voice_lifecycle.py',
+        'deps/some_library/source.c',
+        '.github/workflows/build-kisarcod-win.yaml',
+    )
+
+    @classmethod
+    def setUpClass(cls):
+        def load(name):
+            return yaml.load((ROOT / '.github/workflows' / name).read_text(),
+                             Loader=yaml.BaseLoader)
+        cls.linux = load('build-kisakcod-linux.yaml')
+        cls.windows = load('build-kisarcod-win.yaml')
+        cls.windows_paths = cls.windows['on']['pull_request']['paths']
+
+    def test_a_newer_pull_request_push_cancels_only_that_pull_requests_run(self):
+        for name, workflow in (('linux', self.linux), ('windows', self.windows)):
+            with self.subTest(workflow=name):
+                self.assertEqual(workflow['concurrency'], self.CONCURRENCY)
+
+    def test_window_jobs_run_sdl3_on_pull_requests_and_both_after_a_merge(self):
+        sdl = self.linux['jobs']['window']['strategy']['matrix']['sdl']
+        self.assertEqual(sdl, WINDOW_SDL_MATRIX)
+        found = re.fullmatch(
+            r"\$\{\{ fromJSON\(github\.event_name == 'pull_request' && '([^']*)' \|\| '([^']*)'\) \}\}",
+            sdl)
+        self.assertIsNotNone(found)
+        self.assertEqual(json.loads(found.group(1)), [3])
+        self.assertEqual(json.loads(found.group(2)), [2, 3])
+
+    def test_windows_paths_are_the_same_for_both_events(self):
+        self.assertEqual(self.windows['on']['push']['paths'], self.windows_paths)
+        self.assertEqual(self.windows['on']['push']['branches'], ['master'])
+        self.assertEqual(self.windows['on']['pull_request']['branches'], ['master'])
+        self.assertIn('workflow_dispatch', self.windows['on'])
+
+    def test_windows_skips_documentation_and_linux_only_changes(self):
+        for path in self.WINDOWS_SKIPS:
+            with self.subTest(path=path):
+                self.assertFalse(_selected(path, self.windows_paths))
+
+    def test_windows_still_runs_for_shared_and_windows_changes(self):
+        for path in self.WINDOWS_RUNS:
+            with self.subTest(path=path):
+                self.assertTrue(_selected(path, self.windows_paths))
+
+    def test_every_script_the_windows_workflow_runs_triggers_it(self):
+        # A new check added to the Windows workflow under scripts/tests must be
+        # re-included in its paths, or changing only that check would not run it.
+        commands = '\n'.join(step.get('run', '')
+                             for job in self.windows['jobs'].values()
+                             for step in job['steps'])
+        referenced = sorted(set(re.findall(r'scripts/tests/[\w./-]*\w', commands)))
+        self.assertIn('scripts/tests/d3dx', referenced)
+        tracked = subprocess.run(['git', 'ls-files', 'scripts/tests'], cwd=ROOT, check=True,
+                                 capture_output=True, text=True).stdout.split()
+        for reference in referenced:
+            files = [path for path in tracked
+                     if path == reference or path.startswith(reference + '/')]
+            with self.subTest(reference=reference):
+                self.assertTrue(files)
+                for path in files:
+                    self.assertTrue(_selected(path, self.windows_paths), path)
+
+    def test_no_shared_source_is_skipped(self):
+        # Only src/linux is skipped under src/; every other tracked source builds.
+        tracked = subprocess.run(['git', 'ls-files', 'src'], cwd=ROOT, check=True,
+                                 capture_output=True, text=True).stdout.split()
+        skipped = [path for path in tracked
+                   if not path.startswith('src/linux/') and not path.endswith('.md')
+                   and not _selected(path, self.windows_paths)]
+        self.assertEqual(skipped, [])
+
+    def test_the_linux_workflow_runs_when_the_windows_triggers_change(self):
+        # This file checks the Windows workflow's triggers, so editing them runs it.
+        for event in ('push', 'pull_request'):
+            with self.subTest(event=event):
+                self.assertIn('.github/workflows/build-kisarcod-win.yaml',
+                              self.linux['on'][event]['paths'])
+
+    def test_the_pattern_reader_matches_githubs_documented_examples(self):
+        # From GitHub's filter pattern cheat sheet.
+        self.assertTrue(_selected('README.md', ['**/README.md']))
+        self.assertTrue(_selected('server/README.md', ['**/README.md']))
+        self.assertTrue(_selected('docs/a/b.md', ['docs/**']))
+        self.assertFalse(_selected('docs.md', ['docs/**']))
+        self.assertTrue(_selected('.github/workflows/x.yaml', ['**']))
+        self.assertFalse(_selected('a/b.md', ['**', '!**/*.md']))
+        self.assertTrue(_selected('scripts/tests/x.py', ['**', '!scripts/tests/**', 'scripts/tests/x.py']))
+        self.assertFalse(_selected('src/linux/a.cpp', ['*.cpp']))
 
 
 if __name__ == '__main__':
