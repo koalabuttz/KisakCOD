@@ -11,6 +11,8 @@
 #include <game_mp/g_public_mp.h>
 #include <server_mp/server_mp.h>
 
+// Script-visible player fields; offsets name their gclient_s members (they
+// were i386 literals, and hasRadar moves on x86_64).
 const client_fields_s fields[18] =
 {
   { "name", 0, F_LSTRING, &ClientScr_ReadOnly, &ClientScr_GetName },
@@ -28,9 +30,9 @@ const client_fields_s fields[18] =
     &ClientScr_SetSessionState,
     &ClientScr_GetSessionState
   },
-  { "maxhealth", 12264, F_INT, &ClientScr_SetMaxHealth, NULL },
-  { "score", 12152, F_INT, &ClientScr_SetScore, NULL },
-  { "deaths", 12156, F_INT, NULL, NULL },
+  { "maxhealth", offsetof(gclient_s, sess.maxHealth), F_INT, &ClientScr_SetMaxHealth, NULL },
+  { "score", offsetof(gclient_s, sess.score), F_INT, &ClientScr_SetScore, NULL },
+  { "deaths", offsetof(gclient_s, sess.deaths), F_INT, NULL, NULL },
   {
     "statusicon",
     0,
@@ -46,26 +48,26 @@ const client_fields_s fields[18] =
     &ClientScr_SetHeadIconTeam,
     &ClientScr_GetHeadIconTeam
   },
-  { "kills", 12160, F_INT, NULL, NULL },
-  { "assists", 12164, F_INT, NULL, NULL },
-  { "hasradar", 12664, F_INT, NULL, NULL },
-  { "spectatorclient", 12136, F_INT, &ClientScr_SetSpectatorClient, NULL },
-  { "killcamentity", 12140, F_INT, &ClientScr_SetKillCamEntity, NULL },
+  { "kills", offsetof(gclient_s, sess.kills), F_INT, NULL, NULL },
+  { "assists", offsetof(gclient_s, sess.assists), F_INT, NULL, NULL },
+  { "hasradar", offsetof(gclient_s, hasRadar), F_INT, NULL, NULL },
+  { "spectatorclient", offsetof(gclient_s, sess.forceSpectatorClient), F_INT, &ClientScr_SetSpectatorClient, NULL },
+  { "killcamentity", offsetof(gclient_s, sess.killCamEntity), F_INT, &ClientScr_SetKillCamEntity, NULL },
   {
     "archivetime",
-    12148,
+    offsetof(gclient_s, sess.archiveTime),
     F_FLOAT,
     &ClientScr_SetArchiveTime,
     &ClientScr_GetArchiveTime
   },
   {
     "psoffsettime",
-    12400,
+    offsetof(gclient_s, sess.psOffsetTime),
     F_INT,
     &ClientScr_SetPSOffsetTime,
     &ClientScr_GetPSOffsetTime
   },
-  { "pers", 12168, F_OBJECT, &ClientScr_ReadOnly, NULL },
+  { "pers", offsetof(gclient_s, sess.scriptPersId), F_OBJECT, &ClientScr_ReadOnly, NULL },
   { NULL, 0, F_INT, NULL, NULL }
 }; // idb
 
