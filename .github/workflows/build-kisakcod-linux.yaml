@@ -311,6 +311,71 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  x64_census:
+    # Opt-in 64-bit track, step one (docs/linux-x64.md): one syntax-only x86_64
+    # Clang pass over every KisakCOD-dedi unit (exact commands from a
+    # -DKISAK_LINUX_ARCH=x86_64 configure) and every client census source, with
+    # findings filed under the upstream "64-bit Support" milestone issues. Fails
+    # only when a source listed in scripts/tests/x64_compile_census_baseline.txt
+    # stops compiling for x86_64. No link, no i386 build, no DXVK, no SDL, no GPU,
+    # no game data. The i386 build and its layout checks are untouched.
+    name: x86_64 compile census
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install x64 census tools
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            cmake ninja-build clang python3 python3-yaml libopenal-dev
+          clang++ --version
+
+      - name: Check x64 census runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/tests/test_x64_compile_census.py
+
+      - name: Run x86_64 compile census
+        timeout-minutes: 20
+        shell: bash
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 -u scripts/tests/run_x64_compile_census.py \
+            --cxx clang++ --cc clang --jobs 4 \
+            --build-dir "$RUNNER_TEMP/build-x64" \
+            --report-dir artifacts/x64-census \
+            2>&1 | tee artifacts/x64-census.log
+
+      - name: Publish x64 census summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f artifacts/x64-census/x64-census.md ]]; then
+            cat artifacts/x64-census/x64-census.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload x64 census report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          # Report and compiler diagnostics for failing units only; no binaries.
+          name: KisakCOD-x64-census
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 7
+
   world_frontend:
     # Asset-free CPU test of the production renderer world front end: scene and
     # view setup, DPVS cell/portal visibility, the AABB-tree and cull-group walk,

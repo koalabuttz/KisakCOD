@@ -1,0 +1,58 @@
+# Sources that compile for native x86_64 Linux today (front end only).
+#
+# Read by scripts/tests/run_x64_compile_census.py. Format: `<set> <path>`, where
+# set is `dedi` (the KisakCOD-dedi target) or `client` (the MP client census
+# sources). A listed source that stops compiling for x86_64 fails the census;
+# an unlisted source that starts compiling is reported as progress. Regenerate
+# with `run_x64_compile_census.py --update-baseline` and review the diff.
+
+client src/client_mp/cl_auth.cpp
+client src/physics/ode/collision_quadtreespace.cpp
+client src/physics/ode/collision_space.cpp
+client src/physics/ode/collision_std.cpp
+client src/physics/ode/collision_util.cpp
+client src/physics/ode/error.cpp
+client src/physics/ode/export-dif.cpp
+client src/physics/ode/joint.cpp
+client src/physics/ode/mass.cpp
+client src/physics/ode/matrix.cpp
+client src/physics/ode/odemath.cpp
+client src/physics/ode/rotation.cpp
+client src/physics/ode/timer.cpp
+client src/physics/ode/util.cpp
+client src/sound/snd_driver.cpp
+client src/sound/snd_mss.cpp
+dedi deps/zlib/adler32.c
+dedi deps/zlib/compress.c
+dedi deps/zlib/crc32.c
+dedi deps/zlib/deflate.c
+dedi deps/zlib/gzio.c
+dedi deps/zlib/infblock.c
+dedi deps/zlib/infcodes.c
+dedi deps/zlib/inffast.c
+dedi deps/zlib/inflate.c
+dedi deps/zlib/inftrees.c
+dedi deps/zlib/infutil.c
+dedi deps/zlib/trees.c
+dedi deps/zlib/uncompr.c
+dedi deps/zlib/zutil.c
+dedi src/linux/sys_posix.cpp
+dedi src/linux/sys_runtime_test.cpp
+dedi src/linux/sys_selftest.cpp
+dedi src/physics/ode/collision_quadtreespace.cpp
+dedi src/physics/ode/collision_space.cpp
+dedi src/physics/ode/collision_std.cpp
+dedi src/physics/ode/collision_util.cpp
+dedi src/physics/ode/error.cpp
+dedi src/physics/ode/export-dif.cpp
+dedi src/physics/ode/fastdot.c
+dedi src/physics/ode/fastldlt.c
+dedi src/physics/ode/fastlsolve.c
+dedi src/physics/ode/fastltsolve.c
+dedi src/physics/ode/joint.cpp
+dedi src/physics/ode/mass.cpp
+dedi src/physics/ode/matrix.cpp
+dedi src/physics/ode/odemath.cpp
+dedi src/physics/ode/rotation.cpp
+dedi src/physics/ode/timer.cpp
+dedi src/physics/ode/util.cpp
