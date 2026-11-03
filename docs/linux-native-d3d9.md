@@ -68,8 +68,8 @@ gfx_d3d/*.h (unchanged)
 6. includes `<linux/win32_window.h>` last: the Win32 window, monitor and process
    calls the renderer units make (`CreateWindowExA`, `MonitorFromPoint`,
    `EnumDisplayMonitors`, `GetMonitorInfoA`, `Sleep`, ...) with the engine's
-   stdcall convention and Windows layouts. Declaring them lets `r_init.cpp` and
-   `rb_sky.cpp` compile unmodified; only a target that links
+   stdcall convention and Windows layouts. Declaring them lets `r_init.cpp`,
+   `r_screenshot.cpp` and `rb_sky.cpp` compile unmodified; only a target that links
    `src/linux/client/window/win32_window_sdl3.cpp` can call them (see
    [linux-device-probe.md](linux-device-probe.md)).
 
@@ -196,7 +196,7 @@ and shaders on a real device, compiles it through the boundary.
 ## Verification boundary
 
 What the checks above establish: the boundary compiles with GCC 13 and Clang 18
-for i386; it keeps the engine's calling conventions and layouts; 23 production
+for i386; it keeps the engine's calling conventions and layouts; 24 production
 renderer units that call D3D9 compile unmodified through it. What they do not
 establish: device creation from engine code, any draw, behaviour on other DXVK
 versions, or anything on hardware. Device creation is the device probe's

@@ -74,6 +74,8 @@ BOOL WINAPI DestroyWindow(HWND hWnd);
 BOOL WINAPI AdjustWindowRectEx(tagRECT *lpRect, DWORD dwStyle, BOOL bMenu, DWORD dwExStyle);
 int WINAPI GetSystemMetrics(int nIndex);
 HWND WINAPI GetActiveWindow();
+// r_screenshot.cpp turns the client-area origin into desktop coordinates.
+BOOL WINAPI ClientToScreen(HWND hWnd, tagPOINT *lpPoint);
 
 // --- Monitors ------------------------------------------------------------------
 inline constexpr DWORD MONITOR_DEFAULTTONULL = 0u;
@@ -95,6 +97,8 @@ static_assert(sizeof(tagMONITORINFO) == 40 && offsetof(tagMONITORINFO, rcWork) =
 typedef BOOL(CALLBACK *MONITORENUMPROC)(HMONITOR, HDC, tagRECT *, LPARAM);
 
 HMONITOR WINAPI MonitorFromPoint(tagPOINT pt, DWORD dwFlags);
+// r_screenshot.cpp asks which monitor shows the game window.
+HMONITOR WINAPI MonitorFromWindow(HWND hwnd, DWORD dwFlags);
 BOOL WINAPI EnumDisplayMonitors(HDC hdc, const tagRECT *lprcClip, MONITORENUMPROC lpfnEnum, LPARAM dwData);
 BOOL WINAPI GetMonitorInfoA(HMONITOR hMonitor, LPMONITORINFO lpmi);
 
