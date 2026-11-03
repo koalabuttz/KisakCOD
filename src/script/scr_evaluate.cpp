@@ -90,7 +90,7 @@ void Scr_ArchiveCanonicalStrings()
     qsort(
         scrEvaluateGlob.archivedCanonicalStrings,
         scrVarPub.canonicalStrCount,
-        8u,
+        sizeof(scrEvaluateGlob.archivedCanonicalStrings[0]),
         (int(*)(const void *, const void *))CompareCanonicalStrings);
     for (ia = 0; ia < (int)scrVarPub.canonicalStrCount; ++ia)
     {
@@ -115,7 +115,7 @@ void Scr_ArchiveCanonicalStrings()
 
 int CompareCanonicalStrings(const char **arg1, const char **arg2)
 {
-    return strcmp(arg1[1], arg2[1]);
+    return strcmp(((const ArchivedCanonicalStringInfo *)arg1)->value, ((const ArchivedCanonicalStringInfo *)arg2)->value);
 }
 
 const char *Scr_GetCanonicalString(uint32_t fieldName)

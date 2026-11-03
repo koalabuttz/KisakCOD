@@ -34,7 +34,7 @@ void FX_DrawProfile(int32_t clientIndex, void(*drawFunc)(char *), float *profile
     }
     if (!InterlockedDecrement(&system->iteratorCount) && system->needsGarbageCollection)
         FX_RunGarbageCollection(system);
-    qsort(entryPool, entryCount, 0x1Cu, (int(*)(const void *, const void *))FX_CompareProfileEntries);
+    qsort(entryPool, entryCount, sizeof(entryPool[0]), (int(*)(const void *, const void *))FX_CompareProfileEntries);
     v11 = system->firstNewEffect - system->firstActiveEffect;
     v3 = va("%4i of %4i effect objects in use (%.0f%%; %i free)", v11, 1024, (double)v11 * 0.09765625, 1024 - v11);
     drawFunc(v3);

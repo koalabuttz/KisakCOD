@@ -1781,7 +1781,7 @@ void UI_SavegameSort(int column, int force)
             qsort(
                 uiInfo.savegameStatus.displaySavegames,
                 uiInfo.savegameCount,
-                4u,
+                sizeof(uiInfo.savegameStatus.displaySavegames[0]),
                 (int(*)(const void *, const void *))UI_SavegamesQsortCompare);
             if (uiInfo.savegameName[0])
             {
