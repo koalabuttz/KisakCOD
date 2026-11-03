@@ -100,7 +100,10 @@ commit, the laptop played fullscreen on GNOME Wayland, and Alt-Tab worked. The
 project still builds against 2.7.1's headers. Only the library the client loads
 at run time needs the fix, so putting the patched library first on
 `LD_LIBRARY_PATH` is enough. Without it, run windowed (`+set r_fullscreen 0`),
-or use XWayland (`SDL_VIDEO_DRIVER=x11`).
+or use XWayland (`SDL_VIDEO_DRIVER=x11`). Fullscreen uses `r_mode` as on
+Windows, so set it to the panel's size for a sharp picture; a smaller mode is
+scaled up. `vid_restart` is refused while a listen server runs, as in the
+retail game.
 
 The engine's own `SIGINT`/`SIGTERM` handling stays in place: the client tells
 SDL not to install its signal handlers. Pointer boundaries the adapter queues
