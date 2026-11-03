@@ -234,18 +234,29 @@ out of the repository.
      drawing, material and BSP loading from source (including
      `Material_FreeAll`, which `R_Shutdown` calls only without fast files), and
      the screenshot command.
+- **The Microsoft runtime's `rand`.** `src/linux/client/msvc_rand.cpp` defines
+  `rand` and `srand` as the Microsoft C runtime does: 15 bits, per-thread
+  state, a new thread at seed 1. The engine's callers assume that range
+  (`fx_system.cpp` seeds an effect with `479 * rand() / 0x8000` and indexes a
+  479-entry table with it; `fx_update.cpp`, `r_buffers.cpp`'s particle cloud
+  buffer and `cg_weapons.cpp` scale or compare `rand()` against 32768). glibc's
+  31-bit `rand` sent the first effect the free camera spawned past the table.
+  The definitions replace glibc's for the executable's own calls and are hidden,
+  so DXVK, SDL and the C++ runtime keep glibc's. The probe refuses to start if
+  seed 1 does not give the runtime's first numbers (41, 18467). Test: check
+  `msvc_rand` in `run_world_surface_checks.py`. The dedicated server does not
+  link it: its callers mask or take a remainder.
 - **Libraries.** The executable links the D3D9 library and SDL3 for their
   symbols only. The dedicated sources compiled into it never see
   `KISAK_LINUX_NATIVE_D3D9` or SDL's include path.
 
 The probe's own sources build with `-Wall -Wextra -Werror`: the probe, the
-shared engine code, the boundary, the SDL3 window functions, and for the
-free-camera replay the adapter (`engine_scene_renderer.cpp`), its effects host
-(`engine_effects.cpp`), the replay (`free_camera_replay.cpp`) and the free
-camera's own sources
-(`src/linux/client/view`), and for its window input the window driver
-(`free_camera_window_driver.cpp`) and the SDL3 window host
-(`src/linux/client/window/window_host.cpp`, `pixel_buffer.cpp`).
+shared engine code, the boundary, `msvc_rand.cpp`, the SDL3 window functions,
+and for the free-camera replay the adapter (`engine_scene_renderer.cpp`), its
+effects host (`engine_effects.cpp`), the replay (`free_camera_replay.cpp`) and
+the free camera's own sources (`src/linux/client/view`), and for its window
+input the window driver (`free_camera_window_driver.cpp`) and the SDL3 window
+host (`src/linux/client/window/window_host.cpp`, `pixel_buffer.cpp`).
 
 ## Limits
 

@@ -462,7 +462,7 @@ When, in every frame (`MapEffects`):
 
 | Where | What, in the cgame's order |
 | --- | --- |
-| after each map load | the plan, then `Phys_Init` and `FX_InitSystem` (`CG_Init`); `rand()` seeded with a fixed value, so a load starts the same effects the same way |
+| after each map load | the plan, then `Phys_Init` and `FX_InitSystem` (`CG_Init`); `rand()` seeded with a fixed value, so a load starts the same effects the same way (the probe's `rand()` is the Microsoft runtime's, 15 bits, as `FX_SetEffectRandomSeed` assumes: [How it links](linux-world-draw-probe.md#how-it-links)) |
 | each frame, after `R_SetLodOrigin`, before `R_RenderScene` (where `R_GenerateReflectionRawData` updates effects) | the frame's refdef copied to `cgArray[0].refdef`, which the effects system reads; `FX_BeginUpdate`, `FX_SetNextUpdateTime`, `R_UpdateNonDependentEffects`; the entities' effects; `FX_SetNextUpdateCamera`, `R_UpdateSpotLightEffect`, `R_UpdateRemainingEffects` (`CG_DrawActiveFrame`) |
 | the entities' effects | a oneshot is spawned once its delay has passed, starting at its trigger time (`CG_Fx`); a loop starts when first seen and is retriggered every period (`CG_LoopFx`); every effect is unbolted; a spawn the effects system refuses (all its elements culled at spawn, or no free effect) is tried again next frame, as the cgame does |
 | before each map unload | `FX_KillAllEffects`, `FX_ShutdownSystem` (`CG_Shutdown`), then `Phys_Shutdown` |

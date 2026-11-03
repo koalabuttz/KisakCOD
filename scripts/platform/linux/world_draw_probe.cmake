@@ -198,7 +198,11 @@ endforeach()
 # Its window input (KISAK_FREE_CAMERA_INPUT) adds the window host that adopts
 # the renderer's window (src/linux/client/window, as KISAK_BUILD_LINUX_WINDOW_HOST
 # builds it for SDL3) and the window driver.
+# src/linux/client/msvc_rand.cpp gives the probe's own objects the Microsoft runtime's
+# 15-bit rand() and srand(), which the effects, renderer and cgame callers assume
+# (see that file). Its definitions are hidden, so shared libraries keep glibc's.
 set(KISAK_WORLD_DRAW_OWN_NATIVE_SOURCES
+    "${SRC_DIR}/linux/client/msvc_rand.cpp"
     "${SRC_DIR}/linux/tools/world_draw_engine.cpp"
     "${SRC_DIR}/linux/tools/world_draw_probe.cpp"
     "${SRC_DIR}/linux/tools/world_draw_probe_boundary.cpp"

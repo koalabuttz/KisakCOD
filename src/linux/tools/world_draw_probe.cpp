@@ -274,6 +274,19 @@ void Kisak_StartWorldDraw(WorldDrawMode drawMode, const char *mapName, const wf:
                 !r_smp_worker_thread[1]->current.enabled,
             "start", "the renderer is not configured for one thread");
     Require(fx_marks && !fx_marks->current.enabled, "start", "fx_marks is not off");
+    // The engine's callers assume the Microsoft runtime's 15-bit rand(), which
+    // src/linux/client/msvc_rand.cpp supplies; with glibc's, the first effect spawned
+    // indexes past fx_randomTable. Seed 1 gives that runtime's first numbers. The
+    // probe reseeds with 1 afterwards, the state every new thread starts in.
+    {
+        std::srand(1);
+        const int first = std::rand();
+        const int second = std::rand();
+        std::srand(1);
+        Require(first == 41 && second == 18467, "start",
+                "rand() is not the Microsoft runtime's (seed 1 gave " + std::to_string(first) + ", " +
+                    std::to_string(second) + "; src/linux/client/msvc_rand.cpp is not linked)");
+    }
     // The free camera holds every frame's static models and sun shadow to rules
     // (world_draw_rules.h CheckSceneCounts, CheckSceneInView), so it refuses to
     // start with their switches off, as a command-line +set could leave them,

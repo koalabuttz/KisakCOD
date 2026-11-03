@@ -139,9 +139,9 @@ python3 scripts/tests/run_world_surface_checks.py --config RelWithDebInfo
 python3 scripts/tests/run_world_surface_checks.py --list
 ```
 
-This runner performs no CMake configure and no engine build. It compiles ten
+This runner performs no CMake configure and no engine build. It compiles eleven
 standalone test translation units directly with `-m32 -std=c++20 -Werror` and runs
-them, then runs the bundle prepare script, for eleven checks:
+them, then runs the bundle prepare script, for twelve checks:
 
 | Check | Source | Covers |
 | --- | --- | --- |
@@ -155,13 +155,15 @@ them, then runs the bundle prepare script, for eleven checks:
 | `world_draw_rules` | `tests/linux_asset_export/world_draw_rules_test.cpp` | what the world draw probe holds a drawn frame to: the back-buffer measurement, the colour, coverage, brightness, repeat and camera rules, the draw counts, and the free camera's static model, shadow and effect counts, on frames built in memory ([guide](../../docs/linux-world-draw-probe.md)) |
 | `map_effects` | `tests/linux_asset_export/map_effects_test.cpp` | the reader the free camera plays a map's own effects from: the script tokenizer, the effect table, the createfx list and the effect plan, on script text the test writes itself ([guide](../../docs/linux-free-camera.md#the-maps-effects)) |
 | `world_image_capture` | `tests/linux_asset_export/world_image_capture_test.cpp` | capture bounds, name filter, duplicate rule, disabled path |
+| `msvc_rand` | `tests/linux_compat/msvc_rand_test.cpp` | the Microsoft runtime's `rand` and `srand` the world draw probe links in place of glibc's: the runtime's seed-1 sequence, the 15-bit range, per-thread state, and that shared libraries still find glibc's |
 | `world_surface_prepare` | `test_world_surface_prepare.py` | the prepare step's trust boundary over archives it writes itself |
 
-`world_image_capture` is the only case with a second translation unit: the capture
-state lives behind a mutex in `src/linux/tools/world_image_capture.cpp`, so that
-unit is compiled beside the test and linked with `-pthread`. It stays engine-free:
-no engine header, no asset tree, no zone. Every other case is a single translation
-unit that includes one header and opens no file except bundles it writes itself.
+`world_image_capture` and `msvc_rand` are the cases with a second translation unit.
+The capture state lives behind a mutex in `src/linux/tools/world_image_capture.cpp`,
+and replacing glibc's `rand` is a property of the link, so each unit is compiled
+beside its test and linked with `-pthread`. Both stay engine-free: no engine header,
+no asset tree, no zone. Every other case is a single translation unit that
+includes one header and opens no file except bundles it writes itself.
 
 Configurations are explicit rather than inherited: `Debug` compiles at `-O0` and
 `RelWithDebInfo` at `-O2`, both with `-g`. Each command runs in its own process
