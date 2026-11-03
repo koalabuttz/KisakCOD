@@ -9,7 +9,10 @@
 // sides share one SDL instance.
 //
 // Behaviour that differs from Windows, on purpose:
-//   * Window classes do not exist. The class name is accepted and ignored.
+//   * Window classes do not exist. The class name is accepted and ignored, and
+//     there is no window procedure. A process can install one observer for
+//     creation and destruction instead (SetWindowObserver), which every window
+//     reports to; the multiplayer client uses it as its WM_CREATE/WM_DESTROY.
 //   * Window sizes are client sizes: the window manager draws the decorations,
 //     so AdjustWindowRectEx leaves the rectangle as it is.
 //   * Only top-level windows. A parent, a menu or a creation parameter fails the
@@ -46,6 +49,13 @@ namespace {
 std::mutex g_windowsLock;
 std::unordered_set<SDL_Window *> g_windows;
 bool g_videoReferenced = false;
+kisak::win32_window::WindowObserver g_observer;
+
+kisak::win32_window::WindowObserver Observer()
+{
+    std::lock_guard<std::mutex> lock(g_windowsLock);
+    return g_observer;
+}
 
 bool EnsureVideo()
 {
@@ -128,6 +138,12 @@ std::size_t OpenWindowCount()
     return g_windows.size();
 }
 
+void SetWindowObserver(const WindowObserver *observer)
+{
+    std::lock_guard<std::mutex> lock(g_windowsLock);
+    g_observer = observer ? *observer : WindowObserver{};
+}
+
 } // namespace kisak::win32_window
 
 HWND WINAPI CreateWindowExA(DWORD dwExStyle,
@@ -181,6 +197,9 @@ HWND WINAPI CreateWindowExA(DWORD dwExStyle,
         std::lock_guard<std::mutex> lock(g_windowsLock);
         g_windows.insert(window);
     }
+    // WM_CREATE: the window procedure hears about the window before the caller.
+    if (const auto created = Observer().created)
+        created(window);
     return reinterpret_cast<HWND>(window);
 }
 
@@ -205,6 +224,10 @@ BOOL WINAPI IsWindow(HWND hWnd)
 BOOL WINAPI DestroyWindow(HWND hWnd)
 {
     SDL_Window *const window = reinterpret_cast<SDL_Window *>(hWnd);
+    // WM_DESTROY: whoever borrowed the window lets go while it still exists.
+    if (KnownWindow(hWnd))
+        if (const auto destroying = Observer().destroying)
+            destroying(window);
     {
         std::lock_guard<std::mutex> lock(g_windowsLock);
         if (!window || !g_windows.erase(window))

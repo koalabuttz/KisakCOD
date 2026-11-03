@@ -6,9 +6,10 @@ target builds them. It is opt-in and off by default. It is the target for the
 player-spawn milestone: a listen server whose own client joins it over the
 engine's in-process loopback (see [linux-client.md](linux-client.md#joining-servers-local-yes-remote-no)).
 
-Status: it links and starts. Without game files it stops where the engine
-needs them. Nothing has run on a GPU or with game files yet; that is the next
-step, on a developer machine.
+Status: it links and starts, and its game window takes keyboard and mouse
+input. Without game files it stops where the engine needs them. Nothing has
+run on a GPU or with game files yet; that is the next step, on a developer
+machine.
 
 ## Building
 
@@ -43,6 +44,7 @@ option.
 | Cinematics | `r_cinematic.cpp` is built without `CINEMA`. That is the engine's own build with no Bink: no cinematic ever plays. `CINEMA` is read nowhere else. |
 | Platform | `src/linux` as the dedicated server uses it, without its server-only stand-ins and its non-interactive script debugger. The client links the in-game debugger, `scr_debugger.cpp`. |
 | Client platform | `msvc_rand.cpp`, the SDL3 Win32 window layer, `texture_memory.cpp` (`r_texturemem.cpp`'s answer without DirectDraw) and the generated `Material_Sort` span of `r_material_load_obj.cpp`. |
+| Window and input | `mp_client_window.cpp` and `mp_client_input.cpp`, below, over the window tests' `WindowHost` and `EngineInput`. |
 | Not available yet | `src/linux/client/mp_client_unavailable.cpp`, below. |
 
 The entry point is `src/linux/main.cpp`, built with `KISAK_LINUX_MP_CLIENT`. It
@@ -50,6 +52,29 @@ prints the client's banner and usage, and reports the video card as DXVK's,
 which the renderer names once it opens the device. After `Com_Init` it queues
 `readStats`, as the Windows `WinMain` does. Console output goes to stderr only,
 because the client's `Com_PrintMessage` already writes every line there.
+
+## The game window and input
+
+On Windows the window procedure (`win_wndproc.cpp`) and `win_input.cpp` feed
+the engine. Here `src/linux/client/mp_client_window.cpp` and
+`src/linux/client/mp_client_input.cpp` do:
+
+| Windows | Linux |
+| --- | --- |
+| `WM_CREATE` sets `g_wv.hWnd` | The Win32 layer reports each new window to an observer from inside `CreateWindowExA`. The client adopts the renderer's window there with a `WindowHost`, which pumps its events but never presents to it or destroys it, and sets `g_wv.hWnd`. |
+| `WM_DESTROY` clears it | `DestroyWindow` reports first, so the host lets go before the window goes (a `vid_restart` or shutdown). Letting go neither quits nor touches the engine's keys. |
+| `PeekMessage` in `Win_GetEvent` | `Win_GetEvent` pumps the window once the engine queue is empty. |
+| Keys, mouse buttons, wheel, `WM_CHAR` | `SE_KEY` and `SE_CHAR` in the engine queue, through `EngineInput`. Keys follow their US layout positions. |
+| `IN_MouseMove`, once per frame | `IN_Frame` hands `CL_MouseEvent` the last position (in window pixels) and the motion summed since the last frame. |
+| The cursor recentred while `CL_MouseEvent` answers yes | Relative capture while it answers yes (look mode). When a menu or the console has the mouse, capture is released and the cursor follows `IN_ShowSystemCursor`. |
+| `WM_ACTIVATE` runs `VID_AppActivate` | Focus and minimize changes run the same steps, after the window releases the held keys. |
+| `WM_CLOSE` runs `Com_Quit_f` | Queues `quit`. Quitting shuts the renderer down, and with it the window, so it waits for the next command buffer pass instead of running inside the window's own event pump. |
+
+The engine's own `SIGINT`/`SIGTERM` handling stays in place: the client tells
+SDL not to install its signal handlers. Pointer boundaries the adapter queues
+(`SE_POINTER`) are dropped before `Com_EventLoop`, which has no case for them.
+Joysticks, MIDI and DirectInput are not ported; the Windows build does not use
+them either.
 
 ## What it does not have yet
 
@@ -61,8 +86,6 @@ engine answers on Windows when that service is missing:
 | Remote script debugger | `win_net_debug.cpp` | None attached. `net_listen` says it is unavailable. |
 | HTTP downloads | `dl_main.cpp` (libcurl) | A download cannot begin, so the client sends `wwwdl fail` and falls back to the UDP download. |
 | Voice chat | `win_voice.cpp` (DirectSound) | No voice device: nothing is captured, sent or played. |
-| Mouse and keyboard | `win_input.cpp` | No mouse initialized. The console on stdin is the only input. |
-| Window procedure | `win_wndproc.cpp` | `g_wv.hWnd` stays null, so the game window is never the foreground window. |
 
 Functions that only raw-asset loading (`useFastFile 0`) or an attached remote
 debugger reaches abort with their name. `Material_FreeAll` runs its fast-file
@@ -70,9 +93,6 @@ branch: it releases the technique sets and nothing else.
 
 Joining a remote server is refused, because Linux has no Steam ticket provider
 ([linux-client.md](linux-client.md#joining-servers-local-yes-remote-no)).
-
-Window events and input are the next piece. Until then the SDL window is not
-pumped, so a desktop may report it as not responding during a run.
 
 ## Checks
 
@@ -94,8 +114,23 @@ with no game data:
   `configure_mp.csv`, a game file, is missing.
 
 Both runs exit 1, print each line once, try no connection and write only under
-`fs_homepath`. CI builds the client in the device-probe job with both stand-ins
-and runs this script.
+`fs_homepath`. The renderer never starts in these runs, so no window is made.
+
+`KisakCOD-mp-client-window-test` (`tests/linux_mp_client/client_window_test.cpp`)
+checks the game window on SDL's dummy video driver, with the engine replaced by
+a recorder. That driver cannot make Vulkan windows, so the test drops the Vulkan
+flag from the window `CreateWindowExA` asks for; the rest is the client's code.
+It checks that the window is adopted inside `CreateWindowExA` and let go inside
+`DestroyWindow`, keys and text reach the engine queue, the mouse is reported
+once per frame, look mode takes and releases capture, focus, minimize and close
+reach the engine, and a destroyed window neither quits nor clears keys. It does
+not check a real desktop's events or HiDPI scaling.
+
+```sh
+LD_LIBRARY_PATH=<sdl3-sdk>/lib SDL_VIDEODRIVER=dummy <bin>/KisakCOD-mp-client-window-test
+```
+
+CI builds both in the device-probe job with the stand-ins and runs both.
 
 ## On the laptop
 

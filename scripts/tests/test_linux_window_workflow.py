@@ -544,6 +544,17 @@ class DeviceProbeWorkflowTests(unittest.TestCase):
         self.assertIn('export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/d3d9-unavailable:'
                       '$RUNNER_TEMP/openal-unavailable"', run)
 
+    def test_the_game_window_test_is_built_and_runs_before_the_client(self):
+        build = self.step(self.MP_BUILD_STEP)['run']
+        self.assertIn('--target KisakCOD-mp KisakCOD-mp-client-window-test', build)
+        # Linked for its Win32 declarations only: no D3D9 library.
+        self.assertIn("readelf -d \"$window_test\" | grep -F 'Shared library: [libSDL3.so.0]'", build)
+        self.assertIn('the game window test must not link a D3D9 library', build)
+        run = self.step(self.MP_RUN_STEP)['run']
+        test = '"$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-mp-client-window-test"'
+        self.assertIn(test, run)
+        self.assertLess(run.index(test), run.index('scripts/tests/test_linux_mp_client.py'))
+
     def test_the_client_script_builds_its_own_trees_and_takes_no_game_directory(self):
         script = (ROOT / 'scripts/tests/test_linux_mp_client.py').read_text()
         self.assertIn('tempfile.TemporaryDirectory(prefix="kisak-mp-client-")', script)

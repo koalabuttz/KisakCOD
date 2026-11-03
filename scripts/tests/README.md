@@ -331,6 +331,16 @@ client's autoconfigure step for want of `configure_mp.csv`. Both exit 1, print
 each line once and write only under `fs_homepath`. Without `--binary` only the
 source checks run.
 
+The same build makes `KisakCOD-mp-client-window-test`, the game window's check
+on SDL's dummy video driver with a recording engine: the window procedure adopts
+the renderer's window and lets it go before it is destroyed, and keys, the
+per-frame mouse report, look-mode capture, focus and close reach the engine as
+on Windows ([guide](../../docs/linux-mp-client.md#the-game-window-and-input)).
+
+```sh
+LD_LIBRARY_PATH=<sdl3-sdk>/lib SDL_VIDEODRIVER=dummy <bin>/KisakCOD-mp-client-window-test
+```
+
 ## World front-end checks
 
 ```sh

@@ -18,4 +18,18 @@ std::uint64_t WindowFlagsForStyle(std::uint32_t style, std::uint32_t exStyle);
 // Windows created by CreateWindowExA and not yet destroyed.
 std::size_t OpenWindowCount();
 
+// The part of a Win32 window procedure the Linux client needs: WM_CREATE and
+// WM_DESTROY. Windows sends both from inside CreateWindowExA and DestroyWindow;
+// so does this layer. `created` runs once the window exists and IsWindow knows
+// it, before CreateWindowExA returns. `destroying` runs before the window goes
+// away, while IsWindow still knows it, so whatever borrowed the window can let
+// go first. A failed CreateWindowExA and a DestroyWindow of an unknown handle
+// call neither. One observer per process; nullptr removes it. The observer is
+// called on the thread that creates or destroys the window, without locks held.
+struct WindowObserver {
+    void (*created)(void *hwnd) = nullptr;
+    void (*destroying)(void *hwnd) = nullptr;
+};
+void SetWindowObserver(const WindowObserver *observer);
+
 } // namespace kisak::win32_window
