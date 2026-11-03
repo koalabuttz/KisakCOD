@@ -831,11 +831,44 @@ namespace rt_test
         }
     }
 
+    // The client's default fs_homepath goes first, on a line of its own, and the
+    // arguments follow unchanged on the next lines (Com_ParseCommandLine splits
+    // at '+' and '\n').
+    void TestCommandLineHomePath()
+    {
+        printf("command line with a default home path\n");
+
+        const char *argv[] = {"prog", "+set", "fs_basepath", "/game dir", "+devmap", "mp_crash"};
+        char *mutableArgv[6];
+        for (int i = 0; i < 6; ++i)
+            mutableArgv[i] = const_cast<char *>(argv[i]);
+
+        Check(BuildCommandLine(6, mutableArgv, "/home/user dir/.local/share/KisakCOD"), "home line fits");
+        const char *const newline = strchr(sys_cmdline, '\n');
+        Check(newline != nullptr, "the home line ends with a newline");
+        if (!newline)
+            return;
+        const std::string homeLine(sys_cmdline, static_cast<size_t>(newline - sys_cmdline));
+        const std::vector<std::string> homeTokens = Tokenize(homeLine.c_str());
+        Check(homeTokens.size() == 3 && homeTokens[0] == "set" && homeTokens[1] == "fs_homepath"
+                  && homeTokens[2] == "/home/user dir/.local/share/KisakCOD",
+              "the home line sets fs_homepath to the path");
+        Check(strchr(homeLine.c_str(), '+') == nullptr, "the home line holds no '+'");
+        Check(strcmp(newline + 1, "+set fs_basepath \"/game dir\" +devmap mp_crash") == 0,
+              "the arguments follow unchanged");
+
+        // No room for the home line: refused, not truncated.
+        std::string longPath(sizeof(sys_cmdline), 'a');
+        longPath[0] = '/';
+        Check(!BuildCommandLine(6, mutableArgv, longPath.c_str()), "a home line that does not fit is refused");
+    }
+
     int RunCommandLineTests()
     {
         TestCommandLineBoundaries();
         TestCommandLineExactFit();
         TestCommandLineRoundTrip();
+        TestCommandLineHomePath();
         return Report("cli");
     }
 }

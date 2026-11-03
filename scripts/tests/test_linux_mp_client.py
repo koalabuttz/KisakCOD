@@ -13,7 +13,9 @@ Two parts:
   the player profile to the client's autoconfigure step, then stop there because
   configure_mp.csv (a game file) is missing. Either way it exits 1, prints each
   console line once (stderr; the fatal error goes to stdout as on the dedicated
-  server), and writes nothing outside the temporary tree.
+  server), and writes nothing outside the temporary tree. Without fs_homepath
+  the client writes to $XDG_DATA_HOME/KisakCOD (or ~/.local/share/KisakCOD), never
+  to the game folder, and refuses to start when it has neither.
 
 Run on SDL's dummy drivers with the stand-in D3D9 and OpenAL libraries on
 LD_LIBRARY_PATH, as CI does. No GPU, Steam install, credentials or game files.
@@ -37,6 +39,7 @@ PLATFORM_LIST = ROOT / "scripts" / "platform" / "linux" / "mp_client_platform_so
 UNAVAILABLE = SRC / "linux" / "client" / "mp_client_unavailable.cpp"
 INPUT = SRC / "linux" / "client" / "mp_client_input.cpp"
 WINDOW = SRC / "linux" / "client" / "mp_client_window.cpp"
+MAIN = SRC / "linux" / "main.cpp"
 RUN_TIMEOUT = 120
 
 
@@ -109,10 +112,26 @@ def source_checks(checker):
                     and "connectionState" not in window_code,
                     "the window and input code do not touch authentication or the connection")
 
+    # Quitting frees the key bindings (script strings) before SL_Shutdown's leak
+    # check, as win_main.cpp's Sys_Quit does.
+    main_code = MAIN.read_text(encoding="utf-8")
+    quit_body = main_code[main_code.index("void Sys_Quit()"):]
+    quit_body = quit_body[:quit_body.index("\n}\n")]
+    checker.require(re.search(r"#ifdef KISAK_LINUX_MP_CLIENT\s+(//[^\n]*\s+)*IN_Shutdown\(\);\s+Key_Shutdown\(\);\s+#endif",
+                              quit_body) is not None
+                    and quit_body.index("Key_Shutdown();") < quit_body.index("SL_Shutdown();"),
+                    "the client's quit frees the key bindings before the script string leak check")
+
 
 def run(binary, arguments, cwd, env):
     return subprocess.run([str(binary), *arguments], cwd=cwd, env=env, stdin=subprocess.DEVNULL,
                           capture_output=True, text=True, errors="replace", timeout=RUN_TIMEOUT, check=False)
+
+
+def make_stub_tree(base):
+    """A base path holding only a one-line stub of fileSysCheck.cfg."""
+    (base / "main").mkdir(parents=True)
+    (base / "main" / "fileSysCheck.cfg").write_text("// stub written by the check; no game data\n")
 
 
 def tree_files(root):
@@ -128,11 +147,17 @@ def run_checks(checker, binary):
         work = Path(workdir)
         cwd = work / "cwd"
         cwd.mkdir()
+        # The client's default home folder, which no run that passes
+        # fs_homepath may touch.
+        unused_home = work / "xdg-unused"
+        env["XDG_DATA_HOME"] = str(unused_home)
 
         completed = run(binary, ["--help"], cwd, env)
         checker.require(completed.returncode == 0 and "KisakCOD multiplayer client (native Linux)" in completed.stdout
                         and "Usage: KisakCOD-mp" in completed.stdout, "--help prints the client's usage and exits 0",
                         completed.stdout + completed.stderr)
+        checker.require("$XDG_DATA_HOME/KisakCOD" in completed.stdout and "not the game folder" in completed.stdout,
+                        "--help says where configs and profiles go", completed.stdout)
         completed = run(binary, ["--version"], cwd, env)
         checker.require(completed.returncode == 0
                         and completed.stdout == "KisakCOD multiplayer client (native Linux)\n",
@@ -165,8 +190,7 @@ def run_checks(checker, binary):
         # A stub fileSysCheck.cfg: through the file system and the profile to the
         # client's autoconfigure step, which needs configure_mp.csv.
         stub = work / "stub"
-        (stub / "base" / "main").mkdir(parents=True)
-        (stub / "base" / "main" / "fileSysCheck.cfg").write_text("// stub written by the check; no game data\n")
+        make_stub_tree(stub / "base")
         completed = run(binary, ["+set", "fs_basepath", str(stub / "base"), "+set", "fs_homepath",
                                  str(stub / "home")], cwd, env)
         err = completed.stderr
@@ -186,6 +210,44 @@ def run_checks(checker, binary):
                         "the run writes only under fs_homepath", str(written))
         checker.require(not any(cwd.iterdir()), "nothing lands in the working directory",
                         str(tree_files(cwd)))
+        checker.require(not unused_home.exists(), "a run given fs_homepath leaves the default home folder alone")
+
+        # Without fs_homepath the client keeps out of the game folder: it writes
+        # to $XDG_DATA_HOME/KisakCOD, or ~/.local/share/KisakCOD without one.
+        for index, (name, extra, home_dir) in enumerate((
+                ("XDG_DATA_HOME", {"XDG_DATA_HOME": "xdg", "HOME": "user"}, "xdg/KisakCOD"),
+                ("HOME", {"XDG_DATA_HOME": None, "HOME": "user"}, "user/.local/share/KisakCOD"),
+                ("HOME when XDG_DATA_HOME is relative", {"XDG_DATA_HOME": "relative/xdg", "HOME": "user"},
+                 "user/.local/share/KisakCOD"))):
+            tree = work / f"default-home-{index}"
+            make_stub_tree(tree / "base")
+            run_env = dict(env)
+            for key, value in extra.items():
+                if value is None:
+                    run_env.pop(key, None)
+                elif value.startswith("relative/"):
+                    run_env[key] = value
+                else:
+                    run_env[key] = str(tree / value)
+            completed = run(binary, ["+set", "fs_basepath", str(tree / "base")], cwd, run_env)
+            log = completed.stdout + completed.stderr
+            checker.require(completed.returncode == 1 and "========= autoconfigure" in completed.stderr,
+                            f"without fs_homepath ({name}) the stub tree still reaches autoconfigure", log[-2000:])
+            written = [entry for entry in tree_files(tree) if entry != "base/main/fileSysCheck.cfg"]
+            checker.require(written and all(entry.startswith(home_dir + "/") for entry in written),
+                            f"without fs_homepath ({name}) the run writes only under {home_dir}", str(written))
+
+        # No usable default and no fs_homepath: refused before the engine starts.
+        refused = work / "no-home"
+        (refused / "base" / "main").mkdir(parents=True)
+        run_env = {key: value for key, value in env.items() if key not in ("XDG_DATA_HOME", "HOME")}
+        completed = run(binary, ["+set", "fs_basepath", str(refused / "base")], cwd, run_env)
+        log = completed.stdout + completed.stderr
+        checker.require(completed.returncode == 1 and "pass +set fs_homepath <folder>" in completed.stderr
+                        and "FS_Startup" not in log,
+                        "with no home folder the client refuses before the engine starts", log[-2000:])
+        checker.require(tree_files(refused) == [] and not any(cwd.iterdir()), "the refusal writes nothing",
+                        str(tree_files(refused)))
 
 
 def main(argv=None):

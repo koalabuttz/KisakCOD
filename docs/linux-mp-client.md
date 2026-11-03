@@ -7,9 +7,10 @@ player-spawn milestone: a listen server whose own client joins it over the
 engine's in-process loopback (see [linux-client.md](linux-client.md#joining-servers-local-yes-remote-no)).
 
 Status: it links and starts, and its game window takes keyboard and mouse
-input. Without game files it stops where the engine needs them. Nothing has
-run on a GPU or with game files yet; that is the next step, on a developer
-machine.
+input. Without game files it stops where the engine needs them. On a developer
+laptop with the game files and a GPU (not CI evidence), `+devmap mp_crash`
+creates the device, loads the map and runs server and game initialization;
+the in-game state is not reached yet.
 
 ## Building
 
@@ -36,7 +37,10 @@ The OpenAL headers (`AL/al.h`) are needed too, whichever library is linked,
 because the sound headers include them. Without `libopenal-dev` installed, unpack
 the package somewhere (`apt-get download libopenal-dev`, then `dpkg-deb -x`) and
 pass `-DKISAK_OPENAL_INCLUDE_DIR=<that tree>/usr/include`; nothing needs to be
-installed system-wide.
+installed system-wide. Use the setting from a fresh build directory, not one
+that was configured with `-isystem <that tree>/usr/include` in the compiler
+flags. CMake caches that directory as one the compiler already searches, and
+then drops it from every target, so `AL/al.h` goes missing.
 
 ## What it compiles
 
@@ -89,6 +93,26 @@ SDL not to install its signal handlers. Pointer boundaries the adapter queues
 Joysticks, MIDI and DirectInput are not ported; the Windows build does not use
 them either.
 
+## Where it writes
+
+Configs, logs and player profiles go to `fs_homepath`. The engine's default for
+it is `fs_basepath`, the game folder, so the Linux client picks its own default
+when the command line sets none: `$XDG_DATA_HOME/KisakCOD`, or
+`~/.local/share/KisakCOD` when `XDG_DATA_HOME` is unset or not absolute. With
+neither that nor `HOME` usable it refuses to start and asks for
+`+set fs_homepath <folder>`. Files in the game folder are still read, through
+the search path.
+
+This keeps the client away from the game's own stats. This build has no CD key
+(`cl_cdkey` stays blank, on Windows too), and the stats file (`mpdata`) is
+encrypted with a key derived from it. So a stats file the retail game wrote
+cannot be decrypted. `LiveStorage_HandleCorruptStats` then renames and deletes
+it under `fs_homepath`, writes zeroed stats, and drops the game with
+`PLATFORM_STATSREADERROR`. With the default home folder, the retail file in the
+game folder is only read. The first map load with an existing retail profile
+drops once. After that, the client reads its own zeroed stats from the home
+folder, which come first in the search path.
+
 ## What it does not have yet
 
 `mp_client_unavailable.cpp` answers for each missing service the way the
@@ -126,7 +150,12 @@ with no game data:
   the player profile to the client's autoconfigure step. It stops there because
   `configure_mp.csv`, a game file, is missing.
 
-Both runs exit 1, print each line once, try no connection and write only under
+- Without `fs_homepath`, the same tree writes only under
+  `$XDG_DATA_HOME/KisakCOD`, or `~/.local/share/KisakCOD` when there is no
+  absolute `XDG_DATA_HOME`. With neither that nor `HOME`, the client refuses
+  before the engine starts.
+
+These runs exit 1, print each line once, try no connection and write only under
 `fs_homepath`. The renderer never starts in these runs, so no window is made.
 
 `KisakCOD-mp-client-window-test` (`tests/linux_mp_client/client_window_test.cpp`)

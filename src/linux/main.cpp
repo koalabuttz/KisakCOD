@@ -32,6 +32,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 
 // ---------------------------------------------------------------------------
@@ -202,9 +203,27 @@ namespace
     // Builds the engine's command line from argv, excluding the program name,
     // mirroring the Windows build where lpCmdLine never contains it. Returns false
     // if the arguments cannot be represented in sys_cmdline.
-    bool BuildCommandLine(int argc, char **argv)
+    //
+    // A non-null 'homePath' becomes the first line, "set fs_homepath <path>",
+    // ended by a newline (Com_ParseCommandLine starts a line at '+' or '\n').
+    // Startup variables are applied line by line, so a +set fs_homepath later
+    // on the command line would win over it.
+    bool BuildCommandLine(int argc, char **argv, const char *homePath = nullptr)
     {
         sys_cmdline[0] = '\0';
+
+        if (homePath)
+        {
+            if (!AppendCommandLineArg(sys_cmdline, sizeof(sys_cmdline), "set", true)
+                || !AppendCommandLineArg(sys_cmdline, sizeof(sys_cmdline), "fs_homepath", false)
+                || !AppendCommandLineArg(sys_cmdline, sizeof(sys_cmdline), homePath, false))
+                return false;
+            const size_t length = strlen(sys_cmdline);
+            if (length + 2 > sizeof(sys_cmdline))
+                return false;
+            sys_cmdline[length] = '\n';
+            sys_cmdline[length + 1] = '\0';
+        }
 
         for (int i = 1; i < argc; ++i)
         {
@@ -224,6 +243,53 @@ namespace
         }
         return false;
     }
+#ifdef KISAK_LINUX_MP_CLIENT
+    // Where the client keeps its configs and player profiles when the command
+    // line does not say. The engine's own default for fs_homepath is
+    // fs_basepath, the game folder: the client would write there, and a stats
+    // file it cannot decrypt (any stats file written with a CD key, since this
+    // build has none) is renamed and deleted there by
+    // LiveStorage_HandleCorruptStats. So the Linux client keeps out of the game
+    // folder by default, in $XDG_DATA_HOME/KisakCOD, or ~/.local/share/KisakCOD
+    // when XDG_DATA_HOME is unset or not absolute (the XDG rule).
+    //
+    // Fills 'out' and returns nullptr, or returns why there is no default.
+    const char *DefaultHomePath(char *out, size_t outSize)
+    {
+        const char *const dataHome = getenv("XDG_DATA_HOME");
+        int written;
+        if (dataHome && dataHome[0] == '/')
+        {
+            written = snprintf(out, outSize, "%s/KisakCOD", dataHome);
+        }
+        else
+        {
+            const char *const home = getenv("HOME");
+            if (!home || home[0] != '/')
+                return "neither XDG_DATA_HOME nor HOME is an absolute path";
+            written = snprintf(out, outSize, "%s/.local/share/KisakCOD", home);
+        }
+        if (written < 0 || (size_t)written >= outSize)
+            return "the default folder's path is too long";
+        if (strpbrk(out, "+\n"))
+            return "the default folder's path holds a '+' or a newline, which split the engine's command line";
+        return nullptr;
+    }
+
+    // Whether the arguments set fs_homepath themselves (+set or +seta, as
+    // Com_StartupVariable reads them).
+    bool SetsHomePath(int argc, char **argv)
+    {
+        for (int i = 1; i + 1 < argc; ++i)
+        {
+            const char *command = argv[i][0] == '+' ? argv[i] + 1 : argv[i];
+            if ((strcasecmp(command, "set") == 0 || strcasecmp(command, "seta") == 0)
+                && strcmp(argv[i + 1], "fs_homepath") == 0)
+                return true;
+        }
+        return false;
+    }
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -514,6 +580,13 @@ void Sys_Quit()
     Sys_EnterCriticalSection(CRITSECT_COM_ERROR);
 
     Sys_SpawnQuitProcess();
+#ifdef KISAK_LINUX_MP_CLIENT
+    // As win_main.cpp's Sys_Quit. Key_Shutdown frees the key bindings, which
+    // are script strings (CopyString); left in place, SL_Shutdown's leak check
+    // below asserts on every quit.
+    IN_Shutdown();
+    Key_Shutdown();
+#endif
     Sys_DestroyConsole();
     Sys_NormalExit();
     RefreshQuitOnErrorCondition();
@@ -648,6 +721,14 @@ namespace
             "\n",
             stream);
         fprintf(stream, "Engine arguments such as  %s  are passed\nthrough unchanged.\n", kExampleArguments);
+#ifdef KISAK_LINUX_MP_CLIENT
+        fputs(
+            "\n"
+            "Configs and player profiles go to $XDG_DATA_HOME/KisakCOD (by default\n"
+            "~/.local/share/KisakCOD), not the game folder; +set fs_homepath <folder>\n"
+            "chooses another.\n",
+            stream);
+#endif
     }
 }
 
@@ -669,7 +750,22 @@ int main(int argc, char **argv)
     // Build the engine command line before any subsystem starts. Arguments that do
     // not fit must refuse to start the server: truncating them would silently run
     // with a different command line than the operator asked for.
-    if (!BuildCommandLine(argc, argv))
+    const char *defaultHome = nullptr;
+#ifdef KISAK_LINUX_MP_CLIENT
+    char homePath[256];
+    if (!SetsHomePath(argc, argv))
+    {
+        if (const char *const problem = DefaultHomePath(homePath, sizeof(homePath)))
+        {
+            fprintf(stderr,
+                "%s: no folder for configs and player profiles (%s); pass +set fs_homepath <folder>\n",
+                kProgramName, problem);
+            return 1;
+        }
+        defaultHome = homePath;
+    }
+#endif
+    if (!BuildCommandLine(argc, argv, defaultHome))
     {
         fprintf(stderr,
             "%s: command line too long: the arguments after the program name "
