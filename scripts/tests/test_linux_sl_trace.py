@@ -3,8 +3,9 @@
 
 Checks the opt-in script string reference trace (src/linux/sl_trace.cpp with
 KISAK_SL_TRACE): events are kept per string, a freed string's history is
-cleared, old events roll off with a note, each event carries a backtrace, and
-unknown or out-of-range strings are handled. Asset-free.
+cleared, old events roll off with a note, each event carries a backtrace,
+lifetime totals per call stack keep every event, and unknown or out-of-range
+strings are handled. Asset-free.
 
 Usage: python3 scripts/tests/test_linux_sl_trace.py [--cxx clang++]
 """
@@ -43,9 +44,14 @@ def check(text):
     require(events == [("new", "0x04"), ("add-user", "0x04"), ("add-ref", "0x00")],
             f"freed string's history was cleared; reused slot shows its own 3 events (got {events})")
     require("SlTraceTestTakeReference" in seven, "events carry a backtrace that names the caller")
+    sites = re.findall(r"SL_TRACE   site \d+: (\d+) adds, (\d+) removes", seven)
+    require("3 call sites over the string's life" in seven and sorted(sites) == [("1", "0")] * 3,
+            f"lifetime call-site totals restart when the string is freed (got {sites})")
     nine = section(text, "SL_TRACE leaked string 9:")
     require("4 older events dropped" in nine, "history keeps the newest 16 events and says how many rolled off")
     require(len(re.findall(r"SL_TRACE   event ", nine)) == 16, "16 events printed for the long history")
+    require(re.findall(r"SL_TRACE   site \d+: (\d+) adds, (\d+) removes", nine) == [("20", "0")],
+            "call-site totals keep every event, not only the newest 16")
     eleven = section(text, "SL_TRACE leaked string 11:")
     require("no recorded events" in eleven, "a string with no events says so")
     outside = section(text, "SL_TRACE leaked string 70000:")

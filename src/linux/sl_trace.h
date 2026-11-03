@@ -5,9 +5,9 @@
 // Debug builds count every script string reference and SL_CheckLeaks asserts at
 // quit if one is still held. That says which string leaked but not who took the
 // reference. With the trace on, every counted reference change records a short
-// backtrace in a per-string history, the history is cleared when the string is
-// freed, and SL_CheckLeaks prints the history of each leaked string before it
-// asserts. Off by default: nothing here is compiled into normal builds.
+// backtrace in a per-string history and adds to per-call-stack totals of adds
+// and removes over the string's whole life. Both are cleared when the string is
+// freed, and SL_CheckLeaks prints them for each leaked string before it asserts. Off by default: nothing here is compiled into normal builds.
 
 #include <cstdint>
 

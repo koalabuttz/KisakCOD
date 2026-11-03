@@ -177,9 +177,11 @@ cmake -S . -B build-sltrace -G Ninja -DKISAK_PLATFORM=linux \
 ```
 
 Every counted reference change then records a 12-frame backtrace in a
-per-string history of the newest 16 events, and the history is cleared when the
-string is freed. At quit, before the assert, each leaked string's history is
-printed to stderr as `SL_TRACE` lines; the frames are `binary(+offset)` and
+per-string history of the newest 16 events, and adds to per-call-site totals
+of adds and removes over the string's whole life (sites are told apart by
+their innermost 6 frames, up to 64 per string). Both are cleared when the
+string is freed. At quit, before the assert, each leaked string's history and
+call-site totals are printed to stderr as `SL_TRACE` lines; the frames are `binary(+offset)` and
 resolve with `addr2line -f -C -e <binary> <offset>`. The text of the string is
 printed too, so keep logs from runs with game data private. The trace is slow
 and only for diagnosis. `sl_trace` in `run_linux_checks.py` tests it without

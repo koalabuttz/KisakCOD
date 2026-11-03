@@ -16,7 +16,11 @@ namespace
 {
 constexpr uint32_t kStringSlots = 65536;
 constexpr uint32_t kEventsPerString = 16;
+constexpr uint32_t kSitesPerString = 64;
 constexpr int kFrames = 12;
+// Call sites are told apart by their innermost frames; deeper frames only
+// say which script thread got there and would split one site into many.
+constexpr int kSiteFrames = 6;
 
 struct Event
 {
@@ -28,11 +32,84 @@ struct Event
     void *frames[kFrames];
 };
 
+// Every distinct call site (innermost kSiteFrames frames) that changed the
+// string's count over its whole life, with how many references it added and
+// removed, and the full stack of its first occurrence. The ring above only
+// keeps the newest events; this keeps the totals.
+struct Site
+{
+    uint32_t hash;
+    uint32_t adds;
+    uint32_t removes;
+    uint8_t depth;
+    void *frames[kFrames];
+};
+
 struct History
 {
     std::atomic<uint32_t> next;
     Event events[kEventsPerString];
+    std::atomic_flag sitesLock;
+    uint32_t siteCount;
+    uint32_t otherAdds;
+    uint32_t otherRemoves;
+    Site sites[kSitesPerString];
 };
+
+bool IsAdd(uint8_t op)
+{
+    return op == SL_TRACE_NEW || op == SL_TRACE_ADD_REF || op == SL_TRACE_ADD_USER;
+}
+
+uint32_t HashFrames(void *const *frames, int depth)
+{
+    uint32_t hash = 2166136261u;
+    for (int i = 0; i < depth; ++i)
+    {
+        uintptr_t value = reinterpret_cast<uintptr_t>(frames[i]);
+        for (size_t b = 0; b < sizeof(value); ++b)
+        {
+            hash ^= static_cast<uint8_t>(value >> (8 * b));
+            hash *= 16777619u;
+        }
+    }
+    return hash;
+}
+
+void CountSite(History *history, const Event &event)
+{
+    const bool add = IsAdd(event.op);
+    const int keyDepth = event.depth < kSiteFrames ? event.depth : kSiteFrames;
+    const uint32_t hash = HashFrames(event.frames, keyDepth);
+    while (history->sitesLock.test_and_set(std::memory_order_acquire))
+        ;
+    Site *site = nullptr;
+    for (uint32_t i = 0; i < history->siteCount; ++i)
+    {
+        const Site &candidate = history->sites[i];
+        const int candidateKey = candidate.depth < kSiteFrames ? candidate.depth : kSiteFrames;
+        if (candidate.hash == hash && candidateKey == keyDepth &&
+            !memcmp(candidate.frames, event.frames, sizeof(void *) * keyDepth))
+        {
+            site = &history->sites[i];
+            break;
+        }
+    }
+    if (!site && history->siteCount < kSitesPerString)
+    {
+        site = &history->sites[history->siteCount++];
+        site->hash = hash;
+        site->adds = 0;
+        site->removes = 0;
+        site->depth = event.depth;
+        memcpy(site->frames, event.frames, sizeof(void *) * event.depth);
+    }
+    if (site)
+        ++(add ? site->adds : site->removes);
+    else
+        ++(add ? history->otherAdds : history->otherRemoves);
+    history->sitesLock.clear(std::memory_order_release);
+}
 
 std::atomic<History *> g_histories[kStringSlots];
 std::atomic<uint32_t> g_seq;
@@ -84,6 +161,7 @@ void SL_TraceRecord(uint32_t stringValue, SlTraceOp op, uint32_t user)
     event.user = static_cast<uint8_t>(user);
     event.thread = static_cast<uint32_t>(syscall(SYS_gettid));
     event.seq = g_seq.fetch_add(1, std::memory_order_relaxed);
+    CountSite(history, event);
 }
 
 void SL_TraceForget(uint32_t stringValue)
@@ -94,6 +172,12 @@ void SL_TraceForget(uint32_t stringValue)
     {
         memset(history->events, 0, sizeof(history->events));
         history->next.store(0, std::memory_order_relaxed);
+        while (history->sitesLock.test_and_set(std::memory_order_acquire))
+            ;
+        history->siteCount = 0;
+        history->otherAdds = 0;
+        history->otherRemoves = 0;
+        history->sitesLock.clear(std::memory_order_release);
     }
 }
 
@@ -120,6 +204,19 @@ void SL_TraceDump(uint32_t stringValue, const char *text, uint32_t user, int32_t
         // Module-relative offsets; resolve them with addr2line -f -C -e <binary>.
         backtrace_symbols_fd(const_cast<void *const *>(event.frames), event.depth, fileno(stderr));
     }
+    // Lifetime totals per call stack. A stack whose adds exceed what the
+    // matching release sites remove is where the surplus reference came from.
+    fprintf(stderr, "SL_TRACE   %u call sites over the string's life (adds/removes):\n", history->siteCount);
+    for (uint32_t i = 0; i < history->siteCount; ++i)
+    {
+        const Site &site = history->sites[i];
+        fprintf(stderr, "SL_TRACE   site %u: %u adds, %u removes\n", i, site.adds, site.removes);
+        fflush(stderr);
+        backtrace_symbols_fd(const_cast<void *const *>(site.frames), site.depth, fileno(stderr));
+    }
+    if (history->otherAdds || history->otherRemoves)
+        fprintf(stderr, "SL_TRACE   more sites than tracked: %u adds, %u removes not attributed\n",
+                history->otherAdds, history->otherRemoves);
     fflush(stderr);
 }
 
