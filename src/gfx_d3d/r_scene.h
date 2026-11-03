@@ -1,5 +1,7 @@
 #pragma once
 
+#include <universal/win_long.h>
+
 #include <xanim/xanim.h>
 
 #include "r_init.h"

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <universal/win_long.h>
+
 #include <qcommon/qcommon.h>
 
 #include "r_debug.h"

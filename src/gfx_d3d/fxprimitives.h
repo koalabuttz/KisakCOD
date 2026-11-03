@@ -1,5 +1,7 @@
 #pragma once
 
+#include <universal/win_long.h>
+
 #include <universal/layout_assert.h>
 
 #include <universal/com_math.h>

@@ -359,7 +359,7 @@ FrameRun RunFrame(const GfxWorld &world, const wf::WorldShape &shape, GfxBackEnd
     wf::Frame &frame = run.frame;
     std::memset(&data, 0, sizeof(data));
     frontEndDataOut = &data;
-    for (volatile long &count : scene.drawSurfCount)
+    for (volatile LONG &count : scene.drawSurfCount)
         count = 0;
 
     R_ClearDpvsScene();

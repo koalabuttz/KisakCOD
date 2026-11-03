@@ -1,5 +1,7 @@
 #pragma once
 
+#include <universal/win_long.h>
+
 #include <universal/layout_assert.h>
 
 // LWSS: This file has way too many structs. KISAKTODO: move out later.
