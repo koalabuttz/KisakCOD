@@ -45,8 +45,8 @@
 #     assertions live), as in the earlier probes.
 #   * What no linked unit defines is in
 #     src/linux/tools/world_draw_probe_boundary.cpp: storage whose owner is not
-#     linked, the per-frame calls into client systems this process does not run
-#     (effects, dynamic entities, sound, cgame), the two Windows-only renderer
+#     linked, the calls into client systems this process does not run (dynamic
+#     entities, sound, the cgame's scene additions), the two Windows-only renderer
 #     services (cinematics, video memory) as Linux has them, and functions the
 #     probe must never reach, each aborting with its name.
 #
@@ -142,12 +142,28 @@ set(KISAK_WORLD_DRAW_STANDIN_SOURCES
     "${SRC_DIR}/gfx_d3d/rb_sunshadow.cpp"
     "${SRC_DIR}/gfx_d3d/rb_tess.cpp"
 )
-# Client units the renderer needs whole, with the stand-in D3D9 types:
-# fx_dvars.cpp owns the effects dvars the scene reads every frame (fx_marks,
-# fx_marks_smodels, fx_marks_ents). The probe registers them with the owner's
-# FX_RegisterDvars without starting the effects system.
+# Client units the renderer needs whole, with the stand-in D3D9 types: the
+# effects system. fx_dvars.cpp owns the effects dvars the scene reads every
+# frame (fx_marks, fx_marks_smodels, fx_marks_ents), which the probe registers
+# with the owner's FX_RegisterDvars; the rest is the effects system the
+# free-camera replay and window driver run for the map's own effects
+# (src/linux/tools/engine_effects.cpp). The draw mode never starts it.
 set(KISAK_WORLD_DRAW_CLIENT_SOURCES
+    "${SRC_DIR}/EffectsCore/fx_archive.cpp"
+    "${SRC_DIR}/EffectsCore/fx_beam.cpp"
+    "${SRC_DIR}/EffectsCore/fx_draw.cpp"
     "${SRC_DIR}/EffectsCore/fx_dvars.cpp"
+    "${SRC_DIR}/EffectsCore/fx_graph.cpp"
+    "${SRC_DIR}/EffectsCore/fx_marks.cpp"
+    "${SRC_DIR}/EffectsCore/fx_postlight.cpp"
+    "${SRC_DIR}/EffectsCore/fx_profile.cpp"
+    "${SRC_DIR}/EffectsCore/fx_random.cpp"
+    "${SRC_DIR}/EffectsCore/fx_sort.cpp"
+    "${SRC_DIR}/EffectsCore/fx_sprite.cpp"
+    "${SRC_DIR}/EffectsCore/fx_system.cpp"
+    "${SRC_DIR}/EffectsCore/fx_update.cpp"
+    "${SRC_DIR}/EffectsCore/fx_update_util.cpp"
+    "${SRC_DIR}/EffectsCore/fxcurve.cpp"
 )
 # Every renderer unit is in exactly one list, and the census-blocked ones are in
 # none: a unit added to src/gfx_d3d, or one the census unblocks, fails the
@@ -177,15 +193,21 @@ endforeach()
 # The boundary goes through the native D3D9 boundary too: its video-memory
 # counterpart asks the device.
 # The free-camera replay (KISAK_FREE_CAMERA_MAP) adds the free camera's own
-# sources (src/linux/client/view), its engine adapter and the replay driver.
+# sources (src/linux/client/view), its engine adapter with the effects host that
+# plays the map's own effects, and the replay driver.
 # Its window input (KISAK_FREE_CAMERA_INPUT) adds the window host that adopts
 # the renderer's window (src/linux/client/window, as KISAK_BUILD_LINUX_WINDOW_HOST
 # builds it for SDL3) and the window driver.
+# src/linux/client/msvc_rand.cpp gives the probe's own objects the Microsoft runtime's
+# 15-bit rand() and srand(), which the effects, renderer and cgame callers assume
+# (see that file). Its definitions are hidden, so shared libraries keep glibc's.
 set(KISAK_WORLD_DRAW_OWN_NATIVE_SOURCES
+    "${SRC_DIR}/linux/client/msvc_rand.cpp"
     "${SRC_DIR}/linux/tools/world_draw_engine.cpp"
     "${SRC_DIR}/linux/tools/world_draw_probe.cpp"
     "${SRC_DIR}/linux/tools/world_draw_probe_boundary.cpp"
     "${SRC_DIR}/linux/tools/engine_scene_renderer.cpp"
+    "${SRC_DIR}/linux/tools/engine_effects.cpp"
     "${SRC_DIR}/linux/tools/free_camera_replay.cpp"
     "${SRC_DIR}/linux/tools/free_camera_window_driver.cpp"
     "${SRC_DIR}/linux/client/view/free_camera.cpp"

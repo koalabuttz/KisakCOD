@@ -61,7 +61,7 @@ probe's own code is in `src/linux/tools/world_draw_probe.cpp`.
 | --- | --- | --- |
 | `arguments` | before any device work | `KISAK_WORLD_DRAW_MAP` is unset, combined with another export mode, or not an allowlisted map name; `KISAK_WORLD_DRAW_SHOW_SECONDS` is set and not a whole number from 0 to 60 |
 | `layout` | the probe and the database loader are compiled with different definitions | any of the shared structs differs in size between the two views, as in the world device probe |
-| `start` | inside `$init`, where a client's `CL_InitRenderer` runs | a zone, a D3D object, a world or a registration exists already; `r_loadForRenderer` is off; the renderer would start threads; `fx_marks` is on; `sys_sysMB` is not set; the render commands are not set up |
+| `start` | inside `$init`, where a client's `CL_InitRenderer` runs | a zone, a D3D object, a world or a registration exists already; `r_loadForRenderer` is off; the renderer would start threads; `fx_marks` is on; `sys_sysMB` is not set; `rand()` is not the Microsoft runtime's ([below](#how-it-links)); the render commands are not set up |
 | `environment` | `DXVK_WSI_DRIVER`, `DXVK_LOG_PATH`, SDL video | the WSI is set to something other than SDL3, or SDL video cannot start |
 | `direct3d` | the probe's own `Direct3DCreate9`, released at once | no Direct3D 9 interface. `R_InitGraphicsApi` goes on without one, so the probe asks first |
 | renderer start | `R_Init`: the window and device for a 640x480 window, the graphics zones queued behind them, render targets, initial state, the scene, code images and materials | the engine's own errors |
@@ -200,7 +200,9 @@ out of the repository.
     `rb_imagetouch`, `rb_pixelcost`, `rb_shade`, `rb_sky`;
   - 53 more keep the type-only stand-in, which the census proves they compile
     with and which gives them no way to call the device;
-  - `EffectsCore/fx_dvars.cpp`, for the effects dvars the scene reads.
+  - the effects system, `src/EffectsCore` (15 units: `fx_dvars.cpp` for the
+    effects dvars the scene reads, and the rest for the free camera's effects,
+    which the draw mode never starts), with the stand-in.
 
   The configure stops if a unit in `src/gfx_d3d` is in no list or in two, or if
   a census-blocked unit is listed. All renderer units use the client
@@ -214,43 +216,63 @@ out of the repository.
 - **The link boundary.** `src/linux/tools/world_draw_probe_boundary.cpp` holds
   what the linked units reach and no linked unit defines, in four kinds:
   1. storage whose owner is not linked (`onlinegame`, `r_fullscreen`,
-     `vid_xpos`, `vid_ypos`);
-  2. per-frame calls the scene makes into client systems this process never
-     starts, each doing what its owner does when that system holds nothing:
-     sound (`CL_UpdateSound`), client debug data, the cgame's FPS history,
-     effects physics, dynamic entity physics and broken pieces.
-     `DynEntCl_ProcessEntities` checks its claim: it aborts if any client
-     dynamic entity of the map has a physics body;
+     `vid_xpos`, `vid_ypos`, and the cgame's `cgArray`, `cg_entitiesArray` and
+     `cgMedia`, which the effects system reads: the free camera's effects host
+     fills `cgArray[0].refdef`, and the rest stays empty);
+  2. calls the scene and the effects system make into client systems this
+     process never starts, each doing what its owner does when that system
+     holds nothing: sound (`CL_UpdateSound`, and `SND_AnyActiveListeners`,
+     which answers that no listener is active), client debug data, the cgame's
+     FPS history, tracer beams, player sprites and 3D HUD elements, the
+     registry of effects loaded from source (`FX_UnregisterAll`), dynamic
+     entity physics and broken pieces. `DynEntCl_ProcessEntities` checks its
+     claim: it aborts if any client dynamic entity of the map has a physics
+     body;
   3. the two Windows-only renderer services as Linux has them: no cinematic
      ever plays (so `R_Cinematic_Shutdown`, which the free-camera replay's
      `R_Shutdown` reaches, has nothing to stop), and `R_AvailableTextureMemory`
      is `r_texturemem.cpp`'s own branch for when DirectDraw cannot report video
      memory;
-  4. 29 functions the probe must never reach, each aborting with its name: the
-     client screen and loading screen, scene entities and effects (the probe
-     adds none, and only the cgame queues effects work), mark generation
-     (`fx_marks` is off), material and BSP loading from source (including
+  4. 26 functions the probe must never reach, each aborting with its name: the
+     client screen and loading screen, scene entities and marks on them (the
+     probe adds none, and `fx_marks` is off), effects bolted to an entity (the
+     free camera spawns every effect unbolted), effect and physics sounds (no
+     listener, and `cgMedia` holds no sound), the physics and collision debug
+     drawing, material and BSP loading from source (including
      `Material_FreeAll`, which `R_Shutdown` calls only without fast files), and
      the screenshot command.
+- **The Microsoft runtime's `rand`.** `src/linux/client/msvc_rand.cpp` defines
+  `rand` and `srand` as the Microsoft C runtime does: 15 bits, per-thread
+  state, a new thread at seed 1. The engine's callers assume that range
+  (`fx_system.cpp` seeds an effect with `479 * rand() / 0x8000` and indexes a
+  479-entry table with it; `fx_update.cpp`, `r_buffers.cpp`'s particle cloud
+  buffer and `cg_weapons.cpp` scale or compare `rand()` against 32768). glibc's
+  31-bit `rand` sent the first effect the free camera spawned past the table.
+  The definitions replace glibc's for the executable's own calls and are hidden,
+  so DXVK, SDL and the C++ runtime keep glibc's. The probe refuses to start if
+  seed 1 does not give the runtime's first numbers (41, 18467). Test: check
+  `msvc_rand` in `run_world_surface_checks.py`. The dedicated server does not
+  link it: its callers mask or take a remainder.
 - **Libraries.** The executable links the D3D9 library and SDL3 for their
   symbols only. The dedicated sources compiled into it never see
   `KISAK_LINUX_NATIVE_D3D9` or SDL's include path.
 
 The probe's own sources build with `-Wall -Wextra -Werror`: the probe, the
-shared engine code, the boundary, the SDL3 window functions, and for the
-free-camera replay the adapter (`engine_scene_renderer.cpp`), the replay
-(`free_camera_replay.cpp`) and the free camera's own sources
-(`src/linux/client/view`), and for its window input the window driver
-(`free_camera_window_driver.cpp`) and the SDL3 window host
-(`src/linux/client/window/window_host.cpp`, `pixel_buffer.cpp`).
+shared engine code, the boundary, `msvc_rand.cpp`, the SDL3 window functions,
+and for the free-camera replay the adapter (`engine_scene_renderer.cpp`), its
+effects host (`engine_effects.cpp`), the replay (`free_camera_replay.cpp`) and
+the free camera's own sources (`src/linux/client/view`), and for its window
+input the window driver (`free_camera_window_driver.cpp`) and the SDL3 window
+host (`src/linux/client/window/window_host.cpp`, `pixel_buffer.cpp`).
 
 ## Limits
 
 What this probe draws is the world as the renderer sees it with no game
 running:
 
-- no effects, no marks, no dynamic entity physics, no sound, no cgame, no scene
-  entities (no players, weapons or script models), no 2D;
+- no effects (the free camera plays the map's own; this mode does not), no
+  marks, no dynamic entity physics, no sound, no cgame, no scene entities (no
+  players, weapons or script models), no 2D;
 - one thread: no render thread, no worker threads, the backend on the main
   thread;
 - scene time 0 on every frame;

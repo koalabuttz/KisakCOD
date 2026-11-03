@@ -210,8 +210,9 @@ void __cdecl CL_InitDedicated()
     R_ConfigureRenderer(&config);
     if (!r_loadForRenderer)
         R_RegisterDvars();
-    // The effects dvars the scene reads every frame. No effects system starts,
-    // so no mark exists: fx_marks off is what a player with marks disabled has.
+    // The effects dvars the scene and the free camera's effects read every
+    // frame. No effect makes a mark here: fx_marks off is what a player with
+    // marks disabled has.
     FX_RegisterDvars();
     Dvar_SetBool(const_cast<dvar_s *>(fx_marks), false);
     Sys_HideSplashWindow();
@@ -284,6 +285,19 @@ void Kisak_StartWorldDraw(WorldDrawMode drawMode, const char *mapName, const wf:
     Require(fx_marks && !fx_marks->current.enabled, "start", "fx_marks is not off");
     Require(Dvar_GetInt("sys_sysMB") > 0, "start",
             "sys_sysMB is not set: R_SetPicmip would load every texture two mip levels down");
+    // The engine's callers assume the Microsoft runtime's 15-bit rand(), which
+    // src/linux/client/msvc_rand.cpp supplies; with glibc's, the first effect spawned
+    // indexes past fx_randomTable. Seed 1 gives that runtime's first numbers. The
+    // probe reseeds with 1 afterwards, the state every new thread starts in.
+    {
+        std::srand(1);
+        const int first = std::rand();
+        const int second = std::rand();
+        std::srand(1);
+        Require(first == 41 && second == 18467, "start",
+                "rand() is not the Microsoft runtime's (seed 1 gave " + std::to_string(first) + ", " +
+                    std::to_string(second) + "; src/linux/client/msvc_rand.cpp is not linked)");
+    }
     // The free camera holds every frame's static models and sun shadow to rules
     // (world_draw_rules.h CheckSceneCounts, CheckSceneInView), so it refuses to
     // start with their switches off, as a command-line +set could leave them,
@@ -293,6 +307,13 @@ void Kisak_StartWorldDraw(WorldDrawMode drawMode, const char *mapName, const wf:
             Require(dvar && dvar->current.enabled, "start",
                     std::string(dvar ? dvar->name : "a draw switch") +
                         " is off; the free camera checks the static models and sun shadow it draws");
+    // The same for the map's own effects, which the free camera plays and checks
+    // (engine_effects.h, world_draw_rules.h CheckFreeCameraCounts).
+    if (freeCamera)
+        for (const dvar_s *dvar : {fx_enable, fx_draw})
+            Require(dvar && dvar->current.enabled, "start",
+                    std::string(dvar ? dvar->name : "an effects switch") +
+                        " is off; the free camera checks the effects it plays");
     Require(frontEndDataOut && frontEndDataOut->commands && frontEndDataOut->commands->cmds, "start",
             "the render commands are not set up (R_ConfigureRenderer did not run)");
 

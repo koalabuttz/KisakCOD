@@ -10,6 +10,7 @@
 #include <universal/q_shared.h>
 #include <qcommon/com_pack.h>
 #include <qcommon/qcommon.h>
+#include <EffectsCore/fx_system.h>
 #include <gfx_d3d/r_bsp.h>
 #include <gfx_d3d/r_dpvs.h>
 #include <gfx_d3d/r_dvars.h>
@@ -92,10 +93,12 @@ struct Leg
     // The first frames that drew no world call and their poses, for the visibility
     // report after the replay.
     std::vector<std::pair<unsigned, kv::CameraPose>> noWorld{};
-    // Frames that drew no static model, and frames without the sun's shadow map.
+    // Frames that drew no static model, frames without the sun's shadow map, and
+    // frames that drew no effect.
     unsigned noStaticModelFrames = 0;
     unsigned noSunShadowFrames = 0;
-    // The first frame whose static model and shadow counts disagree, and why.
+    unsigned noEffectFrames = 0;
+    // The first frame whose static model, shadow or effect counts disagree, and why.
     int sceneProblemFrame = -1;
     std::string sceneProblem{};
 };
@@ -110,13 +113,16 @@ struct Interruption
     uint64_t before = 0, after = 0;
 };
 
-// One of the renderer's own switches turned off and on again at a checkpoint.
+// One of the renderer's or the effects' own switches turned off and on again at a
+// checkpoint.
 struct Switch
 {
     std::string name;       // what it takes out of the scene
     std::string dvar;
     std::string checkpoint; // the view it was tried on
     bool goneFromCounts = false;
+    // A try: the picture need not change at this view (the effects' switch).
+    bool tryOnly = false;
     uint64_t before = 0, without = 0, after = 0;
 };
 
@@ -139,6 +145,23 @@ std::string PoseJson(const kv::CameraPose &pose)
     json << "{\"origin\":[" << pose.origin[0] << "," << pose.origin[1] << "," << pose.origin[2] << "],\"angles\":["
          << pose.angles[0] << "," << pose.angles[1] << "," << pose.angles[2] << "]}";
     return json.str();
+}
+
+// The switches the replay turns off: what a frame without each looks like.
+bool StaticModelsGone(const FrameResult &frame)
+{
+    return frame.scene.staticModelsDrawn == 0 && frame.scene.staticModelSurfaces == 0;
+}
+
+bool SunShadowGone(const FrameResult &frame)
+{
+    return !frame.scene.sunShadowDrawn && frame.scene.sunShadowSurfaces == 0;
+}
+
+// fx_draw off: the effects are still updated, but none is drawn.
+bool EffectsGone(const FrameResult &frame)
+{
+    return frame.effects.running && frame.effects.meshes == 0 && frame.effects.surfaces == 0;
 }
 
 class Replay
@@ -168,7 +191,9 @@ public:
             ++leg.noStaticModelFrames;
         if (!frame.scene.sunShadowDrawn)
             ++leg.noSunShadowFrames;
-        const std::string sceneProblem = wdr::CheckSceneCounts(frame.scene);
+        if (!wdr::EffectsDrawn(frame.effects))
+            ++leg.noEffectFrames;
+        const std::string sceneProblem = wdr::CheckFreeCameraCounts(frame.scene, frame.effects);
         if (!sceneProblem.empty() && leg.sceneProblemFrame < 0)
         {
             leg.sceneProblemFrame = int(leg.frames);
@@ -193,10 +218,11 @@ public:
     {
         const kv::CameraPose &pose = leg.fewestColorsPose;
         Say("free_camera_leg name=%s frames=%u seconds=%.3f luma=%.1f..%.1f min_colors=%zu solid_frames=%u "
-            "no_world_frames=%u no_static_model_frames=%u no_sun_shadow_frames=%u fewest_colors_frame=%d "
-            "origin=%.2f,%.2f,%.2f angles=%.3f,%.3f,%.3f cell=%d contents=%s\n",
+            "no_world_frames=%u no_static_model_frames=%u no_sun_shadow_frames=%u no_effect_frames=%u "
+            "fewest_colors_frame=%d origin=%.2f,%.2f,%.2f angles=%.3f,%.3f,%.3f cell=%d contents=%s\n",
             leg.name.c_str(), leg.frames, leg.seconds, leg.minLuma, leg.maxLuma, leg.minColors, leg.solidFrames,
-            leg.noWorldFrames, leg.noStaticModelFrames, leg.noSunShadowFrames, leg.fewestColorsFrame, pose.origin[0],
+            leg.noWorldFrames, leg.noStaticModelFrames, leg.noSunShadowFrames, leg.noEffectFrames,
+            leg.fewestColorsFrame, pose.origin[0],
             pose.origin[1], pose.origin[2], pose.angles[0], pose.angles[1], pose.angles[2], leg.fewestColorsCell,
             Hex(uint32_t(leg.fewestColorsContents)).c_str());
         SayFrame((leg.name + ".fewest_colors").c_str(), leg.fewestColorsFrame, leg.fewestColors);
@@ -255,23 +281,43 @@ public:
 
     // Settles the view at a checkpoint with one of the renderer's switches off,
     // then on again. gone says whether a frame's counts show the thing missing.
-    void SwitchOff(const char *name, const dvar_s *dvar, const Checkpoint &at,
-                   bool (*gone)(const wdr::SceneCounts &))
+    const Switch &SwitchOff(const char *name, const dvar_s *dvar, const Checkpoint &at,
+                            bool (*gone)(const FrameResult &), bool tryOnly = false)
     {
         Require(dvar && dvar->current.enabled, "replay", std::string(dvar ? dvar->name : name) + " is not on");
         Switch record{name, dvar->name, at.name};
+        record.tryOnly = tryOnly;
         record.before = at.Digest();
         Dvar_SetBool(const_cast<dvar_s *>(dvar), false);
         const Checkpoint &without = Settle(at.name + ".without_" + dvar->name);
-        record.goneFromCounts = gone(without.frames.back().scene);
+        record.goneFromCounts = gone(without.frames.back());
         record.without = without.Digest();
         Dvar_SetBool(const_cast<dvar_s *>(dvar), true);
         record.after = Settle(at.name + ".with_" + dvar->name).Digest();
-        Say("free_camera_switch name=%s dvar=%s checkpoint=%s gone_from_counts=%s before=%s without=%s after=%s\n",
-            name, dvar->name, at.name.c_str(), record.goneFromCounts ? "yes" : "no", Hex64(record.before).c_str(),
-            Hex64(record.without).c_str(), Hex64(record.after).c_str());
+        Say("free_camera_switch name=%s dvar=%s checkpoint=%s try=%s gone_from_counts=%s before=%s without=%s "
+            "after=%s\n",
+            name, dvar->name, at.name.c_str(), tryOnly ? "yes" : "no", record.goneFromCounts ? "yes" : "no",
+            Hex64(record.before).c_str(), Hex64(record.without).c_str(), Hex64(record.after).c_str());
         switches_.push_back(record);
+        return switches_.back();
     }
+
+    // The effects' switch (fx_draw), tried at each checkpoint offered here whose
+    // counts have effects in them, until one try changes the picture: an effect
+    // behind a wall is drawn and hidden by it. Called right after that
+    // checkpoint settled, with the camera still there.
+    void SwitchEffectsIfDrawn(const Checkpoint &at)
+    {
+        if (!effectsShownAt_.empty() || !wdr::EffectsDrawn(at.frames.back().effects))
+            return;
+        ++effectTries_;
+        const Switch &record = SwitchOff("effects", fx_draw, at, EffectsGone, true);
+        if (record.without != record.before)
+            effectsShownAt_ = at.name;
+    }
+    // The checkpoint whose picture changed without the effects, or empty.
+    const std::string &EffectsShownAt() const { return effectsShownAt_; }
+    unsigned EffectTries() const { return effectTries_; }
 
     const std::deque<Checkpoint> &Checkpoints() const { return checkpoints_; }
     const std::vector<Leg> &Legs() const { return legs_; }
@@ -286,18 +332,9 @@ private:
     std::vector<Leg> legs_;
     std::vector<Interruption> interruptions_;
     std::vector<Switch> switches_;
+    std::string effectsShownAt_;
+    unsigned effectTries_ = 0;
 };
-
-// The switches the replay turns off: what a frame without each looks like.
-bool StaticModelsGone(const wdr::SceneCounts &counts)
-{
-    return counts.staticModelsDrawn == 0 && counts.staticModelSurfaces == 0;
-}
-
-bool SunShadowGone(const wdr::SceneCounts &counts)
-{
-    return !counts.sunShadowDrawn && counts.sunShadowSurfaces == 0;
-}
 
 // The window host's part of a resize: the window takes the new size, and the
 // owner hears it. A window manager may refuse the size; the back buffer follows
@@ -771,7 +808,8 @@ void Kisak_ReplayFreeCamera(const std::filesystem::path &directory, const char *
     Say("free_camera_graphics_zones=loaded zones=%d seconds=%.2f\n", g_zoneCount, startSeconds);
     const kv::ViewExtent base{vidConfig.sceneWidth, vidConfig.sceneHeight};
 
-    EngineSceneRenderer renderer(base, true);
+    // The map's own effects play in every frame (engine_effects.h).
+    EngineSceneRenderer renderer(base, true, true);
     std::vector<std::string> problems;
     auto check = [&](const std::string &what, const std::string &problem) {
         if (!problem.empty())
@@ -814,18 +852,21 @@ void Kisak_ReplayFreeCamera(const std::filesystem::path &directory, const char *
         // each switched off and on again with the camera still.
         replay.SwitchOff("static_models", r_drawSModels, atA, StaticModelsGone);
         replay.SwitchOff("sun_shadow", sm_sunEnable, atA, SunShadowGone);
+        // What the map's effects add: switched off at the checkpoints with effects
+        // in their counts until the picture shows them.
+        replay.SwitchEffectsIfDrawn(atA);
         Leg forward{"A.forward"};
         owner.Key('w', true);
         for (int i = 0; i < 60; ++i)
             replay.Draw(1000 / 60 + (i % 3 == 0), forward);
         owner.Key('w', false);
         replay.Finish(forward);
-        replay.Settle("A.forward");
+        replay.SwitchEffectsIfDrawn(replay.Settle("A.forward"));
         Leg turn{"A.turn"};
         owner.Mouse(-818, 0);
         replay.Draw(0, turn);
         replay.Finish(turn);
-        replay.Settle("A.turn");
+        replay.SwitchEffectsIfDrawn(replay.Settle("A.turn"));
         Leg fast{"A.fast"};
         owner.Key('w', true);
         owner.Key(K_SHIFT, true);
@@ -834,7 +875,7 @@ void Kisak_ReplayFreeCamera(const std::filesystem::path &directory, const char *
         owner.Key('w', false);
         owner.Key(K_SHIFT, false);
         replay.Finish(fast);
-        replay.Settle("A.fast");
+        replay.SwitchEffectsIfDrawn(replay.Settle("A.fast"));
         Leg rise{"A.rise"};
         owner.Key(K_SPACE, true);
         for (int i = 0; i < 5; ++i)
@@ -843,6 +884,7 @@ void Kisak_ReplayFreeCamera(const std::filesystem::path &directory, const char *
         replay.Finish(rise);
         const Checkpoint &end = replay.Settle("A.rise");
         const std::string endName = end.name;
+        replay.SwitchEffectsIfDrawn(end);
 
         // 3. Interruptions where path A ended. Each must bring back the same picture.
         // A resize to 800x600 and back: two device resets at new sizes.
@@ -881,7 +923,7 @@ void Kisak_ReplayFreeCamera(const std::filesystem::path &directory, const char *
         // and 642 ms of turning left.
         const kv::CameraPose startB = PoseOf(b);
         RequireLoaded(owner.Load(mapName, &startB), owner, "the load at camera B");
-        replay.Settle("B.start");
+        replay.SwitchEffectsIfDrawn(replay.Settle("B.start"));
         Leg square{"B.square"};
         for (int side = 0; side < 4; ++side)
         {
@@ -896,7 +938,7 @@ void Kisak_ReplayFreeCamera(const std::filesystem::path &directory, const char *
             owner.Key(K_LEFTARROW, false);
         }
         replay.Finish(square);
-        replay.Settle("B.square");
+        replay.SwitchEffectsIfDrawn(replay.Settle("B.square"));
 
         // 5. The rules on what was drawn.
         const uint32_t width = base.width, height = base.height;
@@ -914,7 +956,8 @@ void Kisak_ReplayFreeCamera(const std::filesystem::path &directory, const char *
             check(checkpoint.name, wdr::CheckSettled(checkpoint.digests, checkpoint.frames.back().smcPatches));
             for (size_t i = 0; i < checkpoint.frames.size(); ++i)
             {
-                const std::string problem = wdr::CheckSceneCounts(checkpoint.frames[i].scene);
+                const std::string problem =
+                    wdr::CheckFreeCameraCounts(checkpoint.frames[i].scene, checkpoint.frames[i].effects);
                 if (!problem.empty())
                 {
                     check(checkpoint.name, "draw " + std::to_string(i) + ": " + problem);
@@ -938,8 +981,18 @@ void Kisak_ReplayFreeCamera(const std::filesystem::path &directory, const char *
             if (leg.sceneProblemFrame >= 0)
                 check(leg.name, "frame " + std::to_string(leg.sceneProblemFrame) + ": " + leg.sceneProblem);
         for (const Switch &item : replay.Switches())
-            check(item.name, wdr::CheckSwitchedOff(item.name.c_str(), item.goneFromCounts, item.before, item.without,
-                                                   item.after));
+            check(item.name + "@" + item.checkpoint,
+                  item.tryOnly ? wdr::CheckSwitchTry(item.name.c_str(), item.goneFromCounts, item.before, item.after)
+                               : wdr::CheckSwitchedOff(item.name.c_str(), item.goneFromCounts, item.before,
+                                                       item.without, item.after));
+        // A map that places effects shows some of them on the way.
+        const EffectsSummary &effects = renderer.Effects()->Summary();
+        if (effects.placements > 0 && replay.EffectTries() == 0)
+            check("effects", "the map places " + std::to_string(effects.placements) +
+                                 " effects, and no checkpoint of the replay drew any");
+        else if (replay.EffectTries() > 0 && replay.EffectsShownAt().empty())
+            check("effects", "turning the effects off changed the picture at none of the " +
+                                 std::to_string(replay.EffectTries()) + " checkpoints with effects in their counts");
         const std::vector<std::string> warnings = DroppedDrawWarnings();
         if (!warnings.empty())
         {
@@ -989,6 +1042,7 @@ void Kisak_ReplayFreeCamera(const std::filesystem::path &directory, const char *
                  << ",\"min_distinct_colors\":" << leg.minColors << ",\"solid_frames\":" << leg.solidFrames
                  << ",\"no_world_frames\":" << leg.noWorldFrames << ",\"no_static_model_frames\":"
                  << leg.noStaticModelFrames << ",\"no_sun_shadow_frames\":" << leg.noSunShadowFrames
+                 << ",\"no_effect_frames\":" << leg.noEffectFrames
                  << ",\"scene_problem\":" << (leg.sceneProblemFrame < 0 ? std::string("null") : Json(leg.sceneProblem))
                  << ",\"fewest_colors\":{\"frame\":"
                  << leg.fewestColorsFrame << ",\"pose\":" << PoseJson(leg.fewestColorsPose)
@@ -1011,16 +1065,20 @@ void Kisak_ReplayFreeCamera(const std::filesystem::path &directory, const char *
         for (const Switch &item : replay.Switches())
         {
             body << (first ? "" : ",") << "{\"name\":" << Json(item.name) << ",\"dvar\":" << Json(item.dvar)
-                 << ",\"checkpoint\":" << Json(item.checkpoint)
+                 << ",\"checkpoint\":" << Json(item.checkpoint) << ",\"try\":" << (item.tryOnly ? "true" : "false")
                  << ",\"gone_from_counts\":" << (item.goneFromCounts ? "true" : "false") << ",\"before\":\""
                  << Hex64(item.before) << "\",\"without\":\"" << Hex64(item.without) << "\",\"after\":\""
                  << Hex64(item.after) << "\"}";
             first = false;
         }
-        body << "],\"dropped_draw_warnings\":[";
+        body << "],\"effects\":" << EffectsSummaryJson(effects) << ",\"effect_switch_tries\":"
+             << replay.EffectTries() << ",\"effects_shown_at\":"
+             << (replay.EffectsShownAt().empty() ? std::string("null") : Json(replay.EffectsShownAt()))
+             << ",\"dropped_draw_warnings\":[";
         for (size_t i = 0; i < warnings.size(); ++i)
             body << (i ? "," : "") << Json(warnings[i]);
         body << "]";
+        SayEffectsSummary(effects);
 
         owner.Shutdown();
         Require(owner.State() == kv::FrameState::Stopped, "shutdown",

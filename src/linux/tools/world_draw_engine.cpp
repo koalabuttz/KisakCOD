@@ -290,7 +290,8 @@ void PrepareRefdef(refdef_s &refdef)
     R_InitPrimaryLights(refdef.primaryLights);
 }
 
-FrameResult DrawRefdef(refdef_s &refdef, bool readBack, const std::function<void(const GfxViewInfo &)> &inspect)
+FrameResult DrawRefdef(refdef_s &refdef, bool readBack, const std::function<void(const GfxViewInfo &)> &inspect,
+                       const std::function<void(const refdef_s &)> &effects)
 {
     const auto started = std::chrono::steady_clock::now();
     Require(PreTessBuffersAgree(), "frame",
@@ -301,6 +302,8 @@ FrameResult DrawRefdef(refdef_s &refdef, bool readBack, const std::function<void
     R_ClearClientCmdList2D();
     R_ClearScene(0);
     R_SetLodOrigin(&refdef);
+    if (effects)
+        effects(refdef);
     R_RenderScene(&refdef);
 
     // What the front end emitted for this view, read before R_IssueRenderCommands
@@ -340,6 +343,13 @@ FrameResult DrawRefdef(refdef_s &refdef, bool readBack, const std::function<void
         inScene.sunShadowStaticModelSurfaces = uint32_t(scene.drawSurfCount[DRAW_SURF_SMODEL_SUNSHADOW_0] +
                                                         scene.drawSurfCount[DRAW_SURF_SMODEL_SUNSHADOW_1]);
     }
+    // The effects' surfaces: the six effect regions, lit and emissive. Their
+    // sprites and trails are code meshes (R_AddCodeMeshDrawSurf).
+    for (int region : {DRAW_SURF_FX_CAMERA_LIT, DRAW_SURF_FX_CAMERA_LIT_AUTO, DRAW_SURF_FX_CAMERA_LIT_DECAL,
+                       DRAW_SURF_FX_CAMERA_EMISSIVE, DRAW_SURF_FX_CAMERA_EMISSIVE_AUTO,
+                       DRAW_SURF_FX_CAMERA_EMISSIVE_DECAL})
+        result.effects.surfaces += uint32_t(scene.drawSurfCount[region]);
+    result.effects.meshes = uint32_t(frontEndDataOut->codeMeshCount);
 
     R_EndFrame();
     R_IssueRenderCommands(0xFFFFFFFF);
@@ -354,11 +364,17 @@ FrameResult DrawRefdef(refdef_s &refdef, bool readBack, const std::function<void
     result.counts.worldDrawCalls = uint32_t(world.primCount);
     result.counts.worldTriangles = uint32_t(world.triCount);
     for (const GfxViewStats &stats : g_frameStatsCur.viewStats)
+    {
         for (int kind : {GFX_PRIM_STATS_SMODELCACHED, GFX_PRIM_STATS_SMODELRIGID})
         {
             inScene.staticModelDrawCalls += uint32_t(stats.primStats[kind].primCount);
             inScene.staticModelTriangles += uint32_t(stats.primStats[kind].triCount);
         }
+        // R_TessCodeMeshList (rb_tess.cpp) counts the effect meshes here; the
+        // sun's flare and its visibility query count here too (rb_sky.cpp).
+        result.effects.drawCalls += uint32_t(stats.primStats[GFX_PRIM_STATS_FX].primCount);
+        result.effects.triangles += uint32_t(stats.primStats[GFX_PRIM_STATS_FX].triCount);
+    }
     const HRESULT level = dx.device->TestCooperativeLevel();
     Require(level == D3D_OK, "frame", "the device is not ready after the frame: " + Hex(uint32_t(level)));
     if (readBack)
@@ -541,8 +557,12 @@ std::string FrameJson(const FrameResult &frame)
          << ",\"sun_used\":" << (m.sunUsed ? "true" : "false") << ",\"shadow_maps\":"
          << (m.shadowMaps ? "true" : "false") << ",\"drawn\":" << (m.sunShadowDrawn ? "true" : "false")
          << ",\"surfaces\":" << m.sunShadowSurfaces << ",\"static_model_surfaces\":"
-         << m.sunShadowStaticModelSurfaces << "},\"smc_patches\":" << frame.smcPatches
-         << ",\"seconds\":" << frame.seconds << "}";
+         << m.sunShadowStaticModelSurfaces << "},\"effects\":{\"running\":"
+         << (frame.effects.running ? "true" : "false") << ",\"effects\":" << frame.effects.effects
+         << ",\"elems\":" << frame.effects.elems << ",\"clouds\":" << frame.effects.clouds
+         << ",\"surfaces\":" << frame.effects.surfaces << ",\"meshes\":" << frame.effects.meshes
+         << ",\"draw_calls\":" << frame.effects.drawCalls << ",\"triangles\":" << frame.effects.triangles
+         << "},\"smc_patches\":" << frame.smcPatches << ",\"seconds\":" << frame.seconds << "}";
     return json.str();
 }
 
@@ -551,9 +571,11 @@ void SayFrame(const char *label, int draw, const FrameResult &frame)
     const wdr::FrameStats &s = frame.stats;
     const wdr::DrawCounts &c = frame.counts;
     const wdr::SceneCounts &m = frame.scene;
+    const wdr::EffectCounts &e = frame.effects;
     Say("world_draw_frame view=%s draw=%d size=%ux%u colors=%zu dominant=%.3f luma=%.1f+-%.1f detail_tiles=%u "
         "digest=%s lit=%u decal=%u emissive=%u world_calls=%u world_tris=%u smodels=%u/%u smodel_surfs=%u "
-        "smodel_calls=%u smodel_tris=%u sun_shadow=%s sun_shadow_surfs=%u/%u smc_patches=%u seconds=%.3f\n",
+        "smodel_calls=%u smodel_tris=%u sun_shadow=%s sun_shadow_surfs=%u/%u fx=%s fx_effects=%u fx_elems=%u "
+        "fx_clouds=%u fx_surfs=%u fx_meshes=%u fx_calls=%u fx_tris=%u smc_patches=%u seconds=%.3f\n",
         label, draw, s.width, s.height, s.distinctColors, s.dominantShare, s.meanLuma, s.lumaStdDev, s.detailTiles,
         Hex64(s.digest).c_str(), c.litSurfaces, c.decalSurfaces, c.emissiveSurfaces, c.worldDrawCalls,
         c.worldTriangles, m.staticModelsDrawn, m.staticModels, m.staticModelSurfaces, m.staticModelDrawCalls,
@@ -563,7 +585,8 @@ void SayFrame(const char *label, int draw, const FrameResult &frame)
         : !m.sunUsed     ? "sun_unused"
         : !m.shadowMaps  ? "maps_off"
                          : "not_drawn",
-        m.sunShadowStaticModelSurfaces, m.sunShadowSurfaces, frame.smcPatches, frame.seconds);
+        m.sunShadowStaticModelSurfaces, m.sunShadowSurfaces, e.running ? "running" : "off", e.effects, e.elems,
+        e.clouds, e.surfaces, e.meshes, e.drawCalls, e.triangles, frame.smcPatches, frame.seconds);
 }
 
 } // namespace kisak_world_draw_engine

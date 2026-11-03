@@ -22,9 +22,10 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / "scripts" / "tests" / "run_world_surface_checks.py"
 
-# The smallest tree the compiled checks need: the test headers, the nine test
+# The smallest tree the compiled checks need: the test headers, the eleven test
 # sources, the src headers the inventory, front-end invariants, device rules, draw
-# rules and capture tests include, and the one src unit the capture test links against.
+# rules, map effects and capture tests include, and the two src units the capture
+# and rand tests link against.
 TREE_FILES = (
     "tests/linux_asset_export/world_surface_inventory_test.cpp",
     "tests/linux_renderer/world_surface_context_test.cpp",
@@ -42,9 +43,13 @@ TREE_FILES = (
     "src/linux/tools/world_device_rules.h",
     "tests/linux_asset_export/world_draw_rules_test.cpp",
     "src/linux/tools/world_draw_rules.h",
+    "tests/linux_asset_export/map_effects_test.cpp",
+    "src/linux/tools/map_effects.h",
     "tests/linux_asset_export/world_image_capture_test.cpp",
     "src/linux/tools/world_image_capture.h",
     "src/linux/tools/world_image_capture.cpp",
+    "tests/linux_compat/msvc_rand_test.cpp",
+    "src/linux/client/msvc_rand.cpp",
 )
 
 # The compiled checks, in the runner's order.
@@ -57,8 +62,18 @@ CASE_NAMES = [
     "world_frontend_invariants",
     "world_device_rules",
     "world_draw_rules",
+    "map_effects",
     "world_image_capture",
+    "msvc_rand",
 ]
+
+# The cases that link one src unit beside the test, with -pthread, and that unit.
+# Every other case is a single translation unit with no flag of its own.
+TWO_UNIT_CASES = {
+    "world_image_capture": "src/linux/tools/world_image_capture.cpp",
+    "msvc_rand": "src/linux/client/msvc_rand.cpp",
+}
+SINGLE_UNIT_NAMES = [name for name in CASE_NAMES if name not in TWO_UNIT_CASES]
 
 # A program that reports a failure and still exits 0. A runner that trusted only
 # the exit status would call this a pass.
@@ -125,14 +140,14 @@ class RunnerPlanTests(unittest.TestCase):
                     self.assertTrue((ROOT / source).is_file(), source)
 
         cases = {case.name: case for case in self.runner.CASES}
-        capture = cases["world_image_capture"]
-        self.assertEqual(capture.extra_sources, ("src/linux/tools/world_image_capture.cpp",))
+        for name, unit in TWO_UNIT_CASES.items():
+            self.assertEqual(cases[name].extra_sources, (unit,), name)
         # Nothing else in the table gained a second unit, so the compile lines of the
-        # eight single-unit checks are unchanged.
-        for name in CASE_NAMES[:-1]:
+        # nine single-unit checks are unchanged.
+        for name in SINGLE_UNIT_NAMES:
             self.assertEqual(cases[name].extra_sources, (), name)
-        # The capture unit is one file from src/linux/tools. An engine source here
-        # would make the check need an asset tree to link, which is exactly what this
+        # Each extra unit is one file from src/linux. An engine source here would
+        # make the check need an asset tree to link, which is exactly what this
         # runner exists to avoid.
         for case in self.runner.CASES:
             for source in case.sources:
@@ -146,6 +161,9 @@ class RunnerPlanTests(unittest.TestCase):
         self.assertEqual(cases["world_surface_inventory"].include_dirs, ("src",))
         # The capture test includes <linux/tools/world_image_capture.h> from src too.
         self.assertEqual(cases["world_image_capture"].include_dirs, ("src",))
+        # The rand test includes no project header: rand comes from <cstdlib> and
+        # its definition from the unit linked beside it.
+        self.assertEqual(cases["msvc_rand"].include_dirs, ())
         # The front-end invariants test includes <linux/tools/world_frontend_invariants.h>.
         self.assertEqual(cases["world_frontend_invariants"].include_dirs, ("src",))
         # The device rules test includes <linux/tools/world_device_rules.h>.
@@ -182,29 +200,33 @@ class RunnerPlanTests(unittest.TestCase):
                 objects = [token for token in argv if token.endswith(".cpp")]
                 self.assertEqual(objects, [source])
 
-        # The capture case is the one line that is not a single translation unit: the
-        # mutex in its unit needs -pthread, and the link needs the unit itself, or the
-        # test's symbols stay undefined. Both are this case's own entry, nothing shared.
+        # The capture and rand cases are the lines that are not a single translation
+        # unit: each links its unit beside the test, or the test's symbols stay
+        # undefined (capture) or glibc's rand stays in place (rand), and each needs
+        # -pthread (the capture unit's mutex, the rand test's threads). Both are each
+        # case's own entry, nothing shared.
         cases = {case.name: case for case in self.runner.CASES}
-        capture = cases["world_image_capture"]
-        argv = self.runner.compile_argv(capture, ROOT, Path("/tmp/work"), "g++", "Debug", [])
-        self.assertIn("-pthread", argv)
-        self.assertEqual(
-            [token for token in argv if token.endswith(".cpp")],
-            [str(ROOT / capture.source), str(ROOT / capture.extra_sources[0])],
-        )
-        self.assertIn("-m32", argv)
-        self.assertIn("-std=c++20", argv)
-        self.assertIn("-Werror", argv)
-        # No engine source and no library: the unit is engine-free by construction.
-        for token in argv:
-            lowered = token.lower()
-            for forbidden in ("dxvk", "sdl", "vulkan", "cmake", "pkg-config", "pkgconfig",
-                              "libengine", "server_assets"):
-                self.assertNotIn(forbidden, lowered)
-        # The flag is the capture case's alone, so the other compile lines are exactly
-        # what they were before that case existed.
-        for name in CASE_NAMES[:-1]:
+        for name in TWO_UNIT_CASES:
+            with self.subTest(case=name):
+                case = cases[name]
+                argv = self.runner.compile_argv(case, ROOT, Path("/tmp/work"), "g++", "Debug", [])
+                self.assertIn("-pthread", argv)
+                self.assertEqual(
+                    [token for token in argv if token.endswith(".cpp")],
+                    [str(ROOT / case.source), str(ROOT / case.extra_sources[0])],
+                )
+                self.assertIn("-m32", argv)
+                self.assertIn("-std=c++20", argv)
+                self.assertIn("-Werror", argv)
+                # No engine source and no library: the unit is engine-free by construction.
+                for token in argv:
+                    lowered = token.lower()
+                    for forbidden in ("dxvk", "sdl", "vulkan", "cmake", "pkg-config", "pkgconfig",
+                                      "libengine", "server_assets"):
+                        self.assertNotIn(forbidden, lowered)
+        # The flag is those cases' alone, so the other compile lines are exactly what
+        # they were before those cases existed.
+        for name in SINGLE_UNIT_NAMES:
             with self.subTest(case=name):
                 self.assertEqual(cases[name].flags, ())
                 self.assertNotIn(
@@ -235,8 +257,8 @@ class RunnerPlanTests(unittest.TestCase):
         work = Path("/tmp/plan-work")
         checks = self.runner.plan_checks(
             Options(), work, ROOT, "/usr/bin/python3", "g++", set(self.runner.KNOWN_NAMES))
-        # Nine compiled cases plus the prepare script: every name in the table, in order.
-        self.assertEqual(len(checks), 10)
+        # Eleven compiled cases plus the prepare script: every name in the table, in order.
+        self.assertEqual(len(checks), 12)
         self.assertEqual([check.name for check in checks], [*CASE_NAMES, self.runner.PREPARE_NAME])
         for check in checks[:-1]:
             self.assertEqual(len(check.commands), 2, check.name)

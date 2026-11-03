@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compile and run the asset-free world surface checks for one configuration.
 
-This runner performs **no CMake configure and no engine build**. It compiles nine
+This runner performs **no CMake configure and no engine build**. It compiles eleven
 standalone test translation units directly with a 32-bit C++20 compiler and runs
 them, then runs the bundle prepare tests. Everything here works without DXVK, SDL,
 a GPU, a Steam client, credentials, game assets or a network:
@@ -34,12 +34,22 @@ a GPU, a Steam client, credentials, game assets or a network:
     brightness, repeat and camera rules, and the renderer's own draw counts), on
     frames built in memory, built against ``src`` for
     ``src/linux/tools/world_draw_rules.h``, which includes no engine or D3D9 header;
+  * ``tests/linux_asset_export/map_effects_test.cpp`` -- the reader the free camera
+    plays a map's own effects from: the script tokenizer, the effect table, the
+    createfx list and the plan, on script text it writes itself, built against
+    ``src`` for ``src/linux/tools/map_effects.h``, which includes no engine header;
   * ``tests/linux_asset_export/world_image_capture_test.cpp`` -- the image capture's
     bounds, name filter, duplicate rule and disabled path. This one is the only case
     that is not a single translation unit: the capture state lives behind a mutex in
     ``src/linux/tools/world_image_capture.cpp``, so that unit is compiled beside the
     test and linked with ``-pthread``. It is still engine-free -- no engine header, no
     asset tree, no zone -- and no other source is added to the line;
+  * ``tests/linux_compat/msvc_rand_test.cpp`` -- the Microsoft runtime's ``rand`` and
+    ``srand`` that the world draw probe links in place of glibc's: the runtime's
+    sequence, the 15-bit range, per-thread state, and that shared libraries still
+    find glibc's. Like the capture case it links its unit,
+    ``src/linux/client/msvc_rand.cpp``, beside the test with ``-pthread``, since replacing
+    glibc's definitions is a property of the link; no engine header;
   * ``scripts/tests/test_world_surface_prepare.py`` -- the prepare step's trust
     boundary over archives it writes itself.
 
@@ -50,7 +60,7 @@ check that must not need DXVK, SDL or a device. The four renderer tests
 (``world_surface_context``, ``world_surface_bundle``, ``world_surface_oracle`` and
 ``world_lit_bundle``) are asset-free by construction -- they include one header each
 and open no file except temporary bundles they write themselves -- and the image
-capture test compiles its own unit and nothing else from ``src``, so all nine are
+capture and rand tests compile their own unit and nothing else from ``src``, so all eleven are
 built here with an explicit compiler line instead.
 
 Configurations are explicit rather than inherited from a build system: ``Debug``
@@ -144,10 +154,11 @@ class Case:
         self.include_dirs = include_dirs
         # Translation units compiled and linked beside the test, relative to the
         # repository. Empty for every case that is a single translation unit. The
-        # capture test needs exactly one: its unit, with no engine source beside it.
+        # capture and rand tests need exactly one each: their unit, with no engine
+        # source beside it.
         self.extra_sources = tuple(extra_sources)
-        # Per-case compiler flags. Only the capture case needs one (-pthread, for the
-        # std::mutex its unit holds). A flag here applies to that case alone; nothing
+        # Per-case compiler flags. Only the capture and rand cases need one (-pthread,
+        # for the std::mutex the capture unit holds and the rand test's threads). A flag here applies to that case alone; nothing
         # is shared, so a flag added for one check cannot change another's line.
         self.flags = tuple(flags)
 
@@ -214,6 +225,14 @@ CASES = (
         "tests/linux_asset_export/world_draw_rules_test.cpp",
         ("src",),
     ),
+    # Header only: the reader of a map's effect table and createfx list, checked on
+    # script text the test writes itself. No engine header, no zone, no script VM.
+    Case(
+        "map_effects",
+        "map effect table, createfx reader and effect plan",
+        "tests/linux_asset_export/map_effects_test.cpp",
+        ("src",),
+    ),
     # The one case with a second translation unit. The capture state, its arena and
     # its mutex live in the unit beside its header, so the test cannot see them
     # without linking that unit. It is a single file from src/linux/tools, not the
@@ -224,6 +243,18 @@ CASES = (
         "tests/linux_asset_export/world_image_capture_test.cpp",
         ("src",),
         extra_sources=("src/linux/tools/world_image_capture.cpp",),
+        flags=("-pthread",),
+    ),
+    # The Microsoft runtime's rand() and srand() that the draw probe links in place
+    # of glibc's. The test needs the unit itself beside it, since replacing glibc's
+    # definitions is a property of the link, and -pthread for its per-thread
+    # checks. One file from src/linux, no engine header.
+    Case(
+        "msvc_rand",
+        "the Microsoft runtime's rand and srand: sequence, 15-bit range, per-thread state, hidden from shared libraries",
+        "tests/linux_compat/msvc_rand_test.cpp",
+        (),
+        extra_sources=("src/linux/client/msvc_rand.cpp",),
         flags=("-pthread",),
     ),
 )

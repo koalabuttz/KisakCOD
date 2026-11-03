@@ -1,19 +1,22 @@
 // Link boundary of the world draw probe (scripts/platform/linux/world_draw_probe.cmake).
 //
 // The probe links the whole renderer except the four units the client compile
-// census still blocks, and none of the client: no cgame, no effects system, no
-// dynamic-entity simulation, no sound, no client screen. What the linked units
-// reach that no linked unit defines is here, in four kinds:
+// census still blocks, the effects system with the physics it steps, and none
+// of the rest of the client: no cgame, no dynamic-entity simulation, no sound,
+// no client screen. The free camera's effects host (engine_effects.h) makes the
+// cgame's effects calls itself. What the linked units reach that no linked unit
+// defines is here, in four kinds:
 //
 //   1. Storage whose owner is not linked, with the owner's exact type,
 //      zero-initialized as the owner's definition is before its init runs.
-//   2. Per-frame calls the scene makes into client systems this process never
-//      starts. R_BeginFrame, R_GenerateSortedDrawSurfs and R_EndFrame call them
-//      every frame without testing whether the system runs, as the engine's
-//      own cgame-free scene render (R_GenerateReflectionRawData) does. Each
-//      definition does what its owner does when that system holds nothing, says
-//      which owner state that is, and checks it where the renderer can see it,
-//      in the manner of server_assets.cpp's sound archiving no-ops.
+//   2. Calls the scene and the effects system make into client systems this
+//      process never starts. R_BeginFrame, R_GenerateSortedDrawSurfs,
+//      R_EndFrame and the effects update call them every frame without testing
+//      whether the system runs, as the engine's own cgame-free scene render
+//      (R_GenerateReflectionRawData) does. Each definition does what its owner
+//      does when that system holds nothing, says which owner state that is, and
+//      checks it where the renderer can see it, in the manner of
+//      server_assets.cpp's sound archiving no-ops.
 //   3. The two renderer services whose owners are Windows-only, as Linux has
 //      them: cinematics (r_cinematic.cpp, Bink) are unavailable, so none is
 //      ever playing; video memory (r_texturemem.cpp, DirectDraw) is the
@@ -26,6 +29,7 @@
 
 #include <universal/q_shared.h>
 #include <qcommon/qcommon.h>
+#include <cgame_mp/cg_local_mp.h>
 #include <DynEntity/DynEntity_client.h>
 #include <EffectsCore/fx_system.h>
 #include <gfx_d3d/r_cinematic.h>
@@ -34,6 +38,7 @@
 #include <gfx_d3d/r_rendercmds.h>
 #include <gfx_d3d/r_scene.h>
 #include <gfx_d3d/r_screenshot.h>
+#include <sound/snd_public.h>
 
 #include <cstdio>
 #include <cstdlib>
@@ -43,6 +48,13 @@ const dvar_t *onlinegame;   // cl_main_mp.cpp; the probe's CL_InitDedicated regi
 const dvar_t *r_fullscreen; // win_wndproc.cpp on Windows; R_RegisterDvars registers it
 const dvar_t *vid_xpos;     // win_wndproc.cpp on Windows; R_RegisterDvars registers it
 const dvar_t *vid_ypos;     // win_wndproc.cpp on Windows; R_RegisterDvars registers it
+// cg_main_mp.cpp. The effects system reads the view from cgArray[0].refdef,
+// which the effects host fills every frame; the cgame's entities stay empty, as
+// no snapshot arrives, and cgMedia holds nothing, as CG_RegisterGraphics and
+// CG_RegisterSounds never run.
+cg_s cgArray[1];
+centity_s cg_entitiesArray[1][1024];
+cgMedia_t cgMedia;
 
 namespace
 {
@@ -86,12 +98,33 @@ void __cdecl CG_CalculateFPS()
 {
 }
 
-// src/EffectsCore/fx_update.cpp: steps the effects physics world to the effects
-// system's time. The effects system is never started here (FX_InitSystem is not
-// linked), so no effect has a physics body to step.
-void __cdecl FX_RunPhysics(int32_t)
+// src/cgame_mp/cg_draw_mp.cpp, which FX_UpdateRemaining calls after the
+// effects: the local entities' tracer beams (CG_AddLocalEntityTracerBeams),
+// then the players' sprites and the 3D HUD elements. No cgame runs here, so no
+// weapon fires a tracer, no player is in the scene and no HUD exists.
+void __cdecl CG_AddSceneTracerBeams(int32_t)
 {
 }
+
+void __cdecl CG_GenerateSceneVerts(int32_t)
+{
+}
+
+// src/sound/snd.cpp: whether any sound listener is active. No sound system is
+// started here, so none is, and FX_SpawnSound plays none of an effect's sounds.
+char __cdecl SND_AnyActiveListeners()
+{
+    return 0;
+}
+
+// src/EffectsCore/fx_load_obj.cpp, which FX_InitSystem and FX_ShutdownSystem
+// call: clears the registry of effects loaded from source files. The probe
+// loads fast files only, and FX_Register (server_assets.cpp) finds effects in
+// them without that registry, so it is always empty.
+void FX_UnregisterAll()
+{
+}
+
 
 // src/DynEntity/DynEntity_client.cpp: for each client model dynamic entity with
 // a physics body, copies the body's interpolated state into its pose. The map's
@@ -188,30 +221,33 @@ KISAK_UNREACHABLE(bool, CL_IsLocalClientInGame, (int32_t))
 KISAK_UNREACHABLE(void, SCR_UpdateScreen, ())
 // The backend's text cursor blink; the probe draws no 2D text.
 KISAK_UNREACHABLE(int32_t, CL_ScaledMilliseconds, ())
-// Scene entities: the probe adds none to the scene.
+// Scene entities and marks on them: the probe adds no entity to the scene, and
+// fx_marks is off.
 KISAK_UNREACHABLE(void, CG_CullIn, (cpose_t *))
 KISAK_UNREACHABLE(void, CG_UsedDObjCalcPose, (cpose_t *))
 KISAK_UNREACHABLE(DObjAnimMat *, CG_DObjCalcPose, (const cpose_t *, const DObj_s *, int *))
 KISAK_UNREACHABLE(float *, CG_GetEntityOrigin, (int, uint32_t))
-KISAK_UNREACHABLE(FxSystem *, FX_GetSystem, (int32_t))
-// Effects work: only the cgame queues the effects worker commands, and the probe
-// turns fx_marks off, so no mark vertices are generated.
-KISAK_UNREACHABLE(void, FX_UpdateSpotLight, (FxCmd *))
-KISAK_UNREACHABLE(void, FX_UpdateNonDependent, (FxCmd *))
-KISAK_UNREACHABLE(void, FX_UpdateRemaining, (FxCmd *))
-KISAK_UNREACHABLE(void, FX_AddNonSpriteDrawSurfs, (FxCmd *))
-KISAK_UNREACHABLE(void, FX_EndUpdate, (int32_t))
-KISAK_UNREACHABLE(void, FX_FillGenerateVertsCmd, (int32_t, FxGenerateVertsCmd *))
-KISAK_UNREACHABLE(void, FX_GenerateVerts, (FxGenerateVertsCmd *))
-KISAK_UNREACHABLE(void, FX_GenerateMarkVertsForWorld, (int32_t))
-KISAK_UNREACHABLE(void, FX_GenerateMarkVertsForStaticModels, (int32_t, int32_t, const uint8_t *))
-KISAK_UNREACHABLE(void, FX_BeginGeneratingMarkVertsForEntModels, (int32_t, uint32_t *))
-KISAK_UNREACHABLE(void, FX_GenerateMarkVertsForEntXModel,
-                  (int32_t, int32_t, uint32_t *, uint16_t, uint8_t, const GfxScaledPlacement *))
-KISAK_UNREACHABLE(void, FX_GenerateMarkVertsForEntDObj,
-                  (int32_t, int32_t, uint32_t *, uint16_t, uint8_t, const DObj_s *, const cpose_t *))
-KISAK_UNREACHABLE(void, FX_GenerateMarkVertsForEntBrush, (int32_t, int32_t, uint32_t *, uint8_t, const GfxPlacement *))
-KISAK_UNREACHABLE(void, FX_EndGeneratingMarkVertsForEntModels, (int32_t))
+KISAK_UNREACHABLE(void, CG_GetPoseOrigin, (const cpose_t *, float *))
+KISAK_UNREACHABLE(void, CG_GetPoseAngles, (const cpose_t *, float *))
+// Effects bolted to an entity's bone: the effects host spawns every effect
+// unbolted (ENTITYNUM_NONE), and an effect's children inherit its bolt.
+KISAK_UNREACHABLE(cpose_t *, CG_GetPose, (int32_t, uint32_t))
+KISAK_UNREACHABLE(void, CG_GetDObjOrientation, (int32_t, int32_t, mat3x3 &, float *))
+KISAK_UNREACHABLE(int32_t, CG_DObjGetWorldBoneMatrix, (const cpose_t *, DObj_s *, int32_t, float (*)[3], float *))
+// Sounds: SND_AnyActiveListeners answers that no listener is active, so
+// FX_SpawnSound plays nothing, and cgMedia holds no collision sounds, so
+// Phys_PlayCollisionSound finds none to play.
+KISAK_UNREACHABLE(int32_t, CG_PlaySoundAlias, (int32_t, int32_t, const float *, snd_alias_list_t *))
+KISAK_UNREACHABLE(void, CG_AddFXSoundAlias, (int32_t, const float *, snd_alias_list_t *))
+KISAK_UNREACHABLE(void, SND_AddPhysicsSound, (snd_alias_list_t *, float *))
+// The physics and collision debug drawing, which only their debug dvars
+// (phys_drawContacts, phys_drawCollisionWorld, ...) turn on.
+KISAK_UNREACHABLE(void, CG_DebugLine, (const float *, const float *, const float *, int32_t, int32_t))
+KISAK_UNREACHABLE(void, CG_DebugBox,
+                  (const float *, const float *, const float *, float, const float *, int32_t, int32_t))
+KISAK_UNREACHABLE(void, CG_DebugBoxOriented,
+                  (const float *, const float *, const float *, const mat3x3 &, const float *, int32_t, int32_t))
+KISAK_UNREACHABLE(void, CG_DebugCircle, (const float *, float, const float *, const float *, int32_t, int32_t))
 // Loading from source (r_material_load_obj.cpp needs D3DX, and the BSP loader's
 // source path): the probe loads fast files only, and these paths test
 // IsFastFileLoad first.

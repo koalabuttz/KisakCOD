@@ -41,6 +41,9 @@ view changes the source of the numbers, not their meaning.
 | `src/linux/client/view/free_camera_window.{h,cpp}` | The renderer's own window, adopted: its keys, pointer, focus, extent and quit into the owner |
 | `tests/linux_free_camera/` | Asset-free tests: the camera and owner by `scripts/tests/run_free_camera_checks.py`, the window input by `scripts/tests/test_linux_window.py` |
 | `src/linux/tools/engine_scene_renderer.{h,cpp}` | `EngineSceneRenderer`, the `SceneRenderer` over the engine renderer |
+| `src/linux/tools/engine_effects.{h,cpp}` | The map's own effects, played with the cgame's effects calls in the cgame's order |
+| `src/linux/tools/map_effects.h` | Reads the map's effect table and createfx list and plans what to play; no engine header |
+| `tests/linux_asset_export/map_effects_test.cpp` | Asset-free test of that reader (`run_world_surface_checks.py`, check `map_effects`) |
 | `src/linux/tools/free_camera_replay.cpp` | The replay of the reference traversals on a real map |
 | `src/linux/tools/free_camera_window_driver.cpp` | The window driver: the renderer's window adopted, flown live or by a checked script |
 | `src/linux/tools/world_draw_engine.{h,cpp}` | Frame, readback, map load and unload, shared with the world draw probe |
@@ -206,7 +209,10 @@ Rules, any of which fails the run:
   left;
 - the static models and the sun's shadow: every frame's counts agree, the map's
   cameras see both, and switching each off at `A.start` changes the picture
-  ([below](#static-models-and-the-suns-shadow)).
+  ([below](#static-models-and-the-suns-shadow));
+- the map's effects: every frame's effect counts agree, and switching them off
+  at the checkpoints with effects in their counts changes some checkpoint's
+  picture ([below](#the-maps-effects)).
 
 Every frame of a leg must be drawn; a frame the owner reports as anything else
 stops the run with its stage. The run prints `free_camera_leg` (with how many of
@@ -420,6 +426,91 @@ and `sun_shadow_surfs=<static model>/<all>`; each frame in the reports gains
 static model and no sun shadow, the replay's report lists its switches, and both
 reports list any warning that left something out (`dropped_draw_warnings`).
 
+## The map's effects
+
+The second widening plays something the engine did not draw before: the map's
+own effects (fire, smoke, dust, sparks), which are also the scene's
+transparent, sorted pass. In the game the map's scripts make one server entity
+for each oneshot and loop entry of the map's createfx list, and the cgame plays
+each entity it sees. The free camera has no server, script VM or cgame, so it
+reads the two script files from the map's zone and makes the cgame's effects
+calls itself (`engine_effects.{h,cpp}`, with the reader in `map_effects.h`).
+The effects system (`src/EffectsCore`, 15 units) and the physics it steps are
+linked into the probe for this.
+
+What it reads (`map_effects.h`), with no script run: the effect table,
+`maps/mp/<map>_fx.gsc` (`level._effect["<id>"] = loadfx("<path>")`), and the
+createfx list, `maps/createfx/<map>_fx.gsc` (`ent = createOneshotEffect("<id>")`
+or `createLoopEffect`, then `ent.v["origin"]`, `["angles"]`, `["fxid"]`,
+`["delay"]`). A statement of any other shape is reported, never guessed at. The
+plan keeps the oneshot and loop entries; exploders (played only when the game
+fires them) and loop sounds are counted and not played. Delays become
+milliseconds as `triggerFx` and `playLoopedFx` convert them
+(`SnapFloatToInt(seconds * 1000)`).
+
+Fail-closed: when the map's zone has no such raw file, when the plan has any
+problem (an unknown statement, an entry without an id, origin, angles or
+delay, an id the table does not load, an effect the zone does not hold, no
+oneshot or loop at all), or when
+`FX_Register` does not find an effect, the map load fails at stage `effects`
+and nothing of the map stays loaded. Raw file and effect names are compared
+without case, as the zone's own lookup compares them (`I_stricmp`): mp_crash's
+table loads `smoke/battlefield_smokebank_S`, which the zone names in lower case. `fx_enable` or `fx_draw` off refuses the
+replay and the window driver at the start stage, before any device work.
+
+When, in every frame (`MapEffects`):
+
+| Where | What, in the cgame's order |
+| --- | --- |
+| after each map load | the plan, then `Phys_Init` and `FX_InitSystem` (`CG_Init`); `rand()` seeded with a fixed value, so a load starts the same effects the same way (the probe's `rand()` is the Microsoft runtime's, 15 bits, as `FX_SetEffectRandomSeed` assumes: [How it links](linux-world-draw-probe.md#how-it-links)) |
+| each frame, after `R_SetLodOrigin`, before `R_RenderScene` (where `R_GenerateReflectionRawData` updates effects) | the frame's refdef copied to `cgArray[0].refdef`, which the effects system reads; `FX_BeginUpdate`, `FX_SetNextUpdateTime`, `R_UpdateNonDependentEffects`; the entities' effects; `FX_SetNextUpdateCamera`, `R_UpdateSpotLightEffect`, `R_UpdateRemainingEffects` (`CG_DrawActiveFrame`) |
+| the entities' effects | a oneshot is spawned once its delay has passed, starting at its trigger time (`CG_Fx`); a loop starts when first seen and is retriggered every period (`CG_LoopFx`); every effect is unbolted; a spawn the effects system refuses (all its elements culled at spawn, or no free effect) is tried again next frame, as the cgame does |
+| before each map unload | `FX_KillAllEffects`, `FX_ShutdownSystem` (`CG_Shutdown`), then `Phys_Shutdown` |
+
+The time is the frame's scene time. The replay and the script draw at 0, as
+before, so they show the client's first frame on the map, held: a oneshot whose
+delay is not positive (the createfx default is -15 s) has been running since
+its start, and a loop has just started. The live camera's scene time is the
+elapsed time, so its effects move. Nothing the effects do reaches gameplay,
+sound or marks: no sound listener exists, so an effect's sounds are not played,
+and `fx_marks` is off.
+
+`DrawRefdef` and the effects host count, for every frame:
+
+| Count | Where it comes from |
+| --- | --- |
+| running | the effects system was updated for this frame |
+| effects, elements, clouds | the effects system's live effects, its elements and trail elements, and its particle clouds |
+| surfaces | the frame's draw surfaces in the six effect regions (`DRAW_SURF_FX_CAMERA_LIT*`, `DRAW_SURF_FX_CAMERA_EMISSIVE*`) |
+| meshes | code meshes the frame generated (`codeMeshCount`): the effects' sprites, trails and beams |
+| draw calls, triangles | the backend's `FX` statistics, which also count the sun's flare and its visibility query |
+
+Rules (`world_draw_rules.h`), any of which fails the run:
+
+- **Counts agree** (`CheckFreeCameraCounts`, after the static model and shadow
+  rule), on every drawn frame of the replay, the script and the live camera: the
+  effects system ran for the frame; every mesh has a draw surface; a surface
+  has a live effect and a live element or cloud behind it; meshes were drawn,
+  with triangles.
+- **Shown** (replay only): at each checkpoint with effects in its counts
+  (`A.start`, `A.forward`, `A.turn`, `A.fast`, `A.rise`, `B.start`,
+  `B.square`, in that order) the view is settled with `fx_draw` off, then on
+  again, until one try changes the picture. An effect behind a wall is drawn and
+  hidden by it, so a try need not change the picture, but every try must take
+  the effects out of the counts (no mesh, no surface, the system still updated)
+  and come back to the same picture. A map that places effects must have some
+  checkpoint with effects in its counts, and some try must change the picture.
+
+Each `world_draw_frame` line gains `fx=running|off`, `fx_effects`, `fx_elems`,
+`fx_clouds`, `fx_surfs`, `fx_meshes`, `fx_calls` and `fx_tris`; each frame in
+the reports gains an `effects` object. Each load prints
+`free_camera_effects_plan` (the table's ids, the list's entries by kind, the
+effects and placements played, problems); the run prints `free_camera_effects`
+(loads, placements, effects spawned, loop retriggers, refused spawn attempts)
+and writes the same in the report's `effects` object. The replay's legs report
+`no_effect_frames`, its switches mark the effects' as tries, and its report
+names the checkpoint whose picture showed the effects (`effects_shown_at`).
+
 ## What is verified
 
 Window input, asset-free, Clang 18 `-m32`, the dummy video driver of SDL 3.2.10
@@ -596,6 +687,56 @@ drawn (49 per second), none minimized or with a lost device, one capture
 request; the shutdown released the device and every zone and destroyed the
 window. DXVK printed no warning or error.
 
+The map's effects, in the cloud sandbox only (no GPU, no game data): the target
+builds in Debug and RelWithDebInfo with `-Wall -Wextra -Werror` on its own
+sources; `map_effects` passes in both configurations (the tokenizer, the table,
+the createfx reader and the plan on script text it writes itself, including
+refusals), as did a GCC ASan/UBSan build of it; `world_draw_rules` covers the
+effect counts rule and the switch try; and `test_world_draw_probe.py` checks
+that `fx_enable` and `fx_draw` off refuse the replay and the script at the start
+stage, while the draw mode still stops at its direct3d stage.
+
+The map's effects on a GPU, on the same laptop (local runs, not CI evidence),
+2026-11-03, on 67d38c4: the replay in RelWithDebInfo (run N=57) and Debug
+(N=58), and the window driver's script in RelWithDebInfo under Wayland (N=59).
+All three passed with no problem and no "not drawing" warning, and the two
+replay builds printed the same lines apart from times. Textures were at picmip 2
+(the probe did not yet register `sys_sysMB`), as in the static model runs, so
+the digests compare with them. Two earlier attempts stopped at stage `effects`
+and found two bugs, fixed before these runs: an effect name compared with case
+where the zone compares without (N=48 to N=50), and glibc's 31-bit `rand()`,
+which sent the first effect spawned past `fx_randomTable` (N=51 to N=53; see
+the draw probe's [link section](linux-world-draw-probe.md#how-it-links)).
+
+`mp_crash`'s scripts gave 8 table effects and 36 oneshots, with no loop,
+exploder or loop sound: 36 placements of 7 effects and no plan problem. Each
+load that drew a frame spawned all 36 at its first update, with none refused
+(the first load of a run draws nothing: 4 starts and 108 spawns in the replay,
+2 and 36 in the script). Every checkpoint frame had 40 live effects with 253
+elements and no particle cloud. At `A.start` the switch gave:
+
+| `A.start` | digest | world draw calls | static model draw calls | effect surfaces | FX draw calls, triangles |
+| --- | --- | --- | --- | --- | --- |
+| as drawn | `4d22d1897c29025c` | 540 | 622 | 31 | 32, 206 |
+| `fx_draw 0` | `0d3e46a38948e9a2` | 399 | 356 | 0 | 1, 2 |
+
+The first try changed the picture, so the replay tried once, and with `fx_draw`
+on again the picture was `A.start`'s. Without the effects the picture, and every
+count, is the static model runs' `A.start` exactly; the FX call and two
+triangles left are the sun's flare query. With them the world issues 141 more
+draw calls and the static models 266 more; the counts do not say which pass
+those belong to. The other checkpoints drew 1 (`A.fast`, `A.rise`) to 36
+(`B.start`) effect surfaces. `A.turn` and `A.rise` kept the static model runs'
+digests, so their one or two effect surfaces changed no pixel there; the rest
+changed. Every interruption at `A.rise` (resize, minimize, device reset, and
+the reload, which restarts the effects) came back to its digest. Of the legs'
+frames only `B.square`'s two pocket frames, which draw no world surface, had no
+effect in their counts.
+
+The script's checkpoints on path A had the replay's digests and counts
+(`W.start` is `A.start`), and the 854x480 `A.rise.wide` and `A.focus` drew one
+effect surface each. The minimize step was not taken (Wayland).
+
 ## What is not verified
 
 - The replay has run on one GPU and one map. Its interruptions are forced: DXVK
@@ -607,6 +748,14 @@ window. DXVK printed no warning or error.
 - The static model and sun shadow rules have run on one GPU and one map, at
   scene time 0 (so no spot light had a shadow map), through the replay and the
   script; the live camera has not been flown with them.
+- The map's effects have run on one GPU and one map, `mp_crash`, whose scripts
+  place only oneshots, at scene time 0 through the replay and the script: no
+  loop has been retriggered and no effect has moved on a GPU, and the live
+  camera has not been flown with them. Exploders, loop sounds, effect sounds,
+  marks and effects bolted to entities are not played; spot light effects run,
+  but their shadows need the scene time to move. A spawn refused at one view
+  and taken at a later one can make a checkpoint's picture depend on the path
+  to it; the report counts refused spawn attempts (none on `mp_crash`).
 - The window input has met a real desktop through the window driver: its
   script (Wayland in RelWithDebInfo, X11 in Debug) and one 70 s live flight
   (Wayland), with the window `R_CreateWindow` made. The live flight was not
@@ -636,6 +785,8 @@ passed there too.
    post-processing. Faithful appearance first; enhanced visuals stay optional.
    Static models and the sun's shadow map, which the engine already drew, are
    now counted, checked and switched off and on
-   ([above](#static-models-and-the-suns-shadow)). Spot light shadows are chosen
-   only when the scene time moves (`R_ChooseShadowedLights`), which the
-   replay's fixed time 0 never does; they come with effects, which need it too.
+   ([above](#static-models-and-the-suns-shadow)). The map's own effects, the
+   scene's transparent and sorted pass, are now played, counted, checked and
+   switched off and on ([above](#the-maps-effects)). Spot light shadows are
+   chosen only when the scene time moves (`R_ChooseShadowedLights`), which the
+   replay's fixed time 0 never does.

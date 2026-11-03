@@ -270,6 +270,64 @@ inline std::string CheckSceneInView(const SceneCounts &counts)
     return {};
 }
 
+// The map's effects in one frame, as the free camera's effects host and the
+// renderer counted them. The draw mode runs no effects system; the free camera
+// runs it as the cgame does. The front end's counts are read after
+// R_RenderScene, the backend's after the frame was issued.
+struct EffectCounts
+{
+    bool running = false;      // the effects system was updated for this frame
+    uint32_t effects = 0;      // effects alive in the system
+    uint32_t elems = 0;        // their elements and trail elements alive
+    uint32_t clouds = 0;       // particle clouds queued for the frame
+    uint32_t surfaces = 0;     // draw surfaces in the six effect regions (lit, emissive; plain, auto, decal)
+    uint32_t meshes = 0;       // code meshes the frame's effects generated (frontEndDataOut->codeMeshCount)
+    uint32_t drawCalls = 0;    // primStats[FX] primCount, both stats views: the effect meshes, and the sun's flare
+    uint32_t triangles = 0;    // .triCount
+};
+
+// What every frame's effect counts must agree on: nothing of an effect without
+// the system running, a draw surface for each mesh, something alive behind every
+// surface, and the backend drawing the meshes. The sun's flare also counts as an
+// effect draw, so draws without meshes are not a fault.
+inline std::string CheckEffectCounts(const EffectCounts &counts)
+{
+    if (!counts.running && (counts.effects || counts.elems || counts.clouds || counts.surfaces || counts.meshes))
+        return "effects were alive or drawn without the effects system running";
+    if (counts.meshes > counts.surfaces)
+        return "the effects generated " + std::to_string(counts.meshes) + " meshes but only " +
+               std::to_string(counts.surfaces) + " effect draw surfaces";
+    if (counts.surfaces > 0 && counts.effects == 0)
+        return "the front end emitted " + std::to_string(counts.surfaces) + " effect surfaces with no effect alive";
+    if (counts.surfaces > 0 && counts.elems == 0 && counts.clouds == 0)
+        return "the front end emitted " + std::to_string(counts.surfaces) +
+               " effect surfaces with no effect element alive";
+    if (counts.meshes > 0 && counts.drawCalls == 0)
+        return "the effects generated " + std::to_string(counts.meshes) +
+               " meshes, but the backend issued no effect draw call";
+    if (counts.drawCalls > 0 && counts.triangles == 0)
+        return "the backend's effect draw calls drew no triangle";
+    return {};
+}
+
+// Whether a frame shows effects: meshes and their draw surfaces.
+inline bool EffectsDrawn(const EffectCounts &counts)
+{
+    return counts.meshes > 0 && counts.surfaces > 0;
+}
+
+// What every frame the free camera draws must agree on: the scene's static model
+// and shadow counts, the effects system updated for the frame, and the effect
+// counts.
+inline std::string CheckFreeCameraCounts(const SceneCounts &scene, const EffectCounts &effects)
+{
+    if (std::string problem = CheckSceneCounts(scene); !problem.empty())
+        return problem;
+    if (!effects.running)
+        return "the effects system was not updated for the frame";
+    return CheckEffectCounts(effects);
+}
+
 // A switch that takes something out of the scene: the frame without it must say
 // so in its counts and look different, and the frame with it back must be the one
 // before. before/after are the settled digests with it on; without is the settled
@@ -281,6 +339,19 @@ inline std::string CheckSwitchedOff(const char *what, bool goneFromCounts, uint6
         return std::string("with ") + what + " off, the renderer still counted them";
     if (without == before)
         return std::string("turning ") + what + " off did not change the picture";
+    if (after != before)
+        return std::string("turning ") + what + " back on did not bring the same picture back";
+    return {};
+}
+
+// One try of a switch that need not change every picture it is tried at: an
+// effect behind a wall is drawn and hidden by it. The counts must still say it
+// is gone, and the picture with it back must be the one before; whether some
+// try changed the picture is the caller's rule.
+inline std::string CheckSwitchTry(const char *what, bool goneFromCounts, uint64_t before, uint64_t after)
+{
+    if (!goneFromCounts)
+        return std::string("with ") + what + " off, the renderer still counted them";
     if (after != before)
         return std::string("turning ") + what + " back on did not bring the same picture back";
     return {};
