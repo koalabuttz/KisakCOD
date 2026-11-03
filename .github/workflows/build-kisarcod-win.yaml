@@ -60,11 +60,12 @@ on:
       - 'scripts/tests/test_script_console_watchdog.py'
       - 'scripts/tests/test_exec_command_ownership.py'
 
-# A newer push to a pull request cancels that pull request's older run. Every
-# other run (pushes to master, manual runs) gets a group of its own and always
-# finishes.
+# A newer push to a pull request cancels that pull request's older run, and a
+# newer push to master cancels an older master run (the newer one checks
+# everything merged so far). Manual runs get a group of their own and always
+# finish.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
   cancel-in-progress: true
 
 jobs:
