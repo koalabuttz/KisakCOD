@@ -36,7 +36,10 @@ The OpenAL headers (`AL/al.h`) are needed too, whichever library is linked,
 because the sound headers include them. Without `libopenal-dev` installed, unpack
 the package somewhere (`apt-get download libopenal-dev`, then `dpkg-deb -x`) and
 pass `-DKISAK_OPENAL_INCLUDE_DIR=<that tree>/usr/include`; nothing needs to be
-installed system-wide.
+installed system-wide. Use the setting from a fresh build directory, not one
+that was configured with `-isystem <that tree>/usr/include` in the compiler
+flags. CMake caches that directory as one the compiler already searches, and
+then drops it from every target, so `AL/al.h` goes missing.
 
 ## What it compiles
 
