@@ -54,6 +54,16 @@ def block(source: str, start: int) -> str:
 
 CALL = re.compile(r"(?<![A-Za-z0-9_])rand\(\)")
 
+# __cdecl is the default convention and is being dropped from engine sources
+# (upstream issue #35). Signatures are compared with it removed so the check
+# passes with either spelling.
+CDECL = re.compile(r"\b__cdecl\b[ \t]*")
+
+
+def drop_cdecl(text: str) -> str:
+    return CDECL.sub("", text)
+
+
 # Comments and literals are skipped: prose may legitimately mention rand(), and a
 # string literal is not the CRT call.
 NON_CODE = re.compile(
@@ -645,11 +655,11 @@ def source_checks(header, com_math, g_utils, g_items):
     checks = [
         ("com_math.h maps random to Q_random on Linux", "#define random Q_random" in header),
         ("com_math.cpp defines the random() that Linux alias names",
-         "float __cdecl random()" in com_math),
+         "float random()" in com_math),
         # The MP branch of Drop_Item is the Linux dedicated-server path; it draws
         # one jitter per velocity axis.
         ("Drop_Item's MP branch draws three crandom() values",
-         crandom_draws(g_items, "gentity_s *__cdecl Drop_Item", "#elif") == 3),
+         crandom_draws(g_items, "gentity_s *Drop_Item", "#elif") == 3),
     ]
     passed = sum(1 for _, ok in checks if ok)
     for name, ok in checks:
@@ -663,14 +673,14 @@ def build_program(header, com_math, g_utils, g_items):
     return "".join(
         [
             HARNESS,
-            function(com_math, "float __cdecl random()"),
-            function(com_math, "float __cdecl crandom()", draws=0),
-            function(g_utils, "int __cdecl G_rand()"),
-            function(g_utils, "float __cdecl G_flrand(float min, float max)", draws=0),
-            function(g_utils, "int __cdecl G_irand(int min, int max)", draws=0),
-            function(g_utils, "float __cdecl G_random()", draws=0),
-            function(g_utils, "float __cdecl G_crandom()", draws=0),
-            function(g_items, "gentity_s *__cdecl Drop_Item(gentity_s *ent, const gitem_s *item, "
+            function(com_math, "float random()"),
+            function(com_math, "float crandom()", draws=0),
+            function(g_utils, "int G_rand()"),
+            function(g_utils, "float G_flrand(float min, float max)", draws=0),
+            function(g_utils, "int G_irand(int min, int max)", draws=0),
+            function(g_utils, "float G_random()", draws=0),
+            function(g_utils, "float G_crandom()", draws=0),
+            function(g_items, "gentity_s *Drop_Item(gentity_s *ent, const gitem_s *item, "
                               "float angle, int32_t novelocity)", draws=0),
             ASSERTIONS,
         ]
@@ -692,8 +702,8 @@ def main() -> int:
     args = parser.parse_args()
 
     header, com_math, g_utils, g_items = (
-        args.header.read_text(), args.com_math.read_text(),
-        args.g_utils.read_text(), args.g_items.read_text(),
+        args.header.read_text(), drop_cdecl(args.com_math.read_text()),
+        drop_cdecl(args.g_utils.read_text()), drop_cdecl(args.g_items.read_text()),
     )
 
     status = source_checks(header, com_math, g_utils, g_items)

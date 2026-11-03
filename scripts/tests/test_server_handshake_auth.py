@@ -85,21 +85,31 @@ CLIENT_SOURCE = ROOT / "src" / "server_mp" / "sv_client_mp.cpp"
 AUTH_HEADER = ROOT / "src" / "server_mp" / "sv_handshake_auth.h"
 BASE64_SOURCE = ROOT / "src" / "universal" / "base64.cpp"
 
+# __cdecl is the default convention and is being dropped from engine sources
+# (upstream issue #35). Signatures are compared with it removed so the check
+# passes with either spelling.
+CDECL = re.compile(r"\b__cdecl\b[ \t]*")
+
+
+def drop_cdecl(text: str) -> str:
+    return CDECL.sub("", text)
+
+
 # (name, exact start of the definition text). The second field is verified so a
 # signature change cannot silently turn this into a different test.
 CLIENT_FUNCTIONS = (
-    ("SV_CaptureUnverifiedGuids", "void __cdecl SV_CaptureUnverifiedGuids()"),
+    ("SV_CaptureUnverifiedGuids", "void SV_CaptureUnverifiedGuids()"),
     ("SV_UnverifiedGuidsEnabled", "bool SV_UnverifiedGuidsEnabled()"),
-    ("SV_CaptureAdvertisedProtocol", "void __cdecl SV_CaptureAdvertisedProtocol()"),
+    ("SV_CaptureAdvertisedProtocol", "void SV_CaptureAdvertisedProtocol()"),
     ("SV_GetAdvertisedProtocol", "int SV_GetAdvertisedProtocol()"),
-    ("SV_SetAdvertisedProtocolInfo", "void __cdecl SV_SetAdvertisedProtocolInfo(char *info)"),
-    ("SV_FindFreeTempBanSlot", "uint32_t __cdecl SV_FindFreeTempBanSlot()"),
-    ("SV_BanGuidBriefly", "void __cdecl SV_BanGuidBriefly("),
+    ("SV_SetAdvertisedProtocolInfo", "void SV_SetAdvertisedProtocolInfo(char *info)"),
+    ("SV_FindFreeTempBanSlot", "uint32_t SV_FindFreeTempBanSlot()"),
+    ("SV_BanGuidBriefly", "void SV_BanGuidBriefly("),
     ("SV_RejectUnsafeTestHandshake", "static bool SV_RejectUnsafeTestHandshake("),
-    ("SV_IsTempBannedGuid", "int __cdecl SV_IsTempBannedGuid("),
-    ("SV_GetChallenge", "void __cdecl SV_GetChallenge("),
-    ("SV_DirectConnect", "void __cdecl SV_DirectConnect("),
-    ("SV_DropClient", "void __cdecl SV_DropClient("),
+    ("SV_IsTempBannedGuid", "int SV_IsTempBannedGuid("),
+    ("SV_GetChallenge", "void SV_GetChallenge("),
+    ("SV_DirectConnect", "void SV_DirectConnect("),
+    ("SV_DropClient", "void SV_DropClient("),
 )
 
 BASE64_FUNCTIONS = (
@@ -3369,13 +3379,13 @@ def main() -> int:
             print(f"FAIL: {path} is missing", file=sys.stderr)
             return 2
 
-    client_source = CLIENT_SOURCE.read_text(encoding="utf-8", errors="replace")
+    client_source = drop_cdecl(CLIENT_SOURCE.read_text(encoding="utf-8", errors="replace"))
     base64_source = BASE64_SOURCE.read_text(encoding="utf-8", errors="replace")
 
     client_functions = {}
     for name, expected in CLIENT_FUNCTIONS:
         text = extract_definition(client_source, name, expected, CLIENT_SOURCE)
-        client_functions[name] = text.replace("__cdecl", "")
+        client_functions[name] = text
 
     base64_functions = {}
     for name, expected in BASE64_FUNCTIONS:

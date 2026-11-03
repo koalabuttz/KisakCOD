@@ -17,7 +17,7 @@ import tempfile
 
 def function(source: str, name: str) -> str:
     signature = re.search(
-        rf"^(?:bool|void|int|int32_t|char|HRESULT|dsound_sample_t\s*\*)\s*__cdecl\s+{name}\s*\([^;{{}}]*\)\s*\{{",
+        rf"^(?:bool|void|int|int32_t|char|HRESULT|dsound_sample_t\s*\*)\s*(?:__cdecl\s+)?{name}\s*\([^;{{}}]*\)\s*\{{",
         source, re.MULTILINE,
     )
     if signature is None:

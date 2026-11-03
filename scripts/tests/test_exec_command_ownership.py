@@ -17,7 +17,7 @@ import tempfile
 
 def extract(source: str, name: str) -> str:
     signature = re.search(
-        rf"^(?:static\s+)?(?:void|char\s*\*?)\s*__cdecl\s+{name}\s*\([^;{{}}]*\)\s*\{{",
+        rf"^(?:static\s+)?(?:void|char\s*\*?)\s*(?:__cdecl\s+)?{name}\s*\([^;{{}}]*\)\s*\{{",
         source, re.MULTILINE,
     )
     if signature is None:
@@ -400,7 +400,7 @@ def main() -> int:
     if nesting is None:
         raise ValueError("CMD_MAX_NESTING definition was not found")
     names = ["Cbuf_ExecuteBuffer", "Cmd_ComErrorCleanup", "Cmd_ExecFromDisk", "Cmd_ExecFromFastFile"]
-    if re.search(r"^static char \*__cdecl Cmd_AllocExecBuffer", source, re.MULTILINE):
+    if re.search(r"^static char \*(?:__cdecl\s+)?Cmd_AllocExecBuffer", source, re.MULTILINE):
         names[:0] = ["Cmd_AllocExecBuffer", "Cmd_FreeExecBuffer"]
     functions = "\n".join(extract(source, name) for name in names)
     compiler = shlex.split(args.cxx)
