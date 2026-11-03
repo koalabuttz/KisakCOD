@@ -23,7 +23,10 @@
 //   * DrawFrame: a refdef from the camera view (FillRefdef), drawn with
 //     world_draw_engine.h DrawRefdef. The view must cover the whole scene.
 //     With effects on, the map's own effects (engine_effects.h) start after
-//     each load, stop before each unload and are updated in every frame.
+//     each load, stop before each unload and are updated in every frame. With
+//     vision on, the map's vision set (engine_vision.h) is loaded after each
+//     load, before the effects, cleared after them before each unload, and
+//     gives every frame's refdef its glow and film.
 //   * Shutdown: the client's renderer shutdown, R_Shutdown(1), which also
 //     destroys the window and releases the device.
 //
@@ -42,6 +45,7 @@
 #include <linux/client/view/frame_owner.h>
 
 #include "engine_effects.h"
+#include "engine_vision.h"
 #include "world_draw_engine.h"
 
 #include <memory>
@@ -51,6 +55,13 @@ struct refdef_s;
 
 namespace kisak_engine_view
 {
+
+// What the map's scripts add to its scene that the renderer plays.
+struct MapScene
+{
+    bool effects = false; // the map's own effects (engine_effects.h)
+    bool vision = false;  // the map's vision set (engine_vision.h)
+};
 
 struct EngineCounters
 {
@@ -63,10 +74,11 @@ public:
     // R_Init has run on this thread at `extent`, its graphics zones are loaded,
     // and no map is. readBack measures the back buffer after every draw
     // (LastFrame); without it a frame is drawn and checked but not read back.
-    // effects plays the map's own effects (engine_effects.h); a map whose
-    // effects cannot be planned then fails to load. Throws std::runtime_error
-    // when the renderer is not in that state.
-    EngineSceneRenderer(kisak::view::ViewExtent extent, bool readBack, bool effects = false);
+    // scene.effects plays the map's own effects (engine_effects.h), and
+    // scene.vision applies its vision set (engine_vision.h); a map whose effects
+    // cannot be planned or whose vision set cannot be loaded then fails to load.
+    // Throws std::runtime_error when the renderer is not in that state.
+    EngineSceneRenderer(kisak::view::ViewExtent extent, bool readBack, MapScene scene = {});
     ~EngineSceneRenderer() override;
     EngineSceneRenderer(const EngineSceneRenderer &) = delete;
     EngineSceneRenderer &operator=(const EngineSceneRenderer &) = delete;
@@ -89,6 +101,8 @@ public:
     const kisak_world_draw_engine::FrameResult &LastFrame() const { return last_; }
     // The map's effects, when this renderer plays them; nullptr otherwise.
     const kisak_world_draw_engine::MapEffects *Effects() const { return effects_.get(); }
+    // The map's vision set, when this renderer applies it; nullptr otherwise.
+    const kisak_world_draw_engine::MapVision *Vision() const { return vision_.get(); }
     const std::string &WorldName() const { return worldName_; }
     kisak::view::ViewExtent Extent() const { return extent_; }
     const EngineCounters &Counters() const { return counters_; }
@@ -105,6 +119,7 @@ private:
     bool mapLoaded_ = false, shutdown_ = false, resetRequested_ = false;
     std::unique_ptr<refdef_s> refdef_;
     std::unique_ptr<kisak_world_draw_engine::MapEffects> effects_;
+    std::unique_ptr<kisak_world_draw_engine::MapVision> vision_;
     kisak_world_draw_engine::FrameResult last_;
     std::string worldName_, problem_;
     EngineCounters counters_;

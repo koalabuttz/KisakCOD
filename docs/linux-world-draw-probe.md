@@ -202,7 +202,10 @@ out of the repository.
     with and which gives them no way to call the device;
   - the effects system, `src/EffectsCore` (15 units: `fx_dvars.cpp` for the
     effects dvars the scene reads, and the rest for the free camera's effects,
-    which the draw mode never starts), with the stand-in.
+    which the draw mode never starts), with the stand-in;
+  - the cgame's vision sets, `src/cgame/cg_visionsets.cpp`, for the free
+    camera's glow and film (the draw mode never loads a vision set), with the
+    stand-in. The census proves it compiles; it is the only cgame unit linked.
 
   The configure stops if a unit in `src/gfx_d3d` is in no list or in two, or if
   a census-blocked unit is listed. All renderer units use the client
@@ -216,9 +219,12 @@ out of the repository.
 - **The link boundary.** `src/linux/tools/world_draw_probe_boundary.cpp` holds
   what the linked units reach and no linked unit defines, in four kinds:
   1. storage whose owner is not linked (`onlinegame`, `r_fullscreen`,
-     `vid_xpos`, `vid_ypos`, and the cgame's `cgArray`, `cg_entitiesArray` and
-     `cgMedia`, which the effects system reads: the free camera's effects host
-     fills `cgArray[0].refdef`, and the rest stays empty);
+     `vid_xpos`, `vid_ypos`, the cgame's `cgArray`, `cg_entitiesArray` and
+     `cgMedia`, which the effects system and the vision sets read: the free
+     camera's vision host keeps the vision set in `cgArray[0]`, its effects host
+     fills `cgArray[0].refdef`, and the rest stays empty; and the client's
+     `clientUIActives`, whose connection state the vision sets read before
+     looking through night vision, which stays `CA_DISCONNECTED`);
   2. calls the scene and the effects system make into client systems this
      process never starts, each doing what its owner does when that system
      holds nothing: sound (`CL_UpdateSound`, and `SND_AnyActiveListeners`,
@@ -260,7 +266,8 @@ out of the repository.
 The probe's own sources build with `-Wall -Wextra -Werror`: the probe, the
 shared engine code, the boundary, `msvc_rand.cpp`, the SDL3 window functions,
 and for the free-camera replay the adapter (`engine_scene_renderer.cpp`), its
-effects host (`engine_effects.cpp`), the replay (`free_camera_replay.cpp`) and
+effects host (`engine_effects.cpp`), its vision host (`engine_vision.cpp`), the
+replay (`free_camera_replay.cpp`) and
 the free camera's own sources (`src/linux/client/view`), and for its window
 input the window driver (`free_camera_window_driver.cpp`) and the SDL3 window
 host (`src/linux/client/window/window_host.cpp`, `pixel_buffer.cpp`).
@@ -277,7 +284,8 @@ running:
   thread;
 - scene time 0 on every frame;
 - no vision set, film, glow or depth of field settings from a cgame, so postfx
-  runs with the refdef's zeroed values;
+  runs with the refdef's zeroed values (the free camera applies the map's
+  vision set; this mode does not);
 - fast files only; no cinematics.
 
 It proves the engine's front end, backend and material passes draw a real map

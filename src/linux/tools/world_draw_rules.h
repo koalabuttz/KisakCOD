@@ -316,16 +316,82 @@ inline bool EffectsDrawn(const EffectCounts &counts)
     return counts.meshes > 0 && counts.surfaces > 0;
 }
 
+// ---- the map's vision set: glow and film --------------------------------------
+//
+// The cgame copies the map's vision set into the refdef's glow and film
+// (CG_VisionSetApplyToRefdef), the front end takes them into the view
+// (R_SetGlowInfo, R_SetFilmInfo), and the backend draws the post effects the view
+// uses (RB_ProcessPostEffects). GlowAsked and FilmAsked are the engine's own
+// tests of whether a setting does anything (R_UsingGlow without its dvars,
+// RB_UsingColorManipulation), over plain values.
+
+inline bool GlowAsked(bool enabled, float bloomIntensity, float radius)
+{
+    return enabled && bloomIntensity != 0.0f && radius != 0.0f;
+}
+
+inline bool FilmAsked(bool enabled, float contrast, float brightness, float desaturation, bool invert,
+                      const float tintDark[3], const float tintLight[3])
+{
+    if (!enabled)
+        return false;
+    if (contrast != 1.0f || brightness != 0.0f || desaturation != 0.0f || invert)
+        return true;
+    for (int i = 0; i < 3; ++i)
+        if (tintDark[i] != 1.0f || tintLight[i] != 1.0f)
+            return true;
+    return false;
+}
+
+struct PostCounts
+{
+    bool vision = false;      // the frame's refdef carries the map's vision set
+    bool glowAsked = false;   // GlowAsked over the refdef's glow
+    bool filmAsked = false;   // FilmAsked over the refdef's film
+    // The renderer's own switches let the vision set through: r_glow on, glow
+    // allowed, no fullbright, no glow tweaks; no film tweaks.
+    bool glowSwitch = false;
+    bool filmSwitch = false;
+    bool glowUsed = false;    // R_UsingGlow over the front end's view
+    bool filmUsed = false;    // RB_UsingColorManipulation over the front end's view
+    bool postEffects = false; // RB_UsingPostEffects over the front end's view
+};
+
+// What every frame's post effect counts must agree on: the view uses glow and
+// film exactly when the vision set asks for them and the renderer's switches let
+// them through, and runs post effects only for them (no blur, no depth of field,
+// no debug view).
+inline std::string CheckPostCounts(const PostCounts &counts)
+{
+    if (!counts.vision)
+        return "the frame was drawn without the map's vision set";
+    const bool glow = counts.glowAsked && counts.glowSwitch;
+    if (counts.glowUsed != glow)
+        return glow ? "the vision set asks for glow and the switches allow it, but the view does not use it"
+                    : "the view uses glow that the vision set or the switches leave off";
+    const bool film = counts.filmAsked && counts.filmSwitch;
+    if (counts.filmUsed != film)
+        return film ? "the vision set asks for film and the switches allow it, but the view does not use it"
+                    : "the view uses film that the vision set or the switches leave off";
+    if (counts.postEffects != (counts.glowUsed || counts.filmUsed))
+        return counts.postEffects ? "the view runs post effects that are neither glow nor film"
+                                  : "the view uses glow or film but runs no post effect";
+    return {};
+}
+
 // What every frame the free camera draws must agree on: the scene's static model
-// and shadow counts, the effects system updated for the frame, and the effect
-// counts.
-inline std::string CheckFreeCameraCounts(const SceneCounts &scene, const EffectCounts &effects)
+// and shadow counts, the effects system updated for the frame, the effect
+// counts, and the vision set's post effects.
+inline std::string CheckFreeCameraCounts(const SceneCounts &scene, const EffectCounts &effects,
+                                         const PostCounts &post)
 {
     if (std::string problem = CheckSceneCounts(scene); !problem.empty())
         return problem;
     if (!effects.running)
         return "the effects system was not updated for the frame";
-    return CheckEffectCounts(effects);
+    if (std::string problem = CheckEffectCounts(effects); !problem.empty())
+        return problem;
+    return CheckPostCounts(post);
 }
 
 // A switch that takes something out of the scene: the frame without it must say

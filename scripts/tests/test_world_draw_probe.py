@@ -39,8 +39,11 @@ The free camera holds the static models, the sun's shadow and the map's effects
 in every frame to rules, so with any of their switches (r_drawSModels,
 sm_enable, sm_sunEnable, fx_enable, fx_draw) turned off on the command line, the
 replay and the window driver refuse at the start stage, before any device work.
-The draw mode keeps those switches as diagnostics and still stops at
-Direct3DCreate9.
+The same holds for the map's vision set, whose glow and film it checks: glow
+off (r_glow, r_glow_allowed), the glow or film tweaks, fullbright or the depth
+of field tweak on, or contrast, brightness, desaturation or blur away from their
+defaults, and the run is refused there too. The draw mode keeps those switches
+as diagnostics and still stops at Direct3DCreate9.
 
 Each run exits 1 and writes nothing to its private output directory.
 
@@ -77,6 +80,7 @@ CAMERA_SWITCH_OFF = "Offline asset export failed: free_camera_replay stage=start
 WINDOW_SWITCH_OFF = "Offline asset export failed: free_camera_window stage=start: "
 SWITCH_OFF_REASON = " is off; the free camera checks the static models and sun shadow it draws"
 EFFECTS_OFF_REASON = " is off; the free camera checks the effects it plays"
+POST_REASON = "; the free camera checks the map's own glow and film"
 # Every export mode the exporter reads; a stray one in the caller's environment
 # would change which refusal the probe gives.
 MODE_VARIABLES = ("KISAK_WORLD_DRAW_MAP", "KISAK_FREE_CAMERA_MAP", "KISAK_WORLD_DEVICE_MAP",
@@ -264,10 +268,35 @@ def main():
             check(last_line(text) == prefix + dvar + reason, f"{what} is refused at the start stage")
             check(not any(line.startswith("direct3d=") for line in text.splitlines()),
                   f"{what} is refused before any device work")
+        # And the same for the map's vision set: what turns its glow or film off,
+        # replaces them, changes them or adds another post effect.
+        post_runs = (
+            ("post-glow", None, "r_glow", "0", " is off", "the replay without glow"),
+            ("post-allowed", "script", "r_glow_allowed", "0", " is off", "the scripted camera with glow disallowed"),
+            ("post-glow-tweaks", None, "r_glowUseTweaks", "1", " is on", "the replay with the glow tweaks"),
+            ("post-film-tweaks", "window", "r_filmUseTweaks", "1", " is on", "the live camera with the film tweaks"),
+            ("post-fullbright", None, "r_fullbright", "1", " is on", "the replay at full brightness"),
+            ("post-dof", "script", "r_dof_tweak", "1", " is on", "the scripted camera with the depth of field tweak"),
+            ("post-contrast", None, "r_contrast", "1.5", " is not 1", "the replay with more contrast"),
+            ("post-brightness", "window", "r_brightness", "0.25", " is not 0", "the live camera brighter"),
+            ("post-desaturation", None, "r_desaturation", "0", " is not 1", "the replay without desaturation"),
+            ("post-blur", "script", "r_blur", "2", " is not 0", "the scripted camera blurred"),
+            ("post-debug", None, "r_showFbColorDebug", "2", " is not None", "the replay with a frame buffer debug view"),
+        )
+        for name, camera_input, dvar, value, state, what in post_runs:
+            status, text = run_probe(probe, tree, outputs / name, None, args.timeout, camera_map="mp_crash",
+                                     camera_input=camera_input, dvars=((dvar, value),))
+            prefix = CAMERA_SWITCH_OFF if camera_input is None else WINDOW_SWITCH_OFF
+            check(status == 1, f"{what} exits 1 (got {status})")
+            check(last_line(text) == prefix + dvar + state + POST_REASON, f"{what} is refused at the start stage")
+            check(not any(line.startswith("direct3d=") for line in text.splitlines()),
+                  f"{what} is refused before any device work")
         status, text = run_probe(probe, tree, outputs / "switch-draw", "mp_crash", args.timeout,
-                                 dvars=(("r_drawSModels", "0"), ("sm_sunEnable", "0"), ("fx_enable", "0")))
+                                 dvars=(("r_drawSModels", "0"), ("sm_sunEnable", "0"), ("fx_enable", "0"),
+                                        ("r_glow", "0"), ("r_filmUseTweaks", "1")))
         check(status == 1 and last_line(text).startswith(DEVICE_FAILURE),
-              "the draw mode with static models, the sun's shadow and effects off still stops at the direct3d stage")
+              "the draw mode with static models, the sun's shadow, effects and glow off and the film tweaks on still "
+              "stops at the direct3d stage")
 
         written = sorted(str(path.relative_to(outputs)) for path in outputs.rglob("*") if path.is_file())
         check(not written, f"nothing is written to the private output directories ({written})")

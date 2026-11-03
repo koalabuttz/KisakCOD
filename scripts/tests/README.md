@@ -166,7 +166,7 @@ them, then runs the bundle prepare script, for twelve checks:
 | `world_lit_bundle` | `tests/linux_renderer/world_lit_bundle_test.cpp` | lit loader refusals: program pair hash and length, widened geometry counts, index walk, colour-map sampler, exact constant set, lightmap layout |
 | `world_frontend_invariants` | `tests/linux_asset_export/world_frontend_invariants_test.cpp` | the rules the offline world front-end probe holds each frame to, and its spawn-point camera scan ([guide](../../docs/linux-world-frontend.md#a-real-map-the-offline-front-end-probe)) |
 | `world_device_rules` | `tests/linux_asset_export/world_device_rules_test.cpp` | the rules the world device probe holds each texture, shader and vertex/index buffer to ([guide](../../docs/linux-world-device-probe.md)) |
-| `world_draw_rules` | `tests/linux_asset_export/world_draw_rules_test.cpp` | what the world draw probe holds a drawn frame to: the back-buffer measurement, the colour, coverage, brightness, repeat and camera rules, the draw counts, and the free camera's static model, shadow and effect counts, on frames built in memory ([guide](../../docs/linux-world-draw-probe.md)) |
+| `world_draw_rules` | `tests/linux_asset_export/world_draw_rules_test.cpp` | what the world draw probe holds a drawn frame to: the back-buffer measurement, the colour, coverage, brightness, repeat and camera rules, the draw counts, and the free camera's static model, shadow, effect and post effect counts, on frames built in memory ([guide](../../docs/linux-world-draw-probe.md)) |
 | `map_effects` | `tests/linux_asset_export/map_effects_test.cpp` | the reader the free camera plays a map's own effects from: the script tokenizer, the effect table, the createfx list and the effect plan, on script text the test writes itself ([guide](../../docs/linux-free-camera.md#the-maps-effects)) |
 | `world_image_capture` | `tests/linux_asset_export/world_image_capture_test.cpp` | capture bounds, name filter, duplicate rule, disabled path |
 | `msvc_rand` | `tests/linux_compat/msvc_rand_test.cpp` | the Microsoft runtime's `rand` and `srand` the world draw probe links in place of glibc's: the runtime's seed-1 sequence, the 15-bit range, per-thread state, and that shared libraries still find glibc's |
@@ -272,7 +272,7 @@ LD_LIBRARY_PATH=<sdl3-sdk>/lib:<stand-in dir> SDL_VIDEODRIVER=dummy \
 ```
 
 The script uses the same kind of temporary tree as the world device probe's and
-runs the probe nineteen times. In the draw mode an allowlisted map must stop at
+runs the probe thirty-two times. In the draw mode an allowlisted map must stop at
 `stage=direct3d` before `R_Init` runs, and no map, an unknown map and a show time
 over 60 seconds must be refused first. In the free-camera replay
 (`KISAK_FREE_CAMERA_MAP`, [guide](../../docs/linux-free-camera.md#the-replay)) an
@@ -286,8 +286,15 @@ time limit on the script must be refused first. The replay, the live camera and
 the script must each refuse at their start stage when a static model or shadow
 switch (`r_drawSModels`, `sm_enable`, `sm_sunEnable`) is off on the command line
 ([guide](../../docs/linux-free-camera.md#static-models-and-the-suns-shadow)),
-while the draw mode with them off still stops at `stage=direct3d`. All nineteen
-exit 1 and write nothing.
+when an effects switch (`fx_enable`, `fx_draw`) is off
+([guide](../../docs/linux-free-camera.md#the-maps-effects)), and when a switch
+turns the map's glow off or replaces, changes or adds to its glow and film
+(`r_glow`, `r_glow_allowed`, `r_glowUseTweaks`, `r_filmUseTweaks`,
+`r_fullbright`, `r_dof_tweak`, `r_contrast`, `r_brightness`, `r_desaturation`,
+`r_blur`, `r_showFbColorDebug`;
+[guide](../../docs/linux-free-camera.md#the-maps-vision-set-glow-and-film)),
+while the draw mode with several of them off still stops at `stage=direct3d`.
+All thirty-two exit 1 and write nothing.
 
 ## World front-end checks
 

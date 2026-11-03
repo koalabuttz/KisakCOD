@@ -28,16 +28,6 @@ namespace me = kisak_map_effects;
 // The seed Start gives rand() (see engine_effects.h). Any fixed value would do.
 constexpr unsigned kEffectsSeed = 1;
 
-struct RawFiles
-{
-    std::vector<const RawFile *> files;
-};
-
-void CollectRawFile(XAssetHeader header, void *context)
-{
-    static_cast<RawFiles *>(context)->files.push_back(header.rawfile);
-}
-
 struct EffectDefs
 {
     std::vector<const FxEffectDef *> defs;
@@ -46,27 +36,6 @@ struct EffectDefs
 void CollectEffectDef(XAssetHeader header, void *context)
 {
     static_cast<EffectDefs *>(context)->defs.push_back(header.fx);
-}
-
-// Whether an asset's name is the name asked for, compared as the zone's own
-// lookup compares them (DB_FindXAssetEntry uses I_stricmp): without case.
-// Scripts and zones do not agree on case; mp_crash's effect table loads
-// "smoke/battlefield_smokebank_S".
-bool SameAssetName(const std::string &asked, const char *name)
-{
-    return name && !I_stricmp(asked.c_str(), name);
-}
-
-// The raw file of that name in the loaded zones, or nullptr. Enumerated rather
-// than looked up, so that a missing file is not replaced by a default asset.
-const RawFile *FindRawFile(const std::string &name)
-{
-    RawFiles all;
-    DB_EnumXAssets(ASSET_TYPE_RAWFILE, CollectRawFile, &all, true);
-    for (const RawFile *file : all.files)
-        if (file && SameAssetName(name, file->name) && !DB_IsXAssetDefault(ASSET_TYPE_RAWFILE, file->name))
-            return file;
-    return nullptr;
 }
 
 std::string_view Text(const RawFile &file)
@@ -88,8 +57,8 @@ void MapEffects::Start(const char *mapName)
     Require(mapName && *mapName, "effects", "no map name");
     const std::string tableName = std::string("maps/mp/") + mapName + "_fx.gsc";
     const std::string listName = std::string("maps/createfx/") + mapName + "_fx.gsc";
-    const RawFile *tableFile = FindRawFile(tableName);
-    const RawFile *listFile = FindRawFile(listName);
+    const RawFile *tableFile = FindLoadedRawFile(tableName);
+    const RawFile *listFile = FindLoadedRawFile(listName);
     Require(tableFile != nullptr, "effects", "the map's zone has no " + tableName);
     Require(listFile != nullptr, "effects", "the map's zone has no " + listName);
 

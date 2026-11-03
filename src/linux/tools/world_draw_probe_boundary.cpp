@@ -1,10 +1,11 @@
 // Link boundary of the world draw probe (scripts/platform/linux/world_draw_probe.cmake).
 //
 // The probe links the whole renderer except the four units the client compile
-// census still blocks, the effects system with the physics it steps, and none
-// of the rest of the client: no cgame, no dynamic-entity simulation, no sound,
-// no client screen. The free camera's effects host (engine_effects.h) makes the
-// cgame's effects calls itself. What the linked units reach that no linked unit
+// census still blocks, the effects system with the physics it steps, the
+// cgame's vision sets, and none of the rest of the client: no other cgame unit,
+// no dynamic-entity simulation, no sound, no client screen. The free camera's
+// effects host (engine_effects.h) and vision host (engine_vision.h) make the
+// cgame's calls themselves. What the linked units reach that no linked unit
 // defines is here, in four kinds:
 //
 //   1. Storage whose owner is not linked, with the owner's exact type,
@@ -55,6 +56,10 @@ const dvar_t *vid_ypos;     // win_wndproc.cpp on Windows; R_RegisterDvars regis
 cg_s cgArray[1];
 centity_s cg_entitiesArray[1][1024];
 cgMedia_t cgMedia;
+// cl_main_mp.cpp. The cgame's vision sets ask whether the client is in a game
+// (CL_GetLocalClientConnectionState) before looking through night vision; no
+// client connects here, so it stays CA_DISCONNECTED.
+clientUIActive_t clientUIActives[STATIC_MAX_LOCAL_CLIENTS];
 
 namespace
 {

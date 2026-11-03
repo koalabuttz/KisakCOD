@@ -69,9 +69,10 @@ void RecoverDevice()
 }
 } // namespace
 
-EngineSceneRenderer::EngineSceneRenderer(ViewExtent extent, bool readBack, bool effects)
+EngineSceneRenderer::EngineSceneRenderer(ViewExtent extent, bool readBack, MapScene scene)
     : extent_(extent), readBack_(readBack), refdef_(std::make_unique<refdef_s>()),
-      effects_(effects ? std::make_unique<wde::MapEffects>() : nullptr)
+      effects_(scene.effects ? std::make_unique<wde::MapEffects>() : nullptr),
+      vision_(scene.vision ? std::make_unique<wde::MapVision>() : nullptr)
 {
     wde::RequireStartedRenderer();
     wde::Require(!extent.Empty(), "renderer", "the renderer must start at a real extent");
@@ -113,6 +114,10 @@ bool EngineSceneRenderer::LoadMap(const std::string &map, std::string &error)
         try
         {
             worldName_ = wde::LoadMap(map.c_str());
+            // CG_Init's order: the cgame's globals, which hold the vision set,
+            // are cleared before the effects system starts.
+            if (vision_)
+                vision_->Start(map.c_str());
             if (effects_)
                 effects_->Start(map.c_str());
         }
@@ -123,6 +128,8 @@ bool EngineSceneRenderer::LoadMap(const std::string &map, std::string &error)
             std::string reason = failure.what();
             if (effects_)
                 effects_->Stop();
+            if (vision_)
+                vision_->Stop();
             if (wde::MapHeld())
             {
                 try
@@ -156,9 +163,12 @@ void EngineSceneRenderer::UnloadMap() noexcept
     worldName_.clear();
     try
     {
-        // CG_Shutdown stops the effects before the map goes.
+        // CG_Shutdown stops the effects, then clears the cgame's globals, before
+        // the map goes.
         if (effects_)
             effects_->Stop();
+        if (vision_)
+            vision_->Stop();
         wde::UnloadMap();
         ++counters_.unloads;
     }
@@ -285,6 +295,9 @@ bool EngineSceneRenderer::DrawFrame(const CameraView &view, std::string &error)
                      "the video config's scene is not " + ExtentText(extent_));
         wde::PrepareRefdef(*refdef_);
         kisak::view::FillRefdef(view, *refdef_);
+        // The cgame's view: the vision set's glow and film at the frame's time.
+        if (vision_)
+            vision_->Apply(*refdef_);
         if (effects_)
         {
             last_ = wde::DrawRefdef(*refdef_, readBack_, {},
@@ -293,6 +306,7 @@ bool EngineSceneRenderer::DrawFrame(const CameraView &view, std::string &error)
         }
         else
             last_ = wde::DrawRefdef(*refdef_, readBack_);
+        last_.post.vision = vision_ != nullptr;
         ++counters_.draws;
         return true;
     }

@@ -21,6 +21,7 @@
 
 struct GfxViewInfo;
 struct GfxWorld;
+struct RawFile;
 struct refdef_s;
 
 namespace kisak_world_draw_engine
@@ -60,6 +61,11 @@ struct FrameResult
     // The effect surfaces, meshes and draws of the frame. The effects system's
     // own counts (running, effects, elements) are its host's to fill.
     wdr::EffectCounts effects;
+    // The vision set's glow and film: what the refdef asks for, whether the
+    // renderer's switches let it through, and what the front end's view uses.
+    // Whether the refdef carries the map's vision set (vision) is its host's to
+    // fill.
+    wdr::PostCounts post;
     // Surfaces this frame moved into the static model cache (R_CacheStaticModelSurface):
     // a view has not settled while it is filling.
     uint32_t smcPatches = 0;
@@ -115,6 +121,14 @@ void UnloadMap();
 // world data or the renderer's world.
 bool MapHeld();
 GfxWorld *FindPackagedWorld(const char *mapName);
+// Whether an asset's name is the name asked for, compared as the zone's own
+// lookup compares them (DB_FindXAssetEntry uses I_stricmp): without case.
+// Scripts and zones do not agree on case; mp_crash's effect table loads
+// "smoke/battlefield_smokebank_S".
+bool SameAssetName(const std::string &asked, const char *name);
+// The raw file of that name in the loaded zones, or nullptr. Enumerated rather
+// than looked up, so that a missing file is not replaced by a default asset.
+const RawFile *FindLoadedRawFile(const std::string &name);
 // View A is the map author's intermission camera when the map has one, otherwise
 // the first player spawn. View B is the first player spawn that is not view A.
 void ChooseCameras(const GfxWorld &world, Camera &a, Camera &b);
