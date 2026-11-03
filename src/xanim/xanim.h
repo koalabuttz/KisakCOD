@@ -216,8 +216,8 @@ struct XAnimTree_s // sizeof=0x14
 {
     XAnim_s *anims;
     int info_usage;
-    volatile long calcRefCount;
-    volatile long modifyRefCount;
+    volatile LONG calcRefCount;
+    volatile LONG modifyRefCount;
     uint16_t children;
     // padding byte
     // padding byte

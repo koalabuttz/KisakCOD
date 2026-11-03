@@ -1624,7 +1624,7 @@ void __cdecl R_AddCellDynBrushSurfacesInFrustumCmd(const DpvsDynamicCellCmd *dat
 
 void __cdecl R_CullDynBrushInCell(uint32_t cellIndex, const DpvsPlane *planes, int planeCount)
 {
-    unsigned long v4; // eax
+    DWORD v4; // eax
     int v5; // [esp+4h] [ebp-34h]
     const DpvsPlane *v6; // [esp+8h] [ebp-30h]
     int v7; // [esp+Ch] [ebp-2Ch]

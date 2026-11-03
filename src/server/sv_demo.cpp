@@ -1672,7 +1672,7 @@ void __cdecl SV_DemoBack_f()
     int v0; // r31
     int v1; // r31
     const char *v2; // r3
-    long double v3; // fp2
+    double v3; // fp2
 
     if (replay_time && replay_autosave)
     {
@@ -1712,7 +1712,7 @@ void __cdecl SV_DemoBack_f()
 void __cdecl SV_DemoForward_f()
 {
     const char *v0; // r3
-    long double v1; // fp2
+    double v1; // fp2
     int v2; // r28
     int v3; // r30
     server_demo_history_t *v4; // r11
@@ -1776,7 +1776,7 @@ void __cdecl SV_DemoFullForward_f()
 {
     int v0; // r11
     const char *v1; // r3
-    long double v2; // fp2
+    double v2; // fp2
 
     if (replay_time && replay_autosave)
     {

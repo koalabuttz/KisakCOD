@@ -130,10 +130,10 @@ class DiagnosticTests(unittest.TestCase):
         for key, (title, upstream, meaning) in census.CATEGORIES.items():
             with self.subTest(key=key):
                 self.assertTrue(title and upstream and meaning)
-        self.assertIn("#74", census.CATEGORIES["layout-assert"][1])
-        self.assertIn("#28", census.CATEGORIES["compiler-types"][1])
-        self.assertIn("#76", census.SCAN_PATTERNS["miles"][1])
-        self.assertIn("#75", census.SCAN_PATTERNS["bink"][1])
+        self.assertIn("upstream 74", census.CATEGORIES["layout-assert"][1])
+        self.assertIn("upstream 28", census.CATEGORIES["compiler-types"][1])
+        self.assertIn("upstream 76", census.SCAN_PATTERNS["miles"][1])
+        self.assertIn("upstream 75", census.SCAN_PATTERNS["bink"][1])
         self.assertEqual(set(census.WARNING_CATEGORIES.values()) | set(census.ERROR_CATEGORIES),
                          set(census.CATEGORIES))
 
@@ -235,7 +235,8 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(report["categories"]["alignment"]["sites"], 0)
         self.assertEqual(report["scan"]["inline-asm"]["total"], 2)
         text = census.render_markdown(report)
-        self.assertIn("#74", text)
+        self.assertIn("upstream 74", text)
+        self.assertNotRegex(text, r"#\d")
         self.assertIn("`src/b.h:3` (1 units)", text)
         self.assertIn("1 client sources were skipped", text)
         json.dumps(report)
@@ -296,7 +297,7 @@ class FakeCompilerTests(unittest.TestCase):
         # src/linux is the fork's own shim layer, whatever the message says.
         self.assertEqual(report["categories"]["linux-shim-abi"]["sites"], 1)
         self.assertEqual(report["categories"]["pointer-truncation"]["sites"], 1)
-        self.assertIn("#74", (report_dir / "x64-census.md").read_text(encoding="utf-8"))
+        self.assertIn("upstream 74", (report_dir / "x64-census.md").read_text(encoding="utf-8"))
         log = report_dir / "logs" / "dedi" / "src_linux_net.cpp.log"
         self.assertIn("-fsyntax-only", log.read_text(encoding="utf-8"))
 

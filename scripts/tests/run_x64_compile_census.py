@@ -16,8 +16,8 @@ translation unit of two source sets once, syntax-only, for x86_64:
     64-bit findings.
 
 Each diagnostic is filed under a category named after the upstream
-SwagSoftware/KisakCOD "64-bit Support" milestone item it belongs to (#2 and its
-blockers, #28 types, #74 static_asserts, #75 Bink, #76 Miles), deduplicated by
+SwagSoftware/KisakCOD "64-bit Support" milestone item it belongs to (upstream 2 and its
+blockers, 28 types, 74 static_asserts, 75 Bink, 76 Miles), deduplicated by
 source location so a header error counts once however many units include it.
 Errors stop a 64-bit compile; the warnings collected alongside (pointer/integer
 casts and 64-to-32 narrowing) compile but are where 32-bit assumptions break at
@@ -88,26 +88,26 @@ DIAGNOSTIC_FLAGS = (
 # key -> (title, upstream reference, what it means). Order is report order.
 CATEGORIES = {
     "layout-assert": (
-        "Struct layout static_asserts", "#74, #2 (struct sizing numbers)",
+        "Struct layout static_asserts", "upstream 74, 2 (struct sizing numbers)",
         "static_assert(sizeof/offsetof == 32-bit value) on shared headers; needs per-arch or sizeof-based checks"),
     "linux-shim-abi": (
         "Linux Win32 ABI shims", "fork only (src/linux)",
         "this fork's src/linux headers assert the 32-bit Windows ABI (pointer, long, OVERLAPPED, D3D9 handles)"),
     "alignment": (
-        "Alignment requests below the x86_64 minimum", "#2 (struct sizing numbers)",
+        "Alignment requests below the x86_64 minimum", "upstream 2 (struct sizing numbers)",
         "align(N) smaller than the type's natural 64-bit alignment"),
     "compiler-types": (
-        "Compiler and Windows types", "#28",
+        "Compiler and Windows types", "upstream 28",
         "va_list, compiler intrinsics and Windows-only calls that differ on x86_64"),
     "inline-asm": (
         "Inline assembly", "none yet (MSVC x64 has no inline asm)",
         "__asm the 64-bit compiler rejected"),
     "other-error": ("Other errors", "triage", "errors no rule above matches"),
     "pointer-truncation": (
-        "Pointer/integer casts", "#2 (pointer arithmetic from the decompilation)",
+        "Pointer/integer casts", "upstream 2 (pointer arithmetic from the decompilation)",
         "warnings: a pointer stored in or rebuilt from a 32-bit integer"),
     "narrowing-64-to-32": (
-        "64-to-32-bit narrowing", "#2, #28",
+        "64-to-32-bit narrowing", "upstream 2 and 28",
         "warnings: size_t/ptrdiff_t/long values implicitly cut to 32 bits"),
 }
 ERROR_CATEGORIES = ("layout-assert", "linux-shim-abi", "alignment", "compiler-types", "inline-asm", "other-error")
@@ -124,14 +124,14 @@ WARNING_CATEGORIES = {
 SCAN_PATTERNS = {
     "inline-asm": ("Inline __asm statements", "none yet (MSVC x64 has no inline asm)",
                    re.compile(r"\b__asm\b")),
-    "fastfile-load-stream": ("Fastfile Load_Stream calls", "#2 (fast-file databases)",
+    "fastfile-load-stream": ("Fastfile Load_Stream calls", "upstream 2 (fast-file databases)",
                              re.compile(r"\bLoad_Stream\s*\(")),
-    "miles": ("Miles (AIL_) call sites", "#76", re.compile(r"\bAIL_\w+\s*\(")),
-    "bink": ("Bink call sites", "#75", re.compile(r"\bBink[A-Z]\w*\s*\(")),
+    "miles": ("Miles (AIL_) call sites", "upstream 76", re.compile(r"\bAIL_\w+\s*\(")),
+    "bink": ("Bink call sites", "upstream 75", re.compile(r"\bBink[A-Z]\w*\s*\(")),
     "literal-size-copy": (
-        "memcpy/memset with a literal size", "#2 (pointer arithmetic; cf. upstream 8aadf94)",
+        "memcpy/memset with a literal size", "upstream 2 (pointer arithmetic; cf. upstream 8aadf94)",
         re.compile(r"\b(?:Com_Memcpy|Com_Memset|memcpy|memset|memmove)\s*\([^;]*,\s*(?:0x[0-9A-Fa-f]+|\d+)u?\s*\)\s*;")),
-    "layout-assert": ("static_assert(sizeof/offsetof) lines", "#74",
+    "layout-assert": ("static_assert(sizeof/offsetof) lines", "upstream 74",
                       re.compile(r"\bstatic_assert\s*\(\s*(?:sizeof|offsetof|__builtin_offsetof)\b")),
 }
 SCAN_SUFFIXES = (".c", ".cpp", ".h", ".hpp", ".inl")
@@ -249,7 +249,7 @@ def classify(path, kind, message, flag):
     if path.startswith("src/linux/"):
         return "linux-shim-abi"
     if re.search(r"sizeof\((?:unsigned )?long\)", message):
-        return "compiler-types"  # Linux long is 8 bytes on x86_64, Windows LONG stays 4 (#28)
+        return "compiler-types"  # Linux long is 8 bytes on x86_64, Windows LONG stays 4 (upstream 28)
     if "static assertion failed" in message and re.search(r"\b(sizeof|offsetof|__builtin_offsetof)\b", message):
         return "layout-assert"
     if "requested alignment is less than minimum alignment" in message:

@@ -2364,8 +2364,8 @@ void __cdecl FX_AddNonSpriteDrawSurfs(FxCmd *cmd)
 
 void __cdecl FX_RewindTo(int32_t localClientNum, int32_t time)
 {
-    volatile long *Destination; // [esp+4h] [ebp-10ACh]
-    volatile long Comperand; // [esp+8h] [ebp-10A8h]
+    volatile LONG *Destination; // [esp+4h] [ebp-10ACh]
+    volatile LONG Comperand; // [esp+8h] [ebp-10A8h]
     uint16_t v4; // [esp+18h] [ebp-1098h]
     FxEffect *effect; // [esp+1Ch] [ebp-1094h]
     FxEffect *effecta; // [esp+1Ch] [ebp-1094h]

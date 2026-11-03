@@ -294,7 +294,7 @@ int  R_SkinSceneDObjModels(
         {
             uint32_t vertsSize = sizeof(GfxPackedVertex) * numSkinnedVerts;
             iassert(frontEndDataOut->tempSkinBuf);
-            unsigned long firstSurf = InterlockedExchangeAdd(&frontEndDataOut->tempSkinPos, vertsSize);
+            uint32_t firstSurf = InterlockedExchangeAdd(&frontEndDataOut->tempSkinPos, vertsSize);
             if ((firstSurf + vertsSize) > 0x480000)
             {
                 R_WarnOncePerFrame(R_WARN_TEMP_SKIN_BUF_SIZE);

@@ -23,7 +23,7 @@ double SecondsPerTick();
 // Calibrate msecPerRawTimerTick. Must run before Sys_FindInfo/Sys_Milliseconds.
 void InitTiming();
 
-extern long double msecPerRawTimerTick;
+extern double msecPerRawTimerTick;
 extern double qpc2msec;
 
 // Nanoseconds from CLOCK_MONOTONIC. Monotonic and unaffected by wall-clock

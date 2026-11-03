@@ -1492,7 +1492,7 @@ void GScr_GetDvarFloat()
 {
     const char *String; // r3
     const char *VariantString; // r3
-    long double v2; // fp2
+    double v2; // fp2
 
     String = Scr_GetString(0);
     VariantString = SV_Archived_Dvar_GetVariantString(String);
@@ -1535,7 +1535,7 @@ void GScr_GetDebugDvarFloat()
 {
     const char *String; // r3
     const char *VariantString; // r3
-    long double v2; // fp2
+    double v2; // fp2
 
     String = Scr_GetString(0);
     VariantString = Dvar_GetVariantString(String);
@@ -5533,8 +5533,8 @@ void Scr_RandomFloatRange()
 
 void GScr_sin()
 {
-    long double v0; // fp2
-    long double v1; // fp2
+    double v0; // fp2
+    double v1; // fp2
 
     *(double *)&v0 = (float)(DEG2RAD( Scr_GetFloat(0) ));
     v1 = sin(v0);
@@ -5543,8 +5543,8 @@ void GScr_sin()
 
 void GScr_cos()
 {
-    long double v0; // fp2
-    long double v1; // fp2
+    double v0; // fp2
+    double v1; // fp2
 
     *(double *)&v0 = (float)(DEG2RAD( Scr_GetFloat(0) ));
     v1 = cos(v0);
@@ -5554,10 +5554,10 @@ void GScr_cos()
 void GScr_tan()
 {
     double v0; // fp31
-    long double v1; // fp2
-    long double v2; // fp2
+    double v1; // fp2
+    double v2; // fp2
     double v3; // fp30
-    long double v4; // fp2
+    double v4; // fp2
     double v5; // fp31
 
     v0 = (float)(DEG2RAD( Scr_GetFloat(0) ));
@@ -5574,10 +5574,10 @@ void GScr_tan()
 
 void GScr_asin()
 {
-    long double v0; // fp2
+    double v0; // fp2
     double v1; // fp31
     const char *v2; // r3
-    long double v3; // fp2
+    double v3; // fp2
 
     *(double *)&v0 = Scr_GetFloat(0);
     v1 = *(double *)&v0;
@@ -5593,10 +5593,10 @@ void GScr_asin()
 
 void GScr_acos()
 {
-    long double v0; // fp2
+    double v0; // fp2
     double v1; // fp31
     const char *v2; // r3
-    long double v3; // fp2
+    double v3; // fp2
 
     *(double *)&v0 = Scr_GetFloat(0);
     v1 = *(double *)&v0;
@@ -5612,8 +5612,8 @@ void GScr_acos()
 
 void GScr_atan()
 {
-    long double v0; // fp2
-    long double v1; // fp2
+    double v0; // fp2
+    double v1; // fp2
 
     *(double *)&v0 = Scr_GetFloat(0);
     v1 = atan(v0);
@@ -5714,8 +5714,8 @@ void GScr_max()
 
 void GScr_floor()
 {
-    long double v0; // fp2
-    long double v1; // fp2
+    double v0; // fp2
+    double v1; // fp2
 
     *(double *)&v0 = Scr_GetFloat(0);
     v1 = floor(v0);
@@ -5724,8 +5724,8 @@ void GScr_floor()
 
 void GScr_ceil()
 {
-    long double v0; // fp2
-    long double v1; // fp2
+    double v0; // fp2
+    double v1; // fp2
 
     *(double *)&v0 = Scr_GetFloat(0);
     v1 = ceil(v0);
@@ -6222,8 +6222,8 @@ void Scr_MusicStop()
 {
     unsigned int NumParam; // r3
     const char *v1; // r3
-    long double v2; // fp2
-    long double v3; // fp2
+    double v2; // fp2
+    double v3; // fp2
     int v4; // r31
     const char *v5; // r3
     const char *v6; // r3
@@ -6524,8 +6524,8 @@ void Scr_AmbientPlay()
     int v0; // r30
     unsigned int NumParam; // r3
     const char *v2; // r3
-    long double v3; // fp2
-    long double v4; // fp2
+    double v3; // fp2
+    double v4; // fp2
     const char *name; // r31
 
     v0 = 0;
@@ -6561,8 +6561,8 @@ void Scr_AmbientPlay()
 void Scr_AmbientStop()
 {
     unsigned int NumParam; // r3
-    long double v2; // fp2
-    long double v3; // fp2
+    double v2; // fp2
+    double v3; // fp2
     int v4; // r31
 
     NumParam = Scr_GetNumParam();
@@ -6918,11 +6918,11 @@ void GScr_ChangeLevel()
 {
     gentity_s *v0; // r31
     unsigned int NumParam; // r3
-    long double v2; // fp2
-    long double v3; // fp2
+    double v2; // fp2
+    double v3; // fp2
     const char *String; // r30
-    long double v5; // fp2
-    long double v6; // fp2
+    double v5; // fp2
+    double v6; // fp2
 
     v0 = G_Find(0, offsetof(gentity_s, classname), scr_const.player);
     if (!v0)
@@ -7047,11 +7047,11 @@ void __cdecl GScr_SetMissionDvar()
 
 void GScr_Cinematic()
 {
-    long double v0; // fp2
-    long double v1; // fp2
+    double v0; // fp2
+    double v1; // fp2
     const char *String; // r30
-    long double v3; // fp2
-    long double v4; // fp2
+    double v3; // fp2
+    double v4; // fp2
 
     if (!g_reloading->current.integer)
     {
@@ -7144,8 +7144,8 @@ void GScr_IsCinematicPlaying()
 void GScr_Earthquake()
 {
     double Float; // fp30
-    long double v1; // fp2
-    long double v2; // fp2
+    double v1; // fp2
+    double v2; // fp2
     double v3; // fp29
     gentity_s *v4; // r3
     int v5; // [sp+50h] [-40h]
@@ -7816,8 +7816,8 @@ skipAxes:
 void Scr_TriggerFX()
 {
     gentity_s *Entity; // r31
-    long double v1; // fp2
-    long double v2; // fp2
+    double v1; // fp2
+    double v2; // fp2
 
     if (!Scr_GetNumParam() || Scr_GetNumParam() > 2)
         Scr_Error("Incorrect number of parameters");
@@ -8009,8 +8009,8 @@ void Scr_SetExponentialFog()
 void Scr_VisionSetNaked()
 {
     unsigned int NumParam; // r3
-    long double v1; // fp2
-    long double v2; // fp2
+    double v1; // fp2
+    double v2; // fp2
     int v5; // [sp+50h] [-10h]
 
     v5 = 1000;
@@ -8032,8 +8032,8 @@ void Scr_VisionSetNaked()
 void Scr_VisionSetNight()
 {
     unsigned int NumParam; // r3
-    long double v1; // fp2
-    long double v2; // fp2
+    double v1; // fp2
+    double v2; // fp2
     int v5; // [sp+50h] [-10h]
 
     v5 = 1000;
@@ -8188,8 +8188,8 @@ void Scr_BadPlace_Delete()
 void Scr_BadPlace_Cylinder()
 {
     unsigned int ConstString; // r31
-    long double v1; // fp2
-    long double v2; // fp2
+    double v1; // fp2
+    double v2; // fp2
     double Float; // fp1
     int v4; // r8
     int v5; // r7
@@ -8226,8 +8226,8 @@ void Scr_BadPlace_Cylinder()
 void Scr_BadPlace_Arc()
 {
     unsigned int ConstString; // r31
-    long double v1; // fp2
-    long double v2; // fp2
+    double v1; // fp2
+    double v2; // fp2
     double v3; // fp31
     double Float; // fp1
     double angle1; // fp0
@@ -8287,8 +8287,8 @@ void Scr_BadPlace_Arc()
 void Scr_BadPlace_Brush()
 {
     unsigned int ConstString; // r30
-    long double v1; // fp2
-    long double v2; // fp2
+    double v1; // fp2
+    double v2; // fp2
     gentity_s *Entity; // r31
     int TeamFlags; // r5
     int v5; // [sp+50h] [-20h]
@@ -9323,9 +9323,9 @@ void __cdecl GScr_ShellShock(scr_entref_t entref)
     const char *String; // r31
     int v3; // r30
     const char *v4; // r3
-    long double v5; // fp2
+    double v5; // fp2
     __int64 v6; // r10
-    long double v7; // fp2
+    double v7; // fp2
     unsigned int v8; // r31
     double v9; // r4
     const char *v10; // r3

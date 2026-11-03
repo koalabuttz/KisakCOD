@@ -8,7 +8,7 @@
 #include <time.h>
 #include <unistd.h>
 
-long double msecPerRawTimerTick;
+double msecPerRawTimerTick;
 double qpc2msec;
 
 // Kept at file scope with the same names as the Windows build so diagnostics
