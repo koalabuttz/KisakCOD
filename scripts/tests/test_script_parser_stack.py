@@ -115,11 +115,19 @@ static size_t nodeArenaUsed;
 constexpr size_t kNodeArenaSize = size_t(512) << 20;
 sval_u* Scr_AllocNode(int size) {
     if (!nodeArena) {
-        void* hint = reinterpret_cast<void*>(uintptr_t(0x7e0080000000ull));
-        void* arena = mmap(hint, kNodeArenaSize, PROT_READ | PROT_WRITE,
-                           MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_FIXED_NOREPLACE, -1, 0);
-        if (arena == MAP_FAILED) throw std::runtime_error("cannot map the parse node arena");
-        nodeArena = static_cast<uint8_t*>(arena);
+        // Reserve 4 GB more than needed (inaccessible, so nothing is committed),
+        // then open the window that starts at the first 0x...80000000 inside.
+        size_t reserve = kNodeArenaSize + (sizeof(void*) > 4 ? size_t(1) << 32 : 0);
+        void* mapped = mmap(nullptr, reserve, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+        if (mapped == MAP_FAILED) throw std::runtime_error("cannot reserve the parse node arena");
+        uintptr_t start = reinterpret_cast<uintptr_t>(mapped);
+        if (sizeof(void*) > 4) {
+            uintptr_t window = (start & ~uintptr_t(0xFFFFFFFFu)) | 0x80000000u;
+            start = window >= start ? window : window + (uintptr_t(1) << 32);
+        }
+        if (mprotect(reinterpret_cast<void*>(start), kNodeArenaSize, PROT_READ | PROT_WRITE) != 0)
+            throw std::runtime_error("cannot map the parse node arena");
+        nodeArena = reinterpret_cast<uint8_t*>(start);
     }
     size_t bytes = sizeof(sval_u) * size;
     if (nodeArenaUsed + bytes > kNodeArenaSize) throw std::runtime_error("parse node arena exhausted");
