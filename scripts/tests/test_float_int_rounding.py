@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Pin the retail map-centre rounding named for upstream issue 56.
+"""Pin the retail float-to-int rounding named for upstream issues 52 and 56.
 
-Retail 1.7 rounds the origin codec's map centre by adding 0.5 and
-truncating (MSG_RoundMapCenter), checked against the retail executable with
-scripts/audit/retail_float_int_scan.py. This test compiles the helper
-straight from the header and checks its values, and checks that the origin
-encoder and decoder both use it.
+Retail 1.7 truncates the game-side vector snaps (SnapVectorTowardZero) and
+rounds the origin codec's map centre by adding 0.5 and truncating
+(MSG_RoundMapCenter). Both were checked against the retail executable with
+scripts/audit/retail_float_int_scan.py. This test compiles the two helpers
+straight from the headers and checks their values, and checks that the
+origin encoder and decoder both use the same centre helper.
 """
 
 import pathlib
@@ -16,9 +17,16 @@ import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+Q_SHARED = ROOT / "src" / "universal" / "q_shared.h"
 QCOMMON = ROOT / "src" / "qcommon" / "qcommon.h"
 MSG_READ = ROOT / "src" / "qcommon" / "msg_mp.cpp"
 MSG_WRITE = ROOT / "src" / "qcommon" / "sv_msg_write_mp.cpp"
+SNAP_USERS = [
+    ROOT / "src" / "game" / "g_missile.cpp",
+    ROOT / "src" / "game_mp" / "g_scr_main_mp.cpp",
+    ROOT / "src" / "game_mp" / "g_utils_mp.cpp",
+    ROOT / "src" / "bgame" / "bg_misc.cpp",
+]
 
 
 def inline_function(path, name):
@@ -32,8 +40,12 @@ def inline_function(path, name):
 PROGRAM = r"""
 #include <cstdio>
 %s
+%s
 int main()
 {
+    float v[3] = { -1.7f, 1.7f, -0.5f };
+    SnapVectorTowardZero(v);
+    std::printf("snap %%g %%g %%g\n", v[0], v[1], v[2]);
     const float centres[] = { -1.49f, -1.5f, -100.3f, -0.6f, 0.49f, 2.5f, 3.5f, 1234.75f };
     for (float c : centres)
         std::printf("centre %%g %%d\n", c, MSG_RoundMapCenter(c));
@@ -43,11 +55,14 @@ int main()
 
 
 class HelperValueTest(unittest.TestCase):
-    def test_centre_rounding_matches_retail(self):
+    def test_helpers_match_retail(self):
         cxx = shutil.which("g++") or shutil.which("clang++")
         if not cxx:
             self.skipTest("no C++ compiler")
-        source = PROGRAM % inline_function(QCOMMON, "MSG_RoundMapCenter")
+        source = PROGRAM % (
+            inline_function(Q_SHARED, "SnapVectorTowardZero"),
+            inline_function(QCOMMON, "MSG_RoundMapCenter"),
+        )
         with tempfile.TemporaryDirectory() as tmp:
             src = pathlib.Path(tmp) / "rounding.cpp"
             exe = pathlib.Path(tmp) / "rounding"
@@ -55,7 +70,8 @@ class HelperValueTest(unittest.TestCase):
             subprocess.run([cxx, "-O2", "-std=c++17", str(src), "-o", str(exe)], check=True)
             out = subprocess.run([str(exe)], check=True, capture_output=True, text=True).stdout
         lines = out.splitlines()
-        centres = dict(line.split()[1:] for line in lines)
+        self.assertEqual(lines[0], "snap -1 1 0")
+        centres = dict(line.split()[1:] for line in lines[1:])
         # +0.5 then truncate toward zero: negative centres with a fraction
         # under .5 move up, unlike std::round.
         self.assertEqual(centres, {
@@ -74,6 +90,13 @@ class SourceUseTest(unittest.TestCase):
         self.assertEqual(writer.count("MSG_RoundMapCenter("), 4)
         for text in (reader, writer):
             self.assertIsNone(re.search(r"mapCenter(?:\(\))?\)?\[\w+\] \+ 0\.5", text))
+
+    def test_game_snaps_use_named_helper(self):
+        bare = re.compile(r"(\S+)\[0\] = \(float\)\(int\)\1\[0\];")
+        for path in SNAP_USERS:
+            text = path.read_text()
+            self.assertIn("SnapVectorTowardZero(", text, path)
+            self.assertIsNone(bare.search(text), path)
 
 
 if __name__ == "__main__":

@@ -1400,6 +1400,7 @@ void __cdecl PlayerCmd_finishPlayerDamage(scr_entref_t entref)
                     player_yaw = pSelf->client->ps.viewangles[1];
                     if (player_yaw < 0.0)
                         player_yaw = player_yaw + 360.0;
+                    // Truncates toward zero, as retail does (_ftol2_sse; upstream #52).
                     flinchYawDir = flinchYawDir - (double)(int)player_yaw;
                     if (flinchYawDir < 0.0)
                         flinchYawDir = flinchYawDir + 360.0;
