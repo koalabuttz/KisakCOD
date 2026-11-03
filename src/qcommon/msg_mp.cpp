@@ -1277,12 +1277,12 @@ double __cdecl MSG_ReadOriginFloat(int bits, msg_t *msg, float oldValue)
             index = 1;
         }
 #if !defined(__linux__) || !defined(KISAK_DEDICATED)
-        roundedCenter = (int)((*CL_GetMapCenter())[index] + 0.5);
+        roundedCenter = MSG_RoundMapCenter((*CL_GetMapCenter())[index]);
 #else
         // A dedicated server has no client static. svs.mapCenter is the same
         // centre that is published to clients in svsHeader, so origin deltas
         // still decode against the value the sender encoded with.
-        roundedCenter = (int)(svs.mapCenter[index] + 0.5);
+        roundedCenter = MSG_RoundMapCenter(svs.mapCenter[index]);
 #endif
         return (float)(roundedCenter + (((int)oldValue + 0x8000 - roundedCenter) ^ MSG_ReadBits(msg, 0x10u)) - 0x8000);
     }
@@ -1299,11 +1299,11 @@ double __cdecl MSG_ReadOriginZFloat(msg_t *msg, float oldValue)
     if (MSG_ReadBit(msg))
     {
 #if !defined(__linux__) || !defined(KISAK_DEDICATED)
-        roundedCenter = (int)((*CL_GetMapCenter())[2] + 0.5);
+        roundedCenter = MSG_RoundMapCenter((*CL_GetMapCenter())[2]);
 #else
         // See MSG_ReadOriginFloat: the dedicated server decodes against the
         // centre it advertises in svsHeader, not a client static.
-        roundedCenter = (int)(svs.mapCenter[2] + 0.5);
+        roundedCenter = MSG_RoundMapCenter(svs.mapCenter[2]);
 #endif
         return (float)(roundedCenter + (((int)oldValue + 0x8000 - roundedCenter) ^ MSG_ReadBits(msg, 0x10u)) - 0x8000);
     }
