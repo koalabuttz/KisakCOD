@@ -309,6 +309,13 @@ def plan_checks(options, workdir, build_dir, binary, python, cxx):
             [Command([python, TESTS / "test_linux_crt_shims.py", "--cxx", cxx], timeout=300)],
         )
     )
+    checks.append(
+        Check(
+            "sl_trace",
+            "opt-in script string reference trace (KISAK_SL_TRACE) on i386 and x86_64",
+            [Command([python, TESTS / "test_linux_sl_trace.py", "--cxx", cxx], timeout=300)],
+        )
+    )
 
     if options.only:
         checks = [check for check in checks if check.name in options.only]
