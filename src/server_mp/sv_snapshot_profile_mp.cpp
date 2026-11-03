@@ -1203,8 +1203,7 @@ void __cdecl SV_Netchan_PrintProfileStats(int bPrintToConsole)
     {
         if (pClient->header.state)
         {
-            strncpy(szClientName, pClient->name, 0x11u);
-            szClientName[16] = 0;
+            I_strncpyz(szClientName, pClient->name, 17);
             pStream = &pClient->header.netchan.prof;
             if (pClient->header.netchan.prof.recieve.iCountedPackets + pClient->header.netchan.prof.send.iCountedPackets <= 0
                 || pStream->recieve.iCountedFragments + pStream->send.iCountedFragments <= 0)

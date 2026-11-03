@@ -1171,7 +1171,7 @@ void __cdecl Actor_AccuracyGraphTextCallback(
     char *text,
     const int textLength)
 {
-    sprintf(text, "Distance: %.2f, Accuracy: %.4f", inputX * ACTOR_MAX_ACCURAY_DISTANCE, inputY);
+    Com_sprintf(text, textLength, "Distance: %.2f, Accuracy: %.4f", inputX * ACTOR_MAX_ACCURAY_DISTANCE, inputY);
 }
 
 void __cdecl G_SwapAccuracyBuffers()

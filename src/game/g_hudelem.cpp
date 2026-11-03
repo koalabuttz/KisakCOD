@@ -472,7 +472,8 @@ void __cdecl HudElem_SetEnumString(
     for (nameIndex = 0; nameIndex < nameCount; ++nameIndex)
     {
         v4 = va(" %s", names[nameIndex]);
-        strncat(errormsg, v4, 0x800u);
+        // strncat's count limited the appended characters, not the buffer.
+        I_strncat(errormsg, sizeof(errormsg), v4);
         errormsg[2047] = 0;
     }
     Scr_Error(errormsg);

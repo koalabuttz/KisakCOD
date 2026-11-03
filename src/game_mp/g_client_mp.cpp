@@ -160,7 +160,7 @@ void __cdecl ClientUserinfoChanged(uint32_t clientNum)
             64);
     SV_GetUserinfo(clientNum, userinfo, 1024);
     if (!Info_Validate(userinfo))
-        strcpy(userinfo, "\\name\\badinfo");
+        I_strncpyz(userinfo, "\\name\\badinfo", sizeof(userinfo));
     client->sess.localClient = SV_IsLocalClient(clientNum);
     s = Info_ValueForKey(userinfo, "cg_predictItems");
     if (atoi(s))
