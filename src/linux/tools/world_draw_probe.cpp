@@ -182,6 +182,15 @@ void __cdecl CL_InitDedicated()
     // command in place, and R_IssueRenderCommands runs the backend here. Set
     // before the renderer dvars exist, as a command-line +set would be.
     Dvar_SetBool(const_cast<dvar_s *>(sys_smp_allowed), false);
+    // The machine's memory, as a configured client's profile holds it:
+    // Sys_ArchiveInfo (src/qcommon/com_playerprofile.cpp) stores sys_info.sysMB in
+    // sys_sysMB, and R_SetPicmip reads it. The dedicated server never registers
+    // it, and without it R_SetPicmip sees 0 MB and loads every texture two mip
+    // levels down. Registered as Sys_RegisterInfoDvars does, set as
+    // Sys_ArchiveInfo does.
+    const dvar_t *const sysMB = Dvar_RegisterInt("sys_sysMB", 0, uint32_t(INT32_MIN), uint32_t(INT32_MAX),
+                                                 DVAR_INIT | DVAR_ARCHIVE, "Physical memory in the system");
+    Dvar_SetInt(sysMB, sys_info.sysMB);
     GfxConfiguration config{};
     config.maxClientViews = 1;
     config.entCount = MAX_GENTITIES;
@@ -273,6 +282,8 @@ void Kisak_StartWorldDraw(WorldDrawMode drawMode, const char *mapName, const wf:
                 !r_smp_worker_thread[1]->current.enabled,
             "start", "the renderer is not configured for one thread");
     Require(fx_marks && !fx_marks->current.enabled, "start", "fx_marks is not off");
+    Require(Dvar_GetInt("sys_sysMB") > 0, "start",
+            "sys_sysMB is not set: R_SetPicmip would load every texture two mip levels down");
     // The free camera holds every frame's static models and sun shadow to rules
     // (world_draw_rules.h CheckSceneCounts, CheckSceneInView), so it refuses to
     // start with their switches off, as a command-line +set could leave them,
@@ -315,8 +326,10 @@ void Kisak_StartWorldDraw(WorldDrawMode drawMode, const char *mapName, const wf:
     char description[sizeof(id.Description) + 1]{};
     if (SUCCEEDED(dx.d3d9->GetAdapterIdentifier(dx.adapterIndex, 0, &id)))
         std::memcpy(description, id.Description, sizeof(id.Description));
-    Say("world_draw_renderer=started renderer=shader_model_3 window=%s scene=%ux%u adapter=\"%s\" seconds=%.2f\n",
-        mode.c_str(), vidConfig.sceneWidth, vidConfig.sceneHeight, description, Seconds(g_started));
+    Say("world_draw_renderer=started renderer=shader_model_3 window=%s scene=%ux%u adapter=\"%s\" sys_mb=%d "
+        "picmip=%d/%d/%d seconds=%.2f\n",
+        mode.c_str(), vidConfig.sceneWidth, vidConfig.sceneHeight, description, Dvar_GetInt("sys_sysMB"),
+        imageGlobals.picmip, imageGlobals.picmipBump, imageGlobals.picmipSpec, Seconds(g_started));
 }
 
 FreeCameraInput Kisak_FreeCameraInput()
