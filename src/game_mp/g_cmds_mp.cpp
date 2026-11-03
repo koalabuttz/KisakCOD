@@ -771,7 +771,7 @@ void G_SayTo(
 
 void Cmd_Where_f(gentity_s *ent)
 {
-    SV_GameSendServerCommand(ent - g_entities, SV_CMD_CAN_IGNORE, va("%c \"\x15%s\n\"", vtos(ent->r.currentOrigin)));
+    SV_GameSendServerCommand(ent - g_entities, SV_CMD_CAN_IGNORE, va("%c \"\x15%s\n\"", 101, vtos(ent->r.currentOrigin)));
 }
 
 void Cmd_CallVote_f(gentity_s *ent)
@@ -888,7 +888,10 @@ void Cmd_CallVote_f(gentity_s *ent)
             arg2[0] = 0;
         SV_Cmd_ArgvBuffer(3, arg3, 256);
         if (!IsFastFileLoad() && !SV_MapExists(arg3))
-            goto LABEL_36;
+        {
+            SV_GameSendServerCommand(ent - g_entities, SV_CMD_CAN_IGNORE, va("%c \"GAME_VOTEMAPINVALID\x15%s\"", 101, arg3));
+            return;
+        }
         mapname = Dvar_RegisterString("mapname", (char *)"", DVAR_SERVERINFO | DVAR_ROM, "Current map name");
         if (!I_stricmp(arg3, mapname->current.string))
             arg3[0] = 0;
@@ -964,8 +967,7 @@ void Cmd_CallVote_f(gentity_s *ent)
     {
         if (!IsFastFileLoad() && !SV_MapExists(arg2))
         {
-        LABEL_36:
-            SV_GameSendServerCommand(ent - g_entities, SV_CMD_CAN_IGNORE, va("%c \"GAME_VOTEMAPINVALID\x15%s\"", 101));
+            SV_GameSendServerCommand(ent - g_entities, SV_CMD_CAN_IGNORE, va("%c \"GAME_VOTEMAPINVALID\x15%s\"", 101, arg2));
             return;
         }
         Com_sprintf(level.voteString, 0x400u, "%s %s", arg1, arg2);

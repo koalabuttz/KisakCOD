@@ -2435,7 +2435,11 @@ LABEL_6:
     ConstString = Scr_GetConstString(0);
     if (ConstString != scr_const.snd_enveffectsprio_level && ConstString != scr_const.snd_enveffectsprio_shellshock)
         Scr_Error("priority must be 'snd_enveffectsprio_level' or 'snd_enveffectsprio_shellshock'\n");
-    SV_GameSendServerCommand(v1, SV_CMD_RELIABLE, va("%c %i \"%s\" %g %g %g", 68, Float));
+    // CG_DeactivateReverbCmd reads "<prio> <fadetime>", with the priorities
+    // PlayerCmd_SetReverb sends. The decompile had the setReverb format here
+    // with one argument for its five.
+    const int32_t prio = ConstString == scr_const.snd_enveffectsprio_shellshock ? 2 : 1;
+    SV_GameSendServerCommand(v1, SV_CMD_RELIABLE, va("%c %i %g", 68, prio, Float));
 }
 
 void PlayerCmd_SetChannelVolumes(scr_entref_t entref)
@@ -2548,7 +2552,14 @@ LABEL_6:
         Scr_Error(
             "priority must be 'snd_channelvolprio_holdbreath', 'snd_channelvolprio_pain', or 'snd_channelvolprio_shellshock'\n");
     }
-    SV_GameSendServerCommand(v1, SV_CMD_RELIABLE, va("%c %i \"%s\" %g %g %g", 70, Float));
+    // CG_DeactivateChannelVolCmd reads "<prio> <fadetime>", with the priorities
+    // PlayerCmd_SetChannelVolumes sends.
+    int32_t prio = 1;
+    if (ConstString == scr_const.snd_channelvolprio_pain)
+        prio = 2;
+    else if (ConstString == scr_const.snd_channelvolprio_shellshock)
+        prio = 3;
+    SV_GameSendServerCommand(v1, SV_CMD_RELIABLE, va("%c %i %g", 70, prio, Float));
 }
 
 void ScrCmd_PlayLocalSound(scr_entref_t entref)
