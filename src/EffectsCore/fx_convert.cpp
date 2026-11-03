@@ -1080,7 +1080,7 @@ void FX_SampleVisualState(FxElemDef *elemDef, const FxEditorElemDef *edElemDef)
 
 void FX_CopyMarkVisuals(const FxEditorElemDef *edElemDef, FxElemMarkVisuals *markVisualsArray)
 {
-    memcpy(markVisualsArray, &edElemDef->markVisuals, 8 * edElemDef->visualCount);
+    memcpy(markVisualsArray, &edElemDef->markVisuals, sizeof(FxElemMarkVisuals) * edElemDef->visualCount);
 }
 
 void FX_CopyVisuals(const FxEditorElemDef *edElemDef, FxElemVisuals *visualsArray)

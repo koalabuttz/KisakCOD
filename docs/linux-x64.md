@@ -362,8 +362,11 @@ The only source change the build needed was in the D3D9 boundary
 (`src/linux/d3d9_native.h`): on i386 it proves that the engine's `__stdcall`
 survived DXVK's `#define __stdcall` and still differs from cdecl. x86_64 has one
 C calling convention, so there it checks that `__stdcall` and `WINAPI` are that
-convention. Every other boundary check (handle types, `WCHAR`, `POINT`/`RECT`
-layouts, the D3D9 enumerators and embedded layouts) runs on both.
+convention. Every other check in the header (handle types, `WCHAR`,
+`POINT`/`RECT` layouts, the D3D9 enumerators and embedded layouts) runs on
+both. Of the CMake compile proofs, only the renderer proof builds on x86_64:
+the boundary header check and the engine layout checks describe the Windows
+x86-32 D3D9 sizes and the i386 calling conventions.
 
 CI's `x86_64 multiplayer client` job builds it against the stand-ins and runs
 the same asset-free checks as the i386 client job: the game window test and
@@ -385,9 +388,44 @@ only the client compiles. The main groups:
 - **Decompiled byte offsets into structs** that hold pointers: menu expressions
   (`ui_expressions*.cpp`), the script debugger, `rb_imagetouch.cpp`,
   `cg_pose_mp.cpp`.
-- **Struct sizes written as i386 numbers**: render command allocations such as
-  `(len + 84) & ~3` for `GfxCmdDrawText2D` (96 bytes on x86_64), `memset` of
-  `trace_t` and `BulletTraceResults` with their i386 sizes, and similar.
+- **Struct sizes written as i386 numbers**: fixed, see below.
+
+### Struct sizes written as numbers
+
+Decompiled code often spells a struct's size as the number the i386 binary
+used: `(len + 84) & ~3` for a `GfxCmdDrawText2D` command (96 bytes on x86_64),
+`Com_Memset(br, 0, 68)` for `BulletTraceResults`, `UI_Alloc(0x174u, 4)` for an
+`itemDef_s`, or `Z_Malloc(2400)` for an array of 600 pointers. A struct that
+holds a pointer is larger on x86_64, so these allocate, clear or copy too few
+bytes there. The check below parses every source in a build twice with
+libclang, as i386 and as x86_64, and reports an integer literal that equals
+the i386 size of a struct the same statement uses when that struct's x86_64
+size is different. It also reports a pointer-to-pointer allocation sized as a
+multiple of 4 without `sizeof`.
+
+```sh
+/usr/bin/python3 scripts/tools/check_32bit_size_literals.py --build-dir build-x64-mp
+```
+
+The sites it found now use `sizeof`, which keeps every i386 value the same:
+render command allocations, trace and bullet result clears, effects
+save/restore and mark visuals, physics user data, the static model cache and
+devgui index maths, file search paths and the filtered file list, menu
+parsing allocations (items, list boxes, key handlers, expression arrays,
+define and punctuation hash tables), the script debugger's allocations, and
+pointer-sized reads in `scr_evaluate.cpp` (`expr->type + 4` is `node[1]`).
+`Scr_PrintProfileTimes` indexed its sorted table by `24 * i` elements instead
+of `i`; that was wrong on i386 too.
+
+A literal can match a size by chance (flags, counts, indexes, a retail record
+size on purpose). `scripts/tools/check_32bit_size_literals_allow.txt` lists
+the ones read and found to be something else, by file and source text, each
+with the reason; an entry that no longer matches fails the check. Two kinds of
+source are skipped: `db_load.cpp`, which reads fastfile records at their
+retail sizes on purpose (see "Fastfile records"), and the raw asset loaders
+(`*_load_obj.cpp`), which only tools run (`--include-raw-loaders` scans them).
+CI runs the check in the x86_64 client job on the client build, which compiles
+the dedicated server's sources too.
 
 ## Windows MSVC x64 census
 

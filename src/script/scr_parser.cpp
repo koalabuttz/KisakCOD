@@ -1348,7 +1348,7 @@ char Scr_PrintProfileTimes(float minTime)
         Com_Printf(CON_CHANNEL_PARSERSCRIPT, "\n");
         for (profileIndexc = 0; profileIndexc < profileCount; ++profileIndexc)
         {
-            opcodeLookup = (OpcodeLookup *)&sortedOpcodeLookup[24 * profileIndexc];
+            opcodeLookup = &sortedOpcodeLookup[profileIndexc];
             v7 = *((float *)Sys_GetValue(0) + 20782);
             v6 = *((float *)Sys_GetValue(0) + 20782);
             Com_Printf(

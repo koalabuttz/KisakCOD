@@ -1,0 +1,114 @@
+# Lines check_32bit_size_literals.py reports whose literal is not a struct size.
+# Each entry is `path: source line` (whitespace collapsed). Read the line before
+# adding it; a struct size belongs in sizeof(T), not here.
+
+# FxTrail pool capacity (128 trails), a template count
+src/EffectsCore/fx_system.cpp: effect->firstTrailHandle = FX_PoolToHandle_Generic<FxTrail, 128>(system->trails, &remoteTrail->item);
+src/EffectsCore/fx_system.cpp: for (trail = FX_PoolFromHandle_Generic<FxTrail, 128>(system->trails, trailHandle);
+
+# a time in ms, a run flag and a bit count
+src/EffectsCore/fx_update.cpp: else if (runFlags == 128)
+src/EffectsCore/fx_update.cpp: if (Com_BitCheckAssert(dst, bitNum, 128))
+src/EffectsCore/fx_update.cpp: if (msecUpdateEnd - msecUpdateBegin > 128)
+
+# decompiled assert that &master->keys is not null (keys sit 8 bytes in on both)
+src/EffectsCore/fxcurve.cpp: if (source->master == (const FxCurve *)-8)
+
+# bit counts and animation flags
+src/bgame/bg_animation_mp.cpp: else if ((bgs->animScriptData.animations[es->legsAnim & 0xFFFFFDFF].flags & 0x30) != 0)
+src/bgame/bg_animation_mp.cpp: if (!Com_BitCheckAssert(bgs->clientinfo[client].clientConditions[condition], value, 8)
+src/bgame/bg_animation_mp.cpp: scriptData->animations[command->animIndex[partIndex]].flags |= 0x10u;
+
+# bob cycle bit
+src/bgame/bg_pmove.cpp: if ((((uint8_t)(iNewBobCycle + 64) ^ (uint8_t)(iOldBobCycle + 64)) & 0x80) != 0)
+
+# effect id range, shake duration, impact table index
+src/cgame/cg_event.cpp: CG_StartShakeCamera(localClientNum, 0.05f, 100, cent->pose.origin, 100.0f);
+src/cgame/cg_event.cpp: cgMedia.fx->table[8].nonflesh[ent->surfType],
+src/cgame/cg_event.cpp: if (cgMedia.fx->table[8].nonflesh[ent->surfType])
+src/cgame/cg_event.cpp: if (fxId > 0 && fxId < 100)
+
+# player state flags
+src/cgame_mp/cg_draw_mp.cpp: if ((ps->otherFlags & 0x18) != 0)
+
+# entity flags
+src/cgame_mp/cg_ents_mp.cpp: if ((cent->nextState.lerp.eFlags & 0x20) == 0)
+
+# a dvar default
+src/cgame_mp/cg_main_mp.cpp: 8,
+
+# a packet count
+src/client_mp/cl_voice.cpp: if ((uint32_t)numPackets <= 0x28)
+
+# retail XAsset record size; db_stream converts the records (as in db_load.cpp)
+src/database/db_file_load.cpp: Load_Stream(1, varXAsset, 8 * count);
+
+# XFILE block index 8 (the index block)
+src/database/db_memory.cpp: iassert(zoneMem->blocks[8].data);
+src/database/db_memory.cpp: if (zoneMem->blocks[8].size)
+src/database/db_memory.cpp: lockedDataa = (uint8_t *)R_AllocStaticIndexBuffer((IDirect3DIndexBuffer9 **)&zoneMem->indexBuffer, zoneMem->blocks[8].size);
+src/database/db_memory.cpp: memcpy(lockedDataa, zoneMem->blocks[8].data, zoneMem->blocks[8].size);
+src/database/db_memory.cpp: zoneMem->lockedIndexData = (uint8_t *)R_AllocStaticIndexBuffer((IDirect3DIndexBuffer9 **)&zoneMem->indexBuffer, zoneMem->blocks[8].size);
+
+# XFILE block index 8 (the index block)
+src/database/db_registry.cpp: *baseIndex = (int32_t)(((uint8_t *)indices - g_zones[zoneHandle].mem.blocks[8].data) >> 1);
+
+# the i386 layout assert itself
+src/game_mp/g_main_mp.cpp: static_assert(LAYOUT_32BIT(sizeof(gclient_s) == 12676));
+
+# material sort keys
+src/gfx_d3d/r_drawsurf.cpp: iassert(material->info.sortKey >= 24);
+src/gfx_d3d/r_drawsurf.cpp: region = (material->info.sortKey == 48) + (material->info.sortKey != 24 ? 0 : 2) + 6;
+
+# vertex size of GfxVertex (32 bytes on both), not GfxMeshData
+src/gfx_d3d/r_rendercmds.cpp: R_InitDynamicMesh(&g_viewInfo[dataIndex][viewIndex].pointLightMeshData[partitionIndex], 6u, 4u, 0x20u);
+src/gfx_d3d/r_rendercmds.cpp: R_InitDynamicMesh(&gfxMeshGlob.fullSceneViewMesh[viewIndexa].meshData, 6u, 4u, 0x20u);
+src/gfx_d3d/r_rendercmds.cpp: R_InitDynamicMesh(&s_backEndData[dataIndex].codeMesh, 0x6000u, 0x4000u, 0x20u);
+
+# vertex size of GfxVertex (32 bytes on both), not GfxMeshData
+src/gfx_d3d/r_spotshadow.cpp: R_InitDynamicMesh(&gfxMeshGlob.spotShadowClearMeshData[spotShadowIndex], 6u, 4u, 0x20u);
+src/gfx_d3d/r_spotshadow.cpp: R_InitDynamicMesh(&gfxMeshGlob.sunShadowClearMeshData[sunShadowIndex], 6u, 4u, 0x20u);
+
+# four floats per vertex
+src/gfx_d3d/rb_backend.cpp: xyzwSize = 16 * cmd->vertexCount;
+
+# a depth state bit
+src/gfx_d3d/rb_logfile.cpp: depthTestTable[3].stateBits = 8;
+
+# debug line duration
+src/physics/phys_coll_boxbrush.cpp: CG_DebugLine(poly->pts[lastEdgeIndex], poly->pts[edgeIndex], color, 0, 8);
+
+# a point count
+src/physics/phys_coll_cylinderbrush.cpp: circlePoly.ptCount = 8;
+
+# a knot count
+src/qcommon/graph.cpp: graph->devguiGraph.knotCountMax = 32;
+
+# the client state field count
+src/qcommon/sv_msg_write_mp.cpp: 24,
+
+# a breakpoint type
+src/script/scr_debugger.cpp: Scr_SpecialBreakpoint(top, (char*)pos, localId, opcode, 8);
+
+# status bit shifts and flags
+src/script/scr_variable.cpp: ArrayIndexValue_DONE = Scr_GetArrayIndexValue(entryValue->w.status >> 8);
+src/script/scr_variable.cpp: entValue->w.status >> 8,
+src/script/scr_variable.cpp: entryValue->w.status |= 0x10u;
+src/script/scr_variable.cpp: value = Scr_GetArrayIndexValue(entryValue->w.status >> 8);
+
+# type range and wait time scale
+src/script/scr_vm.cpp: iassert(top->type >= 0 && top->type < (1 << 8));
+src/script/scr_vm.cpp: waitTime = 20 * fs.top->u.intValue;
+
+# parser state numbers
+src/script/scr_yacc2.cpp: case 8:
+
+# server entity flags
+src/server_mp/sv_archive_mp.cpp: && ((v30->r.svFlags & 0x18) != 0 || svsHeader.svEntities[v30->s.number].numClusters))
+
+# the temp hunk header is 16 bytes on both (magic, size, name fit; the trailing pad is never written)
+src/universal/com_memory.cpp: hdr = (hunkHeader_t*)(buf - 16);
+
+# a buffer length and a piece index
+src/universal/com_sndalias.cpp: Com_sprintf(dest, 0x20u, "%.4f %.4f\n", graph->knots[i][0], graph->knots[i][1]);
+src/universal/com_sndalias.cpp: if (index < 16)

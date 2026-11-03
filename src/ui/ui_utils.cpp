@@ -405,7 +405,7 @@ const char *String_Alloc(const char *p)
         last = stra;
         stra = stra->next;
     }
-    strb = (stringDef_s *)UI_Alloc(8u, 4);
+    strb = (stringDef_s *)UI_Alloc(sizeof(stringDef_s), 4);
     strb->next = 0;
     strb->str = (const char *)s;
     if (last)

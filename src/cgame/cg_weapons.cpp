@@ -3096,7 +3096,7 @@ char BulletTrace(
     iassert(attacker);
     iassert(br);
     bcassert(lastSurfaceType, SURF_TYPECOUNT);
-    Com_Memset((uint32_t *)br, 0, 68);
+    Com_Memset((uint32_t *)br, 0, sizeof(*br));
     CG_LocationalTrace(&br->trace, (float*)bp->start, (float*)bp->end, bp->ignoreEntIndex, MASK_SHOT);
     if (br->trace.hitType == TRACE_HITTYPE_NONE)
         return 0;
