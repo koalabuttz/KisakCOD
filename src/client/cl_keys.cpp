@@ -2133,7 +2133,7 @@ int32_t __cdecl CL_GetKeyBindingInternal(int32_t localClientNum, const char *com
     }
     else
     {
-        strcpy((char *)keyNames, "KEY_UNBOUND");
+        I_strncpyz((char *)keyNames, "KEY_UNBOUND", 128);
     }
     return bindCount;
 }
