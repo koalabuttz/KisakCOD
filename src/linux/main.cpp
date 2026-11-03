@@ -580,6 +580,13 @@ void Sys_Quit()
     Sys_EnterCriticalSection(CRITSECT_COM_ERROR);
 
     Sys_SpawnQuitProcess();
+#ifdef KISAK_LINUX_MP_CLIENT
+    // As win_main.cpp's Sys_Quit. Key_Shutdown frees the key bindings, which
+    // are script strings (CopyString); left in place, SL_Shutdown's leak check
+    // below asserts on every quit.
+    IN_Shutdown();
+    Key_Shutdown();
+#endif
     Sys_DestroyConsole();
     Sys_NormalExit();
     RefreshQuitOnErrorCondition();
