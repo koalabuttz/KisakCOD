@@ -10,7 +10,7 @@
 //   clang++ -DSYS_RUNTIME_TEST ... src/linux/sys_runtime_test.cpp
 //       src/linux/sys_posix.cpp -o /tmp/sys_runtime_test
 //
-// Modes: threads, render, render-pending, console, files, cli.
+// Modes: threads, render, render-pending, render-engine-wait, console, files, cli.
 
 #ifdef SYS_RUNTIME_TEST
 
@@ -24,6 +24,7 @@
 
 #include <atomic>
 #include <fcntl.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -353,6 +354,73 @@ namespace rt_test
         Check(s_renderErrors.load() == 0, "backend identity and command ordering valid");
         Check(!Sys_RendererReady(), "no stale frame after backend exit");
         return Report("render");
+    }
+
+    // The backend's own wait shape. RB_RenderThread does not wait on the backend
+    // event directly: it calls R_ProcessWorkerCmdsWithTimeout(Sys_WaitBackendEvent, 1),
+    // which, with no worker commands queued, sleeps in Sys_WaitForWorkerCmd and
+    // then re-checks the backend event. Sys_FrontEndSleep only sets the backend
+    // event, so that sleep has to end on its own, as the 1 ms timed wait does on
+    // Windows; an unbounded sleep leaves the frontend and backend waiting on each
+    // other (seen on the first full client run at SV_SpawnServer's
+    // Com_SyncThreads). The watchdog turns that deadlock into a failure.
+    std::atomic<bool> s_exitEngineRenderer{false};
+    std::atomic<int> s_enginePauses{0};
+    void *s_engineRendererExited;
+
+    void EngineShapedRenderWorker(uint32_t)
+    {
+        for (;;)
+        {
+            while (!Sys_WaitBackendEvent())
+                Sys_WaitForWorkerCmd();
+            if (s_exitEngineRenderer.load()) break;
+            if (Sys_FinishRenderer())
+            {
+                if (void *data = Sys_RendererSleep())
+                {
+                    (void)data;
+                    Sys_RenderCompleted();
+                }
+                ++s_enginePauses;
+                Sys_StopRenderer();
+                Sys_WaitForMainThread();
+                Sys_StartRenderer();
+            }
+        }
+        Sys_SetEvent(&s_engineRendererExited);
+    }
+
+    void EngineWaitDeadlock(int)
+    {
+        static const char message[] =
+            "FAIL: the frontend's pause request never reached a backend sleeping in Sys_WaitForWorkerCmd (deadlock)\n";
+        (void)!write(STDOUT_FILENO, message, sizeof(message) - 1);
+        _exit(1);
+    }
+
+    int RunRenderEngineWaitTests()
+    {
+        Sys_InitMainThread();
+        Sys_CreateEvent(true, false, &s_engineRendererExited);
+        signal(SIGALRM, EngineWaitDeadlock);
+        alarm(10);
+        Check(Sys_SpawnRenderThread(EngineShapedRenderWorker) == 1, "render thread created and resumed");
+        for (int round = 0; round < 32; ++round)
+        {
+            Sys_ReleaseThreadOwnership();
+            // Let the backend reach its worker-command sleep before asking for it back.
+            usleep(2000);
+            Sys_FrontEndSleep();
+            Check(Sys_FinishRenderer(), "frontend owns the paused backend");
+            Check(s_enginePauses.load() == round + 1, "each pause request reaches the sleeping backend once");
+        }
+        alarm(0);
+        Sys_ReleaseThreadOwnership();
+        s_exitEngineRenderer.store(true);
+        Sys_NotifyRenderer();
+        Check(Sys_WaitForSingleObjectTimeout(&s_engineRendererExited, 2000), "backend exits after the last release");
+        return Report("render-engine-wait");
     }
 
     int RunRenderPendingTests()
@@ -782,6 +850,8 @@ int main(int argc, char **argv)
         return rt_test::RunRenderTests();
     if (strcmp(mode, "render-pending") == 0)
         return rt_test::RunRenderPendingTests();
+    if (strcmp(mode, "render-engine-wait") == 0)
+        return rt_test::RunRenderEngineWaitTests();
     if (strcmp(mode, "console") == 0)
         return rt_test::RunConsoleTests(argc, argv);
     if (strcmp(mode, "files") == 0)

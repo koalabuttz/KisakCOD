@@ -502,8 +502,14 @@ int Sys_WaitBackendEvent()
 
 void Sys_WaitForWorkerCmd()
 {
+    // A 1 ms timed wait, as on Windows (Sys_WaitForSingleObjectTimeout(backendEvent,
+    // 1)), never an unbounded one. Its callers re-check their own condition after
+    // it: the render thread's R_ProcessWorkerCmdsWithTimeout(Sys_WaitBackendEvent, 1)
+    // looks at the backend event, which Sys_FrontEndSleep sets without touching
+    // this event. Sleeping until this event alone was set left the frontend and
+    // the backend waiting on each other at the first Com_SyncThreads.
     EnsureEvent(&workerCmdEvent, true, false);
-    Sys_WaitForSingleObject((void **)&workerCmdEvent);
+    Sys_WaitForSingleObjectTimeout((void **)&workerCmdEvent, 1);
 }
 
 void Sys_SetWorkerCmdEvent()
