@@ -423,9 +423,19 @@ class X64DedicatedWorkflowTests(unittest.TestCase):
                     self.assertTrue(step["run"].lstrip().startswith("set -euo pipefail"))
 
     def test_the_job_needs_no_i386_toolchain_graphics_or_assets(self):
+        # Only the layout check reads i386 headers; no other step may use them.
+        commands = "\n".join(step.get("run", "") for step in self.job["steps"]
+                              if step.get("name") != "Install i386 headers for the layout check")
         for forbidden in ("multilib", "-m32", "dxvk", "sdl", "vulkan", "xvfb", "steam", "build-linux.sh"):
             with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, self.commands.lower())
+                self.assertNotIn(forbidden, commands.lower())
+
+    def test_i386_headers_are_installed_before_the_layout_check(self):
+        names = [step.get("name") for step in self.job["steps"]]
+        headers = names.index("Install i386 headers for the layout check")
+        self.assertLess(headers, names.index("Check fastfile record layout tables"))
+        step = self.job["steps"][headers]
+        self.assertIn("g++-multilib", step["run"])
 
 
 if __name__ == "__main__":

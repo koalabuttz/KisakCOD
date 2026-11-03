@@ -484,6 +484,15 @@ jobs:
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
             cmake ninja-build clang python3 python3-clang-18 ccache
 
+      # The layout check parses db_load.cpp as i386 and as x86_64, so it needs
+      # the i386 C and C++ headers. Nothing in this job builds i386 code.
+      - name: Install i386 headers for the layout check
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y g++-multilib
+
       - name: Restore compiler cache
         uses: actions/cache/restore@v4
         with:
