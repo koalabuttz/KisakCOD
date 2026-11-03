@@ -1123,7 +1123,6 @@ int PC_ExpandBuiltinDefine(
         curtime = _ctime64(&t);
         // "Mmm dd yyyy" from ctime's "Www Mmm dd hh:mm:ss yyyy\n".
         snprintf(token->string, sizeof(token->string), "\"%.7s%.4s\"", curtime + 4, curtime + 20);
-        free(curtime);
         token->type = 4;
         goto LABEL_8;
     case 4:
@@ -1131,7 +1130,6 @@ int PC_ExpandBuiltinDefine(
         curtime = _ctime64(&t);
         // "hh:mm:ss" from ctime's "Www Mmm dd hh:mm:ss yyyy\n".
         snprintf(token->string, sizeof(token->string), "\"%.8s\"", curtime + 11);
-        free(curtime);
         token->type = 4;
     LABEL_8:
         token->subtype = strlen(token->string);

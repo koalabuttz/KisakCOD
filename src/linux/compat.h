@@ -16,7 +16,7 @@
 //     later decision, not something this header presumes.
 //   * MSVC *CRT* entry points are different: _snprintf/_vsnprintf,
 //     _vsnprintf_s, _stricmp/_strnicmp, _itoa, the array strcpy_s and
-//     _time64/_localtime64 are language-runtime surface with no Win32 API
+//     _time64/_localtime64/_ctime64 are language-runtime surface with no Win32 API
 //     behind them, so they are implemented here (see the CRT section below).
 //     The Interlocked* intrinsics are NOT here: qcommon/threads_interlock.h
 //     owns those and q_shared.h includes it on Linux.
@@ -372,6 +372,21 @@ inline struct tm *_localtime64(const long long *sourceTime)
         return nullptr; // MSVC also rejects times before the epoch
     static thread_local struct tm result;
     return localtime_r(&narrowed, &result);
+}
+
+// _ctime64: the call site is ui/ui_shared_obj.cpp, which expands the __DATE__
+// and __TIME__ tokens of a menu source file from ctime's 26-character text.
+// Same range rule as _localtime64 above; the returned text lives in a per-thread
+// buffer, as MSVC's does, so the caller must not free it.
+inline char *_ctime64(const long long *sourceTime)
+{
+    if (sourceTime == nullptr)
+        return nullptr;
+    const time_t narrowed = static_cast<time_t>(*sourceTime);
+    if (static_cast<long long>(narrowed) != *sourceTime || *sourceTime < 0)
+        return nullptr;
+    static thread_local char result[26];
+    return ctime_r(&narrowed, result);
 }
 
 // ---------------------------------------------------------------------------
