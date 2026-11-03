@@ -778,9 +778,13 @@ enum DvarFlags : uint16
 	DVAR_CHEAT              = 0x80, // can not be changed if cheats are disabled
 
 	// DVAR_AUTOEXEC, DVAR_SAVED, and DVAR_CHANGEABLE_RESET are not 100% sure
-	DVAR_TEMP               = 0x100,
+	DVAR_CODINFO            = 0x100,    // replicated to clients through the CS_CODINFO configstrings
+	                                    // (SV_PreFrame, SV_SaveSystemInfo); script makeDvarServerInfo() adds it
 	DVAR_AUTOEXEC           = 0x200,
 	DVAR_NORESTART          = 0x400,    // do not clear when a cvar_restart is issued
+	                                    // Unverified: SV_PreFrame resends CS_SERVERINFO when a 0x400 dvar
+	                                    // changes, and script setDvar(name, value, 1) adds 0x400, so this
+	                                    // may really be a script serverinfo flag.
 	DVAR_SAVED              = 0x1000,
 	DVAR_EXTERNAL           = 0x4000,   // created by a set command or setclientdvar
 	DVAR_CHANGEABLE_RESET   = 0x8000,

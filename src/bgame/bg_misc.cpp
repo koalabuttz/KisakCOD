@@ -357,7 +357,7 @@ void __cdecl BG_RegisterDvars()
         "player_view_pitch_up",
         85.0f,
         mind,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "Maximum angle that the player can look up");
     mine.value.max = 90.0f;
     mine.value.min = 0.0f;
@@ -365,7 +365,7 @@ void __cdecl BG_RegisterDvars()
         "player_view_pitch_down",
         85.0f,
         mine,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "Maximum angle that the player can look down");
     minf.value.max = 20.0f;
     minf.value.min = 0.0f;
@@ -373,7 +373,7 @@ void __cdecl BG_RegisterDvars()
         "player_lean_shift_left",
         5.0f,
         minf,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "Amount to shift the player 3rd person model when leaning left");
     ming.value.max = 20.0f;
     ming.value.min = 0.0f;
@@ -381,7 +381,7 @@ void __cdecl BG_RegisterDvars()
         "player_lean_shift_right",
         2.5f,
         ming,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "Amount to shift the player 3rd person model when leaning right");
     minh.value.max = 20.0f;
     minh.value.min = 0.0f;
@@ -389,7 +389,7 @@ void __cdecl BG_RegisterDvars()
         "player_lean_shift_crouch_left",
         12.5f,
         minh,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "Amount to shift the player 3rd person model when crouch leaning left");
     mini.value.max = 20.0f;
     mini.value.min = 0.0f;
@@ -397,7 +397,7 @@ void __cdecl BG_RegisterDvars()
         "player_lean_shift_crouch_right",
         13.0f,
         mini,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "Amount to shift the player 3rd person model when crouch leaning right");
     minj.value.max = 3.0f;
     minj.value.min = 0.0f;
@@ -405,7 +405,7 @@ void __cdecl BG_RegisterDvars()
         "player_lean_rotate_left",
         1.25f,
         minj,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "Amount to rotate the player 3rd person model when leaning left");
     mink.value.max = 3.0f;
     mink.value.min = 0.0f;
@@ -413,7 +413,7 @@ void __cdecl BG_RegisterDvars()
         "player_lean_rotate_right",
         1.25f,
         mink,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "Amount to rotate the player 3rd person model when leaning right");
     minl.value.max = 3.0f;
     minl.value.min = 0.0f;
@@ -421,7 +421,7 @@ void __cdecl BG_RegisterDvars()
         "player_lean_rotate_crouch_left",
         1.25f,
         minl,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "Amount to rotate the player 3rd person model when crouch leaning left");
     minm.value.max = 3.0f;
     minm.value.min = 0.0f;
@@ -429,7 +429,7 @@ void __cdecl BG_RegisterDvars()
         "player_lean_rotate_crouch_right",
         1.0f,
         minm,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "Amount to rotate the player 3rd person model when crouch leaning right");
 #ifdef KISAK_MP
     minn.value.max = 360.0f;
@@ -438,7 +438,7 @@ void __cdecl BG_RegisterDvars()
         "bg_ladder_yawcap",
         100.0f,
         minn,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The maximum angle that a player can look around while on a ladder");
     mino.value.max = 360.0f;
     mino.value.min = 0.0f;
@@ -446,7 +446,7 @@ void __cdecl BG_RegisterDvars()
         "bg_prone_yawcap",
         85.0f,
         mino,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The maximum angle that a player can look around quickly while prone");
     minp.value.max = FLT_MAX;
     minp.value.min = 0.0f;
@@ -454,7 +454,7 @@ void __cdecl BG_RegisterDvars()
         "bg_foliagesnd_minspeed",
         40.0f,
         minp,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The speed that a player must be going to make minimum noise while moving through foliage");
     minq.value.max = FLT_MAX;
     minq.value.min = 0.0f;
@@ -462,25 +462,25 @@ void __cdecl BG_RegisterDvars()
         "bg_foliagesnd_maxspeed",
         180.0f,
         minq,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The speed that a player must be going to make maximum noise while moving through foliage");
     bg_foliagesnd_slowinterval = Dvar_RegisterInt(
         "bg_foliagesnd_slowinterval",
         1500,
         (DvarLimits)0x7FFFFFFF00000000LL,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The time between each foliage sound when moving slowly");
     bg_foliagesnd_fastinterval = Dvar_RegisterInt(
         "bg_foliagesnd_fastinterval",
         500,
         (DvarLimits)0x7FFFFFFF00000000LL,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The time between each foliage sound when moving quickly");
     bg_foliagesnd_resetinterval = Dvar_RegisterInt(
         "bg_foliagesnd_resetinterval",
         500,
         (DvarLimits)0x7FFFFFFF00000000LL,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The time interval before foliage sounds are reset after the player has stopped moving");
     minr.value.max = FLT_MAX;
     minr.value.min = 1.0f;
@@ -488,7 +488,7 @@ void __cdecl BG_RegisterDvars()
         "bg_fallDamageMinHeight",
         128.0f,
         minr,
-        DVAR_CHEAT | DVAR_TEMP | DVAR_SYSTEMINFO,
+        DVAR_CHEAT | DVAR_CODINFO | DVAR_SYSTEMINFO,
         "The height that a player will start to take minimum damage if they fall");
     mins.value.max = FLT_MAX;
     mins.value.min = 1.0f;
@@ -496,23 +496,23 @@ void __cdecl BG_RegisterDvars()
         "bg_fallDamageMaxHeight",
         300.0f,
         mins,
-        DVAR_CHEAT | DVAR_TEMP | DVAR_SYSTEMINFO,
+        DVAR_CHEAT | DVAR_CODINFO | DVAR_SYSTEMINFO,
         "The height that a player will take maximum damage when falling");
     mint.value.max = 1000.0f;
     mint.value.min = 0.0f;
-    inertiaMax = Dvar_RegisterFloat("inertiaMax", 50.0, mint, DVAR_CHEAT | DVAR_TEMP, "Maximum player inertia");
-    inertiaDebug = Dvar_RegisterBool("inertiaDebug", 0, DVAR_CHEAT | DVAR_TEMP, "Show inertia debug information");
+    inertiaMax = Dvar_RegisterFloat("inertiaMax", 50.0, mint, DVAR_CHEAT | DVAR_CODINFO, "Maximum player inertia");
+    inertiaDebug = Dvar_RegisterBool("inertiaDebug", 0, DVAR_CHEAT | DVAR_CODINFO, "Show inertia debug information");
     minu.value.max = 1.0f;
     minu.value.min = -1.0f;
     inertiaAngle = Dvar_RegisterFloat(
         "inertiaAngle",
         0.0f,
         minu,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The cosine of the angle at which inertia occurs");
     minv.value.max = 100.0f;
     minv.value.min = 0.0f;
-    friction = Dvar_RegisterFloat("friction", 5.5f, minv, DVAR_CHEAT | DVAR_TEMP, "Player friction");
+    friction = Dvar_RegisterFloat("friction", 5.5f, minv, DVAR_CHEAT | DVAR_CODINFO, "Player friction");
 #elif KISAK_SP
     minn.value.max = 360.0f;
     minn.value.min = 0.0f;
@@ -598,7 +598,7 @@ void __cdecl BG_RegisterDvars()
 #endif
     minw.value.max = 1000.0f;
     minw.value.min = 0.0f;
-    stopspeed = Dvar_RegisterFloat("stopspeed", 100.0f, minw, DVAR_CHEAT | DVAR_TEMP, "The player deceleration");
+    stopspeed = Dvar_RegisterFloat("stopspeed", 100.0f, minw, DVAR_CHEAT | DVAR_CODINFO, "The player deceleration");
     minx.value.max = 1.0f;
     minx.value.min = 0.0f;
     bg_swingSpeed = Dvar_RegisterFloat(
@@ -623,7 +623,7 @@ void __cdecl BG_RegisterDvars()
         0.02f,
         0.014f,
         minz,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The multiplier to apply to the player's speed to get the bob amplitude while sprinting");
     minba.value.max = 1.0f;
     minba.value.min = 0.0f;
@@ -632,7 +632,7 @@ void __cdecl BG_RegisterDvars()
         0.0070000002f,
         0.0070000002f,
         minba,
-        DVAR_CHEAT | DVAR_TEMP | DVAR_SAVED,
+        DVAR_CHEAT | DVAR_CODINFO | DVAR_SAVED,
         "The multiplier to apply to the player's speed to get the bob amplitude while standing");
     minbb.value.max = 1.0f;
     minbb.value.min = 0.0f;
@@ -641,7 +641,7 @@ void __cdecl BG_RegisterDvars()
         0.0074999998f,
         0.0074999998f,
         minbb,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The multiplier to apply to the player's speed to get the bob amplitude while ducking");
     minbc.value.max = 1.0f;
     minbc.value.min = 0.0f;
@@ -650,18 +650,18 @@ void __cdecl BG_RegisterDvars()
         0.02f,
         0.0049999999f,
         minbc,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The multiplier to apply to the player's speed to get the bob amplitude while prone");
     minbd.value.max = 36.0f;
     minbd.value.min = 0.0f;
-    bg_bobMax = Dvar_RegisterFloat("bg_bobMax", 8.0f, minbd, DVAR_CHEAT | DVAR_TEMP, "The maximum allowed bob amplitude");
+    bg_bobMax = Dvar_RegisterFloat("bg_bobMax", 8.0f, minbd, DVAR_CHEAT | DVAR_CODINFO, "The maximum allowed bob amplitude");
     minbe.value.max = 300.0f;
     minbe.value.min = 0.0f;
     bg_aimSpreadMoveSpeedThreshold = Dvar_RegisterFloat(
         "bg_aimSpreadMoveSpeedThreshold",
         11.0f,
         minbe,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "When player is moving faster than this speed, the aim spread will increase");
     minbf.value.max = 1000.0f;
     minbf.value.min = 0.0f;
@@ -669,7 +669,7 @@ void __cdecl BG_RegisterDvars()
         "bg_maxGrenadeIndicatorSpeed",
         20.0f,
         minbf,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "Maximum speed of grenade that will show up in indicator and can be thrown back.");
 #elif KISAK_SP
     bg_bobAmplitudeSprinting = Dvar_RegisterVec2(
@@ -732,7 +732,7 @@ void __cdecl BG_RegisterDvars()
         "player_breath_hold_time",
         4.5f,
         minbg,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The maximum time a player can hold his breath");
     minbh.value.max = 30.0f;
     minbh.value.min = 0.0f;
@@ -740,7 +740,7 @@ void __cdecl BG_RegisterDvars()
         "player_breath_gasp_time",
         1.0f,
         minbh,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The amount of time a player will gasp once they can breath again");
     minbi.value.max = 30.0f;
     minbi.value.min = 0.0f;
@@ -748,7 +748,7 @@ void __cdecl BG_RegisterDvars()
         "player_breath_fire_delay",
         0.0f,
         minbi,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The amount of time subtracted from the player remaining breath time when a weapon is fired");
     minbj.value.max = 50.0f;
     minbj.value.min = 0.0f;
@@ -756,7 +756,7 @@ void __cdecl BG_RegisterDvars()
         "player_breath_gasp_scale",
         4.5f,
         minbj,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "Scale value to apply to the target waver during a gasp");
     minbk.value.max = 50.0f;
     minbk.value.min = 0.0f;
@@ -764,7 +764,7 @@ void __cdecl BG_RegisterDvars()
         "player_breath_hold_lerp",
         1.0f,
         minbk,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The interpolation rate for the target waver amplitude when holding breath");
     minbl.value.max = 50.0f;
     minbl.value.min = 0.0f;
@@ -772,7 +772,7 @@ void __cdecl BG_RegisterDvars()
         "player_breath_gasp_lerp",
         6.0f,
         minbl,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The interpolation rate for the target waver amplitude when gasping");
     minbm.value.max = 100.0f;
     minbm.value.min = 0.0f;
@@ -780,7 +780,7 @@ void __cdecl BG_RegisterDvars()
         "player_breath_snd_lerp",
         2.0f,
         minbm,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The interpolation rate for the player hold breath sound");
     minbn.value.max = 2.0f;
     minbn.value.min = 0.0f;
@@ -788,18 +788,18 @@ void __cdecl BG_RegisterDvars()
         "player_breath_snd_delay",
         1.0f,
         minbn,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The delay before playing the breathe in sound");
     player_scopeExitOnDamage = Dvar_RegisterBool(
         "player_scopeExitOnDamage",
         0,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "Exit the scope if the player takes damage");
     player_adsExitDelay = Dvar_RegisterInt(
         "player_adsExitDelay",
         0,
         (DvarLimits)0x3E800000000LL,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "Delay before exiting aim down sight");
     minbo.value.max = 1.0f;
     minbo.value.min = 0.0f;
@@ -809,7 +809,7 @@ void __cdecl BG_RegisterDvars()
         minbo,
         DVAR_CHEAT,
         "The contribution movement direction has on player torso direction(multi-player only)");
-    player_debugHealth = Dvar_RegisterBool("player_debugHealth", 0, DVAR_CHEAT | DVAR_TEMP, "Turn on debugging info for player health");
+    player_debugHealth = Dvar_RegisterBool("player_debugHealth", 0, DVAR_CHEAT | DVAR_CODINFO, "Turn on debugging info for player health");
     player_sustainAmmo = Dvar_RegisterBool("player_sustainAmmo", 0, DVAR_CHEAT, "Firing weapon will not decrease clip ammo.");
     minbp.value.max = 20.0f;
     minbp.value.min = 0.0000000099999999f;
@@ -817,7 +817,7 @@ void __cdecl BG_RegisterDvars()
         "player_moveThreshhold",
         10.0f,
         minbp,
-        DVAR_ROM | DVAR_CHEAT | DVAR_TEMP,
+        DVAR_ROM | DVAR_CHEAT | DVAR_CODINFO,
         "The speed at which the player is considered to be moving for the purposes of \n"
         "view model bob and multiplayer model movement");
     minbq.value.max = 50000.0f;
@@ -826,7 +826,7 @@ void __cdecl BG_RegisterDvars()
         "player_footstepsThreshhold",
         0.0f,
         minbq,
-        DVAR_ROM | DVAR_CHEAT | DVAR_TEMP,
+        DVAR_ROM | DVAR_CHEAT | DVAR_CODINFO,
         "The minimum speed at which the player makes loud footstep noises");
     minbr.value.max = 20.0f;
     minbr.value.min = 0.0f;
@@ -834,7 +834,7 @@ void __cdecl BG_RegisterDvars()
         "player_strafeSpeedScale",
         0.80000001f,
         minbr,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The scale applied to the player speed when strafing");
     minbs.value.max = 20.0f;
     minbs.value.min = 0.0f;
@@ -842,7 +842,7 @@ void __cdecl BG_RegisterDvars()
         "player_backSpeedScale",
         0.69999999f,
         minbs,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The scale applied to the player speed when moving backwards");
     minbt.value.max = 1.0f;
     minbt.value.min = 0.0f;
@@ -850,7 +850,7 @@ void __cdecl BG_RegisterDvars()
         "player_strafeAnimCosAngle",
         0.5f,
         minbt,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "Cosine of the angle which player starts using strafe animations");
     minbu.value.max = 20.0f;
     minbu.value.min = 0.0f;
@@ -858,13 +858,13 @@ void __cdecl BG_RegisterDvars()
         "player_spectateSpeedScale",
         1.0f,
         minbu,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The scale applied to the player speed when spectating");
     player_sprintForwardMinimum = Dvar_RegisterInt(
         "player_sprintForwardMinimum",
         105,
         (DvarLimits)0xFF00000000LL,
-        DVAR_TEMP,
+        DVAR_CODINFO,
         "The minimum forward deflection required to maintain a sprint");
     minbv.value.max = 5.0f;
     minbv.value.min = 0.0f;
@@ -872,7 +872,7 @@ void __cdecl BG_RegisterDvars()
         "player_sprintSpeedScale",
         1.5f,
         minbv,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The scale applied to the player speed when sprinting");
     minbw.value.max = 12.8f;
     minbw.value.min = 0.0f;
@@ -880,7 +880,7 @@ void __cdecl BG_RegisterDvars()
         "player_sprintTime",
         4.0f,
         minbw,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The base length of time a player can sprint");
     minbx.value.max = 12.8f;
     minbx.value.min = 0.0f;
@@ -888,7 +888,7 @@ void __cdecl BG_RegisterDvars()
         "player_sprintMinTime",
         1.0f,
         minbx,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The minimum sprint time needed in order to start sprinting");
     minby.value.max = 9000.0f;
     minby.value.min = 0.0f;
@@ -896,7 +896,7 @@ void __cdecl BG_RegisterDvars()
         "player_sprintRechargePause",
         0.0f,
         minby,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The length of time the meter will pause before starting to recharge after a player sprints");
     minbz.value.max = 5000.0f;
     minbz.value.min = 0.0f;
@@ -904,7 +904,7 @@ void __cdecl BG_RegisterDvars()
         "player_sprintStrafeSpeedScale",
         0.667f,
         minbz,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The speed at which you can strafe while sprinting");
     minca.value.max = 2.0f;
     minca.value.min = 0.0f;
@@ -912,12 +912,12 @@ void __cdecl BG_RegisterDvars()
         "player_sprintCameraBob",
         0.5f,
         minca,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The speed the camera bobs while you sprint");
     player_turnAnims = Dvar_RegisterBool(
         "player_turnAnims",
         0,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "Use animations to turn a player's model in multiplayer");
     xanim_debug = Dvar_RegisterBool("xanim_debug", false, DVAR_NOFLAG, "Turn on Xanim Debugging information");
 #ifdef KISAK_MP
@@ -930,7 +930,7 @@ void __cdecl BG_RegisterDvars()
         "player_dmgtimer_timePerPoint",
         100.0f,
         mincb,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The time in milliseconds that the player is slowed down per point of damage");
     mincc.value.max = FLT_MAX;
     mincc.value.min = 0.0f;
@@ -938,7 +938,7 @@ void __cdecl BG_RegisterDvars()
         "player_dmgtimer_maxTime",
         750.0f,
         mincc,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The maximum time that the player is slowed due to damage");
     mincd.value.max = 1.0f;
     mincd.value.min = 0.0f;
@@ -946,19 +946,19 @@ void __cdecl BG_RegisterDvars()
         "player_dmgtimer_minScale",
         0.0f,
         mincd,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "The minimum scale value to slow the player by when damaged");
     player_dmgtimer_stumbleTime = Dvar_RegisterInt(
         "player_dmgtimer_stumbleTime",
         500,
         (DvarLimits)0x7D000000000LL,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "Maximum time to play stumble animations");
     player_dmgtimer_flinchTime = Dvar_RegisterInt(
         "player_dmgtimer_flinchTime",
         500,
         (DvarLimits)0x7D000000000LL,
-        DVAR_CHEAT | DVAR_TEMP,
+        DVAR_CHEAT | DVAR_CODINFO,
         "Maximum time to play flinch animations");
     bg_shock_soundLoop = Dvar_RegisterString("bg_shock_soundLoop", "shellshock_loop", DVAR_CHEAT, "Shellshock loop alias");
     bg_shock_soundLoopSilent = Dvar_RegisterString(

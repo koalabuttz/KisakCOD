@@ -1187,10 +1187,10 @@ void __cdecl SV_PreFrame()
     }
     if ((dvar_modifiedFlags & 8) != 0)
         SV_SetSystemInfoConfig();
-    if ((dvar_modifiedFlags & 0x100) != 0)
+    if ((dvar_modifiedFlags & DVAR_CODINFO) != 0)
     {
-        SV_SetConfig(CS_CODINFO, CS_CODINFO_COUNT, 256);
-        dvar_modifiedFlags &= ~0x100u;
+        SV_SetConfig(CS_CODINFO, CS_CODINFO_COUNT, DVAR_CODINFO);
+        dvar_modifiedFlags &= ~DVAR_CODINFO;
     }
 }
 
