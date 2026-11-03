@@ -605,7 +605,16 @@ jobs:
           sudo apt-get update
           # libopenal-dev only for <AL/al.h>; the client links the OpenAL stand-in.
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            cmake ninja-build clang binutils python3 ccache libopenal-dev
+            cmake ninja-build clang binutils python3 python3-clang-18 ccache libopenal-dev
+
+      # The size literal check parses every source as i386 and as x86_64, so it
+      # needs the i386 C and C++ headers. Nothing in this job builds i386 code.
+      - name: Install i386 headers for the size literal check
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y g++-multilib
 
       - name: Restore compiler cache
         uses: actions/cache/restore@v4
@@ -695,7 +704,8 @@ jobs:
             -DKISAK_DXVK_NATIVE_INCLUDE_DIR="$RUNNER_TEMP/dxvk-include/dxvk" \
             -DKISAK_DXVK_NATIVE_LIBRARY="$d3d9" \
             -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_OPENAL_LIBRARY="$openal" \
-            -DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3"
+            -DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3" \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
           cmake --build "$BUILD_DIR" --target KisakCOD-mp KisakCOD-mp-client-window-test \
             KisakCOD-native-d3d9-proofs --parallel "$(nproc)"
           for binary in "$OUT_DIR/KisakCOD-mp" "$OUT_DIR/KisakCOD-mp-client-window-test"; do
@@ -712,6 +722,17 @@ jobs:
             echo "the multiplayer client needs a library beyond SDL3, D3D9, OpenAL and the runtimes" >&2
             exit 1
           fi
+
+      # A struct's i386 size written as a number allocates or clears too few
+      # bytes on x86_64 when the struct holds a pointer (docs/linux-x64.md,
+      # "Struct sizes written as numbers"). It runs after the build because
+      # common.cpp includes the generated buildnumber.h.
+      - name: Check for 32-bit struct sizes written as numbers
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/bin/python3 scripts/tools/check_32bit_size_literals.py --build-dir "$BUILD_DIR"
 
       - name: Run the x86_64 multiplayer client's fail-closed start
         timeout-minutes: 10
