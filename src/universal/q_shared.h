@@ -1099,6 +1099,19 @@ uint32_t __cdecl Sys_Milliseconds();
 uint32_t __cdecl Sys_MillisecondsRaw();
 void __cdecl Sys_SnapVector(float *v);
 
+// Quake 3's SnapVector: truncates each component toward zero (-1.7 -> -1).
+// Retail 1.7 compiles these game-side snaps (temp entities, missile deltas,
+// snapped entity states, objective origins) through _ftol2_sse, so they
+// truncate. Sys_SnapVector above is different: it rounds with fistp. Checked
+// against the retail executable with scripts/audit/retail_float_int_scan.py
+// (upstream #52); keep both as they are.
+inline void SnapVectorTowardZero(float *v)
+{
+    v[0] = (float)(int)v[0];
+    v[1] = (float)(int)v[1];
+    v[2] = (float)(int)v[2];
+}
+
 // com_shared
 struct qtime_s // sizeof=0x24
 {                                       // ...

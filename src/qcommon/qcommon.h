@@ -1653,6 +1653,18 @@ inline int SnapFloatToInt(float x)
     return retval;
 }
 
+// Rounds a map-centre coordinate for the origin netfield codec
+// (MSG_ReadOriginFloat / MSG_WriteOriginFloat and their Z variants).
+// Retail adds 0.5 and truncates toward zero, so a negative centre whose
+// fraction is below .5 moves up (-1.49 -> 0) instead of to the nearest
+// integer. Keep it that way (upstream #56): the 16-bit origin path XORs
+// values against this centre on both ends, so a server that rounds the
+// centre differently from a retail client decodes origins wrongly.
+inline int MSG_RoundMapCenter(float center)
+{
+    return (int)(center + 0.5);
+}
+
 // Float-returning snap-to-grid (Sys_SnapVector, SnapPointToIntersectingPlanes).
 // same as above, just returns the result as a float
 inline float SnapFloat(float x)

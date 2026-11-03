@@ -1382,9 +1382,7 @@ gentity_s *__cdecl G_TempEntity(const float *origin, int event)
     snapped[0] = *origin;
     snapped[1] = origin[1];
     snapped[2] = origin[2];
-    snapped[0] = (float)(int)snapped[0];
-    snapped[1] = (float)(int)snapped[1];
-    snapped[2] = (float)(int)snapped[2];
+    SnapVectorTowardZero(snapped);
     G_SetOrigin(e, snapped);
     SV_LinkEntity(e);
     return e;

@@ -392,9 +392,7 @@ void __cdecl G_ExplodeMissile(gentity_s *ent)
 #ifdef KISAK_MP
             if (weapDef->projExplosion == WEAPPROJEXP_SMOKE && weapDef->projExplosionEffect)
             {
-                eventEnt->s.lerp.pos.trBase[0] = (float)(int)eventEnt->s.lerp.pos.trBase[0];
-                eventEnt->s.lerp.pos.trBase[1] = (float)(int)eventEnt->s.lerp.pos.trBase[1];
-                eventEnt->s.lerp.pos.trBase[2] = (float)(int)eventEnt->s.lerp.pos.trBase[2];
+                SnapVectorTowardZero(eventEnt->s.lerp.pos.trBase);
                 G_SetOrigin(eventEnt, eventEnt->s.lerp.pos.trBase);
                 eventEnt->s.lerp.eFlags |= 0x10000u;
                 eventEnt->s.lerp.u.customExplode.startTime = level.time;
@@ -2772,9 +2770,7 @@ void __cdecl G_InitGrenadeMovement(gentity_s *grenade, const float *start, const
             ".pos.trDelta)[2])");
     }
     vectoangles(dir, grenade->r.currentAngles);
-    grenade->s.lerp.pos.trDelta[0] = (float)(int)grenade->s.lerp.pos.trDelta[0];
-    grenade->s.lerp.pos.trDelta[1] = (float)(int)grenade->s.lerp.pos.trDelta[1];
-    grenade->s.lerp.pos.trDelta[2] = (float)(int)grenade->s.lerp.pos.trDelta[2];
+    SnapVectorTowardZero(grenade->s.lerp.pos.trDelta);
     if (rotate)
     {
         grenade->s.lerp.apos.trType = TR_LINEAR;
@@ -3029,9 +3025,7 @@ gentity_s *__cdecl G_FireRocket(
             "!IS_NAN((bolt->s.lerp.pos.trDelta)[0]) && !IS_NAN((bolt->s.lerp.pos.trDelta)[1]) && !IS_NAN((bolt->s.lerp.pos.trDelta)[2])");
     }
 #ifdef KISAK_MP
-    bolt->s.lerp.pos.trDelta[0] = (float)(int)bolt->s.lerp.pos.trDelta[0];
-    bolt->s.lerp.pos.trDelta[1] = (float)(int)bolt->s.lerp.pos.trDelta[1];
-    bolt->s.lerp.pos.trDelta[2] = (float)(int)bolt->s.lerp.pos.trDelta[2];
+    SnapVectorTowardZero(bolt->s.lerp.pos.trDelta);
 #endif
     currentOrigin = bolt->r.currentOrigin;
     bolt->r.currentOrigin[0] = *start;

@@ -1718,6 +1718,7 @@ void __cdecl BG_SetNewAnimation(
                 else
                     cycleLen = 1000;
                 fStartTimea = (float)(bgs->time % cycleLen) / (float)cycleLen + (float)ci->clientNum * 0.3600000143051147f;
+                // Truncates toward zero, as retail does (_ftol2_sse; upstream #52).
                 fStartTime = fStartTimea - (float)(int)fStartTimea;
             }
         }

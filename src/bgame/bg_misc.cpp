@@ -1812,12 +1812,8 @@ void __cdecl BG_PlayerToEntitySetTrajectory(playerState_s *ps, entityState_s *s,
     s->lerp.u.player.movementDir = ps->movementDir;
     if (snap)
     {
-        s->lerp.pos.trBase[0] = (float)(int)s->lerp.pos.trBase[0];
-        s->lerp.pos.trBase[1] = (float)(int)s->lerp.pos.trBase[1];
-        s->lerp.pos.trBase[2] = (float)(int)s->lerp.pos.trBase[2];
-        s->lerp.apos.trBase[0] = (float)(int)s->lerp.apos.trBase[0];
-        s->lerp.apos.trBase[1] = (float)(int)s->lerp.apos.trBase[1];
-        s->lerp.apos.trBase[2] = (float)(int)s->lerp.apos.trBase[2];
+        SnapVectorTowardZero(s->lerp.pos.trBase);
+        SnapVectorTowardZero(s->lerp.apos.trBase);
     }
 #endif
 }

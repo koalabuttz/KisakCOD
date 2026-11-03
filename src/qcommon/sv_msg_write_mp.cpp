@@ -1004,7 +1004,7 @@ void __cdecl MSG_WriteOriginFloat(const int clientNum, msg_t *msg, int bits, flo
             indexa = 1;
         }
         iassert( svsHeaderValid );
-        roundedCentera = (svsHeader.mapCenter[indexa] + 0.5);
+        roundedCentera = MSG_RoundMapCenter(svsHeader.mapCenter[indexa]);
         roundedValuea = (roundedOldValue + 0x8000 - roundedCentera) ^ (roundedValue - roundedCentera + 0x8000);
         SV_PacketDataIsOrigin(clientNum, msg);
         MinBitCountForNum = GetMinBitCountForNum(roundedValuea);
@@ -1057,7 +1057,7 @@ void __cdecl MSG_WriteOriginFloat(const int clientNum, msg_t *msg, int bits, flo
             index = 1;
         }
         iassert( svsHeaderValid );
-        roundedCenter = (svsHeader.mapCenter[index] + 0.5);
+        roundedCenter = MSG_RoundMapCenter(svsHeader.mapCenter[index]);
         if (GetMinBitCountForNum((roundedOldValue + 0x8000 - roundedCenter) ^ (roundedValue - roundedCenter + 0x8000)) > 16)
         {
             if (index)
@@ -1109,7 +1109,7 @@ void __cdecl MSG_WriteOriginZFloat(const int clientNum, msg_t *msg, float value,
     {
         MSG_WriteBit1(msg);
         iassert( svsHeaderValid );
-        roundedCentera = (svsHeader.mapCenter[2] + 0.5);
+        roundedCentera = MSG_RoundMapCenter(svsHeader.mapCenter[2]);
         roundedValuea = (roundedOldValue + 0x8000 - roundedCentera) ^ (roundedValue - roundedCentera + 0x8000);
         SV_PacketDataIsOrigin(clientNum, msg);
         if (GetMinBitCountForNum(roundedValuea) > 16)
@@ -1133,7 +1133,7 @@ void __cdecl MSG_WriteOriginZFloat(const int clientNum, msg_t *msg, float value,
         MSG_WriteBit0(msg);
         SV_PacketDataIsOriginDelta(clientNum, msg);
         iassert( svsHeaderValid );
-        roundedCenter = (svsHeader.mapCenter[2] + 0.5);
+        roundedCenter = MSG_RoundMapCenter(svsHeader.mapCenter[2]);
         if (GetMinBitCountForNum((roundedOldValue + 0x8000 - roundedCenter) ^ (roundedValue - roundedCenter + 0x8000)) > 16)
             Com_Error(
                 ERR_DROP,
