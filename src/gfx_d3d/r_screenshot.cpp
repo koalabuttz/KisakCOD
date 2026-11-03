@@ -1923,8 +1923,8 @@ void R_LightingFromCubemapShots(const float *baseColor)
 
 void R_GetDirForCubemapPixel(int faceIndex, float x, float y, float *dir)
 {
-    Vec3Mad(cubemapShotAxis[faceIndex + 1][0], x, (const float *)(36 * (faceIndex + 1) + 9391748), dir);
-    Vec3Mad(dir, y, (const float *)(36 * (faceIndex + 1) + 9391760), dir);
+    Vec3Mad(cubemapShotAxis[faceIndex + 1][0], x, cubemapShotAxis[faceIndex + 1][1], dir);
+    Vec3Mad(dir, y, cubemapShotAxis[faceIndex + 1][2], dir);
     Vec3Normalize(dir);
 }
 
