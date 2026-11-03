@@ -8,6 +8,7 @@
 #include <qcommon/cmd.h>
 #include <database/database.h>
 #include "rb_logfile.h"
+#include <mutex>
 #include "r_utils.h"
 #include "r_dvars.h"
 #include "r_image.h"
@@ -923,6 +924,54 @@ void Material_CollateTechniqueSets(XAssetHeader header, TechniqueSetList *techSe
     //        1024);
     techSetList->hashTable[techSetList->count++] = header.techniqueSet;
     //userData[userData[1024]++] = (DWORD)header.xmodelPieces;
+}
+
+namespace
+{
+constexpr uint32_t TEXT_ICON_SLOTS = 1u << 14; // 7 bits in each of two bytes
+Material *s_textIconMaterials[TEXT_ICON_SLOTS];
+uint32_t s_textIconCount;
+std::mutex s_textIconMutex;
+}
+
+uint32_t Material_ToTextIconHandle(Material *material)
+{
+    if constexpr (sizeof(Material *) == sizeof(uint32_t))
+    {
+        return (uint32_t)(uintptr_t)material;
+    }
+    else
+    {
+        std::lock_guard<std::mutex> lock(s_textIconMutex);
+        uint32_t slot;
+        for (slot = 0; slot < s_textIconCount; ++slot)
+        {
+            if (s_textIconMaterials[slot] == material)
+                break;
+        }
+        if (slot == s_textIconCount)
+        {
+            if (s_textIconCount == TEXT_ICON_SLOTS)
+                Com_Error(ERR_DROP, "more than %i text icon materials", TEXT_ICON_SLOTS);
+            s_textIconMaterials[s_textIconCount++] = material;
+        }
+        return 0x80808080u | (slot & 0x7F) | ((slot >> 7) & 0x7F) << 8;
+    }
+}
+
+Material *Material_FromTextIconHandle(uint32_t handle)
+{
+    if constexpr (sizeof(Material *) == sizeof(uint32_t))
+    {
+        return (Material *)(uintptr_t)handle;
+    }
+    else
+    {
+        const uint32_t slot = (handle & 0x7F) | ((handle >> 8) & 0x7F) << 7;
+        if ((handle & 0x80808080u) != 0x80808080u || slot >= TEXT_ICON_SLOTS)
+            return nullptr;
+        return s_textIconMaterials[slot];
+    }
 }
 
 bool IsValidMaterialHandle(Material *const handle)

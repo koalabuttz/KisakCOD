@@ -2143,9 +2143,12 @@ double RB_DrawHudIcon(
     ya = y - ((double)font->pixelHeight * yScale + h) * 0.5;
     iassert( w > 0 );
     iassert( h > 0 );
-    if (!IsValidMaterialHandle(*(Material *const *)(text + 3)))
+    uint32_t iconHandle;
+    memcpy(&iconHandle, text + 3, sizeof(iconHandle));
+    Material *iconMaterial = Material_FromTextIconHandle(iconHandle);
+    if (!IsValidMaterialHandle(iconMaterial))
         return 0.0;
-    v9 = Material_FromHandle(*(Material **)(text + 3));
+    v9 = Material_FromHandle(iconMaterial);
     RB_DrawStretchPicRotate(v9, x, ya, w, h, s0, 0.0, s1, 1.0, sinAngle, cosAngle, color, GFX_PRIM_STATS_HUD);
     return w;
 }
