@@ -763,9 +763,12 @@
          DVAR_NOFLAG,
          "Show this many rows of light grid points for the vis cache");
      r_showLightGrid = Dvar_RegisterBool("r_showLightGrid", 0, DVAR_CHEAT, "Show light grid debugging information");
+     // Off by default: on, a model whose origin lies outside the light grid
+     // (a brick resting in the floor on mp_crash) is lit with the grid's debug
+     // colour until something moves it. Set it to 1 to find such models.
      r_showMissingLightGrid = Dvar_RegisterBool(
          "r_showMissingLightGrid",
-         true,
+         false,
          DVAR_NOFLAG,
          "Use rainbow colors for entities that are outside the light grid");
      r_cacheSModelLighting = Dvar_RegisterBool(
