@@ -1202,7 +1202,7 @@ bool __cdecl NET_OutOfBandPrint(netsrc_t sock, netadr_t adr, const char *data)
     }
     if (strlen(data) + 1 <= 0x1FFFC)
     {
-        strcpy((char *)&tempNetchanPacketBuf[4], data);
+        I_strncpyz((char *)&tempNetchanPacketBuf[4], data, sizeof(tempNetchanPacketBuf) - 4);
         v6 = strlen((const char *)tempNetchanPacketBuf);
         res = (int)FakeLag_SendPacket(sock, v6, tempNetchanPacketBuf, adr) >= -1;
 

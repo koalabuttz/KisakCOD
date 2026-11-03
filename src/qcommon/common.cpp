@@ -340,7 +340,7 @@ void QDECL Com_Printf(int channel, const char* fmt, ...)
 	va_list va;
 
 	va_start(va, fmt);
-	_vsnprintf(string, 0x1000u, fmt, va);
+	vsnprintf(string, 0x1000u, fmt, va);
 	string[4095] = 0;
 	Com_PrintMessage(channel, string, 0);
 }
@@ -503,7 +503,7 @@ void Com_DPrintf(int channel, const char* fmt, ...)
     {
         if (com_developer->current.integer)
         {
-            _vsnprintf(string, 0x1000u, fmt, va);
+            vsnprintf(string, 0x1000u, fmt, va);
             string[4095] = 0;
             Com_Printf(channel, "%s", string);
         }
@@ -523,7 +523,7 @@ void Com_PrintError(int channel, const char *fmt, ...)
     else
         I_strncpyz(dest, "^1Error: ", 4096);
     v3 = &dest[strlen(dest) + 1] - &dest[1];
-    _vsnprintf(&dest[v3], 4096 - v3, fmt, va);
+    vsnprintf(&dest[v3], 4096 - v3, fmt, va);
     dest[4095] = 0;
     ++com_errorPrintsCount;
     Com_PrintMessage(channel, dest, 3);
@@ -547,7 +547,7 @@ void Com_PrintWarning(int channel, const char *fmt, ...)
     va_start(va, fmt);
     I_strncpyz(dest, "^3", 4096);
     v3 = &dest[strlen(dest) + 1] - &dest[1];
-    _vsnprintf(&dest[v3], 4096 - v3, fmt, va);
+    vsnprintf(&dest[v3], 4096 - v3, fmt, va);
     dest[4095] = 0;
     Com_PrintMessage(channel, dest, 2);
 }
@@ -702,7 +702,7 @@ void Com_Error(errorParm_t code, const char* fmt, ...)
     if (com_errorEntered)
         Sys_Error("recursive error after: %s", com_errorMessage);
     com_errorEntered = 1;
-    _vsnprintf(com_errorMessage, 0x1000u, fmt, va);
+    vsnprintf(com_errorMessage, 0x1000u, fmt, va);
     com_errorMessage[4095] = 0;
     iassert( com_errorMessage[0] );
     if (code == ERR_SCRIPT || code == ERR_LOCALIZATION)
@@ -2445,7 +2445,7 @@ void __cdecl Com_LocalizedFloatToString(float f, char* buffer, uint32_t maxlen, 
     uint32_t charPos; // [esp+8h] [ebp-8h]
     char delimiter; // [esp+Fh] [ebp-1h]
 
-    _snprintf(buffer, maxlen - 1, "%.*f", numDecimalPlaces, f);
+    snprintf(buffer, maxlen, "%.*f", numDecimalPlaces, f);
     buffer[maxlen - 1] = 0;
     delimiter = Com_GetDecimalDelimiter();
     if (delimiter != 46)

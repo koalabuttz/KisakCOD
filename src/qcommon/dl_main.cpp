@@ -144,7 +144,7 @@ int __cdecl DL_BeginDownload(char *localName, char *remoteName)
     download.file = fopen(localName, "wb");
     if (!download.file)
         return 0;
-    strcpy(download.path, localName);
+    snprintf(download.path, sizeof(download.path), "%s", localName);
     download.easy = curl_easy_init();
     if (!download.easy)
     {

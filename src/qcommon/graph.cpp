@@ -111,11 +111,11 @@ void __cdecl GraphFloat_SaveToFile(const GraphFloat *graph)
     }
 }
 
-void __cdecl GraphFloat_DevGuiCB_Text(const DevGraph *devGuiGraph, float inputX, float inputY, char *text)
+void __cdecl GraphFloat_DevGuiCB_Text(const DevGraph *devGuiGraph, float inputX, float inputY, char *text, const int textLength)
 {
     float inputYa; // [esp+24h] [ebp+10h]
 
     inputYa = inputY * *((float *)devGuiGraph->data + 81);
-    sprintf(text, "Fraction: %.3f, Value: %.3f", inputX, inputYa);
+    Com_sprintf(text, textLength, "Fraction: %.3f, Value: %.3f", inputX, inputYa);
 }
 

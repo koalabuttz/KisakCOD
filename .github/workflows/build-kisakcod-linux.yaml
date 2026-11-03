@@ -10,6 +10,13 @@ name: Linux native server and client foundations
 # Configure and build stay in the workflow and never reuse the Windows output
 # paths: each configuration gets its own build directory and its own runtime
 # output directory. The Python runner only tests what was built.
+#
+# Speed: the jobs that build the engine with CMake keep a ccache per job and
+# configuration (restored from this branch or master, saved after every run
+# that was not cancelled) and build on every runner core. The pinned SDL3 SDK is
+# cached under a key that changes with this file, so an edit here rebuilds it.
+# A cache only skips compiles whose inputs are unchanged; every check still runs
+# against what this run built.
 
 on:
   workflow_dispatch:
@@ -90,8 +97,26 @@ jobs:
           sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            cmake ninja-build clang g++-multilib python3 python3-yaml libsdl2-dev:i386
+            cmake ninja-build clang g++-multilib python3 python3-yaml libsdl2-dev:i386 ccache
           test -f /usr/lib/i386-linux-gnu/cmake/SDL2/sdl2-config.cmake
+      - name: Restore compiler cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-window-sdl${{ matrix.sdl }}-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-window-sdl${{ matrix.sdl }}-${{ matrix.config }}-
+      - name: Use compiler cache
+        id: ccache
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/ci/use-ccache.sh
+      - name: Restore pinned 32-bit SDL3 SDK
+        if: matrix.sdl == 3
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/SDL3-sdk
+          key: sdl3-sdk-i386-877399b2b2cf21e67554ed9046410f268ce1d1b2-${{ hashFiles('.github/workflows/build-kisakcod-linux.yaml') }}
       - name: Build pinned 32-bit SDL3 SDK
         if: matrix.sdl == 3
         timeout-minutes: 20
@@ -99,22 +124,26 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts
-          # SDL release-3.2.10, pinned to its full source revision.
-          git init "$RUNNER_TEMP/SDL3-source"
-          git -C "$RUNNER_TEMP/SDL3-source" remote add origin https://github.com/libsdl-org/SDL.git
-          git -C "$RUNNER_TEMP/SDL3-source" fetch --depth 1 origin 877399b2b2cf21e67554ed9046410f268ce1d1b2
-          git -C "$RUNNER_TEMP/SDL3-source" checkout --detach FETCH_HEAD
-          test "$(git -C "$RUNNER_TEMP/SDL3-source" rev-parse HEAD)" = 877399b2b2cf21e67554ed9046410f268ce1d1b2
-          cmake -S "$RUNNER_TEMP/SDL3-source" -B "$RUNNER_TEMP/SDL3-build" -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
-            -DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_SHARED_LINKER_FLAGS=-m32 \
-            -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/SDL3-sdk" -DCMAKE_INSTALL_LIBDIR=lib \
-            -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TESTS=OFF -DSDL_TEST_LIBRARY=OFF \
-            -DSDL_EXAMPLES=OFF -DSDL_X11=OFF -DSDL_WAYLAND=OFF -DSDL_UNIX_CONSOLE_BUILD=ON \
-            -DSDL_ALSA=OFF -DSDL_PULSEAUDIO=OFF -DSDL_PIPEWIRE=OFF -DSDL_JACK=OFF \
-            2>&1 | tee artifacts/sdl3-configure.log
-          cmake --build "$RUNNER_TEMP/SDL3-build" --parallel 2
-          cmake --install "$RUNNER_TEMP/SDL3-build"
+          # A restored SDK (same pin, same options: the cache key changes with
+          # this file) skips the build; the checks below run either way.
+          if [[ ! -f "$RUNNER_TEMP/SDL3-sdk/lib/libSDL3.so.0" ]]; then
+            # SDL release-3.2.10, pinned to its full source revision.
+            git init "$RUNNER_TEMP/SDL3-source"
+            git -C "$RUNNER_TEMP/SDL3-source" remote add origin https://github.com/libsdl-org/SDL.git
+            git -C "$RUNNER_TEMP/SDL3-source" fetch --depth 1 origin 877399b2b2cf21e67554ed9046410f268ce1d1b2
+            git -C "$RUNNER_TEMP/SDL3-source" checkout --detach FETCH_HEAD
+            test "$(git -C "$RUNNER_TEMP/SDL3-source" rev-parse HEAD)" = 877399b2b2cf21e67554ed9046410f268ce1d1b2
+            cmake -S "$RUNNER_TEMP/SDL3-source" -B "$RUNNER_TEMP/SDL3-build" -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+              -DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_SHARED_LINKER_FLAGS=-m32 \
+              -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/SDL3-sdk" -DCMAKE_INSTALL_LIBDIR=lib \
+              -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TESTS=OFF -DSDL_TEST_LIBRARY=OFF \
+              -DSDL_EXAMPLES=OFF -DSDL_X11=OFF -DSDL_WAYLAND=OFF -DSDL_UNIX_CONSOLE_BUILD=ON \
+              -DSDL_ALSA=OFF -DSDL_PULSEAUDIO=OFF -DSDL_PIPEWIRE=OFF -DSDL_JACK=OFF \
+              2>&1 | tee artifacts/sdl3-configure.log
+            cmake --build "$RUNNER_TEMP/SDL3-build" --parallel "$(nproc)"
+            cmake --install "$RUNNER_TEMP/SDL3-build"
+          fi
           readelf -h "$RUNNER_TEMP/SDL3-sdk/lib/libSDL3.so.0" | tee artifacts/sdl3-elf.log
           grep -q ELF32 artifacts/sdl3-elf.log
       - name: Check graphical workflow contract
@@ -135,7 +164,7 @@ jobs:
           fi
           python3 -u scripts/tests/test_linux_window.py \
             --build-dir "$GITHUB_WORKSPACE/build-linux/window-sdl${{ matrix.sdl }}-${{ matrix.config }}" \
-            --build-type "${{ matrix.config }}" --cc clang --cxx clang++ --jobs 2 \
+            --build-type "${{ matrix.config }}" --cc clang --cxx clang++ --jobs "$(nproc)" \
             --sdl-major "${{ matrix.sdl }}" "${sdk_args[@]}" --video-driver dummy \
             2>&1 | tee "artifacts/window-sdl${{ matrix.sdl }}-${{ matrix.config }}.log"
       - name: Upload window check log
@@ -146,6 +175,18 @@ jobs:
           path: artifacts/*.log
           if-no-files-found: warn
           retention-days: 7
+      - name: Report compiler cache
+        if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ccache --show-stats
+      - name: Save compiler cache
+        if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-window-sdl${{ matrix.sdl }}-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   native:
     name: Native Linux ${{ matrix.config }}
@@ -174,7 +215,20 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            cmake ninja-build clang g++-multilib python3
+            cmake ninja-build clang g++-multilib python3 ccache
+
+      - name: Restore compiler cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-native-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-native-${{ matrix.config }}-
+      - name: Use compiler cache
+        id: ccache
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/ci/use-ccache.sh
 
       - name: Report compiler versions
         shell: bash
@@ -208,7 +262,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cmake --build "$BUILD_DIR" --target KisakCOD-dedi --parallel 2
+          cmake --build "$BUILD_DIR" --target KisakCOD-dedi --parallel "$(nproc)"
           test -x "$BINARY"
           ls -l "$BINARY"
 
@@ -218,6 +272,7 @@ jobs:
           python3 scripts/tests/test_linux_check_runner.py
           python3 scripts/tests/test_linux_fastfile_driver.py
           python3 scripts/tests/test_linux_client_core_driver.py
+          python3 scripts/tests/test_strip_cdecl.py
 
       - name: Run asset-free native checks
         timeout-minutes: 30
@@ -238,6 +293,7 @@ jobs:
           python3 scripts/tests/test_linux_client_core.py \
             --cxx clang++ \
             --build-type "${{ matrix.config }}" \
+            --jobs "$(nproc)" \
             --build-dir "$GITHUB_WORKSPACE/build-linux/client-core-${{ matrix.config }}"
 
       - name: Upload executable and check logs
@@ -252,6 +308,19 @@ jobs:
           if-no-files-found: warn
           compression-level: 9
           retention-days: 7
+
+      - name: Report compiler cache
+        if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ccache --show-stats
+      - name: Save compiler cache
+        if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-native-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   client_census:
     # Asset-free compile proof for the multiplayer client sources: one syntax-only
@@ -579,7 +648,20 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            cmake ninja-build clang g++ g++-multilib binutils python3
+            cmake ninja-build clang g++ g++-multilib binutils python3 ccache
+
+      - name: Restore compiler cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-native-d3d9-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-native-d3d9-${{ matrix.config }}-
+      - name: Use compiler cache
+        id: ccache
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/ci/use-ccache.sh
 
       - name: Verify the 32-bit toolchains
         shell: bash
@@ -656,7 +738,7 @@ jobs:
             -DKISAK_BUILD_LINUX_NATIVE_D3D9=ON \
             -DKISAK_DXVK_NATIVE_INCLUDE_DIR="$RUNNER_TEMP/dxvk-include/dxvk" \
             2>&1 | tee "artifacts/native-d3d9-cmake-${{ matrix.config }}.log"
-          cmake --build "$BUILD_DIR" --target KisakCOD-native-d3d9-proofs --parallel 2 \
+          cmake --build "$BUILD_DIR" --target KisakCOD-native-d3d9-proofs --parallel "$(nproc)" \
             2>&1 | tee -a "artifacts/native-d3d9-cmake-${{ matrix.config }}.log"
           out="$GITHUB_WORKSPACE/out/native-d3d9-${{ matrix.config }}"
           "$out/KisakCOD-native-d3d9-boundary-check"
@@ -678,7 +760,7 @@ jobs:
           cmake -S . -B "$BUILD_DIR" -DKISAK_BUILD_WORLD_FRONTEND_PROBE=ON \
             2>&1 | tee "artifacts/world-frontend-probe-${{ matrix.config }}.log"
           cmake --build "$BUILD_DIR" \
-            --target KisakCOD-world-frontend-probe KisakCOD-world-frontend-invariants-test --parallel 2 \
+            --target KisakCOD-world-frontend-probe KisakCOD-world-frontend-invariants-test --parallel "$(nproc)" \
             2>&1 | tee -a "artifacts/world-frontend-probe-${{ matrix.config }}.log"
           out="$GITHUB_WORKSPACE/out/native-d3d9-${{ matrix.config }}"
           "$out/KisakCOD-world-frontend-invariants-test"
@@ -705,6 +787,19 @@ jobs:
           path: artifacts/
           if-no-files-found: warn
           retention-days: 7
+
+      - name: Report compiler cache
+        if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ccache --show-stats
+      - name: Save compiler cache
+        if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-native-d3d9-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   device_probe:
     # The opt-in D3D9 device probe (scripts/platform/linux/device_probe.cmake)
@@ -752,7 +847,26 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            cmake ninja-build clang g++ g++-multilib binutils python3
+            cmake ninja-build clang g++ g++-multilib binutils python3 ccache
+
+      - name: Restore compiler cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-device-probe-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-device-probe-${{ matrix.config }}-
+      - name: Use compiler cache
+        id: ccache
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/ci/use-ccache.sh
+
+      - name: Restore pinned 32-bit SDL3 SDK
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/SDL3-sdk
+          key: sdl3-sdk-i386-${{ env.SDL3_REVISION }}-${{ hashFiles('.github/workflows/build-kisakcod-linux.yaml') }}
 
       - name: Build pinned 32-bit SDL3 SDK
         timeout-minutes: 20
@@ -760,22 +874,26 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts
-          # SDL release-3.2.10, the same pin and options as the window job.
-          git init "$RUNNER_TEMP/SDL3-source"
-          git -C "$RUNNER_TEMP/SDL3-source" remote add origin https://github.com/libsdl-org/SDL.git
-          git -C "$RUNNER_TEMP/SDL3-source" fetch --depth 1 origin "$SDL3_REVISION"
-          git -C "$RUNNER_TEMP/SDL3-source" checkout --detach FETCH_HEAD
-          test "$(git -C "$RUNNER_TEMP/SDL3-source" rev-parse HEAD)" = "$SDL3_REVISION"
-          cmake -S "$RUNNER_TEMP/SDL3-source" -B "$RUNNER_TEMP/SDL3-build" -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
-            -DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_SHARED_LINKER_FLAGS=-m32 \
-            -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/SDL3-sdk" -DCMAKE_INSTALL_LIBDIR=lib \
-            -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TESTS=OFF -DSDL_TEST_LIBRARY=OFF \
-            -DSDL_EXAMPLES=OFF -DSDL_X11=OFF -DSDL_WAYLAND=OFF -DSDL_UNIX_CONSOLE_BUILD=ON \
-            -DSDL_ALSA=OFF -DSDL_PULSEAUDIO=OFF -DSDL_PIPEWIRE=OFF -DSDL_JACK=OFF \
-            2>&1 | tee artifacts/sdl3-configure.log
-          cmake --build "$RUNNER_TEMP/SDL3-build" --parallel 2
-          cmake --install "$RUNNER_TEMP/SDL3-build"
+          # A restored SDK (same pin, same options: the cache key changes with
+          # this file) skips the build; the checks below run either way.
+          if [[ ! -f "$RUNNER_TEMP/SDL3-sdk/lib/libSDL3.so.0" ]]; then
+            # SDL release-3.2.10, the same pin and options as the window job.
+            git init "$RUNNER_TEMP/SDL3-source"
+            git -C "$RUNNER_TEMP/SDL3-source" remote add origin https://github.com/libsdl-org/SDL.git
+            git -C "$RUNNER_TEMP/SDL3-source" fetch --depth 1 origin "$SDL3_REVISION"
+            git -C "$RUNNER_TEMP/SDL3-source" checkout --detach FETCH_HEAD
+            test "$(git -C "$RUNNER_TEMP/SDL3-source" rev-parse HEAD)" = "$SDL3_REVISION"
+            cmake -S "$RUNNER_TEMP/SDL3-source" -B "$RUNNER_TEMP/SDL3-build" -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+              -DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_SHARED_LINKER_FLAGS=-m32 \
+              -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/SDL3-sdk" -DCMAKE_INSTALL_LIBDIR=lib \
+              -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TESTS=OFF -DSDL_TEST_LIBRARY=OFF \
+              -DSDL_EXAMPLES=OFF -DSDL_X11=OFF -DSDL_WAYLAND=OFF -DSDL_UNIX_CONSOLE_BUILD=ON \
+              -DSDL_ALSA=OFF -DSDL_PULSEAUDIO=OFF -DSDL_PIPEWIRE=OFF -DSDL_JACK=OFF \
+              2>&1 | tee artifacts/sdl3-configure.log
+            cmake --build "$RUNNER_TEMP/SDL3-build" --parallel "$(nproc)"
+            cmake --install "$RUNNER_TEMP/SDL3-build"
+          fi
           readelf -h "$RUNNER_TEMP/SDL3-sdk/lib/libSDL3.so.0" | tee artifacts/sdl3-elf.log
           grep -q ELF32 artifacts/sdl3-elf.log
 
@@ -824,7 +942,7 @@ jobs:
             -DKISAK_BUILD_DEVICE_PROBE=ON \
             -DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3" \
             2>&1 | tee "artifacts/device-probe-${{ matrix.config }}.log"
-          cmake --build "$BUILD_DIR" --target KisakCOD-device-probe KisakCOD-win32-window-test --parallel 2 \
+          cmake --build "$BUILD_DIR" --target KisakCOD-device-probe KisakCOD-win32-window-test --parallel "$(nproc)" \
             2>&1 | tee -a "artifacts/device-probe-${{ matrix.config }}.log"
           out="$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}"
           for binary in "$out/KisakCOD-device-probe" "$out/KisakCOD-win32-window-test"; do
@@ -877,7 +995,7 @@ jobs:
           cmake -S . -B "$BUILD_DIR" \
             -DKISAK_BUILD_WORLD_FRONTEND_PROBE=ON -DKISAK_BUILD_WORLD_DEVICE_PROBE=ON \
             2>&1 | tee "artifacts/world-device-probe-${{ matrix.config }}.log"
-          cmake --build "$BUILD_DIR" --target KisakCOD-world-device-probe --parallel 2 \
+          cmake --build "$BUILD_DIR" --target KisakCOD-world-device-probe --parallel "$(nproc)" \
             2>&1 | tee -a "artifacts/world-device-probe-${{ matrix.config }}.log"
           probe="$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-world-device-probe"
           readelf -h "$probe" | grep -Eq 'Class:[[:space:]]+ELF32'
@@ -922,7 +1040,7 @@ jobs:
           # client census still blocks. Only built and inspected here.
           cmake -S . -B "$BUILD_DIR" -DKISAK_BUILD_WORLD_DRAW_PROBE=ON \
             2>&1 | tee "artifacts/world-draw-probe-${{ matrix.config }}.log"
-          cmake --build "$BUILD_DIR" --target KisakCOD-world-draw-probe --parallel 2 \
+          cmake --build "$BUILD_DIR" --target KisakCOD-world-draw-probe --parallel "$(nproc)" \
             2>&1 | tee -a "artifacts/world-draw-probe-${{ matrix.config }}.log"
           probe="$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-world-draw-probe"
           readelf -h "$probe" | grep -Eq 'Class:[[:space:]]+ELF32'
@@ -967,6 +1085,19 @@ jobs:
           path: artifacts/
           if-no-files-found: warn
           retention-days: 7
+
+      - name: Report compiler cache
+        if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ccache --show-stats
+      - name: Save compiler cache
+        if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-device-probe-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   free_camera:
     # Asset-free: the host free camera and its frame owner, compiled as two

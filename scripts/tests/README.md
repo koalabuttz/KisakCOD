@@ -143,7 +143,22 @@ When the hosted workflows run:
 - Pull requests run the SDL3 window jobs only; pushes to master and manual runs
   also run SDL2.
 
-`test_linux_window_workflow.py` checks these rules (`CiTriggerTests`).
+What makes them faster without dropping a check:
+
+- The four Linux jobs that build the engine with CMake (window, native, native
+  D3D9 boundary, device probe) compile through ccache
+  (`scripts/ci/use-ccache.sh`). Each job and configuration restores the newest
+  cache from its branch, or else from master, and saves its own after every run
+  that was not cancelled. A hit only skips a compile whose input and flags are
+  unchanged; links and every check still run on this run's build.
+- The pinned SDL3 SDK is cached. Its key holds the revision and a hash of the
+  Linux workflow, so changing the SDL3 build options rebuilds it; the ELF32
+  check runs on a restored SDK too.
+- Builds use every runner core (`nproc`) instead of two.
+- Windows builds the three games in one parallel MSBuild call.
+
+`test_linux_window_workflow.py` checks these rules (`CiTriggerTests`,
+`CiCacheTests`).
 
 ## World surface checks
 

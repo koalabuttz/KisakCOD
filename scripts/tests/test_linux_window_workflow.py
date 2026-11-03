@@ -735,6 +735,13 @@ class CiTriggerTests(unittest.TestCase):
                 self.assertIn('.github/workflows/build-kisarcod-win.yaml',
                               self.linux['on'][event]['paths'])
 
+    def test_windows_builds_the_three_games_in_one_parallel_call(self):
+        build = next(step for step in self.windows['jobs']['build']['steps']
+                     if step.get('name', '').startswith('Build '))
+        self.assertIn('--parallel', build['run'])
+        self.assertIn('--target KisakCOD-sp KisakCOD-mp KisakCOD-dedi', build['run'])
+        self.assertIn('if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }', build['run'])
+
     def test_the_pattern_reader_matches_githubs_documented_examples(self):
         # From GitHub's filter pattern cheat sheet.
         self.assertTrue(_selected('README.md', ['**/README.md']))
@@ -745,6 +752,105 @@ class CiTriggerTests(unittest.TestCase):
         self.assertFalse(_selected('a/b.md', ['**', '!**/*.md']))
         self.assertTrue(_selected('scripts/tests/x.py', ['**', '!scripts/tests/**', 'scripts/tests/x.py']))
         self.assertFalse(_selected('src/linux/a.cpp', ['*.cpp']))
+
+
+class CiCacheTests(unittest.TestCase):
+    """The build caches only skip unchanged compiles; every check still runs."""
+
+    # Jobs that configure and build the engine with CMake.
+    CCACHE_JOBS = ('window', 'native', 'native_d3d9_boundary', 'device_probe')
+    SDL3_JOBS = ('window', 'device_probe')
+
+    @classmethod
+    def setUpClass(cls):
+        cls.workflow = yaml.load(
+            (ROOT / '.github/workflows/build-kisakcod-linux.yaml').read_text(),
+            Loader=yaml.BaseLoader)
+
+    def step(self, job, name):
+        return next(step for step in self.workflow['jobs'][job]['steps'] if step.get('name') == name)
+
+    def test_each_cmake_job_restores_and_saves_its_own_compiler_cache(self):
+        for name in self.CCACHE_JOBS:
+            job = self.workflow['jobs'][name]
+            names = [step.get('name') for step in job['steps']]
+            with self.subTest(job=name):
+                install = next(step['run'] for step in job['steps']
+                               if step.get('name', '').startswith('Install '))
+                self.assertIn(' ccache', install)
+                restore = self.step(name, 'Restore compiler cache')
+                use = self.step(name, 'Use compiler cache')
+                save = self.step(name, 'Save compiler cache')
+                self.assertTrue(restore['uses'].startswith('actions/cache/restore@'))
+                self.assertTrue(save['uses'].startswith('actions/cache/save@'))
+                self.assertEqual(restore['with']['path'], '${{ runner.temp }}/ccache')
+                self.assertEqual(save['with']['path'], restore['with']['path'])
+                self.assertEqual(save['with']['key'], restore['with']['key'])
+                # Each run saves under its own key; the newest entry for this job
+                # and configuration (this branch first, then master) is restored.
+                self.assertTrue(restore['with']['key'].endswith('-${{ github.run_id }}-${{ github.run_attempt }}'))
+                self.assertTrue(restore['with']['key'].startswith(restore['with']['restore-keys']))
+                self.assertIn('${{ matrix.config }}', restore['with']['restore-keys'])
+                self.assertEqual(use['id'], 'ccache')
+                self.assertIn('scripts/ci/use-ccache.sh', use['run'])
+                self.assertEqual(save['if'], "${{ !cancelled() && steps.ccache.outcome == 'success' }}")
+                # The cache is in place before the first compile and saved last.
+                first_build = min(index for index, step in enumerate(job['steps'])
+                                  if 'cmake --build' in step.get('run', '')
+                                  or 'test_linux_window.py' in step.get('run', ''))
+                self.assertLess(names.index('Use compiler cache'), first_build)
+                self.assertEqual(names[-1], 'Save compiler cache')
+        window_key = self.step('window', 'Restore compiler cache')['with']['restore-keys']
+        self.assertIn('sdl${{ matrix.sdl }}', window_key)
+        keys = [self.step(name, 'Restore compiler cache')['with']['restore-keys'] for name in self.CCACHE_JOBS]
+        self.assertEqual(len(set(keys)), len(keys))
+
+    def test_no_other_job_uses_the_compiler_cache(self):
+        for name, job in self.workflow['jobs'].items():
+            if name in self.CCACHE_JOBS:
+                continue
+            text = '\n'.join(step.get('run', '') + step.get('uses', '') for step in job['steps'])
+            with self.subTest(job=name):
+                self.assertNotIn('ccache', text)
+                self.assertNotIn('actions/cache', text)
+
+    def test_ccache_setup_launches_cmake_compiles_only(self):
+        script = (ROOT / 'scripts/ci/use-ccache.sh').read_text()
+        self.assertIn('set -euo pipefail', script)
+        for line in ('CCACHE_DIR=$cache_dir', 'CCACHE_BASEDIR=${GITHUB_WORKSPACE:?}',
+                     'CMAKE_C_COMPILER_LAUNCHER=ccache', 'CMAKE_CXX_COMPILER_LAUNCHER=ccache'):
+            self.assertIn(line, script)
+        self.assertIn('"${GITHUB_ENV:?}"', script)
+        self.assertNotIn('CXX=', script.replace('CMAKE_CXX_COMPILER_LAUNCHER=', ''))
+
+    def test_sdl3_sdk_cache_follows_the_pin_and_this_file_and_is_still_checked(self):
+        for name in self.SDL3_JOBS:
+            job = self.workflow['jobs'][name]
+            names = [step.get('name') for step in job['steps']]
+            with self.subTest(job=name):
+                cache = self.step(name, 'Restore pinned 32-bit SDL3 SDK')
+                self.assertTrue(cache['uses'].startswith('actions/cache@'))
+                self.assertEqual(cache['with']['path'], '${{ runner.temp }}/SDL3-sdk')
+                key = cache['with']['key']
+                self.assertTrue('877399b2b2cf21e67554ed9046410f268ce1d1b2' in key
+                                or '${{ env.SDL3_REVISION }}' in key, key)
+                self.assertIn("hashFiles('.github/workflows/build-kisakcod-linux.yaml')", key)
+                self.assertLess(names.index('Restore pinned 32-bit SDL3 SDK'),
+                                names.index('Build pinned 32-bit SDL3 SDK'))
+                build = self.step(name, 'Build pinned 32-bit SDL3 SDK')['run']
+                self.assertIn('if [[ ! -f "$RUNNER_TEMP/SDL3-sdk/lib/libSDL3.so.0" ]]; then', build)
+                # The ELF check runs on a restored SDK too.
+                tail = build[build.index('\nfi\n'):]
+                self.assertIn('readelf -h "$RUNNER_TEMP/SDL3-sdk/lib/libSDL3.so.0"', tail)
+                self.assertIn('grep -q ELF32', tail)
+        self.assertEqual(self.step('window', 'Restore pinned 32-bit SDL3 SDK')['if'], 'matrix.sdl == 3')
+
+    def test_engine_builds_use_every_runner_core(self):
+        text = '\n'.join(step.get('run', '') for name in self.CCACHE_JOBS
+                         for step in self.workflow['jobs'][name]['steps'])
+        self.assertNotIn('--parallel 2', text)
+        self.assertNotIn('--jobs 2', text)
+        self.assertIn('--jobs "$(nproc)"', text)
 
 
 if __name__ == '__main__':

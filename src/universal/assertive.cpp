@@ -102,12 +102,15 @@ HINSTANCE__* __cdecl GetModuleBase(char* name)
     }
     if (nameIndex >= 0 && name[nameIndex] == 46)
         nameLength = nameIndex;
+    // Leave room for the ".exe"/".dll" suffix and the terminator.
+    if (nameLength > (int)sizeof(moduleName) - 5)
+        return 0;
     memcpy((uint8_t*)moduleName, (uint8_t*)name, nameLength);
-    strcpy(&moduleName[nameLength], ".exe");
+    I_strncpyz(&moduleName[nameLength], ".exe", sizeof(moduleName) - nameLength);
     moduleHandle = GetModuleHandleA(moduleName);
     if (moduleHandle)
         return moduleHandle;
-    strcpy(&moduleName[nameLength], ".dll");
+    I_strncpyz(&moduleName[nameLength], ".dll", sizeof(moduleName) - nameLength);
     return GetModuleHandleA(moduleName);
 }
 
@@ -234,7 +237,7 @@ char __cdecl ParseMapFile(FILE* fp, uint32_t baseAddress, char* mapName)
             return 0;
         if (!lineBuffer[0])
             break;
-        if (sscanf(lineBuffer, "%x:%x %xH %s %s", &group, &offset, &address, function, filenameBuffer) != 5)
+        if (sscanf(lineBuffer, "%x:%x %xH %1023s %1023s", &group, &offset, &address, function, filenameBuffer) != 5)
         {
             ParseError("Unknown line format in the segments section");
             return 0;
@@ -262,14 +265,14 @@ char __cdecl ParseMapFile(FILE* fp, uint32_t baseAddress, char* mapName)
             return 0;
         if (!lineBuffer[0])
             break;
-        if (sscanf(lineBuffer, "%x:%x %s %x", &group, &offset, function, &address) != 4)
+        if (sscanf(lineBuffer, "%x:%x %1023s %x", &group, &offset, function, &address) != 4)
         {
             ParseError("Unknown line format in the public symbols section");
             return 0;
         }
         v5 = strrchr(lineBuffer, 0x20u);
         filenameSubStr = v5;
-        if (!v5 || sscanf(filenameSubStr + 1, "%s", filenameBuffer) != 1)
+        if (!v5 || sscanf(filenameSubStr + 1, "%1023s", filenameBuffer) != 1)
         {
             ParseError("Couldn't parse file name in the public symbols section");
             return 0;
@@ -312,14 +315,14 @@ char __cdecl ParseMapFile(FILE* fp, uint32_t baseAddress, char* mapName)
         return 0;
     while (ReadLine(fp) && lineBuffer[0])
     {
-        if (sscanf(lineBuffer, "%x:%x %s %x", &group, &offset, function, &address) != 4)
+        if (sscanf(lineBuffer, "%x:%x %1023s %x", &group, &offset, function, &address) != 4)
         {
             ParseError("Unknown line format in the static symbols section");
             return 0;
         }
         v8 = strrchr(lineBuffer, 0x20u);
         filenameSubStr = v8;
-        if (!v8 || sscanf(filenameSubStr + 1, "%s", filenameBuffer) != 1)
+        if (!v8 || sscanf(filenameSubStr + 1, "%1023s", filenameBuffer) != 1)
         {
             ParseError("Couldn't parse file name in the static symbols section");
             return 0;
@@ -374,8 +377,7 @@ LABEL_90:
             ParseError("Couldn't find ')' for the name of the source file in line number section");
             return 0;
         }
-        strncpy(filenameBuffer, pszNameStart + 1, v12 - pszNameStart - 1);
-        filenameBuffer[pszNameStop - pszNameStart - 1] = 0;
+        I_strncpyz(filenameBuffer, pszNameStart + 1, pszNameStop - pszNameStart);
         filenameSubStr = filenameBuffer;
         if (!SkipLines(1, fp))
             return 0;
@@ -484,50 +486,49 @@ void __cdecl LoadMapFilesForDir(const char* dir)
     }
 }
 
-int __cdecl LoadMapFiles(char* msg)
+int __cdecl LoadMapFiles(char* msg, int msgSize)
 {
-    int v1; // eax
     int j; // [esp+0h] [ebp-Ch]
     AddressInfo* addressInfo; // [esp+4h] [ebp-8h]
-    char* curPos; // [esp+8h] [ebp-4h]
-    char* curPosa; // [esp+8h] [ebp-4h]
-    char* curPosb; // [esp+8h] [ebp-4h]
+    int curPos;
 
     LoadMapFilesForDir("");
-    curPos = msg;
+    curPos = 0;
     for (j = 0; j < g_assertAddressCount; ++j)
     {
         addressInfo = &g_assertAddress[j];
         if (addressInfo->moduleName[0])
         {
-            curPosa = &curPos[sprintf(curPos, "%s:    ", addressInfo->moduleName)];
+            Com_sprintfPos(msg, msgSize, &curPos, "%s:    ", addressInfo->moduleName);
             if (addressInfo->bestLineFilename[0])
             {
-                curPosb = &curPosa[sprintf(
-                    curPosa,
+                Com_sprintfPos(
+                    msg,
+                    msgSize,
+                    &curPos,
                     "%s        ...%s, line %i",
                     addressInfo->bestFunction,
                     addressInfo->bestLineFilename,
-                    addressInfo->bestLineNumber)];
-                v1 = sprintf(curPosb, "\n");
+                    addressInfo->bestLineNumber);
             }
             else
             {
                 if (addressInfo->bestFunction[0])
-                    curPosb = &curPosa[sprintf(
-                        curPosa,
+                    Com_sprintfPos(
+                        msg,
+                        msgSize,
+                        &curPos,
                         "%s        ...%s, address %x",
                         addressInfo->bestFunction,
                         addressInfo->bestFunctionFilename,
-                        addressInfo->address)];
+                        addressInfo->address);
                 else
-                    curPosb = &curPosa[sprintf(curPosa, "%s, address %x", addressInfo->bestFunction, addressInfo->address)];
-                v1 = sprintf(curPosb, "\n");
+                    Com_sprintfPos(msg, msgSize, &curPos, "%s, address %x", addressInfo->bestFunction, addressInfo->address);
             }
-            curPos = &curPosb[v1];
+            Com_sprintfPos(msg, msgSize, &curPos, "\n");
         }
     }
-    return curPos - msg;
+    return curPos;
 }
 
 char g_module[MAX_PATH];
@@ -536,7 +537,7 @@ char g_module[MAX_PATH];
 
 // KISAKX64
 // this is broken right now
-int __cdecl DoStackTrace(char* msg, int nIgnore)
+int __cdecl DoStackTrace(char* msg, int msgSize, int nIgnore)
 {
     int* v2; // ecx
     int* reg_ebp; // [esp+4h] [ebp-10h]
@@ -565,33 +566,36 @@ int __cdecl DoStackTrace(char* msg, int nIgnore)
                 break;
         }
     }
-    return LoadMapFiles(msg);
+    return LoadMapFiles(msg, msgSize);
 }
 
-void __cdecl BuildAssertMessage(const char* expr, const char* filename, int line, int type, int skipLevels, char* message)
+void __cdecl BuildAssertMessage(const char* expr, const char* filename, int line, int type, int skipLevels, char* message, int messageSize)
 {
     const char* String; // eax
-    int v7; // eax
-    char* curPos; // [esp+0h] [ebp-14h]
+    int curPos;
     char unknown[12]; // [esp+4h] [ebp-10h] BYREF
 
-    strcpy(unknown, "<unknown>");
+    I_strncpyz(unknown, "<unknown>", sizeof(unknown));
     if (!filename)
         filename = unknown;
     if (!expr)
         expr = unknown;
     if (!GetModuleFileNameA(0, g_module, sizeof(g_module)))
-        strcpy(g_module, "<unknown application>");
+        I_strncpyz(g_module, "<unknown application>", sizeof(g_module));
     String = Dvar_GetString("version");
-    curPos = &message[sprintf(message, "Build: %s\n", String)];
-    v7 = sprintf(
-        curPos,
+    message[0] = 0;
+    curPos = 0;
+    Com_sprintfPos(message, messageSize, &curPos, "Build: %s\n", String);
+    Com_sprintfPos(
+        message,
+        messageSize,
+        &curPos,
         "Expression:\n    %s\n\nModule:    %s\nFile:    %s\nLine:    %d\n\n",
         expr,
         g_module,
         filename,
         line);
-    DoStackTrace(&curPos[v7], skipLevels + 1);
+    DoStackTrace(&message[curPos], messageSize - curPos, skipLevels + 1);
 }
 
 HWND g_hwndGame[4];
@@ -655,7 +659,7 @@ void MyAssertHandler(const char *filename, int line, int type, const char *fmt, 
     
     va_start(va, fmt);
     Sys_EnterCriticalSection(CRITSECT_ASSERT);
-    _vsnprintf(message, 0x400u, fmt, va);
+    vsnprintf(message, 0x400u, fmt, va);
     message[1023] = 0;
 
     fprintf(stderr, "\x1b[31mASSERTION FAIL AT \x1b[33m%s:%d (TYPE: %d)\x1b[m:\n\t%s\n", filename, line, type, message);
@@ -664,7 +668,7 @@ void MyAssertHandler(const char *filename, int line, int type, const char *fmt, 
     {
         CopyMessageToClipboard();
         AssertNotify(lastAssertType, RECURSIVE);
-        BuildAssertMessage(message, filename, line, type, 1, assertMessage);
+        BuildAssertMessage(message, filename, line, type, 1, assertMessage, sizeof(assertMessage));
         if (isHandlingAssert == 1)
         {
             isHandlingAssert = 2;
@@ -677,7 +681,7 @@ void MyAssertHandler(const char *filename, int line, int type, const char *fmt, 
     lastAssertType = type;
     isHandlingAssert = 1;
     FixWindowsDesktop();
-    BuildAssertMessage(message, filename, line, type, 1, assertMessage);
+    BuildAssertMessage(message, filename, line, type, 1, assertMessage, sizeof(assertMessage));
     Com_Printf(CON_CHANNEL_SYSTEM, "ASSERTBEGIN -------------------------------------------------------------------\n");
     Com_Printf(CON_CHANNEL_SYSTEM, "%s", assertMessage);
     Com_Printf(CON_CHANNEL_SYSTEM, "ASSERTEND ---------------------------------------------------------------------\n");
@@ -702,12 +706,12 @@ void MyAssertHandler(const char *filename, int line, int type, const char *fmt, 
         char m[1024];
         va_list va;
         va_start( va, fmt );
-        _vsnprintf( m, sizeof( m ), fmt ? fmt : "", va );
+        vsnprintf( m, sizeof( m ), fmt ? fmt : "", va );
         va_end( va );
         m[1023] = 0;
         char tmp[MAX_PATH], p2[MAX_PATH];
         GetTempPathA( sizeof( tmp ), tmp );
-        _snprintf( p2, sizeof( p2 ), "%sradiant_firstlight.log", tmp );
+        snprintf( p2, sizeof( p2 ), "%sradiant_firstlight.log", tmp );
         FILE *f = fopen( p2, "a" );
         if ( f )
         {
