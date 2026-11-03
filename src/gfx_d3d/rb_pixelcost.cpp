@@ -110,23 +110,22 @@ const Material *R_PixelCost_GetAccumulationMaterial(const Material *material)
 void R_PixelCost_BeginSurface(GfxCmdBufContext context)
 {
     int cost; // [esp+4h] [ebp-Ch]
-    unsigned __int64 packedKey; // [esp+8h] [ebp-8h]
-    unsigned __int64 packedKeya; // [esp+8h] [ebp-8h]
 
     if (pixelCostMode == GFX_PIXEL_COST_MODE_MEASURE_COST)
     {
-        packedKey = R_PixelCost_PackedKeyForMaterial(*(_QWORD *)&context.state->material);
-        if (!RB_PixelCost_DoesPrimMatch(packedKey))
-            RB_PixelCost_ResetPrim(packedKey);
+        // Retail packed the state's material and techType into one 64-bit key.
+        iassert(context.state->material);
+        if (!RB_PixelCost_DoesPrimMatch(context.state->material, context.state->techType))
+            RB_PixelCost_ResetPrim(context.state->material, context.state->techType);
         ++pixelCostGlob.expectedCount;
         RB_PixelCost_BeginTiming();
         RB_HW_BeginOcclusionQuery(gfxAssets.pixelCountQuery);
     }
     else if (pixelCostMode == GFX_PIXEL_COST_MODE_MEASURE_MSEC)
     {
-        packedKeya = R_PixelCost_PackedKeyForMaterial(*(_QWORD *)&context.state->material);
-        if (!RB_PixelCost_DoesPrimMatch(packedKeya))
-            RB_PixelCost_ResetPrim(packedKeya);
+        iassert(context.state->material);
+        if (!RB_PixelCost_DoesPrimMatch(context.state->material, context.state->techType))
+            RB_PixelCost_ResetPrim(context.state->material, context.state->techType);
         ++pixelCostGlob.expectedCount;
         RB_PixelCost_BeginTiming();
     }
@@ -226,25 +225,20 @@ int RB_PixelCost_GetCostForRecordIndex(int recordIndex)
     }
 }
 
-unsigned __int64 R_PixelCost_PackedKeyForMaterial(__int64 material)
+bool RB_PixelCost_DoesPrimMatch(const Material *material, MaterialTechniqueType techType)
 {
-    iassert( material );
-    return material;
+    const GfxPixelCostKey_s &key = pixelCostGlob.records[pixelCostGlob.recordCount].key.mtl;
+
+    return key.material == material && key.techType == techType;
 }
 
-bool RB_PixelCost_DoesPrimMatch(unsigned __int64 packedKey)
-{
-    return __PAIR64__(
-        pixelCostGlob.records[pixelCostGlob.recordCount].key.mtl.techType,
-        pixelCostGlob.records[pixelCostGlob.recordCount].key.mtl.material) == packedKey;
-}
-
-void RB_PixelCost_ResetPrim(unsigned __int64 packedKey)
+void RB_PixelCost_ResetPrim(const Material *material, MaterialTechniqueType techType)
 {
     GfxPixelCostRecord *record; // [esp+0h] [ebp-4h]
 
     record = &pixelCostGlob.records[pixelCostGlob.expectedCount];
-    record->key.packed = packedKey;
+    record->key.mtl.material = material;
+    record->key.mtl.techType = techType;
     *(uint32_t *)record->costHistory = 0;
     *(uint32_t *)&record->costHistory[2] = 0;
     *(uint32_t *)&record->costHistory[4] = 0;
