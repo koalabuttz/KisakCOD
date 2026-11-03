@@ -24,8 +24,14 @@ int g_overAllocatedSize;
 
 namespace
 {
-    // 128 MB, matching the arena size the Windows build requested.
+    // 128 MB, matching the arena size the Windows build requested. A 64-bit
+    // build expands fastfile records as it loads them (DB_NativeBlockSize), so
+    // it reserves more; pages are only committed as zones use them.
+#if defined(__x86_64__)
+    constexpr uint32_t kArenaSize = 0x20000000u;
+#else
     constexpr uint32_t kArenaSize = 0x8000000u;
+#endif
 
     uint8_t *s_arenaBase = nullptr;
     uint32_t s_pageSize = 4096;

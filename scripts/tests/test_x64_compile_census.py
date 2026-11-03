@@ -409,6 +409,13 @@ class X64DedicatedWorkflowTests(unittest.TestCase):
         self.assertIn("--target KisakCOD-dedi", self.commands)
         self.assertIn('scripts/tests/test_linux_bootstrap.py --arch x86_64 "$BINARY"', self.commands)
 
+    def test_layout_tables_and_conversion_are_checked_before_the_build(self):
+        names = [step.get("name") for step in self.job["steps"]]
+        self.assertIn('scripts/tools/gen_db_disk_layout.py --build-dir "$BUILD_DIR" --check', self.commands)
+        self.assertIn("scripts/tests/test_db_record_conversion.py", self.commands)
+        self.assertLess(names.index("Check fastfile record layout tables"), names.index("Build x86_64 KisakCOD-dedi"))
+        self.assertLess(names.index("Check 64-bit fastfile record conversion"), names.index("Build x86_64 KisakCOD-dedi"))
+
     def test_every_command_block_propagates_failure(self):
         for step in self.job["steps"]:
             if "run" in step:
