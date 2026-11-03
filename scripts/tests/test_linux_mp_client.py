@@ -35,6 +35,8 @@ SRC = ROOT / "src"
 TARGET_MODULE = ROOT / "scripts" / "platform" / "linux" / "mp_client.cmake"
 PLATFORM_LIST = ROOT / "scripts" / "platform" / "linux" / "mp_client_platform_sources.txt"
 UNAVAILABLE = SRC / "linux" / "client" / "mp_client_unavailable.cpp"
+INPUT = SRC / "linux" / "client" / "mp_client_input.cpp"
+WINDOW = SRC / "linux" / "client" / "mp_client_window.cpp"
 RUN_TIMEOUT = 120
 
 
@@ -90,6 +92,19 @@ def source_checks(checker):
     checker.require("bool Voice_Init()\n{\n    return false;" in unavailable, "voice never initializes")
     checker.require("Steam" not in unavailable and "CL_CDKeyValidate" not in unavailable,
                     "the stand-ins do not touch authentication")
+
+    # The window procedure and input replaced the input stand-ins.
+    checker.require('"${SRC_DIR}/linux/client/mp_client_input.cpp"' in module
+                    and '"${SRC_DIR}/linux/client/mp_client_window.cpp"' in module,
+                    "the client links its window procedure and input")
+    checker.require(not re.search(r"\bIN_[A-Za-z]+\s*\(", unavailable),
+                    "no input function is left among the stand-ins")
+    window_code = INPUT.read_text(encoding="utf-8") + WINDOW.read_text(encoding="utf-8")
+    checker.require('Cbuf_AddText(0, "quit\\n");' in window_code and "Com_Quit_f()" not in window_code,
+                    "closing the window queues quit instead of shutting down inside the event pump")
+    checker.require("Steam" not in window_code and "CL_CDKeyValidate" not in window_code
+                    and "connectionState" not in window_code,
+                    "the window and input code do not touch authentication or the connection")
 
 
 def run(binary, arguments, cwd, env):

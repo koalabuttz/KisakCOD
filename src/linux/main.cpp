@@ -23,6 +23,9 @@
 #include "sys_threads.h"
 #include "sys_time.h"
 #include "sys_events.h"
+#ifdef KISAK_LINUX_MP_CLIENT
+#include "client/mp_client_input.h"
+#endif
 
 #include <errno.h>
 #include <signal.h>
@@ -348,14 +351,36 @@ void Sys_FindInfo()
 // Event queue
 // ---------------------------------------------------------------------------
 
+// The next queued event Com_EventLoop has a case for. The client's window input
+// adapter also queues pointer boundaries (SE_POINTER), which the engine has no
+// use for: the window already showed or hid the cursor when it saw them. Pointer
+// motion (SE_MOUSE) is never queued; the client takes it once per frame in
+// IN_Frame, as win_input.cpp does. The dedicated server queues neither.
+static bool PollEngineEvent(sysEvent_t *result)
+{
+    while (Sys_PollQueuedEvent(result))
+    {
+        if (result->evType == SE_POINTER || result->evType == SE_MOUSE)
+            continue;
+        return true;
+    }
+    return false;
+}
+
 sysEvent_t *Win_GetEvent(sysEvent_t *result)
 {
     PROF_SCOPED("Win_GetEvent");
 
-    if (Sys_PollQueuedEvent(result)) return result;
+    if (PollEngineEvent(result)) return result;
+#ifdef KISAK_LINUX_MP_CLIENT
+    // The window procedure: once the queue is empty, the game window's events
+    // join it, as PeekMessage/DispatchMessage feed it on Windows.
+    Sys_PumpClientWindow();
+    if (PollEngineEvent(result)) return result;
+#endif
     sysEvent_t ev{};
 
-    // No window messages to pump; console input is the only external source.
+    // The console is the other external source.
     char *consoleLine = Sys_ConsoleInput();
     if (consoleLine)
     {
@@ -364,7 +389,7 @@ sysEvent_t *Win_GetEvent(sysEvent_t *result)
         I_strncpyz(copy, consoleLine, (int)length + 1);
         Sys_QueEvent(0, SE_CONSOLE, 0, 0, (int)length + 1, copy);
 
-        if (Sys_PollQueuedEvent(result)) return result;
+        if (PollEngineEvent(result)) return result;
     }
 
     ev.evTime = (int)Sys_Milliseconds();
@@ -528,9 +553,13 @@ void Sys_Print(const char *msg)
 
 void Sys_In_Restart_f()
 {
-    // The dedicated server has no input device to reinitialise; the native Linux
-    // client has none yet (see src/linux/client/mp_client_unavailable.cpp).
+#ifdef KISAK_LINUX_MP_CLIENT
+    IN_Shutdown();
+    IN_Init();
+#else
+    // The dedicated server has no input device to reinitialise.
     Com_Printf(CON_CHANNEL_SYSTEM, "in_restart: input subsystem is not present on this platform\n");
+#endif
 }
 
 void Sys_Net_Restart_f()
@@ -577,6 +606,9 @@ void Sys_Init()
         Com_Printf(CON_CHANNEL_SYSTEM, "Streaming SIMD Extensions (SSE) %ssupported\n", "not ");
 
     Com_Printf(CON_CHANNEL_SYSTEM, "\n");
+#ifdef KISAK_LINUX_MP_CLIENT
+    IN_Init();
+#endif
 }
 
 static void PrintWorkingDir()
@@ -663,6 +695,10 @@ int main(int argc, char **argv)
     Profile_Init();
     Profile_InitContext(0);
 
+#ifdef KISAK_LINUX_MP_CLIENT
+    // Before the renderer creates its window, so the window is adopted at once.
+    Sys_InstallClientWindow();
+#endif
     Com_Init(sys_cmdline);
 
     PrintWorkingDir();

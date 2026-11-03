@@ -151,12 +151,23 @@ endforeach()
 # Material_Sort and its helpers, copied from r_material_load_obj.cpp (which the
 # census blocks) the way the world front-end probe copies them.
 include(${SCRIPTS_DIR}/platform/linux/material_sort_span.cmake)
+# The game window: the Win32 window layer the renderer creates its window
+# through, and the window procedure that adopts it (mp_client_window.cpp) with
+# the SDL event host and its engine-queue adapter. The test below links the same
+# list.
+set(KISAK_MP_CLIENT_WINDOW_SOURCES
+    "${SRC_DIR}/linux/client/mp_client_window.cpp"
+    "${SRC_DIR}/linux/client/window/engine_input.cpp"
+    "${SRC_DIR}/linux/client/window/pixel_buffer.cpp"
+    "${SRC_DIR}/linux/client/window/win32_window_sdl3.cpp"
+    "${SRC_DIR}/linux/client/window/window_host.cpp")
 set(mp_client_own_sources
     "${KISAK_MATERIAL_SORT_SPAN_UNIT}"
     "${SRC_DIR}/linux/client/msvc_rand.cpp"
+    "${SRC_DIR}/linux/client/mp_client_input.cpp"
     "${SRC_DIR}/linux/client/mp_client_unavailable.cpp"
     "${SRC_DIR}/linux/client/texture_memory.cpp"
-    "${SRC_DIR}/linux/client/window/win32_window_sdl3.cpp")
+    ${KISAK_MP_CLIENT_WINDOW_SOURCES})
 
 # The Windows client's definitions without CINEMA (see r_cinematic.cpp above).
 set(KISAK_MP_CLIENT_DEFINITIONS
@@ -209,3 +220,31 @@ target_link_options(KisakCOD-mp PRIVATE -Wl,--gc-sections)
 target_link_libraries(KisakCOD-mp PRIVATE
     "${KISAK_DXVK_NATIVE_LIBRARY}" "${KISAK_OPENAL_LIBRARY}" SDL3::SDL3 Threads::Threads ${CMAKE_DL_LIBS})
 add_dependencies(KisakCOD-mp update_build_number)
+
+# The game window's asset-free test, on SDL's dummy video driver. The Win32 layer
+# asks SDL for a Vulkan window, which the dummy driver cannot make, so the test
+# wraps SDL_CreateWindowWithProperties to drop that one flag. It needs the
+# boundary's headers for the Win32 declarations, not the D3D9 library:
+# --as-needed keeps the library off it.
+add_executable(KisakCOD-mp-client-window-test
+    "${TESTS_DIR}/linux_mp_client/client_window_test.cpp"
+    ${KISAK_MP_CLIENT_WINDOW_SOURCES}
+    "${SRC_DIR}/linux/client/window/window_services.cpp"
+    "${SRC_DIR}/linux/sys_events.cpp"
+    "${SRC_DIR}/linux/sys_critical.cpp"
+    "${SRC_DIR}/linux/sys_posix.cpp")
+target_compile_features(KisakCOD-mp-client-window-test PRIVATE cxx_std_20)
+target_compile_definitions(KisakCOD-mp-client-window-test PRIVATE
+    KISAK_MP KISAK_OPENAL RELEASE_ASSERTS _FILE_OFFSET_BITS=64 _GNU_SOURCE KISAK_LINUX_SDL_MAJOR=3)
+target_include_directories(KisakCOD-mp-client-window-test SYSTEM PRIVATE "${SRC_DIR}" "${DEPS_DIR}" "${tracy_SOURCE_DIR}/public")
+target_compile_options(KisakCOD-mp-client-window-test PRIVATE ${KISAK_MP_CLIENT_OPTIONS})
+# Warnings are errors in the new code; the engine units beside it keep the
+# client's flags.
+set_source_files_properties(
+    "${TESTS_DIR}/linux_mp_client/client_window_test.cpp"
+    "${SRC_DIR}/linux/client/mp_client_window.cpp"
+    TARGET_DIRECTORY KisakCOD-mp-client-window-test
+    PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra;-Werror")
+target_link_options(KisakCOD-mp-client-window-test PRIVATE
+    -Wl,--as-needed -Wl,--gc-sections -Wl,--wrap=SDL_CreateWindowWithProperties)
+target_link_libraries(KisakCOD-mp-client-window-test PRIVATE kisak_linux_native_d3d9 SDL3::SDL3 Threads::Threads)

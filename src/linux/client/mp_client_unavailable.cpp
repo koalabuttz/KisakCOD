@@ -5,10 +5,9 @@
 //
 //   1. Optional services, answered the way the engine answers when the service
 //      is missing on Windows: no remote script debugger attached, HTTP downloads
-//      that could not start (dl_main.cpp without libcurl), no voice device
-//      (win_voice.cpp when DirectSound capture fails), no mouse initialized
-//      (win_input.cpp before IN_Startup finds one) and no window procedure
-//      (win_wndproc.cpp). Each says which Windows state it is.
+//      that could not start (dl_main.cpp without libcurl) and no voice device
+//      (win_voice.cpp when DirectSound capture fails). Each says which Windows
+//      state it is.
 //   2. The fast-file branch of a function whose unit does not compile here.
 //   3. Code that only raw-asset loading (useFastFile 0) or an attached remote
 //      debugger reaches. Neither exists in this build, so each aborts with its
@@ -23,7 +22,6 @@
 #include <client_mp/client_mp.h>
 #include <database/database.h>
 #include <gfx_d3d/r_material.h>
-#include <win32/win_input.h>
 #include <win32/win_local.h>
 #include <win32/win_net_debug.h>
 #include <xanim/xanim.h>
@@ -127,42 +125,8 @@ bool Voice_IsClientTalking(uint32_t clientNum)
     return false;
 }
 
-// src/win32/win_input.cpp with no mouse initialized (s_wmv.mouseInitialized 0):
-// IN_Frame and IN_ActivateMouse do nothing. The cursor calls have no device to
-// move or show. Keyboard and mouse input for this target is the next piece of
-// the port; until then the console (stdin) is the only input.
-void IN_Frame()
-{
-}
-
-void IN_ActivateMouse(qboolean force)
-{
-    (void)force;
-}
-
-void IN_ShowSystemCursor(BOOL show)
-{
-    (void)show;
-}
-
-void IN_SetCursorPos(tagPOINT x)
-{
-    (void)x;
-}
-
-// src/win32/win_wndproc.cpp owns the window procedure, which is what sets
-// g_wv.hWnd. Without one, g_wv.hWnd stays null: the game window is never the
-// foreground window, and asking for it to become one changes nothing.
-bool IN_IsForegroundWindow()
-{
-    return false;
-}
-
-void IN_SetForegroundWindow()
-{
-}
-
-// win_wndproc.cpp's storage; R_RegisterDvars registers all three.
+// win_wndproc.cpp's storage; R_RegisterDvars registers all three. The window
+// procedure itself is src/linux/client/mp_client_input.cpp.
 const dvar_t *r_fullscreen;
 const dvar_t *vid_xpos;
 const dvar_t *vid_ypos;
