@@ -1346,11 +1346,7 @@ void CG_ClearUnion(int32_t localClientNum, centity_s *cent)
         break;
     case ET_HELICOPTER:
     case ET_VEHICLE:
-        *(_QWORD *)&cent->pose.player.control = 0;
-        *((_QWORD *)&cent->pose.fx + 1) = 0;
-        *((_QWORD *)&cent->pose.fx + 2) = 0;
-        *((_QWORD *)&cent->pose.fx + 3) = 0;
-        *((uint32_t *)&cent->pose.fx + 8) = 0;
+        memset(&cent->pose.vehicle, 0, sizeof(cent->pose.vehicle));
         break;
     default:
         break;

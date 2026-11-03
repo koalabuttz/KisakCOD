@@ -87,7 +87,7 @@ GfxCmdDrawText2D *R_EmitBaseTextCommand(void *owner,GfxCommandAllocate allocate,
     if (!*text && cursorPos < 0)
         return 0;
     v13 = strlen(text);
-    cmd = (GfxCmdDrawText2D *)allocate(owner, RC_DRAW_TEXT_2D, (v13 + 84) & 0xFFFFFFFC);
+    cmd = (GfxCmdDrawText2D *)allocate(owner, RC_DRAW_TEXT_2D, (v13 + sizeof(GfxCmdDrawText2D)) & ~3u);
     if (!cmd)
         return 0;
     cmd->x = x;

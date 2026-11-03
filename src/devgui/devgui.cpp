@@ -161,8 +161,8 @@ uint16_t DevGui_GetMenuHandle(DevMenuItem *menu)
 {
     uint16_t handle; // [esp+0h] [ebp-4h]
 
-    handle = ((char *)menu - (char *)&devguiGlob) / 40 + 1;
-    if ((uint16_t)(((char *)menu - (char *)&devguiGlob) / 40) == 0xFFFF || handle > 0x258u)
+    handle = (menu - devguiGlob.menus) + 1;
+    if ((uint16_t)(menu - devguiGlob.menus) == 0xFFFF || handle > 0x258u)
         MyAssertHandler(
             ".\\devgui\\devgui.cpp",
             137,
@@ -171,7 +171,7 @@ uint16_t DevGui_GetMenuHandle(DevMenuItem *menu)
             handle,
             1,
             600);
-    return ((char *)menu - (char *)&devguiGlob) / 40 + 1;
+    return (menu - devguiGlob.menus) + 1;
 }
 
 int32_t DevGui_CompareMenus(const DevMenuItem *menu0, const DevMenuItem *menu1)

@@ -1327,8 +1327,8 @@ void PS_CreatePunctuationTable(script_s *script, punctuation_s *punctuations)
     punctuation_s *p; // [esp+2Ch] [ebp-4h]
 
     if (!script->punctuationtable)
-        script->punctuationtable = (punctuation_s **)GetMemory(0x400u);
-    memset((uint8_t *)script->punctuationtable, 0, 0x400u);
+        script->punctuationtable = (punctuation_s **)GetMemory(256 * sizeof(punctuation_s *));
+    memset((uint8_t *)script->punctuationtable, 0, 256 * sizeof(punctuation_s *));
     for (i = 0; punctuations[i].p; ++i)
     {
         newp = &punctuations[i];
@@ -1755,7 +1755,7 @@ define_s *PC_DefineFromString(char *string)
     memset((uint8_t *)&src, 0, sizeof(src));
     I_strncpyz(src.filename, "*extern", sizeof(src.filename));
     src.scriptstack = script;
-    src.definehash = (define_s **)GetClearedMemory(0x1000u);
+    src.definehash = (define_s **)GetClearedMemory(1024 * sizeof(define_s *));
     res = PC_Directive_define(&src);
     for (t = src.tokens; t; t = src.tokens)
     {
@@ -1889,7 +1889,7 @@ void PC_PushIndent(source_s *source, int type, parseSkip_t skip)
 {
     indent_s *indent; // [esp+0h] [ebp-4h]
 
-    indent = (indent_s *)GetMemory(0x10u);
+    indent = (indent_s *)GetMemory(sizeof(indent_s));
     indent->type = type;
     indent->script = source->scriptstack;
     indent->skip = skip;
@@ -3040,7 +3040,7 @@ source_s *LoadSourceFile(char *filename)
     source->defines = 0;
     source->indentstack = 0;
     source->skip = 0;
-    source->definehash = (define_s **)GetClearedMemory(0x1000u);
+    source->definehash = (define_s **)GetClearedMemory(1024 * sizeof(define_s *));
     PC_AddGlobalDefinesToSource(source);
     return source;
 }
@@ -4502,7 +4502,7 @@ void Statement_AddStringOperand(statement_s *statement, char *str)
 {
     expressionEntry *entry; // [esp+20h] [ebp-4h]
 
-    entry = (expressionEntry *)Z_Malloc(12, "Statement_AddStringOperand", 34);
+    entry = (expressionEntry *)Z_Malloc(sizeof(expressionEntry), "Statement_AddStringOperand", 34);
     entry->type = 1;
     entry->data.op = OP_MULTIPLY;
     entry->data.operand.internals.intVal = (int)Z_Malloc(strlen(str) + 1, "Statement_AddStringOperand", 34);
@@ -4624,7 +4624,7 @@ int MenuParse_visible(menuDef_t *menu, int handle)
     {
         flags = menu->window.dynamicFlags[0];
         Window_SetDynamicFlags(0, &menu->window, flags | 4);
-        menu->visibleExp.entries = (expressionEntry **)Z_Malloc(2400, "Statement_AddOperator", 34);
+        menu->visibleExp.entries = (expressionEntry **)Z_Malloc(600 * sizeof(expressionEntry *), "Statement_AddOperator", 34);
         if (parse_expression(handle, &menu->visibleExp, 200))
             return 1;
     }
@@ -4675,13 +4675,13 @@ int MenuParse_execExp(menuDef_t *menu, int handle)
                     Com_PrintError(CON_CHANNEL_SYSTEM, "ERROR: Expected 'X' or 'Y' after \"exp rect\" but found \"%s\"\n", token.string);
                     return 0;
                 }
-                menu->rectYExp.entries = (expressionEntry **)Z_Malloc(2400, "MenuParse_execExp", 34);
+                menu->rectYExp.entries = (expressionEntry **)Z_Malloc(600 * sizeof(expressionEntry *), "MenuParse_execExp", 34);
                 if (parse_expression(handle, &menu->rectYExp, 200))
                     return 1;
             }
             else
             {
-                menu->rectXExp.entries = (expressionEntry **)Z_Malloc(2400, "MenuParse_execExp", 34);
+                menu->rectXExp.entries = (expressionEntry **)Z_Malloc(600 * sizeof(expressionEntry *), "MenuParse_execExp", 34);
                 if (parse_expression(handle, &menu->rectXExp, 200))
                     return 1;
             }
@@ -4701,7 +4701,7 @@ int MenuParse_execExp(menuDef_t *menu, int handle)
         }
         flags = menu->window.dynamicFlags[0];
         Window_SetDynamicFlags(0, &menu->window, flags | 4);
-        menu->visibleExp.entries = (expressionEntry **)Z_Malloc(2400, "MenuParse_execExp", 34);
+        menu->visibleExp.entries = (expressionEntry **)Z_Malloc(600 * sizeof(expressionEntry *), "MenuParse_execExp", 34);
         if (parse_expression(handle, &menu->visibleExp, 200))
             return 1;
     }
@@ -4923,7 +4923,7 @@ int MenuParse_itemDef(menuDef_t *menu, int handle)
 
     if (menu->itemCount < 256)
     {
-        item = (itemDef_s *)UI_Alloc(0x174u, 4);
+        item = (itemDef_s *)UI_Alloc(sizeof(itemDef_s), 4);
         Item_Init(item, menu->imageTrack);
         if (!Item_Parse(handle, item))
         {
@@ -4949,7 +4949,7 @@ int MenuParse_execKey(menuDef_t *menu, int handle)
     keyindex = (uint8_t)keyname;
     if (!PC_Script_Parse(handle, &action))
         return 0;
-    handler = (ItemKeyHandler *)UI_Alloc(0xCu, 4);
+    handler = (ItemKeyHandler *)UI_Alloc(sizeof(ItemKeyHandler), 4);
     handler->key = keyindex;
     handler->action = action;
     handler->next = menu->onKey;
@@ -4967,7 +4967,7 @@ int MenuParse_execKeyInt(menuDef_t *menu, int handle)
         return 0;
     if (!PC_Script_Parse(handle, &action))
         return 0;
-    handler = (ItemKeyHandler *)UI_Alloc(0xCu, 4);
+    handler = (ItemKeyHandler *)UI_Alloc(sizeof(ItemKeyHandler), 4);
     handler->key = keyname;
     handler->action = action;
     handler->next = menu->onKey;
@@ -5155,7 +5155,7 @@ void Item_ValidateTypeData(itemDef_s *item, int handle)
         switch (item->type)
         {
         case 6:
-            item->typeData.listBox = (listBoxDef_s *)UI_Alloc(0x154u, 4);
+            item->typeData.listBox = (listBoxDef_s *)UI_Alloc(sizeof(listBoxDef_s), 4);
             break;
         case 4:
         case 9:
@@ -5333,7 +5333,7 @@ int ItemParse_visible(itemDef_s *item, int handle)
     {
         flags = item->window.dynamicFlags[0];
         Window_SetDynamicFlags(0, &item->window, flags | 4);
-        item->visibleExp.entries = (expressionEntry **)Z_Malloc(2400, "ItemParse_visible", 34);
+        item->visibleExp.entries = (expressionEntry **)Z_Malloc(600 * sizeof(expressionEntry *), "ItemParse_visible", 34);
         if (parse_expression(handle, &item->visibleExp, 200))
             return 1;
     }
@@ -5735,7 +5735,7 @@ int ItemParse_execKey(itemDef_s *item, int handle)
     keyindex = (uint8_t)keyname;
     if (!PC_Script_Parse(handle, &action))
         return 0;
-    handler = (ItemKeyHandler *)UI_Alloc(0xCu, 4);
+    handler = (ItemKeyHandler *)UI_Alloc(sizeof(ItemKeyHandler), 4);
     handler->key = keyindex;
     handler->action = action;
     handler->next = item->onKey;
@@ -5753,7 +5753,7 @@ int ItemParse_execKeyInt(itemDef_s *item, int handle)
         return 0;
     if (!PC_Script_Parse(handle, &action))
         return 0;
-    handler = (ItemKeyHandler *)UI_Alloc(0xCu, 4);
+    handler = (ItemKeyHandler *)UI_Alloc(sizeof(ItemKeyHandler), 4);
     handler->key = keyname;
     handler->action = action;
     handler->next = item->onKey;
@@ -5788,7 +5788,7 @@ int ItemParse_execExp(itemDef_s *item, int handle)
                             Com_PrintError(CON_CHANNEL_SYSTEM, "ERROR: Expected 'A' after \"exp forecolor\" but found \"%s\"\n", expressionType);
                             return 0;
                         }
-                        item->forecolorAExp.entries = (expressionEntry **)Z_Malloc(2400, "ItemParse_execExp", 34);
+                        item->forecolorAExp.entries = (expressionEntry **)Z_Malloc(600 * sizeof(expressionEntry *), "ItemParse_execExp", 34);
                         if (parse_expression(handle, &item->forecolorAExp, 200))
                             return 1;
                     }
@@ -5804,14 +5804,14 @@ int ItemParse_execExp(itemDef_s *item, int handle)
                     {
                         if (!I_stricmp(expressionType, "Y"))
                         {
-                            item->rectYExp.entries = (expressionEntry **)Z_Malloc(2400, "ItemParse_execExp", 34);
+                            item->rectYExp.entries = (expressionEntry **)Z_Malloc(600 * sizeof(expressionEntry *), "ItemParse_execExp", 34);
                             if (parse_expression(handle, &item->rectYExp, 200))
                                 return 1;
                         }
                     }
                     else
                     {
-                        item->rectXExp.entries = (expressionEntry **)Z_Malloc(2400, "ItemParse_execExp", 34);
+                        item->rectXExp.entries = (expressionEntry **)Z_Malloc(600 * sizeof(expressionEntry *), "ItemParse_execExp", 34);
                         if (parse_expression(handle, &item->rectXExp, 200))
                             return 1;
                     }
@@ -5825,13 +5825,13 @@ int ItemParse_execExp(itemDef_s *item, int handle)
                                 expressionType);
                             return 0;
                         }
-                        item->rectHExp.entries = (expressionEntry **)Z_Malloc(2400, "ItemParse_execExp", 34);
+                        item->rectHExp.entries = (expressionEntry **)Z_Malloc(600 * sizeof(expressionEntry *), "ItemParse_execExp", 34);
                         if (parse_expression(handle, &item->rectHExp, 200))
                             return 1;
                     }
                     else
                     {
-                        item->rectWExp.entries = (expressionEntry **)Z_Malloc(2400, "ItemParse_execExp", 34);
+                        item->rectWExp.entries = (expressionEntry **)Z_Malloc(600 * sizeof(expressionEntry *), "ItemParse_execExp", 34);
                         if (parse_expression(handle, &item->rectWExp, 200))
                             return 1;
                     }
@@ -5839,14 +5839,14 @@ int ItemParse_execExp(itemDef_s *item, int handle)
             }
             else
             {
-                item->materialExp.entries = (expressionEntry **)Z_Malloc(2400, "ItemParse_execExp", 34);
+                item->materialExp.entries = (expressionEntry **)Z_Malloc(600 * sizeof(expressionEntry *), "ItemParse_execExp", 34);
                 if (parse_expression(handle, &item->materialExp, 200))
                     return 1;
             }
         }
         else
         {
-            item->textExp.entries = (expressionEntry **)Z_Malloc(2400, "ItemParse_execExp", 34);
+            item->textExp.entries = (expressionEntry **)Z_Malloc(600 * sizeof(expressionEntry *), "ItemParse_execExp", 34);
             if (parse_expression(handle, &item->textExp, 200))
                 return 1;
         }
@@ -5855,7 +5855,7 @@ int ItemParse_execExp(itemDef_s *item, int handle)
     {
         flags = item->window.dynamicFlags[0];
         Window_SetDynamicFlags(0, &item->window, flags | 4);
-        item->visibleExp.entries = (expressionEntry **)Z_Malloc(2400, "ItemParse_execExp", 34);
+        item->visibleExp.entries = (expressionEntry **)Z_Malloc(600 * sizeof(expressionEntry *), "ItemParse_execExp", 34);
         if (parse_expression(handle, &item->visibleExp, 200))
             return 1;
     }
@@ -6291,7 +6291,7 @@ char Menu_New(int handle, int imageTrack)
 {
     menuDef_t *menu; // [esp+0h] [ebp-4h]
 
-    menu = (menuDef_t *)UI_Alloc(0x11Cu, 4);
+    menu = (menuDef_t *)UI_Alloc(sizeof(menuDef_t), 4);
     Menu_Init(menu, imageTrack);
     if (Menu_Parse(handle, menu))
     {

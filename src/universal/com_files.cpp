@@ -2502,8 +2502,11 @@ const char **FS_ListFilteredFiles(
     FS_ReturnPath(sanitizedPath, zpath, &pathDepth);
     if (sanitizedPath[0])
         ++pathDepth;
-    user = Hunk_UserCreate(0x20000, "FS_ListFilteredFiles", 0, 0, 3);
-    list = (const char **)Hunk_UserAlloc(user, 0x8004u, 4);
+    // The list holds the hunk user, up to 0x1FFF names (FS_AddFileToList's
+    // limit) and a terminator; the rest of the hunk holds the names' text.
+    // Hunk_UserCreate takes whole 4 KB pages (0x20000 on i386).
+    user = Hunk_UserCreate((0x17FFC + 0x2001 * sizeof(const char *) + 0xFFF) & ~0xFFFu, "FS_ListFilteredFiles", 0, 0, 3);
+    list = (const char **)Hunk_UserAlloc(user, 0x2001 * sizeof(const char *), 4);
     *list++ = (const char *)user;
     for (search = searchPath; search; search = search->next)
     {
@@ -2662,12 +2665,12 @@ const char **FS_ListFilteredFilesInLocation(
         {
             if (locationSearchPath)
             {
-                locationSearch->next = (searchpath_s *)Hunk_UserAlloc(user, 0x1Cu, 4);
+                locationSearch->next = (searchpath_s *)Hunk_UserAlloc(user, sizeof(searchpath_s), 4);
                 locationSearch = locationSearch->next;
             }
             else
             {
-                locationSearchPath = (searchpath_s *)Hunk_UserAlloc(user, 0x1Cu, 4);
+                locationSearchPath = (searchpath_s *)Hunk_UserAlloc(user, sizeof(searchpath_s), 4);
                 locationSearch = locationSearchPath;
             }
             locationSearch->next = 0;

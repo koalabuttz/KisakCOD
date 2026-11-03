@@ -1402,7 +1402,7 @@ int R_EmitPointLightPartitionSurfs(
         drawSurfCount = frontEndDataOut->drawSurfCount - firstDrawSurf;
         if (drawSurfCount)
         {
-            memcpy(partition, light, 0x40u);
+            partition->light = *light;
             partition->info.drawSurfs = &frontEndDataOut->drawSurfs[firstDrawSurf];
             partitions[partitionCount++].info.drawSurfCount = drawSurfCount;
         }

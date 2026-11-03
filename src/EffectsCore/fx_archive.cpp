@@ -21,11 +21,11 @@ void FX_Restore(int32_t clientIndex, MemoryFile *memFile)
     if (!systemBuffers)
         MyAssertHandler(".\\EffectsCore\\fx_archive.cpp", 223, 0, "%s", "systemBuffers");
     FX_RestoreEffectDefTable(memFile, &table);
-    MemFile_ReadData(memFile, 2656, (uint8_t *)p);
+    MemFile_ReadData(memFile, sizeof(FxSystem), (uint8_t *)p);
     if (!*((_BYTE *)p + 2526) || *((uint32_t *)p + 627))
         Com_Error(ERR_DROP, "Invalid save file");
     FX_LinkSystemBuffers((FxSystem *)p, systemBuffers);
-    MemFile_ReadData(memFile, 291968, (uint8_t *)systemBuffers);
+    MemFile_ReadData(memFile, sizeof(FxSystemBuffers), (uint8_t *)systemBuffers);
     FX_FixupEffectDefHandles((FxSystem *)p, &table);
     MemFile_ReadData(memFile, 4, (uint8_t *)&v2);
     v4 = v2;
@@ -197,10 +197,10 @@ void FX_Save(int32_t clientIndex, MemoryFile *memFile)
         MyAssertHandler(".\\EffectsCore\\fx_archive.cpp", 270, 0, "%s", "!system->isArchiving");
     system->isArchiving = 1;
     FX_SaveEffectDefTable(system, memFile);
-    MemFile_WriteData(memFile, 2656, system);
+    MemFile_WriteData(memFile, sizeof(FxSystem), system);
     UsedSize = MemFile_GetUsedSize(memFile);
     // ProfMem_Begin("systemBuffers", UsedSize);
-    MemFile_WriteData(memFile, 291968, systemBuffers);
+    MemFile_WriteData(memFile, sizeof(FxSystemBuffers), systemBuffers);
     v3 = MemFile_GetUsedSize(memFile);
     // ProfMem_End(v3);
     p = system;

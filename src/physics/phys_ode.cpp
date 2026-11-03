@@ -122,7 +122,7 @@ void Phys_Init()
     if (!physInited)
     {
         memset((uint8_t *)&physGlob, 0, sizeof(physGlob));
-        Pool_Init((char *)physGlob.userData, &physGlob.userDataPool, 0x70u, 0x200u);
+        Pool_Init((char *)physGlob.userData, &physGlob.userDataPool, sizeof(PhysObjUserData), 0x200u);
         ODE_Init();
         for (worldIndex = PHYS_WORLD_DYNENT; worldIndex < PHYS_WORLD_COUNT; ++worldIndex)
         {
