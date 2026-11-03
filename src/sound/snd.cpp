@@ -3085,7 +3085,7 @@ void __cdecl DebugDrawWorldSound3D(
                 iassert(chaninfo->alias0->soundFile);
 
                 org[2] = org[2] - fontsize * 12.0;
-                strcpy(buffer, "File: ");
+                I_strncpyz(buffer, "File: ", sizeof(buffer));
                 Com_GetSoundFileName(
                     chaninfo->alias0,
                     &buffer[&buffer[strlen(buffer) + 1] - &buffer[1]],

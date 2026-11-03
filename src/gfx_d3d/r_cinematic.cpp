@@ -754,12 +754,12 @@ bool __cdecl R_Cinematic_BinkOpen(
                 "%s\n\t(playbackFlags) = %i",
                 "(playbackFlags & 0x00000008)",
                 playbackFlags);
-        _snprintf(filepath[0], 0x100u, "video/%s.%s", filename, "bik");
+        snprintf(filepath[0], 0x100u, "video/%s.%s", filename, "bik");
     }
     else
     {
-        _snprintf(filepath[0], 0x100u, "%s\\main\\video\\%s.%s", cwd, filename, "bik");
-        _snprintf(filepath[1], 0x100u, "%s\\raw\\video\\%s.%s", cwd, filename, "bik");
+        snprintf(filepath[0], 0x100u, "%s\\main\\video\\%s.%s", cwd, filename, "bik");
+        snprintf(filepath[1], 0x100u, "%s\\raw\\video\\%s.%s", cwd, filename, "bik");
     }
     if (R_Cinematic_BinkOpenPath(filepath[0], playbackFlags, errText, errTextSize))
         return 1;
@@ -792,7 +792,7 @@ char __cdecl R_Cinematic_BinkOpenPath(
             if (!rawfile)
             {
                 if (errText)
-                    _snprintf(errText, errTextSize, "Couldn't find rawfile '%s' in db", filepath);
+                    snprintf(errText, errTextSize, "Couldn't find rawfile '%s' in db", filepath);
                 return 0;
             }
             filledBuffer = rawfile->buffer;
@@ -842,7 +842,7 @@ char __cdecl R_Cinematic_BinkOpenPath(
     if (errText)
     {
         Error = (const char *)BinkGetError();
-        _snprintf(errText, errTextSize, "BinkOpen: %s", Error);
+        snprintf(errText, errTextSize, "BinkOpen: %s", Error);
     }
     return 0;
 }
@@ -887,7 +887,7 @@ char __cdecl R_Cinematic_BinkOpenPath_MemoryResident(
     if (!fileHandle)
     {
         if (errText)
-            _snprintf(errText, errTextSize, "Open failed");
+            snprintf(errText, errTextSize, "Open failed");
         return 0;
     }
     fileSize = FileWrapper_GetFileSize(fileHandle);
@@ -896,9 +896,9 @@ char __cdecl R_Cinematic_BinkOpenPath_MemoryResident(
         if (errText)
         {
             if (fileSize)
-                _snprintf(errText, errTextSize, "GetFileSize failed (%i)", fileSize);
+                snprintf(errText, errTextSize, "GetFileSize failed (%i)", fileSize);
             else
-                _snprintf(errText, errTextSize, "Zero file size");
+                snprintf(errText, errTextSize, "Zero file size");
         }
     LABEL_14:
         fclose(fileHandle);
@@ -908,7 +908,7 @@ char __cdecl R_Cinematic_BinkOpenPath_MemoryResident(
     if (fileSize > freeBufferSpace)
     {
         if (errText)
-            _snprintf(errText, errTextSize, "Cinematic too big (%i > %i)", fileSize, freeBufferSpace);
+            snprintf(errText, errTextSize, "Cinematic too big (%i > %i)", fileSize, freeBufferSpace);
         goto LABEL_14;
     }
     allocedBuffer = (void *)CinematicHunk_Alloc(&cinematicGlob.residentHunk, fileSize);
@@ -918,7 +918,7 @@ char __cdecl R_Cinematic_BinkOpenPath_MemoryResident(
     if (numberOfBytesRead == fileSize)
         return 1;
     if (errText)
-        _snprintf(errText, errTextSize, "Read was short (wanted %i got %i)", fileSize, numberOfBytesRead);
+        snprintf(errText, errTextSize, "Read was short (wanted %i got %i)", fileSize, numberOfBytesRead);
     CinematicHunk_Reset(&cinematicGlob.residentHunk);
     return 0;
 }

@@ -1287,7 +1287,7 @@ void __cdecl R_LightVisHistoryFilename(char *bspName, char *filename)
     Com_StripExtension(bspName, filename);
     if (strlen(filename) + 5 >= 0x40)
         Com_Error(ERR_DROP, "light grid log filename %s.grid is too long", filename);
-    strcat(filename, ".grid");
+    I_strncat(filename, 64, ".grid");
 }
 
 void __cdecl R_SaveLightVisHistory()
