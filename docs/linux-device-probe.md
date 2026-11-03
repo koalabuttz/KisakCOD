@@ -45,7 +45,9 @@ DXVK's own fatal errors abort too (see Limits).
 
 `r_init.cpp` owns the window on Windows. It calls `CreateWindowExA`,
 `MonitorFromPoint`, `EnumDisplayMonitors`, `GetMonitorInfoA`, `GetSystemMetrics`
-and friends, and stores `IDirect3D9::GetAdapterMonitor`'s `HMONITOR`. Two pieces
+and friends, and stores `IDirect3D9::GetAdapterMonitor`'s `HMONITOR`.
+`r_screenshot.cpp` adds `MonitorFromWindow` and `ClientToScreen` for windowed
+screenshots. Two pieces
 let it compile and run unmodified:
 
 - `src/linux/win32_window.h` declares those calls with the engine's stdcall

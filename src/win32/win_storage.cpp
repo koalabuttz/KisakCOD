@@ -599,7 +599,13 @@ void LiveStorage_Encrypt(StatsFile *statsFile)
     uint32_t key[4]; // [esp+5Ch] [ebp-10h] BYREF
 
     *(uint32_t *)statsFile->magic = *(uint32_t *)"iwm0";
+#ifdef _WIN32
     statsFile->nonce = timeGetTime();
+#else
+    // Native Linux has no winmm. The nonce only has to differ between writes and
+    // is stored in the file, so any millisecond clock will do.
+    statsFile->nonce = Sys_Milliseconds();
+#endif
     LiveStorage_GetCryptKey(statsFile->nonce, (unsigned __int8 *)key);
     Com_BlockChecksum128(
         (unsigned __int8 *)&statsFile->body.statsData,

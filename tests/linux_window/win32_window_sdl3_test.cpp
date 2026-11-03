@@ -98,6 +98,17 @@ void CheckWithoutVideo()
     Check(!DestroyWindow(reinterpret_cast<HWND>(&unrelated)), "an unknown pointer is not destroyed");
     Check(!ShowWindow(reinterpret_cast<HWND>(&unrelated), SW_SHOW), "an unknown pointer is not shown");
 
+    // r_screenshot.cpp's windowed path: MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST),
+    // then ClientToScreen. A handle that is no window has no monitor, whatever the
+    // flags, and its point is left alone.
+    Check(MonitorFromWindow(nullptr, MONITOR_DEFAULTTONEAREST) == nullptr, "a null handle has no monitor");
+    Check(MonitorFromWindow(reinterpret_cast<HWND>(&unrelated), MONITOR_DEFAULTTOPRIMARY) == nullptr,
+          "an unknown pointer has no monitor, even with MONITOR_DEFAULTTOPRIMARY");
+    tagPOINT origin{7, 9};
+    Check(!ClientToScreen(reinterpret_cast<HWND>(&unrelated), &origin) && origin.x == 7 && origin.y == 9,
+          "ClientToScreen refuses an unknown pointer and leaves the point unchanged");
+    Check(!ClientToScreen(nullptr, &origin), "ClientToScreen refuses a null handle");
+
     tagRECT rect{10, 20, 650, 500};
     Check(AdjustWindowRectEx(&rect, WS_VISIBLE | WS_CAPTION | WS_SYSMENU, FALSE, 0) == TRUE,
           "AdjustWindowRectEx accepts a rectangle");

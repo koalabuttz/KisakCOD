@@ -237,6 +237,37 @@ HWND WINAPI GetActiveWindow()
     return KnownWindow(reinterpret_cast<HWND>(focus)) ? reinterpret_cast<HWND>(focus) : nullptr;
 }
 
+// Windows reports ERROR_INVALID_WINDOW_HANDLE and no monitor for a handle that is
+// not a window, whatever dwFlags says; a window on no display follows dwFlags.
+HMONITOR WINAPI MonitorFromWindow(HWND hwnd, DWORD dwFlags)
+{
+    SDL_Window *const window = KnownWindow(hwnd);
+    if (!window)
+        return nullptr;
+    const SDL_DisplayID display = SDL_GetDisplayForWindow(window);
+    if (display)
+        return ToMonitor(display);
+    if (dwFlags == MONITOR_DEFAULTTOPRIMARY || dwFlags == MONITOR_DEFAULTTONEAREST)
+        return ToMonitor(SDL_GetPrimaryDisplay());
+    return nullptr;
+}
+
+// SDL3 reports the client area's position, which is what ClientToScreen adds.
+// Where the window system gives no global position (Wayland), SDL answers 0,0.
+BOOL WINAPI ClientToScreen(HWND hWnd, tagPOINT *lpPoint)
+{
+    SDL_Window *const window = KnownWindow(hWnd);
+    if (!window || !lpPoint)
+        return FALSE;
+    int x = 0;
+    int y = 0;
+    if (!SDL_GetWindowPosition(window, &x, &y))
+        return FALSE;
+    lpPoint->x += x;
+    lpPoint->y += y;
+    return TRUE;
+}
+
 HMONITOR WINAPI MonitorFromPoint(tagPOINT pt, DWORD dwFlags)
 {
     if (!EnsureVideo())

@@ -283,8 +283,14 @@ void Sys_DetectCpuVendorAndName(char *vendor, char *name)
 
 void Sys_DetectVideoCard(int descLimit, char *description)
 {
+#ifdef KISAK_LINUX_MP_CLIENT
+    // Sys_FindInfo runs before the renderer opens a device, so the adapter is not
+    // known yet; the renderer logs DXVK's adapter when it creates the device.
+    I_strncpyz(description, "Direct3D 9 through DXVK Native (adapter reported by the renderer)", descLimit);
+#else
     // A dedicated server has no video device; say so rather than inventing one.
     I_strncpyz(description, "None (dedicated server)", descLimit);
+#endif
 }
 
 // Short arithmetic benchmark producing a comparable GHz figure, used only for
@@ -506,7 +512,14 @@ void Sys_Quit()
 
 void Sys_Print(const char *msg)
 {
+#ifdef KISAK_LINUX_MP_CLIENT
+    // A client build's Com_PrintMessage already copies every message to stderr
+    // (the Windows client's debug console). Writing it to stdout as well would
+    // show each line twice in a terminal.
+    (void)msg;
+#else
     Conbuf_AppendTextInMainThread(msg);
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -515,7 +528,8 @@ void Sys_Print(const char *msg)
 
 void Sys_In_Restart_f()
 {
-    // The dedicated server has no input device to reinitialise.
+    // The dedicated server has no input device to reinitialise; the native Linux
+    // client has none yet (see src/linux/client/mp_client_unavailable.cpp).
     Com_Printf(CON_CHANNEL_SYSTEM, "in_restart: input subsystem is not present on this platform\n");
 }
 
@@ -578,21 +592,30 @@ static void PrintWorkingDir()
 
 namespace
 {
+#ifdef KISAK_LINUX_MP_CLIENT
+    const char *kVersionBanner = "KisakCOD multiplayer client (native Linux)\n";
+    const char *kProgramName = "KisakCOD-mp";
+    const char *kExampleArguments = "+set fs_basepath <game folder>  +devmap mp_crash";
+    const char *kInitializedLine = "Multiplayer client initialized (native Linux port; gameplay unverified)\n";
+#else
     const char *kVersionBanner = "KisakCOD dedicated server (native Linux)\n";
+    const char *kProgramName = "kisakcod-dedi";
+    const char *kExampleArguments = "+set dedicated 2  +map mp_crash";
+    const char *kInitializedLine = "Dedicated server initialized (native Linux port; gameplay unverified)\n";
+#endif
 
     void PrintUsage(FILE *stream)
     {
         fputs(kVersionBanner, stream);
+        fprintf(stream, "Usage: %s [options] [+<command> ...]\n", kProgramName);
         fputs(
-            "Usage: kisakcod-dedi [options] [+<command> ...]\n"
             "\n"
             "Options:\n"
             "  --help       Show this help and exit.\n"
             "  --version    Show the build version and exit.\n"
-            "\n"
-            "Engine arguments such as  +set dedicated 2  +map mp_crash  are passed\n"
-            "through unchanged.\n",
+            "\n",
             stream);
+        fprintf(stream, "Engine arguments such as  %s  are passed\nthrough unchanged.\n", kExampleArguments);
     }
 }
 
@@ -617,9 +640,9 @@ int main(int argc, char **argv)
     if (!BuildCommandLine(argc, argv))
     {
         fprintf(stderr,
-            "kisakcod-dedi: command line too long: the arguments after the program name "
+            "%s: command line too long: the arguments after the program name "
             "must fit in %zu bytes\n",
-            sizeof(sys_cmdline) - 1);
+            kProgramName, sizeof(sys_cmdline) - 1);
         return 1;
     }
 
@@ -645,7 +668,13 @@ int main(int argc, char **argv)
     PrintWorkingDir();
 
     Steam_Init(); // Announces the unavailable authentication backend; never bypasses it.
-    Com_Printf(CON_CHANNEL_SYSTEM, "Dedicated server initialized (native Linux port; gameplay unverified)\n");
+#ifdef KISAK_LINUX_MP_CLIENT
+    // WinMain's client step: load the player's stats (LiveStorage) once the
+    // file system is up.
+    if (!com_dedicated->current.integer)
+        Cbuf_AddText(0, "readStats\n");
+#endif
+    Com_Printf(CON_CHANNEL_SYSTEM, "%s", kInitializedLine);
 
     // Main loop. Outstanding signals are actioned here, on the main thread,
     // where running an engine command is safe.

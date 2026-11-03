@@ -1,0 +1,9 @@
+# Windows platform units (WIN32_SRC in scripts/common_files.cmake) that the
+# native Linux multiplayer client links as they are. Everything else in WIN32_SRC
+# is replaced by src/linux.
+#
+# Read by scripts/platform/linux/mp_client.cmake (KisakCOD-mp) and by
+# scripts/tests/run_client_compile_census.py, which compiles these with the
+# client definitions next to the engine groups. So a unit here has the same
+# compile proof as any census source. Paths are relative to the repository root.
+src/win32/win_storage.cpp

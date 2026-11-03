@@ -210,6 +210,7 @@ set(KISAK_WORLD_DRAW_OWN_NATIVE_SOURCES
     "${SRC_DIR}/linux/tools/world_draw_engine.cpp"
     "${SRC_DIR}/linux/tools/world_draw_probe.cpp"
     "${SRC_DIR}/linux/tools/world_draw_probe_boundary.cpp"
+    "${SRC_DIR}/linux/client/texture_memory.cpp"
     "${SRC_DIR}/linux/tools/engine_scene_renderer.cpp"
     "${SRC_DIR}/linux/tools/engine_effects.cpp"
     "${SRC_DIR}/linux/tools/engine_vision.cpp"

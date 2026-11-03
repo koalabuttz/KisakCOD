@@ -111,6 +111,23 @@ class BlockedListTests(unittest.TestCase):
                 self.assertTrue((ROOT / path).is_file(), path)
                 self.assertTrue(path.endswith(".cpp"))
 
+    def test_platform_units_must_be_windows_platform_sources(self):
+        win32 = [ROOT / "src" / "win32" / "win_storage.cpp", ROOT / "src" / "win32" / "win_main.cpp"]
+        with tempfile.TemporaryDirectory(prefix="kisak-census-platform-") as workdir:
+            listed = Path(workdir) / "platform.txt"
+            listed.write_text("# header\n\nsrc/win32/win_storage.cpp  # stats\n", encoding="utf-8")
+            self.assertEqual(census.load_platform_sources(listed, win32),
+                             [("WIN32_SRC", (ROOT / "src" / "win32" / "win_storage.cpp").resolve())])
+            listed.write_text("src/qcommon/common.cpp\n", encoding="utf-8")
+            with self.assertRaises(census.CensusError):
+                census.load_platform_sources(listed, win32)
+
+    @unittest.skipUnless(shutil.which("cmake"), "cmake is required to list the client sources")
+    def test_the_checked_in_platform_list_is_censused(self):
+        win32 = [path for _, path in census.list_sources("cmake", ["WIN32_SRC"])]
+        platform = census.load_platform_sources(census.PLATFORM_LIST, win32)
+        self.assertIn(("WIN32_SRC", (ROOT / "src" / "win32" / "win_storage.cpp").resolve()), platform)
+
 
 @unittest.skipUnless(shutil.which("cmake"), "cmake is required to list the client sources")
 class FakeCompilerTests(unittest.TestCase):

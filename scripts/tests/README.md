@@ -313,6 +313,24 @@ turns the map's glow off or replaces, changes or adds to its glow and film
 while the draw mode with several of them off still stops at `stage=direct3d`.
 All thirty-two exit 1 and write nothing.
 
+### Multiplayer client
+
+`KisakCOD-mp` (`-DKISAK_BUILD_LINUX_MP_CLIENT=ON`, with the native D3D9 boundary,
+SDL3 and an OpenAL library) is the whole game in one process
+([guide](../../docs/linux-mp-client.md)). With the D3D9 and OpenAL stand-ins:
+
+```sh
+LD_LIBRARY_PATH=<sdl3-sdk>/lib:<d3d9 stand-in dir>:<openal stand-in dir> SDL_VIDEODRIVER=dummy \
+  python3 scripts/tests/test_linux_mp_client.py --binary <bin>/KisakCOD-mp
+```
+
+The script checks the target's sources, then runs the client from temporary
+trees with no game data. An empty base path must be refused at the file system
+check, and a tree with only the stub `fileSysCheck.cfg` must stop at the
+client's autoconfigure step for want of `configure_mp.csv`. Both exit 1, print
+each line once and write only under `fs_homepath`. Without `--binary` only the
+source checks run.
+
 ## World front-end checks
 
 ```sh

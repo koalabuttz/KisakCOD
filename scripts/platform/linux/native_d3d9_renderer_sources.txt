@@ -24,6 +24,7 @@ src/gfx_d3d/r_material.cpp
 src/gfx_d3d/r_model_lighting.cpp
 src/gfx_d3d/r_rendertarget.cpp
 src/gfx_d3d/r_scene.cpp
+src/gfx_d3d/r_screenshot.cpp
 src/gfx_d3d/r_setstate_d3d.cpp
 src/gfx_d3d/r_shade.cpp
 src/gfx_d3d/r_state.cpp

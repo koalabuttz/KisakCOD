@@ -292,7 +292,7 @@ rule. Each fix is its own commit.
 
 ## Integration with the native D3D9 boundary
 
-The boundary ([linux-native-d3d9.md](linux-native-d3d9.md)) proves 23 renderer
+The boundary ([linux-native-d3d9.md](linux-native-d3d9.md)) proves 24 renderer
 units compile through DXVK Native's real `d3d9.h`, `r_scene.cpp` and
 `rb_backend.cpp` among them. Checked locally against the pinned DXVK 2.7.1
 headers with the engine's own dialect (`-std=gnu++20`, which is what CMake gives
