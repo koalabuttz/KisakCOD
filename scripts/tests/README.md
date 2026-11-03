@@ -139,9 +139,9 @@ python3 scripts/tests/run_world_surface_checks.py --config RelWithDebInfo
 python3 scripts/tests/run_world_surface_checks.py --list
 ```
 
-This runner performs no CMake configure and no engine build. It compiles nine
+This runner performs no CMake configure and no engine build. It compiles ten
 standalone test translation units directly with `-m32 -std=c++20 -Werror` and runs
-them, then runs the bundle prepare script, for ten checks:
+them, then runs the bundle prepare script, for eleven checks:
 
 | Check | Source | Covers |
 | --- | --- | --- |
@@ -152,7 +152,8 @@ them, then runs the bundle prepare script, for ten checks:
 | `world_lit_bundle` | `tests/linux_renderer/world_lit_bundle_test.cpp` | lit loader refusals: program pair hash and length, widened geometry counts, index walk, colour-map sampler, exact constant set, lightmap layout |
 | `world_frontend_invariants` | `tests/linux_asset_export/world_frontend_invariants_test.cpp` | the rules the offline world front-end probe holds each frame to, and its spawn-point camera scan ([guide](../../docs/linux-world-frontend.md#a-real-map-the-offline-front-end-probe)) |
 | `world_device_rules` | `tests/linux_asset_export/world_device_rules_test.cpp` | the rules the world device probe holds each texture, shader and vertex/index buffer to ([guide](../../docs/linux-world-device-probe.md)) |
-| `world_draw_rules` | `tests/linux_asset_export/world_draw_rules_test.cpp` | what the world draw probe holds a drawn frame to: the back-buffer measurement, the colour, coverage, brightness, repeat and camera rules, and the draw counts, on frames built in memory ([guide](../../docs/linux-world-draw-probe.md)) |
+| `world_draw_rules` | `tests/linux_asset_export/world_draw_rules_test.cpp` | what the world draw probe holds a drawn frame to: the back-buffer measurement, the colour, coverage, brightness, repeat and camera rules, the draw counts, and the free camera's static model, shadow and effect counts, on frames built in memory ([guide](../../docs/linux-world-draw-probe.md)) |
+| `map_effects` | `tests/linux_asset_export/map_effects_test.cpp` | the reader the free camera plays a map's own effects from: the script tokenizer, the effect table, the createfx list and the effect plan, on script text the test writes itself ([guide](../../docs/linux-free-camera.md#the-maps-effects)) |
 | `world_image_capture` | `tests/linux_asset_export/world_image_capture_test.cpp` | capture bounds, name filter, duplicate rule, disabled path |
 | `world_surface_prepare` | `test_world_surface_prepare.py` | the prepare step's trust boundary over archives it writes itself |
 

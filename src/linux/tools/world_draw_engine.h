@@ -57,6 +57,9 @@ struct FrameResult
     wdr::FrameStats stats;
     wdr::DrawCounts counts;
     wdr::SceneCounts scene;
+    // The effect surfaces, meshes and draws of the frame. The effects system's
+    // own counts (running, effects, elements) are its host's to fill.
+    wdr::EffectCounts effects;
     // Surfaces this frame moved into the static model cache (R_CacheStaticModelSurface):
     // a view has not settled while it is filling.
     uint32_t smcPatches = 0;
@@ -82,12 +85,15 @@ void PresentEmptyFrame();
 // view: x, y, width, height, the tangents, vieworg, viewaxis, zNear and time.
 void PrepareRefdef(refdef_s &refdef);
 // One frame of that view, call for call as R_GenerateReflectionRawData draws a
-// cubemap face (without the effects update), then the draw counts and, when
-// readBack is set, the measured back buffer. Requires the pre-tessellated index
-// buffers to agree before the frame and a ready device after it. inspect, when
-// given, sees the front end's view after R_RenderScene, before the backend runs.
+// cubemap face, then the draw counts and, when readBack is set, the measured
+// back buffer. Requires the pre-tessellated index buffers to agree before the
+// frame and a ready device after it. inspect, when given, sees the front end's
+// view after R_RenderScene, before the backend runs. effects, when given, runs
+// where R_GenerateReflectionRawData updates the effects: after R_SetLodOrigin,
+// before R_RenderScene (engine_effects.h); without it no effect is updated.
 FrameResult DrawRefdef(refdef_s &refdef, bool readBack = true,
-                       const std::function<void(const GfxViewInfo &)> &inspect = {});
+                       const std::function<void(const GfxViewInfo &)> &inspect = {},
+                       const std::function<void(const refdef_s &)> &effects = {});
 // The renderer warnings that say something was not drawn ("... - not drawing
 // model", "Too many visible static models", ...) which R_WarnOncePerFrame has
 // printed since the process started, by their R_WARN_ names. Empty when none.

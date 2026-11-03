@@ -22,6 +22,8 @@
 //     windowed device.
 //   * DrawFrame: a refdef from the camera view (FillRefdef), drawn with
 //     world_draw_engine.h DrawRefdef. The view must cover the whole scene.
+//     With effects on, the map's own effects (engine_effects.h) start after
+//     each load, stop before each unload and are updated in every frame.
 //   * Shutdown: the client's renderer shutdown, R_Shutdown(1), which also
 //     destroys the window and releases the device.
 //
@@ -39,6 +41,7 @@
 
 #include <linux/client/view/frame_owner.h>
 
+#include "engine_effects.h"
 #include "world_draw_engine.h"
 
 #include <memory>
@@ -60,8 +63,10 @@ public:
     // R_Init has run on this thread at `extent`, its graphics zones are loaded,
     // and no map is. readBack measures the back buffer after every draw
     // (LastFrame); without it a frame is drawn and checked but not read back.
-    // Throws std::runtime_error when the renderer is not in that state.
-    EngineSceneRenderer(kisak::view::ViewExtent extent, bool readBack);
+    // effects plays the map's own effects (engine_effects.h); a map whose
+    // effects cannot be planned then fails to load. Throws std::runtime_error
+    // when the renderer is not in that state.
+    EngineSceneRenderer(kisak::view::ViewExtent extent, bool readBack, bool effects = false);
     ~EngineSceneRenderer() override;
     EngineSceneRenderer(const EngineSceneRenderer &) = delete;
     EngineSceneRenderer &operator=(const EngineSceneRenderer &) = delete;
@@ -82,6 +87,8 @@ public:
     void RequestReset() { resetRequested_ = true; }
 
     const kisak_world_draw_engine::FrameResult &LastFrame() const { return last_; }
+    // The map's effects, when this renderer plays them; nullptr otherwise.
+    const kisak_world_draw_engine::MapEffects *Effects() const { return effects_.get(); }
     const std::string &WorldName() const { return worldName_; }
     kisak::view::ViewExtent Extent() const { return extent_; }
     const EngineCounters &Counters() const { return counters_; }
@@ -97,6 +104,7 @@ private:
     bool readBack_;
     bool mapLoaded_ = false, shutdown_ = false, resetRequested_ = false;
     std::unique_ptr<refdef_s> refdef_;
+    std::unique_ptr<kisak_world_draw_engine::MapEffects> effects_;
     kisak_world_draw_engine::FrameResult last_;
     std::string worldName_, problem_;
     EngineCounters counters_;

@@ -201,8 +201,9 @@ void __cdecl CL_InitDedicated()
     R_ConfigureRenderer(&config);
     if (!r_loadForRenderer)
         R_RegisterDvars();
-    // The effects dvars the scene reads every frame. No effects system starts,
-    // so no mark exists: fx_marks off is what a player with marks disabled has.
+    // The effects dvars the scene and the free camera's effects read every
+    // frame. No effect makes a mark here: fx_marks off is what a player with
+    // marks disabled has.
     FX_RegisterDvars();
     Dvar_SetBool(const_cast<dvar_s *>(fx_marks), false);
     Sys_HideSplashWindow();
@@ -282,6 +283,13 @@ void Kisak_StartWorldDraw(WorldDrawMode drawMode, const char *mapName, const wf:
             Require(dvar && dvar->current.enabled, "start",
                     std::string(dvar ? dvar->name : "a draw switch") +
                         " is off; the free camera checks the static models and sun shadow it draws");
+    // The same for the map's own effects, which the free camera plays and checks
+    // (engine_effects.h, world_draw_rules.h CheckFreeCameraCounts).
+    if (freeCamera)
+        for (const dvar_s *dvar : {fx_enable, fx_draw})
+            Require(dvar && dvar->current.enabled, "start",
+                    std::string(dvar ? dvar->name : "an effects switch") +
+                        " is off; the free camera checks the effects it plays");
     Require(frontEndDataOut && frontEndDataOut->commands && frontEndDataOut->commands->cmds, "start",
             "the render commands are not set up (R_ConfigureRenderer did not run)");
 

@@ -69,8 +69,9 @@ void RecoverDevice()
 }
 } // namespace
 
-EngineSceneRenderer::EngineSceneRenderer(ViewExtent extent, bool readBack)
-    : extent_(extent), readBack_(readBack), refdef_(std::make_unique<refdef_s>())
+EngineSceneRenderer::EngineSceneRenderer(ViewExtent extent, bool readBack, bool effects)
+    : extent_(extent), readBack_(readBack), refdef_(std::make_unique<refdef_s>()),
+      effects_(effects ? std::make_unique<wde::MapEffects>() : nullptr)
 {
     wde::RequireStartedRenderer();
     wde::Require(!extent.Empty(), "renderer", "the renderer must start at a real extent");
@@ -112,12 +113,16 @@ bool EngineSceneRenderer::LoadMap(const std::string &map, std::string &error)
         try
         {
             worldName_ = wde::LoadMap(map.c_str());
+            if (effects_)
+                effects_->Start(map.c_str());
         }
         catch (const std::exception &failure)
         {
             // Nothing of a failed map stays held. If that fails too, the next load is
             // refused, because the map is still held.
             std::string reason = failure.what();
+            if (effects_)
+                effects_->Stop();
             if (wde::MapHeld())
             {
                 try
@@ -151,6 +156,9 @@ void EngineSceneRenderer::UnloadMap() noexcept
     worldName_.clear();
     try
     {
+        // CG_Shutdown stops the effects before the map goes.
+        if (effects_)
+            effects_->Stop();
         wde::UnloadMap();
         ++counters_.unloads;
     }
@@ -277,7 +285,14 @@ bool EngineSceneRenderer::DrawFrame(const CameraView &view, std::string &error)
                      "the video config's scene is not " + ExtentText(extent_));
         wde::PrepareRefdef(*refdef_);
         kisak::view::FillRefdef(view, *refdef_);
-        last_ = wde::DrawRefdef(*refdef_, readBack_);
+        if (effects_)
+        {
+            last_ = wde::DrawRefdef(*refdef_, readBack_, {},
+                                    [this](const refdef_s &refdef) { effects_->Update(refdef); });
+            effects_->Count(last_.effects);
+        }
+        else
+            last_ = wde::DrawRefdef(*refdef_, readBack_);
         ++counters_.draws;
         return true;
     }

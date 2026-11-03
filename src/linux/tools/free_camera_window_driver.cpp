@@ -218,6 +218,7 @@ struct Checkpoint
     uint64_t digest = 0;
     uint32_t width = 0, height = 0;
     wdr::SceneCounts scene{};
+    wdr::EffectCounts effects{};
 };
 
 struct Step
@@ -286,11 +287,12 @@ public:
                 what + ": the frame was " + kv::FrameOutcomeName(*outcome) +
                     (owner_.Error().empty() ? std::string() : ": " + owner_.Error()));
         ++frames_;
-        const std::string problem = wdr::CheckSceneCounts(renderer_.LastFrame().scene);
+        const FrameResult &frame = renderer_.LastFrame();
+        const std::string problem = wdr::CheckFreeCameraCounts(frame.scene, frame.effects);
         if (!problem.empty() && sceneProblem_.empty())
             sceneProblem_ = what + ": " + problem;
     }
-    // The first drawn frame whose static model and shadow counts disagree.
+    // The first drawn frame whose static model, shadow or effect counts disagree.
     const std::string &SceneProblem() const { return sceneProblem_; }
     // The same frame for the reference owner.
     void Expect(int msec) { reference_.Frame(msec, kSceneTime); }
@@ -321,6 +323,7 @@ public:
         checkpoint.width = last.stats.width;
         checkpoint.height = last.stats.height;
         checkpoint.scene = last.scene;
+        checkpoint.effects = last.effects;
         checkpoint.extent = owner_.AppliedExtent();
         Require(SamePose(owner_.Camera().Pose(), checkpoint.pose), "script", name + ": settling moved the camera");
         Say("free_camera_window_checkpoint name=%s extent=%s draws=%u settled=%s digest=%s pose_matches=%s %s\n",
@@ -687,7 +690,8 @@ std::string RunScript(EngineSceneRenderer &renderer, AspectFollower &follower, k
              << ",\"settled\":" << (checkpoint.settled ? "true" : "false") << ",\"draws\":" << checkpoint.draws
              << ",\"digest\":\"" << Hex64(checkpoint.digest) << "\",\"static_models_drawn\":"
              << checkpoint.scene.staticModelsDrawn
-             << ",\"sun_shadow_drawn\":" << (checkpoint.scene.sunShadowDrawn ? "true" : "false") << "}";
+             << ",\"sun_shadow_drawn\":" << (checkpoint.scene.sunShadowDrawn ? "true" : "false")
+             << ",\"effects_drawn\":" << (wdr::EffectsDrawn(checkpoint.effects) ? "true" : "false") << "}";
         first = false;
     }
     body << "],\"steps\":[";
@@ -708,7 +712,7 @@ std::string RunScript(EngineSceneRenderer &renderer, AspectFollower &follower, k
 // ---- the live run ---------------------------------------------------------------
 
 // Returns the report's live part, starting with a comma. A drawn frame whose
-// static model and shadow counts disagree is a problem.
+// static model, shadow or effect counts disagree is a problem.
 std::string RunLive(EngineSceneRenderer &renderer, kv::FrameOwner &owner, kv::FreeCameraWindow &window,
                     int secondsLimit, std::vector<std::string> &problems)
 {
@@ -719,7 +723,7 @@ std::string RunLive(EngineSceneRenderer &renderer, kv::FrameOwner &owner, kv::Fr
     const auto started = std::chrono::steady_clock::now();
     const auto limit = started + std::chrono::seconds(secondsLimit);
     std::map<kv::FrameOutcome, unsigned> outcomes;
-    unsigned sceneProblems = 0, noStaticModelFrames = 0, noSunShadowFrames = 0;
+    unsigned sceneProblems = 0, noStaticModelFrames = 0, noSunShadowFrames = 0, noEffectFrames = 0;
     std::string firstSceneProblem;
     long long lastMilliseconds = 0;
     std::string ending = "quit";
@@ -747,10 +751,11 @@ std::string RunLive(EngineSceneRenderer &renderer, kv::FrameOwner &owner, kv::Fr
         last = *outcome;
         if (*outcome == kv::FrameOutcome::Drawn)
         {
-            const wdr::SceneCounts &scene = renderer.LastFrame().scene;
-            noStaticModelFrames += scene.staticModelsDrawn == 0;
-            noSunShadowFrames += !scene.sunShadowDrawn;
-            const std::string problem = wdr::CheckSceneCounts(scene);
+            const FrameResult &frame = renderer.LastFrame();
+            noStaticModelFrames += frame.scene.staticModelsDrawn == 0;
+            noSunShadowFrames += !frame.scene.sunShadowDrawn;
+            noEffectFrames += !wdr::EffectsDrawn(frame.effects);
+            const std::string problem = wdr::CheckFreeCameraCounts(frame.scene, frame.effects);
             if (!problem.empty() && sceneProblems++ == 0)
                 firstSceneProblem = "drawn frame " + std::to_string(outcomes[kv::FrameOutcome::Drawn] - 1) + ": " +
                                     problem;
@@ -764,10 +769,11 @@ std::string RunLive(EngineSceneRenderer &renderer, kv::FrameOwner &owner, kv::Fr
     const double seconds = Seconds(started);
     const unsigned drawn = outcomes[kv::FrameOutcome::Drawn];
     Say("free_camera_window_live ending=%s seconds=%.2f drawn=%u minimized=%u device_lost=%u fps=%.1f "
-        "capture_requests=%u no_static_model_frames=%u no_sun_shadow_frames=%u scene_problems=%u\n",
+        "capture_requests=%u no_static_model_frames=%u no_sun_shadow_frames=%u no_effect_frames=%u "
+        "scene_problems=%u\n",
         ending.c_str(), seconds, drawn, outcomes[kv::FrameOutcome::Minimized], outcomes[kv::FrameOutcome::DeviceLost],
         seconds > 0 ? drawn / seconds : 0.0, window.CaptureRequests(), noStaticModelFrames, noSunShadowFrames,
-        sceneProblems);
+        noEffectFrames, sceneProblems);
     if (sceneProblems)
         problems.push_back("scene: " + std::to_string(sceneProblems) + " drawn frame(s) with counts that disagree; " +
                            firstSceneProblem);
@@ -780,7 +786,8 @@ std::string RunLive(EngineSceneRenderer &renderer, kv::FrameOwner &owner, kv::Fr
         first = false;
     }
     body << "},\"capture_requests\":" << window.CaptureRequests() << ",\"no_static_model_frames\":" << noStaticModelFrames
-         << ",\"no_sun_shadow_frames\":" << noSunShadowFrames << ",\"scene_problems\":" << sceneProblems
+         << ",\"no_sun_shadow_frames\":" << noSunShadowFrames << ",\"no_effect_frames\":" << noEffectFrames
+         << ",\"scene_problems\":" << sceneProblems
          << ",\"final_pose\":" << PoseJson(owner.Camera().Pose());
     return body.str();
 }
@@ -797,8 +804,9 @@ void Kisak_RunFreeCameraWindow(const std::filesystem::path &directory, const cha
     const kv::ViewExtent engineExtent{vidConfig.sceneWidth, vidConfig.sceneHeight};
 
     // The script reads every frame back to compare settled pictures; a live run
-    // only draws.
-    EngineSceneRenderer renderer(engineExtent, scripted);
+    // only draws. Both play the map's own effects (engine_effects.h), which the
+    // live run's elapsed scene time animates.
+    EngineSceneRenderer renderer(engineExtent, scripted, true);
     AspectFollower follower(renderer);
     std::vector<std::string> problems;
     auto check = [&](const std::string &what, const std::string &problem) {
@@ -875,6 +883,7 @@ void Kisak_RunFreeCameraWindow(const std::filesystem::path &directory, const cha
             follower.Updates());
         Say("free_camera_shutdown=done device=%s zones=%d window=%s\n", dx.device ? "held" : "released", g_zoneCount,
             SDL_GetWindowFromID(windowId) ? "kept" : "destroyed");
+        SayEffectsSummary(renderer.Effects()->Summary());
 
         // 4. The report: counts and measurements, no pixels.
         std::ostringstream json;
@@ -887,7 +896,8 @@ void Kisak_RunFreeCameraWindow(const std::filesystem::path &directory, const cha
              << ",\"resizes\":" << owned.resizes << ",\"resets\":" << owned.resets
              << "},\"renderer\":{\"draws\":" << engine.draws << ",\"empty_frames\":" << engine.emptyFrames
              << ",\"resizes\":" << engine.resizes << ",\"resets\":" << engine.resets
-             << "},\"aspect_updates\":" << follower.Updates() << ",\"dropped_draw_warnings\":[";
+             << "},\"aspect_updates\":" << follower.Updates()
+             << ",\"effects\":" << EffectsSummaryJson(renderer.Effects()->Summary()) << ",\"dropped_draw_warnings\":[";
         for (size_t i = 0; i < warnings.size(); ++i)
             json << (i ? "," : "") << Json(warnings[i]);
         json << "],\"start_seconds\":" << startSeconds

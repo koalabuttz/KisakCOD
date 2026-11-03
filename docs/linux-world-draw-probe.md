@@ -193,7 +193,9 @@ out of the repository.
     `rb_imagetouch`, `rb_pixelcost`, `rb_shade`, `rb_sky`;
   - 53 more keep the type-only stand-in, which the census proves they compile
     with and which gives them no way to call the device;
-  - `EffectsCore/fx_dvars.cpp`, for the effects dvars the scene reads.
+  - the effects system, `src/EffectsCore` (15 units: `fx_dvars.cpp` for the
+    effects dvars the scene reads, and the rest for the free camera's effects,
+    which the draw mode never starts), with the stand-in.
 
   The configure stops if a unit in `src/gfx_d3d` is in no list or in two, or if
   a census-blocked unit is listed. All renderer units use the client
@@ -207,22 +209,29 @@ out of the repository.
 - **The link boundary.** `src/linux/tools/world_draw_probe_boundary.cpp` holds
   what the linked units reach and no linked unit defines, in four kinds:
   1. storage whose owner is not linked (`onlinegame`, `r_fullscreen`,
-     `vid_xpos`, `vid_ypos`);
-  2. per-frame calls the scene makes into client systems this process never
-     starts, each doing what its owner does when that system holds nothing:
-     sound (`CL_UpdateSound`), client debug data, the cgame's FPS history,
-     effects physics, dynamic entity physics and broken pieces.
-     `DynEntCl_ProcessEntities` checks its claim: it aborts if any client
-     dynamic entity of the map has a physics body;
+     `vid_xpos`, `vid_ypos`, and the cgame's `cgArray`, `cg_entitiesArray` and
+     `cgMedia`, which the effects system reads: the free camera's effects host
+     fills `cgArray[0].refdef`, and the rest stays empty);
+  2. calls the scene and the effects system make into client systems this
+     process never starts, each doing what its owner does when that system
+     holds nothing: sound (`CL_UpdateSound`, and `SND_AnyActiveListeners`,
+     which answers that no listener is active), client debug data, the cgame's
+     FPS history, tracer beams, player sprites and 3D HUD elements, the
+     registry of effects loaded from source (`FX_UnregisterAll`), dynamic
+     entity physics and broken pieces. `DynEntCl_ProcessEntities` checks its
+     claim: it aborts if any client dynamic entity of the map has a physics
+     body;
   3. the two Windows-only renderer services as Linux has them: no cinematic
      ever plays (so `R_Cinematic_Shutdown`, which the free-camera replay's
      `R_Shutdown` reaches, has nothing to stop), and `R_AvailableTextureMemory`
      is `r_texturemem.cpp`'s own branch for when DirectDraw cannot report video
      memory;
-  4. 29 functions the probe must never reach, each aborting with its name: the
-     client screen and loading screen, scene entities and effects (the probe
-     adds none, and only the cgame queues effects work), mark generation
-     (`fx_marks` is off), material and BSP loading from source (including
+  4. 26 functions the probe must never reach, each aborting with its name: the
+     client screen and loading screen, scene entities and marks on them (the
+     probe adds none, and `fx_marks` is off), effects bolted to an entity (the
+     free camera spawns every effect unbolted), effect and physics sounds (no
+     listener, and `cgMedia` holds no sound), the physics and collision debug
+     drawing, material and BSP loading from source (including
      `Material_FreeAll`, which `R_Shutdown` calls only without fast files), and
      the screenshot command.
 - **Libraries.** The executable links the D3D9 library and SDL3 for their
@@ -231,8 +240,9 @@ out of the repository.
 
 The probe's own sources build with `-Wall -Wextra -Werror`: the probe, the
 shared engine code, the boundary, the SDL3 window functions, and for the
-free-camera replay the adapter (`engine_scene_renderer.cpp`), the replay
-(`free_camera_replay.cpp`) and the free camera's own sources
+free-camera replay the adapter (`engine_scene_renderer.cpp`), its effects host
+(`engine_effects.cpp`), the replay (`free_camera_replay.cpp`) and the free
+camera's own sources
 (`src/linux/client/view`), and for its window input the window driver
 (`free_camera_window_driver.cpp`) and the SDL3 window host
 (`src/linux/client/window/window_host.cpp`, `pixel_buffer.cpp`).
@@ -242,8 +252,9 @@ free-camera replay the adapter (`engine_scene_renderer.cpp`), the replay
 What this probe draws is the world as the renderer sees it with no game
 running:
 
-- no effects, no marks, no dynamic entity physics, no sound, no cgame, no scene
-  entities (no players, weapons or script models), no 2D;
+- no effects (the free camera plays the map's own; this mode does not), no
+  marks, no dynamic entity physics, no sound, no cgame, no scene entities (no
+  players, weapons or script models), no 2D;
 - one thread: no render thread, no worker threads, the backend on the main
   thread;
 - scene time 0 on every frame;

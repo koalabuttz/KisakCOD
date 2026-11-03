@@ -297,6 +297,65 @@ void CheckSceneCounts()
     Fails(wdr::CheckSwitchedOff("static models", false, 1, 2, 1), "a switch the counts do not follow");
     Fails(wdr::CheckSwitchedOff("static models", true, 1, 1, 1), "a switch that changes nothing on screen");
     Fails(wdr::CheckSwitchedOff("static models", true, 1, 2, 3), "a switch that does not come back");
+
+    Passes(wdr::CheckSwitchTry("effects", true, 1, 1), "a try whose effects were hidden behind a wall");
+    Fails(wdr::CheckSwitchTry("effects", false, 1, 1), "a try the counts do not follow");
+    Fails(wdr::CheckSwitchTry("effects", true, 1, 3), "a try that does not come back");
+}
+void CheckEffectCounts()
+{
+    wdr::EffectCounts view;
+    view.running = true;
+    view.effects = 40;
+    view.elems = 900;
+    view.surfaces = 30;
+    view.meshes = 28;
+    view.drawCalls = 31;
+    view.triangles = 1800;
+    Passes(wdr::CheckEffectCounts(view), "a frame with effects in view");
+    Check(wdr::EffectsDrawn(view), "a frame with effect meshes and surfaces shows effects");
+    wdr::EffectCounts away = view;
+    away.surfaces = away.meshes = 0;
+    away.drawCalls = 1;
+    away.triangles = 2;
+    Passes(wdr::CheckEffectCounts(away), "effects alive out of view, and the sun's flare drawn");
+    Check(!wdr::EffectsDrawn(away), "a frame without effect meshes shows none");
+    wdr::EffectCounts drawMode;
+    drawMode.drawCalls = 1;
+    drawMode.triangles = 2;
+    Passes(wdr::CheckEffectCounts(drawMode), "the draw mode: no effects system, the sun's flare drawn");
+
+    wdr::EffectCounts stray = view;
+    stray.running = false;
+    Fails(wdr::CheckEffectCounts(stray), "effects drawn without the system running");
+    wdr::EffectCounts lostSurfaces = view;
+    lostSurfaces.surfaces = lostSurfaces.meshes - 1;
+    Fails(wdr::CheckEffectCounts(lostSurfaces), "more effect meshes than effect surfaces");
+    wdr::EffectCounts orphan = view;
+    orphan.effects = 0;
+    Fails(wdr::CheckEffectCounts(orphan), "effect surfaces with no effect alive");
+    wdr::EffectCounts empty = view;
+    empty.elems = 0;
+    Fails(wdr::CheckEffectCounts(empty), "effect surfaces with no element alive");
+    wdr::EffectCounts clouds = empty;
+    clouds.clouds = 3;
+    Passes(wdr::CheckEffectCounts(clouds), "effect surfaces from clouds alone");
+    wdr::EffectCounts undrawn = view;
+    undrawn.drawCalls = undrawn.triangles = 0;
+    Fails(wdr::CheckEffectCounts(undrawn), "effect meshes the backend never drew");
+    wdr::EffectCounts flat = view;
+    flat.triangles = 0;
+    Fails(wdr::CheckEffectCounts(flat), "effect draw calls with no triangle");
+
+    // The free camera's frame rule: the scene's counts first, then the effects.
+    wdr::SceneCounts scene;
+    Passes(wdr::CheckFreeCameraCounts(scene, view), "a free-camera frame with effects in view");
+    Passes(wdr::CheckFreeCameraCounts(scene, away), "a free-camera frame with effects out of view");
+    Fails(wdr::CheckFreeCameraCounts(scene, drawMode), "a free-camera frame without the effects system updated");
+    Fails(wdr::CheckFreeCameraCounts(scene, undrawn), "a free-camera frame whose effect meshes were never drawn");
+    wdr::SceneCounts strayModels;
+    strayModels.staticModelsDrawn = 3;
+    Fails(wdr::CheckFreeCameraCounts(strayModels, view), "a free-camera frame whose scene counts disagree");
 }
 } // namespace
 
@@ -307,6 +366,7 @@ int main()
     CheckRepeatsAndViews();
     CheckCounts();
     CheckSceneCounts();
+    CheckEffectCounts();
     if (failures)
     {
         std::printf("world_draw_rules_test: %d failure(s)\n", failures);
