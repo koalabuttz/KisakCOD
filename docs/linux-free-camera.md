@@ -1,6 +1,6 @@
 # Linux free camera: frame ownership, camera and input
 
-Status on 2026-11-02: **camera, frame owner and window input exist, and the
+Status on 2026-11-03: **camera, frame owner and window input exist, and the
 frame owner drives the engine renderer on a GPU with a real map.** The camera, its
 key bindings, the frame owner and the window input that feeds them are covered by
 asset-free tests. The `SceneRenderer` adapter over the engine renderer the
@@ -15,7 +15,8 @@ input: the camera flown through the renderer's own window, live or by a checked
 script of SDL events. Its scripted run has passed on the same laptop under
 Wayland and X11, and David has flown the live camera there. Every frame's
 [static models and sun shadow](#static-models-and-the-suns-shadow) are now
-counted and held to rules; that has run only in the sandbox so far.
+counted and held to rules, and the replay and the script passed those rules on
+the same laptop.
 
 ## Why a host camera
 
@@ -520,8 +521,38 @@ builds in Debug and RelWithDebInfo with `-Wall -Wextra -Werror`, the rules pass
 `world_draw_rules` (each shown to accept a sunlit view with static models and to
 reject one with one thing wrong), and `test_world_draw_probe.py` checks the
 start refusal for the replay, the live camera and the script, and that the
-draw mode still runs without those switches. Nothing about them has run on a
-GPU yet.
+draw mode still runs without those switches.
+
+Static models and the sun's shadow on a GPU, on the same laptop (local runs, not
+CI evidence), 2026-11-03, on bd993cf (the same tree as this change's 444430d): the
+replay in RelWithDebInfo (run N=45) and Debug (N=46), and the window driver's
+script in RelWithDebInfo under Wayland (N=47). All three passed with no problem
+and no "not drawing" warning. The two replay builds printed the same lines apart
+from times, and the script's checkpoints on path A had the replay's digests
+and counts (`W.start` is `A.start`). At `A.start` the camera kept 862 of the map's 4,038
+static models, and the switches gave:
+
+| `A.start` | digest | world draw calls | static models drawn | static model draw calls | sun shadow surfaces |
+| --- | --- | --- | --- | --- | --- |
+| as drawn | `0d3e46a38948e9a2` | 399 | 862 (124 surfaces, 132,662 triangles) | 356 | 200, 77 of them static models |
+| `r_drawSModels 0` | `9dd41beb94f2f293` | 399 | 0 | 0 | 123, none static models |
+| `sm_sunEnable 0` | `99ae63a503be5263` | 276 | 862 | 219 | none: the sun is unused |
+
+Each picture came back to `A.start`'s digest with its switch on again. Without
+the sun's shadow the world issues 123 fewer draw calls and the static models 137
+fewer, which shows the shadow map's draws counted with the scene as described
+above.
+
+Every checkpoint of both paths drew static models (from 81 at the script's
+`A.focus` to 862) and the sun's shadow, at 640x480, at 800x600 and at the
+script's 854x480, and after each interruption. Of the legs' frames only
+`B.square`'s lacked either: 1 of its 36 frames drew no static model and 11 drew
+no sun shadow. The sun counts as lighting the view only through the world
+surfaces in view (`R_AddAllBspDrawSurfacesCamera`; static models do not set
+it), and the counts rule held on all 11 frames, so in each of them the sun lit
+none of the world surfaces in view and the engine drew no shadow map for it.
+The two pocket frames, which drew no world surface, are among them; which the
+other frames were is not reported.
 
 Window driver, in the cloud sandbox only: it builds into the same target in
 Debug and RelWithDebInfo with `-Wall -Wextra -Werror`, and
@@ -573,7 +604,9 @@ window. DXVK printed no warning or error.
 - Nothing is compared with a captured game frame.
 - That the game also draws nothing inside path B's pocket follows from the
   map's faces and the visibility walk's rules; it has not been seen on Windows.
-- The static model and sun shadow rules have not run on a GPU.
+- The static model and sun shadow rules have run on one GPU and one map, at
+  scene time 0 (so no spot light had a shadow map), through the replay and the
+  script; the live camera has not been flown with them.
 - The window input has met a real desktop through the window driver: its
   script (Wayland in RelWithDebInfo, X11 in Debug) and one 70 s live flight
   (Wayland), with the window `R_CreateWindow` made. The live flight was not
