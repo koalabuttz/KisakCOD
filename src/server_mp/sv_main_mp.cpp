@@ -1179,11 +1179,11 @@ void SV_PreFrame()
     PROF_SCOPED("SV_PreFrame");
     KISAK_NULLSUB();
     SV_UpdateBots();
-    if ((dvar_modifiedFlags & 0x404) != 0)
+    if ((dvar_modifiedFlags & (DVAR_SERVERINFO | DVAR_SCRIPTINFO)) != 0)
     {
         v0 = Dvar_InfoString(0, 4);
         SV_SetConfigstring(CS_SERVERINFO, v0);
-        dvar_modifiedFlags &= 0xFFFFFBFB;
+        dvar_modifiedFlags &= ~(DVAR_SERVERINFO | DVAR_SCRIPTINFO);
     }
     if ((dvar_modifiedFlags & 8) != 0)
         SV_SetSystemInfoConfig();

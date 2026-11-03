@@ -781,17 +781,21 @@ enum DvarFlags : uint16
 	DVAR_ROM                = 0x40, // display only, cannot be set by user at all (can be set by code)
 	DVAR_CHEAT              = 0x80, // can not be changed if cheats are disabled
 
-	// DVAR_AUTOEXEC, DVAR_SAVED, and DVAR_CHANGEABLE_RESET are not 100% sure
+	// Bits above 0x80 were checked against the code that tests them and the
+	// retail 1.7 iw3mp.exe. CHANGEABLE_RESET, SAVED and AUTOEXEC are the names
+	// in the original assert in Dvar_Reregister, which tests them as 0x9200;
+	// which name is which bit, and the other names, follow from behaviour.
 	DVAR_CODINFO            = 0x100,    // replicated to clients through the CS_CODINFO configstrings
 	                                    // (SV_PreFrame, SV_SaveSystemInfo); script makeDvarServerInfo() adds it
-	DVAR_AUTOEXEC           = 0x200,
-	DVAR_NORESTART          = 0x400,    // do not clear when a cvar_restart is issued
-	                                    // Unverified: SV_PreFrame resends CS_SERVERINFO when a 0x400 dvar
-	                                    // changes, and script setDvar(name, value, 1) adds 0x400, so this
-	                                    // may really be a script serverinfo flag.
-	DVAR_SAVED              = 0x1000,
+	DVAR_CHANGEABLE_RESET   = 0x200,    // reset value may change after registration: Dvar_ChangeResetValue
+	                                    // requires it (the per-map r_lightTweak* resets, ui_playerProfileAlreadyChosen)
+	DVAR_SCRIPTINFO         = 0x400,    // serverinfo dvar set by script setDvar(name, value, 1); serverinfo
+	                                    // is built from 0x404 and Dvar_ResetScriptInfo clears it on map load
+	// 0x800 (unnamed): the decompiled Dvar_SetVariant latches devgui changes to these dvars; retail 1.7 MP has no such check
+	DVAR_SAVED              = 0x1000,   // kept in SP savegames (Dvar_SaveDvars/Dvar_ResetDvars filter 0x1000)
+	// 0x2000 (unnamed): never set or tested in the source; no test of it found in retail 1.7 MP
 	DVAR_EXTERNAL           = 0x4000,   // created by a set command or setclientdvar
-	DVAR_CHANGEABLE_RESET   = 0x8000,
+	DVAR_AUTOEXEC           = 0x8000,   // set while an autoexec config runs; that value becomes the reset value
 };
 
 union DvarValue

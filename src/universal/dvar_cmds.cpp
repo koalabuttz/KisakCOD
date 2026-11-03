@@ -372,7 +372,7 @@ void Dvar_ListSingle(const dvar_s *dvar, const char *userData)
 
     if (!userData || Com_Filter(userData, (char *)dvar->name, 0))
     {
-        if ((dvar->flags & 0x404) != 0)
+        if ((dvar->flags & (DVAR_SERVERINFO | DVAR_SCRIPTINFO)) != 0)
             Com_Printf(CON_CHANNEL_DONT_FILTER, "S");
         else
             Com_Printf(CON_CHANNEL_DONT_FILTER, " ");
