@@ -199,7 +199,7 @@ void Steam_Init()
 
 	SteamClient()->SetWarningMessageHook(&SteamAPIDebugTextHook);
 
-	strncpy(g_steamName, SteamFriends()->GetPersonaName(), 63);
+	I_strncpyz(g_steamName, SteamFriends()->GetPersonaName(), sizeof(g_steamName));
 	g_steamID = SteamUser()->GetSteamID().ConvertToUint64();
 
 	callbackHandler = new SteamCallbackHandler();

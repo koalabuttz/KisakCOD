@@ -925,7 +925,7 @@ const MtlStateMapBitName *__cdecl Material_ParseValueForState(const char **text,
         v2 = Com_Parse(text);
         Com_sprintf(signedToken, 0x100u, "-%s", v2->token);
         //token = signedToken;
-        strcpy(token->token, signedToken);
+        I_strncpyz(token->token, signedToken, sizeof(token->token));
     }
     for (valueIndex = 0; bitNames[valueIndex].name; ++valueIndex)
     {
@@ -4728,7 +4728,7 @@ Material *__cdecl R_GetBspMaterial(uint32_t materialIndex)
         MyAssertHandler(".\\r_bsp_load_obj.cpp", 230, 0, "%s", "strcmp( name, \"noshader\" )");
     if (!strcmp(name->material, "$default"))
     {
-        strcpy((char*)&name->material[0], "$default3d");
+        I_strncpyz((char*)&name->material[0], "$default3d", sizeof(name->material));
         //name = "$default3d";
     }
     if (name->material[0] == 42)
@@ -5934,13 +5934,17 @@ void __cdecl Material_PreLoadSingleShaderText(const char *filename, const char *
     int fileHandle; // [esp+28h] [ebp-50h] BYREF
     int fileSize; // [esp+2Ch] [ebp-4Ch]
     char filepath[68]; // [esp+30h] [ebp-48h] BYREF
+    uint32_t nameSize;
 
     Com_sprintf(filepath, 0x40u, "shaders/%s%s", subdir, filename);
     fileSize = FS_FOpenFileRead(filepath, &fileHandle);
     iassert( fileSize >= 0 );
-    buffer = (char*)Hunk_AllocAlign(strlen(subdir) + fileSize + strlen(filename) + 2, 1, "Material_PreLoadSingleShaderText", 22);
+    // The name, its terminator, then the shader text and its terminator.
+    nameSize = strlen(subdir) + strlen(filename) + 1;
+    buffer = (char*)Hunk_AllocAlign(nameSize + fileSize + 1, 1, "Material_PreLoadSingleShaderText", 22);
     cached->name = buffer;
-    buffera = &buffer[sprintf(buffer, "%s%s", subdir, filename) + 1]; // TODO: wth, change to snprintf with proper calculations
+    Com_sprintf(buffer, nameSize, "%s%s", subdir, filename);
+    buffera = &buffer[nameSize];
     cached->text = buffera;
     FS_Read((unsigned char*)buffera, fileSize, fileHandle);
     FS_FCloseFile(fileHandle);

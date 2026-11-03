@@ -68,7 +68,7 @@ LRESULT __stdcall ConWndProc(HWND__ *hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 		if (com_dedicated && com_dedicated->current.integer)
 		{
 			cmdString = (char*)Com_AllocEvent(5);
-			strcpy(cmdString, "quit");
+			I_strncpyz(cmdString, "quit", 5);
 			Sys_QueEvent(0, SE_CONSOLE, 0, 0, strlen(cmdString) + 1, cmdString);
 		}
 		else
@@ -100,8 +100,11 @@ LRESULT __stdcall InputLineWndProc(HWND__ *hWnd, UINT uMsg, HWND__ *wParam, LPAR
 	else if (uMsg == 258 && (int)wParam == 13)
 	{
 		GetWindowTextA(s_wcd.hwndInputLine, inputBuffer, 1024);
-		strncat(s_wcd.consoleText, inputBuffer, 512 - strlen(s_wcd.consoleText) - 5);
-		strcat(s_wcd.consoleText, "\n");
+		// Keep at most 507 characters of text, as before. The old count underflowed
+		// once earlier lines had filled the buffer, letting strncat run past it.
+		if (strlen(s_wcd.consoleText) < sizeof(s_wcd.consoleText) - 5)
+			I_strncat(s_wcd.consoleText, sizeof(s_wcd.consoleText) - 4, inputBuffer);
+		I_strncat(s_wcd.consoleText, sizeof(s_wcd.consoleText), "\n");
 		SetWindowTextA(s_wcd.hwndInputLine, "");
 		Com_sprintf(displayBuffer, 0x400u, "]%s\n", inputBuffer);
 		Sys_Print(displayBuffer);
@@ -283,7 +286,7 @@ char *Sys_ConsoleInput( void )
 		return NULL;
 	}
 		
-	strcpy( s_wcd.returnedText, s_wcd.consoleText );
+	I_strncpyz( s_wcd.returnedText, s_wcd.consoleText, sizeof( s_wcd.returnedText ) );
 	s_wcd.consoleText[0] = 0;
 	
 	return s_wcd.returnedText;

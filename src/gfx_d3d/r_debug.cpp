@@ -142,8 +142,7 @@ void __cdecl R_AddDebugString(
             pDebugString->color[2] = color[2];
             pDebugString->color[3] = color[3];
             pDebugString->scale = scale;
-            strncpy(pDebugString->text, string, sizeof(pDebugString->text) - 1);
-            pDebugString->text[95] = 0;
+            I_strncpyz(pDebugString->text, string, sizeof(pDebugString->text));
             ++debugGlobalsEntry->stringCount;
             Sys_LeaveCriticalSection(CRITSECT_DEBUG_LINE);
         }

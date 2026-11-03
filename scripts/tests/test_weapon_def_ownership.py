@@ -12,7 +12,7 @@ import shlex
 import subprocess
 import tempfile
 
-from test_random_range import block
+from test_random_range import block, drop_cdecl
 
 ROOT = Path(__file__).resolve().parents[2]
 PREAMBLE = r'''
@@ -100,11 +100,11 @@ def main():
     parser.add_argument('--m32', action='store_true')
     parser.add_argument('--sanitize', action='store_true')
     args = parser.parse_args()
-    source = args.source.read_text()
+    source = drop_cdecl(args.source.read_text())
     bodies = '\n'.join(block(source, source.index(signature)) for signature in (
-        'void __cdecl BG_FreeWeaponDefStrings()',
-        'void __cdecl BG_ShutdownWeaponDefFiles()',
-        'WeaponDef *__cdecl BG_LoadWeaponDef(const char *name)',
+        'void BG_FreeWeaponDefStrings()',
+        'void BG_ShutdownWeaponDefFiles()',
+        'WeaponDef *BG_LoadWeaponDef(const char *name)',
     ))
     with tempfile.TemporaryDirectory(prefix='kisak-weapon-ownership-') as directory:
         work = Path(directory)

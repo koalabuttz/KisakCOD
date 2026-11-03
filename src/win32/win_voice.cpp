@@ -279,7 +279,7 @@ int __cdecl mixerGetRecordSource(char *srcName)
                         for (jj = 0; jj < iMultipleItems; ++jj)
                         {
                             if (lpListBool[jj].fValue == 1)
-                                strncpy(srcName, lpListText[jj].szName, 0xFFu);
+                                I_strncpyz(srcName, lpListText[jj].szName, 256); // old_rec_source[256]
                         }
                         if (lpmxc)
                             free(lpmxc);

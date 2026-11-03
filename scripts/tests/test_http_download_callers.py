@@ -15,7 +15,7 @@ import tempfile
 
 
 def extract(source, name):
-    match = re.search(r"^(?:static bool|void __cdecl) " + name + r"\([^\n]*\)\n\{", source, re.MULTILINE)
+    match = re.search(r"^(?:static bool|void(?: __cdecl)?) " + name + r"\([^\n]*\)\n\{", source, re.MULTILINE)
     if not match:
         raise ValueError(f"production function not found: {name}")
     depth = 1
