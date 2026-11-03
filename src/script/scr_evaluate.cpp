@@ -1285,7 +1285,7 @@ void Scr_GetValue(uint32_t index, VariableValue *value)
     {
         v2 = &scrVmPub.top[-(int)index];
         type = v2->type;
-        value->u.intValue = v2->u.intValue;
+        value->u = v2->u;
         value->type = type;
         AddRefToValue(value->type, value->u);
     }
@@ -1443,7 +1443,7 @@ void Scr_PostEvalBuiltin(VariableValue *value)
             MyAssertHandler(".\\script\\scr_evaluate.cpp", 1619, 0, "%s", "scrVmPub.inparamcount == 1");
         scrVmPub.inparamcount = 0;
         type = scrVmPub.top->type;
-        value->u.intValue = scrVmPub.top->u.intValue;
+        value->u = scrVmPub.top->u;
         value->type = type;
         --scrVmPub.top;
     }

@@ -1668,7 +1668,7 @@ void  SetVariableEntityFieldValue(uint32_t entId, uint32_t fieldName, VariableVa
 		iassert(!(entryValue->w.type & VAR_MASK));
 
 		entryValue->w.status |= value->type;
-		entryValue->u.u.intValue = value->u.intValue;
+		entryValue->u.u = value->u;
 	}
 }
 
@@ -1872,7 +1872,7 @@ uint32_t  Scr_EvalFieldObject(uint32_t tempVariable, VariableValue* value)
 			iassert(type >= FIRST_OBJECT);
 
 			tempValue.type = VAR_POINTER;
-			tempValue.u.intValue = value->u.intValue;
+			tempValue.u = value->u;
 
 			SetVariableValue(tempVariable, &tempValue);
 			return tempValue.u.pointerValue;
@@ -2696,7 +2696,7 @@ void  Scr_EvalEquality(VariableValue* value1, VariableValue* value2)
 		break;
 	case VAR_FUNCTION:
 		value1->type = VAR_INTEGER;
-		value1->u.intValue = value1->u.intValue == value2->u.intValue;
+		value1->u.intValue = value1->u.codePosValue == value2->u.codePosValue;
 		break;
 	case VAR_ANIMATION:
 		value1->type = VAR_INTEGER;
@@ -2915,7 +2915,7 @@ uint32_t Scr_EvalArrayRef(uint32_t parentId)
 		varValue.type = (Vartype_t)(parentValue->w.type & VAR_MASK);
 		if (varValue.type)
 		{
-			varValue.u.intValue = parentValue->u.u.intValue;
+			varValue.u = parentValue->u.u;
 		add_array:
 			if (varValue.type == VAR_POINTER)
 			{
@@ -2931,7 +2931,7 @@ uint32_t Scr_EvalArrayRef(uint32_t parentId)
 						varValue.u.pointerValue = Scr_AllocArray();
 						CopyArray(id, varValue.u.pointerValue);
 						iassert(parentValue);
-						parentValue->u.u.intValue = varValue.u.intValue;
+						parentValue->u.u = varValue.u;
 					}
 					return varValue.u.pointerValue;
 				}
@@ -3015,7 +3015,7 @@ void  ClearArray(uint32_t parentId, VariableValue* value)
 		parentValue = &scrVarGlob.variableList[parentId + VARIABLELIST_CHILD_BEGIN];
 		iassert((parentValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
 		varValue.type = (Vartype_t)(parentValue->w.status & 0x1F);
-		varValue.u.intValue = parentValue->u.u.intValue;
+		varValue.u = parentValue->u.u;
 	}
 	else
 	{
@@ -3064,7 +3064,7 @@ void  ClearArray(uint32_t parentId, VariableValue* value)
 			varValue.u.intValue = Scr_AllocArray();
 			CopyArray(id.stringValue, varValue.u.stringValue);
 			iassert(parentValue);
-			parentValue->u.u.intValue = varValue.u.intValue;
+			parentValue->u.u = varValue.u;
 		}
 		if (value->type == VAR_INTEGER)
 		{
