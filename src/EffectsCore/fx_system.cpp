@@ -190,7 +190,7 @@ void FX_ShutdownSystem(int32_t localClientNum)
     FX_UnregisterAll();
 }
 
-void FX_RelocateSystem(FxSystem *system, int32_t relocationDistance)
+void FX_RelocateSystem(FxSystem *system, intptr_t relocationDistance)
 {
     if (relocationDistance)
     {

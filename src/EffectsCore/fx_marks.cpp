@@ -1006,12 +1006,12 @@ static void FX_EmitMarkTri(
         index.value[0] = marksSystem->carryIndex;
         index.value[1] = *indices + baseVertex;
         pIndex = (r_double_index_t *)&outSurf->indices[outSurf->indexCount - 1];
-        iassert(!((uint)pIndex & 3));
+        iassert(!((uintptr_t)pIndex & 3));
         *pIndex = index;
         index.value[0] = indices[1] + baseVertex;
         index.value[1] = indices[2] + baseVertex;
         pIndex = pIndex + 1;
-        iassert(!((uint)pIndex & 3));
+        iassert(!((uintptr_t)pIndex & 3));
         *pIndex = index;
         marksSystem->hasCarryIndex = 0;
     }
