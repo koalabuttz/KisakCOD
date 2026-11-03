@@ -437,13 +437,8 @@ void turret_CalculateConvergenceAngularVelocity(
     float diffX = currX - desiredAngles[0];
     float diffY = currY - desiredAngles[1];
 
-    static constexpr float DEG_TO_TURNS = 0.0027777778f;
-
-    float normX = floorf(diffX * DEG_TO_TURNS + 0.5f);
-    float normY = floorf(diffY * DEG_TO_TURNS + 0.5f);
-
-    float angDiffX = fabsf((diffX * DEG_TO_TURNS - normX) * 360.0f);
-    float angDiffY = fabsf((diffY * DEG_TO_TURNS - normY) * 360.0f);
+    float angDiffX = fabsf(AngleWrap180(diffX));
+    float angDiffY = fabsf(AngleWrap180(diffY));
 
     if (dt <= 0) {
         angularVelocity[0] = angularVelocity[1] = 0.0f;
@@ -517,10 +512,7 @@ int turret_UpdateTargetAngles(
         }
 
         float rawDiff = targetAngles[channel] - lerp->turret.gunAngles[channel];
-        const float DEG_TO_TURNS = 0.0027777778f; // = 1/360
-        float turns = rawDiff * DEG_TO_TURNS;
-        float nearest = floorf(turns + 0.5f);
-        float wrappedDeg = (turns - nearest) * 360.0f;
+        float wrappedDeg = AngleWrap180(rawDiff);
 
         float delta = (wrappedDeg > speed) ? speed :
             (wrappedDeg < -speed) ? -speed : wrappedDeg;
@@ -666,9 +658,9 @@ int __cdecl turret_CanTargetPoint(const gentity_s *self, const float *vPoint, fl
         currentAngles = self->r.currentAngles;
         while (1)
         {
-            v15 = (float)((float)(*(float *)((char *)localAngles + v12) - *currentAngles) * (float)0.0027777778);
+            v15 = (float)((float)(*(float *)((char *)localAngles + v12) - *currentAngles) * TURNS_PER_DEGREE_F);
             v10 = (float)((float)((float)(*(float *)((char *)localAngles + v12) - *currentAngles)
-                * (float)0.0027777778)
+                * TURNS_PER_DEGREE_F)
                 + (float)0.5);
             v10 = floor(v10);
             v16 = (float)((float)((float)v15 - (float)v10) * (float)360.0);
@@ -740,8 +732,8 @@ int __cdecl turret_CanTargetSentient(
         vec[1] = targetPosition[1] - tagPos[1];
         vec[2] = targetPosition[2] - tagPos[2];
         vectosignedangles(vec, angles);
-        v11 = (float)((float)(angles[1] - self->r.currentAngles[1]) * (float)0.0027777778);
-        v12 = (float)((float)((float)(angles[1] - self->r.currentAngles[1]) * (float)0.0027777778) + (float)0.5);
+        v11 = (float)((float)(angles[1] - self->r.currentAngles[1]) * TURNS_PER_DEGREE_F);
+        v12 = (float)((float)((float)(angles[1] - self->r.currentAngles[1]) * TURNS_PER_DEGREE_F) + (float)0.5);
         v13 = floor(v12);
         v14 = (float)((float)((float)v11 - (float)v13) * (float)360.0);
         localAngles[1] = (float)((float)v11 - (float)v13) * (float)360.0;

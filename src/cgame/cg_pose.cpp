@@ -107,9 +107,9 @@ void __cdecl CG_mg42_DoControllers(const cpose_t *pose, const DObj_s *obj, int *
         turretViewAngles = (float*)pose->turret.viewAngles;
         v9 = ((*turretViewAngles - pose->angles[0]) * 0.0027777778);
         v11 = pose->angles[1];
-        aimAngles[0] = (float)((float)v9 - floor((((*turretViewAngles - pose->angles[0]) * 0.0027777778f) + 0.5f))) * (float)360.0;
-        v12 = (float)((float)(turretViewAngles[1] - (float)v11) * (float)0.0027777778);
-        v13 = floor((((turretViewAngles[1] - (float)v11) * (float)0.0027777778) + (float)0.5));
+        aimAngles[0] = (float)((float)v9 - floor((((*turretViewAngles - pose->angles[0]) * TURNS_PER_DEGREE_F) + 0.5f))) * (float)360.0;
+        v12 = (float)((float)(turretViewAngles[1] - (float)v11) * TURNS_PER_DEGREE_F);
+        v13 = floor((((turretViewAngles[1] - (float)v11) * TURNS_PER_DEGREE_F) + (float)0.5));
         flashAngles[0] = 0.0;
         aimAngles[1] = (float)((float)v12 - (float)*(double *)&v13) * (float)360.0;
     }
@@ -126,8 +126,6 @@ void __cdecl CG_mg42_DoControllers(const cpose_t *pose, const DObj_s *obj, int *
 
 void CG_Vehicle_DoControllers(const cpose_t *pose, const DObj_s *obj, int *partBits)
 {
-    const float SHORT2ANGLE = 0.0054931641f;
-
     float bodyAngles[3];   // tag_body:   pitch (X), 0, roll (Z)
     float turretAngles[3]; // tag_turret: 0, yaw (Y), 0
     float barrelAngles[3]; // tag_barrel: barrelPitch (X), 0, 0
@@ -138,17 +136,17 @@ void CG_Vehicle_DoControllers(const cpose_t *pose, const DObj_s *obj, int *partB
 
     iassert(obj);
 
-    bodyAngles[0]   = (float)pose->vehicle.pitch       * SHORT2ANGLE;
+    bodyAngles[0]   = (float)pose->vehicle.pitch       * DEGREES_PER_SHORT_F;
     bodyAngles[1]   = 0.0f;
-    bodyAngles[2]   = (float)pose->vehicle.roll        * SHORT2ANGLE;
+    bodyAngles[2]   = (float)pose->vehicle.roll        * DEGREES_PER_SHORT_F;
     turretAngles[0] = 0.0f;
-    turretAngles[1] = (float)pose->vehicle.yaw         * SHORT2ANGLE;
+    turretAngles[1] = (float)pose->vehicle.yaw         * DEGREES_PER_SHORT_F;
     turretAngles[2] = 0.0f;
-    barrelAngles[0] = (float)pose->vehicle.barrelPitch * SHORT2ANGLE;
+    barrelAngles[0] = (float)pose->vehicle.barrelPitch * DEGREES_PER_SHORT_F;
     barrelAngles[1] = 0.0f;
     barrelAngles[2] = 0.0f;
     steerAngles[0]  = 0.0f;
-    steerAngles[1]  = (float)pose->vehicle.steerYaw    * SHORT2ANGLE;
+    steerAngles[1]  = (float)pose->vehicle.steerYaw    * DEGREES_PER_SHORT_F;
     steerAngles[2]  = 0.0f;
 
     DObjSetLocalTag((DObj_s *)obj, partBits, pose->vehicle.tag_body,   vec3_origin, bodyAngles);

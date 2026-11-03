@@ -57,27 +57,18 @@ void __cdecl CG_Player_PreControllers(DObj_s *obj, centity_s *cent)
 void __cdecl CG_mg42_PreControllers(DObj_s *obj, centity_s *cent)
 {
     float v2; // [esp+14h] [ebp-80h]
-    float v3; // [esp+18h] [ebp-7Ch]
-    float v4; // [esp+1Ch] [ebp-78h]
     float v5; // [esp+20h] [ebp-74h]
     float v6; // [esp+24h] [ebp-70h]
-    float v7; // [esp+28h] [ebp-6Ch]
-    float v8; // [esp+2Ch] [ebp-68h]
     float v9; // [esp+30h] [ebp-64h]
     float v10; // [esp+34h] [ebp-60h]
-    float v11; // [esp+38h] [ebp-5Ch]
-    float v12; // [esp+3Ch] [ebp-58h]
     float v13; // [esp+40h] [ebp-54h]
     bool v14; // [esp+44h] [ebp-50h]
     float v15; // [esp+48h] [ebp-4Ch]
     float v16; // [esp+50h] [ebp-44h]
-    float v17; // [esp+54h] [ebp-40h]
     float v18; // [esp+58h] [ebp-3Ch]
     float v19; // [esp+60h] [ebp-34h]
-    float v20; // [esp+64h] [ebp-30h]
     float v21; // [esp+68h] [ebp-2Ch]
     float frameInterpolation; // [esp+70h] [ebp-24h]
-    float v23; // [esp+74h] [ebp-20h]
     uint32_t playAnim; // [esp+7Ch] [ebp-18h]
     const cg_s *cgameGlob;
 
@@ -97,27 +88,18 @@ void __cdecl CG_mg42_PreControllers(DObj_s *obj, centity_s *cent)
         v21 = cent->currentState.u.turret.gunAngles[0];
         frameInterpolation = cgameGlob->frameInterpolation;
         v13 = cent->nextState.lerp.u.turret.gunAngles[0] - v21;
-        v23 = v13 * 0.002777777845039964f;
-        v12 = v23 + 0.5f;
-        v11 = floor(v12);
-        v10 = (v23 - v11) * 360.0f;
+        v10 = AngleWrap180(v13);
         cent->pose.turret.angles.pitch = v10 * frameInterpolation + v21;
         v18 = cent->currentState.u.turret.gunAngles[1];
         v19 = cgameGlob->frameInterpolation;
         v9 = cent->nextState.lerp.u.turret.gunAngles[1] - v18;
-        v20 = v9 * 0.002777777845039964f;
-        v8 = v20 + 0.5f;
-        v7 = floor(v8);
-        v6 = (v20 - v7) * 360.0f;
+        v6 = AngleWrap180(v9);
         cent->pose.turret.angles.yaw = v6 * v19 + v18;
     }
     v15 = cent->currentState.u.turret.gunAngles[2];
     v16 = cgameGlob->frameInterpolation;
     v5 = cent->nextState.lerp.u.turret.gunAngles[2] - v15;
-    v17 = v5 * 0.002777777845039964f;
-    v4 = v17 + 0.5f;
-    v3 = floor(v4);
-    v2 = (v17 - v3) * 360.0f;
+    v2 = AngleWrap180(v5);
     cent->pose.turret.barrelPitch = v2 * v16 + v15;
     DObjGetBoneIndex(obj, scr_const.tag_aim, &cent->pose.turret.tag_aim);
     DObjGetBoneIndex(obj, scr_const.tag_aim_animated, &cent->pose.turret.tag_aim_animated);
@@ -972,21 +954,21 @@ void __cdecl CG_InterpolateEntityPosition(cg_s *cgameGlob, centity_s *cent)
     BG_EvaluateTrajectory(&cent->nextState.lerp.apos, cgameGlob->nextSnap->serverTime, next);
     v32 = current[0];
     v21 = next[0] - current[0];
-    v33 = v21 * 0.002777777845039964;
+    v33 = v21 * TURNS_PER_DEGREE;
     v20 = v33 + 0.5;
     v19 = floor(v20);
     v18 = (v33 - v19) * 360.0;
     cent->pose.angles[0] = v18 * f + v32;
     v30 = current[1];
     v17 = next[1] - current[1];
-    v31 = v17 * 0.002777777845039964;
+    v31 = v17 * TURNS_PER_DEGREE;
     v16 = v31 + 0.5;
     v15 = floor(v16);
     v14 = (v31 - v15) * 360.0;
     cent->pose.angles[1] = v14 * f + v30;
     v28 = current[2];
     v13 = next[2] - current[2];
-    v29 = v13 * 0.002777777845039964;
+    v29 = v13 * TURNS_PER_DEGREE;
     v12 = v29 + 0.5;
     v11 = floor(v12);
     v10 = (v29 - v11) * 360.0;
@@ -1005,7 +987,7 @@ void __cdecl CG_InterpolateEntityPosition(cg_s *cgameGlob, centity_s *cent)
         movementDir = (float)cent->currentState.u.player.movementDir;
         v26 = (float)cent->nextState.lerp.u.player.movementDir;
         v9 = v26 - movementDir;
-        v27 = v9 * 0.002777777845039964;
+        v27 = v9 * TURNS_PER_DEGREE;
         v8 = v27 + 0.5;
         v7 = floor(v8);
         v6 = (v27 - v7) * 360.0;
@@ -1018,7 +1000,7 @@ void __cdecl CG_InterpolateEntityPosition(cg_s *cgameGlob, centity_s *cent)
         cent->pose.angles[2] = 0.0;
         v22 = cent->currentState.u.player.leanf;
         v5 = cent->currentState.u.player.leanf - v22;
-        v23 = v5 * 0.002777777845039964;
+        v23 = v5 * TURNS_PER_DEGREE;
         v4 = v23 + 0.5;
         v3 = floor(v4);
         v2 = (v23 - v3) * 360.0;

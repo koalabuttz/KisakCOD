@@ -129,6 +129,11 @@ std::set<tagInfo_s*> tags;
 int teleports, linked, collisionSetups, traceSweeps, traceChecks;
 int blockCandidate=-1; bool blockAll, noGround, lowCeiling, endpointSolid, startSolid, scriptActive=true;
 float teleported[3]{}; gentity_s *lastLinkPlayer{}, *lastLinkVehicle{};
+// Angle factors as src/universal/com_math.h defines them.
+constexpr float TURNS_PER_DEGREE_F=1.0f/360.0f; constexpr double TURNS_PER_DEGREE=0.002777777845039964;
+constexpr float DEGREES_PER_SHORT_F=360.0f/65536.0f; constexpr double DEGREES_PER_SHORT=360.0/65536.0;
+constexpr float SHORTS_PER_DEGREE_F=65536.0f/360.0f; constexpr double SHORTS_PER_DEGREE=182.0444488525391;
+float AngleWrap180(float a) { const float t=a*TURNS_PER_DEGREE_F; return (t-std::floor(t+0.5f))*360.0f; }
 float AngleNormalize360(float a) { a=std::fmod(a,360.0f); return a<0?a+360:a; }
 float AngleNormalize180(float a) { a=AngleNormalize360(a); return a>180?a-360:a; }
 float I_fabs(float a) { return std::fabs(a); }

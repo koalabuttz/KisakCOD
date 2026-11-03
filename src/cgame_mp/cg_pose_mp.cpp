@@ -84,17 +84,17 @@ void CG_VehPoseControllers(const cpose_t *pose, const DObj_s *obj, int32_t *part
     v51 = 0.0;
     v52 = 0.0;
     pitch = pose->vehicle.pitch;
-    steerAngles[0] = pitch * 0.0054931640625;
+    steerAngles[0] = pitch * DEGREES_PER_SHORT;
     roll = pose->vehicle.roll;
-    steerAngles[2] = roll * 0.0054931640625;
+    steerAngles[2] = roll * DEGREES_PER_SHORT;
     suspTravel = pose->vehicle.barrelPitch;
-    bodyAngles[0] = suspTravel * 0.0054931640625;
+    bodyAngles[0] = suspTravel * DEGREES_PER_SHORT;
     if (pose->eType == ET_HELICOPTER)
         bodyAngles[2] = pose->turret.barrelPitch;
     yaw = pose->vehicle.yaw;
-    barrelAngles[1] = yaw * 0.0054931640625;
+    barrelAngles[1] = yaw * DEGREES_PER_SHORT;
     tempAxis_44 = pose->vehicle.steerYaw;
-    v51 = tempAxis_44 * 0.0054931640625;
+    v51 = tempAxis_44 * DEGREES_PER_SHORT;
     DObjSetLocalTag((DObj_s*)obj, partBits, pose->vehicle.tag_body, vec3_origin, steerAngles);
     DObjSetLocalTag((DObj_s*)obj, partBits, pose->vehicle.tag_turret, vec3_origin, barrelAngles);
     DObjSetLocalTag((DObj_s*)obj, partBits, pose->vehicle.tag_barrel, vec3_origin, bodyAngles);

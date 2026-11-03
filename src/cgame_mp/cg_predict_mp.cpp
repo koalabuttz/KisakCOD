@@ -455,14 +455,14 @@ void __cdecl CG_InterpolatePlayerState(int32_t localClientNum, int32_t grabAngle
             {
                 v12 = prevSnap->ps.viewangles[i];
                 v9 = nextSnap->ps.viewangles[i] - v12;
-                v13 = v9 * 0.002777777845039964;
+                v13 = v9 * TURNS_PER_DEGREE;
                 v8 = v13 + 0.5;
                 v7 = floor(v8);
                 v6 = (v13 - v7) * 360.0;
                 out->viewangles[i] = v6 * f + v12;
                 v10 = prevSnap->ps.delta_angles[i];
                 v5 = nextSnap->ps.delta_angles[i] - v10;
-                v11 = v5 * 0.002777777845039964;
+                v11 = v5 * TURNS_PER_DEGREE;
                 v4 = v11 + 0.5;
                 v3 = floor(v4);
                 v2 = (v11 - v3) * 360.0;

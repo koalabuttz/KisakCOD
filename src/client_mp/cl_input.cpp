@@ -780,7 +780,7 @@ void __cdecl CL_FinishMove(int localClientNum, usercmd_s *cmd)
     cmd->serverTime = serverTime;
     for (i = 0; i < 3; ++i)
         cmd->angles[i] = (uint16_t)(int)((LocalClientGlobals->viewangles[i] + LocalClientGlobals->cgameKickAngles[i])
-            * 182.0444488525391);
+            * SHORTS_PER_DEGREE);
     cmd->buttons |= LocalClientGlobals->cgameExtraButtons;
     LocalClientGlobals->cgameExtraButtons = 0;
     if (CG_VehLocalClientDriving(localClientNum))

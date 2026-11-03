@@ -503,7 +503,7 @@ void __cdecl MSG_WriteAngle16(msg_t *sb, double f)
     }
     else
     {
-        *(_WORD *)&sb->data[cursize] = (int)(float)((float)f * (float)182.04445);
+        *(_WORD *)&sb->data[cursize] = (int)(float)((float)f * SHORTS_PER_DEGREE_F);
         sb->cursize = cursize + 2;
     }
 }
@@ -661,7 +661,7 @@ float __cdecl MSG_ReadAngle16(msg_t *msg)
         raw = *(int16_t *)&msg->data[readcount];
         msg->readcount = readcount + 2;
     }
-    return (float)raw * 0.0054931641f;
+    return (float)raw * DEGREES_PER_SHORT_F;
 }
 
 void __cdecl MSG_ReadData(msg_t *msg, _BYTE *data, int len)

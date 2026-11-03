@@ -1460,13 +1460,10 @@ void __cdecl VEH_UpdateAngleAndAngularVel(
     float overShoot,
     vehicle_physic_t *phys)
 {
-    float v6; // [esp+10h] [ebp-40h]
-    float v7; // [esp+14h] [ebp-3Ch]
     float v8; // [esp+18h] [ebp-38h]
     float v9; // [esp+1Ch] [ebp-34h]
     float v10; // [esp+20h] [ebp-30h]
     float v11; // [esp+24h] [ebp-2Ch]
-    float v12; // [esp+2Ch] [ebp-24h]
     float stopAngle; // [esp+38h] [ebp-18h]
     float stopAnglea; // [esp+38h] [ebp-18h]
     float stopTime; // [esp+3Ch] [ebp-14h]
@@ -1510,10 +1507,7 @@ void __cdecl VEH_UpdateAngleAndAngularVel(
         {
             phys->rotVel[index] = VEH_AccelerateSpeed(phys->rotVel[index], targetAngleVel, effectiveAccel, 0.05f);
             phys->angles[index] = phys->rotVel[index] * 0.05f + phys->angles[index];
-            v12 = phys->angles[index] * 0.002777777845039964f;
-            v7 = v12 + 0.5f;
-            v6 = floor(v7);
-            phys->angles[index] = (v12 - v6) * 360.0f;
+            phys->angles[index] = AngleWrap180(phys->angles[index]);
         }
         else
         {
@@ -1546,10 +1540,7 @@ float __cdecl VEH_UpdateMove_GetDesiredYaw(scr_vehicle_s *veh, float *desiredDir
 {
     double v2; // st7
     float v4; // [esp+8h] [ebp-44h]
-    float v5; // [esp+Ch] [ebp-40h]
-    float v6; // [esp+18h] [ebp-34h]
     float v7; // [esp+1Ch] [ebp-30h]
-    float v8; // [esp+20h] [ebp-2Ch]
     float stopAngle; // [esp+24h] [ebp-28h]
     float timeToTurn; // [esp+28h] [ebp-24h]
     float timeToStop; // [esp+2Ch] [ebp-20h]
@@ -1580,10 +1571,7 @@ float __cdecl VEH_UpdateMove_GetDesiredYaw(scr_vehicle_s *veh, float *desiredDir
             timeToTurn = v2 + v2;
             stopAngle = phys->maxAngleVel[1] * 0.5 * timeToTurn;
             angleDiff = desiredYaw - phys->angles[1];
-            v8 = angleDiff * 0.002777777845039964f;
-            v6 = v8 + 0.5f;
-            v5 = floor(v6);
-            v7 = (v8 - v5) * 360.0f;
+            v7 = AngleWrap180(angleDiff);
             v4 = I_fabs(v7);
             if (timeToStop > timeToTurn && v4 > stopAngle)
                 timeToTurn = (v4 - stopAngle) / phys->maxAngleVel[1] + timeToTurn;
@@ -3583,7 +3571,7 @@ void __cdecl VEH_CalcAccel(gentity_s *ent, char *move, float *bodyAccel, float *
             MyAssertHandler(".\\game\\g_scr_vehicle.cpp", 1077, 0, "%s", "player->client");
 
         // Wrap (viewYaw - prevYaw)/360 into [-0.5, 0.5], multiply by 7200 (= 20*360 deg/sec).
-        angle = (player->client->ps.viewangles[1] - veh->phys.prevAngles[1]) * 0.0027777778f;
+        angle = (player->client->ps.viewangles[1] - veh->phys.prevAngles[1]) * TURNS_PER_DEGREE_F;
         frac  = (float)floor(angle + 0.5f);
         wish  = (angle - frac) * 7200.0f;
     }
@@ -3743,7 +3731,7 @@ void __cdecl VEH_UpdateClient(gentity_s *ent)
     veh->phys.rotVel[2] = rotOrWorldAccel[2] * 0.05f + veh->phys.rotVel[2];
 
     // Wrap yaw into [-180, 180): take (rotVel.y*0.05 + prevYaw)/360, fold by round, *360.
-    angle = (veh->phys.rotVel[1] * 0.05f + veh->phys.prevAngles[1]) * 0.0027777778f; // 1/360
+    angle = (veh->phys.rotVel[1] * 0.05f + veh->phys.prevAngles[1]) * TURNS_PER_DEGREE_F;
     frac  = (float)floor(angle + 0.5);
     veh->phys.angles[0] = 0.0f;
     veh->phys.angles[2] = 0.0f;
@@ -6253,10 +6241,8 @@ void __cdecl VEH_UpdateSteering(gentity_s *ent)
         reverse = forwardSpeed < 0.0f;
     }
 
-    // Wrap (angles[1] - prevAngles[1]) / 360 into [-0.5, 0.5], multiply back to deg
-    float angle = (veh->phys.angles[1] - veh->phys.prevAngles[1]) * 0.0027777778f; // 1/360
-    float wrappedAngle = angle - (float)floor(angle + 0.5f);
-    float steer = (reverse ? -10.0f : 10.0f) * (wrappedAngle * 360.0f);
+    // Steer toward the yaw change since last frame, wrapped into [-180, 180].
+    float steer = (reverse ? -10.0f : 10.0f) * AngleWrap180(veh->phys.angles[1] - veh->phys.prevAngles[1]);
 
     // Asm uses two fsel ops to clamp to ±45 (matches IDA exactly).
     float aboveMax = steer - 45.0f;

@@ -1844,8 +1844,8 @@ void __cdecl ActorCmd_GetMotionAngle(scr_entref_t entref)
     else
     {
         v2 = vectoyaw(v1->Physics.vVelocity);
-        v3 = (float)((float)((float)v2 - v1->ent->r.currentAngles[1]) * (float)0.0027777778);
-        *(double *)&v4 = (float)((float)((float)((float)v2 - v1->ent->r.currentAngles[1]) * (float)0.0027777778) + (float)0.5);
+        v3 = (float)((float)((float)v2 - v1->ent->r.currentAngles[1]) * TURNS_PER_DEGREE_F);
+        *(double *)&v4 = (float)((float)((float)((float)v2 - v1->ent->r.currentAngles[1]) * TURNS_PER_DEGREE_F) + (float)0.5);
         v5 = floor(v4);
         v6 = (float)((float)((float)v3 - (float)*(double *)&v5) * (float)360.0);
     }

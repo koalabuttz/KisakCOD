@@ -913,7 +913,7 @@ bool __cdecl turret_behind(gentity_s *self, gentity_s *other)
     v9 = I_fabs(pTurretInfo->arcmax[1]);
     yawSpan = (v10 + v9) * 0.5;
     v8 = yawSpan + minYaw;
-    v12 = v8 * 0.002777777845039964;
+    v12 = v8 * TURNS_PER_DEGREE;
     v7 = v12 + 0.5;
     v6 = floor(v7);
     centerYaw = (v12 - v6) * 360.0;

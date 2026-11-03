@@ -189,7 +189,7 @@ float __cdecl AngleDelta(float a1, float a2)
     float v7; // [esp+18h] [ebp-4h]
 
     v6 = a1 - a2;
-    v7 = v6 * 0.002777777845039964;
+    v7 = v6 * TURNS_PER_DEGREE;
     v5 = v7 + 0.5;
     v4 = floor(v5);
     return ((v7 - v4) * 360.0);
@@ -295,7 +295,7 @@ float __cdecl LinearTrackAngle(float tgt, float cur, float rate, float deltaTime
     while (tgt - cur < -180.0)
         tgt = tgt + 360.0;
     angle = LinearTrack(tgt, cur, rate, deltaTime);
-    v8 = angle * 0.002777777845039964;
+    v8 = angle * TURNS_PER_DEGREE;
     v7 = v8 + 0.5;
     v6 = floor(v7);
     return ((v8 - v6) * 360.0);
@@ -333,7 +333,7 @@ float __cdecl DiffTrackAngle(float tgt, float cur, float rate, float deltaTime)
     while (tgt - cur < -180.0)
         tgt = tgt + 360.0;
     angle = DiffTrack(tgt, cur, rate, deltaTime);
-    v8 = angle * 0.002777777845039964;
+    v8 = angle * TURNS_PER_DEGREE;
     v7 = v8 + 0.5;
     v6 = floor(v7);
     return ((v8 - v6) * 360.0);
@@ -1767,7 +1767,7 @@ float __cdecl AngleNormalize360(float angle)
     float result; // [esp+1Ch] [ebp-8h]
     float result2; // [esp+20h] [ebp-4h]
 
-    scaledAngle = angle * 0.002777777845039964;
+    scaledAngle = angle * TURNS_PER_DEGREE;
     v3 = floor(scaledAngle);
     result = (scaledAngle - v3) * 360.0;
     result2 = result - 360.0;
@@ -1787,8 +1787,7 @@ float AngleNormalize180(float angle)
 
 float AngleSubtract(float a1, float a2)
 {
-    float scaled = (a1 - a2) * 0.0027777778f;
-    return (scaled - floorf(scaled + 0.5f)) * 360.0f;
+    return AngleWrap180(a1 - a2);
 }
 
 float __cdecl RadiusFromBounds(const float *mins, const float *maxs)
