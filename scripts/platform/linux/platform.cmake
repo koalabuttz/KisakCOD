@@ -2,10 +2,9 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
     message(FATAL_ERROR "KISAK_PLATFORM=linux requires a Linux target toolchain.")
 endif()
 if(KISAK_LINUX_ARCH STREQUAL "x86_64")
-    # Opt-in 64-bit track: KisakCOD-dedi builds and boots without game data, and
-    # the compile census reads its compile commands. Fastfile loading is not
-    # 64-bit yet, and every other opt-in Linux target still describes the i386
-    # engine. See docs/linux-x64.md.
+    # Opt-in 64-bit track: KisakCOD-dedi loads retail maps and hosts bots, and
+    # the compile census reads its compile commands. Every other opt-in Linux
+    # target still describes the i386 engine. See docs/linux-x64.md.
     if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
         message(FATAL_ERROR "KISAK_LINUX_ARCH=x86_64 requires a 64-bit toolchain (-m64). Use a new build directory.")
     endif()
@@ -17,8 +16,8 @@ if(KISAK_LINUX_ARCH STREQUAL "x86_64")
             message(FATAL_ERROR "${kisak_i386_only} is i386-only; KISAK_LINUX_ARCH=x86_64 supports only KisakCOD-dedi and the compile census")
         endif()
     endforeach()
-    message(WARNING "KISAK_LINUX_ARCH=x86_64 is the opt-in 64-bit track. KisakCOD-dedi builds and boots "
-        "without game data, but fastfile (map) loading is not 64-bit yet; ship the i386 build. See docs/linux-x64.md.")
+    message(WARNING "KISAK_LINUX_ARCH=x86_64 is the opt-in 64-bit track. KisakCOD-dedi loads the stock maps "
+        "and hosts bots, but it has had far less testing than i386; ship the i386 build. See docs/linux-x64.md.")
 elseif(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
     message(FATAL_ERROR "The Linux dedicated server requires a 32-bit toolchain (-m32). Use a new build directory.")
 endif()
