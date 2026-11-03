@@ -251,6 +251,22 @@ float AngleNormalize360(float angle);
 float AngleNormalize180(float angle);
 float AngleSubtract(float a1, float a2);
 
+// Angle unit factors, with the exact values the game code uses. A turn is
+// 360 degrees; a "short angle" (network and usercmd angles) splits a turn into
+// 65536 steps. The _F constants are floats; the plain ones are doubles for
+// expressions that multiply in double.
+//
+// SHORTS_PER_DEGREE is the float factor as the decompiler printed it (16
+// digits), which is one double ulp above the float widened exactly. The code
+// has always multiplied by this double, so it keeps that value.
+inline constexpr float DEGREES_PER_SHORT_F = 360.0f / 65536.0f;
+inline constexpr double DEGREES_PER_SHORT = 360.0 / 65536.0;
+inline constexpr float SHORTS_PER_DEGREE_F = 65536.0f / 360.0f;
+inline constexpr double SHORTS_PER_DEGREE = 182.0444488525391;
+static_assert(DEGREES_PER_SHORT_F == 0.0054931641f && DEGREES_PER_SHORT == 0.0054931640625);
+static_assert(SHORTS_PER_DEGREE_F == 182.04445f && SHORTS_PER_DEGREE_F == (float)182.04445);
+static_assert((float)SHORTS_PER_DEGREE == SHORTS_PER_DEGREE_F);
+
 void FastSinCos(float radians, float *s, float *c);
 void MatrixRotationX(float mat[3][3], float degree);
 void MatrixRotationY(float mat[3][3], float degree);

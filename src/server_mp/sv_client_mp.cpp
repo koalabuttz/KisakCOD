@@ -1692,9 +1692,9 @@ void __cdecl SV_UserMove(client_t *cl, msg_t *msg, int delta)
                         Com_Printf(CON_CHANNEL_SERVER, "---- Corrupt user command data:\n");
                         Com_Printf(CON_CHANNEL_SERVER, "Command was %i of %i in the packet.\n", i, cmdCount);
                         Com_Printf(CON_CHANNEL_SERVER, "serverTime = %i\n", cmd->serverTime);
-                        Com_Printf(CON_CHANNEL_SERVER, "angles[0] = %i(%f)\n", cmd->angles[0], (double)cmd->angles[0] * 0.0054931640625);
-                        Com_Printf(CON_CHANNEL_SERVER, "angles[1] = %i(%f)\n", cmd->angles[1], (double)cmd->angles[1] * 0.0054931640625);
-                        Com_Printf(CON_CHANNEL_SERVER, "angles[2] = %i(%f)\n", cmd->angles[2], (double)cmd->angles[2] * 0.0054931640625);
+                        Com_Printf(CON_CHANNEL_SERVER, "angles[0] = %i(%f)\n", cmd->angles[0], (double)cmd->angles[0] * DEGREES_PER_SHORT);
+                        Com_Printf(CON_CHANNEL_SERVER, "angles[1] = %i(%f)\n", cmd->angles[1], (double)cmd->angles[1] * DEGREES_PER_SHORT);
+                        Com_Printf(CON_CHANNEL_SERVER, "angles[2] = %i(%f)\n", cmd->angles[2], (double)cmd->angles[2] * DEGREES_PER_SHORT);
                         Com_Printf(CON_CHANNEL_SERVER, "forwardmove = %i\n", cmd->forwardmove);
                         Com_Printf(CON_CHANNEL_SERVER, "rightmove = %i\n", cmd->rightmove);
                         Com_Printf(CON_CHANNEL_SERVER, "buttons = %i\n", cmd->buttons);

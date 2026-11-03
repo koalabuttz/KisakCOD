@@ -1055,9 +1055,9 @@ int __cdecl PausedClientFreeMove(int localClientNum)
     {
         LocalClientGlobals = CG_GetLocalClientGlobals(localClientNum);
 
-        angles[0] = (float)usercmd.angles[0] * 0.0054931641f;
-        angles[1] = (float)usercmd.angles[1] * 0.0054931641f;
-        angles[2] = (float)usercmd.angles[2] * 0.0054931641f;
+        angles[0] = (float)usercmd.angles[0] * DEGREES_PER_SHORT_F;
+        angles[1] = (float)usercmd.angles[1] * DEGREES_PER_SHORT_F;
+        angles[2] = (float)usercmd.angles[2] * DEGREES_PER_SHORT_F;
         angles[0] = LocalClientGlobals->predictedPlayerState.delta_angles[0] + angles[0];
         angles[1] = LocalClientGlobals->predictedPlayerState.delta_angles[1] + angles[1];
         angles[2] = LocalClientGlobals->predictedPlayerState.delta_angles[2] + angles[2];

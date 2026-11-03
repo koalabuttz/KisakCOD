@@ -108,7 +108,7 @@ void __cdecl SetClientViewAngle(gentity_s *ent, const float *angle)
     }
     for (i = 0; i < 3; ++i)
     {
-        v18 = newAngle[i] - (float)ent->client->sess.cmd.angles[i] * 0.0054931640625f;
+        v18 = newAngle[i] - (float)ent->client->sess.cmd.angles[i] * DEGREES_PER_SHORT_F;
         v19 = v18 * 0.002777777845039964f;
         v5 = v19 + 0.5f;
         v4 = floor(v5);

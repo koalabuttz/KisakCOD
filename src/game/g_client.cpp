@@ -288,7 +288,7 @@ void __cdecl InitClientDeltaAngles(gclient_s *client)
 
     for (int i = 0; i < 3; ++i)
     {
-        const float cmdDeg = (float)cmdAngles[i] * 0.0054931641f;
+        const float cmdDeg = (float)cmdAngles[i] * DEGREES_PER_SHORT_F;
         const float diff   = viewangles[i] - cmdDeg;
         const float turns  = diff * 0.0027777778f;
         const float frac   = turns - floorf(turns + 0.5f);

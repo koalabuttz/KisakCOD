@@ -1168,8 +1168,8 @@ void __cdecl PM_AdjustAimSpreadScale(pmove_t *pm, pml_t *pml)
                 {
                     for (i = 0; i < 2; ++i)
                     {
-                        a2 = (double)pm->oldcmd.angles[i] * 0.0054931640625;
-                        a1 = (double)pm->cmd.angles[i] * 0.0054931640625;
+                        a2 = (double)pm->oldcmd.angles[i] * DEGREES_PER_SHORT;
+                        a1 = (double)pm->cmd.angles[i] * DEGREES_PER_SHORT;
                         v8 = AngleDelta(a1, a2);
                         v5 = I_fabs(v8);
                         viewchange = v5 * (float)0.0099999998 * weapDef->fHipSpreadTurnAdd / pml->frametime + viewchange;

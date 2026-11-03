@@ -1306,7 +1306,7 @@ char __cdecl VEH_PlayerRotation(gentity_s *player, vehicle_physic_t *phys)
     char sign; // [esp+33h] [ebp-5h]
     float yawWanted; // [esp+34h] [ebp-4h]
 
-    angle = (double)player->client->sess.cmd.angles[1] * 0.0054931640625
+    angle = (double)player->client->sess.cmd.angles[1] * DEGREES_PER_SHORT
         + player->client->ps.delta_angles[1];
     yawWanted = AngleNormalize360(angle);
     v7 = phys->angles[1];

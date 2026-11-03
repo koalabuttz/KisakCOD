@@ -1032,11 +1032,11 @@ void __cdecl CG_Vehicle_PreControllers(int localClientNum, const DObj_s *obj, ce
 
     cg_s *cgameGlob = CG_GetLocalClientGlobals(localClientNum);
 
-    cent->pose.vehicle.pitch = (int)floor(LerpAngle(cent->currentState.u.vehicle.bodyPitch, cent->nextState.lerp.u.vehicle.bodyPitch, cgameGlob->frameInterpolation) * 182.04445f + 0.5f);
-    cent->pose.vehicle.roll = (int)floor(LerpAngle(cent->currentState.u.vehicle.bodyRoll, cent->nextState.lerp.u.vehicle.bodyRoll, cgameGlob->frameInterpolation) * 182.04445f + 0.5f);
-    cent->pose.vehicle.barrelPitch = (int)floor(LerpAngle(cent->currentState.u.vehicle.gunPitch, cent->nextState.lerp.u.vehicle.gunPitch, cgameGlob->frameInterpolation) * 182.04445f + 0.5f);
-    cent->pose.vehicle.yaw = (int)floor(LerpAngle(cent->currentState.u.vehicle.gunYaw, cent->nextState.lerp.u.vehicle.gunYaw, cgameGlob->frameInterpolation) * 182.04445f + 0.5f);
-    cent->pose.vehicle.steerYaw = (int)floor( LerpAngle(cent->currentState.u.vehicle.steerYaw, cent->nextState.lerp.u.vehicle.steerYaw, cgameGlob->frameInterpolation) * 182.04445f + 0.5f);
+    cent->pose.vehicle.pitch = (int)floor(LerpAngle(cent->currentState.u.vehicle.bodyPitch, cent->nextState.lerp.u.vehicle.bodyPitch, cgameGlob->frameInterpolation) * SHORTS_PER_DEGREE_F + 0.5f);
+    cent->pose.vehicle.roll = (int)floor(LerpAngle(cent->currentState.u.vehicle.bodyRoll, cent->nextState.lerp.u.vehicle.bodyRoll, cgameGlob->frameInterpolation) * SHORTS_PER_DEGREE_F + 0.5f);
+    cent->pose.vehicle.barrelPitch = (int)floor(LerpAngle(cent->currentState.u.vehicle.gunPitch, cent->nextState.lerp.u.vehicle.gunPitch, cgameGlob->frameInterpolation) * SHORTS_PER_DEGREE_F + 0.5f);
+    cent->pose.vehicle.yaw = (int)floor(LerpAngle(cent->currentState.u.vehicle.gunYaw, cent->nextState.lerp.u.vehicle.gunYaw, cgameGlob->frameInterpolation) * SHORTS_PER_DEGREE_F + 0.5f);
+    cent->pose.vehicle.steerYaw = (int)floor( LerpAngle(cent->currentState.u.vehicle.steerYaw, cent->nextState.lerp.u.vehicle.steerYaw, cgameGlob->frameInterpolation) * SHORTS_PER_DEGREE_F + 0.5f);
 
     cent->pose.vehicle.time = (float)cent->nextState.time2 * 0.001f;
     DObjGetBoneIndex(obj, scr_const.tag_body, &cent->pose.vehicle.tag_body);

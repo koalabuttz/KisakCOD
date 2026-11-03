@@ -676,9 +676,9 @@ void __cdecl PM_UpdateViewAngles(playerState_s *ps, float msec, usercmd_s *cmd, 
     {
         if (ps->stats[STAT_DEAD_YAW] == 999)
         {
-            angle = (double)cmd->angles[1] * 0.0054931640625 + ps->delta_angles[1];
+            angle = (double)cmd->angles[1] * DEGREES_PER_SHORT + ps->delta_angles[1];
             temp = AngleNormalize360(angle);
-            ps->stats[STAT_DEAD_YAW] = (int)(temp * 0.0054931640625);
+            ps->stats[STAT_DEAD_YAW] = (int)(temp * DEGREES_PER_SHORT);
         }
     LABEL_21:
         PM_UpdateLean(
@@ -739,7 +739,7 @@ void __cdecl PM_UpdateViewAngles_Clamp(playerState_s *ps, usercmd_s *cmd)
     maxPitch = player_view_pitch_down->current.value;
     for (i = 0; i < 3; ++i)
     {
-        v7 = ps->delta_angles[i] + (double)cmd->angles[i] * 0.0054931640625;
+        v7 = ps->delta_angles[i] + (double)cmd->angles[i] * DEGREES_PER_SHORT;
         v8 = v7 * 0.002777777845039964;
         v5 = v8 + 0.5;
         v4 = floor(v5);
@@ -750,13 +750,13 @@ void __cdecl PM_UpdateViewAngles_Clamp(playerState_s *ps, usercmd_s *cmd)
             {
                 if (temp < -minPitch)
                 {
-                    ps->delta_angles[0] = -minPitch - (double)cmd->angles[0] * 0.0054931640625;
+                    ps->delta_angles[0] = -minPitch - (double)cmd->angles[0] * DEGREES_PER_SHORT;
                     temp = -minPitch;
                 }
             }
             else
             {
-                ps->delta_angles[0] = maxPitch - (double)cmd->angles[0] * 0.0054931640625;
+                ps->delta_angles[0] = maxPitch - (double)cmd->angles[0] * DEGREES_PER_SHORT;
                 temp = maxPitch;
             }
         }
