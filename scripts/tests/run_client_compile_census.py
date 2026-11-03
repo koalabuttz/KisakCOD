@@ -22,7 +22,9 @@ with the reason. The check is a two-way ratchet:
 Either one fails the run. A listed path that the CMake lists no longer contain is
 also stale. What is compiled is the client source set minus the groups recorded
 in ``EXCLUDED_GROUPS`` below (the Windows platform layer, which ``src/linux``
-replaces, and vendored third-party code with its own build rules); a group that
+replaces, and vendored third-party code with its own build rules), plus the few
+Windows platform units the Linux client links as they are
+(``scripts/platform/linux/mp_client_platform_sources.txt``); a group that
 the MP target gains or loses fails the run until this file is updated, so the
 census cannot silently stop covering part of the client.
 
@@ -58,6 +60,9 @@ ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src"
 SCRIPTS = ROOT / "scripts"
 BLOCKED_LIST = SCRIPTS / "tests" / "client_compile_census_blocked.txt"
+# Windows platform units the Linux client links as they are; censused with the
+# engine groups (see that file's header).
+PLATFORM_LIST = SCRIPTS / "platform" / "linux" / "mp_client_platform_sources.txt"
 MP_TARGET = SCRIPTS / "mp" / "CMakeLists.txt"
 DEFAULT_TIMEOUT = 300
 
@@ -141,6 +146,20 @@ def check_group_coverage(groups):
     for group in sorted(known - set(groups)):
         problems.append(f"KisakCOD-mp no longer lists group {group}: remove it from the census")
     return problems
+
+
+def load_platform_sources(path, win32_sources):
+    """The WIN32_SRC units the Linux client links, as (group, absolute path)."""
+    win32 = {relative(source) for source in win32_sources}
+    sources = []
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        line = line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        if line not in win32:
+            raise CensusError(f"{path.name}:{number}: {line} is not a WIN32_SRC .cpp of KisakCOD-mp")
+        sources.append(("WIN32_SRC", (ROOT / line).resolve()))
+    return sources
 
 
 def list_sources(cmake, groups):
@@ -257,6 +276,7 @@ def main(argv=None):
         if shutil.which(options.cmake) is None:
             raise CensusError(f"{options.cmake} not found")
         sources = list_sources(options.cmake, CENSUS_GROUPS)
+        sources += load_platform_sources(PLATFORM_LIST, [path for _, path in list_sources(options.cmake, ["WIN32_SRC"])])
     except (CensusError, OSError, subprocess.SubprocessError) as error:
         print(f"FAIL: census setup: {error}")
         return 1
