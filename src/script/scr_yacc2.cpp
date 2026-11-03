@@ -1280,7 +1280,12 @@ yysetstate:
 			switch (yyn)
 			{
 			case 1:
-				yaccResult = node1(yyvsp[-1].val.type, yyvsp->val);// node2_
+				// The script root: { include list, thread list }. The decompiled
+				// action passed the include list through node1's 4-byte type,
+				// which cuts the pointer on x86_64.
+				yaccResult.node = Scr_AllocNode(2);
+				yaccResult.node[0] = yyvsp[-1].val;
+				yaccResult.node[1] = yyvsp->val;
 				break;
 			case 2:
 				yaccResult = node1(ENUM_expression, yyvsp->val);// node1
