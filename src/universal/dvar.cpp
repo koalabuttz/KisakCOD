@@ -163,7 +163,7 @@ void PBdvar_set(const char *var_name, char *value)
         Dvar_SetFromStringByName(var_name, value);
 }
 
-char *Dvar_InfoString(int localClientNum, char bit)
+char *Dvar_InfoString(int localClientNum, int bit)
 {
     const char *UsernameForLocalClient; // eax
 

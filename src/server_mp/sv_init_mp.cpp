@@ -664,7 +664,7 @@ void SV_SaveSystemInfo()
     char *v0; // eax
 
     SV_SetSystemInfoConfig();
-    v0 = Dvar_InfoString(0, 4);
+    v0 = Dvar_InfoString(0, DVAR_SERVERINFO | DVAR_SCRIPTINFO);
     SV_SetConfigstring(CS_SERVERINFO, v0);
     dvar_modifiedFlags &= ~(DVAR_SERVERINFO | DVAR_SCRIPTINFO);
     SV_SetConfig(CS_CODINFO, CS_CODINFO_COUNT, DVAR_CODINFO);
