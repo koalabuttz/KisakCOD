@@ -29,8 +29,8 @@ endif()
 
 message(STATUS "----- KisakCOD native D3D9 boundary (opt-in, DXVK Native) -----")
 
-if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
-    message(FATAL_ERROR "KISAK_BUILD_LINUX_NATIVE_D3D9 describes the i386 engine: configure a 32-bit (-m32) build")
+if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4 AND NOT KISAK_LINUX_ARCH STREQUAL "x86_64")
+    message(FATAL_ERROR "KISAK_BUILD_LINUX_NATIVE_D3D9 needs a 32-bit (-m32) build, or KISAK_LINUX_ARCH=x86_64 for the 64-bit track")
 endif()
 if(NOT KISAK_DXVK_NATIVE_INCLUDE_DIR)
     message(FATAL_ERROR

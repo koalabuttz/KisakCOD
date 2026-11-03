@@ -3,7 +3,8 @@
 
 Two parts:
 
-* Source checks (always): the opt-in target stays off by default and i386-only,
+* Source checks (always): the opt-in target stays off by default (i386, or
+  x86_64 only through KISAK_LINUX_ARCH=x86_64),
   CINEMA is read only by the unit the target compiles without it, the platform
   units it links are real files, and the stand-ins it links say what they are.
 * Run checks (with ``--binary``): start the client from temporary trees that hold
@@ -67,7 +68,11 @@ def source_checks(checker):
                     and 'NOT EXISTS "${KISAK_OPENAL_INCLUDE_DIR}/AL/al.h"' in module,
                     "the optional OpenAL header directory is checked for AL/al.h")
     fence = (ROOT / "scripts" / "platform" / "linux" / "platform.cmake").read_text(encoding="utf-8")
-    checker.require("KISAK_BUILD_LINUX_MP_CLIENT)" in fence, "the 64-bit configuration refuses the client target")
+    d3d9_module = (ROOT / "scripts" / "platform" / "linux" / "native_d3d9.cmake").read_text(encoding="utf-8")
+    checker.require("KISAK_BUILD_LINUX_MP_CLIENT" not in fence
+                    and 'if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4 AND NOT KISAK_LINUX_ARCH STREQUAL "x86_64")' in d3d9_module,
+                    "a 64-bit toolchain builds the client and its D3D9 boundary only under KISAK_LINUX_ARCH=x86_64")
+    checker.require("KISAK_BUILD_WORLD_DRAW_PROBE)" in fence, "the 64-bit configuration still refuses the renderer probes")
 
     definitions = re.search(r"set\(KISAK_MP_CLIENT_DEFINITIONS(.*?)\)", module, re.S)
     checker.require(definitions is not None and "CINEMA" not in definitions.group(1).split(),

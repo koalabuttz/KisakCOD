@@ -11,7 +11,8 @@ The track is staged:
    where the 32-bit assumptions are, filed under the upstream issues.
 2. **x86_64 dedicated server**: make `KisakCOD-dedi` build and run 64-bit, which
    is where the fastfile loader and script VM work lands.
-3. **x86_64 client**: the renderer and client on DXVK Native x86_64.
+3. **x86_64 client**: the renderer and client on DXVK Native x86_64 (started:
+   builds, not playable yet).
 
 ## Upstream alignment
 
@@ -335,6 +336,58 @@ Still i386-shaped and off the dedicated path: the SP save game stack format in
 `scr_readwrite.cpp`, client-side literal offset and size tables (effects,
 devgui, static model cache, server browser), and the pointer/integer casts the
 census lists in the raw asset (`*_load_obj.cpp`) loaders.
+
+## x86_64 multiplayer client
+
+Step 3 starts here. `KisakCOD-mp` and its native D3D9 boundary configure under
+`KISAK_LINUX_ARCH=x86_64`; the renderer probes and the other opt-in client
+targets stay i386-only. The client **builds and starts but is not playable
+yet**: the work below lists what still assumes 32-bit pointers.
+
+```sh
+cmake -S . -B build-x64-mp -G Ninja -DKISAK_PLATFORM=linux -DKISAK_LINUX_ARCH=x86_64 \
+  -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS=-m64 -DCMAKE_CXX_FLAGS=-m64 \
+  -DKISAK_BUILD_LINUX_NATIVE_D3D9=ON -DKISAK_DXVK_NATIVE_INCLUDE_DIR=<dxvk>/include/dxvk \
+  -DKISAK_DXVK_NATIVE_LIBRARY=<x86_64 libdxvk_d3d9.so or the stand-in> \
+  -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_OPENAL_LIBRARY=<x86_64 libopenal.so.1 or the stand-in> \
+  -DSDL3_DIR=<x86_64 SDL3 3.2.10>/lib/cmake/SDL3
+cmake --build build-x64-mp --target KisakCOD-mp KisakCOD-mp-client-window-test
+```
+
+SDL3, DXVK Native and OpenAL must be x86_64 builds of the same pins the i386
+client uses (SDL 3.2.10, DXVK 2.7.1). The stand-ins in `tests/` build with
+`-m64` as they do with `-m32`.
+
+The only source change the build needed was in the D3D9 boundary
+(`src/linux/d3d9_native.h`): on i386 it proves that the engine's `__stdcall`
+survived DXVK's `#define __stdcall` and still differs from cdecl. x86_64 has one
+C calling convention, so there it checks that `__stdcall` and `WINAPI` are that
+convention. Every other boundary check (handle types, `WCHAR`, `POINT`/`RECT`
+layouts, the D3D9 enumerators and embedded layouts) runs on both.
+
+CI's `x86_64 multiplayer client` job builds it against the stand-ins and runs
+the same asset-free checks as the i386 client job: the game window test and
+`test_linux_mp_client.py` (file system refusal, autoconfigure stop, home folder
+rules).
+
+### What still assumes 32-bit pointers
+
+The x86_64 client build warns at 336 casts between pointers and narrower
+integers (209 int-to-pointer, 127 pointer-to-int); 237 of them are in sources
+only the client compiles. The main groups:
+
+- **Physics object ids**: `physObjId` fields (`cpose_t`, dynamic entities,
+  effect elements) store a `dxBody *` in an `int`.
+- **Renderer streams that pack pointers into 32-bit words**: the static model
+  primitive draw stream (`R_WritePrimDrawSurfInt`), model surfaces, the worker
+  command data in `r_scene.cpp`/`r_dpvs_entity.cpp`, and the light and shadow
+  receiver callbacks.
+- **Decompiled byte offsets into structs** that hold pointers: menu expressions
+  (`ui_expressions*.cpp`), the script debugger, `rb_imagetouch.cpp`,
+  `cg_pose_mp.cpp`.
+- **Struct sizes written as i386 numbers**: render command allocations such as
+  `(len + 84) & ~3` for `GfxCmdDrawText2D` (96 bytes on x86_64), `memset` of
+  `trace_t` and `BulletTraceResults` with their i386 sizes, and similar.
 
 ## Windows MSVC x64 census
 
