@@ -10,7 +10,7 @@ int compare_hudelems(const void *pe0, const void *pe1)
 {
     float delta; // [esp+0h] [ebp-Ch]
 
-    delta = *(float *)(*(uint32_t *)pe0 + 128) - *(float *)(*(uint32_t *)pe1 + 128);
+    delta = (*(hudelem_s *const *)pe0)->sort - (*(hudelem_s *const *)pe1)->sort;
     if (delta >= 0.0)
         return delta > 0.0;
     else
