@@ -18,7 +18,7 @@ import tempfile
 
 def shutdown_function(source: str) -> str:
     signature = re.search(
-        r"void\s+__cdecl\s+R_ShutdownRenderCommands\s*\(\s*\)\s*\{", source
+        r"void\s+(?:__cdecl\s+)?R_ShutdownRenderCommands\s*\(\s*\)\s*\{", source
     )
     if signature is None:
         raise ValueError("R_ShutdownRenderCommands definition was not found")

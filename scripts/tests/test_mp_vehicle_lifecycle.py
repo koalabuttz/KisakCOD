@@ -518,7 +518,7 @@ def main():
     for path,names in groups.items():
         source=(args.source_root/path).read_text()
         for name in names:
-            if name == 'SV_TraceCapsuleWithIgnore' and not re.search(r'^void __cdecl SV_TraceCapsuleWithIgnore\(',source,re.M):
+            if name == 'SV_TraceCapsuleWithIgnore' and not re.search(r'^void (?:__cdecl )?SV_TraceCapsuleWithIgnore\(',source,re.M):
                 bodies.append('void SV_TraceCapsuleWithIgnore(trace_t*r,const float*s,const float*mi,const float*ma,const float*e,const IgnoreEntParams*i,int c) { SV_Trace(r,s,mi,ma,e,i,c,0,nullptr,0); }')
             elif name == 'G_VehFindExitPosition' and not re.search(r'^static bool G_VehFindExitPosition\(', source, re.M):
                 # Allow the original source to compile for a negative control.

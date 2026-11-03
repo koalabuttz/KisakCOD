@@ -61,6 +61,16 @@ def extract(source: str, name: str, signature: str) -> str:
 
 CALL = re.compile(r"(?<![A-Za-z0-9_])rand\(\)")
 
+# __cdecl is the default convention and is being dropped from engine sources
+# (upstream issue #35). Signatures are compared with it removed so the check
+# passes with either spelling.
+CDECL = re.compile(r"\b__cdecl\b[ \t]*")
+
+
+def drop_cdecl(text: str) -> str:
+    return CDECL.sub("", text)
+
+
 # Comments and literals are skipped: a comment may legitimately mention rand(),
 # and a string literal is not the CRT call.
 NON_CODE = re.compile(
@@ -1428,27 +1438,27 @@ def build_program(g_utils, bg_misc, g_combat, g_items) -> str:
             # The three G_* random helpers the death-grenade path draws from, taken
             # from the shipped multiplayer definitions so the velocity arithmetic
             # under test is production code rather than a reproduction.
-            function(g_utils, "G_rand", "int __cdecl G_rand()", draws=1),
-            function(g_utils, "G_random", "float __cdecl G_random()", draws=0),
-            function(g_utils, "G_crandom", "float __cdecl G_crandom()", draws=0),
+            function(g_utils, "G_rand", "int G_rand()", draws=1),
+            function(g_utils, "G_random", "float G_random()", draws=0),
+            function(g_utils, "G_crandom", "float G_crandom()", draws=0),
             "",
             # The shipped placement and trajectory integrator. Extracting these is
             # what makes the item tests measure real behaviour: G_SetOrigin really
             # resets the trajectory (so LaunchItem's seeding must survive it), and
             # BG_EvaluateTrajectory really integrates the frame instead of being
             # handed a canned sample.
-            extract(g_utils, "G_SetOrigin", "void __cdecl G_SetOrigin(gentity_s *ent, const float *origin)"),
+            extract(g_utils, "G_SetOrigin", "void G_SetOrigin(gentity_s *ent, const float *origin)"),
             extract(bg_misc, "BG_EvaluateTrajectory",
-                    "void __cdecl BG_EvaluateTrajectory(const trajectory_t *tr, int32_t atTime, "
+                    "void BG_EvaluateTrajectory(const trajectory_t *tr, int32_t atTime, "
                     "float *result)"),
             "",
             # The code under test.
             extract(g_combat, "DeathGrenadeDrop",
-                    "void __cdecl DeathGrenadeDrop(gentity_s *self, int32_t meansOfDeath)"),
+                    "void DeathGrenadeDrop(gentity_s *self, int32_t meansOfDeath)"),
             extract(g_items, "LaunchItem",
-                    "gentity_s *__cdecl LaunchItem(const gitem_s *item, float *origin, "
+                    "gentity_s *LaunchItem(const gitem_s *item, float *origin, "
                     "float *angles, float *velocity, int32_t ownerNum)"),
-            extract(g_items, "G_RunItem", "void __cdecl G_RunItem(gentity_s *ent)"),
+            extract(g_items, "G_RunItem", "void G_RunItem(gentity_s *ent)"),
             ASSERTIONS,
         ]
     )
@@ -1580,10 +1590,10 @@ def main() -> int:
                         help="also run the 64-bit build under ASan/UBSan")
     args = parser.parse_args()
 
-    g_utils = args.g_utils.read_text()
-    bg_misc = args.bg_misc.read_text()
-    g_combat = args.g_combat.read_text()
-    g_items = args.g_items.read_text()
+    g_utils = drop_cdecl(args.g_utils.read_text())
+    bg_misc = drop_cdecl(args.bg_misc.read_text())
+    g_combat = drop_cdecl(args.g_combat.read_text())
+    g_items = drop_cdecl(args.g_items.read_text())
 
     # Shipping headers, read only to verify the constants transcribed into the
     # harness rather than to compile against.
