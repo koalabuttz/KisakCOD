@@ -131,6 +131,20 @@ bootstrap check, the asset-free world surface checks and the native D3D9 boundar
 checks (below). Loading a map and
 quitting with licensed assets remain separate application checks.
 
+When the hosted workflows run:
+
+- A newer push to a pull request cancels that pull request's older Linux and
+  Windows runs. Pushes to master and manual runs always finish.
+- The Windows workflow skips changes that cannot reach the MSVC builds or its
+  regression checks: documentation and Markdown, `src/linux`, `tests/linux_*`,
+  `scripts/platform/linux`, `build-linux.sh`, the Linux workflow, and the Linux
+  runners in `scripts/tests`. A check added to the Windows workflow under
+  `scripts/tests` has to be listed in its paths.
+- Pull requests run the SDL3 window jobs only; pushes to master and manual runs
+  also run SDL2.
+
+`test_linux_window_workflow.py` checks these rules (`CiTriggerTests`).
+
 ## World surface checks
 
 ```sh

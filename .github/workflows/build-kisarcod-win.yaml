@@ -2,10 +2,70 @@ name: Windows CMake DirectX Build
 
 on:
   workflow_dispatch:
+  # Changes that cannot affect the Windows builds skip this workflow. The path
+  # list is the same for both events, and the order matters: a later pattern
+  # overrides an earlier one. scripts/tests/test_linux_window_workflow.py checks it.
   push:
     branches: [ "master" ]
+    paths:
+      - '**'
+      # Nothing below reaches the MSVC builds or the regression checks: the
+      # documentation, and the native Linux port's own sources, tests, CMake,
+      # script and workflow (shared sources include src/linux headers only in
+      # Linux builds).
+      - '!docs/**'
+      - '!**/*.md'
+      - '!src/linux/**'
+      - '!tests/linux_*/**'
+      - '!scripts/platform/linux/**'
+      - '!build-linux.sh'
+      - '!.github/workflows/build-kisakcod-linux.yaml'
+      # scripts/tests holds the Linux runners too. Only the scripts and the
+      # D3DX project this workflow runs are its own; add any new one here.
+      - '!scripts/tests/**'
+      - 'scripts/tests/d3dx/**'
+      - 'scripts/tests/test_renderer_command_ownership.py'
+      - 'scripts/tests/test_script_vm_field_stack.py'
+      - 'scripts/tests/test_shader_constant_order.py'
+      - 'scripts/tests/test_shellshock_channel_metadata.py'
+      - 'scripts/tests/test_script_loading_watchdog.py'
+      - 'scripts/tests/test_voice_lifecycle.py'
+      - 'scripts/tests/test_script_console_watchdog.py'
+      - 'scripts/tests/test_exec_command_ownership.py'
   pull_request:
     branches: [ "master" ]
+    paths:
+      - '**'
+      # Nothing below reaches the MSVC builds or the regression checks: the
+      # documentation, and the native Linux port's own sources, tests, CMake,
+      # script and workflow (shared sources include src/linux headers only in
+      # Linux builds).
+      - '!docs/**'
+      - '!**/*.md'
+      - '!src/linux/**'
+      - '!tests/linux_*/**'
+      - '!scripts/platform/linux/**'
+      - '!build-linux.sh'
+      - '!.github/workflows/build-kisakcod-linux.yaml'
+      # scripts/tests holds the Linux runners too. Only the scripts and the
+      # D3DX project this workflow runs are its own; add any new one here.
+      - '!scripts/tests/**'
+      - 'scripts/tests/d3dx/**'
+      - 'scripts/tests/test_renderer_command_ownership.py'
+      - 'scripts/tests/test_script_vm_field_stack.py'
+      - 'scripts/tests/test_shader_constant_order.py'
+      - 'scripts/tests/test_shellshock_channel_metadata.py'
+      - 'scripts/tests/test_script_loading_watchdog.py'
+      - 'scripts/tests/test_voice_lifecycle.py'
+      - 'scripts/tests/test_script_console_watchdog.py'
+      - 'scripts/tests/test_exec_command_ownership.py'
+
+# A newer push to a pull request cancels that pull request's older run. Every
+# other run (pushes to master, manual runs) gets a group of its own and always
+# finishes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
   runtime-regressions:
