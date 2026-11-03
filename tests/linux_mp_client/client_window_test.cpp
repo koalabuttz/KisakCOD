@@ -15,6 +15,7 @@
 // releases relative capture and the cursor follows the engine's requests; focus,
 // minimize and close reach the engine as VID_AppActivate and WM_CLOSE do;
 // destroying the window (vid_restart, shutdown) neither quits nor clears keys;
+// another thread's pump gets nothing, as with Windows' per-thread queues;
 // a recreated window is adopted again.
 //
 // Not claimed: a real desktop's event stream, HiDPI pixel scaling (the dummy
@@ -33,6 +34,7 @@
 #include <cstdlib>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 extern "C" SDL_Window *__real_SDL_CreateWindowWithProperties(SDL_PropertiesID props);
@@ -195,8 +197,18 @@ void CheckWindowLifetime()
     Check(CountType(events, SE_POINTER) == 1, "the pointer boundary is queued for the platform to drop");
     Check(CountType(events, SE_MOUSE) == 0, "motion is never queued as an engine event");
 
+    // Another thread (the render thread, through Sys_LoadingKeepAlive) gets
+    // none of the window's events, as PeekMessage gives it none on Windows.
     Push(sdl::MakeKey(id, SDL_SCANCODE_A, false));
-    GameWindow()->Pump();
+    bool otherPumped = true, otherThrew = false;
+    std::thread renderThread([&] {
+        try { otherPumped = GameWindow()->Pump(); }
+        catch (...) { otherThrew = true; }
+    });
+    renderThread.join();
+    Check(!otherThrew && !otherPumped, "another thread's pump does nothing and does not fail");
+    Check(Drain().empty(), "another thread's pump delivers nothing");
+    Check(GameWindow()->Pump(), "the window's own thread pumps it");
     Check(HasKey(Drain(), 'a', 0), "a key release reaches the engine queue");
 
     // --- mouse ----------------------------------------------------------------
