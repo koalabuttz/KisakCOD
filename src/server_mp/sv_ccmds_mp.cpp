@@ -1139,7 +1139,7 @@ void __cdecl SV_AssembleConSayMessage(int firstArg, char *text, int sizeofText)
 {
     uint32_t textLen; // [esp+10h] [ebp-4h]
 
-    strcpy(text, "console: ");
+    I_strncpyz(text, "console: ", sizeofText);
     textLen = 9;
     if (strlen(text) != 9)
         MyAssertHandler(".\\server_mp\\sv_ccmds_mp.cpp", 827, 1, "%s", "textLen == strlen( text )");

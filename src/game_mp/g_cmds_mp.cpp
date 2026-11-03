@@ -1157,7 +1157,7 @@ void __cdecl Cmd_MenuResponse_f(gentity_s *pEnt)
     else
     {
         szMenuName[0] = 0;
-        strcpy(szResponse, "bad");
+        I_strncpyz(szResponse, "bad", sizeof(szResponse));
     }
     Scr_AddString(szResponse);
     Scr_AddString(szMenuName);

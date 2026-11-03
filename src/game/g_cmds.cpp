@@ -838,7 +838,7 @@ void __cdecl Cmd_MenuResponse_f(gentity_s *pEnt)
     else
     {
         v4[0] = 0;
-        strcpy(v5, "bad");
+        I_strncpyz(v5, "bad", sizeof(v5));
     }
     Scr_AddString(v5);
     Scr_AddString(v4);

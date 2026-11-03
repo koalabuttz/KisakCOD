@@ -148,8 +148,8 @@ void DebugDrawNodePicking(const char *msg, actor_s *self, const pathnode_t *node
 
         if (msg)
         {
-            strncpy(debugCoverNodeMsg[debugNodeIndex], msg, 19);
-            debugCoverNodeMsg[debugNodeIndex][19] = '\0'; // ensure null-termination
+            // Keeps at most 19 characters, as before.
+            I_strncpyz(debugCoverNodeMsg[debugNodeIndex], msg, 20);
         }
         else
         {

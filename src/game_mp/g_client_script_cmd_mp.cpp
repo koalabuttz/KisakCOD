@@ -66,7 +66,7 @@ void __cdecl PlayerCmd_giveWeapon(scr_entref_t entref)
 LABEL_20:
     if (wasGivenWeapon)
     {
-        _snprintf(svcmd, 0x40u, "%c \"%i\"", 74, 1);
+        snprintf(svcmd, 0x40u, "%c \"%i\"", 74, 1);
         svcmd[63] = 0;
         SV_GameSendServerCommand(pSelf - g_entities, SV_CMD_CAN_IGNORE, svcmd);
         G_InitializeAmmo(pSelf, weaponIndex, weaponModel, hadWeapon);
@@ -1537,7 +1537,7 @@ void __cdecl PlayerCmd_OpenMenu(scr_entref_t entref)
                 0,
                 "%s",
                 "(iMenuIndex >= 0) && (iMenuIndex < MAX_SCRIPT_MENUS)");
-        _snprintf(svcmd, 0x40u, "%c %i", 116, iMenuIndex);
+        snprintf(svcmd, 0x40u, "%c %i", 116, iMenuIndex);
         svcmd[63] = 0;
         SV_GameSendServerCommand(entref.entnum, SV_CMD_RELIABLE, svcmd);
         Scr_AddInt(1);
@@ -1578,7 +1578,7 @@ void __cdecl PlayerCmd_OpenMenuNoMouse(scr_entref_t entref)
                 0,
                 "%s",
                 "(iMenuIndex >= 0) && (iMenuIndex < MAX_SCRIPT_MENUS)");
-        _snprintf(svcmd, 0x40u, "%c %i 1", 116, iMenuIndex);
+        snprintf(svcmd, 0x40u, "%c %i 1", 116, iMenuIndex);
         svcmd[63] = 0;
         SV_GameSendServerCommand(entref.entnum, SV_CMD_RELIABLE, svcmd);
         Scr_AddInt(1);
@@ -1608,7 +1608,7 @@ void __cdecl PlayerCmd_CloseMenu(scr_entref_t entref)
             Scr_ObjectError(v1);
         }
     }
-    _snprintf(svcmd, 0x40u, "%c", 117);
+    snprintf(svcmd, 0x40u, "%c", 117);
     svcmd[63] = 0;
     SV_GameSendServerCommand(entref.entnum, SV_CMD_RELIABLE, svcmd);
 }
@@ -1632,7 +1632,7 @@ void __cdecl PlayerCmd_CloseInGameMenu(scr_entref_t entref)
             Scr_ObjectError(v1);
         }
     }
-    _snprintf(svcmd, 0x20u, "%c", 76);
+    snprintf(svcmd, 0x20u, "%c", 76);
     svcmd[31] = 0;
     SV_GameSendServerCommand(entref.entnum, SV_CMD_RELIABLE, svcmd);
 }
@@ -1896,7 +1896,7 @@ void __cdecl iclientprintln(scr_entref_t entref)
             Scr_ObjectError(v1);
         }
     }
-    _snprintf(svcmd, 0x20u, "%c", 102);
+    snprintf(svcmd, 0x20u, "%c", 102);
     svcmd[31] = 0;
     Scr_MakeGameMessage(entref.entnum, svcmd);
 }
@@ -1920,7 +1920,7 @@ void __cdecl iclientprintlnbold(scr_entref_t entref)
             Scr_ObjectError(v1);
         }
     }
-    _snprintf(svcmd, 0x20u, "%c", 103);
+    snprintf(svcmd, 0x20u, "%c", 103);
     svcmd[31] = 0;
     Scr_MakeGameMessage(entref.entnum, svcmd);
 }
@@ -2194,7 +2194,7 @@ void __cdecl PlayerCmd_SetClientDvars(scr_entref_t entref)
     if (Scr_GetNumParam() % 2)
         Scr_Error(
             "Not enough parameters to setclientdvar() - must be an even number of parameters (dvar, value, dvar, value, etc.)\n");
-    strcpy(finalString, "v");
+    I_strncpyz(finalString, "v", sizeof(finalString));
     for (i = 0; i < Scr_GetNumParam(); i += 2)
     {
         dvarName = Scr_GetString(i);
@@ -2570,7 +2570,7 @@ void __cdecl ScrCmd_PlayLocalSound(scr_entref_t entref)
     }
     pszSoundName = Scr_GetString(0);
     soundIndex = G_SoundAliasIndex((char*)pszSoundName);
-    _snprintf(svcmd, 0x40u, "%c %i", 115, soundIndex);
+    snprintf(svcmd, 0x40u, "%c %i", 115, soundIndex);
     svcmd[63] = 0;
     SV_GameSendServerCommand(entref.entnum, SV_CMD_CAN_IGNORE, svcmd);
 }
@@ -2596,7 +2596,7 @@ void __cdecl ScrCmd_StopLocalSound(scr_entref_t entref)
     }
     pszSoundName = Scr_GetString(0);
     soundIndex = G_SoundAliasIndex((char*)pszSoundName);
-    _snprintf(svcmd, 0x40u, "%c %i", 107, soundIndex);
+    snprintf(svcmd, 0x40u, "%c %i", 107, soundIndex);
     svcmd[63] = 0;
     SV_GameSendServerCommand(entref.entnum, SV_CMD_CAN_IGNORE, svcmd);
 }
@@ -3384,10 +3384,10 @@ void __cdecl PlayerCmd_UpdateScores(scr_entref_t entref)
             Scr_ObjectError(v1);
         }
     }
-    _snprintf(svcmd, 0x40u, "%c %i", 72, level.teamScores[TEAM_ALLIES]);
+    snprintf(svcmd, 0x40u, "%c %i", 72, level.teamScores[TEAM_ALLIES]);
     svcmd[63] = 0;
     SV_GameSendServerCommand(pSelf - g_entities, SV_CMD_CAN_IGNORE, svcmd);
-    _snprintf(svcmd, 0x40u, "%c %i", 71, level.teamScores[TEAM_AXIS]);
+    snprintf(svcmd, 0x40u, "%c %i", 71, level.teamScores[TEAM_AXIS]);
     svcmd[63] = 0;
     SV_GameSendServerCommand(pSelf - g_entities, SV_CMD_CAN_IGNORE, svcmd);
 }
@@ -3429,12 +3429,12 @@ void __cdecl PlayerCmd_UpdateDMScores(scr_entref_t entref)
             break;
         }
     }
-    _snprintf(svcmd, 0x40u, "%c %i %i", 73, selfClientIndex, level.clients[selfClientIndex].sess.score);
+    snprintf(svcmd, 0x40u, "%c %i %i", 73, selfClientIndex, level.clients[selfClientIndex].sess.score);
     svcmd[63] = 0;
     SV_GameSendServerCommand(pSelf - g_entities, SV_CMD_CAN_IGNORE, svcmd);
     if (nextBestClientIndex >= 0)
     {
-        _snprintf(svcmd, 0x40u, "%c %i %i", 73, nextBestClientIndex, level.clients[nextBestClientIndex].sess.score);
+        snprintf(svcmd, 0x40u, "%c %i %i", 73, nextBestClientIndex, level.clients[nextBestClientIndex].sess.score);
         svcmd[63] = 0;
         SV_GameSendServerCommand(pSelf - g_entities, SV_CMD_CAN_IGNORE, svcmd);
     }

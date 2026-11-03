@@ -840,7 +840,7 @@ void __cdecl SV_SetGametype()
     if (!Scr_IsValidGameType(gametype))
     {
         Com_Printf(CON_CHANNEL_SERVER, "g_gametype %s is not a valid gametype, defaulting to dm\n", gametype);
-        strcpy(gametype, "dm");
+        I_strncpyz(gametype, "dm", sizeof(gametype));
     }
     Dvar_SetString((dvar_s *)sv_gametype, gametype);
 }
