@@ -20,6 +20,7 @@
 #include <gfx_d3d/r_material.h>
 #include <gfx_d3d/r_rendercmds.h>
 #include <gfx_d3d/r_scene.h>
+#include <gfx_d3d/rb_postfx.h>
 #include <gfx_d3d/rb_stats.h>
 #include <linux/d3d9_types.h>
 
@@ -319,6 +320,23 @@ FrameResult DrawRefdef(refdef_s &refdef, bool readBack, const std::function<void
     if (inspect)
         inspect(view);
 
+    // The post effects: what the refdef's glow and film ask for, whether the
+    // renderer's switches let them through (R_UsingGlow's dvars, and the film
+    // tweaks R_SetFilmInfo would take instead), and what the view uses, by the
+    // backend's own tests (rb_postfx.cpp).
+    wdr::PostCounts &post = result.post;
+    post.glowAsked = wdr::GlowAsked(refdef.glow.enabled, refdef.glow.bloomIntensity, refdef.glow.radius);
+    post.filmAsked = wdr::FilmAsked(refdef.film.enabled, refdef.film.contrast, refdef.film.brightness,
+                                    refdef.film.desaturation, refdef.film.invert, refdef.film.tintDark,
+                                    refdef.film.tintLight);
+    post.glowSwitch = r_glow->current.enabled &&
+                      (r_glow_allowed->current.enabled || r_glow_allowed_script_forced->current.enabled) &&
+                      !r_fullbright->current.enabled && !r_glowUseTweaks->current.enabled;
+    post.filmSwitch = !r_filmUseTweaks->current.enabled;
+    post.glowUsed = R_UsingGlow(&view);
+    post.filmUsed = RB_UsingColorManipulation(&view);
+    post.postEffects = RB_UsingPostEffects(&view);
+
     // The static models and the sun's shadow map, as the front end left them.
     // R_AddAllStaticModelSurfacesCamera clears the visibility byte of every static
     // model it culls or cannot light, so the ones still set are the ones it kept.
@@ -417,6 +435,29 @@ std::vector<std::string> DroppedDrawWarnings()
 }
 
 // ---- the map ----------------------------------------------------------------
+
+bool SameAssetName(const std::string &asked, const char *name)
+{
+    return name && !I_stricmp(asked.c_str(), name);
+}
+
+namespace
+{
+void CollectRawFile(XAssetHeader header, void *context)
+{
+    static_cast<std::vector<const RawFile *> *>(context)->push_back(header.rawfile);
+}
+} // namespace
+
+const RawFile *FindLoadedRawFile(const std::string &name)
+{
+    std::vector<const RawFile *> all;
+    DB_EnumXAssets(ASSET_TYPE_RAWFILE, CollectRawFile, &all, true);
+    for (const RawFile *file : all)
+        if (file && SameAssetName(name, file->name) && !DB_IsXAssetDefault(ASSET_TYPE_RAWFILE, file->name))
+            return file;
+    return nullptr;
+}
 
 GfxWorld *FindPackagedWorld(const char *mapName)
 {
@@ -535,6 +576,21 @@ std::string CameraJson(const Camera &camera)
     return json.str();
 }
 
+namespace
+{
+const char *Bool(bool value)
+{
+    return value ? "true" : "false";
+}
+
+// A post effect in a world_draw_frame line: used, switched off, not asked for by
+// the refdef, or (a rule failure) asked for and allowed but not used.
+const char *PostState(bool asked, bool on, bool used)
+{
+    return used ? "used" : !asked ? "not_asked" : !on ? "switched_off" : "missing";
+}
+} // namespace
+
 std::string FrameJson(const FrameResult &frame)
 {
     const wdr::FrameStats &s = frame.stats;
@@ -562,6 +618,10 @@ std::string FrameJson(const FrameResult &frame)
          << ",\"elems\":" << frame.effects.elems << ",\"clouds\":" << frame.effects.clouds
          << ",\"surfaces\":" << frame.effects.surfaces << ",\"meshes\":" << frame.effects.meshes
          << ",\"draw_calls\":" << frame.effects.drawCalls << ",\"triangles\":" << frame.effects.triangles
+         << "},\"post\":{\"vision\":" << Bool(frame.post.vision) << ",\"glow_asked\":" << Bool(frame.post.glowAsked)
+         << ",\"glow_switch\":" << Bool(frame.post.glowSwitch) << ",\"glow_used\":" << Bool(frame.post.glowUsed)
+         << ",\"film_asked\":" << Bool(frame.post.filmAsked) << ",\"film_switch\":" << Bool(frame.post.filmSwitch)
+         << ",\"film_used\":" << Bool(frame.post.filmUsed) << ",\"post_effects\":" << Bool(frame.post.postEffects)
          << "},\"smc_patches\":" << frame.smcPatches << ",\"seconds\":" << frame.seconds << "}";
     return json.str();
 }
@@ -572,10 +632,12 @@ void SayFrame(const char *label, int draw, const FrameResult &frame)
     const wdr::DrawCounts &c = frame.counts;
     const wdr::SceneCounts &m = frame.scene;
     const wdr::EffectCounts &e = frame.effects;
+    const wdr::PostCounts &p = frame.post;
     Say("world_draw_frame view=%s draw=%d size=%ux%u colors=%zu dominant=%.3f luma=%.1f+-%.1f detail_tiles=%u "
         "digest=%s lit=%u decal=%u emissive=%u world_calls=%u world_tris=%u smodels=%u/%u smodel_surfs=%u "
         "smodel_calls=%u smodel_tris=%u sun_shadow=%s sun_shadow_surfs=%u/%u fx=%s fx_effects=%u fx_elems=%u "
-        "fx_clouds=%u fx_surfs=%u fx_meshes=%u fx_calls=%u fx_tris=%u smc_patches=%u seconds=%.3f\n",
+        "fx_clouds=%u fx_surfs=%u fx_meshes=%u fx_calls=%u fx_tris=%u vision=%s glow=%s film=%s post=%s "
+        "smc_patches=%u seconds=%.3f\n",
         label, draw, s.width, s.height, s.distinctColors, s.dominantShare, s.meanLuma, s.lumaStdDev, s.detailTiles,
         Hex64(s.digest).c_str(), c.litSurfaces, c.decalSurfaces, c.emissiveSurfaces, c.worldDrawCalls,
         c.worldTriangles, m.staticModelsDrawn, m.staticModels, m.staticModelSurfaces, m.staticModelDrawCalls,
@@ -586,7 +648,9 @@ void SayFrame(const char *label, int draw, const FrameResult &frame)
         : !m.shadowMaps  ? "maps_off"
                          : "not_drawn",
         m.sunShadowStaticModelSurfaces, m.sunShadowSurfaces, e.running ? "running" : "off", e.effects, e.elems,
-        e.clouds, e.surfaces, e.meshes, e.drawCalls, e.triangles, frame.smcPatches, frame.seconds);
+        e.clouds, e.surfaces, e.meshes, e.drawCalls, e.triangles, p.vision ? "applied" : "none",
+        PostState(p.glowAsked, p.glowSwitch, p.glowUsed), PostState(p.filmAsked, p.filmSwitch, p.filmUsed),
+        p.postEffects ? "yes" : "no", frame.smcPatches, frame.seconds);
 }
 
 } // namespace kisak_world_draw_engine

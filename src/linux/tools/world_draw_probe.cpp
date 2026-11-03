@@ -13,6 +13,7 @@
 #include <qcommon/threads.h>
 #include <win32/win_local.h>
 #include <database/database.h>
+#include <cgame/cg_local.h>
 #include <client_mp/client_mp.h>
 #include <EffectsCore/fx_system.h>
 #include <gfx_d3d/r_bsp.h>
@@ -215,6 +216,9 @@ void __cdecl CL_InitDedicated()
     // marks disabled has.
     FX_RegisterDvars();
     Dvar_SetBool(const_cast<dvar_s *>(fx_marks), false);
+    // The cgame's vision set dvars, as CG_RegisterDvars registers them, for the
+    // free camera's vision set (engine_vision.h).
+    CG_RegisterVisionSetsDvars();
     Sys_HideSplashWindow();
     Sys_ShowConsole();
     Sys_NormalExit();
@@ -314,6 +318,33 @@ void Kisak_StartWorldDraw(WorldDrawMode drawMode, const char *mapName, const wf:
             Require(dvar && dvar->current.enabled, "start",
                     std::string(dvar ? dvar->name : "an effects switch") +
                         " is off; the free camera checks the effects it plays");
+    // And for the map's vision set, whose glow and film it applies and checks
+    // (engine_vision.h, world_draw_rules.h CheckPostCounts): every switch that
+    // turns them off, replaces them, changes them or adds another post effect
+    // must be as a client starts.
+    if (freeCamera)
+    {
+        const std::string reason = "; the free camera checks the map's own glow and film";
+        for (const dvar_s *dvar : {r_glow, r_glow_allowed})
+            Require(dvar && dvar->current.enabled, "start",
+                    std::string(dvar ? dvar->name : "a glow switch") + " is off" + reason);
+        for (const dvar_s *dvar : {r_glowUseTweaks, r_filmUseTweaks, r_fullbright, r_dof_tweak})
+            Require(dvar && !dvar->current.enabled, "start",
+                    std::string(dvar ? dvar->name : "a post effect switch") + " is on" + reason);
+        const struct
+        {
+            const dvar_s *dvar;
+            float value;
+            const char *text;
+        } neutral[] = {{r_contrast, 1.0f, "1"}, {r_brightness, 0.0f, "0"}, {r_desaturation, 1.0f, "1"},
+                       {r_blur, 0.0f, "0"}};
+        for (const auto &setting : neutral)
+            Require(setting.dvar && setting.dvar->current.value == setting.value, "start",
+                    std::string(setting.dvar ? setting.dvar->name : "a post effect setting") + " is not " +
+                        setting.text + reason);
+        Require(r_showFbColorDebug && r_showFbColorDebug->current.integer == 0, "start",
+                "r_showFbColorDebug is not None" + reason);
+    }
     Require(frontEndDataOut && frontEndDataOut->commands && frontEndDataOut->commands->cmds, "start",
             "the render commands are not set up (R_ConfigureRenderer did not run)");
 

@@ -346,16 +346,114 @@ void CheckEffectCounts()
     wdr::EffectCounts flat = view;
     flat.triangles = 0;
     Fails(wdr::CheckEffectCounts(flat), "effect draw calls with no triangle");
+}
 
-    // The free camera's frame rule: the scene's counts first, then the effects.
+// A frame with the map's vision set applied: glow and film asked for, allowed and
+// used, and the post effects run for them.
+wdr::PostCounts VisionFrame()
+{
+    wdr::PostCounts post;
+    post.vision = true;
+    post.glowAsked = post.filmAsked = true;
+    post.glowSwitch = post.filmSwitch = true;
+    post.glowUsed = post.filmUsed = post.postEffects = true;
+    return post;
+}
+
+void CheckPostCounts()
+{
+    // The engine's tests of whether a setting does anything.
+    const float ones[3] = {1.0f, 1.0f, 1.0f};
+    const float warm[3] = {1.1f, 1.0f, 0.9f};
+    Check(wdr::GlowAsked(true, 0.5f, 4.0f), "glow on with a bloom and a radius is asked for");
+    Check(!wdr::GlowAsked(false, 0.5f, 4.0f), "glow off is not asked for");
+    Check(!wdr::GlowAsked(true, 0.0f, 4.0f), "glow without a bloom is not asked for");
+    Check(!wdr::GlowAsked(true, 0.5f, 0.0f), "glow without a radius is not asked for");
+    Check(!wdr::FilmAsked(true, 1.0f, 0.0f, 0.0f, false, ones, ones), "film that changes no colour is not asked for");
+    Check(!wdr::FilmAsked(false, 1.4f, 0.0f, 0.0f, false, ones, ones), "film off is not asked for");
+    Check(wdr::FilmAsked(true, 1.4f, 0.0f, 0.0f, false, ones, ones), "film with a contrast is asked for");
+    Check(wdr::FilmAsked(true, 1.0f, 0.1f, 0.0f, false, ones, ones), "film with a brightness is asked for");
+    Check(wdr::FilmAsked(true, 1.0f, 0.0f, 0.2f, false, ones, ones), "film with a desaturation is asked for");
+    Check(wdr::FilmAsked(true, 1.0f, 0.0f, 0.0f, true, ones, ones), "an inverting film is asked for");
+    Check(wdr::FilmAsked(true, 1.0f, 0.0f, 0.0f, false, warm, ones), "film with a dark tint is asked for");
+    Check(wdr::FilmAsked(true, 1.0f, 0.0f, 0.0f, false, ones, warm), "film with a light tint is asked for");
+
+    const wdr::PostCounts vision = VisionFrame();
+    Passes(wdr::CheckPostCounts(vision), "glow and film asked for, allowed and used");
+    wdr::PostCounts plain;
+    plain.vision = true;
+    plain.glowSwitch = plain.filmSwitch = true;
+    Passes(wdr::CheckPostCounts(plain), "a vision set that asks for neither, and no post effect");
+    wdr::PostCounts glowOff = vision;
+    glowOff.glowSwitch = false;
+    glowOff.glowUsed = false;
+    Passes(wdr::CheckPostCounts(glowOff), "glow switched off, film still used");
+    wdr::PostCounts filmOff = vision;
+    filmOff.filmSwitch = false;
+    filmOff.filmUsed = false;
+    Passes(wdr::CheckPostCounts(filmOff), "film switched off, glow still used");
+
+    wdr::PostCounts none = vision;
+    none.vision = false;
+    Fails(wdr::CheckPostCounts(none), "a frame drawn without the vision set");
+    wdr::PostCounts lostGlow = vision;
+    lostGlow.glowUsed = false;
+    Fails(wdr::CheckPostCounts(lostGlow), "glow asked for and allowed but not used");
+    wdr::PostCounts strayGlow = glowOff;
+    strayGlow.glowUsed = true;
+    Fails(wdr::CheckPostCounts(strayGlow), "glow used while switched off");
+    wdr::PostCounts lostFilm = vision;
+    lostFilm.filmUsed = false;
+    Fails(wdr::CheckPostCounts(lostFilm), "film asked for and allowed but not used");
+    wdr::PostCounts strayFilm = plain;
+    strayFilm.filmUsed = strayFilm.postEffects = true;
+    Fails(wdr::CheckPostCounts(strayFilm), "film used that the vision set does not ask for");
+    wdr::PostCounts extra = plain;
+    extra.postEffects = true;
+    Fails(wdr::CheckPostCounts(extra), "post effects run for neither glow nor film");
+    wdr::PostCounts skipped = vision;
+    skipped.postEffects = false;
+    Fails(wdr::CheckPostCounts(skipped), "glow and film used with no post effect run");
+}
+
+void CheckFreeCameraCounts()
+{
+    wdr::EffectCounts view;
+    view.running = true;
+    view.effects = 4;
+    view.elems = 30;
+    view.surfaces = 12;
+    view.meshes = 12;
+    view.drawCalls = 13;
+    view.triangles = 60;
+    wdr::EffectCounts away;
+    away.running = true;
+    away.effects = 4;
+    away.elems = 30;
+    away.drawCalls = 1;
+    away.triangles = 2;
+    wdr::EffectCounts drawMode;
+    drawMode.drawCalls = 1;
+    drawMode.triangles = 2;
+    wdr::EffectCounts undrawn = view;
+    undrawn.drawCalls = undrawn.triangles = 0;
+    const wdr::PostCounts post = VisionFrame();
+
+    // The free camera's frame rule: the scene's counts first, then the effects,
+    // then the vision set's post effects.
     wdr::SceneCounts scene;
-    Passes(wdr::CheckFreeCameraCounts(scene, view), "a free-camera frame with effects in view");
-    Passes(wdr::CheckFreeCameraCounts(scene, away), "a free-camera frame with effects out of view");
-    Fails(wdr::CheckFreeCameraCounts(scene, drawMode), "a free-camera frame without the effects system updated");
-    Fails(wdr::CheckFreeCameraCounts(scene, undrawn), "a free-camera frame whose effect meshes were never drawn");
+    Passes(wdr::CheckFreeCameraCounts(scene, view, post), "a free-camera frame with effects in view");
+    Passes(wdr::CheckFreeCameraCounts(scene, away, post), "a free-camera frame with effects out of view");
+    Fails(wdr::CheckFreeCameraCounts(scene, drawMode, post),
+          "a free-camera frame without the effects system updated");
+    Fails(wdr::CheckFreeCameraCounts(scene, undrawn, post),
+          "a free-camera frame whose effect meshes were never drawn");
     wdr::SceneCounts strayModels;
     strayModels.staticModelsDrawn = 3;
-    Fails(wdr::CheckFreeCameraCounts(strayModels, view), "a free-camera frame whose scene counts disagree");
+    Fails(wdr::CheckFreeCameraCounts(strayModels, view, post), "a free-camera frame whose scene counts disagree");
+    wdr::PostCounts noVision = post;
+    noVision.vision = false;
+    Fails(wdr::CheckFreeCameraCounts(scene, view, noVision), "a free-camera frame without the vision set");
 }
 } // namespace
 
@@ -367,6 +465,8 @@ int main()
     CheckCounts();
     CheckSceneCounts();
     CheckEffectCounts();
+    CheckPostCounts();
+    CheckFreeCameraCounts();
     if (failures)
     {
         std::printf("world_draw_rules_test: %d failure(s)\n", failures);

@@ -143,12 +143,15 @@ set(KISAK_WORLD_DRAW_STANDIN_SOURCES
     "${SRC_DIR}/gfx_d3d/rb_tess.cpp"
 )
 # Client units the renderer needs whole, with the stand-in D3D9 types: the
-# effects system. fx_dvars.cpp owns the effects dvars the scene reads every
-# frame (fx_marks, fx_marks_smodels, fx_marks_ents), which the probe registers
-# with the owner's FX_RegisterDvars; the rest is the effects system the
-# free-camera replay and window driver run for the map's own effects
-# (src/linux/tools/engine_effects.cpp). The draw mode never starts it.
+# effects system and the cgame's vision sets. fx_dvars.cpp owns the effects
+# dvars the scene reads every frame (fx_marks, fx_marks_smodels, fx_marks_ents),
+# which the probe registers with the owner's FX_RegisterDvars; the rest is the
+# effects system the free-camera replay and window driver run for the map's own
+# effects (src/linux/tools/engine_effects.cpp). cg_visionsets.cpp loads and
+# applies the map's vision set, its glow and film, for the same two modes
+# (src/linux/tools/engine_vision.cpp). The draw mode starts neither.
 set(KISAK_WORLD_DRAW_CLIENT_SOURCES
+    "${SRC_DIR}/cgame/cg_visionsets.cpp"
     "${SRC_DIR}/EffectsCore/fx_archive.cpp"
     "${SRC_DIR}/EffectsCore/fx_beam.cpp"
     "${SRC_DIR}/EffectsCore/fx_draw.cpp"
@@ -194,7 +197,8 @@ endforeach()
 # counterpart asks the device.
 # The free-camera replay (KISAK_FREE_CAMERA_MAP) adds the free camera's own
 # sources (src/linux/client/view), its engine adapter with the effects host that
-# plays the map's own effects, and the replay driver.
+# plays the map's own effects and the vision host that applies its vision set,
+# and the replay driver.
 # Its window input (KISAK_FREE_CAMERA_INPUT) adds the window host that adopts
 # the renderer's window (src/linux/client/window, as KISAK_BUILD_LINUX_WINDOW_HOST
 # builds it for SDL3) and the window driver.
@@ -208,6 +212,7 @@ set(KISAK_WORLD_DRAW_OWN_NATIVE_SOURCES
     "${SRC_DIR}/linux/tools/world_draw_probe_boundary.cpp"
     "${SRC_DIR}/linux/tools/engine_scene_renderer.cpp"
     "${SRC_DIR}/linux/tools/engine_effects.cpp"
+    "${SRC_DIR}/linux/tools/engine_vision.cpp"
     "${SRC_DIR}/linux/tools/free_camera_replay.cpp"
     "${SRC_DIR}/linux/tools/free_camera_window_driver.cpp"
     "${SRC_DIR}/linux/client/view/free_camera.cpp"

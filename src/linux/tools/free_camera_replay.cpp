@@ -119,6 +119,7 @@ struct Switch
 {
     std::string name;       // what it takes out of the scene
     std::string dvar;
+    bool offValue = false;  // the dvar's value that takes it out
     std::string checkpoint; // the view it was tried on
     bool goneFromCounts = false;
     // A try: the picture need not change at this view (the effects' switch).
@@ -164,6 +165,20 @@ bool EffectsGone(const FrameResult &frame)
     return frame.effects.running && frame.effects.meshes == 0 && frame.effects.surfaces == 0;
 }
 
+// r_glow off: the refdef still asks for the vision set's glow, and the view
+// does not use it.
+bool GlowGone(const FrameResult &frame)
+{
+    return frame.post.glowAsked && !frame.post.glowUsed;
+}
+
+// r_filmUseTweaks on, with r_filmTweakEnable off: the refdef still asks for the
+// vision set's film, and the view takes the tweaks' film, which is off.
+bool FilmGone(const FrameResult &frame)
+{
+    return frame.post.filmAsked && !frame.post.filmUsed;
+}
+
 class Replay
 {
 public:
@@ -193,7 +208,7 @@ public:
             ++leg.noSunShadowFrames;
         if (!wdr::EffectsDrawn(frame.effects))
             ++leg.noEffectFrames;
-        const std::string sceneProblem = wdr::CheckFreeCameraCounts(frame.scene, frame.effects);
+        const std::string sceneProblem = wdr::CheckFreeCameraCounts(frame.scene, frame.effects, frame.post);
         if (!sceneProblem.empty() && leg.sceneProblemFrame < 0)
         {
             leg.sceneProblemFrame = int(leg.frames);
@@ -281,23 +296,27 @@ public:
 
     // Settles the view at a checkpoint with one of the renderer's switches off,
     // then on again. gone says whether a frame's counts show the thing missing.
+    // offValue is the dvar's value that takes it out: false for a switch that
+    // turns it off, true for one that overrides it.
     const Switch &SwitchOff(const char *name, const dvar_s *dvar, const Checkpoint &at,
-                            bool (*gone)(const FrameResult &), bool tryOnly = false)
+                            bool (*gone)(const FrameResult &), bool tryOnly = false, bool offValue = false)
     {
-        Require(dvar && dvar->current.enabled, "replay", std::string(dvar ? dvar->name : name) + " is not on");
-        Switch record{name, dvar->name, at.name};
+        Require(dvar && dvar->current.enabled != offValue, "replay",
+                std::string(dvar ? dvar->name : name) + (offValue ? " is not off" : " is not on"));
+        Switch record{name, dvar->name, offValue, at.name};
         record.tryOnly = tryOnly;
         record.before = at.Digest();
-        Dvar_SetBool(const_cast<dvar_s *>(dvar), false);
+        Dvar_SetBool(const_cast<dvar_s *>(dvar), offValue);
         const Checkpoint &without = Settle(at.name + ".without_" + dvar->name);
         record.goneFromCounts = gone(without.frames.back());
         record.without = without.Digest();
-        Dvar_SetBool(const_cast<dvar_s *>(dvar), true);
+        Dvar_SetBool(const_cast<dvar_s *>(dvar), !offValue);
         record.after = Settle(at.name + ".with_" + dvar->name).Digest();
-        Say("free_camera_switch name=%s dvar=%s checkpoint=%s try=%s gone_from_counts=%s before=%s without=%s "
-            "after=%s\n",
-            name, dvar->name, at.name.c_str(), tryOnly ? "yes" : "no", record.goneFromCounts ? "yes" : "no",
-            Hex64(record.before).c_str(), Hex64(record.without).c_str(), Hex64(record.after).c_str());
+        Say("free_camera_switch name=%s dvar=%s off=%d checkpoint=%s try=%s gone_from_counts=%s before=%s "
+            "without=%s after=%s\n",
+            name, dvar->name, offValue ? 1 : 0, at.name.c_str(), tryOnly ? "yes" : "no",
+            record.goneFromCounts ? "yes" : "no", Hex64(record.before).c_str(), Hex64(record.without).c_str(),
+            Hex64(record.after).c_str());
         switches_.push_back(record);
         return switches_.back();
     }
@@ -808,8 +827,9 @@ void Kisak_ReplayFreeCamera(const std::filesystem::path &directory, const char *
     Say("free_camera_graphics_zones=loaded zones=%d seconds=%.2f\n", g_zoneCount, startSeconds);
     const kv::ViewExtent base{vidConfig.sceneWidth, vidConfig.sceneHeight};
 
-    // The map's own effects play in every frame (engine_effects.h).
-    EngineSceneRenderer renderer(base, true, true);
+    // The map's own effects play in every frame (engine_effects.h), and its
+    // vision set gives every frame its glow and film (engine_vision.h).
+    EngineSceneRenderer renderer(base, true, {.effects = true, .vision = true});
     std::vector<std::string> problems;
     auto check = [&](const std::string &what, const std::string &problem) {
         if (!problem.empty())
@@ -852,6 +872,17 @@ void Kisak_ReplayFreeCamera(const std::filesystem::path &directory, const char *
         // each switched off and on again with the camera still.
         replay.SwitchOff("static_models", r_drawSModels, atA, StaticModelsGone);
         replay.SwitchOff("sun_shadow", sm_sunEnable, atA, SunShadowGone);
+        // What the vision set's glow and film add, each that it asks for: glow
+        // switched off, film overridden by the tweaks' film, which is off.
+        const VisionSummary &vision = renderer.Vision()->Summary();
+        if (vision.glow)
+            replay.SwitchOff("glow", r_glow, atA, GlowGone);
+        if (vision.film)
+        {
+            Require(r_filmTweakEnable && !r_filmTweakEnable->current.enabled, "replay",
+                    "r_filmTweakEnable is on: the film switch would draw the tweaks' film instead of none");
+            replay.SwitchOff("film", r_filmUseTweaks, atA, FilmGone, false, true);
+        }
         // What the map's effects add: switched off at the checkpoints with effects
         // in their counts until the picture shows them.
         replay.SwitchEffectsIfDrawn(atA);
@@ -956,8 +987,8 @@ void Kisak_ReplayFreeCamera(const std::filesystem::path &directory, const char *
             check(checkpoint.name, wdr::CheckSettled(checkpoint.digests, checkpoint.frames.back().smcPatches));
             for (size_t i = 0; i < checkpoint.frames.size(); ++i)
             {
-                const std::string problem =
-                    wdr::CheckFreeCameraCounts(checkpoint.frames[i].scene, checkpoint.frames[i].effects);
+                const std::string problem = wdr::CheckFreeCameraCounts(
+                    checkpoint.frames[i].scene, checkpoint.frames[i].effects, checkpoint.frames[i].post);
                 if (!problem.empty())
                 {
                     check(checkpoint.name, "draw " + std::to_string(i) + ": " + problem);
@@ -1065,7 +1096,7 @@ void Kisak_ReplayFreeCamera(const std::filesystem::path &directory, const char *
         for (const Switch &item : replay.Switches())
         {
             body << (first ? "" : ",") << "{\"name\":" << Json(item.name) << ",\"dvar\":" << Json(item.dvar)
-                 << ",\"checkpoint\":" << Json(item.checkpoint) << ",\"try\":" << (item.tryOnly ? "true" : "false")
+                 << ",\"off\":" << (item.offValue ? 1 : 0) << ",\"checkpoint\":" << Json(item.checkpoint) << ",\"try\":" << (item.tryOnly ? "true" : "false")
                  << ",\"gone_from_counts\":" << (item.goneFromCounts ? "true" : "false") << ",\"before\":\""
                  << Hex64(item.before) << "\",\"without\":\"" << Hex64(item.without) << "\",\"after\":\""
                  << Hex64(item.after) << "\"}";
@@ -1074,11 +1105,12 @@ void Kisak_ReplayFreeCamera(const std::filesystem::path &directory, const char *
         body << "],\"effects\":" << EffectsSummaryJson(effects) << ",\"effect_switch_tries\":"
              << replay.EffectTries() << ",\"effects_shown_at\":"
              << (replay.EffectsShownAt().empty() ? std::string("null") : Json(replay.EffectsShownAt()))
-             << ",\"dropped_draw_warnings\":[";
+             << ",\"vision\":" << VisionSummaryJson(renderer.Vision()->Summary()) << ",\"dropped_draw_warnings\":[";
         for (size_t i = 0; i < warnings.size(); ++i)
             body << (i ? "," : "") << Json(warnings[i]);
         body << "]";
         SayEffectsSummary(effects);
+        SayVisionSummary(renderer.Vision()->Summary());
 
         owner.Shutdown();
         Require(owner.State() == kv::FrameState::Stopped, "shutdown",

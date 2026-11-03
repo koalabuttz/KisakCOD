@@ -288,7 +288,7 @@ public:
                     (owner_.Error().empty() ? std::string() : ": " + owner_.Error()));
         ++frames_;
         const FrameResult &frame = renderer_.LastFrame();
-        const std::string problem = wdr::CheckFreeCameraCounts(frame.scene, frame.effects);
+        const std::string problem = wdr::CheckFreeCameraCounts(frame.scene, frame.effects, frame.post);
         if (!problem.empty() && sceneProblem_.empty())
             sceneProblem_ = what + ": " + problem;
     }
@@ -755,7 +755,7 @@ std::string RunLive(EngineSceneRenderer &renderer, kv::FrameOwner &owner, kv::Fr
             noStaticModelFrames += frame.scene.staticModelsDrawn == 0;
             noSunShadowFrames += !frame.scene.sunShadowDrawn;
             noEffectFrames += !wdr::EffectsDrawn(frame.effects);
-            const std::string problem = wdr::CheckFreeCameraCounts(frame.scene, frame.effects);
+            const std::string problem = wdr::CheckFreeCameraCounts(frame.scene, frame.effects, frame.post);
             if (!problem.empty() && sceneProblems++ == 0)
                 firstSceneProblem = "drawn frame " + std::to_string(outcomes[kv::FrameOutcome::Drawn] - 1) + ": " +
                                     problem;
@@ -805,8 +805,9 @@ void Kisak_RunFreeCameraWindow(const std::filesystem::path &directory, const cha
 
     // The script reads every frame back to compare settled pictures; a live run
     // only draws. Both play the map's own effects (engine_effects.h), which the
-    // live run's elapsed scene time animates.
-    EngineSceneRenderer renderer(engineExtent, scripted, true);
+    // live run's elapsed scene time animates, and apply its vision set
+    // (engine_vision.h).
+    EngineSceneRenderer renderer(engineExtent, scripted, {.effects = true, .vision = true});
     AspectFollower follower(renderer);
     std::vector<std::string> problems;
     auto check = [&](const std::string &what, const std::string &problem) {
@@ -884,6 +885,7 @@ void Kisak_RunFreeCameraWindow(const std::filesystem::path &directory, const cha
         Say("free_camera_shutdown=done device=%s zones=%d window=%s\n", dx.device ? "held" : "released", g_zoneCount,
             SDL_GetWindowFromID(windowId) ? "kept" : "destroyed");
         SayEffectsSummary(renderer.Effects()->Summary());
+        SayVisionSummary(renderer.Vision()->Summary());
 
         // 4. The report: counts and measurements, no pixels.
         std::ostringstream json;
@@ -897,7 +899,8 @@ void Kisak_RunFreeCameraWindow(const std::filesystem::path &directory, const cha
              << "},\"renderer\":{\"draws\":" << engine.draws << ",\"empty_frames\":" << engine.emptyFrames
              << ",\"resizes\":" << engine.resizes << ",\"resets\":" << engine.resets
              << "},\"aspect_updates\":" << follower.Updates()
-             << ",\"effects\":" << EffectsSummaryJson(renderer.Effects()->Summary()) << ",\"dropped_draw_warnings\":[";
+             << ",\"effects\":" << EffectsSummaryJson(renderer.Effects()->Summary())
+             << ",\"vision\":" << VisionSummaryJson(renderer.Vision()->Summary()) << ",\"dropped_draw_warnings\":[";
         for (size_t i = 0; i < warnings.size(); ++i)
             json << (i ? "," : "") << Json(warnings[i]);
         json << "],\"start_seconds\":" << startSeconds

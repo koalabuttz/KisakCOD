@@ -42,6 +42,7 @@ view changes the source of the numbers, not their meaning.
 | `tests/linux_free_camera/` | Asset-free tests: the camera and owner by `scripts/tests/run_free_camera_checks.py`, the window input by `scripts/tests/test_linux_window.py` |
 | `src/linux/tools/engine_scene_renderer.{h,cpp}` | `EngineSceneRenderer`, the `SceneRenderer` over the engine renderer |
 | `src/linux/tools/engine_effects.{h,cpp}` | The map's own effects, played with the cgame's effects calls in the cgame's order |
+| `src/linux/tools/engine_vision.{h,cpp}` | The map's vision set (glow and film), loaded and applied with the cgame's own vision set code |
 | `src/linux/tools/map_effects.h` | Reads the map's effect table and createfx list and plans what to play; no engine header |
 | `tests/linux_asset_export/map_effects_test.cpp` | Asset-free test of that reader (`run_world_surface_checks.py`, check `map_effects`) |
 | `src/linux/tools/free_camera_replay.cpp` | The replay of the reference traversals on a real map |
@@ -511,6 +512,78 @@ and writes the same in the report's `effects` object. The replay's legs report
 `no_effect_frames`, its switches mark the effects' as tries, and its report
 names the checkpoint whose picture showed the effects (`effects_shown_at`).
 
+## The map's vision set: glow and film
+
+The third widening is the post-processing a map asks for: its vision set, which
+gives every frame a glow (bloom) and a film (colour grading: contrast,
+brightness, desaturation, tints). Until now every free-camera frame was drawn
+with both off, as the world draw probe's refdef leaves them. In a multiplayer
+game a script chooses the vision set: the map's art script and the game type's
+script call `VisionSetNaked` with the map's name, at duration 0, for play. The
+server sends that as a config string, and the cgame loads the vision set and
+copies it into every frame's refdef. The free camera has no server or script
+VM, so it takes the play vision set directly and makes the cgame's calls itself
+(`engine_vision.{h,cpp}`), with the cgame's own vision set unit,
+`src/cgame/cg_visionsets.cpp`, compiled unmodified and linked into the probe
+for this.
+
+When (`MapVision`):
+
+| Where | What, in the cgame's order |
+| --- | --- |
+| after each map load, before the effects start | the file the cgame will read, `vision/<map>.vision`, must be in the loaded zones and set all 16 of a vision set's values; the cgame's globals cleared (`CG_Init`); then what `CG_VisionSetConfigString_Naked` does with the config string `"<map>" 0`: the name, and `CG_VisionSetStartLerp_To`, which loads the file with the cgame's reader (`LoadVisionFile`). The cgame must then hold the file's values, with no blend running |
+| each frame, before the effects update and `R_RenderScene` | the cgame's time set to the frame's, `CG_VisionSetsUpdate`, `CG_VisionSetApplyToRefdef`, and the glow and film it wrote copied into the frame's refdef (`CG_DrawActiveFrame`, `CG_CalcViewValues`) |
+| before each map unload, after the effects stop | the cgame's globals cleared (`CG_Shutdown`) |
+
+The cgame's reader only warns about a value that is missing or malformed and
+keeps what was there before, so the completeness check reads the file twice,
+onto all zero bits and onto all one bits: a value the file sets comes out the
+same both times. The night vision set is seen only through night vision goggles
+and is not loaded. No player exists: the client is not connected
+(`clientUIActives`, linked as storage, stays `CA_DISCONNECTED`), so
+`CG_LookingThroughNightVision` answers no, and with no weapon the fade is 1.
+
+Fail-closed: a missing file, a value it does not set, or a cgame that holds
+anything else fails the map load at stage `vision`, and nothing of the map stays
+loaded. A switch that turns glow off (`r_glow`, `r_glow_allowed`), replaces the
+glow or film with the tweak dvars (`r_glowUseTweaks`, `r_filmUseTweaks`), draws
+without lighting (`r_fullbright`), adds a depth of field (`r_dof_tweak`), moves
+contrast, brightness, desaturation or blur from their defaults (`r_contrast`,
+`r_brightness`, `r_desaturation`, `r_blur`) or shows a frame buffer debug view
+(`r_showFbColorDebug`) refuses the replay and the window driver at the start
+stage, before any device work.
+
+`DrawRefdef` and the vision host record, for every frame:
+
+| Value | Where it comes from |
+| --- | --- |
+| vision | the frame's refdef carries the map's vision set |
+| glow asked, film asked | whether the refdef's glow and film do anything, by the engine's own tests over the refdef (`R_UsingGlow` without its dvars, `RB_UsingColorManipulation`) |
+| glow switch, film switch | the renderer's switches let them through: `r_glow` on, glow allowed, no fullbright, no glow tweaks; no film tweaks |
+| glow used, film used, post effects | `R_UsingGlow`, `RB_UsingColorManipulation` and `RB_UsingPostEffects` over the front end's view, the tests the backend draws by (`RB_ProcessPostEffects`) |
+
+Rules (`world_draw_rules.h`), any of which fails the run:
+
+- **Counts agree** (`CheckPostCounts`, last in `CheckFreeCameraCounts`), on
+  every drawn frame of the replay, the script and the live camera: the frame
+  carries the vision set; the view uses glow exactly when the vision set asks
+  for it and the switches let it through, and the same for film; the view runs
+  post effects exactly when it uses glow or film.
+- **Shown** (replay only): at `A.start`, each of glow and film that the vision
+  set asks for is taken out and put back with the camera still: glow by
+  `r_glow 0`, film by `r_filmUseTweaks 1` with `r_filmTweakEnable` off, which
+  replaces the film with an empty one. The view must stop using it, the picture
+  must change, and the picture must come back when it is put back. A vision set
+  that asks for neither has no switch to try.
+
+Each `world_draw_frame` line gains `vision=applied|none` and `glow=`, `film=`
+(`used`, `not_asked`, `switched_off`, or `missing` when asked and allowed but
+not used) and `post=yes|no`; each frame in the reports gains a `post` object.
+Each load prints `free_camera_vision_load` (the name, the file, whether it asks
+for glow and film); the run prints `free_camera_vision` and writes the same in
+the report's `vision` object. Switch lines and objects gain `off`, the value
+that takes the thing out.
+
 ## What is verified
 
 Window input, asset-free, Clang 18 `-m32`, the dummy video driver of SDL 3.2.10
@@ -756,6 +829,11 @@ effect surface each. The minimize step was not taken (Wayland).
   but their shadows need the scene time to move. A spawn refused at one view
   and taken at a later one can make a checkpoint's picture depend on the path
   to it; the report counts refused spawn attempts (none on `mp_crash`).
+- The map's vision set has not run on a GPU yet (see the pull request that adds
+  it). It is the play vision set at a fixed time: the intro and outro vision
+  sets a round shows, blends between vision sets, night vision and the fades
+  of the night vision goggles are not exercised. Fog, which the map's art
+  script sets with `setExpFog`, is not applied.
 - The window input has met a real desktop through the window driver: its
   script (Wayland in RelWithDebInfo, X11 in Debug) and one 70 s live flight
   (Wayland), with the window `R_CreateWindow` made. The live flight was not
@@ -787,6 +865,8 @@ passed there too.
    now counted, checked and switched off and on
    ([above](#static-models-and-the-suns-shadow)). The map's own effects, the
    scene's transparent and sorted pass, are now played, counted, checked and
-   switched off and on ([above](#the-maps-effects)). Spot light shadows are
+   switched off and on ([above](#the-maps-effects)). The map's vision set, its
+   glow and film, is now applied, checked and switched off and on
+   ([above](#the-maps-vision-set-glow-and-film)). Spot light shadows are
    chosen only when the scene time moves (`R_ChooseShadowedLights`), which the
    replay's fixed time 0 never does.
