@@ -176,7 +176,11 @@ gclient_s *G_GetPlayerState(int32_t clientNum)
 
 int32_t G_GetClientSize()
 {
-    return 12676;
+    // Retail returns 12676 (sizeof(gclient_s) on 32-bit). The server strides
+    // archived client and player states by this value, so it must track the
+    // real struct size on every architecture.
+    static_assert(LAYOUT_32BIT(sizeof(gclient_s) == 12676));
+    return sizeof(gclient_s);
 }
 
 void G_FreeEntities()
