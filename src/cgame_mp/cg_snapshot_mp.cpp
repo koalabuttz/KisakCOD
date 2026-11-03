@@ -40,7 +40,7 @@ void CG_ShutdownEntity(int localClientNum, centity_s *cent)
         {
             if (CG_IsEntityLinked(localClientNum, cent->nextState.number))
                 CG_UnlinkEntity(localClientNum, cent->nextState.number);
-            Phys_ObjDestroy(PHYS_WORLD_FX, (dxBody *)cent->pose.physObjId);
+            Phys_ObjDestroy(PHYS_WORLD_FX, Phys_ObjFromId(cent->pose.physObjId));
         }
         cent->currentState.pos.trType = TR_STATIONARY;
         cent->currentState.apos.trType = TR_STATIONARY;

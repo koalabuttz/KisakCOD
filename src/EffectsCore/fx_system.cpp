@@ -1829,16 +1829,16 @@ bool FX_SpawnModelPhysics(
     visuals.anonymous = FX_GetElemVisuals(elemDef, randomSeed).anonymous;
     if (!*((_DWORD*)visuals.anonymous + 53))
         MyAssertHandler(".\\EffectsCore\\fx_system.cpp", 1853, 0, "%s", "visuals.model->physPreset");
-    elem->physObjId = (int)Phys_ObjCreate(
+    elem->physObjId = Phys_IdFromObj(Phys_ObjCreate(
         PHYS_WORLD_FX,
         worldOrigin,
         quat,
         velocity,
-        *((const PhysPreset**)visuals.anonymous + 53));
+        *((const PhysPreset**)visuals.anonymous + 53)));
     if (elem->physObjId)
     {
-        Phys_ObjSetCollisionFromXModel(visuals.model, PHYS_WORLD_FX, (dxBody*)elem->physObjId);
-        Phys_ObjSetAngularVelocity((dxBody*)elem->physObjId, angularVelocity);
+        Phys_ObjSetCollisionFromXModel(visuals.model, PHYS_WORLD_FX, Phys_ObjFromId(elem->physObjId));
+        Phys_ObjSetAngularVelocity(Phys_ObjFromId(elem->physObjId), angularVelocity);
     }
     Sys_LeaveCriticalSection(CRITSECT_PHYSICS);
     return elem->physObjId != 0;
@@ -1964,7 +1964,7 @@ void FX_FreeElem(FxSystem* system, uint16_t elemHandle, FxEffect* effect, uint32
     if (elemDef->elemType == 5 && (elemDef->flags & 0x8000000) != 0 && elem->item.physObjId)
     {
         Sys_EnterCriticalSection(CRITSECT_PHYSICS);
-        Phys_ObjDestroy(PHYS_WORLD_FX, (dxBody*)elem->item.physObjId);
+        Phys_ObjDestroy(PHYS_WORLD_FX, Phys_ObjFromId(elem->item.physObjId));
         Sys_LeaveCriticalSection(CRITSECT_PHYSICS);
     }
     elem->nextFree = 0;

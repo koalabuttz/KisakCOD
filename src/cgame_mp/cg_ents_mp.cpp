@@ -1072,17 +1072,17 @@ void CG_CreatePhysicsObject(int32_t localClientNum, centity_s *cent)
     if (physPreset)
     {
         Sys_EnterCriticalSection(CRITSECT_PHYSICS);
-        physObjId = (int)Phys_ObjCreate(PHYS_WORLD_FX, position, quat, velocity, physPreset);
+        physObjId = Phys_IdFromObj(Phys_ObjCreate(PHYS_WORLD_FX, position, quat, velocity, physPreset));
         if (physObjId)
         {
-            DObjPhysicsSetCollisionFromXModel(obj, PHYS_WORLD_FX, (dxBody *)physObjId);
+            DObjPhysicsSetCollisionFromXModel(obj, PHYS_WORLD_FX, Phys_ObjFromId(physObjId));
             direction[0] = cent->currentState.apos.trDelta[0];
             direction[1] = cent->currentState.apos.trDelta[1];
             direction[2] = cent->currentState.apos.trDelta[2];
             speed = Vec3Normalize(direction);
             Phys_ObjBulletImpact(
                 PHYS_WORLD_FX,
-                (dxBody *)physObjId,
+                Phys_ObjFromId(physObjId),
                 cent->currentState.pos.trDelta,
                 direction,
                 speed,
@@ -1118,7 +1118,7 @@ void CG_UpdatePhysicsPose(centity_s *cent)
             "%s",
             "cent->pose.physObjId != PHYS_OBJ_ID_NULL && cent->pose.physObjId != PHYS_OBJ_ID_DEAD");
     Sys_EnterCriticalSection(CRITSECT_PHYSICS);
-    Phys_ObjGetInterpolatedState(PHYS_WORLD_FX, (dxBody *)cent->pose.physObjId, cent->pose.origin, quat);
+    Phys_ObjGetInterpolatedState(PHYS_WORLD_FX, Phys_ObjFromId(cent->pose.physObjId), cent->pose.origin, quat);
     Sys_LeaveCriticalSection(CRITSECT_PHYSICS);
     UnitQuatToAngles(quat, cent->pose.angles);
 }
@@ -1215,7 +1215,7 @@ DObj_s *CG_PreProcess_GetDObj(int32_t localClientNum, int32_t entIndex, int32_t 
         {
             if (CG_IsEntityLinked(localClientNum, cent->nextState.number))
                 CG_UnlinkEntity(localClientNum, cent->nextState.number);
-            Phys_ObjDestroy(PHYS_WORLD_FX, (dxBody *)cent->pose.physObjId);
+            Phys_ObjDestroy(PHYS_WORLD_FX, Phys_ObjFromId(cent->pose.physObjId));
             cent->pose.physObjId = 0;
         }
         FX_MarkEntDetachAll(localClientNum, entIndex);

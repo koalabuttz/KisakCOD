@@ -216,6 +216,7 @@ class PlannedCommandTests(unittest.TestCase):
             "database_publication",
             "crt_shims",
             "sl_trace",
+            "phys_objid",
         ]
         self.assertEqual([check.name for check in self.checks], known)
 

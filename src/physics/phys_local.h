@@ -9,6 +9,7 @@
 
 #include <universal/memfile.h>
 #include <universal/pool_allocator.h>
+#include <physics/phys_objid.h>
 
 enum $B7C75F5EC8C61F46B3FEFC285D8D85F1 : __int32
 {

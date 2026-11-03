@@ -379,8 +379,14 @@ The x86_64 client build warns at 336 casts between pointers and narrower
 integers (209 int-to-pointer, 127 pointer-to-int); 237 of them are in sources
 only the client compiles. The main groups:
 
-- **Physics object ids**: `physObjId` fields (`cpose_t`, dynamic entities,
-  effect elements) store a `dxBody *` in an `int`.
+- **Physics object ids**: fixed. `physObjId` fields (`cpose_t`, dynamic
+  entities, breakable pieces, effect elements) keep a `dxBody *` in an `int`,
+  and `DynEntityClient` keeps its 12-byte fastfile layout, so the field stays
+  32 bits. `Phys_IdFromObj` and `Phys_ObjFromId` (`src/physics/phys_objid.h`)
+  convert: on i386 the id is the pointer, as before; on x86_64 it is a slot in
+  a table of live bodies that `dBodyCreate` fills and `dBodyDestroy` and
+  `dWorldDestroy` empty (2048 slots; the retail body pool held 512). The
+  `phys_objid` check in `run_linux_checks.py` tests both.
 - **Renderer streams that pack pointers into 32-bit words**: the static model
   primitive draw stream (`R_WritePrimDrawSurfInt`), model surfaces, the worker
   command data in `r_scene.cpp`/`r_dpvs_entity.cpp`, and the light and shadow
