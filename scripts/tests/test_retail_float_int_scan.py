@@ -175,6 +175,24 @@ class ScanTest(unittest.TestCase):
         self.assertEqual(kinds, {("eax", 0x24): "fistp-cw", ("eax", 0): "fistp"})
         self.assertIn(("fistp-cw", "fisub"), {(s.kind, s.next_op) for s in report.sites})
 
+    def test_loose_triple_by_destination(self):
+        # G_TempEntity shape: read origin[i] through different registers,
+        # truncate, store into consecutive stack slots.
+        listing = "\n".join(
+            f"  {0x401000 + 0x20 * n:x}:\tfld    DWORD PTR [{reg}+0x0]\n"
+            f"  {0x401003 + 0x20 * n:x}:\tcall   0x402000\n"
+            f"  {0x401008 + 0x20 * n:x}:\tmov    DWORD PTR [esp+0x4],eax\n"
+            f"  {0x40100c + 0x20 * n:x}:\tfild   DWORD PTR [esp+0x4]\n"
+            f"  {0x401010 + 0x20 * n:x}:\tfstp   DWORD PTR [esp+{0x10 + 4 * n:#x}]"
+            for n, reg in enumerate(("eax", "ecx", "edx"))
+        ) + "\n" + MSVC_LISTING[MSVC_LISTING.index("  402000:"):]
+        report = scan.scan(scan.parse_objdump(listing))
+        self.assertEqual(report.triples, [])
+        self.assertEqual(len(report.loose_triples), 1)
+        key, triple = report.loose_triples[0]
+        self.assertEqual((key, triple[0].dst), ("dst", ("esp", 0x10)))
+        self.assertEqual({s.kind for s in triple}, {"call-ftol"})
+
     def test_memory_operand_parsing(self):
         self.assertEqual(scan.parse_mem("DWORD PTR [esi+eax*4+0x3c]"), ("esi+eax*4", 0x3C))
         self.assertEqual(scan.parse_mem("DWORD PTR ds:0x946428"), ("abs", 0x946428))

@@ -20,7 +20,11 @@ Conversion kinds:
 
 Usage:
   retail_float_int_scan.py iw3mp.exe
-  retail_float_int_scan.py --objdump-text disasm.txt   # pre-made objdump -d -M intel
+  retail_float_int_scan.py --objdump-text disasm.txt [exe]  # pre-made objdump -d -M intel
+
+With the executable available, float constants used next to each reconverted
+site are printed as numbers (e.g. fmul:10), which is how the single sites in
+#52 (CutFloat, the flinch yaw, the compass fractions) are told apart.
 """
 
 from __future__ import annotations
@@ -77,6 +81,7 @@ class Site:
     dst: tuple[str, int] | None = None
     reconverted: bool = False
     next_op: str = "-"
+    consts: list = field(default_factory=list)
 
 
 @dataclass
@@ -85,6 +90,63 @@ class Report:
     helpers: list = field(default_factory=list)
     sites: list = field(default_factory=list)
     triples: list = field(default_factory=list)
+    loose_triples: list = field(default_factory=list)
+
+
+class PeImage:
+    """Minimal PE32 reader: maps virtual addresses to file bytes for constants."""
+
+    def __init__(self, data: bytes):
+        import struct
+        self.data = data
+        pe = struct.unpack_from("<I", data, 0x3C)[0]
+        nsec = struct.unpack_from("<H", data, pe + 6)[0]
+        opt_size = struct.unpack_from("<H", data, pe + 20)[0]
+        self.image_base = struct.unpack_from("<I", data, pe + 24 + 28)[0]
+        self.sections = []
+        sec = pe + 24 + opt_size
+        for n in range(nsec):
+            vsize, va, raw_size, raw_off = struct.unpack_from("<IIII", data, sec + 40 * n + 8)
+            self.sections.append((self.image_base + va, max(vsize, raw_size), raw_off, raw_size))
+
+    def read(self, va: int, size: int) -> bytes | None:
+        for start, vsize, raw_off, raw_size in self.sections:
+            if start <= va and va + size <= start + min(vsize, raw_size):
+                off = raw_off + (va - start)
+                return self.data[off:off + size]
+        return None
+
+    def number(self, va: int, size: int) -> float | None:
+        import struct
+        raw = self.read(va, size)
+        if raw is None or len(raw) != size:
+            return None
+        return struct.unpack("<f" if size == 4 else "<d", raw)[0]
+
+
+CONST_RE = re.compile(r"(DWORD|QWORD) PTR [a-z]s:0x([0-9a-f]+)")
+CONST_MNEMS = {
+    "fld", "fmul", "fadd", "fsub", "fsubr", "fdiv", "fdivr", "fcom", "fcomp",
+    "movss", "movsd", "mulss", "mulsd", "addss", "addsd", "subss", "subsd", "comiss", "ucomiss",
+}
+
+
+def nearby_constants(insns, i, pe, window=10):
+    """Float constants loaded from absolute addresses around insns[i]."""
+    if pe is None:
+        return []
+    out = []
+    for j in range(max(0, i - window), min(len(insns), i + window + 1)):
+        insn = insns[j]
+        if insn.mnem not in CONST_MNEMS:
+            continue
+        m = CONST_RE.search(insn.ops)
+        if not m:
+            continue
+        value = pe.number(int(m.group(2), 16), 4 if m.group(1) == "DWORD" else 8)
+        if value is not None and value == value and abs(value) < 1e9:
+            out.append(f"{insn.mnem}:{value:.9g}")
+    return out
 
 
 def parse_objdump(text: str) -> list[Insn]:
@@ -227,7 +289,7 @@ def follow_result(insns, i, window=8):
     return reconverted, "-", None
 
 
-def scan(insns: list[Insn]) -> Report:
+def scan(insns: list[Insn], pe: PeImage | None = None) -> Report:
     insns.sort(key=lambda x: x.addr)
     by_addr = {insn.addr: i for i, insn in enumerate(insns)}
     helpers, helper_ranges = find_truncating_helpers(insns, by_addr)
@@ -258,6 +320,7 @@ def scan(insns: list[Insn]) -> Report:
         site = Site(index=i, addr=insn.addr, kind=kind)
         site.src = trace_source(insns, i)
         site.reconverted, site.next_op, site.dst = follow_result(insns, i)
+        site.consts = nearby_constants(insns, i, pe)
         report.kinds[kind] += 1
         report.sites.append(site)
 
@@ -279,6 +342,30 @@ def scan(insns: list[Insn]) -> Report:
         if len(found) == 3:
             used.update(s.addr for s in found)
             report.triples.append(found)
+
+    # Loose triples: three nearby conversions whose source or float
+    # destination steps by 4 bytes (catches snaps copied to a local, or
+    # reached through an index register), whether or not they are reconverted.
+    strict = {s.addr for t in report.triples for s in t}
+    sites = report.sites
+    for a_i, a in enumerate(sites):
+        if a.addr in strict:
+            continue
+        for key in ("src", "dst"):
+            ref = getattr(a, key)
+            if ref is None:
+                continue
+            found = [a]
+            for b in sites[a_i + 1:a_i + 8]:
+                if b.addr - a.addr > 0x180:
+                    break
+                if getattr(b, key) == (ref[0], ref[1] + 4 * len(found)):
+                    found.append(b)
+                    if len(found) == 3:
+                        break
+            if len(found) == 3 and not any(s.addr in strict for s in found):
+                report.loose_triples.append((key, found))
+                break
     return report
 
 
@@ -304,6 +391,16 @@ def format_report(report: Report, max_sites: int) -> str:
     out.append(f"  ({len(report.triples)} triples)")
     out.append("")
 
+    out.append("loose triples (source or destination steps by 4; any kind):")
+    for key, triple in report.loose_triples:
+        ref = getattr(triple[0], key)
+        kinds = "/".join(s.kind for s in triple)
+        backs = "/".join(s.next_op if s.reconverted else "int" for s in triple)
+        label = KNOWN_DISPLACEMENTS.get(ref[1], "") if key == "src" else ""
+        out.append(f"  0x{triple[0].addr:08x} {kinds:30s} {key} [{ref[0]}+0x{ref[1]:x}] then {backs} {label}")
+    out.append(f"  ({len(report.loose_triples)} loose triples)")
+    out.append("")
+
     # Everything that converts back to float and then does arithmetic: the
     # fraction, yaw and CutFloat shapes from #52.
     shapes = collections.Counter()
@@ -313,6 +410,12 @@ def format_report(report: Report, max_sites: int) -> str:
     out.append("reconverted sites by kind and next float op:")
     for (kind, op), count in sorted(shapes.items()):
         out.append(f"  {kind:10s} then {op:8s} {count}")
+    out.append("")
+
+    out.append("reconverted sites with nearby float constants (all kinds):")
+    for s in report.sites:
+        if s.reconverted and s.consts:
+            out.append(f"  0x{s.addr:08x} {s.kind:9s} then {s.next_op:6s} {' '.join(s.consts)}")
     out.append("")
 
     rounding = [s for s in report.sites if s.kind in ("fistp", "cvt")]
@@ -331,6 +434,10 @@ def main(argv=None) -> int:
     ap.add_argument("--objdump", default="objdump")
     ap.add_argument("--max-sites", type=int, default=400)
     args = ap.parse_args(argv)
+    pe = None
+    if args.exe:
+        with open(args.exe, "rb") as f:
+            pe = PeImage(f.read())
     if args.objdump_text:
         with open(args.objdump_text, encoding="utf-8", errors="replace") as f:
             text = f.read()
@@ -341,7 +448,7 @@ def main(argv=None) -> int:
         ).stdout
     else:
         ap.error("give an executable or --objdump-text")
-    print(format_report(scan(parse_objdump(text)), args.max_sites))
+    print(format_report(scan(parse_objdump(text), pe), args.max_sites))
     return 0
 
 
