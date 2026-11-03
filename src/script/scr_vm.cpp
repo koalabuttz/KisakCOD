@@ -4734,16 +4734,16 @@ void VM_UnarchiveStack(uint32_t startLocalId, VariableStackBuffer* stackValue)
         {
             iassert(scrVmPub.function_count < 32 /*MAX_VM_STACK_DEPTH*/);
 
-            scrVmPub.function_frame->fs.pos = *(const char**)buf;
+            scrVmPub.function_frame->fs.pos = Scr_ReadStackValue(buf).codePosValue;
             ++scrVmPub.function_count;
             ++scrVmPub.function_frame;
         }
         else
         {
-            top->u.codePosValue = *(const char**)buf;
+            top->u = Scr_ReadStackValue(buf);
         }
 
-        buf += 4;
+        buf += SCR_STACK_VALUE_SIZE;
     }
     fs.pos = stackValue->pos;
     fs.top = top;
