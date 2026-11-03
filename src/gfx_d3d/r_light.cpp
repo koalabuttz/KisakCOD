@@ -337,9 +337,11 @@ void R_GetBspOmniLightSurfs(const GfxLight *light, int lightIndex, GfxBspDrawSur
 
 int R_AllowBspOmniLight(int surfIndex, void *bspLightCallbackAsVoid)
 {
-    return *(_BYTE *)(*(uint32_t *)bspLightCallbackAsVoid + surfIndex)
-        && *((float *)bspLightCallbackAsVoid + 4) >= PointToBoxDistSq(
-            (const float *)bspLightCallbackAsVoid + 1,
+    const BspOmniLightCallback *bspLightCallback = (const BspOmniLightCallback *)bspLightCallbackAsVoid;
+
+    return bspLightCallback->surfaceVisData[surfIndex]
+        && bspLightCallback->radiusSq >= PointToBoxDistSq(
+            bspLightCallback->position,
             rgp.world->dpvs.surfaces[surfIndex].bounds[0],
             rgp.world->dpvs.surfaces[surfIndex].bounds[1]);
 }
@@ -448,9 +450,11 @@ void R_GetBspSpotLightSurfs(const GfxLight *light, int lightIndex, GfxBspDrawSur
 
 int R_AllowBspSpotLightShadows(int surfIndex, void *bspLightCallbackAsVoid)
 {
+    const BspSpotLightCallback *bspLightCallback = (const BspSpotLightCallback *)bspLightCallbackAsVoid;
+
     if (r_spotLightShadows->current.enabled)
         return R_BoxInPlanes(
-            (const float (*)[4])((uint32_t)bspLightCallbackAsVoid + 4),
+            bspLightCallback->planes,
             rgp.world->dpvs.surfaces[surfIndex].bounds[0],
             rgp.world->dpvs.surfaces[surfIndex].bounds[1]);
     else
@@ -545,9 +549,11 @@ int R_BoxInPlanes(const float (*planes)[4], const float *mins, const float *maxs
 
 int R_AllowBspSpotLight(int surfIndex, void *bspLightCallbackAsVoid)
 {
-    if (*(_BYTE *)(*(uint32_t *)bspLightCallbackAsVoid + surfIndex))
+    const BspSpotLightCallback *bspLightCallback = (const BspSpotLightCallback *)bspLightCallbackAsVoid;
+
+    if (bspLightCallback->surfaceVisData[surfIndex])
         return R_BoxInPlanes(
-            (const float (*)[4])((uint32_t)bspLightCallbackAsVoid + 4),
+            bspLightCallback->planes,
             rgp.world->dpvs.surfaces[surfIndex].bounds[0],
             rgp.world->dpvs.surfaces[surfIndex].bounds[1]);
     else

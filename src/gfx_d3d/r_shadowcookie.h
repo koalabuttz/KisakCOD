@@ -32,7 +32,7 @@ void R_AddShadowCookie(
     ShadowCookieList *cookieList);
 void R_GenerateShadowCookieViewParms(float *modelMin, float *modelMax, GfxViewParms *shadowViewParms);
 void R_GenerateBspShadowReceivers(ShadowCookieList *shadowCookieList);
-bool R_AllowBspShadowReceiver(int surfIndex, uint32_t *shadowReceiverCallbackAsVoid);
+int R_AllowBspShadowReceiver(int surfIndex, void *shadowReceiverCallbackAsVoid);
 void R_GenerateSceneEntShadowReceivers(ShadowCookieList *shadowCookieList);
 char R_OutsideOfShadowFrustumPlanes(const DpvsPlane *planes, const float *minmax);
 void R_ResetShadowCookies();

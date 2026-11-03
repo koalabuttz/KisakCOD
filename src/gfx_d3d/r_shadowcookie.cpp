@@ -612,7 +612,7 @@ void R_GenerateBspShadowReceivers(ShadowCookieList *shadowCookieList)
             radius,
             scene.cookie[cookieIndex].planes,
             5u,
-            (int(*)(int, void *))R_AllowBspShadowReceiver,
+            R_AllowBspShadowReceiver,
             &shadowReceiverCallback,
             (GfxSurface **)&drawSurfs[128],
             0x100u);
@@ -646,9 +646,11 @@ void R_GenerateBspShadowReceivers(ShadowCookieList *shadowCookieList)
     }
 }
 
-bool R_AllowBspShadowReceiver(int surfIndex, uint32_t *shadowReceiverCallbackAsVoid)
+int R_AllowBspShadowReceiver(int surfIndex, void *shadowReceiverCallbackAsVoid)
 {
-    return *(_BYTE *)(*shadowReceiverCallbackAsVoid + surfIndex)
+    const ShadowReceiverCallback *shadowReceiverCallback = (const ShadowReceiverCallback *)shadowReceiverCallbackAsVoid;
+
+    return shadowReceiverCallback->surfaceVisData[surfIndex]
         && Material_GetTechnique(rgp.world->dpvs.surfaces[surfIndex].material, TECHNIQUE_SHADOWCOOKIE_RECEIVER) != 0;
 }
 
