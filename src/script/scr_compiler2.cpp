@@ -608,7 +608,7 @@ void EmitCaseStatementInfo(uint32_t name, sval_u sourcePos)
 	}
 
 	//newCaseStatement = (CaseStatementInfo *)Hunk_AllocateTempMemoryHighInternal(sizeof(*newCaseStatement));
-	newCaseStatement = (CaseStatementInfo *)Hunk_AllocateTempMemoryHigh(16, "EmitCaseStatementInfo");
+	newCaseStatement = (CaseStatementInfo *)Hunk_AllocateTempMemoryHigh(sizeof(CaseStatementInfo), "EmitCaseStatementInfo");
 
 	newCaseStatement->name = name;
 	newCaseStatement->codePos = (char *)TempMalloc(0);
@@ -697,7 +697,7 @@ void Scr_BeginDevScript(int *type, char **savedPos)
 	*type = BUILTIN_DEVELOPER_ONLY;
 }
 
-int AddFunction(int func, const char *name)
+int AddFunction(uintptr_t func, const char *name)
 {
 	int i; // [esp+0h] [ebp-4h]
 
@@ -736,7 +736,7 @@ void Scr_CopyBlock(scr_block_s *from, scr_block_s **to)
 	if (*to == NULL)
 	{
 		//*to = (scr_block_s *)Hunk_AllocateTempMemoryHighInternal(sizeof(**to));
-		*to = (scr_block_s*)Hunk_AllocateTempMemoryHigh(536, "Scr_CopyBlock");
+		*to = (scr_block_s*)Hunk_AllocateTempMemoryHigh(sizeof(scr_block_s), "Scr_CopyBlock");
 	}
 
 	**to = *from;
@@ -1411,7 +1411,7 @@ void EmitGetInteger(int value, sval_u sourcePos)
 	}
 	EmitOpcode(OP_GetInteger, 1, 0);
 	AddOpcodePos(sourcePos.stringValue, 1);
-	EmitCodepos((const char*)value);
+	EmitInteger(value);
 }
 
 /*
@@ -1930,7 +1930,7 @@ void EmitPostScriptThreadPointer(sval_u expr, int param_count, bool bMethod, sva
 		EmitOpcode(OP_ScriptThreadCallPointer, -param_count, CALL_THREAD);
 
 	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-	EmitCodepos((const char *)param_count);
+	EmitCodepos((const char *)(uintptr_t)param_count);
 }
 
 /*
@@ -2856,7 +2856,7 @@ void EmitFunction(sval_u func, sval_u sourcePos)
 		}
 	}
 
-	EmitCodepos((const char *)scope);
+	EmitCodepos((const char *)(uintptr_t)scope);
 
 	countId = GetVariable(threadId, 0);
 	count = Scr_EvalVariable(countId);
@@ -2939,8 +2939,8 @@ void EmitObject(sval_u expr, sval_u sourcePos)
 	if (!entnum && s[1] != 48)
 		goto LABEL_17;
 	EmitOpcode(0x81u, 1, 0);
-	EmitCodepos((const char*)classnum);
-	EmitCodepos((const char*)entnum);
+	EmitCodepos((const char*)(uintptr_t)classnum);
+	EmitCodepos((const char*)(uintptr_t)entnum);
 }
 
 /*
@@ -3399,7 +3399,7 @@ void EmitPostScriptThread(sval_u func, int param_count, bool bMethod, sval_u sou
 
 	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT | SOURCE_TYPE_CALL);
 	EmitFunction(func, sourcePos);
-	EmitCodepos((const char *)param_count);
+	EmitCodepos((const char *)(uintptr_t)param_count);
 }
 
 /*
@@ -3954,7 +3954,7 @@ script_method:
 			value = Scr_EvalVariable(methId);
 			type = Scr_GetUncacheType(value.type);
 
-			meth = (void (*)(scr_entref_t))value.u.pointerValue;
+			meth = (void (*)(scr_entref_t))value.u.codePosValue;
 		}
 		else
 		{
@@ -3964,7 +3964,7 @@ script_method:
 			methId = GetNewVariable(scrCompilePub.builtinMeth, name);
 
 			value.type = (Vartype_t)Scr_GetCacheType(type);
-			value.u.pointerValue = (intptr_t)meth;
+			value.u.codePosValue = (const char *)meth;
 
 			SetVariableValue(methId, &value);
 		}
@@ -3999,7 +3999,7 @@ script_method:
 	EmitCallBuiltinMethodOpcode(param_count, sourcePos);
 
 	//EmitUnsignedShort(AddFunction(meth, pName));
-	EmitShort(AddFunction((int)meth, pName));
+	EmitShort(AddFunction((uintptr_t)meth, pName));
 
 	AddOpcodePos(methodSourcePos.sourcePosValue, SOURCE_TYPE_NONE);
 	AddExpressionListOpcodePos(params);
@@ -4072,7 +4072,7 @@ script_function:
 			value = Scr_EvalVariable(funcId);
 			type = Scr_GetUncacheType(value.type);
 
-			func = (void (*)())value.u.pointerValue;
+			func = (void (*)())value.u.codePosValue;
 		}
 		else
 		{
@@ -4082,7 +4082,7 @@ script_function:
 			funcId = GetNewVariable(scrCompilePub.builtinFunc, name);
 
 			value.type = (Vartype_t)Scr_GetCacheType(type);
-			value.u.pointerValue = (intptr_t)func;
+			value.u.codePosValue = (const char *)func;
 
 			SetVariableValue(funcId, &value);
 		}
@@ -4116,7 +4116,7 @@ script_function:
 	EmitCallBuiltinOpcode(param_count, sourcePos);
 
 	//EmitUnsignedShort(AddFunction((intptr_t)func, pName));
-	EmitShort(AddFunction((intptr_t)func, pName));
+	EmitShort(AddFunction((uintptr_t)func, pName));
 
 	AddExpressionListOpcodePos(params);
 
@@ -4579,7 +4579,7 @@ void EmitForStatement(sval_u stmt1, sval_u expr, sval_u stmt2, sval_u stmt, sval
 	oldContinueChildCount = scrCompileGlob.continueChildCount;
 	breakChildCount = 0;
 	continueChildCount = 0;
-	continueChildBlocks = (scr_block_s**)Hunk_AllocateTempMemoryHigh(4096, "EmitForStatement");
+	continueChildBlocks = (scr_block_s**)Hunk_AllocateTempMemoryHigh(1024 * sizeof(scr_block_s *), "EmitForStatement");
 	scrCompileGlob.continueChildBlocks = continueChildBlocks;
 	scrCompileGlob.continueChildCount = &continueChildCount;
 	scrCompileGlob.breakBlock = forStatBlock->block;
@@ -4587,7 +4587,7 @@ void EmitForStatement(sval_u stmt1, sval_u expr, sval_u stmt2, sval_u stmt, sval
 	{
 		pos2 = 0;
 		nextPos2 = 0;
-		breakChildBlocks = (scr_block_s**)Hunk_AllocateTempMemoryHigh(4096, "EmitForStatement");
+		breakChildBlocks = (scr_block_s**)Hunk_AllocateTempMemoryHigh(1024 * sizeof(scr_block_s *), "EmitForStatement");
 		scrCompileGlob.breakChildCount = &breakChildCount;
 	}
 	else
@@ -4708,7 +4708,7 @@ void EmitWhileStatement(sval_u expr, sval_u stmt, sval_u sourcePos, sval_u while
 	{
 		pos2 = 0;
 		nextPos2 = 0;
-		breakChildBlocks = (scr_block_s**)Hunk_AllocateTempMemoryHigh(4096, "EmitWhileStatement");
+		breakChildBlocks = (scr_block_s**)Hunk_AllocateTempMemoryHigh(1024 * sizeof(scr_block_s *), "EmitWhileStatement");
 		scrCompileGlob.breakChildCount = &breakChildCount;
 	}
 	else
@@ -4851,14 +4851,15 @@ void EmitSwitchStatement(sval_u expr, sval_u stmtlist, sval_u sourcePos, bool la
 
 	while (caseStatement)
 	{
-		EmitCodepos((const char*)caseStatement->name);
+		EmitCodepos((const char*)(uintptr_t)caseStatement->name);
 		EmitCodepos(caseStatement->codePos);
 		caseStatement = caseStatement->next;
 		num++;
 	}
 
 	*(unsigned short *)pos2 = num;
-	qsort(pos3, num, 8u, CompareCaseInfo);
+	// Each case is two pointer-sized slots: the case value, then its code position.
+	qsort(pos3, num, 2 * sizeof(intptr_t), CompareCaseInfo);
 
 	while (num > 1)
 	{
@@ -4874,7 +4875,7 @@ void EmitSwitchStatement(sval_u expr, sval_u stmtlist, sval_u sourcePos, bool la
 			}
 		}
 		--num;
-		pos3 += 8;
+		pos3 += 2 * sizeof(intptr_t);
 	}
 
 	ConnectBreakStatements();

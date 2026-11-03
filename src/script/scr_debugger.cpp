@@ -1175,7 +1175,7 @@ void Scr_SortElementChildren(Scr_WatchElement_s *parentElement)
     elementList = Scr_AllocDebugMem(4 * count, "Scr_SortElementChildren");
     for (newIndex = 0; newIndex < count; ++newIndex)
         elementList[newIndex] = (uint32_t)&newElements[newIndex];
-    qsort(elementList, count, 4u, (int(*)(const void *, const void *))CompareThreadElements);
+    qsort(elementList, count, sizeof(elementList[0]), (int(*)(const void *, const void *))CompareThreadElements);
     for (newIndexa = 0; newIndexa < count; ++newIndexa)
     {
         if (newIndexa >= count - 1)
@@ -2272,7 +2272,7 @@ void Scr_DebugTerminateThread(int topThread)
 {
     Scr_DebugKillThread(
         scrVmPub.function_frame_start[topThread].fs.localId,
-        scrVmPub.stack[3 * topThread - 96].u.codePosValue);
+        scrVmPub.function_frame_start[topThread].fs.pos);
     if (topThread == scrVmPub.function_count)
     {
         if (!scrDebuggerGlob.kill_thread)
@@ -2289,7 +2289,7 @@ void Scr_DebugTerminateThread(int topThread)
     }
     else
     {
-        scrVmPub.stack[3 * topThread - 96].u.intValue = (int)&g_EndPos;
+        scrVmPub.function_frame_start[topThread].fs.pos = &g_EndPos;
     }
 }
 

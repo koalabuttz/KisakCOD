@@ -1635,7 +1635,7 @@ void __thiscall Scr_ScriptCallStack::UpdateStack()
         {
             if (i)
             {
-                codePos = (char*)scrVmPub.stack[3 * (scrVmPub.function_count - i) - 96].u.intValue;
+                codePos = (char*)scrVmPub.function_frame_start[scrVmPub.function_count - i].fs.pos;
                 index = scrVmPub.function_frame_start[scrVmPub.function_count - i].fs.localId == 0;
             }
             else
@@ -2328,7 +2328,7 @@ void Scr_ScriptWatch::EvaluateWatchChildren(Scr_WatchElement_s *parentElement)
                     v10 = Scr_CompareCanonicalStrings;
                 compare = v10;
             }
-            qsort(&names[hardcodedCount], count - hardcodedCount, 4u, (int(*)(void const *, void const *))compare);
+            qsort(&names[hardcodedCount], count - hardcodedCount, sizeof(names[0]), (int(*)(void const *, void const *))compare);
             oldElements = parentElement->childArrayHead;
             oldChildCount = parentElement->childCount;
             newElements = (Scr_WatchElement_s*)Scr_AllocDebugMem(100 * count, "Scr_ScriptWatch::EvaluateWatchChildren3");
