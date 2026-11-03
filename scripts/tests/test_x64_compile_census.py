@@ -355,11 +355,20 @@ class CMakeKnobTests(unittest.TestCase):
     def test_the_platform_keeps_the_32_bit_check_and_fences_x86_64(self):
         text = (ROOT / "scripts" / "platform" / "linux" / "platform.cmake").read_text(encoding="utf-8")
         self.assertIn('elseif(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)', text)
+        fence = text[text.index("foreach(kisak_i386_only"):]
+        fence = fence[:fence.index(")")]
         for option in ("KISAK_BUILD_LINUX_CLIENT_CORE", "KISAK_BUILD_LINUX_WINDOW_HOST",
-                       "KISAK_BUILD_LINUX_NATIVE_D3D9", "KISAK_BUILD_DEVICE_PROBE",
-                       "KISAK_BUILD_WORLD_DRAW_PROBE", "KISAK_BUILD_LINUX_MP_CLIENT"):
+                       "KISAK_BUILD_DEVICE_PROBE", "KISAK_BUILD_WORLD_DRAW_PROBE"):
             with self.subTest(option=option):
-                self.assertIn(option, text)
+                self.assertIn(option, fence)
+        # The x86_64 client track (docs/linux-x64.md) lifts the fence for the
+        # boundary and the multiplayer client only; the boundary still refuses
+        # any other 64-bit build.
+        for option in ("KISAK_BUILD_LINUX_NATIVE_D3D9", "KISAK_BUILD_LINUX_MP_CLIENT"):
+            with self.subTest(option=option):
+                self.assertNotIn(option, fence)
+        boundary = (ROOT / "scripts" / "platform" / "linux" / "native_d3d9.cmake").read_text(encoding="utf-8")
+        self.assertIn('if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4 AND NOT KISAK_LINUX_ARCH STREQUAL "x86_64")', boundary)
 
 
 class WorkflowTests(unittest.TestCase):
