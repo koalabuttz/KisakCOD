@@ -163,7 +163,7 @@ void PBdvar_set(const char *var_name, char *value)
         Dvar_SetFromStringByName(var_name, value);
 }
 
-char *Dvar_InfoString(int localClientNum, char bit)
+char *Dvar_InfoString(int localClientNum, int bit)
 {
     const char *UsernameForLocalClient; // eax
 
@@ -1238,7 +1238,7 @@ void Dvar_ChangeResetValue(dvar_s *dvar, DvarValue value)
         MyAssertHandler(".\\universal\\dvar.cpp", 1379, 0, "%s", "dvar");
     if (!dvar->name)
         MyAssertHandler(".\\universal\\dvar.cpp", 1380, 0, "%s", "dvar->name");
-    if ((dvar->flags & 0x200) == 0)
+    if ((dvar->flags & DVAR_CHANGEABLE_RESET) == 0)
         MyAssertHandler(
             ".\\universal\\dvar.cpp",
             1381,
@@ -1767,7 +1767,7 @@ void Dvar_Reregister(
     }
     if (dvar->type != type)
         MyAssertHandler(".\\universal\\dvar.cpp", 1560, 0, "%s\n\t(dvarName) = %s", "(dvar->type == type)", dvarName);
-    if ((dvar->flags & 0x9200) == 0 && !Dvar_ValuesEqual(type, dvar->reset, resetValue))
+    if ((dvar->flags & (DVAR_CHANGEABLE_RESET | DVAR_SAVED | DVAR_AUTOEXEC)) == 0 && !Dvar_ValuesEqual(type, dvar->reset, resetValue))
     {
         v11 = Dvar_ValueToString(dvar, resetValue);
         v9 = Dvar_DisplayableResetValue(dvar);
@@ -2730,7 +2730,7 @@ void Dvar_SetCommand(const char *dvarName, char *string)
     {
         if (isLoadingAutoExecGlobalFlag)
         {
-            Dvar_AddFlags(dvar, 0x8000);
+            Dvar_AddFlags(dvar, DVAR_AUTOEXEC);
             Dvar_UpdateResetValue(dvar, dvar->current);
         }
     }
@@ -2822,7 +2822,7 @@ void Dvar_ResetScriptInfo()
     while (g_dvarCritSect.writeCount)
         NET_Sleep(0);
     for (dvarIter = 0; dvarIter < dvarCount; ++dvarIter)
-        dvarPool[dvarIter].flags &= ~0x400u;
+        dvarPool[dvarIter].flags &= ~DVAR_SCRIPTINFO;
     if (g_dvarCritSect.readCount <= 0)
         MyAssertHandler(
             "c:\\trees\\cod3\\src\\universal\\../qcommon/threads_interlock.h",

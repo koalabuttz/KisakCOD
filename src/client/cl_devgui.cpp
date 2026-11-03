@@ -56,14 +56,14 @@ const dvar_s *CL_RegisterDevGuiDvars()
 {
     const dvar_s *result; // eax
 
-    clGuiGlob.mapEnumDvar[0] = Dvar_RegisterEnum("mapEnum0", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_NORESTART, "");
-    clGuiGlob.mapEnumDvar[1] = Dvar_RegisterEnum("mapEnum1", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_NORESTART, "");
-    clGuiGlob.mapEnumDvar[2] = Dvar_RegisterEnum("mapEnum2", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_NORESTART, "");
-    clGuiGlob.mapEnumDvar[3] = Dvar_RegisterEnum("mapEnum3", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_NORESTART, "");
-    clGuiGlob.mapEnumDvar[4] = Dvar_RegisterEnum("mapEnum4", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_NORESTART, "");
-    clGuiGlob.mapEnumDvar[5] = Dvar_RegisterEnum("mapEnum5", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_NORESTART, "");
-    clGuiGlob.mapEnumDvar[6] = Dvar_RegisterEnum("mapEnum6", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_NORESTART, "");
-    result = Dvar_RegisterEnum("mapEnum7", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_NORESTART, "");
+    clGuiGlob.mapEnumDvar[0] = Dvar_RegisterEnum("mapEnum0", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_SCRIPTINFO, "");
+    clGuiGlob.mapEnumDvar[1] = Dvar_RegisterEnum("mapEnum1", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_SCRIPTINFO, "");
+    clGuiGlob.mapEnumDvar[2] = Dvar_RegisterEnum("mapEnum2", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_SCRIPTINFO, "");
+    clGuiGlob.mapEnumDvar[3] = Dvar_RegisterEnum("mapEnum3", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_SCRIPTINFO, "");
+    clGuiGlob.mapEnumDvar[4] = Dvar_RegisterEnum("mapEnum4", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_SCRIPTINFO, "");
+    clGuiGlob.mapEnumDvar[5] = Dvar_RegisterEnum("mapEnum5", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_SCRIPTINFO, "");
+    clGuiGlob.mapEnumDvar[6] = Dvar_RegisterEnum("mapEnum6", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_SCRIPTINFO, "");
+    result = Dvar_RegisterEnum("mapEnum7", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_SCRIPTINFO, "");
     clGuiGlob.mapEnumDvar[7] = result;
     return result;
 }

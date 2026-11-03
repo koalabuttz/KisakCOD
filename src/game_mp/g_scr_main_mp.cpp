@@ -967,7 +967,7 @@ void GScr_SetDvar()
             dvar = Dvar_FindVar(dvarName);
             if (!dvar)
                 MyAssertHandler(".\\game_mp\\g_scr_main_mp.cpp", 778, 0, "%s", "dvar");
-            Dvar_AddFlags(dvar, 1024);
+            Dvar_AddFlags(dvar, DVAR_SCRIPTINFO);
         }
     }
     else

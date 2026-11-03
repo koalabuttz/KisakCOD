@@ -780,34 +780,34 @@
          "Speed up model lighting by caching previous results");
      minn.value.max = 4.0f;
      minn.value.min = 0.0f;
-     r_lightTweakAmbient = Dvar_RegisterFloat("r_lightTweakAmbient", 0.1f, minn, DVAR_ROM | DVAR_AUTOEXEC, "Ambient light strength");
+     r_lightTweakAmbient = Dvar_RegisterFloat("r_lightTweakAmbient", 0.1f, minn, DVAR_ROM | DVAR_CHANGEABLE_RESET, "Ambient light strength");
      mino.value.max = 1.0f;
      mino.value.min = 0.0f;
      r_lightTweakDiffuseFraction = Dvar_RegisterFloat(
          "r_lightTweakDiffuseFraction",
          0.5f,
          mino,
-         DVAR_ROM | DVAR_AUTOEXEC,
+         DVAR_ROM | DVAR_CHANGEABLE_RESET,
          "diffuse light fraction");
      minp.value.max = 4.0f;
      minp.value.min = 0.0f;
-     r_lightTweakSunLight = Dvar_RegisterFloat("r_lightTweakSunLight", 1.0f, minp, DVAR_CHEAT | DVAR_AUTOEXEC, "Sunlight strength");
+     r_lightTweakSunLight = Dvar_RegisterFloat("r_lightTweakSunLight", 1.0f, minp, DVAR_CHEAT | DVAR_CHANGEABLE_RESET, "Sunlight strength");
      r_lightTweakAmbientColor = Dvar_RegisterColor(
          "r_lightTweakAmbientColor",
          1.0f,
          0.0f,
          0.0f,
          1.0f,
-         DVAR_ROM | DVAR_AUTOEXEC,
+         DVAR_ROM | DVAR_CHANGEABLE_RESET,
          "Light ambient color");
-     r_lightTweakSunColor = Dvar_RegisterColor("r_lightTweakSunColor", 0.0f, 1.0f, 0.0f, 1.0f, DVAR_CHEAT | DVAR_AUTOEXEC, "Sun color");
+     r_lightTweakSunColor = Dvar_RegisterColor("r_lightTweakSunColor", 0.0f, 1.0f, 0.0f, 1.0f, DVAR_CHEAT | DVAR_CHANGEABLE_RESET, "Sun color");
      r_lightTweakSunDiffuseColor = Dvar_RegisterColor(
          "r_lightTweakSunDiffuseColor",
          0.0f,
          0.0f,
          1.0f,
          1.0f,
-         DVAR_ROM | DVAR_AUTOEXEC,
+         DVAR_ROM | DVAR_CHANGEABLE_RESET,
          "Sun diffuse color");
      minq.value.max = 360.0f;
      minq.value.min = -360.0f;
@@ -817,7 +817,7 @@
          0.0f,
          0.0f,
          minq,
-         DVAR_CHEAT | DVAR_AUTOEXEC | DVAR_SAVED,
+         DVAR_CHEAT | DVAR_CHANGEABLE_RESET | DVAR_SAVED,
          "Sun direction in degrees");
      r_envMapOverride = Dvar_RegisterBool("r_envMapOverride", false, DVAR_NOFLAG, "Min reflection intensity based on glancing angle.");
      minr.value.max = 2.0f;

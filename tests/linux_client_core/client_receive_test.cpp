@@ -84,7 +84,7 @@ char *SEH_LocalizeTextMessage(const char *,const char *,msgLocErrType_t) { std::
 void LiveStorage_ReadStatsFromDir(char *) { std::abort(); }
 bool LiveStorage_DoWeHaveStats() { return false; }
 playerStatNetworkData *LiveStorage_GetStatBuffer() { std::abort(); }
-char *Dvar_InfoString(int,char) { static char info[]="\\name\\fixture";return info; }
+char *Dvar_InfoString(int,int) { static char info[]="\\name\\fixture";return info; }
 
 static int checks,failures;
 static void check(bool value,const char *name) {

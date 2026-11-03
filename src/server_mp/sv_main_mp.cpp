@@ -341,7 +341,7 @@ void SVC_Status(netadr_t from)
     int v26; // [esp+485Ch] [ebp-8h]
 
     v22 = 0;
-    v11 = Dvar_InfoString(0, 4);
+    v11 = Dvar_InfoString(0, DVAR_SERVERINFO | DVAR_SCRIPTINFO);
     v10 = s;
     do
     {
@@ -446,7 +446,7 @@ void SVC_GameCompleteStatus(netadr_t from)
     playerState_s *ps; // [esp+844h] [ebp-40Ch]
     char player[1028]; // [esp+848h] [ebp-408h] BYREF
 
-    v12 = Dvar_InfoString(0, 4);
+    v12 = Dvar_InfoString(0, DVAR_SERVERINFO | DVAR_SCRIPTINFO);
     v11 = infostring;
     do
     {
@@ -1179,11 +1179,11 @@ void SV_PreFrame()
     PROF_SCOPED("SV_PreFrame");
     KISAK_NULLSUB();
     SV_UpdateBots();
-    if ((dvar_modifiedFlags & 0x404) != 0)
+    if ((dvar_modifiedFlags & (DVAR_SERVERINFO | DVAR_SCRIPTINFO)) != 0)
     {
-        v0 = Dvar_InfoString(0, 4);
+        v0 = Dvar_InfoString(0, DVAR_SERVERINFO | DVAR_SCRIPTINFO);
         SV_SetConfigstring(CS_SERVERINFO, v0);
-        dvar_modifiedFlags &= 0xFFFFFBFB;
+        dvar_modifiedFlags &= ~(DVAR_SERVERINFO | DVAR_SCRIPTINFO);
     }
     if ((dvar_modifiedFlags & 8) != 0)
         SV_SetSystemInfoConfig();

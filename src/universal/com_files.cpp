@@ -1345,7 +1345,7 @@ void FS_RegisterDvars()
             v2 = (char *)"F:\\SteamLibrary\\steamapps\\common\\Call of Duty 4";
     }
 #endif
-    fs_basepath = Dvar_RegisterString("fs_basepath", v2, DVAR_INIT | DVAR_AUTOEXEC, "Base game path");
+    fs_basepath = Dvar_RegisterString("fs_basepath", v2, DVAR_INIT | DVAR_CHANGEABLE_RESET, "Base game path");
     fs_basegame = Dvar_RegisterString("fs_basegame", (char *)"", DVAR_INIT, "Base game name");
     fs_gameDirVar = Dvar_RegisterString(
         "fs_game",
@@ -1357,7 +1357,7 @@ void FS_RegisterDvars()
     homePath = (char *)RETURN_ZERO32();
     if (!homePath || !*homePath)
         homePath = (char *)fs_basepath->reset.integer;
-    fs_homepath = Dvar_RegisterString("fs_homepath", homePath, DVAR_INIT | DVAR_AUTOEXEC, "Game home path");
+    fs_homepath = Dvar_RegisterString("fs_homepath", homePath, DVAR_INIT | DVAR_CHANGEABLE_RESET, "Game home path");
     fs_restrict = Dvar_RegisterBool("fs_restrict", 0, DVAR_INIT, "Restrict file access for demos etc.");
 }
 
