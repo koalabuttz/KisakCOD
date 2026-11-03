@@ -979,7 +979,7 @@ void CMod_PartionLeafBrushes(uint16_t *leafBrushes, int numLeafBrushes, cLeaf_t 
     }
 }
 
-uint32_t CM_Hunk_AllocateTempMemoryHigh(int size, const char *name)
+uint8_t *CM_Hunk_AllocateTempMemoryHigh(int size, const char *name)
 {
     return Hunk_AllocateTempMemoryHigh(size, name);
 }

@@ -235,6 +235,38 @@ def check_asset_free_launch(checker, binary, workdir):
     )
 
 
+def check_empty_game_dir_launch(checker, binary, workdir):
+    """An existing but empty main/ makes FS_Startup list it for .iwd files.
+
+    Listing a directory allocates through Hunk_UserCreate, which a missing
+    main/ never reaches. The run must still end at the missing fileSysCheck.cfg.
+    """
+    (workdir / "main").mkdir()
+    arguments = [
+        "+set", "fs_basepath", str(workdir),
+        "+set", "fs_homepath", str(workdir),
+        "+set", "net_ip", "127.0.0.1",
+        "+set", "net_noudp", "1",
+    ]
+    code, output, timed_out = run(binary, arguments, workdir, LAUNCH_TIMEOUT)
+
+    if timed_out:
+        checker.failed(f"empty main/ launch did not exit within {LAUNCH_TIMEOUT}s")
+        return
+
+    checker.require(
+        code == 1,
+        "empty main/ launch exits 1 rather than crashing or being signalled",
+        f"returncode {code}\n{last_lines(output)}",
+    )
+    checker.require("ASSERT" not in output, "empty main/ launch raises no assert", last_lines(output))
+    checker.require(
+        FILE_SYS_CHECK in output,
+        "empty main/ launch reports the missing fileSysCheck.cfg",
+        last_lines(output),
+    )
+
+
 def check_fastfile_rejected(checker, binary, workdir):
     """Server-only builds must refuse loose-asset loading before FS starts."""
     arguments = [
@@ -365,6 +397,9 @@ def main():
         run_dir = Path(temporary)
         check_asset_free_launch(checker, binary, run_dir)
         check_fastfile_rejected(checker, binary, run_dir)
+
+    with tempfile.TemporaryDirectory(prefix="kisakcod-bootstrap-empty-") as temporary:
+        check_empty_game_dir_launch(checker, binary, Path(temporary))
 
     print(flush=True)
     if checker.failures:
