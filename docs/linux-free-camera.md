@@ -453,7 +453,9 @@ problem (an unknown statement, an entry without an id, origin, angles or
 delay, an id the table does not load, an effect the zone does not hold, no
 oneshot or loop at all), or when
 `FX_Register` does not find an effect, the map load fails at stage `effects`
-and nothing of the map stays loaded. `fx_enable` or `fx_draw` off refuses the
+and nothing of the map stays loaded. Raw file and effect names are compared
+without case, as the zone's own lookup compares them (`I_stricmp`): mp_crash's
+table loads `smoke/battlefield_smokebank_S`, which the zone names in lower case. `fx_enable` or `fx_draw` off refuses the
 replay and the window driver at the start stage, before any device work.
 
 When, in every frame (`MapEffects`):

@@ -48,6 +48,15 @@ void CollectEffectDef(XAssetHeader header, void *context)
     static_cast<EffectDefs *>(context)->defs.push_back(header.fx);
 }
 
+// Whether an asset's name is the name asked for, compared as the zone's own
+// lookup compares them (DB_FindXAssetEntry uses I_stricmp): without case.
+// Scripts and zones do not agree on case; mp_crash's effect table loads
+// "smoke/battlefield_smokebank_S".
+bool SameAssetName(const std::string &asked, const char *name)
+{
+    return name && !I_stricmp(asked.c_str(), name);
+}
+
 // The raw file of that name in the loaded zones, or nullptr. Enumerated rather
 // than looked up, so that a missing file is not replaced by a default asset.
 const RawFile *FindRawFile(const std::string &name)
@@ -55,7 +64,7 @@ const RawFile *FindRawFile(const std::string &name)
     RawFiles all;
     DB_EnumXAssets(ASSET_TYPE_RAWFILE, CollectRawFile, &all, true);
     for (const RawFile *file : all.files)
-        if (file && file->name && name == file->name && !DB_IsXAssetDefault(ASSET_TYPE_RAWFILE, file->name))
+        if (file && SameAssetName(name, file->name) && !DB_IsXAssetDefault(ASSET_TYPE_RAWFILE, file->name))
             return file;
     return nullptr;
 }
@@ -90,7 +99,7 @@ void MapEffects::Start(const char *mapName)
     DB_EnumXAssets(ASSET_TYPE_FX, CollectEffectDef, &packaged, true);
     plan_ = me::PlanEffects(list, table, [&](const std::string &path) {
         for (const FxEffectDef *def : packaged.defs)
-            if (def && def->name && path == def->name && !DB_IsXAssetDefault(ASSET_TYPE_FX, def->name))
+            if (def && SameAssetName(path, def->name) && !DB_IsXAssetDefault(ASSET_TYPE_FX, def->name))
                 return true;
         return false;
     });
