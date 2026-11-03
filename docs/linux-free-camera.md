@@ -810,6 +810,41 @@ The script's checkpoints on path A had the replay's digests and counts
 (`W.start` is `A.start`), and the 854x480 `A.rise.wide` and `A.focus` drew one
 effect surface each. The minimize step was not taken (Wayland).
 
+The map's vision set, in the cloud sandbox only (no GPU, no game data): the
+target builds in Debug and RelWithDebInfo with `-Wall -Wextra -Werror` on its
+own sources; `world_draw_rules` covers the post effect rule and the free-camera
+rule with it, also under ASan/UBSan; and `test_world_draw_probe.py` (32 runs,
+103 checks in both builds) checks that each of the eleven post effect switches
+refuses the replay, the live camera or the script at the start stage, while the
+draw mode with glow off and the film tweaks on still stops at its direct3d
+stage.
+
+The map's vision set on a GPU, on the same laptop (local runs, not CI
+evidence), 2026-11-03, on 421087b at full texture detail (picmip 0): the replay
+in RelWithDebInfo (run N=61) and Debug (N=62), and the window driver's script in
+RelWithDebInfo under Wayland (N=63). All three passed with no problem, no
+refusal, no warning from the cgame's vision file reader and no "not drawing"
+warning; the two replay builds printed the same lines apart from times. Every
+load found `vision/mp_crash.vision` complete. `mp_crash`'s vision set asks for
+film and not for glow, so every frame of the three runs reads
+`vision=applied glow=not_asked film=used post=yes`, and the replay switched film
+only:
+
+| `A.start` | digest | distinct colours | mean luma |
+| --- | --- | --- | --- |
+| with the vision set's film | `5422aead0720c10d` | 62,544 | 160.8 |
+| `r_filmUseTweaks 1` (film off) | `3bf7607540330329` | 70,131 | 123.3 |
+
+Without the film the picture is the effects run's `A.start` at full texture
+detail (N=60) exactly, and with it on again the picture came back. Every count
+(world, static model, shadow and effect) is N=60's at every checkpoint; every
+checkpoint's digest changed. The film brightens the view and narrows its
+colours: path A's forward leg went from a mean luma of 116 to 122 to one of 153
+to 161. The other switches at `A.start` (static models, sun shadow, effects)
+still took their parts out and came back, and all four interruptions at
+`A.rise` came back to its digest. The script's checkpoints on path A had the
+replay's digests.
+
 ## What is not verified
 
 - The replay has run on one GPU and one map. Its interruptions are forced: DXVK
@@ -829,11 +864,13 @@ effect surface each. The minimize step was not taken (Wayland).
   but their shadows need the scene time to move. A spawn refused at one view
   and taken at a later one can make a checkpoint's picture depend on the path
   to it; the report counts refused spawn attempts (none on `mp_crash`).
-- The map's vision set has not run on a GPU yet (see the pull request that adds
-  it). It is the play vision set at a fixed time: the intro and outro vision
-  sets a round shows, blends between vision sets, night vision and the fades
-  of the night vision goggles are not exercised. Fog, which the map's art
-  script sets with `setExpFog`, is not applied.
+- The map's vision set has run on one GPU and one map. `mp_crash`'s asks for no
+  glow, so glow has not been drawn on a GPU, and its switch has not been tried
+  there. It is the play vision set at a fixed time: the intro and outro vision
+  sets a round shows, blends between vision sets, night vision and the fades of
+  the night vision goggles are not exercised. Fog, which the map's art script
+  sets with `setExpFog`, is not applied. The film's picture is the engine's,
+  not compared with the game's.
 - The window input has met a real desktop through the window driver: its
   script (Wayland in RelWithDebInfo, X11 in Debug) and one 70 s live flight
   (Wayland), with the window `R_CreateWindow` made. The live flight was not
