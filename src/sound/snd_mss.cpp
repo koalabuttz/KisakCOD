@@ -317,7 +317,7 @@ int MSS_DigitalFormatType(int waveFormat, int bits, int channels)
 uint8_t *MSS_Alloc(uint32_t bytes, uint32_t rate)
 {
   if ( IsFastFileLoad() )
-    return (uint8_t *)((int (*)(uint32_t, uint32_t))MSS_Alloc_FastFile)(bytes, rate);
+    return (uint8_t *)MSS_Alloc_FastFile(bytes);
   else
     return MSS_Alloc_LoadObj(bytes, rate);
 }
