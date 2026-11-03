@@ -30,6 +30,7 @@ Usage:
 
 import argparse
 import json
+import re
 import shlex
 import sys
 from pathlib import Path
@@ -301,7 +302,21 @@ def merge(leaves):
     return ops
 
 
+STREAM_SOURCES = (SOURCE, ROOT / "src" / "database" / "db_file_load.cpp")
+SIZEOF_IN_LOAD_STREAM = re.compile(r"\bLoad_Stream\s*\([^;]*\bsizeof\s*\(")
+
+
+def check_stream_sizes():
+    """Load_Stream sizes are retail disk byte counts, so sizeof (a native size) is wrong."""
+    for path in STREAM_SOURCES:
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if SIZEOF_IN_LOAD_STREAM.search(line):
+                raise GenError(f"{path.relative_to(ROOT)}:{number}: Load_Stream takes the retail disk "
+                               "size; sizeof gives the native size, which differs on 64-bit builds")
+
+
 def generate(build_dir):
+    check_stream_sizes()
     ci = load_clang()
     layouts = Layouts(ci, compile_args(build_dir))
     t64_by_var = dict(layouts.stream_types("-m64"))

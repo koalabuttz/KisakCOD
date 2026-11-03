@@ -6113,7 +6113,7 @@ void Mark_RawFilePtr()
 
 void Load_StringTable(bool atStreamStart)
 {
-    Load_Stream(atStreamStart, varStringTable, sizeof(StringTable));
+    Load_Stream(atStreamStart, varStringTable, 16);
     varXString = &varStringTable->name;
     Load_XString(0);
     if (varStringTable->values)
