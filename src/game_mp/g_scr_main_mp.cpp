@@ -704,18 +704,21 @@ void Scr_VerifyWeaponIndex(int32_t weaponIndex, const char *weaponName)
 
 void iprintln()
 {
-    const char *v0; // eax
+    // A local buffer, as iclientprintln uses. Scr_MakeGameMessage formats with
+    // va(), whose two buffers rotate: a player argument takes the other one, so
+    // the command would be formatted into the buffer it is read from.
+    char svcmd[32];
 
-    v0 = va("%c", 102);
-    Scr_MakeGameMessage(-1, v0);
+    snprintf(svcmd, sizeof(svcmd), "%c", 102);
+    Scr_MakeGameMessage(-1, svcmd);
 }
 
 void iprintlnbold()
 {
-    const char *v0; // eax
+    char svcmd[32]; // see iprintln
 
-    v0 = va("%c", 103);
-    Scr_MakeGameMessage(-1, v0);
+    snprintf(svcmd, sizeof(svcmd), "%c", 103);
+    Scr_MakeGameMessage(-1, svcmd);
 }
 
 void GScr_print3d()
