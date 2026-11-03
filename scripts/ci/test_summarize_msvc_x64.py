@@ -76,7 +76,7 @@ class ReportTests(unittest.TestCase):
                                        f"KisakCOD-mp={work / 'mp.log'}"])
             self.assertEqual(status, 0)
             report = json.loads((work / "r" / "msvc-x64-census.json").read_text(encoding="utf-8"))
-            self.assertEqual(report["targets"]["KisakCOD-mp"]["errors"], 5)
+            self.assertEqual(report["targets"]["KisakCOD-mp"]["errors"], 4)  # the repeated asm line counts once
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(summary.main(["--report-dir", str(work / "r2"),
                                                f"KisakCOD-mp={work / 'empty.log'}"]), 1)

@@ -97,9 +97,10 @@ def summarize(logs, root):
     findings = defaultdict(dict)  # category -> {(path, line, code, message): set(targets)}
     for target, text in logs.items():
         diagnostics = parse_log(text, root)
+        # A header diagnostic repeats once per file that includes it, so count sites.
         per_target[target] = {
-            "errors": sum(1 for d in diagnostics if d[2] == "error"),
-            "warnings": sum(1 for d in diagnostics if d[2] == "warning"),
+            "errors": len({(d[0], d[1], d[3]) for d in diagnostics if d[2] == "error"}),
+            "warnings": len({(d[0], d[1], d[3]) for d in diagnostics if d[2] == "warning"}),
             "files_with_errors": len({d[0] for d in diagnostics if d[2] == "error"}),
             "succeeded": not any(d[2] == "error" for d in diagnostics) and "error MSB" not in text
                          and "LNK" not in text,
@@ -134,7 +135,7 @@ def render_markdown(report):
     out.append("`-A x64` build of the normal CMake project; report only. Categories match the Linux "
                "x86_64 census (docs/linux-x64.md).")
     out.append("")
-    out.append("| Target | Errors | Warnings | Files with errors | Built |")
+    out.append("| Target | Error sites | Warning sites | Files with errors | Built |")
     out.append("|---|---:|---:|---:|---|")
     for target, entry in sorted(report["targets"].items()):
         out.append(f"| {target} | {entry['errors']} | {entry['warnings']} | {entry['files_with_errors']} | "
