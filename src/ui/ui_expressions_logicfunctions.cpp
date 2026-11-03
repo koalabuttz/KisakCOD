@@ -598,10 +598,10 @@ void add_StringWithString(Operand *leftSide, Operand *rightSide, Operand *result
             "(rightSide->dataType == VAL_STRING)",
             rightSide->dataType);
     result->dataType = VAL_STRING;
-    I_strncpyz(leftSideStr, (char *)leftSide->internals.intVal, 256);
-    I_strncpyz(rightSideStr, (char *)rightSide->internals.intVal, 256);
+    I_strncpyz(leftSideStr, (char *)leftSide->internals.string, 256);
+    I_strncpyz(rightSideStr, (char *)rightSide->internals.string, 256);
     Com_sprintf(resultStr, 0x100u, "%s%s", leftSideStr, rightSideStr);
-    result->internals.intVal = (int)resultStr;
+    result->internals.string = resultStr;
 }
 
 char resultStr_0[256];
@@ -626,9 +626,9 @@ void add_StringWithInt(Operand *leftSide, Operand *rightSide, Operand *result)
             "(rightSide->dataType == VAL_INT)",
             rightSide->dataType);
     result->dataType = VAL_STRING;
-    I_strncpyz(leftSideStr, (char *)leftSide->internals.intVal, 256);
+    I_strncpyz(leftSideStr, (char *)leftSide->internals.string, 256);
     Com_sprintf(resultStr_0, 0x100u, "%s%i", leftSideStr, rightSide->internals.intVal);
-    result->internals.intVal = (int)resultStr_0;
+    result->internals.string = resultStr_0;
 }
 
 char resultStr_1[256];
@@ -653,9 +653,9 @@ void add_IntWithString(Operand *leftSide, Operand *rightSide, Operand *result)
             "(rightSide->dataType == VAL_STRING)",
             leftSide->dataType);
     result->dataType = VAL_STRING;
-    I_strncpyz(rightSideStr, (char *)rightSide->internals.intVal, 256);
+    I_strncpyz(rightSideStr, (char *)rightSide->internals.string, 256);
     Com_sprintf(resultStr_1, 0x100u, "%i%s", leftSide->internals.intVal, rightSideStr);
-    result->internals.intVal = (int)resultStr_1;
+    result->internals.string = resultStr_1;
 }
 
 char resultStr_2[256];
@@ -680,9 +680,9 @@ void add_FloatWithString(Operand *leftSide, Operand *rightSide, Operand *result)
             "(rightSide->dataType == VAL_STRING)",
             leftSide->dataType);
     result->dataType = VAL_STRING;
-    I_strncpyz(rightSideStr, (char *)rightSide->internals.intVal, 256);
+    I_strncpyz(rightSideStr, (char *)rightSide->internals.string, 256);
     Com_sprintf(resultStr_2, 0x100u, "%f%s", leftSide->internals.floatVal, rightSideStr);
-    result->internals.intVal = (int)resultStr_2;
+    result->internals.string = resultStr_2;
 }
 
 char resultStr_3[256];
@@ -707,9 +707,9 @@ void add_StringWithFloat(Operand *leftSide, Operand *rightSide, Operand *result)
             "(rightSide->dataType == VAL_FLOAT)",
             rightSide->dataType);
     result->dataType = VAL_STRING;
-    I_strncpyz(leftSideStr, (char *)leftSide->internals.intVal, 256);
+    I_strncpyz(leftSideStr, (char *)leftSide->internals.string, 256);
     Com_sprintf(resultStr_3, 0x100u, "%s%f", leftSideStr, rightSide->internals.floatVal);
-    result->internals.intVal = (int)resultStr_3;
+    result->internals.string = resultStr_3;
 }
 
 void multiply_IntByInt(Operand *leftSide, Operand *rightSide, Operand *result)
@@ -1065,7 +1065,7 @@ void and_StringWithInt(Operand *leftSide, Operand *rightSide, Operand *result)
             "(rightSide->dataType == VAL_INT)",
             rightSide->dataType);
     result->dataType = VAL_INT;
-    v3 = *(_BYTE *)leftSide->internals.intVal && rightSide->internals.intVal;
+    v3 = leftSide->internals.string[0] && rightSide->internals.intVal;
     result->internals.intVal = v3;
 }
 
@@ -1095,7 +1095,7 @@ void and_StringWithFloat(Operand *leftSide, Operand *rightSide, Operand *result)
             "(rightSide->dataType == VAL_FLOAT)",
             rightSide->dataType);
     result->dataType = VAL_INT;
-    v3 = *(_BYTE *)leftSide->internals.intVal && rightSide->internals.floatVal != 0.0;
+    v3 = leftSide->internals.string[0] && rightSide->internals.floatVal != 0.0;
     result->internals.intVal = v3;
 }
 
@@ -1205,7 +1205,7 @@ void or_StringWithInt(Operand *leftSide, Operand *rightSide, Operand *result)
             "(rightSide->dataType == VAL_INT)",
             rightSide->dataType);
     result->dataType = VAL_INT;
-    v3 = *(_BYTE *)leftSide->internals.intVal || rightSide->internals.intVal;
+    v3 = leftSide->internals.string[0] || rightSide->internals.intVal;
     result->internals.intVal = v3;
 }
 
@@ -1235,7 +1235,7 @@ void or_StringWithFloat(Operand *leftSide, Operand *rightSide, Operand *result)
             "(rightSide->dataType == VAL_FLOAT)",
             rightSide->dataType);
     result->dataType = VAL_INT;
-    v3 = *(_BYTE *)leftSide->internals.intVal || rightSide->internals.floatVal != 0.0;
+    v3 = leftSide->internals.string[0] || rightSide->internals.floatVal != 0.0;
     result->internals.intVal = v3;
 }
 

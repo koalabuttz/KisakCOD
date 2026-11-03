@@ -348,7 +348,7 @@ char *GetSourceString(Operand operand)
     char *result; // [esp+8h] [ebp-4h]
 
     if (operand.dataType == VAL_STRING)
-        return (char *)operand.internals.intVal;
+        return (char *)operand.internals.string;
     if ((uint32_t)currentTempOperand >= 0x10)
         MyAssertHandler(
             ".\\ui\\ui_expressions.cpp",
@@ -537,7 +537,7 @@ void AddOperandToStack(OperandStack *dataStack, Operand *data)
     operandInternalDataUnion v2; // ecx
     int numOperandLists; // edx
 
-    if (data->dataType == VAL_STRING && !data->internals.intVal)
+    if (data->dataType == VAL_STRING && !data->internals.string)
         MyAssertHandler(
             ".\\ui\\ui_expressions.cpp",
             1605,
@@ -566,7 +566,7 @@ char GetOperand(OperandStack *dataStack, Operand *data)
             data->dataType = list->operands[0].dataType;
             data->internals = v4;
             --dataStack->numOperandLists;
-            if (data->dataType == VAL_STRING && !data->internals.intVal)
+            if (data->dataType == VAL_STRING && !data->internals.string)
                 MyAssertHandler(
                     ".\\ui\\ui_expressions.cpp",
                     1796,
@@ -963,7 +963,7 @@ void RunOp(int localClientNum, OperatorStack *opStack, OperandStack *dataStack)
     case OP_TOSTRING:
         GetOperand(dataStack, &data1);
         operandResult.dataType = VAL_STRING;
-        operandResult.internals.intVal = (int)GetSourceString(data1);
+        operandResult.internals.string = GetSourceString(data1);
         AddOperandToStack(dataStack, &operandResult);
         return;
     case OP_TOFLOAT:
@@ -1051,11 +1051,11 @@ void GetDvarStringValue(Operand *source, Operand *result)
                 VariantString = CopyDvarString(dvar->current.string);
             else
                 VariantString = (char *)Dvar_GetVariantString(source->internals.string);
-            result->internals.intVal = (int)VariantString;
+            result->internals.string = VariantString;
         }
         else
         {
-            result->internals.intVal = (int)"";
+            result->internals.string = "";
         }
         if (uiscript_debug->current.integer)
             Com_Printf(CON_CHANNEL_UI, "dvarstring( %s ) = %s\n", source->internals.string, result->internals.string);
@@ -1065,7 +1065,7 @@ void GetDvarStringValue(Operand *source, Operand *result)
         NameForValueType = GetNameForValueType(source->dataType);
         Com_PrintError(CON_CHANNEL_UI, "Error: Must use a string as the name of a dvar, not a %s\n", NameForValueType);
         result->dataType = VAL_STRING;
-        result->internals.intVal = (int)"";
+        result->internals.string = "";
     }
 }
 
@@ -1417,7 +1417,7 @@ void GetPlayerField(int localClientNum, Operand *source, Operand *result)
             else
             {
                 result->dataType = VAL_STRING;
-                result->internals.intVal = (int)CG_GetPlayerOpposingTeamName(localClientNum);
+                result->internals.string = CG_GetPlayerOpposingTeamName(localClientNum);
                 if (uiscript_debug->current.integer)
                     Com_Printf(CON_CHANNEL_UI, "player( %s ) = %s\n", source->internals.string, result->internals.string);
             }
@@ -1425,7 +1425,7 @@ void GetPlayerField(int localClientNum, Operand *source, Operand *result)
         else
         {
             result->dataType = VAL_STRING;
-            result->internals.intVal = (int)CG_GetPlayerTeamName(localClientNum);
+            result->internals.string = CG_GetPlayerTeamName(localClientNum);
             if (uiscript_debug->current.integer)
                 Com_Printf(CON_CHANNEL_UI, "player( %s ) = %s\n", source->internals.string, result->internals.string);
         }
@@ -1435,7 +1435,7 @@ void GetPlayerField(int localClientNum, Operand *source, Operand *result)
         NameForValueType = GetNameForValueType(source->dataType);
         Com_PrintError(CON_CHANNEL_UI, "Error: Must use a string as the name of a player field, not a %s\n", NameForValueType);
         result->dataType = VAL_STRING;
-        result->internals.intVal = (int)"";
+        result->internals.string = "";
     }
 }
 
@@ -1489,7 +1489,7 @@ void GetFieldForTeam(int localClientNum, team_t team, Operand *fieldName, Operan
             else
             {
                 result->dataType = VAL_STRING;
-                result->internals.intVal = (int)CG_GetTeamName(team);
+                result->internals.string = CG_GetTeamName(team);
                 if (uiscript_debug->current.integer)
                     Com_Printf(CON_CHANNEL_UI, "team(%i)( %s ) = %s\n", team, fieldName->internals.string, result->internals.string);
             }
@@ -1511,7 +1511,7 @@ void GetFieldForTeam(int localClientNum, team_t team, Operand *fieldName, Operan
         NameForValueType = GetNameForValueType(fieldName->dataType);
         Com_PrintError(CON_CHANNEL_UI, "Error: Must use a string as the name of a team parameter, not a %s\n", NameForValueType);
         result->dataType = VAL_STRING;
-        result->internals.intVal = (int)"";
+        result->internals.string = "";
     }
 }
 
@@ -1784,14 +1784,14 @@ void GetKeyBinding(int localClientNum, Operand *fieldName, Operand *result)
     {
         UI_GetKeyBindingLocalizedStringSingle(localClientNum, fieldName->internals.string, resultString);
         result->dataType = VAL_STRING;
-        result->internals.intVal = (int)resultString;
+        result->internals.string = resultString;
     }
     else
     {
         NameForValueType = GetNameForValueType(fieldName->dataType);
         Com_PrintError(CON_CHANNEL_UI, "Error: Must use a string as KeyBinding() parameter, not a %s\n", NameForValueType);
         result->dataType = VAL_STRING;
-        result->internals.intVal = (int)"";
+        result->internals.string = "";
     }
 }
 
@@ -2074,7 +2074,7 @@ void SecondsToTimeDisplay(int localClientNum, Operand *source, Operand *result)
         v3 % 1440 / 60,
         v3 % 60);
     result->dataType = VAL_STRING;
-    result->internals.intVal = (int)resultString_0;
+    result->internals.string = resultString_0;
     if (uiscript_debug->current.integer)
         Com_Printf(CON_CHANNEL_UI, "secondsToTime() = %s\n", resultString_0);
 }
@@ -2084,7 +2084,7 @@ void SecondsToCountdownDisplay(int localClientNum, int seconds, Operand *result)
     static char resultString_1[128];
 
     result->dataType = VAL_STRING;
-    result->internals.intVal = (int)resultString_1;
+    result->internals.string = resultString_1;
     if (seconds >= 0)
     {
         snprintf(resultString_1, 0x80u, "%2i:%02i", seconds / 60, seconds % 60);
@@ -2093,7 +2093,7 @@ void SecondsToCountdownDisplay(int localClientNum, int seconds, Operand *result)
     }
     else
     {
-        result->internals.intVal = (int)"";
+        result->internals.string = "";
     }
 }
 
@@ -2138,17 +2138,17 @@ void GetGametypeObjective(int localClientNum, Operand *result)
                 "%s\n\t(localClientNum) = %i",
                 "(localClientNum == 0)",
                 localClientNum);
-        result->internals.intVal = (int)CG_GetGametypeDescription(localClientNum);
+        result->internals.string = CG_GetGametypeDescription(localClientNum);
         if (!result->internals.intVal)
-            result->internals.intVal = (int)"";
+            result->internals.string = "";
     }
     else
     {
-        result->internals.intVal = (int)"";
+        result->internals.string = "";
     }
 #elif KISAK_SP
     result->dataType = VAL_STRING;
-    result->internals.intVal = (int)"";
+    result->internals.string = "";
 #endif
 }
 
@@ -2162,22 +2162,22 @@ void GetGametypeName(int localClientNum, Operand *result)
     if (CL_GetLocalClientConnectionState(localClientNum) >= CA_LOADING)
     {
         cgs = CG_GetLocalClientStaticGlobals(localClientNum);
-        result->internals.intVal = (int)UI_GetGameTypeDisplayName(cgs->gametype);
+        result->internals.string = UI_GetGameTypeDisplayName(cgs->gametype);
     }
     else if (g_gametype)
     {
-        result->internals.intVal = (int)UI_GetGameTypeDisplayName(g_gametype->current.string);
+        result->internals.string = UI_GetGameTypeDisplayName(g_gametype->current.string);
     }
     else
     {
-        result->internals.intVal = (int)"";
+        result->internals.string = "";
     }
     if (!result->internals.intVal)
-        result->internals.intVal = (int)"";
+        result->internals.string = "";
 
 #elif KISAK_SP
     result->dataType = VAL_STRING;
-    result->internals.intVal = (int)"";
+    result->internals.string = "";
 #endif
 }
 
@@ -2189,15 +2189,15 @@ void GetGametypeInternal(int localClientNum, Operand *result)
     result->dataType = VAL_STRING;
 
     if (CL_GetLocalClientConnectionState(localClientNum) >= CA_LOADING)
-        result->internals.intVal = (int)cgs->gametype;
+        result->internals.string = cgs->gametype;
     else
         result->internals.intVal = g_gametype->current.integer;
     if (!result->internals.intVal)
-        result->internals.intVal = (int)"";
+        result->internals.string = "";
 
 #elif KISAK_SP
     result->dataType = VAL_STRING;
-    result->internals.intVal = (int)"";
+    result->internals.string = "";
 #endif
 }
 
@@ -2273,7 +2273,7 @@ void RunCommaOp(int localClientNum, OperandStack *dataStack, OperandList *list1,
             v4.intVal = (int)list1->operands[list1Operand].internals;
             finalList[operand].dataType = list1->operands[list1Operand].dataType;
             finalList[operand].internals = v4;
-            if (finalList[operand].dataType == VAL_STRING && !finalList[operand].internals.intVal)
+            if (finalList[operand].dataType == VAL_STRING && !finalList[operand].internals.string)
                 MyAssertHandler(
                     ".\\ui\\ui_expressions.cpp",
                     1637,
@@ -2287,7 +2287,7 @@ void RunCommaOp(int localClientNum, OperandStack *dataStack, OperandList *list1,
             v5.intVal = (int)list2->operands[list2Operand].internals;
             finalList[operand].dataType = list2->operands[list2Operand].dataType;
             finalList[operand].internals = v5;
-            if (finalList[operand].dataType == VAL_STRING && !finalList[operand].internals.intVal)
+            if (finalList[operand].dataType == VAL_STRING && !finalList[operand].internals.string)
                 MyAssertHandler(
                     ".\\ui\\ui_expressions.cpp",
                     1643,
@@ -2334,7 +2334,7 @@ void TableLookup(int localClientNum, OperandList *list, Operand *operandResult)
             intVal = GetSourceInt(&list->operands[3]).intVal;
             v8 = GetSourceString(list->operands[2]);
             v4.intVal = GetSourceInt(&list->operands[1]).intVal;
-            operandResult->internals.intVal = (int)StringTable_Lookup(table, v4.intVal, v8, intVal);
+            operandResult->internals.string = StringTable_Lookup(table, v4.intVal, v8, intVal);
             if (uiscript_debug->current.integer)
             {
                 string = operandResult->internals.string;
@@ -2352,13 +2352,13 @@ void TableLookup(int localClientNum, OperandList *list, Operand *operandResult)
                 "UI Expression Error: Expected 4 params to function StringTableLookup, found %i\n",
                 list->operandCount);
             operandResult->dataType = VAL_STRING;
-            operandResult->internals.intVal = (int)"";
+            operandResult->internals.string = "";
         }
     }
     else
     {
         operandResult->dataType = VAL_STRING;
-        operandResult->internals.intVal = (int)"";
+        operandResult->internals.string = "";
     }
 }
 
@@ -2480,9 +2480,9 @@ void LocalizeString(OperandList *list, Operand *operandResult)
     }
     string[stringLen] = 0;
     operandResult->dataType = VAL_STRING;
-    operandResult->internals.intVal = (int)SEH_LocalizeTextMessage(string, "ui string", LOCMSG_NOERR);
+    operandResult->internals.string = SEH_LocalizeTextMessage(string, "ui string", LOCMSG_NOERR);
     if (!operandResult->internals.intVal)
-        operandResult->internals.intVal = (int)"";
+        operandResult->internals.string = "";
 }
 
 void LocalizationError(const char *errorMessage)
