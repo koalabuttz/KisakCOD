@@ -3,7 +3,7 @@
 ## Status
 
 There is **no playable native Linux client**. The opt-in foundation now includes
-eight full production client translation units, asset-free runtime integration tests,
+ten full production client translation units, asset-free runtime integration tests,
 a runnable Linux discovery diagnostic, and an independently opt-in SDL2 window/input shell. The diagnostic starts real UDP/event
 handling and sends read-only `getinfo`; it explicitly reports `connected=false`
 and unavailable Linux authentication. It does not initialize `CL_Frame`, load game
@@ -14,17 +14,18 @@ window option adds no SDL dependency to it. The shared event queue is extracted 
 
 ## What the milestone builds
 
-`KISAK_BUILD_LINUX_CLIENT_CORE` (default `OFF`) adds eight targets:
+`KISAK_BUILD_LINUX_CLIENT_CORE` (default `OFF`) adds nine targets:
 
 | Target | Kind | Purpose |
 | --- | --- | --- |
-| `KisakCOD-client-core` | OBJECT library | Compiles eight production client TUs |
+| `KisakCOD-client-core` | OBJECT library | Compiles ten production client TUs |
 | `KisakCOD-client-netchan-test` | executable | Asset-free test of the real codec |
 | `KisakCOD-client-state-test` | executable | Real command-parser and key-state runtime checks |
 | `KisakCOD-client-packet-test` | executable | Production command emission, server decoding and prediction history integration |
 | `KisakCOD-client-auth-test` | executable | Challenge formatting and real resend state machine |
 | `KisakCOD-client-receive-test` | executable | Production reader/tokenizer/receive lifecycle and connection guards |
 | `KisakCOD-client-platform-test` | executable | Full client-main compilation and portable setenv behavior |
+| `KisakCOD-client-connect-test` | executable | Production `connect` command: local server joined, remote servers refused |
 | `KisakCOD-client-headless` | executable | Read-only UDP server discovery, no game admission |
 
 The object library compiles these files **unmodified**, from their production
@@ -38,6 +39,8 @@ source paths:
 - `src/client_mp/cl_connection_mp.cpp` — production connection resend state machine
 - `src/client_mp/cl_connection_receive_mp.cpp` — connectionless dispatch and timeout lifecycle
 - `src/client_mp/cl_main_mp.cpp` — full client-main TU, with portable environment handling
+- `src/client_mp/cl_main_pc_mp.cpp` — `connect` and server-browser commands; Linux authentication fails closed
+- `src/client/cl_ui_draw.cpp` — client UI draw wrappers
 
 Note the paths: the multiplayer client sources live under `client_mp/`.
 `src/client/cl_input.cpp` is the singleplayer/Windows-client variant and is
@@ -126,7 +129,7 @@ opt into client targets. Hosted run
 [41267177207](https://github.com/koalabuttz/KisakCOD/actions/runs/41267177207)
 passed both native jobs with these client-core checks included.
 
-The checker verifies generated compile commands for all eight client-core
+The checker verifies generated compile commands for all ten client-core
 translation units (`-m32`, `KISAK_MP`, no dedicated defines), builds in an isolated
 output directory and executes all six runtime tests plus real socket tests. The state-test compile commands
 are also checked for production source paths, client flags and `RELEASE_ASSERTS`. Its default-OFF check uses a
@@ -233,9 +236,39 @@ sections, contradictory totals and nonzero process exits. The default build
 still exposes none of the optional client targets and the dedicated executable
 fingerprint is checked even when a client build fails.
 
+## Joining servers: local yes, remote no
+
+`src/client_mp/cl_main_pc_mp.cpp` used to stop the Linux compile with
+`#error Steam Auth for Arch`. Its Linux branch now fails closed instead:
+`CL_CDKeyValidate` prints "Client authentication unavailable" and returns false,
+so `connect <address>` drops with `EXE_ERR_INVALID_CD_KEY` before any packet is
+sent. Windows keeps its Steam path unchanged.
+
+`CL_Connect_f` only asks for authentication when the address is not local.
+`connect localhost` (and a listen server's own client after `map`/`devmap`)
+resolves to `NA_LOOPBACK`, the engine's in-process packet queue, and goes
+straight to `CA_CHALLENGING` as in retail; the server's `SV_DirectConnect`
+skips the challenge for local addresses the same way. That is how the player
+on a listen server joins, and it is unchanged by this port. It is safe because
+`NA_LOOPBACK` never comes from a socket: `Sys_GetPacket` gives every UDP sender
+`NA_IP` (pinned by `tests/linux_net`), and `127.0.0.1` over UDP is an ordinary
+remote address that is refused like any other.
+
+`KisakCOD-client-connect-test` runs the unmodified `CL_Connect_f` with the real
+`NET_StringToAdr`, `NET_IsLocalAddress` and `Sys_StringToAdr`, and recording
+doubles for the client systems around them. It checks the localhost sequence
+(no authentication asked, `CA_CHALLENGING`, retail connection fields), that a
+remote IPv4 address, `127.0.0.1:28960` and bare `127.0.0.1` all resolve to
+`NA_IP`, drop with `EXE_ERR_INVALID_CD_KEY` and never start a connection, and
+that an already connected client is left alone. Making the Linux branch accept
+fails seven of its 25 checks.
+
+Joining a remote server from Linux needs a real ticket provider; until then it
+stays refused rather than sending an unauthenticated challenge.
+
 ## What still blocks a real native client
 
-Compiling eight client TUs is not a client. In rough order of weight:
+Compiling ten client TUs is not a client. In rough order of weight:
 
 1. **Engine startup integration.** A real SDL2 window/input host now exists, but
    its shell does not drive `CL_Frame`, client key/UI consumption, or game startup.

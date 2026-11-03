@@ -50,7 +50,6 @@ src/universal/win_common.cpp: includes <direct.h> (native: src/linux/sys_files.c
 src/universal/win_shared.cpp: includes <windows.h> (native: src/linux/sys_posix.cpp)
 
 # --- Client services without a native implementation yet. ---
-src/client_mp/cl_main_pc_mp.cpp: deliberate #error "Steam Auth for Arch"; native Steam authentication is unimplemented
 src/qcommon/dl_main.cpp: includes <curl/curl.h>
 src/groupvoice/decode.cpp: DirectSound voice headers include <windows.h>
 src/groupvoice/encode.cpp: DirectSound voice headers include <windows.h>
