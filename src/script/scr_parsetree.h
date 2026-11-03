@@ -8,6 +8,7 @@ void Scr_ShutdownAllocNode();
 sval_u *Scr_AllocNode(int size);
 sval_u node0(Enum_t type);
 sval_u node1(Enum_t type, sval_u val2);
+sval_u node2_(sval_u val1, sval_u val2);
 sval_u node2(Enum_t type, sval_u val1, sval_u val2);
 sval_u node3(Enum_t type, sval_u val1, sval_u val2, sval_u val3);
 sval_u node4(Enum_t type, sval_u val1, sval_u val2, sval_u val3, sval_u val4);

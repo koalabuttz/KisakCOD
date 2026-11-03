@@ -49,6 +49,20 @@ sval_u node1(Enum_t type, sval_u val1)
     return result;
 }
 
+// A two-slot node of whole values: expression and parameter list items
+// ({ value, source position }) and the script root ({ includes, threads }).
+// The decompiled grammar built these with node1, passing the first value as
+// its 4-byte type, which drops the top half of a node pointer on x86_64.
+sval_u node2_(sval_u val1, sval_u val2)
+{
+    sval_u result;
+
+    result.node = Scr_AllocNode(2);
+    result.node[0] = val1;
+    result.node[1] = val2;
+    return result;
+}
+
 sval_u node2(Enum_t type, sval_u val1, sval_u val2)
 {
     sval_u result; // eax
