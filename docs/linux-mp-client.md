@@ -111,7 +111,15 @@ it under `fs_homepath`, writes zeroed stats, and drops the game with
 `PLATFORM_STATSREADERROR`. With the default home folder, the retail file in the
 game folder is only read. The first map load with an existing retail profile
 drops once. After that, the client reads its own zeroed stats from the home
-folder, which come first in the search path.
+folder.
+
+Retail never separated the two folders, so the engine only searched
+`fs_basepath/players` and created or deleted profiles there, while every other
+`players/` write went to `fs_homepath`. The engine now also searches
+`fs_homepath/players`, ahead of the game folder's, and creates and deletes
+profiles under `fs_homepath`. When the two paths are the same, as by default on
+Windows, nothing changes. Deleting a profile that exists only in the game
+folder does nothing.
 
 ## What it does not have yet
 
@@ -154,6 +162,9 @@ with no game data:
   `$XDG_DATA_HOME/KisakCOD`, or `~/.local/share/KisakCOD` when there is no
   absolute `XDG_DATA_HOME`. With neither that nor `HOME`, the client refuses
   before the engine starts.
+- With an active profile in both folders, the one in `fs_homepath/players`
+  is used, that folder comes first in the search path, and the game folder's
+  `players/` is left as it was.
 
 These runs exit 1, print each line once, try no connection and write only under
 `fs_homepath`. The renderer never starts in these runs, so no window is made.

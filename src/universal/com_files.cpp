@@ -2054,6 +2054,10 @@ void FS_Startup(char *gameName)
         FS_AddLocalizedGameDirectory((char *)fs_homepath->current.string, (char*)"devraw");
         FS_AddLocalizedGameDirectory((char *)fs_homepath->current.string, (char*)"raw_shared");
         FS_AddLocalizedGameDirectory((char *)fs_homepath->current.string, (char*)"raw");
+        // Player profiles and stats are written under fs_homepath/players
+        // (FS_WriteFileToDir and friends), so read them from there first. When
+        // fs_homepath is fs_basepath, as by default on Windows, this adds nothing.
+        FS_AddLocalizedGameDirectory((char *)fs_homepath->current.string, (char*)"players");
     }
     if (*(_BYTE *)fs_cdpath->current.string && I_stricmp(fs_basepath->current.string, fs_cdpath->current.string))
     {
