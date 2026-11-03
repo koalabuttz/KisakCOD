@@ -1659,7 +1659,7 @@ void Com_InitDvars()
         "Write to log file - 0 = disabled, 1 = async file write, 2 = Sync every write");
     com_statmon = Dvar_RegisterBool("com_statmon", 0, 0, "Draw stats monitor");
 #ifdef KISAK_MP
-    com_timescale = Dvar_RegisterFloat("com_timescale", 1.0, 0.001f, 1000.0f, DVAR_SYSTEMINFO | DVAR_ROM | DVAR_CHEAT | DVAR_TEMP | DVAR_SAVED, "Scale time of each frame");
+    com_timescale = Dvar_RegisterFloat("com_timescale", 1.0, 0.001f, 1000.0f, DVAR_SYSTEMINFO | DVAR_ROM | DVAR_CHEAT | DVAR_CODINFO | DVAR_SAVED, "Scale time of each frame");
 #elif KISAK_SP
     com_timescale = Dvar_RegisterFloat("com_timescale", 1.0, 0.001f, 1000.0f, DVAR_SAVED | DVAR_CHEAT | DVAR_ROM | DVAR_SYSTEMINFO, "Scale time of each frame");
 #endif

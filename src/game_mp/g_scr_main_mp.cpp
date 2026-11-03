@@ -5349,7 +5349,7 @@ void GScr_MakeDvarServerInfo()
     dvar = Dvar_FindVar(dvarName);
     if (dvar)
     {
-        Dvar_AddFlags(dvar, 256);
+        Dvar_AddFlags(dvar, DVAR_CODINFO);
     }
     else
     {
@@ -5377,7 +5377,7 @@ void GScr_MakeDvarServerInfo()
             ++pCh;
         }
         *pCh = 0;
-        Dvar_RegisterString(dvarName, (char *)dvarValue, DVAR_TEMP | DVAR_EXTERNAL, "Script defined user info dvar");
+        Dvar_RegisterString(dvarName, (char *)dvarValue, DVAR_CODINFO | DVAR_EXTERNAL, "Script defined user info dvar");
     }
 }
 

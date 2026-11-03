@@ -509,22 +509,22 @@ const dvar_s *G_RegisterDvars()
     g_TeamIcon_Allies = Dvar_RegisterString(
         "g_TeamIcon_Allies",
         "faction_128_usmc",
-        DVAR_TEMP,
+        DVAR_CODINFO,
         "Shader name for the allied scores banner");
     g_TeamIcon_Axis = Dvar_RegisterString(
         "g_TeamIcon_Axis",
         "faction_128_arab",
-        DVAR_TEMP,
+        DVAR_CODINFO,
         "Shader name for the axis scores banner");
     g_TeamIcon_Free = Dvar_RegisterString(
         "g_TeamIcon_Free",
         (char *)"",
-        DVAR_TEMP,
+        DVAR_CODINFO,
         "Shader name for the scores of players with no team");
     g_TeamIcon_Spectator = Dvar_RegisterString(
         "g_TeamIcon_Spectator",
         (char *)"",
-        DVAR_TEMP,
+        DVAR_CODINFO,
         "Shader name for the scores of players who are spectators");
     g_ScoresColor_MyTeam = Dvar_RegisterColor(
         "g_ScoresColor_MyTeam",
@@ -532,7 +532,7 @@ const dvar_s *G_RegisterDvars()
         0.72000003f,
         0.25f,
         1.0f,
-        DVAR_TEMP,
+        DVAR_CODINFO,
         "Player team color on scoreboard");
     g_ScoresColor_EnemyTeam = Dvar_RegisterColor(
         "g_ScoresColor_EnemyTeam",
@@ -540,7 +540,7 @@ const dvar_s *G_RegisterDvars()
         0.07f,
         0.05f,
         1.0f,
-        DVAR_TEMP,
+        DVAR_CODINFO,
         "Enemy team color on scoreboard");
     g_ScoresColor_Spectator = Dvar_RegisterColor(
         "g_ScoresColor_Spectator",
@@ -548,7 +548,7 @@ const dvar_s *G_RegisterDvars()
         0.25f,
         0.25f,
         1.0f,
-        DVAR_TEMP,
+        DVAR_CODINFO,
         "Spectator team color on scoreboard");
     g_ScoresColor_Free = Dvar_RegisterColor(
         "g_ScoresColor_Free",
@@ -556,7 +556,7 @@ const dvar_s *G_RegisterDvars()
         0.77999997f,
         0.1f,
         1.0f,
-        DVAR_TEMP,
+        DVAR_CODINFO,
         "Free Team color on scoreboard");
     g_ScoresColor_Allies = Dvar_RegisterColor(
         "g_ScoresColor_Allies",
@@ -564,7 +564,7 @@ const dvar_s *G_RegisterDvars()
         0.46000001f,
         0.07f,
         1.0f,
-        DVAR_TEMP,
+        DVAR_CODINFO,
         "Allies team color on scoreboard");
     g_ScoresColor_Axis = Dvar_RegisterColor(
         "g_ScoresColor_Axis",
@@ -572,17 +572,17 @@ const dvar_s *G_RegisterDvars()
         0.07f,
         0.05f,
         1.0f,
-        DVAR_TEMP,
+        DVAR_CODINFO,
         "Axis team color on scoreboard");
-    g_TeamName_Allies = Dvar_RegisterString("g_TeamName_Allies", "GAME_ALLIES", DVAR_TEMP, "Allied team name");
-    g_TeamName_Axis = Dvar_RegisterString("g_TeamName_Axis", "GAME_AXIS", DVAR_TEMP, "Axis team name");
+    g_TeamName_Allies = Dvar_RegisterString("g_TeamName_Allies", "GAME_ALLIES", DVAR_CODINFO, "Allied team name");
+    g_TeamName_Axis = Dvar_RegisterString("g_TeamName_Axis", "GAME_AXIS", DVAR_CODINFO, "Axis team name");
     g_TeamColor_Allies = Dvar_RegisterColor(
         "g_TeamColor_Allies",
         0.60000002f,
         0.63999999f,
         0.69f,
         1.0f,
-        DVAR_TEMP,
+        DVAR_CODINFO,
         "Allies team color");
     g_TeamColor_Axis = Dvar_RegisterColor(
         "g_TeamColor_Axis",
@@ -590,7 +590,7 @@ const dvar_s *G_RegisterDvars()
         0.56999999f,
         0.41f,
         1.0f,
-        DVAR_TEMP,
+        DVAR_CODINFO,
         "Axis team color");
     g_TeamColor_MyTeam = Dvar_RegisterColor(
         "g_TeamColor_MyTeam",
@@ -598,18 +598,18 @@ const dvar_s *G_RegisterDvars()
         0.60000002f,
         0.85000002f,
         1.0f,
-        DVAR_TEMP,
+        DVAR_CODINFO,
         "Player team color");
-    g_TeamColor_EnemyTeam = Dvar_RegisterColor("g_TeamColor_EnemyTeam", 0.75f, 0.25f, 0.25f, 1.0f, DVAR_TEMP, "Enemy team color");
+    g_TeamColor_EnemyTeam = Dvar_RegisterColor("g_TeamColor_EnemyTeam", 0.75f, 0.25f, 0.25f, 1.0f, DVAR_CODINFO, "Enemy team color");
     g_TeamColor_Spectator = Dvar_RegisterColor(
         "g_TeamColor_Spectator",
         0.25f,
         0.25f,
         0.25f,
         1.0f,
-        DVAR_TEMP,
+        DVAR_CODINFO,
         "Spectator team color");
-    g_TeamColor_Free = Dvar_RegisterColor("g_TeamColor_Free", 0.75f, 0.25f, 0.25f, 1.0f, DVAR_TEMP, "Free Team color");
+    g_TeamColor_Free = Dvar_RegisterColor("g_TeamColor_Free", 0.75f, 0.25f, 0.25f, 1.0f, DVAR_CODINFO, "Free Team color");
     g_smoothClients = Dvar_RegisterBool("g_smoothClients", true, DVAR_NOFLAG, "Enable extrapolation between client states");
     g_antilag = Dvar_RegisterBool("g_antilag", true, DVAR_ARCHIVE | DVAR_SERVERINFO, "Turn on antilag checks for weapon hits");
     g_oldVoting = Dvar_RegisterBool("g_oldVoting", true, DVAR_ARCHIVE, "Use old voting method");
@@ -728,7 +728,7 @@ const dvar_s *G_RegisterDvars()
         0.0f,
         0.0f,
         1.0f,
-        DVAR_ROM | DVAR_CHEAT | DVAR_TEMP | DVAR_SAVED,
+        DVAR_ROM | DVAR_CHEAT | DVAR_CODINFO | DVAR_SAVED,
         "Fog color that was set in the most recent call to \"setexpfog\"");
     mino.value.max = FLT_MAX;
     mino.value.min = 0.0f;
@@ -736,7 +736,7 @@ const dvar_s *G_RegisterDvars()
         "g_fogStartDistReadOnly",
         0.0f,
         mino,
-        DVAR_ROM | DVAR_CHEAT | DVAR_TEMP | DVAR_SAVED,
+        DVAR_ROM | DVAR_CHEAT | DVAR_CODINFO | DVAR_SAVED,
         "Fog start distance that was set in the most recent call to \"setexpfog\"");
     minp.value.max = FLT_MAX;
     minp.value.min = 0.0f;
@@ -744,7 +744,7 @@ const dvar_s *G_RegisterDvars()
         "g_fogHalfDistReadOnly",
         0.1f,
         minp,
-        DVAR_ROM | DVAR_CHEAT | DVAR_TEMP | DVAR_SAVED,
+        DVAR_ROM | DVAR_CHEAT | DVAR_CODINFO | DVAR_SAVED,
         "Fog start distance that was set in the most recent call to \"setexpfog\"");
     g_fogHalfDistReadOnly = result;
     return result;

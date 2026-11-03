@@ -1681,19 +1681,8 @@ void __cdecl MSG_ReadDeltaPlayerstate(
         }
     }
 
-    // LWSS: this is made redundant via the memcpy at the start (#36)
-    //{
-    //    int itr = LastChangedField;
-    //    NetField *field = (NetField *)&playerStateFields[LastChangedField];
-    //    while (itr < numPlayerStateFields)
-    //    {
-    //        v19 = (int *)((char *)&from->commandTime + field->offset);
-    //        *(int *)((char *)&to->commandTime + field->offset) = *v19;
-    //        ++itr;
-    //        ++field;
-    //    }
-    //}
-
+    // Fields past lastChangedField keep their `from` values through the
+    // memcpy above (upstream #36), so they need no copy of their own.
 
 #if !defined(__linux__) || !defined(KISAK_DEDICATED)
     // Client-side prediction bookkeeping: the client records the origin it sent
@@ -1712,19 +1701,11 @@ void __cdecl MSG_ReadDeltaPlayerstate(
             &to->movementDir))
         {
             Com_PrintError(CON_CHANNEL_CLIENT, "Unable to find the origin we sent, delta is not going to work");
-            // LWSS: if the above function returns false, there is no data set in `to`. 
-            // The below copy code is redundant via the memcpy at the top (#36)
-            //to->origin[0] = from->origin[0];
-            //to->origin[1] = from->origin[1];
-            //to->origin[2] = from->origin[2];
-            //to->velocity[0] = from->velocity[0];
-            //to->velocity[1] = from->velocity[1];
-            //to->velocity[2] = from->velocity[2];
-            //to->bobCycle = from->bobCycle;
-            //to->movementDir = from->movementDir;
-            //to->viewangles[0] = from->viewangles[0];
-            //to->viewangles[1] = from->viewangles[1];
-            //to->viewangles[2] = from->viewangles[2];
+            // On failure CL_GetPredictedOriginForServerTime writes nothing, so
+            // `to` keeps the memcpy'd `from` values plus any fields the delta
+            // above changed. Retail copied origin, velocity, bobCycle,
+            // movementDir and viewangles back from `from` here, which also
+            // discarded delta changes to them; upstream dropped that copy (#36).
         }
     }
 #endif // !defined(__linux__) || !defined(KISAK_DEDICATED)
