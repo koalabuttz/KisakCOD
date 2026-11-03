@@ -125,7 +125,7 @@ void Com_VolumeFalloffCurveGraphEventCallback(const DevGraph *graph, DevEventTyp
 
     if (!graph)
         MyAssertHandler(".\\universal\\com_sndalias.cpp", 213, 0, "%s", "graph");
-    data = (int)graph->data;
+    data = (int)(intptr_t)graph->data;
     if (data <= 0 || data >= 16)
         MyAssertHandler(
             ".\\universal\\com_sndalias.cpp",
@@ -166,14 +166,14 @@ void Com_GetGraphList(XAssetHeader header, int *data)
     if (index < 16)
     {
         graph = &g_sa.curveDevGraphs[index];
-        if (header.xmodelPieces->name)
+        if (header.sndCurve->filename)
         {
-            snprintf(devguiPath, ARRAYSIZE(devguiPath), "Main:1/Snd:6/Volume Falloff Curves/%s:%d", header.xmodelPieces->name, index);
+            snprintf(devguiPath, ARRAYSIZE(devguiPath), "Main:1/Snd:6/Volume Falloff Curves/%s:%d", header.sndCurve->filename, index);
             graph->knotCountMax = 8;
-            graph->knots = (float (*)[2]) & header.xmodelPieces->pieces;
-            graph->knotCount = &header.xmodelPieces->numpieces;
+            graph->knots = header.sndCurve->knots;
+            graph->knotCount = &header.sndCurve->knotCount;
             graph->eventCallback = Com_VolumeFalloffCurveGraphEventCallback;
-            graph->data = (void *)index;
+            graph->data = (void *)(intptr_t)index;
             graph->disableEditingEndPoints = 1;
             DevGui_AddGraph(devguiPath, graph);
             ++*count;
@@ -659,7 +659,7 @@ void Com_UnloadSoundAliasSounds(snd_alias_system_t system)
             "(system == SASYS_UI || system == SASYS_CGAME)",
             system);
     SND_StopSounds(SND_STOP_ALL);
-    aliases = (snd_alias_t *)*(&g_sa.soundFileInfo[-4].count + 3 * system);
+    aliases = g_sa.aliasInfo[system].head;
     for (i = 0; i < g_sa.aliasInfo[system].count; ++i)
     {
         if ((aliases[i].flags & 0xC0) >> 6 == 1)

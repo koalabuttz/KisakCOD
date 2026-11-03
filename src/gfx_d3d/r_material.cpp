@@ -1000,8 +1000,8 @@ void Material_UpdatePicmipSingle(XAssetHeader header)
 {
     int textureIndex; // [esp+4h] [ebp-4h]
 
-    for (textureIndex = 0; textureIndex < BYTE2(header.xmodelPieces[4].pieces); ++textureIndex)
-        Material_UpdatePicmipForTexdef((MaterialTextureDef*)header.xmodelPieces[5].pieces + textureIndex);
+    for (textureIndex = 0; textureIndex < header.material->textureCount; ++textureIndex)
+        Material_UpdatePicmipForTexdef(&header.material->textureTable[textureIndex]);
 }
 
 void Material_UpdatePicmipAll()

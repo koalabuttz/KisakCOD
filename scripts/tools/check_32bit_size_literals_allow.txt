@@ -109,6 +109,5 @@ src/server_mp/sv_archive_mp.cpp: && ((v30->r.svFlags & 0x18) != 0 || svsHeader.s
 # the temp hunk header is 16 bytes on both (magic, size, name fit; the trailing pad is never written)
 src/universal/com_memory.cpp: hdr = (hunkHeader_t*)(buf - 16);
 
-# a buffer length and a piece index
+# a buffer length
 src/universal/com_sndalias.cpp: Com_sprintf(dest, 0x20u, "%.4f %.4f\n", graph->knots[i][0], graph->knots[i][1]);
-src/universal/com_sndalias.cpp: if (index < 16)
