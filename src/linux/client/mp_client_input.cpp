@@ -37,6 +37,8 @@
 
 #include <linux/client/window/sdl_api.h>
 
+#include <cstdlib>
+#include <cstring>
 #include <exception>
 #include <string>
 
@@ -83,6 +85,20 @@ kisak::mp_client::ClientWindow *Window()
 
 void Sys_InstallClientWindow()
 {
+    // DXVK Native picks its window system (WSI) when the first device is made,
+    // from DXVK_WSI_DRIVER. The renderer's windows are SDL3 windows
+    // (win32_window_sdl3.cpp), so any other WSI would misread every HWND; left
+    // unset, DXVK 2.7.1 throws while choosing one. The probes do the same.
+    const char *const wsi = getenv("DXVK_WSI_DRIVER");
+    if (!wsi)
+    {
+        if (setenv("DXVK_WSI_DRIVER", "SDL3", 1) != 0)
+            Sys_Error("Could not set DXVK_WSI_DRIVER=SDL3 for the renderer");
+    }
+    else if (strcmp(wsi, "SDL3") != 0)
+    {
+        Sys_Error("DXVK_WSI_DRIVER is '%s'; the game window is an SDL3 window, so it must be SDL3 or unset", wsi);
+    }
     // The engine handles SIGINT and SIGTERM itself (src/linux/main.cpp); SDL
     // would otherwise replace those handlers when the renderer starts video.
     SDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, "1");

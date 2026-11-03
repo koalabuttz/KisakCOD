@@ -139,6 +139,19 @@ def run_checks(checker, binary):
                         "--version prints the client banner and exits 0", completed.stdout + completed.stderr)
         checker.require(not any(cwd.iterdir()), "the early exits write nothing")
 
+        # The renderer's windows are SDL3 windows, so another DXVK window system
+        # is refused before the engine starts.
+        wsi = work / "wsi"
+        (wsi / "base").mkdir(parents=True)
+        completed = run(binary, ["+set", "fs_basepath", str(wsi / "base"), "+set", "fs_homepath", str(wsi / "home")],
+                        cwd, dict(env, DXVK_WSI_DRIVER="Win32"))
+        log = completed.stdout + completed.stderr
+        checker.require(completed.returncode == 1 and "DXVK_WSI_DRIVER is 'Win32'" in log
+                        and "fileSysCheck.cfg" not in log,
+                        "another DXVK window system is refused before the engine starts", log[-2000:])
+        checker.require(not (wsi / "home").exists() and not any(cwd.iterdir()),
+                        "the refusal writes nothing")
+
         # An empty base path: the engine starts and refuses at the file system check.
         empty = work / "empty"
         (empty / "base").mkdir(parents=True)

@@ -76,6 +76,13 @@ the engine. Here `src/linux/client/mp_client_window.cpp` and
 | `WM_ACTIVATE` runs `VID_AppActivate` | Focus and minimize changes run the same steps, after the window releases the held keys. |
 | `WM_CLOSE` runs `Com_Quit_f` | Queues `quit`. Quitting shuts the renderer down, and with it the window, so it waits for the next command buffer pass instead of running inside the window's own event pump. |
 
+DXVK Native has to present through its SDL3 window system, because the
+renderer's windows are SDL3 windows. The client sets `DXVK_WSI_DRIVER=SDL3`
+before the engine starts, and refuses to start when the variable names another
+one. DXVK 2.7.1 cannot enter fullscreen on a native Wayland session (its SDL3
+path moves the window first, which Wayland refuses), so run windowed there
+(`+set r_fullscreen 0`).
+
 The engine's own `SIGINT`/`SIGTERM` handling stays in place: the client tells
 SDL not to install its signal handlers. Pointer boundaries the adapter queues
 (`SE_POINTER`) are dropped before `Com_EventLoop`, which has no case for them.
