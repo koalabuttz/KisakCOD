@@ -834,6 +834,10 @@ void G_ShutdownGame(int32_t freeScripts)
     HudElem_DestroyAll();
     if (Scr_IsSystemActive() && !level.savepersist)
         SV_FreeClientScriptPers();
+    // getTagOrigin/getTagAngles cache the last tag name with a counted reference.
+    // G_InitGame clears level with memset, so drop it here as SP's G_ShutdownGame
+    // does; otherwise each map change can leak one string (SL_CheckLeaks at quit).
+    GScr_Shutdown();
     Scr_ShutdownSystem(1u, level.savepersist == 0);
     if (freeScripts)
     {
