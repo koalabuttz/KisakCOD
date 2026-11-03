@@ -90,9 +90,20 @@ the engine. Here `src/linux/client/mp_client_window.cpp` and
 DXVK Native has to present through its SDL3 window system, because the
 renderer's windows are SDL3 windows. The client sets `DXVK_WSI_DRIVER=SDL3`
 before the engine starts, and refuses to start when the variable names another
-one. DXVK 2.7.1 cannot enter fullscreen on a native Wayland session (its SDL3
-path moves the window first, which Wayland refuses), so run windowed there
-(`+set r_fullscreen 0`).
+one.
+
+Fullscreen on a native Wayland session needs DXVK 3.0 or later, or 2.7.1 with
+upstream commit `a1abc9c4` ("[wsi] Don't treat SDL_SetWindowPosition failure
+as fatal") on top. DXVK 2.7.1's SDL3 path positions the window before going
+fullscreen, Wayland refuses to position it, and 2.7.1 gives up. With that one
+commit, the laptop played fullscreen on GNOME Wayland, and Alt-Tab worked. The
+project still builds against 2.7.1's headers. Only the library the client loads
+at run time needs the fix, so putting the patched library first on
+`LD_LIBRARY_PATH` is enough. Without it, run windowed (`+set r_fullscreen 0`),
+or use XWayland (`SDL_VIDEO_DRIVER=x11`). Fullscreen uses `r_mode` as on
+Windows, so set it to the panel's size for a sharp picture; a smaller mode is
+scaled up. `vid_restart` is refused while a listen server runs, as in the
+retail game.
 
 The engine's own `SIGINT`/`SIGTERM` handling stays in place: the client tells
 SDL not to install its signal handlers. Pointer boundaries the adapter queues
@@ -211,7 +222,8 @@ evidence. All three pass as of master `998344d`:
    minutes of play printed about 140 prediction misses, 1.2 units on average
    and 7.7 at most. There is no Windows figure to compare them with yet.
 
-Run it windowed (`+set r_fullscreen 0 +set r_mode 1024x768`) and with
-`+set net_ip 127.0.0.1`. The listen server then opens no outside port. The
+Run it with `+set net_ip 127.0.0.1`, and windowed
+(`+set r_fullscreen 0 +set r_mode 1024x768`) unless the DXVK library has the
+fullscreen fix above. The listen server then opens no outside port. The
 first map load with an existing retail profile drops once (see
 [Where it writes](#where-it-writes)).
