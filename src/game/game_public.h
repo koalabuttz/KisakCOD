@@ -1,5 +1,7 @@
 #pragma once
 
+#include <universal/layout_assert.h>
+
 
 #ifdef KISAK_MP
 #include <cgame_mp/cg_local_mp.h>
@@ -138,7 +140,7 @@ struct client_fields_s // sizeof=0x14
     void(__cdecl *setter)(gclient_s *, const client_fields_s *);
     void(__cdecl *getter)(gclient_s *, const client_fields_s *);
 };
-static_assert(sizeof(client_fields_s) == 0x14);
+static_assert(LAYOUT_32BIT(sizeof(client_fields_s) == 0x14));
 
 struct VehicleLocalPhysics // sizeof=0x34
 {                                       // ...
@@ -146,7 +148,7 @@ struct VehicleLocalPhysics // sizeof=0x34
     int32_t hasGround;                      // ...
     int32_t onGround;                       // ...
 };
-static_assert(sizeof(VehicleLocalPhysics) == 0x34);
+static_assert(LAYOUT_32BIT(sizeof(VehicleLocalPhysics) == 0x34));
 
 struct VehiclePhysicsBackup // sizeof=0x1B8
 {                                       // ...
@@ -226,7 +228,7 @@ struct game_hudelem_field_t // sizeof=0x1C  (SP/MP same)
     void(__cdecl *setter)(game_hudelem_s *, int);
     void(__cdecl *getter)(game_hudelem_s *, int);
 };
-static_assert(sizeof(game_hudelem_field_t) == 0x1C);
+static_assert(LAYOUT_32BIT(sizeof(game_hudelem_field_t) == 0x1C));
 
 
 

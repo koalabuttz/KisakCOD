@@ -1,4 +1,6 @@
 #pragma once
+
+#include <universal/layout_assert.h>
 #include "r_gfx.h"
 #include "r_sky.h"
 #include "r_primarylights.h"
@@ -202,7 +204,7 @@ struct GfxWorld // sizeof=0x2DC
     GfxWorldDpvsStatic dpvs;            // ...
     GfxWorldDpvsDynamic dpvsDyn;        // ...
 };
-static_assert(sizeof(GfxWorld) == 0x2DC);
+static_assert(LAYOUT_32BIT(sizeof(GfxWorld) == 0x2DC));
 
 // r_bsp
 void __cdecl R_ReloadWorld();

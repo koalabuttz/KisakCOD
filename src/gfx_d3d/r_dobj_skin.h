@@ -1,4 +1,6 @@
 #pragma once
+
+#include <universal/layout_assert.h>
 #include "r_scene.h"
 
 struct GfxModelSurfaceInfo // sizeof=0xC
@@ -24,14 +26,14 @@ struct GfxModelSkinnedSurface // sizeof=0x18
         int oldSkinnedCachedOffset;
     };
 };
-static_assert(sizeof(GfxModelSkinnedSurface) == 24);
+static_assert(LAYOUT_32BIT(sizeof(GfxModelSkinnedSurface) == 24));
 
 struct GfxModelRigidSurface // sizeof=0x38
 {
     GfxModelSkinnedSurface surf;
     GfxScaledPlacement placement;
 };
-static_assert(sizeof(GfxModelRigidSurface) == 56);
+static_assert(LAYOUT_32BIT(sizeof(GfxModelRigidSurface) == 56));
 
 struct SkinXModelCmd // sizeof=0x1C
 {                                       // ...

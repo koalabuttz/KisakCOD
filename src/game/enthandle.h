@@ -1,5 +1,7 @@
 #pragma once
 
+#include <universal/layout_assert.h>
+
 
 struct gentity_s;
 
@@ -9,7 +11,7 @@ struct EntHandleInfo // sizeof=0x8 // (SP/MP same)
     uint16_t next;              // ...
     uint16_t prev;              // ...
 };
-static_assert(sizeof(EntHandleInfo) == 0x8);
+static_assert(LAYOUT_32BIT(sizeof(EntHandleInfo) == 0x8));
 
 struct EntHandleList // sizeof=0x2 // (SP/MP same)
 {                                       // ...

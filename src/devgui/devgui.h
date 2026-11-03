@@ -1,4 +1,6 @@
 #pragma once
+
+#include <universal/layout_assert.h>
 #include <qcommon/graph.h>
 
 enum DevGuiInputState : __int32
@@ -45,7 +47,7 @@ union DevMenuChild // sizeof=0x4
     DevGraph *graph;
     uint16_t menu;
 };
-static_assert(sizeof(DevMenuChild) == 0x4);
+static_assert(LAYOUT_32BIT(sizeof(DevMenuChild) == 0x4));
 
 struct DevMenuItem // sizeof=0x28
 {                                       // ...
@@ -58,7 +60,7 @@ struct DevMenuItem // sizeof=0x28
     uint16_t parent;            // ...
     DevMenuChild child;                 // ...
 };
-static_assert(sizeof(DevMenuItem) == 0x28);
+static_assert(LAYOUT_32BIT(sizeof(DevMenuItem) == 0x28));
 
 struct devguiGlob_t // sizeof=0x5E10
 {                                       // ...
@@ -83,7 +85,7 @@ struct devguiGlob_t // sizeof=0x5E10
     int32_t right;                          // ...
     int32_t sliderWidth;                    // ...
 };
-static_assert(sizeof(devguiGlob_t) == 0x5E10);
+static_assert(LAYOUT_32BIT(sizeof(devguiGlob_t) == 0x5E10));
 
 // devgui
 void __cdecl TRACK_devgui();

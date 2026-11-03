@@ -566,6 +566,7 @@ set(UNIVERSAL
     "${SRC_DIR}/universal/dvar_game_commands.cpp"
     "${SRC_DIR}/universal/fft.cpp"
     "${SRC_DIR}/universal/fft.h"
+    "${SRC_DIR}/universal/layout_assert.h"
     "${SRC_DIR}/universal/memfile.cpp"
     "${SRC_DIR}/universal/memfile.h"
     "${SRC_DIR}/universal/physicalmemory.cpp"

@@ -183,7 +183,7 @@
     static_assert(offsetof(D3DDISPLAYMODE, RefreshRate) == 8, "D3DDISPLAYMODE.RefreshRate offset"); \
     static_assert(offsetof(D3DDISPLAYMODE, Format) == 12, "D3DDISPLAYMODE.Format offset");         \
     static_assert(sizeof(D3DFMT_DXT1) == 4, "D3DFMT_* enumerator width");                          \
-    static_assert(sizeof(IDirect3DDevice9 *) == 4, "D3D9 interface pointers are 32-bit")
+    static_assert(sizeof(void *) != 4 || sizeof(IDirect3DDevice9 *) == 4, "D3D9 interface pointers are 32-bit")
 
 #if defined(KISAK_LINUX_NATIVE_D3D9)
 

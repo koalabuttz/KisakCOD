@@ -1,5 +1,7 @@
 #pragma once
 
+#include <universal/layout_assert.h>
+
 #ifdef KISAK_SP
 #error This file is for Multi-Player only
 #endif
@@ -25,7 +27,7 @@ struct entityHandler_t // sizeof=0x28
     int32_t methodOfDeath;
     int32_t splashMethodOfDeath;
 };
-static_assert(sizeof(entityHandler_t) == 0x28);
+static_assert(LAYOUT_32BIT(sizeof(entityHandler_t) == 0x28));
 
 struct trigger_info_t // sizeof=0xC
 {                                       // ...
@@ -106,7 +108,7 @@ struct level_locals_t // sizeof=0x2E6C
     float compassNorth[2];              // ...
     scr_vehicle_s *vehicles;            // ...
 };
-static_assert(sizeof(level_locals_t) == 0x2E6C);
+static_assert(LAYOUT_32BIT(sizeof(level_locals_t) == 0x2E6C));
 
 void __cdecl TRACK_g_main();
 int32_t __cdecl G_GetSavePersist();

@@ -32,16 +32,24 @@ shared sources the way upstream's do, and not depend on Linux-only machinery.
 | [#76 Miles Audio Replacement](https://github.com/SwagSoftware/KisakCOD/issues/76) | OpenAL replacement merged as PR #88 behind `KISAK_OPENAL`, with known bugs | Miles `AIL_` call-site count |
 | Closed PR [#85](https://github.com/SwagSoftware/KisakCOD/pull/85) (Android arm64) | Declined: "doesn't really integrate well into the codebase"; no x64 support yet | Its loader kept the 32-bit on-disk layout and resolved pointers at use; one candidate for step 2 |
 
-Three upstream points need agreeing before step 2 changes shared headers:
+Points where this fork had to choose before upstream did:
 
-- **#74 has no stated design.** The i386 layout checks must stay (project rule),
-  so the likely shape is per-architecture expected sizes, or the asserts limited
-  to the serialized/network structs that must keep 32-bit layout. Upstream's
-  choice should come first.
+- **#74 (static_assert for multi-platform) has no stated design.** This fork
+  uses `LAYOUT_32BIT(cond)` from `src/universal/layout_assert.h`:
+  `static_assert(LAYOUT_32BIT(sizeof(XModel) == 220));` checks the retail value
+  on 32-bit targets exactly as before and holds on 64-bit ones. It is applied
+  only to the 151 checks that fail at 64 bits because of pointer size (found by
+  compiling every MP, SP and dedicated unit both ways: none of them fails on
+  i386). Every check that holds on both stays a plain `static_assert`, so 64-bit
+  builds keep checking layouts that must not change, such as network structs.
+  The Linux Windows-ABI shims (`src/linux/compat.h`) assert the Windows x86 or
+  x64 value for the target instead (`WPARAM`/`LPARAM` pointer-sized, `OVERLAPPED`
+  20 or 32 bytes). Plain standard C++, no compiler extension, so it suits
+  upstream's MSVC build too.
 - **`long` differs between targets.** Linux x86_64 is LP64 (`long` is 8 bytes);
   Windows x64 is LLP64 (`long` is 4 bytes). #28's move to `int32_t`/`uint32_t`
-  is what makes both work; `src/linux/compat.h` asserts `sizeof(long) == 4`
-  today, and the census files that under the fork's own shims.
+  is what makes both work. The Linux `Interlocked*` shims assert a 4-byte
+  operand, which is where engine `long` counters fail at 64 bits today.
 - Upstream #35 (remove calling-convention specifiers) conflicts with this fork's
   i386 stdcall checks; on x86_64 the specifiers are ignored, so it does not block
   this track.
@@ -130,6 +138,23 @@ What this says:
   read for stack walks in `assertive.cpp` (MSVC branch). None is reached by the
   Linux x86_64 compile; all of them matter for an MSVC x64 build, which has no
   inline assembler.
+
+### After the per-platform layout asserts
+
+Local run, 2026-11-03, same setup, after `LAYOUT_32BIT` was applied (upstream
+issue 74):
+
+| Set | Units | Compile for x86_64 |
+|---|---:|---:|
+| `KisakCOD-dedi` | 215 | 49 (was 34) |
+| MP client | 370 | 31 (was 16) |
+
+Layout assert and `src/linux` shim errors are gone. The compile wall is now 19
+sites: `_BitScanReverse` redefining a compiler builtin in `qcommon.h` (hit by
+505 units), the five Linux `Interlocked*` shims rejecting 8-byte `long`
+counters, `va_list` and `_vsnprintf` mismatches (all upstream issue 28), six
+`align(N)` requests below the x86_64 minimum alignment (upstream issue 2), and
+three follow-on errors.
 
 ### What the census does not claim
 

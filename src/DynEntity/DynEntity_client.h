@@ -1,4 +1,6 @@
 #pragma once
+
+#include <universal/layout_assert.h>
 #include <cstdint>
 
 #include <qcommon/qcommon.h>
@@ -45,7 +47,7 @@ struct DynEntityDef // sizeof=0x60
     PhysMass mass;
     int32_t contents;
 };
-static_assert(sizeof(DynEntityDef) == 0x60);
+static_assert(LAYOUT_32BIT(sizeof(DynEntityDef) == 0x60));
 
 struct DynEntityPose // sizeof=0x20
 {
@@ -81,7 +83,7 @@ struct DynEntityAreaParms // sizeof=0x14
     uint16_t maxCount;          // ...
     uint16_t count;             // ...
 };
-static_assert(sizeof(DynEntityAreaParms) == 0x14);
+static_assert(LAYOUT_32BIT(sizeof(DynEntityAreaParms) == 0x14));
 
 struct DynEntSortStruct // sizeof=0x8
 {
@@ -102,7 +104,7 @@ struct BreakablePiece // sizeof=0xC
     bool active;                        // ...
     // padding byte
 };
-static_assert(sizeof(BreakablePiece) == 0xC);
+static_assert(LAYOUT_32BIT(sizeof(BreakablePiece) == 0xC));
 
 struct pointtrace_t;
 struct trace_t;
@@ -256,7 +258,7 @@ struct DynEntityProps // sizeof=0x8
     bool usePhysics;
     bool destroyable;
 };
-static_assert(sizeof(DynEntityProps) == 0x8);
+static_assert(LAYOUT_32BIT(sizeof(DynEntityProps) == 0x8));
 
 struct DynEntityCreateParams // sizeof=0x1C0
 {                                       // ...

@@ -1,4 +1,6 @@
 #pragma once
+
+#include <universal/layout_assert.h>
 #ifndef KISAK_MP
 #error This File is MultiPlayer Only
 #endif
@@ -23,7 +25,7 @@ struct BuiltinFunctionDef // sizeof=0xC
     void(__cdecl *actionFunc)();
     int32_t type;
 };
-static_assert(sizeof(BuiltinFunctionDef) == 0xC);
+static_assert(LAYOUT_32BIT(sizeof(BuiltinFunctionDef) == 0xC));
 
 struct BuiltinMethodDef // sizeof=0xC
 {                                       // ...
@@ -31,7 +33,7 @@ struct BuiltinMethodDef // sizeof=0xC
     void(__cdecl *actionFunc)(scr_entref_t); // ...
     int32_t type;                           // ...
 };
-static_assert(sizeof(BuiltinMethodDef) == 0xC);
+static_assert(LAYOUT_32BIT(sizeof(BuiltinMethodDef) == 0xC));
 
 enum meansOfDeath_t : int32_t
 {                                       // ...
@@ -118,7 +120,7 @@ struct corpseInfo_t // sizeof=0x4DC
     // padding byte
     // padding byte
 };
-static_assert(sizeof(corpseInfo_t) == 0x4DC);
+static_assert(LAYOUT_32BIT(sizeof(corpseInfo_t) == 0x4DC));
 
 struct scr_data_t // sizeof=0x379C
 {                                       // ...
@@ -130,7 +132,7 @@ struct scr_data_t // sizeof=0x379C
     int32_t createstruct;                   // ...
     corpseInfo_t playerCorpseInfo[8];   // ...
 };
-static_assert(sizeof(scr_data_t) == 0x379C);
+static_assert(LAYOUT_32BIT(sizeof(scr_data_t) == 0x379C));
 
 // g_active_mp
 void __cdecl P_DamageFeedback(gentity_s *player);
@@ -1054,7 +1056,7 @@ struct useList_t // sizeof=0x8
     gentity_s *ent;                     // ...
     float score;
 };
-static_assert(sizeof(useList_t) == 0x8);
+static_assert(LAYOUT_32BIT(sizeof(useList_t) == 0x8));
 
 void __cdecl Player_UpdateActivate(gentity_s *ent);
 char __cdecl Player_ActivateCmd(gentity_s *ent);

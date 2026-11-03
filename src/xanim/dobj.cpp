@@ -1,4 +1,5 @@
 #include <universal/q_shared.h>
+#include <universal/layout_assert.h>
 #include "dobj.h"
 #include "xmodel.h"
 #include <qcommon/qcommon.h>
@@ -526,7 +527,7 @@ void __cdecl DObjArchive(DObj_s *obj)
     obj->models = NULL;
     DObjFree(obj);
 
-    static_assert((sizeof(DObj_s) - sizeof(obj->models)) == 96);
+    static_assert(LAYOUT_32BIT((sizeof(DObj_s) - sizeof(obj->models)) == 96));
     memcpy(obj, &savedObj, sizeof(DObj_s) - sizeof(obj->models));
 }
 

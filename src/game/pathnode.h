@@ -1,4 +1,6 @@
 #pragma once
+
+#include <universal/layout_assert.h>
 #include <script/scr_variable.h>
 #include <bgame/bg_public.h>
 #include <bgame/bg_local.h>
@@ -196,7 +198,7 @@ struct pathnode_tree_nodes_t // sizeof=0x8
     int nodeCount;
     uint16_t *nodes;
 };
-static_assert(sizeof(pathnode_tree_nodes_t) == 8);
+static_assert(LAYOUT_32BIT(sizeof(pathnode_tree_nodes_t) == 8));
 
 struct pathnode_tree_t;
 union pathnode_tree_info_t // sizeof=0x8

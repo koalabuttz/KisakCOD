@@ -1,4 +1,6 @@
 #pragma once
+
+#include <universal/layout_assert.h>
 #include <cgame/cg_local.h>
 #include <qcommon/graph.h>
 #include <cstdint>
@@ -108,7 +110,7 @@ struct AimInput // sizeof=0x30
     int32_t localClientNum;                 // ...
     const struct playerState_s *ps;            // ...
 };
-static_assert(sizeof(AimInput) == 0x30);
+static_assert(LAYOUT_32BIT(sizeof(AimInput) == 0x30));
 
 struct AimOutput // sizeof=0x10
 {                                       // ...

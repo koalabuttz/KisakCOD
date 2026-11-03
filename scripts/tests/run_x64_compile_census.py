@@ -248,6 +248,8 @@ def classify(path, kind, message, flag):
         return WARNING_CATEGORIES.get(flag)
     if path.startswith("src/linux/"):
         return "linux-shim-abi"
+    if re.search(r"sizeof\((?:unsigned )?long\)", message):
+        return "compiler-types"  # Linux long is 8 bytes on x86_64, Windows LONG stays 4 (#28)
     if "static assertion failed" in message and re.search(r"\b(sizeof|offsetof|__builtin_offsetof)\b", message):
         return "layout-assert"
     if "requested alignment is less than minimum alignment" in message:

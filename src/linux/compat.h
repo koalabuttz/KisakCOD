@@ -201,21 +201,22 @@ struct tagPOINT
 typedef struct tagPOINT POINT;
 typedef struct tagPOINT *LPPOINT;
 
-// The layouts above are Windows' x86-32 layouts. Fail loudly if a field ever
-// drifts or if this header is compiled for a 64-bit target, where the engine's
-// persisted structures would no longer match the Windows build.
-static_assert(sizeof(void *) == 4, "src/linux/compat.h describes the 32-bit Windows ABI: build with -m32");
+// The layouts above are Windows' x86 (32-bit) layouts, and on the opt-in x86_64
+// track Windows x64 (LLP64) ones: LONG and DWORD stay 32-bit, WPARAM, LPARAM,
+// ULONG_PTR and HANDLE follow the pointer size. Fail loudly if a field ever
+// drifts. The 32-bit values are checked exactly as before on i386.
+static_assert(sizeof(void *) == 4 || sizeof(void *) == 8, "src/linux/compat.h describes the Windows x86 or x64 ABI");
 static_assert(sizeof(LONG) == 4, "Windows LONG is 32-bit");
 static_assert(sizeof(DWORD) == 4, "Windows DWORD is 32-bit");
 static_assert(sizeof(WORD) == 2, "Windows WORD is 16-bit");
 static_assert(sizeof(BOOL) == 4, "Windows BOOL is a 32-bit int");
-static_assert(sizeof(WPARAM) == 4, "Windows WPARAM follows the 32-bit pointer size");
-static_assert(sizeof(LPARAM) == 4, "Windows LPARAM follows the 32-bit pointer size");
+static_assert(sizeof(WPARAM) == sizeof(void *), "Windows WPARAM follows the pointer size");
+static_assert(sizeof(LPARAM) == sizeof(void *), "Windows LPARAM follows the pointer size");
 static_assert(sizeof(OSVERSIONINFOA) == 148, "OSVERSIONINFOA layout must match windef/winnt");
 static_assert(offsetof(OSVERSIONINFOA, szCSDVersion) == 20, "OSVERSIONINFOA.szCSDVersion offset");
-static_assert(sizeof(OVERLAPPED) == 20, "OVERLAPPED layout must match winbase.h");
-static_assert(offsetof(OVERLAPPED, Offset) == 8, "OVERLAPPED.Offset offset");
-static_assert(offsetof(OVERLAPPED, hEvent) == 16, "OVERLAPPED.hEvent offset");
+static_assert(sizeof(OVERLAPPED) == (sizeof(void *) == 4 ? 20 : 32), "OVERLAPPED layout must match winbase.h");
+static_assert(offsetof(OVERLAPPED, Offset) == (sizeof(void *) == 4 ? 8 : 16), "OVERLAPPED.Offset offset");
+static_assert(offsetof(OVERLAPPED, hEvent) == (sizeof(void *) == 4 ? 16 : 24), "OVERLAPPED.hEvent offset");
 static_assert(sizeof(FILETIME) == 8, "FILETIME layout must match winbase.h");
 static_assert(sizeof(SYSTEMTIME) == 16, "SYSTEMTIME layout must match winbase.h");
 static_assert(sizeof(POINT) == 8, "POINT must be two 32-bit LONGs, as in windef.h");
