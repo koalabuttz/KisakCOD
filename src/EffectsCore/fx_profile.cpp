@@ -2,7 +2,7 @@
 #include "fx_system.h"
 
 
-void __cdecl FX_DrawProfile(int32_t clientIndex, void(__cdecl *drawFunc)(char *), float *profilePos)
+void FX_DrawProfile(int32_t clientIndex, void(*drawFunc)(char *), float *profilePos)
 {
     char *v3; // eax
     char *v4; // eax
@@ -34,7 +34,7 @@ void __cdecl FX_DrawProfile(int32_t clientIndex, void(__cdecl *drawFunc)(char *)
     }
     if (!InterlockedDecrement(&system->iteratorCount) && system->needsGarbageCollection)
         FX_RunGarbageCollection(system);
-    qsort(entryPool, entryCount, 0x1Cu, (int(__cdecl *)(const void *, const void *))FX_CompareProfileEntries);
+    qsort(entryPool, entryCount, 0x1Cu, (int(*)(const void *, const void *))FX_CompareProfileEntries);
     v11 = system->firstNewEffect - system->firstActiveEffect;
     v3 = va("%4i of %4i effect objects in use (%.0f%%; %i free)", v11, 1024, (double)v11 * 0.09765625, 1024 - v11);
     drawFunc(v3);
@@ -73,8 +73,8 @@ void __cdecl FX_DrawProfile(int32_t clientIndex, void(__cdecl *drawFunc)(char *)
         (double)(int)system->gfxCloudCount * 0.390625,
         256 - system->gfxCloudCount);
     drawFunc(v8);
-    ((void(__cdecl *)(const char *, float *))drawFunc)("", profilePos);
-    ((void(__cdecl *)(const char *, float *))drawFunc)(
+    ((void(*)(const char *, float *))drawFunc)("", profilePos);
+    ((void(*)(const char *, float *))drawFunc)(
         "Effects are sorted by percent of available resources used",
         profilePos);
     v9 = va(
@@ -89,7 +89,7 @@ void __cdecl FX_DrawProfile(int32_t clientIndex, void(__cdecl *drawFunc)(char *)
         "pend",
         "effectname");
     drawFunc(v9);
-    ((void(__cdecl *)(const char *, float *))drawFunc)(
+    ((void(*)(const char *, float *))drawFunc)(
         "-------------------------------------------------------------------",
         profilePos);
     for (j = 0; j < entryCount; ++j)
@@ -110,7 +110,7 @@ void __cdecl FX_DrawProfile(int32_t clientIndex, void(__cdecl *drawFunc)(char *)
     }
 }
 
-FxProfileEntry *__cdecl FX_GetProfileEntry(const FxEffectDef *effectDef, FxProfileEntry *entryPool, int32_t *entryCount)
+FxProfileEntry *FX_GetProfileEntry(const FxEffectDef *effectDef, FxProfileEntry *entryPool, int32_t *entryCount)
 {
     int32_t entryIndex; // [esp+0h] [ebp-4h]
 
@@ -138,7 +138,7 @@ FxProfileEntry *__cdecl FX_GetProfileEntry(const FxEffectDef *effectDef, FxProfi
     return &entryPool[entryIndex];
 }
 
-void __cdecl FX_ProfileSingleEffect(FxSystem *system, const FxEffect *effect, FxProfileEntry *entry)
+void FX_ProfileSingleEffect(FxSystem *system, const FxEffect *effect, FxProfileEntry *entry)
 {
     uint16_t elemHandle; // [esp+0h] [ebp-1Ch]
     uint16_t trailHandle; // [esp+4h] [ebp-18h]
@@ -185,7 +185,7 @@ void __cdecl FX_ProfileSingleEffect(FxSystem *system, const FxEffect *effect, Fx
     }
 }
 
-int32_t __cdecl FX_CompareProfileEntries(const FxProfileEntry *e0, const FxProfileEntry *e1)
+int32_t FX_CompareProfileEntries(const FxProfileEntry *e0, const FxProfileEntry *e1)
 {
     float cost; // [esp+8h] [ebp-8h]
     float cost_4; // [esp+Ch] [ebp-4h]
@@ -199,7 +199,7 @@ int32_t __cdecl FX_CompareProfileEntries(const FxProfileEntry *e0, const FxProfi
     return -1;
 }
 
-double __cdecl FX_GetProfileEntryCost(const FxProfileEntry *entry)
+double FX_GetProfileEntryCost(const FxProfileEntry *entry)
 {
     float v3; // [esp+4h] [ebp-10h]
     float costEffect; // [esp+Ch] [ebp-8h]
@@ -213,7 +213,7 @@ double __cdecl FX_GetProfileEntryCost(const FxProfileEntry *entry)
     else
         return (float)((double)entry->effectCount * (1.0f / 1024.0f));
 }
-void __cdecl FX_DrawMarkProfile(int32_t clientIndex, void(__cdecl* drawFunc)(const char*, float*), float* profilePos)
+void FX_DrawMarkProfile(int32_t clientIndex, void(* drawFunc)(const char*, float*), float* profilePos)
 {
     const char* v3; // eax
     char* v4; // eax
@@ -310,20 +310,20 @@ void __cdecl FX_DrawMarkProfile(int32_t clientIndex, void(__cdecl* drawFunc)(con
         512,
         fx_marksSystemPool[0].allocedMarkCount,
         fx_marksSystemPool[0].freedMarkCount);
-    ((void(__cdecl*)(char*))drawFunc)(v4);
+    ((void(*)(char*))drawFunc)(v4);
     v5 = va("%4i of %4i triGroups in use (%4i wasted)", 2048 - freeTriGroups, 2048, wastedTriGroups);
-    ((void(__cdecl*)(char*))drawFunc)(v5);
+    ((void(*)(char*))drawFunc)(v5);
     v6 = va("%4i of %4i pointGroups in use (%4i wasted)", 3072 - freePointGroups, 3072, wastedPointGroups);
-    ((void(__cdecl*)(char*))drawFunc)(v6);
+    ((void(*)(char*))drawFunc)(v6);
     drawFunc(" ", profilePos);
     v7 = va("%4i World Brush Marks", worldBrushMarks);
-    ((void(__cdecl*)(char*))drawFunc)(v7);
+    ((void(*)(char*))drawFunc)(v7);
     v8 = va("%4i World Model Marks", worldModelMarks);
-    ((void(__cdecl*)(char*))drawFunc)(v8);
+    ((void(*)(char*))drawFunc)(v8);
     v9 = va("%4i Ent Brush Marks", entBrushMarks);
-    ((void(__cdecl*)(char*))drawFunc)(v9);
+    ((void(*)(char*))drawFunc)(v9);
     v10 = va("%4i Ent Model", entModelMarks);
-    ((void(__cdecl*)(char*))drawFunc)(v10);
+    ((void(*)(char*))drawFunc)(v10);
     FX_DrawMarkProfile_MarkPrint(
         fx_marksSystemPool,
         fx_marksSystemPool[0].firstActiveWorldMarkHandle,
@@ -353,7 +353,7 @@ void __cdecl FX_DrawMarkProfile(int32_t clientIndex, void(__cdecl* drawFunc)(con
     }
 }
 
-const char *__cdecl typeAsString(uint8_t type)
+const char *typeAsString(uint8_t type)
 {
     const char *result; // eax
 
@@ -380,12 +380,12 @@ const char *__cdecl typeAsString(uint8_t type)
     return result;
 }
 
-void __cdecl FX_DrawMarkProfile_MarkPrint(
+void FX_DrawMarkProfile_MarkPrint(
     FxMarksSystem *marksSystem,
     uint16_t head,
     const char *name,
     int32_t index,
-    void(__cdecl *drawFunc)(const char *, float *),
+    void(*drawFunc)(const char *, float *),
     float *profilePos)
 {
     const char *v6; // eax

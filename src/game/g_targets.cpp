@@ -12,7 +12,7 @@
 
 TargetGlob targGlob;
 
-void __cdecl G_InitTargets()
+void G_InitTargets()
 {
     targGlob.targetCount = 0;
 
@@ -23,7 +23,7 @@ void __cdecl G_InitTargets()
     }
 }
 
-void __cdecl G_LoadTargets()
+void G_LoadTargets()
 {
     int v0; // r20
     float *v1; // r31
@@ -93,7 +93,7 @@ void __cdecl G_LoadTargets()
     } while ((uintptr_t)v1 < (uintptr_t)&targGlob.targets[32]);
 }
 
-void __cdecl Scr_Target_SetShader()
+void Scr_Target_SetShader()
 {
     unsigned int v0; // r4
     gentity_s *Entity; // r3
@@ -160,7 +160,7 @@ void __cdecl Scr_Target_SetShader()
     SV_SetConfigstring(v9, v11);
 }
 
-void __cdecl Scr_Target_SetOffscreenShader()
+void Scr_Target_SetOffscreenShader()
 {
     unsigned int v0; // r4
     gentity_s *Entity; // r3
@@ -227,7 +227,7 @@ void __cdecl Scr_Target_SetOffscreenShader()
     SV_SetConfigstring(v9, v11);
 }
 
-void __cdecl Scr_Target_GetArray()
+void Scr_Target_GetArray()
 {
     Scr_MakeArray();
 
@@ -244,7 +244,7 @@ void __cdecl Scr_Target_GetArray()
     }
 }
 
-int __cdecl TargetIndex(gentity_s *ent)
+int TargetIndex(gentity_s *ent)
 {
     for (unsigned int targIdx = 0; targIdx < MAX_TARGETS; ++targIdx)
     {
@@ -255,7 +255,7 @@ int __cdecl TargetIndex(gentity_s *ent)
     return MAX_TARGETS;
 }
 
-void __cdecl Scr_Target_IsTarget()
+void Scr_Target_IsTarget()
 {
     gentity_s *ent; // [esp+4h] [ebp-4h]
 
@@ -268,7 +268,7 @@ void __cdecl Scr_Target_IsTarget()
         Scr_AddBool(1);
 }
 
-void __cdecl Scr_Target_Set()
+void Scr_Target_Set()
 {
     unsigned int v0; // r4
     gentity_s *Entity; // r3
@@ -416,7 +416,7 @@ bool Targ_Remove(gentity_s *ent)
     return 1;
 }
 
-void __cdecl Targ_RemoveAll()
+void Targ_RemoveAll()
 {
     for (unsigned int targetIndex = 0; targetIndex < MAX_TARGETS; ++targetIndex)
     {
@@ -431,7 +431,7 @@ void __cdecl Targ_RemoveAll()
     }
 }
 
-void __cdecl Scr_Target_Remove()
+void Scr_Target_Remove()
 {
     unsigned int v0; // r4
     gentity_s *Entity; // r31
@@ -447,7 +447,7 @@ void __cdecl Scr_Target_Remove()
     }
 }
 
-int __cdecl G_WorldDirToScreenPos(
+int G_WorldDirToScreenPos(
     const gentity_s *player,
     double fov_x,
     const float *worldDir,
@@ -485,7 +485,7 @@ int __cdecl G_WorldDirToScreenPos(
     return result;
 }
 
-int __cdecl ScrGetTargetScreenPos(float *screenPos)
+int ScrGetTargetScreenPos(float *screenPos)
 {
     unsigned int v2; // r4
     gentity_s *Entity; // r28
@@ -558,7 +558,7 @@ int __cdecl ScrGetTargetScreenPos(float *screenPos)
     return G_WorldDirToScreenPos(player, fov_x, worldDir, screenPos);
 }
 
-void __cdecl Scr_Target_IsInCircle()
+void Scr_Target_IsInCircle()
 {
     double Float; // fp31
     int v1; // r3
@@ -574,7 +574,7 @@ void __cdecl Scr_Target_IsInCircle()
     Scr_AddBool(v1);
 }
 
-void __cdecl Scr_Target_IsInRect()
+void Scr_Target_IsInRect()
 {
     double Float; // fp31
     double v1; // fp30
@@ -588,7 +588,7 @@ void __cdecl Scr_Target_IsInRect()
     Scr_AddBool(v2);
 }
 
-void __cdecl Scr_Target_StartLockOn()
+void Scr_Target_StartLockOn()
 {
     gentity_s *Entity; // r31
     double Float; // fp1
@@ -604,7 +604,7 @@ void __cdecl Scr_Target_StartLockOn()
     SV_GameSendServerCommand(-1, v5);
 }
 
-void __cdecl Scr_Target_ClearLockOn()
+void Scr_Target_ClearLockOn()
 {
     const char *v0; // r3
 
@@ -612,7 +612,7 @@ void __cdecl Scr_Target_ClearLockOn()
     SV_GameSendServerCommand(-1, v0);
 }
 
-int __cdecl GetTargetIdx(const gentity_s *ent)
+int GetTargetIdx(const gentity_s *ent)
 {
     if (ent)
     {
@@ -628,7 +628,7 @@ int __cdecl GetTargetIdx(const gentity_s *ent)
     return ARRAY_COUNT(targGlob.targets);
 }
 
-int __cdecl G_TargetGetOffset(const gentity_s *targ, float *result)
+int G_TargetGetOffset(const gentity_s *targ, float *result)
 {
     unsigned int targetIndex; // [esp+4h] [ebp-4h]
 
@@ -649,7 +649,7 @@ int __cdecl G_TargetGetOffset(const gentity_s *targ, float *result)
     }
 }
 
-int __cdecl G_TargetAttackProfileTop(const gentity_s *ent)
+int G_TargetAttackProfileTop(const gentity_s *ent)
 {
     int TargetIdx; // r3
 
@@ -660,7 +660,7 @@ int __cdecl G_TargetAttackProfileTop(const gentity_s *ent)
         return targGlob.targets[TargetIdx].flags & 1;
 }
 
-void __cdecl Scr_Target_SetAttackMode()
+void Scr_Target_SetAttackMode()
 {
     unsigned int v0; // r4
     gentity_s *Entity; // r3
@@ -696,7 +696,7 @@ void __cdecl Scr_Target_SetAttackMode()
     SV_SetConfigstring(TargetIdx + 27, v7);
 }
 
-void __cdecl Scr_Target_SetJavelinOnly()
+void Scr_Target_SetJavelinOnly()
 {
     int v1; // ecx
     unsigned int targIdx; // [esp+0h] [ebp-410h]

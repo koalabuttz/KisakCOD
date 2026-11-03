@@ -12,7 +12,7 @@
 #endif
 
 
-void __cdecl VEH_CheckForPredictedCrash(gentity_s *ent)
+void VEH_CheckForPredictedCrash(gentity_s *ent)
 {
     vehicle_physic_t *phys; // [esp+Ch] [ebp-40h]
     trace_t trace; // [esp+14h] [ebp-38h] BYREF
@@ -44,7 +44,7 @@ void __cdecl VEH_CheckForPredictedCrash(gentity_s *ent)
 }
 
 #ifdef KISAK_MP
-void __cdecl VEH_UpdateClientChopper(gentity_s *ent)
+void VEH_UpdateClientChopper(gentity_s *ent)
 {
     bool v1; // eax
     float v3; // [esp+14h] [ebp-D0h]
@@ -146,7 +146,7 @@ void __cdecl VEH_UpdateClientChopper(gentity_s *ent)
     }
 }
 #elif KISAK_SP
-void __cdecl VEH_UpdateClientChopper(gentity_s *ent)
+void VEH_UpdateClientChopper(gentity_s *ent)
 {
     bool v1; // eax
     float v3; // [esp+14h] [ebp-D0h]
@@ -340,7 +340,7 @@ LABEL_27:
 }
 #endif
 
-void __cdecl HELI_CalcAccel(gentity_s *ent, char *move, float *bodyAccel, float *rotAccel)
+void HELI_CalcAccel(gentity_s *ent, char *move, float *bodyAccel, float *rotAccel)
 {
     float scale; // [esp+4h] [ebp-29Ch]
     float v5; // [esp+10h] [ebp-290h]
@@ -765,7 +765,7 @@ void __cdecl HELI_CalcAccel(gentity_s *ent, char *move, float *bodyAccel, float 
     }
 }
 
-void __cdecl HELI_CmdScale(char *move, float *outFracs)
+void HELI_CmdScale(char *move, float *outFracs)
 {
     float v2; // [esp+0h] [ebp-5Ch]
     float v3; // [esp+4h] [ebp-58h]
@@ -830,7 +830,7 @@ void __cdecl HELI_CmdScale(char *move, float *outFracs)
         outFracs[3] = 0.0f;
 }
 
-void __cdecl HELI_UpdateJitter(VehicleJitter *jitter)
+void HELI_UpdateJitter(VehicleJitter *jitter)
 {
     double v1; // st7
     double v2; // st7
@@ -876,7 +876,7 @@ void __cdecl HELI_UpdateJitter(VehicleJitter *jitter)
     }
 }
 
-void __cdecl HELI_SoftenCollisions(gentity_s *ent, float *worldAccel)
+void HELI_SoftenCollisions(gentity_s *ent, float *worldAccel)
 {
     double v2; // st7
     float v3; // [esp+0h] [ebp-78h]
@@ -935,7 +935,7 @@ void __cdecl HELI_SoftenCollisions(gentity_s *ent, float *worldAccel)
     }
 }
 
-bool __cdecl VEH_TestSlideMove(gentity_s *ent, float *outPos)
+bool VEH_TestSlideMove(gentity_s *ent, float *outPos)
 {
     bool result; // eax
     scr_vehicle_s *veh; // [esp+10h] [ebp-1Ch]

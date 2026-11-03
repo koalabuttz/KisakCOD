@@ -64,7 +64,7 @@ GfxImage g_imageProgs[14];
 struct BuiltinImageConstructorTable // sizeof=0x8
 {                                       // ...
     const char *name;                   // ...
-    void(__cdecl *LoadCallback)(GfxImage *); // ...
+    void(*LoadCallback)(GfxImage *); // ...
 };
 const BuiltinImageConstructorTable constructorTable[8] =
 {
@@ -78,13 +78,13 @@ const BuiltinImageConstructorTable constructorTable[8] =
     {"$pixelcostcolorcode", Image_LoadPixelCostColorCode}
 };
 
-void __cdecl TRACK_r_image()
+void TRACK_r_image()
 {
     track_static_alloc_internal(g_imageProgs, 504, "g_imageProgs", 18);
     track_static_alloc_internal(imageTypeName, 40, "imageTypeName", 18);
 }
 
-void __cdecl R_DelayLoadImage(XAssetHeader header)
+void R_DelayLoadImage(XAssetHeader header)
 {
     GfxImage *image = header.image;
     if (image->delayLoadPixels)
@@ -108,20 +108,20 @@ void __cdecl R_DelayLoadImage(XAssetHeader header)
     }
 }
 
-void __cdecl R_GetImageList(ImageList *imageList)
+void R_GetImageList(ImageList *imageList)
 {
     iassert( imageList );
     imageList->count = 0;
-    DB_EnumXAssets(ASSET_TYPE_IMAGE, (void(__cdecl *)(XAssetHeader, void *))R_AddImageToList, imageList, 1);
+    DB_EnumXAssets(ASSET_TYPE_IMAGE, (void(*)(XAssetHeader, void *))R_AddImageToList, imageList, 1);
 }
 
-void __cdecl R_AddImageToList(XAssetHeader header, ImageList* imageList)
+void R_AddImageToList(XAssetHeader header, ImageList* imageList)
 {
     iassert( imageList->count < ARRAY_COUNT( imageList->image ) );
     imageList->image[imageList->count++] = header.image;
 }
 
-void __cdecl R_SumOfUsedImages(Image_MemUsage *usage)
+void R_SumOfUsedImages(Image_MemUsage *usage)
 {
     const char *v1; // eax
     GfxImage *image; // [esp+0h] [ebp-2040h]
@@ -172,7 +172,7 @@ void __cdecl R_SumOfUsedImages(Image_MemUsage *usage)
     usage->minspec = imageGlobals.totalMemory.platform[1];
 }
 
-void __cdecl Image_Release(GfxImage *image)
+void Image_Release(GfxImage *image)
 {
     int platform; // [esp+0h] [ebp-4h]
 
@@ -196,7 +196,7 @@ void __cdecl Image_Release(GfxImage *image)
     }
 }
 
-GfxImage *__cdecl Image_AllocProg(int imageProgType, uint8_t category, uint8_t semantic)
+GfxImage *Image_AllocProg(int imageProgType, uint8_t category, uint8_t semantic)
 {
     GfxImage *image; // [esp+0h] [ebp-Ch]
     const char *name; // [esp+4h] [ebp-8h]
@@ -213,7 +213,7 @@ GfxImage *__cdecl Image_AllocProg(int imageProgType, uint8_t category, uint8_t s
     return &g_imageProgs[imageProgType];
 }
 
-void __cdecl Image_SetupAndLoad(
+void Image_SetupAndLoad(
     GfxImage *image,
     int width,
     int height,
@@ -224,7 +224,7 @@ void __cdecl Image_SetupAndLoad(
     Image_Setup(image, width, height, depth, imageFlags, imageFormat);
 }
 
-void __cdecl R_ShutdownImages()
+void R_ShutdownImages()
 {
     GfxImage *image; // [esp+0h] [ebp-2014h]
     int numBackups; // [esp+4h] [ebp-2010h]
@@ -256,7 +256,7 @@ void __cdecl R_ShutdownImages()
     }
 }
 
-void __cdecl Image_SetupRenderTarget(
+void Image_SetupRenderTarget(
     GfxImage *image,
     uint16_t width,
     uint16_t height,
@@ -267,7 +267,7 @@ void __cdecl Image_SetupRenderTarget(
     Image_SetupAndLoad(image, width, height, 1, IMG_FLAG_NOPICMIP | IMG_FLAG_NOMIPMAPS | IMG_FLAG_RENDER_TARGET, imageFormat);
 }
 
-void __cdecl Load_Texture(GfxTexture *remoteLoadDef, GfxImage *image)
+void Load_Texture(GfxTexture *remoteLoadDef, GfxImage *image)
 {
     uint32_t mipDepth; // [esp+0h] [ebp-60h]
     uint32_t mipHeight; // [esp+4h] [ebp-5Ch]
@@ -404,7 +404,7 @@ void __cdecl Load_Texture(GfxTexture *remoteLoadDef, GfxImage *image)
     }
 }
 
-GfxImage *__cdecl Image_FindExisting(const char *name)
+GfxImage *Image_FindExisting(const char *name)
 {
     if (IsFastFileLoad())
         return Image_FindExisting_FastFile(name);
@@ -412,12 +412,12 @@ GfxImage *__cdecl Image_FindExisting(const char *name)
         return Image_FindExisting_LoadObj(name);
 }
 
-GfxImage *__cdecl Image_FindExisting_FastFile(const char *name)
+GfxImage *Image_FindExisting_FastFile(const char *name)
 {
     return DB_FindXAssetHeader(ASSET_TYPE_IMAGE, name).image;
 }
 
-GfxImage *__cdecl Image_Register(const char *imageName, uint8_t semantic, int imageTrack)
+GfxImage *Image_Register(const char *imageName, uint8_t semantic, int imageTrack)
 {
     if (IsFastFileLoad())
         return (GfxImage *)Image_Register_FastFile(imageName);
@@ -425,17 +425,17 @@ GfxImage *__cdecl Image_Register(const char *imageName, uint8_t semantic, int im
         return Image_Register_LoadObj((char*)imageName, semantic, imageTrack);
 }
 
-GfxImage *__cdecl Image_Register_FastFile(const char *imageName)
+GfxImage *Image_Register_FastFile(const char *imageName)
 {
     return Image_FindExisting(imageName);
 }
 
-char __cdecl Image_LoadFromFile(GfxImage *image)
+char Image_LoadFromFile(GfxImage *image)
 {
     return Image_LoadFromFileWithReader(image, FS_FOpenFileReadDatabase);
 }
 
-char __cdecl Image_ValidateHeader(GfxImageFileHeader *imageFile, const char *filepath)
+char Image_ValidateHeader(GfxImageFileHeader *imageFile, const char *filepath)
 {
     if (imageFile->tag[0] == 73 && imageFile->tag[1] == 87 && imageFile->tag[2] == 105)
     {
@@ -456,7 +456,7 @@ char __cdecl Image_ValidateHeader(GfxImageFileHeader *imageFile, const char *fil
     }
 }
 
-uint32_t __cdecl Image_CountMipmaps(char imageFlags, uint32_t width, uint32_t height, uint32_t depth)
+uint32_t Image_CountMipmaps(char imageFlags, uint32_t width, uint32_t height, uint32_t depth)
 {
     uint32_t mipRes; // [esp+0h] [ebp-8h]
     uint32_t mipCount; // [esp+4h] [ebp-4h]
@@ -468,7 +468,7 @@ uint32_t __cdecl Image_CountMipmaps(char imageFlags, uint32_t width, uint32_t he
         ++mipCount;
     return mipCount;
 }
-uint32_t __cdecl Image_CountMipmapsForFile(const GfxImageFileHeader *fileHeader)
+uint32_t Image_CountMipmapsForFile(const GfxImageFileHeader *fileHeader)
 {
     return Image_CountMipmaps(
         fileHeader->flags,
@@ -477,7 +477,7 @@ uint32_t __cdecl Image_CountMipmapsForFile(const GfxImageFileHeader *fileHeader)
         fileHeader->dimensions[2]);
 }
 
-void __cdecl Image_UploadData(
+void Image_UploadData(
     const GfxImage *image,
     _D3DFORMAT format,
     _D3DCUBEMAP_FACES face,
@@ -493,12 +493,12 @@ void __cdecl Image_UploadData(
     }
 }
 
-void __cdecl Image_LoadWhite(GfxImage *image)
+void Image_LoadWhite(GfxImage *image)
 {
     Image_LoadSolid(image, 0xFFu, 0xFFu, 0xFFu, 0xFFu);
 }
 
-void __cdecl Image_LoadSolid(
+void Image_LoadSolid(
     GfxImage *image,
     uint8_t r,
     uint8_t g,
@@ -511,22 +511,22 @@ void __cdecl Image_LoadSolid(
     Image_Generate2D(image, pic, 1, 1, D3DFMT_A8R8G8B8);
 }
 
-void __cdecl Image_LoadBlack(GfxImage *image)
+void Image_LoadBlack(GfxImage *image)
 {
     Image_LoadSolid(image, 0, 0, 0, 0xFFu);
 }
 
-void __cdecl Image_LoadGray(GfxImage *image)
+void Image_LoadGray(GfxImage *image)
 {
     Image_LoadSolid(image, 0x80u, 0x80u, 0x80u, 0x80u);
 }
 
-void __cdecl Image_LoadIdentityNormalMap(GfxImage *image)
+void Image_LoadIdentityNormalMap(GfxImage *image)
 {
     Image_LoadSolid(image, 0x80u, 0x80u, 0xFFu, 0x80u);
 }
 
-void __cdecl Image_LoadBlack3D(GfxImage *image)
+void Image_LoadBlack3D(GfxImage *image)
 {
     uint8_t pic[4]; // [esp+4h] [ebp-4h] BYREF
 
@@ -534,7 +534,7 @@ void __cdecl Image_LoadBlack3D(GfxImage *image)
     Image_Generate3D(image, pic, 1, 1, 1, D3DFMT_A8R8G8B8);
 }
 
-void __cdecl Image_LoadBlackCube(GfxImage *image)
+void Image_LoadBlackCube(GfxImage *image)
 {
     const uint8_t *pic[6][15]; // [esp+4h] [ebp-170h] BYREF
     uint8_t pixel[4]; // [esp+170h] [ebp-4h] BYREF
@@ -549,7 +549,7 @@ void __cdecl Image_LoadBlackCube(GfxImage *image)
     Image_GenerateCube(image, pic, 1, D3DFMT_A8R8G8B8, 1u);
 }
 
-void __cdecl Image_LoadPixelCostColorCode(GfxImage *image)
+void Image_LoadPixelCostColorCode(GfxImage *image)
 {
     uint8_t pic[257][4]; // [esp+0h] [ebp-408h] BYREF
 
@@ -557,7 +557,7 @@ void __cdecl Image_LoadPixelCostColorCode(GfxImage *image)
     Image_Generate2D(image, pic[0], 256, 1, D3DFMT_X8R8G8B8);
 }
 
-GfxImage *__cdecl Image_LoadBuiltin(char *name, uint8_t semantic, uint8_t imageTrack)
+GfxImage *Image_LoadBuiltin(char *name, uint8_t semantic, uint8_t imageTrack)
 {
     GfxImage *image; // [esp+14h] [ebp-8h]
     uint32_t tableIndex; // [esp+18h] [ebp-4h]
@@ -579,7 +579,7 @@ GfxImage *__cdecl Image_LoadBuiltin(char *name, uint8_t semantic, uint8_t imageT
     return image;
 }
 
-void __cdecl Image_Construct(
+void Image_Construct(
     char *name,
     int nameSize,
     uint8_t category,
@@ -602,7 +602,7 @@ void __cdecl Image_Construct(
     iassert(image->picmip.platform[PICMIP_PLATFORM_MINSPEC] == 0);
     image->track = imageTrack;
 }
-int __cdecl Image_GetAvailableHashLocation(const char *name)
+int Image_GetAvailableHashLocation(const char *name)
 {
     int hashIndex; // [esp+0h] [ebp-4h]
 
@@ -615,7 +615,7 @@ int __cdecl Image_GetAvailableHashLocation(const char *name)
     }
     return hashIndex;
 }
-GfxImage *__cdecl Image_Alloc(
+GfxImage *Image_Alloc(
     char *name,
     uint8_t category,
     uint8_t semantic,
@@ -633,12 +633,12 @@ GfxImage *__cdecl Image_Alloc(
     imageGlobals.imageHashTable[Image_GetAvailableHashLocation(name)] = image;
     return image;
 }
-void __cdecl Image_Free(GfxImage *image)
+void Image_Free(GfxImage *image)
 {
     Image_Release(image);
 }
 
-IDirect3DSurface9 *__cdecl Image_GetSurface(GfxImage *image)
+IDirect3DSurface9 *Image_GetSurface(GfxImage *image)
 {
     const char *v1; // eax
     int hr; // [esp+0h] [ebp-8h]
@@ -673,7 +673,7 @@ IDirect3DSurface9 *__cdecl Image_GetSurface(GfxImage *image)
     return surface;
 }
 
-void __cdecl R_SetPicmip()
+void R_SetPicmip()
 {
     uint32_t texMemInMegs; // [esp+0h] [ebp-10h]
     uint32_t sysMemInMegs; // [esp+4h] [ebp-Ch]
@@ -772,7 +772,7 @@ void R_InitRawImage()
     iassert(rgp.rawImage);
 }
 
-void __cdecl R_InitImages()
+void R_InitImages()
 {
     for (int i = 0; i < 2; ++i)
     {
@@ -791,7 +791,7 @@ void __cdecl R_InitImages()
 #endif
 }
 
-bool __cdecl Image_IsCodeImage(int track)
+bool Image_IsCodeImage(int track)
 {
     return track >= IMAGE_TRACK_MISC && (track <= IMAGE_TRACK_DEBUG || track == IMAGE_TRACK_LIGHTMAP);
 }
@@ -822,7 +822,7 @@ void R_InitCodeImages()
 // Faithful port of the binary: missing file or failed image is non-fatal (count stays 0 ->
 // R_GetCaseTexture falls back to whiteImage). Image_Register == the binary's
 // Image_FindExisting-then-Image_Load(name,2,1) inner logic (r_image_load_obj Image_Register_LoadObj).
-void __cdecl R_LoadCaseTextures()
+void R_LoadCaseTextures()
 {
     char data[4096];           // idb char[4096] (FatalError if file >= 4096 bytes)
     const char *data_p;
@@ -862,7 +862,7 @@ void __cdecl R_LoadCaseTextures()
 }
 #endif
 
-void __cdecl R_ImageList_f()
+void R_ImageList_f()
 {
     const char *v0; // eax
     _D3DFORMAT v1; // eax
@@ -1012,7 +1012,7 @@ void __cdecl R_ImageList_f()
     Com_Printf(CON_CHANNEL_GFX, "Related commands: meminfo, imagelist, gfx_world, gfx_model, cg_drawfps, com_statmon, tempmeminfo\n");
 }
 
-bool __cdecl imagecompare(GfxImage *image1, GfxImage *image2)
+bool imagecompare(GfxImage *image1, GfxImage *image2)
 {
     if (image1->track > (int)image2->track)
         return 0;
@@ -1021,7 +1021,7 @@ bool __cdecl imagecompare(GfxImage *image1, GfxImage *image2)
     return 1;
 }
 
-void __cdecl R_FreeLostImage(XAssetHeader header)
+void R_FreeLostImage(XAssetHeader header)
 {
     GfxImage *image = header.image;
     iassert( image );
@@ -1031,12 +1031,12 @@ void __cdecl R_FreeLostImage(XAssetHeader header)
         Image_Release(header.image);
 }
 
-char __cdecl Image_ReloadFromFile(GfxImage *image)
+char Image_ReloadFromFile(GfxImage *image)
 {
-    return Image_LoadFromFileWithReader(image, (int(__cdecl *)(const char *, int *))FS_FOpenFileRead);
+    return Image_LoadFromFileWithReader(image, (int(*)(const char *, int *))FS_FOpenFileRead);
 }
 
-char __cdecl R_DuplicateTexture(GfxImage *dstImage, const GfxImage *srcImage)
+char R_DuplicateTexture(GfxImage *dstImage, const GfxImage *srcImage)
 {
     if (!srcImage || !srcImage->texture.basemap)
         return 0;
@@ -1046,7 +1046,7 @@ char __cdecl R_DuplicateTexture(GfxImage *dstImage, const GfxImage *srcImage)
     return 1;
 }
 
-char __cdecl Image_AssignDefaultTexture(GfxImage *image)
+char Image_AssignDefaultTexture(GfxImage *image)
 {
 #ifdef KISAK_RADIANT
     // Editor diagnostic (white-xmodel bug): every image that reaches here failed to
@@ -1072,7 +1072,7 @@ char __cdecl Image_AssignDefaultTexture(GfxImage *image)
     return R_DuplicateTexture(image, rgp.whiteImage);
 }
 
-void __cdecl Image_Rebuild(GfxImage *image)
+void Image_Rebuild(GfxImage *image)
 {
     const char *v1; // eax
     uint8_t category; // [esp+0h] [ebp-4h]
@@ -1098,7 +1098,7 @@ void __cdecl Image_Rebuild(GfxImage *image)
     }
 }
 
-void __cdecl R_RebuildLostImage(XAssetHeader header)
+void R_RebuildLostImage(XAssetHeader header)
 {
     GfxImage *image = header.image;
 
@@ -1126,18 +1126,18 @@ void __cdecl R_RebuildLostImage(XAssetHeader header)
     }
 }
 
-void __cdecl R_ReloadLostImages()
+void R_ReloadLostImages()
 {
-    DB_EnumXAssets(ASSET_TYPE_IMAGE, (void(__cdecl *)(XAssetHeader, void *))R_RebuildLostImage, 0, 1);
+    DB_EnumXAssets(ASSET_TYPE_IMAGE, (void(*)(XAssetHeader, void *))R_RebuildLostImage, 0, 1);
 }
 
-void __cdecl R_ReleaseLostImages()
+void R_ReleaseLostImages()
 {
     rg.waterFloatTime = rg.waterFloatTime + 1.0;
-    DB_EnumXAssets(ASSET_TYPE_IMAGE, (void(__cdecl *)(XAssetHeader, void *))R_FreeLostImage, 0, 1);
+    DB_EnumXAssets(ASSET_TYPE_IMAGE, (void(*)(XAssetHeader, void *))R_FreeLostImage, 0, 1);
 }
 
-_D3DFORMAT __cdecl R_ImagePixelFormat(const GfxImage *image)
+_D3DFORMAT R_ImagePixelFormat(const GfxImage *image)
 {
     MapType mapType; // [esp+0h] [ebp-40h]
     _D3DSURFACE_DESC surfaceDesc; // [esp+4h] [ebp-3Ch] BYREF
@@ -1175,7 +1175,7 @@ _D3DFORMAT __cdecl R_ImagePixelFormat(const GfxImage *image)
 }
 
 
-void __cdecl Image_CreateCubeTexture_PC(
+void Image_CreateCubeTexture_PC(
     GfxImage *image,
     uint16_t edgeLen,
     uint32_t mipmapCount,
@@ -1224,7 +1224,7 @@ void __cdecl Image_CreateCubeTexture_PC(
 }
 
 
-void __cdecl Image_Create3DTexture_PC(
+void Image_Create3DTexture_PC(
     GfxImage *image,
     uint16_t width,
     uint16_t height,
@@ -1287,7 +1287,7 @@ void __cdecl Image_Create3DTexture_PC(
     }
 }
 
-void __cdecl RB_UnbindAllImages()
+void RB_UnbindAllImages()
 {
     uint32_t samplerIndex; // [esp+0h] [ebp-4h]
 
@@ -1298,7 +1298,7 @@ void __cdecl RB_UnbindAllImages()
     }
 }
 
-void __cdecl Image_Reload(GfxImage *image)
+void Image_Reload(GfxImage *image)
 {
     iassert( image );
     Image_Release(image);
@@ -1306,7 +1306,7 @@ void __cdecl Image_Reload(GfxImage *image)
         Com_Error(ERR_FATAL, "failed to load image '%s'", image->name);
 }
 
-void __cdecl Image_UpdatePicmip(GfxImage *image)
+void Image_UpdatePicmip(GfxImage *image)
 {
     Picmip picmip; // [esp+0h] [ebp-4h] BYREF
 
@@ -1319,7 +1319,7 @@ void __cdecl Image_UpdatePicmip(GfxImage *image)
     }
 }
 
-void __cdecl Image_Create2DTexture_PC(
+void Image_Create2DTexture_PC(
     GfxImage *image,
     uint16_t width,
     uint16_t height,
@@ -1391,7 +1391,7 @@ void __cdecl Image_Create2DTexture_PC(
     }
 }
 
-void __cdecl Image_Setup(GfxImage *image, int width, int height, int depth, int imageFlags, _D3DFORMAT imageFormat)
+void Image_Setup(GfxImage *image, int width, int height, int depth, int imageFlags, _D3DFORMAT imageFormat)
 {
     uint32_t mipmapCount; // [esp+0h] [ebp-4h]
 
@@ -1435,7 +1435,7 @@ void __cdecl Image_Setup(GfxImage *image, int width, int height, int depth, int 
 // Image_PicmipForSemantic) will use for the next disk load.  (The engine's own
 // R_SetPicmip already does exactly this copy on the manual-picmip path; this is the
 // on-demand refresh of it after the editor changes r_picmip.)
-void __cdecl R_UpdateMipMap()
+void R_UpdateMipMap()
 {
     imageGlobals.picmip     = r_picmip->current.integer;
     imageGlobals.picmipBump = r_picmip_bump->current.integer;
@@ -1451,7 +1451,7 @@ void __cdecl R_UpdateMipMap()
 // (r_image.cpp) is kisak's byte-exact R_ReloadImage @ 0x513490 (Image_Release →
 // Image_ReloadFromFile → Image_AssignDefaultTexture-on-fail → FATAL-on-fail).  After
 // this the texture browser + brushes show the edited TGA/DDS/IWI without a restart.
-void __cdecl R_ReloadImages()
+void R_ReloadImages()
 {
     for (int i = 0; i < IMAGE_HASH_TABLE_SIZE; ++i)
     {

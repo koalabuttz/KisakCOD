@@ -14,7 +14,7 @@ ipFilter_s ipFilters[1024];
 int numIPFilters;
 
 #ifdef KISAK_MP
-void __cdecl G_ProcessIPBans()
+void G_ProcessIPBans()
 {
     char *v0; // eax
     char str[1028]; // [esp+0h] [ebp-410h] BYREF
@@ -37,7 +37,7 @@ void __cdecl G_ProcessIPBans()
     }
 }
 
-void __cdecl AddIP(char *str)
+void AddIP(char *str)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -58,7 +58,7 @@ void __cdecl AddIP(char *str)
 }
 #endif
 
-int __cdecl StringToFilter(char *s, ipFilter_s *f)
+int StringToFilter(char *s, ipFilter_s *f)
 {
     uint8_t v3; // al
     int j; // [esp+0h] [ebp-94h]
@@ -122,7 +122,7 @@ void UpdateIPBans()
     Dvar_SetString((dvar_s *)g_banIPs, iplist);
 }
 
-void __cdecl Svcmd_AddIP_f()
+void Svcmd_AddIP_f()
 {
     char str[1028]; // [esp+0h] [ebp-408h] BYREF
 
@@ -137,7 +137,7 @@ void __cdecl Svcmd_AddIP_f()
     }
 }
 
-void __cdecl Svcmd_RemoveIP_f()
+void Svcmd_RemoveIP_f()
 {
     char str[1024]; // [esp+0h] [ebp-410h] BYREF
     ipFilter_s f; // [esp+404h] [ebp-Ch] BYREF
@@ -169,7 +169,7 @@ void __cdecl Svcmd_RemoveIP_f()
 
 #endif
 
-void __cdecl Svcmd_EntityList_f()
+void Svcmd_EntityList_f()
 {
     const char *EntityTypeName; // eax
     int e; // [esp+0h] [ebp-8h]
@@ -193,7 +193,7 @@ void __cdecl Svcmd_EntityList_f()
     }
 }
 
-int __cdecl ConsoleCommand()
+int ConsoleCommand()
 {
 #ifdef KISAK_MP
     char *v1; // eax

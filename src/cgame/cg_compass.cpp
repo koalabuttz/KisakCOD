@@ -74,7 +74,7 @@ const dvar_t *compassIconOtherVehWidth;
 const dvar_t *compassIconOtherVehHeight;
 #endif
 
-void __cdecl CG_CompassRegisterDvars()
+void CG_CompassRegisterDvars()
 {
     DvarLimits min; // [esp+Ch] [ebp-10h]
     DvarLimits mina; // [esp+Ch] [ebp-10h]
@@ -528,12 +528,12 @@ void __cdecl CG_CompassRegisterDvars()
         "The size of the full map's border, filled by the CG_PLAYER_FULLMAP_BORDER ownerdraw");
 }
 
-bool __cdecl CG_IsSelectingLocation(int32_t localClientNum)
+bool CG_IsSelectingLocation(int32_t localClientNum)
 {
     return CG_GetLocalClientGlobals(localClientNum)->predictedPlayerState.locationSelectionInfo != 0;
 }
 
-bool __cdecl CG_WorldPosToCompass(
+bool CG_WorldPosToCompass(
     CompassType compassType,
     const cg_s *cgameGlob,
     const rectDef_s *mapRect,
@@ -626,7 +626,7 @@ bool __cdecl CG_WorldPosToCompass(
     return clipped;
 }
 
-void __cdecl CG_CompassCalcDimensions(
+void CG_CompassCalcDimensions(
     CompassType compassType,
     const cg_s *cgameGlob,
     const rectDef_s *parentRect,
@@ -709,7 +709,7 @@ void __cdecl CG_CompassCalcDimensions(
     }
 }
 
-double __cdecl CG_FadeCompass(int32_t localClientNum, int32_t displayStartTime, CompassType compassType)
+double CG_FadeCompass(int32_t localClientNum, int32_t displayStartTime, CompassType compassType)
 {
 
     if (compassType)
@@ -717,7 +717,7 @@ double __cdecl CG_FadeCompass(int32_t localClientNum, int32_t displayStartTime, 
 
     return CG_FadeHudMenu(localClientNum, hud_fade_compass, displayStartTime, SnapFloatToInt(hud_fade_compass->current.value * 1000.0f));}
 
-void __cdecl CG_CompassDrawPlayerBack(
+void CG_CompassDrawPlayerBack(
     int32_t localClientNum,
     CompassType compassType,
     const rectDef_s *parentRect,
@@ -753,7 +753,7 @@ void __cdecl CG_CompassDrawPlayerBack(
             material);
     }
 }
-void __cdecl CG_CompassDrawPlayerNorthCoord(
+void CG_CompassDrawPlayerNorthCoord(
     int32_t localClientNum,
     CompassType compassType,
     const rectDef_s *parentRect,
@@ -864,7 +864,7 @@ void __cdecl CG_CompassDrawPlayerNorthCoord(
     }
 }
 
-void __cdecl CG_CompassDrawPlayerEastCoord(
+void CG_CompassDrawPlayerEastCoord(
     int32_t localClientNum,
     CompassType compassType,
     const rectDef_s *parentRect,
@@ -966,7 +966,7 @@ void __cdecl CG_CompassDrawPlayerEastCoord(
     }
 }
 
-void __cdecl CG_CompassDrawPlayerNCoordScroll(
+void CG_CompassDrawPlayerNCoordScroll(
     int32_t localClientNum,
     CompassType compassType,
     const rectDef_s *parentRect,
@@ -1045,7 +1045,7 @@ void __cdecl CG_CompassDrawPlayerNCoordScroll(
     }
 }
 
-void __cdecl CG_CompassDrawPlayerECoordScroll(
+void CG_CompassDrawPlayerECoordScroll(
     int32_t localClientNum,
     CompassType compassType,
     const rectDef_s *parentRect,
@@ -1125,7 +1125,7 @@ void __cdecl CG_CompassDrawPlayerECoordScroll(
     }
 }
 
-void __cdecl CG_CompassDrawPlayerMap(
+void CG_CompassDrawPlayerMap(
     int32_t localClientNum,
     CompassType compassType,
     const rectDef_s *parentRect,
@@ -1231,7 +1231,7 @@ void __cdecl CG_CompassDrawPlayerMap(
     }
 }
 
-void __cdecl CG_CompassDrawPlayerMapLocationSelector(
+void CG_CompassDrawPlayerMapLocationSelector(
     int32_t localClientNum,
     CompassType compassType,
     const rectDef_s *parentRect,
@@ -1335,7 +1335,7 @@ void __cdecl CG_CompassDrawPlayerMapLocationSelector(
     }
 }
 
-void __cdecl CG_CompassDrawPlayer(
+void CG_CompassDrawPlayer(
     int32_t localClientNum,
     CompassType compassType,
     const rectDef_s *parentRect,
@@ -1419,7 +1419,7 @@ void __cdecl CG_CompassDrawPlayer(
     }
 }
 
-void __cdecl CG_CompassDrawBorder(
+void CG_CompassDrawBorder(
     int32_t localClientNum,
     CompassType compassType,
     const rectDef_s *parentRect,
@@ -1610,7 +1610,7 @@ void __cdecl CG_CompassDrawBorder(
     }
 }
 
-void __cdecl CG_CompassUpYawVector(const cg_s *cgameGlob, float *result)
+void CG_CompassUpYawVector(const cg_s *cgameGlob, float *result)
 {
     if (compassRotation->current.enabled)
     {
@@ -1688,7 +1688,7 @@ static void DrawTickerTapeObjectivePing(
 }
 #endif
 
-void __cdecl CG_CompassDrawTickertape(
+void CG_CompassDrawTickertape(
     int32_t localClientNum,
     CompassType compassType,
     const rectDef_s *parentRect,
@@ -1887,7 +1887,7 @@ void __cdecl CG_CompassDrawTickertape(
     }
 }
 
-void __cdecl CalcCompassPointerSize(CompassType compassType, float *w, float *h)
+void CalcCompassPointerSize(CompassType compassType, float *w, float *h)
 {
     iassert(w);
     iassert(h);
@@ -1904,7 +1904,7 @@ void __cdecl CalcCompassPointerSize(CompassType compassType, float *w, float *h)
     }
 }
 
-void __cdecl DrawIconDistanceText(
+void DrawIconDistanceText(
     int32_t localClientNum,
     float distance,
     float iconX,
@@ -1960,19 +1960,19 @@ void __cdecl DrawIconDistanceText(
         textStyle);
 }
 
-double __cdecl CutFloat(float original)
+double CutFloat(float original)
 {
     // Truncates toward zero, as retail does (_ftol2_sse; upstream #52).
     return (float)((double)(int)(original * 10.0) * 0.1000000014901161);
 }
 
-double __cdecl CG_GetHudAlphaCompass(int32_t localClientNum)
+double CG_GetHudAlphaCompass(int32_t localClientNum)
 {
     cg_s *LocalClientGlobals = CG_GetLocalClientGlobals(localClientNum);
     return CG_FadeCompass(localClientNum, LocalClientGlobals->compassFadeTime, COMPASS_TYPE_PARTIAL);
 }
 
-void __cdecl CalcCompassFriendlySize(CompassType compassType, float *w, float *h)
+void CalcCompassFriendlySize(CompassType compassType, float *w, float *h)
 {
     iassert(w);
     iassert(h);
@@ -1990,7 +1990,7 @@ void __cdecl CalcCompassFriendlySize(CompassType compassType, float *w, float *h
 }
 
 #ifdef KISAK_MP
-void __cdecl CG_CompassDrawPlayerPointers_MP(
+void CG_CompassDrawPlayerPointers_MP(
     int32_t localClientNum,
     CompassType compassType,
     const rectDef_s *parentRect,
@@ -2311,7 +2311,7 @@ void CG_CompassDrawPlayerPointers_SP(
 }
 #endif
 
-double __cdecl GetObjectiveFade(const rectDef_s *clipRect, float x, float y, float width, float height)
+double GetObjectiveFade(const rectDef_s *clipRect, float x, float y, float width, float height)
 {
     float clip; // [esp+4h] [ebp-8h]
     float clipa; // [esp+4h] [ebp-8h]

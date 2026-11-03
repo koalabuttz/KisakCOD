@@ -16,23 +16,23 @@ static centity_s* cg_itemEntities[512];
 static int32_t cg_itemEntityCount;
 static int32_t cg_itemLocalClientNum;
 
-void __cdecl TRACK_cg_predict()
+void TRACK_cg_predict()
 {
     track_static_alloc_internal(cg_pmove, 272, "cg_pmove", 9);
     track_static_alloc_internal(cg_itemEntities, 2048, "cg_itemEntities", 9);
 }
 
-int32_t __cdecl CG_ItemListLocalClientNum()
+int32_t CG_ItemListLocalClientNum()
 {
     return cg_itemLocalClientNum;
 }
 
-void __cdecl CG_ClearItemList()
+void CG_ClearItemList()
 {
     cg_itemEntityCount = 0;
 }
 
-void __cdecl CG_BuildItemList(int32_t localClientNum, const snapshot_s *nextSnap)
+void CG_BuildItemList(int32_t localClientNum, const snapshot_s *nextSnap)
 {
     centity_s *cent; // [esp+0h] [ebp-Ch]
     int32_t entIndex; // [esp+4h] [ebp-8h]
@@ -51,7 +51,7 @@ void __cdecl CG_BuildItemList(int32_t localClientNum, const snapshot_s *nextSnap
     }
 }
 
-void __cdecl CG_PredictPlayerState(int32_t localClientNum)
+void CG_PredictPlayerState(int32_t localClientNum)
 {
     centity_s* Entity; // eax
     double v2; // st7
@@ -108,7 +108,7 @@ void __cdecl CG_PredictPlayerState(int32_t localClientNum)
     CL_SendCmd(localClientNum);
 }
 
-void __cdecl CG_PredictPlayerState_Internal(int32_t localClientNum)
+void CG_PredictPlayerState_Internal(int32_t localClientNum)
 {
     float v1; // [esp+10h] [ebp-188h]
     float v2; // [esp+14h] [ebp-184h]
@@ -352,7 +352,7 @@ void __cdecl CG_PredictPlayerState_Internal(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_TouchItemPrediction(int32_t localClientNum)
+void CG_TouchItemPrediction(int32_t localClientNum)
 {
     centity_s *cent; // [esp+4h] [ebp-8h]
     int32_t entIndex; // [esp+8h] [ebp-4h]
@@ -371,7 +371,7 @@ void __cdecl CG_TouchItemPrediction(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_TouchItem(cg_s *cgameGlob, centity_s *cent)
+void CG_TouchItem(cg_s *cgameGlob, centity_s *cent)
 {
     int32_t bitNum; // [esp+0h] [ebp-8h]
 
@@ -399,7 +399,7 @@ void __cdecl CG_TouchItem(cg_s *cgameGlob, centity_s *cent)
     }
 }
 
-void __cdecl CG_InterpolatePlayerState(int32_t localClientNum, int32_t grabAngles)
+void CG_InterpolatePlayerState(int32_t localClientNum, int32_t grabAngles)
 {
     float v2; // [esp+Ch] [ebp-7Ch]
     float v3; // [esp+10h] [ebp-78h]

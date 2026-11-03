@@ -73,7 +73,7 @@ void R_WarnOncePerFrame(GfxWarningType warnType, ...)
 uint32_t frameCount;
 int previous_0;
 float frameRate;
-double __cdecl R_UpdateFrameRate()
+double R_UpdateFrameRate()
 {
     int frameTime; // [esp+0h] [ebp-8h]
     uint32_t current; // [esp+4h] [ebp-4h]
@@ -108,7 +108,7 @@ double __cdecl R_UpdateFrameRate()
     return frameRate;
 }
 
-void __cdecl R_WarnInitDvars()
+void R_WarnInitDvars()
 {
     DvarLimits min; // [esp+4h] [ebp-10h]
 

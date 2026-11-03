@@ -10,7 +10,7 @@ struct $C28D828B354D71D7584331F40DBDE744 // sizeof=0x100C
     volatile uint32_t put;          // ...
 };
 
-void __cdecl Material_UploadShaders(MaterialTechniqueSet *techSet);
-void __cdecl RB_UploadShaderStep();
+void Material_UploadShaders(MaterialTechniqueSet *techSet);
+void RB_UploadShaderStep();
 
 extern $C28D828B354D71D7584331F40DBDE744 mtlUploadGlob;

@@ -11,7 +11,7 @@
 
 
 
-void __cdecl R_SetVertexDecl(GfxCmdBufPrimState *primState, const MaterialVertexDeclaration *vertexDecl)
+void R_SetVertexDecl(GfxCmdBufPrimState *primState, const MaterialVertexDeclaration *vertexDecl)
 {
     IDirect3DVertexDeclaration9 *v3; // [esp+0h] [ebp-40h]
     int hr; // [esp+34h] [ebp-Ch]
@@ -50,14 +50,14 @@ void __cdecl R_SetVertexDecl(GfxCmdBufPrimState *primState, const MaterialVertex
     }
 }
 
-void __cdecl RB_ClearPixelShader()
+void RB_ClearPixelShader()
 {
     if (gfxCmdBufState.pixelShader)
         R_HW_SetPixelShader(gfxCmdBufState.prim.device, 0);
     gfxCmdBufState.pixelShader = 0;
 }
 
-void __cdecl R_HW_SetPixelShader(IDirect3DDevice9 *device, const MaterialPixelShader *mtlShader)
+void R_HW_SetPixelShader(IDirect3DDevice9 *device, const MaterialPixelShader *mtlShader)
 {
     int v2; // eax
     HRESULT hr; // [esp+4h] [ebp-4h]
@@ -93,14 +93,14 @@ void __cdecl R_HW_SetPixelShader(IDirect3DDevice9 *device, const MaterialPixelSh
     } while (alwaysfails);
 }
 
-void __cdecl RB_ClearVertexShader()
+void RB_ClearVertexShader()
 {
     if (gfxCmdBufState.vertexShader)
         R_HW_SetVertexShader(gfxCmdBufState.prim.device, 0);
     gfxCmdBufState.vertexShader = 0;
 }
 
-void __cdecl R_HW_SetVertexShader(IDirect3DDevice9 *device, const MaterialVertexShader *mtlShader)
+void R_HW_SetVertexShader(IDirect3DDevice9 *device, const MaterialVertexShader *mtlShader)
 {
     int v2; // eax
     HRESULT hr; // [esp+4h] [ebp-4h]
@@ -135,14 +135,14 @@ void __cdecl R_HW_SetVertexShader(IDirect3DDevice9 *device, const MaterialVertex
     } while (alwaysfails);
 }
 
-void __cdecl RB_ClearVertexDecl()
+void RB_ClearVertexDecl()
 {
     if (gfxCmdBufState.prim.vertexDecl)
         R_SetVertexDecl(&gfxCmdBufState.prim, 0);
     iassert(gfxCmdBufState.prim.vertexDecl == NULL);
 }
 
-void __cdecl RB_SetTessTechnique(const Material *material, MaterialTechniqueType techType)
+void RB_SetTessTechnique(const Material *material, MaterialTechniqueType techType)
 {
     iassert(material);
     if (gfxCmdBufState.origMaterial != material || gfxCmdBufState.origTechType != techType)
@@ -153,7 +153,7 @@ void __cdecl RB_SetTessTechnique(const Material *material, MaterialTechniqueType
     }
 }
 
-void __cdecl RB_BeginSurface(const Material *material, MaterialTechniqueType techType)
+void RB_BeginSurface(const Material *material, MaterialTechniqueType techType)
 {
     iassert(tess.indexCount == 0);
     iassert(tess.vertexCount == 0);
@@ -181,7 +181,7 @@ void __cdecl RB_BeginSurface(const Material *material, MaterialTechniqueType tec
     iassert(gfxCmdBufState.technique);
 }
 
-void __cdecl RB_EndTessSurface()
+void RB_EndTessSurface()
 {
     {
         PROF_SCOPED("EndSurface_Standard");
@@ -239,7 +239,7 @@ void RB_DrawTessSurface()
     tess.vertexCount = 0;
 }
 
-void __cdecl R_DrawTessTechnique(GfxCmdBufContext context, const GfxDrawPrimArgs *args)
+void R_DrawTessTechnique(GfxCmdBufContext context, const GfxDrawPrimArgs *args)
 {
     const MaterialTechnique *technique; // [esp+38h] [ebp-14h]
     IDirect3DVertexBuffer9 *vb; // [esp+3Ch] [ebp-10h]
@@ -287,7 +287,7 @@ void __cdecl R_DrawTessTechnique(GfxCmdBufContext context, const GfxDrawPrimArgs
         RB_LogPrint("\n");
 }
 
-void __cdecl RB_TessOverflow()
+void RB_TessOverflow()
 {
     GfxPrimStats *primStats; // [esp+0h] [ebp-4h]
 

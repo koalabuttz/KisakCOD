@@ -35,7 +35,7 @@ StateEnt stateEntries[6] =
 
 int ragdollTime;
 
-char __cdecl Ragdoll_ValidateBodyObj(RagdollBody *body)
+char Ragdoll_ValidateBodyObj(RagdollBody *body)
 {
     RagdollDef *def; // [esp+0h] [ebp-18h]
     DObj_s *obj; // [esp+4h] [ebp-14h]
@@ -76,7 +76,7 @@ char __cdecl Ragdoll_ValidateBodyObj(RagdollBody *body)
     return 1;
 }
 
-void __cdecl Ragdoll_SnapshotBaseLerpOffsets(RagdollBody *body)
+void Ragdoll_SnapshotBaseLerpOffsets(RagdollBody *body)
 {
     float v1; // [esp+20h] [ebp-118h]
     float v2; // [esp+24h] [ebp-114h]
@@ -180,13 +180,13 @@ void __cdecl Ragdoll_SnapshotBaseLerpOffsets(RagdollBody *body)
     }
 }
 
-void __cdecl Ragdoll_GetDObjBaseBoneMatrix(DObj_s *obj, uint8_t boneIndex, DObjAnimMat *outMat)
+void Ragdoll_GetDObjBaseBoneMatrix(DObj_s *obj, uint8_t boneIndex, DObjAnimMat *outMat)
 {
     iassert( obj );
     DObjGetBasePoseMatrix(obj, boneIndex, outMat);
 }
 
-void __cdecl Ragdoll_AnimMatToMat43(const DObjAnimMat *mat, float (*out)[3])
+void Ragdoll_AnimMatToMat43(const DObjAnimMat *mat, float (*out)[3])
 {
     float v2; // [esp+24h] [ebp-30h]
     float v3; // [esp+28h] [ebp-2Ch]
@@ -236,7 +236,7 @@ void __cdecl Ragdoll_AnimMatToMat43(const DObjAnimMat *mat, float (*out)[3])
     (*out)[11] = mat->trans[2];
 }
 
-char __cdecl Ragdoll_CreateBodyPhysics(RagdollBody *body)
+char Ragdoll_CreateBodyPhysics(RagdollBody *body)
 {
     iassert( body );
     iassert( body->state > RAGDOLL_DOBJ_VALID_STATE );
@@ -262,7 +262,7 @@ char __cdecl Ragdoll_CreateBodyPhysics(RagdollBody *body)
     }
 }
 
-char __cdecl Ragdoll_CreatePhysJoints(RagdollBody *body)
+char Ragdoll_CreatePhysJoints(RagdollBody *body)
 {
     RagdollDef *def; // [esp+0h] [ebp-8h]
     int i; // [esp+4h] [ebp-4h]
@@ -278,7 +278,7 @@ char __cdecl Ragdoll_CreatePhysJoints(RagdollBody *body)
     return 1;
 }
 
-char __cdecl Ragdoll_CreatePhysJoint(RagdollBody *body, JointDef *jointDef, Joint *joint)
+char Ragdoll_CreatePhysJoint(RagdollBody *body, JointDef *jointDef, Joint *joint)
 {
     JointType type; // [esp+10h] [ebp-98h]
     Bone *parentBone; // [esp+18h] [ebp-90h]
@@ -359,7 +359,7 @@ char __cdecl Ragdoll_CreatePhysJoint(RagdollBody *body, JointDef *jointDef, Join
     return 1;
 }
 
-char __cdecl Ragdoll_CreatePhysObjs(RagdollBody *body)
+char Ragdoll_CreatePhysObjs(RagdollBody *body)
 {
     RagdollDef *def; // [esp+0h] [ebp-8h]
     int i; // [esp+4h] [ebp-4h]
@@ -375,7 +375,7 @@ char __cdecl Ragdoll_CreatePhysObjs(RagdollBody *body)
     return 1;
 }
 
-char __cdecl Ragdoll_CreatePhysObj(RagdollBody *body, BoneDef *boneDef, Bone *bone)
+char Ragdoll_CreatePhysObj(RagdollBody *body, BoneDef *boneDef, Bone *bone)
 {
     float v4; // [esp+Ch] [ebp-E0h]
     float halfHeight; // [esp+10h] [ebp-DCh]
@@ -511,7 +511,7 @@ char __cdecl Ragdoll_CreatePhysObj(RagdollBody *body, BoneDef *boneDef, Bone *bo
     }
 }
 
-char __cdecl Ragdoll_GetDObjBaseBoneOrigin(
+char Ragdoll_GetDObjBaseBoneOrigin(
     int localClientNum,
     DObj_s *obj,
     const float *offset,
@@ -528,7 +528,7 @@ char __cdecl Ragdoll_GetDObjBaseBoneOrigin(
     return 1;
 }
 
-char __cdecl Ragdoll_GetDObjBaseBoneOriginQuat(
+char Ragdoll_GetDObjBaseBoneOriginQuat(
     int localClientNum,
     DObj_s *obj,
     const float *offset,
@@ -549,7 +549,7 @@ char __cdecl Ragdoll_GetDObjBaseBoneOriginQuat(
     return 1;
 }
 
-void __cdecl Ragdoll_PoseInvAxis(const cpose_t *pose, mat3x3 &invAxis)
+void Ragdoll_PoseInvAxis(const cpose_t *pose, mat3x3 &invAxis)
 {
     float axis[3][3]; // [esp+0h] [ebp-24h] BYREF
 
@@ -558,7 +558,7 @@ void __cdecl Ragdoll_PoseInvAxis(const cpose_t *pose, mat3x3 &invAxis)
     AxisTranspose(axis, invAxis);
 }
 
-void __cdecl Ragdoll_DestroyPhysJoints(RagdollBody *body)
+void Ragdoll_DestroyPhysJoints(RagdollBody *body)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -573,7 +573,7 @@ void __cdecl Ragdoll_DestroyPhysJoints(RagdollBody *body)
     memset((uint8_t *)body->joints, 0, sizeof(body->joints));
 }
 
-void __cdecl Ragdoll_DestroyPhysObjs(RagdollBody *body)
+void Ragdoll_DestroyPhysObjs(RagdollBody *body)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -586,14 +586,14 @@ void __cdecl Ragdoll_DestroyPhysObjs(RagdollBody *body)
     }
 }
 
-void __cdecl Ragdoll_RemoveBodyPhysics(RagdollBody *body)
+void Ragdoll_RemoveBodyPhysics(RagdollBody *body)
 {
     iassert( body );
     Ragdoll_DestroyPhysJoints(body);
     Ragdoll_DestroyPhysObjs(body);
 }
 
-bool __cdecl Ragdoll_ValidatePrecalcBoneDef(RagdollDef *def, BoneDef *bone)
+bool Ragdoll_ValidatePrecalcBoneDef(RagdollDef *def, BoneDef *bone)
 {
     float v3; // [esp+0h] [ebp-8h]
 
@@ -603,7 +603,7 @@ bool __cdecl Ragdoll_ValidatePrecalcBoneDef(RagdollDef *def, BoneDef *bone)
     return v3 >= 0.000001;
 }
 
-void __cdecl Ragdoll_ClosestPointsTwoSegs(float (*s0)[3], float (*s1)[3], float *t0, float *t1, float *direction)
+void Ragdoll_ClosestPointsTwoSegs(float (*s0)[3], float (*s1)[3], float *t0, float *t1, float *direction)
 {
     double v5; // [esp+0h] [ebp-70h]
     float v6; // [esp+8h] [ebp-68h]
@@ -727,7 +727,7 @@ void __cdecl Ragdoll_ClosestPointsTwoSegs(float (*s0)[3], float (*s1)[3], float 
         direction[c] = sc * u[c] + w[c] - tc * v[c];
 }
 
-void __cdecl Ragdoll_GenerateAllSelfCollisionContacts()
+void Ragdoll_GenerateAllSelfCollisionContacts()
 {
     float diff[3]; // [esp+14h] [ebp-88h] BYREF
     float t0; // [esp+20h] [ebp-7Ch] BYREF
@@ -770,7 +770,7 @@ void __cdecl Ragdoll_GenerateAllSelfCollisionContacts()
     }
 }
 
-void __cdecl Ragdoll_GenBoneCapsuleSegments(RagdollBody *body, uint8_t *bones, float (*s0)[3], float (*s1)[3])
+void Ragdoll_GenBoneCapsuleSegments(RagdollBody *body, uint8_t *bones, float (*s0)[3], float (*s1)[3])
 {
     if ((uint32_t)*bones >= body->numBones)
         MyAssertHandler(
@@ -792,7 +792,7 @@ void __cdecl Ragdoll_GenBoneCapsuleSegments(RagdollBody *body, uint8_t *bones, f
     Ragdoll_GenBoneCapsuleSegment(&body->bones[bones[1]], s1);
 }
 
-void __cdecl Ragdoll_GenBoneCapsuleSegment(Bone *bone, float (*seg)[3])
+void Ragdoll_GenBoneCapsuleSegment(Bone *bone, float (*seg)[3])
 {
     float boneMtx[3][3]; // [esp+Ch] [ebp-24h] BYREF
 
@@ -800,7 +800,7 @@ void __cdecl Ragdoll_GenBoneCapsuleSegment(Bone *bone, float (*seg)[3])
     Vec3Mad((const float *)seg, bone->length, boneMtx[0], &(*seg)[3]);
 }
 
-void __cdecl Ragdoll_AddSelfContact(
+void Ragdoll_AddSelfContact(
     RagdollBody *body,
     uint8_t *bones,
     float radius0,
@@ -835,7 +835,7 @@ void __cdecl Ragdoll_AddSelfContact(
     }
 }
 
-void __cdecl Ragdoll_ExplosionEvent(
+void Ragdoll_ExplosionEvent(
     int localClientNum,
     bool isCylinder,
     const float *origin,
@@ -961,7 +961,7 @@ void __cdecl Ragdoll_ExplosionEvent(
     }
 }
 
-void __cdecl Ragdoll_GetTorsoPosition(RagdollBody *body, float *center)
+void Ragdoll_GetTorsoPosition(RagdollBody *body, float *center)
 {
     BoneOrientation *boneOrientation; // [esp+0h] [ebp-4h]
 
@@ -972,7 +972,7 @@ void __cdecl Ragdoll_GetTorsoPosition(RagdollBody *body, float *center)
     center[2] = boneOrientation->origin[2];
 }
 
-bool __cdecl Ragdoll_EnterTunnelTest(RagdollBody *body, BodyState_t curState, BodyState_t newState)
+bool Ragdoll_EnterTunnelTest(RagdollBody *body, BodyState_t curState, BodyState_t newState)
 {
     BoneOrientation *v2; // eax
     BoneOrientation *v3; // eax
@@ -1011,7 +1011,7 @@ bool __cdecl Ragdoll_EnterTunnelTest(RagdollBody *body, BodyState_t curState, Bo
     }
 }
 
-void __cdecl Ragdoll_SnapshotBaseLerpBones(RagdollBody *body, BoneOrientation *snapshot)
+void Ragdoll_SnapshotBaseLerpBones(RagdollBody *body, BoneOrientation *snapshot)
 {
     BoneOrientation *v2; // eax
     float v3; // [esp+8h] [ebp-1A8h]
@@ -1185,7 +1185,7 @@ void __cdecl Ragdoll_SnapshotBaseLerpBones(RagdollBody *body, BoneOrientation *s
     }
 }
 
-DObjAnimMat *__cdecl Ragdoll_GetDObjLocalBoneMatrix(const cpose_t *pose, DObj_s *obj, uint8_t boneIndex)
+DObjAnimMat *Ragdoll_GetDObjLocalBoneMatrix(const cpose_t *pose, DObj_s *obj, uint8_t boneIndex)
 {
     DObjAnimMat *mat; // [esp+34h] [ebp-4h]
 
@@ -1202,7 +1202,7 @@ DObjAnimMat *__cdecl Ragdoll_GetDObjLocalBoneMatrix(const cpose_t *pose, DObj_s 
         return 0;
 }
 
-void __cdecl Ragdoll_SetCurrentPoseFromSnapshot(RagdollBody *body, BoneOrientation *snapshot)
+void Ragdoll_SetCurrentPoseFromSnapshot(RagdollBody *body, BoneOrientation *snapshot)
 {
     const float *qa; // [esp+4h] [ebp-24h]
     RagdollDef *def; // [esp+8h] [ebp-20h]
@@ -1240,7 +1240,7 @@ void __cdecl Ragdoll_SetCurrentPoseFromSnapshot(RagdollBody *body, BoneOrientati
     }
 }
 
-void __cdecl Ragdoll_UpdateBodyContactCentroids(RagdollBody *body)
+void Ragdoll_UpdateBodyContactCentroids(RagdollBody *body)
 {
     float com[3]; // [esp+0h] [ebp-14h] BYREF
     int i; // [esp+Ch] [ebp-8h]
@@ -1258,7 +1258,7 @@ void __cdecl Ragdoll_UpdateBodyContactCentroids(RagdollBody *body)
     }
 }
 
-void __cdecl Ragdoll_BodyCenterOfMass(RagdollBody *body, float *com)
+void Ragdoll_BodyCenterOfMass(RagdollBody *body, float *com)
 {
     float v2; // [esp+Ch] [ebp-24h]
     float massSum; // [esp+14h] [ebp-1Ch]
@@ -1289,7 +1289,7 @@ void __cdecl Ragdoll_BodyCenterOfMass(RagdollBody *body, float *com)
     Vec3Scale(com, v2, com);
 }
 
-void __cdecl Ragdoll_EstimateInitialVelocities(RagdollBody *body)
+void Ragdoll_EstimateInitialVelocities(RagdollBody *body)
 {
     float scale; // [esp+8h] [ebp-78h]
     float angleOffset[3]; // [esp+18h] [ebp-68h] BYREF
@@ -1352,7 +1352,7 @@ void __cdecl Ragdoll_EstimateInitialVelocities(RagdollBody *body)
     }
 }
 
-char __cdecl Ragdoll_TunnelTest(RagdollBody *body)
+char Ragdoll_TunnelTest(RagdollBody *body)
 {
     float scale; // [esp+Ch] [ebp-100h]
     const float *qa; // [esp+14h] [ebp-F8h]
@@ -1436,7 +1436,7 @@ char __cdecl Ragdoll_TunnelTest(RagdollBody *body)
     return 1;
 }
 
-int __cdecl Ragdoll_FindBoneChildren(RagdollBody *body, int boneIdx, int *childIndices)
+int Ragdoll_FindBoneChildren(RagdollBody *body, int boneIdx, int *childIndices)
 {
     int numChildren; // [esp+0h] [ebp-8h]
     int i; // [esp+4h] [ebp-4h]
@@ -1455,7 +1455,7 @@ int __cdecl Ragdoll_FindBoneChildren(RagdollBody *body, int boneIdx, int *childI
     return numChildren;
 }
 
-char __cdecl Ragdoll_BoneTrace(trace_t *trace, trace_t *revTrace, float *start, float *end)
+char Ragdoll_BoneTrace(trace_t *trace, trace_t *revTrace, float *start, float *end)
 {
     CM_BoxTrace(trace, start, end, vec3_origin, vec3_origin, 0, PHYS_WORLD_CLIPMASK);
     if (trace->startsolid)
@@ -1473,7 +1473,7 @@ char __cdecl Ragdoll_BoneTrace(trace_t *trace, trace_t *revTrace, float *start, 
     return 1;
 }
 
-void __cdecl Ragdoll_PrintTunnelFail(RagdollBody *body)
+void Ragdoll_PrintTunnelFail(RagdollBody *body)
 {
     DObj_s *obj; // [esp+18h] [ebp-8h]
     const cpose_t *pose; // [esp+1Ch] [ebp-4h]
@@ -1494,7 +1494,7 @@ void __cdecl Ragdoll_PrintTunnelFail(RagdollBody *body)
     }
 }
 
-void __cdecl Ragdoll_UpdateVelocityCapture(RagdollBody *body)
+void Ragdoll_UpdateVelocityCapture(RagdollBody *body)
 {
     BoneOrientation *snapshot; // [esp+0h] [ebp-4h]
     BoneOrientation *snapshota; // [esp+0h] [ebp-4h]
@@ -1516,7 +1516,7 @@ void __cdecl Ragdoll_UpdateVelocityCapture(RagdollBody *body)
     }
 }
 
-void __cdecl Ragdoll_SnapshotAnimOrientations(RagdollBody *body, BoneOrientation *snapshot)
+void Ragdoll_SnapshotAnimOrientations(RagdollBody *body, BoneOrientation *snapshot)
 {
     RagdollDef *def; // [esp+0h] [ebp-18h]
     DObj_s *obj; // [esp+4h] [ebp-14h]
@@ -1555,7 +1555,7 @@ void __cdecl Ragdoll_SnapshotAnimOrientations(RagdollBody *body, BoneOrientation
     }
 }
 
-char __cdecl Ragdoll_GetDObjWorldBoneOriginQuat(
+char Ragdoll_GetDObjWorldBoneOriginQuat(
     int localClientNum,
     const cpose_t *pose,
     DObj_s *obj,
@@ -1580,7 +1580,7 @@ char __cdecl Ragdoll_GetDObjWorldBoneOriginQuat(
     return 1;
 }
 
-bool __cdecl Ragdoll_EnterDead(RagdollBody *body, BodyState_t curState, BodyState_t newState)
+bool Ragdoll_EnterDead(RagdollBody *body, BodyState_t curState, BodyState_t newState)
 {
     int references; // [esp+0h] [ebp-4h]
 
@@ -1592,7 +1592,7 @@ bool __cdecl Ragdoll_EnterDead(RagdollBody *body, BodyState_t curState, BodyStat
     return 1;
 }
 
-bool __cdecl Ragdoll_ExitDead(RagdollBody *body, BodyState_t curState, BodyState_t newState)
+bool Ragdoll_ExitDead(RagdollBody *body, BodyState_t curState, BodyState_t newState)
 {
     RagdollDef *def; // [esp+0h] [ebp-4h]
 
@@ -1605,7 +1605,7 @@ bool __cdecl Ragdoll_ExitDead(RagdollBody *body, BodyState_t curState, BodyState
     return 1;
 }
 
-bool __cdecl Ragdoll_ExitDObjWait(RagdollBody *body, BodyState_t prevState, BodyState_t curState)
+bool Ragdoll_ExitDObjWait(RagdollBody *body, BodyState_t prevState, BodyState_t curState)
 {
     RagdollDef *def; // [esp+0h] [ebp-18h]
     DObj_s *obj; // [esp+4h] [ebp-14h]
@@ -1659,7 +1659,7 @@ bool __cdecl Ragdoll_ExitDObjWait(RagdollBody *body, BodyState_t prevState, Body
     return 1;
 }
 
-bool __cdecl Ragdoll_ExitIdle(RagdollBody *body, BodyState_t curState, BodyState_t newState)
+bool Ragdoll_ExitIdle(RagdollBody *body, BodyState_t curState, BodyState_t newState)
 {
     BoneOrientation *v4; // eax
 
@@ -1680,7 +1680,7 @@ bool __cdecl Ragdoll_ExitIdle(RagdollBody *body, BodyState_t curState, BodyState
     return 1;
 }
 
-bool __cdecl Ragdoll_EnterIdle(RagdollBody *body, BodyState_t curState, BodyState_t newState)
+bool Ragdoll_EnterIdle(RagdollBody *body, BodyState_t curState, BodyState_t newState)
 {
     BoneOrientation *v1; // eax
 
@@ -1694,7 +1694,7 @@ bool __cdecl Ragdoll_EnterIdle(RagdollBody *body, BodyState_t curState, BodyStat
     return 1;
 }
 
-void __cdecl Ragdoll_SnapshotBonePositions(RagdollBody *body, BoneOrientation *boneSnapshot)
+void Ragdoll_SnapshotBonePositions(RagdollBody *body, BoneOrientation *boneSnapshot)
 {
     float *dest; // [esp+0h] [ebp-2Ch]
     RagdollDef *def; // [esp+8h] [ebp-24h]
@@ -1738,7 +1738,7 @@ void __cdecl Ragdoll_SnapshotBonePositions(RagdollBody *body, BoneOrientation *b
     }
 }
 
-bool __cdecl Ragdoll_EnterRunning(RagdollBody *body, BodyState_t curState, BodyState_t newState)
+bool Ragdoll_EnterRunning(RagdollBody *body, BodyState_t curState, BodyState_t newState)
 {
     iassert( body );
     if (Ragdoll_CountPhysicsBodies() < ragdoll_max_simulating->current.integer)
@@ -1750,7 +1750,7 @@ bool __cdecl Ragdoll_EnterRunning(RagdollBody *body, BodyState_t curState, BodyS
     return 0;
 }
 
-void __cdecl Ragdoll_UpdateDObjWait(RagdollBody *body)
+void Ragdoll_UpdateDObjWait(RagdollBody *body)
 {
     iassert( body );
     if (body->stateFrames <= 3)
@@ -1768,7 +1768,7 @@ void __cdecl Ragdoll_UpdateDObjWait(RagdollBody *body)
     }
 }
 
-void __cdecl Ragdoll_UpdateRunning(RagdollBody *body)
+void Ragdoll_UpdateRunning(RagdollBody *body)
 {
     iassert( body );
     if (Ragdoll_CheckIdle(body))
@@ -1783,7 +1783,7 @@ void __cdecl Ragdoll_UpdateRunning(RagdollBody *body)
     }
 }
 
-void __cdecl Ragdoll_UpdateFriction(RagdollBody *body)
+void Ragdoll_UpdateFriction(RagdollBody *body)
 {
     JointType type; // [esp+10h] [ebp-28h]
     float frictionForce; // [esp+14h] [ebp-24h]
@@ -1838,7 +1838,7 @@ void __cdecl Ragdoll_UpdateFriction(RagdollBody *body)
     }
 }
 
-char __cdecl Ragdoll_CheckIdle(RagdollBody *body)
+char Ragdoll_CheckIdle(RagdollBody *body)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -1852,7 +1852,7 @@ char __cdecl Ragdoll_CheckIdle(RagdollBody *body)
     return 1;
 }
 
-void __cdecl Ragdoll_FilterBonePositions(RagdollBody *body)
+void Ragdoll_FilterBonePositions(RagdollBody *body)
 {
     BoneOrientation *v1; // eax
 
@@ -1860,7 +1860,7 @@ void __cdecl Ragdoll_FilterBonePositions(RagdollBody *body)
     Ragdoll_SnapshotBonePositions(body, v1);
 }
 
-char __cdecl Ragdoll_BodyNewState(RagdollBody *body, BodyState_t state)
+char Ragdoll_BodyNewState(RagdollBody *body, BodyState_t state)
 {
     BodyState_t prevState; // [esp+4h] [ebp-4h]
 
@@ -1901,7 +1901,7 @@ char __cdecl Ragdoll_BodyNewState(RagdollBody *body, BodyState_t state)
     }
 }
 
-void __cdecl Ragdoll_BodyUpdate(int msec, RagdollBody *body)
+void Ragdoll_BodyUpdate(int msec, RagdollBody *body)
 {
     StateEnt *entry; // [esp+0h] [ebp-8h]
     BodyState_t prevState; // [esp+4h] [ebp-4h]
@@ -1926,7 +1926,7 @@ void __cdecl Ragdoll_BodyUpdate(int msec, RagdollBody *body)
     body->stateMsec += msec;
 }
 
-void __cdecl Ragdoll_Update(int msec)
+void Ragdoll_Update(int msec)
 {
     RagdollBody *body; // [esp+30h] [ebp-8h]
     int i; // [esp+34h] [ebp-4h]

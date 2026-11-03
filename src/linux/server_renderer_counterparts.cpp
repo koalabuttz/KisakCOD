@@ -83,7 +83,7 @@ const dvar_t *r_reflectionProbeGenerateExit;
 // set.
 // ---------------------------------------------------------------------------
 
-void __cdecl R_RegisterDvars()
+void R_RegisterDvars()
 {
     r_loadForRenderer = Dvar_RegisterBool(
         "r_loadForRenderer",
@@ -113,7 +113,7 @@ void __cdecl R_RegisterDvars()
 // calls Material_PreventOverrideTechniqueGeneration when generation is enabled;
 // that switches off technique-set overriding for the renderer, which does not
 // exist here, so the dvar is registered and the flag is otherwise only read.
-void __cdecl R_ReflectionProbeRegisterDvars()
+void R_ReflectionProbeRegisterDvars()
 {
     r_reflectionProbeGenerate = Dvar_RegisterBool(
         "r_reflectionProbeGenerate",
@@ -156,7 +156,7 @@ static bool DedicatedRendererAllocates()
     return r_loadForRenderer && r_loadForRenderer->current.enabled;
 }
 
-void *__cdecl R_AllocStaticVertexBuffer(IDirect3DVertexBuffer9 **vb, int sizeInBytes)
+void *R_AllocStaticVertexBuffer(IDirect3DVertexBuffer9 **vb, int sizeInBytes)
 {
     iassert(vb);
     iassert(sizeInBytes > 0);
@@ -168,7 +168,7 @@ void *__cdecl R_AllocStaticVertexBuffer(IDirect3DVertexBuffer9 **vb, int sizeInB
     return 0;
 }
 
-void *__cdecl R_AllocStaticIndexBuffer(IDirect3DIndexBuffer9 **ib, int sizeInBytes)
+void *R_AllocStaticIndexBuffer(IDirect3DIndexBuffer9 **ib, int sizeInBytes)
 {
     iassert(ib);
     iassert(sizeInBytes > 0);
@@ -180,7 +180,7 @@ void *__cdecl R_AllocStaticIndexBuffer(IDirect3DIndexBuffer9 **ib, int sizeInByt
     return 0;
 }
 
-void __cdecl R_FinishStaticVertexBuffer(IDirect3DVertexBuffer9 *vb)
+void R_FinishStaticVertexBuffer(IDirect3DVertexBuffer9 *vb)
 {
     if (!vb)
         return;
@@ -188,7 +188,7 @@ void __cdecl R_FinishStaticVertexBuffer(IDirect3DVertexBuffer9 *vb)
     Com_Error(ERR_FATAL, "R_FinishStaticVertexBuffer: a device vertex buffer was created in a dedicated build\n");
 }
 
-void __cdecl R_FinishStaticIndexBuffer(IDirect3DIndexBuffer9 *ib)
+void R_FinishStaticIndexBuffer(IDirect3DIndexBuffer9 *ib)
 {
     if (!ib)
         return;
@@ -196,7 +196,7 @@ void __cdecl R_FinishStaticIndexBuffer(IDirect3DIndexBuffer9 *ib)
     Com_Error(ERR_FATAL, "R_FinishStaticIndexBuffer: a device index buffer was created in a dedicated build\n");
 }
 
-void __cdecl R_UnlockVertexBuffer(IDirect3DVertexBuffer9 *handle)
+void R_UnlockVertexBuffer(IDirect3DVertexBuffer9 *handle)
 {
     if (!handle)
         return;
@@ -204,7 +204,7 @@ void __cdecl R_UnlockVertexBuffer(IDirect3DVertexBuffer9 *handle)
     Com_Error(ERR_FATAL, "R_UnlockVertexBuffer: a device vertex buffer was created in a dedicated build\n");
 }
 
-void __cdecl R_UnlockIndexBuffer(IDirect3DIndexBuffer9 *handle)
+void R_UnlockIndexBuffer(IDirect3DIndexBuffer9 *handle)
 {
     if (!handle)
         return;
@@ -212,7 +212,7 @@ void __cdecl R_UnlockIndexBuffer(IDirect3DIndexBuffer9 *handle)
     Com_Error(ERR_FATAL, "R_UnlockIndexBuffer: a device index buffer was created in a dedicated build\n");
 }
 
-void __cdecl R_FreeStaticVertexBuffer(IDirect3DVertexBuffer9 *vb)
+void R_FreeStaticVertexBuffer(IDirect3DVertexBuffer9 *vb)
 {
     if (!vb)
         return;
@@ -220,7 +220,7 @@ void __cdecl R_FreeStaticVertexBuffer(IDirect3DVertexBuffer9 *vb)
     Com_Error(ERR_FATAL, "R_FreeStaticVertexBuffer: a device vertex buffer was created in a dedicated build\n");
 }
 
-void __cdecl R_FreeStaticIndexBuffer(IDirect3DIndexBuffer9 *ib)
+void R_FreeStaticIndexBuffer(IDirect3DIndexBuffer9 *ib)
 {
     if (!ib)
         return;
@@ -231,7 +231,7 @@ void __cdecl R_FreeStaticIndexBuffer(IDirect3DIndexBuffer9 *ib)
 // src/gfx_d3d/r_buffers.cpp:122, called by the generated zone loaders
 // (src/database/db_load.cpp). It reproduces the branch the original takes when
 // r_loadForRenderer->current.enabled is false.
-void __cdecl Load_VertexBuffer(IDirect3DVertexBuffer9 **vb, uint8_t *bufferData, int sizeInBytes)
+void Load_VertexBuffer(IDirect3DVertexBuffer9 **vb, uint8_t *bufferData, int sizeInBytes)
 {
     // Without a device there is no buffer to copy into, so the record's vertex
     // data stays in the zone and the handle is null. The size is the caller's to
@@ -257,21 +257,21 @@ void __cdecl Load_VertexBuffer(IDirect3DVertexBuffer9 **vb, uint8_t *bufferData,
 // mirror of it: a nesting counter that no one increments is zero by construction.
 // ---------------------------------------------------------------------------
 
-void __cdecl R_BeginRemoteScreenUpdate()
+void R_BeginRemoteScreenUpdate()
 {
     // r_rendercmds.cpp:1642 -- increments the nesting depth only when a render
     // thread is running, which never happens here.
     iassert(IsFastFileLoad());
 }
 
-void __cdecl R_EndRemoteScreenUpdate()
+void R_EndRemoteScreenUpdate()
 {
     // r_rendercmds.cpp:1664 -- the matching decrement. Nothing was incremented,
     // so there is nothing to wait on or release.
     iassert(IsFastFileLoad());
 }
 
-void __cdecl R_PushRemoteScreenUpdate(int remoteScreenUpdateNesting)
+void R_PushRemoteScreenUpdate(int remoteScreenUpdateNesting)
 {
     // r_rendercmds.cpp:1699 -- nests Begin calls. With no nesting possible the
     // only valid input is zero.
@@ -280,28 +280,28 @@ void __cdecl R_PushRemoteScreenUpdate(int remoteScreenUpdateNesting)
     (void)remoteScreenUpdateNesting;
 }
 
-int __cdecl R_PopRemoteScreenUpdate()
+int R_PopRemoteScreenUpdate()
 {
     // r_rendercmds.cpp:1718 -- returns the depth it unwound, which is always zero
     // here. Callers store this and pass it back to R_PushRemoteScreenUpdate.
     return 0;
 }
 
-bool __cdecl R_IsInRemoteScreenUpdate()
+bool R_IsInRemoteScreenUpdate()
 {
     // r_rendercmds.cpp:1740 -- r_glob.isRenderingRemoteUpdate is set by the render
     // thread's own update path, which does not exist here.
     return false;
 }
 
-void __cdecl R_ReleaseThreadOwnership()
+void R_ReleaseThreadOwnership()
 {
     // r_rendercmds.cpp:264 -- hands the front end to the render thread when one is
     // running. DB_FindXAssetHeader calls it before waiting on the database thread.
     iassert(Sys_IsMainThread());
 }
 
-void __cdecl R_SyncRenderThread()
+void R_SyncRenderThread()
 {
     // r_rendercmds.cpp:231 -- once the renderer has registered, the main thread
     // sleeps until the render thread takes the front end. rg.registered is
@@ -323,7 +323,7 @@ void __cdecl R_SyncRenderThread()
 // are the real bodies, not stubs.
 // ---------------------------------------------------------------------------
 
-void __cdecl XSurfaceGetVerts(const XSurface *surf, float *pVert, float *pTexCoord, float *pNormal)
+void XSurfaceGetVerts(const XSurface *surf, float *pVert, float *pTexCoord, float *pNormal)
 {
     int render_count;
     GfxPackedVertex *verts1;
@@ -353,7 +353,7 @@ void __cdecl XSurfaceGetVerts(const XSurface *surf, float *pVert, float *pTexCoo
     }
 }
 
-int __cdecl XSurfaceGetNumVerts(const XSurface *surface)
+int XSurfaceGetNumVerts(const XSurface *surface)
 {
     iassert(surface);
     return surface->vertCount;
@@ -368,7 +368,7 @@ int __cdecl XSurfaceGetNumVerts(const XSurface *surface)
 // real one rather than a stub that leaves an entity's bounds unset.
 // ---------------------------------------------------------------------------
 
-void __cdecl R_GetXModelBounds(XModel *model, const float (*axes)[3], float *mins, float *maxs)
+void R_GetXModelBounds(XModel *model, const float (*axes)[3], float *mins, float *maxs)
 {
     float coord;
     int surfaceCount;

@@ -4,7 +4,7 @@
 
 
 
-void __cdecl CM_CalcTraceExtents(TraceExtents *extents)
+void CM_CalcTraceExtents(TraceExtents *extents)
 {
     double v1; // [esp+0h] [ebp-10h]
     float diff; // [esp+8h] [ebp-8h]
@@ -21,7 +21,7 @@ void __cdecl CM_CalcTraceExtents(TraceExtents *extents)
     }
 }
 
-int __cdecl CM_TraceBox(const TraceExtents *extents, float *mins, float *maxs, float fraction)
+int CM_TraceBox(const TraceExtents *extents, float *mins, float *maxs, float fraction)
 {
     float v5; // [esp+0h] [ebp-3Ch]
     float v6; // [esp+4h] [ebp-38h]
@@ -92,7 +92,7 @@ int __cdecl CM_TraceBox(const TraceExtents *extents, float *mins, float *maxs, f
     return 0;
 }
 
-bool __cdecl CM_TraceSphere(const TraceExtents *extents, const float *origin, float radius, float fraction)
+bool CM_TraceSphere(const TraceExtents *extents, const float *origin, float radius, float fraction)
 {
     double v4; // st7
     float scale; // [esp+0h] [ebp-5Ch]

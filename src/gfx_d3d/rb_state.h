@@ -2,10 +2,10 @@
 #include "rb_backend.h"
 
 
-void __cdecl TRACK_rb_state();
-void __cdecl RB_SetInitialState();
-void __cdecl RB_InitSceneViewport();
-void __cdecl RB_InitImages();
+void TRACK_rb_state();
+void RB_SetInitialState();
+void RB_InitSceneViewport();
+void RB_InitImages();
 
 
 extern const GfxCmdBufContext gfxCmdBufContext;

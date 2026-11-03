@@ -2,7 +2,7 @@
 #include "fft.h"
 #include "q_shared.h"
 
-void __cdecl FFT(complex_s *data_inout, uint32_t log2_count, int *bitSwap, complex_s *trigTable)
+void FFT(complex_s *data_inout, uint32_t log2_count, int *bitSwap, complex_s *trigTable)
 {
     int v4; // eax
     float imag; // ecx
@@ -258,7 +258,7 @@ void __cdecl FFT(complex_s *data_inout, uint32_t log2_count, int *bitSwap, compl
     }
 }
 
-void __cdecl FFT_Init(int *fftBitswap, complex_s *fftTrigTable)
+void FFT_Init(int *fftBitswap, complex_s *fftTrigTable)
 {
     float v2; // [esp+8h] [ebp-Ch]
     int fftIndex; // [esp+Ch] [ebp-8h]

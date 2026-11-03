@@ -33,7 +33,7 @@ enum DEBUGMAYMOVE_LIFT_ENUM : __int32
     DEBUGMAYMOVE_LIFTED = 0x1,
 };
 
-actor_s *__cdecl Actor_Get(scr_entref_t entref)
+actor_s *Actor_Get(scr_entref_t entref)
 {
     actor_s *result; // r3
     unsigned __int16 v2; // [sp+74h] [+14h]
@@ -58,7 +58,7 @@ actor_s *__cdecl Actor_Get(scr_entref_t entref)
     return result;
 }
 
-void __cdecl Actor_SetScriptGoalPos(actor_s *self, const float *vGoalPos, pathnode_t *node)
+void Actor_SetScriptGoalPos(actor_s *self, const float *vGoalPos, pathnode_t *node)
 {
     gentity_s *volume; // r5
 
@@ -76,7 +76,7 @@ void __cdecl Actor_SetScriptGoalPos(actor_s *self, const float *vGoalPos, pathno
     }
 }
 
-void __cdecl ActorCmd_StartScriptedAnim(scr_entref_t entref)
+void ActorCmd_StartScriptedAnim(scr_entref_t entref)
 {
     Actor_Get(entref);
     if (Scr_GetNumParam() > 6)
@@ -84,7 +84,7 @@ void __cdecl ActorCmd_StartScriptedAnim(scr_entref_t entref)
     ScrCmd_animscriptedInternal(entref, 0);
 }
 
-void __cdecl Actor_StartArrivalState(actor_s *self, ai_state_t newState)
+void Actor_StartArrivalState(actor_s *self, ai_state_t newState)
 {
     gentity_s *ent; // r30
     double Float; // fp1
@@ -119,7 +119,7 @@ void __cdecl Actor_StartArrivalState(actor_s *self, ai_state_t newState)
     Actor_ClearPath(self);
 }
 
-void __cdecl ActorCmd_StartCoverArrival(scr_entref_t entref)
+void ActorCmd_StartCoverArrival(scr_entref_t entref)
 {
     actor_s *v1; // r3
 
@@ -127,7 +127,7 @@ void __cdecl ActorCmd_StartCoverArrival(scr_entref_t entref)
     Actor_StartArrivalState(v1, AIS_COVERARRIVAL);
 }
 
-void __cdecl ActorCmd_StartTraverseArrival(scr_entref_t entref)
+void ActorCmd_StartTraverseArrival(scr_entref_t entref)
 {
     actor_s *v1; // r3
 
@@ -135,7 +135,7 @@ void __cdecl ActorCmd_StartTraverseArrival(scr_entref_t entref)
     Actor_StartArrivalState(v1, AIS_NEGOTIATION);
 }
 
-void __cdecl ActorCmd_CheckCoverExitPosWithPath(scr_entref_t entref)
+void ActorCmd_CheckCoverExitPosWithPath(scr_entref_t entref)
 {
     actor_s *v1; // r31
     bool v2; // r3
@@ -147,7 +147,7 @@ void __cdecl ActorCmd_CheckCoverExitPosWithPath(scr_entref_t entref)
     Scr_AddBool(v2);
 }
 
-void __cdecl ActorCmd_Shoot(scr_entref_t entref)
+void ActorCmd_Shoot(scr_entref_t entref)
 {
     actor_s *actor; // r31
     double accuracyMod; // fp31
@@ -171,7 +171,7 @@ void __cdecl ActorCmd_Shoot(scr_entref_t entref)
     Actor_Shoot(actor, accuracyMod, (float(*)[3])posOverride, NOT_LAST_SHOT_IN_CLIP);
 }
 
-void __cdecl ActorCmd_ShootBlank(scr_entref_t entref)
+void ActorCmd_ShootBlank(scr_entref_t entref)
 {
     actor_s *v1; // r31
     const char *v2; // r3
@@ -191,7 +191,7 @@ void __cdecl ActorCmd_ShootBlank(scr_entref_t entref)
     Actor_ShootBlank(v1);
 }
 
-void __cdecl ActorCmd_Melee(scr_entref_t entref)
+void ActorCmd_Melee(scr_entref_t entref)
 {
     actor_s *v1; // r31
     const float *v2; // r4
@@ -213,7 +213,7 @@ void __cdecl ActorCmd_Melee(scr_entref_t entref)
         Scr_AddEntity(v3);
 }
 
-void __cdecl ActorCmd_UpdatePlayerSightAccuracy(scr_entref_t entref)
+void ActorCmd_UpdatePlayerSightAccuracy(scr_entref_t entref)
 {
     actor_s *self; // r31
     sentient_s *enemy; // r3
@@ -232,7 +232,7 @@ void __cdecl ActorCmd_UpdatePlayerSightAccuracy(scr_entref_t entref)
     self->playerSightAccuracy = 1.0;
 }
 
-void __cdecl ActorCmd_FindCoverNode(scr_entref_t entref)
+void ActorCmd_FindCoverNode(scr_entref_t entref)
 {
     actor_s *v1; // r3
 
@@ -240,7 +240,7 @@ void __cdecl ActorCmd_FindCoverNode(scr_entref_t entref)
     Actor_Cover_FindCoverNode(v1);
 }
 
-void __cdecl ActorCmd_FindBestCoverNode(scr_entref_t entref)
+void ActorCmd_FindBestCoverNode(scr_entref_t entref)
 {
     actor_s *v1; // r3
     pathnode_t *BestCover; // r3
@@ -251,7 +251,7 @@ void __cdecl ActorCmd_FindBestCoverNode(scr_entref_t entref)
         Scr_AddPathnode(BestCover);
 }
 
-void __cdecl ActorCmd_GetCoverNode(scr_entref_t entref)
+void ActorCmd_GetCoverNode(scr_entref_t entref)
 {
     actor_s *v1; // r3
     pathnode_t *CoverNode; // r3
@@ -262,7 +262,7 @@ void __cdecl ActorCmd_GetCoverNode(scr_entref_t entref)
         Scr_AddPathnode(CoverNode);
 }
 
-void __cdecl ActorCmd_UseCoverNode(scr_entref_t entref)
+void ActorCmd_UseCoverNode(scr_entref_t entref)
 {
     actor_s *v1; // r31
     pathnode_t *Pathnode; // r3
@@ -278,7 +278,7 @@ void __cdecl ActorCmd_UseCoverNode(scr_entref_t entref)
     Scr_AddBool(v3);
 }
 
-void __cdecl ActorCmd_ReacquireStep(scr_entref_t entref)
+void ActorCmd_ReacquireStep(scr_entref_t entref)
 {
     actor_s *v1; // r31
     double Float; // fp1
@@ -290,7 +290,7 @@ void __cdecl ActorCmd_ReacquireStep(scr_entref_t entref)
     Scr_AddBool(v3);
 }
 
-void __cdecl ActorCmd_FindReacquireNode(scr_entref_t entref)
+void ActorCmd_FindReacquireNode(scr_entref_t entref)
 {
     actor_s *v1; // r3
 
@@ -298,7 +298,7 @@ void __cdecl ActorCmd_FindReacquireNode(scr_entref_t entref)
     Actor_Exposed_FindReacquireNode(v1);
 }
 
-void __cdecl ActorCmd_GetReacquireNode(scr_entref_t entref)
+void ActorCmd_GetReacquireNode(scr_entref_t entref)
 {
     actor_s *v1; // r3
     pathnode_t *ReacquireNode; // r3
@@ -309,7 +309,7 @@ void __cdecl ActorCmd_GetReacquireNode(scr_entref_t entref)
         Scr_AddPathnode(ReacquireNode);
 }
 
-void __cdecl ActorCmd_UseReacquireNode(scr_entref_t entref)
+void ActorCmd_UseReacquireNode(scr_entref_t entref)
 {
     actor_s *v1; // r31
     pathnode_t *Pathnode; // r3
@@ -323,7 +323,7 @@ void __cdecl ActorCmd_UseReacquireNode(scr_entref_t entref)
     Scr_AddBool(v3);
 }
 
-void __cdecl ActorCmd_FindReacquireDirectPath(scr_entref_t entref)
+void ActorCmd_FindReacquireDirectPath(scr_entref_t entref)
 {
     actor_s *v1; // r30
     bool v2; // r31
@@ -335,7 +335,7 @@ void __cdecl ActorCmd_FindReacquireDirectPath(scr_entref_t entref)
     Actor_Exposed_FindReacquireDirectPath(v1, v2);
 }
 
-void __cdecl ActorCmd_FindReacquireProximatePath(scr_entref_t entref)
+void ActorCmd_FindReacquireProximatePath(scr_entref_t entref)
 {
     actor_s *v1; // r30
     char v2; // r31
@@ -347,7 +347,7 @@ void __cdecl ActorCmd_FindReacquireProximatePath(scr_entref_t entref)
     Actor_Exposed_FindReacquireProximatePath(v1, v2);
 }
 
-void __cdecl ActorCmd_TrimPathToAttack(scr_entref_t entref)
+void ActorCmd_TrimPathToAttack(scr_entref_t entref)
 {
     actor_s *v1; // r31
     int v2; // r3
@@ -359,7 +359,7 @@ void __cdecl ActorCmd_TrimPathToAttack(scr_entref_t entref)
     Scr_AddBool(v2);
 }
 
-void __cdecl ActorCmd_ReacquireMove(scr_entref_t entref)
+void ActorCmd_ReacquireMove(scr_entref_t entref)
 {
     actor_s *v1; // r31
     unsigned __int8 started; // r3
@@ -371,7 +371,7 @@ void __cdecl ActorCmd_ReacquireMove(scr_entref_t entref)
     Scr_AddBool(started);
 }
 
-void __cdecl ActorCmd_FlagEnemyUnattackable(scr_entref_t entref)
+void ActorCmd_FlagEnemyUnattackable(scr_entref_t entref)
 {
     actor_s *v1; // r3
 
@@ -379,7 +379,7 @@ void __cdecl ActorCmd_FlagEnemyUnattackable(scr_entref_t entref)
     Actor_FlagEnemyUnattackable(v1);
 }
 
-void __cdecl ActorCmd_SetAimAnims(scr_entref_t entref)
+void ActorCmd_SetAimAnims(scr_entref_t entref)
 {
     actor_s *v1; // r31
     XAnimTree_s *ActorAnimTree; // r30
@@ -394,7 +394,7 @@ void __cdecl ActorCmd_SetAimAnims(scr_entref_t entref)
     v1->animSets.shootHigh = Scr_GetAnim(5, ActorAnimTree).index;
 }
 
-void __cdecl ActorCmd_AimAtPos(scr_entref_t entref)
+void ActorCmd_AimAtPos(scr_entref_t entref)
 {
     actor_s *v1; // r31
     double v2; // fp30
@@ -467,7 +467,7 @@ void __cdecl ActorCmd_AimAtPos(scr_entref_t entref)
     Scr_AddFloat(0.1f);
 }
 
-void __cdecl ActorCmd_EnterProne(scr_entref_t entref)
+void ActorCmd_EnterProne(scr_entref_t entref)
 {
     actor_s *v1; // r3
     actor_s *v2; // r31
@@ -486,7 +486,7 @@ void __cdecl ActorCmd_EnterProne(scr_entref_t entref)
     G_ActorEnterProne(v2, v3);
 }
 
-void __cdecl ActorCmd_ExitProne(scr_entref_t entref)
+void ActorCmd_ExitProne(scr_entref_t entref)
 {
     actor_s *v1; // r31
     int v2; // [sp+50h] [-20h]
@@ -496,7 +496,7 @@ void __cdecl ActorCmd_ExitProne(scr_entref_t entref)
     G_ActorExitProne(v1, v2);
 }
 
-void __cdecl ActorCmd_SetProneAnimNodes(scr_entref_t entref)
+void ActorCmd_SetProneAnimNodes(scr_entref_t entref)
 {
     float downAng; // fp29
     float upAng; // fp31
@@ -526,7 +526,7 @@ void __cdecl ActorCmd_SetProneAnimNodes(scr_entref_t entref)
     v4->animSets.animProneHigh = Scr_GetAnim(4, ActorAnimTree).index;
 }
 
-void __cdecl ActorCmd_UpdateProne(scr_entref_t entref)
+void ActorCmd_UpdateProne(scr_entref_t entref)
 {
     actor_s *v1; // r31
     XAnimTree_s *ActorAnimTree; // r30
@@ -555,7 +555,7 @@ void __cdecl ActorCmd_UpdateProne(scr_entref_t entref)
     }
 }
 
-void __cdecl ActorCmd_ClearPitchOrient(scr_entref_t entref)
+void ActorCmd_ClearPitchOrient(scr_entref_t entref)
 {
     actor_s *v1; // r3
 
@@ -564,7 +564,7 @@ void __cdecl ActorCmd_ClearPitchOrient(scr_entref_t entref)
     v1->ProneInfo.orientPitch = 0;
 }
 
-void __cdecl ActorCmd_SetLookAtAnimNodes(scr_entref_t entref)
+void ActorCmd_SetLookAtAnimNodes(scr_entref_t entref)
 {
     actor_s *v1; // r30
     XAnimTree_s *ActorAnimTree; // r31
@@ -583,7 +583,7 @@ void __cdecl ActorCmd_SetLookAtAnimNodes(scr_entref_t entref)
     Actor_SetLookAtAnimNodes(v1, Anim.index, v7.index, v6.index);
 }
 
-void __cdecl ActorCmd_SetLookAt(scr_entref_t entref)
+void ActorCmd_SetLookAt(scr_entref_t entref)
 {
     double Float; // fp31
     actor_s *v2; // r31
@@ -599,7 +599,7 @@ void __cdecl ActorCmd_SetLookAt(scr_entref_t entref)
     Actor_SetLookAt(v2, v3, Float);
 }
 
-void __cdecl ActorCmd_SetLookAtYawLimits(scr_entref_t entref)
+void ActorCmd_SetLookAtYawLimits(scr_entref_t entref)
 {
     actor_s *v1; // r31
     double Float; // fp31
@@ -613,7 +613,7 @@ void __cdecl ActorCmd_SetLookAtYawLimits(scr_entref_t entref)
     Actor_SetLookAtYawLimits(v1, v4, v3, Float);
 }
 
-void __cdecl ActorCmd_StopLookAt(scr_entref_t entref)
+void ActorCmd_StopLookAt(scr_entref_t entref)
 {
     double Float; // fp31
     actor_s *v2; // r31
@@ -625,7 +625,7 @@ void __cdecl ActorCmd_StopLookAt(scr_entref_t entref)
     Actor_StopLookAt(v2, Float);
 }
 
-void __cdecl ActorCmd_CanShoot(scr_entref_t entref)
+void ActorCmd_CanShoot(scr_entref_t entref)
 {
     actor_s *self; // r31
     bool CanShootFrom; // r31
@@ -659,7 +659,7 @@ void __cdecl ActorCmd_CanShoot(scr_entref_t entref)
     Scr_AddInt(CanShootFrom);
 }
 
-void __cdecl ActorCmd_CanSee(scr_entref_t entref)
+void ActorCmd_CanSee(scr_entref_t entref)
 {
     actor_s *v1; // r30
     gentity_s *pOther; // r31
@@ -690,7 +690,7 @@ void __cdecl ActorCmd_CanSee(scr_entref_t entref)
     Scr_AddBool(CanSeeSentient);
 }
 
-void __cdecl ActorCmd_DropWeapon(scr_entref_t entref)
+void ActorCmd_DropWeapon(scr_entref_t entref)
 {
     actor_s *v1; // r29
     const char *String; // r31
@@ -787,7 +787,7 @@ void __cdecl ActorCmd_DropWeapon(scr_entref_t entref)
     }
 }
 
-void __cdecl DEBUGMAYMOVE(float *vec1, float *vec2, const float *color, DEBUGMAYMOVE_LIFT_ENUM liftBehavior)
+void DEBUGMAYMOVE(float *vec1, float *vec2, const float *color, DEBUGMAYMOVE_LIFT_ENUM liftBehavior)
 {
     double v4; // fp13
     double v5; // fp0
@@ -817,7 +817,7 @@ void __cdecl DEBUGMAYMOVE(float *vec1, float *vec2, const float *color, DEBUGMAY
     }
 }
 
-int __cdecl MayMove_CheckFriendlyFire(actor_s *self, float *start, const float *end)
+int MayMove_CheckFriendlyFire(actor_s *self, float *start, const float *end)
 {
     double v6; // fp1
     double v7; // fp0
@@ -874,7 +874,7 @@ int __cdecl MayMove_CheckFriendlyFire(actor_s *self, float *start, const float *
     return 1;
 }
 
-int __cdecl MayMove_TraceCheck(actor_s *self, float *vStart, float *vEnd, int allowStartSolid, int checkDrop)
+int MayMove_TraceCheck(actor_s *self, float *vStart, float *vEnd, int allowStartSolid, int checkDrop)
 {
     trace_t results; // [sp+A0h] [-70h] BYREF
     float vPointLow[3];
@@ -947,7 +947,7 @@ int __cdecl MayMove_TraceCheck(actor_s *self, float *vStart, float *vEnd, int al
     }
 }
 
-void __cdecl ActorCmd_MayMoveToPoint(scr_entref_t entref)
+void ActorCmd_MayMoveToPoint(scr_entref_t entref)
 {
     actor_s *v1; // r31
     int v2; // r30
@@ -995,7 +995,7 @@ LABEL_11:
     Scr_AddInt(v5);
 }
 
-void __cdecl ActorCmd_MayMoveFromPointToPoint(scr_entref_t entref)
+void ActorCmd_MayMoveFromPointToPoint(scr_entref_t entref)
 {
     actor_s *v1; // r31
     int v2; // r7
@@ -1034,7 +1034,7 @@ LABEL_8:
     Scr_AddInt(v3);
 }
 
-void __cdecl ActorCmd_Teleport(scr_entref_t entref)
+void ActorCmd_Teleport(scr_entref_t entref)
 {
     actor_s *self; // r31
     float *angles; // r25
@@ -1128,7 +1128,7 @@ LABEL_16:
     Scr_AddInt(1);
 }
 
-void __cdecl ActorCmd_WithinApproxPathDist(scr_entref_t entref)
+void ActorCmd_WithinApproxPathDist(scr_entref_t entref)
 {
     actor_s *v1; // r31
     double Float; // fp1
@@ -1139,7 +1139,7 @@ void __cdecl ActorCmd_WithinApproxPathDist(scr_entref_t entref)
     Scr_AddFloat((float)Path_WithinApproxDist(&v1->Path, Float));
 }
 
-void __cdecl ActorCmd_IsPathDirect(scr_entref_t entref)
+void ActorCmd_IsPathDirect(scr_entref_t entref)
 {
     actor_s *v1; // r31
     int v2; // r3
@@ -1152,7 +1152,7 @@ void __cdecl ActorCmd_IsPathDirect(scr_entref_t entref)
     Scr_AddInt(v2);
 }
 
-void __cdecl ActorCmd_AllowedStances(scr_entref_t entref)
+void ActorCmd_AllowedStances(scr_entref_t entref)
 {
     actor_s *v1; // r29
     int NumParam; // r27
@@ -1195,7 +1195,7 @@ void __cdecl ActorCmd_AllowedStances(scr_entref_t entref)
     }
 }
 
-void __cdecl ActorCmd_IsStanceAllowed(scr_entref_t entref)
+void ActorCmd_IsStanceAllowed(scr_entref_t entref)
 {
     actor_s *v1; // r31
     unsigned int ConstString; // r3
@@ -1254,7 +1254,7 @@ LABEL_14:
     Scr_AddInt((eAllowedStances & v3) != 0);
 }
 
-void __cdecl ActorCmd_IsSuppressionWaiting(scr_entref_t entref)
+void ActorCmd_IsSuppressionWaiting(scr_entref_t entref)
 {
     actor_s *v1; // r3
     int IsSuppressionWaiting; // r3
@@ -1264,7 +1264,7 @@ void __cdecl ActorCmd_IsSuppressionWaiting(scr_entref_t entref)
     Scr_AddInt(IsSuppressionWaiting);
 }
 
-void __cdecl ActorCmd_IsSuppressed(scr_entref_t entref)
+void ActorCmd_IsSuppressed(scr_entref_t entref)
 {
     actor_s *v1; // r3
     int IsSuppressed; // r3
@@ -1274,7 +1274,7 @@ void __cdecl ActorCmd_IsSuppressed(scr_entref_t entref)
     Scr_AddInt(IsSuppressed);
 }
 
-void __cdecl ActorCmd_IsMoveSuppressed(scr_entref_t entref)
+void ActorCmd_IsMoveSuppressed(scr_entref_t entref)
 {
     actor_s *v1; // r3
     int IsMoveSuppressed; // r3
@@ -1284,7 +1284,7 @@ void __cdecl ActorCmd_IsMoveSuppressed(scr_entref_t entref)
     Scr_AddInt(IsMoveSuppressed);
 }
 
-void __cdecl ActorCmd_CheckGrenadeThrow(scr_entref_t entref)
+void ActorCmd_CheckGrenadeThrow(scr_entref_t entref)
 {
     actor_s *v1; // r31
     unsigned int ConstString; // r29
@@ -1316,7 +1316,7 @@ void __cdecl ActorCmd_CheckGrenadeThrow(scr_entref_t entref)
     }
 }
 
-void __cdecl ActorCmd_CheckGrenadeThrowPos(scr_entref_t entref)
+void ActorCmd_CheckGrenadeThrowPos(scr_entref_t entref)
 {
     actor_s *self; // r31
     unsigned int ConstString; // r27
@@ -1396,7 +1396,7 @@ void __cdecl ActorCmd_CheckGrenadeThrowPos(scr_entref_t entref)
     }
 }
 
-void __cdecl ActorCmd_ThrowGrenade(scr_entref_t entref)
+void ActorCmd_ThrowGrenade(scr_entref_t entref)
 {
     actor_s *self; // r31
     const DObj_s *ServerDObj; // r3
@@ -1489,7 +1489,7 @@ void __cdecl ActorCmd_ThrowGrenade(scr_entref_t entref)
     Scr_SetString(&self->GrenadeTossMethod, 0);
 }
 
-bool __cdecl Actor_CheckGrenadeLaunch(actor_s *self, const float *vStartPos, const float *vOffset)
+bool Actor_CheckGrenadeLaunch(actor_s *self, const float *vStartPos, const float *vOffset)
 {
     const char *v6; // r3
     __int64 v7; // r11
@@ -1521,7 +1521,7 @@ bool __cdecl Actor_CheckGrenadeLaunch(actor_s *self, const float *vStartPos, con
     return result;
 }
 
-void __cdecl ActorCmd_CheckGrenadeLaunch(scr_entref_t entref)
+void ActorCmd_CheckGrenadeLaunch(scr_entref_t entref)
 {
     actor_s *v1; // r31
     const sentient_s *TargetSentient; // r3
@@ -1552,7 +1552,7 @@ void __cdecl ActorCmd_CheckGrenadeLaunch(scr_entref_t entref)
     }
 }
 
-void __cdecl ActorCmd_CheckGrenadeLaunchPos(scr_entref_t entref)
+void ActorCmd_CheckGrenadeLaunchPos(scr_entref_t entref)
 {
     actor_s *v1; // r31
     float v2[4]; // [sp+50h] [-30h] BYREF
@@ -1570,7 +1570,7 @@ void __cdecl ActorCmd_CheckGrenadeLaunchPos(scr_entref_t entref)
         Scr_AddVector(v1->vGrenadeTossVel);
 }
 
-void __cdecl ActorCmd_FireGrenadeLauncher(scr_entref_t entref)
+void ActorCmd_FireGrenadeLauncher(scr_entref_t entref)
 {
     actor_s *v1; // r3
     actor_s *v2; // r31
@@ -1615,7 +1615,7 @@ void __cdecl ActorCmd_FireGrenadeLauncher(scr_entref_t entref)
     v2->bGrenadeTossValid = 0;
 }
 
-void __cdecl ActorCmd_PickUpGrenade(scr_entref_t entref)
+void ActorCmd_PickUpGrenade(scr_entref_t entref)
 {
     actor_s *v1; // r31
 
@@ -1624,7 +1624,7 @@ void __cdecl ActorCmd_PickUpGrenade(scr_entref_t entref)
         Actor_Grenade_Attach(v1);
 }
 
-void __cdecl ActorCmd_UseTurret(scr_entref_t entref)
+void ActorCmd_UseTurret(scr_entref_t entref)
 {
     actor_s *v1; // r30
     gentity_s *Entity; // r31
@@ -1638,7 +1638,7 @@ void __cdecl ActorCmd_UseTurret(scr_entref_t entref)
     Scr_AddBool(v3);
 }
 
-void __cdecl ActorCmd_StopUseTurret(scr_entref_t entref)
+void ActorCmd_StopUseTurret(scr_entref_t entref)
 {
     actor_s *v1; // r3
 
@@ -1646,7 +1646,7 @@ void __cdecl ActorCmd_StopUseTurret(scr_entref_t entref)
     Actor_StopUseTurret(v1);
 }
 
-void __cdecl ActorCmd_CanUseTurret(scr_entref_t entref)
+void ActorCmd_CanUseTurret(scr_entref_t entref)
 {
     actor_s *v1; // r30
     gentity_s *Entity; // r31
@@ -1660,7 +1660,7 @@ void __cdecl ActorCmd_CanUseTurret(scr_entref_t entref)
     Scr_AddBool(v3);
 }
 
-void __cdecl ActorCmd_TraverseMode(scr_entref_t entref)
+void ActorCmd_TraverseMode(scr_entref_t entref)
 {
     actor_s *v1; // r31
     unsigned int ConstString; // r3
@@ -1685,7 +1685,7 @@ void __cdecl ActorCmd_TraverseMode(scr_entref_t entref)
     }
 }
 
-void __cdecl ActorCmd_AnimMode(scr_entref_t entref)
+void ActorCmd_AnimMode(scr_entref_t entref)
 {
     actor_s *v1; // r28
     bool v2; // r29
@@ -1739,7 +1739,7 @@ void __cdecl ActorCmd_AnimMode(scr_entref_t entref)
     }
 }
 
-void __cdecl ActorCmd_OrientMode(scr_entref_t entref)
+void ActorCmd_OrientMode(scr_entref_t entref)
 {
     actor_s *v1; // r31
     unsigned int ConstString; // r3
@@ -1817,7 +1817,7 @@ void __cdecl ActorCmd_OrientMode(scr_entref_t entref)
     }
 }
 
-void __cdecl ActorCmd_GetMotionAngle(scr_entref_t entref)
+void ActorCmd_GetMotionAngle(scr_entref_t entref)
 {
     actor_s *v1; // r31
     double v2; // fp1
@@ -1852,7 +1852,7 @@ void __cdecl ActorCmd_GetMotionAngle(scr_entref_t entref)
     Scr_AddFloat(v6);
 }
 
-void __cdecl ActorCmd_GetAnglesToLikelyEnemyPath(scr_entref_t entref)
+void ActorCmd_GetAnglesToLikelyEnemyPath(scr_entref_t entref)
 {
     actor_s *v1; // r31
 
@@ -1861,7 +1861,7 @@ void __cdecl ActorCmd_GetAnglesToLikelyEnemyPath(scr_entref_t entref)
         Scr_AddVector(v1->anglesToLikelyEnemyPath);
 }
 
-void __cdecl ActorCmd_SetTurretAnim(scr_entref_t entref)
+void ActorCmd_SetTurretAnim(scr_entref_t entref)
 {
     actor_s *v1; // r31
     XAnimTree_s *ActorAnimTree; // r3
@@ -1873,7 +1873,7 @@ void __cdecl ActorCmd_SetTurretAnim(scr_entref_t entref)
     v1->turretAnimSet = 1;
 }
 
-void __cdecl ActorCmd_GetTurret(scr_entref_t entref)
+void ActorCmd_GetTurret(scr_entref_t entref)
 {
     actor_s *v1; // r31
 
@@ -1886,7 +1886,7 @@ void __cdecl ActorCmd_GetTurret(scr_entref_t entref)
     }
 }
 
-void __cdecl ActorCmd_BeginPrediction(scr_entref_t entref)
+void ActorCmd_BeginPrediction(scr_entref_t entref)
 {
     actor_s *v1; // r31
     int actorPredictDepth; // r11
@@ -1964,7 +1964,7 @@ void __cdecl ActorCmd_BeginPrediction(scr_entref_t entref)
     v12->vLookUp[2] = v1->vLookUp[2];
 }
 
-void __cdecl ActorCmd_EndPrediction(scr_entref_t entref)
+void ActorCmd_EndPrediction(scr_entref_t entref)
 {
     actor_s *v1; // r31
     XAnimTree_s *ActorAnimTree; // r3
@@ -2032,7 +2032,7 @@ void __cdecl ActorCmd_EndPrediction(scr_entref_t entref)
     v1->vLookUp[2] = v10->vLookUp[2];
 }
 
-void __cdecl ActorCmd_LerpPosition(scr_entref_t entref)
+void ActorCmd_LerpPosition(scr_entref_t entref)
 {
     actor_s *v1; // r31
     float *p_eType; // r30
@@ -2064,7 +2064,7 @@ void __cdecl ActorCmd_LerpPosition(scr_entref_t entref)
     v1->Physics.groundEntNum = ENTITYNUM_NONE;
 }
 
-void __cdecl ActorCmd_PredictOriginAndAngles(scr_entref_t entref)
+void ActorCmd_PredictOriginAndAngles(scr_entref_t entref)
 {
     actor_s *self; // r29
     gentity_s *ent; // r28
@@ -2091,7 +2091,7 @@ void __cdecl ActorCmd_PredictOriginAndAngles(scr_entref_t entref)
     Actor_PredictOriginAndAngles(self);
 }
 
-void __cdecl ActorCmd_PredictAnim(scr_entref_t entref)
+void ActorCmd_PredictAnim(scr_entref_t entref)
 {
     actor_s *v1; // r3
 
@@ -2099,7 +2099,7 @@ void __cdecl ActorCmd_PredictAnim(scr_entref_t entref)
     Actor_PredictAnim(v1);
 }
 
-void __cdecl Actor_GetEntType(int entnum)
+void Actor_GetEntType(int entnum)
 {
     unsigned __int16 obstacle; // r11
 
@@ -2117,7 +2117,7 @@ void __cdecl Actor_GetEntType(int entnum)
     }
 }
 
-void __cdecl ActorCmd_GetHitEntType(scr_entref_t entref)
+void ActorCmd_GetHitEntType(scr_entref_t entref)
 {
     int iHitEntnum; // r11
     unsigned __int16 obstacle; // r11
@@ -2137,7 +2137,7 @@ void __cdecl ActorCmd_GetHitEntType(scr_entref_t entref)
     }
 }
 
-void __cdecl ActorCmd_GetHitYaw(scr_entref_t entref)
+void ActorCmd_GetHitYaw(scr_entref_t entref)
 {
     actor_s *v1; // r31
     double v2; // fp1
@@ -2153,7 +2153,7 @@ void __cdecl ActorCmd_GetHitYaw(scr_entref_t entref)
     Scr_AddFloat(v2);
 }
 
-void __cdecl ActorCmd_GetGroundEntType(scr_entref_t entref)
+void ActorCmd_GetGroundEntType(scr_entref_t entref)
 {
     int groundEntNum; // r11
     unsigned __int16 obstacle; // r11
@@ -2173,7 +2173,7 @@ void __cdecl ActorCmd_GetGroundEntType(scr_entref_t entref)
     }
 }
 
-void __cdecl ActorCmd_IsDeflected(scr_entref_t entref)
+void ActorCmd_IsDeflected(scr_entref_t entref)
 {
     actor_s *v1; // r3
 
@@ -2181,7 +2181,7 @@ void __cdecl ActorCmd_IsDeflected(scr_entref_t entref)
     Scr_AddInt(v1->Physics.bDeflected);
 }
 
-void __cdecl ActorCmd_trackScriptState(scr_entref_t entref)
+void ActorCmd_trackScriptState(scr_entref_t entref)
 {
     actor_s *v1; // r31
     unsigned int ConstString; // r3
@@ -2213,12 +2213,12 @@ void __cdecl ActorCmd_trackScriptState(scr_entref_t entref)
 }
 
 // attributes: thunk
-void __cdecl ActorCmd_DumpHistory(scr_entref_t entref)
+void ActorCmd_DumpHistory(scr_entref_t entref)
 {
     Actor_Get(entref);
 }
 
-void __cdecl ScrCmd_animcustom(scr_entref_t entref)
+void ScrCmd_animcustom(scr_entref_t entref)
 {
     actor_s *v1; // r31
     int Func; // r30
@@ -2233,7 +2233,7 @@ void __cdecl ScrCmd_animcustom(scr_entref_t entref)
     }
 }
 
-void __cdecl ScrCmd_CanAttackEnemyNode(scr_entref_t entref)
+void ScrCmd_CanAttackEnemyNode(scr_entref_t entref)
 {
     actor_s *v1; // r31
     const pathnode_t *v2; // r30
@@ -2256,7 +2256,7 @@ void __cdecl ScrCmd_CanAttackEnemyNode(scr_entref_t entref)
     Scr_AddInt(v5);
 }
 
-void __cdecl ScrCmd_GetNegotiationStartNode(scr_entref_t entref)
+void ScrCmd_GetNegotiationStartNode(scr_entref_t entref)
 {
     actor_s *v1; // r31
     pathnode_t *v2; // r3
@@ -2283,7 +2283,7 @@ void __cdecl ScrCmd_GetNegotiationStartNode(scr_entref_t entref)
     }
 }
 
-void __cdecl ScrCmd_GetNegotiationEndNode(scr_entref_t entref)
+void ScrCmd_GetNegotiationEndNode(scr_entref_t entref)
 {
     actor_s *v1; // r31
     pathnode_t *v2; // r3
@@ -2310,7 +2310,7 @@ void __cdecl ScrCmd_GetNegotiationEndNode(scr_entref_t entref)
     }
 }
 
-void __cdecl ActorCmd_CheckProne(scr_entref_t entref)
+void ActorCmd_CheckProne(scr_entref_t entref)
 {
     double yaw; // fp31
     unsigned int isProne; // r3
@@ -2326,7 +2326,7 @@ void __cdecl ActorCmd_CheckProne(scr_entref_t entref)
     Scr_AddBool(canGoProne);
 }
 
-void __cdecl ActorCmd_PushPlayer(scr_entref_t entref)
+void ActorCmd_PushPlayer(scr_entref_t entref)
 {
     actor_s *v1; // r31
     int Int; // r3
@@ -2343,7 +2343,7 @@ void __cdecl ActorCmd_PushPlayer(scr_entref_t entref)
     v1->Physics.iTraceMask = v4;
 }
 
-void __cdecl Actor_SetScriptGoalVolume(actor_s *self, gentity_s *volume)
+void Actor_SetScriptGoalVolume(actor_s *self, gentity_s *volume)
 {
     iassert(volume);
     iassert(volume->r.inuse);
@@ -2353,7 +2353,7 @@ void __cdecl Actor_SetScriptGoalVolume(actor_s *self, gentity_s *volume)
     self->scriptGoal.volume = volume;
 }
 
-void __cdecl ActorCmd_SetGoalNode(scr_entref_t entref)
+void ActorCmd_SetGoalNode(scr_entref_t entref)
 {
     actor_s *self; // r30
     pathnode_t *Pathnode; // r3
@@ -2377,7 +2377,7 @@ void __cdecl ActorCmd_SetGoalNode(scr_entref_t entref)
     Actor_SetScriptGoalPos(self, Pathnode->constant.vOrigin, Pathnode);
 }
 
-void __cdecl Actor_SetScriptGoalEntity(actor_s *self, gentity_s *pGoalEnt)
+void Actor_SetScriptGoalEntity(actor_s *self, gentity_s *pGoalEnt)
 {
     iassert(pGoalEnt);
     iassert(pGoalEnt->r.inuse);
@@ -2387,7 +2387,7 @@ void __cdecl Actor_SetScriptGoalEntity(actor_s *self, gentity_s *pGoalEnt)
     self->scriptGoal.volume = 0;
 }
 
-void __cdecl ActorCmd_SetGoalPos(scr_entref_t entref)
+void ActorCmd_SetGoalPos(scr_entref_t entref)
 {
     actor_s *v1; // r31
     float v2[4]; // [sp+50h] [-20h] BYREF
@@ -2397,7 +2397,7 @@ void __cdecl ActorCmd_SetGoalPos(scr_entref_t entref)
     Actor_SetScriptGoalPos(v1, v2, 0);
 }
 
-void __cdecl ActorCmd_SetGoalEntity(scr_entref_t entref)
+void ActorCmd_SetGoalEntity(scr_entref_t entref)
 {
     actor_s *v1; // r31
     gentity_s *Entity; // r30
@@ -2408,7 +2408,7 @@ void __cdecl ActorCmd_SetGoalEntity(scr_entref_t entref)
     Actor_SetScriptGoalEntity(v1, Entity);
 }
 
-void __cdecl ActorCmd_SetGoalVolume(scr_entref_t entref)
+void ActorCmd_SetGoalVolume(scr_entref_t entref)
 {
     actor_s *self; // r31
     gentity_s *Entity; // r30
@@ -2423,7 +2423,7 @@ void __cdecl ActorCmd_SetGoalVolume(scr_entref_t entref)
     Actor_SetScriptGoalVolume(self, Entity);
 }
 
-void __cdecl ActorCmd_GetGoalVolume(scr_entref_t entref)
+void ActorCmd_GetGoalVolume(scr_entref_t entref)
 {
     gentity_s *volume; // r3
 
@@ -2432,12 +2432,12 @@ void __cdecl ActorCmd_GetGoalVolume(scr_entref_t entref)
         Scr_AddEntity(volume);
 }
 
-void __cdecl ActorCmd_ClearGoalVolume(scr_entref_t entref)
+void ActorCmd_ClearGoalVolume(scr_entref_t entref)
 {
     Actor_Get(entref)->scriptGoal.volume = 0;
 }
 
-void __cdecl ActorCmd_SetFixedNodeSafeVolume(scr_entref_t entref)
+void ActorCmd_SetFixedNodeSafeVolume(scr_entref_t entref)
 {
     actor_s *self; // r30
     gentity_s *Entity; // r31
@@ -2448,7 +2448,7 @@ void __cdecl ActorCmd_SetFixedNodeSafeVolume(scr_entref_t entref)
     self->fixedNodeSafeVolumeRadiusSq = RadiusFromBounds2DSq(Entity->r.mins, Entity->r.maxs);
 }
 
-void __cdecl ActorCmd_GetFixedNodeSafeVolume(scr_entref_t entref)
+void ActorCmd_GetFixedNodeSafeVolume(scr_entref_t entref)
 {
     EntHandle *p_fixedNodeSafeVolume; // r31
 
@@ -2459,7 +2459,7 @@ void __cdecl ActorCmd_GetFixedNodeSafeVolume(scr_entref_t entref)
     }
 }
 
-void __cdecl ActorCmd_ClearFixedNodeSafeVolume(scr_entref_t entref)
+void ActorCmd_ClearFixedNodeSafeVolume(scr_entref_t entref)
 {
     actor_s *self;
 
@@ -2468,7 +2468,7 @@ void __cdecl ActorCmd_ClearFixedNodeSafeVolume(scr_entref_t entref)
     self->fixedNodeSafeVolumeRadiusSq = 0.0f;
 }
 
-void __cdecl ActorCmd_IsInGoal(scr_entref_t entref)
+void ActorCmd_IsInGoal(scr_entref_t entref)
 {
     actor_s *v1; // r31
     unsigned __int8 v2; // r3
@@ -2487,7 +2487,7 @@ void __cdecl ActorCmd_IsInGoal(scr_entref_t entref)
     }
 }
 
-void __cdecl ActorCmd_SetOverrideRunToPos(scr_entref_t entref)
+void ActorCmd_SetOverrideRunToPos(scr_entref_t entref)
 {
     actor_s *self; // r31
     float pos[3];
@@ -2511,7 +2511,7 @@ void __cdecl ActorCmd_SetOverrideRunToPos(scr_entref_t entref)
     self->arrivalInfo.animscriptOverrideRunToPos[2] = pos[2];
 }
 
-void __cdecl ActorCmd_NearNode(scr_entref_t entref)
+void ActorCmd_NearNode(scr_entref_t entref)
 {
     actor_s *v1; // r31
     const pathnode_t *Pathnode; // r3
@@ -2523,7 +2523,7 @@ void __cdecl ActorCmd_NearNode(scr_entref_t entref)
     Scr_AddBool(v3);
 }
 
-void __cdecl ActorCmd_ClearEnemy(scr_entref_t entref)
+void ActorCmd_ClearEnemy(scr_entref_t entref)
 {
     actor_s *self; // r31
 
@@ -2545,7 +2545,7 @@ void __cdecl ActorCmd_ClearEnemy(scr_entref_t entref)
 }
 
 static const float AI_ENTITY_TARGET_MAX_THREAT = 1.0;
-void __cdecl ActorCmd_SetEntityTarget(scr_entref_t entref)
+void ActorCmd_SetEntityTarget(scr_entref_t entref)
 {
     actor_s *self; // r29
     gentity_s *targetEnt; // r28
@@ -2571,7 +2571,7 @@ void __cdecl ActorCmd_SetEntityTarget(scr_entref_t entref)
         Sentient_SetEnemy(self->sentient, targetEnt, 1);
 }
 
-void __cdecl ActorCmd_ClearEntityTarget(scr_entref_t entref)
+void ActorCmd_ClearEntityTarget(scr_entref_t entref)
 {
     actor_s *self; // r31
 
@@ -2584,7 +2584,7 @@ void __cdecl ActorCmd_ClearEntityTarget(scr_entref_t entref)
     self->sentient->scriptTargetEnt.setEnt(NULL);
 }
 
-void __cdecl ActorCmd_SetPotentialThreat(scr_entref_t entref)
+void ActorCmd_SetPotentialThreat(scr_entref_t entref)
 {
     actor_s *v1; // r31
     double Float; // fp1
@@ -2596,7 +2596,7 @@ void __cdecl ActorCmd_SetPotentialThreat(scr_entref_t entref)
     Actor_SetPotentialThreat(&v1->potentialThreat, Float);
 }
 
-void __cdecl ActorCmd_ClearPotentialThreat(scr_entref_t entref)
+void ActorCmd_ClearPotentialThreat(scr_entref_t entref)
 {
     actor_s *v1; // r31
 
@@ -2608,7 +2608,7 @@ void __cdecl ActorCmd_ClearPotentialThreat(scr_entref_t entref)
 
 static const char *USAGEMSG = "Invalid call to setFlashBanged().";
 
-void __cdecl ActorCmd_SetFlashBanged(scr_entref_t entref)
+void ActorCmd_SetFlashBanged(scr_entref_t entref)
 {
     actor_s *v1; // r31
     double Float; // fp31
@@ -2633,7 +2633,7 @@ void __cdecl ActorCmd_SetFlashBanged(scr_entref_t entref)
 
 static const char *USAGEMSG_0 = "Invalid call to setFlashbangImmunity().";
 
-void __cdecl ActorCmd_SetFlashbangImmunity(scr_entref_t entref)
+void ActorCmd_SetFlashbangImmunity(scr_entref_t entref)
 {
     actor_s *v1; // r31
 
@@ -2644,7 +2644,7 @@ void __cdecl ActorCmd_SetFlashbangImmunity(scr_entref_t entref)
         Scr_Error(USAGEMSG_0);
 }
 
-void __cdecl ActorCmd_GetFlashBangedStrength(scr_entref_t entref)
+void ActorCmd_GetFlashBangedStrength(scr_entref_t entref)
 {
     actor_s *v1; // r3
 
@@ -2652,7 +2652,7 @@ void __cdecl ActorCmd_GetFlashBangedStrength(scr_entref_t entref)
     Scr_AddFloat(v1->flashBangedStrength);
 }
 
-void __cdecl ActorCmd_SetEngagementMinDist(scr_entref_t entref)
+void ActorCmd_SetEngagementMinDist(scr_entref_t entref)
 {
     actor_s *v1; // r31
     double Float; // fp2
@@ -2679,7 +2679,7 @@ void __cdecl ActorCmd_SetEngagementMinDist(scr_entref_t entref)
     }
 }
 
-void __cdecl ActorCmd_SetEngagementMaxDist(scr_entref_t entref)
+void ActorCmd_SetEngagementMaxDist(scr_entref_t entref)
 {
     actor_s *v1; // r31
     double Float; // fp2
@@ -2701,7 +2701,7 @@ void __cdecl ActorCmd_SetEngagementMaxDist(scr_entref_t entref)
     }
 }
 
-void __cdecl ActorCmd_IsKnownEnemyInRadius(scr_entref_t entref)
+void ActorCmd_IsKnownEnemyInRadius(scr_entref_t entref)
 {
     const actor_s *v1; // r31
     double Float; // fp1
@@ -2715,7 +2715,7 @@ void __cdecl ActorCmd_IsKnownEnemyInRadius(scr_entref_t entref)
     Scr_AddInt(v3);
 }
 
-void __cdecl ActorCmd_IsKnownEnemyInVolume(scr_entref_t entref)
+void ActorCmd_IsKnownEnemyInVolume(scr_entref_t entref)
 {
     const actor_s *v1; // r31
     const gentity_s *Entity; // r3
@@ -2727,7 +2727,7 @@ void __cdecl ActorCmd_IsKnownEnemyInVolume(scr_entref_t entref)
     Scr_AddInt(v3);
 }
 
-void __cdecl ActorCmd_SetTalkToSpecies(scr_entref_t entref)
+void ActorCmd_SetTalkToSpecies(scr_entref_t entref)
 {
     actor_s *self; // r26
     int speciesMask; // r30
@@ -2766,7 +2766,7 @@ void __cdecl ActorCmd_SetTalkToSpecies(scr_entref_t entref)
     }
 }
 
-void(__cdecl *__cdecl Actor_GetMethod(const char **pName))(scr_entref_t)
+void(*Actor_GetMethod(const char **pName))(scr_entref_t)
 {
     int v1; // r6
     unsigned int v2; // r5

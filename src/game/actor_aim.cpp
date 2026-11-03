@@ -40,13 +40,13 @@ AccuracyGraphBackup g_accuGraphBuf[2][128];
 char debugAccuracyStrings[8][32] = { 0 };
 int g_accuGraphTime[2][128]; // [bufferIndex][weapIndex] (dword_82C31FB0)
 
-void __cdecl TRACK_actor_aim()
+void TRACK_actor_aim()
 {
     track_static_alloc_internal(g_accuracyGraphs, 4096, "g_accuracyGraphs", 0);
     track_static_alloc_internal(g_accuGraphBuf, 0x10000, "g_accuGraphBuf", 0);
 }
 
-void __cdecl Actor_DrawDebugAccuracy(const float *pos, double scale, double rowHeight)
+void Actor_DrawDebugAccuracy(const float *pos, double scale, double rowHeight)
 {
     const float *v8; // r30
     char *v9; // r31
@@ -63,7 +63,7 @@ void __cdecl Actor_DrawDebugAccuracy(const float *pos, double scale, double rowH
     }
 }
 
-void __cdecl Actor_DebugAccuracyMsg(
+void Actor_DebugAccuracyMsg(
     unsigned int msgIndex,
     const char *msg,
     float accuracy,
@@ -87,7 +87,7 @@ void __cdecl Actor_DebugAccuracyMsg(
     debugAccuracyColors[msgIndex][3] = color[3];
 }
 
-float __cdecl Actor_GetAccuracyFraction(
+float Actor_GetAccuracyFraction(
     float dist,
     const WeaponDef *weapDef,
     WeapAccuracyType accuracyType)
@@ -118,7 +118,7 @@ float __cdecl Actor_GetAccuracyFraction(
     return GraphGetValueFromFraction(knotCount, knots, frac);
 }
 
-float __cdecl Actor_GetWeaponAccuracy(
+float Actor_GetWeaponAccuracy(
     const actor_s *self,
     const sentient_s *enemy,
     const WeaponDef *weapDef,
@@ -149,7 +149,7 @@ float __cdecl Actor_GetWeaponAccuracy(
     return accuracy;
 }
 
-float __cdecl Actor_GetPlayerStanceAccuracy(const actor_s *self, const sentient_s *enemy)
+float Actor_GetPlayerStanceAccuracy(const actor_s *self, const sentient_s *enemy)
 {
     iassert(self);
     iassert(enemy);
@@ -172,7 +172,7 @@ float __cdecl Actor_GetPlayerStanceAccuracy(const actor_s *self, const sentient_
     }
 }
 
-float __cdecl Actor_GetPlayerMovementAccuracy(const actor_s *self, const sentient_s *enemy)
+float Actor_GetPlayerMovementAccuracy(const actor_s *self, const sentient_s *enemy)
 {
     iassert(self);
     iassert(enemy);
@@ -215,7 +215,7 @@ float __cdecl Actor_GetPlayerMovementAccuracy(const actor_s *self, const sentien
     return 0.1f;
 }
 
-float __cdecl Actor_GetPlayerSightAccuracy(actor_s *self, const sentient_s *enemy)
+float Actor_GetPlayerSightAccuracy(actor_s *self, const sentient_s *enemy)
 {
     float accuracyFactor; // fp25
     float accuracy; // fp31
@@ -265,7 +265,7 @@ float __cdecl Actor_GetPlayerSightAccuracy(actor_s *self, const sentient_s *enem
     return 0.1f;
 }
 
-float __cdecl Actor_GetFinalAccuracy(actor_s *self, weaponParms *wp, double accuracyMod)
+float Actor_GetFinalAccuracy(actor_s *self, weaponParms *wp, double accuracyMod)
 {
     double accuracy; // fp1
     sentient_s *enemy; // r30
@@ -332,7 +332,7 @@ float __cdecl Actor_GetFinalAccuracy(actor_s *self, weaponParms *wp, double accu
     return dbg;
 }
 
-void __cdecl Actor_FillWeaponParms(actor_s *self, weaponParms *wp)
+void Actor_FillWeaponParms(actor_s *self, weaponParms *wp)
 {
     iassert(self);
     iassert(wp);
@@ -439,7 +439,7 @@ void Actor_HitTarget(const weaponParms *wp, const float *target, float *forward)
 }
 
 
-void __cdecl Actor_HitEnemy(actor_s *self, weaponParms *wp, double accuracy)
+void Actor_HitEnemy(actor_s *self, weaponParms *wp, double accuracy)
 {
     self->missCount = 0;
     self->hitCount = self->hitCount + 1;
@@ -451,7 +451,7 @@ void __cdecl Actor_HitEnemy(actor_s *self, weaponParms *wp, double accuracy)
 }
 
 static float outerRadius = 6969.0f;
-void __cdecl Actor_MissSentient(weaponParms *wp, sentient_s *enemy, float accuracy)
+void Actor_MissSentient(weaponParms *wp, sentient_s *enemy, float accuracy)
 {
     gentity_s *ent = enemy->ent;
     if (outerRadius == 6969.0f)
@@ -540,7 +540,7 @@ void __cdecl Actor_MissSentient(weaponParms *wp, sentient_s *enemy, float accura
 
 // some aislop
 static float outerRadius_0 = 6969.0f;
-void __cdecl Actor_MissTarget(const weaponParms *wp, const float *target, float *forward)
+void Actor_MissTarget(const weaponParms *wp, const float *target, float *forward)
 {
     float startX; // fp0
     float startY; // fp13
@@ -611,7 +611,7 @@ void __cdecl Actor_MissTarget(const weaponParms *wp, const float *target, float 
 }
 
 
-void __cdecl Actor_MissEnemy(actor_s *self, weaponParms *wp, double accuracy)
+void Actor_MissEnemy(actor_s *self, weaponParms *wp, double accuracy)
 {
     ++self->missCount;
 
@@ -622,18 +622,18 @@ void __cdecl Actor_MissEnemy(actor_s *self, weaponParms *wp, double accuracy)
     Actor_MissSentient(wp, self->sentient->targetEnt.ent()->sentient, accuracy);
 }
 
-void __cdecl Actor_ShootNoEnemy(actor_s *self, weaponParms *wp)
+void Actor_ShootNoEnemy(actor_s *self, weaponParms *wp)
 {
     Vec3Copy(wp->gunForward, wp->forward);
 }
 
-void __cdecl Actor_ShootPos(actor_s *self, weaponParms *wp, float *pos)
+void Actor_ShootPos(actor_s *self, weaponParms *wp, float *pos)
 {
     Vec3Sub(pos, wp->muzzleTrace, wp->forward);
     Vec3NormalizeFast(wp->forward);
 }
 
-void __cdecl Actor_ClampShot(actor_s *self, weaponParms *wp)
+void Actor_ClampShot(actor_s *self, weaponParms *wp)
 {
     float planeNormal[4]; // [sp+58h] [-68h] BYREF
     float dest[4]; // [sp+68h] [-58h] BYREF
@@ -662,7 +662,7 @@ void __cdecl Actor_ClampShot(actor_s *self, weaponParms *wp)
     }
 }
 
-void __cdecl Actor_Shoot(actor_s *self, float accuracyMod, float (*posOverride)[3], enumLastShot lastShot)
+void Actor_Shoot(actor_s *self, float accuracyMod, float (*posOverride)[3], enumLastShot lastShot)
 {
     gentity_s *ent; // r27
     unsigned int weaponName; // r3
@@ -771,7 +771,7 @@ void __cdecl Actor_Shoot(actor_s *self, float accuracyMod, float (*posOverride)[
     }
 }
 
-void __cdecl Actor_ShootBlank(actor_s *self)
+void Actor_ShootBlank(actor_s *self)
 {
     unsigned int weaponName; // r3
     const char *v3; // r3
@@ -821,7 +821,7 @@ void __cdecl Actor_ShootBlank(actor_s *self)
     }
 }
 
-gentity_s *__cdecl Actor_Melee(actor_s *self, const float *direction)
+gentity_s *Actor_Melee(actor_s *self, const float *direction)
 {
     gentity_s *ent; // r27
     const char *v5; // r3
@@ -918,7 +918,7 @@ gentity_s *__cdecl Actor_Melee(actor_s *self, const float *direction)
     return Weapon_Melee(self->ent, &wp, 64.0, 0.0, 0.0, level.time);
 }
 
-float __cdecl Sentient_GetScarinessForDistance(sentient_s *self, sentient_s *enemy, double fDist)
+float Sentient_GetScarinessForDistance(sentient_s *self, sentient_s *enemy, double fDist)
 {
     unsigned int WeaponIndexForName; // r3
     WeaponDef *weapDef; // r3
@@ -963,7 +963,7 @@ float __cdecl Sentient_GetScarinessForDistance(sentient_s *self, sentient_s *ene
     return AccuracyFraction;
 }
 
-void __cdecl Actor_GetAccuracyGraphFileName_FastFile(
+void Actor_GetAccuracyGraphFileName_FastFile(
     const WeaponDef *weaponDef,
     WeapAccuracyType accuracyType,
     char *filePath,
@@ -986,7 +986,7 @@ void __cdecl Actor_GetAccuracyGraphFileName_FastFile(
     }
 }
 
-void __cdecl Actor_GetAccuracyGraphFileName(
+void Actor_GetAccuracyGraphFileName(
     const WeaponDef *weaponDef,
     WeapAccuracyType accuracyType,
     char *filePath,
@@ -1009,7 +1009,7 @@ void __cdecl Actor_GetAccuracyGraphFileName(
     }
 }
 
-void __cdecl Actor_AccuracyGraphSaveToFile(
+void Actor_AccuracyGraphSaveToFile(
     const DevGraph *graph,
     WeaponDef *weaponDef,
     WeapAccuracyType accuracyType)
@@ -1086,7 +1086,7 @@ void __cdecl Actor_AccuracyGraphSaveToFile(
     }
 }
 
-void __cdecl Actor_CommonAccuracyGraphEventCallback(
+void Actor_CommonAccuracyGraphEventCallback(
     const DevGraph *graph,
     DevEventType event,
     WeapAccuracyType accuracyType)
@@ -1148,7 +1148,7 @@ void __cdecl Actor_CommonAccuracyGraphEventCallback(
     }
 }
 
-void __cdecl Actor_AiVsAiAccuracyGraphEventCallback(
+void Actor_AiVsAiAccuracyGraphEventCallback(
     const DevGraph *graph,
     DevEventType event,
     int unusedLocalClientNum)
@@ -1156,7 +1156,7 @@ void __cdecl Actor_AiVsAiAccuracyGraphEventCallback(
     Actor_CommonAccuracyGraphEventCallback(graph, event, WEAP_ACCURACY_AI_VS_AI);
 }
 
-void __cdecl Actor_AiVsPlayerAccuracyGraphEventCallback(
+void Actor_AiVsPlayerAccuracyGraphEventCallback(
     const DevGraph *graph,
     DevEventType event,
     int unusedLocalClientNum)
@@ -1164,7 +1164,7 @@ void __cdecl Actor_AiVsPlayerAccuracyGraphEventCallback(
     Actor_CommonAccuracyGraphEventCallback(graph, event, WEAP_ACCURACY_AI_VS_PLAYER);
 }
 
-void __cdecl Actor_AccuracyGraphTextCallback(
+void Actor_AccuracyGraphTextCallback(
     const DevGraph *graph,
     const float inputX,
     const float inputY,
@@ -1174,15 +1174,15 @@ void __cdecl Actor_AccuracyGraphTextCallback(
     Com_sprintf(text, textLength, "Distance: %.2f, Accuracy: %.4f", inputX * ACTOR_MAX_ACCURAY_DISTANCE, inputY);
 }
 
-void __cdecl G_SwapAccuracyBuffers()
+void G_SwapAccuracyBuffers()
 {
     ++g_accuracyBufferIndex;
 }
 
-DevGraph *__cdecl Actor_InitWeaponAccuracyGraphForWeaponType(
+DevGraph *Actor_InitWeaponAccuracyGraphForWeaponType(
     unsigned int weaponIndex,
     WeapAccuracyType accuracyType,
-    void(__cdecl *eventCallback)(const DevGraph *, DevEventType, int))
+    void(*eventCallback)(const DevGraph *, DevEventType, int))
 {
     WeaponDef *weaponDef = BG_GetWeaponDef(weaponIndex);
     iassert(weaponDef);
@@ -1229,7 +1229,7 @@ DevGraph *__cdecl Actor_InitWeaponAccuracyGraphForWeaponType(
     return result;
 }
 
-void __cdecl Actor_CopyAccuGraphBuf(WeaponDef *from, WeaponDef *to)
+void Actor_CopyAccuGraphBuf(WeaponDef *from, WeaponDef *to)
 {
     if (!bg_lastParsedWeaponIndex)
         return;
@@ -1266,7 +1266,7 @@ void __cdecl Actor_CopyAccuGraphBuf(WeaponDef *from, WeaponDef *to)
     }
 }
 
-void __cdecl Actor_InitWeaponAccuracyGraphForWeapon(unsigned int weaponIndex)
+void Actor_InitWeaponAccuracyGraphForWeapon(unsigned int weaponIndex)
 {
     WeaponDef *WeaponDef; // r29
     DevGraph *inited; // r31
@@ -1296,7 +1296,7 @@ void __cdecl Actor_InitWeaponAccuracyGraphForWeapon(unsigned int weaponIndex)
     }
 }
 
-void __cdecl Actor_ShutdownWeaponAccuracyGraph()
+void Actor_ShutdownWeaponAccuracyGraph()
 {
     unsigned int v0; // r30
     const char ***p_data; // r29

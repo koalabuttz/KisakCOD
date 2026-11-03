@@ -9,13 +9,13 @@ debugger_sval_s *g_debugExprHead = NULL;
 
 HunkUser *g_allocNodeUser;
 
-void __cdecl Scr_InitAllocNode()
+void Scr_InitAllocNode()
 {
     iassert(!g_allocNodeUser);
     g_allocNodeUser = Hunk_UserCreate(0x10000, "Scr_InitAllocNode", 0, 1, 7);
 }
 
-void __cdecl Scr_ShutdownAllocNode()
+void Scr_ShutdownAllocNode()
 {
     if (g_allocNodeUser)
     {
@@ -24,13 +24,13 @@ void __cdecl Scr_ShutdownAllocNode()
     }
 }
 
-sval_u *__cdecl Scr_AllocNode(int size)
+sval_u *Scr_AllocNode(int size)
 {
     iassert(g_allocNodeUser);
     return (sval_u *)Hunk_UserAlloc(g_allocNodeUser, 4 * size, 4);
 }
 
-sval_u __cdecl node0(Enum_t type)
+sval_u node0(Enum_t type)
 {
     sval_u result; // eax
 
@@ -39,7 +39,7 @@ sval_u __cdecl node0(Enum_t type)
     return result;
 }
 
-sval_u __cdecl node1(Enum_t type, sval_u val1)
+sval_u node1(Enum_t type, sval_u val1)
 {
     sval_u result; // eax
 
@@ -49,7 +49,7 @@ sval_u __cdecl node1(Enum_t type, sval_u val1)
     return result;
 }
 
-sval_u __cdecl node2(Enum_t type, sval_u val1, sval_u val2)
+sval_u node2(Enum_t type, sval_u val1, sval_u val2)
 {
     sval_u result; // eax
 
@@ -60,7 +60,7 @@ sval_u __cdecl node2(Enum_t type, sval_u val1, sval_u val2)
     return result;
 }
 
-sval_u __cdecl node3(Enum_t type, sval_u val1, sval_u val2, sval_u val3)
+sval_u node3(Enum_t type, sval_u val1, sval_u val2, sval_u val3)
 {
     sval_u result; // eax
 
@@ -72,7 +72,7 @@ sval_u __cdecl node3(Enum_t type, sval_u val1, sval_u val2, sval_u val3)
     return result;
 }
 
-sval_u __cdecl node4(Enum_t type, sval_u val1, sval_u val2, sval_u val3, sval_u val4)
+sval_u node4(Enum_t type, sval_u val1, sval_u val2, sval_u val3, sval_u val4)
 {
     sval_u result; // eax
 
@@ -85,7 +85,7 @@ sval_u __cdecl node4(Enum_t type, sval_u val1, sval_u val2, sval_u val3, sval_u 
     return result;
 }
 
-sval_u __cdecl node5(Enum_t type, sval_u val1, sval_u val2, sval_u val3, sval_u val4, sval_u val5)
+sval_u node5(Enum_t type, sval_u val1, sval_u val2, sval_u val3, sval_u val4, sval_u val5)
 {
     sval_u result; // eax
 
@@ -99,7 +99,7 @@ sval_u __cdecl node5(Enum_t type, sval_u val1, sval_u val2, sval_u val3, sval_u 
     return result;
 }
 
-sval_u __cdecl node6(Enum_t type, sval_u val1, sval_u val2, sval_u val3, sval_u val4, sval_u val5, sval_u val6)
+sval_u node6(Enum_t type, sval_u val1, sval_u val2, sval_u val3, sval_u val4, sval_u val5, sval_u val6)
 {
     sval_u result; // eax
 
@@ -114,7 +114,7 @@ sval_u __cdecl node6(Enum_t type, sval_u val1, sval_u val2, sval_u val3, sval_u 
     return result;
 }
 
-sval_u __cdecl node7(
+sval_u node7(
     Enum_t type,
     sval_u val1,
     sval_u val2,
@@ -138,7 +138,7 @@ sval_u __cdecl node7(
     return result;
 }
 
-sval_u __cdecl node8(
+sval_u node8(
     Enum_t type,
     sval_u val1,
     sval_u val2,
@@ -201,7 +201,7 @@ sval_u append_node(sval_u val1, sval_u val2)
     return val1;
 }
 
-void __cdecl Scr_ClearDebugExpr(debugger_sval_s *debugExprHead)
+void Scr_ClearDebugExpr(debugger_sval_s *debugExprHead)
 {
     while (debugExprHead)
     {
@@ -215,7 +215,7 @@ void __cdecl Scr_ClearDebugExpr(debugger_sval_s *debugExprHead)
     }
 }
 
-sval_u *__cdecl Scr_AllocDebugExpr(Enum_t type, int size, const char *name)
+sval_u *Scr_AllocDebugExpr(Enum_t type, int size, const char *name)
 {
     sval_u *val; // eax
     debugger_sval_s *debugval;
@@ -235,7 +235,7 @@ sval_u *__cdecl Scr_AllocDebugExpr(Enum_t type, int size, const char *name)
     return val;
 }
 
-void __cdecl Scr_FreeDebugExpr(ScriptExpression_t *expr)
+void Scr_FreeDebugExpr(ScriptExpression_t *expr)
 {
     debugger_sval_s *debugExprHead; // [esp+0h] [ebp-Ch]
     debugger_sval_s *nextDebugExprHead; // [esp+8h] [ebp-4h]
@@ -259,14 +259,14 @@ void __cdecl Scr_FreeDebugExpr(ScriptExpression_t *expr)
     }
 }
 
-sval_u __cdecl debugger_node0(Enum_t type)
+sval_u debugger_node0(Enum_t type)
 {
     sval_u result;
     result.node = Scr_AllocDebugExpr(type, sizeof(sval_u), "debugger_node0");
     return result;
 }
 
-sval_u __cdecl debugger_node1(Enum_t type, sval_u val1)
+sval_u debugger_node1(Enum_t type, sval_u val1)
 {
     sval_u result; // eax
 
@@ -276,7 +276,7 @@ sval_u __cdecl debugger_node1(Enum_t type, sval_u val1)
     return result;
 }
 
-sval_u __cdecl debugger_node2(Enum_t type, sval_u val1, sval_u val2)
+sval_u debugger_node2(Enum_t type, sval_u val1, sval_u val2)
 {
     sval_u result; // eax
 
@@ -286,7 +286,7 @@ sval_u __cdecl debugger_node2(Enum_t type, sval_u val1, sval_u val2)
     return result;
 }
 
-sval_u __cdecl debugger_node3(Enum_t type, sval_u val1, sval_u val2, sval_u val3)
+sval_u debugger_node3(Enum_t type, sval_u val1, sval_u val2, sval_u val3)
 {
     sval_u result; // eax
 
@@ -297,7 +297,7 @@ sval_u __cdecl debugger_node3(Enum_t type, sval_u val1, sval_u val2, sval_u val3
     return result;
 }
 
-sval_u __cdecl debugger_node4(Enum_t type, sval_u val1, sval_u val2, sval_u val3, sval_u val4)
+sval_u debugger_node4(Enum_t type, sval_u val1, sval_u val2, sval_u val3, sval_u val4)
 {
     sval_u result; // eax
 
@@ -309,14 +309,14 @@ sval_u __cdecl debugger_node4(Enum_t type, sval_u val1, sval_u val2, sval_u val3
     return result;
 }
 
-sval_u __cdecl debugger_prepend_node(sval_u val1, sval_u val2)
+sval_u debugger_prepend_node(sval_u val1, sval_u val2)
 {
     sval_u nop = debugger_node2(ENUM_NOP, val1, val2.node[0]);
     val2.node[0].node = nop.node + 1;
     return val2;
 }
 
-sval_u __cdecl debugger_buffer(Enum_t type, char *buf, uint32_t size, int alignment)
+sval_u debugger_buffer(Enum_t type, char *buf, uint32_t size, int alignment)
 {
     iassert(IsPowerOf2(alignment));
 
@@ -328,7 +328,7 @@ sval_u __cdecl debugger_buffer(Enum_t type, char *buf, uint32_t size, int alignm
     return result[0];
 }
 
-sval_u __cdecl debugger_string(Enum_t type, char *s)
+sval_u debugger_string(Enum_t type, char *s)
 {
     return debugger_buffer(type, s, strlen(s) + 1, 1);
 }

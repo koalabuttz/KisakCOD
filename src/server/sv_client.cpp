@@ -10,7 +10,7 @@
 #include "sv_public.h"
 #include <EffectsCore/fx_system.h>
 
-void __cdecl SV_DirectConnect()
+void SV_DirectConnect()
 {
     client_t *clients; // r31
 
@@ -24,19 +24,19 @@ void __cdecl SV_DirectConnect()
     clients->lastUsercmd.serverTime = G_GetTime();
 }
 
-void __cdecl SV_SendClientGameState(client_t *client)
+void SV_SendClientGameState(client_t *client)
 {
     if (client != svs.clients)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\server\\sv_client.cpp", 64, 0, "%s", "client == svs.clients");
     CL_ParseGamestate((char *)sv.configstrings);
 }
 
-void __cdecl SV_SendGameState()
+void SV_SendGameState()
 {
     CL_ParseGamestate((char *)sv.configstrings);
 }
 
-void __cdecl SV_ClientEnterWorld(client_t *client)
+void SV_ClientEnterWorld(client_t *client)
 {
     if (client->state != 1)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\server\\sv_client.cpp", 87, 0, "%s", "client->state == CS_ACTIVE");
@@ -44,7 +44,7 @@ void __cdecl SV_ClientEnterWorld(client_t *client)
     client->gentity = SV_GentityNum(client - svs.clients);
 }
 
-float __cdecl SV_FX_GetVisibility(const float *start, const float *end)
+float SV_FX_GetVisibility(const float *start, const float *end)
 {
     float ServerVisibility; // fp31
 
@@ -60,7 +60,7 @@ float __cdecl SV_FX_GetVisibility(const float *start, const float *end)
     }
 }
 
-void __cdecl SV_ExecuteClientCommand(const char *s)
+void SV_ExecuteClientCommand(const char *s)
 {
     if (!SV_Loaded())
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\server\\sv_client.cpp", 140, 0, "%s", "SV_Loaded()");
@@ -74,7 +74,7 @@ void __cdecl SV_ExecuteClientCommand(const char *s)
     ClientCommand(0, s);
 }
 
-void __cdecl SV_ClientThink(usercmd_s *cmd)
+void SV_ClientThink(usercmd_s *cmd)
 {
     client_t *clients; // r11
 
@@ -96,17 +96,17 @@ void __cdecl SV_ClientThink(usercmd_s *cmd)
 }
 
 // attributes: thunk
-gentity_s *__cdecl SV_GetEntityState(int entnum)
+gentity_s *SV_GetEntityState(int entnum)
 {
     return SV_GentityNum(entnum);
 }
 
-void __cdecl SV_TrackPlayerDied()
+void SV_TrackPlayerDied()
 {
     //Live_SetDeaths(++svs.playerDeaths);
 }
 
-void __cdecl SV_AddToPlayerScore(int amount)
+void SV_AddToPlayerScore(int amount)
 {
     svs.playerScore += amount;
     //Live_SetScore(svs.playerScore);

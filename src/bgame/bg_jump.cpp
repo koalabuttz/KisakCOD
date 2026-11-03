@@ -11,7 +11,7 @@ const dvar_t *jump_slowdownEnable;
 const dvar_t *jump_ladderPushVel;
 const dvar_t *jump_spreadAdd;
 
-void __cdecl Jump_RegisterDvars()
+void Jump_RegisterDvars()
 {
     DvarLimits min; // [esp+4h] [ebp-14h]
     DvarLimits mina; // [esp+4h] [ebp-14h]
@@ -79,13 +79,13 @@ void __cdecl Jump_RegisterDvars()
 #endif
 }
 
-void __cdecl Jump_ClearState(playerState_s *ps)
+void Jump_ClearState(playerState_s *ps)
 {
     ps->pm_flags &= ~PMF_JUMPING;
     ps->jumpOriginZ = 0.0;
 }
 
-bool __cdecl Jump_GetStepHeight(playerState_s *ps, const float *origin, float *stepSize)
+bool Jump_GetStepHeight(playerState_s *ps, const float *origin, float *stepSize)
 {
     iassert((ps->pm_flags & PMF_JUMPING) != 0);
     iassert(origin);
@@ -104,14 +104,14 @@ bool __cdecl Jump_GetStepHeight(playerState_s *ps, const float *origin, float *s
     return true;
 }
 
-bool __cdecl Jump_IsPlayerAboveMax(playerState_s *ps)
+bool Jump_IsPlayerAboveMax(playerState_s *ps)
 {
     iassert((ps->pm_flags & PMF_JUMPING) != 0);
 
     return ps->origin[2] >= ps->jumpOriginZ + jump_height->current.value;
 }
 
-void __cdecl Jump_ActivateSlowdown(playerState_s *ps)
+void Jump_ActivateSlowdown(playerState_s *ps)
 {
     if (!ps->pm_time)
     {
@@ -120,7 +120,7 @@ void __cdecl Jump_ActivateSlowdown(playerState_s *ps)
     }
 }
 
-void __cdecl Jump_ApplySlowdown(playerState_s *ps)
+void Jump_ApplySlowdown(playerState_s *ps)
 {
     iassert((ps->pm_flags & PMF_JUMPING) != 0);
 
@@ -151,7 +151,7 @@ void __cdecl Jump_ApplySlowdown(playerState_s *ps)
         Vec3Scale(ps->velocity, scale, ps->velocity);
 }
 
-double __cdecl Jump_ReduceFriction(playerState_s *ps)
+double Jump_ReduceFriction(playerState_s *ps)
 {
     iassert((ps->pm_flags & PMF_JUMPING) != 0);
 
@@ -166,7 +166,7 @@ double __cdecl Jump_ReduceFriction(playerState_s *ps)
     }
 }
 
-double __cdecl Jump_GetSlowdownFriction(playerState_s *ps)
+double Jump_GetSlowdownFriction(playerState_s *ps)
 {
     iassert((ps->pm_flags & PMF_JUMPING) != 0);
 
@@ -181,7 +181,7 @@ double __cdecl Jump_GetSlowdownFriction(playerState_s *ps)
     return ((double)ps->pm_time * 1.5 * 0.0005882352706976235 + 1.0);
 }
 
-void __cdecl Jump_ClampVelocity(playerState_s *ps, const float *origin)
+void Jump_ClampVelocity(playerState_s *ps, const float *origin)
 {
     float v2; // [esp+0h] [ebp-10h]
     float v3; // [esp+4h] [ebp-Ch]
@@ -207,7 +207,7 @@ void __cdecl Jump_ClampVelocity(playerState_s *ps, const float *origin)
     }
 }
 
-bool __cdecl Jump_Check(pmove_t *pm, pml_t *pml)
+bool Jump_Check(pmove_t *pm, pml_t *pml)
 {
     playerState_s *ps; // [esp+4h] [ebp-4h]
 
@@ -259,7 +259,7 @@ bool __cdecl Jump_Check(pmove_t *pm, pml_t *pml)
     }
 }
 
-void __cdecl Jump_Start(pmove_t *pm, pml_t *pml, float height)
+void Jump_Start(pmove_t *pm, pml_t *pml, float height)
 {
     float v3; // [esp+0h] [ebp-10h]
     float factor; // [esp+4h] [ebp-Ch]
@@ -297,7 +297,7 @@ void __cdecl Jump_Start(pmove_t *pm, pml_t *pml, float height)
         ps->aimSpreadScale = 255.0;
 }
 
-double __cdecl Jump_GetLandFactor(playerState_s *ps)
+double Jump_GetLandFactor(playerState_s *ps)
 {
     iassert((ps->pm_flags & PMF_JUMPING) != 0);
 
@@ -312,7 +312,7 @@ double __cdecl Jump_GetLandFactor(playerState_s *ps)
     return ((double)ps->pm_time * 1.5 * 0.0005882352706976235 + 1.0);
 }
 
-void __cdecl Jump_PushOffLadder(playerState_s *ps, pml_t *pml)
+void Jump_PushOffLadder(playerState_s *ps, pml_t *pml)
 {
     float scale; // [esp+Ch] [ebp-48h]
     float value; // [esp+14h] [ebp-40h]
@@ -351,7 +351,7 @@ void __cdecl Jump_PushOffLadder(playerState_s *ps, pml_t *pml)
     ps->pm_flags &= ~PMF_LADDER;
 }
 
-void __cdecl Jump_AddSurfaceEvent(playerState_s *ps, pml_t *pml)
+void Jump_AddSurfaceEvent(playerState_s *ps, pml_t *pml)
 {
     int surfType; // [esp+0h] [ebp-4h]
 

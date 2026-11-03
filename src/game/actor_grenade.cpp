@@ -22,13 +22,13 @@
 float g_vGrenadeHint[512][3]{ 0.0f };
 float g_vRefPos[3]{ 0.0f };
 
-void __cdecl TRACK_actor_grenade()
+void TRACK_actor_grenade()
 {
     track_static_alloc_internal(g_vGrenadeHint, 6144, "g_vGrenadeHint", 5);
     track_static_alloc_internal(g_vRefPos, 12, "g_vRefPos", 5);
 }
 
-void __cdecl SP_info_grenade_hint(gentity_s *ent)
+void SP_info_grenade_hint(gentity_s *ent)
 {
     unsigned int grenadeHintCount; // r11
 
@@ -46,7 +46,7 @@ void __cdecl SP_info_grenade_hint(gentity_s *ent)
 }
 
 // aislop
-bool __cdecl Actor_Grenade_IsValidTrajectory(
+bool Actor_Grenade_IsValidTrajectory(
     actor_s *self,
     const float *vFrom,
     float *vVelocity,
@@ -200,7 +200,7 @@ bool __cdecl Actor_Grenade_IsValidTrajectory(
     return true;
 }
 
-void __cdecl Actor_Grenade_GetTossFromPosition(
+void Actor_Grenade_GetTossFromPosition(
     actor_s *self,
     const float *vStandPos,
     const float *vOffset,
@@ -220,7 +220,7 @@ void __cdecl Actor_Grenade_GetTossFromPosition(
     vFrom[2] = vStandPos[2] + v8[2];
 }
 
-void __cdecl Actor_Grenade_GetTossPositions(
+void Actor_Grenade_GetTossPositions(
     const float *vFrom,
     float *vTargetPos,
     float *vLand,
@@ -280,7 +280,7 @@ void __cdecl Actor_Grenade_GetTossPositions(
     vLand[2] = vFrom[2] + (float)v13;
 }
 
-int __cdecl Actor_Grenade_GetTossPositionsFromHints(
+int Actor_Grenade_GetTossPositionsFromHints(
     const float *vFrom,
     const float *vTargetPos,
     const unsigned int method,
@@ -358,7 +358,7 @@ int __cdecl Actor_Grenade_GetTossPositionsFromHints(
     }
 }
 
-bool __cdecl Actor_Grenade_CheckMaximumEnergyToss(
+bool Actor_Grenade_CheckMaximumEnergyToss(
     actor_s *self,
     float *vFrom,
     float *vLand,
@@ -462,7 +462,7 @@ bool __cdecl Actor_Grenade_CheckMaximumEnergyToss(
     return Actor_Grenade_IsValidTrajectory(self, vFrom, vVelOut, vLand);
 }
 
-bool __cdecl Actor_Grenade_CheckInfiniteEnergyToss(actor_s *self, float *vFrom, float *vLand, float *vVelOut)
+bool Actor_Grenade_CheckInfiniteEnergyToss(actor_s *self, float *vFrom, float *vLand, float *vVelOut)
 {
     double v8; // fp30
     double v9; // fp29
@@ -542,7 +542,7 @@ bool __cdecl Actor_Grenade_CheckInfiniteEnergyToss(actor_s *self, float *vFrom, 
     return Actor_Grenade_IsValidTrajectory(self, vFrom, vVelOut, vLand);
 }
 
-bool __cdecl Actor_Grenade_CheckMinimumEnergyToss(actor_s *self, float *vFrom, float *vLand, float *vVelOut)
+bool Actor_Grenade_CheckMinimumEnergyToss(actor_s *self, float *vFrom, float *vLand, float *vVelOut)
 {
     float fTotalDist; // fp31
     float fTotalTime; // fp31
@@ -575,7 +575,7 @@ bool __cdecl Actor_Grenade_CheckMinimumEnergyToss(actor_s *self, float *vFrom, f
     return Actor_Grenade_IsValidTrajectory(self, vFrom, vVelOut, vLand);
 }
 
-int __cdecl Actor_Grenade_CheckGrenadeHintToss(actor_s *self, float *vFrom, float *vLand, float *vVelOut)
+int Actor_Grenade_CheckGrenadeHintToss(actor_s *self, float *vFrom, float *vLand, float *vVelOut)
 {
     unsigned int grenadeHintCount; // r8
     unsigned int v9; // r29
@@ -728,7 +728,7 @@ int __cdecl Actor_Grenade_CheckGrenadeHintToss(actor_s *self, float *vFrom, floa
 #undef v31
 #undef v32
 
-int __cdecl compare_desperate_hints(float *pe0, float *pe1)
+int compare_desperate_hints(float *pe0, float *pe1)
 {
     double v2; // fp0
     double v3; // fp13
@@ -745,7 +745,7 @@ int __cdecl compare_desperate_hints(float *pe0, float *pe1)
         return -1;
 }
 
-int __cdecl Actor_Grenade_CheckDesperateToss(actor_s *self, float *vFrom, float *vVelOut)
+int Actor_Grenade_CheckDesperateToss(actor_s *self, float *vFrom, float *vVelOut)
 {
     unsigned int v6; // r30
     float *v7; // r31
@@ -770,7 +770,7 @@ int __cdecl Actor_Grenade_CheckDesperateToss(actor_s *self, float *vFrom, float 
                 g_vGrenadeHint,
                 level.grenadeHintCount,
                 0xCu,
-                (int(__cdecl *)(const void *, const void *))compare_desperate_hints),
+                (int(*)(const void *, const void *))compare_desperate_hints),
             v6 = 0,
             level.grenadeHintCount))
     {
@@ -793,7 +793,7 @@ int __cdecl Actor_Grenade_CheckDesperateToss(actor_s *self, float *vFrom, float 
     }
 }
 
-bool __cdecl Actor_GrenadeLauncher_CheckPos(
+bool Actor_GrenadeLauncher_CheckPos(
     actor_s *self,
     const float *vStandPos,
     const float *vOffset,
@@ -895,7 +895,7 @@ int Actor_Grenade_IsSafeTarget(actor_s *self, const float *vTargetPos, unsigned 
     return 0;
 }
 
-void __cdecl Actor_PredictGrenadeLandPos(gentity_s *pGrenade)
+void Actor_PredictGrenadeLandPos(gentity_s *pGrenade)
 {
     int clipmask; // r30
     int nextthink; // r10
@@ -932,7 +932,7 @@ void __cdecl Actor_PredictGrenadeLandPos(gentity_s *pGrenade)
     }
 }
 
-bool __cdecl Actor_Grenade_IsPointSafe(actor_s *self, const float *vPoint)
+bool Actor_Grenade_IsPointSafe(actor_s *self, const float *vPoint)
 {
     EntHandle *p_pGrenade; // r31
     gentity_s *v5; // r3
@@ -963,7 +963,7 @@ bool __cdecl Actor_Grenade_IsPointSafe(actor_s *self, const float *vPoint)
     return G_CanRadiusDamageFromPos(self->ent, vPoint, inflictor, centerPos, radius, 1.0f, NULL, 0.0f, 1, 0x802011) == 0;
 }
 
-float __cdecl Actor_Grenade_EscapePlane(actor_s *self, float *normal)
+float Actor_Grenade_EscapePlane(actor_s *self, float *normal)
 {
     double v4; // fp31
     gentity_s *TargetEntity; // r31
@@ -1023,7 +1023,7 @@ LABEL_18:
     return dist;
 }
 
-void __cdecl Actor_Grenade_GetPickupPos(actor_s *self, const float *enemyPos, float *vGrenadePickupPos)
+void Actor_Grenade_GetPickupPos(actor_s *self, const float *enemyPos, float *vGrenadePickupPos)
 {
     gentity_s *v6; // r3
     double v7; // fp13
@@ -1051,7 +1051,7 @@ void __cdecl Actor_Grenade_GetPickupPos(actor_s *self, const float *enemyPos, fl
     vGrenadePickupPos[2] = (float)((float)v10 * (float)29.5) + v8->mover.speed;
 }
 
-bool __cdecl Actor_Grenade_ShouldIgnore(actor_s *self, gentity_s *grenade)
+bool Actor_Grenade_ShouldIgnore(actor_s *self, gentity_s *grenade)
 {
     gentity_s *ent; // r11
     double v5; // fp31
@@ -1096,7 +1096,7 @@ bool __cdecl Actor_Grenade_ShouldIgnore(actor_s *self, gentity_s *grenade)
         + (float)((float)((float)v8 * (float)v8) + (float)((float)v9 * (float)v9))) > 100.0;
 }
 
-int __cdecl Actor_IsAwareOfGrenade(actor_s *self)
+int Actor_IsAwareOfGrenade(actor_s *self)
 {
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_grenade.cpp", 1515, 0, "%s", "self");
@@ -1110,7 +1110,7 @@ int __cdecl Actor_IsAwareOfGrenade(actor_s *self)
     return 0;
 }
 
-void __cdecl Actor_GrenadePing(actor_s *self, gentity_s *pGrenade)
+void Actor_GrenadePing(actor_s *self, gentity_s *pGrenade)
 {
     unsigned int stateLevel; // r11
     gentity_s *v5; // r3
@@ -1157,13 +1157,13 @@ void __cdecl Actor_GrenadePing(actor_s *self, gentity_s *pGrenade)
     }
 }
 
-void __cdecl Actor_DissociateGrenade(gentity_s *pGrenade)
+void Actor_DissociateGrenade(gentity_s *pGrenade)
 {
     EntHandleDissociate(pGrenade);
     pGrenade->activator = 0;
 }
 
-void __cdecl Actor_Grenade_Attach(actor_s *self)
+void Actor_Grenade_Attach(actor_s *self)
 {
     gentity_s *v2; // r28
     WeaponDef *weapDef; // r30
@@ -1187,7 +1187,7 @@ void __cdecl Actor_Grenade_Attach(actor_s *self)
     v2->parent.setEnt(self->ent);
 }
 
-void __cdecl Actor_Grenade_Detach(actor_s *self)
+void Actor_Grenade_Detach(actor_s *self)
 {
     gentity_s *v2; // r31
     WeaponDef *weapDef; // r30
@@ -1221,14 +1221,14 @@ void __cdecl Actor_Grenade_Detach(actor_s *self)
     v2->mover.speed = 0.0f;
 }
 
-int __cdecl Actor_Grenade_InActorHands(gentity_s *grenade)
+int Actor_Grenade_InActorHands(gentity_s *grenade)
 {
     if (!grenade)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_grenade.cpp", 1745, 0, "%s", "grenade");
     return grenade->r.svFlags & 1;
 }
 
-bool __cdecl Actor_Grenade_Resume(actor_s *self, ai_state_t ePrevState)
+bool Actor_Grenade_Resume(actor_s *self, ai_state_t ePrevState)
 {
     int result; // r3
 
@@ -1242,7 +1242,7 @@ bool __cdecl Actor_Grenade_Resume(actor_s *self, ai_state_t ePrevState)
     return result;
 }
 
-void __cdecl Actor_Grenade_Cower(actor_s *self)
+void Actor_Grenade_Cower(actor_s *self)
 {
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_grenade.cpp", 1828, 0, "%s", "self");
@@ -1250,7 +1250,7 @@ void __cdecl Actor_Grenade_Cower(actor_s *self)
     Actor_AnimStop(self, &g_animScriptTable[self->species]->grenade_cower);
 }
 
-void __cdecl Actor_Grenade_Combat(actor_s *self)
+void Actor_Grenade_Combat(actor_s *self)
 {
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_grenade.cpp", 1844, 0, "%s", "self");
@@ -1268,7 +1268,7 @@ void __cdecl Actor_Grenade_Combat(actor_s *self)
     }
 }
 
-void __cdecl Actor_Grenade_CoverAttack(actor_s *self)
+void Actor_Grenade_CoverAttack(actor_s *self)
 {
     iassert(self);
     iassert(self->sentient);
@@ -1286,7 +1286,7 @@ void __cdecl Actor_Grenade_CoverAttack(actor_s *self)
     }
 }
 
-void __cdecl Actor_Grenade_Flee(actor_s *self)
+void Actor_Grenade_Flee(actor_s *self)
 {
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_grenade.cpp", 1893, 0, "%s", "self");
@@ -1308,7 +1308,7 @@ void __cdecl Actor_Grenade_Flee(actor_s *self)
     }
 }
 
-void __cdecl Actor_Grenade_TakeCover(actor_s *self)
+void Actor_Grenade_TakeCover(actor_s *self)
 {
     pathnode_t *pClaimedNode; // r4
 
@@ -1338,7 +1338,7 @@ void __cdecl Actor_Grenade_TakeCover(actor_s *self)
     }
 }
 
-actor_think_result_t __cdecl Actor_Grenade_ThrowBack(actor_s *self)
+actor_think_result_t Actor_Grenade_ThrowBack(actor_s *self)
 {
     gentity_s *v2; // r3
     double v3; // fp31
@@ -1380,7 +1380,7 @@ actor_think_result_t __cdecl Actor_Grenade_ThrowBack(actor_s *self)
     }
 }
 
-void __cdecl G_DrawGrenadeHints()
+void G_DrawGrenadeHints()
 {
     gentity_s *gentities; // r9
     unsigned int v6; // r25
@@ -1506,7 +1506,7 @@ void __cdecl G_DrawGrenadeHints()
 
 static const float ACTOR_GRENADE_HINT_DEVIATION_RADIUS = 15.0f;
 
-bool __cdecl Actor_Grenade_CheckTossPos(
+bool Actor_Grenade_CheckTossPos(
     actor_s *self,
     float *vStandPos,
     float *vOffset,
@@ -1655,7 +1655,7 @@ LABEL_43:
     return v47;
 }
 
-bool __cdecl Actor_Grenade_AttemptReturnTo(
+bool Actor_Grenade_AttemptReturnTo(
     actor_s *self,
     float *vFrom,
     float *vEnemyPos,
@@ -1713,7 +1713,7 @@ bool __cdecl Actor_Grenade_AttemptReturnTo(
         1);
 }
 
-int __cdecl Actor_Grenade_AttemptReturn(actor_s *self)
+int Actor_Grenade_AttemptReturn(actor_s *self)
 {
     gentity_s *v2; // r26
     EntHandle *p_parent; // r27
@@ -1835,7 +1835,7 @@ int __cdecl Actor_Grenade_AttemptReturn(actor_s *self)
     return 1;
 }
 
-void __cdecl Actor_Grenade_DropIfHeld(actor_s *self)
+void Actor_Grenade_DropIfHeld(actor_s *self)
 {
     gentity_s *v2; // r31
     gentity_s *v3; // r3
@@ -1857,20 +1857,20 @@ void __cdecl Actor_Grenade_DropIfHeld(actor_s *self)
     }
 }
 
-void __cdecl Actor_Grenade_Finish(actor_s *self, ai_state_t eNextState)
+void Actor_Grenade_Finish(actor_s *self, ai_state_t eNextState)
 {
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_grenade.cpp", 1781, 0, "%s", "self");
     Actor_Grenade_DropIfHeld(self);
 }
 
-void __cdecl Actor_Grenade_Suspend(actor_s *self, ai_state_t eNextState)
+void Actor_Grenade_Suspend(actor_s *self, ai_state_t eNextState)
 {
     iassert(self);
     Actor_Grenade_DropIfHeld(self);
 }
 
-bool __cdecl Actor_Grenade_CheckToss(
+bool Actor_Grenade_CheckToss(
     actor_s *self,
     float *vStandPos,
     float *vOffset,
@@ -1942,7 +1942,7 @@ bool __cdecl Actor_Grenade_CheckToss(
         bRechecking);
 }
 
-void __cdecl Actor_Grenade_AttemptEscape(actor_s *self, int bForceAbortPath)
+void Actor_Grenade_AttemptEscape(actor_s *self, int bForceAbortPath)
 {
     gentity_s *v5; // r3
     gentity_s *v6; // r3
@@ -2055,7 +2055,7 @@ LABEL_36:
     Actor_SetSubState(self, substate);
 }
 
-void __cdecl Actor_Grenade_DecideResponse(actor_s *self)
+void Actor_Grenade_DecideResponse(actor_s *self)
 {
     iassert(self);
     iassert(self->pGrenade.isDefined());
@@ -2070,7 +2070,7 @@ void __cdecl Actor_Grenade_DecideResponse(actor_s *self)
     }
 }
 
-int __cdecl Actor_Grenade_ReevaluateResponse(actor_s *self, ActorGrenadeReevaluateMode reevaluateMode)
+int Actor_Grenade_ReevaluateResponse(actor_s *self, ActorGrenadeReevaluateMode reevaluateMode)
 {
     gentity_s *v4; // r3
     gentity_s *ent; // r30
@@ -2095,7 +2095,7 @@ int __cdecl Actor_Grenade_ReevaluateResponse(actor_s *self, ActorGrenadeReevalua
     return 0;
 }
 
-void __cdecl Actor_GrenadeBounced(gentity_s *pGrenade, gentity_s *pHitEnt)
+void Actor_GrenadeBounced(gentity_s *pGrenade, gentity_s *pHitEnt)
 {
     actor_s *i; // r31
 
@@ -2117,7 +2117,7 @@ void __cdecl Actor_GrenadeBounced(gentity_s *pGrenade, gentity_s *pHitEnt)
     }
 }
 
-bool __cdecl Actor_Grenade_Start(actor_s *self, ai_state_t ePrevState)
+bool Actor_Grenade_Start(actor_s *self, ai_state_t ePrevState)
 {
     int result; // r3
 
@@ -2139,7 +2139,7 @@ bool __cdecl Actor_Grenade_Start(actor_s *self, ai_state_t ePrevState)
     return result;
 }
 
-actor_think_result_t __cdecl Actor_Grenade_Acquire(actor_s *self)
+actor_think_result_t Actor_Grenade_Acquire(actor_s *self)
 {
     actor_s *pOther; // r28
     gentity_s *v3; // r30
@@ -2236,7 +2236,7 @@ actor_think_result_t __cdecl Actor_Grenade_Acquire(actor_s *self)
     return ACTOR_THINK_DONE;
 }
 
-actor_think_result_t __cdecl Actor_Grenade_Think(actor_s *self)
+actor_think_result_t Actor_Grenade_Think(actor_s *self)
 {
     actor_think_result_t result; // r3
     ai_substate_t v3; // r11

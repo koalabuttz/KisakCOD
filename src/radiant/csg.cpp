@@ -30,7 +30,7 @@ extern void     Brush_SplitBrushByFace( brush_t *b, face_t *f,
                                          brush_t **front, brush_t **back );    // 0x471960
 // Allocates a new face slot in dest's face array and copies src into it.
 // Returns a pointer to the newly allocated face entry.
-// IDA signature: char* __cdecl Face_Alloc(int brush, _DWORD *face)
+// IDA signature: char* Face_Alloc(int brush, _DWORD *face)
 extern face_t  *Face_Alloc( brush_t *dest, face_t *src );                    // 0x471500
 // Frees a DEF (88-byte brush_t) without list/entity cleanup (raw free).
 // IDA: __usercall(def@<edi>) — arg in edi; cdecl wrapper needed when brush.cpp is ported.

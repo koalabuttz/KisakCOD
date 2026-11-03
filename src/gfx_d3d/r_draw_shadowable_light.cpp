@@ -8,7 +8,7 @@
 #include "r_state.h"
 
 
-void __cdecl R_SetLightProperties(
+void R_SetLightProperties(
     GfxCmdBufSourceState *source,
     const GfxLight *light,
     const GfxLightDef *def,
@@ -68,7 +68,7 @@ void __cdecl R_SetLightProperties(
     }
 }
 
-void __cdecl R_SetCodeImageSamplerState(
+void R_SetCodeImageSamplerState(
     GfxCmdBufSourceState *source,
     MaterialTextureSource codeTexture,
     uint8_t samplerState)
@@ -79,7 +79,7 @@ void __cdecl R_SetCodeImageSamplerState(
     source->input.codeImageSamplerStates[codeTexture] = samplerState;
 }
 
-void __cdecl R_SetShadowableLight(
+void R_SetShadowableLight(
     GfxCmdBufSourceState *source,
     uint32_t shadowableLightIndex,
     const GfxViewInfo *viewInfo)
@@ -163,7 +163,7 @@ void __cdecl R_SetShadowableLight(
     }
 }
 
-void __cdecl R_SetDrawSurfsShadowableLight(GfxCmdBufSourceState *source, const GfxDrawSurfListInfo *info)
+void R_SetDrawSurfsShadowableLight(GfxCmdBufSourceState *source, const GfxDrawSurfListInfo *info)
 {
     uint32_t shadowableLightIndex; // [esp+4h] [ebp-14h]
     const GfxLight *light; // [esp+14h] [ebp-4h]
@@ -179,7 +179,7 @@ void __cdecl R_SetDrawSurfsShadowableLight(GfxCmdBufSourceState *source, const G
     }
 }
 
-uint32_t __cdecl R_GetShadowableLightIndex(
+uint32_t R_GetShadowableLightIndex(
     const GfxBackEndData *data,
     const GfxViewInfo *viewInfo,
     const GfxLight *light)

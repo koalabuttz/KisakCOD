@@ -18,7 +18,7 @@
 #include "actor_senses.h"
 #include "actor_grenade.h"
 
-void __cdecl Actor_Turret_Touch(actor_s *self, gentity_s *pOther)
+void Actor_Turret_Touch(actor_s *self, gentity_s *pOther)
 {
     sentient_s *sentient; // r4
 
@@ -27,7 +27,7 @@ void __cdecl Actor_Turret_Touch(actor_s *self, gentity_s *pOther)
         Actor_GetPerfectInfo(self, sentient);
 }
 
-int __cdecl Actor_IsUsingTurret(actor_s *self)
+int Actor_IsUsingTurret(actor_s *self)
 {
     gentity_s *pTurret; // r11
     gentity_s *v3; // r3
@@ -45,7 +45,7 @@ int __cdecl Actor_IsUsingTurret(actor_s *self)
     return v4;
 }
 
-int __cdecl Actor_UseTurret(actor_s *self, gentity_s *pTurret)
+int Actor_UseTurret(actor_s *self, gentity_s *pTurret)
 {
     int result; // r3
 
@@ -63,7 +63,7 @@ int __cdecl Actor_UseTurret(actor_s *self, gentity_s *pTurret)
     return result;
 }
 
-bool __cdecl Actor_Turret_Start(actor_s *self, ai_state_t ePrevState)
+bool Actor_Turret_Start(actor_s *self, ai_state_t ePrevState)
 {
     gentity_s *pTurret; // r28
     TurretInfo *pTurretInfo; // r29
@@ -138,7 +138,7 @@ bool __cdecl Actor_Turret_Start(actor_s *self, ai_state_t ePrevState)
     return 1;
 }
 
-void __cdecl Actor_DetachTurret(actor_s *self)
+void Actor_DetachTurret(actor_s *self)
 {
     gentity_s *pTurret; // r11
     gentity_s *ent; // r3
@@ -178,7 +178,7 @@ void __cdecl Actor_DetachTurret(actor_s *self)
     pTurretInfo->flags &= ~TURRET_PITCH_CAP;
 }
 
-void __cdecl Actor_Turret_Finish(actor_s *self, ai_state_t eNextState)
+void Actor_Turret_Finish(actor_s *self, ai_state_t eNextState)
 {
     gentity_s *pTurret; // r11
     gentity_s *v5; // r3
@@ -203,13 +203,13 @@ void __cdecl Actor_Turret_Finish(actor_s *self, ai_state_t eNextState)
     }
 }
 
-void __cdecl Actor_Turret_Suspend(actor_s *self, ai_state_t eNextState)
+void Actor_Turret_Suspend(actor_s *self, ai_state_t eNextState)
 {
     if (Actor_IsUsingTurret(self))
         Actor_DetachTurret(self);
 }
 
-void __cdecl Actor_StopUseTurret(actor_s *self)
+void Actor_StopUseTurret(actor_s *self)
 {
     iassert(self);
     iassert(self->sentient);
@@ -230,7 +230,7 @@ void __cdecl Actor_StopUseTurret(actor_s *self)
 //   4. For free-standing turrets, move the AI to that origin; if it gets wedged against a
 //      non-living obstruction, tighten the firing arc or detach from the turret.
 //
-actor_think_result_t __cdecl Actor_Turret_PostThink(actor_s *self)
+actor_think_result_t Actor_Turret_PostThink(actor_s *self)
 {
     iassert(self);
 
@@ -635,7 +635,7 @@ actor_think_result_t __cdecl Actor_Turret_PostThink(actor_s *self)
     return ACTOR_THINK_REPEAT;
 }
 
-actor_think_result_t __cdecl Actor_Turret_Think(actor_s *self)
+actor_think_result_t Actor_Turret_Think(actor_s *self)
 {
     gentity_s *v3; // r3
     char isUsingTurret; // r11
@@ -774,7 +774,7 @@ LABEL_53:
 #undef v90
 #undef v91
 
-void __cdecl Actor_Turret_Pain(
+void Actor_Turret_Pain(
     actor_s *self,
     gentity_s *pAttacker,
     int iDamage,

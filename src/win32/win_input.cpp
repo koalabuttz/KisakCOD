@@ -234,12 +234,12 @@ static DIDATAFORMAT	df = {
 	rgodf,                      // and here they are
 };
 
-bool __cdecl IN_IsForegroundWindow()
+bool IN_IsForegroundWindow()
 {
 	return GetForegroundWindow() == g_wv.hWnd;
 }
 
-void __cdecl IN_SetForegroundWindow()
+void IN_SetForegroundWindow()
 {
 	SetForegroundWindow(g_wv.hWnd);
 	SetFocus(g_wv.hWnd);
@@ -260,7 +260,7 @@ IN_ActivateMouse
 Called when the window gains focus or changes in some way
 ===========
 */
-void __cdecl IN_ActivateMouse(int force)
+void IN_ActivateMouse(int force)
 {
 	if (s_wmv.mouseInitialized)
 	{
@@ -286,7 +286,7 @@ IN_DeactivateMouse
 Called when the window loses focus
 ===========
 */
-void __cdecl IN_DeactivateMouse()
+void IN_DeactivateMouse()
 {
 	if (s_wmv.mouseInitialized && s_wmv.mouseActive)
 	{
@@ -302,7 +302,7 @@ void __cdecl IN_DeactivateMouse()
 IN_StartupMouse
 ===========
 */
-void __cdecl IN_StartupMouse()
+void IN_StartupMouse()
 {
 	s_wmv.mouseInitialized = 0;
 	if (in_mouse->current.enabled)
@@ -332,7 +332,7 @@ IN_MouseEvent
 //	A_MOUSE5
 //};
 
-void __cdecl IN_MouseEvent(int mstate)
+void IN_MouseEvent(int mstate)
 {
 	int diff; // [esp+0h] [ebp-8h]
 	int button; // [esp+4h] [ebp-4h]
@@ -353,7 +353,7 @@ void __cdecl IN_MouseEvent(int mstate)
 }
 
 
-void __cdecl IN_ClampMouseMove(tagPOINT *curPos)
+void IN_ClampMouseMove(tagPOINT *curPos)
 {
 	bool isClamped; // [esp+3h] [ebp-11h]
 	tagRECT rc; // [esp+4h] [ebp-10h] BYREF
@@ -395,7 +395,7 @@ void __cdecl IN_ClampMouseMove(tagPOINT *curPos)
 IN_MouseMove
 ===========
 */
-void __cdecl IN_RecenterMouse();
+void IN_RecenterMouse();
 int IN_MouseMove()
 {
 	int result; // eax
@@ -437,7 +437,7 @@ int IN_MouseMove()
 =========================================================================
 */
 
-void __cdecl IN_ShowSystemCursor(BOOL show)
+void IN_ShowSystemCursor(BOOL show)
 {
 	int actualShow; // [esp+0h] [ebp-8h]
 	int desiredShow; // [esp+4h] [ebp-4h]
@@ -452,7 +452,7 @@ void __cdecl IN_ShowSystemCursor(BOOL show)
 IN_Startup
 ===========
 */
-void __cdecl IN_Startup()
+void IN_Startup()
 {
 	IN_StartupMouse();
 	Dvar_ClearModified((dvar_s*)in_mouse);
@@ -463,7 +463,7 @@ void __cdecl IN_Startup()
 IN_Shutdown
 ===========
 */
-void __cdecl IN_Shutdown()
+void IN_Shutdown()
 {
 	IN_DeactivateMouse();
 }
@@ -473,7 +473,7 @@ void __cdecl IN_Shutdown()
 IN_Init
 ===========
 */
-void __cdecl IN_Init()
+void IN_Init()
 {
 	in_mouse = Dvar_RegisterBool("in_mouse", 1, DVAR_ARCHIVE | DVAR_LATCH, "Initialize the mouse drivers");
 	IN_Startup();
@@ -511,7 +511,7 @@ IN_Frame
 Called every frame, even if not generating commands
 ==================
 */
-void __cdecl IN_Frame()
+void IN_Frame()
 {
 	if (Dvar_GetBool("ClickToContinue"))
 		PostMessageA(g_wv.hWnd, 0x201u, 1u, 0);
@@ -540,7 +540,7 @@ void IN_ClearStates (void)
 	s_wmv.oldButtonState = 0;
 }
 
-void __cdecl IN_RecenterMouse()
+void IN_RecenterMouse()
 {
 	tagRECT window_rect; // [esp+0h] [ebp-10h] BYREF
 
@@ -549,7 +549,7 @@ void __cdecl IN_RecenterMouse()
 	window_center_y = (window_rect.bottom + window_rect.top) / 2;
 	SetCursorPos((window_rect.left + window_rect.right) / 2, (window_rect.bottom + window_rect.top) / 2);
 }
-void __cdecl IN_SetCursorPos(tagPOINT x)
+void IN_SetCursorPos(tagPOINT x)
 {
 	tagPOINT curPos; // [esp+0h] [ebp-8h] BYREF
 

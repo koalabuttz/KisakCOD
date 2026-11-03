@@ -789,7 +789,7 @@ void G_RegisterDebugDvars()
     G_RegisterMissileDebugDvars();
 }
 
-void __cdecl TRACK_g_main()
+void TRACK_g_main()
 {
     track_static_alloc_internal(&level, 15892, "level", 9);
     track_static_alloc_internal(g_entities, 1366528, "g_entities", 9);
@@ -802,17 +802,17 @@ void __cdecl TRACK_g_main()
     track_static_alloc_internal(g_actors, 250368, "g_actors", 5);
 }
 
-int __cdecl G_GetServerSnapTime()
+int G_GetServerSnapTime()
 {
     return level.snapTime;
 }
 
-int __cdecl G_GetTime()
+int G_GetTime()
 {
     return level.time;
 }
 
-int __cdecl G_GetSpecialIndex(int entnum)
+int G_GetSpecialIndex(int entnum)
 {
     return level.specialIndex[entnum];
 }
@@ -843,7 +843,7 @@ void G_InitDvars()
     ProfLoad_End();
 }
 
-void __cdecl G_FreeEntities()
+void G_FreeEntities()
 {
     gentity_s *e; // r31
     int i; // r11
@@ -870,7 +870,7 @@ void __cdecl G_FreeEntities()
     Path_CheckUserCountLeaks();
 }
 
-void *__cdecl Hunk_AllocActorXAnimServer(int size)
+void *Hunk_AllocActorXAnimServer(int size)
 {
     return Hunk_AllocLow(size, "Hunk_AllocActorXAnimServer", 5);
 }
@@ -964,7 +964,7 @@ void G_FreeAnimTreeInstances()
     } while (v4);
 }
 
-void __cdecl G_ClearLowHunk()
+void G_ClearLowHunk()
 {
     if (level.loading == LOADING_SAVEGAME)
         XAnimDisableLeakCheck();
@@ -978,17 +978,17 @@ void __cdecl G_ClearLowHunk()
     Hunk_ResetDebugMem();
 }
 
-bool __cdecl G_DemoPlaying()
+bool G_DemoPlaying()
 {
     return level.demoplaying;
 }
 
-void *__cdecl Hunk_AllocXAnimServer(int size)
+void *Hunk_AllocXAnimServer(int size)
 {
     return Hunk_AllocLow(size, "Hunk_AllocXAnimServer", 11);
 }
 
-bool __cdecl G_ExitAfterConnectPaths()
+bool G_ExitAfterConnectPaths()
 {
     return false;
 }
@@ -1035,7 +1035,7 @@ void ScriptIOFilesShutdown()
     level.openScriptIOFileHandles[0] = 0;
 }
 
-void __cdecl G_PrintFastFileErrors(const char *fastfile)
+void G_PrintFastFileErrors(const char *fastfile)
 {
     iassert(fastfile);
 
@@ -1049,14 +1049,14 @@ void __cdecl G_PrintFastFileErrors(const char *fastfile)
     }
 }
 
-void __cdecl G_PrintAllFastFileErrors()
+void G_PrintAllFastFileErrors()
 {
     G_PrintFastFileErrors("code_post_gfx");
     G_PrintFastFileErrors("common");
     G_PrintFastFileErrors(sv_mapname->current.string);
 }
 
-void __cdecl G_InitGame(
+void G_InitGame(
     unsigned int randomSeed,
     int restart,
     int checksum,
@@ -1267,7 +1267,7 @@ LABEL_43:
     level.initializing = 0;
 }
 
-void __cdecl G_ShutdownGame(int clearScripts)
+void G_ShutdownGame(int clearScripts)
 {
     unsigned __int8 v2; // r11
 
@@ -1338,17 +1338,17 @@ void G_ChangeLevel()
     }
 }
 
-bool __cdecl G_IsNextMapWaiting()
+bool G_IsNextMapWaiting()
 {
     return g_reloading->current.integer == 4;
 }
 
-void __cdecl G_SetNextMap(const char *mapname)
+void G_SetNextMap(const char *mapname)
 {
     I_strncpyz(g_nextMap, mapname, 64);
 }
 
-void __cdecl G_LoadNextMap()
+void G_LoadNextMap()
 {
     const char *v0; // r4
     char *v1; // r3
@@ -1368,7 +1368,7 @@ void __cdecl G_LoadNextMap()
     Cbuf_AddText(0, v0);
 }
 
-void __cdecl G_CheckReloadStatus()
+void G_CheckReloadStatus()
 {
     const char *v0; // r3
 
@@ -1416,7 +1416,7 @@ void __cdecl G_CheckReloadStatus()
     }
 }
 
-void __cdecl G_ApplyEntityEq(gentity_s *ent)
+void G_ApplyEntityEq(gentity_s *ent)
 {
     gentity_s *Player; // r3
     gclient_s *client; // r11
@@ -1474,11 +1474,11 @@ void __cdecl G_ApplyEntityEq(gentity_s *ent)
     }
 }
 
-void __cdecl G_RunThink(gentity_s *ent)
+void G_RunThink(gentity_s *ent)
 {
     int nextthink; // r10
     int handler; // r10
-    void(__cdecl * think)(gentity_s *); // r31
+    void(* think)(gentity_s *); // r31
 
     nextthink = ent->nextthink;
     if (nextthink > 0 && nextthink <= level.time)
@@ -1496,7 +1496,7 @@ void __cdecl G_RunThink(gentity_s *ent)
     }
 }
 
-void __cdecl G_DrawEntityBBoxes()
+void G_DrawEntityBBoxes()
 {
     const dvar_s *v4; // r9
     int v5; // r27
@@ -1583,7 +1583,7 @@ void DebugDumpAIEventListeners()
     }
 }
 
-void __cdecl G_CheckLoadGame(int checksum, SaveGame *save)
+void G_CheckLoadGame(int checksum, SaveGame *save)
 {
     loading_t loading; // r11
 
@@ -1622,7 +1622,7 @@ LABEL_8:
     level.loading = LOADING_DONE;
 }
 
-void __cdecl G_XAnimUpdateEnt(gentity_s *ent)
+void G_XAnimUpdateEnt(gentity_s *ent)
 {
     while (ent->r.inuse)
     {
@@ -1634,7 +1634,7 @@ void __cdecl G_XAnimUpdateEnt(gentity_s *ent)
     }
 }
 
-void __cdecl G_ClientDoPerFrameNotifies(gentity_s *ent)
+void G_ClientDoPerFrameNotifies(gentity_s *ent)
 {
     gclient_s *client; // r31
     unsigned int weapon; // r3
@@ -1685,7 +1685,7 @@ void __cdecl G_ClientDoPerFrameNotifies(gentity_s *ent)
     }
 }
 
-void __cdecl G_RunFrameForEntityInternal(gentity_s *ent)
+void G_RunFrameForEntityInternal(gentity_s *ent)
 {
     int eventTime; // r10
     int eType; // r11
@@ -1752,7 +1752,7 @@ void __cdecl G_RunFrameForEntityInternal(gentity_s *ent)
     G_RunMover(ent);
 }
 
-void __cdecl G_RunFrameForEntity(gentity_s *ent)
+void G_RunFrameForEntity(gentity_s *ent)
 {
     int v10; // r4
     const char *v11; // r7
@@ -1827,19 +1827,19 @@ void __cdecl G_RunFrameForEntity(gentity_s *ent)
     }
 }
 
-void __cdecl G_RunPreFrame()
+void G_RunPreFrame()
 {
     level.previousTime = level.time;
     ++level.framenum;
     level.time += 50;
 }
 
-int __cdecl G_GetFramePos()
+int G_GetFramePos()
 {
     return level.framePos;
 }
 
-int __cdecl NotifyTriggers()
+int NotifyTriggers()
 {
     int v0; // r18
     int v1; // r25
@@ -1891,7 +1891,7 @@ int __cdecl NotifyTriggers()
     return v0;
 }
 
-void __cdecl G_SendClientMessages()
+void G_SendClientMessages()
 {
     int v0; // r28
     int v1; // r25
@@ -2066,7 +2066,7 @@ void __cdecl G_SendClientMessages()
         SaveRegisteredItems();
 }
 
-void __cdecl G_ArchiveSpecialEntityInfo(const entityState_s *es, MemoryFile *memFile)
+void G_ArchiveSpecialEntityInfo(const entityState_s *es, MemoryFile *memFile)
 {
     int eType; // r11
     int v5; // r30
@@ -2086,7 +2086,7 @@ void __cdecl G_ArchiveSpecialEntityInfo(const entityState_s *es, MemoryFile *mem
     }
 }
 
-void __cdecl G_TraceCapsule(
+void G_TraceCapsule(
     trace_t *results,
     const float *start,
     const float *mins,
@@ -2103,7 +2103,7 @@ void __cdecl G_TraceCapsule(
     SV_Trace(results, start, mins, maxs, end, &ignoreEntParams, contentmask, 0, 0, 0);
 }
 
-int __cdecl G_TraceCapsuleComplete(
+int G_TraceCapsuleComplete(
     const float *start,
     const float *mins,
     const float *maxs,
@@ -2114,7 +2114,7 @@ int __cdecl G_TraceCapsuleComplete(
     return SV_TracePassed(start, mins, maxs, end, passEntityNum, ENTITYNUM_NONE, contentmask, 0, 0, 0);
 }
 
-void __cdecl G_LocationalTrace(
+void G_LocationalTrace(
     trace_t *results,
     const float *start,
     const float *end,
@@ -2138,7 +2138,7 @@ void __cdecl G_LocationalTrace(
         1);
 }
 
-void __cdecl G_LocationalTraceAllowChildren(
+void G_LocationalTraceAllowChildren(
     trace_t *results,
     const float *start,
     const float *end,
@@ -2163,7 +2163,7 @@ void __cdecl G_LocationalTraceAllowChildren(
         1);
 }
 
-int __cdecl G_LocationalTracePassed(
+int G_LocationalTracePassed(
     const float *start,
     const float *end,
     int passEntityNum,
@@ -2184,17 +2184,17 @@ int __cdecl G_LocationalTracePassed(
         1);
 }
 
-void __cdecl G_SightTrace(int *hitNum, const float *start, const float *end, int passEntityNum, int contentmask)
+void G_SightTrace(int *hitNum, const float *start, const float *end, int passEntityNum, int contentmask)
 {
     SV_SightTrace(hitNum, start, vec3_origin, vec3_origin, end, passEntityNum, ENTITYNUM_NONE, contentmask);
 }
 
-void __cdecl G_AddDebugString(const float *xyz, const float *color, double scale, const char *pszText)
+void G_AddDebugString(const float *xyz, const float *color, double scale, const char *pszText)
 {
     CL_AddDebugString(xyz, color, scale, pszText, 1, 1);
 }
 
-void __cdecl G_AddDebugStringWithDuration(
+void G_AddDebugStringWithDuration(
     const float *xyz,
     const float *color,
     double scale,
@@ -2205,7 +2205,7 @@ void __cdecl G_AddDebugStringWithDuration(
 }
 
 static int lastEntTime;
-void __cdecl ShowEntityInfo()
+void ShowEntityInfo()
 {
     int mode;
     int filter;
@@ -2215,7 +2215,7 @@ void __cdecl ShowEntityInfo()
     int now;
     int recentTime;
     gentity_s *ent;
-    void(__cdecl * entinfo)(gentity_s *, float *);
+    void(* entinfo)(gentity_s *, float *);
     float viewPos[3]; // BYREF
     float viewFwd[3]; // BYREF
     float endPos[3]; // BYREF
@@ -2290,7 +2290,7 @@ void __cdecl ShowEntityInfo()
     }
 }
 
-int __cdecl G_RunFrame(ServerFrameExtent extent, int timeCap)
+int G_RunFrame(ServerFrameExtent extent, int timeCap)
 {
     int currentIndex; // r5
     int num_entities; // r11
@@ -2588,7 +2588,7 @@ int __cdecl G_RunFrame(ServerFrameExtent extent, int timeCap)
     return 1;
 }
 
-void __cdecl G_LoadLevel()
+void G_LoadLevel()
 {
     iassert((level.loading == LOADING_LEVEL) || (level.loading == LOADING_SAVEGAME));
 

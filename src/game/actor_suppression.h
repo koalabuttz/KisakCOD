@@ -15,22 +15,22 @@ struct ai_suppression_t
     int movementOnly;
 };
 
-void __cdecl DebugDrawSuppression(actor_s *self);
-int __cdecl Actor_PickNewSuppressantEntry(actor_s *self, sentient_s *pSuppressor);
-int __cdecl Actor_NearCoverNode(actor_s *self);
-void __cdecl Actor_BulletWhizbyNotify(actor_s *self, sentient_s *pSuppressor);
-void __cdecl Actor_AddSuppressionLine(
+void DebugDrawSuppression(actor_s *self);
+int Actor_PickNewSuppressantEntry(actor_s *self, sentient_s *pSuppressor);
+int Actor_NearCoverNode(actor_s *self);
+void Actor_BulletWhizbyNotify(actor_s *self, sentient_s *pSuppressor);
+void Actor_AddSuppressionLine(
     actor_s *self,
     sentient_s *pSuppressor,
     const float *vStart,
     const float *vEnd);
-void __cdecl Actor_ClearSuppressant(ai_suppression_t *suppressant);
-void __cdecl Actor_DecaySuppressionLines(actor_s *self);
-void __cdecl Actor_DissociateSuppressor(actor_s *self, sentient_s *pSuppressor);
-int __cdecl Actor_IsSuppressedInAnyway(actor_s *self);
-bool __cdecl Actor_IsSuppressed(actor_s *self);
-int __cdecl Actor_IsMoveSuppressed(actor_s *self);
-int __cdecl Actor_IsSuppressionWaiting(actor_s *self);
-int __cdecl Actor_GetSuppressionPlanes(actor_s *self, float (*vNormalOut)[2], float *fDistOut);
-int __cdecl Actor_GetMoveOnlySuppressionPlanes(actor_s *self, float (*vNormalOut)[2], float *fDistOut);
-void __cdecl Actor_ClearAllSuppressionFromEnemySentient(sentient_s *pSuppressor);
+void Actor_ClearSuppressant(ai_suppression_t *suppressant);
+void Actor_DecaySuppressionLines(actor_s *self);
+void Actor_DissociateSuppressor(actor_s *self, sentient_s *pSuppressor);
+int Actor_IsSuppressedInAnyway(actor_s *self);
+bool Actor_IsSuppressed(actor_s *self);
+int Actor_IsMoveSuppressed(actor_s *self);
+int Actor_IsSuppressionWaiting(actor_s *self);
+int Actor_GetSuppressionPlanes(actor_s *self, float (*vNormalOut)[2], float *fDistOut);
+int Actor_GetMoveOnlySuppressionPlanes(actor_s *self, float (*vNormalOut)[2], float *fDistOut);
+void Actor_ClearAllSuppressionFromEnemySentient(sentient_s *pSuppressor);

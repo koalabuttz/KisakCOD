@@ -2,7 +2,7 @@
 #include <universal/q_shared.h>
 #include "r_state.h"
 
-void __cdecl R_SetViewportStruct(GfxCmdBufSourceState *source, const GfxViewport *viewport)
+void R_SetViewportStruct(GfxCmdBufSourceState *source, const GfxViewport *viewport)
 {
     iassert(viewport->width > 0);
     iassert(viewport->height > 0);
@@ -15,7 +15,7 @@ void __cdecl R_SetViewportStruct(GfxCmdBufSourceState *source, const GfxViewport
     source->viewportIsDirty = 1;
 }
 
-void __cdecl R_SetViewportValues(GfxCmdBufSourceState *source, int x, int y, int width, int height)
+void R_SetViewportValues(GfxCmdBufSourceState *source, int x, int y, int width, int height)
 {
     GfxViewport viewport; // [esp+0h] [ebp-10h] BYREF
 

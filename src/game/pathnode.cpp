@@ -86,7 +86,7 @@ NodeTypeToName priorityAllowedNodes[9] =
   { NODE_COVER_LEFT, "NODE_COVER_LEFT" }
 };
 
-void __cdecl TRACK_pathnode()
+void TRACK_pathnode()
 {
     track_static_alloc_internal(&g_path, 16512, "g_path", 6);
     track_static_alloc_internal((void *)nodeColorTable, 320, "nodeColorTable", 5);
@@ -94,7 +94,7 @@ void __cdecl TRACK_pathnode()
     track_static_alloc_internal(&debugPathBuf, 996, "debugPathBuf", 0);
 }
 
-int __cdecl NodeTypeCanHavePriority(nodeType type)
+int NodeTypeCanHavePriority(nodeType type)
 {
     unsigned int v1; // r10
     NodeTypeToName *i; // r11
@@ -109,7 +109,7 @@ int __cdecl NodeTypeCanHavePriority(nodeType type)
     return 1;
 }
 
-void __cdecl TurretNode_GetAngles(const pathnode_t *node, float *angleMin, float *angleMax)
+void TurretNode_GetAngles(const pathnode_t *node, float *angleMin, float *angleMax)
 {
     int turretEntNumber; // r11
     gentity_s *ent; // r29
@@ -135,7 +135,7 @@ void __cdecl TurretNode_GetAngles(const pathnode_t *node, float *angleMin, float
     }
 }
 
-bool __cdecl TurretNode_HasTurret(const pathnode_t *node)
+bool TurretNode_HasTurret(const pathnode_t *node)
 {
     int turretEntNumber; // r11
 
@@ -154,7 +154,7 @@ bool __cdecl TurretNode_HasTurret(const pathnode_t *node)
     return g_entities[node->dynamic.turretEntNumber].pTurretInfo != 0;
 }
 
-void __cdecl Path_ReadOnly(int offset)
+void Path_ReadOnly(int offset)
 {
     const char *v1; // r3
 
@@ -162,7 +162,7 @@ void __cdecl Path_ReadOnly(int offset)
     Scr_Error(v1);
 }
 
-void __cdecl Path_NonNegativeFloat(pathnode_t *node, int offset)
+void Path_NonNegativeFloat(pathnode_t *node, int offset)
 {
     double Float; // fp31
     const char *v5; // r3
@@ -186,7 +186,7 @@ void __cdecl Path_NonNegativeFloat(pathnode_t *node, int offset)
     *(float *)((char *)&node->constant.type + fields_3[offset].ofs) = Float;
 }
 
-void __cdecl Path_GetType(pathnode_t *node, int offset)
+void Path_GetType(pathnode_t *node, int offset)
 {
     if (node->constant.type >= (unsigned int)NODE_NUMTYPES)
         MyAssertHandler(
@@ -198,7 +198,7 @@ void __cdecl Path_GetType(pathnode_t *node, int offset)
     Scr_AddString(nodeStringTable[node->constant.type]);
 }
 
-void __cdecl Scr_SetPathnodeField(unsigned int entnum, unsigned int offset)
+void Scr_SetPathnodeField(unsigned int entnum, unsigned int offset)
 {
     iassert((unsigned)offset < ARRAY_COUNT(fields_3) - 1);
     iassert((unsigned)entnum < PATH_MAX_NODES);
@@ -206,11 +206,11 @@ void __cdecl Scr_SetPathnodeField(unsigned int entnum, unsigned int offset)
     Scr_Error(va("pathnode property '%s' is read-only", fields_3[offset].name));
 }
 
-void __cdecl Scr_GetPathnodeField(unsigned int entnum, unsigned int offset)
+void Scr_GetPathnodeField(unsigned int entnum, unsigned int offset)
 {
     node_field_t *v4; // r11
     unsigned __int8 *v5; // r3
-    void(__cdecl * getter)(pathnode_t *, int); // r10
+    void(* getter)(pathnode_t *, int); // r10
 
     if (offset >= 0xB)
         MyAssertHandler(
@@ -237,7 +237,7 @@ void __cdecl Scr_GetPathnodeField(unsigned int entnum, unsigned int offset)
         Scr_GetGenericField(v5, v4->type, v4->ofs);
 }
 
-void __cdecl PathNode_ClearStringField(unsigned __int16 *destScrString)
+void PathNode_ClearStringField(unsigned __int16 *destScrString)
 {
     unsigned int v2; // r3
 
@@ -249,7 +249,7 @@ void __cdecl PathNode_ClearStringField(unsigned __int16 *destScrString)
     }
 }
 
-void __cdecl PathNode_UpdateStringField(
+void PathNode_UpdateStringField(
     const char *destKey,
     unsigned __int16 *destScrString,
     const char *key,
@@ -269,7 +269,7 @@ void __cdecl PathNode_UpdateStringField(
     }
 }
 
-void __cdecl PathNode_UpdateFloatField(const char *destKey, float *destFloat, const char *key, const char *value)
+void PathNode_UpdateFloatField(const char *destKey, float *destFloat, const char *key, const char *value)
 {
     float floatValue; // [sp+50h] [-40h] BYREF
 
@@ -284,7 +284,7 @@ void __cdecl PathNode_UpdateFloatField(const char *destKey, float *destFloat, co
     }
 }
 
-void __cdecl PathNode_OriginMatches(const char *value, const float *nodeOrigin)
+void PathNode_OriginMatches(const char *value, const float *nodeOrigin)
 {
     float x; // [sp+50h] [-30h] BYREF
     float y; // [sp+54h] [-2Ch] BYREF
@@ -297,7 +297,7 @@ void __cdecl PathNode_OriginMatches(const char *value, const float *nodeOrigin)
         ++g_path.originErrors;
 }
 
-void __cdecl node_droptofloor(pathnode_t *node)
+void node_droptofloor(pathnode_t *node)
 {
     float dropMaxs[3]; // [esp+D0h] [ebp-A4h] BYREF
     float dropMins[3]; // [esp+DCh] [ebp-98h] BYREF
@@ -373,7 +373,7 @@ void __cdecl node_droptofloor(pathnode_t *node)
     node->constant.type = NODE_BADNODE;
 }
 
-void __cdecl G_UpdateTrackExtraNodes()
+void G_UpdateTrackExtraNodes()
 {
     unsigned int nodeCount; // r11
 
@@ -402,7 +402,7 @@ void __cdecl G_UpdateTrackExtraNodes()
     g_path.actualNodeCount = nodeCount;
 }
 
-void __cdecl GScr_AddFieldsForPathnode()
+void GScr_AddFieldsForPathnode()
 {
     for (node_field_t *f = fields_3; f->name; ++f)
     {
@@ -411,7 +411,7 @@ void __cdecl GScr_AddFieldsForPathnode()
     }
 }
 
-pathnode_t *__cdecl Scr_GetPathnode(unsigned int index)
+pathnode_t *Scr_GetPathnode(unsigned int index)
 {
     scr_entref_t entref; // [sp+50h] [-20h]
 
@@ -430,7 +430,7 @@ pathnode_t *__cdecl Scr_GetPathnode(unsigned int index)
     }
 }
 
-void __cdecl G_FreePathnodesScriptInfo()
+void G_FreePathnodesScriptInfo()
 {
     unsigned int nodeIndex; // r31
 
@@ -446,7 +446,7 @@ void __cdecl G_FreePathnodesScriptInfo()
     }
 }
 
-bool __cdecl Path_CompareNodesIncreasing(const pathsort_t &ps1, const pathsort_t &ps2)
+bool Path_CompareNodesIncreasing(const pathsort_t &ps1, const pathsort_t &ps2)
 {
     if (ps1.node->dynamic.wLinkCount)
     {
@@ -460,7 +460,7 @@ bool __cdecl Path_CompareNodesIncreasing(const pathsort_t &ps1, const pathsort_t
     return ps1.metric < ps2.metric;
 }
 
-unsigned int __cdecl Path_ConvertNodeToIndex(const pathnode_t *node)
+unsigned int Path_ConvertNodeToIndex(const pathnode_t *node)
 {
     unsigned int v2; // r31
 
@@ -478,7 +478,7 @@ unsigned int __cdecl Path_ConvertNodeToIndex(const pathnode_t *node)
     return v2;
 }
 
-pathnode_t *__cdecl Path_ConvertIndexToNode(unsigned int index)
+pathnode_t *Path_ConvertIndexToNode(unsigned int index)
 {
     if (index >= g_path.actualNodeCount)
         MyAssertHandler(
@@ -491,12 +491,12 @@ pathnode_t *__cdecl Path_ConvertIndexToNode(unsigned int index)
     return &gameWorldSp.path.nodes[index];
 }
 
-unsigned int __cdecl Path_NodeCount()
+unsigned int Path_NodeCount()
 {
     return g_path.actualNodeCount;
 }
 
-void __cdecl Path_Init(int restart)
+void Path_Init(int restart)
 {
     memset(&g_path, 0, sizeof(g_path));
     iassert(gameWorldSp.path.nodes);
@@ -504,21 +504,21 @@ void __cdecl Path_Init(int restart)
     Path_InitBadPlaces();
 }
 
-int __cdecl NodeVisCacheEntry(int i, int j)
+int NodeVisCacheEntry(int i, int j)
 {
     if (i >= j)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\pathnode.cpp", 1255, 0, "%s", "i < j");
     return g_path.actualNodeCount * i + j;
 }
 
-int __cdecl ExpandedNodeVisCacheEntry(int i, int j)
+int ExpandedNodeVisCacheEntry(int i, int j)
 {
     if (i <= j)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\pathnode.cpp", 1262, 0, "%s", "i > j");
     return (i - 1) * g_path.actualNodeCount + j;
 }
 
-static void __cdecl Path_NodesInCylinder_process(pathnode_t *pnode)
+static void Path_NodesInCylinder_process(pathnode_t *pnode)
 {
     float distSq; // [esp+Ch] [ebp-4h]
 
@@ -541,7 +541,7 @@ static void __cdecl Path_NodesInCylinder_process(pathnode_t *pnode)
     }
 }
 
-void __cdecl Path_NodesInCylinder_r(pathnode_tree_t *tree)
+void Path_NodesInCylinder_r(pathnode_tree_t *tree)
 {
     float dist;
     while (tree->axis >= 0)
@@ -576,7 +576,7 @@ void __cdecl Path_NodesInCylinder_r(pathnode_tree_t *tree)
     }
 }
 
-int __cdecl Path_NodesInCylinder(
+int Path_NodesInCylinder(
     const float *origin,
     float maxDist,
     float maxHeight,
@@ -604,7 +604,7 @@ int __cdecl Path_NodesInCylinder(
     return g_path.circle.nodeCount;
 }
 
-int __cdecl Path_NodesInRadius(
+int Path_NodesInRadius(
     float *origin,
     double maxDist,
     pathsort_t *nodes,
@@ -614,12 +614,12 @@ int __cdecl Path_NodesInRadius(
     return Path_NodesInCylinder(origin, maxDist, 1000000000.0, nodes, maxNodes, typeFlags);
 }
 
-int __cdecl Path_IsDynamicBlockingEntity(gentity_s *ent)
+int Path_IsDynamicBlockingEntity(gentity_s *ent)
 {
     return ent->flags & 0x100;
 }
 
-bool __cdecl Path_IsBadPlaceLink(unsigned int nodeNumFrom, unsigned int nodeNumTo, team_t eTeam)
+bool Path_IsBadPlaceLink(unsigned int nodeNumFrom, unsigned int nodeNumTo, team_t eTeam)
 {
     unsigned int actualNodeCount; // r8
     unsigned int v7; // r11
@@ -751,7 +751,7 @@ void Path_InitLinkInfoArray()
     }
 }
 
-void __cdecl Path_InitNodeDynamic(pathnode_t *loadNode)
+void Path_InitNodeDynamic(pathnode_t *loadNode)
 {
     pathnode_dynamic_t *p_dynamic; // r11
     int v3; // ctr
@@ -784,7 +784,7 @@ void __cdecl Path_InitNodeDynamic(pathnode_t *loadNode)
     loadNode->dynamic.turretEntNumber = -1;
 }
 
-void __cdecl Path_InitNodesDynamic()
+void Path_InitNodesDynamic()
 {
     unsigned int v1; // r28
     int v2; // r30
@@ -829,13 +829,13 @@ void __cdecl Path_InitNodesDynamic()
     }
 }
 
-void __cdecl Path_PreSpawnInitPaths()
+void Path_PreSpawnInitPaths()
 {
     Path_InitNodesDynamic();
     Path_InitLinkCounts();
 }
 
-void __cdecl Path_DrawDebugNoLinks(const pathnode_t *node, const float (*color)[4], int duration)
+void Path_DrawDebugNoLinks(const pathnode_t *node, const float (*color)[4], int duration)
 {
     double v5; // fp31
     double v6; // fp30
@@ -1034,7 +1034,7 @@ void Path_DrawDebugLink(const pathnode_t *node, const int i, bool bShowAll)
 }
 
 
-float __cdecl Path_GetDebugStringScale(const float *cameraPos, const float *origin)
+float Path_GetDebugStringScale(const float *cameraPos, const float *origin)
 {
     gentity_s *v4; // r3
     double v5; // fp13
@@ -1064,7 +1064,7 @@ float __cdecl Path_GetDebugStringScale(const float *cameraPos, const float *orig
     return (float)v7;
 }
 
-void __cdecl Path_DrawDebugNodeBox(const pathnode_t *node)
+void Path_DrawDebugNodeBox(const pathnode_t *node)
 {
     double v5; // fp2
     double v6; // fp31
@@ -1114,7 +1114,7 @@ void __cdecl Path_DrawDebugNodeBox(const pathnode_t *node)
     }
 }
 
-void __cdecl Path_DrawDebugNode(const float *cameraPos, const pathnode_t *node)
+void Path_DrawDebugNode(const float *cameraPos, const pathnode_t *node)
 {
     double DebugStringScale; // fp1
     const char *v7; // r5
@@ -1138,7 +1138,7 @@ static float vGoalPos[3];
 static float width;
 static float perp[2];
 
-void __cdecl Path_DrawDebugFindPath(float *vOrigin)
+void Path_DrawDebugFindPath(float *vOrigin)
 {
     int integer; // r11
     int v2; // r11
@@ -1279,7 +1279,7 @@ LABEL_11:
     }
 }
 
-void __cdecl Path_DrawFriendlyChain()
+void Path_DrawFriendlyChain()
 {
     const float *v0; // r6
     int v1; // r5
@@ -1366,7 +1366,7 @@ void __cdecl Path_DrawFriendlyChain()
     }
 }
 
-bool __cdecl Path_IsNodeIndex(const pathnode_t *node, unsigned int nodeIndexToCheck)
+bool Path_IsNodeIndex(const pathnode_t *node, unsigned int nodeIndexToCheck)
 {
     unsigned int v4; // r31
     pathnode_t *nodes; // r11
@@ -1395,7 +1395,7 @@ bool __cdecl Path_IsNodeIndex(const pathnode_t *node, unsigned int nodeIndexToCh
     return nodeIndexToCheck == v4;
 }
 
-int __cdecl Path_NodesVisible(const pathnode_t *node0, const pathnode_t *node1)
+int Path_NodesVisible(const pathnode_t *node0, const pathnode_t *node1)
 {
     unsigned int v4; // r31
     unsigned int v5; // r29
@@ -1456,7 +1456,7 @@ int __cdecl Path_NodesVisible(const pathnode_t *node0, const pathnode_t *node1)
     return result;
 }
 
-int __cdecl Path_ExpandedNodeVisible(const pathnode_t *node0, const pathnode_t *node1)
+int Path_ExpandedNodeVisible(const pathnode_t *node0, const pathnode_t *node1)
 {
     unsigned int v4; // r31
     unsigned int v5; // r29
@@ -1517,7 +1517,7 @@ int __cdecl Path_ExpandedNodeVisible(const pathnode_t *node0, const pathnode_t *
     return result;
 }
 
-pathnode_t *__cdecl Path_FindChainPos(const float *vOrigin, pathnode_t *pPrevChainPos)
+pathnode_t *Path_FindChainPos(const float *vOrigin, pathnode_t *pPrevChainPos)
 {
     pathnode_t *result; // r3
     __int16 wChainId; // r31
@@ -1656,7 +1656,7 @@ pathnode_t *__cdecl Path_FindChainPos(const float *vOrigin, pathnode_t *pPrevCha
     return result;
 }
 
-void __cdecl Path_UpdateBestChainNode(pathnode_t *node, pathnode_t **bestNode, unsigned int *foundCount)
+void Path_UpdateBestChainNode(pathnode_t *node, pathnode_t **bestNode, unsigned int *foundCount)
 {
     int wChainDepth; // r11
     int v6; // r10
@@ -1681,7 +1681,7 @@ void __cdecl Path_UpdateBestChainNode(pathnode_t *node, pathnode_t **bestNode, u
         *bestNode = node;
 }
 
-int __cdecl Path_CanSetDesiredChainPos(actor_s *claimer, const pathnode_t *node)
+int Path_CanSetDesiredChainPos(actor_s *claimer, const pathnode_t *node)
 {
     int v4; // r30
     actor_s *Actor; // r3
@@ -1699,7 +1699,7 @@ int __cdecl Path_CanSetDesiredChainPos(actor_s *claimer, const pathnode_t *node)
     return 0;
 }
 
-void __cdecl Path_AttachSentientToChainNode(sentient_s *sentient, unsigned __int16 targetname)
+void Path_AttachSentientToChainNode(sentient_s *sentient, unsigned __int16 targetname)
 {
     unsigned int v4; // r28
     pathnode_t *pActualChainPos; // r11
@@ -1769,7 +1769,7 @@ void __cdecl Path_AttachSentientToChainNode(sentient_s *sentient, unsigned __int
     }
 }
 
-pathnode_t *__cdecl Path_FirstNode(int typeFlags)
+pathnode_t *Path_FirstNode(int typeFlags)
 {
     int v1; // r10
     pathnode_t *i; // r11
@@ -1785,7 +1785,7 @@ pathnode_t *__cdecl Path_FirstNode(int typeFlags)
     return &gameWorldSp.path.nodes[v1];
 }
 
-pathnode_t *__cdecl Path_NextNode(pathnode_t *prevNode, int typeFlags)
+pathnode_t *Path_NextNode(pathnode_t *prevNode, int typeFlags)
 {
     pathnode_t *nodes; // r11
     unsigned int actualNodeCount; // r9
@@ -1829,7 +1829,7 @@ pathnode_t *__cdecl Path_NextNode(pathnode_t *prevNode, int typeFlags)
     return &nodes[v6];
 }
 
-sentient_s *__cdecl Path_GetNodeOwner(const pathnode_t *node)
+sentient_s *Path_GetNodeOwner(const pathnode_t *node)
 {
     const pathnode_dynamic_t *p_dynamic; // r31
     int v4; // r11
@@ -1860,7 +1860,7 @@ sentient_s *__cdecl Path_GetNodeOwner(const pathnode_t *node)
     return 0;
 }
 
-int __cdecl Path_CanStealPriorityNode(const pathnode_t *node, sentient_s *claimer)
+int Path_CanStealPriorityNode(const pathnode_t *node, sentient_s *claimer)
 {
     sentient_s *NodeOwner; // r3
     sentient_s *v5; // r29
@@ -1901,7 +1901,7 @@ int __cdecl Path_CanStealPriorityNode(const pathnode_t *node, sentient_s *claime
     return result;
 }
 
-int __cdecl Path_CanStealNode(const pathnode_t *node, sentient_s *claimer)
+int Path_CanStealNode(const pathnode_t *node, sentient_s *claimer)
 {
     sentient_s *NodeOwner; // r3
     sentient_s *v5; // r28
@@ -1942,7 +1942,7 @@ int __cdecl Path_CanStealNode(const pathnode_t *node, sentient_s *claimer)
     return result;
 }
 
-void __cdecl Path_ClaimNodeInternal(pathnode_t *node, sentient_s *claimer)
+void Path_ClaimNodeInternal(pathnode_t *node, sentient_s *claimer)
 {
     actor_s *actor; // r3
 
@@ -1959,7 +1959,7 @@ void __cdecl Path_ClaimNodeInternal(pathnode_t *node, sentient_s *claimer)
     Sentient_BanNearNodes(claimer);
 }
 
-void __cdecl Path_MarkNodeOverlap(pathnode_t *node)
+void Path_MarkNodeOverlap(pathnode_t *node)
 {
     iassert(node);
     node->dynamic.pOwner.setSentient(NULL);
@@ -1967,7 +1967,7 @@ void __cdecl Path_MarkNodeOverlap(pathnode_t *node)
     node->dynamic.iFreeTime = 0x7FFFFFFF;
 }
 
-void __cdecl Path_ClaimNode(pathnode_t *node, sentient_s *claimer)
+void Path_ClaimNode(pathnode_t *node, sentient_s *claimer)
 {
     int iFreeTime; // r8
     int loopItr; // r18
@@ -2019,7 +2019,7 @@ void __cdecl Path_ClaimNode(pathnode_t *node, sentient_s *claimer)
     Sentient_BanNearNodes(claimer);
 }
 
-void __cdecl Path_RevokeClaim(pathnode_t *node, sentient_s *pNewClaimer)
+void Path_RevokeClaim(pathnode_t *node, sentient_s *pNewClaimer)
 {
     pathnode_dynamic_t *p_dynamic; // r31
 
@@ -2036,7 +2036,7 @@ void __cdecl Path_RevokeClaim(pathnode_t *node, sentient_s *pNewClaimer)
     }
 }
 
-void __cdecl Path_RelinquishNode(sentient_s *claimer, int timeUntilRelinquished)
+void Path_RelinquishNode(sentient_s *claimer, int timeUntilRelinquished)
 {
     pathnode_t *node; // r27
     gentity_s *ent; // r3
@@ -2096,7 +2096,7 @@ void __cdecl Path_RelinquishNode(sentient_s *claimer, int timeUntilRelinquished)
     }
 }
 
-int __cdecl Path_AllowedStancesForNode(pathnode_t *node)
+int Path_AllowedStancesForNode(pathnode_t *node)
 {
     int spawnflags; // r8
     int v3; // r31
@@ -2122,7 +2122,7 @@ int __cdecl Path_AllowedStancesForNode(pathnode_t *node)
     return v3;
 }
 
-int __cdecl Path_SaveIndex(const pathnode_t *node)
+int Path_SaveIndex(const pathnode_t *node)
 {
     pathnode_t *nodes; // r11
 
@@ -2142,7 +2142,7 @@ int __cdecl Path_SaveIndex(const pathnode_t *node)
     return node - nodes + 1;
 }
 
-pathnode_t *__cdecl Path_LoadNode(unsigned int index)
+pathnode_t *Path_LoadNode(unsigned int index)
 {
     if (index > g_path.actualNodeCount)
         Com_Error(ERR_DROP, "\x15Path_LoadNode: node out of range (%i)", index);
@@ -2152,7 +2152,7 @@ pathnode_t *__cdecl Path_LoadNode(unsigned int index)
         return 0;
 }
 
-void __cdecl Path_ValidateNode(pathnode_t *node)
+void Path_ValidateNode(pathnode_t *node)
 {
     int v2; // r31
     int v3; // r27
@@ -2214,7 +2214,7 @@ void __cdecl Path_ValidateNode(pathnode_t *node)
     }
 }
 
-void __cdecl Path_ValidateAllNodes()
+void Path_ValidateAllNodes()
 {
     unsigned int v0; // r31
     int v1; // r30
@@ -2232,7 +2232,7 @@ void __cdecl Path_ValidateAllNodes()
     }
 }
 
-void __cdecl Path_CheckLinkLeaks()
+void Path_CheckLinkLeaks()
 {
     int next; // r11
     int v1; // r10
@@ -2278,7 +2278,7 @@ void __cdecl Path_CheckLinkLeaks()
     }
 }
 
-void __cdecl Path_CheckUserCountLeaks()
+void Path_CheckUserCountLeaks()
 {
     unsigned int v0; // r25
     unsigned int actualNodeCount; // r10
@@ -2307,7 +2307,7 @@ void __cdecl Path_CheckUserCountLeaks()
     }
 }
 
-void __cdecl Path_DisconnectPath(pathnode_t *node, pathlink_s *link)
+void Path_DisconnectPath(pathnode_t *node, pathlink_s *link)
 {
     int v4; // r11
     pathlink_s *v5; // r11
@@ -2406,7 +2406,7 @@ void __cdecl Path_DisconnectPath(pathnode_t *node, pathlink_s *link)
     Path_ValidateNode(node);
 }
 
-void __cdecl Path_ConnectPath(pathnode_t *node, pathlink_s *link)
+void Path_ConnectPath(pathnode_t *node, pathlink_s *link)
 {
     int v4; // r11
     float fDist; // r10
@@ -2445,7 +2445,7 @@ void __cdecl Path_ConnectPath(pathnode_t *node, pathlink_s *link)
     Path_ValidateNode(node);
 }
 
-static void __cdecl Path_ConnectPath_0(pathnode_t *node, int toNodeNum)
+static void Path_ConnectPath_0(pathnode_t *node, int toNodeNum)
 {
     int totalLinkCount; // r8
     int wLinkCount; // r11
@@ -2477,7 +2477,7 @@ static void __cdecl Path_ConnectPath_0(pathnode_t *node, int toNodeNum)
     }
 }
 
-void __cdecl Path_ConnectPathsForEntity(gentity_s *ent)
+void Path_ConnectPathsForEntity(gentity_s *ent)
 {
     int disconnectedLinks; // r7
     int next; // r11
@@ -2514,7 +2514,7 @@ void __cdecl Path_ConnectPathsForEntity(gentity_s *ent)
     }
 }
 
-void __cdecl Path_DisconnectPath_0(gentity_s *ent, pathnode_t *node, pathlink_s *link)
+void Path_DisconnectPath_0(gentity_s *ent, pathnode_t *node, pathlink_s *link)
 {
     int next; // r29
     unsigned __int16 v7; // r28
@@ -2551,7 +2551,7 @@ void __cdecl Path_DisconnectPath_0(gentity_s *ent, pathnode_t *node, pathlink_s 
 
 static float disconnectMins[3] = { -15.0, -15.0, 18.0 };
 static float disconnectMaxs[3] = { 15.0, 15.0, 72.0 };
-void __cdecl Path_DisconnectPathsForEntity(gentity_s *ent)
+void Path_DisconnectPathsForEntity(gentity_s *ent)
 {
     int number; // r26
     unsigned int v3; // r21
@@ -2613,7 +2613,7 @@ void __cdecl Path_DisconnectPathsForEntity(gentity_s *ent)
     }
 }
 
-void __cdecl Path_UpdateBadPlaceCountForLink(pathlink_s *link, int teamflags, int delta)
+void Path_UpdateBadPlaceCountForLink(pathlink_s *link, int teamflags, int delta)
 {
     unsigned int i; // r29
     int v7; // r31
@@ -2765,7 +2765,7 @@ void Path_UpdateArcBadPlaceCount(badplace_arc_t *arc, int teamFlags, int delta)
 }
 
 
-void __cdecl Path_UpdateBrushBadPlaceCount(gentity_s *brushEnt, int teamflags, int delta)
+void Path_UpdateBrushBadPlaceCount(gentity_s *brushEnt, int teamflags, int delta)
 {
     int v6; // r5
     pathsort_t *v7; // r4
@@ -2845,7 +2845,7 @@ void __cdecl Path_UpdateBrushBadPlaceCount(gentity_s *brushEnt, int teamflags, i
     }
 }
 
-int __cdecl Path_IsNodeInArc(
+int Path_IsNodeInArc(
     pathnode_t *pNode,
     const float *origin,
     double radius,
@@ -2856,7 +2856,7 @@ int __cdecl Path_IsNodeInArc(
     return IsPosInsideArc(pNode->constant.vOrigin, 15.0, origin, radius, angle0, angle1, halfHeight);
 }
 
-void __cdecl WriteEntityDisconnectedLinks(gentity_s *ent, SaveGame *save)
+void WriteEntityDisconnectedLinks(gentity_s *ent, SaveGame *save)
 {
     int disconnectedLinks; // r11
     int v5; // r31
@@ -2875,7 +2875,7 @@ void __cdecl WriteEntityDisconnectedLinks(gentity_s *ent, SaveGame *save)
     }
 }
 
-void __cdecl ReadEntityDisconnectedLinks(gentity_s *ent, SaveGame *save)
+void ReadEntityDisconnectedLinks(gentity_s *ent, SaveGame *save)
 {
     int disconnectedLinks;
     pathnode_t *node;
@@ -2918,7 +2918,7 @@ void __cdecl ReadEntityDisconnectedLinks(gentity_s *ent, SaveGame *save)
     } while (disconnectedLinks != ent->disconnectedLinks);
 }
 
-void __cdecl Scr_SetNodePriority()
+void Scr_SetNodePriority()
 {
     unsigned int v0; // r4
     pathnode_t *Pathnode; // r29
@@ -2972,7 +2972,7 @@ void __cdecl Scr_SetNodePriority()
     }
 }
 
-void __cdecl Scr_IsNodeOccupied()
+void Scr_IsNodeOccupied()
 {
     unsigned int v0; // r4
     bool v1; // r3
@@ -2988,7 +2988,7 @@ void __cdecl Scr_IsNodeOccupied()
     }
 }
 
-void __cdecl Scr_SetTurretNode()
+void Scr_SetTurretNode()
 {
     unsigned int v0; // r4
     pathnode_t *Pathnode; // r30
@@ -3015,7 +3015,7 @@ void __cdecl Scr_SetTurretNode()
     }
 }
 
-void __cdecl Scr_UnsetTurretNode()
+void Scr_UnsetTurretNode()
 {
     unsigned int v0; // r4
     pathnode_t *Pathnode; // r3
@@ -3034,7 +3034,7 @@ void __cdecl Scr_UnsetTurretNode()
     }
 }
 
-void __cdecl GScr_SetDynamicPathnodeField(pathnode_t *node, unsigned int index)
+void GScr_SetDynamicPathnodeField(pathnode_t *node, unsigned int index)
 {
     unsigned int v3; // r3
 
@@ -3042,7 +3042,7 @@ void __cdecl GScr_SetDynamicPathnodeField(pathnode_t *node, unsigned int index)
     Scr_SetDynamicEntityField(v3, 2u, index);
 }
 
-static void __cdecl G_InitPathBaseNode(pathbasenode_t *pbnode, const pathnode_t *pnode)
+static void G_InitPathBaseNode(pathbasenode_t *pbnode, const pathnode_t *pnode)
 {
     pbnode->vOrigin[0] = pnode->constant.vOrigin[0];
     pbnode->vOrigin[1] = pnode->constant.vOrigin[1];
@@ -3052,13 +3052,13 @@ static void __cdecl G_InitPathBaseNode(pathbasenode_t *pbnode, const pathnode_t 
         pbnode->type |= 0x100000u;
 }
 
-static void __cdecl G_DropPathNodeToFloor(unsigned int nodeIndex)
+static void G_DropPathNodeToFloor(unsigned int nodeIndex)
 {
     node_droptofloor(&gameWorldSp.path.nodes[nodeIndex]);
     G_InitPathBaseNode(&gameWorldSp.path.basenodes[nodeIndex], &gameWorldSp.path.nodes[nodeIndex]);
 }
 
-void __cdecl G_DropPathnodesToFloor()
+void G_DropPathnodesToFloor()
 {
     unsigned int backupEntContents[MAX_GENTITIES]; // [esp+Ch] [ebp-1008h]
 
@@ -3088,14 +3088,14 @@ void __cdecl G_DropPathnodesToFloor()
     }
 }
 
-void __cdecl Scr_FreePathnode(pathnode_t *node)
+void Scr_FreePathnode(pathnode_t *node)
 {
     iassert(!node->dynamic.pOwner.isDefined());
 
     Scr_FreeEntityNum(Path_ConvertNodeToIndex(node), CLASS_NUM_PATHNODE);
 }
 
-void __cdecl Scr_AddPathnode(pathnode_t *node)
+void Scr_AddPathnode(pathnode_t *node)
 {
     unsigned int v1; // r3
 
@@ -3103,7 +3103,7 @@ void __cdecl Scr_AddPathnode(pathnode_t *node)
     Scr_AddEntityNum(v1, CLASS_NUM_PATHNODE);
 }
 
-void __cdecl Scr_GetNode()
+void Scr_GetNode()
 {
     unsigned int ConstString; // r26
     const char *String; // r3
@@ -3163,7 +3163,7 @@ void __cdecl Scr_GetNode()
     }
 }
 
-void __cdecl Scr_GetNodeArray()
+void Scr_GetNodeArray()
 {
     unsigned int ConstString; // r27
     const char *String; // r30
@@ -3218,7 +3218,7 @@ void __cdecl Scr_GetNodeArray()
     }
 }
 
-void __cdecl Scr_GetAllNodes()
+void Scr_GetAllNodes()
 {
     unsigned int v0; // r31
     int v1; // r30
@@ -3240,7 +3240,7 @@ void __cdecl Scr_GetAllNodes()
     }
 }
 
-void __cdecl Path_Shutdown()
+void Path_Shutdown()
 {
     pathnode_t *i; // r31
     pathnode_t *node; // r31
@@ -3268,7 +3268,7 @@ void __cdecl Path_Shutdown()
     g_pPath = 0;
 }
 
-void __cdecl Path_AutoDisconnectPaths()
+void Path_AutoDisconnectPaths()
 {
     int v0; // r29
     int num_entities; // r10
@@ -3300,13 +3300,13 @@ void __cdecl Path_AutoDisconnectPaths()
     }
 }
 
-void __cdecl Path_InitPaths()
+void Path_InitPaths()
 {
     Path_InitLinkInfoArray();
     Path_ValidateAllNodes();
 }
 
-void __cdecl Path_DrawVisData()
+void Path_DrawVisData()
 {
     gentity_s *v0; // r3
     const float *v1; // r6
@@ -3374,17 +3374,17 @@ void __cdecl Path_DrawVisData()
     }
 }
 
-void __cdecl Path_RelinquishNodeNow(sentient_s *claimer)
+void Path_RelinquishNodeNow(sentient_s *claimer)
 {
     Path_RelinquishNode(claimer, 0);
 }
 
-void __cdecl Path_RelinquishNodeSoon(sentient_s *claimer)
+void Path_RelinquishNodeSoon(sentient_s *claimer)
 {
     Path_RelinquishNode(claimer, 5000);
 }
 
-void __cdecl Path_MarkNodeInvalid(pathnode_t *node, team_t eTeam)
+void Path_MarkNodeInvalid(pathnode_t *node, team_t eTeam)
 {
     pathnode_dynamic_t *p_dynamic; // r23
     int v6; // r27
@@ -3432,7 +3432,7 @@ void __cdecl Path_MarkNodeInvalid(pathnode_t *node, team_t eTeam)
     iassert(!node->dynamic.pOwner.isDefined() || node->dynamic.pOwner.sentient()->eTeam != eTeam);
 }
 
-void __cdecl G_SetPathnodeScriptVariable(const char *key, const char *value, pathnode_t *ent)
+void G_SetPathnodeScriptVariable(const char *key, const char *value, pathnode_t *ent)
 {
     unsigned int Field; // r30
     double v6; // fp2
@@ -3474,7 +3474,7 @@ void __cdecl G_SetPathnodeScriptVariable(const char *key, const char *value, pat
     }
 }
 
-void __cdecl G_ParsePathnodeScriptField(const char *key, const char *value, pathnode_t *node)
+void G_ParsePathnodeScriptField(const char *key, const char *value, pathnode_t *node)
 {
     PathNode_UpdateStringField("target", &node->constant.target, key, value);
     PathNode_UpdateStringField("targetname", &node->constant.targetname, key, value);
@@ -3503,7 +3503,7 @@ void __cdecl G_ParsePathnodeScriptField(const char *key, const char *value, path
     }
 }
 
-void __cdecl G_ParsePathnodeScriptFields(pathnode_t *node)
+void G_ParsePathnodeScriptFields(pathnode_t *node)
 {
     int v2; // r30
     const char **v3; // r31
@@ -3525,7 +3525,7 @@ void __cdecl G_ParsePathnodeScriptFields(pathnode_t *node)
 
 int overCount;
 
-void __cdecl G_SpawnPathnodeDynamic()
+void G_SpawnPathnodeDynamic()
 {
     unsigned int v0; // r6
     pathnode_t *v1; // r31
@@ -3585,7 +3585,7 @@ void __cdecl G_SpawnPathnodeDynamic()
     }
 }
 
-int __cdecl Path_CanClaimNode(const pathnode_t *node, sentient_s *claimer)
+int Path_CanClaimNode(const pathnode_t *node, sentient_s *claimer)
 {
     int iFreeTime; // r10
     sentient_s *NodeOwner; // r3
@@ -3618,7 +3618,7 @@ int __cdecl Path_CanClaimNode(const pathnode_t *node, sentient_s *claimer)
     return result;
 }
 
-void __cdecl Path_ForceClaimNode(pathnode_t *node, sentient_s *claimer)
+void Path_ForceClaimNode(pathnode_t *node, sentient_s *claimer)
 {
     team_t eTeam; // r8
     pathnode_t *pClaimedNode; // r11
@@ -3680,7 +3680,7 @@ void __cdecl Path_ForceClaimNode(pathnode_t *node, sentient_s *claimer)
     }
 }
 
-pathnode_t *__cdecl Path_ChooseSubsequentChainNode_r(
+pathnode_t *Path_ChooseSubsequentChainNode_r(
     int depthMin,
     int depthMax,
     pathnode_t *pParent,
@@ -3765,7 +3765,7 @@ pathnode_t *__cdecl Path_ChooseSubsequentChainNode_r(
     return v12;
 }
 
-pathnode_t *__cdecl Path_ChooseAnyChainNodeIfDeadEnd(
+pathnode_t *Path_ChooseAnyChainNodeIfDeadEnd(
     int depthMin,
     int depthMax,
     pathnode_t *chainPos,
@@ -3825,7 +3825,7 @@ pathnode_t *__cdecl Path_ChooseAnyChainNodeIfDeadEnd(
     return v16;
 }
 
-pathnode_t *__cdecl Path_ChoosePreviousChainNode(int depthMin, int depthMax, pathnode_t *chainPos, actor_s *claimer)
+pathnode_t *Path_ChoosePreviousChainNode(int depthMin, int depthMax, pathnode_t *chainPos, actor_s *claimer)
 {
     int wChainParent; // r11
     int v9; // r11
@@ -3866,7 +3866,7 @@ pathnode_t *__cdecl Path_ChoosePreviousChainNode(int depthMin, int depthMax, pat
     return chainPos;
 }
 
-pathnode_t *__cdecl Path_ChooseDesperationChainNode(
+pathnode_t *Path_ChooseDesperationChainNode(
     int depthMin,
     int depthMax,
     pathnode_t *refPos,
@@ -3942,7 +3942,7 @@ pathnode_t *__cdecl Path_ChooseDesperationChainNode(
     return (pathnode_t *)v8;
 }
 
-pathnode_t *__cdecl Path_ChooseDesperationNewChainNode(
+pathnode_t *Path_ChooseDesperationNewChainNode(
     int depthMin,
     int depthMax,
     pathnode_t *refPos,
@@ -4020,7 +4020,7 @@ pathnode_t *__cdecl Path_ChooseDesperationNewChainNode(
     return (pathnode_t *)v8;
 }
 
-pathnode_t *__cdecl Path_ChooseChainPos(
+pathnode_t *Path_ChooseChainPos(
     pathnode_t *refPos,
     int iFollowMin,
     int iFollowMax,
@@ -4115,7 +4115,7 @@ pathnode_t *__cdecl Path_ChooseChainPos(
     return result;
 }
 
-pathnode_t *__cdecl Path_NearestNodeNotCrossPlanes(
+pathnode_t *Path_NearestNodeNotCrossPlanes(
     const float *const vOrigin,
     pathsort_t *nodes,
     int typeFlags,
@@ -4225,7 +4225,7 @@ pathnode_t *__cdecl Path_NearestNodeNotCrossPlanes(
     return 0;
 }
 
-pathnode_t *__cdecl Path_NearestNode(
+pathnode_t *Path_NearestNode(
     const float *const vOrigin,
     pathsort_t *nodes,
     int typeFlags,
@@ -4247,7 +4247,7 @@ pathnode_t *__cdecl Path_NearestNode(
         heightCheck);
 }
 
-void __cdecl Path_DrawDebugNearestNode(float *vOrigin, int numNodes)
+void Path_DrawDebugNearestNode(float *vOrigin, int numNodes)
 {
     const float *v3; // r6
     int v4; // r5
@@ -4301,7 +4301,7 @@ void __cdecl Path_DrawDebugNearestNode(float *vOrigin, int numNodes)
 }
 
 // blops
-void __cdecl Path_DrawDebugClaimedNodes(float *origin, int numNodes)
+void Path_DrawDebugClaimedNodes(float *origin, int numNodes)
 {
     sentient_s *v2; // eax
     char *v3; // [esp+10h] [ebp-C38h]
@@ -4371,7 +4371,7 @@ void __cdecl Path_DrawDebugClaimedNodes(float *origin, int numNodes)
     }
 }
 
-void __cdecl Path_DrawDebug()
+void Path_DrawDebug()
 {
     unsigned int v0; // r24
     int v1; // r25

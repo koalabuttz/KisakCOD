@@ -69,7 +69,7 @@ const client_fields_s fields[18] =
   { NULL, 0, F_INT, NULL, NULL }
 }; // idb
 
-void __cdecl ClientScr_ReadOnly(gclient_s *pSelf, const client_fields_s *pField)
+void ClientScr_ReadOnly(gclient_s *pSelf, const client_fields_s *pField)
 {
     const char *v2; // eax
 
@@ -81,7 +81,7 @@ void __cdecl ClientScr_ReadOnly(gclient_s *pSelf, const client_fields_s *pField)
     Scr_Error(v2);
 }
 
-void __cdecl ClientScr_SetSessionTeam(gclient_s *pSelf, const client_fields_s *pField)
+void ClientScr_SetSessionTeam(gclient_s *pSelf, const client_fields_s *pField)
 {
     uint16_t newTeam; // [esp+0h] [ebp-4h]
 
@@ -114,7 +114,7 @@ void __cdecl ClientScr_SetSessionTeam(gclient_s *pSelf, const client_fields_s *p
     ClientUserinfoChanged(pSelf - level.clients);
     CalculateRanks();
 }
-void __cdecl ClientScr_GetSessionTeam(gclient_s *pSelf, const client_fields_s *pField)
+void ClientScr_GetSessionTeam(gclient_s *pSelf, const client_fields_s *pField)
 {
     if (!pSelf)
         MyAssertHandler(".\\game\\g_client_fields.cpp", 81, 0, "%s", "pSelf");
@@ -137,7 +137,7 @@ void __cdecl ClientScr_GetSessionTeam(gclient_s *pSelf, const client_fields_s *p
     }
 }
 
-void __cdecl ClientScr_SetSessionState(gclient_s *pSelf, const client_fields_s *pField)
+void ClientScr_SetSessionState(gclient_s *pSelf, const client_fields_s *pField)
 {
     uint16_t newState; // [esp+0h] [ebp-4h]
 
@@ -169,7 +169,7 @@ void __cdecl ClientScr_SetSessionState(gclient_s *pSelf, const client_fields_s *
     }
 }
 
-void __cdecl ClientScr_GetSessionState(gclient_s *pSelf, const client_fields_s *pField)
+void ClientScr_GetSessionState(gclient_s *pSelf, const client_fields_s *pField)
 {
     if (!pSelf)
         MyAssertHandler(".\\game\\g_client_fields.cpp", 144, 0, "%s", "pSelf");
@@ -195,7 +195,7 @@ void __cdecl ClientScr_GetSessionState(gclient_s *pSelf, const client_fields_s *
 }
 
 
-void __cdecl ClientScr_SetHeadIcon(gclient_s *pSelf, const client_fields_s *pField)
+void ClientScr_SetHeadIcon(gclient_s *pSelf, const client_fields_s *pField)
 {
     gentity_s *pEnt; // [esp+0h] [ebp-8h]
     const char *pszIcon; // [esp+4h] [ebp-4h]
@@ -206,7 +206,7 @@ void __cdecl ClientScr_SetHeadIcon(gclient_s *pSelf, const client_fields_s *pFie
     pEnt->s.iHeadIcon = GScr_GetHeadIconIndex(pszIcon);
 }
 
-void __cdecl ClientScr_GetHeadIcon(gclient_s *pSelf, const client_fields_s *pField)
+void ClientScr_GetHeadIcon(gclient_s *pSelf, const client_fields_s *pField)
 {
     char szConfigString[1024]; // [esp+0h] [ebp-408h] BYREF
     gentity_s *pEnt; // [esp+404h] [ebp-4h]
@@ -228,7 +228,7 @@ void __cdecl ClientScr_GetHeadIcon(gclient_s *pSelf, const client_fields_s *pFie
     }
 }
 
-void __cdecl ClientScr_SetHeadIconTeam(gclient_s *pSelf, const client_fields_s *pField)
+void ClientScr_SetHeadIconTeam(gclient_s *pSelf, const client_fields_s *pField)
 {
     gentity_s *pEnt; // [esp+0h] [ebp-8h]
     uint16_t sTeam; // [esp+4h] [ebp-4h]
@@ -259,7 +259,7 @@ void __cdecl ClientScr_SetHeadIconTeam(gclient_s *pSelf, const client_fields_s *
     }
 }
 
-void __cdecl ClientScr_GetHeadIconTeam(gclient_s *pSelf, const client_fields_s *pField)
+void ClientScr_GetHeadIconTeam(gclient_s *pSelf, const client_fields_s *pField)
 {
     int32_t iHeadIconTeam; // [esp+0h] [ebp-8h]
 
@@ -284,7 +284,7 @@ void __cdecl ClientScr_GetHeadIconTeam(gclient_s *pSelf, const client_fields_s *
 }
 
 
-void __cdecl ClientScr_GetName(gclient_s *pSelf, const client_fields_s *pField)
+void ClientScr_GetName(gclient_s *pSelf, const client_fields_s *pField)
 {
     if (!pSelf)
         MyAssertHandler(".\\game\\g_client_fields.cpp", 64, 0, "%s", "pSelf");
@@ -292,7 +292,7 @@ void __cdecl ClientScr_GetName(gclient_s *pSelf, const client_fields_s *pField)
 }
 
 
-void __cdecl ClientScr_SetMaxHealth(gclient_s *pSelf, const client_fields_s *pField)
+void ClientScr_SetMaxHealth(gclient_s *pSelf, const client_fields_s *pField)
 {
     if (!pSelf)
         MyAssertHandler(".\\game\\g_client_fields.cpp", 174, 0, "%s", "pSelf");
@@ -305,13 +305,13 @@ void __cdecl ClientScr_SetMaxHealth(gclient_s *pSelf, const client_fields_s *pFi
     pSelf->ps.stats[STAT_MAX_HEALTH] = pSelf->sess.maxHealth;
 }
 
-void __cdecl ClientScr_SetScore(gclient_s *pSelf, const client_fields_s *pField)
+void ClientScr_SetScore(gclient_s *pSelf, const client_fields_s *pField)
 {
     pSelf->sess.score = Scr_GetInt(0);
     CalculateRanks();
 }
 
-void __cdecl ClientScr_SetSpectatorClient(gclient_s *pSelf, const client_fields_s *pField)
+void ClientScr_SetSpectatorClient(gclient_s *pSelf, const client_fields_s *pField)
 {
     int32_t iNewSpectatorClient; // [esp+0h] [ebp-4h]
 
@@ -323,7 +323,7 @@ void __cdecl ClientScr_SetSpectatorClient(gclient_s *pSelf, const client_fields_
     pSelf->sess.forceSpectatorClient = iNewSpectatorClient;
 }
 
-void __cdecl ClientScr_SetKillCamEntity(gclient_s *pSelf, const client_fields_s *pField)
+void ClientScr_SetKillCamEntity(gclient_s *pSelf, const client_fields_s *pField)
 {
     int32_t iNewKillCamEntity; // [esp+0h] [ebp-4h]
 
@@ -335,7 +335,7 @@ void __cdecl ClientScr_SetKillCamEntity(gclient_s *pSelf, const client_fields_s 
     pSelf->sess.killCamEntity = iNewKillCamEntity;
 }
 
-void __cdecl ClientScr_SetStatusIcon(gclient_s *pSelf, const client_fields_s *pField)
+void ClientScr_SetStatusIcon(gclient_s *pSelf, const client_fields_s *pField)
 {
     iassert(pSelf);
 
@@ -343,7 +343,7 @@ void __cdecl ClientScr_SetStatusIcon(gclient_s *pSelf, const client_fields_s *pF
     pSelf->sess.status_icon = GScr_GetStatusIconIndex(pszIcon);
 }
 
-void __cdecl ClientScr_GetStatusIcon(gclient_s *pSelf, const client_fields_s *pField)
+void ClientScr_GetStatusIcon(gclient_s *pSelf, const client_fields_s *pField)
 {
     char szConfigString[1028]; // [esp+0h] [ebp-408h] BYREF
 
@@ -368,26 +368,26 @@ void __cdecl ClientScr_GetStatusIcon(gclient_s *pSelf, const client_fields_s *pF
 }
 
 
-void __cdecl ClientScr_SetArchiveTime(gclient_s *pSelf, const client_fields_s *pField)
+void ClientScr_SetArchiveTime(gclient_s *pSelf, const client_fields_s *pField)
 {
     if (!pSelf)
         MyAssertHandler(".\\game\\g_client_fields.cpp", 394, 0, "%s", "pSelf");
     pSelf->sess.archiveTime = (int)(Scr_GetFloat(0) * 1000.0);
 }
 
-void __cdecl ClientScr_GetArchiveTime(gclient_s *pSelf, const client_fields_s *pField)
+void ClientScr_GetArchiveTime(gclient_s *pSelf, const client_fields_s *pField)
 {
     Scr_AddFloat(pSelf->sess.archiveTime * EQUAL_EPSILON);
 }
 
-void __cdecl ClientScr_SetPSOffsetTime(gclient_s *pSelf, const client_fields_s *pField)
+void ClientScr_SetPSOffsetTime(gclient_s *pSelf, const client_fields_s *pField)
 {
     if (!pSelf)
         MyAssertHandler(".\\game\\g_client_fields.cpp", 417, 0, "%s", "pSelf");
     pSelf->sess.psOffsetTime = Scr_GetInt(0);
 }
 
-void __cdecl ClientScr_GetPSOffsetTime(gclient_s *pSelf, const client_fields_s *pField)
+void ClientScr_GetPSOffsetTime(gclient_s *pSelf, const client_fields_s *pField)
 {
     Scr_AddInt(pSelf->sess.archiveTime);
 }
@@ -396,7 +396,7 @@ void __cdecl ClientScr_GetPSOffsetTime(gclient_s *pSelf, const client_fields_s *
 const client_fields_s fields[1] = { { NULL, 0, F_INT, NULL, NULL } };
 #endif
 
-void __cdecl GScr_AddFieldsForClient()
+void GScr_AddFieldsForClient()
 {
 #ifdef KISAK_MP
     const client_fields_s *f; // [esp+4h] [ebp-4h]
@@ -412,7 +412,7 @@ void __cdecl GScr_AddFieldsForClient()
 #endif
 }
 
-void __cdecl Scr_SetClientField(gclient_s *client, int32_t offset)
+void Scr_SetClientField(gclient_s *client, int32_t offset)
 {
     const client_fields_s *f; // [esp+0h] [ebp-4h]
 
@@ -440,7 +440,7 @@ void __cdecl Scr_SetClientField(gclient_s *client, int32_t offset)
     }
 }
 
-void __cdecl Scr_GetClientField(gclient_s *client, int32_t offset)
+void Scr_GetClientField(gclient_s *client, int32_t offset)
 {
     const client_fields_s *f; // [esp+0h] [ebp-4h]
 

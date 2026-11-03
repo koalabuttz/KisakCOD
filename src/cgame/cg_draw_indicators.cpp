@@ -16,7 +16,7 @@
 uint32_t g_hudGrenadeCount;
 HudGrenade g_hudGrenades[32];
 
-void __cdecl CG_DrawFlashDamage(const cg_s *cgameGlob)
+void CG_DrawFlashDamage(const cg_s *cgameGlob)
 {
     float y; // [esp+4h] [ebp-48h]
     float width; // [esp+14h] [ebp-38h]
@@ -50,7 +50,7 @@ void __cdecl CG_DrawFlashDamage(const cg_s *cgameGlob)
     }
 }
 
-void __cdecl CG_DrawDamageDirectionIndicators(int32_t localClientNum)
+void CG_DrawDamageDirectionIndicators(int32_t localClientNum)
 {
     float v1; // [esp+18h] [ebp-7Ch]
     float v2; // [esp+1Ch] [ebp-78h]
@@ -125,12 +125,12 @@ void __cdecl CG_DrawDamageDirectionIndicators(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_ClearHudGrenades()
+void CG_ClearHudGrenades()
 {
     g_hudGrenadeCount = 0;
 }
 
-char __cdecl CG_AddHudGrenade_PositionCheck(const cg_s *cgameGlob, const centity_s *grenadeEnt, WeaponDef *weapDef)
+char CG_AddHudGrenade_PositionCheck(const cg_s *cgameGlob, const centity_s *grenadeEnt, WeaponDef *weapDef)
 {
     float v4; // [esp+0h] [ebp-3Ch]
     float v5; // [esp+4h] [ebp-38h]
@@ -194,7 +194,7 @@ char __cdecl CG_AddHudGrenade_PositionCheck(const cg_s *cgameGlob, const centity
     return 1;
 }
 
-void __cdecl CG_AddHudGrenade(const cg_s *cgameGlob, const centity_s *grenadeEnt)
+void CG_AddHudGrenade(const cg_s *cgameGlob, const centity_s *grenadeEnt)
 {
     HudGrenade *v2; // [esp+0h] [ebp-28h]
     Material *material; // [esp+1Ch] [ebp-Ch]
@@ -250,7 +250,7 @@ void __cdecl CG_AddHudGrenade(const cg_s *cgameGlob, const centity_s *grenadeEnt
     }
 }
 
-void __cdecl CG_DrawGrenadeIndicators(int32_t localClientNum)
+void CG_DrawGrenadeIndicators(int32_t localClientNum)
 {
     float v1; // [esp+14h] [ebp-58h]
     float v2; // [esp+18h] [ebp-54h]
@@ -321,7 +321,7 @@ void __cdecl CG_DrawGrenadeIndicators(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_DrawGrenadePointer(
+void CG_DrawGrenadePointer(
     int32_t localClientNum,
     float centerX,
     float centerY,
@@ -384,7 +384,7 @@ void __cdecl CG_DrawGrenadePointer(
     CG_DrawRotatedQuadPic(scrPlace, pointerPos, pointerPos_4, grenade_vertices, v5, color, cgMedia.grenadePointer);
 }
 
-void __cdecl CG_DrawGrenadeIcon(
+void CG_DrawGrenadeIcon(
     int32_t localClientNum,
     float centerX,
     float centerY,

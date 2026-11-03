@@ -24,21 +24,21 @@ const DynEntityProps dynEntProps[3] =
     { "destruct", true, false, true, true }
 };
 
-uint8_t *__cdecl DynEnt_AllocXModel(int32_t size)
+uint8_t *DynEnt_AllocXModel(int32_t size)
 {
     if (size <= 0)
         MyAssertHandler(".\\DynEntity\\DynEntity_load_obj.cpp", 160, 0, "%s", "size > 0");
     return Hunk_Alloc(size, "DynEnt_AllocXModel", 21);
 }
 
-uint8_t *__cdecl DynEnt_AllocXModelColl(int32_t size)
+uint8_t *DynEnt_AllocXModelColl(int32_t size)
 {
     if (size <= 0)
         MyAssertHandler(".\\DynEntity\\DynEntity_load_obj.cpp", 170, 0, "%s", "size > 0");
     return Hunk_Alloc(size, "DynEnt_AllocXModelColl", 27);
 }
 
-char __cdecl DynEnt_IsValidClassName(const char *className)
+char DynEnt_IsValidClassName(const char *className)
 {
     uint32_t classIndex; // [esp+0h] [ebp-4h]
 
@@ -52,17 +52,17 @@ char __cdecl DynEnt_IsValidClassName(const char *className)
     return 0;
 }
 
-XModel *__cdecl DynEnt_XModelPrecache(const char *modelName)
+XModel *DynEnt_XModelPrecache(const char *modelName)
 {
     if (!modelName)
         MyAssertHandler(".\\DynEntity\\DynEntity_load_obj.cpp", 180, 0, "%s", "modelName");
     return XModelPrecache(
         (char*)modelName,
-        (void *(__cdecl *)(int))DynEnt_AllocXModel,
-        (void *(__cdecl *)(int))DynEnt_AllocXModelColl);
+        (void *(*)(int))DynEnt_AllocXModel,
+        (void *(*)(int))DynEnt_AllocXModelColl);
 }
 
-int32_t __cdecl DynEnt_GetType(const char *typeName)
+int32_t DynEnt_GetType(const char *typeName)
 {
     int32_t type; // [esp+0h] [ebp-4h]
 
@@ -76,35 +76,35 @@ int32_t __cdecl DynEnt_GetType(const char *typeName)
     return 0;
 }
 
-uint8_t *__cdecl DynEnt_AllocXModelPieces(int32_t size)
+uint8_t *DynEnt_AllocXModelPieces(int32_t size)
 {
     if (size <= 0)
         MyAssertHandler(".\\DynEntity\\DynEntity_load_obj.cpp", 200, 0, "%s", "size > 0");
     return Hunk_Alloc(size, "DynEnt_AllocXModelPieces", 21);
 }
 
-XModelPieces *__cdecl DynEnt_XModelPiecesPrecache(const char *name)
+XModelPieces *DynEnt_XModelPiecesPrecache(const char *name)
 {
     if (!name)
         MyAssertHandler(".\\DynEntity\\DynEntity_load_obj.cpp", 220, 0, "%s", "name");
-    return XModelPiecesPrecache(name, (void *(__cdecl *)(int))DynEnt_AllocXModelPieces);
+    return XModelPiecesPrecache(name, (void *(*)(int))DynEnt_AllocXModelPieces);
 }
 
-uint8_t *__cdecl DynEnt_AllocPhysPreset(int32_t size)
+uint8_t *DynEnt_AllocPhysPreset(int32_t size)
 {
     if (size <= 0)
         MyAssertHandler(".\\DynEntity\\DynEntity_load_obj.cpp", 190, 0, "%s", "size > 0");
     return Hunk_Alloc(size, "DynEnt_AllocPhysPreset", 21);
 }
 
-PhysPreset *__cdecl DynEnt_PhysPresetPrecache(const char *name)
+PhysPreset *DynEnt_PhysPresetPrecache(const char *name)
 {
     if (!name)
         MyAssertHandler(".\\DynEntity\\DynEntity_load_obj.cpp", 210, 0, "%s", "name");
-    return PhysPresetPrecache(name, (void *(__cdecl *)(int))DynEnt_AllocPhysPreset);
+    return PhysPresetPrecache(name, (void *(*)(int))DynEnt_AllocPhysPreset);
 }
 
-char __cdecl DynEnt_Create(DynEntityDef *dynEntDef, const DynEntityCreateParams *params)
+char DynEnt_Create(DynEntityDef *dynEntDef, const DynEntityCreateParams *params)
 {
     uint32_t brushModel; // [esp+58h] [ebp-4h]
     int32_t brushModela; // [esp+58h] [ebp-4h]
@@ -245,7 +245,7 @@ char __cdecl DynEnt_Create(DynEntityDef *dynEntDef, const DynEntityCreateParams 
     }
 }
 
-int32_t __cdecl DynEnt_GetEntityCountFromString(const char *entityString)
+int32_t DynEnt_GetEntityCountFromString(const char *entityString)
 {
     char key[68]; // [esp+0h] [ebp-98h] BYREF
     const char *ptr; // [esp+44h] [ebp-54h] BYREF
@@ -281,7 +281,7 @@ int32_t __cdecl DynEnt_GetEntityCountFromString(const char *entityString)
     return count;
 }
 
-int32_t __cdecl DynEnt_CompareEntities(_DWORD *arg0, _DWORD *arg1)
+int32_t DynEnt_CompareEntities(_DWORD *arg0, _DWORD *arg1)
 {
     int32_t hasModel0; // [esp+8h] [ebp-14h]
     int32_t value1; // [esp+10h] [ebp-Ch]
@@ -330,7 +330,7 @@ int32_t __cdecl DynEnt_CompareEntities(_DWORD *arg0, _DWORD *arg1)
     }
 }
 
-uint8_t *__cdecl DynEnt_Alloc(int32_t count, int32_t size)
+uint8_t *DynEnt_Alloc(int32_t count, int32_t size)
 {
     uint8_t *buf; // [esp+0h] [ebp-4h]
 
@@ -344,7 +344,7 @@ uint8_t *__cdecl DynEnt_Alloc(int32_t count, int32_t size)
 }
 
 #ifdef KISAK_MP
-void __cdecl DynEnt_LoadEntities()
+void DynEnt_LoadEntities()
 {
     char *v0; // eax
     char v1; // [esp+3h] [ebp-2D1h]
@@ -575,7 +575,7 @@ void __cdecl DynEnt_LoadEntities()
         }
         if (dynEntCount)
         {
-            qsort(dynEntDefList, dynEntCount, 0x60u, (int(__cdecl *)(const void *, const void *))DynEnt_CompareEntities);
+            qsort(dynEntDefList, dynEntCount, 0x60u, (int(*)(const void *, const void *))DynEnt_CompareEntities);
             for (dynEntIndex = 0; dynEntIndex < dynEntCount; ++dynEntIndex)
             {
                 dynEntDef = (DynEntityDef *)&dynEntDefList[96 * dynEntIndex];
@@ -615,7 +615,7 @@ void __cdecl DynEnt_LoadEntities()
 #endif // KISAK_MP
 
 #ifdef KISAK_SP
-void __cdecl DynEnt_LoadEntities(MemoryFile *memFile)
+void DynEnt_LoadEntities(MemoryFile *memFile)
 {
     iassert(memFile);
     for (int drawType = 0; drawType < 2; ++drawType)
@@ -652,7 +652,7 @@ void __cdecl DynEnt_LoadEntities(MemoryFile *memFile)
 }
 #endif // KISAK_SP
 
-const DynEntityProps *__cdecl DynEnt_GetEntityProps(DynEntityType dynEntType)
+const DynEntityProps *DynEnt_GetEntityProps(DynEntityType dynEntType)
 {
     if (dynEntType == DYNENT_TYPE_INVALID)
         MyAssertHandler(".\\DynEntity\\DynEntity_load_obj.cpp", 618, 0, "%s", "dynEntType != DYNENT_TYPE_INVALID");
@@ -668,7 +668,7 @@ const DynEntityProps *__cdecl DynEnt_GetEntityProps(DynEntityType dynEntType)
     return &dynEntProps[dynEntType];
 }
 
-uint16_t __cdecl DynEnt_GetId(const DynEntityDef *dynEntDef, DynEntityDrawType drawType)
+uint16_t DynEnt_GetId(const DynEntityDef *dynEntDef, DynEntityDrawType drawType)
 {
     uint16_t dynEntId; // [esp+0h] [ebp-4h]
 
@@ -686,12 +686,12 @@ uint16_t __cdecl DynEnt_GetId(const DynEntityDef *dynEntDef, DynEntityDrawType d
     return dynEntId;
 }
 
-uint16_t __cdecl DynEnt_GetEntityCount(DynEntityCollType collType)
+uint16_t DynEnt_GetEntityCount(DynEntityCollType collType)
 {
     return cm.dynEntCount[collType];
 }
 
-const DynEntityDef *__cdecl DynEnt_GetEntityDef(uint16_t dynEntId, DynEntityDrawType drawType)
+const DynEntityDef *DynEnt_GetEntityDef(uint16_t dynEntId, DynEntityDrawType drawType)
 {
     if (dynEntId >= (uint32_t)cm.dynEntCount[drawType])
         MyAssertHandler(
@@ -704,12 +704,12 @@ const DynEntityDef *__cdecl DynEnt_GetEntityDef(uint16_t dynEntId, DynEntityDraw
     return &cm.dynEntDefList[drawType][dynEntId];
 }
 
-DynEntityPose *__cdecl DynEnt_GetClientModelPoseList()
+DynEntityPose *DynEnt_GetClientModelPoseList()
 {
     return cm.dynEntPoseList[0];
 }
 
-DynEntityPose *__cdecl DynEnt_GetClientPose(uint16_t dynEntId, DynEntityDrawType drawType)
+DynEntityPose *DynEnt_GetClientPose(uint16_t dynEntId, DynEntityDrawType drawType)
 {
     if (dynEntId >= (uint32_t)cm.dynEntCount[drawType])
         MyAssertHandler(
@@ -722,7 +722,7 @@ DynEntityPose *__cdecl DynEnt_GetClientPose(uint16_t dynEntId, DynEntityDrawType
     return &cm.dynEntPoseList[drawType][dynEntId];
 }
 
-DynEntityClient *__cdecl DynEnt_GetClientEntity(uint16_t dynEntId, DynEntityDrawType drawType)
+DynEntityClient *DynEnt_GetClientEntity(uint16_t dynEntId, DynEntityDrawType drawType)
 {
     if (dynEntId >= (uint32_t)cm.dynEntCount[drawType])
         MyAssertHandler(
@@ -735,7 +735,7 @@ DynEntityClient *__cdecl DynEnt_GetClientEntity(uint16_t dynEntId, DynEntityDraw
     return &cm.dynEntClientList[drawType][dynEntId];
 }
 
-DynEntityColl *__cdecl DynEnt_GetEntityColl(DynEntityCollType collType, uint16_t dynEntId)
+DynEntityColl *DynEnt_GetEntityColl(DynEntityCollType collType, uint16_t dynEntId)
 {
     if ((uint32_t)collType >= DYNENT_COLL_COUNT)
         MyAssertHandler(
@@ -756,7 +756,7 @@ DynEntityColl *__cdecl DynEnt_GetEntityColl(DynEntityCollType collType, uint16_t
     return &cm.dynEntCollList[collType][dynEntId];
 }
 
-int32_t __cdecl DynEnt_GetXModelUsageCount(const XModel *xModel)
+int32_t DynEnt_GetXModelUsageCount(const XModel *xModel)
 {
     uint32_t drawType; // [esp+0h] [ebp-Ch]
     uint16_t dynEntId; // [esp+4h] [ebp-8h]

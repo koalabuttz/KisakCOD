@@ -13,12 +13,12 @@
 #include <server/sv_game.h>
 #include <server/sv_world.h>
 
-int32_t __cdecl G_LevelSpawnString(const char *key, const char *defaultString, const char **out)
+int32_t G_LevelSpawnString(const char *key, const char *defaultString, const char **out)
 {
     return G_SpawnString(&level.spawnVar, key, defaultString, out);
 }
 
-int32_t __cdecl G_SpawnFloat(const char *key, const char *defaultString, float *out)
+int32_t G_SpawnFloat(const char *key, const char *defaultString, float *out)
 {
     int32_t present; // [esp+0h] [ebp-8h]
     const char *s; // [esp+4h] [ebp-4h] BYREF
@@ -28,7 +28,7 @@ int32_t __cdecl G_SpawnFloat(const char *key, const char *defaultString, float *
     return present;
 }
 
-int32_t __cdecl G_SpawnInt(const char *key, const char *defaultString, int32_t *out)
+int32_t G_SpawnInt(const char *key, const char *defaultString, int32_t *out)
 {
     int32_t present; // [esp+0h] [ebp-8h]
     const char *s; // [esp+4h] [ebp-4h] BYREF
@@ -38,7 +38,7 @@ int32_t __cdecl G_SpawnInt(const char *key, const char *defaultString, int32_t *
     return present;
 }
 
-void __cdecl Scr_ReadOnlyField(gentity_s *ent, int32_t i)
+void Scr_ReadOnlyField(gentity_s *ent, int32_t i)
 {
     Scr_Error("Tried to set a read only entity field");
 }
@@ -70,10 +70,10 @@ const SpawnFuncEntry s_bspOnlySpawns[14] =
   { "script_vehicle_mp", &G_VehSpawner }
 }; // idb
 
-int32_t __cdecl G_CallSpawnEntity(gentity_s *ent)
+int32_t G_CallSpawnEntity(gentity_s *ent)
 {
     const gitem_s *item; // [esp+0h] [ebp-Ch]
-    void(__cdecl * spawnFunc)(gentity_s *); // [esp+4h] [ebp-8h]
+    void(* spawnFunc)(gentity_s *); // [esp+4h] [ebp-8h]
     const char *classname; // [esp+8h] [ebp-4h]
 
     iassert(!level.spawnVar.spawnVarsValid);
@@ -110,7 +110,7 @@ int32_t __cdecl G_CallSpawnEntity(gentity_s *ent)
 
 }
 
-const gitem_s *__cdecl G_GetItemForClassname(const char *classname, uint8_t model)
+const gitem_s *G_GetItemForClassname(const char *classname, uint8_t model)
 {
     int32_t weapIndex; // [esp+0h] [ebp-8h]
 
@@ -123,7 +123,7 @@ const gitem_s *__cdecl G_GetItemForClassname(const char *classname, uint8_t mode
     return BG_FindItemForWeapon(weapIndex, model);
 }
 
-void(__cdecl *__cdecl G_FindSpawnFunc(
+void(*G_FindSpawnFunc(
     const char *classname,
     const SpawnFuncEntry *spawnFuncArray,
     int32_t spawnFuncCount))(gentity_s *)
@@ -143,7 +143,7 @@ struct ent_field_t // sizeof=0x10
     const char *name;
     int32_t ofs;
     fieldtype_t type;
-    void(__cdecl *callback)(gentity_s *, int);
+    void(*callback)(gentity_s *, int);
 };
 
 const ent_field_t fields_1[11] =
@@ -161,7 +161,7 @@ const ent_field_t fields_1[11] =
   { NULL, 0, F_INT, NULL }
 }; // idb
 
-void __cdecl GScr_AddFieldsForEntity()
+void GScr_AddFieldsForEntity()
 {
     const ent_field_t *f; // [esp+0h] [ebp-4h]
 
@@ -176,12 +176,12 @@ void __cdecl GScr_AddFieldsForEntity()
     GScr_AddFieldsForClient();
 }
 
-void __cdecl GScr_AddFieldsForRadiant()
+void GScr_AddFieldsForRadiant()
 {
     Scr_AddFields("radiant", "txt");
 }
 
-void __cdecl Scr_SetGenericField(uint8_t *b, fieldtype_t type, int32_t ofs)
+void Scr_SetGenericField(uint8_t *b, fieldtype_t type, int32_t ofs)
 {
     VariableUnion v3; // eax
     float vec[3]; // [esp+4h] [ebp-Ch] BYREF
@@ -221,7 +221,7 @@ void __cdecl Scr_SetGenericField(uint8_t *b, fieldtype_t type, int32_t ofs)
     }
 }
 
-int32_t __cdecl Scr_SetObjectField(uint32_t classnum, uint32_t entnum, uint32_t offset)
+int32_t Scr_SetObjectField(uint32_t classnum, uint32_t entnum, uint32_t offset)
 {
     const char *v4; // eax
 
@@ -239,7 +239,7 @@ int32_t __cdecl Scr_SetObjectField(uint32_t classnum, uint32_t entnum, uint32_t 
     return 1;
 }
 
-int32_t __cdecl Scr_SetEntityField(uint32_t entnum, uint32_t offset)
+int32_t Scr_SetEntityField(uint32_t entnum, uint32_t offset)
 {
     const ent_field_t *f; // [esp+0h] [ebp-8h]
     gentity_s *ent; // [esp+4h] [ebp-4h]
@@ -274,7 +274,7 @@ int32_t __cdecl Scr_SetEntityField(uint32_t entnum, uint32_t offset)
     }
 }
 
-void __cdecl Scr_GetEntityField(uint32_t entnum, uint32_t offset)
+void Scr_GetEntityField(uint32_t entnum, uint32_t offset)
 {
     gentity_s *ent; // [esp+4h] [ebp-4h]
 
@@ -296,7 +296,7 @@ void __cdecl Scr_GetEntityField(uint32_t entnum, uint32_t offset)
     }
 }
 
-void __cdecl Scr_GetGenericField(uint8_t *b, fieldtype_t type, int32_t ofs)
+void Scr_GetGenericField(uint8_t *b, fieldtype_t type, int32_t ofs)
 {
     uint32_t value; // eax
     uint16_t str; // [esp+8h] [ebp-18h]
@@ -354,7 +354,7 @@ void __cdecl Scr_GetGenericField(uint8_t *b, fieldtype_t type, int32_t ofs)
     }
 }
 
-void __cdecl Scr_FreeEntityConstStrings(gentity_s *pEnt)
+void Scr_FreeEntityConstStrings(gentity_s *pEnt)
 {
     const ent_field_t *f; // [esp+4h] [ebp-8h]
     int32_t i; // [esp+8h] [ebp-4h]
@@ -371,7 +371,7 @@ void __cdecl Scr_FreeEntityConstStrings(gentity_s *pEnt)
     }
 }
 
-void __cdecl Scr_FreeEntity(gentity_s *ent)
+void Scr_FreeEntity(gentity_s *ent)
 {
     if (!ent)
         MyAssertHandler(".\\game_mp\\g_spawn_mp.cpp", 803, 0, "%s", "ent");
@@ -389,7 +389,7 @@ void __cdecl Scr_FreeEntity(gentity_s *ent)
     Scr_FreeEntityNum(ent->s.number, CLASS_NUM_ENTITY);
 }
 
-void __cdecl Scr_AddEntity(gentity_s *ent)
+void Scr_AddEntity(gentity_s *ent)
 {
     if (!ent)
         MyAssertHandler(".\\game_mp\\g_spawn_mp.cpp", 819, 0, "%s", "ent");
@@ -406,7 +406,7 @@ void __cdecl Scr_AddEntity(gentity_s *ent)
     Scr_AddEntityNum(ent->s.number, CLASS_NUM_ENTITY);
 }
 
-gentity_s *__cdecl Scr_GetEntityAllowNull(uint32_t index)
+gentity_s *Scr_GetEntityAllowNull(uint32_t index)
 {
     scr_entref_t entref; // [esp+4h] [ebp-8h]
 
@@ -420,7 +420,7 @@ gentity_s *__cdecl Scr_GetEntityAllowNull(uint32_t index)
     return &g_entities[entref.entnum];
 }
 
-gentity_s *__cdecl Scr_GetEntity(uint32_t index)
+gentity_s *Scr_GetEntity(uint32_t index)
 {
     scr_entref_t entref; // [esp+4h] [ebp-4h]
 
@@ -438,7 +438,7 @@ gentity_s *__cdecl Scr_GetEntity(uint32_t index)
     }
 }
 
-void __cdecl Scr_FreeHudElem(game_hudelem_s *hud)
+void Scr_FreeHudElem(game_hudelem_s *hud)
 {
     if (!hud)
         MyAssertHandler(".\\game_mp\\g_spawn_mp.cpp", 881, 0, "%s", "hud");
@@ -457,7 +457,7 @@ void __cdecl Scr_FreeHudElem(game_hudelem_s *hud)
     Scr_FreeEntityNum(hud - g_hudelems, CLASS_NUM_HUDELEM);
 }
 
-void __cdecl Scr_AddHudElem(game_hudelem_s *hud)
+void Scr_AddHudElem(game_hudelem_s *hud)
 {
     if (!hud)
         MyAssertHandler(".\\game_mp\\g_spawn_mp.cpp", 902, 0, "%s", "hud");
@@ -474,7 +474,7 @@ void __cdecl Scr_AddHudElem(game_hudelem_s *hud)
     Scr_AddEntityNum(hud - g_hudelems, CLASS_NUM_HUDELEM);
 }
 
-uint16_t __cdecl Scr_ExecEntThread(gentity_s *ent, int32_t handle, uint32_t paramcount)
+uint16_t Scr_ExecEntThread(gentity_s *ent, int32_t handle, uint32_t paramcount)
 {
     if (!ent)
         MyAssertHandler(".\\game_mp\\g_spawn_mp.cpp", 937, 0, "%s", "ent");
@@ -491,7 +491,7 @@ uint16_t __cdecl Scr_ExecEntThread(gentity_s *ent, int32_t handle, uint32_t para
     return Scr_ExecEntThreadNum(ent->s.number, CLASS_NUM_ENTITY, handle, paramcount);
 }
 
-void __cdecl Scr_Notify(gentity_s *ent, uint16_t stringValue, uint32_t paramcount)
+void Scr_Notify(gentity_s *ent, uint16_t stringValue, uint32_t paramcount)
 {
     iassert(ent);
     iassert(ent->s.number == ent - g_entities);
@@ -500,7 +500,7 @@ void __cdecl Scr_Notify(gentity_s *ent, uint16_t stringValue, uint32_t paramcoun
     Scr_NotifyNum(ent->s.number, CLASS_NUM_ENTITY, stringValue, paramcount);
 }
 
-void __cdecl Scr_GetEnt()
+void Scr_GetEnt()
 {
     gentity_s *result; // [esp+0h] [ebp-24h]
     uint16_t name; // [esp+8h] [ebp-1Ch]
@@ -551,7 +551,7 @@ void __cdecl Scr_GetEnt()
     }
 }
 
-void __cdecl Scr_GetEntArray()
+void Scr_GetEntArray()
 {
     uint16_t name; // [esp+4h] [ebp-1Ch]
     int32_t offset; // [esp+8h] [ebp-18h]
@@ -619,7 +619,7 @@ void __cdecl Scr_GetEntArray()
     }
 }
 
-void __cdecl SP_worldspawn()
+void SP_worldspawn()
 {
     float yaw; // [esp+10h] [ebp-8h]
     const char *s; // [esp+14h] [ebp-4h] BYREF
@@ -672,7 +672,7 @@ void __cdecl SP_worldspawn()
     iassert(!g_entities[ENTITYNUM_WORLD].r.ownerNum.isDefined());
 }
 
-void __cdecl G_SpawnEntitiesFromString()
+void G_SpawnEntitiesFromString()
 {
     if (!G_ParseSpawnVars(&level.spawnVar))
         Com_Error(ERR_DROP, "SpawnEntities: no entities");
@@ -685,7 +685,7 @@ void __cdecl G_SpawnEntitiesFromString()
 void G_CallSpawn()
 {
     const gitem_s *item; // [esp+0h] [ebp-10h]
-    void(__cdecl * spawnFunc)(gentity_s *); // [esp+4h] [ebp-Ch]
+    void(* spawnFunc)(gentity_s *); // [esp+4h] [ebp-Ch]
     const char *classname; // [esp+8h] [ebp-8h] BYREF
     gentity_s *ent; // [esp+Ch] [ebp-4h]
 
@@ -724,7 +724,7 @@ void G_CallSpawn()
     }
 }
 
-void __cdecl G_ParseEntityFields(gentity_s *ent)
+void G_ParseEntityFields(gentity_s *ent)
 {
     int32_t i; // [esp+0h] [ebp-4h]
 
@@ -737,7 +737,7 @@ void __cdecl G_ParseEntityFields(gentity_s *ent)
 }
 
 typedef uint16_t modelNameIndex_t;
-void __cdecl G_ParseEntityField(const char *key, char *value, gentity_s *ent)
+void G_ParseEntityField(const char *key, char *value, gentity_s *ent)
 {
     const ent_field_t *f; // [esp+Ch] [ebp-14h]
     float vec[3]; // [esp+10h] [ebp-10h] BYREF
@@ -794,12 +794,12 @@ void __cdecl G_ParseEntityField(const char *key, char *value, gentity_s *ent)
     }
 }
 
-void __cdecl GScr_SetDynamicEntityField(gentity_s *ent, uint32_t index)
+void GScr_SetDynamicEntityField(gentity_s *ent, uint32_t index)
 {
     Scr_SetDynamicEntityField(ent->s.number, 0, index);
 }
 
-void __cdecl G_SetEntityScriptVariable(const char *key, char *value, gentity_s *ent)
+void G_SetEntityScriptVariable(const char *key, char *value, gentity_s *ent)
 {
     uint32_t index; // [esp+0h] [ebp-4h]
 
@@ -808,7 +808,7 @@ void __cdecl G_SetEntityScriptVariable(const char *key, char *value, gentity_s *
         GScr_SetDynamicEntityField(ent, index);
 }
 
-uint32_t __cdecl G_SetEntityScriptVariableInternal(const char *key, char *value)
+uint32_t G_SetEntityScriptVariableInternal(const char *key, char *value)
 {
     uint32_t index; // [esp+Ch] [ebp-14h]
     int32_t type; // [esp+10h] [ebp-10h] BYREF
@@ -845,7 +845,7 @@ uint32_t __cdecl G_SetEntityScriptVariableInternal(const char *key, char *value)
     return index;
 }
 
-void __cdecl G_LoadStructs()
+void G_LoadStructs()
 {
     uint16_t hThread; // [esp+14h] [ebp-8h]
     const char *classname; // [esp+18h] [ebp-4h] BYREF
@@ -888,7 +888,7 @@ int32_t G_SpawnStruct()
     return result;
 }
 
-void __cdecl Scr_GetObjectField(uint32_t classnum, int entnum, int offset)
+void Scr_GetObjectField(uint32_t classnum, int entnum, int offset)
 {
     const char *v3; // eax
 

@@ -10,7 +10,7 @@
 #endif
 extern const float MY_SUBTITLE_GLOWCOLOR[4] = { 0.0f, 0.3f, 0.0f, 1.0f };
 
-void __cdecl Item_Text_Paint(UiContext *dc, itemDef_s *item)
+void Item_Text_Paint(UiContext *dc, itemDef_s *item)
 {
     PROF_SCOPED("Item_Text_Paint");
 
@@ -103,7 +103,7 @@ void __cdecl Item_Text_Paint(UiContext *dc, itemDef_s *item)
     }
 }
 
-void __cdecl Item_SetTextExtents(int localClientNum, itemDef_s *item, const char *text)
+void Item_SetTextExtents(int localClientNum, itemDef_s *item, const char *text)
 {
     bool v3; // [esp+20h] [ebp-40h]
     bool v4; // [esp+24h] [ebp-3Ch]
@@ -161,7 +161,7 @@ void __cdecl Item_SetTextExtents(int localClientNum, itemDef_s *item, const char
     }
 }
 
-void __cdecl Item_TextColor(UiContext *dc, itemDef_s *item, float (*newColor)[4])
+void Item_TextColor(UiContext *dc, itemDef_s *item, float (*newColor)[4])
 {
     float *disableColor; // edx
     float v4; // [esp+1Ch] [ebp-4Ch]
@@ -241,7 +241,7 @@ void __cdecl Item_TextColor(UiContext *dc, itemDef_s *item, float (*newColor)[4]
     }
 }
 
-void __cdecl Item_YesNo_Paint(UiContext *dc, itemDef_s *item)
+void Item_YesNo_Paint(UiContext *dc, itemDef_s *item)
 {
     const char *VariantString; // eax
     char *v3; // eax
@@ -266,7 +266,7 @@ void __cdecl Item_YesNo_Paint(UiContext *dc, itemDef_s *item)
     Item_Text_Paint(dc, item);
 }
 
-void __cdecl Fade(
+void Fade(
     int *flags,
     float *f,
     float clamp,
@@ -302,7 +302,7 @@ void __cdecl Fade(
     }
 }
 
-void __cdecl LerpColor(float *a, float *b, float *c, float t)
+void LerpColor(float *a, float *b, float *c, float t)
 {
     int i; // [esp+0h] [ebp-4h]
 

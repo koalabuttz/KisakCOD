@@ -33,10 +33,10 @@ struct StaticModelLightCallback // sizeof=0x74
 LightGlobals lightGlob;
 StaticModelLightCallback g_staticModelLightCallback;
 
-int(__cdecl *allowSurf_0[1])(int, void *) = { R_AllowBspOmniLight };
-int(__cdecl *allowSurf_1[2])(int, void *) = { R_AllowBspSpotLight, R_AllowBspSpotLightShadows };
+int(*allowSurf_0[1])(int, void *) = { R_AllowBspOmniLight };
+int(*allowSurf_1[2])(int, void *) = { R_AllowBspSpotLight, R_AllowBspSpotLightShadows };
 
-void __cdecl R_EnumLightDefs(void(__cdecl *func)(GfxLightDef *, void *), void *data)
+void R_EnumLightDefs(void(*func)(GfxLightDef *, void *), void *data)
 {
     GfxLightDef *def; // [esp+0h] [ebp-8h]
     int defIndex; // [esp+4h] [ebp-4h]
@@ -49,7 +49,7 @@ void __cdecl R_EnumLightDefs(void(__cdecl *func)(GfxLightDef *, void *), void *d
     }
 }
 
-GfxLightDef *__cdecl R_RegisterLightDef_LoadObj(const char *name)
+GfxLightDef *R_RegisterLightDef_LoadObj(const char *name)
 {
     GfxLightDef *defa; // [esp+0h] [ebp-8h]
     int defIndex; // [esp+4h] [ebp-4h]
@@ -89,7 +89,7 @@ GfxLightDef *__cdecl R_RegisterLightDef_LoadObj(const char *name)
     }
 }
 
-GfxLightDef *__cdecl R_RegisterLightDef(const char *name)
+GfxLightDef *R_RegisterLightDef(const char *name)
 {
     if (IsFastFileLoad())
         return R_RegisterLightDef_FastFile(name);
@@ -97,23 +97,23 @@ GfxLightDef *__cdecl R_RegisterLightDef(const char *name)
         return R_RegisterLightDef_LoadObj(name);
 }
 
-GfxLightDef *__cdecl R_RegisterLightDef_FastFile(const char *name)
+GfxLightDef *R_RegisterLightDef_FastFile(const char *name)
 {
     return DB_FindXAssetHeader(ASSET_TYPE_LIGHT_DEF, name).lightDef;
 }
 
-void __cdecl R_InitLightDefs()
+void R_InitLightDefs()
 {
     iassert( lightGlob.defCount == 0 );
     rgp.dlightDef = R_RegisterLightDef("light_dynamic");
 }
 
-void __cdecl R_ShutdownLightDefs()
+void R_ShutdownLightDefs()
 {
     lightGlob.defCount = 0;
 }
 
-int __cdecl R_GetPointLightPartitions(const GfxLight **visibleLights)
+int R_GetPointLightPartitions(const GfxLight **visibleLights)
 {
     const GfxLight *addedLights[32]; // [esp+0h] [ebp-90h] BYREF
     int visibleCount; // [esp+84h] [ebp-Ch]
@@ -152,7 +152,7 @@ int __cdecl R_GetPointLightPartitions(const GfxLight **visibleLights)
     return visibleCount;
 }
 
-void __cdecl R_MostImportantLights(const GfxLight **lights, int lightCount, int keepCount)
+void R_MostImportantLights(const GfxLight **lights, int lightCount, int keepCount)
 {
     int top; // [esp+54h] [ebp-10h]
     int bot; // [esp+58h] [ebp-Ch]
@@ -208,7 +208,7 @@ void __cdecl R_MostImportantLights(const GfxLight **lights, int lightCount, int 
     }
 }
 
-bool __cdecl R_LightImportanceGreaterEqual(const GfxLight *light0, const GfxLight *light1)
+bool R_LightImportanceGreaterEqual(const GfxLight *light0, const GfxLight *light1)
 {
     float v[3]; // [esp+4h] [ebp-28h] BYREF
     float diff[3]; // [esp+10h] [ebp-1Ch] BYREF
@@ -240,7 +240,7 @@ bool __cdecl R_LightImportanceGreaterEqual(const GfxLight *light0, const GfxLigh
     return radiusSq[1] * distSq[0] <= radiusSq[0] * distSq[1];
 }
 
-void __cdecl R_GetBspLightSurfs(const GfxLight **visibleLights, int visibleCount)
+void R_GetBspLightSurfs(const GfxLight **visibleLights, int visibleCount)
 {
     GfxBspDrawSurfData surfData[2];
 
@@ -262,7 +262,7 @@ void __cdecl R_GetBspLightSurfs(const GfxLight **visibleLights, int visibleCount
     }
 }
 
-void __cdecl R_GetBspOmniLightSurfs(const GfxLight *light, int lightIndex, GfxBspDrawSurfData *surfData)
+void R_GetBspOmniLightSurfs(const GfxLight *light, int lightIndex, GfxBspDrawSurfData *surfData)
 {
     uint16_t triSurfList[2]; // [esp+F0h] [ebp-4Ch] BYREF
     uint32_t surfIndex; // [esp+F4h] [ebp-48h]
@@ -305,11 +305,11 @@ void __cdecl R_GetBspOmniLightSurfs(const GfxLight *light, int lightIndex, GfxBs
     {
         surfData->drawSurfList.current = drawSurfs;
         surfData->drawSurfList.end = (GfxDrawSurf *)&scene.visLightShadow[lightIndex - 3];
-        //std::_Sort<int *, int, bool(__cdecl *)(int, int)>(
+        //std::_Sort<int *, int, bool(*)(int, int)>(
         //    (const GfxStaticModelDrawInst **)surfaces[0],
         //    (const GfxStaticModelDrawInst **)&surfaces[0][visLightDrawSurfCount],
         //    (int)(4 * visLightDrawSurfCount) >> 2,
-        //    (bool(__cdecl *)(const GfxStaticModelDrawInst *, const GfxStaticModelDrawInst *))R_SortBspShadowReceiverSurfaces);
+        //    (bool(*)(const GfxStaticModelDrawInst *, const GfxStaticModelDrawInst *))R_SortBspShadowReceiverSurfaces);
         std::sort(&surfaces[0][0], &surfaces[0][visLightDrawSurfCount], R_SortBspShadowReceiverSurfaces);
         for (listSurfIndex = 0; listSurfIndex < visLightDrawSurfCount; ++listSurfIndex)
         {
@@ -335,7 +335,7 @@ void __cdecl R_GetBspOmniLightSurfs(const GfxLight *light, int lightIndex, GfxBs
     }
 }
 
-int __cdecl R_AllowBspOmniLight(int surfIndex, void *bspLightCallbackAsVoid)
+int R_AllowBspOmniLight(int surfIndex, void *bspLightCallbackAsVoid)
 {
     return *(_BYTE *)(*(uint32_t *)bspLightCallbackAsVoid + surfIndex)
         && *((float *)bspLightCallbackAsVoid + 4) >= PointToBoxDistSq(
@@ -344,7 +344,7 @@ int __cdecl R_AllowBspOmniLight(int surfIndex, void *bspLightCallbackAsVoid)
             rgp.world->dpvs.surfaces[surfIndex].bounds[1]);
 }
 
-void __cdecl R_GetBspSpotLightSurfs(const GfxLight *light, int lightIndex, GfxBspDrawSurfData *surfData)
+void R_GetBspSpotLightSurfs(const GfxLight *light, int lightIndex, GfxBspDrawSurfData *surfData)
 {
     uint16_t triSurfList[2]; // [esp+1B4h] [ebp-ACh] BYREF
     uint32_t surfIndex; // [esp+1B8h] [ebp-A8h]
@@ -383,11 +383,11 @@ void __cdecl R_GetBspSpotLightSurfs(const GfxLight *light, int lightIndex, GfxBs
         scene.visLightShadow[lightIndex - 4].drawSurfCount = surfCounts[0];
         surfData->drawSurfList.current = drawSurfs[0];
         surfData->drawSurfList.end = (GfxDrawSurf *)&scene.visLightShadow[lightIndex - 3];
-        //std::_Sort<int *, int, bool(__cdecl *)(int, int)>(
+        //std::_Sort<int *, int, bool(*)(int, int)>(
         //    (const GfxStaticModelDrawInst **)surfaces[0],
         //    (const GfxStaticModelDrawInst **)&surfaces[0][surfCounts[0]],
         //    (signed int)(4 * surfCounts[0]) >> 2,
-        //    (bool(__cdecl *)(const GfxStaticModelDrawInst *, const GfxStaticModelDrawInst *))R_SortBspShadowReceiverSurfaces);
+        //    (bool(*)(const GfxStaticModelDrawInst *, const GfxStaticModelDrawInst *))R_SortBspShadowReceiverSurfaces);
         std::sort(&surfaces[0][0], &surfaces[0][surfCounts[0]], R_SortBspShadowReceiverSurfaces);
         for (listSurfIndex = 0; listSurfIndex < surfCounts[0]; ++listSurfIndex)
         {
@@ -416,11 +416,11 @@ void __cdecl R_GetBspSpotLightSurfs(const GfxLight *light, int lightIndex, GfxBs
         scene.visLightShadow[lightIndex].drawSurfCount = surfCounts[1];
         surfData[1].drawSurfList.current = drawSurfs[1];
         surfData[1].drawSurfList.end = (GfxDrawSurf *)((char *)scene.cookie + 8200 * lightIndex);
-        //std::_Sort<int *, int, bool(__cdecl *)(int, int)>(
+        //std::_Sort<int *, int, bool(*)(int, int)>(
         //    (const GfxStaticModelDrawInst **)surfaces[1],
         //    (const GfxStaticModelDrawInst **)&surfaces[1][surfCounts[1]],
         //    (signed int)(4 * surfCounts[1]) >> 2,
-        //    (bool(__cdecl *)(const GfxStaticModelDrawInst *, const GfxStaticModelDrawInst *))R_SortBspShadowReceiverSurfaces);
+        //    (bool(*)(const GfxStaticModelDrawInst *, const GfxStaticModelDrawInst *))R_SortBspShadowReceiverSurfaces);
         std::sort(&surfaces[1][0], &surfaces[1][surfCounts[1]], R_SortBspShadowReceiverSurfaces);
         for (listSurfIndex = 0; listSurfIndex < surfCounts[1]; ++listSurfIndex)
         {
@@ -446,7 +446,7 @@ void __cdecl R_GetBspSpotLightSurfs(const GfxLight *light, int lightIndex, GfxBs
     }
 }
 
-int __cdecl R_AllowBspSpotLightShadows(int surfIndex, void *bspLightCallbackAsVoid)
+int R_AllowBspSpotLightShadows(int surfIndex, void *bspLightCallbackAsVoid)
 {
     if (r_spotLightShadows->current.enabled)
         return R_BoxInPlanes(
@@ -457,7 +457,7 @@ int __cdecl R_AllowBspSpotLightShadows(int surfIndex, void *bspLightCallbackAsVo
         return 0;
 }
 
-int __cdecl R_BoxInPlanes(const float (*planes)[4], const float *mins, const float *maxs)
+int R_BoxInPlanes(const float (*planes)[4], const float *mins, const float *maxs)
 {
     float v4; // [esp+0h] [ebp-4Ch]
     float v5; // [esp+4h] [ebp-48h]
@@ -543,7 +543,7 @@ int __cdecl R_BoxInPlanes(const float (*planes)[4], const float *mins, const flo
     return 1;
 }
 
-int __cdecl R_AllowBspSpotLight(int surfIndex, void *bspLightCallbackAsVoid)
+int R_AllowBspSpotLight(int surfIndex, void *bspLightCallbackAsVoid)
 {
     if (*(_BYTE *)(*(uint32_t *)bspLightCallbackAsVoid + surfIndex))
         return R_BoxInPlanes(
@@ -554,7 +554,7 @@ int __cdecl R_AllowBspSpotLight(int surfIndex, void *bspLightCallbackAsVoid)
         return 0;
 }
 
-void __cdecl R_CalcSpotLightPlanes(const GfxLight *light, float (*planes)[4])
+void R_CalcSpotLightPlanes(const GfxLight *light, float (*planes)[4])
 {
     float fCos; // [esp+0h] [ebp-50h]
     float fCosa; // [esp+0h] [ebp-50h]
@@ -591,7 +591,7 @@ void __cdecl R_CalcSpotLightPlanes(const GfxLight *light, float (*planes)[4])
     R_CalcPlaneFromPointDir(&(*planes)[20], origin, lightDirection);
 }
 
-void __cdecl R_CalcPlaneFromPointDir(float *plane, const float *origin, const float *dir)
+void R_CalcPlaneFromPointDir(float *plane, const float *origin, const float *dir)
 {
     *plane = *dir;
     plane[1] = dir[1];
@@ -599,7 +599,7 @@ void __cdecl R_CalcPlaneFromPointDir(float *plane, const float *origin, const fl
     plane[3] = -Vec3Dot(origin, dir);
 }
 
-void __cdecl R_ComputeSpotLightCrossDirs(const GfxLight *light, float (*crossDirs)[3])
+void R_ComputeSpotLightCrossDirs(const GfxLight *light, float (*crossDirs)[3])
 {
     float v2; // [esp+0h] [ebp-34h]
     float v3; // [esp+4h] [ebp-30h]
@@ -624,7 +624,7 @@ void __cdecl R_ComputeSpotLightCrossDirs(const GfxLight *light, float (*crossDir
     Vec3Normalize((float *)crossDirs);
 }
 
-void __cdecl R_CalcPlaneFromCosSinPointDirs(
+void R_CalcPlaneFromCosSinPointDirs(
     float *plane,
     float fCos,
     float fSin,
@@ -636,7 +636,7 @@ void __cdecl R_CalcPlaneFromCosSinPointDirs(
     plane[3] = -Vec3Dot(plane, origin);
 }
 
-void __cdecl R_GetStaticModelLightSurfs(const GfxLight **visibleLights, int visibleCount)
+void R_GetStaticModelLightSurfs(const GfxLight **visibleLights, int visibleCount)
 {
     const GfxStaticModelDrawInst* smodelDrawInst; // [esp+18h] [ebp-89Ch]
     GfxDrawSurf drawSurf; // [esp+1Ch] [ebp-898h]
@@ -749,7 +749,7 @@ void __cdecl R_GetStaticModelLightSurfs(const GfxLight **visibleLights, int visi
     }
 }
 
-int __cdecl R_AllowStaticModelOmniLight(int smodelIndex)
+int R_AllowStaticModelOmniLight(int smodelIndex)
 {
     return g_staticModelLightCallback.smodelVisData[smodelIndex]
         && g_staticModelLightCallback.radiusSq >= PointToBoxDistSq(
@@ -758,7 +758,7 @@ int __cdecl R_AllowStaticModelOmniLight(int smodelIndex)
             rgp.world->dpvs.smodelInsts[smodelIndex].maxs);
 }
 
-int __cdecl R_AllowStaticModelSpotLight(int smodelIndex)
+int R_AllowStaticModelSpotLight(int smodelIndex)
 {
     if (g_staticModelLightCallback.smodelVisData[smodelIndex])
         return R_BoxInPlanes(
@@ -769,7 +769,7 @@ int __cdecl R_AllowStaticModelSpotLight(int smodelIndex)
         return 0;
 }
 
-void __cdecl R_GetSceneEntLightSurfs(const GfxLight **visibleLights, int visibleCount)
+void R_GetSceneEntLightSurfs(const GfxLight **visibleLights, int visibleCount)
 {
     float v2; // [esp+4h] [ebp-208h]
     float v3; // [esp+8h] [ebp-204h]
@@ -1175,7 +1175,7 @@ void __cdecl R_GetSceneEntLightSurfs(const GfxLight **visibleLights, int visible
     }
 }
 
-int __cdecl R_SphereInPlanes(const float (*planes)[4], const float *center, float radius)
+int R_SphereInPlanes(const float (*planes)[4], const float *center, float radius)
 {
     uint32_t planeIndex; // [esp+4h] [ebp-4h]
 
@@ -1187,7 +1187,7 @@ int __cdecl R_SphereInPlanes(const float (*planes)[4], const float *center, floa
     return 1;
 }
 
-bool __cdecl R_SpotLightIsAttachedToDobj(const DObj_s *obj)
+bool R_SpotLightIsAttachedToDobj(const DObj_s *obj)
 {
     FxSystem *system; // [esp+0h] [ebp-8h]
     DObj_s *attachedDobj; // [esp+4h] [ebp-4h]
@@ -1204,7 +1204,7 @@ bool __cdecl R_SpotLightIsAttachedToDobj(const DObj_s *obj)
 }
 
 // KISAKTODO: unfk
-void __cdecl ShortSortArray_GfxReverseSortDrawSurfsInterface_GfxDrawSurf_(GfxDrawSurf *lo, GfxDrawSurf *hi)
+void ShortSortArray_GfxReverseSortDrawSurfsInterface_GfxDrawSurf_(GfxDrawSurf *lo, GfxDrawSurf *hi)
 {
     int packed_high; // edx
     unsigned __int64 v3; // [esp+4h] [ebp-34h]
@@ -1240,7 +1240,7 @@ void __cdecl ShortSortArray_GfxReverseSortDrawSurfsInterface_GfxDrawSurf_(GfxDra
 }
 
 // KISAKTODO: unfk
-void __cdecl qsortArray_GfxReverseSortDrawSurfsInterface_GfxDrawSurf_(GfxDrawSurf *elems, int count)
+void qsortArray_GfxReverseSortDrawSurfsInterface_GfxDrawSurf_(GfxDrawSurf *elems, int count)
 {
     int packed_high; // edx
     GfxDrawSurf *v3; // eax
@@ -1358,14 +1358,14 @@ void __cdecl qsortArray_GfxReverseSortDrawSurfsInterface_GfxDrawSurf_(GfxDrawSur
 }
 
 
-void __cdecl R_ReverseSortDrawSurfs(GfxDrawSurf *drawSurfList, int surfCount)
+void R_ReverseSortDrawSurfs(GfxDrawSurf *drawSurfList, int surfCount)
 {
     PROF_SCOPED("R_SortDrawSurfs");
     //qsortArray<GfxReverseSortDrawSurfsInterface, GfxDrawSurf>(drawSurfList, surfCount);
     qsortArray_GfxReverseSortDrawSurfsInterface_GfxDrawSurf_(drawSurfList, surfCount);
 }
 
-int __cdecl R_EmitPointLightPartitionSurfs(
+int R_EmitPointLightPartitionSurfs(
     GfxViewInfo *viewInfo,
     const GfxLight **visibleLights,
     int visibleCount,
@@ -1410,7 +1410,7 @@ int __cdecl R_EmitPointLightPartitionSurfs(
     return partitionCount;
 }
 
-int __cdecl R_GetTechniqueForLightType(const GfxLight *light, const GfxViewInfo *viewInfo)
+int R_GetTechniqueForLightType(const GfxLight *light, const GfxViewInfo *viewInfo)
 {
     const char *v3; // eax
 
@@ -1453,7 +1453,7 @@ int __cdecl R_GetTechniqueForLightType(const GfxLight *light, const GfxViewInfo 
     }
 }
 
-void __cdecl R_EmitShadowedLightPartitionSurfs(
+void R_EmitShadowedLightPartitionSurfs(
     GfxViewInfo *viewInfo,
     uint32_t lightDrawSurfCount,
     GfxDrawSurf *lightDrawSurfs,

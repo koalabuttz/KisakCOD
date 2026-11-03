@@ -8,7 +8,7 @@
 #include "rb_sunshadow.h"
 #include "r_state.h"
 
-void __cdecl RB_SetSpotShadowOverlayScaleAndBias(const GfxSpotShadow *spotShadow)
+void RB_SetSpotShadowOverlayScaleAndBias(const GfxSpotShadow *spotShadow)
 {
     float nearDepth; // [esp+20h] [ebp-1Ch] BYREF
     MaterialTechniqueType shadowmapBuildTechType; // [esp+24h] [ebp-18h]
@@ -36,7 +36,7 @@ void __cdecl RB_SetSpotShadowOverlayScaleAndBias(const GfxSpotShadow *spotShadow
     }
 }
 
-void __cdecl RB_DrawSpotShadowOverlay()
+void RB_DrawSpotShadowOverlay()
 {
     float x; // [esp+28h] [ebp-40h]
     float t0; // [esp+44h] [ebp-24h]

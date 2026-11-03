@@ -12,17 +12,17 @@
 #include <script/scr_const.h>
 #include <qcommon/com_bsp.h>
 
-float __cdecl G_GetEntInfoScale()
+float G_GetEntInfoScale()
 {
     return CG_GetViewZoomScale() * g_entinfo_scale->current.value;
 }
 
-void __cdecl SP_info_notnull(gentity_s *self)
+void SP_info_notnull(gentity_s *self)
 {
     G_SetOrigin(self, self->r.currentOrigin);
 }
 
-void __cdecl SP_light(gentity_s *self)
+void SP_light(gentity_s *self)
 {
     const ComPrimaryLight *light; // r30
     unsigned int primaryLightIndex; // [sp+50h] [-80h] BYREF
@@ -88,7 +88,7 @@ void __cdecl SP_light(gentity_s *self)
     }
 }
 
-void __cdecl SP_info_volume(gentity_s *self)
+void SP_info_volume(gentity_s *self)
 {
     int v2; // r11
 
@@ -113,7 +113,7 @@ void __cdecl SP_info_volume(gentity_s *self)
     }
 }
 
-void __cdecl TeleportPlayer(gentity_s *player, float *origin, const float *angles)
+void TeleportPlayer(gentity_s *player, float *origin, const float *angles)
 {
     SetClientOrigin(player, origin);
     SetClientViewAngle(player, angles);
@@ -122,7 +122,7 @@ void __cdecl TeleportPlayer(gentity_s *player, float *origin, const float *angle
     SV_LinkEntity(player);
 }
 
-void __cdecl SP_sound_blend(gentity_s *self)
+void SP_sound_blend(gentity_s *self)
 {
     self->s.lerp.u.turret.gunAngles[0] = 0.0;
     self->r.contents = 0;
@@ -134,7 +134,7 @@ void __cdecl SP_sound_blend(gentity_s *self)
     self->s.eventParms[1] = 0;
 }
 
-gentity_s *__cdecl G_SpawnSoundBlend()
+gentity_s *G_SpawnSoundBlend()
 {
     gentity_s *v0; // r31
     gentity_s *result; // r3
@@ -153,7 +153,7 @@ gentity_s *__cdecl G_SpawnSoundBlend()
     return result;
 }
 
-void __cdecl G_SetSoundBlend(gentity_s *ent, unsigned __int16 alias0, unsigned __int16 alias1, double lerp)
+void G_SetSoundBlend(gentity_s *ent, unsigned __int16 alias0, unsigned __int16 alias1, double lerp)
 {
     iassert(ent->r.inuse);
     iassert(ent->s.eType == ET_SOUND_BLEND);
@@ -166,17 +166,17 @@ void __cdecl G_SetSoundBlend(gentity_s *ent, unsigned __int16 alias0, unsigned _
     SV_LinkEntity(ent);
 }
 
-void __cdecl G_SetSoundBlendVolumeScale(gentity_s *ent, double scale)
+void G_SetSoundBlendVolumeScale(gentity_s *ent, double scale)
 {
     ent->s.lerp.u.soundBlend.volumeScale = scale;
 }
 
-float __cdecl G_GetSoundBlendVolumeScale(gentity_s *ent)
+float G_GetSoundBlendVolumeScale(gentity_s *ent)
 {
     return ent->s.lerp.u.soundBlend.volumeScale;
 }
 
-void __cdecl EntinfoPosAndScale(gentity_s *self, float *source, float *pos, float *textScale, float *dist)
+void EntinfoPosAndScale(gentity_s *self, float *source, float *pos, float *textScale, float *dist)
 {
     double v10; // fp12
     double v11; // fp0
@@ -210,7 +210,7 @@ void __cdecl EntinfoPosAndScale(gentity_s *self, float *source, float *pos, floa
 }
 
 
-void __cdecl misc_EntInfo(gentity_s *self, float *source)
+void misc_EntInfo(gentity_s *self, float *source)
 {
     static const float color[4] = { 0.5, 0.5, 0.5, 1.0 };
 
@@ -245,7 +245,7 @@ void __cdecl misc_EntInfo(gentity_s *self, float *source)
     G_AddDebugString(origin, color, (textScale * 0.75f), txt);
 }
 
-void __cdecl EntInfo_Item(gentity_s *self, float *source)
+void EntInfo_Item(gentity_s *self, float *source)
 {
     static float MY_MAX_DIST = 500.0f;
     static float MY_MAX_DIST_HALF = 0.0f;

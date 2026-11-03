@@ -83,13 +83,13 @@ const float cubemapShotAxis[7][3][3] =
   { { -1.0, 0.0, 0.0 }, { 0.0, -1.0, 0.0 }, { 0.0, 0.0, 1.0 } }
 }; // idb
 
-void __cdecl TRACK_r_screenshot()
+void TRACK_r_screenshot()
 {
     track_static_alloc_internal((void *)cubemapShotAxis, 252, "cubemapShotAxis", 18);
     track_static_alloc_internal(&cubeShotGlob, 24, "cubeShotGlob", 18);
 }
 
-void __cdecl Image_Blend1x1Faces(uint8_t *(*pixels)[15], int mipLevel)
+void Image_Blend1x1Faces(uint8_t *(*pixels)[15], int mipLevel)
 {
     int i; // [esp+10h] [ebp-10h]
     int face; // [esp+14h] [ebp-Ch]
@@ -108,7 +108,7 @@ void __cdecl Image_Blend1x1Faces(uint8_t *(*pixels)[15], int mipLevel)
     }
 }
 
-uint8_t *__cdecl Image_GetCubeCornerPixel(
+uint8_t *Image_GetCubeCornerPixel(
     uint8_t *facePixels,
     uint32_t coordx,
     int coordy,
@@ -161,7 +161,7 @@ uint8_t *__cdecl Image_GetCubeCornerPixel(
     return 0;
 }
 
-uint8_t *__cdecl Image_GetCubeFaceEdgePixel(
+uint8_t *Image_GetCubeFaceEdgePixel(
     uint8_t *facePixels,
     int pixel,
     int edgeSize,
@@ -196,7 +196,7 @@ uint8_t *__cdecl Image_GetCubeFaceEdgePixel(
     return result;
 }
 
-void __cdecl Image_BlendCubeCorner(
+void Image_BlendCubeCorner(
     uint8_t *facePixels0,
     uint8_t *facePixels1,
     uint8_t *facePixels2,
@@ -224,7 +224,7 @@ void __cdecl Image_BlendCubeCorner(
     }
 }
 
-void __cdecl Image_BlendCubeFaceEdge(
+void Image_BlendCubeFaceEdge(
     uint8_t *thisFacePixels,
     uint8_t *otherFacePixels,
     int edgeSize,
@@ -254,7 +254,7 @@ void __cdecl Image_BlendCubeFaceEdge(
     }
 }
 
-void __cdecl CubeMap_BlendFaceEdges(uint8_t *(*pixels)[15], int mipLevel, int edgeSize)
+void CubeMap_BlendFaceEdges(uint8_t *(*pixels)[15], int mipLevel, int edgeSize)
 {
     if (edgeSize == 1)
     {
@@ -395,7 +395,7 @@ void __cdecl CubeMap_BlendFaceEdges(uint8_t *(*pixels)[15], int mipLevel, int ed
     }
 }
 
-void __cdecl R_CubemapShotDownSample(uint8_t *pixels, int baseRes, int downSampleRes)
+void R_CubemapShotDownSample(uint8_t *pixels, int baseRes, int downSampleRes)
 {
     int i; // [esp+10h] [ebp-34h]
     int colIndex; // [esp+14h] [ebp-30h]
@@ -437,7 +437,7 @@ void __cdecl R_CubemapShotDownSample(uint8_t *pixels, int baseRes, int downSampl
     }
 }
 
-void __cdecl Image_FlipVertically(uint8_t *pic, int size)
+void Image_FlipVertically(uint8_t *pic, int size)
 {
     int *v2; // ecx
     int t; // [esp+4h] [ebp-1Ch]
@@ -458,7 +458,7 @@ void __cdecl Image_FlipVertically(uint8_t *pic, int size)
     }
 }
 
-void __cdecl Image_FlipDiagonally(uint8_t *pic, int size)
+void Image_FlipDiagonally(uint8_t *pic, int size)
 {
     int t; // [esp+0h] [ebp-14h]
     int cache; // [esp+4h] [ebp-10h]
@@ -475,7 +475,7 @@ void __cdecl Image_FlipDiagonally(uint8_t *pic, int size)
     }
 }
 
-void __cdecl Image_FlipHorizontally(uint8_t *pic, int size)
+void Image_FlipHorizontally(uint8_t *pic, int size)
 {
     int t; // [esp+0h] [ebp-1Ch]
     int cache; // [esp+4h] [ebp-18h]
@@ -496,7 +496,7 @@ void __cdecl Image_FlipHorizontally(uint8_t *pic, int size)
     }
 }
 
-void __cdecl CubeMap_FlipSides(uint8_t **pic, int size)
+void CubeMap_FlipSides(uint8_t **pic, int size)
 {
     Image_FlipDiagonally(*pic, size);
     Image_FlipDiagonally(pic[1], size);
@@ -508,7 +508,7 @@ void __cdecl CubeMap_FlipSides(uint8_t **pic, int size)
     Image_FlipDiagonally(pic[5], size);
 }
 
-void __cdecl Image_CubeMapDirRemap(float *dir, int size)
+void Image_CubeMapDirRemap(float *dir, int size)
 {
     double v2; // st7
     int i; // [esp+4h] [ebp-4h]
@@ -520,7 +520,7 @@ void __cdecl Image_CubeMapDirRemap(float *dir, int size)
     }
 }
 
-void __cdecl Image_CubeMapDir(int face, int u, int v, int size, float *dir)
+void Image_CubeMapDir(int face, int u, int v, int size, float *dir)
 {
     const char *v5; // eax
 
@@ -568,7 +568,7 @@ void __cdecl Image_CubeMapDir(int face, int u, int v, int size, float *dir)
     Vec3Normalize(dir);
 }
 
-void __cdecl CubeMap_CacheHighMipDirs()
+void CubeMap_CacheHighMipDirs()
 {
     int u; // [esp+0h] [ebp-Ch]
     int v; // [esp+4h] [ebp-8h]
@@ -588,7 +588,7 @@ void __cdecl CubeMap_CacheHighMipDirs()
     }
 }
 
-double __cdecl Image_CubeMipMapBlurDot(int mipSize)
+double Image_CubeMipMapBlurDot(int mipSize)
 {
     double result; // st7
     const char *v2; // eax
@@ -639,7 +639,7 @@ double __cdecl Image_CubeMipMapBlurDot(int mipSize)
     return result;
 }
 
-void __cdecl Image_CubeMapFaceDir(int face, float *dir)
+void Image_CubeMapFaceDir(int face, float *dir)
 {
     const char *v2; // eax
 
@@ -685,7 +685,7 @@ void __cdecl Image_CubeMapFaceDir(int face, float *dir)
     }
 }
 
-void __cdecl Image_CalcCubeMipMapTexel32SubSample(
+void Image_CalcCubeMipMapTexel32SubSample(
     int face,
     int u,
     int v,
@@ -712,7 +712,7 @@ void __cdecl Image_CalcCubeMipMapTexel32SubSample(
     }
 }
 
-void __cdecl Image_CalcCubeMipMapTexel32(
+void Image_CalcCubeMipMapTexel32(
     uint8_t *pixel,
     float *dir,
     uint8_t *(*sourceFacePixels)[15],
@@ -748,7 +748,7 @@ void __cdecl Image_CalcCubeMipMapTexel32(
     }
 }
 
-void __cdecl CubeMap_GenerateMipMap32(
+void CubeMap_GenerateMipMap32(
     uint8_t *image,
     int size,
     uint8_t *(*sourceFacePixels)[15],
@@ -783,7 +783,7 @@ void __cdecl CubeMap_GenerateMipMap32(
     }
 }
 
-void __cdecl R_CreateReflectionRawDataFromCubemapShot(DiskGfxReflectionProbe *probeRawData, int downSampleRes)
+void R_CreateReflectionRawDataFromCubemapShot(DiskGfxReflectionProbe *probeRawData, int downSampleRes)
 {
     int v2; // [esp+0h] [ebp-190h]
     int mip; // [esp+4h] [ebp-18Ch]
@@ -846,7 +846,7 @@ void __cdecl R_CreateReflectionRawDataFromCubemapShot(DiskGfxReflectionProbe *pr
             "rawPixels - probeRawData->pixels == sizeof( probeRawData->pixels )");
 }
 
-char __cdecl R_GetFrontBufferData(int x, int y, int width, int height, int bytesPerPixel, uint8_t *buffer)
+char R_GetFrontBufferData(int x, int y, int width, int height, int bytesPerPixel, uint8_t *buffer)
 {
     const char *v7; // eax
     const char *v8; // eax
@@ -1004,7 +1004,7 @@ char __cdecl R_GetFrontBufferData(int x, int y, int width, int height, int bytes
     }
 }
 
-void __cdecl R_UpsamplePixelData(
+void R_UpsamplePixelData(
     int oldSize,
     int newSize,
     int stride,
@@ -1056,7 +1056,7 @@ void __cdecl R_UpsamplePixelData(
     }
 }
 
-void __cdecl R_DownsamplePixelData(
+void R_DownsamplePixelData(
     int oldSize,
     int newSize,
     int stride,
@@ -1103,7 +1103,7 @@ void __cdecl R_DownsamplePixelData(
     }
 }
 
-void __cdecl R_ResampleImage(
+void R_ResampleImage(
     int oldWidth,
     int oldHeight,
     int newWidth,
@@ -1176,7 +1176,7 @@ void __cdecl R_ResampleImage(
     }
 }
 
-uint8_t *__cdecl R_TakeResampledScreenshot(int width, int height, int bytesPerPixel, int headerSize)
+uint8_t *R_TakeResampledScreenshot(int width, int height, int bytesPerPixel, int headerSize)
 {
     uint32_t displayHeight; // [esp+0h] [ebp-14h]
     uint32_t displayWidth; // [esp+4h] [ebp-10h]
@@ -1203,7 +1203,7 @@ uint8_t *__cdecl R_TakeResampledScreenshot(int width, int height, int bytesPerPi
     }
 }
 
-void __cdecl R_LevelShot()
+void R_LevelShot()
 {
     uint8_t *buffer; // [esp+0h] [ebp-10Ch]
     char checkname[260]; // [esp+4h] [ebp-108h] BYREF
@@ -1230,7 +1230,7 @@ void __cdecl R_LevelShot()
     }
 }
 
-int __cdecl R_SaveJpg(
+int R_SaveJpg(
     char *filename,
     int quality,
     uint32_t image_width,
@@ -1317,7 +1317,7 @@ int __cdecl R_SaveJpg(
 #endif
 }
 
-void __cdecl R_SaveGameShot(const char *saveName)
+void R_SaveGameShot(const char *saveName)
 {
     char filename[256]; // [esp+0h] [ebp-110h] BYREF
     uint8_t *pixels; // [esp+104h] [ebp-Ch]
@@ -1335,7 +1335,7 @@ void __cdecl R_SaveGameShot(const char *saveName)
     }
 }
 
-void __cdecl R_BeginCubemapShot(int pixelWidthHeight, int pixelBorder)
+void R_BeginCubemapShot(int pixelWidthHeight, int pixelBorder)
 {
     if (pixelWidthHeight <= 0)
         MyAssertHandler(
@@ -1421,13 +1421,13 @@ void R_CubemapShotSetInitialState()
     } while (alwaysfails);
 }
 
-void __cdecl R_EndCubemapShot(CubemapShot shotIndex)
+void R_EndCubemapShot(CubemapShot shotIndex)
 {
     R_CopyCubemapShot(shotIndex);
     R_CubemapShotRestoreState();
 }
 
-void __cdecl R_CopyCubemapShot(CubemapShot imgIndex)
+void R_CopyCubemapShot(CubemapShot imgIndex)
 {
     int sizeInBytes; // [esp+4h] [ebp-4h]
 
@@ -1445,7 +1445,7 @@ void __cdecl R_CopyCubemapShot(CubemapShot imgIndex)
     R_CubemapShotCopySurfaceToBuffer(cubeShotGlob.pixels[imgIndex - 1], sizeInBytes);
 }
 
-char __cdecl R_GetBackBufferData(int x, int y, int width, int height, int bytesPerPixel, uint8_t *buffer)
+char R_GetBackBufferData(int x, int y, int width, int height, int bytesPerPixel, uint8_t *buffer)
 {
     const char *v6; // eax
     const char *v8; // eax
@@ -1604,7 +1604,7 @@ char __cdecl R_GetBackBufferData(int x, int y, int width, int height, int bytesP
     }
 }
 
-void __cdecl R_CubemapShotFlipVerticalBuffer(uint8_t *buffer)
+void R_CubemapShotFlipVerticalBuffer(uint8_t *buffer)
 {
     int srcIndex; // [esp+0h] [ebp-14h]
     uint8_t swapBuffer[4]; // [esp+4h] [ebp-10h]
@@ -1626,7 +1626,7 @@ void __cdecl R_CubemapShotFlipVerticalBuffer(uint8_t *buffer)
     }
 }
 
-void __cdecl R_CubemapShotCopySurfaceToBuffer(uint8_t *buffer, int bufferSizeInBytes)
+void R_CubemapShotCopySurfaceToBuffer(uint8_t *buffer, int bufferSizeInBytes)
 {
     iassert( buffer );
     if (bufferSizeInBytes <= 0)
@@ -1655,12 +1655,12 @@ void R_CubemapShotRestoreState()
     R_SetRenderTarget(gfxCmdBufContext, R_RENDERTARGET_FRAME_BUFFER);
 }
 
-void __cdecl R_SaveCubemapShot(char *filename, CubemapShot shotIndex, float n0, float n1)
+void R_SaveCubemapShot(char *filename, CubemapShot shotIndex, float n0, float n1)
 {
     R_CubemapShotWriteTargaFile(filename, shotIndex, n0, n1);
 }
 
-void __cdecl R_CubemapShotWriteTargaFile(char *filename, CubemapShot shotIndex, float n0, float n1)
+void R_CubemapShotWriteTargaFile(char *filename, CubemapShot shotIndex, float n0, float n1)
 {
     int imgIndex; // [esp+Ch] [ebp-Ch]
     int fileSize; // [esp+10h] [ebp-8h]
@@ -1687,7 +1687,7 @@ void __cdecl R_CubemapShotWriteTargaFile(char *filename, CubemapShot shotIndex, 
     Z_VirtualFree(cubeShotGlob.pixels[imgIndex]);
 }
 
-void __cdecl R_CubemapShotWriteTargaHeader(int res, uint8_t *fileBuffer)
+void R_CubemapShotWriteTargaHeader(int res, uint8_t *fileBuffer)
 {
     iassert( fileBuffer );
     iassert( (res > 0) );
@@ -1703,7 +1703,7 @@ void __cdecl R_CubemapShotWriteTargaHeader(int res, uint8_t *fileBuffer)
     fileBuffer[16] = 32;
 }
 
-void __cdecl R_CubemapShotCopyBufferToTarga(const uint8_t *srcBuffer, uint8_t *targa)
+void R_CubemapShotCopyBufferToTarga(const uint8_t *srcBuffer, uint8_t *targa)
 {
     int srcIndex; // [esp+0h] [ebp-10h]
     int colIndex; // [esp+4h] [ebp-Ch]
@@ -1726,7 +1726,7 @@ void __cdecl R_CubemapShotCopyBufferToTarga(const uint8_t *srcBuffer, uint8_t *t
     }
 }
 
-void __cdecl R_CubemapShotApplyFresnelToTarga(CubemapShot shotIndex, float n0, float n1, uint8_t *targa)
+void R_CubemapShotApplyFresnelToTarga(CubemapShot shotIndex, float n0, float n1, uint8_t *targa)
 {
     int colIndex; // [esp+8h] [ebp-10h]
     int rowIndex; // [esp+Ch] [ebp-Ch]
@@ -1751,7 +1751,7 @@ void __cdecl R_CubemapShotApplyFresnelToTarga(CubemapShot shotIndex, float n0, f
     }
 }
 
-uint8_t __cdecl R_CubemapShotCalcReflectionFactor(
+uint8_t R_CubemapShotCalcReflectionFactor(
     int shotIndex,
     int colIndex,
     int rowIndex,
@@ -1810,7 +1810,7 @@ uint8_t __cdecl R_CubemapShotCalcReflectionFactor(
     refraction = FresnelTerm(n0, n1, dir[2]);
     return SnapFloatToInt(refraction * 255.0f);}
 
-void __cdecl R_CubemapLightingForDir(
+void R_CubemapLightingForDir(
     float (**linearColors)[3],
     int width,
     int height,
@@ -1871,7 +1871,7 @@ void __cdecl R_CubemapLightingForDir(
     pixel[3] = -1;
 }
 
-void __cdecl R_CubemapLighting(
+void R_CubemapLighting(
     float (**linearColors)[3],
     int width,
     int height,
@@ -1900,7 +1900,7 @@ void __cdecl R_CubemapLighting(
     }
 }
 
-void __cdecl R_LightingFromCubemapShots(const float *baseColor)
+void R_LightingFromCubemapShots(const float *baseColor)
 {
     int pixelsPerFace; // [esp+0h] [ebp-1Ch]
     float (*linearColors[6])[3]; // [esp+4h] [ebp-18h] BYREF
@@ -1921,14 +1921,14 @@ void __cdecl R_LightingFromCubemapShots(const float *baseColor)
     Z_VirtualFree(linearColors[0]);
 }
 
-void __cdecl R_GetDirForCubemapPixel(int faceIndex, float x, float y, float *dir)
+void R_GetDirForCubemapPixel(int faceIndex, float x, float y, float *dir)
 {
     Vec3Mad(cubemapShotAxis[faceIndex + 1][0], x, (const float *)(36 * (faceIndex + 1) + 9391748), dir);
     Vec3Mad(dir, y, (const float *)(36 * (faceIndex + 1) + 9391760), dir);
     Vec3Normalize(dir);
 }
 
-void __cdecl R_CubemapShotExtractLinearLight(
+void R_CubemapShotExtractLinearLight(
     uint8_t **pixels,
     int width,
     int height,
@@ -1966,7 +1966,7 @@ void __cdecl R_CubemapShotExtractLinearLight(
     }
 }
 
-void __cdecl R_ScreenshotFilename(uint32_t lastNumber, const char *extension, char *fileName)
+void R_ScreenshotFilename(uint32_t lastNumber, const char *extension, char *fileName)
 {
     if (lastNumber < 0x2710)
         Com_sprintf(fileName, 0x100u, "screenshots/shot%04i.%s", lastNumber, extension);
@@ -1974,7 +1974,7 @@ void __cdecl R_ScreenshotFilename(uint32_t lastNumber, const char *extension, ch
         Com_sprintf(fileName, 0x100u, "screenshots/shot9999.%s", extension);
 }
 
-int __cdecl R_TakeScreenshotJpg(int x, int y, int width, int height, const char *filename)
+int R_TakeScreenshotJpg(int x, int y, int width, int height, const char *filename)
 {
     uint8_t *buffer; // [esp+0h] [ebp-4h]
 	int ok;
@@ -1987,7 +1987,7 @@ int __cdecl R_TakeScreenshotJpg(int x, int y, int width, int height, const char 
 	return ok;
 }
 
-int __cdecl R_TakeScreenshotTga(int x, int y, int width, int height, char *filename)
+int R_TakeScreenshotTga(int x, int y, int width, int height, char *filename)
 {
     uint8_t *buffer; // [esp+0h] [ebp-8h]
 	int ok;
@@ -2011,7 +2011,7 @@ int __cdecl R_TakeScreenshotTga(int x, int y, int width, int height, char *filen
 }
 
 int lastNumber;
-void __cdecl R_ScreenshotCommand(GfxScreenshotType type)
+void R_ScreenshotCommand(GfxScreenshotType type)
 {
     const char *v1; // eax
     const char *v2; // eax

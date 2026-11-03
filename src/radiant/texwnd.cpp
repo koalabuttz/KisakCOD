@@ -501,7 +501,7 @@ static int tex_set_is_in_use( qtexture_s *q )
 
 // 0x45A4D0 — qsort comparator for sorted_materials[] (each entry is a qtexture_s*):
 // case-insensitive by material name (qtexture_s.name @ +4).
-static int __cdecl Tex_stricmp( const void *a1, const void *a2 )
+static int Tex_stricmp( const void *a1, const void *a2 )
 {
     return _stricmp( ( *(qtexture_s **)a1 )->name, ( *(qtexture_s **)a2 )->name );
 }

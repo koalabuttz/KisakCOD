@@ -14,19 +14,19 @@
 static unsigned int g_idHistoryIndex;
 static short idHistory[16];
 
-void __cdecl WriteByte(
+void WriteByte(
     unsigned __int8 b,
     MemoryFile *memFile)
 {
     MemFile_WriteData(memFile, 1, &b);
 }
 
-void __cdecl WriteShort(unsigned __int16 i, MemoryFile *memFile)
+void WriteShort(unsigned __int16 i, MemoryFile *memFile)
 {
     MemFile_WriteData(memFile, 2, &i);
 }
 
-void __cdecl WriteString(unsigned __int16 str, MemoryFile *memFile)
+void WriteString(unsigned __int16 str, MemoryFile *memFile)
 {
     const char *v3; // r3
 
@@ -34,7 +34,7 @@ void __cdecl WriteString(unsigned __int16 str, MemoryFile *memFile)
     MemFile_WriteCString(memFile, v3);
 }
 
-void __cdecl SafeWriteString(unsigned __int16 str, MemoryFile *memFile)
+void SafeWriteString(unsigned __int16 str, MemoryFile *memFile)
 {
     unsigned int v3; // r30
     const char *v4; // r3
@@ -55,7 +55,7 @@ void __cdecl SafeWriteString(unsigned __int16 str, MemoryFile *memFile)
     }
 }
 
-int __cdecl Scr_ReadString(MemoryFile *memFile)
+int Scr_ReadString(MemoryFile *memFile)
 {
     const char *CString; // r3
     const char *v2; // r11
@@ -67,7 +67,7 @@ int __cdecl Scr_ReadString(MemoryFile *memFile)
     return (unsigned __int16)SL_GetStringOfSize(CString, 0, v2 - CString, MT_TYPE_SCRIPT_STRING);
 }
 
-int __cdecl Scr_ReadOptionalString(MemoryFile *memFile)
+int Scr_ReadOptionalString(MemoryFile *memFile)
 {
     const char *CString; // r3
     const char *v4; // r11
@@ -83,7 +83,7 @@ int __cdecl Scr_ReadOptionalString(MemoryFile *memFile)
     return (unsigned __int16)SL_GetStringOfSize(CString, 0, v4 - CString, MT_TYPE_SCRIPT_STRING);
 }
 
-void __cdecl WriteInt(int i, MemoryFile *memFile)
+void WriteInt(int i, MemoryFile *memFile)
 {
     MemFile_WriteData(memFile, 4, &i);
 }
@@ -94,7 +94,7 @@ void WriteFloat(float f, MemoryFile *memFile)
     MemFile_WriteData(memFile, 4, &f);
 }
 
-void __cdecl WriteVector(float *v, MemoryFile *memFile)
+void WriteVector(float *v, MemoryFile *memFile)
 {
     iassert(v);
     iassert(!IS_NAN(v[0]) && !IS_NAN(v[1]) && !IS_NAN(v[2]));
@@ -104,7 +104,7 @@ void __cdecl WriteVector(float *v, MemoryFile *memFile)
     WriteFloat(v[2], memFile);
 }
 
-const float *__cdecl Scr_ReadVec3(MemoryFile *memFile)
+const float *Scr_ReadVec3(MemoryFile *memFile)
 {
     float vec[3]; // [sp+58h] [-48h] BYREF
 
@@ -117,7 +117,7 @@ const float *__cdecl Scr_ReadVec3(MemoryFile *memFile)
     return Scr_AllocVector(vec);
 }
 
-void __cdecl WriteCodepos(const char *pos, MemoryFile *memFile)
+void WriteCodepos(const char *pos, MemoryFile *memFile)
 {
     int v4; // r11
     int v5; // [sp+50h] [-20h] BYREF
@@ -141,7 +141,7 @@ void __cdecl WriteCodepos(const char *pos, MemoryFile *memFile)
     MemFile_WriteData(memFile, 4, &v5);
 }
 
-const char *__cdecl Scr_ReadCodepos(MemoryFile *memFile)
+const char *Scr_ReadCodepos(MemoryFile *memFile)
 {
     int v1; // r31
     const char *v2; // r31
@@ -302,7 +302,7 @@ unsigned int Scr_ReadId(MemoryFile *memFile, unsigned int opcode)
     return result;
 }
 
-void __cdecl WriteStack(const VariableStackBuffer *stackBuf, MemoryFile *memFile)
+void WriteStack(const VariableStackBuffer *stackBuf, MemoryFile *memFile)
 {
     int v4; // r30
     __int16 v5; // r11
@@ -337,7 +337,7 @@ void __cdecl WriteStack(const VariableStackBuffer *stackBuf, MemoryFile *memFile
     }
 }
 
-VariableStackBuffer *__cdecl Scr_ReadStack(MemoryFile *memFile)
+VariableStackBuffer *Scr_ReadStack(MemoryFile *memFile)
 {
     __int16 v2; // r27
     int v3; // r28
@@ -388,7 +388,7 @@ VariableStackBuffer *__cdecl Scr_ReadStack(MemoryFile *memFile)
     return (VariableStackBuffer *)v6;
 }
 
-void __cdecl Scr_DoLoadEntryInternal(VariableValue *value, MemoryFile *memFile)
+void Scr_DoLoadEntryInternal(VariableValue *value, MemoryFile *memFile)
 {
     unsigned int v4; // r4
     int v5; // r4
@@ -445,7 +445,7 @@ void __cdecl Scr_DoLoadEntryInternal(VariableValue *value, MemoryFile *memFile)
     }
 }
 
-int __cdecl Scr_DoLoadEntry(VariableValue *value, bool isArray, MemoryFile *memFile)
+int Scr_DoLoadEntry(VariableValue *value, bool isArray, MemoryFile *memFile)
 {
 
     int result;
@@ -507,7 +507,7 @@ int __cdecl Scr_DoLoadEntry(VariableValue *value, bool isArray, MemoryFile *memF
     return result;
 }
 
-void __cdecl AddSaveObjectInternal(unsigned int parentId)
+void AddSaveObjectInternal(unsigned int parentId)
 {
     if (parentId)
     {
@@ -519,7 +519,7 @@ void __cdecl AddSaveObjectInternal(unsigned int parentId)
     }
 }
 
-unsigned int __cdecl Scr_ConvertThreadFromLoad(unsigned __int16 handle)
+unsigned int Scr_ConvertThreadFromLoad(unsigned __int16 handle)
 {
     int v2; // r30
     unsigned int v3; // r30
@@ -542,7 +542,7 @@ unsigned int __cdecl Scr_ConvertThreadFromLoad(unsigned __int16 handle)
     return v3;
 }
 
-void __cdecl Scr_DoLoadObjectInfo(unsigned __int16 parentId, MemoryFile *memFile)
+void Scr_DoLoadObjectInfo(unsigned __int16 parentId, MemoryFile *memFile)
 {
 
 
@@ -669,7 +669,7 @@ void __cdecl Scr_DoLoadObjectInfo(unsigned __int16 parentId, MemoryFile *memFile
     }
 }
 
-void __cdecl Scr_ReadGameEntry(MemoryFile *memFile)
+void Scr_ReadGameEntry(MemoryFile *memFile)
 {
     int type; // r28
     unsigned int gameId; // r11
@@ -781,7 +781,7 @@ static void Scr_RemoveDebuggerRefs()
     }
 }
 
-void __cdecl Scr_SaveShutdown(bool savegame)
+void Scr_SaveShutdown(bool savegame)
 {
     char v2; // r20
     unsigned __int16 *v3; // r25
@@ -838,7 +838,7 @@ void __cdecl Scr_SaveShutdown(bool savegame)
     }
 }
 
-void __cdecl Scr_LoadPre(int sys, MemoryFile *memFile)
+void Scr_LoadPre(int sys, MemoryFile *memFile)
 {
     unsigned __int16 savecount; // r11
     unsigned int v4; // r30
@@ -1151,7 +1151,7 @@ static int CheckReferences()
     return 0;
 }
 
-void __cdecl Scr_LoadShutdown()
+void Scr_LoadShutdown()
 {
     unsigned int v0; // r30
     unsigned __int16 *v1; // r31
@@ -1173,7 +1173,7 @@ void __cdecl Scr_LoadShutdown()
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\script\\scr_readwrite.cpp", 1115, 0, "%s", "CheckReferences()");
 }
 
-void __cdecl DoSaveEntryInternal(unsigned int type, VariableUnion *u, MemoryFile *memFile)
+void DoSaveEntryInternal(unsigned int type, VariableUnion *u, MemoryFile *memFile)
 {
     unsigned int UsedSize; // r3
     unsigned int v7; // r3
@@ -1276,13 +1276,13 @@ void __cdecl DoSaveEntryInternal(unsigned int type, VariableUnion *u, MemoryFile
     }
 }
 
-void __cdecl Scr_SaveSource(MemoryFile *memFile)
+void Scr_SaveSource(MemoryFile *memFile)
 {
     MemFile_WriteData(memFile, 1, &scrVarPub.developer);
     MemFile_WriteData(memFile, 1, &scrVarPub.developer_script);
 }
 
-void __cdecl SaveMemory_SaveWriteImmediate(const void *buffer, unsigned int len, SaveImmediate *save)
+void SaveMemory_SaveWriteImmediate(const void *buffer, unsigned int len, SaveImmediate *save)
 {
     if (!save || !save->f || !buffer || !len)
         return;
@@ -1290,7 +1290,7 @@ void __cdecl SaveMemory_SaveWriteImmediate(const void *buffer, unsigned int len,
     FS_Write((const char *)buffer, len, handle);
 }
 
-void __cdecl Scr_SaveSourceImmediate(SaveImmediate *save)
+void Scr_SaveSourceImmediate(SaveImmediate *save)
 {
     if (!scrVarPub.developer)
         return;
@@ -1331,7 +1331,7 @@ void __cdecl Scr_SaveSourceImmediate(SaveImmediate *save)
     }
 }
 
-void __cdecl Scr_LoadSource(MemoryFile *memFile, void *fileHandle)
+void Scr_LoadSource(MemoryFile *memFile, void *fileHandle)
 {
     SaveSourceBufferInfo *saveSourceBufferLookup; // r3
     signed int v5; // r25
@@ -1397,7 +1397,7 @@ void __cdecl Scr_LoadSource(MemoryFile *memFile, void *fileHandle)
     }
 }
 
-void __cdecl Scr_SkipSource(MemoryFile *memFile, void *fileHandle)
+void Scr_SkipSource(MemoryFile *memFile, void *fileHandle)
 {
     int i; // r30
     _BYTE v5[4]; // [sp+50h] [-30h] BYREF
@@ -1424,7 +1424,7 @@ void __cdecl Scr_SkipSource(MemoryFile *memFile, void *fileHandle)
     }
 }
 
-void __cdecl AddSaveStackInternal(const VariableStackBuffer *stackBuf)
+void AddSaveStackInternal(const VariableStackBuffer *stackBuf)
 {
     int localId; // r7
     unsigned __int16 size; // r11
@@ -1455,7 +1455,7 @@ void __cdecl AddSaveStackInternal(const VariableStackBuffer *stackBuf)
     }
 }
 
-void __cdecl AddSaveEntryInternal(unsigned int type, const VariableStackBuffer *u)
+void AddSaveEntryInternal(unsigned int type, const VariableStackBuffer *u)
 {
     if (type == VAR_POINTER)
     {
@@ -1472,7 +1472,7 @@ void __cdecl AddSaveEntryInternal(unsigned int type, const VariableStackBuffer *
 }
 
 // local variable allocation has failed, the output may be wrong!
-void __cdecl DoSaveEntry(VariableValue *value, VariableValue *name, bool isArray, MemoryFile *memFile)
+void DoSaveEntry(VariableValue *value, VariableValue *name, bool isArray, MemoryFile *memFile)
 {
     unsigned int UsedSize; // r3
     unsigned int v9; // r3
@@ -1584,7 +1584,7 @@ void __cdecl DoSaveEntry(VariableValue *value, VariableValue *name, bool isArray
     }
 }
 
-void __cdecl AddSaveObjectChildren(unsigned int parentId)
+void AddSaveObjectChildren(unsigned int parentId)
 {
     VariableValueInternal *parentValue; // r23
     int parentType; // r24
@@ -1665,7 +1665,7 @@ void __cdecl AddSaveObjectChildren(unsigned int parentId)
     }
 }
 
-void __cdecl AddSaveObject(unsigned int parentId)
+void AddSaveObject(unsigned int parentId)
 {
     unsigned __int16 savecount; // r11
     int v2; // r29
@@ -1692,7 +1692,7 @@ void __cdecl AddSaveObject(unsigned int parentId)
     }
 }
 
-void __cdecl DoSaveObjectInfo(unsigned int parentId, MemoryFile *memFile)
+void DoSaveObjectInfo(unsigned int parentId, MemoryFile *memFile)
 {
     VariableValueInternal *v4; // r31
     int v5; // r30
@@ -1798,7 +1798,7 @@ void __cdecl DoSaveObjectInfo(unsigned int parentId, MemoryFile *memFile)
     }
 }
 
-int __cdecl Scr_ConvertThreadToSave(unsigned __int16 handle)
+int Scr_ConvertThreadToSave(unsigned __int16 handle)
 {
     int v1; // r31
     int v3; // r31
@@ -1818,7 +1818,7 @@ int __cdecl Scr_ConvertThreadToSave(unsigned __int16 handle)
     return scrVarPub.saveIdMap[v3];
 }
 
-void __cdecl WriteGameEntry(MemoryFile *memFile)
+void WriteGameEntry(MemoryFile *memFile)
 {
     DoSaveEntryInternal(
         scrVarGlob.variableList[scrVarPub.gameId + VARIABLELIST_CHILD_BEGIN].w.type & 0x1F,
@@ -1826,7 +1826,7 @@ void __cdecl WriteGameEntry(MemoryFile *memFile)
         memFile);
 }
 
-void __cdecl Scr_SavePost(MemoryFile *memFile)
+void Scr_SavePost(MemoryFile *memFile)
 {
     unsigned int UsedSize; // r3
     unsigned int v3; // r29
@@ -1876,7 +1876,7 @@ void __cdecl Scr_SavePost(MemoryFile *memFile)
     } while (v6);
 }
 
-void __cdecl AddSaveStack(const VariableStackBuffer *stackBuf)
+void AddSaveStack(const VariableStackBuffer *stackBuf)
 {
     int size; // r9
     CONST char *buf; // r31
@@ -1910,7 +1910,7 @@ void __cdecl AddSaveStack(const VariableStackBuffer *stackBuf)
     }
 }
 
-void __cdecl AddSaveEntry(unsigned int type, const VariableStackBuffer *u)
+void AddSaveEntry(unsigned int type, const VariableStackBuffer *u)
 {
     if (type == VAR_POINTER)
     {
@@ -1922,7 +1922,7 @@ void __cdecl AddSaveEntry(unsigned int type, const VariableStackBuffer *u)
     }
 }
 
-void __cdecl Scr_SavePre(int sys)
+void Scr_SavePre(int sys)
 {
     int v2; // r30
     unsigned __int16 *p_entArrayId; // r29

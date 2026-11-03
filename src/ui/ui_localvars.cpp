@@ -2,13 +2,13 @@
 #include "ui_shared.h"
 #include <universal/com_memory.h>
 
-void __cdecl UILocalVar_Init(UILocalVarContext *context)
+void UILocalVar_Init(UILocalVarContext *context)
 {
     if (!context)
         MyAssertHandler(".\\ui\\ui_localvars.cpp", 23, 0, "%s", "context");
 }
 
-void __cdecl UILocalVar_Shutdown(UILocalVarContext *context)
+void UILocalVar_Shutdown(UILocalVarContext *context)
 {
     uint32_t hash; // [esp+4h] [ebp-4h]
 
@@ -26,7 +26,7 @@ void __cdecl UILocalVar_Shutdown(UILocalVarContext *context)
     memset((uint8_t *)context, 0, sizeof(UILocalVarContext));
 }
 
-UILocalVarContext *__cdecl UILocalVar_Find(UILocalVarContext *context, const char *name)
+UILocalVarContext *UILocalVar_Find(UILocalVarContext *context, const char *name)
 {
     uint32_t hash; // [esp+0h] [ebp-4h] BYREF
 
@@ -36,7 +36,7 @@ UILocalVarContext *__cdecl UILocalVar_Find(UILocalVarContext *context, const cha
         return 0;
 }
 
-char __cdecl UILocalVar_FindLocation(UILocalVarContext *context, const char *name, uint32_t *hashForName)
+char UILocalVar_FindLocation(UILocalVarContext *context, const char *name, uint32_t *hashForName)
 {
     uint32_t hash; // [esp+1Ch] [ebp-8h]
     uint32_t initialHash; // [esp+20h] [ebp-4h]
@@ -58,7 +58,7 @@ char __cdecl UILocalVar_FindLocation(UILocalVarContext *context, const char *nam
     return 0;
 }
 
-uint32_t __cdecl UILocalVar_HashName(const char *name)
+uint32_t UILocalVar_HashName(const char *name)
 {
     __int16 hash; // [esp+0h] [ebp-8h]
     uint32_t i; // [esp+4h] [ebp-4h]
@@ -69,7 +69,7 @@ uint32_t __cdecl UILocalVar_HashName(const char *name)
     return (uint8_t)(hash + HIBYTE(hash));
 }
 
-UILocalVarContext *__cdecl UILocalVar_FindOrCreate(UILocalVarContext *context, char *name)
+UILocalVarContext *UILocalVar_FindOrCreate(UILocalVarContext *context, char *name)
 {
     UILocalVar *var; // [esp+0h] [ebp-8h]
     uint32_t hash; // [esp+4h] [ebp-4h] BYREF
@@ -83,7 +83,7 @@ UILocalVarContext *__cdecl UILocalVar_FindOrCreate(UILocalVarContext *context, c
     return (UILocalVarContext *)var;
 }
 
-bool __cdecl UILocalVar_GetBool(const UILocalVar *var)
+bool UILocalVar_GetBool(const UILocalVar *var)
 {
     if (!var)
         MyAssertHandler(".\\ui\\ui_localvars.cpp", 114, 0, "%s", "var");
@@ -96,7 +96,7 @@ bool __cdecl UILocalVar_GetBool(const UILocalVar *var)
     return atoi(var->u.string) != 0;
 }
 
-UILocalVar_u __cdecl UILocalVar_GetInt(const UILocalVar *var)
+UILocalVar_u UILocalVar_GetInt(const UILocalVar *var)
 {
     if (!var)
         MyAssertHandler(".\\ui\\ui_localvars.cpp", 133, 0, "%s", "var");
@@ -119,7 +119,7 @@ UILocalVar_u __cdecl UILocalVar_GetInt(const UILocalVar *var)
     }
 }
 
-double __cdecl UILocalVar_GetFloat(const UILocalVar *var)
+double UILocalVar_GetFloat(const UILocalVar *var)
 {
     if (!var)
         MyAssertHandler(".\\ui\\ui_localvars.cpp", 152, 0, "%s", "var");
@@ -132,7 +132,7 @@ double __cdecl UILocalVar_GetFloat(const UILocalVar *var)
     return (float)atof(var->u.string);
 }
 
-char *__cdecl UILocalVar_GetString(const UILocalVar *var, char *stringBuf, uint32_t size)
+char *UILocalVar_GetString(const UILocalVar *var, char *stringBuf, uint32_t size)
 {
     if (!var)
         MyAssertHandler(".\\ui\\ui_localvars.cpp", 171, 0, "%s", "var");
@@ -157,7 +157,7 @@ char *__cdecl UILocalVar_GetString(const UILocalVar *var, char *stringBuf, uint3
     }
 }
 
-void __cdecl UILocalVar_SetBool(UILocalVar *var, bool b)
+void UILocalVar_SetBool(UILocalVar *var, bool b)
 {
     if (var->type == UILOCALVAR_STRING)
         FreeString(var->u.string);
@@ -165,7 +165,7 @@ void __cdecl UILocalVar_SetBool(UILocalVar *var, bool b)
     var->u.integer = b;
 }
 
-void __cdecl UILocalVar_SetInt(UILocalVar *var, int i)
+void UILocalVar_SetInt(UILocalVar *var, int i)
 {
     if (var->type == UILOCALVAR_STRING)
         FreeString(var->u.string);
@@ -173,7 +173,7 @@ void __cdecl UILocalVar_SetInt(UILocalVar *var, int i)
     var->u.integer = i;
 }
 
-void __cdecl UILocalVar_SetFloat(UILocalVar *var, float f)
+void UILocalVar_SetFloat(UILocalVar *var, float f)
 {
     if (var->type == UILOCALVAR_STRING)
         FreeString(var->u.string);
@@ -181,7 +181,7 @@ void __cdecl UILocalVar_SetFloat(UILocalVar *var, float f)
     var->u.value = f;
 }
 
-void __cdecl UILocalVar_SetString(UILocalVar *var, char *s)
+void UILocalVar_SetString(UILocalVar *var, char *s)
 {
     // Copy first: s may alias the existing value, and allocation may fail.
     const char *replacement = CopyString(s);

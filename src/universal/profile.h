@@ -1390,24 +1390,24 @@ static const ProfileSettings s_profileArrays[29] =
 #include <tracy/Tracy.hpp>
 #include <tracy/TracyC.h>
 
-inline void __cdecl Profile_Guard(int id) {}
-inline void __cdecl Profile_Unguard(int id) {}
-inline void __cdecl Profile_SetTotal(int index, int total) {}
+inline void Profile_Guard(int id) {}
+inline void Profile_Unguard(int id) {}
+inline void Profile_SetTotal(int index, int total) {}
 inline void Profile_ResetScriptCounters() {}
-inline void __cdecl Profile_ResetCounters(int system) {}
-inline void __cdecl Profile_Recover(int id) {}
-inline void __cdecl Profile_InitContext(int profileContext) {}
-inline ProfileStack *__cdecl Profile_GetStackForContext(int profileContext) { return NULL;  }
-inline ProfileScript *__cdecl Profile_GetScript() { return NULL;  }
-inline int __cdecl Profile_GetEnumParity(uint32_t profEnum) { return 0; }
-inline int __cdecl Profile_GetDisplayThread() { return 0; }
-inline void __cdecl Profile_EndScripts(uint32_t profileFlags) {} 
-inline void __cdecl Profile_EndScript(int profileIndex) {}
-inline void __cdecl Profile_BeginScripts(uint32_t profileFlags) {}
-inline void __cdecl Profile_BeginScript(int profileIndex) {}
-inline int __cdecl Profile_AddScriptName(char *profileName) { return 0; }
-inline void __cdecl Profile_ResetCountersForContext(int profileContext, int system) {}
-inline const char *__cdecl Profile_MissingEnd() { return ""; }
+inline void Profile_ResetCounters(int system) {}
+inline void Profile_Recover(int id) {}
+inline void Profile_InitContext(int profileContext) {}
+inline ProfileStack *Profile_GetStackForContext(int profileContext) { return NULL;  }
+inline ProfileScript *Profile_GetScript() { return NULL;  }
+inline int Profile_GetEnumParity(uint32_t profEnum) { return 0; }
+inline int Profile_GetDisplayThread() { return 0; }
+inline void Profile_EndScripts(uint32_t profileFlags) {} 
+inline void Profile_EndScript(int profileIndex) {}
+inline void Profile_BeginScripts(uint32_t profileFlags) {}
+inline void Profile_BeginScript(int profileIndex) {}
+inline int Profile_AddScriptName(char *profileName) { return 0; }
+inline void Profile_ResetCountersForContext(int profileContext, int system) {}
+inline const char *Profile_MissingEnd() { return ""; }
 
 void Profile_Init();
 
@@ -1419,28 +1419,28 @@ void Profile_EndInternal(double *duration);
 
 #else
 void Profile_Init();
-void __cdecl Profile_Guard(int id);
-void __cdecl Profile_Unguard(int id);
-void __cdecl Profile_SetTotal(int index, int total);
+void Profile_Guard(int id);
+void Profile_Unguard(int id);
+void Profile_SetTotal(int index, int total);
 void Profile_ResetScriptCounters();
-void __cdecl Profile_ResetCounters(int system);
-void __cdecl Profile_Recover(int id);
-void __cdecl Profile_InitContext(int profileContext);
-void __cdecl Profile_InitContext(int profileContext);
-ProfileStack *__cdecl Profile_GetStackForContext(int profileContext);
-ProfileScript *__cdecl Profile_GetScript();
-int __cdecl Profile_GetEnumParity(uint32_t profEnum);
-int __cdecl Profile_GetDisplayThread();
-void __cdecl Profile_EndScripts(uint32_t profileFlags);
-void __cdecl Profile_EndScript(int profileIndex);
-void __cdecl Profile_BeginScripts(uint32_t profileFlags);
-void __cdecl Profile_BeginScript(int profileIndex);
-int __cdecl Profile_AddScriptName(char *profileName);
-void __cdecl Profile_ResetCountersForContext(int profileContext, int system);
-const char *__cdecl Profile_MissingEnd();
+void Profile_ResetCounters(int system);
+void Profile_Recover(int id);
+void Profile_InitContext(int profileContext);
+void Profile_InitContext(int profileContext);
+ProfileStack *Profile_GetStackForContext(int profileContext);
+ProfileScript *Profile_GetScript();
+int Profile_GetEnumParity(uint32_t profEnum);
+int Profile_GetDisplayThread();
+void Profile_EndScripts(uint32_t profileFlags);
+void Profile_EndScript(int profileIndex);
+void Profile_BeginScripts(uint32_t profileFlags);
+void Profile_BeginScript(int profileIndex);
+int Profile_AddScriptName(char *profileName);
+void Profile_ResetCountersForContext(int profileContext, int system);
+const char *Profile_MissingEnd();
 
-void __cdecl Profile_Begin(int index);
-int __cdecl Profile_EndInternal(double *duration);
+void Profile_Begin(int index);
+int Profile_EndInternal(double *duration);
 
 #define PROF_SCOPED(name) // Disable Profiling without Tracy
 #define PROFLOAD_SCOPED(name) PROF_SCOPED(name)

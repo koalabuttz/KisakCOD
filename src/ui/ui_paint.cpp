@@ -10,7 +10,7 @@
 #include "ui.h"
 #endif
 
-char __cdecl Menu_IsVisible(UiContext *dc, menuDef_t *menu)
+char Menu_IsVisible(UiContext *dc, menuDef_t *menu)
 {
     if (!Window_IsVisible(dc->localClientNum, &menu->window))
         return 0;
@@ -47,7 +47,7 @@ char __cdecl Menu_IsVisible(UiContext *dc, menuDef_t *menu)
     return 0;
 }
 
-char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
+char Menu_Paint(UiContext *dc, menuDef_t *menu)
 {
     float fadeCycle; // [esp+1Ch] [ebp-14h]
     float v4; // [esp+20h] [ebp-10h]
@@ -128,7 +128,7 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
 }
 
 
-void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
+void Item_Paint(UiContext *dc, itemDef_s *item)
 {
     PROF_SCOPED("Item_Paint");
 

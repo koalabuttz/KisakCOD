@@ -18,7 +18,7 @@
 int g_allowRemoveCorpse;
 bool g_godModeRemoteInputValid;
 
-int __cdecl CheatsOkInternal(gentity_s *ent)
+int CheatsOkInternal(gentity_s *ent)
 {
     const char *v2; // r3
     const char *v4; // r3
@@ -44,7 +44,7 @@ int __cdecl CheatsOkInternal(gentity_s *ent)
     }
 }
 
-int __cdecl CheatsOk(gentity_s *ent)
+int CheatsOk(gentity_s *ent)
 {
     int ok; // r31
 
@@ -56,7 +56,7 @@ int __cdecl CheatsOk(gentity_s *ent)
 }
 
 char line[1024];
-char *__cdecl ConcatArgs(int start)
+char *ConcatArgs(int start)
 {
     size_t v2; // r30
     int nesting; // r7
@@ -103,7 +103,7 @@ char *__cdecl ConcatArgs(int start)
     return result;
 }
 
-void __cdecl SanitizeString(char *in, char *out)
+void SanitizeString(char *in, char *out)
 {
     char *v2; // r31
     char v4; // r11
@@ -132,7 +132,7 @@ void __cdecl SanitizeString(char *in, char *out)
     *out = 0;
 }
 
-void __cdecl G_setfog(const char *fogstring)
+void G_setfog(const char *fogstring)
 {
     float fDensity; // [esp+0h] [ebp-1Ch] BYREF
     float clr[3]; // [esp+4h] [ebp-18h] BYREF
@@ -154,7 +154,7 @@ void __cdecl G_setfog(const char *fogstring)
     }
 }
 
-void __cdecl Cmd_Fogswitch_f()
+void Cmd_Fogswitch_f()
 {
     const char *v0; // r3
 
@@ -162,7 +162,7 @@ void __cdecl Cmd_Fogswitch_f()
     G_setfog(v0);
 }
 
-void __cdecl Cmd_SetSoundLength_f()
+void Cmd_SetSoundLength_f()
 {
     int nesting; // r7
     int v1; // r5
@@ -210,12 +210,12 @@ void __cdecl Cmd_SetSoundLength_f()
     }
 }
 
-void __cdecl Cmd_RemoveCorpse_f()
+void Cmd_RemoveCorpse_f()
 {
     G_GetFreeActorCorpseIndex(0);
 }
 
-void __cdecl Cmd_Give_f(gentity_s *ent)
+void Cmd_Give_f(gentity_s *ent)
 {
     int ok; // r31
     int v3; // r3
@@ -356,7 +356,7 @@ LABEL_25:
         goto LABEL_31;
 }
 
-void __cdecl Cmd_Take_f(gentity_s *ent)
+void Cmd_Take_f(gentity_s *ent)
 {
     int ok; // r30
     int v3; // r3
@@ -488,7 +488,7 @@ LABEL_25:
         goto LABEL_33;
 }
 
-void __cdecl Cmd_God_f(gentity_s *ent)
+void Cmd_God_f(gentity_s *ent)
 {
     int ok; // r30
     int v3; // r3
@@ -519,7 +519,7 @@ void __cdecl Cmd_God_f(gentity_s *ent)
     }
 }
 
-void __cdecl Cmd_DemiGod_f(gentity_s *ent)
+void Cmd_DemiGod_f(gentity_s *ent)
 {
     int ok; // r30
     int v3; // r3
@@ -548,7 +548,7 @@ void __cdecl Cmd_DemiGod_f(gentity_s *ent)
     }
 }
 
-void __cdecl Cmd_Notarget_f(gentity_s *ent)
+void Cmd_Notarget_f(gentity_s *ent)
 {
     int ok; // r30
     int v3; // r3
@@ -577,7 +577,7 @@ void __cdecl Cmd_Notarget_f(gentity_s *ent)
     }
 }
 
-void __cdecl Cmd_Noclip_f(gentity_s *ent)
+void Cmd_Noclip_f(gentity_s *ent)
 {
     int ok; // r30
     int v3; // r3
@@ -608,7 +608,7 @@ void __cdecl Cmd_Noclip_f(gentity_s *ent)
     }
 }
 
-void __cdecl Cmd_UFO_f(gentity_s *ent)
+void Cmd_UFO_f(gentity_s *ent)
 {
     int ok; // r30
     int v3; // r3
@@ -639,7 +639,7 @@ void __cdecl Cmd_UFO_f(gentity_s *ent)
     }
 }
 
-void __cdecl Cmd_Kill_f(gentity_s *ent)
+void Cmd_Kill_f(gentity_s *ent)
 {
     gclient_s *client; // r5
 
@@ -653,7 +653,7 @@ void __cdecl Cmd_Kill_f(gentity_s *ent)
     }
 }
 
-void __cdecl Cmd_Where_f(gentity_s *ent)
+void Cmd_Where_f(gentity_s *ent)
 {
     gclient_s *client; // r11
 
@@ -664,7 +664,7 @@ void __cdecl Cmd_Where_f(gentity_s *ent)
     }
 }
 
-void __cdecl Cmd_SetViewpos_f(gentity_s *ent)
+void Cmd_SetViewpos_f(gentity_s *ent)
 {
     int ok; // r31
     float angles[3]; // was v12 (pitch), v13 (yaw), v14 (roll)
@@ -726,7 +726,7 @@ void __cdecl Cmd_SetViewpos_f(gentity_s *ent)
 const char *aPrintGameUsage = "print \"GAME_USAGE\x15: jumptonode nodenum\n\"";
 const char *aPrint = "print \"\x15nodenum must be >= 0 and < %i\n\"";
 
-void __cdecl Cmd_JumpToNode_f(gentity_s *ent)
+void Cmd_JumpToNode_f(gentity_s *ent)
 {
     int ok; // r30
     int v3; // r3
@@ -781,12 +781,12 @@ void __cdecl Cmd_JumpToNode_f(gentity_s *ent)
     SV_GameSendServerCommand((v5 >> 7) + ((unsigned int)v5 >> 31), v4);
 }
 
-void __cdecl Cmd_InterruptCamera_f(gentity_s *ent)
+void Cmd_InterruptCamera_f(gentity_s *ent)
 {
     ;
 }
 
-void __cdecl Cmd_DropWeapon_f(gentity_s *pSelf)
+void Cmd_DropWeapon_f(gentity_s *pSelf)
 {
     int ok; // r31
     int v3; // r3
@@ -808,7 +808,7 @@ void __cdecl Cmd_DropWeapon_f(gentity_s *pSelf)
     }
 }
 
-void __cdecl Cmd_MenuResponse_f(gentity_s *pEnt)
+void Cmd_MenuResponse_f(gentity_s *pEnt)
 {
     int nesting; // r7
     unsigned int v3; // r3
@@ -846,7 +846,7 @@ void __cdecl Cmd_MenuResponse_f(gentity_s *pEnt)
 }
 
 // attributes: thunk
-void __cdecl Cmd_PrintEntities_f()
+void Cmd_PrintEntities_f()
 {
     G_PrintEntities();
 }
@@ -963,7 +963,7 @@ void Cmd_VisionSetNight_f()
     SV_SetConfigstring(CS_VISIONSET_NIGHT, va("\"%s\" %i", v5, v7));
 }
 
-void __cdecl ClientCommand(int clientNum, const char *s)
+void ClientCommand(int clientNum, const char *s)
 {
     gentity_s *v3; // r30
     const char *v5; // r3

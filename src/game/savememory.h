@@ -6,42 +6,42 @@
 
 #include "g_save.h"
 
-unsigned int __cdecl Com_BlockChecksum32(const void *buffer, unsigned int length);
-void __cdecl TRACK_save_memory();
+unsigned int Com_BlockChecksum32(const void *buffer, unsigned int length);
+void TRACK_save_memory();
 MemoryFile *SaveMemory_GetMemoryFile(SaveGame *save);
-SaveGame *__cdecl SaveMemory_GetSaveHandle(unsigned int type);
-void __cdecl SaveMemory_ClearSaveGame(SaveGame *saveGame, bool isUsingGlobalBuffer);
+SaveGame *SaveMemory_GetSaveHandle(unsigned int type);
+void SaveMemory_ClearSaveGame(SaveGame *saveGame, bool isUsingGlobalBuffer);
 void *SaveMemory_ResetGameBuffers();
-void __cdecl SaveMemory_InitializeSaveSystem();
-void __cdecl SaveMemory_ShutdownSaveSystem();
-void __cdecl SaveMemory_ClearDemoSave();
-void __cdecl SaveMemory_AllocateTempMemory(SaveGame *save, int size, void *buffer);
-void __cdecl SaveMemory_AllocateHeapMemory(SaveGame *save, unsigned int size);
-void __cdecl SaveMemory_FreeMemory(SaveGame *save);
-int __cdecl SaveMemory_GenerateSaveId();
+void SaveMemory_InitializeSaveSystem();
+void SaveMemory_ShutdownSaveSystem();
+void SaveMemory_ClearDemoSave();
+void SaveMemory_AllocateTempMemory(SaveGame *save, int size, void *buffer);
+void SaveMemory_AllocateHeapMemory(SaveGame *save, unsigned int size);
+void SaveMemory_FreeMemory(SaveGame *save);
+int SaveMemory_GenerateSaveId();
 // attributes: thunk
-void __cdecl SaveMemory_StartSegment(SaveGame *save, int index);
+void SaveMemory_StartSegment(SaveGame *save, int index);
 // attributes: thunk
-void __cdecl SaveMemory_MoveToSegment(SaveGame *save, int index);
-void __cdecl SaveMemory_InitializeGameSave(SaveGame *save);
-void __cdecl SaveMemory_InitializeDemoSave(SaveGame *save);
-void __cdecl SaveMemory_FinalizeSave(SaveGame *save);
-void __cdecl SaveMemory_InitializeLoad(SaveGame *save, int size);
-void __cdecl SaveMemory_FinalizeLoad(SaveGame *save);
-void __cdecl SaveMemory_FinalizeSaveCommit(SaveGame *save);
-bool __cdecl SaveMemory_IsSuccessful(SaveGame *save);
-int __cdecl SaveMemory_IsSaving(SaveGame *save);
-bool __cdecl SaveMemory_IsLoading(SaveGame *save);
-bool __cdecl SaveMemory_IsWaitingForCommit(SaveGame *save);
-unsigned __int8 *__cdecl SaveMemory_GetBodyBuffer(SaveGame *save);
-unsigned int __cdecl SaveMemory_CalculateChecksum(SaveGame *save);
-void __cdecl SaveMemory_InitializeLoadFromBuffer(SaveGame *save, unsigned __int8 *buffer, int length);
-void __cdecl SaveMemory_SaveWrite(const void *buffer, int len, SaveGame *save);
-void __cdecl SaveMemory_SetBuffer(void *buffer, int len, SaveGame *save);
-void __cdecl SaveMemory_LoadRead(void *buffer, int size, SaveGame *save);
-int __cdecl SaveMemory_GetTotalLoadSize(SaveGame *save);
+void SaveMemory_MoveToSegment(SaveGame *save, int index);
+void SaveMemory_InitializeGameSave(SaveGame *save);
+void SaveMemory_InitializeDemoSave(SaveGame *save);
+void SaveMemory_FinalizeSave(SaveGame *save);
+void SaveMemory_InitializeLoad(SaveGame *save, int size);
+void SaveMemory_FinalizeLoad(SaveGame *save);
+void SaveMemory_FinalizeSaveCommit(SaveGame *save);
+bool SaveMemory_IsSuccessful(SaveGame *save);
+int SaveMemory_IsSaving(SaveGame *save);
+bool SaveMemory_IsLoading(SaveGame *save);
+bool SaveMemory_IsWaitingForCommit(SaveGame *save);
+unsigned __int8 *SaveMemory_GetBodyBuffer(SaveGame *save);
+unsigned int SaveMemory_CalculateChecksum(SaveGame *save);
+void SaveMemory_InitializeLoadFromBuffer(SaveGame *save, unsigned __int8 *buffer, int length);
+void SaveMemory_SaveWrite(const void *buffer, int len, SaveGame *save);
+void SaveMemory_SetBuffer(void *buffer, int len, SaveGame *save);
+void SaveMemory_LoadRead(void *buffer, int size, SaveGame *save);
+int SaveMemory_GetTotalLoadSize(SaveGame *save);
 // local variable allocation has failed, the output may be wrong!
-void __cdecl SaveMemory_CreateHeader(
+void SaveMemory_CreateHeader(
     const char *cleanUserName,
     const char *description,
     const char *screenshot,
@@ -51,22 +51,22 @@ void __cdecl SaveMemory_CreateHeader(
     unsigned int saveType,
     int saveId,
     SaveGame *save);
-const SaveHeader *__cdecl SaveMemory_GetHeader(SaveGame *save);
-void *__cdecl SaveMemory_ReadLoadFromDevice(
+const SaveHeader *SaveMemory_GetHeader(SaveGame *save);
+void *SaveMemory_ReadLoadFromDevice(
     const char *filename,
     int checksum,
     int useLoadedSourceFiles,
     SaveGame **save);
-bool __cdecl SaveMemory_IsRecentlyLoaded();
-int __cdecl SaveMemory_IsCommittedSaveAvailable(const char *filename, int checksum);
-bool __cdecl SaveMemory_IsCurrentCommittedSaveValid();
-int __cdecl SaveMemory_CommitSave(SaveGame *save, int saveId);
-void __cdecl SaveMemory_RollbackSave(SaveGame *save);
-SaveGame *__cdecl SaveMemory_GetLastCommittedSave();
-int __cdecl SaveMemory_WriteSaveToDevice(SaveGame *save);
-bool __cdecl SaveMemory_IsWrittenToDevice(SaveGame *save);
-int __cdecl SaveMemory_ForceCommitSave(SaveGame *save);
-bool __cdecl SaveMemory_IsCommitForced();
-void __cdecl SaveMemory_ClearForcedCommitFlag();
-void __cdecl SaveMemory_FinalizeSaveToDisk(SaveGame *save);
-void __cdecl SaveMemory_CleanupSaveMemory();
+bool SaveMemory_IsRecentlyLoaded();
+int SaveMemory_IsCommittedSaveAvailable(const char *filename, int checksum);
+bool SaveMemory_IsCurrentCommittedSaveValid();
+int SaveMemory_CommitSave(SaveGame *save, int saveId);
+void SaveMemory_RollbackSave(SaveGame *save);
+SaveGame *SaveMemory_GetLastCommittedSave();
+int SaveMemory_WriteSaveToDevice(SaveGame *save);
+bool SaveMemory_IsWrittenToDevice(SaveGame *save);
+int SaveMemory_ForceCommitSave(SaveGame *save);
+bool SaveMemory_IsCommitForced();
+void SaveMemory_ClearForcedCommitFlag();
+void SaveMemory_FinalizeSaveToDisk(SaveGame *save);
+void SaveMemory_CleanupSaveMemory();

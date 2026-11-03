@@ -17,7 +17,7 @@
 #include <xanim/xmodel.h>
 #include <xanim/dobj.h>
 
-void __cdecl CG_AddAllPlayerSpriteDrawSurfs(int32_t localClientNum)
+void CG_AddAllPlayerSpriteDrawSurfs(int32_t localClientNum)
 {
     int32_t entityIndex; // [esp+0h] [ebp-14h]
     centity_s *cent; // [esp+8h] [ebp-Ch]
@@ -32,7 +32,7 @@ void __cdecl CG_AddAllPlayerSpriteDrawSurfs(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_AddPlayerSpriteDrawSurfs(int32_t localClientNum, const centity_s *cent)
+void CG_AddPlayerSpriteDrawSurfs(int32_t localClientNum, const centity_s *cent)
 {
     team_t iClientTeam; // [esp+10h] [ebp-18h]
     int32_t secondaryHeight; // [esp+14h] [ebp-14h]
@@ -175,7 +175,7 @@ void  CG_AddPlayerSpriteDrawSurf(
     }
 }
 
-void __cdecl CG_Player(int32_t localClientNum, centity_s *cent)
+void CG_Player(int32_t localClientNum, centity_s *cent)
 {
     double v2; // st7
     bool v3; // [esp+4h] [ebp-50h]
@@ -240,7 +240,7 @@ void __cdecl CG_Player(int32_t localClientNum, centity_s *cent)
         }
     }
 }
-void __cdecl CG_PlayerTurretPositionAndBlend(int32_t localClientNum, centity_s *cent)
+void CG_PlayerTurretPositionAndBlend(int32_t localClientNum, centity_s *cent)
 {
     int32_t v4; // eax
     double v5; // st7
@@ -446,7 +446,7 @@ void __cdecl CG_PlayerTurretPositionAndBlend(int32_t localClientNum, centity_s *
     }
 }
 
-void __cdecl CG_Corpse(int32_t localClientNum, centity_s *cent)
+void CG_Corpse(int32_t localClientNum, centity_s *cent)
 {
     double v2; // st7
     DObj_s *obja; // [esp+8h] [ebp-12Ch]
@@ -498,7 +498,7 @@ void __cdecl CG_Corpse(int32_t localClientNum, centity_s *cent)
     }
 }
 
-void __cdecl CG_UpdatePlayerDObj(int32_t localClientNum, centity_s *cent)
+void CG_UpdatePlayerDObj(int32_t localClientNum, centity_s *cent)
 {
     DObj_s *dobj; // [esp+0h] [ebp-114h]
     DObj_s *dobja; // [esp+0h] [ebp-114h]
@@ -523,7 +523,7 @@ void __cdecl CG_UpdatePlayerDObj(int32_t localClientNum, centity_s *cent)
     }
 }
 
-void __cdecl CG_ResetPlayerEntity(int32_t localClientNum, cg_s *cgameGlob, centity_s *cent, int32_t resetAnimation)
+void CG_ResetPlayerEntity(int32_t localClientNum, cg_s *cgameGlob, centity_s *cent, int32_t resetAnimation)
 {
     XAnimTree_s *pAnimTree; // [esp+18h] [ebp-10h]
     DObj_s *obj; // [esp+1Ch] [ebp-Ch]
@@ -574,7 +574,7 @@ void __cdecl CG_ResetPlayerEntity(int32_t localClientNum, cg_s *cgameGlob, centi
             (uint32_t)(ci->torso.yawAngle));
 }
 
-const char *__cdecl CG_GetTeamName(team_t team)
+const char *CG_GetTeamName(team_t team)
 {
     const char *result; // eax
     const char *v2; // eax
@@ -605,7 +605,7 @@ const char *__cdecl CG_GetTeamName(team_t team)
     return result;
 }
 
-const char *__cdecl CG_GetOpposingTeamName(team_t team)
+const char *CG_GetOpposingTeamName(team_t team)
 {
     const char *result; // eax
     const char *v2; // eax
@@ -634,7 +634,7 @@ const char *__cdecl CG_GetOpposingTeamName(team_t team)
     return result;
 }
 
-const char *__cdecl CG_GetPlayerTeamName(int32_t localClientNum)
+const char *CG_GetPlayerTeamName(int32_t localClientNum)
 {
     cg_s *cgameGlob = CG_GetLocalClientGlobals(localClientNum);
 
@@ -649,7 +649,7 @@ const char *__cdecl CG_GetPlayerTeamName(int32_t localClientNum)
         return CG_GetTeamName(TEAM_FREE);
 }
 
-const char *__cdecl CG_GetPlayerOpposingTeamName(int32_t localClientNum)
+const char *CG_GetPlayerOpposingTeamName(int32_t localClientNum)
 {
     cg_s *cgameGlob = CG_GetLocalClientGlobals(localClientNum);
 
@@ -664,7 +664,7 @@ const char *__cdecl CG_GetPlayerOpposingTeamName(int32_t localClientNum)
         return CG_GetOpposingTeamName(TEAM_FREE);
 }
 
-bool __cdecl CG_IsPlayerDead(int32_t localClientNum)
+bool CG_IsPlayerDead(int32_t localClientNum)
 {
     cg_s *cgameGlob = CG_GetLocalClientGlobals(localClientNum);
 
@@ -680,14 +680,14 @@ bool __cdecl CG_IsPlayerDead(int32_t localClientNum)
         || (cgameGlob->nextSnap->ps.otherFlags & 2) != 0;
 }
 
-int32_t __cdecl CG_GetPlayerClipAmmoCount(int32_t localClientNum)
+int32_t CG_GetPlayerClipAmmoCount(int32_t localClientNum)
 {
     cg_s *cgameGlob = CG_GetLocalClientGlobals(localClientNum);
     playerState_s *ps = &cgameGlob->nextSnap->ps;
     return ps->ammoclip[BG_ClipForWeapon(cgameGlob->nextSnap->ps.weapon)];
 }
 
-void __cdecl CG_UpdateWeaponVisibility(int32_t localClientNum, centity_s *cent)
+void CG_UpdateWeaponVisibility(int32_t localClientNum, centity_s *cent)
 {
     bool IsKnifeMeleeAnim; // [esp+0h] [ebp-58h]
     uint8_t boneIndex; // [esp+7h] [ebp-51h] BYREF
@@ -759,7 +759,7 @@ void __cdecl CG_UpdateWeaponVisibility(int32_t localClientNum, centity_s *cent)
     }
 }
 
-bool __cdecl CG_IsWeaponVisible(int32_t localClientNum, centity_s *cent, XModel *weapModel, float *origin, float *forward)
+bool CG_IsWeaponVisible(int32_t localClientNum, centity_s *cent, XModel *weapModel, float *origin, float *forward)
 {
     float stock[3]; // [esp+Ch] [ebp-58h] BYREF
     float end[3]; // [esp+1Ch] [ebp-48h] BYREF
@@ -803,7 +803,7 @@ bool __cdecl CG_IsWeaponVisible(int32_t localClientNum, centity_s *cent, XModel 
     return trace.fraction == 1.0;
 }
 
-void __cdecl CG_CalcWeaponVisTrace(
+void CG_CalcWeaponVisTrace(
     XModel *weapModel,
     float *origin,
     float *forward,

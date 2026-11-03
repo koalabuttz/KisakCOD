@@ -17,17 +17,17 @@ static const float PROFLOAD_FONT_SCALE = 0.36f;
 static const float PROFLOAD_TEXT_COLOR[4] = { 0.0f, 1.0f, 0.0f, 1.0f };
 static const float PROFLOAD_BACKGROUND_COLOR[4] = { 0.0f, 0.0f, 0.0f, 0.8f };
 
-void __cdecl TRACK_com_profilemapload()
+void TRACK_com_profilemapload()
 {
     track_static_alloc_internal(&mapLoadProfile, 43136, "mapLoadProfile", 0);
 }
 
-bool __cdecl ProfLoad_IsActive()
+bool ProfLoad_IsActive()
 {
     return mapLoadProfile.isLoading;
 }
 
-void __cdecl ProfLoad_BeginTrackedValue(MapProfileTrackedValue type)
+void ProfLoad_BeginTrackedValue(MapProfileTrackedValue type)
 {
     MapProfileEntry *entry; // [esp+0h] [ebp-Ch]
     unsigned __int64 ticks; // [esp+4h] [ebp-8h]
@@ -42,13 +42,13 @@ void __cdecl ProfLoad_BeginTrackedValue(MapProfileTrackedValue type)
     }
 }
 
-void __cdecl ProfLoad_BeginTrackedValueTicks(MapProfileElement *value, unsigned __int64 ticks)
+void ProfLoad_BeginTrackedValueTicks(MapProfileElement *value, unsigned __int64 ticks)
 {
     iassert( value->ticksStart == 0 );
     value->ticksStart = ticks;
 }
 
-void __cdecl ProfLoad_EndTrackedValue(MapProfileTrackedValue type)
+void ProfLoad_EndTrackedValue(MapProfileTrackedValue type)
 {
     MapProfileEntry *entry; // [esp+0h] [ebp-Ch]
     unsigned __int64 ticks; // [esp+4h] [ebp-8h]
@@ -62,20 +62,20 @@ void __cdecl ProfLoad_EndTrackedValue(MapProfileTrackedValue type)
     }
 }
 
-void __cdecl ProfLoad_EndTrackedValueTicks(MapProfileElement *value, unsigned __int64 ticks)
+void ProfLoad_EndTrackedValueTicks(MapProfileElement *value, unsigned __int64 ticks)
 {
     iassert( value->ticksStart != 0 );
     value->ticksTotal += ticks - value->ticksStart;
     value->ticksStart = 0;
 }
 
-void __cdecl ProfLoad_Init()
+void ProfLoad_Init()
 {
     com_profileLoading = Dvar_RegisterBool("profile_show_loading", 0, DVAR_NOFLAG, "Show map load profiler");
     mapLoadProfile.isLoading = 0;
 }
 
-void __cdecl ProfLoad_Activate()
+void ProfLoad_Activate()
 {
     iassert( mapLoadProfile.isLoading == false );
     memset((uint8_t *)&mapLoadProfile, 0, sizeof(mapLoadProfile));
@@ -85,7 +85,7 @@ void __cdecl ProfLoad_Activate()
     Com_Printf(CON_CHANNEL_PROFILE, "^6Activating map load profiler\n");
 }
 
-void __cdecl ProfLoad_Deactivate()
+void ProfLoad_Deactivate()
 {
     iassert( mapLoadProfile.isLoading == true );
     mapLoadProfile.ticksFinish = __rdtsc();
@@ -191,7 +191,7 @@ int ProfLoad_PrintTree()
     return result;
 }
 
-void __cdecl ProfLoad_GetEntryRowText(const MapProfileEntry *entry, char *rowText, int sizeofRowText)
+void ProfLoad_GetEntryRowText(const MapProfileEntry *entry, char *rowText, int sizeofRowText)
 {
     Com_sprintf(
         rowText,
@@ -243,11 +243,11 @@ void ProfLoad_PrintHotSpots()
         LODWORD(v11[v3].ticksFile) = v2;
         HIDWORD(v11[v3].ticksFile) = HIDWORD(v2);
     }
-    //std::_Sort<MapProfileHotSpot *, int, bool(__cdecl *)(MapProfileHotSpot const &, MapProfileHotSpot const &)>(
+    //std::_Sort<MapProfileHotSpot *, int, bool(*)(MapProfileHotSpot const &, MapProfileHotSpot const &)>(
     //    v11,
     //    &v11[mapLoadProfile.profileEntryCount],
     //    24 * mapLoadProfile.profileEntryCount / 24,
-    //    (bool(__cdecl *)(const MapProfileHotSpot *, const MapProfileHotSpot *))ProfLoad_CompareHotSpotNames);
+    //    (bool(*)(const MapProfileHotSpot *, const MapProfileHotSpot *))ProfLoad_CompareHotSpotNames);
     //std::sort(&v11[0], &v11[mapLoadProfile.profileEntryCount], 24 * mapLoadProfile.profileEntryCount / 24, ProfLoad_CompareHotSpotNames);
     std::sort(&v11[0], &v11[mapLoadProfile.profileEntryCount], ProfLoad_CompareHotSpotNames);
     v14 = 0;
@@ -278,7 +278,7 @@ void ProfLoad_PrintHotSpots()
         }
         ++v14;
     }
-    //std::_Sort<MapProfileHotSpot *, int, bool(__cdecl *)(MapProfileHotSpot const &, MapProfileHotSpot const &)>(
+    //std::_Sort<MapProfileHotSpot *, int, bool(*)(MapProfileHotSpot const &, MapProfileHotSpot const &)>(
     //    v11,
     //    &v11[v14],
     //    24 * v14 / 24,
@@ -309,17 +309,17 @@ void ProfLoad_PrintHotSpots()
     Com_Printf(CON_CHANNEL_PROFILE, "\n^6Hot spot total time: %5.3f self, %5.3f file\n\n", (double)v15, (double)v16);
 }
 
-bool __cdecl ProfLoad_CompareHotSpotNames(const MapProfileHotSpot &hotSpot0, const MapProfileHotSpot &hotSpot1)
+bool ProfLoad_CompareHotSpotNames(const MapProfileHotSpot &hotSpot0, const MapProfileHotSpot &hotSpot1)
 {
     return hotSpot1.label < hotSpot0.label;
 }
 
-bool __cdecl ProfLoad_CompareHotSpotTicks(const MapProfileHotSpot &hotSpot0, const MapProfileHotSpot &hotSpot1)
+bool ProfLoad_CompareHotSpotTicks(const MapProfileHotSpot &hotSpot0, const MapProfileHotSpot &hotSpot1)
 {
     return hotSpot0.ticksSelf > hotSpot1.ticksSelf;
 }
 
-void __cdecl ProfLoad_Begin(const char *label)
+void ProfLoad_Begin(const char *label)
 {
     int v1; // [esp+0h] [ebp-10h]
     MapProfileEntry *entry; // [esp+Ch] [ebp-4h]
@@ -340,7 +340,7 @@ void __cdecl ProfLoad_Begin(const char *label)
     }
 }
 
-MapProfileEntry *__cdecl Com_GetEntryForNewLabel(const char *label)
+MapProfileEntry *Com_GetEntryForNewLabel(const char *label)
 {
     int entryIndex; // [esp+4h] [ebp-8h]
     int firstEntry; // [esp+8h] [ebp-4h]
@@ -367,7 +367,7 @@ MapProfileEntry *__cdecl Com_GetEntryForNewLabel(const char *label)
     return &mapLoadProfile.profileEntries[mapLoadProfile.profileEntryCount++];
 }
 
-void __cdecl ProfLoad_End()
+void ProfLoad_End()
 {
     MapProfileEntry *entry; // [esp+0h] [ebp-14h]
     unsigned __int64 timeStepInTicks; // [esp+4h] [ebp-10h]
@@ -386,7 +386,7 @@ void __cdecl ProfLoad_End()
     }
 }
 
-void __cdecl ProfLoad_DrawOverlay(rectDef_s *rect)
+void ProfLoad_DrawOverlay(rectDef_s *rect)
 {
     int fileReadCount; // [esp+7Ch] [ebp-128h]
     Font_s *profileFont; // [esp+88h] [ebp-11Ch]

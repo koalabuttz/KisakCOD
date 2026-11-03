@@ -53,11 +53,11 @@ static fileHandleData_t fsh[65];
 char fs_gamedir[256];
 searchpath_s *fs_searchpaths;
 
-char __cdecl FS_SanitizeFilename(const char *filename, char *sanitizedName, int sanitizedNameSize);
-BOOL __cdecl FS_UseSearchPath(const searchpath_s *pSearch);
-int __cdecl FS_GetHandleAndOpenFile(const char *filename, const char *ospath, FsThread thread);
-int __cdecl FS_IwdIsPure(iwd_t *iwd);
-const char **__cdecl FS_ListFilteredFiles(
+char FS_SanitizeFilename(const char *filename, char *sanitizedName, int sanitizedNameSize);
+BOOL FS_UseSearchPath(const searchpath_s *pSearch);
+int FS_GetHandleAndOpenFile(const char *filename, const char *ospath, FsThread thread);
+int FS_IwdIsPure(iwd_t *iwd);
+const char **FS_ListFilteredFiles(
     searchpath_s *searchPath,
     const char *path,
     const char *extension,
@@ -67,12 +67,12 @@ const char **__cdecl FS_ListFilteredFiles(
 
 
 
-bool __cdecl FS_Initialized()
+bool FS_Initialized()
 {
     return fs_searchpaths != 0;
 }
 
-int __cdecl FS_ConditionalRestart(int localClientNum, int checksumFeed)
+int FS_ConditionalRestart(int localClientNum, int checksumFeed)
 {
     if (!FS_NeedRestart(checksumFeed))
         return 0;
@@ -81,7 +81,7 @@ int __cdecl FS_ConditionalRestart(int localClientNum, int checksumFeed)
 }
 
 char info6[8192];
-char *__cdecl FS_ReferencedIwdPureChecksums()
+char *FS_ReferencedIwdPureChecksums()
 {
     char *v0; // eax
     char *v1; // eax
@@ -120,14 +120,14 @@ char *__cdecl FS_ReferencedIwdPureChecksums()
     return info6;
 }
 
-BOOL __cdecl FS_PureIgnoresExtension(const char *extension)
+BOOL FS_PureIgnoresExtension(const char *extension)
 {
     if (*extension == 46)
         ++extension;
     return !I_stricmp(extension, "cfg") || I_stricmp(extension, ".dm_NETWORK_PROTOCOL_VERSION") == 0;
 }
 
-char __cdecl FS_FilesAreLoadedGlobally(const char *filename)
+char FS_FilesAreLoadedGlobally(const char *filename)
 {
     const char *extensions[8]; // [esp+20h] [ebp-28h]
     int filenameLen; // [esp+40h] [ebp-8h]
@@ -151,7 +151,7 @@ char __cdecl FS_FilesAreLoadedGlobally(const char *filename)
 }
 
 char info8[8192];
-char *__cdecl FS_ReferencedIwdNames()
+char *FS_ReferencedIwdNames()
 {
     searchpath_s *search; // [esp+0h] [ebp-4h]
 
@@ -171,7 +171,7 @@ char *__cdecl FS_ReferencedIwdNames()
 }
 
 char info5[8192];
-char *__cdecl FS_ReferencedIwdChecksums()
+char *FS_ReferencedIwdChecksums()
 {
     char *v0; // eax
     searchpath_s *search; // [esp+0h] [ebp-4h]
@@ -189,7 +189,7 @@ char *__cdecl FS_ReferencedIwdChecksums()
 }
 
 char info3[8192];
-char *__cdecl FS_LoadedIwdNames()
+char *FS_LoadedIwdNames()
 {
     searchpath_s *search; // [esp+0h] [ebp-4h]
 
@@ -207,7 +207,7 @@ char *__cdecl FS_LoadedIwdNames()
 }
 
 char info2_0[8192];
-char *__cdecl FS_LoadedIwdChecksums()
+char *FS_LoadedIwdChecksums()
 {
     char *v0; // eax
     searchpath_s *search; // [esp+0h] [ebp-4h]
@@ -227,7 +227,7 @@ char *__cdecl FS_LoadedIwdChecksums()
     return info2_0;
 }
 
-void __cdecl FS_ClearIwdReferences()
+void FS_ClearIwdReferences()
 {
     searchpath_s *search; // [esp+0h] [ebp-4h]
 
@@ -239,7 +239,7 @@ void __cdecl FS_ClearIwdReferences()
 }
 
 char info4[8192];
-char *__cdecl FS_LoadedIwdPureChecksums()
+char *FS_LoadedIwdPureChecksums()
 {
     char *v0; // eax
     searchpath_s *search; // [esp+0h] [ebp-4h]
@@ -259,13 +259,13 @@ char *__cdecl FS_LoadedIwdPureChecksums()
     return info4;
 }
 
-void __cdecl FS_CheckFileSystemStarted()
+void FS_CheckFileSystemStarted()
 {
     if (!fs_searchpaths)
         MyAssertHandler(".\\universal\\com_files.cpp", 708, 0, "%s", "fs_searchpaths");
 }
 
-int __cdecl FS_GetFileOsPath(const char *filename, char *ospath)
+int FS_GetFileOsPath(const char *filename, char *ospath)
 {
     char sanitizedName[256]; // [esp+0h] [ebp-110h] BYREF
     directory_t *dir; // [esp+104h] [ebp-Ch]
@@ -298,7 +298,7 @@ int __cdecl FS_GetFileOsPath(const char *filename, char *ospath)
     return -1;
 }
 
-int __cdecl FS_OpenFileOverwrite(char *qpath)
+int FS_OpenFileOverwrite(char *qpath)
 {
 #if !defined(__linux__)
     DWORD oldAttributes; // [esp+0h] [ebp-10Ch]
@@ -359,12 +359,12 @@ int __cdecl FS_OpenFileOverwrite(char *qpath)
     }
 }
 
-int __cdecl FS_LoadStack()
+int FS_LoadStack()
 {
     return fs_loadStack;
 }
 
-int __cdecl FS_HashFileName(const char *fname, int hashSize)
+int FS_HashFileName(const char *fname, int hashSize)
 {
     int hash; // [esp+0h] [ebp-Ch]
     int letter; // [esp+4h] [ebp-8h]
@@ -383,7 +383,7 @@ int __cdecl FS_HashFileName(const char *fname, int hashSize)
     return ((hash >> 20) ^ hash ^ (hash >> 10)) & (hashSize - 1);
 }
 
-FILE *__cdecl FS_FileForHandle(int f)
+FILE *FS_FileForHandle(int f)
 {
     if (f <= 0 || f >= 65)
         MyAssertHandler(
@@ -400,7 +400,7 @@ FILE *__cdecl FS_FileForHandle(int f)
     return fsh[f].handleFiles.file.o;
 }
 
-int __cdecl FS_filelength(int f)
+int FS_filelength(int f)
 {
     FILE *h; // [esp+4h] [ebp-4h]
 
@@ -418,7 +418,7 @@ int __cdecl FS_filelength(int f)
     return FS_FileGetFileSize(h);
 }
 
-void __cdecl FS_ReplaceSeparators(char *path)
+void FS_ReplaceSeparators(char *path)
 {
     char *src; // [esp+0h] [ebp-Ch]
     char *dst; // [esp+4h] [ebp-8h]
@@ -447,12 +447,12 @@ void __cdecl FS_ReplaceSeparators(char *path)
     *dst = 0;
 }
 
-void __cdecl FS_BuildOSPath(const char *base, const char *game, const char *qpath, char *ospath)
+void FS_BuildOSPath(const char *base, const char *game, const char *qpath, char *ospath)
 {
     FS_BuildOSPathForThread(base, game, qpath, ospath, FS_THREAD_MAIN);
 }
 
-void __cdecl FS_BuildOSPathForThread(const char *base, const char *game, const char *qpath, char *ospath, FsThread thread)
+void FS_BuildOSPathForThread(const char *base, const char *game, const char *qpath, char *ospath, FsThread thread)
 {
     uint32_t v5; // [esp+0h] [ebp-3Ch]
     uint32_t v6; // [esp+10h] [ebp-2Ch]
@@ -486,7 +486,7 @@ void __cdecl FS_BuildOSPathForThread(const char *base, const char *game, const c
     FS_ReplaceSeparators(ospath);
 }
 
-int __cdecl FS_CreatePath(char *OSPath)
+int FS_CreatePath(char *OSPath)
 {
     const char *v1; // eax
     char *ofs; // [esp+0h] [ebp-4h]
@@ -512,12 +512,12 @@ int __cdecl FS_CreatePath(char *OSPath)
     }
 }
 
-void __cdecl FS_FileClose(FILE *stream)
+void FS_FileClose(FILE *stream)
 {
     fclose(stream);
 }
 
-void __cdecl FS_FCloseFile(int h)
+void FS_FCloseFile(int h)
 {
     FILE *f; // [esp+0h] [ebp-4h]
 
@@ -546,17 +546,17 @@ void __cdecl FS_FCloseFile(int h)
     Com_Memset((uint32_t *)&fsh[h], 0, 284);
 }
 
-void __cdecl FS_FCloseLogFile(int h)
+void FS_FCloseLogFile(int h)
 {
     FS_FCloseFile(h);
 }
 
-int __cdecl FS_FOpenFileWrite(const char *filename)
+int FS_FOpenFileWrite(const char *filename)
 {
     return FS_FOpenFileWriteToDirForThread(filename, fs_gamedir, FS_THREAD_MAIN);
 }
 
-int __cdecl FS_HandleForFile(FsThread thread)
+int FS_HandleForFile(FsThread thread)
 {
     int i; // [esp+8h] [ebp-Ch]
     int ia; // [esp+8h] [ebp-Ch]
@@ -618,7 +618,7 @@ int __cdecl FS_HandleForFile(FsThread thread)
     return 0;
 }
 
-int __cdecl FS_FOpenTextFileWrite(const char *filename)
+int FS_FOpenTextFileWrite(const char *filename)
 {
     char ospath[260]; // [esp+0h] [ebp-110h] BYREF
     FILE *f; // [esp+108h] [ebp-8h]
@@ -641,7 +641,7 @@ int __cdecl FS_FOpenTextFileWrite(const char *filename)
     return h;
 }
 
-int __cdecl FS_FOpenFileAppend(const char *filename)
+int FS_FOpenFileAppend(const char *filename)
 {
     bool IsMainThread; // al
     char ospath[260]; // [esp+0h] [ebp-110h] BYREF
@@ -668,19 +668,19 @@ int __cdecl FS_FOpenFileAppend(const char *filename)
     return h;
 }
 
-uint32_t __cdecl FS_FOpenFileReadStream(const char *filename, int *file)
+uint32_t FS_FOpenFileReadStream(const char *filename, int *file)
 {
     return FS_FOpenFileReadForThread(filename, file, FS_THREAD_STREAM);
 }
 
-bool __cdecl FS_IsBackupSubStr(const char *filenameSubStr)
+bool FS_IsBackupSubStr(const char *filenameSubStr)
 {
     if (*filenameSubStr == '.' && filenameSubStr[1] == '.')
         return 1;
     return *filenameSubStr == ':' && filenameSubStr[1] == ':';
 }
 
-char __cdecl FS_SanitizeFilename(const char *filename, char *sanitizedName, int sanitizedNameSize)
+char FS_SanitizeFilename(const char *filename, char *sanitizedName, int sanitizedNameSize)
 {
     const char *v4; // eax
     char v7; // [esp+8h] [ebp-14h]
@@ -749,14 +749,14 @@ char __cdecl FS_SanitizeFilename(const char *filename, char *sanitizedName, int 
     return 1;
 }
 
-BOOL __cdecl FS_UseSearchPath(const searchpath_s *pSearch)
+BOOL FS_UseSearchPath(const searchpath_s *pSearch)
 {
     if (pSearch->bLocalized && fs_ignoreLocalized->current.enabled)
         return 0;
     return !pSearch->bLocalized || pSearch->language == SEH_GetCurrentLanguage();
 }
 
-int __cdecl FS_FilenameCompare(const char *s1, const char *s2)
+int FS_FilenameCompare(const char *s1, const char *s2)
 {
     int c2; // [esp+0h] [ebp-8h]
     int c1; // [esp+4h] [ebp-4h]
@@ -779,7 +779,7 @@ int __cdecl FS_FilenameCompare(const char *s1, const char *s2)
     return 0;
 }
 
-uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsThread thread)
+uint32_t FS_FOpenFileReadForThread(const char *filename, int *file, FsThread thread)
 {
     char *v4; // eax
     const char *v5; // eax
@@ -975,18 +975,18 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
     return zfi->cur_file_info.uncompressed_size;
 }
 
-int __cdecl FS_FOpenFileReadDatabase(const char *filename, int *file)
+int FS_FOpenFileReadDatabase(const char *filename, int *file)
 {
     return FS_FOpenFileReadForThread(filename, file, FS_THREAD_DATABASE);
 }
 
-uint32_t __cdecl FS_FOpenFileRead(const char *filename, int *file)
+uint32_t FS_FOpenFileRead(const char *filename, int *file)
 {
     com_fileAccessed = 1;
     return FS_FOpenFileReadForThread(filename, file, FS_THREAD_MAIN);
 }
 
-bool __cdecl FS_Delete(const char *filename)
+bool FS_Delete(const char *filename)
 {
     char ospath[260]; // [esp+0h] [ebp-108h] BYREF
 
@@ -999,7 +999,7 @@ bool __cdecl FS_Delete(const char *filename)
     return remove(ospath) != -1;
 }
 
-uint32_t __cdecl FS_Read(uint8_t *buffer, uint32_t len, int h)
+uint32_t FS_Read(uint8_t *buffer, uint32_t len, int h)
 {
     int tries; // [esp+4h] [ebp-14h]
     uint32_t remaining; // [esp+8h] [ebp-10h]
@@ -1037,7 +1037,7 @@ uint32_t __cdecl FS_Read(uint8_t *buffer, uint32_t len, int h)
     return len;
 }
 
-uint32_t __cdecl FS_Write(const char *buffer, uint32_t len, int h)
+uint32_t FS_Write(const char *buffer, uint32_t len, int h)
 {
     int tries; // [esp+4h] [ebp-14h]
     uint32_t remaining; // [esp+8h] [ebp-10h]
@@ -1069,7 +1069,7 @@ uint32_t __cdecl FS_Write(const char *buffer, uint32_t len, int h)
     return len;
 }
 
-uint32_t __cdecl FS_WriteLog(const char *buffer, uint32_t len, int h)
+uint32_t FS_WriteLog(const char *buffer, uint32_t len, int h)
 {
     return FS_Write(buffer, len, h);
 }
@@ -1084,7 +1084,7 @@ void FS_Printf(int h, const char *fmt, ...)
     FS_Write(string, &string[strlen(string) + 1] - &string[1], h);
 }
 
-int __cdecl FS_Seek(int f, int offset, int origin)
+int FS_Seek(int f, int offset, int origin)
 {
     uint32_t CurrentFile; // eax
     const char *v5; // eax
@@ -1162,7 +1162,7 @@ int __cdecl FS_Seek(int f, int offset, int origin)
     return -1;
 }
 
-int __cdecl FS_ReadFile(const char *qpath, void **buffer)
+int FS_ReadFile(const char *qpath, void **buffer)
 {
     uint8_t *buf; // [esp+0h] [ebp-Ch]
     int len; // [esp+4h] [ebp-8h]
@@ -1193,17 +1193,17 @@ int __cdecl FS_ReadFile(const char *qpath, void **buffer)
     }
 }
 
-uint32_t *__cdecl FS_AllocMem(int bytes)
+uint32_t *FS_AllocMem(int bytes)
 {
     return Hunk_AllocateTempMemory(bytes, "FS_AllocMem");
 }
 
-void __cdecl FS_ResetFiles()
+void FS_ResetFiles()
 {
     fs_loadStack = 0;
 }
 
-void __cdecl FS_FreeFile(char *buffer)
+void FS_FreeFile(char *buffer)
 {
     FS_CheckFileSystemStarted();
     if (!buffer)
@@ -1212,12 +1212,12 @@ void __cdecl FS_FreeFile(char *buffer)
     FS_FreeMem(buffer);
 }
 
-void __cdecl FS_FreeMem(char *buffer)
+void FS_FreeMem(char *buffer)
 {
     Hunk_FreeTempMemory(buffer);
 }
 
-int __cdecl FS_FileExists(char *file)
+int FS_FileExists(char *file)
 {
     FILE *f; // [esp+0h] [ebp-10Ch]
     char testpath[260]; // [esp+4h] [ebp-108h] BYREF
@@ -1230,7 +1230,7 @@ int __cdecl FS_FileExists(char *file)
     return 1;
 }
 
-int __cdecl FS_WriteFile(char *filename, char *buffer, uint32_t size)
+int FS_WriteFile(char *filename, char *buffer, uint32_t size)
 {
     int f; // [esp+0h] [ebp-8h]
     uint32_t actualSize; // [esp+4h] [ebp-4h]
@@ -1262,7 +1262,7 @@ int __cdecl FS_WriteFile(char *filename, char *buffer, uint32_t size)
     }
 }
 
-void __cdecl FS_ConvertPath(char *s)
+void FS_ConvertPath(char *s)
 {
     while (*s)
     {
@@ -1272,7 +1272,7 @@ void __cdecl FS_ConvertPath(char *s)
     }
 }
 
-bool __cdecl FS_GameDirDomainFunc(dvar_s *dvar, DvarValue newValue)
+bool FS_GameDirDomainFunc(dvar_s *dvar, DvarValue newValue)
 {
     bool result; // al
     int v3; // eax
@@ -1361,7 +1361,7 @@ void FS_RegisterDvars()
     fs_restrict = Dvar_RegisterBool("fs_restrict", 0, DVAR_INIT, "Restrict file access for demos etc.");
 }
 
-void __cdecl FS_AddSearchPath(searchpath_s *search)
+void FS_AddSearchPath(searchpath_s *search)
 {
     searchpath_s **pSearch; // [esp+0h] [ebp-4h]
 
@@ -1375,7 +1375,7 @@ void __cdecl FS_AddSearchPath(searchpath_s *search)
     *pSearch = search;
 }
 
-iwd_t *__cdecl FS_LoadZipFile(char *zipfile, char *basename)
+iwd_t *FS_LoadZipFile(char *zipfile, char *basename)
 {
     char v3; // [esp+17h] [ebp-1DDh]
     char *name; // [esp+1Ch] [ebp-1D8h]
@@ -1464,7 +1464,7 @@ iwd_t *__cdecl FS_LoadZipFile(char *zipfile, char *basename)
 
 char szIwdLanguageName[2][64];
 int iString = 0;
-char *__cdecl IwdFileLanguage(const char *pszIwdFileName)
+char *IwdFileLanguage(const char *pszIwdFileName)
 {
     int iCurrChar; // [esp+10h] [ebp-4h]
 
@@ -1487,7 +1487,7 @@ char *__cdecl IwdFileLanguage(const char *pszIwdFileName)
     return szIwdLanguageName[iString];
 }
 
-int __cdecl FS_PathCmp(const char *s1, const char *s2)
+int FS_PathCmp(const char *s1, const char *s2)
 {
     int c2; // [esp+0h] [ebp-8h]
     int c1; // [esp+4h] [ebp-4h]
@@ -1512,7 +1512,7 @@ int __cdecl FS_PathCmp(const char *s1, const char *s2)
     return 0;
 }
 
-int __cdecl iwdsort(const char **a, char **b)
+int iwdsort(const char **a, char **b)
 {
     char *pszLanguageB; // [esp+0h] [ebp-10h]
     char *pszLanguageA; // [esp+4h] [ebp-Ch]
@@ -1538,7 +1538,7 @@ int __cdecl iwdsort(const char **a, char **b)
     return FS_PathCmp(aa, bb);
 }
 
-void __cdecl FS_AddIwdFilesForGameDirectory(char *path, char *pszGameFolder)
+void FS_AddIwdFilesForGameDirectory(char *path, char *pszGameFolder)
 {
     char *v2; // eax
     const char *LanguageName; // eax
@@ -1582,7 +1582,7 @@ void __cdecl FS_AddIwdFilesForGameDirectory(char *path, char *pszGameFolder)
             *((_WORD *)v2 + 4) = 8224;
         }
     }
-    qsort(s0, numfiles, 4u, (int(__cdecl *)(const void *, const void *))iwdsort);
+    qsort(s0, numfiles, 4u, (int(*)(const void *, const void *))iwdsort);
     for (i = 0; i < numfiles; ++i)
     {
         if (I_strncmp(s0[i], "          ", 10))
@@ -1650,7 +1650,7 @@ void __cdecl FS_AddIwdFilesForGameDirectory(char *path, char *pszGameFolder)
 }
 
 #ifdef WIN32
-int __cdecl Sys_DirectoryHasContents(const char *directory)
+int Sys_DirectoryHasContents(const char *directory)
 {
     _finddata64i32_t findinfo; // [esp+0h] [ebp-238h] BYREF
     int findhandle; // [esp+12Ch] [ebp-10Ch]
@@ -1692,7 +1692,7 @@ static bool Sys_ReaddirEntryIsDirectory(const char *directory, const struct dire
     return stat(ospath, &statInfo) == 0 && S_ISDIR(statInfo.st_mode);
 }
 
-int __cdecl Sys_DirectoryHasContents(const char *directory)
+int Sys_DirectoryHasContents(const char *directory)
 {
     DIR *dir;
     struct dirent *entry;
@@ -1720,7 +1720,7 @@ int __cdecl Sys_DirectoryHasContents(const char *directory)
 }
 #endif
 
-void __cdecl FS_AddGameDirectory(char *path, char *dir, int bLanguageDirectory, int iLanguage)
+void FS_AddGameDirectory(char *path, char *dir, int bLanguageDirectory, int iLanguage)
 {
     uint32_t *v4; // eax
     int v5; // eax
@@ -1801,7 +1801,7 @@ void __cdecl FS_AddGameDirectory(char *path, char *dir, int bLanguageDirectory, 
     FS_AddIwdFilesForGameDirectory(path, szGameFolder);
 }
 
-void __cdecl FS_AddLocalizedGameDirectory(char *path, char *dir)
+void FS_AddLocalizedGameDirectory(char *path, char *dir)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -1810,7 +1810,7 @@ void __cdecl FS_AddLocalizedGameDirectory(char *path, char *dir)
     FS_AddGameDirectory(path, dir, 0, 0);
 }
 
-void __cdecl Com_ReadCDKey()
+void Com_ReadCDKey()
 {
     // KISAKTODO: this sucks!
     //uint32_t size; // [esp+0h] [ebp-28h] BYREF
@@ -1850,7 +1850,7 @@ void __cdecl Com_ReadCDKey()
     //}
 }
 
-void __cdecl FS_DisplayPath(int bLanguageCull)
+void FS_DisplayPath(int bLanguageCull)
 {
     const char *LanguageName; // eax
     const char *v2; // eax
@@ -1904,16 +1904,16 @@ void __cdecl FS_DisplayPath(int bLanguageCull)
     }
 }
 
-void __cdecl FS_Path_f()
+void FS_Path_f()
 {
     FS_DisplayPath(1);
 }
-void __cdecl FS_FullPath_f()
+void FS_FullPath_f()
 {
     FS_DisplayPath(0);
 }
 
-void __cdecl FS_Dir_f()
+void FS_Dir_f()
 {
     const char *path; // [esp+0h] [ebp-14h]
     const char *extension; // [esp+4h] [ebp-10h]
@@ -1947,7 +1947,7 @@ void __cdecl FS_Dir_f()
     }
 }
 
-void __cdecl FS_SortFileList(const char **filelist, int numfiles)
+void FS_SortFileList(const char **filelist, int numfiles)
 {
     int j; // [esp+4h] [ebp-14h]
     int k; // [esp+8h] [ebp-10h]
@@ -1971,7 +1971,7 @@ void __cdecl FS_SortFileList(const char **filelist, int numfiles)
     Z_Free(sortedlist, 3);
 }
 
-void __cdecl FS_NewDir_f()
+void FS_NewDir_f()
 {
     int ndirs; // [esp+0h] [ebp-10h] BYREF
     int i; // [esp+4h] [ebp-Ch]
@@ -1999,7 +1999,7 @@ void __cdecl FS_NewDir_f()
     }
 }
 
-int __cdecl FS_TouchFile(const char *name)
+int FS_TouchFile(const char *name)
 {
     int f; // [esp+0h] [ebp-4h] BYREF
 
@@ -2010,7 +2010,7 @@ int __cdecl FS_TouchFile(const char *name)
     return 1;
 }
 
-void __cdecl FS_TouchFile_f()
+void FS_TouchFile_f()
 {
     const char *v0; // eax
 
@@ -2030,7 +2030,7 @@ cmd_function_s FS_FullPath_f_VAR;
 cmd_function_s FS_NewDir_f_VAR;
 cmd_function_s FS_Dir_f_VAR;
 cmd_function_s FS_TouchFile_f_VAR;
-void __cdecl FS_AddCommands()
+void FS_AddCommands()
 {
     Cmd_AddCommandInternal("path", FS_Path_f, &FS_Path_f_VAR);
     Cmd_AddCommandInternal("fullpath", FS_FullPath_f, &FS_FullPath_f_VAR);
@@ -2039,7 +2039,7 @@ void __cdecl FS_AddCommands()
     Cmd_AddCommandInternal("touchFile", FS_TouchFile_f, &FS_TouchFile_f_VAR);
 }
 
-void __cdecl FS_Startup(char *gameName)
+void FS_Startup(char *gameName)
 {
     char *v2; // eax
     char *v3; // eax
@@ -2111,7 +2111,7 @@ void __cdecl FS_Startup(char *gameName)
     Com_Printf(CON_CHANNEL_FILES, "%d files in iwd files\n", fs_iwdFileCount);
 }
 
-void __cdecl FS_SetRestrictions()
+void FS_SetRestrictions()
 {
     searchpath_s *path; // [esp+0h] [ebp-4h]
 
@@ -2129,14 +2129,14 @@ void __cdecl FS_SetRestrictions()
     }
 }
 
-bool __cdecl FS_IsBasePathValid()
+bool FS_IsBasePathValid()
 {
     return FS_ReadFile("fileSysCheck.cfg", 0) > 0;
 }
 
 char lastValidBase[256];
 char lastValidGame[256];
-void __cdecl FS_InitFilesystem()
+void FS_InitFilesystem()
 {
     Com_StartupVariable("fs_cdpath");
     Com_StartupVariable("fs_basepath");
@@ -2159,7 +2159,7 @@ void __cdecl FS_InitFilesystem()
     I_strncpyz(lastValidGame, (char *)fs_gameDirVar->current.integer, 256);
 }
 
-uint32_t __cdecl FS_FOpenFileByMode(char *qpath, int *f, fsMode_t mode)
+uint32_t FS_FOpenFileByMode(char *qpath, int *f, fsMode_t mode)
 {
     uint32_t r; // [esp+4h] [ebp-8h]
     int sync; // [esp+8h] [ebp-4h]
@@ -2202,7 +2202,7 @@ uint32_t __cdecl FS_FOpenFileByMode(char *qpath, int *f, fsMode_t mode)
     return r;
 }
 
-void __cdecl FS_Flush(int f)
+void FS_Flush(int f)
 {
     FILE*v1; // eax
 
@@ -2210,7 +2210,7 @@ void __cdecl FS_Flush(int f)
     fflush(v1);
 }
 
-void __cdecl Com_GetBspFilename(char *filename, uint32_t size, const char *mapname)
+void Com_GetBspFilename(char *filename, uint32_t size, const char *mapname)
 {
 #ifdef KISAK_MP
     Com_sprintf(filename, size, "maps/mp/%s.d3dbsp", mapname);
@@ -2219,13 +2219,13 @@ void __cdecl Com_GetBspFilename(char *filename, uint32_t size, const char *mapna
 #endif
 }
 
-void __cdecl FS_FreeFileList(const char **list)
+void FS_FreeFileList(const char **list)
 {
     if (list)
         Hunk_UserDestroy((HunkUser *)*(list - 1));
 }
 
-uint32_t __cdecl FS_FTell(int f)
+uint32_t FS_FTell(int f)
 {
     FILE *v1; // eax
 
@@ -2239,12 +2239,12 @@ uint32_t __cdecl FS_FTell(int f)
 // disk. Exposed so callers outside this file can work around FS_Seek's zip-archive origin
 // handling (see the comment above AL_FixupZipSeekOrigin in snd_driver.cpp) without needing direct
 // access to fsh, which is private to this translation unit.
-bool __cdecl FS_IsFileInZip(int f)
+bool FS_IsFileInZip(int f)
 {
     return fsh[f].zipFile != NULL;
 }
 
-int __cdecl FS_GetModList(char *listbuf, int bufsize)
+int FS_GetModList(char *listbuf, int bufsize)
 {
     char v3; // [esp+3h] [ebp-18Dh]
     char *v4; // [esp+8h] [ebp-188h]
@@ -2338,7 +2338,7 @@ int __cdecl FS_GetModList(char *listbuf, int bufsize)
     return nMods;
 }
 
-int __cdecl FS_GetFileList(
+int FS_GetFileList(
     const char *path,
     const char *extension,
     FsListBehavior_e behavior,
@@ -2382,7 +2382,7 @@ int __cdecl FS_GetFileList(
     return fileCount;
 }
 
-int __cdecl FS_AddFileToList(HunkUser *user, const char *name, const char **list, int nfiles)
+int FS_AddFileToList(HunkUser *user, const char *name, const char **list, int nfiles)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -2397,7 +2397,7 @@ int __cdecl FS_AddFileToList(HunkUser *user, const char *name, const char **list
     return nfiles + 1;
 }
 
-int __cdecl FS_ReturnPath(const char *zname, char *zpath, int *depth)
+int FS_ReturnPath(const char *zname, char *zpath, int *depth)
 {
     char v3; // cl
     char *v5; // [esp+8h] [ebp-14h]
@@ -2432,7 +2432,7 @@ int __cdecl FS_ReturnPath(const char *zname, char *zpath, int *depth)
     return len;
 }
 
-int __cdecl FS_IwdIsPure(iwd_t *iwd)
+int FS_IwdIsPure(iwd_t *iwd)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -2446,7 +2446,7 @@ int __cdecl FS_IwdIsPure(iwd_t *iwd)
     return 0;
 }
 
-const char **__cdecl FS_ListFilteredFiles(
+const char **FS_ListFilteredFiles(
     searchpath_s *searchPath,
     const char *path,
     const char *extension,
@@ -2604,12 +2604,12 @@ const char **__cdecl FS_ListFilteredFiles(
     }
 }
 
-const char **__cdecl FS_ListFiles(const char *path, const char *extension, FsListBehavior_e behavior, int *numfiles)
+const char **FS_ListFiles(const char *path, const char *extension, FsListBehavior_e behavior, int *numfiles)
 {
     return FS_ListFilteredFiles(fs_searchpaths, path, extension, 0, behavior, numfiles);
 }
 
-bool __cdecl FS_CheckLocation(const char *path, int lookInFlags)
+bool FS_CheckLocation(const char *path, int lookInFlags)
 {
     if (lookInFlags == 63)
         return 1;
@@ -2626,7 +2626,7 @@ bool __cdecl FS_CheckLocation(const char *path, int lookInFlags)
     return (lookInFlags & 0x20) != 0 && !I_strncmp(path, "devraw", 6);
 }
 
-const char **__cdecl FS_ListFilteredFilesInLocation(
+const char **FS_ListFilteredFilesInLocation(
     const char *path,
     const char *extension,
     const char *filter,
@@ -2684,7 +2684,7 @@ const char **__cdecl FS_ListFilteredFilesInLocation(
     return result;
 }
 
-const char **__cdecl FS_ListFilesInLocation(
+const char **FS_ListFilesInLocation(
     const char *path,
     const char *extension,
     FsListBehavior_e behavior,
@@ -2695,7 +2695,7 @@ const char **__cdecl FS_ListFilesInLocation(
 }
 
 char buf[1024];
-char *__cdecl FS_ShiftStr(const char *string, char shift)
+char *FS_ShiftStr(const char *string, char shift)
 {
     signed int v2; // kr00_4
     int i; // [esp+14h] [ebp-4h]
@@ -2707,7 +2707,7 @@ char *__cdecl FS_ShiftStr(const char *string, char shift)
     return buf;
 }
 
-int __cdecl FS_SV_FOpenFileRead(const char *filename, int *fp)
+int FS_SV_FOpenFileRead(const char *filename, int *fp)
 {
     FILE *Binary; // eax
     FILE *v3; // eax
@@ -2760,7 +2760,7 @@ int __cdecl FS_SV_FOpenFileRead(const char *filename, int *fp)
         return 0;
 }
 
-int __cdecl FS_SV_FOpenFileWrite(const char *filename)
+int FS_SV_FOpenFileWrite(const char *filename)
 {
     FILE *v2; // eax
     char *v3; // [esp+Ch] [ebp-10Ch]
@@ -2788,7 +2788,7 @@ int __cdecl FS_SV_FOpenFileWrite(const char *filename)
     return f;
 }
 
-void __cdecl FS_CopyFile(char *fromOSPath, char *toOSPath)
+void FS_CopyFile(char *fromOSPath, char *toOSPath)
 {
     uint8_t *buf; // [esp+0h] [ebp-Ch]
     int len; // [esp+4h] [ebp-8h]
@@ -2817,12 +2817,12 @@ void __cdecl FS_CopyFile(char *fromOSPath, char *toOSPath)
     }
 }
 
-void __cdecl FS_Remove(const char *osPath)
+void FS_Remove(const char *osPath)
 {
     remove(osPath);
 }
 
-void __cdecl FS_SV_Rename(char *from, char *to)
+void FS_SV_Rename(char *from, char *to)
 {
     char to_ospath[256]; // [esp+20h] [ebp-208h] BYREF
     char from_ospath[260]; // [esp+120h] [ebp-108h] BYREF
@@ -2842,7 +2842,7 @@ void __cdecl FS_SV_Rename(char *from, char *to)
     }
 }
 
-int __cdecl FS_SV_FileExists(char *file)
+int FS_SV_FileExists(char *file)
 {
     FILE *f; // [esp+10h] [ebp-10Ch]
     char testpath[260]; // [esp+14h] [ebp-108h] BYREF
@@ -2856,7 +2856,7 @@ int __cdecl FS_SV_FileExists(char *file)
     return 1;
 }
 
-void __cdecl FS_Restart(int localClientNum, int checksumFeed)
+void FS_Restart(int localClientNum, int checksumFeed)
 {
 
     FS_Shutdown();
@@ -2913,7 +2913,7 @@ void __cdecl FS_Restart(int localClientNum, int checksumFeed)
     ProfLoad_End();
 }
 
-bool __cdecl FS_NeedRestart(int checksumFeed)
+bool FS_NeedRestart(int checksumFeed)
 {
     if (com_sv_running->current.enabled)
         return false;
@@ -2924,12 +2924,12 @@ bool __cdecl FS_NeedRestart(int checksumFeed)
     return checksumFeed != fs_checksumFeed;
 }
 
-int __cdecl FS_FOpenFileWriteToDir(const char *filename, const  char *dir)
+int FS_FOpenFileWriteToDir(const char *filename, const  char *dir)
 {
     return FS_FOpenFileWriteToDirForThread(filename, dir, FS_THREAD_MAIN);
 }
 
-int __cdecl FS_GetHandleAndOpenFile(const char *filename, const char *ospath, FsThread thread)
+int FS_GetHandleAndOpenFile(const char *filename, const char *ospath, FsThread thread)
 {
     int f; // [esp+0h] [ebp-8h]
     FILE *fp; // [esp+4h] [ebp-4h]
@@ -2945,7 +2945,7 @@ int __cdecl FS_GetHandleAndOpenFile(const char *filename, const char *ospath, Fs
     return f;
 }
 
-int __cdecl FS_FOpenFileWriteToDirForThread(const char *filename, const char *dir, FsThread thread)
+int FS_FOpenFileWriteToDirForThread(const char *filename, const char *dir, FsThread thread)
 {
     char ospath[260]; // [esp+0h] [ebp-108h] BYREF
 
@@ -2959,7 +2959,7 @@ int __cdecl FS_FOpenFileWriteToDirForThread(const char *filename, const char *di
         return FS_GetHandleAndOpenFile(filename, ospath, thread);
 }
 
-int __cdecl FS_WriteFileToDir(const char *filename, const char *path, char *buffer, uint32_t size)
+int FS_WriteFileToDir(const char *filename, const char *path, char *buffer, uint32_t size)
 {
     int f; // [esp+0h] [ebp-8h]
     uint32_t actualSize; // [esp+4h] [ebp-4h]
@@ -2991,7 +2991,7 @@ int __cdecl FS_WriteFileToDir(const char *filename, const char *path, char *buff
     }
 }
 
-void __cdecl FS_ShutdownSearchPaths(searchpath_s *p)
+void FS_ShutdownSearchPaths(searchpath_s *p)
 {
     searchpath_s *next; // [esp+0h] [ebp-4h]
 
@@ -3011,7 +3011,7 @@ void __cdecl FS_ShutdownSearchPaths(searchpath_s *p)
     }
 }
 
-void __cdecl FS_RemoveCommands()
+void FS_RemoveCommands()
 {
     Cmd_RemoveCommand("path");
     Cmd_RemoveCommand("fullpath");
@@ -3020,7 +3020,7 @@ void __cdecl FS_RemoveCommands()
     Cmd_RemoveCommand("touchFile");
 }
 
-void __cdecl FS_Shutdown()
+void FS_Shutdown()
 {
     int i; // [esp+0h] [ebp-4h]
     SND_StopSounds(SND_STOP_STREAMED);
@@ -3035,7 +3035,7 @@ void __cdecl FS_Shutdown()
     FS_RemoveCommands();
 }
 
-bool __cdecl FS_DeleteInDir(char *filename, char *dir)
+bool FS_DeleteInDir(char *filename, char *dir)
 {
     char ospath[260]; // [esp+0h] [ebp-108h] BYREF
 
@@ -3048,7 +3048,7 @@ bool __cdecl FS_DeleteInDir(char *filename, char *dir)
     return remove(ospath) != -1;
 }
 
-void __cdecl FS_Rename(char *from, char *fromDir, char *to, char *toDir)
+void FS_Rename(char *from, char *fromDir, char *to, char *toDir)
 {
     char to_ospath[256]; // [esp+0h] [ebp-208h] BYREF
     char from_ospath[260]; // [esp+100h] [ebp-108h] BYREF

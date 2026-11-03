@@ -10,7 +10,7 @@
 
 #include <bgame/bg_public.h>
 
-void __cdecl SV_ArchiveSnapshot(msg_t *msg)
+void SV_ArchiveSnapshot(msg_t *msg)
 {
     clientState_s *ClientStateLocal; // eax
     clientState_s *v2; // eax
@@ -310,14 +310,14 @@ skipDelta:
     SV_PacketDataIsUnknown(clientNum, msg);
 }
 
-gentity_s *__cdecl SV_GentityNumLocal(int num)
+gentity_s *SV_GentityNumLocal(int num)
 {
     if (!svsHeaderValid)
         MyAssertHandler(".\\server_mp\\sv_archive_mp.cpp", 35, 0, "%s", "svsHeaderValid");
     return (gentity_s *)((char *)svsHeader.gentities + num * svsHeader.gentitySize);
 }
 
-const clientState_s *__cdecl G_GetClientStateLocal(int clientNum)
+const clientState_s *G_GetClientStateLocal(int clientNum)
 {
     if (!svsHeaderValid)
         MyAssertHandler(".\\server_mp\\sv_archive_mp.cpp", 42, 0, "%s", "svsHeaderValid");
@@ -325,7 +325,7 @@ const clientState_s *__cdecl G_GetClientStateLocal(int clientNum)
 }
 
 hudelem_s g_dummyHudCurrent_1;
-int __cdecl GetFollowPlayerStateLocal(int clientNum, playerState_s *ps)
+int GetFollowPlayerStateLocal(int clientNum, playerState_s *ps)
 {
     uint32_t index; // [esp+8h] [ebp-8h]
 

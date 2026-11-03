@@ -37,7 +37,7 @@
 static bool s_expectRuntimeAssertion;
 static int s_runtimeAssertions;
 
-void __cdecl Com_InitThreadData(int threadContext)
+void Com_InitThreadData(int threadContext)
 {
     (void)threadContext;
 }

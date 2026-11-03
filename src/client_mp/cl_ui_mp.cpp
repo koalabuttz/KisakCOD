@@ -10,7 +10,7 @@
 #include <gfx_d3d/r_rendercmds.h>
 
 
-void __cdecl CL_GetClientState(int localClientNum, uiClientState_s *state)
+void CL_GetClientState(int localClientNum, uiClientState_s *state)
 {
     CL_GetLocalClientGlobals(localClientNum);
     clientConnection_t *clc = CL_GetLocalClientConnection(localClientNum);
@@ -21,20 +21,20 @@ void __cdecl CL_GetClientState(int localClientNum, uiClientState_s *state)
     I_strncpyz(state->messageString, clc->serverMessage, 1024);
 }
 
-void __cdecl CL_SetDisplayHUDWithKeycatchUI(int localClientNum, bool display)
+void CL_SetDisplayHUDWithKeycatchUI(int localClientNum, bool display)
 {
     clientUIActive_t *clUI = CL_GetLocalClientUIGlobals(localClientNum);
 
     clUI->displayHUDWithKeycatchUI = display;
 }
 
-bool __cdecl CL_AllowPopup(int localClientNum)
+bool CL_AllowPopup(int localClientNum)
 {
     connstate_t connstate = CL_GetLocalClientConnectionState(localClientNum);
     return !CL_GetLocalClientConnection(localClientNum)->demoplaying && connstate == CA_ACTIVE;
 }
 
-void __cdecl LAN_ResetPings(int source)
+void LAN_ResetPings(int source)
 {
     int i; // [esp+4h] [ebp-Ch]
     int count; // [esp+8h] [ebp-8h]
@@ -67,7 +67,7 @@ void __cdecl LAN_ResetPings(int source)
     }
 }
 
-int __cdecl LAN_GetServerCount(int source)
+int LAN_GetServerCount(int source)
 {
     switch (source)
     {
@@ -81,7 +81,7 @@ int __cdecl LAN_GetServerCount(int source)
     return 0;
 }
 
-int __cdecl LAN_WaitServerResponse(int source)
+int LAN_WaitServerResponse(int source)
 {
     if (source == 1)
         return cls.waitglobalserverresponse;
@@ -89,7 +89,7 @@ int __cdecl LAN_WaitServerResponse(int source)
         return 0;
 }
 
-void __cdecl LAN_GetServerInfo(int source, uint32_t n, char *buf, int buflen)
+void LAN_GetServerInfo(int source, uint32_t n, char *buf, int buflen)
 {
     const char *v4; // eax
     const char *v5; // eax
@@ -178,7 +178,7 @@ void __cdecl LAN_GetServerInfo(int source, uint32_t n, char *buf, int buflen)
     }
 }
 
-int __cdecl LAN_GetServerPing(int source, uint32_t n)
+int LAN_GetServerPing(int source, uint32_t n)
 {
     serverInfo_t *server; // [esp+4h] [ebp-4h]
 
@@ -205,7 +205,7 @@ int __cdecl LAN_GetServerPing(int source, uint32_t n)
         return -1;
 }
 
-serverInfo_t *__cdecl LAN_GetServerPtr(int source, uint32_t n)
+serverInfo_t *LAN_GetServerPtr(int source, uint32_t n)
 {
     if (source)
     {
@@ -226,7 +226,7 @@ serverInfo_t *__cdecl LAN_GetServerPtr(int source, uint32_t n)
     return 0;
 }
 
-void __cdecl LAN_CleanHostname(const char *hostName, char *cleanHostName)
+void LAN_CleanHostname(const char *hostName, char *cleanHostName)
 {
     uint8_t c; // [esp+3h] [ebp-1h]
 
@@ -242,7 +242,7 @@ void __cdecl LAN_CleanHostname(const char *hostName, char *cleanHostName)
     *cleanHostName = 0;
 }
 
-int __cdecl LAN_CompareHostname(const char *hostName1, const char *hostName2)
+int LAN_CompareHostname(const char *hostName1, const char *hostName2)
 {
     char cleanHostName2[32]; // [esp+4h] [ebp-48h] BYREF
     char cleanHostName1[32]; // [esp+24h] [ebp-28h] BYREF
@@ -257,7 +257,7 @@ int __cdecl LAN_CompareHostname(const char *hostName1, const char *hostName2)
         return I_stricmp(hostName1, hostName2);
 }
 
-int __cdecl LAN_CompareServers(int source, int sortKey, int sortDir, uint32_t s1, uint32_t s2)
+int LAN_CompareServers(int source, int sortKey, int sortDir, uint32_t s1, uint32_t s2)
 {
     char *v6; // eax
     char *v7; // eax
@@ -360,7 +360,7 @@ int __cdecl LAN_CompareServers(int source, int sortKey, int sortDir, uint32_t s1
         return res;
 }
 
-void __cdecl LAN_MarkServerDirty(int source, uint32_t n, uint8_t dirty)
+void LAN_MarkServerDirty(int source, uint32_t n, uint8_t dirty)
 {
     serverInfo_t *server; // [esp+8h] [ebp-8h]
     int count; // [esp+Ch] [ebp-4h]
@@ -410,7 +410,7 @@ void __cdecl LAN_MarkServerDirty(int source, uint32_t n, uint8_t dirty)
     }
 }
 
-int __cdecl LAN_ServerIsDirty(int source, uint32_t n)
+int LAN_ServerIsDirty(int source, uint32_t n)
 {
     if (source)
     {
@@ -431,12 +431,12 @@ int __cdecl LAN_ServerIsDirty(int source, uint32_t n)
     return 0;
 }
 
-int __cdecl LAN_UpdateDirtyPings(int localClientNum, uint32_t source)
+int LAN_UpdateDirtyPings(int localClientNum, uint32_t source)
 {
     return CL_UpdateDirtyPings(localClientNum, source);
 }
 
-void __cdecl Key_KeynumToStringBuf(int keynum, char *buf, int buflen)
+void Key_KeynumToStringBuf(int keynum, char *buf, int buflen)
 {
     char *v3; // eax
 
@@ -444,7 +444,7 @@ void __cdecl Key_KeynumToStringBuf(int keynum, char *buf, int buflen)
     I_strncpyz(buf, v3, buflen);
 }
 
-int __cdecl CL_GetClientName(int localClientNum, int index, char *buf, int size)
+int CL_GetClientName(int localClientNum, int index, char *buf, int size)
 {
     clientActive_t *LocalClientGlobals; // [esp+0h] [ebp-Ch]
     int i; // [esp+8h] [ebp-4h]
@@ -468,7 +468,7 @@ int __cdecl CL_GetClientName(int localClientNum, int index, char *buf, int size)
     return 0;
 }
 
-int __cdecl CL_ShutdownUI()
+int CL_ShutdownUI()
 {
     int localClientNum; // [esp+0h] [ebp-4h]
 
@@ -482,7 +482,7 @@ int __cdecl CL_ShutdownUI()
     return 1;
 }
 
-void __cdecl CL_InitUI()
+void CL_InitUI()
 {
     int localClientNum; // [esp+0h] [ebp-8h]
     int remoteScreenUpdateNesting; // [esp+4h] [ebp-4h]

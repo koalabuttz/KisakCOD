@@ -3,12 +3,12 @@
 #include "r_utils.h"
 
 
-void __cdecl R_InitContext(const GfxBackEndData *data, GfxCmdBuf *cmdBuf)
+void R_InitContext(const GfxBackEndData *data, GfxCmdBuf *cmdBuf)
 {
 	cmdBuf->device = dx.device;
 }
 
-void __cdecl R_CmdBufSet3D(GfxCmdBufSourceState *source)
+void R_CmdBufSet3D(GfxCmdBufSourceState *source)
 {
 	GfxCmdBufSourceState *worldMatrix; // [esp+0h] [ebp-4h]
 

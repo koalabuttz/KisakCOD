@@ -44,13 +44,13 @@ const int boxVerts[24][3] =
   { 1, 1, 1 }
 }; // idb
 
-void __cdecl TRACK_r_model()
+void TRACK_r_model()
 {
     track_static_alloc_internal((void *)boxVerts, 288, "boxVerts", 18);
     track_static_alloc_internal(&gfxBuf, 2359456, "gfxBuf", 18);
 }
 
-void __cdecl R_UnlockSkinnedCache()
+void R_UnlockSkinnedCache()
 {
     IDirect3DVertexBuffer9 *vb; // [esp+30h] [ebp-4h]
 
@@ -64,7 +64,7 @@ void __cdecl R_UnlockSkinnedCache()
     }
 }
 
-static bool __cdecl R_ModelSort(XModel *model1, XModel *model2)
+static bool R_ModelSort(XModel *model1, XModel *model2)
 {
     int MemUsage; // esi
 
@@ -72,7 +72,7 @@ static bool __cdecl R_ModelSort(XModel *model1, XModel *model2)
     return MemUsage < XModelGetMemUsage(model2);
 }
 
-void __cdecl R_ModelList_f()
+void R_ModelList_f()
 {
     const char *Name; // eax
     const char *v1; // [esp+Ch] [ebp-212Ch]
@@ -92,8 +92,8 @@ void __cdecl R_ModelList_f()
     v7 = 0;
     v6 = 0;
     inData = 0;
-    DB_EnumXAssets(ASSET_TYPE_XMODEL, (void(__cdecl *)(XAssetHeader, void *))R_GetModelList, &inData, 1);
-    //std::_Sort<XModel **, int, bool(__cdecl *)(XModel *&, XModel *&)>(v4, &v4[inData], (4 * inData) >> 2, R_ModelSort);
+    DB_EnumXAssets(ASSET_TYPE_XMODEL, (void(*)(XAssetHeader, void *))R_GetModelList, &inData, 1);
+    //std::_Sort<XModel **, int, bool(*)(XModel *&, XModel *&)>(v4, &v4[inData], (4 * inData) >> 2, R_ModelSort);
     std::sort(&v4[0], &v4[inData], R_ModelSort);
     Com_Printf(CON_CHANNEL_GFX, "---------------------------\n");
     Com_Printf(CON_CHANNEL_GFX, "SM# is the number of static model instances\n");
@@ -142,21 +142,21 @@ void __cdecl R_ModelList_f()
     Com_Printf(CON_CHANNEL_GFX, "Related commands: meminfo, imagelist, gfx_world, gfx_model, cg_drawfps, com_statmon, tempmeminfo\n");
 }
 
-void __cdecl R_GetModelList(XAssetHeader header, XAssetHeader *data)
+void R_GetModelList(XAssetHeader header, XAssetHeader *data)
 {
     //iassert( modelList->count < ARRAY_COUNT( modelList->sorted ) ); // KISAKTODO
     data[(int)data->xmodelPieces++ + 1] = header;
 }
 
-XModel *__cdecl R_RegisterModel(const char *name)
+XModel *R_RegisterModel(const char *name)
 {
     return XModelPrecache(
         (char*)name,
-        (void *(__cdecl *)(int))Hunk_AllocXModelPrecache,
-        (void *(__cdecl *)(int))Hunk_AllocXModelPrecacheColl);
+        (void *(*)(int))Hunk_AllocXModelPrecache,
+        (void *(*)(int))Hunk_AllocXModelPrecacheColl);
 }
 
-void __cdecl R_XModelDebug(const DObj_s *obj, int *partBits)
+void R_XModelDebug(const DObj_s *obj, int *partBits)
 {
     if ((r_xdebug->current.integer & 1) != 0)
         R_XModelDebugBoxes(obj, partBits);
@@ -164,7 +164,7 @@ void __cdecl R_XModelDebug(const DObj_s *obj, int *partBits)
         R_XModelDebugAxes(obj, partBits);
 }
 
-void __cdecl R_XModelDebugBoxes(const DObj_s *obj, int *partBits)
+void R_XModelDebugBoxes(const DObj_s *obj, int *partBits)
 {
     DObjAnimMat *boneMatrix; // [esp+0h] [ebp-250h]
     uint32_t boxEdge; // [esp+4h] [ebp-24Ch]
@@ -220,7 +220,7 @@ void __cdecl R_XModelDebugBoxes(const DObj_s *obj, int *partBits)
     }
 }
 
-void __cdecl R_XModelDebugAxes(const DObj_s *obj, int *partBits)
+void R_XModelDebugAxes(const DObj_s *obj, int *partBits)
 {
     DObjAnimMat *boneMatrix; // [esp+0h] [ebp-60h]
     int boneIndex; // [esp+4h] [ebp-5Ch]
@@ -270,7 +270,7 @@ void __cdecl R_XModelDebugAxes(const DObj_s *obj, int *partBits)
     }
 }
 
-int __cdecl R_SkinXModel(
+int R_SkinXModel(
     XModelDrawInfo *modelInfo,
     const XModel *model,
     const DObj_s *obj,
@@ -362,7 +362,7 @@ int __cdecl R_SkinXModel(
     }
 }
 
-void __cdecl R_SkinSceneEnt(GfxSceneEntity *sceneEnt)
+void R_SkinSceneEnt(GfxSceneEntity *sceneEnt)
 {
     DObjAnimMat *boneMatrix; // [esp+0h] [ebp-8h]
     const DObj_s *obj; // [esp+4h] [ebp-4h]
@@ -376,7 +376,7 @@ void __cdecl R_SkinSceneEnt(GfxSceneEntity *sceneEnt)
     }
 }
 
-int __cdecl R_SkinAndBoundSceneEnt(GfxSceneEntity *sceneEnt)
+int R_SkinAndBoundSceneEnt(GfxSceneEntity *sceneEnt)
 {
     DObjAnimMat *boneMatrix; // [esp+0h] [ebp-Ch]
     const DObj_s *obj; // [esp+4h] [ebp-8h] BYREF
@@ -398,7 +398,7 @@ int __cdecl R_SkinAndBoundSceneEnt(GfxSceneEntity *sceneEnt)
     }
 }
 
-void __cdecl R_LockSkinnedCache()
+void R_LockSkinnedCache()
 {
     IDirect3DVertexBuffer9 *vb; // [esp+30h] [ebp-4h]
 

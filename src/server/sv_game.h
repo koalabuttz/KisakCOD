@@ -18,11 +18,11 @@ struct XModel;
 #endif
 
 
-void __cdecl TRACK_sv_game();
-gentity_s *__cdecl SV_GentityNum(int num);
-playerState_s *__cdecl SV_GameClientNum(int num);
-svEntity_s *__cdecl SV_SvEntityForGentity(const gentity_s *gEnt);
-gentity_s *__cdecl SV_GEntityForSvEntity(svEntity_s *svEnt);
+void TRACK_sv_game();
+gentity_s *SV_GentityNum(int num);
+playerState_s *SV_GameClientNum(int num);
+svEntity_s *SV_SvEntityForGentity(const gentity_s *gEnt);
+gentity_s *SV_GEntityForSvEntity(svEntity_s *svEnt);
 
 bool SV_SetBrushModel(gentity_s *ent);
 void SV_SetCheckSum(int checksum);
@@ -32,57 +32,57 @@ const char *SV_Archived_Dvar_GetVariantString(const char *dvarName);
 void SV_SetUsercmdButtonsWeapons(int buttons, int weapon, int offhand);
 
 #ifdef KISAK_MP
-void __cdecl SV_GameSendServerCommand(int clientNum, svscmd_type type, const char *text);
+void SV_GameSendServerCommand(int clientNum, svscmd_type type, const char *text);
 #elif KISAK_SP
-void __cdecl SV_GameSendServerCommand(int clientNum, const char *text);
+void SV_GameSendServerCommand(int clientNum, const char *text);
 #endif
 
-void __cdecl SV_GameDropClient(int clientNum, const char *reason);
-void __cdecl SV_SetMapCenter(float *mapCenter);
-void __cdecl SV_SetGameEndTime(int gameEndTime);
-bool __cdecl SV_inSnapshot(const float *origin, int iEntityNum);
-bool __cdecl SV_EntityContact(const float *mins, const float *maxs, const gentity_s *gEnt);
-void __cdecl SV_GetServerinfo(char *buffer, int bufferSize);
-void __cdecl SV_LocateGameData(
+void SV_GameDropClient(int clientNum, const char *reason);
+void SV_SetMapCenter(float *mapCenter);
+void SV_SetGameEndTime(int gameEndTime);
+bool SV_inSnapshot(const float *origin, int iEntityNum);
+bool SV_EntityContact(const float *mins, const float *maxs, const gentity_s *gEnt);
+void SV_GetServerinfo(char *buffer, int bufferSize);
+void SV_LocateGameData(
     gentity_s *gEnts,
     int numGEntities,
     int sizeofGEntity_t,
     playerState_s *clients,
     int sizeofGameClient);
-void __cdecl SV_GetUsercmd(int clientNum, usercmd_s *cmd);
-XModel *__cdecl SV_XModelGet(char *name);
-uint8_t *__cdecl SV_AllocXModelPrecache(uint32_t size);
-uint8_t *__cdecl SV_AllocXModelPrecacheColl(uint32_t size);
-void __cdecl SV_DObjDumpInfo(gentity_s *ent);
-void __cdecl SV_ResetSkeletonCache();
-bool __cdecl SV_DObjCreateSkelForBone(DObj_s *obj, int boneIndex);
-char *__cdecl SV_AllocSkelMemory(uint32_t size);
-int __cdecl SV_DObjCreateSkelForBones(DObj_s *obj, int *partBits);
-int __cdecl SV_DObjUpdateServerTime(gentity_s *ent, float dtime, int bNotify);
-void __cdecl SV_DObjInitServerTime(gentity_s *ent, float dtime);
-int __cdecl SV_DObjGetBoneIndex(const gentity_s *ent, uint32_t boneName);
-DObjAnimMat *__cdecl SV_DObjGetMatrixArray(const gentity_s *ent);
-void __cdecl SV_DObjDisplayAnim(gentity_s *ent, const char *header);
-void __cdecl SV_DObjGetBounds(gentity_s *ent, float *mins, float *maxs);
-XAnimTree_s *__cdecl SV_DObjGetTree(gentity_s *ent);
-void __cdecl SV_XModelDebugBoxes(gentity_s *ent);
-bool __cdecl SV_MapExists(char *name);
-bool __cdecl SV_DObjExists(gentity_s *ent);
-void __cdecl SV_track_shutdown();
-char *__cdecl SV_GetGuid(int clientNum);
-int __cdecl SV_GetClientPing(int clientNum);
-bool __cdecl SV_IsLocalClient(int clientNum);
-void __cdecl SV_ShutdownGameProgs();
-void __cdecl SV_SetGametype();
+void SV_GetUsercmd(int clientNum, usercmd_s *cmd);
+XModel *SV_XModelGet(char *name);
+uint8_t *SV_AllocXModelPrecache(uint32_t size);
+uint8_t *SV_AllocXModelPrecacheColl(uint32_t size);
+void SV_DObjDumpInfo(gentity_s *ent);
+void SV_ResetSkeletonCache();
+bool SV_DObjCreateSkelForBone(DObj_s *obj, int boneIndex);
+char *SV_AllocSkelMemory(uint32_t size);
+int SV_DObjCreateSkelForBones(DObj_s *obj, int *partBits);
+int SV_DObjUpdateServerTime(gentity_s *ent, float dtime, int bNotify);
+void SV_DObjInitServerTime(gentity_s *ent, float dtime);
+int SV_DObjGetBoneIndex(const gentity_s *ent, uint32_t boneName);
+DObjAnimMat *SV_DObjGetMatrixArray(const gentity_s *ent);
+void SV_DObjDisplayAnim(gentity_s *ent, const char *header);
+void SV_DObjGetBounds(gentity_s *ent, float *mins, float *maxs);
+XAnimTree_s *SV_DObjGetTree(gentity_s *ent);
+void SV_XModelDebugBoxes(gentity_s *ent);
+bool SV_MapExists(char *name);
+bool SV_DObjExists(gentity_s *ent);
+void SV_track_shutdown();
+char *SV_GetGuid(int clientNum);
+int SV_GetClientPing(int clientNum);
+bool SV_IsLocalClient(int clientNum);
+void SV_ShutdownGameProgs();
+void SV_SetGametype();
 #ifdef KISAK_MP
-void __cdecl SV_InitGameProgs(int savepersist);
-void __cdecl SV_RestartGameProgs(int savepersist);
+void SV_InitGameProgs(int savepersist);
+void SV_RestartGameProgs(int savepersist);
 #elif KISAK_SP
-void __cdecl SV_InitGameProgs(uint32_t randomSeed, int savegame, SaveGame **save);
-void __cdecl SV_RestartGameProgs(uint32_t randomSeed, int savegame, SaveGame **save, int loadScripts);
+void SV_InitGameProgs(uint32_t randomSeed, int savegame, SaveGame **save);
+void SV_RestartGameProgs(uint32_t randomSeed, int savegame, SaveGame **save, int loadScripts);
 #endif
-void __cdecl SV_InitGameVM(int restart, int savepersist);
-int __cdecl SV_GameCommand();
+void SV_InitGameVM(int restart, int savepersist);
+int SV_GameCommand();
 
 #ifdef KISAK_SP
 void SV_CheckLoadLevel(SaveGame *save);

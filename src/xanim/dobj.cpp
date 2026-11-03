@@ -26,7 +26,7 @@ struct SavedDObj // sizeof=0x60
 
 uint32_t g_empty;
 
-void __cdecl DObjInit()
+void DObjInit()
 {
     int duplicatePartBits[5]; // [esp+0h] [ebp-14h] BYREF
 
@@ -34,7 +34,7 @@ void __cdecl DObjInit()
     g_empty = SL_GetStringOfSize((char *)duplicatePartBits, 0, 0x11u, MT_TYPE_DUPLICATE_PARTS);
 }
 
-void __cdecl DObjShutdown()
+void DObjShutdown()
 {
     if (g_empty)
     {
@@ -43,7 +43,7 @@ void __cdecl DObjShutdown()
     }
 }
 
-void __cdecl DObjDumpInfo(const DObj_s *obj)
+void DObjDumpInfo(const DObj_s *obj)
 {
     int j; // [esp+0h] [ebp-20h]
     int numBones; // [esp+4h] [ebp-1Ch]
@@ -92,12 +92,12 @@ void __cdecl DObjDumpInfo(const DObj_s *obj)
     }
 }
 
-bool __cdecl DObjIgnoreCollision(const DObj_s *obj, char modelIndex)
+bool DObjIgnoreCollision(const DObj_s *obj, char modelIndex)
 {
     return (obj->ignoreCollision & (1 << modelIndex)) != 0;
 }
 
-void __cdecl DObjGetHierarchyBits(const DObj_s *obj, int boneIndex, int *partBits)
+void DObjGetHierarchyBits(const DObj_s *obj, int boneIndex, int *partBits)
 {
     int j; // [esp+4Ch] [ebp-B8h]
     const unsigned __int8 *pos; // [esp+50h] [ebp-B4h]
@@ -184,14 +184,14 @@ void __cdecl DObjGetHierarchyBits(const DObj_s *obj, int boneIndex, int *partBit
     }
 }
 
-bool __cdecl DObjSkelIsBoneUpToDate(DObj_s *obj, int boneIndex)
+bool DObjSkelIsBoneUpToDate(DObj_s *obj, int boneIndex)
 {
     iassert(obj);
 
     return obj->skel.partBits.skel.testBit(boneIndex);
 }
 
-void __cdecl DObjSetTree(DObj_s *obj, XAnimTree_s *tree)
+void DObjSetTree(DObj_s *obj, XAnimTree_s *tree)
 {
     obj->tree = tree;
     if (tree)
@@ -201,7 +201,7 @@ void __cdecl DObjSetTree(DObj_s *obj, XAnimTree_s *tree)
     }
 }
 
-void __cdecl DObjCreate(DObjModel_s *dobjModels, uint32_t numModels, XAnimTree_s *tree, DObj_s *obj, __int16 entnum)
+void DObjCreate(DObjModel_s *dobjModels, uint32_t numModels, XAnimTree_s *tree, DObj_s *obj, __int16 entnum)
 {
     PROF_SCOPED("DObjCreate");
 
@@ -225,7 +225,7 @@ void __cdecl DObjCreate(DObjModel_s *dobjModels, uint32_t numModels, XAnimTree_s
     DObjSetTree(obj, tree);
 }
 
-void __cdecl DObjCreateDuplicateParts(DObj_s *obj, DObjModel_s *dobjModels, uint32_t numModels)
+void DObjCreateDuplicateParts(DObj_s *obj, DObjModel_s *dobjModels, uint32_t numModels)
 {
     int numBones; // [esp+30h] [ebp-5ACh]
     unsigned __int8 modelParents[32]; // [esp+34h] [ebp-5A8h] BYREF
@@ -360,7 +360,7 @@ void __cdecl DObjCreateDuplicateParts(DObj_s *obj, DObjModel_s *dobjModels, uint
     }
 }
 
-void __cdecl DObjDumpCreationInfo(DObjModel_s *dobjModels, uint32_t numModels)
+void DObjDumpCreationInfo(DObjModel_s *dobjModels, uint32_t numModels)
 {
     const char *Name; // eax
     uint32_t j; // [esp+0h] [ebp-14h]
@@ -383,7 +383,7 @@ void __cdecl DObjDumpCreationInfo(DObjModel_s *dobjModels, uint32_t numModels)
     }
 }
 
-void __cdecl DObjComputeBounds(DObj_s *obj)
+void DObjComputeBounds(DObj_s *obj)
 {
     int numModels; // [esp+0h] [ebp-10h]
     float radius; // [esp+4h] [ebp-Ch]
@@ -404,7 +404,7 @@ void __cdecl DObjComputeBounds(DObj_s *obj)
     obj->radius = radius;
 }
 
-void __cdecl DObjFree(DObj_s *obj)
+void DObjFree(DObj_s *obj)
 {
     XModel **models; // [esp+34h] [ebp-4h]
 
@@ -432,7 +432,7 @@ void __cdecl DObjFree(DObj_s *obj)
     }
 }
 
-void __cdecl DObjGetCreateParms(
+void DObjGetCreateParms(
     const DObj_s *obj,
     DObjModel_s *dobjModels,
     uint16_t *numModels,
@@ -501,7 +501,7 @@ void __cdecl DObjGetCreateParms(
     }
 }
 
-void __cdecl DObjArchive(DObj_s *obj)
+void DObjArchive(DObj_s *obj)
 {
     DObjModel_s *model; // [esp+8h] [ebp-170h]
     SavedDObj savedObj; // [esp+10h] [ebp-168h] BYREF
@@ -531,7 +531,7 @@ void __cdecl DObjArchive(DObj_s *obj)
     memcpy(obj, &savedObj, sizeof(DObj_s) - sizeof(obj->models));
 }
 
-void __cdecl DObjUnarchive(DObj_s *obj)
+void DObjUnarchive(DObj_s *obj)
 {
     DObjModel_s *model; // [esp+8h] [ebp-170h]
     SavedDObj savedObj; // [esp+10h] [ebp-168h] BYREF
@@ -551,12 +551,12 @@ void __cdecl DObjUnarchive(DObj_s *obj)
     DObjSetHidePartBits(obj, savedObj.hidePartBits);
 }
 
-void __cdecl DObjSkelClear(const DObj_s *obj)
+void DObjSkelClear(const DObj_s *obj)
 {
     memset((unsigned __int8 *)&obj->skel, 0, sizeof(obj->skel));
 }
 
-void __cdecl DObjGetBounds(const DObj_s *obj, float *mins, float *maxs)
+void DObjGetBounds(const DObj_s *obj, float *mins, float *maxs)
 {
     iassert(obj);
 
@@ -569,25 +569,25 @@ void __cdecl DObjGetBounds(const DObj_s *obj, float *mins, float *maxs)
     maxs[2] = obj->radius;
 }
 
-void __cdecl DObjPhysicsGetBounds(const DObj_s *obj, float *mins, float *maxs)
+void DObjPhysicsGetBounds(const DObj_s *obj, float *mins, float *maxs)
 {
     iassert(obj);
     iassert(obj->models[0]);
     XModelGetBounds(obj->models[0], mins, maxs);
 }
 
-void __cdecl DObjPhysicsSetCollisionFromXModel(const DObj_s *obj, PhysWorld worldIndex, dxBody *physId)
+void DObjPhysicsSetCollisionFromXModel(const DObj_s *obj, PhysWorld worldIndex, dxBody *physId)
 {
     Phys_ObjSetCollisionFromXModel(*(const XModel **)obj->models, worldIndex, physId);
 }
 
-double __cdecl DObjGetRadius(const DObj_s *obj)
+double DObjGetRadius(const DObj_s *obj)
 {
     iassert(obj);
     return obj->radius;
 }
 
-PhysPreset *__cdecl DObjGetPhysPreset(const DObj_s *obj)
+PhysPreset *DObjGetPhysPreset(const DObj_s *obj)
 {
     iassert(obj);
     iassert(obj->numModels > 0);
@@ -596,7 +596,7 @@ PhysPreset *__cdecl DObjGetPhysPreset(const DObj_s *obj)
     return obj->models[0]->physPreset;
 }
 
-const char *__cdecl DObjGetName(const DObj_s *obj)
+const char *DObjGetName(const DObj_s *obj)
 {
     iassert(obj);
     iassert(obj->numModels > 0);
@@ -605,7 +605,7 @@ const char *__cdecl DObjGetName(const DObj_s *obj)
     return obj->models[0]->name;
 }
 
-const char *__cdecl DObjGetBoneName(const DObj_s *obj, int boneIndex)
+const char *DObjGetBoneName(const DObj_s *obj, int boneIndex)
 {
     int j; // [esp+0h] [ebp-20h]
     int numBones; // [esp+4h] [ebp-1Ch]
@@ -637,7 +637,7 @@ const char *__cdecl DObjGetBoneName(const DObj_s *obj, int boneIndex)
     return 0;
 }
 
-char *__cdecl DObjGetModelParentBoneName(const DObj_s *obj, int modelIndex)
+char *DObjGetModelParentBoneName(const DObj_s *obj, int modelIndex)
 {
     iassert(obj);
     iassert(modelIndex < obj->numModels);
@@ -645,13 +645,13 @@ char *__cdecl DObjGetModelParentBoneName(const DObj_s *obj, int modelIndex)
     return (char*)DObjGetBoneName(obj, *((unsigned __int8 *)&obj->models[obj->numModels] + modelIndex));
 }
 
-XAnimTree_s *__cdecl DObjGetTree(const DObj_s *obj)
+XAnimTree_s *DObjGetTree(const DObj_s *obj)
 {
     iassert(obj);
     return obj->tree;
 }
 
-void __cdecl DObjTraceline(DObj_s *obj, float *start, float *end, unsigned __int8 *priorityMap, DObjTrace_s *trace)
+void DObjTraceline(DObj_s *obj, float *start, float *end, unsigned __int8 *priorityMap, DObjTrace_s *trace)
 {
     double v5; // st7
     float v8; // [esp+20h] [ebp-390h]
@@ -935,7 +935,7 @@ LABEL_17:
     }
 }
 
-void __cdecl DObjTracelinePartBits(DObj_s *obj, int *partBits)
+void DObjTracelinePartBits(DObj_s *obj, int *partBits)
 {
     uint32_t j; // [esp+30h] [ebp-24h]
     XModel *model; // [esp+34h] [ebp-20h]
@@ -978,7 +978,7 @@ void __cdecl DObjTracelinePartBits(DObj_s *obj, int *partBits)
     DObjCompleteHierarchyBits(obj, partBits);
 }
 
-void __cdecl DObjGeomTraceline(
+void DObjGeomTraceline(
     DObj_s *obj,
     float *localStart,
     float *const localEnd,
@@ -1048,7 +1048,7 @@ void __cdecl DObjGeomTraceline(
     results->normal[2] = trace.normal[2];
 }
 
-void __cdecl DObjGeomTracelinePartBits(DObj_s *obj, int contentmask, int *partBits)
+void DObjGeomTracelinePartBits(DObj_s *obj, int contentmask, int *partBits)
 {
     uint32_t boneIndex; // [esp+0h] [ebp-14h]
     XModel *model; // [esp+4h] [ebp-10h]
@@ -1072,7 +1072,7 @@ void __cdecl DObjGeomTracelinePartBits(DObj_s *obj, int contentmask, int *partBi
     DObjCompleteHierarchyBits(obj, partBits);
 }
 
-int __cdecl DObjHasContents(DObj_s *obj, int contentmask)
+int DObjHasContents(DObj_s *obj, int contentmask)
 {
     int i; // [esp+0h] [ebp-8h]
     XModel **models; // [esp+4h] [ebp-4h]
@@ -1086,7 +1086,7 @@ int __cdecl DObjHasContents(DObj_s *obj, int contentmask)
     return 0;
 }
 
-int __cdecl DObjGetContents(const DObj_s *obj)
+int DObjGetContents(const DObj_s *obj)
 {
     int contents; // [esp+0h] [ebp-8h]
     int i; // [esp+4h] [ebp-4h]
@@ -1097,7 +1097,7 @@ int __cdecl DObjGetContents(const DObj_s *obj)
     return contents;
 }
 
-int __cdecl DObjSetLocalBoneIndex(DObj_s *obj, int *partBits, int boneIndex, const float *trans, const float *angles)
+int DObjSetLocalBoneIndex(DObj_s *obj, int *partBits, int boneIndex, const float *trans, const float *angles)
 {
     if (!DObjSetRotTransIndex(obj, partBits, boneIndex))
         return 0;
@@ -1105,7 +1105,7 @@ int __cdecl DObjSetLocalBoneIndex(DObj_s *obj, int *partBits, int boneIndex, con
     return 1;
 }
 
-int __cdecl DObjGetBoneIndex(const DObj_s *obj, uint32_t name, unsigned __int8 *index)
+int DObjGetBoneIndex(const DObj_s *obj, uint32_t name, unsigned __int8 *index)
 {
     int j; // [esp+0h] [ebp-18h]
     int ja; // [esp+0h] [ebp-18h]
@@ -1152,7 +1152,7 @@ int __cdecl DObjGetBoneIndex(const DObj_s *obj, uint32_t name, unsigned __int8 *
     return 0;
 }
 
-int __cdecl DObjGetModelBoneIndex(const DObj_s *obj, const char *modelName, uint32_t name, unsigned __int8 *index)
+int DObjGetModelBoneIndex(const DObj_s *obj, const char *modelName, uint32_t name, unsigned __int8 *index)
 {
     int j; // [esp+0h] [ebp-18h]
     int ja; // [esp+0h] [ebp-18h]
@@ -1199,7 +1199,7 @@ int __cdecl DObjGetModelBoneIndex(const DObj_s *obj, const char *modelName, uint
 }
 
 // LWSS: for ragdolls
-void __cdecl DObjGetBasePoseMatrix(const DObj_s *obj, unsigned __int8 boneIndex, DObjAnimMat *outMat)
+void DObjGetBasePoseMatrix(const DObj_s *obj, unsigned __int8 boneIndex, DObjAnimMat *outMat)
 {
     DObjAnimMat mat[128]; // [esp+8h] [ebp-1010h] BYREF
     int partBits[4]; // [esp+1008h] [ebp-10h] BYREF
@@ -1220,7 +1220,7 @@ void __cdecl DObjGetBasePoseMatrix(const DObj_s *obj, unsigned __int8 boneIndex,
     }
 }
 
-void __cdecl DObjSetHidePartBits(DObj_s *obj, const uint32_t *partBits)
+void DObjSetHidePartBits(DObj_s *obj, const uint32_t *partBits)
 {
     obj->hidePartBits[0] = *partBits;
     obj->hidePartBits[1] = partBits[1];

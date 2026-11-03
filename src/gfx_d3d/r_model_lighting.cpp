@@ -78,7 +78,7 @@ GfxSmodelLightGlob smodelLightGlob;
 
 int s_modelLightingSampleDelta[64];
 
-void __cdecl R_SetModelLightingCoords(uint16_t handle, float *out)
+void R_SetModelLightingCoords(uint16_t handle, float *out)
 {
     uint32_t entryIndex; // [esp+10h] [ebp-18h]
     float yCoord; // [esp+14h] [ebp-14h]
@@ -93,7 +93,7 @@ void __cdecl R_SetModelLightingCoords(uint16_t handle, float *out)
     out[3] = 1.0;
 }
 
-void __cdecl R_GetPackedStaticModelLightingCoords(uint32_t smodelIndex, PackedLightingCoords *packedCoords)
+void R_GetPackedStaticModelLightingCoords(uint32_t smodelIndex, PackedLightingCoords *packedCoords)
 {
     uint32_t v2; // [esp+0h] [ebp-18h]
     uint32_t v3; // [esp+4h] [ebp-14h]
@@ -135,13 +135,13 @@ void __cdecl R_GetPackedStaticModelLightingCoords(uint32_t smodelIndex, PackedLi
     packedCoords->array[3] = 0;
 }
 
-uint32_t __cdecl R_ModelLightingIndexFromHandle(uint16_t handle)
+uint32_t R_ModelLightingIndexFromHandle(uint16_t handle)
 {
     iassert(handle && handle <= modelLightGlob.totalEntryLimit);
     return handle - 1;
 }
 
-char __cdecl R_AllocStaticModelLighting(GfxStaticModelDrawInst *smodelDrawInst, uint32_t smodelIndex)
+char R_AllocStaticModelLighting(GfxStaticModelDrawInst *smodelDrawInst, uint32_t smodelIndex)
 {
     uint16_t handle; // [esp+0h] [ebp-10h]
     uint32_t smodelIndexPrev; // [esp+4h] [ebp-Ch]
@@ -193,7 +193,7 @@ char __cdecl R_AllocStaticModelLighting(GfxStaticModelDrawInst *smodelDrawInst, 
     return 1;
 }
 
-uint32_t __cdecl R_AllocModelLighting_PrimaryLight(
+uint32_t R_AllocModelLighting_PrimaryLight(
     float *lightingOrigin,
     uint32_t dynEntId,
     uint16_t *cachedLightingHandle,
@@ -207,10 +207,10 @@ uint32_t __cdecl R_AllocModelLighting_PrimaryLight(
         lightingInfoOut);
 }
 
-uint32_t __cdecl R_AllocModelLighting(
+uint32_t R_AllocModelLighting(
     float *lightingOrigin,
     uint16_t *cachedLightingHandle,
-    uint32_t(__cdecl *GetPrimaryLightCallback)(const void *),
+    uint32_t(*GetPrimaryLightCallback)(const void *),
     const void *userData,
     GfxLightingInfo *lightingInfoOut)
 {
@@ -292,13 +292,13 @@ uint32_t __cdecl R_AllocModelLighting(
     }
 }
 
-uint32_t __cdecl R_DynEntPrimaryLightCallback(const void *userData)
+uint32_t R_DynEntPrimaryLightCallback(const void *userData)
 {
     DWORD *data = (DWORD *)userData;
     return rgp.world->nonSunPrimaryLightForModelDynEnt[*data];
 }
 
-uint32_t __cdecl R_AllocModelLighting_Box(
+uint32_t R_AllocModelLighting_Box(
     const GfxViewInfo *viewInfo,
     float *lightingOrigin,
     const float *boxMins,
@@ -320,14 +320,14 @@ uint32_t __cdecl R_AllocModelLighting_Box(
         lightingInfoOut);
 }
 
-uint32_t __cdecl R_GetPrimaryLightForBoxCallback(const void *userData)
+uint32_t R_GetPrimaryLightForBoxCallback(const void *userData)
 {
     GfxFindLightForBox *boxWork = (GfxFindLightForBox *)userData;
 
     return R_GetNonSunPrimaryLightForBox(boxWork->viewInfo, boxWork->midPoint, boxWork->halfSize);
 }
 
-uint32_t __cdecl R_AllocModelLighting_Sphere(
+uint32_t R_AllocModelLighting_Sphere(
     const GfxViewInfo *viewInfo,
     float *lightingOrigin,
     const float *origin,
@@ -351,14 +351,14 @@ uint32_t __cdecl R_AllocModelLighting_Sphere(
         lightingInfoOut);
 }
 
-uint32_t __cdecl R_GetPrimaryLightForSphereCallback(const void *userData)
+uint32_t R_GetPrimaryLightForSphereCallback(const void *userData)
 {
     GfxFindLightForSphere *sphereWork = (GfxFindLightForSphere *)userData;
     
     return R_GetNonSunPrimaryLightForSphere(sphereWork->viewInfo, sphereWork->origin, sphereWork->radius);
 }
 
-void __cdecl R_ToggleModelLightingFrame()
+void R_ToggleModelLightingFrame()
 {
     uint32_t entryIndex; // [esp+0h] [ebp-4h]
 
@@ -377,7 +377,7 @@ void __cdecl R_ToggleModelLightingFrame()
     }
 }
 
-uint32_t __cdecl R_CalcModelLighting(
+uint32_t R_CalcModelLighting(
     uint32_t entryIndex,
     const float *lightingOrigin,
     uint32_t nonSunPrimaryLightIndex,
@@ -395,7 +395,7 @@ uint32_t __cdecl R_CalcModelLighting(
         extrapolateBehavior);
 }
 
-void __cdecl R_BeginAllStaticModelLighting()
+void R_BeginAllStaticModelLighting()
 {
     uint32_t size; // [esp+0h] [ebp-4h]
 
@@ -405,7 +405,7 @@ void __cdecl R_BeginAllStaticModelLighting()
     Com_Memset(smodelLightGlob.lightingBits, 0, size);
 }
 
-void __cdecl R_SetAllStaticModelLighting()
+void R_SetAllStaticModelLighting()
 {
     DWORD v1; // eax
     uint32_t wordCount; // [esp+34h] [ebp-18h]
@@ -443,7 +443,7 @@ void __cdecl R_SetAllStaticModelLighting()
     }
 }
 
-void __cdecl R_SetStaticModelLighting(uint32_t smodelIndex)
+void R_SetStaticModelLighting(uint32_t smodelIndex)
 {
     uint32_t entryIndex; // [esp+0h] [ebp-18h]
     const GfxStaticModelDrawInst *smodelDrawInst; // [esp+4h] [ebp-14h]
@@ -468,7 +468,7 @@ void __cdecl R_SetStaticModelLighting(uint32_t smodelIndex)
         R_CalcModelLighting(entryIndex, lightingOrigin, smodelDrawInst->primaryLightIndex, GFX_MODELLIGHT_EXTRAPOLATE);
 }
 
-void __cdecl R_SetModelGroundLighting(uint32_t entryIndex, const uint8_t *groundLighting)
+void R_SetModelGroundLighting(uint32_t entryIndex, const uint8_t *groundLighting)
 {
     GfxModelLightingPatch *patch; // [esp+8h] [ebp-4h]
 
@@ -486,13 +486,13 @@ void __cdecl R_SetModelGroundLighting(uint32_t entryIndex, const uint8_t *ground
     *(uint32_t *)patch->groundLighting = *(uint32_t *)groundLighting;
 }
 
-void __cdecl R_SetModelLightingCoordsForSource(uint16_t handle, GfxCmdBufSourceState *source)
+void R_SetModelLightingCoordsForSource(uint16_t handle, GfxCmdBufSourceState *source)
 {
     R_SetModelLightingCoords(handle, source->input.consts[CONST_SRC_CODE_BASE_LIGHTING_COORDS]);
     R_DirtyCodeConstant(source, CONST_SRC_CODE_BASE_LIGHTING_COORDS);
 }
 
-void __cdecl R_SetStaticModelLightingCoordsForSource(uint32_t smodelIndex, GfxCmdBufSourceState *source)
+void R_SetStaticModelLightingCoordsForSource(uint32_t smodelIndex, GfxCmdBufSourceState *source)
 {
     R_SetModelLightingCoords(rgp.world->dpvs.smodelDrawInsts[smodelIndex].lightingHandle, source->input.consts[CONST_SRC_CODE_BASE_LIGHTING_COORDS]);
     R_DirtyCodeConstant(source, CONST_SRC_CODE_BASE_LIGHTING_COORDS);
@@ -522,7 +522,7 @@ uint32_t R_SetModelLightingSampleDeltas()
     return result;
 }
 
-void __cdecl R_SetModelLightingLookupScale(GfxCmdBufInput *input)
+void R_SetModelLightingLookupScale(GfxCmdBufInput *input)
 {
     float lookupScale[4]; // [esp+4h] [ebp-10h] BYREF
 
@@ -533,13 +533,13 @@ void __cdecl R_SetModelLightingLookupScale(GfxCmdBufInput *input)
     R_SetInputCodeConstantFromVec4(input, CONST_SRC_CODE_LIGHTING_LOOKUP_SCALE, lookupScale);
 }
 
-void __cdecl R_SetupDynamicModelLighting(GfxCmdBufInput *input)
+void R_SetupDynamicModelLighting(GfxCmdBufInput *input)
 {
     R_SetInputCodeImageTexture(input, TEXTURE_SRC_CODE_MODEL_LIGHTING, modelLightGlob.image);
     R_SetModelLightingLookupScale(input);
 }
 
-void __cdecl R_ShutdownModelLightingGlobals()
+void R_ShutdownModelLightingGlobals()
 {
     uint32_t i; // [esp+0h] [ebp-4h]
 
@@ -549,7 +549,7 @@ void __cdecl R_ShutdownModelLightingGlobals()
     R_FreeGlobalVariable(modelLightGlob.lightingInfo);
 }
 
-void __cdecl R_InitModelLightingGlobals()
+void R_InitModelLightingGlobals()
 {
     DWORD v1; // eax
     uint32_t totalBitsNeeded; // [esp+Ch] [ebp-8h]
@@ -587,12 +587,12 @@ void __cdecl R_InitModelLightingGlobals()
     modelLightGlob.image = modelLightGlob.lightImages[0];
 }
 
-char *__cdecl R_AllocModelLightingGlobal(uint32_t bytes)
+char *R_AllocModelLightingGlobal(uint32_t bytes)
 {
     return Z_VirtualAlloc(bytes, "R_AllocModelLightingGlobal", 18);
 }
 
-void __cdecl R_ResetModelLighting()
+void R_ResetModelLighting()
 {
     float *v1; // [esp+0h] [ebp-14h]
     uint32_t entryIndex; // [esp+4h] [ebp-10h]
@@ -624,7 +624,7 @@ void __cdecl R_ResetModelLighting()
     smodelLightGlob.local.assignedCount = 0;
 }
 
-void __cdecl R_InitModelLightingImage()
+void R_InitModelLightingImage()
 {
     bool useAltUpdate; // [esp+1h] [ebp-1h]
 
@@ -646,7 +646,7 @@ void __cdecl R_InitModelLightingImage()
     modelLightGlob.image = modelLightGlob.lightImages[0];
 }
 
-void __cdecl R_ShutdownModelLightingImage()
+void R_ShutdownModelLightingImage()
 {
     int imgIndex; // [esp+0h] [ebp-4h]
 
@@ -663,13 +663,13 @@ void __cdecl R_ShutdownModelLightingImage()
     modelLightGlob.image = 0;
 }
 
-void __cdecl R_InitStaticModelLighting()
+void R_InitStaticModelLighting()
 {
     smodelLightGlob.local.assignedCount = 0;
     smodelLightGlob.local.freeableCount = 0;
 }
 
-void __cdecl R_ApplyLightGridColorsPatch(const GfxModelLightingPatch *patch, uint8_t *pixels)
+void R_ApplyLightGridColorsPatch(const GfxModelLightingPatch *patch, uint8_t *pixels)
 {
     GfxLightGridColors packed; // [esp+170h] [ebp-A8h] BYREF
 
@@ -689,7 +689,7 @@ void __cdecl R_ApplyLightGridColorsPatch(const GfxModelLightingPatch *patch, uin
     }
 }
 
-void __cdecl RB_PatchModelLighting(const GfxModelLightingPatch *patchList, uint32_t patchCount)
+void RB_PatchModelLighting(const GfxModelLightingPatch *patchList, uint32_t patchCount)
 {
     uint32_t modelLightingIndex; // [esp+4h] [ebp-4Ch]
     int v6; // [esp+8h] [ebp-48h]

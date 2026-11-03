@@ -152,12 +152,12 @@ uint32_t Win_InitThreads()
 
 // *(_DWORD *)(*(_DWORD *)(*((_DWORD *)NtCurrentTeb()->ThreadLocalStoragePointer + _tls_index) + 4)
 
-void __cdecl Sys_Mkdir(const char *path)
+void Sys_Mkdir(const char *path)
 {
     _mkdir(path);
 }
 
-BOOL __cdecl Sys_RemoveDirTree(const char *path)
+BOOL Sys_RemoveDirTree(const char *path)
 {
     bool v2; // [esp+8h] [ebp-250h]
     int handle; // [esp+1Ch] [ebp-23Ch]
@@ -196,7 +196,7 @@ BOOL __cdecl Sys_RemoveDirTree(const char *path)
     return !hasError && _rmdir(path) != -1;
 }
 
-void __cdecl Sys_ListFilteredFiles(
+void Sys_ListFilteredFiles(
     HunkUser *user,
     const char *basedir,
     const char *subdirs,
@@ -238,7 +238,7 @@ void __cdecl Sys_ListFilteredFiles(
     }
 }
 
-BOOL __cdecl HasFileExtension(const char *name, const char *extension)
+BOOL HasFileExtension(const char *name, const char *extension)
 {
     char search[260]; // [esp+0h] [ebp-108h] BYREF
 
@@ -246,7 +246,7 @@ BOOL __cdecl HasFileExtension(const char *name, const char *extension)
     return I_stricmpwild(search, name) == 0;
 }
 
-int __cdecl Sys_CountFileList(char **list)
+int Sys_CountFileList(char **list)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -262,7 +262,7 @@ int __cdecl Sys_CountFileList(char **list)
     return i;
 }
 
-char **__cdecl Sys_ListFiles(
+char **Sys_ListFiles(
     const char *directory,
     const char *extension,
     const char *filter,
@@ -376,20 +376,20 @@ char **__cdecl Sys_ListFiles(
 
 
 char cwd[256];
-char *__cdecl Sys_Cwd()
+char *Sys_Cwd()
 {
     _getcwd(cwd, 255);
     cwd[255] = 0;
     return cwd;
 }
 
-const char *__cdecl Sys_DefaultCDPath()
+const char *Sys_DefaultCDPath()
 {
     return "";
 }
 
 char exePath[256];
-char *__cdecl Sys_DefaultInstallPath()
+char *Sys_DefaultInstallPath()
 {
     char *v0; // eax
     uint32_t len; // [esp+0h] [ebp-8h]

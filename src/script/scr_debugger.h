@@ -262,84 +262,84 @@ struct scrDebuggerGlob_t // sizeof=0x2B8
 };
 static_assert(LAYOUT_32BIT(sizeof(scrDebuggerGlob_t) == 0x2B8));
 
-void __cdecl TRACK_scr_debugger();
-void __cdecl Scr_KeyEvent(int key);
-void __cdecl Scr_AddDebugText(char *text);
-void __cdecl Scr_AddManualBreakpoint(uint8_t *codePos);
-void __cdecl Scr_AddBreakpoint(const uint8_t *codePos);
-char *__cdecl Scr_FindBreakpointInfo(const char *codePos);
-Scr_Breakpoint *__cdecl Scr_AllocBreakpoint();
-void __cdecl Scr_FreeBreakpoint(Scr_Breakpoint *breakpoint);
-Scr_WatchElement_s *__cdecl Scr_ReadElement();
-void __cdecl Scr_FreeLineBreakpoint(Scr_Breakpoint *breakpoint, bool deleteElement);
-void __cdecl Scr_RemoveManualBreakpoint(uint8_t *codePos);
-void __cdecl Scr_RemoveBreakpoint(uint8_t *codePos);
-void __cdecl Scr_WriteElement(Scr_WatchElement_s *element);
-void __cdecl Scr_MonitorCommand(const char *text);
+void TRACK_scr_debugger();
+void Scr_KeyEvent(int key);
+void Scr_AddDebugText(char *text);
+void Scr_AddManualBreakpoint(uint8_t *codePos);
+void Scr_AddBreakpoint(const uint8_t *codePos);
+char *Scr_FindBreakpointInfo(const char *codePos);
+Scr_Breakpoint *Scr_AllocBreakpoint();
+void Scr_FreeBreakpoint(Scr_Breakpoint *breakpoint);
+Scr_WatchElement_s *Scr_ReadElement();
+void Scr_FreeLineBreakpoint(Scr_Breakpoint *breakpoint, bool deleteElement);
+void Scr_RemoveManualBreakpoint(uint8_t *codePos);
+void Scr_RemoveBreakpoint(uint8_t *codePos);
+void Scr_WriteElement(Scr_WatchElement_s *element);
+void Scr_MonitorCommand(const char *text);
 Scr_WatchElement_s *Scr_ResumeBreakpoints();
-void __cdecl Scr_SetTempBreakpoint(char *codePos, uint32_t threadId);
-void __cdecl Scr_FreeDebugMem(void *ptr);
-uint32_t *__cdecl Scr_AllocDebugMem(int size, const char *name);
-Scr_WatchElement_s *__cdecl Scr_GetElementRoot(Scr_WatchElement_s *element);
-void __cdecl Scr_FreeWatchElementChildrenStrict(Scr_WatchElement_s *element);
-void __cdecl Scr_FreeWatchElementChildren(Scr_WatchElement_s *element);
-void __cdecl Scr_RemoveValue(Scr_WatchElement_s *element);
-void __cdecl Scr_FreeWatchElementText(Scr_WatchElement_s *element);
-bool __cdecl Scr_IsSortWatchElement(Scr_WatchElement_s *element);
-int __cdecl CompareArrayIndices(uint32_t *arg1, uint32_t *arg2);
-void __cdecl Scr_DeltaElementValueText(Scr_WatchElement_s *element, const char *oldValueText);
-void __cdecl Scr_SetNonFieldElementRefText(Scr_WatchElement_s *element);
-void __cdecl Scr_PostSetText(Scr_WatchElement_s *element);
-const char *__cdecl Scr_GetElementThreadPos(Scr_WatchElement_s *element);
-void __cdecl Scr_SetElementRefText(Scr_WatchElement_s *element, char *fieldText);
-void __cdecl Scr_ConnectElementChildren(Scr_WatchElement_s *parentElement);
-void __cdecl Scr_SortElementChildren(Scr_WatchElement_s *parentElement);
-int __cdecl CompareThreadElements(int *arg1, int *arg2);
-Scr_WatchElement_s *__cdecl Scr_CreateWatchElement(char *text, Scr_WatchElement_s **prevElem, const char *name);
-void __cdecl Scr_Evaluate();
-void __cdecl Scr_CheckBreakonNotify(
+void Scr_SetTempBreakpoint(char *codePos, uint32_t threadId);
+void Scr_FreeDebugMem(void *ptr);
+uint32_t *Scr_AllocDebugMem(int size, const char *name);
+Scr_WatchElement_s *Scr_GetElementRoot(Scr_WatchElement_s *element);
+void Scr_FreeWatchElementChildrenStrict(Scr_WatchElement_s *element);
+void Scr_FreeWatchElementChildren(Scr_WatchElement_s *element);
+void Scr_RemoveValue(Scr_WatchElement_s *element);
+void Scr_FreeWatchElementText(Scr_WatchElement_s *element);
+bool Scr_IsSortWatchElement(Scr_WatchElement_s *element);
+int CompareArrayIndices(uint32_t *arg1, uint32_t *arg2);
+void Scr_DeltaElementValueText(Scr_WatchElement_s *element, const char *oldValueText);
+void Scr_SetNonFieldElementRefText(Scr_WatchElement_s *element);
+void Scr_PostSetText(Scr_WatchElement_s *element);
+const char *Scr_GetElementThreadPos(Scr_WatchElement_s *element);
+void Scr_SetElementRefText(Scr_WatchElement_s *element, char *fieldText);
+void Scr_ConnectElementChildren(Scr_WatchElement_s *parentElement);
+void Scr_SortElementChildren(Scr_WatchElement_s *parentElement);
+int CompareThreadElements(int *arg1, int *arg2);
+Scr_WatchElement_s *Scr_CreateWatchElement(char *text, Scr_WatchElement_s **prevElem, const char *name);
+void Scr_Evaluate();
+void Scr_CheckBreakonNotify(
     uint32_t notifyListOwnerId,
     uint32_t stringValue,
     VariableValue *top,
     char *pos,
     uint32_t localId);
-void __cdecl Scr_SpecialBreakpoint(VariableValue *top, char *pos, uint32_t localId, int opcode, int type);
-char __cdecl Scr_AllowBreakpoint(char *pos);
+void Scr_SpecialBreakpoint(VariableValue *top, char *pos, uint32_t localId, int opcode, int type);
+char Scr_AllowBreakpoint(char *pos);
 Scr_OpcodeList_s *Scr_UnbreakAllAssignmentPos();
-void __cdecl Scr_RemoveAssignmentBreakpoint(uint8_t *codePos);
-bool __cdecl Scr_RefToVariable(uint32_t id, int isObject);
+void Scr_RemoveAssignmentBreakpoint(uint8_t *codePos);
+bool Scr_RefToVariable(uint32_t id, int isObject);
 Scr_OpcodeList_s *Scr_BreakOnAllAssignmentPos();
-void __cdecl Scr_AddAssignmentBreakpoint(uint8_t *codePos);
+void Scr_AddAssignmentBreakpoint(uint8_t *codePos);
 void Scr_Step();
-void __cdecl Scr_InitDebuggerMain();
-void __cdecl Scr_ShutdownDebuggerMain();
-void __cdecl Scr_InitDebugger();
-void __cdecl Scr_ShutdownDebugger();
-void __cdecl Scr_InitDebuggerSystem();
+void Scr_InitDebuggerMain();
+void Scr_ShutdownDebuggerMain();
+void Scr_InitDebugger();
+void Scr_ShutdownDebugger();
+void Scr_InitDebuggerSystem();
 void Scr_InitBreakpoints();
-void __cdecl Scr_ShutdownDebuggerSystem(int restart);
-void __cdecl Scr_AddAssignmentPos(char *codePos);
-void __cdecl Scr_RunDebuggerRemote();
-void __cdecl Scr_RunDebugger();
+void Scr_ShutdownDebuggerSystem(int restart);
+void Scr_AddAssignmentPos(char *codePos);
+void Scr_RunDebuggerRemote();
+void Scr_RunDebugger();
 Scr_WatchElement_s *Scr_DisplayDebugger();
-void __cdecl Scr_WatchElementHitBreakpoint(Scr_WatchElement_s *element, bool enabled);
-void __cdecl Scr_ShowConsole();
+void Scr_WatchElementHitBreakpoint(Scr_WatchElement_s *element, bool enabled);
+void Scr_ShowConsole();
 void Scr_HitBreakpointInternal();
-int __cdecl Scr_HitBreakpoint(VariableValue *top, char *pos, uint32_t localId, int hitBreakpoint);
-bool __cdecl Scr_ConditionalExpression(Scr_WatchElement_s *element, uint32_t localId);
-void __cdecl Scr_HitBuiltinBreakpoint(
+int Scr_HitBreakpoint(VariableValue *top, char *pos, uint32_t localId, int hitBreakpoint);
+bool Scr_ConditionalExpression(Scr_WatchElement_s *element, uint32_t localId);
+void Scr_HitBuiltinBreakpoint(
     VariableValue *top,
     const char *pos,
     uint32_t localId,
     int opcode,
     int builtinIndex,
     uint32_t outparamcount);
-void __cdecl Scr_DebugKillThread(uint32_t threadId, const char *codePos);
-void __cdecl Scr_DebugTerminateThread(int topThread);
-int __cdecl Scr_UpdateDebugSocket();
+void Scr_DebugKillThread(uint32_t threadId, const char *codePos);
+void Scr_DebugTerminateThread(int topThread);
+int Scr_UpdateDebugSocket();
 void Scr_ToggleBreakpointRemote();
 void Scr_SelectScriptLineRemote();
-void __cdecl Scr_SetMiscScrollPaneComp(struct UI_LinesComponent *comp);
+void Scr_SetMiscScrollPaneComp(struct UI_LinesComponent *comp);
 void Scr_UpdateWatchHeightRemote();
 void Scr_SelectElementRemote();
 void Scr_ToggleExpandElementRemote();
@@ -363,15 +363,15 @@ void Scr_HitBreakpointRemote();
 void Scr_WatchElementHitBreakpointRemote();
 void Scr_KeepAliveRemote();
 void Scr_SortHitBreakpointsTopRemote();
-void __cdecl Sys_ConsolePrintRemote(int localClientNum);
-void __cdecl Scr_UpdateDebugger();
-char __cdecl Scr_WatchElementHasSameValue(Scr_WatchElement_s *element, VariableValue *newValue);
-int __cdecl Scr_HitAssignmentBreakpoint(VariableValue *top, char *pos, uint32_t localId, int forceBreak);
-bool __cdecl Scr_IgnoreErrors();
+void Sys_ConsolePrintRemote(int localClientNum);
+void Scr_UpdateDebugger();
+char Scr_WatchElementHasSameValue(Scr_WatchElement_s *element, VariableValue *newValue);
+int Scr_HitAssignmentBreakpoint(VariableValue *top, char *pos, uint32_t localId, int forceBreak);
+bool Scr_IgnoreErrors();
 
 void Scr_EnableBreakpoints(bool enable);
 bool Scr_CanDrawScript();
-void __cdecl Scr_DrawScript();
+void Scr_DrawScript();
 
 void Scr_UpdateRemoteDebugger();
 

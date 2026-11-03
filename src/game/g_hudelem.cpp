@@ -57,12 +57,12 @@ const game_hudelem_field_t fields_0[] = // LWSS: should be called "fields"
 game_hudelem_s g_hudelems[MAX_HUDELEMS_TOTAL];
 
 
-void __cdecl TRACK_g_hudelem()
+void TRACK_g_hudelem()
 {
     track_static_alloc_internal(g_hudelems, sizeof(g_hudelems), "g_hudelems", 10);
 }
 
-game_hudelem_s *__cdecl HudElem_Alloc(int32_t clientNum, int32_t teamNum)
+game_hudelem_s *HudElem_Alloc(int32_t clientNum, int32_t teamNum)
 {
     uint32_t i; // [esp+0h] [ebp-4h]
 
@@ -81,7 +81,7 @@ game_hudelem_s *__cdecl HudElem_Alloc(int32_t clientNum, int32_t teamNum)
     return 0;
 }
 
-void __cdecl HudElem_SetDefaults(game_hudelem_s *hud)
+void HudElem_SetDefaults(game_hudelem_s *hud)
 {
 	iassert(hud);
 	bcassert(hud - g_hudelems, ARRAY_COUNT(g_hudelems));
@@ -154,7 +154,7 @@ void __cdecl HudElem_SetDefaults(game_hudelem_s *hud)
     HudElem_ClearTypeSettings(hud);
 }
 
-void __cdecl HudElem_ClearTypeSettings(game_hudelem_s *hud)
+void HudElem_ClearTypeSettings(game_hudelem_s *hud)
 {
     hud->elem.width = 0;
     hud->elem.height = 0;
@@ -173,7 +173,7 @@ void __cdecl HudElem_ClearTypeSettings(game_hudelem_s *hud)
     hud->elem.text = 0;
 }
 
-void __cdecl HudElem_Free(game_hudelem_s *hud)
+void HudElem_Free(game_hudelem_s *hud)
 {
 	iassert(hud);
 	bcassert(hud - g_hudelems, ARRAY_COUNT(g_hudelems));
@@ -191,7 +191,7 @@ void __cdecl HudElem_Free(game_hudelem_s *hud)
 }
 
 #ifdef KISAK_MP
-void __cdecl HudElem_ClientDisconnect(gentity_s *ent)
+void HudElem_ClientDisconnect(gentity_s *ent)
 {
     uint32_t i; // [esp+0h] [ebp-4h]
 
@@ -206,7 +206,7 @@ void __cdecl HudElem_ClientDisconnect(gentity_s *ent)
 }
 #endif
 
-void __cdecl HudElem_DestroyAll()
+void HudElem_DestroyAll()
 {
     uint32_t i; // [esp+0h] [ebp-4h]
 
@@ -218,7 +218,7 @@ void __cdecl HudElem_DestroyAll()
     memset((uint8_t *)g_hudelems, 0, sizeof(g_hudelems));
 }
 
-void __cdecl HudElem_SetLocalizedString(game_hudelem_s *hud, int32_t offset)
+void HudElem_SetLocalizedString(game_hudelem_s *hud, int32_t offset)
 {
 #ifdef KISAK_MP
     *(int *)((char *)&hud->elem.type + fields_0[offset].ofs) = G_LocalizedStringIndex((char*)Scr_GetIString(0));
@@ -230,7 +230,7 @@ void __cdecl HudElem_SetLocalizedString(game_hudelem_s *hud, int32_t offset)
 #endif
 }
 
-void __cdecl HudElem_SetFlagForeground(game_hudelem_s *hud, int32_t offset)
+void HudElem_SetFlagForeground(game_hudelem_s *hud, int32_t offset)
 {
     uint32_t v2; // ecx
     int32_t *flags; // [esp+4h] [ebp-8h]
@@ -243,7 +243,7 @@ void __cdecl HudElem_SetFlagForeground(game_hudelem_s *hud, int32_t offset)
     *flags = v2;
 }
 
-void __cdecl HudElem_GetFlagForeground(game_hudelem_s *hud, int32_t offset)
+void HudElem_GetFlagForeground(game_hudelem_s *hud, int32_t offset)
 {
     if (fields_0[offset].ofs != HEOFS(elem.flags))
         MyAssertHandler(".\\game\\g_hudelem.cpp", 411, 0, "%s", "fields[offset].ofs == HEOFS( elem.flags )");
@@ -253,7 +253,7 @@ void __cdecl HudElem_GetFlagForeground(game_hudelem_s *hud, int32_t offset)
         Scr_AddBool(0);
 }
 
-void __cdecl HudElem_SetFlagHideWhenDead(game_hudelem_s *hud, int32_t offset)
+void HudElem_SetFlagHideWhenDead(game_hudelem_s *hud, int32_t offset)
 {
     uint32_t v2; // ecx
     int32_t *flags; // [esp+4h] [ebp-8h]
@@ -266,7 +266,7 @@ void __cdecl HudElem_SetFlagHideWhenDead(game_hudelem_s *hud, int32_t offset)
     *flags = v2;
 }
 
-void __cdecl HudElem_GetFlagHideWhenDead(game_hudelem_s *hud, int32_t offset)
+void HudElem_GetFlagHideWhenDead(game_hudelem_s *hud, int32_t offset)
 {
     if (fields_0[offset].ofs != HEOFS(elem.flags))
         MyAssertHandler(".\\game\\g_hudelem.cpp", 439, 0, "%s", "fields[offset].ofs == HEOFS( elem.flags )");
@@ -276,7 +276,7 @@ void __cdecl HudElem_GetFlagHideWhenDead(game_hudelem_s *hud, int32_t offset)
         Scr_AddBool(0);
 }
 
-void __cdecl HudElem_SetFlagHideWhenInMenu(game_hudelem_s *hud, int32_t offset)
+void HudElem_SetFlagHideWhenInMenu(game_hudelem_s *hud, int32_t offset)
 {
     uint32_t v2; // ecx
     int32_t *flags; // [esp+4h] [ebp-8h]
@@ -289,7 +289,7 @@ void __cdecl HudElem_SetFlagHideWhenInMenu(game_hudelem_s *hud, int32_t offset)
     *flags = v2;
 }
 
-void __cdecl HudElem_GetFlagHideWhenInMenu(game_hudelem_s *hud, int32_t offset)
+void HudElem_GetFlagHideWhenInMenu(game_hudelem_s *hud, int32_t offset)
 {
     if (fields_0[offset].ofs != HEOFS(elem.flags))
         MyAssertHandler(".\\game\\g_hudelem.cpp", 467, 0, "%s", "fields[offset].ofs == HEOFS( elem.flags )");
@@ -299,12 +299,12 @@ void __cdecl HudElem_GetFlagHideWhenInMenu(game_hudelem_s *hud, int32_t offset)
         Scr_AddBool(0);
 }
 
-void __cdecl HudElem_SetBoolean(game_hudelem_s *hud, int32_t offset)
+void HudElem_SetBoolean(game_hudelem_s *hud, int32_t offset)
 {
     *(VariableUnion *)((char *)&hud->elem.type + fields_0[offset].ofs) = Scr_GetInt(0);
 }
 
-void __cdecl HudElem_SetColor(game_hudelem_s *hud, int32_t offset)
+void HudElem_SetColor(game_hudelem_s *hud, int32_t offset)
 {
     float color[3]; // [esp+6Ch] [ebp-Ch] BYREF
 
@@ -321,7 +321,7 @@ void __cdecl HudElem_SetColor(game_hudelem_s *hud, int32_t offset)
     hud->elem.color.b = SnapFloatToInt(clampedB);
 }
 
-void __cdecl HudElem_GetColor(game_hudelem_s *hud, int32_t offset)
+void HudElem_GetColor(game_hudelem_s *hud, int32_t offset)
 {
     float color[3]; // [esp+Ch] [ebp-Ch] BYREF
 
@@ -333,7 +333,7 @@ void __cdecl HudElem_GetColor(game_hudelem_s *hud, int32_t offset)
     Scr_AddVector(color);
 }
 
-void __cdecl HudElem_SetAlpha(game_hudelem_s *hud, int32_t offset)
+void HudElem_SetAlpha(game_hudelem_s *hud, int32_t offset)
 {
     float alpha; // [esp+24h] [ebp-4h]
 
@@ -346,13 +346,13 @@ void __cdecl HudElem_SetAlpha(game_hudelem_s *hud, int32_t offset)
     hud->elem.color.a = SnapFloatToInt(clampedAlpha);
 }
 
-void __cdecl HudElem_GetAlpha(game_hudelem_s *hud, int32_t offset)
+void HudElem_GetAlpha(game_hudelem_s *hud, int32_t offset)
 {
     iassert(fields_0[offset].ofs == HEOFS(elem.color));
     Scr_AddFloat(hud->elem.color.a * 0.003921568859368563);
 }
 
-void __cdecl HudElem_SetGlowColor(game_hudelem_s *hud, int32_t offset)
+void HudElem_SetGlowColor(game_hudelem_s *hud, int32_t offset)
 {
     float glowColor[3]; // [esp+6Ch] [ebp-Ch] BYREF
 
@@ -370,7 +370,7 @@ void __cdecl HudElem_SetGlowColor(game_hudelem_s *hud, int32_t offset)
     hud->elem.glowColor.b = SnapFloatToInt(clampedB);
 }
 
-void __cdecl HudElem_GetGlowColor(game_hudelem_s *hud, int32_t offset)
+void HudElem_GetGlowColor(game_hudelem_s *hud, int32_t offset)
 {
     float glowColor[3]; // [esp+Ch] [ebp-Ch] BYREF
 
@@ -382,7 +382,7 @@ void __cdecl HudElem_GetGlowColor(game_hudelem_s *hud, int32_t offset)
     Scr_AddVector(glowColor);
 }
 
-void __cdecl HudElem_SetGlowAlpha(game_hudelem_s *hud, int32_t offset)
+void HudElem_SetGlowAlpha(game_hudelem_s *hud, int32_t offset)
 {
     float glowAlpha; // [esp+24h] [ebp-4h]
 
@@ -395,14 +395,14 @@ void __cdecl HudElem_SetGlowAlpha(game_hudelem_s *hud, int32_t offset)
     hud->elem.glowColor.a = SnapFloatToInt(clampedGlowAlpha);
 }
 
-void __cdecl HudElem_GetGlowAlpha(game_hudelem_s *hud, int32_t offset)
+void HudElem_GetGlowAlpha(game_hudelem_s *hud, int32_t offset)
 {
     iassert(fields_0[offset].ofs == HEOFS(elem.glowColor));
 
     Scr_AddFloat(hud->elem.glowColor.a * 0.003921568859368563);
 }
 
-void __cdecl HudElem_SetFontScale(game_hudelem_s *hud, int32_t offset)
+void HudElem_SetFontScale(game_hudelem_s *hud, int32_t offset)
 {
     float scale; // [esp+10h] [ebp-4h]
     
@@ -432,12 +432,12 @@ void __cdecl HudElem_SetFontScale(game_hudelem_s *hud, int32_t offset)
     hud->elem.fontScale = scale;
 }
 
-void __cdecl HudElem_SetFont(game_hudelem_s *hud, int32_t offset)
+void HudElem_SetFont(game_hudelem_s *hud, int32_t offset)
 {
     HudElem_SetEnumString(hud, &fields_0[offset], g_he_font, 6);
 }
 
-void __cdecl HudElem_SetEnumString(
+void HudElem_SetEnumString(
     game_hudelem_s *hud,
     const game_hudelem_field_t *f,
     const char **names,
@@ -479,12 +479,12 @@ void __cdecl HudElem_SetEnumString(
     Scr_Error(errormsg);
 }
 
-void __cdecl HudElem_GetFont(game_hudelem_s *hud, int32_t offset)
+void HudElem_GetFont(game_hudelem_s *hud, int32_t offset)
 {
     HudElem_GetEnumString(hud, &fields_0[offset], g_he_font, 6);
 }
 
-void __cdecl HudElem_GetEnumString(
+void HudElem_GetEnumString(
     game_hudelem_s *hud,
     const game_hudelem_field_t *f,
     const char **names,
@@ -506,47 +506,47 @@ void __cdecl HudElem_GetEnumString(
     Scr_AddString((char *)names[index]);
 }
 
-void __cdecl HudElem_SetAlignX(game_hudelem_s *hud, int32_t offset)
+void HudElem_SetAlignX(game_hudelem_s *hud, int32_t offset)
 {
     HudElem_SetEnumString(hud, &fields_0[offset], g_he_alignx, 3);
 }
 
-void __cdecl HudElem_GetAlignX(game_hudelem_s *hud, int32_t offset)
+void HudElem_GetAlignX(game_hudelem_s *hud, int32_t offset)
 {
     HudElem_GetEnumString(hud, &fields_0[offset], g_he_alignx, 3);
 }
 
-void __cdecl HudElem_SetAlignY(game_hudelem_s *hud, int32_t offset)
+void HudElem_SetAlignY(game_hudelem_s *hud, int32_t offset)
 {
     HudElem_SetEnumString(hud, &fields_0[offset], g_he_aligny, 3);
 }
 
-void __cdecl HudElem_GetAlignY(game_hudelem_s *hud, int32_t offset)
+void HudElem_GetAlignY(game_hudelem_s *hud, int32_t offset)
 {
     HudElem_GetEnumString(hud, &fields_0[offset], g_he_aligny, 3);
 }
 
-void __cdecl HudElem_SetHorzAlign(game_hudelem_s *hud, int32_t offset)
+void HudElem_SetHorzAlign(game_hudelem_s *hud, int32_t offset)
 {
     HudElem_SetEnumString(hud, &fields_0[offset], g_he_horzalign, 8);
 }
 
-void __cdecl HudElem_GetHorzAlign(game_hudelem_s *hud, int32_t offset)
+void HudElem_GetHorzAlign(game_hudelem_s *hud, int32_t offset)
 {
     HudElem_GetEnumString(hud, &fields_0[offset], g_he_horzalign, 8);
 }
 
-void __cdecl HudElem_SetVertAlign(game_hudelem_s *hud, int32_t offset)
+void HudElem_SetVertAlign(game_hudelem_s *hud, int32_t offset)
 {
     HudElem_SetEnumString(hud, &fields_0[offset], g_he_vertalign, 8);
 }
 
-void __cdecl HudElem_GetVertAlign(game_hudelem_s *hud, int32_t offset)
+void HudElem_GetVertAlign(game_hudelem_s *hud, int32_t offset)
 {
     HudElem_GetEnumString(hud, &fields_0[offset], g_he_vertalign, 8);
 }
 
-void __cdecl Scr_GetHudElemField(uint32_t entnum, uint32_t offset)
+void Scr_GetHudElemField(uint32_t entnum, uint32_t offset)
 {
     game_hudelem_s *hud; // [esp+0h] [ebp-8h]
     const game_hudelem_field_t *f; // [esp+4h] [ebp-4h]
@@ -563,7 +563,7 @@ void __cdecl Scr_GetHudElemField(uint32_t entnum, uint32_t offset)
         Scr_GetGenericField((uint8_t *)hud, f->type, f->ofs);
 }
 
-void __cdecl Scr_SetHudElemField(uint32_t entnum, uint32_t offset)
+void Scr_SetHudElemField(uint32_t entnum, uint32_t offset)
 {
     game_hudelem_s *hud; // [esp+0h] [ebp-8h]
     const game_hudelem_field_t *f; // [esp+4h] [ebp-4h]
@@ -580,7 +580,7 @@ void __cdecl Scr_SetHudElemField(uint32_t entnum, uint32_t offset)
         Scr_SetGenericField((uint8_t *)hud, f->type, f->ofs);
 }
 
-void __cdecl Scr_FreeHudElemConstStrings(game_hudelem_s *hud)
+void Scr_FreeHudElemConstStrings(game_hudelem_s *hud)
 {
     const game_hudelem_field_t *f; // [esp+0h] [ebp-4h]
 
@@ -591,7 +591,7 @@ void __cdecl Scr_FreeHudElemConstStrings(game_hudelem_s *hud)
     }
 }
 
-void __cdecl GScr_NewHudElem()
+void GScr_NewHudElem()
 {
     game_hudelem_s *hud; // [esp+0h] [ebp-4h]
 
@@ -601,7 +601,7 @@ void __cdecl GScr_NewHudElem()
     Scr_AddHudElem(hud);
 }
 
-void __cdecl GScr_NewClientHudElem()
+void GScr_NewClientHudElem()
 {
     game_hudelem_s *hud; // [esp+0h] [ebp-8h]
     gentity_s *ent; // [esp+4h] [ebp-4h]
@@ -620,7 +620,7 @@ void __cdecl GScr_NewClientHudElem()
 }
 
 #ifdef KISAK_MP
-void __cdecl GScr_NewTeamHudElem()
+void GScr_NewTeamHudElem()
 {
     game_hudelem_s *v0; // eax
     uint16_t teamName; // [esp+0h] [ebp-Ch]
@@ -651,7 +651,7 @@ void __cdecl GScr_NewTeamHudElem()
 }
 #endif
 
-void __cdecl GScr_AddFieldsForHudElems()
+void GScr_AddFieldsForHudElems()
 {
     const game_hudelem_field_t *f; // [esp+4h] [ebp-4h]
 
@@ -665,7 +665,7 @@ void __cdecl GScr_AddFieldsForHudElems()
     }
 }
 
-void __cdecl HECmd_SetText(scr_entref_t entref)
+void HECmd_SetText(scr_entref_t entref)
 {
     int32_t v1; // eax
     char string[1024]; // [esp+0h] [ebp-408h] BYREF
@@ -679,7 +679,7 @@ void __cdecl HECmd_SetText(scr_entref_t entref)
     hud->elem.text = v1;
 }
 
-game_hudelem_s *__cdecl HECmd_GetHudElem(scr_entref_t entref)
+game_hudelem_s *HECmd_GetHudElem(scr_entref_t entref)
 {
     if (entref.classnum == CLASS_NUM_HUDELEM)
     {
@@ -694,7 +694,7 @@ game_hudelem_s *__cdecl HECmd_GetHudElem(scr_entref_t entref)
     }
 }
 
-void __cdecl HECmd_ClearAllTextAfterHudElem(scr_entref_t entref)
+void HECmd_ClearAllTextAfterHudElem(scr_entref_t entref)
 {
     int32_t configStringIndex; // [esp+0h] [ebp-8h]
     game_hudelem_s *hud; // [esp+4h] [ebp-4h]
@@ -708,7 +708,7 @@ void __cdecl HECmd_ClearAllTextAfterHudElem(scr_entref_t entref)
         SV_SetConfigstring(CS_LOCALIZED_STRINGS + configStringIndex, (char *)"");
 }
 
-void __cdecl HECmd_SetMaterial(scr_entref_t entref)
+void HECmd_SetMaterial(scr_entref_t entref)
 {
     int32_t width; // [esp+0h] [ebp-14h]
     int32_t height; // [esp+4h] [ebp-10h]
@@ -746,7 +746,7 @@ void __cdecl HECmd_SetMaterial(scr_entref_t entref)
     hud->elem.height = height;
 }
 
-void __cdecl HECmd_SetTargetEnt(scr_entref_t entref)
+void HECmd_SetTargetEnt(scr_entref_t entref)
 {
     game_hudelem_s *hud; // [esp+0h] [ebp-8h]
     gentity_s *ent; // [esp+4h] [ebp-4h]
@@ -758,17 +758,17 @@ void __cdecl HECmd_SetTargetEnt(scr_entref_t entref)
         Com_PrintWarning(CON_CHANNEL_SERVER, "SetTargetEnt() called on a non-broadcasting entity, may not show in client snapshots.\n");
 }
 
-void __cdecl HECmd_ClearTargetEnt(scr_entref_t entref)
+void HECmd_ClearTargetEnt(scr_entref_t entref)
 {
     HECmd_GetHudElem(entref)->elem.targetEntNum = ENTITYNUM_NONE;
 }
 
-void __cdecl HECmd_SetTimer(scr_entref_t entref)
+void HECmd_SetTimer(scr_entref_t entref)
 {
     HECmd_SetTimer_Internal(entref, HE_TYPE_TIMER_DOWN, "setTimer");
 }
 
-void __cdecl HECmd_SetTimer_Internal(scr_entref_t entref, he_type_t type, const char *cmdName)
+void HECmd_SetTimer_Internal(scr_entref_t entref, he_type_t type, const char *cmdName)
 {
     const char *v3; // eax
     const char *v4; // eax
@@ -807,27 +807,27 @@ void __cdecl HECmd_SetTimer_Internal(scr_entref_t entref, he_type_t type, const 
     hud->elem.time = time + level.time;
 }
 
-void __cdecl HECmd_SetTimerUp(scr_entref_t entref)
+void HECmd_SetTimerUp(scr_entref_t entref)
 {
     HECmd_SetTimer_Internal(entref, HE_TYPE_TIMER_UP, "setTimerUp");
 }
 
-void __cdecl HECmd_SetTenthsTimer(scr_entref_t entref)
+void HECmd_SetTenthsTimer(scr_entref_t entref)
 {
     HECmd_SetTimer_Internal(entref, HE_TYPE_TENTHS_TIMER_DOWN, "setTenthsTimer");
 }
 
-void __cdecl HECmd_SetTenthsTimerUp(scr_entref_t entref)
+void HECmd_SetTenthsTimerUp(scr_entref_t entref)
 {
     HECmd_SetTimer_Internal(entref, HE_TYPE_TENTHS_TIMER_UP, "setTenthsTimerUp");
 }
 
-void __cdecl HECmd_SetClock(scr_entref_t entref)
+void HECmd_SetClock(scr_entref_t entref)
 {
     HECmd_SetClock_Internal(entref, HE_TYPE_CLOCK_DOWN, "setClock");
 }
 
-void __cdecl HECmd_SetClock_Internal(scr_entref_t entref, he_type_t type, const char *cmdName)
+void HECmd_SetClock_Internal(scr_entref_t entref, he_type_t type, const char *cmdName)
 {
     float v9; // [esp+8h] [ebp-3Ch]
     float v10; // [esp+18h] [ebp-2Ch]
@@ -888,12 +888,12 @@ void __cdecl HECmd_SetClock_Internal(scr_entref_t entref, he_type_t type, const 
     hud->elem.height = height;
 }
 
-void __cdecl HECmd_SetClockUp(scr_entref_t entref)
+void HECmd_SetClockUp(scr_entref_t entref)
 {
     HECmd_SetClock_Internal(entref, HE_TYPE_CLOCK_UP, "setClockUp");
 }
 
-void __cdecl HECmd_SetValue(scr_entref_t entref)
+void HECmd_SetValue(scr_entref_t entref)
 {
     game_hudelem_s *hud; // [esp+0h] [ebp-8h]
     float value; // [esp+4h] [ebp-4h]
@@ -905,7 +905,7 @@ void __cdecl HECmd_SetValue(scr_entref_t entref)
     hud->elem.value = value;
 }
 
-void __cdecl HECmd_SetWaypoint(scr_entref_t entref)
+void HECmd_SetWaypoint(scr_entref_t entref)
 {
     VariableUnion v1; // eax
     int32_t numParam; // [esp+4h] [ebp-8h]
@@ -926,7 +926,7 @@ void __cdecl HECmd_SetWaypoint(scr_entref_t entref)
     }
 }
 
-void __cdecl HECmd_FadeOverTime(scr_entref_t entref)
+void HECmd_FadeOverTime(scr_entref_t entref)
 {
     float fadeTime; // [esp+1Ch] [ebp-8h]
     game_hudelem_s *hud; // [esp+20h] [ebp-4h]
@@ -948,7 +948,7 @@ void __cdecl HECmd_FadeOverTime(scr_entref_t entref)
     hud->elem.fadeStartTime = level.time;
     hud->elem.fadeTime = SnapFloatToInt(fadeTime * 1000.0f);}
 
-void __cdecl HECmd_ScaleOverTime(scr_entref_t entref)
+void HECmd_ScaleOverTime(scr_entref_t entref)
 {
     const char *v1; // eax
     const char *v2; // eax
@@ -984,7 +984,7 @@ void __cdecl HECmd_ScaleOverTime(scr_entref_t entref)
     hud->elem.height = height;
 }
 
-void __cdecl HECmd_MoveOverTime(scr_entref_t entref)
+void HECmd_MoveOverTime(scr_entref_t entref)
 {
     const char *v1; // eax
     const char *v2; // eax
@@ -1014,7 +1014,7 @@ void __cdecl HECmd_MoveOverTime(scr_entref_t entref)
     hud->elem.fromAlignScreen = hud->elem.alignScreen;
 }
 
-void __cdecl HECmd_Reset(scr_entref_t entref)
+void HECmd_Reset(scr_entref_t entref)
 {
     game_hudelem_s *hud; // [esp+0h] [ebp-4h]
 
@@ -1022,7 +1022,7 @@ void __cdecl HECmd_Reset(scr_entref_t entref)
     HudElem_SetDefaults(hud);
 }
 
-void __cdecl HECmd_Destroy(scr_entref_t entref)
+void HECmd_Destroy(scr_entref_t entref)
 {
     game_hudelem_s *hud; // [esp+0h] [ebp-4h]
 
@@ -1032,7 +1032,7 @@ void __cdecl HECmd_Destroy(scr_entref_t entref)
 
 #ifdef KISAK_MP
 
-void __cdecl HECmd_SetPlayerNameString(scr_entref_t entref)
+void HECmd_SetPlayerNameString(scr_entref_t entref)
 {
     game_hudelem_s *hud; // [esp+0h] [ebp-8h]
     gentity_s *player; // [esp+4h] [ebp-4h]
@@ -1058,7 +1058,7 @@ void __cdecl HECmd_SetPlayerNameString(scr_entref_t entref)
     }
 }
 
-void __cdecl HECmd_SetGameTypeString(scr_entref_t entref)
+void HECmd_SetGameTypeString(scr_entref_t entref)
 {
     const char *gametype; // [esp+0h] [ebp-8h]
     game_hudelem_s *hud; // [esp+4h] [ebp-4h]
@@ -1085,7 +1085,7 @@ void __cdecl HECmd_SetGameTypeString(scr_entref_t entref)
     }
 }
 
-void __cdecl HECmd_SetMapNameString(scr_entref_t entref)
+void HECmd_SetMapNameString(scr_entref_t entref)
 {
     game_hudelem_s *hud; // [esp+0h] [ebp-8h]
     const char *mapname; // [esp+4h] [ebp-4h]
@@ -1112,7 +1112,7 @@ void __cdecl HECmd_SetMapNameString(scr_entref_t entref)
 }
 #endif
 
-void __cdecl HECmd_SetPulseFX(scr_entref_t entref)
+void HECmd_SetPulseFX(scr_entref_t entref)
 {
     game_hudelem_s *hud; // [esp+8h] [ebp-8h]
     gclient_s *ps; // [esp+4h] [ebp-4h]
@@ -1136,7 +1136,7 @@ void __cdecl HECmd_SetPulseFX(scr_entref_t entref)
     hud->elem.soundID = ps->ps.hudElemLastAssignedSoundID;
 }
 
-VariableUnion __cdecl GetIntGTZero(uint32_t index)
+VariableUnion GetIntGTZero(uint32_t index)
 {
     const char *v1; // eax
     int32_t number; // [esp+0h] [ebp-4h]
@@ -1264,7 +1264,7 @@ static const BuiltinMethodDef methods_0[20] =
 
 #endif // KISAK_SP
 
-void(__cdecl *__cdecl HudElem_GetMethod(const char **pName))(scr_entref_t)
+void(*HudElem_GetMethod(const char **pName))(scr_entref_t)
 {
     uint32_t i; // [esp+18h] [ebp-4h]
 
@@ -1281,7 +1281,7 @@ void(__cdecl *__cdecl HudElem_GetMethod(const char **pName))(scr_entref_t)
 
 #ifdef KISAK_MP
 hudelem_s g_dummyHudCurrent_0;
-void __cdecl HudElem_UpdateClient(gclient_s *client, int32_t clientNum, hudelem_update_t which)
+void HudElem_UpdateClient(gclient_s *client, int32_t clientNum, hudelem_update_t which)
 {
     int32_t archivalCount; // [esp+8h] [ebp-14h]
     int32_t currentCount; // [esp+Ch] [ebp-10h]

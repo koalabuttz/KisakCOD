@@ -8,7 +8,7 @@
 #include <ui/ui.h>
 #include <universal/com_sndalias.h>
 
-void __cdecl Key_KeynumToStringBuf(int keynum, char *buf, int buflen)
+void Key_KeynumToStringBuf(int keynum, char *buf, int buflen)
 {
     const char *v5; // r3
 
@@ -16,7 +16,7 @@ void __cdecl Key_KeynumToStringBuf(int keynum, char *buf, int buflen)
     I_strncpyz(buf, v5, buflen);
 }
 
-int __cdecl CL_ShutdownUI()
+int CL_ShutdownUI()
 {
     if (!cls.uiStarted)
         return 0;
@@ -32,7 +32,7 @@ int __cdecl CL_ShutdownUI()
     return 1;
 }
 
-void __cdecl CL_InitUI()
+void CL_InitUI()
 {
     int remoteScreenUpdateNesting; // r3
 

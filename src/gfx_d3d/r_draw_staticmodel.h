@@ -13,40 +13,40 @@ struct GfxStaticModelDrawStream // sizeof=0x1C
     uint32_t reflectionProbeIndex;
 };
 
-void __cdecl R_DrawStaticModelSurfLit(const uint32_t *primDrawSurfPos, GfxCmdBufContext context);
-int __cdecl R_GetNextStaticModelSurf(GfxStaticModelDrawStream *drawStream, XSurface **outSurf);
-void __cdecl R_DrawStaticModelSurf(const uint32_t *primDrawSurfPos, GfxCmdBufContext context);
-void __cdecl R_DrawStaticModelDrawSurfNonOptimized(GfxStaticModelDrawStream *drawStream, GfxCmdBufContext context);
-void __cdecl R_SetStaticModelVertexBuffer(GfxCmdBufPrimState *primState, XSurface *xsurf);
-void __cdecl R_DrawStaticModelDrawSurfPlacement(
+void R_DrawStaticModelSurfLit(const uint32_t *primDrawSurfPos, GfxCmdBufContext context);
+int R_GetNextStaticModelSurf(GfxStaticModelDrawStream *drawStream, XSurface **outSurf);
+void R_DrawStaticModelSurf(const uint32_t *primDrawSurfPos, GfxCmdBufContext context);
+void R_DrawStaticModelDrawSurfNonOptimized(GfxStaticModelDrawStream *drawStream, GfxCmdBufContext context);
+void R_SetStaticModelVertexBuffer(GfxCmdBufPrimState *primState, XSurface *xsurf);
+void R_DrawStaticModelDrawSurfPlacement(
     const GfxStaticModelDrawInst *smodelDrawInst,
     GfxCmdBufSourceState *source);
-void __cdecl R_DrawStaticModelDrawSurfLightingNonOptimized(
+void R_DrawStaticModelDrawSurfLightingNonOptimized(
     GfxStaticModelDrawStream *drawStream,
     GfxCmdBufContext context);
 
-void __cdecl R_DrawStaticModelCachedSurfLit(const uint32_t *primDrawSurfPos, GfxCmdBufContext context);
-void __cdecl R_DrawStaticModelCachedSurf(const uint32_t *primDrawSurfPos, GfxCmdBufContext context);
-void __cdecl R_SetupCachedStaticModelLighting(GfxCmdBufSourceState *source);
-int __cdecl R_ReadStaticModelPreTessDrawSurf(
+void R_DrawStaticModelCachedSurfLit(const uint32_t *primDrawSurfPos, GfxCmdBufContext context);
+void R_DrawStaticModelCachedSurf(const uint32_t *primDrawSurfPos, GfxCmdBufContext context);
+void R_SetupCachedStaticModelLighting(GfxCmdBufSourceState *source);
+int R_ReadStaticModelPreTessDrawSurf(
     GfxReadCmdBuf *readCmdBuf,
     GfxStaticModelPreTessSurf *pretessSurf,
     uint32_t *firstIndex,
     uint32_t *count);
-void __cdecl R_DrawStaticModelsPreTessDrawSurf(
+void R_DrawStaticModelsPreTessDrawSurf(
     GfxStaticModelPreTessSurf pretessSurf,
     uint32_t firstIndex,
     uint32_t count,
     GfxCmdBufContext context);
-void __cdecl R_DrawStaticModelsPreTessDrawSurfLighting(
+void R_DrawStaticModelsPreTessDrawSurfLighting(
     GfxStaticModelPreTessSurf pretessSurf,
     uint32_t firstIndex,
     uint32_t count,
     GfxCmdBufContext context);
 
-void __cdecl R_DrawStaticModelSkinnedSurf(const uint32_t *primDrawSurfPos, GfxCmdBufContext context);
-void __cdecl R_DrawStaticModelSkinnedSurfLit(const uint32_t *primDrawSurfPos, GfxCmdBufContext context);
-void __cdecl R_DrawStaticModelsSkinnedDrawSurf(GfxStaticModelDrawStream *drawStream, GfxCmdBufContext context);
+void R_DrawStaticModelSkinnedSurf(const uint32_t *primDrawSurfPos, GfxCmdBufContext context);
+void R_DrawStaticModelSkinnedSurfLit(const uint32_t *primDrawSurfPos, GfxCmdBufContext context);
+void R_DrawStaticModelsSkinnedDrawSurf(GfxStaticModelDrawStream *drawStream, GfxCmdBufContext context);
 
-uint32_t __cdecl R_ReadPrimDrawSurfInt(GfxReadCmdBuf *cmdBuf);
-const uint32_t *__cdecl R_ReadPrimDrawSurfData(GfxReadCmdBuf *cmdBuf, uint32_t count);
+uint32_t R_ReadPrimDrawSurfInt(GfxReadCmdBuf *cmdBuf);
+const uint32_t *R_ReadPrimDrawSurfData(GfxReadCmdBuf *cmdBuf, uint32_t count);

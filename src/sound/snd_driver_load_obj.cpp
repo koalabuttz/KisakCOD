@@ -18,14 +18,14 @@
 #endif
 
 #ifdef KISAK_DEDICATED
-LoadedSound* __cdecl SND_LoadFromBuffer(void* buffer, const char* soundName)
+LoadedSound* SND_LoadFromBuffer(void* buffer, const char* soundName)
 {
     return NULL;
 }
 #else
 
 #ifndef KISAK_OPENAL
-LoadedSound *__cdecl SND_LoadFromBuffer(void *buffer, const char *soundName)
+LoadedSound *SND_LoadFromBuffer(void *buffer, const char *soundName)
 {
     _AILSOUNDINFO info; // [esp+8h] [ebp-28h] BYREF
     LoadedSound *loadSnd; // [esp+2Ch] [ebp-4h]
@@ -59,7 +59,7 @@ LoadedSound *__cdecl SND_LoadFromBuffer(void *buffer, const char *soundName)
 // declared chunk sizes and never needed the total buffer length, but drwav_init_memory
 // bounds-checks against it for safety. SND_LoadFromBuffer has no callers outside this file
 // (see SND_LoadSoundFile below), so extending its signature is safe.
-LoadedSound *__cdecl SND_LoadFromBuffer(void *buffer, uint32_t bufferSize, const char *soundName)
+LoadedSound *SND_LoadFromBuffer(void *buffer, uint32_t bufferSize, const char *soundName)
 {
     iassert(buffer);
 
@@ -111,7 +111,7 @@ LoadedSound *__cdecl SND_LoadFromBuffer(void *buffer, uint32_t bufferSize, const
 
 #endif // KISAK_DEDICATED
 
-LoadedSound *__cdecl SND_LoadSoundFile(const char *name)
+LoadedSound *SND_LoadSoundFile(const char *name)
 {
     void *buffer; // [esp+4h] [ebp-10Ch] BYREF
     char realname[256]; // [esp+8h] [ebp-108h] BYREF

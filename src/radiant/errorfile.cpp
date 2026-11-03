@@ -307,7 +307,7 @@ static void ErrorLog_AddEntry( const float *dir, const char *mapfile,
 // Sort error-log entries by material name, then by map-file reference (both
 // case-insensitive).  IDA: I_stricmp(a1[1], a2[1]) then I_stricmp(*a1, *a2) — a1[1]
 // is the matname (+4), *a1 is the mapfile (+0).
-static int __cdecl ErrorLog_Compare( const void *a, const void *b )
+static int ErrorLog_Compare( const void *a, const void *b )
 {
     const s_errLogEntry_t *ea = (const s_errLogEntry_t *)a;
     const s_errLogEntry_t *eb = (const s_errLogEntry_t *)b;

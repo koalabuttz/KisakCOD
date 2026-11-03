@@ -8,7 +8,7 @@ struct $7272244CE635036285CD968BA6FC5DEE // sizeof=0x4
 
 $7272244CE635036285CD968BA6FC5DEE r_logFileGlob;
 
-void __cdecl RB_UpdateLogging()
+void RB_UpdateLogging()
 {
     if (RB_IsLogging())
         Dvar_SetInt((dvar_s *)r_logFile, r_logFile->current.integer - 1);
@@ -47,12 +47,12 @@ void RB_OpenLogFile()
     }
 }
 
-bool __cdecl RB_IsLogging()
+bool RB_IsLogging()
 {
     return r_logFile->current.integer && r_logFileGlob.fp != 0;
 }
 
-void __cdecl RB_LogPrint(const char *text)
+void RB_LogPrint(const char *text)
 {
     iassert( r_logFile->current.integer );
     if (RB_IsLogging())
@@ -62,7 +62,7 @@ void __cdecl RB_LogPrint(const char *text)
     }
 }
 
-const char *__cdecl RB_LogTechniqueType(MaterialTechniqueType techType)
+const char *RB_LogTechniqueType(MaterialTechniqueType techType)
 {
     const char *techniqueNames[TECHNIQUE_TOTAL_COUNT]; // [esp+0h] [ebp-90h]
 
@@ -112,7 +112,7 @@ const char *__cdecl RB_LogTechniqueType(MaterialTechniqueType techType)
     return techniqueNames[techType];
 }
 
-void __cdecl RB_LogPrintState_0(int stateBits0, int changedBits0)
+void RB_LogPrintState_0(int stateBits0, int changedBits0)
 {
     const char *v2; // eax
     const char *v3; // eax
@@ -189,7 +189,7 @@ void __cdecl RB_LogPrintState_0(int stateBits0, int changedBits0)
     RB_LogFromTable("Cull Face", stateBits0, changedBits0, 49152, 0, cullTable, 3);
 }
 
-void __cdecl RB_LogBlend(const char *format, uint32_t blend)
+void RB_LogBlend(const char *format, uint32_t blend)
 {
     const char *v2; // eax
     const char *blendNames[14]; // [esp+0h] [ebp-38h]
@@ -221,7 +221,7 @@ void __cdecl RB_LogBlend(const char *format, uint32_t blend)
     RB_LogPrint(v2);
 }
 
-void __cdecl RB_LogBlendOp(const char *format, uint32_t blendOp)
+void RB_LogBlendOp(const char *format, uint32_t blendOp)
 {
     const char *v2; // eax
     const char *blendOpNames[6]; // [esp+0h] [ebp-18h]
@@ -245,7 +245,7 @@ void __cdecl RB_LogBlendOp(const char *format, uint32_t blendOp)
     RB_LogPrint(v2);
 }
 
-void __cdecl RB_LogFromTable(
+void RB_LogFromTable(
     const char *keyName,
     int stateBits,
     int changedBits,
@@ -273,7 +273,7 @@ void __cdecl RB_LogFromTable(
     RB_LogPrint(v8);
 }
 
-void __cdecl RB_LogPrintState_1(int stateBits1, int changedBits1)
+void RB_LogPrintState_1(int stateBits1, int changedBits1)
 {
     StencilLogBits stencilLogFront; // [esp+0h] [ebp-78h] BYREF
     StencilLogBits stencilLogBack; // [esp+18h] [ebp-60h] BYREF
@@ -318,7 +318,7 @@ void __cdecl RB_LogPrintState_1(int stateBits1, int changedBits1)
     RB_LogStencilState(stateBits1, changedBits1, &stencilLogBack);
 }
 
-void __cdecl RB_LogBool(
+void RB_LogBool(
     const char *keyName,
     int stateBits,
     int changedBits,
@@ -337,7 +337,7 @@ void __cdecl RB_LogBool(
     RB_LogPrint(v6);
 }
 
-void __cdecl RB_LogStencilState(int stateBits1, int changedBits1, const StencilLogBits *desc)
+void RB_LogStencilState(int stateBits1, int changedBits1, const StencilLogBits *desc)
 {
     const char *v3; // eax
     const char *v4; // eax

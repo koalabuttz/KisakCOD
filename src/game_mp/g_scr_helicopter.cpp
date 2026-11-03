@@ -67,7 +67,7 @@ const BuiltinMethodDef s_methods[25] =
   { "setdamagestage", &CMD_Heli_SetDamageStage, 0 }
 }; // idb
 
-void __cdecl CMD_Heli_FreeHelicopter(scr_entref_t entref)
+void CMD_Heli_FreeHelicopter(scr_entref_t entref)
 {
     gentity_s *ent; // [esp+0h] [ebp-4h]
 
@@ -75,7 +75,7 @@ void __cdecl CMD_Heli_FreeHelicopter(scr_entref_t entref)
     G_VehFreeEntity(ent);
 }
 
-void __cdecl CMD_Heli_SetDamageStage(scr_entref_t entref)
+void CMD_Heli_SetDamageStage(scr_entref_t entref)
 {
     gentity_s *ent; // [esp+0h] [ebp-4h]
 
@@ -83,7 +83,7 @@ void __cdecl CMD_Heli_SetDamageStage(scr_entref_t entref)
     ent->s.un1.scale = Scr_GetInt(0);
 }
 
-void(__cdecl *__cdecl Helicopter_GetMethod(const char **pName))(scr_entref_t)
+void(*Helicopter_GetMethod(const char **pName))(scr_entref_t)
 {
     uint32_t i; // [esp+18h] [ebp-4h]
 
@@ -98,7 +98,7 @@ void(__cdecl *__cdecl Helicopter_GetMethod(const char **pName))(scr_entref_t)
     return 0;
 }
 
-void __cdecl Helicopter_RegisterDvars()
+void Helicopter_RegisterDvars()
 {
     DvarLimits min; // [esp+4h] [ebp-10h]
     DvarLimits mina; // [esp+4h] [ebp-10h]
@@ -349,7 +349,7 @@ void __cdecl Helicopter_RegisterDvars()
         "The amount of rotational momentum the helicopter has with regards to tilting.");
 }
 
-void __cdecl G_SpawnHelicopter(gentity_s *ent, gentity_s *owner, const char *vehicleInfoName, char *modelName)
+void G_SpawnHelicopter(gentity_s *ent, gentity_s *owner, const char *vehicleInfoName, char *modelName)
 {
     scr_vehicle_s *veh; // [esp+10h] [ebp-10h]
     team_t team; // [esp+14h] [ebp-Ch]
@@ -391,7 +391,7 @@ void __cdecl G_SpawnHelicopter(gentity_s *ent, gentity_s *owner, const char *veh
     Heli_InitFirstThink(ent);
 }
 
-void __cdecl Heli_InitFirstThink(gentity_s *pSelf)
+void Heli_InitFirstThink(gentity_s *pSelf)
 {
     float *prevAngles; // [esp+0h] [ebp-28h]
     float *angles; // [esp+4h] [ebp-24h]
@@ -429,7 +429,7 @@ void __cdecl Heli_InitFirstThink(gentity_s *pSelf)
     veh->flags |= 8u;
 }
 
-void __cdecl Helicopter_Pain(
+void Helicopter_Pain(
     gentity_s *pSelf,
     gentity_s *pAttacker,
     int32_t damage,
@@ -452,7 +452,7 @@ void __cdecl Helicopter_Pain(
     }
 }
 
-void __cdecl Helicopter_Die(
+void Helicopter_Die(
     gentity_s *pSelf,
     gentity_s *pInflictor,
     gentity_s *pAttacker,
@@ -476,7 +476,7 @@ void __cdecl Helicopter_Die(
     }
 }
 
-void __cdecl Helicopter_Controller(const gentity_s *pSelf, int32_t *partBits)
+void Helicopter_Controller(const gentity_s *pSelf, int32_t *partBits)
 {
     //float gunYaw; // [esp+4h] [ebp-38h]
     //float v3; // [esp+Ch] [ebp-30h]
@@ -513,7 +513,7 @@ void __cdecl Helicopter_Controller(const gentity_s *pSelf, int32_t *partBits)
         DObjSetLocalBoneIndex(obj, partBits, veh->boneIndex.barrel, vec3_origin, barrelAngles);
 }
 
-void __cdecl Helicopter_Think(gentity_s *ent)
+void Helicopter_Think(gentity_s *ent)
 {
     Scr_Vehicle_Think(ent);
     ent->nextthink = level.time + 50;

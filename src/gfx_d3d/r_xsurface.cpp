@@ -5,7 +5,7 @@
 
 #include <xanim/xanim.h>
 
-void __cdecl XSurfaceGetVerts(const XSurface *surf, float *pVert, float *pTexCoord, float *pNormal)
+void XSurfaceGetVerts(const XSurface *surf, float *pVert, float *pTexCoord, float *pNormal)
 {
     int render_count; // [esp+0h] [ebp-Ch]
     GfxPackedVertex *verts1; // [esp+4h] [ebp-8h]
@@ -35,13 +35,13 @@ void __cdecl XSurfaceGetVerts(const XSurface *surf, float *pVert, float *pTexCoo
     }
 }
 
-int __cdecl XSurfaceGetNumVerts(const XSurface *surface)
+int XSurfaceGetNumVerts(const XSurface *surface)
 {
     iassert( surface );
     return surface->vertCount;
 }
 
-int __cdecl XSurfaceGetNumTris(const XSurface *surface)
+int XSurfaceGetNumTris(const XSurface *surface)
 {
     iassert( surface );
     return surface->triCount;
@@ -58,7 +58,7 @@ int __cdecl XSurfaceGetNumTris(const XSurface *surface)
 // baseVert is broadcast into both 16-bit lanes of a dword so two indices are offset per add;
 // the caller guarantees baseVert+index <= USHRT_MAX (vertLimit <= 0x10000) so no lane carries.
 // ─────────────────────────────────────────────────────────────────────────────
-uint16_t *__cdecl R_CheckTris( const XSurface *surface, void *dstIndices, uint16_t baseVert )
+uint16_t *R_CheckTris( const XSurface *surface, void *dstIndices, uint16_t baseVert )
 {
     iassert( (reinterpret_cast<size_t>( surface->triIndices ) & 3) == 0 );
     iassert( (reinterpret_cast<size_t>( dstIndices ) & 3) == 0 );
@@ -90,7 +90,7 @@ uint16_t *__cdecl R_CheckTris( const XSurface *surface, void *dstIndices, uint16
 // (sub_456850) is separate + still parked.  Consumed by the editor's misc_model vert-snap
 // (VertSnap_CollectModel) and model ray-pick (select.cpp).
 // ─────────────────────────────────────────────────────────────────────────────
-int __cdecl Editor_ExtractXModelGeo( XModel *model, float *verts, int vertLimit,
+int Editor_ExtractXModelGeo( XModel *model, float *verts, int vertLimit,
                                      uint16_t *indices, int indexLimit )
 {
     iassert( model );

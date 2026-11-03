@@ -41,7 +41,7 @@ const char *bg_perkNames[PERK_COUNT] =
     "specialty_specialgrenade",
 };
 
-uint32_t __cdecl BG_GetPerkIndexForName(const char *perkName)
+uint32_t BG_GetPerkIndexForName(const char *perkName)
 {
     uint32_t idx; // [esp+0h] [ebp-4h]
 
@@ -52,7 +52,7 @@ uint32_t __cdecl BG_GetPerkIndexForName(const char *perkName)
     return idx;
 }
 
-void __cdecl Perks_RegisterDvars()
+void Perks_RegisterDvars()
 {
     DvarLimits min; // [esp+4h] [ebp-10h]
     DvarLimits mina; // [esp+4h] [ebp-10h]

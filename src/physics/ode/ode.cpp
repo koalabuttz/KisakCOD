@@ -847,7 +847,7 @@ void ODE_InitJoint(dxWorld* world, dxJoint* joint, dxJointTypeNum typenum)
     jointInit(joint);
 }
 
-dxJoint* __cdecl createJointInPlace(dxWorld* world, dxJoint* joint, dxJointTypeNum typenum)
+dxJoint* createJointInPlace(dxWorld* world, dxJoint* joint, dxJointTypeNum typenum)
 {
     dAASSERT(world);
     dAASSERT(joint);
@@ -1435,7 +1435,7 @@ extern "C" void dTestDataStructures()
 
 odeGlob_t odeGlob;
 
-void __cdecl ODE_LeakCheck()
+void ODE_LeakCheck()
 {
     iassert(Pool_FreeCount(&odeGlob.bodyPool) == ARRAY_COUNT(odeGlob.bodies));
 
@@ -1457,12 +1457,12 @@ void __cdecl ODE_LeakCheck()
     }
 }
 
-dxUserGeom *__cdecl Phys_GetWorldGeom()
+dxUserGeom *Phys_GetWorldGeom()
 {
     return &odeGlob.worldGeom;
 }
 
-void __cdecl ODE_Init()
+void ODE_Init()
 {
     Pool_Init((char *)odeGlob.bodies, &odeGlob.bodyPool, sizeof(dxBody), 512);
     Pool_Init(odeGlob.geoms, &odeGlob.geomPool, sizeof(dxGeomTransform), 2048);
@@ -1512,13 +1512,13 @@ dxBody *dBodyCreate(dxWorld *w)
     return b;
 }
 
-dxJointGroup *__cdecl dGetContactJointGroup(PhysWorld worldIndex)
+dxJointGroup *dGetContactJointGroup(PhysWorld worldIndex)
 {
     odeGlob.contactsGroup[worldIndex].num = 0;
     return &odeGlob.contactsGroup[worldIndex];
 }
 
-dxSimpleSpace *__cdecl dGetSimpleSpace(PhysWorld worldIndex)
+dxSimpleSpace *dGetSimpleSpace(PhysWorld worldIndex)
 {
     if (&odeGlob.space[worldIndex])
     {

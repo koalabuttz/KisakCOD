@@ -22,7 +22,7 @@ endif()
 set(HEADER_CONTENT "#pragma once
 #define BUILD_NUMBER ${BUILD_NUMBER}
 
-char *__cdecl getBuildNumber();
+char *getBuildNumber();
 int getBuildNumberAsInt();
 ")
 

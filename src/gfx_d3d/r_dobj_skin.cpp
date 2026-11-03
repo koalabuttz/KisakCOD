@@ -12,20 +12,20 @@
 #include "r_model_pose.h"
 #include "r_dpvs.h"
 
-static void __cdecl R_FlagXModelAsSkinned(GfxSceneEntity *sceneEnt, uint32_t surfaceCount)
+static void R_FlagXModelAsSkinned(GfxSceneEntity *sceneEnt, uint32_t surfaceCount)
 {
     iassert(sceneEnt->cull.state == CULL_STATE_SKINNED_PENDING);
     sceneEnt->cull.state = surfaceCount + 4;
 }
 
 #ifdef KISAK_MP
-static GfxSkinCacheEntry *__cdecl CG_GetSkinCacheEntry(cpose_t *pose)
+static GfxSkinCacheEntry *CG_GetSkinCacheEntry(cpose_t *pose)
 {
     return &pose->skinCacheEntry;
 }
 #endif
 
-static int __cdecl R_AllocSkinnedCachedVerts(int vertCount)
+static int R_AllocSkinnedCachedVerts(int vertCount)
 {
     LONG offset; // [esp+4h] [ebp-8h]
 
@@ -354,7 +354,7 @@ int  R_SkinSceneDObjModels(
     return totalSurfaceCount;
 }
 
-void __cdecl R_SkinGfxEntityCmd(GfxSceneEntity **data)
+void R_SkinGfxEntityCmd(GfxSceneEntity **data)
 {
     DObjAnimMat *boneMatrix; // [esp+0h] [ebp-14h]
     const DObj_s *obj; // [esp+4h] [ebp-10h] BYREF
@@ -373,7 +373,7 @@ void __cdecl R_SkinGfxEntityCmd(GfxSceneEntity **data)
     }
 }
 
-void __cdecl R_SkinSceneDObj(
+void R_SkinSceneDObj(
     GfxSceneEntity *sceneEnt,
     GfxSceneEntity *localSceneEnt,
     const DObj_s *obj,
@@ -407,7 +407,7 @@ void __cdecl R_SkinSceneDObj(
     }
 }
 
-int __cdecl DObjBad(const DObj_s *obj)
+int DObjBad(const DObj_s *obj)
 {
     int j; // [esp+0h] [ebp-4h]
 

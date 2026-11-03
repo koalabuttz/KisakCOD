@@ -48,7 +48,7 @@ visField_t visionDefFields[16] =
   { "r_filmDarkTint", 68, 2 }
 }; // idb
 
-void __cdecl CG_RegisterVisionSetsDvars()
+void CG_RegisterVisionSetsDvars()
 {
     DvarLimits min; // [esp+4h] [ebp-10h]
     DvarLimits mina; // [esp+4h] [ebp-10h]
@@ -72,12 +72,12 @@ void __cdecl CG_RegisterVisionSetsDvars()
     nightVisionDisableEffects = Dvar_RegisterBool("nightVisionDisableEffects", 0, DVAR_SAVED, "");
 }
 
-void __cdecl CG_InitVisionSetsMenu()
+void CG_InitVisionSetsMenu()
 {
-    DB_EnumXAssets(ASSET_TYPE_RAWFILE, (void(__cdecl *)(XAssetHeader, void *))CG_AddVisionSetMenuItem, 0, 0);
+    DB_EnumXAssets(ASSET_TYPE_RAWFILE, (void(*)(XAssetHeader, void *))CG_AddVisionSetMenuItem, 0, 0);
 }
 
-void __cdecl CG_AddVisionSetMenuItem(XAssetHeader header)
+void CG_AddVisionSetMenuItem(XAssetHeader header)
 {
     char devguiPath[260]; // [esp+0h] [ebp-310h] BYREF
     const char *visionSetNameEnd; // [esp+104h] [ebp-20Ch]
@@ -104,7 +104,7 @@ void __cdecl CG_AddVisionSetMenuItem(XAssetHeader header)
     }
 }
 
-void __cdecl CG_VisionSetsUpdate(int32_t localClientNum)
+void CG_VisionSetsUpdate(int32_t localClientNum)
 {
     int32_t idx; // [esp+4h] [ebp-4h]
 
@@ -124,7 +124,7 @@ void __cdecl CG_VisionSetsUpdate(int32_t localClientNum)
             &cgameGlob->visionSetCurrent[idx]);
 }
 
-void __cdecl UpdateVarsLerp(
+void UpdateVarsLerp(
     int32_t time,
     const visionSetVars_t *from,
     const visionSetVars_t *to,
@@ -204,7 +204,7 @@ void __cdecl UpdateVarsLerp(
     }
 }
 
-bool __cdecl LerpBool(bool from, bool to, float fraction, visionSetLerpStyle_t style)
+bool LerpBool(bool from, bool to, float fraction, visionSetLerpStyle_t style)
 {
     iassert(style != VISIONSETLERP_NONE);
     if (style < VISIONSETLERP_BACKFORTH_LINEAR || style > VISIONSETLERP_BACKFORTH_SMOOTH || fraction < 0.5)
@@ -213,7 +213,7 @@ bool __cdecl LerpBool(bool from, bool to, float fraction, visionSetLerpStyle_t s
         return from;
 }
 
-double __cdecl LerpFloat(float from, float to, float fraction, visionSetLerpStyle_t style)
+double LerpFloat(float from, float to, float fraction, visionSetLerpStyle_t style)
 {
     double v5; // st7
 
@@ -244,14 +244,14 @@ double __cdecl LerpFloat(float from, float to, float fraction, visionSetLerpStyl
     }
 }
 
-void __cdecl LerpVec3(float *from, float *to, float fraction, visionSetLerpStyle_t style, float *result)
+void LerpVec3(float *from, float *to, float fraction, visionSetLerpStyle_t style, float *result)
 {
     *result = LerpFloat(*from, *to, fraction, style);
     result[1] = LerpFloat(from[1], to[1], fraction, style);
     result[2] = LerpFloat(from[2], to[2], fraction, style);
 }
 
-char __cdecl CG_VisionSetStartLerp_To(
+char CG_VisionSetStartLerp_To(
     int32_t localClientNum,
     visionSetMode_t mode,
     visionSetLerpStyle_t style,
@@ -278,7 +278,7 @@ char __cdecl CG_VisionSetStartLerp_To(
     return 1;
 }
 
-char __cdecl GetVisionSet(int32_t localClientNum, char *name, visionSetVars_t *resultSettings)
+char GetVisionSet(int32_t localClientNum, char *name, visionSetVars_t *resultSettings)
 {
     int32_t idx; // [esp+10h] [ebp-4h]
     int32_t idxa; // [esp+10h] [ebp-4h]
@@ -318,7 +318,7 @@ char __cdecl GetVisionSet(int32_t localClientNum, char *name, visionSetVars_t *r
     }
 }
 
-char __cdecl LoadVisionFile(const char *name, visionSetVars_t *resultSettings)
+char LoadVisionFile(const char *name, visionSetVars_t *resultSettings)
 {
     char *fileBuf; // [esp+0h] [ebp-50h]
     char success; // [esp+7h] [ebp-49h]
@@ -335,7 +335,7 @@ char __cdecl LoadVisionFile(const char *name, visionSetVars_t *resultSettings)
     return success;
 }
 
-char *__cdecl RawBufferOpen(const char *name, const char *formatFullPath)
+char *RawBufferOpen(const char *name, const char *formatFullPath)
 {
     char *filebuf; // [esp+0h] [ebp-4Ch]
     char fullpath[68]; // [esp+4h] [ebp-48h] BYREF
@@ -353,7 +353,7 @@ char *__cdecl RawBufferOpen(const char *name, const char *formatFullPath)
     return 0;
 }
 
-char __cdecl LoadVisionSettingsFromBuffer(const char *buffer, const char *filename, visionSetVars_t *settings)
+char LoadVisionSettingsFromBuffer(const char *buffer, const char *filename, visionSetVars_t *settings)
 {
     int32_t fieldNum; // [esp+0h] [ebp-20h]
     bool wasRead[16]; // [esp+4h] [ebp-1Ch] BYREF
@@ -389,7 +389,7 @@ char __cdecl LoadVisionSettingsFromBuffer(const char *buffer, const char *filena
     return 1;
 }
 
-char __cdecl ApplyTokenToField(uint32_t fieldNum, const char *token, visionSetVars_t *settings)
+char ApplyTokenToField(uint32_t fieldNum, const char *token, visionSetVars_t *settings)
 {
     int32_t fieldType; // [esp+0h] [ebp-30h]
     int32_t tempInt; // [esp+Ch] [ebp-24h] BYREF
@@ -438,7 +438,7 @@ char __cdecl ApplyTokenToField(uint32_t fieldNum, const char *token, visionSetVa
     return 1;
 }
 
-char __cdecl VisionSetCurrent(int32_t localClientNum, visionSetMode_t mode, char *name)
+char VisionSetCurrent(int32_t localClientNum, visionSetMode_t mode, char *name)
 {
     cg_s *cgameGlob;
 
@@ -452,7 +452,7 @@ char __cdecl VisionSetCurrent(int32_t localClientNum, visionSetMode_t mode, char
     return 1;
 }
 
-void __cdecl SetDefaultVision(int32_t localClientNum)
+void SetDefaultVision(int32_t localClientNum)
 {
     cg_s *cgameGlob;
 
@@ -462,7 +462,7 @@ void __cdecl SetDefaultVision(int32_t localClientNum)
     CG_VisionSetStartLerp_To(localClientNum, VISIONSETMODE_NAKED, VISIONSETLERP_TO_SMOOTH, cgameGlob->visionNameNaked, 0);
 }
 
-void __cdecl CG_VisionSetConfigString_Naked(int32_t localClientNum)
+void CG_VisionSetConfigString_Naked(int32_t localClientNum)
 {
     parseInfo_t *v1; // eax
     int32_t duration; // [esp+0h] [ebp-10h]
@@ -485,7 +485,7 @@ void __cdecl CG_VisionSetConfigString_Naked(int32_t localClientNum)
         duration);
 }
 
-void __cdecl CG_VisionSetConfigString_Night(int32_t localClientNum)
+void CG_VisionSetConfigString_Night(int32_t localClientNum)
 {
     parseInfo_t *v1; // eax
     int32_t duration; // [esp+0h] [ebp-10h]
@@ -508,7 +508,7 @@ void __cdecl CG_VisionSetConfigString_Night(int32_t localClientNum)
         duration);
 }
 
-void __cdecl CG_VisionSetMyChanges()
+void CG_VisionSetMyChanges()
 {
     uint32_t visSetIdx; // [esp+8h] [ebp-8h]
     int32_t localClientNum; // [esp+Ch] [ebp-4h]
@@ -541,7 +541,7 @@ void __cdecl CG_VisionSetMyChanges()
     }
 }
 
-void __cdecl CG_VisionSetUpdateTweaksFromFile_Glow()
+void CG_VisionSetUpdateTweaksFromFile_Glow()
 {
     visionSetVars_t setVars; // [esp+8h] [ebp-50h] BYREF
 
@@ -563,7 +563,7 @@ void __cdecl CG_VisionSetUpdateTweaksFromFile_Glow()
     }
 }
 
-bool __cdecl LoadVisionFileForTweaks(visionSetVars_t *setVars)
+bool LoadVisionFileForTweaks(visionSetVars_t *setVars)
 {
     char *setName; // [esp+Ch] [ebp-4h]
     cg_s *cgameGlob;
@@ -577,7 +577,7 @@ bool __cdecl LoadVisionFileForTweaks(visionSetVars_t *setVars)
     return *setName && GetVisionSet(0, setName, setVars) != 0;
 }
 
-void __cdecl CG_VisionSetUpdateTweaksFromFile_Film()
+void CG_VisionSetUpdateTweaksFromFile_Film()
 {
     visionSetVars_t setVars; // [esp+10h] [ebp-50h] BYREF
 
@@ -601,7 +601,7 @@ void __cdecl CG_VisionSetUpdateTweaksFromFile_Film()
     }
 }
 
-char __cdecl CG_LookingThroughNightVision(int32_t localClientNum)
+char CG_LookingThroughNightVision(int32_t localClientNum)
 {
     int32_t weapIndex; // [esp+4h] [ebp-10h]
     WeaponDef *weapDef; // [esp+10h] [ebp-4h]
@@ -634,7 +634,7 @@ char __cdecl CG_LookingThroughNightVision(int32_t localClientNum)
     return 0;
 }
 
-void __cdecl CG_VisionSetApplyToRefdef(int32_t localClientNum)
+void CG_VisionSetApplyToRefdef(int32_t localClientNum)
 {
     float fade; // [esp+14h] [ebp-1Ch]
     GfxFilm *film; // [esp+1Ch] [ebp-14h]
@@ -678,7 +678,7 @@ void __cdecl CG_VisionSetApplyToRefdef(int32_t localClientNum)
     }
 }
 
-double __cdecl VisionFadeValue(int32_t localClientNum)
+double VisionFadeValue(int32_t localClientNum)
 {
     float v3; // [esp+4h] [ebp-50h]
     float v4; // [esp+8h] [ebp-4Ch]
@@ -783,7 +783,7 @@ double __cdecl VisionFadeValue(int32_t localClientNum)
     }
 }
 
-void __cdecl FadeRefDef(refdef_s *rd, float brightness)
+void FadeRefDef(refdef_s *rd, float brightness)
 {
     iassert(rd);
     iassert((brightness >= 0.f) && (brightness <= 1.f));

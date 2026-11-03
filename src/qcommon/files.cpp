@@ -17,7 +17,7 @@ int fs_serverReferencedIwds[1024];
 // KISAKTODO header-ify
 extern int fs_fakeChkSum;
 
-char *__cdecl FS_GetMapBaseName(char *mapname)
+char *FS_GetMapBaseName(char *mapname)
 {
     uint32_t v2; // [esp+0h] [ebp-18h]
     int c; // [esp+10h] [ebp-8h]
@@ -40,7 +40,7 @@ char *__cdecl FS_GetMapBaseName(char *mapname)
     return fs_mapBaseName;
 }
 
-BOOL __cdecl FS_serverPak(const char *pak)
+BOOL FS_serverPak(const char *pak)
 {
     char v2; // [esp+3h] [ebp-55h]
     char *v3; // [esp+8h] [ebp-50h]
@@ -56,7 +56,7 @@ BOOL __cdecl FS_serverPak(const char *pak)
     return strstr(szFile, "_svr_") != 0;
 }
 
-int __cdecl FS_iwIwd(char *iwd, char *base)
+int FS_iwIwd(char *iwd, char *base)
 {
     const char *v2; // eax
     const char *v4; // eax
@@ -110,7 +110,7 @@ int __cdecl FS_iwIwd(char *iwd, char *base)
     return 0;
 }
 
-int __cdecl FS_CompareIwds(char *needediwds, int len, int dlstring)
+int FS_CompareIwds(char *needediwds, int len, int dlstring)
 {
     char *v4; // eax
     const char *v5; // [esp+8h] [ebp-20h]
@@ -180,7 +180,7 @@ int fs_numServerReferencedFFs;
 const char *fs_serverReferencedFFNames[32];
 int fs_serverReferencedFFCheckSums[32];
 static_assert(ARRAY_COUNT(fs_serverReferencedFFNames) == ARRAY_COUNT(fs_serverReferencedFFCheckSums));
-int __cdecl FS_CompareFFs(char *neededFFs, int len, int dlstring)
+int FS_CompareFFs(char *neededFFs, int len, int dlstring)
 {
     int v4; // eax
     const char *v5; // [esp+18h] [ebp-28h]
@@ -246,7 +246,7 @@ int __cdecl FS_CompareFFs(char *neededFFs, int len, int dlstring)
     return 1;
 }
 
-FS_SERVER_COMPARE_RESULT __cdecl FS_CompareWithServerFiles(char *neededFiles, int len, int dlstring)
+FS_SERVER_COMPARE_RESULT FS_CompareWithServerFiles(char *neededFiles, int len, int dlstring)
 {
     FS_SERVER_COMPARE_RESULT iwdCompareResult; // [esp+10h] [ebp-Ch]
     int neededIWDStrLen; // [esp+14h] [ebp-8h]
@@ -264,7 +264,7 @@ FS_SERVER_COMPARE_RESULT __cdecl FS_CompareWithServerFiles(char *neededFiles, in
     return (FS_SERVER_COMPARE_RESULT)(iwdCompareResult == NEED_DOWNLOAD || ffCompareResult == NEED_DOWNLOAD);
 }
 
-void __cdecl FS_ShutdownServerFileReferences(int *numFiles, const char **fileNames)
+void FS_ShutdownServerFileReferences(int *numFiles, const char **fileNames)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -279,12 +279,12 @@ void __cdecl FS_ShutdownServerFileReferences(int *numFiles, const char **fileNam
     *numFiles = 0;
 }
 
-void __cdecl FS_ShutdownServerReferencedIwds()
+void FS_ShutdownServerReferencedIwds()
 {
     FS_ShutdownServerFileReferences(&fs_numServerReferencedIwds, fs_serverReferencedIwdNames);
 }
 
-int __cdecl FS_ServerSetReferencedFiles(
+int FS_ServerSetReferencedFiles(
     char *fileSums,
     char *fileNames,
     int maxFiles,
@@ -334,7 +334,7 @@ int __cdecl FS_ServerSetReferencedFiles(
     return c;
 }
 
-void __cdecl FS_ServerSetReferencedIwds(char *iwdSums, char *iwdNames)
+void FS_ServerSetReferencedIwds(char *iwdSums, char *iwdNames)
 {
     FS_ShutdownServerReferencedIwds();
     fs_numServerReferencedIwds = FS_ServerSetReferencedFiles(
@@ -345,12 +345,12 @@ void __cdecl FS_ServerSetReferencedIwds(char *iwdSums, char *iwdNames)
         fs_serverReferencedIwdNames);
 }
 
-void __cdecl FS_ShutdownServerReferencedFFs()
+void FS_ShutdownServerReferencedFFs()
 {
     FS_ShutdownServerFileReferences(&fs_numServerReferencedFFs, fs_serverReferencedFFNames);
 }
 
-void __cdecl FS_ServerSetReferencedFFs(char *FFSums, char *FFNames)
+void FS_ServerSetReferencedFFs(char *FFSums, char *FFNames)
 {
     FS_ShutdownServerReferencedFFs();
     fs_numServerReferencedFFs = FS_ServerSetReferencedFiles(
@@ -361,12 +361,12 @@ void __cdecl FS_ServerSetReferencedFFs(char *FFSums, char *FFNames)
         fs_serverReferencedFFNames);
 }
 
-void __cdecl FS_ShutdownServerIwdNames()
+void FS_ShutdownServerIwdNames()
 {
     FS_ShutdownServerFileReferences(&fs_numServerIwds, fs_serverIwdNames);
 }
 
-void __cdecl FS_PureServerSetLoadedIwds(char *iwdSums, char *iwdNames)
+void FS_PureServerSetLoadedIwds(char *iwdSums, char *iwdNames)
 {
     const char *v2; // eax
     int v3; // eax

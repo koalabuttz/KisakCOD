@@ -12,7 +12,7 @@
 #endif
 
 
-uint32_t __cdecl SV_ClipHandleForEntity(const gentity_s *ent)
+uint32_t SV_ClipHandleForEntity(const gentity_s *ent)
 {
 #ifdef KISAK_MP
     if (ent->r.bmodel)
@@ -27,7 +27,7 @@ uint32_t __cdecl SV_ClipHandleForEntity(const gentity_s *ent)
 #endif
 }
 
-void __cdecl SV_UnlinkEntity(gentity_s *gEnt)
+void SV_UnlinkEntity(gentity_s *gEnt)
 {
     svEntity_s *ent; // [esp+30h] [ebp-4h]
 
@@ -41,7 +41,7 @@ void __cdecl SV_UnlinkEntity(gentity_s *gEnt)
 float actorLocationalMins[3] = { -64.0f, -64.0f, -32.0f };
 float actorLocationalMaxs[3] = { 64.0f, 64.0f, 72.0f };
 
-void __cdecl SV_LinkEntity(gentity_s *gEnt)
+void SV_LinkEntity(gentity_s *gEnt)
 {
 #ifdef KISAK_MP
     int v1; // eax
@@ -392,7 +392,7 @@ LABEL_37:
 #endif
 }
 
-void __cdecl SnapAngles(float *vAngles)
+void SnapAngles(float *vAngles)
 {
     float delta; // [esp+10h] [ebp-Ch]
     int rounded; // [esp+14h] [ebp-8h]
@@ -407,7 +407,7 @@ void __cdecl SnapAngles(float *vAngles)
     }
 }
 
-void __cdecl SV_PointTraceToEntity(const pointtrace_t *clip, svEntity_s *check, trace_t *trace)
+void SV_PointTraceToEntity(const pointtrace_t *clip, svEntity_s *check, trace_t *trace)
 {
     const char *v3; // eax
     __int64 v4; // [esp+8h] [ebp-F8h]
@@ -580,7 +580,7 @@ void __cdecl SV_PointTraceToEntity(const pointtrace_t *clip, svEntity_s *check, 
     }
 }
 
-void __cdecl SV_ClipMoveToEntity(const moveclip_t *clip, svEntity_s *check, trace_t *trace)
+void SV_ClipMoveToEntity(const moveclip_t *clip, svEntity_s *check, trace_t *trace)
 {
     __int64 v3; // [esp-Ch] [ebp-40h]
     uint16_t number; // [esp+6h] [ebp-2Eh]
@@ -640,7 +640,7 @@ void __cdecl SV_ClipMoveToEntity(const moveclip_t *clip, svEntity_s *check, trac
     }
 }
 
-int __cdecl SV_PointSightTraceToEntity(const sightpointtrace_t *clip, svEntity_s *check)
+int SV_PointSightTraceToEntity(const sightpointtrace_t *clip, svEntity_s *check)
 {
     float v3; // [esp+10h] [ebp-F0h]
     float v4; // [esp+14h] [ebp-ECh]
@@ -765,7 +765,7 @@ int __cdecl SV_PointSightTraceToEntity(const sightpointtrace_t *clip, svEntity_s
     return 0;
 }
 
-DObj_s *__cdecl SV_LocationalTraceDObj(const pointtrace_t *clip, const gentity_s *touch)
+DObj_s *SV_LocationalTraceDObj(const pointtrace_t *clip, const gentity_s *touch)
 {
     if (!clip->bLocational)
         return 0;
@@ -776,7 +776,7 @@ DObj_s *__cdecl SV_LocationalTraceDObj(const pointtrace_t *clip, const gentity_s
     return 0;
 }
 
-int __cdecl SV_ClipSightToEntity(const sightclip_t *clip, svEntity_s *check)
+int SV_ClipSightToEntity(const sightclip_t *clip, svEntity_s *check)
 {
     gentity_s *touch; // [esp+0h] [ebp-14h]
     uint32_t clipHandle; // [esp+8h] [ebp-Ch]
@@ -824,7 +824,7 @@ LABEL_15:
     }
 }
 
-DObj_s *__cdecl SV_LocationalSightTraceDObj(const sightpointtrace_t *clip, const gentity_s *touch)
+DObj_s *SV_LocationalSightTraceDObj(const sightpointtrace_t *clip, const gentity_s *touch)
 {
     if (!clip->locational)
         return 0;
@@ -835,7 +835,7 @@ DObj_s *__cdecl SV_LocationalSightTraceDObj(const sightpointtrace_t *clip, const
     return 0;
 }
 
-void __cdecl SV_SetupIgnoreEntParams(IgnoreEntParams *ignoreEntParams, int baseEntity)
+void SV_SetupIgnoreEntParams(IgnoreEntParams *ignoreEntParams, int baseEntity)
 {
     gentity_s *base; // [esp+0h] [ebp-4h]
 
@@ -859,7 +859,7 @@ void __cdecl SV_SetupIgnoreEntParams(IgnoreEntParams *ignoreEntParams, int baseE
     ignoreEntParams->ignoreParent = 0;
 }
 
-void __cdecl SV_Trace(
+void SV_Trace(
     trace_t *results,
     const float *start,
     const float *mins,
@@ -1050,7 +1050,7 @@ void __cdecl SV_Trace(
 // Hull traces used for vehicle exits need explicit parent/sibling filtering.
 // SV_Trace's legacy hull path only carries passEntityNum/passOwnerNum, so keep
 // that behavior for existing callers and apply the requested flags here.
-void __cdecl SV_TraceCapsuleWithIgnore(
+void SV_TraceCapsuleWithIgnore(
     trace_t *results,
     const float *start,
     const float *mins,
@@ -1111,7 +1111,7 @@ void __cdecl SV_TraceCapsuleWithIgnore(
     }
 }
 
-int __cdecl SV_TracePassed(
+int SV_TracePassed(
     const float *start,
     const float *mins,
     const float *maxs,
@@ -1194,7 +1194,7 @@ int __cdecl SV_TracePassed(
     return 1;
 }
 
-void __cdecl SV_SightTrace(
+void SV_SightTrace(
     int *hitNum,
     const float *start,
     const float *mins,
@@ -1271,7 +1271,7 @@ void __cdecl SV_SightTrace(
     }
 }
 
-int __cdecl SV_SightTraceToEntity(float *start, float *mins, float *maxs, float *end, int entityNum, int contentmask)
+int SV_SightTraceToEntity(float *start, float *mins, float *maxs, float *end, int entityNum, int contentmask)
 {
     double v7; // st7
     uint32_t clipHandle; // [esp+34h] [ebp-2Ch]
@@ -1329,7 +1329,7 @@ int __cdecl SV_SightTraceToEntity(float *start, float *mins, float *maxs, float 
         return 0;
 }
 
-int __cdecl SV_PointContents(float *p, int passEntityNum, int contentmask)
+int SV_PointContents(float *p, int passEntityNum, int contentmask)
 {
     int v3; // eax
     int entityList[1025]; // [esp+0h] [ebp-1018h] BYREF

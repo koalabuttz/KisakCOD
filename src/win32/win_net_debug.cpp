@@ -20,12 +20,12 @@ uint32_t ip_debugServerSocket[2];
 
 char *g_debugReadBytes;
 
-int __cdecl Sys_IsRemoteDebugClient()
+int Sys_IsRemoteDebugClient()
 {
 	return g_debugClient;
 }
 
-void __cdecl NET_ShutdownDebug()
+void NET_ShutdownDebug()
 {
 	int i; // [esp+0h] [ebp-4h]
 
@@ -89,7 +89,7 @@ void Sys_DebugSocketError(const char* message)
 	Com_Printf(CON_CHANNEL_SYSTEM, "%s\n", message);
 }
 
-void __cdecl Sys_Listen_f()
+void Sys_Listen_f()
 {
 	const char* v0; // eax
 	const char* v1; // eax
@@ -139,16 +139,16 @@ void Sys_SendDebugReadBytesInternal()
 	}
 }
 
-void __cdecl Sys_SendDebugReadBytes(int read)
+void Sys_SendDebugReadBytes(int read)
 {
 	*g_debugReadBytes += read;
 	if (*g_debugReadBytes - g_debugReadBytesSent >= 0x2000)
 		Sys_SendDebugReadBytesInternal();
 }
 
-void __cdecl Sys_DebugSend(int channel, const char *buf, int len, const char *name);
+void Sys_DebugSend(int channel, const char *buf, int len, const char *name);
 
-void __cdecl Sys_WriteDebugSocketData(unsigned __int8 *buffer, int len)
+void Sys_WriteDebugSocketData(unsigned __int8 *buffer, int len)
 {
 	int pos; // [esp+0h] [ebp-10h]
 	uint32_t copyLen; // [esp+8h] [ebp-8h]
@@ -180,7 +180,7 @@ void __cdecl Sys_WriteDebugSocketData(unsigned __int8 *buffer, int len)
 	}
 }
 
-void __cdecl Sys_WriteDebugSocketString(char *text)
+void Sys_WriteDebugSocketString(char *text)
 {
 	int len; // [esp+10h] [ebp-4h] BYREF
 
@@ -189,23 +189,23 @@ void __cdecl Sys_WriteDebugSocketString(char *text)
 	Sys_WriteDebugSocketData((unsigned __int8 *)text, len);
 }
 
-void __cdecl Sys_WriteDebugSocketInt(int value)
+void Sys_WriteDebugSocketInt(int value)
 {
 	Sys_WriteDebugSocketData((unsigned char*)&value, 4);
 }
 
-void __cdecl Sys_WriteDebugSocketMessageType(unsigned __int8 type)
+void Sys_WriteDebugSocketMessageType(unsigned __int8 type)
 {
 	Sys_EnterCriticalSection(CRITSECT_DEBUG_SOCKET);
 	Sys_WriteDebugSocketData(&type, 1);
 }
 
-void __cdecl Sys_EndWriteDebugSocket()
+void Sys_EndWriteDebugSocket()
 {
 	Sys_LeaveCriticalSection(CRITSECT_DEBUG_SOCKET);
 }
 
-char *__cdecl Sys_ReadDebugSocketString()
+char *Sys_ReadDebugSocketString()
 {
 	uint32_t buffer; // [esp+0h] [ebp-100Ch] BYREF
 	char in[4100]; // [esp+4h] [ebp-1008h] BYREF
@@ -218,7 +218,7 @@ char *__cdecl Sys_ReadDebugSocketString()
 	return (char*)CopyString(in);
 }
 
-void __cdecl Sys_ReadDebugSocketStringBuffer(char *buffer, int len)
+void Sys_ReadDebugSocketStringBuffer(char *buffer, int len)
 {
 	char *text; // [esp+0h] [ebp-4h]
 
@@ -228,7 +228,7 @@ void __cdecl Sys_ReadDebugSocketStringBuffer(char *buffer, int len)
 }
 
 
-int __cdecl Sys_ReadDebugSocketData(char *buffer, int len, int blocking)
+int Sys_ReadDebugSocketData(char *buffer, int len, int blocking)
 {
 	const char *v4; // eax
 	const char *v5; // eax
@@ -276,7 +276,7 @@ int __cdecl Sys_ReadDebugSocketData(char *buffer, int len, int blocking)
 	return 0;
 }
 
-int __cdecl Sys_ReadDebugSocketInt()
+int Sys_ReadDebugSocketInt()
 {
 	int value; // [esp+0h] [ebp-4h] BYREF
 
@@ -284,7 +284,7 @@ int __cdecl Sys_ReadDebugSocketInt()
 	return value;
 }
 
-int __cdecl Sys_UpdateDebugSocket()
+int Sys_UpdateDebugSocket()
 {
 	const char *v1; // eax
 	const char *v2; // eax
@@ -322,17 +322,17 @@ int __cdecl Sys_UpdateDebugSocket()
 	return sys_debugMessageType[0];
 }
 
-int __cdecl Sys_ReadDebugSocketMessageType(unsigned __int8 *type, int blocking)
+int Sys_ReadDebugSocketMessageType(unsigned __int8 *type, int blocking)
 {
 	return Sys_ReadDebugSocketData((char*)type, 1, blocking);
 }
 
-BOOL __cdecl Sys_DebugCanSend()
+BOOL Sys_DebugCanSend()
 {
 	return g_debugWriteBytes - g_debugReadBytesRemote <= 40960;
 }
 
-void __cdecl Sys_DebugSend(int channel, const char *buf, int len, const char *name)
+void Sys_DebugSend(int channel, const char *buf, int len, const char *name)
 {
 	const char *v4; // eax
 	const char *v5; // eax
@@ -394,7 +394,7 @@ void __cdecl Sys_DebugSend(int channel, const char *buf, int len, const char *na
 	}
 }
 
-void __cdecl Sys_FlushDebugSocketData()
+void Sys_FlushDebugSocketData()
 {
 	int pos; // [esp+0h] [ebp-8h]
 	int channel; // [esp+4h] [ebp-4h]
@@ -410,7 +410,7 @@ void __cdecl Sys_FlushDebugSocketData()
 	}
 }
 
-void __cdecl Sys_AckDebugSocket()
+void Sys_AckDebugSocket()
 {
 	sys_debugMessageType[0] = 0;
 }

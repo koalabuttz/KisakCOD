@@ -7,7 +7,7 @@
 double msecPerRawTimerTick;
 double qpc2msec;
 
-double __cdecl SecondsPerTick()
+double SecondsPerTick()
 {
     _LARGE_INTEGER tscStop; // [esp+20h] [ebp-30h]
     _LARGE_INTEGER qpcFrequency; // [esp+28h] [ebp-28h] BYREF
@@ -36,7 +36,7 @@ double __cdecl SecondsPerTick()
     return secPerTick;
 }
 
-void __cdecl InitTiming()
+void InitTiming()
 {
 	msecPerRawTimerTick = SecondsPerTick() * 1000.0;
 }

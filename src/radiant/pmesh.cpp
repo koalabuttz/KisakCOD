@@ -6305,7 +6305,7 @@ static void VertSnap_CollectPatch( selbrush_t *b, const orientation_t *orient )
 //  binary: b->owner->def->modelClass->model->handle (entity_s.def@0x08 / modelClass@0x64 /
 //  entitymodel_t.model@0x160 / models_t.handle@+4).
 struct XModel;
-extern int __cdecl Editor_ExtractXModelGeo( XModel *model, float *verts, int vertLimit,
+extern int Editor_ExtractXModelGeo( XModel *model, float *verts, int vertLimit,
                                             uint16_t *indices, int indexLimit );  // gfx_d3d/r_xsurface.cpp (0x4FEBB0)
 static void VertSnap_CollectModel( selbrush_t *b, const orientation_t *orient )
 {
@@ -9439,7 +9439,7 @@ extern char         R_Ed_FreeVertices( Material *handle, int vertCount, int vert
 extern int          Editor_MaterialSortKey( Material *handle );                            // r_ed_scene.cpp 0x4FDBB0
 extern void         Editor_AddMeshCmd( Material *handle, int techType, int sortKey,
                         int vertCount, int vbIndexAndOffs, int indexCount, int indexTable ); // r_ed_scene.cpp 0x4FDA50
-extern const MaterialTechnique *__cdecl Material_GetTechnique( const Material *material,
+extern const MaterialTechnique *Material_GetTechnique( const Material *material,
                         MaterialTechniqueType techType );
 
 // PM_FRONT_FACE / PM_BACK_FACE index selectors come from qe3.h.

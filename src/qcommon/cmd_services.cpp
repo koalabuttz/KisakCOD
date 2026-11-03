@@ -4,8 +4,8 @@
 #include "threads.h"
 #include <script/scr_debugger.h>
 // Narrow server interface: no need for server world/demo structures here.
-int __cdecl SV_GameCommand();
-void __cdecl SV_WaitServer();
+int SV_GameCommand();
+void SV_WaitServer();
 extern int com_inServerFrame;
 #if defined(KISAK_MP) && !defined(KISAK_DEDICATED)
 #include <client_mp/client_mp.h>

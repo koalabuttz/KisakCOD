@@ -14360,7 +14360,7 @@ const uint16_t waveletEncodeAlpha[511] =
   0u
 }; // idb
 
-void __cdecl TRACK_r_image_wavelet()
+void TRACK_r_image_wavelet()
 {
 	track_static_alloc_internal((void *)waveletDecodeBlue, 0x4000, "waveletDecodeBlue", 18);
 	track_static_alloc_internal((void *)waveletEncodeBlue, 1022, "waveletEncodeBlue", 18);
@@ -14370,7 +14370,7 @@ void __cdecl TRACK_r_image_wavelet()
 	track_static_alloc_internal((void *)waveletEncodeAlpha, 1022, "waveletEncodeAlpha", 18);
 }
 
-void __cdecl Image_LoadWavelet(GfxImage *image, const GfxImageFileHeader *fileHeader, const unsigned char *data, _D3DFORMAT format, int bytesPerPixel)
+void Image_LoadWavelet(GfxImage *image, const GfxImageFileHeader *fileHeader, const unsigned char *data, _D3DFORMAT format, int bytesPerPixel)
 {
     uint8_t *from[6]; // [esp+14h] [ebp-88h]
     uint8_t *pixels[6]; // [esp+2Ch] [ebp-70h]
@@ -14442,7 +14442,7 @@ void __cdecl Image_LoadWavelet(GfxImage *image, const GfxImageFileHeader *fileHe
 }
 
 
-void __cdecl Wavelet_DecompressLevel(uint8_t *src, uint8_t *dst, WaveletDecode *decode)
+void Wavelet_DecompressLevel(uint8_t *src, uint8_t *dst, WaveletDecode *decode)
 {
     bool needsMipDelta;
     int dstChanOffset[4]; // [esp+8h] [ebp-6Ch] BYREF
@@ -14600,7 +14600,7 @@ void __cdecl Wavelet_DecompressLevel(uint8_t *src, uint8_t *dst, WaveletDecode *
     }
 }
 
-void __cdecl Wavelet_ConsumeBits(uint16_t bitCount, WaveletDecode *decode)
+void Wavelet_ConsumeBits(uint16_t bitCount, WaveletDecode *decode)
 {
     iassert( bitCount > 0 && bitCount <= 16 );
     iassert( decode->bit < 8 );
@@ -14615,7 +14615,7 @@ void __cdecl Wavelet_ConsumeBits(uint16_t bitCount, WaveletDecode *decode)
 
 
 
-int __cdecl Wavelet_DecodeValue(
+int Wavelet_DecodeValue(
     const WaveletHuffmanDecode *decodeTable,
     uint16_t bitCount,
     int bias,
@@ -14639,7 +14639,7 @@ int __cdecl Wavelet_DecodeValue(
 
 
 
-void __cdecl Wavelet_AddDeltaToMipmap(
+void Wavelet_AddDeltaToMipmap(
     uint8_t *inout,
     int size,
     WaveletDecode *decode,

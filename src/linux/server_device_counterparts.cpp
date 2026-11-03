@@ -100,7 +100,7 @@ const dvar_t *onlinegame;
 // section counts. The fast-file names are the zones the server loads.
 // ---------------------------------------------------------------------------
 
-void __cdecl SetGfxConfig(const GfxConfiguration *config)
+void SetGfxConfig(const GfxConfiguration *config)
 {
     iassert(config);
     bcassert(config->maxClientViews, GFX_MAX_CLIENT_VIEWS);
@@ -193,7 +193,7 @@ static void R_LoadGraphicsAssets()
 // r_loadForRenderer->current.enabled to false before the first zone is loaded, so
 // the database keeps vertex/index data in CPU memory instead of handing it to a
 // device.
-void __cdecl R_MakeDedicated(const GfxConfiguration *config)
+void R_MakeDedicated(const GfxConfiguration *config)
 {
     SetGfxConfig(config);
     if (!r_loadForRenderer)
@@ -208,7 +208,7 @@ void __cdecl R_MakeDedicated(const GfxConfiguration *config)
 // g_splashWnd is always null and there is no window to hide. The Windows call has
 // no equivalent here, so the null check is the whole function; a non-null handle
 // would mean a window was created without a display server.
-void __cdecl Sys_HideSplashWindow()
+void Sys_HideSplashWindow()
 {
     if (g_splashWnd)
         Com_Error(ERR_FATAL, "Sys_HideSplashWindow: a splash window exists on a platform without windows\n");
@@ -217,7 +217,7 @@ void __cdecl Sys_HideSplashWindow()
 // src/client_mp/cl_main_mp.cpp:4163. onlinegame is registered here rather than in
 // CL_Init so the server has the same online-game dvar the original dedicated
 // server had; it is registered, not set, matching the original default of true.
-void __cdecl CL_InitDedicated()
+void CL_InitDedicated()
 {
     GfxConfiguration config;
 
@@ -259,7 +259,7 @@ static bool DedicatedRendererAllocates()
 // into a texture. There is no texture here, so the pixels stay where the zone put
 // them and delayLoadPixels stays set; clearing the flag would falsely claim the
 // image had been uploaded.
-void __cdecl R_DelayLoadImage(XAssetHeader header)
+void R_DelayLoadImage(XAssetHeader header)
 {
     if (!DedicatedRendererAllocates())
         return;
@@ -271,7 +271,7 @@ void __cdecl R_DelayLoadImage(XAssetHeader header)
 // src/gfx_d3d/r_image_load_obj.cpp:272 answers whether an image is one of the
 // renderer-created procedural images in g_imageProgs. Nothing creates those on
 // this build, so no image can be one.
-bool __cdecl Image_IsProg(GfxImage *image)
+bool Image_IsProg(GfxImage *image)
 {
     (void)image;
     return false;
@@ -280,7 +280,7 @@ bool __cdecl Image_IsProg(GfxImage *image)
 // src/gfx_d3d/r_material.cpp:477 originally set rgp.needSortMaterials, which is
 // the flag the renderer's material sort polls. The flag is real state, so it is
 // still set: the sort simply never runs.
-void __cdecl Material_DirtySort()
+void Material_DirtySort()
 {
     rgp.needSortMaterials = 1;
 }
@@ -290,7 +290,7 @@ void __cdecl Material_DirtySort()
 // remaps it to an "sm2/" variant. With no shader model there is no remapping, so
 // the set maps to itself -- the same result the original produced for a
 // non-SM3 renderer -- and remappedTechniqueSet never points at a foreign set.
-void __cdecl Material_OriginalRemapTechniqueSet(MaterialTechniqueSet *techSet)
+void Material_OriginalRemapTechniqueSet(MaterialTechniqueSet *techSet)
 {
     iassert(techSet);
 
@@ -302,7 +302,7 @@ void __cdecl Material_OriginalRemapTechniqueSet(MaterialTechniqueSet *techSet)
 // RB_UploadShaderStep, which runs on a render thread this build never starts, so
 // enqueueing would fill the 1024-entry ring and then trip its own overflow check.
 // Nothing is uploaded, so nothing is queued.
-void __cdecl Material_UploadShaders(MaterialTechniqueSet *techSet)
+void Material_UploadShaders(MaterialTechniqueSet *techSet)
 {
     iassert(Sys_IsDatabaseThread());
     (void)techSet;
@@ -311,14 +311,14 @@ void __cdecl Material_UploadShaders(MaterialTechniqueSet *techSet)
 // src/gfx_d3d/r_material_override.cpp:328 resets the upload queue described
 // above. The queue is permanently empty here, so there is nothing to reset; the
 // call is kept because DB_LoadXAssets makes it before every zone load.
-void __cdecl Material_ClearShaderUploadList()
+void Material_ClearShaderUploadList()
 {
 }
 
 // src/gfx_d3d/r_material_override.cpp:323 marks the technique-set override table
 // dirty. That table is rebuilt by Material_OverrideTechniqueSets for the render
 // thread, which does not run here, so the flag has no reader.
-void __cdecl Material_DirtyTechniqueSetOverrides()
+void Material_DirtyTechniqueSetOverrides()
 {
 }
 
@@ -326,7 +326,7 @@ void __cdecl Material_DirtyTechniqueSetOverrides()
 // renderer's shader-model feature bits and then re-syncs the render thread. With
 // no feature bits to read and no render thread to sync, the sets loaded from the
 // zone stay as they are. This is called from DB_PostLoadXZone.
-void __cdecl Material_OverrideTechniqueSets()
+void Material_OverrideTechniqueSets()
 {
     iassert(Sys_IsMainThread());
 }
@@ -334,7 +334,7 @@ void __cdecl Material_OverrideTechniqueSets()
 // src/gfx_d3d/r_init.cpp:2934 guards against unloading the BSP the renderer is
 // still drawing. rgp.world is never set on this build, so the guard is extracted
 // verbatim and simply never fires.
-void __cdecl R_UnloadWorld()
+void R_UnloadWorld()
 {
     iassert(IsFastFileLoad());
 
@@ -343,14 +343,14 @@ void __cdecl R_UnloadWorld()
 }
 
 // src/gfx_d3d/r_image.cpp:1290 clears the samplers bound on a device.
-void __cdecl RB_UnbindAllImages()
+void RB_UnbindAllImages()
 {
     // Guarded by dx.device in the original; no device is ever created here, so
     // there is no bound sampler and no device to clear it on.
 }
 
 // src/gfx_d3d/r_init.cpp:2828 clears the stream sources bound to a device.
-void __cdecl R_ShutdownStreams()
+void R_ShutdownStreams()
 {
     // Guarded by dx.device in the original.
 }
@@ -369,7 +369,7 @@ void __cdecl R_ShutdownStreams()
 // src/gfx_d3d/r_image.cpp:270. The disabled branch is the assignment above the
 // device work: the texture handle is null and the pixels stay in the zone, with
 // delayLoadPixels left as the record had it.
-void __cdecl Load_Texture(GfxTexture *remoteLoadDef, GfxImage *image)
+void Load_Texture(GfxTexture *remoteLoadDef, GfxImage *image)
 {
     GfxImageLoadDef *loadDef = remoteLoadDef->loadDef;
 
@@ -400,14 +400,14 @@ void __cdecl Load_Texture(GfxTexture *remoteLoadDef, GfxImage *image)
 
 // src/gfx_d3d/r_material.cpp:289 and 304. Both write the null program handle and
 // leave the byte-code load definition in the record.
-void __cdecl Load_CreateMaterialPixelShader(GfxPixelShaderLoadDef *loadDef, MaterialPixelShader *mtlShader)
+void Load_CreateMaterialPixelShader(GfxPixelShaderLoadDef *loadDef, MaterialPixelShader *mtlShader)
 {
     iassert(loadDef == &mtlShader->prog.loadDef);
 
     mtlShader->prog.ps = 0;
 }
 
-void __cdecl Load_CreateMaterialVertexShader(GfxVertexShaderLoadDef *loadDef, MaterialVertexShader *mtlShader)
+void Load_CreateMaterialVertexShader(GfxVertexShaderLoadDef *loadDef, MaterialVertexShader *mtlShader)
 {
     iassert(loadDef == &mtlShader->prog.loadDef);
 
@@ -417,7 +417,7 @@ void __cdecl Load_CreateMaterialVertexShader(GfxVertexShaderLoadDef *loadDef, Ma
 // src/gfx_d3d/r_material.cpp:353. Every declaration handle is null, and isLoaded is
 // still set so the pass is not rebuilt by Material_ReloadPassResources -- the same
 // state a client reaches when it loads a pass with the renderer switched off.
-void __cdecl Load_BuildVertexDecl(MaterialVertexDeclaration **mtlVertDecl)
+void Load_BuildVertexDecl(MaterialVertexDeclaration **mtlVertDecl)
 {
     int vertDeclType;
 
@@ -434,7 +434,7 @@ void __cdecl Load_BuildVertexDecl(MaterialVertexDeclaration **mtlVertDecl)
 
 // src/gfx_d3d/r_image.cpp:794. Same predicate as the renderer's, needed because
 // Image_Free below uses it and r_image.cpp is not part of this build.
-bool __cdecl Image_IsCodeImage(int track)
+bool Image_IsCodeImage(int track)
 {
     return track >= IMAGE_TRACK_MISC && (track <= IMAGE_TRACK_DEBUG || track == IMAGE_TRACK_LIGHTMAP);
 }
@@ -443,7 +443,7 @@ bool __cdecl Image_IsCodeImage(int track)
 // device the image never had card memory taken from the tracking total and never
 // had a basemap, so the accounting subtraction is the original's and the release
 // itself has nothing to do. A non-null basemap would mean a texture was created.
-void __cdecl Image_Free(GfxImage *image)
+void Image_Free(GfxImage *image)
 {
     int platform;
 
@@ -483,7 +483,7 @@ static void DedicatedReleasePassResources(MaterialPass *pass)
 // src/gfx_d3d/r_material.cpp:852 -> Material_ReleaseTechniqueSetResources (:797).
 // Registered in DB_RemoveXAssetHandler, so it runs for every technique set when a
 // zone is unloaded.
-void __cdecl Material_ReleaseTechniqueSet(XAssetHeader header, void *crap)
+void Material_ReleaseTechniqueSet(XAssetHeader header, void *crap)
 {
     MaterialTechnique *technique;
     int techType;
@@ -515,7 +515,7 @@ void __cdecl Material_ReleaseTechniqueSet(XAssetHeader header, void *crap)
 // src/gfx_d3d/r_material.cpp:585. The "always use the default material"
 // substitution and the "$default" fallback both need rgp.defaultMaterial, which
 // only the renderer creates, so those cases cannot be served here.
-Material *__cdecl Material_RegisterHandle(const char *name, int imageTrack)
+Material *Material_RegisterHandle(const char *name, int imageTrack)
 {
     PROF_SCOPED("Material_RegisterHandle");
 

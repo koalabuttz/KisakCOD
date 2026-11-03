@@ -133,34 +133,34 @@ enum GfxWarningType : __int32
     R_WARN_COUNT = 0x29,
 };
 
-void __cdecl TRACK_r_debug();
-void __cdecl R_AddDebugPolygon(DebugGlobals *debugGlobalsEntry, const float *color, int pointCount, float (*points)[3]);
-void __cdecl R_AddDebugLine(DebugGlobals *debugGlobalsEntry, const float *start, const float *end, const float *color);
-void __cdecl R_AddDebugBox(DebugGlobals *debugGlobalsEntry, const float *mins, const float *maxs, const float *color);
-void __cdecl R_AddDebugString(
+void TRACK_r_debug();
+void R_AddDebugPolygon(DebugGlobals *debugGlobalsEntry, const float *color, int pointCount, float (*points)[3]);
+void R_AddDebugLine(DebugGlobals *debugGlobalsEntry, const float *start, const float *end, const float *color);
+void R_AddDebugBox(DebugGlobals *debugGlobalsEntry, const float *mins, const float *maxs, const float *color);
+void R_AddDebugString(
     DebugGlobals *debugGlobalsEntry,
     const float *origin,
     const float *color,
     float scale,
     const char *string);
-void __cdecl R_AddScaledDebugString(
+void R_AddScaledDebugString(
     DebugGlobals *debugGlobalsEntry,
     const GfxViewParms *viewParms,
     const float *origin,
     const float *color,
     const char *string);
-void __cdecl R_InitDebugEntry(DebugGlobals *debugGlobalsEntry);
-void __cdecl R_InitDebug();
-void __cdecl R_ShutdownDebugEntry(DebugGlobals *debugGlobalsEntry);
-void __cdecl R_TransferDebugGlobals(DebugGlobals *debugGlobalsEntry);
-void __cdecl R_ShutdownDebug();
-void __cdecl R_CopyDebugStrings(
+void R_InitDebugEntry(DebugGlobals *debugGlobalsEntry);
+void R_InitDebug();
+void R_ShutdownDebugEntry(DebugGlobals *debugGlobalsEntry);
+void R_TransferDebugGlobals(DebugGlobals *debugGlobalsEntry);
+void R_ShutdownDebug();
+void R_CopyDebugStrings(
     trDebugString_t *clStrings,
     int clStringCnt,
     trDebugString_t *svStrings,
     int svStringCnt,
     int maxStringCount);
-void __cdecl R_CopyDebugLines(
+void R_CopyDebugLines(
     trDebugLine_t *clLines,
     int clLineCnt,
     trDebugLine_t *svLines,
@@ -168,13 +168,13 @@ void __cdecl R_CopyDebugLines(
     int maxLineCount);
 
 // r_debug_alloc
-void __cdecl R_DebugAlloc(void **memPtr, int size, const char *name);
-void __cdecl R_DebugFree(void **dataPtr);
+void R_DebugAlloc(void **memPtr, int size, const char *name);
+void R_DebugFree(void **dataPtr);
 
 
 // r_warn
 void R_WarnOncePerFrame(GfxWarningType warnType, ...);
-double __cdecl R_UpdateFrameRate();
-static void __cdecl R_WarnInitDvars();
+double R_UpdateFrameRate();
+static void R_WarnInitDvars();
 
 extern DebugGlobals debugGlobals;

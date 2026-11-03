@@ -84,17 +84,17 @@ int old_com_frameTime;
 
 kbutton_t kb[29];
 
-void __cdecl TRACK_cl_input()
+void TRACK_cl_input()
 {
     track_static_alloc_internal(kb, 580, "kb", 10);
 }
 
-bool __cdecl IN_IsTempProneKeyActive()
+bool IN_IsTempProneKeyActive()
 {
     return kb[KEY_PRONE].active;
 }
 
-int __cdecl IN_IsTempStanceKeyActive()
+int IN_IsTempStanceKeyActive()
 {
     return kb[KEY_PRONE].active || kb[KEY_DOWN].active;
 }
@@ -104,7 +104,7 @@ void IN_MLookDown()
     kb[KEY_MLOOK].active = 1;
 }
 
-void __cdecl IN_KeyDown(kbutton_t *b)
+void IN_KeyDown(kbutton_t *b)
 {
     const char *c; // [esp+0h] [ebp-8h]
     const char *ca; // [esp+0h] [ebp-8h]
@@ -140,7 +140,7 @@ void __cdecl IN_KeyDown(kbutton_t *b)
     }
 }
 
-void __cdecl IN_KeyUp(kbutton_t *b)
+void IN_KeyUp(kbutton_t *b)
 {
     unsigned int v1; // edx
     const char *c; // [esp+0h] [ebp-Ch]
@@ -181,7 +181,7 @@ void __cdecl IN_KeyUp(kbutton_t *b)
     }
 }
 
-float __cdecl CL_KeyState(kbutton_t *key)
+float CL_KeyState(kbutton_t *key)
 {
     bool active = key->active;
     unsigned int msec = key->msec;
@@ -204,14 +204,14 @@ float __cdecl CL_KeyState(kbutton_t *key)
     return (float)msec / (float)frame_msec;
 }
 
-void __cdecl CL_SetStance(int localClientNum, StanceState stance)
+void CL_SetStance(int localClientNum, StanceState stance)
 {
     iassert(localClientNum == 0);
     if (!IN_IsTempStanceKeyActive())
         clients[0].stance = stance;
 }
 
-void __cdecl CL_ToggleStance(StanceState preferredStance)
+void CL_ToggleStance(StanceState preferredStance)
 {
     if (IN_IsTempStanceKeyActive())
         return;
@@ -410,13 +410,13 @@ void IN_Smoke_Up()
     IN_KeyUp(&kb[KEY_SMOKE]);
 }
 
-void __cdecl IN_BreathSprint_Down()
+void IN_BreathSprint_Down()
 {
     IN_KeyDown(&kb[KEY_BREATH]);
     IN_KeyDown(&kb[KEY_SPRINT]);
 }
 
-void __cdecl IN_BreathSprint_Up()
+void IN_BreathSprint_Up()
 {
     IN_KeyUp(&kb[KEY_BREATH]);
     IN_KeyUp(&kb[KEY_SPRINT]);
@@ -512,12 +512,12 @@ void IN_Stance_Up()
     clients[0].stanceHeld = 0;
 }
 
-void __cdecl IN_CenterView()
+void IN_CenterView()
 {
     clients[0].viewangles[0] = -clients[0].snap.ps.delta_angles[0];
 }
 
-void __cdecl IN_RemoteKeyboard()
+void IN_RemoteKeyboard()
 {
     int nesting; // r7
     const char *v1; // r3
@@ -565,7 +565,7 @@ void __cdecl IN_RemoteKeyboard()
     }
 }
 
-void __cdecl IN_RemoteMouseMove()
+void IN_RemoteMouseMove()
 {
     const char *v0; // r3
     int v1; // r31
@@ -712,22 +712,22 @@ void IN_GoStandUp()
     IN_KeyUp(&kb[KEY_MOVEUP]);
 }
 
-void __cdecl IN_SprintDown()
+void IN_SprintDown()
 {
     IN_KeyDown(&kb[KEY_SPRINT]);
 }
 
-void __cdecl IN_SprintUp()
+void IN_SprintUp()
 {
     IN_KeyUp(&kb[KEY_SPRINT]);
 }
 
-void __cdecl IN_NightVisionDown()
+void IN_NightVisionDown()
 {
     IN_KeyDown(&kb[KEY_NIGHTVISION]);
 }
 
-void __cdecl IN_NightVisionUp()
+void IN_NightVisionUp()
 {
     IN_KeyUp(&kb[KEY_NIGHTVISION]);
 }
@@ -765,7 +765,7 @@ void CL_StanceButtonUpdate()
     }
 }
 
-void __cdecl CL_AddCurrentStanceToCmd(usercmd_s *cmd)
+void CL_AddCurrentStanceToCmd(usercmd_s *cmd)
 {
     StanceState stance = clients[0].stance;
 
@@ -813,7 +813,7 @@ void __cdecl CL_AddCurrentStanceToCmd(usercmd_s *cmd)
 }
 
 #ifdef KISAK_MP
-void __cdecl CL_KeyMove(usercmd_s *cmd)
+void CL_KeyMove(usercmd_s *cmd)
 {
     int		forward, side, up;
 
@@ -885,7 +885,7 @@ static bool s_scriptWasNoCrouch;
 static bool s_scriptSuppressProne;
 static bool s_scriptSuppressCrouch;
 
-void __cdecl CL_KeyMove(usercmd_s *cmd)
+void CL_KeyMove(usercmd_s *cmd)
 {
     int		forward, side, up;
     bool noProne;
@@ -971,7 +971,7 @@ void __cdecl CL_KeyMove(usercmd_s *cmd)
 }
 #endif
 
-int __cdecl CL_AllowInput()
+int CL_AllowInput()
 {
     int integer; // r11
     int result; // r3
@@ -993,7 +993,7 @@ int __cdecl CL_AllowInput()
     return result;
 }
 
-void __cdecl CL_GamepadMove(usercmd_s *cmd)
+void CL_GamepadMove(usercmd_s *cmd)
 {
     // KISAKTODO
 #if 0
@@ -1107,7 +1107,7 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
 #endif
 }
 
-void __cdecl CL_GetMouseMovement(clientActive_t *cl, float *mx, float *my)
+void CL_GetMouseMovement(clientActive_t *cl, float *mx, float *my)
 {
     iassert(mx);
     iassert(my);
@@ -1128,7 +1128,7 @@ void __cdecl CL_GetMouseMovement(clientActive_t *cl, float *mx, float *my)
     cl->mouseDy[cl->mouseIndex] = 0;
 }
 
-void __cdecl CL_MouseMove(usercmd_s *cmd)
+void CL_MouseMove(usercmd_s *cmd)
 {
 #if 0
     __int64 oldAngles; // r9
@@ -1339,7 +1339,7 @@ void __cdecl CL_MouseMove(usercmd_s *cmd)
     }
 }
 
-void __cdecl CL_UpdateCmdButton(int *cmdButtons, int kbButton, int buttonFlag)
+void CL_UpdateCmdButton(int *cmdButtons, int kbButton, int buttonFlag)
 {
     int v3; // r10
 
@@ -1349,14 +1349,14 @@ void __cdecl CL_UpdateCmdButton(int *cmdButtons, int kbButton, int buttonFlag)
     kb[v3].wasPressed = 0;
 }
 
-static void __cdecl CL_UpdateCmdButton(int localClientNum, int *cmdButtons, int kbButton, int buttonFlag)
+static void CL_UpdateCmdButton(int localClientNum, int *cmdButtons, int kbButton, int buttonFlag)
 {
     if (kb[kbButton].active || kb[kbButton].wasPressed)
         *cmdButtons |= buttonFlag;
     kb[kbButton].wasPressed = 0;
 }
 
-void __cdecl CL_CmdButtons(usercmd_s *cmd)
+void CL_CmdButtons(usercmd_s *cmd)
 {
     CL_UpdateCmdButton(&cmd->buttons, 14, BUTTON_ATTACK);
     CL_UpdateCmdButton(&cmd->buttons, 15, BUTTON_BREATH);
@@ -1392,7 +1392,7 @@ void __cdecl CL_CmdButtons(usercmd_s *cmd)
             "cmd->buttons < (1 << KEY_BIT_COUNT)");
 }
 
-void __cdecl CL_SetUsercmdButtonsWeapons(int buttons, int weapon, int offhand)
+void CL_SetUsercmdButtonsWeapons(int buttons, int weapon, int offhand)
 {
     if (clientUIActives[0].isRunning)
     {
@@ -1403,7 +1403,7 @@ void __cdecl CL_SetUsercmdButtonsWeapons(int buttons, int weapon, int offhand)
     }
 }
 
-void __cdecl CL_FinishMove(usercmd_s *cmd)
+void CL_FinishMove(usercmd_s *cmd)
 {
     int buttons; // r9
 
@@ -1430,7 +1430,7 @@ void __cdecl CL_FinishMove(usercmd_s *cmd)
     }
 }
 
-int __cdecl CG_HandleLocationSelectionInput(int localClientNum, usercmd_s *cmd)
+int CG_HandleLocationSelectionInput(int localClientNum, usercmd_s *cmd)
 {
 #if 0
     int result; // r3
@@ -1592,7 +1592,7 @@ int __cdecl CG_HandleLocationSelectionInput(int localClientNum, usercmd_s *cmd)
     }
 }
 
-void __cdecl CL_CreateCmd(usercmd_s *result)
+void CL_CreateCmd(usercmd_s *result)
 {
     float oldAngles; // fp31
 
@@ -1644,7 +1644,7 @@ void CL_CreateNewCommands()
     Sys_LeaveCriticalSection(CRITSECT_CLIENT_CMD);
 }
 
-void __cdecl CL_WritePacket()
+void CL_WritePacket()
 {
     int reliableAcknowledge; // r11
     bool v1; // cr58
@@ -1711,14 +1711,14 @@ void __cdecl CL_WritePacket()
     Sys_LeaveCriticalSection(CRITSECT_CLIENT_CMD);
 }
 
-void __cdecl CL_ClearClientCommandPacket()
+void CL_ClearClientCommandPacket()
 {
     Sys_EnterCriticalSection(CRITSECT_CLIENT_CMD);
     clientConnections[0].reliableAcknowledge = clientConnections[0].reliableSequence;
     Sys_LeaveCriticalSection(CRITSECT_CLIENT_CMD);
 }
 
-void __cdecl CL_ClearClientThinkPacket()
+void CL_ClearClientThinkPacket()
 {
     Sys_EnterCriticalSection(CRITSECT_CLIENT_CMD);
     clients[0].cmdNumberAcknowledge = clients[0].cmdNumber;
@@ -1748,7 +1748,7 @@ void PausedModelPreviewerGamepad()
 #endif
 }
 
-void __cdecl CL_Input(int localClientNum)
+void CL_Input(int localClientNum)
 {
     if (CL_AllowInput())
     {
@@ -1762,7 +1762,7 @@ void __cdecl CL_Input(int localClientNum)
     }
 }
 
-void __cdecl CL_ShutdownInput()
+void CL_ShutdownInput()
 {
     Cmd_RemoveCommand("mouseMove");
     Cmd_RemoveCommand("remoteKey");
@@ -1839,7 +1839,7 @@ void __cdecl CL_ShutdownInput()
     Cmd_RemoveCommand("-gostand");
 }
 
-void __cdecl CL_ClearKeys(int localClientNum)
+void CL_ClearKeys(int localClientNum)
 {
     memset(kb, 0, sizeof(kb));
 }
@@ -1930,7 +1930,7 @@ cmd_function_s IN_NightVisionDown_VAR;
 cmd_function_s IN_NightVisionUp_VAR;
 
 
-void __cdecl CL_InitInput()
+void CL_InitInput()
 {
     const char *v0; // r5
     unsigned __int16 v1; // r4
@@ -2031,17 +2031,17 @@ void __cdecl CL_InitInput()
 
 // LWSS ADD - the SP build is from XBox, and we need mouse controls so I'm pasting over the mouse stuff from MP
 
-static void __cdecl Scr_MouseEvent(int x, int y)
+static void Scr_MouseEvent(int x, int y)
 {
     UI_Component::MouseEvent(x, y);
 }
 
-void __cdecl CL_ShowSystemCursor(bool show)
+void CL_ShowSystemCursor(bool show)
 {
     IN_ShowSystemCursor(show);
 }
 
-int __cdecl CL_MouseEvent(int x, int y, int dx, int dy)
+int CL_MouseEvent(int x, int y, int dx, int dy)
 {
     clientActive_t *LocalClientGlobals; // [esp+0h] [ebp-8h]
 

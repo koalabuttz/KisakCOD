@@ -4,12 +4,12 @@
 #include <universal/com_files.h>
 #include <qcommon/qcommon.h>
 
-void __cdecl Image_FreeRawPixels(GfxRawImage *image)
+void Image_FreeRawPixels(GfxRawImage *image)
 {
     Z_Free(image->pixels, 22);
 }
 
-void __cdecl Image_CopyBitmapData(GfxRawImage *image, GfxImageFileHeader *imageFile, uint8_t *imageData)
+void Image_CopyBitmapData(GfxRawImage *image, GfxImageFileHeader *imageFile, uint8_t *imageData)
 {
     int pixelCount; // [esp+4h] [ebp-8h]
     GfxRawPixel *pixel; // [esp+8h] [ebp-4h]
@@ -89,7 +89,7 @@ void __cdecl Image_CopyBitmapData(GfxRawImage *image, GfxImageFileHeader *imageF
     }
 }
 
-void __cdecl Image_DecodeBitmap(
+void Image_DecodeBitmap(
     GfxRawImage *image,
     GfxImageFileHeader *imageFile,
     uint8_t *imageData,
@@ -126,7 +126,7 @@ void __cdecl Image_DecodeBitmap(
     }
 }
 
-void __cdecl Image_DecompressDxt1_Internal(
+void Image_DecompressDxt1_Internal(
     DdsBlock_Dxt1_t *dxt1,
     GfxRawImage *image,
     int x,
@@ -195,12 +195,12 @@ void __cdecl Image_DecompressDxt1_Internal(
     }
 }
 
-void __cdecl Image_DecompressDxt1(uint8_t *block, GfxRawImage *image, int x, int y)
+void Image_DecompressDxt1(uint8_t *block, GfxRawImage *image, int x, int y)
 {
     Image_DecompressDxt1_Internal((DdsBlock_Dxt1_t*)block, image, x, y, 0);
 }
 
-void __cdecl Image_DecompressDxt3(uint8_t *block, GfxRawImage *image, int x, int y)
+void Image_DecompressDxt3(uint8_t *block, GfxRawImage *image, int x, int y)
 {
     int dy; // [esp+4h] [ebp-4h]
 
@@ -214,7 +214,7 @@ void __cdecl Image_DecompressDxt3(uint8_t *block, GfxRawImage *image, int x, int
     }
 }
 
-void __cdecl Image_DecompressDxt5(uint8_t *block, GfxRawImage *image, int x, int y)
+void Image_DecompressDxt5(uint8_t *block, GfxRawImage *image, int x, int y)
 {
     int i; // [esp+F4h] [ebp-24h]
     uint8_t a[8]; // [esp+104h] [ebp-14h]
@@ -256,11 +256,11 @@ void __cdecl Image_DecompressDxt5(uint8_t *block, GfxRawImage *image, int x, int
     }
 }
 
-void __cdecl Image_CopyDxtcData(GfxRawImage *image, GfxImageFileHeader *imageFile, uint8_t *imageData)
+void Image_CopyDxtcData(GfxRawImage *image, GfxImageFileHeader *imageFile, uint8_t *imageData)
 {
     uint8_t format; // [esp+0h] [ebp-14h]
     int blockSize; // [esp+4h] [ebp-10h]
-    void(__cdecl * DecompressDxtcBlock)(uint8_t *, GfxRawImage *, int, int); // [esp+8h] [ebp-Ch]
+    void(* DecompressDxtcBlock)(uint8_t *, GfxRawImage *, int, int); // [esp+8h] [ebp-Ch]
     int x; // [esp+Ch] [ebp-8h]
     int y; // [esp+10h] [ebp-4h]
 
@@ -294,7 +294,7 @@ void __cdecl Image_CopyDxtcData(GfxRawImage *image, GfxImageFileHeader *imageFil
     }
 }
 
-void __cdecl Image_DecodeDxtc(
+void Image_DecodeDxtc(
     GfxRawImage *image,
     GfxImageFileHeader *imageFile,
     uint8_t *imageData,
@@ -338,7 +338,7 @@ void __cdecl Image_DecodeDxtc(
     }
 }
 
-void __cdecl Image_GetRawPixels(char *imageName, GfxRawImage *image)
+void Image_GetRawPixels(char *imageName, GfxRawImage *image)
 {
     GfxImageFileHeader *imageData; // [esp+14h] [ebp-50h]
     char filepath[64]; // [esp+1Ch] [ebp-48h] BYREF
@@ -416,7 +416,7 @@ void __cdecl Image_GetRawPixels(char *imageName, GfxRawImage *image)
     FS_FreeFile(imageFile->tag);
 }
 
-int __cdecl Image_CountMipmapsForFile(GfxImageFileHeader *imageFile)
+int Image_CountMipmapsForFile(GfxImageFileHeader *imageFile)
 {
     int v2; // [esp+0h] [ebp-1Ch]
     int v3; // [esp+4h] [ebp-18h]
@@ -447,7 +447,7 @@ int __cdecl Image_CountMipmapsForFile(GfxImageFileHeader *imageFile)
     return mipCount;
 }
 
-int __cdecl Image_CountMipmapsForFile_0(GfxImageFileHeader *imageFile)
+int Image_CountMipmapsForFile_0(GfxImageFileHeader *imageFile)
 {
     int v2; // [esp+0h] [ebp-1Ch]
     int v3; // [esp+4h] [ebp-18h]
@@ -478,7 +478,7 @@ int __cdecl Image_CountMipmapsForFile_0(GfxImageFileHeader *imageFile)
     return mipCount;
 }
 
-void __cdecl Image_DecodeWavelet(
+void Image_DecodeWavelet(
     GfxRawImage *image,
     GfxImageFileHeader *imageFile,
     uint8_t *imageData,

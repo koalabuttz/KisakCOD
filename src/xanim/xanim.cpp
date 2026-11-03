@@ -30,23 +30,23 @@ static bool g_anim_developer;
 static XAnimNotify_s g_notifyList[0x80];
 static XAnimInfo g_xAnimInfo[0x1000];
 
-int __cdecl XAnimGetTreeHighMemUsage()
+int XAnimGetTreeHighMemUsage()
 {
     return g_info_high_usage << 6;
 }
 
-int __cdecl XAnimGetTreeMemUsage()
+int XAnimGetTreeMemUsage()
 {
     return g_info_usage << 6;
 }
 
-void __cdecl TRACK_xanim()
+void TRACK_xanim()
 {
     //track_static_alloc_internal(g_xAnimInfo, 0x40000, "g_xAnimInfo", 11);
     //track_static_alloc_internal(g_notifyList, 1536, "g_notifyList", 11);
 }
 
-int __cdecl XAnimGetTreeMaxMemUsage()
+int XAnimGetTreeMaxMemUsage()
 {
     return 0x40000;
 }
@@ -56,7 +56,7 @@ XAnimInfo *XAnimAllocInfo(DObj_s *obj, uint32_t animIndex, int after)
     return &g_xAnimInfo[XAnimAllocInfoIndex(obj, animIndex, after)];
 }
 
-void __cdecl XAnimInit()
+void XAnimInit()
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -80,7 +80,7 @@ void __cdecl XAnimInit()
     g_info_high_usage = 1;
 }
 
-void __cdecl XAnimShutdown()
+void XAnimShutdown()
 {
     if (g_endNotetrackName)
     {
@@ -90,17 +90,17 @@ void __cdecl XAnimShutdown()
     }
 }
 
-XAnimParts* __cdecl XAnimFindData_LoadObj(const char* name)
+XAnimParts* XAnimFindData_LoadObj(const char* name)
 {
     return (XAnimParts*)Hunk_FindDataForFile(6, name);
 }
 
-XAnimParts* __cdecl XAnimFindData_FastFile(const char* name)
+XAnimParts* XAnimFindData_FastFile(const char* name)
 {
     return DB_FindXAssetHeader(ASSET_TYPE_XANIMPARTS, name).parts;
 }
 
-void __cdecl XAnimCreate(XAnim_s* anims, uint32_t animIndex, const char* name)
+void XAnimCreate(XAnim_s* anims, uint32_t animIndex, const char* name)
 {
     char v4; // [esp+3h] [ebp-31h]
     char* v5; // [esp+8h] [ebp-2Ch]
@@ -138,7 +138,7 @@ void __cdecl XAnimCreate(XAnim_s* anims, uint32_t animIndex, const char* name)
     }
 }
 
-XAnimParts *__cdecl XAnimClone(XAnimParts *fromParts, void *(__cdecl *Alloc)(int))
+XAnimParts *XAnimClone(XAnimParts *fromParts, void *(*Alloc)(int))
 {
     XAnimParts *toParts; // [esp+8h] [ebp-18h]
     int size; // [esp+Ch] [ebp-14h]
@@ -164,7 +164,7 @@ XAnimParts *__cdecl XAnimClone(XAnimParts *fromParts, void *(__cdecl *Alloc)(int
     return toParts;
 }
 
-XAnimParts *__cdecl XAnimPrecache(const char *name, void *(__cdecl *Alloc)(int))
+XAnimParts *XAnimPrecache(const char *name, void *(*Alloc)(int))
 {
     XAnimParts *result; // eax
     XAnimParts *Data_FastFile; // eax
@@ -205,7 +205,7 @@ XAnimParts *__cdecl XAnimPrecache(const char *name, void *(__cdecl *Alloc)(int))
     return result;
 }
 
-void __cdecl XAnimBlend(
+void XAnimBlend(
     XAnim_s* anims,
     uint32_t animIndex,
     const char* name,
@@ -257,19 +257,19 @@ void __cdecl XAnimBlend(
     }
 }
 
-bool __cdecl IsNodeAdditive(const XAnimEntry* node)
+bool IsNodeAdditive(const XAnimEntry* node)
 {
     iassert(node);
 
     return !IsLeafNode(node) && (node->animParent.flags & 0x10) != 0;
 }
 
-bool __cdecl IsLeafNode(const XAnimEntry* anim)
+bool IsLeafNode(const XAnimEntry* anim)
 {
     return anim->numAnims == 0;
 }
 
-XAnim_s* __cdecl XAnimCreateAnims(const char* debugName, uint32_t size, void* (__cdecl* Alloc)(int))
+XAnim_s* XAnimCreateAnims(const char* debugName, uint32_t size, void* (* Alloc)(int))
 {
     char v4; // [esp+3h] [ebp-29h]
     char* v5; // [esp+8h] [ebp-24h]
@@ -303,7 +303,7 @@ XAnim_s* __cdecl XAnimCreateAnims(const char* debugName, uint32_t size, void* (_
     return anims;
 }
 
-void __cdecl XAnimFree(XAnimParts *parts)
+void XAnimFree(XAnimParts *parts)
 {
     int size; // [esp+0h] [ebp-14h]
     XAnimNotifyInfo *notify; // [esp+4h] [ebp-10h]
@@ -325,7 +325,7 @@ void __cdecl XAnimFree(XAnimParts *parts)
     }
 }
 
-void __cdecl XAnimFreeList(XAnim_s* anims)
+void XAnimFreeList(XAnim_s* anims)
 {
     uint32_t i; // [esp+0h] [ebp-4h]
 
@@ -349,7 +349,7 @@ void __cdecl XAnimFreeList(XAnim_s* anims)
     }
 }
 
-XAnimTree_s* __cdecl XAnimCreateTree(XAnim_s* anims, void* (__cdecl* Alloc)(int))
+XAnimTree_s* XAnimCreateTree(XAnim_s* anims, void* (* Alloc)(int))
 {
     XAnimTree_s* tree; // [esp+0h] [ebp-Ch]
 
@@ -363,7 +363,7 @@ XAnimTree_s* __cdecl XAnimCreateTree(XAnim_s* anims, void* (__cdecl* Alloc)(int)
     return tree;
 }
 
-void __cdecl XAnimFreeTree(XAnimTree_s* tree, void(__cdecl* Free)(void*, int))
+void XAnimFreeTree(XAnimTree_s* tree, void(* Free)(void*, int))
 {
     iassert(tree);
     iassert(tree->anims);
@@ -400,7 +400,7 @@ int XAnimGetAssetType(XAnimTree_s *tree, uint32_t index)
     return node->parts->assetType;
 }
 
-XAnim_s* __cdecl XAnimGetAnims(const XAnimTree_s* tree)
+XAnim_s* XAnimGetAnims(const XAnimTree_s* tree)
 {
     iassert(tree);
 
@@ -424,7 +424,7 @@ void XAnimResetAnimMap(const DObj_s *obj, uint32_t infoIndex)
     XAnimResetAnimMap_r(modelMap, infoIndex);
 }
 
-void __cdecl XAnimInitModelMap(XModel* const* models, uint32_t numModels, XModelNameMap* modelMap)
+void XAnimInitModelMap(XModel* const* models, uint32_t numModels, XModelNameMap* modelMap)
 {
     uint32_t boneIndex; // [esp+0h] [ebp-20h]
     uint16_t boneName; // [esp+4h] [ebp-1Ch]
@@ -460,7 +460,7 @@ void __cdecl XAnimInitModelMap(XModel* const* models, uint32_t numModels, XModel
     }
 }
 
-void __cdecl XAnimResetAnimMap_r(XModelNameMap* modelMap, uint32_t infoIndex)
+void XAnimResetAnimMap_r(XModelNameMap* modelMap, uint32_t infoIndex)
 {
     XAnimInfo* info; // [esp+0h] [ebp-8h]
     uint32_t childInfoIndex; // [esp+4h] [ebp-4h]
@@ -484,7 +484,7 @@ void __cdecl XAnimResetAnimMap_r(XModelNameMap* modelMap, uint32_t infoIndex)
     }
 }
 
-void __cdecl XAnimResetAnimMapLeaf(const XModelNameMap* modelMap, uint32_t infoIndex)
+void XAnimResetAnimMapLeaf(const XModelNameMap* modelMap, uint32_t infoIndex)
 {
     const char* animToModel2; // [esp+4h] [ebp-8h]
     uint32_t animToModel; // [esp+8h] [ebp-4h]
@@ -498,7 +498,7 @@ void __cdecl XAnimResetAnimMapLeaf(const XModelNameMap* modelMap, uint32_t infoI
     SL_RemoveRefToStringOfSize(animToModel, (unsigned __int8)animToModel2[16] + 17);
 }
 
-uint32_t __cdecl XAnimGetAnimMap(const XAnimParts* parts, const XModelNameMap* modelMap)
+uint32_t XAnimGetAnimMap(const XAnimParts* parts, const XModelNameMap* modelMap)
 {
     uint32_t boneIndex; // [esp+0h] [ebp-BCh]
     uint32_t hash; // [esp+8h] [ebp-B4h]
@@ -539,7 +539,7 @@ uint32_t __cdecl XAnimGetAnimMap(const XAnimParts* parts, const XModelNameMap* m
     return SL_GetStringOfSize((char*)&animToModel, 0, boneCount + 17, MT_TYPE_MODEL_PART_MAP);
 }
 
-double __cdecl XAnimGetLength(const XAnim_s* anims, uint32_t animIndex)
+double XAnimGetLength(const XAnim_s* anims, uint32_t animIndex)
 {
     XAnimParts* parts; // [esp+Ch] [ebp-4h]
 
@@ -557,12 +557,12 @@ double __cdecl XAnimGetLength(const XAnim_s* anims, uint32_t animIndex)
     return (float)((double)parts->numframes / parts->framerate);
 }
 
-int __cdecl XAnimGetLengthMsec(const XAnim_s* anims, uint32_t anim)
+int XAnimGetLengthMsec(const XAnim_s* anims, uint32_t anim)
 {
     return (int)(XAnimGetLength(anims, anim) * 1000.0);
 }
 
-double __cdecl XAnimGetTime(const XAnimTree_s* tree, uint32_t animIndex)
+double XAnimGetTime(const XAnimTree_s* tree, uint32_t animIndex)
 {
     uint32_t infoIndex; // [esp+4h] [ebp-4h]
 
@@ -587,7 +587,7 @@ double __cdecl XAnimGetTime(const XAnimTree_s* tree, uint32_t animIndex)
         return 0.0f;
 }
 
-uint32_t __cdecl XAnimGetInfoIndex(const XAnimTree_s* tree, uint32_t animIndex)
+uint32_t XAnimGetInfoIndex(const XAnimTree_s* tree, uint32_t animIndex)
 {
     if (!tree)
         MyAssertHandler(".\\xanim\\xanim.cpp", 2466, 0, "%s", "tree");
@@ -597,7 +597,7 @@ uint32_t __cdecl XAnimGetInfoIndex(const XAnimTree_s* tree, uint32_t animIndex)
         return 0;
 }
 
-uint32_t __cdecl XAnimGetInfoIndex_r(const XAnimTree_s* tree, uint32_t animIndex, uint32_t infoIndex)
+uint32_t XAnimGetInfoIndex_r(const XAnimTree_s* tree, uint32_t animIndex, uint32_t infoIndex)
 {
     XAnimInfo* info; // [esp+0h] [ebp-10h]
     uint32_t prevAnimIndex; // [esp+4h] [ebp-Ch]
@@ -633,7 +633,7 @@ uint32_t __cdecl XAnimGetInfoIndex_r(const XAnimTree_s* tree, uint32_t animIndex
     return 0;
 }
 
-double __cdecl XAnimGetWeight(const XAnimTree_s* tree, uint32_t animIndex)
+double XAnimGetWeight(const XAnimTree_s* tree, uint32_t animIndex)
 {
     uint32_t infoIndex; // [esp+4h] [ebp-4h]
 
@@ -658,7 +658,7 @@ double __cdecl XAnimGetWeight(const XAnimTree_s* tree, uint32_t animIndex)
         return (float)0.0;
 }
 
-bool __cdecl XAnimHasFinished(const XAnimTree_s* tree, uint32_t animIndex)
+bool XAnimHasFinished(const XAnimTree_s* tree, uint32_t animIndex)
 {
     XAnimState* state; // [esp+4h] [ebp-8h]
     uint32_t infoIndex; // [esp+8h] [ebp-4h]
@@ -692,7 +692,7 @@ bool __cdecl XAnimHasFinished(const XAnimTree_s* tree, uint32_t animIndex)
         || state->cycleCount > state->oldCycleCount;
 }
 
-int __cdecl XAnimGetNumChildren(const XAnim_s* anims, uint32_t animIndex)
+int XAnimGetNumChildren(const XAnim_s* anims, uint32_t animIndex)
 {
     if (!anims)
         MyAssertHandler(".\\xanim\\xanim.cpp", 2541, 0, "%s", "anims");
@@ -701,7 +701,7 @@ int __cdecl XAnimGetNumChildren(const XAnim_s* anims, uint32_t animIndex)
     return anims->entries[animIndex].numAnims;
 }
 
-uint32_t __cdecl XAnimGetChildAt(const XAnim_s* anims, uint32_t animIndex, uint32_t childIndex)
+uint32_t XAnimGetChildAt(const XAnim_s* anims, uint32_t animIndex, uint32_t childIndex)
 {
     if (!anims)
         MyAssertHandler(".\\xanim\\xanim.cpp", 2555, 0, "%s", "anims");
@@ -718,7 +718,7 @@ uint32_t __cdecl XAnimGetChildAt(const XAnim_s* anims, uint32_t animIndex, uint3
     return childIndex + anims->entries[animIndex].animParent.children;
 }
 
-const char* __cdecl XAnimGetAnimName(const XAnim_s* anims, uint32_t animIndex)
+const char* XAnimGetAnimName(const XAnim_s* anims, uint32_t animIndex)
 {
     iassert(anims);
     iassert(animIndex < anims->size);
@@ -729,7 +729,7 @@ const char* __cdecl XAnimGetAnimName(const XAnim_s* anims, uint32_t animIndex)
         return "";
 }
 
-char* __cdecl XAnimGetAnimDebugName(const XAnim_s* anims, uint32_t animIndex)
+char* XAnimGetAnimDebugName(const XAnim_s* anims, uint32_t animIndex)
 {
     bool isDefault; // [esp+Fh] [ebp-15h]
     XAnimParts* parts; // [esp+10h] [ebp-14h]
@@ -769,21 +769,21 @@ char* __cdecl XAnimGetAnimDebugName(const XAnim_s* anims, uint32_t animIndex)
     }
 }
 
-const char* __cdecl XAnimGetAnimTreeDebugName(const XAnim_s* anims)
+const char* XAnimGetAnimTreeDebugName(const XAnim_s* anims)
 {
     if (!anims)
         MyAssertHandler(".\\xanim\\xanim.cpp", 2622, 0, "%s", "anims");
     return anims->debugName;
 }
 
-uint32_t __cdecl XAnimGetAnimTreeSize(const XAnim_s* anims)
+uint32_t XAnimGetAnimTreeSize(const XAnim_s* anims)
 {
     if (!anims)
         MyAssertHandler(".\\xanim\\xanim.cpp", 2634, 0, "%s", "anims");
     return anims->size;
 }
 
-void __cdecl XAnimInitInfo(XAnimInfo* info)
+void XAnimInitInfo(XAnimInfo* info)
 {
     info->state.currentAnimTime = 0.0;
     info->state.oldTime = 0.0;
@@ -800,7 +800,7 @@ void __cdecl XAnimInitInfo(XAnimInfo* info)
     info->notifyType = 0;
 }
 
-void __cdecl XAnimUpdateOldTime(
+void XAnimUpdateOldTime(
     DObj_s* obj,
     uint32_t infoIndex,
     XAnimState* syncState,
@@ -892,7 +892,7 @@ void __cdecl XAnimUpdateOldTime(
     info->state.oldCycleCount = info->state.cycleCount;
 }
 
-uint32_t __cdecl XAnimInitTime(XAnimTree_s* tree, uint32_t infoIndex, float goalTime)
+uint32_t XAnimInitTime(XAnimTree_s* tree, uint32_t infoIndex, float goalTime)
 {
     uint32_t toInfoIndex; // [esp+10h] [ebp-4h]
 
@@ -921,7 +921,7 @@ uint32_t __cdecl XAnimInitTime(XAnimTree_s* tree, uint32_t infoIndex, float goal
     }
 }
 
-void __cdecl XAnimResetTime(uint32_t infoIndex)
+void XAnimResetTime(uint32_t infoIndex)
 {
     uint32_t childInfoIndex; // [esp+0h] [ebp-4h]
 
@@ -930,7 +930,7 @@ void __cdecl XAnimResetTime(uint32_t infoIndex)
         XAnimResetTime(childInfoIndex);
 }
 
-void __cdecl XAnimResetTimeInternal(uint32_t infoIndex)
+void XAnimResetTimeInternal(uint32_t infoIndex)
 {
     XAnimState* state; // [esp+0h] [ebp-8h]
 
@@ -950,7 +950,7 @@ void __cdecl XAnimResetTimeInternal(uint32_t infoIndex)
     g_xAnimInfo[infoIndex].notifyIndex = -1;
 }
 
-uint32_t __cdecl XAnimCloneInitTime(XAnimTree_s* tree, uint32_t infoIndex, uint32_t parentIndex)
+uint32_t XAnimCloneInitTime(XAnimTree_s* tree, uint32_t infoIndex, uint32_t parentIndex)
 {
     XAnimInfo* toInfo; // [esp+0h] [ebp-14h]
     uint32_t toInfoIndex; // [esp+4h] [ebp-10h]
@@ -981,7 +981,7 @@ uint32_t __cdecl XAnimCloneInitTime(XAnimTree_s* tree, uint32_t infoIndex, uint3
     return toInfoIndex;
 }
 
-void __cdecl DObjInitServerTime(DObj_s* obj, float dtime)
+void DObjInitServerTime(DObj_s* obj, float dtime)
 {
     XAnimState syncState; // [esp+58h] [ebp-28h] BYREF
     XAnimTree_s* tree; // [esp+78h] [ebp-8h]
@@ -999,7 +999,7 @@ void __cdecl DObjInitServerTime(DObj_s* obj, float dtime)
     }
 }
 
-void __cdecl DObjUpdateClientInfo(DObj_s* obj, float dtime, bool notify)
+void DObjUpdateClientInfo(DObj_s* obj, float dtime, bool notify)
 {
     XAnimState syncState; // [esp+58h] [ebp-28h] BYREF
     XAnimTree_s* tree; // [esp+78h] [ebp-8h]
@@ -1024,7 +1024,7 @@ void __cdecl DObjUpdateClientInfo(DObj_s* obj, float dtime, bool notify)
     }
 }
 
-void __cdecl XAnimUpdateTimeAndNotetrack(const DObj_s* obj, uint32_t infoIndex, float dtime, bool bNotify)
+void XAnimUpdateTimeAndNotetrack(const DObj_s* obj, uint32_t infoIndex, float dtime, bool bNotify)
 {
     uint32_t nextInfoIndex; // [esp+Ch] [ebp-Ch]
     XAnimInfo* info; // [esp+10h] [ebp-8h]
@@ -1089,7 +1089,7 @@ void __cdecl XAnimUpdateTimeAndNotetrack(const DObj_s* obj, uint32_t infoIndex, 
     }
 }
 
-void __cdecl XAnimCheckFreeInfo(XAnimTree_s* tree, uint32_t infoIndex, int hasWeight)
+void XAnimCheckFreeInfo(XAnimTree_s* tree, uint32_t infoIndex, int hasWeight)
 {
     uint32_t nextInfoIndex; // [esp+4h] [ebp-Ch]
     XAnimInfo* info; // [esp+8h] [ebp-8h]
@@ -1115,7 +1115,7 @@ void __cdecl XAnimCheckFreeInfo(XAnimTree_s* tree, uint32_t infoIndex, int hasWe
         XAnimFreeInfo(tree, infoIndex);
 }
 
-void __cdecl XAnimFreeInfo(XAnimTree_s* tree, uint32_t infoIndex)
+void XAnimFreeInfo(XAnimTree_s* tree, uint32_t infoIndex)
 {
     XAnimInfo* info; // [esp+0h] [ebp-14h]
     uint32_t next; // [esp+4h] [ebp-10h]
@@ -1186,7 +1186,7 @@ void __cdecl XAnimFreeInfo(XAnimTree_s* tree, uint32_t infoIndex)
     InterlockedDecrement(&tree->modifyRefCount);
 }
 
-void __cdecl XAnimClearServerNotify(XAnimInfo* info)
+void XAnimClearServerNotify(XAnimInfo* info)
 {
     if (info->notifyName)
     {
@@ -1196,7 +1196,7 @@ void __cdecl XAnimClearServerNotify(XAnimInfo* info)
     info->notifyIndex = -1;
 }
 
-double __cdecl XAnimGetAverageRateFrequency(const XAnimTree_s *tree, uint32_t infoIndex)
+double XAnimGetAverageRateFrequency(const XAnimTree_s *tree, uint32_t infoIndex)
 {
     const XAnimInfo *info; // [esp+14h] [ebp-18h]
     const XAnimInfo *infoa; // [esp+14h] [ebp-18h]
@@ -1256,7 +1256,7 @@ double __cdecl XAnimGetAverageRateFrequency(const XAnimTree_s *tree, uint32_t in
     }
 }
 
-void __cdecl XAnimUpdateTimeAndNotetrackLeaf(
+void XAnimUpdateTimeAndNotetrackLeaf(
     const DObj_s* obj,
     const XAnimParts* parts,
     uint32_t infoIndex,
@@ -1355,7 +1355,7 @@ void __cdecl XAnimUpdateTimeAndNotetrackLeaf(
     }
 }
 
-void __cdecl XAnimProcessClientNotify(XAnimInfo* info, float dtime)
+void XAnimProcessClientNotify(XAnimInfo* info, float dtime)
 {
     float frac; // [esp+4h] [ebp-1Ch]
     float fraca; // [esp+4h] [ebp-1Ch]
@@ -1470,7 +1470,7 @@ void __cdecl XAnimProcessClientNotify(XAnimInfo* info, float dtime)
     }
 }
 
-uint16_t __cdecl XAnimGetNextNotifyIndex(const XAnimParts* parts, float time)
+uint16_t XAnimGetNextNotifyIndex(const XAnimParts* parts, float time)
 {
     XAnimNotifyInfo* notifyInfo; // [esp+8h] [ebp-14h]
     XAnimNotifyInfo* bestNotifyInfo; // [esp+Ch] [ebp-10h]
@@ -1513,7 +1513,7 @@ uint16_t __cdecl XAnimGetNextNotifyIndex(const XAnimParts* parts, float time)
     return bestNotifyInfo - parts->notify;
 }
 
-double __cdecl XAnimGetNotifyFracLeaf(const XAnimState* state, const XAnimState* nextState, float time, float dtime)
+double XAnimGetNotifyFracLeaf(const XAnimState* state, const XAnimState* nextState, float time, float dtime)
 {
     if (dtime == 0.0)
         MyAssertHandler(".\\xanim\\xanim.cpp", 940, 0, "%s", "dtime");
@@ -1544,7 +1544,7 @@ double __cdecl XAnimGetNotifyFracLeaf(const XAnimState* state, const XAnimState*
     }
 }
 
-void __cdecl XAnimAddClientNotify(uint32_t notetrackName, float frac, uint32_t notifyType)
+void XAnimAddClientNotify(uint32_t notetrackName, float frac, uint32_t notifyType)
 {
     XAnimNotify_s* notify; // [esp+0h] [ebp-8h]
     XAnimNotify_s* notifya; // [esp+0h] [ebp-8h]
@@ -1575,7 +1575,7 @@ void __cdecl XAnimAddClientNotify(uint32_t notetrackName, float frac, uint32_t n
     ++g_notifyListSize;
 }
 
-void __cdecl XAnimUpdateTimeAndNotetrackSyncSubTree(
+void XAnimUpdateTimeAndNotetrackSyncSubTree(
     const DObj_s* obj,
     uint32_t infoIndex,
     float dtime,
@@ -1695,7 +1695,7 @@ void __cdecl XAnimUpdateTimeAndNotetrackSyncSubTree(
     }
 }
 
-void __cdecl XAnimUpdateInfoSync(
+void XAnimUpdateInfoSync(
     const DObj_s* obj,
     uint32_t infoIndex,
     bool bNotify,
@@ -1753,7 +1753,7 @@ void __cdecl XAnimUpdateInfoSync(
     }
 }
 
-void __cdecl XAnimProcessServerNotify(const DObj_s* obj, XAnimInfo* info, float time)
+void XAnimProcessServerNotify(const DObj_s* obj, XAnimInfo* info, float time)
 {
     XAnimNotifyInfo* notifyInfo; // [esp+0h] [ebp-10h]
     XAnimNotifyInfo* notifyInfoa; // [esp+0h] [ebp-10h]
@@ -1895,7 +1895,7 @@ void __cdecl XAnimProcessServerNotify(const DObj_s* obj, XAnimInfo* info, float 
     }
 }
 
-XAnimParts* __cdecl XAnimGetParts(const XAnimTree_s* tree, XAnimInfo* info)
+XAnimParts* XAnimGetParts(const XAnimTree_s* tree, XAnimInfo* info)
 {
     XAnimEntry* anim; // [esp+0h] [ebp-8h]
     XAnimParts* parts; // [esp+4h] [ebp-4h]
@@ -1924,13 +1924,13 @@ XAnimParts* __cdecl XAnimGetParts(const XAnimTree_s* tree, XAnimInfo* info)
     }
 }
 
-void __cdecl NotifyServerNotetrack(const DObj_s* obj, uint32_t notifyName, uint32_t notetrackName)
+void NotifyServerNotetrack(const DObj_s* obj, uint32_t notifyName, uint32_t notetrackName)
 {
     Scr_AddConstString(notetrackName);
     Scr_NotifyNum(obj->entnum - 1, 0, notifyName, 1u);
 }
 
-int __cdecl DObjUpdateServerInfo(DObj_s* obj, float dtime, int bNotify)
+int DObjUpdateServerInfo(DObj_s* obj, float dtime, int bNotify)
 {
     float fracDtime; // [esp+54h] [ebp-Ch]
     XAnimTree_s* tree; // [esp+58h] [ebp-8h]
@@ -1972,7 +1972,7 @@ int __cdecl DObjUpdateServerInfo(DObj_s* obj, float dtime, int bNotify)
     }
 }
 
-double __cdecl XAnimFindServerNoteTrack(const DObj_s* obj, uint32_t infoIndex, float dtime)
+double XAnimFindServerNoteTrack(const DObj_s* obj, uint32_t infoIndex, float dtime)
 {
     float v4; // [esp+8h] [ebp-1Ch]
     float v5; // [esp+Ch] [ebp-18h]
@@ -2053,7 +2053,7 @@ double __cdecl XAnimFindServerNoteTrack(const DObj_s* obj, uint32_t infoIndex, f
     }
 }
 
-double __cdecl XAnimFindServerNoteTrackLeafNode(const DObj_s* obj, XAnimInfo* info, float dtime)
+double XAnimFindServerNoteTrackLeafNode(const DObj_s* obj, XAnimInfo* info, float dtime)
 {
     float v4; // [esp+8h] [ebp-38h]
     float v5; // [esp+Ch] [ebp-34h]
@@ -2103,7 +2103,7 @@ double __cdecl XAnimFindServerNoteTrackLeafNode(const DObj_s* obj, XAnimInfo* in
     return XAnimGetNextServerNotifyFrac(obj, info, state, &nextState, dtimea);
 }
 
-double __cdecl XAnimGetNextServerNotifyFrac(
+double XAnimGetNextServerNotifyFrac(
     const DObj_s* obj,
     XAnimInfo* info,
     const XAnimState* syncState,
@@ -2131,7 +2131,7 @@ double __cdecl XAnimGetNextServerNotifyFrac(
         return XAnimGetNotifyFracLeaf(syncState, nextSyncState, 1.0, dtime);
 }
 
-double __cdecl XAnimFindServerNoteTrackSyncSubTree(const DObj_s* obj, XAnimInfo* info, float dtime)
+double XAnimFindServerNoteTrackSyncSubTree(const DObj_s* obj, XAnimInfo* info, float dtime)
 {
     float v4; // [esp+8h] [ebp-34h]
     float v5; // [esp+Ch] [ebp-30h]
@@ -2182,7 +2182,7 @@ double __cdecl XAnimFindServerNoteTrackSyncSubTree(const DObj_s* obj, XAnimInfo*
     return XAnimGetServerNotifyFracSyncTotal(obj, info, state, &nextState, dtime);
 }
 
-double __cdecl XAnimGetServerNotifyFracSyncTotal(
+double XAnimGetServerNotifyFracSyncTotal(
     const DObj_s* obj,
     XAnimInfo* info,
     const XAnimState* syncState,
@@ -2216,7 +2216,7 @@ double __cdecl XAnimGetServerNotifyFracSyncTotal(
     return minFrac;
 }
 
-int __cdecl DObjGetClientNotifyList(XAnimNotify_s** notifyList)
+int DObjGetClientNotifyList(XAnimNotify_s** notifyList)
 {
     if (!Sys_IsMainThread())
         MyAssertHandler(".\\xanim\\xanim.cpp", 2804, 0, "%s", "Sys_IsMainThread()");
@@ -2224,7 +2224,7 @@ int __cdecl DObjGetClientNotifyList(XAnimNotify_s** notifyList)
     return g_notifyListSize;
 }
 
-void __cdecl DObjDisplayAnimToBuffer(const DObj_s* obj, const char* header, char* buffer, int bufferSize)
+void DObjDisplayAnimToBuffer(const DObj_s* obj, const char* header, char* buffer, int bufferSize)
 {
     XAnimTree_s* tree; // [esp+0h] [ebp-8h]
     int bufferPos; // [esp+4h] [ebp-4h] BYREF
@@ -2247,7 +2247,7 @@ void __cdecl DObjDisplayAnimToBuffer(const DObj_s* obj, const char* header, char
     }
 }
 
-void __cdecl XAnimDisplay(
+void XAnimDisplay(
     const XAnimTree_s *tree,
     uint32_t infoIndex,
     int depth,
@@ -2419,7 +2419,7 @@ void __cdecl XAnimDisplay(
     }
 }
 
-void __cdecl DObjDisplayAnim(const DObj_s* obj, const char* header)
+void DObjDisplayAnim(const DObj_s* obj, const char* header)
 {
     char buffer[2052]; // [esp+0h] [ebp-808h] BYREF
 
@@ -2428,7 +2428,7 @@ void __cdecl DObjDisplayAnim(const DObj_s* obj, const char* header)
     Com_Printf(CON_CHANNEL_ANIM, buffer);
 }
 
-void __cdecl XAnimCalcDelta(DObj_s* obj, uint32_t animIndex, float* rot, float* trans, bool bUseGoalWeight)
+void XAnimCalcDelta(DObj_s* obj, uint32_t animIndex, float* rot, float* trans, bool bUseGoalWeight)
 {
     XAnimSimpleRotPos rotPos; // [esp+3Ch] [ebp-24h] BYREF
     XAnimTree_s* tree; // [esp+54h] [ebp-Ch]
@@ -2475,7 +2475,7 @@ void __cdecl XAnimCalcDelta(DObj_s* obj, uint32_t animIndex, float* rot, float* 
     }
 }
 
-void __cdecl XAnimCalcDeltaTree(
+void XAnimCalcDeltaTree(
     const DObj_s* obj,
     uint32_t infoIndex,
     float weightScale,
@@ -2687,7 +2687,7 @@ void __cdecl XAnimCalcDeltaTree(
     }
 }
 
-void __cdecl XAnimCalcRelDeltaParts(
+void XAnimCalcRelDeltaParts(
     const XAnimParts* parts,
     float weightScale,
     float time1,
@@ -2785,7 +2785,7 @@ void __cdecl XAnimCalcRelDeltaParts(
     Vec3Add(rotPos->pos, pos, rotPos->pos);
 }
 
-void __cdecl TransformToQuatRefFrame(const float* rot, float* trans)
+void TransformToQuatRefFrame(const float* rot, float* trans)
 {
     float r; // [esp+0h] [ebp-10h]
     float ra; // [esp+0h] [ebp-10h]
@@ -2807,7 +2807,7 @@ void __cdecl TransformToQuatRefFrame(const float* rot, float* trans)
     }
 }
 
-void __cdecl XAnimCalcAbsDeltaParts(const XAnimParts* parts, float weightScale, float time, XAnimSimpleRotPos* rotPos)
+void XAnimCalcAbsDeltaParts(const XAnimParts* parts, float weightScale, float time, XAnimSimpleRotPos* rotPos)
 {
     float v4; // [esp+Ch] [ebp-2Ch]
     float pos[3]; // [esp+10h] [ebp-28h] BYREF
@@ -2829,7 +2829,7 @@ void __cdecl XAnimCalcAbsDeltaParts(const XAnimParts* parts, float weightScale, 
     Vec3Add(rotPos->pos, pos, rotPos->pos);
 }
 
-void __cdecl XAnimCalcAbsDelta(DObj_s* obj, uint32_t animIndex, float* rot, float* trans)
+void XAnimCalcAbsDelta(DObj_s* obj, uint32_t animIndex, float* rot, float* trans)
 {
     XAnimSimpleRotPos rotPos; // [esp+3Ch] [ebp-24h] BYREF
     XAnimTree_s* tree; // [esp+54h] [ebp-Ch]
@@ -2876,7 +2876,7 @@ void __cdecl XAnimCalcAbsDelta(DObj_s* obj, uint32_t animIndex, float* rot, floa
     }
 }
 
-void __cdecl XAnimGetRelDelta(
+void XAnimGetRelDelta(
     const XAnim_s* anims,
     uint32_t animIndex,
     float* rot,
@@ -2930,7 +2930,7 @@ void __cdecl XAnimGetRelDelta(
     }
 }
 
-void __cdecl XAnimGetAbsDelta(const XAnim_s* anims, uint32_t animIndex, float* rot, float* trans, float time)
+void XAnimGetAbsDelta(const XAnim_s* anims, uint32_t animIndex, float* rot, float* trans, float time)
 {
     XAnimSimpleRotPos rotPos; // [esp+3Ch] [ebp-20h] BYREF
     const XAnimEntry* anim; // [esp+54h] [ebp-8h]
@@ -2979,7 +2979,7 @@ void __cdecl XAnimGetAbsDelta(const XAnim_s* anims, uint32_t animIndex, float* r
     }
 }
 
-uint32_t __cdecl XAnimAllocInfoWithParent(
+uint32_t XAnimAllocInfoWithParent(
     XAnimTree_s* tree,
     uint16_t animToModel,
     uint32_t animIndex,
@@ -3119,7 +3119,7 @@ uint32_t XAnimAllocInfoIndex(DObj_s *obj, uint32_t animIndex, int after)
     return XAnimAllocInfoWithParent(tree, animToModel, animIndex, parentInfoIndex, after);
 }
 
-uint32_t __cdecl XAnimEnsureGoalWeightParent(DObj_s* obj, uint32_t animIndex)
+uint32_t XAnimEnsureGoalWeightParent(DObj_s* obj, uint32_t animIndex)
 {
     XAnimInfo* infoa; // [esp+0h] [ebp-14h]
     XAnimInfo* info; // [esp+0h] [ebp-14h]
@@ -3160,7 +3160,7 @@ uint32_t __cdecl XAnimEnsureGoalWeightParent(DObj_s* obj, uint32_t animIndex)
     return infoIndex;
 }
 
-void __cdecl XAnimClearGoalWeightInternal(
+void XAnimClearGoalWeightInternal(
     XAnimTree_s* tree,
     uint32_t infoIndex,
     float blendTime,
@@ -3209,7 +3209,7 @@ void __cdecl XAnimClearGoalWeightInternal(
     XAnimClearServerNotify(info);
 }
 
-void __cdecl XAnimClearTreeGoalWeightsInternal(
+void XAnimClearTreeGoalWeightsInternal(
     XAnimTree_s* tree,
     uint32_t infoIndex,
     float blendTime,
@@ -3229,7 +3229,7 @@ void __cdecl XAnimClearTreeGoalWeightsInternal(
     }
 }
 
-void __cdecl XAnimClearTreeGoalWeights(XAnimTree_s* tree, uint32_t animIndex, float blendTime)
+void XAnimClearTreeGoalWeights(XAnimTree_s* tree, uint32_t animIndex, float blendTime)
 {
     uint32_t infoIndex; // [esp+8h] [ebp-4h]
 
@@ -3238,7 +3238,7 @@ void __cdecl XAnimClearTreeGoalWeights(XAnimTree_s* tree, uint32_t animIndex, fl
         XAnimClearTreeGoalWeightsInternal(tree, infoIndex, blendTime, 1);
 }
 
-void __cdecl XAnimClearTreeGoalWeightsStrict(XAnimTree_s* tree, uint32_t animIndex, float blendTime)
+void XAnimClearTreeGoalWeightsStrict(XAnimTree_s* tree, uint32_t animIndex, float blendTime)
 {
     int numAnims; // [esp+4h] [ebp-Ch]
     const XAnimEntry* anim; // [esp+8h] [ebp-8h]
@@ -3256,7 +3256,7 @@ void __cdecl XAnimClearTreeGoalWeightsStrict(XAnimTree_s* tree, uint32_t animInd
         XAnimClearTreeGoalWeights(tree, i + anim->animParent.children, blendTime);
 }
 
-void __cdecl XAnimClearGoalWeightKnobInternal(
+void XAnimClearGoalWeightKnobInternal(
     XAnimTree_s* tree,
     uint32_t infoIndex,
     float goalWeight,
@@ -3329,7 +3329,7 @@ void __cdecl XAnimClearGoalWeightKnobInternal(
     }
 }
 
-int __cdecl XAnimSetCompleteGoalWeightNode(
+int XAnimSetCompleteGoalWeightNode(
     XAnimTree_s* tree,
     uint32_t infoIndex,
     float goalWeight,
@@ -3404,7 +3404,7 @@ int XAnimSetCompleteGoalWeightKnobAll(
     }
 }
 
-int __cdecl XAnimSetGoalWeightKnobAll(
+int XAnimSetGoalWeightKnobAll(
     DObj_s* obj,
     uint32_t animIndex,
     uint32_t rootIndex,
@@ -3479,7 +3479,7 @@ int XAnimSetCompleteGoalWeightKnob(
     return XAnimSetCompleteGoalWeightNode(tree, infoIndex, goalWeight, goalTime, rate, notifyName, notifyType);
 }
 
-int __cdecl XAnimSetGoalWeightKnob(
+int XAnimSetGoalWeightKnob(
     DObj_s* obj,
     uint32_t animIndex,
     float goalWeight,
@@ -3517,7 +3517,7 @@ int __cdecl XAnimSetGoalWeightKnob(
     return error;
 }
 
-void __cdecl XAnimClearTree(XAnimTree_s* tree)
+void XAnimClearTree(XAnimTree_s* tree)
 {
     iassert(tree);
     if (tree->children)
@@ -3528,7 +3528,7 @@ void __cdecl XAnimClearTree(XAnimTree_s* tree)
     iassert(!tree->info_usage);
 }
 
-int __cdecl XAnimSetGoalWeightNode(
+int XAnimSetGoalWeightNode(
     XAnimTree_s* tree,
     uint32_t infoIndex,
     float goalWeight,
@@ -3630,7 +3630,7 @@ int __cdecl XAnimSetGoalWeightNode(
     return 0;
 }
 
-uint32_t __cdecl XAnimGetDescendantWithGreatestWeight(const XAnimTree_s* tree, uint32_t infoIndex)
+uint32_t XAnimGetDescendantWithGreatestWeight(const XAnimTree_s* tree, uint32_t infoIndex)
 {
     float testWeight; // [esp+0h] [ebp-14h]
     uint32_t result; // [esp+4h] [ebp-10h]
@@ -3667,12 +3667,12 @@ uint32_t __cdecl XAnimGetDescendantWithGreatestWeight(const XAnimTree_s* tree, u
     }
 }
 
-void __cdecl XAnimSetupSyncNodes(XAnim_s* anims)
+void XAnimSetupSyncNodes(XAnim_s* anims)
 {
     XAnimSetupSyncNodes_r(anims, 0);
 }
 
-void __cdecl XAnimSetupSyncNodes_r(XAnim_s* anims, uint32_t animIndex)
+void XAnimSetupSyncNodes_r(XAnim_s* anims, uint32_t animIndex)
 {
     int flag; // [esp+0h] [ebp-14h]
     int numAnims; // [esp+4h] [ebp-10h]
@@ -3699,7 +3699,7 @@ void __cdecl XAnimSetupSyncNodes_r(XAnim_s* anims, uint32_t animIndex)
     }
 }
 
-void __cdecl XAnimFillInSyncNodes_r(XAnim_s* anims, uint32_t animIndex, bool bLoop)
+void XAnimFillInSyncNodes_r(XAnim_s* anims, uint32_t animIndex, bool bLoop)
 {
     XAnimParts* Data_FastFile; // eax
     char* AnimDebugName; // eax
@@ -3766,17 +3766,17 @@ void __cdecl XAnimFillInSyncNodes_r(XAnim_s* anims, uint32_t animIndex, bool bLo
     }
 }
 
-bool __cdecl XAnimHasTime(const XAnim_s* anims, uint32_t animIndex)
+bool XAnimHasTime(const XAnim_s* anims, uint32_t animIndex)
 {
     return IsLeafNode(&anims->entries[animIndex]) || (anims->entries[animIndex].animParent.flags & 3) != 0;
 }
 
-BOOL __cdecl XAnimIsPrimitive(XAnim_s* anims, uint32_t animIndex)
+BOOL XAnimIsPrimitive(XAnim_s* anims, uint32_t animIndex)
 {
     return anims->entries[animIndex].numAnims == 0;
 }
 
-void __cdecl XAnimSetTime(XAnimTree_s *tree, uint32_t animIndex, float time)
+void XAnimSetTime(XAnimTree_s *tree, uint32_t animIndex, float time)
 {
     XAnimState *state; // [esp+18h] [ebp-10h]
     uint32_t infoIndex; // [esp+20h] [ebp-8h]
@@ -3806,7 +3806,7 @@ void __cdecl XAnimSetTime(XAnimTree_s *tree, uint32_t animIndex, float time)
     }
 }
 
-void __cdecl XAnimUpdateServerNotifyIndex(XAnimInfo* info, const XAnimParts* parts)
+void XAnimUpdateServerNotifyIndex(XAnimInfo* info, const XAnimParts* parts)
 {
     iassert(parts);
     iassert(info->notifyName);
@@ -3816,7 +3816,7 @@ void __cdecl XAnimUpdateServerNotifyIndex(XAnimInfo* info, const XAnimParts* par
         info->notifyIndex = XAnimGetNextNotifyIndex(parts, info->state.currentAnimTime);
 }
 
-uint32_t __cdecl XAnimRestart(XAnimTree_s* tree, uint32_t infoIndex, float goalTime)
+uint32_t XAnimRestart(XAnimTree_s* tree, uint32_t infoIndex, float goalTime)
 {
     uint32_t parentInfoIndex; // [esp+8h] [ebp-10h]
     XAnimInfo* parentInfo; // [esp+Ch] [ebp-Ch]
@@ -3849,7 +3849,7 @@ uint32_t __cdecl XAnimRestart(XAnimTree_s* tree, uint32_t infoIndex, float goalT
         return infoIndex;
 }
 
-int __cdecl XAnimSetGoalWeight(
+int XAnimSetGoalWeight(
     DObj_s* obj,
     uint32_t animIndex,
     float goalWeight,
@@ -3889,7 +3889,7 @@ int __cdecl XAnimSetGoalWeight(
     return error;
 }
 
-void __cdecl XAnimSetAnimRate(XAnimTree_s* tree, uint32_t animIndex, float rate)
+void XAnimSetAnimRate(XAnimTree_s* tree, uint32_t animIndex, float rate)
 {
     uint32_t infoIndex; // [esp+0h] [ebp-4h]
 
@@ -3906,7 +3906,7 @@ void __cdecl XAnimSetAnimRate(XAnimTree_s* tree, uint32_t animIndex, float rate)
     }
 }
 
-bool __cdecl XAnimIsLooped(const XAnim_s* anims, uint32_t animIndex)
+bool XAnimIsLooped(const XAnim_s* anims, uint32_t animIndex)
 {
     iassert(anims);
 
@@ -3916,7 +3916,7 @@ bool __cdecl XAnimIsLooped(const XAnim_s* anims, uint32_t animIndex)
         return (anims->entries[animIndex].animParent.flags & 1) != 0;
 }
 
-char __cdecl XAnimNotetrackExists(const XAnim_s* anims, uint32_t animIndex, uint32_t name)
+char XAnimNotetrackExists(const XAnim_s* anims, uint32_t animIndex, uint32_t name)
 {
     const XAnimNotifyInfo* notify; // [esp+0h] [ebp-10h]
     int notifyIndex; // [esp+4h] [ebp-Ch]
@@ -3939,7 +3939,7 @@ char __cdecl XAnimNotetrackExists(const XAnim_s* anims, uint32_t animIndex, uint
     return 0;
 }
 
-void __cdecl XAnimAddNotetrackTimesToScriptArray(const XAnim_s* anims, uint32_t animIndex, uint32_t name)
+void XAnimAddNotetrackTimesToScriptArray(const XAnim_s* anims, uint32_t animIndex, uint32_t name)
 {
     const XAnimNotifyInfo* notify; // [esp+4h] [ebp-10h]
     int notifyIndex; // [esp+8h] [ebp-Ch]
@@ -3963,7 +3963,7 @@ void __cdecl XAnimAddNotetrackTimesToScriptArray(const XAnim_s* anims, uint32_t 
     }
 }
 
-int __cdecl XAnimSetCompleteGoalWeight(
+int XAnimSetCompleteGoalWeight(
     DObj_s* obj,
     uint32_t animIndex,
     float goalWeight,
@@ -4000,7 +4000,7 @@ int __cdecl XAnimSetCompleteGoalWeight(
     return error;
 }
 
-void __cdecl XAnimCloneAnimInfo(const XAnimInfo* from, XAnimInfo* to)
+void XAnimCloneAnimInfo(const XAnimInfo* from, XAnimInfo* to)
 {
     iassert(to->animIndex == from->animIndex);
     qmemcpy(&to->state, &from->state, sizeof(to->state));
@@ -4013,7 +4013,7 @@ void __cdecl XAnimCloneAnimInfo(const XAnimInfo* from, XAnimInfo* to)
         SL_AddRefToString(to->notifyName);
 }
 
-void __cdecl XAnimCloneAnimTree(const XAnimTree_s* from, XAnimTree_s* to)
+void XAnimCloneAnimTree(const XAnimTree_s* from, XAnimTree_s* to)
 {
     PROF_SCOPED("XAnimCloneAnimTree");
 
@@ -4032,7 +4032,7 @@ void __cdecl XAnimCloneAnimTree(const XAnimTree_s* from, XAnimTree_s* to)
         XAnimCloneAnimTree_r(from, to, from->children, 0);
 }
 
-void __cdecl XAnimCloneAnimTree_r(
+void XAnimCloneAnimTree_r(
     const XAnimTree_s* from,
     XAnimTree_s* to,
     uint32_t fromInfoIndex,
@@ -4069,7 +4069,7 @@ void __cdecl XAnimCloneAnimTree_r(
     }
 }
 
-XAnimInfo* __cdecl GetAnimInfo(int infoIndex)
+XAnimInfo* GetAnimInfo(int infoIndex)
 {
     iassert(infoIndex > 0 && infoIndex < 4096);
 

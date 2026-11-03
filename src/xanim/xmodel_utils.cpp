@@ -12,13 +12,13 @@ struct TestLod // sizeof=0x8
 };
 TestLod g_testLods[4];
 
-const char *__cdecl XModelGetName(const XModel *model)
+const char *XModelGetName(const XModel *model)
 {
     iassert(model);
     return model->name;
 }
 
-int __cdecl XModelGetSurfaces(const XModel *model, XSurface **surfaces, int lod)
+int XModelGetSurfaces(const XModel *model, XSurface **surfaces, int lod)
 {
     iassert(model);
     iassert(surfaces);
@@ -30,7 +30,7 @@ int __cdecl XModelGetSurfaces(const XModel *model, XSurface **surfaces, int lod)
     return lodInfo[lod].numsurfs;
 }
 
-XSurface *__cdecl XModelGetSurface(const XModel *model, int lod, int surfIndex)
+XSurface *XModelGetSurface(const XModel *model, int lod, int surfIndex)
 {
     uint32_t modelSurfIndex; // [esp+0h] [ebp-4h]
 
@@ -40,7 +40,7 @@ XSurface *__cdecl XModelGetSurface(const XModel *model, int lod, int surfIndex)
     return &model->surfs[modelSurfIndex];
 }
 
-const XModelLodInfo *__cdecl XModelGetLodInfo(const XModel *model, int lod)
+const XModelLodInfo *XModelGetLodInfo(const XModel *model, int lod)
 {
     iassert(model);
     iassert(lod >= 0);
@@ -48,7 +48,7 @@ const XModelLodInfo *__cdecl XModelGetLodInfo(const XModel *model, int lod)
     return &model->lodInfo[lod];
 }
 
-uint32_t __cdecl XModelGetSurfCount(const XModel *model, int lod)
+uint32_t XModelGetSurfCount(const XModel *model, int lod)
 {
     iassert(model);
     iassert(lod >= 0);
@@ -56,7 +56,7 @@ uint32_t __cdecl XModelGetSurfCount(const XModel *model, int lod)
     return model->lodInfo[lod].numsurfs;
 }
 
-Material **__cdecl XModelGetSkins(const XModel *model, int lod)
+Material **XModelGetSkins(const XModel *model, int lod)
 {
     iassert(model);
     iassert(lod >= 0);
@@ -64,34 +64,34 @@ Material **__cdecl XModelGetSkins(const XModel *model, int lod)
     return &model->materialHandles[model->lodInfo[lod].surfIndex];
 }
 
-XModelLodRampType __cdecl XModelGetLodRampType(const XModel *model)
+XModelLodRampType XModelGetLodRampType(const XModel *model)
 {
     return (XModelLodRampType)model->lodRampType;
 }
 
-int __cdecl XModelGetNumLods(const XModel *model)
+int XModelGetNumLods(const XModel *model)
 {
     return model->numLods;
 }
 
-double __cdecl XModelGetLodOutDist(const XModel *model)
+double XModelGetLodOutDist(const XModel *model)
 {
     return *((float *)&model->parentList + 7 * XModelGetNumLods(model));
 }
 
-int __cdecl XModelNumBones(const XModel *model)
+int XModelNumBones(const XModel *model)
 {
     iassert(model);
 
     return model->numBones;
 }
 
-const DObjAnimMat *__cdecl XModelGetBasePose(const XModel *model)
+const DObjAnimMat *XModelGetBasePose(const XModel *model)
 {
     return model->baseMat;
 }
 
-int __cdecl XModelGetLodForDist(const XModel *model, float dist)
+int XModelGetLodForDist(const XModel *model, float dist)
 {
     float v3; // [esp+0h] [ebp-14h]
     int lodIndex; // [esp+4h] [ebp-10h]
@@ -110,7 +110,7 @@ int __cdecl XModelGetLodForDist(const XModel *model, float dist)
     return -1;
 }
 
-void __cdecl XModelSetTestLods(uint32_t lodLevel, float dist)
+void XModelSetTestLods(uint32_t lodLevel, float dist)
 {
     iassert((unsigned)lodLevel < MAX_LODS);
 
@@ -118,7 +118,7 @@ void __cdecl XModelSetTestLods(uint32_t lodLevel, float dist)
     g_testLods[lodLevel].enabled = dist >= 0.0;
 }
 
-double __cdecl XModelGetLodDist(const XModel *model, uint32_t lod)
+double XModelGetLodDist(const XModel *model, uint32_t lod)
 {
     iassert(model);
     bcassert(lod, model->numLods);
@@ -126,14 +126,14 @@ double __cdecl XModelGetLodDist(const XModel *model, uint32_t lod)
     return model->lodInfo[lod].dist;
 }
 
-int __cdecl XModelGetContents(const XModel *model)
+int XModelGetContents(const XModel *model)
 {
     iassert(model);
 
     return model->contents;
 }
 
-int __cdecl XModelGetStaticModelCacheVertCount(XModel *model, uint32_t lod)
+int XModelGetStaticModelCacheVertCount(XModel *model, uint32_t lod)
 {
     iassert(model);
     bcassert(lod, MAX_LODS);

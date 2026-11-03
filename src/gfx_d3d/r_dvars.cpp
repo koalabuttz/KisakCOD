@@ -419,7 +419,7 @@
      NULL
  };
 
- void __cdecl R_ReflectionProbeRegisterDvars()
+ void R_ReflectionProbeRegisterDvars()
  {
      r_reflectionProbeGenerate = Dvar_RegisterBool(
          "r_reflectionProbeGenerate",
@@ -440,7 +440,7 @@
          Material_PreventOverrideTechniqueGeneration();
  }
 
- static void __cdecl R_WarnInitDvars()
+ static void R_WarnInitDvars()
  {
      DvarLimits min; // [esp+4h] [ebp-10h]
 
@@ -454,7 +454,7 @@
          "Number of seconds after displaying a \"per-frame\" warning before it will display again");
  }
 
- void __cdecl R_RegisterDvars()
+ void R_RegisterDvars()
  {
      DvarLimits min; // [esp+Ch] [ebp-10h]
      DvarLimits mina; // [esp+Ch] [ebp-10h]
@@ -1536,7 +1536,7 @@
      return Dvar_RegisterBool(name, defaultState, flags, helpString);
  }
 
- char __cdecl R_CheckDvarModified(const dvar_s *dvar)
+ char R_CheckDvarModified(const dvar_s *dvar)
  {
      if (!dvar->modified)
          return 0;

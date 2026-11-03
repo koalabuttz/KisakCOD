@@ -16,14 +16,14 @@ struct gentity_s;
 
 struct entityHandler_t // sizeof=0x28
 {
-    void(__cdecl *think)(gentity_s *);
-    void(__cdecl *reached)(gentity_s *);
-    void(__cdecl *blocked)(gentity_s *, gentity_s *);
-    void(__cdecl *touch)(gentity_s *, gentity_s *, int32_t);
-    void(__cdecl *use)(gentity_s *, gentity_s *, gentity_s *);
-    void(__cdecl *pain)(gentity_s *, gentity_s *, int32_t, const float *, const int32_t, const float *, const hitLocation_t, const int32_t);
-    void(__cdecl *die)(gentity_s *, gentity_s *, gentity_s *, int32_t, int32_t, const int, const float *, const hitLocation_t, int32_t);
-    void(__cdecl *controller)(const gentity_s *, int32_t *);
+    void(*think)(gentity_s *);
+    void(*reached)(gentity_s *);
+    void(*blocked)(gentity_s *, gentity_s *);
+    void(*touch)(gentity_s *, gentity_s *, int32_t);
+    void(*use)(gentity_s *, gentity_s *, gentity_s *);
+    void(*pain)(gentity_s *, gentity_s *, int32_t, const float *, const int32_t, const float *, const hitLocation_t, const int32_t);
+    void(*die)(gentity_s *, gentity_s *, gentity_s *, int32_t, int32_t, const int, const float *, const hitLocation_t, int32_t);
+    void(*controller)(const gentity_s *, int32_t *);
     int32_t methodOfDeath;
     int32_t splashMethodOfDeath;
 };
@@ -110,56 +110,56 @@ struct level_locals_t // sizeof=0x2E6C
 };
 static_assert(LAYOUT_32BIT(sizeof(level_locals_t) == 0x2E6C));
 
-void __cdecl TRACK_g_main();
-int32_t __cdecl G_GetSavePersist();
-void __cdecl G_SetSavePersist(int32_t savepersist);
-double __cdecl G_GetFogOpaqueDistSqrd();
-int32_t __cdecl G_GetClientScore(int32_t clientNum);
-int32_t __cdecl G_GetClientArchiveTime(int32_t clientNum);
-void __cdecl G_SetClientArchiveTime(int32_t clientNum, int32_t time);
-clientState_s *__cdecl G_GetClientState(int32_t clientNum);
-struct gclient_s *__cdecl G_GetPlayerState(int32_t clientNum);
-int32_t __cdecl G_GetClientSize();
-void __cdecl G_FreeEntities();
-bool __cdecl G_ExitAfterConnectPaths();
-int32_t __cdecl G_IsServerGameSystem(int32_t clientNum);
-void __cdecl G_InitGame(int32_t levelTime, int32_t randomSeed, int32_t restart, int32_t savepersist);
+void TRACK_g_main();
+int32_t G_GetSavePersist();
+void G_SetSavePersist(int32_t savepersist);
+double G_GetFogOpaqueDistSqrd();
+int32_t G_GetClientScore(int32_t clientNum);
+int32_t G_GetClientArchiveTime(int32_t clientNum);
+void G_SetClientArchiveTime(int32_t clientNum, int32_t time);
+clientState_s *G_GetClientState(int32_t clientNum);
+struct gclient_s *G_GetPlayerState(int32_t clientNum);
+int32_t G_GetClientSize();
+void G_FreeEntities();
+bool G_ExitAfterConnectPaths();
+int32_t G_IsServerGameSystem(int32_t clientNum);
+void G_InitGame(int32_t levelTime, int32_t randomSeed, int32_t restart, int32_t savepersist);
 const dvar_s *G_RegisterDvars();
-void __cdecl G_CreateDObj(
+void G_CreateDObj(
     DObjModel_s *dobjModels,
     uint16_t numModels,
     XAnimTree_s *tree,
     uint32_t handle,
     int32_t unusedLocalClientNum);
-DObj_s *__cdecl G_GetDObj(uint32_t handle, int32_t unusedLocalClientNum);
+DObj_s *G_GetDObj(uint32_t handle, int32_t unusedLocalClientNum);
 void G_LoadAnimTreeInstances();
 void G_PrintAllFastFileErrors();
-void __cdecl G_PrintFastFileErrors(const char *fastfile);
-void __cdecl G_ShutdownGame(int32_t freeScripts);
+void G_PrintFastFileErrors(const char *fastfile);
+void G_ShutdownGame(int32_t freeScripts);
 int32_t G_FreeAnimTreeInstances();
-void __cdecl SendScoreboardMessageToAllIntermissionClients();
-void __cdecl CalculateRanks();
-int32_t __cdecl SortRanks(uint32_t *a, uint32_t *b);
-void __cdecl ExitLevel();
+void SendScoreboardMessageToAllIntermissionClients();
+void CalculateRanks();
+int32_t SortRanks(uint32_t *a, uint32_t *b);
+void ExitLevel();
 void G_LogPrintf(const char *fmt, ...);
-void __cdecl CheckVote();
-void __cdecl G_UpdateObjectiveToClients();
-void __cdecl G_UpdateHudElemsToClients();
-void __cdecl G_RunThink(gentity_s *ent);
-void __cdecl DebugDumpAnims();
-void __cdecl G_XAnimUpdateEnt(gentity_s *ent);
-void __cdecl G_RunFrame(int32_t levelTime);
-void __cdecl G_ClientDoPerFrameNotifies(gentity_s *ent);
-bool __cdecl DoPerFrameNotify(
+void CheckVote();
+void G_UpdateObjectiveToClients();
+void G_UpdateHudElemsToClients();
+void G_RunThink(gentity_s *ent);
+void DebugDumpAnims();
+void G_XAnimUpdateEnt(gentity_s *ent);
+void G_RunFrame(int32_t levelTime);
+void G_ClientDoPerFrameNotifies(gentity_s *ent);
+bool DoPerFrameNotify(
     gentity_s *ent,
     bool isCurrently,
     bool wasPreviously,
     uint16_t begin,
     uint16_t end);
 const dvar_s *ShowEntityInfo();
-void __cdecl ShowEntityInfo_Items(gentity_s *ent);
-void __cdecl G_RunFrameForEntity(gentity_s *ent);
-void __cdecl G_TraceCapsule(
+void ShowEntityInfo_Items(gentity_s *ent);
+void G_RunFrameForEntity(gentity_s *ent);
+void G_TraceCapsule(
     trace_t *results,
     const float *start,
     const float *mins,
@@ -167,37 +167,37 @@ void __cdecl G_TraceCapsule(
     const float *end,
     int32_t passEntityNum,
     int32_t contentmask);
-int32_t __cdecl G_TraceCapsuleComplete(
+int32_t G_TraceCapsuleComplete(
     float *start,
     float *mins,
     float *maxs,
     float *end,
     int32_t passEntityNum,
     int32_t contentmask);
-void __cdecl G_LocationalTrace(
+void G_LocationalTrace(
     trace_t *results,
     float *start,
     float *end,
     int32_t passEntityNum,
     int32_t contentmask,
     uint8_t *priorityMap);
-void __cdecl G_LocationalTraceAllowChildren(
+void G_LocationalTraceAllowChildren(
     trace_t *results,
     float *start,
     float *end,
     int32_t passEntityNum,
     int32_t contentmask,
     uint8_t *priorityMap);
-int32_t __cdecl G_LocationalTracePassed(
+int32_t G_LocationalTracePassed(
     float *start,
     float *end,
     int32_t passEntityNum,
     int32_t passEntityNum1,
     int32_t contentmask,
     uint8_t *priorityMap);
-void __cdecl G_SightTrace(int32_t *hitNum, float *start, float *end, int32_t passEntityNum, int32_t contentmask);
-void __cdecl G_AddDebugString(const float *xyz, const float *color, float scale, const char *text, int32_t duration);
-bool __cdecl OnSameTeam(struct gentity_s *ent1, struct gentity_s *ent2);
+void G_SightTrace(int32_t *hitNum, float *start, float *end, int32_t passEntityNum, int32_t contentmask);
+void G_AddDebugString(const float *xyz, const float *color, float scale, const char *text, int32_t duration);
+bool OnSameTeam(struct gentity_s *ent1, struct gentity_s *ent2);
 
 extern const dvar_t *pickupPrints;
 extern const dvar_t *g_password;

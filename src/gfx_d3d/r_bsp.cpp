@@ -16,7 +16,7 @@
 //struct GfxWorld s_world    85b28080     gfx_d3d : r_bsp.obj // LWSS: moved to db_registry for DEDICATED
 
 
-void __cdecl R_ReloadWorld()
+void R_ReloadWorld()
 {
     iassert( s_world.vd.worldVb == NULL_VERTEX_BUFFER );
     if (s_world.vertexCount)
@@ -26,7 +26,7 @@ void __cdecl R_ReloadWorld()
         R_CreateWorldVertexBuffer(&s_world.vld.layerVb, (int *)s_world.vld.data, s_world.vertexLayerDataSize);
 }
 
-void __cdecl R_ShutdownWorld()
+void R_ShutdownWorld()
 {
     R_ReleaseWorld();
     rgp.world = 0;
@@ -36,7 +36,7 @@ void __cdecl R_ShutdownWorld()
     s_world.vertexLayerDataSize = 0;
 }
 
-void __cdecl R_ReleaseWorld()
+void R_ReleaseWorld()
 {
     if (rgp.world)
     {
@@ -59,7 +59,7 @@ void __cdecl R_ReleaseWorld()
     iassert( s_world.vld.layerVb == NULL_VERTEX_BUFFER );
 }
 
-void __cdecl R_InterpretSunLightParseParams(SunLightParseParams *sunParse)
+void R_InterpretSunLightParseParams(SunLightParseParams *sunParse)
 {
     float *sunColorFromBsp; // [esp+0h] [ebp-8h]
     float *color; // [esp+4h] [ebp-4h]
@@ -76,7 +76,7 @@ void __cdecl R_InterpretSunLightParseParams(SunLightParseParams *sunParse)
     sunColorFromBsp[2] = color[2];
 }
 
-void __cdecl R_UpdateLightsFromDvars()
+void R_UpdateLightsFromDvars()
 {
     SunLightParseParams sunParse; // [esp+8h] [ebp-8Ch] BYREF
 
@@ -94,7 +94,7 @@ void __cdecl R_UpdateLightsFromDvars()
     R_InterpretSunLightParseParams(&sunParse);
 }
 
-void __cdecl R_CopyParseParamsFromDvars(SunLightParseParams *sunParse)
+void R_CopyParseParamsFromDvars(SunLightParseParams *sunParse)
 {
     float sunLightMin; // [esp+14h] [ebp-4h]
 
@@ -122,7 +122,7 @@ void __cdecl R_CopyParseParamsFromDvars(SunLightParseParams *sunParse)
     sunParse->angles[2] = r_lightTweakSunDirection->current.vector[2];
 }
 
-void __cdecl R_GetNormalizedColorFromDvar(const dvar_s *dvar, float *outVec)
+void R_GetNormalizedColorFromDvar(const dvar_s *dvar, float *outVec)
 {
     int channelIter; // [esp+4h] [ebp-4h]
 
@@ -131,7 +131,7 @@ void __cdecl R_GetNormalizedColorFromDvar(const dvar_s *dvar, float *outVec)
     ColorNormalize(outVec, outVec);
 }
 
-void __cdecl R_LoadWorld(char *name, int *checksum, int savegame)
+void R_LoadWorld(char *name, int *checksum, int savegame)
 {
     uint32_t reflectionProbeIndex; // [esp+8Ch] [ebp-8h]
     int lightmapIndex; // [esp+90h] [ebp-4h]
@@ -162,7 +162,7 @@ void __cdecl R_LoadWorld(char *name, int *checksum, int savegame)
     }
 }
 
-void __cdecl R_CopyParseParamsToDvars(const SunLightParseParams *sunParse, int savegame)
+void R_CopyParseParamsToDvars(const SunLightParseParams *sunParse, int savegame)
 {
     float saveDirection[3];
 
@@ -212,13 +212,13 @@ void R_InitDynamicData()
     R_InitStaticModelLighting();
 }
 
-void __cdecl R_SetWorldPtr_LoadObj(const char *name)
+void R_SetWorldPtr_LoadObj(const char *name)
 {
     rgp.world = R_LoadWorldInternal(name);
     iassert( rgp.world );
 }
 
-void __cdecl R_SetWorldPtr_FastFile(const char *name)
+void R_SetWorldPtr_FastFile(const char *name)
 {
     rgp.world = DB_FindXAssetHeader(ASSET_TYPE_GFXWORLD, name).gfxWorld;
     rgp.needSortMaterials = 1;

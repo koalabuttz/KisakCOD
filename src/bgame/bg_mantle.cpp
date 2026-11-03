@@ -59,7 +59,7 @@ const MantleAnimTransition s_mantleTrans[MANTLE_UP_COUNT] = // SP/MP Same
     {MANTLE_UP_21, MANTLE_OVER_LOW, 21.0f}
 };
 
-void __cdecl Mantle_RegisterDvars()
+void Mantle_RegisterDvars()
 {
     DvarLimits min; // [esp+4h] [ebp-14h]
     DvarLimits mina; // [esp+4h] [ebp-14h]
@@ -102,7 +102,7 @@ void __cdecl Mantle_RegisterDvars()
         "The angle at which to restrict a sideways turn while mantling");
 }
 
-void __cdecl Mantle_CreateAnims(void *(__cdecl *xanimAlloc)(int32_t))
+void Mantle_CreateAnims(void *(*xanimAlloc)(int32_t))
 {
     float v1; // [esp+10h] [ebp-50h]
     float v2; // [esp+14h] [ebp-4Ch]
@@ -159,12 +159,12 @@ void __cdecl Mantle_CreateAnims(void *(__cdecl *xanimAlloc)(int32_t))
     }
 }
 
-void __cdecl Mantle_ShutdownAnims()
+void Mantle_ShutdownAnims()
 {
     s_mantleAnims = 0;
 }
 
-void __cdecl Mantle_Check(pmove_t *pm, pml_t *pml)
+void Mantle_Check(pmove_t *pm, pml_t *pml)
 {
     float mantleDir[3]; // [esp+8h] [ebp-74h] BYREF
     trace_t trace; // [esp+14h] [ebp-68h] BYREF
@@ -215,7 +215,7 @@ void __cdecl Mantle_Check(pmove_t *pm, pml_t *pml)
     }
 }
 
-void __cdecl Mantle_DebugPrint(const char *msg)
+void Mantle_DebugPrint(const char *msg)
 {
 #ifdef _DEBUG
     iassert(msg);
@@ -224,7 +224,7 @@ void __cdecl Mantle_DebugPrint(const char *msg)
 #endif
 }
 
-char __cdecl Mantle_CheckLedge(pmove_t *pm, pml_t *pml, MantleResults *mresults, float height)
+char Mantle_CheckLedge(pmove_t *pm, pml_t *pml, MantleResults *mresults, float height)
 {
     float mins[3]; // [esp+18h] [ebp-60h] BYREF
     float start[3]; // [esp+24h] [ebp-54h] BYREF
@@ -330,7 +330,7 @@ char __cdecl Mantle_CheckLedge(pmove_t *pm, pml_t *pml, MantleResults *mresults,
     }
 }
 
-void __cdecl Mantle_CalcEndPos(pmove_t *pm, MantleResults *mresults)
+void Mantle_CalcEndPos(pmove_t *pm, MantleResults *mresults)
 {
     float mins[3]; // [esp+2Ch] [ebp-60h] BYREF
     float start[3]; // [esp+38h] [ebp-54h] BYREF
@@ -392,7 +392,7 @@ void __cdecl Mantle_CalcEndPos(pmove_t *pm, MantleResults *mresults)
     }
 }
 
-void __cdecl Mantle_Start(pmove_t *pm, playerState_s *ps, MantleResults *mresults)
+void Mantle_Start(pmove_t *pm, playerState_s *ps, MantleResults *mresults)
 {
     int UpLength; // esi
     float trans[3]; // [esp+14h] [ebp-14h] BYREF
@@ -420,12 +420,12 @@ void __cdecl Mantle_Start(pmove_t *pm, playerState_s *ps, MantleResults *mresult
 #endif
 }
 
-int __cdecl Mantle_GetUpLength(MantleState *mstate)
+int Mantle_GetUpLength(MantleState *mstate)
 {
     return XAnimGetLengthMsec(s_mantleAnims, s_mantleTrans[mstate->transIndex].upAnimIndex);
 }
 
-int __cdecl Mantle_GetOverLength(MantleState *mstate)
+int Mantle_GetOverLength(MantleState *mstate)
 {
     if ((mstate->flags & 1) != 0)
         return XAnimGetLengthMsec(s_mantleAnims, s_mantleTrans[mstate->transIndex].overAnimIndex);
@@ -433,7 +433,7 @@ int __cdecl Mantle_GetOverLength(MantleState *mstate)
         return 0;
 }
 
-void __cdecl Mantle_GetAnimDelta(MantleState *mstate, int32_t time, float *delta)
+void Mantle_GetAnimDelta(MantleState *mstate, int32_t time, float *delta)
 {
     float frac; // [esp+8h] [ebp-24h]
     float fraca; // [esp+8h] [ebp-24h]
@@ -466,7 +466,7 @@ void __cdecl Mantle_GetAnimDelta(MantleState *mstate, int32_t time, float *delta
     VectorAngleMultiply(delta, mstate->yaw);
 }
 
-int __cdecl Mantle_FindTransition(float curHeight, float goalHeight)
+int Mantle_FindTransition(float curHeight, float goalHeight)
 {
     float v3; // [esp+8h] [ebp-24h]
     float v4; // [esp+Ch] [ebp-20h]
@@ -496,7 +496,7 @@ int __cdecl Mantle_FindTransition(float curHeight, float goalHeight)
     return bestIndex;
 }
 
-char __cdecl Mantle_FindMantleSurface(pmove_t *pm, pml_t *pml, trace_t *trace, float *mantleDir)
+char Mantle_FindMantleSurface(pmove_t *pm, pml_t *pml, trace_t *trace, float *mantleDir)
 {
     float traceDir[3]; // [esp+50h] [ebp-54h] BYREF
     float playerRadius; // [esp+5Ch] [ebp-48h]
@@ -578,7 +578,7 @@ char __cdecl Mantle_FindMantleSurface(pmove_t *pm, pml_t *pml, trace_t *trace, f
     }
 }
 
-void __cdecl Mantle_Move(pmove_t *pm, playerState_s *ps, pml_t *pml)
+void Mantle_Move(pmove_t *pm, playerState_s *ps, pml_t *pml)
 {
     int UpLength; // esi
     float scale; // [esp+Ch] [ebp-30h]
@@ -638,7 +638,7 @@ void __cdecl Mantle_Move(pmove_t *pm, playerState_s *ps, pml_t *pml)
     }
 }
 
-int __cdecl Mantle_GetAnim(MantleState *mstate)
+int Mantle_GetAnim(MantleState *mstate)
 {
     int upTime; // [esp+0h] [ebp-Ch]
     int overTime; // [esp+8h] [ebp-4h]
@@ -654,7 +654,7 @@ int __cdecl Mantle_GetAnim(MantleState *mstate)
         return s_mantleTrans[mstate->transIndex].upAnimIndex;
 }
 
-void __cdecl Mantle_CapView(playerState_s *ps)
+void Mantle_CapView(playerState_s *ps)
 {
     float value; // [esp+Ch] [ebp-Ch]
     float delta; // [esp+10h] [ebp-8h]
@@ -681,13 +681,13 @@ void __cdecl Mantle_CapView(playerState_s *ps)
     }
 }
 
-void __cdecl Mantle_ClearHint(playerState_s *ps)
+void Mantle_ClearHint(playerState_s *ps)
 {
     iassert(ps);
     ps->mantleState.flags &= ~8u;
 }
 
-bool __cdecl Mantle_IsWeaponInactive(playerState_s *ps)
+bool Mantle_IsWeaponInactive(playerState_s *ps)
 {
     if (!mantle_enable->current.enabled)
         return 0;

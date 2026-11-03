@@ -19,7 +19,7 @@
 
 SentientGlobals glob;
 
-sentient_s *__cdecl Sentient_Alloc()
+sentient_s *Sentient_Alloc()
 {
     iassert(level.sentients != NULL);
 
@@ -38,7 +38,7 @@ sentient_s *__cdecl Sentient_Alloc()
     return 0;
 }
 
-void __cdecl Sentient_DissociateSentient(sentient_s *self, sentient_s *other, team_t eOtherTeam)
+void Sentient_DissociateSentient(sentient_s *self, sentient_s *other, team_t eOtherTeam)
 {
     iassert(self);
     iassert(self != other);
@@ -66,7 +66,7 @@ void __cdecl Sentient_DissociateSentient(sentient_s *self, sentient_s *other, te
     }
 }
 
-void __cdecl Sentient_GetOrigin(const sentient_s *self, float *vOriginOut)
+void Sentient_GetOrigin(const sentient_s *self, float *vOriginOut)
 {
     iassert(self);
     iassert(self->ent);
@@ -76,7 +76,7 @@ void __cdecl Sentient_GetOrigin(const sentient_s *self, float *vOriginOut)
     Vec3Copy(self->ent->r.currentOrigin, vOriginOut);
 }
 
-void __cdecl Sentient_GetForwardDir(sentient_s *self, float *vDirOut)
+void Sentient_GetForwardDir(sentient_s *self, float *vDirOut)
 {
     iassert(self);
     iassert(self->ent);
@@ -86,7 +86,7 @@ void __cdecl Sentient_GetForwardDir(sentient_s *self, float *vDirOut)
     YawVectors(self->ent->r.currentAngles[YAW], vDirOut, NULL);
 }
 
-void __cdecl Sentient_GetVelocity(const sentient_s *self, float *vVelOut)
+void Sentient_GetVelocity(const sentient_s *self, float *vVelOut)
 {
     iassert(self);
     iassert(self->ent);
@@ -103,7 +103,7 @@ void __cdecl Sentient_GetVelocity(const sentient_s *self, float *vVelOut)
     }
 }
 
-void __cdecl Sentient_GetCentroid(sentient_s *self, float *vCentroidOut)
+void Sentient_GetCentroid(sentient_s *self, float *vCentroidOut)
 {
     gentity_s *ent; // r11
     double v5; // fp13
@@ -141,7 +141,7 @@ void __cdecl Sentient_GetCentroid(sentient_s *self, float *vCentroidOut)
     vCentroidOut[2] = (float)((float)((float)((float)v6 - v7[2]) * (float)0.5) + (float)v5) + v7[2];
 }
 
-void __cdecl Sentient_GetEyePosition(const sentient_s *self, float *vEyePosOut)
+void Sentient_GetEyePosition(const sentient_s *self, float *vEyePosOut)
 {
     iassert(self);
     iassert(self->ent);
@@ -154,7 +154,7 @@ void __cdecl Sentient_GetEyePosition(const sentient_s *self, float *vEyePosOut)
         G_GetPlayerViewOrigin(&self->ent->client->ps, vEyePosOut);
 }
 
-void __cdecl Sentient_GetDebugEyePosition(const sentient_s *self, float *vEyePosOut)
+void Sentient_GetDebugEyePosition(const sentient_s *self, float *vEyePosOut)
 {
     actor_s *actor; // r3
 
@@ -178,7 +178,7 @@ void __cdecl Sentient_GetDebugEyePosition(const sentient_s *self, float *vEyePos
         G_GetPlayerViewOrigin(&self->ent->client->ps, vEyePosOut);
 }
 
-float __cdecl Sentient_GetHeadHeight(const sentient_s *self)
+float Sentient_GetHeadHeight(const sentient_s *self)
 {
     double v2; // fp1
 
@@ -201,7 +201,7 @@ float __cdecl Sentient_GetHeadHeight(const sentient_s *self)
     return (float)v2;
 }
 
-void __cdecl Sentient_UpdateActualChainPos(sentient_s *self)
+void Sentient_UpdateActualChainPos(sentient_s *self)
 {
     pathnode_t *ChainPos; // r3
     float v3[4]; // [sp+50h] [-20h] BYREF
@@ -218,7 +218,7 @@ void __cdecl Sentient_UpdateActualChainPos(sentient_s *self)
     }
 }
 
-pathnode_t *__cdecl Sentient_NearestNode(sentient_s *self)
+pathnode_t *Sentient_NearestNode(sentient_s *self)
 {
     pathnode_t *node; // r3
     float vOrigin[3]; // [sp+68h] [-348h] BYREF
@@ -263,7 +263,7 @@ pathnode_t *__cdecl Sentient_NearestNode(sentient_s *self)
     return self->pNearestNode;
 }
 
-pathnode_t *__cdecl Sentient_NearestNodeSuppressed(
+pathnode_t *Sentient_NearestNodeSuppressed(
     sentient_s *self,
     float (*vNormal)[2],
     float *fDist,
@@ -290,14 +290,14 @@ pathnode_t *__cdecl Sentient_NearestNodeSuppressed(
         NEAREST_NODE_DO_HEIGHT_CHECK);
 }
 
-void __cdecl Sentient_InvalidateNearestNode(sentient_s *self)
+void Sentient_InvalidateNearestNode(sentient_s *self)
 {
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\sentient.cpp", 448, 0, "%s", "self");
     self->bNearestNodeValid = 0;
 }
 
-void __cdecl Sentient_SetEnemy(sentient_s *self, gentity_s *enemy, int bNotify)
+void Sentient_SetEnemy(sentient_s *self, gentity_s *enemy, int bNotify)
 {
     sentient_s *sentient; // r30
     int iEnemyNotifyTime; // r11
@@ -379,7 +379,7 @@ void __cdecl Sentient_SetEnemy(sentient_s *self, gentity_s *enemy, int bNotify)
     }
 }
 
-sentient_s *__cdecl Sentient_FirstSentient(int iTeamFlags)
+sentient_s *Sentient_FirstSentient(int iTeamFlags)
 {
     int v2; // r10
     team_t *i; // r11
@@ -400,7 +400,7 @@ sentient_s *__cdecl Sentient_FirstSentient(int iTeamFlags)
     return &level.sentients[v2];
 }
 
-sentient_s *__cdecl Sentient_NextSentient(sentient_s *pPrevSentient, int iTeamFlags)
+sentient_s *Sentient_NextSentient(sentient_s *pPrevSentient, int iTeamFlags)
 {
     sentient_s *sentients; // r11
     int v5; // r10
@@ -450,7 +450,7 @@ sentient_s *__cdecl Sentient_NextSentient(sentient_s *pPrevSentient, int iTeamFl
 const char *pszTeamName[5] =
 { "invalid", "axis", "allies", "neutral", "dead" };
 
-const char *__cdecl Sentient_NameForTeam(unsigned int eTeam)
+const char *Sentient_NameForTeam(unsigned int eTeam)
 {
     if (eTeam > 4)
         MyAssertHandler(
@@ -462,7 +462,7 @@ const char *__cdecl Sentient_NameForTeam(unsigned int eTeam)
     return pszTeamName[eTeam];
 }
 
-void __cdecl Sentient_SetTeam(sentient_s *self, team_t eTeam)
+void Sentient_SetTeam(sentient_s *self, team_t eTeam)
 {
     if (eTeam <= TEAM_FREE || eTeam >= TEAM_NUM_TEAMS)
         MyAssertHandler(
@@ -475,7 +475,7 @@ void __cdecl Sentient_SetTeam(sentient_s *self, team_t eTeam)
         self->eTeam = eTeam;
 }
 
-void __cdecl Sentient_ClaimNode(sentient_s *self, pathnode_t *node)
+void Sentient_ClaimNode(sentient_s *self, pathnode_t *node)
 {
     actor_s *actor; // r3
     pathnode_t *pClaimedNode; // r11
@@ -511,7 +511,7 @@ void __cdecl Sentient_ClaimNode(sentient_s *self, pathnode_t *node)
     }
 }
 
-void __cdecl Sentient_NodeClaimRevoked(sentient_s *self, pathnode_t *node)
+void Sentient_NodeClaimRevoked(sentient_s *self, pathnode_t *node)
 {
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\sentient.cpp", 705, 0, "%s", "self");
@@ -526,7 +526,7 @@ void __cdecl Sentient_NodeClaimRevoked(sentient_s *self, pathnode_t *node)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\sentient.cpp", 713, 0, "%s", "self->pClaimedNode != node");
 }
 
-void __cdecl Sentient_StealClaimNode(sentient_s *self, sentient_s *other)
+void Sentient_StealClaimNode(sentient_s *self, sentient_s *other)
 {
     pathnode_t *pClaimedNode; // r3
 
@@ -541,7 +541,7 @@ void __cdecl Sentient_StealClaimNode(sentient_s *self, sentient_s *other)
         Path_ForceClaimNode(pClaimedNode, self);
 }
 
-void __cdecl Sentient_BanNearNodes(sentient_s *self)
+void Sentient_BanNearNodes(sentient_s *self)
 {
     pathnode_t *node; // r31
     int iNodeCount; // r3
@@ -591,7 +591,7 @@ void __cdecl Sentient_BanNearNodes(sentient_s *self)
     }
 }
 
-void __cdecl Sentient_UpdatePlayerTrail(gentity_s *ent)
+void Sentient_UpdatePlayerTrail(gentity_s *ent)
 {
     int lastTime; // r11
     int time; // r10
@@ -630,21 +630,21 @@ void __cdecl Sentient_UpdatePlayerTrail(gentity_s *ent)
     }
 }
 
-void __cdecl Sentient_WriteGlob(SaveGame *save)
+void Sentient_WriteGlob(SaveGame *save)
 {
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\sentient.cpp", 819, 0, "%s", "save");
     SaveMemory_SaveWrite(&glob, 40, save);
 }
 
-void __cdecl Sentient_ReadGlob(SaveGame *save)
+void Sentient_ReadGlob(SaveGame *save)
 {
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\sentient.cpp", 826, 0, "%s", "save");
     SaveMemory_LoadRead(&glob, 40, save);
 }
 
-void __cdecl Sentient_GetTrailPos(sentient_s *self, float *pos, int *time)
+void Sentient_GetTrailPos(sentient_s *self, float *pos, int *time)
 {
     int v6; // r11
     int v7; // r8
@@ -678,7 +678,7 @@ void __cdecl Sentient_GetTrailPos(sentient_s *self, float *pos, int *time)
     }
 }
 
-void __cdecl G_InitSentients()
+void G_InitSentients()
 {
     SentientGlobals *v0; // r11
     int v1; // ctr
@@ -697,7 +697,7 @@ void __cdecl G_InitSentients()
     Actor_InitThreatBiasGroups();
 }
 
-int __cdecl Sentient_NearestNodeDirty(sentient_s *self, bool originChanged)
+int Sentient_NearestNodeDirty(sentient_s *self, bool originChanged)
 {
     int result; // r3
     pathnode_t *pNearestNode; // r11
@@ -727,7 +727,7 @@ int __cdecl Sentient_NearestNodeDirty(sentient_s *self, bool originChanged)
     return result;
 }
 
-void __cdecl Sentient_Dissociate(sentient_s *self)
+void Sentient_Dissociate(sentient_s *self)
 {
     sentient_s *sentient; // r29
     actor_s *actor; // r31
@@ -772,7 +772,7 @@ void __cdecl Sentient_Dissociate(sentient_s *self)
     }
 }
 
-void __cdecl Sentient_Free(sentient_s *sentient)
+void Sentient_Free(sentient_s *sentient)
 {
     iassert(sentient);
     iassert(level.sentients);

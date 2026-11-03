@@ -63,12 +63,12 @@ FILE *yy_stdout()
 	return stdout;
 }
 
-void __cdecl IntegerValue(char *str)
+void IntegerValue(char *str)
 {
 	sscanf(str, "%d", &yylval.val.intValue);
 }
 
-void __cdecl FloatValue(char *str)
+void FloatValue(char *str)
 {
 	sscanf(str, "%f", &yylval.val.floatValue);
 }
@@ -221,7 +221,7 @@ int yy_get_previous_state()
 	return yy_current_state;
 }
 
-LPVOID __cdecl yy_flex_alloc(uint32_t size)
+LPVOID yy_flex_alloc(uint32_t size)
 {
 	return malloc(size);
 }
@@ -237,7 +237,7 @@ void *yy_flex_realloc(void *ptr, uint32_t size)
 	return realloc(ptr, size);
 }
 
-void __cdecl yy_init_buffer(yy_buffer_state *b, FILE *file)
+void yy_init_buffer(yy_buffer_state *b, FILE *file)
 {
 	yy_flush_buffer(b);
 	b->yy_input_file = file;
@@ -269,7 +269,7 @@ yy_buffer_state *yy_create_buffer()
 	return b;
 }
 
-void __cdecl TextValue(char *str, int len)
+void TextValue(char *str, int len)
 {
 	yylval.val.stringValue = SL_GetStringOfSize(str, 0, len + 1, MT_TYPE_SCRIPT_PARSE);
 }
@@ -392,7 +392,7 @@ int yy_get_next_buffer()
 	return result;
 }
 
-int __cdecl yylex()
+int yylex()
 {
 	int yy_next_buffer; // [esp+0h] [ebp-24h]
 	int yy_next_state; // [esp+8h] [ebp-1Ch]

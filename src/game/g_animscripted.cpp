@@ -14,7 +14,7 @@
 #include <script/scr_animtree.h>
 #include "actor_corpse.h"
 
-void __cdecl LocalToWorldOriginAndAngles(
+void LocalToWorldOriginAndAngles(
     const float (*matrix)[3],
     const float *trans,
     const float *rot,
@@ -33,7 +33,7 @@ void __cdecl LocalToWorldOriginAndAngles(
     AxisToAngles((const mat3x3&)*v11, angles);
 }
 
-void __cdecl CalcDeltaOriginAndAngles(
+void CalcDeltaOriginAndAngles(
     DObj_s *obj,
     unsigned int anim,
     const float (*matrix)[3],
@@ -58,7 +58,7 @@ void __cdecl CalcDeltaOriginAndAngles(
     AxisToAngles((const mat3x3&)*resultAxis, angles);
 }
 
-void __cdecl GetDeltaOriginAndAngles(
+void GetDeltaOriginAndAngles(
     const XAnim_s *anims,
     unsigned int anim,
     const float (*matrix)[3],
@@ -79,7 +79,7 @@ void __cdecl GetDeltaOriginAndAngles(
     AxisToAngles((const mat3x3&)*v13, angles);
 }
 
-void __cdecl G_Animscripted_DeathPlant(
+void G_Animscripted_DeathPlant(
     gentity_s *ent,
     const XAnim_s *anims,
     unsigned int anim,
@@ -167,7 +167,7 @@ void __cdecl G_Animscripted_DeathPlant(
         scripted->fOrientLerp = -1.0;
 }
 
-void __cdecl G_AnimScripted_ClearAnimWeights(
+void G_AnimScripted_ClearAnimWeights(
     DObj_s *obj,
     XAnimTree_s *pAnimTree,
     unsigned int root,
@@ -210,7 +210,7 @@ LABEL_12:
     XAnimClearTreeGoalWeightsStrict(pAnimTree, root, v14);
 }
 
-void __cdecl G_Animscripted(
+void G_Animscripted(
     gentity_s *ent,
     float *origin,
     const float *angles,
@@ -285,7 +285,7 @@ void __cdecl G_Animscripted(
     AnglesSubtract(ent->r.currentAngles, axisAngles, scripted->anglesError);
 }
 
-void __cdecl G_ReduceOriginError(float *origin, float *originError, double maxChange)
+void G_ReduceOriginError(float *origin, float *originError, double maxChange)
 {
     double v6; // fp1
     double v7; // fp1
@@ -328,7 +328,7 @@ void __cdecl G_ReduceOriginError(float *origin, float *originError, double maxCh
     }
 }
 
-void __cdecl G_ReduceAnglesError(float *angles, float *anglesError, double maxChange)
+void G_ReduceAnglesError(float *angles, float *anglesError, double maxChange)
 {
     float *v4; // r31
     int v5; // r30
@@ -367,7 +367,7 @@ void __cdecl G_ReduceAnglesError(float *angles, float *anglesError, double maxCh
     } while (v6);
 }
 
-void __cdecl G_AnimScripted_Think_DeathPlant(gentity_s *ent, XAnimTree_s *tree, float *origin, float *angles)
+void G_AnimScripted_Think_DeathPlant(gentity_s *ent, XAnimTree_s *tree, float *origin, float *angles)
 {
     animscripted_s *scripted; // r30
     int number; // r8
@@ -415,7 +415,7 @@ void __cdecl G_AnimScripted_Think_DeathPlant(gentity_s *ent, XAnimTree_s *tree, 
     angles[2] = (scripted->fEndRoll * fOrientLerp) + angles[2];
 }
 
-void __cdecl G_AnimScripted_UpdateEntityOriginAndAngles(gentity_s *ent, float *origin, const float *angles)
+void G_AnimScripted_UpdateEntityOriginAndAngles(gentity_s *ent, float *origin, const float *angles)
 {
     double v6; // fp13
     double v7; // fp12
@@ -450,7 +450,7 @@ void __cdecl G_AnimScripted_UpdateEntityOriginAndAngles(gentity_s *ent, float *o
     }
 }
 
-void __cdecl G_Animscripted_Think(gentity_s *ent)
+void G_Animscripted_Think(gentity_s *ent)
 {
     animscripted_s *scripted; // r31
     XAnimTree_s *EntAnimTree; // r28
@@ -492,7 +492,7 @@ void __cdecl G_Animscripted_Think(gentity_s *ent)
     }
 }
 
-void __cdecl GScr_GetStartOrigin()
+void GScr_GetStartOrigin()
 {
     XAnimTree_s *v0; // r5
     const XAnim_s *Anims; // r3
@@ -517,7 +517,7 @@ void __cdecl GScr_GetStartOrigin()
     Scr_AddVector(v7);
 }
 
-void __cdecl GScr_GetStartAngles()
+void GScr_GetStartAngles()
 {
     float pos[3];
     float angles[3];
@@ -553,7 +553,7 @@ void __cdecl GScr_GetStartAngles()
     Scr_AddVector(finalAngles);
 }
 
-void __cdecl GScr_GetCycleOriginOffset()
+void GScr_GetCycleOriginOffset()
 {
     XAnimTree_s *v0; // r5
     const XAnim_s *Anims; // r31

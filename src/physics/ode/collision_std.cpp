@@ -1814,7 +1814,7 @@ int dCollideRayPlane (dxGeom *o1, dxGeom *o2, int flags,
 }
 
 // LWSS ADD
-int __cdecl ODE_CollideCapsuleBox(
+int ODE_CollideCapsuleBox(
     const float *boxPos,
     const float *boxRot,
     float *boxLengths,

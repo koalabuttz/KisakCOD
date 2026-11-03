@@ -1564,7 +1564,7 @@ void Drag_MouseUp( unsigned int buttons )
         if ( g_qeglobals.camera_fov_setup )
         {
             int planeBuf[32];   // 4 planes × 32 bytes (v25[32] in the IDB)
-            ( (void (__cdecl *)( int, int, int, int, int * ))g_qeglobals.camera_fov_setup )(
+            ( (void (*)( int, int, int, int, int * ))g_qeglobals.camera_fov_setup )(
                 g_qeglobals.drag_selectionbox_x_1, g_qeglobals.drag_selectionbox_x_2,
                 g_qeglobals.drag_selectionbox_y_1, g_qeglobals.drag_selectionbox_y_2, planeBuf );
 

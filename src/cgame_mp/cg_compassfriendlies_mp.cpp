@@ -13,19 +13,19 @@
 CompassActor s_compassActors[1][64];
 CompassVehicle s_compassVehicles[1][8];
 
-void __cdecl TRACK_cg_compassfriendlies()
+void TRACK_cg_compassfriendlies()
 {
     track_static_alloc_internal(s_compassActors, 3072, "s_compassActors", 9);
     track_static_alloc_internal(s_compassVehicles, 224, "s_compassVehicles", 9);
 }
 
-void __cdecl CG_ClearCompassPingData()
+void CG_ClearCompassPingData()
 {
     memset((uint8_t *)s_compassActors, 0, sizeof(s_compassActors));
     memset((uint8_t *)s_compassVehicles, 0, sizeof(s_compassVehicles));
 }
 
-void __cdecl CG_CompassUpdateVehicleInfo(int32_t localClientNum, int32_t entityIndex)
+void CG_CompassUpdateVehicleInfo(int32_t localClientNum, int32_t entityIndex)
 {
     CompassVehicle *Vehicle; // eax
     centity_s *cent; // [esp+10h] [ebp-4h]
@@ -45,7 +45,7 @@ void __cdecl CG_CompassUpdateVehicleInfo(int32_t localClientNum, int32_t entityI
     Vehicle->ownerIndex = cent->nextState.lerp.u.vehicle.teamAndOwnerIndex >> 2;
 }
 
-CompassVehicle *__cdecl GetVehicle(int32_t localClientNum, int32_t entityNum)
+CompassVehicle *GetVehicle(int32_t localClientNum, int32_t entityNum)
 {
     CompassVehicle *v3; // edx
     int32_t veh; // [esp+4h] [ebp-8h]
@@ -82,7 +82,7 @@ CompassVehicle *__cdecl GetVehicle(int32_t localClientNum, int32_t entityNum)
     return v3;
 }
 
-void __cdecl CG_CompassRadarPingEnemyPlayers(int32_t localClientNum, float oldRadarProgress, float newRadarProgress)
+void CG_CompassRadarPingEnemyPlayers(int32_t localClientNum, float oldRadarProgress, float newRadarProgress)
 {
     bool v3; // [esp+8h] [ebp-34h]
     centity_s *cent; // [esp+Ch] [ebp-30h]
@@ -125,7 +125,7 @@ void __cdecl CG_CompassRadarPingEnemyPlayers(int32_t localClientNum, float oldRa
     }
 }
 
-void __cdecl GetRadarLine(cg_s *cgameGlob, float radarProgress, float *line)
+void GetRadarLine(cg_s *cgameGlob, float radarProgress, float *line)
 {
     float v3; // [esp+0h] [ebp-18h]
     float margin; // [esp+14h] [ebp-4h]
@@ -139,7 +139,7 @@ void __cdecl GetRadarLine(cg_s *cgameGlob, float radarProgress, float *line)
     line[2] = (margin * 2.0 + cgameGlob->compassMapWorldSize[0]) * radarProgress + v3 - margin;
 }
 
-double __cdecl GetRadarLineMargin(cg_s *cgameGlob)
+double GetRadarLineMargin(cg_s *cgameGlob)
 {
     static float SQRT2 = sqrt(2.0);
 
@@ -162,7 +162,7 @@ double __cdecl GetRadarLineMargin(cg_s *cgameGlob)
     return (float)(v2 * 0.5);
 }
 
-bool __cdecl DoLinesSurroundPoint(cg_s *cgameGlob, float *radarLine1, float *radarLine2, float *pos)
+bool DoLinesSurroundPoint(cg_s *cgameGlob, float *radarLine1, float *radarLine2, float *pos)
 {
     float v5; // [esp+8h] [ebp-10h]
     float v6; // [esp+Ch] [ebp-Ch]
@@ -178,7 +178,7 @@ bool __cdecl DoLinesSurroundPoint(cg_s *cgameGlob, float *radarLine1, float *rad
     return v1 < 0.0 != v2 < 0.0;
 }
 
-void __cdecl RadarPingEnemyPlayer(CompassActor *actor, int32_t time)
+void RadarPingEnemyPlayer(CompassActor *actor, int32_t time)
 {
     if (!actor)
         MyAssertHandler(".\\cgame_mp\\cg_compassfriendlies_mp.cpp", 159, 0, "%s", "actor");
@@ -191,7 +191,7 @@ void __cdecl RadarPingEnemyPlayer(CompassActor *actor, int32_t time)
     }
 }
 
-void __cdecl CG_CompassIncreaseRadarTime(int32_t localClientNum)
+void CG_CompassIncreaseRadarTime(int32_t localClientNum)
 {
     float v1; // [esp+8h] [ebp-14h]
     float oldRadarProgress; // [esp+14h] [ebp-8h]
@@ -215,7 +215,7 @@ void __cdecl CG_CompassIncreaseRadarTime(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_CompassAddWeaponPingInfo(int32_t localClientNum, const centity_s *cent, const float *origin, int32_t msec)
+void CG_CompassAddWeaponPingInfo(int32_t localClientNum, const centity_s *cent, const float *origin, int32_t msec)
 {
     bool v4; // [esp+0h] [ebp-20h]
     int32_t playerIndex; // [esp+8h] [ebp-18h]
@@ -258,7 +258,7 @@ void __cdecl CG_CompassAddWeaponPingInfo(int32_t localClientNum, const centity_s
     }
 }
 
-void __cdecl ActorUpdatePos(int32_t localClientNum, CompassActor *actor, const float *newPos, int32_t actorClientIndex)
+void ActorUpdatePos(int32_t localClientNum, CompassActor *actor, const float *newPos, int32_t actorClientIndex)
 {
     cg_s *cgameGlob;
 
@@ -281,7 +281,7 @@ void __cdecl ActorUpdatePos(int32_t localClientNum, CompassActor *actor, const f
     *(double *)actor->lastPos = *(double *)newPos;
 }
 
-bool __cdecl DoesMovementCrossRadar(cg_s *cgameGlob, float radarProgress, const float *p1, const float *p2)
+bool DoesMovementCrossRadar(cg_s *cgameGlob, float radarProgress, const float *p1, const float *p2)
 {
     float v5; // [esp+10h] [ebp-1Ch]
     float v6; // [esp+14h] [ebp-18h]
@@ -299,7 +299,7 @@ bool __cdecl DoesMovementCrossRadar(cg_s *cgameGlob, float radarProgress, const 
     return v1 < 0.0 != v2 < 0.0;
 }
 
-bool __cdecl CanLocalPlayerHearActorFootsteps(int32_t localClientNum, const float *actorPos, uint32_t actorClientIndex)
+bool CanLocalPlayerHearActorFootsteps(int32_t localClientNum, const float *actorPos, uint32_t actorClientIndex)
 {
     float v4; // [esp+4h] [ebp-74h]
     float v5; // [esp+Ch] [ebp-6Ch]
@@ -353,7 +353,7 @@ bool __cdecl CanLocalPlayerHearActorFootsteps(int32_t localClientNum, const floa
     return v4 <= (double)xyspeedSq;
 }
 
-void __cdecl CG_CompassUpdateActors(int32_t localClientNum)
+void CG_CompassUpdateActors(int32_t localClientNum)
 {
     bool v1; // [esp+Ch] [ebp-4Ch]
     bool v2; // [esp+10h] [ebp-48h]
@@ -441,7 +441,7 @@ void __cdecl CG_CompassUpdateActors(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_CompassDrawFriendlies(
+void CG_CompassDrawFriendlies(
     int32_t localClientNum,
     CompassType compassType,
     const rectDef_s *parentRect,
@@ -702,7 +702,7 @@ void __cdecl CG_CompassDrawFriendlies(
     }
 }
 
-void __cdecl CG_CompassDrawEnemies(
+void CG_CompassDrawEnemies(
     int32_t localClientNum,
     CompassType compassType,
     const rectDef_s *parentRect,
@@ -871,7 +871,7 @@ void __cdecl CG_CompassDrawEnemies(
     }
 }
 
-void __cdecl CG_CompassDrawRadarEffects(
+void CG_CompassDrawRadarEffects(
     int32_t localClientNum,
     CompassType compassType,
     const rectDef_s *parentRect,
@@ -967,7 +967,7 @@ void __cdecl CG_CompassDrawRadarEffects(
     }
 }
 
-double __cdecl GetRadarLineEastWestPercentage(cg_s *cgameGlob, float radarProgress)
+double GetRadarLineEastWestPercentage(cg_s *cgameGlob, float radarProgress)
 {
     float margin; // [esp+10h] [ebp-4h]
 
@@ -975,7 +975,7 @@ double __cdecl GetRadarLineEastWestPercentage(cg_s *cgameGlob, float radarProgre
     return (float)((margin * 2.0 + 1.0) * radarProgress - margin);
 }
 
-void __cdecl CG_CompassDrawVehicles(
+void CG_CompassDrawVehicles(
     int32_t localClientNum,
     CompassType compassType,
     int32_t eType,

@@ -10,7 +10,7 @@
 #include <script/scr_const.h>
 #include <script/scr_vm.h>
 
-bool __cdecl Actor_CheckCoverLeave(actor_s *self, const float *exitPos)
+bool Actor_CheckCoverLeave(actor_s *self, const float *exitPos)
 {
     double v5; // fp1
     int wPathLen; // r11
@@ -65,7 +65,7 @@ bool __cdecl Actor_CheckCoverLeave(actor_s *self, const float *exitPos)
     return 1;
 }
 
-int __cdecl Actor_CheckCoverApproach(actor_s *self)
+int Actor_CheckCoverApproach(actor_s *self)
 {
     int result; // r3
     sentient_s *sentient; // r11
@@ -97,7 +97,7 @@ int __cdecl Actor_CheckCoverApproach(actor_s *self)
     return result;
 }
 
-void __cdecl Actor_CoverApproachNotify(actor_s *self)
+void Actor_CoverApproachNotify(actor_s *self)
 {
     path_t *p_Path; // r29
     pathnode_t *arrivalNode; // r25
@@ -172,7 +172,7 @@ void __cdecl Actor_CoverApproachNotify(actor_s *self)
     }
 }
 
-bool __cdecl Actor_CoverArrival_Start(actor_s *self, ai_state_t ePrevState)
+bool Actor_CoverArrival_Start(actor_s *self, ai_state_t ePrevState)
 {
     int result; // r3
 
@@ -183,12 +183,12 @@ bool __cdecl Actor_CoverArrival_Start(actor_s *self, ai_state_t ePrevState)
     return result;
 }
 
-bool __cdecl Actor_CoverArrival_Resume(actor_s *self, ai_state_t ePrevState)
+bool Actor_CoverArrival_Resume(actor_s *self, ai_state_t ePrevState)
 {
     return false;
 }
 
-actor_think_result_t __cdecl Actor_CoverArrival_Think(actor_s *self)
+actor_think_result_t Actor_CoverArrival_Think(actor_s *self)
 {
     iassert(self->bUseGoalWeight);
     Actor_SetAnimScript(self, &g_animScriptTable[self->species]->cover_arrival, AI_MOVE_STOP, self->eAnimMode);

@@ -30,7 +30,7 @@
 
 float g_entMoveTolVec[3] = { 16.0f, 16.0f, 16.0f };
 
-void __cdecl CG_Player_PreControllers(DObj_s *obj, centity_s *cent)
+void CG_Player_PreControllers(DObj_s *obj, centity_s *cent)
 {
     clientInfo_t *ci; // [esp+Ch] [ebp-8h]
     int32_t i; // [esp+10h] [ebp-4h]
@@ -54,7 +54,7 @@ void __cdecl CG_Player_PreControllers(DObj_s *obj, centity_s *cent)
     }
 }
 
-void __cdecl CG_mg42_PreControllers(DObj_s *obj, centity_s *cent)
+void CG_mg42_PreControllers(DObj_s *obj, centity_s *cent)
 {
     float v2; // [esp+14h] [ebp-80h]
     float v5; // [esp+20h] [ebp-74h]
@@ -398,7 +398,7 @@ void  CG_UpdateBModelWorldBounds(uint32_t localClientNum, centity_s *cent, int32
 }
 
 // KISAKTODO: Remove this stupid function
-bool __cdecl CG_VecLessThan(float *a, float *b)
+bool CG_VecLessThan(float *a, float *b)
 {
     float v3; // [esp+4h] [ebp-1Ch]
     float v4; // [esp+8h] [ebp-18h]
@@ -424,7 +424,7 @@ bool __cdecl CG_VecLessThan(float *a, float *b)
     return v3 <= 0.0;
 }
 
-void __cdecl CG_AdjustPositionForMover(
+void CG_AdjustPositionForMover(
     int32_t localClientNum,
     const float *in,
     int32_t moverNum,
@@ -481,7 +481,7 @@ void __cdecl CG_AdjustPositionForMover(
     }
 }
 
-void __cdecl CG_SetFrameInterpolation(int32_t localClientNum)
+void CG_SetFrameInterpolation(int32_t localClientNum)
 {
     int32_t delta; // [esp+4h] [ebp-8h]
     cg_s *cgameGlob;
@@ -504,7 +504,7 @@ void __cdecl CG_SetFrameInterpolation(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_ProcessClientNoteTracks(cg_s *cgameGlob, uint32_t clientNum)
+void CG_ProcessClientNoteTracks(cg_s *cgameGlob, uint32_t clientNum)
 {
     XAnimNotify_s *noteList; // [esp+4h] [ebp-Ch] BYREF
     int32_t i; // [esp+8h] [ebp-8h]
@@ -535,7 +535,7 @@ void __cdecl CG_ProcessClientNoteTracks(cg_s *cgameGlob, uint32_t clientNum)
     }
 }
 
-void __cdecl CG_AddPacketEntity(int32_t localClientNum, int32_t entnum)
+void CG_AddPacketEntity(int32_t localClientNum, int32_t entnum)
 {
     bool v2; // [esp+4h] [ebp-84h]
     bool v4; // [esp+Ch] [ebp-7Ch]
@@ -649,7 +649,7 @@ void __cdecl CG_AddPacketEntity(int32_t localClientNum, int32_t entnum)
     }
 }
 
-void __cdecl CG_UpdateClientDobjPartBits(centity_s *cent, int32_t entnum, int32_t localClientNum)
+void CG_UpdateClientDobjPartBits(centity_s *cent, int32_t entnum, int32_t localClientNum)
 {
     DObj_s *obj; // [esp+0h] [ebp-14h]
     uint32_t oldPartBits[4]; // [esp+4h] [ebp-10h] BYREF
@@ -665,7 +665,7 @@ void __cdecl CG_UpdateClientDobjPartBits(centity_s *cent, int32_t entnum, int32_
     }
 }
 
-int32_t __cdecl CG_AddPacketEntities(int32_t localClientNum)
+int32_t CG_AddPacketEntities(int32_t localClientNum)
 {
     int32_t viewlocked_entNum; // [esp+0h] [ebp-154h]
     uint32_t linkedPlayerCount; // [esp+34h] [ebp-120h]
@@ -725,7 +725,7 @@ int32_t __cdecl CG_AddPacketEntities(int32_t localClientNum)
     return lockedView;
 }
 
-void __cdecl CG_DObjUpdateInfo(const cg_s *cgameGlob, DObj_s *obj, bool notify)
+void CG_DObjUpdateInfo(const cg_s *cgameGlob, DObj_s *obj, bool notify)
 {
     float dtime; // [esp+8h] [ebp-4h]
 
@@ -733,7 +733,7 @@ void __cdecl CG_DObjUpdateInfo(const cg_s *cgameGlob, DObj_s *obj, bool notify)
     DObjUpdateClientInfo(obj, dtime, notify);
 }
 
-int32_t __cdecl CG_DObjGetWorldBoneMatrix(
+int32_t CG_DObjGetWorldBoneMatrix(
     const cpose_t *pose,
     DObj_s *obj,
     int32_t boneIndex,
@@ -756,7 +756,7 @@ int32_t __cdecl CG_DObjGetWorldBoneMatrix(
     return 1;
 }
 
-DObjAnimMat *__cdecl CG_DObjGetLocalBoneMatrix(const cpose_t *pose, DObj_s *obj, int32_t boneIndex)
+DObjAnimMat *CG_DObjGetLocalBoneMatrix(const cpose_t *pose, DObj_s *obj, int32_t boneIndex)
 {
     DObjAnimMat *mat; // [esp+34h] [ebp-4h]
 
@@ -772,7 +772,7 @@ DObjAnimMat *__cdecl CG_DObjGetLocalBoneMatrix(const cpose_t *pose, DObj_s *obj,
         return 0;
 }
 
-int32_t __cdecl CG_DObjGetWorldTagMatrix(
+int32_t CG_DObjGetWorldTagMatrix(
     const cpose_t *pose,
     DObj_s *obj,
     uint32_t tagName,
@@ -795,7 +795,7 @@ int32_t __cdecl CG_DObjGetWorldTagMatrix(
     return 1;
 }
 
-DObjAnimMat *__cdecl CG_DObjGetLocalTagMatrix(const cpose_t *pose, DObj_s *obj, uint32_t tagName)
+DObjAnimMat *CG_DObjGetLocalTagMatrix(const cpose_t *pose, DObj_s *obj, uint32_t tagName)
 {
     uint8_t boneIndex; // [esp+3h] [ebp-1h] BYREF
 
@@ -808,7 +808,7 @@ DObjAnimMat *__cdecl CG_DObjGetLocalTagMatrix(const cpose_t *pose, DObj_s *obj, 
         return 0;
 }
 
-int32_t __cdecl CG_DObjGetWorldTagPos(const cpose_t *pose, DObj_s *obj, uint32_t tagName, float *pos)
+int32_t CG_DObjGetWorldTagPos(const cpose_t *pose, DObj_s *obj, uint32_t tagName, float *pos)
 {
     DObjAnimMat *mat; // [esp+8h] [ebp-4h]
 
@@ -825,7 +825,7 @@ int32_t __cdecl CG_DObjGetWorldTagPos(const cpose_t *pose, DObj_s *obj, uint32_t
     return 1;
 }
 
-cpose_t*__cdecl CG_GetPose(int32_t localClientNum, uint32_t handle)
+cpose_t*CG_GetPose(int32_t localClientNum, uint32_t handle)
 {
     iassert(handle >= 0 && handle < (((1 << 10)) + 128));
 
@@ -837,7 +837,7 @@ cpose_t*__cdecl CG_GetPose(int32_t localClientNum, uint32_t handle)
     return &CG_GetLocalClientGlobals(localClientNum)->viewModelPose;
 }
 
-void __cdecl CG_CalcEntityLerpPositions(int32_t localClientNum, centity_s *cent)
+void CG_CalcEntityLerpPositions(int32_t localClientNum, centity_s *cent)
 {
     uint32_t corpseIndex; // [esp+18h] [ebp-8h]
     clientInfo_t *ci; // [esp+1Ch] [ebp-4h]
@@ -901,7 +901,7 @@ void __cdecl CG_CalcEntityLerpPositions(int32_t localClientNum, centity_s *cent)
     }
 }
 
-void __cdecl CG_InterpolateEntityPosition(cg_s *cgameGlob, centity_s *cent)
+void CG_InterpolateEntityPosition(cg_s *cgameGlob, centity_s *cent)
 {
     float v2; // [esp+8h] [ebp-B4h]
     float v3; // [esp+Ch] [ebp-B0h]
@@ -1008,7 +1008,7 @@ void __cdecl CG_InterpolateEntityPosition(cg_s *cgameGlob, centity_s *cent)
     }
 }
 
-void __cdecl CG_CalcEntityPhysicsPositions(int32_t localClientNum, centity_s *cent)
+void CG_CalcEntityPhysicsPositions(int32_t localClientNum, centity_s *cent)
 {
     cgs_t *cgs;
 
@@ -1045,7 +1045,7 @@ void __cdecl CG_CalcEntityPhysicsPositions(int32_t localClientNum, centity_s *ce
     }
 }
 
-void __cdecl CG_CreatePhysicsObject(int32_t localClientNum, centity_s *cent)
+void CG_CreatePhysicsObject(int32_t localClientNum, centity_s *cent)
 {
     const char *v2; // eax
     const char *Name; // eax
@@ -1106,7 +1106,7 @@ void __cdecl CG_CreatePhysicsObject(int32_t localClientNum, centity_s *cent)
     }
 }
 
-void __cdecl CG_UpdatePhysicsPose(centity_s *cent)
+void CG_UpdatePhysicsPose(centity_s *cent)
 {
     float quat[4]; // [esp+0h] [ebp-10h] BYREF
 
@@ -1123,7 +1123,7 @@ void __cdecl CG_UpdatePhysicsPose(centity_s *cent)
     UnitQuatToAngles(quat, cent->pose.angles);
 }
 
-char __cdecl CG_ExpiredLaunch(int32_t localClientNum, centity_s *cent)
+char CG_ExpiredLaunch(int32_t localClientNum, centity_s *cent)
 {
     iassert(cent->nextValid);
 
@@ -1135,7 +1135,7 @@ char __cdecl CG_ExpiredLaunch(int32_t localClientNum, centity_s *cent)
     return 1;
 }
 
-void __cdecl CG_CalcEntityRagdollPositions(int32_t localClientNum, centity_s *cent)
+void CG_CalcEntityRagdollPositions(int32_t localClientNum, centity_s *cent)
 {
     if (!cent)
         MyAssertHandler(".\\cgame_mp\\cg_ents_mp.cpp", 1400, 0, "%s", "cent");
@@ -1152,7 +1152,7 @@ void __cdecl CG_CalcEntityRagdollPositions(int32_t localClientNum, centity_s *ce
         CG_UpdateRagdollPose(cent);
 }
 
-void __cdecl CG_CreateRagdollObject(int32_t localClientNum, centity_s *cent)
+void CG_CreateRagdollObject(int32_t localClientNum, centity_s *cent)
 {
     int32_t RagdollForDObj; // eax
     bool shareRagdoll; // [esp+Ah] [ebp-2h]
@@ -1182,7 +1182,7 @@ void __cdecl CG_CreateRagdollObject(int32_t localClientNum, centity_s *cent)
     cent->pose.isRagdoll = 1;
 }
 
-void __cdecl CG_UpdateRagdollPose(centity_s *cent)
+void CG_UpdateRagdollPose(centity_s *cent)
 {
     if (!cent->pose.ragdollHandle && !cent->pose.killcamRagdollHandle)
         MyAssertHandler(
@@ -1197,7 +1197,7 @@ void __cdecl CG_UpdateRagdollPose(centity_s *cent)
         Ragdoll_GetRootOrigin(cent->pose.ragdollHandle, cent->pose.origin);
 }
 
-DObj_s *__cdecl CG_PreProcess_GetDObj(int32_t localClientNum, int32_t entIndex, int32_t entType, XModel *model)
+DObj_s *CG_PreProcess_GetDObj(int32_t localClientNum, int32_t entIndex, int32_t entType, XModel *model)
 {
     XAnimTree_s *Tree; // [esp+18h] [ebp-20h]
     float *v6; // [esp+1Ch] [ebp-1Ch]
@@ -1228,7 +1228,7 @@ DObj_s *__cdecl CG_PreProcess_GetDObj(int32_t localClientNum, int32_t entIndex, 
             MyAssertHandler(".\\cgame_mp\\cg_ents_mp.cpp", 1568, 0, "%s", "!cent->tree");
         anims = CG_GetAnimations(localClientNum, entIndex, entType);
         if (anims)
-            Tree = XAnimCreateTree(anims, (void *(__cdecl *)(int))CG_AllocAnimTree);
+            Tree = XAnimCreateTree(anims, (void *(*)(int))CG_AllocAnimTree);
         else
             Tree = 0;
         animTree = Tree;
@@ -1248,7 +1248,7 @@ DObj_s *__cdecl CG_PreProcess_GetDObj(int32_t localClientNum, int32_t entIndex, 
     return obj;
 }
 
-XAnim_s *__cdecl CG_GetAnimations(int32_t localClientNum, uint32_t entIndex, int32_t entType)
+XAnim_s *CG_GetAnimations(int32_t localClientNum, uint32_t entIndex, int32_t entType)
 {
     centity_s *cent; // [esp+4h] [ebp-4h]
     centity_s *centa; // [esp+4h] [ebp-4h]
@@ -1269,14 +1269,14 @@ XAnim_s *__cdecl CG_GetAnimations(int32_t localClientNum, uint32_t entIndex, int
     }
 }
 
-XAnim_s *__cdecl CG_GetMG42Anims(centity_s *cent)
+XAnim_s *CG_GetMG42Anims(centity_s *cent)
 {
     WeaponDef *weapDef; // [esp+0h] [ebp-8h]
     XAnim_s *pAnims; // [esp+4h] [ebp-4h]
 
     iassert(cent->nextState.weapon);
     weapDef = BG_GetWeaponDef(cent->nextState.weapon);
-    pAnims = XAnimCreateAnims("MG42", 3u, (void *(__cdecl *)(int))Hunk_AllocXAnimClient);
+    pAnims = XAnimCreateAnims("MG42", 3u, (void *(*)(int))Hunk_AllocXAnimClient);
     iassert(pAnims);
     XAnimBlend(pAnims, 0, "root", 1u, 2u, 0);
     BG_CreateXAnim(pAnims, 1u, (char *)weapDef->szXAnims[WEAP_ANIM_IDLE]);
@@ -1284,14 +1284,14 @@ XAnim_s *__cdecl CG_GetMG42Anims(centity_s *cent)
     return pAnims;
 }
 
-XAnim_s *__cdecl CG_GetHelicopterAnims(centity_s *cent)
+XAnim_s *CG_GetHelicopterAnims(centity_s *cent)
 {
     XAnim_s *pAnims; // [esp+4h] [ebp-4h]
 
     if (!cent->nextState.weapon)
         MyAssertHandler(".\\cgame_mp\\cg_ents_mp.cpp", 230, 0, "%s", "cent->nextState.weapon");
     BG_GetWeaponDef(cent->nextState.weapon);
-    pAnims = XAnimCreateAnims("helicopter", 2u, (void *(__cdecl *)(int))Hunk_AllocXAnimClient);
+    pAnims = XAnimCreateAnims("helicopter", 2u, (void *(*)(int))Hunk_AllocXAnimClient);
     if (!pAnims)
         MyAssertHandler(".\\cgame_mp\\cg_ents_mp.cpp", 234, 0, "%s", "pAnims");
     XAnimBlend(pAnims, 0, "root", 1u, 1u, 0);
@@ -1299,12 +1299,12 @@ XAnim_s *__cdecl CG_GetHelicopterAnims(centity_s *cent)
     return pAnims;
 }
 
-char *__cdecl CG_AllocAnimTree(int32_t size)
+char *CG_AllocAnimTree(int32_t size)
 {
     return (char*)MT_Alloc(size, MT_TYPE_SMALL_ANIM_TREE);
 }
 
-void __cdecl CG_DObjCalcBone(const cpose_t *pose, DObj_s *obj, int32_t boneIndex)
+void CG_DObjCalcBone(const cpose_t *pose, DObj_s *obj, int32_t boneIndex)
 {
     int32_t partBits[4]; // [esp+0h] [ebp-10h] BYREF
 
@@ -1326,7 +1326,7 @@ void __cdecl CG_DObjCalcBone(const cpose_t *pose, DObj_s *obj, int32_t boneIndex
     }
 }
 
-void __cdecl CG_ClearUnion(int32_t localClientNum, centity_s *cent)
+void CG_ClearUnion(int32_t localClientNum, centity_s *cent)
 {
     switch (cent->pose.eTypeUnion)
     {
@@ -1358,7 +1358,7 @@ void __cdecl CG_ClearUnion(int32_t localClientNum, centity_s *cent)
     cent->pose.eTypeUnion = ET_GENERAL;
 }
 
-void __cdecl CG_SetUnionType(int32_t localClientNum, centity_s *cent)
+void CG_SetUnionType(int32_t localClientNum, centity_s *cent)
 {
     switch (cent->nextState.eType)
     {
@@ -1378,13 +1378,13 @@ void __cdecl CG_SetUnionType(int32_t localClientNum, centity_s *cent)
     }
 }
 
-void __cdecl CG_UpdatePoseUnion(int32_t localClientNum, centity_s *cent)
+void CG_UpdatePoseUnion(int32_t localClientNum, centity_s *cent)
 {
     CG_ClearUnion(localClientNum, cent);
     CG_SetUnionType(localClientNum, cent);
 }
 
-void __cdecl CG_ProcessEntity(int32_t localClientNum, centity_s *cent)
+void CG_ProcessEntity(int32_t localClientNum, centity_s *cent)
 {
     CG_EntityEffects(localClientNum, cent);
     if (cent->nextState.eType != cent->pose.eTypeUnion)
@@ -1441,7 +1441,7 @@ void __cdecl CG_ProcessEntity(int32_t localClientNum, centity_s *cent)
     }
 }
 
-void __cdecl CG_General(int32_t localClientNum, centity_s *cent)
+void CG_General(int32_t localClientNum, centity_s *cent)
 {
     DObj_s *obj; // [esp+4h] [ebp-18h]
     float lightingOrigin[3]; // [esp+10h] [ebp-Ch] BYREF
@@ -1464,7 +1464,7 @@ void __cdecl CG_General(int32_t localClientNum, centity_s *cent)
     }
 }
 
-void __cdecl CG_LockLightingOrigin(centity_s *cent, float *lightingOrigin)
+void CG_LockLightingOrigin(centity_s *cent, float *lightingOrigin)
 {
     if ((cent->nextState.lerp.eFlags & 0x400) != 0)
     {
@@ -1487,7 +1487,7 @@ void __cdecl CG_LockLightingOrigin(centity_s *cent, float *lightingOrigin)
     lightingOrigin[2] = lightingOrigin[2] + 4.0;
 }
 
-void __cdecl CG_Item(int32_t localClientNum, centity_s *cent)
+void CG_Item(int32_t localClientNum, centity_s *cent)
 {
     DObj_s *obj; // [esp+Ch] [ebp-20h]
     uint8_t weapModel; // [esp+17h] [ebp-15h]
@@ -1521,7 +1521,7 @@ void __cdecl CG_Item(int32_t localClientNum, centity_s *cent)
     }
 }
 
-void __cdecl CG_EntityEffects(int32_t localClientNum, centity_s *cent)
+void CG_EntityEffects(int32_t localClientNum, centity_s *cent)
 {
     if (cent->nextState.loopSound)
         CG_AddEntityLoopSound(localClientNum, cent);
@@ -1529,7 +1529,7 @@ void __cdecl CG_EntityEffects(int32_t localClientNum, centity_s *cent)
         CG_CalcEntityLerpPositions(localClientNum, cent);
 }
 
-void __cdecl CG_AddEntityLoopSound(int32_t localClientNum, const centity_s *cent)
+void CG_AddEntityLoopSound(int32_t localClientNum, const centity_s *cent)
 {
     const char *ConfigString; // eax
     float midpoint[3]; // [esp+0h] [ebp-1Ch] BYREF
@@ -1554,7 +1554,7 @@ void __cdecl CG_AddEntityLoopSound(int32_t localClientNum, const centity_s *cent
     }
 }
 
-void __cdecl CG_mg42(int32_t localClientNum, centity_s *cent)
+void CG_mg42(int32_t localClientNum, centity_s *cent)
 {
     DObj_s *obj; // [esp+Ch] [ebp-18h]
     float lightingOrigin[3]; // [esp+14h] [ebp-10h] BYREF
@@ -1592,7 +1592,7 @@ void __cdecl CG_mg42(int32_t localClientNum, centity_s *cent)
     }
 }
 
-void __cdecl CG_Missile(int32_t localClientNum, centity_s *cent)
+void CG_Missile(int32_t localClientNum, centity_s *cent)
 {
     DObj_s *obj; // [esp+10h] [ebp-20h]
     entityState_s *s1; // [esp+14h] [ebp-1Ch]
@@ -1640,7 +1640,7 @@ void __cdecl CG_Missile(int32_t localClientNum, centity_s *cent)
     }
 }
 
-void __cdecl CG_ScriptMover(int32_t localClientNum, centity_s *cent)
+void CG_ScriptMover(int32_t localClientNum, centity_s *cent)
 {
     const GfxBrushModel *BrushModel; // eax
     uint32_t materialTime; // [esp+0h] [ebp-1Ch]
@@ -1678,7 +1678,7 @@ void __cdecl CG_ScriptMover(int32_t localClientNum, centity_s *cent)
     }
 }
 
-void __cdecl CG_SoundBlend(int32_t localClientNum, centity_s *cent)
+void CG_SoundBlend(int32_t localClientNum, centity_s *cent)
 {
     const char *ConfigString; // eax
     float lerp; // [esp+24h] [ebp-18h]
@@ -1718,7 +1718,7 @@ void __cdecl CG_SoundBlend(int32_t localClientNum, centity_s *cent)
     }
 }
 
-void __cdecl CG_Fx(int32_t localClientNum, centity_s *cent)
+void CG_Fx(int32_t localClientNum, centity_s *cent)
 {
     if (cent->pose.fx.triggerTime != cent->nextState.time2)
     {
@@ -1734,7 +1734,7 @@ void __cdecl CG_Fx(int32_t localClientNum, centity_s *cent)
     }
 }
 
-FxEffect *__cdecl CG_StartFx(int32_t localClientNum, centity_s *cent, int32_t startAtTime)
+FxEffect *CG_StartFx(int32_t localClientNum, centity_s *cent, int32_t startAtTime)
 {
     const FxEffectDef *fxDef; // [esp+0h] [ebp-30h]
     int32_t fxId; // [esp+8h] [ebp-28h]
@@ -1758,7 +1758,7 @@ FxEffect *__cdecl CG_StartFx(int32_t localClientNum, centity_s *cent, int32_t st
     return FX_SpawnOrientedEffect(localClientNum, fxDef, startAtTime, cent->pose.origin, axis, ENTITYNUM_NONE);
 }
 
-void __cdecl CG_LoopFx(int32_t localClientNum, centity_s *cent)
+void CG_LoopFx(int32_t localClientNum, centity_s *cent)
 {
     double v2; // [esp+0h] [ebp-20h]
     float diff[3]; // [esp+8h] [ebp-18h] BYREF
@@ -1790,7 +1790,7 @@ void __cdecl CG_LoopFx(int32_t localClientNum, centity_s *cent)
     }
 }
 
-void __cdecl CG_PrimaryLight(int32_t localClientNum, centity_s *cent)
+void CG_PrimaryLight(int32_t localClientNum, centity_s *cent)
 {
     GfxLight *light; // [esp+2Ch] [ebp-34h]
     float oldColor[4]; // [esp+30h] [ebp-30h] BYREF
@@ -1865,7 +1865,7 @@ void __cdecl CG_PrimaryLight(int32_t localClientNum, centity_s *cent)
     }
 }
 
-const ComPrimaryLight *__cdecl Com_GetPrimaryLight(uint32_t primaryLightIndex)
+const ComPrimaryLight *Com_GetPrimaryLight(uint32_t primaryLightIndex)
 {
     if (!comWorld.isInUse)
         MyAssertHandler("c:\\trees\\cod3\\src\\cgame_mp\\../qcommon/com_bsp_api.h", 31, 0, "%s", "comWorld.isInUse");
@@ -1880,7 +1880,7 @@ const ComPrimaryLight *__cdecl Com_GetPrimaryLight(uint32_t primaryLightIndex)
     return &comWorld.primaryLights[primaryLightIndex];
 }
 
-void __cdecl CG_ClampPrimaryLightOrigin(GfxLight *light, const ComPrimaryLight *refLight)
+void CG_ClampPrimaryLightOrigin(GfxLight *light, const ComPrimaryLight *refLight)
 {
     float scale; // [esp+Ch] [ebp-20h]
     float v3; // [esp+10h] [ebp-1Ch]
@@ -1899,7 +1899,7 @@ void __cdecl CG_ClampPrimaryLightOrigin(GfxLight *light, const ComPrimaryLight *
     }
 }
 
-void __cdecl CG_ClampPrimaryLightDir(GfxLight *light, const ComPrimaryLight *refLight)
+void CG_ClampPrimaryLightDir(GfxLight *light, const ComPrimaryLight *refLight)
 {
     const char *v2; // eax
     float scale; // [esp+14h] [ebp-40h]
@@ -1940,7 +1940,7 @@ void __cdecl CG_ClampPrimaryLightDir(GfxLight *light, const ComPrimaryLight *ref
     }
 }
 
-void __cdecl CG_GetPoseOrigin(const cpose_t *pose, float *origin)
+void CG_GetPoseOrigin(const cpose_t *pose, float *origin)
 {
     if (!pose)
         MyAssertHandler(".\\cgame_mp\\cg_ents_mp.cpp", 1769, 0, "%s", "pose");
@@ -1949,7 +1949,7 @@ void __cdecl CG_GetPoseOrigin(const cpose_t *pose, float *origin)
     origin[2] = pose->origin[2];
 }
 
-void __cdecl CG_GetPoseAngles(const cpose_t *pose, float *angles)
+void CG_GetPoseAngles(const cpose_t *pose, float *angles)
 {
     if (!pose)
         MyAssertHandler(".\\cgame_mp\\cg_ents_mp.cpp", 1776, 0, "%s", "pose");
@@ -1958,12 +1958,12 @@ void __cdecl CG_GetPoseAngles(const cpose_t *pose, float *angles)
     angles[2] = pose->angles[2];
 }
 
-float *__cdecl CG_GetEntityOrigin(int32_t localClientNum, uint32_t entnum)
+float *CG_GetEntityOrigin(int32_t localClientNum, uint32_t entnum)
 {
     return CG_GetEntity(localClientNum, entnum)->pose.origin;
 }
 
-void __cdecl CG_PredictiveSkinCEntity(GfxSceneEntity *sceneEnt)
+void CG_PredictiveSkinCEntity(GfxSceneEntity *sceneEnt)
 {
     cpose_t *pose; // [esp+0h] [ebp-4h]
 

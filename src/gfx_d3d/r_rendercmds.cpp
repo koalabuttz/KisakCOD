@@ -50,7 +50,7 @@ GfxCmdArray g_debugFrontEndCmds;
 static uint32_t s_renderCmdBufferSize;
 static int s_renderCmdWarnSize;
 
-void __cdecl TRACK_r_rendercmds()
+void TRACK_r_rendercmds()
 {
     track_static_alloc_internal((void *)s_backEndData, 2346752, "s_backEndData", 18);
     track_static_alloc_internal(g_viewInfo, 212352, "g_viewInfo", 18);
@@ -59,12 +59,12 @@ void __cdecl TRACK_r_rendercmds()
     track_static_alloc_internal(&g_debugFrontEndCmds, 16, "g_debugFrontEndCmds", 0);
 }
 
-void __cdecl R_FreeGlobalVariable(void *var)
+void R_FreeGlobalVariable(void *var)
 {
     Z_VirtualFree(var);
 }
 
-void __cdecl R_ShutdownSceneBuffers()
+void R_ShutdownSceneBuffers()
 {
     uint32_t localClientNum; // [esp+0h] [ebp-8h]
     uint32_t viewIndex; // [esp+4h] [ebp-4h]
@@ -80,7 +80,7 @@ void __cdecl R_ShutdownSceneBuffers()
     }
 }
 
-void __cdecl R_ShutdownRenderCommands()
+void R_ShutdownRenderCommands()
 {
     uint32_t dataIndex; // [esp+4h] [ebp-4h]
 
@@ -99,7 +99,7 @@ void __cdecl R_ShutdownRenderCommands()
     R_ShutdownSceneBuffers();
 }
 
-void __cdecl R_ShutdownRenderBuffers()
+void R_ShutdownRenderBuffers()
 {
     GfxBackEndData *data; // [esp+0h] [ebp-10h]
     uint32_t partitionIndex; // [esp+4h] [ebp-Ch]
@@ -127,7 +127,7 @@ void __cdecl R_ShutdownRenderBuffers()
     R_ShutdownDynamicIndices(&gfxBuf.smodelCache);
 }
 
-void __cdecl R_ShutdownDynamicMesh(GfxMeshData *mesh)
+void R_ShutdownDynamicMesh(GfxMeshData *mesh)
 {
     IDirect3DVertexBuffer9 *varCopy; // [esp+0h] [ebp-4h]
 
@@ -148,7 +148,7 @@ void __cdecl R_ShutdownDynamicMesh(GfxMeshData *mesh)
     }
 }
 
-void __cdecl R_InitRenderCommands()
+void R_InitRenderCommands()
 {
     uint32_t dataIndex; // [esp+4h] [ebp-4h]
 
@@ -179,7 +179,7 @@ void __cdecl R_InitRenderCommands()
     }
 }
 
-void __cdecl R_InitRenderBuffers()
+void R_InitRenderBuffers()
 {
     float w; // [esp+8h] [ebp-3Ch]
     float h; // [esp+Ch] [ebp-38h]
@@ -209,7 +209,7 @@ void __cdecl R_InitRenderBuffers()
     R_InitDynamicIndices(&gfxBuf.smodelCache, 0x100000);
 }
 
-void __cdecl R_InitDynamicMesh(
+void R_InitDynamicMesh(
     GfxMeshData *mesh,
     uint32_t indexCount,
     uint32_t vertCount,
@@ -222,13 +222,13 @@ void __cdecl R_InitDynamicMesh(
     R_InitDynamicVertexBufferState(&mesh->vb, vertSize * vertCount);
 }
 
-void __cdecl R_InitRenderThread()
+void R_InitRenderThread()
 {
-    if (!Sys_SpawnRenderThread((void(__cdecl *)(uint32_t))RB_RenderThread))
+    if (!Sys_SpawnRenderThread((void(*)(uint32_t))RB_RenderThread))
         Com_Error(ERR_FATAL, "Failed to create render thread");
 }
 
-void __cdecl R_SyncRenderThread()
+void R_SyncRenderThread()
 {
     if (!Sys_IsRenderThread())
     {
@@ -262,7 +262,7 @@ GfxCmdArray *R_ClearCmdList()
     return result;
 }
 
-void __cdecl R_ReleaseThreadOwnership()
+void R_ReleaseThreadOwnership()
 {
     iassert( Sys_IsMainThread() );
     if (r_glob.startedRenderThread)
@@ -276,7 +276,7 @@ void __cdecl R_ReleaseThreadOwnership()
     }
 }
 
-void __cdecl R_IssueRenderCommands(uint32_t type)
+void R_IssueRenderCommands(uint32_t type)
 {
     bool v1; // [esp+1Eh] [ebp-16h]
 
@@ -335,7 +335,7 @@ bool R_UpdateSkinCacheUsage()
     return result;
 }
 
-char __cdecl R_HandOffToBackend(char type)
+char R_HandOffToBackend(char type)
 {
     bool v2; // [esp+3h] [ebp-1h]
 
@@ -356,7 +356,7 @@ char __cdecl R_HandOffToBackend(char type)
     }
 }
 
-void __cdecl R_ToggleSmpFrameCmd(char type)
+void R_ToggleSmpFrameCmd(char type)
 {
     iassert( Sys_IsMainThread() );
     R_ReleaseThreadOwnership();
@@ -377,7 +377,7 @@ void __cdecl R_ToggleSmpFrameCmd(char type)
     R_ToggleSmpFrame();
 }
 
-void __cdecl R_AbortRenderCommands()
+void R_AbortRenderCommands()
 {
     iassert( Sys_IsMainThread() );
     if (rg.registered)
@@ -392,27 +392,27 @@ void __cdecl R_AbortRenderCommands()
 
 GfxCmdArray *s_cmdList;
 
-void __cdecl R_BeginClientCmdList2D()
+void R_BeginClientCmdList2D()
 {
     frontEndDataOut->viewInfo[frontEndDataOut->viewInfoCount].cmds = &s_cmdList->cmds[s_cmdList->usedTotal];
 }
 
-void __cdecl R_ClearClientCmdList2D()
+void R_ClearClientCmdList2D()
 {
     frontEndDataOut->viewInfo[frontEndDataOut->viewInfoCount].cmds = 0;
 }
 
-void __cdecl R_BeginSharedCmdList()
+void R_BeginSharedCmdList()
 {
     frontEndDataOut->cmds = &s_cmdList->cmds[s_cmdList->usedTotal];
 }
 
-void __cdecl R_AddCmdEndOfList()
+void R_AddCmdEndOfList()
 {
     R_EmitEndCommand(nullptr,[](void *,GfxRenderCommand id,int bytes) { return R_GetCommandBuffer(id,bytes); });
 }
 
-GfxCmdHeader *__cdecl R_GetCommandBuffer(GfxRenderCommand renderCmd, int bytes)
+GfxCmdHeader *R_GetCommandBuffer(GfxRenderCommand renderCmd, int bytes)
 {
     const char *v2; // eax
     int sizeLimit; // [esp+Ch] [ebp-4h]
@@ -561,7 +561,7 @@ DebugGlobals *R_ToggleSmpFrame()
     return result;
 }
 
-GfxViewParms *__cdecl R_AllocViewParms()
+GfxViewParms *R_AllocViewParms()
 {
     iassert( frontEndDataOut );
     if (frontEndDataOut->viewParmCount >= 0x1Cu)
@@ -575,7 +575,7 @@ GfxViewParms *__cdecl R_AllocViewParms()
     return &frontEndDataOut->viewParms[frontEndDataOut->viewParmCount++];
 }
 
-void __cdecl R_AddCmdDrawStretchPic(
+void R_AddCmdDrawStretchPic(
     float x,
     float y,
     float w,
@@ -624,12 +624,12 @@ void __cdecl R_AddCmdDrawStretchPic(
     },x,y,w,h,s0,t0,s1,t1,color,actualMaterial);
 }
 
-bool __cdecl Material_HasAnyFogableTechnique(const Material *material)
+bool Material_HasAnyFogableTechnique(const Material *material)
 {
     return Material_GetTechnique(material, TECHNIQUE_LIT_BEGIN) || Material_GetTechnique(material, TECHNIQUE_EMISSIVE);
 }
 
-const MaterialTechnique *__cdecl Material_GetTechnique(const Material *material, MaterialTechniqueType techType)
+const MaterialTechnique *Material_GetTechnique(const Material *material, MaterialTechniqueType techType)
 {
     const MaterialTechnique *technique; // [esp+0h] [ebp-8h]
     const MaterialTechniqueSet *techSet; // [esp+4h] [ebp-4h]
@@ -651,7 +651,7 @@ const MaterialTechnique *__cdecl Material_GetTechnique(const Material *material,
     return technique;
 }
 
-MaterialTechniqueSet *__cdecl Material_GetTechniqueSet(const Material *material)
+MaterialTechniqueSet *Material_GetTechniqueSet(const Material *material)
 {
     iassert( material );
     if (!material->techniqueSet)
@@ -665,7 +665,7 @@ MaterialTechniqueSet *__cdecl Material_GetTechniqueSet(const Material *material)
     return material->techniqueSet->remappedTechniqueSet;
 }
 
-void __cdecl R_AddCmdDrawStretchPicFlipST(
+void R_AddCmdDrawStretchPicFlipST(
     float x,
     float y,
     float w,
@@ -726,7 +726,7 @@ void __cdecl R_AddCmdDrawStretchPicFlipST(
     }
 }
 
-void __cdecl R_AddCmdDrawStretchPicRotateXY(
+void R_AddCmdDrawStretchPicRotateXY(
     float x,
     float y,
     float w,
@@ -763,7 +763,7 @@ void __cdecl R_AddCmdDrawStretchPicRotateXY(
     }
 }
 
-void __cdecl R_AddCmdDrawStretchPicRotateST(
+void R_AddCmdDrawStretchPicRotateST(
     float x,
     float y,
     float w,
@@ -802,7 +802,7 @@ void __cdecl R_AddCmdDrawStretchPicRotateST(
     }
 }
 
-void __cdecl R_AddCmdDrawTextWithCursor(
+void R_AddCmdDrawTextWithCursor(
     const char *text,
     int maxChars,
     Font_s *font,
@@ -819,7 +819,7 @@ void __cdecl R_AddCmdDrawTextWithCursor(
     AddBaseDrawTextCmd(text, maxChars, font, x, y, xScale, yScale, rotation, color, style, cursorPos, cursor);
 }
 
-GfxCmdDrawText2D *__cdecl AddBaseDrawTextCmd(
+GfxCmdDrawText2D *AddBaseDrawTextCmd(
     const char *text,
     int maxChars,
     Font_s *font,
@@ -838,7 +838,7 @@ GfxCmdDrawText2D *__cdecl AddBaseDrawTextCmd(
     },text,maxChars,font,x,y,xScale,yScale,rotation,color,style,cursorPos,cursor);
 }
 
-void __cdecl R_AddCmdDrawText(
+void R_AddCmdDrawText(
     const char *text,
     int maxChars,
     Font_s *font,
@@ -853,7 +853,7 @@ void __cdecl R_AddCmdDrawText(
     R_AddCmdDrawTextWithCursor(text, maxChars, font, x, y, xScale, yScale, rotation, color, style, -1, 0);
 }
 
-void __cdecl R_AddCmdDrawTextSubtitle(
+void R_AddCmdDrawTextSubtitle(
     const char *text,
     int maxChars,
     Font_s *font,
@@ -879,7 +879,7 @@ void __cdecl R_AddCmdDrawTextSubtitle(
     }
 }
 
-char __cdecl SetDrawText2DGlowParms(GfxCmdDrawText2D *cmd, const float *color, const float *glowColor)
+char SetDrawText2DGlowParms(GfxCmdDrawText2D *cmd, const float *color, const float *glowColor)
 {
     float scaledGlowColor[4]; // [esp+0h] [ebp-10h] BYREF
 
@@ -896,7 +896,7 @@ char __cdecl SetDrawText2DGlowParms(GfxCmdDrawText2D *cmd, const float *color, c
     return 1;
 }
 
-void __cdecl R_AddCmdDrawTextWithEffects(
+void R_AddCmdDrawTextWithEffects(
     const char *text,
     int maxChars,
     Font_s *font,
@@ -949,7 +949,7 @@ void __cdecl R_AddCmdDrawTextWithEffects(
     }
 }
 
-char __cdecl SetDrawText2DPulseFXParms(
+char SetDrawText2DPulseFXParms(
     GfxCmdDrawText2D *cmd,
     Material *fxMaterial,
     Material *fxMaterialGlow,
@@ -975,7 +975,7 @@ char __cdecl SetDrawText2DPulseFXParms(
     return 1;
 }
 
-void __cdecl R_AddCmdDrawConsoleText(
+void R_AddCmdDrawConsoleText(
     char *textPool,
     int poolSize,
     int firstChar,
@@ -991,7 +991,7 @@ void __cdecl R_AddCmdDrawConsoleText(
     AddBaseDrawConsoleTextCmd(textPool, poolSize, firstChar, charCount, font, x, y, xScale, yScale, color, style);
 }
 
-GfxCmdDrawText2D *__cdecl AddBaseDrawConsoleTextCmd(
+GfxCmdDrawText2D *AddBaseDrawConsoleTextCmd(
     char *textPool,
     int poolSize,
     int firstChar,
@@ -1038,7 +1038,7 @@ GfxCmdDrawText2D *__cdecl AddBaseDrawConsoleTextCmd(
     return cmd;
 }
 
-void __cdecl CopyPoolTextToCmd(char *textPool, int poolSize, int firstChar, int charCount, GfxCmdDrawText2D *cmd)
+void CopyPoolTextToCmd(char *textPool, int poolSize, int firstChar, int charCount, GfxCmdDrawText2D *cmd)
 {
     uint32_t poolRemaining; // [esp+30h] [ebp-4h]
 
@@ -1060,7 +1060,7 @@ void __cdecl CopyPoolTextToCmd(char *textPool, int poolSize, int firstChar, int 
     cmd->text[charCount] = 0;
 }
 
-void __cdecl R_AddCmdDrawConsoleTextSubtitle(
+void R_AddCmdDrawConsoleTextSubtitle(
     char *textPool,
     int poolSize,
     int firstChar,
@@ -1084,7 +1084,7 @@ void __cdecl R_AddCmdDrawConsoleTextSubtitle(
     }
 }
 
-void __cdecl R_AddCmdDrawConsoleTextPulseFX(
+void R_AddCmdDrawConsoleTextPulseFX(
     char *textPool,
     int poolSize,
     int firstChar,
@@ -1138,7 +1138,7 @@ void __cdecl R_AddCmdDrawConsoleTextPulseFX(
     }
 }
 
-void __cdecl R_AddCmdDrawQuadPic(const float (*verts)[2], const float *color, Material *material)
+void R_AddCmdDrawQuadPic(const float (*verts)[2], const float *color, Material *material)
 {
     Material *defaultMaterial; // [esp+0h] [ebp-14h]
     int cornerIndex; // [esp+Ch] [ebp-8h]
@@ -1161,7 +1161,7 @@ void __cdecl R_AddCmdDrawQuadPic(const float (*verts)[2], const float *color, Ma
     }
 }
 
-void __cdecl R_BeginFrame()
+void R_BeginFrame()
 {
     bool v0; // [esp+0h] [ebp-Ch]
     bool v1; // [esp+4h] [ebp-8h]
@@ -1193,7 +1193,7 @@ void __cdecl R_BeginFrame()
     }
 }
 
-int __cdecl R_GpuSyncModified()
+int R_GpuSyncModified()
 {
     iassert( r_gpuSync );
     iassert( r_multiGpu );
@@ -1255,7 +1255,7 @@ void R_UpdateFrontEndDvarOptions()
     rg.drawXModels = r_drawXModels->current.enabled;
 }
 
-void __cdecl R_SetInputCodeConstantFromVec4(GfxCmdBufInput *input, CodeConstant constant, const float *value)
+void R_SetInputCodeConstantFromVec4(GfxCmdBufInput *input, CodeConstant constant, const float *value)
 {
     bcassert(constant, CONST_SRC_CODE_COUNT_FLOAT4);
     iassert(s_codeConstUpdateFreq[constant] == MTL_UPDATE_RARELY);
@@ -1275,14 +1275,14 @@ void __cdecl R_SetInputCodeConstantFromVec4(GfxCmdBufInput *input, CodeConstant 
     input->consts[constant][3] = value[3];
 }
 
-void __cdecl R_SetInputCodeImageTexture(GfxCmdBufInput *input, MaterialTextureSource codeTexture, const GfxImage *image)
+void R_SetInputCodeImageTexture(GfxCmdBufInput *input, MaterialTextureSource codeTexture, const GfxImage *image)
 {
     iassert(input);
     bcassert(codeTexture, TEXTURE_SRC_CODE_COUNT);
     input->codeImages[codeTexture] = image;
 }
 
-bool __cdecl R_LightTweaksModified()
+bool R_LightTweaksModified()
 {
     char v1; // bl
     char v2; // bl
@@ -1334,7 +1334,7 @@ void R_SetTestLods()
     }
 }
 
-bool __cdecl R_AreAnyImageOverridesActive()
+bool R_AreAnyImageOverridesActive()
 {
     if (r_colorMap->current.integer != 1)
         return 1;
@@ -1354,7 +1354,7 @@ void R_SetOutdoorFeatherConst()
         r_outdoorFeather->current.value);
 }
 
-void __cdecl R_SetInputCodeConstant(GfxCmdBufInput *input, CodeConstant constant, float x, float y, float z, float w)
+void R_SetInputCodeConstant(GfxCmdBufInput *input, CodeConstant constant, float x, float y, float z, float w)
 {
     float *v6; // [esp+0h] [ebp-4h]
 
@@ -1402,7 +1402,7 @@ void R_EnvMapOverrideConstants()
             r_envMapSunIntensity->current.value);
 }
 
-void __cdecl R_EndFrame()
+void R_EndFrame()
 {
     if (rg.registered)
     {
@@ -1421,14 +1421,14 @@ void __cdecl R_EndFrame()
     }
 }
 
-void __cdecl R_AddCmdClearScreen(int whichToClear,const float *color,float depth,uint8_t stencil)
+void R_AddCmdClearScreen(int whichToClear,const float *color,float depth,uint8_t stencil)
 {
     R_EmitClearScreenCommand(nullptr,[](void *,GfxRenderCommand id,int bytes) {
         return R_GetCommandBuffer(id,bytes);
     },whichToClear,color,depth,stencil);
 }
 
-void __cdecl R_AddCmdSaveScreen(uint32_t screenTimerId)
+void R_AddCmdSaveScreen(uint32_t screenTimerId)
 {
     GfxCmdSaveScreen *cmd; // [esp+0h] [ebp-4h]
 
@@ -1446,7 +1446,7 @@ void __cdecl R_AddCmdSaveScreen(uint32_t screenTimerId)
     cmd->screenTimerId = screenTimerId;
 }
 
-void __cdecl R_AddCmdSaveScreenSection(
+void R_AddCmdSaveScreenSection(
     float viewX,
     float viewY,
     float viewWidth,
@@ -1473,7 +1473,7 @@ void __cdecl R_AddCmdSaveScreenSection(
     cmd->screenTimerId = screenTimerId;
 }
 
-void __cdecl R_AddCmdBlendSavedScreenShockBlurred(
+void R_AddCmdBlendSavedScreenShockBlurred(
     int fadeMsec,
     float viewX,
     float viewY,
@@ -1507,7 +1507,7 @@ void __cdecl R_AddCmdBlendSavedScreenShockBlurred(
     }
 }
 
-void __cdecl R_AddCmdBlendSavedScreenShockFlashed(
+void R_AddCmdBlendSavedScreenShockFlashed(
     float intensityWhiteout,
     float intensityScreengrab,
     float viewX,
@@ -1529,22 +1529,22 @@ void __cdecl R_AddCmdBlendSavedScreenShockFlashed(
     }
 }
 
-void __cdecl R_AddCmdDrawProfile()
+void R_AddCmdDrawProfile()
 {
     R_GetCommandBuffer(RC_DRAW_PROFILE, 4);
 }
 
-void __cdecl R_AddCmdProjectionSet2D()
+void R_AddCmdProjectionSet2D()
 {
     R_AddCmdProjectionSet(GFX_PROJECTION_2D);
 }
 
-void __cdecl R_AddCmdProjectionSet3D()
+void R_AddCmdProjectionSet3D()
 {
     R_AddCmdProjectionSet(GFX_PROJECTION_3D);
 }
 
-void __cdecl R_AddCmdProjectionSet(GfxProjectionTypes projection)
+void R_AddCmdProjectionSet(GfxProjectionTypes projection)
 {
     GfxCmdProjectionSet *cmd; // [esp+0h] [ebp-4h]
 
@@ -1554,13 +1554,13 @@ void __cdecl R_AddCmdProjectionSet(GfxProjectionTypes projection)
 }
 
 #ifdef KISAK_RADIANT
-bool __cdecl CL_IsLocalClientInGame(int32_t localClientNum)
+bool CL_IsLocalClientInGame(int32_t localClientNum)
 {
     return true;
 }
 #endif
 
-void __cdecl R_BeginRemoteScreenUpdate()
+void R_BeginRemoteScreenUpdate()
 {
     if (IsFastFileLoad() && Sys_IsMainThread())
     {
@@ -1582,7 +1582,7 @@ void __cdecl R_BeginRemoteScreenUpdate()
     }
 }
 
-void __cdecl R_EndRemoteScreenUpdate()
+void R_EndRemoteScreenUpdate()
 {
     if (IsFastFileLoad() && Sys_IsMainThread())
     {
@@ -1617,7 +1617,7 @@ void __cdecl R_EndRemoteScreenUpdate()
     }
 }
 
-void __cdecl R_PushRemoteScreenUpdate(int remoteScreenUpdateNesting)
+void R_PushRemoteScreenUpdate(int remoteScreenUpdateNesting)
 {
     iassert( IsFastFileLoad() || remoteScreenUpdateNesting == 0 );
     iassert( Sys_IsMainThread() );
@@ -1636,7 +1636,7 @@ void __cdecl R_PushRemoteScreenUpdate(int remoteScreenUpdateNesting)
     }
 }
 
-int __cdecl R_PopRemoteScreenUpdate()
+int R_PopRemoteScreenUpdate()
 {
     volatile int remoteScreenUpdateNesting; // [esp+4h] [ebp-4h]
 
@@ -1658,13 +1658,13 @@ int __cdecl R_PopRemoteScreenUpdate()
     return remoteScreenUpdateNesting;
 }
 
-bool __cdecl R_IsInRemoteScreenUpdate()
+bool R_IsInRemoteScreenUpdate()
 {
     iassert( Sys_IsRenderThread() );
     return r_glob.isRenderingRemoteUpdate;
 }
 
-void __cdecl R_InitTempSkinBuf()
+void R_InitTempSkinBuf()
 {
     GfxBackEndData *data; // [esp+0h] [ebp-8h]
     uint32_t i; // [esp+4h] [ebp-4h]
@@ -1689,7 +1689,7 @@ void R_AddCmdSetViewportValues(int x, int y, int width, int height)
     },x,y,width,height);
 }
 
-void __cdecl R_BeginDebugFrame()
+void R_BeginDebugFrame()
 {
     iassert(s_debugFrameGlob.restoreCmdList == NULL);
     iassert(s_debugFrameGlob.restoreFrontEndDataOut == NULL);
@@ -1713,7 +1713,7 @@ void __cdecl R_BeginDebugFrame()
     }
 }
 
-void __cdecl R_EndDebugFrame()
+void R_EndDebugFrame()
 {
     bool v0; // [esp+1h] [ebp-1h]
 
@@ -1777,7 +1777,7 @@ void __cdecl R_EndDebugFrame()
 // rewind usedTotal to the start of lastCmd, re-acquire the buffer at the bigger
 // byte count (same id), and hand back the old end-of-buffer where the new data
 // gets appended.
-void *__cdecl R_AddMultipleRendercommands(int bytes)
+void *R_AddMultipleRendercommands(int bytes)
 {
     GfxCmdHeader *lastCmd = s_cmdList->lastCmd;
     uint8_t *cmds = s_cmdList->cmds;
@@ -1793,7 +1793,7 @@ void *__cdecl R_AddMultipleRendercommands(int bytes)
 // IDB R_AddLineCmd @ 0x4fd0a0 — append `count` line-segments of `dimension`-D
 // geometry, merging into the previous RC_DRAW_LINES command when the widths and
 // dimensions match and the byte/line caps still fit.
-void __cdecl R_AddLineCmd(short count, char width, char dimension, GfxPointVertex *verts)
+void R_AddLineCmd(short count, char width, char dimension, GfxPointVertex *verts)
 {
     iassert( (count > 0) );
 
@@ -1927,7 +1927,7 @@ static void Ed_EmitLineBatch(short count, char width, char dimension, GfxPointVe
 #endif
 
 // IDB R_AddCmd_Line3D @ 0x4fd1a0 — thin 3D wrapper over R_AddLineCmd.
-void __cdecl R_AddCmd_Line3D(short count, char width, GfxPointVertex *verts)
+void R_AddCmd_Line3D(short count, char width, GfxPointVertex *verts)
 {
 #ifdef KISAK_RADIANT
     Ed_EmitLineBatch(count, width, 3, verts);
@@ -1937,7 +1937,7 @@ void __cdecl R_AddCmd_Line3D(short count, char width, GfxPointVertex *verts)
 }
 
 #ifdef KISAK_RADIANT
-void __cdecl R_AddCmd_Line3DNoDepth(short count, char width, GfxPointVertex *verts)
+void R_AddCmd_Line3DNoDepth(short count, char width, GfxPointVertex *verts)
 {
     Ed_EmitLineBatch(count, width, 4, verts);
 }
@@ -1951,7 +1951,7 @@ void __cdecl R_AddCmd_Line3DNoDepth(short count, char width, GfxPointVertex *ver
 // colours from CODE_MATERIAL_COLOR (not the per-vertex GfxPointVertex.color the binary
 // relies on) — without it a 2D line batch would render whatever material colour was
 // last set instead of its own packed colour.
-void __cdecl R_AddCmd_Line2D(short count, char width, GfxPointVertex *verts)
+void R_AddCmd_Line2D(short count, char width, GfxPointVertex *verts)
 {
 #ifdef KISAK_RADIANT
     Ed_EmitLineBatch(count, width, 2, verts);
@@ -1966,7 +1966,7 @@ void __cdecl R_AddCmd_Line2D(short count, char width, GfxPointVertex *verts)
 // R_AddMultipleRendercommands; the fresh path R_GetCommandBuffer). kisak's
 // GfxCmdDrawPoints names the per-point field `size` (the IDB calls it `width`) and the
 // flexible array `verts`. The clipper's DrawClipper draws its placed clip points here.
-static GfxCmdDrawPoints *__cdecl R_AddPointCmdRaw(short pointCount, char size, char dimension, const GfxPointVertex *verts)
+static GfxCmdDrawPoints *R_AddPointCmdRaw(short pointCount, char size, char dimension, const GfxPointVertex *verts)
 {
     iassert( (pointCount > 0) );
     iassert( (size > 0) );
@@ -2003,7 +2003,7 @@ static GfxCmdDrawPoints *__cdecl R_AddPointCmdRaw(short pointCount, char size, c
 
 // Keep the IDA point-command batching in R_AddPointCmdRaw; Radiant wraps it below
 // to map per-vertex point colours onto kisak's material-colour point technique.
-GfxCmdDrawPoints *__cdecl R_AddPointCmd(short pointCount, char size, char dimension, const GfxPointVertex *verts)
+GfxCmdDrawPoints *R_AddPointCmd(short pointCount, char size, char dimension, const GfxPointVertex *verts)
 {
 #ifdef KISAK_RADIANT
     iassert( (pointCount > 0) );
@@ -2047,7 +2047,7 @@ GfxCmdDrawPoints *__cdecl R_AddPointCmd(short pointCount, char size, char dimens
 }
 
 // IDB R_AddPointCmd_W @ 0x4fd080 - thin 3D wrapper over R_AddPointCmd.
-GfxCmdDrawPoints *__cdecl R_AddPointCmd_W(short pointCount, char size, const GfxPointVertex *verts)
+GfxCmdDrawPoints *R_AddPointCmd_W(short pointCount, char size, const GfxPointVertex *verts)
 {
     return R_AddPointCmd(pointCount, size, 3, verts);
 }
@@ -2059,7 +2059,7 @@ GfxCmdDrawPoints *__cdecl R_AddPointCmd_W(short pointCount, char size, const Gfx
 // indices) — verified byte-identical to the IDB. §11: kisak
 // R_GetCommandBuffer(renderCmd, bytes) (IDB lists them swapped); RC_DRAW_TRIANGLES
 // symbol (kisak 0x13), never a literal.
-void __cdecl R_AddRenderCmdDrawTris(
+void R_AddRenderCmdDrawTris(
     Material *material, MaterialTechniqueType techType, short indexCount,
     const uint16_t *indices, short vertexCount,
     const float (*xyzw)[4], const float (*normal)[3], float *color,
@@ -2101,7 +2101,7 @@ void __cdecl R_AddRenderCmdDrawTris(
 // GfxBackEndData has only one viewParms, and editor rendering is synchronous —
 // no SMP workers — so the pointer is valid front-end → back-end).
 // §11: kisak R_GetCommandBuffer(renderCmd, bytes); IDB lists them swapped.
-void __cdecl R_AddBeginViewCmd(const GfxSceneDef *sceneDef, const GfxViewParms *viewParms)
+void R_AddBeginViewCmd(const GfxSceneDef *sceneDef, const GfxViewParms *viewParms)
 {
     GfxCmdBeginView *cmd = (GfxCmdBeginView *)R_GetCommandBuffer(RC_BEGIN_VIEW, sizeof(GfxCmdBeginView));
     iassert( cmd );
@@ -2116,7 +2116,7 @@ void __cdecl R_AddBeginViewCmd(const GfxSceneDef *sceneDef, const GfxViewParms *
 // r_shade.cpp:282 (iassert newState.fields.version) + garbage (white) line output. Setting
 // it white before the lines (matching rb_sky.cpp's unlit-draw pattern) bumps the version
 // and gives the shader its colour. kisak ships only the RB handler, no emitter — add one.
-void __cdecl R_AddCmdSetMaterialColor(const float *color)
+void R_AddCmdSetMaterialColor(const float *color)
 {
     GfxCmdSetMaterialColor *cmd = (GfxCmdSetMaterialColor *)R_GetCommandBuffer(RC_SET_MATERIAL_COLOR, sizeof(GfxCmdSetMaterialColor));
 #ifdef KISAK_RADIANT
@@ -2153,7 +2153,7 @@ void __cdecl R_AddCmdSetMaterialColor(const float *color)
 // (the editor has no scene sun / rgp.world->sunLight, so the in-scene R_SetSunConstants never
 // runs). RB_SetCustomConstantCmd (rb_backend.cpp) consumes it. §11: kisak R_GetCommandBuffer
 // (renderCmd, bytes) — the IDB lists the args swapped (R_GetCommandBuffer(24, cmd)).
-void __cdecl R_AddCmdSetCustomShaderConstant(unsigned int constant, float x, float y, float z, float w)
+void R_AddCmdSetCustomShaderConstant(unsigned int constant, float x, float y, float z, float w)
 {
     GfxCmdSetCustomConstant *cmd =
         (GfxCmdSetCustomConstant *)R_GetCommandBuffer(RC_SET_CUSTOM_CONSTANT, sizeof(GfxCmdSetCustomConstant));
@@ -2181,7 +2181,7 @@ void __cdecl R_AddCmdSetCustomShaderConstant(unsigned int constant, float x, flo
 // editor passes a resolved Material* directly (matching every other kisak render-command
 // material field), so no handle indirection is needed. §11: R_GetCommandBuffer is
 // (renderCmd, bytes) in kisak — the IDB lists them swapped.
-void __cdecl R_AddCmdDrawFullScreenColoredQuad(
+void R_AddCmdDrawFullScreenColoredQuad(
     float s0, float t0, float s1, float t1, const float *color, const Material *material)
 {
     GfxCmdDrawFullScreenColoredQuad *cmd = (GfxCmdDrawFullScreenColoredQuad *)
@@ -2207,7 +2207,7 @@ void __cdecl R_AddCmdDrawFullScreenColoredQuad(
 // §11: kisak R_GetCommandBuffer(renderCmd, bytes) (IDB lists them swapped); the byte
 // size is (strlen(text)+sizeof(GfxCmdDrawText3D)) rounded DOWN to a multiple of 4,
 // matching the IDB's `(t_size + 0x34) & ~3` (0x34 == sizeof(GfxCmdDrawText3D)).
-void __cdecl R_AddCmdDrawTextAtPosition(
+void R_AddCmdDrawTextAtPosition(
     const char *text, Font_s *font, const float *origin,
     const float *xPixelStep, const float *yPixelStep, const float *color)
 {
@@ -2247,7 +2247,7 @@ void __cdecl R_AddCmdDrawTextAtPosition(
 // which samples the colormap, so the thumbnail shows the actual texture image.
 // §11: kisak R_GetCommandBuffer(renderCmd, bytes) (IDB lists them swapped); RC_STRETCH_PIC
 // symbol (== RC_FIRST_NONCRITICAL), never a literal.
-void __cdecl R_AddCmdDraw2DImage(
+void R_AddCmdDraw2DImage(
     float x, float y, float w, float h,
     float s0, float t0, float s1, float t1,
     const float *color, Material *material)

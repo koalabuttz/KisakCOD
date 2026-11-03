@@ -3,7 +3,7 @@
 #include "assertive.h"
 #include <cstdint>
 
-void __cdecl Pool_Init(char *pool, pooldata_t *pooldata, uint32_t itemSize, uint32_t itemCount)
+void Pool_Init(char *pool, pooldata_t *pooldata, uint32_t itemSize, uint32_t itemCount)
 {
     uint32_t itemIndex; // [esp+4h] [ebp-4h]
 
@@ -24,7 +24,7 @@ void __cdecl Pool_Init(char *pool, pooldata_t *pooldata, uint32_t itemSize, uint
     pooldata->activeCount = 0;
 }
 
-freenode *__cdecl Pool_Alloc(pooldata_t *pooldata)
+freenode *Pool_Alloc(pooldata_t *pooldata)
 {
     freenode *item; // [esp+0h] [ebp-4h]
 
@@ -38,7 +38,7 @@ freenode *__cdecl Pool_Alloc(pooldata_t *pooldata)
     return item;
 }
 
-void __cdecl Pool_Free(freenode *data, pooldata_t *pooldata)
+void Pool_Free(freenode *data, pooldata_t *pooldata)
 {
     freenode *item; // [esp+0h] [ebp-4h]
 
@@ -56,7 +56,7 @@ void __cdecl Pool_Free(freenode *data, pooldata_t *pooldata)
     --pooldata->activeCount;
 }
 
-uint32_t __cdecl Pool_FreeCount(const pooldata_t *pooldata)
+uint32_t Pool_FreeCount(const pooldata_t *pooldata)
 {
     const freenode *item; // [esp+0h] [ebp-8h]
     uint32_t count; // [esp+4h] [ebp-4h]

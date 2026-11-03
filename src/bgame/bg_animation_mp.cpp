@@ -182,7 +182,7 @@ int parseEvent;
 
 uint32_t defineStringsOffset;
 
-void __cdecl TRACK_bg_animation_mp()
+void TRACK_bg_animation_mp()
 {
     TRACK_STATIC_ARR(numDefines, 9);
     TRACK_STATIC_ARR(defineStrings, 9);
@@ -220,7 +220,7 @@ void BG_AnimParseError(const char *msg, ...)
         Com_Error(ERR_DROP, "%s", text);
     }
 }
-uint32_t __cdecl BG_AnimationIndexForString(const char *string)
+uint32_t BG_AnimationIndexForString(const char *string)
 {
     char v2 = 0; // [esp+3h] [ebp-1Dh]
     const char *v4 = nullptr; // [esp+Ch] [ebp-14h]
@@ -270,7 +270,7 @@ uint32_t __cdecl BG_AnimationIndexForString(const char *string)
     }
 }
 
-int32_t __cdecl BG_StringHashValue(const char *fname)
+int32_t BG_StringHashValue(const char *fname)
 {
     int32_t hash; // [esp+0h] [ebp-Ch]
     int32_t i; // [esp+8h] [ebp-4h]
@@ -283,7 +283,7 @@ int32_t __cdecl BG_StringHashValue(const char *fname)
     return hash;
 }
 
-animScriptParseMode_t __cdecl BG_IndexForString(const char *token, animStringItem_t *strings, int32_t allowFail)
+animScriptParseMode_t BG_IndexForString(const char *token, animStringItem_t *strings, int32_t allowFail)
 {
     int32_t hash; // [esp+4h] [ebp-8h]
     int32_t i; // [esp+8h] [ebp-4h]
@@ -304,19 +304,19 @@ animScriptParseMode_t __cdecl BG_IndexForString(const char *token, animStringIte
     return (animScriptParseMode_t)-1;
 }
 
-void __cdecl BG_InitWeaponString(int32_t index, const char *name)
+void BG_InitWeaponString(int32_t index, const char *name)
 {
     weaponStrings[index].string = name;
     weaponStrings[index].hash = BG_StringHashValue(name);
 }
 
-void __cdecl BG_InitWeaponStrings()
+void BG_InitWeaponStrings()
 {
     memset((uint8_t *)weaponStrings, 0, sizeof(weaponStrings));
     BG_LoadWeaponStrings();
 }
 
-void __cdecl BG_ParseCommands(const char **input, animScriptItem_t *scriptItem, animScriptData_t *scriptData)
+void BG_ParseCommands(const char **input, animScriptItem_t *scriptItem, animScriptData_t *scriptData)
 {
     int32_t v3; // eax
     parseInfo_t *v5; // [esp+24h] [ebp-18h]
@@ -479,7 +479,7 @@ void __cdecl BG_ParseCommands(const char **input, animScriptItem_t *scriptItem, 
     }
 }
 
-int32_t __cdecl GetValueForBitfield(uint32_t bitfield)
+int32_t GetValueForBitfield(uint32_t bitfield)
 {
     int32_t i; // [esp+0h] [ebp-8h]
 
@@ -491,7 +491,7 @@ int32_t __cdecl GetValueForBitfield(uint32_t bitfield)
     return 0;
 }
 
-int32_t __cdecl BG_PlayAnim(
+int32_t BG_PlayAnim(
     playerState_s *ps,
     int32_t animNum,
     animBodyPart_t bodyPart,
@@ -620,7 +620,7 @@ LABEL_46:
         return -1;
 }
 
-int32_t __cdecl BG_ExecuteCommand(
+int32_t BG_ExecuteCommand(
     playerState_s *ps,
     animScriptCommand_t *scriptCommand,
     int32_t setTimer,
@@ -684,7 +684,7 @@ int32_t __cdecl BG_ExecuteCommand(
         return -1;
 }
 
-int32_t __cdecl BG_AnimScriptAnimation(playerState_s *ps, aistateEnum_t state, scriptAnimMoveTypes_t movetype, int32_t force)
+int32_t BG_AnimScriptAnimation(playerState_s *ps, aistateEnum_t state, scriptAnimMoveTypes_t movetype, int32_t force)
 {
     animScriptItem_t *scriptItem; // [esp+8h] [ebp-4h]
 
@@ -751,7 +751,7 @@ int32_t __cdecl BG_AnimScriptAnimation(playerState_s *ps, aistateEnum_t state, s
     }
 }
 
-animScriptItem_t *__cdecl BG_FirstValidItem(uint32_t client, animScript_t *script)
+animScriptItem_t *BG_FirstValidItem(uint32_t client, animScript_t *script)
 {
     int32_t command; // [esp+0h] [ebp-Ch]
     int32_t i; // [esp+4h] [ebp-8h]
@@ -791,7 +791,7 @@ animScriptItem_t *__cdecl BG_FirstValidItem(uint32_t client, animScript_t *scrip
     return 0;
 }
 
-int32_t __cdecl BG_EvaluateConditions(clientInfo_t *ci, animScriptItem_t *scriptItem)
+int32_t BG_EvaluateConditions(clientInfo_t *ci, animScriptItem_t *scriptItem)
 {
     int32_t ValueForBitfield; // eax
     const char *WeaponTypeName; // eax
@@ -877,7 +877,7 @@ int32_t __cdecl BG_EvaluateConditions(clientInfo_t *ci, animScriptItem_t *script
     return 1;
 }
 
-const char *__cdecl GetMoveTypeName(int32_t type)
+const char *GetMoveTypeName(int32_t type)
 {
     const char *result; // eax
 
@@ -953,7 +953,7 @@ const char *__cdecl GetMoveTypeName(int32_t type)
     return result;
 }
 
-const char *__cdecl GetWeaponTypeName(int32_t type)
+const char *GetWeaponTypeName(int32_t type)
 {
     const char *result; // eax
 
@@ -993,7 +993,7 @@ const char *__cdecl GetWeaponTypeName(int32_t type)
     return result;
 }
 
-const char *__cdecl GetBodyPart(int32_t bodypart)
+const char *GetBodyPart(int32_t bodypart)
 {
     switch (bodypart)
     {
@@ -1007,7 +1007,7 @@ const char *__cdecl GetBodyPart(int32_t bodypart)
     return "unknown body part";
 }
 
-int32_t __cdecl BG_AnimScriptEvent(playerState_s *ps, scriptAnimEventTypes_t event, int32_t isContinue, int32_t force)
+int32_t BG_AnimScriptEvent(playerState_s *ps, scriptAnimEventTypes_t event, int32_t isContinue, int32_t force)
 {
     if (event != ANIM_ET_DEATH && ps->pm_type >= PM_DEAD)
         return -1;
@@ -1030,7 +1030,7 @@ int32_t __cdecl BG_AnimScriptEvent(playerState_s *ps, scriptAnimEventTypes_t eve
     return BG_ExecuteCommand(ps, &scriptItem->commands[v5 % scriptItem->numCommands], 1, isContinue, force);
 }
 
-void __cdecl BG_SetConditionValue(uint32_t client, uint32_t condition, uint64_t value)
+void BG_SetConditionValue(uint32_t client, uint32_t condition, uint64_t value)
 {
     uint32_t ConditionBit; // eax
     const char *ConditionString; // eax
@@ -1055,7 +1055,7 @@ void __cdecl BG_SetConditionValue(uint32_t client, uint32_t condition, uint64_t 
     }
 }
 
-const char *__cdecl BG_GetConditionString(int32_t condition, uint32_t value)
+const char *BG_GetConditionString(int32_t condition, uint32_t value)
 {
     const char *result; // eax
     const char *v3; // eax
@@ -1106,7 +1106,7 @@ const char *__cdecl BG_GetConditionString(int32_t condition, uint32_t value)
     return result;
 }
 
-void __cdecl BG_SetConditionBit(uint32_t client, int32_t condition, int32_t value)
+void BG_SetConditionBit(uint32_t client, int32_t condition, int32_t value)
 {
     const char *ConditionString; // eax
 
@@ -1128,7 +1128,7 @@ void __cdecl BG_SetConditionBit(uint32_t client, int32_t condition, int32_t valu
     Com_BitSetAssert(bgs->clientinfo[client].clientConditions[condition], value, 8);
 }
 
-uint32_t __cdecl BG_GetConditionBit(const clientInfo_t *ci, uint32_t condition)
+uint32_t BG_GetConditionBit(const clientInfo_t *ci, uint32_t condition)
 {
     uint32_t i; // [esp+0h] [ebp-8h]
 
@@ -1143,14 +1143,14 @@ uint32_t __cdecl BG_GetConditionBit(const clientInfo_t *ci, uint32_t condition)
     return 0;
 }
 
-animScriptData_t *__cdecl BG_GetAnimationForIndex(int32_t client, uint32_t index)
+animScriptData_t *BG_GetAnimationForIndex(int32_t client, uint32_t index)
 {
     if (index >= globalScriptData->numAnimations)
         Com_Error(ERR_DROP, "BG_GetAnimationForIndex: index out of bounds");
     return (animScriptData_t *)((char *)globalScriptData + 104 * index);
 }
 
-void __cdecl BG_AnimUpdatePlayerStateConditions(pmove_t *pmove)
+void BG_AnimUpdatePlayerStateConditions(pmove_t *pmove)
 {
     playerState_s* ps = pmove->ps; // [esp+Ch] [ebp-4h]
     uint32_t ViewmodelWeaponIndex = BG_GetViewmodelWeaponIndex(pmove->ps); // eax
@@ -1184,7 +1184,7 @@ void __cdecl BG_AnimUpdatePlayerStateConditions(pmove_t *pmove)
         BG_SetConditionValue(ps->clientNum, ANIM_COND_PERK, ANIM_PERK_UNUSED);
 }
 
-bool __cdecl BG_IsCrouchingAnim(const clientInfo_t *ci, int32_t animNum)
+bool BG_IsCrouchingAnim(const clientInfo_t *ci, int32_t animNum)
 {
     int64_t v2 = 0; // rax
     animScriptData_t* anim = BG_GetAnimationForIndex(ci->clientNum, animNum & 0xFFFFFDFF); // [esp+8h] [ebp-4h]
@@ -1195,22 +1195,22 @@ bool __cdecl BG_IsCrouchingAnim(const clientInfo_t *ci, int32_t animNum)
     return v2 != 0;
 }
 
-bool __cdecl BG_IsAds(const clientInfo_t *ci, int32_t animNum)
+bool BG_IsAds(const clientInfo_t *ci, int32_t animNum)
 {
     return (BG_GetAnimationForIndex(ci->clientNum, animNum & 0xFFFFFDFF)->animations[0].movetype & 0x3F0) != 0;
 }
 
-bool __cdecl BG_IsProneAnim(const clientInfo_t *ci, int32_t animNum)
+bool BG_IsProneAnim(const clientInfo_t *ci, int32_t animNum)
 {
     return (BG_GetAnimationForIndex(ci->clientNum, animNum & 0xFFFFFDFF)->animations[0].movetype & 0x308) != 0;
 }
 
-bool __cdecl BG_IsKnifeMeleeAnim(const clientInfo_t *ci, int32_t animNum)
+bool BG_IsKnifeMeleeAnim(const clientInfo_t *ci, int32_t animNum)
 {
     return (BG_GetAnimationForIndex(ci->clientNum, animNum & 0xFFFFFDFF)->animations[0].flags & 0x100) != 0;
 }
 
-void __cdecl BG_LerpOffset(float *offset_goal, float maxOffsetChange, float *offset)
+void BG_LerpOffset(float *offset_goal, float maxOffsetChange, float *offset)
 {
     float diff[3];
 
@@ -1230,7 +1230,7 @@ void __cdecl BG_LerpOffset(float *offset_goal, float maxOffsetChange, float *off
     }
 }
 
-void __cdecl BG_Player_DoControllersSetup(const entityState_s *es, clientInfo_t *ci, int32_t frametime)
+void BG_Player_DoControllersSetup(const entityState_s *es, clientInfo_t *ci, int32_t frametime)
 {
     controller_info_t info = { 0 }; // [esp+Ch] [ebp-68h] BYREF
 
@@ -1247,7 +1247,7 @@ void __cdecl BG_Player_DoControllersSetup(const entityState_s *es, clientInfo_t 
     BG_LerpOffset(info.tag_origin_offset, maxOffsetChange, ci->control.tag_origin_offset);
 }
 
-void __cdecl BG_Player_DoControllersInternal(const entityState_s *es, const clientInfo_t *ci, controller_info_t *info)
+void BG_Player_DoControllersInternal(const entityState_s *es, const clientInfo_t *ci, controller_info_t *info)
 {
     double v3; // st7
     double v4; // st7
@@ -1441,14 +1441,14 @@ void __cdecl BG_Player_DoControllersInternal(const entityState_s *es, const clie
     }
 }
 
-uint32_t __cdecl BG_GetConditionValue(const clientInfo_t *ci, uint32_t condition)
+uint32_t BG_GetConditionValue(const clientInfo_t *ci, uint32_t condition)
 {
     iassert(condition < NUM_ANIM_CONDITIONS);
 
     return ci->clientConditions[condition][0];
 }
 
-void __cdecl BG_LerpAngles(float *angles_goal, float maxAngleChange, float *angles)
+void BG_LerpAngles(float *angles_goal, float maxAngleChange, float *angles)
 {
     for (int32_t i = 0; i < 3; ++i) // [esp+8h] [ebp-4h]
     {
@@ -1467,7 +1467,7 @@ void __cdecl BG_LerpAngles(float *angles_goal, float maxAngleChange, float *angl
     }
 }
 
-void __cdecl BG_PlayerAnimation(int32_t localClientNum, const entityState_s *es, clientInfo_t *ci)
+void BG_PlayerAnimation(int32_t localClientNum, const entityState_s *es, clientInfo_t *ci)
 {
     BG_PlayerAngles(es, ci);
     BG_AnimPlayerConditions(es, ci);
@@ -1487,7 +1487,7 @@ void __cdecl BG_PlayerAnimation(int32_t localClientNum, const entityState_s *es,
     BG_RunLerpFrameRate(localClientNum, ci, &ci->torso, es->torsoAnim, es);
 }
 
-void __cdecl BG_RunLerpFrameRate(
+void BG_RunLerpFrameRate(
     int32_t localClientNum,
     clientInfo_t *ci,
     lerpFrame_t *lf,
@@ -1600,7 +1600,7 @@ void __cdecl BG_RunLerpFrameRate(
     }
 }
 
-void __cdecl BG_SetNewAnimation(
+void BG_SetNewAnimation(
     int32_t localClientNum,
     clientInfo_t *ci,
     lerpFrame_t *lf,
@@ -1769,7 +1769,7 @@ void __cdecl BG_SetNewAnimation(
     }
 }
 
-void __cdecl BG_PlayerAnimation_VerifyAnim(XAnimTree_s *pAnimTree, lerpFrame_t *lf)
+void BG_PlayerAnimation_VerifyAnim(XAnimTree_s *pAnimTree, lerpFrame_t *lf)
 {
     BG_CheckThread();
 
@@ -1790,7 +1790,7 @@ void __cdecl BG_PlayerAnimation_VerifyAnim(XAnimTree_s *pAnimTree, lerpFrame_t *
     }
 }
 
-void __cdecl BG_PlayerAngles(const entityState_s *es, clientInfo_t *ci)
+void BG_PlayerAngles(const entityState_s *es, clientInfo_t *ci)
 {
     double v2; // st7
     float vHeadAngles; // [esp+1Ch] [ebp-38h]
@@ -1951,7 +1951,7 @@ LABEL_38:
     }
 }
 
-void __cdecl BG_SwingAngles(
+void BG_SwingAngles(
     float destination,
     float swingTolerance,
     float clampTolerance,
@@ -2035,7 +2035,7 @@ void __cdecl BG_SwingAngles(
     }
 }
 
-void __cdecl BG_AnimPlayerConditions(const entityState_s *es, clientInfo_t *ci)
+void BG_AnimPlayerConditions(const entityState_s *es, clientInfo_t *ci)
 {
     BG_CheckThread();
 
@@ -2101,7 +2101,7 @@ void __cdecl BG_AnimPlayerConditions(const entityState_s *es, clientInfo_t *ci)
     }
 }
 
-void __cdecl BG_UpdatePlayerDObj(
+void BG_UpdatePlayerDObj(
     int32_t localClientNum,
     DObj_s *pDObj,
     entityState_s *es,
@@ -2170,7 +2170,7 @@ void __cdecl BG_UpdatePlayerDObj(
     ci->dobjDirty = 0;
 }
 
-void __cdecl BG_LoadAnim()
+void BG_LoadAnim()
 {
     LargeLocal playerAnims_large_local(sizeof(loadAnim_t) * 512); // [esp+0h] [ebp-10h] BYREF
     uint32_t iNumPlayerAnims; // [esp+8h] [ebp-8h] BYREF
@@ -2355,7 +2355,7 @@ void BG_FinalizePlayerAnims()
     BG_SetupAnimNoteTypes(globalScriptData);
 }
 
-loadAnim_t *__cdecl BG_LoadAnimForAnimIndex(uint32_t iAnimIndex)
+loadAnim_t *BG_LoadAnimForAnimIndex(uint32_t iAnimIndex)
 {
     uint32_t i; // [esp+0h] [ebp-8h]
     loadAnim_t *pAnim; // [esp+4h] [ebp-4h]
@@ -2374,7 +2374,7 @@ loadAnim_t *__cdecl BG_LoadAnimForAnimIndex(uint32_t iAnimIndex)
     return 0;
 }
 
-void __cdecl BG_SetupAnimNoteTypes(animScriptData_t *scriptData)
+void BG_SetupAnimNoteTypes(animScriptData_t *scriptData)
 {
     int cmdIndex; // [esp+4h] [ebp-14h]
     animScript_t *script; // [esp+8h] [ebp-10h]
@@ -2406,7 +2406,7 @@ void __cdecl BG_SetupAnimNoteTypes(animScriptData_t *scriptData)
     }
 }
 
-void __cdecl BG_AnimParseAnimScript(animScriptData_t *scriptData, loadAnim_t *pLoadAnims, uint32_t*piNumAnims)
+void BG_AnimParseAnimScript(animScriptData_t *scriptData, loadAnim_t *pLoadAnims, uint32_t*piNumAnims)
 {
     const char *v3; // eax
     int32_t v4; // eax
@@ -2670,7 +2670,7 @@ void __cdecl BG_AnimParseAnimScript(animScriptData_t *scriptData, loadAnim_t *pL
     Com_UnloadRawTextFile(input);
 }
 
-char *__cdecl BG_CopyStringIntoBuffer(const char *string, char *buffer, uint32_t bufSize, uint32_t*offset)
+char *BG_CopyStringIntoBuffer(const char *string, char *buffer, uint32_t bufSize, uint32_t*offset)
 {
     char v5; // [esp+13h] [ebp-21h]
     char *v6; // [esp+18h] [ebp-1Ch]
@@ -2691,7 +2691,7 @@ char *__cdecl BG_CopyStringIntoBuffer(const char *string, char *buffer, uint32_t
     return pch;
 }
 
-void __cdecl BG_ParseConditionBits(
+void BG_ParseConditionBits(
     const char **text_pp,
     animStringItem_t *stringTable,
     int32_t condIndex,
@@ -2811,7 +2811,7 @@ void __cdecl BG_ParseConditionBits(
     }
 }
 
-int __cdecl BG_ParseConditions(const char **text_pp, animScriptItem_t *scriptItem)
+int BG_ParseConditions(const char **text_pp, animScriptItem_t *scriptItem)
 {
     animScriptConditionTypes_t type; // [esp+20h] [ebp-14h]
     int conditionIndex; // [esp+24h] [ebp-10h]
@@ -2883,7 +2883,7 @@ void BG_FindAnimTrees()
     bgs->animScriptData.turningAnim = bgs->generic_human.turning.index;
 }
 
-scr_animtree_t __cdecl BG_FindAnimTree(const char *filename, int32_t bEnforceExists)
+scr_animtree_t BG_FindAnimTree(const char *filename, int32_t bEnforceExists)
 {
     scr_animtree_t tree; // [esp+4h] [ebp-4h]
 

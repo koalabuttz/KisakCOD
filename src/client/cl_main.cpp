@@ -120,7 +120,7 @@ const dvar_t *cl_shownet;
 
 const dvar_s *arcadeScore[19]{ 0 };
 
-void __cdecl TRACK_cl_main()
+void TRACK_cl_main()
 {
     track_static_alloc_internal(clientUIActives, 20, "clientUIActives", 9);
     track_static_alloc_internal(clients, 633532, "clients", 9);
@@ -128,27 +128,27 @@ void __cdecl TRACK_cl_main()
     track_static_alloc_internal(&cls, 612, "cls", 9);
 }
 
-int __cdecl CL_GetLocalClientActiveCount()
+int CL_GetLocalClientActiveCount()
 {
     return 1;
 }
 
-int __cdecl CL_GetFirstActiveLocalClient()
+int CL_GetFirstActiveLocalClient()
 {
     return 0;
 }
 
-bool __cdecl CL_IsLocalClientActive(int clientNum)
+bool CL_IsLocalClientActive(int clientNum)
 {
     return clientNum == 0;
 }
 
-void __cdecl CL_SetLocalClientActive(int clientNum, bool active)
+void CL_SetLocalClientActive(int clientNum, bool active)
 {
     ;
 }
 
-int __cdecl CL_LocalClientNumFromControllerIndex(unsigned int controllerIndex)
+int CL_LocalClientNumFromControllerIndex(unsigned int controllerIndex)
 {
     if (controllerIndex >= 4)
         MyAssertHandler(
@@ -167,7 +167,7 @@ int __cdecl CL_LocalClientNumFromControllerIndex(unsigned int controllerIndex)
     return 0;
 }
 
-int __cdecl CL_ControllerIndexFromClientNum(int clientIndex)
+int CL_ControllerIndexFromClientNum(int clientIndex)
 {
     if (clientIndex)
         MyAssertHandler(
@@ -180,28 +180,28 @@ int __cdecl CL_ControllerIndexFromClientNum(int clientIndex)
     return cl_controller_in_use;
 }
 
-int __cdecl CL_GetFirstActiveControllerIndex()
+int CL_GetFirstActiveControllerIndex()
 {
     return cl_controller_in_use;
 }
 
-int __cdecl CL_AllLocalClientsInactive()
+int CL_AllLocalClientsInactive()
 {
     return 0;
 }
 
 // attributes: thunk
-void __cdecl CL_RunOncePerClientFrame(int localClientNum, int msec)
+void CL_RunOncePerClientFrame(int localClientNum, int msec)
 {
     IN_Frame();
 }
 
-void __cdecl CL_DumpReliableCommand(int cmdIndex, const char *cmd)
+void CL_DumpReliableCommand(int cmdIndex, const char *cmd)
 {
     Com_Printf(CON_CHANNEL_DONT_FILTER, "cmd[%d] '%s'\n", cmdIndex, cmd);
 }
 
-void __cdecl CL_DumpReliableCommands(clientConnection_t *clc)
+void CL_DumpReliableCommands(clientConnection_t *clc)
 {
     int reliableAcknowledge; // r11
     int reliableSequence; // r28
@@ -249,7 +249,7 @@ void __cdecl CL_DumpReliableCommands(clientConnection_t *clc)
     }
 }
 
-void __cdecl CL_AddReliableCommand(int localClientNum, const char *cmd)
+void CL_AddReliableCommand(int localClientNum, const char *cmd)
 {
     int reliableSequence; // r11
 
@@ -270,7 +270,7 @@ void __cdecl CL_AddReliableCommand(int localClientNum, const char *cmd)
     }
 }
 
-void __cdecl CL_ShutdownDevGui()
+void CL_ShutdownDevGui()
 {
     CL_DestroyDevGui();
     DevGui_Shutdown();
@@ -279,7 +279,7 @@ void __cdecl CL_ShutdownDevGui()
     Cmd_RemoveCommand("devgui_open");
 }
 
-void __cdecl CL_ShutdownHunkUsers()
+void CL_ShutdownHunkUsers()
 {
     Com_SyncThreads();
     CL_ShutdownCGame();
@@ -297,7 +297,7 @@ void __cdecl CL_ShutdownHunkUsers()
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\client\\cl_main.cpp", 383, 0, "%s", "!cls.uiStarted");
 }
 
-void __cdecl CL_SaveSettings(MemoryFile *memFile)
+void CL_SaveSettings(MemoryFile *memFile)
 {
     bool usingAds; // r31
     bool v3; // [sp+50h] [-30h] BYREF
@@ -317,7 +317,7 @@ void __cdecl CL_SaveSettings(MemoryFile *memFile)
     MemFile_WriteData(memFile, 1, &v3);
 }
 
-void __cdecl CL_RestoreSettings(MemoryFile *memFile)
+void CL_RestoreSettings(MemoryFile *memFile)
 {
     int v2; // r31
     _BYTE v3[8]; // [sp+50h] [-20h] BYREF
@@ -339,7 +339,7 @@ void __cdecl CL_RestoreSettings(MemoryFile *memFile)
     clients[0].usingAds = v2 > 0;
 }
 
-void __cdecl CL_MapLoading_CalcMovieToPlay(const char *buffer, const char *inMapName, char *outMovieName)
+void CL_MapLoading_CalcMovieToPlay(const char *buffer, const char *inMapName, char *outMovieName)
 {
     unsigned int v3; // r30
     char *v4; // r14
@@ -570,7 +570,7 @@ void __cdecl CL_MapLoading_CalcMovieToPlay(const char *buffer, const char *inMap
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\client\\cl_main.cpp", 622, 0, "%s", "outMovieName[0]");
 }
 
-void __cdecl CL_MapLoading_CalcMovieToPlay_LoadObj(const char *inMapName, char *outMovieName)
+void CL_MapLoading_CalcMovieToPlay_LoadObj(const char *inMapName, char *outMovieName)
 {
     void *buffer;
 
@@ -580,7 +580,7 @@ void __cdecl CL_MapLoading_CalcMovieToPlay_LoadObj(const char *inMapName, char *
     FS_FreeFile((char *)buffer);
 }
 
-void __cdecl CL_MapLoading_CalcMovieToPlay_FastFile(const char *inMapName, char *outMovieName)
+void CL_MapLoading_CalcMovieToPlay_FastFile(const char *inMapName, char *outMovieName)
 {
     XAssetHeader asset; // r30
 
@@ -592,7 +592,7 @@ void __cdecl CL_MapLoading_CalcMovieToPlay_FastFile(const char *inMapName, char 
     CL_MapLoading_CalcMovieToPlay((const char *)asset.xmodelPieces->pieces, inMapName, outMovieName);
 }
 
-void __cdecl CL_MapLoading_StartCinematic(const char *mapname, float volume)
+void CL_MapLoading_StartCinematic(const char *mapname, float volume)
 {
     XAssetHeader asset; // r30
     char movieName[264]; // [sp+50h] [-130h] BYREF
@@ -613,7 +613,7 @@ void __cdecl CL_MapLoading_StartCinematic(const char *mapname, float volume)
     R_Cinematic_StartPlayback(movieName, 5, volume);
 }
 
-void __cdecl CL_MapLoading(const char *mapname)
+void CL_MapLoading(const char *mapname)
 {
     // KISAKTODO: (SP): could use more touchups
     if (!clientUIActives[0].isRunning)
@@ -636,7 +636,7 @@ void __cdecl CL_MapLoading(const char *mapname)
     SND_FadeAllSounds(0.0, 0);
 }
 
-void __cdecl CL_ResetSkeletonCache()
+void CL_ResetSkeletonCache()
 {
     iassert(Sys_IsMainThread());
     //PIXSetMarker(0xFFFFFFFF, "CL_ResetSkeletonCache");
@@ -646,7 +646,7 @@ void __cdecl CL_ResetSkeletonCache()
     clients[0].skelMemPos = 0;
 }
 
-void __cdecl CL_ClearState()
+void CL_ClearState()
 {
     unsigned __int16 *configstrings; // r31
 
@@ -665,7 +665,7 @@ void __cdecl CL_ClearState()
     memset(clientConnections, 0, sizeof(clientConnections));
 }
 
-void __cdecl CL_Disconnect(int localClientNum)
+void CL_Disconnect(int localClientNum)
 {
     if (clientUIActives[0].isRunning)
     {
@@ -685,7 +685,7 @@ void __cdecl CL_Disconnect(int localClientNum)
     }
 }
 
-void __cdecl CL_ForwardCommandToServer(int localClientNum, const char *string)
+void CL_ForwardCommandToServer(int localClientNum, const char *string)
 {
     const char *cmd; // r31
 
@@ -708,7 +708,7 @@ void __cdecl CL_ForwardCommandToServer(int localClientNum, const char *string)
     }
 }
 
-void __cdecl CL_ForwardToServer_f()
+void CL_ForwardToServer_f()
 {
     char v0[1032]; // [sp+50h] [-410h] BYREF
 
@@ -723,14 +723,14 @@ void __cdecl CL_ForwardToServer_f()
     }
 }
 
-void __cdecl CL_ConnectResponse()
+void CL_ConnectResponse()
 {
     if (!clientUIActives[0].isRunning)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\client\\cl_main.cpp", 998, 0, "%s", "clUI->isRunning");
     clientUIActives[0].connectionState = !clientUIActives[0].cgameInitialized ? CA_LOADING : CA_MAP_RESTART;
 }
 
-void __cdecl CL_InitLoad(const char *mapname)
+void CL_InitLoad(const char *mapname)
 {
     com_expectedHunkUsage = 0;
     Dvar_SetString(nextmap, "");
@@ -746,7 +746,7 @@ void __cdecl CL_InitLoad(const char *mapname)
     clientUIActives[0].connectionState = CA_MAP_RESTART;
 }
 
-void __cdecl CL_PacketEvent(msg_t *msg, int serverMessageSequence)
+void CL_PacketEvent(msg_t *msg, int serverMessageSequence)
 {
     int readcount; // r27
     int messageNum; // r26
@@ -773,7 +773,7 @@ void __cdecl CL_PacketEvent(msg_t *msg, int serverMessageSequence)
     }
 }
 
-void __cdecl CL_SetFrametime(int frametime, int animFrametime)
+void CL_SetFrametime(int frametime, int animFrametime)
 {
     if (frametime - animFrametime < 0)
         MyAssertHandler(
@@ -786,7 +786,7 @@ void __cdecl CL_SetFrametime(int frametime, int animFrametime)
     cls.animFrametime = animFrametime;
 }
 
-void __cdecl CheckForConsoleGuidePause(int localClientNum)
+void CheckForConsoleGuidePause(int localClientNum)
 {
 #ifdef KISAK_XBOX
     if (Live_IsSystemUiActive()
@@ -800,7 +800,7 @@ void __cdecl CheckForConsoleGuidePause(int localClientNum)
 #endif
 }
 
-void __cdecl CL_Frame(int localClientNum, int msec)
+void CL_Frame(int localClientNum, int msec)
 {
     int v14; // r29
     char v21; // cr34
@@ -878,17 +878,17 @@ void __cdecl CL_Frame(int localClientNum, int msec)
     }
 }
 
-bool __cdecl CL_IsLocalClientInGame(int localClientNum)
+bool CL_IsLocalClientInGame(int localClientNum)
 {
     return clientUIActives[0].connectionState == CA_ACTIVE;
 }
 
-bool __cdecl CL_IsUIActive(const int localClientNum)
+bool CL_IsUIActive(const int localClientNum)
 {
     return (clientUIActives[0].keyCatchers & KEYCATCH_UI) != 0;
 }
 
-void __cdecl CL_InitRenderer()
+void CL_InitRenderer()
 {
     iassert(!cls.rendererStarted);
     cls.rendererStarted = 1;
@@ -1024,7 +1024,7 @@ void CL_InitDevGui()
     CL_CreateDevGui();
 }
 
-void __cdecl CL_StartHunkUsers()
+void CL_StartHunkUsers()
 {
     if (clientUIActives[0].isRunning)
     {
@@ -1046,7 +1046,7 @@ void __cdecl CL_StartHunkUsers()
     }
 }
 
-int __cdecl CL_ScaledMilliseconds()
+int CL_ScaledMilliseconds()
 {
     return cls.realtime;
 }
@@ -1074,7 +1074,7 @@ static void CL_SetFastFileNames(GfxConfiguration *config, bool dedicatedServer)
     config->modFastFileName = DB_ModFileExists() != 0 ? "mod" : NULL;
 }
 
-void __cdecl CL_InitRef()
+void CL_InitRef()
 {
     GfxConfiguration config; // [sp+50h] [-20h] BYREF
 
@@ -1085,12 +1085,12 @@ void __cdecl CL_InitRef()
     Dvar_SetInt(cl_paused, 0);
 }
 
-void __cdecl CL_VoidCommand()
+void CL_VoidCommand()
 {
     ;
 }
 
-void __cdecl CL_startMultiplayer_f()
+void CL_startMultiplayer_f()
 {
     iassert(0); // KISAKTODO
     if (!Sys_IsMainThread())
@@ -1104,7 +1104,7 @@ void __cdecl CL_startMultiplayer_f()
     //JUMPOUT(0x82179E04);
 }
 
-void __cdecl CL_ShellExecute_URL_f()
+void CL_ShellExecute_URL_f()
 {
     int nesting; // r7
     const char *v1; // r3
@@ -1136,7 +1136,7 @@ void __cdecl CL_ShellExecute_URL_f()
     }
 }
 
-void __cdecl CL_IncAnimWeight_f()
+void CL_IncAnimWeight_f()
 {
     const dvar_s *v7; // r3
     double v8; // fp0
@@ -1159,7 +1159,7 @@ void __cdecl CL_IncAnimWeight_f()
     Com_Printf(CON_CHANNEL_DONT_FILTER, (const char *)HIDWORD(v10), LODWORD(v10));
 }
 
-void __cdecl CL_DecAnimWeight_f()
+void CL_DecAnimWeight_f()
 {
     const dvar_s *v7; // r3
     double v8; // fp0
@@ -1182,7 +1182,7 @@ void __cdecl CL_DecAnimWeight_f()
     Com_Printf(CON_CHANNEL_DONT_FILTER, (const char *)HIDWORD(v10), LODWORD(v10));
 }
 
-void __cdecl CL_StopLogo(int localClientNum)
+void CL_StopLogo(int localClientNum)
 {
     const char *string; // r4
     const char *v3; // r3
@@ -1209,7 +1209,7 @@ void __cdecl CL_StopLogo(int localClientNum)
     }
 }
 
-void __cdecl CL_PlayLogo_f()
+void CL_PlayLogo_f()
 {
     int nesting; // r7
     int v1; // r3
@@ -1292,7 +1292,7 @@ void __cdecl CL_PlayLogo_f()
     cls.logo.startTime = cls.realtime + 100;
 }
 
-void __cdecl CL_StopLogoOrCinematic(int localClientNum)
+void CL_StopLogoOrCinematic(int localClientNum)
 {
     connstate_t connectionState; // r30
 
@@ -1325,12 +1325,12 @@ void __cdecl CL_StopLogoOrCinematic(int localClientNum)
 }
 
 // attributes: thunk
-void __cdecl CL_InitOnceForAllClients()
+void CL_InitOnceForAllClients()
 {
     Ragdoll_Register();
 }
 
-void __cdecl CL_StopControllerRumbles()
+void CL_StopControllerRumbles()
 {
     //CG_StopAllRumbles(0); // KISAKTODO
 }
@@ -1379,7 +1379,7 @@ void CL_Pause_f()
 }
 
 static int recursive;
-void __cdecl CL_Shutdown(int localClientNum)
+void CL_Shutdown(int localClientNum)
 {
     if (!Sys_IsMainThread())
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\client\\cl_main.cpp", 1982, 0, "%s", "Sys_IsMainThread()");
@@ -1433,7 +1433,7 @@ void __cdecl CL_Shutdown(int localClientNum)
 
 
 
-void __cdecl CL_DrawTextPhysicalWithEffects(
+void CL_DrawTextPhysicalWithEffects(
     const char *text,
     int32_t maxChars,
     Font_s *font,
@@ -1471,7 +1471,7 @@ void __cdecl CL_DrawTextPhysicalWithEffects(
         fxDecayDuration);
 }
 
-void __cdecl CL_DrawText(
+void CL_DrawText(
     const ScreenPlacement *scrPlace,
     const char *text,
     int32_t maxChars,
@@ -1489,7 +1489,7 @@ void __cdecl CL_DrawText(
     R_AddCmdDrawText(text, maxChars, font, x, y, xScale, yScale, 0.0, color, style);
 }
 
-void __cdecl CL_DrawTextRotate(
+void CL_DrawTextRotate(
     const ScreenPlacement *scrPlace,
     const char *text,
     int32_t maxChars,
@@ -1508,7 +1508,7 @@ void __cdecl CL_DrawTextRotate(
     R_AddCmdDrawText(text, maxChars, font, x, y, xScale, yScale, rotation, color, style);
 }
 
-void __cdecl CL_DrawTextPhysicalWithCursor(
+void CL_DrawTextPhysicalWithCursor(
     char *text,
     int32_t maxChars,
     Font_s *font,
@@ -1524,7 +1524,7 @@ void __cdecl CL_DrawTextPhysicalWithCursor(
     R_AddCmdDrawTextWithCursor(text, maxChars, font, x, y, xScale, yScale, 0.0, color, style, cursorPos, cursor);
 }
 
-void __cdecl CL_DrawTextWithCursor(
+void CL_DrawTextWithCursor(
     const ScreenPlacement *scrPlace,
     const char *text,
     int32_t maxChars,
@@ -1546,23 +1546,23 @@ void __cdecl CL_DrawTextWithCursor(
 }
 
 // attributes: thunk
-Font_s *__cdecl CL_RegisterFont(const char *fontName, int imageTrack)
+Font_s *CL_RegisterFont(const char *fontName, int imageTrack)
 {
     return R_RegisterFont(fontName, imageTrack);
 }
 
 static bool cl_skipRendering;
-void __cdecl CL_SetSkipRendering(bool skip)
+void CL_SetSkipRendering(bool skip)
 {
     cl_skipRendering = skip;
 }
 
-bool __cdecl CL_SkipRendering()
+bool CL_SkipRendering()
 {
     return cl_skipRendering;
 }
 
-void __cdecl CL_UpdateSound()
+void CL_UpdateSound()
 {
     PROF_SCOPED("update sound");
 
@@ -1572,7 +1572,7 @@ void __cdecl CL_UpdateSound()
 }
 
 
-void __cdecl CL_ShutdownRenderer(int destroyWindow)
+void CL_ShutdownRenderer(int destroyWindow)
 {
     iassert(cls.rendererStarted || destroyWindow);
 
@@ -1589,7 +1589,7 @@ void __cdecl CL_ShutdownRenderer(int destroyWindow)
     //Con_ShutdownClientAssets(); // nullsub
 }
 
-void __cdecl CL_ShutdownAll(bool destroyWindow)
+void CL_ShutdownAll(bool destroyWindow)
 {
     R_SyncRenderThread();
     CL_ShutdownHunkUsers();
@@ -1603,7 +1603,7 @@ void __cdecl CL_ShutdownAll(bool destroyWindow)
     track_shutdown(3);
 }
 
-void __cdecl CL_DisconnectLocalClient()
+void CL_DisconnectLocalClient()
 {
     connstate_t connectionState; // r30
     int v1; // r31
@@ -1627,12 +1627,12 @@ void __cdecl CL_DisconnectLocalClient()
 }
 
 // attributes: thunk
-void __cdecl CL_Disconnect_f()
+void CL_Disconnect_f()
 {
     CL_DisconnectLocalClient();
 }
 
-void __cdecl CL_Vid_Restart_f()
+void CL_Vid_Restart_f()
 {
     if (com_sv_running->current.enabled)
     {
@@ -1659,7 +1659,7 @@ void __cdecl CL_Vid_Restart_f()
     }
 }
 
-void __cdecl CL_Snd_Restart_f()
+void CL_Snd_Restart_f()
 {
     if (com_sv_running->current.enabled)
     {
@@ -1674,7 +1674,7 @@ void __cdecl CL_Snd_Restart_f()
     }
 }
 
-void __cdecl CL_ShutdownRef()
+void CL_ShutdownRef()
 {
     R_SyncRenderThread();
 	CL_ShutdownRenderer(1);
@@ -1685,7 +1685,7 @@ void __cdecl CL_ShutdownRef()
 }
 
 // aislop
-void __cdecl CL_DrawLogo()
+void CL_DrawLogo()
 {
     if (clientUIActives[0].connectionState != CA_LOGO)
     {
@@ -1778,7 +1778,7 @@ cmd_function_s CL_DecAnimWeight_f_VAR;
 cmd_function_s XModelDumpInfo_VAR;
 cmd_function_s CL_StopControllerRumbles_VAR;
 
-void __cdecl CL_Init(int localClientNum)
+void CL_Init(int localClientNum)
 {
     int v21; // r28
     const dvar_s **v22; // r29
@@ -1902,8 +1902,8 @@ void __cdecl CL_Init(int localClientNum)
     Cmd_AddCommandInternal("sl", CL_VoidCommand, &CL_VoidCommand_VAR);
     Cmd_AddCommandInternal("startMultiplayer", CL_startMultiplayer_f, &CL_startMultiplayer_f_VAR);
     Cmd_AddCommandInternal("shellExecute", CL_ShellExecute_URL_f, &CL_ShellExecute_URL_f_VAR);
-    Cmd_AddCommandInternal("+incAnimWeight", (void(__cdecl *)())CL_IncAnimWeight_f, &CL_IncAnimWeight_f_VAR);
-    Cmd_AddCommandInternal("+decAnimWeight", (void(__cdecl *)())CL_DecAnimWeight_f, &CL_DecAnimWeight_f_VAR);
+    Cmd_AddCommandInternal("+incAnimWeight", (void(*)())CL_IncAnimWeight_f, &CL_IncAnimWeight_f_VAR);
+    Cmd_AddCommandInternal("+decAnimWeight", (void(*)())CL_DecAnimWeight_f, &CL_DecAnimWeight_f_VAR);
     cl_testAnimWeight = Dvar_RegisterFloat("cl_testAnimWeight", 0.0, 0.0, 1.0, 0, "test animation weighting");
     Cmd_AddCommandInternal("modelDumpInfo", XModelDumpInfo, &XModelDumpInfo_VAR);
     //CL_Xenon_RegisterDvars();

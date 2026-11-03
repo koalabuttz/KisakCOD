@@ -129,27 +129,27 @@ struct Console // sizeof=0x14ACC
 };
 
 // cl_console
-void __cdecl TRACK_cl_console();
-void __cdecl Con_ToggleConsole();
-void __cdecl Con_OpenConsole(int32_t localClientNum);
-void __cdecl Con_OpenConsoleOutput(int32_t localClientNum);
-void __cdecl Con_CloseConsole(int32_t localClientNum);
-void __cdecl Con_GetTextCopy(char *text, int32_t maxSize);
-void __cdecl Con_TimeJumped(int32_t localClientNum, int32_t serverTime);
-void __cdecl Con_ResetMessageWindowTimes(MessageWindow *msgwnd, int32_t serverTime);
-void __cdecl Con_TimeNudged(int32_t localClientNum, int32_t serverTimeNudge);
-void __cdecl Con_NudgeMessageWindowTimes(MessageWindow *msgwnd, int32_t serverTimeNudge, int32_t serverTime);
-void __cdecl Con_ClearNotify(int32_t localClientNum);
-void __cdecl Con_ClearMessageWindow(MessageWindow *msgwnd);
-void __cdecl Con_ClearErrors(int32_t localClientNum);
-void __cdecl Con_CheckResize();
-void __cdecl Con_Init();
-void __cdecl Con_ChatModePublic_f();
-void __cdecl Con_ChatModeTeam_f();
-void __cdecl Con_Clear_f();
-void __cdecl Con_InitClientAssets();
-void __cdecl Con_InitMessageBuffer();
-void __cdecl Con_InitMessageWindow(
+void TRACK_cl_console();
+void Con_ToggleConsole();
+void Con_OpenConsole(int32_t localClientNum);
+void Con_OpenConsoleOutput(int32_t localClientNum);
+void Con_CloseConsole(int32_t localClientNum);
+void Con_GetTextCopy(char *text, int32_t maxSize);
+void Con_TimeJumped(int32_t localClientNum, int32_t serverTime);
+void Con_ResetMessageWindowTimes(MessageWindow *msgwnd, int32_t serverTime);
+void Con_TimeNudged(int32_t localClientNum, int32_t serverTimeNudge);
+void Con_NudgeMessageWindowTimes(MessageWindow *msgwnd, int32_t serverTimeNudge, int32_t serverTime);
+void Con_ClearNotify(int32_t localClientNum);
+void Con_ClearMessageWindow(MessageWindow *msgwnd);
+void Con_ClearErrors(int32_t localClientNum);
+void Con_CheckResize();
+void Con_Init();
+void Con_ChatModePublic_f();
+void Con_ChatModeTeam_f();
+void Con_Clear_f();
+void Con_InitClientAssets();
+void Con_InitMessageBuffer();
+void Con_InitMessageWindow(
     MessageWindow *msgwnd,
     Message *messages,
     MessageLine *lines,
@@ -160,9 +160,9 @@ void __cdecl Con_InitMessageWindow(
     int32_t scrollTime,
     int32_t fadeIn,
     int32_t fadeOut);
-void __cdecl CL_ConsolePrint(int32_t localClientNum, int32_t channel, const char *txt, int32_t duration, int32_t pixelWidth, int32_t flags);
+void CL_ConsolePrint(int32_t localClientNum, int32_t channel, const char *txt, int32_t duration, int32_t pixelWidth, int32_t flags);
 void Con_OneTimeInit();
-char __cdecl CL_ConsolePrint_AddLine(
+char CL_ConsolePrint_AddLine(
     int32_t localClientNum,
     int32_t channel,
     const char *txt,
@@ -170,35 +170,35 @@ char __cdecl CL_ConsolePrint_AddLine(
     int32_t pixelWidth,
     char color,
     int32_t flags);
-void __cdecl Con_UpdateNotifyMessage(int32_t localClientNum, uint32_t channel, int32_t duration, int32_t flags);
-void __cdecl Con_UpdateNotifyMessageWindow(
+void Con_UpdateNotifyMessage(int32_t localClientNum, uint32_t channel, int32_t duration, int32_t flags);
+void Con_UpdateNotifyMessageWindow(
     int32_t localClientNum,
     uint32_t channel,
     int32_t duration,
     int32_t flags,
     print_msg_dest_t dest);
-int32_t __cdecl Con_GetDefaultMsgDuration(print_msg_dest_t dest);
-void __cdecl Con_UpdateMessage(int32_t localClientNum, MessageWindow *msgwnd, int32_t duration);
-MessageWindow *__cdecl Con_GetDestWindow(int32_t localClientNum, print_msg_dest_t dest);
-void __cdecl Con_UpdateNotifyLine(int32_t localClientNum, uint32_t channel, bool lineFeed, int32_t flags);
-void __cdecl Con_UpdateNotifyLineWindow(
+int32_t Con_GetDefaultMsgDuration(print_msg_dest_t dest);
+void Con_UpdateMessage(int32_t localClientNum, MessageWindow *msgwnd, int32_t duration);
+MessageWindow *Con_GetDestWindow(int32_t localClientNum, print_msg_dest_t dest);
+void Con_UpdateNotifyLine(int32_t localClientNum, uint32_t channel, bool lineFeed, int32_t flags);
+void Con_UpdateNotifyLineWindow(
     int32_t localClientNum,
     uint32_t channel,
     bool lineFeed,
     int32_t flags,
     print_msg_dest_t dest);
-void __cdecl Con_UpdateMessageWindowLine(int32_t localClientNum, MessageWindow *msgwnd, int32_t linefeed, int32_t flags);
-void __cdecl Con_FreeFirstMessageWindowLine(MessageWindow *msgwnd);
-void __cdecl Con_CopyCurrentConsoleLineText(MessageWindow *msgwnd, MessageLine *msgLine);
-bool __cdecl Con_NeedToFreeMessageWindowLine(MessageWindow *msgwnd, int32_t charCount);
-int32_t __cdecl PrintTimeTotal(MessageWindow *msgwnd, MessageLine *line);
-int32_t __cdecl PrintableCharsCount(const MessageWindow *msgwnd, MessageLine *line);
-int32_t __cdecl GetNextValidPrintTimeForLine(int32_t localClientNum, MessageWindow *msgwnd, char flags);
-int32_t __cdecl LatestActiveTypewrittenLineIdx(MessageWindow *msgwnd);
-int32_t __cdecl PrintTimeWriteOut(MessageWindow *msgwnd, MessageLine *line);
-void __cdecl Con_Linefeed(int32_t localClientNum, uint32_t channel, int32_t flags);
-void __cdecl CL_ConsoleFixPosition();
-void __cdecl CL_DeathMessagePrint(
+void Con_UpdateMessageWindowLine(int32_t localClientNum, MessageWindow *msgwnd, int32_t linefeed, int32_t flags);
+void Con_FreeFirstMessageWindowLine(MessageWindow *msgwnd);
+void Con_CopyCurrentConsoleLineText(MessageWindow *msgwnd, MessageLine *msgLine);
+bool Con_NeedToFreeMessageWindowLine(MessageWindow *msgwnd, int32_t charCount);
+int32_t PrintTimeTotal(MessageWindow *msgwnd, MessageLine *line);
+int32_t PrintableCharsCount(const MessageWindow *msgwnd, MessageLine *line);
+int32_t GetNextValidPrintTimeForLine(int32_t localClientNum, MessageWindow *msgwnd, char flags);
+int32_t LatestActiveTypewrittenLineIdx(MessageWindow *msgwnd);
+int32_t PrintTimeWriteOut(MessageWindow *msgwnd, MessageLine *line);
+void Con_Linefeed(int32_t localClientNum, uint32_t channel, int32_t flags);
+void CL_ConsoleFixPosition();
+void CL_DeathMessagePrint(
     int32_t localClientNum,
     char *attackerName,
     char attackerColorIndex,
@@ -208,12 +208,12 @@ void __cdecl CL_DeathMessagePrint(
     float iconWidth,
     float iconHeight,
     bool horzFlipIcon);
-uint32_t __cdecl CL_AddDeathMessageString(
+uint32_t CL_AddDeathMessageString(
     char *deathMsg,
     uint32_t deathMsgLen,
     uint32_t deathMsgMaxLen,
     char *string);
-uint32_t __cdecl CL_AddDeathMessageIcon(
+uint32_t CL_AddDeathMessageIcon(
     char *deathMsg,
     uint32_t deathMsgLen,
     uint32_t deathMsgMaxLen,
@@ -221,24 +221,24 @@ uint32_t __cdecl CL_AddDeathMessageIcon(
     float iconWidth,
     float iconHeight,
     bool horzFlipIcon);
-int32_t __cdecl CL_DeathMessageIconDimension(float size);
-void __cdecl Con_AutoCompleteFromList(
+int32_t CL_DeathMessageIconDimension(float size);
+void Con_AutoCompleteFromList(
     const char **strings,
     uint32_t stringCount,
     const char *prefix,
     char *completed,
     uint32_t sizeofCompleted);
-const char *__cdecl Con_TokenizeInput();
-char __cdecl Con_AnySpaceAfterCommand();
-bool __cdecl Con_IsAutoCompleteMatch(const char *query, const char *matchToText, int32_t matchTextLen);
-bool __cdecl Con_HasTooManyMatchesToShow();
-bool __cdecl Con_IsDvarCommand(const char *cmd);
-char __cdecl Con_CycleAutoComplete(int32_t step);
-bool __cdecl Con_HasActiveAutoComplete();
-char __cdecl Con_CommitToAutoComplete();
-char __cdecl Con_CancelAutoComplete();
-void __cdecl Con_AllowAutoCompleteCycling(bool isAllowed);
-void __cdecl Con_DrawGameMessageWindow(
+const char *Con_TokenizeInput();
+char Con_AnySpaceAfterCommand();
+bool Con_IsAutoCompleteMatch(const char *query, const char *matchToText, int32_t matchTextLen);
+bool Con_HasTooManyMatchesToShow();
+bool Con_IsDvarCommand(const char *cmd);
+char Con_CycleAutoComplete(int32_t step);
+bool Con_HasActiveAutoComplete();
+char Con_CommitToAutoComplete();
+char Con_CancelAutoComplete();
+void Con_AllowAutoCompleteCycling(bool isAllowed);
+void Con_DrawGameMessageWindow(
     int32_t localClientNum,
     uint32_t windowIndex,
     int32_t xPos,
@@ -251,7 +251,7 @@ void __cdecl Con_DrawGameMessageWindow(
     int32_t textStyle,
     char textAlignMode,
     msgwnd_mode_t mode);
-void __cdecl Con_DrawMessageWindow(
+void Con_DrawMessageWindow(
     int32_t localClientNum,
     MessageWindow *msgwnd,
     int32_t x,
@@ -265,7 +265,7 @@ void __cdecl Con_DrawMessageWindow(
     float msgwndScale,
     msgwnd_mode_t mode,
     char textAlignMode);
-void __cdecl Con_DrawMessageWindowNewToOld(
+void Con_DrawMessageWindowNewToOld(
     int32_t localClientNum,
     MessageWindow *msgwnd,
     int32_t x,
@@ -279,7 +279,7 @@ void __cdecl Con_DrawMessageWindowNewToOld(
     int32_t textStyle,
     float msgwndScale,
     char textAlignMode);
-void __cdecl Con_DrawMessageLineOnHUD(
+void Con_DrawMessageLineOnHUD(
     int32_t localClientNum,
     const ScreenPlacement *scrPlace,
     int32_t x,
@@ -294,11 +294,11 @@ void __cdecl Con_DrawMessageLineOnHUD(
     int32_t textStyle,
     float msgwndScale,
     char textAlignMode);
-bool __cdecl LineVisible(const MessageWindow *msgwnd, int32_t lineIdx, int32_t time);
-void __cdecl TypewriterSounds(int32_t localClientNum, const MessageWindow *msgwnd, MessageLine *line);
-void __cdecl Con_CullFinishedLines(int32_t serverTime, MessageWindow *msgwnd);
-double __cdecl Con_GetMessageAlpha(Message *message, MessageWindow *msgwnd, int32_t serverTime, bool scrollsIntoPlace);
-void __cdecl Con_DrawMessageWindowOldToNew(
+bool LineVisible(const MessageWindow *msgwnd, int32_t lineIdx, int32_t time);
+void TypewriterSounds(int32_t localClientNum, const MessageWindow *msgwnd, MessageLine *line);
+void Con_CullFinishedLines(int32_t serverTime, MessageWindow *msgwnd);
+double Con_GetMessageAlpha(Message *message, MessageWindow *msgwnd, int32_t serverTime, bool scrollsIntoPlace);
+void Con_DrawMessageWindowOldToNew(
     int32_t localClientNum,
     MessageWindow *msgwnd,
     int32_t x,
@@ -312,34 +312,34 @@ void __cdecl Con_DrawMessageWindowOldToNew(
     int32_t textStyle,
     float msgwndScale,
     char textAlignMode);
-bool __cdecl CL_ShouldntDrawMessageWindow(int32_t localClientNum);
-void __cdecl Con_DrawMiniConsole(int32_t localClientNum, int32_t xPos, int32_t yPos, float alpha);
-void __cdecl Con_ClearMiniConsole(int32_t localClientNum);
-void __cdecl Con_DrawErrors(int32_t localClientNum, int32_t xPos, int32_t yPos, float alpha);
-bool __cdecl Con_IsValidGameMessageWindow(uint32_t windowIndex);
-bool __cdecl Con_IsGameMessageWindowActive(int32_t localClientNum, uint32_t windowIndex);
-void __cdecl Con_DrawSay(int32_t localClientNum, int32_t x, int32_t y);
-void __cdecl Con_ToggleConsoleOutput();
-void __cdecl Con_DrawConsole(int32_t localClientNum);
-void __cdecl Con_DrawSolidConsole(int32_t localClientNum);
-void __cdecl Con_DrawInput(int32_t localClientNum);
-void __cdecl ConDrawInput_Text(char *str, const float *color);
-void __cdecl ConDrawInput_TextAndOver(char *str, const float *color);
-int32_t __cdecl ConDrawInput_TextWidth(const char *text);
-void __cdecl ConDrawInput_Box(int32_t lines, const float *color);
-void __cdecl ConDraw_Box(float x, float y, float w, float h, const float *color);
-void __cdecl ConDrawInput_IncrMatchCounter(char *str);
-void __cdecl ConDrawInput_DvarMatch(char *str);
-void __cdecl ConDrawInput_TextLimitChars(char *str, int32_t maxChars, const float *color);
-void __cdecl ConDrawInput_DetailedDvarMatch(char *str);
-void __cdecl ConDrawInput_AutoCompleteArg(const char **stringList, int32_t stringCount);
-int32_t __cdecl ConDrawInput_CompareStrings(const char **e0, const char **e1);
-int32_t __cdecl ConDrawInput_TextFieldFirstArgChar();
-int32_t __cdecl ConDrawInput_GetDvarDescriptionLines(const dvar_s *dvar);
-void __cdecl ConDrawInput_DetailedCmdMatch(char *str);
-void __cdecl ConDrawInput_CmdMatch(char *str);
-void __cdecl Con_DrawAutoCompleteChoice(int32_t localClientNum, bool isDvarCommand, const char *originalCommand);
-uint32_t __cdecl Con_GetAutoCompleteColorCodedString(
+bool CL_ShouldntDrawMessageWindow(int32_t localClientNum);
+void Con_DrawMiniConsole(int32_t localClientNum, int32_t xPos, int32_t yPos, float alpha);
+void Con_ClearMiniConsole(int32_t localClientNum);
+void Con_DrawErrors(int32_t localClientNum, int32_t xPos, int32_t yPos, float alpha);
+bool Con_IsValidGameMessageWindow(uint32_t windowIndex);
+bool Con_IsGameMessageWindowActive(int32_t localClientNum, uint32_t windowIndex);
+void Con_DrawSay(int32_t localClientNum, int32_t x, int32_t y);
+void Con_ToggleConsoleOutput();
+void Con_DrawConsole(int32_t localClientNum);
+void Con_DrawSolidConsole(int32_t localClientNum);
+void Con_DrawInput(int32_t localClientNum);
+void ConDrawInput_Text(char *str, const float *color);
+void ConDrawInput_TextAndOver(char *str, const float *color);
+int32_t ConDrawInput_TextWidth(const char *text);
+void ConDrawInput_Box(int32_t lines, const float *color);
+void ConDraw_Box(float x, float y, float w, float h, const float *color);
+void ConDrawInput_IncrMatchCounter(char *str);
+void ConDrawInput_DvarMatch(char *str);
+void ConDrawInput_TextLimitChars(char *str, int32_t maxChars, const float *color);
+void ConDrawInput_DetailedDvarMatch(char *str);
+void ConDrawInput_AutoCompleteArg(const char **stringList, int32_t stringCount);
+int32_t ConDrawInput_CompareStrings(const char **e0, const char **e1);
+int32_t ConDrawInput_TextFieldFirstArgChar();
+int32_t ConDrawInput_GetDvarDescriptionLines(const dvar_s *dvar);
+void ConDrawInput_DetailedCmdMatch(char *str);
+void ConDrawInput_CmdMatch(char *str);
+void Con_DrawAutoCompleteChoice(int32_t localClientNum, bool isDvarCommand, const char *originalCommand);
+uint32_t Con_GetAutoCompleteColorCodedString(
     char *query,
     const char *matchToText,
     int32_t matchTextLen,
@@ -347,31 +347,31 @@ uint32_t __cdecl Con_GetAutoCompleteColorCodedString(
     const char *originalCommand,
     char *colorCoded,
     int32_t colorCodedSize);
-int32_t __cdecl Con_GetAutoCompleteColorCodedStringDiscontiguous(
+int32_t Con_GetAutoCompleteColorCodedStringDiscontiguous(
     const char *query,
     const char *matchToText,
     int32_t matchTextLen,
     char *colorCoded,
     int32_t colorCodedSize);
-int32_t __cdecl Con_GetAutoCompleteColorCodedStringContiguous(
+int32_t Con_GetAutoCompleteColorCodedStringContiguous(
     char *query,
     const char *matchToText,
     int32_t matchTextLen,
     char *colorCoded,
     int32_t colorCodedSize);
-void __cdecl Con_DrawInputPrompt(int32_t localClientNum);
+void Con_DrawInputPrompt(int32_t localClientNum);
 void Con_DrawOuputWindow();
-void __cdecl Con_DrawOutputScrollBar(float x, float y, float width, float height);
-void __cdecl Con_DrawOutputText(float x, float y);
-void __cdecl Con_DrawOutputVersion(float x, float y, float width, float height);
-char *__cdecl Con_GetVersionString();
-void __cdecl Con_PageUp();
-void __cdecl Con_PageDown();
-void __cdecl Con_Top();
-void __cdecl Con_Bottom();
-void __cdecl Con_Close(int32_t localClientNum);
-bool __cdecl Con_IsActive(int32_t localClientNum);
-void __cdecl CL_PlayTextFXPulseSounds(
+void Con_DrawOutputScrollBar(float x, float y, float width, float height);
+void Con_DrawOutputText(float x, float y);
+void Con_DrawOutputVersion(float x, float y, float width, float height);
+char *Con_GetVersionString();
+void Con_PageUp();
+void Con_PageDown();
+void Con_Top();
+void Con_Bottom();
+void Con_Close(int32_t localClientNum);
+bool Con_IsActive(int32_t localClientNum);
+void CL_PlayTextFXPulseSounds(
     uint32_t localClientNum,
     int32_t currentTime,
     int32_t strLength,
@@ -440,8 +440,8 @@ struct PlayerKeyState // sizeof=0xD28
     KeyState keys[256];                 // ...
     LocSelInputState locSelInputState;  // ...
 };
-void __cdecl TRACK_cl_keys();
-void __cdecl Field_DrawTextOverride(
+void TRACK_cl_keys();
+void Field_DrawTextOverride(
     int32_t localClientNum,
     const field_t *edit,
     int32_t x,
@@ -451,50 +451,50 @@ void __cdecl Field_DrawTextOverride(
     char *str,
     int32_t drawLen,
     int32_t cursorPos);
-void __cdecl Field_Draw(int32_t localClientNum, field_t *edit, int32_t x, int32_t y, int32_t horzAlign, int32_t vertAlign);
-void __cdecl Field_AdjustScroll(const ScreenPlacement *scrPlace, field_t *edit);
-void __cdecl Console_Key(int32_t localClientNum, int32_t key);
-char __cdecl Field_KeyDownEvent(int32_t localClientNum, const ScreenPlacement *scrPlace, field_t *edit, int32_t key);
-char __cdecl Field_Paste(int32_t localClientNum, const ScreenPlacement *scrPlace, field_t *edit);
-bool __cdecl Field_CharEvent(int32_t localClientNum, const ScreenPlacement *scrPlace, field_t *edit, int32_t ch);
+void Field_Draw(int32_t localClientNum, field_t *edit, int32_t x, int32_t y, int32_t horzAlign, int32_t vertAlign);
+void Field_AdjustScroll(const ScreenPlacement *scrPlace, field_t *edit);
+void Console_Key(int32_t localClientNum, int32_t key);
+char Field_KeyDownEvent(int32_t localClientNum, const ScreenPlacement *scrPlace, field_t *edit, int32_t key);
+char Field_Paste(int32_t localClientNum, const ScreenPlacement *scrPlace, field_t *edit);
+bool Field_CharEvent(int32_t localClientNum, const ScreenPlacement *scrPlace, field_t *edit, int32_t ch);
 void CompleteCommand();
-void __cdecl PrintMatches(const char *s);
-void __cdecl ConcatRemaining(char *src, char *start);
+void PrintMatches(const char *s);
+void ConcatRemaining(char *src, char *start);
 int32_t keyConcatArgs();
 void CompleteCmdArgument();
-void __cdecl ReplaceConsoleInputArgument(int32_t replaceCount, char *replacement);
+void ReplaceConsoleInputArgument(int32_t replaceCount, char *replacement);
 void CompleteDvarArgument();
-void __cdecl UpdateMatches(bool searchCmds, int32_t *matchLenAfterCmds, int32_t *matchLenAfterDvars);
-void __cdecl FindMatches(char *s);
-bool __cdecl Console_IsRconCmd(const char *commandString);
-bool __cdecl Console_IsClientDisconnected();
-int32_t __cdecl Key_GetOverstrikeMode(int32_t localClientNum);
-void __cdecl Key_SetOverstrikeMode(int32_t localClientNum, int32_t state);
-int32_t __cdecl Key_IsDown(int32_t localClientNum, int32_t keynum);
-const char *__cdecl Key_KeynumToString(int32_t keynum, int32_t translate);
-void __cdecl Key_SetBinding(int32_t localClientNum, int32_t keynum, char *binding);
-const char *__cdecl Key_GetBinding(int32_t localClientNum, uint32_t keynum);
-int32_t __cdecl Key_GetCommandAssignment(int32_t localClientNum, const char *command, int32_t *twokeys);
-int32_t __cdecl Key_GetCommandAssignmentInternal(int32_t localClientNum, const char *command, int32_t *twokeys);
-bool __cdecl Key_IsCommandBound(int32_t localClientNum, const char *command);
-void __cdecl Key_Unbind_f();
-int32_t __cdecl Key_StringToKeynum(const char *str);
-void __cdecl Key_Unbindall_f();
-void __cdecl Key_Bind_f();
-void __cdecl Key_WriteBindings(int32_t localClientNum, int32_t f);
-int32_t __cdecl Key_WriteBindingsToBuffer(int32_t localClientNum, char *buffer, int32_t bufferSize);
-void __cdecl Key_Bindlist_f();
-void __cdecl CL_InitKeyCommands();
-bool __cdecl CL_IsConsoleKey(int32_t key);
-void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint32_t time);
-void __cdecl Message_Key(int32_t localClientNum, int32_t key);
-bool __cdecl CL_MouseInputShouldBypassMenus(int32_t localClientNum, int32_t key);
-void __cdecl CL_CharEvent(int32_t localClientNum, int32_t key);
-void __cdecl CL_ConsoleCharEvent(int32_t localClientNum, int32_t key);
-void __cdecl Key_ClearStates(int32_t localClientNum);
-int32_t __cdecl CL_GetKeyBinding(int32_t localClientNum, const char *command, char (*keyNames)[128]);
-int32_t __cdecl CL_GetKeyBindingInternal(int32_t localClientNum, const char *command, char (*keyNames)[128]);
-void __cdecl Key_Shutdown();
+void UpdateMatches(bool searchCmds, int32_t *matchLenAfterCmds, int32_t *matchLenAfterDvars);
+void FindMatches(char *s);
+bool Console_IsRconCmd(const char *commandString);
+bool Console_IsClientDisconnected();
+int32_t Key_GetOverstrikeMode(int32_t localClientNum);
+void Key_SetOverstrikeMode(int32_t localClientNum, int32_t state);
+int32_t Key_IsDown(int32_t localClientNum, int32_t keynum);
+const char *Key_KeynumToString(int32_t keynum, int32_t translate);
+void Key_SetBinding(int32_t localClientNum, int32_t keynum, char *binding);
+const char *Key_GetBinding(int32_t localClientNum, uint32_t keynum);
+int32_t Key_GetCommandAssignment(int32_t localClientNum, const char *command, int32_t *twokeys);
+int32_t Key_GetCommandAssignmentInternal(int32_t localClientNum, const char *command, int32_t *twokeys);
+bool Key_IsCommandBound(int32_t localClientNum, const char *command);
+void Key_Unbind_f();
+int32_t Key_StringToKeynum(const char *str);
+void Key_Unbindall_f();
+void Key_Bind_f();
+void Key_WriteBindings(int32_t localClientNum, int32_t f);
+int32_t Key_WriteBindingsToBuffer(int32_t localClientNum, char *buffer, int32_t bufferSize);
+void Key_Bindlist_f();
+void CL_InitKeyCommands();
+bool CL_IsConsoleKey(int32_t key);
+void CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint32_t time);
+void Message_Key(int32_t localClientNum, int32_t key);
+bool CL_MouseInputShouldBypassMenus(int32_t localClientNum, int32_t key);
+void CL_CharEvent(int32_t localClientNum, int32_t key);
+void CL_ConsoleCharEvent(int32_t localClientNum, int32_t key);
+void Key_ClearStates(int32_t localClientNum);
+int32_t CL_GetKeyBinding(int32_t localClientNum, const char *command, char (*keyNames)[128]);
+int32_t CL_GetKeyBindingInternal(int32_t localClientNum, const char *command, char (*keyNames)[128]);
+void Key_Shutdown();
 
 #define KEYCATCH_NONE               0x0000
 #define KEYCATCH_CONSOLE            0x0001
@@ -503,10 +503,10 @@ void __cdecl Key_Shutdown();
 #define KEYCATCH_UI                 0x0010
 #define KEYCATCH_MESSAGE            0x0020
 
-bool __cdecl Key_IsCatcherActive(int32_t localClientNum, int32_t mask);
-void __cdecl Key_AddCatcher(int32_t localClientNum, int32_t orMask);
-void __cdecl Key_RemoveCatcher(int32_t localClientNum, int32_t andMask);
-void __cdecl Key_SetCatcher(int32_t localClientNum, int32_t catcher);
+bool Key_IsCatcherActive(int32_t localClientNum, int32_t mask);
+void Key_AddCatcher(int32_t localClientNum, int32_t orMask);
+void Key_RemoveCatcher(int32_t localClientNum, int32_t andMask);
+void Key_SetCatcher(int32_t localClientNum, int32_t catcher);
 int CL_IsKeyPressed(int localClientNum, const char *keyName);
 bool Key_IsValidGamePadChar(const char key);
 const char *CL_GetCommandFromKey(const char *keyName);
@@ -516,15 +516,15 @@ extern field_t g_consoleField;
 
 // screen_placement
 #ifdef KISAK_XBOX
-void __cdecl ScrPlace_Init();
+void ScrPlace_Init();
 #endif
-void __cdecl ScrPlace_SetupFloatViewport(
+void ScrPlace_SetupFloatViewport(
     ScreenPlacement *scrPlace,
     float viewportX,
     float viewportY,
     float viewportWidth,
     float viewportHeight);
-void __cdecl ScrPlace_CalcSafeAreaOffsets(
+void ScrPlace_CalcSafeAreaOffsets(
     float viewportX,
     float viewportY,
     float viewportWidth,
@@ -534,21 +534,21 @@ void __cdecl ScrPlace_CalcSafeAreaOffsets(
     float *realViewableMax,
     float *virtualViewableMin,
     float *virtualViewableMax);
-void __cdecl ScrPlace_SetupViewport(
+void ScrPlace_SetupViewport(
     ScreenPlacement *scrPlace,
     int32_t viewportX,
     int32_t viewportY,
     int32_t viewportWidth,
     int32_t viewportHeight);
-void __cdecl ScrPlace_SetupUnsafeViewport(
+void ScrPlace_SetupUnsafeViewport(
     ScreenPlacement *scrPlace,
     int32_t viewportX,
     int32_t viewportY,
     int32_t viewportWidth,
     int32_t viewportHeight);
-double __cdecl ScrPlace_ApplyX(const ScreenPlacement *scrPlace, float x, int32_t horzAlign);
-double __cdecl ScrPlace_ApplyY(const ScreenPlacement *scrPlace, float y, int32_t vertAlign);
-void __cdecl ScrPlace_ApplyRect(
+double ScrPlace_ApplyX(const ScreenPlacement *scrPlace, float x, int32_t horzAlign);
+double ScrPlace_ApplyY(const ScreenPlacement *scrPlace, float y, int32_t vertAlign);
+void ScrPlace_ApplyRect(
     const ScreenPlacement *scrPlace,
     float *x,
     float *y,
@@ -568,23 +568,23 @@ extern PlayerKeyState playerKeys[1];
 
 
 // con_channels
-char __cdecl Con_OpenChannel(char *name, bool allowScript);
-bool __cdecl Con_ScriptHasPermission(uint32_t channel);
-bool __cdecl Con_GetChannel(const char *name, int32_t *channel_result);
-bool __cdecl Con_IsChannelOpen(uint32_t channel);
-bool __cdecl Con_IsChannelVisible(print_msg_dest_t dest, uint32_t channel, int32_t errorflags);
-void __cdecl Con_WriteFilterConfigString(int32_t f);
-void __cdecl Con_InitGameMsgChannels();
-void __cdecl Con_InitChannelsForDestFromList(print_msg_dest_t dest, const char *channelNames);
-void __cdecl Con_FilterShowChannel(print_msg_dest_t dest, const char *channelName, bool show);
-void __cdecl Con_InitChannels();
-void __cdecl Con_ChannelList_f();
-void __cdecl Con_FilterAdd_f();
-void __cdecl Con_FilterAdd(bool show);
-void __cdecl Con_FilterRemove_f();
-void __cdecl Con_FilterList_f();
-void __cdecl Con_ShutdownChannels();
-void __cdecl Con_CloseChannelInternal(uint32_t channel);
+char Con_OpenChannel(char *name, bool allowScript);
+bool Con_ScriptHasPermission(uint32_t channel);
+bool Con_GetChannel(const char *name, int32_t *channel_result);
+bool Con_IsChannelOpen(uint32_t channel);
+bool Con_IsChannelVisible(print_msg_dest_t dest, uint32_t channel, int32_t errorflags);
+void Con_WriteFilterConfigString(int32_t f);
+void Con_InitGameMsgChannels();
+void Con_InitChannelsForDestFromList(print_msg_dest_t dest, const char *channelNames);
+void Con_FilterShowChannel(print_msg_dest_t dest, const char *channelName, bool show);
+void Con_InitChannels();
+void Con_ChannelList_f();
+void Con_FilterAdd_f();
+void Con_FilterAdd(bool show);
+void Con_FilterRemove_f();
+void Con_FilterList_f();
+void Con_ShutdownChannels();
+void Con_CloseChannelInternal(uint32_t channel);
 
 #ifdef KISAK_SP
 void Con_SaveChannels(MemoryFile *memFile);
@@ -593,9 +593,9 @@ void Con_RestoreChannels(MemoryFile *memFile);
 
 
 // cl_devgui
-void __cdecl CL_DevGuiFrame(int32_t localClientNum);
-void __cdecl CL_CreateDevGui();
-void __cdecl CL_DestroyDevGui();
+void CL_DevGuiFrame(int32_t localClientNum);
+void CL_CreateDevGui();
+void CL_DestroyDevGui();
 
 
 
@@ -604,37 +604,37 @@ struct clientDebugStringInfo_t;
 struct clientDebugLineInfo_t;
 
 void CL_RecordServerDebugData();
-void __cdecl CL_AddDebugString(
+void CL_AddDebugString(
     const float *xyz,
     const float *color,
     float scale,
     const char *text,
     int32_t fromServer,
     int32_t duration);
-bool __cdecl CreateDebugStringsIfNeeded();
-void __cdecl AddDebugStringInternal(
+bool CreateDebugStringsIfNeeded();
+void AddDebugStringInternal(
     const float *xyz,
     const float *color,
     float scale,
     const char *text,
     int32_t duration,
     clientDebugStringInfo_t *info);
-void __cdecl CL_AddDebugLine(
+void CL_AddDebugLine(
     const float *start,
     const float *end,
     const float *color,
     int32_t depthTest,
     int32_t duration,
     int32_t fromServer);
-bool __cdecl CreateDebugLinesIfNeeded();
-void __cdecl AddDebugLineInternal(
+bool CreateDebugLinesIfNeeded();
+void AddDebugLineInternal(
     const float *start,
     const float *end,
     const float *color,
     int32_t depthTest,
     int32_t duration,
     clientDebugLineInfo_t *info);
-void __cdecl CL_AddDebugStarWithText(
+void CL_AddDebugStarWithText(
     const float *point,
     const float *starColor,
     const float *textColor,
@@ -642,23 +642,23 @@ void __cdecl CL_AddDebugStarWithText(
     float fontsize,
     int32_t duration,
     int32_t fromServer);
-void __cdecl CL_AddDebugStar(const float *point, const float *color, int32_t duration, int32_t fromServer);
-void __cdecl CL_FlushDebugClientData();
-void __cdecl FlushDebugStrings(clientDebugStringInfo_t *info, int32_t fromServer);
-void __cdecl FlushDebugLines(clientDebugLineInfo_t *info, int32_t fromServer);
-void __cdecl CL_UpdateDebugClientData();
-void __cdecl CL_FlushDebugServerData();
-void __cdecl CL_UpdateDebugServerData();
-void __cdecl CL_ShutdownDebugData();
+void CL_AddDebugStar(const float *point, const float *color, int32_t duration, int32_t fromServer);
+void CL_FlushDebugClientData();
+void FlushDebugStrings(clientDebugStringInfo_t *info, int32_t fromServer);
+void FlushDebugLines(clientDebugLineInfo_t *info, int32_t fromServer);
+void CL_UpdateDebugClientData();
+void CL_FlushDebugServerData();
+void CL_UpdateDebugServerData();
+void CL_ShutdownDebugData();
 
 
 
 // cl_cin
-int32_t __cdecl CIN_PlayCinematic(int32_t localClientNum, char *arg);
-void __cdecl CL_PlayCinematic_f();
-void __cdecl CL_PlayUnskippableCinematic_f();
-void __cdecl SCR_DrawCinematic(int32_t localClientNum);
-void __cdecl SCR_StopCinematic(int32_t localClientNum);
+int32_t CIN_PlayCinematic(int32_t localClientNum, char *arg);
+void CL_PlayCinematic_f();
+void CL_PlayUnskippableCinematic_f();
+void SCR_DrawCinematic(int32_t localClientNum);
+void SCR_StopCinematic(int32_t localClientNum);
 
 
 extern int32_t g_console_field_width;
@@ -901,42 +901,42 @@ struct clientConnection_t
     serverCommands_s serverCommands;
 };
 
-void __cdecl CL_SetLocalClientConnectionState(int32_t localClientNum, connstate_t connstate);
-void __cdecl TRACK_cl_cgame();
-void __cdecl CL_GetScreenDimensions(int32_t *width, int32_t *height, float *aspect);
-float __cdecl CL_GetScreenAspectRatioDisplayPixel();
-int32_t __cdecl CL_GetUserCmd(int32_t localClientNum, int32_t cmdNumber, usercmd_s *ucmd);
-int32_t __cdecl CL_GetCurrentCmdNumber(int32_t localClientNum);
-void __cdecl CL_GetCurrentSnapshotNumber(int32_t localClientNum, int32_t *snapshotNumber, int32_t *serverTime);
-int32_t __cdecl CL_GetSnapshot(int32_t localClientNum, snapshot_s *snapshot);
-void __cdecl CL_SetUserCmdWeapons(int32_t localClientNum, int32_t weapon, int32_t offHandIndex);
-void __cdecl CL_SetUserCmdAimValues(
+void CL_SetLocalClientConnectionState(int32_t localClientNum, connstate_t connstate);
+void TRACK_cl_cgame();
+void CL_GetScreenDimensions(int32_t *width, int32_t *height, float *aspect);
+float CL_GetScreenAspectRatioDisplayPixel();
+int32_t CL_GetUserCmd(int32_t localClientNum, int32_t cmdNumber, usercmd_s *ucmd);
+int32_t CL_GetCurrentCmdNumber(int32_t localClientNum);
+void CL_GetCurrentSnapshotNumber(int32_t localClientNum, int32_t *snapshotNumber, int32_t *serverTime);
+int32_t CL_GetSnapshot(int32_t localClientNum, snapshot_s *snapshot);
+void CL_SetUserCmdWeapons(int32_t localClientNum, int32_t weapon, int32_t offHandIndex);
+void CL_SetUserCmdAimValues(
     int32_t localClientNum,
     double gunPitch,
     double gunYaw,
     double gunXOfs,
     double gunYOfs,
     double gunZOfs);
-void __cdecl CL_SetFOVSensitivityScale(int32_t localClientNum, double scale);
-void __cdecl CL_SetExtraButtons(int32_t localClientNum, int32_t buttons);
+void CL_SetFOVSensitivityScale(int32_t localClientNum, double scale);
+void CL_SetExtraButtons(int32_t localClientNum, int32_t buttons);
 void CL_ConfigstringModified();
-void __cdecl CL_Restart();
-int32_t __cdecl CL_PreprocessServerCommand(const char *s);
-int32_t __cdecl CL_CGameNeedsServerCommand(int32_t localClientNum, int32_t serverCommandNumber);
-void __cdecl CL_ArchiveServerCommands(MemoryFile *memFile);
-void __cdecl CL_LoadServerCommands(SaveGame *save);
-void __cdecl CL_ShutdownCGame();
-int32_t __cdecl CL_DObjCreateSkelForBone(DObj_s *obj, int32_t boneIndex);
-void __cdecl LoadWorld(const char *name, int32_t savegame);
-void __cdecl CL_SubtitlePrint(int32_t localClientNum, const char *text, int32_t duration, int32_t pixelWidth);
-const char *__cdecl CL_GetConfigString(int32_t localClientNum, uint32_t configStringIndex);
-snd_alias_t *__cdecl CL_PickSoundAlias(const char *aliasname);
-void __cdecl CL_FinishLoadingModels();
-void __cdecl CL_GetViewForward(float *forward);
-void __cdecl CL_GetViewPos(float *pos);
-void __cdecl CL_RenderScene(const refdef_s *fd);
-void __cdecl CL_SetFullScreenViewport();
-void __cdecl CL_DrawStretchPicPhysical(
+void CL_Restart();
+int32_t CL_PreprocessServerCommand(const char *s);
+int32_t CL_CGameNeedsServerCommand(int32_t localClientNum, int32_t serverCommandNumber);
+void CL_ArchiveServerCommands(MemoryFile *memFile);
+void CL_LoadServerCommands(SaveGame *save);
+void CL_ShutdownCGame();
+int32_t CL_DObjCreateSkelForBone(DObj_s *obj, int32_t boneIndex);
+void LoadWorld(const char *name, int32_t savegame);
+void CL_SubtitlePrint(int32_t localClientNum, const char *text, int32_t duration, int32_t pixelWidth);
+const char *CL_GetConfigString(int32_t localClientNum, uint32_t configStringIndex);
+snd_alias_t *CL_PickSoundAlias(const char *aliasname);
+void CL_FinishLoadingModels();
+void CL_GetViewForward(float *forward);
+void CL_GetViewPos(float *pos);
+void CL_RenderScene(const refdef_s *fd);
+void CL_SetFullScreenViewport();
+void CL_DrawStretchPicPhysical(
     float x,
     float y,
     float w,
@@ -947,7 +947,7 @@ void __cdecl CL_DrawStretchPicPhysical(
     float t2,
     const float *color,
     Material *material);
-void __cdecl CL_DrawStretchPicPhysicalFlipST(
+void CL_DrawStretchPicPhysicalFlipST(
     float x,
     float y,
     float w,
@@ -958,7 +958,7 @@ void __cdecl CL_DrawStretchPicPhysicalFlipST(
     float t2,
     const float *color,
     Material *material);
-void __cdecl CL_DrawStretchPic(
+void CL_DrawStretchPic(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -972,7 +972,7 @@ void __cdecl CL_DrawStretchPic(
     float t2,
     const float *color,
     Material *material);
-void __cdecl CL_DrawStretchPicPhysicalRotateXY(
+void CL_DrawStretchPicPhysicalRotateXY(
     float x,
     float y,
     float w,
@@ -984,7 +984,7 @@ void __cdecl CL_DrawStretchPicPhysicalRotateXY(
     float angle,
     const float *color,
     Material *material);
-void __cdecl CL_DrawStretchPicFlipST(
+void CL_DrawStretchPicFlipST(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -998,7 +998,7 @@ void __cdecl CL_DrawStretchPicFlipST(
     float t2,
     const float *color,
     Material *material);
-void __cdecl CL_DrawStretchPicRotatedST(
+void CL_DrawStretchPicRotatedST(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -1014,84 +1014,84 @@ void __cdecl CL_DrawStretchPicRotatedST(
     float angle,
     const float *color,
     Material *material);
-void __cdecl CL_ProjectionSet2D();
-void __cdecl CL_ProjectionSet3D();
-void __cdecl CL_CapTurnRate(int32_t localClientNum, double maxPitchSpeed, double maxYawSpeed);
-void __cdecl CL_SetViewAngles(int32_t localClientNum, float *angles);
-void __cdecl CL_StartLoading(const char *mapname);
-void __cdecl CL_InitCGame(int32_t localClientNum, int32_t savegame);
-void __cdecl CL_FirstSnapshot();
-void __cdecl CL_SetActive();
-void __cdecl CL_CreateNextSnap();
-char *__cdecl CL_TimeDemoLogBaseName(const char *mapname);
+void CL_ProjectionSet2D();
+void CL_ProjectionSet3D();
+void CL_CapTurnRate(int32_t localClientNum, double maxPitchSpeed, double maxYawSpeed);
+void CL_SetViewAngles(int32_t localClientNum, float *angles);
+void CL_StartLoading(const char *mapname);
+void CL_InitCGame(int32_t localClientNum, int32_t savegame);
+void CL_FirstSnapshot();
+void CL_SetActive();
+void CL_CreateNextSnap();
+char *CL_TimeDemoLogBaseName(const char *mapname);
 void CL_UpdateTimeDemo();
-void __cdecl CL_SetCGameTime(int32_t localClientNum);
-void __cdecl CL_SetADS(int32_t localClientNum, bool ads);
-void __cdecl CL_ArchiveClientState(MemoryFile *memFile, int32_t segmentIndex);
-void __cdecl CL_LookupColor(uint8_t c, float *color);
-bool __cdecl CL_IsCgameInitialized(int32_t localClientNum);
+void CL_SetCGameTime(int32_t localClientNum);
+void CL_SetADS(int32_t localClientNum, bool ads);
+void CL_ArchiveClientState(MemoryFile *memFile, int32_t segmentIndex);
+void CL_LookupColor(uint8_t c, float *color);
+bool CL_IsCgameInitialized(int32_t localClientNum);
 
 
 
 // cl_main
-void __cdecl TRACK_cl_main();
-int32_t __cdecl CL_GetLocalClientActiveCount();
-int32_t __cdecl CL_GetFirstActiveLocalClient();
-bool __cdecl CL_IsLocalClientActive(int32_t clientNum);
-void __cdecl CL_SetLocalClientActive(int32_t clientNum, bool active);
-int32_t __cdecl CL_LocalClientNumFromControllerIndex(uint32_t controllerIndex);
-int32_t __cdecl CL_ControllerIndexFromClientNum(int32_t clientIndex);
-int32_t __cdecl CL_GetFirstActiveControllerIndex();
-int32_t __cdecl CL_AllLocalClientsInactive();
-void __cdecl CL_RunOncePerClientFrame(int32_t localClientNum, int32_t msec);
-void __cdecl CL_DumpReliableCommand(int32_t cmdIndex, const char *cmd);
-void __cdecl CL_DumpReliableCommands(clientConnection_t *clc);
-void __cdecl CL_AddReliableCommand(int32_t localClientNum, const char *cmd);
-void __cdecl CL_ShutdownDevGui();
-void __cdecl CL_ShutdownHunkUsers();
-void __cdecl CL_ShutdownDemo();
-void __cdecl CL_SaveSettings(MemoryFile *memFile);
-void __cdecl CL_RestoreSettings(MemoryFile *memFile);
-void __cdecl CL_MapLoading_CalcMovieToPlay(const char *buffer, const char *inMapName, char *outMovieName);
-void __cdecl CL_MapLoading_CalcMovieToPlay_LoadObj(const char *inMapName, char *outMovieName);
-void __cdecl CL_MapLoading_CalcMovieToPlay_FastFile(const char *inMapName, char *outMovieName);
-void __cdecl CL_MapLoading_StartCinematic(const char *mapname, float volume);
-void __cdecl CL_MapLoading(const char *mapname);
-void __cdecl CL_ResetSkeletonCache();
-void __cdecl CL_ClearState();
-void __cdecl CL_Disconnect(int32_t localClientNum);
-void __cdecl CL_ForwardCommandToServer(int32_t localClientNum, const char *string);
-void __cdecl CL_ForwardToServer_f();
-void __cdecl CL_ConnectResponse();
-void __cdecl CL_InitLoad(const char *mapname);
-void __cdecl CL_PacketEvent(msg_t *msg, int32_t serverMessageSequence);
-void __cdecl CL_SetFrametime(int32_t frametime, int32_t animFrametime);
-void __cdecl CheckForConsoleGuidePause(int32_t localClientNum);
-void __cdecl CL_Frame(int32_t localClientNum, int32_t msec);
-bool __cdecl CL_IsLocalClientInGame(int32_t localClientNum);
-bool __cdecl CL_IsUIActive(const int32_t localClientNum);
-void __cdecl CL_InitRenderer();
-void __cdecl CL_ShutdownRenderer(int32_t destroyWindow);
+void TRACK_cl_main();
+int32_t CL_GetLocalClientActiveCount();
+int32_t CL_GetFirstActiveLocalClient();
+bool CL_IsLocalClientActive(int32_t clientNum);
+void CL_SetLocalClientActive(int32_t clientNum, bool active);
+int32_t CL_LocalClientNumFromControllerIndex(uint32_t controllerIndex);
+int32_t CL_ControllerIndexFromClientNum(int32_t clientIndex);
+int32_t CL_GetFirstActiveControllerIndex();
+int32_t CL_AllLocalClientsInactive();
+void CL_RunOncePerClientFrame(int32_t localClientNum, int32_t msec);
+void CL_DumpReliableCommand(int32_t cmdIndex, const char *cmd);
+void CL_DumpReliableCommands(clientConnection_t *clc);
+void CL_AddReliableCommand(int32_t localClientNum, const char *cmd);
+void CL_ShutdownDevGui();
+void CL_ShutdownHunkUsers();
+void CL_ShutdownDemo();
+void CL_SaveSettings(MemoryFile *memFile);
+void CL_RestoreSettings(MemoryFile *memFile);
+void CL_MapLoading_CalcMovieToPlay(const char *buffer, const char *inMapName, char *outMovieName);
+void CL_MapLoading_CalcMovieToPlay_LoadObj(const char *inMapName, char *outMovieName);
+void CL_MapLoading_CalcMovieToPlay_FastFile(const char *inMapName, char *outMovieName);
+void CL_MapLoading_StartCinematic(const char *mapname, float volume);
+void CL_MapLoading(const char *mapname);
+void CL_ResetSkeletonCache();
+void CL_ClearState();
+void CL_Disconnect(int32_t localClientNum);
+void CL_ForwardCommandToServer(int32_t localClientNum, const char *string);
+void CL_ForwardToServer_f();
+void CL_ConnectResponse();
+void CL_InitLoad(const char *mapname);
+void CL_PacketEvent(msg_t *msg, int32_t serverMessageSequence);
+void CL_SetFrametime(int32_t frametime, int32_t animFrametime);
+void CheckForConsoleGuidePause(int32_t localClientNum);
+void CL_Frame(int32_t localClientNum, int32_t msec);
+bool CL_IsLocalClientInGame(int32_t localClientNum);
+bool CL_IsUIActive(const int32_t localClientNum);
+void CL_InitRenderer();
+void CL_ShutdownRenderer(int32_t destroyWindow);
 void CL_DevGuiDvar_f();
 void CL_DevGuiCmd_f();
 void CL_DevGuiOpen_f();
 void CL_InitDevGui();
-void __cdecl CL_StartHunkUsers();
-int32_t __cdecl CL_ScaledMilliseconds();
-void __cdecl CL_InitRef();
-void __cdecl CL_VoidCommand();
-void __cdecl CL_startMultiplayer_f();
-void __cdecl CL_ShellExecute_URL_f();
-void __cdecl CL_IncAnimWeight_f();
-void __cdecl CL_DecAnimWeight_f();
-void __cdecl CL_StopLogo(int32_t localClientNum);
-void __cdecl CL_PlayLogo_f();
-void __cdecl CL_StopLogoOrCinematic(int32_t localClientNum);
-void __cdecl CL_InitOnceForAllClients();
-void __cdecl CL_StopControllerRumbles();
+void CL_StartHunkUsers();
+int32_t CL_ScaledMilliseconds();
+void CL_InitRef();
+void CL_VoidCommand();
+void CL_startMultiplayer_f();
+void CL_ShellExecute_URL_f();
+void CL_IncAnimWeight_f();
+void CL_DecAnimWeight_f();
+void CL_StopLogo(int32_t localClientNum);
+void CL_PlayLogo_f();
+void CL_StopLogoOrCinematic(int32_t localClientNum);
+void CL_InitOnceForAllClients();
+void CL_StopControllerRumbles();
 void CL_Pause_f();
-void __cdecl CL_Shutdown(int32_t localClientNum);
-void __cdecl CL_DrawTextPhysical(
+void CL_Shutdown(int32_t localClientNum);
+void CL_DrawTextPhysical(
     const char *text,
     int32_t maxChars,
     Font_s *font,
@@ -1101,7 +1101,7 @@ void __cdecl CL_DrawTextPhysical(
     float yScale,
     const float *color,
     int32_t style);
-void __cdecl CL_DrawTextPhysicalWithEffects(
+void CL_DrawTextPhysicalWithEffects(
     const char *text,
     int32_t maxChars,
     Font_s *font,
@@ -1118,7 +1118,7 @@ void __cdecl CL_DrawTextPhysicalWithEffects(
     int32_t fxLetterTime,
     int32_t fxDecayStartTime,
     int32_t fxDecayDuration);
-void __cdecl CL_DrawText(
+void CL_DrawText(
     const ScreenPlacement *scrPlace,
     const char *text,
     int32_t maxChars,
@@ -1131,7 +1131,7 @@ void __cdecl CL_DrawText(
     float yScale,
     const float *color,
     int32_t style);
-void __cdecl CL_DrawTextRotate(
+void CL_DrawTextRotate(
     const ScreenPlacement *scrPlace,
     const char *text,
     int32_t maxChars,
@@ -1145,7 +1145,7 @@ void __cdecl CL_DrawTextRotate(
     float yScale,
     const float *color,
     int32_t style);
-void __cdecl CL_DrawTextPhysicalWithCursor(
+void CL_DrawTextPhysicalWithCursor(
     char *text,
     int32_t maxChars,
     Font_s *font,
@@ -1157,7 +1157,7 @@ void __cdecl CL_DrawTextPhysicalWithCursor(
     int32_t style,
     int32_t cursorPos,
     char cursor);
-void __cdecl CL_DrawTextWithCursor(
+void CL_DrawTextWithCursor(
     const ScreenPlacement *scrPlace,
     const char *text,
     int32_t maxChars,
@@ -1172,18 +1172,18 @@ void __cdecl CL_DrawTextWithCursor(
     int32_t style,
     int32_t cursorPos,
     char cursor);
-Font_s *__cdecl CL_RegisterFont(const char *fontName, int32_t imageTrack);
-void __cdecl CL_SetSkipRendering(bool skip);
-bool __cdecl CL_SkipRendering();
-void __cdecl CL_UpdateSound();
-void __cdecl CL_ShutdownAll(bool destroyWindow);
-void __cdecl CL_DisconnectLocalClient();
-void __cdecl CL_Disconnect_f();
-void __cdecl CL_Vid_Restart_f();
-void __cdecl CL_Snd_Restart_f();
-void __cdecl CL_ShutdownRef();
-void __cdecl CL_DrawLogo();
-void __cdecl CL_Init(int32_t localClientNum);
+Font_s *CL_RegisterFont(const char *fontName, int32_t imageTrack);
+void CL_SetSkipRendering(bool skip);
+bool CL_SkipRendering();
+void CL_UpdateSound();
+void CL_ShutdownAll(bool destroyWindow);
+void CL_DisconnectLocalClient();
+void CL_Disconnect_f();
+void CL_Vid_Restart_f();
+void CL_Snd_Restart_f();
+void CL_ShutdownRef();
+void CL_DrawLogo();
+void CL_Init(int32_t localClientNum);
 
 
 extern clientConnection_t clientConnections[1];
@@ -1230,7 +1230,7 @@ extern int scr_initialized;
 extern bool updateScreenCalled;
 
 
-inline clientActive_t *__cdecl CL_GetLocalClientGlobals(int32_t localClientNum)
+inline clientActive_t *CL_GetLocalClientGlobals(int32_t localClientNum)
 {
     iassert(clients);
     iassert(localClientNum == 0);
@@ -1238,7 +1238,7 @@ inline clientActive_t *__cdecl CL_GetLocalClientGlobals(int32_t localClientNum)
     return &clients[localClientNum];
 }
 
-inline connstate_t __cdecl CL_GetLocalClientConnectionState(int localClientNum) // line: 1112
+inline connstate_t CL_GetLocalClientConnectionState(int localClientNum) // line: 1112
 {
     iassert(localClientNum == 0);
     return clientUIActives[localClientNum].connectionState;
@@ -1256,4 +1256,4 @@ inline clientUIActive_t *CL_GetLocalClientUIGlobals(int localClientNum)
 void ScrPlace_SetupFloatViewportForDisplay(ScreenPlacement *,float,float,float,float,float,int,int);
 
 // Shared viewport command entry (original SP caller, also used by native UI).
-void __cdecl CL_SetViewport(int x, int y, int width, int height);
+void CL_SetViewport(int x, int y, int width, int height);

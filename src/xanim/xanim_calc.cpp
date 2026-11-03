@@ -3,23 +3,23 @@
 #include <qcommon/qcommon.h>
 #include <universal/profile.h>
 
-void __cdecl Short2LerpAsVec2(const __int16 *from, const __int16 *to, float frac, float *out)
+void Short2LerpAsVec2(const __int16 *from, const __int16 *to, float frac, float *out)
 {
     out[0] = frac * (to[0] - from[0]) + from[0];
     out[1] = frac * (to[1] - from[1]) + from[1];
 }
 
-void __cdecl XAnim_SetTime(float time, int frameCount, XAnimTime *animTime);
+void XAnim_SetTime(float time, int frameCount, XAnimTime *animTime);
 
 template <typename T>
-void __cdecl XAnim_GetTimeIndex(
+void XAnim_GetTimeIndex(
     const XAnimTime *animTime,
     const T*indices,
     int tableSize,
     int *keyFrameIndex,
     float *keyFrameLerpFrac);
 
-void __cdecl XAnimCalc(
+void XAnimCalc(
     const DObj_s *obj,
     XAnimInfo *info,
     float weightScale,
@@ -158,14 +158,14 @@ void __cdecl XAnimCalc(
     }
 }
 
-bool __cdecl IsInfoAdditive(const XAnimInfo *info)
+bool IsInfoAdditive(const XAnimInfo *info)
 {
     if (!info)
         MyAssertHandler(".\\xanim\\xanim_calc.cpp", 147, 0, "%s", "info");
     return !info->animToModel && (info->animParent.flags & 0x10) != 0;
 }
 
-void __cdecl XAnimClearRotTransArray(const DObj_s *obj, DObjAnimMat *rotTransArray, XAnimCalcAnimInfo *info)
+void XAnimClearRotTransArray(const DObj_s *obj, DObjAnimMat *rotTransArray, XAnimCalcAnimInfo *info)
 {
     uint32_t modelPartIndex; // [esp+4h] [ebp-4h]
 
@@ -187,7 +187,7 @@ void __cdecl XAnimClearRotTransArray(const DObj_s *obj, DObjAnimMat *rotTransArr
 }
 
 template <typename T>
-void __cdecl XAnimCalcParts(
+void XAnimCalcParts(
     const XAnimParts *parts,
     const unsigned __int8 *animToModel,
     float time,
@@ -713,7 +713,7 @@ LABEL_141:
     }
 }
 
-void __cdecl XAnimCalcLeaf(XAnimInfo *info, float weightScale, DObjAnimMat *rotTransArray, XAnimCalcAnimInfo *animInfo)
+void XAnimCalcLeaf(XAnimInfo *info, float weightScale, DObjAnimMat *rotTransArray, XAnimCalcAnimInfo *animInfo)
 {
     float time; // [esp+24h] [ebp-10h]
     XAnimToXModel *animToModel; // [esp+28h] [ebp-Ch]
@@ -771,7 +771,7 @@ void __cdecl XAnimCalcLeaf(XAnimInfo *info, float weightScale, DObjAnimMat *rotT
     }
 }
 
-void __cdecl XAnimCalcNonLoopEnd(
+void XAnimCalcNonLoopEnd(
     const XAnimParts *parts,
     const unsigned __int8 *animToModel,
     float weightScale,
@@ -1179,7 +1179,7 @@ void __cdecl XAnimCalcNonLoopEnd(
     }
 }
 
-DObjAnimMat *__cdecl XAnimGetCalcBuffer(XAnimCalcAnimInfo *info, const DObj_s *obj, int *rotTransArrayIndex)
+DObjAnimMat *XAnimGetCalcBuffer(XAnimCalcAnimInfo *info, const DObj_s *obj, int *rotTransArrayIndex)
 {
     DObjAnimMat *calcBuffer; // [esp+0h] [ebp-8h]
     int index; // [esp+4h] [ebp-4h]
@@ -1199,7 +1199,7 @@ DObjAnimMat *__cdecl XAnimGetCalcBuffer(XAnimCalcAnimInfo *info, const DObj_s *o
     }
 }
 
-void __cdecl XAnimScaleRotTransArray(int numBones, const XAnimCalcAnimInfo *info, DObjAnimMat *rotTransArray)
+void XAnimScaleRotTransArray(int numBones, const XAnimCalcAnimInfo *info, DObjAnimMat *rotTransArray)
 {
     float r; // [esp+8h] [ebp-8h]
     uint32_t i; // [esp+Ch] [ebp-4h]
@@ -1216,7 +1216,7 @@ void __cdecl XAnimScaleRotTransArray(int numBones, const XAnimCalcAnimInfo *info
     }
 }
 
-void __cdecl XAnimNormalizeRotScaleTransArray(
+void XAnimNormalizeRotScaleTransArray(
     int numBones,
     const XAnimCalcAnimInfo *info,
     float weightScale,
@@ -1243,7 +1243,7 @@ void __cdecl XAnimNormalizeRotScaleTransArray(
     }
 }
 
-void __cdecl XAnimMadRotTransArray(
+void XAnimMadRotTransArray(
     int numBones,
     const XAnimCalcAnimInfo *info,
     float weightScale,
@@ -1272,7 +1272,7 @@ void __cdecl XAnimMadRotTransArray(
     }
 }
 
-void __cdecl XAnimApplyAdditives(
+void XAnimApplyAdditives(
     DObjAnimMat *rotTransArray,
     DObjAnimMat *additiveArray,
     float weight,
@@ -1313,7 +1313,7 @@ void __cdecl XAnimApplyAdditives(
     }
 }
 
-void __cdecl XAnim_CalcRotDeltaEntire(const XAnimDeltaPart *animDelta, float *rotDelta)
+void XAnim_CalcRotDeltaEntire(const XAnimDeltaPart *animDelta, float *rotDelta)
 {
     XAnimDeltaPartQuat *rotFrameDeltas; // [esp+8h] [ebp-8h]
     const __int16 *rotDeltaLastFrame; // [esp+Ch] [ebp-4h]
@@ -1335,7 +1335,7 @@ void __cdecl XAnim_CalcRotDeltaEntire(const XAnimDeltaPart *animDelta, float *ro
     }
 }
 
-void __cdecl XAnim_CalcPosDeltaEntire(const XAnimDeltaPart *animDelta, float4 *posDelta)
+void XAnim_CalcPosDeltaEntire(const XAnimDeltaPart *animDelta, float4 *posDelta)
 {
     XAnimPartTrans *trans; // ecx
     unsigned short *v3; // [esp+20h] [ebp-44h]
@@ -1391,7 +1391,7 @@ void __cdecl XAnim_CalcPosDeltaEntire(const XAnimDeltaPart *animDelta, float4 *p
     }
 }
 
-void __cdecl XAnimWeightedAccumLerpedTrans(
+void XAnimWeightedAccumLerpedTrans(
     float4 fromVec,
     float4 toVec,
     float keyFrameLerpFrac,
@@ -1410,7 +1410,7 @@ void __cdecl XAnimWeightedAccumLerpedTrans(
     totalRotTrans->transWeight = totalRotTrans->transWeight + weightScale;
 }
 
-void __cdecl XAnimWeightedAccumTrans(float weightScale, int *dataInt, DObjAnimMat *totalRotTrans)
+void XAnimWeightedAccumTrans(float weightScale, int *dataInt, DObjAnimMat *totalRotTrans)
 {
     Vec3Mad(totalRotTrans->trans, weightScale, (const float *)dataInt, totalRotTrans->trans);
     totalRotTrans->transWeight = totalRotTrans->transWeight + weightScale;
@@ -1637,7 +1637,7 @@ void XAnim_CalcRotDeltaDuring(
     }
 }
 
-void __cdecl XAnim_SetTime(float time, int frameCount, XAnimTime *animTime)
+void XAnim_SetTime(float time, int frameCount, XAnimTime *animTime)
 {
     animTime->time = time;
     animTime->frameFrac = frameCount * time;
@@ -1786,7 +1786,7 @@ LABEL_20:
     }
 }
 
-void __cdecl XAnim_CalcDeltaForTime(const XAnimParts *anim, float time, float *rotDelta, float4 *posDelta)
+void XAnim_CalcDeltaForTime(const XAnimParts *anim, float time, float *rotDelta, float4 *posDelta)
 {
     int frameCount; // [esp+20h] [ebp-8h]
     XAnimDeltaPart *animDelta; // [esp+24h] [ebp-4h]

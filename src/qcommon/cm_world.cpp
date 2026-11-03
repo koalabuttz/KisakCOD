@@ -52,12 +52,12 @@ struct cm_world_t // sizeof=0x701C
 
 cm_world_t cm_world;
 
-void __cdecl TRACK_cm_world()
+void TRACK_cm_world()
 {
     track_static_alloc_internal(&cm_world, 28700, "cm_world", 25);
 }
 
-void __cdecl CM_LinkWorld()
+void CM_LinkWorld()
 {
     PROFLOAD_SCOPED("CM_LoadWorld");
     CM_ClearWorld();
@@ -84,7 +84,7 @@ void CM_ClearWorld()
     iassert( !cm_world.sectors[SECTOR_HEAD].tree.child[1] );
 }
 
-void __cdecl CM_UnlinkEntity(svEntity_s *ent)
+void CM_UnlinkEntity(svEntity_s *ent)
 {
     gentity_s *i; // eax
     worldSector_s *node; // [esp+0h] [ebp-18h]
@@ -168,7 +168,7 @@ void __cdecl CM_UnlinkEntity(svEntity_s *ent)
     }
 }
 
-void __cdecl CM_LinkEntity(svEntity_s *ent, float *absmin, float *absmax, uint32_t clipHandle)
+void CM_LinkEntity(svEntity_s *ent, float *absmin, float *absmax, uint32_t clipHandle)
 {
     worldSector_s *node; // [esp+10h] [ebp-30h]
     int contents; // [esp+14h] [ebp-2Ch]
@@ -243,7 +243,7 @@ void __cdecl CM_LinkEntity(svEntity_s *ent, float *absmin, float *absmax, uint32
     }
 }
 
-void __cdecl CM_AddEntityToNode(svEntity_s *ent, uint16_t childNodeIndex)
+void CM_AddEntityToNode(svEntity_s *ent, uint16_t childNodeIndex)
 {
     uint16_t *prevEnt; // [esp+0h] [ebp-8h]
     uint32_t entnum; // [esp+4h] [ebp-4h]
@@ -271,7 +271,7 @@ void __cdecl CM_AddEntityToNode(svEntity_s *ent, uint16_t childNodeIndex)
     *prevEnt = entnum + 1;
 }
 
-void __cdecl CM_SortNode(uint16_t nodeIndex, float *mins, float *maxs)
+void CM_SortNode(uint16_t nodeIndex, float *mins, float *maxs)
 {
     worldSector_s *node; // [esp+4h] [ebp-28h]
     uint16_t modelnum; // [esp+8h] [ebp-24h]
@@ -415,7 +415,7 @@ void __cdecl CM_SortNode(uint16_t nodeIndex, float *mins, float *maxs)
     }
 }
 
-uint16_t __cdecl CM_AllocWorldSector(float *mins, float *maxs)
+uint16_t CM_AllocWorldSector(float *mins, float *maxs)
 {
     worldSector_s *node; // [esp+4h] [ebp-14h]
     uint16_t nodeIndex; // [esp+8h] [ebp-10h]
@@ -444,7 +444,7 @@ uint16_t __cdecl CM_AllocWorldSector(float *mins, float *maxs)
     return nodeIndex;
 }
 
-void __cdecl CM_AddStaticModelToNode(cStaticModel_s *staticModel, uint16_t childNodeIndex)
+void CM_AddStaticModelToNode(cStaticModel_s *staticModel, uint16_t childNodeIndex)
 {
     uint32_t modelnum; // [esp+0h] [ebp-8h]
     cStaticModel_s *prevStaticModel; // [esp+4h] [ebp-4h]
@@ -480,7 +480,7 @@ uint32_t CM_LinkAllStaticModels()
     return result;
 }
 
-void __cdecl CM_LinkStaticModel(cStaticModel_s *staticModel)
+void CM_LinkStaticModel(cStaticModel_s *staticModel)
 {
     int contents; // [esp+0h] [ebp-24h]
     worldSector_s *node; // [esp+4h] [ebp-20h]
@@ -522,7 +522,7 @@ LABEL_11:
     CM_SortNode(nodeIndex, mins, maxs);
 }
 
-int __cdecl CM_AreaEntities(const float *mins, const float *maxs, int *entityList, int maxcount, int contentmask)
+int CM_AreaEntities(const float *mins, const float *maxs, int *entityList, int maxcount, int contentmask)
 {
     areaParms_t ap; // [esp+30h] [ebp-18h] BYREF
 
@@ -539,7 +539,7 @@ int __cdecl CM_AreaEntities(const float *mins, const float *maxs, int *entityLis
     return ap.count;
 }
 
-void __cdecl CM_AreaEntities_r(uint32_t nodeIndex, areaParms_t *ap)
+void CM_AreaEntities_r(uint32_t nodeIndex, areaParms_t *ap)
 {
     worldSector_s *node; // [esp+0h] [ebp-14h]
     uint32_t nextNodeIndex; // [esp+4h] [ebp-10h]
@@ -592,7 +592,7 @@ void __cdecl CM_AreaEntities_r(uint32_t nodeIndex, areaParms_t *ap)
     }
 }
 
-void __cdecl CM_PointTraceStaticModels(trace_t *results, const float *start, const float *end, int contentmask)
+void CM_PointTraceStaticModels(trace_t *results, const float *start, const float *end, int contentmask)
 {
     locTraceWork_t tw; // [esp+30h] [ebp-48h] BYREF
     float start_[4]; // [esp+58h] [ebp-20h] BYREF
@@ -620,7 +620,7 @@ void __cdecl CM_PointTraceStaticModels(trace_t *results, const float *start, con
     CM_PointTraceStaticModels_r(&tw, 1u, start_, end_, results);
 }
 
-void __cdecl CM_PointTraceStaticModels_r(
+void CM_PointTraceStaticModels_r(
     locTraceWork_t *tw,
     uint16_t nodeIndex,
     const float *p1_,
@@ -691,7 +691,7 @@ void __cdecl CM_PointTraceStaticModels_r(
     }
 }
 
-int __cdecl CM_PointTraceStaticModelsComplete(const float *start, const float *end, int contentmask)
+int CM_PointTraceStaticModelsComplete(const float *start, const float *end, int contentmask)
 {
     staticmodeltrace_t clip; // [esp+30h] [ebp-2Ch] BYREF
     int result; // [esp+58h] [ebp-4h]
@@ -711,7 +711,7 @@ int __cdecl CM_PointTraceStaticModelsComplete(const float *start, const float *e
     return result;
 }
 
-int __cdecl CM_PointTraceStaticModelsComplete_r(
+int CM_PointTraceStaticModelsComplete_r(
     const staticmodeltrace_t *clip,
     uint16_t nodeIndex,
     const float *p1_,
@@ -776,7 +776,7 @@ int __cdecl CM_PointTraceStaticModelsComplete_r(
     return 0;
 }
 
-void __cdecl CM_ClipMoveToEntities(moveclip_t *clip, trace_t *trace)
+void CM_ClipMoveToEntities(moveclip_t *clip, trace_t *trace)
 {
     float start[4]; // [esp+40h] [ebp-20h] BYREF
     float end[4]; // [esp+50h] [ebp-10h] BYREF
@@ -802,7 +802,7 @@ void __cdecl CM_ClipMoveToEntities(moveclip_t *clip, trace_t *trace)
     CM_ClipMoveToEntities_r(clip, 1u, start, end, trace);
 }
 
-void __cdecl CM_ClipMoveToEntities_r(
+void CM_ClipMoveToEntities_r(
     const moveclip_t *clip,
     uint16_t nodeIndex,
     const float *p1,
@@ -924,7 +924,7 @@ void __cdecl CM_ClipMoveToEntities_r(
     }
 }
 
-int __cdecl CM_ClipSightTraceToEntities(sightclip_t *clip)
+int CM_ClipSightTraceToEntities(sightclip_t *clip)
 {
     int hitNum; // [esp+30h] [ebp-4h]
 
@@ -934,7 +934,7 @@ int __cdecl CM_ClipSightTraceToEntities(sightclip_t *clip)
     return hitNum;
 }
 
-int __cdecl CM_ClipSightTraceToEntities_r(
+int CM_ClipSightTraceToEntities_r(
     const sightclip_t *clip,
     uint16_t nodeIndex,
     const float *p1,
@@ -1044,7 +1044,7 @@ int __cdecl CM_ClipSightTraceToEntities_r(
     return hitNuma;
 }
 
-void __cdecl CM_PointTraceToEntities(pointtrace_t *clip, trace_t *trace)
+void CM_PointTraceToEntities(pointtrace_t *clip, trace_t *trace)
 {
     float start[4]; // [esp+3Ch] [ebp-20h] BYREF
     float end[4]; // [esp+4Ch] [ebp-10h] BYREF
@@ -1066,7 +1066,7 @@ void __cdecl CM_PointTraceToEntities(pointtrace_t *clip, trace_t *trace)
     CM_PointTraceToEntities_r(clip, 1u, start, end, trace);
 }
 
-void __cdecl CM_PointTraceToEntities_r(
+void CM_PointTraceToEntities_r(
     pointtrace_t *clip,
     uint16_t nodeIndex,
     const float *p1,
@@ -1135,7 +1135,7 @@ void __cdecl CM_PointTraceToEntities_r(
     }
 }
 
-int __cdecl CM_PointSightTraceToEntities(sightpointtrace_t *clip)
+int CM_PointSightTraceToEntities(sightpointtrace_t *clip)
 {
     int hitNum; // [esp+30h] [ebp-4h]
 
@@ -1145,7 +1145,7 @@ int __cdecl CM_PointSightTraceToEntities(sightpointtrace_t *clip)
     return hitNum;
 }
 
-int __cdecl CM_PointSightTraceToEntities_r(
+int CM_PointSightTraceToEntities_r(
     sightpointtrace_t *clip,
     uint16_t nodeIndex,
     const float *p1,

@@ -14,7 +14,7 @@
 #endif
 
 
-void __cdecl Reached_ScriptMover(gentity_s *pEnt)
+void Reached_ScriptMover(gentity_s *pEnt)
 {
     float v1; // [esp+18h] [ebp-24h]
     float v2; // [esp+1Ch] [ebp-20h]
@@ -74,7 +74,7 @@ void __cdecl Reached_ScriptMover(gentity_s *pEnt)
     }
 }
 
-int __cdecl ScriptMover_UpdateMove(
+int ScriptMover_UpdateMove(
     trajectory_t *pTr,
     float *vCurrPos,
     float fSpeed,
@@ -157,7 +157,7 @@ int __cdecl ScriptMover_UpdateMove(
     return 1;
 }
 
-void __cdecl InitScriptMover(gentity_s *pSelf)
+void InitScriptMover(gentity_s *pSelf)
 {
     pSelf->r.svFlags = 0;
     pSelf->handler = ENT_HANDLER_SCRIPT_MOVER;
@@ -174,7 +174,7 @@ void __cdecl InitScriptMover(gentity_s *pSelf)
     pSelf->flags |= FL_SUPPORTS_LINKTO;
 }
 
-void __cdecl SP_script_brushmodel(gentity_s *self)
+void SP_script_brushmodel(gentity_s *self)
 {
     if (SV_SetBrushModel(self))
     {
@@ -198,7 +198,7 @@ void __cdecl SP_script_brushmodel(gentity_s *self)
     }
 }
 
-void __cdecl SP_script_model(gentity_s *pSelf)
+void SP_script_model(gentity_s *pSelf)
 {
     G_DObjUpdate(pSelf);
     InitScriptMover(pSelf);
@@ -212,7 +212,7 @@ void __cdecl SP_script_model(gentity_s *pSelf)
 #endif
 }
 
-void __cdecl SP_script_origin(gentity_s *pSelf)
+void SP_script_origin(gentity_s *pSelf)
 {
     InitScriptMover(pSelf);
     pSelf->r.contents = 0;
@@ -220,7 +220,7 @@ void __cdecl SP_script_origin(gentity_s *pSelf)
     pSelf->r.svFlags |= 1u;
 }
 
-void __cdecl ScriptEntCmdGetCommandTimes(float *pfTotalTime, float *pfAccelTime, float *pfDecelTime)
+void ScriptEntCmdGetCommandTimes(float *pfTotalTime, float *pfAccelTime, float *pfDecelTime)
 {
     float fTotalTimeRoundedUp; // [esp+0h] [ebp-8h]
     int iNumParms; // [esp+4h] [ebp-4h]
@@ -262,7 +262,7 @@ void __cdecl ScriptEntCmdGetCommandTimes(float *pfTotalTime, float *pfAccelTime,
     }
 }
 
-void __cdecl ScriptEntCmd_MoveTo(scr_entref_t entref)
+void ScriptEntCmd_MoveTo(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+Ch] [ebp-1Ch]
@@ -295,7 +295,7 @@ void __cdecl ScriptEntCmd_MoveTo(scr_entref_t entref)
     ScriptMover_Move(pSelf, vPos, fTotalTime, fAccelTime, fDecelTime);
 }
 
-void __cdecl ScriptMover_Move(gentity_s *pEnt, const float *vPos, float fTotalTime, float fAccelTime, float fDecelTime)
+void ScriptMover_Move(gentity_s *pEnt, const float *vPos, float fTotalTime, float fAccelTime, float fDecelTime)
 {
     float origin[3]; // [esp+2Ch] [ebp-Ch] BYREF
 
@@ -319,7 +319,7 @@ void __cdecl ScriptMover_Move(gentity_s *pEnt, const float *vPos, float fTotalTi
     SV_LinkEntity(pEnt);
 }
 
-void __cdecl ScriptMover_SetupMove(
+void ScriptMover_SetupMove(
     trajectory_t *pTr,
     const float *vPos,
     float fTotalTime,
@@ -468,7 +468,7 @@ void __cdecl ScriptMover_SetupMove(
     }
 }
 
-void __cdecl ScriptEntCmd_GravityMove(scr_entref_t entref)
+void ScriptEntCmd_GravityMove(scr_entref_t entref)
 {
     const char *v1; // eax
     const char *v2; // eax
@@ -506,7 +506,7 @@ void __cdecl ScriptEntCmd_GravityMove(scr_entref_t entref)
     ScriptMover_GravityMove(pSelf, velocity, fTotalTime);
 }
 
-void __cdecl ScriptMover_GravityMove(gentity_s *mover, float *velocity, float totalTime)
+void ScriptMover_GravityMove(gentity_s *mover, float *velocity, float totalTime)
 {
     trajectory_t *trajectory; // [esp+24h] [ebp-4h]
 
@@ -548,7 +548,7 @@ void __cdecl ScriptMover_GravityMove(gentity_s *mover, float *velocity, float to
     SV_LinkEntity(mover);
 }
 
-void __cdecl ScriptEnt_MoveAxis(scr_entref_t entref, int iAxis)
+void ScriptEnt_MoveAxis(scr_entref_t entref, int iAxis)
 {
     const char *v2; // eax
     gentity_s *pSelf; // [esp+10h] [ebp-20h]
@@ -585,22 +585,22 @@ void __cdecl ScriptEnt_MoveAxis(scr_entref_t entref, int iAxis)
     ScriptMover_Move(pSelf, vPos, fTotalTime, fAccelTime, fDecelTime);
 }
 
-void __cdecl ScriptEntCmd_MoveX(scr_entref_t entref)
+void ScriptEntCmd_MoveX(scr_entref_t entref)
 {
     ScriptEnt_MoveAxis(entref, 0);
 }
 
-void __cdecl ScriptEntCmd_MoveY(scr_entref_t entref)
+void ScriptEntCmd_MoveY(scr_entref_t entref)
 {
     ScriptEnt_MoveAxis(entref, 1);
 }
 
-void __cdecl ScriptEntCmd_MoveZ(scr_entref_t entref)
+void ScriptEntCmd_MoveZ(scr_entref_t entref)
 {
     ScriptEnt_MoveAxis(entref, 2);
 }
 
-void __cdecl ScriptEntCmd_RotateTo(scr_entref_t entref)
+void ScriptEntCmd_RotateTo(scr_entref_t entref)
 {
     const char *v1; // eax
     double v2; // st7
@@ -640,7 +640,7 @@ void __cdecl ScriptEntCmd_RotateTo(scr_entref_t entref)
     ScriptMover_Rotate(pSelf, vRot, fTotalTime, fAccelTime, fDecelTime);
 }
 
-void __cdecl ScriptMover_Rotate(
+void ScriptMover_Rotate(
     gentity_s *pEnt,
     const float *vRot,
     float fTotalTime,
@@ -668,12 +668,12 @@ void __cdecl ScriptMover_Rotate(
     SV_LinkEntity(pEnt);
 }
 
-void __cdecl ScriptEntCmd_DevAddPitch(scr_entref_t entref)
+void ScriptEntCmd_DevAddPitch(scr_entref_t entref)
 {
     ScriptEnt_DevAddRotate(entref, 1u);
 }
 
-void __cdecl ScriptEnt_DevAddRotate(scr_entref_t entref, uint32_t iAxis)
+void ScriptEnt_DevAddRotate(scr_entref_t entref, uint32_t iAxis)
 {
     const char *v2; // eax
     float v3; // [esp+14h] [ebp-60h]
@@ -731,17 +731,17 @@ void __cdecl ScriptEnt_DevAddRotate(scr_entref_t entref, uint32_t iAxis)
     }
 }
 
-void __cdecl ScriptEntCmd_DevAddYaw(scr_entref_t entref)
+void ScriptEntCmd_DevAddYaw(scr_entref_t entref)
 {
     ScriptEnt_DevAddRotate(entref, 2u);
 }
 
-void __cdecl ScriptEntCmd_DevAddRoll(scr_entref_t entref)
+void ScriptEntCmd_DevAddRoll(scr_entref_t entref)
 {
     ScriptEnt_DevAddRotate(entref, 0);
 }
 
-void __cdecl ScriptEnt_RotateAxis(scr_entref_t entref, int iAxis)
+void ScriptEnt_RotateAxis(scr_entref_t entref, int iAxis)
 {
     const char *v2; // eax
     gentity_s *pSelf; // [esp+10h] [ebp-20h]
@@ -778,22 +778,22 @@ void __cdecl ScriptEnt_RotateAxis(scr_entref_t entref, int iAxis)
     ScriptMover_Rotate(pSelf, vRot, fTotalTime, fAccelTime, fDecelTime);
 }
 
-void __cdecl ScriptEntCmd_RotatePitch(scr_entref_t entref)
+void ScriptEntCmd_RotatePitch(scr_entref_t entref)
 {
     ScriptEnt_RotateAxis(entref, 0);
 }
 
-void __cdecl ScriptEntCmd_RotateYaw(scr_entref_t entref)
+void ScriptEntCmd_RotateYaw(scr_entref_t entref)
 {
     ScriptEnt_RotateAxis(entref, 1);
 }
 
-void __cdecl ScriptEntCmd_RotateRoll(scr_entref_t entref)
+void ScriptEntCmd_RotateRoll(scr_entref_t entref)
 {
     ScriptEnt_RotateAxis(entref, 2);
 }
 
-void __cdecl ScriptEntCmd_Vibrate(scr_entref_t entref)
+void ScriptEntCmd_Vibrate(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+28h] [ebp-5Ch]
@@ -856,7 +856,7 @@ void __cdecl ScriptEntCmd_Vibrate(scr_entref_t entref)
     }
 }
 
-void __cdecl ScriptEntCmd_RotateVelocity(scr_entref_t entref)
+void ScriptEntCmd_RotateVelocity(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+Ch] [ebp-1Ch]
@@ -888,7 +888,7 @@ void __cdecl ScriptEntCmd_RotateVelocity(scr_entref_t entref)
     ScriptMover_RotateSpeed(pSelf, vSpeed, fTotalTime, fAccelTime, fDecelTime);
 }
 
-void __cdecl ScriptMover_RotateSpeed(
+void ScriptMover_RotateSpeed(
     gentity_s *pEnt,
     const float *vRotSpeed,
     float fTotalTime,
@@ -911,7 +911,7 @@ void __cdecl ScriptMover_RotateSpeed(
     SV_LinkEntity(pEnt);
 }
 
-void __cdecl ScriptMover_SetupMoveSpeed(
+void ScriptMover_SetupMoveSpeed(
     trajectory_t *pTr,
     const float *vSpeed,
     float fTotalTime,
@@ -1072,7 +1072,7 @@ void __cdecl ScriptMover_SetupMoveSpeed(
     }
 }
 
-void __cdecl ScriptEntCmd_SetCanDamage(scr_entref_t entref)
+void ScriptEntCmd_SetCanDamage(scr_entref_t entref)
 {
     gentity_s *pSelf; // [esp+0h] [ebp-Ch]
 
@@ -1096,7 +1096,7 @@ void __cdecl ScriptEntCmd_SetCanDamage(scr_entref_t entref)
     }
 }
 
-void __cdecl ScriptEntCmd_PhysicsLaunch(scr_entref_t entref)
+void ScriptEntCmd_PhysicsLaunch(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-1Ch]
@@ -1140,7 +1140,7 @@ void __cdecl ScriptEntCmd_PhysicsLaunch(scr_entref_t entref)
     pSelf->takedamage = 0;
 }
 
-void __cdecl ScriptMover_SetupPhysicsLaunch(
+void ScriptMover_SetupPhysicsLaunch(
     trajectory_t *pTr,
     trajectory_t *paTr,
     const float *contact_point,
@@ -1171,7 +1171,7 @@ void __cdecl ScriptMover_SetupPhysicsLaunch(
     paTr->trType = TR_PHYSICS;
 }
 
-void __cdecl ScriptEntCmd_Solid(scr_entref_t entref)
+void ScriptEntCmd_Solid(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-4h]
@@ -1213,7 +1213,7 @@ void __cdecl ScriptEntCmd_Solid(scr_entref_t entref)
     }
 }
 
-void __cdecl ScriptEntCmd_NotSolid(scr_entref_t entref)
+void ScriptEntCmd_NotSolid(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *pSelf; // [esp+0h] [ebp-4h]
@@ -1271,7 +1271,7 @@ const BuiltinMethodDef methods_1[18] =
   { "physicslaunch", &ScriptEntCmd_PhysicsLaunch, 0 }
 }; // idb
 
-void(__cdecl *__cdecl ScriptEnt_GetMethod(const char **pName))(scr_entref_t)
+void(*ScriptEnt_GetMethod(const char **pName))(scr_entref_t)
 {
     uint32_t i; // [esp+18h] [ebp-4h]
 

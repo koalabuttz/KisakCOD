@@ -85,7 +85,7 @@ const /*$26A77A1ABB1A9087FD9203E2FD79C24D*/ MemInfoData meminfoData[37] =
 
 trStatistics_t rendererStats;
 
-void __cdecl CG_CalculateFPS()
+void CG_CalculateFPS()
 {
     DWORD v0; // eax
     int32_t frameTime; // [esp+0h] [ebp-8h]
@@ -97,7 +97,7 @@ void __cdecl CG_CalculateFPS()
     ++fps_index;
 }
 
-double __cdecl CG_DrawFPS(const ScreenPlacement *scrPlace, float y, meminfo_t *meminfo)
+double CG_DrawFPS(const ScreenPlacement *scrPlace, float y, meminfo_t *meminfo)
 {
     float frac; // [esp+20h] [ebp-B8h]
     float v5; // [esp+24h] [ebp-B4h]
@@ -258,12 +258,12 @@ double __cdecl CG_DrawFPS(const ScreenPlacement *scrPlace, float y, meminfo_t *m
     return (float)(CG_CornerDebugPrint(scrPlace, farRight, yb, v10, s, (char*)" phys ms/fr", colorWhite) + yb);    
 }
 
-bool __cdecl CG_Flash(int32_t timeMs)
+bool CG_Flash(int32_t timeMs)
 {
     return (int)Sys_Milliseconds() % (2 * timeMs) < timeMs;
 }
 
-double __cdecl CG_CornerDebugPrint(
+double CG_CornerDebugPrint(
     const ScreenPlacement *sP,
     float posX,
     float posY,
@@ -296,7 +296,7 @@ double __cdecl CG_CornerDebugPrint(
     return (float)((float)yDelta * 0.75f);
 }
 
-double __cdecl CG_CornerDebugPrintCaption(
+double CG_CornerDebugPrintCaption(
     const ScreenPlacement *sP,
     float posX,
     float posY,
@@ -330,7 +330,7 @@ void DrawReplayTime(const ScreenPlacement *scrPlace, float posY)
 }
 #endif
 
-void __cdecl CG_DrawUpperRightDebugInfo(int32_t localClientNum)
+void CG_DrawUpperRightDebugInfo(int32_t localClientNum)
 {
 #ifdef KISAK_MP
     meminfo_t meminfo; // [esp+8h] [ebp-A8h] BYREF
@@ -372,7 +372,7 @@ void __cdecl CG_DrawUpperRightDebugInfo(int32_t localClientNum)
 }
 
 #ifdef KISAK_MP
-float __cdecl CG_DrawSnapshot(int32_t localClientNum, float posY)
+float CG_DrawSnapshot(int32_t localClientNum, float posY)
 {
     char *v2; // eax
     char *v3; // eax
@@ -401,7 +401,7 @@ float __cdecl CG_DrawSnapshot(int32_t localClientNum, float posY)
 }
 #endif
 
-double __cdecl CG_DrawStatmon(const ScreenPlacement *scrPlace, float y, meminfo_t *meminfo)
+double CG_DrawStatmon(const ScreenPlacement *scrPlace, float y, meminfo_t *meminfo)
 {
     char *v3; // eax
     float farRight; // [esp+18h] [ebp-Ch]
@@ -425,7 +425,7 @@ double __cdecl CG_DrawStatmon(const ScreenPlacement *scrPlace, float y, meminfo_
     return y;
 }
 
-void __cdecl CG_DrawPerformanceWarnings()
+void CG_DrawPerformanceWarnings()
 {
     int32_t time; // [esp+20h] [ebp-18h]
     const statmonitor_s *stats; // [esp+24h] [ebp-14h] BYREF
@@ -451,7 +451,7 @@ void __cdecl CG_DrawPerformanceWarnings()
     }
 }
 
-void __cdecl CG_DrawDebugOverlays(int32_t localClientNum)
+void CG_DrawDebugOverlays(int32_t localClientNum)
 {
     if (cg_drawMaterial->current.integer)
     {
@@ -465,7 +465,7 @@ void __cdecl CG_DrawDebugOverlays(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_DrawMaterial(int32_t localClientNum, uint32_t drawMaterialType)
+void CG_DrawMaterial(int32_t localClientNum, uint32_t drawMaterialType)
 {
     int32_t v2; // [esp+18h] [ebp-206Ch]
     int32_t v3; // [esp+1Ch] [ebp-2068h]
@@ -506,7 +506,7 @@ void __cdecl CG_DrawMaterial(int32_t localClientNum, uint32_t drawMaterialType)
     }
 }
 
-void __cdecl CG_DrawDebugPlayerHealth(int32_t localClientNum)
+void CG_DrawDebugPlayerHealth(int32_t localClientNum)
 {
     float w; // [esp+30h] [ebp-2Ch]
     float v2; // [esp+34h] [ebp-28h]
@@ -580,7 +580,7 @@ void __cdecl CG_DrawDebugPlayerHealth(int32_t localClientNum)
         cgMedia.whiteMaterial);
 }
 
-void __cdecl CG_DrawFullScreenDebugOverlays(int32_t localClientNum)
+void CG_DrawFullScreenDebugOverlays(int32_t localClientNum)
 {
     if (cg_drawVersion->current.enabled)
         CG_DrawVersion();
@@ -621,7 +621,7 @@ void __cdecl CG_DrawFullScreenDebugOverlays(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_DrawScriptUsage(const ScreenPlacement *scrPlace)
+void CG_DrawScriptUsage(const ScreenPlacement *scrPlace)
 {
     uint32_t NumScriptVars; // eax
     char *v2; // eax
@@ -677,7 +677,7 @@ void CG_DrawVersion()
         0);
 }
 
-void __cdecl CG_DrawSoundEqOverlay(int32_t localClientNum)
+void CG_DrawSoundEqOverlay(int32_t localClientNum)
 {
     snd_entchannel_info_t *EntChannelName; // eax
     float v2; // [esp+20h] [ebp-738h]
@@ -745,7 +745,7 @@ void __cdecl CG_DrawSoundEqOverlay(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_DrawSoundOverlay(const ScreenPlacement *scrPlace)
+void CG_DrawSoundOverlay(const ScreenPlacement *scrPlace)
 {
     snd_overlay_info_t info[64]; // [esp+20h] [ebp-4430h] BYREF
     float v2; // [esp+4428h] [ebp-28h]
@@ -795,16 +795,16 @@ void __cdecl CG_DrawSoundOverlay(const ScreenPlacement *scrPlace)
     }
 }
 
-void __cdecl CG_DrawFxProfile(int32_t localClientNum)
+void CG_DrawFxProfile(int32_t localClientNum)
 {
     float profilePos[2]; // [esp+0h] [ebp-8h] BYREF
 
     profilePos[0] = 0.0f;
     profilePos[1] = 12.0f;
-    FX_DrawProfile(localClientNum, (void(__cdecl *)(char *))CG_DrawFxText, profilePos);
+    FX_DrawProfile(localClientNum, (void(*)(char *))CG_DrawFxText, profilePos);
 }
 
-void __cdecl CG_DrawFxText(char *text, float *profilePos)
+void CG_DrawFxText(char *text, float *profilePos)
 {
     iassert(text);
 
@@ -824,7 +824,7 @@ void __cdecl CG_DrawFxText(char *text, float *profilePos)
     profilePos[1] = profilePos[1] + 12.0f;
 }
 
-void __cdecl CG_DrawFxMarkProfile(int32_t localClientNum)
+void CG_DrawFxMarkProfile(int32_t localClientNum)
 {
     float profilePos[2]; // [esp+0h] [ebp-8h] BYREF
 

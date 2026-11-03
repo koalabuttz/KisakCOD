@@ -16,17 +16,17 @@ const char MYRANDOMCHARS[63] =
 
 
 
-uint32_t __cdecl R_FontGetRandomLetter(Font_s *font, int seed)
+uint32_t R_FontGetRandomLetter(Font_s *font, int seed)
 {
     return MYRANDOMCHARS[RandWithSeed(&seed) % 0x3E];
 }
 
-void __cdecl TRACK_r_font()
+void TRACK_r_font()
 {
     track_static_alloc_internal(registeredFont, 64, "registeredFont", 18);
 }
 
-Font_s *__cdecl R_RegisterFont(const char *name, int imageTrack)
+Font_s *R_RegisterFont(const char *name, int imageTrack)
 {
     if (IsFastFileLoad())
         return R_RegisterFont_FastFile(name);
@@ -34,12 +34,12 @@ Font_s *__cdecl R_RegisterFont(const char *name, int imageTrack)
         return R_RegisterFont_LoadObj(name, imageTrack);
 }
 
-Font_s *__cdecl R_RegisterFont_FastFile(const char *fontName)
+Font_s *R_RegisterFont_FastFile(const char *fontName)
 {
     return DB_FindXAssetHeader(ASSET_TYPE_FONT, fontName).font;
 }
 
-Font_s *__cdecl R_LoadFont(const char *fontName, int imageTrack)
+Font_s *R_LoadFont(const char *fontName, int imageTrack)
 {
     Material *v3; // eax
     char glowMaterialName[64]; // [esp+0h] [ebp-68h] BYREF
@@ -108,7 +108,7 @@ Font_s *__cdecl R_LoadFont(const char *fontName, int imageTrack)
     }
 }
 
-Font_s *__cdecl R_RegisterFont_LoadObj(const char *fontName, int imageTrack)
+Font_s *R_RegisterFont_LoadObj(const char *fontName, int imageTrack)
 {
     Font_s *font; // [esp+0h] [ebp-8h]
     int fontIndex; // [esp+4h] [ebp-4h]
@@ -136,7 +136,7 @@ Font_s *__cdecl R_RegisterFont_LoadObj(const char *fontName, int imageTrack)
 
 
 
-int __cdecl R_ConsoleTextWidth(const char *textPool, int poolSize, int firstChar, int charCount, Font_s *font)
+int R_ConsoleTextWidth(const char *textPool, int poolSize, int firstChar, int charCount, Font_s *font)
 {
     int indexMask; // [esp+0h] [ebp-18h]
     int parsePos; // [esp+4h] [ebp-14h]
@@ -175,12 +175,12 @@ int __cdecl R_ConsoleTextWidth(const char *textPool, int poolSize, int firstChar
     return width;
 }
 
-void __cdecl R_InitFonts()
+void R_InitFonts()
 {
     iassert( registeredFontCount == 0 );
 }
 
-void __cdecl R_ShutdownFonts()
+void R_ShutdownFonts()
 {
     registeredFontCount = 0;
 }

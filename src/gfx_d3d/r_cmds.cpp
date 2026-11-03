@@ -20,16 +20,16 @@
 
 #include <algorithm>
 
-void __cdecl R_Cmd_ScreenshotJpeg()
+void R_Cmd_ScreenshotJpeg()
 {
 	R_ScreenshotCommand(R_SCREENSHOT_JPG);
 }
-void __cdecl R_Cmd_Screenshot()
+void R_Cmd_Screenshot()
 {
 	R_ScreenshotCommand(R_SCREENSHOT_TGA);
 }
 
-void __cdecl R_Cmd_ApplyPicmip()
+void R_Cmd_ApplyPicmip()
 {
     Material_UpdatePicmipAll();
 }
@@ -47,7 +47,7 @@ cmd_function_s RB_Stats_f_VAR;
 cmd_function_s R_StaticModelCacheStats_f_VAR;
 cmd_function_s R_StaticModelCacheFlush_f_VAR;
 
-void __cdecl R_RegisterCmds()
+void R_RegisterCmds()
 {
 	Cmd_AddCommandInternal("screenshot", R_Cmd_Screenshot, &R_Cmd_Screenshot_VAR);
 	Cmd_AddCommandInternal("screenshotJpeg", R_Cmd_ScreenshotJpeg, &R_Cmd_ScreenshotJpeg_VAR);
@@ -63,7 +63,7 @@ void __cdecl R_RegisterCmds()
 	Cmd_AddCommandInternal("r_smc_flush", R_StaticModelCacheFlush_f, &R_StaticModelCacheFlush_f_VAR);
 }
 
-void __cdecl R_UnregisterCmds()
+void R_UnregisterCmds()
 {
 	Cmd_RemoveCommand("r_applyPicmip");
 	Cmd_RemoveCommand("screenshot");

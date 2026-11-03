@@ -17,7 +17,7 @@
 
 
 #ifdef KISAK_MP
-void __cdecl G_AntiLagRewindClientPos(int gameTime, AntilagClientStore *antilagStore)
+void G_AntiLagRewindClientPos(int gameTime, AntilagClientStore *antilagStore)
 {
     const char *v2; // eax
     float *currentOrigin; // edx
@@ -99,7 +99,7 @@ void __cdecl G_AntiLagRewindClientPos(int gameTime, AntilagClientStore *antilagS
 }
 
 
-void __cdecl G_AntiLag_RestoreClientPos(AntilagClientStore *antilagStore)
+void G_AntiLag_RestoreClientPos(AntilagClientStore *antilagStore)
 {
     const char *v1; // eax
     float *v2; // edx
@@ -146,7 +146,7 @@ void __cdecl G_AntiLag_RestoreClientPos(AntilagClientStore *antilagStore)
 }
 #endif
 
-gentity_s *__cdecl Weapon_Melee(gentity_s *ent, weaponParms *wp, float range, float width, float height, int gametime)
+gentity_s *Weapon_Melee(gentity_s *ent, weaponParms *wp, float range, float width, float height, int gametime)
 {
 #ifdef KISAK_MP
     AntilagClientStore antilagClients; // [esp+Ch] [ebp-348h] BYREF
@@ -161,7 +161,7 @@ gentity_s *__cdecl Weapon_Melee(gentity_s *ent, weaponParms *wp, float range, fl
 #endif
 }
 
-gentity_s *__cdecl Weapon_Melee_internal(gentity_s *ent, weaponParms *wp, float range, float width, float height)
+gentity_s *Weapon_Melee_internal(gentity_s *ent, weaponParms *wp, float range, float width, float height)
 {
     int v6; // eax
     hitLocation_t partGroup; // [esp+4h] [ebp-5Ch]
@@ -246,7 +246,7 @@ gentity_s *__cdecl Weapon_Melee_internal(gentity_s *ent, weaponParms *wp, float 
     return traceEnt;
 }
 
-char __cdecl Melee_Trace(
+char Melee_Trace(
     gentity_s *ent,
     weaponParms *wp,
     int damage,
@@ -312,7 +312,7 @@ char __cdecl Melee_Trace(
     return 0;
 }
 
-gentity_s *__cdecl Weapon_Throw_Grenade(
+gentity_s *Weapon_Throw_Grenade(
     gentity_s *ent,
     uint32_t grenType,
     uint8_t grenModel,
@@ -365,7 +365,7 @@ gentity_s *__cdecl Weapon_Throw_Grenade(
     return m;
 }
 
-gentity_s *__cdecl Weapon_GrenadeLauncher_Fire(
+gentity_s *Weapon_GrenadeLauncher_Fire(
     gentity_s *ent,
     uint32_t grenType,
     uint8_t grenModel,
@@ -402,7 +402,7 @@ gentity_s *__cdecl Weapon_GrenadeLauncher_Fire(
     return m;
 }
 
-gentity_s *__cdecl Weapon_RocketLauncher_Fire(
+gentity_s *Weapon_RocketLauncher_Fire(
     gentity_s *ent,
     uint32_t weaponIndex,
     float spread,
@@ -443,7 +443,7 @@ gentity_s *__cdecl Weapon_RocketLauncher_Fire(
     return m;
 }
 
-void __cdecl gunrandom(float *x, float *y)
+void gunrandom(float *x, float *y)
 {
     float v2; // [esp+8h] [ebp-14h]
     float sinT; // [esp+Ch] [ebp-10h]
@@ -460,7 +460,7 @@ void __cdecl gunrandom(float *x, float *y)
     *y = r * sinT;
 }
 
-bool __cdecl LogAccuracyHit(gentity_s *target, gentity_s *attacker)
+bool LogAccuracyHit(gentity_s *target, gentity_s *attacker)
 {
     iassert(target);
     iassert(attacker);
@@ -485,7 +485,7 @@ bool __cdecl LogAccuracyHit(gentity_s *target, gentity_s *attacker)
     return 0;
 }
 
-void __cdecl FireWeapon(gentity_s *ent, int gametime)
+void FireWeapon(gentity_s *ent, int gametime)
 {
     float offset[3]; // [esp+18h] [ebp-60h] BYREF
     float fAimSpreadAmount; // [esp+24h] [ebp-54h]
@@ -552,7 +552,7 @@ void __cdecl FireWeapon(gentity_s *ent, int gametime)
     }
 }
 
-void __cdecl CalcMuzzlePoints(const gentity_s *ent, weaponParms *wp)
+void CalcMuzzlePoints(const gentity_s *ent, weaponParms *wp)
 {
     float viewang[3]; // [esp+4h] [ebp-Ch] BYREF
 
@@ -577,7 +577,7 @@ void __cdecl CalcMuzzlePoints(const gentity_s *ent, weaponParms *wp)
 #endif
 }
 
-void __cdecl G_UseOffHand(gentity_s *ent)
+void G_UseOffHand(gentity_s *ent)
 {
     weaponParms wp; // [esp+0h] [ebp-40h] BYREF
 
@@ -596,7 +596,7 @@ void __cdecl G_UseOffHand(gentity_s *ent)
         &wp);
 }
 
-void __cdecl FireWeaponMelee(gentity_s *ent, int gametime)
+void FireWeaponMelee(gentity_s *ent, int gametime)
 {
     weaponParms wp; // [esp+10h] [ebp-40h] BYREF
 
@@ -625,7 +625,7 @@ void __cdecl FireWeaponMelee(gentity_s *ent, int gametime)
     }
 }
 
-int __cdecl G_GivePlayerWeapon(playerState_s *pPS, int iWeaponIndex, uint8_t altModelIndex)
+int G_GivePlayerWeapon(playerState_s *pPS, int iWeaponIndex, uint8_t altModelIndex)
 {
     int iCurrIndex; // [esp+0h] [ebp-10h]
     int newOffHandIndex; // [esp+4h] [ebp-Ch]
@@ -700,7 +700,7 @@ int __cdecl G_GivePlayerWeapon(playerState_s *pPS, int iWeaponIndex, uint8_t alt
     }
 }
 
-void __cdecl G_SetupWeaponDef()
+void G_SetupWeaponDef()
 {
     Com_DPrintf(CON_CHANNEL_PLAYERWEAP, "----------------------\n");
     Com_DPrintf(CON_CHANNEL_PLAYERWEAP, "Game: G_SetupWeaponDef\n");
@@ -721,7 +721,7 @@ void __cdecl G_SetupWeaponDef()
     Com_DPrintf(CON_CHANNEL_PLAYERWEAP, "----------------------\n");
 }
 
-uint32_t __cdecl G_GetWeaponIndexForName(const char *name)
+uint32_t G_GetWeaponIndexForName(const char *name)
 {
     if (level.initializing)
         return BG_GetWeaponIndexForName(name, G_RegisterWeapon);
@@ -729,7 +729,7 @@ uint32_t __cdecl G_GetWeaponIndexForName(const char *name)
         return BG_FindWeaponIndexForName(name);
 }
 
-void __cdecl G_SelectWeaponIndex(int clientNum, int iWeaponIndex)
+void G_SelectWeaponIndex(int clientNum, int iWeaponIndex)
 {
 #ifdef KISAK_MP
     SV_GameSendServerCommand(clientNum, SV_CMD_RELIABLE, va("%c %i", 97, iWeaponIndex));
@@ -738,7 +738,7 @@ void __cdecl G_SelectWeaponIndex(int clientNum, int iWeaponIndex)
 #endif
 }
 
-void __cdecl G_SetEquippedOffHand(int clientNum, uint32_t offHandIndex)
+void G_SetEquippedOffHand(int clientNum, uint32_t offHandIndex)
 {
 #ifdef KISAK_MP
     BG_AssertOffhandIndexOrNone(offHandIndex);

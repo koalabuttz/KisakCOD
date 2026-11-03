@@ -20,7 +20,7 @@
 unsigned int g_centInPrevSnapshot[68]{ 0 };
 bool g_clientDirty[MAX_GENTITIES];
 
-void __cdecl CG_ShutdownEntity(int localClientNum, centity_s *cent)
+void CG_ShutdownEntity(int localClientNum, centity_s *cent)
 {
     int oldEType; // r11
     FxEffect *effect; // r4
@@ -66,7 +66,7 @@ void __cdecl CG_ShutdownEntity(int localClientNum, centity_s *cent)
     cent->pose.physObjId = 0;
 }
 
-void __cdecl CG_InitEntity(centity_s *cent)
+void CG_InitEntity(centity_s *cent)
 {
     int eType; // r11
 
@@ -78,7 +78,7 @@ void __cdecl CG_InitEntity(centity_s *cent)
     }
 }
 
-void __cdecl CG_ResetEntity(int localClientNum, centity_s *cent)
+void CG_ResetEntity(int localClientNum, centity_s *cent)
 {
     int eType; // r11
     unsigned __int8 v5; // r11
@@ -174,7 +174,7 @@ void __cdecl CG_ResetEntity(int localClientNum, centity_s *cent)
     }
 }
 
-void __cdecl CG_SetInitialSnapshot(int localClientNum)
+void CG_SetInitialSnapshot(int localClientNum)
 {
     snapshot_s *nextSnap; // r31
     int *p_numEntities; // r28
@@ -241,7 +241,7 @@ void __cdecl CG_SetInitialSnapshot(int localClientNum)
     }
 }
 
-int __cdecl CG_DObjCloneToBuffer(int localClientNum, centity_s *cent, const XAnimTree_s *serverTree)
+int CG_DObjCloneToBuffer(int localClientNum, centity_s *cent, const XAnimTree_s *serverTree)
 {
     int eType; // r11
     int result; // r3
@@ -282,7 +282,7 @@ int __cdecl CG_DObjCloneToBuffer(int localClientNum, centity_s *cent, const XAni
     return result;
 }
 
-void __cdecl CG_FreeTree(XAnimTree_s *tree, centity_s *cent)
+void CG_FreeTree(XAnimTree_s *tree, centity_s *cent)
 {
     int oldEType; // r11
 
@@ -293,7 +293,7 @@ void __cdecl CG_FreeTree(XAnimTree_s *tree, centity_s *cent)
         Com_XAnimFreeSmallTree(tree);
 }
 
-void __cdecl CG_UpdateSnapshotNum(int localClientNum)
+void CG_UpdateSnapshotNum(int localClientNum)
 {
     int v2; // r10
     int n; // [sp+50h] [-20h] BYREF
@@ -319,7 +319,7 @@ void __cdecl CG_UpdateSnapshotNum(int localClientNum)
     }
 }
 
-snapshot_s *__cdecl CG_ReadNextSnapshot(int localClientNum)
+snapshot_s *CG_ReadNextSnapshot(int localClientNum)
 {
     int v2; // r3
     snapshot_s *v3; // r31
@@ -339,7 +339,7 @@ snapshot_s *__cdecl CG_ReadNextSnapshot(int localClientNum)
 }
 
 // Debug function
-void __cdecl CG_CheckSnapshot(int localClientNum, const char *caller)
+void CG_CheckSnapshot(int localClientNum, const char *caller)
 {
     return; // KISAKTODO: Com_GetClientDObj() returning non-zero below for over 0x400?
 
@@ -415,13 +415,13 @@ void __cdecl CG_CheckSnapshot(int localClientNum, const char *caller)
     }
 }
 
-void __cdecl CG_ServerDObjClean(int entnum)
+void CG_ServerDObjClean(int entnum)
 {
     Com_ServerDObjClean(entnum);
     g_clientDirty[entnum] = 1;
 }
 
-void __cdecl CG_SetNextSnap(int localClientNum)
+void CG_SetNextSnap(int localClientNum)
 {
     snapshot_s *snap; // r18
     int *p_numEntities; // r24
@@ -628,7 +628,7 @@ void __cdecl CG_SetNextSnap(int localClientNum)
     CG_CheckSnapshot(localClientNum, "CG_SetNextSnap-post");
 }
 
-void __cdecl CG_ProcessNextSnap(int localClientNum)
+void CG_ProcessNextSnap(int localClientNum)
 {
     unsigned int *v1; // r27
     int v3; // r25
@@ -754,7 +754,7 @@ void __cdecl CG_ProcessNextSnap(int localClientNum)
     }
 }
 
-void __cdecl CG_CreateNextSnap(int localClientNum, double dtime, int readNext)
+void CG_CreateNextSnap(int localClientNum, double dtime, int readNext)
 {
     snapshot_s *nextSnap; // r18
     double value; // fp0
@@ -1039,7 +1039,7 @@ void __cdecl CG_CreateNextSnap(int localClientNum, double dtime, int readNext)
     CG_CheckSnapshot(localClientNum, "CG_CreateNextSnap(post)");
 }
 
-void __cdecl CG_FirstSnapshot(int localClientNum)
+void CG_FirstSnapshot(int localClientNum)
 {
     cg_s *cgameGlob = CG_GetLocalClientGlobals(localClientNum);
 
@@ -1079,7 +1079,7 @@ void __cdecl CG_FirstSnapshot(int localClientNum)
     iassert(cgameGlob->nextSnap->serverTime == G_GetServerSnapTime());
 }
 
-void __cdecl CG_ProcessDemoSnapshots(int localClientNum)
+void CG_ProcessDemoSnapshots(int localClientNum)
 {
     snapshot_s *nextSnap; // r11
 
@@ -1108,7 +1108,7 @@ void __cdecl CG_ProcessDemoSnapshots(int localClientNum)
     }
 }
 
-void __cdecl CG_ProcessSnapshots(int localClientNum)
+void CG_ProcessSnapshots(int localClientNum)
 {
     snapshot_s *snap; // r11
     int serverTime; // r5

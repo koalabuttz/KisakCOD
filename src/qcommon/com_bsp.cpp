@@ -4,7 +4,7 @@
 
 ComWorld comWorld;
 
-char __cdecl Com_CanPrimaryLightAffectPoint(const ComPrimaryLight *light, const float *point)
+char Com_CanPrimaryLightAffectPoint(const ComPrimaryLight *light, const float *point)
 {
     float v3; // [esp+Ch] [ebp-24h]
     float deltaToLight[3]; // [esp+18h] [ebp-18h] BYREF
@@ -43,7 +43,7 @@ char __cdecl Com_CanPrimaryLightAffectPoint(const ComPrimaryLight *light, const 
     return spotDotTimesDist > 0.0 && cosHalfFov * cosHalfFov * distSq <= spotDotTimesDist * spotDotTimesDist;
 }
 
-double __cdecl CosOfSumOfArcCos(float cos0, float cos1)
+double CosOfSumOfArcCos(float cos0, float cos1)
 {
     float v4; // [esp+4h] [ebp-18h]
     float v5; // [esp+10h] [ebp-Ch]
@@ -57,7 +57,7 @@ double __cdecl CosOfSumOfArcCos(float cos0, float cos1)
     return (float)(cos0 * cos1 - v4);
 }
 
-void __cdecl Com_UnloadWorld()
+void Com_UnloadWorld()
 {
     iassert( IsFastFileLoad() );
     if (comWorld.isInUse)

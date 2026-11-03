@@ -15,7 +15,7 @@
 #endif
 
 
-void __cdecl R_StaticModelWriteInfoHeader(int fileHandle)
+void R_StaticModelWriteInfoHeader(int fileHandle)
 {
     char dest[4104]; // [esp+10h] [ebp-1008h] BYREF
 
@@ -27,17 +27,17 @@ void __cdecl R_StaticModelWriteInfoHeader(int fileHandle)
     FS_Write(dest, &dest[strlen(dest) + 1] - &dest[1], fileHandle);
 }
 
-BOOL __cdecl R_StaticModelHasLighting(uint32_t smodelIndex)
+BOOL R_StaticModelHasLighting(uint32_t smodelIndex)
 {
     return rgp.world->dpvs.smodelDrawInsts[smodelIndex].lightingHandle != 0;
 }
 
-int __cdecl R_StaticModelGetMemoryUsageInst()
+int R_StaticModelGetMemoryUsageInst()
 {
     return 76;
 }
 
-int __cdecl R_StaticModelGetMemoryUsage(XModel *model, int *modelCount)
+int R_StaticModelGetMemoryUsage(XModel *model, int *modelCount)
 {
     int cellIndex; // [esp+0h] [ebp-14h]
     GfxAabbTree *tree; // [esp+8h] [ebp-Ch]
@@ -63,7 +63,7 @@ int __cdecl R_StaticModelGetMemoryUsage(XModel *model, int *modelCount)
     return usage;
 }
 
-BOOL __cdecl R_StaticModelCompare(
+BOOL R_StaticModelCompare(
     const GfxStaticModelCombinedInst &smodelInst0,
     const GfxStaticModelCombinedInst &smodelInst1)
 {

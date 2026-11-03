@@ -9,7 +9,7 @@
 #include "q_shared.h" // ARRAY_COUNT
 
 
-static void __cdecl Com_TranslatePoints(float (*points)[64][2], uint32_t pointCount, float *offset)
+static void Com_TranslatePoints(float (*points)[64][2], uint32_t pointCount, float *offset)
 {
     uint32_t pointIdx; // [esp+0h] [ebp-4h]
 
@@ -20,7 +20,7 @@ static void __cdecl Com_TranslatePoints(float (*points)[64][2], uint32_t pointCo
     }
 }
 
-static void __cdecl Com_SwapHullPoints(uint32_t *pointOrder, uint32_t pointIndex0, uint32_t pointIndex1)
+static void Com_SwapHullPoints(uint32_t *pointOrder, uint32_t pointIndex0, uint32_t pointIndex1)
 {
     uint32_t swapCache; // [esp+4h] [ebp-4h]
 
@@ -29,7 +29,7 @@ static void __cdecl Com_SwapHullPoints(uint32_t *pointOrder, uint32_t pointIndex
     pointOrder[pointIndex1] = swapCache;
 }
 
-static void __cdecl Com_InitialHull(
+static void Com_InitialHull(
     const float (*points)[64][2],
     uint32_t *pointOrder,
     uint32_t pointCount,
@@ -73,7 +73,7 @@ static void __cdecl Com_InitialHull(
     }
 }
 
-static uint32_t __cdecl Com_AddPointToHull(
+static uint32_t Com_AddPointToHull(
     uint32_t pointIndex,
     uint32_t newIndex,
     uint32_t *hullOrder,
@@ -89,7 +89,7 @@ static uint32_t __cdecl Com_AddPointToHull(
 }
 
 
-uint32_t __cdecl Com_RecursivelyGrowHull(
+uint32_t Com_RecursivelyGrowHull(
     const float (*points)[64][2],
     uint32_t *pointOrder,
     uint32_t pointCount,
@@ -186,7 +186,7 @@ done_splitting_0:
     );
 }
 
-static uint32_t __cdecl Com_GrowInitialHull(
+static uint32_t Com_GrowInitialHull(
     const float (*points)[64][2],
     uint32_t *pointOrder,
     uint32_t pointCount,
@@ -330,7 +330,7 @@ done_splitting:
     return hullPointCount;
 }
 
-uint32_t __cdecl Com_ConvexHull(float (*points)[2], uint32_t pointCount, float (*hull)[2])
+uint32_t Com_ConvexHull(float (*points)[2], uint32_t pointCount, float (*hull)[2])
 {
     float *v4; // [esp+0h] [ebp-218h]
     float *v5; // [esp+4h] [ebp-214h]
@@ -377,7 +377,7 @@ uint32_t __cdecl Com_ConvexHull(float (*points)[2], uint32_t pointCount, float (
 // Reuses the static Com_TranslatePoints/Com_InitialHull/Com_GrowInitialHull above
 // (which is why this lives here, not in the editor tree). Translates 'points' in
 // place; callers pass a throwaway projection-scratch buffer. Radiant-only.
-uint32_t __cdecl Com_ConvexHullIndices(float (*points)[2], uint32_t pointCount, uint32_t *hullOrder)
+uint32_t Com_ConvexHullIndices(float (*points)[2], uint32_t pointCount, uint32_t *hullOrder)
 {
     uint32_t pointOrder[64];
     float    offset[2];

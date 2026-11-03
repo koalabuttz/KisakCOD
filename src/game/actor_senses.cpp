@@ -68,7 +68,7 @@ int Actor_SightTrace(actor_s *self, const float *start, const float *end, int pa
     return 1;
 }
 
-int __cdecl Actor_CanSeePointFrom(
+int Actor_CanSeePointFrom(
     actor_s *self,
     const float *vStart,
     const float *vEnd,
@@ -103,7 +103,7 @@ int __cdecl Actor_CanSeePointFrom(
         return 0;
 }
 
-int __cdecl Actor_CanSeeEnemyViaClaimedNode(actor_s *self)
+int Actor_CanSeeEnemyViaClaimedNode(actor_s *self)
 {
     pathnode_t *pClaimedNode; // r30
     sentient_s *TargetSentient; // r31
@@ -127,7 +127,7 @@ int __cdecl Actor_CanSeeEnemyViaClaimedNode(actor_s *self)
     return v6;
 }
 
-sentient_s *__cdecl Actor_KnowAboutEnemy(actor_s *self, int hadPath)
+sentient_s *Actor_KnowAboutEnemy(actor_s *self, int hadPath)
 {
     sentient_s *result; // r3
     sentient_s *v5; // r30
@@ -158,7 +158,7 @@ sentient_s *__cdecl Actor_KnowAboutEnemy(actor_s *self, int hadPath)
     return result;
 }
 
-int __cdecl Actor_CanShootFrom(actor_s *self, const float *vTarget, const float *vFrom)
+int Actor_CanShootFrom(actor_s *self, const float *vTarget, const float *vFrom)
 {
     double v6; // fp13
     double v7; // fp12
@@ -198,12 +198,12 @@ int __cdecl Actor_CanShootFrom(actor_s *self, const float *vTarget, const float 
     return v11;
 }
 
-int __cdecl compare_sentient_sort(unsigned int *pe1, unsigned int *pe2)
+int compare_sentient_sort(unsigned int *pe1, unsigned int *pe2)
 {
     return pe2[1] - pe1[1];
 }
 
-void __cdecl Actor_UpdateLastKnownPos(actor_s *self, sentient_s *other)
+void Actor_UpdateLastKnownPos(actor_s *self, sentient_s *other)
 {
     iassert(self);
     iassert(other >= level.sentients && other < level.sentients + MAX_SENTIENTS);
@@ -213,7 +213,7 @@ void __cdecl Actor_UpdateLastKnownPos(actor_s *self, sentient_s *other)
     info->pLastKnownNode = other->pNearestNode;
 }
 
-void __cdecl Actor_UpdateLastEnemySightPos(actor_s *self)
+void Actor_UpdateLastEnemySightPos(actor_s *self)
 {
     const sentient_s *target = Actor_GetTargetSentient(self);
     if (target)
@@ -227,7 +227,7 @@ void __cdecl Actor_UpdateLastEnemySightPos(actor_s *self)
     }
 }
 
-void __cdecl Actor_UpdateEyeInformation(actor_s *self)
+void Actor_UpdateEyeInformation(actor_s *self)
 {
     float tagMat[4][3]; // [esp+2Ch] [ebp-30h] BYREF
 
@@ -268,7 +268,7 @@ void __cdecl Actor_UpdateEyeInformation(actor_s *self)
     }
 }
 
-void __cdecl Actor_GetEyePosition(actor_s *self, float *vEyePosOut)
+void Actor_GetEyePosition(actor_s *self, float *vEyePosOut)
 {
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_senses.cpp", 843, 0, "%s", "self");
@@ -280,7 +280,7 @@ void __cdecl Actor_GetEyePosition(actor_s *self, float *vEyePosOut)
     vEyePosOut[2] = self->eyeInfo.pos[2];
 }
 
-void __cdecl Actor_GetDebugEyePosition(actor_s *self, float *vEyePosOut)
+void Actor_GetDebugEyePosition(actor_s *self, float *vEyePosOut)
 {
     gentity_s *ent; // r8
     int v5; // r9
@@ -315,7 +315,7 @@ void __cdecl Actor_GetDebugEyePosition(actor_s *self, float *vEyePosOut)
     vEyePosOut[2] = ent->r.currentOrigin[2] + (float)56.0;
 }
 
-void __cdecl Actor_GetEyeDirection(actor_s *self, float *vEyeDir)
+void Actor_GetEyeDirection(actor_s *self, float *vEyeDir)
 {
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_senses.cpp", 896, 0, "%s", "self");
@@ -327,7 +327,7 @@ void __cdecl Actor_GetEyeDirection(actor_s *self, float *vEyeDir)
     vEyeDir[2] = self->eyeInfo.dir[2];
 }
 
-void __cdecl Actor_GetEyeOffset(actor_s *self, float *vEyePosOut)
+void Actor_GetEyeOffset(actor_s *self, float *vEyePosOut)
 {
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_senses.cpp", 913, 0, "%s", "self");
@@ -338,7 +338,7 @@ void __cdecl Actor_GetEyeOffset(actor_s *self, float *vEyePosOut)
     vEyePosOut[2] = 64.0;
 }
 
-int __cdecl Actor_GetMuzzleInfo(actor_s *self, float *vOrigin, float *vForward)
+int Actor_GetMuzzleInfo(actor_s *self, float *vOrigin, float *vForward)
 {
     double v7; // fp0
     double v8; // fp13
@@ -387,7 +387,7 @@ int __cdecl Actor_GetMuzzleInfo(actor_s *self, float *vOrigin, float *vForward)
     return 1;
 }
 
-bool __cdecl PointInFovAndRange(
+bool PointInFovAndRange(
     actor_s *self,
     const float *vEyePos,
     const float *vPoint,
@@ -424,7 +424,7 @@ bool __cdecl PointInFovAndRange(
     return result;
 }
 
-int __cdecl Actor_CanSeePointExInternal(
+int Actor_CanSeePointExInternal(
     actor_s *self,
     const float *vPoint,
     double fovDot,
@@ -441,7 +441,7 @@ int __cdecl Actor_CanSeePointExInternal(
     return result;
 }
 
-int __cdecl Actor_CanSeePointEx(
+int Actor_CanSeePointEx(
     actor_s *self,
     const float *vPoint,
     double fovDot,
@@ -462,7 +462,7 @@ int __cdecl Actor_CanSeePointEx(
     return Actor_CanSeePointExInternal(self, vPoint, fovDot, fMaxDistSqrd, ignoreEntityNum, v16);
 }
 
-void __cdecl Actor_UpdateVisCache(actor_s *self, const gentity_s *ent, sentient_info_t *pInfo, bool bVisible)
+void Actor_UpdateVisCache(actor_s *self, const gentity_s *ent, sentient_info_t *pInfo, bool bVisible)
 {
     bool v8; // r31
     int number; // r5
@@ -615,7 +615,7 @@ int Actor_CanSeeEntityEx(actor_s *self, const gentity_s *ent, double fovDot, dou
     return 1;
 }
 
-int __cdecl Actor_CanSeeSentientEx(
+int Actor_CanSeeSentientEx(
     actor_s *self,
     sentient_s *sentient,
     double fovDot,
@@ -640,7 +640,7 @@ int __cdecl Actor_CanSeeSentientEx(
     return Actor_CanSeeEntityEx(self, sentient->ent, fovDot, fMaxDistSqrd);
 }
 
-int __cdecl Actor_CanShootEnemy(actor_s *self)
+int Actor_CanShootEnemy(actor_s *self)
 {
     int result; // r3
     float v3[4]; // [sp+50h] [-40h] BYREF
@@ -659,22 +659,22 @@ int __cdecl Actor_CanShootEnemy(actor_s *self)
     return result;
 }
 
-int __cdecl Actor_CanSeePoint(actor_s *self, const float *vPoint)
+int Actor_CanSeePoint(actor_s *self, const float *vPoint)
 {
     return Actor_CanSeePointEx(self, vPoint, self->fovDot, self->fMaxSightDistSqrd, ENTITYNUM_NONE);
 }
 
-int __cdecl Actor_CanSeeEntityPoint(actor_s *self, const float *vPoint, const gentity_s *ent)
+int Actor_CanSeeEntityPoint(actor_s *self, const float *vPoint, const gentity_s *ent)
 {
     return Actor_CanSeePointEx(self, vPoint, self->fovDot, self->fMaxSightDistSqrd, ent->s.number);
 }
 
-int __cdecl Actor_CanSeeEntity(actor_s *self, const gentity_s *ent)
+int Actor_CanSeeEntity(actor_s *self, const gentity_s *ent)
 {
     return Actor_CanSeeEntityEx(self, ent, self->fovDot, self->fMaxSightDistSqrd);
 }
 
-int __cdecl Actor_CanSeeSentient(actor_s *self, sentient_s *sentient, int iMaxLatency)
+int Actor_CanSeeSentient(actor_s *self, sentient_s *sentient, int iMaxLatency)
 {
     if (self->sentientInfo[sentient - level.sentients].VisCache.iLastUpdateTime
         && iMaxLatency + self->sentientInfo[sentient - level.sentients].VisCache.iLastUpdateTime >= level.time)
@@ -687,7 +687,7 @@ int __cdecl Actor_CanSeeSentient(actor_s *self, sentient_s *sentient, int iMaxLa
     }
 }
 
-int __cdecl Actor_CanSeeEnemy(actor_s *self)
+int Actor_CanSeeEnemy(actor_s *self)
 {
     sentient_s *TargetSentient; // r4
     const gentity_s *v4; // r3
@@ -704,7 +704,7 @@ int __cdecl Actor_CanSeeEnemy(actor_s *self)
     return Actor_CanSeeEntityEx(self, v4, self->fovDot, self->fMaxSightDistSqrd);
 }
 
-int __cdecl Actor_CanSeeEnemyExtended(actor_s *self, int useClaimedNode)
+int Actor_CanSeeEnemyExtended(actor_s *self, int useClaimedNode)
 {
     sentient_s *TargetSentient; // r30
     int iLastVisTime; // r11
@@ -742,7 +742,7 @@ int __cdecl Actor_CanSeeEnemyExtended(actor_s *self, int useClaimedNode)
     }
 }
 
-void __cdecl Actor_UpdateSight(actor_s *self)
+void Actor_UpdateSight(actor_s *self)
 {
     sentient_s *sentient; // r29
     int iTraceCount; // r29
@@ -797,7 +797,7 @@ void __cdecl Actor_UpdateSight(actor_s *self)
 
         if (iCheckCount > 1)
         {
-            qsort(check, iCheckCount, sizeof(sentient_sort_t), (int(__cdecl *)(const void *, const void *))compare_sentient_sort);
+            qsort(check, iCheckCount, sizeof(sentient_sort_t), (int(*)(const void *, const void *))compare_sentient_sort);
         }
     }
 

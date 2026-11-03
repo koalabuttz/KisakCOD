@@ -697,7 +697,7 @@ void Scr_BeginDevScript(int *type, char **savedPos)
 	*type = BUILTIN_DEVELOPER_ONLY;
 }
 
-int __cdecl AddFunction(int func, const char *name)
+int AddFunction(int func, const char *name)
 {
 	int i; // [esp+0h] [ebp-4h]
 
@@ -5605,7 +5605,7 @@ void EmitThreadList(sval_u val)
 	iassert(!scrCompileGlob.in_developer_thread);
 }
 
-void __cdecl ScriptCompile(
+void ScriptCompile(
 	sval_u val,
 	uint32_t fileId,
 	uint32_t scriptId,

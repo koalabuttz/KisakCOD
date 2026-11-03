@@ -58,7 +58,7 @@ const listColumnInfo_t columnInfoWithPing[9] =
   { LCT_PING, 0.1f, "CGAME_SB_PING", 2 }
 }; // idb
 
-void __cdecl UpdateScores(int32_t localClientNum)
+void UpdateScores(int32_t localClientNum)
 {
     cg_s *cgameGlob;
 
@@ -71,12 +71,12 @@ void __cdecl UpdateScores(int32_t localClientNum)
     }
 }
 
-const score_t *__cdecl UI_GetOurClientScore(int32_t localClientNum)
+const score_t *UI_GetOurClientScore(int32_t localClientNum)
 {
     return GetClientScore(localClientNum, CG_GetLocalClientGlobals(localClientNum)->clientNum);
 }
 
-const score_t *__cdecl GetClientScore(int32_t localClientNum, int32_t clientNum)
+const score_t *GetClientScore(int32_t localClientNum, int32_t clientNum)
 {
     int32_t scoreNum; // [esp+4h] [ebp-8h]
     cg_s *cgameGlob;
@@ -94,7 +94,7 @@ const score_t *__cdecl GetClientScore(int32_t localClientNum, int32_t clientNum)
     return 0;
 }
 
-const score_t *__cdecl UI_GetScoreAtRank(int32_t localClientNum, int32_t rank)
+const score_t *UI_GetScoreAtRank(int32_t localClientNum, int32_t rank)
 {
     cg_s *cgameGlob;
 
@@ -109,12 +109,12 @@ const score_t *__cdecl UI_GetScoreAtRank(int32_t localClientNum, int32_t rank)
     return 0;
 }
 
-char *__cdecl CG_GetGametypeDescription(int32_t localClientNum)
+char *CG_GetGametypeDescription(int32_t localClientNum)
 {
     return SEH_LocalizeTextMessage(CG_GetLocalClientGlobals(localClientNum)->objectiveText, "game objective display", LOCMSG_SAFE);
 }
 
-char __cdecl CG_DrawScoreboard_GetTeamColorIndex(int32_t team, int32_t localClientNum)
+char CG_DrawScoreboard_GetTeamColorIndex(int32_t team, int32_t localClientNum)
 {
     cg_s *cgameGlob;
 
@@ -137,7 +137,7 @@ char __cdecl CG_DrawScoreboard_GetTeamColorIndex(int32_t team, int32_t localClie
     return 57;
 }
 
-int32_t __cdecl CG_DrawScoreboard(int32_t localClientNum)
+int32_t CG_DrawScoreboard(int32_t localClientNum)
 {
     const float *fadeColor; // [esp+4h] [ebp-Ch]
     float fade; // [esp+8h] [ebp-8h]
@@ -169,7 +169,7 @@ int32_t __cdecl CG_DrawScoreboard(int32_t localClientNum)
 }
 
 char szServerIPAddress[128];
-char *__cdecl CL_GetServerIPAddress()
+char *CL_GetServerIPAddress()
 {
     __int16 v1; // ax
     clientConnection_t *clc; // [esp+0h] [ebp-4h]
@@ -195,7 +195,7 @@ char *__cdecl CL_GetServerIPAddress()
     return szServerIPAddress;
 }
 
-void __cdecl CG_DrawBackdropServerInfo(int32_t localClientNum, float alpha)
+void CG_DrawBackdropServerInfo(int32_t localClientNum, float alpha)
 {
     int32_t v2; // esi
     double v3; // [esp+28h] [ebp-50h]
@@ -246,14 +246,14 @@ void __cdecl CG_DrawBackdropServerInfo(int32_t localClientNum, float alpha)
     UI_DrawText(scrPlace, serverIP, 0x7FFFFFFF, footerFont, xb, y, 1, 0, fontScale, color, 3);
 }
 
-void __cdecl CG_DrawScoreboard_Backdrop(int32_t localClientNum, float alpha)
+void CG_DrawScoreboard_Backdrop(int32_t localClientNum, float alpha)
 {
     CG_BackdropLeft(localClientNum);
     CG_BackdropTop();
     CG_DrawBackdropServerInfo(localClientNum, alpha);
 }
 
-double __cdecl CG_BackdropLeft(int32_t localClientNum)
+double CG_BackdropLeft(int32_t localClientNum)
 {
     float v3; // [esp+4h] [ebp-14h]
     float v4; // [esp+8h] [ebp-10h]
@@ -268,7 +268,7 @@ double __cdecl CG_BackdropLeft(int32_t localClientNum)
         return (float)0.0;
 }
 
-double __cdecl CG_BackdropTop()
+double CG_BackdropTop()
 {
     float v2; // [esp+4h] [ebp-Ch]
     float v3; // [esp+8h] [ebp-8h]
@@ -281,12 +281,12 @@ double __cdecl CG_BackdropTop()
         return (float)0.0;
 }
 
-float __cdecl CG_BannerScoreboardScaleMultiplier()
+float CG_BannerScoreboardScaleMultiplier()
 {
     return 1.0;
 }
 
-void __cdecl CG_DrawScoreboard_ScoresList(int32_t localClientNum, float alpha)
+void CG_DrawScoreboard_ScoresList(int32_t localClientNum, float alpha)
 {
     float v2; // [esp+10h] [ebp-54h]
     double v3; // [esp+14h] [ebp-50h]
@@ -366,7 +366,7 @@ void __cdecl CG_DrawScoreboard_ScoresList(int32_t localClientNum, float alpha)
     }
 }
 
-double __cdecl CG_DrawScoreboard_ListColumnHeaders(
+double CG_DrawScoreboard_ListColumnHeaders(
     int32_t localClientNum,
     const float *color,
     float y,
@@ -411,7 +411,7 @@ double __cdecl CG_DrawScoreboard_ListColumnHeaders(
     return (float)(y + h + 4.0);
 }
 
-void __cdecl CG_GetScoreboardInfo(const listColumnInfo_t **colInfo, int32_t *numFields)
+void CG_GetScoreboardInfo(const listColumnInfo_t **colInfo, int32_t *numFields)
 {
     if (cg_scoreboardPingText->current.enabled)
     {
@@ -425,7 +425,7 @@ void __cdecl CG_GetScoreboardInfo(const listColumnInfo_t **colInfo, int32_t *num
     }
 }
 
-int32_t __cdecl CG_ScoreboardTotalLines(int32_t localClientNum)
+int32_t CG_ScoreboardTotalLines(int32_t localClientNum)
 {
     int32_t total; // [esp+4h] [ebp-4h]
     cg_s *cgameGlob;
@@ -444,7 +444,7 @@ int32_t __cdecl CG_ScoreboardTotalLines(int32_t localClientNum)
     return total;
 }
 
-double __cdecl CG_DrawTeamOfClientScore(
+double CG_DrawTeamOfClientScore(
     int32_t localClientNum,
     const float *color,
     float y,
@@ -499,7 +499,7 @@ double __cdecl CG_DrawTeamOfClientScore(
     return ya;
 }
 
-int32_t __cdecl CG_CheckDrawScoreboardLine(int32_t localClientNum, int32_t *drawLine, float y, float lineHeight)
+int32_t CG_CheckDrawScoreboardLine(int32_t localClientNum, int32_t *drawLine, float y, float lineHeight)
 {
     float value; // [esp+8h] [ebp-8h]
 
@@ -531,7 +531,7 @@ int32_t __cdecl CG_CheckDrawScoreboardLine(int32_t localClientNum, int32_t *draw
     }
 }
 
-double __cdecl CG_DrawScoreboard_ListBanner(
+double CG_DrawScoreboard_ListBanner(
     int32_t localClientNum,
     const float *color,
     float y,
@@ -628,7 +628,7 @@ double __cdecl CG_DrawScoreboard_ListBanner(
     return (float)(y + h + 4.0);
 }
 
-double __cdecl CG_DrawClientScore(
+double CG_DrawClientScore(
     int32_t localClientNum,
     const float *color,
     float y,
@@ -862,7 +862,7 @@ double __cdecl CG_DrawClientScore(
     return (float)(CG_BannerScoreboardScaleMultiplier() * v14 + y);
 }
 
-double __cdecl CalcXAdj(int32_t align, float maxw, float w)
+double CalcXAdj(int32_t align, float maxw, float w)
 {
     if (align == 1)
     {
@@ -880,7 +880,7 @@ double __cdecl CalcXAdj(int32_t align, float maxw, float w)
     }
 }
 
-void __cdecl DrawListString(
+void DrawListString(
     int32_t localClientNum,
     char *string,
     float x,
@@ -928,7 +928,7 @@ void __cdecl DrawListString(
     }
 }
 
-void __cdecl CG_DrawClientPing(int32_t localClientNum, int32_t ping, float x, float y, float maxWidth, float maxHeight)
+void CG_DrawClientPing(int32_t localClientNum, int32_t ping, float x, float y, float maxWidth, float maxHeight)
 {
     float v6; // [esp+20h] [ebp-74h]
     int32_t v7; // [esp+30h] [ebp-64h]
@@ -989,7 +989,7 @@ void __cdecl CG_DrawClientPing(int32_t localClientNum, int32_t ping, float x, fl
     }
 }
 
-void __cdecl CG_DrawScrollbar(int32_t localClientNum, const float *color, float top)
+void CG_DrawScrollbar(int32_t localClientNum, const float *color, float top)
 {
     float v3; // [esp+28h] [ebp-44h]
     float v4; // [esp+2Ch] [ebp-40h]
@@ -1102,7 +1102,7 @@ void __cdecl CG_DrawScrollbar(int32_t localClientNum, const float *color, float 
     }
 }
 
-void __cdecl CenterViewOnClient(int32_t localClientNum)
+void CenterViewOnClient(int32_t localClientNum)
 {
     double v1; // [esp+0h] [ebp-54h]
     double v2; // [esp+8h] [ebp-4Ch]
@@ -1153,12 +1153,12 @@ void __cdecl CenterViewOnClient(int32_t localClientNum)
     }
 }
 
-int32_t __cdecl CG_IsScoreboardDisplayed(int32_t localClientNum)
+int32_t CG_IsScoreboardDisplayed(int32_t localClientNum)
 {
     return CG_GetLocalClientGlobals(localClientNum)->showScores;
 }
 
-void __cdecl CG_ScrollScoreboardUp(cg_s *cgameGlob)
+void CG_ScrollScoreboardUp(cg_s *cgameGlob)
 {
     if (cgameGlob->scoresTop > 1)
     {
@@ -1168,7 +1168,7 @@ void __cdecl CG_ScrollScoreboardUp(cg_s *cgameGlob)
     }
 }
 
-void __cdecl CG_ScrollScoreboardDown(cg_s *cgameGlob)
+void CG_ScrollScoreboardDown(cg_s *cgameGlob)
 {
     int32_t totalLines; // [esp+0h] [ebp-4h]
 
@@ -1181,7 +1181,7 @@ void __cdecl CG_ScrollScoreboardDown(cg_s *cgameGlob)
     }
 }
 
-void __cdecl CG_RegisterScoreboardDvars()
+void CG_RegisterScoreboardDvars()
 {
     DvarLimits b; // [esp+8h] [ebp-10h]
     DvarLimits ba; // [esp+8h] [ebp-10h]
@@ -1300,7 +1300,7 @@ void __cdecl CG_RegisterScoreboardDvars()
     cg_scoreboardRankFontScale = Dvar_RegisterFloat("cg_scoreboardRankFontScale", 0.25f, bf, DVAR_NOFLAG, "Scale of rank font");
 }
 
-void __cdecl CG_RegisterScoreboardGraphics()
+void CG_RegisterScoreboardGraphics()
 {
     Material_RegisterHandle("white", IMAGE_TRACK_HUD);
     Material_RegisterHandle("white", IMAGE_TRACK_HUD);
@@ -1316,7 +1316,7 @@ void __cdecl CG_RegisterScoreboardGraphics()
     Material_RegisterHandle("voice_off", IMAGE_TRACK_HUD);
 }
 
-bool __cdecl Scoreboard_HandleInput(int32_t localClientNum, int32_t key)
+bool Scoreboard_HandleInput(int32_t localClientNum, int32_t key)
 {
     bool result; // al
 

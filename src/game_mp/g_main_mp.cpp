@@ -125,7 +125,7 @@ const char *g_entinfoNames[3] =
     NULL
 };
 
-void __cdecl TRACK_g_main()
+void TRACK_g_main()
 {
     track_static_alloc_internal(&level, 11884, "level", 9);
     track_static_alloc_internal(g_entities, 643072, "g_entities", 9);
@@ -134,52 +134,52 @@ void __cdecl TRACK_g_main()
     track_static_alloc_internal(g_entinfoNames, 12, "g_entinfoNames", 0);
 }
 
-int32_t __cdecl G_GetSavePersist()
+int32_t G_GetSavePersist()
 {
     return level.savepersist;
 }
 
-void __cdecl G_SetSavePersist(int32_t savepersist)
+void G_SetSavePersist(int32_t savepersist)
 {
     level.savepersist = savepersist;
 }
 
-double __cdecl G_GetFogOpaqueDistSqrd()
+double G_GetFogOpaqueDistSqrd()
 {
     return level.fFogOpaqueDistSqrd;
 }
 
-int32_t __cdecl G_GetClientScore(int32_t clientNum)
+int32_t G_GetClientScore(int32_t clientNum)
 {
     return level.clients[clientNum].sess.score;
 }
 
-int32_t __cdecl G_GetClientArchiveTime(int32_t clientNum)
+int32_t G_GetClientArchiveTime(int32_t clientNum)
 {
     return level.clients[clientNum].sess.archiveTime;
 }
 
-void __cdecl G_SetClientArchiveTime(int32_t clientNum, int32_t time)
+void G_SetClientArchiveTime(int32_t clientNum, int32_t time)
 {
     level.clients[clientNum].sess.archiveTime = time;
 }
 
-clientState_s *__cdecl G_GetClientState(int32_t clientNum)
+clientState_s *G_GetClientState(int32_t clientNum)
 {
     return &level.clients[clientNum].sess.cs;
 }
 
-gclient_s *__cdecl G_GetPlayerState(int32_t clientNum)
+gclient_s *G_GetPlayerState(int32_t clientNum)
 {
     return &level.clients[clientNum];
 }
 
-int32_t __cdecl G_GetClientSize()
+int32_t G_GetClientSize()
 {
     return 12676;
 }
 
-void __cdecl G_FreeEntities()
+void G_FreeEntities()
 {
     gentity_s *e; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
@@ -204,12 +204,12 @@ void __cdecl G_FreeEntities()
     level.lastFreeEnt = 0;
 }
 
-bool __cdecl G_ExitAfterConnectPaths()
+bool G_ExitAfterConnectPaths()
 {
     return 0;
 }
 
-int32_t __cdecl G_IsServerGameSystem(int32_t clientNum)
+int32_t G_IsServerGameSystem(int32_t clientNum)
 {
     if (!g_debugPlayerAnimScript)
         return 0;
@@ -221,7 +221,7 @@ int32_t __cdecl G_IsServerGameSystem(int32_t clientNum)
     return 1;
 }
 
-void __cdecl G_InitGame(int32_t levelTime, int32_t randomSeed, int32_t restart, int32_t savepersist)
+void G_InitGame(int32_t levelTime, int32_t randomSeed, int32_t restart, int32_t savepersist)
 {
     com_parse_mark_t *v4; // edx
     char serverinfo[1028]; // [esp+4h] [ebp-810h] BYREF
@@ -251,12 +251,12 @@ void __cdecl G_InitGame(int32_t levelTime, int32_t randomSeed, int32_t restart, 
     if (!Dvar_GetBool("sv_cheats") && !restart)
         Dvar_SetCheatState();
     G_ProcessIPBans();
-    level_bgs.GetXModel = (XModel * (__cdecl *)(const char *))SV_XModelGet;
-    level_bgs.CreateDObj = (void(__cdecl *)(DObjModel_s *, uint16_t, XAnimTree_s *, int, int, clientInfo_t *))G_CreateDObj;
+    level_bgs.GetXModel = (XModel * (*)(const char *))SV_XModelGet;
+    level_bgs.CreateDObj = (void(*)(DObjModel_s *, uint16_t, XAnimTree_s *, int, int, clientInfo_t *))G_CreateDObj;
     level_bgs.AttachWeapon = 0;
     level_bgs.GetDObj = G_GetDObj;
     level_bgs.SafeDObjFree = G_SafeDObjFree;
-    level_bgs.AllocXAnim = (void *(__cdecl *)(int))Hunk_AllocXAnimServer;
+    level_bgs.AllocXAnim = (void *(*)(int))Hunk_AllocXAnimServer;
     level_bgs.anim_user = 1;
     if (*(_BYTE *)g_log->current.integer)
     {
@@ -290,7 +290,7 @@ void __cdecl G_InitGame(int32_t levelTime, int32_t randomSeed, int32_t restart, 
         v4->backup_lines = 0;
         v4->backup_text = 0;
     }
-    Mantle_CreateAnims((void *(__cdecl *)(int))Hunk_AllocXAnimServer);
+    Mantle_CreateAnims((void *(*)(int))Hunk_AllocXAnimServer);
 
     iassert(bgs == NULL);
     bgs = &level_bgs;
@@ -750,7 +750,7 @@ const dvar_s *G_RegisterDvars()
     return result;
 }
 
-void __cdecl G_CreateDObj(
+void G_CreateDObj(
     DObjModel_s *dobjModels,
     uint16_t numModels,
     XAnimTree_s *tree,
@@ -768,7 +768,7 @@ void __cdecl G_CreateDObj(
     Com_ServerDObjCreate(dobjModels, numModels, tree, handle);
 }
 
-DObj_s *__cdecl G_GetDObj(uint32_t handle, int32_t unusedLocalClientNum)
+DObj_s *G_GetDObj(uint32_t handle, int32_t unusedLocalClientNum)
 {
     if (unusedLocalClientNum != -1)
         MyAssertHandler(
@@ -784,9 +784,9 @@ DObj_s *__cdecl G_GetDObj(uint32_t handle, int32_t unusedLocalClientNum)
 void G_LoadAnimTreeInstances()
 {
     for (int i = 0; i < 64; ++i)
-        level_bgs.clientinfo[i].pXAnimTree = XAnimCreateTree(level_bgs.generic_human.tree.anims, (void *(__cdecl *)(int))Hunk_AllocXAnimServer);
+        level_bgs.clientinfo[i].pXAnimTree = XAnimCreateTree(level_bgs.generic_human.tree.anims, (void *(*)(int))Hunk_AllocXAnimServer);
     for (int i = 0; i < 8; ++i)
-        g_scr_data.playerCorpseInfo[i].tree = XAnimCreateTree(level_bgs.generic_human.tree.anims, (void *(__cdecl *)(int))Hunk_AllocXAnimServer);
+        g_scr_data.playerCorpseInfo[i].tree = XAnimCreateTree(level_bgs.generic_human.tree.anims, (void *(*)(int))Hunk_AllocXAnimServer);
 }
 
 void G_PrintAllFastFileErrors()
@@ -798,7 +798,7 @@ void G_PrintAllFastFileErrors()
     G_PrintFastFileErrors(sv_mapname->current.string);
 }
 
-void __cdecl G_PrintFastFileErrors(const char *fastfile)
+void G_PrintFastFileErrors(const char *fastfile)
 {
     RawFile *rawfile; // [esp+4h] [ebp-4h]
 
@@ -814,7 +814,7 @@ void __cdecl G_PrintFastFileErrors(const char *fastfile)
     }
 }
 
-void __cdecl G_ShutdownGame(int32_t freeScripts)
+void G_ShutdownGame(int32_t freeScripts)
 {
     int32_t file; // [esp+0h] [ebp-4h]
 
@@ -881,7 +881,7 @@ int32_t G_FreeAnimTreeInstances()
     return result;
 }
 
-void __cdecl SendScoreboardMessageToAllIntermissionClients()
+void SendScoreboardMessageToAllIntermissionClients()
 {
     int32_t i; // [esp+4h] [ebp-4h]
 
@@ -896,7 +896,7 @@ void __cdecl SendScoreboardMessageToAllIntermissionClients()
     }
 }
 
-void __cdecl CalculateRanks()
+void CalculateRanks()
 {
     int32_t i; // [esp+0h] [ebp-4h]
 
@@ -911,11 +911,11 @@ void __cdecl CalculateRanks()
                 ++level.numVotingClients;
         }
     }
-    qsort(level.sortedClients, level.numConnectedClients, 4u, (int(__cdecl *)(const void *, const void *))SortRanks);
+    qsort(level.sortedClients, level.numConnectedClients, 4u, (int(*)(const void *, const void *))SortRanks);
     level.bUpdateScoresForIntermission = 1;
 }
 
-int32_t __cdecl SortRanks(uint32_t *a, uint32_t *b)
+int32_t SortRanks(uint32_t *a, uint32_t *b)
 {
     gclient_s *cb; // [esp+0h] [ebp-8h]
     gclient_s *ca; // [esp+4h] [ebp-4h]
@@ -961,7 +961,7 @@ int32_t __cdecl SortRanks(uint32_t *a, uint32_t *b)
     }
 }
 
-void __cdecl ExitLevel()
+void ExitLevel()
 {
     int32_t i; // [esp+4h] [ebp-4h]
     int32_t ia; // [esp+4h] [ebp-4h]
@@ -1005,7 +1005,7 @@ void G_LogPrintf(const char *fmt, ...)
     }
 }
 
-void __cdecl CheckVote()
+void CheckVote()
 {
     const char *v0; // eax
     const char *v1; // eax
@@ -1051,7 +1051,7 @@ void __cdecl CheckVote()
     }
 }
 
-void __cdecl G_UpdateObjectiveToClients()
+void G_UpdateObjectiveToClients()
 {
     objective_t *obj; // [esp+8h] [ebp-18h]
     int32_t team; // [esp+Ch] [ebp-14h]
@@ -1081,7 +1081,7 @@ void __cdecl G_UpdateObjectiveToClients()
     }
 }
 
-void __cdecl G_UpdateHudElemsToClients()
+void G_UpdateHudElemsToClients()
 {
     gentity_s *ent; // [esp+0h] [ebp-8h]
     int32_t clientNum; // [esp+4h] [ebp-4h]
@@ -1098,9 +1098,9 @@ void __cdecl G_UpdateHudElemsToClients()
     }
 }
 
-void __cdecl G_RunThink(gentity_s *ent)
+void G_RunThink(gentity_s *ent)
 {
-    void(__cdecl * think)(gentity_s *); // [esp+0h] [ebp-8h]
+    void(* think)(gentity_s *); // [esp+0h] [ebp-8h]
     int32_t thinktime; // [esp+4h] [ebp-4h]
 
     thinktime = ent->nextthink;
@@ -1114,7 +1114,7 @@ void __cdecl G_RunThink(gentity_s *ent)
     }
 }
 
-void __cdecl DebugDumpAnims()
+void DebugDumpAnims()
 {
     if (g_dumpAnims->current.integer >= 0)
     {
@@ -1124,18 +1124,18 @@ void __cdecl DebugDumpAnims()
     }
 }
 
-void __cdecl G_XAnimUpdateEnt(gentity_s *ent)
+void G_XAnimUpdateEnt(gentity_s *ent)
 {
     while (ent->r.inuse && (ent->flags & 0x2000) == 0 && G_DObjUpdateServerTime(ent, 1))
         Scr_RunCurrentThreads();
 }
 
-void __cdecl TeamplayInfoMessage(gentity_s *ent)
+void TeamplayInfoMessage(gentity_s *ent)
 {
     ent->client->ps.stats[STAT_IDENT_CLIENT_NUM] = -1;
 }
 
-void __cdecl CheckTeamStatus()
+void CheckTeamStatus()
 {
     gentity_s *ent; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
@@ -1155,7 +1155,7 @@ void __cdecl CheckTeamStatus()
     }
 }
 
-void __cdecl G_RunFrame(int32_t levelTime)
+void G_RunFrame(int32_t levelTime)
 {
     trigger_info_t *v1; // ecx
     float dtime; // [esp+4h] [ebp-530h]
@@ -1351,7 +1351,7 @@ void __cdecl G_RunFrame(int32_t levelTime)
     ShowEntityInfo();
 }
 
-void __cdecl G_ClientDoPerFrameNotifies(gentity_s *ent)
+void G_ClientDoPerFrameNotifies(gentity_s *ent)
 {
     WeaponDef *WeaponDef; // eax
     bool v2; // al
@@ -1393,7 +1393,7 @@ void __cdecl G_ClientDoPerFrameNotifies(gentity_s *ent)
     client->previouslySprinting = DoPerFrameNotify(ent, IsSprinting, previouslySprinting, sprint_begin, sprint_end);
 }
 
-bool __cdecl DoPerFrameNotify(
+bool DoPerFrameNotify(
     gentity_s *ent,
     bool isCurrently,
     bool wasPreviously,
@@ -1462,7 +1462,7 @@ const dvar_s *ShowEntityInfo()
 #endif
 }
 
-void __cdecl ShowEntityInfo_Items(gentity_s *ent)
+void ShowEntityInfo_Items(gentity_s *ent)
 {
     WeaponDef *weapDef; // [esp+14h] [ebp-18h]
     char *text; // [esp+18h] [ebp-14h]
@@ -1491,7 +1491,7 @@ void __cdecl ShowEntityInfo_Items(gentity_s *ent)
     }
 }
 
-void __cdecl G_RunFrameForEntity(gentity_s *ent)
+void G_RunFrameForEntity(gentity_s *ent)
 {
 
     iassert(ent->r.inuse);
@@ -1571,7 +1571,7 @@ void __cdecl G_RunFrameForEntity(gentity_s *ent)
     }
 }
 
-void __cdecl G_TraceCapsule(
+void G_TraceCapsule(
     trace_t *results,
     const float *start,
     const float *mins,
@@ -1586,7 +1586,7 @@ void __cdecl G_TraceCapsule(
     SV_Trace(results, (float*)start, (float *)mins, (float *)maxs, (float *)end, &ignoreEntParams, contentmask, 0, 0, 0);
 }
 
-int32_t __cdecl G_TraceCapsuleComplete(
+int32_t G_TraceCapsuleComplete(
     float *start,
     float *mins,
     float *maxs,
@@ -1597,7 +1597,7 @@ int32_t __cdecl G_TraceCapsuleComplete(
     return SV_TracePassed(start, mins, maxs, end, passEntityNum, ENTITYNUM_NONE, contentmask, 0, 0, 0);
 }
 
-void __cdecl G_LocationalTrace(
+void G_LocationalTrace(
     trace_t *results,
     float *start,
     float *end,
@@ -1621,7 +1621,7 @@ void __cdecl G_LocationalTrace(
         1);
 }
 
-void __cdecl G_LocationalTraceAllowChildren(
+void G_LocationalTraceAllowChildren(
     trace_t *results,
     float *start,
     float *end,
@@ -1646,7 +1646,7 @@ void __cdecl G_LocationalTraceAllowChildren(
         1);
 }
 
-int32_t __cdecl G_LocationalTracePassed(
+int32_t G_LocationalTracePassed(
     float *start,
     float *end,
     int32_t passEntityNum,
@@ -1667,12 +1667,12 @@ int32_t __cdecl G_LocationalTracePassed(
         1);
 }
 
-void __cdecl G_SightTrace(int32_t *hitNum, float *start, float *end, int32_t passEntityNum, int32_t contentmask)
+void G_SightTrace(int32_t *hitNum, float *start, float *end, int32_t passEntityNum, int32_t contentmask)
 {
     SV_SightTrace(hitNum, start, (float *)vec3_origin, (float *)vec3_origin, end, passEntityNum, ENTITYNUM_NONE, contentmask);
 }
 
-void __cdecl G_AddDebugString(const float *xyz, const float *color, float scale, const char *text, int32_t duration)
+void G_AddDebugString(const float *xyz, const float *color, float scale, const char *text, int32_t duration)
 {
     // Debug text only ever feeds the client's draw list; a dedicated server has
     // no renderer to receive it.
@@ -1681,7 +1681,7 @@ void __cdecl G_AddDebugString(const float *xyz, const float *color, float scale,
 #endif
 }
 
-bool __cdecl OnSameTeam(struct gentity_s *ent1, struct gentity_s *ent2)
+bool OnSameTeam(struct gentity_s *ent1, struct gentity_s *ent2)
 {
     if (!ent1->client || !ent2->client)
         return 0;

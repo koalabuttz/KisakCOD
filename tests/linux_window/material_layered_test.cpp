@@ -19,20 +19,20 @@ bool Guards(){for(auto a:allocations)for(size_t i=0;i<32;++i)if(a.data[a.size+i]
 }
 void Com_PrintError(int,const char *,...) {}
 void MyAssertHandler(const char *,int,int,const char *,...){throw std::bad_alloc();}
-uint8_t *__cdecl Material_Alloc(uint32_t size){
+uint8_t *Material_Alloc(uint32_t size){
  ++allocCalls;if(rejectAllocation)throw std::bad_alloc();if(nullAllocation)return nullptr;
  void *p=nullptr;if(posix_memalign(&p,32,size+32))throw std::bad_alloc();
  std::memset(p,0xcd,size);std::memset(static_cast<uint8_t*>(p)+size,0xa5,32);
  allocations.push_back({static_cast<uint8_t*>(p),size});return static_cast<uint8_t*>(p);
 }
-uint32_t __cdecl R_HashString(const char *){return tint;}
-char __cdecl Material_HasConstant(const Material *m,uint32_t hash){for(unsigned i=0;i<m->constantCount;++i)if(m->constantTable[i].nameHash==hash)return 1;return 0;}
-uint32_t __cdecl Material_CreateLayeredStateBitsTable(const Material **,uint32_t,const MaterialTechniqueSet *,uint8_t *entries,uint32_t (*)[2]){++stateCalls;std::memset(entries,255,TECHNIQUE_COUNT);return 0;}
-void __cdecl Material_SetStateBits(Material *m,uint32_t (*)[2],uint32_t count){m->stateBitsCount=count;}
-void __cdecl Material_AppendCharToConstName(char *name,char c){for(int i=0;i<12;++i)if(!name[i]){name[i]=c;if(i+1<12)name[i+1]=0;return;}}
-int __cdecl CompareHashedMaterialTextures(_DWORD *a,_DWORD *b){return *a<*b?-1:*a>*b?1:0;}
-void __cdecl Material_SetMaterialDrawRegion(Material *){}
-char __cdecl Material_Validate(const Material *){++validateCalls;return 1;}
+uint32_t R_HashString(const char *){return tint;}
+char Material_HasConstant(const Material *m,uint32_t hash){for(unsigned i=0;i<m->constantCount;++i)if(m->constantTable[i].nameHash==hash)return 1;return 0;}
+uint32_t Material_CreateLayeredStateBitsTable(const Material **,uint32_t,const MaterialTechniqueSet *,uint8_t *entries,uint32_t (*)[2]){++stateCalls;std::memset(entries,255,TECHNIQUE_COUNT);return 0;}
+void Material_SetStateBits(Material *m,uint32_t (*)[2],uint32_t count){m->stateBitsCount=count;}
+void Material_AppendCharToConstName(char *name,char c){for(int i=0;i<12;++i)if(!name[i]){name[i]=c;if(i+1<12)name[i+1]=0;return;}}
+int CompareHashedMaterialTextures(_DWORD *a,_DWORD *b){return *a<*b?-1:*a>*b?1:0;}
+void Material_SetMaterialDrawRegion(Material *){}
+char Material_Validate(const Material *){++validateCalls;return 1;}
 int main(int argc,char **argv){
  const bool baseline=argc>1 && !std::strcmp(argv[1],"--baseline");
  MaterialTechniqueSet tech{};Material source{};source.techniqueSet=&tech;

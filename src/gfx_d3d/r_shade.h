@@ -13,68 +13,68 @@ union GfxShaderConstantState // sizeof=0x8
     unsigned __int64 packed;
 };
 
-int __cdecl R_ReserveIndexData(GfxCmdBufPrimState *state, int triCount);
-int __cdecl R_SetVertexData(GfxCmdBufState *state, const void *data, int vertexCount, int stride);
-void __cdecl R_ChangeObjectPlacement(GfxCmdBufSourceState *source, const GfxScaledPlacement *placement);
-int __cdecl R_SetIndexData(GfxCmdBufPrimState *state, uint8_t *indices, int triCount);
-void __cdecl R_SetupPassPerPrimArgs(GfxCmdBufContext context);
-void __cdecl R_SetVertexShaderConstantFromCode(GfxCmdBufContext context, const MaterialShaderArgument *routingData);
-void __cdecl R_HW_SetVertexShaderConstant(__int64 device, __int64 data);
-float *__cdecl R_GetCodeConstant(GfxCmdBufContext context, uint32_t constant);
-char __cdecl R_IsVertexShaderConstantUpToDate(GfxCmdBufContext context, const MaterialShaderArgument *routingData);
-char __cdecl R_IsShaderMatrixUpToDate(
+int R_ReserveIndexData(GfxCmdBufPrimState *state, int triCount);
+int R_SetVertexData(GfxCmdBufState *state, const void *data, int vertexCount, int stride);
+void R_ChangeObjectPlacement(GfxCmdBufSourceState *source, const GfxScaledPlacement *placement);
+int R_SetIndexData(GfxCmdBufPrimState *state, uint8_t *indices, int triCount);
+void R_SetupPassPerPrimArgs(GfxCmdBufContext context);
+void R_SetVertexShaderConstantFromCode(GfxCmdBufContext context, const MaterialShaderArgument *routingData);
+void R_HW_SetVertexShaderConstant(__int64 device, __int64 data);
+float *R_GetCodeConstant(GfxCmdBufContext context, uint32_t constant);
+char R_IsVertexShaderConstantUpToDate(GfxCmdBufContext context, const MaterialShaderArgument *routingData);
+char R_IsShaderMatrixUpToDate(
     const GfxCmdBufSourceState *source,
     GfxShaderConstantState *constant,
     const MaterialShaderArgument *routingData);
-char __cdecl R_IsShaderConstantUpToDate(
+char R_IsShaderConstantUpToDate(
     const GfxCmdBufSourceState *source,
     GfxShaderConstantState *constant,
     const MaterialShaderArgument *routingData);
-void __cdecl R_SetupPassPerObjectArgs(GfxCmdBufContext context);
-void __cdecl R_SetPixelShaderConstantFromLiteral(GfxCmdBufState *state, uint32_t dest, const float *literal);
-void __cdecl R_HW_SetPixelShaderConstant(
+void R_SetupPassPerObjectArgs(GfxCmdBufContext context);
+void R_SetPixelShaderConstantFromLiteral(GfxCmdBufState *state, uint32_t dest, const float *literal);
+void R_HW_SetPixelShaderConstant(
     IDirect3DDevice9 *device,
     uint32_t dest,
     const float *data,
     uint32_t rowCount);
-int __cdecl R_IsPixelShaderConstantUpToDate(GfxCmdBufContext context, const MaterialShaderArgument *routingData);
-void __cdecl R_SetPixelShaderConstantFromCode(GfxCmdBufContext context, const MaterialShaderArgument *routingData);
-void __cdecl R_SetupPassCriticalPixelShaderArgs(GfxCmdBufContext context);
-void __cdecl R_SetupPassVertexShaderArgs(GfxCmdBufContext context);
-void __cdecl R_OverrideImage(GfxImage **image, const MaterialTextureDef *texdef);
-void __cdecl R_SetPixelShader(GfxCmdBufState *state, const MaterialPixelShader *pixelShader);
-void __cdecl R_SetVertexShader(GfxCmdBufState *state, const MaterialVertexShader *vertexShader);
-void __cdecl R_UpdateVertexDecl(GfxCmdBufState *state);
-void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex);
-void __cdecl R_SetState(GfxCmdBufState *state, uint32_t *stateBits);
-void __cdecl R_SetVertexShaderConstantFromLiteral(GfxCmdBufState *state, uint32_t dest, const float *literal);
-const MaterialTextureDef *__cdecl R_SetPixelSamplerFromMaterial(
+int R_IsPixelShaderConstantUpToDate(GfxCmdBufContext context, const MaterialShaderArgument *routingData);
+void R_SetPixelShaderConstantFromCode(GfxCmdBufContext context, const MaterialShaderArgument *routingData);
+void R_SetupPassCriticalPixelShaderArgs(GfxCmdBufContext context);
+void R_SetupPassVertexShaderArgs(GfxCmdBufContext context);
+void R_OverrideImage(GfxImage **image, const MaterialTextureDef *texdef);
+void R_SetPixelShader(GfxCmdBufState *state, const MaterialPixelShader *pixelShader);
+void R_SetVertexShader(GfxCmdBufState *state, const MaterialVertexShader *vertexShader);
+void R_UpdateVertexDecl(GfxCmdBufState *state);
+void R_SetupPass(GfxCmdBufContext context, uint32_t passIndex);
+void R_SetState(GfxCmdBufState *state, uint32_t *stateBits);
+void R_SetVertexShaderConstantFromLiteral(GfxCmdBufState *state, uint32_t dest, const float *literal);
+const MaterialTextureDef *R_SetPixelSamplerFromMaterial(
     GfxCmdBufContext context,
     const MaterialShaderArgument *arg,
     const MaterialTextureDef *texDef);
 
-void __cdecl R_SetPassShaderPrimArguments(
+void R_SetPassShaderPrimArguments(
     GfxCmdBufContext context,
     uint32_t argCount,
     const MaterialShaderArgument *arg);
-void __cdecl R_SetPassShaderObjectArguments(
+void R_SetPassShaderObjectArguments(
     GfxCmdBufContext context,
     uint32_t argCount,
     const MaterialShaderArgument *arg);
-void __cdecl R_SetPassPixelShaderStableArguments(
+void R_SetPassPixelShaderStableArguments(
     GfxCmdBufContext context,
     uint32_t argCount,
     const MaterialShaderArgument *arg);
-void __cdecl R_SetPassVertexShaderStableArguments(
+void R_SetPassVertexShaderStableArguments(
     GfxCmdBufContext context,
     uint32_t argCount,
     const MaterialShaderArgument *arg);
-void __cdecl R_SetPassShaderStableArguments(
+void R_SetPassShaderStableArguments(
     GfxCmdBufContext context,
     uint32_t argCount,
     const MaterialShaderArgument *arg);
 
-inline void __cdecl R_CheckVertexDataOverflow(int dataSize)
+inline void R_CheckVertexDataOverflow(int dataSize)
 {
     if (!gfxBuf.dynamicVertexBuffer)
         MyAssertHandler("c:\\trees\\cod3\\src\\gfx_d3d\\r_shade.h", 38, 0, "%s", "gfxBuf.dynamicVertexBuffer");
@@ -92,4 +92,4 @@ inline void __cdecl R_CheckVertexDataOverflow(int dataSize)
 
 
 // r_draw_pixelshader
-uint32_t __cdecl R_SkipDrawSurfListMaterial(const GfxDrawSurf *drawSurfList, uint32_t drawSurfCount);
+uint32_t R_SkipDrawSurfListMaterial(const GfxDrawSurf *drawSurfList, uint32_t drawSurfCount);

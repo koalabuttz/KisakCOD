@@ -9,7 +9,7 @@
 #include <universal/profile.h>
 
 
-bool __cdecl R_UsingGlow(const GfxViewInfo *viewInfo)
+bool R_UsingGlow(const GfxViewInfo *viewInfo)
 {
     iassert( viewInfo );
     return (r_glow_allowed->current.enabled || r_glow_allowed_script_forced->current.enabled)
@@ -20,7 +20,7 @@ bool __cdecl R_UsingGlow(const GfxViewInfo *viewInfo)
         && viewInfo->glow.radius != 0.0;
 }
 
-bool __cdecl R_UsingDepthOfField(const GfxViewInfo *viewInfo)
+bool R_UsingDepthOfField(const GfxViewInfo *viewInfo)
 {
     iassert( viewInfo );
     if (viewInfo->dof.viewModelEnd > viewInfo->dof.viewModelStart + 1.0)
@@ -30,7 +30,7 @@ bool __cdecl R_UsingDepthOfField(const GfxViewInfo *viewInfo)
     return viewInfo->dof.farEnd > viewInfo->dof.farStart + 1.0 && viewInfo->dof.farBlur > 0.0;
 }
 
-bool __cdecl RB_UsingColorManipulation(const GfxViewInfo *viewInfo)
+bool RB_UsingColorManipulation(const GfxViewInfo *viewInfo)
 {
     iassert( viewInfo );
     if (!viewInfo->film.enabled)
@@ -48,14 +48,14 @@ bool __cdecl RB_UsingColorManipulation(const GfxViewInfo *viewInfo)
     return viewInfo->film.tintLight[0] != 1.0 || viewInfo->film.tintLight[1] != 1.0 || viewInfo->film.tintLight[2] != 1.0;
 }
 
-void __cdecl RB_ApplyColorManipulationFullscreen(const GfxViewInfo *viewInfo)
+void RB_ApplyColorManipulationFullscreen(const GfxViewInfo *viewInfo)
 {
     iassert( RB_UsingColorManipulation( viewInfo ) );
     iassert( viewInfo->isRenderingFullScreen );
     RB_FullScreenFilter(rgp.postFxColorMaterial);
 }
 
-void __cdecl RB_ApplyColorManipulationSplitscreen(const GfxViewInfo *viewInfo)
+void RB_ApplyColorManipulationSplitscreen(const GfxViewInfo *viewInfo)
 {
     iassert( RB_UsingColorManipulation( viewInfo ) );
     iassert( !viewInfo->isRenderingFullScreen );
@@ -73,7 +73,7 @@ void RB_GetResolvedScene()
     }
 }
 
-void __cdecl RB_GetDepthOfFieldInputImages(float radius)
+void RB_GetDepthOfFieldInputImages(float radius)
 {
     float v1; // [esp+Ch] [ebp-8h]
 
@@ -91,7 +91,7 @@ void __cdecl RB_GetDepthOfFieldInputImages(float radius)
     RB_FullScreenFilter(rgp.smallBlurMaterial);
 }
 
-void __cdecl RB_ProcessPostEffects(const GfxViewInfo *viewInfo)
+void RB_ProcessPostEffects(const GfxViewInfo *viewInfo)
 {
     float blurRadius; // [esp+38h] [ebp-4h]
 
@@ -122,17 +122,17 @@ void __cdecl RB_ProcessPostEffects(const GfxViewInfo *viewInfo)
     }
 }
 
-bool __cdecl RB_UsingMergedPostEffects(const GfxViewInfo *viewInfo)
+bool RB_UsingMergedPostEffects(const GfxViewInfo *viewInfo)
 {
     return R_UsingDepthOfField(viewInfo) || RB_UsingColorManipulation(viewInfo);
 }
 
-bool __cdecl RB_UsingBlur(float blurRadius)
+bool RB_UsingBlur(float blurRadius)
 {
     return r_blur->current.value > 0.0 || blurRadius > 0.0;
 }
 
-bool __cdecl RB_UsingPostEffects(const GfxViewInfo *viewInfo)
+bool RB_UsingPostEffects(const GfxViewInfo *viewInfo)
 {
     if (R_UsingGlow(viewInfo))
         return 1;
@@ -143,14 +143,14 @@ bool __cdecl RB_UsingPostEffects(const GfxViewInfo *viewInfo)
     return RB_UsingMergedPostEffects(viewInfo);
 }
 
-void __cdecl RB_CalcGlowEffect(const GfxViewInfo *viewInfo)
+void RB_CalcGlowEffect(const GfxViewInfo *viewInfo)
 {
     iassert( viewInfo );
     iassert( viewInfo->glow.bloomIntensity );
     RB_GlowFilterImage(viewInfo->glow.radius);
 }
 
-void __cdecl RB_ApplyGlowEffect(const GfxViewInfo *viewInfo)
+void RB_ApplyGlowEffect(const GfxViewInfo *viewInfo)
 {
     if (gfxRenderTargets[gfxCmdBufState.renderTargetId].surface.color != gfxRenderTargets[R_RENDERTARGET_FRAME_BUFFER].surface.color)
         MyAssertHandler(
@@ -167,7 +167,7 @@ void __cdecl RB_ApplyGlowEffect(const GfxViewInfo *viewInfo)
     backEnd.glowCount = 0;
 }
 
-void __cdecl RB_ApplyGlowEffectPass(const GfxViewInfo *viewInfo, GfxImage *glowImage)
+void RB_ApplyGlowEffectPass(const GfxViewInfo *viewInfo, GfxImage *glowImage)
 {
     iassert( viewInfo );
     iassert( rgp.world );
@@ -175,7 +175,7 @@ void __cdecl RB_ApplyGlowEffectPass(const GfxViewInfo *viewInfo, GfxImage *glowI
     RB_FullScreenFilter(rgp.glowApplyBloomMaterial);
 }
 
-void __cdecl RB_ApplyMergedPostEffects(const GfxViewInfo *viewInfo)
+void RB_ApplyMergedPostEffects(const GfxViewInfo *viewInfo)
 {
     const char *v1; // eax
     float v2; // [esp+1Ch] [ebp-84h]
@@ -248,7 +248,7 @@ void __cdecl RB_ApplyMergedPostEffects(const GfxViewInfo *viewInfo)
     }
 }
 
-void __cdecl RB_GetSceneDepthOfFieldEquation(
+void RB_GetSceneDepthOfFieldEquation(
     float nearOutOfFocus,
     float nearInFocus,
     float farInFocus,
@@ -278,7 +278,7 @@ void __cdecl RB_GetSceneDepthOfFieldEquation(
     }
 }
 
-void __cdecl RB_GetNearDepthOfFieldEquation(
+void RB_GetNearDepthOfFieldEquation(
     float outOfFocus,
     float inFocus,
     float nearClip,
@@ -302,7 +302,7 @@ void __cdecl RB_GetNearDepthOfFieldEquation(
     dofEquation[2] = inFocus / (inFocus - outOfFocus);
 }
 
-void __cdecl RB_GetViewModelDepthOfFieldEquation(float outOfFocus, float inFocus, float *dofEquation)
+void RB_GetViewModelDepthOfFieldEquation(float outOfFocus, float inFocus, float *dofEquation)
 {
     float nearClip; // [esp+14h] [ebp-8h]
 
@@ -311,7 +311,7 @@ void __cdecl RB_GetViewModelDepthOfFieldEquation(float outOfFocus, float inFocus
     RB_GetNearDepthOfFieldEquation(outOfFocus, inFocus, nearClip, 1.0, dofEquation);
 }
 
-float __cdecl RB_GetDepthOfFieldBlurFraction(const GfxViewInfo *viewInfo, float pixelRadiusAtSceneRes)
+float RB_GetDepthOfFieldBlurFraction(const GfxViewInfo *viewInfo, float pixelRadiusAtSceneRes)
 {
     float fraction; // [esp+18h] [ebp-8h]
     float normalizedRadius; // [esp+1Ch] [ebp-4h]
@@ -329,7 +329,7 @@ float __cdecl RB_GetDepthOfFieldBlurFraction(const GfxViewInfo *viewInfo, float 
     return pow(fraction, r_dof_bias->current.value);
 }
 
-float __cdecl RB_GetBlurRadius(float blurRadiusFromCode)
+float RB_GetBlurRadius(float blurRadiusFromCode)
 {
     float blurRadiusFinal; // [esp+8h] [ebp-14h]
     float blurRadiusSqFromDvar; // [esp+10h] [ebp-Ch]
@@ -342,7 +342,7 @@ float __cdecl RB_GetBlurRadius(float blurRadiusFromCode)
     return blurRadiusFinal;
 }
 
-void __cdecl RB_BlurScreen(const GfxViewInfo *viewInfo, float blurRadius)
+void RB_BlurScreen(const GfxViewInfo *viewInfo, float blurRadius)
 {
     float blurRadiusMin; // [esp+28h] [ebp-8h]
     uint32_t color; // [esp+2Ch] [ebp-4h]

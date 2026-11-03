@@ -30,12 +30,12 @@ struct actor_physics_local_t
 actor_physics_local_t g_apl;
 actor_physics_t *g_pPhys;
 
-void __cdecl TRACK_actor_physics()
+void TRACK_actor_physics()
 {
     track_static_alloc_internal(&g_apl, 92, "g_apl", 5);
 }
 
-void __cdecl AIPhys_AddTouchEnt(int entityNum)
+void AIPhys_AddTouchEnt(int entityNum)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -50,7 +50,7 @@ void __cdecl AIPhys_AddTouchEnt(int entityNum)
     }
 }
 
-void __cdecl AIPhys_ClipVelocity(
+void AIPhys_ClipVelocity(
     const float *in,
     const float *normal,
     bool isWalkable,
@@ -100,7 +100,7 @@ void __cdecl AIPhys_ClipVelocity(
     //}
 }
 
-SlideMoveResult __cdecl AIPhys_SlideMove(int gravity, int zonly)
+SlideMoveResult AIPhys_SlideMove(int gravity, int zonly)
 {
     float fTimeLeft; // fp20
     int iNumPlanes; // r31
@@ -465,7 +465,7 @@ LABEL_22:
 }
 
 
-int __cdecl AIPhys_AirMove()
+int AIPhys_AirMove()
 {
     if (g_apl.bGroundPlane)
         AIPhys_ClipVelocity(
@@ -477,7 +477,7 @@ int __cdecl AIPhys_AirMove()
     return AIPhys_StepSlideMove(1, 0);
 }
 
-int __cdecl AIPhys_WalkMove()
+int AIPhys_WalkMove()
 {
     g_pPhys->vVelocity[0] = (1.0f / g_apl.fFrameTime) * g_pPhys->vWishDelta[0];
     g_pPhys->vVelocity[1] = (1.0f / g_apl.fFrameTime) * g_pPhys->vWishDelta[1];
@@ -506,7 +506,7 @@ int __cdecl AIPhys_WalkMove()
     }
 }
 
-int __cdecl AIPhys_ZOnlyPhysicsMove()
+int AIPhys_ZOnlyPhysicsMove()
 {
     actor_physics_t *v0; // r11
     double v1; // fp0
@@ -730,7 +730,7 @@ void AIPhys_FoliageSounds(void)
 }
 
 
-int __cdecl Actor_Physics(actor_physics_t *pPhys)
+int Actor_Physics(actor_physics_t *pPhys)
 {
     int groundEntNum; // r9
     actor_physics_t *v3; // r29
@@ -824,7 +824,7 @@ int __cdecl Actor_Physics(actor_physics_t *pPhys)
     }
 }
 
-void __cdecl Actor_PostPhysics(actor_physics_t *pPhys)
+void Actor_PostPhysics(actor_physics_t *pPhys)
 {
     int bIsAlive; // r10
 

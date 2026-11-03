@@ -6,7 +6,7 @@
 #endif
 #include <universal/profile.h>
 
-void __cdecl UI_DrawText(
+void UI_DrawText(
     const ScreenPlacement *scrPlace,
     const char *text,
     int maxChars,
@@ -40,7 +40,7 @@ void __cdecl UI_DrawText(
     CL_DrawTextPhysical(text, maxChars, font, x, v11, xScale, yScale, color, style);
 }
 
-int __cdecl UI_TextWidth(const char *text, int maxChars, Font_s *font, float scale)
+int UI_TextWidth(const char *text, int maxChars, Font_s *font, float scale)
 {
     float actualScale; // [esp+8h] [ebp-4h]
 
@@ -48,7 +48,7 @@ int __cdecl UI_TextWidth(const char *text, int maxChars, Font_s *font, float sca
     return (int)((double)R_TextWidth(text, maxChars, font) * actualScale);
 }
 
-int __cdecl UI_TextHeight(Font_s *font, float scale)
+int UI_TextHeight(Font_s *font, float scale)
 {
     float actualScale; // [esp+8h] [ebp-4h]
 

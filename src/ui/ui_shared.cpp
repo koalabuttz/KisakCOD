@@ -295,13 +295,13 @@ const commandDef_t commandList[46] =
 #endif
 
 #ifdef KISAK_MP
-void __cdecl Script_GetAutoUpdate(UiContext *dc, itemDef_s *item, const char **args)
+void Script_GetAutoUpdate(UiContext *dc, itemDef_s *item, const char **args)
 {
     CL_GetAutoUpdate();
 }
 #endif
 
-void __cdecl Script_StatClearPerkGetArg(
+void Script_StatClearPerkGetArg(
     UiContext *dc,
     itemDef_s *item,
     const char **args,
@@ -324,7 +324,7 @@ void __cdecl Script_StatClearPerkGetArg(
         Com_UngetToken();
 }
 
-void __cdecl Script_StatClearPerkNew(UiContext *dc, itemDef_s *item, const char **args)
+void Script_StatClearPerkNew(UiContext *dc, itemDef_s *item, const char **args)
 {
     const char *v3; // eax
     int v4; // eax
@@ -383,12 +383,12 @@ static void UI_SetupParserKeywords()
     Menu_SetupKeywordHash();
 }
 
-void __cdecl Menu_Setup(UiContext *dc)
+void Menu_Setup(UiContext *dc)
 {
     UI_SetupMenuContext(dc, UI_SetupParserKeywords);
 }
 
-void __cdecl Menu_FreeMemory(menuDef_t *menu)
+void Menu_FreeMemory(menuDef_t *menu)
 {
     int item; // [esp+0h] [ebp-4h]
 
@@ -399,7 +399,7 @@ void __cdecl Menu_FreeMemory(menuDef_t *menu)
     free_expression(&menu->rectYExp);
 }
 
-void __cdecl Menus_FreeAllMemory(UiContext *dc)
+void Menus_FreeAllMemory(UiContext *dc)
 {
     int menu; // [esp+0h] [ebp-4h]
 
@@ -409,7 +409,7 @@ void __cdecl Menus_FreeAllMemory(UiContext *dc)
 
 
 
-int __cdecl Color_Parse(const char **p, float (*c)[4])
+int Color_Parse(const char **p, float (*c)[4])
 {
     float f; // [esp+0h] [ebp-8h] BYREF
     int i; // [esp+4h] [ebp-4h]
@@ -424,7 +424,7 @@ int __cdecl Color_Parse(const char **p, float (*c)[4])
 }
 
 
-void __cdecl Script_SetColor(UiContext *dc, itemDef_s *item, const char **args)
+void Script_SetColor(UiContext *dc, itemDef_s *item, const char **args)
 {
     float *out; // [esp+0h] [ebp-414h]
     char name[1028]; // [esp+4h] [ebp-410h] BYREF
@@ -460,7 +460,7 @@ void __cdecl Script_SetColor(UiContext *dc, itemDef_s *item, const char **args)
     }
 }
 
-void __cdecl Script_SetBackground(UiContext *dc, itemDef_s *item, const char **args)
+void Script_SetBackground(UiContext *dc, itemDef_s *item, const char **args)
 {
     char name[1028]; // [esp+0h] [ebp-408h] BYREF
 
@@ -468,7 +468,7 @@ void __cdecl Script_SetBackground(UiContext *dc, itemDef_s *item, const char **a
         item->window.background = Material_RegisterHandle(name, item->imageTrack);
 }
 
-void __cdecl Script_SetItemColor(UiContext *dc, itemDef_s *item, const char **args)
+void Script_SetItemColor(UiContext *dc, itemDef_s *item, const char **args)
 {
     int j; // [esp+0h] [ebp-828h]
     itemDef_s *item2; // [esp+4h] [ebp-824h]
@@ -521,7 +521,7 @@ void __cdecl Script_SetItemColor(UiContext *dc, itemDef_s *item, const char **ar
     }
 }
 
-int __cdecl Menu_ItemsMatchingGroup(menuDef_t *menu, char *name)
+int Menu_ItemsMatchingGroup(menuDef_t *menu, char *name)
 {
     int v2; // eax
     int wildcard; // [esp+4h] [ebp-Ch]
@@ -552,7 +552,7 @@ int __cdecl Menu_ItemsMatchingGroup(menuDef_t *menu, char *name)
     return count;
 }
 
-itemDef_s *__cdecl Menu_GetMatchingItemByNumber(menuDef_t *menu, int index, char *name)
+itemDef_s *Menu_GetMatchingItemByNumber(menuDef_t *menu, int index, char *name)
 {
     int v3; // eax
     int wildcard; // [esp+4h] [ebp-Ch]
@@ -587,7 +587,7 @@ itemDef_s *__cdecl Menu_GetMatchingItemByNumber(menuDef_t *menu, int index, char
     return 0;
 }
 
-void __cdecl Menus_HideByName(const UiContext *dc, const char *menuName)
+void Menus_HideByName(const UiContext *dc, const char *menuName)
 {
     menuDef_t *menu; // [esp+0h] [ebp-4h]
 
@@ -600,7 +600,7 @@ void __cdecl Menus_HideByName(const UiContext *dc, const char *menuName)
         Window_RemoveDynamicFlags(dc->localClientNum, &menu->window, 4);
 }
 
-void __cdecl Menus_ShowByName(const UiContext *dc, const char *windowName)
+void Menus_ShowByName(const UiContext *dc, const char *windowName)
 {
     menuDef_t *menu; // [esp+0h] [ebp-4h]
 
@@ -613,7 +613,7 @@ void __cdecl Menus_ShowByName(const UiContext *dc, const char *windowName)
         Window_AddDynamicFlags(dc->localClientNum, &menu->window, 4);
 }
 
-itemDef_s *__cdecl Menu_FindItemByName(menuDef_t *menu, const char *p)
+itemDef_s *Menu_FindItemByName(menuDef_t *menu, const char *p)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -627,7 +627,7 @@ itemDef_s *__cdecl Menu_FindItemByName(menuDef_t *menu, const char *p)
     return 0;
 }
 
-void __cdecl Menus_CloseAll(UiContext *dc)
+void Menus_CloseAll(UiContext *dc)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -635,7 +635,7 @@ void __cdecl Menus_CloseAll(UiContext *dc)
         Menus_Close(dc, dc->Menus[i]);
 }
 
-void __cdecl Script_Show(UiContext *dc, itemDef_s *item, const char **args)
+void Script_Show(UiContext *dc, itemDef_s *item, const char **args)
 {
     char name[1028]; // [esp+0h] [ebp-408h] BYREF
 
@@ -643,7 +643,7 @@ void __cdecl Script_Show(UiContext *dc, itemDef_s *item, const char **args)
         Menu_ShowItemByName(dc->localClientNum, item->parent, name, 1);
 }
 
-void __cdecl Menu_ShowItemByName(int localClientNum, menuDef_t *menu, char *p, int bShow)
+void Menu_ShowItemByName(int localClientNum, menuDef_t *menu, char *p, int bShow)
 {
     itemDef_s *item; // [esp+0h] [ebp-Ch]
     int i; // [esp+4h] [ebp-8h]
@@ -663,7 +663,7 @@ void __cdecl Menu_ShowItemByName(int localClientNum, menuDef_t *menu, char *p, i
     }
 }
 
-void __cdecl Script_Hide(UiContext *dc, itemDef_s *item, const char **args)
+void Script_Hide(UiContext *dc, itemDef_s *item, const char **args)
 {
     char name[1028]; // [esp+0h] [ebp-408h] BYREF
 
@@ -671,7 +671,7 @@ void __cdecl Script_Hide(UiContext *dc, itemDef_s *item, const char **args)
         Menu_ShowItemByName(dc->localClientNum, item->parent, name, 0);
 }
 
-void __cdecl Script_FadeIn(UiContext *dc, itemDef_s *item, const char **args)
+void Script_FadeIn(UiContext *dc, itemDef_s *item, const char **args)
 {
     char name[1028]; // [esp+0h] [ebp-408h] BYREF
 
@@ -679,7 +679,7 @@ void __cdecl Script_FadeIn(UiContext *dc, itemDef_s *item, const char **args)
         Menu_FadeItemByName(dc->localClientNum, item->parent, name, 0);
 }
 
-void __cdecl Menu_FadeItemByName(int localClientNum, menuDef_t *menu, char *p, int fadeOut)
+void Menu_FadeItemByName(int localClientNum, menuDef_t *menu, char *p, int fadeOut)
 {
     itemDef_s *item; // [esp+0h] [ebp-Ch]
     int i; // [esp+4h] [ebp-8h]
@@ -705,7 +705,7 @@ void __cdecl Menu_FadeItemByName(int localClientNum, menuDef_t *menu, char *p, i
     }
 }
 
-void __cdecl Script_FadeOut(UiContext *dc, itemDef_s *item, const char **args)
+void Script_FadeOut(UiContext *dc, itemDef_s *item, const char **args)
 {
     char name[1028]; // [esp+0h] [ebp-408h] BYREF
 
@@ -713,7 +713,7 @@ void __cdecl Script_FadeOut(UiContext *dc, itemDef_s *item, const char **args)
         Menu_FadeItemByName(dc->localClientNum, item->parent, name, 1);
 }
 
-void __cdecl Script_ShowMenu(UiContext *dc, itemDef_s *item, const char **args)
+void Script_ShowMenu(UiContext *dc, itemDef_s *item, const char **args)
 {
     char name[1028]; // [esp+0h] [ebp-408h] BYREF
 
@@ -721,7 +721,7 @@ void __cdecl Script_ShowMenu(UiContext *dc, itemDef_s *item, const char **args)
         Menus_ShowByName(dc, name);
 }
 
-void __cdecl Script_HideMenu(UiContext *dc, itemDef_s *item, const char **args)
+void Script_HideMenu(UiContext *dc, itemDef_s *item, const char **args)
 {
     char name[1028]; // [esp+0h] [ebp-408h] BYREF
 
@@ -729,7 +729,7 @@ void __cdecl Script_HideMenu(UiContext *dc, itemDef_s *item, const char **args)
         Menus_HideByName(dc, name);
 }
 
-void __cdecl Script_Open(UiContext *dc, itemDef_s *item, const char **args)
+void Script_Open(UiContext *dc, itemDef_s *item, const char **args)
 {
     char name[1028]; // [esp+0h] [ebp-408h] BYREF
 
@@ -737,7 +737,7 @@ void __cdecl Script_Open(UiContext *dc, itemDef_s *item, const char **args)
         Menus_OpenByName(dc, name);
 }
 
-void __cdecl Script_OpenForGameType(UiContext *dc, itemDef_s *item, const char **args)
+void Script_OpenForGameType(UiContext *dc, itemDef_s *item, const char **args)
 {
     const char *String; // eax
     const char *v4; // eax
@@ -751,7 +751,7 @@ void __cdecl Script_OpenForGameType(UiContext *dc, itemDef_s *item, const char *
     }
 }
 
-void __cdecl Script_CloseForGameType(UiContext *dc, itemDef_s *item, const char **args)
+void Script_CloseForGameType(UiContext *dc, itemDef_s *item, const char **args)
 {
     const char *String; // eax
     const char *v4; // eax
@@ -765,7 +765,7 @@ void __cdecl Script_CloseForGameType(UiContext *dc, itemDef_s *item, const char 
     }
 }
 
-void __cdecl Script_ValidateStat(int controllerIndex, int index, int value)
+void Script_ValidateStat(int controllerIndex, int index, int value)
 {
     if (index < 2400 || index > 2402)
     {
@@ -775,7 +775,7 @@ void __cdecl Script_ValidateStat(int controllerIndex, int index, int value)
     }
 }
 
-void __cdecl Script_StatSetUsingStatsTable(UiContext *dc, itemDef_s *item, const char **args)
+void Script_StatSetUsingStatsTable(UiContext *dc, itemDef_s *item, const char **args)
 {
     const char *v3; // eax
     int v4; // eax
@@ -839,7 +839,7 @@ void __cdecl Script_StatSetUsingStatsTable(UiContext *dc, itemDef_s *item, const
     }
 }
 
-void __cdecl Script_StatClearBitMask(UiContext *dc, itemDef_s *item, const char **args)
+void Script_StatClearBitMask(UiContext *dc, itemDef_s *item, const char **args)
 {
     int bitMask; // [esp+0h] [ebp-14h] BYREF
     int oldStatValue; // [esp+4h] [ebp-10h]
@@ -854,7 +854,7 @@ void __cdecl Script_StatClearBitMask(UiContext *dc, itemDef_s *item, const char 
     LiveStorage_SetStat(controllerIndex, statNum, newStatValue);
 }
 
-void __cdecl Script_StatBitMaskGetArgs(UiContext *dc, itemDef_s *item, const char **args, int *statNum, int *bitMask)
+void Script_StatBitMaskGetArgs(UiContext *dc, itemDef_s *item, const char **args, int *statNum, int *bitMask)
 {
     char arg[1028]; // [esp+0h] [ebp-408h] BYREF
 
@@ -876,7 +876,7 @@ void __cdecl Script_StatBitMaskGetArgs(UiContext *dc, itemDef_s *item, const cha
     Com_UngetToken();
 }
 
-void __cdecl Script_InGameOpen(UiContext *dc, itemDef_s *item, const char **args)
+void Script_InGameOpen(UiContext *dc, itemDef_s *item, const char **args)
 {
     char name[1028]; // [esp+0h] [ebp-408h] BYREF
 
@@ -887,7 +887,7 @@ void __cdecl Script_InGameOpen(UiContext *dc, itemDef_s *item, const char **args
     }
 }
 
-void __cdecl Script_InGameClose(UiContext *dc, itemDef_s *item, const char **args)
+void Script_InGameClose(UiContext *dc, itemDef_s *item, const char **args)
 {
     char name[1028]; // [esp+0h] [ebp-408h] BYREF
 
@@ -898,7 +898,7 @@ void __cdecl Script_InGameClose(UiContext *dc, itemDef_s *item, const char **arg
     }
 }
 
-void __cdecl Script_FocusFirstInMenu(UiContext *dc, itemDef_s *item, const char** args)
+void Script_FocusFirstInMenu(UiContext *dc, itemDef_s *item, const char** args)
 {
     const char *name; // [esp+0h] [ebp-Ch]
     itemDef_s *focusItem; // [esp+8h] [ebp-4h]
@@ -923,7 +923,7 @@ void __cdecl Script_FocusFirstInMenu(UiContext *dc, itemDef_s *item, const char*
     }
 }
 
-int __cdecl Item_ListBox_OverLB(int localClientNum, itemDef_s *item, float x, float y)
+int Item_ListBox_OverLB(int localClientNum, itemDef_s *item, float x, float y)
 {
     float thumbstart; // [esp+Ch] [ebp-28h]
     float thumbstarta; // [esp+Ch] [ebp-28h]
@@ -994,7 +994,7 @@ int __cdecl Item_ListBox_OverLB(int localClientNum, itemDef_s *item, float x, fl
     return 0;
 }
 
-void __cdecl Item_ListBox_MouseEnter(int localClientNum, itemDef_s *item, float x, float y)
+void Item_ListBox_MouseEnter(int localClientNum, itemDef_s *item, float x, float y)
 {
     int v4; // eax
     int v5; // [esp+8h] [ebp-68h]
@@ -1078,7 +1078,7 @@ void __cdecl Item_ListBox_MouseEnter(int localClientNum, itemDef_s *item, float 
     }
 }
 
-itemDef_s *__cdecl Menu_FocusFirstSelectableItem(UiContext *dc, menuDef_t *menu)
+itemDef_s *Menu_FocusFirstSelectableItem(UiContext *dc, menuDef_t *menu)
 {
     int localClientNum; // [esp+8h] [ebp-8h]
     uint32_t cursor; // [esp+Ch] [ebp-4h]
@@ -1121,7 +1121,7 @@ itemDef_s *__cdecl Menu_FocusFirstSelectableItem(UiContext *dc, menuDef_t *menu)
     }
 }
 
-void __cdecl Script_SetFocus(UiContext *dc, itemDef_s *item, const char **args)
+void Script_SetFocus(UiContext *dc, itemDef_s *item, const char **args)
 {
     char name[1028]; // [esp+8h] [ebp-410h] BYREF
     itemDef_s *focusItem; // [esp+410h] [ebp-8h]
@@ -1150,7 +1150,7 @@ void __cdecl Script_SetFocus(UiContext *dc, itemDef_s *item, const char **args)
     }
 }
 
-void __cdecl Script_SetFocusByDvar(UiContext *dc, itemDef_s *item, const char **args)
+void Script_SetFocusByDvar(UiContext *dc, itemDef_s *item, const char **args)
 {
     itemDef_s *focusItem; // [esp+8h] [ebp-418h]
     menuDef_t *parent; // [esp+Ch] [ebp-414h]
@@ -1183,7 +1183,7 @@ void __cdecl Script_SetFocusByDvar(UiContext *dc, itemDef_s *item, const char **
     }
 }
 
-void __cdecl Script_SetDvar(UiContext *dc, itemDef_s *item, const char **args)
+void Script_SetDvar(UiContext *dc, itemDef_s *item, const char **args)
 {
     char val[1024]; // [esp+0h] [ebp-808h] BYREF
     char dvarName[1028]; // [esp+400h] [ebp-408h] BYREF
@@ -1195,7 +1195,7 @@ void __cdecl Script_SetDvar(UiContext *dc, itemDef_s *item, const char **args)
     }
 }
 
-void __cdecl Script_Exec(UiContext *dc, itemDef_s *item, const char **args)
+void Script_Exec(UiContext *dc, itemDef_s *item, const char **args)
 {
     int v3; // eax
 
@@ -1203,12 +1203,12 @@ void __cdecl Script_Exec(UiContext *dc, itemDef_s *item, const char **args)
     Script_ExecHandler(dc->localClientNum, v3, item, args, Script_AddTextWrapper);
 }
 
-void __cdecl Script_ExecHandler(
+void Script_ExecHandler(
     int localClientNum,
     int controllerIndex,
     itemDef_s *item,
     const char **args,
-    void(__cdecl *textCallback)(int, int, const char *))
+    void(*textCallback)(int, int, const char *))
 {
     char val[1028]; // [esp+0h] [ebp-408h] BYREF
 
@@ -1219,30 +1219,30 @@ void __cdecl Script_ExecHandler(
     }
 }
 
-void __cdecl Script_AddTextWrapper(int clientNum, int controllerIndex, const char *text)
+void Script_AddTextWrapper(int clientNum, int controllerIndex, const char *text)
 {
     Cbuf_AddText(clientNum, text);
 }
 
-void __cdecl Script_ExecNow(UiContext *dc, itemDef_s *item, const char **args)
+void Script_ExecNow(UiContext *dc, itemDef_s *item, const char **args)
 {
     int v3; // eax
 
     v3 = CL_ControllerIndexFromClientNum(dc->localClientNum);
-    Script_ExecHandler(dc->localClientNum, v3, item, args, (void(__cdecl *)(int, int, const char *))Cbuf_ExecuteBuffer);
+    Script_ExecHandler(dc->localClientNum, v3, item, args, (void(*)(int, int, const char *))Cbuf_ExecuteBuffer);
 }
 
-void __cdecl Script_ExecOnDvarStringValue(UiContext *dc, itemDef_s *item, const char **args)
+void Script_ExecOnDvarStringValue(UiContext *dc, itemDef_s *item, const char **args)
 {
     Script_ConditionalExecHandler(dc->localClientNum, item, args, Script_ExecIfStringsEqual, Script_AddTextWrapper);
 }
 
-void __cdecl Script_ConditionalExecHandler(
+void Script_ConditionalExecHandler(
     int localClientNum,
     itemDef_s *item,
     const char **args,
-    bool(__cdecl *shouldExec)(const char *, const char *),
-    void(__cdecl *textCallback)(int, int, const char *))
+    bool(*shouldExec)(const char *, const char *),
+    void(*textCallback)(int, int, const char *))
 {
     int v5; // eax
     char testValue[1024]; // [esp+0h] [ebp-C08h] BYREF
@@ -1262,17 +1262,17 @@ void __cdecl Script_ConditionalExecHandler(
     }
 }
 
-bool __cdecl Script_ExecIfStringsEqual(const char *dvarValue, const char *testValue)
+bool Script_ExecIfStringsEqual(const char *dvarValue, const char *testValue)
 {
     return I_stricmp(dvarValue, testValue) == 0;
 }
 
-void __cdecl Script_ExecOnDvarIntValue(UiContext *dc, itemDef_s *item, const char **args)
+void Script_ExecOnDvarIntValue(UiContext *dc, itemDef_s *item, const char **args)
 {
     Script_ConditionalExecHandler(dc->localClientNum, item, args, Script_ExecIfIntsEqual, Script_AddTextWrapper);
 }
 
-bool __cdecl Script_ExecIfIntsEqual(const char *dvarValue, const char *testValue)
+bool Script_ExecIfIntsEqual(const char *dvarValue, const char *testValue)
 {
     int v2; // esi
 
@@ -1280,12 +1280,12 @@ bool __cdecl Script_ExecIfIntsEqual(const char *dvarValue, const char *testValue
     return v2 == atoi(testValue);
 }
 
-void __cdecl Script_ExecOnDvarFloatValue(UiContext *dc, itemDef_s *item, const char **args)
+void Script_ExecOnDvarFloatValue(UiContext *dc, itemDef_s *item, const char **args)
 {
     Script_ConditionalExecHandler(dc->localClientNum, item, args, Script_ExecIfFloatsEqual, Script_AddTextWrapper);
 }
 
-bool __cdecl Script_ExecIfFloatsEqual(const char *dvarValue, const char *testValue)
+bool Script_ExecIfFloatsEqual(const char *dvarValue, const char *testValue)
 {
     float v3; // [esp+4h] [ebp-10h]
     double v4; // [esp+8h] [ebp-Ch]
@@ -1297,46 +1297,46 @@ bool __cdecl Script_ExecIfFloatsEqual(const char *dvarValue, const char *testVal
     return v3 < 0.000009999999747378752;
 }
 
-void __cdecl Script_ExecNowOnDvarStringValue(UiContext *dc, itemDef_s *item, const char **args)
+void Script_ExecNowOnDvarStringValue(UiContext *dc, itemDef_s *item, const char **args)
 {
     Script_ConditionalExecHandler(
         dc->localClientNum,
         item,
         args,
         Script_ExecIfStringsEqual,
-        (void(__cdecl *)(int, int, const char *))Cbuf_ExecuteBuffer);
+        (void(*)(int, int, const char *))Cbuf_ExecuteBuffer);
 }
 
-void __cdecl Script_ExecNowOnDvarIntValue(UiContext *dc, itemDef_s *item, const char **args)
+void Script_ExecNowOnDvarIntValue(UiContext *dc, itemDef_s *item, const char **args)
 {
     Script_ConditionalExecHandler(
         dc->localClientNum,
         item,
         args,
         Script_ExecIfIntsEqual,
-        (void(__cdecl *)(int, int, const char *))Cbuf_ExecuteBuffer);
+        (void(*)(int, int, const char *))Cbuf_ExecuteBuffer);
 }
 
-void __cdecl Script_ExecNowOnDvarFloatValue(UiContext *dc, itemDef_s *item, const char **args)
+void Script_ExecNowOnDvarFloatValue(UiContext *dc, itemDef_s *item, const char **args)
 {
     Script_ConditionalExecHandler(
         dc->localClientNum,
         item,
         args,
         Script_ExecIfFloatsEqual,
-        (void(__cdecl *)(int, int, const char *))Cbuf_ExecuteBuffer);
+        (void(*)(int, int, const char *))Cbuf_ExecuteBuffer);
 }
 
-void __cdecl Script_RespondOnDvarStringValue(UiContext *dc, itemDef_s *item, const char **args)
+void Script_RespondOnDvarStringValue(UiContext *dc, itemDef_s *item, const char **args)
 {
     Script_ConditionalResponseHandler(dc->localClientNum, item, args, Script_ExecIfStringsEqual);
 }
 
-void __cdecl Script_ConditionalResponseHandler(
+void Script_ConditionalResponseHandler(
     int localClientNum,
     itemDef_s *item,
     const char **args,
-    bool(__cdecl *shouldRespond)(const char *, const char *))
+    bool(*shouldRespond)(const char *, const char *))
 {
     const char *v5; // eax
     int iIndex; // [esp+0h] [ebp-C10h]
@@ -1378,17 +1378,17 @@ void __cdecl Script_ConditionalResponseHandler(
     }
 }
 
-void __cdecl Script_RespondOnDvarIntValue(UiContext *dc, itemDef_s *item, const char **args)
+void Script_RespondOnDvarIntValue(UiContext *dc, itemDef_s *item, const char **args)
 {
     Script_ConditionalResponseHandler(dc->localClientNum, item, args, Script_ExecIfIntsEqual);
 }
 
-void __cdecl Script_RespondOnDvarFloatValue(UiContext *dc, itemDef_s *item, const char **args)
+void Script_RespondOnDvarFloatValue(UiContext *dc, itemDef_s *item, const char **args)
 {
     Script_ConditionalResponseHandler(dc->localClientNum, item, args, Script_ExecIfFloatsEqual);
 }
 
-void __cdecl Script_SetLocalVarFloat(UiContext *dc, itemDef_s *item, const char **args)
+void Script_SetLocalVarFloat(UiContext *dc, itemDef_s *item, const char **args)
 {
     float f; // [esp+4h] [ebp-110h]
     UILocalVarContext *var; // [esp+8h] [ebp-10Ch]
@@ -1405,7 +1405,7 @@ void __cdecl Script_SetLocalVarFloat(UiContext *dc, itemDef_s *item, const char 
     }
 }
 
-void __cdecl Script_FeederTop(UiContext *dc, itemDef_s *item, const char **args)
+void Script_FeederTop(UiContext *dc, itemDef_s *item, const char **args)
 {
     listBoxDef_s *listPtr; // [esp+8h] [ebp-4h]
 
@@ -1425,7 +1425,7 @@ void __cdecl Script_FeederTop(UiContext *dc, itemDef_s *item, const char **args)
     }
 }
 
-void __cdecl Script_FeederBottom(UiContext *dc, itemDef_s *item, const char **args)
+void Script_FeederBottom(UiContext *dc, itemDef_s *item, const char **args)
 {
     int v2; // [esp+4h] [ebp-14h]
     int v3; // [esp+8h] [ebp-10h]
@@ -1452,7 +1452,7 @@ void __cdecl Script_FeederBottom(UiContext *dc, itemDef_s *item, const char **ar
     }
 }
 
-void __cdecl Script_ScriptMenuResponse(UiContext *dc, itemDef_s *item, const char **args)
+void Script_ScriptMenuResponse(UiContext *dc, itemDef_s *item, const char **args)
 {
     const char *v4; // eax
     int iIndex; // [esp+0h] [ebp-410h]
@@ -1481,7 +1481,7 @@ void __cdecl Script_ScriptMenuResponse(UiContext *dc, itemDef_s *item, const cha
     }
 }
 
-int __cdecl Item_ListBox_MaxScroll(int localClientNum, itemDef_s *item)
+int Item_ListBox_MaxScroll(int localClientNum, itemDef_s *item)
 {
     int v2; // esi
     int v5; // [esp+Ch] [ebp-4h]
@@ -1494,7 +1494,7 @@ int __cdecl Item_ListBox_MaxScroll(int localClientNum, itemDef_s *item)
         return 0;
 }
 
-int __cdecl Item_ListBox_Viewmax(itemDef_s *item)
+int Item_ListBox_Viewmax(itemDef_s *item)
 {
     float v2; // [esp+8h] [ebp-2Ch]
     float v3; // [esp+Ch] [ebp-28h]
@@ -1545,7 +1545,7 @@ int __cdecl Item_ListBox_Viewmax(itemDef_s *item)
     return (int)(totalSize / unitSize);
 }
 
-void __cdecl Item_ListBox_SetCursorPos(int localClientNum, itemDef_s *item, int viewmax, int newCursorPos)
+void Item_ListBox_SetCursorPos(int localClientNum, itemDef_s *item, int viewmax, int newCursorPos)
 {
     listBoxDef_s *listPtr; // [esp+8h] [ebp-4h]
 
@@ -1558,7 +1558,7 @@ void __cdecl Item_ListBox_SetCursorPos(int localClientNum, itemDef_s *item, int 
     UI_FeederSelection(localClientNum, item->special, newCursorPos);
 }
 
-int __cdecl Menu_OverActiveItem(int localClientNum, menuDef_t *menu, float x, float y)
+int Menu_OverActiveItem(int localClientNum, menuDef_t *menu, float x, float y)
 {
     const rectDef_s *v4; // eax
     itemDef_s *v6; // [esp+8h] [ebp-1Ch]
@@ -1616,7 +1616,7 @@ int __cdecl Menu_OverActiveItem(int localClientNum, menuDef_t *menu, float x, fl
     return 0;
 }
 
-int __cdecl Display_VisibleMenuCount(UiContext *dc)
+int Display_VisibleMenuCount(UiContext *dc)
 {
     menuDef_t *v2; // [esp+4h] [ebp-10h]
     int localClientNum; // [esp+8h] [ebp-Ch]
@@ -1642,7 +1642,7 @@ int __cdecl Display_VisibleMenuCount(UiContext *dc)
     return count;
 }
 
-void __cdecl Menus_HandleOOBClick(UiContext *dc, menuDef_t *menu, int key, int down)
+void Menus_HandleOOBClick(UiContext *dc, menuDef_t *menu, int key, int down)
 {
     int j; // [esp+Ch] [ebp-8h]
     int i; // [esp+10h] [ebp-4h]
@@ -1676,7 +1676,7 @@ void __cdecl Menus_HandleOOBClick(UiContext *dc, menuDef_t *menu, int key, int d
     }
 }
 
-void __cdecl Item_TextField_BeginEdit(int localClientNum, itemDef_s *item)
+void Item_TextField_BeginEdit(int localClientNum, itemDef_s *item)
 {
     uint32_t v2; // [esp+0h] [ebp-20h]
     editFieldDef_s *editPtr; // [esp+18h] [ebp-8h]
@@ -1705,7 +1705,7 @@ void __cdecl Item_TextField_BeginEdit(int localClientNum, itemDef_s *item)
     }
 }
 
-int __cdecl Menus_OpenByName(UiContext *dc, const char *p)
+int Menus_OpenByName(UiContext *dc, const char *p)
 {
     menuDef_t *pMenu; // [esp+0h] [ebp-4h]
 
@@ -1722,7 +1722,7 @@ int __cdecl Menus_OpenByName(UiContext *dc, const char *p)
     }
 }
 
-void __cdecl Menus_PrintAllLoadedMenus(UiContext *dc)
+void Menus_PrintAllLoadedMenus(UiContext *dc)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -1732,7 +1732,7 @@ void __cdecl Menus_PrintAllLoadedMenus(UiContext *dc)
     Com_Printf(CON_CHANNEL_SYSTEM, "\n%i menus total\n", dc->menuCount);
 }
 
-int __cdecl Display_MouseMove(UiContext *dc)
+int Display_MouseMove(UiContext *dc)
 {
     menuDef_t *menu; // [esp+4h] [ebp-8h]
     int i; // [esp+8h] [ebp-4h]
@@ -1755,7 +1755,7 @@ int __cdecl Display_MouseMove(UiContext *dc)
     }
 }
 
-bool __cdecl Item_TextField_HandleKey(UiContext *dc, itemDef_s *item, int key)
+bool Item_TextField_HandleKey(UiContext *dc, itemDef_s *item, int key)
 {
     char *VariantString; // eax
     char *v5; // eax
@@ -1969,7 +1969,7 @@ bool __cdecl Item_TextField_HandleKey(UiContext *dc, itemDef_s *item, int key)
     }
 }
 
-void __cdecl Item_TextField_EnsureCursorVisible(int localClientNum, itemDef_s *item, const char *text)
+void Item_TextField_EnsureCursorVisible(int localClientNum, itemDef_s *item, const char *text)
 {
     editFieldDef_s *editPtr; // [esp+0h] [ebp-Ch]
     int paintOffsetMin; // [esp+4h] [ebp-8h]
@@ -1992,7 +1992,7 @@ void __cdecl Item_TextField_EnsureCursorVisible(int localClientNum, itemDef_s *i
     }
 }
 
-void __cdecl Scroll_ListBox_AutoFunc(UiContext *dc, void *p)
+void Scroll_ListBox_AutoFunc(UiContext *dc, void *p)
 {
     if (dc->realTime > *(_DWORD *)p)
     {
@@ -2007,7 +2007,7 @@ void __cdecl Scroll_ListBox_AutoFunc(UiContext *dc, void *p)
     }
 }
 
-void __cdecl Scroll_ListBox_ThumbFunc(UiContext *dc, void *p)
+void Scroll_ListBox_ThumbFunc(UiContext *dc, void *p)
 {
     int v2; // [esp+0h] [ebp-3Ch]
     int v3; // [esp+4h] [ebp-38h]
@@ -2089,7 +2089,7 @@ void __cdecl Scroll_ListBox_ThumbFunc(UiContext *dc, void *p)
     }
 }
 
-int __cdecl Item_Slider_OverSlider(int localClientNum, itemDef_s *item, float x, float y)
+int Item_Slider_OverSlider(int localClientNum, itemDef_s *item, float x, float y)
 {
     rectDef_s r; // [esp+8h] [ebp-1Ch] BYREF
     const rectDef_s *rect; // [esp+20h] [ebp-4h]
@@ -2109,20 +2109,20 @@ int __cdecl Item_Slider_OverSlider(int localClientNum, itemDef_s *item, float x,
         return 0;
 }
 
-void __cdecl Scroll_Slider_SetThumbPos(UiContext *dc, itemDef_s *item);
+void Scroll_Slider_SetThumbPos(UiContext *dc, itemDef_s *item);
 
-void __cdecl Scroll_Slider_ThumbFunc(UiContext *dc, itemDef_s **p)
+void Scroll_Slider_ThumbFunc(UiContext *dc, itemDef_s **p)
 {
     Scroll_Slider_SetThumbPos(dc, p[6]);
 }
 
-int __cdecl Item_OwnerDraw_HandleKey(itemDef_s *item, int key)
+int Item_OwnerDraw_HandleKey(itemDef_s *item, int key)
 {
     return UI_OwnerDrawHandleKey(item->window.ownerDraw, item->window.ownerDrawFlags, &item->special, key);
 }
 
 int lastListBoxClickTime;
-int __cdecl Item_ListBox_HandleKey(UiContext *dc, itemDef_s *item, int key, int down, int force)
+int Item_ListBox_HandleKey(UiContext *dc, itemDef_s *item, int key, int down, int force)
 {
     int result; // eax
     int v6; // [esp+8h] [ebp-84h]
@@ -2326,7 +2326,7 @@ int __cdecl Item_ListBox_HandleKey(UiContext *dc, itemDef_s *item, int key, int 
     return result;
 }
 
-void __cdecl Item_ListBox_Page(int localClientNum, itemDef_s *item, int max, int scrollmax, int viewmax, int delta)
+void Item_ListBox_Page(int localClientNum, itemDef_s *item, int max, int scrollmax, int viewmax, int delta)
 {
     int v6; // [esp+4h] [ebp-18h]
     int v7; // [esp+Ch] [ebp-10h]
@@ -2358,7 +2358,7 @@ void __cdecl Item_ListBox_Page(int localClientNum, itemDef_s *item, int max, int
     }
 }
 
-void __cdecl Item_ListBox_Scroll(int localClientNum, itemDef_s *item, int max, int scrollmax, int viewmax, int delta)
+void Item_ListBox_Scroll(int localClientNum, itemDef_s *item, int max, int scrollmax, int viewmax, int delta)
 {
     int v6; // [esp+0h] [ebp-1Ch]
     int v7; // [esp+Ch] [ebp-10h]
@@ -2393,7 +2393,7 @@ void __cdecl Item_ListBox_Scroll(int localClientNum, itemDef_s *item, int max, i
     }
 }
 
-int __cdecl Item_Multi_HandleKey(UiContext *dc, itemDef_s *item, int key)
+int Item_Multi_HandleKey(UiContext *dc, itemDef_s *item, int key)
 {
     char *v4; // eax
     multiDef_s *multiPtr; // [esp+8h] [ebp-10h]
@@ -2429,7 +2429,7 @@ int __cdecl Item_Multi_HandleKey(UiContext *dc, itemDef_s *item, int key)
     return 1;
 }
 
-int __cdecl Item_Multi_CountSettings(itemDef_s *item)
+int Item_Multi_CountSettings(itemDef_s *item)
 {
     multiDef_s *multiPtr; // [esp+0h] [ebp-4h]
 
@@ -2440,7 +2440,7 @@ int __cdecl Item_Multi_CountSettings(itemDef_s *item)
         return 0;
 }
 
-int __cdecl Item_Multi_FindDvarByValue(itemDef_s *item)
+int Item_Multi_FindDvarByValue(itemDef_s *item)
 {
     const char *VariantString; // eax
     multiDef_s *multiPtr; // [esp+0h] [ebp-10h]
@@ -2474,7 +2474,7 @@ int __cdecl Item_Multi_FindDvarByValue(itemDef_s *item)
     return 0;
 }
 
-int __cdecl Item_List_NextEntryForKey(int key, int current, int count)
+int Item_List_NextEntryForKey(int key, int current, int count)
 {
     bool v4; // [esp+0h] [ebp-Ch]
     bool v5; // [esp+4h] [ebp-8h]
@@ -2519,7 +2519,7 @@ int __cdecl Item_List_NextEntryForKey(int key, int current, int count)
         return current;
 }
 
-int __cdecl Item_DvarEnum_HandleKey(UiContext *dc, itemDef_s *item, int key)
+int Item_DvarEnum_HandleKey(UiContext *dc, itemDef_s *item, int key)
 {
     char *v4; // eax
     int next; // [esp+0h] [ebp-Ch]
@@ -2544,7 +2544,7 @@ int __cdecl Item_DvarEnum_HandleKey(UiContext *dc, itemDef_s *item, int key)
     return 1;
 }
 
-int __cdecl Item_DvarEnum_CountSettings(itemDef_s *item)
+int Item_DvarEnum_CountSettings(itemDef_s *item)
 {
     const dvar_s *enumDvar; // [esp+0h] [ebp-4h]
 
@@ -2561,7 +2561,7 @@ int __cdecl Item_DvarEnum_CountSettings(itemDef_s *item)
         return 0;
 }
 
-int __cdecl Item_DvarEnum_EnumIndex(itemDef_s *item)
+int Item_DvarEnum_EnumIndex(itemDef_s *item)
 {
     int enumIndex; // [esp+0h] [ebp-Ch]
     int enumIndexa; // [esp+0h] [ebp-Ch]
@@ -2583,7 +2583,7 @@ int __cdecl Item_DvarEnum_EnumIndex(itemDef_s *item)
     return 0;
 }
 
-double __cdecl Item_Slider_ThumbPosition(int localClientNum, itemDef_s *item)
+double Item_Slider_ThumbPosition(int localClientNum, itemDef_s *item)
 {
     const char *VariantString; // eax
     float x0; // [esp+Ch] [ebp-18h]
@@ -2622,7 +2622,7 @@ double __cdecl Item_Slider_ThumbPosition(int localClientNum, itemDef_s *item)
     return (float)(valuec + 5.0 + 1.0 + x);
 }
 
-double __cdecl Item_GetRectPlacementX(int alignX, float x0, float containerWidth, float selfWidth)
+double Item_GetRectPlacementX(int alignX, float x0, float containerWidth, float selfWidth)
 {
     if (!alignX)
         return x0;
@@ -2638,7 +2638,7 @@ double __cdecl Item_GetRectPlacementX(int alignX, float x0, float containerWidth
     }
 }
 
-double __cdecl Item_ListBox_ThumbPosition(int localClientNum, itemDef_s *item)
+double Item_ListBox_ThumbPosition(int localClientNum, itemDef_s *item)
 {
     int max; // [esp+Ch] [ebp-14h]
     float pos; // [esp+10h] [ebp-10h]
@@ -2688,7 +2688,7 @@ double __cdecl Item_ListBox_ThumbPosition(int localClientNum, itemDef_s *item)
     }
 }
 
-void __cdecl Scroll_Slider_SetThumbPos(UiContext *dc, itemDef_s *item)
+void Scroll_Slider_SetThumbPos(UiContext *dc, itemDef_s *item)
 {
     char *v2; // eax
     float v3; // [esp+Ch] [ebp-40h]
@@ -2749,7 +2749,7 @@ void __cdecl Scroll_Slider_SetThumbPos(UiContext *dc, itemDef_s *item)
     }
 }
 
-int __cdecl Item_Slider_HandleKey(UiContext *dc, itemDef_s *item, int key, int down)
+int Item_Slider_HandleKey(UiContext *dc, itemDef_s *item, int key, int down)
 {
     const char *VariantString; // eax
     char *v6; // eax
@@ -2821,17 +2821,17 @@ int __cdecl Item_Slider_HandleKey(UiContext *dc, itemDef_s *item, int key, int d
     }
 }
 
-int __cdecl UI_GetKeyBindingLocalizedString(int localClientNum, const char *command, char *keys)
+int UI_GetKeyBindingLocalizedString(int localClientNum, const char *command, char *keys)
 {
     return GetKeyBindingLocalizedString(localClientNum, command, keys, 0);
 }
 
-int __cdecl Display_KeyBindPending()
+int Display_KeyBindPending()
 {
     return g_waitingForKey;
 }
 
-int __cdecl Item_Bind_HandleKey(UiContext *dc, itemDef_s *item, int key, int down)
+int Item_Bind_HandleKey(UiContext *dc, itemDef_s *item, int key, int down)
 {
     bool v5; // [esp+3h] [ebp-Dh]
     int bindCount; // [esp+4h] [ebp-Ch]
@@ -2885,7 +2885,7 @@ int __cdecl Item_Bind_HandleKey(UiContext *dc, itemDef_s *item, int key, int dow
     }
 }
 
-void __cdecl Menu_SetFeederSelection(UiContext *dc, menuDef_t *menu, int feeder, int index, const char *name)
+void Menu_SetFeederSelection(UiContext *dc, menuDef_t *menu, int feeder, int index, const char *name)
 {
     int i; // [esp+8h] [ebp-Ch]
     itemDef_s *item; // [esp+Ch] [ebp-8h]
@@ -2926,7 +2926,7 @@ void __cdecl Menu_SetFeederSelection(UiContext *dc, menuDef_t *menu, int feeder,
     }
 }
 
-int __cdecl Menus_AnyFullScreenVisible(UiContext *dc)
+int Menus_AnyFullScreenVisible(UiContext *dc)
 {
     int i; // [esp+4h] [ebp-4h]
 
@@ -2940,7 +2940,7 @@ int __cdecl Menus_AnyFullScreenVisible(UiContext *dc)
 
 
 #ifdef KISAK_SP
-void __cdecl Item_Text_GetSubtitle(StringTable *table, char *outText)
+void Item_Text_GetSubtitle(StringTable *table, char *outText)
 {
 	unsigned int timeMsec;
 	int timeRemaining;
@@ -3027,7 +3027,7 @@ void __cdecl Item_Text_GetSubtitle(StringTable *table, char *outText)
 #endif
 
 extern const float MY_SUBTITLE_GLOWCOLOR[4];
-void __cdecl Item_TextField_Paint(UiContext *dc, itemDef_s *item)
+void Item_TextField_Paint(UiContext *dc, itemDef_s *item)
 {
     char *VariantString; // eax
     int maxPaintChars; // [esp+24h] [ebp-478h]
@@ -3145,14 +3145,14 @@ void __cdecl Item_TextField_Paint(UiContext *dc, itemDef_s *item)
     }
 }
 
-void __cdecl Item_Multi_Paint(UiContext *dc, itemDef_s *item)
+void Item_Multi_Paint(UiContext *dc, itemDef_s *item)
 {
     PROF_SCOPED("Item_Multi_Paint");
     item->text = Item_Multi_Setting(item);
     Item_Text_Paint(dc, item);
 }
 
-const char *__cdecl Item_Multi_Setting(itemDef_s *item)
+const char *Item_Multi_Setting(itemDef_s *item)
 {
     const char *VariantString; // eax
     multiDef_s *multiPtr; // [esp+0h] [ebp-10h]
@@ -3186,14 +3186,14 @@ const char *__cdecl Item_Multi_Setting(itemDef_s *item)
     return "";
 }
 
-void __cdecl Item_DvarEnum_Paint(UiContext *dc, itemDef_s *item)
+void Item_DvarEnum_Paint(UiContext *dc, itemDef_s *item)
 {
     PROF_SCOPED("Item_DvarEnum_Paint");
     item->text = Item_DvarEnum_Setting(item);
     Item_Text_Paint(dc, item);
 }
 
-const char *__cdecl Item_DvarEnum_Setting(itemDef_s *item)
+const char *Item_DvarEnum_Setting(itemDef_s *item)
 {
     const char *v2; // eax
     int enumIndex; // [esp+0h] [ebp-8h]
@@ -3225,7 +3225,7 @@ const char *__cdecl Item_DvarEnum_Setting(itemDef_s *item)
     return *(const char **)(enumDvar->domain.integer.max + 4 * enumIndex);
 }
 
-void __cdecl Item_Slider_Paint(UiContext *dc, itemDef_s *item)
+void Item_Slider_Paint(UiContext *dc, itemDef_s *item)
 {
     const char *VariantString; // eax
     float v3; // [esp+20h] [ebp-64h]
@@ -3309,7 +3309,7 @@ void __cdecl Item_Slider_Paint(UiContext *dc, itemDef_s *item)
         sharedUiInfo.assets.sliderThumb);
 }
 
-double __cdecl Item_GetRectPlacementY(int alignY, float y0, float containerHeight, float selfHeight)
+double Item_GetRectPlacementY(int alignY, float y0, float containerHeight, float selfHeight)
 {
     if (alignY == 12)
     {
@@ -3330,7 +3330,7 @@ double __cdecl Item_GetRectPlacementY(int alignY, float y0, float containerHeigh
     }
 }
 
-void __cdecl Item_Bind_Paint(UiContext *dc, itemDef_s *item)
+void Item_Bind_Paint(UiContext *dc, itemDef_s *item)
 {
     PROF_SCOPED("Item_Bind_Paint");
     char nameBind[260]; // [esp+0h] [ebp-108h] BYREF
@@ -3348,7 +3348,7 @@ void __cdecl Item_Bind_Paint(UiContext *dc, itemDef_s *item)
     item->text = "";
 }
 
-void __cdecl Item_ListBox_Paint(UiContext *dc, itemDef_s *item)
+void Item_ListBox_Paint(UiContext *dc, itemDef_s *item)
 {
     float width; // [esp+18h] [ebp-78h]
     float v3; // [esp+24h] [ebp-6Ch]
@@ -3676,7 +3676,7 @@ void __cdecl Item_ListBox_Paint(UiContext *dc, itemDef_s *item)
     }
 }
 
-double __cdecl Item_ListBox_ThumbDrawPosition(UiContext *dc, itemDef_s *item)
+double Item_ListBox_ThumbDrawPosition(UiContext *dc, itemDef_s *item)
 {
     float max; // [esp+Ch] [ebp-Ch]
     float maxa; // [esp+Ch] [ebp-Ch]
@@ -3714,7 +3714,7 @@ double __cdecl Item_ListBox_ThumbDrawPosition(UiContext *dc, itemDef_s *item)
     return Item_ListBox_ThumbPosition(dc->localClientNum, item);
 }
 
-void __cdecl Item_ListBox_PaintTextElem(
+void Item_ListBox_PaintTextElem(
     int localClientNum,
     itemDef_s *item,
     int row,
@@ -3774,7 +3774,7 @@ void __cdecl Item_ListBox_PaintTextElem(
     }
 }
 
-double __cdecl Item_GetTextAlignAdj(int alignment, float width, float textWidth)
+double Item_GetTextAlignAdj(int alignment, float width, float textWidth)
 {
     float v5; // [esp+4h] [ebp-18h]
     float v7; // [esp+Ch] [ebp-10h]
@@ -3807,7 +3807,7 @@ double __cdecl Item_GetTextAlignAdj(int alignment, float width, float textWidth)
     }
 }
 
-void __cdecl Item_ListBox_PaintBackground(int localClientNum, itemDef_s *item, float x, float y)
+void Item_ListBox_PaintBackground(int localClientNum, itemDef_s *item, float x, float y)
 {
     float v4; // [esp+1Ch] [ebp-18h]
     float v5; // [esp+20h] [ebp-14h]
@@ -3836,7 +3836,7 @@ void __cdecl Item_ListBox_PaintBackground(int localClientNum, itemDef_s *item, f
     }
 }
 
-void __cdecl Item_ListBox_PaintHighlight(int localClientNum, itemDef_s *item, float x, float y)
+void Item_ListBox_PaintHighlight(int localClientNum, itemDef_s *item, float x, float y)
 {
     float v4; // [esp+20h] [ebp-3Ch]
     float v5; // [esp+24h] [ebp-38h]
@@ -3906,7 +3906,7 @@ void __cdecl Item_ListBox_PaintHighlight(int localClientNum, itemDef_s *item, fl
     }
 }
 
-void __cdecl Item_OwnerDraw_Paint(UiContext *dc, itemDef_s *item)
+void Item_OwnerDraw_Paint(UiContext *dc, itemDef_s *item)
 {
     rectDef_s clamp; // [esp+44h] [ebp-90h]
     float v3; // [esp+60h] [ebp-74h]
@@ -4071,7 +4071,7 @@ void __cdecl Item_OwnerDraw_Paint(UiContext *dc, itemDef_s *item)
     }
 }
 
-void __cdecl Item_GameMsgWindow_Paint(UiContext *dc, itemDef_s *item)
+void Item_GameMsgWindow_Paint(UiContext *dc, itemDef_s *item)
 {
     const char *v2; // eax
     const char *v3; // eax
@@ -4120,7 +4120,7 @@ void __cdecl Item_GameMsgWindow_Paint(UiContext *dc, itemDef_s *item)
     }
 }
 
-void __cdecl Menu_PaintAll_BeginVisibleList(char *stringBegin, uint32_t stringSize)
+void Menu_PaintAll_BeginVisibleList(char *stringBegin, uint32_t stringSize)
 {
     PROF_SCOPED("Menu_PaintAll_BeginVisibleList");
 
@@ -4135,7 +4135,7 @@ void __cdecl Menu_PaintAll_BeginVisibleList(char *stringBegin, uint32_t stringSi
     *((_WORD *)stringBegin + 6) = *(_WORD *)&VISIBLE_LIST_PREFIX[12];
 }
 
-void __cdecl Menu_PaintAll_AppendToVisibleList(char *stringBegin, uint32_t stringSize, char *stringToAppend)
+void Menu_PaintAll_AppendToVisibleList(char *stringBegin, uint32_t stringSize, char *stringToAppend)
 {
     PROF_SCOPED("Menu_PaintAll_AppendToVisibleList");
 
@@ -4177,7 +4177,7 @@ void __cdecl Menu_PaintAll_AppendToVisibleList(char *stringBegin, uint32_t strin
     I_strncat(stringBegin, stringSize, (char *)terminus);
 }
 
-void __cdecl Menu_PaintAll_DrawVisibleList(char *stringBegin, UiContext *dc)
+void Menu_PaintAll_DrawVisibleList(char *stringBegin, UiContext *dc)
 {
     PROF_SCOPED("Menu_PaintAll_DrawVisibleList");
 
@@ -4207,13 +4207,13 @@ void __cdecl Menu_PaintAll_DrawVisibleList(char *stringBegin, UiContext *dc)
         0);
 }
 
-void __cdecl TRACK_ui_shared()
+void TRACK_ui_shared()
 {
     track_static_alloc_internal(&scrollInfo, 32, "scrollInfo", 34);
     track_static_alloc_internal((void *)commandList, 336, "commandList", 34);
 }
 
-void __cdecl UI_AddMenuList(UiContext *dc, MenuList *menuList)
+void UI_AddMenuList(UiContext *dc, MenuList *menuList)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -4224,7 +4224,7 @@ void __cdecl UI_AddMenuList(UiContext *dc, MenuList *menuList)
     }
 }
 
-void __cdecl UI_AddMenu(UiContext *dc, menuDef_t *menu)
+void UI_AddMenu(UiContext *dc, menuDef_t *menu)
 {
     if (dc->menuCount >= 640)
         Com_Error(ERR_DROP, "UI_AddMenu: EXE_ERR_OUT_OF_MEMORY");
@@ -4244,12 +4244,12 @@ void __cdecl UI_AddMenu(UiContext *dc, menuDef_t *menu)
         Com_Error(ERR_DROP, "UI_AddMenu: invalid menu registration");
 }
 
-int __cdecl UI_PlayLocalSoundAliasByName(uint32_t localClientNum, const char *aliasname)
+int UI_PlayLocalSoundAliasByName(uint32_t localClientNum, const char *aliasname)
 {
     return SND_PlayLocalSoundAliasByName(localClientNum, aliasname, SASYS_UI);
 }
 
-int __cdecl UI_GetMenuScreen()
+int UI_GetMenuScreen()
 {
     int menu; // [esp+0h] [ebp-4h]
 
@@ -4260,12 +4260,12 @@ int __cdecl UI_GetMenuScreen()
         return 1;
 }
 
-int __cdecl UI_GetForcedMenuScreen()
+int UI_GetForcedMenuScreen()
 {
     return -1;
 }
 
-int __cdecl UI_GetMenuScreenForError()
+int UI_GetMenuScreenForError()
 {
     int menu; // [esp+0h] [ebp-4h]
 
@@ -4276,7 +4276,7 @@ int __cdecl UI_GetMenuScreenForError()
         return 0;
 }
 
-MenuList *__cdecl UI_LoadMenu(char *menuFile, int imageTrack)
+MenuList *UI_LoadMenu(char *menuFile, int imageTrack)
 {
     if (IsFastFileLoad())
         return UI_LoadMenus_FastFile(menuFile);
@@ -4284,7 +4284,7 @@ MenuList *__cdecl UI_LoadMenu(char *menuFile, int imageTrack)
         return UI_LoadMenu_LoadObj(menuFile, imageTrack);
 }
 
-MenuList *__cdecl UI_LoadMenus(char *menuFile, int imageTrack)
+MenuList *UI_LoadMenus(char *menuFile, int imageTrack)
 {
     if (IsFastFileLoad())
         return UI_LoadMenus_FastFile(menuFile);
@@ -4292,7 +4292,7 @@ MenuList *__cdecl UI_LoadMenus(char *menuFile, int imageTrack)
         return UI_LoadMenus_LoadObj(menuFile, imageTrack);
 }
 
-MenuList *__cdecl UI_LoadMenus_FastFile(const char *menuFile)
+MenuList *UI_LoadMenus_FastFile(const char *menuFile)
 {
     return DB_FindXAssetHeader(ASSET_TYPE_MENULIST, menuFile).menuList;
 }

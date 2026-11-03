@@ -30,7 +30,7 @@ static bool s_voiceMixerConfigured;
 dsound_sample_t *currentRecordingSample;
 dsound_sample_t *s_clientSamples[64];
 
-static uint32_t __cdecl mixerGetRecordLevel(char *SrcName)
+static uint32_t mixerGetRecordLevel(char *SrcName)
 {
     const char *v2; // eax
     tagMIXERCONTROLA mxc; // [esp+0h] [ebp-188h] BYREF
@@ -84,7 +84,7 @@ static uint32_t __cdecl mixerGetRecordLevel(char *SrcName)
     return -1;
 }
 
-bool __cdecl Voice_SendVoiceData()
+bool Voice_SendVoiceData()
 {
     if (!sv_voice->current.enabled || !cl_voice->current.enabled || Dvar_GetInt("rate") < 5000)
         return 0;
@@ -93,7 +93,7 @@ bool __cdecl Voice_SendVoiceData()
         && (cl_talking->current.enabled || IN_IsTalkKeyHeld() || cl_voiceCommunication.voicePacketCount);
 }
 
-int __cdecl mixerSetRecordSource(char *SrcName)
+int mixerSetRecordSource(char *SrcName)
 {
     const char *v2; // eax
     int jj; // [esp+0h] [ebp-100h]
@@ -204,7 +204,7 @@ int __cdecl mixerSetRecordSource(char *SrcName)
     return 0;
 }
 
-int __cdecl mixerGetRecordSource(char *srcName)
+int mixerGetRecordSource(char *srcName)
 {
     int jj; // [esp+4h] [ebp-100h]
     tagMIXERLINECONTROLSA mxlc; // [esp+8h] [ebp-FCh] BYREF
@@ -311,7 +311,7 @@ int __cdecl mixerGetRecordSource(char *srcName)
     return 0;
 }
 
-int __cdecl mixerSetRecordLevel(char *SrcName, unsigned __int16 newLevel)
+int mixerSetRecordLevel(char *SrcName, unsigned __int16 newLevel)
 {
     const char *v3; // eax
     tagMIXERCONTROLA mxc; // [esp+0h] [ebp-188h] BYREF
@@ -377,7 +377,7 @@ int __cdecl mixerSetRecordLevel(char *SrcName, unsigned __int16 newLevel)
     return 0;
 }
 
-int __cdecl mixerSetMicrophoneMute(unsigned __int8 bMute)
+int mixerSetMicrophoneMute(unsigned __int8 bMute)
 {
     const char *v2; // eax
     tagMIXERCONTROLA mxc; // [esp+0h] [ebp-188h] BYREF
@@ -443,7 +443,7 @@ int __cdecl mixerSetMicrophoneMute(unsigned __int8 bMute)
     return 0;
 }
 
-int __cdecl Client_SendVoiceData(int bytes, char *enc_buffer)
+int Client_SendVoiceData(int bytes, char *enc_buffer)
 {
     if (bytes > 0)
     {
@@ -458,7 +458,7 @@ int samples_in_partial_audio_buffer;
 __int16 partial_audio_buffer[640];
 char enc_buffer[4096];
 int enc_buffer_pos;
-int __cdecl Record_QueueAudioDataForEncoding(audioSample_t *sample)
+int Record_QueueAudioDataForEncoding(audioSample_t *sample)
 {
     __int64 v1; // rax
     int v3; // [esp+0h] [ebp-2030h]
@@ -565,31 +565,31 @@ int __cdecl Record_QueueAudioDataForEncoding(audioSample_t *sample)
     }
 }
 
-int __cdecl Record_AudioCallback(audioSample_t *sample)
+int Record_AudioCallback(audioSample_t *sample)
 {
     return Record_QueueAudioDataForEncoding(sample);
 }
 
-int __cdecl Record_Init()
+int Record_Init()
 {
     Record_SetRecordingCallback(Record_AudioCallback);
     return DSOUNDRecord_Init(1);
 }
 
-int __cdecl Sound_Init(HWND__ *handle)
+int Sound_Init(HWND__ *handle)
 {
     return DSound_Init(1, handle);
 }
 
-dsound_sample_t *__cdecl Sound_NewSample()
+dsound_sample_t *Sound_NewSample()
 {
     return DSound_NewSample();
 }
 
-void __cdecl Record_Shutdown();
-void __cdecl Sound_Shutdown();
+void Record_Shutdown();
+void Sound_Shutdown();
 
-bool __cdecl Voice_Init()
+bool Voice_Init()
 {
     DvarLimits min; // [esp+4h] [ebp-30h]
     DvarLimits mina; // [esp+4h] [ebp-30h]
@@ -653,25 +653,25 @@ bool __cdecl Voice_Init()
     return true;
 }
 
-int __cdecl Record_DestroySample(dsound_sample_t *sample);
+int Record_DestroySample(dsound_sample_t *sample);
 
-int __cdecl Sound_DestroySample(struct dsound_sample_t *sample)
+int Sound_DestroySample(struct dsound_sample_t *sample)
 {
     return Record_DestroySample(sample);
 }
 
-void __cdecl Record_Shutdown()
+void Record_Shutdown()
 {
     Encode_Shutdown();
     DSOUNDRecord_Shutdown();
 }
 
-void __cdecl Sound_Shutdown()
+void Sound_Shutdown()
 {
     DSound_Shutdown();
 }
 
-void __cdecl Voice_Shutdown()
+void Voice_Shutdown()
 {
     int client; // [esp+0h] [ebp-4h]
 
@@ -699,7 +699,7 @@ void __cdecl Voice_Shutdown()
     g_voice_initialized = 0;
 }
 
-double __cdecl Voice_GetVoiceLevel()
+double Voice_GetVoiceLevel()
 {
     int ii; // [esp+0h] [ebp-8h]
     float avgLvl; // [esp+4h] [ebp-4h]
@@ -714,17 +714,17 @@ double __cdecl Voice_GetVoiceLevel()
     return avgLvl;
 }
 
-void __cdecl Sound_SampleFrame(dsound_sample_t *sample)
+void Sound_SampleFrame(dsound_sample_t *sample)
 {
     DSound_SampleFrame(sample);
 }
 
-void __cdecl Sound_Frame()
+void Sound_Frame()
 {
     KISAK_NULLSUB();
 }
 
-void __cdecl Voice_Playback()
+void Voice_Playback()
 {
     int client; // [esp+24h] [ebp-4h]
 
@@ -741,12 +741,12 @@ void __cdecl Voice_Playback()
     }
 }
 
-void __cdecl Record_Frame()
+void Record_Frame()
 {
     DSOUNDRecord_Frame();
 }
 
-int __cdecl Voice_GetLocalVoiceData()
+int Voice_GetLocalVoiceData()
 {
     if (!cl_voice || !cl_voice->current.enabled)
     {
@@ -782,12 +782,12 @@ int __cdecl Voice_GetLocalVoiceData()
     return 0;
 }
 
-uint32_t __cdecl Sound_UpdateSample(dsound_sample_t *sample, char *data, uint32_t data_len)
+uint32_t Sound_UpdateSample(dsound_sample_t *sample, char *data, uint32_t data_len)
 {
     return DSound_UpdateSample(sample, data, data_len);
 }
 
-void __cdecl Voice_IncomingVoiceData(unsigned __int8 talker, unsigned __int8 *data, int packetDataSize)
+void Voice_IncomingVoiceData(unsigned __int8 talker, unsigned __int8 *data, int packetDataSize)
 {
     int v3; // [esp+0h] [ebp-201Ch]
     FILE *stream; // [esp+8h] [ebp-2014h]
@@ -827,7 +827,7 @@ void __cdecl Voice_IncomingVoiceData(unsigned __int8 talker, unsigned __int8 *da
     }
 }
 
-bool __cdecl Voice_IsClientTalking(uint32_t clientNum)
+bool Voice_IsClientTalking(uint32_t clientNum)
 {
     if (clientNum >= 0x40)
         MyAssertHandler(
@@ -840,17 +840,17 @@ bool __cdecl Voice_IsClientTalking(uint32_t clientNum)
     return (int)(Sys_Milliseconds() - s_clientTalkTime[clientNum]) < 300;
 }
 
-dsound_sample_t *__cdecl Record_NewSample()
+dsound_sample_t *Record_NewSample()
 {
     return DSOUNDRecord_NewSample();
 }
 
-HRESULT __cdecl Record_Start(dsound_sample_t *sample)
+HRESULT Record_Start(dsound_sample_t *sample)
 {
     return DSOUNDRecord_Start(sample);
 }
 
-char __cdecl Voice_StartRecording()
+char Voice_StartRecording()
 {
     if (!g_voice_initialized)
         return 0;
@@ -871,17 +871,17 @@ char __cdecl Voice_StartRecording()
     return 1;
 }
 
-HRESULT __cdecl Record_Stop(dsound_sample_t *sample)
+HRESULT Record_Stop(dsound_sample_t *sample)
 {
     return DSOUNDRecord_Stop(sample);
 }
 
-int __cdecl Record_DestroySample(dsound_sample_t *sample)
+int Record_DestroySample(dsound_sample_t *sample)
 {
     return DSOUNDRecord_DestroySample(sample);
 }
 
-char __cdecl Voice_StopRecording()
+char Voice_StopRecording()
 {
     if (!recording)
         return 0;

@@ -11,35 +11,35 @@ struct SeparatingAxisInfo // sizeof=0x14
 
 
 // phys_coll_cylinderbrush
-void __cdecl Phys_CollideCylinderWithBrush(const cbrush_t *brush, const objInfo *info, Results *results);
-void __cdecl Phys_CollideCylinderWithFace(
+void Phys_CollideCylinderWithBrush(const cbrush_t *brush, const objInfo *info, Results *results);
+void Phys_CollideCylinderWithFace(
     const float *polyPlane,
     const Poly *poly,
     const objInfo *info,
     int surfaceFlags,
     Results *results);
-void __cdecl Phys_PushPolyOutOfCylinderEndcapPlane(
+void Phys_PushPolyOutOfCylinderEndcapPlane(
     Results *results,
     const Poly *poly,
     const float *polyNormal,
     const objInfo *info,
     int surfaceFlags);
-uint32_t __cdecl Phys_ClipPolygonAgainstCylinderRadius(
+uint32_t Phys_ClipPolygonAgainstCylinderRadius(
     const Poly *poly,
     const objInfo *info,
     float (*result)[3],
     uint32_t maxVerts);
-uint32_t __cdecl Phys_ClipLineSegmentAgainstCylinderRadius(
+uint32_t Phys_ClipLineSegmentAgainstCylinderRadius(
     const float *pt1,
     const float *pt2,
     const objInfo *info,
     float (*result)[3]);
-char __cdecl Phys_CylinderFaceTestSeparatingAxes(
+char Phys_CylinderFaceTestSeparatingAxes(
     const float *polyPlane,
     const Poly *poly,
     const objInfo *info,
     SeparatingAxisInfo *axisInfo);
-char __cdecl Phys_CylinderFaceTestAxis(
+char Phys_CylinderFaceTestAxis(
     const float *polyNormal,
     const Poly *poly,
     const objInfo *info,
@@ -48,7 +48,7 @@ char __cdecl Phys_CylinderFaceTestAxis(
     SeparatingAxisInfo *axisInfo,
     uint32_t axisNumber,
     bool testForRejectionOnly);
-char __cdecl Phys_TestCircleToEdgeAxis(
+char Phys_TestCircleToEdgeAxis(
     const float *polyNormal,
     const Poly *poly,
     const float *pt1,
@@ -57,15 +57,15 @@ char __cdecl Phys_TestCircleToEdgeAxis(
     const float *circleCenter,
     SeparatingAxisInfo *axisInfo,
     uint32_t axisNumber);
-void __cdecl Phys_ClipCylinderEdgeToPoly(
+void Phys_ClipCylinderEdgeToPoly(
     SeparatingAxisInfo *axisInfo,
     const float *polyPlane,
     const Poly *poly,
     const objInfo *info,
     int surfaceFlags,
     Results *results);
-void __cdecl Phys_AddContactForPlane(Results *results, float *pt, const float *plane, float *normal, int surfaceFlags);
-void __cdecl Phys_PushEdgeAwayFromCylinderCircle(
+void Phys_AddContactForPlane(Results *results, float *pt, const float *plane, float *normal, int surfaceFlags);
+void Phys_PushEdgeAwayFromCylinderCircle(
     const float *ptOnEdge,
     const float *pt2OnEdge,
     const float *edge,
@@ -73,20 +73,20 @@ void __cdecl Phys_PushEdgeAwayFromCylinderCircle(
     const objInfo *info,
     int surfaceFlags,
     Results *results);
-uint32_t __cdecl Phys_IntersectionOfCircleWithPlane(
+uint32_t Phys_IntersectionOfCircleWithPlane(
     const float *plane,
     const float *circleCenter,
     const float *circleAxis,
     float circleRadius,
     float *pt1,
     float *pt2);
-void __cdecl Phys_ClipCylinderEndcapToPoly(
+void Phys_ClipCylinderEndcapToPoly(
     const float *polyPlane,
     const Poly *poly,
     const objInfo *info,
     int surfaceFlags,
     Results *results);
-void __cdecl Phys_PushLinesAway(
+void Phys_PushLinesAway(
     const float *p1,
     const float *dir1,
     const float *p2,
@@ -95,8 +95,8 @@ void __cdecl Phys_PushLinesAway(
     float depth,
     Results *results,
     int surfaceFlags);
-double __cdecl Phys_DistanceOfCylinderFromPlane(const float *plane, const objInfo *info);
-void __cdecl Phys_CollideCylinderWithTriangleList(
+double Phys_DistanceOfCylinderFromPlane(const float *plane, const objInfo *info);
+void Phys_CollideCylinderWithTriangleList(
     const unsigned __int16 *a_indices,
     const float (*verts)[3],
     uint32_t triCount,
@@ -134,8 +134,8 @@ struct AxisTestResults // sizeof=0x1C
     float bestRt;                       // ...
     float normal[3];                    // ...
 };
-void __cdecl Phys_CollideCapsuleWithBrush(const cbrush_t *brush, const objInfo *info, Results *results);
-void __cdecl Phys_CapsuleBuildContactsForTri(
+void Phys_CollideCapsuleWithBrush(const cbrush_t *brush, const objInfo *info, Results *results);
+void Phys_CapsuleBuildContactsForTri(
     Results *results,
     const float *plane,
     const Capsule *capsule,
@@ -143,14 +143,14 @@ void __cdecl Phys_CapsuleBuildContactsForTri(
     const float *p1,
     const float *p2,
     int surfaceFlags);
-bool __cdecl Phys_CapsuleSeparatingAxisTest(
+bool Phys_CapsuleSeparatingAxisTest(
     AxisTestResults *axisResults,
     const float *plane,
     const Capsule *capsule,
     const float *tri0,
     const float *tri1,
     const float *tri2);
-char __cdecl Phys_TestAxis(
+char Phys_TestAxis(
     AxisTestResults *axisResults,
     const Capsule *capsule,
     const float *p0,
@@ -159,7 +159,7 @@ char __cdecl Phys_TestAxis(
     const float *inAxis,
     int axisNum,
     bool noFlip);
-void __cdecl Phys_CapsuleBuildContactsForTriEndEdges(
+void Phys_CapsuleBuildContactsForTriEndEdges(
     Results *results,
     const float *plane,
     const Capsule *capsule,
@@ -167,14 +167,14 @@ void __cdecl Phys_CapsuleBuildContactsForTriEndEdges(
     const float *p1,
     const float *p2,
     int surfaceFlags);
-bool __cdecl Phys_CapsuleSeparatingAxisTestEndEdges(
+bool Phys_CapsuleSeparatingAxisTestEndEdges(
     AxisTestResults *axisResults,
     const float *plane,
     const Capsule *capsule,
     const float *tri0,
     const float *tri1,
     const float *tri2);
-void __cdecl Phys_CapsuleBuildContactsForTriMiddleEdge(
+void Phys_CapsuleBuildContactsForTriMiddleEdge(
     Results *results,
     const float *plane,
     const Capsule *capsule,
@@ -182,15 +182,15 @@ void __cdecl Phys_CapsuleBuildContactsForTriMiddleEdge(
     const float *p1,
     const float *p2,
     int surfaceFlags);
-bool __cdecl Phys_CapsuleSeparatingAxisTestMiddleEdge(
+bool Phys_CapsuleSeparatingAxisTestMiddleEdge(
     AxisTestResults *axisResults,
     const float *plane,
     const Capsule *capsule,
     const float *tri0,
     const float *tri1,
     const float *tri2);
-bool __cdecl Phys_TestCapsulePlane(const float *plane, const Capsule *capsule);
-void __cdecl Phys_CollideCapsuleWithTriangleList(
+bool Phys_TestCapsulePlane(const float *plane, const Capsule *capsule);
+void Phys_CollideCapsuleWithTriangleList(
     const unsigned __int16 *a_indices,
     const float (*verts)[3],
     uint32_t triCount,

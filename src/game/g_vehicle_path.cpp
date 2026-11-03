@@ -41,7 +41,7 @@ vn_field_t vn_fields[9] =
   { NULL, 0, F_INT }
 };
 
-void __cdecl VP_AddDebugLine(float *start, float *end, int forceDraw)
+void VP_AddDebugLine(float *start, float *end, int forceDraw)
 {
     float v10; // fp10
     double v11; // fp31
@@ -106,7 +106,7 @@ void __cdecl VP_AddDebugLine(float *start, float *end, int forceDraw)
     }
 }
 
-void __cdecl VP_SetScriptVariable(const char *key, const char *value, vehicle_node_t *node)
+void VP_SetScriptVariable(const char *key, const char *value, vehicle_node_t *node)
 {
     unsigned int index; // r30
     int type; // [sp+50h] [-40h] BYREF
@@ -145,7 +145,7 @@ void __cdecl VP_SetScriptVariable(const char *key, const char *value, vehicle_no
     }
 }
 
-void __cdecl VP_ParseField(const char *key, const char *value, vehicle_node_t *node)
+void VP_ParseField(const char *key, const char *value, vehicle_node_t *node)
 {
     vn_field_t *f; // r31
     float x; // [sp+50h] [-40h] BYREF
@@ -208,7 +208,7 @@ void __cdecl VP_ParseField(const char *key, const char *value, vehicle_node_t *n
     }
 }
 
-void __cdecl VP_ParseFields(vehicle_node_t *node)
+void VP_ParseFields(vehicle_node_t *node)
 {
     iassert(level.spawnVar.spawnVarsValid);
 
@@ -218,7 +218,7 @@ void __cdecl VP_ParseFields(vehicle_node_t *node)
     }
 }
 
-void __cdecl VP_ClearNode(vehicle_node_t *node)
+void VP_ClearNode(vehicle_node_t *node)
 {
     Scr_SetString(&node->name, 0);
     Scr_SetString(&node->target, 0);
@@ -226,7 +226,7 @@ void __cdecl VP_ClearNode(vehicle_node_t *node)
     Scr_SetString(&node->script_noteworthy, 0);
 }
 
-void __cdecl VP_CopyNode(const vehicle_node_t *src, vehicle_node_t *dst)
+void VP_CopyNode(const vehicle_node_t *src, vehicle_node_t *dst)
 {
     Scr_SetString(&dst->name, src->name);
     Scr_SetString(&dst->target, src->target);
@@ -251,7 +251,7 @@ void __cdecl VP_CopyNode(const vehicle_node_t *src, vehicle_node_t *dst)
 }
 
 
-int __cdecl VP_GetNodeIndex(unsigned __int16 name, float *origin)
+int VP_GetNodeIndex(unsigned __int16 name, float *origin)
 {
     int v2; // r7
     int result; // r3
@@ -446,7 +446,7 @@ float VP_CalcNodeLookAhead(int16_t nodeIdx)
 }
 
 
-void __cdecl VP_CalcNodeAngles(__int16 nodeIdx, float *angles)
+void VP_CalcNodeAngles(__int16 nodeIdx, float *angles)
 {
     vehicle_node_t *v2; // r11
     double v4; // fp0
@@ -575,7 +575,7 @@ LABEL_24:
     }
 }
 
-float __cdecl VP_GetSpeed(const vehicle_pathpos_t *vpp)
+float VP_GetSpeed(const vehicle_pathpos_t *vpp)
 {
     vehicle_node_t *node; // r11
     int nextIdx; // r9
@@ -588,7 +588,7 @@ float __cdecl VP_GetSpeed(const vehicle_pathpos_t *vpp)
         return node->speed;
 }
 
-float __cdecl VP_GetLookAhead(const vehicle_pathpos_t *vpp)
+float VP_GetLookAhead(const vehicle_pathpos_t *vpp)
 {
     vehicle_node_t *node; // r11
     int nextIdx; // r9
@@ -601,7 +601,7 @@ float __cdecl VP_GetLookAhead(const vehicle_pathpos_t *vpp)
         return node->lookAhead;
 }
 
-float __cdecl VP_GetSlide(const vehicle_pathpos_t *vpp)
+float VP_GetSlide(const vehicle_pathpos_t *vpp)
 {
     vehicle_node_t *v1; // r11
     __int16 nextIdx; // r9
@@ -641,7 +641,7 @@ LABEL_3:
     return (float)frac;
 }
 
-void __cdecl VP_GetAngles(const vehicle_pathpos_t *vpp, float *angles)
+void VP_GetAngles(const vehicle_pathpos_t *vpp, float *angles)
 {
     vehicle_node_t *v4; // r11
     int nextIdx; // r9
@@ -713,7 +713,7 @@ LABEL_13:
     }
 }
 
-void __cdecl VP_GetLookAheadXYZ(const vehicle_pathpos_t *vpp, float *lookXYZ)
+void VP_GetLookAheadXYZ(const vehicle_pathpos_t *vpp, float *lookXYZ)
 {
     __int16 v2; // r10
     vehicle_node_t *v3; // r11
@@ -752,7 +752,7 @@ LABEL_8:
     lookXYZ[2] = (float)(v3->dir[2] * (float)v4) + v3->origin[2];
 }
 
-int __cdecl VP_UpdatePathPos(vehicle_pathpos_t *vpp, const float *dir, __int16 nodeTest)
+int VP_UpdatePathPos(vehicle_pathpos_t *vpp, const float *dir, __int16 nodeTest)
 {
     __int16 nodeIdx; // r8
     double frac; // fp6
@@ -833,7 +833,7 @@ LABEL_15:
     return test;
 }
 
-void __cdecl VP_BeginSwitchNode(const vehicle_pathpos_t *vpp)
+void VP_BeginSwitchNode(const vehicle_pathpos_t *vpp)
 {
     int name; // r8
     const vehicle_node_t *switchNode; // r3
@@ -862,7 +862,7 @@ void __cdecl VP_BeginSwitchNode(const vehicle_pathpos_t *vpp)
         VP_CopyNode(switchNode, &s_nodes[v3]);
 }
 
-void __cdecl VP_EndSwitchNode(const vehicle_pathpos_t *vpp)
+void VP_EndSwitchNode(const vehicle_pathpos_t *vpp)
 {
     __int16 v1; // r10
     int v2; // r11
@@ -887,12 +887,12 @@ void __cdecl VP_EndSwitchNode(const vehicle_pathpos_t *vpp)
         VP_CopyNode(&vpp->switchNode[1], &s_nodes[v1]);
 }
 
-void __cdecl G_InitVehiclePaths()
+void G_InitVehiclePaths()
 {
     s_numNodes = 0;
 }
 
-void __cdecl G_FreeVehiclePaths()
+void G_FreeVehiclePaths()
 {
     int v0; // r30
     vehicle_node_t *v1; // r31
@@ -914,7 +914,7 @@ void __cdecl G_FreeVehiclePaths()
     s_numNodes = 0;
 }
 
-void __cdecl G_FreeVehiclePathsScriptInfo()
+void G_FreeVehiclePathsScriptInfo()
 {
     int v0; // r31
 
@@ -929,7 +929,7 @@ void __cdecl G_FreeVehiclePathsScriptInfo()
     }
 }
 
-void __cdecl G_SetupVehiclePaths()
+void G_SetupVehiclePaths()
 {
     // AKA G_SetupSplinePaths()
 
@@ -1000,7 +1000,7 @@ void __cdecl G_SetupVehiclePaths()
     }
 }
 
-void __cdecl G_VehInitPathPos(vehicle_pathpos_t *vpp)
+void G_VehInitPathPos(vehicle_pathpos_t *vpp)
 {
     vpp->frac = 0.0;
     vpp->endOfPath = 0;
@@ -1059,7 +1059,7 @@ void __cdecl G_VehInitPathPos(vehicle_pathpos_t *vpp)
     vpp->switchNode[1].prevIdx = -1;
 }
 
-void __cdecl G_VehFreePathPos(vehicle_pathpos_t *vpp)
+void G_VehFreePathPos(vehicle_pathpos_t *vpp)
 {
     vehicle_node_t *switchNode; // r31
 
@@ -1074,7 +1074,7 @@ void __cdecl G_VehFreePathPos(vehicle_pathpos_t *vpp)
     Scr_SetString(&vpp->switchNode[1].script_noteworthy, 0);
 }
 
-void __cdecl G_VehSetUpPathPos(vehicle_pathpos_t *vpp, __int16 nodeIdx)
+void G_VehSetUpPathPos(vehicle_pathpos_t *vpp, __int16 nodeIdx)
 {
     vehicle_node_t *v2; // r9
     double v3; // fp13
@@ -1261,7 +1261,7 @@ void G_VehSetSwitchNode(vehicle_pathpos_t *vpp, int16_t srcNodeIdx, int16_t dstN
 }
 
 
-void __cdecl TRACK_g_vehicle_path()
+void TRACK_g_vehicle_path()
 {
     track_static_alloc_internal(s_nodes, 272000, "s_nodes", 9);
 }
@@ -1302,7 +1302,7 @@ static void VP_InitNode(vehicle_node_t *node, short nodeIdx)
     node->nextIdx = -1;
 }
 
-void __cdecl SP_info_vehicle_node(int rotated)
+void SP_info_vehicle_node(int rotated)
 {
     vehicle_node_t *node; // r31
     int name; // r11
@@ -1334,7 +1334,7 @@ void __cdecl SP_info_vehicle_node(int rotated)
         node->speed = node->speed * MPH_TO_INCHES_PER_SEC;
 }
 
-int __cdecl GScr_GetVehicleNodeIndex(int index)
+int GScr_GetVehicleNodeIndex(int index)
 {
     scr_entref_t EntityRef; // [sp+50h] [-20h]
 
@@ -1357,7 +1357,7 @@ int __cdecl GScr_GetVehicleNodeIndex(int index)
     }
 }
 
-void __cdecl GScr_AddFieldsForVehicleNode()
+void GScr_AddFieldsForVehicleNode()
 {
     vn_field_t *v0; // r28
     int v1; // r30
@@ -1382,7 +1382,7 @@ void __cdecl GScr_AddFieldsForVehicleNode()
     }
 }
 
-void __cdecl GScr_GetVehicleNodeField(unsigned int entnum, unsigned int offset)
+void GScr_GetVehicleNodeField(unsigned int entnum, unsigned int offset)
 {
     if (offset >= 8)
         MyAssertHandler(
@@ -1403,7 +1403,7 @@ void __cdecl GScr_GetVehicleNodeField(unsigned int entnum, unsigned int offset)
     Scr_GetGenericField((unsigned __int8 *)&s_nodes[entnum], vn_fields[offset].type, vn_fields[offset].ofs);
 }
 
-void __cdecl GScr_GetVehicleNode()
+void GScr_GetVehicleNode()
 {
     unsigned int ConstString; // r25
     const char *String; // r3
@@ -1460,7 +1460,7 @@ void __cdecl GScr_GetVehicleNode()
     }
 }
 
-void __cdecl GScr_GetVehicleNodeArray()
+void GScr_GetVehicleNodeArray()
 {
     unsigned int ConstString; // r27
     const char *String; // r3
@@ -1512,7 +1512,7 @@ void __cdecl GScr_GetVehicleNodeArray()
     }
 }
 
-void __cdecl GScr_GetAllVehicleNodes()
+void GScr_GetAllVehicleNodes()
 {
     int v0; // r31
 
@@ -1529,7 +1529,7 @@ void __cdecl GScr_GetAllVehicleNodes()
     }
 }
 
-void __cdecl VP_DrawPath(const vehicle_pathpos_t *vpp)
+void VP_DrawPath(const vehicle_pathpos_t *vpp)
 {
     int v2; // r29
     int v3; // r30
@@ -1602,7 +1602,7 @@ LABEL_11:
     }
 }
 
-void __cdecl G_DrawVehiclePaths()
+void G_DrawVehiclePaths()
 {
     __int16 v0; // r29
     int v1; // r31

@@ -124,7 +124,7 @@ struct XSurfaceGetTriCandidatesLocals // sizeof=0x2A4
     const struct XSurfaceCollisionTree *tree;  // ...
     const uint16_t *inIndices;  // ...
     const struct GfxPackedVertex *inVertices0; // ...
-    bool(__cdecl *visitorFunc)(void *, const struct GfxPackedVertex **, const struct GfxPackedVertex **); // ...
+    bool(*visitorFunc)(void *, const struct GfxPackedVertex **, const struct GfxPackedVertex **); // ...
     void *visitorContext;               // ...
     uint32_t nodeQueueBegin;        // ...
     uint32_t nodeQueueEnd;          // ...
@@ -238,27 +238,27 @@ struct XVertexInfo1 // sizeof=0x6
 };
 
 // xmodel
-void __cdecl XModelPartsFree(XModelPartsLoad *modelParts);
-bool __cdecl XModelBad(const XModel *model);
-void __cdecl TRACK_xmodel();
-XModel *__cdecl XModelPrecache(char *name, void *(__cdecl *Alloc)(int), void *(__cdecl *AllocColl)(int));
-XModel *__cdecl XModelPrecache_LoadObj(char *name, void *(__cdecl *Alloc)(int), void *(__cdecl *AllocColl)(int));
-XModel *__cdecl XModelPrecache_FastFile(const char *name);
-XModel *__cdecl XModelLoad(char *name, void *(__cdecl *Alloc)(int), void *(__cdecl *AllocColl)(int));
+void XModelPartsFree(XModelPartsLoad *modelParts);
+bool XModelBad(const XModel *model);
+void TRACK_xmodel();
+XModel *XModelPrecache(char *name, void *(*Alloc)(int), void *(*AllocColl)(int));
+XModel *XModelPrecache_LoadObj(char *name, void *(*Alloc)(int), void *(*AllocColl)(int));
+XModel *XModelPrecache_FastFile(const char *name);
+XModel *XModelLoad(char *name, void *(*Alloc)(int), void *(*AllocColl)(int));
 XModel *XModelFindExisting(const char *name);
 uint16_t *XModelBoneNames(XModel *model);
 void XModelDumpInfo();
 
-double __cdecl XModelGetRadius(const XModel *model);
-void __cdecl XModelGetBounds(const XModel *model, float *mins, float *maxs);
-int __cdecl XModelGetMemUsage(const XModel *model);
-int __cdecl XModelTraceLine(
+double XModelGetRadius(const XModel *model);
+void XModelGetBounds(const XModel *model, float *mins, float *maxs);
+int XModelGetMemUsage(const XModel *model);
+int XModelTraceLine(
     const XModel *model,
     struct trace_t *results,
     const float *localStart,
     const float *localEnd,
     int contentmask);
-int __cdecl XModelTraceLineAnimated(
+int XModelTraceLineAnimated(
     const struct DObj_s *obj,
     uint32_t modelIndex,
     int baseBoneIndex,
@@ -267,62 +267,62 @@ int __cdecl XModelTraceLineAnimated(
     float *localStart,
     float *localEnd,
     int contentmask);
-void __cdecl XModelTraceLineAnimatedPartBits(
+void XModelTraceLineAnimatedPartBits(
     const struct DObj_s *obj,
     uint32_t modelIndex,
     int baseBoneIndex,
     int contentmask,
     int *partBits);
-char __cdecl XSurfaceVisitTrianglesInAabb(
+char XSurfaceVisitTrianglesInAabb(
     const struct XSurface *surface,
     uint32_t vertListIndex,
     const float *aabbMins,
     const float *aabbMaxs,
-    bool(__cdecl *visitorFunc)(void *, const struct GfxPackedVertex **, const struct GfxPackedVertex **),
+    bool(*visitorFunc)(void *, const struct GfxPackedVertex **, const struct GfxPackedVertex **),
     void *visitorContext);
-void __cdecl XSurfaceVisitTrianglesInAabb_ConvertAabb(
+void XSurfaceVisitTrianglesInAabb_ConvertAabb(
     const struct XSurfaceCollisionTree *tree,
     const float *aabbMins,
     const float *aabbMaxs,
     int *mins,
     int *maxs);
-bool __cdecl XSurfaceVisitTrianglesInAabb_ProcessVertices(XSurfaceGetTriCandidatesLocals *locals);
-char __cdecl XSurfaceVisitTrianglesInAabb_ProcessTriangles(XSurfaceGetTriCandidatesLocals *locals);
-char __cdecl XSurfaceVisitTrianglesInAabb_ProcessLeaf(XSurfaceGetTriCandidatesLocals *locals);
-char __cdecl XSurfaceVisitTrianglesInAabb_ProcessNode(XSurfaceGetTriCandidatesLocals *locals);
-int __cdecl XModelGetBoneIndex(const XModel *model, uint32_t name, uint32_t offset, unsigned __int8 *index);
-int __cdecl XModelGetStaticBounds(const XModel *model, mat3x3 &axis, float *mins, float *maxs);
+bool XSurfaceVisitTrianglesInAabb_ProcessVertices(XSurfaceGetTriCandidatesLocals *locals);
+char XSurfaceVisitTrianglesInAabb_ProcessTriangles(XSurfaceGetTriCandidatesLocals *locals);
+char XSurfaceVisitTrianglesInAabb_ProcessLeaf(XSurfaceGetTriCandidatesLocals *locals);
+char XSurfaceVisitTrianglesInAabb_ProcessNode(XSurfaceGetTriCandidatesLocals *locals);
+int XModelGetBoneIndex(const XModel *model, uint32_t name, uint32_t offset, unsigned __int8 *index);
+int XModelGetStaticBounds(const XModel *model, mat3x3 &axis, float *mins, float *maxs);
 
 // xmodel_utils
-const char *__cdecl XModelGetName(const XModel *model);
-int __cdecl XModelGetSurfaces(const XModel *model, struct XSurface **surfaces, int lod);
-struct XSurface *__cdecl XModelGetSurface(const XModel *model, int lod, int surfIndex);
-const XModelLodInfo *__cdecl XModelGetLodInfo(const XModel *model, int lod);
-uint32_t __cdecl XModelGetSurfCount(const XModel *model, int lod);
-Material **__cdecl XModelGetSkins(const XModel *model, int lod);
-XModelLodRampType __cdecl XModelGetLodRampType(const XModel *model);
-int __cdecl XModelGetNumLods(const XModel *model);
-double __cdecl XModelGetLodOutDist(const XModel *model);
-int __cdecl XModelNumBones(const XModel *model);
-const DObjAnimMat *__cdecl XModelGetBasePose(const XModel *model);
-int __cdecl XModelGetLodForDist(const XModel *model, float dist);
-void __cdecl XModelSetTestLods(uint32_t lodLevel, float dist);
-double __cdecl XModelGetLodDist(const XModel *model, uint32_t lod);
-int __cdecl XModelGetContents(const XModel *model);
-int __cdecl XModelGetStaticModelCacheVertCount(XModel *model, uint32_t lod);
+const char *XModelGetName(const XModel *model);
+int XModelGetSurfaces(const XModel *model, struct XSurface **surfaces, int lod);
+struct XSurface *XModelGetSurface(const XModel *model, int lod, int surfIndex);
+const XModelLodInfo *XModelGetLodInfo(const XModel *model, int lod);
+uint32_t XModelGetSurfCount(const XModel *model, int lod);
+Material **XModelGetSkins(const XModel *model, int lod);
+XModelLodRampType XModelGetLodRampType(const XModel *model);
+int XModelGetNumLods(const XModel *model);
+double XModelGetLodOutDist(const XModel *model);
+int XModelNumBones(const XModel *model);
+const DObjAnimMat *XModelGetBasePose(const XModel *model);
+int XModelGetLodForDist(const XModel *model, float dist);
+void XModelSetTestLods(uint32_t lodLevel, float dist);
+double XModelGetLodDist(const XModel *model, uint32_t lod);
+int XModelGetContents(const XModel *model);
+int XModelGetStaticModelCacheVertCount(XModel *model, uint32_t lod);
 
 
 
 // xmodel_load_obj
-void __cdecl ConsumeQuatNoSwap(unsigned __int8 **pos, __int16 *out);
-int __cdecl XModelSurfsPrecache(
+void ConsumeQuatNoSwap(unsigned __int8 **pos, __int16 *out);
+int XModelSurfsPrecache(
     XModel *model,
     const char *name,
-    void *(__cdecl *Alloc)(int),
+    void *(*Alloc)(int),
     __int16 modelNumsurfs,
     const char *modelName,
     XModelSurfs *outModelSurfs);
 
 
 // xmodel_load_phys_collmap
-struct PhysGeomList *__cdecl XModel_LoadPhysicsCollMap(const char *name, void *(__cdecl *Alloc)(int));
+struct PhysGeomList *XModel_LoadPhysicsCollMap(const char *name, void *(*Alloc)(int));

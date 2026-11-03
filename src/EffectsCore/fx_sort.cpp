@@ -3,7 +3,7 @@
 #include <universal/profile.h>
 
 
-void __cdecl FX_SortEffects(FxSystem *system)
+void FX_SortEffects(FxSystem *system)
 {
     float diff[9]; // [esp+20h] [ebp-1048h] BYREF
     FxEffect *firstEffect; // [esp+44h] [ebp-1024h]
@@ -50,7 +50,7 @@ void __cdecl FX_SortEffects(FxSystem *system)
     system->iteratorCount = 0;
 }
 
-void __cdecl FX_WaitBeginIteratingOverEffects_Exclusive(FxSystem *system)
+void FX_WaitBeginIteratingOverEffects_Exclusive(FxSystem *system)
 {
     volatile LONG *Destination; // [esp+0h] [ebp-4h]
 
@@ -64,7 +64,7 @@ void __cdecl FX_WaitBeginIteratingOverEffects_Exclusive(FxSystem *system)
     } while (InterlockedCompareExchange(Destination, -1, 0));
 }
 
-bool __cdecl FX_FirstEffectIsFurther(FxEffect *firstEffect, FxEffect *secondEffect)
+bool FX_FirstEffectIsFurther(FxEffect *firstEffect, FxEffect *secondEffect)
 {
     if (firstEffect->boltAndSortOrder.sortOrder == 255
         && secondEffect->boltAndSortOrder.sortOrder == 255)
@@ -78,7 +78,7 @@ bool __cdecl FX_FirstEffectIsFurther(FxEffect *firstEffect, FxEffect *secondEffe
     return firstEffect->boltAndSortOrder.sortOrder < secondEffect->boltAndSortOrder.sortOrder;
 }
 
-int __cdecl FX_CalcRunnerParentSortOrder(FxEffect *effect)
+int FX_CalcRunnerParentSortOrder(FxEffect *effect)
 {
     int v3; // [esp+8h] [ebp-20h]
     const FxEffectDef *def; // [esp+10h] [ebp-18h]
@@ -117,7 +117,7 @@ int __cdecl FX_CalcRunnerParentSortOrder(FxEffect *effect)
         return 0;
 }
 
-void __cdecl FX_SortNewElemsInEffect(FxSystem *system, FxEffect *effect)
+void FX_SortNewElemsInEffect(FxSystem *system, FxEffect *effect)
 {
     uint16_t elemHandle; // [esp+8h] [ebp-Ch]
     uint16_t elemHandlea; // [esp+8h] [ebp-Ch]
@@ -162,7 +162,7 @@ void __cdecl FX_SortNewElemsInEffect(FxSystem *system, FxEffect *effect)
     }
 }
 
-void __cdecl FX_SortSpriteElemIntoEffect(FxSystem *system, FxEffect *effect, FxElem *elem)
+void FX_SortSpriteElemIntoEffect(FxSystem *system, FxEffect *effect, FxElem *elem)
 {
     uint16_t v3; // [esp+5Ah] [ebp-2Ah]
     FxInsertSortElem sortElem; // [esp+5Ch] [ebp-28h] BYREF
@@ -203,7 +203,7 @@ void __cdecl FX_SortSpriteElemIntoEffect(FxSystem *system, FxEffect *effect, FxE
         nextElem->prevElemHandleInEffect = elemHandle;
 }
 
-void __cdecl FX_GetInsertSortElem(
+void FX_GetInsertSortElem(
     const FxSystem *system,
     const FxEffect *effect,
     const FxElem *elem,
@@ -237,7 +237,7 @@ void __cdecl FX_GetInsertSortElem(
     sortElem->distToCamSq = Vec3LengthSq(diff);
 }
 
-bool __cdecl FX_ExistingElemSortsBeforeNewElem(
+bool FX_ExistingElemSortsBeforeNewElem(
     const FxSystem *system,
     const FxEffect *effect,
     const FxElem *elem,

@@ -19,7 +19,7 @@
 
 //Line 53050:  0006 : 0053ff60       int32_t *itemRegistered     82ceff60     g_items.obj
 
-void __cdecl Fill_Clip(playerState_s *ps, uint32_t weapon)
+void Fill_Clip(playerState_s *ps, uint32_t weapon)
 {
     int32_t ammomove; // [esp+0h] [ebp-18h]
     int32_t iClipIndex; // [esp+8h] [ebp-10h]
@@ -42,7 +42,7 @@ void __cdecl Fill_Clip(playerState_s *ps, uint32_t weapon)
     }
 }
 
-int32_t __cdecl Add_Ammo(gentity_s *ent, uint32_t weaponIndex, uint8_t weaponModel, int32_t count, int32_t fillClip)
+int32_t Add_Ammo(gentity_s *ent, uint32_t weaponIndex, uint8_t weaponModel, int32_t count, int32_t fillClip)
 {
     int32_t ammoIndex; // [esp+0h] [ebp-20h]
     int32_t oldClip; // [esp+4h] [ebp-1Ch]
@@ -113,13 +113,13 @@ int32_t __cdecl Add_Ammo(gentity_s *ent, uint32_t weaponIndex, uint8_t weaponMod
     return ps->ps.ammoclip[clipIndex] - oldClip + ps->ps.ammo[ammoIndex] - oldAmmo;
 }
 
-void __cdecl Touch_Item_Auto(gentity_s *ent, gentity_s *other, int32_t bTouched)
+void Touch_Item_Auto(gentity_s *ent, gentity_s *other, int32_t bTouched)
 {
     ent->active = 1;
     Touch_Item(ent, other, bTouched);
 }
 
-void __cdecl Touch_Item(gentity_s *ent, gentity_s *other, int32_t touched)
+void Touch_Item(gentity_s *ent, gentity_s *other, int32_t touched)
 {
     char *Guid; // eax
     int32_t number; // [esp-Ch] [ebp-68h]
@@ -188,7 +188,7 @@ void __cdecl Touch_Item(gentity_s *ent, gentity_s *other, int32_t touched)
     }
 }
 
-int32_t __cdecl WeaponPickup(gentity_s *weaponEnt, gentity_s *player, int32_t *pickupEvent, int32_t touched)
+int32_t WeaponPickup(gentity_s *weaponEnt, gentity_s *player, int32_t *pickupEvent, int32_t touched)
 {
     int32_t weapIdx; // [esp+0h] [ebp-Ch]
     WeaponDef *weapDef; // [esp+4h] [ebp-8h]
@@ -208,7 +208,7 @@ int32_t __cdecl WeaponPickup(gentity_s *weaponEnt, gentity_s *player, int32_t *p
     return WeaponPickup_Grab(weaponEnt, player, weapIdx, pickupEvent);
 }
 
-int32_t __cdecl WeaponPickup_Grab(gentity_s *weaponEnt, gentity_s *player, int32_t weapIdx, int32_t *pickupEvent)
+int32_t WeaponPickup_Grab(gentity_s *weaponEnt, gentity_s *player, int32_t weapIdx, int32_t *pickupEvent)
 {
     uint8_t weaponModel; // [esp+3h] [ebp-Dh]
     int32_t gotWeapon; // [esp+4h] [ebp-Ch]
@@ -252,7 +252,7 @@ int32_t __cdecl WeaponPickup_Grab(gentity_s *weaponEnt, gentity_s *player, int32
     }
 }
 
-int32_t __cdecl WeaponPickup_AddWeapon(
+int32_t WeaponPickup_AddWeapon(
     gentity_s *ent,
     gentity_s *other,
     int32_t weapon,
@@ -364,7 +364,7 @@ LABEL_12:
     }
 }
 
-int32_t __cdecl CurrentPrimaryWeapon(playerState_s *ps)
+int32_t CurrentPrimaryWeapon(playerState_s *ps)
 {
     int32_t weapIdx; // [esp+0h] [ebp-8h]
     WeaponDef *weapDef; // [esp+4h] [ebp-4h]
@@ -389,7 +389,7 @@ int32_t __cdecl CurrentPrimaryWeapon(playerState_s *ps)
     return weapIdx;
 }
 
-int32_t __cdecl G_ItemClipMask(gentity_s *ent)
+int32_t G_ItemClipMask(gentity_s *ent)
 {
     if (!ent)
         MyAssertHandler(".\\game\\g_items.cpp", 176, 0, "%s", "ent");
@@ -399,7 +399,7 @@ int32_t __cdecl G_ItemClipMask(gentity_s *ent)
         return 1169;
 }
 
-bool __cdecl WeaponPickup_LeechFromWeaponEnt(
+bool WeaponPickup_LeechFromWeaponEnt(
     gentity_s *weaponEnt,
     gentity_s *player,
     int32_t haveExactWeapon,
@@ -459,7 +459,7 @@ bool __cdecl WeaponPickup_LeechFromWeaponEnt(
     return haveExactWeapon && removedAnyAmmo;
 }
 
-void __cdecl PrintPlayerPickupMessage(gentity_s *player, uint32_t weapIdx, WeaponDef *weapDef)
+void PrintPlayerPickupMessage(gentity_s *player, uint32_t weapIdx, WeaponDef *weapDef)
 {
     const char *text;
 
@@ -485,7 +485,7 @@ void __cdecl PrintPlayerPickupMessage(gentity_s *player, uint32_t weapIdx, Weapo
 #endif
 }
 
-void __cdecl WeaponPickup_AddAmmoForNewWeapon(gentity_s *weaponEnt, gentity_s *player)
+void WeaponPickup_AddAmmoForNewWeapon(gentity_s *weaponEnt, gentity_s *player)
 {
     gclient_s *client; // esi
     int32_t i; // [esp+4h] [ebp-18h]
@@ -514,7 +514,7 @@ void __cdecl WeaponPickup_AddAmmoForNewWeapon(gentity_s *weaponEnt, gentity_s *p
     }
 }
 
-void __cdecl WeaponPickup_Notifies(
+void WeaponPickup_Notifies(
     gentity_s *thisItem,
     gentity_s *newDroppedItem,
     gentity_s *player,
@@ -534,7 +534,7 @@ void __cdecl WeaponPickup_Notifies(
     Scr_Notify(thisItem, scr_const.trigger, 2u);
 }
 
-bool __cdecl WeaponPickup_Touch(gentity_s *weaponEnt, gentity_s *player, int32_t weapIdx, int32_t *pickupEvent)
+bool WeaponPickup_Touch(gentity_s *weaponEnt, gentity_s *player, int32_t weapIdx, int32_t *pickupEvent)
 {
     gclient_s *client; // [esp+0h] [ebp-14h]
     bool haveExactWeapon; // [esp+8h] [ebp-Ch]
@@ -562,7 +562,7 @@ bool __cdecl WeaponPickup_Touch(gentity_s *weaponEnt, gentity_s *player, int32_t
     return removeWeaponFromWorld;
 }
 
-void __cdecl PrintMessage_CannotGrabItem(gentity_s *ent, gentity_s *player, int32_t touched, gitem_s *item, int32_t weapIndex)
+void PrintMessage_CannotGrabItem(gentity_s *ent, gentity_s *player, int32_t touched, gitem_s *item, int32_t weapIndex)
 {
     WeaponDef *WeaponDef; // eax
     const char *v6; // eax
@@ -620,13 +620,13 @@ void __cdecl PrintMessage_CannotGrabItem(gentity_s *ent, gentity_s *player, int3
 }
 
 #ifdef KISAK_MP
-void __cdecl DroppedItemClearOwner(gentity_s *pSelf)
+void DroppedItemClearOwner(gentity_s *pSelf)
 {
     pSelf->s.clientNum = 64;
 }
 #endif
 
-void __cdecl G_GetItemClassname(const gitem_s *item, uint16_t *out)
+void G_GetItemClassname(const gitem_s *item, uint16_t *out)
 {
     char classname[256]; // [esp+4h] [ebp-108h] BYREF
     WeaponDef *weapDef; // [esp+108h] [ebp-4h]
@@ -636,7 +636,7 @@ void __cdecl G_GetItemClassname(const gitem_s *item, uint16_t *out)
     G_SetConstString(out, classname);
 }
 
-gentity_s *__cdecl Drop_Item(gentity_s *ent, const gitem_s *item, float angle, int32_t novelocity)
+gentity_s *Drop_Item(gentity_s *ent, const gitem_s *item, float angle, int32_t novelocity)
 {
     float velocity[3]; // [esp+10h] [ebp-24h] BYREF
     float angles[3]; // [esp+1Ch] [ebp-18h] BYREF
@@ -683,7 +683,7 @@ gentity_s *__cdecl Drop_Item(gentity_s *ent, const gitem_s *item, float angle, i
     return LaunchItem(item, vPos, angles, velocity, ent->s.number);
 }
 
-gentity_s *__cdecl LaunchItem(const gitem_s *item, float *origin, float *angles, float *velocity, int32_t ownerNum)
+gentity_s *LaunchItem(const gitem_s *item, float *origin, float *angles, float *velocity, int32_t ownerNum)
 {
     char *Name; // eax
     gentity_s *dropped; // [esp+30h] [ebp-18h]
@@ -756,7 +756,7 @@ gentity_s *__cdecl LaunchItem(const gitem_s *item, float *origin, float *angles,
     return dropped;
 }
 
-int32_t __cdecl GetFreeDropCueIdx()
+int32_t GetFreeDropCueIdx()
 {
     float diff[3]; // [esp+0h] [ebp-38h] BYREF
     int32_t weapIndex; // [esp+Ch] [ebp-2Ch]
@@ -829,7 +829,7 @@ int32_t __cdecl GetFreeDropCueIdx()
     return iBest;
 }
 
-bool __cdecl PlayerHasAnyAmmoToTransferToWeapon(gentity_s *player, uint32_t transferWeapon)
+bool PlayerHasAnyAmmoToTransferToWeapon(gentity_s *player, uint32_t transferWeapon)
 {
     if (!player->client)
         MyAssertHandler(".\\game\\g_items.cpp", 890, 0, "%s", "player->client");
@@ -837,7 +837,7 @@ bool __cdecl PlayerHasAnyAmmoToTransferToWeapon(gentity_s *player, uint32_t tran
         || GetNonClipAmmoToTransferToWeaponEntity(player, transferWeapon) > 0;
 }
 
-int32_t __cdecl GetNonClipAmmoToTransferToWeaponEntity(gentity_s *player, uint32_t transferWeapon)
+int32_t GetNonClipAmmoToTransferToWeaponEntity(gentity_s *player, uint32_t transferWeapon)
 {
     int32_t ammoIndex; // [esp+0h] [ebp-10h]
     int32_t ammoDrop; // [esp+Ch] [ebp-4h]
@@ -851,7 +851,7 @@ int32_t __cdecl GetNonClipAmmoToTransferToWeaponEntity(gentity_s *player, uint32
         return ammoDrop;
 }
 
-gentity_s *__cdecl Drop_Weapon(gentity_s *ent, int32_t weapIdx, uint8_t weaponModel, uint32_t tag)
+gentity_s *Drop_Weapon(gentity_s *ent, int32_t weapIdx, uint8_t weaponModel, uint32_t tag)
 {
     WeaponDef *WeaponDef; // eax
     gclient_s *v7; // esi
@@ -930,7 +930,7 @@ gentity_s *__cdecl Drop_Weapon(gentity_s *ent, int32_t weapIdx, uint8_t weaponMo
     }
 }
 
-int32_t __cdecl TransferPlayerAmmoToWeaponEntity(gentity_s *player, gentity_s *weaponEnt, int32_t transferWeapon)
+int32_t TransferPlayerAmmoToWeaponEntity(gentity_s *player, gentity_s *weaponEnt, int32_t transferWeapon)
 {
     int32_t NonClipAmmoToTransferToWeaponEntity; // eax
     int32_t clipIndex; // [esp+4h] [ebp-14h]
@@ -954,7 +954,7 @@ int32_t __cdecl TransferPlayerAmmoToWeaponEntity(gentity_s *player, gentity_s *w
     return total;
 }
 
-int32_t __cdecl TransferRandomAmmoToWeaponEntity(gentity_s *weaponEnt, int32_t transferWeapon)
+int32_t TransferRandomAmmoToWeaponEntity(gentity_s *weaponEnt, int32_t transferWeapon)
 {
     int32_t i; // [esp+0h] [ebp-20h]
     int32_t iDropAmmo; // [esp+4h] [ebp-1Ch]
@@ -1024,7 +1024,7 @@ int32_t __cdecl TransferRandomAmmoToWeaponEntity(gentity_s *weaponEnt, int32_t t
     return total;
 }
 
-void __cdecl FinishSpawningItem(gentity_s *ent)
+void FinishSpawningItem(gentity_s *ent)
 {
     float v4; // [esp+10h] [ebp-BCh]
     float v5; // [esp+14h] [ebp-B8h]
@@ -1108,14 +1108,14 @@ void __cdecl FinishSpawningItem(gentity_s *ent)
     SV_LinkEntity(ent);
 }
 
-void __cdecl ClearRegisteredItems()
+void ClearRegisteredItems()
 {
     memset((uint8_t *)itemRegistered, 0, sizeof(itemRegistered));
     itemRegistered[0] = 1;
 }
 
 #ifdef KISAK_MP
-void __cdecl SaveRegisteredWeapons()
+void SaveRegisteredWeapons()
 {
     char dest[8196]; // [esp+0h] [ebp-2010h] BYREF
     uint32_t weaponIndex; // [esp+2008h] [ebp-8h]
@@ -1135,7 +1135,7 @@ void __cdecl SaveRegisteredWeapons()
 }
 #endif
 
-void __cdecl SaveRegisteredItems()
+void SaveRegisteredItems()
 {
     char string[128]; // [esp+0h] [ebp-98h] BYREF
     int32_t modelIdx; // [esp+84h] [ebp-14h]
@@ -1171,7 +1171,7 @@ void __cdecl SaveRegisteredItems()
     SV_SetConfigstring(CS_ITEMS, string);
 }
 
-void __cdecl G_RegisterWeapon(uint32_t weapIndex)
+void G_RegisterWeapon(uint32_t weapIndex)
 {
     char *Name; // eax
     char *v2; // eax
@@ -1221,14 +1221,14 @@ void __cdecl G_RegisterWeapon(uint32_t weapIndex)
     //}
 }
 
-int32_t __cdecl IsItemRegistered(uint32_t iItemIndex)
+int32_t IsItemRegistered(uint32_t iItemIndex)
 {
     if (iItemIndex >= 0x80)
         MyAssertHandler(".\\game\\g_items.cpp", 1349, 0, "%s", "(iItemIndex >= 0) && (iItemIndex < MAX_WEAPONS)");
     return itemRegistered[iItemIndex];
 }
 
-void __cdecl G_SpawnItem(gentity_s *ent, const gitem_s *item)
+void G_SpawnItem(gentity_s *ent, const gitem_s *item)
 {
     char *Name; // eax
     uint32_t weapIndex; // [esp+8h] [ebp-Ch]
@@ -1296,7 +1296,7 @@ void __cdecl G_SpawnItem(gentity_s *ent, const gitem_s *item)
     }
 }
 
-void __cdecl G_RunItem(gentity_s *ent)
+void G_RunItem(gentity_s *ent)
 {
     int32_t passEntityNum; // [esp+10h] [ebp-ACh]
     float diff[6]; // [esp+24h] [ebp-98h] BYREF
@@ -1452,7 +1452,7 @@ void __cdecl G_RunItem(gentity_s *ent)
     }
 }
 
-void __cdecl G_OrientItemToGround(gentity_s *ent, trace_t *trace)
+void G_OrientItemToGround(gentity_s *ent, trace_t *trace)
 {
     float vAngles[3]; // [esp+8h] [ebp-30h] BYREF
     float vAxis[3][3]; // [esp+14h] [ebp-24h] BYREF

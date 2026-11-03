@@ -16,12 +16,12 @@ const uint16_t templateIndices[12] = { 0u, 2u, 1u, 2u, 4u, 1u, 1u, 4u, 3u, 3u, 4
 
 static FxBeamInfo g_beamInfo;
 
-void __cdecl CreateClipMatrix(float4x4* clipMtx, const float* vieworg, const mat3x3& viewaxis);
-void __cdecl Float4x4ForViewer(float4x4* mtx, const vec3r origin3, const mat3x3& axis);
-void __cdecl Float4x4InfinitePerspectiveMatrix(float4x4* mtx, float tanHalfFovX, float tanHalfFovY, float zNear);
+void CreateClipMatrix(float4x4* clipMtx, const float* vieworg, const mat3x3& viewaxis);
+void Float4x4ForViewer(float4x4* mtx, const vec3r origin3, const mat3x3& axis);
+void Float4x4InfinitePerspectiveMatrix(float4x4* mtx, float tanHalfFovX, float tanHalfFovY, float zNear);
 
-bool __cdecl Vec4HomogenousClipBothZ(float4* pt0, float4* pt1);
-bool __cdecl Vec4HomogenousClipZW(float4* pt0, float4* pt1, float4 coeffZW);
+bool Vec4HomogenousClipBothZ(float4* pt0, float4* pt1);
+bool Vec4HomogenousClipZW(float4* pt0, float4* pt1, float4 coeffZW);
 
 static const float4 wiggle[] = {
 	{.v = { 0.0f, 1.0f, 0.0f, 0.0f, }},
@@ -34,7 +34,7 @@ static const float4 wiggle[] = {
 	{.v = { -0.70999998f, 0.70999998f, 0.0f, 0.0f, }}
 };
 
-void __cdecl FX_Beam_GenerateVerts(FxGenerateVertsCmd *cmd)
+void FX_Beam_GenerateVerts(FxGenerateVertsCmd *cmd)
 {
     float4 v1; // [esp-24h] [ebp-2DCh]
     float v2; // [esp+8h] [ebp-2B0h]
@@ -329,7 +329,7 @@ void __cdecl FX_Beam_GenerateVerts(FxGenerateVertsCmd *cmd)
     }
 }
 
-void __cdecl CreateClipMatrix(float4x4* clipMtx, const float* vieworg, const mat3x3& viewaxis)
+void CreateClipMatrix(float4x4* clipMtx, const float* vieworg, const mat3x3& viewaxis)
 {
     float4x4 viewMtx; // [esp+14h] [ebp-88h] BYREF
     float4x4 projMtx; // [esp+54h] [ebp-48h] BYREF
@@ -404,7 +404,7 @@ void __cdecl CreateClipMatrix(float4x4* clipMtx, const float* vieworg, const mat
         + viewMtx.w.v[3] * projMtx.w.v[3];
 }
 
-void __cdecl Float4x4ForViewer(float4x4 *mtx, const vec3r origin3, const mat3x3& axis3)
+void Float4x4ForViewer(float4x4 *mtx, const vec3r origin3, const mat3x3& axis3)
 {
     float4 origin; // [esp+144h] [ebp-A8h]
     float4x4 tAxis; // [esp+154h] [ebp-98h] BYREF
@@ -509,7 +509,7 @@ void __cdecl Float4x4ForViewer(float4x4 *mtx, const vec3r origin3, const mat3x3&
     mtx->w = transRow;
 }
 
-void __cdecl Float4x4InfinitePerspectiveMatrix(float4x4* mtx, float tanHalfFovX, float tanHalfFovY, float zNear)
+void Float4x4InfinitePerspectiveMatrix(float4x4* mtx, float tanHalfFovX, float tanHalfFovY, float zNear)
 {
     mtx->x.v[0] = MAX_11BIT_FLT / tanHalfFovX;
     mtx->x.v[1] = 0.0f;
@@ -677,7 +677,7 @@ char  FX_GenerateBeam_GetFlatDelta(
     return 1;
 }
 
-bool __cdecl Vec4HomogenousClipBothZ(float4 *pt0, float4 *pt1)
+bool Vec4HomogenousClipBothZ(float4 *pt0, float4 *pt1)
 {
     float4 coeffZGtW; // [esp+140h] [ebp-24h] BYREF
     float4 coeffZLt0; // [esp+150h] [ebp-14h] BYREF
@@ -695,7 +695,7 @@ bool __cdecl Vec4HomogenousClipBothZ(float4 *pt0, float4 *pt1)
     return Vec4HomogenousClipZW(pt0, pt1, coeffZLt0) && Vec4HomogenousClipZW(pt0, pt1, coeffZGtW);
 }
 
-bool __cdecl Vec4HomogenousClipZW(float4 *pt0, float4 *pt1, float4 coeffZW)
+bool Vec4HomogenousClipZW(float4 *pt0, float4 *pt1, float4 coeffZW)
 {
     float v4; // [esp+4h] [ebp-D8h]
     float v5; // [esp+8h] [ebp-D4h]
@@ -811,12 +811,12 @@ bool __cdecl Vec4HomogenousClipZW(float4 *pt0, float4 *pt1, float4 coeffZW)
     return (v11 & v15) == 0;
 }
 
-void __cdecl FX_Beam_Begin()
+void FX_Beam_Begin()
 {
     g_beamInfo.beamCount = 0;
 }
 
-void __cdecl FX_Beam_Add(FxBeam *beam)
+void FX_Beam_Add(FxBeam *beam)
 {
     if (g_beamInfo.beamCount != 96)
     {
@@ -824,7 +824,7 @@ void __cdecl FX_Beam_Add(FxBeam *beam)
     }
 }
 
-FxBeamInfo *__cdecl FX_Beam_GetInfo()
+FxBeamInfo *FX_Beam_GetInfo()
 {
     return &g_beamInfo;
 }

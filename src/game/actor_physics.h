@@ -50,23 +50,23 @@ struct alignas(4) actor_physics_t
     unsigned __int8 bDeflected;
 };
 
-void __cdecl TRACK_actor_physics();
-void __cdecl AIPhys_AddTouchEnt(int entityNum);
-void __cdecl AIPhys_ClipVelocity(
+void TRACK_actor_physics();
+void AIPhys_AddTouchEnt(int entityNum);
+void AIPhys_ClipVelocity(
     const float *in,
     const float *normal,
     bool isWalkable,
     float *out,
     float overbounce);
-SlideMoveResult __cdecl AIPhys_SlideMove(int gravity, int zonly);
-int __cdecl AIPhys_StepSlideMove(int gravity, int zonly);
-int __cdecl AIPhys_AirMove();
-int __cdecl AIPhys_WalkMove();
-int __cdecl AIPhys_ZOnlyPhysicsMove();
+SlideMoveResult AIPhys_SlideMove(int gravity, int zonly);
+int AIPhys_StepSlideMove(int gravity, int zonly);
+int AIPhys_AirMove();
+int AIPhys_WalkMove();
+int AIPhys_ZOnlyPhysicsMove();
 void AIPhys_NoClipMove();
 SlideMoveResult AIPhys_NoGravityMove();
 void AIPhys_GroundTrace();
 void AIPhys_Footsteps();
-void __cdecl AIPhys_FoliageSounds();
-int __cdecl Actor_Physics(actor_physics_t *pPhys);
-void __cdecl Actor_PostPhysics(actor_physics_t *pPhys);
+void AIPhys_FoliageSounds();
+int Actor_Physics(actor_physics_t *pPhys);
+void Actor_PostPhysics(actor_physics_t *pPhys);

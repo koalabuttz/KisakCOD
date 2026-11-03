@@ -32,7 +32,7 @@ uint16_t *controller_names[6] =
     &scr_const.pelvis
 };
 
-int32_t __cdecl GetFollowPlayerState(int32_t clientNum, playerState_s *ps)
+int32_t GetFollowPlayerState(int32_t clientNum, playerState_s *ps)
 {
     gclient_s *client; // [esp+8h] [ebp-8h]
     uint32_t index; // [esp+Ch] [ebp-4h]
@@ -71,7 +71,7 @@ int32_t __cdecl GetFollowPlayerState(int32_t clientNum, playerState_s *ps)
     }
 }
 
-void __cdecl P_DamageFeedback(gentity_s *player)
+void P_DamageFeedback(gentity_s *player)
 {
     gclient_s *client; // [esp+8h] [ebp-40h]
     int32_t damage; // [esp+Ch] [ebp-3Ch]
@@ -133,17 +133,17 @@ void __cdecl P_DamageFeedback(gentity_s *player)
     }
 }
 
-void __cdecl G_SetClientSound(gentity_s *ent)
+void G_SetClientSound(gentity_s *ent)
 {
     ent->s.loopSound = 0;
 }
 
-void __cdecl ClientImpacts(gentity_s *ent, pmove_t *pm)
+void ClientImpacts(gentity_s *ent, pmove_t *pm)
 {
     int32_t j; // [esp+4h] [ebp-14h]
-    void(__cdecl * entTouch)(gentity_s *, gentity_s *, int); // [esp+8h] [ebp-10h]
+    void(* entTouch)(gentity_s *, gentity_s *, int); // [esp+8h] [ebp-10h]
     gentity_s *other; // [esp+Ch] [ebp-Ch]
-    void(__cdecl * otherTouch)(gentity_s *, gentity_s *, int); // [esp+10h] [ebp-8h]
+    void(* otherTouch)(gentity_s *, gentity_s *, int); // [esp+10h] [ebp-8h]
     int32_t i; // [esp+14h] [ebp-4h]
 
     entTouch = entityHandlers[ent->handler].touch;
@@ -171,14 +171,14 @@ void __cdecl ClientImpacts(gentity_s *ent, pmove_t *pm)
 }
 
 const float range[3] = { 20.0f, 20.0f, 20.0f };
-void __cdecl G_TouchTriggers(gentity_s *ent)
+void G_TouchTriggers(gentity_s *ent)
 {
     int32_t entityList[1025]; // [esp+30h] [ebp-1030h] BYREF
     float diff[3]; // [esp+1034h] [ebp-2Ch] BYREF
-    void(__cdecl * touch)(gentity_s *, gentity_s *, int); // [esp+1040h] [ebp-20h]
+    void(* touch)(gentity_s *, gentity_s *, int); // [esp+1040h] [ebp-20h]
     entityState_s *item; // [esp+1044h] [ebp-1Ch]
     float sum[3]; // [esp+1048h] [ebp-18h] BYREF
-    void(__cdecl * v6)(gentity_s *, gentity_s *, int); // [esp+1054h] [ebp-Ch]
+    void(* v6)(gentity_s *, gentity_s *, int); // [esp+1054h] [ebp-Ch]
     int32_t v7; // [esp+1058h] [ebp-8h]
     int32_t i; // [esp+105Ch] [ebp-4h]
 
@@ -228,7 +228,7 @@ void __cdecl G_TouchTriggers(gentity_s *ent)
     }
 }
 
-void __cdecl SpectatorThink(gentity_s *ent, usercmd_s *ucmd)
+void SpectatorThink(gentity_s *ent, usercmd_s *ucmd)
 {
     gclient_s *client; // [esp+10h] [ebp-11Ch]
     pmove_t pm; // [esp+14h] [ebp-118h] BYREF
@@ -273,7 +273,7 @@ void __cdecl SpectatorThink(gentity_s *ent, usercmd_s *ucmd)
     }
 }
 
-int32_t __cdecl ClientInactivityTimer(gclient_s *client)
+int32_t ClientInactivityTimer(gclient_s *client)
 {
     const char *v2; // eax
 
@@ -307,7 +307,7 @@ int32_t __cdecl ClientInactivityTimer(gclient_s *client)
     return 1;
 }
 
-void __cdecl ClientIntermissionThink(gentity_s *ent)
+void ClientIntermissionThink(gentity_s *ent)
 {
     gclient_s *client; // [esp+0h] [ebp-4h]
 
@@ -317,7 +317,7 @@ void __cdecl ClientIntermissionThink(gentity_s *ent)
     client->buttonsSinceLastFrame |= client->buttons & ~client->oldbuttons;
 }
 
-void __cdecl NotifyGrenadePullback(gentity_s *ent, uint32_t weaponIndex)
+void NotifyGrenadePullback(gentity_s *ent, uint32_t weaponIndex)
 {
     WeaponDef *weapDef; // [esp+0h] [ebp-4h]
 
@@ -334,7 +334,7 @@ void __cdecl NotifyGrenadePullback(gentity_s *ent, uint32_t weaponIndex)
     Scr_Notify(ent, scr_const.grenade_pullback, 1u);
 }
 
-void __cdecl HandleClientEvent(gclient_s *client, gentity_s *ent, int32_t event, int32_t eventParm)
+void HandleClientEvent(gclient_s *client, gentity_s *ent, int32_t event, int32_t eventParm)
 {
     gentity_s *attacker; // [esp+4h] [ebp-14h]
     float damage; // [esp+8h] [ebp-10h]
@@ -409,9 +409,9 @@ void __cdecl HandleClientEvent(gclient_s *client, gentity_s *ent, int32_t event,
     }
 }
 
-void __cdecl AttemptLiveGrenadePickup(gentity_s *clientEnt)
+void AttemptLiveGrenadePickup(gentity_s *clientEnt)
 {
-    void(__cdecl * touch)(gentity_s *, gentity_s *, int); // [esp+0h] [ebp-8h]
+    void(* touch)(gentity_s *, gentity_s *, int); // [esp+0h] [ebp-8h]
     gentity_s *grenadeEnt; // [esp+4h] [ebp-4h]
 
     if (!clientEnt)
@@ -446,7 +446,7 @@ void __cdecl AttemptLiveGrenadePickup(gentity_s *clientEnt)
     }
 }
 
-bool __cdecl IsLiveGrenade(gentity_s *ent)
+bool IsLiveGrenade(gentity_s *ent)
 {
     WeaponDef *weapDef; // [esp+0h] [ebp-4h]
 
@@ -458,7 +458,7 @@ bool __cdecl IsLiveGrenade(gentity_s *ent)
     return weapDef->offhandClass == OFFHAND_CLASS_FRAG_GRENADE;
 }
 
-void __cdecl ClientEvents(gentity_s *ent, int32_t oldEventSequence)
+void ClientEvents(gentity_s *ent, int32_t oldEventSequence)
 {
     gclient_s *client; // [esp+0h] [ebp-10h]
     int32_t i; // [esp+Ch] [ebp-4h]
@@ -472,7 +472,7 @@ void __cdecl ClientEvents(gentity_s *ent, int32_t oldEventSequence)
         HandleClientEvent(client, ent, client->ps.events[i & 3], client->ps.eventParms[i & 3]);
 }
 
-void __cdecl G_SetLastServerTime(int32_t clientNum, int32_t lastServerTime)
+void G_SetLastServerTime(int32_t clientNum, int32_t lastServerTime)
 {
     gentity_s *ent; // [esp+0h] [ebp-4h]
 
@@ -485,7 +485,7 @@ void __cdecl G_SetLastServerTime(int32_t clientNum, int32_t lastServerTime)
         ent->client->lastServerTime = lastServerTime;
 }
 
-void __cdecl G_SetClientContents(gentity_s *pEnt)
+void G_SetClientContents(gentity_s *pEnt)
 {
     if (!pEnt->client)
         MyAssertHandler(".\\game_mp\\g_active_mp.cpp", 601, 0, "%s", "pEnt->client");
@@ -507,7 +507,7 @@ void __cdecl G_SetClientContents(gentity_s *pEnt)
     }
 }
 
-void __cdecl ClientThink_real(gentity_s *ent, usercmd_s *ucmd)
+void ClientThink_real(gentity_s *ent, usercmd_s *ucmd)
 {
     float *v2; // [esp+50h] [ebp-2FCh]
     float *vGunSpeed; // [esp+B4h] [ebp-298h]
@@ -751,7 +751,7 @@ void __cdecl ClientThink_real(gentity_s *ent, usercmd_s *ucmd)
     }
 }
 
-void __cdecl G_PlayerStateToEntityStateExtrapolate(playerState_s *ps, entityState_s *s, int32_t time, int32_t snap)
+void G_PlayerStateToEntityStateExtrapolate(playerState_s *ps, entityState_s *s, int32_t time, int32_t snap)
 {
     s->lerp.pos.trDelta[0] = ps->velocity[0];
     s->lerp.pos.trDelta[1] = ps->velocity[1];
@@ -773,7 +773,7 @@ void __cdecl G_PlayerStateToEntityStateExtrapolate(playerState_s *ps, entityStat
     s->lerp.pos.trType = TR_LINEAR_STOP;
 }
 
-void __cdecl G_AddPlayerMantleBlockage(float *endPos, int32_t duration, pmove_t *pm)
+void G_AddPlayerMantleBlockage(float *endPos, int32_t duration, pmove_t *pm)
 {
     gentity_s *owner; // [esp+10h] [ebp-Ch]
     gentity_s *ent; // [esp+18h] [ebp-4h]
@@ -798,7 +798,7 @@ void __cdecl G_AddPlayerMantleBlockage(float *endPos, int32_t duration, pmove_t 
     ent->nextthink = g_mantleBlockTimeBuffer->current.integer + duration + level.time;
 }
 
-void __cdecl ClientThink(int32_t clientNum)
+void ClientThink(int32_t clientNum)
 {
     gentity_s *ent; // [esp+8h] [ebp-4h]
 
@@ -820,7 +820,7 @@ void __cdecl ClientThink(int32_t clientNum)
     bgs = 0;
 }
 
-void __cdecl G_RunClient(gentity_s *ent)
+void G_RunClient(gentity_s *ent)
 {
     float *origin; // [esp+0h] [ebp-10h]
     
@@ -872,7 +872,7 @@ void __cdecl G_RunClient(gentity_s *ent)
     }
 }
 
-void __cdecl IntermissionClientEndFrame(gentity_s *ent)
+void IntermissionClientEndFrame(gentity_s *ent)
 {
     char *v1; // eax
     char *v2; // eax
@@ -895,7 +895,7 @@ void __cdecl IntermissionClientEndFrame(gentity_s *ent)
     SV_SetConfigstring(CS_SCORES2, v2);
 }
 
-void __cdecl SpectatorClientEndFrame(gentity_s *ent)
+void SpectatorClientEndFrame(gentity_s *ent)
 {
     uint32_t v1; // edx
     gclient_s *client; // [esp+0h] [ebp-2FE4h]
@@ -1000,12 +1000,12 @@ void __cdecl SpectatorClientEndFrame(gentity_s *ent)
     }
 }
 
-bool __cdecl G_ClientCanSpectateTeam(gclient_s *client, team_t team)
+bool G_ClientCanSpectateTeam(gclient_s *client, team_t team)
 {
     return (client->sess.noSpectate & (1 << team)) == 0;
 }
 
-int32_t __cdecl StuckInClient(gentity_s *self)
+int32_t StuckInClient(gentity_s *self)
 {
     float v2; // [esp+0h] [ebp-50h]
     float integer; // [esp+4h] [ebp-4Ch]
@@ -1089,7 +1089,7 @@ int32_t __cdecl StuckInClient(gentity_s *self)
     return 1;
 }
 
-void __cdecl G_PlayerController(const gentity_s *self, int32_t *partBits)
+void G_PlayerController(const gentity_s *self, int32_t *partBits)
 {
     const DObj_s *obj; // [esp+0h] [ebp-1Ch]
     clientInfo_t *ci; // [esp+4h] [ebp-18h]
@@ -1121,7 +1121,7 @@ void __cdecl G_PlayerController(const gentity_s *self, int32_t *partBits)
     BG_Player_DoControllers(&player, obj, partBits);
 }
 
-void __cdecl ClientEndFrame(gentity_s *ent)
+void ClientEndFrame(gentity_s *ent)
 {
     //int32_t v1; // ecx
     int32_t v2; // eax
@@ -1376,7 +1376,7 @@ void __cdecl ClientEndFrame(gentity_s *ent)
     }
 }
 
-int32_t __cdecl G_UpdateClientInfo(gentity_s *ent)
+int32_t G_UpdateClientInfo(gentity_s *ent)
 {
     uint32_t v1; // eax
     uint32_t v2; // eax
@@ -1470,7 +1470,7 @@ int32_t __cdecl G_UpdateClientInfo(gentity_s *ent)
     return bChanged;
 }
 
-void __cdecl G_PlayerEvent(int32_t clientNum, int32_t event)
+void G_PlayerEvent(int32_t clientNum, int32_t event)
 {
     gclient_s *client; // [esp+4h] [ebp-10h]
     float kickAVel[3]; // [esp+8h] [ebp-Ch] BYREF

@@ -5,7 +5,7 @@
 #include "q_parse.h"
 #include "com_files.h"
 
-const char *__cdecl StringTable_GetColumnValueForRow(const StringTable *table, int row, int column)
+const char *StringTable_GetColumnValueForRow(const StringTable *table, int row, int column)
 {
     if (column < table->columnCount
         && row < table->rowCount
@@ -21,7 +21,7 @@ const char *__cdecl StringTable_GetColumnValueForRow(const StringTable *table, i
     }
 }
 
-const char *__cdecl StringTable_Lookup(
+const char *StringTable_Lookup(
     const StringTable *table,
     int comparisonColumn,
     const char *value,
@@ -41,7 +41,7 @@ const char *__cdecl StringTable_Lookup(
     }
 }
 
-int __cdecl StringTable_LookupRowNumForValue(const StringTable *table, int comparisonColumn, const char *value)
+int StringTable_LookupRowNumForValue(const StringTable *table, int comparisonColumn, const char *value)
 {
     int slot; // [esp+0h] [ebp-8h]
     int row; // [esp+4h] [ebp-4h]
@@ -70,7 +70,7 @@ static int g_numStringTables = 0;
 static StringTable g_stringTableCache[STRING_TABLE_CACHE_SIZE];
 #endif
 
-void __cdecl StringTable_GetAsset(const char *filename, StringTable **tablePtr)
+void StringTable_GetAsset(const char *filename, StringTable **tablePtr)
 {
     if (!IsFastFileLoad())
     {

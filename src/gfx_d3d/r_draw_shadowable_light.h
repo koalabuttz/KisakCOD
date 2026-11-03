@@ -9,22 +9,22 @@ enum LightHasShadowMap : __int32
     LIGHT_HAS_NO_SHADOWMAP = 0x1,
 };
 
-void __cdecl R_SetLightProperties(
+void R_SetLightProperties(
     GfxCmdBufSourceState *source,
     const GfxLight *light,
     const GfxLightDef *def,
     LightHasShadowMap hasShadowMap,
     float spotShadowFade);
-void __cdecl R_SetCodeImageSamplerState(
+void R_SetCodeImageSamplerState(
     GfxCmdBufSourceState *source,
     MaterialTextureSource codeTexture,
     uint8_t samplerState);
-void __cdecl R_SetShadowableLight(
+void R_SetShadowableLight(
     GfxCmdBufSourceState *source,
     uint32_t shadowableLightIndex,
     const GfxViewInfo *viewInfo);
-void __cdecl R_SetDrawSurfsShadowableLight(GfxCmdBufSourceState *source, const GfxDrawSurfListInfo *info);
-uint32_t __cdecl R_GetShadowableLightIndex(
+void R_SetDrawSurfsShadowableLight(GfxCmdBufSourceState *source, const GfxDrawSurfListInfo *info);
+uint32_t R_GetShadowableLightIndex(
     const GfxBackEndData *data,
     const GfxViewInfo *viewInfo,
     const GfxLight *light);

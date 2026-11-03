@@ -43,13 +43,13 @@ const float g_color_table[8][4]
     { 1.0f, 1.0f, 1.0f, 1.0f }
 };
 
-void __cdecl TRACK_cl_cgame()
+void TRACK_cl_cgame()
 {
     track_static_alloc_internal(bigConfigString, 0x2000, "bigConfigString", 9);
     track_static_alloc_internal((void *)g_color_table, 128, "g_color_table", 10);
 }
 
-void __cdecl CL_GetScreenDimensions(int32_t *width, int32_t *height, float *aspect)
+void CL_GetScreenDimensions(int32_t *width, int32_t *height, float *aspect)
 {
     if (!width)
         MyAssertHandler(".\\client_mp\\cl_cgame_mp.cpp", 93, 0, "%s", "width");
@@ -62,12 +62,12 @@ void __cdecl CL_GetScreenDimensions(int32_t *width, int32_t *height, float *aspe
     *aspect = cls.vidConfig.aspectRatioWindow;
 }
 
-double __cdecl CL_GetScreenAspectRatioDisplayPixel()
+double CL_GetScreenAspectRatioDisplayPixel()
 {
     return cls.vidConfig.aspectRatioDisplayPixel;
 }
 
-int32_t __cdecl CL_GetUserCmd(int32_t localClientNum, int32_t cmdNumber, usercmd_s *ucmd)
+int32_t CL_GetUserCmd(int32_t localClientNum, int32_t cmdNumber, usercmd_s *ucmd)
 {
     clientActive_t *LocalClientGlobals; // [esp+8h] [ebp-4h]
 
@@ -80,12 +80,12 @@ int32_t __cdecl CL_GetUserCmd(int32_t localClientNum, int32_t cmdNumber, usercmd
     return 1;
 }
 
-int32_t __cdecl CL_GetCurrentCmdNumber(int32_t localClientNum)
+int32_t CL_GetCurrentCmdNumber(int32_t localClientNum)
 {
     return CL_GetLocalClientGlobals(localClientNum)->cmdNumber;
 }
 
-void __cdecl CL_GetCurrentSnapshotNumber(int32_t localClientNum, int32_t *snapshotNumber, int32_t *serverTime)
+void CL_GetCurrentSnapshotNumber(int32_t localClientNum, int32_t *snapshotNumber, int32_t *serverTime)
 {
     clientActive_t *LocalClientGlobals; // eax
 
@@ -94,7 +94,7 @@ void __cdecl CL_GetCurrentSnapshotNumber(int32_t localClientNum, int32_t *snapsh
     *serverTime = LocalClientGlobals->snap.serverTime;
 }
 
-int32_t __cdecl CL_GetSnapshot(int32_t localClientNum, int32_t snapshotNumber, snapshot_s *snapshot)
+int32_t CL_GetSnapshot(int32_t localClientNum, int32_t snapshotNumber, snapshot_s *snapshot)
 {
     const char *v4; // eax
     uint32_t number; // [esp+8h] [ebp-418h]
@@ -167,7 +167,7 @@ int32_t __cdecl CL_GetSnapshot(int32_t localClientNum, int32_t snapshotNumber, s
     return 1;
 }
 
-void __cdecl CL_SetUserCmdWeapons(int32_t localClientNum, int32_t weapon, int32_t offHandIndex)
+void CL_SetUserCmdWeapons(int32_t localClientNum, int32_t weapon, int32_t offHandIndex)
 {
     clientActive_t *LocalClientGlobals; // [esp+0h] [ebp-4h]
 
@@ -176,7 +176,7 @@ void __cdecl CL_SetUserCmdWeapons(int32_t localClientNum, int32_t weapon, int32_
     LocalClientGlobals->cgameUserCmdOffHandIndex = offHandIndex;
 }
 
-void __cdecl CL_SetUserCmdAimValues(int32_t localClientNum, const float *kickAngles)
+void CL_SetUserCmdAimValues(int32_t localClientNum, const float *kickAngles)
 {
     clientActive_t *LocalClientGlobals; // [esp+4h] [ebp-4h]
 
@@ -186,7 +186,7 @@ void __cdecl CL_SetUserCmdAimValues(int32_t localClientNum, const float *kickAng
     LocalClientGlobals->cgameKickAngles[2] = kickAngles[2];
 }
 
-void __cdecl CL_SetUserCmdOrigin(
+void CL_SetUserCmdOrigin(
     int32_t localClientNum,
     const float *origin,
     const float *velocity,
@@ -211,12 +211,12 @@ void __cdecl CL_SetUserCmdOrigin(
     LocalClientGlobals->cgameViewangles[2] = viewangles[2];
 }
 
-void __cdecl CL_SetFOVSensitivityScale(int32_t localClientNum, float scale)
+void CL_SetFOVSensitivityScale(int32_t localClientNum, float scale)
 {
     CL_GetLocalClientGlobals(localClientNum)->cgameFOVSensitivityScale = scale;
 }
 
-void __cdecl CL_SetExtraButtons(int32_t localClientNum, int32_t buttons)
+void CL_SetExtraButtons(int32_t localClientNum, int32_t buttons)
 {
     clientActive_t *LocalClientGlobals; // [esp+0h] [ebp-4h]
 
@@ -224,7 +224,7 @@ void __cdecl CL_SetExtraButtons(int32_t localClientNum, int32_t buttons)
     LocalClientGlobals->cgameExtraButtons |= buttons;
 }
 
-void __cdecl CL_DumpReliableCommands(int32_t localClientNum)
+void CL_DumpReliableCommands(int32_t localClientNum)
 {
     clientConnection_t *clc; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
@@ -234,7 +234,7 @@ void __cdecl CL_DumpReliableCommands(int32_t localClientNum)
         Com_PrintError(CON_CHANNEL_ERROR, "cmd %5d: '%s'\n", i, clc->serverCommands[i]);
 }
 
-int32_t __cdecl CL_CGameNeedsServerCommand(int32_t localClientNum, int32_t serverCommandNumber)
+int32_t CL_CGameNeedsServerCommand(int32_t localClientNum, int32_t serverCommandNumber)
 {
     int32_t result; // eax
     const char *v3; // eax
@@ -344,7 +344,7 @@ int32_t __cdecl CL_CGameNeedsServerCommand(int32_t localClientNum, int32_t serve
     }
 }
 
-void __cdecl CL_ConfigstringModified(int32_t localClientNum)
+void CL_ConfigstringModified(int32_t localClientNum)
 {
     uint32_t v2; // [esp+0h] [ebp-4Ch]
     clientActive_t *LocalClientGlobals; // [esp+24h] [ebp-28h]
@@ -395,7 +395,7 @@ void __cdecl CL_ConfigstringModified(int32_t localClientNum)
     //LargeLocal::~LargeLocal(&oldGs_large_local);
 }
 
-void __cdecl CL_CM_LoadMap(char *mapname)
+void CL_CM_LoadMap(char *mapname)
 {
     int32_t checksum; // [esp+0h] [ebp-4h] BYREF
 
@@ -411,7 +411,7 @@ void __cdecl CL_CM_LoadMap(char *mapname)
     }
 }
 
-void __cdecl CL_ShutdownCGame(int32_t localClientNum)
+void CL_ShutdownCGame(int32_t localClientNum)
 {
     Com_UnloadSoundAliases(SASYS_CGAME);
 
@@ -431,7 +431,7 @@ void __cdecl CL_ShutdownCGame(int32_t localClientNum)
 }
 
 int32_t warnCount;
-bool __cdecl CL_DObjCreateSkelForBone(DObj_s *obj, int32_t boneIndex)
+bool CL_DObjCreateSkelForBone(DObj_s *obj, int32_t boneIndex)
 {
     char *buf; // [esp+0h] [ebp-Ch]
     uint32_t len; // [esp+4h] [ebp-8h]
@@ -460,7 +460,7 @@ bool __cdecl CL_DObjCreateSkelForBone(DObj_s *obj, int32_t boneIndex)
     }
 }
 
-void __cdecl CL_SubtitlePrint(int32_t localClientNum, const char *text, int32_t duration, int32_t lineWidth)
+void CL_SubtitlePrint(int32_t localClientNum, const char *text, int32_t duration, int32_t lineWidth)
 {
     const char *translation; // [esp+0h] [ebp-4h]
     char *translationa; // [esp+0h] [ebp-4h]
@@ -483,7 +483,7 @@ void __cdecl CL_SubtitlePrint(int32_t localClientNum, const char *text, int32_t 
     CL_ConsolePrint(localClientNum, CON_CHANNEL_SUBTITLE, translationa, duration, lineWidth, 0);
 }
 
-const char *__cdecl CL_GetConfigString(int32_t localClientNum, uint32_t configStringIndex)
+const char *CL_GetConfigString(int32_t localClientNum, uint32_t configStringIndex)
 {
     clientActive_t *LocalClientGlobals; // [esp+0h] [ebp-4h]
 
@@ -501,12 +501,12 @@ const char *__cdecl CL_GetConfigString(int32_t localClientNum, uint32_t configSt
     return &LocalClientGlobals->gameState.stringData[LocalClientGlobals->gameState.stringOffsets[configStringIndex]];
 }
 
-snd_alias_t *__cdecl CL_PickSoundAlias(const char *aliasname)
+snd_alias_t *CL_PickSoundAlias(const char *aliasname)
 {
     return Com_PickSoundAlias(aliasname);
 }
 
-void __cdecl CL_RenderScene(const refdef_s *fd)
+void CL_RenderScene(const refdef_s *fd)
 {
     cls.debugRenderPos[0] = fd->vieworg[0];
     cls.debugRenderPos[1] = fd->vieworg[1];
@@ -516,7 +516,7 @@ void __cdecl CL_RenderScene(const refdef_s *fd)
 
 
 
-void __cdecl CL_DrawStretchPicPhysicalRotateXY(
+void CL_DrawStretchPicPhysicalRotateXY(
     float x,
     float y,
     float w,
@@ -532,7 +532,7 @@ void __cdecl CL_DrawStretchPicPhysicalRotateXY(
     R_AddCmdDrawStretchPicRotateXY(x, y, w, h, s1, t1, s2, t2, angle, color, material);
 }
 
-void __cdecl CL_DrawStretchPicPhysicalFlipST(
+void CL_DrawStretchPicPhysicalFlipST(
     float x,
     float y,
     float w,
@@ -549,7 +549,7 @@ void __cdecl CL_DrawStretchPicPhysicalFlipST(
 
 
 
-void __cdecl CL_DrawStretchPicFlipST(
+void CL_DrawStretchPicFlipST(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -568,7 +568,7 @@ void __cdecl CL_DrawStretchPicFlipST(
     CL_DrawStretchPicPhysicalFlipST(x, y, w, h, s1, t1, s2, t2, color, material);
 }
 
-void __cdecl CL_DrawStretchPicRotatedST(
+void CL_DrawStretchPicRotatedST(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -601,7 +601,7 @@ void __cdecl CL_DrawStretchPicRotatedST(
         material);
 }
 
-void __cdecl CL_CapTurnRate(int32_t localClientNum, float maxPitchSpeed, float maxYawSpeed)
+void CL_CapTurnRate(int32_t localClientNum, float maxPitchSpeed, float maxYawSpeed)
 {
     clientActive_t *LocalClientGlobals; // eax
 
@@ -610,13 +610,13 @@ void __cdecl CL_CapTurnRate(int32_t localClientNum, float maxPitchSpeed, float m
     LocalClientGlobals->cgameMaxYawSpeed = maxYawSpeed;
 }
 
-void __cdecl CL_SyncTimes(int32_t localClientNum)
+void CL_SyncTimes(int32_t localClientNum)
 {
     if (CL_GetLocalClientConnectionState(localClientNum) == CA_ACTIVE)
         CL_FirstSnapshot(localClientNum);
 }
 
-int32_t __cdecl LoadWorld(char *mapname)
+int32_t LoadWorld(char *mapname)
 {
     int32_t checksum; // [esp+0h] [ebp-4h] BYREF
 
@@ -626,7 +626,7 @@ int32_t __cdecl LoadWorld(char *mapname)
     return checksum;
 }
 
-void __cdecl CL_StartLoading()
+void CL_StartLoading()
 {
     if (CL_AnyLocalClientsRunning())
     {
@@ -636,7 +636,7 @@ void __cdecl CL_StartLoading()
     }
 }
 
-void __cdecl CL_SetExpectedHunkUsage(const char *mapname)
+void CL_SetExpectedHunkUsage(const char *mapname)
 {
     int32_t handle; // [esp+0h] [ebp-18h] BYREF
     char *buf; // [esp+8h] [ebp-10h]
@@ -678,7 +678,7 @@ void __cdecl CL_SetExpectedHunkUsage(const char *mapname)
     com_expectedHunkUsage = 0;
 }
 
-void __cdecl CL_InitCGame(int32_t localClientNum)
+void CL_InitCGame(int32_t localClientNum)
 {
     const char *v1; // eax
     XZoneInfo zoneInfo; // [esp+10h] [ebp-70h] BYREF
@@ -756,7 +756,7 @@ void __cdecl CL_InitCGame(int32_t localClientNum)
         DB_SyncXAssets();
 }
 
-void __cdecl CL_FirstSnapshot(int32_t localClientNum)
+void CL_FirstSnapshot(int32_t localClientNum)
 {
     clientActive_t *LocalClientGlobals; // [esp+0h] [ebp-8h]
     clientConnection_t *clc; // [esp+4h] [ebp-4h]
@@ -791,7 +791,7 @@ void __cdecl CL_FirstSnapshot(int32_t localClientNum)
     }
 }
 
-char *__cdecl CL_TimeDemoLogBaseName(const char *mapname)
+char *CL_TimeDemoLogBaseName(const char *mapname)
 {
     char *result; // eax
     const char *pos; // [esp+0h] [ebp-10h]
@@ -819,7 +819,7 @@ char *__cdecl CL_TimeDemoLogBaseName(const char *mapname)
     return result;
 }
 
-void __cdecl CL_UpdateTimeDemo(int32_t localClientNum)
+void CL_UpdateTimeDemo(int32_t localClientNum)
 {
     char *v1; // eax
     char *v2; // eax
@@ -852,7 +852,7 @@ void __cdecl CL_UpdateTimeDemo(int32_t localClientNum)
     LocalClientGlobals->serverTime = clc->timeDemoBaseTime + 50 * clc->timeDemoFrames;
 }
 
-void __cdecl CL_NextDemo(int32_t localClientNum)
+void CL_NextDemo(int32_t localClientNum)
 {
     char v[1028]; // [esp+0h] [ebp-408h] BYREF
 
@@ -871,7 +871,7 @@ void __cdecl CL_NextDemo(int32_t localClientNum)
     }
 }
 
-void __cdecl CL_DemoCompleted(int32_t localClientNum)
+void CL_DemoCompleted(int32_t localClientNum)
 {
     int32_t time; // [esp+10h] [ebp-8h]
     clientConnection_t *clc; // [esp+14h] [ebp-4h]
@@ -897,7 +897,7 @@ void __cdecl CL_DemoCompleted(int32_t localClientNum)
     CL_NextDemo(0);
 }
 
-void __cdecl CL_ReadDemoClientArchive(int32_t localClientNum)
+void CL_ReadDemoClientArchive(int32_t localClientNum)
 {
     clientActive_t *LocalClientGlobals; // [esp+0h] [ebp-14h]
     uint8_t *archive; // [esp+8h] [ebp-Ch]
@@ -931,7 +931,7 @@ void __cdecl CL_ReadDemoClientArchive(int32_t localClientNum)
     }
 }
 
-void __cdecl CL_ReadDemoNetworkPacket(int32_t localClientNum)
+void CL_ReadDemoNetworkPacket(int32_t localClientNum)
 {
     uint32_t v1; // edx
     int32_t v2; // eax
@@ -982,7 +982,7 @@ void __cdecl CL_ReadDemoNetworkPacket(int32_t localClientNum)
     }
 }
 
-void __cdecl CL_ReadDemoMessage(int32_t localClientNum)
+void CL_ReadDemoMessage(int32_t localClientNum)
 {
     clientConnection_t *clc; // [esp+8h] [ebp-8h]
     uint8_t s; // [esp+Fh] [ebp-1h] BYREF
@@ -1013,7 +1013,7 @@ void __cdecl CL_ReadDemoMessage(int32_t localClientNum)
     }
 }
 
-void __cdecl CL_SetCGameTime(int localClientNum)
+void CL_SetCGameTime(int localClientNum)
 {
     clientActive_t *LocalClientGlobals; // [esp+0h] [ebp-Ch]
     clientConnection_t *clc; // [esp+8h] [ebp-4h]
@@ -1088,7 +1088,7 @@ void __cdecl CL_SetCGameTime(int localClientNum)
         goto LABEL_16;
 }
 
-void __cdecl CL_AdjustTimeDelta(int32_t localClientNum)
+void CL_AdjustTimeDelta(int32_t localClientNum)
 {
     clientActive_t *LocalClientGlobals; // [esp+4h] [ebp-14h]
     int32_t idealDelta; // [esp+8h] [ebp-10h]
@@ -1175,12 +1175,12 @@ void __cdecl CL_AdjustTimeDelta(int32_t localClientNum)
     }
 }
 
-void __cdecl CL_SetADS(int32_t localClientNum, bool ads)
+void CL_SetADS(int32_t localClientNum, bool ads)
 {
     CL_GetLocalClientGlobals(localClientNum)->usingAds = ads;
 }
 
-void __cdecl CL_DrawString(int32_t x, int32_t y, char *pszString, int32_t bShadow, int32_t iCharHeight)
+void CL_DrawString(int32_t x, int32_t y, char *pszString, int32_t bShadow, int32_t iCharHeight)
 {
     float v5; // [esp+0h] [ebp-20h]
     float v6; // [esp+4h] [ebp-1Ch]
@@ -1192,7 +1192,7 @@ void __cdecl CL_DrawString(int32_t x, int32_t y, char *pszString, int32_t bShado
     CG_DrawStringExt(&scrPlaceFull, v5, v6, pszString, 0, 0, bShadow, charHeight);
 }
 
-void __cdecl CL_DrawRect(int32_t x, int32_t y, int32_t width, int32_t height, const float *color)
+void CL_DrawRect(int32_t x, int32_t y, int32_t width, int32_t height, const float *color)
 {
     float v5; // [esp+0h] [ebp-30h]
     float v6; // [esp+4h] [ebp-2Ch]
@@ -1206,14 +1206,14 @@ void __cdecl CL_DrawRect(int32_t x, int32_t y, int32_t width, int32_t height, co
     CL_DrawStretchPic(&scrPlaceFull, v5, v6, w, h, 1, 1, 0.0, 0.0, 0.0, 0.0, color, cls.whiteMaterial);
 }
 
-void __cdecl CL_ArchiveClientState(int32_t localClientNum, MemoryFile *memFile)
+void CL_ArchiveClientState(int32_t localClientNum, MemoryFile *memFile)
 {
     CG_ArchiveState(localClientNum, memFile);
     FX_Archive(localClientNum, memFile);
     R_ArchiveFogState(memFile);
 }
 
-void __cdecl CL_LookupColor(int32_t localClientNum, uint8_t c, float *color)
+void CL_LookupColor(int32_t localClientNum, uint8_t c, float *color)
 {
     float *v3; // [esp+4h] [ebp-18h]
     float *v4; // [esp+8h] [ebp-14h]
@@ -1270,7 +1270,7 @@ void __cdecl CL_LookupColor(int32_t localClientNum, uint8_t c, float *color)
     }
 }
 
-void __cdecl CL_UpdateColor(int32_t localClientNum)
+void CL_UpdateColor(int32_t localClientNum)
 {
     if (CL_GetLocalClientConnectionState(localClientNum) >= CA_CONNECTED)
     {
@@ -1287,13 +1287,13 @@ void __cdecl CL_UpdateColor(int32_t localClientNum)
     }
 }
 
-void __cdecl CL_UpdateColorInternal(const char *var_name, float *color)
+void CL_UpdateColorInternal(const char *var_name, float *color)
 {
     Dvar_GetUnpackedColorByName(var_name, color);
     color[3] = 1.0;
 }
 
-bool __cdecl CL_IsCgameInitialized(int32_t localClientNum)
+bool CL_IsCgameInitialized(int32_t localClientNum)
 {
     clientUIActive_t *clUI = CL_GetLocalClientUIGlobals(localClientNum);
     return clUI->cgameInitialized;

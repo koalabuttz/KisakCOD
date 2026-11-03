@@ -5,7 +5,7 @@
 
 OutdoorGlob outdoorGlob;
 
-void __cdecl Outdoor_ApplyBoundingBox(const float *outdoorMin, const float *outdoorMax)
+void Outdoor_ApplyBoundingBox(const float *outdoorMin, const float *outdoorMax)
 {
     int dimIter; // [esp+4h] [ebp-4h]
 
@@ -61,7 +61,7 @@ int Outdoor_UpdateTransforms()
     return result;
 }
 
-void __cdecl R_RegisterOutdoorImage(GfxWorld *world, const float *outdoorMin, const float *outdoorMax)
+void R_RegisterOutdoorImage(GfxWorld *world, const float *outdoorMin, const float *outdoorMax)
 {
     iassert( world );
     Outdoor_ApplyBoundingBox(outdoorMin, outdoorMax);
@@ -71,7 +71,7 @@ void __cdecl R_RegisterOutdoorImage(GfxWorld *world, const float *outdoorMin, co
     iassert( world->outdoorImage );
 }
 
-void __cdecl Outdoor_SetRendererOutdoorLookupMatrix(GfxWorld *world)
+void Outdoor_SetRendererOutdoorLookupMatrix(GfxWorld *world)
 {
     float outdoorScale[3]; // [esp+0h] [ebp-1Ch]
     float outdoorTranslate[3]; // [esp+Ch] [ebp-10h]
@@ -130,7 +130,7 @@ uint8_t *Outdoor_ComputeTexels()
     return result;
 }
 
-double __cdecl Outdoor_TraceHeightInWorld(float worldX, float worldY)
+double Outdoor_TraceHeightInWorld(float worldX, float worldY)
 {
     float traceEndHeight; // [esp+4h] [ebp-4Ch]
     float traceStartHeight; // [esp+8h] [ebp-48h]
@@ -152,7 +152,7 @@ double __cdecl Outdoor_TraceHeightInWorld(float worldX, float worldY)
     return (float)((traceEndHeight - traceStartHeight) * results.fraction + traceStartHeight);
 }
 
-int __cdecl Outdoor_TransformToTextureClamped(int dimension, float inWorld)
+int Outdoor_TransformToTextureClamped(int dimension, float inWorld)
 {
     int max; // [esp+4h] [ebp-18h]
     int unclamped; // [esp+14h] [ebp-8h]
@@ -170,7 +170,7 @@ int __cdecl Outdoor_TransformToTextureClamped(int dimension, float inWorld)
     return max;
 }
 
-void __cdecl R_GenerateOutdoorImage(GfxImage *outdoorImage)
+void R_GenerateOutdoorImage(GfxImage *outdoorImage)
 {
     outdoorGlob.pic = (uint8_t *)Hunk_AllocateTempMemory(
         outdoorMapSize[1] * outdoorMapSize[0],

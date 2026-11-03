@@ -419,33 +419,33 @@ static_assert(LAYOUT_32BIT(sizeof(actor_s) == 0x1e90), "actor_s size drift vs Co
 static_assert(LAYOUT_32BIT(offsetof(actor_s, sentientInfo) == 0x834), "actor_s.sentientInfo offset drift vs CoD3SP IDA");
 static_assert(LAYOUT_32BIT(sizeof(sentient_info_t) == 0x28), "sentient_info_t size drift vs CoD3SP IDA");
 
-int __cdecl Path_IsValidClaimNode(const pathnode_t *node);
-int __cdecl Path_IsCoverNode(const pathnode_t *node);
-team_t __cdecl Sentient_EnemyTeam(unsigned int eTeam);
-void __cdecl TRACK_actor();
-void __cdecl VisCache_Copy(vis_cache_t *pDstCache, const vis_cache_t *pSrcCache);
-void __cdecl VisCache_Update(vis_cache_t *pCache, bool bVisible);
-void __cdecl SentientInfo_Clear(sentient_info_t *pInfo);
-void __cdecl SentientInfo_ForceCopy(sentient_info_t *pTo, const sentient_info_t *pFrom);
-int __cdecl Actor_droptofloor(gentity_s *ent);
-int __cdecl Actor_IsDeletable(actor_s *actor);
-void __cdecl G_InitActors();
-unsigned int __cdecl G_GetActorIndex(actor_s *actor);
-XAnimTree_s *__cdecl G_GetActorAnimTree(actor_s *actor);
-XAnimTree_s *__cdecl G_AllocAnimClientTree();
-void __cdecl G_FreeAnimClientTree(XAnimTree_s *tree);
-void __cdecl Actor_SetDefaults(actor_s *actor);
-void __cdecl Actor_FinishSpawning(actor_s *self);
-void __cdecl Actor_InitAnimScript(actor_s *self);
-actor_s *__cdecl Actor_FirstActor(int iTeamFlags);
-actor_s *__cdecl Actor_NextActor(actor_s *pPrevActor, int iTeamFlags);
-void __cdecl Actor_ClearArrivalPos(actor_s *self);
-void __cdecl Actor_PreThink(actor_s *self);
-void __cdecl Actor_ValidateReacquireNodes(actor_s *self);
-void __cdecl Actor_Touch(gentity_s *self, gentity_s *other, int bTouched);
-bool __cdecl Actor_InScriptedState(const actor_s *self);
-int __cdecl Actor_CheckDeathAllowed(actor_s *self, int damage);
-void __cdecl Actor_Pain(
+int Path_IsValidClaimNode(const pathnode_t *node);
+int Path_IsCoverNode(const pathnode_t *node);
+team_t Sentient_EnemyTeam(unsigned int eTeam);
+void TRACK_actor();
+void VisCache_Copy(vis_cache_t *pDstCache, const vis_cache_t *pSrcCache);
+void VisCache_Update(vis_cache_t *pCache, bool bVisible);
+void SentientInfo_Clear(sentient_info_t *pInfo);
+void SentientInfo_ForceCopy(sentient_info_t *pTo, const sentient_info_t *pFrom);
+int Actor_droptofloor(gentity_s *ent);
+int Actor_IsDeletable(actor_s *actor);
+void G_InitActors();
+unsigned int G_GetActorIndex(actor_s *actor);
+XAnimTree_s *G_GetActorAnimTree(actor_s *actor);
+XAnimTree_s *G_AllocAnimClientTree();
+void G_FreeAnimClientTree(XAnimTree_s *tree);
+void Actor_SetDefaults(actor_s *actor);
+void Actor_FinishSpawning(actor_s *self);
+void Actor_InitAnimScript(actor_s *self);
+actor_s *Actor_FirstActor(int iTeamFlags);
+actor_s *Actor_NextActor(actor_s *pPrevActor, int iTeamFlags);
+void Actor_ClearArrivalPos(actor_s *self);
+void Actor_PreThink(actor_s *self);
+void Actor_ValidateReacquireNodes(actor_s *self);
+void Actor_Touch(gentity_s *self, gentity_s *other, int bTouched);
+bool Actor_InScriptedState(const actor_s *self);
+int Actor_CheckDeathAllowed(actor_s *self, int damage);
+void Actor_Pain(
     gentity_s *self,
     gentity_s *pAttacker,
     int iDamage,
@@ -454,7 +454,7 @@ void __cdecl Actor_Pain(
     const float *vDir,
     hitLocation_t hitLoc,
     const int weaponIdx);
-void __cdecl Actor_Die(
+void Actor_Die(
     gentity_s *self,
     gentity_s *pInflictor,
     gentity_s *pAttacker,
@@ -463,137 +463,137 @@ void __cdecl Actor_Die(
     const int iWeapon,
     const float *vDir,
     const hitLocation_t hitLoc);
-bool __cdecl Actor_IsDying(const actor_s *self);
-bool __cdecl usingCodeGoal(actor_s *actor);
-gentity_s *__cdecl Actor_GetTargetEntity(actor_s *self);
-sentient_s *__cdecl Actor_GetTargetSentient(actor_s *self);
-void __cdecl Actor_GetTargetPosition(actor_s *self, float *position);
-void __cdecl Actor_GetTargetLookPosition(actor_s *self, float *position);
-void __cdecl Actor_InitMove(actor_s *self);
-bool __cdecl Actor_IsDodgeEntity(actor_s *self, int entnum);
-int __cdecl Actor_Physics_GetLeftOrRightDodge(actor_s *self, bool dodgeRight, double length);
-void __cdecl Actor_PhysicsBackupInputs(actor_s *self, PhysicsInputs *inputs);
-void __cdecl Actor_PhysicsRestoreInputs(actor_s *self, PhysicsInputs *inputs);
-bool __cdecl Actor_AtDifferentElevation(float *vOrgSelf, float *vOrgOther);
-float __cdecl Actor_CalcultatePlayerPushDelta(const actor_s *self, const gentity_s *pusher, float *pushDir);
-bool __cdecl Actor_ShouldMoveAwayFromCloseEnt(actor_s *self);
-void __cdecl Actor_UpdateProneInformation(actor_s *self, int bDoProneCheck);
-void __cdecl actor_controller(const gentity_s *self, int *partBits);
-bool __cdecl Actor_PointNear(const float *vPoint, const float *vGoalPos);
-bool __cdecl Actor_PointNearNode(const float *vPoint, const pathnode_t *node);
-int __cdecl Actor_PointAtGoal(const float *vPoint, const actor_goal_s *goal);
-bool __cdecl Actor_PointNearGoal(const float *vPoint, const actor_goal_s *goal, double buffer);
-bool __cdecl Actor_PointNearPoint(const float *vPoint, const float *vGoalPos, double buffer);
-bool __cdecl Actor_PointAt(const float *vPoint, const float *vGoalPos);
-void __cdecl Actor_HandleInvalidPath(actor_s *self);
-pathnode_t *__cdecl Actor_FindClaimedNode(actor_s *self);
-bool __cdecl Actor_EnemyInPathFightDist(actor_s *self, sentient_s *enemy);
-bool __cdecl Actor_IsCloseToSegment(
+bool Actor_IsDying(const actor_s *self);
+bool usingCodeGoal(actor_s *actor);
+gentity_s *Actor_GetTargetEntity(actor_s *self);
+sentient_s *Actor_GetTargetSentient(actor_s *self);
+void Actor_GetTargetPosition(actor_s *self, float *position);
+void Actor_GetTargetLookPosition(actor_s *self, float *position);
+void Actor_InitMove(actor_s *self);
+bool Actor_IsDodgeEntity(actor_s *self, int entnum);
+int Actor_Physics_GetLeftOrRightDodge(actor_s *self, bool dodgeRight, double length);
+void Actor_PhysicsBackupInputs(actor_s *self, PhysicsInputs *inputs);
+void Actor_PhysicsRestoreInputs(actor_s *self, PhysicsInputs *inputs);
+bool Actor_AtDifferentElevation(float *vOrgSelf, float *vOrgOther);
+float Actor_CalcultatePlayerPushDelta(const actor_s *self, const gentity_s *pusher, float *pushDir);
+bool Actor_ShouldMoveAwayFromCloseEnt(actor_s *self);
+void Actor_UpdateProneInformation(actor_s *self, int bDoProneCheck);
+void actor_controller(const gentity_s *self, int *partBits);
+bool Actor_PointNear(const float *vPoint, const float *vGoalPos);
+bool Actor_PointNearNode(const float *vPoint, const pathnode_t *node);
+int Actor_PointAtGoal(const float *vPoint, const actor_goal_s *goal);
+bool Actor_PointNearGoal(const float *vPoint, const actor_goal_s *goal, double buffer);
+bool Actor_PointNearPoint(const float *vPoint, const float *vGoalPos, double buffer);
+bool Actor_PointAt(const float *vPoint, const float *vGoalPos);
+void Actor_HandleInvalidPath(actor_s *self);
+pathnode_t *Actor_FindClaimedNode(actor_s *self);
+bool Actor_EnemyInPathFightDist(actor_s *self, sentient_s *enemy);
+bool Actor_IsCloseToSegment(
     float *origin,
     float *pathPoint,
     double len,
     float *dir,
     double requiredDistFromPathSq);
-int __cdecl Actor_IsAlongPath(actor_s *self, float *origin, float *pathPoint, int hadPath);
-int __cdecl Actor_IsDoingCover(actor_s *self);
-bool __cdecl Actor_IsReactingToEnemyDuringReacquireMove(actor_s *self);
-gentity_s *__cdecl Actor_IsKnownEnemyInRegion(
+int Actor_IsAlongPath(actor_s *self, float *origin, float *pathPoint, int hadPath);
+int Actor_IsDoingCover(actor_s *self);
+bool Actor_IsReactingToEnemyDuringReacquireMove(actor_s *self);
+gentity_s *Actor_IsKnownEnemyInRegion(
     const actor_s *self,
     const gentity_s *volume,
     const float *position,
     double radius);
-int __cdecl Actor_InFixedNodeExposedCombat(actor_s *self);
-bool __cdecl Actor_HasPath(actor_s *self);
-void __cdecl Actor_InitPath(actor_s *self);
-void __cdecl Actor_ClearPath(actor_s *self);
-void __cdecl Actor_GetAnimDeltas(actor_s *self, float *rotation, float *translation);
-int __cdecl Actor_IsMovingToMeleeAttack(actor_s *self);
-bool __cdecl Actor_SkipPathEndActions(actor_s *self);
-void __cdecl Actor_PathEndActions(actor_s *self);
-void __cdecl Actor_PredictAnim(actor_s *self);
-bool __cdecl Actor_AtClaimNode(actor_s *self);
-bool __cdecl Actor_NearClaimNode(actor_s *self, double dist);
-void __cdecl Actor_CheckCollisions(actor_s *self);
-void __cdecl Actor_ClearPileUp(actor_s *self);
-void __cdecl Actor_ClipPathToGoal(actor_s *self);
-void __cdecl Actor_BeginTrimPath(actor_s *self);
-int __cdecl Actor_TrimPathToAttack(actor_s *self);
-int __cdecl Actor_MayReacquireMove(actor_s *self);
-void __cdecl Actor_ClearMoveHistory(actor_s *self);
-void __cdecl Actor_GetMoveHistoryAverage(actor_s *self, float *vDir);
-void __cdecl Actor_UpdateMoveHistory(actor_s *self);
-void __cdecl Path_UpdateLeanAmount(actor_s *self, float *vWishDir);
-float __cdecl Path_UpdateMomentum(actor_s *self, float *vWishDir, double fMoveDist);
-bool __cdecl Path_UseMomentum(actor_s *self);
-void __cdecl Path_UpdateMovementDelta(actor_s *self, double fMoveDist);
-void __cdecl Actor_AddStationaryMoveHistory(actor_s *self);
-int __cdecl Actor_IsMoving(actor_s *self);
-unsigned int __cdecl G_GetActorFriendlyIndex(int iEntNum);
-void __cdecl G_BypassForCG_GetClientActorIndexAndTeam(int iEntNum, int *actorIndex, int *team);
-unsigned int __cdecl G_BypassForCG_GetClientActorFriendlyIndex(int iEntNum);
-gentity_s *__cdecl G_GetFriendlyIndexActor(int iFriendlyIndex);
-void __cdecl Actor_SetFlashed(actor_s *self, int flashed, double strength);
-void __cdecl Actor_UpdateDesiredChainPosInternal(
+int Actor_InFixedNodeExposedCombat(actor_s *self);
+bool Actor_HasPath(actor_s *self);
+void Actor_InitPath(actor_s *self);
+void Actor_ClearPath(actor_s *self);
+void Actor_GetAnimDeltas(actor_s *self, float *rotation, float *translation);
+int Actor_IsMovingToMeleeAttack(actor_s *self);
+bool Actor_SkipPathEndActions(actor_s *self);
+void Actor_PathEndActions(actor_s *self);
+void Actor_PredictAnim(actor_s *self);
+bool Actor_AtClaimNode(actor_s *self);
+bool Actor_NearClaimNode(actor_s *self, double dist);
+void Actor_CheckCollisions(actor_s *self);
+void Actor_ClearPileUp(actor_s *self);
+void Actor_ClipPathToGoal(actor_s *self);
+void Actor_BeginTrimPath(actor_s *self);
+int Actor_TrimPathToAttack(actor_s *self);
+int Actor_MayReacquireMove(actor_s *self);
+void Actor_ClearMoveHistory(actor_s *self);
+void Actor_GetMoveHistoryAverage(actor_s *self, float *vDir);
+void Actor_UpdateMoveHistory(actor_s *self);
+void Path_UpdateLeanAmount(actor_s *self, float *vWishDir);
+float Path_UpdateMomentum(actor_s *self, float *vWishDir, double fMoveDist);
+bool Path_UseMomentum(actor_s *self);
+void Path_UpdateMovementDelta(actor_s *self, double fMoveDist);
+void Actor_AddStationaryMoveHistory(actor_s *self);
+int Actor_IsMoving(actor_s *self);
+unsigned int G_GetActorFriendlyIndex(int iEntNum);
+void G_BypassForCG_GetClientActorIndexAndTeam(int iEntNum, int *actorIndex, int *team);
+unsigned int G_BypassForCG_GetClientActorFriendlyIndex(int iEntNum);
+gentity_s *G_GetFriendlyIndexActor(int iFriendlyIndex);
+void Actor_SetFlashed(actor_s *self, int flashed, double strength);
+void Actor_UpdateDesiredChainPosInternal(
     actor_s *self,
     int iFollowMin,
     int iFollowMax,
     sentient_s *pGoalSentient);
-void __cdecl Actor_UpdateDesiredChainPos(actor_s *self);
-void __cdecl Actor_CheckOverridePos(actor_s *self, const float *prevGoalPos);
+void Actor_UpdateDesiredChainPos(actor_s *self);
+void Actor_CheckOverridePos(actor_s *self, const float *prevGoalPos);
 void Actor_SetGoalRadius(actor_goal_s *goal, float radius);
 void Actor_SetGoalHeight(actor_goal_s *goal, float height);
-bool __cdecl Actor_IsInsideArc(
+bool Actor_IsInsideArc(
     actor_s *self,
     const float *origin,
     double radius,
     double angle0,
     double angle1,
     double halfHeight);
-void __cdecl SentientInfo_Copy(actor_s *pTo, const actor_s *pFrom, int index);
-actor_s *__cdecl Actor_Alloc();
-void __cdecl Actor_Free(actor_s *actor);
-void __cdecl Actor_FreeExpendable();
-void __cdecl Actor_FinishSpawningAll();
-void __cdecl Actor_DissociateSentient(actor_s *self, sentient_s *other, team_t eOtherTeam);
-void __cdecl Actor_NodeClaimRevoked(actor_s *self, int invalidTime);
-void __cdecl Actor_CheckClearNodeClaimCloseEnt(actor_s *self);
-int __cdecl Actor_KeepClaimedNode(actor_s *self);
-void __cdecl Actor_ClearKeepClaimedNode(actor_s *self);
-void __cdecl Actor_CheckNodeClaim(actor_s *self);
-void __cdecl Actor_UpdatePlayerPush(actor_s *self, gentity_s *player);
-void __cdecl Actor_UpdateCloseEnt(actor_s *self);
-actor_think_result_t __cdecl Actor_CallThink(actor_s *self);
-void __cdecl Actor_EntInfo(gentity_s *self, float *source);
-int __cdecl Actor_MoveAwayNoWorse(actor_s *self);
-int __cdecl Actor_PhysicsCheckMoveAwayNoWorse(
+void SentientInfo_Copy(actor_s *pTo, const actor_s *pFrom, int index);
+actor_s *Actor_Alloc();
+void Actor_Free(actor_s *actor);
+void Actor_FreeExpendable();
+void Actor_FinishSpawningAll();
+void Actor_DissociateSentient(actor_s *self, sentient_s *other, team_t eOtherTeam);
+void Actor_NodeClaimRevoked(actor_s *self, int invalidTime);
+void Actor_CheckClearNodeClaimCloseEnt(actor_s *self);
+int Actor_KeepClaimedNode(actor_s *self);
+void Actor_ClearKeepClaimedNode(actor_s *self);
+void Actor_CheckNodeClaim(actor_s *self);
+void Actor_UpdatePlayerPush(actor_s *self, gentity_s *player);
+void Actor_UpdateCloseEnt(actor_s *self);
+actor_think_result_t Actor_CallThink(actor_s *self);
+void Actor_EntInfo(gentity_s *self, float *source);
+int Actor_MoveAwayNoWorse(actor_s *self);
+int Actor_PhysicsCheckMoveAwayNoWorse(
     actor_s *self,
     gentity_s *other,
     gentityFlags_t flags,
     double distanceSqrd,
     double lengthSqrd);
-int __cdecl Actor_PhysicsMoveAway(actor_s *self);
-int __cdecl Actor_IsAtScriptGoal(actor_s *self);
-bool __cdecl Actor_IsNearClaimedNode(actor_s *self);
-int __cdecl Actor_IsFixedNodeUseable(actor_s *self);
-bool __cdecl Actor_FindPath(
+int Actor_PhysicsMoveAway(actor_s *self);
+int Actor_IsAtScriptGoal(actor_s *self);
+bool Actor_IsNearClaimedNode(actor_s *self);
+int Actor_IsFixedNodeUseable(actor_s *self);
+bool Actor_FindPath(
     actor_s *self,
     const float *vGoalPos,
     int bAllowNegotiationLinks,
     bool ignoreSuppression);
-void __cdecl Actor_RecalcPath(actor_s *self);
-bool __cdecl Actor_FindPathToNode(actor_s *self, pathnode_t *pGoalNode, int bSuppressable);
-bool __cdecl Actor_FindPathToSentient(actor_s *self, sentient_s *pGoalEnt, int bSuppressable);
-void __cdecl Actor_FindPathInGoalWithLOS(
+void Actor_RecalcPath(actor_s *self);
+bool Actor_FindPathToNode(actor_s *self, pathnode_t *pGoalNode, int bSuppressable);
+bool Actor_FindPathToSentient(actor_s *self, sentient_s *pGoalEnt, int bSuppressable);
+void Actor_FindPathInGoalWithLOS(
     actor_s *self,
     const float *vGoalPos,
     double fWithinDistSqrd,
     bool ignoreSuppression);
-void __cdecl Actor_FindPathAway(
+void Actor_FindPathAway(
     actor_s *self,
     const float *vBadPos,
     double fMinSafeDist,
     int bAllowNegotiationLinks);
-void __cdecl Actor_FindPathAwayNotCrossPlanes(
+void Actor_FindPathAwayNotCrossPlanes(
     actor_s *self,
     const float *vBadPos,
     float fMinSafeDist,
@@ -601,27 +601,27 @@ void __cdecl Actor_FindPathAwayNotCrossPlanes(
     float dist,
     int bUseSuppressionPlanes,
     int bAllowNegotiationLinks);
-void __cdecl Actor_BadPlacesChanged();
-void __cdecl Actor_UpdateAnglesAndDelta(actor_s *self);
-void __cdecl Actor_UpdatePileUp(actor_s *self);
-void __cdecl Actor_UpdateGoalPos(actor_s *self);
-int __cdecl SP_actor(gentity_s *ent);
-int __cdecl Actor_CheckGoalNotify(actor_s *self);
-void __cdecl Actor_CheckNotify(actor_s *self);
-void __cdecl Actor_Think(gentity_s *self);
-int __cdecl Actor_PhysicsAndDodge(actor_s *self);
-void __cdecl Actor_DoMove(actor_s *self);
-bool __cdecl Actor_IsAtGoal(actor_s *self);
-bool __cdecl Actor_FindPathToGoalDirectInternal(actor_s *self);
-void __cdecl Actor_FindPathToGoalDirect(actor_s *self);
-int __cdecl Actor_FindPathToClaimNode(actor_s *self, pathnode_t *node);
-int __cdecl Actor_CheckStop(actor_s *self, bool canUseEnemyGoal, pathnode_t *node, int hadPath);
-void __cdecl Actor_TryPathToArrivalPos(actor_s *self);
-void __cdecl Actor_FindPathToFixedNode(actor_s *self);
-void __cdecl Actor_FindPathToGoal(actor_s *self);
-void __cdecl Actor_UpdateOriginAndAngles(actor_s *self);
-void __cdecl Actor_PredictOriginAndAngles(actor_s *self);
-void __cdecl Actor_PostThink(actor_s *self);
+void Actor_BadPlacesChanged();
+void Actor_UpdateAnglesAndDelta(actor_s *self);
+void Actor_UpdatePileUp(actor_s *self);
+void Actor_UpdateGoalPos(actor_s *self);
+int SP_actor(gentity_s *ent);
+int Actor_CheckGoalNotify(actor_s *self);
+void Actor_CheckNotify(actor_s *self);
+void Actor_Think(gentity_s *self);
+int Actor_PhysicsAndDodge(actor_s *self);
+void Actor_DoMove(actor_s *self);
+bool Actor_IsAtGoal(actor_s *self);
+bool Actor_FindPathToGoalDirectInternal(actor_s *self);
+void Actor_FindPathToGoalDirect(actor_s *self);
+int Actor_FindPathToClaimNode(actor_s *self, pathnode_t *node);
+int Actor_CheckStop(actor_s *self, bool canUseEnemyGoal, pathnode_t *node, int hadPath);
+void Actor_TryPathToArrivalPos(actor_s *self);
+void Actor_FindPathToFixedNode(actor_s *self);
+void Actor_FindPathToGoal(actor_s *self);
+void Actor_UpdateOriginAndAngles(actor_s *self);
+void Actor_PredictOriginAndAngles(actor_s *self);
+void Actor_PostThink(actor_s *self);
 
 
 static const float actorMins[3] = { -15.0, -15.0, 0.0 };

@@ -249,7 +249,7 @@ DObjAnimMat *R_UpdateSceneEntBounds(
     }
 }
 
-DObjAnimMat *__cdecl R_DObjCalcPose(const GfxSceneEntity *sceneEnt, const DObj_s *obj, int *partBits)
+DObjAnimMat *R_DObjCalcPose(const GfxSceneEntity *sceneEnt, const DObj_s *obj, int *partBits)
 {
     DObjAnimMat *boneMatrix;
     int completePartBits[4];
@@ -272,7 +272,7 @@ DObjAnimMat *__cdecl R_DObjCalcPose(const GfxSceneEntity *sceneEnt, const DObj_s
     return boneMatrix;
 }
 
-void __cdecl R_SetNoDraw(GfxSceneEntity *sceneEnt)
+void R_SetNoDraw(GfxSceneEntity *sceneEnt)
 {
     if (sceneEnt->cull.state != 1)
         MyAssertHandler(
@@ -285,7 +285,7 @@ void __cdecl R_SetNoDraw(GfxSceneEntity *sceneEnt)
     sceneEnt->cull.state = 4;
 }
 
-void __cdecl R_UpdateGfxEntityBoundsCmd(GfxSceneEntity **data)
+void R_UpdateGfxEntityBoundsCmd(GfxSceneEntity **data)
 {
     const DObj_s *obj; // [esp+0h] [ebp-10h] BYREF
     GfxSceneEntity *localSceneEnt; // [esp+4h] [ebp-Ch] BYREF

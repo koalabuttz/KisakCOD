@@ -33,12 +33,12 @@ thread_local EntVisData g_dynEntVisData;
 thread_local byte *g_smodelVisData;
 thread_local byte *g_surfaceVisData;
 
-void __cdecl TRACK_r_dpvs()
+void TRACK_r_dpvs()
 {
     track_static_alloc_internal(&dpvsGlob, 44664, "dpvsGlob", 18);
 }
 
-void __cdecl R_FrustumClipPlanes(
+void R_FrustumClipPlanes(
     const GfxMatrix *viewProjMtx,
     const float (*sidePlanes)[4],
     int sidePlaneCount,
@@ -64,7 +64,7 @@ void __cdecl R_FrustumClipPlanes(
     }
 }
 
-char *__cdecl R_PortalAssertMsg()
+char *R_PortalAssertMsg()
 {
     const char *v0; // eax
     const char *v1; // eax
@@ -110,7 +110,7 @@ char *__cdecl R_PortalAssertMsg()
         dpvsGlob.viewProjMtx->m[3][3]);
 }
 
-uint32_t __cdecl R_FindNearestReflectionProbeInCell(
+uint32_t R_FindNearestReflectionProbeInCell(
     const GfxWorld *world,
     const GfxCell *cell,
     const float *origin)
@@ -149,7 +149,7 @@ uint32_t __cdecl R_FindNearestReflectionProbeInCell(
     return bestProbe;
 }
 
-uint32_t __cdecl R_FindNearestReflectionProbe(const GfxWorld *world, const float *origin)
+uint32_t R_FindNearestReflectionProbe(const GfxWorld *world, const float *origin)
 {
     float diff[3]; // [esp+4h] [ebp-18h] BYREF
     float bestProbeDist; // [esp+10h] [ebp-Ch]
@@ -175,7 +175,7 @@ uint32_t __cdecl R_FindNearestReflectionProbe(const GfxWorld *world, const float
     return bestProbe;
 }
 
-uint32_t __cdecl R_CalcReflectionProbeIndex(const float *origin)
+uint32_t R_CalcReflectionProbeIndex(const float *origin)
 {
     uint32_t cellIndex; // [esp+0h] [ebp-4h]
 
@@ -188,7 +188,7 @@ uint32_t __cdecl R_CalcReflectionProbeIndex(const float *origin)
     return R_FindNearestReflectionProbeInCell(rgp.world, &rgp.world->cells[cellIndex], origin);
 }
 
-void __cdecl R_AddAllSceneEntSurfacesCamera(const GfxViewInfo *viewInfo)
+void R_AddAllSceneEntSurfacesCamera(const GfxViewInfo *viewInfo)
 {
     GfxSceneDynBrush *sceneDynBrush; // [esp+70h] [ebp-70h]
     DynEntityPose *dynEntPose; // [esp+74h] [ebp-6Ch]
@@ -383,7 +383,7 @@ void __cdecl R_AddAllSceneEntSurfacesCamera(const GfxViewInfo *viewInfo)
     }
 }
 
-void __cdecl R_AddAllSceneEntSurfacesSunShadow()
+void R_AddAllSceneEntSurfacesSunShadow()
 {
     uint32_t partitionIndex; // [esp+0h] [ebp-4h]
 
@@ -391,7 +391,7 @@ void __cdecl R_AddAllSceneEntSurfacesSunShadow()
         R_AddAllSceneEntSurfacesRangeSunShadow(partitionIndex);
 }
 
-void __cdecl R_AddAllSceneEntSurfacesRangeSunShadow(uint32_t partitionIndex)
+void R_AddAllSceneEntSurfacesRangeSunShadow(uint32_t partitionIndex)
 {
     GfxSceneDynBrush *sceneDynBrush; // [esp+30h] [ebp-40h]
     GfxDrawSurf *drawSurf; // [esp+38h] [ebp-38h]
@@ -475,7 +475,7 @@ void __cdecl R_AddAllSceneEntSurfacesRangeSunShadow(uint32_t partitionIndex)
     R_SortDrawSurfs(scene.drawSurfs[stage], drawSurfCount);
 }
 
-void __cdecl R_AddAllSceneEntSurfacesSpotShadow(
+void R_AddAllSceneEntSurfacesSpotShadow(
     const GfxViewInfo *viewInfo,
     uint32_t spotShadowIndex,
     uint32_t primaryLightIndex)
@@ -575,13 +575,13 @@ void __cdecl R_AddAllSceneEntSurfacesSpotShadow(
     R_SortDrawSurfs(scene.drawSurfs[stage], drawSurfCount);
 }
 
-void __cdecl R_AddSceneDObj(uint32_t entnum, uint32_t viewIndex)
+void R_AddSceneDObj(uint32_t entnum, uint32_t viewIndex)
 {
     iassert( entnum != gfxCfg.entnumNone );
     scene.dpvs.entVisData[viewIndex][entnum] = 1;
 }
 
-void __cdecl R_DrawAllSceneEnt(const GfxViewInfo *viewInfo)
+void R_DrawAllSceneEnt(const GfxViewInfo *viewInfo)
 {
     uint8_t viewVisData; // [esp+14h] [ebp-50h]
     uint32_t *entVisBits; // [esp+18h] [ebp-4Ch]
@@ -884,7 +884,7 @@ void __cdecl R_DrawAllSceneEnt(const GfxViewInfo *viewInfo)
     }
 }
 
-int __cdecl R_DrawBModel(BModelDrawInfo *bmodelInfo, const GfxBrushModel *bmodel, const GfxPlacement *placement)
+int R_DrawBModel(BModelDrawInfo *bmodelInfo, const GfxBrushModel *bmodel, const GfxPlacement *placement)
 {
     uint16_t visibleSurfaceCount; // [esp+Ah] [ebp-26h]
     uint32_t surfId; // [esp+10h] [ebp-20h]
@@ -952,7 +952,7 @@ int __cdecl R_DrawBModel(BModelDrawInfo *bmodelInfo, const GfxBrushModel *bmodel
     }
 }
 
-void __cdecl R_DrawAllDynEnt(const GfxViewInfo *viewInfo)
+void R_DrawAllDynEnt(const GfxViewInfo *viewInfo)
 {
     DynEntityPose *dynEntPose; // [esp+38h] [ebp-38h]
     GfxSceneDynBrush *sceneDynBrush; // [esp+3Ch] [ebp-34h]
@@ -1028,7 +1028,7 @@ void __cdecl R_DrawAllDynEnt(const GfxViewInfo *viewInfo)
         scene.sceneDynBrushCount = 0;
 }
 
-void __cdecl R_UnfilterEntFromCells(uint32_t localClientNum, uint32_t entnum)
+void R_UnfilterEntFromCells(uint32_t localClientNum, uint32_t entnum)
 {
     uint32_t cellIndex; // [esp+0h] [ebp-18h]
     uint32_t invBit; // [esp+4h] [ebp-14h]
@@ -1072,7 +1072,7 @@ void __cdecl R_UnfilterEntFromCells(uint32_t localClientNum, uint32_t entnum)
     }
 }
 
-void __cdecl R_UnfilterDynEntFromCells(uint32_t dynEntId, DynEntityDrawType drawType)
+void R_UnfilterDynEntFromCells(uint32_t dynEntId, DynEntityDrawType drawType)
 {
     uint32_t cellIndex; // [esp+0h] [ebp-18h]
     uint32_t cellCount; // [esp+8h] [ebp-10h]
@@ -1092,7 +1092,7 @@ void __cdecl R_UnfilterDynEntFromCells(uint32_t dynEntId, DynEntityDrawType draw
     }
 }
 
-void __cdecl R_FilterXModelIntoScene(
+void R_FilterXModelIntoScene(
     const XModel *model,
     const GfxScaledPlacement *placement,
     uint16_t renderFxFlags,
@@ -1196,7 +1196,7 @@ void __cdecl R_FilterXModelIntoScene(
     }
 }
 
-void __cdecl R_FilterDObjIntoCells(uint32_t localClientNum, uint32_t entnum, float *origin, float radius)
+void R_FilterDObjIntoCells(uint32_t localClientNum, uint32_t entnum, float *origin, float radius)
 {
     float s; // [esp+0h] [ebp-30h]
     float mins[3]; // [esp+8h] [ebp-28h] BYREF
@@ -1223,7 +1223,7 @@ void __cdecl R_FilterDObjIntoCells(uint32_t localClientNum, uint32_t entnum, flo
     R_FilterEntIntoCells_r(&entInfo, (mnode_t *)rgp.world->dpvsPlanes.nodes, mins, maxs);
 }
 
-void __cdecl R_FilterEntIntoCells_r(FilterEntInfo *entInfo, mnode_t *node, const float *mins, const float *maxs)
+void R_FilterEntIntoCells_r(FilterEntInfo *entInfo, mnode_t *node, const float *mins, const float *maxs)
 {
     float localmaxs[3]; // [esp+0h] [ebp-50h]
     float dist; // [esp+Ch] [ebp-44h]
@@ -1297,7 +1297,7 @@ void __cdecl R_FilterEntIntoCells_r(FilterEntInfo *entInfo, mnode_t *node, const
         R_AddEntToCell(entInfo, cellIndex - 1);
 }
 
-void __cdecl R_AddEntToCell(FilterEntInfo *entInfo, uint32_t cellIndex)
+void R_AddEntToCell(FilterEntInfo *entInfo, uint32_t cellIndex)
 {
     uint32_t bit; // [esp+0h] [ebp-1Ch]
     uint32_t localClientNum; // [esp+4h] [ebp-18h]
@@ -1341,7 +1341,7 @@ void __cdecl R_AddEntToCell(FilterEntInfo *entInfo, uint32_t cellIndex)
     scene.dpvs.entInfo[localClientNum][entnum].bmodel = entInfo->info.bmodel;
 }
 
-void __cdecl R_FilterBModelIntoCells(uint32_t localClientNum, uint32_t entnum, GfxBrushModel *bmodel)
+void R_FilterBModelIntoCells(uint32_t localClientNum, uint32_t entnum, GfxBrushModel *bmodel)
 {
     FilterEntInfo entInfo; // [esp+0h] [ebp-10h] BYREF
 
@@ -1362,13 +1362,13 @@ void __cdecl R_FilterBModelIntoCells(uint32_t localClientNum, uint32_t entnum, G
     R_FilterEntIntoCells_r(&entInfo, (mnode_t *)rgp.world->dpvsPlanes.nodes, bmodel->writable.mins, bmodel->writable.maxs);
 }
 
-void __cdecl R_FilterDynEntIntoCells(uint32_t dynEntId, DynEntityDrawType drawType, float *mins, float *maxs)
+void R_FilterDynEntIntoCells(uint32_t dynEntId, DynEntityDrawType drawType, float *mins, float *maxs)
 {
     R_UnfilterDynEntFromCells(dynEntId, drawType);
     R_FilterDynEntIntoCells_r((mnode_t *)rgp.world->dpvsPlanes.nodes, dynEntId, drawType, mins, maxs);
 }
 
-void __cdecl R_FilterDynEntIntoCells_r(
+void R_FilterDynEntIntoCells_r(
     mnode_t *node,
     uint32_t dynEntIndex,
     DynEntityDrawType drawType,
@@ -1448,7 +1448,7 @@ void __cdecl R_FilterDynEntIntoCells_r(
         R_AddDynEntToCell(cellIndex - 1, dynEntIndex, drawType);
 }
 
-void __cdecl R_AddDynEntToCell(uint32_t cellIndex, uint32_t dynEntIndex, DynEntityDrawType drawType)
+void R_AddDynEntToCell(uint32_t cellIndex, uint32_t dynEntIndex, DynEntityDrawType drawType)
 {
     uint32_t wordIndex; // [esp+Ch] [ebp-4h]
 
@@ -1457,7 +1457,7 @@ void __cdecl R_AddDynEntToCell(uint32_t cellIndex, uint32_t dynEntIndex, DynEnti
     rgp.world->dpvsDyn.dynEntCellBits[drawType][wordIndex] |= 0x80000000 >> (dynEntIndex & 0x1F);
 }
 
-void __cdecl R_FilterEntitiesIntoCells(int cameraCellIndex)
+void R_FilterEntitiesIntoCells(int cameraCellIndex)
 {
     float s; // [esp+0h] [ebp-84h]
     int v3; // [esp+18h] [ebp-6Ch]
@@ -1598,7 +1598,7 @@ void __cdecl R_FilterEntitiesIntoCells(int cameraCellIndex)
 // SCENE_VIEW_CAMERA = 0x0,
 // SCENE_VIEW_SUNSHADOW_0 = 0x1, (CSM Near)
 // SCENE_VIEW_SUNSHADOW_1 = 0x2, (CSM Far)
-uint32_t __cdecl R_SetVisData(uint32_t viewIndex)
+uint32_t R_SetVisData(uint32_t viewIndex)
 {
     uint32_t oldViewIndex; // [esp+4h] [ebp-8h]
     uint32_t drawType; // [esp+8h] [ebp-4h]
@@ -1612,7 +1612,7 @@ uint32_t __cdecl R_SetVisData(uint32_t viewIndex)
     return oldViewIndex;
 }
 
-void __cdecl R_AddCellDynBrushSurfacesInFrustumCmd(const DpvsDynamicCellCmd *data)
+void R_AddCellDynBrushSurfacesInFrustumCmd(const DpvsDynamicCellCmd *data)
 {
     uint32_t oldViewIndex; // [esp+0h] [ebp-8h]
 
@@ -1622,7 +1622,7 @@ void __cdecl R_AddCellDynBrushSurfacesInFrustumCmd(const DpvsDynamicCellCmd *dat
     R_SetVisData(oldViewIndex);
 }
 
-void __cdecl R_CullDynBrushInCell(uint32_t cellIndex, const DpvsPlane *planes, int planeCount)
+void R_CullDynBrushInCell(uint32_t cellIndex, const DpvsPlane *planes, int planeCount)
 {
     DWORD v4; // eax
     int v5; // [esp+4h] [ebp-34h]
@@ -1693,7 +1693,7 @@ void __cdecl R_CullDynBrushInCell(uint32_t cellIndex, const DpvsPlane *planes, i
     }
 }
 
-void __cdecl R_GenerateShadowMapCasterCells()
+void R_GenerateShadowMapCasterCells()
 {
     GfxLight *sunLight; // edx
     GfxCell *cell; // [esp+4h] [ebp-Ch]
@@ -1723,7 +1723,7 @@ void __cdecl R_GenerateShadowMapCasterCells()
     }
 }
 
-void __cdecl R_VisitPortalsNoFrustum(const GfxCell *cell)
+void R_VisitPortalsNoFrustum(const GfxCell *cell)
 {
     float scale; // [esp+4h] [ebp-D80h]
     GfxHullPointsPool(*hullPointsPoolArray)[256]; // [esp+5Ch] [ebp-D28h]
@@ -1786,7 +1786,7 @@ void __cdecl R_VisitPortalsNoFrustum(const GfxCell *cell)
     //LargeLocal::~LargeLocal(&hullPointsPoolArray_large_local);
 }
 
-uint32_t __cdecl R_PortalClipPlanesNoFrustum(
+uint32_t R_PortalClipPlanesNoFrustum(
     DpvsPlane *planes,
     uint32_t vertexCount,
     const float (*winding)[3])
@@ -1827,7 +1827,7 @@ uint32_t __cdecl R_PortalClipPlanesNoFrustum(
     return planeCount;
 }
 
-void __cdecl R_GetSidePlaneNormals(const float (*winding)[3], uint32_t vertexCount, float (*normals)[3])
+void R_GetSidePlaneNormals(const float (*winding)[3], uint32_t vertexCount, float (*normals)[3])
 {
     float *v3; // [esp+18h] [ebp-61Ch]
     float delta[388]; // [esp+1Ch] [ebp-618h] BYREF
@@ -1862,7 +1862,7 @@ void __cdecl R_GetSidePlaneNormals(const float (*winding)[3], uint32_t vertexCou
     }
 }
 
-GfxPortal *__cdecl R_NextQueuedPortal()
+GfxPortal *R_NextQueuedPortal()
 {
     float dist; // eax
     PortalHeapNode *portalQueue; // esi
@@ -1927,7 +1927,7 @@ int R_AssertValidQueue()
     return result;
 }
 
-void __cdecl R_VisitPortalsForCellNoFrustum(
+void R_VisitPortalsForCellNoFrustum(
     const GfxCell *cell,
     GfxPortal *parentPortal,
     const DpvsPlane *parentPlane,
@@ -1969,7 +1969,7 @@ void __cdecl R_VisitPortalsForCellNoFrustum(
     R_SetAncestorListStatus(parentPortal, 0);
 }
 
-void __cdecl R_EnqueuePortal(GfxPortal *portal)
+void R_EnqueuePortal(GfxPortal *portal)
 {
     float v1; // edx
     PortalHeapNode *portalQueue; // esi
@@ -2009,7 +2009,7 @@ void __cdecl R_EnqueuePortal(GfxPortal *portal)
     R_AssertValidQueue();
 }
 
-double __cdecl R_FurthestPointOnWinding(const float (*points)[3], int pointCount, const DpvsPlane *plane)
+double R_FurthestPointOnWinding(const float (*points)[3], int pointCount, const DpvsPlane *plane)
 {
     float v4; // [esp+0h] [ebp-24h]
     float v5; // [esp+4h] [ebp-20h]
@@ -2046,7 +2046,7 @@ double __cdecl R_FurthestPointOnWinding(const float (*points)[3], int pointCount
     return distMax;
 }
 
-bool __cdecl R_ShouldSkipPortal(const GfxPortal *portal, const DpvsPlane *planes, int planeCount)
+bool R_ShouldSkipPortal(const GfxPortal *portal, const DpvsPlane *planes, int planeCount)
 {
     float v4; // [esp+0h] [ebp-4h]
 
@@ -2056,7 +2056,7 @@ bool __cdecl R_ShouldSkipPortal(const GfxPortal *portal, const DpvsPlane *planes
     return v4 > 0.0 || R_PortalBehindAnyPlane(portal, planes, planeCount) != 0;
 }
 
-char __cdecl R_PortalBehindAnyPlane(const GfxPortal *portal, const DpvsPlane *planes, int planeCount)
+char R_PortalBehindAnyPlane(const GfxPortal *portal, const DpvsPlane *planes, int planeCount)
 {
     while (planeCount)
     {
@@ -2068,7 +2068,7 @@ char __cdecl R_PortalBehindAnyPlane(const GfxPortal *portal, const DpvsPlane *pl
     return 0;
 }
 
-char __cdecl R_PortalBehindPlane(const GfxPortal *portal, const DpvsPlane *plane)
+char R_PortalBehindPlane(const GfxPortal *portal, const DpvsPlane *plane)
 {
     float v3; // [esp+0h] [ebp-Ch]
     int c; // [esp+4h] [ebp-8h]
@@ -2085,7 +2085,7 @@ char __cdecl R_PortalBehindPlane(const GfxPortal *portal, const DpvsPlane *plane
     return 1;
 }
 
-char __cdecl R_ChopPortalAndAddHullPointsNoFrustum(
+char R_ChopPortalAndAddHullPointsNoFrustum(
     GfxPortal *portal,
     const DpvsPlane *parentPlane,
     const DpvsPlane *planes,
@@ -2113,7 +2113,7 @@ char __cdecl R_ChopPortalAndAddHullPointsNoFrustum(
     return 1;
 }
 
-void __cdecl R_AddVertToPortalHullPoints(GfxPortal *portal, const float *v)
+void R_AddVertToPortalHullPoints(GfxPortal *portal, const float *v)
 {
     float hull[64][2]; // [esp+14h] [ebp-208h] BYREF
     int hullPointCount; // [esp+218h] [ebp-4h]
@@ -2144,7 +2144,7 @@ void __cdecl R_AddVertToPortalHullPoints(GfxPortal *portal, const float *v)
     portal->writable.hullPoints[portal->writable.hullPointCount++][1] = Vec3Dot(v, portal->hullAxis[1]);
 }
 
-GfxHullPointsPool *__cdecl R_AllocHullPoints()
+GfxHullPointsPool *R_AllocHullPoints()
 {
     GfxHullPointsPool *hullPointsPool; // [esp+0h] [ebp-4h]
 
@@ -2155,7 +2155,7 @@ GfxHullPointsPool *__cdecl R_AllocHullPoints()
     return hullPointsPool;
 }
 
-int __cdecl R_ChopPortal(
+int R_ChopPortal(
     const GfxPortal *portal,
     const DpvsPlane *parentPlane,
     const DpvsPlane *planes,
@@ -2193,7 +2193,7 @@ int __cdecl R_ChopPortal(
     return vertCount;
 }
 
-const float (*__cdecl R_ChopPortalWinding(
+const float (*R_ChopPortalWinding(
     const float (*vertsIn)[3],
     int *vertexCount,
     const DpvsPlane *plane,
@@ -2295,13 +2295,13 @@ const float (*__cdecl R_ChopPortalWinding(
     }
 }
 
-void __cdecl R_SetCellVisible(const GfxCell *cell)
+void R_SetCellVisible(const GfxCell *cell)
 {
     iassert( dpvsGlob.cellBits );
     dpvsGlob.cellBits[(uint32_t)(cell - rgp.world->cells) >> 5] |= 1 << ((cell - rgp.world->cells) & 0x1F);
 }
 
-void __cdecl R_SetAncestorListStatus(GfxPortal *portal, bool isAncestor)
+void R_SetAncestorListStatus(GfxPortal *portal, bool isAncestor)
 {
     while (portal)
     {
@@ -2310,7 +2310,7 @@ void __cdecl R_SetAncestorListStatus(GfxPortal *portal, bool isAncestor)
         portal = portal->writable.queuedParent;
     }
 }
-void __cdecl R_AddWorldSurfacesFrustumOnly()
+void R_AddWorldSurfacesFrustumOnly()
 {
     int v0; // [esp+8h] [ebp-B4h]
     DpvsPlane *v1; // [esp+Ch] [ebp-B0h]
@@ -2406,7 +2406,7 @@ void __cdecl R_AddWorldSurfacesFrustumOnly()
     }
 }
 
-void __cdecl R_AddCellSurfacesAndCullGroupsInFrustumDelayed(
+void R_AddCellSurfacesAndCullGroupsInFrustumDelayed(
     const GfxCell *cell,
     const DpvsPlane *planes,
     uint8_t planeCount,
@@ -2432,7 +2432,7 @@ void __cdecl R_AddCellSurfacesAndCullGroupsInFrustumDelayed(
     R_AddWorkerCmd(WRKCMD_DPVS_CELL_DYN_BRUSH, (uint8_t *)&dpvsDynamicCell);
 }
 
-void __cdecl R_ShowCull()
+void R_ShowCull()
 {
     float s; // [esp+0h] [ebp-50h]
     float *origin; // [esp+14h] [ebp-3Ch]
@@ -2495,7 +2495,7 @@ void __cdecl R_ShowCull()
     }
 }
 
-void __cdecl R_InitSceneData(int localClientNum)
+void R_InitSceneData(int localClientNum)
 {
     uint32_t cellIndex; // [esp+0h] [ebp-10h]
     uint32_t offset; // [esp+4h] [ebp-Ch]
@@ -2528,7 +2528,7 @@ void __cdecl R_InitSceneData(int localClientNum)
     memset((uint8_t *)scene.dpvs.entInfo[localClientNum], 0, 4 * gfxCfg.entCount);
 }
 
-void __cdecl DynEntCl_InitFilter()
+void DynEntCl_InitFilter()
 {
     uint32_t drawType; // [esp+0h] [ebp-4h]
 
@@ -2543,7 +2543,7 @@ void __cdecl DynEntCl_InitFilter()
             4 * rgp.world->dpvsPlanes.cellCount * rgp.world->dpvsDyn.dynEntClientWordCount[drawType]);
 }
 
-void __cdecl R_InitSceneBuffers()
+void R_InitSceneBuffers()
 {
     uint32_t localClientNum; // [esp+0h] [ebp-8h]
     uint32_t viewIndex; // [esp+4h] [ebp-4h]
@@ -2565,7 +2565,7 @@ void __cdecl R_InitSceneBuffers()
     }
 }
 
-void __cdecl R_ClearDpvsScene()
+void R_ClearDpvsScene()
 {
     uint32_t drawType; // [esp+0h] [ebp-8h]
     int i; // [esp+4h] [ebp-4h]
@@ -2612,7 +2612,7 @@ void __cdecl R_ClearDpvsScene()
     R_SetVisData(0);
 }
 
-bool __cdecl R_CullDynamicSpotLightInCameraView()
+bool R_CullDynamicSpotLightInCameraView()
 {
     if (!scene.addedLightCount)
         return 1;
@@ -2626,7 +2626,7 @@ bool __cdecl R_CullDynamicSpotLightInCameraView()
     return scene.isAddedLightCulled[0];
 }
 
-void __cdecl R_CullDynamicPointLightsInCameraView()
+void R_CullDynamicPointLightsInCameraView()
 {
     int planeCount; // [esp+Ch] [ebp-10h]
     DpvsPlane *planes; // [esp+10h] [ebp-Ch]
@@ -2654,7 +2654,7 @@ const float standardFrustumSidePlanes[4][4] =
   { 0.0, 1.0, 0.0, 1.0 }
 }; // idb
 
-void __cdecl R_SetupWorldSurfacesDpvs(const GfxViewParms *viewParms)
+void R_SetupWorldSurfacesDpvs(const GfxViewParms *viewParms)
 {
     DpvsView *dpvsView; // [esp+0h] [ebp-4h]
 
@@ -2672,7 +2672,7 @@ void __cdecl R_SetupWorldSurfacesDpvs(const GfxViewParms *viewParms)
     dpvsView->frustumPlaneCount = R_AddNearAndFarClipPlanes(dpvsView->frustumPlanes, 4);
 }
 
-int __cdecl R_AddNearAndFarClipPlanes(DpvsPlane *planes, int planeCount)
+int R_AddNearAndFarClipPlanes(DpvsPlane *planes, int planeCount)
 {
     int planeCounta; // [esp+Ch] [ebp+Ch]
 
@@ -2685,7 +2685,7 @@ int __cdecl R_AddNearAndFarClipPlanes(DpvsPlane *planes, int planeCount)
     return planeCounta;
 }
 
-void __cdecl R_SetupDpvsForPoint(const GfxViewParms *viewParms)
+void R_SetupDpvsForPoint(const GfxViewParms *viewParms)
 {
     float zfar; // [esp+14h] [ebp-4h]
 
@@ -2721,7 +2721,7 @@ void __cdecl R_SetupDpvsForPoint(const GfxViewParms *viewParms)
     }
 }
 
-void __cdecl R_SetViewFrustumPlanes(GfxViewInfo *viewInfo)
+void R_SetViewFrustumPlanes(GfxViewInfo *viewInfo)
 {
     iassert(dpvsGlob.views[scene.dpvs.localClientNum][SCENE_VIEW_CAMERA].frustumPlaneCount >= 4);
 
@@ -2735,12 +2735,12 @@ void __cdecl R_SetViewFrustumPlanes(GfxViewInfo *viewInfo)
 }
 
 // lol.
-void __cdecl R_CopyClipPlane(const DpvsPlane *in, DpvsPlane *out)
+void R_CopyClipPlane(const DpvsPlane *in, DpvsPlane *out)
 {
     *out = *in;
 }
 
-void __cdecl R_AddSkySurfacesDpvs(const DpvsPlane *planes, int planeCount)
+void R_AddSkySurfacesDpvs(const DpvsPlane *planes, int planeCount)
 {
     int v2; // [esp+4h] [ebp-1B0h]
     int v3; // [esp+8h] [ebp-1ACh]
@@ -2791,7 +2791,7 @@ void __cdecl R_AddSkySurfacesDpvs(const DpvsPlane *planes, int planeCount)
     }
 }
 
-void __cdecl R_AddWorldSurfacesDpvs(const GfxViewParms *viewParms, int cameraCellIndex)
+void R_AddWorldSurfacesDpvs(const GfxViewParms *viewParms, int cameraCellIndex)
 {
     DpvsView *dpvsView; // [esp+0h] [ebp-4h]
 
@@ -2824,7 +2824,7 @@ void __cdecl R_AddWorldSurfacesDpvs(const GfxViewParms *viewParms, int cameraCel
         R_ShowLightVisCachePoints(viewParms->origin, dpvsView->frustumPlanes, dpvsView->frustumPlaneCount);
 }
 
-void __cdecl R_AddWorldSurfacesPortalWalk(int cameraCellIndex)
+void R_AddWorldSurfacesPortalWalk(int cameraCellIndex)
 {
     GfxCell *cell; // [esp+0h] [ebp-Ch]
     int cellIndex; // [esp+4h] [ebp-8h]
@@ -2875,7 +2875,7 @@ void __cdecl R_AddWorldSurfacesPortalWalk(int cameraCellIndex)
 
 const float color[4] = { 0.0f, 1.0f, 1.0f, 0.25f };
 
-void __cdecl R_VisitPortals(const GfxCell *cell, const DpvsPlane *parentPlane, const DpvsPlane *planes, int planeCount)
+void R_VisitPortals(const GfxCell *cell, const DpvsPlane *parentPlane, const DpvsPlane *planes, int planeCount)
 {
     float scale; // [esp+4h] [ebp-D98h]
     float v5; // [esp+28h] [ebp-D74h]
@@ -2985,7 +2985,7 @@ void __cdecl R_VisitPortals(const GfxCell *cell, const DpvsPlane *parentPlane, c
     //LargeLocal::~LargeLocal(&hullPointsPoolArray_large_local);
 }
 
-uint32_t __cdecl R_PortalClipPlanes(
+uint32_t R_PortalClipPlanes(
     DpvsPlane *planes,
     uint32_t vertexCount,
     const float (*winding)[3],
@@ -3057,7 +3057,7 @@ uint32_t __cdecl R_PortalClipPlanes(
     return planeCount;
 }
 
-double __cdecl R_NearestPointOnWinding(const float (*points)[3], int pointCount, const DpvsPlane *plane)
+double R_NearestPointOnWinding(const float (*points)[3], int pointCount, const DpvsPlane *plane)
 {
     float v4; // [esp+0h] [ebp-24h]
     float v5; // [esp+4h] [ebp-20h]
@@ -3094,7 +3094,7 @@ double __cdecl R_NearestPointOnWinding(const float (*points)[3], int pointCount,
     return distMin;
 }
 
-void __cdecl R_ProjectPortal(
+void R_ProjectPortal(
     int vertexCount,
     const float (*winding)[3],
     float *mins,
@@ -3175,7 +3175,7 @@ void __cdecl R_ProjectPortal(
     *clipChildren = (DpvsClipChildren)(r_portalMinClipArea->current.value <= area);
 }
 
-uint32_t __cdecl R_AddBevelPlanes(
+uint32_t R_AddBevelPlanes(
     DpvsPlane *planes,
     uint32_t vertexCount,
     const float (*winding)[3],
@@ -3264,7 +3264,7 @@ uint32_t __cdecl R_AddBevelPlanes(
     return planeCount;
 }
 
-void __cdecl R_UnprojectPoint(const float *projected, float *unprojected)
+void R_UnprojectPoint(const float *projected, float *unprojected)
 {
     *unprojected = dpvsGlob.invViewProjMtx->m[0][0] * *projected
         + dpvsGlob.invViewProjMtx->m[1][0] * projected[1]
@@ -3280,7 +3280,7 @@ void __cdecl R_UnprojectPoint(const float *projected, float *unprojected)
         + dpvsGlob.invViewProjMtx->m[3][3];
 }
 
-void __cdecl R_VisitPortalsForCell(
+void R_VisitPortalsForCell(
     const GfxCell *cell,
     GfxPortal *parentPortal,
     const DpvsPlane *parentPlane,
@@ -3389,7 +3389,7 @@ void __cdecl R_VisitPortalsForCell(
     }
 }
 
-char __cdecl R_ChopPortalAndAddHullPoints(
+char R_ChopPortalAndAddHullPoints(
     GfxPortal *portal,
     const DpvsPlane *parentPlane,
     const DpvsPlane *planes,
@@ -3408,7 +3408,7 @@ char __cdecl R_ChopPortalAndAddHullPoints(
     return 1;
 }
 
-void __cdecl R_VisitAllFurtherCells(
+void R_VisitAllFurtherCells(
     const GfxCell *cell,
     const DpvsPlane *parentPlane,
     const DpvsPlane *planes,
@@ -3435,7 +3435,7 @@ void __cdecl R_VisitAllFurtherCells(
     }
 }
 
-int __cdecl R_GetFurtherCellList_r(
+int R_GetFurtherCellList_r(
     const GfxCell *cell,
     const DpvsPlane *parentPlane,
     const DpvsPlane *planes,
@@ -3463,7 +3463,7 @@ int __cdecl R_GetFurtherCellList_r(
     return count;
 }
 
-char __cdecl R_IsCellInList(const GfxCell *cell, const GfxCell **list, int count)
+char R_IsCellInList(const GfxCell *cell, const GfxCell **list, int count)
 {
     int index; // [esp+0h] [ebp-4h]
 
@@ -3475,13 +3475,13 @@ char __cdecl R_IsCellInList(const GfxCell *cell, const GfxCell **list, int count
     return 0;
 }
 
-int __cdecl R_AddCellToList(const GfxCell *cell, const GfxCell **list, int count)
+int R_AddCellToList(const GfxCell *cell, const GfxCell **list, int count)
 {
     list[count] = cell;
     return count + 1;
 }
 
-void __cdecl R_SetupShadowSurfacesDpvs(
+void R_SetupShadowSurfacesDpvs(
     const GfxViewParms *viewParms,
     const float (*sidePlanes)[4],
     uint32_t sidePlaneCount,
@@ -3530,7 +3530,7 @@ void __cdecl R_SetupShadowSurfacesDpvs(
     dpvsView->frustumPlaneCount = sidePlaneCount;
 }
 
-double __cdecl R_GetFarPlaneDist()
+double R_GetFarPlaneDist()
 {
     if (r_zfar->current.value == 0.0)
         return dpvsGlob.cullDist;
@@ -3538,7 +3538,7 @@ double __cdecl R_GetFarPlaneDist()
         return r_zfar->current.value;
 }
 
-uint32_t __cdecl R_CalcReflectionProbeIndex(const GfxWorld *world, const float *origin)
+uint32_t R_CalcReflectionProbeIndex(const GfxWorld *world, const float *origin)
 {
     uint32_t cellIndex; // [esp+0h] [ebp-4h]
 
@@ -3556,7 +3556,7 @@ uint32_t __cdecl R_CalcReflectionProbeIndex(const GfxWorld *world, const float *
     return R_FindNearestReflectionProbeInCell(world, &world->cells[cellIndex], origin);
 }
 
-int __cdecl R_CellForPoint(const GfxWorld *world, const float *origin)
+int R_CellForPoint(const GfxWorld *world, const float *origin)
 {
     mnode_t *node; // [esp+4h] [ebp-1Ch]
     int cellIndex; // [esp+14h] [ebp-Ch]
@@ -3596,13 +3596,13 @@ int __cdecl R_CellForPoint(const GfxWorld *world, const float *origin)
     return cellIndex - 1;
 }
 
-void __cdecl R_FreeHullPoints(GfxHullPointsPool *hullPoints)
+void R_FreeHullPoints(GfxHullPointsPool *hullPoints)
 {
     hullPoints->nextFree = dpvsGlob.nextFreeHullPoints;
     dpvsGlob.nextFreeHullPoints = hullPoints;
 }
 
-float __cdecl R_DpvsPlaneMaxSignedDistToBox(const DpvsPlane *plane, const float *minmax)
+float R_DpvsPlaneMaxSignedDistToBox(const DpvsPlane *plane, const float *minmax)
 {
     return (float)((float)(*(const float *)((char *)minmax + plane->side[2]) * plane->coeffs[2])
         + (float)((float)(*(const float *)((char *)minmax + plane->side[1]) * plane->coeffs[1])
@@ -3610,7 +3610,7 @@ float __cdecl R_DpvsPlaneMaxSignedDistToBox(const DpvsPlane *plane, const float 
                 + plane->coeffs[3])));
 }
 
-float __cdecl R_DpvsPlaneMinSignedDistToBox(const DpvsPlane *plane, const float *minmax)
+float R_DpvsPlaneMinSignedDistToBox(const DpvsPlane *plane, const float *minmax)
 {
     return (float)((float)(*(const float *)((char *)minmax - plane->side[2] + 28) * plane->coeffs[2])
         + (float)((float)(*(const float *)((char *)minmax - plane->side[1] + 20) * plane->coeffs[1])
@@ -3618,7 +3618,7 @@ float __cdecl R_DpvsPlaneMinSignedDistToBox(const DpvsPlane *plane, const float 
                 + plane->coeffs[3])));
 }
 
-void __cdecl R_SetDpvsPlaneSides(DpvsPlane *plane)
+void R_SetDpvsPlaneSides(DpvsPlane *plane)
 {
     plane->side[0] = (plane->coeffs[0] <= 0.0f) ? 0 : 12;
     plane->side[1] = (plane->coeffs[1] <= 0.0f) ? 4 : 16;

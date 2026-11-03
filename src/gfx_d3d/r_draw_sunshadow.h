@@ -9,4 +9,4 @@ void R_DrawSunShadowMap(
     struct GfxCmdBuf *cmdBuf);
 
 // LWSS ADD from blops
-void __cdecl DrawSunDirectionDebug(const float *viewOrg, const float *viewForward);
+void DrawSunDirectionDebug(const float *viewOrg, const float *viewForward);

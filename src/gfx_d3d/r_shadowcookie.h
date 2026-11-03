@@ -9,30 +9,30 @@ struct ShadowCandidate // sizeof=0x8
     float weight;                       // ...
 };
 
-bool __cdecl R_SortBspShadowReceiverSurfaces(GfxSurface *surface0, GfxSurface *surface1);
-void __cdecl R_EmitShadowCookieSurfs(GfxViewInfo *viewInfo);
-void __cdecl R_GenerateShadowCookiesCmd(ShadowCookieCmd *cmd);
-void __cdecl R_GenerateShadowCookies(
+bool R_SortBspShadowReceiverSurfaces(GfxSurface *surface0, GfxSurface *surface1);
+void R_EmitShadowCookieSurfs(GfxViewInfo *viewInfo);
+void R_GenerateShadowCookiesCmd(ShadowCookieCmd *cmd);
+void R_GenerateShadowCookies(
     int localClientNum,
     const GfxViewParms *viewParmsDpvs,
     const GfxViewParms *viewParmsDraw,
     ShadowCookieList *shadowCookieList);
-bool __cdecl R_ShadowCandidatePred(const ShadowCandidate &a, const ShadowCandidate &b);
-void __cdecl R_PopulateCandidates(const GfxViewParms *viewParmsDraw, ShadowCandidate *candidates);
-void __cdecl R_AddCasters(
+bool R_ShadowCandidatePred(const ShadowCandidate &a, const ShadowCandidate &b);
+void R_PopulateCandidates(const GfxViewParms *viewParmsDraw, ShadowCandidate *candidates);
+void R_AddCasters(
     int localClientNum,
     const GfxViewParms *viewParmsDraw,
     ShadowCandidate *candidates,
     ShadowCookieList *shadowCookieList);
-void __cdecl R_AddShadowCookie(
+void R_AddShadowCookie(
     int localClientNum,
     const GfxViewParms *viewParms,
     uint32_t sceneEntIndex,
     float fade,
     ShadowCookieList *cookieList);
-void __cdecl R_GenerateShadowCookieViewParms(float *modelMin, float *modelMax, GfxViewParms *shadowViewParms);
-void __cdecl R_GenerateBspShadowReceivers(ShadowCookieList *shadowCookieList);
-bool __cdecl R_AllowBspShadowReceiver(int surfIndex, uint32_t *shadowReceiverCallbackAsVoid);
-void __cdecl R_GenerateSceneEntShadowReceivers(ShadowCookieList *shadowCookieList);
-char __cdecl R_OutsideOfShadowFrustumPlanes(const DpvsPlane *planes, const float *minmax);
-void __cdecl R_ResetShadowCookies();
+void R_GenerateShadowCookieViewParms(float *modelMin, float *modelMax, GfxViewParms *shadowViewParms);
+void R_GenerateBspShadowReceivers(ShadowCookieList *shadowCookieList);
+bool R_AllowBspShadowReceiver(int surfIndex, uint32_t *shadowReceiverCallbackAsVoid);
+void R_GenerateSceneEntShadowReceivers(ShadowCookieList *shadowCookieList);
+char R_OutsideOfShadowFrustumPlanes(const DpvsPlane *planes, const float *minmax);
+void R_ResetShadowCookies();

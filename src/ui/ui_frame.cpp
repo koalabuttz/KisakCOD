@@ -6,12 +6,12 @@
 #include <algorithm>
 #include <string>
 
-int __cdecl Menu_Count(UiContext *dc)
+int Menu_Count(UiContext *dc)
 {
     return dc->menuCount;
 }
 
-void __cdecl Menu_PaintAll(UiContext *dc)
+void Menu_PaintAll(UiContext *dc)
 {
     PROF_SCOPED("Menu_PaintAll");
 

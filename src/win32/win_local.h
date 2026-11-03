@@ -88,7 +88,7 @@ void	IN_MouseEvent (int mstate);
 
 void	Sys_CreateConsole( void );
 void	Sys_DestroyConsole( void );
-void __cdecl Sys_ShowConsole();
+void Sys_ShowConsole();
 
 char	*Sys_ConsoleInput (void);
 
@@ -110,7 +110,7 @@ void	IN_Init (void);
 void	IN_Shutdown (void);
 void	IN_JoystickCommands (void);
 
-void __cdecl IN_ShowSystemCursor(BOOL show);
+void IN_ShowSystemCursor(BOOL show);
 
 // KISAKTODO void	IN_Move (usercmd_s *cmd); // usercmd_t -> usercmd_s
 // add additional non keyboard / non mouse movement on top of the keyboard move cmd
@@ -339,51 +339,51 @@ int Sys_InterlockedDecrement(uint *addend);
 
 void Sys_SetErrorText(const char* buf);
 void Sys_Error(const char *error, ...);
-void __cdecl Sys_OutOfMemErrorInternal(const char* filename, int line);
-void __cdecl Sys_NormalExit();
+void Sys_OutOfMemErrorInternal(const char* filename, int line);
+void Sys_NormalExit();
 
-void __cdecl Sys_OpenURL(const char *url, int doexit);
-void __cdecl  Sys_Quit();
-void __cdecl Sys_Print(const char *msg);
-char *__cdecl Sys_GetClipboardData();
-int __cdecl Sys_SetClipboardData(const char *text);
-void __cdecl Sys_QueEvent(uint32_t time, sysEventType_t type, int value, int value2, int ptrLength, void *ptr);
+void Sys_OpenURL(const char *url, int doexit);
+void Sys_Quit();
+void Sys_Print(const char *msg);
+char *Sys_GetClipboardData();
+int Sys_SetClipboardData(const char *text);
+void Sys_QueEvent(uint32_t time, sysEventType_t type, int value, int value2, int ptrLength, void *ptr);
 void Sys_ShutdownEvents();
-void __cdecl Sys_LoadingKeepAlive();
-sysEvent_t *__cdecl Sys_GetEvent(sysEvent_t *result);
-void __cdecl Sys_Init();
+void Sys_LoadingKeepAlive();
+sysEvent_t *Sys_GetEvent(sysEvent_t *result);
+void Sys_Init();
 
 void Sys_In_Restart_f();
 #ifdef KISAK_MP
 void Sys_Net_Restart_f();
-void __cdecl Sys_Listen_f();
+void Sys_Listen_f();
 #endif
 
-void __cdecl Sys_Mkdir(const char *path);
-BOOL __cdecl Sys_RemoveDirTree(const char *path);
-int __cdecl Sys_CountFileList(char **list);
-char **__cdecl Sys_ListFiles(
+void Sys_Mkdir(const char *path);
+BOOL Sys_RemoveDirTree(const char *path);
+int Sys_CountFileList(char **list);
+char **Sys_ListFiles(
 	const char *directory,
 	const char *extension,
 	const char *filter,
 	int *numfiles,
 	int wantsubs);
-char *__cdecl Sys_Cwd();
-const char *__cdecl Sys_DefaultCDPath();
-char *__cdecl Sys_DefaultInstallPath();
-void __cdecl Sys_QuitAndStartProcess(const char *exeName, const char *parameters);
+char *Sys_Cwd();
+const char *Sys_DefaultCDPath();
+char *Sys_DefaultInstallPath();
+void Sys_QuitAndStartProcess(const char *exeName, const char *parameters);
 
 
 // win_voice
-bool __cdecl Voice_SendVoiceData();
-bool __cdecl Voice_Init();
-void __cdecl Voice_Shutdown();
-double __cdecl Voice_GetVoiceLevel();
-void __cdecl Voice_Playback();
-int __cdecl Voice_GetLocalVoiceData();
-void __cdecl Voice_IncomingVoiceData(unsigned __int8 talker, unsigned __int8 *data, int packetDataSize);
-bool __cdecl Voice_IsClientTalking(uint32_t clientNum);
-char __cdecl Voice_StartRecording();
-char __cdecl Voice_StopRecording();
+bool Voice_SendVoiceData();
+bool Voice_Init();
+void Voice_Shutdown();
+double Voice_GetVoiceLevel();
+void Voice_Playback();
+int Voice_GetLocalVoiceData();
+void Voice_IncomingVoiceData(unsigned __int8 talker, unsigned __int8 *data, int packetDataSize);
+bool Voice_IsClientTalking(uint32_t clientNum);
+char Voice_StartRecording();
+char Voice_StopRecording();
 
 extern SysInfo sys_info;

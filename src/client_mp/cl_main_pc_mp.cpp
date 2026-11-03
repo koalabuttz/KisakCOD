@@ -19,7 +19,7 @@
 
 bool s_playerMute[64];
 
-int __cdecl CL_ServerStatus(char *serverAddress, char *serverStatusString, int maxLen)
+int CL_ServerStatus(char *serverAddress, char *serverStatusString, int maxLen)
 {
     serverStatus_s *serverStatus; // [esp+0h] [ebp-20h]
     int i; // [esp+4h] [ebp-1Ch]
@@ -79,7 +79,7 @@ int __cdecl CL_ServerStatus(char *serverAddress, char *serverStatusString, int m
     }
 }
 
-void __cdecl CL_SetServerInfoByAddress(netadr_t from, char *info, __int16 ping)
+void CL_SetServerInfoByAddress(netadr_t from, char *info, __int16 ping)
 {
     int cmp; // [esp+0h] [ebp-14h]
     int low; // [esp+4h] [ebp-10h]
@@ -127,7 +127,7 @@ void __cdecl CL_SetServerInfoByAddress(netadr_t from, char *info, __int16 ping)
     }
 }
 
-void __cdecl CL_SetServerInfo(serverInfo_t *server, char *info, __int16 ping)
+void CL_SetServerInfo(serverInfo_t *server, char *info, __int16 ping)
 {
     const char *v3; // eax
     const char *v4; // eax
@@ -196,7 +196,7 @@ void __cdecl CL_SetServerInfo(serverInfo_t *server, char *info, __int16 ping)
     }
 }
 
-void __cdecl CL_ServerInfoPacket(netadr_t from, msg_t *msg, int time)
+void CL_ServerInfoPacket(netadr_t from, msg_t *msg, int time)
 {
     const char *v3; // eax
     const char *v4; // eax
@@ -294,7 +294,7 @@ void __cdecl CL_ServerInfoPacket(netadr_t from, msg_t *msg, int time)
     }
 }
 
-void __cdecl CL_Connect_f()
+void CL_Connect_f()
 {
     const char *v0; // eax
     __int16 v1; // ax
@@ -384,7 +384,7 @@ void __cdecl CL_Connect_f()
 }
 
 // This is called by the Client to see if the Auth is even valid before sending to the Server.
-bool __cdecl CL_CDKeyValidate(netadr_t addr)
+bool CL_CDKeyValidate(netadr_t addr)
 {
 #ifdef WIN32
     return Steam_UpdateClientAuthTicket(addr);
@@ -394,7 +394,7 @@ bool __cdecl CL_CDKeyValidate(netadr_t addr)
 #endif
 }
 
-//bool __cdecl CL_CDKeyValidate(const char *key, const char *checksum)
+//bool CL_CDKeyValidate(const char *key, const char *checksum)
 //{
 //    char chs[8]; // [esp+4h] [ebp-1Ch] BYREF
 //    uint32_t crcAcc; // [esp+10h] [ebp-10h]
@@ -419,7 +419,7 @@ bool __cdecl CL_CDKeyValidate(netadr_t addr)
 //    return checksum && !I_strnicmp(chs, checksum, 4) || checksum == 0;
 //}
 
-void __cdecl CL_GlobalServers_f()
+void CL_GlobalServers_f()
 {
     const char *v0; // eax
     const char *v1; // eax
@@ -464,7 +464,7 @@ void __cdecl CL_GlobalServers_f()
     }
 }
 
-void __cdecl CL_ServerStatusResponse(netadr_t from, msg_t *msg)
+void CL_ServerStatusResponse(netadr_t from, msg_t *msg)
 {
     char *v2; // eax
     char info[1024]; // [esp+30h] [ebp-420h] BYREF
@@ -559,7 +559,7 @@ void __cdecl CL_ServerStatusResponse(netadr_t from, msg_t *msg)
     }
 }
 
-void __cdecl CL_ResetPlayerMuting(uint32_t muteClientIndex)
+void CL_ResetPlayerMuting(uint32_t muteClientIndex)
 {
     if (muteClientIndex >= MAX_CLIENTS)
     {
@@ -569,7 +569,7 @@ void __cdecl CL_ResetPlayerMuting(uint32_t muteClientIndex)
     s_playerMute[muteClientIndex] = 0;
 }
 
-void __cdecl CL_MutePlayer(int localClientNum, uint32_t muteClientIndex)
+void CL_MutePlayer(int localClientNum, uint32_t muteClientIndex)
 {
     const char *v2; // eax
 
@@ -589,7 +589,7 @@ void __cdecl CL_MutePlayer(int localClientNum, uint32_t muteClientIndex)
     Cbuf_AddText(0, v2);
 }
 
-bool __cdecl CL_IsPlayerMuted(int localClientNum, uint32_t muteClientIndex)
+bool CL_IsPlayerMuted(int localClientNum, uint32_t muteClientIndex)
 {
     if (muteClientIndex >= 0x40)
         MyAssertHandler(
@@ -601,7 +601,7 @@ bool __cdecl CL_IsPlayerMuted(int localClientNum, uint32_t muteClientIndex)
     return s_playerMute[muteClientIndex];
 }
 
-void __cdecl CL_ClearMutedList()
+void CL_ClearMutedList()
 {
     memset((uint8_t *)s_playerMute, 0, sizeof(s_playerMute));
 }

@@ -60,14 +60,14 @@ const char *g_HitLocNames[19] =
 
 unsigned __int16 g_HitLocConstNames[19]{ 0 };
 
-void __cdecl TRACK_g_combat()
+void TRACK_g_combat()
 {
     track_static_alloc_internal(g_fHitLocDamageMult, 76, "g_fHitLocDamageMult", 9);
     track_static_alloc_internal(g_HitLocNames, 76, "g_HitLocNames", 9);
     track_static_alloc_internal(g_HitLocConstNames, 38, "g_HitLocConstNames", 9);
 }
 
-void __cdecl G_HitLocStrcpy(unsigned __int8 *pMember, const char *pszKeyValue)
+void G_HitLocStrcpy(unsigned __int8 *pMember, const char *pszKeyValue)
 {
     int v2; // r10
     int v3; // r11
@@ -80,7 +80,7 @@ void __cdecl G_HitLocStrcpy(unsigned __int8 *pMember, const char *pszKeyValue)
     } while (v3);
 }
 
-void __cdecl G_ParseHitLocDmgTable()
+void G_ParseHitLocDmgTable()
 {
     static const char *filename = "info/ai_lochit_dmgtable";
     cspField_t fields[ARRAY_COUNT(g_HitLocNames)];
@@ -104,7 +104,7 @@ void __cdecl G_ParseHitLocDmgTable()
     }
 }
 
-void __cdecl TossClientItems(gentity_s *self)
+void TossClientItems(gentity_s *self)
 {
     gclient_s *client; // r30
     unsigned int weapon; // r31
@@ -143,7 +143,7 @@ void __cdecl TossClientItems(gentity_s *self)
     }
 }
 
-void __cdecl LookAtKiller(gentity_s *self, gentity_s *inflictor, gentity_s *attacker)
+void LookAtKiller(gentity_s *self, gentity_s *inflictor, gentity_s *attacker)
 {
     double v3; // fp0
     double v4; // fp12
@@ -173,7 +173,7 @@ void __cdecl LookAtKiller(gentity_s *self, gentity_s *inflictor, gentity_s *atta
     self->client->ps.stats[STAT_DEAD_YAW] = (int)self->r.currentAngles[1];
 }
 
-int __cdecl G_MeansOfDeathFromScriptParam(unsigned int scrParam)
+int G_MeansOfDeathFromScriptParam(unsigned int scrParam)
 {
     unsigned __int16 ConstString; // r3
     int v3; // r10
@@ -201,7 +201,7 @@ void use_trigger_use(gentity_s *ent, gentity_s *other, gentity_s *activator)
     ;
 }
 
-void __cdecl player_die(
+void player_die(
     gentity_s *self,
     gentity_s *inflictor,
     gentity_s *attacker,
@@ -319,7 +319,7 @@ void __cdecl player_die(
     }
 }
 
-float __cdecl G_GetWeaponHitLocationMultiplier(unsigned int hitLoc, unsigned int weapon)
+float G_GetWeaponHitLocationMultiplier(unsigned int hitLoc, unsigned int weapon)
 {
     WeaponDef *weapDef; // r3
 
@@ -335,7 +335,7 @@ float __cdecl G_GetWeaponHitLocationMultiplier(unsigned int hitLoc, unsigned int
     }
 }
 
-void __cdecl handleDeathInvulnerability(gentity_s *targ, int prevHealth, int mod)
+void handleDeathInvulnerability(gentity_s *targ, int prevHealth, int mod)
 {
     gclient_s *client; // r28
     int health; // r11
@@ -380,7 +380,7 @@ void __cdecl handleDeathInvulnerability(gentity_s *targ, int prevHealth, int mod
     }
 }
 
-void __cdecl G_DamageNotify(
+void G_DamageNotify(
     unsigned __int16 notify,
     gentity_s *targ,
     gentity_s *attacker,
@@ -430,7 +430,7 @@ void __cdecl G_DamageNotify(
     Scr_Notify(targ, notify, 8u);
 }
 
-int __cdecl G_GetWeaponIndexForEntity(const gentity_s *ent)
+int G_GetWeaponIndexForEntity(const gentity_s *ent)
 {
     gclient_s *client; // r28
     unsigned int viewlocked_entNum; // r7
@@ -475,7 +475,7 @@ int __cdecl G_GetWeaponIndexForEntity(const gentity_s *ent)
     return result;
 }
 
-static void __cdecl G_DamageKnockback(
+static void G_DamageKnockback(
     gentity_s *targ,
     const gentity_s *attacker,
     const float *dir,
@@ -549,7 +549,7 @@ static void __cdecl G_DamageKnockback(
     }
 }
 
-bool __cdecl G_ShouldTakeBulletDamage(gentity_s *targ, gentity_s *attacker)
+bool G_ShouldTakeBulletDamage(gentity_s *targ, gentity_s *attacker)
 {
     sentient_s *sentient; // r11
     actor_s *actor; // r11
@@ -567,7 +567,7 @@ bool __cdecl G_ShouldTakeBulletDamage(gentity_s *targ, gentity_s *attacker)
         || attacker->actor->eState[attacker->actor->stateLevel] == AIS_SCRIPTEDANIM;
 }
 
-void __cdecl G_Damage(
+void G_Damage(
     gentity_s *targ,
     gentity_s *inflictor,
     gentity_s *attacker,
@@ -598,9 +598,9 @@ void __cdecl G_Damage(
     sentient_s *sentient; // r11
     int v61; // r3
     sentient_s *v62; // r11
-    void(__cdecl * die)(gentity_s *, gentity_s *, gentity_s *, const int, const int, const int, const float *, const hitLocation_t); // r30
+    void(* die)(gentity_s *, gentity_s *, gentity_s *, const int, const int, const int, const float *, const hitLocation_t); // r30
     int v64; // r3
-    void(__cdecl * pain)(gentity_s *, gentity_s *, int, const float *, const int, const float *, const hitLocation_t, const int); // r11
+    void(* pain)(gentity_s *, gentity_s *, int, const float *, const int, const float *, const hitLocation_t, const int); // r11
     gclient_s *v66; // r11
     unsigned int v67; // [sp+8h] [-F8h]
     int v68; // [sp+Ch] [-F4h]
@@ -836,7 +836,7 @@ void __cdecl G_Damage(
     }
 }
 
-int __cdecl G_CanRadiusDamageFromPos(
+int G_CanRadiusDamageFromPos(
     gentity_s *targ,
     const float *targetPos,
     gentity_s *inflictor,
@@ -1167,7 +1167,7 @@ int __cdecl G_CanRadiusDamageFromPos(
 }
 
 
-float __cdecl EntDistToPoint(float *origin, gentity_s *ent)
+float EntDistToPoint(float *origin, gentity_s *ent)
 {
     unsigned int i; // [esp+10h] [ebp-10h]
     float v[3]; // [esp+14h] [ebp-Ch] BYREF
@@ -1199,7 +1199,7 @@ float __cdecl EntDistToPoint(float *origin, gentity_s *ent)
     }
 }
 
-void __cdecl GetEntListForRadius(
+void GetEntListForRadius(
     const float *origin,
     float radius_max,
     float radius_min,
@@ -1220,7 +1220,7 @@ void __cdecl GetEntListForRadius(
     *entListCount = CM_AreaEntities(mins, maxs, entList, MAX_GENTITIES, -1);
 }
 
-void __cdecl AddScrTeamName(team_t team)
+void AddScrTeamName(team_t team)
 {
     switch (team)
     {
@@ -1246,7 +1246,7 @@ void __cdecl AddScrTeamName(team_t team)
     }
 }
 
-float __cdecl G_GetRadiusDamageDistanceSquared(float *damageOrigin, gentity_s *ent)
+float G_GetRadiusDamageDistanceSquared(float *damageOrigin, gentity_s *ent)
 {
     float v[3]; // [esp+Ch] [ebp-Ch]
 
@@ -1278,13 +1278,13 @@ float __cdecl G_GetRadiusDamageDistanceSquared(float *damageOrigin, gentity_s *e
     return Vec3LengthSq(v);
 }
 
-bool __cdecl G_WithinDamageRadius(float *damageOrigin, double radiusSquared, gentity_s *ent)
+bool G_WithinDamageRadius(float *damageOrigin, double radiusSquared, gentity_s *ent)
 {
     iassert(ent);
     return G_GetRadiusDamageDistanceSquared(damageOrigin, ent) < radiusSquared;
 }
 
-bool __cdecl G_ClientFlashbanged(gclient_s *client)
+bool G_ClientFlashbanged(gclient_s *client)
 {
     iassert(client);
     return (client->ps.pm_flags & 0x10000) != 0
@@ -1292,13 +1292,13 @@ bool __cdecl G_ClientFlashbanged(gclient_s *client)
         && BG_GetShellshockParms(client->ps.shellshockIndex)->screenBlend.type == SHELLSHOCK_VIEWTYPE_FLASHED;
 }
 
-int __cdecl G_GetHitLocationString(unsigned int hitLoc)
+int G_GetHitLocationString(unsigned int hitLoc)
 {
     iassert((unsigned)hitLoc < HITLOC_NUM);
     return g_HitLocConstNames[hitLoc];
 }
 
-int __cdecl G_CanRadiusDamage(
+int G_CanRadiusDamage(
     gentity_s *targ,
     gentity_s *inflictor,
     const float *centerPos,
@@ -1322,7 +1322,7 @@ int __cdecl G_CanRadiusDamage(
         contentMask);
 }
 
-void __cdecl FlashbangBlastEnt(
+void FlashbangBlastEnt(
     gentity_s *ent,
     float *blastOrigin,
     double radius_max,
@@ -1389,7 +1389,7 @@ void __cdecl FlashbangBlastEnt(
     }
 }
 
-void __cdecl G_FlashbangBlast(
+void G_FlashbangBlast(
     float *origin,
     double radius_max,
     double radius_min,
@@ -1415,7 +1415,7 @@ void __cdecl G_FlashbangBlast(
     }
 }
 
-int __cdecl G_RadiusDamage(
+int G_RadiusDamage(
     float *origin,
     gentity_s *inflictor,
     gentity_s *attacker,

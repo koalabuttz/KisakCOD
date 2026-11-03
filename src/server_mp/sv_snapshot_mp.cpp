@@ -21,7 +21,7 @@ int svsHeaderValid;
 msg_t g_archiveMsg;
 uint8_t tempServerMsgBuf[131072];
 
-void __cdecl SV_WriteSnapshotToClient(client_t *client, msg_t *msg)
+void SV_WriteSnapshotToClient(client_t *client, msg_t *msg)
 {
     int v2; // edx
     clientSnapshot_t *frame; // [esp+0h] [ebp-54h]
@@ -171,7 +171,7 @@ void __cdecl SV_WriteSnapshotToClient(client_t *client, msg_t *msg)
         MSG_WriteByte(msg, 0);
 }
 
-void __cdecl SV_EmitPacketEntities(
+void SV_EmitPacketEntities(
     SnapshotInfo_s *snapInfo,
     int from_num_entities,
     int from_first_entity,
@@ -332,7 +332,7 @@ void __cdecl SV_EmitPacketEntities(
     SV_TrackPacketData(snapInfo->clientNum, ANALYZE_SNAPSHOT_ALLENTITIES, 0, 0, bitsStart, msg);
 }
 
-void __cdecl SV_EmitPacketClients(
+void SV_EmitPacketClients(
     SnapshotInfo_s *snapInfo,
     int from_num_clients,
     int from_first_client,
@@ -477,7 +477,7 @@ void __cdecl SV_EmitPacketClients(
     SV_TrackPacketData(snapInfo->clientNum, ANALYZE_SNAPSHOT_ALLCLIENTS, 0, 0, bitsStart, msg);
 }
 
-void __cdecl SV_UpdateServerCommandsToClient(client_t *client, msg_t *msg)
+void SV_UpdateServerCommandsToClient(client_t *client, msg_t *msg)
 {
     int bitsUsed; // [esp+0h] [ebp-8h]
     int i; // [esp+4h] [ebp-4h]
@@ -499,7 +499,7 @@ void __cdecl SV_UpdateServerCommandsToClient(client_t *client, msg_t *msg)
     client->reliableSent = client->reliableSequence;
 }
 
-void __cdecl SV_UpdateServerCommandsToClient_PreventOverflow(client_t *client, msg_t *msg, int iMsgSize)
+void SV_UpdateServerCommandsToClient_PreventOverflow(client_t *client, msg_t *msg, int iMsgSize)
 {
     svscmd_info_t *v3; // [esp+Ch] [ebp-Ch]
     int i; // [esp+14h] [ebp-4h]
@@ -519,7 +519,7 @@ void __cdecl SV_UpdateServerCommandsToClient_PreventOverflow(client_t *client, m
         client->reliableSent = ia;
 }
 
-char __cdecl SV_GetClientPositionAtTime(int client, int gametime, float *pos)
+char SV_GetClientPositionAtTime(int client, int gametime, float *pos)
 {
     float end[3]; // [esp+10h] [ebp-301Ch] BYREF
     int v5; // [esp+1Ch] [ebp-3010h]
@@ -614,7 +614,7 @@ char __cdecl SV_GetClientPositionAtTime(int client, int gametime, float *pos)
     return 1;
 }
 
-int __cdecl SV_GetArchivedClientInfo(int clientNum, int *pArchiveTime, playerState_s *ps, clientState_s *cs)
+int SV_GetArchivedClientInfo(int clientNum, int *pArchiveTime, playerState_s *ps, clientState_s *cs)
 {
     cachedSnapshot_t *cachedFrame; // [esp+74h] [ebp-10h]
     uint32_t i; // [esp+78h] [ebp-Ch]
@@ -685,7 +685,7 @@ int __cdecl SV_GetArchivedClientInfo(int clientNum, int *pArchiveTime, playerSta
     }
 }
 
-cachedSnapshot_t *__cdecl SV_GetCachedSnapshot(int *pArchiveTime)
+cachedSnapshot_t *SV_GetCachedSnapshot(int *pArchiveTime)
 {
     int archivedFrame; // [esp+4h] [ebp-8h]
     cachedSnapshot_t *cachedFrame; // [esp+8h] [ebp-4h]
@@ -720,7 +720,7 @@ cachedSnapshot_t *__cdecl SV_GetCachedSnapshot(int *pArchiveTime)
     return 0;
 }
 
-cachedSnapshot_t *__cdecl SV_GetCachedSnapshotInternal(int archivedFrame)
+cachedSnapshot_t *SV_GetCachedSnapshotInternal(int archivedFrame)
 {
     int v2; // edx
     int v3; // eax
@@ -978,7 +978,7 @@ cachedSnapshot_t *__cdecl SV_GetCachedSnapshotInternal(int archivedFrame)
     return cachedFrame;
 }
 
-int __cdecl SV_GetCurrentClientInfo(int clientNum, playerState_s *ps, clientState_s *cs)
+int SV_GetCurrentClientInfo(int clientNum, playerState_s *ps, clientState_s *cs)
 {
     if (svs.clients[clientNum].header.state != CS_ACTIVE)
         return 0;
@@ -988,7 +988,7 @@ int __cdecl SV_GetCurrentClientInfo(int clientNum, playerState_s *ps, clientStat
     return 1;
 }
 
-void __cdecl SV_BuildClientSnapshot(client_t *client)
+void SV_BuildClientSnapshot(client_t *client)
 {
     uint8_t *v1; // eax
     clientState_s *ClientState; // eax
@@ -1156,7 +1156,7 @@ void __cdecl SV_BuildClientSnapshot(client_t *client)
     }
 }
 
-void __cdecl SV_AddEntitiesVisibleFromPoint(float *org, int clientNum, snapshotEntityNumbers_t *eNums)
+void SV_AddEntitiesVisibleFromPoint(float *org, int clientNum, snapshotEntityNumbers_t *eNums)
 {
     const char *v3; // eax
     int e; // [esp+18h] [ebp-28h]
@@ -1245,7 +1245,7 @@ void __cdecl SV_AddEntitiesVisibleFromPoint(float *org, int clientNum, snapshotE
     }
 }
 
-void __cdecl SV_AddCachedEntitiesVisibleFromPoint(
+void SV_AddCachedEntitiesVisibleFromPoint(
     int from_num_entities,
     int from_first_entity,
     float *org,
@@ -1307,14 +1307,14 @@ void __cdecl SV_AddCachedEntitiesVisibleFromPoint(
     }
 }
 
-void __cdecl SV_AddArchivedEntToSnapshot(int e, snapshotEntityNumbers_t *eNums)
+void SV_AddArchivedEntToSnapshot(int e, snapshotEntityNumbers_t *eNums)
 {
     if (eNums->numSnapshotEntities != 1024)
         eNums->snapshotEntities[eNums->numSnapshotEntities++] = e;
 }
 
 uint8_t svCompressedBuf[131072];
-void __cdecl SV_SendMessageToClient(msg_t *msg, client_t *client)
+void SV_SendMessageToClient(msg_t *msg, client_t *client)
 {
     int v2; // [esp+Ch] [ebp-30h]
     double v3; // [esp+14h] [ebp-28h]
@@ -1396,7 +1396,7 @@ void __cdecl SV_SendMessageToClient(msg_t *msg, client_t *client)
     }
 }
 
-int __cdecl SV_RateMsec(client_t *client, int messageSize)
+int SV_RateMsec(client_t *client, int messageSize)
 {
     int rate; // [esp+0h] [ebp-8h]
 
@@ -1422,7 +1422,7 @@ int __cdecl SV_RateMsec(client_t *client, int messageSize)
 }
 
 uint8_t tempSnapshotMsgBuf[131072];
-void __cdecl SV_BeginClientSnapshot(client_t *client, msg_t *msg)
+void SV_BeginClientSnapshot(client_t *client, msg_t *msg)
 {
     uint32_t clientNum; // [esp+0h] [ebp-4h]
 
@@ -1457,7 +1457,7 @@ void __cdecl SV_BeginClientSnapshot(client_t *client, msg_t *msg)
     }
 }
 
-void __cdecl SV_Download_Clear(client_t *cl)
+void SV_Download_Clear(client_t *cl)
 {
     if (!cl)
         MyAssertHandler(".\\server_mp\\sv_client_mp.cpp", 1711, 0, "%s", "cl");
@@ -1466,7 +1466,7 @@ void __cdecl SV_Download_Clear(client_t *cl)
     cl->downloadName[0] = 0;
 }
 
-void __cdecl SV_WriteDownloadErrorMessage(client_t *cl, msg_t *msg, const char *errorMessage)
+void SV_WriteDownloadErrorMessage(client_t *cl, msg_t *msg, const char *errorMessage)
 {
     MSG_WriteByte(msg, 5u);
     MSG_WriteShort(msg, 0);
@@ -1475,7 +1475,7 @@ void __cdecl SV_WriteDownloadErrorMessage(client_t *cl, msg_t *msg, const char *
     SV_Download_Clear(cl);
 }
 
-int __cdecl SV_WWWRedirectClient(client_t *cl, msg_t *msg)
+int SV_WWWRedirectClient(client_t *cl, msg_t *msg)
 {
     char *v2; // eax
     int handle; // [esp+0h] [ebp-Ch] BYREF
@@ -1508,7 +1508,7 @@ int __cdecl SV_WWWRedirectClient(client_t *cl, msg_t *msg)
     }
 }
 
-void __cdecl SV_WriteDownloadToClient(client_t *cl, msg_t *msg)
+void SV_WriteDownloadToClient(client_t *cl, msg_t *msg)
 {
     int v2; // edx
     int rate; // [esp+0h] [ebp-414h]
@@ -1648,7 +1648,7 @@ void __cdecl SV_WriteDownloadToClient(client_t *cl, msg_t *msg)
     }
 }
 
-void __cdecl SV_EndClientSnapshot(client_t *client, msg_t *msg)
+void SV_EndClientSnapshot(client_t *client, msg_t *msg)
 {
     uint32_t clientNum; // [esp+30h] [ebp-4h]
 
@@ -1699,7 +1699,7 @@ void __cdecl SV_EndClientSnapshot(client_t *client, msg_t *msg)
     SV_SendMessageToClient(msg, client);
 }
 
-void __cdecl SV_PrintServerCommandsForClient(client_t *client)
+void SV_PrintServerCommandsForClient(client_t *client)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -1714,7 +1714,7 @@ void __cdecl SV_PrintServerCommandsForClient(client_t *client)
     Com_Printf(CON_CHANNEL_SERVER, "----------");
 }
 
-void __cdecl SV_SetServerStaticHeader()
+void SV_SetServerStaticHeader()
 {
     svsHeader.clients = svs.clients;
     svsHeader.time = svs.time;
@@ -1749,7 +1749,7 @@ void __cdecl SV_SetServerStaticHeader()
     svsHeaderValid = 1;
 }
 
-void __cdecl SV_GetServerStaticHeader()
+void SV_GetServerStaticHeader()
 {
     iassert(svsHeader.clients == svs.clients);
     iassert(svsHeader.snapFlagServerBit == svs.snapFlagServerBit);
@@ -1850,7 +1850,7 @@ void __cdecl SV_GetServerStaticHeader()
     svsHeaderValid = 0;
 }
 
-void __cdecl SV_WriteVoiceDataToClient(client_t *client, msg_t *msg)
+void SV_WriteVoiceDataToClient(client_t *client, msg_t *msg)
 {
     int packet; // [esp+0h] [ebp-4h]
 
@@ -1876,7 +1876,7 @@ void __cdecl SV_WriteVoiceDataToClient(client_t *client, msg_t *msg)
         MyAssertHandler(".\\server_mp\\sv_voice_mp.cpp", 50, 0, "%s", "!msg->overflowed");
 }
 
-void __cdecl SV_SendClientVoiceData(client_t *client)
+void SV_SendClientVoiceData(client_t *client)
 {
     uint8_t *msg_buf; // [esp+0h] [ebp-34h]
     msg_t msg; // [esp+Ch] [ebp-28h] BYREF
@@ -1909,7 +1909,7 @@ void __cdecl SV_SendClientVoiceData(client_t *client)
     //LargeLocal::~LargeLocal(&msg_buf_large_local);
 }
 
-void __cdecl SV_SendClientMessages()
+void SV_SendClientMessages()
 {
     float comp_ratio; // [esp+C0h] [ebp-94h]
     float ave; // [esp+C4h] [ebp-90h]

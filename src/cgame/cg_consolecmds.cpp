@@ -14,7 +14,7 @@
 #include <stringed/stringed_hooks.h>
 #include "cg_view.h"
 
-int __cdecl CG_CheatsOK(const char *cmdName)
+int CG_CheatsOK(const char *cmdName)
 {
     if (sv_cheats->current.enabled)
         return 1;
@@ -295,7 +295,7 @@ void CG_UFO_f()
     }
 }
 
-void __cdecl CG_SetViewPos_f()
+void CG_SetViewPos_f()
 {
     int v0; // r30
     float *origin; // r31
@@ -393,7 +393,7 @@ void __cdecl CG_SetViewPos_f()
     }
 }
 
-void __cdecl SphereCoordsToPos(
+void SphereCoordsToPos(
     float sphereDistance,
     float sphereYaw,
     float sphereAltitude,
@@ -414,7 +414,7 @@ void __cdecl SphereCoordsToPos(
     result[2] = v17 * sphereDistance;
 }
 
-void __cdecl CG_SetViewOrbit_f()
+void CG_SetViewOrbit_f()
 {
     playerState_s *p_predictedPlayerState; // r31
     float focusX; // fp31
@@ -491,13 +491,13 @@ void CG_PlayRumble_f()
 }
 
 // attributes: thunk
-void __cdecl UpdateGlowTweaks_f()
+void UpdateGlowTweaks_f()
 {
     CG_VisionSetUpdateTweaksFromFile_Glow();
 }
 
 // attributes: thunk
-void __cdecl UpdateFilmTweaks_f()
+void UpdateFilmTweaks_f()
 {
     CG_VisionSetUpdateTweaksFromFile_Film();
 }
@@ -542,7 +542,7 @@ cmd_function_s printentities_VAR;
 cmd_function_s VisionSetNaked_VAR;
 cmd_function_s VisionSetNight_VAR;
 
-void __cdecl CG_InitConsoleCommands()
+void CG_InitConsoleCommands()
 {
     Cmd_AddCommandInternal("viewpos", CG_Viewpos_f, &CG_Viewpos_f_VAR);
     Cmd_AddCommandInternal("+scores", CG_ScoresDown_f, &CG_ScoresDown_f_VAR);

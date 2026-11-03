@@ -136,12 +136,12 @@ char SND_BooleanFromField(const char *value, const char *trueValue, const char *
 }
 } // namespace
 
-int __cdecl SND_GetEntChannelCount()
+int SND_GetEntChannelCount()
 {
     return snd_serverEntChannelCount;
 }
 
-snd_entchannel_info_t *__cdecl SND_GetEntChannelName(int entchannel)
+snd_entchannel_info_t *SND_GetEntChannelName(int entchannel)
 {
     iassert(entchannel >= 0 && entchannel < snd_serverEntChannelCount);
 
@@ -159,7 +159,7 @@ snd_entchannel_info_t *__cdecl SND_GetEntChannelName(int entchannel)
 // an out-of-bounds store into g_snd. Here the count is tested before the store,
 // which reports the same error for the same line (the 65th channel) without
 // writing past the end of the table.
-void __cdecl SND_ParseEntChannelFile(const char *buffer)
+void SND_ParseEntChannelFile(const char *buffer)
 {
     char channelName[68];
     int maxVoices;
@@ -287,20 +287,20 @@ void SND_InitEntChannels()
 // A dedicated server never starts a voice, so there is no channel array to clear
 // and, in particular, nothing to do to the entity channel metadata: clearing that
 // would desynchronise it from the bg_shock_volume[] table built from it.
-void __cdecl SND_ShutdownChannels()
+void SND_ShutdownChannels()
 {
     SND_StopSounds(SND_STOP_ALL);
 }
 
 // The client resets g_snd.restore.size so a pending restore is dropped. No such
 // restore buffer exists without a device.
-void __cdecl SND_ErrorCleanup()
+void SND_ErrorCleanup()
 {
 }
 
 // Nothing is playing and nothing can be started, so the stop request has nothing
 // to act on.
-void __cdecl SND_StopSounds(snd_stopsounds_arg_t which)
+void SND_StopSounds(snd_stopsounds_arg_t which)
 {
     (void)which;
 }
@@ -308,7 +308,7 @@ void __cdecl SND_StopSounds(snd_stopsounds_arg_t which)
 // src/sound/snd_driver.cpp reads the length back out of _AILSOUNDINFO_COD4: the
 // caller passes the address of `info.format`, so index 2 is `info.data_len`.
 // That is a field the loader already filled in; no device state is involved.
-int __cdecl SND_GetSoundFileSize(uint32_t *pSoundFile)
+int SND_GetSoundFileSize(uint32_t *pSoundFile)
 {
     iassert(pSoundFile);
     return pSoundFile[2];
@@ -322,7 +322,7 @@ int __cdecl SND_GetSoundFileSize(uint32_t *pSoundFile)
 // converted copy. A dedicated server has no playback rate and no driver buffer,
 // and the bytes are already where the loader put them, so the metadata is left
 // exactly as it was read. Nothing is decoded and no loaded sound is reported.
-void __cdecl SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
+void SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
 {
     iassert(mssSound);
     iassert(srcData == (void *)mssSound->data);
@@ -333,7 +333,7 @@ void __cdecl SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
 // it to a SND_LoadFromBuffer that returns NULL, and report no loaded sound.
 // Com_AddLoadedSoundFile reads the NULL as soundFile->exists = 0, and
 // Com_LoadSoundAliasSounds counts it as a missing sound instead of a decoded one.
-LoadedSound *__cdecl SND_LoadSoundFile(const char *name)
+LoadedSound *SND_LoadSoundFile(const char *name)
 {
     void *buffer;
     char realname[256];

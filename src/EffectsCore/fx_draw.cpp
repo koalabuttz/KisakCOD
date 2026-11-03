@@ -18,7 +18,7 @@
 #include <cgame/cg_main.h>
 #endif
 
-void __cdecl FX_EvaluateVisAlpha(FxElemPreVisualState *preVisState, FxElemVisualState *visState)
+void FX_EvaluateVisAlpha(FxElemPreVisualState *preVisState, FxElemVisualState *visState)
 {
     float valueLerpInv; // [esp+30h] [ebp-8h]
     float valueLerp; // [esp+34h] [ebp-4h]
@@ -34,7 +34,7 @@ void __cdecl FX_EvaluateVisAlpha(FxElemPreVisualState *preVisState, FxElemVisual
         3);
 }
 
-uint8_t __cdecl FX_InterpolateColor(
+uint8_t FX_InterpolateColor(
     const FxElemVisStateSample *refState,
     float valueLerp,
     float valueLerpInv,
@@ -53,7 +53,7 @@ uint8_t __cdecl FX_InterpolateColor(
     return SnapFloatToInt(sampleLerp * valueTo + sampleLerpInv * valueFrom);
 }
 
-void __cdecl FX_SetupVisualState(
+void FX_SetupVisualState(
     const FxElemDef *elemDef,
     const FxEffect *effect,
     int32_t randomSeed,
@@ -74,7 +74,7 @@ void __cdecl FX_SetupVisualState(
     preVisState->distanceFade = 255;
 }
 
-void __cdecl FX_EvaluateSize(FxElemPreVisualState *preVisState, FxElemVisualState *visState)
+void FX_EvaluateSize(FxElemPreVisualState *preVisState, FxElemVisualState *visState)
 {
     visState->size[0] = FX_InterpolateSize(
         preVisState->refState,
@@ -95,7 +95,7 @@ void __cdecl FX_EvaluateSize(FxElemPreVisualState *preVisState, FxElemVisualStat
         visState->size[1] = visState->size[0];
 }
 
-double __cdecl FX_InterpolateSize(
+double FX_InterpolateSize(
     const FxElemVisStateSample *refState,
     int32_t randomSeed,
     FxRandKey randomKey,
@@ -113,7 +113,7 @@ double __cdecl FX_InterpolateSize(
     return (float)(valueFrom * sampleLerpInv + valueTo * sampleLerp);
 }
 
-void __cdecl FX_EvaluateVisualState(FxElemPreVisualState *preVisState, float msecLifeSpan, FxElemVisualState *visState)
+void FX_EvaluateVisualState(FxElemPreVisualState *preVisState, float msecLifeSpan, FxElemVisualState *visState)
 {
     float valueLerpInv; // [esp+B4h] [ebp-20h]
     const FxElemDef *elemDef; // [esp+B8h] [ebp-1Ch]
@@ -149,7 +149,7 @@ void __cdecl FX_EvaluateVisualState(FxElemPreVisualState *preVisState, float mse
     visState->color[3] = (uint16_t)(LOWORD(preVisState->distanceFade) * visState->color[3]) >> 8;
 }
 
-double __cdecl FX_IntegrateRotationFromZero(
+double FX_IntegrateRotationFromZero(
     const FxElemVisStateSample *refState,
     int32_t randomSeed,
     FxRandKey randomKey,
@@ -176,7 +176,7 @@ double __cdecl FX_IntegrateRotationFromZero(
 
 static int32_t mapping[] = { 2, 1, 0 }; // idb
 
-void __cdecl FX_EvaluateVisualState_DoLighting(
+void FX_EvaluateVisualState_DoLighting(
     FxElemPreVisualState *preVisState,
     FxElemVisualState *visState,
     const FxElemDef *elemDef)
@@ -215,7 +215,7 @@ void __cdecl FX_EvaluateVisualState_DoLighting(
     }
 }
 
-void __cdecl FX_UnpackColor565(
+void FX_UnpackColor565(
     uint16_t packed,
     uint8_t *outR,
     uint8_t *outG,
@@ -229,7 +229,7 @@ void __cdecl FX_UnpackColor565(
     *outB |= (int)*outB >> 5;
 }
 
-void __cdecl FX_DrawElem_BillboardSprite(FxDrawState *draw)
+void FX_DrawElem_BillboardSprite(FxDrawState *draw)
 {
     float *origin; // ecx
     float *v2; // [esp+4h] [ebp-2Ch]
@@ -256,7 +256,7 @@ void __cdecl FX_DrawElem_BillboardSprite(FxDrawState *draw)
     }
 }
 
-void __cdecl FX_GenSpriteVerts(FxDrawState *draw, const float *tangent, const float *binormal, const float *normal)
+void FX_GenSpriteVerts(FxDrawState *draw, const float *tangent, const float *binormal, const float *normal)
 {
     float scale1; // [esp+8h] [ebp-274h]
     __int16 v5; // [esp+14h] [ebp-268h]
@@ -474,7 +474,7 @@ void __cdecl FX_GenSpriteVerts(FxDrawState *draw, const float *tangent, const fl
     }
 }
 
-void __cdecl FX_GetSpriteTexCoords(const FxDrawState *draw, float *s0, float *ds, float *t0, float *dt)
+void FX_GetSpriteTexCoords(const FxDrawState *draw, float *s0, float *ds, float *t0, float *dt)
 {
     uint8_t colBits; // [esp+14h] [ebp-14h]
     int32_t atlasIndex; // [esp+18h] [ebp-10h]
@@ -549,7 +549,7 @@ void __cdecl FX_GetSpriteTexCoords(const FxDrawState *draw, float *s0, float *ds
     }
 }
 
-bool __cdecl FX_CullElementForDraw_Sprite(const FxDrawState *draw)
+bool FX_CullElementForDraw_Sprite(const FxDrawState *draw)
 {
     bool result; // al
     float v2; // [esp+4h] [ebp-18h]
@@ -572,7 +572,7 @@ bool __cdecl FX_CullElementForDraw_Sprite(const FxDrawState *draw)
     return result;
 }
 
-uint32_t __cdecl FX_CullElementForDraw_FrustumPlaneCount(const FxDrawState *draw)
+uint32_t FX_CullElementForDraw_FrustumPlaneCount(const FxDrawState *draw)
 {
     if (!draw || !draw->camera || draw->camera->frustumPlaneCount < 5)
         MyAssertHandler(
@@ -587,13 +587,13 @@ uint32_t __cdecl FX_CullElementForDraw_FrustumPlaneCount(const FxDrawState *draw
         return draw->camera->frustumPlaneCount;
 }
 
-void __cdecl FX_DrawElem_OrientedSprite(FxDrawState *draw)
+void FX_DrawElem_OrientedSprite(FxDrawState *draw)
 {
     if (!FX_CullElementForDraw_Sprite(draw))
         FX_GenSpriteVerts(draw, draw->orient.axis[1], draw->orient.axis[2], draw->orient.axis[0]);
 }
 
-void __cdecl FX_DrawElem_Tail(FxDrawState *draw)
+void FX_DrawElem_Tail(FxDrawState *draw)
 {
     float scale; // [esp+8h] [ebp-48h]
     float normal[3]; // [esp+2Ch] [ebp-24h] BYREF
@@ -621,7 +621,7 @@ void __cdecl FX_DrawElem_Tail(FxDrawState *draw)
     }
 }
 
-bool __cdecl FX_CullElementForDraw_Tail(const FxDrawState *draw)
+bool FX_CullElementForDraw_Tail(const FxDrawState *draw)
 {
     bool result; // al
     float scale; // [esp+Ch] [ebp-14h]
@@ -640,7 +640,7 @@ bool __cdecl FX_CullElementForDraw_Tail(const FxDrawState *draw)
     return result;
 }
 
-char __cdecl FX_CullCylinder(
+char FX_CullCylinder(
     const FxCamera *camera,
     uint32_t frustumPlaneCount,
     const float *posWorld0,
@@ -697,7 +697,7 @@ char __cdecl FX_CullCylinder(
     return 0;
 }
 
-void __cdecl FX_DrawElem_Cloud(FxDrawState *draw)
+void FX_DrawElem_Cloud(FxDrawState *draw)
 {
     GfxParticleCloud *cloud; // [esp+50h] [ebp-Ch]
     FxElemVisuals visuals; // [esp+54h] [ebp-8h]
@@ -741,7 +741,7 @@ void __cdecl FX_DrawElem_Cloud(FxDrawState *draw)
     }
 }
 
-void __cdecl FX_SetPlacement(const FxDrawState *draw, GfxScaledPlacement *placement)
+void FX_SetPlacement(const FxDrawState *draw, GfxScaledPlacement *placement)
 {
     float axis[3][3]; // [esp+14h] [ebp-28h] BYREF
     float msecForAxis; // [esp+38h] [ebp-4h]
@@ -755,7 +755,7 @@ void __cdecl FX_SetPlacement(const FxDrawState *draw, GfxScaledPlacement *placem
     placement->scale = draw->visState.scale;
 }
 
-double __cdecl FX_GetMsecForSamplingAxis(float msecElapsed, float msecLifeSpan, int32_t atRestFraction)
+double FX_GetMsecForSamplingAxis(float msecElapsed, float msecLifeSpan, int32_t atRestFraction)
 {
     float msecAtRest; // [esp+8h] [ebp-8h]
     float msecSinceAtRest; // [esp+Ch] [ebp-4h]
@@ -770,7 +770,7 @@ double __cdecl FX_GetMsecForSamplingAxis(float msecElapsed, float msecLifeSpan, 
         return (float)(msecAtRest + 150.0);
 }
 
-double __cdecl FX_InterpolateScale(
+double FX_InterpolateScale(
     const FxElemVisStateSample *refState,
     int32_t randomSeed,
     FxRandKey randomKey,
@@ -787,7 +787,7 @@ double __cdecl FX_InterpolateScale(
     return (float)(valueFrom * sampleLerpInv + valueTo * sampleLerp);
 }
 
-bool __cdecl FX_CullElementForDraw_Cloud(const FxDrawState *draw)
+bool FX_CullElementForDraw_Cloud(const FxDrawState *draw)
 {
     bool result; // al
     float v2; // [esp+4h] [ebp-18h]
@@ -812,7 +812,7 @@ bool __cdecl FX_CullElementForDraw_Cloud(const FxDrawState *draw)
     return result;
 }
 
-void __cdecl FX_DrawElem_Model(FxDrawState *draw)
+void FX_DrawElem_Model(FxDrawState *draw)
 {
     FxElemVisuals visuals; // [esp+20h] [ebp-24h]
     GfxScaledPlacement placement; // [esp+24h] [ebp-20h] BYREF
@@ -843,14 +843,14 @@ void __cdecl FX_DrawElem_Model(FxDrawState *draw)
     }
 }
 
-void __cdecl FX_SetPlacementFromPhysics(const FxDrawState *draw, GfxPlacement *placement)
+void FX_SetPlacementFromPhysics(const FxDrawState *draw, GfxPlacement *placement)
 {
     Sys_EnterCriticalSection(CRITSECT_PHYSICS);
     Phys_ObjGetInterpolatedState(PHYS_WORLD_FX, (dxBody *)draw->elem->physObjId, placement->origin, placement->quat);
     Sys_LeaveCriticalSection(CRITSECT_PHYSICS);
 }
 
-void __cdecl FX_DrawElem_Light(FxDrawState *draw)
+void FX_DrawElem_Light(FxDrawState *draw)
 {
     float green; // [esp+4Ch] [ebp-Ch]
     float blue; // [esp+50h] [ebp-8h]
@@ -869,7 +869,7 @@ void __cdecl FX_DrawElem_Light(FxDrawState *draw)
     }
 }
 
-bool __cdecl FX_CullElementForDraw_Light(const FxDrawState *draw)
+bool FX_CullElementForDraw_Light(const FxDrawState *draw)
 {
     bool result; // al
     uint32_t frustumPlaneCount; // [esp+4h] [ebp-4h]
@@ -884,7 +884,7 @@ bool __cdecl FX_CullElementForDraw_Light(const FxDrawState *draw)
     return result;
 }
 
-void __cdecl FX_DrawElem_SpotLight(FxDrawState *draw)
+void FX_DrawElem_SpotLight(FxDrawState *draw)
 {
     float green; // [esp+4Ch] [ebp-Ch]
     float blue; // [esp+50h] [ebp-8h]
@@ -903,7 +903,7 @@ void __cdecl FX_DrawElem_SpotLight(FxDrawState *draw)
     }
 }
 
-void __cdecl FX_DrawNonSpriteElems(FxSystem *system)
+void FX_DrawNonSpriteElems(FxSystem *system)
 {
     FxEffect *effect; // [esp+3Ch] [ebp-8h]
     volatile int32_t activeIndex; // [esp+40h] [ebp-4h]
@@ -923,7 +923,7 @@ void __cdecl FX_DrawNonSpriteElems(FxSystem *system)
         FX_RunGarbageCollection(system);
 }
 
-void __cdecl FX_BeginIteratingOverEffects_Cooperative(FxSystem *system)
+void FX_BeginIteratingOverEffects_Cooperative(FxSystem *system)
 {
     volatile int32_t iteratorCount; // [esp+0h] [ebp-Ch]
 
@@ -938,7 +938,7 @@ void __cdecl FX_BeginIteratingOverEffects_Cooperative(FxSystem *system)
     } while (InterlockedCompareExchange(&system->iteratorCount, iteratorCount + 1, iteratorCount) != iteratorCount);
 }
 
-void __cdecl FX_DrawNonSpriteEffect(FxSystem *system, FxEffect *effect, uint32_t elemClass, int32_t drawTime)
+void FX_DrawNonSpriteEffect(FxSystem *system, FxEffect *effect, uint32_t elemClass, int32_t drawTime)
 {
     uint16_t elemHandle; // [esp+0h] [ebp-BCh]
     FxDrawState drawState; // [esp+4h] [ebp-B8h] BYREF
@@ -973,7 +973,7 @@ void __cdecl FX_DrawNonSpriteEffect(FxSystem *system, FxEffect *effect, uint32_t
     }
 }
 
-void __cdecl FX_DrawElement_Setup_1_(
+void FX_DrawElement_Setup_1_(
     FxSystem* system,
     FxDrawState* draw,
     int32_t elemMsecBegin,
@@ -1050,7 +1050,7 @@ static ElementHandlerFn s_drawElemHandler[8] =
     FX_DrawElem_SpotLight
 };
 
-void __cdecl FX_DrawElement(FxSystem *system, const FxElemDef *elemDef, const FxElem *elem, FxDrawState *draw)
+void FX_DrawElement(FxSystem *system, const FxElemDef *elemDef, const FxElem *elem, FxDrawState *draw)
 {
     if (elemDef->elemType >= 8u)
         MyAssertHandler(
@@ -1071,7 +1071,7 @@ void __cdecl FX_DrawElement(FxSystem *system, const FxElemDef *elemDef, const Fx
     }
 }
 
-void __cdecl FX_DrawSpotLight(FxSystem *system)
+void FX_DrawSpotLight(FxSystem *system)
 {
     FxEffect *v1; // eax
     volatile int32_t msecDraw; // [esp-4h] [ebp-Ch]
@@ -1095,7 +1095,7 @@ void __cdecl FX_DrawSpotLight(FxSystem *system)
         FX_RunGarbageCollection(system);
 }
 
-void __cdecl FX_DrawSpotLightEffect(FxSystem *system, FxEffect *effect, int32_t drawTime)
+void FX_DrawSpotLightEffect(FxSystem *system, FxEffect *effect, int32_t drawTime)
 {
     uint16_t activeSpotLightElemHandle; // [esp+2h] [ebp-BAh]
     FxDrawState drawState; // [esp+4h] [ebp-B8h] BYREF
@@ -1121,7 +1121,7 @@ void __cdecl FX_DrawSpotLightEffect(FxSystem *system, FxEffect *effect, int32_t 
     FX_DrawElement(system, elemDef, elem, &drawState);
 }
 
-void __cdecl FX_DrawSpriteElems(FxSystem *system, int32_t drawTime)
+void FX_DrawSpriteElems(FxSystem *system, int32_t drawTime)
 {
     int32_t numTrailEffects; // [esp+38h] [ebp-820h]
     uint16_t effectHandle; // [esp+3Ch] [ebp-81Ch]
@@ -1184,7 +1184,7 @@ void __cdecl FX_DrawSpriteElems(FxSystem *system, int32_t drawTime)
     }
 }
 
-void __cdecl FX_DrawTrailsForEffect(FxSystem *system, FxEffect *effect, int32_t drawTime)
+void FX_DrawTrailsForEffect(FxSystem *system, FxEffect *effect, int32_t drawTime)
 {
     FxDrawState drawState; // [esp+0h] [ebp-B8h] BYREF
     uint16_t trailHandle; // [esp+B0h] [ebp-8h]
@@ -1202,7 +1202,7 @@ void __cdecl FX_DrawTrailsForEffect(FxSystem *system, FxEffect *effect, int32_t 
     }
 }
 
-void __cdecl FX_DrawTrail(FxSystem *system, FxDrawState *draw, FxTrail *trail)
+void FX_DrawTrail(FxSystem *system, FxDrawState *draw, FxTrail *trail)
 {
     double v3; // st7
     const char *v4; // eax
@@ -1378,7 +1378,7 @@ void __cdecl FX_DrawTrail(FxSystem *system, FxDrawState *draw, FxTrail *trail)
     }
 }
 
-void __cdecl FX_TrailElem_UncompressBasis(const char (*inBasis)[3], float (*basis)[3])
+void FX_TrailElem_UncompressBasis(const char (*inBasis)[3], float (*basis)[3])
 {
     int32_t basisVecIter; // [esp+4h] [ebp-8h]
     int32_t dimIter; // [esp+8h] [ebp-4h]
@@ -1390,7 +1390,7 @@ void __cdecl FX_TrailElem_UncompressBasis(const char (*inBasis)[3], float (*basi
     }
 }
 
-void __cdecl FX_GenTrail_IndsForSegment(
+void FX_GenTrail_IndsForSegment(
     FxDrawState *draw,
     uint16_t reservedBaseVertex,
     r_double_index_t *outIndices)
@@ -1436,7 +1436,7 @@ void __cdecl FX_GenTrail_IndsForSegment(
     }
 }
 
-void __cdecl Fx_GenTrail_PopulateSegmentDrawState(
+void Fx_GenTrail_PopulateSegmentDrawState(
     FxDrawState *draw,
     float spawnDist,
     float uCoordOffset,
@@ -1459,7 +1459,7 @@ void __cdecl Fx_GenTrail_PopulateSegmentDrawState(
     outState->uCoord = spawnDist / (double)draw->elemDef->trailDef->repeatDist + uCoordOffset;
 }
 
-void __cdecl FX_GenTrail_VertsForSegment(const FxTrailSegmentDrawState *segmentDrawState, GfxPackedVertex *remoteVerts)
+void FX_GenTrail_VertsForSegment(const FxTrailSegmentDrawState *segmentDrawState, GfxPackedVertex *remoteVerts)
 {
     float scale1; // [esp+8h] [ebp-10Ch]
     __int16 v3; // [esp+38h] [ebp-DCh]
@@ -1557,7 +1557,7 @@ void __cdecl FX_GenTrail_VertsForSegment(const FxTrailSegmentDrawState *segmentD
     }
 }
 
-void __cdecl FX_DrawSpriteEffect(FxSystem *system, FxEffect *effect, int32_t drawTime)
+void FX_DrawSpriteEffect(FxSystem *system, FxEffect *effect, int32_t drawTime)
 {
     uint16_t elemHandle; // [esp+0h] [ebp-C0h]
     const FxElemDef *elemDef; // [esp+4h] [ebp-BCh]
@@ -1593,7 +1593,7 @@ void __cdecl FX_DrawSpriteEffect(FxSystem *system, FxEffect *effect, int32_t dra
     }
 }
 
-void __cdecl FX_GenerateVerts(FxGenerateVertsCmd *cmd)
+void FX_GenerateVerts(FxGenerateVertsCmd *cmd)
 {
     int32_t drawTime; // [esp+50h] [ebp-8h]
     FxSystem *localSystem; // [esp+54h] [ebp-4h]
@@ -1619,7 +1619,7 @@ void __cdecl FX_GenerateVerts(FxGenerateVertsCmd *cmd)
     }
 }
 
-void __cdecl FX_FillGenerateVertsCmd(int32_t localClientNum, FxGenerateVertsCmd* cmd)
+void FX_FillGenerateVertsCmd(int32_t localClientNum, FxGenerateVertsCmd* cmd)
 {
     cg_s *cgameGlob;
 
@@ -1639,7 +1639,7 @@ void __cdecl FX_FillGenerateVertsCmd(int32_t localClientNum, FxGenerateVertsCmd*
     AxisCopy(cgameGlob->refdef.viewaxis, cmd->viewaxis);
 }
 
-void __cdecl FX_EvaluateDistanceFade(FxDrawState *draw)
+void FX_EvaluateDistanceFade(FxDrawState *draw)
 {
     float v1; // [esp+18h] [ebp-3Ch]
     float v2; // [esp+1Ch] [ebp-38h]
@@ -1669,7 +1669,7 @@ void __cdecl FX_EvaluateDistanceFade(FxDrawState *draw)
     }
 }
 
-double __cdecl FX_ClampRangeLerp(float dist, const FxFloatRange *range)
+double FX_ClampRangeLerp(float dist, const FxFloatRange *range)
 {
     float baseDist; // [esp+0h] [ebp-8h]
     float value; // [esp+4h] [ebp-4h]

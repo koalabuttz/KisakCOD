@@ -29,19 +29,19 @@ FxSystem fx_systemPool[1];
 FxSystemBuffers fx_systemBufferPool[1];
 FxMarksSystem fx_marksSystemPool[1];
 
-void __cdecl TRACK_fx_system()
+void TRACK_fx_system()
 {
     track_static_alloc_internal(fx_systemPool, 2656, "fx_systemPool", 8);
     track_static_alloc_internal(fx_systemBufferPool, 291968, "fx_systemBufferPool", 8);
     track_static_alloc_internal(fx_marksSystemPool, 294940, "fx_marksSystemPool", 8);
 }
 
-XModel *__cdecl FX_RegisterModel(const char *modelName)
+XModel *FX_RegisterModel(const char *modelName)
 {
     return R_RegisterModel(modelName);
 }
 
-FxSystem *__cdecl FX_GetSystem(int32_t clientIndex)
+FxSystem *FX_GetSystem(int32_t clientIndex)
 {
     if (clientIndex)
         MyAssertHandler(
@@ -54,7 +54,7 @@ FxSystem *__cdecl FX_GetSystem(int32_t clientIndex)
     return fx_systemPool;
 }
 
-FxSystemBuffers *__cdecl FX_GetSystemBuffers(int32_t clientIndex)
+FxSystemBuffers *FX_GetSystemBuffers(int32_t clientIndex)
 {
     if (clientIndex)
         MyAssertHandler(
@@ -67,7 +67,7 @@ FxSystemBuffers *__cdecl FX_GetSystemBuffers(int32_t clientIndex)
     return fx_systemBufferPool;
 }
 
-void __cdecl FX_LinkSystemBuffers(FxSystem *system, FxSystemBuffers *systemBuffers)
+void FX_LinkSystemBuffers(FxSystem *system, FxSystemBuffers *systemBuffers)
 {
     system->elems = systemBuffers->elems;
     system->effects = systemBuffers->effects;
@@ -77,7 +77,7 @@ void __cdecl FX_LinkSystemBuffers(FxSystem *system, FxSystemBuffers *systemBuffe
     system->deferredElems = systemBuffers->deferredElems;
 }
 
-void __cdecl FX_InitSystem(int32_t localClientNum)
+void FX_InitSystem(int32_t localClientNum)
 {
     FxSystem *system; // [esp+4h] [ebp-8h]
     FxSystemBuffers *systemBuffers; // [esp+8h] [ebp-4h]
@@ -119,7 +119,7 @@ void __cdecl FX_InitSystem(int32_t localClientNum)
     fx_serverVisClient = localClientNum;
 }
 
-void __cdecl FX_ResetSystem(FxSystem *system)
+void FX_ResetSystem(FxSystem *system)
 {
     FxPool<FxTrail> *trails; // [esp+0h] [ebp-28h]
     int32_t k; // [esp+8h] [ebp-20h]
@@ -163,7 +163,7 @@ void __cdecl FX_ResetSystem(FxSystem *system)
     system->visStateBufferWrite = system->visState + 1;
 }
 
-int32_t __cdecl FX_EffectToHandle(FxSystem *system, FxEffect *effect)
+int32_t FX_EffectToHandle(FxSystem *system, FxEffect *effect)
 {
     iassert(system);
     iassert(effect && effect >= &system->effects[0] && effect < &system->effects[FX_EFFECT_LIMIT]);
@@ -172,7 +172,7 @@ int32_t __cdecl FX_EffectToHandle(FxSystem *system, FxEffect *effect)
 }
 
 
-void __cdecl FX_ShutdownSystem(int32_t localClientNum)
+void FX_ShutdownSystem(int32_t localClientNum)
 {
     FxSystem *system; // [esp+0h] [ebp-8h]
     FxSystemBuffers *systemBuffers; // [esp+4h] [ebp-4h]
@@ -190,7 +190,7 @@ void __cdecl FX_ShutdownSystem(int32_t localClientNum)
     FX_UnregisterAll();
 }
 
-void __cdecl FX_RelocateSystem(FxSystem *system, int32_t relocationDistance)
+void FX_RelocateSystem(FxSystem *system, int32_t relocationDistance)
 {
     if (relocationDistance)
     {
@@ -199,7 +199,7 @@ void __cdecl FX_RelocateSystem(FxSystem *system, int32_t relocationDistance)
     }
 }
 
-void __cdecl FX_EffectNoLongerReferenced(FxSystem *system, FxEffect *remoteEffect)
+void FX_EffectNoLongerReferenced(FxSystem *system, FxEffect *remoteEffect)
 {
     const char *v2; // eax
     int32_t oldStatusValue; // [esp+14h] [ebp-8h]
@@ -246,7 +246,7 @@ void __cdecl FX_EffectNoLongerReferenced(FxSystem *system, FxEffect *remoteEffec
     system->needsGarbageCollection = 1;
 }
 
-void __cdecl FX_DelRefToEffect(FxSystem *system, FxEffect *effect)
+void FX_DelRefToEffect(FxSystem *system, FxEffect *effect)
 {
     if (!effect)
         MyAssertHandler("c:\\trees\\cod3\\src\\effectscore\\fx_system.h", 393, 0, "%s", "effect");
@@ -263,7 +263,7 @@ void __cdecl FX_DelRefToEffect(FxSystem *system, FxEffect *effect)
     InterlockedDecrement(&effect->status);
 }
 
-void __cdecl FX_RunGarbageCollection(FxSystem *system)
+void FX_RunGarbageCollection(FxSystem *system)
 {
     uint16_t effectHandle; // [esp+8h] [ebp-818h]
     uint32_t freedCount; // [esp+Ch] [ebp-814h]
@@ -304,14 +304,14 @@ void __cdecl FX_RunGarbageCollection(FxSystem *system)
     }
 }
 
-bool __cdecl FX_BeginIteratingOverEffects_Exclusive(FxSystem *system)
+bool FX_BeginIteratingOverEffects_Exclusive(FxSystem *system)
 {
     if (system->isArchiving)
         MyAssertHandler("c:\\trees\\cod3\\src\\effectscore\\fx_system.h", 523, 0, "%s", "!system->isArchiving");
     return InterlockedCompareExchange(&system->iteratorCount, -1, 0) == 0;
 }
 
-void __cdecl FX_RunGarbageCollection_FreeSpotLight(FxSystem *system, uint16_t effectHandle)
+void FX_RunGarbageCollection_FreeSpotLight(FxSystem *system, uint16_t effectHandle)
 {
     if (system->activeSpotLightEffectCount && system->activeSpotLightEffectHandle == effectHandle)
     {
@@ -321,7 +321,7 @@ void __cdecl FX_RunGarbageCollection_FreeSpotLight(FxSystem *system, uint16_t ef
     }
 }
 
-void __cdecl FX_FreePool_Generic_FxTrail_(FxTrail *item, volatile LONG *firstFreeIndex, FxPool<FxTrail> *pool)
+void FX_FreePool_Generic_FxTrail_(FxTrail *item, volatile LONG *firstFreeIndex, FxPool<FxTrail> *pool)
 {
     volatile uint32_t freedIndex; // [esp+4h] [ebp-4h]
 
@@ -346,7 +346,7 @@ void __cdecl FX_FreePool_Generic_FxTrail_(FxTrail *item, volatile LONG *firstFre
     Sys_LeaveCriticalSection(CRITSECT_FX_ALLOC);
 }
 
-void __cdecl FX_RunGarbageCollection_FreeTrails(FxSystem *system, FxEffect *effect)
+void FX_RunGarbageCollection_FreeTrails(FxSystem *system, FxEffect *effect)
 {
     uint16_t firstTrailHandle; // [esp+Ah] [ebp-6h]
     FxPool<FxTrail> *trail; // [esp+Ch] [ebp-4h]
@@ -365,7 +365,7 @@ void __cdecl FX_RunGarbageCollection_FreeTrails(FxSystem *system, FxEffect *effe
     }
 }
 
-void __cdecl FX_SpawnEffect_AllocTrails(FxSystem *system, FxEffect *effect)
+void FX_SpawnEffect_AllocTrails(FxSystem *system, FxEffect *effect)
 {
     const FxEffectDef *def; // [esp+4h] [ebp-1Ch]
     FxPool<FxTrail> *remoteTrail; // [esp+Ch] [ebp-14h]
@@ -404,7 +404,7 @@ void __cdecl FX_SpawnEffect_AllocTrails(FxSystem *system, FxEffect *effect)
     }
 }
 
-FxPool<FxTrail>* __cdecl FX_AllocPool_Generic_FxTrail_(
+FxPool<FxTrail>* FX_AllocPool_Generic_FxTrail_(
     volatile LONG* firstFreeIndex,
     FxPool<FxTrail>* pool,
     volatile LONG* activeCount)
@@ -444,7 +444,7 @@ FxPool<FxTrail>* __cdecl FX_AllocPool_Generic_FxTrail_(
     }
 }
 
-FxPool<FxTrailElem>* __cdecl FX_AllocPool_Generic_FxTrailElem_(
+FxPool<FxTrailElem>* FX_AllocPool_Generic_FxTrailElem_(
     volatile LONG * firstFreeIndex,
     FxPool<FxTrailElem>* pool,
     volatile LONG * activeCount)
@@ -484,7 +484,7 @@ FxPool<FxTrailElem>* __cdecl FX_AllocPool_Generic_FxTrailElem_(
     }
 }
 
-FxPool<FxElem>* __cdecl FX_AllocPool_Generic_FxElem_(
+FxPool<FxElem>* FX_AllocPool_Generic_FxElem_(
     volatile LONG* firstFreeIndex,
     FxPool<FxElem>* pool,
     volatile LONG * activeCount)
@@ -523,7 +523,7 @@ FxPool<FxElem>* __cdecl FX_AllocPool_Generic_FxElem_(
     }
 }
 
-void __cdecl FX_FreePool_Generic_FxElem_(FxElem* item, volatile LONG* firstFreeIndex, FxPool<FxElem>* pool)
+void FX_FreePool_Generic_FxElem_(FxElem* item, volatile LONG* firstFreeIndex, FxPool<FxElem>* pool)
 {
     volatile uint32_t freedIndex; // [esp+4h] [ebp-4h]
 
@@ -548,7 +548,7 @@ void __cdecl FX_FreePool_Generic_FxElem_(FxElem* item, volatile LONG* firstFreeI
     Sys_LeaveCriticalSection(CRITSECT_FX_ALLOC);
 }
 
-void __cdecl FX_FreePool_Generic_FxTrailElem_(
+void FX_FreePool_Generic_FxTrailElem_(
     FxTrailElem* item,
     volatile LONG* firstFreeIndex,
     FxPool<FxTrailElem>* pool)
@@ -577,19 +577,19 @@ void __cdecl FX_FreePool_Generic_FxTrailElem_(
 }
 
 
-FxPool<FxTrail> *__cdecl FX_AllocTrail(FxSystem *system)
+FxPool<FxTrail> *FX_AllocTrail(FxSystem *system)
 {
     return FX_AllocPool_Generic_FxTrail_(&system->firstFreeTrail, system->trails, &system->activeTrailCount);
 }
 
-uint16_t __cdecl FX_CalculatePackedLighting(const float *origin)
+uint16_t FX_CalculatePackedLighting(const float *origin)
 {
     uint8_t color[4]; // [esp+4h] [ebp-4h] BYREF
 
     R_GetAverageLightingAtPoint(origin, color);
     return ((color[2] & 0xF8) << 8) | (8 * (color[1] & 0xF8)) | ((color[0] & 0xF8) >> 3);
 }
-FxEffect* __cdecl FX_SpawnEffect(
+FxEffect* FX_SpawnEffect(
     FxSystem* system,
     const FxEffectDef* remoteDef,
     int32_t msecBegin,
@@ -719,7 +719,7 @@ FxEffect* __cdecl FX_SpawnEffect(
     }
 }
 
-void __cdecl FX_AddRefToEffect(FxSystem *__formal, FxEffect *effect)
+void FX_AddRefToEffect(FxSystem *__formal, FxEffect *effect)
 {
     if (!effect)
         MyAssertHandler("c:\\trees\\cod3\\src\\effectscore\\fx_system.h", 369, 0, "%s", "effect");
@@ -734,7 +734,7 @@ void __cdecl FX_AddRefToEffect(FxSystem *__formal, FxEffect *effect)
     InterlockedIncrement(&effect->status);
 }
 
-char __cdecl FX_CullEffectForSpawn(const FxCamera *camera, const FxEffectDef *effectDef, const float *origin)
+char FX_CullEffectForSpawn(const FxCamera *camera, const FxEffectDef *effectDef, const float *origin)
 {
     const FxElemDef *localDefs; // [esp+18h] [ebp-Ch]
     int32_t elemDefCount; // [esp+1Ch] [ebp-8h]
@@ -750,7 +750,7 @@ char __cdecl FX_CullEffectForSpawn(const FxCamera *camera, const FxEffectDef *ef
     return 1;
 }
 
-bool __cdecl FX_CullElemForSpawn(const FxCamera *camera, const FxElemDef *elemDef, const float *origin)
+bool FX_CullElemForSpawn(const FxCamera *camera, const FxElemDef *elemDef, const float *origin)
 {
     float v4; // [esp+4h] [ebp-18h]
     float diff[3]; // [esp+Ch] [ebp-10h] BYREF
@@ -768,7 +768,7 @@ bool __cdecl FX_CullElemForSpawn(const FxCamera *camera, const FxElemDef *elemDe
         && FX_CullSphere(camera, camera->frustumPlaneCount, origin, elemDef->spawnFrustumCullRadius);
 }
 
-void __cdecl FX_SetEffectRandomSeed(FxEffect *effect, const FxEffectDef *remoteDef)
+void FX_SetEffectRandomSeed(FxEffect *effect, const FxEffectDef *remoteDef)
 {
     if (FX_EffectAffectsGameplay(remoteDef))
         effect->randomSeed = (479 * ((uint32_t)(214013 * effect->msecBegin + 2531011) >> 17)) >> 15; // has to be unsigned
@@ -784,7 +784,7 @@ void __cdecl FX_SetEffectRandomSeed(FxEffect *effect, const FxEffectDef *remoteD
     // LWSS END
 }
 
-char __cdecl FX_EffectAffectsGameplay(const FxEffectDef *remoteEffectDef)
+char FX_EffectAffectsGameplay(const FxEffectDef *remoteEffectDef)
 {
     bool result; // [esp+7h] [ebp-19h]
     const FxElemDef *elemDef; // [esp+8h] [ebp-18h]
@@ -834,7 +834,7 @@ char __cdecl FX_EffectAffectsGameplay(const FxEffectDef *remoteEffectDef)
     return result;
 }
 
-char __cdecl FX_IsSpotLightEffect(FxSystem *system, const FxEffectDef *def)
+char FX_IsSpotLightEffect(FxSystem *system, const FxEffectDef *def)
 {
     int32_t elemDefIter; // [esp+4h] [ebp-4h]
 
@@ -848,12 +848,12 @@ char __cdecl FX_IsSpotLightEffect(FxSystem *system, const FxEffectDef *def)
     return 0;
 }
 
-bool __cdecl FX_CanAllocSpotLightEffect(const FxSystem *system)
+bool FX_CanAllocSpotLightEffect(const FxSystem *system)
 {
     return system->activeSpotLightEffectCount < 1;
 }
 
-char __cdecl FX_SpawnEffect_AllocSpotLightEffect(FxSystem *system, FxEffect *effect)
+char FX_SpawnEffect_AllocSpotLightEffect(FxSystem *system, FxEffect *effect)
 {
     const FxEffectDef *def; // [esp+4h] [ebp-10h]
     int32_t elemDefCount; // [esp+Ch] [ebp-8h]
@@ -881,7 +881,7 @@ char __cdecl FX_SpawnEffect_AllocSpotLightEffect(FxSystem *system, FxEffect *eff
     return 1;
 }
 
-FxEffect *__cdecl FX_SpawnOrientedEffect(
+FxEffect *FX_SpawnOrientedEffect(
     int32_t localClientNum,
     const FxEffectDef *def,
     int32_t msecBegin,
@@ -909,7 +909,7 @@ FxEffect *__cdecl FX_SpawnOrientedEffect(
         markEntnum);
 }
 
-void __cdecl FX_AssertAllocatedEffect(int32_t localClientNum, FxEffect *effect)
+void FX_AssertAllocatedEffect(int32_t localClientNum, FxEffect *effect)
 {
     FxSystem *system; // [esp+0h] [ebp-4h]
 
@@ -921,7 +921,7 @@ void __cdecl FX_AssertAllocatedEffect(int32_t localClientNum, FxEffect *effect)
         MyAssertHandler(".\\EffectsCore\\fx_system.cpp", 1337, 0, "%s", "(effect->status & FX_STATUS_REF_COUNT_MASK) != 0");
 }
 
-void __cdecl FX_PlayOrientedEffectWithMarkEntity(
+void FX_PlayOrientedEffectWithMarkEntity(
     int32_t localClientNum,
     const FxEffectDef *def,
     int32_t startMsec,
@@ -938,7 +938,7 @@ void __cdecl FX_PlayOrientedEffectWithMarkEntity(
         FX_DelRefToEffect(system, effect);
 }
 
-void __cdecl FX_PlayOrientedEffect(
+void FX_PlayOrientedEffect(
     int32_t localClientNum,
     const FxEffectDef *def,
     int32_t startMsec,
@@ -954,7 +954,7 @@ void __cdecl FX_PlayOrientedEffect(
         FX_DelRefToEffect(system, effect);
 }
 
-FxEffect *__cdecl FX_SpawnBoltedEffect(
+FxEffect *FX_SpawnBoltedEffect(
     int32_t localClientNum,
     const FxEffectDef *def,
     int32_t msecBegin,
@@ -982,7 +982,7 @@ FxEffect *__cdecl FX_SpawnBoltedEffect(
     return FX_SpawnEffect(system, def, msecBegin, orient.origin, orient.axis, dobjHandle, boneIndex, 255, -1, ENTITYNUM_NONE);
 }
 
-char __cdecl FX_NeedsBoltUpdate(const FxEffectDef *def)
+char FX_NeedsBoltUpdate(const FxEffectDef *def)
 {
     int32_t elemDefIndex; // [esp+4h] [ebp-4h]
 
@@ -998,7 +998,7 @@ char __cdecl FX_NeedsBoltUpdate(const FxEffectDef *def)
     return 0;
 }
 
-void __cdecl FX_PlayBoltedEffect(
+void FX_PlayBoltedEffect(
     int32_t localClientNum,
     const FxEffectDef *def,
     int32_t startMsec,
@@ -1013,7 +1013,7 @@ void __cdecl FX_PlayBoltedEffect(
     if (effect)
         FX_DelRefToEffect(system, effect);
 }
-void __cdecl FX_RetriggerEffect(int32_t localClientNum, FxEffect* effect, int32_t msecBegin)
+void FX_RetriggerEffect(int32_t localClientNum, FxEffect* effect, int32_t msecBegin)
 {
     volatile LONG* Destination; // [esp+1Ch] [ebp-54h]
     volatile LONG Comperand; // [esp+20h] [ebp-50h]
@@ -1109,7 +1109,7 @@ void __cdecl FX_RetriggerEffect(int32_t localClientNum, FxEffect* effect, int32_
     InterlockedExchangeAdd(&effect->status, -536870912);
 }
 
-void __cdecl FX_GetTrailHandleList_Last(
+void FX_GetTrailHandleList_Last(
     FxSystem *system,
     FxEffect *effect,
     uint16_t *outHandleList,
@@ -1139,7 +1139,7 @@ void __cdecl FX_GetTrailHandleList_Last(
     *outTrailCount = trailIndex;
 }
 
-void __cdecl FX_ThroughWithEffect(int32_t localClientNum, FxEffect *effect)
+void FX_ThroughWithEffect(int32_t localClientNum, FxEffect *effect)
 {
     FxSystem *system; // [esp+4h] [ebp-4h]
 
@@ -1163,7 +1163,7 @@ void __cdecl FX_ThroughWithEffect(int32_t localClientNum, FxEffect *effect)
     }
 }
 
-void __cdecl FX_StopEffect(FxSystem *system, FxEffect *effect)
+void FX_StopEffect(FxSystem *system, FxEffect *effect)
 {
     uint16_t effectHandle; // [esp+20h] [ebp-14h]
     uint16_t stoppedEffectHandle; // [esp+24h] [ebp-10h]
@@ -1207,7 +1207,7 @@ void __cdecl FX_StopEffect(FxSystem *system, FxEffect *effect)
     }
 }
 
-void __cdecl FX_StopEffectNonRecursive(FxSystem *system, FxEffect *effect)
+void FX_StopEffectNonRecursive(FxSystem *system, FxEffect *effect)
 {
     volatile int32_t status; // [esp+4h] [ebp-4h]
 
@@ -1226,7 +1226,7 @@ void __cdecl FX_StopEffectNonRecursive(FxSystem *system, FxEffect *effect)
     }
 }
 
-void __cdecl FX_KillEffect(FxSystem* system, FxEffect* effect)
+void FX_KillEffect(FxSystem* system, FxEffect* effect)
 {
     uint16_t effectHandle; // [esp+Ch] [ebp-14h]
     uint16_t killedEffectHandle; // [esp+10h] [ebp-10h]
@@ -1285,7 +1285,7 @@ void __cdecl FX_KillEffect(FxSystem* system, FxEffect* effect)
     FX_DelRefToEffect(system, effect);
 }
 
-void __cdecl FX_RemoveAllEffectElems(FxSystem *system, FxEffect *effect)
+void FX_RemoveAllEffectElems(FxSystem *system, FxEffect *effect)
 {
     uint16_t trailHandle; // [esp+4h] [ebp-Ch]
     FxPool<FxTrail> *trail; // [esp+8h] [ebp-8h]
@@ -1319,7 +1319,7 @@ void __cdecl FX_RemoveAllEffectElems(FxSystem *system, FxEffect *effect)
     FX_DelRefToEffect(system, effect);
 }
 
-void __cdecl FX_KillEffectDef(int32_t localClientNum, const FxEffectDef *def)
+void FX_KillEffectDef(int32_t localClientNum, const FxEffectDef *def)
 {
     FxEffect *effect; // [esp+Ch] [ebp-Ch]
     FxSystem *system; // [esp+10h] [ebp-8h]
@@ -1342,7 +1342,7 @@ void __cdecl FX_KillEffectDef(int32_t localClientNum, const FxEffectDef *def)
         FX_RunGarbageCollection(system);
 }
 
-void __cdecl FX_KillAllEffects(int32_t localClientNum)
+void FX_KillAllEffects(int32_t localClientNum)
 {
     FxEffect *effect; // [esp+Ch] [ebp-Ch]
     FxSystem *system; // [esp+10h] [ebp-8h]
@@ -1370,7 +1370,7 @@ void __cdecl FX_KillAllEffects(int32_t localClientNum)
     }
 }
 
-void __cdecl FX_SpawnTrailElem_NoCull(
+void FX_SpawnTrailElem_NoCull(
     FxSystem *system,
     FxEffect *effect,
     FxTrail *trail,
@@ -1470,7 +1470,7 @@ void __cdecl FX_SpawnTrailElem_NoCull(
     }
 }
 
-FxPool<FxTrailElem> *__cdecl FX_AllocTrailElem(FxSystem *system)
+FxPool<FxTrailElem> *FX_AllocTrailElem(FxSystem *system)
 {
     return FX_AllocPool_Generic_FxTrailElem_(
         &system->firstFreeTrailElem,
@@ -1478,7 +1478,7 @@ FxPool<FxTrailElem> *__cdecl FX_AllocTrailElem(FxSystem *system)
         &system->activeTrailElemCount);
 }
 
-void __cdecl FX_SpawnTrailElem_Cull(
+void FX_SpawnTrailElem_Cull(
     FxSystem *system,
     FxEffect *effect,
     FxTrail *trail,
@@ -1511,7 +1511,7 @@ void __cdecl FX_SpawnTrailElem_Cull(
         FX_SpawnTrailElem_NoCull(system, effect, trail, effectFrameWhenPlayed, msecWhenPlayed, distanceWhenPlayed);
 }
 
-bool __cdecl FX_CullTrailElem(
+bool FX_CullTrailElem(
     const FxCamera *camera,
     const FxElemDef *elemDef,
     const float *origin,
@@ -1540,7 +1540,7 @@ bool __cdecl FX_CullTrailElem(
     return distSq > cutoffDist * cutoffDist;
 }
 
-void __cdecl FX_SpawnSpotLightElem(FxSystem *system, FxElem *elem)
+void FX_SpawnSpotLightElem(FxSystem *system, FxElem *elem)
 {
     if (system->activeSpotLightEffectCount <= 0)
         MyAssertHandler(".\\EffectsCore\\fx_system.cpp", 2038, 0, "%s", "system->activeSpotLightEffectCount > 0");
@@ -1552,7 +1552,7 @@ void __cdecl FX_SpawnSpotLightElem(FxSystem *system, FxElem *elem)
     system->activeSpotLightElemHandle = FX_PoolToHandle_Generic<FxElem, 2048>(system->elems, elem);
 }
 
-void __cdecl FX_SpawnElem(
+void FX_SpawnElem(
     FxSystem *system,
     FxEffect *effect,
     int32_t elemDefIndex,
@@ -1705,12 +1705,12 @@ void __cdecl FX_SpawnElem(
     }
 }
 
-FxPool<FxElem> *__cdecl FX_AllocElem(FxSystem *system)
+FxPool<FxElem> *FX_AllocElem(FxSystem *system)
 {
     return FX_AllocPool_Generic_FxElem_(&system->firstFreeElem, system->elems, &system->activeElemCount);
 }
 
-void __cdecl FX_SpawnRunner(
+void FX_SpawnRunner(
     FxSystem *system,
     FxEffect *effect,
     const FxElemDef *remoteElemDef,
@@ -1793,7 +1793,7 @@ void __cdecl FX_SpawnRunner(
         FX_DelRefToEffect(system, spawnedEffect);
 }
 
-bool __cdecl FX_SpawnModelPhysics(
+bool FX_SpawnModelPhysics(
     FxSystem* system,
     FxEffect* effect,
     const FxElemDef* elemDef,
@@ -1844,7 +1844,7 @@ bool __cdecl FX_SpawnModelPhysics(
     return elem->physObjId != 0;
 }
 
-void __cdecl FX_GetOriginForElem(
+void FX_GetOriginForElem(
     FxEffect *effect,
     const FxElemDef *elemDef,
     const FxSpatialFrame *effectFrameWhenPlayed,
@@ -1884,7 +1884,7 @@ void __cdecl FX_GetOriginForElem(
     }
 }
 
-void __cdecl FX_SpawnSound(
+void FX_SpawnSound(
     int32_t localClientNumber,
     FxEffect *effect,
     const FxElemDef *elemDef,
@@ -1923,7 +1923,7 @@ void __cdecl FX_SpawnSound(
     }
 }
 
-void __cdecl FX_FreeElem(FxSystem* system, uint16_t elemHandle, FxEffect* effect, uint32_t elemClass)
+void FX_FreeElem(FxSystem* system, uint16_t elemHandle, FxEffect* effect, uint32_t elemClass)
 {
     uint16_t prevElemHandleInEffect; // [esp+10h] [ebp-14h]
     uint16_t nextElemHandleInEffect; // [esp+12h] [ebp-12h]
@@ -1982,7 +1982,7 @@ void __cdecl FX_FreeElem(FxSystem* system, uint16_t elemHandle, FxEffect* effect
     InterlockedDecrement(&system->activeElemCount);
 }
 
-void __cdecl FX_FreeTrailElem(FxSystem *system, uint16_t trailElemHandle, FxEffect *effect, FxTrail *trail)
+void FX_FreeTrailElem(FxSystem *system, uint16_t trailElemHandle, FxEffect *effect, FxTrail *trail)
 {
     FxPool<FxTrailElem> *trailElem; // [esp+10h] [ebp-4h]
 
@@ -2011,7 +2011,7 @@ void __cdecl FX_FreeTrailElem(FxSystem *system, uint16_t trailElemHandle, FxEffe
     InterlockedDecrement(&system->activeTrailElemCount);
 }
 
-void __cdecl FX_FreeSpotLightElem(FxSystem *system, uint16_t elemHandle, FxEffect *effect)
+void FX_FreeSpotLightElem(FxSystem *system, uint16_t elemHandle, FxEffect *effect)
 {
     FxPool<FxElem> *v3; // eax
     uint16_t activeSpotLightElemHandle; // [esp+Eh] [ebp-6h]
@@ -2043,7 +2043,7 @@ void __cdecl FX_FreeSpotLightElem(FxSystem *system, uint16_t elemHandle, FxEffec
     InterlockedDecrement(&system->activeSpotLightElemCount);
 }
 
-double __cdecl FX_GetClientVisibility(int32_t localClientNum, const float *start, const float *end)
+double FX_GetClientVisibility(int32_t localClientNum, const float *start, const float *end)
 {
     float v4; // [esp+14h] [ebp-9Ch]
     float v5; // [esp+18h] [ebp-98h]

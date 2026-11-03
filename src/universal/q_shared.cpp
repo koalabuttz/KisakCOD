@@ -48,7 +48,7 @@ int I_stricmp(const char* s0, const char* s1)
     return I_strnicmp(s0, s1, 0x7FFFFFFF);
 }
 
-const char *__cdecl I_stristr(const char *s0, const char *substr)
+const char *I_stristr(const char *s0, const char *substr)
 {
     int v3; // esi
     int s0Char; // [esp+4h] [ebp-8h]
@@ -162,7 +162,7 @@ static char value1[3][2][8192]; // 3rd for server thread
 static char value1[2][2][8192]; // main + render threads, no server
 #endif
 
-void __cdecl TRACK_q_shared()
+void TRACK_q_shared()
 {
     TRACK_STATIC_ARR(va_info, 10);
     TRACK_STATIC_ARR(g_com_error, 10);
@@ -170,7 +170,7 @@ void __cdecl TRACK_q_shared()
     TRACK_STATIC_ARR(value1, 10);
 }
 
-uint8_t __cdecl ColorIndex(uint8_t c)
+uint8_t ColorIndex(uint8_t c)
 {
     if ((uint8_t)(c - 48) >= 0xAu)
         return 7;
@@ -178,7 +178,7 @@ uint8_t __cdecl ColorIndex(uint8_t c)
         return c - 48;
 }
 
-const char *__cdecl Com_GetFilenameSubString(const char *pathname)
+const char *Com_GetFilenameSubString(const char *pathname)
 {
     const char *last; // [esp+0h] [ebp-4h]
 
@@ -192,7 +192,7 @@ const char *__cdecl Com_GetFilenameSubString(const char *pathname)
     return last;
 }
 
-void __cdecl Com_AssembleFilepath(char *folder, char *name, char *extension, char *path, int maxCharCount)
+void Com_AssembleFilepath(char *folder, char *name, char *extension, char *path, int maxCharCount)
 {
     uint32_t v5; // [esp+0h] [ebp-3Ch]
     uint32_t v6; // [esp+10h] [ebp-2Ch]
@@ -220,7 +220,7 @@ void __cdecl Com_AssembleFilepath(char *folder, char *name, char *extension, cha
     memcpy((uint8_t *)&patha[v6], (uint8_t *)extension, v5 + 1);
 }
 
-const char *__cdecl Com_GetExtensionSubString(const char *filename)
+const char *Com_GetExtensionSubString(const char *filename)
 {
     const char *substr; // [esp+0h] [ebp-4h]
 
@@ -244,7 +244,7 @@ const char *__cdecl Com_GetExtensionSubString(const char *filename)
     return substr;
 }
 
-void __cdecl Com_StripExtension(char *in, char *out)
+void Com_StripExtension(char *in, char *out)
 {
     const char *extension; // [esp+0h] [ebp-4h]
 
@@ -254,7 +254,7 @@ void __cdecl Com_StripExtension(char *in, char *out)
     *out = 0;
 }
 
-void __cdecl Com_DefaultExtension(char *path, uint32_t maxSize, const char *extension)
+void Com_DefaultExtension(char *path, uint32_t maxSize, const char *extension)
 {
     char *src; // [esp+10h] [ebp-4Ch]
     char oldPath[68]; // [esp+14h] [ebp-48h] BYREF
@@ -268,22 +268,22 @@ void __cdecl Com_DefaultExtension(char *path, uint32_t maxSize, const char *exte
     Com_sprintf(path, maxSize, "%s%s", oldPath, extension);
 }
 
-int __cdecl ShortSwap(__int16 l)
+int ShortSwap(__int16 l)
 {
     return HIBYTE(l) + ((uint8_t)l << 8);
 }
 
-__int16 __cdecl ShortNoSwap(__int16 l)
+__int16 ShortNoSwap(__int16 l)
 {
     return l;
 }
 
-int __cdecl LongSwap(int l)
+int LongSwap(int l)
 {
     return HIBYTE(l) + (BYTE2(l) << 8) + (BYTE1(l) << 16) + ((uint8_t)l << 24);
 }
 
-unsigned __int64 __cdecl Long64Swap(unsigned __int64 l)
+unsigned __int64 Long64Swap(unsigned __int64 l)
 {
     return HIBYTE(l)
         + ((unsigned __int64)BYTE6(l) << 8)
@@ -295,12 +295,12 @@ unsigned __int64 __cdecl Long64Swap(unsigned __int64 l)
         + ((unsigned __int64)(uint8_t)l << 56);
 }
 
-unsigned __int64 __cdecl Long64NoSwap(unsigned __int64 ll)
+unsigned __int64 Long64NoSwap(unsigned __int64 ll)
 {
     return ll;
 }
 
-double __cdecl FloatReadSwap(int n)
+double FloatReadSwap(int n)
 {
     FloatReadSwap_union dat2; // [esp+4h] [ebp-4h]
 
@@ -311,12 +311,12 @@ double __cdecl FloatReadSwap(int n)
     return dat2.f;
 }
 
-double __cdecl FloatReadNoSwap(int n)
+double FloatReadNoSwap(int n)
 {
     return *(float *)&n;
 }
 
-FloatWriteSwap_union __cdecl FloatWriteSwap(float f)
+FloatWriteSwap_union FloatWriteSwap(float f)
 {
     FloatWriteSwap_union dat2; // [esp+4h] [ebp-4h]
 
@@ -328,51 +328,51 @@ FloatWriteSwap_union __cdecl FloatWriteSwap(float f)
 }
 
 
-unsigned __int64(__cdecl *LittleLong64)(unsigned __int64);
+unsigned __int64(*LittleLong64)(unsigned __int64);
 
-void __cdecl Swap_InitLittleEndian()
+void Swap_InitLittleEndian()
 {
     //_BigShort = (__int16(*)(__int16))ShortSwap;
     //LittleShort = ShortNoSwap;
     //BigLong = LongSwap;
-    //LittleLong = (int(__cdecl *)(int))LongNoSwap;
+    //LittleLong = (int(*)(int))LongNoSwap;
     LittleLong64 = Long64NoSwap;
-    //LittleFloatRead = (float(__cdecl *)(int))FloatReadNoSwap;
-    //LittleFloatWrite = (int(__cdecl *)(float))LongNoSwap;
+    //LittleFloatRead = (float(*)(int))FloatReadNoSwap;
+    //LittleFloatWrite = (int(*)(float))LongNoSwap;
 }
 
-void __cdecl Swap_InitBigEndian()
+void Swap_InitBigEndian()
 {
     //_BigShort = ShortNoSwap;
-    //LittleShort = (__int16(__cdecl *)(__int16))ShortSwap;
-    //BigLong = (int(__cdecl *)(int))LongNoSwap;
+    //LittleShort = (__int16(*)(__int16))ShortSwap;
+    //BigLong = (int(*)(int))LongNoSwap;
     //LittleLong = LongSwap;
     LittleLong64 = Long64Swap;
-    //LittleFloatRead = (float(__cdecl *)(int))FloatReadSwap;
-    //LittleFloatWrite = (int(__cdecl *)(float))FloatWriteSwap;
+    //LittleFloatRead = (float(*)(int))FloatReadSwap;
+    //LittleFloatWrite = (int(*)(float))FloatWriteSwap;
 }
 
-void __cdecl Swap_Init()
+void Swap_Init()
 {
     Swap_InitLittleEndian();
 }
 
-bool __cdecl I_isdigit(int c)
+bool I_isdigit(int c)
 {
     return c >= 48 && c <= 57;
 }
 
-bool __cdecl I_isalnum(int c)
+bool I_isalnum(int c)
 {
     return I_isalpha(c) || I_isdigit(c);
 }
 
-bool __cdecl I_isforfilename(int c)
+bool I_isforfilename(int c)
 {
     return I_isalnum(c) || c == 95 || c == 45;
 }
 
-int __cdecl I_strncmp(const char *s0, const char *s1, int n)
+int I_strncmp(const char *s0, const char *s1, int n)
 {
     int c1; // [esp+0h] [ebp-8h]
     int c0; // [esp+4h] [ebp-4h]
@@ -389,7 +389,7 @@ int __cdecl I_strncmp(const char *s0, const char *s1, int n)
     return 0;
 }
 
-int __cdecl I_strcmp(const char *s0, const char *s1)
+int I_strcmp(const char *s0, const char *s1)
 {
     if (!s0)
         MyAssertHandler(".\\universal\\q_shared.cpp", 649, 0, "%s", "s0");
@@ -398,7 +398,7 @@ int __cdecl I_strcmp(const char *s0, const char *s1)
     return I_strncmp(s0, s1, 0x7FFFFFFF);
 }
 
-int __cdecl I_stricmpwild(const char *wild, const char *s)
+int I_stricmpwild(const char *wild, const char *s)
 {
     int v3; // esi
     char charWild; // [esp+7h] [ebp-9h]
@@ -434,7 +434,7 @@ int __cdecl I_stricmpwild(const char *wild, const char *s)
     return 0;
 }
 
-char *__cdecl I_strlwr(char *s)
+char *I_strlwr(char *s)
 {
     char *iter; // [esp+0h] [ebp-4h]
 
@@ -446,7 +446,7 @@ char *__cdecl I_strlwr(char *s)
     return s;
 }
 
-char *__cdecl I_strupr(char *s)
+char *I_strupr(char *s)
 {
     char *iter; // [esp+0h] [ebp-4h]
 
@@ -458,7 +458,7 @@ char *__cdecl I_strupr(char *s)
     return s;
 }
 
-int __cdecl I_DrawStrlen(const char *str)
+int I_DrawStrlen(const char *str)
 {
     int count; // [esp+4h] [ebp-4h]
 
@@ -478,7 +478,7 @@ int __cdecl I_DrawStrlen(const char *str)
     return count;
 }
 
-char *__cdecl I_CleanStr(char *string)
+char *I_CleanStr(char *string)
 {
     char *d; // [esp+0h] [ebp-Ch]
     char c; // [esp+7h] [ebp-5h]
@@ -505,7 +505,7 @@ char *__cdecl I_CleanStr(char *string)
     return string;
 }
 
-uint8_t __cdecl I_CleanChar(uint8_t character)
+uint8_t I_CleanChar(uint8_t character)
 {
     if (character == 146)
         return 39;
@@ -545,7 +545,7 @@ int Com_sprintfPos(char *dest, int destSize, int *destPos, const char *fmt, ...)
     return len;
 }
 
-bool __cdecl CanKeepStringPointer(const char *string)
+bool CanKeepStringPointer(const char *string)
 {
     va_info_t *info; // [esp+0h] [ebp-8h]
 
@@ -557,7 +557,7 @@ bool __cdecl CanKeepStringPointer(const char *string)
     return string < (char *)info || string > &info->va_string[1][1023];
 }
 
-void __cdecl Com_InitThreadData(int threadContext)
+void Com_InitThreadData(int threadContext)
 {
     Sys_SetValue(1, &va_info[threadContext]);
     Sys_SetValue(2, &g_com_error[threadContext]);
@@ -565,7 +565,7 @@ void __cdecl Com_InitThreadData(int threadContext)
 }
 
 static int valueindex;
-const char *__cdecl Info_ValueForKey(const char *s, const char *key)
+const char *Info_ValueForKey(const char *s, const char *key)
 {
     char *v3; // [esp+0h] [ebp-2010h]
     char *v4; // [esp+0h] [ebp-2010h]
@@ -626,7 +626,7 @@ const char *__cdecl Info_ValueForKey(const char *s, const char *key)
     return "";
 }
 
-void __cdecl Info_NextPair(const char **head, char *key, char *value)
+void Info_NextPair(const char **head, char *key, char *value)
 {
     char *o; // [esp+0h] [ebp-8h]
     char *oa; // [esp+0h] [ebp-8h]
@@ -658,7 +658,7 @@ void __cdecl Info_NextPair(const char **head, char *key, char *value)
     *head = sa;
 }
 
-void __cdecl Info_RemoveKey(char *s, const char *key)
+void Info_RemoveKey(char *s, const char *key)
 {
     char *v2; // eax
     char v3; // al
@@ -710,7 +710,7 @@ void __cdecl Info_RemoveKey(char *s, const char *key)
     }
 }
 
-void __cdecl Info_RemoveKey_Big(char *s, const char *key)
+void Info_RemoveKey_Big(char *s, const char *key)
 {
     char *v2; // eax
     char v3; // al
@@ -765,7 +765,7 @@ void __cdecl Info_RemoveKey_Big(char *s, const char *key)
     }
 }
 
-bool __cdecl Info_Validate(const char *s)
+bool Info_Validate(const char *s)
 {
     int v1; // eax
     int v3; // eax
@@ -780,7 +780,7 @@ bool __cdecl Info_Validate(const char *s)
     return v3 == 0;
 }
 
-void __cdecl Info_SetValueForKey(char *s, const char *key, const char *value)
+void Info_SetValueForKey(char *s, const char *key, const char *value)
 {
     int v3; // eax
     int v4; // eax
@@ -859,7 +859,7 @@ void __cdecl Info_SetValueForKey(char *s, const char *key, const char *value)
     }
 }
 
-void __cdecl Info_SetValueForKey_Big(char *s, const char *key, const char *value)
+void Info_SetValueForKey_Big(char *s, const char *key, const char *value)
 {
     int j;
     char c;
@@ -928,14 +928,14 @@ void __cdecl Info_SetValueForKey_Big(char *s, const char *key, const char *value
         Com_Printf(CON_CHANNEL_SYSTEM, "Info string length exceeded. key: %s value: %s Info string: %s", key, value, s);
 }
 
-bool __cdecl ParseConfigStringToStruct(
+bool ParseConfigStringToStruct(
     uint8_t *pStruct,
     const cspField_t *pFieldList,
     int iNumFields,
     char *pszBuffer,
     int iMaxFieldTypes,
-    int(__cdecl *parseSpecialFieldType)(uint8_t *, const char *, const int),
-    void(__cdecl *parseStrcpy)(uint8_t *, const char *))
+    int(*parseSpecialFieldType)(uint8_t *, const char *, const int),
+    void(*parseStrcpy)(uint8_t *, const char *))
 {
     return ParseConfigStringToStructCustomSize(
         pStruct,
@@ -947,14 +947,14 @@ bool __cdecl ParseConfigStringToStruct(
         parseStrcpy);
 }
 
-bool __cdecl ParseConfigStringToStructCustomSize(
+bool ParseConfigStringToStructCustomSize(
     uint8_t *pStruct,
     const cspField_t *pFieldList,
     int iNumFields,
     char *pszBuffer,
     int iMaxFieldTypes,
-    int(__cdecl *parseSpecialFieldType)(uint8_t *, const char *, const int),
-    void(__cdecl *parseStrcpy)(uint8_t *, const char *))
+    int(*parseSpecialFieldType)(uint8_t *, const char *, const int),
+    void(*parseStrcpy)(uint8_t *, const char *))
 {
     int v7; // eax
     int v8; // eax
@@ -1098,7 +1098,7 @@ bool __cdecl ParseConfigStringToStructCustomSize(
     return v21 == iNumFields && !v18;
 }
 
-double __cdecl GetLeanFraction(float fFrac)
+double GetLeanFraction(float fFrac)
 {
     float v3; // [esp+4h] [ebp-4h]
 
@@ -1106,7 +1106,7 @@ double __cdecl GetLeanFraction(float fFrac)
     return (float)((2.0 - v3) * fFrac);
 }
 
-double __cdecl UnGetLeanFraction(float fFrac)
+double UnGetLeanFraction(float fFrac)
 {
     float v3; // [esp+4h] [ebp-8h]
     float v4; // [esp+8h] [ebp-4h]
@@ -1119,7 +1119,7 @@ double __cdecl UnGetLeanFraction(float fFrac)
     return (1.0f - v3);
 }
 
-void __cdecl AddLeanToPosition(float *position, float fViewYaw, float fLeanFrac, float fViewRoll, float fLeanDist)
+void AddLeanToPosition(float *position, float fViewYaw, float fLeanFrac, float fViewRoll, float fLeanDist)
 {
     float fLean; // [esp+Ch] [ebp-1Ch]
     float fLeana; // [esp+Ch] [ebp-1Ch]
@@ -1138,12 +1138,12 @@ void __cdecl AddLeanToPosition(float *position, float fViewYaw, float fLeanFrac,
     }
 }
 
-bool __cdecl Com_IsLegacyXModelName(const char *name)
+bool Com_IsLegacyXModelName(const char *name)
 {
     return !I_strnicmp(name, "xmodel", 6) && (name[6] == 47 || name[6] == 92);
 }
 
-uint32_t __cdecl LongNoSwap(uint32_t color)
+uint32_t LongNoSwap(uint32_t color)
 {
     return color;
 }

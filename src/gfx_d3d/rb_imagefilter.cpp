@@ -7,7 +7,7 @@
 #include "rb_shade.h"
 
 
-void __cdecl RB_GaussianFilterImage(
+void RB_GaussianFilterImage(
     float radius,
     GfxRenderTargetId srcRenderTargetId,
     GfxRenderTargetId dstRenderTargetId)
@@ -39,7 +39,7 @@ void __cdecl RB_GaussianFilterImage(
     RB_FilterImage(&filter);
 }
 
-void __cdecl RB_VirtualToSceneRadius(float radius, float *radiusX, float *radiusY)
+void RB_VirtualToSceneRadius(float radius, float *radiusX, float *radiusY)
 {
     iassert( radiusX );
     iassert( radiusY );
@@ -47,7 +47,7 @@ void __cdecl RB_VirtualToSceneRadius(float radius, float *radiusX, float *radius
     *radiusX = *radiusY * vidConfig.aspectRatioScenePixel;
 }
 
-int __cdecl RB_GenerateGaussianFilterChain(
+int RB_GenerateGaussianFilterChain(
     float radiusX,
     float radiusY,
     uint32_t srcWidth,
@@ -152,7 +152,7 @@ int __cdecl RB_GenerateGaussianFilterChain(
     return passCount;
 }
 
-void __cdecl RB_GenerateGaussianFilter1D(float radius, int *res, int axis, GfxImageFilterPass *filterPass)
+void RB_GenerateGaussianFilter1D(float radius, int *res, int axis, GfxImageFilterPass *filterPass)
 {
     float tapWeights[8]; // [esp+18h] [ebp-48h] BYREF
     int tapHalfCount; // [esp+38h] [ebp-28h]
@@ -174,7 +174,7 @@ void __cdecl RB_GenerateGaussianFilter1D(float radius, int *res, int axis, GfxIm
     filterPass->dstHeight = res[1];
 }
 
-int __cdecl RB_PickSymmetricFilterMaterial(int halfTapCount, const Material **material)
+int RB_PickSymmetricFilterMaterial(int halfTapCount, const Material **material)
 {
     if (halfTapCount <= 0 || halfTapCount > 8)
         MyAssertHandler(
@@ -188,7 +188,7 @@ int __cdecl RB_PickSymmetricFilterMaterial(int halfTapCount, const Material **ma
     return halfTapCount;
 }
 
-int __cdecl RB_GaussianFilterPoints1D(
+int RB_GaussianFilterPoints1D(
     float pixels,
     int srcRes,
     int dstRes,
@@ -265,7 +265,7 @@ int __cdecl RB_GaussianFilterPoints1D(
     return tapHalfCount;
 }
 
-void __cdecl RB_GenerateGaussianFilter2D(
+void RB_GenerateGaussianFilter2D(
     float radius,
     uint32_t srcWidth,
     uint32_t srcHeight,
@@ -306,7 +306,7 @@ void __cdecl RB_GenerateGaussianFilter2D(
     filterPass->dstHeight = dstHeight;
 }
 
-void __cdecl RB_FilterImage(GfxImageFilter *filter)
+void RB_FilterImage(GfxImageFilter *filter)
 {
     int passIndex; // [esp+2Ch] [ebp-Ch]
     float h; // [esp+30h] [ebp-8h]
@@ -348,7 +348,7 @@ void __cdecl RB_FilterImage(GfxImageFilter *filter)
     KISAK_NULLSUB();
 }
 
-void __cdecl RB_SetupFilterPass(const GfxImageFilterPass *filterPass)
+void RB_SetupFilterPass(const GfxImageFilterPass *filterPass)
 {
     int constIndex; // [esp+4h] [ebp-4h]
 
@@ -368,7 +368,7 @@ void __cdecl RB_SetupFilterPass(const GfxImageFilterPass *filterPass)
         
 }
 
-void __cdecl RB_FilterPingPong(const GfxImageFilter *filter, int passIndex)
+void RB_FilterPingPong(const GfxImageFilter *filter, int passIndex)
 {
     GfxRenderTargetId finalTarget; // [esp+0h] [ebp-14h]
     GfxImage *image; // [esp+4h] [ebp-10h]
@@ -388,7 +388,7 @@ void __cdecl RB_FilterPingPong(const GfxImageFilter *filter, int passIndex)
     R_SetRenderTarget(gfxCmdBufContext, finalTarget);
 }
 
-void __cdecl RB_GlowFilterImage(float radius)
+void RB_GlowFilterImage(float radius)
 {
     float radiusScale; // [esp+1Ch] [ebp-8h]
     float radiusa; // [esp+2Ch] [ebp+8h]
@@ -413,7 +413,7 @@ void __cdecl RB_GlowFilterImage(float radius)
     }
 }
 
-GfxRenderTargetId __cdecl RB_ApplyGlowFilter(
+GfxRenderTargetId RB_ApplyGlowFilter(
     float radius,
     GfxRenderTargetId srcRenderTarget,
     GfxRenderTargetId dstRenderTarget)

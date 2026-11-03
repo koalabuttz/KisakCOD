@@ -14,7 +14,7 @@
 
 
 
-void __cdecl CG_Laser_Add(
+void CG_Laser_Add(
     centity_s *cent,
     DObj_s *obj,
     cpose_t *pose,
@@ -33,7 +33,7 @@ void __cdecl CG_Laser_Add(
     }
 }
 
-void __cdecl CG_Laser_Add_Core(
+void CG_Laser_Add_Core(
     centity_s *cent,
     DObj_s *obj,
     orientation_t *orient,

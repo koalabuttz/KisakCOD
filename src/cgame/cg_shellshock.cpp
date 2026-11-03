@@ -150,7 +150,7 @@ const float cg_perturbations[131][2] =
 
 
 
-void __cdecl CG_PerturbCamera(cg_s *cgameGlob)
+void CG_PerturbCamera(cg_s *cgameGlob)
 {
     float rot[3][3]; // [esp+18h] [ebp-48h] BYREF
     float axis[3][3]; // [esp+3Ch] [ebp-24h] BYREF
@@ -172,7 +172,7 @@ void __cdecl CG_PerturbCamera(cg_s *cgameGlob)
     }
 }
 
-int32_t __cdecl CG_DrawShellShockSavedScreenBlendBlurred(
+int32_t CG_DrawShellShockSavedScreenBlendBlurred(
     int32_t localClientNum,
     const shellshock_parms_t* parms,
     int32_t start,
@@ -223,7 +223,7 @@ int32_t __cdecl CG_DrawShellShockSavedScreenBlendBlurred(
     }
 }
 
-void __cdecl SaveScreenToBuffer(int32_t localClientNum)
+void SaveScreenToBuffer(int32_t localClientNum)
 {
     const ClientViewParams *view; // [esp+14h] [ebp-8h]
 
@@ -237,7 +237,7 @@ void __cdecl SaveScreenToBuffer(int32_t localClientNum)
         R_AddCmdSaveScreen(localClientNum);
     }
 }
-int32_t __cdecl CG_DrawShellShockSavedScreenBlendFlashed(
+int32_t CG_DrawShellShockSavedScreenBlendFlashed(
     int32_t localClientNum,
     const shellshock_parms_t* parms,
     int32_t start,
@@ -296,7 +296,7 @@ int32_t __cdecl CG_DrawShellShockSavedScreenBlendFlashed(
     }
 }
 
-double __cdecl BlendSmooth(float percent)
+double BlendSmooth(float percent)
 {
     float v3; // [esp+Ch] [ebp-Ch]
     float sin; // [esp+14h] [ebp-4h]
@@ -306,7 +306,7 @@ double __cdecl BlendSmooth(float percent)
     return (float)((sin + 1.0) * 0.5);
 }
 
-void __cdecl CG_UpdateShellShock(int32_t localClientNum, const shellshock_parms_t *parms, int32_t start, int32_t duration)
+void CG_UpdateShellShock(int32_t localClientNum, const shellshock_parms_t *parms, int32_t start, int32_t duration)
 {
     int32_t time;
 
@@ -324,7 +324,7 @@ void __cdecl CG_UpdateShellShock(int32_t localClientNum, const shellshock_parms_
     }
 }
 
-void __cdecl EndShellShock(int32_t localClientNum)
+void EndShellShock(int32_t localClientNum)
 {
     EndShellShockSound(localClientNum);
     EndShellShockLookControl(localClientNum);
@@ -332,7 +332,7 @@ void __cdecl EndShellShock(int32_t localClientNum)
     EndShellShockScreen(localClientNum);
 }
 
-void __cdecl EndShellShockSound(int32_t localClientNum)
+void EndShellShockSound(int32_t localClientNum)
 {
     snd_alias_t *alias; // [esp+10h] [ebp-4h]
     cg_s *cgameGlob;
@@ -350,13 +350,13 @@ void __cdecl EndShellShockSound(int32_t localClientNum)
     }
 }
 
-void __cdecl EndShellShockLookControl(int32_t localClientNum)
+void EndShellShockLookControl(int32_t localClientNum)
 {
     CG_GetLocalClientGlobals(localClientNum)->shellshock.sensitivity = 1.0f;
     CL_CapTurnRate(localClientNum, 0.0f, 0.0f);
 }
 
-void __cdecl EndShellShockCamera(int32_t localClientNum)
+void EndShellShockCamera(int32_t localClientNum)
 {
     cg_s *cgameGlob;
 
@@ -366,12 +366,12 @@ void __cdecl EndShellShockCamera(int32_t localClientNum)
     cgameGlob->shellshock.viewDelta[1] = 0.0;
 }
 
-void __cdecl EndShellShockScreen(int32_t localClientNum)
+void EndShellShockScreen(int32_t localClientNum)
 {
     CG_GetLocalClientGlobals(localClientNum)->shellshock.hasSavedScreen = 0;
 }
 
-void __cdecl UpdateShellShockSound(int32_t localClientNum, const shellshock_parms_t* parms, int32_t time, int32_t duration)
+void UpdateShellShockSound(int32_t localClientNum, const shellshock_parms_t* parms, int32_t time, int32_t duration)
 {
     const snd_alias_t* v4; // eax
     const snd_alias_t* v5; // eax
@@ -461,7 +461,7 @@ void __cdecl UpdateShellShockSound(int32_t localClientNum, const shellshock_parm
     }
 }
 
-void __cdecl UpdateShellShockLookControl(int32_t localClientNum, const shellshock_parms_t *parms, int32_t time, int32_t duration)
+void UpdateShellShockLookControl(int32_t localClientNum, const shellshock_parms_t *parms, int32_t time, int32_t duration)
 {
     float maxPitchSpeed; // [esp+8h] [ebp-14h]
     float maxYawSpeed; // [esp+Ch] [ebp-10h]
@@ -506,7 +506,7 @@ void __cdecl UpdateShellShockLookControl(int32_t localClientNum, const shellshoc
     }
 }
 
-void __cdecl UpdateShellShockCamera(int32_t localClientNum, const shellshock_parms_t *parms, int32_t time, int32_t duration)
+void UpdateShellShockCamera(int32_t localClientNum, const shellshock_parms_t *parms, int32_t time, int32_t duration)
 {
     int32_t dt; // [esp+20h] [ebp-20h]
     float ta; // [esp+24h] [ebp-1Ch]
@@ -542,7 +542,7 @@ void __cdecl UpdateShellShockCamera(int32_t localClientNum, const shellshock_par
     }
 }
 
-double __cdecl CubicInterpolate(float t, float x0, float x1, float x2, float x3)
+double CubicInterpolate(float t, float x0, float x1, float x2, float x3)
 {
     float c; // [esp+4h] [ebp-10h]
     float b; // [esp+Ch] [ebp-8h]
@@ -554,14 +554,14 @@ double __cdecl CubicInterpolate(float t, float x0, float x1, float x2, float x3)
     return (float)(((t * a + b) * t + c) * t + x1);
 }
 
-void __cdecl CG_StartShellShock(cg_s *cgameGlob, const shellshock_parms_t *parms, int32_t start, int32_t duration)
+void CG_StartShellShock(cg_s *cgameGlob, const shellshock_parms_t *parms, int32_t start, int32_t duration)
 {
     cgameGlob->shellshock.parms = parms;
     cgameGlob->shellshock.startTime = start;
     cgameGlob->shellshock.duration = duration;
 }
 
-bool __cdecl CG_Flashbanged(int32_t localClientNum)
+bool CG_Flashbanged(int32_t localClientNum)
 {
     const cg_s *cgameGlob;
 

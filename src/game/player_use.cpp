@@ -19,11 +19,11 @@
 #include "bullet.h"
 
 
-void __cdecl Player_UseEntity(gentity_s *playerEnt, gentity_s *useEnt)
+void Player_UseEntity(gentity_s *playerEnt, gentity_s *useEnt)
 {
     int eType; // r11
     int handler; // r10
-    void(__cdecl * touch)(gentity_s *, gentity_s *, gentity_s *); // r11
+    void(* touch)(gentity_s *, gentity_s *, gentity_s *); // r11
     gentity_s *v7; // r5
 
     if (!playerEnt)
@@ -41,7 +41,7 @@ void __cdecl Player_UseEntity(gentity_s *playerEnt, gentity_s *useEnt)
         Scr_Notify(useEnt, scr_const.touch, 1u);
         handler = useEnt->handler;
         useEnt->active = 1;
-        touch = (void(__cdecl *)(gentity_s *, gentity_s *, gentity_s *))entityHandlers[handler].touch;
+        touch = (void(*)(gentity_s *, gentity_s *, gentity_s *))entityHandlers[handler].touch;
         if (touch)
         {
             v7 = 0;
@@ -65,7 +65,7 @@ void __cdecl Player_UseEntity(gentity_s *playerEnt, gentity_s *useEnt)
     playerEnt->client->useHoldEntity.setEnt(NULL);
 }
 
-int __cdecl Player_ActivateCmd(gentity_s *ent)
+int Player_ActivateCmd(gentity_s *ent)
 {
     int result; // r3
     gentity_s *v3; // r4
@@ -125,7 +125,7 @@ int __cdecl Player_ActivateCmd(gentity_s *ent)
     return 1;
 }
 
-void __cdecl Player_ActivateHoldCmd(gentity_s *ent)
+void Player_ActivateHoldCmd(gentity_s *ent)
 {
     gclient_s *client; // r11
     gentity_s *useEnt; // r30
@@ -153,7 +153,7 @@ void __cdecl Player_ActivateHoldCmd(gentity_s *ent)
     }
 }
 
-void __cdecl Player_UpdateActivate(gentity_s *ent)
+void Player_UpdateActivate(gentity_s *ent)
 {
     char v2; // r28
     gclient_s *client; // r11
@@ -186,12 +186,12 @@ void __cdecl Player_UpdateActivate(gentity_s *ent)
     ent->client->useButtonDone = 1;
 }
 
-int __cdecl compare_use(float *pe1, float *pe2)
+int compare_use(float *pe1, float *pe2)
 {
     return (int)(float)(pe1[1] - pe2[1]);
 }
 
-int __cdecl Player_GetUseList(gentity_s *ent, useList_t *useList, int prevHintEntIndex)
+int Player_GetUseList(gentity_s *ent, useList_t *useList, int prevHintEntIndex)
 {
     int v6; // r22
     gclient_s *client; // r29
@@ -421,7 +421,7 @@ int __cdecl Player_GetUseList(gentity_s *ent, useList_t *useList, int prevHintEn
             ++v13;
         }
     }
-    qsort(useList, v11, 8u, (int(__cdecl *)(const void *, const void *))compare_use);
+    qsort(useList, v11, 8u, (int(*)(const void *, const void *))compare_use);
     v31 = v11 - v6;
     v33 = (int)(v11 - v6) <= 0;
     v32 = 0;
@@ -456,11 +456,11 @@ int __cdecl Player_GetUseList(gentity_s *ent, useList_t *useList, int prevHintEn
                 p_score = &use->score;
         } while (v35);
     }
-    qsort(useList, v31, 8u, (int(__cdecl *)(const void *, const void *))compare_use);
+    qsort(useList, v31, 8u, (int(*)(const void *, const void *))compare_use);
     return v31 - v32;
 }
 
-void __cdecl G_UpdateFriendlyOverlay(gentity_s *ent)
+void G_UpdateFriendlyOverlay(gentity_s *ent)
 {
     gentity_s *v2; // r30
     actor_s *actor; // r11
@@ -539,7 +539,7 @@ LABEL_20:
     SV_SetConfigstring(v10, v9);
 }
 
-int __cdecl Player_GetItemCursorHint(const gclient_s *client, const gentity_s *traceEnt)
+int Player_GetItemCursorHint(const gclient_s *client, const gentity_s *traceEnt)
 {
     int index; // r31
     unsigned int v5; // r30
@@ -584,7 +584,7 @@ int __cdecl Player_GetItemCursorHint(const gclient_s *client, const gentity_s *t
     return result;
 }
 
-void __cdecl Player_SetTurretDropHint(gentity_s *ent)
+void Player_SetTurretDropHint(gentity_s *ent)
 {
     iassert(ent);
     iassert(ent->client);
@@ -607,7 +607,7 @@ void __cdecl Player_SetTurretDropHint(gentity_s *ent)
     }
 }
 
-void __cdecl Player_UpdateCursorHints(gentity_s *ent)
+void Player_UpdateCursorHints(gentity_s *ent)
 {
     gclient_s *client; // r23
     int v3; // r30
@@ -767,7 +767,7 @@ void __cdecl Player_UpdateCursorHints(gentity_s *ent)
     }
 }
 
-gentity_s *__cdecl Player_UpdateLookAtEntityTrace(
+gentity_s *Player_UpdateLookAtEntityTrace(
     trace_t *trace,
     const float *start,
     const float *end,
@@ -806,7 +806,7 @@ gentity_s *__cdecl Player_UpdateLookAtEntityTrace(
         return &g_entities[EntityHitId];
 }
 
-int __cdecl Player_CheckAlmostStationary(gentity_s *ent, float *dir)
+int Player_CheckAlmostStationary(gentity_s *ent, float *dir)
 {
     gclient_s *client; // r29
     float *currentOrigin; // r30
@@ -851,7 +851,7 @@ int __cdecl Player_CheckAlmostStationary(gentity_s *ent, float *dir)
     return 0;
 }
 
-void __cdecl Player_DebugDrawLOS(const float *center, const float *dir, double dist2D, int debugDrawDuration)
+void Player_DebugDrawLOS(const float *center, const float *dir, double dist2D, int debugDrawDuration)
 {
     double yaw; // fp1
     float maxs[3]; // [sp+50h] [-40h] BYREF
@@ -869,7 +869,7 @@ void __cdecl Player_DebugDrawLOS(const float *center, const float *dir, double d
     G_DebugBox(center, mins, maxs, yaw, colorOrange, 0, debugDrawDuration);
 }
 
-void __cdecl Player_BanNodesInFront(gentity_s *ent, float dist, const float *start, const float *dir)
+void Player_BanNodesInFront(gentity_s *ent, float dist, const float *start, const float *dir)
 {
     double dist2D; // fp31
     int v13; // r5
@@ -955,7 +955,7 @@ void __cdecl Player_BanNodesInFront(gentity_s *ent, float dist, const float *sta
     }
 }
 
-void __cdecl Player_BlockFriendliesInADS(gentity_s *ent, float dist, const float *start, const float *dir)
+void Player_BlockFriendliesInADS(gentity_s *ent, float dist, const float *start, const float *dir)
 {
     int BestTarget; // r29
     gclient_s *client; // r10
@@ -987,7 +987,7 @@ void __cdecl Player_BlockFriendliesInADS(gentity_s *ent, float dist, const float
         G_DebugLine(ent->r.currentOrigin, g_entities[BestTarget].r.currentOrigin, colorCyan, 0);
 }
 
-void __cdecl Player_GrenadeThrowBlockFriendlies(
+void Player_GrenadeThrowBlockFriendlies(
     gentity_s *ent,
     float dist,
     const float *start,
@@ -1007,7 +1007,7 @@ void __cdecl Player_GrenadeThrowBlockFriendlies(
     }
 }
 
-void __cdecl Player_UpdateLookAtEntity(gentity_s *ent)
+void Player_UpdateLookAtEntity(gentity_s *ent)
 {
     gclient_s *client; // r21
     unsigned int weapon; // r3

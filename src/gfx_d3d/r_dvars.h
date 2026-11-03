@@ -10,10 +10,10 @@ enum GfxAspectRatio : int32_t
 };
 
 
-void __cdecl R_ReflectionProbeRegisterDvars();
-void __cdecl R_RegisterDvars();
+void R_ReflectionProbeRegisterDvars();
+void R_RegisterDvars();
 const dvar_t *R_RegisterWorkerThreadDvar(const char *name, uint32_t workerIndex);
-char __cdecl R_CheckDvarModified(const dvar_s *dvar);
+char R_CheckDvarModified(const dvar_s *dvar);
 
 //extern const dvar_t **prof_probe;
 extern const dvar_t *prof_probe[5];

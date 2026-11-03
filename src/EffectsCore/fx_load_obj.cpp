@@ -62,7 +62,7 @@ const FxFlagDef s_allFlagDefs[42] =
   { NULL, 0, 0, 0 }
 }; // idb
 
-//uint8_t *__cdecl Hunk_AllocPhysPresetPrecache(int size)
+//uint8_t *Hunk_AllocPhysPresetPrecache(int size)
 //{
 //    if (size <= 0)
 //        MyAssertHandler(".\\EffectsCore\\fx_load_obj.cpp", 237, 0, "%s", "size > 0");
@@ -74,7 +74,7 @@ void FX_UnregisterAll()
     memset(&fx_load, 0, sizeof(fx_load));
 }
 
-char __cdecl FX_ParseSingleFlag(const char *token, FxFlagOutputSet *flagOutputSet)
+char FX_ParseSingleFlag(const char *token, FxFlagOutputSet *flagOutputSet)
 {
     int *outputFlag; // [esp+0h] [ebp-8h]
     const FxFlagDef *flagDef; // [esp+4h] [ebp-4h]
@@ -100,7 +100,7 @@ char __cdecl FX_ParseSingleFlag(const char *token, FxFlagOutputSet *flagOutputSe
     return 0;
 }
 
-char __cdecl FX_ParseFlagsField(const char **parse, FxFlagOutputSet *flagOutputSet)
+char FX_ParseFlagsField(const char **parse, FxFlagOutputSet *flagOutputSet)
 {
     parseInfo_t *token; // [esp+0h] [ebp-4h]
 
@@ -116,7 +116,7 @@ char __cdecl FX_ParseFlagsField(const char **parse, FxFlagOutputSet *flagOutputS
     return 0;
 }
 
-bool __cdecl FX_ParseName(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseName(const char **parse, FxEditorElemDef *edElemDef)
 {
     parseInfo_t *token; // [esp+0h] [ebp-4h]
 
@@ -125,7 +125,7 @@ bool __cdecl FX_ParseName(const char **parse, FxEditorElemDef *edElemDef)
     return 1;
 }
 
-bool __cdecl FX_ParseNonAtlasFlags(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseNonAtlasFlags(const char **parse, FxEditorElemDef *edElemDef)
 {
     FxFlagOutputSet flagOutputSet; // [esp+0h] [ebp-Ch] BYREF
 
@@ -135,140 +135,140 @@ bool __cdecl FX_ParseNonAtlasFlags(const char **parse, FxEditorElemDef *edElemDe
     return FX_ParseFlagsField(parse, &flagOutputSet);
 }
 
-char __cdecl FX_ParseFloat(const char **parse, float *value)
+char FX_ParseFloat(const char **parse, float *value)
 {
     *value = Com_ParseFloat(parse);
     return 1;
 }
 
-bool __cdecl FX_ParseFloatRange(const char **parse, FxFloatRange *range)
+bool FX_ParseFloatRange(const char **parse, FxFloatRange *range)
 {
     return FX_ParseFloat(parse, &range->base) && FX_ParseFloat(parse, &range->amplitude) != 0;
 }
 
-bool __cdecl FX_ParseSpawnRange(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseSpawnRange(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseFloatRange(parse, &edElemDef->spawnRange);
 }
 
-bool __cdecl FX_ParseFadeInRange(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseFadeInRange(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseFloatRange(parse, &edElemDef->fadeInRange);
 }
 
-bool __cdecl FX_ParseFadeOutRange(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseFadeOutRange(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseFloatRange(parse, &edElemDef->fadeOutRange);
 }
 
-bool __cdecl FX_ParseSpawnFrustumCullRadius(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseSpawnFrustumCullRadius(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseFloat(parse, &edElemDef->spawnFrustumCullRadius);
 }
 
-char __cdecl FX_ParseInt(const char **parse, int *value)
+char FX_ParseInt(const char **parse, int *value)
 {
     *value = Com_ParseInt(parse);
     return 1;
 }
 
-bool __cdecl FX_ParseSpawnDefLooping(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseSpawnDefLooping(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseInt(parse, &edElemDef->spawnLooping.intervalMsec)
         && FX_ParseInt(parse, &edElemDef->spawnLooping.count) != 0;
 }
 
-bool __cdecl FX_ParseIntRange(const char **parse, FxIntRange *range)
+bool FX_ParseIntRange(const char **parse, FxIntRange *range)
 {
     return FX_ParseInt(parse, &range->base) && FX_ParseInt(parse, &range->amplitude) != 0;
 }
 
-bool __cdecl FX_ParseSpawnDefOneShot(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseSpawnDefOneShot(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseIntRange(parse, &edElemDef->spawnOneShot.count);
 }
 
-bool __cdecl FX_ParseSpawnDelayMsec(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseSpawnDelayMsec(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseIntRange(parse, &edElemDef->spawnDelayMsec);
 }
 
-bool __cdecl FX_ParseLifeSpanMsec(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseLifeSpanMsec(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseIntRange(parse, &edElemDef->lifeSpanMsec);
 }
 
-bool __cdecl FX_ParseSpawnOrgX(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseSpawnOrgX(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseFloatRange(parse, edElemDef->spawnOrigin);
 }
 
-bool __cdecl FX_ParseSpawnOrgY(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseSpawnOrgY(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseFloatRange(parse, &edElemDef->spawnOrigin[1]);
 }
 
-bool __cdecl FX_ParseSpawnOrgZ(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseSpawnOrgZ(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseFloatRange(parse, &edElemDef->spawnOrigin[2]);
 }
 
-bool __cdecl FX_ParseSpawnOffsetRadius(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseSpawnOffsetRadius(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseFloatRange(parse, &edElemDef->spawnOffsetRadius);
 }
 
-bool __cdecl FX_ParseSpawnOffsetHeight(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseSpawnOffsetHeight(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseFloatRange(parse, &edElemDef->spawnOffsetHeight);
 }
 
-bool __cdecl FX_ParseSpawnAnglePitch(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseSpawnAnglePitch(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseFloatRange(parse, edElemDef->spawnAngles);
 }
 
-bool __cdecl FX_ParseSpawnAngleYaw(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseSpawnAngleYaw(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseFloatRange(parse, &edElemDef->spawnAngles[1]);
 }
 
-bool __cdecl FX_ParseSpawnAngleRoll(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseSpawnAngleRoll(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseFloatRange(parse, &edElemDef->spawnAngles[2]);
 }
 
-bool __cdecl FX_ParseAngleVelPitch(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseAngleVelPitch(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseFloatRange(parse, edElemDef->angularVelocity);
 }
 
-bool __cdecl FX_ParseAngleVelYaw(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseAngleVelYaw(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseFloatRange(parse, &edElemDef->angularVelocity[1]);
 }
 
-bool __cdecl FX_ParseAngleVelRoll(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseAngleVelRoll(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseFloatRange(parse, &edElemDef->angularVelocity[2]);
 }
 
-bool __cdecl FX_ParseInitialRot(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseInitialRot(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseFloatRange(parse, &edElemDef->initialRotation);
 }
 
-bool __cdecl FX_ParseGravity(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseGravity(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseFloatRange(parse, &edElemDef->gravity);
 }
 
-bool __cdecl FX_ParseElasticity(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseElasticity(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseFloatRange(parse, &edElemDef->elasticity);
 }
 
-bool __cdecl FX_ParseAtlasBehavior(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseAtlasBehavior(const char **parse, FxEditorElemDef *edElemDef)
 {
     FxFlagOutputSet flagOutputSet; // [esp+0h] [ebp-Ch] BYREF
 
@@ -278,37 +278,37 @@ bool __cdecl FX_ParseAtlasBehavior(const char **parse, FxEditorElemDef *edElemDe
     return FX_ParseFlagsField(parse, &flagOutputSet);
 }
 
-bool __cdecl FX_ParseAtlasIndex(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseAtlasIndex(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseInt(parse, &edElemDef->atlas.index);
 }
 
-bool __cdecl FX_ParseAtlasFps(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseAtlasFps(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseInt(parse, &edElemDef->atlas.fps);
 }
 
-bool __cdecl FX_ParseAtlasLoopCount(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseAtlasLoopCount(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseInt(parse, &edElemDef->atlas.loopCount);
 }
 
-bool __cdecl FX_ParseAtlasColIndexBits(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseAtlasColIndexBits(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseInt(parse, &edElemDef->atlas.colIndexBits);
 }
 
-bool __cdecl FX_ParseAtlasRowIndexBits(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseAtlasRowIndexBits(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseInt(parse, &edElemDef->atlas.rowIndexBits);
 }
 
-bool __cdecl FX_ParseAtlasEntryCount(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseAtlasEntryCount(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseInt(parse, &edElemDef->atlas.entryCount);
 }
 
-char __cdecl FX_ParseCurve(const char **parse, int dimCount, float minValue, float maxValue, const FxCurve **shape)
+char FX_ParseCurve(const char **parse, int dimCount, float minValue, float maxValue, const FxCurve **shape)
 {
     double v6; // st7
     float v7; // [esp+10h] [ebp-828h]
@@ -393,7 +393,7 @@ char __cdecl FX_ParseCurve(const char **parse, int dimCount, float minValue, flo
     }
 }
 
-bool __cdecl FX_ParseGraphRange(
+bool FX_ParseGraphRange(
     const char **parse,
     int dimCount,
     float minValue,
@@ -412,76 +412,76 @@ bool __cdecl FX_ParseGraphRange(
     return 0;
 }
 
-bool __cdecl FX_ParseVelGraph0X(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseVelGraph0X(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseGraphRange(parse, 1, -0.5, 0.5, edElemDef->velScale[0], edElemDef->velShape[0][0]);
 }
 
-bool __cdecl FX_ParseVelGraph0Y(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseVelGraph0Y(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseGraphRange(parse, 1, -0.5, 0.5, &edElemDef->velScale[0][1], edElemDef->velShape[0][1]);
 }
 
-bool __cdecl FX_ParseVelGraph0Z(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseVelGraph0Z(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseGraphRange(parse, 1, -0.5, 0.5, &edElemDef->velScale[0][2], edElemDef->velShape[0][2]);
 }
 
-bool __cdecl FX_ParseVelGraph1X(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseVelGraph1X(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseGraphRange(parse, 1, -0.5, 0.5, edElemDef->velScale[1], edElemDef->velShape[1][0]);
 }
 
-bool __cdecl FX_ParseVelGraph1Y(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseVelGraph1Y(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseGraphRange(parse, 1, -0.5, 0.5, &edElemDef->velScale[1][1], edElemDef->velShape[1][1]);
 }
 
-bool __cdecl FX_ParseVelGraph1Z(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseVelGraph1Z(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseGraphRange(parse, 1, -0.5, 0.5, &edElemDef->velScale[1][2], edElemDef->velShape[1][2]);
 }
 
-bool __cdecl FX_ParseRotGraph(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseRotGraph(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseGraphRange(parse, 1, -0.5, 0.5, &edElemDef->rotationScale, edElemDef->rotationShape);
 }
 
-bool __cdecl FX_ParseSizeGraph0(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseSizeGraph0(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseGraphRange(parse, 1, 0.0, 1.0, edElemDef->sizeScale, edElemDef->sizeShape[0]);
 }
 
-bool __cdecl FX_ParseSizeGraph1(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseSizeGraph1(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseGraphRange(parse, 1, 0.0, 1.0, &edElemDef->sizeScale[1], edElemDef->sizeShape[1]);
 }
 
-bool __cdecl FX_ParseScaleGraph(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseScaleGraph(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseGraphRange(parse, 1, 0.0, 1.0, &edElemDef->scaleScale, edElemDef->scaleShape);
 }
 
-bool __cdecl FX_ParseColorGraph(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseColorGraph(const char **parse, FxEditorElemDef *edElemDef)
 {
     float scale; // [esp+10h] [ebp-4h] BYREF
 
     return FX_ParseGraphRange(parse, 3, 0.0, 1.0, &scale, edElemDef->color);
 }
 
-bool __cdecl FX_ParseAlphaGraph(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseAlphaGraph(const char **parse, FxEditorElemDef *edElemDef)
 {
     float scale; // [esp+10h] [ebp-4h] BYREF
 
     return FX_ParseGraphRange(parse, 1, 0.0, 1.0, &scale, edElemDef->alpha);
 }
 
-bool __cdecl FX_ParseLightingFrac(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseLightingFrac(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseFloat(parse, &edElemDef->lightingFrac);
 }
 
-bool __cdecl FX_ParseVector(const char **parse, float *value)
+bool FX_ParseVector(const char **parse, float *value)
 {
     if (!FX_ParseFloat(parse, value))
         return 0;
@@ -490,17 +490,17 @@ bool __cdecl FX_ParseVector(const char **parse, float *value)
     return 0;
 }
 
-bool __cdecl FX_ParseCollOffset(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseCollOffset(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseVector(parse, edElemDef->collOffset);
 }
 
-bool __cdecl FX_ParseCollRadius(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseCollRadius(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseFloat(parse, &edElemDef->collRadius);
 }
 
-char __cdecl FX_ParseEffectRef(const char **parse, const FxEffectDef **fx)
+char FX_ParseEffectRef(const char **parse, const FxEffectDef **fx)
 {
     parseInfo_t *token; // [esp+0h] [ebp-4h]
 
@@ -512,59 +512,59 @@ char __cdecl FX_ParseEffectRef(const char **parse, const FxEffectDef **fx)
     return 1;
 }
 
-bool __cdecl FX_ParseFxOnImpact(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseFxOnImpact(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseEffectRef(parse, &edElemDef->effectOnImpact);
 }
 
-bool __cdecl FX_ParseFxOnDeath(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseFxOnDeath(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseEffectRef(parse, &edElemDef->effectOnDeath);
 }
 
-bool __cdecl FX_ParseSortOrder(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseSortOrder(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseInt(parse, &edElemDef->sortOrder);
 }
 
-bool __cdecl FX_ParseEmission(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseEmission(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseEffectRef(parse, &edElemDef->emission);
 }
 
-bool __cdecl FX_ParseEmitDist(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseEmitDist(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseFloatRange(parse, &edElemDef->emitDist);
 }
 
-bool __cdecl FX_ParseEmitDistVariance(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseEmitDistVariance(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseFloatRange(parse, &edElemDef->emitDistVariance);
 }
 
-bool __cdecl FX_ParseTrailRepeatTime(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseTrailRepeatTime(const char **parse, FxEditorElemDef *edElemDef)
 {
     float deprecated; // [esp+0h] [ebp-4h] BYREF
 
     return FX_ParseFloat(parse, &deprecated);
 }
 
-bool __cdecl FX_ParseTrailSplitDist(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseTrailSplitDist(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseInt(parse, &edElemDef->trailSplitDist);
 }
 
-bool __cdecl FX_ParseTrailScrollTime(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseTrailScrollTime(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseFloat(parse, &edElemDef->trailScrollTime);
 }
 
-bool __cdecl FX_ParseTrailRepeatDist(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseTrailRepeatDist(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseInt(parse, &edElemDef->trailRepeatDist);
 }
 
-bool __cdecl FX_ParseTrailDef(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseTrailDef(const char **parse, FxEditorElemDef *edElemDef)
 {
     int index; // [esp+0h] [ebp-Ch] BYREF
     FxTrailVertex *trailVertex; // [esp+4h] [ebp-8h]
@@ -619,7 +619,7 @@ bool __cdecl FX_ParseTrailDef(const char **parse, FxEditorElemDef *edElemDef)
     return 1;
 }
 
-bool __cdecl FX_SetEditorElemType(FxEditorElemDef *edElemDef, uint8_t type)
+bool FX_SetEditorElemType(FxEditorElemDef *edElemDef, uint8_t type)
 {
     if (edElemDef->elemType == 11)
     {
@@ -633,12 +633,12 @@ bool __cdecl FX_SetEditorElemType(FxEditorElemDef *edElemDef, uint8_t type)
     }
 }
 
-bool __cdecl FX_ParseAssetArray_FxElemVisuals_32_(
+bool FX_ParseAssetArray_FxElemVisuals_32_(
     const char **parse,
     uint8_t elemType,
     FxEditorElemDef *edElemDef,
     FxElemVisuals(*visualsArray)[32],
-    bool(__cdecl *RegisterAsset)(const char *, FxElemVisuals *))
+    bool(*RegisterAsset)(const char *, FxElemVisuals *))
 {
     char name[264]; // [esp+0h] [ebp-110h] BYREF
     const char *token; // [esp+10Ch] [ebp-4h]
@@ -664,75 +664,75 @@ bool __cdecl FX_ParseAssetArray_FxElemVisuals_32_(
     return 0;
 }
 
-Material *__cdecl FX_RegisterMaterial(char *material)
+Material *FX_RegisterMaterial(char *material)
 {
     if (!strcmp(material, "$default"))
         material = (char*)"$default3d";
     return Material_RegisterHandle(material, IMAGE_TRACK_FX);
 }
 
-BOOL __cdecl FX_RegisterAsset_Material(char *name, FxElemVisuals *visuals)
+BOOL FX_RegisterAsset_Material(char *name, FxElemVisuals *visuals)
 {
     visuals->anonymous = FX_RegisterMaterial(name);
     return visuals->anonymous != 0;
 }
 
-bool __cdecl FX_ParseBillboardSprite(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseBillboardSprite(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseAssetArray_FxElemVisuals_32_(
         parse,
         0,
         edElemDef,
         &edElemDef->visuals,
-        (bool(__cdecl *)(const char *, FxElemVisuals *))FX_RegisterAsset_Material);
+        (bool(*)(const char *, FxElemVisuals *))FX_RegisterAsset_Material);
 }
 
-bool __cdecl FX_ParseOrientedSprite(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseOrientedSprite(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseAssetArray_FxElemVisuals_32_(
         parse,
         1u,
         edElemDef,
         &edElemDef->visuals,
-        (bool(__cdecl *)(const char *, FxElemVisuals *))FX_RegisterAsset_Material);
+        (bool(*)(const char *, FxElemVisuals *))FX_RegisterAsset_Material);
 }
 
-bool __cdecl FX_ParseCloud(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseCloud(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseAssetArray_FxElemVisuals_32_(
         parse,
         4u,
         edElemDef,
         &edElemDef->visuals,
-        (bool(__cdecl *)(const char *, FxElemVisuals *))FX_RegisterAsset_Material);
+        (bool(*)(const char *, FxElemVisuals *))FX_RegisterAsset_Material);
 }
 
-bool __cdecl FX_ParseTail(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseTail(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseAssetArray_FxElemVisuals_32_(
         parse,
         2u,
         edElemDef,
         &edElemDef->visuals,
-        (bool(__cdecl *)(const char *, FxElemVisuals *))FX_RegisterAsset_Material);
+        (bool(*)(const char *, FxElemVisuals *))FX_RegisterAsset_Material);
 }
 
-bool __cdecl FX_ParseTrail(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseTrail(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseAssetArray_FxElemVisuals_32_(
         parse,
         3u,
         edElemDef,
         &edElemDef->visuals,
-        (bool(__cdecl *)(const char *, FxElemVisuals *))FX_RegisterAsset_Material);
+        (bool(*)(const char *, FxElemVisuals *))FX_RegisterAsset_Material);
 }
 
-bool __cdecl FX_ParseAssetArray_FxElemMarkVisuals_16_(
+bool FX_ParseAssetArray_FxElemMarkVisuals_16_(
     const char **parse,
     uint8_t elemType,
     FxEditorElemDef *edElemDef,
     FxElemMarkVisuals(*visualsArray)[16],
-    bool(__cdecl *RegisterAsset)(const char *, FxElemMarkVisuals *))
+    bool(*RegisterAsset)(const char *, FxElemMarkVisuals *))
 {
     char name[264]; // [esp+0h] [ebp-110h] BYREF
     const char *token; // [esp+10Ch] [ebp-4h]
@@ -758,7 +758,7 @@ bool __cdecl FX_ParseAssetArray_FxElemMarkVisuals_16_(
     return 0;
 }
 
-bool __cdecl FX_RegisterMarkMaterials(const char *materialName, Material **materials)
+bool FX_RegisterMarkMaterials(const char *materialName, Material **materials)
 {
     Material *v2; // eax
     char materialNameWithPrefix[260]; // [esp+14h] [ebp-118h] BYREF
@@ -782,12 +782,12 @@ bool __cdecl FX_RegisterMarkMaterials(const char *materialName, Material **mater
     return success;
 }
 
-bool __cdecl FX_RegisterAsset_DecalMaterials(const char *name, FxElemMarkVisuals *visuals)
+bool FX_RegisterAsset_DecalMaterials(const char *name, FxElemMarkVisuals *visuals)
 {
     return FX_RegisterMarkMaterials(name, visuals->materials);
 }
 
-bool __cdecl FX_ParseDecal(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseDecal(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseAssetArray_FxElemMarkVisuals_16_(
         parse,
@@ -797,63 +797,63 @@ bool __cdecl FX_ParseDecal(const char **parse, FxEditorElemDef *edElemDef)
         FX_RegisterAsset_DecalMaterials);
 }
 
-BOOL __cdecl FX_RegisterAsset_Model(const char *name, FxElemVisuals *visuals)
+BOOL FX_RegisterAsset_Model(const char *name, FxElemVisuals *visuals)
 {
     visuals->anonymous = FX_RegisterModel(name);
     return visuals->anonymous != 0;
 }
 
-bool __cdecl FX_ParseModel(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseModel(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseAssetArray_FxElemVisuals_32_(
         parse,
         5u,
         edElemDef,
         &edElemDef->visuals,
-        (bool(__cdecl *)(const char *, FxElemVisuals *))FX_RegisterAsset_Model);
+        (bool(*)(const char *, FxElemVisuals *))FX_RegisterAsset_Model);
 }
 
-bool __cdecl FX_ParseLight(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseLight(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_SetEditorElemType(edElemDef, 6u);
 }
 
 
-bool __cdecl FX_ParseSpotLight(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseSpotLight(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_SetEditorElemType(edElemDef, 7u);
 }
 
-BOOL __cdecl FX_RegisterAsset_EffectDef(char *name, FxElemVisuals *visuals)
+BOOL FX_RegisterAsset_EffectDef(char *name, FxElemVisuals *visuals)
 {
     visuals->anonymous = FX_Register(name);
     return visuals->anonymous != 0;
 }
 
-bool __cdecl FX_ParseRunner(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseRunner(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseAssetArray_FxElemVisuals_32_(
         parse,
         0xAu,
         edElemDef,
         &edElemDef->visuals,
-        (bool(__cdecl *)(const char *, FxElemVisuals *))FX_RegisterAsset_EffectDef);
+        (bool(*)(const char *, FxElemVisuals *))FX_RegisterAsset_EffectDef);
 }
 
-char __cdecl FX_RegisterAsset_SoundAliasName(char *name, FxElemVisuals *visuals)
+char FX_RegisterAsset_SoundAliasName(char *name, FxElemVisuals *visuals)
 {
     ReplaceString((const char **)visuals, name);
     return 1;
 }
 
-bool __cdecl FX_ParseSound(const char **parse, FxEditorElemDef *edElemDef)
+bool FX_ParseSound(const char **parse, FxEditorElemDef *edElemDef)
 {
     return FX_ParseAssetArray_FxElemVisuals_32_(
         parse,
         8u,
         edElemDef,
         &edElemDef->visuals,
-        (bool(__cdecl *)(const char *, FxElemVisuals *))FX_RegisterAsset_SoundAliasName);
+        (bool(*)(const char *, FxElemVisuals *))FX_RegisterAsset_SoundAliasName);
 }
 
 const FxElemField s_elemFields[69] =
@@ -929,7 +929,7 @@ const FxElemField s_elemFields[69] =
   { "sound", &FX_ParseSound }
 }; // idb
 
-bool __cdecl FX_ParseEditorElemField(const char **parse, FxEditorElemDef *edElemDef, const char *token)
+bool FX_ParseEditorElemField(const char **parse, FxEditorElemDef *edElemDef, const char *token)
 {
     uint32_t fieldIndex; // [esp+14h] [ebp-4h]
     uint32_t fieldIndexa; // [esp+14h] [ebp-4h]
@@ -946,7 +946,7 @@ bool __cdecl FX_ParseEditorElemField(const char **parse, FxEditorElemDef *edElem
     return 0;
 }
 
-char __cdecl FX_ParseEditorElem(int version, const char **parse, FxEditorElemDef *edElemDef)
+char FX_ParseEditorElem(int version, const char **parse, FxEditorElemDef *edElemDef)
 {
     parseInfo_t *token; // [esp+0h] [ebp-4h]
 
@@ -977,7 +977,7 @@ char __cdecl FX_ParseEditorElem(int version, const char **parse, FxEditorElemDef
     return 0;
 }
 
-char __cdecl FX_ParseEditorEffect(const char **parse, FxEditorEffectDef *edEffectDef)
+char FX_ParseEditorEffect(const char **parse, FxEditorEffectDef *edEffectDef)
 {
     int version; // [esp+0h] [ebp-8h]
     parseInfo_t *token; // [esp+4h] [ebp-4h]
@@ -1012,7 +1012,7 @@ char __cdecl FX_ParseEditorEffect(const char **parse, FxEditorEffectDef *edEffec
     }
 }
 
-char __cdecl FX_LoadEditorEffectFromBuffer(
+char FX_LoadEditorEffectFromBuffer(
     const char *buffer,
     const char *parseSessionName,
     FxEditorEffectDef *edEffectDef)
@@ -1039,7 +1039,7 @@ char __cdecl FX_LoadEditorEffectFromBuffer(
     return success;
 }
 
-bool __cdecl FX_LoadEditorEffect(const char *name, FxEditorEffectDef *edEffectDef)
+bool FX_LoadEditorEffect(const char *name, FxEditorEffectDef *edEffectDef)
 {
     char v3; // [esp+3h] [ebp-5Dh]
     FxEditorEffectDef *v4; // [esp+8h] [ebp-58h]
@@ -1081,14 +1081,14 @@ void* FX_AllocMem(uint32_t size)
     return Hunk_AllocAlign(size, 4, "FX_Alloc", 8);
 }
 
-PhysPreset *__cdecl FX_RegisterPhysPreset(const char *name)
+PhysPreset *FX_RegisterPhysPreset(const char *name)
 {
     if (!name)
         MyAssertHandler(".\\EffectsCore\\fx_load_obj.cpp", 246, 0, "%s", "name");
-    return PhysPresetPrecache(name, (void *(__cdecl *)(int))Hunk_AllocPhysPresetPrecache);
+    return PhysPresetPrecache(name, (void *(*)(int))Hunk_AllocPhysPresetPrecache);
 }
 
-const FxEffectDef *__cdecl FX_LoadFailed(const char *name)
+const FxEffectDef *FX_LoadFailed(const char *name)
 {
     char v2; // [esp+3h] [ebp-55h]
     _BYTE *v3; // [esp+8h] [ebp-50h]
@@ -1142,7 +1142,7 @@ const FxEffectDef *__cdecl FX_LoadFailed(const char *name)
     return (const FxEffectDef *)effectDef;
 }
 
-const FxEffectDef *__cdecl FX_Load(const char *name)
+const FxEffectDef *FX_Load(const char *name)
 {
     const FxEffectDef *v5; // [esp+10h] [ebp-10B54h]
     FxEditorEffectDef edEffectDef; // [esp+14h] [ebp-10B50h] BYREF
@@ -1159,7 +1159,7 @@ const FxEffectDef *__cdecl FX_Load(const char *name)
     }
 }
 
-int __cdecl FX_HashName(const char *name)
+int FX_HashName(const char *name)
 {
     __int16 hash; // [esp+4h] [ebp-Ch]
     char letter; // [esp+Bh] [ebp-5h]
@@ -1185,7 +1185,7 @@ int __cdecl FX_HashName(const char *name)
     return hash & 0x1FF;
 }
 
-int __cdecl FX_GetHashIndex(const char *name, bool *exists)
+int FX_GetHashIndex(const char *name, bool *exists)
 {
     int hashIndex; // [esp+0h] [ebp-4h]
 
@@ -1205,7 +1205,7 @@ int __cdecl FX_GetHashIndex(const char *name, bool *exists)
     return hashIndex;
 }
 
-const FxEffectDef *__cdecl FX_Register_LoadObj(const char *name)
+const FxEffectDef *FX_Register_LoadObj(const char *name)
 {
     int hashIndex; // [esp+0h] [ebp-8h]
     bool exists; // [esp+7h] [ebp-1h] BYREF
@@ -1218,7 +1218,7 @@ const FxEffectDef *__cdecl FX_Register_LoadObj(const char *name)
     return fx_load.effectDefs[hashIndex];
 }
 
-const FxEffectDef *__cdecl FX_Register(const char *name)
+const FxEffectDef *FX_Register(const char *name)
 {
     if (IsFastFileLoad())
         return FX_Register_FastFile(name);
@@ -1226,7 +1226,7 @@ const FxEffectDef *__cdecl FX_Register(const char *name)
         return FX_Register_LoadObj(name);
 }
 
-const FxEffectDef *__cdecl FX_Register_FastFile(const char *name)
+const FxEffectDef *FX_Register_FastFile(const char *name)
 {
     if (!I_strncmp(name, "fx/", 3))
         MyAssertHandler(
@@ -1239,12 +1239,12 @@ const FxEffectDef *__cdecl FX_Register_FastFile(const char *name)
     return DB_FindXAssetHeader(ASSET_TYPE_FX, name).fx;
 }
 
-void __cdecl FX_RegisterDefaultEffect()
+void FX_RegisterDefaultEffect()
 {
     fx_load.defaultEffect = FX_Register("misc/missing_fx");
 }
 
-void __cdecl FX_ForEachEffectDef(void(__cdecl* callback)(const FxEffectDef*, void*), void* data)
+void FX_ForEachEffectDef(void(* callback)(const FxEffectDef*, void*), void* data)
 {
     int hashIndex; // [esp+0h] [ebp-4h]
 

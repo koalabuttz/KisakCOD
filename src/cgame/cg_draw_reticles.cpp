@@ -14,7 +14,7 @@
 #include <cgame/cg_main.h>
 #endif
 
-void __cdecl CG_CalcCrosshairPosition(const cg_s *cgameGlob, float *x, float *y)
+void CG_CalcCrosshairPosition(const cg_s *cgameGlob, float *x, float *y)
 {
     double v3; // st7
     double v4; // st7
@@ -45,7 +45,7 @@ void __cdecl CG_CalcCrosshairPosition(const cg_s *cgameGlob, float *x, float *y)
     }
 }
 
-char __cdecl CG_GetWeapReticleZoom(const cg_s *cgameGlob, float *zoom)
+char CG_GetWeapReticleZoom(const cg_s *cgameGlob, float *zoom)
 {
     int32_t weapIndex; // [esp+0h] [ebp-Ch]
     float fPosLerp; // [esp+4h] [ebp-8h]
@@ -86,7 +86,7 @@ char __cdecl CG_GetWeapReticleZoom(const cg_s *cgameGlob, float *zoom)
     return 1;
 }
 
-void __cdecl CG_DrawNightVisionOverlay(int32_t localClientNum)
+void CG_DrawNightVisionOverlay(int32_t localClientNum)
 {
     iassert(localClientNum == 0);
 
@@ -112,7 +112,7 @@ void __cdecl CG_DrawNightVisionOverlay(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_DrawCrosshair(int32_t localClientNum)
+void CG_DrawCrosshair(int32_t localClientNum)
 {
     WeaponDef *weapDefTurret; // [esp+Ch] [ebp-44h]
     float posLerp; // [esp+10h] [ebp-40h]
@@ -201,7 +201,7 @@ void __cdecl CG_DrawCrosshair(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_DrawAdsOverlay(
+void CG_DrawAdsOverlay(
     int32_t localClientNum,
     const WeaponDef *weapDef,
     const float *color,
@@ -339,7 +339,7 @@ void __cdecl CG_DrawAdsOverlay(
     }
 }
 
-void __cdecl CG_DrawFrameOverlay(
+void CG_DrawFrameOverlay(
     float innerLeft,
     float innerRight,
     float innerTop,
@@ -380,12 +380,12 @@ void __cdecl CG_DrawFrameOverlay(
     }
 }
 
-bool __cdecl CG_UsingLowResViewPort(int32_t localClientNum)
+bool CG_UsingLowResViewPort(int32_t localClientNum)
 {
     return scrPlaceView[localClientNum].realViewportSize[1] <= 480.0;
 }
 
-void __cdecl CG_UpdateScissorViewport(refdef_s *refdef, float *drawPos, float *drawSize)
+void CG_UpdateScissorViewport(refdef_s *refdef, float *drawPos, float *drawSize)
 {
     uint32_t v3; // [esp+0h] [ebp-54h]
     uint32_t v4; // [esp+4h] [ebp-50h]
@@ -447,7 +447,7 @@ void __cdecl CG_UpdateScissorViewport(refdef_s *refdef, float *drawPos, float *d
     refdef->scissorViewport.height = v3 - refdef->scissorViewport.y;
 }
 
-double __cdecl CG_DrawWeapReticle(int32_t localClientNum)
+double CG_DrawWeapReticle(int32_t localClientNum)
 {
     int32_t weapIndex; // [esp+14h] [ebp-28h]
     float crossHairAlpha; // [esp+18h] [ebp-24h]
@@ -480,7 +480,7 @@ double __cdecl CG_DrawWeapReticle(int32_t localClientNum)
     return crossHairAlpha;
 }
 
-void __cdecl CG_CalcCrosshairColor(int32_t localClientNum, float alpha, float *color)
+void CG_CalcCrosshairColor(int32_t localClientNum, float alpha, float *color)
 {
     WeaponDef *weapDef; // [esp+14h] [ebp-4h]
     cg_s *cgameGlob;
@@ -543,7 +543,7 @@ LABEL_22:
     color[3] = alpha * cg_crosshairAlpha->current.value;
 }
 
-void __cdecl CG_DrawTurretCrossHair(int32_t localClientNum)
+void CG_DrawTurretCrossHair(int32_t localClientNum)
 {
     centity_s *cent; // [esp+38h] [ebp-38h]
     float drawSize; // [esp+44h] [ebp-2Ch]
@@ -598,7 +598,7 @@ void __cdecl CG_DrawTurretCrossHair(int32_t localClientNum)
     }
 }
 
-char __cdecl AllowedToDrawCrosshair(int32_t localClientNum, const playerState_s *predictedPlayerState)
+char AllowedToDrawCrosshair(int32_t localClientNum, const playerState_s *predictedPlayerState)
 {
     iassert(predictedPlayerState);
     iassert(cg_paused);
@@ -626,7 +626,7 @@ char __cdecl AllowedToDrawCrosshair(int32_t localClientNum, const playerState_s 
     return 1;
 }
 
-bool __cdecl CG_IsReticleTurnedOff()
+bool CG_IsReticleTurnedOff()
 {
 #ifdef KISAK_MP
     return !cg_drawCrosshair->current.enabled || !UI_ShouldDrawCrosshair();
@@ -635,7 +635,7 @@ bool __cdecl CG_IsReticleTurnedOff()
 #endif
 }
 
-void __cdecl CG_DrawAdsAimIndicator(
+void CG_DrawAdsAimIndicator(
     int32_t localClientNum,
     const WeaponDef *weapDef,
     const float *color,
@@ -666,7 +666,7 @@ void __cdecl CG_DrawAdsAimIndicator(
     }
 }
 
-void __cdecl CG_TransitionToAds(
+void CG_TransitionToAds(
     const cg_s *cgameGlob,
     const WeaponDef *weapDef,
     float posLerp,
@@ -714,7 +714,7 @@ void __cdecl CG_TransitionToAds(
     *transShift = fa * 240.0 / cgameGlob->refdef.tanHalfFovY * v5;
 }
 
-void __cdecl CG_DrawReticleCenter(
+void CG_DrawReticleCenter(
     int32_t localClientNum,
     const WeaponDef *weapDef,
     const float *color,
@@ -763,7 +763,7 @@ void __cdecl CG_DrawReticleCenter(
     }
 }
 
-void __cdecl CG_DrawReticleSides(
+void CG_DrawReticleSides(
     int32_t localClientNum,
     const WeaponDef *weapDef,
     const float *baseColor,
@@ -858,7 +858,7 @@ void __cdecl CG_DrawReticleSides(
     }
 }
 
-void __cdecl CG_CalcReticleSpread(
+void CG_CalcReticleSpread(
     const cg_s *cgameGlob,
     const WeaponDef *weapDef,
     const float *drawSize,
@@ -884,7 +884,7 @@ void __cdecl CG_CalcReticleSpread(
     spread[1] = scale - weapDef->fHipReticleSidePos * drawSize[1];
 }
 
-void __cdecl CG_CalcReticleColor(const float *baseColor, float alpha, float aimSpreadScale, float *reticleColor)
+void CG_CalcReticleColor(const float *baseColor, float alpha, float aimSpreadScale, float *reticleColor)
 {
     iassert(cg_crosshairAlpha);
     iassert(cg_crosshairAlphaMin);
@@ -901,7 +901,7 @@ void __cdecl CG_CalcReticleColor(const float *baseColor, float alpha, float aimS
     iassert((reticleColor[3] >= 0 && reticleColor[3] <= 1.0f));
 }
 
-void __cdecl CG_CalcReticleImageOffset(const float *drawSize, float *imageTexelOffset)
+void CG_CalcReticleImageOffset(const float *drawSize, float *imageTexelOffset)
 {
     *imageTexelOffset = *drawSize / 8.0;
     imageTexelOffset[1] = drawSize[1] / 8.0;

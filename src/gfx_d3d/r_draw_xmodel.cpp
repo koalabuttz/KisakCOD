@@ -13,7 +13,7 @@
 #include "r_dobj_skin.h"
 
 
-void __cdecl R_DrawXModelRigidModelSurf(GfxCmdBufContext context, XSurface *xsurf)
+void R_DrawXModelRigidModelSurf(GfxCmdBufContext context, XSurface *xsurf)
 {
     GfxCmdBufSourceState *ActiveWorldMatrix; // eax
     int vertexOffset0; // [esp+20h] [ebp-18h] BYREF
@@ -47,7 +47,7 @@ void __cdecl R_DrawXModelRigidModelSurf(GfxCmdBufContext context, XSurface *xsur
     }
 }
 
-void __cdecl R_GetWorldMatrixForModelSurf(const GfxModelRigidSurface *modelSurf, float4 eyeOffset, vector4 *worldMat)
+void R_GetWorldMatrixForModelSurf(const GfxModelRigidSurface *modelSurf, float4 eyeOffset, vector4 *worldMat)
 {
     float v3; // [esp+24h] [ebp-58h]
     float v4; // [esp+28h] [ebp-54h]
@@ -113,7 +113,7 @@ void __cdecl R_GetWorldMatrixForModelSurf(const GfxModelRigidSurface *modelSurf,
     worldMat->w.v[3] = worldMat->w.v[3] - eyeOffset.v[3];
 }
 
-uint32_t __cdecl R_DrawXModelRigidSurfLitInternal(
+uint32_t R_DrawXModelRigidSurfLitInternal(
     const GfxDrawSurf *drawSurfList,
     uint32_t drawSurfCount,
     GfxCmdBufContext context)
@@ -186,7 +186,7 @@ uint32_t __cdecl R_DrawXModelRigidSurfLitInternal(
     return drawSurfIndex;
 }
 
-uint32_t __cdecl R_DrawXModelRigidSurfLit(
+uint32_t R_DrawXModelRigidSurfLit(
     const GfxDrawSurf *drawSurfList,
     uint32_t drawSurfCount,
     GfxCmdBufContext context)
@@ -194,7 +194,7 @@ uint32_t __cdecl R_DrawXModelRigidSurfLit(
     return R_DrawXModelRigidSurfLitInternal(drawSurfList, drawSurfCount, context);
 }
 
-uint32_t __cdecl R_DrawXModelRigidSurfCameraInternal(
+uint32_t R_DrawXModelRigidSurfCameraInternal(
     const GfxDrawSurf *drawSurfList,
     uint32_t drawSurfCount,
     GfxCmdBufContext context)
@@ -263,7 +263,7 @@ uint32_t __cdecl R_DrawXModelRigidSurfCameraInternal(
     return drawSurfIndex;
 }
 
-uint32_t __cdecl R_DrawXModelRigidSurfCamera(
+uint32_t R_DrawXModelRigidSurfCamera(
     const GfxDrawSurf *drawSurfList,
     uint32_t drawSurfCount,
     GfxCmdBufContext context)
@@ -271,7 +271,7 @@ uint32_t __cdecl R_DrawXModelRigidSurfCamera(
     return R_DrawXModelRigidSurfCameraInternal(drawSurfList, drawSurfCount, context);
 }
 
-uint32_t __cdecl R_DrawXModelRigidSurfInternal(
+uint32_t R_DrawXModelRigidSurfInternal(
     const GfxDrawSurf *drawSurfList,
     uint32_t drawSurfCount,
     GfxCmdBufContext context)
@@ -316,7 +316,7 @@ uint32_t __cdecl R_DrawXModelRigidSurfInternal(
     return drawSurfIndex;
 }
 
-uint32_t __cdecl R_DrawXModelRigidSurf(
+uint32_t R_DrawXModelRigidSurf(
     const GfxDrawSurf *drawSurfList,
     uint32_t drawSurfCount,
     GfxCmdBufContext context)

@@ -22,7 +22,7 @@ const dvar_t *hud_flash_period_offhand;
 
 const char *offhandStrings[4] = { "", "WEAPON_FRAGGRENADE", "WEAPON_SMOKEGRENADE", "WEAPON_FLASHGRENADE"}; // idb
 
-void __cdecl CG_OffhandRegisterDvars()
+void CG_OffhandRegisterDvars()
 {
     DvarLimits min; // [esp+4h] [ebp-10h]
     DvarLimits mina; // [esp+4h] [ebp-10h]
@@ -45,7 +45,7 @@ void __cdecl CG_OffhandRegisterDvars()
         "Offhand weapons flash period on changing weapon");
 }
 
-void __cdecl CG_DrawOffHandIcon(
+void CG_DrawOffHandIcon(
     int32_t localClientNum,
     const rectDef_s *rect,
     float scale,
@@ -109,7 +109,7 @@ void __cdecl CG_DrawOffHandIcon(
     }
 }
 
-int32_t __cdecl GetBestOffhand(const playerState_s *predictedPlayerState, int32_t offhandClass)
+int32_t GetBestOffhand(const playerState_s *predictedPlayerState, int32_t offhandClass)
 {
     int32_t newOffhand; // [esp+0h] [ebp-4h]
 
@@ -119,7 +119,7 @@ int32_t __cdecl GetBestOffhand(const playerState_s *predictedPlayerState, int32_
     return newOffhand;
 }
 
-bool __cdecl IsOffHandDisplayVisible(const cg_s *cgameGlob)
+bool IsOffHandDisplayVisible(const cg_s *cgameGlob)
 {
 #ifdef KISAK_MP
     return cgameGlob->predictedPlayerState.pm_type < PM_DEAD && (cgameGlob->predictedPlayerState.weapFlags & 0x80) == 0;
@@ -135,7 +135,7 @@ bool __cdecl IsOffHandDisplayVisible(const cg_s *cgameGlob)
 #endif
 }
 
-void __cdecl CG_DrawOffHandHighlight(
+void CG_DrawOffHandHighlight(
     int32_t localClientNum,
     const rectDef_s *rect,
     float scale,
@@ -202,7 +202,7 @@ void __cdecl CG_DrawOffHandHighlight(
     }
 }
 
-void __cdecl OffHandFlash(const cg_s *cgameGlob, const float *base_color, float *out_color)
+void OffHandFlash(const cg_s *cgameGlob, const float *base_color, float *out_color)
 {
     float v3; // [esp+0h] [ebp-14h]
     float phi; // [esp+8h] [ebp-Ch]
@@ -233,7 +233,7 @@ void __cdecl OffHandFlash(const cg_s *cgameGlob, const float *base_color, float 
     }
 }
 
-int32_t __cdecl CalcOffHandAmmo(const playerState_s *predictedPlayerState, int32_t weaponType)
+int32_t CalcOffHandAmmo(const playerState_s *predictedPlayerState, int32_t weaponType)
 {
     int32_t ammoCount; // [esp+0h] [ebp-10h]
     uint32_t weapCount; // [esp+4h] [ebp-Ch]
@@ -258,7 +258,7 @@ int32_t __cdecl CalcOffHandAmmo(const playerState_s *predictedPlayerState, int32
     return ammoCount;
 }
 
-void __cdecl CG_DrawOffHandAmmo(
+void CG_DrawOffHandAmmo(
     int32_t localClientNum,
     const rectDef_s *rect,
     Font_s *font,
@@ -322,7 +322,7 @@ void __cdecl CG_DrawOffHandAmmo(
     }
 }
 
-void __cdecl CG_DrawOffHandName(
+void CG_DrawOffHandName(
     int32_t localClientNum,
     const rectDef_s *rect,
     Font_s *font,
@@ -371,7 +371,7 @@ void __cdecl CG_DrawOffHandName(
     }
 }
 
-void __cdecl CG_SwitchOffHandCmd(int32_t localClientNum)
+void CG_SwitchOffHandCmd(int32_t localClientNum)
 {
     uint32_t newOffhand; // [esp+4h] [ebp-8h]
     WeaponDef* weapDef; // [esp+8h] [ebp-4h]
@@ -389,7 +389,7 @@ void __cdecl CG_SwitchOffHandCmd(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_PrepOffHand(int32_t localClientNum, const entityState_s *ent, uint32_t weaponIndex)
+void CG_PrepOffHand(int32_t localClientNum, const entityState_s *ent, uint32_t weaponIndex)
 {
     WeaponDef *weapDef; // [esp+0h] [ebp-4h]
 
@@ -408,7 +408,7 @@ void __cdecl CG_PrepOffHand(int32_t localClientNum, const entityState_s *ent, ui
         CG_PlayEntitySoundAlias(localClientNum, ent->number, weapDef->pullbackSound);
 }
 
-void __cdecl CG_UseOffHand(int32_t localClientNum, const centity_s *cent, uint32_t weaponIndex)
+void CG_UseOffHand(int32_t localClientNum, const centity_s *cent, uint32_t weaponIndex)
 {
     const weaponInfo_s *weapInfo; // [esp+0h] [ebp-1Ch]
     DObj_s *obj; // [esp+4h] [ebp-18h]
@@ -450,7 +450,7 @@ void __cdecl CG_UseOffHand(int32_t localClientNum, const centity_s *cent, uint32
     }
 }
 
-void __cdecl CG_SetEquippedOffHand(int32_t localClientNum, uint32_t offHandIndex)
+void CG_SetEquippedOffHand(int32_t localClientNum, uint32_t offHandIndex)
 {
     WeaponDef *WeaponDef; // eax
 

@@ -17,7 +17,7 @@ extern cmd_function_s Dvar_RegisterInt_f_VAR;
 extern cmd_function_s Dvar_RegisterFloat_f_VAR;
 extern cmd_function_s Dvar_SetU_f_VAR;
 
-void __cdecl Dvar_AddCommands()
+void Dvar_AddCommands()
 {
     Cmd_AddCommandInternal("toggle", Dvar_Toggle_f, &Dvar_Toggle_f_VAR);
     Cmd_AddCommandInternal("togglep", Dvar_TogglePrint_f, &Dvar_TogglePrint_f_VAR);

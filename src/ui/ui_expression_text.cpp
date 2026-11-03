@@ -9,7 +9,7 @@ bool UI_TryLiteralExpression(const statement_s *statement,Operand *result) {
     *result=value.data.operand;return true;
 }
 
-char *__cdecl GetExpressionResultString(int localClientNum, const statement_s *statement)
+char *GetExpressionResultString(int localClientNum, const statement_s *statement)
 {
     static char resultString_2[256];
 

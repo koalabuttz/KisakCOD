@@ -44,13 +44,13 @@ unsigned __int16 *g_AIEV_scrConst_table[23] =
 
 int g_listenerCount;
 
-void __cdecl TRACK_actor_event_listener()
+void TRACK_actor_event_listener()
 {
     track_static_alloc_internal(g_AIEVlisteners, 256, "g_AIEVlisteners", 5);
     track_static_alloc_internal(g_AIEV_scrConst_table, 92, "g_AIEV_scrConst_table", 5);
 }
 
-void __cdecl Actor_EventListener_Init()
+void Actor_EventListener_Init()
 {
     g_listenerCount = 0;
 
@@ -61,17 +61,17 @@ void __cdecl Actor_EventListener_Init()
     }
 }
 
-void __cdecl Actor_EventListener_SetCount(int listenerCount)
+void Actor_EventListener_SetCount(int listenerCount)
 {
     g_listenerCount = listenerCount;
 }
 
-int __cdecl Actor_EventListener_GetCount()
+int Actor_EventListener_GetCount()
 {
     return g_listenerCount;
 }
 
-int __cdecl Actor_FindEventFromString(unsigned __int16 eventString)
+int Actor_FindEventFromString(unsigned __int16 eventString)
 {
     for (int i = 0; i < ARRAY_COUNT(g_AIEV_scrConst_table); ++i)
     {
@@ -83,7 +83,7 @@ int __cdecl Actor_FindEventFromString(unsigned __int16 eventString)
     return 0;
 }
 
-void __cdecl Actor_EventListener_Add(int entIndex, unsigned __int16 eventString)
+void Actor_EventListener_Add(int entIndex, unsigned __int16 eventString)
 {
     int EventFromString; // r29
     int v4; // r11
@@ -133,7 +133,7 @@ void __cdecl Actor_EventListener_Add(int entIndex, unsigned __int16 eventString)
     }
 }
 
-void __cdecl RemoveSwapWithLast(unsigned int listenerIndex)
+void RemoveSwapWithLast(unsigned int listenerIndex)
 {
     unsigned int v2; // r7
     int v3; // r10
@@ -162,7 +162,7 @@ void __cdecl RemoveSwapWithLast(unsigned int listenerIndex)
     g_AIEVlisteners[v6].events = 0;
 }
 
-void __cdecl Actor_EventListener_Remove(int entIndex, unsigned __int16 eventString)
+void Actor_EventListener_Remove(int entIndex, unsigned __int16 eventString)
 {
     int EventFromString; // r4
     unsigned int v4; // r31
@@ -183,7 +183,7 @@ void __cdecl Actor_EventListener_Remove(int entIndex, unsigned __int16 eventStri
     }
 }
 
-void __cdecl Actor_EventListener_RemoveEntity(int entIndex)
+void Actor_EventListener_RemoveEntity(int entIndex)
 {
     unsigned int v1; // r10
     AIEventListener *i; // r11
@@ -200,7 +200,7 @@ void __cdecl Actor_EventListener_RemoveEntity(int entIndex)
     }
 }
 
-int __cdecl Actor_EventListener_Next(int index, int event, int teamFlags)
+int Actor_EventListener_Next(int index, int event, int teamFlags)
 {
     int v3; // r30
     AIEventListener *i; // r31
@@ -223,7 +223,7 @@ int __cdecl Actor_EventListener_Next(int index, int event, int teamFlags)
     return v3;
 }
 
-gentity_s *__cdecl Actor_EventListener_GetEntity(unsigned int index)
+gentity_s *Actor_EventListener_GetEntity(unsigned int index)
 {
     if (index >= 0x20)
         MyAssertHandler(
@@ -236,7 +236,7 @@ gentity_s *__cdecl Actor_EventListener_GetEntity(unsigned int index)
     return &g_entities[g_AIEVlisteners[index].entIndex];
 }
 
-void __cdecl Actor_EventListener_NotifyToListener(
+void Actor_EventListener_NotifyToListener(
     gentity_s *listener,
     gentity_s *originator,
     ai_event_t event,
@@ -262,7 +262,7 @@ void __cdecl Actor_EventListener_NotifyToListener(
     }
 }
 
-void __cdecl Actor_DumpEventListners()
+void Actor_DumpEventListners()
 {
     int v0; // r30
     AIEventListener *v1; // r31
@@ -292,7 +292,7 @@ void __cdecl Actor_DumpEventListners()
     }
 }
 
-int __cdecl Actor_EventListener_First(int event, int teamFlags)
+int Actor_EventListener_First(int event, int teamFlags)
 {
     return Actor_EventListener_Next(-1, event, teamFlags);
 }

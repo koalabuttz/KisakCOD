@@ -34,10 +34,10 @@ struct EntHandle // sizeof=0x4 // (SP/MP same)
 };
 static_assert(sizeof(EntHandle) == 0x4);
 
-void __cdecl EntHandleDissociate(gentity_s *ent);
-void __cdecl EntHandleDissociateInternal(EntHandleList *entHandleList);
-void __cdecl RemoveEntHandleInfo(EntHandleList *entHandleList, uint32_t oldInfoIndex);
-uint32_t __cdecl AddEntHandleInfo(EntHandleList *entHandleList, void *handle);
+void EntHandleDissociate(gentity_s *ent);
+void EntHandleDissociateInternal(EntHandleList *entHandleList);
+void RemoveEntHandleInfo(EntHandleList *entHandleList, uint32_t oldInfoIndex);
+uint32_t AddEntHandleInfo(EntHandleList *entHandleList, void *handle);
 
 
 #ifdef KISAK_SP

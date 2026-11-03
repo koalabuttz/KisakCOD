@@ -6,7 +6,7 @@
 
 // guessing this is in its own file because they have some fancy XBOX ifdef with handmade ASM
 
-void __cdecl AngleVectors(const float *angles, float *forward, float *right, float *up)
+void AngleVectors(const float *angles, float *forward, float *right, float *up)
 {
     float		angle;
     float		sr, sp, sy, cr, cp, cy;
@@ -44,7 +44,7 @@ void __cdecl AngleVectors(const float *angles, float *forward, float *right, flo
 	}
 }
 
-void __cdecl AnglesToAxis(const float *angles, float axis[3][3])
+void AnglesToAxis(const float *angles, float axis[3][3])
 {
     // This is basically AngleVectors() and then a right subtract, 
     // but it's been optimized to not calculate and then negate right in this function
@@ -76,7 +76,7 @@ void __cdecl AnglesToAxis(const float *angles, float axis[3][3])
     axis[2][2] = cr*cp;
 }
 
-float __cdecl Vec4Normalize(float *v)
+float Vec4Normalize(float *v)
 {
     float v2; // [esp+0h] [ebp-Ch]
     float ilength; // [esp+4h] [ebp-8h]
@@ -95,7 +95,7 @@ float __cdecl Vec4Normalize(float *v)
     return v2;
 }
 
-void __cdecl AnglesToQuat(const float *angles, float *quat)
+void AnglesToQuat(const float *angles, float *quat)
 {
     float axis[3][3]; // [esp+0h] [ebp-24h] BYREF
 

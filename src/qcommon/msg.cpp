@@ -218,12 +218,12 @@ const netField_t playerStateFields[143] =
 
 
 
-void __cdecl TRACK_msg()
+void TRACK_msg()
 {
     track_static_alloc_internal((void *)playerStateFields, 1716, "playerStateFields", 9);
 }
 
-void __cdecl MSG_Init(msg_t *buf, unsigned __int8 *data, int length)
+void MSG_Init(msg_t *buf, unsigned __int8 *data, int length)
 {
     memset(buf, 0, sizeof(msg_t));
 
@@ -231,19 +231,19 @@ void __cdecl MSG_Init(msg_t *buf, unsigned __int8 *data, int length)
     buf->maxsize = length;
 }
 
-void __cdecl MSG_BeginReading(msg_t *msg)
+void MSG_BeginReading(msg_t *msg)
 {
     msg->overflowed = 0;
     msg->readcount = 0;
     msg->bit = 0;
 }
 
-void __cdecl MSG_Truncate(msg_t *msg)
+void MSG_Truncate(msg_t *msg)
 {
     msg->cursize = msg->readcount;
 }
 
-void __cdecl MSG_WriteBit0(msg_t *msg)
+void MSG_WriteBit0(msg_t *msg)
 {
     int cursize; // r11
     unsigned __int8 *data; // r9
@@ -266,7 +266,7 @@ void __cdecl MSG_WriteBit0(msg_t *msg)
     }
 }
 
-void __cdecl MSG_WriteBit1(msg_t *msg)
+void MSG_WriteBit1(msg_t *msg)
 {
     int cursize; // r11
     int v3; // r9
@@ -292,7 +292,7 @@ void __cdecl MSG_WriteBit1(msg_t *msg)
     }
 }
 
-void __cdecl MSG_WriteBits(msg_t *msg, int value, unsigned int bits)
+void MSG_WriteBits(msg_t *msg, int value, unsigned int bits)
 {
     unsigned int v3; // r30
     int v6; // r9
@@ -326,7 +326,7 @@ void __cdecl MSG_WriteBits(msg_t *msg, int value, unsigned int bits)
     }
 }
 
-int __cdecl MSG_ReadBits(msg_t *msg, unsigned int bits)
+int MSG_ReadBits(msg_t *msg, unsigned int bits)
 {
     int result; // r3
     signed int i; // r11
@@ -363,7 +363,7 @@ int __cdecl MSG_ReadBits(msg_t *msg, unsigned int bits)
     return result;
 }
 
-int __cdecl MSG_ReadBit(msg_t *msg)
+int MSG_ReadBit(msg_t *msg)
 {
     int v2; // r30
     int readcount; // r11
@@ -388,7 +388,7 @@ int __cdecl MSG_ReadBit(msg_t *msg)
     return (Byte >> v2) & 1;
 }
 
-void __cdecl MSG_WriteByte(msg_t *msg, unsigned __int8 c)
+void MSG_WriteByte(msg_t *msg, unsigned __int8 c)
 {
     int cursize; // r11
 
@@ -404,7 +404,7 @@ void __cdecl MSG_WriteByte(msg_t *msg, unsigned __int8 c)
     }
 }
 
-void __cdecl MSG_WriteData(msg_t *buf, unsigned char *data, int length)
+void MSG_WriteData(msg_t *buf, unsigned char *data, int length)
 {
     int i; // r10
     int cursize; // r11
@@ -424,7 +424,7 @@ void __cdecl MSG_WriteData(msg_t *buf, unsigned char *data, int length)
     }
 }
 
-void __cdecl MSG_WriteShort(msg_t *msg, __int16 c)
+void MSG_WriteShort(msg_t *msg, __int16 c)
 {
     int cursize; // r11
 
@@ -440,7 +440,7 @@ void __cdecl MSG_WriteShort(msg_t *msg, __int16 c)
     }
 }
 
-void __cdecl MSG_WriteLong(msg_t *msg, int c)
+void MSG_WriteLong(msg_t *msg, int c)
 {
     int cursize; // r11
 
@@ -456,7 +456,7 @@ void __cdecl MSG_WriteLong(msg_t *msg, int c)
     }
 }
 
-void __cdecl MSG_WriteFloat(msg_t *sb, double f)
+void MSG_WriteFloat(msg_t *sb, double f)
 {
     int v3; // [sp+50h] [-20h]
 
@@ -465,7 +465,7 @@ void __cdecl MSG_WriteFloat(msg_t *sb, double f)
     MSG_WriteBits(sb, v3, 0x20u);
 }
 
-void __cdecl MSG_WriteString(msg_t *sb, char *s)
+void MSG_WriteString(msg_t *sb, char *s)
 {
     const char *v4; // r11
 
@@ -476,7 +476,7 @@ void __cdecl MSG_WriteString(msg_t *sb, char *s)
     MSG_WriteData(sb, (unsigned char*)s, v4 - s);
 }
 
-void __cdecl MSG_WriteAngle(msg_t *sb, double f)
+void MSG_WriteAngle(msg_t *sb, double f)
 {
     int cursize; // r11
 
@@ -492,7 +492,7 @@ void __cdecl MSG_WriteAngle(msg_t *sb, double f)
     }
 }
 
-void __cdecl MSG_WriteAngle16(msg_t *sb, double f)
+void MSG_WriteAngle16(msg_t *sb, double f)
 {
     int cursize; // r11
 
@@ -508,7 +508,7 @@ void __cdecl MSG_WriteAngle16(msg_t *sb, double f)
     }
 }
 
-void __cdecl MSG_WriteInt64(msg_t *msg, unsigned __int64 c)
+void MSG_WriteInt64(msg_t *msg, unsigned __int64 c)
 {
     int newsize; // [esp+4h] [ebp-4h]
 
@@ -526,7 +526,7 @@ void __cdecl MSG_WriteInt64(msg_t *msg, unsigned __int64 c)
     }
 }
 
-int __cdecl MSG_ReadByte(msg_t *msg)
+int MSG_ReadByte(msg_t *msg)
 {
     int readcount; // r10
     int result; // r3
@@ -545,7 +545,7 @@ int __cdecl MSG_ReadByte(msg_t *msg)
     return result;
 }
 
-int __cdecl MSG_ReadShort(msg_t *msg)
+int MSG_ReadShort(msg_t *msg)
 {
     int readcount; // r10
     int v3; // r9
@@ -568,7 +568,7 @@ int __cdecl MSG_ReadShort(msg_t *msg)
     return result;
 }
 
-int __cdecl MSG_ReadLong(msg_t *msg)
+int MSG_ReadLong(msg_t *msg)
 {
     int readcount; // r10
     int result; // r3
@@ -587,7 +587,7 @@ int __cdecl MSG_ReadLong(msg_t *msg)
     return result;
 }
 
-float __cdecl MSG_ReadFloat(msg_t *msg)
+float MSG_ReadFloat(msg_t *msg)
 {
     float result; // fp1
     float f; // [sp+50h] [-20h]
@@ -606,7 +606,7 @@ float __cdecl MSG_ReadFloat(msg_t *msg)
     return result;
 }
 
-int __cdecl MSG_ReadString(msg_t *msg, char *buffer, int bufsize)
+int MSG_ReadString(msg_t *msg, char *buffer, int bufsize)
 {
     int i; // r10
     int readcount; // r11
@@ -647,7 +647,7 @@ int __cdecl MSG_ReadString(msg_t *msg, char *buffer, int bufsize)
     return 1;
 }
 
-float __cdecl MSG_ReadAngle16(msg_t *msg)
+float MSG_ReadAngle16(msg_t *msg)
 {
     int readcount = msg->readcount;
     int raw;
@@ -664,7 +664,7 @@ float __cdecl MSG_ReadAngle16(msg_t *msg)
     return (float)raw * DEGREES_PER_SHORT_F;
 }
 
-void __cdecl MSG_ReadData(msg_t *msg, _BYTE *data, int len)
+void MSG_ReadData(msg_t *msg, _BYTE *data, int len)
 {
     int i; // r10
     int readcount; // r11
@@ -689,7 +689,7 @@ void __cdecl MSG_ReadData(msg_t *msg, _BYTE *data, int len)
     }
 }
 
-int __cdecl MSG_ReadInt64(msg_t *msg)
+int MSG_ReadInt64(msg_t *msg)
 {
     int readcount; // r4
     int v3; // r30
@@ -714,7 +714,7 @@ int __cdecl MSG_ReadInt64(msg_t *msg)
     return HIDWORD(v5);
 }
 
-void __cdecl MSG_WriteDelta(msg_t *msg, int oldV, int newV, unsigned int bits)
+void MSG_WriteDelta(msg_t *msg, int oldV, int newV, unsigned int bits)
 {
     if (oldV == newV)
     {
@@ -727,7 +727,7 @@ void __cdecl MSG_WriteDelta(msg_t *msg, int oldV, int newV, unsigned int bits)
     }
 }
 
-int __cdecl MSG_ReadDelta(msg_t *msg, int oldV, unsigned int bits)
+int MSG_ReadDelta(msg_t *msg, int oldV, unsigned int bits)
 {
     if (MSG_ReadBits(msg, 1u))
         return MSG_ReadBits(msg, bits);
@@ -735,7 +735,7 @@ int __cdecl MSG_ReadDelta(msg_t *msg, int oldV, unsigned int bits)
         return oldV;
 }
 
-void __cdecl MSG_WriteDeltaFloat(msg_t *msg, double oldV, double newV)
+void MSG_WriteDeltaFloat(msg_t *msg, double oldV, double newV)
 {
     msg_t *v3; // r31
     unsigned int v4; // r5
@@ -759,7 +759,7 @@ void __cdecl MSG_WriteDeltaFloat(msg_t *msg, double oldV, double newV)
     MSG_WriteBits(msg, v5, v4);
 }
 
-float __cdecl MSG_ReadDeltaFloat(msg_t *msg, double oldV)
+float MSG_ReadDeltaFloat(msg_t *msg, double oldV)
 {
     double v4; // fp1
 
@@ -770,7 +770,7 @@ float __cdecl MSG_ReadDeltaFloat(msg_t *msg, double oldV)
     return *((float *)&v4 + 1);
 }
 
-void __cdecl MSG_WriteDeltaUsercmd(msg_t *msg, const usercmd_s *from, const usercmd_s *to)
+void MSG_WriteDeltaUsercmd(msg_t *msg, const usercmd_s *from, const usercmd_s *to)
 {
     unsigned int v6; // r5
     int serverTime; // r4
@@ -1127,7 +1127,7 @@ void __cdecl MSG_WriteDeltaUsercmd(msg_t *msg, const usercmd_s *from, const user
     }
 }
 
-void __cdecl MSG_ReadDeltaUsercmd(msg_t *msg, const usercmd_s *from, usercmd_s *to)
+void MSG_ReadDeltaUsercmd(msg_t *msg, const usercmd_s *from, usercmd_s *to)
 {
     int v6; // r28
     int Bits; // r11
@@ -1295,7 +1295,7 @@ void __cdecl MSG_ReadDeltaUsercmd(msg_t *msg, const usercmd_s *from, usercmd_s *
             "to->buttons < (1 << BUTTON_BIT_COUNT)");
 }
 
-void __cdecl MSG_WriteDeltaField(msg_t *msg, unsigned __int8 *to, const netField_t *field)
+void MSG_WriteDeltaField(msg_t *msg, unsigned __int8 *to, const netField_t *field)
 {
     msg_t *v5; // r31
     int offset; // r29
@@ -1344,7 +1344,7 @@ LABEL_12:
     MSG_WriteBits(v5, *(unsigned int *)&to[offset], bits);
 }
 
-void __cdecl MSG_ReadDeltaField(msg_t *msg, unsigned __int8 *to, const netField_t *field, int print)
+void MSG_ReadDeltaField(msg_t *msg, unsigned __int8 *to, const netField_t *field, int print)
 {
     int offset; // r30
     int Bits; // r6
@@ -1384,7 +1384,7 @@ void __cdecl MSG_ReadDeltaField(msg_t *msg, unsigned __int8 *to, const netField_
         Com_Printf(CON_CHANNEL_SYSTEM, "%s:%f ", field->name, *(float *)&to[offset]);
 }
 
-void __cdecl MSG_WriteDeltaHudElems(msg_t *msg, hudelem_s *to, int count)
+void MSG_WriteDeltaHudElems(msg_t *msg, hudelem_s *to, int count)
 {
     int v6; // r31
     hudelem_s *v7; // r11
@@ -1450,7 +1450,7 @@ void __cdecl MSG_WriteDeltaHudElems(msg_t *msg, hudelem_s *to, int count)
     }
 }
 
-void __cdecl MSG_ReadDeltaHudElems(msg_t *msg, hudelem_s *to, unsigned int count)
+void MSG_ReadDeltaHudElems(msg_t *msg, hudelem_s *to, unsigned int count)
 {
     int Bits; // r3
     unsigned int v7; // r22
@@ -1562,7 +1562,7 @@ void __cdecl MSG_ReadDeltaHudElems(msg_t *msg, hudelem_s *to, unsigned int count
     }
 }
 
-void __cdecl MSG_WriteDeltaPlayerstate(msg_t *msg, playerState_s *to)
+void MSG_WriteDeltaPlayerstate(msg_t *msg, playerState_s *to)
 {
     int bit; // r11
     int cursize; // r5
@@ -2074,7 +2074,7 @@ void __cdecl MSG_WriteDeltaPlayerstate(msg_t *msg, playerState_s *to)
     }
 }
 
-void __cdecl MSG_ReadDeltaPlayerstate(msg_t *msg, playerState_s *to)
+void MSG_ReadDeltaPlayerstate(msg_t *msg, playerState_s *to)
 {
     int bit; // r11
     int readcount; // r5
@@ -2615,7 +2615,7 @@ void __cdecl MSG_ReadDeltaPlayerstate(msg_t *msg, playerState_s *to)
     }
 }
 
-int __cdecl MSG_GetByte(msg_t *msg, int where)
+int MSG_GetByte(msg_t *msg, int where)
 {
     if (where < msg->cursize)
         return msg->data[where];
@@ -2623,7 +2623,7 @@ int __cdecl MSG_GetByte(msg_t *msg, int where)
     return msg->splitData[where - msg->cursize];
 }
 
-void __cdecl MSG_GetBytes(msg_t *msg, int where, unsigned __int8 *dest, int len)
+void MSG_GetBytes(msg_t *msg, int where, unsigned __int8 *dest, int len)
 {
     int i; // r30
     unsigned __int8 *data; // r11

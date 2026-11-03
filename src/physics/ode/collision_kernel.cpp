@@ -624,7 +624,7 @@ void dCloseODE()
 #include "odeext.h"
 #include <physics/phys_local.h>
 
-void __cdecl dInitUserGeom(dxUserGeom *geom, int classnum, dxSpace *space, dxBody *body)
+void dInitUserGeom(dxUserGeom *geom, int classnum, dxSpace *space, dxBody *body)
 {
     if (!geom)
         MyAssertHandler(".\\physics\\ode\\src\\collision_kernel.cpp", 749, 0, "%s", "geom");
@@ -643,7 +643,7 @@ void __cdecl dInitUserGeom(dxUserGeom *geom, int classnum, dxSpace *space, dxBod
     }
 }
 
-void __cdecl ODE_GeomTransformGetAAContainedBox(dxGeomTransform *geom, float *mins, float *maxs)
+void ODE_GeomTransformGetAAContainedBox(dxGeomTransform *geom, float *mins, float *maxs)
 {
     if (geom->type != 6)
         MyAssertHandler(".\\physics\\ode\\src\\collision_transform.cpp", 105, 0, "%s", "geom->type == dGeomTransformClass");
@@ -659,7 +659,7 @@ void __cdecl ODE_GeomTransformGetAAContainedBox(dxGeomTransform *geom, float *mi
     ODE_GeomGetAAContainedBox((dxGeomTransform*)geom->obj, mins, maxs);
 }
 
-void __cdecl ODE_GeomGetAAContainedBox(dxGeomTransform *geom, float *mins, float *maxs)
+void ODE_GeomGetAAContainedBox(dxGeomTransform *geom, float *mins, float *maxs)
 {
     const char *v3; // eax
     float lengths[4]; // [esp+1Ch] [ebp-14h] BYREF

@@ -9,43 +9,43 @@ enum RenderTargetUsage : __int32
     RENDERTARGET_USAGE_TEXTURE = 0x3,
 };
 
-void __cdecl AssertUninitializedRenderTarget(const GfxRenderTarget *renderTarget);
-int __cdecl R_GetDepthStencilFormat(_D3DFORMAT renderTargetFormat);
-void __cdecl R_InitRenderTargets();
+void AssertUninitializedRenderTarget(const GfxRenderTarget *renderTarget);
+int R_GetDepthStencilFormat(_D3DFORMAT renderTargetFormat);
+void R_InitRenderTargets();
 void R_InitRenderTargets_PC();
-void __cdecl R_ShareRenderTarget(GfxRenderTargetId idFrom, GfxRenderTargetId idTo);
-void __cdecl R_InitFullscreenRenderTargetImage(
+void R_ShareRenderTarget(GfxRenderTargetId idFrom, GfxRenderTargetId idTo);
+void R_InitFullscreenRenderTargetImage(
     int imageProgType,
     FullscreenType screenType,
     int picmip,
     _D3DFORMAT format,
     RenderTargetUsage usage,
     GfxRenderTarget *renderTarget);
-void __cdecl R_GetFullScreenRes(FullscreenType screenType, int *fullscreenWidth, int *fullscreenHeight);
-IDirect3DSurface9 *__cdecl R_AssignSingleSampleDepthStencilSurface();
-void __cdecl R_InitRenderTargetImage(
+void R_GetFullScreenRes(FullscreenType screenType, int *fullscreenWidth, int *fullscreenHeight);
+IDirect3DSurface9 *R_AssignSingleSampleDepthStencilSurface();
+void R_InitRenderTargetImage(
     int imageProgType,
     uint16_t width,
     uint16_t height,
     _D3DFORMAT format,
     RenderTargetUsage usage,
     GfxRenderTarget *renderTarget);
-void __cdecl R_AssignImageToRenderTargetColor(GfxRenderTargetSurface *surface, GfxImage *image);
-void __cdecl R_InitShadowmapRenderTarget(
+void R_AssignImageToRenderTargetColor(GfxRenderTargetSurface *surface, GfxImage *image);
+void R_InitShadowmapRenderTarget(
     int imageProgType,
     uint16_t tileRes,
     uint16_t tileRowCount,
     GfxRenderTarget *renderTarget);
-void __cdecl R_InitAndTrackRenderTargetImage(
+void R_InitAndTrackRenderTargetImage(
     int imageProgType,
     uint16_t width,
     uint16_t height,
     _D3DFORMAT format,
     RenderTargetUsage usage,
     GfxRenderTarget *renderTarget);
-void __cdecl R_InitShadowCookieBlurRenderTarget(GfxRenderTarget *renderTarget);
-void __cdecl R_InitShadowCookieRenderTarget(GfxRenderTarget *renderTarget);
-void __cdecl R_AssignShadowCookieDepthStencilSurface(GfxRenderTargetSurface *surface);
-_D3DFORMAT __cdecl R_InitFrameBufferRenderTarget();
-void __cdecl R_ShutdownRenderTargets();
-const char *__cdecl R_RenderTargetName(GfxRenderTargetId renderTargetId);
+void R_InitShadowCookieBlurRenderTarget(GfxRenderTarget *renderTarget);
+void R_InitShadowCookieRenderTarget(GfxRenderTarget *renderTarget);
+void R_AssignShadowCookieDepthStencilSurface(GfxRenderTargetSurface *surface);
+_D3DFORMAT R_InitFrameBufferRenderTarget();
+void R_ShutdownRenderTargets();
+const char *R_RenderTargetName(GfxRenderTargetId renderTargetId);

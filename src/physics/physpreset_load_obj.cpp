@@ -4,7 +4,7 @@
 #include <qcommon/qcommon.h>
 #include <universal/com_files.h>
 
-void *(__cdecl *physAlloc)(int);
+void *(*physAlloc)(int);
 
 cspField_t physPresetFields[10] =
 {
@@ -34,7 +34,7 @@ struct PhysPresetLite // LWSS add custom struct to adhere to the above field off
     bool tempDefaultToCylinder; // 36
 };
 
-void __cdecl PhysPreset_Strcpy(uint8_t *member, const char *keyValue)
+void PhysPreset_Strcpy(uint8_t *member, const char *keyValue)
 {
     char v2; // [esp+3h] [ebp-25h]
     char *v3; // [esp+8h] [ebp-20h]
@@ -59,7 +59,7 @@ void __cdecl PhysPreset_Strcpy(uint8_t *member, const char *keyValue)
     }
 }
 
-PhysPreset *__cdecl PhysPresetLoadFile(const char *name, void *(__cdecl *Alloc)(int))
+PhysPreset *PhysPresetLoadFile(const char *name, void *(*Alloc)(int))
 {
     char dest[64]; // [esp+24h] [ebp-2080h] BYREF
     char buffer[8192]; // [esp+64h] [ebp-2040h] BYREF
@@ -155,7 +155,7 @@ PhysPreset *__cdecl PhysPresetLoadFile(const char *name, void *(__cdecl *Alloc)(
     }
 }
 
-PhysPreset *__cdecl PhysPresetPrecache(const char *name, void *(__cdecl *Alloc)(int))
+PhysPreset *PhysPresetPrecache(const char *name, void *(*Alloc)(int))
 {
     PhysPreset *physPreset; // [esp+0h] [ebp-4h]
     PhysPreset *physPreseta; // [esp+0h] [ebp-4h]

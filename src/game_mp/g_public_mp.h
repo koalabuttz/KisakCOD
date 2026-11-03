@@ -22,7 +22,7 @@ static const char *g_dedicatedEnumNames[4] = { "listen server", "dedicated LAN s
 struct BuiltinFunctionDef // sizeof=0xC
 {
     const char *actionString;
-    void(__cdecl *actionFunc)();
+    void(*actionFunc)();
     int32_t type;
 };
 static_assert(LAYOUT_32BIT(sizeof(BuiltinFunctionDef) == 0xC));
@@ -30,7 +30,7 @@ static_assert(LAYOUT_32BIT(sizeof(BuiltinFunctionDef) == 0xC));
 struct BuiltinMethodDef // sizeof=0xC
 {                                       // ...
     const char *actionString;           // ...
-    void(__cdecl *actionFunc)(scr_entref_t); // ...
+    void(*actionFunc)(scr_entref_t); // ...
     int32_t type;                           // ...
 };
 static_assert(LAYOUT_32BIT(sizeof(BuiltinMethodDef) == 0xC));
@@ -135,167 +135,167 @@ struct scr_data_t // sizeof=0x379C
 static_assert(LAYOUT_32BIT(sizeof(scr_data_t) == 0x379C));
 
 // g_active_mp
-void __cdecl P_DamageFeedback(gentity_s *player);
-void __cdecl G_SetClientSound(gentity_s *ent);
-void __cdecl ClientImpacts(gentity_s *ent, pmove_t *pm);
-void __cdecl G_TouchTriggers(gentity_s *ent);
-void __cdecl SpectatorThink(gentity_s *ent, usercmd_s *ucmd);
-int32_t __cdecl ClientInactivityTimer(gclient_s *client);
-void __cdecl ClientIntermissionThink(gentity_s *ent);
-void __cdecl NotifyGrenadePullback(gentity_s *ent, uint32_t weaponIndex);
-void __cdecl HandleClientEvent(gclient_s *client, gentity_s *ent, int32_t event, int32_t eventParm);
-void __cdecl AttemptLiveGrenadePickup(gentity_s *clientEnt);
-bool __cdecl IsLiveGrenade(gentity_s *ent);
-void __cdecl ClientEvents(gentity_s *ent, int32_t oldEventSequence);
-void __cdecl G_SetLastServerTime(int32_t clientNum, int32_t lastServerTime);
-void __cdecl G_SetClientContents(gentity_s *pEnt);
-void __cdecl ClientThink_real(gentity_s *ent, usercmd_s *ucmd);
-void __cdecl G_PlayerStateToEntityStateExtrapolate(playerState_s *ps, entityState_s *s, int32_t time, int32_t snap);
-void __cdecl G_AddPlayerMantleBlockage(float *endPos, int32_t duration, pmove_t *pm);
-void __cdecl ClientThink(int32_t clientNum);
-void __cdecl G_RunClient(gentity_s *ent);
-void __cdecl IntermissionClientEndFrame(gentity_s *ent);
-void __cdecl SpectatorClientEndFrame(gentity_s *ent);
-bool __cdecl G_ClientCanSpectateTeam(gclient_s *client, team_t team);
-int32_t __cdecl GetFollowPlayerState(int32_t clientNum, playerState_s *ps);
-int32_t __cdecl StuckInClient(gentity_s *self);
-void __cdecl G_PlayerController(const gentity_s *self, int32_t *partBits);
-void __cdecl ClientEndFrame(gentity_s *ent);
-int32_t __cdecl G_UpdateClientInfo(gentity_s *ent);
-void __cdecl G_PlayerEvent(int32_t clientNum, int32_t event);
-int32_t __cdecl GetFollowPlayerState(int32_t clientNum, playerState_s *ps);
+void P_DamageFeedback(gentity_s *player);
+void G_SetClientSound(gentity_s *ent);
+void ClientImpacts(gentity_s *ent, pmove_t *pm);
+void G_TouchTriggers(gentity_s *ent);
+void SpectatorThink(gentity_s *ent, usercmd_s *ucmd);
+int32_t ClientInactivityTimer(gclient_s *client);
+void ClientIntermissionThink(gentity_s *ent);
+void NotifyGrenadePullback(gentity_s *ent, uint32_t weaponIndex);
+void HandleClientEvent(gclient_s *client, gentity_s *ent, int32_t event, int32_t eventParm);
+void AttemptLiveGrenadePickup(gentity_s *clientEnt);
+bool IsLiveGrenade(gentity_s *ent);
+void ClientEvents(gentity_s *ent, int32_t oldEventSequence);
+void G_SetLastServerTime(int32_t clientNum, int32_t lastServerTime);
+void G_SetClientContents(gentity_s *pEnt);
+void ClientThink_real(gentity_s *ent, usercmd_s *ucmd);
+void G_PlayerStateToEntityStateExtrapolate(playerState_s *ps, entityState_s *s, int32_t time, int32_t snap);
+void G_AddPlayerMantleBlockage(float *endPos, int32_t duration, pmove_t *pm);
+void ClientThink(int32_t clientNum);
+void G_RunClient(gentity_s *ent);
+void IntermissionClientEndFrame(gentity_s *ent);
+void SpectatorClientEndFrame(gentity_s *ent);
+bool G_ClientCanSpectateTeam(gclient_s *client, team_t team);
+int32_t GetFollowPlayerState(int32_t clientNum, playerState_s *ps);
+int32_t StuckInClient(gentity_s *self);
+void G_PlayerController(const gentity_s *self, int32_t *partBits);
+void ClientEndFrame(gentity_s *ent);
+int32_t G_UpdateClientInfo(gentity_s *ent);
+void G_PlayerEvent(int32_t clientNum, int32_t event);
+int32_t GetFollowPlayerState(int32_t clientNum, playerState_s *ps);
 
 
 
 // g_client_mp
-void __cdecl SetClientViewAngle(gentity_s *ent, const float *angle);
-void __cdecl G_GetPlayerViewOrigin(const playerState_s *ps, float *origin);
-void __cdecl ClientUserinfoChanged(uint32_t clientNum);
-void __cdecl ClientCleanName(const char *in, char *out, int32_t outSize);
-char *__cdecl ClientConnect(uint32_t clientNum, uint16_t scriptPersId);
-void __cdecl ClientClearFields(gclient_s *client);
-void __cdecl ClientBegin(int32_t clientNum);
-void __cdecl ClientSpawn(gentity_s *ent, const float *spawn_origin, const float *spawn_angles);
-void __cdecl ClientDisconnect(int32_t clientNum);
-uint32_t __cdecl G_GetNonPVSPlayerInfo(gentity_s *pSelf, float *vPosition, int32_t iLastUpdateEnt);
+void SetClientViewAngle(gentity_s *ent, const float *angle);
+void G_GetPlayerViewOrigin(const playerState_s *ps, float *origin);
+void ClientUserinfoChanged(uint32_t clientNum);
+void ClientCleanName(const char *in, char *out, int32_t outSize);
+char *ClientConnect(uint32_t clientNum, uint16_t scriptPersId);
+void ClientClearFields(gclient_s *client);
+void ClientBegin(int32_t clientNum);
+void ClientSpawn(gentity_s *ent, const float *spawn_origin, const float *spawn_angles);
+void ClientDisconnect(int32_t clientNum);
+uint32_t G_GetNonPVSPlayerInfo(gentity_s *pSelf, float *vPosition, int32_t iLastUpdateEnt);
 
 
 
 // g_client_script_cmd_mp
-void __cdecl PlayerCmd_giveWeapon(scr_entref_t entref);
-void __cdecl G_InitializeAmmo(gentity_s *pSelf, int32_t weaponIndex, uint8_t weaponModel, int32_t hadWeapon);
-int32_t __cdecl G_GetNeededStartAmmo(gentity_s *pSelf, WeaponDef *weapDef);
-void __cdecl PlayerCmd_takeWeapon(scr_entref_t entref);
-void __cdecl PlayerCmd_takeAllWeapons(scr_entref_t entref);
-void __cdecl PlayerCmd_getCurrentWeapon(scr_entref_t entref);
-bool __cdecl ClientPlaying(gentity_s *pSelf);
-void __cdecl PlayerCmd_getCurrentOffhand(scr_entref_t entref);
-void __cdecl PlayerCmd_setOffhandSecondaryClass(scr_entref_t entref);
-void __cdecl PlayerCmd_getOffhandSecondaryClass(scr_entref_t entref);
-void __cdecl PlayerCmd_hasWeapon(scr_entref_t entref);
-void __cdecl PlayerCmd_switchToWeapon(scr_entref_t entref);
-void __cdecl PlayerCmd_switchToOffhand(scr_entref_t entref);
-void __cdecl PlayerCmd_giveStartAmmo(scr_entref_t entref);
-void __cdecl PlayerCmd_giveMaxAmmo(scr_entref_t entref);
-void __cdecl PlayerCmd_getFractionStartAmmo(scr_entref_t entref);
-void __cdecl PlayerCmd_getFractionMaxAmmo(scr_entref_t entref);
-void __cdecl PlayerCmd_setOrigin(scr_entref_t entref);
-void __cdecl PlayerCmd_GetVelocity(scr_entref_t entref);
-void __cdecl PlayerCmd_setAngles(scr_entref_t entref);
-void __cdecl PlayerCmd_getAngles(scr_entref_t entref);
-void __cdecl PlayerCmd_useButtonPressed(scr_entref_t entref);
-void __cdecl PlayerCmd_attackButtonPressed(scr_entref_t entref);
-void __cdecl PlayerCmd_adsButtonPressed(scr_entref_t entref);
-void __cdecl PlayerCmd_meleeButtonPressed(scr_entref_t entref);
-void __cdecl PlayerCmd_fragButtonPressed(scr_entref_t entref);
-void __cdecl PlayerCmd_secondaryOffhandButtonPressed(scr_entref_t entref);
-void __cdecl PlayerCmd_buttonPressedDEVONLY(scr_entref_t entref);
-void __cdecl PlayerCmd_playerADS(scr_entref_t entref);
-void __cdecl PlayerCmd_isOnGround(scr_entref_t entref);
-void __cdecl PlayerCmd_pingPlayer(scr_entref_t entref);
-void __cdecl PlayerCmd_SetViewmodel(scr_entref_t entref);
-void __cdecl PlayerCmd_GetViewmodel(scr_entref_t entref);
-void __cdecl PlayerCmd_showScoreboard(scr_entref_t entref);
-void __cdecl PlayerCmd_setSpawnWeapon(scr_entref_t entref);
-void __cdecl PlayerCmd_dropItem(scr_entref_t entref);
-void __cdecl PlayerCmd_finishPlayerDamage(scr_entref_t entref);
-bool __cdecl IsBulletImpactMOD(meansOfDeath_t mod);
-void __cdecl PlayerCmd_Suicide(scr_entref_t entref);
-void __cdecl PlayerCmd_OpenMenu(scr_entref_t entref);
-void __cdecl PlayerCmd_OpenMenuNoMouse(scr_entref_t entref);
-void __cdecl PlayerCmd_CloseMenu(scr_entref_t entref);
-void __cdecl PlayerCmd_CloseInGameMenu(scr_entref_t entref);
-void __cdecl PlayerCmd_SetWeaponAmmoClip(scr_entref_t entref);
-void __cdecl PlayerCmd_SetWeaponAmmoStock(scr_entref_t entref);
-void __cdecl PlayerCmd_GetWeaponAmmoClip(scr_entref_t entref);
-void __cdecl PlayerCmd_GetWeaponAmmoStock(scr_entref_t entref);
-void __cdecl PlayerCmd_AnyAmmoForWeaponModes(scr_entref_t entref);
-void __cdecl iclientprintln(scr_entref_t entref);
-void __cdecl iclientprintlnbold(scr_entref_t entref);
-void __cdecl PlayerCmd_spawn(scr_entref_t entref);
-void __cdecl PlayerCmd_setEnterTime(scr_entref_t entref);
-void __cdecl BodyEnd(gentity_s *ent);
-void __cdecl PlayerCmd_ClonePlayer(scr_entref_t entref);
-void __cdecl PlayerCmd_SetClientDvar(scr_entref_t entref);
-void __cdecl PlayerCmd_SetClientDvars(scr_entref_t entref);
-void __cdecl PlayerCmd_IsTalking(scr_entref_t entref);
-void __cdecl PlayerCmd_FreezeControls(scr_entref_t entref);
-void __cdecl PlayerCmd_DisableWeapons(scr_entref_t entref);
-void __cdecl PlayerCmd_EnableWeapons(scr_entref_t entref);
-void __cdecl PlayerCmd_SetReverb(scr_entref_t entref);
-void __cdecl PlayerCmd_DeactivateReverb(scr_entref_t entref);
-void __cdecl PlayerCmd_SetChannelVolumes(scr_entref_t entref);
-void __cdecl PlayerCmd_DeactivateChannelVolumes(scr_entref_t entref);
-void __cdecl ScrCmd_PlayLocalSound(scr_entref_t entref);
-void __cdecl ScrCmd_StopLocalSound(scr_entref_t entref);
-void __cdecl PlayerCmd_SayAll(scr_entref_t entref);
-void __cdecl PlayerCmd_SayTeam(scr_entref_t entref);
-void __cdecl PlayerCmd_AllowADS(scr_entref_t entref);
-void __cdecl PlayerCmd_AllowJump(scr_entref_t entref);
-void __cdecl PlayerCmd_AllowSprint(scr_entref_t entref);
-void __cdecl PlayerCmd_SetSpreadOverride(scr_entref_t entref);
-void __cdecl PlayerCmd_ResetSpreadOverride(scr_entref_t entref);
-void __cdecl PlayerCmd_AllowSpectateTeam(scr_entref_t entref);
-void __cdecl PlayerCmd_GetGuid(scr_entref_t entref);
-void __cdecl PlayerCmd_GetXuid(scr_entref_t entref);
-void __cdecl PlayerCmd_BeginLocationSelection(scr_entref_t entref);
-void __cdecl PlayerCmd_EndLocationSelection(scr_entref_t entref);
-void __cdecl PlayerCmd_SetActionSlot(scr_entref_t entref);
-void __cdecl PlayerCmd_GetWeaponsList(scr_entref_t entref);
-void __cdecl PlayerCmd_GetWeaponsListPrimaries(scr_entref_t entref);
-void __cdecl PlayerCmd_SetPerk(scr_entref_t entref);
-void __cdecl BG_SetPerk(int32_t *perks, uint32_t perkIndex);
-void __cdecl PlayerCmd_HasPerk(scr_entref_t entref);
-void __cdecl PlayerCmd_UnsetPerk(scr_entref_t entref);
-void __cdecl BG_UnsetPerk(int32_t *perks, uint32_t perkIndex);
-void __cdecl PlayerCmd_ClearPerks(scr_entref_t entref);
-void __cdecl PlayerCmd_UpdateScores(scr_entref_t entref);
-void __cdecl PlayerCmd_UpdateDMScores(scr_entref_t entref);
-void __cdecl PlayerCmd_SetRank(scr_entref_t entref);
-void(__cdecl *__cdecl Player_GetMethod(const char **pName))(scr_entref_t);
+void PlayerCmd_giveWeapon(scr_entref_t entref);
+void G_InitializeAmmo(gentity_s *pSelf, int32_t weaponIndex, uint8_t weaponModel, int32_t hadWeapon);
+int32_t G_GetNeededStartAmmo(gentity_s *pSelf, WeaponDef *weapDef);
+void PlayerCmd_takeWeapon(scr_entref_t entref);
+void PlayerCmd_takeAllWeapons(scr_entref_t entref);
+void PlayerCmd_getCurrentWeapon(scr_entref_t entref);
+bool ClientPlaying(gentity_s *pSelf);
+void PlayerCmd_getCurrentOffhand(scr_entref_t entref);
+void PlayerCmd_setOffhandSecondaryClass(scr_entref_t entref);
+void PlayerCmd_getOffhandSecondaryClass(scr_entref_t entref);
+void PlayerCmd_hasWeapon(scr_entref_t entref);
+void PlayerCmd_switchToWeapon(scr_entref_t entref);
+void PlayerCmd_switchToOffhand(scr_entref_t entref);
+void PlayerCmd_giveStartAmmo(scr_entref_t entref);
+void PlayerCmd_giveMaxAmmo(scr_entref_t entref);
+void PlayerCmd_getFractionStartAmmo(scr_entref_t entref);
+void PlayerCmd_getFractionMaxAmmo(scr_entref_t entref);
+void PlayerCmd_setOrigin(scr_entref_t entref);
+void PlayerCmd_GetVelocity(scr_entref_t entref);
+void PlayerCmd_setAngles(scr_entref_t entref);
+void PlayerCmd_getAngles(scr_entref_t entref);
+void PlayerCmd_useButtonPressed(scr_entref_t entref);
+void PlayerCmd_attackButtonPressed(scr_entref_t entref);
+void PlayerCmd_adsButtonPressed(scr_entref_t entref);
+void PlayerCmd_meleeButtonPressed(scr_entref_t entref);
+void PlayerCmd_fragButtonPressed(scr_entref_t entref);
+void PlayerCmd_secondaryOffhandButtonPressed(scr_entref_t entref);
+void PlayerCmd_buttonPressedDEVONLY(scr_entref_t entref);
+void PlayerCmd_playerADS(scr_entref_t entref);
+void PlayerCmd_isOnGround(scr_entref_t entref);
+void PlayerCmd_pingPlayer(scr_entref_t entref);
+void PlayerCmd_SetViewmodel(scr_entref_t entref);
+void PlayerCmd_GetViewmodel(scr_entref_t entref);
+void PlayerCmd_showScoreboard(scr_entref_t entref);
+void PlayerCmd_setSpawnWeapon(scr_entref_t entref);
+void PlayerCmd_dropItem(scr_entref_t entref);
+void PlayerCmd_finishPlayerDamage(scr_entref_t entref);
+bool IsBulletImpactMOD(meansOfDeath_t mod);
+void PlayerCmd_Suicide(scr_entref_t entref);
+void PlayerCmd_OpenMenu(scr_entref_t entref);
+void PlayerCmd_OpenMenuNoMouse(scr_entref_t entref);
+void PlayerCmd_CloseMenu(scr_entref_t entref);
+void PlayerCmd_CloseInGameMenu(scr_entref_t entref);
+void PlayerCmd_SetWeaponAmmoClip(scr_entref_t entref);
+void PlayerCmd_SetWeaponAmmoStock(scr_entref_t entref);
+void PlayerCmd_GetWeaponAmmoClip(scr_entref_t entref);
+void PlayerCmd_GetWeaponAmmoStock(scr_entref_t entref);
+void PlayerCmd_AnyAmmoForWeaponModes(scr_entref_t entref);
+void iclientprintln(scr_entref_t entref);
+void iclientprintlnbold(scr_entref_t entref);
+void PlayerCmd_spawn(scr_entref_t entref);
+void PlayerCmd_setEnterTime(scr_entref_t entref);
+void BodyEnd(gentity_s *ent);
+void PlayerCmd_ClonePlayer(scr_entref_t entref);
+void PlayerCmd_SetClientDvar(scr_entref_t entref);
+void PlayerCmd_SetClientDvars(scr_entref_t entref);
+void PlayerCmd_IsTalking(scr_entref_t entref);
+void PlayerCmd_FreezeControls(scr_entref_t entref);
+void PlayerCmd_DisableWeapons(scr_entref_t entref);
+void PlayerCmd_EnableWeapons(scr_entref_t entref);
+void PlayerCmd_SetReverb(scr_entref_t entref);
+void PlayerCmd_DeactivateReverb(scr_entref_t entref);
+void PlayerCmd_SetChannelVolumes(scr_entref_t entref);
+void PlayerCmd_DeactivateChannelVolumes(scr_entref_t entref);
+void ScrCmd_PlayLocalSound(scr_entref_t entref);
+void ScrCmd_StopLocalSound(scr_entref_t entref);
+void PlayerCmd_SayAll(scr_entref_t entref);
+void PlayerCmd_SayTeam(scr_entref_t entref);
+void PlayerCmd_AllowADS(scr_entref_t entref);
+void PlayerCmd_AllowJump(scr_entref_t entref);
+void PlayerCmd_AllowSprint(scr_entref_t entref);
+void PlayerCmd_SetSpreadOverride(scr_entref_t entref);
+void PlayerCmd_ResetSpreadOverride(scr_entref_t entref);
+void PlayerCmd_AllowSpectateTeam(scr_entref_t entref);
+void PlayerCmd_GetGuid(scr_entref_t entref);
+void PlayerCmd_GetXuid(scr_entref_t entref);
+void PlayerCmd_BeginLocationSelection(scr_entref_t entref);
+void PlayerCmd_EndLocationSelection(scr_entref_t entref);
+void PlayerCmd_SetActionSlot(scr_entref_t entref);
+void PlayerCmd_GetWeaponsList(scr_entref_t entref);
+void PlayerCmd_GetWeaponsListPrimaries(scr_entref_t entref);
+void PlayerCmd_SetPerk(scr_entref_t entref);
+void BG_SetPerk(int32_t *perks, uint32_t perkIndex);
+void PlayerCmd_HasPerk(scr_entref_t entref);
+void PlayerCmd_UnsetPerk(scr_entref_t entref);
+void BG_UnsetPerk(int32_t *perks, uint32_t perkIndex);
+void PlayerCmd_ClearPerks(scr_entref_t entref);
+void PlayerCmd_UpdateScores(scr_entref_t entref);
+void PlayerCmd_UpdateDMScores(scr_entref_t entref);
+void PlayerCmd_SetRank(scr_entref_t entref);
+void(*Player_GetMethod(const char **pName))(scr_entref_t);
 
 
 
 // g_cmds_mp
-void __cdecl SendScoreboard(gentity_s *ent);
-void __cdecl Cmd_Score_f(gentity_s *ent);
-int32_t __cdecl CheatsOk(gentity_s *ent);
-char *__cdecl ConcatArgs(int32_t start);
-int32_t __cdecl SV_Cmd_Argc();
-void __cdecl G_setfog(const char *fogstring);
-void __cdecl Cmd_Give_f(gentity_s *ent);
-void __cdecl Cmd_Take_f(gentity_s *ent);
-void __cdecl Cmd_God_f(gentity_s *ent);
-void __cdecl Cmd_DemiGod_f(gentity_s *ent);
-void __cdecl Cmd_Notarget_f(gentity_s *ent);
-void __cdecl Cmd_Noclip_f(gentity_s *ent);
-void __cdecl Cmd_UFO_f(gentity_s *ent);
-void __cdecl Cmd_Kill_f(gentity_s *ent);
-void __cdecl StopFollowing(gentity_s *ent);
-int32_t __cdecl Cmd_FollowCycle_f(gentity_s *ent, int32_t dir);
-bool __cdecl G_IsPlaying(gentity_s *ent);
-void __cdecl G_Say(gentity_s *ent, gentity_s *target, int32_t mode, char *chatText);
-void __cdecl G_SayTo(
+void SendScoreboard(gentity_s *ent);
+void Cmd_Score_f(gentity_s *ent);
+int32_t CheatsOk(gentity_s *ent);
+char *ConcatArgs(int32_t start);
+int32_t SV_Cmd_Argc();
+void G_setfog(const char *fogstring);
+void Cmd_Give_f(gentity_s *ent);
+void Cmd_Take_f(gentity_s *ent);
+void Cmd_God_f(gentity_s *ent);
+void Cmd_DemiGod_f(gentity_s *ent);
+void Cmd_Notarget_f(gentity_s *ent);
+void Cmd_Noclip_f(gentity_s *ent);
+void Cmd_UFO_f(gentity_s *ent);
+void Cmd_Kill_f(gentity_s *ent);
+void StopFollowing(gentity_s *ent);
+int32_t Cmd_FollowCycle_f(gentity_s *ent, int32_t dir);
+bool G_IsPlaying(gentity_s *ent);
+void G_Say(gentity_s *ent, gentity_s *target, int32_t mode, char *chatText);
+void G_SayTo(
     gentity_s *ent,
     gentity_s *other,
     int32_t mode,
@@ -303,27 +303,27 @@ void __cdecl G_SayTo(
     const char *teamString,
     const char *cleanname,
     const char *message);
-void __cdecl Cmd_Where_f(gentity_s *ent);
-void __cdecl Cmd_CallVote_f(gentity_s *ent);
-void __cdecl Cmd_Vote_f(gentity_s *ent);
-void __cdecl Cmd_SetViewpos_f(gentity_s *ent);
-void __cdecl Cmd_EntityCount_f();
-void __cdecl Cmd_MenuResponse_f(gentity_s *pEnt);
-void __cdecl ClientCommand(int32_t clientNum);
-void __cdecl Cmd_Say_f(gentity_s *ent, int32_t mode, int32_t arg0);
+void Cmd_Where_f(gentity_s *ent);
+void Cmd_CallVote_f(gentity_s *ent);
+void Cmd_Vote_f(gentity_s *ent);
+void Cmd_SetViewpos_f(gentity_s *ent);
+void Cmd_EntityCount_f();
+void Cmd_MenuResponse_f(gentity_s *pEnt);
+void ClientCommand(int32_t clientNum);
+void Cmd_Say_f(gentity_s *ent, int32_t mode, int32_t arg0);
 void Cmd_PrintEntities_f();
 void Cmd_VisionSetNaked_f();
-const char *__cdecl SV_Cmd_Argv(int32_t argIndex);
+const char *SV_Cmd_Argv(int32_t argIndex);
 void Cmd_VisionSetNight_f();
 
 
 
 // g_combat_mp
-void __cdecl TRACK_g_combat();
-void __cdecl G_ParseHitLocDmgTable();
-void __cdecl LookAtKiller(gentity_s *self, gentity_s *inflictor, gentity_s *attacker);
-int32_t __cdecl G_MeansOfDeathFromScriptParam(uint32_t scrParam);
-void __cdecl player_die(
+void TRACK_g_combat();
+void G_ParseHitLocDmgTable();
+void LookAtKiller(gentity_s *self, gentity_s *inflictor, gentity_s *attacker);
+int32_t G_MeansOfDeathFromScriptParam(uint32_t scrParam);
+void player_die(
     gentity_s *self,
     gentity_s *inflictor,
     gentity_s *attacker,
@@ -333,9 +333,9 @@ void __cdecl player_die(
     const float *vDir,
     hitLocation_t hitLoc,
     int32_t psTimeOffset);
-void __cdecl DeathGrenadeDrop(gentity_s *self, int32_t meansOfDeath);
-double __cdecl G_GetWeaponHitLocationMultiplier(hitLocation_t hitLoc, uint32_t weapon);
-void __cdecl G_DamageClient(
+void DeathGrenadeDrop(gentity_s *self, int32_t meansOfDeath);
+double G_GetWeaponHitLocationMultiplier(hitLocation_t hitLoc, uint32_t weapon);
+void G_DamageClient(
     gentity_s *targ,
     gentity_s *inflictor,
     gentity_s *attacker,
@@ -347,8 +347,8 @@ void __cdecl G_DamageClient(
     uint32_t weapon,
     hitLocation_t hitLoc,
     int32_t timeOffset);
-uint32_t __cdecl G_GetWeaponIndexForEntity(const gentity_s *ent);
-void __cdecl G_Damage(
+uint32_t G_GetWeaponIndexForEntity(const gentity_s *ent);
+void G_Damage(
     gentity_s *targ,
     gentity_s *inflictor,
     gentity_s *attacker,
@@ -362,7 +362,7 @@ void __cdecl G_Damage(
     uint32_t modelIndex,
     uint32_t partName,
     int32_t timeOffset);
-void __cdecl DamageNotify(
+void DamageNotify(
     uint16_t notify,
     gentity_s *targ,
     gentity_s *attacker,
@@ -373,21 +373,21 @@ void __cdecl DamageNotify(
     int32_t dFlags,
     uint32_t modelIndex,
     uint32_t partName);
-double __cdecl CanDamage(
+double CanDamage(
     gentity_s *targ,
     gentity_s *inflictor,
     float *centerPos,
     float coneAngleCos,
     float *coneDirection,
     int32_t contentMask);
-void __cdecl G_FlashbangBlast(float *origin, float radius_max, float radius_min, gentity_s *attacker, team_t team);
-void __cdecl GetEntListForRadius(
+void G_FlashbangBlast(float *origin, float radius_max, float radius_min, gentity_s *attacker, team_t team);
+void GetEntListForRadius(
     const float *origin,
     float radius_max,
     float radius_min,
     int32_t *entList,
     int32_t *entListCount);
-void __cdecl FlashbangBlastEnt(
+void FlashbangBlastEnt(
     gentity_s *ent,
     float *blastOrigin,
     float radius_max,
@@ -395,11 +395,11 @@ void __cdecl FlashbangBlastEnt(
     gentity_s *attacker,
     team_t team);
 
-double __cdecl EntDistToPoint(const float *origin, gentity_s *ent);
-void __cdecl AddScrTeamName(team_t team);
-bool __cdecl G_WithinDamageRadius(const float *damageOrigin, float radiusSquared, gentity_s *ent);
-double __cdecl G_GetRadiusDamageDistanceSquared(const float *damageOrigin, gentity_s *ent);
-int32_t __cdecl G_RadiusDamage(
+double EntDistToPoint(const float *origin, gentity_s *ent);
+void AddScrTeamName(team_t team);
+bool G_WithinDamageRadius(const float *damageOrigin, float radiusSquared, gentity_s *ent);
+double G_GetRadiusDamageDistanceSquared(const float *damageOrigin, gentity_s *ent);
+int32_t G_RadiusDamage(
     float *origin,
     gentity_s *inflictor,
     gentity_s *attacker,
@@ -411,61 +411,61 @@ int32_t __cdecl G_RadiusDamage(
     gentity_s *ignore,
     int32_t mod,
     uint32_t weapon);
-uint16_t __cdecl G_GetHitLocationString(hitLocation_t hitLoc);
-int32_t __cdecl G_GetHitLocationIndexFromString(uint16_t sString);
+uint16_t G_GetHitLocationString(hitLocation_t hitLoc);
+int32_t G_GetHitLocationIndexFromString(uint16_t sString);
 
 
 
 
 // g_misc_mp
-void __cdecl SP_info_notnull(gentity_s *self);
-void __cdecl SP_light(gentity_s *self);
-void __cdecl TeleportPlayer(gentity_s *player, float *origin, float *angles);
-void __cdecl G_InitTurrets();
-void __cdecl G_ClientStopUsingTurret(gentity_s *self);
-void __cdecl turret_think_client(gentity_s *self);
-void __cdecl turret_track(gentity_s *self, gentity_s *other);
-void __cdecl G_PlayerTurretPositionAndBlend(gentity_s *ent, gentity_s *pTurretEnt);
-void __cdecl turret_clientaim(gentity_s *self, gentity_s *other);
-void __cdecl turret_shoot_internal(gentity_s *self, gentity_s *other);
-void __cdecl Fire_Lead(gentity_s *ent, gentity_s *activator);
-void __cdecl Turret_FillWeaponParms(gentity_s *ent, gentity_s *activator, weaponParms *wp);
-void __cdecl turret_UpdateSound(gentity_s *self);
-void __cdecl turret_think(gentity_s *self);
-int32_t __cdecl turret_ReturnToDefaultPos(gentity_s *self, int32_t bManned);
-int32_t __cdecl turret_UpdateTargetAngles(gentity_s *self, float *desiredAngles, int32_t bManned);
-void __cdecl turret_think_init(gentity_s *self);
-void __cdecl turret_controller(const gentity_s *self, int32_t *partBits);
-void __cdecl G_FreeTurret(gentity_s *self);
-bool __cdecl G_IsTurretUsable(gentity_s *self, gentity_s *owner);
-bool __cdecl turret_behind(gentity_s *self, gentity_s *other);
-void __cdecl turret_use(gentity_s *self, gentity_s *owner, gentity_s *activator);
-void __cdecl G_SpawnTurret(gentity_s *self, const char *weaponinfoname);
-void __cdecl SP_turret(gentity_s *self);
+void SP_info_notnull(gentity_s *self);
+void SP_light(gentity_s *self);
+void TeleportPlayer(gentity_s *player, float *origin, float *angles);
+void G_InitTurrets();
+void G_ClientStopUsingTurret(gentity_s *self);
+void turret_think_client(gentity_s *self);
+void turret_track(gentity_s *self, gentity_s *other);
+void G_PlayerTurretPositionAndBlend(gentity_s *ent, gentity_s *pTurretEnt);
+void turret_clientaim(gentity_s *self, gentity_s *other);
+void turret_shoot_internal(gentity_s *self, gentity_s *other);
+void Fire_Lead(gentity_s *ent, gentity_s *activator);
+void Turret_FillWeaponParms(gentity_s *ent, gentity_s *activator, weaponParms *wp);
+void turret_UpdateSound(gentity_s *self);
+void turret_think(gentity_s *self);
+int32_t turret_ReturnToDefaultPos(gentity_s *self, int32_t bManned);
+int32_t turret_UpdateTargetAngles(gentity_s *self, float *desiredAngles, int32_t bManned);
+void turret_think_init(gentity_s *self);
+void turret_controller(const gentity_s *self, int32_t *partBits);
+void G_FreeTurret(gentity_s *self);
+bool G_IsTurretUsable(gentity_s *self, gentity_s *owner);
+bool turret_behind(gentity_s *self, gentity_s *other);
+void turret_use(gentity_s *self, gentity_s *owner, gentity_s *activator);
+void G_SpawnTurret(gentity_s *self, const char *weaponinfoname);
+void SP_turret(gentity_s *self);
 
 
 
 
 // g_player_corpse_mp
-int32_t __cdecl G_GetPlayerCorpseIndex(gentity_s *ent);
-int32_t __cdecl G_GetFreePlayerCorpseIndex();
-void __cdecl PlayerCorpse_Free(gentity_s *ent);
-void __cdecl G_RunCorpseMove(gentity_s *ent);
-void __cdecl G_BounceCorpse(gentity_s *ent, corpseInfo_t *corpseInfo, trace_t *trace, float *endpos);
-char __cdecl G_GetAnimDeltaForCorpse(gentity_s *ent, float *originChange);
-void __cdecl G_RunCorpse(gentity_s *ent);
-void __cdecl G_RunCorpseAnimate(gentity_s *ent);
+int32_t G_GetPlayerCorpseIndex(gentity_s *ent);
+int32_t G_GetFreePlayerCorpseIndex();
+void PlayerCorpse_Free(gentity_s *ent);
+void G_RunCorpseMove(gentity_s *ent);
+void G_BounceCorpse(gentity_s *ent, corpseInfo_t *corpseInfo, trace_t *trace, float *endpos);
+char G_GetAnimDeltaForCorpse(gentity_s *ent, float *originChange);
+void G_RunCorpse(gentity_s *ent);
+void G_RunCorpseAnimate(gentity_s *ent);
 
 
 
 // g_scr_helicopter
-void __cdecl CMD_Heli_FreeHelicopter(scr_entref_t entref);
-void __cdecl CMD_Heli_SetDamageStage(scr_entref_t entref);
-void(__cdecl *__cdecl Helicopter_GetMethod(const char **pName))(scr_entref_t);
-void __cdecl Helicopter_RegisterDvars();
-void __cdecl G_SpawnHelicopter(gentity_s *ent, gentity_s *owner, const char *vehicleInfoName, char *modelName);
-void __cdecl Heli_InitFirstThink(gentity_s *pSelf);
-void __cdecl Helicopter_Pain(
+void CMD_Heli_FreeHelicopter(scr_entref_t entref);
+void CMD_Heli_SetDamageStage(scr_entref_t entref);
+void(*Helicopter_GetMethod(const char **pName))(scr_entref_t);
+void Helicopter_RegisterDvars();
+void G_SpawnHelicopter(gentity_s *ent, gentity_s *owner, const char *vehicleInfoName, char *modelName);
+void Heli_InitFirstThink(gentity_s *pSelf);
+void Helicopter_Pain(
     gentity_s *pSelf,
     gentity_s *pAttacker,
     int32_t damage,
@@ -474,7 +474,7 @@ void __cdecl Helicopter_Pain(
     const float *dir,
     const hitLocation_t hitLoc,
     const int32_t weaponIdx);
-void __cdecl Helicopter_Die(
+void Helicopter_Die(
     gentity_s *pSelf,
     gentity_s *pInflictor,
     gentity_s *pAttacker,
@@ -484,38 +484,38 @@ void __cdecl Helicopter_Die(
     const float *dir,
     const hitLocation_t hitLoc,
     int32_t psTimeOffset);
-void __cdecl Helicopter_Controller(const gentity_s *pSelf, int32_t *partBits);
-void __cdecl Helicopter_Think(gentity_s *ent);
+void Helicopter_Controller(const gentity_s *pSelf, int32_t *partBits);
+void Helicopter_Think(gentity_s *ent);
 
 
 
 
 // g_scr_main_mp
-uint32_t __cdecl GScr_AllocString(const char *s);
-void __cdecl TRACK_g_scr_main();
-void __cdecl Scr_LoadLevel();
-void __cdecl GScr_LoadGameTypeScript();
-int32_t __cdecl GScr_LoadScriptAndLabel(const char *filename, const char *label, int32_t bEnforceExists);
-void __cdecl GScr_LoadScripts();
+uint32_t GScr_AllocString(const char *s);
+void TRACK_g_scr_main();
+void Scr_LoadLevel();
+void GScr_LoadGameTypeScript();
+int32_t GScr_LoadScriptAndLabel(const char *filename, const char *label, int32_t bEnforceExists);
+void GScr_LoadScripts();
 int32_t GScr_LoadLevelScript();
 void GScr_PostLoadScripts();
-void __cdecl GScr_FreeScripts();
-void __cdecl ScrCmd_GetClanId(scr_entref_t entref);
-void __cdecl ScrCmd_GetClanName(scr_entref_t entref);
+void GScr_FreeScripts();
+void ScrCmd_GetClanId(scr_entref_t entref);
+void ScrCmd_GetClanName(scr_entref_t entref);
 void GScr_CreatePrintChannel();
 void GScr_printChannelSet();
 void print();
 void println();
-void __cdecl Scr_LocalizationError(uint32_t iParm, const char *pszErrorMessage);
-void __cdecl Scr_ConstructMessageString(
+void Scr_LocalizationError(uint32_t iParm, const char *pszErrorMessage);
+void Scr_ConstructMessageString(
     int32_t firstParmIndex,
     int32_t lastParmIndex,
     const char *errorContext,
     char *string,
     uint32_t stringLimit);
-void __cdecl Scr_ValidateLocalizedStringRef(uint32_t parmIndex, const char *token, int32_t tokenLen);
-void __cdecl Scr_MakeGameMessage(int32_t iClientNum, const char *pszCmd);
-void __cdecl Scr_VerifyWeaponIndex(int32_t weaponIndex, const char *weaponName);
+void Scr_ValidateLocalizedStringRef(uint32_t parmIndex, const char *token, int32_t tokenLen);
+void Scr_MakeGameMessage(int32_t iClientNum, const char *pszCmd);
+void Scr_VerifyWeaponIndex(int32_t weaponIndex, const char *weaponName);
 void iprintln();
 void iprintlnbold();
 void GScr_print3d();
@@ -533,9 +533,9 @@ void GScr_SetDvar();
 void GScr_GetTime();
 void Scr_GetEntByNum();
 void Scr_GetWeaponModel();
-void __cdecl GScr_GetAmmoCount(scr_entref_t entref);
-gentity_s *__cdecl GetPlayerEntity(scr_entref_t entref);
-gentity_s *__cdecl GetEntity(scr_entref_t entref);
+void GScr_GetAmmoCount(scr_entref_t entref);
+gentity_s *GetPlayerEntity(scr_entref_t entref);
+gentity_s *GetEntity(scr_entref_t entref);
 void GScr_AnimHasNotetrack();
 void GScr_GetNotetrackTimes();
 void GScr_GetBrushModelCenter();
@@ -544,62 +544,62 @@ void GScr_SpawnPlane();
 void GScr_SpawnTurret();
 void GScr_SpawnHelicopter();
 uint32_t GScr_PrecacheTurret();
-void __cdecl ScrCmd_SetMoveSpeedScale(scr_entref_t entref);
-void __cdecl ScrCmd_attach(scr_entref_t entref);
-void __cdecl ScrCmd_detach(scr_entref_t entref);
-void __cdecl ScrCmd_detachAll(scr_entref_t entref);
-void __cdecl ScrCmd_GetAttachSize(scr_entref_t entref);
-void __cdecl ScrCmd_GetAttachModelName(scr_entref_t entref);
-void __cdecl ScrCmd_GetAttachTagName(scr_entref_t entref);
-void __cdecl ScrCmd_GetAttachIgnoreCollision(scr_entref_t entref);
-void __cdecl G_EntityStateSetPartBits(gentity_s *ent, const uint32_t *partBits);
-void __cdecl G_EntityStateGetPartBits(const gentity_s *ent, uint32_t *partBits);
-void __cdecl ScrCmd_hidepart(scr_entref_t entref);
-void __cdecl ScrCmd_showpart(scr_entref_t entref);
-void __cdecl ScrCmd_showallparts(scr_entref_t entref);
-void __cdecl ScrCmd_LinkTo(scr_entref_t entref);
-void __cdecl ScrCmd_Unlink(scr_entref_t entref);
-void __cdecl ScrCmd_EnableLinkTo(scr_entref_t entref);
-void __cdecl ScrCmd_GetOrigin(scr_entref_t entref);
-void __cdecl ScrCmd_GetEye(scr_entref_t entref);
-void __cdecl ScrCmd_UseBy(scr_entref_t entref);
-void __cdecl ScrCmd_IsTouching(scr_entref_t entref);
+void ScrCmd_SetMoveSpeedScale(scr_entref_t entref);
+void ScrCmd_attach(scr_entref_t entref);
+void ScrCmd_detach(scr_entref_t entref);
+void ScrCmd_detachAll(scr_entref_t entref);
+void ScrCmd_GetAttachSize(scr_entref_t entref);
+void ScrCmd_GetAttachModelName(scr_entref_t entref);
+void ScrCmd_GetAttachTagName(scr_entref_t entref);
+void ScrCmd_GetAttachIgnoreCollision(scr_entref_t entref);
+void G_EntityStateSetPartBits(gentity_s *ent, const uint32_t *partBits);
+void G_EntityStateGetPartBits(const gentity_s *ent, uint32_t *partBits);
+void ScrCmd_hidepart(scr_entref_t entref);
+void ScrCmd_showpart(scr_entref_t entref);
+void ScrCmd_showallparts(scr_entref_t entref);
+void ScrCmd_LinkTo(scr_entref_t entref);
+void ScrCmd_Unlink(scr_entref_t entref);
+void ScrCmd_EnableLinkTo(scr_entref_t entref);
+void ScrCmd_GetOrigin(scr_entref_t entref);
+void ScrCmd_GetEye(scr_entref_t entref);
+void ScrCmd_UseBy(scr_entref_t entref);
+void ScrCmd_IsTouching(scr_entref_t entref);
 void ScrCmd_SoundExists();
-void __cdecl ScrCmd_PlaySound(scr_entref_t entref);
-gentity_s *__cdecl StartScriptPlaySoundOnEnt(scr_entref_t entref);
-void __cdecl ScrCmd_PlaySoundToTeam(scr_entref_t entref);
-void __cdecl ScrCmd_PlaySoundToPlayer(scr_entref_t entref);
-void __cdecl ScrCmd_PlaySoundAsMaster(scr_entref_t entref);
-void __cdecl ScrCmd_PlayLoopSound(scr_entref_t entref);
-void __cdecl ScrCmd_StopLoopSound(scr_entref_t entref);
-void __cdecl ScrCmd_Delete(scr_entref_t entref);
-void __cdecl ScrCmd_SetModel(scr_entref_t entref);
-void __cdecl ScrCmd_GetNormalHealth(scr_entref_t entref);
-void __cdecl ScrCmd_SetNormalHealth(scr_entref_t entref);
-void __cdecl ScrCmd_Show(scr_entref_t entref);
-void __cdecl ScrCmd_Hide(scr_entref_t entref);
-void __cdecl ScrCmd_LaserOn(scr_entref_t entref);
-void __cdecl ScrCmd_LaserOff(scr_entref_t entref);
-void __cdecl ScrCmd_ShowToPlayer(scr_entref_t entref);
-void __cdecl ScrCmd_SetContents(scr_entref_t entref);
-void __cdecl ScrCmd_GetStance(scr_entref_t entref);
-void __cdecl Scr_SetStableMissile(scr_entref_t entref);
-void __cdecl GScr_SetCursorHint(scr_entref_t entref);
-int32_t __cdecl G_GetHintStringIndex(int32_t *piIndex, char *pszString);
-void __cdecl GScr_SetHintString(scr_entref_t entref);
-void __cdecl GScr_UseTriggerRequireLookAt(scr_entref_t entref);
-void __cdecl GScr_GetEntityNumber(scr_entref_t entref);
-void __cdecl GScr_EnableGrenadeTouchDamage(scr_entref_t entref);
-void __cdecl GScr_DisableGrenadeTouchDamage(scr_entref_t entref);
-void __cdecl GScr_MissileSetTarget(scr_entref_t entref);
-void __cdecl GScr_EnableAimAssist(scr_entref_t entref);
-void __cdecl GScr_DisableAimAssist(scr_entref_t entref);
-void __cdecl G_InitObjectives();
-int32_t __cdecl ObjectiveStateIndexFromString(objectiveState_t *piStateIndex, uint32_t stateString);
-void __cdecl ClearObjective(objective_t *obj);
+void ScrCmd_PlaySound(scr_entref_t entref);
+gentity_s *StartScriptPlaySoundOnEnt(scr_entref_t entref);
+void ScrCmd_PlaySoundToTeam(scr_entref_t entref);
+void ScrCmd_PlaySoundToPlayer(scr_entref_t entref);
+void ScrCmd_PlaySoundAsMaster(scr_entref_t entref);
+void ScrCmd_PlayLoopSound(scr_entref_t entref);
+void ScrCmd_StopLoopSound(scr_entref_t entref);
+void ScrCmd_Delete(scr_entref_t entref);
+void ScrCmd_SetModel(scr_entref_t entref);
+void ScrCmd_GetNormalHealth(scr_entref_t entref);
+void ScrCmd_SetNormalHealth(scr_entref_t entref);
+void ScrCmd_Show(scr_entref_t entref);
+void ScrCmd_Hide(scr_entref_t entref);
+void ScrCmd_LaserOn(scr_entref_t entref);
+void ScrCmd_LaserOff(scr_entref_t entref);
+void ScrCmd_ShowToPlayer(scr_entref_t entref);
+void ScrCmd_SetContents(scr_entref_t entref);
+void ScrCmd_GetStance(scr_entref_t entref);
+void Scr_SetStableMissile(scr_entref_t entref);
+void GScr_SetCursorHint(scr_entref_t entref);
+int32_t G_GetHintStringIndex(int32_t *piIndex, char *pszString);
+void GScr_SetHintString(scr_entref_t entref);
+void GScr_UseTriggerRequireLookAt(scr_entref_t entref);
+void GScr_GetEntityNumber(scr_entref_t entref);
+void GScr_EnableGrenadeTouchDamage(scr_entref_t entref);
+void GScr_DisableGrenadeTouchDamage(scr_entref_t entref);
+void GScr_MissileSetTarget(scr_entref_t entref);
+void GScr_EnableAimAssist(scr_entref_t entref);
+void GScr_DisableAimAssist(scr_entref_t entref);
+void G_InitObjectives();
+int32_t ObjectiveStateIndexFromString(objectiveState_t *piStateIndex, uint32_t stateString);
+void ClearObjective(objective_t *obj);
 void Scr_Objective_Add();
-void __cdecl ClearObjective_OnEntity(objective_t *obj);
-void __cdecl SetObjectiveIcon(objective_t *obj, uint32_t paramNum);
+void ClearObjective_OnEntity(objective_t *obj);
+void SetObjectiveIcon(objective_t *obj, uint32_t paramNum);
 void Scr_Objective_Delete();
 void Scr_Objective_State();
 void Scr_Objective_Icon();
@@ -613,11 +613,11 @@ int32_t GScr_Obituary();
 void GScr_positionWouldTelefrag();
 void GScr_getStartTime();
 void GScr_PrecacheMenu();
-int32_t __cdecl GScr_GetScriptMenuIndex(const char *pszMenu);
+int32_t GScr_GetScriptMenuIndex(const char *pszMenu);
 void GScr_PrecacheStatusIcon();
-int32_t __cdecl GScr_GetStatusIconIndex(const char *pszIcon);
+int32_t GScr_GetStatusIconIndex(const char *pszIcon);
 void GScr_PrecacheHeadIcon();
-int32_t __cdecl GScr_GetHeadIconIndex(const char *pszIcon);
+int32_t GScr_GetHeadIconIndex(const char *pszIcon);
 void GScr_WeaponClipSize();
 void GScr_WeaponIsSemiAuto();
 void GScr_WeaponIsBoltAction();
@@ -631,10 +631,10 @@ void GScr_WeaponFireTime();
 void GScr_IsWeaponClipOnly();
 void GScr_IsWeaponDetonationTimed();
 void GScr_PrecacheLocationSelector();
-int32_t __cdecl GScr_GetLocSelIndex(const char *mtlName);
+int32_t GScr_GetLocSelIndex(const char *mtlName);
 void Scr_BulletTrace();
 void Scr_BulletTracePassed();
-void __cdecl Scr_SightTracePassed();
+void Scr_SightTracePassed();
 void Scr_PhysicsTrace();
 void Scr_PlayerPhysicsTrace();
 void Scr_RandomInt();
@@ -686,20 +686,20 @@ void Scr_AmbientPlay();
 void Scr_AmbientStop();
 void Scr_GrenadeExplosionEffect();
 void GScr_RadiusDamage();
-void __cdecl GScr_RadiusDamageInternal(gentity_s *inflictor);
-void __cdecl GScr_EntityRadiusDamage(scr_entref_t entref);
-void __cdecl GScr_Detonate(scr_entref_t entref);
+void GScr_RadiusDamageInternal(gentity_s *inflictor);
+void GScr_EntityRadiusDamage(scr_entref_t entref);
+void GScr_Detonate(scr_entref_t entref);
 VariableUnion GScr_SetPlayerIgnoreRadiusDamage();
-void __cdecl GScr_DamageConeTrace(scr_entref_t entref);
-void __cdecl GScr_DamageConeTraceInternal(scr_entref_t entref, int32_t contentMask);
-void __cdecl GScr_SightConeTrace(scr_entref_t entref);
+void GScr_DamageConeTrace(scr_entref_t entref);
+void GScr_DamageConeTraceInternal(scr_entref_t entref, int32_t contentMask);
+void GScr_SightConeTrace(scr_entref_t entref);
 void GScr_GetMoveDelta();
 void GScr_GetAngleDelta();
 void GScr_GetNorthYaw();
 void Scr_LoadFX();
 void Scr_PlayFX();
-void __cdecl Scr_SetFxAngles(uint32_t givenAxisCount, float (*axis)[3], float *angles);
-void __cdecl Scr_FxParamError(uint32_t paramIndex, const char *errorString, int32_t fxId);
+void Scr_SetFxAngles(uint32_t givenAxisCount, float (*axis)[3], float *angles);
+void Scr_FxParamError(uint32_t paramIndex, const char *errorString, int32_t fxId);
 void Scr_PlayFXOnTag();
 void Scr_PlayLoopedFX();
 void Scr_SpawnFX();
@@ -709,7 +709,7 @@ void Scr_PhysicsRadiusJolt();
 void Scr_PhysicsRadiusJitter();
 void Scr_PhysicsExplosionCylinder();
 void Scr_SetExponentialFog();
-void __cdecl Scr_SetFog(const char *cmd, float start, float density, float r, float g, float b, float time);
+void Scr_SetFog(const char *cmd, float start, float density, float r, float g, float b, float time);
 void Scr_VisionSetNaked();
 void Scr_VisionSetNight();
 void Scr_TableLookup();
@@ -725,27 +725,27 @@ void GScr_SetTeamScore();
 void GScr_SetClientNameMode();
 void GScr_UpdateClientNames();
 void GScr_GetTeamPlayersAlive();
-void __cdecl GScr_GetNumParts();
-void __cdecl GScr_GetPartName();
+void GScr_GetNumParts();
+void GScr_GetPartName();
 gentity_s *GScr_Earthquake();
-void __cdecl GScr_ShellShock(scr_entref_t entref);
-void __cdecl GScr_StopShellShock(scr_entref_t entref);
-void __cdecl GScr_GetTagOrigin(scr_entref_t entref);
-int32_t __cdecl GScr_UpdateTagInternal(
+void GScr_ShellShock(scr_entref_t entref);
+void GScr_StopShellShock(scr_entref_t entref);
+void GScr_GetTagOrigin(scr_entref_t entref);
+int32_t GScr_UpdateTagInternal(
     gentity_s *ent,
     uint32_t tagName,
     cached_tag_mat_t *cachedTag,
     int32_t showScriptError);
-void __cdecl GScr_GetTagAngles(scr_entref_t entref);
-void __cdecl GScr_SetDepthOfField(scr_entref_t entref);
-void __cdecl GScr_SetViewModelDepthOfField(scr_entref_t entref);
-void __cdecl GScr_ViewKick(scr_entref_t entref);
-void __cdecl GScr_LocalToWorldCoords(scr_entref_t entref);
-void __cdecl GScr_SetRightArc(scr_entref_t entref);
-void __cdecl GScr_SetLeftArc(scr_entref_t entref);
-void __cdecl GScr_SetTopArc(scr_entref_t entref);
-void __cdecl GScr_SetBottomArc(scr_entref_t entref);
-void __cdecl GScr_PlaceSpawnPoint(scr_entref_t entref);
+void GScr_GetTagAngles(scr_entref_t entref);
+void GScr_SetDepthOfField(scr_entref_t entref);
+void GScr_SetViewModelDepthOfField(scr_entref_t entref);
+void GScr_ViewKick(scr_entref_t entref);
+void GScr_LocalToWorldCoords(scr_entref_t entref);
+void GScr_SetRightArc(scr_entref_t entref);
+void GScr_SetLeftArc(scr_entref_t entref);
+void GScr_SetTopArc(scr_entref_t entref);
+void GScr_SetBottomArc(scr_entref_t entref);
+void GScr_PlaceSpawnPoint(scr_entref_t entref);
 void GScr_MapRestart();
 void GScr_LoadMap();
 void GScr_ExitLevel();
@@ -764,41 +764,41 @@ void GScr_ClientPrint();
 void GScr_OpenFile();
 void GScr_CloseFile();
 void GScr_FPrintln();
-void __cdecl Scr_FPrint_internal(bool commaBetweenFields);
+void Scr_FPrint_internal(bool commaBetweenFields);
 void GScr_FPrintFields();
 void GScr_FReadLn();
 void GScr_FGetArg();
-void __cdecl GScr_GetStat(scr_entref_t entref);
-void __cdecl GScr_SetStat(scr_entref_t entref);
-void __cdecl GScr_SetTeamForTrigger(scr_entref_t entref);
-void __cdecl GScr_ClientClaimTrigger(scr_entref_t entref);
-void __cdecl GScr_ClientReleaseTrigger(scr_entref_t entref);
-void __cdecl GScr_ReleaseClaimedTrigger(scr_entref_t entref);
+void GScr_GetStat(scr_entref_t entref);
+void GScr_SetStat(scr_entref_t entref);
+void GScr_SetTeamForTrigger(scr_entref_t entref);
+void GScr_ClientClaimTrigger(scr_entref_t entref);
+void GScr_ClientReleaseTrigger(scr_entref_t entref);
+void GScr_ReleaseClaimedTrigger(scr_entref_t entref);
 void GScr_SetMapCenter();
 void GScr_SetGameEndTime();
 void GScr_SetMiniMap();
 bool GScr_SetTeamRadar();
 void GScr_GetTeamRadar();
 void GScr_GetArrayKeys();
-void __cdecl GScr_IsOnLadder(scr_entref_t entref);
-void __cdecl GScr_IsMantling(scr_entref_t entref);
-void __cdecl GScr_StartRagdoll(scr_entref_t entref);
-void __cdecl GScr_IsRagdoll(scr_entref_t entref);
-void __cdecl GScr_GetCorpseAnim(scr_entref_t entref);
-void __cdecl ScrCmd_ItemWeaponSetAmmo(scr_entref_t entref);
-void __cdecl Scr_SetOrigin(gentity_s *ent, int32_t i);
-void __cdecl Scr_SetAngles(gentity_s *ent, int32_t i);
-void __cdecl Scr_SetHealth(gentity_s *ent, int32_t i);
-void __cdecl GScr_AddEntity(gentity_s *pEnt);
-void __cdecl Scr_ParseGameTypeList();
+void GScr_IsOnLadder(scr_entref_t entref);
+void GScr_IsMantling(scr_entref_t entref);
+void GScr_StartRagdoll(scr_entref_t entref);
+void GScr_IsRagdoll(scr_entref_t entref);
+void GScr_GetCorpseAnim(scr_entref_t entref);
+void ScrCmd_ItemWeaponSetAmmo(scr_entref_t entref);
+void Scr_SetOrigin(gentity_s *ent, int32_t i);
+void Scr_SetAngles(gentity_s *ent, int32_t i);
+void Scr_SetHealth(gentity_s *ent, int32_t i);
+void GScr_AddEntity(gentity_s *pEnt);
+void Scr_ParseGameTypeList();
 XAssetHeader Scr_ParseGameTypeList_FastFile();
-char *__cdecl Scr_GetGameTypeNameForScript(const char *pszGameTypeScript);
-bool __cdecl Scr_IsValidGameType(const char *pszGameType);
-void __cdecl Scr_LoadGameType();
-void __cdecl Scr_StartupGameType();
-void __cdecl Scr_PlayerConnect(gentity_s *self);
-void __cdecl Scr_PlayerDisconnect(gentity_s *self);
-void __cdecl Scr_PlayerDamage(
+char *Scr_GetGameTypeNameForScript(const char *pszGameTypeScript);
+bool Scr_IsValidGameType(const char *pszGameType);
+void Scr_LoadGameType();
+void Scr_StartupGameType();
+void Scr_PlayerConnect(gentity_s *self);
+void Scr_PlayerDisconnect(gentity_s *self);
+void Scr_PlayerDamage(
     gentity_s *self,
     gentity_s *inflictor,
     gentity_s *attacker,
@@ -810,7 +810,7 @@ void __cdecl Scr_PlayerDamage(
     const float *vDir,
     hitLocation_t hitLoc,
     int32_t timeOffset);
-void __cdecl Scr_PlayerKilled(
+void Scr_PlayerKilled(
     gentity_s *self,
     gentity_s *inflictor,
     gentity_s *attacker,
@@ -821,7 +821,7 @@ void __cdecl Scr_PlayerKilled(
     hitLocation_t hitLoc,
     int32_t psTimeOffset,
     int32_t deathAnimDuration);
-void __cdecl Scr_PlayerLastStand(
+void Scr_PlayerLastStand(
     gentity_s *self,
     gentity_s *inflictor,
     gentity_s *attacker,
@@ -831,8 +831,8 @@ void __cdecl Scr_PlayerLastStand(
     const float *vDir,
     hitLocation_t hitLoc,
     int32_t psTimeOffset);
-void __cdecl Scr_VoteCalled(gentity_s *self, char *command, char *param1, char *param2);
-void __cdecl Scr_PlayerVote(gentity_s *self, char *option);
+void Scr_VoteCalled(gentity_s *self, char *command, char *param1, char *param2);
+void Scr_PlayerVote(gentity_s *self, char *option);
 
 
 
@@ -842,68 +842,68 @@ void __cdecl Scr_PlayerVote(gentity_s *self, char *option);
 struct SpawnFuncEntry // sizeof=0x8
 {                                       // ...
     const char *classname;
-    void(__cdecl *callback)(gentity_s *);
+    void(*callback)(gentity_s *);
 };
-void __cdecl Scr_GetObjectField(uint32_t classnum, int entnum, int offset);
-int32_t __cdecl G_LevelSpawnString(const char *key, const char *defaultString, const char **out);
-int32_t __cdecl G_SpawnFloat(const char *key, const char *defaultString, float *out);
-int32_t __cdecl G_SpawnInt(const char *key, const char *defaultString, int32_t *out);
-void __cdecl Scr_ReadOnlyField(gentity_s *ent, int32_t i);
-int32_t __cdecl G_CallSpawnEntity(gentity_s *ent);
-const gitem_s *__cdecl G_GetItemForClassname(const char *classname, uint8_t model);
-void(__cdecl *__cdecl G_FindSpawnFunc(
+void Scr_GetObjectField(uint32_t classnum, int entnum, int offset);
+int32_t G_LevelSpawnString(const char *key, const char *defaultString, const char **out);
+int32_t G_SpawnFloat(const char *key, const char *defaultString, float *out);
+int32_t G_SpawnInt(const char *key, const char *defaultString, int32_t *out);
+void Scr_ReadOnlyField(gentity_s *ent, int32_t i);
+int32_t G_CallSpawnEntity(gentity_s *ent);
+const gitem_s *G_GetItemForClassname(const char *classname, uint8_t model);
+void(*G_FindSpawnFunc(
     const char *classname,
     const SpawnFuncEntry *spawnFuncArray,
     int32_t spawnFuncCount))(gentity_s *);
-void __cdecl GScr_AddFieldsForEntity();
-void __cdecl GScr_AddFieldsForRadiant();
-void __cdecl Scr_SetGenericField(uint8_t *b, fieldtype_t type, int32_t ofs);
-int32_t __cdecl Scr_SetObjectField(uint32_t classnum, uint32_t entnum, uint32_t offset);
-int32_t __cdecl Scr_SetEntityField(uint32_t entnum, uint32_t offset);
-void __cdecl Scr_GetEntityField(uint32_t entnum, uint32_t offset);
-void __cdecl Scr_GetGenericField(uint8_t *b, fieldtype_t type, int32_t ofs);
-void __cdecl Scr_FreeEntityConstStrings(gentity_s *pEnt);
-void __cdecl Scr_FreeEntity(gentity_s *ent);
-void __cdecl Scr_AddEntity(gentity_s *ent);
-gentity_s *__cdecl Scr_GetEntityAllowNull(uint32_t index);
-gentity_s *__cdecl Scr_GetEntity(uint32_t index);
-void __cdecl Scr_FreeHudElem(game_hudelem_s *hud);
-void __cdecl Scr_AddHudElem(game_hudelem_s *hud);
-uint16_t __cdecl Scr_ExecEntThread(gentity_s *ent, int32_t handle, uint32_t paramcount);
-void __cdecl Scr_Notify(gentity_s *ent, uint16_t stringValue, uint32_t paramcount);
-void __cdecl Scr_GetEnt();
-void __cdecl Scr_GetEntArray();
-void __cdecl SP_worldspawn();
-void __cdecl G_SpawnEntitiesFromString();
+void GScr_AddFieldsForEntity();
+void GScr_AddFieldsForRadiant();
+void Scr_SetGenericField(uint8_t *b, fieldtype_t type, int32_t ofs);
+int32_t Scr_SetObjectField(uint32_t classnum, uint32_t entnum, uint32_t offset);
+int32_t Scr_SetEntityField(uint32_t entnum, uint32_t offset);
+void Scr_GetEntityField(uint32_t entnum, uint32_t offset);
+void Scr_GetGenericField(uint8_t *b, fieldtype_t type, int32_t ofs);
+void Scr_FreeEntityConstStrings(gentity_s *pEnt);
+void Scr_FreeEntity(gentity_s *ent);
+void Scr_AddEntity(gentity_s *ent);
+gentity_s *Scr_GetEntityAllowNull(uint32_t index);
+gentity_s *Scr_GetEntity(uint32_t index);
+void Scr_FreeHudElem(game_hudelem_s *hud);
+void Scr_AddHudElem(game_hudelem_s *hud);
+uint16_t Scr_ExecEntThread(gentity_s *ent, int32_t handle, uint32_t paramcount);
+void Scr_Notify(gentity_s *ent, uint16_t stringValue, uint32_t paramcount);
+void Scr_GetEnt();
+void Scr_GetEntArray();
+void SP_worldspawn();
+void G_SpawnEntitiesFromString();
 void G_CallSpawn();
-void __cdecl G_ParseEntityFields(gentity_s *ent);
-void __cdecl G_ParseEntityField(const char *key, char *value, gentity_s *ent);
-void __cdecl G_SetEntityScriptVariable(const char *key, char *value, gentity_s *ent);
-uint32_t __cdecl G_SetEntityScriptVariableInternal(const char *key, char *value);
-void __cdecl G_LoadStructs();
+void G_ParseEntityFields(gentity_s *ent);
+void G_ParseEntityField(const char *key, char *value, gentity_s *ent);
+void G_SetEntityScriptVariable(const char *key, char *value, gentity_s *ent);
+uint32_t G_SetEntityScriptVariableInternal(const char *key, char *value);
+void G_LoadStructs();
 int32_t G_SpawnStruct();
 
 
 
 
 // g_trigger_mp
-void __cdecl G_Trigger(gentity_s *self, gentity_s *other);
-char __cdecl InitTrigger(gentity_s *self);
-void __cdecl InitSentientTrigger(gentity_s *self);
-void __cdecl multi_trigger(gentity_s *ent);
-void __cdecl Touch_Multi(gentity_s *self, gentity_s *other, int32_t extra);
-void __cdecl SP_trigger_multiple(gentity_s *ent);
-void __cdecl InitTriggerWait(gentity_s *ent, int32_t spawnflag);
-void __cdecl SP_trigger_radius(gentity_s *ent);
-void __cdecl SP_trigger_disk(gentity_s *ent);
-void __cdecl hurt_touch(gentity_s *self, gentity_s *other, int32_t extra);
-void __cdecl hurt_use(gentity_s *self, gentity_s *other, gentity_s *third);
-void __cdecl SP_trigger_hurt(gentity_s *self);
-void __cdecl SP_trigger_once(gentity_s *ent);
-bool __cdecl Respond_trigger_damage(gentity_s *pEnt, int32_t iMOD);
-void __cdecl Activate_trigger_damage(gentity_s *pEnt, gentity_s *pOther, int32_t iDamage, int32_t iMOD);
-void __cdecl Use_trigger_damage(gentity_s *pEnt, gentity_s *pOther, gentity_s *third);
-void __cdecl Pain_trigger_damage(gentity_s *pSelf, gentity_s *pAttacker, int32_t iDamage, const float *vPoint, int32_t iMod, const float *idk, hitLocation_t hit, int32_t swag);
+void G_Trigger(gentity_s *self, gentity_s *other);
+char InitTrigger(gentity_s *self);
+void InitSentientTrigger(gentity_s *self);
+void multi_trigger(gentity_s *ent);
+void Touch_Multi(gentity_s *self, gentity_s *other, int32_t extra);
+void SP_trigger_multiple(gentity_s *ent);
+void InitTriggerWait(gentity_s *ent, int32_t spawnflag);
+void SP_trigger_radius(gentity_s *ent);
+void SP_trigger_disk(gentity_s *ent);
+void hurt_touch(gentity_s *self, gentity_s *other, int32_t extra);
+void hurt_use(gentity_s *self, gentity_s *other, gentity_s *third);
+void SP_trigger_hurt(gentity_s *self);
+void SP_trigger_once(gentity_s *ent);
+bool Respond_trigger_damage(gentity_s *pEnt, int32_t iMOD);
+void Activate_trigger_damage(gentity_s *pEnt, gentity_s *pOther, int32_t iDamage, int32_t iMOD);
+void Use_trigger_damage(gentity_s *pEnt, gentity_s *pOther, gentity_s *third);
+void Pain_trigger_damage(gentity_s *pSelf, gentity_s *pAttacker, int32_t iDamage, const float *vPoint, int32_t iMod, const float *idk, hitLocation_t hit, int32_t swag);
 void Die_trigger_damage(
     gentity_s *pSelf,
     gentity_s *pInflictor,
@@ -914,126 +914,126 @@ void Die_trigger_damage(
     const float *vDir,
     const hitLocation_t hitLoc,
     int32_t timeOffset);
-void __cdecl SP_trigger_damage(gentity_s *pSelf);
-void __cdecl G_CheckHitTriggerDamage(gentity_s *pActivator, float *vStart, float *vEnd, int32_t iDamage, uint32_t iMOD);
-void __cdecl G_GrenadeTouchTriggerDamage(gentity_s *pActivator, float *vStart, float *vEnd, int32_t iDamage, int32_t iMOD);
-void __cdecl SP_trigger_lookat(gentity_s *self);
+void SP_trigger_damage(gentity_s *pSelf);
+void G_CheckHitTriggerDamage(gentity_s *pActivator, float *vStart, float *vEnd, int32_t iDamage, uint32_t iMOD);
+void G_GrenadeTouchTriggerDamage(gentity_s *pActivator, float *vStart, float *vEnd, int32_t iDamage, int32_t iMOD);
+void SP_trigger_lookat(gentity_s *self);
 
 
 
 // g_vehicles_mp
-uint16_t __cdecl BG_VehiclesGetSlotTagName(int32_t slotIndex);
-void __cdecl CG_VehRegisterDvars();
-DObj_s *__cdecl GetVehicleEntDObj(int32_t localClientNum, centity_s *centVeh);
-void __cdecl CG_VehGunnerPOV(int32_t localClientNum, float *resultOrigin, float *resultAngles);
-clientInfo_t *__cdecl ClientInfoForLocalClient(int32_t localClientNum);
-bool __cdecl CG_VehLocalClientUsingVehicle(int32_t localClientNum);
-bool __cdecl CG_VehLocalClientDriving(int32_t localClientNum);
-bool __cdecl CG_VehEntityUsingVehicle(int32_t localClientNum, uint32_t entNum);
-clientInfo_t *__cdecl ClientInfoForEntity(int32_t localClientNum, uint32_t entNum);
-int32_t __cdecl CG_VehLocalClientVehicleSlot(int32_t localClientNum);
-int32_t __cdecl CG_VehPlayerVehicleSlot(int32_t localClientNum, uint32_t entNum);
-void __cdecl CG_VehSeatTransformForPlayer(
+uint16_t BG_VehiclesGetSlotTagName(int32_t slotIndex);
+void CG_VehRegisterDvars();
+DObj_s *GetVehicleEntDObj(int32_t localClientNum, centity_s *centVeh);
+void CG_VehGunnerPOV(int32_t localClientNum, float *resultOrigin, float *resultAngles);
+clientInfo_t *ClientInfoForLocalClient(int32_t localClientNum);
+bool CG_VehLocalClientUsingVehicle(int32_t localClientNum);
+bool CG_VehLocalClientDriving(int32_t localClientNum);
+bool CG_VehEntityUsingVehicle(int32_t localClientNum, uint32_t entNum);
+clientInfo_t *ClientInfoForEntity(int32_t localClientNum, uint32_t entNum);
+int32_t CG_VehLocalClientVehicleSlot(int32_t localClientNum);
+int32_t CG_VehPlayerVehicleSlot(int32_t localClientNum, uint32_t entNum);
+void CG_VehSeatTransformForPlayer(
     int32_t localClientNum,
     uint32_t entNum,
     float *resultOrigin,
     float *resultAngles);
-void __cdecl SeatTransformForClientInfo(int32_t localClientNum, clientInfo_t *ci, float *resultOrigin, float *resultAngles);
-void __cdecl SeatTransformForSlot(
+void SeatTransformForClientInfo(int32_t localClientNum, clientInfo_t *ci, float *resultOrigin, float *resultAngles);
+void SeatTransformForSlot(
     int32_t localClientNum,
     uint32_t vehEntNum,
     uint32_t vehSlotIdx,
     float *resultOrigin,
     float *resultAngles);
-void __cdecl CG_VehSeatOriginForLocalClient(int32_t localClientNum, float *result);
-double __cdecl Veh_GetTurretBarrelRoll(int32_t localClientNum, centity_s *cent);
-int32_t __cdecl CG_GetEntityIndex(int32_t localClientNum, const centity_s *cent);
-vehicleEffects *__cdecl VehicleGetFxInfo(int32_t localClientNum, int32_t entityNum);
-void __cdecl Veh_IncTurretBarrelRoll(int32_t localClientNum, int32_t entityNum, float rotation);
-void __cdecl CG_VehProcessEntity(int32_t localClientNum, centity_s *cent);
-void __cdecl SetupPoseControllers(int32_t localClientNum, DObj_s *obj, centity_s *cent, vehfx_t *fxInfo);
-uint16_t __cdecl CompressUnit(float unit);
-void __cdecl VehicleFXTest(int32_t localClientNum, const DObj_s *obj, centity_s *cent, vehfx_t *fxInfo);
-double __cdecl GetSpeed(int32_t localClientNum, centity_s *cent);
-void __cdecl VEH_SetPosition(gentity_s *ent, const float *origin, const float *vel, const float *angles);
-void __cdecl VEH_InitPhysics(gentity_s *ent);
-bool __cdecl VEH_SlideMove(gentity_s *ent, int32_t gravity, float frameTime);
-void __cdecl VEH_ClipVelocity(float *in, float *normal, float *out);
-void __cdecl VEH_BackupPosition(gentity_s *ent);
-void __cdecl VEH_TouchEntities(gentity_s *ent);
-void __cdecl VEH_PushEntity(gentity_s *ent, gentity_s *target, float *pushDir, float *deltaOrigin, float *deltaAngles);
-bool __cdecl AttachedStickyMissile(gentity_s *vehicle, gentity_s *missile);
-void __cdecl PushAttachedStickyMissile(gentity_s *vehicle, gentity_s *missile);
-void __cdecl G_VehRegisterDvars();
-struct vehicle_info_t *__cdecl VEH_GetVehicleInfo(__int16 index);
-int32_t __cdecl G_VehPlayerRideSlot(gentity_s *vehicle, int32_t playerEntNum);
-void __cdecl VEH_DebugCapsule(float *pos, float rad, float height, float r, float g, float b);
-void __cdecl VEH_SetPosition(gentity_s *ent, const float *origin, const float *angles);
-void __cdecl VEH_JoltBody(gentity_s *ent, const float *dir, float intensity, float speedFrac, float decel);
-void __cdecl VEH_UpdateSounds(gentity_s *ent);
-void __cdecl G_VehUnlinkPlayer(gentity_s *ent, gentity_s *player);
-void __cdecl VehicleClearRideSlotForPlayer(gentity_s *ent, int32_t playerEntNum);
-void __cdecl G_VehiclesInit(int32_t restarting);
-void __cdecl InitInfos(int32_t restarting);
-void __cdecl G_VehiclesSetupSpawnedEnts();
-void __cdecl SetupCollisionMap(gentity_s *ent);
-gentity_s *__cdecl GetCollisionMap(const char *modelname);
-void __cdecl SpawnVehicle(gentity_s *ent, const char *typeName);
-int32_t __cdecl VEH_GetVehicleInfoFromName(const char *name);
-int32_t __cdecl G_LoadVehicle(const char *name);
-int32_t __cdecl VEH_ParseSpecificField(uint8_t *pStruct, const char *pValue, int32_t fieldType);
-void __cdecl VEH_InitModelAndValidateTags(gentity_s *ent, int32_t *infoIdx);
-char __cdecl VEH_DObjHasRequiredTags(gentity_s *ent, int32_t infoIdx);
-void __cdecl InitVehicleTags(gentity_s *ent);
-void __cdecl InitEntityVehicleVars(gentity_s *ent, scr_vehicle_s *veh, __int16 infoIdx);
-void __cdecl InitEntityVars(gentity_s *ent, scr_vehicle_s *veh, int32_t infoIdx);
-void __cdecl G_VehFreeEntity(gentity_s *vehEnt);
-bool __cdecl G_VehUsable(gentity_s *vehicle, gentity_s *player);
-char __cdecl VehicleHasSeatFree(gentity_s *ent);
-bool __cdecl G_VehImmuneToDamage(gentity_s *ent, int32_t mod, char damageFlags, uint32_t weapon);
-void __cdecl G_VehEntHandler_Think(gentity_s *pSelf);
-VehicleTags *__cdecl RideTagFirst(gentity_s *ent);
-VehicleTags *__cdecl RideTagNext(gentity_s *ent, VehicleRideSlot_t *inTag);
-void __cdecl VEH_DebugBox(float *pos, float width, float r, float g, float b);
-void __cdecl InflictDamage(gentity_s *vehEnt, gentity_s *target, float *dir, int32_t damage);
-int32_t __cdecl VehicleEntDriver(gentity_s *ent);
-void __cdecl UpdateTurret(gentity_s *ent);
-int32_t __cdecl VehicleEntGunner(gentity_s *ent);
-void __cdecl VEH_UpdateBody(gentity_s *ent, float frameTime);
-void __cdecl VEH_UpdateSteering(gentity_s *ent);
-void __cdecl VEH_UpdateMaterialTime(gentity_s *ent, float frameTime);
-void __cdecl VEH_UpdateWeapon(gentity_s *ent);
-void __cdecl FireTurret(gentity_s *ent, gentity_s *player);
-void __cdecl FillWeaponParms(gentity_s *vehEnt, gentity_s *player, weaponParms *wp);
-void __cdecl VEH_UpdateClients(gentity_s *ent);
-void __cdecl VEH_UpdateClientPassenger(gentity_s *ent);
-int32_t __cdecl VehicleEntPassenger(gentity_s *ent);
-void __cdecl VEH_UpdateClientGunner(gentity_s *ent);
-void __cdecl VEH_UpdateClientDriver(gentity_s *ent);
-char __cdecl VEH_PlayerRotation(gentity_s *player, vehicle_physic_t *phys);
-void __cdecl UpdateSimulation(gentity_s *ent);
-void __cdecl IntegratePosAndRot(gentity_s *ent);
-void __cdecl DebugDrawVelocity(const float *origin, const float *velocity, const float *color);
-void __cdecl GetAccelerationForces(gentity_s *ent, float frameTime, float *resultPosition);
-void __cdecl PositionAccelForces(vehicle_physic_t *phys, float driverAccel, float *result);
-bool __cdecl CarTravelingForward(vehicle_physic_t *phys);
-bool __cdecl DriverBreaking(vehicle_physic_t *phys, float driverAccel);
-void __cdecl AdvanceVehiclePosition(gentity_s *ent, float frameTime);
-void __cdecl VEH_GroundTrace(gentity_s *ent);
-void __cdecl VEH_GroundMove(gentity_s *ent, float frameTime);
-void __cdecl VEH_StepSlideMove(gentity_s *ent, int32_t gravity, float frameTime);
-bool __cdecl VEH_SlideMove(gentity_s *ent, int32_t gravity, float frameTime);
-void __cdecl VEH_AirMove(gentity_s *ent, int32_t gravity, float frameTime);
-void __cdecl VEH_GroundPlant(gentity_s *ent, int32_t gravity, float frameTime);
-void __cdecl VEH_DebugLine(float *start, float *end, float r, float g, float b);
-void __cdecl VEH_GetWheelOrigin(gentity_s *ent, int32_t idx, float *origin);
-void __cdecl AdvanceVehicleRotation(gentity_s *ent, float frameTime);
-void __cdecl CapMaxMPH(vehicle_physic_t *phys);
-void __cdecl InitFirstThink(gentity_s *pSelf);
-void __cdecl G_VehEntHandler_Touch(gentity_s *pSelf, gentity_s *pOther, int32_t bTouched);
-void __cdecl G_VehEntHandler_Use(gentity_s *pEnt, gentity_s *pOther, gentity_s *pActivator);
-void __cdecl LinkPlayerToVehicle(gentity_s *ent, gentity_s *player);
-void __cdecl G_VehEntHandler_Die(
+void CG_VehSeatOriginForLocalClient(int32_t localClientNum, float *result);
+double Veh_GetTurretBarrelRoll(int32_t localClientNum, centity_s *cent);
+int32_t CG_GetEntityIndex(int32_t localClientNum, const centity_s *cent);
+vehicleEffects *VehicleGetFxInfo(int32_t localClientNum, int32_t entityNum);
+void Veh_IncTurretBarrelRoll(int32_t localClientNum, int32_t entityNum, float rotation);
+void CG_VehProcessEntity(int32_t localClientNum, centity_s *cent);
+void SetupPoseControllers(int32_t localClientNum, DObj_s *obj, centity_s *cent, vehfx_t *fxInfo);
+uint16_t CompressUnit(float unit);
+void VehicleFXTest(int32_t localClientNum, const DObj_s *obj, centity_s *cent, vehfx_t *fxInfo);
+double GetSpeed(int32_t localClientNum, centity_s *cent);
+void VEH_SetPosition(gentity_s *ent, const float *origin, const float *vel, const float *angles);
+void VEH_InitPhysics(gentity_s *ent);
+bool VEH_SlideMove(gentity_s *ent, int32_t gravity, float frameTime);
+void VEH_ClipVelocity(float *in, float *normal, float *out);
+void VEH_BackupPosition(gentity_s *ent);
+void VEH_TouchEntities(gentity_s *ent);
+void VEH_PushEntity(gentity_s *ent, gentity_s *target, float *pushDir, float *deltaOrigin, float *deltaAngles);
+bool AttachedStickyMissile(gentity_s *vehicle, gentity_s *missile);
+void PushAttachedStickyMissile(gentity_s *vehicle, gentity_s *missile);
+void G_VehRegisterDvars();
+struct vehicle_info_t *VEH_GetVehicleInfo(__int16 index);
+int32_t G_VehPlayerRideSlot(gentity_s *vehicle, int32_t playerEntNum);
+void VEH_DebugCapsule(float *pos, float rad, float height, float r, float g, float b);
+void VEH_SetPosition(gentity_s *ent, const float *origin, const float *angles);
+void VEH_JoltBody(gentity_s *ent, const float *dir, float intensity, float speedFrac, float decel);
+void VEH_UpdateSounds(gentity_s *ent);
+void G_VehUnlinkPlayer(gentity_s *ent, gentity_s *player);
+void VehicleClearRideSlotForPlayer(gentity_s *ent, int32_t playerEntNum);
+void G_VehiclesInit(int32_t restarting);
+void InitInfos(int32_t restarting);
+void G_VehiclesSetupSpawnedEnts();
+void SetupCollisionMap(gentity_s *ent);
+gentity_s *GetCollisionMap(const char *modelname);
+void SpawnVehicle(gentity_s *ent, const char *typeName);
+int32_t VEH_GetVehicleInfoFromName(const char *name);
+int32_t G_LoadVehicle(const char *name);
+int32_t VEH_ParseSpecificField(uint8_t *pStruct, const char *pValue, int32_t fieldType);
+void VEH_InitModelAndValidateTags(gentity_s *ent, int32_t *infoIdx);
+char VEH_DObjHasRequiredTags(gentity_s *ent, int32_t infoIdx);
+void InitVehicleTags(gentity_s *ent);
+void InitEntityVehicleVars(gentity_s *ent, scr_vehicle_s *veh, __int16 infoIdx);
+void InitEntityVars(gentity_s *ent, scr_vehicle_s *veh, int32_t infoIdx);
+void G_VehFreeEntity(gentity_s *vehEnt);
+bool G_VehUsable(gentity_s *vehicle, gentity_s *player);
+char VehicleHasSeatFree(gentity_s *ent);
+bool G_VehImmuneToDamage(gentity_s *ent, int32_t mod, char damageFlags, uint32_t weapon);
+void G_VehEntHandler_Think(gentity_s *pSelf);
+VehicleTags *RideTagFirst(gentity_s *ent);
+VehicleTags *RideTagNext(gentity_s *ent, VehicleRideSlot_t *inTag);
+void VEH_DebugBox(float *pos, float width, float r, float g, float b);
+void InflictDamage(gentity_s *vehEnt, gentity_s *target, float *dir, int32_t damage);
+int32_t VehicleEntDriver(gentity_s *ent);
+void UpdateTurret(gentity_s *ent);
+int32_t VehicleEntGunner(gentity_s *ent);
+void VEH_UpdateBody(gentity_s *ent, float frameTime);
+void VEH_UpdateSteering(gentity_s *ent);
+void VEH_UpdateMaterialTime(gentity_s *ent, float frameTime);
+void VEH_UpdateWeapon(gentity_s *ent);
+void FireTurret(gentity_s *ent, gentity_s *player);
+void FillWeaponParms(gentity_s *vehEnt, gentity_s *player, weaponParms *wp);
+void VEH_UpdateClients(gentity_s *ent);
+void VEH_UpdateClientPassenger(gentity_s *ent);
+int32_t VehicleEntPassenger(gentity_s *ent);
+void VEH_UpdateClientGunner(gentity_s *ent);
+void VEH_UpdateClientDriver(gentity_s *ent);
+char VEH_PlayerRotation(gentity_s *player, vehicle_physic_t *phys);
+void UpdateSimulation(gentity_s *ent);
+void IntegratePosAndRot(gentity_s *ent);
+void DebugDrawVelocity(const float *origin, const float *velocity, const float *color);
+void GetAccelerationForces(gentity_s *ent, float frameTime, float *resultPosition);
+void PositionAccelForces(vehicle_physic_t *phys, float driverAccel, float *result);
+bool CarTravelingForward(vehicle_physic_t *phys);
+bool DriverBreaking(vehicle_physic_t *phys, float driverAccel);
+void AdvanceVehiclePosition(gentity_s *ent, float frameTime);
+void VEH_GroundTrace(gentity_s *ent);
+void VEH_GroundMove(gentity_s *ent, float frameTime);
+void VEH_StepSlideMove(gentity_s *ent, int32_t gravity, float frameTime);
+bool VEH_SlideMove(gentity_s *ent, int32_t gravity, float frameTime);
+void VEH_AirMove(gentity_s *ent, int32_t gravity, float frameTime);
+void VEH_GroundPlant(gentity_s *ent, int32_t gravity, float frameTime);
+void VEH_DebugLine(float *start, float *end, float r, float g, float b);
+void VEH_GetWheelOrigin(gentity_s *ent, int32_t idx, float *origin);
+void AdvanceVehicleRotation(gentity_s *ent, float frameTime);
+void CapMaxMPH(vehicle_physic_t *phys);
+void InitFirstThink(gentity_s *pSelf);
+void G_VehEntHandler_Touch(gentity_s *pSelf, gentity_s *pOther, int32_t bTouched);
+void G_VehEntHandler_Use(gentity_s *pEnt, gentity_s *pOther, gentity_s *pActivator);
+void LinkPlayerToVehicle(gentity_s *ent, gentity_s *player);
+void G_VehEntHandler_Die(
     gentity_s *pSelf,
     gentity_s *pInflictor,
     gentity_s *pAttacker,
@@ -1043,9 +1043,9 @@ void __cdecl G_VehEntHandler_Die(
     const float *dir,
     const hitLocation_t hitLoc,
     int32_t psTimeOffset);
-void __cdecl G_VehEntHandler_Controller(const gentity_s *pSelf, int32_t *partBits);
-void __cdecl G_VehSpawner(gentity_s *pSelf);
-void __cdecl G_VehCollmapSpawner(gentity_s *pSelf);
+void G_VehEntHandler_Controller(const gentity_s *pSelf, int32_t *partBits);
+void G_VehSpawner(gentity_s *pSelf);
+void G_VehCollmapSpawner(gentity_s *pSelf);
 
 
 
@@ -1058,16 +1058,16 @@ struct useList_t // sizeof=0x8
 };
 static_assert(LAYOUT_32BIT(sizeof(useList_t) == 0x8));
 
-void __cdecl Player_UpdateActivate(gentity_s *ent);
-char __cdecl Player_ActivateCmd(gentity_s *ent);
-void __cdecl Player_ActivateHoldCmd(gentity_s *ent);
-void __cdecl Player_UseEntity(gentity_s *playerEnt, gentity_s *useEnt);
-void __cdecl Player_UpdateCursorHints(gentity_s *ent);
-int32_t __cdecl Player_GetUseList(gentity_s *ent, useList_t *useList, int32_t prevHintEntIndex);
-int32_t __cdecl compare_use(float *pe1, float *pe2);
-int32_t __cdecl Player_GetItemCursorHint(const gclient_s *client, const gentity_s *traceEnt);
-void __cdecl Player_SetTurretDropHint(gentity_s *ent);
-void __cdecl Player_SetVehicleDropHint(gentity_s *ent);
+void Player_UpdateActivate(gentity_s *ent);
+char Player_ActivateCmd(gentity_s *ent);
+void Player_ActivateHoldCmd(gentity_s *ent);
+void Player_UseEntity(gentity_s *playerEnt, gentity_s *useEnt);
+void Player_UpdateCursorHints(gentity_s *ent);
+int32_t Player_GetUseList(gentity_s *ent, useList_t *useList, int32_t prevHintEntIndex);
+int32_t compare_use(float *pe1, float *pe2);
+int32_t Player_GetItemCursorHint(const gclient_s *client, const gentity_s *traceEnt);
+void Player_SetTurretDropHint(gentity_s *ent);
+void Player_SetVehicleDropHint(gentity_s *ent);
 
 
 
@@ -1101,8 +1101,8 @@ extern const dvar_t *vehHelicopterHeadSwayDontSwayTheTurret;
 extern const dvar_t *vehHelicopterTiltFromFwdAndYaw_VelAtMaxTilt;
 extern const dvar_t *vehHelicopterDecelerationSide;
 
-void __cdecl Scr_AddStruct();
-void __cdecl Scr_ResetTimeout();
+void Scr_AddStruct();
+void Scr_ResetTimeout();
 
 extern BuiltinFunctionDef functions[];
 extern BuiltinMethodDef methods_2[];

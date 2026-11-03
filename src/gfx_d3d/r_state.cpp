@@ -32,7 +32,7 @@ const uint32_t s_depthTestTable_30[4] = { 8, 2, 3, 4 };
 const uint32_t s_stencilOpTable_30[8] = { 1, 2, 3, 4, 5, 6, 7, 8 };
 const uint32_t s_stencilFuncTable_30[8] = { 1, 2, 3, 4, 5, 6, 7, 8 };
 
-void __cdecl R_ChangeIndices(GfxCmdBufPrimState *state, IDirect3DIndexBuffer9 *ib)
+void R_ChangeIndices(GfxCmdBufPrimState *state, IDirect3DIndexBuffer9 *ib)
 {
     const char *v2; // eax
     int hr; // [esp+0h] [ebp-8h]
@@ -67,7 +67,7 @@ void __cdecl R_ChangeIndices(GfxCmdBufPrimState *state, IDirect3DIndexBuffer9 *i
     } while (alwaysfails);
 }
 
-void __cdecl R_ChangeStreamSource(
+void R_ChangeStreamSource(
     GfxCmdBufPrimState *state,
     uint32_t streamIndex,
     IDirect3DVertexBuffer9 *vb,
@@ -106,7 +106,7 @@ void __cdecl R_ChangeStreamSource(
     } while (alwaysfails);
 }
 
-void __cdecl R_SetTexFilter()
+void R_SetTexFilter()
 {
     int v0; // [esp+0h] [ebp-60h]
     int v1; // [esp+4h] [ebp-5Ch]
@@ -245,7 +245,7 @@ void __cdecl R_SetTexFilter()
     dx.mipBias = r_texFilterMipBias->current.unsignedInt;
 }
 
-void __cdecl R_SetInitialContextState(IDirect3DDevice9 *device)
+void R_SetInitialContextState(IDirect3DDevice9 *device)
 {
     const char *v1; // eax
     const char *v2; // eax
@@ -315,7 +315,7 @@ void __cdecl R_SetInitialContextState(IDirect3DDevice9 *device)
     } while (alwaysfails);
 }
 
-void __cdecl R_ChangeDepthHackNearClip(GfxCmdBufSourceState *source, uint32_t depthHackFlags)
+void R_ChangeDepthHackNearClip(GfxCmdBufSourceState *source, uint32_t depthHackFlags)
 {
     iassert( source );
     if (depthHackFlags != source->depthHackFlags)
@@ -325,7 +325,7 @@ void __cdecl R_ChangeDepthHackNearClip(GfxCmdBufSourceState *source, uint32_t de
     }
 }
 
-void __cdecl R_DepthHackNearClipChanged(GfxCmdBufSourceState *source)
+void R_DepthHackNearClipChanged(GfxCmdBufSourceState *source)
 {
     ++source->matrixVersions[2];
     ++source->matrixVersions[4];
@@ -334,7 +334,7 @@ void __cdecl R_DepthHackNearClipChanged(GfxCmdBufSourceState *source)
     R_DirtyCodeConstant(source, CONST_SRC_CODE_DEPTH_FROM_CLIP);
 }
 
-GfxCmdBufSourceState *__cdecl R_GetCodeMatrix(
+GfxCmdBufSourceState *R_GetCodeMatrix(
     GfxCmdBufSourceState *source,
     uint32_t sourceIndex,
     uint32_t firstRow)
@@ -395,7 +395,7 @@ GfxCmdBufSourceState *__cdecl R_GetCodeMatrix(
     }
 }
 
-void __cdecl R_DeriveCodeMatrix(GfxCmdBufSourceState *source, GfxCodeMatrices *activeMatrices, uint32_t baseIndex)
+void R_DeriveCodeMatrix(GfxCmdBufSourceState *source, GfxCodeMatrices *activeMatrices, uint32_t baseIndex)
 {
     const char *v3; // eax
 
@@ -432,7 +432,7 @@ void __cdecl R_DeriveCodeMatrix(GfxCmdBufSourceState *source, GfxCodeMatrices *a
     }
 }
 
-void __cdecl R_DeriveViewMatrix(GfxCmdBufSourceState *source)
+void R_DeriveViewMatrix(GfxCmdBufSourceState *source)
 {
     memcpy(&source->matrices.matrix[4], &source->viewParms, sizeof(source->matrices.matrix[4]));
     MatrixTransformVector44(source->eyeOffset, source->matrices.matrix[4].m, source->matrices.matrix[4].m[3]);
@@ -453,7 +453,7 @@ void  R_DeriveWorldViewMatrix(GfxCmdBufSourceState *source)
     source->constVersions[70] = source->matrixVersions[3];
 }
 
-void __cdecl R_DeriveProjectionMatrix(GfxCmdBufSourceState *source)
+void R_DeriveProjectionMatrix(GfxCmdBufSourceState *source)
 {
     memcpy(&source->matrices.matrix[8], &source->viewParms.projectionMatrix, sizeof(source->matrices.matrix[8]));
     if (source->depthHackFlags == 2)
@@ -461,7 +461,7 @@ void __cdecl R_DeriveProjectionMatrix(GfxCmdBufSourceState *source)
     source->constVersions[66] = source->matrixVersions[2];
 }
 
-void __cdecl R_DeriveViewProjectionMatrix(GfxCmdBufSourceState *source)
+void R_DeriveViewProjectionMatrix(GfxCmdBufSourceState *source)
 {
     GfxMatrix *viewProj; // [esp+14h] [ebp-10h]
 
@@ -508,7 +508,7 @@ void  R_DeriveWorldViewProjectionMatrix(GfxCmdBufSourceState *source)
     source->constVersions[78] = source->matrixVersions[5];
 }
 
-void __cdecl R_DeriveShadowLookupMatrix(GfxCmdBufSourceState *source)
+void R_DeriveShadowLookupMatrix(GfxCmdBufSourceState *source)
 {
     memcpy(&source->matrices.matrix[24], &source->shadowLookupMatrix, sizeof(source->matrices.matrix[24]));
     MatrixTransformVector44(source->eyeOffset, source->matrices.matrix[24].m, source->matrices.matrix[24].m[3]);
@@ -553,7 +553,7 @@ void  R_GenerateWorldOutdoorLookupMatrix(
     source->constVersions[86] = source->matrixVersions[7];
 }
 
-const GfxImage *__cdecl R_GetTextureFromCode(
+const GfxImage *R_GetTextureFromCode(
     GfxCmdBufSourceState *source,
     MaterialTextureSource codeTexture,
     uint8_t *samplerState)
@@ -571,7 +571,7 @@ const GfxImage *__cdecl R_GetTextureFromCode(
     return source->input.codeImages[codeTexture];
 }
 
-void __cdecl R_TextureFromCodeError(GfxCmdBufSourceState *source, uint32_t codeTexture)
+void R_TextureFromCodeError(GfxCmdBufSourceState *source, uint32_t codeTexture)
 {
     if (!rg.codeImageNames[codeTexture])
         MyAssertHandler(
@@ -584,7 +584,7 @@ void __cdecl R_TextureFromCodeError(GfxCmdBufSourceState *source, uint32_t codeT
     Com_Error(ERR_DROP, "Tried to use '%s' when it isn't valid\n", rg.codeImageNames[codeTexture]);
 }
 
-const GfxImage *__cdecl R_OverrideGrayscaleImage(const dvar_s *dvar)
+const GfxImage *R_OverrideGrayscaleImage(const dvar_s *dvar)
 {
     const char *v2; // eax
 
@@ -600,7 +600,7 @@ const GfxImage *__cdecl R_OverrideGrayscaleImage(const dvar_s *dvar)
     return rgp.grayImage;
 }
 
-void __cdecl R_SetLightmap(GfxCmdBufContext context, uint32_t lmapIndex)
+void R_SetLightmap(GfxCmdBufContext context, uint32_t lmapIndex)
 {
     const MaterialPass *pass; // [esp+0h] [ebp-8h]
     const GfxImage *overrideImage; // [esp+4h] [ebp-4h]
@@ -650,7 +650,7 @@ void __cdecl R_SetLightmap(GfxCmdBufContext context, uint32_t lmapIndex)
     }
 }
 
-void __cdecl R_SetReflectionProbe(GfxCmdBufContext context, uint32_t reflectionProbeIndex)
+void R_SetReflectionProbe(GfxCmdBufContext context, uint32_t reflectionProbeIndex)
 {
     iassert( rgp.world );
     iassert( reflectionProbeIndex != REFLECTION_PROBE_INVALID );
@@ -667,7 +667,7 @@ void __cdecl R_SetReflectionProbe(GfxCmdBufContext context, uint32_t reflectionP
         R_SetSampler(context, 1u, 0x72u, rgp.world->reflectionProbes[reflectionProbeIndex].reflectionImage);
 }
 
-void __cdecl R_ChangeDepthRange(GfxCmdBufState *state, GfxDepthRangeType depthRangeType)
+void R_ChangeDepthRange(GfxCmdBufState *state, GfxDepthRangeType depthRangeType)
 {
     float v2; // [esp+8h] [ebp-28h]
     float v3; // [esp+Ch] [ebp-24h]
@@ -697,7 +697,7 @@ void __cdecl R_ChangeDepthRange(GfxCmdBufState *state, GfxDepthRangeType depthRa
     R_HW_SetViewport(device, &state->viewport, state->depthRangeNear, state->depthRangeFar);
 }
 
-void __cdecl R_HW_SetViewport(IDirect3DDevice9 *device, const GfxViewport *viewport, float nearValue, float farValue)
+void R_HW_SetViewport(IDirect3DDevice9 *device, const GfxViewport *viewport, float nearValue, float farValue)
 {
     const char *v4; // eax
     int hr; // [esp+10h] [ebp-1Ch]
@@ -738,7 +738,7 @@ void __cdecl R_HW_SetViewport(IDirect3DDevice9 *device, const GfxViewport *viewp
     } while (alwaysfails);
 }
 
-int __cdecl R_BeginMaterial(GfxCmdBufState *state, const Material *material, MaterialTechniqueType techType)
+int R_BeginMaterial(GfxCmdBufState *state, const Material *material, MaterialTechniqueType techType)
 {
     const char *v4; // eax
     const char *v5; // eax
@@ -760,7 +760,7 @@ int __cdecl R_BeginMaterial(GfxCmdBufState *state, const Material *material, Mat
     return 1;
 }
 
-void __cdecl R_ClearAllStreamSources(GfxCmdBufPrimState *state)
+void R_ClearAllStreamSources(GfxCmdBufPrimState *state)
 {
     if (state->streams[0].vb || state->streams[0].offset || state->streams[0].stride)
         R_ChangeStreamSource(state, 0, 0, 0, 0);
@@ -768,7 +768,7 @@ void __cdecl R_ClearAllStreamSources(GfxCmdBufPrimState *state)
         R_ChangeStreamSource(state, 1u, 0, 0, 0);
 }
 
-void __cdecl R_DrawIndexedPrimitive(GfxCmdBufPrimState *state, const GfxDrawPrimArgs *args)
+void R_DrawIndexedPrimitive(GfxCmdBufPrimState *state, const GfxDrawPrimArgs *args)
 {
     const char *v2; // eax
     int hr; // [esp+0h] [ebp-Ch]
@@ -807,7 +807,7 @@ void __cdecl R_DrawIndexedPrimitive(GfxCmdBufPrimState *state, const GfxDrawPrim
     }
 }
 
-void __cdecl R_ChangeState_0(GfxCmdBufState *state, uint32_t stateBits0)
+void R_ChangeState_0(GfxCmdBufState *state, uint32_t stateBits0)
 {
     bool blendOpRgbWasEnabled; // [esp+2Fh] [ebp-Dh]
     int changedBits; // [esp+30h] [ebp-Ch]
@@ -870,7 +870,7 @@ void __cdecl R_ChangeState_0(GfxCmdBufState *state, uint32_t stateBits0)
     }
 }
 
-void __cdecl R_HW_SetAlphaTestEnable(IDirect3DDevice9 *device, __int16 stateBits0)
+void R_HW_SetAlphaTestEnable(IDirect3DDevice9 *device, __int16 stateBits0)
 {
     const char *v2; // eax
     int hr; // [esp+0h] [ebp-4h]
@@ -899,7 +899,7 @@ void __cdecl R_HW_SetAlphaTestEnable(IDirect3DDevice9 *device, __int16 stateBits
     } while (alwaysfails);
 }
 
-void __cdecl R_HW_SetColorMask(IDirect3DDevice9 *device, uint32_t stateBits0)
+void R_HW_SetColorMask(IDirect3DDevice9 *device, uint32_t stateBits0)
 {
     const char *v2; // eax
     int hr; // [esp+0h] [ebp-8h]
@@ -927,7 +927,7 @@ void __cdecl R_HW_SetColorMask(IDirect3DDevice9 *device, uint32_t stateBits0)
     } while (alwaysfails);
 }
 
-void __cdecl R_HW_SetCullFace(IDirect3DDevice9 *device, __int16 stateBits0)
+void R_HW_SetCullFace(IDirect3DDevice9 *device, __int16 stateBits0)
 {
     const char *v2; // eax
     int hr; // [esp+0h] [ebp-4h]
@@ -962,7 +962,7 @@ void __cdecl R_HW_SetCullFace(IDirect3DDevice9 *device, __int16 stateBits0)
     } while (alwaysfails);
 }
 
-void __cdecl R_HW_SetPolygonMode(IDirect3DDevice9 *device, signed int stateBits0)
+void R_HW_SetPolygonMode(IDirect3DDevice9 *device, signed int stateBits0)
 {
     const char *v2; // eax
     int hr; // [esp+0h] [ebp-4h]
@@ -992,7 +992,7 @@ void __cdecl R_HW_SetPolygonMode(IDirect3DDevice9 *device, signed int stateBits0
     } while (alwaysfails);
 }
 
-void __cdecl R_HW_DisableBlend(IDirect3DDevice9 *device)
+void R_HW_DisableBlend(IDirect3DDevice9 *device)
 {
     const char *v1; // eax
     int hr; // [esp+0h] [ebp-4h]
@@ -1018,7 +1018,7 @@ void __cdecl R_HW_DisableBlend(IDirect3DDevice9 *device)
     } while (alwaysfails);
 }
 
-void __cdecl R_HW_SetBlend(
+void R_HW_SetBlend(
     IDirect3DDevice9 *device,
     bool blendWasEnabled,
     uint32_t changedBits,
@@ -1213,7 +1213,7 @@ void __cdecl R_HW_SetBlend(
     }
 }
 
-void __cdecl R_SetAlphaTestFunction(GfxCmdBufState *state, __int16 stateBits0)
+void R_SetAlphaTestFunction(GfxCmdBufState *state, __int16 stateBits0)
 {
     const char *v2; // eax
     const char *v3; // eax
@@ -1291,7 +1291,7 @@ void __cdecl R_SetAlphaTestFunction(GfxCmdBufState *state, __int16 stateBits0)
     }
 }
 
-void __cdecl R_ChangeState_1(GfxCmdBufState *state, uint32_t stateBits1)
+void R_ChangeState_1(GfxCmdBufState *state, uint32_t stateBits1)
 {
     int changedBits; // [esp+30h] [ebp-Ch]
     IDirect3DDevice9 *device; // [esp+38h] [ebp-4h]
@@ -1355,7 +1355,7 @@ void __cdecl R_ChangeState_1(GfxCmdBufState *state, uint32_t stateBits1)
     }
 }
 
-void __cdecl R_HW_SetDepthWriteEnable(IDirect3DDevice9 *device, char stateBits1)
+void R_HW_SetDepthWriteEnable(IDirect3DDevice9 *device, char stateBits1)
 {
     const char *v2; // eax
     int hr; // [esp+0h] [ebp-4h]
@@ -1384,7 +1384,7 @@ void __cdecl R_HW_SetDepthWriteEnable(IDirect3DDevice9 *device, char stateBits1)
     } while (alwaysfails);
 }
 
-void __cdecl R_HW_SetDepthTestEnable(IDirect3DDevice9 *device, char stateBits1)
+void R_HW_SetDepthTestEnable(IDirect3DDevice9 *device, char stateBits1)
 {
     const char *v2; // eax
     int hr; // [esp+0h] [ebp-4h]
@@ -1413,7 +1413,7 @@ void __cdecl R_HW_SetDepthTestEnable(IDirect3DDevice9 *device, char stateBits1)
     } while (alwaysfails);
 }
 
-void __cdecl R_HW_SetDepthTestFunction(IDirect3DDevice9 *device, char stateBits1)
+void R_HW_SetDepthTestFunction(IDirect3DDevice9 *device, char stateBits1)
 {
     const char *v2; // eax
     int hr; // [esp+0h] [ebp-4h]
@@ -1441,7 +1441,7 @@ void __cdecl R_HW_SetDepthTestFunction(IDirect3DDevice9 *device, char stateBits1
     } while (alwaysfails);
 }
 
-void __cdecl R_HW_EnableStencil(IDirect3DDevice9 *device)
+void R_HW_EnableStencil(IDirect3DDevice9 *device)
 {
     const char *v1; // eax
     int hr; // [esp+0h] [ebp-4h]
@@ -1467,7 +1467,7 @@ void __cdecl R_HW_EnableStencil(IDirect3DDevice9 *device)
     } while (alwaysfails);
 }
 
-void __cdecl R_HW_DisableStencil(IDirect3DDevice9 *device)
+void R_HW_DisableStencil(IDirect3DDevice9 *device)
 {
     const char *v1; // eax
     int hr; // [esp+0h] [ebp-4h]
@@ -1493,7 +1493,7 @@ void __cdecl R_HW_DisableStencil(IDirect3DDevice9 *device)
     } while (alwaysfails);
 }
 
-void __cdecl R_HW_SetFrontStencilOp(
+void R_HW_SetFrontStencilOp(
     IDirect3DDevice9 *device,
     uint32_t stencilOpPass,
     uint32_t stencilOpFail,
@@ -1568,7 +1568,7 @@ void __cdecl R_HW_SetFrontStencilOp(
     } while (alwaysfails);
 }
 
-void __cdecl R_HW_SetBackStencilOp(
+void R_HW_SetBackStencilOp(
     IDirect3DDevice9 *device,
     uint32_t stencilOpPass,
     uint32_t stencilOpFail,
@@ -1643,7 +1643,7 @@ void __cdecl R_HW_SetBackStencilOp(
     } while (alwaysfails);
 }
 
-void __cdecl R_HW_SetFrontStencilFunc(IDirect3DDevice9 *device, uint32_t stencilFunc)
+void R_HW_SetFrontStencilFunc(IDirect3DDevice9 *device, uint32_t stencilFunc)
 {
     const char *v2; // eax
     int hr; // [esp+0h] [ebp-4h]
@@ -1670,7 +1670,7 @@ void __cdecl R_HW_SetFrontStencilFunc(IDirect3DDevice9 *device, uint32_t stencil
     } while (alwaysfails);
 }
 
-void __cdecl R_HW_SetBackStencilFunc(IDirect3DDevice9 *device, uint32_t stencilFunc)
+void R_HW_SetBackStencilFunc(IDirect3DDevice9 *device, uint32_t stencilFunc)
 {
     const char *v2; // eax
     int hr; // [esp+0h] [ebp-4h]
@@ -1697,7 +1697,7 @@ void __cdecl R_HW_SetBackStencilFunc(IDirect3DDevice9 *device, uint32_t stencilF
     } while (alwaysfails);
 }
 
-void __cdecl R_SetSampler(
+void R_SetSampler(
     GfxCmdBufContext context,
     uint32_t samplerIndex,
     uint8_t samplerState,
@@ -1729,7 +1729,7 @@ void __cdecl R_SetSampler(
     }
 }
 
-uint32_t __cdecl R_HW_SetSamplerState(
+uint32_t R_HW_SetSamplerState(
     IDirect3DDevice9 *device,
     uint32_t samplerIndex,
     uint32_t samplerState,
@@ -1935,7 +1935,7 @@ uint32_t __cdecl R_HW_SetSamplerState(
     return finalSamplerState;
 }
 
-uint32_t __cdecl R_DecodeSamplerState(uint8_t samplerState)
+uint32_t R_DecodeSamplerState(uint8_t samplerState)
 {
     uint32_t tableIndex; // [esp+0h] [ebp-8h]
 
@@ -1949,7 +1949,7 @@ uint32_t __cdecl R_DecodeSamplerState(uint8_t samplerState)
             | ((samplerState & 0x80) << 18);
 }
 
-void __cdecl R_SetSamplerState(GfxCmdBufState *state, uint32_t samplerIndex, uint8_t samplerState)
+void R_SetSamplerState(GfxCmdBufState *state, uint32_t samplerIndex, uint8_t samplerState)
 {
     uint32_t decodedSamplerState; // [esp+8h] [ebp-4h]
 
@@ -1975,7 +1975,7 @@ void __cdecl R_SetSamplerState(GfxCmdBufState *state, uint32_t samplerIndex, uin
     }
 }
 
-void __cdecl R_ForceSetBlendState(IDirect3DDevice9 *device, uint32_t stateBits0)
+void R_ForceSetBlendState(IDirect3DDevice9 *device, uint32_t stateBits0)
 {
     if ((stateBits0 & 0x700) != 0)
         R_HW_SetBlend(device, 0, 0xFFFFFFFF, stateBits0);
@@ -1983,7 +1983,7 @@ void __cdecl R_ForceSetBlendState(IDirect3DDevice9 *device, uint32_t stateBits0)
         R_HW_DisableBlend(device);
 }
 
-void __cdecl R_ForceSetStencilState(IDirect3DDevice9 *device, uint32_t stateBits1)
+void R_ForceSetStencilState(IDirect3DDevice9 *device, uint32_t stateBits1)
 {
     if ((stateBits1 & 0x40) != 0)
     {
@@ -2001,7 +2001,7 @@ void __cdecl R_ForceSetStencilState(IDirect3DDevice9 *device, uint32_t stateBits
     }
 }
 
-void __cdecl R_GetViewport(GfxCmdBufSourceState *source, GfxViewport *outViewport)
+void R_GetViewport(GfxCmdBufSourceState *source, GfxViewport *outViewport)
 {
     int v2; // [esp+0h] [ebp-10h]
     int v3; // [esp+4h] [ebp-Ch]
@@ -2083,7 +2083,7 @@ void __cdecl R_GetViewport(GfxCmdBufSourceState *source, GfxViewport *outViewpor
     }
 }
 
-void __cdecl R_SetViewport(GfxCmdBufState *state, const GfxViewport *viewport)
+void R_SetViewport(GfxCmdBufState *state, const GfxViewport *viewport)
 {
     const char *v2; // eax
 
@@ -2117,7 +2117,7 @@ void __cdecl R_SetViewport(GfxCmdBufState *state, const GfxViewport *viewport)
 
 
 
-void __cdecl R_UpdateViewport(GfxCmdBufSourceState *source, GfxViewport *viewport)
+void R_UpdateViewport(GfxCmdBufSourceState *source, GfxViewport *viewport)
 {
     float lookupScale[2]; // v7, v8 [esp+34h] [ebp-28h]
     float invWidth; // [esp+3Ch] [ebp-20h]
@@ -2167,13 +2167,13 @@ void __cdecl R_UpdateViewport(GfxCmdBufSourceState *source, GfxViewport *viewpor
     );
 }
 
-void __cdecl R_DisableSampler(GfxCmdBufState *state, uint32_t samplerIndex)
+void R_DisableSampler(GfxCmdBufState *state, uint32_t samplerIndex)
 {
     state->samplerTexture[samplerIndex] = 0;
     R_HW_DisableSampler(state->prim.device, samplerIndex);
 }
 
-void __cdecl R_HW_DisableSampler(IDirect3DDevice9 *device, uint32_t samplerIndex)
+void R_HW_DisableSampler(IDirect3DDevice9 *device, uint32_t samplerIndex)
 {
     const char *v2; // eax
     int hr; // [esp+0h] [ebp-4h]
@@ -2201,7 +2201,7 @@ void __cdecl R_HW_DisableSampler(IDirect3DDevice9 *device, uint32_t samplerIndex
     } while (alwaysfails);
 }
 
-void __cdecl R_UnbindImage(GfxCmdBufState *state, const GfxImage *image)
+void R_UnbindImage(GfxCmdBufState *state, const GfxImage *image)
 {
     uint32_t samplerIndex; // [esp+0h] [ebp-4h]
 
@@ -2213,7 +2213,7 @@ void __cdecl R_UnbindImage(GfxCmdBufState *state, const GfxImage *image)
 }
 
 bool g_renderTargetIsOverridden;
-void __cdecl R_SetRenderTargetSize(GfxCmdBufSourceState *source, GfxRenderTargetId newTargetId)
+void R_SetRenderTargetSize(GfxCmdBufSourceState *source, GfxRenderTargetId newTargetId)
 {
     GfxRenderTargetId actualTargetId; // [esp+0h] [ebp-4h]
 
@@ -2254,7 +2254,7 @@ const GfxViewportBehavior s_viewportBehaviorForRenderTarget[15] =
   GFX_USE_VIEWPORT_FOR_VIEW
 }; // idb
 
-GfxViewportBehavior __cdecl R_ViewportBehaviorForRenderTarget(GfxRenderTargetId renderTargetId)
+GfxViewportBehavior R_ViewportBehaviorForRenderTarget(GfxRenderTargetId renderTargetId)
 {
     iassert(s_viewportBehaviorForRenderTarget);
     bcassert(renderTargetId, R_RENDERTARGET_COUNT);
@@ -2275,7 +2275,7 @@ GfxViewportBehavior __cdecl R_ViewportBehaviorForRenderTarget(GfxRenderTargetId 
 #endif
 }
 
-void __cdecl R_SetRenderTarget(GfxCmdBufContext context, GfxRenderTargetId newTargetId)
+void R_SetRenderTarget(GfxCmdBufContext context, GfxRenderTargetId newTargetId)
 {
     if (pixelCostMode > GFX_PIXEL_COST_MODE_MEASURE_MSEC)
         newTargetId = RB_PixelCost_OverrideRenderTarget(newTargetId);
@@ -2306,7 +2306,7 @@ void __cdecl R_SetRenderTarget(GfxCmdBufContext context, GfxRenderTargetId newTa
     }
 }
 
-void __cdecl R_HW_SetRenderTarget(GfxCmdBufState *state, GfxRenderTargetId newTargetId)
+void R_HW_SetRenderTarget(GfxCmdBufState *state, GfxRenderTargetId newTargetId)
 {
     int hr; // [esp+4h] [ebp-8h]
     IDirect3DDevice9 *device; // [esp+8h] [ebp-4h]
@@ -2370,7 +2370,7 @@ void __cdecl R_HW_SetRenderTarget(GfxCmdBufState *state, GfxRenderTargetId newTa
     }
 }
 
-void __cdecl R_UpdateStatsTarget(int newTargetId)
+void R_UpdateStatsTarget(int newTargetId)
 {
     if (newTargetId == R_RENDERTARGET_SHADOWCOOKIE || newTargetId == R_RENDERTARGET_DYNAMICSHADOWS)
         g_viewStats = &g_frameStatsCur.viewStats[1];
@@ -2378,7 +2378,7 @@ void __cdecl R_UpdateStatsTarget(int newTargetId)
         g_viewStats = &g_frameStatsCur.viewStats[0];
 }
 
-void __cdecl R_ClearScreenInternal(
+void R_ClearScreenInternal(
     IDirect3DDevice9 *device,
     uint8_t whichToClear,
     const float *color,
@@ -2444,7 +2444,7 @@ void __cdecl R_ClearScreenInternal(
     } while (alwaysfails);
 }
 
-void __cdecl R_ClearScreen(
+void R_ClearScreen(
     IDirect3DDevice9 *device,
     uint8_t whichToClear,
     const float *color,
@@ -2467,7 +2467,7 @@ void __cdecl R_ClearScreen(
         R_ClearScreenInternal(device, whichToClear, color, depth, stencil, viewport);
 }
 
-void __cdecl R_ForceSetPolygonOffset(IDirect3DDevice9 *device, char stateBits1)
+void R_ForceSetPolygonOffset(IDirect3DDevice9 *device, char stateBits1)
 {
     __int64 v2; // [esp+10h] [ebp-24h]
     uint32_t offset; // [esp+28h] [ebp-Ch]
@@ -2489,7 +2489,7 @@ void __cdecl R_ForceSetPolygonOffset(IDirect3DDevice9 *device, char stateBits1)
     R_HW_SetPolygonOffset(device, scale, bias);
 }
 
-void __cdecl R_HW_SetPolygonOffset(IDirect3DDevice9 *device, float scale, float bias)
+void R_HW_SetPolygonOffset(IDirect3DDevice9 *device, float scale, float bias)
 {
     const char *v3; // eax
     const char *v4; // eax
@@ -2545,12 +2545,12 @@ void __cdecl R_HW_SetPolygonOffset(IDirect3DDevice9 *device, float scale, float 
     } while (alwaysfails);
 }
 
-void __cdecl R_SetMeshStream(GfxCmdBufState *state, GfxMeshData *mesh)
+void R_SetMeshStream(GfxCmdBufState *state, GfxMeshData *mesh)
 {
     R_SetStreamSource(&state->prim, mesh->vb.buffer, 0, mesh->vertSize);
 }
 
-void __cdecl R_SetCompleteState(IDirect3DDevice9 *device, uint32_t *stateBits)
+void R_SetCompleteState(IDirect3DDevice9 *device, uint32_t *stateBits)
 {
     iassert(device);
     R_HW_SetColorMask(device, stateBits[0]);
@@ -2566,7 +2566,7 @@ void __cdecl R_SetCompleteState(IDirect3DDevice9 *device, uint32_t *stateBits)
     R_ForceSetStencilState(device, stateBits[1]);
 }
 
-void __cdecl R_InitLocalCmdBufState(GfxCmdBufState *state)
+void R_InitLocalCmdBufState(GfxCmdBufState *state)
 {
     memcpy(state, &gfxCmdBufState, sizeof(GfxCmdBufState));
     memset(state->vertexShaderConstState, 0, sizeof(state->vertexShaderConstState));
@@ -2614,7 +2614,7 @@ void R_DrawCall(
     memcpy(&gfxCmdBufState, &cmdBuf, sizeof(gfxCmdBufState));
 }
 
-void __cdecl R_SetCodeConstant(GfxCmdBufSourceState *source, CodeConstant constant, float x, float y, float z, float w)
+void R_SetCodeConstant(GfxCmdBufSourceState *source, CodeConstant constant, float x, float y, float z, float w)
 {
     bcassert(constant, CONST_SRC_CODE_COUNT_FLOAT4);
 
@@ -2626,7 +2626,7 @@ void __cdecl R_SetCodeConstant(GfxCmdBufSourceState *source, CodeConstant consta
     R_DirtyCodeConstant(source, constant);
 }
 
-void __cdecl R_SetCodeConstantFromVec4(GfxCmdBufSourceState *source, CodeConstant constant, float *value)
+void R_SetCodeConstantFromVec4(GfxCmdBufSourceState *source, CodeConstant constant, float *value)
 {
     float *v3; // [esp+0h] [ebp-4h]
 
@@ -2640,14 +2640,14 @@ void __cdecl R_SetCodeConstantFromVec4(GfxCmdBufSourceState *source, CodeConstan
     R_DirtyCodeConstant(source, constant);
 }
 
-void __cdecl R_DirtyCodeConstant(GfxCmdBufSourceState *source, CodeConstant constant)
+void R_DirtyCodeConstant(GfxCmdBufSourceState *source, CodeConstant constant)
 {
     iassert(constant < ARRAY_COUNT(source->constVersions));
 
     ++source->constVersions[constant];
 }
 
-void __cdecl R_UpdateCodeConstant(
+void R_UpdateCodeConstant(
     GfxCmdBufSourceState *source,
     CodeConstant constant,
     float x,
@@ -2680,7 +2680,7 @@ void __cdecl R_UpdateCodeConstant(
 }
 
 
-void __cdecl R_SetAlphaAntiAliasingState(IDirect3DDevice9 *device, __int16 stateBits0)
+void R_SetAlphaAntiAliasingState(IDirect3DDevice9 *device, __int16 stateBits0)
 {
     const char *v2; // eax
     int hr; // [esp+0h] [ebp-Ch]

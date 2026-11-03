@@ -389,11 +389,11 @@ struct alignas(8) materialCommands_t // sizeof=0x22A960
 
 
 
-void __cdecl TRACK_rb_backend();
-void __cdecl RB_CopyBackendStats();
-void __cdecl RB_SetIdentity();
-void __cdecl R_SetVertex2d(GfxVertex *vert, float x, float y, float s, float t, uint32_t color);
-void __cdecl R_SetVertex4dWithNormal(
+void TRACK_rb_backend();
+void RB_CopyBackendStats();
+void RB_SetIdentity();
+void R_SetVertex2d(GfxVertex *vert, float x, float y, float s, float t, uint32_t color);
+void R_SetVertex4dWithNormal(
     GfxVertex *vert,
     float x,
     float y,
@@ -405,7 +405,7 @@ void __cdecl R_SetVertex4dWithNormal(
     float s,
     float t,
     const uint8_t *color);
-void __cdecl RB_DrawStretchPic(
+void RB_DrawStretchPic(
     const Material *material,
     float x,
     float y,
@@ -417,8 +417,8 @@ void __cdecl RB_DrawStretchPic(
     float t1,
     uint32_t color,
     GfxPrimStatsTarget statsTarget);
-void __cdecl RB_CheckTessOverflow(int vertexCount, int indexCount);
-void __cdecl RB_DrawStretchPicFlipST(
+void RB_CheckTessOverflow(int vertexCount, int indexCount);
+void RB_DrawStretchPicFlipST(
     const Material *material,
     float x,
     float y,
@@ -430,40 +430,40 @@ void __cdecl RB_DrawStretchPicFlipST(
     float t1,
     uint32_t color,
     GfxPrimStatsTarget statsTarget);
-void __cdecl RB_DrawFullScreenColoredQuad(
+void RB_DrawFullScreenColoredQuad(
     const Material *material,
     float s0,
     float t0,
     float s1,
     float t1,
     uint32_t color);
-void __cdecl RB_FullScreenColoredFilter(const Material *material, uint32_t color);
-void __cdecl RB_FullScreenFilter(const Material *material);
-void __cdecl RB_SplitScreenFilter(const Material *material, const GfxViewInfo *viewInfo);
-void __cdecl RB_SplitScreenTexCoords(float x, float y, float w, float h, float *s0, float *t0, float *s1, float *t1);
-void __cdecl R_Resolve(GfxCmdBufContext context, GfxImage *image);
-void __cdecl RB_StretchPicCmd(GfxRenderCommandExecState *execState);
-void __cdecl RB_StretchPicCmdFlipST(GfxRenderCommandExecState *execState);
-void __cdecl RB_StretchPicRotateXYCmd(GfxRenderCommandExecState *execState);
-void __cdecl RB_StretchPicRotateSTCmd(GfxRenderCommandExecState *execState);
-void __cdecl RB_DrawQuadPicCmd(GfxRenderCommandExecState *execState);
-void __cdecl RB_DrawFullScreenColoredQuadCmd(GfxRenderCommandExecState *execState);
-void __cdecl RB_StretchRawCmd(GfxRenderCommandExecState *execState);
-void __cdecl RB_StretchRaw(int x, int y, int w, int h, int cols, int rows, const uint8_t *data);
-void __cdecl R_DrawSurfs(GfxCmdBufContext context, GfxCmdBufState *prepassState, const GfxDrawSurfListInfo *info);
-uint32_t __cdecl R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext);
-void __cdecl R_TessEnd(GfxCmdBufContext context, GfxCmdBufContext prepassContext);
-void __cdecl RB_ClearScreenCmd(GfxRenderCommandExecState *execState);
-void __cdecl RB_SetGammaRamp(const GfxGammaRamp *gammaTable);
-void __cdecl RB_SaveScreenCmd(GfxRenderCommandExecState *execState);
-void __cdecl RB_SaveScreenSectionCmd(GfxRenderCommandExecState *execState);
-void __cdecl R_ResolveSection(GfxCmdBufContext context, GfxImage *image);
-void __cdecl RB_BlendSavedScreenBlurredCmd(GfxRenderCommandExecState *execState);
-void __cdecl R_SetCodeImageTexture(GfxCmdBufSourceState *source, MaterialTextureSource codeTexture, const GfxImage *image);
-void __cdecl RB_BlendSavedScreenFlashedCmd(GfxRenderCommandExecState *execState);
-void __cdecl RB_DrawPointsCmd(GfxRenderCommandExecState *execState);
-void __cdecl RB_DrawPoints2D(const GfxCmdDrawPoints *cmd);
-void __cdecl R_SetVertex4d(
+void RB_FullScreenColoredFilter(const Material *material, uint32_t color);
+void RB_FullScreenFilter(const Material *material);
+void RB_SplitScreenFilter(const Material *material, const GfxViewInfo *viewInfo);
+void RB_SplitScreenTexCoords(float x, float y, float w, float h, float *s0, float *t0, float *s1, float *t1);
+void R_Resolve(GfxCmdBufContext context, GfxImage *image);
+void RB_StretchPicCmd(GfxRenderCommandExecState *execState);
+void RB_StretchPicCmdFlipST(GfxRenderCommandExecState *execState);
+void RB_StretchPicRotateXYCmd(GfxRenderCommandExecState *execState);
+void RB_StretchPicRotateSTCmd(GfxRenderCommandExecState *execState);
+void RB_DrawQuadPicCmd(GfxRenderCommandExecState *execState);
+void RB_DrawFullScreenColoredQuadCmd(GfxRenderCommandExecState *execState);
+void RB_StretchRawCmd(GfxRenderCommandExecState *execState);
+void RB_StretchRaw(int x, int y, int w, int h, int cols, int rows, const uint8_t *data);
+void R_DrawSurfs(GfxCmdBufContext context, GfxCmdBufState *prepassState, const GfxDrawSurfListInfo *info);
+uint32_t R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext);
+void R_TessEnd(GfxCmdBufContext context, GfxCmdBufContext prepassContext);
+void RB_ClearScreenCmd(GfxRenderCommandExecState *execState);
+void RB_SetGammaRamp(const GfxGammaRamp *gammaTable);
+void RB_SaveScreenCmd(GfxRenderCommandExecState *execState);
+void RB_SaveScreenSectionCmd(GfxRenderCommandExecState *execState);
+void R_ResolveSection(GfxCmdBufContext context, GfxImage *image);
+void RB_BlendSavedScreenBlurredCmd(GfxRenderCommandExecState *execState);
+void R_SetCodeImageTexture(GfxCmdBufSourceState *source, MaterialTextureSource codeTexture, const GfxImage *image);
+void RB_BlendSavedScreenFlashedCmd(GfxRenderCommandExecState *execState);
+void RB_DrawPointsCmd(GfxRenderCommandExecState *execState);
+void RB_DrawPoints2D(const GfxCmdDrawPoints *cmd);
+void R_SetVertex4d(
     GfxVertex *vert,
     float x,
     float y,
@@ -472,13 +472,13 @@ void __cdecl R_SetVertex4d(
     float s,
     float t,
     const uint8_t *color);
-void __cdecl RB_DrawPoints3D(const GfxCmdDrawPoints *cmd);
-void __cdecl RB_DrawLines2D(int count, int width, const GfxPointVertex *verts);
-void __cdecl R_SetVertex3d(GfxVertex *vert, float x, float y, float z, float s, float t, const uint8_t *color);
-void __cdecl RB_DrawLines3D(int count, int width, const GfxPointVertex *verts, bool depthTest);
-void __cdecl RB_DrawLinesCmd(GfxRenderCommandExecState *execState);
-void __cdecl RB_DrawTrianglesCmd(GfxRenderCommandExecState *execState);
-void __cdecl RB_DrawTriangles_Internal(
+void RB_DrawPoints3D(const GfxCmdDrawPoints *cmd);
+void RB_DrawLines2D(int count, int width, const GfxPointVertex *verts);
+void R_SetVertex3d(GfxVertex *vert, float x, float y, float z, float s, float t, const uint8_t *color);
+void RB_DrawLines3D(int count, int width, const GfxPointVertex *verts, bool depthTest);
+void RB_DrawLinesCmd(GfxRenderCommandExecState *execState);
+void RB_DrawTrianglesCmd(GfxRenderCommandExecState *execState);
+void RB_DrawTriangles_Internal(
     const Material *material,
     MaterialTechniqueType techType,
     __int16 indexCount,
@@ -488,15 +488,15 @@ void __cdecl RB_DrawTriangles_Internal(
     const float (*normal)[3],
     const GfxColor *color,
     const float (*st)[2]);
-void __cdecl RB_DrawProfileCmd(GfxRenderCommandExecState *execState);
-void __cdecl RB_SetMaterialColorCmd(GfxRenderCommandExecState *execState);
+void RB_DrawProfileCmd(GfxRenderCommandExecState *execState);
+void RB_SetMaterialColorCmd(GfxRenderCommandExecState *execState);
 #ifdef KISAK_RADIANT
-void __cdecl RB_SetCustomConstantCmd(GfxRenderCommandExecState *execState);  // #26 layer C2 sun preview
+void RB_SetCustomConstantCmd(GfxRenderCommandExecState *execState);  // #26 layer C2 sun preview
 #endif
-void __cdecl RB_SetViewportCmd(GfxRenderCommandExecState *execState);
-void __cdecl RB_LookupColor(uint8_t c, GfxColor *color);
-void __cdecl RB_DrawText(const char *text, Font_s *font, float x, float y, GfxColor color);
-void __cdecl DrawText2D(
+void RB_SetViewportCmd(GfxRenderCommandExecState *execState);
+void RB_LookupColor(uint8_t c, GfxColor *color);
+void RB_DrawText(const char *text, Font_s *font, float x, float y, GfxColor color);
+void DrawText2D(
     const char *text,
     float x,
     float y,
@@ -518,7 +518,7 @@ void __cdecl DrawText2D(
     int fxDecayDuration,
     const Material *fxMaterial,
     const Material *fxMaterialGlow);
-void __cdecl RB_DrawStretchPicRotate(
+void RB_DrawStretchPicRotate(
     const Material *material,
     float x,
     float y,
@@ -532,7 +532,7 @@ void __cdecl RB_DrawStretchPicRotate(
     float cosAngle,
     uint32_t color,
     GfxPrimStatsTarget statsTarget);
-double __cdecl RB_DrawHudIcon(
+double RB_DrawHudIcon(
     const char *text,
     float x,
     float y,
@@ -542,7 +542,7 @@ double __cdecl RB_DrawHudIcon(
     float xScale,
     float yScale,
     uint32_t color);
-void __cdecl RB_DrawCursor(
+void RB_DrawCursor(
     const Material *material,
     uint8_t cursor,
     float x,
@@ -553,7 +553,7 @@ void __cdecl RB_DrawCursor(
     float xScale,
     float yScale,
     uint32_t color);
-void __cdecl RotateXY(
+void RotateXY(
     float cosAngle,
     float sinAngle,
     float pivotX,
@@ -562,9 +562,9 @@ void __cdecl RotateXY(
     float y,
     float *outX,
     float *outY);
-double __cdecl GetMonospaceWidth(Font_s *font, char renderFlags);
-void __cdecl GlowColor(GfxColor *result, GfxColor baseColor, GfxColor forcedGlowColor, char renderFlags);
-char __cdecl SetupPulseFXVars(
+double GetMonospaceWidth(Font_s *font, char renderFlags);
+void GlowColor(GfxColor *result, GfxColor baseColor, GfxColor forcedGlowColor, char renderFlags);
+char SetupPulseFXVars(
     const char *text,
     int maxLength,
     char renderFlags,
@@ -577,7 +577,7 @@ char __cdecl SetupPulseFXVars(
     int *resultMaxLength,
     bool *resultDecaying,
     int *resultdecayTimeElapsed);
-void __cdecl GetDecayingLetterInfo(
+void GetDecayingLetterInfo(
     uint32_t letter,
     Font_s *font,
     int *randSeed,
@@ -589,7 +589,7 @@ void __cdecl GetDecayingLetterInfo(
     uint8_t *resultAlpha,
     uint32_t *resultLetter,
     bool *resultDrawExtraFxChar);
-void __cdecl DrawTextFxExtraCharacter(
+void DrawTextFxExtraCharacter(
     const Material *material,
     int charIndex,
     float x,
@@ -599,51 +599,51 @@ void __cdecl DrawTextFxExtraCharacter(
     float sinAngle,
     float cosAngle,
     uint32_t color);
-uint8_t __cdecl ModulateByteColors(uint8_t colorA, uint8_t colorB);
-void __cdecl RB_DrawTextInSpace(
+uint8_t ModulateByteColors(uint8_t colorA, uint8_t colorB);
+void RB_DrawTextInSpace(
     const char *text,
     Font_s *font,
     const float *org,
     const float *xPixelStep,
     const float *yPixelStep,
     uint32_t color);
-void __cdecl RB_DrawCharInSpace(
+void RB_DrawCharInSpace(
     const Material *material,
     float *xyz,
     const float *dx,
     const float *dy,
     const Glyph *glyph,
     uint32_t color);
-void __cdecl RB_DrawText2DCmd(GfxRenderCommandExecState *execState);
-void __cdecl RB_DrawText3DCmd(GfxRenderCommandExecState *execState);
-void __cdecl RB_ProjectionSetCmd(GfxRenderCommandExecState *execState);
-void __cdecl RB_ResetStatTracking();
-void __cdecl RB_BeginFrame(const GfxBackEndData *data);
-void __cdecl RB_EndFrame(char drawType);
+void RB_DrawText2DCmd(GfxRenderCommandExecState *execState);
+void RB_DrawText3DCmd(GfxRenderCommandExecState *execState);
+void RB_ProjectionSetCmd(GfxRenderCommandExecState *execState);
+void RB_ResetStatTracking();
+void RB_BeginFrame(const GfxBackEndData *data);
+void RB_EndFrame(char drawType);
 GfxIndexBufferState *RB_SwapBuffers();
 void RB_UpdateBackEndDvarOptions();
-void __cdecl RB_ExecuteRenderCommandsLoop(const void *cmds);
-void __cdecl RB_Draw3D();
-void __cdecl RB_CallExecuteRenderCommands();
+void RB_ExecuteRenderCommandsLoop(const void *cmds);
+void RB_Draw3D();
+void RB_CallExecuteRenderCommands();
 // positive sp value has been detected, the output may be wrong!
-void __cdecl  RB_RenderThread(uint32_t threadContext);
-void __cdecl RB_RenderCommandFrame(const GfxBackEndData *data);
-void __cdecl RB_InitBackendGlobalStructs();
-void __cdecl RB_SetBspImages();
-void __cdecl RB_InitCodeImages();
-void __cdecl RB_BindDefaultImages();
-void __cdecl RB_RegisterBackendAssets();
+void RB_RenderThread(uint32_t threadContext);
+void RB_RenderCommandFrame(const GfxBackEndData *data);
+void RB_InitBackendGlobalStructs();
+void RB_SetBspImages();
+void RB_InitCodeImages();
+void RB_BindDefaultImages();
+void RB_RegisterBackendAssets();
 
 void RB_AbandonGpuFence();
-void __cdecl R_InsertGpuFence();
-bool __cdecl R_GpuFenceTimeout();
-void __cdecl R_FinishGpuFence();
-void __cdecl R_AcquireGpuFenceLock();
-void __cdecl R_ReleaseGpuFenceLock();
+void R_InsertGpuFence();
+bool R_GpuFenceTimeout();
+void R_FinishGpuFence();
+void R_AcquireGpuFenceLock();
+void R_ReleaseGpuFenceLock();
 
 
 // rb_imagetouch
-void __cdecl RB_TouchAllImages();
+void RB_TouchAllImages();
 
 extern r_backEndGlobals_t backEnd;
 extern materialCommands_t tess;

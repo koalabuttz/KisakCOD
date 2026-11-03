@@ -8,7 +8,7 @@
 #include "g_main.h"
 #include "actor_corpse.h"
 
-actor_prone_info_s *__cdecl G_GetActorProneInfo(actor_s *actor)
+actor_prone_info_s *G_GetActorProneInfo(actor_s *actor)
 {
     if ((unsigned int)(actor - level.actors) >= 0x20)
         MyAssertHandler(
@@ -20,7 +20,7 @@ actor_prone_info_s *__cdecl G_GetActorProneInfo(actor_s *actor)
     return &actor->ProneInfo;
 }
 
-actor_prone_info_s *__cdecl G_GetActorProneInfoFromEntNum(int iEntNum)
+actor_prone_info_s *G_GetActorProneInfoFromEntNum(int iEntNum)
 {
     gentity_s *v2; // r31
     actor_s *actor; // r3
@@ -48,7 +48,7 @@ actor_prone_info_s *__cdecl G_GetActorProneInfoFromEntNum(int iEntNum)
     return &g_scr_data.actorCorpseInfo[v6].proneInfo;
 }
 
-actor_prone_info_s *__cdecl G_BypassForCG_GetClientActorProneInfo(int iEntNum)
+actor_prone_info_s *G_BypassForCG_GetClientActorProneInfo(int iEntNum)
 {
     unsigned int v1; // r30
     gentity_s *v2; // r31
@@ -87,7 +87,7 @@ actor_prone_info_s *__cdecl G_BypassForCG_GetClientActorProneInfo(int iEntNum)
     return &level.cgData_actorProneInfo[v1];
 }
 
-void __cdecl G_InitActorProneInfo(actor_s *actor)
+void G_InitActorProneInfo(actor_s *actor)
 {
     actor_prone_info_s *p_ProneInfo; // r11
     int v3; // ctr
@@ -104,7 +104,7 @@ void __cdecl G_InitActorProneInfo(actor_s *actor)
     } while (v3);
 }
 
-void __cdecl G_ActorEnterProne(actor_s *actor, unsigned int iTransTime)
+void G_ActorEnterProne(actor_s *actor, unsigned int iTransTime)
 {
     actor_prone_info_s *p_ProneInfo; // r29
     float *v5; // r5
@@ -176,7 +176,7 @@ void __cdecl G_ActorEnterProne(actor_s *actor, unsigned int iTransTime)
             "BG_ActorGoalIsProne( &actor->ProneInfo )");
 }
 
-void __cdecl G_ActorExitProne(actor_s *actor, unsigned int iTransTime)
+void G_ActorExitProne(actor_s *actor, unsigned int iTransTime)
 {
     actor_prone_info_s *p_ProneInfo; // r29
     int iProneTrans; // r11

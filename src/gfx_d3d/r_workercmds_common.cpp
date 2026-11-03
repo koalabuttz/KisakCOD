@@ -7,19 +7,19 @@
 #include <universal/profile.h>
 
 
-void __cdecl R_ProcessCmd_UpdateFxSpotLight(FxCmd *cmd)
+void R_ProcessCmd_UpdateFxSpotLight(FxCmd *cmd)
 {
     FX_UpdateSpotLight(cmd);
     Sys_SetUpdateSpotLightEffectEvent();
 }
 
-void __cdecl R_ProcessCmd_UpdateFxNonDependent(FxCmd *cmd)
+void R_ProcessCmd_UpdateFxNonDependent(FxCmd *cmd)
 {
     FX_UpdateNonDependent(cmd);
     Sys_SetUpdateNonDependentEffectsEvent();
 }
 
-void __cdecl R_ProcessCmd_UpdateFxRemaining(FxCmd *cmd)
+void R_ProcessCmd_UpdateFxRemaining(FxCmd *cmd)
 {
     FxGenerateVertsCmd genVertsCmd; // [esp+30h] [ebp-48h] BYREF
 
@@ -37,29 +37,29 @@ void __cdecl R_ProcessCmd_UpdateFxRemaining(FxCmd *cmd)
     R_AddWorkerCmd(WRKCMD_GENERATE_FX_VERTS, (uint8_t *)&genVertsCmd);
 }
 
-void __cdecl R_UpdateSpotLightEffect(FxCmd *cmd)
+void R_UpdateSpotLightEffect(FxCmd *cmd)
 {
     Sys_ResetUpdateSpotLightEffectEvent();
     R_AddWorkerCmd(WRKCMD_UPDATE_FX_SPOT_LIGHT, (uint8_t *)cmd);
 }
 
-void __cdecl R_UpdateNonDependentEffects(FxCmd *cmd)
+void R_UpdateNonDependentEffects(FxCmd *cmd)
 {
     Sys_ResetUpdateNonDependentEffectsEvent();
     R_AddWorkerCmd(WRKCMD_UPDATE_FX_NON_DEPENDENT, (uint8_t *)cmd);
 }
 
-void __cdecl R_UpdateRemainingEffects(FxCmd *cmd)
+void R_UpdateRemainingEffects(FxCmd *cmd)
 {
     R_AddWorkerCmd(WRKCMD_UPDATE_FX_REMAINING, (uint8_t *)cmd);
 }
 
-void __cdecl R_UpdateXModelBoundsDelayed(GfxSceneEntity *sceneEnt)
+void R_UpdateXModelBoundsDelayed(GfxSceneEntity *sceneEnt)
 {
     R_AddWorkerCmd(WRKCMD_BOUNDS_ENT_DELAYED, (uint8_t *)&sceneEnt);
 }
 
-void __cdecl R_SkinGfxEntityDelayed(GfxSceneEntity *sceneEnt)
+void R_SkinGfxEntityDelayed(GfxSceneEntity *sceneEnt)
 {
     R_AddWorkerCmd(WRKCMD_SKIN_ENT_DELAYED, (uint8_t *)&sceneEnt);
 }

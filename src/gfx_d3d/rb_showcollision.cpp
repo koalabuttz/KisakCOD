@@ -31,12 +31,12 @@ int showCollisionContentMasks[10] = { 0, 210624, 65536, 8192, 128, 512, 131072, 
 
 GfxPointVertex debugLineVerts[2725];
 
-void __cdecl TRACK_rb_showcollision()
+void TRACK_rb_showcollision()
 {
     track_static_alloc_internal(debugLineVerts, 43600, "debugLineVerts", 0);
 }
 
-void __cdecl RB_ShowCollision(const GfxViewParms *viewParms)
+void RB_ShowCollision(const GfxViewParms *viewParms)
 {
     char v1; // [esp+8h] [ebp-98h]
     char v2; // [esp+Ch] [ebp-94h]
@@ -82,7 +82,7 @@ void __cdecl RB_ShowCollision(const GfxViewParms *viewParms)
     }
 }
 
-void __cdecl BuildFrustumPlanes(const GfxViewParms *viewParms, cplane_s *frustumPlanes)
+void BuildFrustumPlanes(const GfxViewParms *viewParms, cplane_s *frustumPlanes)
 {
     char v2; // [esp+0h] [ebp-84h]
     char v3; // [esp+4h] [ebp-80h]
@@ -129,7 +129,7 @@ void __cdecl BuildFrustumPlanes(const GfxViewParms *viewParms, cplane_s *frustum
     }
 }
 
-void __cdecl RB_SetPolyVert(float *xyz, GfxColor color, int tessVertIndex)
+void RB_SetPolyVert(float *xyz, GfxColor color, int tessVertIndex)
 {
     float *xyzw; // [esp+4h] [ebp-4h]
 
@@ -145,7 +145,7 @@ void __cdecl RB_SetPolyVert(float *xyz, GfxColor color, int tessVertIndex)
     *(float*)   &tess.indices[16 * tessVertIndex - 87188] = 0.0;
 }
 
-void __cdecl RB_DrawCollisionPoly(int numPoints, float (*points)[3], const float *colorFloat)
+void RB_DrawCollisionPoly(int numPoints, float (*points)[3], const float *colorFloat)
 {
     int vertCount; // [esp+4h] [ebp-10h]
     int vertIndex; // [esp+8h] [ebp-Ch]

@@ -74,7 +74,7 @@ struct FrameInfo // sizeof=0x8
 };
 
 template <typename T>
-void __cdecl ODE_ForEachBody(dxWorld *world, T func)
+void ODE_ForEachBody(dxWorld *world, T func)
 {
     dxBody *bodyIter; // [esp+0h] [ebp-4h]
 
@@ -82,7 +82,7 @@ void __cdecl ODE_ForEachBody(dxWorld *world, T func)
         func(bodyIter);
 }
 
-void __cdecl TRACK_phys()
+void TRACK_phys()
 {
     track_static_alloc_internal(&physGlob, 156936, "physGlob", 9);
 }
@@ -90,7 +90,7 @@ void __cdecl TRACK_phys()
 cmd_function_s Phys_Stop_f_VAR;
 cmd_function_s Phys_Go_f_VAR;
 
-void __cdecl Phys_Init()
+void Phys_Init()
 {
     DvarLimits min; // [esp+4h] [ebp-14h]
     DvarLimits mina; // [esp+4h] [ebp-14h]
@@ -384,12 +384,12 @@ void __cdecl Phys_Init()
     }
 }
 
-void __cdecl Phys_Go_f()
+void Phys_Go_f()
 {
-    ODE_ForEachBody<void(__cdecl *)(dxBody *)>(physGlob.world[0], Phys_EnableGeom);
+    ODE_ForEachBody<void(*)(dxBody *)>(physGlob.world[0], Phys_EnableGeom);
 }
 
-void __cdecl Phys_EnableGeom(dxBody *body)
+void Phys_EnableGeom(dxBody *body)
 {
     dxGeom *geom; // [esp+4h] [ebp-4h]
 
@@ -398,12 +398,12 @@ void __cdecl Phys_EnableGeom(dxBody *body)
         dGeomEnable(geom);
 }
 
-void __cdecl Phys_Stop_f()
+void Phys_Stop_f()
 {
-    ODE_ForEachBody<void(__cdecl *)(dxBody *)>(physGlob.world[0], Phys_DisableBodyAndGeom);
+    ODE_ForEachBody<void(*)(dxBody *)>(physGlob.world[0], Phys_DisableBodyAndGeom);
 }
 
-void __cdecl Phys_DisableBodyAndGeom(dxBody *body)
+void Phys_DisableBodyAndGeom(dxBody *body)
 {
     PhysObjUserData *userData; // [esp+0h] [ebp-8h]
     dxGeom *geom; // [esp+4h] [ebp-4h]
@@ -414,7 +414,7 @@ void __cdecl Phys_DisableBodyAndGeom(dxBody *body)
         dGeomDisable(geom);
 }
 
-dxBody *__cdecl Phys_ObjCreateAxis(
+dxBody *Phys_ObjCreateAxis(
     PhysWorld worldIndex,
     float *position,
     const float (*axis)[3],
@@ -458,7 +458,7 @@ dxBody *__cdecl Phys_ObjCreateAxis(
     return Phys_CreateBodyFromState(worldIndex, &state);
 }
 
-dxBody *__cdecl Phys_CreateBodyFromState(PhysWorld worldIndex, const BodyState *state)
+dxBody *Phys_CreateBodyFromState(PhysWorld worldIndex, const BodyState *state)
 {
     float *savedPos; // [esp+14h] [ebp-A4h]
     GeomState geomState; // [esp+28h] [ebp-90h] BYREF
@@ -527,7 +527,7 @@ dxBody *__cdecl Phys_CreateBodyFromState(PhysWorld worldIndex, const BodyState *
     }
 }
 
-void __cdecl Phys_BodyGetCenterOfMass(dxBody *body, float *outPosition)
+void Phys_BodyGetCenterOfMass(dxBody *body, float *outPosition)
 {
     const float *bodyPosition; // [esp+0h] [ebp-4h]
 
@@ -537,7 +537,7 @@ void __cdecl Phys_BodyGetCenterOfMass(dxBody *body, float *outPosition)
     outPosition[2] = bodyPosition[2];
 }
 
-void __cdecl Phys_BodyAddGeomAndSetMass(
+void Phys_BodyAddGeomAndSetMass(
     PhysWorld worldIndex,
     dxBody *body,
     float totalMass,
@@ -643,7 +643,7 @@ void __cdecl Phys_BodyAddGeomAndSetMass(
     dBodySetMass(body, &mass);
 }
 
-void __cdecl Phys_AdjustForNewCenterOfMass(dxBody *body, const float *newRelCenterOfMass)
+void Phys_AdjustForNewCenterOfMass(dxBody *body, const float *newRelCenterOfMass)
 {
     PhysObjUserData *bodyUserData; // [esp+10h] [ebp-74h]
     float geomOffset[3]; // [esp+14h] [ebp-70h] BYREF
@@ -685,7 +685,7 @@ void __cdecl Phys_AdjustForNewCenterOfMass(dxBody *body, const float *newRelCent
     bodyUserData->savedPos[2] = newAbsCenterOfMass[2];
 }
 
-void __cdecl Phys_BodyGetRotation(dxBody *body, float (*outRotation)[3])
+void Phys_BodyGetRotation(dxBody *body, float (*outRotation)[3])
 {
     const float *bodyRotation; // [esp+8h] [ebp-4h]
 
@@ -695,7 +695,7 @@ void __cdecl Phys_BodyGetRotation(dxBody *body, float (*outRotation)[3])
     Phys_OdeMatrix3ToAxis(bodyRotation, outRotation);
 }
 
-void __cdecl Phys_OdeMatrix3ToAxis(const float *inMatrix, float (*outAxis)[3])
+void Phys_OdeMatrix3ToAxis(const float *inMatrix, float (*outAxis)[3])
 {
     int r; // [esp+4h] [ebp-8h]
     int c; // [esp+8h] [ebp-4h]
@@ -707,7 +707,7 @@ void __cdecl Phys_OdeMatrix3ToAxis(const float *inMatrix, float (*outAxis)[3])
     }
 }
 
-void __cdecl Phys_ObjGetPositionFromCenterOfMass(
+void Phys_ObjGetPositionFromCenterOfMass(
     dxBody *body,
     const float (*rotation)[3],
     const float *centerOfGravity,
@@ -723,7 +723,7 @@ void __cdecl Phys_ObjGetPositionFromCenterOfMass(
     Vec3Add(rotatedTrans, centerOfGravity, objPos);
 }
 
-void __cdecl Phys_MassSetBrushTotal(dMass *m, float totalMass, float *momentsOfInertia, const float *productsOfInertia)
+void Phys_MassSetBrushTotal(dMass *m, float totalMass, float *momentsOfInertia, const float *productsOfInertia)
 {
     float I11; // [esp+28h] [ebp-24h]
     float I22; // [esp+2Ch] [ebp-20h]
@@ -756,7 +756,7 @@ void __cdecl Phys_MassSetBrushTotal(dMass *m, float totalMass, float *momentsOfI
     dMassSetParameters(m, totalMass, 0.0, 0.0, 0.0, I11, I22, I33, I12, I13, I23);
 }
 
-dxBody *__cdecl Phys_ObjCreate(
+dxBody *Phys_ObjCreate(
     PhysWorld worldIndex,
     float *position,
     float *quat,
@@ -806,7 +806,7 @@ dxBody *__cdecl Phys_ObjCreate(
     return Phys_ObjCreateAxis(worldIndex, position, axis, velocity, physPreset);
 }
 
-void __cdecl Phys_ObjSetOrientation(
+void Phys_ObjSetOrientation(
     PhysWorld worldIndex,
     dxBody *id,
     const float *newPosition,
@@ -841,7 +841,7 @@ void __cdecl Phys_ObjSetOrientation(
     dBodySetRotation(body, newOdeRotation);
 }
 
-void __cdecl Phys_ObjAddGeomBox(PhysWorld worldIndex, dxBody *id, const float *boxMin, const float *boxMax)
+void Phys_ObjAddGeomBox(PhysWorld worldIndex, dxBody *id, const float *boxMin, const float *boxMax)
 {
     GeomState geomState; // [esp+Ch] [ebp-A0h] BYREF
     dxBody *body; // [esp+54h] [ebp-58h]
@@ -860,7 +860,7 @@ void __cdecl Phys_ObjAddGeomBox(PhysWorld worldIndex, dxBody *id, const float *b
     Phys_BodyAddGeomAndSetMass(worldIndex, body, mass.mass, &geomState, centerOfMass);
 }
 
-void __cdecl Phys_ObjAddGeomBoxRotated(
+void Phys_ObjAddGeomBoxRotated(
     PhysWorld worldIndex,
     dxBody *id,
     const float *center,
@@ -891,7 +891,7 @@ void __cdecl Phys_ObjAddGeomBoxRotated(
     Phys_BodyAddGeomAndSetMass(worldIndex, body, mass.mass, &geomState, center);
 }
 
-void __cdecl Phys_ObjAddGeomBrushModel(
+void Phys_ObjAddGeomBrushModel(
     PhysWorld worldIndex,
     dxBody *id,
     unsigned __int16 brushModel,
@@ -918,7 +918,7 @@ void __cdecl Phys_ObjAddGeomBrushModel(
     Phys_BodyAddGeomAndSetMass(worldIndex, id, mass.mass, &geomState, physMass->centerOfMass);
 }
 
-void __cdecl Phys_ObjAddGeomBrush(PhysWorld worldIndex, dxBody *id, const cbrush_t *brush, const PhysMass *physMass)
+void Phys_ObjAddGeomBrush(PhysWorld worldIndex, dxBody *id, const cbrush_t *brush, const PhysMass *physMass)
 {
     GeomState geomState; // [esp+14h] [ebp-98h] BYREF
     dxBody *body; // [esp+60h] [ebp-4Ch]
@@ -941,7 +941,7 @@ void __cdecl Phys_ObjAddGeomBrush(PhysWorld worldIndex, dxBody *id, const cbrush
     Phys_BodyAddGeomAndSetMass(worldIndex, id, mass.mass, &geomState, physMass->centerOfMass);
 }
 
-void __cdecl Phys_ObjAddGeomCylinder(PhysWorld worldIndex, dxBody *id, const float *boxMin, const float *boxMax)
+void Phys_ObjAddGeomCylinder(PhysWorld worldIndex, dxBody *id, const float *boxMin, const float *boxMax)
 {
     float v4; // [esp+Ch] [ebp-C0h]
     float v5; // [esp+10h] [ebp-BCh]
@@ -973,7 +973,7 @@ void __cdecl Phys_ObjAddGeomCylinder(PhysWorld worldIndex, dxBody *id, const flo
     Phys_BodyAddGeomAndSetMass(worldIndex, body, mass.mass, &geomState, centerOfMass);
 }
 
-void __cdecl Phys_ObjAddGeomCylinderDirection(
+void Phys_ObjAddGeomCylinderDirection(
     PhysWorld worldIndex,
     dxBody *id,
     int direction,
@@ -1002,7 +1002,7 @@ void __cdecl Phys_ObjAddGeomCylinderDirection(
     Phys_BodyAddGeomAndSetMass(worldIndex, body, mass.mass, &geomState, centerOfMass);
 }
 
-void __cdecl Phys_ObjAddGeomCylinderRotated(
+void Phys_ObjAddGeomCylinderRotated(
     PhysWorld worldIndex,
     dxBody *id,
     int direction,
@@ -1041,7 +1041,7 @@ void __cdecl Phys_ObjAddGeomCylinderRotated(
     Phys_BodyAddGeomAndSetMass(worldIndex, body, mass.mass, &geomState, center);
 }
 
-void __cdecl Phys_ObjAddGeomCapsule(
+void Phys_ObjAddGeomCapsule(
     PhysWorld worldIndex,
     dxBody *id,
     int direction,
@@ -1070,7 +1070,7 @@ void __cdecl Phys_ObjAddGeomCapsule(
     Phys_BodyAddGeomAndSetMass(worldIndex, body, mass.mass, &geomState, centerOfMass);
 }
 
-void __cdecl Phys_ObjSetCollisionFromXModel(const XModel *model, PhysWorld worldIndex, dxBody *physId)
+void Phys_ObjSetCollisionFromXModel(const XModel *model, PhysWorld worldIndex, dxBody *physId)
 {
     float mins[3]; // [esp+10h] [ebp-24h] BYREF
     PhysGeomInfo *geom; // [esp+1Ch] [ebp-18h]
@@ -1125,28 +1125,28 @@ void __cdecl Phys_ObjSetCollisionFromXModel(const XModel *model, PhysWorld world
     }
 }
 
-void __cdecl Phys_ObjSetAngularVelocity(dxBody *id, float *angularVel)
+void Phys_ObjSetAngularVelocity(dxBody *id, float *angularVel)
 {
     if (!id)
         MyAssertHandler(".\\physics\\phys_ode.cpp", 973, 0, "%s", "id");
     dBodySetAngularVel(id, angularVel[2], *angularVel, angularVel[1]);
 }
 
-void __cdecl Phys_ObjSetAngularVelocityRaw(dxBody *id, float *angularVel)
+void Phys_ObjSetAngularVelocityRaw(dxBody *id, float *angularVel)
 {
     if (!id)
         MyAssertHandler(".\\physics\\phys_ode.cpp", 985, 0, "%s", "id");
     dBodySetAngularVel(id, *angularVel, angularVel[1], angularVel[2]);
 }
 
-void __cdecl Phys_ObjSetVelocity(dxBody *id, float *velocity)
+void Phys_ObjSetVelocity(dxBody *id, float *velocity)
 {
     if (!id)
         MyAssertHandler(".\\physics\\phys_ode.cpp", 997, 0, "%s", "id");
     dBodySetLinearVel(id, *velocity, velocity[1], velocity[2]);
 }
 
-void __cdecl Phys_ObjGetPosition(dxBody *id, float *outPosition, float (*outRotation)[3])
+void Phys_ObjGetPosition(dxBody *id, float *outPosition, float (*outRotation)[3])
 {
     const float *bodyRotation; // [esp+8h] [ebp-Ch]
     const float *bodyPosition; // [esp+Ch] [ebp-8h]
@@ -1164,14 +1164,14 @@ void __cdecl Phys_ObjGetPosition(dxBody *id, float *outPosition, float (*outRota
     Phys_ObjGetPositionFromCenterOfMass(id, outRotation, outPosition, outPosition);
 }
 
-void __cdecl Phys_ObjGetCenterOfMass(dxBody *id, float *outPosition)
+void Phys_ObjGetCenterOfMass(dxBody *id, float *outPosition)
 {
     if (!id)
         MyAssertHandler(".\\physics\\phys_ode.cpp", 1031, 0, "%s", "id");
     Phys_BodyGetCenterOfMass(id, outPosition);
 }
 
-void __cdecl Phys_ObjDestroy(PhysWorld worldIndex, dxBody *id)
+void Phys_ObjDestroy(PhysWorld worldIndex, dxBody *id)
 {
     PhysObjUserData *userData; // [esp+0h] [ebp-8h]
 
@@ -1192,7 +1192,7 @@ void __cdecl Phys_ObjDestroy(PhysWorld worldIndex, dxBody *id)
 #endif
 }
 
-void __cdecl Phys_ObjAddForce(PhysWorld worldIndex, dxBody *id, float *worldPos, const float *impulse)
+void Phys_ObjAddForce(PhysWorld worldIndex, dxBody *id, float *worldPos, const float *impulse)
 {
     float fx; // [esp+18h] [ebp-24h]
     float fy; // [esp+1Ch] [ebp-20h]
@@ -1216,7 +1216,7 @@ void __cdecl Phys_ObjAddForce(PhysWorld worldIndex, dxBody *id, float *worldPos,
     userData->timeLastAsleep = (int)physGlob.space[51 * Phys_IndexFromODEWorld(odeWorld) - 152];
 }
 
-int __cdecl Phys_IndexFromODEWorld(dxWorld *world)
+int Phys_IndexFromODEWorld(dxWorld *world)
 {
     int worldIndex; // [esp+0h] [ebp-4h]
 
@@ -1230,7 +1230,7 @@ int __cdecl Phys_IndexFromODEWorld(dxWorld *world)
     return PHYS_WORLD_COUNT;
 }
 
-void __cdecl Phys_ObjBulletImpact(
+void Phys_ObjBulletImpact(
     PhysWorld worldIndex,
     dxBody *id,
     const float *worldPosRaw,
@@ -1313,7 +1313,7 @@ void __cdecl Phys_ObjBulletImpact(
     }
 }
 
-void __cdecl Phys_TweakBulletImpact(float *worldPos, float *bulletDir, const float *centerOfMass)
+void Phys_TweakBulletImpact(float *worldPos, float *bulletDir, const float *centerOfMass)
 {
     float offset[3]; // [esp+14h] [ebp-Ch] BYREF
 
@@ -1328,7 +1328,7 @@ void __cdecl Phys_TweakBulletImpact(float *worldPos, float *bulletDir, const flo
     Vec3Add(worldPos, offset, worldPos);
 }
 
-void __cdecl Phys_PlayCollisionSound(int localClientNum, dxBody *body, uint32_t sndClass, ContactList *contactList)
+void Phys_PlayCollisionSound(int localClientNum, dxBody *body, uint32_t sndClass, ContactList *contactList)
 {
     double v4; // st7
     float scale; // [esp+8h] [ebp-74h]
@@ -1381,7 +1381,7 @@ void __cdecl Phys_PlayCollisionSound(int localClientNum, dxBody *body, uint32_t 
     }
 }
 
-void __cdecl Phys_BodyGetPointVelocity(dxBody *body, float *point, float *outVelocity)
+void Phys_BodyGetPointVelocity(dxBody *body, float *point, float *outVelocity)
 {
     float bodyVelocity[4]; // [esp+10h] [ebp-10h] BYREF
 
@@ -1391,7 +1391,7 @@ void __cdecl Phys_BodyGetPointVelocity(dxBody *body, float *point, float *outVel
     outVelocity[2] = bodyVelocity[2];
 }
 
-void __cdecl Phys_DrawDebugText(const ScreenPlacement *scrPlace)
+void Phys_DrawDebugText(const ScreenPlacement *scrPlace)
 {
     int v1; // eax
     uint32_t totalBodiesAwake; // [esp+20h] [ebp-14h]
@@ -1411,7 +1411,7 @@ void __cdecl Phys_DrawDebugText(const ScreenPlacement *scrPlace)
     CG_DrawStringExt(scrPlace, x, y, (char *)text, colorGreen, 0, 1, charHeight);
 }
 
-int __cdecl Phys_DrawDebugTextForWorld(
+int Phys_DrawDebugTextForWorld(
     uint32_t worldIndex,
     char *worldText,
     float *x,
@@ -1426,7 +1426,7 @@ int __cdecl Phys_DrawDebugTextForWorld(
     physGlob.debugActiveObjCount = 0;
     //bodyCount = XModelBoneNames((XModel *)physGlob.world[worldIndex]);
     bodyCount = physGlob.world[worldIndex]->nb;
-    ODE_ForEachBody<void(__cdecl *)(dxBody *)>(physGlob.world[worldIndex], Phys_ObjCountIfActive);
+    ODE_ForEachBody<void(*)(dxBody *)>(physGlob.world[worldIndex], Phys_ObjCountIfActive);
     CG_DrawStringExt(scrPlace, *x, *y, worldText, colorGreen, 0, 1, charHeight);
     *y = *y + charHeight;
     v6 = va("   Awake: %i", physGlob.debugActiveObjCount);
@@ -1438,13 +1438,13 @@ int __cdecl Phys_DrawDebugTextForWorld(
     return physGlob.debugActiveObjCount;
 }
 
-void __cdecl Phys_ObjCountIfActive(dxBody *body)
+void Phys_ObjCountIfActive(dxBody *body)
 {
     if (dBodyIsEnabled(body))
         ++physGlob.debugActiveObjCount;
 }
 
-void __cdecl dxPostProcessIslands(PhysWorld worldIndex)
+void dxPostProcessIslands(PhysWorld worldIndex)
 {
     float v1; // [esp+8h] [ebp-6Ch]
     float v2; // [esp+Ch] [ebp-68h]
@@ -1500,7 +1500,7 @@ void __cdecl dxPostProcessIslands(PhysWorld worldIndex)
         ODE_ForEachBody(world, Phys_CheckIfAliveTooLong);
 }
 
-void __cdecl Phys_CheckIfAliveTooLong(dxBody *body)
+void Phys_CheckIfAliveTooLong(dxBody *body)
 {
     float *awakeTooLongLastPos; // [esp+20h] [ebp-50h]
     float mins[3]; // [esp+28h] [ebp-48h] BYREF
@@ -1566,7 +1566,7 @@ void __cdecl Phys_CheckIfAliveTooLong(dxBody *body)
     }
 }
 
-int __cdecl Phys_DoBodyOncePerFrame(uint32_t worldIndex, dxBody *body, float deltaT)
+int Phys_DoBodyOncePerFrame(uint32_t worldIndex, dxBody *body, float deltaT)
 {
     float v4; // [esp+8h] [ebp-20h]
     float v5; // [esp+Ch] [ebp-1Ch]
@@ -1604,7 +1604,7 @@ int __cdecl Phys_DoBodyOncePerFrame(uint32_t worldIndex, dxBody *body, float del
     return 1;
 }
 
-void __cdecl Phys_GeomUserGetAAContainedBox(dxGeom *geom, float *mins, float *maxs)
+void Phys_GeomUserGetAAContainedBox(dxGeom *geom, float *mins, float *maxs)
 {
     unsigned __int16 *ClassData; // eax
     const char *v4; // eax
@@ -1700,7 +1700,7 @@ void __cdecl Phys_GeomUserGetAAContainedBox(dxGeom *geom, float *mins, float *ma
     }
 }
 
-int __cdecl Phys_ObjGetSnapshot(PhysWorld worldIndex, dxBody *id, float *outPos, float (*outMat)[3])
+int Phys_ObjGetSnapshot(PhysWorld worldIndex, dxBody *id, float *outPos, float (*outMat)[3])
 {
     PhysObjUserData *userData; // [esp+8h] [ebp-8h]
 
@@ -1710,7 +1710,7 @@ int __cdecl Phys_ObjGetSnapshot(PhysWorld worldIndex, dxBody *id, float *outPos,
     return physGlob.worldData[worldIndex].timeLastSnapshot;
 }
 
-void __cdecl Phys_RewindCurrentTime(PhysWorld worldIndex, int timeNow)
+void Phys_RewindCurrentTime(PhysWorld worldIndex, int timeNow)
 {
     float newFrac; // [esp+8h] [ebp-8h]
 
@@ -1734,7 +1734,7 @@ void __cdecl Phys_RewindCurrentTime(PhysWorld worldIndex, int timeNow)
     }
 }
 
-void __cdecl Phys_GetPerformance(float *average, int *mintime, int *maxtime)
+void Phys_GetPerformance(float *average, int *mintime, int *maxtime)
 {
     Sys_EnterCriticalSection(CRITSECT_PHYSICS);
     *average = physGlob.performanceAverage;
@@ -1743,7 +1743,7 @@ void __cdecl Phys_GetPerformance(float *average, int *mintime, int *maxtime)
     Sys_LeaveCriticalSection(CRITSECT_PHYSICS);
 }
 
-void __cdecl Phys_PerformanceEndFrame()
+void Phys_PerformanceEndFrame()
 {
     uint32_t total; // [esp+8h] [ebp-8h]
     uint32_t frameIndex; // [esp+Ch] [ebp-4h]
@@ -1772,7 +1772,7 @@ void __cdecl Phys_PerformanceEndFrame()
     Sys_LeaveCriticalSection(CRITSECT_PHYSICS);
 }
 
-void __cdecl Phys_RunToTime(int localClientNum, PhysWorld worldIndex, int timeNow)
+void Phys_RunToTime(int localClientNum, PhysWorld worldIndex, int timeNow)
 {
     DWORD v3; // eax
     float seconds; // [esp+20h] [ebp-5Ch]
@@ -1848,7 +1848,7 @@ void __cdecl Phys_RunToTime(int localClientNum, PhysWorld worldIndex, int timeNo
     Phys_PerformanceAddTime(v3 - time);
 }
 
-void __cdecl Phys_ObjDraw(dxBody *body)
+void Phys_ObjDraw(dxBody *body)
 {
     const float *v1; // eax
     float v2; // [esp+8h] [ebp-A8h]
@@ -1937,7 +1937,7 @@ void __cdecl Phys_ObjDraw(dxBody *body)
     }
 }
 
-void __cdecl Phys_NearCallback(void *userData, dxGeom *geom1, dxGeom *geom2)
+void Phys_NearCallback(void *userData, dxGeom *geom1, dxGeom *geom2)
 {
     float v3; // [esp+8h] [ebp-30B4h]
     float value; // [esp+Ch] [ebp-30B0h]
@@ -2053,9 +2053,9 @@ void __cdecl Phys_NearCallback(void *userData, dxGeom *geom1, dxGeom *geom2)
     }
 }
 
-void __cdecl ODE_CollideSimpleSpaceWithGeomNoAABBTest(dxSpace *space, dxGeom *geom, void *data);
+void ODE_CollideSimpleSpaceWithGeomNoAABBTest(dxSpace *space, dxGeom *geom, void *data);
 
-void __cdecl Phys_RunFrame(int localClientNum, PhysWorld worldIndex, float seconds)
+void Phys_RunFrame(int localClientNum, PhysWorld worldIndex, float seconds)
 {
     float scale; // [esp+4h] [ebp-80h]
     float value; // [esp+Ch] [ebp-78h]
@@ -2123,7 +2123,7 @@ void __cdecl Phys_RunFrame(int localClientNum, PhysWorld worldIndex, float secon
     physGlob.dumpContacts = 0;
 }
 
-void __cdecl Phys_BodyGrabSnapshot(dxBody *body)
+void Phys_BodyGrabSnapshot(dxBody *body)
 {
     PhysObjUserData *userData; // [esp+30h] [ebp-4h]
 
@@ -2180,7 +2180,7 @@ void __cdecl Phys_BodyGrabSnapshot(dxBody *body)
     }
 }
 
-void __cdecl Phys_DoBodyOncePerRun(dxBody *body)
+void Phys_DoBodyOncePerRun(dxBody *body)
 {
     float mins[3]; // [esp+30h] [ebp-1Ch] BYREF
     float maxs[3]; // [esp+3Ch] [ebp-10h] BYREF
@@ -2204,7 +2204,7 @@ void __cdecl Phys_DoBodyOncePerRun(dxBody *body)
     }
 }
 
-void __cdecl Phys_ObjTraceNewPos(dxBody *body)
+void Phys_ObjTraceNewPos(dxBody *body)
 {
     float number; // [esp+8h] [ebp-E0h]
     float fraction; // [esp+Ch] [ebp-DCh]
@@ -2314,14 +2314,14 @@ void __cdecl Phys_ObjTraceNewPos(dxBody *body)
     }
 }
 
-void __cdecl Phys_PerformanceAddTime(int time)
+void Phys_PerformanceAddTime(int time)
 {
     Sys_EnterCriticalSection(CRITSECT_PHYSICS);
     physGlob.physPreviousFrameTimes[physGlob.physPerformanceFrame % 0xA] += time;
     Sys_LeaveCriticalSection(CRITSECT_PHYSICS);
 }
 
-void __cdecl Phys_ObjGetInterpolatedState(PhysWorld worldIndex, dxBody *id, float *outPos, float *outQuat)
+void Phys_ObjGetInterpolatedState(PhysWorld worldIndex, dxBody *id, float *outPos, float *outQuat)
 {
     float oldMat[3][3]; // [esp+8h] [ebp-84h] BYREF
     float newPos[3]; // [esp+2Ch] [ebp-60h] BYREF
@@ -2341,7 +2341,7 @@ void __cdecl Phys_ObjGetInterpolatedState(PhysWorld worldIndex, dxBody *id, floa
     Vec4Normalize(outQuat);
 }
 
-void __cdecl Phys_ObjSetInertialTensor(dxBody *id, const PhysMass *physMass)
+void Phys_ObjSetInertialTensor(dxBody *id, const PhysMass *physMass)
 {
     dMass mass; // [esp+10h] [ebp-48h] BYREF
 
@@ -2356,12 +2356,12 @@ void __cdecl Phys_ObjSetInertialTensor(dxBody *id, const PhysMass *physMass)
     Phys_AdjustForNewCenterOfMass(id, physMass->centerOfMass);
 }
 
-bool __cdecl Phys_ObjIsAsleep(dxBody *id)
+bool Phys_ObjIsAsleep(dxBody *id)
 {
     return !dBodyIsEnabled(id);
 }
 
-void __cdecl Phys_Shutdown()
+void Phys_Shutdown()
 {
     int worldIndex; // [esp+0h] [ebp-4h]
 
@@ -2401,7 +2401,7 @@ void __cdecl Phys_Shutdown()
     }
 }
 
-void __cdecl Phys_ObjSave(dxBody *id, MemoryFile *memFile)
+void Phys_ObjSave(dxBody *id, MemoryFile *memFile)
 {
     BodyState state; // [esp+0h] [ebp-70h] BYREF
 
@@ -2413,7 +2413,7 @@ void __cdecl Phys_ObjSave(dxBody *id, MemoryFile *memFile)
     MemFile_WriteData(memFile, 112, &state);
 }
 
-void __cdecl Phys_GetStateFromBody(dxBody *body, BodyState *state)
+void Phys_GetStateFromBody(dxBody *body, BodyState *state)
 {
     float *Rotation; // eax
     float *AngularVel; // [esp+8h] [ebp-64h]
@@ -2462,7 +2462,7 @@ void __cdecl Phys_GetStateFromBody(dxBody *body, BodyState *state)
     state->enabled = dBodyIsEnabled(body);
 }
 
-dxBody *__cdecl Phys_ObjLoad(PhysWorld worldIndex, MemoryFile *memFile)
+dxBody *Phys_ObjLoad(PhysWorld worldIndex, MemoryFile *memFile)
 {
     BodyState state;
 
@@ -2471,7 +2471,7 @@ dxBody *__cdecl Phys_ObjLoad(PhysWorld worldIndex, MemoryFile *memFile)
     return Phys_CreateBodyFromState(worldIndex, &state);
 }
 
-void __cdecl Phys_InitJoints()
+void Phys_InitJoints()
 {
     //PhysStaticArray<dxJointHinge, 192>::init(&physGlob.hingeArray);
     //PhysStaticArray<dxJointBall, 160>::init(&physGlob.ballArray);
@@ -2481,7 +2481,7 @@ void __cdecl Phys_InitJoints()
     physGlob.aMotorArray.init();
 }
 
-void __cdecl Phys_SetHingeParams(
+void Phys_SetHingeParams(
     PhysWorld worldIndex,
     dxJointHinge *id,
     float motorSpeed,
@@ -2502,7 +2502,7 @@ void __cdecl Phys_SetHingeParams(
     dJointSetHingeParam(id, 1, highStop);
 }
 
-dxJointHinge *__cdecl Phys_CreateHinge(
+dxJointHinge *Phys_CreateHinge(
     PhysWorld worldIndex,
     dxBody *obj1,
     dxBody *obj2,
@@ -2541,7 +2541,7 @@ dxJointHinge *__cdecl Phys_CreateHinge(
     }
 }
 
-dxJointBall *__cdecl Phys_CreateBallAndSocket(PhysWorld worldIndex, dxBody *obj1, dxBody *obj2, float *anchor)
+dxJointBall *Phys_CreateBallAndSocket(PhysWorld worldIndex, dxBody *obj1, dxBody *obj2, float *anchor)
 {
     dxJointBall *joint; // [esp+Ch] [ebp-Ch]
     dxJointBall *jointa; // [esp+Ch] [ebp-Ch]
@@ -2562,7 +2562,7 @@ dxJointBall *__cdecl Phys_CreateBallAndSocket(PhysWorld worldIndex, dxBody *obj1
     }
 }
 
-void __cdecl Phys_SetAngularMotorParams(
+void Phys_SetAngularMotorParams(
     PhysWorld worldIndex,
     dxJointAMotor *id,
     const float *motorSpeeds,
@@ -2594,7 +2594,7 @@ void __cdecl Phys_SetAngularMotorParams(
     }
 }
 
-dxJointAMotor *__cdecl Phys_CreateAngularMotor(
+dxJointAMotor *Phys_CreateAngularMotor(
     PhysWorld worldIndex,
     dxBody *obj1,
     dxBody *obj2,
@@ -2643,7 +2643,7 @@ dxJointAMotor *__cdecl Phys_CreateAngularMotor(
     }
 }
 
-void __cdecl Phys_JointDestroy(PhysWorld worldIndex, dxJointHinge *id)
+void Phys_JointDestroy(PhysWorld worldIndex, dxJointHinge *id)
 {
     if (!id)
         MyAssertHandler(".\\physics\\phys_ode.cpp", 2631, 0, "%s", "id");
@@ -2668,7 +2668,7 @@ void __cdecl Phys_JointDestroy(PhysWorld worldIndex, dxJointHinge *id)
     }
 }
 
-void __cdecl Phys_SetCollisionCallback(PhysWorld worldIndex, void(__cdecl *callback)())
+void Phys_SetCollisionCallback(PhysWorld worldIndex, void(*callback)())
 {
     if ((uint32_t)worldIndex >= PHYS_WORLD_COUNT)
         MyAssertHandler(
@@ -2681,7 +2681,7 @@ void __cdecl Phys_SetCollisionCallback(PhysWorld worldIndex, void(__cdecl *callb
     physGlob.worldData[worldIndex].collisionCallback = callback;
 }
 
-void __cdecl Phys_AddJitterRegion(
+void Phys_AddJitterRegion(
     PhysWorld worldIndex,
     const float *origin,
     float innerRadius,
@@ -2729,7 +2729,7 @@ void __cdecl Phys_AddJitterRegion(
     }
 }
 
-void __cdecl Phys_ObjSetContactCentroid(dxBody *id, const float *worldPos)
+void Phys_ObjSetContactCentroid(dxBody *id, const float *worldPos)
 {
     PhysObjUserData *userData; // [esp+4h] [ebp-8h]
 

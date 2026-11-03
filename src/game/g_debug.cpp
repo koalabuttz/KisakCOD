@@ -13,14 +13,14 @@
 // Debug primitives only ever feed the client's draw list. A dedicated server has
 // no client renderer, so these forward to nothing there; the symbols are kept so
 // the game module still links.
-void __cdecl G_DebugLine(const float *start, const float *end, const float *color, int32_t depthTest)
+void G_DebugLine(const float *start, const float *end, const float *color, int32_t depthTest)
 {
 #if !defined(__linux__) || !defined(KISAK_DEDICATED)
     CL_AddDebugLine(start, end, color, depthTest, 0, 1);
 #endif
 }
 
-void __cdecl G_DebugLineWithDuration(
+void G_DebugLineWithDuration(
     const float *start,
     const float *end,
     const float *color,
@@ -32,14 +32,14 @@ void __cdecl G_DebugLineWithDuration(
 #endif
 }
 
-void __cdecl G_DebugStar(const float *point, const float *color)
+void G_DebugStar(const float *point, const float *color)
 {
 #if !defined(__linux__) || !defined(KISAK_DEDICATED)
     CL_AddDebugStar(point, color, 0, 1);
 #endif
 }
 
-void __cdecl G_DebugStarWithText(
+void G_DebugStarWithText(
     const float *point,
     const float *starColor,
     const float *textColor,
@@ -51,7 +51,7 @@ void __cdecl G_DebugStarWithText(
 #endif
 }
 
-void __cdecl G_DebugBox(
+void G_DebugBox(
     const float *origin,
     const float *mins,
     const float *maxs,
@@ -94,7 +94,7 @@ void __cdecl G_DebugBox(
         G_DebugLineWithDuration(&v[3 * iEdgePairs[ia][0]], &v[3 * iEdgePairs[ia][1]], color, depthTest, duration);
 }
 
-void __cdecl G_DebugCircle(
+void G_DebugCircle(
     const float *center,
     float radius,
     const float *color,
@@ -122,7 +122,7 @@ void __cdecl G_DebugCircle(
     G_DebugCircleEx(center, radius, dir, color, depthTest, duration);
 }
 
-void __cdecl G_DebugCircleEx(
+void G_DebugCircleEx(
     const float *center,
     float radius,
     const float *dir,
@@ -303,7 +303,7 @@ void G_DebugPlane(
     CL_AddDebugLine(v23, v29, color, depthTest, duration, 1);
 }
 
-void __cdecl G_DebugArc(
+void G_DebugArc(
     const float *center,
     float radius,
     float angle0,

@@ -6,24 +6,24 @@
 
 
 // sv_init
-void __cdecl TRACK_sv_init();
-void __cdecl SV_GetConfigstring(unsigned int index, char *buffer, int bufferSize);
-unsigned int __cdecl SV_GetConfigstringConst(unsigned int index);
-void __cdecl SV_InitReliableCommandsForClient(client_t *cl);
-void __cdecl SV_FreeReliableCommandsForClient(client_t *cl);
-void __cdecl SV_AddReliableCommand(client_t *cl, int index, const char *cmd);
-void __cdecl SV_Startup();
-void __cdecl SV_ClearServer();
-void __cdecl SV_StartMap(int randomSeed);
-void __cdecl SV_Settle();
-int __cdecl SV_SaveImmediately(const char *levelName);
-void __cdecl SV_LoadLevelAssets(const char *mapname);
-bool __cdecl SV_Loaded();
-void __cdecl SV_Init();
-void __cdecl SV_Shutdown(const char *finalmsg);
-void __cdecl SV_SetConfigstring(unsigned int index, const char *val);
+void TRACK_sv_init();
+void SV_GetConfigstring(unsigned int index, char *buffer, int bufferSize);
+unsigned int SV_GetConfigstringConst(unsigned int index);
+void SV_InitReliableCommandsForClient(client_t *cl);
+void SV_FreeReliableCommandsForClient(client_t *cl);
+void SV_AddReliableCommand(client_t *cl, int index, const char *cmd);
+void SV_Startup();
+void SV_ClearServer();
+void SV_StartMap(int randomSeed);
+void SV_Settle();
+int SV_SaveImmediately(const char *levelName);
+void SV_LoadLevelAssets(const char *mapname);
+bool SV_Loaded();
+void SV_Init();
+void SV_Shutdown(const char *finalmsg);
+void SV_SetConfigstring(unsigned int index, const char *val);
 void SV_SaveSystemInfo();
-void __cdecl SV_SpawnServer(const char *server, int savegame);
+void SV_SpawnServer(const char *server, int savegame);
 
 
 extern const dvar_t *sv_clientFrameRateFix;

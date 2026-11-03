@@ -11,7 +11,7 @@
 #include <universal/com_files.h>
 
 
-void __cdecl SV_UnmutePlayer_f(client_t *cl)
+void SV_UnmutePlayer_f(client_t *cl)
 {
     const char *v1; // eax
     uint32_t otherClient; // [esp+0h] [ebp-4h]
@@ -24,7 +24,7 @@ void __cdecl SV_UnmutePlayer_f(client_t *cl)
         Com_Printf(CON_CHANNEL_DONT_FILTER, "Invalid unmute client %i\n", otherClient);
 }
 
-void __cdecl SV_MutePlayer_f(client_t *cl)
+void SV_MutePlayer_f(client_t *cl)
 {
     const char *v1; // eax
     uint32_t otherClient; // [esp+0h] [ebp-4h]
@@ -37,7 +37,7 @@ void __cdecl SV_MutePlayer_f(client_t *cl)
         Com_Printf(CON_CHANNEL_DONT_FILTER, "Invalid mute client %i\n", otherClient);
 }
 
-void __cdecl SV_WWWDownLoad_Clear(client_t *cl)
+void SV_WWWDownLoad_Clear(client_t *cl)
 {
     if (!cl)
         MyAssertHandler(".\\server_mp\\sv_client_mp.cpp", 1866, 0, "%s", "cl");
@@ -46,7 +46,7 @@ void __cdecl SV_WWWDownLoad_Clear(client_t *cl)
     cl->downloadingWWW = 0;
 }
 
-void __cdecl SV_WWWDownload_f(client_t *cl)
+void SV_WWWDownload_f(client_t *cl)
 {
     const char *subcmd; // [esp+0h] [ebp-4h]
 
@@ -116,7 +116,7 @@ void __cdecl SV_WWWDownload_f(client_t *cl)
     }
 }
 
-void __cdecl SV_RetransmitDownload_f(client_t *cl)
+void SV_RetransmitDownload_f(client_t *cl)
 {
     const char *v1; // eax
 
@@ -125,14 +125,14 @@ void __cdecl SV_RetransmitDownload_f(client_t *cl)
         cl->downloadXmitBlock = cl->downloadClientBlock;
 }
 
-void __cdecl SV_DoneDownload_f(client_t *cl)
+void SV_DoneDownload_f(client_t *cl)
 {
     Com_DPrintf(CON_CHANNEL_DONT_FILTER, "clientDownload: %s Done\n", cl->name);
     SV_Download_Clear(cl);
     SV_SendClientGameState(cl);
 }
 
-void __cdecl SV_StopDownload_f(client_t *cl)
+void SV_StopDownload_f(client_t *cl)
 {
     if (cl->downloadName[0])
         Com_DPrintf(CON_CHANNEL_DONT_FILTER, "clientDownload: %d : file \"%s\" aborted\n", cl - svs.clients, cl->downloadName);
@@ -140,12 +140,12 @@ void __cdecl SV_StopDownload_f(client_t *cl)
     SV_Download_Clear(cl);
 }
 
-void __cdecl SV_ResetPureClient_f(client_t *cl)
+void SV_ResetPureClient_f(client_t *cl)
 {
     cl->pureAuthentic = 0;
 }
 
-void __cdecl SV_NextDownload_f(client_t *cl)
+void SV_NextDownload_f(client_t *cl)
 {
     const char *v1; // eax
     int block; // [esp+0h] [ebp-4h]
@@ -172,7 +172,7 @@ void __cdecl SV_NextDownload_f(client_t *cl)
     }
 }
 
-void __cdecl SV_BeginDownload_f(client_t *cl)
+void SV_BeginDownload_f(client_t *cl)
 {
 	const char *v1; // eax
 
@@ -182,7 +182,7 @@ void __cdecl SV_BeginDownload_f(client_t *cl)
 	I_strncpyz(cl->downloadName, v1, 64);
 }
 
-void __cdecl SV_VerifyIwds_f(client_t *cl)
+void SV_VerifyIwds_f(client_t *cl)
 {
     int v1; // eax
     const char *v2; // eax

@@ -23,7 +23,7 @@
 int scr_initialized;
 BOOL updateScreenCalled;
 
-void __cdecl SCR_DrawSmallStringExt(int x, int y, char *string, const float *setColor)
+void SCR_DrawSmallStringExt(int x, int y, char *string, const float *setColor)
 {
     float yAdj; // [esp+28h] [ebp-8h]
     float xAdj; // [esp+2Ch] [ebp-4h]
@@ -33,13 +33,13 @@ void __cdecl SCR_DrawSmallStringExt(int x, int y, char *string, const float *set
     R_AddCmdDrawText(string, 0x7FFFFFFF, cls.consoleFont, xAdj, yAdj, 1.0, 1.0, 0.0, setColor, 0);
 }
 
-void __cdecl SCR_Init()
+void SCR_Init()
 {
     scr_initialized = 1;
 }
 
 int s_lastUpdateScreenTime;
-static char __cdecl SCR_ShouldSkipUpdateScreen()
+static char SCR_ShouldSkipUpdateScreen()
 {
     connstate_t clcState; // [esp+0h] [ebp-Ch]
     DWORD timeNow; // [esp+4h] [ebp-8h]
@@ -54,7 +54,7 @@ static char __cdecl SCR_ShouldSkipUpdateScreen()
     return 0;
 }
 
-float __cdecl CL_GetMenuBlurRadius(int localClientNum)
+float CL_GetMenuBlurRadius(int localClientNum)
 {
     if (Key_IsCatcherActive(localClientNum, KEYCATCH_UI) && cls.uiStarted)
         return UI_GetBlurRadius(localClientNum);
@@ -62,7 +62,7 @@ float __cdecl CL_GetMenuBlurRadius(int localClientNum)
         return 0.0f;
 }
 
-void __cdecl SCR_UpdateScreen()
+void SCR_UpdateScreen()
 {
     if (!updateScreenCalled && !SCR_ShouldSkipUpdateScreen())
     {
@@ -97,7 +97,7 @@ void SCR_UpdateFrame()
         R_BspGenerateReflections();
 }
 
-int __cdecl CL_CGameRendering(int localClientNum)
+int CL_CGameRendering(int localClientNum)
 {
     BOOL demType; // eax
     BOOL v3; // [esp-4h] [ebp-Ch]
@@ -129,12 +129,12 @@ int __cdecl CL_CGameRendering(int localClientNum)
     }
 }
 
-DemoType __cdecl CL_GetDemoType()
+DemoType CL_GetDemoType()
 {
     return (DemoType)(CL_GetLocalClientConnection(0)->demoplaying != 0);
 }
 
-void __cdecl CL_DrawScreen(int localClientNum)
+void CL_DrawScreen(int localClientNum)
 {
     if (cls.rendererStarted)
     {
@@ -150,7 +150,7 @@ void __cdecl CL_DrawScreen(int localClientNum)
     }
 }
 
-void __cdecl SCR_DrawScreenField(int localClientNum, int refreshedUI)
+void SCR_DrawScreenField(int localClientNum, int refreshedUI)
 {
     connstate_t clcState; // [esp+8h] [ebp-4h]
 
@@ -262,7 +262,7 @@ void SCR_ClearScreen()
     R_AddCmdClearScreen(1, colorBlack, 1.0, 0);
 }
 
-void __cdecl SCR_UpdateLoadScreen()
+void SCR_UpdateLoadScreen()
 {
     if (!IsFastFileLoad())
         SCR_UpdateScreen();
@@ -299,7 +299,7 @@ const char *WeaponStateNames_65[27] =
   "WEAPON_NIGHTVISION_REMOVE"
 }; // idb
 
-void __cdecl CL_CubemapShot_f()
+void CL_CubemapShot_f()
 {
     const char *v0; // eax
     const char *v1; // eax

@@ -6,7 +6,7 @@
 
 #define	MAX_CLIP_PLANES	8
 
-void __cdecl PM_StepSlideMove(pmove_t *pm, pml_t *pml, int32_t gravity)
+void PM_StepSlideMove(pmove_t *pm, pml_t *pml, int32_t gravity)
 {
     float v3; // [esp+8h] [ebp-140h]
     float v4; // [esp+Ch] [ebp-13Ch]
@@ -217,7 +217,7 @@ void __cdecl PM_StepSlideMove(pmove_t *pm, pml_t *pml, int32_t gravity)
     }
 }
 
-int __cdecl PM_VerifyPronePosition(pmove_t *pm, float *vFallbackOrg, float *vFallbackVel)
+int PM_VerifyPronePosition(pmove_t *pm, float *vFallbackOrg, float *vFallbackVel)
 {
     int result; // eax
 
@@ -274,7 +274,7 @@ PM_SlideMove
 Returns qtrue if the velocity was clipped in some way
 ==================
 */
-bool __cdecl PM_SlideMove(pmove_t *pm, pml_t *pml, int32_t gravity)
+bool PM_SlideMove(pmove_t *pm, pml_t *pml, int32_t gravity)
 {
     int32_t j; // [esp+3Ch] [ebp-120h]
     float dir[3]; // [esp+40h] [ebp-11Ch] BYREF
@@ -474,7 +474,7 @@ bool __cdecl PM_SlideMove(pmove_t *pm, pml_t *pml, int32_t gravity)
     return bumpcount != 0;
 }
 
-double __cdecl PM_PermuteRestrictiveClipPlanes(
+double PM_PermuteRestrictiveClipPlanes(
     const float *velocity,
     int32_t planeCount,
     const float (*planes)[3],

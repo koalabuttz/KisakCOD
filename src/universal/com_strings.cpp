@@ -24,14 +24,14 @@ void FreeString(const char* str)
 	SL_RemoveRefToString(out);
 }
 
-const char* __cdecl CopyString(char* in)
+const char* CopyString(char* in)
 {
     iassert(in);
 
     return SL_ConvertToString(SL_GetString_(in, 0, MT_TYPE_GENERIC));
 }
 
-void __cdecl ReplaceString(const char** str, const char* in)
+void ReplaceString(const char** str, const char* in)
 {
     const char* newStr; // [esp+0h] [ebp-4h]
 

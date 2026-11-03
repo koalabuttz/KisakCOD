@@ -17,12 +17,12 @@ AimTargetGlob atGlob;
 
 const dvar_s *aim_target_sentient_radius;
 
-void __cdecl TRACK_aim_target()
+void TRACK_aim_target()
 {
     track_static_alloc_internal(&atGlob, 5640, "atGlob", 10);
 }
 
-const dvar_s *__cdecl AimTarget_RegisterDvars(int a1, unsigned __int16 a2, const char *a3)
+const dvar_s *AimTarget_RegisterDvars(int a1, unsigned __int16 a2, const char *a3)
 {
     const dvar_s *result; // r3
 
@@ -31,19 +31,19 @@ const dvar_s *__cdecl AimTarget_RegisterDvars(int a1, unsigned __int16 a2, const
     return result;
 }
 
-void __cdecl AimTarget_Init()
+void AimTarget_Init()
 {
     memset(&atGlob, 0, sizeof(atGlob));
     aim_target_sentient_radius = Dvar_RegisterFloat("aim_target_sentient_radius", 10.0, 0.0, 128.0, 0x82/*?*/, "The radius used to calculate target bounds for a sentient(actor or player)");
     Cbuf_InsertText(0, "exec devgui_aimassist\n");
 }
 
-void __cdecl AimTarget_ClearTargetList()
+void AimTarget_ClearTargetList()
 {
     atGlob.targetCount = 0;
 }
 
-int __cdecl AimTarget_CompareTargets(const AimTarget *targetA, const AimTarget *targetB)
+int AimTarget_CompareTargets(const AimTarget *targetA, const AimTarget *targetB)
 {
     double worldDistSqr; // fp0
     double v5; // fp13
@@ -62,7 +62,7 @@ int __cdecl AimTarget_CompareTargets(const AimTarget *targetA, const AimTarget *
     return result;
 }
 
-void __cdecl AimTarget_AddTargetToList(const AimTarget *target)
+void AimTarget_AddTargetToList(const AimTarget *target)
 {
     int v2; // r29
     int targetCount; // r11
@@ -127,7 +127,7 @@ void __cdecl AimTarget_AddTargetToList(const AimTarget *target)
     }
 }
 
-void __cdecl AimTarget_GetTargetBounds(const gentity_s *targetEnt, float *mins, float *maxs)
+void AimTarget_GetTargetBounds(const gentity_s *targetEnt, float *mins, float *maxs)
 {
     const dvar_s *v6; // r11
     double v7; // fp13
@@ -157,7 +157,7 @@ void __cdecl AimTarget_GetTargetBounds(const gentity_s *targetEnt, float *mins, 
     }
 }
 
-float __cdecl AimTarget_GetTargetRadius(const gentity_s *targetEnt)
+float AimTarget_GetTargetRadius(const gentity_s *targetEnt)
 {
     float maxs[3]; // [sp+50h] [-30h] BYREF
     float mins[3]; // [sp+60h] [-20h] BYREF
@@ -175,7 +175,7 @@ float __cdecl AimTarget_GetTargetRadius(const gentity_s *targetEnt)
     }
 }
 
-void __cdecl AimTarget_GetTargetCenter(const gentity_s *targetEnt, float *center)
+void AimTarget_GetTargetCenter(const gentity_s *targetEnt, float *center)
 {
     double v4; // fp12
     double v5; // fp11
@@ -200,7 +200,7 @@ void __cdecl AimTarget_GetTargetCenter(const gentity_s *targetEnt, float *center
     center[2] = targetEnt->r.currentOrigin[2] + (float)((float)v5 * (float)0.5);
 }
 
-int __cdecl AimTarget_IsTargetValid(const gentity_s *targetEnt)
+int AimTarget_IsTargetValid(const gentity_s *targetEnt)
 {
     gentity_s *playerEnt; // r28
     double v4; // fp31
@@ -246,7 +246,7 @@ int __cdecl AimTarget_IsTargetValid(const gentity_s *targetEnt)
     return 1;
 }
 
-int __cdecl AimTarget_IsTargetVisible(const gentity_s *targetEnt, unsigned int visBone)
+int AimTarget_IsTargetVisible(const gentity_s *targetEnt, unsigned int visBone)
 {
     gentity_s *playerEnt; // r28
     float targetEyePos[3]; // [sp+50h] [-90h] BYREF
@@ -297,7 +297,7 @@ int __cdecl AimTarget_IsTargetVisible(const gentity_s *targetEnt, unsigned int v
     return 1;
 }
 
-void __cdecl AimTarget_CreateTarget(const gentity_s *targetEnt, AimTarget *target)
+void AimTarget_CreateTarget(const gentity_s *targetEnt, AimTarget *target)
 {
     double v5; // fp0
     double v6; // fp13
@@ -350,14 +350,14 @@ void __cdecl AimTarget_CreateTarget(const gentity_s *targetEnt, AimTarget *targe
     //Profile_EndInternal(0);
 }
 
-bool __cdecl AimTarget_PlayerInValidState(const playerState_s *ps)
+bool AimTarget_PlayerInValidState(const playerState_s *ps)
 {
     iassert(ps);
 
     return ps->pm_type == PM_NORMAL || ps->pm_type == PM_NORMAL_LINKED;
 }
 
-void __cdecl AimTarget_ProcessEntity(gentity_s *ent)
+void AimTarget_ProcessEntity(gentity_s *ent)
 {
     gentity_s *playerEnt; // r29
     gclient_s *client; // r29
@@ -432,13 +432,13 @@ LABEL_35:
     ; // LWSS: this is only here so the goto works
 }
 
-void __cdecl AimTarget_UpdateClientTargets()
+void AimTarget_UpdateClientTargets()
 {
     atGlob.clientTargetCount = atGlob.targetCount;
     memcpy(atGlob.clientTargets, &atGlob, 44 * atGlob.targetCount);
 }
 
-void __cdecl AimTarget_GetClientTargetList(int32_t localClientNum, AimTarget **targetList, int *targetCount)
+void AimTarget_GetClientTargetList(int32_t localClientNum, AimTarget **targetList, int *targetCount)
 {
     iassert(targetList);
     iassert(targetCount);
@@ -447,7 +447,7 @@ void __cdecl AimTarget_GetClientTargetList(int32_t localClientNum, AimTarget **t
     *targetCount = atGlob.clientTargetCount;
 }
 
-int __cdecl AimTarget_GetBestTarget(const float *start, const float *viewDir)
+int AimTarget_GetBestTarget(const float *start, const float *viewDir)
 {
     int result; // r3
     double v5; // fp4
@@ -506,7 +506,7 @@ int __cdecl AimTarget_GetBestTarget(const float *start, const float *viewDir)
     return result;
 }
 
-void __cdecl AimTarget_WriteSaveGame(SaveGame *save)
+void AimTarget_WriteSaveGame(SaveGame *save)
 {
     int v2; // r31
     AimTargetGlob *v3; // r30
@@ -527,7 +527,7 @@ void __cdecl AimTarget_WriteSaveGame(SaveGame *save)
     }
 }
 
-void __cdecl AimTarget_ReadSaveGame(SaveGame *save)
+void AimTarget_ReadSaveGame(SaveGame *save)
 {
     int v2; // r31
     AimTargetGlob *v3; // r30

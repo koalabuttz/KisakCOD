@@ -71,7 +71,7 @@ struct dbrushside_t // sizeof=0x8
     int materialNum;
 };
 
-void __cdecl CM_InitStaticModel(cStaticModel_s *staticModel, float *origin, float *angles, float scale)
+void CM_InitStaticModel(cStaticModel_s *staticModel, float *origin, float *angles, float scale)
 {
     float v4; // [esp+10h] [ebp-48h]
     float axis[3][3]; // [esp+34h] [ebp-24h] BYREF
@@ -139,29 +139,29 @@ void __cdecl CM_InitStaticModel(cStaticModel_s *staticModel, float *origin, floa
     }
 }
 
-uint8_t *__cdecl CM_Hunk_AllocXModel(uint32_t size)
+uint8_t *CM_Hunk_AllocXModel(uint32_t size)
 {
     return Hunk_Alloc(size, "CM_Hunk_AllocXModel", 21);
 }
-uint8_t *__cdecl CM_Hunk_AllocXModelColl(uint32_t size)
+uint8_t *CM_Hunk_AllocXModelColl(uint32_t size)
 {
     return Hunk_Alloc(size, "CM_Hunk_AllocXModelColl", 27);
 }
 
-uint8_t *__cdecl CM_Hunk_Alloc(uint32_t size, const char *name, int type)
+uint8_t *CM_Hunk_Alloc(uint32_t size, const char *name, int type)
 {
     return Hunk_Alloc(size, name, type);
 }
 
-XModel *__cdecl CM_XModelPrecache(char *name)
+XModel *CM_XModelPrecache(char *name)
 {
     return XModelPrecache(
         name,
-        (void *(__cdecl *)(int))CM_Hunk_AllocXModel,
-        (void *(__cdecl *)(int))CM_Hunk_AllocXModelColl);
+        (void *(*)(int))CM_Hunk_AllocXModel,
+        (void *(*)(int))CM_Hunk_AllocXModelColl);
 }
 
-char __cdecl CM_CreateStaticModel(cStaticModel_s *staticModel, char *name, float *origin, float *angles, float scale)
+char CM_CreateStaticModel(cStaticModel_s *staticModel, char *name, float *origin, float *angles, float scale)
 {
     XModel *model; // [esp+34h] [ebp-4h]
 
@@ -200,7 +200,7 @@ char __cdecl CM_CreateStaticModel(cStaticModel_s *staticModel, char *name, float
     return 1;
 }
 
-void __cdecl CM_LoadStaticModels()
+void CM_LoadStaticModels()
 {
     char v0; // [esp+7h] [ebp-115h]
     char *v1; // [esp+Ch] [ebp-110h]
@@ -341,7 +341,7 @@ void __cdecl CM_LoadStaticModels()
     }
 }
 
-void __cdecl CM_LoadMapFromBsp(const char *name, bool usePvs)
+void CM_LoadMapFromBsp(const char *name, bool usePvs)
 {
     uint32_t version; // [esp+20h] [ebp-4h]
 
@@ -374,7 +374,7 @@ void __cdecl CM_LoadMapFromBsp(const char *name, bool usePvs)
     ProfLoad_End();
 }
 
-void __cdecl CM_LoadMapData_LoadObj(const char *name)
+void CM_LoadMapData_LoadObj(const char *name)
 {
     if (!cm.isInUse || I_stricmp(cm.name, name))
     {
@@ -397,19 +397,19 @@ void __cdecl CM_LoadMapData_LoadObj(const char *name)
     }
 }
 
-cplane_s *__cdecl CM_GetPlanes()
+cplane_s *CM_GetPlanes()
 {
     iassert( cm.planes );
     return cm.planes;
 }
 
-int __cdecl CM_GetPlaneCount()
+int CM_GetPlaneCount()
 {
     return cm.planeCount;
 }
 
 
-void __cdecl CMod_LoadPlanes()
+void CMod_LoadPlanes()
 {
     char v0; // [esp+4h] [ebp-28h]
     char v1; // [esp+8h] [ebp-24h]
@@ -466,7 +466,7 @@ void __cdecl CMod_LoadPlanes()
     }
 }
 
-bool __cdecl CMod_HasSpawnString(const SpawnVar *userData, const char *key)
+bool CMod_HasSpawnString(const SpawnVar *userData, const char *key)
 {
     const char *value; // [esp+4h] [ebp-4h] BYREF
 
@@ -638,10 +638,10 @@ const char *g_purgeableEnts[7] =
   "func_group"
 };
 
-bool __cdecl MapEnts_CanPurgeEntity(
+bool MapEnts_CanPurgeEntity(
     const char *classname,
     void *userData,
-    bool(__cdecl *HasKeyCallback)(void *, const char *))
+    bool(*HasKeyCallback)(void *, const char *))
 {
     uint32_t classnameIndex; // [esp+0h] [ebp-4h]
 
@@ -653,7 +653,7 @@ bool __cdecl MapEnts_CanPurgeEntity(
     return !I_stricmp(classname, "light") && !HasKeyCallback(userData, "pl#");
 }
 
-MapEnts *__cdecl MapEnts_GetFromString(char *name, const char *entityString, int numEntityChars)
+MapEnts *MapEnts_GetFromString(char *name, const char *entityString, int numEntityChars)
 {
     MapEnts *mapEnts; // [esp+10h] [ebp-A2Ch]
     SpawnVar spawnVar; // [esp+14h] [ebp-A28h] BYREF
@@ -698,7 +698,7 @@ MapEnts *__cdecl MapEnts_GetFromString(char *name, const char *entityString, int
     return mapEnts;
 }
 
-MapEnts *__cdecl MapEnts_RealLoad(const char *name)
+MapEnts *MapEnts_RealLoad(const char *name)
 {
     int numEntityChars; // [esp+0h] [ebp-8h] BYREF
     const char *entityString; // [esp+4h] [ebp-4h]
@@ -707,7 +707,7 @@ MapEnts *__cdecl MapEnts_RealLoad(const char *name)
     return MapEnts_GetFromString((char*)name, entityString, numEntityChars);
 }
 
-MapEnts *__cdecl MapEnts_VirtualLoad(const char *name)
+MapEnts *MapEnts_VirtualLoad(const char *name)
 {
     return MapEnts_RealLoad(name);
 }
@@ -788,7 +788,7 @@ uint16_t *CM_InitBoxHull()
     return result;
 }
 
-void __cdecl CMod_LoadBrushRelated(uint32_t version, bool usePvs)
+void CMod_LoadBrushRelated(uint32_t version, bool usePvs)
 {
     int leafbrushNodesCount; // [esp+0h] [ebp-10h]
     HunkUser *user; // [esp+8h] [ebp-8h]
@@ -918,17 +918,17 @@ void CMod_LoadSubmodelBrushNodes()
     }
 }
 
-void __cdecl CM_Hunk_CheckTempMemoryHighClear()
+void CM_Hunk_CheckTempMemoryHighClear()
 {
     Hunk_CheckTempMemoryHighClear();
 }
 
-void __cdecl CM_Hunk_ClearTempMemoryHigh()
+void CM_Hunk_ClearTempMemoryHigh()
 {
     Hunk_ClearTempMemoryHigh();
 }
 
-void __cdecl CMod_PartionLeafBrushes(uint16_t *leafBrushes, int numLeafBrushes, cLeaf_t *leaf)
+void CMod_PartionLeafBrushes(uint16_t *leafBrushes, int numLeafBrushes, cLeaf_t *leaf)
 {
     int j; // [esp+8h] [ebp-28h]
     int ja; // [esp+8h] [ebp-28h]
@@ -979,12 +979,12 @@ void __cdecl CMod_PartionLeafBrushes(uint16_t *leafBrushes, int numLeafBrushes, 
     }
 }
 
-uint32_t __cdecl CM_Hunk_AllocateTempMemoryHigh(int size, const char *name)
+uint32_t CM_Hunk_AllocateTempMemoryHigh(int size, const char *name)
 {
     return Hunk_AllocateTempMemoryHigh(size, name);
 }
 
-cLeafBrushNode_s *__cdecl CMod_PartionLeafBrushes_r(
+cLeafBrushNode_s *CMod_PartionLeafBrushes_r(
     uint16_t *leafBrushes,
     int numLeafBrushes,
     const float *mins,
@@ -1146,7 +1146,7 @@ cLeafBrushNode_s *__cdecl CMod_PartionLeafBrushes_r(
     return node;
 }
 
-cLeafBrushNode_s *__cdecl CMod_AllocLeafBrushNode()
+cLeafBrushNode_s *CMod_AllocLeafBrushNode()
 {
     cLeafBrushNode_s *result; // eax
 
@@ -1162,7 +1162,7 @@ cLeafBrushNode_s *__cdecl CMod_AllocLeafBrushNode()
     return result;
 }
 
-double __cdecl CMod_GetPartitionScore(
+double CMod_GetPartitionScore(
     uint16_t *leafBrushes,
     int numLeafBrushes,
     int axis,
@@ -1229,7 +1229,7 @@ double __cdecl CMod_GetPartitionScore(
     }
 }
 
-int __cdecl CMod_GetLeafTerrainContents(cLeaf_t *leaf)
+int CMod_GetLeafTerrainContents(cLeaf_t *leaf)
 {
     int contents; // [esp+0h] [ebp-8h]
     int k; // [esp+4h] [ebp-4h]
@@ -1363,7 +1363,7 @@ void CMod_LoadBrushes()
     iassert(sideEdgeCountsCount == static_cast<uint>(inEdgeCounts - inEdgeCountsBase));
 }
 
-void __cdecl CMod_LoadLeafs(bool usePvs)
+void CMod_LoadLeafs(bool usePvs)
 {
     cLeaf_t *out; // [esp+0h] [ebp-20h]
     int cluster; // [esp+4h] [ebp-1Ch]
@@ -1406,7 +1406,7 @@ void __cdecl CMod_LoadLeafs(bool usePvs)
     }
 }
 
-void __cdecl CMod_LoadLeafs_Version14(bool usePvs)
+void CMod_LoadLeafs_Version14(bool usePvs)
 {
     cLeaf_t *out; // [esp+0h] [ebp-20h]
     int cluster; // [esp+4h] [ebp-1Ch]

@@ -85,7 +85,7 @@ static void Win_RegisterClass()
 		Com_Error(ERR_FATAL, "EXE_ERR_COULDNT_REGISTER_WINDOW");
 }
 
-sysEvent_t* __cdecl Win_GetEvent(sysEvent_t* result)
+sysEvent_t* Win_GetEvent(sysEvent_t* result)
 {
 	PROF_SCOPED("Win_GetEvent");
 
@@ -169,7 +169,7 @@ static int Sys_GetSemaphoreFileName()
 	return snprintf(sys_processSemaphoreFile, sizeof(sys_processSemaphoreFile), "__%s", moduleName);
 }
 
-void __cdecl Sys_QuitAndStartProcess(const char *exeName, const char *parameters)
+void Sys_QuitAndStartProcess(const char *exeName, const char *parameters)
 {
 	char pathOrig[268]; // [esp+0h] [ebp-110h] BYREF
 
@@ -181,12 +181,12 @@ void __cdecl Sys_QuitAndStartProcess(const char *exeName, const char *parameters
 	Cbuf_AddText(0, "quit\n");
 }
 
-void __cdecl Sys_NormalExit()
+void Sys_NormalExit()
 {
 	DeleteFileA(sys_processSemaphoreFile);
 }
 
-void __cdecl Sys_OutOfMemErrorInternal(const char* filename, int line)
+void Sys_OutOfMemErrorInternal(const char* filename, int line)
 {
 	HWND ActiveWindow; // eax
 	char* v3; // [esp-Ch] [ebp-Ch]
@@ -201,7 +201,7 @@ void __cdecl Sys_OutOfMemErrorInternal(const char* filename, int line)
 	exit(-1);
 }
 
-int __cdecl Sys_IsGameProcess(DWORD id)
+int Sys_IsGameProcess(DWORD id)
 {
 	tagMODULEENTRY32 me; // [esp+0h] [ebp-350h] BYREF
 	int isGame; // [esp+22Ch] [ebp-124h]
@@ -256,7 +256,7 @@ void Sys_NoFreeFilesError()
 	exit(-1);
 }
 
-int __cdecl Sys_CheckCrashOrRerun()
+int Sys_CheckCrashOrRerun()
 {
 #ifdef KISAK_PURE
 	HWND ActiveWindow; // eax
@@ -354,7 +354,7 @@ void Sys_Error(const char *error, ...)
 	exit(0);
 }
 
-void __cdecl Sys_OpenURL(const char *url, int doexit)
+void Sys_OpenURL(const char *url, int doexit)
 {
 	const char *v2; // eax
 	HWND__ *wnd; // [esp+0h] [ebp-4h]
@@ -393,7 +393,7 @@ void Sys_SpawnQuitProcess()
 	}
 }
 
-void __cdecl  Sys_Quit()
+void Sys_Quit()
 {
 	Sys_EnterCriticalSection(CRITSECT_COM_ERROR);
 	timeEndPeriod(1);
@@ -416,12 +416,12 @@ void __cdecl  Sys_Quit()
 	exit(0);
 }
 
-void __cdecl Sys_Print(const char *msg)
+void Sys_Print(const char *msg)
 {
 	Conbuf_AppendTextInMainThread(msg);
 }
 
-char *__cdecl Sys_GetClipboardData()
+char *Sys_GetClipboardData()
 {
 	SIZE_T v0; // eax
 	HANDLE hClipboardData; // [esp+0h] [ebp-Ch]
@@ -449,7 +449,7 @@ char *__cdecl Sys_GetClipboardData()
 	return data;
 }
 
-int __cdecl Sys_SetClipboardData(const char *text)
+int Sys_SetClipboardData(const char *text)
 {
 	char v2; // cl
 	_BYTE *v3; // [esp+8h] [ebp-20h]
@@ -481,7 +481,7 @@ int __cdecl Sys_SetClipboardData(const char *text)
 	}
 }
 
-void __cdecl Sys_QueEvent(uint32_t time, sysEventType_t type, int value, int value2, int ptrLength, void *ptr)
+void Sys_QueEvent(uint32_t time, sysEventType_t type, int value, int value2, int ptrLength, void *ptr)
 {
 	sysEvent_t *ev; // [esp+0h] [ebp-4h]
 
@@ -520,7 +520,7 @@ void Sys_ShutdownEvents()
 	Sys_LeaveCriticalSection(CRITSECT_SYS_EVENT_QUEUE);
 }
 
-void __cdecl Sys_LoadingKeepAlive()
+void Sys_LoadingKeepAlive()
 {
 	sysEvent_t result; // [esp+0h] [ebp-48h] BYREF
 	sysEvent_t v1; // [esp+18h] [ebp-30h]
@@ -534,7 +534,7 @@ void __cdecl Sys_LoadingKeepAlive()
 	R_CheckLostDevice();
 }
 
-sysEvent_t *__cdecl Sys_GetEvent(sysEvent_t *result)
+sysEvent_t *Sys_GetEvent(sysEvent_t *result)
 {
 	PROF_SCOPED("Sys_GetEvent");
 
@@ -546,7 +546,7 @@ sysEvent_t *__cdecl Sys_GetEvent(sysEvent_t *result)
 	return result;
 }
 
-void __cdecl Sys_Init()
+void Sys_Init()
 {
 	// _OSVERSIONINFOA osversion; // [esp+14h] [ebp-A0h] BYREF
 
@@ -601,7 +601,7 @@ void Sys_Net_Restart_f()
 }
 #endif
 
-void __cdecl Sys_CreateSplashWindow()
+void Sys_CreateSplashWindow()
 {
 	HWND__* hwnd; // [esp+0h] [ebp-54h]
 	int bmpSize; // [esp+4h] [ebp-50h]
@@ -667,7 +667,7 @@ void __cdecl Sys_CreateSplashWindow()
 		}
 	}
 }
-void __cdecl Sys_ShowSplashWindow()
+void Sys_ShowSplashWindow()
 {
 	if (g_splashWnd)
 	{
@@ -676,7 +676,7 @@ void __cdecl Sys_ShowSplashWindow()
 	}
 }
 
-int __cdecl Sys_SystemMemoryMB()
+int Sys_SystemMemoryMB()
 {
 	HWND ActiveWindow; // eax
 	HWND v2; // eax

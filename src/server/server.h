@@ -154,161 +154,161 @@ enum ServerFrameExtent : __int32
 };
 
 // sv_ccmds
-void __cdecl SV_SetValuesFromSkill();
+void SV_SetValuesFromSkill();
 void SV_DifficultyEasy();
 void SV_DifficultyMedium();
 void SV_DifficultyHard();
 void SV_DifficultyFu();
-int __cdecl ReadSaveHeader(const char *filename, SaveHeader *header);
-int __cdecl ExtractMapStringFromSaveGame(const char *filename, char *mapname);
-void __cdecl ShowLoadErrorsSummary(const char *mapName, unsigned int count);
-void __cdecl SV_ClearLoadGame();
-void __cdecl SV_MapRestart(int savegame, int loadScripts);
-int __cdecl CheckForSaveGame(char *mapname, char *filename);
-int __cdecl SV_CheckLoadGame();
-void __cdecl SV_RequestMapRestart(int loadScripts);
-void __cdecl SV_FastRestart_f();
-void __cdecl SV_MapRestart_f();
-void __cdecl SV_NextLevel_f();
-void __cdecl SV_LoadGame_f();
+int ReadSaveHeader(const char *filename, SaveHeader *header);
+int ExtractMapStringFromSaveGame(const char *filename, char *mapname);
+void ShowLoadErrorsSummary(const char *mapName, unsigned int count);
+void SV_ClearLoadGame();
+void SV_MapRestart(int savegame, int loadScripts);
+int CheckForSaveGame(char *mapname, char *filename);
+int SV_CheckLoadGame();
+void SV_RequestMapRestart(int loadScripts);
+void SV_FastRestart_f();
+void SV_MapRestart_f();
+void SV_NextLevel_f();
+void SV_LoadGame_f();
 #ifdef KISAK_XBOX
-void __cdecl SV_ForceSelectSaveDevice_f();
-void __cdecl SV_SelectSaveDevice_f();
+void SV_ForceSelectSaveDevice_f();
+void SV_SelectSaveDevice_f();
 #endif
-void __cdecl CheckSaveExists(const char *filename);
-void __cdecl SV_LoadGameContinue_f();
-void __cdecl SV_ScriptUsage_f();
+void CheckSaveExists(const char *filename);
+void SV_LoadGameContinue_f();
+void SV_ScriptUsage_f();
 void SV_ScriptVarUsage_f_usage();
 void SV_ScriptVarUsage_f();
 void SV_ScriptProfile_f();
 void SV_ScriptBuiltin_f();
 void SV_ScriptProfileReset_f();
-void __cdecl SV_ScriptProfileFile_f();
-void __cdecl SV_StringUsage_f();
+void SV_ScriptProfileFile_f();
+void SV_StringUsage_f();
 void SV_SaveGame_f();
-void __cdecl SV_SaveGameLastCommit_f();
-void __cdecl SV_RemoveOperatorCommands();
+void SV_SaveGameLastCommit_f();
+void SV_RemoveOperatorCommands();
 void SV_Map_f();
-void __cdecl SV_AddOperatorCommands();
+void SV_AddOperatorCommands();
 
 
 // sv_client
-void __cdecl SV_DirectConnect();
-void __cdecl SV_SendClientGameState(client_t *client);
-void __cdecl SV_SendGameState();
-void __cdecl SV_ClientEnterWorld(client_t *client);
-float __cdecl SV_FX_GetVisibility(const float *start, const float *end);
-void __cdecl SV_ExecuteClientCommand(const char *s);
-void __cdecl SV_ClientThink(usercmd_s *cmd);
-gentity_s *__cdecl SV_GetEntityState(int entnum);
-void __cdecl SV_TrackPlayerDied();
-void __cdecl SV_AddToPlayerScore(int amount);
+void SV_DirectConnect();
+void SV_SendClientGameState(client_t *client);
+void SV_SendGameState();
+void SV_ClientEnterWorld(client_t *client);
+float SV_FX_GetVisibility(const float *start, const float *end);
+void SV_ExecuteClientCommand(const char *s);
+void SV_ClientThink(usercmd_s *cmd);
+gentity_s *SV_GetEntityState(int entnum);
+void SV_TrackPlayerDied();
+void SV_AddToPlayerScore(int amount);
 
 
 
 // sv_demo
 struct SaveGame;
 
-void __cdecl TRACK_sv_demo();
-unsigned int __cdecl SV_GetHistoryIndex(server_demo_history_t *history);
-int __cdecl SV_GetBufferIndex(unsigned __int8 *ptr);
-void __cdecl SV_HistoryFree(unsigned __int8 *ptr, int size);
-int __cdecl SV_HistoryAlloc(server_demo_history_t *history, unsigned __int8 **pData, int size);
-int __cdecl SV_MsgAlloc(unsigned int maxsize);
+void TRACK_sv_demo();
+unsigned int SV_GetHistoryIndex(server_demo_history_t *history);
+int SV_GetBufferIndex(unsigned __int8 *ptr);
+void SV_HistoryFree(unsigned __int8 *ptr, int size);
+int SV_HistoryAlloc(server_demo_history_t *history, unsigned __int8 **pData, int size);
+int SV_MsgAlloc(unsigned int maxsize);
 void SV_CheckDemoSize();
-bool __cdecl SV_DemoWrite(const void *buffer, unsigned int len, _iobuf *file);
-int __cdecl SV_FindTimeSkipIndex(int time);
-FileMarkSkip *__cdecl SV_FindMarkSkip(const char *name);
-void __cdecl SV_TruncateHistoryTimeCache(int maxTime);
+bool SV_DemoWrite(const void *buffer, unsigned int len, _iobuf *file);
+int SV_FindTimeSkipIndex(int time);
+FileMarkSkip *SV_FindMarkSkip(const char *name);
+void SV_TruncateHistoryTimeCache(int maxTime);
 int SV_ClearHistoryMarkCache();
 // attributes: thunk
-void __cdecl SV_TruncateHistoryCache(int maxTime);
+void SV_TruncateHistoryCache(int maxTime);
 int SV_SetAutoSaveHistoryTime();
-void __cdecl SV_ResetDemo();
+void SV_ResetDemo();
 _iobuf *SV_ClearHistoryCache();
-void __cdecl SV_FreeDemoSaveBuf(server_demo_save_t *save);
-void __cdecl SV_FreeHistoryData(server_demo_history_t *history);
-void __cdecl SV_FreeHistory(server_demo_history_t **history);
+void SV_FreeDemoSaveBuf(server_demo_save_t *save);
+void SV_FreeHistoryData(server_demo_history_t *history);
+void SV_FreeHistory(server_demo_history_t **history);
 void SV_FreeDemoMsg();
-int __cdecl SV_WaitForSaveHistoryDone();
-void __cdecl SV_ShutdownDemo();
-int __cdecl SV_AddDemoSave(SaveGame *savehandle, server_demo_save_t *save, int createSave);
-_iobuf *__cdecl SV_DemoOpenFile(const char *fileName);
-void __cdecl SV_InitWriteDemo(int randomSeed);
-void __cdecl SV_InitReadDemoSavegame(SaveGame **saveHandle);
-int __cdecl SV_InitDemoSavegame(SaveGame **save);
-bool __cdecl SV_IsDemoPlaying();
-bool __cdecl SV_UsingDemoSave();
-void __cdecl SV_RecordClientCommand(const char *s);
-void __cdecl SV_RecordClientThink(usercmd_s *cmd);
-void __cdecl SV_RecordFxVisibility(double visibility);
-void __cdecl SV_RecordCheatsOk(int cheatsOk);
-void __cdecl SV_RecordIsRecentlyLoaded(bool isRecentlyLoaded);
-void __cdecl SV_Record_Dvar_GetVariantString(const char *buffer);
-void __cdecl SV_RecordButtonPressed(int buttonPressed);
-void __cdecl SV_GetFreeDemoName(const char *baseName, int demoCount, char *testDemoName);
-void __cdecl SV_SaveDemoImmediate(SaveImmediate *save);
-void __cdecl SV_WriteDemo(SaveGame *save);
-void __cdecl SV_SaveDemo(const char *demoName, const char *description, unsigned __int32 saveType);
-void __cdecl SV_AutoSaveDemo(const char *baseName, const char *description, int demoCount, bool force);
-bool __cdecl SV_GetLatestAutoReplayName(char *filename, int filenameSize);
+int SV_WaitForSaveHistoryDone();
+void SV_ShutdownDemo();
+int SV_AddDemoSave(SaveGame *savehandle, server_demo_save_t *save, int createSave);
+_iobuf *SV_DemoOpenFile(const char *fileName);
+void SV_InitWriteDemo(int randomSeed);
+void SV_InitReadDemoSavegame(SaveGame **saveHandle);
+int SV_InitDemoSavegame(SaveGame **save);
+bool SV_IsDemoPlaying();
+bool SV_UsingDemoSave();
+void SV_RecordClientCommand(const char *s);
+void SV_RecordClientThink(usercmd_s *cmd);
+void SV_RecordFxVisibility(double visibility);
+void SV_RecordCheatsOk(int cheatsOk);
+void SV_RecordIsRecentlyLoaded(bool isRecentlyLoaded);
+void SV_Record_Dvar_GetVariantString(const char *buffer);
+void SV_RecordButtonPressed(int buttonPressed);
+void SV_GetFreeDemoName(const char *baseName, int demoCount, char *testDemoName);
+void SV_SaveDemoImmediate(SaveImmediate *save);
+void SV_WriteDemo(SaveGame *save);
+void SV_SaveDemo(const char *demoName, const char *description, unsigned __int32 saveType);
+void SV_AutoSaveDemo(const char *baseName, const char *description, int demoCount, bool force);
+bool SV_GetLatestAutoReplayName(char *filename, int filenameSize);
 void SV_EnableAutoDemo();
-void __cdecl SV_SaveDemo_f();
+void SV_SaveDemo_f();
 void SV_DemoRestart();
-void __cdecl SV_DemoRestart_f();
-int __cdecl SV_DemoHasMark();
-void __cdecl SV_LoadDemo(SaveGame *save, void *fileHandle);
-bool __cdecl SV_RecordingDemo();
-int __cdecl SV_Demo_Dvar_Set(const char *var_name, const char *value);
-int __cdecl SV_WriteDemoSaveBuf(server_demo_save_t *save);
-bool __cdecl SV_WriteHistory(_iobuf *fileHistory, const server_demo_history_t *history);
-void __cdecl SV_SaveHistoryTime(server_demo_history_t *history);
-void __cdecl SV_SaveHistoryMark(const server_demo_history_t *history);
-void __cdecl SV_SaveHistory(server_demo_history_t *history);
-void __cdecl  SV_SaveHistoryLoop(unsigned int threadContext);
+void SV_DemoRestart_f();
+int SV_DemoHasMark();
+void SV_LoadDemo(SaveGame *save, void *fileHandle);
+bool SV_RecordingDemo();
+int SV_Demo_Dvar_Set(const char *var_name, const char *value);
+int SV_WriteDemoSaveBuf(server_demo_save_t *save);
+bool SV_WriteHistory(_iobuf *fileHistory, const server_demo_history_t *history);
+void SV_SaveHistoryTime(server_demo_history_t *history);
+void SV_SaveHistoryMark(const server_demo_history_t *history);
+void SV_SaveHistory(server_demo_history_t *history);
+void SV_SaveHistoryLoop(unsigned int threadContext);
 bool SV_InitHistorySaveThread();
-void __cdecl SV_InitDemoSystem();
-server_demo_history_t *__cdecl SV_DemoGetFreeBuffer();
-int __cdecl SV_HistoryIsNew(server_demo_history_t *history);
-void __cdecl SV_ClearInfrequentTimeMarks(server_demo_history_t *history);
-server_demo_history_t *__cdecl SV_DemoGetBuffer();
-server_demo_history_t *__cdecl SV_GetMarkHistory(const char *name);
-int __cdecl SV_DemoSaveHistory(server_demo_history_t *history);
-void __cdecl SV_DemoMark_f();
-bool __cdecl SV_DemoRead(void *buffer, unsigned int len, _iobuf *file);
-int __cdecl SV_DemoAllocRead(
+void SV_InitDemoSystem();
+server_demo_history_t *SV_DemoGetFreeBuffer();
+int SV_HistoryIsNew(server_demo_history_t *history);
+void SV_ClearInfrequentTimeMarks(server_demo_history_t *history);
+server_demo_history_t *SV_DemoGetBuffer();
+server_demo_history_t *SV_GetMarkHistory(const char *name);
+int SV_DemoSaveHistory(server_demo_history_t *history);
+void SV_DemoMark_f();
+bool SV_DemoRead(void *buffer, unsigned int len, _iobuf *file);
+int SV_DemoAllocRead(
     server_demo_history_t *history,
     unsigned __int8 **buffer,
     unsigned int len,
     _iobuf *file);
-bool __cdecl SV_ReadHistory(_iobuf *fileHistory, server_demo_history_t *history);
-bool __cdecl SV_DemoLoadHistory(_iobuf *fileHistory, int fileOffset);
-bool __cdecl SV_LoadHistoryForTime(int time);
-bool __cdecl SV_ActiveHistoryIsMark(const char *name);
-int __cdecl SV_LoadHistoryForMark(const char *name);
-void __cdecl SV_DemoGoto_f();
-void __cdecl SV_DemoSetNextLevelTime(int time);
-void __cdecl SV_DemoBack_f();
-void __cdecl SV_DemoForward_f();
-void __cdecl SV_DemoFullForward_f();
-void __cdecl SV_DemoLive_f();
-void __cdecl SV_DemoInfo_f();
-int __cdecl SV_GetDemoStartTime();
-int __cdecl SV_GetDemoEndTime();
-int __cdecl SV_CheckAutoSaveHistory(int setTooSoon);
+bool SV_ReadHistory(_iobuf *fileHistory, server_demo_history_t *history);
+bool SV_DemoLoadHistory(_iobuf *fileHistory, int fileOffset);
+bool SV_LoadHistoryForTime(int time);
+bool SV_ActiveHistoryIsMark(const char *name);
+int SV_LoadHistoryForMark(const char *name);
+void SV_DemoGoto_f();
+void SV_DemoSetNextLevelTime(int time);
+void SV_DemoBack_f();
+void SV_DemoForward_f();
+void SV_DemoFullForward_f();
+void SV_DemoLive_f();
+void SV_DemoInfo_f();
+int SV_GetDemoStartTime();
+int SV_GetDemoEndTime();
+int SV_CheckAutoSaveHistory(int setTooSoon);
 void SV_DoAutoSaveHistory();
-void __cdecl SV_UpdateDemo();
+void SV_UpdateDemo();
 void SV_DemoLive();
-void __cdecl SV_EndDemo(bool error);
+void SV_EndDemo(bool error);
 void SV_ReadNextDemoType();
-bool __cdecl SV_InitReadDemo(int *randomSeed);
-bool __cdecl SV_InitDemo(int *randomSeed);
-bool __cdecl SV_ReadPacket(int framePos);
-float __cdecl SV_DemoFxVisibility();
-int __cdecl SV_DemoCheatsOk();
-bool __cdecl SV_DemoIsRecentlyLoaded();
-const char *__cdecl SV_Demo_Dvar_GetVariantString();
-int __cdecl SV_DemoButtonPressed();
+bool SV_InitReadDemo(int *randomSeed);
+bool SV_InitDemo(int *randomSeed);
+bool SV_ReadPacket(int framePos);
+float SV_DemoFxVisibility();
+int SV_DemoCheatsOk();
+bool SV_DemoIsRecentlyLoaded();
+const char *SV_Demo_Dvar_GetVariantString();
+int SV_DemoButtonPressed();
 
 
 // sv_main
@@ -413,11 +413,11 @@ struct alignas(4) PendingSaveList
     bool isAutoSaving;
 };
 
-void __cdecl TRACK_sv_main();
-char *__cdecl SV_ExpandNewlines(char *in);
-void __cdecl SV_DumpServerCommands(client_t *client);
-void __cdecl AppendCommandsForInternalSave(const char *filename);
-void __cdecl SV_InitiatePendingSave(
+void TRACK_sv_main();
+char *SV_ExpandNewlines(char *in);
+void SV_DumpServerCommands(client_t *client);
+void AppendCommandsForInternalSave(const char *filename);
+void SV_InitiatePendingSave(
     const char *filename,
     const char *description,
     const char *screenshot,
@@ -425,46 +425,46 @@ void __cdecl SV_InitiatePendingSave(
     unsigned int commitLevel,
     PendingSave *pendingSave,
     bool suppressPlayerNotify);
-int __cdecl SV_AddPendingSave(
+int SV_AddPendingSave(
     const char *filename,
     const char *description,
     const char *screenshot,
     SaveType saveType,
     unsigned int commitLevel,
     bool suppressPlayerNotify);
-int __cdecl SV_ProcessPendingSave(PendingSave *pendingSave);
-int __cdecl SV_ProcessPendingSaves();
-void __cdecl SV_ClearPendingSaves();
-int __cdecl SV_IsInternalSave(const char *filename);
-void __cdecl SV_SetLastSaveName(const char *filename);
-void __cdecl SV_AddServerCommand(client_t *client, const char *cmd);
+int SV_ProcessPendingSave(PendingSave *pendingSave);
+int SV_ProcessPendingSaves();
+void SV_ClearPendingSaves();
+int SV_IsInternalSave(const char *filename);
+void SV_SetLastSaveName(const char *filename);
+void SV_AddServerCommand(client_t *client, const char *cmd);
 void SV_SendServerCommand(client_t *cl, const char *fmt, ...);
-void __cdecl SV_SaveServerCommands(SaveGame *save);
-void __cdecl SV_LoadServerCommands(SaveGame *save);
-void __cdecl SV_PreFrame();
-int __cdecl SV_RunFrame(ServerFrameExtent extent, int timeCap);
+void SV_SaveServerCommands(SaveGame *save);
+void SV_LoadServerCommands(SaveGame *save);
+void SV_PreFrame();
+int SV_RunFrame(ServerFrameExtent extent, int timeCap);
 void SV_ProcessPostFrame();
-void __cdecl SV_UpdatePerformanceFrame(int time);
-bool __cdecl SV_CheckSkipTimeout();
-int __cdecl SV_CheckStartServer();
-int __cdecl SV_WaitStartServer();
-void __cdecl  SV_ServerThread(unsigned int threadContext);
-void __cdecl SV_InitServerThread();
-void __cdecl SV_ExitAfterTime();
+void SV_UpdatePerformanceFrame(int time);
+bool SV_CheckSkipTimeout();
+int SV_CheckStartServer();
+int SV_WaitStartServer();
+void SV_ServerThread(unsigned int threadContext);
+void SV_InitServerThread();
+void SV_ExitAfterTime();
 void SV_WakeServer();
-void __cdecl SV_WaitServer();
-void __cdecl SV_InitSnapshot();
-void __cdecl SV_WaitSaveGame();
-void __cdecl SV_BeginSaveGame();
-void __cdecl SV_EndSaveGame();
-int __cdecl SV_WaitServerSnapshot();
-bool __cdecl SV_ReachedServerCommandThreshold();
-void __cdecl SV_FrameInternal(int msec);
-int __cdecl SV_GetPartialFrametime();
-int __cdecl SV_ForwardFrame();
-int __cdecl SV_ClientFrameRateFix(int msec);
-int __cdecl SV_Frame(int msec);
-bool __cdecl SV_SaveMemory_IsRecentlyLoaded();
+void SV_WaitServer();
+void SV_InitSnapshot();
+void SV_WaitSaveGame();
+void SV_BeginSaveGame();
+void SV_EndSaveGame();
+int SV_WaitServerSnapshot();
+bool SV_ReachedServerCommandThreshold();
+void SV_FrameInternal(int msec);
+int SV_GetPartialFrametime();
+int SV_ForwardFrame();
+int SV_ClientFrameRateFix(int msec);
+int SV_Frame(int msec);
+bool SV_SaveMemory_IsRecentlyLoaded();
 
 extern server_t sv;
 extern serverStatic_t svs;
@@ -504,13 +504,13 @@ inline int SV_GetCheckSum()
 
 
 // sv_snapshot
-void __cdecl SV_WriteSnapshotToClient(client_t *client, msg_t *msg);
-void __cdecl SV_UpdateServerCommandsToClient(client_t *client);
-void __cdecl SV_AddEntToSnapshot(int entnum);
-void __cdecl SV_AddEntitiesVisibleFromPoint(int clientNum);
-void __cdecl SV_BuildClientSnapshot(client_t *client);
-void __cdecl SV_SendMessageToClient(msg_t *msg, client_t *client);
-void __cdecl SV_BuildAndSendClientSnapshot(client_t *client);
-void __cdecl SV_SendClientMessages();
-void __cdecl SV_WriteSnapshotToClientCmd(void *cmdData);
-void __cdecl SV_ArchiveSnapshotCmd(void *cmdData);
+void SV_WriteSnapshotToClient(client_t *client, msg_t *msg);
+void SV_UpdateServerCommandsToClient(client_t *client);
+void SV_AddEntToSnapshot(int entnum);
+void SV_AddEntitiesVisibleFromPoint(int clientNum);
+void SV_BuildClientSnapshot(client_t *client);
+void SV_SendMessageToClient(msg_t *msg, client_t *client);
+void SV_BuildAndSendClientSnapshot(client_t *client);
+void SV_SendClientMessages();
+void SV_WriteSnapshotToClientCmd(void *cmdData);
+void SV_ArchiveSnapshotCmd(void *cmdData);
