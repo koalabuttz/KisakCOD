@@ -942,8 +942,10 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
+          # libopenal-dev only for <AL/al.h>, which the multiplayer client's
+          # sound headers include; the client links the OpenAL stand-in.
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            cmake ninja-build clang g++ g++-multilib binutils python3 ccache
+            cmake ninja-build clang g++ g++-multilib binutils python3 ccache libopenal-dev
 
       - name: Restore compiler cache
         uses: actions/cache/restore@v4

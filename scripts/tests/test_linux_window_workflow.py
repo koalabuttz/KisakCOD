@@ -528,6 +528,12 @@ class DeviceProbeWorkflowTests(unittest.TestCase):
             self.assertIn(f"grep -qx '{library}'", build)
         self.assertIn('the multiplayer client needs a library beyond SDL3, D3D9, OpenAL and the runtimes', build)
 
+    def test_the_job_installs_the_openal_headers_the_client_sound_code_includes(self):
+        # src/sound/snd_local.h includes <AL/al.h>; the library itself is the stand-in.
+        install = self.step('Install 32-bit C++ toolchain')['run']
+        self.assertIn('libopenal-dev', install)
+        self.assertNotIn('libopenal1', install)
+
     def test_the_client_run_is_the_asset_free_script_on_dummy_drivers(self):
         step = self.step(self.MP_RUN_STEP)
         self.assertEqual(step['env']['SDL_VIDEODRIVER'], 'dummy')
