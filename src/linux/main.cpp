@@ -446,7 +446,11 @@ sysEvent_t *Win_GetEvent(sysEvent_t *result)
 #endif
     sysEvent_t ev{};
 
-    // The console is the other external source.
+    // The console is the other external source. Its reader keeps the partial
+    // line in statics, and the render thread polls too (Sys_LoadingKeepAlive in
+    // SCR_UpdateScreen), so reading and queueing a line holds the event queue's
+    // section, which Windows holds across the whole of Win_GetEvent.
+    Sys_EnterCriticalSection(CRITSECT_SYS_EVENT_QUEUE);
     char *consoleLine = Sys_ConsoleInput();
     if (consoleLine)
     {
@@ -454,9 +458,10 @@ sysEvent_t *Win_GetEvent(sysEvent_t *result)
         char *copy = (char *)Com_AllocEvent((int)length + 1);
         I_strncpyz(copy, consoleLine, (int)length + 1);
         Sys_QueEvent(0, SE_CONSOLE, 0, 0, (int)length + 1, copy);
-
-        if (PollEngineEvent(result)) return result;
     }
+    Sys_LeaveCriticalSection(CRITSECT_SYS_EVENT_QUEUE);
+    if (consoleLine && PollEngineEvent(result))
+        return result;
 
     ev.evTime = (int)Sys_Milliseconds();
     *result = ev;

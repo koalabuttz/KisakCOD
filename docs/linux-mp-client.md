@@ -73,7 +73,7 @@ the engine. Here `src/linux/client/mp_client_window.cpp` and
 | --- | --- |
 | `WM_CREATE` sets `g_wv.hWnd` | The Win32 layer reports each new window to an observer from inside `CreateWindowExA`. The client adopts the renderer's window there with a `WindowHost`, which pumps its events but never presents to it or destroys it, and sets `g_wv.hWnd`. |
 | `WM_DESTROY` clears it | `DestroyWindow` reports first, so the host lets go before the window goes (a `vid_restart` or shutdown). Letting go neither quits nor touches the engine's keys. |
-| `PeekMessage` in `Win_GetEvent` | `Win_GetEvent` pumps the window once the engine queue is empty. |
+| `PeekMessage` in `Win_GetEvent`, which only sees the calling thread's windows | `Win_GetEvent` pumps the window once the engine queue is empty, on the thread that created it. The render thread also calls `Win_GetEvent` (`Sys_LoadingKeepAlive` while it draws the loading screen); there the pump does nothing, as `PeekMessage` finds nothing. |
 | Keys, mouse buttons, wheel, `WM_CHAR` | `SE_KEY` and `SE_CHAR` in the engine queue, through `EngineInput`. Keys follow their US layout positions. |
 | `IN_MouseMove`, once per frame | `IN_Frame` hands `CL_MouseEvent` the last position (in window pixels) and the motion summed since the last frame. |
 | The cursor recentred while `CL_MouseEvent` answers yes | Relative capture while it answers yes (look mode). When a menu or the console has the mouse, capture is released and the cursor follows `IN_ShowSystemCursor`. |

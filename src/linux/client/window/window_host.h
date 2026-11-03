@@ -77,6 +77,9 @@ public:
     void Present(PixelBufferView frame);
     uint32_t Id() const { return SDL_GetWindowID(window_); }
     bool Running() const { return running_; }
+    // Whether the calling thread made this host, the only thread that may
+    // pump it or change its window.
+    bool OnOwnerThread() const { return sdl::CurrentThread() == owner_; }
     bool Focused() const { return focused_; }
     bool PointerInside() const { return pointerInside_; }
     // Hide the native cursor only while this running, focused window owns the

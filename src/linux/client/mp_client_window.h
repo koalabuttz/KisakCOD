@@ -62,8 +62,10 @@ public:
     ClientWindow(const ClientWindow &) = delete;
     ClientWindow &operator=(const ClientWindow &) = delete;
 
-    // Pump the window's pending events into the engine queue.
-    void Pump();
+    // Pump the window's pending events into the engine queue. Only the thread
+    // that created the window gets them, as with Windows' per-thread message
+    // queues; another thread's call does nothing and returns false.
+    bool Pump();
     // IN_Frame: hand the gathered motion to the engine and follow its answer.
     // `mouseEnabled` is win_input.cpp's "mouse initialized and app active".
     void Frame(bool mouseEnabled);

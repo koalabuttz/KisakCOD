@@ -105,9 +105,16 @@ ClientWindow::~ClientWindow()
     g_detaching = wasDetaching;
 }
 
-void ClientWindow::Pump()
+bool ClientWindow::Pump()
 {
+    // PeekMessage only returns messages for windows the calling thread owns.
+    // The render thread reaches Win_GetEvent too, through Sys_LoadingKeepAlive
+    // in SCR_UpdateScreen while it draws the loading screen, and on Windows it
+    // gets none of the game window's messages there. Likewise here.
+    if (!host_->OnOwnerThread())
+        return false;
     host_->Pump(0);
+    return true;
 }
 
 void ClientWindow::ToPixels(int &x, int &y) const
