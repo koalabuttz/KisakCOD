@@ -101,8 +101,8 @@ void __cdecl Actor_UpdateLookAngles(actor_s *self)
     p_ScriptOrient = &self->ScriptOrient;
     if (self->ScriptOrient.eMode == AI_ORIENT_INVALID)
         p_ScriptOrient = &self->CodeOrient;
-    v4 = (float)((float)(p_ScriptOrient->fDesiredLookPitch - self->fLookPitch) * (float)0.0027777778);
-    a2 = (float)((float)((float)(p_ScriptOrient->fDesiredLookPitch - self->fLookPitch) * (float)0.0027777778) + (float)0.5);
+    v4 = (float)((float)(p_ScriptOrient->fDesiredLookPitch - self->fLookPitch) * TURNS_PER_DEGREE_F);
+    a2 = (float)((float)((float)(p_ScriptOrient->fDesiredLookPitch - self->fLookPitch) * TURNS_PER_DEGREE_F) + (float)0.5);
     v5 = floor(a2);
     v6 = (float)((float)((float)v4 - (float)*(double *)&v5) * (float)360.0);
     if (v6 <= 40.0)
@@ -115,8 +115,8 @@ void __cdecl Actor_UpdateLookAngles(actor_s *self)
         v6 = 40.0;
     }
     v7 = (float)(self->fLookPitch + (float)v6);
-    v8 = (float)((float)(p_ScriptOrient->fDesiredLookYaw - self->fLookYaw) * (float)0.0027777778);
-    *(double *)&v5 = (float)((float)((float)(p_ScriptOrient->fDesiredLookYaw - self->fLookYaw) * (float)0.0027777778)
+    v8 = (float)((float)(p_ScriptOrient->fDesiredLookYaw - self->fLookYaw) * TURNS_PER_DEGREE_F);
+    *(double *)&v5 = (float)((float)((float)(p_ScriptOrient->fDesiredLookYaw - self->fLookYaw) * TURNS_PER_DEGREE_F)
         + (float)0.5);
     v9 = floor(v5);
     v10 = (float)((float)((float)v8 - (float)*(double *)&v9) * (float)360.0);
@@ -150,8 +150,8 @@ void __cdecl Actor_UpdateBodyAngle(actor_s *self)
         fDesiredBodyYaw = self->CodeOrient.fDesiredBodyYaw;
     ent = self->ent;
     self->fDesiredBodyYaw = fDesiredBodyYaw;
-    v5 = (float)((float)((float)fDesiredBodyYaw - ent->r.currentAngles[1]) * (float)0.0027777778);
-    a2 = (float)((float)((float)((float)fDesiredBodyYaw - ent->r.currentAngles[1]) * (float)0.0027777778) + (float)0.5);
+    v5 = (float)((float)((float)fDesiredBodyYaw - ent->r.currentAngles[1]) * TURNS_PER_DEGREE_F);
+    a2 = (float)((float)((float)((float)fDesiredBodyYaw - ent->r.currentAngles[1]) * TURNS_PER_DEGREE_F) + (float)0.5);
     v6 = floor(a2);
     v7 = (float)((float)((float)v5 - (float)*(double *)&v6) * (float)360.0);
     if (BG_ActorIsProne(&self->ProneInfo, level.time))

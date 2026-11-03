@@ -1009,6 +1009,7 @@ void __cdecl CG_CompassDrawPlayerNCoordScroll(
         coordb = coorda / compassCoords->current.vector[2] + compassCoords->current.vector[1];
         coordc = compassMaxRange->current.value * 0.5 / compassCoords->current.vector[2] + coordb;
         pixelPerCoord = compassCoords->current.vector[2] * h / compassMaxRange->current.value;
+        // Truncates toward zero, as retail does (_ftol2_sse; upstream #52).
         fracPortion = 1.0 - (coordc - (double)(int)coordc);
         pixelY = y - fracPortion * pixelPerCoord;
         coord = coordc + fracPortion;
@@ -1086,6 +1087,7 @@ void __cdecl CG_CompassDrawPlayerECoordScroll(
         coorda = coord / compassCoords->current.vector[2] + compassCoords->current.value;
         coordb = coorda - compassMaxRange->current.value * 0.5 / compassCoords->current.vector[2];
         pixelPerCoord = compassCoords->current.vector[2] * w / compassMaxRange->current.value;
+        // Truncates toward zero, as retail does (_ftol2_sse; upstream #52).
         fracPortion = coordb - (double)(int)coordb;
         pixelX = x - fracPortion * pixelPerCoord;
         integerPortion = (int)coordb;
@@ -1960,6 +1962,7 @@ void __cdecl DrawIconDistanceText(
 
 double __cdecl CutFloat(float original)
 {
+    // Truncates toward zero, as retail does (_ftol2_sse; upstream #52).
     return (float)((double)(int)(original * 10.0) * 0.1000000014901161);
 }
 

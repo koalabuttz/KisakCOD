@@ -1410,9 +1410,9 @@ void __cdecl CL_FinishMove(usercmd_s *cmd)
     cmd->weapon = clients[0].cgameUserCmdWeapon;
     cmd->offHandIndex = clients[0].cgameUserCmdOffHandIndex;
     cmd->serverTime = clients[0].serverTime;
-    cmd->angles[0] = (unsigned __int16)(int)(clients[0].viewangles[0] * (float)182.04445);
-    cmd->angles[1] = (unsigned __int16)(int)(clients[0].viewangles[1] * (float)182.04445);
-    cmd->angles[KEY_FORWARD] = (unsigned __int16)(int)(clients[0].viewangles[KEY_FORWARD] * (float)182.04445);
+    cmd->angles[0] = (unsigned __int16)(int)(clients[0].viewangles[0] * SHORTS_PER_DEGREE_F);
+    cmd->angles[1] = (unsigned __int16)(int)(clients[0].viewangles[1] * SHORTS_PER_DEGREE_F);
+    cmd->angles[KEY_FORWARD] = (unsigned __int16)(int)(clients[0].viewangles[KEY_FORWARD] * SHORTS_PER_DEGREE_F);
     buttons = cmd->buttons;
     cmd->gunPitch = clients[0].cgameUserCmdGunPitch;
     cmd->gunYaw = clients[0].cgameUserCmdGunYaw;

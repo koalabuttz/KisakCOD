@@ -392,9 +392,7 @@ void __cdecl G_ExplodeMissile(gentity_s *ent)
 #ifdef KISAK_MP
             if (weapDef->projExplosion == WEAPPROJEXP_SMOKE && weapDef->projExplosionEffect)
             {
-                eventEnt->s.lerp.pos.trBase[0] = (float)(int)eventEnt->s.lerp.pos.trBase[0];
-                eventEnt->s.lerp.pos.trBase[1] = (float)(int)eventEnt->s.lerp.pos.trBase[1];
-                eventEnt->s.lerp.pos.trBase[2] = (float)(int)eventEnt->s.lerp.pos.trBase[2];
+                SnapVectorTowardZero(eventEnt->s.lerp.pos.trBase);
                 G_SetOrigin(eventEnt, eventEnt->s.lerp.pos.trBase);
                 eventEnt->s.lerp.eFlags |= 0x10000u;
                 eventEnt->s.lerp.u.customExplode.startTime = level.time;
@@ -1499,10 +1497,7 @@ void __cdecl MissileLandAngles(gentity_s *ent, trace_t *trace, float *vAngles, i
     float v8; // [esp+10h] [ebp-54h]
     float v9; // [esp+14h] [ebp-50h]
     float v10; // [esp+18h] [ebp-4Ch]
-    float v11; // [esp+1Ch] [ebp-48h]
-    float v12; // [esp+20h] [ebp-44h]
     float v13; // [esp+24h] [ebp-40h]
-    float v14; // [esp+34h] [ebp-30h]
     int32_t hitTime; // [esp+40h] [ebp-24h]
     float fSurfacePitch; // [esp+44h] [ebp-20h]
     float fAdjustPitchDiff; // [esp+50h] [ebp-14h]
@@ -1536,10 +1531,7 @@ void __cdecl MissileLandAngles(gentity_s *ent, trace_t *trace, float *vAngles, i
             else
                 ent->s.lerp.apos.trDelta[0] = (v4 * 0.300000011920929f + 0.8500000238418579f) * ent->s.lerp.apos.trDelta[0] * -1.0;
         }
-        v14 = *vAngles * 0.002777777845039964f;
-        v12 = v14 + 0.5;
-        v11 = floor(v12);
-        *vAngles = (v14 - v11) * 360.0f;
+        *vAngles = AngleWrap180(*vAngles);
         if (bForceAlign || 45.0f > v13)
         {
             v10 = I_fabs(*vAngles);
@@ -2772,9 +2764,7 @@ void __cdecl G_InitGrenadeMovement(gentity_s *grenade, const float *start, const
             ".pos.trDelta)[2])");
     }
     vectoangles(dir, grenade->r.currentAngles);
-    grenade->s.lerp.pos.trDelta[0] = (float)(int)grenade->s.lerp.pos.trDelta[0];
-    grenade->s.lerp.pos.trDelta[1] = (float)(int)grenade->s.lerp.pos.trDelta[1];
-    grenade->s.lerp.pos.trDelta[2] = (float)(int)grenade->s.lerp.pos.trDelta[2];
+    SnapVectorTowardZero(grenade->s.lerp.pos.trDelta);
     if (rotate)
     {
         grenade->s.lerp.apos.trType = TR_LINEAR;
@@ -3029,9 +3019,7 @@ gentity_s *__cdecl G_FireRocket(
             "!IS_NAN((bolt->s.lerp.pos.trDelta)[0]) && !IS_NAN((bolt->s.lerp.pos.trDelta)[1]) && !IS_NAN((bolt->s.lerp.pos.trDelta)[2])");
     }
 #ifdef KISAK_MP
-    bolt->s.lerp.pos.trDelta[0] = (float)(int)bolt->s.lerp.pos.trDelta[0];
-    bolt->s.lerp.pos.trDelta[1] = (float)(int)bolt->s.lerp.pos.trDelta[1];
-    bolt->s.lerp.pos.trDelta[2] = (float)(int)bolt->s.lerp.pos.trDelta[2];
+    SnapVectorTowardZero(bolt->s.lerp.pos.trDelta);
 #endif
     currentOrigin = bolt->r.currentOrigin;
     bolt->r.currentOrigin[0] = *start;

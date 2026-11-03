@@ -2251,9 +2251,7 @@ void Scr_Objective_Add()
     if (numParam >= 3)
     {
         Scr_GetVector(2u, obj->origin);
-        obj->origin[0] = (float)(int)obj->origin[0];
-        obj->origin[1] = (float)(int)obj->origin[1];
-        obj->origin[2] = (float)(int)obj->origin[2];
+        SnapVectorTowardZero(obj->origin);
         result = obj;
         obj->entNum = ENTITYNUM_NONE;
         if (numParam >= 4)
@@ -2358,10 +2356,8 @@ void Scr_Objective_Position()
     obj = &level.objectives[objNum];
     ClearObjective_OnEntity(obj);
     Scr_GetVector(1u, obj->origin);
-    obj->origin[0] = (float)(int)obj->origin[0];
-    obj->origin[1] = (float)(int)obj->origin[1];
+    SnapVectorTowardZero(obj->origin);
     result = obj;
-    obj->origin[2] = (float)(int)obj->origin[2];
 }
 
 objective_t *Scr_Objective_OnEntity()

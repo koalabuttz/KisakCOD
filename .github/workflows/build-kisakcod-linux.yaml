@@ -273,6 +273,8 @@ jobs:
           python3 scripts/tests/test_linux_fastfile_driver.py
           python3 scripts/tests/test_linux_client_core_driver.py
           python3 scripts/tests/test_strip_cdecl.py
+          python3 scripts/tests/test_float_int_rounding.py
+          python3 scripts/tests/test_retail_float_int_scan.py
 
       - name: Run asset-free native checks
         timeout-minutes: 30

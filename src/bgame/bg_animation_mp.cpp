@@ -1256,12 +1256,9 @@ void __cdecl BG_Player_DoControllersInternal(const entityState_s *es, const clie
     double v7; // st7
     double v8; // st7
     double v9; // st7
-    float v10; // [esp+8h] [ebp-D0h]
-    float v11; // [esp+Ch] [ebp-CCh]
     float *v12; // [esp+18h] [ebp-C0h]
     float *v13; // [esp+1Ch] [ebp-BCh]
     float v14; // [esp+38h] [ebp-A0h]
-    float v15; // [esp+44h] [ebp-94h]
     float tag_origin_offset; // [esp+4Ch] [ebp-8Ch]
     float tag_origin_offset_4; // [esp+50h] [ebp-88h]
     float c; // [esp+58h] [ebp-80h]
@@ -1304,10 +1301,7 @@ void __cdecl BG_Player_DoControllersInternal(const entityState_s *es, const clie
             vTorsoAngles[0] = ci->torso.pitchAngle;
             if ((es->lerp.eFlags & 8) != 0)
             {
-                v15 = vTorsoAngles[0] * 0.002777777845039964f;
-                v11 = v15 + 0.5f;
-                v10 = floor(v11);
-                vTorsoAngles[0] = (v15 - v10) * 360.0f;
+                vTorsoAngles[0] = AngleWrap180(vTorsoAngles[0]);
                 if (vTorsoAngles[0] <= 0.0f)
                     v3 = vTorsoAngles[0] * 0.25f;
                 else
@@ -1718,6 +1712,7 @@ void __cdecl BG_SetNewAnimation(
                 else
                     cycleLen = 1000;
                 fStartTimea = (float)(bgs->time % cycleLen) / (float)cycleLen + (float)ci->clientNum * 0.3600000143051147f;
+                // Truncates toward zero, as retail does (_ftol2_sse; upstream #52).
                 fStartTime = fStartTimea - (float)(int)fStartTimea;
             }
         }

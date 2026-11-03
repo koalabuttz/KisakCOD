@@ -191,3 +191,28 @@ It is a Clang front-end pass on Linux x86_64: not a link, not a run, not MSVC
 x64, and not proof that a unit that compiles behaves correctly with 8-byte
 pointers. The fastfile loader, for one, compiles today and is still wrong at
 64 bits.
+
+## Windows MSVC x64 census
+
+The Windows workflow has a matching report-only job, "MSVC x64 compile census"
+(upstream issue 1 asks for x64 CI rows). It configures the normal CMake project
+with `-A x64`, builds `KisakCOD-sp`, `KisakCOD-mp` and `KisakCOD-dedi` with one
+MSBuild log each, and `scripts/ci/summarize_msvc_x64.py` sorts the diagnostics
+into the categories above, deduplicated by site. Compile errors never fail the
+job; a broken configure or a missing log does. It runs on pushes to `master`
+and manual runs only, not on pull request pushes. The summary is on the run
+page and in the `KisakCOD-msvc-x64-census` artifact.
+
+The first run (2026-11-03, before the per-platform layout asserts landed)
+stopped all three targets in 37 to 38 files:
+
+| Category | Sites | Notes |
+|---|---:|---|
+| Struct layout static_asserts | 153 | the same asserts Clang reports; the per-platform asserts change takes these out |
+| Inline assembly | 1 | `assertive.cpp` stack walk; `qcommon.h` and `common.cpp` are not reached yet |
+| Other errors | 49 | mostly MMX intrinsics MSVC x64 lacks (`_m_empty`, `_m_punpcklbw`) in the SSE skinning path, plus `CPUSTRING` |
+| Pointer/integer casts (warning) | 1,271 | twice the Clang count; MSVC warns on more cast forms |
+| 64-to-32 narrowing (warning) | 292 | `size_t` into `int`/`uint32_t` |
+
+MSVC stops a file after 100 errors, so later errors in a file show up only
+once the first ones are fixed.

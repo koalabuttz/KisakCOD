@@ -387,7 +387,7 @@ void __cdecl MSG_WriteBigString(msg_t *sb, char *s)
 void __cdecl MSG_WriteAngle16(msg_t *sb, float f)
 {
     iassert( !sb->readOnly );
-    MSG_WriteShort(sb, (int)(f * 182.0444488525391));
+    MSG_WriteShort(sb, (int)(f * SHORTS_PER_DEGREE));
 }
 
 int __cdecl MSG_ReadByte(msg_t *msg)
@@ -531,7 +531,7 @@ char *__cdecl MSG_ReadStringLine(msg_t *msg)
 
 double __cdecl MSG_ReadAngle16(msg_t *msg)
 {
-    return (float)((double)MSG_ReadShort(msg) * 0.0054931640625);
+    return (float)((double)MSG_ReadShort(msg) * DEGREES_PER_SHORT);
 }
 
 void __cdecl MSG_ReadData(msg_t *msg, uint8_t *data, int len)
@@ -666,7 +666,7 @@ void __cdecl MSG_SetDefaultUserCmd(playerState_s *ps, usercmd_s *cmd)
     cmd->weapon = ps->weapon;
     cmd->offHandIndex = ps->offHandIndex;
     for (i = 0; i < 2; ++i)
-        cmd->angles[i] = (uint16_t)(int)((ps->viewangles[i] - ps->delta_angles[i]) * 182.0444488525391);
+        cmd->angles[i] = (uint16_t)(int)((ps->viewangles[i] - ps->delta_angles[i]) * SHORTS_PER_DEGREE);
     if ((ps->otherFlags & 4) != 0)
     {
         if ((ps->eFlags & 8) != 0)
@@ -818,8 +818,8 @@ void __cdecl MSG_WriteDeltaUsercmdKey(msg_t *msg, int key, const usercmd_s *from
             MSG_WriteDeltaKeyShort(
                 msg,
                 keya,
-                (int)(from->meleeChargeYaw * 182.0444488525391),
-                (int)(to->meleeChargeYaw * 182.0444488525391));
+                (int)(from->meleeChargeYaw * SHORTS_PER_DEGREE),
+                (int)(to->meleeChargeYaw * SHORTS_PER_DEGREE));
             MSG_WriteDeltaKey(msg, keya, from->meleeChargeDist, to->meleeChargeDist, 8u);
         }
     }
@@ -869,8 +869,8 @@ void __cdecl MSG_ReadDeltaUsercmdKey(msg_t *msg, int key, const usercmd_s *from,
                 to->meleeChargeYaw = (double)MSG_ReadDeltaKeyShort(
                     msg,
                     keya,
-                    (uint16_t)(int)(from->meleeChargeYaw * 182.0444488525391))
-                    * 0.0054931640625;
+                    (uint16_t)(int)(from->meleeChargeYaw * SHORTS_PER_DEGREE))
+                    * DEGREES_PER_SHORT;
                 to->meleeChargeDist = MSG_ReadDeltaKey(msg, keya, from->meleeChargeDist, 8u);
             }
             if (to->buttons >= (1 << BUTTON_BIT_COUNT))
@@ -1277,12 +1277,12 @@ double __cdecl MSG_ReadOriginFloat(int bits, msg_t *msg, float oldValue)
             index = 1;
         }
 #if !defined(__linux__) || !defined(KISAK_DEDICATED)
-        roundedCenter = (int)((*CL_GetMapCenter())[index] + 0.5);
+        roundedCenter = MSG_RoundMapCenter((*CL_GetMapCenter())[index]);
 #else
         // A dedicated server has no client static. svs.mapCenter is the same
         // centre that is published to clients in svsHeader, so origin deltas
         // still decode against the value the sender encoded with.
-        roundedCenter = (int)(svs.mapCenter[index] + 0.5);
+        roundedCenter = MSG_RoundMapCenter(svs.mapCenter[index]);
 #endif
         return (float)(roundedCenter + (((int)oldValue + 0x8000 - roundedCenter) ^ MSG_ReadBits(msg, 0x10u)) - 0x8000);
     }
@@ -1299,11 +1299,11 @@ double __cdecl MSG_ReadOriginZFloat(msg_t *msg, float oldValue)
     if (MSG_ReadBit(msg))
     {
 #if !defined(__linux__) || !defined(KISAK_DEDICATED)
-        roundedCenter = (int)((*CL_GetMapCenter())[2] + 0.5);
+        roundedCenter = MSG_RoundMapCenter((*CL_GetMapCenter())[2]);
 #else
         // See MSG_ReadOriginFloat: the dedicated server decodes against the
         // centre it advertises in svsHeader, not a client static.
-        roundedCenter = (int)(svs.mapCenter[2] + 0.5);
+        roundedCenter = MSG_RoundMapCenter(svs.mapCenter[2]);
 #endif
         return (float)(roundedCenter + (((int)oldValue + 0x8000 - roundedCenter) ^ MSG_ReadBits(msg, 0x10u)) - 0x8000);
     }

@@ -15,28 +15,13 @@ void __cdecl SetClientViewAngle(gentity_s *ent, const float *angle)
 {
     double v2; // st7
     double v3; // st7
-    float v4; // [esp+8h] [ebp-7Ch]
-    float v5; // [esp+14h] [ebp-70h]
-    float v6; // [esp+18h] [ebp-6Ch]
-    float v7; // [esp+1Ch] [ebp-68h]
-    float v8; // [esp+20h] [ebp-64h]
-    float v9; // [esp+24h] [ebp-60h]
-    float v10; // [esp+28h] [ebp-5Ch]
-    float v11; // [esp+2Ch] [ebp-58h]
     float v12; // [esp+30h] [ebp-54h]
     float v13; // [esp+34h] [ebp-50h]
-    float v14; // [esp+38h] [ebp-4Ch]
-    float v15; // [esp+3Ch] [ebp-48h]
     float *viewangles; // [esp+40h] [ebp-44h]
     float v17; // [esp+4Ch] [ebp-38h]
     float v18; // [esp+50h] [ebp-34h]
-    float v19; // [esp+54h] [ebp-30h]
     float v20; // [esp+58h] [ebp-2Ch]
-    float v21; // [esp+5Ch] [ebp-28h]
     float v22; // [esp+60h] [ebp-24h]
-    float v23; // [esp+64h] [ebp-20h]
-    float v24; // [esp+68h] [ebp-1Ch]
-    float v25; // [esp+6Ch] [ebp-18h]
     float fDeltab; // [esp+70h] [ebp-14h]
     float fDelta; // [esp+70h] [ebp-14h]
     float fDeltac; // [esp+70h] [ebp-14h]
@@ -52,10 +37,7 @@ void __cdecl SetClientViewAngle(gentity_s *ent, const float *angle)
     if ((ent->client->ps.pm_flags & PMF_PRONE) != 0 && (ent->client->ps.eFlags & 0x300) == 0)
     {
         fDeltab = AngleDelta(ent->client->ps.proneDirection, newAngle[1]);
-        v25 = fDeltab * 0.002777777845039964f;
-        v15 = v25 + 0.5;
-        v14 = floor(v15);
-        fDelta = (v25 - v14) * 360.0;
+        fDelta = AngleWrap180(fDeltab);
         if (bg_prone_yawcap->current.value < (double)fDelta || fDelta < -bg_prone_yawcap->current.value)
         {
             if (bg_prone_yawcap->current.value >= (double)fDelta)
@@ -76,10 +58,7 @@ void __cdecl SetClientViewAngle(gentity_s *ent, const float *angle)
             }
         }
         fDeltad = AngleDelta(ent->client->ps.proneTorsoPitch, newAngle[0]);
-        v24 = fDeltad * 0.002777777845039964f;
-        v11 = v24 + 0.5f;
-        v10 = floor(v11);
-        fDeltaa = (v24 - v10) * 360.0f;
+        fDeltaa = AngleWrap180(fDeltad);
         if (fDeltaa > 45.0f || fDeltaa < -45.0f)
         {
             if (fDeltaa <= 45.0f)
@@ -91,28 +70,19 @@ void __cdecl SetClientViewAngle(gentity_s *ent, const float *angle)
             if (fDeltae <= 0.0f)
             {
                 v20 = ent->client->ps.proneTorsoPitch + 45.0f;
-                v21 = v20 * 0.002777777845039964f;
-                v7 = v21 + 0.5f;
-                v6 = floor(v7);
-                newAngle[0] = (v21 - v6) * 360.0f;
+                newAngle[0] = AngleWrap180(v20);
             }
             else
             {
                 v22 = ent->client->ps.proneTorsoPitch - 45.0f;
-                v23 = v22 * 0.002777777845039964f;
-                v9 = v23 + 0.5f;
-                v8 = floor(v9);
-                newAngle[0] = (v23 - v8) * 360.0f;
+                newAngle[0] = AngleWrap180(v22);
             }
         }
     }
     for (i = 0; i < 3; ++i)
     {
-        v18 = newAngle[i] - (float)ent->client->sess.cmd.angles[i] * 0.0054931640625f;
-        v19 = v18 * 0.002777777845039964f;
-        v5 = v19 + 0.5f;
-        v4 = floor(v5);
-        v17 = (v19 - v4) * 360.0f;
+        v18 = newAngle[i] - (float)ent->client->sess.cmd.angles[i] * DEGREES_PER_SHORT_F;
+        v17 = AngleWrap180(v18);
         ent->client->ps.delta_angles[i] = v17;
     }
     ent->r.currentAngles[0] = newAngle[0];

@@ -1743,12 +1743,12 @@ void __cdecl BG_PlayerToEntitySetPitchAngles(playerState_s *ps, entityState_s *s
         {
             fLerpFrac = 1.0;
         }
-        v9 = ps->fTorsoPitch * 0.002777777845039964;
+        v9 = ps->fTorsoPitch * TURNS_PER_DEGREE;
         v7 = v9 + 0.5;
         v6 = floor(v7);
         v5 = (v9 - v6) * 360.0;
         s->fTorsoPitch = v5 * fLerpFrac;
-        v8 = ps->fWaistPitch * 0.002777777845039964;
+        v8 = ps->fWaistPitch * TURNS_PER_DEGREE;
         v4 = v8 + 0.5;
         v3 = floor(v4);
         v2 = (v8 - v3) * 360.0;
@@ -1812,12 +1812,8 @@ void __cdecl BG_PlayerToEntitySetTrajectory(playerState_s *ps, entityState_s *s,
     s->lerp.u.player.movementDir = ps->movementDir;
     if (snap)
     {
-        s->lerp.pos.trBase[0] = (float)(int)s->lerp.pos.trBase[0];
-        s->lerp.pos.trBase[1] = (float)(int)s->lerp.pos.trBase[1];
-        s->lerp.pos.trBase[2] = (float)(int)s->lerp.pos.trBase[2];
-        s->lerp.apos.trBase[0] = (float)(int)s->lerp.apos.trBase[0];
-        s->lerp.apos.trBase[1] = (float)(int)s->lerp.apos.trBase[1];
-        s->lerp.apos.trBase[2] = (float)(int)s->lerp.apos.trBase[2];
+        SnapVectorTowardZero(s->lerp.pos.trBase);
+        SnapVectorTowardZero(s->lerp.apos.trBase);
     }
 #endif
 }
@@ -2019,13 +2015,13 @@ bool __cdecl BG_CheckProneValid(
         vTorsoPos[2] = vPos[2];
         Vec3Sub(vTorsoPos, vWaistPos, vDelta);
         v23 = vectopitch(vDelta);
-        v24 = v23 * 0.002777777845039964;
+        v24 = v23 * TURNS_PER_DEGREE;
         v17 = v24 + 0.5;
         v16 = floor(v17);
         fTorsoPitch = (v24 - v16) * 360.0;
         Vec3Sub(vWaistPos, vFeetPos, vDelta);
         v21 = vectopitch(vDelta);
-        v22 = v21 * 0.002777777845039964;
+        v22 = v21 * TURNS_PER_DEGREE;
         v15 = v22 + 0.5;
         v14 = floor(v15);
         fWaistPitch = (v22 - v14) * 360.0;
