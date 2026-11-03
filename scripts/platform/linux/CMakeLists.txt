@@ -54,6 +54,13 @@ target_link_options(KisakCOD-dedi PRIVATE -Wl,--gc-sections)
 find_package(Threads REQUIRED)
 target_link_libraries(KisakCOD-dedi PRIVATE Threads::Threads ${CMAKE_DL_LIBS})
 add_dependencies(KisakCOD-dedi update_build_number)
+# Diagnostics only: record who takes each script string reference and print the
+# history of any string still referenced at quit (src/linux/sl_trace.h).
+option(KISAK_SL_TRACE "Trace script string references in KisakCOD-dedi (diagnostic, slow)" OFF)
+if(KISAK_SL_TRACE)
+    target_compile_definitions(KisakCOD-dedi PRIVATE KISAK_SL_TRACE)
+    message(WARNING "KISAK_SL_TRACE is on: KisakCOD-dedi records a backtrace for every script string reference. Diagnostic builds only.")
+endif()
 include(${SCRIPTS_DIR}/extern/tracy.cmake)
 include(${SCRIPTS_DIR}/platform/linux/asset_export.cmake)
 include(${SCRIPTS_DIR}/platform/linux/native_d3d9.cmake)

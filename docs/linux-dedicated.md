@@ -164,6 +164,27 @@ This protects against assuming Windows' 15-bit `RAND_MAX` on Linux, which caused
 runaway death-dropped items. `--sanitize` additionally runs a 64-bit ASan/UBSan
 variant; the regular runner includes the unsanitized 32/64-bit check.
 
+### Tracing a leaked script string
+
+Debug builds count every script string reference and assert at quit
+(`SL_CheckLeaks`, `scr_stringlist.cpp`) if one is still held. That names the
+string but not who kept it. Configure a separate build with
+`-DKISAK_SL_TRACE=ON` to find out:
+
+```sh
+cmake -S . -B build-sltrace -G Ninja -DKISAK_PLATFORM=linux \
+  -DCMAKE_BUILD_TYPE=Debug -DKISAK_SL_TRACE=ON ...   # plus the usual -m32 flags
+```
+
+Every counted reference change then records a 12-frame backtrace in a
+per-string history of the newest 16 events, and the history is cleared when the
+string is freed. At quit, before the assert, each leaked string's history is
+printed to stderr as `SL_TRACE` lines; the frames are `binary(+offset)` and
+resolve with `addr2line -f -C -e <binary> <offset>`. The text of the string is
+printed too, so keep logs from runs with game data private. The trace is slow
+and only for diagnosis. `sl_trace` in `run_linux_checks.py` tests it without
+assets.
+
 Additional native file/virtual-memory checks can be built directly:
 
 ```sh

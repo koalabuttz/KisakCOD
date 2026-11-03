@@ -215,6 +215,7 @@ class PlannedCommandTests(unittest.TestCase):
             "bot_driver",
             "database_publication",
             "crt_shims",
+            "sl_trace",
         ]
         self.assertEqual([check.name for check in self.checks], known)
 

@@ -9,6 +9,12 @@
 #include "scr_memorytree.h"
 #include <universal/profile.h>
 #include <universal/com_constantconfigstrings.h>
+#if defined(__linux__)
+#include <linux/sl_trace.h>
+#else
+#define SL_TRACE(stringValue, op, user) ((void)0)
+#define SL_TRACE_FORGET(stringValue) ((void)0)
+#endif
 #include "scr_variable.h"
 
 #ifdef KISAK_MP
@@ -106,6 +112,7 @@ void SL_AddUserInternal(RefString* refStr, uint32_t user)
 			Comperand = refStr->data;
 		while (InterlockedCompareExchange(&refStr->data, Comperand | (user << 16), Comperand) != Comperand);
 		InterlockedIncrement(&refStr->data);
+		SL_TRACE(SL_ConvertFromRefString(refStr), user ? SL_TRACE_ADD_USER : SL_TRACE_ADD_REF, user);
 	}
 }
 
@@ -124,6 +131,7 @@ void SL_AddRefToString(uint32_t stringValue)
 
 	RefString* refStr = GetRefString(stringValue);
 	InterlockedIncrement(&refStr->data);
+	SL_TRACE(stringValue, SL_TRACE_ADD_REF, 0);
 
 	iassert(refStr->refCount);
 }
@@ -139,6 +147,14 @@ static void SL_CheckLeaks()
 	{
 		if (!scrStringDebugGlob->ignoreLeaks)
 		{
+#if defined(KISAK_SL_TRACE)
+			// Print every leaked string's reference history before the first assert.
+			for (int i = 1; i < 65536; ++i)
+			{
+				if (scrStringDebugGlob->refCount[i])
+					SL_TraceDump(i, GetRefString(i)->str, GetRefString(i)->user, scrStringDebugGlob->refCount[i]);
+			}
+#endif
 			for (int i = 1; i < 65536; ++i)
 			{
 				iassert(!scrStringDebugGlob->refCount[i]);
@@ -388,6 +404,7 @@ uint32_t SL_GetStringOfSize(const char* str, uint32_t user, uint32_t len, mtType
 	iassert(refStr->user == user);
 	refStr->data = refStr->data & 0xFFFF0000 | 1;
 	refStr->data = (len << 24) | refStr->data & 0xFFFFFF;
+	SL_TRACE(stringValue, SL_TRACE_NEW, user);
 
 	if (scrStringDebugGlob)
 	{
@@ -535,6 +552,7 @@ void SL_TransferRefToUser(uint32_t stringValue, uint32_t user)
 			InterlockedDecrement(&scrStringDebugGlob->refCount[stringValue]);
 		}
 		InterlockedDecrement(&refStr->data);
+		SL_TRACE(stringValue, SL_TRACE_TRANSFER, user);
 	}
 	else
 	{
@@ -653,6 +671,7 @@ static void SL_FreeString(uint32_t stringValue, RefString* refStr, uint32_t len)
 
 		iassert(!refStr->user);
 
+		SL_TRACE_FORGET(stringValue);
 		MT_FreeIndex(stringValue, len + 4);
 
 		iassert(((entry->status_next & HASH_STAT_MASK) == HASH_STAT_HEAD));
@@ -759,6 +778,7 @@ void SL_RemoveRefToStringOfSize(uint32_t stringValue, uint32_t len)
 
 	if (InterlockedDecrement(&refStr->data) << 16) // refcount
 	{
+		SL_TRACE(stringValue, SL_TRACE_REMOVE, 0);
 		if (scrStringDebugGlob)
 		{
 			// An assert here means that it tried to free a string handle that didn't have ref's. (add `SL_ConvertToString(stringValue)` to watch tab)
