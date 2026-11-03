@@ -180,7 +180,13 @@ static ID_INLINE int BigLong(int l) { return LongSwap(l); }
 // convention is what __cdecl means on Windows, so no attribute is needed.
 
 // buildstring will be incorporated into the version string
+#if defined(__x86_64__)
 #ifdef NDEBUG
+#define	CPUSTRING	"linux-x86_64"
+#else
+#define	CPUSTRING	"linux-x86_64-debug"
+#endif
+#elif defined(NDEBUG)
 #define	CPUSTRING	"linux-x86"
 #else
 #define	CPUSTRING	"linux-x86-debug"

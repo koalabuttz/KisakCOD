@@ -953,8 +953,8 @@ void Com_SetStringEdReference(const char *pszReference, char *subtitle)
             token = "\r\nENDMARKER\r\n\r\n\r\n";
             FS_Write((char*)"\r\nENDMARKER\r\n\r\n\r\n", strlen("\r\nENDMARKER\r\n\r\n\r\n"), hOutFile);
             FS_FCloseFile(hOutFile);
-            FS_BuildOSPath((char*)fs_basepath->current.integer, fs_gamedir, (char*)"soundaliases/temp.st", szFromFile);
-            FS_BuildOSPath((char*)fs_basepath->current.integer, fs_gamedir, (char*)"soundaliases/subtitle.st", szToFile);
+            FS_BuildOSPath((char*)fs_basepath->current.string, fs_gamedir, (char*)"soundaliases/temp.st", szFromFile);
+            FS_BuildOSPath((char*)fs_basepath->current.string, fs_gamedir, (char*)"soundaliases/subtitle.st", szToFile);
             FS_CopyFile(szFromFile, szToFile);
             FS_Remove(szFromFile);
         }
@@ -1013,7 +1013,7 @@ void Com_ProcessSoundAliasFileLocalization(char *sourceFile, char *loadspecCurGa
 
     filename = "soundaliases/temp.csv";
     Com_sprintf(dest, 0x100u, "soundaliases/%s", sourceFile);
-    FS_BuildOSPath((char*)fs_basepath->current.integer, fs_gamedir, dest, ospath);
+    FS_BuildOSPath((char*)fs_basepath->current.string, fs_gamedir, dest, ospath);
     Com_Printf(CON_CHANNEL_SOUND, "Processing sound alias file %s..\n", ospath);
     stream = fopen(ospath, "r+");
     if (!stream)
@@ -1226,8 +1226,8 @@ void Com_ProcessSoundAliasFileLocalization(char *sourceFile, char *loadspecCurGa
     }
     Com_EndParseSession();
     FS_FCloseFile(h);
-    FS_BuildOSPath((char *)fs_basepath->current.integer, fs_gamedir, (char *)filename, fromOSPath);
-    FS_BuildOSPath((char *)fs_basepath->current.integer, fs_gamedir, dest, toOSPath);
+    FS_BuildOSPath((char *)fs_basepath->current.string, fs_gamedir, (char *)filename, fromOSPath);
+    FS_BuildOSPath((char *)fs_basepath->current.string, fs_gamedir, dest, toOSPath);
     if (v37)
         FS_CopyFile(fromOSPath, toOSPath);
     FS_Remove(fromOSPath);

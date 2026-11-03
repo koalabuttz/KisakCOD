@@ -60,7 +60,7 @@ char Menu_Paint(UiContext *dc, menuDef_t *menu)
 
     iassert(menu);
 
-    if (*(_BYTE *)ui_showMenuOnly->current.integer
+    if (*(_BYTE *)ui_showMenuOnly->current.string
         && menu->window.name
         && I_stricmp(menu->window.name, ui_showMenuOnly->current.string))
     {

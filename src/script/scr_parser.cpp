@@ -691,7 +691,7 @@ char *Scr_ReadFile(const char *filename, char *extFilename, const char *codePos,
 {
     int file; // [esp+24h] [ebp-4h] BYREF
 
-    if (*(_BYTE *)fs_gameDirVar->current.integer)
+    if (*(_BYTE *)fs_gameDirVar->current.string)
     {
         if ((FS_FOpenFileRead(extFilename, &file) & 0x80000000) != 0)
         {

@@ -375,6 +375,15 @@ stops compiling for x86_64 fails the run; newly compiling sources are reported
 as progress (`--update-baseline` records them). See
 [docs/linux-x64.md](../../docs/linux-x64.md).
 
+The x86_64 dedicated server itself builds from such a build directory, and the
+bootstrap smoke test checks it with `--arch x86_64` (ELF64, machine 62) instead
+of the default i386 header checks:
+
+```sh
+cmake --build build-x64 --target KisakCOD-dedi
+python3 scripts/tests/test_linux_bootstrap.py --arch x86_64 bin/KisakCOD-dedi
+```
+
 ## Free camera checks
 
 ```sh
