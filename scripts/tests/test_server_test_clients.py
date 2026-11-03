@@ -101,13 +101,23 @@ ROOT = Path(__file__).resolve().parents[2]
 CLIENT_SOURCE = ROOT / "src" / "server_mp" / "sv_client_mp.cpp"
 MAIN_SOURCE = ROOT / "src" / "server_mp" / "sv_main_mp.cpp"
 
+# __cdecl is the default convention and is being dropped from engine sources
+# (upstream issue #35). Signatures are compared with it removed so the check
+# passes with either spelling.
+CDECL = re.compile(r"\b__cdecl\b[ \t]*")
+
+
+def drop_cdecl(text: str) -> str:
+    return CDECL.sub("", text)
+
+
 # (source, name, exact start of the definition text). The start text is verified
 # so a signature change cannot silently turn this into a different test.
 FUNCTIONS = (
-    (CLIENT_SOURCE, "SV_AddTestClient", "gentity_s *__cdecl SV_AddTestClient()"),
-    (MAIN_SOURCE, "SV_BotUserMove", "void __cdecl SV_BotUserMove(client_t *cl)"),
-    (MAIN_SOURCE, "SV_UpdateBots", "void __cdecl SV_UpdateBots()"),
-    (MAIN_SOURCE, "SV_CheckTimeouts", "void __cdecl SV_CheckTimeouts()"),
+    (CLIENT_SOURCE, "SV_AddTestClient", "gentity_s *SV_AddTestClient()"),
+    (MAIN_SOURCE, "SV_BotUserMove", "void SV_BotUserMove(client_t *cl)"),
+    (MAIN_SOURCE, "SV_UpdateBots", "void SV_UpdateBots()"),
+    (MAIN_SOURCE, "SV_CheckTimeouts", "void SV_CheckTimeouts()"),
 )
 
 # Damage applied to a temporary copy of the extracted production text. Each one
@@ -994,7 +1004,7 @@ def build_and_run(cxx: str, m32: bool, sanitize: bool, workdir: Path,
 
     extracted = []
     for path, name, start in FUNCTIONS:
-        extracted.append(extract_definition(path.read_text(), name, start, path))
+        extracted.append(extract_definition(drop_cdecl(path.read_text()), name, start, path))
     production_text = "\n\n".join(extracted)
     if mutate is not None:
         label, needle, replacement = mutate

@@ -89,7 +89,7 @@ void __cdecl CL_CheckForResend(int localClientNum)
             case CA_CONNECTING:
                 if (net_lanauthorize->current.enabled || !Sys_IsLANAddress(clc->serverAddress))
                     CL_RequestAuthorization(localClientNum);
-                strcpy(pkt, "getchallenge");
+                I_strncpyz(pkt, "getchallenge", sizeof(pkt));
                 pktlen = &pkt[strlen(pkt) + 1] - &pkt[1];
                 //PbClientConnecting(1, pkt, &pktlen);
                 //CL_BuildMd5StrFromCDKey(md5Str);

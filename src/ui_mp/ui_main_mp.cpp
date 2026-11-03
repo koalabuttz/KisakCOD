@@ -1128,7 +1128,7 @@ MenuList *__cdecl Load_ScriptMenuInternal(const char *pszMenu, int imageTrack)
 {
     char szMenuFile[260]; // [esp+0h] [ebp-108h] BYREF
 
-    strcpy(szMenuFile, "ui_mp/scriptmenus/");
+    I_strncpyz(szMenuFile, "ui_mp/scriptmenus/", sizeof(szMenuFile));
     I_strncat(szMenuFile, 256, pszMenu);
     I_strncat(szMenuFile, 256, ".menu");
     return UI_LoadMenu(szMenuFile, imageTrack);
@@ -5588,7 +5588,7 @@ void __cdecl UI_StartServerRefresh(int localClientNum, int full)
             "(localClientNum == 0)",
             localClientNum);
     Com_RealTime(&q);
-    _snprintf(dvarName, 0x18u, "ui_lastServerRefresh_%i", ui_netSource->current.integer);
+    snprintf(dvarName, 0x18u, "ui_lastServerRefresh_%i", ui_netSource->current.integer);
     tm_min = q.tm_min;
     tm_hour = q.tm_hour;
     v7 = q.tm_year + 1900;
@@ -5641,9 +5641,6 @@ void __cdecl UI_UpdatePendingPings(uiInfo_s *uiInfo)
 char errorString[1024];
 char *__cdecl UI_SafeTranslateString(const char *reference)
 {
-    char v2; // [esp+3h] [ebp-11h]
-    char *v3; // [esp+8h] [ebp-Ch]
-    const char *v4; // [esp+Ch] [ebp-8h]
     const char *translation; // [esp+10h] [ebp-4h]
 
     if (*reference == 21)
@@ -5663,19 +5660,14 @@ char *__cdecl UI_SafeTranslateString(const char *reference)
                 Com_Error(ERR_LOCALIZATION, "Could not translate string \"%s\"", reference);
             else
                 Com_PrintWarning(CON_CHANNEL_UI, "WARNING: Could not translate string \"%s\"\n", reference);
-            strcpy(errorString, "^1UNLOCALIZED(^7");
+            I_strncpyz(errorString, "^1UNLOCALIZED(^7", sizeof(errorString));
             I_strncat(errorString, 1024, reference);
             I_strncat(errorString, 1024, "^1)^7");
         }
         else
         {
-            v4 = reference;
-            v3 = errorString;
-            do
-            {
-                v2 = *v4;
-                *v3++ = *v4++;
-            } while (v2);
+            // An inlined strcpy in the original; bounded here.
+            I_strncpyz(errorString, reference, sizeof(errorString));
         }
         return errorString;
     }

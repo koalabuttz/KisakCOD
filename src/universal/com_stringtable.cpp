@@ -130,8 +130,9 @@ void __cdecl StringTable_GetAsset(const char *filename, StringTable **tablePtr)
 
             if (token->token[0])
             {
-                char *text = (char *)Z_Malloc(strlen(token->token) + 1, "Kisak stringtable->value (text)", 21);
-                strcpy((char *)text, token->token);
+                const size_t textSize = strlen(token->token) + 1;
+                char *text = (char *)Z_Malloc(textSize, "Kisak stringtable->value (text)", 21);
+                memcpy(text, token->token, textSize);
                 ptrs[totalcells] = text;
             }
 
@@ -148,8 +149,9 @@ void __cdecl StringTable_GetAsset(const char *filename, StringTable **tablePtr)
         table.rowCount = newlines;
         table.columnCount = (totalcells / table.rowCount);
 
-        table.name = (const char *)Z_Malloc(strlen(filename) + 1, "Kisak stringtable->name", 21);
-        strcpy((char*)table.name, filename);
+        const size_t nameSize = strlen(filename) + 1;
+        table.name = (const char *)Z_Malloc(nameSize, "Kisak stringtable->name", 21);
+        memcpy((char *)table.name, filename, nameSize);
 
         g_stringTableCache[g_numStringTables] = table;
         *tablePtr = &g_stringTableCache[g_numStringTables];

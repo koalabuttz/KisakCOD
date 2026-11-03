@@ -7592,7 +7592,7 @@ void __cdecl Scr_FxParamError(unsigned int paramIndex, const char *errorString, 
     if (fxId)
         SV_GetConfigstring(fxId + 2147, v7, 1024); // CS_EFFECT_NAMES (PC SP, was Xbox 2179)
     else
-        strcpy(v7, "not successfully loaded");
+        I_strncpyz(v7, "not successfully loaded", sizeof(v7));
     v6 = va("%s (effect = %s)\n", errorString, v7);
     Scr_ParamError(paramIndex, v6);
 }

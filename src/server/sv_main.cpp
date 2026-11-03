@@ -318,7 +318,7 @@ void SV_SendServerCommand(client_t *cl, const char *fmt, ...)
 
     va_start(va, fmt);
 
-    _vsnprintf((char *)tempServerCommandBuf, 0x20000u, fmt, va);
+    vsnprintf((char *)tempServerCommandBuf, sizeof(tempServerCommandBuf), fmt, va);
 
     if (cl)
     {

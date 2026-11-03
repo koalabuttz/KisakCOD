@@ -995,7 +995,7 @@ void G_LogPrintf(const char *fmt, ...)
     va_start(va, fmt);
     if (level.logFile)
     {
-        _vsnprintf(string2, 0x400u, fmt, va);
+        vsnprintf(string2, 0x400u, fmt, va);
         argptr = 0;
         min = level.time / 1000 / 60;
         tens = level.time / 1000 % 60 / 10;

@@ -148,11 +148,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build ${{ matrix.config }}
+        # One MSBuild call for the three games: --parallel lets the projects
+        # build side by side (each already compiles with /MP), so one game links
+        # while another compiles, instead of one target after the other.
         run: |
-          foreach ($target in @("KisakCOD-sp", "KisakCOD-mp", "KisakCOD-dedi")) {
-            cmake --build build-${{ matrix.config }} --config ${{ matrix.config }} --target $target
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          }
+          cmake --build build-${{ matrix.config }} --config ${{ matrix.config }} --parallel `
+            --target KisakCOD-sp KisakCOD-mp KisakCOD-dedi
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Check native Windows bootstrap
         run: |

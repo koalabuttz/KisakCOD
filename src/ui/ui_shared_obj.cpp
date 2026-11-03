@@ -178,7 +178,7 @@ void SourceError(source_s *source, const char *str, ...)
     va_list va; // [esp+41Ch] [ebp+10h] BYREF
 
     va_start(va, str);
-    _vsnprintf(text, 0x400u, str, va);
+    vsnprintf(text, 0x400u, str, va);
     Com_PrintError(CON_CHANNEL_PARSERSCRIPT, "Error: file %s, line %d: %s\n", source->scriptstack->filename, source->scriptstack->line, text);
     PrintSourceStack(source->scriptstack);
 }
@@ -297,7 +297,7 @@ void ScriptError(script_s *script, const char *str, ...)
     va_start(va, str);
     if ((script->flags & 1) == 0)
     {
-        _vsnprintf(text, 0x400u, str, va);
+        vsnprintf(text, 0x400u, str, va);
         Com_PrintError(CON_CHANNEL_PARSERSCRIPT, "Error: file %s, line %d: %s\n", script->filename, script->line, text);
     }
 }
@@ -310,7 +310,7 @@ void ScriptWarning(script_s *script, const char *str, ...)
     va_start(va, str);
     if ((script->flags & 2) == 0)
     {
-        _vsnprintf(text, 0x400u, str, va);
+        vsnprintf(text, 0x400u, str, va);
         Com_PrintWarning(CON_CHANNEL_PARSERSCRIPT, "Warning: file %s, line %d: %s\n", script->filename, script->line, text);
     }
 }
@@ -727,7 +727,7 @@ int __cdecl PS_ReadPunctuation(script_s *script, token_s *token)
         len = strlen(punc->p);
         if (&script->script_p[len] <= script->end_p && !strncmp(script->script_p, p, len))
         {
-            strncpy(token->string, p, 0x400u);
+            I_strncpyz(token->string, p, sizeof(token->string));
             script->script_p += len;
             token->type = 5;
             token->subtype = punc->n;
@@ -804,7 +804,7 @@ void SourceWarning(source_s *source, const char *str, ...)
     va_list va; // [esp+41Ch] [ebp+10h] BYREF
 
     va_start(va, str);
-    _vsnprintf(text, 0x400u, str, va);
+    vsnprintf(text, 0x400u, str, va);
     Com_PrintWarning(
         CON_CHANNEL_PARSERSCRIPT,
         "Warning: file %s, line %d: %s\n",
@@ -982,14 +982,15 @@ int __cdecl PC_StringizeTokens(token_s *tokens, token_s *token)
     token->type = 1;
     token->whitespace_p = 0;
     token->endwhitespace_p = 0;
-    token->string[0] = 0;
-    strcat(token->string, "\"");
+    // strncat's count was the space left without the terminator, so a full
+    // string overran token->string by one byte.
+    I_strncpyz(token->string, "\"", sizeof(token->string));
     while (tokens)
     {
-        strncat(token->string, tokens->string, 1024 - strlen(token->string));
+        I_strncat(token->string, sizeof(token->string), tokens->string);
         tokens = tokens->next;
     }
-    strncat(token->string, "\"", 1024 - strlen(token->string));
+    I_strncat(token->string, sizeof(token->string), "\"");
     return 1;
 }
 
@@ -997,13 +998,13 @@ int __cdecl PC_MergeTokens(token_s *t1, token_s *t2)
 {
     if (t1->type == 4 && (t2->type == 4 || t2->type == 3))
     {
-        strcat(t1->string, t2->string);
+        I_strncat(t1->string, sizeof(t1->string), t2->string);
         return 1;
     }
     else if (t1->type == 1 && t2->type == 1)
     {
         t1->string[strlen(t1->string) - 1] = 0;
-        strcat(t1->string, &t2->string[1]);
+        I_strncat(t1->string, sizeof(t1->string), &t2->string[1]);
         return 1;
     }
     else
@@ -1120,19 +1121,16 @@ int __cdecl PC_ExpandBuiltinDefine(
     case 3:
         t = _time64(0);
         curtime = _ctime64(&t);
-        strcpy(token->string, "\"");
-        strncat(token->string, curtime + 4, 7u);
-        strncat(&token->string[7], curtime + 20, 4u);
-        strcat(token->string, "\"");
+        // "Mmm dd yyyy" from ctime's "Www Mmm dd hh:mm:ss yyyy\n".
+        snprintf(token->string, sizeof(token->string), "\"%.7s%.4s\"", curtime + 4, curtime + 20);
         free(curtime);
         token->type = 4;
         goto LABEL_8;
     case 4:
         t = _time64(0);
         curtime = _ctime64(&t);
-        strcpy(token->string, "\"");
-        strncat(token->string, curtime + 11, 8u);
-        strcat(token->string, "\"");
+        // "hh:mm:ss" from ctime's "Www Mmm dd hh:mm:ss yyyy\n".
+        snprintf(token->string, sizeof(token->string), "\"%.8s\"", curtime + 11);
         free(curtime);
         token->type = 4;
     LABEL_8:
@@ -1408,15 +1406,6 @@ script_s *__cdecl LoadScriptFile(const char *filename)
 
 int __cdecl PC_Directive_include(source_s *source)
 {
-    char v2; // [esp+1Bh] [ebp-4B9h]
-    char *v3; // [esp+20h] [ebp-4B4h]
-    char *v4; // [esp+24h] [ebp-4B0h]
-    char v5; // [esp+2Bh] [ebp-4A9h]
-    token_s *v6; // [esp+2Ch] [ebp-4A8h]
-    char *v7; // [esp+40h] [ebp-494h]
-    char v8; // [esp+47h] [ebp-48Dh]
-    char *v9; // [esp+4Ch] [ebp-488h]
-    char *includepath; // [esp+50h] [ebp-484h] BYREF
     char path[68]; // [esp+54h] [ebp-480h] BYREF
     script_s *script; // [esp+98h] [ebp-43Ch]
     token_s token; // [esp+9Ch] [ebp-438h] BYREF
@@ -1432,21 +1421,10 @@ int __cdecl PC_Directive_include(source_s *source)
         script = LoadScriptFile(token.string);
         if (!script)
         {
-            includepath = source->includepath;
-            v9 = path;
-            do
-            {
-                v8 = *includepath;
-                *v9++ = *includepath++;
-            } while (v8);
-            v7 = &token.string[strlen(token.string) + 1];
-            v6 = (token_s *)((char *)&includepath + 3);
-            do
-            {
-                v5 = v6->string[1];
-                v6 = (token_s *)((char *)v6 + 1);
-            } while (v5);
-            memcpy(v6, &token, v7 - (char *)&token);
+            // Try again relative to the include path. The decompiled form of this
+            // strcpy/strcat pair wrote the token over the stack instead.
+            I_strncpyz(path, source->includepath, sizeof(path));
+            I_strncat(path, sizeof(path), token.string);
             script = LoadScriptFile(path);
         }
         goto LABEL_30;
@@ -1457,13 +1435,7 @@ int __cdecl PC_Directive_include(source_s *source)
         SourceError(source, "#include without file name");
         return 0;
     }
-    v4 = source->includepath;
-    v3 = path;
-    do
-    {
-        v2 = *v4;
-        *v3++ = *v4++;
-    } while (v2);
+    I_strncpyz(path, source->includepath, sizeof(path));
     while (PC_ReadSourceToken(source, &token))
     {
         if (token.linescrossed > 0)
@@ -1473,11 +1445,11 @@ int __cdecl PC_Directive_include(source_s *source)
         }
         if (token.type == 5 && token.string[0] == 62)
             break;
-        strncat(path, token.string, 0x40u);
+        I_strncat(path, sizeof(path), token.string);
     }
     if (token.string[0] != 62)
         SourceWarning(source, "#include missing trailing >");
-    if (&path[strlen(path) + 1] == &path[1])
+    if (!path[0])
     {
         SourceError(source, "#include without file name between < >");
         return 0;
@@ -1783,7 +1755,7 @@ define_s *__cdecl PC_DefineFromString(char *string)
 
     script = LoadScriptMemory(string, strlen(string), "*extern");
     memset((uint8_t *)&src, 0, sizeof(src));
-    strncpy(src.filename, "*extern", 0x40u);
+    I_strncpyz(src.filename, "*extern", sizeof(src.filename));
     src.scriptstack = script;
     src.definehash = (define_s **)GetClearedMemory(0x1000u);
     res = PC_Directive_define(&src);
@@ -2811,7 +2783,7 @@ void __cdecl UnreadSignToken(source_s *source)
     token.whitespace_p = source->scriptstack->script_p;
     token.endwhitespace_p = source->scriptstack->script_p;
     token.linescrossed = 0;
-    strcpy(token.string, "-");
+    I_strncpyz(token.string, "-", sizeof(token.string));
     token.type = 5;
     token.subtype = 30;
     PC_UnreadSourceToken(source, &token);
@@ -3064,7 +3036,7 @@ source_s *__cdecl LoadSourceFile(char *filename)
     script->next = 0;
     source = (source_s *)GetMemory(0x4D0u);
     memset(source, 0, sizeof(source_s));
-    strncpy(source->filename, filename, 0x40u);
+    I_strncpyz(source->filename, filename, sizeof(source->filename));
     source->scriptstack = script;
     source->tokens = 0;
     source->defines = 0;
@@ -3305,7 +3277,7 @@ void PC_SourceError(int handle, char *format, ...)
     va_list va; // [esp+A0h] [ebp+10h] BYREF
 
     va_start(va, format);
-    _vsnprintf(string_3, 0x1000u, format, va);
+    vsnprintf(string_3, 0x1000u, format, va);
     argptr = 0;
     filename[0] = 0;
     line = 0;

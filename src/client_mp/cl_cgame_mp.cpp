@@ -322,7 +322,7 @@ int32_t __cdecl CL_CGameNeedsServerCommand(int32_t localClientNum, int32_t serve
             sa = Cmd_Argv(2);
             if (strlen(sa) + strlen(bigConfigString) >= 0x2000)
                 Com_Error(ERR_DROP, "bcs exceeded BIG_INFO_STRING");
-            strcat(bigConfigString, sa);
+            I_strncat(bigConfigString, sizeof(bigConfigString), sa);
             Cmd_EndTokenizedString();
             result = 0;
             break;
@@ -332,7 +332,7 @@ int32_t __cdecl CL_CGameNeedsServerCommand(int32_t localClientNum, int32_t serve
             sb = Cmd_Argv(2);
             if (strlen(bigConfigString) + strlen(sb) + 1 >= 0x2000)
                 Com_Error(ERR_DROP, "bcs exceeded BIG_INFO_STRING");
-            strcat(bigConfigString, sb);
+            I_strncat(bigConfigString, sizeof(bigConfigString), sb);
             s = bigConfigString;
             Cmd_EndTokenizedString();
             continue;

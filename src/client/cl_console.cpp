@@ -2807,7 +2807,8 @@ void __cdecl Con_DrawAutoCompleteChoice(int32_t localClientNum, bool isDvarComma
         conDrawInputGlob.inputTextLen,
         isDvarCommand,
         originalCommand,
-        colorCodedLine);
+        colorCodedLine,
+        sizeof(colorCodedLine));
     x = (int)conDrawInputGlob.x;
     y = (int)conDrawInputGlob.y;
     iassert(strlen(colorCodedLine) > 0);
@@ -2822,37 +2823,35 @@ uint32_t __cdecl Con_GetAutoCompleteColorCodedString(
     int32_t matchTextLen,
     bool isDvarCommand,
     const char *originalCommand,
-    char *colorCoded)
+    char *colorCoded,
+    int32_t colorCodedSize)
 {
-    uint32_t prefixLen; // [esp+0h] [ebp-4h]
+    int32_t prefixLen; // [esp+0h] [ebp-4h]
 
+    prefixLen = 0;
+    colorCoded[0] = 0;
     if (isDvarCommand)
-        prefixLen = sprintf(colorCoded, "^2%s ", originalCommand);
-    else
-        prefixLen = 0;
+        Com_sprintfPos(colorCoded, colorCodedSize, &prefixLen, "^2%s ", originalCommand);
     if (con_matchPrefixOnly->current.enabled)
         return prefixLen
-        + Con_GetAutoCompleteColorCodedStringContiguous(query, matchToText, matchTextLen, &colorCoded[prefixLen]);
+        + Con_GetAutoCompleteColorCodedStringContiguous(
+            query, matchToText, matchTextLen, &colorCoded[prefixLen], colorCodedSize - prefixLen);
     else
         return prefixLen
-        + Con_GetAutoCompleteColorCodedStringDiscontiguous(query, matchToText, matchTextLen, &colorCoded[prefixLen]);
+        + Con_GetAutoCompleteColorCodedStringDiscontiguous(
+            query, matchToText, matchTextLen, &colorCoded[prefixLen], colorCodedSize - prefixLen);
 }
 
 int32_t __cdecl Con_GetAutoCompleteColorCodedStringDiscontiguous(
     const char *query,
     const char *matchToText,
     int32_t matchTextLen,
-    char *colorCoded)
+    char *colorCoded,
+    int32_t colorCodedSize)
 {
     int32_t v4; // eax
-    char v6; // [esp+13h] [ebp-29h]
-    char *v7; // [esp+18h] [ebp-24h]
-    const char *v8; // [esp+1Ch] [ebp-20h]
-    const char *v9; // [esp+20h] [ebp-1Ch]
     int32_t matchLetter; // [esp+24h] [ebp-18h]
     int32_t colorCodedPos; // [esp+28h] [ebp-14h]
-    int32_t colorCodedPosb; // [esp+28h] [ebp-14h]
-    int32_t colorCodedPosa; // [esp+28h] [ebp-14h]
     char wasMatching; // [esp+2Fh] [ebp-Dh]
     int32_t matchTextPos; // [esp+30h] [ebp-Ch]
     const char *queryPos; // [esp+34h] [ebp-8h]
@@ -2864,6 +2863,7 @@ int32_t __cdecl Con_GetAutoCompleteColorCodedStringDiscontiguous(
     wasMatching = 0;
     matchTextPos = 0;
     colorCodedPos = 0;
+    colorCoded[0] = 0;
     matchLetter = tolower(*matchToText);
     for (queryPos = query; *queryPos; ++queryPos)
     {
@@ -2874,87 +2874,51 @@ int32_t __cdecl Con_GetAutoCompleteColorCodedStringDiscontiguous(
         if (isMatching != wasMatching)
         {
             wasMatching = isMatching;
-            if (isMatching)
-                v9 = "^2";
-            else
-                v9 = "^7";
-            v8 = v9;
-            v7 = &colorCoded[colorCodedPos];
-            do
-            {
-                v6 = *v8;
-                *v7++ = *v8++;
-            } while (v6);
-            colorCodedPos += 2;
+            Com_sprintfPos(colorCoded, colorCodedSize, &colorCodedPos, isMatching ? "^2" : "^7");
         }
-        colorCoded[colorCodedPos++] = *queryPos;
+        Com_sprintfPos(colorCoded, colorCodedSize, &colorCodedPos, "%c", *queryPos);
     }
-    strcpy(&colorCoded[colorCodedPos], "^7");
-    colorCodedPosb = colorCodedPos + 2;
-    colorCoded[colorCodedPosb] = 32;
-    colorCodedPosa = colorCodedPosb + 1;
-    colorCoded[colorCodedPosa] = 0;
+    Com_sprintfPos(colorCoded, colorCodedSize, &colorCodedPos, "^7 ");
     iassert(strlen(colorCoded) > 0);
-    return colorCodedPosa;
+    return colorCodedPos;
 }
 
 int32_t __cdecl Con_GetAutoCompleteColorCodedStringContiguous(
     char *query,
     const char *matchToText,
     int32_t matchTextLen,
-    char *colorCoded)
+    char *colorCoded,
+    int32_t colorCodedSize)
 {
-    char v5; // [esp+13h] [ebp-59h]
-    char *v6; // [esp+18h] [ebp-54h]
-    char *v7; // [esp+1Ch] [ebp-50h]
-    char v8; // [esp+43h] [ebp-29h]
-    char *v9; // [esp+48h] [ebp-24h]
-    char *v10; // [esp+4Ch] [ebp-20h]
-    uint32_t v11; // [esp+50h] [ebp-1Ch]
+    int32_t matchLen;
     int32_t colorCodedPos; // [esp+60h] [ebp-Ch]
-    int32_t colorCodedPosb; // [esp+60h] [ebp-Ch]
-    int32_t colorCodedPosc; // [esp+60h] [ebp-Ch]
-    int32_t colorCodedPosa; // [esp+60h] [ebp-Ch]
-    int32_t colorCodedPosd; // [esp+60h] [ebp-Ch]
     char *queryPos; // [esp+64h] [ebp-8h]
 
     iassert(query);
     iassert(matchToText);
     iassert(matchTextLen);
     colorCodedPos = 0;
+    colorCoded[0] = 0;
     queryPos = (char *)I_stristr(query, matchToText);
     if (queryPos)
     {
-        strncpy(colorCoded, query, queryPos - query);
-        strcpy(&colorCoded[queryPos - query], "^2");
-        colorCodedPosb = queryPos - query + 2;
-        v11 = strlen(matchToText);
-        strncpy(&colorCoded[colorCodedPosb], queryPos, v11);
-        colorCodedPosc = v11 + colorCodedPosb;
-        strcpy(&colorCoded[colorCodedPosc], "^7");
-        colorCodedPosa = colorCodedPosc + 2;
-        v10 = &queryPos[v11];
-        v9 = &colorCoded[colorCodedPosa];
-        do
-        {
-            v8 = *v10;
-            *v9++ = *v10++;
-        } while (v8);
-        colorCodedPosd = strlen(&queryPos[v11]) + colorCodedPosa;
-        colorCoded[colorCodedPosd] = 32;
-        colorCodedPos = colorCodedPosd + 1;
-        colorCoded[colorCodedPos] = 0;
+        // The text before the match, the match in green, then the rest and a space.
+        matchLen = strlen(matchToText);
+        Com_sprintfPos(
+            colorCoded,
+            colorCodedSize,
+            &colorCodedPos,
+            "%.*s^2%.*s^7%s ",
+            (int32_t)(queryPos - query),
+            query,
+            matchLen,
+            queryPos,
+            &queryPos[matchLen]);
     }
     else
     {
         iassert(strlen(query) > 0);
-        v7 = query;
-        v6 = colorCoded;
-        do
-        {
-            v5 = *v7;
-            *v6++ = *v7++;
-        } while (v5);
+        I_strncpyz(colorCoded, query, colorCodedSize);
     }
     iassert(strlen(colorCoded) > 0);
     return colorCodedPos;

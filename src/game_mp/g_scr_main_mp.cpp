@@ -4224,7 +4224,7 @@ void __cdecl Scr_FxParamError(uint32_t  paramIndex, const char *errorString, int
     if (fxId)
         SV_GetConfigstring(fxId + CS_EFFECT_NAMES, fxName, 1024);
     else
-        strcpy(fxName, "not successfully loaded");
+        I_strncpyz(fxName, "not successfully loaded", sizeof(fxName));
     v3 = va("%s (effect = %s)\n", errorString, fxName);
     Scr_ParamError(paramIndex, v3);
 }

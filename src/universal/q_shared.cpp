@@ -921,8 +921,9 @@ void __cdecl Info_SetValueForKey_Big(char *s, const char *key, const char *value
         return;
     }
 
-    if (strlen(s) + strlen(newi) <= BIG_INFO_STRING)
-        strcat(s, newi);
+    // The sum must leave room for the terminator: s holds BIG_INFO_STRING bytes.
+    if (strlen(s) + strlen(newi) < BIG_INFO_STRING)
+        I_strncat(s, BIG_INFO_STRING, newi);
     else
         Com_Printf(CON_CHANNEL_SYSTEM, "Info string length exceeded. key: %s value: %s Info string: %s", key, value, s);
 }

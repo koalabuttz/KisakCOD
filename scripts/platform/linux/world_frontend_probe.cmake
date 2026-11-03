@@ -57,9 +57,16 @@ endif()
 
 # ---- the Material_Sort span ---------------------------------------------------
 set(world_frontend_material_source "${SRC_DIR}/gfx_d3d/r_material_load_obj.cpp")
-set(world_frontend_material_marker "void __cdecl Material_GetVertexShaderName(")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${world_frontend_material_source}")
 file(READ "${world_frontend_material_source}" world_frontend_material_text)
+# Engine sources are dropping the redundant __cdecl (upstream issue #35), so the
+# marker and the required definitions match with or without it. The generated
+# unit still copies the span verbatim.
+set(world_frontend_material_marker "void Material_GetVertexShaderName(")
+string(FIND "${world_frontend_material_text}" "\nvoid __cdecl Material_GetVertexShaderName(" world_frontend_cdecl_marker_at)
+if(NOT world_frontend_cdecl_marker_at EQUAL -1)
+    set(world_frontend_material_marker "void __cdecl Material_GetVertexShaderName(")
+endif()
 string(FIND "${world_frontend_material_text}" "\n${world_frontend_material_marker}" world_frontend_marker_at)
 string(FIND "${world_frontend_material_text}" "\n${world_frontend_material_marker}" world_frontend_marker_last REVERSE)
 if(world_frontend_marker_at EQUAL -1 OR NOT world_frontend_marker_at EQUAL world_frontend_marker_last)
@@ -71,11 +78,12 @@ string(SUBSTRING "${world_frontend_material_text}" ${world_frontend_span_at} -1 
 string(REGEX MATCHALL "\n" world_frontend_head_lines "${world_frontend_material_head}")
 list(LENGTH world_frontend_head_lines world_frontend_span_line)
 math(EXPR world_frontend_span_line "${world_frontend_span_line} + 1")
+string(REPLACE "__cdecl " "" world_frontend_material_span_plain "${world_frontend_material_span}")
 foreach(required_definition
-        "void __cdecl Material_SortInternal(Material **sortedMaterials, uint32_t materialCount)"
-        "void __cdecl Material_Sort()"
-        "bool __cdecl Material_Compare(const Material *mtl0, const Material *mtl1)")
-    string(FIND "${world_frontend_material_span}" "${required_definition}" required_at)
+        "void Material_SortInternal(Material **sortedMaterials, uint32_t materialCount)"
+        "void Material_Sort()"
+        "bool Material_Compare(const Material *mtl0, const Material *mtl1)")
+    string(FIND "${world_frontend_material_span_plain}" "${required_definition}" required_at)
     if(required_at EQUAL -1)
         message(FATAL_ERROR "the Material_Sort span of r_material_load_obj.cpp no longer defines '${required_definition}'")
     endif()

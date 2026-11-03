@@ -117,7 +117,7 @@ char *__cdecl SEH_SafeTranslateString(char *pszReference)
                 Com_Error(ERR_LOCALIZATION, "Could not translate exe string \"%s\"", pszReference);
             else
                 Com_PrintWarning(CON_CHANNEL_SYSTEM, "WARNING: Could not translate exe string \"%s\"\n", pszReference);
-            strcpy(szErrorString, "^1UNLOCALIZED(^7");
+            I_strncpyz(szErrorString, "^1UNLOCALIZED(^7", sizeof(szErrorString));
             I_strncat(szErrorString, 1024, pszReference);
             I_strncat(szErrorString, 1024, "^1)^7");
         }
@@ -183,7 +183,7 @@ char *__cdecl SEH_LocalizeTextMessage(const char *pszInputBuffer, const char *ps
                 I_strncpyz(szTokenBuf, (char *)pszTokenStart, pszIn - pszTokenStart + 1);
                 if (bLocOn)
                 {
-                    if (!SEH_GetLocalizedTokenReference(szTokenBuf, szTokenBuf, pszMessageType, errType))
+                    if (!SEH_GetLocalizedTokenReference(szTokenBuf, sizeof(szTokenBuf), szTokenBuf, pszMessageType, errType))
                         return 0;
                     iTokenLen = &szTokenBuf[strlen(szTokenBuf) + 1] - &szTokenBuf[1];
                 }
@@ -305,6 +305,7 @@ char *__cdecl SEH_LocalizeTextMessage(const char *pszInputBuffer, const char *ps
 
 int __cdecl SEH_GetLocalizedTokenReference(
     char *token,
+    int tokenSize,
     const char *reference,
     const char *messageType,
     msgLocErrType_t errType)
@@ -330,7 +331,7 @@ int __cdecl SEH_GetLocalizedTokenReference(
             return 0;
     }
 
-    strcpy(token, translation);
+    I_strncpyz(token, translation, tokenSize);
     
     return 1;
 }

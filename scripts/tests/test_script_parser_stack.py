@@ -265,7 +265,7 @@ int main() {
 
 def harness(repo, parser, scenarios=SCENARIOS):
     yacc = (repo / "src/script/scr_yacc.h").read_text()
-    declarations = yacc[yacc.index("enum Enum_t"):yacc.index("int __cdecl yyparse")]
+    declarations = yacc[yacc.index("enum Enum_t"):re.search(r"\bint\s+(?:__cdecl\s+)?yyparse\b", yacc).start()]
     declarations = declarations.replace("__int32", "intptr_t")
     vm = (repo / "src/script/scr_vm.h").read_text()
     opcode = vm[vm.index("enum Opcode_t"):]

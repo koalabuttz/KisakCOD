@@ -16,6 +16,15 @@ import shlex
 import subprocess
 import tempfile
 
+# __cdecl is the default convention and is being dropped from engine sources
+# (upstream issue #35). Signatures are compared with it removed so the check
+# passes with either spelling.
+CDECL = re.compile(r"\b__cdecl\b[ \t]*")
+
+
+def drop_cdecl(text: str) -> str:
+    return CDECL.sub("", text)
+
 
 def block(source: str, start: int) -> str:
     """Return a brace-delimited declaration/function, ignoring quoted braces."""
@@ -222,18 +231,18 @@ def main() -> int:
     parser.add_argument("--benchmark", action="store_true")
     parser.add_argument("--sanitize", action="store_true", help="run with undefined-behavior sanitizer")
     args = parser.parse_args()
-    source, header = args.source.read_text(), args.header.read_text()
+    source, header = drop_cdecl(args.source.read_text()), args.header.read_text()
     enum_starts = [match.start() for match in re.finditer("enum operationEnum", header)]
     values_start = header.index("union operandInternalDataUnion")
     operand_end = header.index("union entryInternalData", values_start)
     types = header[values_start:operand_end]
-    table = source[source.index("struct ValidOperation"):source.index("char *__cdecl GetSourceString")]
+    table = source[source.index("struct ValidOperation"):source.index("char *GetSourceString")]
     handlers = sorted(set(re.findall(r"&(\w+)\s*}", table)))
     declarations = "\n".join(
         f"void {name}(Operand*, Operand*, Operand* result) {{ result->dataType = VAL_INT; "
         f"result->internals.intVal = {i}; }}" for i, name in enumerate(handlers)
     )
-    lookup_start = source.index("void(__cdecl *__cdecl GetOperationFunction(")
+    lookup_start = source.index("void(*GetOperationFunction(")
     lookup = block(source, lookup_start)
     # Keep every production instruction in the table/lookup. Only the platform
     # spelling for 32-bit enum storage changes for the native host compiler.

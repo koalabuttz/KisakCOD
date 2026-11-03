@@ -276,7 +276,7 @@ def main() -> int:
     parts.append(MATERIAL_STUB)
     for name in ("R_RegisterShaderConst", "R_GetPixelLiteralConsts", "R_ComparePixelConsts"):
         function = declaration(
-            source, rf"^(?:void|int)\s+__cdecl\s+{name}\s*\([^;{{}}]*\)\s*\{{", name,
+            source, rf"^(?:void|int)\s+(?:__cdecl\s+)?{name}\s*\([^;{{}}]*\)\s*\{{", name,
         )
         # Keep the real comparator's local storage in a separate stack frame so
         # poisonStack can prime it without rewriting the production body.
