@@ -1080,7 +1080,7 @@ void FS_Printf(int h, const char *fmt, ...)
     va_list va; // [esp+102Ch] [ebp+10h] BYREF
 
     va_start(va, fmt);
-    _vsnprintf(string, 0x1000u, fmt, va);
+    vsnprintf(string, 0x1000u, fmt, va);
     FS_Write(string, &string[strlen(string) + 1] - &string[1], h);
 }
 

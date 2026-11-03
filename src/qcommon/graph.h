@@ -38,4 +38,4 @@ void __cdecl GraphFloat_ParseBuffer(GraphFloat *graph, const char *buffer, char 
 void __cdecl GraphFloat_CreateDevGui(GraphFloat *graph, const char *devguiPath);
 void __cdecl GraphFloat_DevGuiCB_Event(const DevGraph *graph, DevEventType event);
 void __cdecl GraphFloat_SaveToFile(const GraphFloat *graph);
-void __cdecl GraphFloat_DevGuiCB_Text(const DevGraph *devGuiGraph, float inputX, float inputY, char *text);
+void __cdecl GraphFloat_DevGuiCB_Text(const DevGraph *devGuiGraph, float inputX, float inputY, char *text, const int textLength);

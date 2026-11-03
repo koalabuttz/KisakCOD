@@ -325,7 +325,7 @@ struct CStringEdPackage // sizeof=0x78
                             v13 = i - v11;
                             if (v13 > 1023)
                                 v13 = 1023;
-                            strncpy(sThisLanguage, (char*)v11, v13);
+                            I_strncpyz(sThisLanguage, (char*)v11, v13 + 1);
                             CStringEdPackage::InsideQuotes(&v19, (const char *)&v11[strlen(sThisLanguage)]);
                             CStringEdPackage::ConvertCRLiterals_Read(&sentence, v19);
                             //v14 = (std::string *)sentence._Bx._Ptr;

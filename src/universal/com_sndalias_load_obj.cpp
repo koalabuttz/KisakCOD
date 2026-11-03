@@ -30,7 +30,7 @@ void __cdecl Com_LoadVolumeModGroups(VolumeModGroup *volumeModGroups)
     len = strlen("VOLUMEMODGROUPS");
     if (!volumeModGroups)
         MyAssertHandler(".\\universal\\com_sndalias_load_obj.cpp", 1042, 0, "%s", "volumeModGroups");
-    strcpy(filename, "soundaliases/volumemodgroups.def");
+    I_strncpyz(filename, "soundaliases/volumemodgroups.def", sizeof(filename));
     v6 = FS_FOpenFileRead(filename, &file);
     if (v6 >= 0)
     {
@@ -283,17 +283,18 @@ void __cdecl Com_SoundAliasChannelForName(char *name, const char *sourceFile, sn
         }
     }
     v3 = 0;
+    string[0] = 0;
     for (i = 0; i < saLoadObjGlob.entChannelCount; ++i)
     {
-        v3 += sprintf(&string[v3], "%s", saLoadObjGlob.entChannels[i]);
+        Com_sprintfPos(string, sizeof(string), &v3, "%s", saLoadObjGlob.entChannels[i]);
         if (i >= saLoadObjGlob.entChannelCount - 2)
         {
             if (i == saLoadObjGlob.entChannelCount - 2)
-                v3 += sprintf(&string[v3], " or ");
+                Com_sprintfPos(string, sizeof(string), &v3, " or ");
         }
         else
         {
-            v3 += sprintf(&string[v3], ", ");
+            Com_sprintfPos(string, sizeof(string), &v3, ", ");
         }
     }
     Com_PrintError(CON_CHANNEL_SOUND, "ERROR: Sound alias file %s: Unknown sound channel '%s'; should be %s\n", sourceFile, name, string);

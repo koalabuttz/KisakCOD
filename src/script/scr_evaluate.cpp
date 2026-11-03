@@ -302,8 +302,9 @@ void __cdecl Scr_GetValueString(uint32_t localId, VariableValue *value, int len,
         Com_sprintf(s, len, "&\"%s\"", SL_ConvertToString(value->u.intValue));
         break;
     case VAR_VECTOR:
-        sprintf(
+        Com_sprintf(
             s,
+            len,
             "(%g, %g, %g)",
             *(float *)value->u.intValue,
             *(float *)(value->u.intValue + 4),

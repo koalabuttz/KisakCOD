@@ -147,8 +147,7 @@ char *__cdecl SE_GetFoundFile(std::string *strResult)
         return NULL;
     }
 
-    strncpy(sTemp, strResult->data(), 63);
-    sTemp[63] = 0;
+    I_strncpyz(sTemp, strResult->data(), sizeof(sTemp));
     v2 = (_BYTE *)strchr(sTemp, ';');
     if (v2)
     {
