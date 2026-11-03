@@ -62,6 +62,15 @@ if(NOT KISAK_OPENAL_LIBRARY OR NOT EXISTS "${KISAK_OPENAL_LIBRARY}")
         "KISAK_BUILD_LINUX_MP_CLIENT needs KISAK_OPENAL_LIBRARY: an i386 OpenAL library to link "
         "(got '${KISAK_OPENAL_LIBRARY}')")
 endif()
+# The client's sound headers include <AL/al.h> (src/sound/snd_local.h), also when
+# the OpenAL stand-in is linked. Without libopenal-dev installed, point this at a
+# directory holding AL/al.h, such as one unpacked from that package.
+set(KISAK_OPENAL_INCLUDE_DIR "" CACHE PATH
+    "Directory holding AL/al.h when the OpenAL headers are not installed system-wide (optional)")
+if(KISAK_OPENAL_INCLUDE_DIR AND NOT EXISTS "${KISAK_OPENAL_INCLUDE_DIR}/AL/al.h")
+    message(FATAL_ERROR
+        "KISAK_OPENAL_INCLUDE_DIR must hold AL/al.h (got '${KISAK_OPENAL_INCLUDE_DIR}')")
+endif()
 find_package(SDL3 3.2.10 CONFIG REQUIRED)
 
 # ---- the engine source set ------------------------------------------------
@@ -192,6 +201,9 @@ foreach(mp_target KisakCOD-mp-native KisakCOD-mp-standin KisakCOD-mp-own)
     target_compile_definitions(${mp_target} PRIVATE ${KISAK_MP_CLIENT_DEFINITIONS})
     target_compile_options(${mp_target} PRIVATE ${KISAK_MP_CLIENT_OPTIONS})
     target_include_directories(${mp_target} PRIVATE "${SRC_DIR}" "${DEPS_DIR}" "${tracy_SOURCE_DIR}/public")
+    if(KISAK_OPENAL_INCLUDE_DIR)
+        target_include_directories(${mp_target} SYSTEM PRIVATE "${KISAK_OPENAL_INCLUDE_DIR}")
+    endif()
     add_dependencies(${mp_target} update_build_number)
 endforeach()
 # dr_wav and dr_mp3 implementations, in the one unit the Windows target puts them.

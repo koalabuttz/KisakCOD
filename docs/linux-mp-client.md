@@ -32,6 +32,12 @@ CI links stand-ins for the last two parts instead: the device probe's
 whose `alcOpenDevice` finds no device. The 64-bit configuration refuses the
 option.
 
+The OpenAL headers (`AL/al.h`) are needed too, whichever library is linked,
+because the sound headers include them. Without `libopenal-dev` installed, unpack
+the package somewhere (`apt-get download libopenal-dev`, then `dpkg-deb -x`) and
+pass `-DKISAK_OPENAL_INCLUDE_DIR=<that tree>/usr/include`; nothing needs to be
+installed system-wide.
+
 ## What it compiles
 
 `scripts/platform/linux/mp_client.cmake` has the details. In short:
