@@ -47,7 +47,12 @@ own `CL_InitDedicated`. That `CL_InitDedicated`:
 - turns `sys_smp_allowed` off before the renderer registers its dvars, so the
   two worker thread dvars default off. Worker commands then run inline, the
   backend runs on the main thread, and `R_InitHardware` starts no worker;
-- registers the renderer and effects dvars and turns `fx_marks` off.
+- registers the renderer and effects dvars and turns `fx_marks` off;
+- sets `sys_sysMB` to the machine's memory (`sys_info.sysMB`), as a configured
+  client's profile holds it (`Sys_ArchiveInfo`). `R_SetPicmip` reads it to pick
+  the texture detail. The dedicated server never registers it, and without it
+  `R_SetPicmip` saw 0 MB and loaded every texture two mip levels down
+  ("Using picmip 2"), which every run before this change did.
 
 Unlike the dedicated server's, it latches nothing off and loads no zone. The
 probe's own code is in `src/linux/tools/world_draw_probe.cpp`.
@@ -56,7 +61,7 @@ probe's own code is in `src/linux/tools/world_draw_probe.cpp`.
 | --- | --- | --- |
 | `arguments` | before any device work | `KISAK_WORLD_DRAW_MAP` is unset, combined with another export mode, or not an allowlisted map name; `KISAK_WORLD_DRAW_SHOW_SECONDS` is set and not a whole number from 0 to 60 |
 | `layout` | the probe and the database loader are compiled with different definitions | any of the shared structs differs in size between the two views, as in the world device probe |
-| `start` | inside `$init`, where a client's `CL_InitRenderer` runs | a zone, a D3D object, a world or a registration exists already; `r_loadForRenderer` is off; the renderer would start threads; `fx_marks` is on; the render commands are not set up |
+| `start` | inside `$init`, where a client's `CL_InitRenderer` runs | a zone, a D3D object, a world or a registration exists already; `r_loadForRenderer` is off; the renderer would start threads; `fx_marks` is on; `sys_sysMB` is not set; the render commands are not set up |
 | `environment` | `DXVK_WSI_DRIVER`, `DXVK_LOG_PATH`, SDL video | the WSI is set to something other than SDL3, or SDL video cannot start |
 | `direct3d` | the probe's own `Direct3DCreate9`, released at once | no Direct3D 9 interface. `R_InitGraphicsApi` goes on without one, so the probe asks first |
 | renderer start | `R_Init`: the window and device for a 640x480 window, the graphics zones queued behind them, render targets, initial state, the scene, code images and materials | the engine's own errors |
@@ -149,7 +154,9 @@ first estimates for a 640x480 view; the evidence below says what mp_crash gives.
 The output is `key=value` lines between the engine's own messages, flushed as
 they happen:
 
-- `world_draw_layout`, `world_draw_renderer=starting|started`,
+- `world_draw_layout`, `world_draw_renderer=starting|started` (`started`
+  gives the adapter, `sys_mb` and the texture detail `R_SetPicmip` chose as
+  `picmip=<colour>/<normal map>/<specular>`),
   `world_draw_graphics_zones`, `world_draw_map`;
 - two `world_draw_camera` lines, then `world_draw_first_frame`;
 - one `world_draw_frame` line per draw, with the measurements and counts
