@@ -194,9 +194,9 @@ pointers. The fastfile loader, for one, compiles today and is still wrong at
 
 ## x86_64 dedicated server
 
-Step two. `KisakCOD-dedi` builds and links as an ELF64 x86_64 program, and it
-boots without game data to the same end state as the i386 build: `FS_Startup`
-runs and the server stops on the missing `fileSysCheck.cfg`.
+Step two. `KisakCOD-dedi` builds and links as an ELF64 x86_64 program. Without
+game data it boots to the same end state as the i386 build, and with the retail
+files it loads a map (see [Loading a retail map](#loading-a-retail-map)).
 
 ```sh
 cmake -S . -B build-x64 -G Ninja -DKISAK_PLATFORM=linux -DKISAK_LINUX_ARCH=x86_64 \
@@ -282,12 +282,38 @@ test compiles `db_stream.cpp` and `db_stream_load.cpp` unmodified for x86_64
 with ASan and UBSan and feeds them retail bytes from memory. CI runs both in the
 `x86_64 dedicated server` job.
 
-### Not 64-bit yet
+### Loading a retail map
 
-Loading a real map has not run yet: that needs game data, so it happens on the
-laptop. Beyond the loader, the pointer/integer cast sites the census lists
-(about 400 on the dedicated path: `com_memory`, `com_files`, the script VM, the
-xanim loaders) are still there, and the bootstrap test reaches none of them.
+The x86_64 dedicated server loads `mp_crash` from the retail game files, runs
+the gametype scripts and its first server frames, and shuts down cleanly, with
+the same 18 checks as i386 (`scripts/tests/test_linux_asset_startup.py --map
+mp_crash`). A `developer 1` / `developer_script 1` run prints no asserts or
+script errors on either architecture, and the two logs match apart from timing.
+This runs on a machine with the game installed, not in CI.
+
+What the map load needed beyond the record conversion, each a 32-bit size or
+width baked into decompiled code:
+
+- Hunk user headers and the `qsort` element sizes used `uint32_t` and literal
+  sizes; they use pointer-sized fields and `sizeof`.
+- The asset clone table folded size functions of types that share a retail size
+  (`LoadedSound` cloned at the `GameWorldSp` size); every slot names its type.
+- About 60 allocations, clears and copies used retail struct sizes (`XAnim_s`
+  entries, DObj model lists, `client_t`, file handles); they use `sizeof`.
+- Script compiler and VM: operand and saved-stack widths (codepos, jumps, case
+  tables, `SCR_STACK_ENTRY_SIZE`), parse tree values copied through their 4-byte
+  `type` member or passed as a node's `Enum_t`, and script values copied as
+  `u.intValue`. `test_script_parser_stack.py` now fails on any parse tree slot
+  that holds a node pointer cut to 32 bits.
+- Index math and offset tables: a default asset was linked into the hash with a
+  byte difference `>> 4`, and the script entity and player field tables held
+  i386 offsets into `gentity_s` and `gclient_s`; both use typed indices and
+  `offsetof`.
+
+Still i386-shaped and off the dedicated path: the SP save game stack format in
+`scr_readwrite.cpp`, client-side literal offset and size tables (effects,
+devgui, static model cache, server browser), and the pointer/integer casts the
+census lists in the raw asset (`*_load_obj.cpp`) loaders.
 
 ## Windows MSVC x64 census
 
