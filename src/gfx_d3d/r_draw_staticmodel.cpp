@@ -58,6 +58,15 @@ void R_DrawStaticModelDrawSurfLightingNonOptimized(
     }
 }
 
+// Reads the XSurface pointer that R_WritePrimDrawSurfPointer stored. The stream is
+// only 4-byte aligned, so copy it out instead of dereferencing a pointer slot.
+static XSurface *R_ReadPrimDrawSurfXSurface(const uint32_t *primDrawSurfPos)
+{
+    XSurface *xsurf;
+    memcpy(&xsurf, primDrawSurfPos, sizeof(xsurf));
+    return xsurf;
+}
+
 void R_DrawStaticModelSurfLit(const uint32_t *primDrawSurfPos, GfxCmdBufContext context)
 {
     GfxStaticModelDrawStream drawStream; // [esp+0h] [ebp-20h] BYREF
@@ -79,9 +88,9 @@ int R_GetNextStaticModelSurf(GfxStaticModelDrawStream *drawStream, XSurface **ou
     if (!drawStream->smodelCount)
         return 0;
     primDrawSurfPos = drawStream->primDrawSurfPos;
-    drawStream->primDrawSurfPos += ((drawStream->smodelCount + 1) >> 1) + 1;
-    xsurf = (XSurface *)*primDrawSurfPos;
-    drawStream->smodelList = (const uint16_t *)(primDrawSurfPos + 1);
+    drawStream->primDrawSurfPos += ((drawStream->smodelCount + 1) >> 1) + PRIM_DRAW_SURF_PTR_WORDS;
+    xsurf = R_ReadPrimDrawSurfXSurface(primDrawSurfPos);
+    drawStream->smodelList = (const uint16_t *)(primDrawSurfPos + PRIM_DRAW_SURF_PTR_WORDS);
     drawStream->localSurf = xsurf;
     g_frameStatsCur.geoIndexCount += 3 * drawStream->smodelCount * xsurf->triCount;
 
@@ -182,7 +191,8 @@ int R_GetNextStaticModelCachedSurf(GfxStaticModelDrawStream *drawStream)
     drawStream->smodelCount = *drawStream->primDrawSurfPos++;
     if (!drawStream->smodelCount)
         return 0;
-    xsurf = (XSurface *)*drawStream->primDrawSurfPos++;
+    xsurf = R_ReadPrimDrawSurfXSurface(drawStream->primDrawSurfPos);
+    drawStream->primDrawSurfPos += PRIM_DRAW_SURF_PTR_WORDS;
     drawStream->smodelList = (const unsigned short*)drawStream->primDrawSurfPos;
     drawStream->primDrawSurfPos += (drawStream->smodelCount + 1) >> 1;
     smodelDrawInst = &rgp.world->dpvs.smodelDrawInsts[R_GetCachedSModelSurf(*drawStream->smodelList)->smodelIndex];

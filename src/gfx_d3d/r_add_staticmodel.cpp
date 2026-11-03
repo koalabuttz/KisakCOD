@@ -146,7 +146,7 @@ void R_AddDelayedStaticModelDrawSurf(
     uint32_t count)
 {
     R_WritePrimDrawSurfInt(delayedCmdBuf, count);
-    R_WritePrimDrawSurfInt(delayedCmdBuf, (uint32_t)xsurf);
+    R_WritePrimDrawSurfPointer(delayedCmdBuf, xsurf);
     R_WritePrimDrawSurfData(delayedCmdBuf, list, (count + 1) >> 1);
 }
 
@@ -395,7 +395,7 @@ void R_SkinStaticModelsCameraForLod(
                         &surfData->drawSurf[region],
                         &surfData->delayedCmdBuf)))
             {
-                if (!R_AllocDrawSurf(&surfData->delayedCmdBuf, drawSurf, &surfData->drawSurf[region], ((count + 1) >> 1) + 2))
+                if (!R_AllocDrawSurf(&surfData->delayedCmdBuf, drawSurf, &surfData->drawSurf[region], ((count + 1) >> 1) + 1 + PRIM_DRAW_SURF_PTR_WORDS))
                     return;
                 R_AddDelayedStaticModelDrawSurf(&surfData->delayedCmdBuf, &surfaces[surfaceIndex], list, count);
             }
@@ -798,7 +798,7 @@ void R_SkinStaticModelsShadowForLod(
                         &surfData->drawSurfList,
                         &surfData->delayedCmdBuf)))
             {
-                if (!R_AllocDrawSurf(&surfData->delayedCmdBuf, drawSurf, &surfData->drawSurfList, ((count + 1) >> 1) + 2))
+                if (!R_AllocDrawSurf(&surfData->delayedCmdBuf, drawSurf, &surfData->drawSurfList, ((count + 1) >> 1) + 1 + PRIM_DRAW_SURF_PTR_WORDS))
                     return;
                 R_AddDelayedStaticModelDrawSurf(&surfData->delayedCmdBuf, &surfaces[0][surfaceIndex], list, count);
             }
