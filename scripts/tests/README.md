@@ -334,6 +334,23 @@ shim test covers the MSVC CRT names `src/linux/compat.h` supplies to client
 sources (`_itoa`, the array `strcpy_s`, `_time64`, `_localtime64`), including the
 fail-closed cases; `run_linux_checks.py` runs it as `crt_shims`.
 
+## x86_64 compile census (opt-in 64-bit track)
+
+```sh
+python3 scripts/tests/test_x64_compile_census.py
+python3 scripts/tests/run_x64_compile_census.py --jobs 4 --report-dir artifacts/x64-census
+```
+
+Needs only a native 64-bit Clang, CMake, Ninja and the OpenAL headers (no
+multilib). It configures a `-DKISAK_LINUX_ARCH=x86_64` build directory, takes the
+exact `KisakCOD-dedi` compile commands from it, adds the client census sources
+with `-m64`, and runs one syntax-only pass per unit. Findings are filed under the
+upstream "64-bit Support" milestone issues and written to `x64-census.md` and
+`x64-census.json`. Only a source listed in `x64_compile_census_baseline.txt` that
+stops compiling for x86_64 fails the run; newly compiling sources are reported
+as progress (`--update-baseline` records them). See
+[docs/linux-x64.md](../../docs/linux-x64.md).
+
 ## Free camera checks
 
 ```sh

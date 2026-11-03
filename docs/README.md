@@ -12,6 +12,11 @@ what is verified and where, and the next milestone. Build steps are in the
 - [Server-side test clients](server-test-clients.md)
 - [Retail CoD4 client compatibility evidence](retail-client-compatibility.md)
 
+## 64-bit track (opt-in)
+
+- [x86_64 track and compile census](linux-x64.md): staged plan, how it lines up
+  with the upstream "64-bit Support" milestone, and what stops a 64-bit compile today
+
 ## Linux client (opt-in)
 
 - [Native Linux client](linux-client.md) and

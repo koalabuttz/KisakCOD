@@ -2,6 +2,12 @@ cmake_minimum_required(VERSION 3.18)
 
 # The serialized assets and VM currently require a 32-bit process. Set the
 # architecture before project() so CMake tests the actual Linux compiler ABI.
+# i386 is the shipping Linux build. x86_64 is an opt-in 64-bit track that only
+# configures for the compile census (scripts/tests/run_x64_compile_census.py):
+# the engine does not build or run 64-bit yet. See docs/linux-x64.md.
+set(KISAK_LINUX_ARCH "i386" CACHE STRING
+    "Native Linux architecture: i386 (shipping) or x86_64 (opt-in compile census only)")
+set_property(CACHE KISAK_LINUX_ARCH PROPERTY STRINGS i386 x86_64)
 if(NOT DEFINED KISAK_PLATFORM)
     if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
         set(KISAK_PLATFORM "linux" CACHE STRING "Build platform: win32|mingw|linux")
@@ -10,9 +16,16 @@ if(NOT DEFINED KISAK_PLATFORM)
     endif()
 endif()
 if(KISAK_PLATFORM STREQUAL "linux")
-    set(CMAKE_C_FLAGS_INIT "${CMAKE_C_FLAGS_INIT} -m32")
-    set(CMAKE_CXX_FLAGS_INIT "${CMAKE_CXX_FLAGS_INIT} -m32")
-    set(CMAKE_EXE_LINKER_FLAGS_INIT "${CMAKE_EXE_LINKER_FLAGS_INIT} -m32")
+    if(KISAK_LINUX_ARCH STREQUAL "i386")
+        set(KISAK_LINUX_ARCH_FLAG -m32)
+    elseif(KISAK_LINUX_ARCH STREQUAL "x86_64")
+        set(KISAK_LINUX_ARCH_FLAG -m64)
+    else()
+        message(FATAL_ERROR "KISAK_LINUX_ARCH must be i386 or x86_64, not '${KISAK_LINUX_ARCH}'")
+    endif()
+    set(CMAKE_C_FLAGS_INIT "${CMAKE_C_FLAGS_INIT} ${KISAK_LINUX_ARCH_FLAG}")
+    set(CMAKE_CXX_FLAGS_INIT "${CMAKE_CXX_FLAGS_INIT} ${KISAK_LINUX_ARCH_FLAG}")
+    set(CMAKE_EXE_LINKER_FLAGS_INIT "${CMAKE_EXE_LINKER_FLAGS_INIT} ${KISAK_LINUX_ARCH_FLAG}")
 endif()
 
 project(KisakCOD)
