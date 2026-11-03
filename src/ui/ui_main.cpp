@@ -518,7 +518,7 @@ MenuList *__cdecl Load_ScriptMenuInternal(const char *pszMenu, int imageTrack)
 {
     char v4[264]; // [sp+50h] [-120h] BYREF
 
-    strcpy(v4, "ui/scriptmenus/");
+    I_strncpyz(v4, "ui/scriptmenus/", sizeof(v4));
     I_strncat(v4, 256, pszMenu);
     I_strncat(v4, 256, ".menu");
     return UI_LoadMenu(v4, imageTrack);
@@ -1799,7 +1799,7 @@ void __cdecl UI_SavegameSort(int column, int force)
         {
             Dvar_SetString(ui_savegame, "");
             uiInfo.savegameName[0] = 0;
-            strcpy(uiInfo.savegameInfo, "EXE_NOSAVEGAMES");
+            I_strncpyz(uiInfo.savegameInfo, "EXE_NOSAVEGAMES", sizeof(uiInfo.savegameInfo));
         }
     }
 }
@@ -1853,7 +1853,7 @@ void __cdecl UI_LoadSavegames(int /*unused*/)
     {
         Dvar_SetString(ui_savegame, "");
         uiInfo.savegameName[0] = 0;
-        strcpy(uiInfo.savegameInfo, "EXE_NOSAVEGAMES");
+        I_strncpyz(uiInfo.savegameInfo, "EXE_NOSAVEGAMES", sizeof(uiInfo.savegameInfo));
     }
 }
 
@@ -2568,7 +2568,7 @@ char *__cdecl UI_ReplaceConversionInts(
         v11 = numInts;
         do
         {
-            sprintf(v10, "%d", *(const char **)((char *)args + v9)); // TODO: Fix this
+            snprintf(v10, 32, "%d", *(const char **)((char *)args + v9)); // TODO: Fix this
             --v11;
             *args = v10;
             v10 += 32;

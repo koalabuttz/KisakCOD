@@ -4126,7 +4126,7 @@ void __cdecl Menu_PaintAll_BeginVisibleList(char *stringBegin, uint32_t stringSi
 
     char VISIBLE_LIST_PREFIX[14]; // [esp+0h] [ebp-14h] BYREF
 
-    strcpy(VISIBLE_LIST_PREFIX, "ui_showlist: ");
+    I_strncpyz(VISIBLE_LIST_PREFIX, "ui_showlist: ", sizeof(VISIBLE_LIST_PREFIX));
     if (stringSize < 0xE)
         MyAssertHandler(".\\ui\\ui_shared.cpp", 6048, 0, "%s", "stringSize >= sizeof( VISIBLE_LIST_PREFIX )");
     *(uint32_t *)stringBegin = *(uint32_t *)VISIBLE_LIST_PREFIX;

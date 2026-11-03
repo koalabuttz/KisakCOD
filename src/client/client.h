@@ -345,17 +345,20 @@ uint32_t __cdecl Con_GetAutoCompleteColorCodedString(
     int32_t matchTextLen,
     bool isDvarCommand,
     const char *originalCommand,
-    char *colorCoded);
+    char *colorCoded,
+    int32_t colorCodedSize);
 int32_t __cdecl Con_GetAutoCompleteColorCodedStringDiscontiguous(
     const char *query,
     const char *matchToText,
     int32_t matchTextLen,
-    char *colorCoded);
+    char *colorCoded,
+    int32_t colorCodedSize);
 int32_t __cdecl Con_GetAutoCompleteColorCodedStringContiguous(
     char *query,
     const char *matchToText,
     int32_t matchTextLen,
-    char *colorCoded);
+    char *colorCoded,
+    int32_t colorCodedSize);
 void __cdecl Con_DrawInputPrompt(int32_t localClientNum);
 void Con_DrawOuputWindow();
 void __cdecl Con_DrawOutputScrollBar(float x, float y, float width, float height);

@@ -281,7 +281,7 @@ void __cdecl CL_ServerInfoPacket(netadr_t from, msg_t *msg, int time)
                 if (&info[strlen(info) + 1] != &info[1])
                 {
                     if (info[&info[strlen(info) + 1] - &info[1] - 1] != 10)
-                        strncat(info, "\n", 0x400u);
+                        I_strncat(info, sizeof(info), "\n");
                     v7 = NET_AdrToString(from);
                     Com_Printf(CON_CHANNEL_CLIENT, "%s: %s", v7, info);
                 }
@@ -423,7 +423,7 @@ void __cdecl CL_GlobalServers_f()
 {
     const char *v0; // eax
     const char *v1; // eax
-    char *buffptr; // [esp+10h] [ebp-42Ch]
+    int commandLen;
     netadr_t to; // [esp+14h] [ebp-428h] BYREF
     int i; // [esp+28h] [ebp-414h]
     char command[1028]; // [esp+2Ch] [ebp-410h] BYREF
@@ -446,15 +446,16 @@ void __cdecl CL_GlobalServers_f()
         to.port = BigShort(com_masterPort->current.integer);
         v0 = Cmd_Argv(2);
         snprintf(command, ARRAYSIZE(command), "getservers %s", v0);
-        buffptr = &command[&command[strlen(command) + 1] - &command[1]]; // kiwi: see below what the hell...
+        // Append the keywords, bounded by the command buffer.
+        commandLen = strlen(command);
         count = Cmd_Argc();
         for (i = 3; i < count; ++i)
         {
             v1 = Cmd_Argv(i);
-            buffptr += sprintf(buffptr, " %s", v1); // kiwi: uhhhh, what the hell.
+            Com_sprintfPos(command, sizeof(command), &commandLen, " %s", v1);
         }
         if (Dvar_GetBool("fs_restrict"))
-            sprintf(buffptr, " demo");
+            Com_sprintfPos(command, sizeof(command), &commandLen, " demo");
         NET_OutOfBandPrint(NS_SERVER, to, command);
     }
     else

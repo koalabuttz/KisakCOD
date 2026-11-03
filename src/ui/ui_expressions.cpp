@@ -2066,7 +2066,7 @@ void __cdecl SecondsToTimeDisplay(int localClientNum, Operand *source, Operand *
     int v3; // [esp+4h] [ebp-14h]
 
     v3 = SnapFloatToInt((float)GetSourceInt(source).intVal / 60.0f);    
-    _snprintf(
+    snprintf(
         resultString_0,
         0x80u,
         "%id %ih %im",
@@ -2087,7 +2087,7 @@ void __cdecl SecondsToCountdownDisplay(int localClientNum, int seconds, Operand 
     result->internals.intVal = (int)resultString_1;
     if (seconds >= 0)
     {
-        _snprintf(resultString_1, 0x80u, "%2i:%02i", seconds / 60, seconds % 60);
+        snprintf(resultString_1, 0x80u, "%2i:%02i", seconds / 60, seconds % 60);
         if (uiscript_debug->current.integer)
             Com_Printf(CON_CHANNEL_UI, "secondsToCountdown() = %s\n", resultString_1);
     }
