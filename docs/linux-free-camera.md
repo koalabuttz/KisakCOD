@@ -696,6 +696,47 @@ effect counts rule and the switch try; and `test_world_draw_probe.py` checks
 that `fx_enable` and `fx_draw` off refuse the replay and the script at the start
 stage, while the draw mode still stops at its direct3d stage.
 
+The map's effects on a GPU, on the same laptop (local runs, not CI evidence),
+2026-11-03, on 67d38c4: the replay in RelWithDebInfo (run N=57) and Debug
+(N=58), and the window driver's script in RelWithDebInfo under Wayland (N=59).
+All three passed with no problem and no "not drawing" warning, and the two
+replay builds printed the same lines apart from times. Textures were at picmip 2
+(the probe did not yet register `sys_sysMB`), as in the static model runs, so
+the digests compare with them. Two earlier attempts stopped at stage `effects`
+and found two bugs, fixed before these runs: an effect name compared with case
+where the zone compares without (N=48 to N=50), and glibc's 31-bit `rand()`,
+which sent the first effect spawned past `fx_randomTable` (N=51 to N=53; see
+the draw probe's [link section](linux-world-draw-probe.md#how-it-links)).
+
+`mp_crash`'s scripts gave 8 table effects and 36 oneshots, with no loop,
+exploder or loop sound: 36 placements of 7 effects and no plan problem. Each
+load that drew a frame spawned all 36 at its first update, with none refused
+(the first load of a run draws nothing: 4 starts and 108 spawns in the replay,
+2 and 36 in the script). Every checkpoint frame had 40 live effects with 253
+elements and no particle cloud. At `A.start` the switch gave:
+
+| `A.start` | digest | world draw calls | static model draw calls | effect surfaces | FX draw calls, triangles |
+| --- | --- | --- | --- | --- | --- |
+| as drawn | `4d22d1897c29025c` | 540 | 622 | 31 | 32, 206 |
+| `fx_draw 0` | `0d3e46a38948e9a2` | 399 | 356 | 0 | 1, 2 |
+
+The first try changed the picture, so the replay tried once, and with `fx_draw`
+on again the picture was `A.start`'s. Without the effects the picture, and every
+count, is the static model runs' `A.start` exactly; the FX call and two
+triangles left are the sun's flare query. With them the world issues 141 more
+draw calls and the static models 266 more; the counts do not say which pass
+those belong to. The other checkpoints drew 1 (`A.fast`, `A.rise`) to 36
+(`B.start`) effect surfaces. `A.turn` and `A.rise` kept the static model runs'
+digests, so their one or two effect surfaces changed no pixel there; the rest
+changed. Every interruption at `A.rise` (resize, minimize, device reset, and
+the reload, which restarts the effects) came back to its digest. Of the legs'
+frames only `B.square`'s two pocket frames, which draw no world surface, had no
+effect in their counts.
+
+The script's checkpoints on path A had the replay's digests and counts
+(`W.start` is `A.start`), and the 854x480 `A.rise.wide` and `A.focus` drew one
+effect surface each. The minimize step was not taken (Wayland).
+
 ## What is not verified
 
 - The replay has run on one GPU and one map. Its interruptions are forced: DXVK
@@ -707,12 +748,14 @@ stage, while the draw mode still stops at its direct3d stage.
 - The static model and sun shadow rules have run on one GPU and one map, at
   scene time 0 (so no spot light had a shadow map), through the replay and the
   script; the live camera has not been flown with them.
-- The map's effects have not yet run on a GPU or against a real map's scripts.
-  Exploders, loop sounds, effect sounds, marks and effects bolted to entities
-  are not played; spot light effects run, but their shadows need the scene time
-  to move. A spawn refused at one view and taken at a later one can make a
-  checkpoint's picture depend on the path to it; the report counts refused
-  spawn attempts.
+- The map's effects have run on one GPU and one map, `mp_crash`, whose scripts
+  place only oneshots, at scene time 0 through the replay and the script: no
+  loop has been retriggered and no effect has moved on a GPU, and the live
+  camera has not been flown with them. Exploders, loop sounds, effect sounds,
+  marks and effects bolted to entities are not played; spot light effects run,
+  but their shadows need the scene time to move. A spawn refused at one view
+  and taken at a later one can make a checkpoint's picture depend on the path
+  to it; the report counts refused spawn attempts (none on `mp_crash`).
 - The window input has met a real desktop through the window driver: its
   script (Wayland in RelWithDebInfo, X11 in Debug) and one 70 s live flight
   (Wayland), with the window `R_CreateWindow` made. The live flight was not
