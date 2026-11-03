@@ -1,6 +1,6 @@
 # Linux free camera: frame ownership, camera and input
 
-Status on 2026-11-02: **camera, frame owner and window input exist, and the
+Status on 2026-11-03: **camera, frame owner and window input exist, and the
 frame owner drives the engine renderer on a GPU with a real map.** The camera, its
 key bindings, the frame owner and the window input that feeds them are covered by
 asset-free tests. The `SceneRenderer` adapter over the engine renderer the
@@ -13,7 +13,10 @@ device. The replay passed on one laptop GPU with `mp_crash`
 [window driver](#the-window-driver) joins the adapter, the owner and the window
 input: the camera flown through the renderer's own window, live or by a checked
 script of SDL events. Its scripted run has passed on the same laptop under
-Wayland and X11, and David has flown the live camera there.
+Wayland and X11, and David has flown the live camera there. Every frame's
+[static models and sun shadow](#static-models-and-the-suns-shadow) are now
+counted and held to rules, and the replay and the script passed those rules on
+the same laptop.
 
 ## Why a host camera
 
@@ -200,7 +203,10 @@ Rules, any of which fails the run:
   empty frame after `R_Init` and after each reset, as many draws by the owner as
   by the renderer;
 - after the shutdown no device, Direct3D interface, registration, map or zone is
-  left.
+  left;
+- the static models and the sun's shadow: every frame's counts agree, the map's
+  cameras see both, and switching each off at `A.start` changes the picture
+  ([below](#static-models-and-the-suns-shadow)).
 
 Every frame of a leg must be drawn; a frame the owner reports as anything else
 stops the run with its stage. The run prints `free_camera_leg` (with how many of
@@ -354,6 +360,66 @@ its checkpoints with poses and digests and its steps; no pixels) and end with
 the pointer of a window on the desktop for a few seconds; nobody should use the
 mouse or keyboard meanwhile, because input that reaches the camera fails the run.
 
+## Static models and the sun's shadow
+
+The first widening of what the camera is checked on draws nothing new: the
+engine already draws the map's static models and the sun's shadow map in every
+free-camera frame. `R_RenderScene` adds the static models the visibility walk
+finds (`R_AddAllStaticModelSurfacesCamera`), and when the sun lights the view
+with shadow maps on it sets the sun's shadow map up (`R_SetupSunShadowMaps`)
+and adds the world's and the static models' surfaces to it. Most of what
+`mp_crash` shows is static models. Until now the free camera checked only the
+world's own surfaces, so a frame that lost its static models or its shadows
+could still pass.
+
+`DrawRefdef` (`world_draw_engine.cpp`) now also reads, for every frame:
+
+| Count | Where it comes from |
+| --- | --- |
+| static models in the world | `dpvs.smodelCount` |
+| static models drawn | static models whose camera visibility byte is still set after `R_RenderScene`: `R_AddAllStaticModelSurfacesCamera` clears it for each one it culls by distance or LOD or cannot light |
+| static model surfaces | the frame's lit, decal and emissive static model draw surfaces |
+| static model draw calls and triangles | the backend's `SMODELCACHED` and `SMODELRIGID` statistics |
+| sun, sun used, shadow maps | the world has a sun light; the camera's surfaces are lit by it (`scene.shadowableLightIsUsed`); `sm_enable` is on and the scene is drawn the standard way |
+| sun shadow drawn, its surfaces | `rg.drawSunShadow`; both partitions' draw surfaces, and how many of them are static models |
+
+`R_UpdateStatsTarget` sends draws into the shadow cookie and dynamic shadow
+targets to the second statistics view and everything else, the sun's shadow
+map included, to the first. So the world draw calls the probe has always
+reported include the world's draws into the sun's shadow map, and the static
+model counts here take both views.
+
+Rules (`world_draw_rules.h`), any of which fails the run:
+
+- **Counts agree** (`CheckSceneCounts`), on every drawn frame of the replay, the
+  window script and the live camera: static models the camera kept have
+  surfaces, the backend drew static models with triangles, and the sun's shadow
+  map is drawn exactly when the sun lights the view with shadow maps on, and is
+  then not empty.
+- **In view** (`CheckSceneInView`), at the map's own cameras (`A.start`,
+  `B.start`, the script's `W.start`): a world with static models shows some of
+  them, and a world with a sun has its shadow map drawn.
+- **Switched off** (`CheckSwitchedOff`), in the replay at `A.start`: the view is
+  settled with `r_drawSModels` off, then on again, and the same with
+  `sm_sunEnable` (the sun shadow switch the game's scripts use). Without them
+  the counts must show them gone and the picture must differ; with them back it
+  must be `A.start`'s picture again. The replay prints a `free_camera_switch`
+  line for each.
+- **Nothing left out**: none of the renderer's own warnings that it left
+  something out of a frame (`R_WarnOncePerFrame`'s "not drawing" kinds, such as
+  too many visible static models to light) has printed during the run.
+- **Refusal**: the replay and the window driver refuse at the start stage, before
+  any device work, when `r_drawSModels`, `sm_enable` or `sm_sunEnable` is off,
+  as a command-line `+set` can leave them, rather than pass without what they
+  check. The draw mode keeps those switches as diagnostics.
+
+Each `world_draw_frame` line gains `smodels=<drawn>/<in world>`,
+`smodel_surfs`, `smodel_calls`, `smodel_tris`, `sun_shadow=drawn|no_sun|sun_unused|maps_off|not_drawn`
+and `sun_shadow_surfs=<static model>/<all>`; each frame in the reports gains
+`static_models` and `sun_shadow` objects. Legs report how many frames drew no
+static model and no sun shadow, the replay's report lists its switches, and both
+reports list any warning that left something out (`dropped_draw_warnings`).
+
 ## What is verified
 
 Window input, asset-free, Clang 18 `-m32`, the dummy video driver of SDL 3.2.10
@@ -450,6 +516,44 @@ normal frames): the free camera has no collision and flew through a wall into
 the air behind it. The leg frames whose eye is in solid (two in `A.fast`, four
 in `A.rise`) drew normally, and every checkpoint settled on a full picture.
 
+Static models and the sun's shadow, in the cloud sandbox only: the target
+builds in Debug and RelWithDebInfo with `-Wall -Wextra -Werror`, the rules pass
+`world_draw_rules` (each shown to accept a sunlit view with static models and to
+reject one with one thing wrong), and `test_world_draw_probe.py` checks the
+start refusal for the replay, the live camera and the script, and that the
+draw mode still runs without those switches.
+
+Static models and the sun's shadow on a GPU, on the same laptop (local runs, not
+CI evidence), 2026-11-03, on bd993cf (the same tree as this change's 444430d): the
+replay in RelWithDebInfo (run N=45) and Debug (N=46), and the window driver's
+script in RelWithDebInfo under Wayland (N=47). All three passed with no problem
+and no "not drawing" warning. The two replay builds printed the same lines apart
+from times, and the script's checkpoints on path A had the replay's digests
+and counts (`W.start` is `A.start`). At `A.start` the camera kept 862 of the map's 4,038
+static models, and the switches gave:
+
+| `A.start` | digest | world draw calls | static models drawn | static model draw calls | sun shadow surfaces |
+| --- | --- | --- | --- | --- | --- |
+| as drawn | `0d3e46a38948e9a2` | 399 | 862 (124 surfaces, 132,662 triangles) | 356 | 200, 77 of them static models |
+| `r_drawSModels 0` | `9dd41beb94f2f293` | 399 | 0 | 0 | 123, none static models |
+| `sm_sunEnable 0` | `99ae63a503be5263` | 276 | 862 | 219 | none: the sun is unused |
+
+Each picture came back to `A.start`'s digest with its switch on again. Without
+the sun's shadow the world issues 123 fewer draw calls and the static models 137
+fewer, which shows the shadow map's draws counted with the scene as described
+above.
+
+Every checkpoint of both paths drew static models (from 81 at the script's
+`A.focus` to 862) and the sun's shadow, at 640x480, at 800x600 and at the
+script's 854x480, and after each interruption. Of the legs' frames only
+`B.square`'s lacked either: 1 of its 36 frames drew no static model and 11 drew
+no sun shadow. The sun counts as lighting the view only through the world
+surfaces in view (`R_AddAllBspDrawSurfacesCamera`; static models do not set
+it), and the counts rule held on all 11 frames, so in each of them the sun lit
+none of the world surfaces in view and the engine drew no shadow map for it.
+The two pocket frames, which drew no world surface, are among them; which the
+other frames were is not reported.
+
 Window driver, in the cloud sandbox only: it builds into the same target in
 Debug and RelWithDebInfo with `-Wall -Wextra -Werror`, and
 `test_world_draw_probe.py` runs both inputs against the stand-in library (each
@@ -500,6 +604,9 @@ window. DXVK printed no warning or error.
 - Nothing is compared with a captured game frame.
 - That the game also draws nothing inside path B's pocket follows from the
   map's faces and the visibility walk's rules; it has not been seen on Windows.
+- The static model and sun shadow rules have run on one GPU and one map, at
+  scene time 0 (so no spot light had a shadow map), through the replay and the
+  script; the live camera has not been flown with them.
 - The window input has met a real desktop through the window driver: its
   script (Wayland in RelWithDebInfo, X11 in Debug) and one 70 s live flight
   (Wayland), with the window `R_CreateWindow` made. The live flight was not
@@ -527,3 +634,8 @@ passed there too.
 5. Then widen draw coverage in this order, each with its own fail-closed refusal
    and evidence: static models, effects, transparency/sorting, shadows and
    post-processing. Faithful appearance first; enhanced visuals stay optional.
+   Static models and the sun's shadow map, which the engine already drew, are
+   now counted, checked and switched off and on
+   ([above](#static-models-and-the-suns-shadow)). Spot light shadows are chosen
+   only when the scene time moves (`R_ChooseShadowedLights`), which the
+   replay's fixed time 0 never does; they come with effects, which need it too.

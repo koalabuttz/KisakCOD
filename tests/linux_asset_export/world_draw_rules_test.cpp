@@ -221,6 +221,83 @@ void CheckCounts()
     noTriangles.worldTriangles = 0;
     Fails(wdr::CheckDrawCounts(noTriangles), "world draw calls without triangles");
 }
+
+wdr::SceneCounts SunlitViewWithModels()
+{
+    wdr::SceneCounts counts;
+    counts.staticModels = 1200;
+    counts.staticModelsDrawn = 310;
+    counts.staticModelSurfaces = 420;
+    counts.staticModelDrawCalls = 150;
+    counts.staticModelTriangles = 90000;
+    counts.sunLight = counts.sunUsed = counts.shadowMaps = counts.sunShadowDrawn = true;
+    counts.sunShadowSurfaces = 600;
+    counts.sunShadowStaticModelSurfaces = 250;
+    return counts;
+}
+
+void CheckSceneCounts()
+{
+    const wdr::SceneCounts view = SunlitViewWithModels();
+    Passes(wdr::CheckSceneCounts(view), "a sunlit view with static models");
+    Passes(wdr::CheckSceneInView(view), "a map camera's sunlit view with static models");
+
+    wdr::SceneCounts indoors = view;
+    indoors.sunUsed = indoors.sunShadowDrawn = false;
+    indoors.sunShadowSurfaces = indoors.sunShadowStaticModelSurfaces = 0;
+    Passes(wdr::CheckSceneCounts(indoors), "a view the sun does not light");
+    Fails(wdr::CheckSceneInView(indoors), "a map camera with no sun shadow in a world with a sun");
+    wdr::SceneCounts noSun = indoors;
+    noSun.sunLight = false;
+    Passes(wdr::CheckSceneInView(noSun), "a map camera in a world without a sun");
+    wdr::SceneCounts shadowsOff = view;
+    shadowsOff.shadowMaps = shadowsOff.sunShadowDrawn = false;
+    shadowsOff.sunShadowSurfaces = shadowsOff.sunShadowStaticModelSurfaces = 0;
+    Passes(wdr::CheckSceneCounts(shadowsOff), "a sunlit view with shadow maps off");
+
+    wdr::SceneCounts none = view;
+    none.staticModelsDrawn = none.staticModelSurfaces = none.staticModelDrawCalls = none.staticModelTriangles = 0;
+    Passes(wdr::CheckSceneCounts(none), "a view with no static model in it");
+    Fails(wdr::CheckSceneInView(none), "a map camera that drew none of the world's static models");
+    wdr::SceneCounts noModels = none;
+    noModels.staticModels = 0;
+    Passes(wdr::CheckSceneInView(noModels), "a map camera in a world without static models");
+
+    wdr::SceneCounts tooMany = view;
+    tooMany.staticModelsDrawn = view.staticModels + 1;
+    Fails(wdr::CheckSceneCounts(tooMany), "more static models kept than the world has");
+    wdr::SceneCounts noSurfaces = view;
+    noSurfaces.staticModelSurfaces = 0;
+    Fails(wdr::CheckSceneCounts(noSurfaces), "static models kept with no surface");
+    wdr::SceneCounts noCalls = view;
+    noCalls.staticModelDrawCalls = 0;
+    Fails(wdr::CheckSceneCounts(noCalls), "static model surfaces the backend did not draw");
+    wdr::SceneCounts noTriangles = view;
+    noTriangles.staticModelTriangles = 0;
+    Fails(wdr::CheckSceneCounts(noTriangles), "static model draw calls without triangles");
+    wdr::SceneCounts strangeSun = view;
+    strangeSun.sunLight = false;
+    Fails(wdr::CheckSceneCounts(strangeSun), "a sun in use in a world without one");
+    wdr::SceneCounts skipped = view;
+    skipped.sunShadowDrawn = false;
+    skipped.sunShadowSurfaces = skipped.sunShadowStaticModelSurfaces = 0;
+    Fails(wdr::CheckSceneCounts(skipped), "a sunlit view whose shadow map was skipped");
+    wdr::SceneCounts unwanted = shadowsOff;
+    unwanted.sunShadowDrawn = true;
+    unwanted.sunShadowSurfaces = 10;
+    Fails(wdr::CheckSceneCounts(unwanted), "a sun shadow map drawn with shadow maps off");
+    wdr::SceneCounts empty = view;
+    empty.sunShadowSurfaces = empty.sunShadowStaticModelSurfaces = 0;
+    Fails(wdr::CheckSceneCounts(empty), "an empty sun shadow map");
+    wdr::SceneCounts moreModels = view;
+    moreModels.sunShadowStaticModelSurfaces = view.sunShadowSurfaces + 1;
+    Fails(wdr::CheckSceneCounts(moreModels), "more static model shadow surfaces than shadow surfaces");
+
+    Passes(wdr::CheckSwitchedOff("static models", true, 1, 2, 1), "a switch that takes something visible out");
+    Fails(wdr::CheckSwitchedOff("static models", false, 1, 2, 1), "a switch the counts do not follow");
+    Fails(wdr::CheckSwitchedOff("static models", true, 1, 1, 1), "a switch that changes nothing on screen");
+    Fails(wdr::CheckSwitchedOff("static models", true, 1, 2, 3), "a switch that does not come back");
+}
 } // namespace
 
 int main()
@@ -229,6 +306,7 @@ int main()
     CheckFrames();
     CheckRepeatsAndViews();
     CheckCounts();
+    CheckSceneCounts();
     if (failures)
     {
         std::printf("world_draw_rules_test: %d failure(s)\n", failures);

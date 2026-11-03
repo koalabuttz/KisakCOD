@@ -106,7 +106,12 @@ time 0), `R_SetLodOrigin`, `R_RenderScene`, `R_EndFrame` and
 Before `R_EndFrame` the probe reads the front end's counts for the view: lit,
 decal and emissive draw surfaces. After the backend ran and presented, it reads
 the backend's own world statistics (draw calls and triangles) and the back
-buffer. The back buffer is read the way the engine's `R_GetBackBufferData` reads
+buffer. `R_UpdateStatsTarget` keeps only the shadow cookie and dynamic shadow
+targets apart, so the world statistics include the world's draws into the sun's
+shadow map. Each frame also carries the static model and sun shadow counts the
+free camera holds to rules
+([linux-free-camera.md](linux-free-camera.md#static-models-and-the-suns-shadow));
+the draw mode reports them and checks none of them. The back buffer is read the way the engine's `R_GetBackBufferData` reads
 it after its cubemap frames: `GetBackBuffer`, an offscreen plain surface,
 `GetRenderTargetData`, `LockRect`.
 
@@ -147,7 +152,8 @@ they happen:
 - `world_draw_layout`, `world_draw_renderer=starting|started`,
   `world_draw_graphics_zones`, `world_draw_map`;
 - two `world_draw_camera` lines, then `world_draw_first_frame`;
-- one `world_draw_frame` line per draw, with the measurements and counts, the
+- one `world_draw_frame` line per draw, with the measurements and counts
+  (world, static models, sun shadow), the
   surfaces it moved into the static model cache (`smc_patches`) and a 64-bit
   digest of the pixels, and one `world_draw_view` line per view with its number
   of draws and whether it settled;
@@ -300,7 +306,10 @@ temporary tree holding nothing but a one-line stub `fileSysCheck.cfg`:
   their own `stage=direct3d`, before the window is adopted, and an unknown
   input, an input in the draw mode and a bad or misplaced time limit must be
   refused first;
-- all fifteen runs exit 1 and write nothing.
+- the replay, the live camera and the script must refuse at their start stage
+  when `r_drawSModels`, `sm_enable` or `sm_sunEnable` is off, and the draw mode
+  with static models and the sun shadow off must still stop at `stage=direct3d`;
+- all nineteen runs exit 1 and write nothing.
 
 No DXVK library, Vulkan, GPU or game data is involved. A pass there means the
 probe builds and fails closed. It says nothing about a device, a map or a frame.

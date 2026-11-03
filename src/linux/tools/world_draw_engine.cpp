@@ -11,6 +11,9 @@
 #include <client_mp/client_mp.h>
 #include <gfx_d3d/r_bsp.h>
 #include <gfx_d3d/r_buffers.h>
+#include <gfx_d3d/r_debug.h>
+#include <gfx_d3d/r_draw_method.h>
+#include <gfx_d3d/r_drawsurf.h>
 #include <gfx_d3d/r_dvars.h>
 #include <gfx_d3d/r_image.h>
 #include <gfx_d3d/r_init.h>
@@ -39,6 +42,9 @@
 extern int32_t g_zoneCount;
 extern XZone g_zones[];
 extern uint8_t g_zoneHandles[];
+// When each renderer warning may print again (src/gfx_d3d/r_warn.cpp): zero
+// until R_WarnOncePerFrame first prints it. Read only.
+extern uint32_t s_warnCount[R_WARN_COUNT];
 
 namespace kisak_world_draw_engine
 {
@@ -310,21 +316,88 @@ FrameResult DrawRefdef(refdef_s &refdef, bool readBack, const std::function<void
     if (inspect)
         inspect(view);
 
+    // The static models and the sun's shadow map, as the front end left them.
+    // R_AddAllStaticModelSurfacesCamera clears the visibility byte of every static
+    // model it culls or cannot light, so the ones still set are the ones it kept.
+    wdr::SceneCounts &inScene = result.scene;
+    const GfxWorldDpvsStatic &dpvs = rgp.world->dpvs;
+    inScene.staticModels = dpvs.smodelCount;
+    for (uint32_t i = 0; i < dpvs.smodelCount; ++i)
+        inScene.staticModelsDrawn += dpvs.smodelVisData[0][i] != 0;
+    inScene.staticModelSurfaces = uint32_t(scene.drawSurfCount[DRAW_SURF_SMODEL_CAMERA_LIT] +
+                                           scene.drawSurfCount[DRAW_SURF_SMODEL_CAMERA_DECAL] +
+                                           scene.drawSurfCount[DRAW_SURF_SMODEL_CAMERA_EMISSIVE]);
+    const uint32_t sun = rgp.world->sunPrimaryLightIndex;
+    inScene.sunLight = sun != 0;
+    inScene.sunUsed = sun != 0 && ((scene.shadowableLightIsUsed[sun >> 5] >> (sun & 31)) & 1u) != 0;
+    inScene.shadowMaps = sm_enable->current.enabled && gfxDrawMethod.drawScene == GFX_DRAW_SCENE_STANDARD;
+    inScene.sunShadowDrawn = rg.drawSunShadow != 0;
+    if (inScene.sunShadowDrawn)
+    {
+        // Only a frame that set the shadow map up wrote its partitions.
+        inScene.sunShadowSurfaces =
+            view.sunShadow.partition[0].info.drawSurfCount + view.sunShadow.partition[1].info.drawSurfCount;
+        inScene.sunShadowStaticModelSurfaces = uint32_t(scene.drawSurfCount[DRAW_SURF_SMODEL_SUNSHADOW_0] +
+                                                        scene.drawSurfCount[DRAW_SURF_SMODEL_SUNSHADOW_1]);
+    }
+
     R_EndFrame();
     R_IssueRenderCommands(0xFFFFFFFF);
 
     // RB_BeginFrame zeroed the counters at the start of this frame's backend work.
-    // viewStats[0] counts draws into the scene's own targets; viewStats[1] counts
-    // the shadow maps (R_UpdateStatsTarget), which are not the camera's view.
+    // R_UpdateStatsTarget sends draws into the shadow cookie and dynamic shadow
+    // targets to viewStats[1] and every other draw, the sun's shadow map
+    // included, to viewStats[0]. The world counts are viewStats[0]'s; the static
+    // model counts take both, so they include the static models drawn into the
+    // sun's shadow map.
     const GfxPrimStats &world = g_frameStatsCur.viewStats[0].primStats[GFX_PRIM_STATS_WORLD];
     result.counts.worldDrawCalls = uint32_t(world.primCount);
     result.counts.worldTriangles = uint32_t(world.triCount);
+    for (const GfxViewStats &stats : g_frameStatsCur.viewStats)
+        for (int kind : {GFX_PRIM_STATS_SMODELCACHED, GFX_PRIM_STATS_SMODELRIGID})
+        {
+            inScene.staticModelDrawCalls += uint32_t(stats.primStats[kind].primCount);
+            inScene.staticModelTriangles += uint32_t(stats.primStats[kind].triCount);
+        }
     const HRESULT level = dx.device->TestCooperativeLevel();
     Require(level == D3D_OK, "frame", "the device is not ready after the frame: " + Hex(uint32_t(level)));
     if (readBack)
         result.stats = ReadBackBuffer();
     result.seconds = Seconds(started);
     return result;
+}
+
+std::vector<std::string> DroppedDrawWarnings()
+{
+    // Each warning whose message (s_warnFormat, src/gfx_d3d/r_warn.cpp) says the
+    // renderer left something out: a model, surface, mesh, effect element or light.
+    static constexpr struct
+    {
+        GfxWarningType type;
+        const char *name;
+    } kDropping[] = {
+        {R_WARN_FRONTEND_ENT_LIMIT, "R_WARN_FRONTEND_ENT_LIMIT"},
+        {R_WARN_MODEL_LIGHT_CACHE, "R_WARN_MODEL_LIGHT_CACHE"},
+        {R_WARN_TEMP_SKIN_BUF_SIZE, "R_WARN_TEMP_SKIN_BUF_SIZE"},
+        {R_WARN_MAX_SKINNED_CACHE_VERTICES, "R_WARN_MAX_SKINNED_CACHE_VERTICES"},
+        {R_WARN_MAX_SCENE_SURFS_SIZE, "R_WARN_MAX_SCENE_SURFS_SIZE"},
+        {R_WARN_MAX_CLOUDS, "R_WARN_MAX_CLOUDS"},
+        {R_WARN_SMODEL_LIGHTING, "R_WARN_SMODEL_LIGHTING"},
+        {R_WARN_MAX_DRAWSURFS, "R_WARN_MAX_DRAWSURFS"},
+        {R_WARN_GFX_CODE_MESH_LIMIT, "R_WARN_GFX_CODE_MESH_LIMIT"},
+        {R_WARN_GFX_MARK_MESH_LIMIT, "R_WARN_GFX_MARK_MESH_LIMIT"},
+        {R_WARN_MAX_SCENE_DRAWSURFS, "R_WARN_MAX_SCENE_DRAWSURFS"},
+        {R_WARN_MAX_FX_DRAWSURFS, "R_WARN_MAX_FX_DRAWSURFS"},
+        {R_WARN_PRIM_DRAW_SURF_BUFFER_SIZE, "R_WARN_PRIM_DRAW_SURF_BUFFER_SIZE"},
+        {R_WARN_CMDBUF_OVERFLOW, "R_WARN_CMDBUF_OVERFLOW"},
+        {R_WARN_SPOT_LIGHT_LIMIT, "R_WARN_SPOT_LIGHT_LIMIT"},
+        {R_WARN_FX_ELEM_LIMIT, "R_WARN_FX_ELEM_LIMIT"},
+    };
+    std::vector<std::string> fired;
+    for (const auto &warning : kDropping)
+        if (s_warnCount[warning.type] != 0)
+            fired.push_back(warning.name);
+    return fired;
 }
 
 // ---- the map ----------------------------------------------------------------
@@ -450,6 +523,7 @@ std::string FrameJson(const FrameResult &frame)
 {
     const wdr::FrameStats &s = frame.stats;
     const wdr::DrawCounts &c = frame.counts;
+    const wdr::SceneCounts &m = frame.scene;
     std::ostringstream json;
     char share[32], luma[32], deviation[32];
     std::snprintf(share, sizeof(share), "%.4f", s.dominantShare);
@@ -460,7 +534,14 @@ std::string FrameJson(const FrameResult &frame)
          << ",\"detail_tiles\":" << s.detailTiles << ",\"digest\":\"" << Hex64(s.digest) << "\""
          << ",\"lit_surfaces\":" << c.litSurfaces << ",\"decal_surfaces\":" << c.decalSurfaces
          << ",\"emissive_surfaces\":" << c.emissiveSurfaces << ",\"world_draw_calls\":" << c.worldDrawCalls
-         << ",\"world_triangles\":" << c.worldTriangles << ",\"smc_patches\":" << frame.smcPatches
+         << ",\"world_triangles\":" << c.worldTriangles << ",\"static_models\":{\"in_world\":"
+         << m.staticModels << ",\"drawn\":" << m.staticModelsDrawn << ",\"surfaces\":" << m.staticModelSurfaces
+         << ",\"draw_calls\":" << m.staticModelDrawCalls << ",\"triangles\":" << m.staticModelTriangles
+         << "},\"sun_shadow\":{\"sun\":" << (m.sunLight ? "true" : "false")
+         << ",\"sun_used\":" << (m.sunUsed ? "true" : "false") << ",\"shadow_maps\":"
+         << (m.shadowMaps ? "true" : "false") << ",\"drawn\":" << (m.sunShadowDrawn ? "true" : "false")
+         << ",\"surfaces\":" << m.sunShadowSurfaces << ",\"static_model_surfaces\":"
+         << m.sunShadowStaticModelSurfaces << "},\"smc_patches\":" << frame.smcPatches
          << ",\"seconds\":" << frame.seconds << "}";
     return json.str();
 }
@@ -469,11 +550,20 @@ void SayFrame(const char *label, int draw, const FrameResult &frame)
 {
     const wdr::FrameStats &s = frame.stats;
     const wdr::DrawCounts &c = frame.counts;
+    const wdr::SceneCounts &m = frame.scene;
     Say("world_draw_frame view=%s draw=%d size=%ux%u colors=%zu dominant=%.3f luma=%.1f+-%.1f detail_tiles=%u "
-        "digest=%s lit=%u decal=%u emissive=%u world_calls=%u world_tris=%u smc_patches=%u seconds=%.3f\n",
+        "digest=%s lit=%u decal=%u emissive=%u world_calls=%u world_tris=%u smodels=%u/%u smodel_surfs=%u "
+        "smodel_calls=%u smodel_tris=%u sun_shadow=%s sun_shadow_surfs=%u/%u smc_patches=%u seconds=%.3f\n",
         label, draw, s.width, s.height, s.distinctColors, s.dominantShare, s.meanLuma, s.lumaStdDev, s.detailTiles,
         Hex64(s.digest).c_str(), c.litSurfaces, c.decalSurfaces, c.emissiveSurfaces, c.worldDrawCalls,
-        c.worldTriangles, frame.smcPatches, frame.seconds);
+        c.worldTriangles, m.staticModelsDrawn, m.staticModels, m.staticModelSurfaces, m.staticModelDrawCalls,
+        m.staticModelTriangles,
+        m.sunShadowDrawn  ? "drawn"
+        : !m.sunLight    ? "no_sun"
+        : !m.sunUsed     ? "sun_unused"
+        : !m.shadowMaps  ? "maps_off"
+                         : "not_drawn",
+        m.sunShadowStaticModelSurfaces, m.sunShadowSurfaces, frame.smcPatches, frame.seconds);
 }
 
 } // namespace kisak_world_draw_engine
