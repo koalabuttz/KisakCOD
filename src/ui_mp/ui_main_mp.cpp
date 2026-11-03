@@ -826,9 +826,8 @@ int UI_GetServerStatusInfo(char *serverAddress, serverStatusInfo_t *info)
 
 int numFound;
 int numTimeOuts;
-uiInfo_s *UI_BuildFindPlayerList()
+void UI_BuildFindPlayerList()
 {
-    uiInfo_s *result; // eax
     const char *v1; // eax
     int j; // [esp+4h] [ebp-1144h]
     serverStatusInfo_t info; // [esp+8h] [ebp-1140h] BYREF
@@ -838,11 +837,9 @@ uiInfo_s *UI_BuildFindPlayerList()
     char buf[1028]; // [esp+D40h] [ebp-408h] BYREF
 
     uiInfo = &uiInfoArray;
-    result = &uiInfoArray;
     if (uiInfoArray.nextFindPlayerRefresh)
     {
-        result = (uiInfo_s *)uiInfo->nextFindPlayerRefresh;
-        if ((int)result <= uiInfo->uiDC.realTime)
+        if (uiInfo->nextFindPlayerRefresh <= uiInfo->uiDC.realTime)
         {
             UI_UpdateDisplayServers(uiInfo);
             for (i = 0; i < 16; ++i)
@@ -853,11 +850,11 @@ uiInfo_s *UI_BuildFindPlayerList()
                     ++numFound;
                     for (j = 0; j < info.numLines; ++j)
                     {
-                        if (*(_DWORD *)&info.text[16 * j - 2040])
+                        if (info.lines[j][2])
                         {
-                            if (**(_BYTE **)&info.text[16 * j - 2040])
+                            if (*info.lines[j][2])
                             {
-                                I_strncpyz(dest, *(char **)&info.text[16 * j - 2036], 34);
+                                I_strncpyz(dest, info.lines[j][3], 34);
                                 I_CleanStr(dest);
                                 if (stristr(dest, uiInfo->findPlayerName))
                                 {
@@ -930,7 +927,7 @@ uiInfo_s *UI_BuildFindPlayerList()
                 if (uiInfo->numFoundPlayerServers)
                 {
                     if (uiInfo->numFoundPlayerServers == 2)
-                        result = (uiInfo_s *)Com_sprintf(
+                        Com_sprintf(
                             uiInfo->foundPlayerServerAddresses[uiInfo->numFoundPlayerServers + 15],
                             0x40u,
                             "%d server%s found with player %s",
@@ -938,7 +935,7 @@ uiInfo_s *UI_BuildFindPlayerList()
                             "",
                             uiInfo->findPlayerName);
                     else
-                        result = (uiInfo_s *)Com_sprintf(
+                        Com_sprintf(
                             uiInfo->foundPlayerServerAddresses[uiInfo->numFoundPlayerServers + 15],
                             0x40u,
                             "%d server%s found with player %s",
@@ -948,7 +945,7 @@ uiInfo_s *UI_BuildFindPlayerList()
                 }
                 else
                 {
-                    result = (uiInfo_s *)Com_sprintf(
+                    Com_sprintf(
                         uiInfo->foundPlayerServerAddresses[uiInfo->numFoundPlayerServers + 15],
                         0x40u,
                         "no servers found");
@@ -957,12 +954,10 @@ uiInfo_s *UI_BuildFindPlayerList()
             }
             else
             {
-                result = uiInfo;
                 uiInfo->nextFindPlayerRefresh = uiInfo->uiDC.realTime + 25;
             }
         }
     }
-    return result;
 }
 
 void UI_Refresh(int localClientNum)
