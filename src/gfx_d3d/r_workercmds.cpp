@@ -21,7 +21,7 @@
 
 #include <setjmp.h>
 
-void(__cdecl *g_cmdExecFailed[WRKCMD_COUNT])();
+void(*g_cmdExecFailed[WRKCMD_COUNT])();
 volatile WorkerCmdType g_waitTypeMainThread;
 
 //long volatile g_workerCmdWaitCount 85b4fc54     gfx_d3d : r_workercmds.obj
@@ -46,27 +46,27 @@ ShadowCookieCmd g_shadowCookieBuf[1];
 
 WorkerCmds g_workerCmds[WRKCMD_COUNT];
 
-int __cdecl R_FXNonDependentOrSpotLightPending(void* args)
+int R_FXNonDependentOrSpotLightPending(void* args)
 {
     return R_FXSpotLightPending() || R_FXNonDependentPending();
 }
 
-bool __cdecl R_FXSpotLightPending()
+bool R_FXSpotLightPending()
 {
     return g_workerCmds[WRKCMD_UPDATE_FX_SPOT_LIGHT].inSize > 0;
 }
 
-bool __cdecl R_FXNonDependentPending()
+bool R_FXNonDependentPending()
 {
     return g_workerCmds[WRKCMD_UPDATE_FX_NON_DEPENDENT].inSize > 0;
 }
 
-int __cdecl R_EndFenceBusy(void *args)
+int R_EndFenceBusy(void *args)
 {
     return R_EndFencePending();
 }
 
-void __cdecl TRACK_r_workercmds()
+void TRACK_r_workercmds()
 {
     track_static_alloc_internal(g_GfxEntityBoundsBuf, 1024, "g_GfxEntityBoundsBuf", 18);
     track_static_alloc_internal(g_SkinGfxEntityBuf, 4096, "g_SkinGfxEntityBuf", 18);
@@ -84,7 +84,7 @@ static LONG R_GetWorkerCmdMinType()
     return InterlockedCompareExchange(&g_workerCmdMinType, 0, 0);
 }
 
-int __cdecl R_ProcessWorkerCmdsWithTimeoutInternal(int(__cdecl *timeout)())
+int R_ProcessWorkerCmdsWithTimeoutInternal(int(*timeout)())
 {
     int processed; // [esp+0h] [ebp-Ch]
     WorkerCmdType minType; // [esp+4h] [ebp-8h]
@@ -132,7 +132,7 @@ int __cdecl R_ProcessWorkerCmdsWithTimeoutInternal(int(__cdecl *timeout)())
 }
 
 LONG g_workerCmdWaitCount;
-void __cdecl R_ProcessWorkerCmdsWithTimeout(int(__cdecl *timeout)(), int forever)
+void R_ProcessWorkerCmdsWithTimeout(int(*timeout)(), int forever)
 {
     while (!timeout() && !R_ProcessWorkerCmdsWithTimeoutInternal(timeout) && forever)
     {
@@ -148,7 +148,7 @@ void __cdecl R_ProcessWorkerCmdsWithTimeout(int(__cdecl *timeout)(), int forever
     }
 }
 
-void __cdecl R_WaitWorkerCmdsOfType(WorkerCmdType type)
+void R_WaitWorkerCmdsOfType(WorkerCmdType type)
 {
     iassert(Sys_IsMainThread());
     g_waitTypeMainThread = type;
@@ -161,7 +161,7 @@ void __cdecl R_WaitWorkerCmdsOfType(WorkerCmdType type)
     g_waitTypeMainThread = (WorkerCmdType)-1;
 }
 
-void __cdecl R_NotifyWorkerCmdType(WorkerCmdType type)
+void R_NotifyWorkerCmdType(WorkerCmdType type)
 {
     LONG value = InterlockedCompareExchange(&g_workerCmdMinType, 0, 0);
     if (value > type)
@@ -171,12 +171,12 @@ void __cdecl R_NotifyWorkerCmdType(WorkerCmdType type)
         Sys_SetWorkerCmdEvent();
 }
 
-int __cdecl R_WorkerCmdsFinished()
+int R_WorkerCmdsFinished()
 {
     return g_workerCmds[g_waitTypeMainThread].inSize == 0;
 }
 
-void __cdecl R_ProcessWorkerCmds()
+void R_ProcessWorkerCmds()
 {
     int processed; // [esp+0h] [ebp-Ch]
     WorkerCmdType minType; // [esp+4h] [ebp-8h]
@@ -213,7 +213,7 @@ void __cdecl R_ProcessWorkerCmds()
     } while (processed || minType);
 }
 
-int __cdecl R_ProcessWorkerCmd(WorkerCmdType type)
+int R_ProcessWorkerCmd(WorkerCmdType type)
 {
     int v2; // eax
     int v3; // eax
@@ -303,7 +303,7 @@ int __cdecl R_ProcessWorkerCmd(WorkerCmdType type)
     return 1;
 }
 
-void __cdecl R_ProcessWorkerCmdInternal(WorkerCmdType type, void *data)
+void R_ProcessWorkerCmdInternal(WorkerCmdType type, void *data)
 {
     R_NotifyWorkerCmdType(type);
     switch (type)
@@ -381,7 +381,7 @@ void R_InitWorkerThreads()
         R_InitWorkerCmds();
         for (workerThreadIndexa = 0; workerThreadIndexa < 2; ++workerThreadIndexa)
         {
-            if (!Sys_SpawnWorkerThread((void(__cdecl *)(uint32_t))R_WorkerThread, workerThreadIndexa))
+            if (!Sys_SpawnWorkerThread((void(*)(uint32_t))R_WorkerThread, workerThreadIndexa))
                 Com_Error(ERR_FATAL, "Failed to create thread");
         }
     }
@@ -489,7 +489,7 @@ int R_InitWorkerCmdsPos()
     return result;
 }
 
-void __cdecl  R_WorkerThread()
+void R_WorkerThread()
 {
     void *Value; // eax
 
@@ -513,7 +513,7 @@ void __cdecl  R_WorkerThread()
     }
 }
 
-void __cdecl R_AddWorkerCmd(WorkerCmdType type, uint8_t *data)
+void R_AddWorkerCmd(WorkerCmdType type, uint8_t *data)
 {
     LONG* Destination; // [esp+30h] [ebp-20h]
     int bufCount; // [esp+34h] [ebp-1Ch]
@@ -563,7 +563,7 @@ void __cdecl R_AddWorkerCmd(WorkerCmdType type, uint8_t *data)
     R_ProcessWorkerCmdInternal(type, data);
 }
 
-void __cdecl R_UpdateActiveWorkerThreads()
+void R_UpdateActiveWorkerThreads()
 {
     char v0; // [esp+3h] [ebp-9h]
     uint32_t i; // [esp+4h] [ebp-8h]
@@ -598,7 +598,7 @@ LABEL_9:
     }
 }
 
-void __cdecl R_WaitFrontendWorkerCmds()
+void R_WaitFrontendWorkerCmds()
 {
     iassert(Sys_IsMainThread());
 
@@ -608,7 +608,7 @@ void __cdecl R_WaitFrontendWorkerCmds()
     R_ProcessWorkerCmdsWithTimeout(R_FinishedWorkerCmds, 1);
 }
 
-int __cdecl R_FinishedWorkerCmds()
+int R_FinishedWorkerCmds()
 {
     WorkerCmdType type; // [esp+4h] [ebp-4h]
 
@@ -620,7 +620,7 @@ int __cdecl R_FinishedWorkerCmds()
     return 1;
 }
 
-void __cdecl R_WaitWorkerCmds()
+void R_WaitWorkerCmds()
 {
 #ifndef KISAK_SP
     iassert(Sys_IsMainThread());

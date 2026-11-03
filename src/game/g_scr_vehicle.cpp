@@ -105,7 +105,7 @@ cspField_t s_vehicleFields[33] =
 }; // idb
 
 
-gentity_s *__cdecl GScr_GetVehicle(scr_entref_t entref)
+gentity_s *GScr_GetVehicle(scr_entref_t entref)
 {
     if (!entref.classnum)
         return VEH_GetVehicle(entref.entnum);
@@ -113,7 +113,7 @@ gentity_s *__cdecl GScr_GetVehicle(scr_entref_t entref)
     return 0;
 }
 
-gentity_s *__cdecl VEH_GetVehicle(int32_t entNum)
+gentity_s *VEH_GetVehicle(int32_t entNum)
 {
     iassert(entNum < MAX_GENTITIES);
 
@@ -129,7 +129,7 @@ gentity_s *__cdecl VEH_GetVehicle(int32_t entNum)
     return &g_entities[entNum];
 }
 
-void __cdecl VEH_InitEntity(gentity_s *ent, scr_vehicle_s *veh, int32_t infoIdx)
+void VEH_InitEntity(gentity_s *ent, scr_vehicle_s *veh, int32_t infoIdx)
 {
 #ifdef KISAK_MP
     ent->handler = ENT_HANDLER_HELICOPTER;
@@ -189,7 +189,7 @@ void __cdecl VEH_InitEntity(gentity_s *ent, scr_vehicle_s *veh, int32_t infoIdx)
 #endif
 }
 
-void __cdecl VEH_InitVehicle(gentity_s *ent, scr_vehicle_s *veh, short infoIdx)
+void VEH_InitVehicle(gentity_s *ent, scr_vehicle_s *veh, short infoIdx)
 {
 #ifdef KISAK_SP
     G_VehInitPathPos(&veh->pathPos);
@@ -255,7 +255,7 @@ void __cdecl VEH_InitVehicle(gentity_s *ent, scr_vehicle_s *veh, short infoIdx)
     VEH_SetPosition(ent, ent->r.currentOrigin, vec3_origin, ent->r.currentAngles);
 }
 
-void __cdecl VEH_InitPhysics(gentity_s *ent)
+void VEH_InitPhysics(gentity_s *ent)
 {
     vehicle_physic_t *phys = &ent->scr_vehicle->phys;
 
@@ -328,7 +328,7 @@ const float s_correctSolidDeltas[26][3] =
   { 1.0f, 1.0f, -1.0f },
   { -1.0f, 1.0f, -1.0f }
 }; // idb
-int32_t __cdecl VEH_CorrectAllSolid(gentity_s *ent, trace_t *trace)
+int32_t VEH_CorrectAllSolid(gentity_s *ent, trace_t *trace)
 {
     vehicle_physic_t *phys; // [esp+10h] [ebp-18h]
     uint32_t i; // [esp+18h] [ebp-10h]
@@ -352,12 +352,12 @@ int32_t __cdecl VEH_CorrectAllSolid(gentity_s *ent, trace_t *trace)
     return 0;
 }
 
-void __cdecl VEH_ClearGround()
+void VEH_ClearGround()
 {
     s_phys.hasGround = 0;
 }
 
-void __cdecl VEH_ClipVelocity(float *in, float *normal, float *out)
+void VEH_ClipVelocity(float *in, float *normal, float *out)
 {
     double v3; // st7
     float change; // [esp+0h] [ebp-Ch]
@@ -387,7 +387,7 @@ void __cdecl VEH_ClipVelocity(float *in, float *normal, float *out)
     }
 }
 
-void __cdecl VEH_GroundTrace(gentity_s *ent)
+void VEH_GroundTrace(gentity_s *ent)
 {
     scr_vehicle_s *veh; // [esp+Ch] [ebp-48h]
     float start[3]; // [esp+10h] [ebp-44h] BYREF
@@ -413,7 +413,7 @@ void __cdecl VEH_GroundTrace(gentity_s *ent)
     }
 }
 
-void __cdecl VEH_GroundMove(gentity_s *ent, float frameTime)
+void VEH_GroundMove(gentity_s *ent, float frameTime)
 {
     float oldvel[3]; // [esp+28h] [ebp-Ch] BYREF
 
@@ -433,7 +433,7 @@ void __cdecl VEH_GroundMove(gentity_s *ent, float frameTime)
         VEH_StepSlideMove(ent, 0, frameTime);
 }
 
-void __cdecl VEH_StepSlideMove(gentity_s *ent, int32_t gravity, float frameTime)
+void VEH_StepSlideMove(gentity_s *ent, int32_t gravity, float frameTime)
 {
     vehicle_physic_t *phys; // [esp+10h] [ebp-70h]
     scr_vehicle_s *veh; // [esp+14h] [ebp-6Ch]
@@ -479,7 +479,7 @@ void __cdecl VEH_StepSlideMove(gentity_s *ent, int32_t gravity, float frameTime)
     }
 }
 
-bool __cdecl VEH_SlideMove(gentity_s *ent, int gravity, float frameTime)
+bool VEH_SlideMove(gentity_s *ent, int gravity, float frameTime)
 {
     float *v3; // [esp+24h] [ebp-D4h]
     float timeLeft; // [esp+30h] [ebp-C8h]
@@ -604,14 +604,14 @@ bool __cdecl VEH_SlideMove(gentity_s *ent, int gravity, float frameTime)
 }
 
 #ifdef KISAK_MP
-void __cdecl VEH_AirMove(gentity_s *ent, int32_t gravity, float frameTime)
+void VEH_AirMove(gentity_s *ent, int32_t gravity, float frameTime)
 {
     if (s_phys.hasGround)
         VEH_ClipVelocity(ent->scr_vehicle->phys.vel, s_phys.groundTrace.normal, ent->scr_vehicle->phys.vel);
     VEH_StepSlideMove(ent, gravity, frameTime);
 }
 #elif KISAK_SP
-void __cdecl VEH_AirMove(gentity_s *ent, int32_t gravity)
+void VEH_AirMove(gentity_s *ent, int32_t gravity)
 {
     if (s_phys.hasGround)
         VEH_ClipVelocity(ent->scr_vehicle->phys.vel, s_phys.groundTrace.normal, ent->scr_vehicle->phys.vel);
@@ -619,7 +619,7 @@ void __cdecl VEH_AirMove(gentity_s *ent, int32_t gravity)
 }
 #endif
 
-void __cdecl VEH_UpdateBody(gentity_s *ent, float frameTime)
+void VEH_UpdateBody(gentity_s *ent, float frameTime)
 {
     scr_vehicle_s *veh; // [esp+Ch] [ebp-8h]
     float intensity; // [esp+10h] [ebp-4h]
@@ -646,7 +646,7 @@ void __cdecl VEH_UpdateBody(gentity_s *ent, float frameTime)
 // Wireframe debug capsule: top circle at (pos.x, pos.y, pos.z+height) and
 // bottom circle at pos, both radius=rad and color=(r,g,b,1).  Note the
 // trailing `0` (duration) matches CoD3SP — the MP version passes `1` here.
-void __cdecl VEH_DebugCapsule(float *pos, float rad, float height, float r, float g, float b)
+void VEH_DebugCapsule(float *pos, float rad, float height, float r, float g, float b)
 {
     float top[3];
     float color[4];
@@ -669,7 +669,7 @@ static void VEH_UnlinkPlayer(gentity_s *player);
 static void VEH_UpdateNonPilotClient(gentity_s *vehEnt);
 #endif
 
-void __cdecl Scr_Vehicle_Think(gentity_s *pSelf)
+void Scr_Vehicle_Think(gentity_s *pSelf)
 {
     vehicle_info_t *info; // [esp+4h] [ebp-8h]
     scr_vehicle_s *veh; // [esp+8h] [ebp-4h]
@@ -750,7 +750,7 @@ void __cdecl Scr_Vehicle_Think(gentity_s *pSelf)
     pSelf->nextthink = level.time + 50;
 }
 
-void __cdecl VEH_MoveTrace(gentity_s *ent)
+void VEH_MoveTrace(gentity_s *ent)
 {
     float diff[3]; // [esp+8h] [ebp-5Ch] BYREF
     int32_t contents; // [esp+14h] [ebp-50h]
@@ -784,7 +784,7 @@ void __cdecl VEH_MoveTrace(gentity_s *ent)
     }
 }
 
-void __cdecl VEH_BackupPosition(gentity_s *ent)
+void VEH_BackupPosition(gentity_s *ent)
 {
     iassert(ent);
     iassert(ent->scr_vehicle);
@@ -797,20 +797,20 @@ void __cdecl VEH_BackupPosition(gentity_s *ent)
     memcpy(&s_backup.phys, &veh->phys, sizeof(s_backup.phys));
 }
 
-void __cdecl VEH_TouchEntities(gentity_s *ent)
+void VEH_TouchEntities(gentity_s *ent)
 {
     int32_t v1; // [esp+Ch] [ebp-1080h]
     float maxs[3]; // [esp+18h] [ebp-1074h] BYREF
     DObj_s *obj; // [esp+24h] [ebp-1068h]
     scr_vehicle_s *scr_vehicle; // [esp+28h] [ebp-1064h]
     float b[3]; // [esp+2Ch] [ebp-1060h] BYREF
-    void(__cdecl * touch)(gentity_s *, gentity_s *, int); // [esp+38h] [ebp-1054h]
+    void(* touch)(gentity_s *, gentity_s *, int); // [esp+38h] [ebp-1054h]
     float v7; // [esp+3Ch] [ebp-1050h]
     gentity_s *target; // [esp+40h] [ebp-104Ch]
     float out[3]; // [esp+44h] [ebp-1048h] BYREF
     float v3[3]; // [esp+50h] [ebp-103Ch] BYREF
     float sum[3]; // [esp+5Ch] [ebp-1030h] BYREF
-    void(__cdecl * v12)(gentity_s *, gentity_s *, int); // [esp+68h] [ebp-1024h]
+    void(* v12)(gentity_s *, gentity_s *, int); // [esp+68h] [ebp-1024h]
     int32_t entityList[MAX_GENTITIES];
     int32_t i; // [esp+1070h] [ebp-1Ch]
     float mins[3]; // [esp+1074h] [ebp-18h] BYREF
@@ -953,7 +953,7 @@ void __cdecl VEH_TouchEntities(gentity_s *ent)
 #endif
 }
 
-void __cdecl VEH_PushEntity(gentity_s *ent, gentity_s *target, float *pushDir, float *deltaOrigin, float *deltaAngles)
+void VEH_PushEntity(gentity_s *ent, gentity_s *target, float *pushDir, float *deltaOrigin, float *deltaAngles)
 {
     iassert(ent);
     iassert(target);
@@ -978,7 +978,7 @@ void __cdecl VEH_PushEntity(gentity_s *ent, gentity_s *target, float *pushDir, f
     }
 }
 
-bool __cdecl AttachedStickyMissile(gentity_s *vehicle, gentity_s *missile)
+bool AttachedStickyMissile(gentity_s *vehicle, gentity_s *missile)
 {
     WeaponDef *weapDef; // [esp+0h] [ebp-4h]
 
@@ -998,7 +998,7 @@ bool __cdecl AttachedStickyMissile(gentity_s *vehicle, gentity_s *missile)
     return weapDef->stickiness == WEAPSTICKINESS_ALL;
 }
 
-void __cdecl PushAttachedStickyMissile(gentity_s *vehicle, gentity_s *missile)
+void PushAttachedStickyMissile(gentity_s *vehicle, gentity_s *missile)
 {
     scr_vehicle_s *scr_vehicle; // edx
     float newVehMat[3][3]; // [esp+10h] [ebp-F4h] BYREF
@@ -1033,7 +1033,7 @@ void __cdecl PushAttachedStickyMissile(gentity_s *vehicle, gentity_s *missile)
     Vec3Copy(missile->r.currentAngles, missile->s.lerp.apos.trBase);
 }
 
-void __cdecl VEH_UpdateAim(gentity_s *ent)
+void VEH_UpdateAim(gentity_s *ent)
 {
     float v1; // [esp+10h] [ebp-180h]
     float v2; // [esp+14h] [ebp-17Ch]
@@ -1224,7 +1224,7 @@ void __cdecl VEH_UpdateAim(gentity_s *ent)
 }
 
 
-void __cdecl VEH_UpdateAIMove(gentity_s *ent)
+void VEH_UpdateAIMove(gentity_s *ent)
 {
     VehicleMoveState moveState; // [esp+0h] [ebp-8h]
     scr_vehicle_s *veh; // [esp+4h] [ebp-4h]
@@ -1248,7 +1248,7 @@ void __cdecl VEH_UpdateAIMove(gentity_s *ent)
 #endif
 }
 
-void __cdecl VEH_UpdateMoveToGoal(gentity_s *ent, const float *goalPos)
+void VEH_UpdateMoveToGoal(gentity_s *ent, const float *goalPos)
 {
     double v2; // st7
     float v3; // [esp+10h] [ebp-B8h]
@@ -1378,14 +1378,14 @@ void __cdecl VEH_UpdateMoveToGoal(gentity_s *ent, const float *goalPos)
     }
 }
 
-bool __cdecl VEH_IsHovering(scr_vehicle_s *veh)
+bool VEH_IsHovering(scr_vehicle_s *veh)
 {
     if (!veh)
         MyAssertHandler(".\\game\\g_scr_vehicle.cpp", 2635, 0, "%s", "veh");
     return veh->moveState == VEH_MOVESTATE_HOVER;
 }
 
-void __cdecl VEH_UpdateMoveOrientation(gentity_s *ent, float *desiredDir)
+void VEH_UpdateMoveOrientation(gentity_s *ent, float *desiredDir)
 {
     float v2; // [esp+14h] [ebp-7Ch]
     float desiredAngle; // [esp+18h] [ebp-78h]
@@ -1452,7 +1452,7 @@ void __cdecl VEH_UpdateMoveOrientation(gentity_s *ent, float *desiredDir)
     VEH_UpdateAngleAndAngularVel(2, v2, angularAccel, angularDecel, 0.0f, phys);
 }
 
-void __cdecl VEH_UpdateAngleAndAngularVel(
+void VEH_UpdateAngleAndAngularVel(
     int32_t index,
     float desiredAngle,
     float accel,
@@ -1517,7 +1517,7 @@ void __cdecl VEH_UpdateAngleAndAngularVel(
     }
 }
 
-float __cdecl VEH_AccelerateSpeed(float speed, float tgtSpeed, float accel, float dt)
+float VEH_AccelerateSpeed(float speed, float tgtSpeed, float accel, float dt)
 {
     float speeda; // [esp+8h] [ebp+8h]
 
@@ -1536,7 +1536,7 @@ float __cdecl VEH_AccelerateSpeed(float speed, float tgtSpeed, float accel, floa
     return speeda;
 }
 
-float __cdecl VEH_UpdateMove_GetDesiredYaw(scr_vehicle_s *veh, float *desiredDir)
+float VEH_UpdateMove_GetDesiredYaw(scr_vehicle_s *veh, float *desiredDir)
 {
     double v2; // st7
     float v4; // [esp+8h] [ebp-44h]
@@ -1593,7 +1593,7 @@ float __cdecl VEH_UpdateMove_GetDesiredYaw(scr_vehicle_s *veh, float *desiredDir
     }
 }
 
-float __cdecl VEH_CalcAccelFraction(float accel, int32_t infoIdx)
+float VEH_CalcAccelFraction(float accel, int32_t infoIdx)
 {
     float v4; // [esp+4h] [ebp-1Ch]
     float v5; // [esp+8h] [ebp-18h]
@@ -1619,17 +1619,17 @@ float __cdecl VEH_CalcAccelFraction(float accel, int32_t infoIdx)
     return (v4 - minAccel) / (maxAccel - minAccel);
 }
 
-float __cdecl VEH_CalcAngularAccel(float accel, float accelFraction)
+float VEH_CalcAngularAccel(float accel, float accelFraction)
 {
     return accelFraction * 45.0f + (1.0f - accelFraction) * 1.0f;
 }
 
-float __cdecl VEH_CalcAngleForAccel(float accel, float accelFraction)
+float VEH_CalcAngleForAccel(float accel, float accelFraction)
 {
     return accelFraction * 1.0f + (1.0f - accelFraction) * 0.1f;
 }
 
-float __cdecl VEH_CalcStoppingTime(float accel, float accelFraction)
+float VEH_CalcStoppingTime(float accel, float accelFraction)
 {
     float v4; // [esp+4h] [ebp-Ch]
 
@@ -1637,7 +1637,7 @@ float __cdecl VEH_CalcStoppingTime(float accel, float accelFraction)
     return v4 * 3.5f + (1.0f - v4) * 2.5f;
 }
 
-void __cdecl VEH_UpdateYawAndNotify(gentity_s *ent, float desiredYaw)
+void VEH_UpdateYawAndNotify(gentity_s *ent, float desiredYaw)
 {
     float v2; // [esp+14h] [ebp-38h]
     bool v3; // [esp+18h] [ebp-34h]
@@ -1689,7 +1689,7 @@ void __cdecl VEH_UpdateYawAndNotify(gentity_s *ent, float desiredYaw)
     }
 }
 
-float __cdecl VEH_GetAccelForAngles(scr_vehicle_s *veh)
+float VEH_GetAccelForAngles(scr_vehicle_s *veh)
 {
     float v2; // [esp+0h] [ebp-28h]
     float v3; // [esp+4h] [ebp-24h]
@@ -1737,7 +1737,7 @@ float __cdecl VEH_GetAccelForAngles(scr_vehicle_s *veh)
     }
 }
 
-void __cdecl VEH_AddFakeDrag(const float *velocity, float maxDragSpeed, float *accelVec)
+void VEH_AddFakeDrag(const float *velocity, float maxDragSpeed, float *accelVec)
 {
     float v3; // [esp+0h] [ebp-24h]
     float v4; // [esp+4h] [ebp-20h]
@@ -1767,7 +1767,7 @@ void __cdecl VEH_AddFakeDrag(const float *velocity, float maxDragSpeed, float *a
     accelVec[1] = accelVec[1] + velocityVec[1];
 }
 
-void __cdecl VEH_CheckHorizontalVelocityToGoal(
+void VEH_CheckHorizontalVelocityToGoal(
     scr_vehicle_s *veh,
     const float *vecToGoal,
     float accelMax,
@@ -1869,7 +1869,7 @@ void __cdecl VEH_CheckHorizontalVelocityToGoal(
     }
 }
 
-void __cdecl VEH_CheckVerticalVelocityToGoal(scr_vehicle_s *veh, float verticalDist, float *accelVec)
+void VEH_CheckVerticalVelocityToGoal(scr_vehicle_s *veh, float verticalDist, float *accelVec)
 {
     float v3; // [esp+0h] [ebp-3Ch]
     float v4; // [esp+4h] [ebp-38h]
@@ -1920,7 +1920,7 @@ void __cdecl VEH_CheckVerticalVelocityToGoal(scr_vehicle_s *veh, float verticalD
     }
 }
 
-int32_t __cdecl VEH_UpdateMove_CheckGoalReached(gentity_s *ent, float distToGoal)
+int32_t VEH_UpdateMove_CheckGoalReached(gentity_s *ent, float distToGoal)
 {
     bool v3; // [esp+0h] [ebp-1Ch]
     bool v4; // [esp+4h] [ebp-18h]
@@ -1972,9 +1972,9 @@ int32_t __cdecl VEH_UpdateMove_CheckGoalReached(gentity_s *ent, float distToGoal
 }
 
 #ifdef KISAK_SP
-float __cdecl VEH_UpdateMove_CheckStop(scr_vehicle_s *veh, float distToGoal)
+float VEH_UpdateMove_CheckStop(scr_vehicle_s *veh, float distToGoal)
 #elif KISAK_MP
-double __cdecl VEH_UpdateMove_CheckStop(scr_vehicle_s *veh, float distToGoal)
+double VEH_UpdateMove_CheckStop(scr_vehicle_s *veh, float distToGoal)
 #endif
 {
     float v3; // [esp+10h] [ebp-24h]
@@ -2023,7 +2023,7 @@ double __cdecl VEH_UpdateMove_CheckStop(scr_vehicle_s *veh, float distToGoal)
     return dt;
 }
 
-void __cdecl VEH_UpdateMove_CheckNearGoal(gentity_s *ent, float distToGoal)
+void VEH_UpdateMove_CheckNearGoal(gentity_s *ent, float distToGoal)
 {
     scr_vehicle_s *veh; // [esp+0h] [ebp-4h]
 
@@ -2034,7 +2034,7 @@ void __cdecl VEH_UpdateMove_CheckNearGoal(gentity_s *ent, float distToGoal)
         Scr_Notify(ent, scr_const.near_goal, 0);
 }
 
-void __cdecl VEH_GetNewSpeedAndAccel(scr_vehicle_s *veh, float dt, int32_t hovering, float *newSpeed, float *accelMax)
+void VEH_GetNewSpeedAndAccel(scr_vehicle_s *veh, float dt, int32_t hovering, float *newSpeed, float *accelMax)
 {
     float decel; // [esp+10h] [ebp-Ch]
     float speed; // [esp+14h] [ebp-8h]
@@ -2068,7 +2068,7 @@ void __cdecl VEH_GetNewSpeedAndAccel(scr_vehicle_s *veh, float dt, int32_t hover
     }
 }
 
-void __cdecl VEH_UpdateHover(gentity_s *ent)
+void VEH_UpdateHover(gentity_s *ent)
 {
     double v1; // [esp+0h] [ebp-2Ch]
     float diff[3]; // [esp+8h] [ebp-24h] BYREF
@@ -2092,7 +2092,7 @@ void __cdecl VEH_UpdateHover(gentity_s *ent)
         VEH_SetHoverGoal(ent);
 }
 
-void __cdecl VEH_SetHoverGoal(gentity_s *ent)
+void VEH_SetHoverGoal(gentity_s *ent)
 {
     float min; // [esp+4h] [ebp-20h]
     int32_t i; // [esp+10h] [ebp-14h]
@@ -2117,7 +2117,7 @@ void __cdecl VEH_SetHoverGoal(gentity_s *ent)
     }
 }
 
-void __cdecl CMD_VEH_SetSpeed(scr_entref_t entref)
+void CMD_VEH_SetSpeed(scr_entref_t entref)
 {
     gentity_s *ent; // [esp+0h] [ebp-4h]
 
@@ -2125,7 +2125,7 @@ void __cdecl CMD_VEH_SetSpeed(scr_entref_t entref)
     CMD_VEH_Script_SetSpeed(ent);
 }
 
-void __cdecl CMD_VEH_Script_SetSpeed(gentity_s *ent)
+void CMD_VEH_Script_SetSpeed(gentity_s *ent)
 {
     vehicle_info_t *info; // [esp+0h] [ebp-8h]
     scr_vehicle_s *veh; // [esp+4h] [ebp-4h]
@@ -2164,7 +2164,7 @@ void __cdecl CMD_VEH_Script_SetSpeed(gentity_s *ent)
     }
 }
 
-void __cdecl CMD_VEH_GetSpeed(scr_entref_t entref)
+void CMD_VEH_GetSpeed(scr_entref_t entref)
 {
     scr_vehicle_s *veh; // [esp+4h] [ebp-8h]
 
@@ -2172,12 +2172,12 @@ void __cdecl CMD_VEH_GetSpeed(scr_entref_t entref)
     Scr_AddFloat(veh->speed);
 }
 
-void __cdecl CMD_VEH_GetSpeedMPH(scr_entref_t entref)
+void CMD_VEH_GetSpeedMPH(scr_entref_t entref)
 {
     Scr_AddFloat(GScr_GetVehicle(entref)->scr_vehicle->speed / MPH_TO_INCHES_PER_SEC);
 }
 
-void __cdecl CMD_VEH_ResumeSpeed(scr_entref_t entref)
+void CMD_VEH_ResumeSpeed(scr_entref_t entref)
 {
     scr_vehicle_s *veh; // [esp+0h] [ebp-8h]
 
@@ -2188,7 +2188,7 @@ void __cdecl CMD_VEH_ResumeSpeed(scr_entref_t entref)
         Scr_ParamError(0, "Cannot set negative acceleration on vehicle");
 }
 
-void __cdecl CMD_VEH_SetYawSpeed(scr_entref_t entref)
+void CMD_VEH_SetYawSpeed(scr_entref_t entref)
 {
     scr_vehicle_s *veh; // [esp+0h] [ebp-8h]
 
@@ -2211,7 +2211,7 @@ void __cdecl CMD_VEH_SetYawSpeed(scr_entref_t entref)
         Scr_ParamError(1u, "Cannot set negative yaw acceleration on vehicle");
 }
 
-void __cdecl CMD_VEH_SetMaxPitchRoll(scr_entref_t entref)
+void CMD_VEH_SetMaxPitchRoll(scr_entref_t entref)
 {
     scr_vehicle_s *veh; // [esp+4h] [ebp-8h]
 
@@ -2226,7 +2226,7 @@ void __cdecl CMD_VEH_SetMaxPitchRoll(scr_entref_t entref)
         Scr_ParamError(1u, "Cannot set negative max roll");
 }
 
-void __cdecl CMD_VEH_SetAirResitance(scr_entref_t entref)
+void CMD_VEH_SetAirResitance(scr_entref_t entref)
 {
     scr_vehicle_s *veh; // [esp+0h] [ebp-8h]
 
@@ -2234,7 +2234,7 @@ void __cdecl CMD_VEH_SetAirResitance(scr_entref_t entref)
     veh->maxDragSpeed = Scr_GetFloat(0) * MPH_TO_INCHES_PER_SEC;
 }
 
-void __cdecl CMD_VEH_SetTurningAbility(scr_entref_t entref)
+void CMD_VEH_SetTurningAbility(scr_entref_t entref)
 {
     scr_vehicle_s *veh; // [esp+14h] [ebp-8h]
 
@@ -2242,7 +2242,7 @@ void __cdecl CMD_VEH_SetTurningAbility(scr_entref_t entref)
     veh->turningAbility = Scr_GetFloat(0);
 }
 
-void __cdecl CMD_VEH_SetHoverParams(scr_entref_t entref)
+void CMD_VEH_SetHoverParams(scr_entref_t entref)
 {
     scr_vehicle_s *veh; // [esp+0h] [ebp-8h]
 
@@ -2256,7 +2256,7 @@ void __cdecl CMD_VEH_SetHoverParams(scr_entref_t entref)
     }
 }
 
-void __cdecl CMD_VEH_SetVehicleTeam(scr_entref_t entref)
+void CMD_VEH_SetVehicleTeam(scr_entref_t entref)
 {
     const char *team; // [esp+4h] [ebp-8h]
     gentity_s *ent; // [esp+8h] [ebp-4h]
@@ -2289,7 +2289,7 @@ void __cdecl CMD_VEH_SetVehicleTeam(scr_entref_t entref)
     }
 }
 
-void __cdecl CMD_VEH_NearGoalNotifyDist(scr_entref_t entref)
+void CMD_VEH_NearGoalNotifyDist(scr_entref_t entref)
 {
     scr_vehicle_s *veh; // [esp+0h] [ebp-8h]
 
@@ -2297,7 +2297,7 @@ void __cdecl CMD_VEH_NearGoalNotifyDist(scr_entref_t entref)
     veh->nearGoalNotifyDist = Scr_GetFloat(0);
 }
 
-void __cdecl CMD_VEH_SetGoalPos(scr_entref_t entref)
+void CMD_VEH_SetGoalPos(scr_entref_t entref)
 {
     scr_vehicle_s *veh; // [esp+0h] [ebp-8h]
 
@@ -2312,7 +2312,7 @@ void __cdecl CMD_VEH_SetGoalPos(scr_entref_t entref)
     veh->stopping = 0;
 }
 
-void __cdecl CMD_VEH_SetGoalYaw(scr_entref_t entref)
+void CMD_VEH_SetGoalYaw(scr_entref_t entref)
 {
     scr_vehicle_s *veh; // [esp+0h] [ebp-8h]
 
@@ -2321,7 +2321,7 @@ void __cdecl CMD_VEH_SetGoalYaw(scr_entref_t entref)
     veh->hasGoalYaw = 1;
 }
 
-void __cdecl CMD_VEH_ClearGoalYaw(scr_entref_t entref)
+void CMD_VEH_ClearGoalYaw(scr_entref_t entref)
 {
     scr_vehicle_s *scr_vehicle; // eax
 
@@ -2330,7 +2330,7 @@ void __cdecl CMD_VEH_ClearGoalYaw(scr_entref_t entref)
     scr_vehicle->hasGoalYaw = 0;
 }
 
-void __cdecl CMD_VEH_SetTargetYaw(scr_entref_t entref)
+void CMD_VEH_SetTargetYaw(scr_entref_t entref)
 {
     scr_vehicle_s *veh; // [esp+0h] [ebp-8h]
 
@@ -2339,7 +2339,7 @@ void __cdecl CMD_VEH_SetTargetYaw(scr_entref_t entref)
     veh->hasTargetYaw = 1;
 }
 
-void __cdecl CMD_VEH_ClearTargetYaw(scr_entref_t entref)
+void CMD_VEH_ClearTargetYaw(scr_entref_t entref)
 {
     scr_vehicle_s *scr_vehicle; // eax
 
@@ -2348,7 +2348,7 @@ void __cdecl CMD_VEH_ClearTargetYaw(scr_entref_t entref)
     scr_vehicle->hasTargetYaw = 0;
 }
 
-void __cdecl CMD_VEH_SetTurretTargetVec(scr_entref_t entref)
+void CMD_VEH_SetTurretTargetVec(scr_entref_t entref)
 {
     const char *v1; // eax
     const char *v2; // eax
@@ -2379,7 +2379,7 @@ void __cdecl CMD_VEH_SetTurretTargetVec(scr_entref_t entref)
     veh->targetOffset[2] = 0.0f;
 }
 
-void __cdecl CMD_VEH_SetTurretTargetEnt(scr_entref_t entref)
+void CMD_VEH_SetTurretTargetEnt(scr_entref_t entref)
 {
     gentity_s *Vehicle; // ecx
     const char *v2; // eax
@@ -2418,7 +2418,7 @@ void __cdecl CMD_VEH_SetTurretTargetEnt(scr_entref_t entref)
     veh->targetOrigin[2] = 0.0f;
 }
 
-void __cdecl CMD_VEH_ClearTurretTargetEnt(scr_entref_t entref)
+void CMD_VEH_ClearTurretTargetEnt(scr_entref_t entref)
 {
     scr_vehicle_s *veh; // [esp+8h] [ebp-8h]
 
@@ -2434,7 +2434,7 @@ void __cdecl CMD_VEH_ClearTurretTargetEnt(scr_entref_t entref)
     veh->targetOffset[2] = 0.0f;
 }
 
-void __cdecl CMD_VEH_SetLookAtEnt(scr_entref_t entref)
+void CMD_VEH_SetLookAtEnt(scr_entref_t entref)
 {
     const char *v1; // eax
     const char *v2; // eax
@@ -2464,7 +2464,7 @@ void __cdecl CMD_VEH_SetLookAtEnt(scr_entref_t entref)
     veh->lookAtEnt.setEnt(tgtEnt);
 }
 
-void __cdecl CMD_VEH_ClearLookAtEnt(scr_entref_t entref)
+void CMD_VEH_ClearLookAtEnt(scr_entref_t entref)
 {
     gentity_s *ent; // [esp+4h] [ebp-4h]
 
@@ -2472,14 +2472,14 @@ void __cdecl CMD_VEH_ClearLookAtEnt(scr_entref_t entref)
     ent->scr_vehicle->lookAtEnt.setEnt(NULL);
 }
 
-void __cdecl CMD_VEH_SetWeapon(scr_entref_t entref)
+void CMD_VEH_SetWeapon(scr_entref_t entref)
 {
     gentity_s *ent = GScr_GetVehicle(entref);
     ent->s.weapon = (uint8_t)BG_FindWeaponIndexForName(Scr_GetString(0));
     ent->s.weaponModel = 0;
 }
 
-char __cdecl VEH_DObjHasRequiredTags(gentity_s *ent, int32_t infoIdx)
+char VEH_DObjHasRequiredTags(gentity_s *ent, int32_t infoIdx)
 {
     vehicle_info_t *info = &s_vehicleInfos[infoIdx];
     if (info->type == VEH_WHEELS_4 || info->type == VEH_TANK)
@@ -2494,7 +2494,7 @@ char __cdecl VEH_DObjHasRequiredTags(gentity_s *ent, int32_t infoIdx)
     return 1;
 }
 
-void __cdecl CMD_VEH_FireWeapon(scr_entref_t entref)
+void CMD_VEH_FireWeapon(scr_entref_t entref)
 {
     const char *v4; // eax
     float intensity; // [esp+8h] [ebp-168h]
@@ -2709,7 +2709,7 @@ forwardDone:
     veh->turret.fireBarrel = veh->turret.fireBarrel == 0;
 }
 
-int32_t __cdecl VEH_GetTagBoneIndex(gentity_s *ent, int32_t barrel)
+int32_t VEH_GetTagBoneIndex(gentity_s *ent, int32_t barrel)
 {
     const char *boneName; // [esp+0h] [ebp-Ch]
     int32_t boneIndex; // [esp+4h] [ebp-8h]
@@ -2845,7 +2845,7 @@ bool G_IsPlayerDrivingVehicle(const gentity_s *player)
     }
 }
 
-vehicle_info_t *__cdecl VEH_GetVehicleInfo(short index)
+vehicle_info_t *VEH_GetVehicleInfo(short index)
 {
     iassert(index >= 0);
     iassert(index < s_numVehicleInfos);
@@ -2853,7 +2853,7 @@ vehicle_info_t *__cdecl VEH_GetVehicleInfo(short index)
     return &s_vehicleInfos[index];
 }
 
-void __cdecl VEH_GetWheelOrigin(gentity_s *ent, int32_t idx, float *origin)
+void VEH_GetWheelOrigin(gentity_s *ent, int32_t idx, float *origin)
 {
     DObjAnimMat *mtx; // [esp+20h] [ebp-Ch]
     scr_vehicle_s *veh; // [esp+24h] [ebp-8h]
@@ -2926,7 +2926,7 @@ int VEH_ParseSpecificField(uint8_t *pStruct, const char *pValue, int fieldType)
     }
 }
 
-int32_t __cdecl G_LoadVehicle(const char *name)
+int32_t G_LoadVehicle(const char *name)
 {
     char fileName[68];
     char loadBuffer[8192];
@@ -3253,7 +3253,7 @@ static void VEH_GroundPlantInternal(gentity_s *ent, vehicle_physic_t *phys, int3
 #endif
 }
 
-void __cdecl VEH_GroundPlant(gentity_s *ent, int32_t gravity, float frameTime)
+void VEH_GroundPlant(gentity_s *ent, int32_t gravity, float frameTime)
 {
     iassert(ent);
     iassert(ent->scr_vehicle);
@@ -3334,7 +3334,7 @@ LABEL_15:
 #define DEFAULT_VEHICLE_NAME "defaultvehicle"
 #endif
 
-void __cdecl VEH_InitModelAndValidateTags(gentity_s *ent, int32_t *infoIdx)
+void VEH_InitModelAndValidateTags(gentity_s *ent, int32_t *infoIdx)
 {
     int32_t defaultInfoIdx; // [esp+0h] [ebp-8h]
     bool isDefault; // [esp+7h] [ebp-1h]
@@ -3370,7 +3370,7 @@ void __cdecl VEH_InitModelAndValidateTags(gentity_s *ent, int32_t *infoIdx)
     }
 }
 
-int32_t __cdecl VEH_GetVehicleInfoFromName(const char *name)
+int32_t VEH_GetVehicleInfoFromName(const char *name)
 {
     int i; // [esp+4h] [ebp-4h]
 
@@ -3397,7 +3397,7 @@ int32_t __cdecl VEH_GetVehicleInfoFromName(const char *name)
     return -1;
 }
 
-void __cdecl VEH_SetPosition(gentity_s *ent, const float *origin, const float *vel, const float *angles)
+void VEH_SetPosition(gentity_s *ent, const float *origin, const float *vel, const float *angles)
 {
 #ifdef KISAK_SP
     if (Vec3Compare(origin, ent->r.currentOrigin)
@@ -3449,7 +3449,7 @@ void __cdecl VEH_SetPosition(gentity_s *ent, const float *origin, const float *v
 #endif
 }
 
-void __cdecl VEH_JoltBody(gentity_s *ent, const float *dir, float intensity, float speedFrac, float decel)
+void VEH_JoltBody(gentity_s *ent, const float *dir, float intensity, float speedFrac, float decel)
 {
     vehicle_info_t *info; // [esp+14h] [ebp-2Ch]
     scr_vehicle_s *veh; // [esp+18h] [ebp-28h]
@@ -3489,7 +3489,7 @@ void __cdecl VEH_JoltBody(gentity_s *ent, const float *dir, float intensity, flo
 // All accel rates clamped to vehicle_info_t's {accel, rotAccel}.  During
 // the jolt grace window (joltTime > 0) maxSpeed/accel swap for the jolt
 // pair so the player can't fight collision recoil.
-void __cdecl VEH_CalcAccel(gentity_s *ent, char *move, float *bodyAccel, float *rotAccel)
+void VEH_CalcAccel(gentity_s *ent, char *move, float *bodyAccel, float *rotAccel)
 {
     scr_vehicle_s *veh;
     vehicle_info_t *info;
@@ -3625,7 +3625,7 @@ void __cdecl VEH_CalcAccel(gentity_s *ent, char *move, float *bodyAccel, float *
 // vehicle's pose back to its s_backup snapshot (taken in VEH_BackupPosition
 // at frame start) and zeros speed.  Prevents the vehicle from clipping into
 // another vehicle's solid box during this frame's physics step.
-void __cdecl VEH_VerifyPosition(gentity_s *ent)
+void VEH_VerifyPosition(gentity_s *ent)
 {
     scr_vehicle_s *scr_vehicle;
     int i;
@@ -3676,7 +3676,7 @@ void __cdecl VEH_VerifyPosition(gentity_s *ent)
 // step, and performs ground/air slide-move plus optional ground-planting
 // for land vehicles (type 0 / type 1).  Tracks idle/engine sound lerp
 // targets at the end so the engine/idle crossfade is driven by throttle.
-void __cdecl VEH_UpdateClient(gentity_s *ent)
+void VEH_UpdateClient(gentity_s *ent)
 {
     scr_vehicle_s *veh;
     vehicle_info_t *info;
@@ -3781,7 +3781,7 @@ void __cdecl VEH_UpdateClient(gentity_s *ent)
         VEH_DebugCapsule(veh->phys.origin, veh->phys.maxs[0], veh->phys.maxs[2], 1.0f, 1.0f, 0.0f);
 }
 
-void __cdecl VEH_UpdatePath(gentity_s *ent)
+void VEH_UpdatePath(gentity_s *ent)
 {
     scr_vehicle_s *veh;
     vehicle_info_t *info;
@@ -4328,7 +4328,7 @@ void  VEH_ResetWheels(gentity_s *ent, vehicle_physic_t *phys)
     } while (v5);
 }
 
-void __cdecl VEH_DebugBox(float *pos, float width, float r, float g, float b)
+void VEH_DebugBox(float *pos, float width, float r, float g, float b)
 {
     float color[4];
     float mins[3];
@@ -6050,7 +6050,7 @@ void Scr_Vehicle_Controller(const gentity_s *pSelf, int *partBits)
 
 #pragma endregion
 
-void __cdecl VEH_UpdateWeapon(gentity_s *ent)
+void VEH_UpdateWeapon(gentity_s *ent)
 {
 #ifdef KISAK_SP
     scr_vehicle_s *veh;
@@ -6156,7 +6156,7 @@ void __cdecl VEH_UpdateWeapon(gentity_s *ent)
 }
 
 #ifdef KISAK_SP
-void __cdecl VEH_UpdateMaterialTime(gentity_s *ent)
+void VEH_UpdateMaterialTime(gentity_s *ent)
 {
     scr_vehicle_s *veh = ent->scr_vehicle;
     vehicle_info_t *info = &s_vehicleInfos[veh->infoIdx];
@@ -6191,7 +6191,7 @@ void __cdecl VEH_UpdateMaterialTime(gentity_s *ent)
     ent->s.lerp.u.vehicle.materialTime -= (int)((materialTimeDelta * 0.05f) * -1000.0f);
 }
 #elif KISAK_MP
-void __cdecl VEH_UpdateMaterialTime(gentity_s *ent, float frameTime)
+void VEH_UpdateMaterialTime(gentity_s *ent, float frameTime)
 {
     vehicle_info_t *info; // [esp+0h] [ebp-Ch]
     scr_vehicle_s *veh; // [esp+4h] [ebp-8h]
@@ -6216,7 +6216,7 @@ void __cdecl VEH_UpdateMaterialTime(gentity_s *ent, float frameTime)
 #endif
 
 #ifdef KISAK_SP
-void __cdecl VEH_UpdateSteering(gentity_s *ent)
+void VEH_UpdateSteering(gentity_s *ent)
 {
     scr_vehicle_s *veh = ent->scr_vehicle;
     vehicle_info_t *info = &s_vehicleInfos[veh->infoIdx];
@@ -6254,7 +6254,7 @@ void __cdecl VEH_UpdateSteering(gentity_s *ent)
     ent->s.lerp.u.turret.gunAngles[2] = steer;
 }
 #elif KISAK_MP
-void __cdecl VEH_UpdateSteering(gentity_s *ent)
+void VEH_UpdateSteering(gentity_s *ent)
 {
     float v1; // [esp+8h] [ebp-24h]
     float v2; // [esp+Ch] [ebp-20h]

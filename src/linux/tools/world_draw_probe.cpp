@@ -173,7 +173,7 @@ constexpr int kMaxCameraSeconds = 3600;
 // server's zone set (no ui_mp), for a renderer that runs on this thread alone. Unlike the dedicated server's
 // CL_InitDedicated (src/linux/server_device_counterparts.cpp) it latches nothing
 // off and loads no zone: Kisak_StartWorldDraw starts the renderer.
-void __cdecl CL_InitDedicated()
+void CL_InitDedicated()
 {
     if (!onlinegame)
         onlinegame = Dvar_RegisterBool("onlinegame", 1, DVAR_CHEAT,

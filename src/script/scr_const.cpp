@@ -6,7 +6,7 @@ scr_const_t scr_const;
 #ifdef KISAK_MP
 #include <game_mp/g_public_mp.h>
 
-void __cdecl GScr_LoadConsts()
+void GScr_LoadConsts()
 {
 	scr_const._ = GScr_AllocString("");
 	scr_const.active = GScr_AllocString("active");

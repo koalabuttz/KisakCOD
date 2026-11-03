@@ -11,7 +11,7 @@
 uint8_t tempVoicePacketBuf[2048];
 voiceCommunication_t cl_voiceCommunication;
 
-void __cdecl CL_WriteVoicePacket(int localClientNum)
+void CL_WriteVoicePacket(int localClientNum)
 {
     int voicePacket; // [esp+8h] [ebp-34h]
     msg_t msg; // [esp+10h] [ebp-2Ch] BYREF
@@ -59,7 +59,7 @@ void __cdecl CL_WriteVoicePacket(int localClientNum)
     }
 }
 
-void __cdecl CL_VoicePacket(int localClientNum, msg_t *msg)
+void CL_VoicePacket(int localClientNum, msg_t *msg)
 {
     int packet; // [esp+0h] [ebp-114h]
     VoicePacket_t voicePacket; // [esp+4h] [ebp-110h] BYREF
@@ -89,7 +89,7 @@ void __cdecl CL_VoicePacket(int localClientNum, msg_t *msg)
     }
 }
 
-bool __cdecl CL_IsPlayerTalking(int localClientNum, int talkingClientIndex)
+bool CL_IsPlayerTalking(int localClientNum, int talkingClientIndex)
 {
     if (CL_IsClientLocal(talkingClientIndex) && (sv_voice->current.enabled || cl_voice->current.enabled))
         return IN_IsTalkKeyHeld();

@@ -56,7 +56,7 @@ static const char* projName[4] =
     "renderer"
 };
 
-void __cdecl track_static_alloc_internal(void* ptr, int size, const char* name, int type)
+void track_static_alloc_internal(void* ptr, int size, const char* name, int type)
 {
 #if 0
     mem_track_t* mem_track; // [esp+0h] [ebp-8h]
@@ -84,7 +84,7 @@ void __cdecl track_static_alloc_internal(void* ptr, int size, const char* name, 
 #endif
 }
 
-void __cdecl CG_track_init()
+void CG_track_init()
 {
 #if 0
     g_mem_track_filename = "cg_memtrack";
@@ -114,13 +114,13 @@ void __cdecl CG_track_init()
 #endif
 }
 
-void __cdecl TRACK_g_memtrack()
+void TRACK_g_memtrack()
 {
     g_mem_track_filename = "";
 }
 
 
-void __cdecl G_track_init()
+void G_track_init()
 {
 #if 0
     g_mem_track_filename = "g_memtrack";
@@ -150,7 +150,7 @@ void __cdecl G_track_init()
 #endif
 }
 
-void __cdecl TRACK_memtrack()
+void TRACK_memtrack()
 {
 #if 0
     track_static_alloc_internal(g_mem_track, (sizeof(mem_track_t) * 0x400)/*20480*/, "g_mem_track", 0);
@@ -166,7 +166,7 @@ void __cdecl TRACK_memtrack()
 #endif
 }
 
-void __cdecl track_addbasicinfo(meminfo_t* info, int type, int size)
+void track_addbasicinfo(meminfo_t* info, int type, int size)
 {
     int v3; // [esp+8h] [ebp-8h]
     int v4; // [esp+Ch] [ebp-4h]
@@ -209,7 +209,7 @@ void __cdecl track_addbasicinfo(meminfo_t* info, int type, int size)
         info->nonSwapMinSpecTotal += size;
 }
 
-void __cdecl track_z_commit(int size, int type)
+void track_z_commit(int size, int type)
 {
 #if 0
 #if defined(_WIN32)
@@ -227,7 +227,7 @@ void __cdecl track_z_commit(int size, int type)
 #endif
 }
 
-static TempMemInfo* __cdecl GetTempMemInfo(
+static TempMemInfo* GetTempMemInfo(
     int permanent,
     const char* name,
     int type,
@@ -290,7 +290,7 @@ LABEL_17:
     return tempMemInfoArray;
 }
 
-static void __cdecl CheckHighMemInfo(TempMemInfo* tempMemInfo, int hunkSize)
+static void CheckHighMemInfo(TempMemInfo* tempMemInfo, int hunkSize)
 {
     int size; // [esp+0h] [ebp-4h]
 
@@ -304,13 +304,13 @@ static void __cdecl CheckHighMemInfo(TempMemInfo* tempMemInfo, int hunkSize)
     }
 }
 
-static void __cdecl CheckLowMemInfo(TempMemInfo* tempMemInfo)
+static void CheckLowMemInfo(TempMemInfo* tempMemInfo)
 {
     if (tempMemInfo->low > tempMemInfo->data.size)
         tempMemInfo->low = tempMemInfo->data.size;
 }
 
-static void __cdecl AddTempMemInfo(
+static void AddTempMemInfo(
     int size,
     int hunkSize,
     int permanent,
@@ -327,7 +327,7 @@ static void __cdecl AddTempMemInfo(
     CheckHighMemInfo(TempMemInfo, hunkSize);
 }
 
-static void __cdecl RemoveTempMemInfo(
+static void RemoveTempMemInfo(
     int size,
     int permanent,
     const char* name,
@@ -343,7 +343,7 @@ static void __cdecl RemoveTempMemInfo(
     CheckLowMemInfo(TempMemInfo);
 }
 
-void __cdecl track_physical_alloc(int size, const char* name, int type)
+void track_physical_alloc(int size, const char* name, int type)
 {
 #if 0
     if (size)
@@ -367,7 +367,7 @@ void __cdecl track_physical_alloc(int size, const char* name, int type)
 #endif
 }
 
-void __cdecl track_hunk_alloc(int size, int pos, const char* name, int type)
+void track_hunk_alloc(int size, int pos, const char* name, int type)
 {
 #if 0
     mem_track_t* mem_track; // [esp+8h] [ebp-4h]
@@ -402,7 +402,7 @@ void __cdecl track_hunk_alloc(int size, int pos, const char* name, int type)
 #endif
 }
 
-void __cdecl track_hunk_allocLow(int size, int pos, const char* name, int type)
+void track_hunk_allocLow(int size, int pos, const char* name, int type)
 {
 #if 0
     mem_track_t* mem_track; // [esp+8h] [ebp-4h]
@@ -437,7 +437,7 @@ void __cdecl track_hunk_allocLow(int size, int pos, const char* name, int type)
 #endif
 }
 
-void __cdecl track_set_hunk_size(int size)
+void track_set_hunk_size(int size)
 {
 #if 0
 #if defined(_WIN32)
@@ -456,7 +456,7 @@ void __cdecl track_set_hunk_size(int size)
 #endif
 }
 
-void __cdecl track_hunk_ClearToMarkHigh(int mark)
+void track_hunk_ClearToMarkHigh(int mark)
 {
 #if 0
     mem_track_t* info; // [esp+8h] [ebp-Ch]
@@ -491,7 +491,7 @@ void __cdecl track_hunk_ClearToMarkHigh(int mark)
 #endif
 }
 
-void __cdecl track_hunk_ClearToMarkLow(int mark)
+void track_hunk_ClearToMarkLow(int mark)
 {
 #if 0
     mem_track_t* info; // [esp+8h] [ebp-Ch]
@@ -535,7 +535,7 @@ static void track_temp_high_reset()
     g_tempHighMemInfoCount = 0;
 }
 
-void __cdecl track_hunk_ClearToStart()
+void track_hunk_ClearToStart()
 {
 #if 0
 #if defined(_WIN32)
@@ -717,7 +717,7 @@ void track_init()
 #endif
 }
 
-void __cdecl track_shutdown(int project)
+void track_shutdown(int project)
 {
 #if 0
     const char* v1; // eax
@@ -748,7 +748,7 @@ void __cdecl track_shutdown(int project)
 #endif
 }
 
-void __cdecl track_getbasicinfo(meminfo_t* info)
+void track_getbasicinfo(meminfo_t* info)
 {
 #if 0
     int MinSpecImageMemory; // eax
@@ -772,7 +772,7 @@ void __cdecl track_getbasicinfo(meminfo_t* info)
 #endif
 }
 
-void __cdecl track_addbasicmeminfo(meminfo_t* sum, meminfo_t* in)
+void track_addbasicmeminfo(meminfo_t* sum, meminfo_t* in)
 {
 #if 0
     int type; // [esp+0h] [ebp-4h]
@@ -785,7 +785,7 @@ void __cdecl track_addbasicmeminfo(meminfo_t* sum, meminfo_t* in)
 #endif
 }
 
-static int __cdecl mem_track_compare(uint32_t *elem1, uint32_t *elem2)
+static int mem_track_compare(uint32_t *elem1, uint32_t *elem2)
 {
     if (*((uint8_t *)elem1 + 16) < (int)*((uint8_t *)elem2 + 16))
         return -1;
@@ -794,7 +794,7 @@ static int __cdecl mem_track_compare(uint32_t *elem1, uint32_t *elem2)
     return 1;
 }
 
-void __cdecl track_PrintInfo()
+void track_PrintInfo()
 {
 #if 0
     mem_track_t* p_data; // edx
@@ -954,7 +954,7 @@ void __cdecl track_PrintInfo()
             if (v8)
                 info.nonSwapMinSpecTotal += mem_trackb->size;
         }
-        qsort(sorted_mem_track, len, 0x14u, (int(__cdecl*)(const void*, const void*))mem_track_compare);
+        qsort(sorted_mem_track, len, 0x14u, (int(*)(const void*, const void*))mem_track_compare);
         info.typeTotal[23] = info.typeTotal[19]
             + info.typeTotal[22]
             + info.typeTotal[21]
@@ -1020,7 +1020,7 @@ void __cdecl track_PrintInfo()
 #endif
 }
 
-void __cdecl track_PrintAllInfo()
+void track_PrintAllInfo()
 {
 #if 0
     if (Sys_IsMainThread())
@@ -1031,7 +1031,7 @@ void __cdecl track_PrintAllInfo()
 #endif
 }
 
-void __cdecl UI_track_init()
+void UI_track_init()
 {
 #if 0
     g_mem_track_filename = "ui_main";
@@ -1052,31 +1052,31 @@ void __cdecl UI_track_init()
 
 
 // str8 from the linker error
-void __cdecl TRACK_r_bsp_load_obj() { /* THUNK */ }
-void __cdecl TRACK_rb_debug() { /* THUNK */ }
-void __cdecl TRACK_ui_shared_obj() { /* THUNK */ }
-void __cdecl TRACK_scr_memorytree() { /* THUNK */ }
-void __cdecl TRACK_scr_stringlist() { /* THUNK */ }
-void __cdecl TRACK_scr_variable() { /* THUNK */ }
-void __cdecl TRACK_scr_compiler() { /* THUNK */ }
-void __cdecl TRACK_com_files() { /* THUNK */ }
-void __cdecl TRACK_com_sndalias() { /* THUNK */ }
-void __cdecl TRACK_dvar() { /* THUNK */ }
-void __cdecl TRACK_profile() { /* THUNK */ }
-void __cdecl TRACK_profile_display() { /* THUNK */ }
-void __cdecl TRACK_win_common() { /* THUNK */ }
-void __cdecl TRACK_win_syscon() { /* THUNK */ }
-void __cdecl TRACK_common() { /* THUNK */ }
-void __cdecl TRACK_files() { /* THUNK */ }
-void __cdecl TRACK_com_memory() { /* THUNK */ }
-void __cdecl TRACK_memfile() { /* THUNK */ }
-void __cdecl TRACK_win_input() { /* THUNK */ }
-void __cdecl TRACK_assertive() { /* THUNK */ }
-void __cdecl TRACK_record_dsound() { /* THUNK */ }
-void __cdecl TRACK_phys_ode() { /* THUNK */ }
-void __cdecl TRACK_profileMem() { /* THUNK */ }
+void TRACK_r_bsp_load_obj() { /* THUNK */ }
+void TRACK_rb_debug() { /* THUNK */ }
+void TRACK_ui_shared_obj() { /* THUNK */ }
+void TRACK_scr_memorytree() { /* THUNK */ }
+void TRACK_scr_stringlist() { /* THUNK */ }
+void TRACK_scr_variable() { /* THUNK */ }
+void TRACK_scr_compiler() { /* THUNK */ }
+void TRACK_com_files() { /* THUNK */ }
+void TRACK_com_sndalias() { /* THUNK */ }
+void TRACK_dvar() { /* THUNK */ }
+void TRACK_profile() { /* THUNK */ }
+void TRACK_profile_display() { /* THUNK */ }
+void TRACK_win_common() { /* THUNK */ }
+void TRACK_win_syscon() { /* THUNK */ }
+void TRACK_common() { /* THUNK */ }
+void TRACK_files() { /* THUNK */ }
+void TRACK_com_memory() { /* THUNK */ }
+void TRACK_memfile() { /* THUNK */ }
+void TRACK_win_input() { /* THUNK */ }
+void TRACK_assertive() { /* THUNK */ }
+void TRACK_record_dsound() { /* THUNK */ }
+void TRACK_phys_ode() { /* THUNK */ }
+void TRACK_profileMem() { /* THUNK */ }
 
-void __cdecl R_Track_Init()
+void R_Track_Init()
 {
 #if 0
     g_mem_track_filename = "r_bsp_load_obj";
@@ -1146,7 +1146,7 @@ void __cdecl R_Track_Init()
 #endif
 }
 
-void __cdecl track_z_alloc(int size, const char* name, int type, char* pos, int project, int overhead)
+void track_z_alloc(int size, const char* name, int type, char* pos, int project, int overhead)
 {
 #if 0
     mem_track_node_s* node; // [esp+8h] [ebp-4h]
@@ -1179,7 +1179,7 @@ void __cdecl track_z_alloc(int size, const char* name, int type, char* pos, int 
 #endif
 }
 
-void __cdecl track_temp_free(int size, int permanent, const char* name)
+void track_temp_free(int size, int permanent, const char* name)
 {
 #if 0
 #if defined(_WIN32)
@@ -1196,7 +1196,7 @@ void __cdecl track_temp_free(int size, int permanent, const char* name)
 #endif
 }
 
-void __cdecl track_temp_alloc(int size, int hunkSize, int permanent, const char* name)
+void track_temp_alloc(int size, int hunkSize, int permanent, const char* name)
 {
 #if 0
 #if defined(_WIN32)
@@ -1213,7 +1213,7 @@ void __cdecl track_temp_alloc(int size, int hunkSize, int permanent, const char*
 #endif
 }
 
-void __cdecl track_temp_high_clear(int permanent)
+void track_temp_high_clear(int permanent)
 {
 #if 0
     int i; // [esp+0h] [ebp-8h]
@@ -1241,7 +1241,7 @@ void __cdecl track_temp_high_clear(int permanent)
 #endif
 }
 
-void __cdecl track_temp_high_alloc(int size, int hunkSize, int permanent, const char* name)
+void track_temp_high_alloc(int size, int hunkSize, int permanent, const char* name)
 {
 #if 0
 #if defined(_WIN32)
@@ -1258,7 +1258,7 @@ void __cdecl track_temp_high_alloc(int size, int hunkSize, int permanent, const 
 #endif
 }
 
-double __cdecl ConvertToMB(int bytes)
+double ConvertToMB(int bytes)
 {
     return (float)((double)bytes / 1048576.0);
 }

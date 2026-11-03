@@ -92,7 +92,9 @@ constexpr auto max(T a, U b) { return a > b ? a : b; }
 // so nothing is redefined for Clang: the calling convention and the alignment
 // hints must stay part of every declaration that shares a header with the
 // MSVC build. GCC has no such keywords, so the same spellings are expressed
-// with the equivalent GNU attributes instead of being dropped.
+// with the equivalent GNU attributes instead of being dropped. Engine sources
+// no longer spell __cdecl (it is the default convention; see
+// scripts/tools/strip_cdecl.py); its alias stays for third-party headers.
 #ifdef __linux__
 #if !defined(__clang__)
 #if defined(__i386__) || defined(__x86_64__)
@@ -152,8 +154,8 @@ constexpr auto max(T a, U b) { return a > b ? a : b; }
 
 #define ID_INLINE __inline
 
-int __cdecl ShortSwap(__int16 l);
-int __cdecl LongSwap(int l);
+int ShortSwap(__int16 l);
+int LongSwap(int l);
 
 static ID_INLINE short BigShort(short l) { return ShortSwap(l); }
 #define LittleShort
@@ -191,8 +193,8 @@ static ID_INLINE int BigLong(int l) { return LongSwap(l); }
 
 #define ID_INLINE inline
 
-int __cdecl ShortSwap(__int16 l);
-int __cdecl LongSwap(int l);
+int ShortSwap(__int16 l);
+int LongSwap(int l);
 
 static ID_INLINE short BigShort(short l) { return ShortSwap(l); }
 #define LittleShort
@@ -527,7 +529,7 @@ void I_strncat(char* dest, int size, const char* src);
 void I_strncpyz(char* dest, const char* src, int destsize);
 int I_stricmp(const char* s0, const char* s1);
 int I_strnicmp(const char* s0, const char* s1, int n);
-const char *__cdecl I_stristr(const char *s0, const char *substr);
+const char *I_stristr(const char *s0, const char *substr);
 
 bool I_islower(int c);
 bool I_isupper(int c);
@@ -535,17 +537,17 @@ bool I_isalpha(int c);
 
 bool I_iscsym(int c);
 
-bool __cdecl I_isdigit(int c);
-bool __cdecl I_isalnum(int c);
-bool __cdecl I_isforfilename(int c);
-int __cdecl I_strncmp(const char *s0, const char *s1, int n);
-int __cdecl I_strcmp(const char *s0, const char *s1);
-int __cdecl I_stricmpwild(const char *wild, const char *s);
-char *__cdecl I_strlwr(char *s);
-char *__cdecl I_strupr(char *s);
-int __cdecl I_DrawStrlen(const char *str);
-char *__cdecl I_CleanStr(char *string);
-uint8_t __cdecl I_CleanChar(uint8_t character);
+bool I_isdigit(int c);
+bool I_isalnum(int c);
+bool I_isforfilename(int c);
+int I_strncmp(const char *s0, const char *s1, int n);
+int I_strcmp(const char *s0, const char *s1);
+int I_stricmpwild(const char *wild, const char *s);
+char *I_strlwr(char *s);
+char *I_strupr(char *s);
+int I_DrawStrlen(const char *str);
+char *I_CleanStr(char *string);
+uint8_t I_CleanChar(uint8_t character);
 
 inline float I_fmin(float a, float b) { return a < b ? a : b; }
 inline float I_fmax(float a, float b) { return a > b ? a : b; }
@@ -881,7 +883,7 @@ struct dvar_s {
 	DvarValue latched;
 	DvarValue reset;
 	DvarLimits domain;
-	bool (__cdecl *domainFunc)(dvar_s*, DvarValue);
+	bool (*domainFunc)(dvar_s*, DvarValue);
 	dvar_s* hashNext;
 };
 
@@ -980,60 +982,60 @@ static const float colorWhiteFaded[4] = { 1.0, 1.0, 1.0, 0.75 }; // idb
 static const float colorGreenFaded[4] = { 0.0, 1.0, 0.0, 0.75 }; // idb
 static const float colorRedFaded[4] = { 0.75, 0.25, 0.0, 0.75 }; // idb
 
-void __cdecl TRACK_q_shared();
-uint8_t __cdecl ColorIndex(uint8_t c);
-const char *__cdecl Com_GetFilenameSubString(const char *pathname);
-void __cdecl Com_AssembleFilepath(char *folder, char *name, char *extension, char *path, int maxCharCount);
-const char *__cdecl Com_GetExtensionSubString(const char *filename);
-void __cdecl Com_StripExtension(char *in, char *out);
-void __cdecl Com_DefaultExtension(char *path, uint32_t maxSize, const char *extension);
-__int16 __cdecl BigShort(__int16 l);
-int __cdecl ShortSwap(__int16 l);
-__int16 __cdecl ShortNoSwap(__int16 l);
-int __cdecl LongSwap(int l);
-unsigned __int64 __cdecl Long64Swap(unsigned __int64 l);
-unsigned __int64 __cdecl Long64NoSwap(unsigned __int64 ll);
-double __cdecl FloatReadSwap(int n);
-double __cdecl FloatReadNoSwap(int n);
-FloatWriteSwap_union __cdecl FloatWriteSwap(float f);
-void __cdecl Swap_InitLittleEndian();
-void __cdecl Swap_InitBigEndian();
-void __cdecl Swap_Init();
+void TRACK_q_shared();
+uint8_t ColorIndex(uint8_t c);
+const char *Com_GetFilenameSubString(const char *pathname);
+void Com_AssembleFilepath(char *folder, char *name, char *extension, char *path, int maxCharCount);
+const char *Com_GetExtensionSubString(const char *filename);
+void Com_StripExtension(char *in, char *out);
+void Com_DefaultExtension(char *path, uint32_t maxSize, const char *extension);
+__int16 BigShort(__int16 l);
+int ShortSwap(__int16 l);
+__int16 ShortNoSwap(__int16 l);
+int LongSwap(int l);
+unsigned __int64 Long64Swap(unsigned __int64 l);
+unsigned __int64 Long64NoSwap(unsigned __int64 ll);
+double FloatReadSwap(int n);
+double FloatReadNoSwap(int n);
+FloatWriteSwap_union FloatWriteSwap(float f);
+void Swap_InitLittleEndian();
+void Swap_InitBigEndian();
+void Swap_Init();
 
 
 int Com_sprintf(char *dest, uint32_t size, const char *fmt, ...);
 int Com_sprintfPos(char *dest, int destSize, int *destPos, const char *fmt, ...);
 
-bool __cdecl CanKeepStringPointer(const char *string);
-void __cdecl Com_InitThreadData(int threadContext);
-const char *__cdecl Info_ValueForKey(const char *s, const char *key);
-void __cdecl Info_NextPair(const char **head, char *key, char *value);
-void __cdecl Info_RemoveKey(const char *s, const char *key);
-void __cdecl Info_RemoveKey_Big(const char *s, const char *key);
-bool __cdecl Info_Validate(const char *s);
-void __cdecl Info_SetValueForKey(char *s, const char *key, const char *value);
-void __cdecl Info_SetValueForKey_Big(char *s, const char *key, const char *value);
-bool __cdecl ParseConfigStringToStruct(
+bool CanKeepStringPointer(const char *string);
+void Com_InitThreadData(int threadContext);
+const char *Info_ValueForKey(const char *s, const char *key);
+void Info_NextPair(const char **head, char *key, char *value);
+void Info_RemoveKey(const char *s, const char *key);
+void Info_RemoveKey_Big(const char *s, const char *key);
+bool Info_Validate(const char *s);
+void Info_SetValueForKey(char *s, const char *key, const char *value);
+void Info_SetValueForKey_Big(char *s, const char *key, const char *value);
+bool ParseConfigStringToStruct(
 	uint8_t *pStruct,
 	const cspField_t *pFieldList,
 	int iNumFields,
 	char *pszBuffer,
 	int iMaxFieldTypes,
-	int(__cdecl *parseSpecialFieldType)(uint8_t *, const char *, const int),
-	void(__cdecl *parseStrcpy)(uint8_t *, const char *));
-bool __cdecl ParseConfigStringToStructCustomSize(
+	int(*parseSpecialFieldType)(uint8_t *, const char *, const int),
+	void(*parseStrcpy)(uint8_t *, const char *));
+bool ParseConfigStringToStructCustomSize(
 	uint8_t *pStruct,
 	const cspField_t *pFieldList,
 	int iNumFields,
 	char *pszBuffer,
 	int iMaxFieldTypes,
-	int(__cdecl *parseSpecialFieldType)(uint8_t *, const char *, const int),
-	void(__cdecl *parseStrcpy)(uint8_t *, const char *));
-double __cdecl GetLeanFraction(float fFrac);
-double __cdecl UnGetLeanFraction(float fFrac);
-void __cdecl AddLeanToPosition(float *position, float fViewYaw, float fLeanFrac, float fViewRoll, float fLeanDist);
-bool __cdecl Com_IsLegacyXModelName(const char *name);
-uint32_t __cdecl LongNoSwap(uint32_t color);
+	int(*parseSpecialFieldType)(uint8_t *, const char *, const int),
+	void(*parseStrcpy)(uint8_t *, const char *));
+double GetLeanFraction(float fFrac);
+double UnGetLeanFraction(float fFrac);
+void AddLeanToPosition(float *position, float fViewYaw, float fLeanFrac, float fViewRoll, float fLeanDist);
+bool Com_IsLegacyXModelName(const char *name);
+uint32_t LongNoSwap(uint32_t color);
 
 #define arr_esize(a) (sizeof((a)[0]))
 #define arr_cnt(a) (sizeof(a)/arr_esize(a))
@@ -1095,9 +1097,9 @@ struct trace_t // sizeof=0x2C
 };
 
 // win_shared
-uint32_t __cdecl Sys_Milliseconds();
-uint32_t __cdecl Sys_MillisecondsRaw();
-void __cdecl Sys_SnapVector(float *v);
+uint32_t Sys_Milliseconds();
+uint32_t Sys_MillisecondsRaw();
+void Sys_SnapVector(float *v);
 
 // Quake 3's SnapVector: truncates each component toward zero (-1.7 -> -1).
 // Retail 1.7 compiles these game-side snaps (temp entities, missile deltas,
@@ -1125,14 +1127,14 @@ struct qtime_s // sizeof=0x24
 	int tm_yday;
 	int tm_isdst;
 };
-char __cdecl Com_Filter(const char *filter, char *name, int casesensitive);
-char __cdecl Com_FilterPath(const char *filter, const char *name, int casesensitive);
-int __cdecl Com_HashKey(const char *string, int maxlen);
-int __cdecl Com_RealTime(qtime_s *qtime);
-//void __cdecl Com_Memcpy(char *dest, char *src, int count);
-//void __cdecl Com_Memset(uint32_t *dest, int val, int count);
+char Com_Filter(const char *filter, char *name, int casesensitive);
+char Com_FilterPath(const char *filter, const char *name, int casesensitive);
+int Com_HashKey(const char *string, int maxlen);
+int Com_RealTime(qtime_s *qtime);
+//void Com_Memcpy(char *dest, char *src, int count);
+//void Com_Memset(uint32_t *dest, int val, int count);
 
-inline bool __cdecl Com_BitCheckAssert(const uint32_t *array, int bitNum, int size)
+inline bool Com_BitCheckAssert(const uint32_t *array, int bitNum, int size)
 {
 	iassert(array);
 	iassert(bitNum < (8 * size));
@@ -1140,7 +1142,7 @@ inline bool __cdecl Com_BitCheckAssert(const uint32_t *array, int bitNum, int si
 	return (array[bitNum / 32] & (1 << (bitNum & 31))) != 0;
 }
 
-inline void __cdecl Com_BitClearAssert(uint32_t *array, int bitNum, int size)
+inline void Com_BitClearAssert(uint32_t *array, int bitNum, int size)
 {
 	iassert(array);
 	iassert(bitNum < (8 * size));
@@ -1148,7 +1150,7 @@ inline void __cdecl Com_BitClearAssert(uint32_t *array, int bitNum, int size)
 	array[bitNum / 32] &= ~(1 << (bitNum & 31));
 }
 
-inline void __cdecl Com_BitSetAssert(uint32_t *array, int bitNum, int size)
+inline void Com_BitSetAssert(uint32_t *array, int bitNum, int size)
 {
 	iassert(array);
 	iassert(bitNum < (8 * size));
@@ -1183,7 +1185,7 @@ struct trajectory_t // sizeof=0x24 // (SP/MP same)
 	float trDelta[3];                   // XREF: CountBitsEnabled(uint)+1B/o
 };
 
-inline bool __cdecl Com_IsRagdollTrajectory(const trajectory_t *trajectory)
+inline bool Com_IsRagdollTrajectory(const trajectory_t *trajectory)
 {
 	iassert(trajectory);
 
@@ -1201,16 +1203,16 @@ struct StringTable // sizeof=0x10
 };
 static_assert(LAYOUT_32BIT(sizeof(StringTable) == 16));
 
-const char *__cdecl StringTable_GetColumnValueForRow(const StringTable *table, int row, int column);
-const char *__cdecl StringTable_Lookup(
+const char *StringTable_GetColumnValueForRow(const StringTable *table, int row, int column);
+const char *StringTable_Lookup(
 	const StringTable *table,
 	int comparisonColumn,
 	const char *value,
 	int valueColumn);
-int __cdecl StringTable_LookupRowNumForValue(const StringTable *table, int comparisonColumn, const char *value);
+int StringTable_LookupRowNumForValue(const StringTable *table, int comparisonColumn, const char *value);
 
 union XAssetHeader;
-void __cdecl StringTable_GetAsset(const char *filename, StringTable **tablePtr);
+void StringTable_GetAsset(const char *filename, StringTable **tablePtr);
 
 
 extern const dvar_t *useFastFile;
@@ -1299,4 +1301,4 @@ static_assert(MASK_WEAPONCLIP == 0x00002080, "MASK_WEAPONCLIP must match the IW3
 static_assert(MASK_PLAYER_VISIBILITY == 0x02803001, "MASK_PLAYER_VISIBILITY must match the IW3 player visibility mask");
 static_assert(CONTENTS_ANY_TRIGGER == 0x405C0008, "CONTENTS_ANY_TRIGGER must include every IW3 trigger type");
 
-extern unsigned __int64(__cdecl *LittleLong64)(unsigned __int64);
+extern unsigned __int64(*LittleLong64)(unsigned __int64);

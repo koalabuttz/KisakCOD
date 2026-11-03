@@ -7,6 +7,6 @@ DObjAnimMat * R_UpdateSceneEntBounds(
     GfxSceneEntity **pLocalSceneEnt,
     const DObj_s **pObj,
     int waitForCullState);
-DObjAnimMat *__cdecl R_DObjCalcPose(const GfxSceneEntity *sceneEnt, const DObj_s *obj, int *partBits);
-void __cdecl R_SetNoDraw(GfxSceneEntity *sceneEnt);
-void __cdecl R_UpdateGfxEntityBoundsCmd(GfxSceneEntity **data);
+DObjAnimMat *R_DObjCalcPose(const GfxSceneEntity *sceneEnt, const DObj_s *obj, int *partBits);
+void R_SetNoDraw(GfxSceneEntity *sceneEnt);
+void R_UpdateGfxEntityBoundsCmd(GfxSceneEntity **data);

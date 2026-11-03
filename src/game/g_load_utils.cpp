@@ -12,30 +12,30 @@
 const char *g_entityBeginParsePoint;
 const char *g_entityEndParsePoint;
 
-char *__cdecl CM_EntityString()
+char *CM_EntityString()
 {
     iassert(cm.mapEnts);
     return cm.mapEnts->entityString;
 }
 
-void __cdecl G_ResetEntityParsePoint()
+void G_ResetEntityParsePoint()
 {
     g_entityBeginParsePoint = CM_EntityString();
     g_entityEndParsePoint = g_entityBeginParsePoint;
 }
 
-const char *__cdecl G_GetEntityParsePoint()
+const char *G_GetEntityParsePoint()
 {
     return g_entityEndParsePoint;
 }
 
-void __cdecl G_SetEntityParsePoint(const char *beginParsePoint)
+void G_SetEntityParsePoint(const char *beginParsePoint)
 {
     g_entityBeginParsePoint = beginParsePoint;
     g_entityEndParsePoint = beginParsePoint;
 }
 
-int32_t __cdecl G_GetEntityToken(char *buffer, int32_t bufferSize)
+int32_t G_GetEntityToken(char *buffer, int32_t bufferSize)
 {
     parseInfo_t *v2; // eax
 
@@ -47,7 +47,7 @@ int32_t __cdecl G_GetEntityToken(char *buffer, int32_t bufferSize)
     return 1;
 }
 
-int32_t __cdecl G_ParseSpawnVars(SpawnVar *spawnVar)
+int32_t G_ParseSpawnVars(SpawnVar *spawnVar)
 {
     char com_token[1024]; // [esp+0h] [ebp-808h] BYREF
     char keyname[1028]; // [esp+400h] [ebp-408h] BYREF
@@ -78,7 +78,7 @@ int32_t __cdecl G_ParseSpawnVars(SpawnVar *spawnVar)
     return 1;
 }
 
-char *__cdecl G_AddSpawnVarToken(char *string, SpawnVar *spawnVar)
+char *G_AddSpawnVarToken(char *string, SpawnVar *spawnVar)
 {
     uint32_t v3; // [esp+0h] [ebp-18h]
     char *dest; // [esp+14h] [ebp-4h]
@@ -92,7 +92,7 @@ char *__cdecl G_AddSpawnVarToken(char *string, SpawnVar *spawnVar)
     return dest;
 }
 
-int32_t __cdecl G_SpawnString(const SpawnVar *spawnVar, const char *key, const char *defaultString, const char **out)
+int32_t G_SpawnString(const SpawnVar *spawnVar, const char *key, const char *defaultString, const char **out)
 {
     int32_t i; // [esp+0h] [ebp-4h]
 
@@ -110,7 +110,7 @@ int32_t __cdecl G_SpawnString(const SpawnVar *spawnVar, const char *key, const c
     return 0;
 }
 
-uint32_t __cdecl G_NewString(const char *string)
+uint32_t G_NewString(const char *string)
 {
     char str[0x4000]; // [esp+10h] [ebp-4010h] BYREF
     uint32_t v3; // [esp+4014h] [ebp-Ch]
@@ -147,7 +147,7 @@ This is just a convenience function
 for printing vectors
 =============
 */
-char *__cdecl vtos(const float *v)
+char *vtos(const float *v)
 {
     static	int		index;
     static	char	str[8][32];

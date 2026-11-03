@@ -6,7 +6,7 @@
 #include "r_drawsurf.h"
 
 
-int __cdecl R_SetupMaterial(
+int R_SetupMaterial(
     GfxCmdBufContext context,
     GfxCmdBufContext *prepassContext,
     const GfxDrawSurfListInfo *info,
@@ -62,7 +62,7 @@ int __cdecl R_SetupMaterial(
     return 1;
 }
 
-int __cdecl R_SetPrepassMaterial(GfxCmdBufContext context, GfxDrawSurf drawSurf, MaterialTechniqueType techType)
+int R_SetPrepassMaterial(GfxCmdBufContext context, GfxDrawSurf drawSurf, MaterialTechniqueType techType)
 {
     const MaterialTechnique *technique; // [esp+8h] [ebp-Ch]
     Material *material; // [esp+Ch] [ebp-8h]
@@ -90,7 +90,7 @@ int __cdecl R_SetPrepassMaterial(GfxCmdBufContext context, GfxDrawSurf drawSurf,
     return 1;
 }
 
-int __cdecl R_SetMaterial(GfxCmdBufContext context, GfxDrawSurf drawSurf, MaterialTechniqueType techType)
+int R_SetMaterial(GfxCmdBufContext context, GfxDrawSurf drawSurf, MaterialTechniqueType techType)
 {
     const MaterialTechnique *technique; // [esp+8h] [ebp-8h]
     Material *material; // [esp+Ch] [ebp-4h]
@@ -124,7 +124,7 @@ int __cdecl R_SetMaterial(GfxCmdBufContext context, GfxDrawSurf drawSurf, Materi
     return 1;
 }
 
-int __cdecl R_UpdateMaterialTime(GfxCmdBufSourceState *source, float materialTime)
+int R_UpdateMaterialTime(GfxCmdBufSourceState *source, float materialTime)
 {
     float gameTime; // [esp+4h] [ebp-4h]
 

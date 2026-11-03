@@ -12,7 +12,7 @@ clipMap_t cm;
 cbrush_t g_box_brush[THREAD_CONTEXT_TRACE_COUNT];
 cmodel_t g_box_model[THREAD_CONTEXT_TRACE_COUNT];
 
-void __cdecl TRACK_cm_load()
+void TRACK_cm_load()
 {
     //track_static_alloc_internal(&cm, 284, "cm", 25);
     //track_static_alloc_internal(g_box_brush, 320, "g_box_brush", 25);
@@ -35,7 +35,7 @@ static void CM_InitAllThreadData()
 #endif
 }
 
-void __cdecl CM_LoadMap(const char *name, int *checksum)
+void CM_LoadMap(const char *name, int *checksum)
 {
     if (!name || !*name)
         Com_Error(ERR_DROP, "CM_LoadMap: NULL name");
@@ -46,7 +46,7 @@ void __cdecl CM_LoadMap(const char *name, int *checksum)
 }
 
 extern TraceThreadInfo g_traceThreadInfo[THREAD_CONTEXT_COUNT];
-void __cdecl CM_InitThreadData(uint32_t threadContext)
+void CM_InitThreadData(uint32_t threadContext)
 {
     TraceThreadInfo *traceThreadInfo; // [esp+8h] [ebp-4h]
 
@@ -61,7 +61,7 @@ void __cdecl CM_InitThreadData(uint32_t threadContext)
     memcpy(traceThreadInfo->box_model, &cm.box_model, sizeof(cmodel_t));
 }
 
-void __cdecl CM_LoadMapData(const char *name)
+void CM_LoadMapData(const char *name)
 {
     if (IsFastFileLoad())
         CM_LoadMapData_FastFile(name);
@@ -69,7 +69,7 @@ void __cdecl CM_LoadMapData(const char *name)
         CM_LoadMapData_LoadObj(name);
 }
 
-void __cdecl CM_LoadMapData_FastFile(const char *name)
+void CM_LoadMapData_FastFile(const char *name)
 {
 #ifdef KISAK_MP
     if (DB_FindXAssetHeader(ASSET_TYPE_CLIPMAP_PVS, name).clipMap != &cm)
@@ -80,7 +80,7 @@ void __cdecl CM_LoadMapData_FastFile(const char *name)
 #endif
 }
 
-void __cdecl CM_Shutdown()
+void CM_Shutdown()
 {
     const char *savedName; // [esp+0h] [ebp-4h]
 
@@ -90,20 +90,20 @@ void __cdecl CM_Shutdown()
     iassert( !cm.isInUse );
 }
 
-void __cdecl CM_Unload()
+void CM_Unload()
 {
     iassert( IsFastFileLoad() );
     if (cm.isInUse)
         Sys_Error("Cannot unload collision while it is in use");
 }
 
-int __cdecl CM_LeafCluster(uint32_t leafnum)
+int CM_LeafCluster(uint32_t leafnum)
 {
     bcassert(leafnum, cm.numLeafs);
     return cm.leafs[leafnum].cluster;
 }
 
-void __cdecl CM_ModelBounds(uint32_t model, float *mins, float *maxs)
+void CM_ModelBounds(uint32_t model, float *mins, float *maxs)
 {
     cmodel_t *cmodel; // eax
 

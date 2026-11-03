@@ -33,7 +33,7 @@ const GfxMtlFeatureMap s_materialFeatures[20] =
   { "twk", 32u, 0u, false }
 }; // idb
 
-void __cdecl Material_GetRemappedFeatures_RunTime(uint32_t *mask, uint32_t *value)
+void Material_GetRemappedFeatures_RunTime(uint32_t *mask, uint32_t *value)
 {
     iassert( mask );
     iassert( value );
@@ -55,7 +55,7 @@ void __cdecl Material_GetRemappedFeatures_RunTime(uint32_t *mask, uint32_t *valu
         *mask |= 0x20u;
 }
 
-void __cdecl Material_ForEachTechniqueSet_FastFile(void(__cdecl *callback)(MaterialTechniqueSet *))
+void Material_ForEachTechniqueSet_FastFile(void(*callback)(MaterialTechniqueSet *))
 {
     TechniqueSetList inData; // [esp+0h] [ebp-1008h] BYREF
 
@@ -65,7 +65,7 @@ void __cdecl Material_ForEachTechniqueSet_FastFile(void(__cdecl *callback)(Mater
         callback(inData.hashTable[--inData.count]); // Material_CollateTechniqueSets()
 }
 
-void __cdecl Material_ForEachTechniqueSet_LoadObj(void(__cdecl *callback)(MaterialTechniqueSet *))
+void Material_ForEachTechniqueSet_LoadObj(void(*callback)(MaterialTechniqueSet *))
 {
     uint32_t hashIndex; // [esp+0h] [ebp-8h]
     MaterialTechniqueSet *techSet; // [esp+4h] [ebp-4h]
@@ -78,7 +78,7 @@ void __cdecl Material_ForEachTechniqueSet_LoadObj(void(__cdecl *callback)(Materi
     }
 }
 
-void __cdecl Material_ForEachTechniqueSet(void(__cdecl *callback)(MaterialTechniqueSet *))
+void Material_ForEachTechniqueSet(void(*callback)(MaterialTechniqueSet *))
 {
     if (IsFastFileLoad())
         Material_ForEachTechniqueSet_FastFile(callback);
@@ -86,7 +86,7 @@ void __cdecl Material_ForEachTechniqueSet(void(__cdecl *callback)(MaterialTechni
         Material_ForEachTechniqueSet_LoadObj(callback);
 }
 
-const GfxMtlFeatureMap *__cdecl Material_FindFeature(
+const GfxMtlFeatureMap *Material_FindFeature(
     const char *featureName,
     const GfxMtlFeatureMap *featureMap,
     uint32_t featureCount)
@@ -101,7 +101,7 @@ const GfxMtlFeatureMap *__cdecl Material_FindFeature(
     return 0;
 }
 
-uint32_t __cdecl Material_NextTechniqueSetNameToken(const char **parse, char *token)
+uint32_t Material_NextTechniqueSetNameToken(const char **parse, char *token)
 {
     uint32_t tokenLen; // [esp+0h] [ebp-4h]
 
@@ -123,7 +123,7 @@ uint32_t __cdecl Material_NextTechniqueSetNameToken(const char **parse, char *to
     return tokenLen;
 }
 
-uint32_t __cdecl Material_ExtendTechniqueSetName(
+uint32_t Material_ExtendTechniqueSetName(
     char *nameSoFar,
     uint32_t nameLen,
     char *token,
@@ -138,7 +138,7 @@ uint32_t __cdecl Material_ExtendTechniqueSetName(
     return tokenLen + nameLen;
 }
 
-void __cdecl Material_RemapTechniqueSetName(
+void Material_RemapTechniqueSetName(
     const char *techSetName,
     char *remapName,
     uint32_t remapMask,
@@ -214,7 +214,7 @@ void __cdecl Material_RemapTechniqueSetName(
     }
 }
 
-void __cdecl AssertValidRemappedTechniqueSet(MaterialTechniqueSet *techSet)
+void AssertValidRemappedTechniqueSet(MaterialTechniqueSet *techSet)
 {
     const char *v1; // eax
     const char *name; // [esp+4h] [ebp-8h]
@@ -257,7 +257,7 @@ void __cdecl AssertValidRemappedTechniqueSet(MaterialTechniqueSet *techSet)
     }
 }
 
-void __cdecl Material_RemapTechniqueSet(MaterialTechniqueSet *techSet)
+void Material_RemapTechniqueSet(MaterialTechniqueSet *techSet)
 {
     char remapName[260]; // [esp+14h] [ebp-108h] BYREF
 
@@ -280,7 +280,7 @@ void __cdecl Material_RemapTechniqueSet(MaterialTechniqueSet *techSet)
     }
 }
 
-void __cdecl Material_OverrideTechniqueSets()
+void Material_OverrideTechniqueSets()
 {
     uint32_t remapValue; // [esp+0h] [ebp-8h] BYREF
     uint32_t remapMask; // [esp+4h] [ebp-4h] BYREF
@@ -301,7 +301,7 @@ void __cdecl Material_OverrideTechniqueSets()
     }
 }
 
-void __cdecl Material_OriginalRemapTechniqueSet(MaterialTechniqueSet *techSet)
+void Material_OriginalRemapTechniqueSet(MaterialTechniqueSet *techSet)
 {
     char remapName[68]; // [esp+0h] [ebp-48h] BYREF
 
@@ -319,19 +319,19 @@ void __cdecl Material_OriginalRemapTechniqueSet(MaterialTechniqueSet *techSet)
     }
 }
 
-void __cdecl Material_DirtyTechniqueSetOverrides()
+void Material_DirtyTechniqueSetOverrides()
 {
     mtlOverrideGlob.isDirty = 1;
 }
 
-void __cdecl Material_ClearShaderUploadList()
+void Material_ClearShaderUploadList()
 {
     mtlUploadGlob.get = 0;
     mtlUploadGlob.put = 0;
     mtlUploadGlob.techTypeIter = TECHNIQUE_DEPTH_PREPASS;
 }
 
-bool __cdecl Material_WouldTechniqueSetBeOverridden(const MaterialTechniqueSet *techSet)
+bool Material_WouldTechniqueSetBeOverridden(const MaterialTechniqueSet *techSet)
 {
     uint32_t remapValue; // [esp+14h] [ebp-10Ch] BYREF
     char remapName[256]; // [esp+18h] [ebp-108h] BYREF

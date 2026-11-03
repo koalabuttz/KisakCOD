@@ -26,7 +26,7 @@
 
 XModel *cached_models[512];
 
-void __cdecl G_SafeDObjFree(uint32_t handle, int unusedLocalClientNum)
+void G_SafeDObjFree(uint32_t handle, int unusedLocalClientNum)
 {
     if (unusedLocalClientNum != -1)
         MyAssertHandler(
@@ -39,12 +39,12 @@ void __cdecl G_SafeDObjFree(uint32_t handle, int unusedLocalClientNum)
     Com_SafeServerDObjFree(handle);
 }
 
-void __cdecl TRACK_g_utils()
+void TRACK_g_utils()
 {
     //track_static_alloc_internal(entityTypeNames, 68, "entityTypeNames", 9);
 }
 
-int __cdecl G_FindConfigstringIndex(char *name, int start, int max, int create, const char *errormsg)
+int G_FindConfigstringIndex(char *name, int start, int max, int create, const char *errormsg)
 {
     const char *v6; // eax
     uint32_t ConfigstringConst; // eax
@@ -130,7 +130,7 @@ int __cdecl G_FindConfigstringIndex(char *name, int start, int max, int create, 
 }
 
 const char *origErrorMsg;
-int __cdecl G_LocalizedStringIndex(char *string)
+int G_LocalizedStringIndex(char *string)
 {
     int v2; // eax
     int configStringIndex; // [esp+0h] [ebp-Ch]
@@ -182,7 +182,7 @@ LABEL_11:
     return configStringIndex;
 }
 
-int __cdecl G_MaterialIndex(const char *name)
+int G_MaterialIndex(const char *name)
 {
     char v2; // [esp+3h] [ebp-55h]
     char *v3; // [esp+8h] [ebp-50h]
@@ -209,7 +209,7 @@ int __cdecl G_MaterialIndex(const char *name)
         "material");
 }
 
-int __cdecl G_ModelIndex(const char *name)
+int G_ModelIndex(const char *name)
 {
     uint32_t nameString; // [esp+68h] [ebp-10h]
     uint32_t s; // [esp+6Ch] [ebp-Ch]
@@ -284,7 +284,7 @@ int __cdecl G_ModelIndex(const char *name)
     return i;
 }
 
-bool __cdecl G_GetModelBounds(int index, float *outMins, float *outMaxs)
+bool G_GetModelBounds(int index, float *outMins, float *outMaxs)
 {
     float identityBasis[3][3]; // [esp+0h] [ebp-28h] BYREF
     XModel *xmodel; // [esp+24h] [ebp-4h]
@@ -300,7 +300,7 @@ bool __cdecl G_GetModelBounds(int index, float *outMins, float *outMaxs)
     return XModelGetStaticBounds(xmodel, identityBasis, outMins, outMaxs) != 0;
 }
 
-XModel *__cdecl G_GetModel(int index)
+XModel *G_GetModel(int index)
 {
     if (index <= 0)
         MyAssertHandler(".\\game_mp\\g_utils_mp.cpp", 313, 0, "%s", "index > 0");
@@ -309,7 +309,7 @@ XModel *__cdecl G_GetModel(int index)
     return cached_models[index];
 }
 
-bool __cdecl G_XModelBad(int index)
+bool G_XModelBad(int index)
 {
     const XModel *Model; // eax
 
@@ -319,21 +319,21 @@ bool __cdecl G_XModelBad(int index)
     return XModelBad(Model);
 }
 
-uint32_t __cdecl G_ModelName(uint32_t index)
+uint32_t G_ModelName(uint32_t index)
 {
     if (index >= 0x200)
         MyAssertHandler(".\\game_mp\\g_utils_mp.cpp", 345, 0, "%s", "(unsigned)index < MAX_MODELS");
     return SV_GetConfigstringConst(index + CS_MODELS);
 }
 
-int __cdecl G_TagIndex(char *name)
+int G_TagIndex(char *name)
 {
     if (!name)
         MyAssertHandler(".\\game_mp\\g_utils_mp.cpp", 352, 0, "%s", "name");
     return G_FindConfigstringIndex(name, CS_TAGS, CS_TAGS_COUNT, 1, 0);
 }
 
-int __cdecl G_EffectIndex(char *name)
+int G_EffectIndex(char *name)
 {
     if (!name)
         MyAssertHandler(".\\game_mp\\g_utils_mp.cpp", 359, 0, "%s", "name");
@@ -345,21 +345,21 @@ int __cdecl G_EffectIndex(char *name)
         "effect");
 }
 
-int __cdecl G_ShellShockIndex(char *name)
+int G_ShellShockIndex(char *name)
 {
     if (!name)
         MyAssertHandler(".\\game_mp\\g_utils_mp.cpp", 366, 0, "%s", "name");
     return G_FindConfigstringIndex(name, CS_SHELLSHOCKS, CS_SHELLSHOCKS_COUNT, 1, 0);
 }
 
-int __cdecl G_SoundAliasIndex(char *name)
+int G_SoundAliasIndex(char *name)
 {
     if (!name)
         MyAssertHandler(".\\game_mp\\g_utils_mp.cpp", 374, 0, "%s", "name");
     return G_FindConfigstringIndex(name, CS_SOUNDALIASES, CS_SOUNDALIASES_COUNT, 1, 0);
 }
 
-void __cdecl G_DObjUpdate(gentity_s *ent)
+void G_DObjUpdate(gentity_s *ent)
 {
     DObj_s *dobj; // [esp+0h] [ebp-114h]
     XModel *model; // [esp+4h] [ebp-110h]
@@ -416,7 +416,7 @@ void __cdecl G_DObjUpdate(gentity_s *ent)
     }
 }
 
-void __cdecl G_SetModel(gentity_s *ent, char *modelName)
+void G_SetModel(gentity_s *ent, char *modelName)
 {
     int modelIndex; // [esp+0h] [ebp-4h]
 
@@ -433,7 +433,7 @@ void __cdecl G_SetModel(gentity_s *ent, char *modelName)
     }
 }
 
-void __cdecl G_OverrideModel(uint32_t modelIndex, char *defaultModelName)
+void G_OverrideModel(uint32_t modelIndex, char *defaultModelName)
 {
     uint32_t v2; // eax
     XModel *v3; // eax
@@ -457,7 +457,7 @@ void __cdecl G_OverrideModel(uint32_t modelIndex, char *defaultModelName)
     }
 }
 
-int __cdecl G_EntAttach(gentity_s *ent, char *modelName, uint32_t tagName, int ignoreCollision)
+int G_EntAttach(gentity_s *ent, char *modelName, uint32_t tagName, int ignoreCollision)
 {
     int i; // [esp+0h] [ebp-8h]
     int modelIndex; // [esp+4h] [ebp-4h]
@@ -490,7 +490,7 @@ int __cdecl G_EntAttach(gentity_s *ent, char *modelName, uint32_t tagName, int i
     return 1;
 }
 
-int __cdecl G_EntDetach(gentity_s *ent, const char *modelName, uint32_t tagName)
+int G_EntDetach(gentity_s *ent, const char *modelName, uint32_t tagName)
 {
     uint32_t v4; // edx
     uint32_t modelNameString; // [esp+4h] [ebp-8h]
@@ -530,7 +530,7 @@ int __cdecl G_EntDetach(gentity_s *ent, const char *modelName, uint32_t tagName)
     return 1;
 }
 
-void __cdecl G_EntDetachAll(gentity_s *ent)
+void G_EntDetachAll(gentity_s *ent)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -543,7 +543,7 @@ void __cdecl G_EntDetachAll(gentity_s *ent)
     G_DObjUpdate(ent);
 }
 
-int __cdecl G_EntLinkTo(gentity_s *ent, gentity_s *parent, uint32_t tagName)
+int G_EntLinkTo(gentity_s *ent, gentity_s *parent, uint32_t tagName)
 {
     if (!G_EntLinkToInternal(ent, parent, tagName))
         return 0;
@@ -551,7 +551,7 @@ int __cdecl G_EntLinkTo(gentity_s *ent, gentity_s *parent, uint32_t tagName)
     return 1;
 }
 
-int __cdecl G_EntLinkToInternal(gentity_s *ent, gentity_s *parent, uint32_t tagName)
+int G_EntLinkToInternal(gentity_s *ent, gentity_s *parent, uint32_t tagName)
 {
     int pm_type; // [esp+0h] [ebp-10h]
     tagInfo_s *tagInfo; // [esp+4h] [ebp-Ch]
@@ -613,7 +613,7 @@ int __cdecl G_EntLinkToInternal(gentity_s *ent, gentity_s *parent, uint32_t tagN
     return 1;
 }
 
-int __cdecl G_EntLinkToWithOffset(
+int G_EntLinkToWithOffset(
     gentity_s *ent,
     gentity_s *parent,
     uint32_t tagName,
@@ -632,7 +632,7 @@ int __cdecl G_EntLinkToWithOffset(
     return 1;
 }
 
-void __cdecl G_EntUnlink(gentity_s *ent)
+void G_EntUnlink(gentity_s *ent)
 {
     gclient_s *client; // ecx
     int pm_type; // [esp+0h] [ebp-24h]
@@ -694,7 +694,7 @@ void __cdecl G_EntUnlink(gentity_s *ent)
     }
 }
 
-void __cdecl G_UpdateTagInfo(gentity_s *ent, int bParentHasDObj)
+void G_UpdateTagInfo(gentity_s *ent, int bParentHasDObj)
 {
     tagInfo_s *tagInfo; // [esp+0h] [ebp-4h]
 
@@ -712,7 +712,7 @@ void __cdecl G_UpdateTagInfo(gentity_s *ent, int bParentHasDObj)
     }
 }
 
-void __cdecl G_UpdateTagInfoOfChildren(gentity_s *parent, int bHasDObj)
+void G_UpdateTagInfoOfChildren(gentity_s *parent, int bHasDObj)
 {
     gentity_s *next; // [esp+0h] [ebp-8h]
     gentity_s *ent; // [esp+4h] [ebp-4h]
@@ -724,7 +724,7 @@ void __cdecl G_UpdateTagInfoOfChildren(gentity_s *parent, int bHasDObj)
     }
 }
 
-void __cdecl G_CalcTagParentAxis(gentity_s *ent, float (*parentAxis)[3])
+void G_CalcTagParentAxis(gentity_s *ent, float (*parentAxis)[3])
 {
     float *currentOrigin; // [esp+Ch] [ebp-C4h]
     float v3; // [esp+24h] [ebp-ACh]
@@ -810,7 +810,7 @@ void __cdecl G_CalcTagParentAxis(gentity_s *ent, float (*parentAxis)[3])
     }
 }
 
-void __cdecl G_CalcTagAxis(gentity_s *ent, int bAnglesOnly)
+void G_CalcTagAxis(gentity_s *ent, int bAnglesOnly)
 {
     tagInfo_s *tagInfo; // [esp+8h] [ebp-94h]
     float invParentAxis[4][3]; // [esp+Ch] [ebp-90h] BYREF
@@ -837,7 +837,7 @@ void __cdecl G_CalcTagAxis(gentity_s *ent, int bAnglesOnly)
     }
 }
 
-void __cdecl G_SetFixedLink(gentity_s *ent, int eAngles)
+void G_SetFixedLink(gentity_s *ent, int eAngles)
 {
     tagInfo_s *tagInfo; // [esp+1Ch] [ebp-64h]
     float parentAxis[4][3]; // [esp+20h] [ebp-60h] BYREF
@@ -875,7 +875,7 @@ void __cdecl G_SetFixedLink(gentity_s *ent, int eAngles)
     }
 }
 
-void __cdecl G_GeneralLink(gentity_s *ent)
+void G_GeneralLink(gentity_s *ent)
 {
     if (!ent->tagInfo)
         MyAssertHandler(".\\game_mp\\g_utils_mp.cpp", 1026, 0, "%s", "ent->tagInfo");
@@ -897,12 +897,12 @@ void __cdecl G_GeneralLink(gentity_s *ent)
     SV_LinkEntity(ent);
 }
 
-void __cdecl G_SafeDObjFree(gentity_s *ent)
+void G_SafeDObjFree(gentity_s *ent)
 {
     Com_SafeServerDObjFree(ent->s.number);
 }
 
-int __cdecl G_DObjUpdateServerTime(gentity_s *ent, int bNotify)
+int G_DObjUpdateServerTime(gentity_s *ent, int bNotify)
 {
     float dtime; // [esp+8h] [ebp-4h]
 
@@ -910,9 +910,9 @@ int __cdecl G_DObjUpdateServerTime(gentity_s *ent, int bNotify)
     return SV_DObjUpdateServerTime(ent, dtime, bNotify);
 }
 
-void __cdecl G_DObjCalcPose(gentity_s *ent, int *partBits)
+void G_DObjCalcPose(gentity_s *ent, int *partBits)
 {
-    void(__cdecl * controller)(const gentity_s *, int *); // [esp+0h] [ebp-8h]
+    void(* controller)(const gentity_s *, int *); // [esp+0h] [ebp-8h]
     DObj_s *obj; // [esp+4h] [ebp-4h]
 
     obj = Com_GetServerDObj(ent->s.number);
@@ -926,9 +926,9 @@ void __cdecl G_DObjCalcPose(gentity_s *ent, int *partBits)
     }
 }
 
-void __cdecl G_DObjCalcBone(const gentity_s *ent, int boneIndex)
+void G_DObjCalcBone(const gentity_s *ent, int boneIndex)
 {
-    void(__cdecl * controller)(const gentity_s *, int *); // [esp+0h] [ebp-18h]
+    void(* controller)(const gentity_s *, int *); // [esp+0h] [ebp-18h]
     DObj_s *obj; // [esp+4h] [ebp-14h]
     int partBits[4]; // [esp+8h] [ebp-10h] BYREF
 
@@ -945,7 +945,7 @@ void __cdecl G_DObjCalcBone(const gentity_s *ent, int boneIndex)
     }
 }
 
-DObjAnimMat *__cdecl G_DObjGetLocalTagMatrix(gentity_s *ent, uint32_t tagName)
+DObjAnimMat *G_DObjGetLocalTagMatrix(gentity_s *ent, uint32_t tagName)
 {
     int boneIndex; // [esp+30h] [ebp-8h]
 
@@ -961,7 +961,7 @@ DObjAnimMat *__cdecl G_DObjGetLocalTagMatrix(gentity_s *ent, uint32_t tagName)
     return &SV_DObjGetMatrixArray(ent)[boneIndex];
 }
 
-int __cdecl G_DObjGetWorldTagMatrix(gentity_s *ent, uint32_t tagName, mat4x3 &tagMat)
+int G_DObjGetWorldTagMatrix(gentity_s *ent, uint32_t tagName, mat4x3 &tagMat)
 {
     float v4; // [esp+1Ch] [ebp-90h]
     float v5; // [esp+20h] [ebp-8Ch]
@@ -1020,7 +1020,7 @@ int __cdecl G_DObjGetWorldTagMatrix(gentity_s *ent, uint32_t tagName, mat4x3 &ta
     return 1;
 }
 
-int __cdecl G_DObjGetWorldTagPos(gentity_s *ent, uint32_t tagName, float *pos)
+int G_DObjGetWorldTagPos(gentity_s *ent, uint32_t tagName, float *pos)
 {
     float ent_axis[4][3]; // [esp+8h] [ebp-34h] BYREF
     DObjAnimMat *mat; // [esp+38h] [ebp-4h]
@@ -1036,7 +1036,7 @@ int __cdecl G_DObjGetWorldTagPos(gentity_s *ent, uint32_t tagName, float *pos)
     return 1;
 }
 
-DObjAnimMat *__cdecl G_DObjGetLocalBoneIndexMatrix(gentity_s *ent, int boneIndex)
+DObjAnimMat *G_DObjGetLocalBoneIndexMatrix(gentity_s *ent, int boneIndex)
 {
     {
         PROF_SCOPED("G_DObjGetLocalTagMatrix");
@@ -1045,7 +1045,7 @@ DObjAnimMat *__cdecl G_DObjGetLocalBoneIndexMatrix(gentity_s *ent, int boneIndex
     return &SV_DObjGetMatrixArray(ent)[boneIndex];
 }
 
-void __cdecl G_DObjGetWorldBoneIndexPos(gentity_s *ent, int boneIndex, float *pos)
+void G_DObjGetWorldBoneIndexPos(gentity_s *ent, int boneIndex, float *pos)
 {
     float ent_axis[4][3]; // [esp+8h] [ebp-34h] BYREF
     DObjAnimMat *mat; // [esp+38h] [ebp-4h]
@@ -1058,7 +1058,7 @@ void __cdecl G_DObjGetWorldBoneIndexPos(gentity_s *ent, int boneIndex, float *po
     MatrixTransformVector43(mat->trans, ent_axis, pos);
 }
 
-void __cdecl G_DObjGetWorldBoneIndexMatrix(gentity_s *ent, int boneIndex, float (*tagMat)[3])
+void G_DObjGetWorldBoneIndexMatrix(gentity_s *ent, int boneIndex, float (*tagMat)[3])
 {
     float v3; // [esp+1Ch] [ebp-90h]
     float v4; // [esp+20h] [ebp-8Ch]
@@ -1120,7 +1120,7 @@ void __cdecl G_DObjGetWorldBoneIndexMatrix(gentity_s *ent, int boneIndex, float 
     MatrixTransformVector43(mat->trans, ent_axis, &(*tagMat)[9]);
 }
 
-gentity_s *__cdecl G_Find(gentity_s *from, int fieldofs, uint16_t match)
+gentity_s *G_Find(gentity_s *from, int fieldofs, uint16_t match)
 {
     uint16_t s; // [esp+0h] [ebp-4h]
     gentity_s *froma; // [esp+Ch] [ebp+8h]
@@ -1145,7 +1145,7 @@ gentity_s *__cdecl G_Find(gentity_s *from, int fieldofs, uint16_t match)
     return 0;
 }
 
-void __cdecl G_InitGentity(gentity_s *e)
+void G_InitGentity(gentity_s *e)
 {
     e->nextFree = 0;
     e->r.inuse = 1;
@@ -1158,7 +1158,7 @@ void __cdecl G_InitGentity(gentity_s *e)
     e->freeAfterEvent = 0;
 }
 
-void __cdecl G_PrintEntities()
+void G_PrintEntities()
 {
     const char *v0; // [esp+18h] [ebp-8h]
     int entityIndex; // [esp+1Ch] [ebp-4h]
@@ -1180,7 +1180,7 @@ void __cdecl G_PrintEntities()
     }
 }
 
-gentity_s *__cdecl G_TrySpawn()
+gentity_s *G_TrySpawn()
 {
     gentity_s *e; // [esp+0h] [ebp-4h]
 
@@ -1203,7 +1203,7 @@ gentity_s *__cdecl G_TrySpawn()
     return e;
 }
 
-gentity_s *__cdecl G_Spawn()
+gentity_s *G_Spawn()
 {
     gentity_s *ent = G_TrySpawn();
     if (!ent)
@@ -1214,14 +1214,14 @@ gentity_s *__cdecl G_Spawn()
     return ent;
 }
 
-bool __cdecl G_MaySpawnEntity(gentity_s *e)
+bool G_MaySpawnEntity(gentity_s *e)
 {
     if (!e)
         return 0;
     return level.time - e->eventTime >= 500 || level.num_entities >= ENTITYNUM_WORLD;
 }
 
-gentity_s *__cdecl G_SpawnPlayerClone()
+gentity_s *G_SpawnPlayerClone()
 {
     gentity_s *e; // [esp+0h] [ebp-8h]
     int flags; // [esp+4h] [ebp-4h]
@@ -1236,7 +1236,7 @@ gentity_s *__cdecl G_SpawnPlayerClone()
     return e;
 }
 
-void __cdecl G_FreeEntityRefs(gentity_s *ed)
+void G_FreeEntityRefs(gentity_s *ed)
 {
     gentity_s *other; // [esp+0h] [ebp-10h]
     gentity_s *othera; // [esp+0h] [ebp-10h]
@@ -1292,7 +1292,7 @@ void __cdecl G_FreeEntityRefs(gentity_s *ed)
         Missile_FreeAttractorRefs(ed);
 }
 
-void __cdecl G_FreeEntity(gentity_s *ed)
+void G_FreeEntity(gentity_s *ed)
 {
     XAnimTree_s *tree; // [esp+0h] [ebp-8h]
     int useCount; // [esp+4h] [ebp-4h]
@@ -1348,7 +1348,7 @@ void __cdecl G_FreeEntity(gentity_s *ed)
         MyAssertHandler(".\\game_mp\\g_utils_mp.cpp", 1556, 0, "%s", "!ed->r.inuse");
 }
 
-void __cdecl G_FreeEntityDelay(gentity_s *ed)
+void G_FreeEntityDelay(gentity_s *ed)
 {
     uint16_t hThread; // [esp+0h] [ebp-4h]
 
@@ -1358,17 +1358,17 @@ void __cdecl G_FreeEntityDelay(gentity_s *ed)
     Scr_FreeThread(hThread);
 }
 
-void __cdecl G_BroadcastEntity(gentity_s *ent)
+void G_BroadcastEntity(gentity_s *ent)
 {
     ent->r.svFlags = 8;
 }
 
-void __cdecl G_FreeEntityAfterEvent(gentity_s *ent)
+void G_FreeEntityAfterEvent(gentity_s *ent)
 {
     ent->freeAfterEvent = 1;
 }
 
-gentity_s *__cdecl G_TempEntity(const float *origin, int event)
+gentity_s *G_TempEntity(const float *origin, int event)
 {
     float snapped[3]; // [esp+Ch] [ebp-10h] BYREF
     gentity_s *e; // [esp+18h] [ebp-4h]
@@ -1388,13 +1388,13 @@ gentity_s *__cdecl G_TempEntity(const float *origin, int event)
     return e;
 }
 
-void __cdecl G_AddPredictableEvent(gentity_s *ent, entity_event_t event, uint32_t eventParm)
+void G_AddPredictableEvent(gentity_s *ent, entity_event_t event, uint32_t eventParm)
 {
     if (ent->client)
         BG_AddPredictableEventToPlayerstate(event, eventParm, &ent->client->ps);
 }
 
-void __cdecl G_AddEvent(gentity_s *ent, uint32_t event, uint32_t eventParm)
+void G_AddEvent(gentity_s *ent, uint32_t event, uint32_t eventParm)
 {
     if (!event)
         MyAssertHandler(".\\game_mp\\g_utils_mp.cpp", 1713, 0, "%s", "event");
@@ -1420,7 +1420,7 @@ void __cdecl G_AddEvent(gentity_s *ent, uint32_t event, uint32_t eventParm)
     ent->r.eventTime = level.time;
 }
 
-void __cdecl G_PlaySoundAlias(gentity_s *ent, uint8_t index)
+void G_PlaySoundAlias(gentity_s *ent, uint8_t index)
 {
     if (!ent)
         MyAssertHandler(".\\game_mp\\g_utils_mp.cpp", 1760, 0, "%s", "ent");
@@ -1428,7 +1428,7 @@ void __cdecl G_PlaySoundAlias(gentity_s *ent, uint8_t index)
         G_AddEvent(ent, EV_SOUND_ALIAS, index);
 }
 
-int __cdecl G_AnimScriptSound(int client, snd_alias_list_t *aliasList)
+int G_AnimScriptSound(int client, snd_alias_list_t *aliasList)
 {
     uint8_t v2; // al
 
@@ -1437,7 +1437,7 @@ int __cdecl G_AnimScriptSound(int client, snd_alias_list_t *aliasList)
     return 0;
 }
 
-void __cdecl G_SetOrigin(gentity_s *ent, const float *origin)
+void G_SetOrigin(gentity_s *ent, const float *origin)
 {
     ent->s.lerp.pos.trBase[0] = *origin;
     ent->s.lerp.pos.trBase[1] = origin[1];
@@ -1453,7 +1453,7 @@ void __cdecl G_SetOrigin(gentity_s *ent, const float *origin)
     ent->r.currentOrigin[2] = origin[2];
 }
 
-void __cdecl G_SetAngle(gentity_s *ent, const float *angle)
+void G_SetAngle(gentity_s *ent, const float *angle)
 {
     ent->s.lerp.apos.trBase[0] = *angle;
     ent->s.lerp.apos.trBase[1] = angle[1];
@@ -1469,41 +1469,41 @@ void __cdecl G_SetAngle(gentity_s *ent, const float *angle)
     ent->r.currentAngles[2] = angle[2];
 }
 
-void __cdecl G_SetConstString(uint16_t *to, char *from)
+void G_SetConstString(uint16_t *to, char *from)
 {
     Scr_SetString(to, 0);
     *to = SL_GetString(from, 0);
 }
 
-const char *__cdecl G_GetEntityTypeName(const gentity_s *ent)
+const char *G_GetEntityTypeName(const gentity_s *ent)
 {
     if (ent->s.eType >= ET_EVENTS)
         MyAssertHandler(".\\game_mp\\g_utils_mp.cpp", 1870, 0, "%s", "(unsigned)ent->s.eType < ET_EVENTS");
     return entityTypeNames[ent->s.eType];
 }
 
-int __cdecl G_rand()
+int G_rand()
 {
     // Callers scale this as a 15-bit value, including the script random helpers.
     return rand() & 0x7fff;
 }
 
-float __cdecl G_flrand(float min, float max)
+float G_flrand(float min, float max)
 {
     return (float)G_rand() * (max - min) / 32768.0f + min;
 }
 
-int __cdecl G_irand(int min, int max)
+int G_irand(int min, int max)
 {
     return min + (max - min) * G_rand() / 0x8000;
 }
 
-float __cdecl G_random()
+float G_random()
 {
     return (float)G_rand() / 32768.0f;
 }
 
-float __cdecl G_crandom()
+float G_crandom()
 {
     return G_random() * 2.0f - 1.0f;
 }

@@ -3677,8 +3677,8 @@ void CMainFrame::OnTexturesShowall()
 // backend (R_ReloadImages / R_UpdateMipMap) is in gfx_d3d/r_image.cpp under KISAK_RADIANT;
 // kisak's imageGlobals.imageHashTable[32768] IS the binary's flat imageGlobals[32768].
 
-void __cdecl R_ReloadImages();   // gfx_d3d/r_image.cpp (idb R_ReloadImages 0x513D70; decl in r_image.h)
-void __cdecl R_UpdateMipMap();    // gfx_d3d/r_image.cpp (idb R_UpdateMipMap  0x5139A0; decl in r_image.h)
+void R_ReloadImages();   // gfx_d3d/r_image.cpp (idb R_ReloadImages 0x513D70; decl in r_image.h)
+void R_UpdateMipMap();    // gfx_d3d/r_image.cpp (idb R_UpdateMipMap  0x5139A0; decl in r_image.h)
 
 // CMainFrame::OnTextureRefresh (0x428B50) — Textures→Refresh Textures (33204, F5).  Reload
 // every loose-file image from disk so edited TGA/DDS/IWI shows up without restarting, then

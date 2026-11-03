@@ -225,7 +225,7 @@ void MT_FreeIndex(uint32_t nodeNum, int numBytes)
     Sys_LeaveCriticalSection(CRITSECT_MEMORY_TREE);
 }
 
-bool __cdecl MT_RemoveMemoryNode(int oldNode, uint32_t size)
+bool MT_RemoveMemoryNode(int oldNode, uint32_t size)
 {
     MemoryNode tempNodeValue;
     int node;

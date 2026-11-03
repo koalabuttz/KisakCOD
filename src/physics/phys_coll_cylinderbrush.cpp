@@ -4,7 +4,7 @@
 #include <cgame/cg_local.h>
 #include <EffectsCore/fx_system.h>
 
-void __cdecl Phys_CollideCylinderWithBrush(const cbrush_t *brush, const objInfo *info, Results *results)
+void Phys_CollideCylinderWithBrush(const cbrush_t *brush, const objInfo *info, Results *results)
 {
     double v3; // st7
     cplane_s *v4; // [esp+0h] [ebp-D58h]
@@ -166,7 +166,7 @@ LABEL_24:
     }
 }
 
-void __cdecl Phys_CollideCylinderWithFace(
+void Phys_CollideCylinderWithFace(
     const float *polyPlane,
     const Poly *poly,
     const objInfo *info,
@@ -264,7 +264,7 @@ void __cdecl Phys_CollideCylinderWithFace(
     }
 }
 
-void __cdecl Phys_PushPolyOutOfCylinderEndcapPlane(
+void Phys_PushPolyOutOfCylinderEndcapPlane(
     Results *results,
     const Poly *poly,
     const float *polyNormal,
@@ -308,7 +308,7 @@ void __cdecl Phys_PushPolyOutOfCylinderEndcapPlane(
     }
 }
 
-uint32_t __cdecl Phys_ClipPolygonAgainstCylinderRadius(
+uint32_t Phys_ClipPolygonAgainstCylinderRadius(
     const Poly *poly,
     const objInfo *info,
     float (*result)[3],
@@ -409,7 +409,7 @@ uint32_t __cdecl Phys_ClipPolygonAgainstCylinderRadius(
     return outVertIndex;
 }
 
-uint32_t __cdecl Phys_ClipLineSegmentAgainstCylinderRadius(
+uint32_t Phys_ClipLineSegmentAgainstCylinderRadius(
     const float *pt1,
     const float *pt2,
     const objInfo *info,
@@ -474,7 +474,7 @@ uint32_t __cdecl Phys_ClipLineSegmentAgainstCylinderRadius(
     return 2;
 }
 
-char __cdecl Phys_CylinderFaceTestSeparatingAxes(
+char Phys_CylinderFaceTestSeparatingAxes(
     const float *polyPlane,
     const Poly *poly,
     const objInfo *info,
@@ -612,7 +612,7 @@ char __cdecl Phys_CylinderFaceTestSeparatingAxes(
     return 1;
 }
 
-char __cdecl Phys_CylinderFaceTestAxis(
+char Phys_CylinderFaceTestAxis(
     const float *polyNormal,
     const Poly *poly,
     const objInfo *info,
@@ -726,7 +726,7 @@ char __cdecl Phys_CylinderFaceTestAxis(
     return 1;
 }
 
-char __cdecl Phys_TestCircleToEdgeAxis(
+char Phys_TestCircleToEdgeAxis(
     const float *polyNormal,
     const Poly *poly,
     const float *pt1,
@@ -779,7 +779,7 @@ char __cdecl Phys_TestCircleToEdgeAxis(
     return Phys_CylinderFaceTestAxis(polyNormal, poly, info, testAxis, 1.0, axisInfo, axisNumber, 0);
 }
 
-void __cdecl Phys_ClipCylinderEdgeToPoly(
+void Phys_ClipCylinderEdgeToPoly(
     SeparatingAxisInfo *axisInfo,
     const float *polyPlane,
     const Poly *poly,
@@ -814,7 +814,7 @@ void __cdecl Phys_ClipCylinderEdgeToPoly(
     }
 }
 
-void __cdecl Phys_AddContactForPlane(Results *results, float *pt, const float *plane, float *normal, int surfaceFlags)
+void Phys_AddContactForPlane(Results *results, float *pt, const float *plane, float *normal, int surfaceFlags)
 {
     float depth; // [esp+10h] [ebp-4h]
 
@@ -823,7 +823,7 @@ void __cdecl Phys_AddContactForPlane(Results *results, float *pt, const float *p
         Phys_AddContactData(results, depth, normal, pt, surfaceFlags);
 }
 
-void __cdecl Phys_PushEdgeAwayFromCylinderCircle(
+void Phys_PushEdgeAwayFromCylinderCircle(
     const float *ptOnEdge,
     const float *pt2OnEdge,
     const float *edge,
@@ -906,7 +906,7 @@ void __cdecl Phys_PushEdgeAwayFromCylinderCircle(
     }
 }
 
-uint32_t __cdecl Phys_IntersectionOfCircleWithPlane(
+uint32_t Phys_IntersectionOfCircleWithPlane(
     const float *plane,
     const float *circleCenter,
     const float *circleAxis,
@@ -977,7 +977,7 @@ uint32_t __cdecl Phys_IntersectionOfCircleWithPlane(
     return 2;
 }
 
-void __cdecl Phys_ClipCylinderEndcapToPoly(
+void Phys_ClipCylinderEndcapToPoly(
     const float *polyPlane,
     const Poly *poly,
     const objInfo *info,
@@ -1072,7 +1072,7 @@ void __cdecl Phys_ClipCylinderEndcapToPoly(
     Phys_ProjectFaceOntoFaceAndClip(polyPlane, poly, &circlePoly, surfaceFlags, results, contactNormal);
 }
 
-void __cdecl Phys_PushLinesAway(
+void Phys_PushLinesAway(
     const float *p1,
     const float *dir1,
     const float *p2,
@@ -1091,7 +1091,7 @@ void __cdecl Phys_PushLinesAway(
     Phys_AddContactData(results, depth, contactNormal, contactPt, surfaceFlags);
 }
 
-double __cdecl Phys_DistanceOfCylinderFromPlane(const float *plane, const objInfo *info)
+double Phys_DistanceOfCylinderFromPlane(const float *plane, const objInfo *info)
 {
     float v3; // [esp+0h] [ebp-2Ch]
     float v4; // [esp+4h] [ebp-28h]
@@ -1122,7 +1122,7 @@ double __cdecl Phys_DistanceOfCylinderFromPlane(const float *plane, const objInf
     return (dista - v3 * info->u.sideExtents[0]);
 }
 
-void __cdecl Phys_CollideCylinderWithTriangleList(
+void Phys_CollideCylinderWithTriangleList(
     const unsigned __int16 *a_indices,
     const float (*verts)[3],
     uint32_t triCount,

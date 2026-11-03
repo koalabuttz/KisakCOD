@@ -272,9 +272,9 @@ struct SurfaceTypeSoundList // sizeof=0x8
     struct snd_alias_list_t **soundAliasList;
 };
 
-struct WeaponDef *__cdecl BG_LoadWeaponDef_LoadObj(const char *name);
+struct WeaponDef *BG_LoadWeaponDef_LoadObj(const char *name);
 
-inline void __cdecl SetConfigString(char **ppszConfigString, const char *pszKeyValue)
+inline void SetConfigString(char **ppszConfigString, const char *pszKeyValue)
 {
     char v2; // [esp+3h] [ebp-21h]
     char *v3; // [esp+8h] [ebp-1Ch]
@@ -299,7 +299,7 @@ inline void __cdecl SetConfigString(char **ppszConfigString, const char *pszKeyV
     }
 }
 
-inline void __cdecl SetConfigString2(uint8_t *pMember, const char *pszKeyValue)
+inline void SetConfigString2(uint8_t *pMember, const char *pszKeyValue)
 {
     SetConfigString((char **)pMember, pszKeyValue);
 }

@@ -24,7 +24,7 @@ void MSS_InitFailed()
 // throwaway probe driver first to detect multichannel capability, then reopens for real -
 // see MSS_open_digital_driver's comments), MSS_Startup already does an equivalent
 // open-then-close sanity probe, so this just opens the real device/context once.
-char __cdecl MSS_Init()
+char MSS_Init()
 {
     int integer = snd_khz->current.integer;
     int hertz;
@@ -160,7 +160,7 @@ void MSS_InitEq()
 // Mirrors MSS_Startup (AIL_startup). Miles' AIL_startup is a global one-time SDK init with
 // no device involved yet; OpenAL has no equivalent 2-stage init, so do an equivalent
 // open-then-close sanity probe here instead - the real device open happens in MSS_Init.
-bool __cdecl MSS_Startup()
+bool MSS_Startup()
 {
     ALCdevice *probe = alcOpenDevice(NULL);
     if (!probe)
@@ -228,7 +228,7 @@ float MSS_GetWetLevel(const snd_alias_t *pAlias)
 // wired up, not tested, and alGlob.eqFilter is deliberately left unallocated (0) above in
 // MSS_InitEq since nothing here uses it while this stays commented out.
 /*
-void __cdecl MSS_ApplyEqFilter(ALuint source, int entchannel)
+void MSS_ApplyEqFilter(ALuint source, int entchannel)
 {
     if (!snd_enableEq->current.enabled)
     {
@@ -264,12 +264,12 @@ void __cdecl MSS_ApplyEqFilter(ALuint source, int entchannel)
     }
 }
 */
-void __cdecl MSS_ApplyEqFilter(ALuint source, int entchannel)
+void MSS_ApplyEqFilter(ALuint source, int entchannel)
 {
 }
 
 // Mirrors MSS_ResumeSample.
-void __cdecl MSS_ResumeSample(int i, int frametime)
+void MSS_ResumeSample(int i, int frametime)
 {
     if (g_snd.chaninfo[i].startDelay)
     {
@@ -282,7 +282,7 @@ void __cdecl MSS_ResumeSample(int i, int frametime)
     }
 }
 
-int __cdecl MSS_DigitalFormatType(int waveFormat, int bits, int channels)
+int MSS_DigitalFormatType(int waveFormat, int bits, int channels)
 {
     int digitalFormat;
 
@@ -302,15 +302,15 @@ int __cdecl MSS_DigitalFormatType(int waveFormat, int bits, int channels)
     return digitalFormat;
 }
 
-uint8_t *__cdecl MSS_Alloc(uint32_t bytes, uint32_t rate)
+uint8_t *MSS_Alloc(uint32_t bytes, uint32_t rate)
 {
     if (IsFastFileLoad())
-        return (uint8_t *)((int(__cdecl *)(uint32_t, uint32_t))MSS_Alloc_FastFile)(bytes, rate);
+        return (uint8_t *)((int(*)(uint32_t, uint32_t))MSS_Alloc_FastFile)(bytes, rate);
     else
         return MSS_Alloc_LoadObj(bytes, rate);
 }
 
-uint8_t *__cdecl MSS_Alloc_LoadObj(uint32_t bytes, uint32_t rate)
+uint8_t *MSS_Alloc_LoadObj(uint32_t bytes, uint32_t rate)
 {
     int min_Spec_bytes = bytes;
     while (rate > 0x4099)
@@ -321,7 +321,7 @@ uint8_t *__cdecl MSS_Alloc_LoadObj(uint32_t bytes, uint32_t rate)
     return Hunk_Alloc(bytes, "MSS_Alloc", 15);
 }
 
-uint32_t *__cdecl MSS_Alloc_FastFile(int bytes)
+uint32_t *MSS_Alloc_FastFile(int bytes)
 {
     return (uint32_t *)Z_Malloc(bytes, "MSS_Alloc", 15);
 }

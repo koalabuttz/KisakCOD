@@ -13,12 +13,12 @@
 statmonitor_s stats[7];
 int statCount;
 
-void __cdecl TRACK_statmonitor()
+void TRACK_statmonitor()
 {
     track_static_alloc_internal(stats, 56, "stats", 10);
 }
 
-void __cdecl StatMon_Warning(int type, int duration, const char *materialName)
+void StatMon_Warning(int type, int duration, const char *materialName)
 {
     if (com_statmon->current.enabled)
     {
@@ -40,13 +40,13 @@ void __cdecl StatMon_Warning(int type, int duration, const char *materialName)
     }
 }
 
-void __cdecl StatMon_GetStatsArray(const statmonitor_s **array, int *count)
+void StatMon_GetStatsArray(const statmonitor_s **array, int *count)
 {
     *array = stats;
     *count = statCount;
 }
 
-void __cdecl StatMon_Reset()
+void StatMon_Reset()
 {
     memset((uint8_t *)stats, 0, sizeof(stats));
     statCount = 0;

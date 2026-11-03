@@ -33,7 +33,7 @@ typedef void (*dstepper_fn_t) (dxWorld *world, dxBody * const *body, int nb,
         dxJoint * const *_joint, int nj, dReal stepsize);
 
 //void dxProcessIslands (dxWorld *world, dReal stepsize, dstepper_fn_t stepper);
-void __cdecl dxProcessIslands(dxWorld *world, float stepsize);
+void dxProcessIslands(dxWorld *world, float stepsize);
 
 
 #endif

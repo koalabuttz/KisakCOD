@@ -316,7 +316,7 @@ const dvar_t *r_mode;
 const dvar_t *r_displayRefresh;
 const dvar_t* r_noborder;
 
-void __cdecl R_SyncGpu(int(__cdecl *WorkCallback)(unsigned __int64))
+void R_SyncGpu(int(*WorkCallback)(unsigned __int64))
 {
     int useWorkCallback; // [esp+30h] [ebp-4h]
 
@@ -343,12 +343,12 @@ void __cdecl R_SyncGpu(int(__cdecl *WorkCallback)(unsigned __int64))
     }
 }
 
-bool __cdecl R_IsUsingAdaptiveGpuSync()
+bool R_IsUsingAdaptiveGpuSync()
 {
     return dx.gpuSync == 1;
 }
 
-void __cdecl TRACK_r_init()
+void TRACK_r_init()
 {
     track_static_alloc_internal(&rgp, 8576, "rgp", 18);
     track_static_alloc_internal(&rg, 33552, "rg", 18);
@@ -356,7 +356,7 @@ void __cdecl TRACK_r_init()
     track_static_alloc_internal(&dx, sizeof(dx), "dx", 18);   // 11488 game / 11552 radiant (windows[5]) — use sizeof so the widened array stays self-consistent
 }
 
-void __cdecl Sys_DirectXFatalError()
+void Sys_DirectXFatalError()
 {
     HWND ActiveWindow; // eax
     char *v1; // [esp-Ch] [ebp-Ch]
@@ -2728,7 +2728,7 @@ const char *__stdcall DXGetErrorDescription9A(int a1)
     return result;
 }
 
-void __cdecl  R_FatalInitError(const char *msg)
+void R_FatalInitError(const char *msg)
 {
     Com_Printf(CON_CHANNEL_GFX, "********** DirectX returned an unrecoverable error code during initialization  **********\n");
     Com_Printf(CON_CHANNEL_GFX, "********** Initialization also happens while playing if DirectX loses a device **********\n");
@@ -2737,7 +2737,7 @@ void __cdecl  R_FatalInitError(const char *msg)
     Sys_DirectXFatalError();
 }
 
-void __cdecl  R_FatalLockError(HRESULT hr)
+void R_FatalLockError(HRESULT hr)
 {
     const char *v1; // eax
 
@@ -2747,12 +2747,12 @@ void __cdecl  R_FatalLockError(HRESULT hr)
     Sys_DirectXFatalError();
 }
 
-const char *__cdecl R_ErrorDescription(HRESULT hr)
+const char *R_ErrorDescription(HRESULT hr)
 {
     return DXGetErrorDescription9A(hr);
 }
 
-void __cdecl R_SetColorMappings()
+void R_SetColorMappings()
 {
     GfxGammaRamp gammaRamp; // [esp+0h] [ebp-208h] BYREF
 
@@ -2763,7 +2763,7 @@ void __cdecl R_SetColorMappings()
     }
 }
 
-void __cdecl R_CalcGammaRamp(GfxGammaRamp *gammaRamp)
+void R_CalcGammaRamp(GfxGammaRamp *gammaRamp)
 {
     float unitScaleValue; // [esp+8h] [ebp-30h]
     float v2; // [esp+Ch] [ebp-2Ch]
@@ -2792,7 +2792,7 @@ void __cdecl R_CalcGammaRamp(GfxGammaRamp *gammaRamp)
     }
 }
 
-void __cdecl R_GammaCorrect(uint8_t *buffer, int bufSize)
+void R_GammaCorrect(uint8_t *buffer, int bufSize)
 {
     int tableIndex; // [esp+0h] [ebp-210h]
     GfxGammaRamp gammaRamp; // [esp+8h] [ebp-208h] BYREF
@@ -2808,7 +2808,7 @@ void __cdecl R_GammaCorrect(uint8_t *buffer, int bufSize)
     }
 }
 
-void __cdecl SetGfxConfig(const GfxConfiguration *config)
+void SetGfxConfig(const GfxConfiguration *config)
 {
     iassert(config);
     bcassert(config->maxClientViews, GFX_MAX_CLIENT_VIEWS);
@@ -2817,7 +2817,7 @@ void __cdecl SetGfxConfig(const GfxConfiguration *config)
     memcpy(&gfxCfg, config, sizeof(gfxCfg));
 }
 
-void __cdecl R_InitThreads()
+void R_InitThreads()
 {
     iassert(!r_glob.isRenderingRemoteUpdate);
 
@@ -2825,7 +2825,7 @@ void __cdecl R_InitThreads()
     R_InitWorkerThreads();
 }
 
-void __cdecl R_ShutdownStreams()
+void R_ShutdownStreams()
 {
     if (dx.device)
     {
@@ -2834,7 +2834,7 @@ void __cdecl R_ShutdownStreams()
     }
 }
 
-void __cdecl R_ShutdownMaterialUsage()
+void R_ShutdownMaterialUsage()
 {
     VertUsage *vertUsage; // [esp+0h] [ebp-Ch]
     uint16_t hashIndex; // [esp+4h] [ebp-8h]
@@ -2851,7 +2851,7 @@ void __cdecl R_ShutdownMaterialUsage()
     }
 }
 
-void __cdecl R_Shutdown(int destroyWindow)
+void R_Shutdown(int destroyWindow)
 {
     if (rg.registered)
     {
@@ -2931,14 +2931,14 @@ void R_ShutdownDirect3D()
     }
 }
 
-void __cdecl R_UnloadWorld()
+void R_UnloadWorld()
 {
     iassert( IsFastFileLoad() );
     if (rgp.world)
         Sys_Error("Cannot unload bsp while it is in use");
 }
 
-void __cdecl R_BeginRegistration(vidConfig_t *vidConfigOut)
+void R_BeginRegistration(vidConfig_t *vidConfigOut)
 {
     iassert(!rg.registered);
     R_Init();
@@ -2979,7 +2979,7 @@ void R_Init()
     RB_ProfileInit();
 }
 
-char __cdecl R_ReduceWindowSettings()
+char R_ReduceWindowSettings()
 {
     if (r_aaSamples->current.integer <= 1)
     {
@@ -3043,12 +3043,12 @@ void R_InitSystems()
     rg.registered = 1;
 }
 
-int __cdecl R_CompareRefreshRates(_DWORD *e0, _DWORD *e1)
+int R_CompareRefreshRates(_DWORD *e0, _DWORD *e1)
 {
     return *e0 - *e1;
 }
 
-int __cdecl R_AddValidResolution(int width, int height, int resolutionCount, int (*availableResolutions)[2])
+int R_AddValidResolution(int width, int height, int resolutionCount, int (*availableResolutions)[2])
 {
     iassert( (resolutionCount >= 0) );
     if (resolutionCount > 0
@@ -3064,7 +3064,7 @@ int __cdecl R_AddValidResolution(int width, int height, int resolutionCount, int
     return resolutionCount + 1;
 }
 
-int __cdecl R_CompareDisplayModes(_DWORD *e0, _DWORD *e1)
+int R_CompareDisplayModes(_DWORD *e0, _DWORD *e1)
 {
     int delta; // [esp+0h] [ebp-Ch]
 
@@ -3078,7 +3078,7 @@ int __cdecl R_CompareDisplayModes(_DWORD *e0, _DWORD *e1)
     return delta;
 }
 
-int __cdecl R_AddValidRefreshRate(int refreshRate, int rateCount, int *availableRefreshRates)
+int R_AddValidRefreshRate(int refreshRate, int rateCount, int *availableRefreshRates)
 {
     int rateIndex; // [esp+4h] [ebp-4h]
     int rateIndexa; // [esp+4h] [ebp-4h]
@@ -3094,7 +3094,7 @@ int __cdecl R_AddValidRefreshRate(int refreshRate, int rateCount, int *available
     return rateCount + 1;
 }
 
-void __cdecl R_EnumDisplayModes(uint32_t adapterIndex)
+void R_EnumDisplayModes(uint32_t adapterIndex)
 {
     const char *v1; // eax
     int v2; // eax
@@ -3128,7 +3128,7 @@ void __cdecl R_EnumDisplayModes(uint32_t adapterIndex)
             ++dx.displayModeCount;
         }
     }
-    qsort(dx.displayModes, dx.displayModeCount, 0x10u, (int(__cdecl *)(const void *, const void *))R_CompareDisplayModes);
+    qsort(dx.displayModes, dx.displayModeCount, 0x10u, (int(*)(const void *, const void *))R_CompareDisplayModes);
     resolutionCount = 0;
     refreshRateCount = 0;
     for (modeIndex = 0; modeIndex < dx.displayModeCount; ++modeIndex)
@@ -3165,7 +3165,7 @@ void __cdecl R_EnumDisplayModes(uint32_t adapterIndex)
         defaultResolutionIndex,
         DVAR_ARCHIVE | DVAR_LATCH,
         "Direct X resolution mode");
-    qsort(availableRefreshRates, refreshRateCount, 4u, (int(__cdecl *)(const void *, const void *))R_CompareRefreshRates);
+    qsort(availableRefreshRates, refreshRateCount, 4u, (int(*)(const void *, const void *))R_CompareRefreshRates);
     defaultRefreshRateIndex = 0;
     for (refreshRateIndex = 0; refreshRateIndex < refreshRateCount; ++refreshRateIndex)
     {
@@ -3186,7 +3186,7 @@ void __cdecl R_EnumDisplayModes(uint32_t adapterIndex)
     r_noborder = Dvar_RegisterBool("r_noborder", false, DVAR_ARCHIVE, "Do not use a border in windowed mode");
 }
 
-char __cdecl R_PreCreateWindow()
+char R_PreCreateWindow()
 {
     if (dx.d3d9)
     {
@@ -3209,7 +3209,7 @@ char __cdecl R_PreCreateWindow()
     return 1;
 }
 
-void __cdecl R_RespondToMissingCaps(DxCapsResponse response, const char *msg, int *allowedPaths)
+void R_RespondToMissingCaps(DxCapsResponse response, const char *msg, int *allowedPaths)
 {
     const char *v3; // eax
     void (*Printf)(int, const char *, ...); // [esp+4h] [ebp-4h]
@@ -3246,7 +3246,7 @@ void __cdecl R_RespondToMissingCaps(DxCapsResponse response, const char *msg, in
     }
 }
 
-int __cdecl R_CheckDxCaps(const _D3DCAPS9 *caps)
+int R_CheckDxCaps(const _D3DCAPS9 *caps)
 {
     uint32_t integer; // [esp+0h] [ebp-10h]
     uint32_t checkIndex; // [esp+4h] [ebp-Ch]
@@ -3273,7 +3273,7 @@ int __cdecl R_CheckDxCaps(const _D3DCAPS9 *caps)
     return allowedPaths;
 }
 
-const char *__cdecl R_DescribeRenderer(int renderer)
+const char *R_DescribeRenderer(int renderer)
 {
     if (renderer == 1)
         return "Shader model 3.0";
@@ -3281,7 +3281,7 @@ const char *__cdecl R_DescribeRenderer(int renderer)
     return "Shader model 2.0";
 }
 
-void __cdecl R_PickRenderer(_D3DCAPS9 *caps)
+void R_PickRenderer(_D3DCAPS9 *caps)
 {
     const char *v1; // eax
     const char *v2; // eax
@@ -3340,7 +3340,7 @@ void __cdecl R_PickRenderer(_D3DCAPS9 *caps)
     Dvar_SetInt((dvar_s *)r_rendererInUse, rendererChosen);
 }
 
-bool __cdecl R_CheckTransparencyMsaa(uint32_t adapterIndex)
+bool R_CheckTransparencyMsaa(uint32_t adapterIndex)
 {
     return r_aaSamples->current.integer != 1
         && dx.d3d9->CheckDeviceFormat(
@@ -3352,7 +3352,7 @@ bool __cdecl R_CheckTransparencyMsaa(uint32_t adapterIndex)
             (_D3DFORMAT)1094800211) == 0;
 }
 
-void __cdecl R_StoreDirect3DCaps(uint32_t adapterIndex)
+void R_StoreDirect3DCaps(uint32_t adapterIndex)
 {
     uint32_t MaxUserClipPlanes; // [esp+0h] [ebp-138h]
     uint32_t MaxTextureHeight; // [esp+4h] [ebp-134h]
@@ -3389,7 +3389,7 @@ void __cdecl R_StoreDirect3DCaps(uint32_t adapterIndex)
     R_SetShadowmapFormats_DX(adapterIndex);
 }
 
-void __cdecl R_GetDirect3DCaps(uint32_t adapterIndex, _D3DCAPS9 *caps)
+void R_GetDirect3DCaps(uint32_t adapterIndex, _D3DCAPS9 *caps)
 {
     const char *v2; // eax
     const char *v3; // eax
@@ -3419,7 +3419,7 @@ void __cdecl R_GetDirect3DCaps(uint32_t adapterIndex, _D3DCAPS9 *caps)
     }
 }
 
-void __cdecl R_SetShadowmapFormats_DX(uint32_t adapterIndex)
+void R_SetShadowmapFormats_DX(uint32_t adapterIndex)
 {
     _D3DFORMAT colorFormat; // [esp+0h] [ebp-24h]
     uint32_t formatIndex; // [esp+4h] [ebp-20h]
@@ -3492,7 +3492,7 @@ int __stdcall R_MonitorEnumCallback(HMONITOR__ *monitorHandle, HDC__ *hdc, tagRE
     }
 }
 
-HMONITOR__ *__cdecl R_ChooseMonitor()
+HMONITOR__ *R_ChooseMonitor()
 {
     POINT pt; // [esp+0h] [ebp-10h]
     GfxEnumMonitors enumData; // [esp+8h] [ebp-8h] BYREF
@@ -3510,7 +3510,7 @@ HMONITOR__ *__cdecl R_ChooseMonitor()
     return MonitorFromPoint(pt, 1u);
 }
 
-uint32_t __cdecl R_ChooseAdapter()
+uint32_t R_ChooseAdapter()
 {
     uint32_t foundAdapterIndex; // [esp+14h] [ebp-470h]
     uint32_t adapterIndex; // [esp+1Ch] [ebp-468h]
@@ -3538,7 +3538,7 @@ uint32_t __cdecl R_ChooseAdapter()
     return foundAdapterIndex;
 }
 
-char __cdecl R_CreateWindow(GfxWindowParms *wndParms)
+char R_CreateWindow(GfxWindowParms *wndParms)
 {
     DWORD exStyle; // [esp+0h] [ebp-1Ch]
     DWORD style; // [esp+4h] [ebp-18h]
@@ -3612,13 +3612,13 @@ char __cdecl R_CreateWindow(GfxWindowParms *wndParms)
     }
 }
 
-void __cdecl Sys_HideSplashWindow()
+void Sys_HideSplashWindow()
 {
     if (g_splashWnd)
         ShowWindow(g_splashWnd, 0);
 }
 
-void __cdecl Sys_DestroySplashWindow()
+void Sys_DestroySplashWindow()
 {
     if (g_splashWnd)
     {
@@ -3628,7 +3628,7 @@ void __cdecl Sys_DestroySplashWindow()
     }
 }
 
-char __cdecl R_CreateGameWindow(GfxWindowParms *wndParms)
+char R_CreateGameWindow(GfxWindowParms *wndParms)
 {
     if (!R_CreateWindow(wndParms))
         return 0;
@@ -3689,7 +3689,7 @@ void R_LoadGraphicsAssets()
     DB_LoadXAssets(zoneInfo, zoneCount, 0);
 }
 
-void __cdecl R_UpdateGpuSyncType()
+void R_UpdateGpuSyncType()
 {
     int integer; // [esp+0h] [ebp-4h]
 
@@ -3700,7 +3700,7 @@ void __cdecl R_UpdateGpuSyncType()
     dx.gpuSync = integer;
 }
 
-void __cdecl R_FinishAttachingToWindow(const GfxWindowParms *wndParms)
+void R_FinishAttachingToWindow(const GfxWindowParms *wndParms)
 {
 #ifdef KISAK_RADIANT
     // Editor multi-window: this is IDB R_CreateWindow (0x4ffb20) — it allows windowCount
@@ -3732,7 +3732,7 @@ void __cdecl R_FinishAttachingToWindow(const GfxWindowParms *wndParms)
     dx.windows[dx.windowCount++].height = wndParms->displayHeight;
 }
 
-char __cdecl R_InitHardware(const GfxWindowParms *wndParms)
+char R_InitHardware(const GfxWindowParms *wndParms)
 {
     uint32_t workerIndex; // [esp+4h] [ebp-4h]
 
@@ -3764,7 +3764,7 @@ char __cdecl R_InitHardware(const GfxWindowParms *wndParms)
     return 1;
 }
 
-void __cdecl R_StoreWindowSettings(const GfxWindowParms *wndParms)
+void R_StoreWindowSettings(const GfxWindowParms *wndParms)
 {
     const char *v1; // eax
     int monitorHeight; // [esp+28h] [ebp-10h]
@@ -3838,7 +3838,7 @@ void R_InitGamma()
     Dvar_SetModified((dvar_s*)r_gamma);
 }
 
-char __cdecl R_CreateForInitOrReset()
+char R_CreateForInitOrReset()
 {
     const char *v0; // eax
     int hr; // [esp+8h] [ebp-8h]
@@ -3891,7 +3891,7 @@ char __cdecl R_CreateForInitOrReset()
     }
 }
 
-IDirect3DQuery9 *__cdecl RB_HW_AllocOcclusionQuery()
+IDirect3DQuery9 *RB_HW_AllocOcclusionQuery()
 {
     const char *v0; // eax
     int hr; // [esp+0h] [ebp-8h]
@@ -3905,7 +3905,7 @@ IDirect3DQuery9 *__cdecl RB_HW_AllocOcclusionQuery()
     return 0;
 }
 
-char __cdecl R_CreateDevice(const GfxWindowParms *wndParms)
+char R_CreateDevice(const GfxWindowParms *wndParms)
 {
     const char *v1; // eax
     _D3DPRESENT_PARAMETERS_ d3dpp; // [esp+0h] [ebp-44h] BYREF
@@ -3937,7 +3937,7 @@ char __cdecl R_CreateDevice(const GfxWindowParms *wndParms)
     }
 }
 
-void __cdecl R_SetD3DPresentParameters(_D3DPRESENT_PARAMETERS_ *d3dpp, const GfxWindowParms *wndParms)
+void R_SetD3DPresentParameters(_D3DPRESENT_PARAMETERS_ *d3dpp, const GfxWindowParms *wndParms)
 {
     iassert( d3dpp );
     iassert( wndParms );
@@ -3968,7 +3968,7 @@ void __cdecl R_SetD3DPresentParameters(_D3DPRESENT_PARAMETERS_ *d3dpp, const Gfx
     }
 }
 
-void __cdecl R_SetupAntiAliasing(const GfxWindowParms *wndParms)
+void R_SetupAntiAliasing(const GfxWindowParms *wndParms)
 {
     _D3DMULTISAMPLE_TYPE multiSampleCount; // [esp+0h] [ebp-Ch]
     DWORD qualityLevels; // [esp+8h] [ebp-4h] BYREF
@@ -4008,7 +4008,7 @@ void __cdecl R_SetupAntiAliasing(const GfxWindowParms *wndParms)
     dx.multiSampleQuality = 0;
 }
 
-bool __cdecl R_GetMonitorDimensions(int *width, int *height)
+bool R_GetMonitorDimensions(int *width, int *height)
 {
     tagMONITORINFO mi; // [esp+0h] [ebp-2Ch] BYREF
     HMONITOR__ *adapterMonitor; // [esp+28h] [ebp-4h]
@@ -4029,7 +4029,7 @@ bool __cdecl R_GetMonitorDimensions(int *width, int *height)
     }
 }
 
-HRESULT __cdecl R_CreateDeviceInternal(HWND__ *hwnd, uint32_t behavior, _D3DPRESENT_PARAMETERS_ *d3dpp)
+HRESULT R_CreateDeviceInternal(HWND__ *hwnd, uint32_t behavior, _D3DPRESENT_PARAMETERS_ *d3dpp)
 {
     _D3DDEVTYPE DeviceType; // eax
     _D3DDISPLAYMODE getModeResult; // [esp+4h] [ebp-18h] BYREF
@@ -4067,7 +4067,7 @@ HRESULT __cdecl R_CreateDeviceInternal(HWND__ *hwnd, uint32_t behavior, _D3DPRES
     return hr;
 }
 
-int __cdecl R_GetDeviceType()
+int R_GetDeviceType()
 {
     _D3DADAPTER_IDENTIFIER9 id; // [esp+18h] [ebp-458h] BYREF
 
@@ -4085,7 +4085,7 @@ int __cdecl R_GetDeviceType()
     }
 }
 
-bool __cdecl R_SetCustomResolution(GfxWindowParms *wndParms)
+bool R_SetCustomResolution(GfxWindowParms *wndParms)
 {
     int monitorHeight; // [esp+0h] [ebp-8h] BYREF
     int monitorWidth; // [esp+4h] [ebp-4h] BYREF
@@ -4096,7 +4096,7 @@ bool __cdecl R_SetCustomResolution(GfxWindowParms *wndParms)
         || wndParms->displayWidth <= monitorWidth && wndParms->displayHeight <= monitorHeight;
 }
 
-const char *__cdecl R_ClosestRefreshRateForMode(uint32_t width, uint32_t height, int refreshRate)
+const char *R_ClosestRefreshRateForMode(uint32_t width, uint32_t height, int refreshRate)
 {
     const char *v4; // eax
     int top; // [esp+0h] [ebp-10h]
@@ -4152,7 +4152,7 @@ const char *__cdecl R_ClosestRefreshRateForMode(uint32_t width, uint32_t height,
     return dx.resolutionNameTable[4 * bot - 1022];
 }
 
-void __cdecl R_SetWndParms(GfxWindowParms *wndParms)
+void R_SetWndParms(GfxWindowParms *wndParms)
 {
     const char *resolutionString; // [esp+0h] [ebp-Ch]
     int refreshRate; // [esp+4h] [ebp-8h] BYREF
@@ -4207,7 +4207,7 @@ void R_InitGlobalStructs()
     MatrixIdentity44(rg.identityViewParms.inverseViewProjectionMatrix.m);
 }
 
-void __cdecl R_EndRegistration()
+void R_EndRegistration()
 {
     iassert( rg.registered );
     KISAK_NULLSUB();
@@ -4218,25 +4218,25 @@ void __cdecl R_EndRegistration()
     }
 }
 
-void __cdecl R_TrackStatistics(trStatistics_t *stats)
+void R_TrackStatistics(trStatistics_t *stats)
 {
     rg.stats = stats;
 }
 
-void __cdecl R_UpdateTeamColors(int team, const float *color_allies, const float *color_axis)
+void R_UpdateTeamColors(int team, const float *color_allies, const float *color_axis)
 {
     rg.team = team;
     Byte4PackRgba(color_allies, (uint8_t *)&rg.color_allies);
     Byte4PackRgba(color_axis, (uint8_t *)&rg.color_axis);
 }
 
-void __cdecl R_ConfigureRenderer(const GfxConfiguration *config)
+void R_ConfigureRenderer(const GfxConfiguration *config)
 {
     SetGfxConfig(config);
     R_InitRenderCommands();
 }
 
-void __cdecl R_ComErrorCleanup()
+void R_ComErrorCleanup()
 {
     iassert( Sys_IsMainThread() );
     R_AbortRenderCommands();
@@ -4249,7 +4249,7 @@ void __cdecl R_ComErrorCleanup()
     }
 }
 
-bool __cdecl R_CanRecoverLostDevice()
+bool R_CanRecoverLostDevice()
 {
     HRESULT hr; // [esp+0h] [ebp-4h]
 
@@ -4395,7 +4395,7 @@ void R_ResetDevice()
 #endif
 }
 
-char __cdecl R_RecoverLostDevice()
+char R_RecoverLostDevice()
 {
     int remoteScreenUpdateNesting; // [esp+0h] [ebp-4h]
 
@@ -4463,7 +4463,7 @@ bool R_CheckLostDevice()
     return false;
 }
 
-void __cdecl R_MakeDedicated(const GfxConfiguration *config)
+void R_MakeDedicated(const GfxConfiguration *config)
 {
     SetGfxConfig(config);
     if (!r_loadForRenderer)
@@ -4504,7 +4504,7 @@ int R_IsHiDef()
 // ─────────────────────────────────────────────────────────────────────────────
 
 // IDB R_InitRendererForWindow @ 0x5011d0.
-char __cdecl R_InitRendererForWindow(HWND hWnd)
+char R_InitRendererForWindow(HWND hWnd)
 {
     RECT rect;
     GetClientRect(hWnd, &rect);
@@ -4542,7 +4542,7 @@ char __cdecl R_InitRendererForWindow(HWND hWnd)
 
 // IDB R_TestDevice @ 0x501a10 — verbatim. Happy path (device not lost,
 // TestCooperativeLevel OK) returns 1 without touching R_RecoverLostDevice.
-char __cdecl R_TestDevice()
+char R_TestDevice()
 {
     if ( !dx.deviceLost )
     {
@@ -4582,7 +4582,7 @@ char __cdecl R_TestDevice()
 //    back buffer bound → both views would draw into one window. The backend also re-runs
 //    R_SetRenderTargetSize + R_SetRenderTarget after this, so we don't duplicate the
 //    immediate bind (IDB's R_SetupRenderTarget/R_SetRenderTarget calls) here.
-void __cdecl R_SetupTargetWindow(int windowIndex)
+void R_SetupTargetWindow(int windowIndex)
 {
     dx.targetWindowIndex = windowIndex;
 
@@ -4624,7 +4624,7 @@ void __cdecl R_SetupTargetWindow(int windowIndex)
 // IDB R_SetupRendertarget_CheckDevice @ 0x501a70 — verbatim. Returns 0 (skip the
 // frame) when already targeting a window, rendering disabled, or the device test
 // fails; otherwise finds the dx.windows[] slot for `hwnd` and makes it the target.
-char __cdecl R_SetupRendertarget_CheckDevice(HWND__ *hwnd)
+char R_SetupRendertarget_CheckDevice(HWND__ *hwnd)
 {
     int i;
 
@@ -4656,7 +4656,7 @@ char __cdecl R_SetupRendertarget_CheckDevice(HWND__ *hwnd)
 // hwnd lookup inside R_SetupRendertarget_CheckDevice but returns false (instead of asserting
 // "invalid hwnd") for a window the renderer never registered, and requires a live swap chain +
 // nonzero size.  Used by CCamWnd::OnPaint to no-op-paint the dead Dynamic-Lighting popup window.
-bool __cdecl R_IsRegisteredRenderWindow(HWND__ *hwnd)
+bool R_IsRegisteredRenderWindow(HWND__ *hwnd)
 {
     if ( !hwnd || !dx.device )
         return false;
@@ -4670,7 +4670,7 @@ bool __cdecl R_IsRegisteredRenderWindow(HWND__ *hwnd)
 
 // IDB R_CheckTargetWindow @ 0x500660 — verbatim. Releases the active target after
 // the frame's commands have been issued (Present consumed it in the backend).
-void __cdecl R_CheckTargetWindow(HWND__ *hwnd)
+void R_CheckTargetWindow(HWND__ *hwnd)
 {
     iassert( dx.targetWindowIndex >= 0 );
     iassert( dx.windows[dx.targetWindowIndex].hwnd == hwnd );
@@ -4687,7 +4687,7 @@ void __cdecl R_CheckTargetWindow(HWND__ *hwnd)
 // dropped — First-Light has no caller that reads the returned vidConfig.
 extern void Radiant_FL_Log( const char *fmt, ... );   // radiant/mainfrm.cpp (First-Light trace)
 
-void __cdecl R_InitEditor()
+void R_InitEditor()
 {
     iassert( !rg.registered );
     Com_Printf(CON_CHANNEL_GFX, "----- R_Init -----\n");
@@ -4718,7 +4718,7 @@ void __cdecl R_InitEditor()
 //  • R_CreateWindow (IDB 0x4ffb20) is byte-identical to kisak R_FinishAttachingToWindow
 //    (which now allows windowCount < R_MAX_WINDOWS under KISAK_RADIANT) — it finalises the
 //    new dx.windows[windowCount] slot (hwnd/width/height) and bumps windowCount.
-HWND __cdecl R_CreateSwapChains(int hz, GfxWindowParms *wnd, int sharedHandle)
+HWND R_CreateSwapChains(int hz, GfxWindowParms *wnd, int sharedHandle)
 {
     (void)hz; (void)sharedHandle;
 
@@ -4750,7 +4750,7 @@ HWND __cdecl R_CreateSwapChains(int hz, GfxWindowParms *wnd, int sharedHandle)
 //
 // §11: the IDB's R_SetD3DPresentParameters(&wnd, dx.windowCount, &d3dpp) AA-count arg is
 // dropped (kisak signature is (d3dpp, wnd)); x/y/hz are left unset (unread in windowed mode).
-void __cdecl R_Hwnd_Resize(HWND__ *hwnd, int width, int height)
+void R_Hwnd_Resize(HWND__ *hwnd, int width, int height)
 {
     iassert( hwnd );
     if ( !width || !height )
@@ -4812,7 +4812,7 @@ void __cdecl R_Hwnd_Resize(HWND__ *hwnd, int width, int height)
 //     R_Cinematic_Init (nulled in the editor → R_Cinematic_Init_NULL) and the two tiny
 //     editor-scratch initialisers sub_53FF30/sub_528930 (zero r_ed_scene mesh-buffer
 //     globals that the empty-grid path never reads). nullsub_6/nullsub_11 are no-ops.
-char __cdecl R_BeginRegistration_R_InitHardware(GfxWindowParms *wnd)
+char R_BeginRegistration_R_InitHardware(GfxWindowParms *wnd)
 {
     if (!R_CreateDevice(wnd))
         return 0;

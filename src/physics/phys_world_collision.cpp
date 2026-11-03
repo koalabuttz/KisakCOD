@@ -33,7 +33,7 @@ typedef struct dxGeom *dGeomID;
 typedef struct dxJoint *dJointID;
 typedef struct dxJointGroup *dJointGroupID;
 
-int __cdecl Phys_GetSurfaceFlagsFromBrush(const cbrush_t *brush, uint32_t brushSideIndex)
+int Phys_GetSurfaceFlagsFromBrush(const cbrush_t *brush, uint32_t brushSideIndex)
 {
     if (!brush)
         MyAssertHandler(".\\physics\\phys_world_collision.cpp", 37, 0, "%s", "brush");
@@ -67,13 +67,13 @@ int __cdecl Phys_GetSurfaceFlagsFromBrush(const cbrush_t *brush, uint32_t brushS
     return cm.materials[brush->axialMaterialNum[brushSideIndex & 1][brushSideIndex >> 1]].surfaceFlags;
 }
 
-void __cdecl CM_ForEachBrushInLeafBrushNode_r(
+void CM_ForEachBrushInLeafBrushNode_r(
     cLeafBrushNode_s *node,
     const float *mins,
     const float *maxs,
     bool testMask,
     int clipMask,
-    void(__cdecl *f)(const cbrush_t *, void *),
+    void(*f)(const cbrush_t *, void *),
     void *userData)
 {
     int k; // [esp+0h] [ebp-Ch]
@@ -125,7 +125,7 @@ void __cdecl CM_ForEachBrushInLeafBrushNode_r(
     }
 }
 
-void __cdecl CM_MeshTestGeomInLeaf(cLeaf_t *leaf, const objInfo *input, Results *results)
+void CM_MeshTestGeomInLeaf(cLeaf_t *leaf, const objInfo *input, Results *results)
 {
     int k; // [esp+4h] [ebp-8h]
     CollisionAabbTree *aabbTree; // [esp+8h] [ebp-4h]
@@ -138,7 +138,7 @@ void __cdecl CM_MeshTestGeomInLeaf(cLeaf_t *leaf, const objInfo *input, Results 
     }
 }
 
-void __cdecl CM_PositionGeomTestInAabbTree_r(CollisionAabbTree *aabbTree, const objInfo *input, Results *results)
+void CM_PositionGeomTestInAabbTree_r(CollisionAabbTree *aabbTree, const objInfo *input, Results *results)
 {
     int j; // [esp+6Ch] [ebp-24h]
     int i; // [esp+70h] [ebp-20h]
@@ -234,7 +234,7 @@ void __cdecl CM_PositionGeomTestInAabbTree_r(CollisionAabbTree *aabbTree, const 
     }
 }
 
-bool __cdecl CM_CullBox2(const objInfo *input, const float *origin, const float *halfSize)
+bool CM_CullBox2(const objInfo *input, const float *origin, const float *halfSize)
 {
     float v4; // [esp+Ch] [ebp-48h]
     float v5; // [esp+10h] [ebp-44h]
@@ -256,7 +256,7 @@ bool __cdecl CM_CullBox2(const objInfo *input, const float *origin, const float 
     return halfBoxSize[2] < (double)v4;
 }
 
-void __cdecl CM_TestGeomInLeaf(cLeaf_t *leaf, const objInfo *input, Results *results)
+void CM_TestGeomInLeaf(cLeaf_t *leaf, const objInfo *input, Results *results)
 {
     if ((input->clipMask & leaf->brushContents) != 0)
         CM_TestGeomInLeafBrushNode(leaf, input, results);
@@ -264,7 +264,7 @@ void __cdecl CM_TestGeomInLeaf(cLeaf_t *leaf, const objInfo *input, Results *res
         CM_MeshTestGeomInLeaf(leaf, input, results);
 }
 
-void __cdecl CM_TestGeomInLeafBrushNode(cLeaf_t *leaf, const objInfo *input, Results *results)
+void CM_TestGeomInLeafBrushNode(cLeaf_t *leaf, const objInfo *input, Results *results)
 {
     int i; // [esp+0h] [ebp-Ch]
     InputOutput io; // [esp+4h] [ebp-8h] BYREF
@@ -284,11 +284,11 @@ void __cdecl CM_TestGeomInLeafBrushNode(cLeaf_t *leaf, const objInfo *input, Res
         input->bounds[1],
         1,
         input->clipMask,
-        (void(__cdecl *)(const cbrush_t *, void *))Phys_TestGeomInBrush,
+        (void(*)(const cbrush_t *, void *))Phys_TestGeomInBrush,
         &io);
 }
 
-void __cdecl Phys_TestGeomInBrush(const cbrush_t *brush, uint32_t *userData)
+void Phys_TestGeomInBrush(const cbrush_t *brush, uint32_t *userData)
 {
     Results *results; // [esp+68h] [ebp-8h]
 
@@ -337,7 +337,7 @@ void __cdecl Phys_TestGeomInBrush(const cbrush_t *brush, uint32_t *userData)
     }
 }
 
-void __cdecl Phys_TestAgainstEntities(const objInfo *input, Results *results)
+void Phys_TestAgainstEntities(const objInfo *input, Results *results)
 {
     float capRadius; // [esp+14h] [ebp-10C4h]
     int entityList[1024]; // [esp+28h] [ebp-10B0h] BYREF
@@ -659,7 +659,7 @@ static dColliderFn *dGetColliderWorld(int classnum)
     return (dColliderFn *)&dCollideWorldGeom;
 }
 
-void __cdecl Phys_InitWorldCollision()
+void Phys_InitWorldCollision()
 {
     dGeomClass gclass; // [esp+0h] [ebp-18h] BYREF
     int classID; // [esp+14h] [ebp-4h]
@@ -682,7 +682,7 @@ void __cdecl Phys_InitWorldCollision()
     dInitUserGeom((dxUserGeom *)physGlob.worldGeom, 15, 0, 0);
 }
 
-void __cdecl Phys_InitBrushmodelGeomClass()
+void Phys_InitBrushmodelGeomClass()
 {
     dGeomClass gclass; // [esp+0h] [ebp-18h] BYREF
     int classID; // [esp+14h] [ebp-4h]
@@ -703,7 +703,7 @@ void __cdecl Phys_InitBrushmodelGeomClass()
             classID);
 }
 
-void __cdecl Phys_GetBrushmodelAABB(dxGeom *geom, float *aabb)
+void Phys_GetBrushmodelAABB(dxGeom *geom, float *aabb)
 {
     cmodel_t *v2; // eax
     float radius; // [esp+Ch] [ebp-18h]
@@ -740,7 +740,7 @@ void __cdecl Phys_GetBrushmodelAABB(dxGeom *geom, float *aabb)
     aabb[5] = radius;
 }
 
-void __cdecl Phys_InitBrushGeomClass()
+void Phys_InitBrushGeomClass()
 {
     dGeomClass gclass; // [esp+0h] [ebp-18h] BYREF
     int classID; // [esp+14h] [ebp-4h]
@@ -761,7 +761,7 @@ void __cdecl Phys_InitBrushGeomClass()
             classID);
 }
 
-void __cdecl Phys_GetBrushAABB(dxGeom *geom, float *aabb)
+void Phys_GetBrushAABB(dxGeom *geom, float *aabb)
 {
     if (!geom)
         MyAssertHandler(".\\physics\\phys_world_collision.cpp", 605, 0, "%s", "geom");
@@ -775,7 +775,7 @@ void __cdecl Phys_GetBrushAABB(dxGeom *geom, float *aabb)
     aabb[5] = FLT_MAX;
 }
 
-void __cdecl Phys_InitCylinderGeomClass()
+void Phys_InitCylinderGeomClass()
 {
     dGeomClass gclass; // [esp+0h] [ebp-18h] BYREF
     int classID; // [esp+14h] [ebp-4h]
@@ -796,7 +796,7 @@ void __cdecl Phys_InitCylinderGeomClass()
             classID);
 }
 
-void __cdecl Phys_GetCylinderAABB(dxGeom *geom, float *aabb)
+void Phys_GetCylinderAABB(dxGeom *geom, float *aabb)
 {
     const float *Rotation; // eax
     float v3; // [esp+0h] [ebp-78h]
@@ -857,7 +857,7 @@ void __cdecl Phys_GetCylinderAABB(dxGeom *geom, float *aabb)
     }
 }
 
-void __cdecl Phys_InitCapsuleGeomClass()
+void Phys_InitCapsuleGeomClass()
 {
     dGeomClass gclass; // [esp+0h] [ebp-18h] BYREF
     int classID; // [esp+14h] [ebp-4h]
@@ -878,7 +878,7 @@ void __cdecl Phys_InitCapsuleGeomClass()
             classID);
 }
 
-void __cdecl Phys_GetCapsuleAABB(dxGeom *geom, float *aabb)
+void Phys_GetCapsuleAABB(dxGeom *geom, float *aabb)
 {
     const float *Rotation; // eax
     float v3; // [esp+0h] [ebp-78h]
@@ -934,7 +934,7 @@ void __cdecl Phys_GetCapsuleAABB(dxGeom *geom, float *aabb)
     }
 }
 
-dxGeom *__cdecl Phys_CreateBrushmodelGeom(
+dxGeom *Phys_CreateBrushmodelGeom(
     dxSpace *space,
     dxBody *body,
     unsigned __int16 brushModel,
@@ -970,7 +970,7 @@ dxGeom *__cdecl Phys_CreateBrushmodelGeom(
     return geom;
 }
 
-dxGeom *__cdecl Phys_CreateBrushGeom(dxSpace *space, dxBody *body, const cbrush_t *brush, const float *centerOfMass)
+dxGeom *Phys_CreateBrushGeom(dxSpace *space, dxBody *body, const cbrush_t *brush, const float *centerOfMass)
 {
     GeomStateBrush *ClassData; // eax
     dxGeom *geom; // [esp+8h] [ebp-4h]
@@ -1000,7 +1000,7 @@ dxGeom *__cdecl Phys_CreateBrushGeom(dxSpace *space, dxBody *body, const cbrush_
     return geom;
 }
 
-dxGeom *__cdecl Phys_CreateCylinderGeom(dxSpace *space, dxBody *body, const GeomStateCylinder *cyl)
+dxGeom *Phys_CreateCylinderGeom(dxSpace *space, dxBody *body, const GeomStateCylinder *cyl)
 {
     GeomStateCylinder *ClassData; // eax
     dxGeom *geom; // [esp+0h] [ebp-8h]
@@ -1015,7 +1015,7 @@ dxGeom *__cdecl Phys_CreateCylinderGeom(dxSpace *space, dxBody *body, const Geom
     return geom;
 }
 
-dxGeom *__cdecl Phys_CreateCapsuleGeom(dxSpace *space, dxBody *body, const GeomStateCylinder *cyl)
+dxGeom *Phys_CreateCapsuleGeom(dxSpace *space, dxBody *body, const GeomStateCylinder *cyl)
 {
     GeomStateCylinder *ClassData; // eax
     dxGeom *geom; // [esp+0h] [ebp-8h]

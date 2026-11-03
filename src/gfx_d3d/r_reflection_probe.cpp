@@ -17,7 +17,7 @@
 int s_numColorCorrectionDataEntries;
 ColorCorrectionData s_colorCorrectionDataEntries[1024];
 
-char __cdecl R_CopyReflectionsFromLumpData(
+char R_CopyReflectionsFromLumpData(
     DiskGfxReflectionProbe *probeRawData,
     const DiskGfxReflectionProbe *probeRawLumpData,
     int lumpProbeCount)
@@ -39,7 +39,7 @@ char __cdecl R_CopyReflectionsFromLumpData(
     return 0;
 }
 
-void __cdecl R_CalcCubeMapViewValues(refdef_s *refdef, CubemapShot cubemapShot, int cubemapSize)
+void R_CalcCubeMapViewValues(refdef_s *refdef, CubemapShot cubemapShot, int cubemapSize)
 {
     refdef->x = 0;
     refdef->y = 0;
@@ -127,12 +127,12 @@ void __cdecl R_CalcCubeMapViewValues(refdef_s *refdef, CubemapShot cubemapShot, 
     }
 }
 
-void __cdecl R_BspGenerateReflections()
+void R_BspGenerateReflections()
 {
     R_GenerateReflections((char*)rgp.world->name, rgp.world->reflectionProbes + 1, rgp.world->reflectionProbeCount - 1);
 }
 
-void __cdecl R_GenerateReflectionRawData(DiskGfxReflectionProbe *probeRawData)
+void R_GenerateReflectionRawData(DiskGfxReflectionProbe *probeRawData)
 {
     float zfar; // [esp+0h] [ebp-40B8h]
     FxCmd cmd; // [esp+4h] [ebp-40B4h] BYREF
@@ -174,7 +174,7 @@ void __cdecl R_GenerateReflectionRawData(DiskGfxReflectionProbe *probeRawData)
     R_CreateReflectionRawDataFromCubemapShot(probeRawData, 64);
 }
 
-void __cdecl R_GenerateReflectionRawDataAll(DiskGfxReflectionProbe *probeRawData, int probeCount, bool *generateProbe)
+void R_GenerateReflectionRawDataAll(DiskGfxReflectionProbe *probeRawData, int probeCount, bool *generateProbe)
 {
     int probeIndex; // [esp+0h] [ebp-4h]
 
@@ -186,7 +186,7 @@ void __cdecl R_GenerateReflectionRawDataAll(DiskGfxReflectionProbe *probeRawData
 }
 
 const char *fields_2[6] = { "name", "black_level", "white_level", "gamma", "saturation", NULL }; // idb
-char __cdecl R_VerifyFieldNames(const char **buf, const char *filename)
+char R_VerifyFieldNames(const char **buf, const char *filename)
 {
     int fieldIndex; // [esp+0h] [ebp-8h]
     parseInfo_t *token; // [esp+4h] [ebp-4h]
@@ -204,7 +204,7 @@ char __cdecl R_VerifyFieldNames(const char **buf, const char *filename)
     return 1;
 }
 
-void __cdecl R_ParseColorCorrectionData(const char *buf, const char *filename)
+void R_ParseColorCorrectionData(const char *buf, const char *filename)
 {
     ColorCorrectionData *ccd; // [esp+10h] [ebp-8h]
     parseInfo_t *token; // [esp+14h] [ebp-4h]
@@ -280,7 +280,7 @@ ColorCorrectionData *R_CreateDefaultColorCorrectionEntry()
     return result;
 }
 
-const ColorCorrectionData *__cdecl R_FindColorCorrectionData(const char *name)
+const ColorCorrectionData *R_FindColorCorrectionData(const char *name)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -298,7 +298,7 @@ const ColorCorrectionData *__cdecl R_FindColorCorrectionData(const char *name)
 
 const float colorIntensityScale[3] = { 0.114f, 0.587f, 0.299f };
 
-void __cdecl R_ColorCorrectBGRAPixel(const ColorCorrectionData *ccd, const uint8_t *from, uint8_t *to)
+void R_ColorCorrectBGRAPixel(const ColorCorrectionData *ccd, const uint8_t *from, uint8_t *to)
 {
     float v3; // [esp+18h] [ebp-64h]
     float v4; // [esp+1Ch] [ebp-60h]
@@ -371,7 +371,7 @@ void __cdecl R_ColorCorrectBGRAPixel(const ColorCorrectionData *ccd, const uint8
     to[3] = (maxIntensity / 4.0 * 255.0);
 }
 
-void __cdecl R_CopyBlockFromBgraToPixelColorWithColorCorrection(
+void R_CopyBlockFromBgraToPixelColorWithColorCorrection(
     const ColorCorrectionData *colorCorrectionData,
     uint8_t *to,
     const uint8_t *from,
@@ -389,7 +389,7 @@ void __cdecl R_CopyBlockFromBgraToPixelColorWithColorCorrection(
     } while (offset != blockSize);
 }
 
-GfxImage *__cdecl R_GenerateReflectionImageFromRawData(const uint8_t *rawPixels, int probeIndex)
+GfxImage *R_GenerateReflectionImageFromRawData(const uint8_t *rawPixels, int probeIndex)
 {
     char *v2; // eax
     int v4; // [esp+0h] [ebp-188h]
@@ -434,7 +434,7 @@ GfxImage *__cdecl R_GenerateReflectionImageFromRawData(const uint8_t *rawPixels,
     return reflectionImage;
 }
 
-void __cdecl R_GenerateReflectionImages(
+void R_GenerateReflectionImages(
     GfxReflectionProbe *probes,
     const DiskGfxReflectionProbe *probeRawData,
     int probeCount,
@@ -465,12 +465,12 @@ void __cdecl R_GenerateReflectionImages(
     Hunk_FreeTempMemory((char*)pixels);
 }
 
-bool __cdecl R_ReflectionProbeGenerateExitWhenDone()
+bool R_ReflectionProbeGenerateExitWhenDone()
 {
     return r_reflectionProbeGenerate->current.enabled && r_reflectionProbeGenerateExit->current.enabled;
 }
 
-void __cdecl R_GenerateReflections(char *mapname, GfxReflectionProbe *probes, uint32_t probeCount)
+void R_GenerateReflections(char *mapname, GfxReflectionProbe *probes, uint32_t probeCount)
 {
     char v3; // al
     DiskGfxReflectionProbe *v4; // [esp+8h] [ebp-124h]

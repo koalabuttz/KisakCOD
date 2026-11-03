@@ -10,7 +10,7 @@
 #include <script/scr_vm.h>
 
 
-void __cdecl SendScoreboard(gentity_s *ent)
+void SendScoreboard(gentity_s *ent)
 {
     int32_t v1; // eax
     int32_t ping; // [esp+0h] [ebp-B3Ch]
@@ -102,12 +102,12 @@ void __cdecl SendScoreboard(gentity_s *ent)
     }
 }
 
-void __cdecl Cmd_Score_f(gentity_s *ent)
+void Cmd_Score_f(gentity_s *ent)
 {
     SendScoreboard(ent);
 }
 
-int32_t __cdecl CheatsOk(gentity_s *ent)
+int32_t CheatsOk(gentity_s *ent)
 {
     const char *v1; // eax
     const char *v3; // eax
@@ -134,7 +134,7 @@ int32_t __cdecl CheatsOk(gentity_s *ent)
 }
 
 char line[1024];
-char *__cdecl ConcatArgs(int32_t start)
+char *ConcatArgs(int32_t start)
 {
     uint32_t v1; // kr00_4
     int32_t c; // [esp+10h] [ebp-418h]
@@ -159,7 +159,7 @@ char *__cdecl ConcatArgs(int32_t start)
     return line;
 }
 
-void __cdecl G_setfog(const char *fogstring)
+void G_setfog(const char *fogstring)
 {
     float fDensity; // [esp+0h] [ebp-1Ch] BYREF
     float clr[3]; // [esp+4h] [ebp-18h] BYREF
@@ -178,7 +178,7 @@ void __cdecl G_setfog(const char *fogstring)
     }
 }
 
-void __cdecl Cmd_Give_f(gentity_s *ent)
+void Cmd_Give_f(gentity_s *ent)
 {
     WeaponDef *weapDef; // [esp+18h] [ebp-20h]
     gentity_s *it_ent; // [esp+1Ch] [ebp-1Ch]
@@ -285,7 +285,7 @@ void __cdecl Cmd_Give_f(gentity_s *ent)
     }
 }
 
-void __cdecl Cmd_Take_f(gentity_s *ent)
+void Cmd_Take_f(gentity_s *ent)
 {
     gclient_s *client; // esi
     int32_t v2; // eax
@@ -430,7 +430,7 @@ void __cdecl Cmd_Take_f(gentity_s *ent)
     }
 }
 
-void __cdecl Cmd_God_f(gentity_s *ent)
+void Cmd_God_f(gentity_s *ent)
 {
     const char *v1; // eax
     const char *v2; // [esp+0h] [ebp-8h]
@@ -447,7 +447,7 @@ void __cdecl Cmd_God_f(gentity_s *ent)
     }
 }
 
-void __cdecl Cmd_DemiGod_f(gentity_s *ent)
+void Cmd_DemiGod_f(gentity_s *ent)
 {
     const char *v1; // eax
     const char *v2; // [esp+0h] [ebp-8h]
@@ -464,7 +464,7 @@ void __cdecl Cmd_DemiGod_f(gentity_s *ent)
     }
 }
 
-void __cdecl Cmd_Notarget_f(gentity_s *ent)
+void Cmd_Notarget_f(gentity_s *ent)
 {
     const char *v1; // eax
 
@@ -479,7 +479,7 @@ void __cdecl Cmd_Notarget_f(gentity_s *ent)
     }
 }
 
-void __cdecl Cmd_Noclip_f(gentity_s *ent)
+void Cmd_Noclip_f(gentity_s *ent)
 {
     const char *v1; // eax
     const char *msg; // [esp+0h] [ebp-4h]
@@ -496,7 +496,7 @@ void __cdecl Cmd_Noclip_f(gentity_s *ent)
     }
 }
 
-void __cdecl Cmd_UFO_f(gentity_s *ent)
+void Cmd_UFO_f(gentity_s *ent)
 {
     const char *v1; // eax
     const char *msg; // [esp+0h] [ebp-4h]
@@ -513,7 +513,7 @@ void __cdecl Cmd_UFO_f(gentity_s *ent)
     }
 }
 
-void __cdecl Cmd_Kill_f(gentity_s *ent)
+void Cmd_Kill_f(gentity_s *ent)
 {
     if (!ent->client)
         MyAssertHandler(".\\game_mp\\g_cmds_mp.cpp", 679, 0, "%s", "ent->client");
@@ -534,7 +534,7 @@ void __cdecl Cmd_Kill_f(gentity_s *ent)
     }
 }
 
-void __cdecl StopFollowing(gentity_s *ent)
+void StopFollowing(gentity_s *ent)
 {
     gclient_s *client; // [esp+14h] [ebp-84h]
     float vAngles[3]; // [esp+18h] [ebp-80h] BYREF
@@ -591,7 +591,7 @@ void __cdecl StopFollowing(gentity_s *ent)
     }
 }
 
-int32_t __cdecl Cmd_FollowCycle_f(gentity_s *ent, int32_t dir)
+int32_t Cmd_FollowCycle_f(gentity_s *ent, int32_t dir)
 {
     int32_t v3; // [esp+0h] [ebp-2FE0h]
     int32_t clientNum; // [esp+4h] [ebp-2FDCh]
@@ -631,7 +631,7 @@ int32_t __cdecl Cmd_FollowCycle_f(gentity_s *ent, int32_t dir)
     return 0;
 }
 
-bool __cdecl G_IsPlaying(gentity_s *ent)
+bool G_IsPlaying(gentity_s *ent)
 {
     if (!ent->client)
         MyAssertHandler(".\\game_mp\\g_cmds_mp.cpp", 845, 0, "%s", "ent->client");
@@ -640,7 +640,7 @@ bool __cdecl G_IsPlaying(gentity_s *ent)
     return ent->client->sess.sessionState == SESS_STATE_PLAYING;
 }
 
-void __cdecl G_Say(gentity_s *ent, gentity_s *target, int32_t mode, char *chatText)
+void G_Say(gentity_s *ent, gentity_s *target, int32_t mode, char *chatText)
 {
     char *v4; // eax
     char *Guid; // eax
@@ -704,7 +704,7 @@ void __cdecl G_Say(gentity_s *ent, gentity_s *target, int32_t mode, char *chatTe
     }
 }
 
-void __cdecl G_SayTo(
+void G_SayTo(
     gentity_s *ent,
     gentity_s *other,
     int32_t mode,
@@ -769,12 +769,12 @@ void __cdecl G_SayTo(
     }
 }
 
-void __cdecl Cmd_Where_f(gentity_s *ent)
+void Cmd_Where_f(gentity_s *ent)
 {
     SV_GameSendServerCommand(ent - g_entities, SV_CMD_CAN_IGNORE, va("%c \"\x15%s\n\"", vtos(ent->r.currentOrigin)));
 }
 
-void __cdecl Cmd_CallVote_f(gentity_s *ent)
+void Cmd_CallVote_f(gentity_s *ent)
 {
     const char *v1; // eax
     const char *v2; // eax
@@ -1023,7 +1023,7 @@ void __cdecl Cmd_CallVote_f(gentity_s *ent)
         MyAssertHandler(".\\game_mp\\g_cmds_mp.cpp", 1271, 0, "unhandled callvote");
 }
 
-void __cdecl Cmd_Vote_f(gentity_s *ent)
+void Cmd_Vote_f(gentity_s *ent)
 {
     const char *v1; // eax
     const char *v2; // eax
@@ -1081,7 +1081,7 @@ void __cdecl Cmd_Vote_f(gentity_s *ent)
     }
 }
 
-void __cdecl Cmd_SetViewpos_f(gentity_s *ent)
+void Cmd_SetViewpos_f(gentity_s *ent)
 {
     char buffer[1024]; // [esp+4h] [ebp-420h] BYREF
     float origin[3]; // [esp+408h] [ebp-1Ch] BYREF
@@ -1127,13 +1127,13 @@ void __cdecl Cmd_SetViewpos_f(gentity_s *ent)
     TeleportPlayer(ent, origin, angles);
 }
 
-void __cdecl Cmd_EntityCount_f()
+void Cmd_EntityCount_f()
 {
     if (g_cheats->current.enabled)
         Com_Printf(CON_CHANNEL_DONT_FILTER, "entity count = %i\n", level.num_entities);
 }
 
-void __cdecl Cmd_MenuResponse_f(gentity_s *pEnt)
+void Cmd_MenuResponse_f(gentity_s *pEnt)
 {
     int32_t v1; // esi
     char szServerId[1024]; // [esp+4h] [ebp-C10h] BYREF
@@ -1164,7 +1164,7 @@ void __cdecl Cmd_MenuResponse_f(gentity_s *pEnt)
     Scr_Notify(pEnt, scr_const.menuresponse, 2u);
 }
 
-void __cdecl ClientCommand(int32_t clientNum)
+void ClientCommand(int32_t clientNum)
 {
     const char *v1; // eax
     gentity_s *ent; // [esp+0h] [ebp-40Ch]
@@ -1336,7 +1336,7 @@ void __cdecl ClientCommand(int32_t clientNum)
     }
 }
 
-void __cdecl Cmd_Say_f(gentity_s *ent, int32_t mode, int32_t arg0)
+void Cmd_Say_f(gentity_s *ent, int32_t mode, int32_t arg0)
 {
     char *p; // [esp+0h] [ebp-4h]
 

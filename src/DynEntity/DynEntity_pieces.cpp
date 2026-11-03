@@ -11,7 +11,7 @@ const dvar_t *dynEntPieces_impactForce;
 int32_t numPieces;
 BreakablePiece g_breakablePieces[100];
 
-void __cdecl DynEntPieces_RegisterDvars()
+void DynEntPieces_RegisterDvars()
 {
     DvarLimits min; // [esp+Ch] [ebp-10h]
     DvarLimits mina; // [esp+Ch] [ebp-10h]
@@ -47,7 +47,7 @@ void __cdecl DynEntPieces_RegisterDvars()
         "Force applied when breakable is destroyed");
 }
 
-void __cdecl DynEntPieces_AddDrawSurfs()
+void DynEntPieces_AddDrawSurfs()
 {
     GfxScaledPlacement placement; // [esp+30h] [ebp-24h] BYREF
     int32_t i; // [esp+50h] [ebp-4h]
@@ -70,7 +70,7 @@ void __cdecl DynEntPieces_AddDrawSurfs()
     }
 }
 
-void __cdecl DynEntPieces_SpawnPieces(
+void DynEntPieces_SpawnPieces(
     int32_t localClientNum,
     const XModelPieces *pieces,
     const float *origin,
@@ -93,7 +93,7 @@ void __cdecl DynEntPieces_SpawnPieces(
             hitDir);
 }
 
-bool __cdecl DynEntPieces_SpawnPhysicsModel(
+bool DynEntPieces_SpawnPhysicsModel(
     int32_t localClientNum,
     const XModel *model,
     const float *offset,
@@ -167,7 +167,7 @@ bool __cdecl DynEntPieces_SpawnPhysicsModel(
     return result;
 }
 
-dxBody *__cdecl DynEntPieces_SpawnPhysObj(
+dxBody *DynEntPieces_SpawnPhysObj(
     const char *modelName,
     const float *mins,
     const float *maxs,
@@ -201,7 +201,7 @@ dxBody *__cdecl DynEntPieces_SpawnPhysObj(
     }
 }
 
-void __cdecl DynEntPieces_CalcForceDir(const float *hitDir, float spreadFraction, float *forceDir)
+void DynEntPieces_CalcForceDir(const float *hitDir, float spreadFraction, float *forceDir)
 {
     int32_t v3; // [esp+8h] [ebp-18h]
     int32_t v4; // [esp+Ch] [ebp-14h]

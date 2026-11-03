@@ -228,7 +228,7 @@ struct ShouldNotRemoveJoint // sizeof=0x8
 };
 
 
-void __cdecl ODE_BreakupIslandIfTooBig(
+void ODE_BreakupIslandIfTooBig(
     dxBody *const *body,
     int *const bodyCount,
     dxJoint **joint,
@@ -274,7 +274,7 @@ void __cdecl ODE_BreakupIslandIfTooBig(
 }
 
 //void dxProcessIslands (dxWorld *world, dReal stepsize, dstepper_fn_t stepper)
-void __cdecl dxProcessIslands(dxWorld *world, float stepsize)
+void dxProcessIslands(dxWorld *world, float stepsize)
 {
     int v2; // [esp+4h] [ebp-502Ch]
     int tag; // [esp+8h] [ebp-5028h]

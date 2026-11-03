@@ -164,7 +164,7 @@ static void compute_invM_JT (int constraintRowCount,
 //	}
 //}
 
-static void __cdecl multiply_J(int constraintRowCount, ConstraintRowData *rows, float *in)
+static void multiply_J(int constraintRowCount, ConstraintRowData *rows, float *in)
 {
 	float suma; // [esp+0h] [ebp-18h]
 	float sum; // [esp+0h] [ebp-18h]
@@ -349,7 +349,7 @@ static int compare_index_error (const void *a, const void *b)
 #endif
 
 unsigned int *g_holdrand;
-__int64 __cdecl SOR_LCP_irand(int max)
+__int64 SOR_LCP_irand(int max)
 {
 	unsigned int holdrand; // [esp+0h] [ebp-Ch]
 
@@ -360,7 +360,7 @@ __int64 __cdecl SOR_LCP_irand(int max)
 	return ((holdrand >> 17) * max) >> 15;
 }
 
-void __cdecl SOR_LCP_MainLoop(
+void SOR_LCP_MainLoop(
 	unsigned int constraintRowCount,
 	ConstraintRowData *rows,
 	int *findex,
@@ -480,7 +480,7 @@ void __cdecl SOR_LCP_MainLoop(
 	}
 }
 
-void __cdecl SOR_LCP_MainLoop_OneBody(
+void SOR_LCP_MainLoop_OneBody(
 	unsigned int constraintRowCount,
 	ConstraintRowData *rows,
 	int *findex,
@@ -671,7 +671,7 @@ static void SOR_LCP (int constraintRowCount,
 const char *spaces =
 "                                        ";
 
-void __cdecl pr_0(const char *msg, int indent)
+void pr_0(const char *msg, int indent)
 {
 	int v2; // [esp+0h] [ebp-8h]
 	int v3; // [esp+4h] [ebp-4h]
@@ -687,7 +687,7 @@ void __cdecl pr_0(const char *msg, int indent)
 	Com_Printf(CON_CHANNEL_PHYS, "%s%s", &spaces[40 - v2], msg);
 }
 
-const char *__cdecl jointKind(const dxJoint *joint)
+const char *jointKind(const dxJoint *joint)
 {
 	switch (joint->typenum)
 	{
@@ -703,7 +703,7 @@ const char *__cdecl jointKind(const dxJoint *joint)
 	return "Unknown";
 }
 
-int __cdecl ptrIdx(void **ptrs, void *ptr, int numPtrs)
+int ptrIdx(void **ptrs, void *ptr, int numPtrs)
 {
 	int i; // [esp+0h] [ebp-4h]
 
@@ -715,7 +715,7 @@ int __cdecl ptrIdx(void **ptrs, void *ptr, int numPtrs)
 	return -1;
 }
 
-void __cdecl dumpBodyJoints(dxWorld *world, dxBody **bodies, int bodyCount, dxJoint *const *joints, int jointCount)
+void dumpBodyJoints(dxWorld *world, dxBody **bodies, int bodyCount, dxJoint *const *joints, int jointCount)
 {
 	// KISAKTODOLATER: Physics debug dumping
 #if 0

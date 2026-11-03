@@ -2,7 +2,7 @@
 #include "ui_shared.h"
 #include <client/client.h>
 
-void __cdecl UI_DrawWrappedText(
+void UI_DrawWrappedText(
     const ScreenPlacement *scrPlace,
     const char *text,
     const rectDef_s *rect,
@@ -18,7 +18,7 @@ void __cdecl UI_DrawWrappedText(
     DrawWrappedText(scrPlace, text, rect, font, x, y, scale, color, style, textAlignMode, textRect, 0, 0, 0);
 }
 
-void __cdecl DrawWrappedText(
+void DrawWrappedText(
     const ScreenPlacement *scrPlace,
     const char *text,
     const rectDef_s *rect,
@@ -134,7 +134,7 @@ void __cdecl DrawWrappedText(
     textRect->h = ya - textRect->y;
 }
 
-double __cdecl Item_GetTextPlacementX(int alignX, float x0, float containerWidth, float selfWidth)
+double Item_GetTextPlacementX(int alignX, float x0, float containerWidth, float selfWidth)
 {
     if (!alignX)
         return x0;
@@ -150,7 +150,7 @@ double __cdecl Item_GetTextPlacementX(int alignX, float x0, float containerWidth
     }
 }
 
-double __cdecl Item_GetTextPlacementY(int alignY, float y0, float containerHeight, float selfHeight)
+double Item_GetTextPlacementY(int alignY, float y0, float containerHeight, float selfHeight)
 {
     switch (alignY)
     {
@@ -167,7 +167,7 @@ double __cdecl Item_GetTextPlacementY(int alignY, float y0, float containerHeigh
     }
 }
 
-int __cdecl UI_PickWordWrapLineWidth(
+int UI_PickWordWrapLineWidth(
     const char *text,
     int bufferSize,
     Font_s *font,
@@ -196,7 +196,7 @@ int __cdecl UI_PickWordWrapLineWidth(
     return widthLimit;
 }
 
-void __cdecl UI_DrawWrappedTextSubtitled(
+void UI_DrawWrappedTextSubtitled(
     const ScreenPlacement *scrPlace,
     const char *text,
     const rectDef_s *rect,
@@ -228,7 +228,7 @@ void __cdecl UI_DrawWrappedTextSubtitled(
         cinematic);
 }
 
-void __cdecl ToWindowCoords(float *x, float *y, const windowDef_t *window)
+void ToWindowCoords(float *x, float *y, const windowDef_t *window)
 {
     if (window->border)
     {
@@ -241,7 +241,7 @@ void __cdecl ToWindowCoords(float *x, float *y, const windowDef_t *window)
     *y = *y + window->rect.y;
 }
 
-void __cdecl Item_Text_AutoWrapped_Paint(
+void Item_Text_AutoWrapped_Paint(
     int localClientNum,
     itemDef_s *item,
     const char *text,

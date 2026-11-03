@@ -6,7 +6,7 @@
 #include "rb_state.h"
 #include "r_utils.h"
 
-int __cdecl RB_CompareTouchImages(int *e0, int *e1)
+int RB_CompareTouchImages(int *e0, int *e1)
 {
     int image; // [esp+0h] [ebp-Ch]
     int image_4; // [esp+4h] [ebp-8h]
@@ -24,7 +24,7 @@ int __cdecl RB_CompareTouchImages(int *e0, int *e1)
     return *(uint8_t *)(image + 11) - *(uint8_t *)(image_4 + 11);
 }
 
-void __cdecl RB_TouchImage(GfxImage *image)
+void RB_TouchImage(GfxImage *image)
 {
     if (image->mapType == MAPTYPE_2D)
     {
@@ -46,7 +46,7 @@ void __cdecl RB_TouchImage(GfxImage *image)
     }
 }
 
-void __cdecl RB_TouchAllImages()
+void RB_TouchAllImages()
 {
     const char *v0; // eax
     const char *v1; // eax
@@ -79,7 +79,7 @@ void __cdecl RB_TouchAllImages()
     if (tess.indexCount)
         RB_EndTessSurface();
     R_GetImageList(&imageList);
-    qsort(imageList.image, imageList.count, 4u, (int(__cdecl *)(const void *, const void *))RB_CompareTouchImages);
+    qsort(imageList.image, imageList.count, 4u, (int(*)(const void *, const void *))RB_CompareTouchImages);
     v6 = 0;
     for (i = 0; i < imageList.count && imageList.image[i]->semantic; ++i)
     {

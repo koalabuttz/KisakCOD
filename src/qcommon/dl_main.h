@@ -7,9 +7,9 @@ enum dlStatus_t : __int32
     DL_FAILED = 0x2,
 };
 
-void __cdecl DL_CancelDownload();
-void __cdecl DL_InitDownload();
-int __cdecl DL_BeginDownload(char *localName, char *remoteName);
-int __cdecl DL_DownloadLoop();
-bool __cdecl DL_InProgress();
-bool __cdecl DL_DLIsMotd();
+void DL_CancelDownload();
+void DL_InitDownload();
+int DL_BeginDownload(char *localName, char *remoteName);
+int DL_DownloadLoop();
+bool DL_InProgress();
+bool DL_DLIsMotd();

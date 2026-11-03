@@ -36,7 +36,7 @@ void UI_RunScriptCommands(UiContext *dc,itemDef_s *item,char *s,const commandDef
     }
 }
 
-void __cdecl Script_Close(UiContext *dc, itemDef_s *item, const char **args)
+void Script_Close(UiContext *dc, itemDef_s *item, const char **args)
 {
     char name[1028]; // [esp+14h] [ebp-408h] BYREF
 
@@ -49,7 +49,7 @@ void __cdecl Script_Close(UiContext *dc, itemDef_s *item, const char **args)
     }
 }
 
-void __cdecl Script_SetLocalVarBool(UiContext *dc, itemDef_s *item, const char **args)
+void Script_SetLocalVarBool(UiContext *dc, itemDef_s *item, const char **args)
 {
     int v3; // eax
     UILocalVarContext *var; // [esp+0h] [ebp-10Ch]
@@ -66,7 +66,7 @@ void __cdecl Script_SetLocalVarBool(UiContext *dc, itemDef_s *item, const char *
     }
 }
 
-UILocalVarContext *__cdecl Script_ParseLocalVar(UiContext *dc, const char **args)
+UILocalVarContext *Script_ParseLocalVar(UiContext *dc, const char **args)
 {
     char varName[260]; // [esp+0h] [ebp-108h] BYREF
 
@@ -76,7 +76,7 @@ UILocalVarContext *__cdecl Script_ParseLocalVar(UiContext *dc, const char **args
         return 0;
 }
 
-void __cdecl Script_SetLocalVarInt(UiContext *dc, itemDef_s *item, const char **args)
+void Script_SetLocalVarInt(UiContext *dc, itemDef_s *item, const char **args)
 {
     int v3; // eax
     UILocalVarContext *var; // [esp+0h] [ebp-10Ch]
@@ -93,7 +93,7 @@ void __cdecl Script_SetLocalVarInt(UiContext *dc, itemDef_s *item, const char **
     }
 }
 
-void __cdecl Script_SetLocalVarString(UiContext *dc, itemDef_s *item, const char **args)
+void Script_SetLocalVarString(UiContext *dc, itemDef_s *item, const char **args)
 {
     UILocalVarContext *var; // [esp+0h] [ebp-10Ch]
     char string[260]; // [esp+4h] [ebp-108h] BYREF
@@ -106,7 +106,7 @@ void __cdecl Script_SetLocalVarString(UiContext *dc, itemDef_s *item, const char
     }
 }
 
-void __cdecl Script_Play(UiContext *dc, itemDef_s *item, const char **args)
+void Script_Play(UiContext *dc, itemDef_s *item, const char **args)
 {
     char val[1028]; // [esp+0h] [ebp-408h] BYREF
 

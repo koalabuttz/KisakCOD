@@ -43,7 +43,7 @@ uint32_t __stdcall MSS_FileReadCallback(UINTa hFileHandle, void *pBuffer, uint32
     return FS_Read((unsigned char *)pBuffer, bytes, hFileHandle);
 }
 
-_DIG_DRIVER *__cdecl MSS_open_digital_driver(int hertz, int bits, int channels)
+_DIG_DRIVER *MSS_open_digital_driver(int hertz, int bits, int channels)
 {
   bool v4; // [esp+0h] [ebp-10h]
   int outputChannels; // [esp+4h] [ebp-Ch] BYREF
@@ -87,7 +87,7 @@ MSS_MC_SPEC mss_spec[5] =
     MSS_MC_51_DISCRETE
 };
 
-char __cdecl MSS_Init()
+char MSS_Init()
 {
   const char *error; // eax
   int integer; // [esp+4h] [ebp-Ch]
@@ -201,7 +201,7 @@ void MSS_InitEq()
   }
 }
 
-bool __cdecl MSS_Startup()
+bool MSS_Startup()
 {
   return AIL_startup() != 0;
 }
@@ -237,7 +237,7 @@ const char *MSS_EQ_TYPE[3] = { "Type 0", "Type 1", "Type 2" }; // idb
 const char *MSS_EQ_GAIN[3] = { "Gain 0", "Gain 1", "Gain 2" }; // idb
 const char *MSS_EQ_Q[3] = { "Q 0", "Q 1", "Q 2" }; // idb
 
-void __cdecl MSS_ApplyEqFilter(_SAMPLE *s, int entchannel)
+void MSS_ApplyEqFilter(_SAMPLE *s, int entchannel)
 {
   int enabled; // [esp+0h] [ebp-14h] BYREF
   int band; // [esp+4h] [ebp-10h]
@@ -270,7 +270,7 @@ void __cdecl MSS_ApplyEqFilter(_SAMPLE *s, int entchannel)
   }
 }
 
-void __cdecl MSS_ResumeSample(int i, int frametime)
+void MSS_ResumeSample(int i, int frametime)
 {
     if ( g_snd.chaninfo[i].startDelay )
     {
@@ -289,12 +289,12 @@ void __cdecl MSS_ResumeSample(int i, int frametime)
     }
 }
 
-_DIG_DRIVER *__cdecl MSS_GetDriver()
+_DIG_DRIVER *MSS_GetDriver()
 {
   return milesGlob.driver;
 }
 
-int __cdecl MSS_DigitalFormatType(int waveFormat, int bits, int channels)
+int MSS_DigitalFormatType(int waveFormat, int bits, int channels)
 {
   int digitalFormat; // [esp+0h] [ebp-4h]
 
@@ -314,15 +314,15 @@ int __cdecl MSS_DigitalFormatType(int waveFormat, int bits, int channels)
   return digitalFormat;
 }
 
-uint8_t *__cdecl MSS_Alloc(uint32_t bytes, uint32_t rate)
+uint8_t *MSS_Alloc(uint32_t bytes, uint32_t rate)
 {
   if ( IsFastFileLoad() )
-    return (uint8_t *)((int (__cdecl *)(uint32_t, uint32_t))MSS_Alloc_FastFile)(bytes, rate);
+    return (uint8_t *)((int (*)(uint32_t, uint32_t))MSS_Alloc_FastFile)(bytes, rate);
   else
     return MSS_Alloc_LoadObj(bytes, rate);
 }
 
-uint8_t *__cdecl MSS_Alloc_LoadObj(uint32_t bytes, uint32_t rate)
+uint8_t *MSS_Alloc_LoadObj(uint32_t bytes, uint32_t rate)
 {
   int min_Spec_bytes; // [esp+0h] [ebp-4h]
 
@@ -336,7 +336,7 @@ uint8_t *__cdecl MSS_Alloc_LoadObj(uint32_t bytes, uint32_t rate)
   return Hunk_Alloc(bytes, "MSS_Alloc", 15);
 }
 
-uint32_t *__cdecl MSS_Alloc_FastFile(int bytes)
+uint32_t *MSS_Alloc_FastFile(int bytes)
 {
   return (uint32_t *)Z_Malloc(bytes, "MSS_Alloc", 15);
 }

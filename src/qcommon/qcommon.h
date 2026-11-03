@@ -228,83 +228,83 @@ void QDECL RefreshQuitOnErrorCondition();
 void Com_Init(char* commandLine);
 void Com_Frame(void);
 
-void __cdecl Com_ShutdownInternal(const char* finalmsg);
+void Com_ShutdownInternal(const char* finalmsg);
 void Com_Shutdown(const char* finalmsg);
 
-void __cdecl Debug_Frame(int localClientNum);
+void Debug_Frame(int localClientNum);
 
-void __cdecl Com_InitPlayerProfiles(int localClientNum);
+void Com_InitPlayerProfiles(int localClientNum);
 #ifdef KISAK_RADIANT
 // Radiant build: cmdlib.cpp provides Com_PrintMessage as a varargs console printer.
 void Com_PrintMessage(const char *fmt, ...);
 #else
-void __cdecl Com_PrintMessage(int channel, const char* msg, int error);
+void Com_PrintMessage(int channel, const char* msg, int error);
 #endif
-void __cdecl Com_LogPrintMessage(int channel, const char* msg);
+void Com_LogPrintMessage(int channel, const char* msg);
 void Com_OpenLogFile();
 void Com_DPrintf(int channel, const char* fmt, ...);
 void Com_PrintError(int channel, const char* fmt, ...);
 void Com_PrintWarning(int channel, const char* fmt, ...);
-void __cdecl Com_SetLocalizedErrorMessage(char* localizedErrorMessage, const char* titleToken);
-void __cdecl Com_SetErrorMessage(char* errorMessage);
-char __cdecl Com_ErrorIsNotice(const char* errorMessage);
-void __cdecl Com_PrintStackTrace();
-void __cdecl Com_ErrorAbort();
-void __cdecl Com_Quit_f();
+void Com_SetLocalizedErrorMessage(char* localizedErrorMessage, const char* titleToken);
+void Com_SetErrorMessage(char* errorMessage);
+char Com_ErrorIsNotice(const char* errorMessage);
+void Com_PrintStackTrace();
+void Com_ErrorAbort();
+void Com_Quit_f();
 void Com_ClearTempMemory();
-void __cdecl Com_ParseCommandLine(char* commandLine);
-int __cdecl Com_SafeMode();
-void __cdecl Com_ForceSafeMode();
-void __cdecl Com_StartupVariable(const char* match);
-void __cdecl Info_Print(const char* s);
-uint32_t* __cdecl Com_AllocEvent(int size);
-void __cdecl Com_ClientPacketEvent();
+void Com_ParseCommandLine(char* commandLine);
+int Com_SafeMode();
+void Com_ForceSafeMode();
+void Com_StartupVariable(const char* match);
+void Info_Print(const char* s);
+uint32_t* Com_AllocEvent(int size);
+void Com_ClientPacketEvent();
 
-void __cdecl Com_ServerPacketEvent();
-void __cdecl Com_EventLoop();
-void __cdecl Com_SetScriptSettings();
-void __cdecl Com_RunAutoExec(int localClientNum, int controllerIndex);
-void __cdecl Com_ExecStartupConfigs(int localClientNum, const char* configFile);
+void Com_ServerPacketEvent();
+void Com_EventLoop();
+void Com_SetScriptSettings();
+void Com_RunAutoExec(int localClientNum, int controllerIndex);
+void Com_ExecStartupConfigs(int localClientNum, const char* configFile);
 void Com_ErrorCleanup();
 void Com_AddStartupCommands();
-void __cdecl Com_Init_Try_Block_Function(char* commandLine);
-void __cdecl Com_Error_f();
-void __cdecl Com_Freeze_f();
-void __cdecl Com_Crash_f();
-void __cdecl Com_Assert_f();
+void Com_Init_Try_Block_Function(char* commandLine);
+void Com_Error_f();
+void Com_Freeze_f();
+void Com_Crash_f();
+void Com_Assert_f();
 void COM_PlayIntroMovies();
 void Com_InitDvars();
-void __cdecl Com_StartupConfigs(int localClientNum);
+void Com_StartupConfigs(int localClientNum);
 void Com_InitXAssets();
-void __cdecl Com_WriteDefaultsToFile(char* filename);
-void __cdecl Com_WriteConfig_f();
-void __cdecl Com_WriteConfigToFile(int localClientNum, char* filename);
-void __cdecl Com_WriteDefaults_f();
-double __cdecl Com_GetTimescaleForSnd();
-void __cdecl Com_AdjustMaxFPS(int* maxFPS);
-void __cdecl Com_Frame_Try_Block_Function();
-void __cdecl Com_WriteConfiguration(int localClientNum);
-int __cdecl Com_ModifyMsec(int msec);
+void Com_WriteDefaultsToFile(char* filename);
+void Com_WriteConfig_f();
+void Com_WriteConfigToFile(int localClientNum, char* filename);
+void Com_WriteDefaults_f();
+double Com_GetTimescaleForSnd();
+void Com_AdjustMaxFPS(int* maxFPS);
+void Com_Frame_Try_Block_Function();
+void Com_WriteConfiguration(int localClientNum);
+int Com_ModifyMsec(int msec);
 void Com_Statmon();
 int Com_UpdateMenu();
-void __cdecl Com_AssetLoadUI();
-void __cdecl Com_CheckSyncFrame();
+void Com_AssetLoadUI();
+void Com_CheckSyncFrame();
 void Com_StartHunkUsers();
-void __cdecl Com_CloseLogfiles();
-bool __cdecl Com_LogFileOpen();
-void __cdecl Com_Close();
-void __cdecl Field_Clear(field_t* edit);
-void __cdecl Com_Restart();
-void __cdecl Com_SetWeaponInfoMemory(int source);
-void __cdecl Com_FreeWeaponInfoMemory(int source);
-int __cdecl Com_AddToString(const char* add, char* msg, int len, int maxlen, int mayAddQuotes);
-char __cdecl Com_GetDecimalDelimiter();
-void __cdecl Com_LocalizedFloatToString(float f, char* buffer, uint32_t maxlen, uint32_t numDecimalPlaces);
-void __cdecl Com_SyncThreads();
-void __cdecl Com_InitDObj();
-void __cdecl Com_ShutdownDObj();
+void Com_CloseLogfiles();
+bool Com_LogFileOpen();
+void Com_Close();
+void Field_Clear(field_t* edit);
+void Com_Restart();
+void Com_SetWeaponInfoMemory(int source);
+void Com_FreeWeaponInfoMemory(int source);
+int Com_AddToString(const char* add, char* msg, int len, int maxlen, int mayAddQuotes);
+char Com_GetDecimalDelimiter();
+void Com_LocalizedFloatToString(float f, char* buffer, uint32_t maxlen, uint32_t numDecimalPlaces);
+void Com_SyncThreads();
+void Com_InitDObj();
+void Com_ShutdownDObj();
 void Com_InitHunkMemory();
-uint8_t *__cdecl CM_Hunk_Alloc(uint32_t size, const char *name, int type);
+uint8_t *CM_Hunk_Alloc(uint32_t size, const char *name, int type);
 
 #ifdef KISAK_SP
 void Com_ResetFrametime();
@@ -322,22 +322,22 @@ struct SndCurve;
 struct SpeakerMapInfo;
 struct XModelPiece;
 
-void __cdecl Com_InitDefaultSoundAliasVolumeFalloffCurve(SndCurve* sndCurve);
-void __cdecl Com_InitDefaultSoundAliasSpeakerMap(SpeakerMapInfo* info);
-void __cdecl Com_FreeEvent(char* ptr);
+void Com_InitDefaultSoundAliasVolumeFalloffCurve(SndCurve* sndCurve);
+void Com_InitDefaultSoundAliasSpeakerMap(SpeakerMapInfo* info);
+void Com_FreeEvent(char* ptr);
 
 void Com_CheckError();
 
-void __cdecl Com_ProcessSoundAliasFileLocalization(char *sourceFile, char *loadspecCurGame);
+void Com_ProcessSoundAliasFileLocalization(char *sourceFile, char *loadspecCurGame);
 
 // com_loadutils.cpp
-char *__cdecl Com_LoadInfoString(char *fileName, const char *fileDesc, const char *ident, char *loadBuffer);
-const char *__cdecl Com_LoadInfoString_FastFile(const char *fileName, const char *fileDesc, const char *ident);
-char *__cdecl Com_LoadInfoString_LoadObj(char *fileName, const char *fileDesc, const char *ident, char *loadBuffer);
-char *__cdecl Com_LoadRawTextFile(const char *fullpath);
-char *__cdecl Com_LoadRawTextFile_FastFile(const char *fullpath);
-char *__cdecl Com_LoadRawTextFile_LoadObj(const char *fullpath);
-void __cdecl Com_UnloadRawTextFile(char *filebuf);
+char *Com_LoadInfoString(char *fileName, const char *fileDesc, const char *ident, char *loadBuffer);
+const char *Com_LoadInfoString_FastFile(const char *fileName, const char *fileDesc, const char *ident);
+char *Com_LoadInfoString_LoadObj(char *fileName, const char *fileDesc, const char *ident, char *loadBuffer);
+char *Com_LoadRawTextFile(const char *fullpath);
+char *Com_LoadRawTextFile_FastFile(const char *fullpath);
+char *Com_LoadRawTextFile_LoadObj(const char *fullpath);
+void Com_UnloadRawTextFile(char *filebuf);
 
 
 
@@ -357,116 +357,116 @@ enum DvarSetSource : __int32
     DVAR_SOURCE_DEVGUI = 0x3,
 };
 
-int __cdecl Dvar_Command();
-void __cdecl Dvar_GetCombinedString(char *combined, int first);
-void __cdecl Dvar_Toggle_f();
-bool __cdecl Dvar_ToggleInternal();
-bool __cdecl Dvar_ToggleSimple(dvar_s *dvar);
-void __cdecl Dvar_TogglePrint_f();
-void __cdecl Dvar_Set_f();
-void __cdecl Dvar_SetU_f();
-void __cdecl Dvar_SetS_f();
-void __cdecl Dvar_SetA_f();
-void __cdecl Dvar_SetFromDvar_f();
-void __cdecl Dvar_Reset_f();
-void __cdecl Dvar_WriteVariables(int f);
-void __cdecl Dvar_WriteSingleVariable(const dvar_s *dvar, int *userData);
-void __cdecl Dvar_WriteDefaults(int f);
-void __cdecl Dvar_WriteSingleDefault(const dvar_s *dvar, int *userData);
-void __cdecl Dvar_List_f();
-void __cdecl Dvar_ListSingle(const dvar_s *dvar, const char *userData);
-void __cdecl Dvar_Dump_f();
-void __cdecl PBdvar_set(const char *var_name, char *value);
-char *__cdecl Dvar_InfoString(int localClientNum, char bit);
-void __cdecl Dvar_InfoStringSingle(const dvar_s *dvar, uint32_t *userData);
-char *__cdecl Dvar_InfoString_Big(int bit);
-void __cdecl Dvar_InfoStringSingle_Big(const dvar_s *dvar, uint32_t *userData);
-void __cdecl Dvar_RegisterBool_f();
-void __cdecl Dvar_RegisterInt_f();
-void __cdecl Dvar_RegisterFloat_f();
-void __cdecl Dvar_SetFromLocalizedStr_f();
-void __cdecl Dvar_SetToTime_f();
-void __cdecl CL_SelectStringTableEntryInDvar_f();
-void __cdecl Dvar_ForEach(void(__cdecl *callback)(const dvar_s *, void *), void *userData);
+int Dvar_Command();
+void Dvar_GetCombinedString(char *combined, int first);
+void Dvar_Toggle_f();
+bool Dvar_ToggleInternal();
+bool Dvar_ToggleSimple(dvar_s *dvar);
+void Dvar_TogglePrint_f();
+void Dvar_Set_f();
+void Dvar_SetU_f();
+void Dvar_SetS_f();
+void Dvar_SetA_f();
+void Dvar_SetFromDvar_f();
+void Dvar_Reset_f();
+void Dvar_WriteVariables(int f);
+void Dvar_WriteSingleVariable(const dvar_s *dvar, int *userData);
+void Dvar_WriteDefaults(int f);
+void Dvar_WriteSingleDefault(const dvar_s *dvar, int *userData);
+void Dvar_List_f();
+void Dvar_ListSingle(const dvar_s *dvar, const char *userData);
+void Dvar_Dump_f();
+void PBdvar_set(const char *var_name, char *value);
+char *Dvar_InfoString(int localClientNum, char bit);
+void Dvar_InfoStringSingle(const dvar_s *dvar, uint32_t *userData);
+char *Dvar_InfoString_Big(int bit);
+void Dvar_InfoStringSingle_Big(const dvar_s *dvar, uint32_t *userData);
+void Dvar_RegisterBool_f();
+void Dvar_RegisterInt_f();
+void Dvar_RegisterFloat_f();
+void Dvar_SetFromLocalizedStr_f();
+void Dvar_SetToTime_f();
+void CL_SelectStringTableEntryInDvar_f();
+void Dvar_ForEach(void(*callback)(const dvar_s *, void *), void *userData);
 void Dvar_Sort();
-void __cdecl Dvar_ForEachName(void(__cdecl *callback)(const char *));
-const dvar_s *__cdecl Dvar_GetAtIndex(uint32_t index);
-void __cdecl Dvar_SetInAutoExec(bool inAutoExec);
-bool __cdecl Dvar_IsSystemActive();
-char __cdecl Dvar_IsValidName(const char *dvarName);
-const char *__cdecl Dvar_EnumToString(const dvar_s *dvar);
-const char *__cdecl Dvar_IndexStringToEnumString(const dvar_s *dvar, const char *indexString);
-const char *__cdecl Dvar_DisplayableValue(const dvar_s *dvar);
-const char *__cdecl Dvar_ValueToString(const dvar_s *dvar, DvarValue value);
-const char *__cdecl Dvar_DisplayableResetValue(const dvar_s *dvar);
-const char *__cdecl Dvar_DisplayableLatchedValue(const dvar_s *dvar);
-char __cdecl Dvar_ValueInDomain(uint8_t type, DvarValue value, DvarLimits domain);
-char __cdecl Dvar_VectorInDomain(const float *vector, int components, float min, float max);
+void Dvar_ForEachName(void(*callback)(const char *));
+const dvar_s *Dvar_GetAtIndex(uint32_t index);
+void Dvar_SetInAutoExec(bool inAutoExec);
+bool Dvar_IsSystemActive();
+char Dvar_IsValidName(const char *dvarName);
+const char *Dvar_EnumToString(const dvar_s *dvar);
+const char *Dvar_IndexStringToEnumString(const dvar_s *dvar, const char *indexString);
+const char *Dvar_DisplayableValue(const dvar_s *dvar);
+const char *Dvar_ValueToString(const dvar_s *dvar, DvarValue value);
+const char *Dvar_DisplayableResetValue(const dvar_s *dvar);
+const char *Dvar_DisplayableLatchedValue(const dvar_s *dvar);
+char Dvar_ValueInDomain(uint8_t type, DvarValue value, DvarLimits domain);
+char Dvar_VectorInDomain(const float *vector, int components, float min, float max);
 const char *Dvar_DomainToString_GetLines(
     uint8_t type,
     DvarLimits *domain,
     char *outBuffer,
     uint32_t outBufferLen,
     int *outLineCount);
-void __cdecl Dvar_VectorDomainToString(int components, DvarLimits domain, char *outBuffer, uint32_t outBufferLen);
+void Dvar_VectorDomainToString(int components, DvarLimits domain, char *outBuffer, uint32_t outBufferLen);
 
-void __cdecl Dvar_PrintDomain(uint8_t type, DvarLimits domain);
-bool __cdecl Dvar_HasLatchedValue(const dvar_s *dvar);
-int __cdecl Dvar_ValuesEqual(uint8_t type, DvarValue val0, DvarValue val1);
-const dvar_s *__cdecl Dvar_FindVar(const char *dvarName);
-void __cdecl Dvar_ClearModified(dvar_s *dvar);
-void __cdecl Dvar_SetModified(dvar_s *dvar);
-void __cdecl Dvar_UpdateEnumDomain(dvar_s *dvar, const char **stringTable);
-DvarValue *__cdecl Dvar_ClampValueToDomain(
+void Dvar_PrintDomain(uint8_t type, DvarLimits domain);
+bool Dvar_HasLatchedValue(const dvar_s *dvar);
+int Dvar_ValuesEqual(uint8_t type, DvarValue val0, DvarValue val1);
+const dvar_s *Dvar_FindVar(const char *dvarName);
+void Dvar_ClearModified(dvar_s *dvar);
+void Dvar_SetModified(dvar_s *dvar);
+void Dvar_UpdateEnumDomain(dvar_s *dvar, const char **stringTable);
+DvarValue *Dvar_ClampValueToDomain(
     DvarValue *result,
     uint8_t type,
     DvarValue value,
     DvarValue resetValue,
     DvarLimits domain);
-void __cdecl Dvar_ClampVectorToDomain(float *vector, int components, float min, float max);
-bool __cdecl Dvar_GetBool(const char *dvarName);
-bool __cdecl Dvar_StringToBool(const char *string);
-int __cdecl Dvar_GetInt(const char *dvarName);
-int __cdecl Dvar_StringToInt(const char *string);
-double __cdecl Dvar_GetFloat(const char *dvarName);
-double __cdecl Dvar_StringToFloat(const char *string);
-const char *__cdecl Dvar_GetString(const char *dvarName);
-const char *__cdecl Dvar_GetVariantString(const char *dvarName);
-void __cdecl Dvar_GetUnpackedColor(const dvar_s *dvar, float *expandedColor);
-void __cdecl Dvar_StringToColor(const char *string, uint8_t *color);
-void __cdecl Dvar_GetUnpackedColorByName(const char *dvarName, float *expandedColor);
-void __cdecl Dvar_Shutdown();
-void __cdecl Dvar_FreeNameString(const char *name);
-bool __cdecl Dvar_ShouldFreeCurrentString(dvar_s *dvar);
-bool __cdecl Dvar_ShouldFreeLatchedString(dvar_s *dvar);
-bool __cdecl Dvar_ShouldFreeResetString(dvar_s *dvar);
-void __cdecl Dvar_FreeString(DvarValue *value);
-void __cdecl Dvar_ChangeResetValue(dvar_s *dvar, DvarValue value);
-void __cdecl Dvar_UpdateResetValue(dvar_s *dvar, DvarValue value);
-void __cdecl Dvar_AssignResetStringValue(dvar_s *dvar, DvarValue *dest, const char *string);
-void __cdecl Dvar_CopyString(const char *string, DvarValue *value);
-void __cdecl Dvar_WeakCopyString(const char *string, DvarValue *value);
-void __cdecl Dvar_MakeLatchedValueCurrent(dvar_s *dvar);
-void __cdecl Dvar_SetVariant(dvar_s *dvar, DvarValue value, DvarSetSource source);
-void __cdecl Dvar_AssignCurrentStringValue(dvar_s *dvar, DvarValue *dest, char *string);
-void __cdecl Dvar_SetLatchedValue(dvar_s *dvar, DvarValue value);
-void __cdecl Dvar_AssignLatchedStringValue(dvar_s *dvar, DvarValue *dest, char *string);
-void __cdecl Dvar_ClearLatchedValue(dvar_s *dvar);
-void __cdecl Dvar_ReinterpretDvar(
+void Dvar_ClampVectorToDomain(float *vector, int components, float min, float max);
+bool Dvar_GetBool(const char *dvarName);
+bool Dvar_StringToBool(const char *string);
+int Dvar_GetInt(const char *dvarName);
+int Dvar_StringToInt(const char *string);
+double Dvar_GetFloat(const char *dvarName);
+double Dvar_StringToFloat(const char *string);
+const char *Dvar_GetString(const char *dvarName);
+const char *Dvar_GetVariantString(const char *dvarName);
+void Dvar_GetUnpackedColor(const dvar_s *dvar, float *expandedColor);
+void Dvar_StringToColor(const char *string, uint8_t *color);
+void Dvar_GetUnpackedColorByName(const char *dvarName, float *expandedColor);
+void Dvar_Shutdown();
+void Dvar_FreeNameString(const char *name);
+bool Dvar_ShouldFreeCurrentString(dvar_s *dvar);
+bool Dvar_ShouldFreeLatchedString(dvar_s *dvar);
+bool Dvar_ShouldFreeResetString(dvar_s *dvar);
+void Dvar_FreeString(DvarValue *value);
+void Dvar_ChangeResetValue(dvar_s *dvar, DvarValue value);
+void Dvar_UpdateResetValue(dvar_s *dvar, DvarValue value);
+void Dvar_AssignResetStringValue(dvar_s *dvar, DvarValue *dest, const char *string);
+void Dvar_CopyString(const char *string, DvarValue *value);
+void Dvar_WeakCopyString(const char *string, DvarValue *value);
+void Dvar_MakeLatchedValueCurrent(dvar_s *dvar);
+void Dvar_SetVariant(dvar_s *dvar, DvarValue value, DvarSetSource source);
+void Dvar_AssignCurrentStringValue(dvar_s *dvar, DvarValue *dest, char *string);
+void Dvar_SetLatchedValue(dvar_s *dvar, DvarValue value);
+void Dvar_AssignLatchedStringValue(dvar_s *dvar, DvarValue *dest, char *string);
+void Dvar_ClearLatchedValue(dvar_s *dvar);
+void Dvar_ReinterpretDvar(
     dvar_s *dvar,
     const char *dvarName,
     uint8_t type,
     uint16_t flags,
     DvarValue value,
     DvarLimits domain);
-const dvar_s *__cdecl Dvar_RegisterNew(
+const dvar_s *Dvar_RegisterNew(
     const char *dvarName,
     uint8_t type,
     uint16_t flags,
     DvarValue value,
     DvarLimits domain,
     const char *description);
-void __cdecl Dvar_Reregister(
+void Dvar_Reregister(
     dvar_s *dvar,
     const char *dvarName,
     uint8_t type,
@@ -474,66 +474,66 @@ void __cdecl Dvar_Reregister(
     DvarValue resetValue,
     DvarLimits domain,
     const char *description);
-const dvar_s *__cdecl Dvar_RegisterBool(
+const dvar_s *Dvar_RegisterBool(
     const char *dvarName,
     bool value,
     uint16_t flags,
     const char *description);
-const dvar_s *__cdecl Dvar_RegisterVariant(
+const dvar_s *Dvar_RegisterVariant(
     const char *dvarName,
     uint8_t type,
     uint16_t flags,
     DvarValue value,
     DvarLimits domain,
     const char *description);
-void __cdecl Dvar_MakeExplicitType(
+void Dvar_MakeExplicitType(
     dvar_s *dvar,
     const char *dvarName,
     uint8_t type,
     uint16_t flags,
     DvarValue resetValue,
     DvarLimits domain);
-DvarValue *__cdecl Dvar_StringToValue(DvarValue *result, uint8_t type, DvarLimits domain, const char *string);
-void __cdecl Dvar_StringToVec2(const char *string, float *vector);
-void __cdecl Dvar_StringToVec3(const char *string, float *vector);
-void __cdecl Dvar_StringToVec4(const char *string, float *vector);
-int __cdecl Dvar_StringToEnum(const DvarLimits *domain, const char *string);
-void __cdecl Dvar_UpdateValue(dvar_s *dvar, DvarValue value);
-char *__cdecl Dvar_AllocNameString(const char *name);
-const dvar_s *__cdecl Dvar_RegisterInt(
+DvarValue *Dvar_StringToValue(DvarValue *result, uint8_t type, DvarLimits domain, const char *string);
+void Dvar_StringToVec2(const char *string, float *vector);
+void Dvar_StringToVec3(const char *string, float *vector);
+void Dvar_StringToVec4(const char *string, float *vector);
+int Dvar_StringToEnum(const DvarLimits *domain, const char *string);
+void Dvar_UpdateValue(dvar_s *dvar, DvarValue value);
+char *Dvar_AllocNameString(const char *name);
+const dvar_s *Dvar_RegisterInt(
     const char *dvarName,
     int value,
     DvarLimits min,
     uint16_t flags,
     const char *description);
-const dvar_t *__cdecl Dvar_RegisterInt(
+const dvar_t *Dvar_RegisterInt(
     const char *dvarName,
     int value,
     uint32_t min,
     uint32_t max,
     uint32_t flags,
     const char *description);
-const dvar_s *__cdecl Dvar_RegisterFloat(
+const dvar_s *Dvar_RegisterFloat(
     const char *dvarName,
     float value,
     DvarLimits min,
     uint16_t flags,
     const char *description);
-const dvar_s *__cdecl Dvar_RegisterFloat(
+const dvar_s *Dvar_RegisterFloat(
     const char *dvarName,
     float value,
     float min,
     float max,
     uint16_t flags,
     const char *description);
-const dvar_s *__cdecl Dvar_RegisterVec2(
+const dvar_s *Dvar_RegisterVec2(
     const char *dvarName,
     float x,
     float y,
     DvarLimits min,
     uint16_t flags,
     const char *description);
-const dvar_s *__cdecl Dvar_RegisterVec3(
+const dvar_s *Dvar_RegisterVec3(
     const char *dvarName,
     float x,
     float y,
@@ -541,7 +541,7 @@ const dvar_s *__cdecl Dvar_RegisterVec3(
     DvarLimits min,
     uint16_t flags,
     const char *description);
-const dvar_s *__cdecl Dvar_RegisterVec3(
+const dvar_s *Dvar_RegisterVec3(
     const char *dvarName,
     float x,
     float y,
@@ -550,7 +550,7 @@ const dvar_s *__cdecl Dvar_RegisterVec3(
     float max,
     uint16_t flags,
     const char *description);
-const dvar_s *__cdecl Dvar_RegisterVec4(
+const dvar_s *Dvar_RegisterVec4(
     const char *dvarName,
     float x,
     float y,
@@ -559,7 +559,7 @@ const dvar_s *__cdecl Dvar_RegisterVec4(
     DvarLimits min,
     uint16_t flags,
     const char *description);
-const dvar_s *__cdecl Dvar_RegisterVec4(
+const dvar_s *Dvar_RegisterVec4(
     const char *dvarName,
     float x,
     float y,
@@ -569,18 +569,18 @@ const dvar_s *__cdecl Dvar_RegisterVec4(
     float maximum,
     uint16_t flags,
     const char *description);
-const dvar_s *__cdecl Dvar_RegisterString(
+const dvar_s *Dvar_RegisterString(
     const char *dvarName,
     const char *value,
     uint16_t flags,
     const char *description);
-const dvar_s *__cdecl Dvar_RegisterEnum(
+const dvar_s *Dvar_RegisterEnum(
     const char *dvarName,
     const char **valueList,
     int defaultIndex,
     uint16_t flags,
     const char *description);
-const dvar_s *__cdecl Dvar_RegisterColor(
+const dvar_s *Dvar_RegisterColor(
     const char *dvarName,
     float r,
     float g,
@@ -588,30 +588,30 @@ const dvar_s *__cdecl Dvar_RegisterColor(
     float a,
     uint16_t flags,
     const char *description);
-void __cdecl Dvar_SetBoolFromSource(dvar_s *dvar, bool value, DvarSetSource source);
-void __cdecl Dvar_SetIntFromSource(dvar_s *dvar, int value, DvarSetSource source);
-void __cdecl Dvar_SetFloatFromSource(dvar_s *dvar, float value, DvarSetSource source);
-void __cdecl Dvar_SetVec2FromSource(dvar_s *dvar, float x, float y, DvarSetSource source);
-void __cdecl Dvar_SetVec3FromSource(dvar_s *dvar, float x, float y, float z, DvarSetSource source);
-void __cdecl Dvar_SetVec4FromSource(dvar_s *dvar, float x, float y, float z, float w, DvarSetSource source);
-void __cdecl Dvar_SetColorFromSource(dvar_s *dvar, float r, float g, float b, float a, DvarSetSource source);
-void __cdecl Dvar_SetBool(dvar_s *dvar, bool value);
+void Dvar_SetBoolFromSource(dvar_s *dvar, bool value, DvarSetSource source);
+void Dvar_SetIntFromSource(dvar_s *dvar, int value, DvarSetSource source);
+void Dvar_SetFloatFromSource(dvar_s *dvar, float value, DvarSetSource source);
+void Dvar_SetVec2FromSource(dvar_s *dvar, float x, float y, DvarSetSource source);
+void Dvar_SetVec3FromSource(dvar_s *dvar, float x, float y, float z, DvarSetSource source);
+void Dvar_SetVec4FromSource(dvar_s *dvar, float x, float y, float z, float w, DvarSetSource source);
+void Dvar_SetColorFromSource(dvar_s *dvar, float r, float g, float b, float a, DvarSetSource source);
+void Dvar_SetBool(dvar_s *dvar, bool value);
 inline void Dvar_SetBool(const dvar_s *dvar, bool value)
 {
     Dvar_SetBool((dvar_s *)dvar, value);
 }
-void __cdecl Dvar_SetInt(dvar_s *dvar, int value);
-inline void __cdecl Dvar_SetInt(const dvar_s *dvar, int value) // KISAKTODO: remove this mischief
+void Dvar_SetInt(dvar_s *dvar, int value);
+inline void Dvar_SetInt(const dvar_s *dvar, int value) // KISAKTODO: remove this mischief
 {
     Dvar_SetInt((dvar_s *)dvar, value);
 }
-void __cdecl Dvar_SetFloat(dvar_s *dvar, float value);
+void Dvar_SetFloat(dvar_s *dvar, float value);
 inline void Dvar_SetFloat(const dvar_s *dvar, float value)
 {
     Dvar_SetFloat((dvar_s *)dvar, value);
 }
-void __cdecl Dvar_SetVec3(dvar_s *dvar, float x, float y, float z);
-void __cdecl Dvar_SetString(dvar_s *dvar, char *value);
+void Dvar_SetVec3(dvar_s *dvar, float x, float y, float z);
+void Dvar_SetString(dvar_s *dvar, char *value);
 inline void Dvar_SetString(const dvar_s *dvar, char* value)
 {
     Dvar_SetString((dvar_s *)dvar, value);
@@ -620,41 +620,41 @@ inline void Dvar_SetString(const dvar_s *dvar, const char *value)
 {
     Dvar_SetString((dvar_s *)dvar, (char *)value);
 }
-void __cdecl Dvar_SetStringFromSource(dvar_s *dvar, char *string, DvarSetSource source);
-void __cdecl Dvar_SetColor(dvar_s *dvar, float r, float g, float b, float a);
-void __cdecl Dvar_SetFromString(dvar_s *dvar, char *string);
-void __cdecl Dvar_SetFromStringFromSource(dvar_s *dvar, char *string, DvarSetSource source);
-void __cdecl Dvar_SetBoolByName(const char *dvarName, bool value);
-void __cdecl Dvar_SetIntByName(const char *dvarName, int value);
-void __cdecl Dvar_SetFloatByName(const char *dvarName, float value);
-void __cdecl Dvar_SetVec3ByName(const char *dvarName, float x, float y, float z);
-void __cdecl Dvar_SetStringByName(const char *dvarName, char *value);
-inline void __cdecl Dvar_SetStringByName(const char *dvarName, const char *value)
+void Dvar_SetStringFromSource(dvar_s *dvar, char *string, DvarSetSource source);
+void Dvar_SetColor(dvar_s *dvar, float r, float g, float b, float a);
+void Dvar_SetFromString(dvar_s *dvar, char *string);
+void Dvar_SetFromStringFromSource(dvar_s *dvar, char *string, DvarSetSource source);
+void Dvar_SetBoolByName(const char *dvarName, bool value);
+void Dvar_SetIntByName(const char *dvarName, int value);
+void Dvar_SetFloatByName(const char *dvarName, float value);
+void Dvar_SetVec3ByName(const char *dvarName, float x, float y, float z);
+void Dvar_SetStringByName(const char *dvarName, char *value);
+inline void Dvar_SetStringByName(const char *dvarName, const char *value)
 {
     Dvar_SetStringByName(dvarName, (char *)value);
 }
-const dvar_s *__cdecl Dvar_SetFromStringByNameFromSource(const char *dvarName, const char *string, DvarSetSource source);
-void __cdecl Dvar_SetFromStringByName(const char *dvarName, const char *string);
-void __cdecl Dvar_SetCommand(const char *dvarName, char *string);
-void __cdecl Dvar_SetDomainFunc(dvar_s *dvar, bool(__cdecl *customFunc)(dvar_s *, DvarValue));
-void __cdecl Dvar_AddFlags(dvar_s *dvar, int flags);
-inline void __cdecl Dvar_AddFlags(const dvar_s *dvar, int flags)
+const dvar_s *Dvar_SetFromStringByNameFromSource(const char *dvarName, const char *string, DvarSetSource source);
+void Dvar_SetFromStringByName(const char *dvarName, const char *string);
+void Dvar_SetCommand(const char *dvarName, char *string);
+void Dvar_SetDomainFunc(dvar_s *dvar, bool(*customFunc)(dvar_s *, DvarValue));
+void Dvar_AddFlags(dvar_s *dvar, int flags);
+inline void Dvar_AddFlags(const dvar_s *dvar, int flags)
 {
     Dvar_AddFlags((dvar_s *)dvar, flags);
 }
 
-void __cdecl Dvar_Reset(dvar_s *dvar, DvarSetSource setSource);
+void Dvar_Reset(dvar_s *dvar, DvarSetSource setSource);
 inline void Dvar_Reset(const dvar_s *dvar, DvarSetSource src)
 {
     Dvar_Reset((dvar_s *)dvar, src);
 }
-void __cdecl Dvar_SetCheatState();
-void __cdecl Dvar_Init();
-void __cdecl Dvar_ResetScriptInfo();
-char __cdecl Dvar_AnyLatchedValues();
-void __cdecl Dvar_ResetDvars(uint16_t filter, DvarSetSource setSource);
-int __cdecl Com_LoadDvarsFromBuffer(const char **dvarnames, uint32_t numDvars, char *buffer, char *filename);
-int __cdecl Com_SaveDvarsToBuffer(const char **dvarnames, uint32_t numDvars, char *buffer, uint32_t bufsize);
+void Dvar_SetCheatState();
+void Dvar_Init();
+void Dvar_ResetScriptInfo();
+char Dvar_AnyLatchedValues();
+void Dvar_ResetDvars(uint16_t filter, DvarSetSource setSource);
+int Com_LoadDvarsFromBuffer(const char **dvarnames, uint32_t numDvars, char *buffer, char *filename);
+int Com_SaveDvarsToBuffer(const char **dvarnames, uint32_t numDvars, char *buffer, uint32_t bufsize);
 
 #ifdef KISAK_SP
 void Dvar_SaveDvars(struct MemoryFile *memFile, uint16_t filter);
@@ -662,39 +662,39 @@ void Dvar_LoadDvars(struct MemoryFile *memFile);
 #endif
 
 // dvar_cmds
-void __cdecl TRACK_dvar_cmds();
-void __cdecl Dvar_GetCombinedString(char *combined, int first);
-void __cdecl Dvar_Toggle_f();
-bool __cdecl Dvar_ToggleInternal();
-bool __cdecl Dvar_ToggleSimple(dvar_s *dvar);
-void __cdecl Dvar_TogglePrint_f();
-void __cdecl Dvar_Set_f();
-void __cdecl Dvar_SetU_f();
-void __cdecl Dvar_SetS_f();
-void __cdecl Dvar_SetA_f();
-void __cdecl Dvar_SetFromDvar_f();
-void __cdecl Dvar_Reset_f();
-void __cdecl Dvar_WriteVariables(int f);
-void __cdecl Dvar_WriteSingleVariable(const dvar_s *dvar, int *userData);
-void __cdecl Dvar_WriteDefaults(int f);
-void __cdecl Dvar_WriteSingleDefault(const dvar_s *dvar, int *userData);
-void __cdecl Dvar_List_f();
-void __cdecl Dvar_ListSingle(const dvar_s *dvar, const char *userData);
-void __cdecl Com_DvarDump(int channel, const char *match);
-void __cdecl Com_DvarDumpSingle(const dvar_s *dvar, void *userData);
-void __cdecl Dvar_Dump_f();
-void __cdecl SV_SetConfig(int start, int max, int bit);
-void __cdecl SV_SetConfigDvar(const dvar_s *dvar, int *userData);
-char *__cdecl Dvar_InfoString(int localClientNum, char bit);
-void __cdecl Dvar_InfoStringSingle(const dvar_s *dvar, uint32_t *userData);
-char *__cdecl Dvar_InfoString_Big(int bit);
-void __cdecl Dvar_InfoStringSingle_Big(const dvar_s *dvar, uint32_t *userData);
-void __cdecl Dvar_AddCommands();
-void __cdecl Dvar_RegisterBool_f();
-void __cdecl Dvar_RegisterInt_f();
-void __cdecl Dvar_RegisterFloat_f();
-void __cdecl Dvar_SetFromLocalizedStr_f();
-void __cdecl Dvar_SetToTime_f();
+void TRACK_dvar_cmds();
+void Dvar_GetCombinedString(char *combined, int first);
+void Dvar_Toggle_f();
+bool Dvar_ToggleInternal();
+bool Dvar_ToggleSimple(dvar_s *dvar);
+void Dvar_TogglePrint_f();
+void Dvar_Set_f();
+void Dvar_SetU_f();
+void Dvar_SetS_f();
+void Dvar_SetA_f();
+void Dvar_SetFromDvar_f();
+void Dvar_Reset_f();
+void Dvar_WriteVariables(int f);
+void Dvar_WriteSingleVariable(const dvar_s *dvar, int *userData);
+void Dvar_WriteDefaults(int f);
+void Dvar_WriteSingleDefault(const dvar_s *dvar, int *userData);
+void Dvar_List_f();
+void Dvar_ListSingle(const dvar_s *dvar, const char *userData);
+void Com_DvarDump(int channel, const char *match);
+void Com_DvarDumpSingle(const dvar_s *dvar, void *userData);
+void Dvar_Dump_f();
+void SV_SetConfig(int start, int max, int bit);
+void SV_SetConfigDvar(const dvar_s *dvar, int *userData);
+char *Dvar_InfoString(int localClientNum, char bit);
+void Dvar_InfoStringSingle(const dvar_s *dvar, uint32_t *userData);
+char *Dvar_InfoString_Big(int bit);
+void Dvar_InfoStringSingle_Big(const dvar_s *dvar, uint32_t *userData);
+void Dvar_AddCommands();
+void Dvar_RegisterBool_f();
+void Dvar_RegisterInt_f();
+void Dvar_RegisterFloat_f();
+void Dvar_SetFromLocalizedStr_f();
+void Dvar_SetToTime_f();
 
 extern char info1[1024];
 extern char info2[8192];
@@ -725,29 +725,29 @@ struct DObj_s;
 struct DObjModel_s;
 struct XAnimTree_s;
 
-void __cdecl TRACK_dobj_management();
-DObj_s *__cdecl Com_GetClientDObj(uint32_t handle, int localClientNum);
+void TRACK_dobj_management();
+DObj_s *Com_GetClientDObj(uint32_t handle, int localClientNum);
 DObj_s * Com_GetClientDObjBuffered(uint32_t handle, int localClientNum);
-DObj_s *__cdecl Com_GetServerDObj(uint32_t handle);
-DObj_s *__cdecl Com_ClientDObjCreate(
+DObj_s *Com_GetServerDObj(uint32_t handle);
+DObj_s *Com_ClientDObjCreate(
 	DObjModel_s *dobjModels,
 	uint16_t numModels,
 	XAnimTree_s *tree,
 	uint32_t handle,
 	int localClientNum);
-int __cdecl Com_GetFreeDObjIndex();
-void __cdecl Com_ClientDObjClearAllSkel();
-DObj_s *__cdecl Com_ServerDObjCreate(
+int Com_GetFreeDObjIndex();
+void Com_ClientDObjClearAllSkel();
+DObj_s *Com_ServerDObjCreate(
 	DObjModel_s *dobjModels,
 	uint16_t numModels,
 	XAnimTree_s *tree,
 	uint32_t handle);
-void __cdecl Com_SafeClientDObjFree(uint32_t handle, int localClientNum);
-void __cdecl Com_SafeServerDObjFree(uint32_t handle);
-void __cdecl Com_InitDObj();
-void __cdecl Com_ShutdownDObj();
-void __cdecl DB_SaveDObjs();
-void __cdecl DB_LoadDObjs();
+void Com_SafeClientDObjFree(uint32_t handle, int localClientNum);
+void Com_SafeServerDObjFree(uint32_t handle);
+void Com_InitDObj();
+void Com_ShutdownDObj();
+void DB_SaveDObjs();
+void DB_LoadDObjs();
 DObj_s *Com_DObjCloneToBuffer(uint32_t entnum);
 void Com_ServerDObjClean(int handle);
 bool Com_ServerDObjDirty(int handle);
@@ -859,14 +859,14 @@ inline DynEntityDrawType& operator++(DynEntityDrawType &e, int i)
     ++e;
     return e;
 }
-uint16_t __cdecl Trace_GetEntityHitId(const trace_t *trace);
-uint16_t __cdecl Trace_GetDynEntHitId(const trace_t *trace, DynEntityDrawType *drawType);
-uint32_t __cdecl CM_TempBoxModel(const float *mins, const float *maxs, int contents);
-void __cdecl CM_GetBox(struct cbrush_t **box_brush, struct cmodel_t **box_model);
-bool __cdecl CM_ClipHandleIsValid(uint32_t handle);
-cmodel_t *__cdecl CM_ClipHandleToModel(uint32_t handle);
-int __cdecl CM_ContentsOfModel(uint32_t handle);
-void __cdecl CM_BoxTrace(
+uint16_t Trace_GetEntityHitId(const trace_t *trace);
+uint16_t Trace_GetDynEntHitId(const trace_t *trace, DynEntityDrawType *drawType);
+uint32_t CM_TempBoxModel(const float *mins, const float *maxs, int contents);
+void CM_GetBox(struct cbrush_t **box_brush, struct cmodel_t **box_model);
+bool CM_ClipHandleIsValid(uint32_t handle);
+cmodel_t *CM_ClipHandleToModel(uint32_t handle);
+int CM_ContentsOfModel(uint32_t handle);
+void CM_BoxTrace(
     trace_t *results,
     const float *start,
     const float *end,
@@ -874,7 +874,7 @@ void __cdecl CM_BoxTrace(
     const float *maxs,
     uint32_t model,
     int brushmask);
-void __cdecl CM_Trace(
+void CM_Trace(
     trace_t *results,
     const float *start,
     const float *end,
@@ -882,39 +882,39 @@ void __cdecl CM_Trace(
     const float *maxs,
     uint32_t model,
     int brushmask);
-void __cdecl CM_GetTraceThreadInfo(TraceThreadInfo *threadInfo);
-void __cdecl CM_TestInLeaf(traceWork_t *tw, cLeaf_t *leaf, trace_t *trace);
-bool __cdecl CM_TestInLeafBrushNode(traceWork_t *tw, cLeaf_t *leaf, trace_t *trace);
-void __cdecl CM_TestInLeafBrushNode_r(const traceWork_t *tw, cLeafBrushNode_s *node, trace_t *trace);
-void __cdecl CM_TestBoxInBrush(const traceWork_t *tw, cbrush_t *brush, trace_t *trace);
-void __cdecl CM_TestCapsuleInCapsule(const traceWork_t *tw, trace_t *trace);
-void __cdecl CM_PositionTest(traceWork_t *tw, trace_t *trace);
-void __cdecl CM_TraceThroughLeaf(const traceWork_t *tw, cLeaf_t *leaf, trace_t *trace);
-bool __cdecl CM_TraceThroughLeafBrushNode(const traceWork_t *tw, cLeaf_t *leaf, trace_t *trace);
-void __cdecl CM_TraceThroughLeafBrushNode_r(
+void CM_GetTraceThreadInfo(TraceThreadInfo *threadInfo);
+void CM_TestInLeaf(traceWork_t *tw, cLeaf_t *leaf, trace_t *trace);
+bool CM_TestInLeafBrushNode(traceWork_t *tw, cLeaf_t *leaf, trace_t *trace);
+void CM_TestInLeafBrushNode_r(const traceWork_t *tw, cLeafBrushNode_s *node, trace_t *trace);
+void CM_TestBoxInBrush(const traceWork_t *tw, cbrush_t *brush, trace_t *trace);
+void CM_TestCapsuleInCapsule(const traceWork_t *tw, trace_t *trace);
+void CM_PositionTest(traceWork_t *tw, trace_t *trace);
+void CM_TraceThroughLeaf(const traceWork_t *tw, cLeaf_t *leaf, trace_t *trace);
+bool CM_TraceThroughLeafBrushNode(const traceWork_t *tw, cLeaf_t *leaf, trace_t *trace);
+void CM_TraceThroughLeafBrushNode_r(
     const traceWork_t *tw,
     cLeafBrushNode_s *node,
     float *p1_,
     const float *p2,
     trace_t *trace);
-void __cdecl CM_TraceThroughBrush(const traceWork_t *tw, cbrush_t *brush, trace_t *trace);
-void __cdecl CM_TraceCapsuleThroughCapsule(const traceWork_t *tw, trace_t *trace);
-int __cdecl CM_TraceSphereThroughSphere(
+void CM_TraceThroughBrush(const traceWork_t *tw, cbrush_t *brush, trace_t *trace);
+void CM_TraceCapsuleThroughCapsule(const traceWork_t *tw, trace_t *trace);
+int CM_TraceSphereThroughSphere(
     const traceWork_t *tw,
     const float *vStart,
     const float *vEnd,
     const float *vStationary,
     float radius,
     trace_t *trace);
-int __cdecl CM_TraceCylinderThroughCylinder(
+int CM_TraceCylinderThroughCylinder(
     const traceWork_t *tw,
     const float *vStationary,
     float fStationaryHalfHeight,
     float radius,
     trace_t *trace);
-void __cdecl CM_TraceThroughTree(const traceWork_t *tw, int num, const float *p1_, const float *p2, trace_t *trace);
-void __cdecl CM_SetAxialCullOnly(traceWork_t *tw);
-void __cdecl CM_TransformedBoxTraceRotated(
+void CM_TraceThroughTree(const traceWork_t *tw, int num, const float *p1_, const float *p2, trace_t *trace);
+void CM_SetAxialCullOnly(traceWork_t *tw);
+void CM_TransformedBoxTraceRotated(
     trace_t *results,
     const float *start,
     const float *end,
@@ -924,7 +924,7 @@ void __cdecl CM_TransformedBoxTraceRotated(
     int brushmask,
     const float *origin,
     float (*matrix)[3]);
-void __cdecl CM_TransformedBoxTrace(
+void CM_TransformedBoxTrace(
     trace_t *results,
     const float *start,
     const float *end,
@@ -933,7 +933,7 @@ void __cdecl CM_TransformedBoxTrace(
     __int64 model,
     const float *origin,
     const float *angles);
-void __cdecl CM_TransformedBoxTraceExternal(
+void CM_TransformedBoxTraceExternal(
     trace_t *results,
     const float *start,
     const float *end,
@@ -942,7 +942,7 @@ void __cdecl CM_TransformedBoxTraceExternal(
     __int64 model,
     const float *origin,
     const float *angles);
-int __cdecl CM_BoxSightTrace(
+int CM_BoxSightTrace(
     int oldHitNum,
     const float *start,
     const float *end,
@@ -950,30 +950,30 @@ int __cdecl CM_BoxSightTrace(
     const float *maxs,
     uint32_t model,
     int brushmask);
-int __cdecl CM_SightTraceThroughBrush(const traceWork_t *tw, cbrush_t *brush);
-int __cdecl CM_SightTraceThroughLeaf(const traceWork_t *tw, cLeaf_t *leaf, trace_t *trace);
-int __cdecl CM_SightTraceThroughLeafBrushNode(const traceWork_t *tw, cLeaf_t *leaf);
-int __cdecl CM_SightTraceThroughLeafBrushNode_r(
+int CM_SightTraceThroughBrush(const traceWork_t *tw, cbrush_t *brush);
+int CM_SightTraceThroughLeaf(const traceWork_t *tw, cLeaf_t *leaf, trace_t *trace);
+int CM_SightTraceThroughLeafBrushNode(const traceWork_t *tw, cLeaf_t *leaf);
+int CM_SightTraceThroughLeafBrushNode_r(
     const traceWork_t *tw,
     cLeafBrushNode_s *node,
     const float *p1_,
     const float *p2);
-int __cdecl CM_SightTraceCapsuleThroughCapsule(const traceWork_t *tw, trace_t *trace);
-bool __cdecl CM_SightTraceSphereThroughSphere(
+int CM_SightTraceCapsuleThroughCapsule(const traceWork_t *tw, trace_t *trace);
+bool CM_SightTraceSphereThroughSphere(
     const traceWork_t *tw,
     const float *vStart,
     const float *vEnd,
     const float *vStationary,
     float radius,
     trace_t *trace);
-bool __cdecl CM_SightTraceCylinderThroughCylinder(
+bool CM_SightTraceCylinderThroughCylinder(
     const traceWork_t *tw,
     const float *vStationary,
     float fStationaryHalfHeight,
     float radius,
     trace_t *trace);
-int __cdecl CM_SightTraceThroughTree(const traceWork_t *tw, int num, const float *p1_, const float *p2, trace_t *trace);
-int __cdecl CM_TransformedBoxSightTrace(
+int CM_SightTraceThroughTree(const traceWork_t *tw, int num, const float *p1_, const float *p2, trace_t *trace);
+int CM_TransformedBoxSightTrace(
     int hitNum,
     const float *start,
     const float *end,
@@ -985,40 +985,40 @@ int __cdecl CM_TransformedBoxSightTrace(
     const float *angles);
 
 // cm_mesh
-void __cdecl CM_TraceThroughAabbTree(const struct traceWork_t *tw, const struct CollisionAabbTree *aabbTree, struct trace_t *trace);
-void __cdecl CM_TraceThroughAabbTree_r(const struct traceWork_t *tw, const struct CollisionAabbTree *aabbTree, struct trace_t *trace);
-bool __cdecl CM_CullBox(const traceWork_t *tw, const float *origin, const float *halfSize);
-void __cdecl CM_TracePointThroughTriangle(const traceWork_t *tw, const uint16_t *indices, trace_t *trace);
-void __cdecl CM_TraceCapsuleThroughTriangle(
+void CM_TraceThroughAabbTree(const struct traceWork_t *tw, const struct CollisionAabbTree *aabbTree, struct trace_t *trace);
+void CM_TraceThroughAabbTree_r(const struct traceWork_t *tw, const struct CollisionAabbTree *aabbTree, struct trace_t *trace);
+bool CM_CullBox(const traceWork_t *tw, const float *origin, const float *halfSize);
+void CM_TracePointThroughTriangle(const traceWork_t *tw, const uint16_t *indices, trace_t *trace);
+void CM_TraceCapsuleThroughTriangle(
     const traceWork_t *tw,
     int triIndex,
     const uint16_t *indices,
     trace_t *trace);
-SphereEdgeTraceResult __cdecl CM_TraceSphereThroughEdge(
+SphereEdgeTraceResult CM_TraceSphereThroughEdge(
     const traceWork_t *tw,
     const float *sphereStart,
     const float *v0,
     const float *v0_v1,
     trace_t *trace);
-bool __cdecl Vec3IsNormalizedEpsilon(const float *v, float epsilon);
-void __cdecl CM_TraceSphereThroughVertex(
+bool Vec3IsNormalizedEpsilon(const float *v, float epsilon);
+void CM_TraceSphereThroughVertex(
     const traceWork_t *tw,
     bool isWalkable,
     const float *sphereStart,
     const float *v,
     trace_t *trace);
-void __cdecl CM_TraceCapsuleThroughBorder(const traceWork_t *tw, struct CollisionBorder *border, trace_t *trace);
-void __cdecl CM_TraceSphereThroughBorder(
+void CM_TraceCapsuleThroughBorder(const traceWork_t *tw, struct CollisionBorder *border, trace_t *trace);
+void CM_TraceSphereThroughBorder(
     const traceWork_t *tw,
     const struct CollisionBorder *border,
     float offsetZ,
     trace_t *trace);
-void __cdecl CM_SightTraceThroughAabbTree(const traceWork_t *tw, const struct CollisionAabbTree *aabbTree, struct trace_t *trace);
-void __cdecl CM_MeshTestInLeaf(const traceWork_t *tw, cLeaf_t *leaf, trace_t *trace);
-void __cdecl CM_PositionTestInAabbTree_r(const traceWork_t *tw, struct CollisionAabbTree *aabbTree, struct trace_t *trace);
-void __cdecl CM_PositionTestCapsuleInTriangle(const traceWork_t *tw, const uint16_t *indices, struct trace_t *trace);
-double __cdecl CM_DistanceSquaredFromPointToTriangle(const float *pt, const uint16_t *indices);
-void __cdecl CM_ClosestPointOnTri(
+void CM_SightTraceThroughAabbTree(const traceWork_t *tw, const struct CollisionAabbTree *aabbTree, struct trace_t *trace);
+void CM_MeshTestInLeaf(const traceWork_t *tw, cLeaf_t *leaf, trace_t *trace);
+void CM_PositionTestInAabbTree_r(const traceWork_t *tw, struct CollisionAabbTree *aabbTree, struct trace_t *trace);
+void CM_PositionTestCapsuleInTriangle(const traceWork_t *tw, const uint16_t *indices, struct trace_t *trace);
+double CM_DistanceSquaredFromPointToTriangle(const float *pt, const uint16_t *indices);
+void CM_ClosestPointOnTri(
     const float *pt,
     const float *v0,
     const float *e0,
@@ -1027,12 +1027,12 @@ void __cdecl CM_ClosestPointOnTri(
     float a01,
     float a11,
     float *ptOnTri);
-bool __cdecl CM_DoesCapsuleIntersectTriangle(
+bool CM_DoesCapsuleIntersectTriangle(
     const float *start,
     const float *end,
     float radiusSq,
     const uint16_t *indices);
-double __cdecl CM_DistanceSquaredBetweenSegments(
+double CM_DistanceSquaredBetweenSegments(
     const float *start0,
     const float *delta0,
     const float *start1,
@@ -1048,15 +1048,15 @@ struct leafList_s // sizeof=0x2C
     float bounds[2][3];                 // ...
     int lastLeaf;                       // ...
 };
-int __cdecl CM_PointLeafnum_r(const float *p, int num);
-int __cdecl CM_PointLeafnum(const float *p);
-void __cdecl CM_BoxLeafnums_r(leafList_s *ll, int nodenum);
-void __cdecl CM_StoreLeafs(leafList_s *ll, int nodenum);
-int __cdecl CM_BoxLeafnums(const float *mins, const float *maxs, uint16_t *list, int listsize, int *lastLeaf);
-int __cdecl CM_PointContents(const float *p, uint32_t model);
-int __cdecl CM_PointContentsLeafBrushNode_r(const float *p, cLeafBrushNode_s *node);
-int __cdecl CM_TransformedPointContents(const float *p, uint32_t model, const float *origin, const float *angles);
-uint8_t *__cdecl CM_ClusterPVS(int cluster);
+int CM_PointLeafnum_r(const float *p, int num);
+int CM_PointLeafnum(const float *p);
+void CM_BoxLeafnums_r(leafList_s *ll, int nodenum);
+void CM_StoreLeafs(leafList_s *ll, int nodenum);
+int CM_BoxLeafnums(const float *mins, const float *maxs, uint16_t *list, int listsize, int *lastLeaf);
+int CM_PointContents(const float *p, uint32_t model);
+int CM_PointContentsLeafBrushNode_r(const float *p, cLeafBrushNode_s *node);
+int CM_TransformedPointContents(const float *p, uint32_t model, const float *origin, const float *angles);
+uint8_t *CM_ClusterPVS(int cluster);
 
 // cm_world
 struct areaParms_t // sizeof=0x18
@@ -1092,56 +1092,56 @@ struct sightpointtrace_t // sizeof=0x2C
     int locational;                     // ...
     uint8_t *priorityMap;       // ...
 };
-void __cdecl TRACK_cm_world();
-void __cdecl CM_LinkWorld();
+void TRACK_cm_world();
+void CM_LinkWorld();
 void CM_ClearWorld();
 
 struct svEntity_s;
-void __cdecl CM_UnlinkEntity(svEntity_s *ent);
-void __cdecl CM_LinkEntity(svEntity_s *ent, float *absmin, float *absmax, uint32_t clipHandle);
-void __cdecl CM_AddEntityToNode(svEntity_s *ent, uint16_t childNodeIndex);
-void __cdecl CM_SortNode(uint16_t nodeIndex, float *mins, float *maxs);
-uint16_t __cdecl CM_AllocWorldSector(float *mins, float *maxs);
-void __cdecl CM_AddStaticModelToNode(struct cStaticModel_s *staticModel, uint16_t childNodeIndex);
+void CM_UnlinkEntity(svEntity_s *ent);
+void CM_LinkEntity(svEntity_s *ent, float *absmin, float *absmax, uint32_t clipHandle);
+void CM_AddEntityToNode(svEntity_s *ent, uint16_t childNodeIndex);
+void CM_SortNode(uint16_t nodeIndex, float *mins, float *maxs);
+uint16_t CM_AllocWorldSector(float *mins, float *maxs);
+void CM_AddStaticModelToNode(struct cStaticModel_s *staticModel, uint16_t childNodeIndex);
 uint32_t CM_LinkAllStaticModels();
-void __cdecl CM_LinkStaticModel(struct cStaticModel_s *staticModel);
-int __cdecl CM_AreaEntities(const float *mins, const float *maxs, int *entityList, int maxcount, int contentmask);
-void __cdecl CM_AreaEntities_r(uint32_t nodeIndex, areaParms_t *ap);
-void __cdecl CM_PointTraceStaticModels(trace_t *results, const float *start, const float *end, int contentmask);
-void __cdecl CM_PointTraceStaticModels_r(
+void CM_LinkStaticModel(struct cStaticModel_s *staticModel);
+int CM_AreaEntities(const float *mins, const float *maxs, int *entityList, int maxcount, int contentmask);
+void CM_AreaEntities_r(uint32_t nodeIndex, areaParms_t *ap);
+void CM_PointTraceStaticModels(trace_t *results, const float *start, const float *end, int contentmask);
+void CM_PointTraceStaticModels_r(
     locTraceWork_t *tw,
     uint16_t nodeIndex,
     const float *p1_,
     const float *p2,
     trace_t *trace);
-int __cdecl CM_PointTraceStaticModelsComplete(const float *start, const float *end, int contentmask);
-int __cdecl CM_PointTraceStaticModelsComplete_r(
+int CM_PointTraceStaticModelsComplete(const float *start, const float *end, int contentmask);
+int CM_PointTraceStaticModelsComplete_r(
     const staticmodeltrace_t *clip,
     uint16_t nodeIndex,
     const float *p1_,
     const float *p2);
-void __cdecl CM_ClipMoveToEntities(moveclip_t *clip, trace_t *trace);
-void __cdecl CM_ClipMoveToEntities_r(
+void CM_ClipMoveToEntities(moveclip_t *clip, trace_t *trace);
+void CM_ClipMoveToEntities_r(
     const moveclip_t *clip,
     uint16_t nodeIndex,
     const float *p1,
     const float *p2,
     trace_t *trace);
-int __cdecl CM_ClipSightTraceToEntities(sightclip_t *clip);
-int __cdecl CM_ClipSightTraceToEntities_r(
+int CM_ClipSightTraceToEntities(sightclip_t *clip);
+int CM_ClipSightTraceToEntities_r(
     const sightclip_t *clip,
     uint16_t nodeIndex,
     const float *p1,
     const float *p2);
-void __cdecl CM_PointTraceToEntities(pointtrace_t *clip, trace_t *trace);
-void __cdecl CM_PointTraceToEntities_r(
+void CM_PointTraceToEntities(pointtrace_t *clip, trace_t *trace);
+void CM_PointTraceToEntities_r(
     pointtrace_t *clip,
     uint16_t nodeIndex,
     const float *p1,
     const float *p2,
     trace_t *trace);
-int __cdecl CM_PointSightTraceToEntities(sightpointtrace_t *clip);
-int __cdecl CM_PointSightTraceToEntities_r(
+int CM_PointSightTraceToEntities(sightpointtrace_t *clip);
+int CM_PointSightTraceToEntities_r(
     sightpointtrace_t *clip,
     uint16_t nodeIndex,
     const float *p1,
@@ -1153,16 +1153,16 @@ void CM_LoadWorld(uint8_t *buf);
 void CM_UnlockTree();
 
 // cm_load
-void __cdecl TRACK_cm_load();
-void __cdecl CM_LoadMap(const char *name, int *checksum);
-void __cdecl CM_InitThreadData(uint32_t threadContext);
-void __cdecl CM_LoadMapData(const char *name);
-void __cdecl CM_LoadMapData_FastFile(const char *name);
-void __cdecl CM_LoadMapFromBsp(const char *name, bool usePvs);
-void __cdecl CM_Shutdown();
-void __cdecl CM_Unload();
-int __cdecl CM_LeafCluster(uint32_t leafnum);
-void __cdecl CM_ModelBounds(uint32_t model, float *mins, float *maxs);
+void TRACK_cm_load();
+void CM_LoadMap(const char *name, int *checksum);
+void CM_InitThreadData(uint32_t threadContext);
+void CM_LoadMapData(const char *name);
+void CM_LoadMapData_FastFile(const char *name);
+void CM_LoadMapFromBsp(const char *name, bool usePvs);
+void CM_Shutdown();
+void CM_Unload();
+int CM_LeafCluster(uint32_t leafnum);
+void CM_ModelBounds(uint32_t model, float *mins, float *maxs);
 
 // cm_load_obj
 struct SpawnVar // sizeof=0xA0C
@@ -1178,12 +1178,12 @@ struct SpawnVar // sizeof=0xA0C
 };
 static_assert(LAYOUT_32BIT(sizeof(SpawnVar) == 0xA0C));
 
-void __cdecl CM_LoadMapData_LoadObj(const char *name);
-struct cplane_s *__cdecl CM_GetPlanes();
-int __cdecl CM_GetPlaneCount();
+void CM_LoadMapData_LoadObj(const char *name);
+struct cplane_s *CM_GetPlanes();
+int CM_GetPlaneCount();
 
-void __cdecl CMod_LoadPlanes();
-bool __cdecl CMod_HasSpawnString(const struct SpawnVar *userData, const char *key);
+void CMod_LoadPlanes();
+bool CMod_HasSpawnString(const struct SpawnVar *userData, const char *key);
 void CMod_LoadMaterials();
 void CMod_LoadNodes();
 void CMod_LoadLeafSurfaces();
@@ -1194,27 +1194,27 @@ void CMod_LoadCollisionBorders();
 void CMod_LoadCollisionPartitions();
 struct MapEnts *CMod_LoadEntityString();
 void CMod_LoadVisibility();
-void __cdecl CMod_LoadBrushRelated(uint32_t version, bool usePvs);
+void CMod_LoadBrushRelated(uint32_t version, bool usePvs);
 uint32_t CMod_LoadSubmodels();
 void CMod_LoadSubmodelBrushNodes();
-void __cdecl CMod_PartionLeafBrushes(uint16_t *leafBrushes, int numLeafBrushes, cLeaf_t *leaf);
-cLeafBrushNode_s *__cdecl CMod_PartionLeafBrushes_r(
+void CMod_PartionLeafBrushes(uint16_t *leafBrushes, int numLeafBrushes, cLeaf_t *leaf);
+cLeafBrushNode_s *CMod_PartionLeafBrushes_r(
     uint16_t *leafBrushes,
     int numLeafBrushes,
     const float *mins,
     const float *maxs);
-cLeafBrushNode_s *__cdecl CMod_AllocLeafBrushNode();
-double __cdecl CMod_GetPartitionScore(
+cLeafBrushNode_s *CMod_AllocLeafBrushNode();
+double CMod_GetPartitionScore(
     uint16_t *leafBrushes,
     int numLeafBrushes,
     int axis,
     const float *mins,
     const float *maxs,
     float *dist);
-int __cdecl CMod_GetLeafTerrainContents(cLeaf_t *leaf);
+int CMod_GetLeafTerrainContents(cLeaf_t *leaf);
 void CMod_LoadBrushes();
-void __cdecl CMod_LoadLeafs(bool usePvs);
-void __cdecl CMod_LoadLeafs_Version14(bool usePvs);
+void CMod_LoadLeafs(bool usePvs);
+void CMod_LoadLeafs_Version14(bool usePvs);
 void CMod_LoadLeafBrushNodes();
 void CMod_LoadLeafBrushNodes_Version14();
 void CMod_LoadLeafBrushes();
@@ -1321,72 +1321,72 @@ struct clipMap_t // sizeof=0x11C
     struct DynEntityColl *dynEntCollList[2];   // ...
     uint32_t checksum;              // ...
 };
-void __cdecl TRACK_cm_showcollision();
-void __cdecl CM_GetPlaneVec4Form(
+void TRACK_cm_showcollision();
+void CM_GetPlaneVec4Form(
     const struct cbrushside_t *sides,
     const float (*axialPlanes)[4],
     int index,
     float *expandedPlane);
-void __cdecl CM_ShowSingleBrushCollision(
+void CM_ShowSingleBrushCollision(
     const cbrush_t *brush,
     const float *color,
-    void(__cdecl *drawCollisionPoly)(int, float (*)[3], const float *));
-void __cdecl CM_BuildAxialPlanes(const cbrush_t *brush, float (*axialPlanes)[6][4]);
-int __cdecl CM_ForEachBrushPlaneIntersection(
+    void(*drawCollisionPoly)(int, float (*)[3], const float *));
+void CM_BuildAxialPlanes(const cbrush_t *brush, float (*axialPlanes)[6][4]);
+int CM_ForEachBrushPlaneIntersection(
     const cbrush_t *brush,
     const float (*axialPlanes)[4],
     ShowCollisionBrushPt *brushPts);
-int __cdecl CM_AddSimpleBrushPoint(
+int CM_AddSimpleBrushPoint(
     const cbrush_t *brush,
     const float (*axialPlanes)[4],
     const __int16 *sideIndices,
     const float *xyz,
     int ptCount,
     ShowCollisionBrushPt *brushPts);
-char __cdecl CM_BuildBrushWindingForSide(
+char CM_BuildBrushWindingForSide(
     winding_t *winding,
     float *planeNormal,
     int sideIndex,
     const ShowCollisionBrushPt *pts,
     int ptCount);
-int __cdecl CM_GetXyzList(int sideIndex, const ShowCollisionBrushPt *pts, int ptCount, float (*xyz)[3], int xyzLimit);
-int __cdecl CM_PointInList(const float *point, const float (*xyzList)[3], int xyzCount);
-void __cdecl CM_PickProjectionAxes(const float *normal, int *i, int *j);
-void __cdecl CM_AddExteriorPointToWindingProjected(winding_t *w, float *pt, int i, int j);
-double __cdecl CM_SignedAreaForPointsProjected(const float *pt0, const float *pt1, const float *pt2, int i, int j);
-void __cdecl CM_AddColinearExteriorPointToWindingProjected(
+int CM_GetXyzList(int sideIndex, const ShowCollisionBrushPt *pts, int ptCount, float (*xyz)[3], int xyzLimit);
+int CM_PointInList(const float *point, const float (*xyzList)[3], int xyzCount);
+void CM_PickProjectionAxes(const float *normal, int *i, int *j);
+void CM_AddExteriorPointToWindingProjected(winding_t *w, float *pt, int i, int j);
+double CM_SignedAreaForPointsProjected(const float *pt0, const float *pt1, const float *pt2, int i, int j);
+void CM_AddColinearExteriorPointToWindingProjected(
     winding_t *w,
     float *pt,
     int i,
     int j,
     int index0,
     int index1);
-double __cdecl CM_RepresentativeTriangleFromWinding(const winding_t *w, const float *normal, int *i0, int *i1, int *i2);
-void __cdecl CM_ReverseWinding(winding_t *w);
-void __cdecl CM_ShowBrushCollision(
+double CM_RepresentativeTriangleFromWinding(const winding_t *w, const float *normal, int *i0, int *i1, int *i2);
+void CM_ReverseWinding(winding_t *w);
+void CM_ShowBrushCollision(
     int contentMask,
     cplane_s *frustumPlanes,
     int frustumPlaneCount,
-    void(__cdecl *drawCollisionPoly)(int, float (*)[3], const float *));
-void __cdecl CM_GetShowCollisionColor(float *colorFloat, char colorCounter);
-char __cdecl CM_BrushInView(const cbrush_t *brush, cplane_s *frustumPlanes, int frustumPlaneCount);
-int __cdecl BoxOnPlaneSide(const float *emins, const float *emaxs, const cplane_s *p);
+    void(*drawCollisionPoly)(int, float (*)[3], const float *));
+void CM_GetShowCollisionColor(float *colorFloat, char colorCounter);
+char CM_BrushInView(const cbrush_t *brush, cplane_s *frustumPlanes, int frustumPlaneCount);
+int BoxOnPlaneSide(const float *emins, const float *emaxs, const cplane_s *p);
 
 
 // cm_staticmodel
-void __cdecl CM_TraceStaticModel(
+void CM_TraceStaticModel(
     struct cStaticModel_s *sm,
     struct trace_t *results,
     const float *start,
     const float *end,
     int contentmask);
-bool __cdecl CM_TraceStaticModelComplete(struct cStaticModel_s *sm, const float *start, const float *end, int contentmask);
+bool CM_TraceStaticModelComplete(struct cStaticModel_s *sm, const float *start, const float *end, int contentmask);
 
 
 // cm_tracebox
-void __cdecl CM_CalcTraceExtents(TraceExtents *extents);
-int __cdecl CM_TraceBox(const TraceExtents *extents, float *mins, float *maxs, float fraction);
-bool __cdecl CM_TraceSphere(const TraceExtents *extents, const float *origin, float radius, float fraction);
+void CM_CalcTraceExtents(TraceExtents *extents);
+int CM_TraceBox(const TraceExtents *extents, float *mins, float *maxs, float fraction);
+bool CM_TraceSphere(const TraceExtents *extents, const float *origin, float radius, float fraction);
 
 
 extern clipMap_t cm;
@@ -1456,26 +1456,26 @@ struct mapLoadProfile_t // sizeof=0xA880
 struct rectDef_s;
 struct Material;
 
-void __cdecl TRACK_com_profilemapload();
-bool __cdecl ProfLoad_IsActive();
-void __cdecl ProfLoad_BeginTrackedValue(MapProfileTrackedValue type);
-void __cdecl ProfLoad_BeginTrackedValueTicks(MapProfileElement *value, unsigned __int64 ticks);
-void __cdecl ProfLoad_EndTrackedValue(MapProfileTrackedValue type);
-void __cdecl ProfLoad_EndTrackedValueTicks(MapProfileElement *value, unsigned __int64 ticks);
-void __cdecl ProfLoad_Init();
-void __cdecl ProfLoad_Activate();
-void __cdecl ProfLoad_Deactivate();
+void TRACK_com_profilemapload();
+bool ProfLoad_IsActive();
+void ProfLoad_BeginTrackedValue(MapProfileTrackedValue type);
+void ProfLoad_BeginTrackedValueTicks(MapProfileElement *value, unsigned __int64 ticks);
+void ProfLoad_EndTrackedValue(MapProfileTrackedValue type);
+void ProfLoad_EndTrackedValueTicks(MapProfileElement *value, unsigned __int64 ticks);
+void ProfLoad_Init();
+void ProfLoad_Activate();
+void ProfLoad_Deactivate();
 void  ProfLoad_Print();
 void ProfLoad_CalculateSelfTicks();
 int ProfLoad_PrintTree();
-void __cdecl ProfLoad_GetEntryRowText(const MapProfileEntry *entry, char *rowText, int sizeofRowText);
+void ProfLoad_GetEntryRowText(const MapProfileEntry *entry, char *rowText, int sizeofRowText);
 void ProfLoad_PrintHotSpots();
-bool __cdecl ProfLoad_CompareHotSpotNames(const MapProfileHotSpot &hotSpot0, const MapProfileHotSpot &hotSpot1);
-bool __cdecl ProfLoad_CompareHotSpotTicks(const MapProfileHotSpot &hotSpot0, const MapProfileHotSpot &hotSpot1);
-void __cdecl ProfLoad_Begin(const char *label);
-MapProfileEntry *__cdecl Com_GetEntryForNewLabel(const char *label);
-void __cdecl ProfLoad_End();
-void __cdecl ProfLoad_DrawOverlay(rectDef_s *rect);
+bool ProfLoad_CompareHotSpotNames(const MapProfileHotSpot &hotSpot0, const MapProfileHotSpot &hotSpot1);
+bool ProfLoad_CompareHotSpotTicks(const MapProfileHotSpot &hotSpot0, const MapProfileHotSpot &hotSpot1);
+void ProfLoad_Begin(const char *label);
+MapProfileEntry *Com_GetEntryForNewLabel(const char *label);
+void ProfLoad_End();
+void ProfLoad_DrawOverlay(rectDef_s *rect);
 int ProfLoad_DrawTree();
 
 extern const dvar_t *com_profileLoading;
@@ -1487,26 +1487,26 @@ struct statmonitor_s // sizeof=0x8
     int endtime;                        // ...
     Material *material;                 // ...
 };
-void __cdecl TRACK_statmonitor();
-void __cdecl StatMon_Warning(int type, int duration, const char *materialName);
-void __cdecl StatMon_GetStatsArray(const statmonitor_s **array, int *count);
-void __cdecl StatMon_Reset();
+void TRACK_statmonitor();
+void StatMon_Warning(int type, int duration, const char *materialName);
+void StatMon_GetStatsArray(const statmonitor_s **array, int *count);
+void StatMon_Reset();
 
 // cl_scrn_mp (KISAKTODO: move out or merge with SP)
 #ifdef KISAK_MP
-void __cdecl SCR_DrawSmallStringExt(int x, int y, char *string, const float *setColor);
-void __cdecl SCR_Init();
-float __cdecl CL_GetMenuBlurRadius(int localClientNum);
-void __cdecl SCR_UpdateScreen();
+void SCR_DrawSmallStringExt(int x, int y, char *string, const float *setColor);
+void SCR_Init();
+float CL_GetMenuBlurRadius(int localClientNum);
+void SCR_UpdateScreen();
 void SCR_UpdateFrame();
-int __cdecl CL_CGameRendering(int localClientNum);
+int CL_CGameRendering(int localClientNum);
 DemoType CL_GetDemoType();
-void __cdecl CL_DrawScreen(int localClientNum);
-void __cdecl SCR_DrawScreenField(int localClientNum, int refreshedUI);
+void CL_DrawScreen(int localClientNum);
+void SCR_DrawScreenField(int localClientNum, int refreshedUI);
 void SCR_DrawDemoRecording();
 void SCR_ClearScreen();
-void __cdecl SCR_UpdateLoadScreen();
-void __cdecl CL_CubemapShot_f();
+void SCR_UpdateLoadScreen();
+void CL_CubemapShot_f();
 void CL_CubemapShotUsage();
 #endif
 
@@ -1574,7 +1574,7 @@ inline char * stristr(const char *haystack, const char *needle)
 }
 
 // LWSS: Random return 0 Stub function that IDA thinks is jpeg-related.
-inline int __cdecl RETURN_ZERO32()
+inline int RETURN_ZERO32()
 {
     return 0;
 }
@@ -1583,7 +1583,7 @@ inline int RETURN_ONE(int i = 0)
     return 1;
 }
 // LWSS: Note: Commonly used as a nullsub()
-inline void __cdecl KISAK_NULLSUB()
+inline void KISAK_NULLSUB()
 {
     ;
 }

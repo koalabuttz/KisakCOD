@@ -1,5 +1,5 @@
 #pragma once
 
 
-bool __cdecl RB_IsGpuFinished();
-bool __cdecl RB_IsGpuFenceFinished();
+bool RB_IsGpuFinished();
+bool RB_IsGpuFenceFinished();

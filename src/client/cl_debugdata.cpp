@@ -14,7 +14,7 @@ void CL_RecordServerDebugData()
     cls.debug.fromServer = 0;
 }
 
-void __cdecl CL_AddDebugString(
+void CL_AddDebugString(
     const float *xyz,
     const float *color,
     float scale,
@@ -36,7 +36,7 @@ void __cdecl CL_AddDebugString(
     }
 }
 
-bool __cdecl CreateDebugStringsIfNeeded()
+bool CreateDebugStringsIfNeeded()
 {
     if (cls.debug.clStrings.strings)
     {
@@ -72,7 +72,7 @@ bool __cdecl CreateDebugStringsIfNeeded()
     }
 }
 
-void __cdecl AddDebugStringInternal(
+void AddDebugStringInternal(
     const float *xyz,
     const float *color,
     float scale,
@@ -98,7 +98,7 @@ void __cdecl AddDebugStringInternal(
     }
 }
 
-void __cdecl CL_AddDebugLine(
+void CL_AddDebugLine(
     const float *start,
     const float *end,
     const float *color,
@@ -117,7 +117,7 @@ void __cdecl CL_AddDebugLine(
     }
 }
 
-bool __cdecl CreateDebugLinesIfNeeded()
+bool CreateDebugLinesIfNeeded()
 {
     if (cls.debug.clLines.lines)
     {
@@ -151,7 +151,7 @@ bool __cdecl CreateDebugLinesIfNeeded()
     }
 }
 
-void __cdecl AddDebugLineInternal(
+void AddDebugLineInternal(
     const float *start,
     const float *end,
     const float *color,
@@ -179,7 +179,7 @@ void __cdecl AddDebugLineInternal(
     }
 }
 
-void __cdecl CL_AddDebugStarWithText(
+void CL_AddDebugStarWithText(
     const float *point,
     const float *starColor,
     const float *textColor,
@@ -219,7 +219,7 @@ void __cdecl CL_AddDebugStarWithText(
     }
 }
 
-void __cdecl CL_AddDebugStar(const float *point, const float *color, int32_t duration, int32_t fromServer)
+void CL_AddDebugStar(const float *point, const float *color, int32_t duration, int32_t fromServer)
 {
     const float black[] = { 0, 0, 0, 0 };
     CL_AddDebugStarWithText(
@@ -232,7 +232,7 @@ void __cdecl CL_AddDebugStar(const float *point, const float *color, int32_t dur
         fromServer);
 }
 
-void __cdecl CL_FlushDebugClientData()
+void CL_FlushDebugClientData()
 {
     if (cls.rendererStarted)
     {
@@ -241,7 +241,7 @@ void __cdecl CL_FlushDebugClientData()
     }
 }
 
-void __cdecl FlushDebugStrings(clientDebugStringInfo_t *info, int32_t fromServer)
+void FlushDebugStrings(clientDebugStringInfo_t *info, int32_t fromServer)
 {
     int32_t idx; // [esp+8h] [ebp-4h]
 
@@ -265,7 +265,7 @@ void __cdecl FlushDebugStrings(clientDebugStringInfo_t *info, int32_t fromServer
     }
 }
 
-void __cdecl FlushDebugLines(clientDebugLineInfo_t *info, int32_t fromServer)
+void FlushDebugLines(clientDebugLineInfo_t *info, int32_t fromServer)
 {
     int32_t idx; // [esp+8h] [ebp-4h]
 
@@ -298,7 +298,7 @@ clientDebugStringInfo_t *svStr = &cls.debug.svStrings;
 clientDebugLineInfo_t *svLineBuff = &cls.debug.svLinesBuffer;
 clientDebugStringInfo_t *svStrBuff = &cls.debug.svStringsBuffer;
 
-void __cdecl CL_UpdateDebugClientData()
+void CL_UpdateDebugClientData()
 {
     if (cls.rendererStarted)
     {
@@ -307,7 +307,7 @@ void __cdecl CL_UpdateDebugClientData()
     }
 }
 
-void __cdecl CL_FlushDebugServerData()
+void CL_FlushDebugServerData()
 {
     if (cls.rendererStarted)
     {
@@ -316,7 +316,7 @@ void __cdecl CL_FlushDebugServerData()
     }
 }
 
-void __cdecl CL_UpdateDebugServerData()
+void CL_UpdateDebugServerData()
 {
     int32_t copySize; // [esp+0h] [ebp-4h]
     int32_t copySizea; // [esp+0h] [ebp-4h]
@@ -332,7 +332,7 @@ void __cdecl CL_UpdateDebugServerData()
     }
 }
 
-void __cdecl CL_ShutdownDebugData()
+void CL_ShutdownDebugData()
 {
     R_DebugFree((void **)&cls.debug.clLines.lines);
     R_DebugFree((void **)&cls.debug.clLines.durations);

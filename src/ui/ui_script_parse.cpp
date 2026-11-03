@@ -4,7 +4,7 @@
 #include <qcommon/qcommon.h>
 #include <stringed/stringed_hooks.h>
 
-int __cdecl String_Parse(const char **p, char *out, int len)
+int String_Parse(const char **p, char *out, int len)
 {
     char *pszTranslated; // [esp+0h] [ebp-8h]
     parseInfo_t *token; // [esp+4h] [ebp-4h]

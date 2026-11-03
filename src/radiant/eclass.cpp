@@ -469,7 +469,7 @@ LRESULT Model_load(char *modelPath, int a2)
 // sub_480CB0  →  Eclass_FreeModel  (0x480CB0)
 // Unlink a models_t from g_models and free it entirely.
 //
-// IDA signature: void __cdecl sub_480CB0(void **a1)
+// IDA signature: void sub_480CB0(void **a1)
 //   a1 = the models_t to free (IDA types it void**).
 // ─────────────────────────────────────────────────────────────────────────────
 void Eclass_FreeModel(void **a1)
@@ -1210,7 +1210,7 @@ LABEL_7:
 // Init_ScanFiles  (0x481840)
 // Read a single .def file and parse all /*QUAKED blocks into g_eclass.
 //
-// IDA signature: void __cdecl Init_ScanFiles(int a1)
+// IDA signature: void Init_ScanFiles(int a1)
 //   a1 = 0: use LoadFile (raw filesystem)
 //   a1 = 1: use FS_ReadFile (VFS)
 //

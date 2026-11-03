@@ -12,12 +12,12 @@
 
 uint8_t windingPool[12292];
 
-void __cdecl TRACK_cm_showcollision()
+void TRACK_cm_showcollision()
 {
     track_static_alloc_internal(windingPool, 12292, "windingPool", 0);
 }
 
-void __cdecl CM_GetPlaneVec4Form(
+void CM_GetPlaneVec4Form(
     const cbrushside_t *sides,
     const float (*axialPlanes)[4],
     int index,
@@ -46,10 +46,10 @@ void __cdecl CM_GetPlaneVec4Form(
     }
 }
 
-void __cdecl CM_ShowSingleBrushCollision(
+void CM_ShowSingleBrushCollision(
     const cbrush_t *brush,
     const float *color,
-    void(__cdecl *drawCollisionPoly)(int, float (*)[3], const float *))
+    void(*drawCollisionPoly)(int, float (*)[3], const float *))
 {
     int ptCount; // [esp+30h] [ebp-506Ch]
     ShowCollisionBrushPt brushPts; // [esp+34h] [ebp-5068h] BYREF
@@ -89,7 +89,7 @@ void __cdecl CM_ShowSingleBrushCollision(
     }
 }
 
-void __cdecl CM_BuildAxialPlanes(const cbrush_t *brush, float (*axialPlanes)[6][4])
+void CM_BuildAxialPlanes(const cbrush_t *brush, float (*axialPlanes)[6][4])
 {
     float v2; // [esp+4h] [ebp-28h]
     float v3; // [esp+Ch] [ebp-20h]
@@ -130,7 +130,7 @@ void __cdecl CM_BuildAxialPlanes(const cbrush_t *brush, float (*axialPlanes)[6][
     (*axialPlanes)[5][3] = v2;
 }
 
-int __cdecl CM_ForEachBrushPlaneIntersection(
+int CM_ForEachBrushPlaneIntersection(
     const cbrush_t *brush,
     const float (*axialPlanes)[4],
     ShowCollisionBrushPt *brushPts)
@@ -178,7 +178,7 @@ int __cdecl CM_ForEachBrushPlaneIntersection(
     return ptCount;
 }
 
-int __cdecl CM_AddSimpleBrushPoint(
+int CM_AddSimpleBrushPoint(
     const cbrush_t *brush,
     const float (*axialPlanes)[4],
     const __int16 *sideIndices,
@@ -225,7 +225,7 @@ int __cdecl CM_AddSimpleBrushPoint(
     return ptCount + 1;
 }
 
-char __cdecl CM_BuildBrushWindingForSide(
+char CM_BuildBrushWindingForSide(
     winding_t *winding,
     float *planeNormal,
     int sideIndex,
@@ -267,7 +267,7 @@ char __cdecl CM_BuildBrushWindingForSide(
     return 1;
 }
 
-int __cdecl CM_GetXyzList(int sideIndex, const ShowCollisionBrushPt *pts, int ptCount, float (*xyz)[3], int xyzLimit)
+int CM_GetXyzList(int sideIndex, const ShowCollisionBrushPt *pts, int ptCount, float (*xyz)[3], int xyzLimit)
 {
     float *v6; // [esp+0h] [ebp-10h]
     const ShowCollisionBrushPt *v7; // [esp+4h] [ebp-Ch]
@@ -297,7 +297,7 @@ int __cdecl CM_GetXyzList(int sideIndex, const ShowCollisionBrushPt *pts, int pt
     return xyzCount;
 }
 
-int __cdecl CM_PointInList(const float *point, const float (*xyzList)[3], int xyzCount)
+int CM_PointInList(const float *point, const float (*xyzList)[3], int xyzCount)
 {
     int xyzIndex; // [esp+8h] [ebp-4h]
 
@@ -309,7 +309,7 @@ int __cdecl CM_PointInList(const float *point, const float (*xyzList)[3], int xy
     return 0;
 }
 
-void __cdecl CM_PickProjectionAxes(const float *normal, int *i, int *j)
+void CM_PickProjectionAxes(const float *normal, int *i, int *j)
 {
     float v3; // [esp+0h] [ebp-2Ch]
     float v4; // [esp+4h] [ebp-28h]
@@ -333,7 +333,7 @@ void __cdecl CM_PickProjectionAxes(const float *normal, int *i, int *j)
     *j = ~(_BYTE)k & 2;
 }
 
-void __cdecl CM_AddExteriorPointToWindingProjected(winding_t *w, float *pt, int i, int j)
+void CM_AddExteriorPointToWindingProjected(winding_t *w, float *pt, int i, int j)
 {
     float *v4; // [esp+0h] [ebp-18h]
     int indexPrev; // [esp+4h] [ebp-14h]
@@ -371,12 +371,12 @@ void __cdecl CM_AddExteriorPointToWindingProjected(winding_t *w, float *pt, int 
     }
 }
 
-double __cdecl CM_SignedAreaForPointsProjected(const float *pt0, const float *pt1, const float *pt2, int i, int j)
+double CM_SignedAreaForPointsProjected(const float *pt0, const float *pt1, const float *pt2, int i, int j)
 {
     return (float)((pt2[j] - pt1[j]) * pt0[i] + (pt0[j] - pt2[j]) * pt1[i] + (pt1[j] - pt0[j]) * pt2[i]);
 }
 
-void __cdecl CM_AddColinearExteriorPointToWindingProjected(
+void CM_AddColinearExteriorPointToWindingProjected(
     winding_t *w,
     float *pt,
     int i,
@@ -460,7 +460,7 @@ void __cdecl CM_AddColinearExteriorPointToWindingProjected(
     }
 }
 
-double __cdecl CM_RepresentativeTriangleFromWinding(const winding_t *w, const float *normal, int *i0, int *i1, int *i2)
+double CM_RepresentativeTriangleFromWinding(const winding_t *w, const float *normal, int *i0, int *i1, int *i2)
 {
     float v6; // [esp+0h] [ebp-40h]
     float v7; // [esp+4h] [ebp-3Ch]
@@ -500,7 +500,7 @@ double __cdecl CM_RepresentativeTriangleFromWinding(const winding_t *w, const fl
     return areaBest;
 }
 
-void __cdecl CM_ReverseWinding(winding_t *w)
+void CM_ReverseWinding(winding_t *w)
 {
     float *v1; // ecx
     float *v2; // [esp+4h] [ebp-1Ch]
@@ -527,11 +527,11 @@ void __cdecl CM_ReverseWinding(winding_t *w)
     }
 }
 
-void __cdecl CM_ShowBrushCollision(
+void CM_ShowBrushCollision(
     int contentMask,
     cplane_s *frustumPlanes,
     int frustumPlaneCount,
-    void(__cdecl *drawCollisionPoly)(int, float (*)[3], const float *))
+    void(*drawCollisionPoly)(int, float (*)[3], const float *))
 {
     float colorFloat[4]; // [esp+4h] [ebp-1Ch] BYREF
     int brushIndex; // [esp+14h] [ebp-Ch]
@@ -553,7 +553,7 @@ void __cdecl CM_ShowBrushCollision(
     }
 }
 
-void __cdecl CM_GetShowCollisionColor(float *colorFloat, char colorCounter)
+void CM_GetShowCollisionColor(float *colorFloat, char colorCounter)
 {
     float v2; // [esp+0h] [ebp-Ch]
     float v3; // [esp+4h] [ebp-8h]
@@ -578,7 +578,7 @@ void __cdecl CM_GetShowCollisionColor(float *colorFloat, char colorCounter)
     colorFloat[3] = 0.5;
 }
 
-char __cdecl CM_BrushInView(const cbrush_t *brush, cplane_s *frustumPlanes, int frustumPlaneCount)
+char CM_BrushInView(const cbrush_t *brush, cplane_s *frustumPlanes, int frustumPlaneCount)
 {
     int frustumPlaneIndex; // [esp+0h] [ebp-4h]
 
@@ -596,7 +596,7 @@ char __cdecl CM_BrushInView(const cbrush_t *brush, cplane_s *frustumPlanes, int 
 
 int bops_initialized;
 int Ljmptab[8];
-BOOL __cdecl BoxOnPlaneSide(const float *emins, const float *emaxs, const cplane_s *p)
+BOOL BoxOnPlaneSide(const float *emins, const float *emaxs, const cplane_s *p)
 {
     // KISAKTODO: Needs ASM jump table and assembly bits (Probably critical function lmao)
     // 

@@ -28,12 +28,12 @@ const dvar_t *r_sunflare_shader;
 const dvar_t *r_sunsprite_size;
 const dvar_t *r_sunglare_max_lighten;
 
-uint32_t __cdecl R_GetSunDvarCount()
+uint32_t R_GetSunDvarCount()
 {
     return 21;
 }
 
-void __cdecl R_RegisterSunDvars()
+void R_RegisterSunDvars()
 {
     DvarLimits min; // [esp+Ch] [ebp-10h]
     DvarLimits mina; // [esp+Ch] [ebp-10h]
@@ -216,7 +216,7 @@ void __cdecl R_RegisterSunDvars()
         "Position in degrees of the sun effect");
 }
 
-void __cdecl R_SetSunFromDvars(sunflare_t *sun)
+void R_SetSunFromDvars(sunflare_t *sun)
 {
     iassert(sun);
 
@@ -244,7 +244,7 @@ void __cdecl R_SetSunFromDvars(sunflare_t *sun)
     sun->hasValidData = 1;
 }
 
-void __cdecl R_LoadSunThroughDvars(const char *sunName, sunflare_t *sun)
+void R_LoadSunThroughDvars(const char *sunName, sunflare_t *sun)
 {
     uint32_t SunDvarCount; // eax
     char *v3; // [esp-8h] [ebp-14h]
@@ -268,7 +268,7 @@ void __cdecl R_LoadSunThroughDvars(const char *sunName, sunflare_t *sun)
     }
 }
 
-void __cdecl R_Cmd_LoadSun()
+void R_Cmd_LoadSun()
 {
     const char *v0; // eax
     sunflare_t *p_sun; // [esp-4h] [ebp-4h]
@@ -299,7 +299,7 @@ void __cdecl R_Cmd_LoadSun()
     }
 }
 
-void __cdecl R_Cmd_SaveSun()
+void R_Cmd_SaveSun()
 {
     const char *v0; // eax
 
@@ -314,7 +314,7 @@ void __cdecl R_Cmd_SaveSun()
     }
 }
 
-void __cdecl R_SaveSunFromDvars(const char *sunName)
+void R_SaveSunFromDvars(const char *sunName)
 {
     char *v1; // eax
     char buffer; // [esp+10h] [ebp-2008h] BYREF
@@ -327,7 +327,7 @@ void __cdecl R_SaveSunFromDvars(const char *sunName)
     }
 }
 
-void __cdecl R_FlushSun()
+void R_FlushSun()
 {
     SunFlareDynamic *sunFlare; // [esp+0h] [ebp-8h]
     uint32_t viewIndex; // [esp+4h] [ebp-4h]

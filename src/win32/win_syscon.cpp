@@ -113,7 +113,7 @@ LRESULT __stdcall InputLineWndProc(HWND__ *hWnd, UINT uMsg, HWND__ *wParam, LPAR
 	return CallWindowProcA((WNDPROC)s_wcd.SysInputLineWndProc, hWnd, uMsg, (WPARAM)wParam, lParam);
 }
 
-uint32_t __cdecl Conbuf_CleanText(const char *source, char *target, int sizeofTarget)
+uint32_t Conbuf_CleanText(const char *source, char *target, int sizeofTarget)
 {
 	const char* start = target;
 	const char* last = &target[sizeofTarget - 3];
@@ -151,7 +151,7 @@ uint32_t __cdecl Conbuf_CleanText(const char *source, char *target, int sizeofTa
 /*
 ** Sys_CreateConsole
 */
-void __cdecl Sys_CreateConsole(HMODULE hInstance)
+void Sys_CreateConsole(HMODULE hInstance)
 {
 	tagRECT Rect;
 
@@ -245,7 +245,7 @@ void __cdecl Sys_CreateConsole(HMODULE hInstance)
 /*
 ** Sys_DestroyConsole
 */
-void __cdecl Sys_DestroyConsole()
+void Sys_DestroyConsole()
 {
 	if (s_wcd.hWnd)
 	{
@@ -259,7 +259,7 @@ void __cdecl Sys_DestroyConsole()
 /*
 ** Sys_ShowConsole
 */
-void __cdecl Sys_ShowConsole()
+void Sys_ShowConsole()
 {
 	HMODULE module;
 
@@ -295,7 +295,7 @@ char *Sys_ConsoleInput( void )
 /*
 ** Conbuf_AppendText
 */
-void __cdecl Conbuf_AppendText(const char *pMsg)
+void Conbuf_AppendText(const char *pMsg)
 {
 	char target[32772]; // [esp+20h] [ebp-8010h] BYREF
 	const char *source; // [esp+8028h] [ebp-8h]
@@ -326,7 +326,7 @@ void __cdecl Conbuf_AppendText(const char *pMsg)
 /*
 ** Sys_SetErrorText
 */
-void __cdecl Sys_SetErrorText(const char *buf)
+void Sys_SetErrorText(const char *buf)
 {
 	HWND ActiveWindow; // eax
 
@@ -337,7 +337,7 @@ void __cdecl Sys_SetErrorText(const char *buf)
 	MessageBoxA(ActiveWindow, buf, "Error", 0x10u);
 }
 
-void __cdecl Conbuf_AppendTextInMainThread(const char* msg)
+void Conbuf_AppendTextInMainThread(const char* msg)
 {
 	if (s_wcd.hwndBuffer)
 	{

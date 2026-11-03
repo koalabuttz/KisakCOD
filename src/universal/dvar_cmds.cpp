@@ -31,18 +31,18 @@ int dvarCount;
 char info1[1024];
 char info2[8192];
 
-void __cdecl TRACK_dvar_cmds()
+void TRACK_dvar_cmds()
 {
     track_static_alloc_internal(info1, sizeof(info1), "info1", 10);
     track_static_alloc_internal(info2, sizeof(info2), "info2", 10);
 }
 
-void __cdecl Dvar_Toggle_f()
+void Dvar_Toggle_f()
 {
     Dvar_ToggleInternal();
 }
 
-bool __cdecl Dvar_ToggleInternal()
+bool Dvar_ToggleInternal()
 {
     const char *v0; // eax
     char *v2; // eax
@@ -113,7 +113,7 @@ bool __cdecl Dvar_ToggleInternal()
     }
 }
 
-bool __cdecl Dvar_ToggleSimple(dvar_s *dvar)
+bool Dvar_ToggleSimple(dvar_s *dvar)
 {
     bool result; // al
     const char *v2; // eax
@@ -190,7 +190,7 @@ bool __cdecl Dvar_ToggleSimple(dvar_s *dvar)
     return result;
 }
 
-void __cdecl Dvar_TogglePrint_f()
+void Dvar_TogglePrint_f()
 {
     int v0; // eax
     const char *string; // [esp+0h] [ebp-Ch]
@@ -217,7 +217,7 @@ void __cdecl Dvar_TogglePrint_f()
     }
 }
 
-void __cdecl Dvar_Set_f()
+void Dvar_Set_f()
 {
     const char *v0; // eax
     const char *v1; // eax
@@ -245,7 +245,7 @@ void __cdecl Dvar_Set_f()
     }
 }
 
-void __cdecl Dvar_SetU_f()
+void Dvar_SetU_f()
 {
     const char *v0; // eax
     const dvar_s *dvar; // [esp+0h] [ebp-4h]
@@ -264,7 +264,7 @@ void __cdecl Dvar_SetU_f()
     }
 }
 
-void __cdecl Dvar_SetS_f()
+void Dvar_SetS_f()
 {
     const char *v0; // eax
     const dvar_s *dvar; // [esp+0h] [ebp-4h]
@@ -283,7 +283,7 @@ void __cdecl Dvar_SetS_f()
     }
 }
 
-void __cdecl Dvar_SetA_f()
+void Dvar_SetA_f()
 {
     const char *v0; // eax
     const dvar_s *dvar; // [esp+0h] [ebp-4h]
@@ -302,7 +302,7 @@ void __cdecl Dvar_SetA_f()
     }
 }
 
-void __cdecl Dvar_SetFromDvar_f()
+void Dvar_SetFromDvar_f()
 {
     const char *v0; // eax
     const char *v1; // eax
@@ -332,7 +332,7 @@ void __cdecl Dvar_SetFromDvar_f()
     }
 }
 
-void __cdecl Dvar_Reset_f()
+void Dvar_Reset_f()
 {
     const char *v0; // eax
     dvar_s *dvar; // [esp+0h] [ebp-4h]
@@ -350,23 +350,23 @@ void __cdecl Dvar_Reset_f()
     }
 }
 
-void __cdecl Dvar_List_f()
+void Dvar_List_f()
 {
     char *match; // [esp+0h] [ebp-4h]
 
     if (Cmd_Argc() <= 1)
     {
-        Dvar_ForEach((void(__cdecl *)(const dvar_s *, void *))Dvar_ListSingle, 0);
+        Dvar_ForEach((void(*)(const dvar_s *, void *))Dvar_ListSingle, 0);
     }
     else
     {
         match = (char *)Cmd_Argv(1);
-        Dvar_ForEach((void(__cdecl *)(const dvar_s *, void *))Dvar_ListSingle, match);
+        Dvar_ForEach((void(*)(const dvar_s *, void *))Dvar_ListSingle, match);
     }
     Com_Printf(CON_CHANNEL_DONT_FILTER, "\n%i total dvars\n", dvarCount);
 }
 
-void __cdecl Dvar_ListSingle(const dvar_s *dvar, const char *userData)
+void Dvar_ListSingle(const dvar_s *dvar, const char *userData)
 {
     const char *v2; // eax
 
@@ -405,7 +405,7 @@ void __cdecl Dvar_ListSingle(const dvar_s *dvar, const char *userData)
     }
 }
 
-void __cdecl Com_DvarDump(int channel, const char *match)
+void Com_DvarDump(int channel, const char *match)
 {
     DvarDumpInfo dumpInfo; // [esp+0h] [ebp-94h] BYREF
     char summary[132]; // [esp+Ch] [ebp-88h] BYREF
@@ -435,7 +435,7 @@ void __cdecl Com_DvarDump(int channel, const char *match)
     }
 }
 
-void __cdecl Com_DvarDumpSingle(const dvar_s *dvar, void *userData)
+void Com_DvarDumpSingle(const dvar_s *dvar, void *userData)
 {
     const char *v2; // eax
     const char *v3; // eax
@@ -464,7 +464,7 @@ void __cdecl Com_DvarDumpSingle(const dvar_s *dvar, void *userData)
     }
 }
 
-void __cdecl Dvar_Dump_f()
+void Dvar_Dump_f()
 {
     const char *match; // [esp+0h] [ebp-4h]
 
@@ -480,17 +480,17 @@ void __cdecl Dvar_Dump_f()
 }
 
 #ifdef KISAK_MP
-void __cdecl SV_SetConfig(int start, int max, int bit)
+void SV_SetConfig(int start, int max, int bit)
 {
     DvarSetConfigInfo info; // [esp+0h] [ebp-Ch] BYREF
 
     info.start = start;
     info.max = max;
     info.bit = bit;
-    Dvar_ForEach((void(__cdecl *)(const dvar_s *, void *))SV_SetConfigDvar, &info);
+    Dvar_ForEach((void(*)(const dvar_s *, void *))SV_SetConfigDvar, &info);
 }
 
-void __cdecl SV_SetConfigDvar(const dvar_s *dvar, int *userData)
+void SV_SetConfigDvar(const dvar_s *dvar, int *userData)
 {
     char *v2; // eax
 
@@ -532,7 +532,7 @@ void Dvar_AddCoreCommands()
     Cmd_AddCommandInternal("dvar_float", Dvar_RegisterFloat_f, &Dvar_RegisterFloat_f_VAR);
 }
 
-void __cdecl Dvar_RegisterBool_f()
+void Dvar_RegisterBool_f()
 {
     const char *v0; // eax
     const char *v1; // eax
@@ -562,7 +562,7 @@ void __cdecl Dvar_RegisterBool_f()
     }
 }
 
-void __cdecl Dvar_RegisterInt_f()
+void Dvar_RegisterInt_f()
 {
     const char *v0; // eax
     const char *v1; // eax
@@ -610,7 +610,7 @@ void __cdecl Dvar_RegisterInt_f()
     }
 }
 
-void __cdecl Dvar_RegisterFloat_f()
+void Dvar_RegisterFloat_f()
 {
     const char *v0; // eax
     const char *v1; // eax
@@ -658,7 +658,7 @@ void __cdecl Dvar_RegisterFloat_f()
     }
 }
 
-void __cdecl Dvar_SetFromLocalizedStr_f()
+void Dvar_SetFromLocalizedStr_f()
 {
     const char *v0; // eax
     const char *v1; // eax
@@ -697,7 +697,7 @@ void __cdecl Dvar_SetFromLocalizedStr_f()
     }
 }
 
-void __cdecl Dvar_SetToTime_f()
+void Dvar_SetToTime_f()
 {
     const char *v0; // eax
     uint32_t v1; // eax

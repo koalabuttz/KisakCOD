@@ -15,12 +15,12 @@
 
 GfxPointVertex g_overlayPoints[36];
 
-void __cdecl TRACK_rb_sunshadow()
+void TRACK_rb_sunshadow()
 {
     track_static_alloc_internal(g_overlayPoints, 576, "g_overlayPoints", 18);
 }
 
-void __cdecl RB_SunShadowMaps(const GfxBackEndData *data, const GfxViewInfo *viewInfo)
+void RB_SunShadowMaps(const GfxBackEndData *data, const GfxViewInfo *viewInfo)
 {
     GfxCmdBuf cmdBuf; // [esp+0h] [ebp-8h] BYREF
 
@@ -40,7 +40,7 @@ void __cdecl RB_SunShadowMaps(const GfxBackEndData *data, const GfxViewInfo *vie
     }
 }
 
-void __cdecl RB_GetShadowOverlayDepthBounds(float *nearDepth, float *farDepth)
+void RB_GetShadowOverlayDepthBounds(float *nearDepth, float *farDepth)
 {
     *nearDepth = sm_showOverlayDepthBounds->current.vector[0];
     *farDepth = sm_showOverlayDepthBounds->current.vector[1];
@@ -61,7 +61,7 @@ void __cdecl RB_GetShadowOverlayDepthBounds(float *nearDepth, float *farDepth)
 }
 
 
-static void __cdecl RB_SunShadowOverlayPoint(const float *xy, float x0, float y0, float w, float h, float *point)
+static void RB_SunShadowOverlayPoint(const float *xy, float x0, float y0, float w, float h, float *point)
 {
     point[0] = ((xy[0] * 0.5f) + 0.5f) * w + x0;
     point[1] = (0.5f - (xy[1] * 0.5f)) * h + y0;
@@ -81,7 +81,7 @@ static void RB_SetSunShadowOverlayScaleAndBias()
     R_UpdateCodeConstant(&gfxCmdBufSourceState, CONST_SRC_CODE_FILTER_TAP_0, scale, bias, 1.0f, 1.0f);
 }
 
-void __cdecl RB_DrawSunShadowOverlay()
+void RB_DrawSunShadowOverlay()
 {
     float v0; // [esp+28h] [ebp-C4h]
     float t0; // [esp+3Ch] [ebp-B0h]

@@ -3,7 +3,7 @@
 #include <universal/com_memory.h>
 
 
-double __cdecl FxCurve_Interpolate1d(const float *key, float intermediateTime)
+double FxCurve_Interpolate1d(const float *key, float intermediateTime)
 {
     const char *v2; // eax
     float value1; // [esp+1Ch] [ebp-10h]
@@ -29,7 +29,7 @@ double __cdecl FxCurve_Interpolate1d(const float *key, float intermediateTime)
     return (float)((intermediateTime - time0) * (value1 - value0) / (time1 - time0) + value0);
 }
 
-void __cdecl FxCurveIterator_Create(FxCurveIterator *createe, const FxCurve *master)
+void FxCurveIterator_Create(FxCurveIterator *createe, const FxCurve *master)
 {
     if (!createe)
         MyAssertHandler(".\\EffectsCore\\FxCurve.cpp", 62, 0, "%s", "createe");
@@ -57,7 +57,7 @@ void __cdecl FxCurveIterator_Create(FxCurveIterator *createe, const FxCurve *mas
     createe->currentKeyIndex = 0;
 }
 
-void __cdecl FxCurveIterator_Release(FxCurveIterator *releasee)
+void FxCurveIterator_Release(FxCurveIterator *releasee)
 {
     if (!releasee)
         MyAssertHandler(".\\EffectsCore\\FxCurve.cpp", 83, 0, "%s", "releasee");
@@ -66,7 +66,7 @@ void __cdecl FxCurveIterator_Release(FxCurveIterator *releasee)
     releasee->master = 0;
 }
 
-void __cdecl FxCurve_Interpolate3d(const float *key, float intermediateTime, float *result)
+void FxCurve_Interpolate3d(const float *key, float intermediateTime, float *result)
 {
     const char *v3; // eax
     float fraction; // [esp+18h] [ebp-14h]
@@ -91,7 +91,7 @@ void __cdecl FxCurve_Interpolate3d(const float *key, float intermediateTime, flo
 }
 
 
-const FxCurve *__cdecl FxCurve_AllocAndCreateWithKeys(float *keyArray, int32_t dimensionCount, int32_t keyCount)
+const FxCurve *FxCurve_AllocAndCreateWithKeys(float *keyArray, int32_t dimensionCount, int32_t keyCount)
 {
     int32_t createdKeyCount; // [esp+14h] [ebp-1Ch]
     int32_t keySize; // [esp+18h] [ebp-18h]
@@ -177,7 +177,7 @@ const FxCurve *__cdecl FxCurve_AllocAndCreateWithKeys(float *keyArray, int32_t d
 }
 
 
-void __cdecl FxCurveIterator_SampleTimeVec3(FxCurveIterator *source, float *replyVector, float time)
+void FxCurveIterator_SampleTimeVec3(FxCurveIterator *source, float *replyVector, float time)
 {
     FxCurveIterator_MoveToTime(source, time);
     if (source->currentKeyIndex >= (uint32_t)(source->master->keyCount - 1))
@@ -191,7 +191,7 @@ void __cdecl FxCurveIterator_SampleTimeVec3(FxCurveIterator *source, float *repl
     FxCurve_Interpolate3d(&source->master->keys[4 * source->currentKeyIndex], time, replyVector);
 }
 
-double __cdecl FxCurveIterator_SampleTime(FxCurveIterator *source, float time)
+double FxCurveIterator_SampleTime(FxCurveIterator *source, float time)
 {
     FxCurveIterator_MoveToTime(source, time);
     if (source->currentKeyIndex >= (uint32_t)(source->master->keyCount - 1))
@@ -205,7 +205,7 @@ double __cdecl FxCurveIterator_SampleTime(FxCurveIterator *source, float time)
     return (float)FxCurve_Interpolate1d(&source->master->keys[2 * source->currentKeyIndex], time);
 }
 
-void __cdecl FxCurveIterator_MoveToTime(FxCurveIterator *source, float time)
+void FxCurveIterator_MoveToTime(FxCurveIterator *source, float time)
 {
     const char *v2; // eax
     int32_t keySize; // [esp+8h] [ebp-8h]

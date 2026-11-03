@@ -200,42 +200,42 @@ struct alignas(64) GfxScene // sizeof=0x154D00
     GfxSceneDpvs dpvs;                  // ...
 };
 
-void __cdecl TRACK_r_scene();
-uint32_t __cdecl R_AllocSceneDObj();
-uint32_t __cdecl R_AllocSceneModel();
-uint32_t __cdecl R_AllocSceneBrush();
-GfxBrushModel *__cdecl R_GetBrushModel(uint32_t modelIndex);
-void __cdecl R_AddBrushModelToSceneFromAngles(
+void TRACK_r_scene();
+uint32_t R_AllocSceneDObj();
+uint32_t R_AllocSceneModel();
+uint32_t R_AllocSceneBrush();
+GfxBrushModel *R_GetBrushModel(uint32_t modelIndex);
+void R_AddBrushModelToSceneFromAngles(
     const GfxBrushModel *bmodel,
     const float *origin,
     const float *angles,
     uint16_t entnum);
-void __cdecl R_AddDObjToScene(
+void R_AddDObjToScene(
     const DObj_s *obj,
     const cpose_t *pose,
     uint32_t entnum,
     uint32_t renderFxFlags,
     float *lightingOrigin,
     float materialTime);
-GfxParticleCloud *__cdecl R_AddParticleCloudToScene(Material *material);
-void __cdecl R_AddOmniLightToScene(const float *org, float radius, float r, float g, float b);
-void __cdecl R_AddSpotLightToScene(const float *org, const float *dir, float radius, float r, float g, float b);
-double __cdecl R_GetDefaultNearClip();
-void __cdecl R_SetupViewProjectionMatrices(GfxViewParms *viewParms);
-void __cdecl R_AddBModelSurfacesCamera(
+GfxParticleCloud *R_AddParticleCloudToScene(Material *material);
+void R_AddOmniLightToScene(const float *org, float radius, float r, float g, float b);
+void R_AddSpotLightToScene(const float *org, const float *dir, float radius, float r, float g, float b);
+double R_GetDefaultNearClip();
+void R_SetupViewProjectionMatrices(GfxViewParms *viewParms);
+void R_AddBModelSurfacesCamera(
     BModelDrawInfo *bmodelInfo,
     const GfxBrushModel *bmodel,
     GfxDrawSurf **drawSurfs,
     GfxDrawSurf **lastDrawSurfs,
     uint32_t reflectionProbeIndex);
-GfxDrawSurf *__cdecl R_AddBModelSurfaces(
+GfxDrawSurf *R_AddBModelSurfaces(
     BModelDrawInfo *bmodelInfo,
     const GfxBrushModel *bmodel,
     MaterialTechniqueType techType,
     GfxDrawSurf *drawSurf,
     GfxDrawSurf *lastDrawSurf);
-const XSurface *__cdecl R_GetXSurface(uint32_t *modelSurf, surfaceType_t surfType);
-void __cdecl R_AddXModelSurfacesCamera(
+const XSurface *R_GetXSurface(uint32_t *modelSurf, surfaceType_t surfType);
+void R_AddXModelSurfacesCamera(
     XModelDrawInfo *modelInfo,
     const XModel *model,
     float *origin,
@@ -247,77 +247,77 @@ void __cdecl R_AddXModelSurfacesCamera(
     GfxDrawSurf **drawSurfs,
     GfxDrawSurf **lastDrawSurfs,
     uint32_t reflectionProbeIndex);
-void __cdecl R_AddXModelDebugString(const float *origin, char *string);
-GfxDrawSurf *__cdecl R_AddXModelSurfaces(
+void R_AddXModelDebugString(const float *origin, char *string);
+GfxDrawSurf *R_AddXModelSurfaces(
     XModelDrawInfo *modelInfo,
     const XModel *model,
     MaterialTechniqueType techType,
     GfxDrawSurf *drawSurf,
     GfxDrawSurf *lastDrawSurf);
-void __cdecl R_AddDObjSurfacesCamera(
+void R_AddDObjSurfacesCamera(
     GfxSceneEntity *sceneEnt,
     __int16 lightingHandle,
     uint8_t primaryLightIndex,
     GfxDrawSurf **drawSurfs,
     GfxDrawSurf **lastDrawSurfs);
-GfxDrawSurf *__cdecl R_AddDObjSurfaces(
+GfxDrawSurf *R_AddDObjSurfaces(
     GfxSceneEntity *sceneEnt,
     MaterialTechniqueType techType,
     GfxDrawSurf *drawSurf,
     GfxDrawSurf *lastDrawSurf);
-bool __cdecl R_EndFencePending();
-void __cdecl R_SetEndTime(int endTime);
-void __cdecl R_WaitEndTime();
-void __cdecl R_InitScene();
-void __cdecl R_ClearScene(uint32_t localClientNum);
-uint32_t __cdecl R_GetLocalClientNum();
-void __cdecl R_SetLodOrigin(const refdef_s *refdef);
+bool R_EndFencePending();
+void R_SetEndTime(int endTime);
+void R_WaitEndTime();
+void R_InitScene();
+void R_ClearScene(uint32_t localClientNum);
+uint32_t R_GetLocalClientNum();
+void R_SetLodOrigin(const refdef_s *refdef);
 void R_UpdateFrameFog();
-uint8_t __cdecl LerpByte(uint8_t from, uint8_t to, float frac);
-void __cdecl R_SetViewParmsForScene(const refdef_s *refdef, GfxViewParms *viewParms);
-void __cdecl R_SetupProjection(float tanHalfFovX, float tanHalfFovY, GfxViewParms *viewParms);
+uint8_t LerpByte(uint8_t from, uint8_t to, float frac);
+void R_SetViewParmsForScene(const refdef_s *refdef, GfxViewParms *viewParms);
+void R_SetupProjection(float tanHalfFovX, float tanHalfFovY, GfxViewParms *viewParms);
 bool R_UpdateFrameSun();
-void __cdecl R_LerpDir(
+void R_LerpDir(
     const float *dirBegin,
     const float *dirEnd,
     int beginLerpTime,
     int endLerpTime,
     int currTime,
     float *result);
-void __cdecl R_UpdateLodParms(const refdef_s *refdef, GfxLodParms *lodParms);
-void __cdecl R_CorrectLodScale(const refdef_s *refdef);
-void __cdecl R_RenderScene(const refdef_s *refdef);
-void __cdecl R_GenerateSortedDrawSurfs(
+void R_UpdateLodParms(const refdef_s *refdef, GfxLodParms *lodParms);
+void R_CorrectLodScale(const refdef_s *refdef);
+void R_RenderScene(const refdef_s *refdef);
+void R_GenerateSortedDrawSurfs(
     const GfxSceneParms *sceneParms,
     const GfxViewParms *viewParmsDpvs,
     const GfxViewParms *viewParmsDraw);
-bool __cdecl R_GetAllowShadowMaps();
-ShadowType __cdecl R_DynamicShadowType();
-void __cdecl R_SetDepthOfField(GfxViewInfo *viewInfo, const GfxSceneParms *sceneParms);
-void __cdecl R_SetFilmInfo(GfxViewInfo *viewInfo, const GfxSceneParms *sceneParms);
-void __cdecl R_UpdateColorManipulation(GfxViewInfo *viewInfo);
-void __cdecl R_SetGlowInfo(GfxViewInfo *viewInfo, const GfxSceneParms *sceneParms);
-void __cdecl R_SetFullSceneViewMesh(int viewInfoIndex, GfxViewInfo *viewInfo);
-void __cdecl R_GenerateSortedSunShadowDrawSurfs(GfxViewInfo *viewInfo);
-void __cdecl R_AddEmissiveSpotLight(GfxViewInfo *viewInfo);
+bool R_GetAllowShadowMaps();
+ShadowType R_DynamicShadowType();
+void R_SetDepthOfField(GfxViewInfo *viewInfo, const GfxSceneParms *sceneParms);
+void R_SetFilmInfo(GfxViewInfo *viewInfo, const GfxSceneParms *sceneParms);
+void R_UpdateColorManipulation(GfxViewInfo *viewInfo);
+void R_SetGlowInfo(GfxViewInfo *viewInfo, const GfxSceneParms *sceneParms);
+void R_SetFullSceneViewMesh(int viewInfoIndex, GfxViewInfo *viewInfo);
+void R_GenerateSortedSunShadowDrawSurfs(GfxViewInfo *viewInfo);
+void R_AddEmissiveSpotLight(GfxViewInfo *viewInfo);
 void R_GenerateMarkVertsForDynamicModels();
-int __cdecl R_GetVisibleDLights(const GfxLight **visibleLights);
-void __cdecl R_GetLightSurfs(int visibleLightCount, const GfxLight **visibleLights);
-void __cdecl R_GetPointLightShadowSurfs(GfxViewInfo *viewInfo, GfxVisibleLight *visibleLights, const GfxLight **lights);
-MaterialTechniqueType __cdecl R_GetEmissiveTechnique(const GfxViewInfo *viewInfo, MaterialTechniqueType baseTech);
-void __cdecl R_SetSunShadowConstants(GfxCmdBufInput *input, const GfxSunShadowProjection *sunProj);
-void __cdecl R_SetSunConstants(GfxCmdBufInput *input);
+int R_GetVisibleDLights(const GfxLight **visibleLights);
+void R_GetLightSurfs(int visibleLightCount, const GfxLight **visibleLights);
+void R_GetPointLightShadowSurfs(GfxViewInfo *viewInfo, GfxVisibleLight *visibleLights, const GfxLight **lights);
+MaterialTechniqueType R_GetEmissiveTechnique(const GfxViewInfo *viewInfo, MaterialTechniqueType baseTech);
+void R_SetSunShadowConstants(GfxCmdBufInput *input, const GfxSunShadowProjection *sunProj);
+void R_SetSunConstants(GfxCmdBufInput *input);
 void R_DrawCineWarning();
-void __cdecl R_SetSceneParms(const refdef_s *refdef, GfxSceneParms *sceneParms);
-void __cdecl R_LinkDObjEntity(uint32_t localClientNum, uint32_t entnum, float *origin, float radius);
-void __cdecl R_LinkBModelEntity(uint32_t localClientNum, uint32_t entnum, GfxBrushModel *bmodel);
-void __cdecl R_UnlinkEntity(uint32_t localClientNum, uint32_t entnum);
-void __cdecl R_LinkDynEnt(uint32_t dynEntId, DynEntityDrawType drawType, float *mins, float *maxs);
-void __cdecl R_UnlinkDynEnt(uint32_t dynEntId, DynEntityDrawType drawType);
+void R_SetSceneParms(const refdef_s *refdef, GfxSceneParms *sceneParms);
+void R_LinkDObjEntity(uint32_t localClientNum, uint32_t entnum, float *origin, float radius);
+void R_LinkBModelEntity(uint32_t localClientNum, uint32_t entnum, GfxBrushModel *bmodel);
+void R_UnlinkEntity(uint32_t localClientNum, uint32_t entnum);
+void R_LinkDynEnt(uint32_t dynEntId, DynEntityDrawType drawType, float *mins, float *maxs);
+void R_UnlinkDynEnt(uint32_t dynEntId, DynEntityDrawType drawType);
 #ifdef KISAK_RADIANT
 // Editor 2D-view scene setup (IDB R_SetSceneParms @ 0x5062b0); see r_scene.cpp.
 struct GfxMatrix;
-void __cdecl R_Ed_SetSceneParms(const float *org, const float (*axis)[3], const GfxMatrix *projection);
+void R_Ed_SetSceneParms(const float *org, const float (*axis)[3], const GfxMatrix *projection);
 // Side-effect-free dry run: would this org/axis/projection produce an engine-valid
 // inverse-VP (one that passes R_DeriveNearPlaneConstantsForView's r_state_utils.cpp:20
 // ortho/determinant asserts)? Lets the editor scene-setup call sites drop a degenerate

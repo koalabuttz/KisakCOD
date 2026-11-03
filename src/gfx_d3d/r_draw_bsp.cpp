@@ -11,7 +11,7 @@
 
 const int g_layerDataStride[16] = { 0, 0, 0, 8, 12, 16, 20, 24, 24, 28, 32, 32, 36, 40, 0, 0 }; // idb
 
-void __cdecl R_SetStreamSource(
+void R_SetStreamSource(
     GfxCmdBufPrimState *primState,
     IDirect3DVertexBuffer9 *vb,
     uint32_t vertexOffset,
@@ -27,7 +27,7 @@ void __cdecl R_SetStreamSource(
         R_ChangeStreamSource(primState, 1u, 0, 0, 0);
 }
 
-void __cdecl R_HW_SetSamplerTexture(IDirect3DDevice9 *device, uint32_t samplerIndex, const GfxTexture *texture)
+void R_HW_SetSamplerTexture(IDirect3DDevice9 *device, uint32_t samplerIndex, const GfxTexture *texture)
 {
     int hr; // [esp+0h] [ebp-4h]
 
@@ -55,7 +55,7 @@ void __cdecl R_HW_SetSamplerTexture(IDirect3DDevice9 *device, uint32_t samplerIn
     } while (alwaysfails);
 }
 
-void __cdecl R_SetStreamsForBspSurface(GfxCmdBufPrimState *state, const srfTriangles_t *tris)
+void R_SetStreamsForBspSurface(GfxCmdBufPrimState *state, const srfTriangles_t *tris)
 {
     int vertexLayerData; // [esp+0h] [ebp-2Ch]
     IDirect3DVertexBuffer9 *layerVb; // [esp+4h] [ebp-28h]
@@ -85,7 +85,7 @@ void __cdecl R_SetStreamsForBspSurface(GfxCmdBufPrimState *state, const srfTrian
     }
 }
 
-void __cdecl R_DrawBspDrawSurfsLit(
+void R_DrawBspDrawSurfsLit(
     const uint32_t *primDrawSurfPos,
     GfxCmdBufContext context,
     GfxCmdBufContext prepassContext)
@@ -123,7 +123,7 @@ void __cdecl R_DrawBspDrawSurfsLit(
     context.state->samplerTexture[3] = drawStream.lightmapSecondaryTexture;
 }
 
-void __cdecl R_DrawTrianglesLit(
+void R_DrawTrianglesLit(
     GfxTrianglesDrawStream *drawStream,
     GfxCmdBufPrimState *primState,
     GfxCmdBufPrimState *prepassPrimState)
@@ -311,7 +311,7 @@ void __cdecl R_DrawTrianglesLit(
     drawStream->lightmapSecondaryTexture = lightmapSecondaryTexture;
 }
 
-void __cdecl R_DrawBspTris(GfxCmdBufPrimState *state, const srfTriangles_t *tris, uint32_t triCount)
+void R_DrawBspTris(GfxCmdBufPrimState *state, const srfTriangles_t *tris, uint32_t triCount)
 {
     GfxDrawPrimArgs args; // [esp+0h] [ebp-Ch] BYREF
 
@@ -324,7 +324,7 @@ void __cdecl R_DrawBspTris(GfxCmdBufPrimState *state, const srfTriangles_t *tris
     g_primStats->dynamicIndexCount += 3 * triCount;
 }
 
-int __cdecl R_ReadBspDrawSurfs(
+int R_ReadBspDrawSurfs(
     const uint32_t **primDrawSurfPos,
     const uint16_t **list,
     uint32_t *count)
@@ -337,7 +337,7 @@ int __cdecl R_ReadBspDrawSurfs(
     return 1;
 }
 
-void __cdecl R_DrawBspDrawSurfs(const uint32_t *primDrawSurfPos, GfxCmdBufState *state)
+void R_DrawBspDrawSurfs(const uint32_t *primDrawSurfPos, GfxCmdBufState *state)
 {
     GfxTrianglesDrawStream drawStream; // [esp+0h] [ebp-30h] BYREF
 
@@ -345,7 +345,7 @@ void __cdecl R_DrawBspDrawSurfs(const uint32_t *primDrawSurfPos, GfxCmdBufState 
     R_DrawTriangles(&drawStream, &state->prim);
 }
 
-void __cdecl R_DrawTriangles(GfxTrianglesDrawStream *drawStream, GfxCmdBufPrimState *state)
+void R_DrawTriangles(GfxTrianglesDrawStream *drawStream, GfxCmdBufPrimState *state)
 {
     int baseIndex; // [esp+0h] [ebp-28h]
     const GfxSurface *tris; // [esp+8h] [ebp-20h]
@@ -387,7 +387,7 @@ void __cdecl R_DrawTriangles(GfxTrianglesDrawStream *drawStream, GfxCmdBufPrimSt
         R_DrawBspTris(state, prevTris, triCount);
 }
 
-void __cdecl R_DrawPreTessTris(
+void R_DrawPreTessTris(
     GfxCmdBufPrimState *state,
     const srfTriangles_t *tris,
     uint32_t baseIndex,
@@ -405,7 +405,7 @@ void __cdecl R_DrawPreTessTris(
     g_primStats->dynamicIndexCount += 3 * triCount;
 }
 
-void __cdecl R_DrawBspDrawSurfsPreTess(const uint32_t *primDrawSurfPos, GfxCmdBufContext context)
+void R_DrawBspDrawSurfsPreTess(const uint32_t *primDrawSurfPos, GfxCmdBufContext context)
 {
     uint32_t baseIndex; // [esp+0h] [ebp-2Ch] BYREF
     uint32_t surfIndex; // [esp+4h] [ebp-28h]
@@ -457,7 +457,7 @@ void __cdecl R_DrawBspDrawSurfsPreTess(const uint32_t *primDrawSurfPos, GfxCmdBu
     }
 }
 
-void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCmdBufContext context)
+void R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCmdBufContext context)
 {
     uint32_t baseIndex; // [esp+4h] [ebp-28h] BYREF
     uint32_t surfIndex; // [esp+8h] [ebp-24h]

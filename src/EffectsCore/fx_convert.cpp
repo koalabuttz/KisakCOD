@@ -3,7 +3,7 @@
 #include <gfx_d3d/r_material.h>
 #include <universal/com_math.h>
 
-bool __cdecl FX_ElemUsesMaterial(const FxEditorElemDef *edElemDef)
+bool FX_ElemUsesMaterial(const FxEditorElemDef *edElemDef)
 {
     uint8_t elemType; // [esp+0h] [ebp-4h]
 
@@ -11,7 +11,7 @@ bool __cdecl FX_ElemUsesMaterial(const FxEditorElemDef *edElemDef)
     return elemType < 5u || elemType > 8u && elemType != 10;
 }
 
-char __cdecl FX_ValidateFlags(const FxEditorEffectDef *editorEffect, const FxEditorElemDef *edElemDef)
+char FX_ValidateFlags(const FxEditorEffectDef *editorEffect, const FxEditorElemDef *edElemDef)
 {
     if ((edElemDef->flags & 0xF0) != 0xC0)
         return 1;
@@ -23,7 +23,7 @@ char __cdecl FX_ValidateFlags(const FxEditorEffectDef *editorEffect, const FxEdi
     return 0;
 }
 
-char __cdecl FX_ValidateAtlasSettings(const FxEditorEffectDef *editorEffect, const FxEditorElemDef *edElemDef)
+char FX_ValidateAtlasSettings(const FxEditorEffectDef *editorEffect, const FxEditorElemDef *edElemDef)
 {
     MaterialInfo mtlInfoRef; // [esp+0h] [ebp-38h] BYREF
     MaterialInfo mtlInfo; // [esp+18h] [ebp-20h] BYREF
@@ -75,7 +75,7 @@ char __cdecl FX_ValidateAtlasSettings(const FxEditorEffectDef *editorEffect, con
     }
 }
 
-char __cdecl FX_ValidateColor(const FxEditorEffectDef *editorEffect, const FxEditorElemDef *edElemDef)
+char FX_ValidateColor(const FxEditorEffectDef *editorEffect, const FxEditorElemDef *edElemDef)
 {
     if (edElemDef->elemType == 9)
     {
@@ -109,7 +109,7 @@ char __cdecl FX_ValidateColor(const FxEditorEffectDef *editorEffect, const FxEdi
     return 1;
 }
 
-char __cdecl FX_ValidateVisuals(const FxEditorEffectDef *editorEffect, const FxEditorElemDef *edElemDef)
+char FX_ValidateVisuals(const FxEditorEffectDef *editorEffect, const FxEditorElemDef *edElemDef)
 {
     int32_t indIter; // [esp+0h] [ebp-4h]
 
@@ -166,7 +166,7 @@ char __cdecl FX_ValidateVisuals(const FxEditorEffectDef *editorEffect, const FxE
     return 0;
 }
 
-char __cdecl FX_ValidatePhysics(const FxEditorEffectDef *editorEffect, const FxEditorElemDef *edElemDef)
+char FX_ValidatePhysics(const FxEditorEffectDef *editorEffect, const FxEditorElemDef *edElemDef)
 {
     float v3; // [esp+10h] [ebp-20h]
     float v4; // [esp+14h] [ebp-1Ch]
@@ -205,7 +205,7 @@ char __cdecl FX_ValidatePhysics(const FxEditorEffectDef *editorEffect, const FxE
     return 0;
 }
 
-bool __cdecl FX_Validate(const FxEditorEffectDef *editorEffect, const FxEditorElemDef *edElemDef)
+bool FX_Validate(const FxEditorEffectDef *editorEffect, const FxEditorElemDef *edElemDef)
 {
     if (!FX_ValidateAtlasSettings(editorEffect, edElemDef))
         return 0;
@@ -218,7 +218,7 @@ bool __cdecl FX_Validate(const FxEditorEffectDef *editorEffect, const FxEditorEl
     return 0;
 }
 
-void __cdecl FX_GetVisualSampleRouting(const FxEditorElemDef *edElem, FxSampleChannel *routing)
+void FX_GetVisualSampleRouting(const FxEditorElemDef *edElem, FxSampleChannel *routing)
 {
     int32_t v2; // [esp+0h] [ebp-8h]
 
@@ -280,7 +280,7 @@ void __cdecl FX_GetVisualSampleRouting(const FxEditorElemDef *edElem, FxSampleCh
     }
 }
 
-int32_t __cdecl FX_DecideIntervalLimit(const FxEditorElemDef *edElemDef)
+int32_t FX_DecideIntervalLimit(const FxEditorElemDef *edElemDef)
 {
     int32_t intervalLimit; // [esp+0h] [ebp-8h]
 
@@ -290,7 +290,7 @@ int32_t __cdecl FX_DecideIntervalLimit(const FxEditorElemDef *edElemDef)
     return intervalLimit;
 }
 
-void __cdecl FX_InterpolateSamples(
+void FX_InterpolateSamples(
     int32_t dimensions,
     float time0,
     const float *samples0,
@@ -328,7 +328,7 @@ void __cdecl FX_InterpolateSamples(
     }
 }
 
-double __cdecl FX_MaxErrorForIntervalCount(
+double FX_MaxErrorForIntervalCount(
     int32_t dimensions,
     int32_t sampleCount,
     const float *samples,
@@ -421,7 +421,7 @@ double __cdecl FX_MaxErrorForIntervalCount(
     return errorMax;
 }
 
-int32_t __cdecl FX_DecideSampleCount(int32_t curveCount, const FxCurve **curves, int32_t intervalLimit)
+int32_t FX_DecideSampleCount(int32_t curveCount, const FxCurve **curves, int32_t intervalLimit)
 {
     int32_t intervalCountBest; // [esp+4h] [ebp-18h]
     float errorBest; // [esp+8h] [ebp-14h]
@@ -461,7 +461,7 @@ int32_t __cdecl FX_DecideSampleCount(int32_t curveCount, const FxCurve **curves,
     return intervalCountBest + 1;
 }
 
-int32_t __cdecl FX_DecideVelocitySampleCount(const FxEditorElemDef *edElem, int32_t intervalLimit)
+int32_t FX_DecideVelocitySampleCount(const FxEditorElemDef *edElem, int32_t intervalLimit)
 {
     const FxCurve *curves[12]; // [esp+0h] [ebp-30h] BYREF
 
@@ -474,7 +474,7 @@ int32_t __cdecl FX_DecideVelocitySampleCount(const FxEditorElemDef *edElem, int3
     return FX_DecideSampleCount(12, curves, intervalLimit);
 }
 
-int32_t __cdecl FX_DecideVisualSampleCount(
+int32_t FX_DecideVisualSampleCount(
     const FxEditorElemDef *edElem,
     const FxSampleChannel *routing,
     int32_t intervalLimit)
@@ -540,7 +540,7 @@ int32_t __cdecl FX_DecideVisualSampleCount(
         return 0;
 }
 
-int32_t __cdecl FX_AdditionalBytesNeededForElemDef(
+int32_t FX_AdditionalBytesNeededForElemDef(
     uint8_t elemType,
     int32_t velStateSampleCount,
     int32_t visStateSampleCount,
@@ -560,7 +560,7 @@ int32_t __cdecl FX_AdditionalBytesNeededForElemDef(
     return bytesNeeded;
 }
 
-int32_t __cdecl FX_AdditionalBytesNeededForGeomTrail(const FxEditorElemDef *elemDef)
+int32_t FX_AdditionalBytesNeededForGeomTrail(const FxEditorElemDef *elemDef)
 {
     if (elemDef->elemType == 3)
         return 22 * elemDef->trailDef.indCount + 28;
@@ -568,7 +568,7 @@ int32_t __cdecl FX_AdditionalBytesNeededForGeomTrail(const FxEditorElemDef *elem
         return 0;
 }
 
-int32_t __cdecl FX_FindEmission(const FxEffectDef *emission, const FxEditorEffectDef *editorEffect)
+int32_t FX_FindEmission(const FxEffectDef *emission, const FxEditorEffectDef *editorEffect)
 {
     int32_t elemIndex; // [esp+0h] [ebp-4h]
 
@@ -588,12 +588,12 @@ int32_t __cdecl FX_FindEmission(const FxEffectDef *emission, const FxEditorEffec
     return -1;
 }
 
-void __cdecl FX_ConvertEffectDefRef(FxEffectDefRef *ref, const FxEffectDef *effectDef)
+void FX_ConvertEffectDefRef(FxEffectDefRef *ref, const FxEffectDef *effectDef)
 {
     ref->handle = effectDef;
 }
 
-int32_t __cdecl FX_AdditionalBytesNeededForEmission(const FxEffectDef *emission)
+int32_t FX_AdditionalBytesNeededForEmission(const FxEffectDef *emission)
 {
     int32_t v2; // [esp+0h] [ebp-1Ch]
     const FxElemDef *elemDef; // [esp+8h] [ebp-14h]
@@ -621,7 +621,7 @@ int32_t __cdecl FX_AdditionalBytesNeededForEmission(const FxEffectDef *emission)
     return bytesNeeded;
 }
 
-void __cdecl FX_CopyCanonicalFloatRange(FxFloatRange *to, const FxFloatRange *from)
+void FX_CopyCanonicalFloatRange(FxFloatRange *to, const FxFloatRange *from)
 {
     if (from->amplitude >= 0.0)
     {
@@ -634,7 +634,7 @@ void __cdecl FX_CopyCanonicalFloatRange(FxFloatRange *to, const FxFloatRange *fr
     }
 }
 
-void __cdecl FX_CopyCanonicalIntRange(FxIntRange *to, const FxIntRange *from)
+void FX_CopyCanonicalIntRange(FxIntRange *to, const FxIntRange *from)
 {
     if (from->amplitude >= 0)
     {
@@ -647,13 +647,13 @@ void __cdecl FX_CopyCanonicalIntRange(FxIntRange *to, const FxIntRange *from)
     }
 }
 
-void __cdecl FX_ScaleFloatRange(FxFloatRange *to, const FxFloatRange *from, float scale)
+void FX_ScaleFloatRange(FxFloatRange *to, const FxFloatRange *from, float scale)
 {
     to->base = from->base * scale;
     to->amplitude = from->amplitude * scale;
 }
 
-void __cdecl FX_BoundFloatRange(FxFloatRange *range, float lower, float upper)
+void FX_BoundFloatRange(FxFloatRange *range, float lower, float upper)
 {
     float v3; // [esp+10h] [ebp-8h]
 
@@ -679,7 +679,7 @@ void __cdecl FX_BoundFloatRange(FxFloatRange *range, float lower, float upper)
     }
 }
 
-void __cdecl FX_ConvertAtlas(FxElemDef *elemDef, const FxEditorElemDef *edElemDef)
+void FX_ConvertAtlas(FxElemDef *elemDef, const FxEditorElemDef *edElemDef)
 {
     MaterialInfo mtlInfo; // [esp+0h] [ebp-18h] BYREF
 
@@ -718,7 +718,7 @@ void __cdecl FX_ConvertAtlas(FxElemDef *elemDef, const FxEditorElemDef *edElemDe
     }
 }
 
-void __cdecl FX_ReserveElemDefMemory(FxElemDef *elemDef, uint8_t **memPool)
+void FX_ReserveElemDefMemory(FxElemDef *elemDef, uint8_t **memPool)
 {
     if (!elemDef)
         MyAssertHandler(".\\EffectsCore\\fx_convert.cpp", 703, 0, "%s", "elemDef");
@@ -751,7 +751,7 @@ void __cdecl FX_ReserveElemDefMemory(FxElemDef *elemDef, uint8_t **memPool)
     }
 }
 
-double __cdecl FX_SampleCurve1D(const FxCurve *curve, float scale, float time)
+double FX_SampleCurve1D(const FxCurve *curve, float scale, float time)
 {
     FxCurveIterator iter; // [esp+24h] [ebp-Ch] BYREF
     float value; // [esp+2Ch] [ebp-4h]
@@ -762,7 +762,7 @@ double __cdecl FX_SampleCurve1D(const FxCurve *curve, float scale, float time)
     return value;
 }
 
-void __cdecl FX_SampleVelocityInFrame(
+void FX_SampleVelocityInFrame(
     FxElemDef *elemDef,
     const float (*velScale)[3],
     FxElemVelStateInFrame *velState,
@@ -877,7 +877,7 @@ void __cdecl FX_SampleVelocityInFrame(
         elemDef->flags |= useGraphBit;
 }
 
-void __cdecl FX_SampleVelocity(FxElemDef *elemDef, const FxEditorElemDef *edElemDef)
+void FX_SampleVelocity(FxElemDef *elemDef, const FxEditorElemDef *edElemDef)
 {
     float v2; // [esp+8h] [ebp-30h]
     float scale; // [esp+10h] [ebp-28h]
@@ -895,7 +895,7 @@ void __cdecl FX_SampleVelocity(FxElemDef *elemDef, const FxEditorElemDef *edElem
     FX_SampleVelocityInFrame(elemDef, velScale, &velStateRange->world, velStateStride, 0x2000000, edElemDef);
 }
 
-void __cdecl FX_SampleVisualStateScalar(
+void FX_SampleVisualStateScalar(
     const FxEditorElemDef *edElemDef,
     float sampleTime,
     FxSampleChannel routing,
@@ -960,7 +960,7 @@ void __cdecl FX_SampleVisualStateScalar(
     }
 }
 
-void __cdecl FX_SampleCurve3D(const FxCurve *curve, float scale, float time, float *value)
+void FX_SampleCurve3D(const FxCurve *curve, float scale, float time, float *value)
 {
     FxCurveIterator iter; // [esp+1Ch] [ebp-8h] BYREF
 
@@ -970,7 +970,7 @@ void __cdecl FX_SampleCurve3D(const FxCurve *curve, float scale, float time, flo
     FxCurveIterator_Release(&iter);
 }
 
-void __cdecl FX_SampleVisualState(FxElemDef *elemDef, const FxEditorElemDef *edElemDef)
+void FX_SampleVisualState(FxElemDef *elemDef, const FxEditorElemDef *edElemDef)
 {
     double v2; // st7
     double v3; // st7
@@ -1078,24 +1078,24 @@ void __cdecl FX_SampleVisualState(FxElemDef *elemDef, const FxEditorElemDef *edE
     }
 }
 
-void __cdecl FX_CopyMarkVisuals(const FxEditorElemDef *edElemDef, FxElemMarkVisuals *markVisualsArray)
+void FX_CopyMarkVisuals(const FxEditorElemDef *edElemDef, FxElemMarkVisuals *markVisualsArray)
 {
     memcpy(markVisualsArray, &edElemDef->markVisuals, 8 * edElemDef->visualCount);
 }
 
-void __cdecl FX_CopyVisuals(const FxEditorElemDef *edElemDef, FxElemVisuals *visualsArray)
+void FX_CopyVisuals(const FxEditorElemDef *edElemDef, FxElemVisuals *visualsArray)
 {
     memcpy(visualsArray, &edElemDef->markVisuals, 4 * edElemDef->visualCount);
 }
 
-void __cdecl FX_ConvertTrail_CalcNormForSegment(const float *vert0, const float *vert1, float *outNormal)
+void FX_ConvertTrail_CalcNormForSegment(const float *vert0, const float *vert1, float *outNormal)
 {
     *outNormal = vert0[1] - vert1[1];
     outNormal[1] = *vert1 - *vert0;
     Vec2Normalize(outNormal);
 }
 
-void __cdecl FX_ConvertTrail_CompileVertices(
+void FX_ConvertTrail_CompileVertices(
     const FxEditorElemDef *edElemDef,
     FxTrailDef *outTrailDef,
     uint8_t **mempool)
@@ -1256,7 +1256,7 @@ void __cdecl FX_ConvertTrail_CompileVertices(
             "outTrailDef->indCount * sizeof( ushort ) <= static_cast< size_t >( indBytes )");
 }
 
-void __cdecl FX_ConvertTrail(FxTrailDef **outTrailDef, const FxEditorElemDef *edElemDef, uint8_t **mempool)
+void FX_ConvertTrail(FxTrailDef **outTrailDef, const FxEditorElemDef *edElemDef, uint8_t **mempool)
 {
     if (edElemDef->elemType == 3)
     {
@@ -1277,7 +1277,7 @@ void __cdecl FX_ConvertTrail(FxTrailDef **outTrailDef, const FxEditorElemDef *ed
     }
 }
 
-void __cdecl FX_ConvertElemDef(
+void FX_ConvertElemDef(
     FxElemDef *elemDef,
     const FxEditorElemDef *edElemDef,
     int32_t velStateCount,
@@ -1461,7 +1461,7 @@ void __cdecl FX_ConvertElemDef(
     elemDef->sortOrder = v8;
 }
 
-int32_t __cdecl FX_ConvertElemDefsOfType(
+int32_t FX_ConvertElemDefsOfType(
     FxElemDef *elemDefArray,
     const FxEditorEffectDef *editorEffect,
     uint32_t loopingFlagState,
@@ -1508,7 +1508,7 @@ int32_t __cdecl FX_ConvertElemDefsOfType(
     return elemCount;
 }
 
-int32_t __cdecl FX_CopyEmittedElemDefs(
+int32_t FX_CopyEmittedElemDefs(
     FxElemDef *elemDefArray,
     const FxEditorEffectDef *editorEffect,
     uint8_t **memPool)
@@ -1552,7 +1552,7 @@ int32_t __cdecl FX_CopyEmittedElemDefs(
     return elemCount;
 }
 
-int32_t __cdecl FX_GetLoopingLife(const FxEffectDef *effectDef)
+int32_t FX_GetLoopingLife(const FxEffectDef *effectDef)
 {
     const FxElemDef *elemDef; // [esp+4h] [ebp-Ch]
     int32_t elemIndex; // [esp+8h] [ebp-8h]
@@ -1570,7 +1570,7 @@ int32_t __cdecl FX_GetLoopingLife(const FxEffectDef *effectDef)
     return msecLoopingLifeMax;
 }
 
-const FxEffectDef *__cdecl FX_Convert(const FxEditorEffectDef *editorEffect, void *(*Alloc)(uint32_t))
+const FxEffectDef *FX_Convert(const FxEditorEffectDef *editorEffect, void *(*Alloc)(uint32_t))
 {
     PhysPreset *v2; // eax
     int32_t v4; // eax

@@ -13,12 +13,12 @@
 #include <server/sv_game.h>
 #include <server/sv_world.h>
 
-int32_t __cdecl compare_use(float *pe1, float *pe2)
+int32_t compare_use(float *pe1, float *pe2)
 {
     return (int)(pe1[1] - pe2[1]);
 }
 
-void __cdecl Player_UpdateActivate(gentity_s *ent)
+void Player_UpdateActivate(gentity_s *ent)
 {
     bool useSucceeded; // [esp+3h] [ebp-1h]
 
@@ -51,7 +51,7 @@ void __cdecl Player_UpdateActivate(gentity_s *ent)
     }
 }
 
-char __cdecl Player_ActivateCmd(gentity_s *ent)
+char Player_ActivateCmd(gentity_s *ent)
 {
     iassert(ent);
     iassert(ent->r.inuse);
@@ -110,7 +110,7 @@ char __cdecl Player_ActivateCmd(gentity_s *ent)
     }
 }
 
-void __cdecl Player_ActivateHoldCmd(gentity_s *ent)
+void Player_ActivateHoldCmd(gentity_s *ent)
 {
     gentity_s *useEnt; // [esp+0h] [ebp-4h]
 
@@ -131,10 +131,10 @@ void __cdecl Player_ActivateHoldCmd(gentity_s *ent)
     }
 }
 
-void __cdecl Player_UseEntity(gentity_s *playerEnt, gentity_s *useEnt)
+void Player_UseEntity(gentity_s *playerEnt, gentity_s *useEnt)
 {
-    void(__cdecl * touch)(gentity_s *, gentity_s *, int); // [esp+0h] [ebp-8h]
-    void(__cdecl * use)(gentity_s *, gentity_s *, gentity_s *); // [esp+4h] [ebp-4h]
+    void(* touch)(gentity_s *, gentity_s *, int); // [esp+0h] [ebp-8h]
+    void(* use)(gentity_s *, gentity_s *, gentity_s *); // [esp+4h] [ebp-4h]
 
     if (!playerEnt)
         MyAssertHandler(".\\game_mp\\player_use_mp.cpp", 41, 0, "%s", "playerEnt");
@@ -164,7 +164,7 @@ void __cdecl Player_UseEntity(gentity_s *playerEnt, gentity_s *useEnt)
     playerEnt->client->useHoldEntity.setEnt(NULL);
 }
 
-void __cdecl Player_UpdateCursorHints(gentity_s *ent)
+void Player_UpdateCursorHints(gentity_s *ent)
 {
     int32_t piIndex; // [esp+4h] [ebp-2020h] BYREF
     int32_t scale; // [esp+8h] [ebp-201Ch]
@@ -294,7 +294,7 @@ void __cdecl Player_UpdateCursorHints(gentity_s *ent)
     }
 }
 
-int32_t __cdecl Player_GetUseList(gentity_s *ent, useList_t *useList, int32_t prevHintEntIndex)
+int32_t Player_GetUseList(gentity_s *ent, useList_t *useList, int32_t prevHintEntIndex)
 {
     double v3; // st7
     int32_t eType; // [esp+8h] [ebp-10D4h]
@@ -422,7 +422,7 @@ int32_t __cdecl Player_GetUseList(gentity_s *ent, useList_t *useList, int32_t pr
             }
         }
     }
-    qsort(useList, num, 8u, (int(__cdecl *)(const void *, const void *))compare_use);
+    qsort(useList, num, 8u, (int(*)(const void *, const void *))compare_use);
     num -= v31;
     v28 = 0;
     for (i = 0; i < (int)num; ++i)
@@ -441,11 +441,11 @@ int32_t __cdecl Player_GetUseList(gentity_s *ent, useList_t *useList, int32_t pr
             }
         }
     }
-    qsort(useList, num, 8u, (int(__cdecl *)(const void *, const void *))compare_use);
+    qsort(useList, num, 8u, (int(*)(const void *, const void *))compare_use);
     return num - v28;
 }
 
-int32_t __cdecl Player_GetItemCursorHint(const gclient_s *client, const gentity_s *traceEnt)
+int32_t Player_GetItemCursorHint(const gclient_s *client, const gentity_s *traceEnt)
 {
     WeaponDef *weapDefItem; // [esp+0h] [ebp-14h]
     WeaponDef *weapDefPlayer; // [esp+8h] [ebp-Ch]
@@ -484,7 +484,7 @@ int32_t __cdecl Player_GetItemCursorHint(const gclient_s *client, const gentity_
     return HINT_NONE;
 }
 
-void __cdecl Player_SetTurretDropHint(gentity_s *ent)
+void Player_SetTurretDropHint(gentity_s *ent)
 {
     gentity_s *turret; // [esp+0h] [ebp-8h]
     gclient_s *ps; // [esp+4h] [ebp-4h]
@@ -511,7 +511,7 @@ void __cdecl Player_SetTurretDropHint(gentity_s *ent)
     }
 }
 
-void __cdecl Player_SetVehicleDropHint(gentity_s *ent)
+void Player_SetVehicleDropHint(gentity_s *ent)
 {
     gclient_s *ps; // [esp+4h] [ebp-4h]
 

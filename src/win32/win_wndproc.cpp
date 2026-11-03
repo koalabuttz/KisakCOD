@@ -248,7 +248,7 @@ static unsigned char MapKey(int key, uint32_t wParam)
 	return result;
 }
 
-void __cdecl VID_AppActivate(uint32_t activeState, int minimize)
+void VID_AppActivate(uint32_t activeState, int minimize)
 {
 	BOOL v2; // [esp+0h] [ebp-8h]
 

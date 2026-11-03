@@ -98,32 +98,32 @@ struct NetFieldList // sizeof=0x8
     uint32_t count;
 };
 
-void __cdecl TRACK_msg();
-const NetFieldList* __cdecl MSG_GetStateFieldListForEntityType(int eType);
-void __cdecl MSG_WriteReliableCommandToBuffer(const char* pszCommand, char* pszBuffer, int iBufferSize);
-void __cdecl MSG_WriteEntityIndex(SnapshotInfo_s *snapInfo, msg_t *msg, int index, int indexBits);
-void __cdecl MSG_WriteOriginFloat(const int clientNum, msg_t *msg, int bits, double value, double oldValue);
-void __cdecl MSG_WriteOriginZFloat(const int clientNum, msg_t *msg, double value, double oldValue);
-bool __cdecl MSG_ValuesAreEqual(const SnapshotInfo_s* snapInfo, int bits, const int* fromF, const int* toF);
-void __cdecl MSG_WriteLastChangedField(msg_t* msg, int lastChangedFieldNum, uint32_t numFields);
-void __cdecl MSG_WriteEventNum(int clientNum, msg_t* msg, uint8_t eventNum);
-void __cdecl MSG_WriteEventParam(int clientNum, msg_t* msg, uint8_t eventParam);
-PacketEntityType __cdecl MSG_GetPacketEntityTypeForEType(int eType);
-uint32_t __cdecl MSG_GetBitCount(int bits, bool* estimate, int from, int to);
-void __cdecl MSG_WriteEntity(
+void TRACK_msg();
+const NetFieldList* MSG_GetStateFieldListForEntityType(int eType);
+void MSG_WriteReliableCommandToBuffer(const char* pszCommand, char* pszBuffer, int iBufferSize);
+void MSG_WriteEntityIndex(SnapshotInfo_s *snapInfo, msg_t *msg, int index, int indexBits);
+void MSG_WriteOriginFloat(const int clientNum, msg_t *msg, int bits, double value, double oldValue);
+void MSG_WriteOriginZFloat(const int clientNum, msg_t *msg, double value, double oldValue);
+bool MSG_ValuesAreEqual(const SnapshotInfo_s* snapInfo, int bits, const int* fromF, const int* toF);
+void MSG_WriteLastChangedField(msg_t* msg, int lastChangedFieldNum, uint32_t numFields);
+void MSG_WriteEventNum(int clientNum, msg_t* msg, uint8_t eventNum);
+void MSG_WriteEventParam(int clientNum, msg_t* msg, uint8_t eventParam);
+PacketEntityType MSG_GetPacketEntityTypeForEType(int eType);
+uint32_t MSG_GetBitCount(int bits, bool* estimate, int from, int to);
+void MSG_WriteEntity(
     SnapshotInfo_s* snapInfo,
     msg_t* msg,
     int time,
     const entityState_s* from,
     const entityState_s* to,
     int force);
-void __cdecl MSG_WriteEntityRemoval(
+void MSG_WriteEntityRemoval(
     SnapshotInfo_s* snapInfo,
     msg_t* msg,
     const uint8_t* from,
     int indexBits,
     bool changeBit);
-void __cdecl MSG_WriteEntityDeltaForEType(
+void MSG_WriteEntityDeltaForEType(
     SnapshotInfo_s* snapInfo,
     msg_t* msg,
     int time,
@@ -131,7 +131,7 @@ void __cdecl MSG_WriteEntityDeltaForEType(
     const entityState_s* from,
     const entityState_s* to,
     int force);
-int __cdecl MSG_WriteEntityDelta(
+int MSG_WriteEntityDelta(
     SnapshotInfo_s* snapInfo,
     msg_t* msg,
     int time,
@@ -141,7 +141,7 @@ int __cdecl MSG_WriteEntityDelta(
     int numFields,
     int indexBits,
     const NetField* stateFields);
-void __cdecl MSG_WriteDeltaField(
+void MSG_WriteDeltaField(
     SnapshotInfo_s* snapInfo,
     msg_t* msg,
     int time,
@@ -150,18 +150,18 @@ void __cdecl MSG_WriteDeltaField(
     const NetField* field,
     int fieldNum,
     bool forceSend);
-void __cdecl MSG_WriteDeltaTime(int clientNum, msg_t* msg, int timeBase, int time);
-void __cdecl MSG_Write24BitFlag(int clientNum, msg_t* msg, int oldFlags, int newFlags);
-void __cdecl MSG_WriteGroundEntityNum(int clientNum, msg_t* msg, int groundEntityNum);
-bool __cdecl MSG_CheckWritingEnoughBits(int value, uint32_t bits);
-void __cdecl MSG_WriteDeltaArchivedEntity(
+void MSG_WriteDeltaTime(int clientNum, msg_t* msg, int timeBase, int time);
+void MSG_Write24BitFlag(int clientNum, msg_t* msg, int oldFlags, int newFlags);
+void MSG_WriteGroundEntityNum(int clientNum, msg_t* msg, int groundEntityNum);
+bool MSG_CheckWritingEnoughBits(int value, uint32_t bits);
+void MSG_WriteDeltaArchivedEntity(
     SnapshotInfo_s* snapInfo,
     msg_t* msg,
     int time,
     const archivedEntity_s* from,
     const archivedEntity_s* to,
     int force);
-int __cdecl MSG_WriteDeltaStruct(
+int MSG_WriteDeltaStruct(
     SnapshotInfo_s* snapInfo,
     msg_t* msg,
     int time,
@@ -172,26 +172,26 @@ int __cdecl MSG_WriteDeltaStruct(
     int indexBits,
     const NetField* stateFields,
     int bChangeBit);
-void __cdecl MSG_WriteDeltaClient(
+void MSG_WriteDeltaClient(
     SnapshotInfo_s* snapInfo,
     msg_t* msg,
     int time,
     const clientState_s* from,
     const clientState_s* to,
     int force);
-void __cdecl MSG_WriteDeltaPlayerstate(
+void MSG_WriteDeltaPlayerstate(
     SnapshotInfo_s* snapInfo,
     msg_t* msg,
     int time,
     const playerState_s* from,
     const playerState_s* to);
-bool __cdecl MSG_ShouldSendPSField(
+bool MSG_ShouldSendPSField(
     const SnapshotInfo_s* snapInfo,
     bool sendOriginAndVel,
     const playerState_s* ps,
     const playerState_s* oldPs,
     const NetField* field);
-void __cdecl MSG_WriteDeltaFields(
+void MSG_WriteDeltaFields(
     SnapshotInfo_s* snapInfo,
     msg_t* msg,
     int time,
@@ -200,7 +200,7 @@ void __cdecl MSG_WriteDeltaFields(
     int force,
     int numFields,
     const NetField* stateFields);
-void __cdecl MSG_WriteDeltaHudElems(
+void MSG_WriteDeltaHudElems(
     SnapshotInfo_s* snapInfo,
     msg_t* msg,
     int time,

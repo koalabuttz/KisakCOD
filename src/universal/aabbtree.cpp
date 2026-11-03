@@ -14,7 +14,7 @@ float *sortedMaxs;
 float *sortedMins;
 float *sortedCoplanar;
 
-int __cdecl compare_floats(float *e0, float *e1)
+int compare_floats(float *e0, float *e1)
 {
     float diff; // [esp+4h] [ebp-4h]
 
@@ -184,7 +184,7 @@ static bool PickAabbSplitPlane(
     return bestHeuristic != 0x80000000;
 }
 
-double __cdecl AddedVolume(const float *addedmins, const float *addedmaxs, const float *mins, const float *maxs)
+double AddedVolume(const float *addedmins, const float *addedmaxs, const float *mins, const float *maxs)
 {
     float expandedMins[3]; // [esp+4h] [ebp-20h] BYREF
     float expandedVolume; // [esp+10h] [ebp-14h]
@@ -205,7 +205,7 @@ double __cdecl AddedVolume(const float *addedmins, const float *addedmaxs, const
     return (expandedVolume - baseVolume);
 }
 
-int __cdecl SplitAabbTree(int count, const GenericAabbTreeOptions *options, int *remap, int *midStart, int *lastStart)
+int SplitAabbTree(int count, const GenericAabbTreeOptions *options, int *remap, int *midStart, int *lastStart)
 {
     double v6; // [esp+4h] [ebp-60h]
     double v7; // [esp+Ch] [ebp-58h]
@@ -321,14 +321,14 @@ int __cdecl SplitAabbTree(int count, const GenericAabbTreeOptions *options, int 
     return 1;
 }
 
-GenericAabbTree *__cdecl AllocAabbTreeNode(const GenericAabbTreeOptions *options)
+GenericAabbTree *AllocAabbTreeNode(const GenericAabbTreeOptions *options)
 {
     if (aabbTreeCount == options->treeNodeLimit)
         Com_Error(ERR_DROP, "More than %i AABB nodes needed\n", options->treeNodeLimit);
     return &options->treeNodePool[aabbTreeCount++];
 }
 
-void __cdecl CreateAabbSubTrees(
+void CreateAabbSubTrees(
     GenericAabbTree *tree,
     const GenericAabbTreeOptions *options,
     int *remap,
@@ -362,7 +362,7 @@ void __cdecl CreateAabbSubTrees(
     }
 }
 
-void __cdecl BuildAabbTree_r(GenericAabbTree *tree, const GenericAabbTreeOptions *options, int *remap)
+void BuildAabbTree_r(GenericAabbTree *tree, const GenericAabbTreeOptions *options, int *remap)
 {
     int midStart; // [esp+0h] [ebp-10h] BYREF
     int childIndex; // [esp+4h] [ebp-Ch]
@@ -389,7 +389,7 @@ void __cdecl BuildAabbTree_r(GenericAabbTree *tree, const GenericAabbTreeOptions
     }
 }
 
-int __cdecl BuildAabbTree(const GenericAabbTreeOptions *options)
+int BuildAabbTree(const GenericAabbTreeOptions *options)
 {
     float *v2; // [esp+4h] [ebp-454h]
     float *v3; // [esp+8h] [ebp-450h]

@@ -32,7 +32,7 @@ const char *const g_TypeName[12] =
   "projectile_dud"
 }; // idb
 
-char *__cdecl CG_ParseImpactEffects(
+char *CG_ParseImpactEffects(
     const char *filename,
     const char *buf,
     int iTypeCount,
@@ -114,13 +114,13 @@ LABEL_20:
         63);
 }
 
-int __cdecl compare_impact_files(const char **pe0, const char **pe1);
+int compare_impact_files(const char **pe0, const char **pe1);
 
-int __cdecl CG_RegisterImpactEffects_Generic_29_char_const_____cdecl_int__(
+int CG_RegisterImpactEffects_Generic_29_char_const_____cdecl_int__(
     const char **szEffectFile,
     const char *pszTypeName,
     const FxEffectDef **fx,
-    const char *(__cdecl *typeToNameFunc)(int),
+    const char *(*typeToNameFunc)(int),
     char *defaultEffectName)
 {
     const char *v5; // eax
@@ -154,7 +154,7 @@ int __cdecl CG_RegisterImpactEffects_Generic_29_char_const_____cdecl_int__(
     return iBadCount;
 }
 
-int __cdecl CG_RegisterImpactEffects_NonFlesh(
+int CG_RegisterImpactEffects_NonFlesh(
     const char **szEffectFile,
     const char *pszTypeName,
     const FxEffectDef **fx)
@@ -163,11 +163,11 @@ int __cdecl CG_RegisterImpactEffects_NonFlesh(
         szEffectFile,
         pszTypeName,
         fx,
-        (const char *(__cdecl *)(int))Com_SurfaceTypeToName,
+        (const char *(*)(int))Com_SurfaceTypeToName,
         0);
 }
 
-void __cdecl CG_RegisterImpactEffectsForDir(char *dir, EffectFile *effectFile, char *listbuf)
+void CG_RegisterImpactEffectsForDir(char *dir, EffectFile *effectFile, char *listbuf)
 {
     void *base[4097]; // [esp+10h] [ebp-4020h] BYREF
     void *buffer; // [esp+4014h] [ebp-1Ch]
@@ -189,7 +189,7 @@ void __cdecl CG_RegisterImpactEffectsForDir(char *dir, EffectFile *effectFile, c
             base[i] = qpath;
             qpath += strlen(qpath) + 1;
         }
-        qsort(base, num, 4u, (int(__cdecl *)(const void *, const void *))compare_impact_files);
+        qsort(base, num, 4u, (int(*)(const void *, const void *))compare_impact_files);
         for (i = 0; i < num; ++i)
         {
             qpath = va("%s/%s", dir, (const char *)base[i]);
@@ -217,11 +217,11 @@ void __cdecl CG_RegisterImpactEffectsForDir(char *dir, EffectFile *effectFile, c
     }
 }
 
-int __cdecl CG_RegisterImpactEffects_Generic_4_char_const_____cdecl_int__(
+int CG_RegisterImpactEffects_Generic_4_char_const_____cdecl_int__(
     const char **szEffectFile,
     const char *pszTypeName,
     const FxEffectDef **fx,
-    const char *(__cdecl *typeToNameFunc)(int),
+    const char *(*typeToNameFunc)(int),
     char *defaultEffectName)
 {
     const char *v5; // eax
@@ -255,14 +255,14 @@ int __cdecl CG_RegisterImpactEffects_Generic_4_char_const_____cdecl_int__(
     return iBadCount;
 }
 
-const char *__cdecl CG_FleshTypeToName(uint32_t fleshTypeId)
+const char *CG_FleshTypeToName(uint32_t fleshTypeId)
 {
     iassert((fleshTypeId >= 0 && fleshTypeId < (sizeof(g_FleshTypeName) / (sizeof(g_FleshTypeName[0]) * (sizeof(g_FleshTypeName) != 4 || sizeof(g_FleshTypeName[0]) <= 4)))));
 
     return g_FleshTypeName[fleshTypeId];
 }
 
-int __cdecl CG_RegisterImpactEffects_Flesh(
+int CG_RegisterImpactEffects_Flesh(
     const char **szEffectFile,
     const char *pszTypeName,
     const FxEffectDef **fx,
@@ -272,11 +272,11 @@ int __cdecl CG_RegisterImpactEffects_Flesh(
         szEffectFile,
         pszTypeName,
         fx,
-        (const char *(__cdecl *)(int))CG_FleshTypeToName,
+        (const char *(*)(int))CG_FleshTypeToName,
         defaultEffectName);
 }
 
-FxImpactTable *__cdecl CG_RegisterImpactEffects_LoadObj(const char *mapname)
+FxImpactTable *CG_RegisterImpactEffects_LoadObj(const char *mapname)
 {
     uint8_t *v1; // eax
     int v2; // eax
@@ -326,12 +326,12 @@ FxImpactTable *__cdecl CG_RegisterImpactEffects_LoadObj(const char *mapname)
     }
 }
 
-FxImpactTable *__cdecl CG_RegisterImpactEffects_FastFile()
+FxImpactTable *CG_RegisterImpactEffects_FastFile()
 {
     return DB_FindXAssetHeader(ASSET_TYPE_IMPACT_FX, "").impactFx;
 }
 
-FxImpactTable *__cdecl CG_RegisterImpactEffects(const char *mapname)
+FxImpactTable *CG_RegisterImpactEffects(const char *mapname)
 {
     if (IsFastFileLoad())
         return CG_RegisterImpactEffects_FastFile();

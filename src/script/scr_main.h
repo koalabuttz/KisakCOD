@@ -99,7 +99,7 @@ uint32_t Scr_LoadScriptInternal(char const*, struct PrecacheEntry*, int);
 uint32_t Scr_LoadScript(char const*);
 void Scr_PostCompileScripts(void);
 void Scr_EndLoadScripts(void);
-void Scr_PrecacheAnimTrees(void* (__cdecl*)(int), int);
+void Scr_PrecacheAnimTrees(void* (*)(int), int);
 void Scr_EndLoadAnimTrees(void);
 void Scr_FreeScripts(unsigned char);
 void Scr_BeginLoadScripts(void);

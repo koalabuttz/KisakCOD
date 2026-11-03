@@ -14,7 +14,7 @@
 #include "actor_team_move.h"
 #include "actor_exposed.h"
 
-bool __cdecl Actor_Dog_Exposed_Start(actor_s *self, ai_state_t ePrevState)
+bool Actor_Dog_Exposed_Start(actor_s *self, ai_state_t ePrevState)
 {
     int time; // r11
 
@@ -29,21 +29,21 @@ bool __cdecl Actor_Dog_Exposed_Start(actor_s *self, ai_state_t ePrevState)
     return 1;
 }
 
-void __cdecl Actor_Dog_Exposed_Finish(actor_s *self, ai_state_t eNextState)
+void Actor_Dog_Exposed_Finish(actor_s *self, ai_state_t eNextState)
 {
     self->ProneInfo.fTorsoPitch = 0.0;
     self->ProneInfo.prone = 0;
     self->ProneInfo.orientPitch = 0;
 }
 
-void __cdecl Actor_Dog_Exposed_Suspend(actor_s *self, ai_state_t eNextState)
+void Actor_Dog_Exposed_Suspend(actor_s *self, ai_state_t eNextState)
 {
     self->ProneInfo.fTorsoPitch = 0.0;
     self->ProneInfo.prone = 0;
     self->ProneInfo.orientPitch = 0;
 }
 
-int __cdecl Actor_Dog_IsInSyncedMelee(actor_s *self, sentient_s *enemy)
+int Actor_Dog_IsInSyncedMelee(actor_s *self, sentient_s *enemy)
 {
     EntHandle *p_syncedMeleeEnt; // r31
     int result; // r3
@@ -63,7 +63,7 @@ int __cdecl Actor_Dog_IsInSyncedMelee(actor_s *self, sentient_s *enemy)
     return result;
 }
 
-void __cdecl Actor_Dog_Attack(actor_s *self)
+void Actor_Dog_Attack(actor_s *self)
 {
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_dog_exposed.cpp", 77, 0, "%s", "self");
@@ -77,7 +77,7 @@ void __cdecl Actor_Dog_Attack(actor_s *self)
     }
 }
 
-void __cdecl Actor_FindPathToGoalNearestNode(actor_s *self)
+void Actor_FindPathToGoalNearestNode(actor_s *self)
 {
     pathnode_t *nodeTo; // r30
     pathnode_t *nodeFrom; // r5
@@ -106,7 +106,7 @@ void __cdecl Actor_FindPathToGoalNearestNode(actor_s *self)
 }
 
 // From blops with love
-int __cdecl Actor_SetMeleeAttackSpot(actor_s *self, const float *enemyPosition, float *attackPosition)
+int Actor_SetMeleeAttackSpot(actor_s *self, const float *enemyPosition, float *attackPosition)
 {
     float dirFromEnemy[2]; // [sp+50h] [-130h] BYREF // v37-v38
 
@@ -256,7 +256,7 @@ int __cdecl Actor_SetMeleeAttackSpot(actor_s *self, const float *enemyPosition, 
     return 1;
 }
 
-void __cdecl Actor_UpdateMeleeGoalPos(actor_s *self, float *goalPos)
+void Actor_UpdateMeleeGoalPos(actor_s *self, float *goalPos)
 {
     double pathEnemyFightDist; // fp1
 
@@ -274,7 +274,7 @@ void __cdecl Actor_UpdateMeleeGoalPos(actor_s *self, float *goalPos)
     Actor_SetGoalRadius(&self->codeGoal, pathEnemyFightDist);
 }
 
-int __cdecl Actor_Dog_IsAttackScriptRunning(actor_s *self)
+int Actor_Dog_IsAttackScriptRunning(actor_s *self)
 {
     unsigned __int8 v2; // r11
 
@@ -288,7 +288,7 @@ int __cdecl Actor_Dog_IsAttackScriptRunning(actor_s *self)
     return v2;
 }
 
-float __cdecl Actor_Dog_GetEnemyPos(actor_s *self, sentient_s *enemy, float *enemyPos)
+float Actor_Dog_GetEnemyPos(actor_s *self, sentient_s *enemy, float *enemyPos)
 {
     gentity_s *ent; // r11
     float *p_commandTime; // r10
@@ -334,7 +334,7 @@ float __cdecl Actor_Dog_GetEnemyPos(actor_s *self, sentient_s *enemy, float *ene
     return (float)v12;
 }
 
-bool __cdecl Actor_Dog_IsEnemyInAttackRange(actor_s *self, sentient_s *enemy, int *goalPosSet)
+bool Actor_Dog_IsEnemyInAttackRange(actor_s *self, sentient_s *enemy, int *goalPosSet)
 {
     bool enemyInAttackRange; // r29
     float bufferedAttackDist; // fp31
@@ -391,7 +391,7 @@ bool __cdecl Actor_Dog_IsEnemyInAttackRange(actor_s *self, sentient_s *enemy, in
     return 0;
 }
 
-actor_think_result_t __cdecl Actor_Dog_Exposed_Think(actor_s *self)
+actor_think_result_t Actor_Dog_Exposed_Think(actor_s *self)
 {
     bool IsEnemyInAttackRange; // r28
     bool v3; // r29

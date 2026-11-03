@@ -9,12 +9,12 @@
 #include "rb_shade.h"
 #include <cgame/cg_local.h>
 
-void __cdecl RB_ClearShadowCookieBufferIfNeeded(int firstTime, const float *cookieClearColor)
+void RB_ClearShadowCookieBufferIfNeeded(int firstTime, const float *cookieClearColor)
 {
     R_ClearScreen(gfxCmdBufState.prim.device, 7u, cookieClearColor, 1.0, 0, 0);
 }
 
-void __cdecl RB_SetShadowCookie(const GfxMatrix *lookupMatrix, float fade)
+void RB_SetShadowCookie(const GfxMatrix *lookupMatrix, float fade)
 {
     R_SetShadowLookupMatrix(&gfxCmdBufSourceState, lookupMatrix);
     gfxCmdBufSourceState.input.consts[CONST_SRC_CODE_SHADOW_PARMS][0] = 0.0;
@@ -24,7 +24,7 @@ void __cdecl RB_SetShadowCookie(const GfxMatrix *lookupMatrix, float fade)
     R_DirtyCodeConstant(&gfxCmdBufSourceState, CONST_SRC_CODE_SHADOW_PARMS);
 }
 
-void __cdecl RB_BlurShadowPass(float st0, float st1)
+void RB_BlurShadowPass(float st0, float st1)
 {
     float w; // [esp+28h] [ebp-14h]
     float h; // [esp+2Ch] [ebp-10h]
@@ -72,7 +72,7 @@ int RB_BlurShadowCookie()
     return result;
 }
 
-void __cdecl RB_DrawShadowCookies(const GfxViewInfo *viewInfo)
+void RB_DrawShadowCookies(const GfxViewInfo *viewInfo)
 {
     float cookieClearColor[4]; // [esp+44h] [ebp-28h] BYREF
     int needToClearDynamicShadows; // [esp+54h] [ebp-18h]

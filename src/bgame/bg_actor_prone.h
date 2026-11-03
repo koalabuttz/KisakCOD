@@ -27,7 +27,7 @@ struct actor_prone_info_s
     };
 };
 
-int __cdecl BG_ActorIsProne(actor_prone_info_s *pInfo, int iCurrentTime);
-int __cdecl BG_ActorGoalIsProne(actor_prone_info_s *pInfo);
+int BG_ActorIsProne(actor_prone_info_s *pInfo, int iCurrentTime);
+int BG_ActorGoalIsProne(actor_prone_info_s *pInfo);
 // local variable allocation has failed, the output may be wrong!
-float __cdecl BG_GetActorProneFraction(actor_prone_info_s *pInfo, int iCurrentTime);
+float BG_GetActorProneFraction(actor_prone_info_s *pInfo, int iCurrentTime);

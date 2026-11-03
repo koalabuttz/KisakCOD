@@ -82,102 +82,102 @@ struct fileHandleData_t // sizeof=0x11C
     char name[256];
 };
 
-bool __cdecl FS_Initialized();
+bool FS_Initialized();
 
-int __cdecl FS_ConditionalRestart(int localClientNum, int checksumFeed);
+int FS_ConditionalRestart(int localClientNum, int checksumFeed);
 
-char *__cdecl FS_ReferencedIwdPureChecksums();
-char *__cdecl FS_ReferencedIwdNames();
-char *__cdecl FS_ReferencedIwdChecksums();
-char *__cdecl FS_LoadedIwdNames();
-char *__cdecl FS_LoadedIwdChecksums();
-void __cdecl FS_ClearIwdReferences();
+char *FS_ReferencedIwdPureChecksums();
+char *FS_ReferencedIwdNames();
+char *FS_ReferencedIwdChecksums();
+char *FS_LoadedIwdNames();
+char *FS_LoadedIwdChecksums();
+void FS_ClearIwdReferences();
 
-char *__cdecl FS_LoadedIwdPureChecksums();
-void __cdecl FS_CheckFileSystemStarted();
-int __cdecl FS_OpenFileOverwrite(char *qpath);
-int __cdecl FS_LoadStack();
-int __cdecl FS_HashFileName(const char *fname, int hashSize);
-int __cdecl FS_filelength(int f);
-bool __cdecl FS_IsFileInZip(int f);
-void __cdecl FS_ReplaceSeparators(char *path);
-void __cdecl FS_BuildOSPath(const char *base, const char *game, const char *qpath, char *ospath);
-void __cdecl FS_BuildOSPathForThread(const char *base, const char *game, const char *qpath, char *ospath, FsThread thread);
-int __cdecl FS_CreatePath(char *OSPath);
-void __cdecl FS_FCloseFile(int h);
-void __cdecl FS_FCloseLogFile(int h);
-int __cdecl FS_FOpenFileWrite(const char *filename);
-int __cdecl FS_FOpenTextFileWrite(const char *filename);
-int __cdecl FS_FOpenFileAppend(const char *filename);
-uint32_t __cdecl FS_FOpenFileReadStream(const char *filename, int *file);
-uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsThread thread);
-int __cdecl FS_FOpenFileReadDatabase(const char *filename, int *file);
-uint32_t __cdecl FS_FOpenFileRead(const char *filename, int *file);
-bool __cdecl FS_Delete(const char *filename);
-int __cdecl FS_FilenameCompare(const char *s1, const char *s2);
-uint32_t __cdecl FS_Read(uint8_t *buffer, uint32_t len, int h);
-uint32_t __cdecl FS_Write(const char *buffer, uint32_t len, int h);
-uint32_t __cdecl FS_WriteLog(const char *buffer, uint32_t len, int h);
+char *FS_LoadedIwdPureChecksums();
+void FS_CheckFileSystemStarted();
+int FS_OpenFileOverwrite(char *qpath);
+int FS_LoadStack();
+int FS_HashFileName(const char *fname, int hashSize);
+int FS_filelength(int f);
+bool FS_IsFileInZip(int f);
+void FS_ReplaceSeparators(char *path);
+void FS_BuildOSPath(const char *base, const char *game, const char *qpath, char *ospath);
+void FS_BuildOSPathForThread(const char *base, const char *game, const char *qpath, char *ospath, FsThread thread);
+int FS_CreatePath(char *OSPath);
+void FS_FCloseFile(int h);
+void FS_FCloseLogFile(int h);
+int FS_FOpenFileWrite(const char *filename);
+int FS_FOpenTextFileWrite(const char *filename);
+int FS_FOpenFileAppend(const char *filename);
+uint32_t FS_FOpenFileReadStream(const char *filename, int *file);
+uint32_t FS_FOpenFileReadForThread(const char *filename, int *file, FsThread thread);
+int FS_FOpenFileReadDatabase(const char *filename, int *file);
+uint32_t FS_FOpenFileRead(const char *filename, int *file);
+bool FS_Delete(const char *filename);
+int FS_FilenameCompare(const char *s1, const char *s2);
+uint32_t FS_Read(uint8_t *buffer, uint32_t len, int h);
+uint32_t FS_Write(const char *buffer, uint32_t len, int h);
+uint32_t FS_WriteLog(const char *buffer, uint32_t len, int h);
 void FS_Printf(int h, const char *fmt, ...);
-int __cdecl FS_Seek(int f, int offset, int origin);
-int __cdecl FS_ReadFile(const char *qpath, void **buffer);
-uint32_t *__cdecl FS_AllocMem(int bytes);
-void __cdecl FS_ResetFiles();
-void __cdecl FS_FreeFile(char *buffer);
-void __cdecl FS_FreeMem(char *buffer);
-int __cdecl FS_FileExists(char *file);
-int __cdecl FS_WriteFile(char *filename, char *buffer, uint32_t size);
-void __cdecl FS_ConvertPath(char *s);
-void __cdecl FS_InitFilesystem();
-uint32_t __cdecl FS_FOpenFileByMode(char *qpath, int *f, fsMode_t mode);
-void __cdecl FS_Flush(int f);
-void __cdecl FS_FreeFileList(const char **list);
+int FS_Seek(int f, int offset, int origin);
+int FS_ReadFile(const char *qpath, void **buffer);
+uint32_t *FS_AllocMem(int bytes);
+void FS_ResetFiles();
+void FS_FreeFile(char *buffer);
+void FS_FreeMem(char *buffer);
+int FS_FileExists(char *file);
+int FS_WriteFile(char *filename, char *buffer, uint32_t size);
+void FS_ConvertPath(char *s);
+void FS_InitFilesystem();
+uint32_t FS_FOpenFileByMode(char *qpath, int *f, fsMode_t mode);
+void FS_Flush(int f);
+void FS_FreeFileList(const char **list);
 
-void __cdecl FS_CopyFile(char *fromOSPath, char *toOSPath);
+void FS_CopyFile(char *fromOSPath, char *toOSPath);
 
-void __cdecl FS_Remove(const char *osPath);
+void FS_Remove(const char *osPath);
 
-char *__cdecl FS_ShiftStr(const char *string, char shift);
-int __cdecl FS_SV_FOpenFileRead(const char *filename, int *fp);
-int __cdecl FS_SV_FOpenFileWrite(const char *filename);
-void __cdecl FS_SV_Rename(char *from, char *to);
-int __cdecl FS_SV_FileExists(char *file);
+char *FS_ShiftStr(const char *string, char shift);
+int FS_SV_FOpenFileRead(const char *filename, int *fp);
+int FS_SV_FOpenFileWrite(const char *filename);
+void FS_SV_Rename(char *from, char *to);
+int FS_SV_FileExists(char *file);
 
-uint32_t __cdecl FS_FTell(int f);
+uint32_t FS_FTell(int f);
 enum FsListBehavior_e : __int32
 {                                       // ...
     FS_LIST_PURE_ONLY = 0x0,
     FS_LIST_ALL = 0x1,
 };
-int __cdecl FS_GetFileList(
+int FS_GetFileList(
     const char *path,
     const char *extension,
     FsListBehavior_e behavior,
     char *listbuf,
     int bufsize);
 
-const char **__cdecl FS_ListFiles(const char *path, const char *extension, FsListBehavior_e behavior, int *numfiles);
-const char **__cdecl FS_ListFilesInLocation(
+const char **FS_ListFiles(const char *path, const char *extension, FsListBehavior_e behavior, int *numfiles);
+const char **FS_ListFilesInLocation(
     const char *path,
     const char *extension,
     FsListBehavior_e behavior,
     int *numfiles,
     int lookInFlags);
 
-void __cdecl FS_FileClose(struct iobuf *stream);
-int __cdecl FS_FOpenFileWriteToDirForThread(const char *filename, const char *dir, FsThread thread);
-int __cdecl FS_FOpenFileWriteToDir(const char *filename, const char *dir);
-int __cdecl FS_WriteFileToDir(const char *filename, const char *path, char *buffer, uint32_t size);
+void FS_FileClose(struct iobuf *stream);
+int FS_FOpenFileWriteToDirForThread(const char *filename, const char *dir, FsThread thread);
+int FS_FOpenFileWriteToDir(const char *filename, const char *dir);
+int FS_WriteFileToDir(const char *filename, const char *path, char *buffer, uint32_t size);
 
-void __cdecl FS_Restart(int localClientNum, int checksumFeed);
-bool __cdecl FS_NeedRestart(int checksumFeed);
+void FS_Restart(int localClientNum, int checksumFeed);
+bool FS_NeedRestart(int checksumFeed);
 
-int __cdecl FS_TouchFile(const char *name);
+int FS_TouchFile(const char *name);
 
 void FS_RegisterDvars();
-void __cdecl FS_Shutdown();
-bool __cdecl FS_DeleteInDir(char *filename, char *dir);
-void __cdecl FS_Rename(char *from, char *fromDir, char *to, char *toDir);
+void FS_Shutdown();
+bool FS_DeleteInDir(char *filename, char *dir);
+void FS_Rename(char *from, char *fromDir, char *to, char *toDir);
 
 extern const dvar_t *fs_remotePCDirectory;
 extern const dvar_t *fs_remotePCName;

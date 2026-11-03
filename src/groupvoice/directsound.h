@@ -67,46 +67,46 @@ static_assert(sizeof(audioSample_t) == 0x20);
 
 
 // play_dsound
-uint32_t __cdecl DSound_UpdateSample(dsound_sample_t *sample, char *data, int32_t data_len);
-int32_t __cdecl DSound_GetBytesLeft(dsound_sample_t *sample);
-void __cdecl DSound_AdjustSamplePlayback(dsound_sample_t *sample, int32_t bytesLeft);
-bool __cdecl DSound_BufferUnderrunOccurred(dsound_sample_t *sample);
-void __cdecl DSound_HandleBufferUnderrun(dsound_sample_t *sample);
-void __cdecl DSound_SampleFrame(dsound_sample_t *sample);
-dsound_sample_t *__cdecl DSound_NewSample();
-char __cdecl DSound_StopSample(dsound_sample_t *sample);
-int32_t __cdecl DSound_Init(bool callDsoundInit, HWND__ *handle);
-void __cdecl DSound_Shutdown();
+uint32_t DSound_UpdateSample(dsound_sample_t *sample, char *data, int32_t data_len);
+int32_t DSound_GetBytesLeft(dsound_sample_t *sample);
+void DSound_AdjustSamplePlayback(dsound_sample_t *sample, int32_t bytesLeft);
+bool DSound_BufferUnderrunOccurred(dsound_sample_t *sample);
+void DSound_HandleBufferUnderrun(dsound_sample_t *sample);
+void DSound_SampleFrame(dsound_sample_t *sample);
+dsound_sample_t *DSound_NewSample();
+char DSound_StopSample(dsound_sample_t *sample);
+int32_t DSound_Init(bool callDsoundInit, HWND__ *handle);
+void DSound_Shutdown();
 
 
 
 // record_dsound
-void __cdecl DSOUNDRecord_UpdateSample(dsound_sample_t *pRecSample);
-void __cdecl DSOUNDRecord_Frame();
-dsound_sample_t *__cdecl DSOUNDRecord_NewSample();
-int32_t __cdecl DSOUNDRecord_DestroySample(dsound_sample_t *pRecSample);
-HRESULT __cdecl DSOUNDRecord_Start(dsound_sample_t *pRecSample);
-HRESULT __cdecl DSOUNDRecord_Stop(dsound_sample_t *pRecSample);
-int32_t __cdecl DSOUNDRecord_Init(bool bCallDsoundInit);
-void __cdecl DSOUNDRecord_Shutdown();
+void DSOUNDRecord_UpdateSample(dsound_sample_t *pRecSample);
+void DSOUNDRecord_Frame();
+dsound_sample_t *DSOUNDRecord_NewSample();
+int32_t DSOUNDRecord_DestroySample(dsound_sample_t *pRecSample);
+HRESULT DSOUNDRecord_Start(dsound_sample_t *pRecSample);
+HRESULT DSOUNDRecord_Stop(dsound_sample_t *pRecSample);
+int32_t DSOUNDRecord_Init(bool bCallDsoundInit);
+void DSOUNDRecord_Shutdown();
 
-void __cdecl Record_SetRecordingCallback(int32_t(__cdecl *new_audioCallback)(audioSample_t *));
+void Record_SetRecordingCallback(int32_t(*new_audioCallback)(audioSample_t *));
 
 
 
 // encode
-void __cdecl Encode_SetOptions(int32_t frequency, int32_t quality);
-bool __cdecl Encode_Init(int32_t bandwidthEnum);
-char __cdecl Encode_Shutdown();
-int32_t __cdecl Encode_Sample(int16_t *buffer_in, char *buffer_out, int32_t maxLength);
-int32_t __cdecl Encode_GetFrameSize();
+void Encode_SetOptions(int32_t frequency, int32_t quality);
+bool Encode_Init(int32_t bandwidthEnum);
+char Encode_Shutdown();
+int32_t Encode_Sample(int16_t *buffer_in, char *buffer_out, int32_t maxLength);
+int32_t Encode_GetFrameSize();
 
 
 // decode
-char __cdecl Decode_Init(int32_t bandwidthEnum);
-void __cdecl Decode_SetOptions();
-void __cdecl Decode_Shutdown();
-int32_t __cdecl Decode_Sample(char *buffer, int32_t maxLength, int16_t *out, int32_t frame_size);
+char Decode_Init(int32_t bandwidthEnum);
+void Decode_SetOptions();
+void Decode_Shutdown();
+int32_t Decode_Sample(char *buffer, int32_t maxLength, int16_t *out, int32_t frame_size);
 
 
 extern int32_t g_frame_size;

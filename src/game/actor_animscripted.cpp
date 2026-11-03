@@ -10,12 +10,12 @@
 #include "actor_orientation.h"
 #include <script/scr_const.h>
 
-bool __cdecl Actor_ScriptedAnim_Start(actor_s *self, ai_state_t ePrevState)
+bool Actor_ScriptedAnim_Start(actor_s *self, ai_state_t ePrevState)
 {
     return 1;
 }
 
-void __cdecl Actor_ScriptedAnim_Finish(actor_s *self, ai_state_t eNextState)
+void Actor_ScriptedAnim_Finish(actor_s *self, ai_state_t eNextState)
 {
     gentity_s *ent; // r31
 
@@ -28,7 +28,7 @@ void __cdecl Actor_ScriptedAnim_Finish(actor_s *self, ai_state_t eNextState)
     }
 }
 
-actor_think_result_t __cdecl Actor_ScriptedAnim_Think(actor_s *self)
+actor_think_result_t Actor_ScriptedAnim_Think(actor_s *self)
 {
     int keepNodeDuringScriptedAnim; // r10
     gentity_s *ent; // r30
@@ -74,13 +74,13 @@ actor_think_result_t __cdecl Actor_ScriptedAnim_Think(actor_s *self)
     return ACTOR_THINK_DONE;
 }
 
-bool __cdecl Actor_CustomAnim_Start(actor_s *self, ai_state_t ePrevState)
+bool Actor_CustomAnim_Start(actor_s *self, ai_state_t ePrevState)
 {
     Scr_Notify(self->ent, scr_const.begin_custom_anim, 0);
     return 1;
 }
 
-actor_think_result_t __cdecl Actor_CustomAnim_Think(actor_s *self)
+actor_think_result_t Actor_CustomAnim_Think(actor_s *self)
 {
     scr_animscript_t *p_AnimScriptSpecific; // r28
     int keepNodeDuringScriptedAnim; // r10

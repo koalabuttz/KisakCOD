@@ -43,7 +43,7 @@ extern void Assert( const char *file, int line, int type, const char *fmt, ... )
 // gfx_d3d/r_material.cpp — looks up a material constant (e.g. "colorTint") by name
 // and copies its vec4 literal into the out vector (IDB 0x51AD50).  Pointer-only here
 // (Material is forward-declared in qe3.h), so a forward decl is enough.
-extern char __cdecl Material_GetConstantValue( Material *material, const char *name, float *outValue );
+extern char Material_GetConstantValue( Material *material, const char *name, float *outValue );
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MtlDef_IsValid — the invariant asserted throughout: exactly one of lyrMtl/radMtl.

@@ -9,7 +9,7 @@
 //struct GfxDrawMethod gfxDrawMethod 85b93648     gfx_d3d : r_draw_method.obj
 GfxDrawMethod gfxDrawMethod;
 
-void __cdecl R_InitDrawMethod()
+void R_InitDrawMethod()
 {
     if (r_fullbright->current.enabled)
     {
@@ -141,7 +141,7 @@ void R_SetDefaultLitTechTypes()
     gfxDrawMethod.litTechType[12][6] = TECHNIQUE_NONE;
 }
 
-void __cdecl R_ForceLitTechType(MaterialTechniqueType litTechType)
+void R_ForceLitTechType(MaterialTechniqueType litTechType)
 {
     uint32_t surfType; // [esp+0h] [ebp-8h]
     uint32_t lightType; // [esp+4h] [ebp-4h]
@@ -153,7 +153,7 @@ void __cdecl R_ForceLitTechType(MaterialTechniqueType litTechType)
     }
 }
 
-void __cdecl R_UpdateDrawMethod(GfxBackEndData *data, const GfxViewInfo *viewInfo)
+void R_UpdateDrawMethod(GfxBackEndData *data, const GfxViewInfo *viewInfo)
 {
     uint32_t primaryLightIndex; // [esp+4h] [ebp-Ch]
     uint32_t surfType; // [esp+8h] [ebp-8h]

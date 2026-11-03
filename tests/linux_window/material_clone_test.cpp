@@ -20,7 +20,7 @@ void Cleanup() { for(auto item:allocations)std::free(item.data);allocations.clea
 void MyAssertHandler(const char *file,int line,int,const char *,...) {
     std::fprintf(stderr,"Unexpected production assertion %s:%d\n",file,line);std::abort();
 }
-uint8_t *__cdecl Material_Alloc(uint32_t size) {
+uint8_t *Material_Alloc(uint32_t size) {
     if(failAfter==0) { failAfter=-1;throw std::bad_alloc(); }
     if(failAfter>0)--failAfter;
     void *memory=nullptr;
@@ -29,8 +29,8 @@ uint8_t *__cdecl Material_Alloc(uint32_t size) {
     std::memset(bytes,0,size);std::memset(bytes+size,0xa5,32);
     allocations.push_back({bytes,size});return bytes;
 }
-void __cdecl Material_GetHashIndex(const char *,uint16_t *index,bool *exists) { *index=5;*exists=existing; }
-void __cdecl Material_Add(Material *material,uint16_t index) { ++published;rg.materialHashTable[index]=material; }
+void Material_GetHashIndex(const char *,uint16_t *index,bool *exists) { *index=5;*exists=existing; }
+void Material_Add(Material *material,uint16_t index) { ++published;rg.materialHashTable[index]=material; }
 
 int main() {
     try {

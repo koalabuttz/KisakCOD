@@ -33,7 +33,7 @@ static const float g_clipSpacePoints[4][3] =
 };
 
 // LWSS: separate from the one in r_shadowcookie
-static void __cdecl R_GetSunAxes2(float (*sunAxis)[3][3])
+static void R_GetSunAxes2(float (*sunAxis)[3][3])
 {
     float v1; // [esp+0h] [ebp-1Ch]
 
@@ -63,7 +63,7 @@ static void __cdecl R_GetSunAxes2(float (*sunAxis)[3][3])
     Vec3Cross((const float *)sunAxis, (*sunAxis)[1], (*sunAxis)[2]);
 }
 
-void __cdecl R_SunShadowMapBoundingPoly(
+void R_SunShadowMapBoundingPoly(
     const GfxSunShadowBoundingPoly *boundingPoly,
     float sampleSize,
     float (*polyInClipSpace)[9][2],
@@ -86,7 +86,7 @@ void __cdecl R_SunShadowMapBoundingPoly(
     }
 }
 
-static uint32_t __cdecl R_SunShadowMapClipSpaceClipPlanes(
+static uint32_t R_SunShadowMapClipSpaceClipPlanes(
     const GfxSunShadowBoundingPoly *boundingPoly,
     int partitionIndex,
     float sampleSize,
@@ -142,7 +142,7 @@ static uint32_t __cdecl R_SunShadowMapClipSpaceClipPlanes(
     return planeCount;
 }
 
-void __cdecl R_SetupSunShadowMaps(const GfxViewParms *viewParms, GfxSunShadow *sunShadow)
+void R_SetupSunShadowMaps(const GfxViewParms *viewParms, GfxSunShadow *sunShadow)
 {
     float sunOrigin[3]; // [esp+50h] [ebp-100h] BYREF
     uint32_t planeCount; // [esp+5Ch] [ebp-F4h]
@@ -228,7 +228,7 @@ void __cdecl R_SetupSunShadowMaps(const GfxViewParms *viewParms, GfxSunShadow *s
         &sunShadow->lookupMatrix);
 }
 
-void __cdecl R_GetSceneExtentsAlongDir(const float *origin, const float *forward, float *nearCap, float *farCap)
+void R_GetSceneExtentsAlongDir(const float *origin, const float *forward, float *nearCap, float *farCap)
 {
     DpvsPlane nearPlane;
     float distMin;
@@ -261,7 +261,7 @@ void __cdecl R_GetSceneExtentsAlongDir(const float *origin, const float *forward
     *farCap = distMax;
 }
 
-void __cdecl R_SunShadowMapProjectionMatrix(
+void R_SunShadowMapProjectionMatrix(
     const float *snappedViewOrgInClipSpace,
     float shadowSampleSize,
     float nearClip,
@@ -286,7 +286,7 @@ void __cdecl R_SunShadowMapProjectionMatrix(
 }
 
 
-static void __cdecl R_GetFrustumNearClipPoints(const GfxMatrix *invViewProjMtx, float (*frustumPoints)[4][3])
+static void R_GetFrustumNearClipPoints(const GfxMatrix *invViewProjMtx, float (*frustumPoints)[4][3])
 {
     R_ClipSpaceToWorldSpace(invViewProjMtx, &g_clipSpacePoints, 4, frustumPoints);
 }
@@ -294,7 +294,7 @@ static void __cdecl R_GetFrustumNearClipPoints(const GfxMatrix *invViewProjMtx, 
 // This entire function checked for accuracy
 // While some of the floats may be off by 0.01, it's sound.
 // The only thing not checked were the called bounding poly functions at the bottom (bounding seems OK)
-void __cdecl R_SetupSunShadowMapProjection(
+void R_SetupSunShadowMapProjection(
     const GfxViewParms *viewParms,
     const float (*sunAxis)[3][3],
     GfxSunShadow *sunShadow,
@@ -647,7 +647,7 @@ void __cdecl R_SetupSunShadowMapProjection(
     R_SetupNearRegionPlane(partitionFraction);
 }
 
-void __cdecl R_ClipSpaceToWorldSpace(
+void R_ClipSpaceToWorldSpace(
     const GfxMatrix *invViewProjMtx,
     const float (*clipSpacePoints)[4][3],
     int pointCount,
@@ -676,7 +676,7 @@ void __cdecl R_ClipSpaceToWorldSpace(
     }
 }
 
-void __cdecl R_SetupSunShadowBoundingPoly(
+void R_SetupSunShadowBoundingPoly(
     float (*frustumPointsInSunProj)[2],
     const float *viewOrgInSunProj,
     const float *snappedViewOrgInSunProj,
@@ -717,7 +717,7 @@ void __cdecl R_SetupSunShadowBoundingPoly(
     boundingPoly->snapDelta[1] = viewOrgInSunProj[1] - snappedViewOrgInSunProj[1];
 }
 
-void __cdecl R_SetupSunShadowMapViewMatrix(
+void R_SetupSunShadowMapViewMatrix(
     const float *snappedViewOrgInSunProj,
     const float (*sunAxis)[3][3],
     GfxSunShadowProjection *sunProj)
@@ -740,7 +740,7 @@ void __cdecl R_SetupSunShadowMapViewMatrix(
     sunProj->viewMatrix[3][3] = 1.0f;
 }
 
-void __cdecl R_SetupSunShadowMapPartitionFraction(
+void R_SetupSunShadowMapPartitionFraction(
     const GfxViewParms *viewParms,
     float scaleToFitUsable,
     GfxSunShadowProjection *sunProj,
@@ -760,7 +760,7 @@ void __cdecl R_SetupSunShadowMapPartitionFraction(
     partitionFraction[3] = -Vec3Dot(viewParms->origin, partitionFraction);
 }
 
-void __cdecl R_GetSunShadowMapPartitionViewOrgInTextureSpace(
+void R_GetSunShadowMapPartitionViewOrgInTextureSpace(
     const float *viewOrgInPixels, // base (in texels) of the cascade within the shadowmap
     const float *viewOrgInSunProj, // view Origin in the Sun space (2D world units)
     const float *snappedViewOrgInSunProj, // view origin snapped to the shadowmap texel grid
@@ -776,7 +776,7 @@ void __cdecl R_GetSunShadowMapPartitionViewOrgInTextureSpace(
     viewOrgInTexSpace[1] = floor(snappedViewOrgInPixels[1]) * (1.0f / 1024.0f);
 }
 
-void __cdecl R_SetupNearRegionPlane(const float *partitionFraction)
+void R_SetupNearRegionPlane(const float *partitionFraction)
 {
     float size; // [esp+24h] [ebp-14h]
     DpvsPlane *shadowFarPlane; // [esp+28h] [ebp-10h]
@@ -823,7 +823,7 @@ void __cdecl R_SetupNearRegionPlane(const float *partitionFraction)
     }
 }
 
-void __cdecl R_GetSunShadowLookupMatrix(
+void R_GetSunShadowLookupMatrix(
     const GfxViewParms *shadowViewParms,
     const GfxSunShadowProjection *sunProj,
     const float *partitionFraction,
@@ -872,7 +872,7 @@ void __cdecl R_GetSunShadowLookupMatrix(
     lookupMatrix->m[3][3] = partitionFraction[3];
 }
 
-void __cdecl R_SunShadowMaps()
+void R_SunShadowMaps()
 {
     uint32_t oldViewIndex;
     int partitionIndex;
@@ -898,7 +898,7 @@ void __cdecl R_SunShadowMaps()
     R_SetVisData(oldViewIndex);
 }
 
-void __cdecl R_MergeAndEmitSunShadowMapsSurfs(GfxViewInfo *viewInfo)
+void R_MergeAndEmitSunShadowMapsSurfs(GfxViewInfo *viewInfo)
 {
     int firstDrawSurf; // [esp+38h] [ebp-14h]
     GfxDrawSurfListInfo *info; // [esp+3Ch] [ebp-10h]

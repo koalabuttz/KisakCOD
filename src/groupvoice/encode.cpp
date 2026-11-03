@@ -15,7 +15,7 @@ int32_t g_speex_initialized;
 int32_t g_current_bandwidth_setting;
 int32_t g_frame_size;
 
-void __cdecl Encode_SetOptions(int32_t frequency, int32_t quality)
+void Encode_SetOptions(int32_t frequency, int32_t quality)
 {
     int32_t yes = 1;
     speex_encoder_ctl(g_encoder, SPEEX_SET_SAMPLING_RATE, &frequency);
@@ -27,7 +27,7 @@ void __cdecl Encode_SetOptions(int32_t frequency, int32_t quality)
     g_encoder_samplerate = frequency;
 }
 
-bool __cdecl Encode_Init(int32_t bandwidthEnum)
+bool Encode_Init(int32_t bandwidthEnum)
 {
     void *v1; // eax
 
@@ -62,7 +62,7 @@ bool __cdecl Encode_Init(int32_t bandwidthEnum)
     return g_encoder != 0;
 }
 
-char __cdecl Encode_Shutdown()
+char Encode_Shutdown()
 {
     if (g_encoder)
         speex_encoder_destroy(g_encoder);
@@ -75,7 +75,7 @@ char __cdecl Encode_Shutdown()
     return 1;
 }
 
-int32_t __cdecl Encode_Sample(int16_t *buffer_in, char *buffer_out, int32_t maxLength)
+int32_t Encode_Sample(int16_t *buffer_in, char *buffer_out, int32_t maxLength)
 {
     if (sv_voiceQuality->current.integer != g_encoder_quality)
     {
@@ -87,7 +87,7 @@ int32_t __cdecl Encode_Sample(int16_t *buffer_in, char *buffer_out, int32_t maxL
     return speex_bits_write(&encodeBits, buffer_out, maxLength);
 }
 
-int32_t __cdecl Encode_GetFrameSize()
+int32_t Encode_GetFrameSize()
 {
     return g_frame_size;
 }

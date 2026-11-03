@@ -63,12 +63,12 @@ int  VariableInfoFunctionCompare(void *p_info1, void *p_info2)
 	return -1;
 }
 
-int __cdecl CompareThreadIndices(uint32_t *arg1, uint32_t *arg2)
+int CompareThreadIndices(uint32_t *arg1, uint32_t *arg2)
 {
 	return *arg1 - *arg2;
 }
 
-void __cdecl Scr_Cleanup()
+void Scr_Cleanup()
 {
 	scrVarPub.evaluate = 0;
 }
@@ -1022,7 +1022,7 @@ uint32_t  Scr_FindField(char const* name, int* type)
 	return 0;
 }
 
-void __cdecl Scr_AddFields_LoadObj(const char *path, const char *extension)
+void Scr_AddFields_LoadObj(const char *path, const char *extension)
 {
 	char filename[68]; // [esp+10h] [ebp-58h] BYREF
 	int numFiles; // [esp+58h] [ebp-10h] BYREF
@@ -1199,7 +1199,7 @@ void  Scr_DumpScriptVariables(bool spreadsheet,
 {
 	uint32_t NumScriptVars; // eax
 	const char* pos; // [esp+0h] [ebp-24h]
-	int(__cdecl * VariableInfoCompareCallBack)(const void*, const void*); // [esp+4h] [ebp-20h]
+	int(* VariableInfoCompareCallBack)(const void*, const void*); // [esp+4h] [ebp-20h]
 	uint32_t index; // [esp+8h] [ebp-1Ch]
 	VariableDebugInfo* pInfo; // [esp+Ch] [ebp-18h]
 	VariableDebugInfo* pInfoa; // [esp+Ch] [ebp-18h]
@@ -2716,7 +2716,7 @@ void  Scr_EvalInequality(VariableValue* value1, VariableValue* value2)
 	value1->u.intValue = value1->u.intValue == 0;
 }
 
-void __cdecl Scr_EvalBinaryOperator(int op, VariableValue *value1, VariableValue *value2)
+void Scr_EvalBinaryOperator(int op, VariableValue *value1, VariableValue *value2)
 {
 	switch (op)
 	{
@@ -3301,7 +3301,7 @@ int VariableInfoCountCompare(_DWORD* info1, _DWORD* info2)
 	return info1[3] - info2[3];
 }
 
-int __cdecl VariableInfoFileLineCompare(_DWORD* info1, _DWORD* info2)
+int VariableInfoFileLineCompare(_DWORD* info1, _DWORD* info2)
 {
 	int fileCompare; // [esp+0h] [ebp-4h]
 
@@ -3595,7 +3595,7 @@ char* Scr_GetSourceFile(char const* filename)
 	return sourceBuffer;
 }
 
-char *__cdecl Scr_GetSourceFile_LoadObj(const char *filename)
+char *Scr_GetSourceFile_LoadObj(const char *filename)
 {
 	const char *v1; // eax
 	char *sourceBuffer; // [esp+0h] [ebp-Ch]

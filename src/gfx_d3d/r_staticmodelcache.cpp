@@ -20,7 +20,7 @@
 static_model_cache_t s_cache;
 
 
-void __cdecl TRACK_r_staticmodelcache()
+void TRACK_r_staticmodelcache()
 {
     track_static_alloc_internal(&s_cache, sizeof(static_model_cache_t), "s_cache", 18);
 }
@@ -31,7 +31,7 @@ void *R_AllocStaticModelCache()
     return R_AllocDynamicVertexBuffer(&gfxBuf.smodelCacheVb, 0x800000);
 }
 
-void __cdecl R_InitStaticModelCache()
+void R_InitStaticModelCache()
 {
     R_AllocStaticModelCache();
     SMC_ClearCache();
@@ -45,7 +45,7 @@ static_model_leaf_t *SMC_GetLeaf(uint32_t cacheIndex)
     return retval;
 }
 
-void __cdecl R_ShutdownStaticModelCache()
+void R_ShutdownStaticModelCache()
 {
     IDirect3DVertexBuffer9 *varCopy; // [esp+0h] [ebp-4h]
 
@@ -70,7 +70,7 @@ void __cdecl R_ShutdownStaticModelCache()
     }
 }
 
-void __cdecl R_CacheStaticModelIndices(uint32_t smodelIndex, uint32_t lod, uint32_t cacheBaseVertIndex)
+void R_CacheStaticModelIndices(uint32_t smodelIndex, uint32_t lod, uint32_t cacheBaseVertIndex)
 {
     uint32_t surfIndex; // [esp+30h] [ebp-2Ch]
     uint32_t baseIndex; // [esp+38h] [ebp-24h]
@@ -121,7 +121,7 @@ void __cdecl R_CacheStaticModelIndices(uint32_t smodelIndex, uint32_t lod, uint3
     }
 }
 
-char __cdecl SMC_ForceFreeBlock(uint32_t smcIndex)
+char SMC_ForceFreeBlock(uint32_t smcIndex)
 {
     static_model_leaf_t *leafs; // [esp+8h] [ebp-8h]
     static_model_tree_t *treenode; // [esp+Ch] [ebp-4h]
@@ -149,7 +149,7 @@ char __cdecl SMC_ForceFreeBlock(uint32_t smcIndex)
     return 1;
 }
 
-char __cdecl SMC_GetFreeBlockOfSize(uint32_t smcIndex, uint32_t listIndex)
+char SMC_GetFreeBlockOfSize(uint32_t smcIndex, uint32_t listIndex)
 {
     static_model_node_list_t *block; // [esp+Ch] [ebp-1Ch]
     static_model_node_list_t *blocka; // [esp+Ch] [ebp-1Ch]
@@ -223,7 +223,7 @@ char __cdecl SMC_GetFreeBlockOfSize(uint32_t smcIndex, uint32_t listIndex)
     return 1;
 }
 
-uint16_t __cdecl SMC_Allocate(uint32_t smcIndex, uint32_t bitCount)
+uint16_t SMC_Allocate(uint32_t smcIndex, uint32_t bitCount)
 {
     static_model_node_list_t *block; // [esp+8h] [ebp-2Ch]
     uint32_t listIndex; // [esp+Ch] [ebp-28h]
@@ -280,7 +280,7 @@ uint16_t __cdecl SMC_Allocate(uint32_t smcIndex, uint32_t bitCount)
     return cacheIndex;
 }
 
-uint16_t __cdecl R_CacheStaticModelSurface(
+uint16_t R_CacheStaticModelSurface(
     uint32_t smcIndex,
     uint32_t smodelIndex,
     const XModelLodInfo *lodInfo)
@@ -380,7 +380,7 @@ uint16_t __cdecl R_CacheStaticModelSurface(
     }
 }
 
-void __cdecl SMC_FreeCachedSurface_r(
+void SMC_FreeCachedSurface_r(
     static_model_tree_t *tree,
     static_model_leaf_t *leafs,
     int nodeIndex,
@@ -452,7 +452,7 @@ void SMC_ClearCache()
     }
 }
 
-void __cdecl R_FlushStaticModelCache()
+void R_FlushStaticModelCache()
 {
     static_model_tree_list_t *next; // [esp+4h] [ebp-10h]
     static_model_tree_t *tree; // [esp+8h] [ebp-Ch]
@@ -484,7 +484,7 @@ void __cdecl R_FlushStaticModelCache()
     }
 }
 
-GfxCachedSModelSurf *__cdecl R_GetCachedSModelSurf(uint32_t cacheIndex)
+GfxCachedSModelSurf *R_GetCachedSModelSurf(uint32_t cacheIndex)
 {
     static_model_leaf_t *leaf;
 
@@ -538,7 +538,7 @@ const GfxBackEndData *RB_PatchStaticModelCache()
     return result;
 }
 
-void __cdecl R_StaticModelCacheStats_f()
+void R_StaticModelCacheStats_f()
 {
     uint32_t usedCount; // [esp+24h] [ebp-24h]
     uint32_t lodIter; // [esp+28h] [ebp-20h]
@@ -576,13 +576,13 @@ void __cdecl R_StaticModelCacheStats_f()
     }
 }
 
-void __cdecl R_StaticModelCacheFlush_f()
+void R_StaticModelCacheFlush_f()
 {
     R_SyncRenderThread();
     R_ClearAllStaticModelCacheRefs();
 }
 
-void __cdecl R_UncacheStaticModel(uint32_t smodelIndex)
+void R_UncacheStaticModel(uint32_t smodelIndex)
 {
     GfxStaticModelDrawInst *smodelDrawInst; // [esp+0h] [ebp-14h]
     uint32_t lod; // [esp+Ch] [ebp-8h]
@@ -603,7 +603,7 @@ void __cdecl R_UncacheStaticModel(uint32_t smodelIndex)
     }
 }
 
-void __cdecl R_ClearAllStaticModelCacheRefs()
+void R_ClearAllStaticModelCacheRefs()
 {
     uint32_t smodelCount; // [esp+0h] [ebp-8h]
     uint32_t smodelIndex; // [esp+4h] [ebp-4h]
@@ -616,7 +616,7 @@ void __cdecl R_ClearAllStaticModelCacheRefs()
     }
 }
 
-void __cdecl SetupTransformUnitVec(const float4 *mtx, int (*fixedMtx)[3])
+void SetupTransformUnitVec(const float4 *mtx, int (*fixedMtx)[3])
 {
     (*fixedMtx)[0] = (int)(mtx->v[0] * (float)32768.0);
     (*fixedMtx)[1] = (int)(mtx->v[1] * (float)32768.0);
@@ -629,7 +629,7 @@ void __cdecl SetupTransformUnitVec(const float4 *mtx, int (*fixedMtx)[3])
     (*fixedMtx)[8] = (int)(mtx[2].v[2] * (float)32768.0);
 }
 
-PackedUnitVec __cdecl LocalTransformUnitVec(PackedUnitVec in, const int (*fixedMtx)[3])
+PackedUnitVec LocalTransformUnitVec(PackedUnitVec in, const int (*fixedMtx)[3])
 {
     PackedUnitVec out; // [esp+0h] [ebp-10h]
 
@@ -649,7 +649,7 @@ PackedUnitVec __cdecl LocalTransformUnitVec(PackedUnitVec in, const int (*fixedM
     return out;
 }
 
-void __cdecl R_SkinXSurfaceStaticVerts(
+void R_SkinXSurfaceStaticVerts(
     const float4 *useAxis,
     const int (*normAxis)[3],
     uint32_t baseVertIndex,
@@ -680,7 +680,7 @@ void __cdecl R_SkinXSurfaceStaticVerts(
     }
 }
 
-void __cdecl R_SkinCachedStaticModelCmd(SkinCachedStaticModelCmd *skinCmd)
+void R_SkinCachedStaticModelCmd(SkinCachedStaticModelCmd *skinCmd)
 {
     float v1; // [esp+94h] [ebp-100h]
     float v2; // [esp+A0h] [ebp-F4h]

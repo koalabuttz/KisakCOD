@@ -3,12 +3,12 @@
 
 #include "qcommon.h"
 
-int __cdecl FS_FileGetFileSize(FILE *file)
+int FS_FileGetFileSize(FILE *file)
 {
     return FileWrapper_GetFileSize(file);
 }
 
-uint32_t __cdecl FS_FileRead(void *ptr, uint32_t len, FILE *stream)
+uint32_t FS_FileRead(void *ptr, uint32_t len, FILE *stream)
 {
     uint32_t read_size; // [esp+0h] [ebp-4h]
 
@@ -28,12 +28,12 @@ uint32_t __cdecl FS_FileRead(void *ptr, uint32_t len, FILE *stream)
     return read_size;
 }
 
-uint32_t __cdecl FS_FileWrite(const void *ptr, uint32_t len, FILE *stream)
+uint32_t FS_FileWrite(const void *ptr, uint32_t len, FILE *stream)
 {
     return fwrite(ptr, 1u, len, stream);
 }
 
-FILE *__cdecl FS_FileOpenReadBinary(const char *filename)
+FILE *FS_FileOpenReadBinary(const char *filename)
 {
     FILE *file; // [esp+0h] [ebp-4h]
 
@@ -43,7 +43,7 @@ FILE *__cdecl FS_FileOpenReadBinary(const char *filename)
     return file;
 }
 
-FILE *__cdecl FS_FileOpenReadText(const char *filename)
+FILE *FS_FileOpenReadText(const char *filename)
 {
     FILE *file; // [esp+0h] [ebp-4h]
 
@@ -53,7 +53,7 @@ FILE *__cdecl FS_FileOpenReadText(const char *filename)
     return file;
 }
 
-FILE *__cdecl FS_FileOpenWriteBinary(const char *filename)
+FILE *FS_FileOpenWriteBinary(const char *filename)
 {
     FILE *file; // [esp+0h] [ebp-4h]
 
@@ -63,7 +63,7 @@ FILE *__cdecl FS_FileOpenWriteBinary(const char *filename)
     return file;
 }
 
-FILE *__cdecl FS_FileOpenAppendText(const char *filename)
+FILE *FS_FileOpenAppendText(const char *filename)
 {
     FILE *file; // [esp+0h] [ebp-4h]
 
@@ -73,7 +73,7 @@ FILE *__cdecl FS_FileOpenAppendText(const char *filename)
     return file;
 }
 
-FILE *__cdecl FS_FileOpenWriteText(const char *filename)
+FILE *FS_FileOpenWriteText(const char *filename)
 {
     FILE *file; // [esp+0h] [ebp-4h]
 
@@ -93,7 +93,7 @@ FILE *FS_FileOpenWriteReadBinary(const char *filename)
     return file;
 }
 
-int __cdecl FS_FileSeek(FILE *file, int offset, int whence)
+int FS_FileSeek(FILE *file, int offset, int whence)
 {
     int seek; // [esp+4h] [ebp-4h]
 
@@ -103,7 +103,7 @@ int __cdecl FS_FileSeek(FILE *file, int offset, int whence)
     return seek;
 }
 
-int __cdecl FileWrapper_Seek(FILE *h, int offset, int origin)
+int FileWrapper_Seek(FILE *h, int offset, int origin)
 {
     const char *v4; // eax
 
@@ -124,7 +124,7 @@ int __cdecl FileWrapper_Seek(FILE *h, int offset, int origin)
     return 0;
 }
 
-int __cdecl FileWrapper_GetFileSize(FILE *h)
+int FileWrapper_GetFileSize(FILE *h)
 {
     int startPos; // [esp+0h] [ebp-8h]
     int fileSize; // [esp+4h] [ebp-4h]

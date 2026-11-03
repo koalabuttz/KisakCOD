@@ -291,7 +291,7 @@ extern CMainFrame *g_pParentWnd;             // 0x25d5a70 (declared again below;
 // moved by WASD/Ctrl+click).  Defined here because DrawZIcon reads it.
 static float m_Camera_origin0 = 0.0f;
 static float m_Camera_origin1 = 0.0f;
-extern void __cdecl R_AddRenderCmdDrawTris(                       // (also declared near DrawSelectionBox)
+extern void R_AddRenderCmdDrawTris(                       // (also declared near DrawSelectionBox)
     Material *material, MaterialTechniqueType techType, short indexCount,
     const uint16_t *indices, short vertexCount,
     const float (*xyzw)[4], const float (*normal)[3], float *color,
@@ -1265,7 +1265,7 @@ static void Ed_PressCallback( int x1, int x2, int y1, int y2, int *out )
 // (0,0,1)x4, st {(0,0),(0,1),(1,1),(1,0)}, depth 131072 on both corners.  Rect normalise:
 // ax=min(x_1,y_1)/bx=max, ay=min(x_2,y_2)/by=max.  The draw gate (camera_fov_setup ==
 // the press callback && d_select_mode in {5,12,13,14,15}) lives in the caller.
-extern void __cdecl R_AddRenderCmdDrawTris(
+extern void R_AddRenderCmdDrawTris(
     Material *material, MaterialTechniqueType techType, short indexCount,
     const uint16_t *indices, short vertexCount,
     const float (*xyzw)[4], const float (*normal)[3], float *color,

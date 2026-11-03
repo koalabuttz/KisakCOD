@@ -3,7 +3,7 @@
 
 int32_t warnCount_1;
 
-void __cdecl FX_OffsetSpawnOrigin(
+void FX_OffsetSpawnOrigin(
     const FxSpatialFrame* effectFrame,
     const FxElemDef* elemDef,
     int32_t randomSeed,
@@ -53,7 +53,7 @@ void __cdecl FX_OffsetSpawnOrigin(
     }
 }
 
-void __cdecl FX_GetOriginForTrailElem(
+void FX_GetOriginForTrailElem(
     FxEffect *effect,
     const FxElemDef *elemDef,
     const FxSpatialFrame *effectFrameWhenPlayed,
@@ -85,7 +85,7 @@ void __cdecl FX_GetOriginForTrailElem(
     FX_OffsetSpawnOrigin(effectFrameWhenPlayed, elemDef, randomSeed, outOrigin);
 }
 
-void __cdecl FX_GetSpawnOrigin(
+void FX_GetSpawnOrigin(
     const FxSpatialFrame *effectFrame,
     const FxElemDef *elemDef,
     int32_t randomSeed,
@@ -102,7 +102,7 @@ void __cdecl FX_GetSpawnOrigin(
         Vec3Add(offset, effectFrame->origin, spawnOrigin);
 }
 
-void __cdecl FX_TransformPosFromLocalToWorld(const FxSpatialFrame *frame, float *posLocal, float *posWorld)
+void FX_TransformPosFromLocalToWorld(const FxSpatialFrame *frame, float *posLocal, float *posWorld)
 {
     float axis[3][3]; // [esp+Ch] [ebp-24h] BYREF
 
@@ -112,7 +112,7 @@ void __cdecl FX_TransformPosFromLocalToWorld(const FxSpatialFrame *frame, float 
     Vec3Mad(posWorld, posLocal[2], axis[2], posWorld);
 }
 
-void __cdecl FX_SpatialFrameToOrientation(const FxSpatialFrame *frame, orientation_t *orient)
+void FX_SpatialFrameToOrientation(const FxSpatialFrame *frame, orientation_t *orient)
 {
     orient->origin[0] = frame->origin[0];
     orient->origin[1] = frame->origin[1];
@@ -120,7 +120,7 @@ void __cdecl FX_SpatialFrameToOrientation(const FxSpatialFrame *frame, orientati
     UnitQuatToAxis(frame->quat, orient->axis);
 }
 
-void __cdecl FX_OrientationDirToWorldDir(const orientation_t *orient, const float *dir, float *out)
+void FX_OrientationDirToWorldDir(const orientation_t *orient, const float *dir, float *out)
 {
     if (dir == out)
         MyAssertHandler(".\\EffectsCore\\fx_update_util.cpp", 184, 0, "%s", "dir != out");
@@ -129,7 +129,7 @@ void __cdecl FX_OrientationDirToWorldDir(const orientation_t *orient, const floa
     out[2] = *dir * orient->axis[0][2] + dir[1] * orient->axis[1][2] + dir[2] * orient->axis[2][2];
 }
 
-void __cdecl FX_GetOrientation(
+void FX_GetOrientation(
     const FxElemDef* elemDef,
     const FxSpatialFrame* frameAtSpawn,
     const FxSpatialFrame* frameNow,
@@ -248,7 +248,7 @@ void __cdecl FX_GetOrientation(
     }
 };
 
-void __cdecl FX_GetVelocityAtTime(
+void FX_GetVelocityAtTime(
     const FxElemDef* elemDef,
     int32_t randomSeed,
     float msecLifeSpan,
@@ -345,7 +345,7 @@ void __cdecl FX_GetVelocityAtTime(
     }
 }
 
-void __cdecl FX_GetVelocityAtTimeInFrame(
+void FX_GetVelocityAtTimeInFrame(
     const FxElemVelStateInFrame *statePrev,
     const FxElemVelStateInFrame *stateNext,
     const float *rangeLerp,
@@ -362,7 +362,7 @@ void __cdecl FX_GetVelocityAtTimeInFrame(
         + velocity[2];
 }
 
-void __cdecl FX_OrientationPosToWorldPos(const orientation_t *orient, const float *pos, float *out)
+void FX_OrientationPosToWorldPos(const orientation_t *orient, const float *pos, float *out)
 {
     if (pos == out)
         MyAssertHandler(".\\EffectsCore\\fx_update_util.cpp", 323, 0, "%s", "pos != out");
@@ -371,7 +371,7 @@ void __cdecl FX_OrientationPosToWorldPos(const orientation_t *orient, const floa
     out[2] = *pos * orient->axis[0][2] + orient->origin[2] + pos[1] * orient->axis[1][2] + pos[2] * orient->axis[2][2];
 }
 
-void __cdecl FX_OrientationPosFromWorldPos(const orientation_t *orient, const float *pos, float *out)
+void FX_OrientationPosFromWorldPos(const orientation_t *orient, const float *pos, float *out)
 {
     float dir; // [esp+0h] [ebp-Ch]
     float dir_4; // [esp+4h] [ebp-8h]
@@ -387,7 +387,7 @@ void __cdecl FX_OrientationPosFromWorldPos(const orientation_t *orient, const fl
     out[2] = dir * orient->axis[2][0] + dir_4 * orient->axis[2][1] + dir_8 * orient->axis[2][2];
 }
 
-void __cdecl FX_AddVisBlocker(FxSystem *system, const float *posWorld, float radius, float opacity)
+void FX_AddVisBlocker(FxSystem *system, const float *posWorld, float radius, float opacity)
 {
     FxVisState *visState; // [esp+1Ch] [ebp-Ch]
     int32_t blockerIndex; // [esp+20h] [ebp-8h]
@@ -426,7 +426,7 @@ void __cdecl FX_AddVisBlocker(FxSystem *system, const float *posWorld, float rad
     }
 }
 
-void __cdecl FX_ToggleVisBlockerFrame(FxSystem *system)
+void FX_ToggleVisBlockerFrame(FxSystem *system)
 {
     FxVisState *visStateSwapCache; // [esp+0h] [ebp-4h]
 
@@ -439,7 +439,7 @@ void __cdecl FX_ToggleVisBlockerFrame(FxSystem *system)
     fx_serverVisClient = system->localClientNum;
 }
 
-char __cdecl FX_CullSphere(const FxCamera *camera, uint32_t frustumPlaneCount, const float *posWorld, float radius)
+char FX_CullSphere(const FxCamera *camera, uint32_t frustumPlaneCount, const float *posWorld, float radius)
 {
     const char *v4; // eax
     const char *v5; // eax
@@ -486,7 +486,7 @@ char __cdecl FX_CullSphere(const FxCamera *camera, uint32_t frustumPlaneCount, c
     return 0;
 }
 
-void __cdecl FX_GetElemAxis(
+void FX_GetElemAxis(
     const FxElemDef* elemDef,
     int32_t randomSeed,
     const orientation_t* orient,
@@ -510,7 +510,7 @@ void __cdecl FX_GetElemAxis(
     FX_AnglesToOrientedAxis(angles, orient, (float(*)[3][3])&axis);
 }
 
-void __cdecl FX_AnglesToOrientedAxis(const float* anglesInRad, const orientation_t* orient, float (*axisOut)[3][3])
+void FX_AnglesToOrientedAxis(const float* anglesInRad, const orientation_t* orient, float (*axisOut)[3][3])
 {
     float v3; // [esp+8h] [ebp-40h]
     float v4; // [esp+14h] [ebp-34h]

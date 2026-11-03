@@ -22,7 +22,7 @@
 void  R_BoxSurfaces(
     const float *mins,
     const float *maxs,
-    int(__cdecl **allowSurf)(int, void *),
+    int(**allowSurf)(int, void *),
     void *callbackContext,
     GfxSurface ***surfLists,
     uint32_t surfListSize,
@@ -58,11 +58,11 @@ void  R_BoxSurfaces(
     }
 }
 
-void __cdecl R_BoxSurfaces_r(
+void R_BoxSurfaces_r(
     mnode_t *node,
     const float *mins,
     const float *maxs,
-    int(__cdecl **allowSurf)(int, void *),
+    int(**allowSurf)(int, void *),
     void *callbackContext,
     GfxSurface ***surfLists,
     uint32_t surfListSize,
@@ -134,11 +134,11 @@ void __cdecl R_BoxSurfaces_r(
     }
 }
 
-void __cdecl R_CellSurfaces(
+void R_CellSurfaces(
     int cellIndex,
     const float *mins,
     const float *maxs,
-    int(__cdecl *allowSurf)(int, void *),
+    int(*allowSurf)(int, void *),
     void *callbackContext,
     GfxSurface **surfList,
     uint32_t surfListSize,
@@ -196,11 +196,11 @@ void __cdecl R_CellSurfaces(
     }
 }
 
-void __cdecl R_AABBTreeSurfaces_r(
+void R_AABBTreeSurfaces_r(
     GfxAabbTree *tree,
     const float *mins,
     const float *maxs,
-    int(__cdecl *allowSurf)(int, void *),
+    int(*allowSurf)(int, void *),
     void *callbackContext,
     GfxSurface **surfList,
     uint32_t surfListSize,
@@ -266,7 +266,7 @@ void __cdecl R_AABBTreeSurfaces_r(
     }
 }
 
-void __cdecl R_AddSurfaceToList(GfxSurface *surf, GfxSurface **surfList, uint32_t *surfCount)
+void R_AddSurfaceToList(GfxSurface *surf, GfxSurface **surfList, uint32_t *surfCount)
 {
     uint32_t listIndex; // [esp+0h] [ebp-4h]
 
@@ -278,11 +278,11 @@ void __cdecl R_AddSurfaceToList(GfxSurface *surf, GfxSurface **surfList, uint32_
     surfList[(*surfCount)++] = surf;
 }
 
-void __cdecl R_CellSurfacesTwoLists(
+void R_CellSurfacesTwoLists(
     int cellIndex,
     const float *mins,
     const float *maxs,
-    int(__cdecl **allowSurf)(int, void *),
+    int(**allowSurf)(int, void *),
     void *callbackContext,
     GfxSurface ***surfLists,
     uint32_t surfListSize,
@@ -348,11 +348,11 @@ void __cdecl R_CellSurfacesTwoLists(
     }
 }
 
-void __cdecl R_AABBTreeSurfacesTwoLists_r(
+void R_AABBTreeSurfacesTwoLists_r(
     GfxAabbTree *tree,
     const float *mins,
     const float *maxs,
-    int(__cdecl **allowSurf)(int, void *),
+    int(**allowSurf)(int, void *),
     void *callbackContext,
     GfxSurface ***surfLists,
     uint32_t surfListSize,
@@ -424,7 +424,7 @@ void __cdecl R_AABBTreeSurfacesTwoLists_r(
 int  R_BoxStaticModels(
     const float *mins,
     const float *maxs,
-    int(__cdecl *allowSModel)(int),
+    int(*allowSModel)(int),
     uint16_t *smodelList,
     int smodelListSize)
 {
@@ -452,11 +452,11 @@ int  R_BoxStaticModels(
     return smodelCount;
 }
 
-void __cdecl R_BoxStaticModels_r(
+void R_BoxStaticModels_r(
     mnode_t *node,
     const float *mins,
     const float *maxs,
-    int(__cdecl *allowSModel)(int),
+    int(*allowSModel)(int),
     uint16_t *smodelList,
     int smodelListSize,
     int *smodelCount,
@@ -488,11 +488,11 @@ void __cdecl R_BoxStaticModels_r(
         R_CellStaticModels(cellIndex - 1, mins, maxs, allowSModel, smodelList, smodelListSize, smodelCount, cellBits);
 }
 
-void __cdecl R_CellStaticModels(
+void R_CellStaticModels(
     int cellIndex,
     const float *mins,
     const float *maxs,
-    int(__cdecl *allowSModel)(int),
+    int(*allowSModel)(int),
     uint16_t *smodelList,
     int smodelListSize,
     int *smodelCount,
@@ -515,11 +515,11 @@ void __cdecl R_CellStaticModels(
     }
 }
 
-void __cdecl R_AABBTreeStaticModels_r(
+void R_AABBTreeStaticModels_r(
     GfxAabbTree *tree,
     const float *mins,
     const float *maxs,
-    int(__cdecl *allowSModel)(int),
+    int(*allowSModel)(int),
     uint16_t *smodelList,
     int smodelListSize,
     int *smodelCount)
@@ -575,7 +575,7 @@ void __cdecl R_AABBTreeStaticModels_r(
     }
 }
 
-void __cdecl R_AddStaticModelToList(int smodelIndex, uint16_t *smodelList, int *smodelCount)
+void R_AddStaticModelToList(int smodelIndex, uint16_t *smodelList, int *smodelCount)
 {
     int listIndex; // [esp+0h] [ebp-4h]
 
@@ -593,7 +593,7 @@ uint32_t  R_CylinderSurfaces(
     float radius,
     const DpvsPlane *planes,
     uint32_t planeCount,
-    int(__cdecl *allowSurf)(int, void *),
+    int(*allowSurf)(int, void *),
     void *callbackContext,
     GfxSurface **surfList,
     uint32_t surfListSize)
@@ -639,14 +639,14 @@ uint32_t  R_CylinderSurfaces(
     return surfCount;
 }
 
-void __cdecl R_CylinderSurfaces_r(
+void R_CylinderSurfaces_r(
     mnode_t *node,
     const float *start,
     const float *end,
     float radius,
     const DpvsPlane *planes,
     uint32_t planeCount,
-    int(__cdecl *allowSurf)(int, void *),
+    int(*allowSurf)(int, void *),
     void *callbackContext,
     GfxSurface **surfList,
     uint32_t surfListSize,
@@ -808,11 +808,11 @@ void __cdecl R_CylinderSurfaces_r(
             cellBits);
 }
 
-void __cdecl R_CellCylinderSurfaces(
+void R_CellCylinderSurfaces(
     int cellIndex,
     const DpvsPlane *planes,
     uint32_t planeCount,
-    int(__cdecl *allowSurf)(int, void *),
+    int(*allowSurf)(int, void *),
     void *callbackContext,
     GfxSurface **surfList,
     uint32_t surfListSize,
@@ -866,7 +866,7 @@ void __cdecl R_CellCylinderSurfaces(
     }
 }
 
-int __cdecl R_OutsideFrustumPlanes(const DpvsPlane *planes, uint32_t planeCount, const float *minmax)
+int R_OutsideFrustumPlanes(const DpvsPlane *planes, uint32_t planeCount, const float *minmax)
 {
     uint32_t plane; // [esp+8h] [ebp-4h]
 
@@ -881,11 +881,11 @@ int __cdecl R_OutsideFrustumPlanes(const DpvsPlane *planes, uint32_t planeCount,
     return 0;
 }
 
-void __cdecl R_AABBTreeCylinderSurfaces_r(
+void R_AABBTreeCylinderSurfaces_r(
     GfxAabbTree *tree,
     const DpvsPlane *planes,
     uint32_t planeCount,
-    int(__cdecl *allowSurf)(int, void *),
+    int(*allowSurf)(int, void *),
     void *callbackContext,
     GfxSurface **surfList,
     uint32_t surfListSize,
@@ -941,7 +941,7 @@ void __cdecl R_AABBTreeCylinderSurfaces_r(
     }
 }
 
-void __cdecl R_MarkUtil_GetDObjAnimMatAndHideParts(
+void R_MarkUtil_GetDObjAnimMatAndHideParts(
     const DObj_s *dobj,
     const cpose_t *pose,
     const DObjAnimMat **outBoneMtxList,
@@ -963,7 +963,7 @@ void __cdecl R_MarkUtil_GetDObjAnimMatAndHideParts(
     DObjGetHidePartBits(dobj, outHidePartBits);
 }
 
-void __cdecl R_MarkFragments_Begin(
+void R_MarkFragments_Begin(
     MarkInfo *markInfo,
     MarkFragmentsAgainstEnum markAgainst,
     const float *origin,
@@ -1004,7 +1004,7 @@ void __cdecl R_MarkFragments_Begin(
     }
 }
 
-void __cdecl R_GetMarkFragmentBounds(
+void R_GetMarkFragmentBounds(
     const float *origin,
     const float (*axis)[3],
     float radius,
@@ -1028,7 +1028,7 @@ void __cdecl R_GetMarkFragmentBounds(
     }
 }
 
-void __cdecl R_GetMarkFragmentClipPlanes(const float *origin, const float (*axis)[3], float radius, float (*planes)[4])
+void R_GetMarkFragmentClipPlanes(const float *origin, const float (*axis)[3], float radius, float (*planes)[4])
 {
     float *v4; // [esp+0h] [ebp-18h]
     float *v5; // [esp+8h] [ebp-10h]
@@ -1056,7 +1056,7 @@ void __cdecl R_GetMarkFragmentClipPlanes(const float *origin, const float (*axis
     }
 }
 
-char __cdecl R_MarkFragments_AddDObj(MarkInfo *markInfo, DObj_s *dObj, cpose_t *pose, uint16_t entityIndex)
+char R_MarkFragments_AddDObj(MarkInfo *markInfo, DObj_s *dObj, cpose_t *pose, uint16_t entityIndex)
 {
     MarkInfoCollidedDObj *collidedDObj; // [esp+0h] [ebp-4h]
 
@@ -1070,7 +1070,7 @@ char __cdecl R_MarkFragments_AddDObj(MarkInfo *markInfo, DObj_s *dObj, cpose_t *
     return 1;
 }
 
-char __cdecl R_MarkFragments_AddBModel(
+char R_MarkFragments_AddBModel(
     MarkInfo *markInfo,
     GfxBrushModel *brushModel,
     cpose_t *pose,
@@ -1088,9 +1088,9 @@ char __cdecl R_MarkFragments_AddBModel(
     return 1;
 }
 
-void __cdecl R_MarkFragments_Go(
+void R_MarkFragments_Go(
     MarkInfo *markInfo,
-    void(__cdecl *callback)(void *, int, FxMarkTri *, int, FxMarkPoint *, const float *, const float *),
+    void(*callback)(void *, int, FxMarkTri *, int, FxMarkPoint *, const float *, const float *),
     void *callbackContext,
     int maxTris,
     FxMarkTri *tris,
@@ -1137,8 +1137,8 @@ void __cdecl R_MarkFragments_Go(
             markInfo->origin[2]);
 }
 
-int(__cdecl *allowSurf[1])(int, void *) = { (int(*)(int, void*))R_AllowMarks };
-char __cdecl R_MarkFragments_WorldBrushes(MarkInfo *markInfo)
+int(*allowSurf[1])(int, void *) = { (int(*)(int, void*))R_AllowMarks };
+char R_MarkFragments_WorldBrushes(MarkInfo *markInfo)
 {
     GfxSurface **surfacesArray[1]; // [esp+298h] [ebp-41Ch] BYREF
     uint32_t surfIndex; // [esp+29Ch] [ebp-418h]
@@ -1190,12 +1190,12 @@ char __cdecl R_MarkFragments_WorldBrushes(MarkInfo *markInfo)
     return 1;
 }
 
-bool __cdecl R_AllowMarks(int surfIndex, const Material *markMaterialAsVoid)
+bool R_AllowMarks(int surfIndex, const Material *markMaterialAsVoid)
 {
     return R_Mark_MaterialAllowsMarks(rgp.world->dpvs.surfaces[surfIndex].material, markMaterialAsVoid);
 }
 
-bool __cdecl R_Mark_MaterialAllowsMarks(const Material *markReceiverMaterialHandle, const Material *markMaterialHandle)
+bool R_Mark_MaterialAllowsMarks(const Material *markReceiverMaterialHandle, const Material *markMaterialHandle)
 {
     if ((markReceiverMaterialHandle->stateFlags & 4) != 0)
         return 0;
@@ -1204,7 +1204,7 @@ bool __cdecl R_Mark_MaterialAllowsMarks(const Material *markReceiverMaterialHand
     return (markReceiverMaterialHandle->info.surfaceTypeBits & markMaterialHandle->info.surfaceTypeBits) == markMaterialHandle->info.surfaceTypeBits;
 }
 
-bool __cdecl R_MarkFragments_BrushSurface(
+bool R_MarkFragments_BrushSurface(
     MarkInfo *markInfo,
     GfxMarkContext *markContext,
     const float (*clipPlanes)[4],
@@ -1339,7 +1339,7 @@ bool __cdecl R_MarkFragments_BrushSurface(
     return true;
 }
 
-int __cdecl R_ChopWorldPolyBehindPlane(
+int R_ChopWorldPolyBehindPlane(
     int inPointCount,
     FxWorldMarkPoint *inPoints,
     FxWorldMarkPoint *outPoints,
@@ -1468,7 +1468,7 @@ int __cdecl R_ChopWorldPolyBehindPlane(
     }
 }
 
-bool __cdecl R_MarkFragment_IsTriangleRejected(
+bool R_MarkFragment_IsTriangleRejected(
     const float *markNormal,
     const float *xyz0,
     const float *xyz1,
@@ -1490,7 +1490,7 @@ bool __cdecl R_MarkFragment_IsTriangleRejected(
     return Vec3LengthSq(scaledNormal) * 0.25 > v5;
 }
 
-void __cdecl R_MarkFragment_SetupWorldClipPoints(
+void R_MarkFragment_SetupWorldClipPoints(
     const GfxWorldVertex *triVerts0,
     const uint16_t *indices,
     FxWorldMarkPoint(*clipPoints)[9])
@@ -1513,7 +1513,7 @@ void __cdecl R_MarkFragment_SetupWorldClipPoints(
     }
 }
 
-char __cdecl R_MarkFragments_EntBrushes(MarkInfo *markInfo)
+char R_MarkFragments_EntBrushes(MarkInfo *markInfo)
 {
     float invPoseMatrix[4][3]; // [esp+10h] [ebp-128h] BYREF
     float negatedPoseOrigin[3]; // [esp+40h] [ebp-F8h] BYREF
@@ -1582,7 +1582,7 @@ char __cdecl R_MarkFragments_EntBrushes(MarkInfo *markInfo)
     return 1;
 }
 
-void __cdecl R_Mark_TransformClipPlanes(const float (*inClipPlanes)[4], float (*matrix)[3], float (*outClipPlanes)[4])
+void R_Mark_TransformClipPlanes(const float (*inClipPlanes)[4], float (*matrix)[3], float (*outClipPlanes)[4])
 {
     float v3; // [esp+4h] [ebp-8h]
     int planeIndex; // [esp+8h] [ebp-4h]
@@ -1597,7 +1597,7 @@ void __cdecl R_Mark_TransformClipPlanes(const float (*inClipPlanes)[4], float (*
     }
 }
 
-char __cdecl R_MarkFragments_Models(MarkInfo *markInfo)
+char R_MarkFragments_Models(MarkInfo *markInfo)
 {
     iassert( !markInfo->markHasLightmap );
     iassert( !( markInfo->usedTriCount || markInfo->usedPointCount ) );
@@ -1610,7 +1610,7 @@ char __cdecl R_MarkFragments_Models(MarkInfo *markInfo)
     return 1;
 }
 
-char __cdecl R_MarkFragments_SceneDObjs(MarkInfo *markInfo)
+char R_MarkFragments_SceneDObjs(MarkInfo *markInfo)
 {
     int v1; // eax
     int submodelIndex; // [esp+6Ch] [ebp-3Ch]
@@ -1664,7 +1664,7 @@ char __cdecl R_MarkFragments_SceneDObjs(MarkInfo *markInfo)
     return 1;
 }
 
-char __cdecl R_MarkFragments_AnimatedXModel(
+char R_MarkFragments_AnimatedXModel(
     MarkInfo* markInfo,
     const XModel* model,
     const uint32_t* hidePartBits,
@@ -1749,7 +1749,7 @@ char __cdecl R_MarkFragments_AnimatedXModel(
     return 1;
 }
 
-int __cdecl R_AddMarkFragment_1_(
+int R_AddMarkFragment_1_(
     FxModelMarkPoint(*clipPoints)[9],
     const float (*planes)[4],
     const GfxMarkContext *markContext,
@@ -1845,7 +1845,7 @@ int __cdecl R_AddMarkFragment_1_(
     return clipPointCount;
 }
 
-char __cdecl R_MarkFragment_DoTriangle_1_(
+char R_MarkFragment_DoTriangle_1_(
     MarkInfo *markInfo,
     const float (*clipPlanes)[4],
     const GfxMarkContext *markContext,
@@ -1884,7 +1884,7 @@ char __cdecl R_MarkFragment_DoTriangle_1_(
     return 1;
 }
 
-bool __cdecl R_MarkModelCoreCallback_1_(
+bool R_MarkModelCoreCallback_1_(
     MarkModelCoreContext *contextAsVoid,
     const GfxPackedVertex **triVerts0,
     const GfxPackedVertex **triVerts1)
@@ -1924,7 +1924,7 @@ bool __cdecl R_MarkModelCoreCallback_1_(
             clipPoints) != 0;
 }
 
-int __cdecl R_AddMarkFragment_0_(
+int R_AddMarkFragment_0_(
     FxModelMarkPoint(*clipPoints)[9],
     const float (*planes)[4],
     const GfxMarkContext *markContext,
@@ -2013,7 +2013,7 @@ int __cdecl R_AddMarkFragment_0_(
     return clipPointCount;
 }
 
-char __cdecl R_MarkFragment_DoTriangle_0_(
+char R_MarkFragment_DoTriangle_0_(
     MarkInfo *markInfo,
     const float (*clipPlanes)[4],
     const GfxMarkContext *markContext,
@@ -2052,7 +2052,7 @@ char __cdecl R_MarkFragment_DoTriangle_0_(
     return 1;
 }
 
-bool __cdecl R_MarkModelCoreCallback_0_(
+bool R_MarkModelCoreCallback_0_(
     void *contextAsVoid,
     const GfxPackedVertex **triVerts0,
     const GfxPackedVertex **triVerts1)
@@ -2090,7 +2090,7 @@ bool __cdecl R_MarkModelCoreCallback_0_(
             clipPoints) != 0;
 }
 
-void __cdecl DObjSkelMatToMatrix43(const DObjSkelMat *inSkelMat, float (*outMatrix)[3])
+void DObjSkelMatToMatrix43(const DObjSkelMat *inSkelMat, float (*outMatrix)[3])
 {
     float *v2; // r10
     const float *v3; // r11
@@ -2190,7 +2190,7 @@ char  R_MarkFragments_AnimatedXModel_VertList(
     return 1;
 }
 
-char __cdecl R_MarkFragments_StaticModels(MarkInfo *markInfo)
+char R_MarkFragments_StaticModels(MarkInfo *markInfo)
 {
     float v2; // [esp+E8h] [ebp-6Ch]
     float v3; // [esp+ECh] [ebp-68h]
@@ -2280,7 +2280,7 @@ char __cdecl R_MarkFragments_StaticModels(MarkInfo *markInfo)
     return 1;
 }
 
-char __cdecl R_MarkFragments_EntirelyRigidXModel(
+char R_MarkFragments_EntirelyRigidXModel(
     MarkInfo *markInfo,
     const XModel *xmodel,
     const float (*modelAxis)[3],
@@ -2313,7 +2313,7 @@ char __cdecl R_MarkFragments_EntirelyRigidXModel(
     return 1;
 }
 
-char __cdecl R_MarkFragments_XModelSurface_Basic(
+char R_MarkFragments_XModelSurface_Basic(
     MarkInfo *markInfo,
     const XSurface *surface,
     const float (*modelAxis)[3],
@@ -2361,14 +2361,14 @@ char __cdecl R_MarkFragments_XModelSurface_Basic(
             vertListIndex,
             localMins,
             localMaxs,
-            (bool(__cdecl *)(void *, const GfxPackedVertex **, const GfxPackedVertex **))R_MarkModelCoreCallback_1_,
+            (bool(*)(void *, const GfxPackedVertex **, const GfxPackedVertex **))R_MarkModelCoreCallback_1_,
             &markModelCoreContext))
             return 0;
     }
     return 1;
 }
 
-int __cdecl R_ChopPolyBehindPlane(
+int R_ChopPolyBehindPlane(
     int inPointCount,
     FxModelMarkPoint *inPoints,
     FxModelMarkPoint *outPoints,
@@ -2493,7 +2493,7 @@ int __cdecl R_ChopPolyBehindPlane(
     }
 }
 
-void __cdecl R_LerpModelMarkPoints(
+void R_LerpModelMarkPoints(
     const FxModelMarkPoint *from,
     const FxModelMarkPoint *to,
     float lerp,

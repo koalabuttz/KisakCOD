@@ -29,12 +29,12 @@ struct alignas(4) SaveMemoryGlob
 SaveMemoryGlob saveMemoryGlob;
 int g_saveId;
 
-unsigned int __cdecl Com_BlockChecksum32(const void *buffer, unsigned int length)
+unsigned int Com_BlockChecksum32(const void *buffer, unsigned int length)
 {
     return Com_BlockChecksumKey32((const unsigned char*)buffer, length, 0);
 }
 
-void __cdecl TRACK_save_memory()
+void TRACK_save_memory()
 {
     track_static_alloc_internal(&saveMemoryGlob, 4722040, "saveMemoryGlob", 10);
 }
@@ -47,7 +47,7 @@ MemoryFile * SaveMemory_GetMemoryFile(SaveGame *save)
     return (MemoryFile*)save;
 }
 
-SaveGame *__cdecl SaveMemory_GetSaveHandle(unsigned int type)
+SaveGame *SaveMemory_GetSaveHandle(unsigned int type)
 {
     if (!type)
         return saveMemoryGlob.currentGameSave;
@@ -60,7 +60,7 @@ SaveGame *__cdecl SaveMemory_GetSaveHandle(unsigned int type)
     return 0;
 }
 
-void __cdecl SaveMemory_ClearSaveGame(SaveGame *saveGame, bool isUsingGlobalBuffer)
+void SaveMemory_ClearSaveGame(SaveGame *saveGame, bool isUsingGlobalBuffer)
 {
     memset(saveGame, 0, sizeof(SaveGame));
     saveGame->isUsingGlobalBuffer = isUsingGlobalBuffer;
@@ -83,7 +83,7 @@ void *SaveMemory_ResetGameBuffers()
     return result;
 }
 
-void __cdecl SaveMemory_InitializeSaveSystem()
+void SaveMemory_InitializeSaveSystem()
 {
     if (saveMemoryGlob.committedGameSave)
         MyAssertHandler(
@@ -112,19 +112,19 @@ void __cdecl SaveMemory_InitializeSaveSystem()
     saveMemoryGlob.recentLoadTime = 0;
 }
 
-void __cdecl SaveMemory_ShutdownSaveSystem()
+void SaveMemory_ShutdownSaveSystem()
 {
     saveMemoryGlob.committedGameSave = 0;
     saveMemoryGlob.currentGameSave = 0;
 }
 
-void __cdecl SaveMemory_ClearDemoSave()
+void SaveMemory_ClearDemoSave()
 {
     memset(&saveMemoryGlob.demo, 0, sizeof(saveMemoryGlob.demo));
     saveMemoryGlob.demo.isUsingGlobalBuffer = 0;
 }
 
-void __cdecl SaveMemory_AllocateTempMemory(SaveGame *save, int size, void *buffer)
+void SaveMemory_AllocateTempMemory(SaveGame *save, int size, void *buffer)
 {
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\savememory.cpp", 256, 0, "%s", "save");
@@ -138,7 +138,7 @@ void __cdecl SaveMemory_AllocateTempMemory(SaveGame *save, int size, void *buffe
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\savememory.cpp", 262, 0, "%s", "save->memFile.buffer");
 }
 
-void __cdecl SaveMemory_AllocateHeapMemory(SaveGame *save, unsigned int size)
+void SaveMemory_AllocateHeapMemory(SaveGame *save, unsigned int size)
 {
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\savememory.cpp", 273, 0, "%s", "save");
@@ -149,7 +149,7 @@ void __cdecl SaveMemory_AllocateHeapMemory(SaveGame *save, unsigned int size)
     save->memFile.buffer = saveMemoryGlob.buffer2;
 }
 
-void __cdecl SaveMemory_FreeMemory(SaveGame *save)
+void SaveMemory_FreeMemory(SaveGame *save)
 {
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\savememory.cpp", 292, 0, "%s", "save");
@@ -162,24 +162,24 @@ void __cdecl SaveMemory_FreeMemory(SaveGame *save)
     }
 }
 
-int __cdecl SaveMemory_GenerateSaveId()
+int SaveMemory_GenerateSaveId()
 {
     return ++g_saveId;
 }
 
 // attributes: thunk
-void __cdecl SaveMemory_StartSegment(SaveGame *save, int index)
+void SaveMemory_StartSegment(SaveGame *save, int index)
 {
     MemFile_StartSegment(&save->memFile, index);
 }
 
 // attributes: thunk
-void __cdecl SaveMemory_MoveToSegment(SaveGame *save, int index)
+void SaveMemory_MoveToSegment(SaveGame *save, int index)
 {
     MemFile_MoveToSegment(&save->memFile, index);
 }
 
-void __cdecl SaveMemory_InitializeGameSave(SaveGame *save)
+void SaveMemory_InitializeGameSave(SaveGame *save)
 {
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\savememory.cpp", 336, 0, "%s", "save");
@@ -190,7 +190,7 @@ void __cdecl SaveMemory_InitializeGameSave(SaveGame *save)
     saveMemoryGlob.recentLoadTime = 0;
 }
 
-void __cdecl SaveMemory_InitializeDemoSave(SaveGame *save)
+void SaveMemory_InitializeDemoSave(SaveGame *save)
 {
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\savememory.cpp", 359, 0, "%s", "save");
@@ -202,7 +202,7 @@ void __cdecl SaveMemory_InitializeDemoSave(SaveGame *save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\savememory.cpp", 363, 1, "%s", "save->saveState == SAVING");
 }
 
-void __cdecl SaveMemory_FinalizeSave(SaveGame *save)
+void SaveMemory_FinalizeSave(SaveGame *save)
 {
     bool isUsingGlobalBuffer; // r10
 
@@ -216,7 +216,7 @@ void __cdecl SaveMemory_FinalizeSave(SaveGame *save)
         SaveMemory_FreeMemory(save);
 }
 
-void __cdecl SaveMemory_InitializeLoad(SaveGame *save, int size)
+void SaveMemory_InitializeLoad(SaveGame *save, int size)
 {
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\savememory.cpp", 403, 0, "%s", "save");
@@ -224,7 +224,7 @@ void __cdecl SaveMemory_InitializeLoad(SaveGame *save, int size)
     save->saveState = LOADING;
 }
 
-void __cdecl SaveMemory_FinalizeLoad(SaveGame *save)
+void SaveMemory_FinalizeLoad(SaveGame *save)
 {
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\savememory.cpp", 418, 0, "%s", "save");
@@ -241,7 +241,7 @@ void __cdecl SaveMemory_FinalizeLoad(SaveGame *save)
     }
 }
 
-void __cdecl SaveMemory_FinalizeSaveCommit(SaveGame *save)
+void SaveMemory_FinalizeSaveCommit(SaveGame *save)
 {
     SaveBufferState saveState; // r11
 
@@ -258,12 +258,12 @@ void __cdecl SaveMemory_FinalizeSaveCommit(SaveGame *save)
     save->saveState = COMMITTED;
 }
 
-bool __cdecl SaveMemory_IsSuccessful(SaveGame *save)
+bool SaveMemory_IsSuccessful(SaveGame *save)
 {
     return !save->memFile.memoryOverflow;
 }
 
-int __cdecl SaveMemory_IsSaving(SaveGame *save)
+int SaveMemory_IsSaving(SaveGame *save)
 {
     SaveBufferState saveState; // r11
     unsigned __int8 v3; // r11
@@ -281,28 +281,28 @@ int __cdecl SaveMemory_IsSaving(SaveGame *save)
     return v3;
 }
 
-bool __cdecl SaveMemory_IsLoading(SaveGame *save)
+bool SaveMemory_IsLoading(SaveGame *save)
 {
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\savememory.cpp", 485, 0, "%s", "save");
     return save->saveState == LOADING;
 }
 
-bool __cdecl SaveMemory_IsWaitingForCommit(SaveGame *save)
+bool SaveMemory_IsWaitingForCommit(SaveGame *save)
 {
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\savememory.cpp", 497, 0, "%s", "save");
     return save->saveState == AWAITING_COMMIT;
 }
 
-unsigned __int8 *__cdecl SaveMemory_GetBodyBuffer(SaveGame *save)
+unsigned __int8 *SaveMemory_GetBodyBuffer(SaveGame *save)
 {
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\savememory.cpp", 511, 0, "%s", "save");
     return save->memFile.buffer;
 }
 
-unsigned int __cdecl SaveMemory_CalculateChecksum(SaveGame *save)
+unsigned int SaveMemory_CalculateChecksum(SaveGame *save)
 {
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\savememory.cpp", 521, 0, "%s", "save");
@@ -311,7 +311,7 @@ unsigned int __cdecl SaveMemory_CalculateChecksum(SaveGame *save)
     return Com_BlockChecksumKey32(save->memFile.buffer, save->header.bodySize, 0);
 }
 
-void __cdecl SaveMemory_InitializeLoadFromBuffer(SaveGame *save, unsigned __int8 *buffer, int length)
+void SaveMemory_InitializeLoadFromBuffer(SaveGame *save, unsigned __int8 *buffer, int length)
 {
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\savememory.cpp", 534, 0, "%s", "save");
@@ -321,7 +321,7 @@ void __cdecl SaveMemory_InitializeLoadFromBuffer(SaveGame *save, unsigned __int8
     save->saveState = LOADING;
 }
 
-void __cdecl SaveMemory_SaveWrite(const void *buffer, int len, SaveGame *save)
+void SaveMemory_SaveWrite(const void *buffer, int len, SaveGame *save)
 {
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\savememory.cpp", 551, 0, "%s", "save");
@@ -337,7 +337,7 @@ void __cdecl SaveMemory_SaveWrite(const void *buffer, int len, SaveGame *save)
     MemFile_WriteData(&save->memFile, len, buffer);
 }
 
-void __cdecl SaveMemory_SetBuffer(void *buffer, int len, SaveGame *save)
+void SaveMemory_SetBuffer(void *buffer, int len, SaveGame *save)
 {
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\savememory.cpp", 567, 0, "%s", "save");
@@ -357,7 +357,7 @@ void __cdecl SaveMemory_SetBuffer(void *buffer, int len, SaveGame *save)
     MemFile_CommonInit(&save->memFile, len, (byte*)buffer, 0, 1);
 }
 
-void __cdecl SaveMemory_LoadRead(void *buffer, int size, SaveGame *save)
+void SaveMemory_LoadRead(void *buffer, int size, SaveGame *save)
 {
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\savememory.cpp", 590, 0, "%s", "save");
@@ -366,7 +366,7 @@ void __cdecl SaveMemory_LoadRead(void *buffer, int size, SaveGame *save)
     MemFile_ReadData(&save->memFile, size, (byte *)buffer);
 }
 
-int __cdecl SaveMemory_GetTotalLoadSize(SaveGame *save)
+int SaveMemory_GetTotalLoadSize(SaveGame *save)
 {
     SaveBufferState saveState; // r8
 
@@ -385,7 +385,7 @@ int __cdecl SaveMemory_GetTotalLoadSize(SaveGame *save)
 }
 
 // local variable allocation has failed, the output may be wrong!
-void __cdecl SaveMemory_CreateHeader(
+void SaveMemory_CreateHeader(
     const char *cleanUserName,
     const char *description,
     const char *screenshot,
@@ -452,7 +452,7 @@ void __cdecl SaveMemory_CreateHeader(
     save->isWrittenToDevice = 0;
 }
 
-const SaveHeader *__cdecl SaveMemory_GetHeader(SaveGame *save)
+const SaveHeader *SaveMemory_GetHeader(SaveGame *save)
 {
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\savememory.cpp", 693, 0, "%s", "save");
@@ -460,7 +460,7 @@ const SaveHeader *__cdecl SaveMemory_GetHeader(SaveGame *save)
 }
 
 
-void *__cdecl SaveMemory_ReadLoadFromDevice(
+void *SaveMemory_ReadLoadFromDevice(
     const char *filename,
     int checksum,
     int /*useLoadedSourceFiles*/,
@@ -552,12 +552,12 @@ void *__cdecl SaveMemory_ReadLoadFromDevice(
     return fileHandle;
 }
 
-bool __cdecl SaveMemory_IsRecentlyLoaded()
+bool SaveMemory_IsRecentlyLoaded()
 {
     return (unsigned int)(Sys_Milliseconds() - saveMemoryGlob.recentLoadTime) < 0x7D0;
 }
 
-int __cdecl SaveMemory_IsCommittedSaveAvailable(const char *filename, int checksum)
+int SaveMemory_IsCommittedSaveAvailable(const char *filename, int checksum)
 {
     const SaveHeader *Header; // r3
     const SaveHeader *v5; // r31
@@ -583,12 +583,12 @@ int __cdecl SaveMemory_IsCommittedSaveAvailable(const char *filename, int checks
     return result;
 }
 
-bool __cdecl SaveMemory_IsCurrentCommittedSaveValid()
+bool SaveMemory_IsCurrentCommittedSaveValid()
 {
     return saveMemoryGlob.committedGameSave && saveMemoryGlob.committedGameSave->saveState == COMMITTED;
 }
 
-int __cdecl SaveMemory_CommitSave(SaveGame *save, int saveId)
+int SaveMemory_CommitSave(SaveGame *save, int saveId)
 {
     SaveGame *committedGameSave; // r10
 
@@ -639,7 +639,7 @@ int __cdecl SaveMemory_CommitSave(SaveGame *save, int saveId)
     }
 }
 
-void __cdecl SaveMemory_RollbackSave(SaveGame *save)
+void SaveMemory_RollbackSave(SaveGame *save)
 {
     if (!save)
     {
@@ -663,12 +663,12 @@ void __cdecl SaveMemory_RollbackSave(SaveGame *save)
     }
 }
 
-SaveGame *__cdecl SaveMemory_GetLastCommittedSave()
+SaveGame *SaveMemory_GetLastCommittedSave()
 {
     return saveMemoryGlob.committedGameSave;
 }
 
-int __cdecl SaveMemory_WriteSaveToDevice(SaveGame *save)
+int SaveMemory_WriteSaveToDevice(SaveGame *save)
 {
     iassert(save);
     SaveBufferState saveState = save->saveState;
@@ -705,28 +705,28 @@ int __cdecl SaveMemory_WriteSaveToDevice(SaveGame *save)
     }
 }
 
-bool __cdecl SaveMemory_IsWrittenToDevice(SaveGame *save)
+bool SaveMemory_IsWrittenToDevice(SaveGame *save)
 {
     return save->isWrittenToDevice;
 }
 
-int __cdecl SaveMemory_ForceCommitSave(SaveGame *save)
+int SaveMemory_ForceCommitSave(SaveGame *save)
 {
     saveMemoryGlob.isCommitForced = 1;
     return SaveMemory_CommitSave(save, save->header.saveId);
 }
 
-bool __cdecl SaveMemory_IsCommitForced()
+bool SaveMemory_IsCommitForced()
 {
     return saveMemoryGlob.isCommitForced;
 }
 
-void __cdecl SaveMemory_ClearForcedCommitFlag()
+void SaveMemory_ClearForcedCommitFlag()
 {
     saveMemoryGlob.isCommitForced = 0;
 }
 
-void __cdecl SaveMemory_FinalizeSaveToDisk(SaveGame *save)
+void SaveMemory_FinalizeSaveToDisk(SaveGame *save)
 {
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\savememory.cpp", 386, 0, "%s", "save");
@@ -738,7 +738,7 @@ void __cdecl SaveMemory_FinalizeSaveToDisk(SaveGame *save)
         SaveMemory_FreeMemory(save);
 }
 
-void __cdecl SaveMemory_CleanupSaveMemory()
+void SaveMemory_CleanupSaveMemory()
 {
     if (saveMemoryGlob.currentGameSave)
         SaveMemory_RollbackSave(saveMemoryGlob.currentGameSave);

@@ -45,7 +45,7 @@ $F77C05005AAF2867FE3D26D91A48F99E pixelCostGlob;
 GfxPixelCostMode pixelCostMode;
 
 
-const Material *__cdecl R_PixelCost_GetAccumulationMaterial(const Material *material)
+const Material *R_PixelCost_GetAccumulationMaterial(const Material *material)
 {
     const Material *result; // eax
     const char *v2; // eax
@@ -107,7 +107,7 @@ const Material *__cdecl R_PixelCost_GetAccumulationMaterial(const Material *mate
     return result;
 }
 
-void __cdecl R_PixelCost_BeginSurface(GfxCmdBufContext context)
+void R_PixelCost_BeginSurface(GfxCmdBufContext context)
 {
     int cost; // [esp+4h] [ebp-Ch]
     unsigned __int64 packedKey; // [esp+8h] [ebp-8h]
@@ -138,7 +138,7 @@ void __cdecl R_PixelCost_BeginSurface(GfxCmdBufContext context)
     }
 }
 
-void __cdecl R_PixelCost_SetConstant(GfxCmdBufSourceState *source, int cost)
+void R_PixelCost_SetConstant(GfxCmdBufSourceState *source, int cost)
 {
     float weights[4]; // [esp+14h] [ebp-10h] BYREF
 
@@ -159,7 +159,7 @@ void __cdecl R_PixelCost_SetConstant(GfxCmdBufSourceState *source, int cost)
     R_SetCodeConstantFromVec4(source, CONST_SRC_CODE_PIXEL_COST_FRACS, weights);
 }
 
-int __cdecl RB_PixelCost_GetCostForRecordIndex(int recordIndex)
+int RB_PixelCost_GetCostForRecordIndex(int recordIndex)
 {
     __int64 v2; // rax
     int v3; // [esp+4h] [ebp-68h]
@@ -226,20 +226,20 @@ int __cdecl RB_PixelCost_GetCostForRecordIndex(int recordIndex)
     }
 }
 
-unsigned __int64 __cdecl R_PixelCost_PackedKeyForMaterial(__int64 material)
+unsigned __int64 R_PixelCost_PackedKeyForMaterial(__int64 material)
 {
     iassert( material );
     return material;
 }
 
-bool __cdecl RB_PixelCost_DoesPrimMatch(unsigned __int64 packedKey)
+bool RB_PixelCost_DoesPrimMatch(unsigned __int64 packedKey)
 {
     return __PAIR64__(
         pixelCostGlob.records[pixelCostGlob.recordCount].key.mtl.techType,
         pixelCostGlob.records[pixelCostGlob.recordCount].key.mtl.material) == packedKey;
 }
 
-void __cdecl RB_PixelCost_ResetPrim(unsigned __int64 packedKey)
+void RB_PixelCost_ResetPrim(unsigned __int64 packedKey)
 {
     GfxPixelCostRecord *record; // [esp+0h] [ebp-4h]
 
@@ -263,7 +263,7 @@ unsigned __int64 RB_PixelCost_BeginTiming()
     return result;
 }
 
-void __cdecl R_HW_FinishGpu()
+void R_HW_FinishGpu()
 {
     R_AcquireGpuFenceLock();
     R_FinishGpuFence();
@@ -272,7 +272,7 @@ void __cdecl R_HW_FinishGpu()
     R_ReleaseGpuFenceLock();
 }
 
-void __cdecl R_PixelCost_EndSurface(GfxCmdBufContext context)
+void R_PixelCost_EndSurface(GfxCmdBufContext context)
 {
     uint16_t v1; // [esp+10h] [ebp-38h]
     int v2; // [esp+14h] [ebp-34h]
@@ -351,7 +351,7 @@ void RB_PixelCost_EndTiming()
         pixelCostGlob.msecElapsed = 0.0f;
 }
 
-GfxRenderTargetId __cdecl RB_PixelCost_OverrideRenderTarget(GfxRenderTargetId targetId)
+GfxRenderTargetId RB_PixelCost_OverrideRenderTarget(GfxRenderTargetId targetId)
 {
     if (targetId < R_RENDERTARGET_SCENE)
         return R_RENDERTARGET_FRAME_BUFFER;

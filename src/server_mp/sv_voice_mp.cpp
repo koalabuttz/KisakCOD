@@ -9,7 +9,7 @@
 
 #include <bgame/bg_public.h>
 
-void __cdecl G_BroadcastVoice(gentity_s *talker, VoicePacket_t *voicePacket)
+void G_BroadcastVoice(gentity_s *talker, VoicePacket_t *voicePacket)
 {
     float v2; // [esp+0h] [ebp-44h]
     float v3; // [esp+8h] [ebp-3Ch]
@@ -58,7 +58,7 @@ void __cdecl G_BroadcastVoice(gentity_s *talker, VoicePacket_t *voicePacket)
     }
 }
 
-bool __cdecl SV_ClientHasClientMuted(uint32_t listener, uint32_t talker)
+bool SV_ClientHasClientMuted(uint32_t listener, uint32_t talker)
 {
     if (listener >= 0x40)
         MyAssertHandler(
@@ -79,7 +79,7 @@ bool __cdecl SV_ClientHasClientMuted(uint32_t listener, uint32_t talker)
     return svs.clients[listener].muteList[talker];
 }
 
-bool __cdecl SV_ClientWantsVoiceData(uint32_t clientNum)
+bool SV_ClientWantsVoiceData(uint32_t clientNum)
 {
     if (clientNum >= 0x40)
         MyAssertHandler(
@@ -92,7 +92,7 @@ bool __cdecl SV_ClientWantsVoiceData(uint32_t clientNum)
     return svs.clients[clientNum].sendVoice;
 }
 
-void __cdecl SV_UserVoice(client_t *cl, msg_t *msg)
+void SV_UserVoice(client_t *cl, msg_t *msg)
 {
     int packet; // [esp+0h] [ebp-11Ch]
     VoicePacket_t voicePacket; // [esp+4h] [ebp-118h] BYREF
@@ -123,7 +123,7 @@ void __cdecl SV_UserVoice(client_t *cl, msg_t *msg)
     }
 }
 
-void __cdecl SV_QueueVoicePacket(int talkerNum, int clientNum, VoicePacket_t *voicePacket)
+void SV_QueueVoicePacket(int talkerNum, int clientNum, VoicePacket_t *voicePacket)
 {
     client_t *client; // [esp+0h] [ebp-8h]
 
@@ -146,7 +146,7 @@ void __cdecl SV_QueueVoicePacket(int talkerNum, int clientNum, VoicePacket_t *vo
     }
 }
 
-void __cdecl SV_PreGameUserVoice(client_t *cl, msg_t *msg)
+void SV_PreGameUserVoice(client_t *cl, msg_t *msg)
 {
     int packet; // [esp+0h] [ebp-124h]
     VoicePacket_t voicePacket; // [esp+4h] [ebp-120h] BYREF

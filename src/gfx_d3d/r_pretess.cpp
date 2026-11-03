@@ -9,7 +9,7 @@
 #include <universal/profile.h>
 
 
-void __cdecl R_InitDrawSurfListInfo(GfxDrawSurfListInfo *info)
+void R_InitDrawSurfListInfo(GfxDrawSurfListInfo *info)
 {
     iassert(Sys_IsMainThread());
 
@@ -27,7 +27,7 @@ void __cdecl R_InitDrawSurfListInfo(GfxDrawSurfListInfo *info)
     iassert(!info->light);
 }
 
-void __cdecl R_EmitDrawSurfList(GfxDrawSurf *drawSurfs, uint32_t drawSurfCount)
+void R_EmitDrawSurfList(GfxDrawSurf *drawSurfs, uint32_t drawSurfCount)
 {
     int newDrawSurfCount; // [esp+4Ch] [ebp-4h]
 
@@ -55,7 +55,7 @@ void __cdecl R_EmitDrawSurfList(GfxDrawSurf *drawSurfs, uint32_t drawSurfCount)
     }
 }
 
-void __cdecl R_MergeAndEmitDrawSurfLists(DrawSurfType firstStage, int stageCount)
+void R_MergeAndEmitDrawSurfLists(DrawSurfType firstStage, int stageCount)
 {
     uint32_t v2; // eax
     signed int v3; // [esp+0h] [ebp-164h]
@@ -118,7 +118,7 @@ void __cdecl R_MergeAndEmitDrawSurfLists(DrawSurfType firstStage, int stageCount
     }
 }
 
-uint32_t __cdecl R_EmitDrawSurfListForKey(
+uint32_t R_EmitDrawSurfListForKey(
     const GfxDrawSurf *drawSurfs,
     uint32_t drawSurfCount,
     uint32_t primarySortKey)
@@ -149,7 +149,7 @@ uint32_t __cdecl R_EmitDrawSurfListForKey(
 }
 
 
-uint16_t *__cdecl R_AllocPreTessIndices(int count)
+uint16_t *R_AllocPreTessIndices(int count)
 {
     uint16_t *indices; // [esp+0h] [ebp-4h]
 
@@ -162,14 +162,14 @@ uint16_t *__cdecl R_AllocPreTessIndices(int count)
     return indices;
 }
 
-void __cdecl R_EndPreTess()
+void R_EndPreTess()
 {
     iassert( gfxBuf.preTessIndexBuffer->indices != NULL );
     R_UnlockIndexBuffer(gfxBuf.preTessIndexBuffer->buffer);
     gfxBuf.preTessIndexBuffer->indices = 0;
 }
 
-void __cdecl R_BeginPreTess()
+void R_BeginPreTess()
 {
     iassert( gfxBuf.preTessIndexBuffer->indices == NULL );
     gfxBuf.preTessIndexBuffer->indices = (uint16_t *)R_LockIndexBuffer(
@@ -180,7 +180,7 @@ void __cdecl R_BeginPreTess()
     gfxBuf.preTessIndexBuffer->used = 0;
 }
 
-int __cdecl R_ReadBspPreTessDrawSurfs(
+int R_ReadBspPreTessDrawSurfs(
     GfxReadCmdBuf *cmdBuf,
     const GfxBspPreTessDrawSurf **list,
     uint32_t *count,

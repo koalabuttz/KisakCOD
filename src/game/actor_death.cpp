@@ -11,7 +11,7 @@
 #include "actor_orientation.h"
 #include "actor_corpse.h"
 
-bool __cdecl Actor_Death_Start(actor_s *self, ai_state_t ePrevState)
+bool Actor_Death_Start(actor_s *self, ai_state_t ePrevState)
 {
     int health; // r8
     float *v4; // r6
@@ -53,7 +53,7 @@ bool __cdecl Actor_Death_Start(actor_s *self, ai_state_t ePrevState)
     return 1;
 }
 
-void __cdecl Actor_Death_Cleanup(actor_s *self)
+void Actor_Death_Cleanup(actor_s *self)
 {
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_death.cpp", 53, 0, "%s", "self");
@@ -69,7 +69,7 @@ void __cdecl Actor_Death_Cleanup(actor_s *self)
     Actor_ClearPath(self);
 }
 
-actor_think_result_t __cdecl Actor_Death_Think(actor_s *self)
+actor_think_result_t Actor_Death_Think(actor_s *self)
 {
     unsigned int v2; // r10
 

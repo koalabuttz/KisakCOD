@@ -2,40 +2,40 @@
 #include "r_material.h"
 
 void  R_SkinXModelCmd(_WORD *data);
-void __cdecl R_SkinXSurfaceSkinned(
+void R_SkinXSurfaceSkinned(
     const struct XSurface *xsurf,
     const DObjSkelMat *boneMatrix,
     GfxPackedVertex *skinVerticesOut);
-void __cdecl R_SkinXSurfaceWeight(
+void R_SkinXSurfaceWeight(
     const GfxPackedVertex *inVerts,
     const struct XSurfaceVertexInfo *vertexInfo,
     const DObjSkelMat *boneMatrix,
     GfxPackedVertex *outVerts);
-void __cdecl R_SkinXSurfaceWeight0(
+void R_SkinXSurfaceWeight0(
     const GfxPackedVertex *vertsIn,
     const uint16_t *vertexBlend,
     int vertCount,
     const DObjSkelMat *boneMatrix,
     GfxPackedVertex *vertsOut);
-void __cdecl R_SkinXSurfaceWeight1(
+void R_SkinXSurfaceWeight1(
     const GfxPackedVertex *vertsIn,
     const uint16_t *vertexBlend,
     int vertCount,
     const DObjSkelMat *boneMatrix,
     GfxPackedVertex *vertsOut);
-void __cdecl R_SkinXSurfaceWeight2(
+void R_SkinXSurfaceWeight2(
     const GfxPackedVertex *vertsIn,
     const uint16_t *vertexBlend,
     int vertCount,
     const DObjSkelMat *boneMatrix,
     GfxPackedVertex *vertsOut);
-void __cdecl R_SkinXSurfaceWeight3(
+void R_SkinXSurfaceWeight3(
     const GfxPackedVertex *vertsIn,
     const uint16_t *vertexBlend,
     int vertCount,
     const DObjSkelMat *boneMatrix,
     GfxPackedVertex *vertsOut);
-void __cdecl R_SkinXSurfaceRigid(
+void R_SkinXSurfaceRigid(
     const XSurface *surf,
     int totalVertCount,
     const DObjSkelMat *boneMatrix,
@@ -43,7 +43,7 @@ void __cdecl R_SkinXSurfaceRigid(
 
 
 // r_model_skin_sse
-void __cdecl R_SkinXSurfaceSkinnedSse(
+void R_SkinXSurfaceSkinnedSse(
     const XSurface *xsurf,
     const DObjSkelMat *boneMatrix,
     GfxPackedVertexNormal *skinVertNormalIn,

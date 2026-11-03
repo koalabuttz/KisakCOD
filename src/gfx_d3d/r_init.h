@@ -382,84 +382,84 @@ struct GfxGlobals // sizeof=0x10
     int backEndFrameCount;              // ...
 };
 
-void __cdecl TRACK_r_init();
+void TRACK_r_init();
 const char *__stdcall DXGetErrorDescription9A(int a1);
-void __cdecl R_SyncGpu(int(__cdecl *WorkCallback)(unsigned __int64));
-bool __cdecl R_IsUsingAdaptiveGpuSync();
-void __cdecl  R_FatalInitError(const char *msg);
-void __cdecl  R_FatalLockError(HRESULT hr);
-const char *__cdecl R_ErrorDescription(HRESULT hr);
-void __cdecl R_SetColorMappings();
-void __cdecl R_CalcGammaRamp(GfxGammaRamp *gammaRamp);
-void __cdecl R_GammaCorrect(uint8_t *buffer, int bufSize);
-void __cdecl SetGfxConfig(const GfxConfiguration *config);
-void __cdecl R_InitThreads();
-void __cdecl R_ShutdownStreams();
-void __cdecl R_ShutdownMaterialUsage();
-void __cdecl R_Shutdown(int destroyWindow);
+void R_SyncGpu(int(*WorkCallback)(unsigned __int64));
+bool R_IsUsingAdaptiveGpuSync();
+void R_FatalInitError(const char *msg);
+void R_FatalLockError(HRESULT hr);
+const char *R_ErrorDescription(HRESULT hr);
+void R_SetColorMappings();
+void R_CalcGammaRamp(GfxGammaRamp *gammaRamp);
+void R_GammaCorrect(uint8_t *buffer, int bufSize);
+void SetGfxConfig(const GfxConfiguration *config);
+void R_InitThreads();
+void R_ShutdownStreams();
+void R_ShutdownMaterialUsage();
+void R_Shutdown(int destroyWindow);
 void R_ShutdownDirect3D();
 void R_ReleaseForShutdownOrReset();
-void __cdecl R_UnloadWorld();
-void __cdecl R_BeginRegistration(vidConfig_t *vidConfigOut);
+void R_UnloadWorld();
+void R_BeginRegistration(vidConfig_t *vidConfigOut);
 void R_Init();
 #ifdef KISAK_RADIANT
 // Editor multi-window renderer bring-up (implementation at end of r_init.cpp).
-char __cdecl R_InitRendererForWindow(HWND hWnd);
-HWND __cdecl R_CreateSwapChains(int hz, GfxWindowParms *wnd, int sharedHandle);
-char __cdecl R_BeginRegistration_R_InitHardware(GfxWindowParms *wnd);
+char R_InitRendererForWindow(HWND hWnd);
+HWND R_CreateSwapChains(int hz, GfxWindowParms *wnd, int sharedHandle);
+char R_BeginRegistration_R_InitHardware(GfxWindowParms *wnd);
 // Editor per-window render-target / device-test path (CXYWnd::OnPaint pipeline).
 // Implementations at end of r_init.cpp; R_SortMaterials lives in radiant/r_ed_scene.cpp.
 // (R_RecoverLostDevice is already declared above — kisak ships the CoD3 recovery.)
-char __cdecl R_TestDevice();
-void __cdecl R_SetupTargetWindow(int windowIndex);
+char R_TestDevice();
+void R_SetupTargetWindow(int windowIndex);
 // Editor renderer R_Init (IDB 0x500820): registers dvars/cmds + creates the D3D9
 // object, but does NOT create a game window/device (deferred to R_InitRendererForWindow).
 // Distinct from kisak's game R_Init, which creates its own window via R_InitGraphicsApi.
-void __cdecl R_InitEditor();
-char __cdecl R_SetupRendertarget_CheckDevice(HWND__ *hwnd);
+void R_InitEditor();
+char R_SetupRendertarget_CheckDevice(HWND__ *hwnd);
 // Non-asserting test for "is this hwnd a registered render target with a live swap chain".
 // (KISAK_RADIANT — used by CCamWnd::OnPaint to skip painting a window the renderer never
 // registered, e.g. the dead Dynamic-Lighting popup, instead of tripping the CheckDevice
 // "invalid hwnd" assert.)
-bool __cdecl R_IsRegisteredRenderWindow(HWND__ *hwnd);
-void __cdecl R_CheckTargetWindow(HWND__ *hwnd);
-void __cdecl R_SortMaterials();
+bool R_IsRegisteredRenderWindow(HWND__ *hwnd);
+void R_CheckTargetWindow(HWND__ *hwnd);
+void R_SortMaterials();
 // Editor per-window resize (IDB 0x501260): re-creates the window's swap chain at the new
 // size so Present is pixel-correct (no stretch). Called from each view's OnSize.
-void __cdecl R_Hwnd_Resize(HWND__ *hwnd, int width, int height);
+void R_Hwnd_Resize(HWND__ *hwnd, int width, int height);
 #endif
 void R_InitGraphicsApi();
 void R_InitSystems();
-char __cdecl R_PreCreateWindow();
-void __cdecl R_StoreDirect3DCaps(uint32_t adapterIndex);
-void __cdecl R_GetDirect3DCaps(uint32_t adapterIndex, _D3DCAPS9 *caps);
-void __cdecl R_SetShadowmapFormats_DX(uint32_t adapterIndex);
-uint32_t __cdecl R_ChooseAdapter();
-void __cdecl Sys_HideSplashWindow();
-void __cdecl Sys_DestroySplashWindow();
-char __cdecl R_CreateGameWindow(GfxWindowParms *wndParms);
-char __cdecl R_InitHardware(const GfxWindowParms *wndParms);
-void __cdecl R_StoreWindowSettings(const GfxWindowParms *wndParms);
+char R_PreCreateWindow();
+void R_StoreDirect3DCaps(uint32_t adapterIndex);
+void R_GetDirect3DCaps(uint32_t adapterIndex, _D3DCAPS9 *caps);
+void R_SetShadowmapFormats_DX(uint32_t adapterIndex);
+uint32_t R_ChooseAdapter();
+void Sys_HideSplashWindow();
+void Sys_DestroySplashWindow();
+char R_CreateGameWindow(GfxWindowParms *wndParms);
+char R_InitHardware(const GfxWindowParms *wndParms);
+void R_StoreWindowSettings(const GfxWindowParms *wndParms);
 void R_InitGamma();
-char __cdecl R_CreateForInitOrReset();
-IDirect3DQuery9 *__cdecl RB_HW_AllocOcclusionQuery();
-char __cdecl R_CreateDevice(const GfxWindowParms *wndParms);
-void __cdecl R_SetD3DPresentParameters(_D3DPRESENT_PARAMETERS_ *d3dpp, const GfxWindowParms *wndParms);
-void __cdecl R_SetupAntiAliasing(const GfxWindowParms *wndParms);
-HRESULT __cdecl R_CreateDeviceInternal(HWND__ *hwnd, uint32_t behavior, _D3DPRESENT_PARAMETERS_ *d3dpp);
-int __cdecl R_GetDeviceType();
-void __cdecl R_SetWndParms(GfxWindowParms *wndParms);
+char R_CreateForInitOrReset();
+IDirect3DQuery9 *RB_HW_AllocOcclusionQuery();
+char R_CreateDevice(const GfxWindowParms *wndParms);
+void R_SetD3DPresentParameters(_D3DPRESENT_PARAMETERS_ *d3dpp, const GfxWindowParms *wndParms);
+void R_SetupAntiAliasing(const GfxWindowParms *wndParms);
+HRESULT R_CreateDeviceInternal(HWND__ *hwnd, uint32_t behavior, _D3DPRESENT_PARAMETERS_ *d3dpp);
+int R_GetDeviceType();
+void R_SetWndParms(GfxWindowParms *wndParms);
 void R_Register();
 void R_InitGlobalStructs();
-void __cdecl R_EndRegistration();
-void __cdecl R_TrackStatistics(trStatistics_t *stats);
-void __cdecl R_UpdateTeamColors(int team, const float *color_allies, const float *color_axis);
-void __cdecl R_ConfigureRenderer(const GfxConfiguration *config);
-void __cdecl R_ComErrorCleanup();
+void R_EndRegistration();
+void R_TrackStatistics(trStatistics_t *stats);
+void R_UpdateTeamColors(int team, const float *color_allies, const float *color_axis);
+void R_ConfigureRenderer(const GfxConfiguration *config);
+void R_ComErrorCleanup();
 bool R_CheckLostDevice();
-void __cdecl R_MakeDedicated(const GfxConfiguration *config);
+void R_MakeDedicated(const GfxConfiguration *config);
 
-void __cdecl R_UpdateGpuSyncType();
+void R_UpdateGpuSyncType();
 
 int R_IsHiDef();
 

@@ -9,18 +9,18 @@
 
 #define CENT_ACTOR_PRONE_NORMAL 1
 
-void __cdecl PitchToQuat(float pitch, float *quat);
-void __cdecl RollToQuat(float roll, float *quat);
-void __cdecl LocalMatrixTransformVectorQuatTrans(const float *in, const DObjAnimMat *mat, float *out);
-void __cdecl NormalizeQuatTrans(DObjAnimMat *mat);
-void __cdecl CG_mg42_DoControllers(const cpose_t *pose, const DObj_s *obj, int *partBits);
-void __cdecl CG_Vehicle_DoControllers(const cpose_t *pose, const DObj_s *obj, int *partBits);
-void __cdecl CG_Actor_DoControllers(const cpose_t *pose, const DObj_s *obj, int *partBits);
-void __cdecl CG_DoBaseOriginController(const cpose_t *pose, const DObj_s *obj, int *setPartBits);
-void __cdecl CG_DoControllers(const cpose_t *pose, const DObj_s *obj, int *partBits);
-DObjAnimMat *__cdecl CG_DObjCalcPose(const cpose_t *pose, const DObj_s *obj, int *partBits);
+void PitchToQuat(float pitch, float *quat);
+void RollToQuat(float roll, float *quat);
+void LocalMatrixTransformVectorQuatTrans(const float *in, const DObjAnimMat *mat, float *out);
+void NormalizeQuatTrans(DObjAnimMat *mat);
+void CG_mg42_DoControllers(const cpose_t *pose, const DObj_s *obj, int *partBits);
+void CG_Vehicle_DoControllers(const cpose_t *pose, const DObj_s *obj, int *partBits);
+void CG_Actor_DoControllers(const cpose_t *pose, const DObj_s *obj, int *partBits);
+void CG_DoBaseOriginController(const cpose_t *pose, const DObj_s *obj, int *setPartBits);
+void CG_DoControllers(const cpose_t *pose, const DObj_s *obj, int *partBits);
+DObjAnimMat *CG_DObjCalcPose(const cpose_t *pose, const DObj_s *obj, int *partBits);
 
-inline int __cdecl CompressUnit(double unit)
+inline int CompressUnit(double unit)
 {
     if (unit < 0.0 || unit > 1.0)
         MyAssertHandler(

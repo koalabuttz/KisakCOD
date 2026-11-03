@@ -14,7 +14,7 @@ int isHandlingAssert;
 char assertMessage[4096];
 int lastAssertType;
 
-void(__cdecl* AssertCallback)(const char*);
+void(* AssertCallback)(const char*);
 
 BOOL CopyMessageToClipboard()
 {
@@ -53,7 +53,7 @@ BOOL CopyMessageToClipboard()
     return result;
 }
 
-char __cdecl AssertNotify(int type, AssertOccurance occurance)
+char AssertNotify(int type, AssertOccurance occurance)
 {
     HWND ActiveWindow; // eax
     const char* msg; // [esp+8h] [ebp-4h]
@@ -84,7 +84,7 @@ char __cdecl AssertNotify(int type, AssertOccurance occurance)
     return 1;
 }
 
-HINSTANCE__* __cdecl GetModuleBase(char* name)
+HINSTANCE__* GetModuleBase(char* name)
 {
     const char* v2; // [esp+Ch] [ebp-11Ch]
     char moduleName[264]; // [esp+10h] [ebp-118h] BYREF
@@ -117,7 +117,7 @@ HINSTANCE__* __cdecl GetModuleBase(char* name)
 char lineBuffer[0x100];
 uint32_t lineBufferStartPos, lineBufferEndPos;
 
-char __cdecl ReadLine(FILE* fp)
+char ReadLine(FILE* fp)
 {
     bool flush; // [esp+3h] [ebp-5h]
     int i; // [esp+4h] [ebp-4h]
@@ -154,7 +154,7 @@ char __cdecl ReadLine(FILE* fp)
     }
 }
 
-char __cdecl SkipLines(int lineCount, FILE* fp)
+char SkipLines(int lineCount, FILE* fp)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -166,7 +166,7 @@ char __cdecl SkipLines(int lineCount, FILE* fp)
     return 1;
 }
 
-void __cdecl ParseError(const char* msg)
+void ParseError(const char* msg)
 {
     HWND ActiveWindow; // eax
 
@@ -189,7 +189,7 @@ struct AddressInfo
 uint32_t g_assertAddressCount;
 AddressInfo g_assertAddress[0x20];
 
-char __cdecl ParseMapFile(FILE* fp, uint32_t baseAddress, char* mapName)
+char ParseMapFile(FILE* fp, uint32_t baseAddress, char* mapName)
 {
     int v4; // eax
     const char* v5; // eax
@@ -431,7 +431,7 @@ LABEL_90:
     return 1;
 }
 
-void __cdecl LoadMapFilesForDir(const char* dir)
+void LoadMapFilesForDir(const char* dir)
 {
     char* v1; // eax
     char* v2; // eax
@@ -486,7 +486,7 @@ void __cdecl LoadMapFilesForDir(const char* dir)
     }
 }
 
-int __cdecl LoadMapFiles(char* msg, int msgSize)
+int LoadMapFiles(char* msg, int msgSize)
 {
     int j; // [esp+0h] [ebp-Ch]
     AddressInfo* addressInfo; // [esp+4h] [ebp-8h]
@@ -537,7 +537,7 @@ char g_module[MAX_PATH];
 
 // KISAKX64
 // this is broken right now
-int __cdecl DoStackTrace(char* msg, int msgSize, int nIgnore)
+int DoStackTrace(char* msg, int msgSize, int nIgnore)
 {
     int* v2; // ecx
     int* reg_ebp; // [esp+4h] [ebp-10h]
@@ -569,7 +569,7 @@ int __cdecl DoStackTrace(char* msg, int msgSize, int nIgnore)
     return LoadMapFiles(msg, msgSize);
 }
 
-void __cdecl BuildAssertMessage(const char* expr, const char* filename, int line, int type, int skipLevels, char* message, int messageSize)
+void BuildAssertMessage(const char* expr, const char* filename, int line, int type, int skipLevels, char* message, int messageSize)
 {
     const char* String; // eax
     int curPos;
@@ -627,7 +627,7 @@ int __stdcall HideWindowCallback(HWND hwnd, LPARAM lParam)
     return 1;
 }
 
-void __cdecl FixWindowsDesktop()
+void FixWindowsDesktop()
 {
     DWORD CurrentThreadId; // eax
     HDC__* hdc; // [esp+0h] [ebp-614h]
@@ -650,7 +650,7 @@ void __cdecl FixWindowsDesktop()
     ReleaseDC(hwndDesktop, hdc);
 }
 
-bool __cdecl QuitOnError();
+bool QuitOnError();
 void MyAssertHandler(const char *filename, int line, int type, const char *fmt, ...)
 {
 #ifdef KISAK_PURE

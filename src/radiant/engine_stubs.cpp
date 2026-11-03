@@ -62,7 +62,7 @@ namespace
     uint32_t s_radiantSkelFrame = UINT32_MAX;
 }
 
-DObjAnimMat *__cdecl CG_DObjCalcPose(const cpose_t *pose, const DObj_s *obj, int *partBits)
+DObjAnimMat *CG_DObjCalcPose(const cpose_t *pose, const DObj_s *obj, int *partBits)
 {
     iassert(pose);
     iassert(obj);
@@ -100,31 +100,31 @@ DObjAnimMat *__cdecl CG_DObjCalcPose(const cpose_t *pose, const DObj_s *obj, int
     return boneMatrix;
 }
 
-void __cdecl CG_GetPoseOrigin(const cpose_t *pose, float *origin)
+void CG_GetPoseOrigin(const cpose_t *pose, float *origin)
 {
     iassert(pose);
     Vec3Copy(pose->origin, origin);
 }
 
-void __cdecl CG_GetPoseAngles(const cpose_t *pose, float *angles)
+void CG_GetPoseAngles(const cpose_t *pose, float *angles)
 {
     iassert(pose);
     Vec3Copy(pose->angles, angles);
 }
 
-void __cdecl CG_UsedDObjCalcPose(cpose_t *pose)
+void CG_UsedDObjCalcPose(cpose_t *pose)
 {
     iassert(pose);
     InterlockedCompareExchange(reinterpret_cast<volatile long *>(&pose->cullIn), 1, 0);
 }
 
-void __cdecl CG_CullIn(cpose_t *pose)
+void CG_CullIn(cpose_t *pose)
 {
     iassert(pose);
     pose->cullIn = 2;
 }
 
-void __cdecl CG_PredictiveSkinCEntity(GfxSceneEntity *sceneEnt)
+void CG_PredictiveSkinCEntity(GfxSceneEntity *sceneEnt)
 {
     iassert(sceneEnt);
     cpose_t *pose = sceneEnt->info.pose;
@@ -140,10 +140,10 @@ void __cdecl CG_PredictiveSkinCEntity(GfxSceneEntity *sceneEnt)
     }
 }
 
-void __cdecl CL_FlushDebugClientData() {}
-void __cdecl CL_UpdateDebugClientData() {}
-void __cdecl CG_CalculateFPS() {}
-void __cdecl CL_UpdateSound() {}
+void CL_FlushDebugClientData() {}
+void CL_UpdateDebugClientData() {}
+void CG_CalculateFPS() {}
+void CL_UpdateSound() {}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Dvars the compiled engine subset dereferences but whose registrar file is not in
@@ -282,7 +282,7 @@ void QDECL Com_Error(errorParm_t code, const char *fmt, ...)
     ExitProcess(1);
 }
 
-void __cdecl Com_PrintError(int channel, const char *fmt, ...)
+void Com_PrintError(int channel, const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
@@ -305,12 +305,12 @@ void __cdecl Com_PrintError(int channel, const char *fmt, ...)
     }
 }
 
-void __cdecl Com_DPrintf(int channel, const char *fmt, ...)
+void Com_DPrintf(int channel, const char *fmt, ...)
 {
     (void)channel; (void)fmt;   // debug channel not hooked up in the editor
 }
 
-void __cdecl Com_PrintWarning(int channel, const char *fmt, ...)
+void Com_PrintWarning(int channel, const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
@@ -322,17 +322,17 @@ void __cdecl Com_PrintWarning(int channel, const char *fmt, ...)
 // Com_PrintMessage comes from cmdlib.cpp (varargs form); the engine-ABI form
 // (int channel, const char *msg, int error) is unused in this build.
 
-void __cdecl Com_ErrorAbort() { RADIANT_BREAK_BEFORE_FATAL_EXIT(); ExitProcess(1); }
-int  __cdecl Com_SafeMode()   { return 0; }
-bool __cdecl Com_LogFileOpen() { return false; }
-void __cdecl Com_StartupVariable(const char *match) { (void)match; }
-void __cdecl Com_SyncThreads() {}
-DObj_s *__cdecl Com_GetClientDObj(uint32_t handle, int localClientNum) { (void)handle; (void)localClientNum; return nullptr; }
+void Com_ErrorAbort() { RADIANT_BREAK_BEFORE_FATAL_EXIT(); ExitProcess(1); }
+int  Com_SafeMode()   { return 0; }
+bool Com_LogFileOpen() { return false; }
+void Com_StartupVariable(const char *match) { (void)match; }
+void Com_SyncThreads() {}
+DObj_s *Com_GetClientDObj(uint32_t handle, int localClientNum) { (void)handle; (void)localClientNum; return nullptr; }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Sys_* — threading / renderer / process stubs
 // ─────────────────────────────────────────────────────────────────────────────
-void __cdecl Sys_Error(const char *fmt, ...)
+void Sys_Error(const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
@@ -344,67 +344,67 @@ void __cdecl Sys_Error(const char *fmt, ...)
     ExitProcess(1);
 }
 
-void __cdecl Sys_OutOfMemErrorInternal(const char *file, int line)
+void Sys_OutOfMemErrorInternal(const char *file, int line)
 {
     fprintf(stderr, "OUT_OF_MEMORY: %s:%d\n", file ? file : "?", line);
     RADIANT_BREAK_BEFORE_FATAL_EXIT();
     ExitProcess(1);
 }
 
-void __cdecl Sys_NormalExit()           { ExitProcess(0); }
-void __cdecl Sys_FrontEndSleep()        {}
-void __cdecl Sys_WaitForMainThread()    {}
-void __cdecl Sys_WaitForWorkerCmd()     {}
-void __cdecl Sys_SetWorkerCmdEvent()    {}
-void __cdecl Sys_ResetWorkerCmdEvent()  {}
-void __cdecl Sys_NotifyRenderer()       {}
-void __cdecl Sys_RenderCompleted()      {}
-void __cdecl Sys_StartRenderer()        {}
-void __cdecl Sys_StopRenderer()         {}
-void __cdecl Sys_ReleaseThreadOwnership() {}
-void __cdecl Sys_WakeRenderer(void *data) { (void)data; }
+void Sys_NormalExit()           { ExitProcess(0); }
+void Sys_FrontEndSleep()        {}
+void Sys_WaitForMainThread()    {}
+void Sys_WaitForWorkerCmd()     {}
+void Sys_SetWorkerCmdEvent()    {}
+void Sys_ResetWorkerCmdEvent()  {}
+void Sys_NotifyRenderer()       {}
+void Sys_RenderCompleted()      {}
+void Sys_StartRenderer()        {}
+void Sys_StopRenderer()         {}
+void Sys_ReleaseThreadOwnership() {}
+void Sys_WakeRenderer(void *data) { (void)data; }
 // Per-thread Sys_SetValue/Sys_GetValue slots.  The engine backs these with
 // g_threadValues[ctx][4] installed by Sys_InitMainThread; the editor runs the renderer
 // synchronously on the main thread, so a thread_local 4-slot array is equivalent.
 // Com_InitThreadData(THREAD_CONTEXT_MAIN) fills slot 1 = &va_info[0] (va() derefs it
 // unguarded), 2 = &g_com_error[0], 3 = &g_traceThreadInfo[0].
 static thread_local void *g_radiantThreadValues[4];
-void __cdecl Sys_SetValue(int idx, void *data) { g_radiantThreadValues[idx] = data; }
-void *__cdecl Sys_GetValue(int idx)     { return g_radiantThreadValues[idx]; }
-void *__cdecl Sys_RendererSleep()       { return nullptr; }
+void Sys_SetValue(int idx, void *data) { g_radiantThreadValues[idx] = data; }
+void *Sys_GetValue(int idx)     { return g_radiantThreadValues[idx]; }
+void *Sys_RendererSleep()       { return nullptr; }
 
-bool __cdecl Sys_IsMainThread()         { return true; }
-bool __cdecl Sys_IsRenderThread()       { return false; }
-bool __cdecl Sys_IsDatabaseThread()     { return false; }
-bool __cdecl Sys_FinishRenderer()       { return true; }
-int  __cdecl Sys_IsMainThreadReady()    { return 1; }
-int  __cdecl Sys_IsRendererReady()      { return 1; }
-int  __cdecl Sys_RendererReady()        { return 1; }
-int  __cdecl Sys_WaitBackendEvent()     { return 0; }
-uint32_t __cdecl Sys_GetCpuCount()      { return 1; }
+bool Sys_IsMainThread()         { return true; }
+bool Sys_IsRenderThread()       { return false; }
+bool Sys_IsDatabaseThread()     { return false; }
+bool Sys_FinishRenderer()       { return true; }
+int  Sys_IsMainThreadReady()    { return 1; }
+int  Sys_IsRendererReady()      { return 1; }
+int  Sys_RendererReady()        { return 1; }
+int  Sys_WaitBackendEvent()     { return 0; }
+uint32_t Sys_GetCpuCount()      { return 1; }
 
-char __cdecl Sys_SpawnRenderThread(void(__cdecl *function)(uint32_t)) { (void)function; return 1; }
-bool __cdecl Sys_SpawnWorkerThread(void(__cdecl *function)(uint32_t), uint32_t idx) { (void)function; (void)idx; return true; }
+char Sys_SpawnRenderThread(void(*function)(uint32_t)) { (void)function; return 1; }
+bool Sys_SpawnWorkerThread(void(*function)(uint32_t), uint32_t idx) { (void)function; (void)idx; return true; }
 
-void __cdecl Sys_SuspendThread(ThreadContext_t ctx) { (void)ctx; }
-void __cdecl Sys_ResumeThread(ThreadContext_t ctx)  { (void)ctx; }
+void Sys_SuspendThread(ThreadContext_t ctx) { (void)ctx; }
+void Sys_ResumeThread(ThreadContext_t ctx)  { (void)ctx; }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Win32 helpers
 // ─────────────────────────────────────────────────────────────────────────────
-void __cdecl Win_SetThreadLock(WinThreadLock lock) { (void)lock; }
-char *__cdecl Win_LocalizeRef(const char *ref)     { return const_cast<char *>(ref ? ref : ""); }
+void Win_SetThreadLock(WinThreadLock lock) { (void)lock; }
+char *Win_LocalizeRef(const char *ref)     { return const_cast<char *>(ref ? ref : ""); }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Geometry helpers
 // ─────────────────────────────────────────────────────────────────────────────
-int __cdecl BoxOnPlaneSide(const float *emins, const float *emaxs, const cplane_s *p)
+int BoxOnPlaneSide(const float *emins, const float *emaxs, const cplane_s *p)
 {
     (void)emins; (void)emaxs; (void)p;
     return 3; // both sides
 }
 
-void __cdecl _copyDWord(uint32_t *dest, uint32_t constant, uint32_t count)
+void _copyDWord(uint32_t *dest, uint32_t constant, uint32_t count)
 {
     for (uint32_t i = 0; i < count; ++i)
         dest[i] = constant;
@@ -413,143 +413,143 @@ void __cdecl _copyDWord(uint32_t *dest, uint32_t constant, uint32_t count)
 // ─────────────────────────────────────────────────────────────────────────────
 // CM (collision map) stubs
 // ─────────────────────────────────────────────────────────────────────────────
-void __cdecl CM_BoxTrace(trace_t *results, const float *start, const float *end,
+void CM_BoxTrace(trace_t *results, const float *start, const float *end,
     const float *mins, const float *maxs, uint32_t model, int contentmask)
 {
     (void)results; (void)start; (void)end; (void)mins; (void)maxs; (void)model; (void)contentmask;
     if (results) memset(results, 0, sizeof(*results));
 }
 
-void __cdecl CM_CalcTraceExtents(TraceExtents *te) { if (te) memset(te, 0, sizeof(*te)); }
+void CM_CalcTraceExtents(TraceExtents *te) { if (te) memset(te, 0, sizeof(*te)); }
 
-int  __cdecl CM_TraceBox(const TraceExtents *te, float *p1, float *p2, float dist)
+int  CM_TraceBox(const TraceExtents *te, float *p1, float *p2, float dist)
 { (void)te; (void)p1; (void)p2; (void)dist; return 0; }
 
-int  __cdecl CM_BoxSightTrace(int model, const float *start, const float *end,
+int  CM_BoxSightTrace(int model, const float *start, const float *end,
     const float *mins, const float *maxs, uint32_t mask, int skipmask)
 { (void)model; (void)start; (void)end; (void)mins; (void)maxs; (void)mask; (void)skipmask; return 0; }
 
-int  __cdecl CM_GetPlaneCount() { return 0; }
-cplane_s *__cdecl CM_GetPlanes() { return nullptr; }
-uint8_t *__cdecl CM_Hunk_Alloc(uint32_t size, const char *name, int type)
+int  CM_GetPlaneCount() { return 0; }
+cplane_s *CM_GetPlanes() { return nullptr; }
+uint8_t *CM_Hunk_Alloc(uint32_t size, const char *name, int type)
 { (void)size; (void)name; (void)type; return nullptr; }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DB (asset database) stubs
 // ─────────────────────────────────────────────────────────────────────────────
-void __cdecl DB_BeginRecoverLostDevice()  {}
-void __cdecl DB_EndRecoverLostDevice()    {}
-void __cdecl DB_ResetZoneSize(int rebuild) { (void)rebuild; }
-void __cdecl DB_ShutdownXAssets()          {}
-void __cdecl DB_SyncXAssets()              {}
-void __cdecl DB_LoadedExternalData(int idx){ (void)idx; }
-void __cdecl DB_LoadXAssets(XZoneInfo *zoneInfo, uint32_t zoneCount, int sync)
+void DB_BeginRecoverLostDevice()  {}
+void DB_EndRecoverLostDevice()    {}
+void DB_ResetZoneSize(int rebuild) { (void)rebuild; }
+void DB_ShutdownXAssets()          {}
+void DB_SyncXAssets()              {}
+void DB_LoadedExternalData(int idx){ (void)idx; }
+void DB_LoadXAssets(XZoneInfo *zoneInfo, uint32_t zoneCount, int sync)
 { (void)zoneInfo; (void)zoneCount; (void)sync; }
 
-bool __cdecl DB_IsMinimumFastFileLoaded()           { return true; }
-bool __cdecl DB_IsXAssetDefault(XAssetType t, const char *name) { (void)t; (void)name; return true; }
-int  __cdecl DB_GetAllXAssetOfType(XAssetType t, XAssetHeader *out, int count) { (void)t; (void)out; (void)count; return 0; }
-int  __cdecl DB_GetAllXAssetOfType_FastFile(XAssetType t, XAssetHeader *out, int count) { (void)t; (void)out; (void)count; return 0; }
+bool DB_IsMinimumFastFileLoaded()           { return true; }
+bool DB_IsXAssetDefault(XAssetType t, const char *name) { (void)t; (void)name; return true; }
+int  DB_GetAllXAssetOfType(XAssetType t, XAssetHeader *out, int count) { (void)t; (void)out; (void)count; return 0; }
+int  DB_GetAllXAssetOfType_FastFile(XAssetType t, XAssetHeader *out, int count) { (void)t; (void)out; (void)count; return 0; }
 
-XAssetHeader __cdecl DB_FindXAssetHeader(XAssetType t, const char *name)
+XAssetHeader DB_FindXAssetHeader(XAssetType t, const char *name)
 { (void)t; (void)name; XAssetHeader h{}; return h; }
 
-void __cdecl DB_EnumXAssets(XAssetType t, void(__cdecl *callback)(XAssetHeader, void*), void *data, bool overrides)
+void DB_EnumXAssets(XAssetType t, void(*callback)(XAssetHeader, void*), void *data, bool overrides)
 { (void)t; (void)callback; (void)data; (void)overrides; }
 
-void __cdecl DB_GetIndexBufferAndBase(uint8_t pool, void *ibOut, void **baseOut, int *offsetOut)
+void DB_GetIndexBufferAndBase(uint8_t pool, void *ibOut, void **baseOut, int *offsetOut)
 { (void)pool; (void)ibOut; if (baseOut) *baseOut = nullptr; if (offsetOut) *offsetOut = 0; }
 
-void __cdecl DB_GetVertexBufferAndOffset(uint8_t zoneHandle, uint8_t *verts, void **vbOut, int *offsetOut)
+void DB_GetVertexBufferAndOffset(uint8_t zoneHandle, uint8_t *verts, void **vbOut, int *offsetOut)
 { (void)zoneHandle; (void)verts; if (vbOut) *vbOut = nullptr; if (offsetOut) *offsetOut = 0; }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FX stubs
 // ─────────────────────────────────────────────────────────────────────────────
-const FxEffectDef *__cdecl FX_Register(const char *name) { (void)name; return nullptr; }
-FxSystem *__cdecl FX_GetSystem(int clientIndex) { (void)clientIndex; return nullptr; }
+const FxEffectDef *FX_Register(const char *name) { (void)name; return nullptr; }
+FxSystem *FX_GetSystem(int clientIndex) { (void)clientIndex; return nullptr; }
 
-void __cdecl FX_BeginUpdate(int32_t localClientNum) { (void)localClientNum; }
-void __cdecl FX_FillUpdateCmd(int32_t localClientNum, FxCmd *cmd) { (void)localClientNum; (void)cmd; }
-void __cdecl FX_GenerateVerts(FxGenerateVertsCmd *cmd) { (void)cmd; }
-void __cdecl FX_RunPhysics(int32_t localClientNum) { (void)localClientNum; }
-void __cdecl FX_SetNextUpdateCamera(int32_t localClientNum, const refdef_s *refdef, float zfar)
+void FX_BeginUpdate(int32_t localClientNum) { (void)localClientNum; }
+void FX_FillUpdateCmd(int32_t localClientNum, FxCmd *cmd) { (void)localClientNum; (void)cmd; }
+void FX_GenerateVerts(FxGenerateVertsCmd *cmd) { (void)cmd; }
+void FX_RunPhysics(int32_t localClientNum) { (void)localClientNum; }
+void FX_SetNextUpdateCamera(int32_t localClientNum, const refdef_s *refdef, float zfar)
 { (void)localClientNum; (void)refdef; (void)zfar; }
 
-void __cdecl FX_BeginGeneratingMarkVertsForEntModels(int32_t lc, uint32_t *indexCount)
+void FX_BeginGeneratingMarkVertsForEntModels(int32_t lc, uint32_t *indexCount)
 { (void)lc; (void)indexCount; }
-void __cdecl FX_EndGeneratingMarkVertsForEntModels(int32_t lc) { (void)lc; }
+void FX_EndGeneratingMarkVertsForEntModels(int32_t lc) { (void)lc; }
 
-void __cdecl FX_GenerateMarkVertsForEntXModel(int32_t lc, int32_t markGroup, uint32_t *indexCount,
+void FX_GenerateMarkVertsForEntXModel(int32_t lc, int32_t markGroup, uint32_t *indexCount,
     uint16_t entityHandle, uint8_t unused, const GfxScaledPlacement *placement)
 { (void)lc; (void)markGroup; (void)indexCount; (void)entityHandle; (void)unused; (void)placement; }
 
-void __cdecl FX_GenerateMarkVertsForEntBrush(int32_t lc, int32_t entId, uint32_t *indexCount,
+void FX_GenerateMarkVertsForEntBrush(int32_t lc, int32_t entId, uint32_t *indexCount,
     uint8_t reflectionProbeIndex, const GfxPlacement *placement)
 { (void)lc; (void)entId; (void)indexCount; (void)reflectionProbeIndex; (void)placement; }
 
-void __cdecl FX_GenerateMarkVertsForEntDObj(int32_t lc, int32_t markGroup, uint32_t *indexCount,
+void FX_GenerateMarkVertsForEntDObj(int32_t lc, int32_t markGroup, uint32_t *indexCount,
     uint16_t entityHandle, uint8_t unused, const DObj_s *dobj, const cpose_t *pose)
 { (void)lc; (void)markGroup; (void)indexCount; (void)entityHandle; (void)unused; (void)dobj; (void)pose; }
 
-void __cdecl FX_GenerateMarkVertsForStaticModels(int32_t lc, int32_t markGroup, const uint8_t *visData)
+void FX_GenerateMarkVertsForStaticModels(int32_t lc, int32_t markGroup, const uint8_t *visData)
 { (void)lc; (void)markGroup; (void)visData; }
 
-void __cdecl FX_GenerateMarkVertsForWorld(int32_t lc) { (void)lc; }
+void FX_GenerateMarkVertsForWorld(int32_t lc) { (void)lc; }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DynEnt stubs
 // ─────────────────────────────────────────────────────────────────────────────
-void __cdecl DynEntCl_ProcessEntities(int localClientNum)    { (void)localClientNum; }
-void __cdecl DynEntPieces_AddDrawSurfs()                     {}
-DynEntityClient *__cdecl DynEnt_GetClientEntity(uint16_t idx, DynEntityDrawType type)
+void DynEntCl_ProcessEntities(int localClientNum)    { (void)localClientNum; }
+void DynEntPieces_AddDrawSurfs()                     {}
+DynEntityClient *DynEnt_GetClientEntity(uint16_t idx, DynEntityDrawType type)
 { (void)idx; (void)type; return nullptr; }
-const DynEntityDef *__cdecl DynEnt_GetEntityDef(uint16_t idx, DynEntityDrawType type)
+const DynEntityDef *DynEnt_GetEntityDef(uint16_t idx, DynEntityDrawType type)
 { (void)idx; (void)type; return nullptr; }
-DynEntityPose *__cdecl DynEnt_GetClientPose(uint16_t idx, DynEntityDrawType type)
+DynEntityPose *DynEnt_GetClientPose(uint16_t idx, DynEntityDrawType type)
 { (void)idx; (void)type; return nullptr; }
-uint16_t __cdecl DynEnt_GetEntityCount(DynEntityCollType type) { (void)type; return 0; }
-int __cdecl DynEnt_GetXModelUsageCount(const XModel *model)   { (void)model; return 0; }
-DynEntityPose *__cdecl DynEnt_GetClientModelPoseList()         { return nullptr; }
+uint16_t DynEnt_GetEntityCount(DynEntityCollType type) { (void)type; return 0; }
+int DynEnt_GetXModelUsageCount(const XModel *model)   { (void)model; return 0; }
+DynEntityPose *DynEnt_GetClientModelPoseList()         { return nullptr; }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SND stubs
 // ─────────────────────────────────────────────────────────────────────────────
-bool __cdecl SND_IsMultiChannel()                              { return false; }
-void __cdecl SND_StopSounds(snd_stopsounds_arg_t which)        { (void)which; }
-LoadedSound *__cdecl SND_LoadSoundFile(const char *name)       { (void)name; return nullptr; }
-int  __cdecl SND_GetSoundFileSize(uint32_t *outSize)           { if (outSize) *outSize = 0; return 0; }
+bool SND_IsMultiChannel()                              { return false; }
+void SND_StopSounds(snd_stopsounds_arg_t which)        { (void)which; }
+LoadedSound *SND_LoadSoundFile(const char *name)       { (void)name; return nullptr; }
+int  SND_GetSoundFileSize(uint32_t *outSize)           { if (outSize) *outSize = 0; return 0; }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Scr stubs
 // ─────────────────────────────────────────────────────────────────────────────
-void __cdecl Scr_AddArray()                              {}
-void __cdecl Scr_AddConstString(uint32_t s)              { (void)s; }
-void __cdecl Scr_AddFloat(float f)                       { (void)f; }
-void __cdecl Scr_MonitorCommand(const char *cmd)         { (void)cmd; }
-void __cdecl Scr_NotifyNum(uint32_t id, uint32_t type, uint32_t name, uint32_t count)
+void Scr_AddArray()                              {}
+void Scr_AddConstString(uint32_t s)              { (void)s; }
+void Scr_AddFloat(float f)                       { (void)f; }
+void Scr_MonitorCommand(const char *cmd)         { (void)cmd; }
+void Scr_NotifyNum(uint32_t id, uint32_t type, uint32_t name, uint32_t count)
 { (void)id; (void)type; (void)name; (void)count; }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SEH (localization) stubs
 // ─────────────────────────────────────────────────────────────────────────────
-void __cdecl SEH_Init_StringEd()       {}
-void __cdecl SEH_Shutdown_StringEd()   {}
-void __cdecl SEH_InitLanguage()        {}
-void __cdecl SEH_UpdateLanguageInfo()  {}
+void SEH_Init_StringEd()       {}
+void SEH_Shutdown_StringEd()   {}
+void SEH_InitLanguage()        {}
+void SEH_UpdateLanguageInfo()  {}
 
-char *__cdecl SEH_LocalizeTextMessage(const char *text, const char *msgType, msgLocErrType_t errType)
+char *SEH_LocalizeTextMessage(const char *text, const char *msgType, msgLocErrType_t errType)
 { (void)msgType; (void)errType; return const_cast<char *>(text ? text : ""); }
 
-char *__cdecl SEH_SafeTranslateString(char *s)             { return s ? s : const_cast<char *>(""); }
-const char *__cdecl SEH_GetLanguageName(uint32_t lang)     { (void)lang; return "english"; }
-int  __cdecl SEH_GetLanguageIndexForName(const char *name, int *idx)
+char *SEH_SafeTranslateString(char *s)             { return s ? s : const_cast<char *>(""); }
+const char *SEH_GetLanguageName(uint32_t lang)     { (void)lang; return "english"; }
+int  SEH_GetLanguageIndexForName(const char *name, int *idx)
 { (void)name; if (idx) *idx = 0; return 0; }
-int  __cdecl SEH_GetCurrentLanguage()                       { return 0; }
-int  __cdecl SEH_PrintStrlen(const char *s)                 { return s ? (int)strlen(s) : 0; }
-uint32_t __cdecl SEH_DecodeLetter(uint32_t c, uint32_t font, int *outLen, int *outGlyph)
+int  SEH_GetCurrentLanguage()                       { return 0; }
+int  SEH_PrintStrlen(const char *s)                 { return s ? (int)strlen(s) : 0; }
+uint32_t SEH_DecodeLetter(uint32_t c, uint32_t font, int *outLen, int *outGlyph)
 { (void)c; (void)font; if (outLen) *outLen = 1; if (outGlyph) *outGlyph = 0; return c; }
-uint32_t __cdecl SEH_ReadCharFromString(const char **text, int *isTrailingPunct)
+uint32_t SEH_ReadCharFromString(const char **text, int *isTrailingPunct)
 {
     if (!text || !*text || !**text) { if (isTrailingPunct) *isTrailingPunct = 0; return 0; }
     if (isTrailingPunct) *isTrailingPunct = 0;
@@ -560,78 +560,78 @@ uint32_t __cdecl SEH_ReadCharFromString(const char **text, int *isTrailingPunct)
 // R_Cinematic — the IDB editor build nulls Init (R_Cinematic_Init_NULL 0x536060, a pure
 // retn), so no cinematic thread exists and activeImageFrame stays 0.
 // ─────────────────────────────────────────────────────────────────────────────
-void __cdecl R_Cinematic_Init()             {}
-void __cdecl R_Cinematic_Shutdown()         {}
+void R_Cinematic_Init()             {}
+void R_Cinematic_Shutdown()         {}
 // 0x5360a0 — the editor variant is JUST the activeImageFrame==-1 branch of
 // R_Cinematic_UpdateRendererImages (black/gray/gray/black), no thread sync.  Runs every
 // frame via RB_BeginFrame, so the cinematic code images are non-NULL before the texture
 // browser draws a cinematic-material thumbnail (otherwise R_TextureFromCodeError fatals
 // with "Tried to use 'cinematicY' when it isn't valid").
-void __cdecl R_Cinematic_UpdateFrame()
+void R_Cinematic_UpdateFrame()
 {
     gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_Y]  = rgp.blackImage;
     gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_CR] = rgp.grayImage;
     gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_CB] = rgp.grayImage;
     gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_A]  = rgp.blackImage;
 }
-void __cdecl R_Cinematic_BeginLostDevice()  {}
-void __cdecl R_Cinematic_EndLostDevice()    {}
-bool __cdecl R_Cinematic_IsStarted()        { return false; }
-bool __cdecl R_Cinematic_IsUnderrun()       { return false; }
+void R_Cinematic_BeginLostDevice()  {}
+void R_Cinematic_EndLostDevice()    {}
+bool R_Cinematic_IsStarted()        { return false; }
+bool R_Cinematic_IsUnderrun()       { return false; }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RB profile / DevGui stubs
 // ─────────────────────────────────────────────────────────────────────────────
-void __cdecl RB_DrawProfile()       {}
-void __cdecl RB_DrawProfileScript() {}
-void __cdecl RB_ProfileInit()       {}
-void __cdecl DevGui_AddGraph(const char *path, DevGraph *graph) { (void)path; (void)graph; }
+void RB_DrawProfile()       {}
+void RB_DrawProfileScript() {}
+void RB_ProfileInit()       {}
+void DevGui_AddGraph(const char *path, DevGraph *graph) { (void)path; (void)graph; }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Net / server stubs
 // ─────────────────────────────────────────────────────────────────────────────
-void __cdecl NET_Sleep(int msec) { Sleep(msec > 0 ? (DWORD)msec : 0); }
-int  __cdecl SV_GameCommand()    { return 0; }
-void __cdecl FS_PureServerSetLoadedIwds(char *loaded, char *referenced) { (void)loaded; (void)referenced; }
+void NET_Sleep(int msec) { Sleep(msec > 0 ? (DWORD)msec : 0); }
+int  SV_GameCommand()    { return 0; }
+void FS_PureServerSetLoadedIwds(char *loaded, char *referenced) { (void)loaded; (void)referenced; }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Physics stub
 // ─────────────────────────────────────────────────────────────────────────────
-void __cdecl Phys_ObjSetCollisionFromXModel(const XModel *model, PhysWorld world, dxBody *body)
+void Phys_ObjSetCollisionFromXModel(const XModel *model, PhysWorld world, dxBody *body)
 { (void)model; (void)world; (void)body; }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FX worker-thread update stubs (r_workercmds_common.cpp)
 // ─────────────────────────────────────────────────────────────────────────────
-void __cdecl FX_FillGenerateVertsCmd(int32_t localClientNum, FxGenerateVertsCmd *cmd) { (void)localClientNum; (void)cmd; }
-void __cdecl FX_UpdateSpotLight(FxCmd *cmd)        { (void)cmd; }
-void __cdecl FX_UpdateNonDependent(FxCmd *cmd)     { (void)cmd; }
-void __cdecl FX_UpdateRemaining(FxCmd *cmd)        { (void)cmd; }
-void __cdecl FX_EndUpdate(int32_t localClientNum)  { (void)localClientNum; }
-void __cdecl FX_AddNonSpriteDrawSurfs(FxCmd *cmd)  { (void)cmd; }
+void FX_FillGenerateVertsCmd(int32_t localClientNum, FxGenerateVertsCmd *cmd) { (void)localClientNum; (void)cmd; }
+void FX_UpdateSpotLight(FxCmd *cmd)        { (void)cmd; }
+void FX_UpdateNonDependent(FxCmd *cmd)     { (void)cmd; }
+void FX_UpdateRemaining(FxCmd *cmd)        { (void)cmd; }
+void FX_EndUpdate(int32_t localClientNum)  { (void)localClientNum; }
+void FX_AddNonSpriteDrawSurfs(FxCmd *cmd)  { (void)cmd; }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Sys FX-event stubs (r_workercmds_common.cpp)
 // ─────────────────────────────────────────────────────────────────────────────
-void __cdecl Sys_SetUpdateSpotLightEffectEvent()           {}
-void __cdecl Sys_ResetUpdateSpotLightEffectEvent()         {}
-void __cdecl Sys_WaitUpdateNonDependentEffectsCompleted()  {}
-void __cdecl Sys_SetUpdateNonDependentEffectsEvent()       {}
-void __cdecl Sys_ResetUpdateNonDependentEffectsEvent()     {}
+void Sys_SetUpdateSpotLightEffectEvent()           {}
+void Sys_ResetUpdateSpotLightEffectEvent()         {}
+void Sys_WaitUpdateNonDependentEffectsCompleted()  {}
+void Sys_SetUpdateNonDependentEffectsEvent()       {}
+void Sys_ResetUpdateNonDependentEffectsEvent()     {}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ProfLoad stubs (load profiling, used in com_files/r_material/etc.)
 // ─────────────────────────────────────────────────────────────────────────────
-void __cdecl ProfLoad_Begin(const char *label)                              { (void)label; }
-void __cdecl ProfLoad_End()                                                  {}
-void __cdecl ProfLoad_BeginTrackedValue(MapProfileTrackedValue type)        { (void)type; }
-void __cdecl ProfLoad_EndTrackedValue(MapProfileTrackedValue type)          { (void)type; }
+void ProfLoad_Begin(const char *label)                              { (void)label; }
+void ProfLoad_End()                                                  {}
+void ProfLoad_BeginTrackedValue(MapProfileTrackedValue type)        { (void)type; }
+void ProfLoad_EndTrackedValue(MapProfileTrackedValue type)          { (void)type; }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CM collision-display stub (rb_showcollision.cpp)
 // ─────────────────────────────────────────────────────────────────────────────
-void __cdecl CM_ShowBrushCollision(int contentMask, cplane_s *frustumPlanes,
-    int frustumPlaneCount, void(__cdecl *drawPoly)(int, float (*)[3], const float *))
+void CM_ShowBrushCollision(int contentMask, cplane_s *frustumPlanes,
+    int frustumPlaneCount, void(*drawPoly)(int, float (*)[3], const float *))
 { (void)contentMask; (void)frustumPlanes; (void)frustumPlaneCount; (void)drawPoly; }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -746,7 +746,7 @@ RadiantFilterEntry filter_locale_array[256] = { { (char *)"all", 0 } };
 
 // 0x402ac0 — Byte4PackPixelColor packs BGRA (array[2]=R, [1]=G, [0]=B, [3]=A) with the
 // usual 2^-30 round epsilon, identical to the engine's Byte4PackVertexColor; delegate.
-extern void __cdecl Byte4PackVertexColor(const float *from, uint8_t *to);  // qcommon/com_pack.cpp
+extern void Byte4PackVertexColor(const float *from, uint8_t *to);  // qcommon/com_pack.cpp
 char Byte4PackPixelColor(float *from, GfxColor *out)
 {
     if (out)

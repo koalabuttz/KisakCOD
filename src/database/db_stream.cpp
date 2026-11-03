@@ -13,9 +13,9 @@ StreamPosInfo g_streamPosStack[64];
 uint32_t g_streamPosStackIndex;
 
 // --- file-local forward declarations (moved out of database.h) ---
-static void __cdecl DB_SetStreamIndex(uint32_t index);
+static void DB_SetStreamIndex(uint32_t index);
 
-void __cdecl DB_InitStreams(XZoneMemory *zoneMem)
+void DB_InitStreams(XZoneMemory *zoneMem)
 {
     int32_t i; // [esp+0h] [ebp-4h]
 
@@ -28,7 +28,7 @@ void __cdecl DB_InitStreams(XZoneMemory *zoneMem)
         g_streamPosArray[i] = zoneMem->blocks[i].data;
 }
 
-void __cdecl DB_PushStreamPos(uint32_t index)
+void DB_PushStreamPos(uint32_t index)
 {
     iassert(index < ARRAY_COUNT(g_streamPosArray));
     iassert(g_streamPosIndex < ARRAY_COUNT(g_streamPosArray));
@@ -40,7 +40,7 @@ void __cdecl DB_PushStreamPos(uint32_t index)
     g_streamPosStack[g_streamPosStackIndex++].pos = g_streamPos;
 }
 
-void __cdecl DB_CloneStreamData(uint8_t *destStart)
+void DB_CloneStreamData(uint8_t *destStart)
 {
     if (destStart)
         memcpy(
@@ -49,7 +49,7 @@ void __cdecl DB_CloneStreamData(uint8_t *destStart)
             g_streamPos - g_streamPosArray[g_streamPosIndex]);
 }
 
-void __cdecl DB_SetStreamIndex(uint32_t index)
+void DB_SetStreamIndex(uint32_t index)
 {
     if (index != g_streamPosIndex)
     {
@@ -68,7 +68,7 @@ void __cdecl DB_SetStreamIndex(uint32_t index)
     }
 }
 
-void __cdecl DB_PopStreamPos()
+void DB_PopStreamPos()
 {
     vassert(g_streamPosStackIndex > 0, "(g_streamPosStackIndex = %d)", g_streamPosStackIndex);
     --g_streamPosStackIndex;
@@ -77,19 +77,19 @@ void __cdecl DB_PopStreamPos()
     DB_SetStreamIndex(g_streamPosStack[g_streamPosStackIndex].index);
 }
 
-uint8_t *__cdecl DB_GetStreamPos()
+uint8_t *DB_GetStreamPos()
 {
     return g_streamPos;
 }
 
-uint8_t *__cdecl DB_AllocStreamPos(int32_t alignment)
+uint8_t *DB_AllocStreamPos(int32_t alignment)
 {
     iassert(g_streamPos);
     g_streamPos = (uint8_t *)(~alignment & (uint32_t)&g_streamPos[alignment]);
     return g_streamPos;
 }
 
-void __cdecl DB_IncStreamPos(int32_t size)
+void DB_IncStreamPos(int32_t size)
 {
     iassert(g_streamPos);
     iassert(g_streamPos + size <= g_streamZoneMem->blocks[g_streamPosIndex].data + g_streamZoneMem->blocks[g_streamPosIndex].size);
@@ -97,7 +97,7 @@ void __cdecl DB_IncStreamPos(int32_t size)
     g_streamPos += size;
 }
 
-const void **__cdecl DB_InsertPointer()
+const void **DB_InsertPointer()
 {
     const void **pData; // [esp+0h] [ebp-4h]
 

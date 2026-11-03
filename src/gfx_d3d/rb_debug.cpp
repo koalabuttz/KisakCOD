@@ -11,7 +11,7 @@ GfxPointVertex g_debugPolyVerts[2725];
 GfxPointVertex g_debugExternLineVerts[2725];
 GfxPointVertex g_debugLineVerts[2725];
 
-void __cdecl RB_AddPlumeStrings(const GfxViewParms *viewParms)
+void RB_AddPlumeStrings(const GfxViewParms *viewParms)
 {
     char *v1; // eax
     float v2; // [esp+Ch] [ebp-20h]
@@ -74,7 +74,7 @@ void RB_DrawPolyInteriors()
     RB_EndTessSurface();
 }
 
-int __cdecl RB_AddDebugLine(
+int RB_AddDebugLine(
     const float *start,
     const float *end,
     const float *color,
@@ -104,7 +104,7 @@ int __cdecl RB_AddDebugLine(
     return vertCount + 2;
 }
 
-int __cdecl RB_EndDebugLines(bool depthTest, int vertCount, const GfxPointVertex *verts)
+int RB_EndDebugLines(bool depthTest, int vertCount, const GfxPointVertex *verts)
 {
     if (vertCount)
         RB_DrawLines3D(vertCount, 1, verts, depthTest);
@@ -143,7 +143,7 @@ int RB_DrawPolyOutlines()
     return RB_EndDebugLines(0, vertCount / 2, g_debugPolyVerts);
 }
 
-void __cdecl RB_DrawDebugPolys()
+void RB_DrawDebugPolys()
 {
     if (backEndData->debugGlobals.polyCount)
     {
@@ -156,7 +156,7 @@ void __cdecl RB_DrawDebugPolys()
     }
 }
 
-void __cdecl RB_DrawDebugLines(trDebugLine_t *lines, int lineCount, GfxPointVertex *verts)
+void RB_DrawDebugLines(trDebugLine_t *lines, int lineCount, GfxPointVertex *verts)
 {
     char lineDepthTest; // [esp+3h] [ebp-11h]
     int vertCount; // [esp+4h] [ebp-10h]
@@ -191,7 +191,7 @@ void __cdecl RB_DrawDebugLines(trDebugLine_t *lines, int lineCount, GfxPointVert
     }
 }
 
-void __cdecl RB_DrawDebugStrings(trDebugString_t *strings, int stringCount)
+void RB_DrawDebugStrings(trDebugString_t *strings, int stringCount)
 {
     float scale; // [esp+0h] [ebp-28h]
     float scalea; // [esp+0h] [ebp-28h]
@@ -225,7 +225,7 @@ void __cdecl RB_DrawDebugStrings(trDebugString_t *strings, int stringCount)
     }
 }
 
-void __cdecl RB_DrawDebug(const GfxViewParms *viewParms)
+void RB_DrawDebug(const GfxViewParms *viewParms)
 {
     iassert( viewParms );
     RB_AddPlumeStrings(viewParms);

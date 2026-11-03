@@ -96,23 +96,23 @@ static const char *s_threadNames[THREAD_CONTEXT_COUNT] =
 };
 #endif
 
-uint32_t __cdecl Sys_GetCpuCount()
+uint32_t Sys_GetCpuCount()
 {
     return s_cpuCount;
 }
 
-void __cdecl Sys_EndLoadThreadPriorities()
+void Sys_EndLoadThreadPriorities()
 {
     iassert(Sys_IsMainThread());
     SetThreadPriority(threadHandle[THREAD_CONTEXT_MAIN], 0);
 }
 
-int __cdecl Sys_IsRendererReady()
+int Sys_IsRendererReady()
 {
     return Sys_WaitForSingleObjectTimeout(&renderCompletedEvent, 0);
 }
 
-void __cdecl Sys_InitMainThread()
+void Sys_InitMainThread()
 {
     HANDLE process; // [esp+0h] [ebp-8h]
     HANDLE pseudoHandle; // [esp+4h] [ebp-4h]
@@ -127,12 +127,12 @@ void __cdecl Sys_InitMainThread()
     Com_InitThreadData(0);
 }
 
-uint32_t __cdecl Sys_GetCurrentThreadId()
+uint32_t Sys_GetCurrentThreadId()
 {
     return GetCurrentThreadId();
 }
 
-void __cdecl Sys_InitThread(ThreadContext_t threadContext)
+void Sys_InitThread(ThreadContext_t threadContext)
 {
     //*(uint32_t*)(*((uint32_t*)NtCurrentTeb()->ThreadLocalStoragePointer + _tls_index) + 4) = g_threadValues[threadContext];
     g_threadLocals = g_threadValues[threadContext];
@@ -140,7 +140,7 @@ void __cdecl Sys_InitThread(ThreadContext_t threadContext)
     Profile_InitContext(threadContext);
 }
 
-char __cdecl Sys_SpawnRenderThread(void(__cdecl* function)(uint32_t))
+char Sys_SpawnRenderThread(void(* function)(uint32_t))
 {
     Sys_CreateEvent(0, 0, &renderPausedEvent);
     Sys_CreateEvent(1, 1, &renderCompletedEvent);
@@ -161,12 +161,12 @@ char __cdecl Sys_SpawnRenderThread(void(__cdecl* function)(uint32_t))
     return 1;
 }
 
-void __cdecl Sys_CreateEvent(bool manualReset, bool initialState, void** event)
+void Sys_CreateEvent(bool manualReset, bool initialState, void** event)
 {
     *event = CreateEventA(0, manualReset, initialState, 0);
 }
 
-void __cdecl Sys_CreateThread(void(__cdecl* function)(uint32_t), ThreadContext_t threadContext)
+void Sys_CreateThread(void(* function)(uint32_t), ThreadContext_t threadContext)
 {
     iassert( threadFunc[threadContext] == NULL );
     iassert(threadContext < THREAD_CONTEXT_COUNT);
@@ -191,7 +191,7 @@ struct tagTHREADNAME_INFO // sizeof=0x10
 };
 
 // https://learn.microsoft.com/en-us/visualstudio/debugger/tips-for-debugging-threads?view=vs-2022&tabs=csharp
-void __cdecl SetThreadName(uint32_t threadId, const char* threadName)
+void SetThreadName(uint32_t threadId, const char* threadName)
 {
     tagTHREADNAME_INFO info; // [esp+10h] [ebp-28h] BYREF
     //CPPEH_RECORD ms_exc; // [esp+20h] [ebp-18h]
@@ -231,7 +231,7 @@ static void* resumedDatabaseEvent;
 
 bool dediRenderHack = false;
 
-char __cdecl Sys_SpawnDatabaseThread(void(__cdecl* function)(uint32_t))
+char Sys_SpawnDatabaseThread(void(* function)(uint32_t))
 {
     Sys_CreateEvent(0, 0, &wakeDatabaseEvent);
     Sys_CreateEvent(1, 1, &databaseCompletedEvent);
@@ -249,7 +249,7 @@ char __cdecl Sys_SpawnDatabaseThread(void(__cdecl* function)(uint32_t))
     return 1;
 }
 
-void __cdecl Sys_SuspendDatabaseThread(ThreadOwner owner)
+void Sys_SuspendDatabaseThread(ThreadOwner owner)
 {
     iassert( owner != THREAD_OWNER_NONE );
 
@@ -266,12 +266,12 @@ void __cdecl Sys_SuspendDatabaseThread(ThreadOwner owner)
     Sys_ResetEvent(&resumedDatabaseEvent);
 }
 
-void __cdecl Sys_ResetEvent(void** event)
+void Sys_ResetEvent(void** event)
 {
     ResetEvent(*event);
 }
 
-void __cdecl Sys_ResumeDatabaseThread(ThreadOwner owner)
+void Sys_ResumeDatabaseThread(ThreadOwner owner)
 {
     iassert( owner != THREAD_OWNER_NONE );
     if (g_databaseThreadOwner != owner)
@@ -286,22 +286,22 @@ void __cdecl Sys_ResumeDatabaseThread(ThreadOwner owner)
     Sys_SetEvent(&resumedDatabaseEvent);
 }
 
-void __cdecl Sys_SetEvent(void** event)
+void Sys_SetEvent(void** event)
 {
     SetEvent(*event);
 }
 
-bool __cdecl Sys_HaveSuspendedDatabaseThread(ThreadOwner owner)
+bool Sys_HaveSuspendedDatabaseThread(ThreadOwner owner)
 {
     return g_databaseThreadOwner == owner;
 }
 
-void __cdecl Sys_WaitDatabaseThread()
+void Sys_WaitDatabaseThread()
 {
     Sys_WaitForSingleObject(&resumedDatabaseEvent);
 }
 
-void __cdecl Sys_WaitForSingleObject(void** event)
+void Sys_WaitForSingleObject(void** event)
 {
     uint32_t result; // [esp+0h] [ebp-4h]
 
@@ -309,7 +309,7 @@ void __cdecl Sys_WaitForSingleObject(void** event)
     iassert(result == ((((uint32_t)0x00000000L)) + 0));
 }
 
-bool __cdecl Sys_SpawnWorkerThread(void(__cdecl* function)(uint32_t), uint32_t threadIndex)
+bool Sys_SpawnWorkerThread(void(* function)(uint32_t), uint32_t threadIndex)
 {
     ThreadContext_t threadContext; // [esp+0h] [ebp-4h]
 
@@ -326,35 +326,35 @@ bool __cdecl Sys_SpawnWorkerThread(void(__cdecl* function)(uint32_t), uint32_t t
     return threadHandle[threadContext] != 0;
 }
 
-void __cdecl Sys_SuspendThread(ThreadContext_t threadContext)
+void Sys_SuspendThread(ThreadContext_t threadContext)
 {
     iassert( threadHandle[threadContext] );
     SuspendThread(threadHandle[threadContext]);
 }
 
-void __cdecl Sys_ResumeThread(ThreadContext_t threadContext)
+void Sys_ResumeThread(ThreadContext_t threadContext)
 {
     iassert( threadHandle[threadContext] );
     ResumeThread(threadHandle[threadContext]);
 }
 
-void *__cdecl Sys_RendererSleep()
+void *Sys_RendererSleep()
 {
     return InterlockedExchangePointer(&smpData, nullptr);
 }
 
-int __cdecl Sys_RendererReady()
+int Sys_RendererReady()
 {
     return smpData != 0;
 }
 
-void __cdecl Sys_RenderCompleted()
+void Sys_RenderCompleted()
 {
     Sys_SetEvent(&renderCompletedEvent);
     Sys_SetWorkerCmdEvent();
 }
 
-void __cdecl Sys_FrontEndSleep()
+void Sys_FrontEndSleep()
 {
     int newCount; // [esp+0h] [ebp-4h]
 
@@ -381,13 +381,13 @@ void __cdecl Sys_FrontEndSleep()
     Sys_WaitForSingleObject(&renderPausedEvent);
 }
 
-bool __cdecl Sys_WaitForSingleObjectTimeout(void** event, uint32_t msec)
+bool Sys_WaitForSingleObjectTimeout(void** event, uint32_t msec)
 {
     iassert( msec != INFINITE );
     return WaitForSingleObject(*event, msec) == 0;
 }
 
-void __cdecl Sys_WakeRenderer(void* data)
+void Sys_WakeRenderer(void* data)
 {
     Sys_ResetEvent(&renderCompletedEvent);
     const void *old = InterlockedExchangePointer(&smpData, data);
@@ -397,7 +397,7 @@ void __cdecl Sys_WakeRenderer(void* data)
     Sys_SetWorkerCmdEvent();
 }
 
-void __cdecl Sys_NotifyRenderer()
+void Sys_NotifyRenderer()
 {
     if (!backendEvent[1])
         MyAssertHandler(
@@ -409,7 +409,7 @@ void __cdecl Sys_NotifyRenderer()
     Sys_SetEvent(&backendEvent[1]);
 }
 
-void __cdecl Sys_DatabaseCompleted()
+void Sys_DatabaseCompleted()
 {
 #ifdef KISAK_SP 
     Sys_EnterCriticalSection(CRITSECT_START_SERVER);
@@ -420,32 +420,32 @@ void __cdecl Sys_DatabaseCompleted()
     Sys_SetEvent(&databaseCompletedEvent);
 }
 
-void __cdecl Sys_WaitStartDatabase()
+void Sys_WaitStartDatabase()
 {
     Sys_WaitForSingleObject(&wakeDatabaseEvent);
 }
 
-bool __cdecl Sys_IsDatabaseReady()
+bool Sys_IsDatabaseReady()
 {
     return Sys_WaitForSingleObjectTimeout(&databaseCompletedEvent, 0);
 }
 
-void __cdecl Sys_SyncDatabase()
+void Sys_SyncDatabase()
 {
     Sys_WaitForSingleObject(&databaseCompletedEvent);
 }
 
-void __cdecl Sys_WakeDatabase()
+void Sys_WakeDatabase()
 {
     Sys_ResetEvent(&databaseCompletedEvent);
 }
 
-void __cdecl Sys_NotifyDatabase()
+void Sys_NotifyDatabase()
 {
     Sys_SetEvent(&wakeDatabaseEvent);
 }
 
-void __cdecl Sys_DatabaseCompleted2()
+void Sys_DatabaseCompleted2()
 {
 #ifdef KISAK_SP
     Sys_EnterCriticalSection(CRITSECT_START_SERVER);
@@ -455,33 +455,33 @@ void __cdecl Sys_DatabaseCompleted2()
     Sys_SetEvent(&databaseCompletedEvent2);
 }
 
-bool __cdecl Sys_IsDatabaseReady2()
+bool Sys_IsDatabaseReady2()
 {
     return Sys_WaitForSingleObjectTimeout(&databaseCompletedEvent2, 0);
 }
 
-void __cdecl Sys_WakeDatabase2()
+void Sys_WakeDatabase2()
 {
     Sys_ResetEvent(&databaseCompletedEvent2);
 }
 
-bool __cdecl Sys_FinishRenderer()
+bool Sys_FinishRenderer()
 {
     KISAK_NULLSUB();
     return !Sys_WaitForSingleObjectTimeout(&noThreadOwnershipEvent, 0);
 }
 
-int __cdecl Sys_IsMainThreadReady()
+int Sys_IsMainThreadReady()
 {
     return Sys_WaitForSingleObjectTimeout(&noThreadOwnershipEvent, 0);
 }
 
-void __cdecl Sys_WaitForMainThread()
+void Sys_WaitForMainThread()
 {
     Sys_WaitForSingleObject(&noThreadOwnershipEvent);
 }
 
-void __cdecl Sys_StopRenderer()
+void Sys_StopRenderer()
 {
     uint32_t newCount; // [esp+0h] [ebp-4h]
 
@@ -498,22 +498,22 @@ void __cdecl Sys_StopRenderer()
     Sys_SetEvent(&renderPausedEvent);
 }
 
-void __cdecl Sys_StartRenderer()
+void Sys_StartRenderer()
 {
     Sys_SetEvent(&rendererRunningEvent);
 }
 
-bool __cdecl Sys_IsRenderThread()
+bool Sys_IsRenderThread()
 {
     return Sys_GetCurrentThreadId() == threadId[THREAD_CONTEXT_BACKEND];
 }
 
-bool __cdecl Sys_IsDatabaseThread()
+bool Sys_IsDatabaseThread()
 {
     return Sys_GetCurrentThreadId() == threadId[THREAD_CONTEXT_DATABASE];
 }
 
-bool __cdecl Sys_IsMainThread()
+bool Sys_IsMainThread()
 {
     return Sys_GetCurrentThreadId() == threadId[THREAD_CONTEXT_MAIN];
 }
@@ -525,66 +525,66 @@ bool Sys_IsServerThread()
 }
 #endif
 
-void __cdecl Sys_SetValue(int valueIndex, void* data)
+void Sys_SetValue(int valueIndex, void* data)
 {
     //*(uint32_t*)(*(uint32_t*)(*((uint32_t*)NtCurrentTeb()->ThreadLocalStoragePointer + _tls_index) + 4) + 4 * valueIndex) = data;
     g_threadLocals[valueIndex] = data;
 }
 
-void* __cdecl Sys_GetValue(int valueIndex)
+void* Sys_GetValue(int valueIndex)
 {
     //return *(void**)(*(uint32_t*)(*((uint32_t*)NtCurrentTeb()->ThreadLocalStoragePointer + _tls_index) + 4) + 4 * valueIndex);
     return g_threadLocals[valueIndex];
 }
 
-void __cdecl Sys_WaitForWorkerCmd()
+void Sys_WaitForWorkerCmd()
 {
     KISAK_NULLSUB();
     Sys_WaitForSingleObjectTimeout(backendEvent, 1u);
 }
 
-void __cdecl Sys_SetWorkerCmdEvent()
+void Sys_SetWorkerCmdEvent()
 {
     Sys_SetEvent(backendEvent);
 }
 
-void __cdecl Sys_ResetWorkerCmdEvent()
+void Sys_ResetWorkerCmdEvent()
 {
     Sys_ResetEvent(backendEvent);
 }
 
-int __cdecl Sys_WaitBackendEvent()
+int Sys_WaitBackendEvent()
 {
     return Sys_WaitForSingleObjectTimeout(&backendEvent[1], 0);
 }
 
-void __cdecl Sys_SetUpdateSpotLightEffectEvent()
+void Sys_SetUpdateSpotLightEffectEvent()
 {
     Sys_SetEvent(&updateSpotLightEffectEvent);
 }
 
-void __cdecl Sys_ResetUpdateSpotLightEffectEvent()
+void Sys_ResetUpdateSpotLightEffectEvent()
 {
     Sys_ResetEvent(&updateSpotLightEffectEvent);
 }
 
-void __cdecl Sys_WaitUpdateNonDependentEffectsCompleted()
+void Sys_WaitUpdateNonDependentEffectsCompleted()
 {
     KISAK_NULLSUB();
     Sys_WaitForSingleObject(&updateEffectsEvent);
 }
 
-void __cdecl Sys_SetUpdateNonDependentEffectsEvent()
+void Sys_SetUpdateNonDependentEffectsEvent()
 {
     Sys_SetEvent(&updateEffectsEvent);
 }
 
-void __cdecl Sys_ResetUpdateNonDependentEffectsEvent()
+void Sys_ResetUpdateNonDependentEffectsEvent()
 {
     Sys_ResetEvent(&updateEffectsEvent);
 }
 
-void __cdecl Sys_SuspendOtherThreads()
+void Sys_SuspendOtherThreads()
 {
     uint32_t threadIndex; // [esp+0h] [ebp-8h]
     uint32_t currentThreadId; // [esp+4h] [ebp-4h]
@@ -597,7 +597,7 @@ void __cdecl Sys_SuspendOtherThreads()
     }
 }
 
-void __cdecl Sys_ReleaseThreadOwnership()
+void Sys_ReleaseThreadOwnership()
 {
     if (Sys_WaitForSingleObjectTimeout(&noThreadOwnershipEvent, 0))
         MyAssertHandler(
@@ -613,7 +613,7 @@ static void* g_cinematicsThreadOutstandingRequestEvent;
 static void* g_cinematicsHostOutstandingRequestEvent;
 
 
-char __cdecl Sys_SpawnCinematicsThread(void(__cdecl* function)(uint32_t))
+char Sys_SpawnCinematicsThread(void(* function)(uint32_t))
 {
     Sys_CreateEvent(1, 1, &g_cinematicsThreadOutstandingRequestEvent);
     Sys_CreateEvent(1, 0, &g_cinematicsHostOutstandingRequestEvent);
@@ -624,37 +624,37 @@ char __cdecl Sys_SpawnCinematicsThread(void(__cdecl* function)(uint32_t))
     return 1;
 }
 
-bool __cdecl Sys_WaitForCinematicsThreadOutstandingRequestEventTimeout(uint32_t timeoutMsec)
+bool Sys_WaitForCinematicsThreadOutstandingRequestEventTimeout(uint32_t timeoutMsec)
 {
     return Sys_WaitForSingleObjectTimeout(&g_cinematicsThreadOutstandingRequestEvent, timeoutMsec);
 }
 
-void __cdecl Sys_SetCinematicsThreadOutstandingRequestEvent()
+void Sys_SetCinematicsThreadOutstandingRequestEvent()
 {
     Sys_SetEvent(&g_cinematicsThreadOutstandingRequestEvent);
 }
 
-void __cdecl Sys_ResetCinematicsThreadOutstandingRequestEvent()
+void Sys_ResetCinematicsThreadOutstandingRequestEvent()
 {
     Sys_ResetEvent(&g_cinematicsThreadOutstandingRequestEvent);
 }
 
-bool __cdecl Sys_WaitForCinematicsHostOutstandingRequestEventTimeout(uint32_t timeoutMsec)
+bool Sys_WaitForCinematicsHostOutstandingRequestEventTimeout(uint32_t timeoutMsec)
 {
     return Sys_WaitForSingleObjectTimeout(&g_cinematicsHostOutstandingRequestEvent, timeoutMsec);
 }
 
-void __cdecl Sys_SetCinematicsHostOutstandingRequestEvent()
+void Sys_SetCinematicsHostOutstandingRequestEvent()
 {
     Sys_SetEvent(&g_cinematicsHostOutstandingRequestEvent);
 }
 
-void __cdecl Sys_ResetCinematicsHostOutstandingRequestEvent()
+void Sys_ResetCinematicsHostOutstandingRequestEvent()
 {
     Sys_ResetEvent(&g_cinematicsHostOutstandingRequestEvent);
 }
 
-void __cdecl Win_SetThreadLock(WinThreadLock threadLock)
+void Win_SetThreadLock(WinThreadLock threadLock)
 {
     if (s_cpuCount != 1 && threadLock != s_threadLock)
     {
@@ -695,7 +695,7 @@ void __cdecl Win_SetThreadLock(WinThreadLock threadLock)
     }
 }
 
-WinThreadLock __cdecl Win_GetThreadLock()
+WinThreadLock Win_GetThreadLock()
 {
     return s_threadLock;
 }
@@ -719,7 +719,7 @@ void Win_UpdateThreadLock()
     }
 }
 
-void __cdecl Sys_BeginLoadThreadPriorities()
+void Sys_BeginLoadThreadPriorities()
 {
     iassert(Sys_IsMainThread());
     SetThreadPriority(threadHandle[THREAD_CONTEXT_MAIN], -1);

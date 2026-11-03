@@ -21,4 +21,4 @@ struct GenericAabbTreeOptions // sizeof=0x28
     int maxItemsPerLeaf;                // ...
 };
 
-int __cdecl BuildAabbTree(const GenericAabbTreeOptions *options);
+int BuildAabbTree(const GenericAabbTreeOptions *options);

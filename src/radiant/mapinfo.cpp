@@ -37,7 +37,7 @@ extern entity_s   entityInsts;                       // map.cpp 0x23F1748 (entit
 //   [0] brushes [1] curves [2] terrain [3] brush_ents [4] box_ents [5] model_ents [6] prefabs
 // a1 = the world block, a2 = the prefab-children block.  A fixed-size CLASS_PREFAB entity
 // with a realized prefab recurses with a2 for BOTH blocks, so nested prefabs share counters.
-void __cdecl MapInfo_01(
+void MapInfo_01(
     int        *worldStats,   // a1 — output counters for the world
     int         prefabStats,  // a2 — output counters for prefab children (int* cast to int)
     selbrush_t *brushList,    // a3 — active_brushes or prefab active_brushlist sentinel
@@ -128,7 +128,7 @@ void __cdecl MapInfo_01(
 // ++map[ entity->def->eclass->name ] over entList, recursing into prefab children exactly
 // like MapInfo_01.  IDB offsets: i->def = i[2], def->eclass = +0x60, eclass->name = +0x04,
 // eclass->classtype = +0x180, i->prefab = +0x48.
-void __cdecl MapInfo_02( CMap<CString, LPCSTR, int, int> *classCounts, entity_s *entList )
+void MapInfo_02( CMap<CString, LPCSTR, int, int> *classCounts, entity_s *entList )
 {
     iassert(entList);
 

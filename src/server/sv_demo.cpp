@@ -35,7 +35,7 @@ server_demo_history_t *g_history;
 bool g_savingHistory;
 server_demo_history_t *volatile g_historySaving;
 
-void __cdecl TRACK_sv_demo()
+void TRACK_sv_demo()
 {
     track_static_alloc_internal(g_buf, 6291456, "g_buf", 0);
     track_static_alloc_internal(g_msgBuf, 10485760, "g_msgBuf", 0);
@@ -44,7 +44,7 @@ void __cdecl TRACK_sv_demo()
     track_static_alloc_internal(g_historyBuffers, 344, "g_historyBuffers", 0);
 }
 
-unsigned int __cdecl SV_GetHistoryIndex(server_demo_history_t *history)
+unsigned int SV_GetHistoryIndex(server_demo_history_t *history)
 {
     if (history == &g_historyBuffers[1])
         return 1;
@@ -53,7 +53,7 @@ unsigned int __cdecl SV_GetHistoryIndex(server_demo_history_t *history)
     return 0;
 }
 
-int __cdecl SV_GetBufferIndex(unsigned __int8 *ptr)
+int SV_GetBufferIndex(unsigned __int8 *ptr)
 {
     int v1; // r8
     int v2; // r10
@@ -79,7 +79,7 @@ int __cdecl SV_GetBufferIndex(unsigned __int8 *ptr)
     return 0;
 }
 
-void __cdecl SV_HistoryFree(unsigned __int8 *ptr, int size)
+void SV_HistoryFree(unsigned __int8 *ptr, int size)
 {
     int BufferIndex; // r3
     int v5; // r10
@@ -96,7 +96,7 @@ void __cdecl SV_HistoryFree(unsigned __int8 *ptr, int size)
             "ptr == g_buf[bufferIndex] + g_bufSize[bufferIndex]");
 }
 
-int __cdecl SV_HistoryAlloc(server_demo_history_t *history, unsigned __int8 **pData, int size)
+int SV_HistoryAlloc(server_demo_history_t *history, unsigned __int8 **pData, int size)
 {
     unsigned int HistoryIndex; // r3
     unsigned int v7; // r28
@@ -135,7 +135,7 @@ int __cdecl SV_HistoryAlloc(server_demo_history_t *history, unsigned __int8 **pD
     return result;
 }
 
-int __cdecl SV_MsgAlloc(unsigned int maxsize)
+int SV_MsgAlloc(unsigned int maxsize)
 {
     if (sv.demo.msg.data)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\server\\sv_demo.cpp", 271, 0, "%s", "!sv.demo.msg.data");
@@ -173,12 +173,12 @@ void SV_CheckDemoSize()
     }
 }
 
-bool __cdecl SV_DemoWrite(const void *buffer, unsigned int len, _iobuf *file)
+bool SV_DemoWrite(const void *buffer, unsigned int len, _iobuf *file)
 {
     return FS_FileWrite(buffer, len, file) == len;
 }
 
-int __cdecl SV_FindTimeSkipIndex(int time)
+int SV_FindTimeSkipIndex(int time)
 {
     int v1; // r11
     FileSkip *v2; // r10
@@ -198,7 +198,7 @@ int __cdecl SV_FindTimeSkipIndex(int time)
     return v1 - 1;
 }
 
-FileMarkSkip *__cdecl SV_FindMarkSkip(const char *name)
+FileMarkSkip *SV_FindMarkSkip(const char *name)
 {
     int v2; // r31
     FileMarkSkip *i; // r30
@@ -214,7 +214,7 @@ FileMarkSkip *__cdecl SV_FindMarkSkip(const char *name)
     return &g_fileMarkSkips[v2];
 }
 
-void __cdecl SV_TruncateHistoryTimeCache(int maxTime)
+void SV_TruncateHistoryTimeCache(int maxTime)
 {
     int v1; // r11
     FileSkip *v2; // r10
@@ -255,7 +255,7 @@ int SV_ClearHistoryMarkCache()
 }
 
 // attributes: thunk
-void __cdecl SV_TruncateHistoryCache(int maxTime)
+void SV_TruncateHistoryCache(int maxTime)
 {
     SV_TruncateHistoryTimeCache(maxTime);
 }
@@ -269,7 +269,7 @@ int SV_SetAutoSaveHistoryTime()
     return result;
 }
 
-void __cdecl SV_ResetDemo()
+void SV_ResetDemo()
 {
     sv.demo.recording = 0;
     sv.demo.playing = 0;
@@ -291,7 +291,7 @@ _iobuf *SV_ClearHistoryCache()
     return result;
 }
 
-void __cdecl SV_FreeDemoSaveBuf(server_demo_save_t *save)
+void SV_FreeDemoSaveBuf(server_demo_save_t *save)
 {
     unsigned __int8 *buf; // r3
 
@@ -304,7 +304,7 @@ void __cdecl SV_FreeDemoSaveBuf(server_demo_save_t *save)
     }
 }
 
-void __cdecl SV_FreeHistoryData(server_demo_history_t *history)
+void SV_FreeHistoryData(server_demo_history_t *history)
 {
     unsigned __int8 *freeEntBuf; // r3
     unsigned __int8 *cmBuf; // r3
@@ -335,7 +335,7 @@ void __cdecl SV_FreeHistoryData(server_demo_history_t *history)
     }
 }
 
-void __cdecl SV_FreeHistory(server_demo_history_t **history)
+void SV_FreeHistory(server_demo_history_t **history)
 {
     server_demo_history_t *v2; // r3
 
@@ -362,7 +362,7 @@ void SV_FreeDemoMsg()
     }
 }
 
-int __cdecl SV_WaitForSaveHistoryDone()
+int SV_WaitForSaveHistoryDone()
 {
     if (!g_savingHistory)
         return 1;
@@ -379,7 +379,7 @@ int __cdecl SV_WaitForSaveHistoryDone()
     return 0;
 }
 
-void __cdecl SV_ShutdownDemo()
+void SV_ShutdownDemo()
 {
     SV_FreeDemoMsg();
     if (g_history)
@@ -399,7 +399,7 @@ void __cdecl SV_ShutdownDemo()
 }
 
 
-int __cdecl SV_AddDemoSave(SaveGame *savehandle, server_demo_save_t *save, int createSave)
+int SV_AddDemoSave(SaveGame *savehandle, server_demo_save_t *save, int createSave)
 {
     server_demo_history_t *history;
     if (g_history)
@@ -466,7 +466,7 @@ int __cdecl SV_AddDemoSave(SaveGame *savehandle, server_demo_save_t *save, int c
     return 1;
 }
 
-_iobuf *__cdecl SV_DemoOpenFile(const char *fileName)
+_iobuf *SV_DemoOpenFile(const char *fileName)
 {
     const char *v2; // r3
     char v4[288]; // [sp+50h] [-120h] BYREF
@@ -479,7 +479,7 @@ _iobuf *__cdecl SV_DemoOpenFile(const char *fileName)
     return 0;
 }
 
-void __cdecl SV_InitWriteDemo(int randomSeed)
+void SV_InitWriteDemo(int randomSeed)
 {
     ProfLoad_Begin("SV_InitWriteDemo");
     if (sv.demo.nextLevelplaying)
@@ -508,7 +508,7 @@ void __cdecl SV_InitWriteDemo(int randomSeed)
     }
 }
 
-void __cdecl SV_InitReadDemoSavegame(SaveGame **saveHandle)
+void SV_InitReadDemoSavegame(SaveGame **saveHandle)
 {
     if (!saveHandle)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\server\\sv_demo.cpp", 1074, 0, "%s", "saveHandle");
@@ -554,7 +554,7 @@ void __cdecl SV_InitReadDemoSavegame(SaveGame **saveHandle)
     }
 }
 
-int __cdecl SV_InitDemoSavegame(SaveGame **save)
+int SV_InitDemoSavegame(SaveGame **save)
 {
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\server\\sv_demo.cpp", 1222, 0, "%s", "save");
@@ -576,17 +576,17 @@ int __cdecl SV_InitDemoSavegame(SaveGame **save)
     return 1;
 }
 
-bool __cdecl SV_IsDemoPlaying()
+bool SV_IsDemoPlaying()
 {
     return sv.demo.playing;
 }
 
-bool __cdecl SV_UsingDemoSave()
+bool SV_UsingDemoSave()
 {
     return sv.demo.nextLevelSave != 0;
 }
 
-void __cdecl SV_RecordClientCommand(const char *s)
+void SV_RecordClientCommand(const char *s)
 {
     int FramePos; // r3
 
@@ -600,7 +600,7 @@ void __cdecl SV_RecordClientCommand(const char *s)
     }
 }
 
-void __cdecl SV_RecordClientThink(usercmd_s *cmd)
+void SV_RecordClientThink(usercmd_s *cmd)
 {
     int FramePos; // r3
 
@@ -614,7 +614,7 @@ void __cdecl SV_RecordClientThink(usercmd_s *cmd)
     }
 }
 
-void __cdecl SV_RecordFxVisibility(double visibility)
+void SV_RecordFxVisibility(double visibility)
 {
     if (sv.demo.recording)
     {
@@ -624,7 +624,7 @@ void __cdecl SV_RecordFxVisibility(double visibility)
     }
 }
 
-void __cdecl SV_RecordCheatsOk(int cheatsOk)
+void SV_RecordCheatsOk(int cheatsOk)
 {
     if (sv.demo.recording)
     {
@@ -634,7 +634,7 @@ void __cdecl SV_RecordCheatsOk(int cheatsOk)
     }
 }
 
-void __cdecl SV_RecordIsRecentlyLoaded(bool isRecentlyLoaded)
+void SV_RecordIsRecentlyLoaded(bool isRecentlyLoaded)
 {
     if (sv.demo.recording)
     {
@@ -644,7 +644,7 @@ void __cdecl SV_RecordIsRecentlyLoaded(bool isRecentlyLoaded)
     }
 }
 
-void __cdecl SV_Record_Dvar_GetVariantString(const char *buffer)
+void SV_Record_Dvar_GetVariantString(const char *buffer)
 {
     if (sv.demo.recording)
     {
@@ -654,7 +654,7 @@ void __cdecl SV_Record_Dvar_GetVariantString(const char *buffer)
     }
 }
 
-void __cdecl SV_RecordButtonPressed(int buttonPressed)
+void SV_RecordButtonPressed(int buttonPressed)
 {
     if (sv.demo.recording)
     {
@@ -664,7 +664,7 @@ void __cdecl SV_RecordButtonPressed(int buttonPressed)
     }
 }
 
-void __cdecl SV_GetFreeDemoName(const char *baseName, int demoCount, char *testDemoName)
+void SV_GetFreeDemoName(const char *baseName, int demoCount, char *testDemoName)
 {
     char path[320];
 
@@ -690,7 +690,7 @@ found:
     }
 }
 
-void __cdecl SV_SaveDemoImmediate(SaveImmediate *save)
+void SV_SaveDemoImmediate(SaveImmediate *save)
 {
     if (!sv.demo.msg.data)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\server\\sv_demo.cpp", 1689, 0, "%s", "sv.demo.msg.data");
@@ -702,7 +702,7 @@ void __cdecl SV_SaveDemoImmediate(SaveImmediate *save)
     SaveMemory_SaveWriteImmediate(sv.demo.msg.data, sv.demo.msg.cursize, save);
 }
 
-void __cdecl SV_WriteDemo(SaveGame *save)
+void SV_WriteDemo(SaveGame *save)
 {
     if (!sv.demo.save.bufLen)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\server\\sv_demo.cpp", 1707, 0, "%s", "sv.demo.save.bufLen");
@@ -713,7 +713,7 @@ void __cdecl SV_WriteDemo(SaveGame *save)
     SaveMemory_SetBuffer(sv.demo.save.buf, sv.demo.save.bufLen, save);
 }
 
-void __cdecl SV_SaveDemo(const char *demoName, const char *description, unsigned __int32 saveType)
+void SV_SaveDemo(const char *demoName, const char *description, unsigned __int32 saveType)
 {
     const char *v3; // r29
     SaveGame *SaveHandle; // r31
@@ -772,7 +772,7 @@ void __cdecl SV_SaveDemo(const char *demoName, const char *description, unsigned
     //MemCard_SetUseDevDrive(0);
 }
 
-void __cdecl SV_AutoSaveDemo(const char *baseName, const char *description, int demoCount, bool force)
+void SV_AutoSaveDemo(const char *baseName, const char *description, int demoCount, bool force)
 {
     SaveGame *SaveHandle; // r3
     char v9[112]; // [sp+50h] [-70h] BYREF
@@ -788,7 +788,7 @@ void __cdecl SV_AutoSaveDemo(const char *baseName, const char *description, int 
     }
 }
 
-bool __cdecl SV_GetLatestAutoReplayName(char *filename, int filenameSize)
+bool SV_GetLatestAutoReplayName(char *filename, int filenameSize)
 {
 	char path[256];
 	char candidate[64];
@@ -836,7 +836,7 @@ void SV_EnableAutoDemo()
     }
 }
 
-void __cdecl SV_SaveDemo_f()
+void SV_SaveDemo_f()
 {
     int nesting; // r7
     const char *v1; // r3
@@ -888,7 +888,7 @@ void SV_DemoRestart()
     SV_RequestMapRestart(0);
 }
 
-void __cdecl SV_DemoRestart_f()
+void SV_DemoRestart_f()
 {
     if (replay_time)
     {
@@ -910,7 +910,7 @@ void __cdecl SV_DemoRestart_f()
     }
 }
 
-int __cdecl SV_DemoHasMark()
+int SV_DemoHasMark()
 {
     unsigned __int8 v0; // r11
 
@@ -924,7 +924,7 @@ int __cdecl SV_DemoHasMark()
     return v0;
 }
 
-void __cdecl SV_LoadDemo(SaveGame *save, void *fileHandle)
+void SV_LoadDemo(SaveGame *save, void *fileHandle)
 {
     const SaveHeader *Header; // r30
     int bodySize; // r5
@@ -1015,12 +1015,12 @@ void Cmd_Echo_f()
     }
 }
 
-bool __cdecl SV_RecordingDemo()
+bool SV_RecordingDemo()
 {
     return sv.demo.recording;
 }
 
-int __cdecl SV_Demo_Dvar_Set(const char *var_name, const char *value)
+int SV_Demo_Dvar_Set(const char *var_name, const char *value)
 {
     int FramePos; // r3
 
@@ -1038,7 +1038,7 @@ int __cdecl SV_Demo_Dvar_Set(const char *var_name, const char *value)
     return 1;
 }
 
-int __cdecl SV_WriteDemoSaveBuf(server_demo_save_t *save)
+int SV_WriteDemoSaveBuf(server_demo_save_t *save)
 {
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\server\\sv_demo.cpp", 1994, 0, "%s", "save");
@@ -1049,7 +1049,7 @@ int __cdecl SV_WriteDemoSaveBuf(server_demo_save_t *save)
     return SV_AddDemoSave(0, save, 1);
 }
 
-bool __cdecl SV_WriteHistory(_iobuf *fileHistory, const server_demo_history_t *history)
+bool SV_WriteHistory(_iobuf *fileHistory, const server_demo_history_t *history)
 {
     unsigned int bufLen; // r30
     unsigned int cmBufLen; // r30
@@ -1070,7 +1070,7 @@ bool __cdecl SV_WriteHistory(_iobuf *fileHistory, const server_demo_history_t *h
     return FS_FileWrite(history->freeEntBuf, freeEntBufLen, fileHistory) == freeEntBufLen;
 }
 
-void __cdecl SV_SaveHistoryTime(server_demo_history_t *history)
+void SV_SaveHistoryTime(server_demo_history_t *history)
 {
     _iobuf *v2; // r3
     _iobuf *v3; // r3
@@ -1117,7 +1117,7 @@ void __cdecl SV_SaveHistoryTime(server_demo_history_t *history)
     }
 }
 
-void __cdecl SV_SaveHistoryMark(const server_demo_history_t *history)
+void SV_SaveHistoryMark(const server_demo_history_t *history)
 {
     FileMarkSkip *MarkSkip; // r31
     int v3; // r11
@@ -1154,7 +1154,7 @@ void __cdecl SV_SaveHistoryMark(const server_demo_history_t *history)
     }
 }
 
-void __cdecl SV_SaveHistory(server_demo_history_t *history)
+void SV_SaveHistory(server_demo_history_t *history)
 {
     //Profile_Begin(406);
     if (history->manual)
@@ -1164,7 +1164,7 @@ void __cdecl SV_SaveHistory(server_demo_history_t *history)
     //Profile_EndInternal(0);
 }
 
-void __cdecl SV_SaveHistoryLoop(unsigned int threadContext)
+void SV_SaveHistoryLoop(unsigned int threadContext)
 {
     iassert(threadContext == THREAD_CONTEXT_SERVER_DEMO);
 
@@ -1186,10 +1186,10 @@ void __cdecl SV_SaveHistoryLoop(unsigned int threadContext)
 
 bool SV_InitHistorySaveThread()
 {
-    return Sys_SpawnServerDemoThread((void(__cdecl *)(unsigned int))SV_SaveHistoryLoop);
+    return Sys_SpawnServerDemoThread((void(*)(unsigned int))SV_SaveHistoryLoop);
 }
 
-void __cdecl SV_InitDemoSystem()
+void SV_InitDemoSystem()
 {
     if (g_fileTimeHistory)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\server\\sv_demo.cpp", 2136, 0, "%s", "!g_fileTimeHistory");
@@ -1197,10 +1197,10 @@ void __cdecl SV_InitDemoSystem()
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\server\\sv_demo.cpp", 2137, 0, "%s", "!g_fileMarkHistory");
     g_fileTimeHistory = SV_DemoOpenFile("timeHistory.cache");
     g_fileMarkHistory = SV_DemoOpenFile("markHistory.cache");
-    Sys_SpawnServerDemoThread((void(__cdecl *)(unsigned int))SV_SaveHistoryLoop);
+    Sys_SpawnServerDemoThread((void(*)(unsigned int))SV_SaveHistoryLoop);
 }
 
-server_demo_history_t *__cdecl SV_DemoGetFreeBuffer()
+server_demo_history_t *SV_DemoGetFreeBuffer()
 {
     server_demo_history_t *result; // r3
 
@@ -1210,7 +1210,7 @@ server_demo_history_t *__cdecl SV_DemoGetFreeBuffer()
     return result;
 }
 
-int __cdecl SV_HistoryIsNew(server_demo_history_t *history)
+int SV_HistoryIsNew(server_demo_history_t *history)
 {
     unsigned __int8 v1; // r11
 
@@ -1224,7 +1224,7 @@ int __cdecl SV_HistoryIsNew(server_demo_history_t *history)
     return v1;
 }
 
-void __cdecl SV_ClearInfrequentTimeMarks(server_demo_history_t *history)
+void SV_ClearInfrequentTimeMarks(server_demo_history_t *history)
 {
     int v2; // r11
     char v3; // r10
@@ -1274,7 +1274,7 @@ void __cdecl SV_ClearInfrequentTimeMarks(server_demo_history_t *history)
     }
 }
 
-server_demo_history_t *__cdecl SV_DemoGetBuffer()
+server_demo_history_t *SV_DemoGetBuffer()
 {
     server_demo_history_t *v0; // r10
     char v1; // r11
@@ -1335,7 +1335,7 @@ server_demo_history_t *__cdecl SV_DemoGetBuffer()
     return g_history;
 }
 
-server_demo_history_t *__cdecl SV_GetMarkHistory(const char *name)
+server_demo_history_t *SV_GetMarkHistory(const char *name)
 {
     if (!SV_DemoGetBuffer() || !(unsigned __int8)SV_WaitForSaveHistoryDone())
         return 0;
@@ -1344,7 +1344,7 @@ server_demo_history_t *__cdecl SV_GetMarkHistory(const char *name)
     return g_history;
 }
 
-int __cdecl SV_DemoSaveHistory(server_demo_history_t *history)
+int SV_DemoSaveHistory(server_demo_history_t *history)
 {
     server_demo_save_t *p_save; // r27
     bool playing; // r11
@@ -1404,7 +1404,7 @@ int __cdecl SV_DemoSaveHistory(server_demo_history_t *history)
     }
 }
 
-void __cdecl SV_DemoMark_f()
+void SV_DemoMark_f()
 {
     const char *v0; // r3
 
@@ -1453,12 +1453,12 @@ void __cdecl SV_DemoMark_f()
     }
 }
 
-bool __cdecl SV_DemoRead(void *buffer, unsigned int len, _iobuf *file)
+bool SV_DemoRead(void *buffer, unsigned int len, _iobuf *file)
 {
     return FS_FileRead(buffer, len, file) == len;
 }
 
-int __cdecl SV_DemoAllocRead(
+int SV_DemoAllocRead(
     server_demo_history_t *history,
     unsigned __int8 **buffer,
     unsigned int len,
@@ -1472,7 +1472,7 @@ int __cdecl SV_DemoAllocRead(
     return result;
 }
 
-bool __cdecl SV_ReadHistory(_iobuf *fileHistory, server_demo_history_t *history)
+bool SV_ReadHistory(_iobuf *fileHistory, server_demo_history_t *history)
 {
     int bufLen; // r31
     int cmBufLen; // r31
@@ -1506,7 +1506,7 @@ bool __cdecl SV_ReadHistory(_iobuf *fileHistory, server_demo_history_t *history)
     return v10 != 0;
 }
 
-bool __cdecl SV_DemoLoadHistory(_iobuf *fileHistory, int fileOffset)
+bool SV_DemoLoadHistory(_iobuf *fileHistory, int fileOffset)
 {
     if (!fileHistory)
         return 0;
@@ -1521,7 +1521,7 @@ bool __cdecl SV_DemoLoadHistory(_iobuf *fileHistory, int fileOffset)
     return SV_ReadHistory(fileHistory, g_history);
 }
 
-bool __cdecl SV_LoadHistoryForTime(int time)
+bool SV_LoadHistoryForTime(int time)
 {
     int v2; // r11
     FileSkip *v3; // r10
@@ -1564,12 +1564,12 @@ bool __cdecl SV_LoadHistoryForTime(int time)
         return SV_DemoLoadHistory(g_fileTimeHistory, 0);
 }
 
-bool __cdecl SV_ActiveHistoryIsMark(const char *name)
+bool SV_ActiveHistoryIsMark(const char *name)
 {
     return g_history && g_history->manual && I_stricmp(g_history->name, name) == 0;
 }
 
-int __cdecl SV_LoadHistoryForMark(const char *name)
+int SV_LoadHistoryForMark(const char *name)
 {
     char v2; // r11
     FileMarkSkip *MarkSkip; // r11
@@ -1612,7 +1612,7 @@ int __cdecl SV_LoadHistoryForMark(const char *name)
     return 1;
 }
 
-void __cdecl SV_DemoGoto_f()
+void SV_DemoGoto_f()
 {
     const char *v0; // r3
 
@@ -1647,7 +1647,7 @@ void __cdecl SV_DemoGoto_f()
     }
 }
 
-void __cdecl SV_DemoSetNextLevelTime(int time)
+void SV_DemoSetNextLevelTime(int time)
 {
     int v1; // r11
 
@@ -1667,7 +1667,7 @@ void __cdecl SV_DemoSetNextLevelTime(int time)
     sv.demo.nextLevelTime = time;
 }
 
-void __cdecl SV_DemoBack_f()
+void SV_DemoBack_f()
 {
     int v0; // r31
     int v1; // r31
@@ -1709,7 +1709,7 @@ void __cdecl SV_DemoBack_f()
     Com_Printf(CON_CHANNEL_DONT_FILTER, "bad value\n");
 }
 
-void __cdecl SV_DemoForward_f()
+void SV_DemoForward_f()
 {
     const char *v0; // r3
     long double v1; // fp2
@@ -1772,7 +1772,7 @@ void __cdecl SV_DemoForward_f()
     SV_DemoSetNextLevelTime(v3);
 }
 
-void __cdecl SV_DemoFullForward_f()
+void SV_DemoFullForward_f()
 {
     int v0; // r11
     const char *v1; // r3
@@ -1809,7 +1809,7 @@ void __cdecl SV_DemoFullForward_f()
     Com_Printf(CON_CHANNEL_DONT_FILTER, "bad value\n");
 }
 
-void __cdecl SV_DemoLive_f()
+void SV_DemoLive_f()
 {
     if (replay_time)
     {
@@ -1826,7 +1826,7 @@ void __cdecl SV_DemoLive_f()
         Com_Printf(CON_CHANNEL_DONT_FILTER, "Not playing replay.\n");
 }
 
-void __cdecl SV_DemoInfo_f()
+void SV_DemoInfo_f()
 {
     FileSkip *v3; // r31
     int v4; // r29
@@ -1864,17 +1864,17 @@ void __cdecl SV_DemoInfo_f()
     }
 }
 
-int __cdecl SV_GetDemoStartTime()
+int SV_GetDemoStartTime()
 {
     return sv.demo.startTime;
 }
 
-int __cdecl SV_GetDemoEndTime()
+int SV_GetDemoEndTime()
 {
     return sv.demo.endTime;
 }
 
-int __cdecl SV_CheckAutoSaveHistory(int setTooSoon)
+int SV_CheckAutoSaveHistory(int setTooSoon)
 {
     const dvar_s *v2; // r11
     int v4; // r11
@@ -1919,7 +1919,7 @@ void SV_DoAutoSaveHistory()
     }
 }
 
-void __cdecl SV_UpdateDemo()
+void SV_UpdateDemo()
 {
     if (sv.demo.recording)
         sv.demo.endTime = G_GetTime();
@@ -1940,7 +1940,7 @@ void SV_DemoLive()
     SV_TruncateHistoryTimeCache(Time);
 }
 
-void __cdecl SV_EndDemo(bool error)
+void SV_EndDemo(bool error)
 {
     int Time; // r3
 
@@ -2019,7 +2019,7 @@ void SV_ReadNextDemoType()
     }
 }
 
-bool __cdecl SV_InitReadDemo(int *randomSeed)
+bool SV_InitReadDemo(int *randomSeed)
 {
     server_demo_history_t *nextLevelSave; // r11
     server_demo_history_t *v3; // r11
@@ -2095,7 +2095,7 @@ bool __cdecl SV_InitReadDemo(int *randomSeed)
     return sv.demo.playing;
 }
 
-bool __cdecl SV_InitDemo(int *randomSeed)
+bool SV_InitDemo(int *randomSeed)
 {
     sv.demo.autoSaveTime = G_GetTime();
     if (sv.demo.nextLevelplaying)
@@ -2104,7 +2104,7 @@ bool __cdecl SV_InitDemo(int *randomSeed)
     return 0;
 }
 
-bool __cdecl SV_ReadPacket(int framePos)
+bool SV_ReadPacket(int framePos)
 {
     bool result; // r3
     const dvar_s *Var; // r30
@@ -2156,7 +2156,7 @@ bool __cdecl SV_ReadPacket(int framePos)
     return result;
 }
 
-float __cdecl SV_DemoFxVisibility()
+float SV_DemoFxVisibility()
 {
     double Float; // fp31
 
@@ -2175,7 +2175,7 @@ float __cdecl SV_DemoFxVisibility()
     }
 }
 
-int __cdecl SV_DemoCheatsOk()
+int SV_DemoCheatsOk()
 {
     int Long; // r31
 
@@ -2191,7 +2191,7 @@ int __cdecl SV_DemoCheatsOk()
     return Long;
 }
 
-bool __cdecl SV_DemoIsRecentlyLoaded()
+bool SV_DemoIsRecentlyLoaded()
 {
     bool v1; // r31
 
@@ -2207,7 +2207,7 @@ bool __cdecl SV_DemoIsRecentlyLoaded()
     return v1;
 }
 
-const char *__cdecl SV_Demo_Dvar_GetVariantString()
+const char *SV_Demo_Dvar_GetVariantString()
 {
     char v1[1032]; // [sp+50h] [-420h] BYREF
 
@@ -2225,7 +2225,7 @@ const char *__cdecl SV_Demo_Dvar_GetVariantString()
     }
 }
 
-int __cdecl SV_DemoButtonPressed()
+int SV_DemoButtonPressed()
 {
     int Byte; // r31
 

@@ -10,7 +10,7 @@
 #include <stringed/stringed_hooks.h>
 #include "cg_servercmds.h"
 
-float __cdecl CG_FadeObjectives(const cg_s *cgameGlob)
+float CG_FadeObjectives(const cg_s *cgameGlob)
 {
     float *fadeColor; // r3
 
@@ -29,7 +29,7 @@ float __cdecl CG_FadeObjectives(const cg_s *cgameGlob)
     return 0.0f;
 }
 
-void __cdecl CG_DrawObjectiveBackdrop(const cg_s *cgameGlob, const float *color)
+void CG_DrawObjectiveBackdrop(const cg_s *cgameGlob, const float *color)
 {
     int height; // [sp+50h] [-40h] BYREF
     int width; // [sp+54h] [-3Ch] BYREF
@@ -42,7 +42,7 @@ void __cdecl CG_DrawObjectiveBackdrop(const cg_s *cgameGlob, const float *color)
     }
 }
 
-void __cdecl CG_DrawObjectiveHeader(
+void CG_DrawObjectiveHeader(
     int localClientNum,
     const rectDef_s *rect,
     Font_s *font,
@@ -98,7 +98,7 @@ void __cdecl CG_DrawObjectiveHeader(
     }
 }
 
-const char *__cdecl CG_WordWrap(
+const char *CG_WordWrap(
     const char *inputText,
     Font_s *font,
     double scale,
@@ -175,7 +175,7 @@ const char *__cdecl CG_WordWrap(
     return v21;
 }
 
-void __cdecl CG_DrawObjectiveList(
+void CG_DrawObjectiveList(
     int localClientNum,
     const rectDef_s *rect,
     Font_s *font,
@@ -412,7 +412,7 @@ void __cdecl CG_DrawObjectiveList(
     }
 }
 
-void __cdecl CG_DrawPausedMenuLine(
+void CG_DrawPausedMenuLine(
     int localClientNum,
     const rectDef_s *rect,
     Font_s *font,
@@ -450,7 +450,7 @@ void __cdecl CG_DrawPausedMenuLine(
     }
 }
 
-int __cdecl CG_DrawScoreboard(int localClientNum)
+int CG_DrawScoreboard(int localClientNum)
 {
     if (cg_paused->current.integer && cg_drawpaused->current.enabled)
         return 0;
@@ -478,7 +478,7 @@ static void CG_ClearObjectiveInfo(objectiveInfo_t *obj)
     obj->icon = 0;
 }
 
-void __cdecl CG_ParseObjectiveChange(int localClientNum, unsigned int num)
+void CG_ParseObjectiveChange(int localClientNum, unsigned int num)
 {
     const char *ConfigString; // r26
     objectiveInfo_t *obj;

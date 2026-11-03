@@ -26,7 +26,7 @@ struct DB_LoadData // sizeof=0x68
     z_stream_s stream;                  // ...
     uint8_t* compressBufferStart; // ...
     uint8_t* compressBufferEnd; // ...
-    void(__cdecl* interrupt)();        // ...
+    void(* interrupt)();        // ...
     int32_t allocType;                      // ...
 };
 
@@ -46,12 +46,12 @@ int32_t g_trackLoadProgress;
 XAssetList g_varXAssetList;
 
 // --- file-local forward declarations (moved out of database.h) ---
-static void __cdecl DB_CancelLoadXFile();
+static void DB_CancelLoadXFile();
 static int32_t DB_WaitXFileStage();
 static void DB_ReadXFileStage();
-static int32_t __cdecl DB_ReadData();
+static int32_t DB_ReadData();
 static void Load_XAssetListCustom();
-static void __cdecl Load_XAssetArrayCustom(int32_t count);
+static void Load_XAssetArrayCustom(int32_t count);
 
 #if defined(__linux__)
 // Bytes the most recent ReadFileEx() completion actually delivered.
@@ -64,7 +64,7 @@ static void __cdecl Load_XAssetArrayCustom(int32_t count);
 static uint32_t g_lastReadBytes;
 #endif
 
-void __cdecl DB_CancelLoadXFile()
+void DB_CancelLoadXFile()
 {
     if (g_load.compressBufferStart)
     {
@@ -107,12 +107,12 @@ int32_t DB_WaitXFileStage()
     return result;
 }
 
-void __cdecl DB_LoadedExternalData(int32_t size)
+void DB_LoadedExternalData(int32_t size)
 {
     InterlockedExchangeAdd(&g_loadedExternalBytes, size);
 }
 
-double __cdecl DB_GetLoadedFraction()
+double DB_GetLoadedFraction()
 {
     double loadedBytesInternal; // [esp+14h] [ebp-20h]
     double totalBytesInternal; // [esp+1Ch] [ebp-18h]
@@ -134,7 +134,7 @@ double __cdecl DB_GetLoadedFraction()
     return (float)((loadedBytesInternal + loadedBytesExternal) / (totalBytesInternal + totalBytesExternal));
 }
 
-void __cdecl DB_LoadXFileData(uint8_t *pos, uint32_t size)
+void DB_LoadXFileData(uint8_t *pos, uint32_t size)
 {
     const char *v2; // eax
     uint32_t err; // [esp+0h] [ebp-4h]
@@ -192,7 +192,7 @@ void DB_ReadXFileStage()
     }
 }
 
-int32_t __cdecl DB_ReadData()
+int32_t DB_ReadData()
 {
     uint8_t *fileBuffer; // [esp+0h] [ebp-4h]
 
@@ -225,11 +225,11 @@ void __stdcall DB_FileReadCompletion(
     ;
 }
 
-void __cdecl DB_LoadDelayedImages()
+void DB_LoadDelayedImages()
 {
     uint32_t copyIter; // [esp+0h] [ebp-4h]
 
-    DB_EnumXAssets(ASSET_TYPE_IMAGE, (void(__cdecl *)(XAssetHeader, void *))R_DelayLoadImage, 0, 0);
+    DB_EnumXAssets(ASSET_TYPE_IMAGE, (void(*)(XAssetHeader, void *))R_DelayLoadImage, 0, 0);
     for (copyIter = 0; copyIter < g_copyInfoCount; ++copyIter)
     {
         if (g_copyInfo[copyIter]->asset.type == ASSET_TYPE_IMAGE)
@@ -237,7 +237,7 @@ void __cdecl DB_LoadDelayedImages()
     }
 }
 
-void __cdecl DB_FinishGeometryBlocks(XZoneMemory *zoneMem)
+void DB_FinishGeometryBlocks(XZoneMemory *zoneMem)
 {
     if (zoneMem->lockedVertexData)
     {
@@ -251,7 +251,7 @@ void __cdecl DB_FinishGeometryBlocks(XZoneMemory *zoneMem)
     }
 }
 
-void __cdecl DB_LoadXFileInternal()
+void DB_LoadXFileInternal()
 {
     int32_t err; // [esp+8h] [ebp-4Ch]
     bool fileIsSecure; // [esp+Fh] [ebp-45h]
@@ -356,7 +356,7 @@ void __cdecl DB_LoadXFileInternal()
     DB_CancelLoadXFile();
 }
 
-bool __cdecl DB_IsMinimumFastFileLoaded()
+bool DB_IsMinimumFastFileLoaded()
 {
 #ifdef KISAK_MP
     return g_minimumFastFileLoaded;
@@ -376,7 +376,7 @@ void Load_XAssetListCustom()
     DB_PopStreamPos();
 }
 
-void __cdecl Load_XAssetArrayCustom(int32_t count)
+void Load_XAssetArrayCustom(int32_t count)
 {
     XAsset *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
@@ -391,7 +391,7 @@ void __cdecl Load_XAssetArrayCustom(int32_t count)
     }
 }
 
-void __cdecl DB_ResetZoneSize(int32_t trackLoadProgress)
+void DB_ResetZoneSize(int32_t trackLoadProgress)
 {
     g_totalSize = 0;
     g_loadedSize = 0;
@@ -400,12 +400,12 @@ void __cdecl DB_ResetZoneSize(int32_t trackLoadProgress)
     g_trackLoadProgress = trackLoadProgress;
 }
 
-void __cdecl DB_LoadXFile(
+void DB_LoadXFile(
     const char *path,
     void *f,
     const char *filename,
     XZoneMemory *zoneMem,
-    void(__cdecl *interrupt)(),
+    void(*interrupt)(),
     uint8_t *buf,
     int32_t allocType)
 {

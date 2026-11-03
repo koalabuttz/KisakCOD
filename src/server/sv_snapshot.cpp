@@ -13,7 +13,7 @@
 #include <client/client.h>
 
 
-void __cdecl SV_WriteSnapshotToClient(client_t *client, msg_t *msg)
+void SV_WriteSnapshotToClient(client_t *client, msg_t *msg)
 {
     int Time; // r3
     int numSnapshotEntities; // r7
@@ -68,14 +68,14 @@ void __cdecl SV_WriteSnapshotToClient(client_t *client, msg_t *msg)
     MSG_WriteBits(msg, ENTITYNUM_NONE, 12);
 }
 
-void __cdecl SV_UpdateServerCommandsToClient(client_t *client)
+void SV_UpdateServerCommandsToClient(client_t *client)
 {
     CL_ParseCommandString(&client->reliableCommands);
     client->reliableCommands.header.sent = client->reliableCommands.header.sequence;
     client->reliableCommands.header.rover = 0;
 }
 
-void __cdecl SV_AddEntToSnapshot(int entnum)
+void SV_AddEntToSnapshot(int entnum)
 {
     int numSnapshotEntities; // r11
 
@@ -94,7 +94,7 @@ void __cdecl SV_AddEntToSnapshot(int entnum)
     ++sv.entityNumbers.numSnapshotEntities;
 }
 
-void __cdecl SV_AddEntitiesVisibleFromPoint(int clientNum)
+void SV_AddEntitiesVisibleFromPoint(int clientNum)
 {
     int e; // r30
     gentity_s *ent; // r3
@@ -119,7 +119,7 @@ void __cdecl SV_AddEntitiesVisibleFromPoint(int clientNum)
     }
 }
 
-void __cdecl SV_BuildClientSnapshot(client_t *client)
+void SV_BuildClientSnapshot(client_t *client)
 {
     playerState_s *frames; // r31
     playerState_s *v2; // r3
@@ -138,7 +138,7 @@ void __cdecl SV_BuildClientSnapshot(client_t *client)
     }
 }
 
-void __cdecl SV_SendMessageToClient(msg_t *msg, client_t *client)
+void SV_SendMessageToClient(msg_t *msg, client_t *client)
 {
     int outgoingSequence; // r4
 
@@ -148,7 +148,7 @@ void __cdecl SV_SendMessageToClient(msg_t *msg, client_t *client)
     CL_PacketEvent(msg, outgoingSequence);
 }
 
-void __cdecl SV_BuildAndSendClientSnapshot(client_t *client)
+void SV_BuildAndSendClientSnapshot(client_t *client)
 {
     int outgoingSequence; // r4
     msg_t msg; // [sp+50h] [-4040h] BYREF
@@ -165,7 +165,7 @@ void __cdecl SV_BuildAndSendClientSnapshot(client_t *client)
     CL_PacketEvent(&msg, outgoingSequence);
 }
 
-void __cdecl SV_SendClientMessages()
+void SV_SendClientMessages()
 {
     client_t *clients; // r11
     client_t *v1; // r30
@@ -193,13 +193,13 @@ void __cdecl SV_SendClientMessages()
     }
 }
 
-void __cdecl SV_WriteSnapshotToClientCmd(void *cmdData)
+void SV_WriteSnapshotToClientCmd(void *cmdData)
 {
     if (!alwaysfails)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\server\\sv_snapshot.cpp", 236, 0, "MP only");
 }
 
-void __cdecl SV_ArchiveSnapshotCmd(void *cmdData)
+void SV_ArchiveSnapshotCmd(void *cmdData)
 {
     if (!alwaysfails)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\server\\sv_snapshot.cpp", 242, 0, "MP only");

@@ -12,21 +12,21 @@ struct GfxBspPreTessDrawSurf // sizeof=0x4
     uint16_t totalTriCount;     // ...
 };
 
-void __cdecl R_InitDrawSurfListInfo(GfxDrawSurfListInfo *info);
-void __cdecl R_EmitDrawSurfList(GfxDrawSurf *drawSurfs, uint32_t drawSurfCount);
-void __cdecl R_MergeAndEmitDrawSurfLists(DrawSurfType firstStage, int stageCount);
-uint32_t __cdecl R_EmitDrawSurfListForKey(
+void R_InitDrawSurfListInfo(GfxDrawSurfListInfo *info);
+void R_EmitDrawSurfList(GfxDrawSurf *drawSurfs, uint32_t drawSurfCount);
+void R_MergeAndEmitDrawSurfLists(DrawSurfType firstStage, int stageCount);
+uint32_t R_EmitDrawSurfListForKey(
     const GfxDrawSurf *drawSurfs,
     uint32_t drawSurfCount,
     uint32_t primarySortKey);
 
 
-uint16_t *__cdecl R_AllocPreTessIndices(int count);
+uint16_t *R_AllocPreTessIndices(int count);
 
-void __cdecl R_EndPreTess();
-void __cdecl R_BeginPreTess();
+void R_EndPreTess();
+void R_BeginPreTess();
 
-int __cdecl R_ReadBspPreTessDrawSurfs(
+int R_ReadBspPreTessDrawSurfs(
     struct GfxReadCmdBuf *cmdBuf,
     const struct GfxBspPreTessDrawSurf **list,
     uint32_t *count,

@@ -482,79 +482,79 @@ struct snd_local_t // sizeof=0x7EF8
     int max_stream_channels;            // ...
 };
 
-void __cdecl TRACK_snd();
-void __cdecl SND_DebugAliasPrint(bool condition, const snd_alias_t *alias, const char *msg);
-int __cdecl SND_GetEntChannelCount();
-bool __cdecl SND_IsStreamChannelLoading(int index);
-bool __cdecl SND_HasFreeVoice(int entchannel);
-void __cdecl SND_AddVoice(int entchannel);
-void __cdecl SND_RemoveVoice(int entchannel);
-int __cdecl SND_GetPriority(int entchannel);
-bool __cdecl SND_IsRestricted(int entchannel);
-bool __cdecl SND_IsAliasChannel3D(int entchannel);
-bool __cdecl SND_IsPausable(int entchannel);
-snd_entchannel_info_t *__cdecl SND_GetEntChannelName(int entchannel);
-int __cdecl SND_GetEntChannelFromName(const char *channelName);
-char __cdecl SND_ValidateEnvEffectsPriorityValue(const char *priorityName, int *priority);
-void __cdecl SND_SetEnvironmentEffects_f();
-int __cdecl SND_RoomtypeFromString(const char *string);
-void __cdecl SND_DeactivateEnvironmentEffects_f();
-void __cdecl SND_SetEq_f();
-SND_EQTYPE __cdecl SND_EqTypeFromString(const char *typeString);
-char __cdecl SND_ParseChannelAndBand_f(int *entchannel, int *eqIndex, int *band);
-void __cdecl SND_SetEqFreq_f();
-void __cdecl SND_SetEqType_f();
-void __cdecl SND_SetEqGain_f();
-void __cdecl SND_SetEqQ_f();
-void __cdecl SND_DeactivateEq_f();
-char __cdecl SND_AnyActiveListeners();
-int __cdecl SND_GetListenerIndexNearestToOrigin(const float *origin);
-void __cdecl SND_DisconnectListener(int localClientNum);
-void __cdecl SND_SetListener(int localClientNum, int clientNum, const float *origin, const float (*axis)[3]);
-void __cdecl SND_SaveListeners(snd_listener *listeners);
-void __cdecl SND_RestoreListeners(snd_listener *listeners);
-int __cdecl SND_SetPlaybackIdNotPlayed(uint32_t index);
-int __cdecl SND_AcquirePlaybackId(uint32_t index, int totalMsec);
-char __cdecl SND_AddLengthNotify(int playbackId, const snd_alias_t *lengthNotifyData, SndLengthId id);
-void __cdecl DoLengthNotify(int msec, const snd_alias_t *lengthNotifyData, SndLengthId id);
-char __cdecl SND_GetKnownLength(int playbackId, int *msec);
-float __cdecl SND_GetLerpedSlavePercentage(float baseSlavePercentage);
-float __cdecl SND_Attenuate(SndCurve *volumeFalloffCurve, float radius, float mindist, float maxdist);
-void __cdecl SND_GetCurrent3DPosition(SndEntHandle sndEnt, float *offset, float *pos_out);
-void __cdecl SND_ResetChannelInfo(int index);
-void __cdecl SND_SetChannelStartInfo(uint32_t index, SndStartAliasInfo *SndStartAliasInfo);
-void __cdecl SND_SetSoundFileChannelInfo(
+void TRACK_snd();
+void SND_DebugAliasPrint(bool condition, const snd_alias_t *alias, const char *msg);
+int SND_GetEntChannelCount();
+bool SND_IsStreamChannelLoading(int index);
+bool SND_HasFreeVoice(int entchannel);
+void SND_AddVoice(int entchannel);
+void SND_RemoveVoice(int entchannel);
+int SND_GetPriority(int entchannel);
+bool SND_IsRestricted(int entchannel);
+bool SND_IsAliasChannel3D(int entchannel);
+bool SND_IsPausable(int entchannel);
+snd_entchannel_info_t *SND_GetEntChannelName(int entchannel);
+int SND_GetEntChannelFromName(const char *channelName);
+char SND_ValidateEnvEffectsPriorityValue(const char *priorityName, int *priority);
+void SND_SetEnvironmentEffects_f();
+int SND_RoomtypeFromString(const char *string);
+void SND_DeactivateEnvironmentEffects_f();
+void SND_SetEq_f();
+SND_EQTYPE SND_EqTypeFromString(const char *typeString);
+char SND_ParseChannelAndBand_f(int *entchannel, int *eqIndex, int *band);
+void SND_SetEqFreq_f();
+void SND_SetEqType_f();
+void SND_SetEqGain_f();
+void SND_SetEqQ_f();
+void SND_DeactivateEq_f();
+char SND_AnyActiveListeners();
+int SND_GetListenerIndexNearestToOrigin(const float *origin);
+void SND_DisconnectListener(int localClientNum);
+void SND_SetListener(int localClientNum, int clientNum, const float *origin, const float (*axis)[3]);
+void SND_SaveListeners(snd_listener *listeners);
+void SND_RestoreListeners(snd_listener *listeners);
+int SND_SetPlaybackIdNotPlayed(uint32_t index);
+int SND_AcquirePlaybackId(uint32_t index, int totalMsec);
+char SND_AddLengthNotify(int playbackId, const snd_alias_t *lengthNotifyData, SndLengthId id);
+void DoLengthNotify(int msec, const snd_alias_t *lengthNotifyData, SndLengthId id);
+char SND_GetKnownLength(int playbackId, int *msec);
+float SND_GetLerpedSlavePercentage(float baseSlavePercentage);
+float SND_Attenuate(SndCurve *volumeFalloffCurve, float radius, float mindist, float maxdist);
+void SND_GetCurrent3DPosition(SndEntHandle sndEnt, float *offset, float *pos_out);
+void SND_ResetChannelInfo(int index);
+void SND_SetChannelStartInfo(uint32_t index, SndStartAliasInfo *SndStartAliasInfo);
+void SND_SetSoundFileChannelInfo(
     uint32_t index,
     int srcChannelCount,
     int baserate,
     int total_msec,
     int start_msec,
     SndFileLoadingState loadingState);
-int __cdecl SND_FindFree2DChannel(SndStartAliasInfo *startAliasInfo, int entchannel);
-int __cdecl SND_FindReplaceableChannel(
+int SND_FindFree2DChannel(SndStartAliasInfo *startAliasInfo, int entchannel);
+int SND_FindReplaceableChannel(
     SndStartAliasInfo *startAliasInfo,
     int entchannel,
     uint32_t first,
     int count);
-int __cdecl SND_FindFree3DChannel(SndStartAliasInfo *startAliasInfo, int entchannel);
-void __cdecl DB_SaveSounds();
-void __cdecl SND_Archive(snd_channel_info_t *chaninfo);
-void __cdecl DB_LoadSounds();
-void __cdecl SND_Unarchive(snd_channel_info_t *chaninfo);
-void __cdecl SND_StopSoundAliasOnEnt(SndEntHandle sndEnt, const char *aliasName);
-void __cdecl StopSoundAliasesOnEnt(SndEntHandle sndEnt, const char *aliasName);
-void __cdecl SND_StopSoundsOnEnt(SndEntHandle sndEnt);
-void __cdecl SND_InitFXSounds();
-void __cdecl SND_AddPlayFXSoundAlias(snd_alias_t *alias, SndEntHandle sndEnt, const float *origin);
-void __cdecl Snd_AssertAliasValid(snd_alias_t *alias);
-void __cdecl SND_PlayFXSounds();
-int __cdecl SND_PlaySoundAlias(
+int SND_FindFree3DChannel(SndStartAliasInfo *startAliasInfo, int entchannel);
+void DB_SaveSounds();
+void SND_Archive(snd_channel_info_t *chaninfo);
+void DB_LoadSounds();
+void SND_Unarchive(snd_channel_info_t *chaninfo);
+void SND_StopSoundAliasOnEnt(SndEntHandle sndEnt, const char *aliasName);
+void StopSoundAliasesOnEnt(SndEntHandle sndEnt, const char *aliasName);
+void SND_StopSoundsOnEnt(SndEntHandle sndEnt);
+void SND_InitFXSounds();
+void SND_AddPlayFXSoundAlias(snd_alias_t *alias, SndEntHandle sndEnt, const float *origin);
+void Snd_AssertAliasValid(snd_alias_t *alias);
+void SND_PlayFXSounds();
+int SND_PlaySoundAlias(
     const snd_alias_t *alias,
     SndEntHandle sndEnt,
     const float *org,
     int timeshift,
     snd_alias_system_t system);
-int __cdecl SND_PlaySoundAlias_Internal(
+int SND_PlaySoundAlias_Internal(
     const snd_alias_t *alias0,
     const snd_alias_t *alias1,
     float lerp,
@@ -566,18 +566,18 @@ int __cdecl SND_PlaySoundAlias_Internal(
     bool treatAsMaster,
     bool useTimescale,
     snd_alias_system_t system);
-void __cdecl SND_StopEntityChannel(SndEntHandle sndEnt, int entchannel);
-int __cdecl SND_StartAliasSample(SndStartAliasInfo *startAliasInfo, int *pChannel);
-int __cdecl SND_StartAliasStream(SndStartAliasInfo *startAliasInfo, int *pChannel);
-int __cdecl SND_FindFreeStreamChannel(SndStartAliasInfo *startAliasInfo, int entchannel);
-void __cdecl SND_ChoosePitchAndVolume(
+void SND_StopEntityChannel(SndEntHandle sndEnt, int entchannel);
+int SND_StartAliasSample(SndStartAliasInfo *startAliasInfo, int *pChannel);
+int SND_StartAliasStream(SndStartAliasInfo *startAliasInfo, int *pChannel);
+int SND_FindFreeStreamChannel(SndStartAliasInfo *startAliasInfo, int entchannel);
+void SND_ChoosePitchAndVolume(
     const snd_alias_t *alias0,
     const snd_alias_t *alias1,
     float lerp,
     float volumeScale,
     float *volume,
     float *pitch);
-char __cdecl SND_ContinueLoopingSound(
+char SND_ContinueLoopingSound(
     const snd_alias_t *alias0,
     const snd_alias_t *alias1,
     float lerp,
@@ -585,20 +585,20 @@ char __cdecl SND_ContinueLoopingSound(
     SndEntHandle sndEnt,
     const float *org,
     int *pChannel);
-void __cdecl SND_ContinueLoopingSound_Internal(
+void SND_ContinueLoopingSound_Internal(
     uint32_t chanIndex,
     float lerp,
     float volumeScale,
     int *pChannel,
-    void(__cdecl *setPlaybackRateFunc)(int, int));
-bool __cdecl SND_IsNullSoundFile(const SoundFile *soundFile);
-int __cdecl SND_PlaySoundAliasAsMaster(
+    void(*setPlaybackRateFunc)(int, int));
+bool SND_IsNullSoundFile(const SoundFile *soundFile);
+int SND_PlaySoundAliasAsMaster(
     const snd_alias_t *alias,
     SndEntHandle sndEnt,
     const float *org,
     int timeshift,
     snd_alias_system_t system);
-int __cdecl SND_PlayBlendedSoundAliases(
+int SND_PlayBlendedSoundAliases(
     const snd_alias_t *alias0,
     const snd_alias_t *alias1,
     float lerp,
@@ -607,19 +607,19 @@ int __cdecl SND_PlayBlendedSoundAliases(
     const float *org,
     int timeshift,
     snd_alias_system_t system);
-char __cdecl SND_ValidateSoundAliasBlend(const snd_alias_t *alias0, const snd_alias_t *alias1, bool bReport);
-int __cdecl SND_PlayLocalSoundAlias(uint32_t localClientNum, const snd_alias_t *alias, snd_alias_system_t system);
-int __cdecl SND_PlayLocalSoundAliasByName(
+char SND_ValidateSoundAliasBlend(const snd_alias_t *alias0, const snd_alias_t *alias1, bool bReport);
+int SND_PlayLocalSoundAlias(uint32_t localClientNum, const snd_alias_t *alias, snd_alias_system_t system);
+int SND_PlayLocalSoundAliasByName(
     uint32_t localClientNum,
     const char *aliasname,
     snd_alias_system_t system);
-void __cdecl SND_ResetPauseSettingsToDefaults();
-void __cdecl SND_PlayMusicAlias(
+void SND_ResetPauseSettingsToDefaults();
+void SND_PlayMusicAlias(
     int localClientNum,
     const snd_alias_t *alias,
     bool useTimescale,
     snd_alias_system_t system);
-void __cdecl SND_StartBackground(
+void SND_StartBackground(
     int localClientNum,
     uint32_t track,
     const snd_alias_t *alias,
@@ -630,86 +630,86 @@ void __cdecl SND_StartBackground(
 void SND_UpdatePause();
 int SND_PauseSounds();
 void SND_UnpauseSounds();
-void __cdecl SND_StopMusic(int fadetime);
-void __cdecl SND_StopBackground(uint32_t track, int fadetime);
-void __cdecl SND_PlayAmbientAlias(
+void SND_StopMusic(int fadetime);
+void SND_StopBackground(uint32_t track, int fadetime);
+void SND_PlayAmbientAlias(
     int localClientNum,
     const snd_alias_t *alias,
     int fadetime,
     snd_alias_system_t system);
 
-void __cdecl SND_StopAmbient(int localClientNum, int fadetime);
-void __cdecl SND_FadeAllSounds(float volume, int fadetime);
-void __cdecl SND_SetChannelVolumes(int priority, const float *channelvolume, int fademsec);
-void __cdecl SND_DeactivateChannelVolumes(int priority, int fademsec);
-void __cdecl SND_UpdateLoopingSounds();
-char __cdecl SND_UpdateBackgroundVolume(uint32_t track, int frametime);
-void __cdecl SND_SetEnvironmentEffects(
+void SND_StopAmbient(int localClientNum, int fadetime);
+void SND_FadeAllSounds(float volume, int fadetime);
+void SND_SetChannelVolumes(int priority, const float *channelvolume, int fademsec);
+void SND_DeactivateChannelVolumes(int priority, int fademsec);
+void SND_UpdateLoopingSounds();
+char SND_UpdateBackgroundVolume(uint32_t track, int frametime);
+void SND_SetEnvironmentEffects(
     int priority,
     const char *roomstring,
     float drylevel,
     float wetlevel,
     int fademsec);
-void __cdecl SND_DeactivateEnvironmentEffects(int priority, int fademsec);
-void __cdecl SND_UpdateReverbs();
-void __cdecl SND_DeactivateAllEq(int eqIndex);
-void __cdecl SND_DeactivateChannelEq(const char *channelName, int eqIndex);
-void __cdecl SND_DeactivateEq(const char *channelName, int eqIndex, uint32_t band);
-void __cdecl SND_Update();
-void __cdecl SND_UpdateMasterVolumes(int frametime);
-void __cdecl SND_UpdateVolume(snd_volume_info_t *volinfo, int frametime);
-void __cdecl SND_UpdateAllChannels(int frametime);
-void __cdecl SND_UpdateSlaveLerp(int frametime);
-bool __cdecl SND_Is2DChannelPlaying(int index);
-bool __cdecl SND_Is3DChannelPlaying(int index);
-bool __cdecl SND_IsStreamChannelPlaying(int index);
-void __cdecl SND_UpdateRoomEffects(int frametime);
+void SND_DeactivateEnvironmentEffects(int priority, int fademsec);
+void SND_UpdateReverbs();
+void SND_DeactivateAllEq(int eqIndex);
+void SND_DeactivateChannelEq(const char *channelName, int eqIndex);
+void SND_DeactivateEq(const char *channelName, int eqIndex, uint32_t band);
+void SND_Update();
+void SND_UpdateMasterVolumes(int frametime);
+void SND_UpdateVolume(snd_volume_info_t *volinfo, int frametime);
+void SND_UpdateAllChannels(int frametime);
+void SND_UpdateSlaveLerp(int frametime);
+bool SND_Is2DChannelPlaying(int index);
+bool SND_Is3DChannelPlaying(int index);
+bool SND_IsStreamChannelPlaying(int index);
+void SND_UpdateRoomEffects(int frametime);
 void SND_UpdateTimeScale();
-void __cdecl DebugDrawWorldSounds(int debugDrawStyle);
-void __cdecl DebugDrawWorldSound3D(
+void DebugDrawWorldSounds(int debugDrawStyle);
+void DebugDrawWorldSound3D(
     uint32_t idx,
     int debugDrawStyle,
     int *offsets,
     int *closestId,
     float *closestIdDotProd);
-double __cdecl FontSizeForDistance(float distance);
+double FontSizeForDistance(float distance);
 void SND_UpdatePhysics();
-bool __cdecl SND_ShouldGiveCpuWarning();
-void __cdecl SND_StopSounds(snd_stopsounds_arg_t which);
-void __cdecl SND_Init();
-char __cdecl SND_InitDriver();
-void __cdecl SND_PlayLocal_f();
-void __cdecl RelativeToListener(const snd_listener *listener, float yaw, float pitch, float dist, float *result);
+bool SND_ShouldGiveCpuWarning();
+void SND_StopSounds(snd_stopsounds_arg_t which);
+void SND_Init();
+char SND_InitDriver();
+void SND_PlayLocal_f();
+void RelativeToListener(const snd_listener *listener, float yaw, float pitch, float dist, float *result);
 void SND_InitEntChannels();
-void __cdecl SND_ParseEntChannelFile(const char *buffer);
-char __cdecl SND_BooleanFromString(const char *value, const char *trueValue, const char *falseValue, bool defaultValue);
-void __cdecl SND_Shutdown();
-void __cdecl SND_ShutdownChannels();
-void __cdecl SND_ErrorCleanup();
-void __cdecl SND_Save(struct MemoryFile *memFile);
-void __cdecl SND_Save3DChannel(int chanIndex, struct MemoryFile *memFile);
-void __cdecl SND_SaveSoundAlias(const snd_alias_t *alias, struct MemoryFile *memFile);
-void __cdecl SND_SaveChanInfo(const snd_channel_info_t *chaninfo, struct MemoryFile *memFile);
-void __cdecl SND_SaveLengthNotifyInfo(const sndLengthNotifyInfo *info, struct MemoryFile *memFile);
-void __cdecl SND_Save2DChannel(int chanIndex, struct MemoryFile *memFile);
-void __cdecl SND_SaveStreamChannel(int chanIndex, struct MemoryFile *memFile);
-void __cdecl SND_Restore(struct MemoryFile *memFile);
-char __cdecl SND_Restore3DChannel(struct MemoryFile *memFile);
-snd_alias_t *__cdecl SND_RestoreSoundAlias(struct MemoryFile *memFile);
-void __cdecl SND_RestoreChanInfo(snd_channel_info_t *chaninfo, struct MemoryFile *memFile);
-void __cdecl SND_RestoreLengthNotifyInfo(struct MemoryFile *memFile, sndLengthNotifyInfo *info);
-char __cdecl SND_Restore2DChannel(struct MemoryFile *memFile);
-char __cdecl SND_RestoreStreamChannel(int channel, struct MemoryFile *memFile);
-int __cdecl SND_GetSoundOverlay(snd_overlay_type_t type, snd_overlay_info_t *info, int maxcount, int *cpu);
-int __cdecl SND_GetSoundOverlay2D(snd_overlay_info_t *info, int maxcount);
-int __cdecl SND_GetSoundOverlay3D(snd_overlay_info_t *info, int maxcount);
-int __cdecl SND_GetSoundOverlayStream(snd_overlay_info_t *info, int maxcount);
-void __cdecl SND_StopChannelAndPlayChainAlias(uint32_t chanId);
-void __cdecl StopChannel(int chanId);
-void __cdecl SND_AddPhysicsSound(snd_alias_list_t *aliasList, float *org);
-double __cdecl SND_GetVolumeNormalized();
-void __cdecl SND_SetHWND(HWND hwnd);
-void __cdecl SND_SetData(MssSoundCOD4 *mssSound, void *srcData);
+void SND_ParseEntChannelFile(const char *buffer);
+char SND_BooleanFromString(const char *value, const char *trueValue, const char *falseValue, bool defaultValue);
+void SND_Shutdown();
+void SND_ShutdownChannels();
+void SND_ErrorCleanup();
+void SND_Save(struct MemoryFile *memFile);
+void SND_Save3DChannel(int chanIndex, struct MemoryFile *memFile);
+void SND_SaveSoundAlias(const snd_alias_t *alias, struct MemoryFile *memFile);
+void SND_SaveChanInfo(const snd_channel_info_t *chaninfo, struct MemoryFile *memFile);
+void SND_SaveLengthNotifyInfo(const sndLengthNotifyInfo *info, struct MemoryFile *memFile);
+void SND_Save2DChannel(int chanIndex, struct MemoryFile *memFile);
+void SND_SaveStreamChannel(int chanIndex, struct MemoryFile *memFile);
+void SND_Restore(struct MemoryFile *memFile);
+char SND_Restore3DChannel(struct MemoryFile *memFile);
+snd_alias_t *SND_RestoreSoundAlias(struct MemoryFile *memFile);
+void SND_RestoreChanInfo(snd_channel_info_t *chaninfo, struct MemoryFile *memFile);
+void SND_RestoreLengthNotifyInfo(struct MemoryFile *memFile, sndLengthNotifyInfo *info);
+char SND_Restore2DChannel(struct MemoryFile *memFile);
+char SND_RestoreStreamChannel(int channel, struct MemoryFile *memFile);
+int SND_GetSoundOverlay(snd_overlay_type_t type, snd_overlay_info_t *info, int maxcount, int *cpu);
+int SND_GetSoundOverlay2D(snd_overlay_info_t *info, int maxcount);
+int SND_GetSoundOverlay3D(snd_overlay_info_t *info, int maxcount);
+int SND_GetSoundOverlayStream(snd_overlay_info_t *info, int maxcount);
+void SND_StopChannelAndPlayChainAlias(uint32_t chanId);
+void StopChannel(int chanId);
+void SND_AddPhysicsSound(snd_alias_list_t *aliasList, float *org);
+double SND_GetVolumeNormalized();
+void SND_SetHWND(HWND hwnd);
+void SND_SetData(MssSoundCOD4 *mssSound, void *srcData);
 
 #ifdef KISAK_SP
 void SND_RestoreEventually(struct MemoryFile *memFile);
@@ -722,7 +722,7 @@ int SND_FindPlaybackId(const snd_alias_t *sndEnt, const char *aliasName);
 #endif
 
 // snd_driver_load_obj
-struct LoadedSound *__cdecl SND_LoadSoundFile(const char *name);
+struct LoadedSound *SND_LoadSoundFile(const char *name);
 
 extern const dvar_t *snd_cinematicVolumeScale;
 extern const dvar_t *snd_enable3D;

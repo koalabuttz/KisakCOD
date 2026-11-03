@@ -97,20 +97,20 @@ static _DWORD s_codeConstUpdateFreq[90] =
 }; // weak
 
 
-uint32_t __cdecl R_HashAssetName(const char *name);
-uint32_t __cdecl R_HashString(const char *string);
-char *__cdecl R_AllocGlobalVariable(uint32_t bytes, const char *name);
-char __cdecl R_CullPointAndRadius(const float *pt, float radius, const DpvsPlane *clipPlanes, int clipPlaneCount);
-void __cdecl R_ConvertColorToBytes(const float *colorFloat, uint32_t *colorBytes);
-inline void __cdecl R_ConvertColorToBytes(const float *colorFloat, unsigned char *colorBytes)
+uint32_t R_HashAssetName(const char *name);
+uint32_t R_HashString(const char *string);
+char *R_AllocGlobalVariable(uint32_t bytes, const char *name);
+char R_CullPointAndRadius(const float *pt, float radius, const DpvsPlane *clipPlanes, int clipPlaneCount);
+void R_ConvertColorToBytes(const float *colorFloat, uint32_t *colorBytes);
+inline void R_ConvertColorToBytes(const float *colorFloat, unsigned char *colorBytes)
 {
     R_ConvertColorToBytes(colorFloat, (uint32_t *)colorBytes);
 }
-inline void __cdecl R_ConvertColorToBytes(const float *colorFloat, GfxColor *colorBytes)
+inline void R_ConvertColorToBytes(const float *colorFloat, GfxColor *colorBytes)
 {
     R_ConvertColorToBytes(colorFloat, (uint32_t *)colorBytes);
 }
-int __cdecl R_PickMaterial(
+int R_PickMaterial(
     int traceMask,
     const float *org,
     const float *dir,
@@ -118,18 +118,18 @@ int __cdecl R_PickMaterial(
     char *surfaceFlags,
     char *contents,
     uint32_t charLimit);
-double __cdecl FresnelTerm(float n0, float n1, float cosIncidentAngle);
-char __cdecl R_GetClearColor(float *unpackedRgba);
-void __cdecl Byte4UnpackBgra(const uint8_t *from, float *to);
+double FresnelTerm(float n0, float n1, float cosIncidentAngle);
+char R_GetClearColor(float *unpackedRgba);
+void Byte4UnpackBgra(const uint8_t *from, float *to);
 
 
 // r_state_utils
-void __cdecl R_BeginView(GfxCmdBufSourceState *source, const GfxSceneDef *sceneDef, const GfxViewParms *viewParms);
-uint32_t __cdecl R_HashAssetName(const char *name);
-uint32_t __cdecl R_HashString(const char *string);
-char *__cdecl R_AllocGlobalVariable(uint32_t bytes, const char *name);
-char __cdecl R_CullPointAndRadius(const float *pt, float radius, const DpvsPlane *clipPlanes, int clipPlaneCount);
-int __cdecl R_PickMaterial(
+void R_BeginView(GfxCmdBufSourceState *source, const GfxSceneDef *sceneDef, const GfxViewParms *viewParms);
+uint32_t R_HashAssetName(const char *name);
+uint32_t R_HashString(const char *string);
+char *R_AllocGlobalVariable(uint32_t bytes, const char *name);
+char R_CullPointAndRadius(const float *pt, float radius, const DpvsPlane *clipPlanes, int clipPlaneCount);
+int R_PickMaterial(
     int traceMask,
     const float *org,
     const float *dir,
@@ -137,29 +137,29 @@ int __cdecl R_PickMaterial(
     char *surfaceFlags,
     char *contents,
     uint32_t charLimit);
-double __cdecl FresnelTerm(float n0, float n1, float cosIncidentAngle);
-char __cdecl R_GetClearColor(float *unpackedRgba);
-void __cdecl Byte4UnpackBgra(const uint8_t *from, float *to);
+double FresnelTerm(float n0, float n1, float cosIncidentAngle);
+char R_GetClearColor(float *unpackedRgba);
+void Byte4UnpackBgra(const uint8_t *from, float *to);
 
-void __cdecl R_SetShadowLookupMatrix(GfxCmdBufSourceState *source, const GfxMatrix *matrix);
-void __cdecl R_Set2D(GfxCmdBufSourceState *source);
-void __cdecl R_Set3D(GfxCmdBufSourceState *source);
-void __cdecl R_CmdBufSet2D(GfxCmdBufSourceState* source, GfxViewport* viewport);
-GfxCmdBufSourceState *__cdecl R_GetActiveWorldMatrix(GfxCmdBufSourceState *source);
-void __cdecl R_InitCmdBufState(GfxCmdBufState *state);
-void __cdecl R_InitCmdBufSourceState(GfxCmdBufSourceState *source, const GfxCmdBufInput *input, int cameraView);
+void R_SetShadowLookupMatrix(GfxCmdBufSourceState *source, const GfxMatrix *matrix);
+void R_Set2D(GfxCmdBufSourceState *source);
+void R_Set3D(GfxCmdBufSourceState *source);
+void R_CmdBufSet2D(GfxCmdBufSourceState* source, GfxViewport* viewport);
+GfxCmdBufSourceState *R_GetActiveWorldMatrix(GfxCmdBufSourceState *source);
+void R_InitCmdBufState(GfxCmdBufState *state);
+void R_InitCmdBufSourceState(GfxCmdBufSourceState *source, const GfxCmdBufInput *input, int cameraView);
 
-void __cdecl R_MatrixIdentity44(float (*out)[4]);
-double __cdecl R_GetBaseLodDist(const float *origin);
-double __cdecl R_GetAdjustedLodDist(float dist, XModelLodRampType lodRampType);
+void R_MatrixIdentity44(float (*out)[4]);
+double R_GetBaseLodDist(const float *origin);
+double R_GetAdjustedLodDist(float dist, XModelLodRampType lodRampType);
 
 #if !defined(__linux__) || !defined(KISAK_DEDICATED)
 // Keep backend method calls out of shared headers. The real D3D backend owns
 // this definition; Linux has no successful fallback for releasing GPU objects.
-uint32_t __cdecl R_ReleaseD3DSurface(IDirect3DSurface9 *surface);
+uint32_t R_ReleaseD3DSurface(IDirect3DSurface9 *surface);
 
 template <typename T>
-inline void __cdecl R_ReleaseAndSetNULL(
+inline void R_ReleaseAndSetNULL(
     IDirect3DSurface9 *var,
     const char *fn,
     const char *filename,

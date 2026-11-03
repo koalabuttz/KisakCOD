@@ -2,7 +2,7 @@
 #include "client.h"
 #include <gfx_d3d/r_rendercmds.h>
 
-void __cdecl CL_DrawStretchPicPhysical(
+void CL_DrawStretchPicPhysical(
     float x,
     float y,
     float w,
@@ -17,7 +17,7 @@ void __cdecl CL_DrawStretchPicPhysical(
     R_AddCmdDrawStretchPic(x, y, w, h, s1, t1, s2, t2, color, material);
 }
 
-void __cdecl CL_DrawStretchPic(
+void CL_DrawStretchPic(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -36,7 +36,7 @@ void __cdecl CL_DrawStretchPic(
     CL_DrawStretchPicPhysical(x, y, w, h, s1, t1, s2, t2, color, material);
 }
 
-void __cdecl CL_DrawTextPhysical(
+void CL_DrawTextPhysical(
     const char *text,
     int32_t maxChars,
     Font_s *font,
@@ -50,7 +50,7 @@ void __cdecl CL_DrawTextPhysical(
     R_AddCmdDrawText(text, maxChars, font, x, y, xScale, yScale, 0.0, color, style);
 }
 
-void __cdecl CL_SetViewport(int x, int y, int width, int height)
+void CL_SetViewport(int x, int y, int width, int height)
 {
     R_AddCmdSetViewportValues(x, y, width, height);
 }

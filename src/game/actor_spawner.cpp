@@ -30,7 +30,7 @@ const float g_vSpawnCheckPoints[11][3] =
 };
 
 
-int __cdecl PointCouldSeeSpawn(const float *vEyePos, const float *vSpawnPos, int iIgnoreEnt1, int iIgnoreEnt2)
+int PointCouldSeeSpawn(const float *vEyePos, const float *vSpawnPos, int iIgnoreEnt1, int iIgnoreEnt2)
 {
     double v8; // fp13
     double v9; // fp12
@@ -69,7 +69,7 @@ int __cdecl PointCouldSeeSpawn(const float *vEyePos, const float *vSpawnPos, int
     return 1;
 }
 
-gentity_s *__cdecl SpawnActor(gentity_s *ent, unsigned int targetname, enumForceSpawn forceSpawn, int getEnemyInfo)
+gentity_s *SpawnActor(gentity_s *ent, unsigned int targetname, enumForceSpawn forceSpawn, int getEnemyInfo)
 {
     unsigned int v8; // r3
     const char *v9; // r5
@@ -182,7 +182,7 @@ gentity_s *__cdecl SpawnActor(gentity_s *ent, unsigned int targetname, enumForce
     }
 }
 
-void __cdecl G_DropActorSpawnersToFloor()
+void G_DropActorSpawnersToFloor()
 {
     int entContents[MAX_GENTITIES + 1];
 
@@ -226,7 +226,7 @@ void __cdecl G_DropActorSpawnersToFloor()
     }
 }
 
-int __cdecl SP_actor_spawner(gentity_s *pEnt)
+int SP_actor_spawner(gentity_s *pEnt)
 {
     int count; // r10
     int v3; // r31

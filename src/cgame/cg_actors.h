@@ -5,8 +5,8 @@
 #error This file is for SinglePlayer only
 #endif
 
-int __cdecl CG_GetEntityIndex(const centity_s *cent);
-int __cdecl CG_GetLocalClientTime(int localClientNum);
-void __cdecl CG_Actor_PreControllers(centity_s *cent);
-void __cdecl CG_Actor(int localClientNum, centity_s *cent);
-void __cdecl CG_ActorSpawner(centity_s *cent);
+int CG_GetEntityIndex(const centity_s *cent);
+int CG_GetLocalClientTime(int localClientNum);
+void CG_Actor_PreControllers(centity_s *cent);
+void CG_Actor(int localClientNum, centity_s *cent);
+void CG_ActorSpawner(centity_s *cent);

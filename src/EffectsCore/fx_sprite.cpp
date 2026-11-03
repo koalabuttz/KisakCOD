@@ -15,7 +15,7 @@ FxSpriteInfo g_spriteInfo;
 
 static FxSprite g_sprites[96]; // ADDED
 
-void __cdecl FX_SpriteGenerateVerts(FxGenerateVertsCmd *cmd)
+void FX_SpriteGenerateVerts(FxGenerateVertsCmd *cmd)
 {
     int32_t i; // [esp+0h] [ebp-8h]
     FxSpriteInfo *spriteInfo; // [esp+4h] [ebp-4h]
@@ -30,7 +30,7 @@ void __cdecl FX_SpriteGenerateVerts(FxGenerateVertsCmd *cmd)
         FX_GenerateSpriteCodeMeshVerts(&g_sprites[i], cmd); // LWSS: changed to `g_sprites`
 }
 
-void __cdecl FX_GenerateSpriteCodeMeshVerts(FxSprite* sprite, FxGenerateVertsCmd* cmd)
+void FX_GenerateSpriteCodeMeshVerts(FxSprite* sprite, FxGenerateVertsCmd* cmd)
 {
     if ((sprite->flags & 2) != 0)
         FX_GenerateSpriteCodeMeshVertsFixedScreenSize(
@@ -51,7 +51,7 @@ void __cdecl FX_GenerateSpriteCodeMeshVerts(FxSprite* sprite, FxGenerateVertsCmd
             cmd);
 }
 
-void __cdecl FX_GenerateSpriteCodeMeshVertsFixedScreenSize(
+void FX_GenerateSpriteCodeMeshVertsFixedScreenSize(
     Material *material,
     const float *pos,
     float radius,
@@ -65,7 +65,7 @@ void __cdecl FX_GenerateSpriteCodeMeshVertsFixedScreenSize(
         FX_BuildSpriteCodeMeshVerts(material, pos, worldRadius, rgbaColor, spriteFlags);
 }
 
-void __cdecl FX_BuildSpriteCodeMeshVerts(
+void FX_BuildSpriteCodeMeshVerts(
     Material* material,
     const float* pos,
     float worldRadius,
@@ -101,7 +101,7 @@ void __cdecl FX_BuildSpriteCodeMeshVerts(
         COERCE_INT(1.0));
 }
 
-void __cdecl FX_BuildQuadStampCodeMeshVerts(
+void FX_BuildQuadStampCodeMeshVerts(
     Material *material,
     const float *viewAxis,
     const float *origin,
@@ -276,7 +276,7 @@ void __cdecl FX_BuildQuadStampCodeMeshVerts(
     }
 }
 
-char __cdecl FX_HeightScreenToWorld(
+char FX_HeightScreenToWorld(
     const float *worldOrigin,
     float screenHeight,
     float *worldHeight,
@@ -301,7 +301,7 @@ char __cdecl FX_HeightScreenToWorld(
     return 1;
 }
 
-double __cdecl FX_GetClipSpaceW(const float *worldPoint, float *vieworg, float (*viewaxis)[3])
+double FX_GetClipSpaceW(const float *worldPoint, float *vieworg, float (*viewaxis)[3])
 {
     float eyeDelta[3]; // [esp+0h] [ebp-Ch] BYREF
 
@@ -309,7 +309,7 @@ double __cdecl FX_GetClipSpaceW(const float *worldPoint, float *vieworg, float (
     return Vec3Dot(eyeDelta, (const float *)viewaxis);
 }
 
-void __cdecl FX_GenerateSpriteCodeMeshVertsFixedWorldSize(
+void FX_GenerateSpriteCodeMeshVertsFixedWorldSize(
     Material* material,
     const float* pos,
     float radius,
@@ -344,7 +344,7 @@ void __cdecl FX_GenerateSpriteCodeMeshVertsFixedWorldSize(
     FX_BuildSpriteCodeMeshVerts(material, pos, worldRadius, rgbaColor, spriteFlags);
 }
 
-char __cdecl FX_HeightWorldToScreen(
+char FX_HeightWorldToScreen(
     const float *worldOrigin,
     float worldHeight,
     float *screenHeight,
@@ -370,20 +370,20 @@ char __cdecl FX_HeightWorldToScreen(
     return 1;
 }
 
-void __cdecl FX_SpriteBegin()
+void FX_SpriteBegin()
 {
     g_spriteInfo.indices = 0;
     g_spriteInfo.indexCount = 0;
 }
 
-void __cdecl FX_SpriteAdd(FxSprite *sprite)
+void FX_SpriteAdd(FxSprite *sprite)
 {
     if ((int)g_spriteInfo.indexCount < arr_cnt(g_sprites))
         qmemcpy(&g_sprites[g_spriteInfo.indexCount++], sprite, sizeof(FxSprite));
         //qmemcpy(&g_sprites[(int)g_spriteInfo.indices++], sprite, sizeof(FxSprite));
 }
 
-FxSpriteInfo *__cdecl FX_SpriteGetInfo()
+FxSpriteInfo *FX_SpriteGetInfo()
 {
     return &g_spriteInfo;
 }

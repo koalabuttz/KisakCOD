@@ -242,10 +242,10 @@ struct dxUserGeom : public dxGeom {
 // END
 
 // LWSS ADD- Custom for COD4
-void __cdecl ODE_GeomGetAAContainedBox(struct dxGeomTransform *geom, float *mins, float *maxs);
-void __cdecl dInitUserGeom(dxUserGeom *geom, int classnum, dxSpace *space, dxBody *body);
+void ODE_GeomGetAAContainedBox(struct dxGeomTransform *geom, float *mins, float *maxs);
+void dInitUserGeom(dxUserGeom *geom, int classnum, dxSpace *space, dxBody *body);
 
-inline dxGeom *__cdecl ODE_BodyGetFirstGeom(dxBody *body)
+inline dxGeom *ODE_BodyGetFirstGeom(dxBody *body)
 {
     if (!body)
         MyAssertHandler(".\\physics\\ode\\src\\collision_kernel.cpp", 310, 0, "%s", "body");

@@ -99,27 +99,27 @@ punctuation_s default_punctuations[53] =
   { NULL, 0, NULL }
 }; // idb
 
-int __cdecl PC_Directive_include(source_s *source);
-int __cdecl PC_Directive_undef(source_s *source);
-int __cdecl PC_Directive_define(source_s *source);
-int __cdecl PC_Directive_if_def(source_s *source, int type);
-int __cdecl PC_Directive_ifdef(source_s *source);
-int __cdecl PC_Directive_ifndef(source_s *source);
-int __cdecl PC_Directive_else(source_s *source);
-int __cdecl PC_Directive_endif(source_s *source);
-int __cdecl PC_Directive_elif(source_s *source);
-int __cdecl PC_Directive_if(source_s *source);
-int __cdecl PC_Directive_line(source_s *source);
-int __cdecl PC_Directive_error(source_s *source);
-int __cdecl PC_Directive_pragma(source_s *source);
-int __cdecl PC_Directive_evalfloat(source_s *source);
-int __cdecl PC_Directive_eval(source_s *source);
-int __cdecl PC_Evaluate(source_s *source, int *intvalue, double *floatvalue, int integer);
-int __cdecl PC_ExpandDefineIntoSource(source_s *source, token_s *deftoken, define_s *define);
-int __cdecl PC_Float_Expression_Parse(int handle, float *f);
+int PC_Directive_include(source_s *source);
+int PC_Directive_undef(source_s *source);
+int PC_Directive_define(source_s *source);
+int PC_Directive_if_def(source_s *source, int type);
+int PC_Directive_ifdef(source_s *source);
+int PC_Directive_ifndef(source_s *source);
+int PC_Directive_else(source_s *source);
+int PC_Directive_endif(source_s *source);
+int PC_Directive_elif(source_s *source);
+int PC_Directive_if(source_s *source);
+int PC_Directive_line(source_s *source);
+int PC_Directive_error(source_s *source);
+int PC_Directive_pragma(source_s *source);
+int PC_Directive_evalfloat(source_s *source);
+int PC_Directive_eval(source_s *source);
+int PC_Evaluate(source_s *source, int *intvalue, double *floatvalue, int integer);
+int PC_ExpandDefineIntoSource(source_s *source, token_s *deftoken, define_s *define);
+int PC_Float_Expression_Parse(int handle, float *f);
 
-int __cdecl PC_DollarDirective_evalfloat(source_s *source);
-int __cdecl PC_DollarDirective_evalint(source_s *source);
+int PC_DollarDirective_evalfloat(source_s *source);
+int PC_DollarDirective_evalint(source_s *source);
 
 const directive_s directives[15] =
 {
@@ -164,7 +164,7 @@ directive_s dollardirectives[20] =
   { NULL, NULL }
 }; // idb
 
-void __cdecl PrintSourceStack(const script_s *scriptstack)
+void PrintSourceStack(const script_s *scriptstack)
 {
     script_s *scriptstacka; // [esp+8h] [ebp+8h]
 
@@ -183,7 +183,7 @@ void SourceError(source_s *source, const char *str, ...)
     PrintSourceStack(source->scriptstack);
 }
 
-void __cdecl PC_PushScript(source_s *source, script_s *script)
+void PC_PushScript(source_s *source, script_s *script)
 {
     script_s *s; // [esp+0h] [ebp-4h]
 
@@ -199,7 +199,7 @@ void __cdecl PC_PushScript(source_s *source, script_s *script)
     source->scriptstack = script;
 }
 
-uint32_t *__cdecl GetMemory(uint32_t size)
+uint32_t *GetMemory(uint32_t size)
 {
     uint32_t *ptr; // [esp+4h] [ebp-4h]
 
@@ -210,14 +210,14 @@ uint32_t *__cdecl GetMemory(uint32_t size)
     return ptr + 1;
 }
 
-void __cdecl FreeMemory(char *ptr)
+void FreeMemory(char *ptr)
 {
     if (*((_DWORD *)ptr - 1) == 0x12345678)
         Z_Free(ptr - 4, 10);
 }
 
 int numtokens;
-token_s *__cdecl PC_CopyToken(token_s *token)
+token_s *PC_CopyToken(token_s *token)
 {
     uint32_t *t; // [esp+8h] [ebp-4h]
 
@@ -236,13 +236,13 @@ token_s *__cdecl PC_CopyToken(token_s *token)
     }
 }
 
-void __cdecl PC_FreeToken(token_s *token)
+void PC_FreeToken(token_s *token)
 {
     FreeMemory(token->string);
     --numtokens;
 }
 
-int __cdecl PS_ReadWhiteSpace(script_s *script)
+int PS_ReadWhiteSpace(script_s *script)
 {
     while (1)
     {
@@ -315,7 +315,7 @@ void ScriptWarning(script_s *script, const char *str, ...)
     }
 }
 
-int __cdecl PS_ReadEscapeCharacter(script_s *script, char *ch)
+int PS_ReadEscapeCharacter(script_s *script, char *ch)
 {
     char c; // [esp+4h] [ebp-Ch]
     int ca; // [esp+4h] [ebp-Ch]
@@ -425,7 +425,7 @@ LABEL_38:
     return 1;
 }
 
-int __cdecl PS_ReadString(script_s *script, token_s *token, int quote)
+int PS_ReadString(script_s *script, token_s *token, int quote)
 {
     int tmpline; // [esp+0h] [ebp-Ch]
     int len; // [esp+4h] [ebp-8h]
@@ -501,7 +501,7 @@ int __cdecl PS_ReadString(script_s *script, token_s *token, int quote)
     return 1;
 }
 
-void __cdecl NumberValue(char *string, __int16 subtype, uint32_t *intvalue, long double *floatvalue)
+void NumberValue(char *string, __int16 subtype, uint32_t *intvalue, long double *floatvalue)
 {
     uint32_t dotfound; // [esp+40h] [ebp-4h]
     char *stringa; // [esp+4Ch] [ebp+8h]
@@ -574,7 +574,7 @@ void __cdecl NumberValue(char *string, __int16 subtype, uint32_t *intvalue, long
     }
 }
 
-int __cdecl PS_ReadNumber(script_s *script, token_s *token)
+int PS_ReadNumber(script_s *script, token_s *token)
 {
     int v3; // edx
     BOOL octal; // [esp+0h] [ebp-14h]
@@ -674,7 +674,7 @@ LABEL_41:
     return 1;
 }
 
-int __cdecl PS_ReadPrimitive(script_s *script, token_s *token)
+int PS_ReadPrimitive(script_s *script, token_s *token)
 {
     int len; // [esp+8h] [ebp-4h]
 
@@ -693,7 +693,7 @@ int __cdecl PS_ReadPrimitive(script_s *script, token_s *token)
     return 1;
 }
 
-int __cdecl PS_ReadName(script_s *script, token_s *token)
+int PS_ReadName(script_s *script, token_s *token)
 {
     char c; // [esp+3h] [ebp-5h]
     int len; // [esp+4h] [ebp-4h]
@@ -715,7 +715,7 @@ int __cdecl PS_ReadName(script_s *script, token_s *token)
     return 1;
 }
 
-int __cdecl PS_ReadPunctuation(script_s *script, token_s *token)
+int PS_ReadPunctuation(script_s *script, token_s *token)
 {
     punctuation_s *punc; // [esp+10h] [ebp-Ch]
     uint32_t len; // [esp+14h] [ebp-8h]
@@ -737,7 +737,7 @@ int __cdecl PS_ReadPunctuation(script_s *script, token_s *token)
     return 0;
 }
 
-int __cdecl PS_ReadToken(script_s *script, token_s *token)
+int PS_ReadToken(script_s *script, token_s *token)
 {
     if (script->tokenavailable)
     {
@@ -793,7 +793,7 @@ int __cdecl PS_ReadToken(script_s *script, token_s *token)
     return 1;
 }
 
-BOOL __cdecl EndOfScript(script_s *script)
+BOOL EndOfScript(script_s *script)
 {
     return script->script_p >= script->end_p;
 }
@@ -814,14 +814,14 @@ void SourceWarning(source_s *source, const char *str, ...)
     PrintSourceStack(source->scriptstack);
 }
 
-void __cdecl FreeScript(script_s *script)
+void FreeScript(script_s *script)
 {
     if (script->punctuationtable)
         FreeMemory((char *)script->punctuationtable);
     FreeMemory(script->filename);
 }
 
-int __cdecl PC_ReadSourceToken(source_s *source, token_s *token)
+int PC_ReadSourceToken(source_s *source, token_s *token)
 {
     token_s *t; // [esp+8h] [ebp-10h]
     script_s *script; // [esp+Ch] [ebp-Ch]
@@ -853,7 +853,7 @@ int __cdecl PC_ReadSourceToken(source_s *source, token_s *token)
     return 1;
 }
 
-void __cdecl PC_PopIndent(source_s *source, int *type, parseSkip_t *skip)
+void PC_PopIndent(source_s *source, int *type, parseSkip_t *skip)
 {
     indent_s *indent; // [esp+0h] [ebp-4h]
 
@@ -873,7 +873,7 @@ void __cdecl PC_PopIndent(source_s *source, int *type, parseSkip_t *skip)
     }
 }
 
-int __cdecl PC_UnreadSourceToken(source_s *source, token_s *token)
+int PC_UnreadSourceToken(source_s *source, token_s *token)
 {
     token_s *v2; // eax
 
@@ -883,7 +883,7 @@ int __cdecl PC_UnreadSourceToken(source_s *source, token_s *token)
     return 1;
 }
 
-int __cdecl PC_ReadDefineParms(source_s *source, define_s *define, token_s **parms, int maxparms)
+int PC_ReadDefineParms(source_s *source, define_s *define, token_s **parms, int maxparms)
 {
     token_s *t; // [esp+50h] [ebp-454h]
     int done; // [esp+54h] [ebp-450h]
@@ -977,7 +977,7 @@ LABEL_11:
     return 1;
 }
 
-int __cdecl PC_StringizeTokens(token_s *tokens, token_s *token)
+int PC_StringizeTokens(token_s *tokens, token_s *token)
 {
     token->type = 1;
     token->whitespace_p = 0;
@@ -994,7 +994,7 @@ int __cdecl PC_StringizeTokens(token_s *tokens, token_s *token)
     return 1;
 }
 
-int __cdecl PC_MergeTokens(token_s *t1, token_s *t2)
+int PC_MergeTokens(token_s *t1, token_s *t2)
 {
     if (t1->type == 4 && (t2->type == 4 || t2->type == 3))
     {
@@ -1013,7 +1013,7 @@ int __cdecl PC_MergeTokens(token_s *t1, token_s *t2)
     }
 }
 
-int __cdecl PC_NameHash(char *name)
+int PC_NameHash(char *name)
 {
     int hash; // [esp+0h] [ebp-8h]
     int i; // [esp+4h] [ebp-4h]
@@ -1024,7 +1024,7 @@ int __cdecl PC_NameHash(char *name)
     return ((uint16_t)(hash >> 20) ^ (uint16_t)(hash ^ (hash >> 10))) & 0x3FF;
 }
 
-void __cdecl PC_AddDefineToHash(define_s *define, define_s **definehash)
+void PC_AddDefineToHash(define_s *define, define_s **definehash)
 {
     int hash; // [esp+0h] [ebp-4h]
 
@@ -1033,7 +1033,7 @@ void __cdecl PC_AddDefineToHash(define_s *define, define_s **definehash)
     definehash[hash] = define;
 }
 
-define_s *__cdecl PC_FindHashedDefine(define_s **definehash, char *name)
+define_s *PC_FindHashedDefine(define_s **definehash, char *name)
 {
     define_s *d; // [esp+14h] [ebp-8h]
 
@@ -1045,7 +1045,7 @@ define_s *__cdecl PC_FindHashedDefine(define_s **definehash, char *name)
     return 0;
 }
 
-int __cdecl PC_FindDefineParm(define_s *define, const char *name)
+int PC_FindDefineParm(define_s *define, const char *name)
 {
     int i; // [esp+14h] [ebp-8h]
     token_s *p; // [esp+18h] [ebp-4h]
@@ -1060,7 +1060,7 @@ int __cdecl PC_FindDefineParm(define_s *define, const char *name)
     return -1;
 }
 
-void __cdecl PC_FreeDefine(define_s *define)
+void PC_FreeDefine(define_s *define)
 {
     token_s *t; // [esp+0h] [ebp-8h]
     token_s *ta; // [esp+0h] [ebp-8h]
@@ -1080,7 +1080,7 @@ void __cdecl PC_FreeDefine(define_s *define)
     FreeMemory((char *)define);
 }
 
-int __cdecl PC_ExpandBuiltinDefine(
+int PC_ExpandBuiltinDefine(
     source_s *source,
     token_s *deftoken,
     define_s *define,
@@ -1146,7 +1146,7 @@ int __cdecl PC_ExpandBuiltinDefine(
     return 1;
 }
 
-int __cdecl PC_ExpandDefine(
+int PC_ExpandDefine(
     source_s *source,
     token_s *deftoken,
     define_s *define,
@@ -1259,7 +1259,7 @@ int __cdecl PC_ExpandDefine(
     return 1;
 }
 
-void __cdecl PC_ConvertPath(char *path)
+void PC_ConvertPath(char *path)
 {
     char v1; // dl
     char *v2; // [esp+8h] [ebp-Ch]
@@ -1292,7 +1292,7 @@ void __cdecl PC_ConvertPath(char *path)
     }
 }
 
-void __cdecl StripDoubleQuotes(char *string)
+void StripDoubleQuotes(char *string)
 {
     char v1; // dl
     char *v2; // [esp+28h] [ebp-8h]
@@ -1312,7 +1312,7 @@ void __cdecl StripDoubleQuotes(char *string)
         string[strlen(string) - 1] = 0;
 }
 
-uint8_t *__cdecl GetClearedMemory(uint32_t size)
+uint8_t *GetClearedMemory(uint32_t size)
 {
     uint8_t *ptr; // [esp+0h] [ebp-4h]
 
@@ -1321,7 +1321,7 @@ uint8_t *__cdecl GetClearedMemory(uint32_t size)
     return ptr;
 }
 
-void __cdecl PS_CreatePunctuationTable(script_s *script, punctuation_s *punctuations)
+void PS_CreatePunctuationTable(script_s *script, punctuation_s *punctuations)
 {
     punctuation_s *lastp; // [esp+20h] [ebp-10h]
     int i; // [esp+24h] [ebp-Ch]
@@ -1359,13 +1359,13 @@ void __cdecl PS_CreatePunctuationTable(script_s *script, punctuation_s *punctuat
     }
 }
 
-void __cdecl SetScriptPunctuations(script_s *script)
+void SetScriptPunctuations(script_s *script)
 {
     PS_CreatePunctuationTable(script, default_punctuations);
     script->punctuations = default_punctuations;
 }
 
-script_s *__cdecl LoadScriptFile(const char *filename)
+script_s *LoadScriptFile(const char *filename)
 {
     char v2; // [esp+3h] [ebp-61h]
     script_s *v3; // [esp+8h] [ebp-5Ch]
@@ -1404,7 +1404,7 @@ script_s *__cdecl LoadScriptFile(const char *filename)
     return buffer;
 }
 
-int __cdecl PC_Directive_include(source_s *source)
+int PC_Directive_include(source_s *source)
 {
     char path[68]; // [esp+54h] [ebp-480h] BYREF
     script_s *script; // [esp+98h] [ebp-43Ch]
@@ -1469,19 +1469,19 @@ LABEL_30:
     }
 }
 
-bool __cdecl PC_WhiteSpaceBeforeToken(token_s *token)
+bool PC_WhiteSpaceBeforeToken(token_s *token)
 {
     return token->endwhitespace_p - token->whitespace_p > 0;
 }
 
-void __cdecl PC_ClearTokenWhiteSpace(token_s *token)
+void PC_ClearTokenWhiteSpace(token_s *token)
 {
     token->whitespace_p = 0;
     token->endwhitespace_p = 0;
     token->linescrossed = 0;
 }
 
-int __cdecl PC_Directive_undef(source_s *source)
+int PC_Directive_undef(source_s *source)
 {
     define_s *lastdefine; // [esp+14h] [ebp-444h]
     int hash; // [esp+18h] [ebp-440h]
@@ -1532,7 +1532,7 @@ int __cdecl PC_Directive_undef(source_s *source)
     }
 }
 
-int __cdecl PC_ReadLine(source_s *source, token_s *token, bool expandDefines)
+int PC_ReadLine(source_s *source, token_s *token, bool expandDefines)
 {
     int crossline; // [esp+14h] [ebp-8h]
     define_s *define; // [esp+18h] [ebp-4h]
@@ -1564,7 +1564,7 @@ int __cdecl PC_ReadLine(source_s *source, token_s *token, bool expandDefines)
     return 1;
 }
 
-int __cdecl PC_ExpandDefineIntoSource(source_s *source, token_s *deftoken, define_s *define)
+int PC_ExpandDefineIntoSource(source_s *source, token_s *deftoken, define_s *define)
 {
     token_s *firsttoken; // [esp+0h] [ebp-8h] BYREF
     token_s *lasttoken; // [esp+4h] [ebp-4h] BYREF
@@ -1582,7 +1582,7 @@ int __cdecl PC_ExpandDefineIntoSource(source_s *source, token_s *deftoken, defin
     return 1;
 }
 
-int __cdecl PC_Directive_define(source_s *source)
+int PC_Directive_define(source_s *source)
 {
     char v2; // [esp+7Bh] [ebp-45Dh]
     char *name; // [esp+80h] [ebp-458h]
@@ -1716,7 +1716,7 @@ int __cdecl PC_Directive_define(source_s *source)
     return 0;
 }
 
-script_s *__cdecl LoadScriptMemory(char *ptr, int length, const char *name)
+script_s *LoadScriptMemory(char *ptr, int length, const char *name)
 {
     char v4; // [esp+3h] [ebp-15h]
     script_s *v5; // [esp+8h] [ebp-10h]
@@ -1744,7 +1744,7 @@ script_s *__cdecl LoadScriptMemory(char *ptr, int length, const char *name)
     return buffer;
 }
 
-define_s *__cdecl PC_DefineFromString(char *string)
+define_s *PC_DefineFromString(char *string)
 {
     source_s src; // [esp+10h] [ebp-4E8h] BYREF
     token_s *t; // [esp+4E4h] [ebp-14h]
@@ -1782,7 +1782,7 @@ define_s *__cdecl PC_DefineFromString(char *string)
     return 0;
 }
 
-int __cdecl PC_AddDefine(source_s *source, char *string)
+int PC_AddDefine(source_s *source, char *string)
 {
     define_s *define; // [esp+0h] [ebp-4h]
 
@@ -1793,7 +1793,7 @@ int __cdecl PC_AddDefine(source_s *source, char *string)
     return 1;
 }
 
-define_s *__cdecl PC_CopyDefine(source_s *source, define_s *define)
+define_s *PC_CopyDefine(source_s *source, define_s *define)
 {
     char v2; // dl
     _BYTE *v4; // [esp+8h] [ebp-28h]
@@ -1848,7 +1848,7 @@ define_s *__cdecl PC_CopyDefine(source_s *source, define_s *define)
 }
 
 define_s *globaldefines;
-void __cdecl PC_AddGlobalDefinesToSource(source_s *source)
+void PC_AddGlobalDefinesToSource(source_s *source)
 {
     define_s *newdefine; // [esp+0h] [ebp-8h]
     define_s *define; // [esp+4h] [ebp-4h]
@@ -1860,7 +1860,7 @@ void __cdecl PC_AddGlobalDefinesToSource(source_s *source)
     }
 }
 
-int __cdecl PC_Directive_if_def(source_s *source, int type)
+int PC_Directive_if_def(source_s *source, int type)
 {
     define_s *d; // [esp+0h] [ebp-440h]
     token_s token; // [esp+8h] [ebp-438h] BYREF
@@ -1887,7 +1887,7 @@ int __cdecl PC_Directive_if_def(source_s *source, int type)
     }
 }
 
-void __cdecl PC_PushIndent(source_s *source, int type, parseSkip_t skip)
+void PC_PushIndent(source_s *source, int type, parseSkip_t skip)
 {
     indent_s *indent; // [esp+0h] [ebp-4h]
 
@@ -1900,17 +1900,17 @@ void __cdecl PC_PushIndent(source_s *source, int type, parseSkip_t skip)
     source->indentstack = indent;
 }
 
-int __cdecl PC_Directive_ifdef(source_s *source)
+int PC_Directive_ifdef(source_s *source)
 {
     return PC_Directive_if_def(source, 8);
 }
 
-int __cdecl PC_Directive_ifndef(source_s *source)
+int PC_Directive_ifndef(source_s *source)
 {
     return PC_Directive_if_def(source, 16);
 }
 
-int __cdecl PC_Directive_else(source_s *source)
+int PC_Directive_else(source_s *source)
 {
     parseSkip_t skip; // [esp+0h] [ebp-8h] BYREF
     int type; // [esp+4h] [ebp-4h] BYREF
@@ -1936,7 +1936,7 @@ int __cdecl PC_Directive_else(source_s *source)
     }
 }
 
-int __cdecl PC_Directive_endif(source_s *source)
+int PC_Directive_endif(source_s *source)
 {
     parseSkip_t skip; // [esp+0h] [ebp-8h] BYREF
     int type; // [esp+4h] [ebp-4h] BYREF
@@ -1948,7 +1948,7 @@ int __cdecl PC_Directive_endif(source_s *source)
     return 0;
 }
 
-int __cdecl PC_OperatorPriority(int op)
+int PC_OperatorPriority(int op)
 {
     int result; // eax
 
@@ -2027,7 +2027,7 @@ int __cdecl PC_OperatorPriority(int op)
     return result;
 }
 
-int __cdecl PC_EvaluateTokens(source_s *source, token_s *tokens, int *intvalue, double *floatvalue, int integer)
+int PC_EvaluateTokens(source_s *source, token_s *tokens, int *intvalue, double *floatvalue, int integer)
 {
     long double v5; // st7
     bool v7; // [esp+18h] [ebp-DC0h]
@@ -2506,7 +2506,7 @@ int __cdecl PC_EvaluateTokens(source_s *source, token_s *tokens, int *intvalue, 
     return 0;
 }
 
-int __cdecl PC_DollarEvaluate(source_s *source, int *intvalue, double *floatvalue, int integer)
+int PC_DollarEvaluate(source_s *source, int *intvalue, double *floatvalue, int integer)
 {
     token_s *t; // [esp+14h] [ebp-454h]
     token_s *ta; // [esp+14h] [ebp-454h]
@@ -2610,7 +2610,7 @@ int __cdecl PC_DollarEvaluate(source_s *source, int *intvalue, double *floatvalu
     return 1;
 }
 
-int __cdecl PC_Directive_elif(source_s *source)
+int PC_Directive_elif(source_s *source)
 {
     parseSkip_t skip; // [esp+0h] [ebp-Ch] BYREF
     int type; // [esp+4h] [ebp-8h] BYREF
@@ -2640,7 +2640,7 @@ int __cdecl PC_Directive_elif(source_s *source)
     }
 }
 
-int __cdecl PC_Evaluate(source_s *source, int *intvalue, double *floatvalue, int integer)
+int PC_Evaluate(source_s *source, int *intvalue, double *floatvalue, int integer)
 {
     token_s *t; // [esp+14h] [ebp-450h]
     token_s *ta; // [esp+14h] [ebp-450h]
@@ -2737,7 +2737,7 @@ int __cdecl PC_Evaluate(source_s *source, int *intvalue, double *floatvalue, int
     }
 }
 
-int __cdecl PC_Directive_if(source_s *source)
+int PC_Directive_if(source_s *source)
 {
     int value; // [esp+4h] [ebp-4h] BYREF
 
@@ -2747,13 +2747,13 @@ int __cdecl PC_Directive_if(source_s *source)
     return 1;
 }
 
-int __cdecl PC_Directive_line(source_s *source)
+int PC_Directive_line(source_s *source)
 {
     SourceError(source, "#line directive not supported");
     return 0;
 }
 
-int __cdecl PC_Directive_error(source_s *source)
+int PC_Directive_error(source_s *source)
 {
     token_s token; // [esp+0h] [ebp-438h] BYREF
 
@@ -2765,7 +2765,7 @@ int __cdecl PC_Directive_error(source_s *source)
     return 0;
 }
 
-int __cdecl PC_Directive_pragma(source_s *source)
+int PC_Directive_pragma(source_s *source)
 {
     token_s token; // [esp+0h] [ebp-438h] BYREF
 
@@ -2775,7 +2775,7 @@ int __cdecl PC_Directive_pragma(source_s *source)
     return 1;
 }
 
-void __cdecl UnreadSignToken(source_s *source)
+void UnreadSignToken(source_s *source)
 {
     token_s token; // [esp+0h] [ebp-438h] BYREF
 
@@ -2789,7 +2789,7 @@ void __cdecl UnreadSignToken(source_s *source)
     PC_UnreadSourceToken(source, &token);
 }
 
-int __cdecl PC_Directive_eval(source_s *source)
+int PC_Directive_eval(source_s *source)
 {
     token_s token; // [esp+0h] [ebp-438h] BYREF
     int value; // [esp+434h] [ebp-4h] BYREF
@@ -2809,7 +2809,7 @@ int __cdecl PC_Directive_eval(source_s *source)
     return 1;
 }
 
-int __cdecl PC_Directive_evalfloat(source_s *source)
+int PC_Directive_evalfloat(source_s *source)
 {
     float v2; // [esp+8h] [ebp-448h]
     float v3; // [esp+Ch] [ebp-444h]
@@ -2833,7 +2833,7 @@ int __cdecl PC_Directive_evalfloat(source_s *source)
     return 1;
 }
 
-int __cdecl PC_ReadDirective(source_s *source)
+int PC_ReadDirective(source_s *source)
 {
     token_s token; // [esp+14h] [ebp-438h] BYREF
     int i; // [esp+448h] [ebp-4h]
@@ -2867,7 +2867,7 @@ int __cdecl PC_ReadDirective(source_s *source)
     }
 }
 
-int __cdecl PC_DollarDirective_evalint(source_s *source)
+int PC_DollarDirective_evalint(source_s *source)
 {
     token_s token; // [esp+0h] [ebp-438h] BYREF
     int value; // [esp+434h] [ebp-4h] BYREF
@@ -2889,7 +2889,7 @@ int __cdecl PC_DollarDirective_evalint(source_s *source)
     return 1;
 }
 
-int __cdecl PC_DollarDirective_evalfloat(source_s *source)
+int PC_DollarDirective_evalfloat(source_s *source)
 {
     float v2; // [esp+18h] [ebp-448h]
     float v3; // [esp+1Ch] [ebp-444h]
@@ -2915,7 +2915,7 @@ int __cdecl PC_DollarDirective_evalfloat(source_s *source)
     return 1;
 }
 
-int __cdecl PC_ReadDollarDirective(source_s *source)
+int PC_ReadDollarDirective(source_s *source)
 {
     token_s token; // [esp+14h] [ebp-438h] BYREF
     int i; // [esp+448h] [ebp-4h]
@@ -2950,7 +2950,7 @@ int __cdecl PC_ReadDollarDirective(source_s *source)
     }
 }
 
-int __cdecl PC_ReadToken(source_s *source, token_s *token)
+int PC_ReadToken(source_s *source, token_s *token)
 {
     token_s newtoken; // [esp+54h] [ebp-438h] BYREF
     define_s *define; // [esp+488h] [ebp-4h]
@@ -3008,7 +3008,7 @@ int __cdecl PC_ReadToken(source_s *source, token_s *token)
     return 1;
 }
 
-int __cdecl PC_CheckTokenString(source_s *source, const char *string)
+int PC_CheckTokenString(source_s *source, const char *string)
 {
     token_s tok; // [esp+14h] [ebp-438h] BYREF
 
@@ -3020,12 +3020,12 @@ int __cdecl PC_CheckTokenString(source_s *source, const char *string)
     return 0;
 }
 
-void __cdecl PC_UnreadToken(source_s *source, token_s *token)
+void PC_UnreadToken(source_s *source, token_s *token)
 {
     PC_UnreadSourceToken(source, token);
 }
 
-source_s *__cdecl LoadSourceFile(char *filename)
+source_s *LoadSourceFile(char *filename)
 {
     source_s *source; // [esp+0h] [ebp-8h]
     script_s *script; // [esp+4h] [ebp-4h]
@@ -3048,7 +3048,7 @@ source_s *__cdecl LoadSourceFile(char *filename)
 }
 
 source_s *sourceFiles[64];
-int __cdecl PC_LoadSourceHandle(char *filename, const char **builtinDefines)
+int PC_LoadSourceHandle(char *filename, const char **builtinDefines)
 {
     source_s *source; // [esp+0h] [ebp-Ch]
     int defineIter; // [esp+4h] [ebp-8h]
@@ -3070,7 +3070,7 @@ int __cdecl PC_LoadSourceHandle(char *filename, const char **builtinDefines)
     return i;
 }
 
-void __cdecl FreeSource(source_s *source)
+void FreeSource(source_s *source)
 {
     script_s *script; // [esp+0h] [ebp-14h]
     define_s *define; // [esp+4h] [ebp-10h]
@@ -3110,7 +3110,7 @@ void __cdecl FreeSource(source_s *source)
     FreeMemory(source->filename);
 }
 
-int __cdecl PC_FreeSourceHandle(int handle)
+int PC_FreeSourceHandle(int handle)
 {
     if (handle < 1 || handle >= 64)
         return 0;
@@ -3121,7 +3121,7 @@ int __cdecl PC_FreeSourceHandle(int handle)
     return 1;
 }
 
-int __cdecl PC_ReadTokenHandle(int handle, pc_token_s *pc_token)
+int PC_ReadTokenHandle(int handle, pc_token_s *pc_token)
 {
     char v3; // [esp+3h] [ebp-449h]
     char *string; // [esp+8h] [ebp-444h]
@@ -3152,7 +3152,7 @@ int __cdecl PC_ReadTokenHandle(int handle, pc_token_s *pc_token)
     return ret;
 }
 
-int __cdecl PC_ReadLineHandle(int handle, pc_token_s *pc_token)
+int PC_ReadLineHandle(int handle, pc_token_s *pc_token)
 {
     char v3; // [esp+3h] [ebp-449h]
     char *string; // [esp+8h] [ebp-444h]
@@ -3183,7 +3183,7 @@ int __cdecl PC_ReadLineHandle(int handle, pc_token_s *pc_token)
     return ret;
 }
 
-int __cdecl PC_SourceFileAndLine(int handle, char *filename, int *line)
+int PC_SourceFileAndLine(int handle, char *filename, int *line)
 {
     char v4; // cl
     char v5; // dl
@@ -3227,7 +3227,7 @@ int __cdecl PC_SourceFileAndLine(int handle, char *filename, int *line)
     return 1;
 }
 
-int __cdecl PC_String_Parse(int handle, const char **out)
+int PC_String_Parse(int handle, const char **out)
 {
     pc_token_s token; // [esp+0h] [ebp-418h] BYREF
 
@@ -3237,7 +3237,7 @@ int __cdecl PC_String_Parse(int handle, const char **out)
     return 1;
 }
 
-int __cdecl PC_Int_Parse(int handle, int *i)
+int PC_Int_Parse(int handle, int *i)
 {
     pc_token_s token; // [esp+0h] [ebp-418h] BYREF
     int negative; // [esp+414h] [ebp-4h]
@@ -3285,7 +3285,7 @@ void PC_SourceError(int handle, char *format, ...)
     Com_PrintError(CON_CHANNEL_UI, "Menu load error: %s, line %d: %s\n", filename, line, string_3);
 }
 
-bool __cdecl Eval_CanPushValue(const Eval *eval)
+bool Eval_CanPushValue(const Eval *eval)
 {
     const char *pExceptionObject; // [esp+0h] [ebp-4h] BYREF
 
@@ -3300,7 +3300,7 @@ bool __cdecl Eval_CanPushValue(const Eval *eval)
     return eval->pushedOp;
 }
 
-char __cdecl Eval_PushInteger(Eval *eval, int value)
+char Eval_PushInteger(Eval *eval, int value)
 {
     if (!Eval_CanPushValue(eval))
         return 0;
@@ -3310,7 +3310,7 @@ char __cdecl Eval_PushInteger(Eval *eval, int value)
     return 1;
 }
 
-bool __cdecl Eval_OperatorForToken(const char *text, EvalOperatorType *op)
+bool Eval_OperatorForToken(const char *text, EvalOperatorType *op)
 {
     bool result; // al
 
@@ -3489,12 +3489,12 @@ bool s_rightToLeft[26] =
   false
 }; // idb
 
-bool __cdecl Eval_IsUnaryOp(const Eval *eval)
+bool Eval_IsUnaryOp(const Eval *eval)
 {
     return !eval->valStackPos || eval->pushedOp;
 }
 
-void __cdecl Eval_PrepareBinaryOpSameTypes(Eval *eval)
+void Eval_PrepareBinaryOpSameTypes(Eval *eval)
 {
     int v1; // eax
     const char *v2; // [esp+4h] [ebp-8h] BYREF
@@ -3527,7 +3527,7 @@ void __cdecl Eval_PrepareBinaryOpSameTypes(Eval *eval)
     }
 }
 
-void __cdecl Eval_PrepareBinaryOpIntegers(Eval *eval)
+void Eval_PrepareBinaryOpIntegers(Eval *eval)
 {
     const char *v1; // [esp+0h] [ebp-8h] BYREF
     const char *pExceptionObject; // [esp+4h] [ebp-4h] BYREF
@@ -3555,7 +3555,7 @@ void __cdecl Eval_PrepareBinaryOpIntegers(Eval *eval)
     }
 }
 
-void __cdecl Eval_PrepareBinaryOpBoolean(Eval *eval)
+void Eval_PrepareBinaryOpBoolean(Eval *eval)
 {
     const char *v1; // [esp+8h] [ebp-8h] BYREF
     const char *pExceptionObject; // [esp+Ch] [ebp-4h] BYREF
@@ -3591,7 +3591,7 @@ void __cdecl Eval_PrepareBinaryOpBoolean(Eval *eval)
     }
 }
 
-bool __cdecl Eval_EvaluationStep(Eval *eval)
+bool Eval_EvaluationStep(Eval *eval)
 {
     bool result; // al
     EvalValue *v2; // edx
@@ -3997,7 +3997,7 @@ bool __cdecl Eval_EvaluationStep(Eval *eval)
     return result;
 }
 
-char __cdecl Eval_PushOperator(Eval *eval, EvalOperatorType op)
+char Eval_PushOperator(Eval *eval, EvalOperatorType op)
 {
     bool v3; // [esp+0h] [ebp-10h]
     const char *v4; // [esp+4h] [ebp-Ch] BYREF
@@ -4074,7 +4074,7 @@ char __cdecl Eval_PushOperator(Eval *eval, EvalOperatorType op)
     }
 }
 
-int __cdecl PC_Int_Expression_Parse(int handle, int *i)
+int PC_Int_Expression_Parse(int handle, int *i)
 {
     EvalValue result; // [esp+0h] [ebp-5468h] BYREF
     EvalValue v4; // [esp+10h] [ebp-5458h]
@@ -4131,7 +4131,7 @@ int __cdecl PC_Int_Expression_Parse(int handle, int *i)
     return 1;
 }
 
-int __cdecl PC_Float_Parse(int handle, float *f)
+int PC_Float_Parse(int handle, float *f)
 {
     pc_token_s token; // [esp+0h] [ebp-418h] BYREF
     int negative; // [esp+414h] [ebp-4h]
@@ -4162,7 +4162,7 @@ int __cdecl PC_Float_Parse(int handle, float *f)
     }
 }
 
-int __cdecl PC_Rect_Parse(int handle, rectDef_s *r)
+int PC_Rect_Parse(int handle, rectDef_s *r)
 {
     if (!PC_Float_Parse(handle, &r->x)
         || !PC_Float_Parse(handle, &r->y)
@@ -4178,7 +4178,7 @@ int __cdecl PC_Rect_Parse(int handle, rectDef_s *r)
     return 1;
 }
 
-char __cdecl Eval_PushNumber(Eval *eval, long double value)
+char Eval_PushNumber(Eval *eval, long double value)
 {
     if (!Eval_CanPushValue(eval))
         return 0;
@@ -4188,7 +4188,7 @@ char __cdecl Eval_PushNumber(Eval *eval, long double value)
     return 1;
 }
 
-bool __cdecl Eval_AnyMissingOperands(const Eval *eval)
+bool Eval_AnyMissingOperands(const Eval *eval)
 {
     int opIndex; // [esp+0h] [ebp-8h]
     int requiredOperandCount; // [esp+4h] [ebp-4h]
@@ -4199,7 +4199,7 @@ bool __cdecl Eval_AnyMissingOperands(const Eval *eval)
     return requiredOperandCount != eval->valStackPos;
 }
 
-EvalValue *__cdecl Eval_Solve(EvalValue *result, Eval *eval)
+EvalValue *Eval_Solve(EvalValue *result, Eval *eval)
 {
     const char *v5; // [esp+14h] [ebp-18h] BYREF
    // _DWORD pExceptionObject[5]; // [esp+18h] [ebp-14h] BYREF
@@ -4224,7 +4224,7 @@ EvalValue *__cdecl Eval_Solve(EvalValue *result, Eval *eval)
     return result;
 }
 
-int __cdecl PC_Float_Expression_Parse(int handle, float *f)
+int PC_Float_Expression_Parse(int handle, float *f)
 {
     EvalValue result; // [esp+8h] [ebp-5468h] BYREF
     EvalValue v4; // [esp+18h] [ebp-5458h]
@@ -4281,7 +4281,7 @@ int __cdecl PC_Float_Expression_Parse(int handle, float *f)
     return 1;
 }
 
-int __cdecl PC_Int_ParseLine(int handle, int *i)
+int PC_Int_ParseLine(int handle, int *i)
 {
     pc_token_s token; // [esp+0h] [ebp-418h] BYREF
     int negative; // [esp+414h] [ebp-4h]
@@ -4309,7 +4309,7 @@ int __cdecl PC_Int_ParseLine(int handle, int *i)
     }
 }
 
-int __cdecl PC_Script_Parse(int handle, const char **out)
+int PC_Script_Parse(int handle, const char **out)
 {
     char *v3; // eax
     char dst[5120]; // [esp+30h] [ebp-1818h] BYREF
@@ -4351,7 +4351,7 @@ int __cdecl PC_Script_Parse(int handle, const char **out)
     return 0;
 }
 
-int __cdecl PC_Color_Parse(int handle, float (*c)[4])
+int PC_Color_Parse(int handle, float (*c)[4])
 {
     float f; // [esp+0h] [ebp-8h] BYREF
     int i; // [esp+4h] [ebp-4h]
@@ -4365,7 +4365,7 @@ int __cdecl PC_Color_Parse(int handle, float (*c)[4])
     return 1;
 }
 
-int __cdecl PC_Char_Parse(int handle, char *out)
+int PC_Char_Parse(int handle, char *out)
 {
     pc_token_s token; // [esp+0h] [ebp-418h] BYREF
 
@@ -4377,7 +4377,7 @@ int __cdecl PC_Char_Parse(int handle, char *out)
 
 
 
-int __cdecl MenuParse_name(menuDef_t *menu, int handle)
+int MenuParse_name(menuDef_t *menu, int handle)
 {
     if (!PC_String_Parse(handle, &menu->window.name))
         return 0;
@@ -4385,17 +4385,17 @@ int __cdecl MenuParse_name(menuDef_t *menu, int handle)
     return 1;
 }
 
-int __cdecl MenuParse_fullscreen(menuDef_t *menu, int handle)
+int MenuParse_fullscreen(menuDef_t *menu, int handle)
 {
     return PC_Int_Parse(handle, &menu->fullScreen);
 }
 
-int __cdecl MenuParse_rect(menuDef_t *menu, int handle)
+int MenuParse_rect(menuDef_t *menu, int handle)
 {
     return PC_Rect_Parse(handle, &menu->window.rect);
 }
 
-void __cdecl free_expression(statement_s *statement)
+void free_expression(statement_s *statement)
 {
     expressionEntry *entry; // [esp+0h] [ebp-8h]
     int entryNum; // [esp+4h] [ebp-4h]
@@ -4416,7 +4416,7 @@ void __cdecl free_expression(statement_s *statement)
     }
 }
 
-int __cdecl parse_operatorToken(const char *token)
+int parse_operatorToken(const char *token)
 {
     int opNum; // [esp+0h] [ebp-4h]
 
@@ -4433,7 +4433,7 @@ int __cdecl parse_operatorToken(const char *token)
 
 int currentTempOperand_0;
 char s_tempOperandValueAsString_0[4][256];
-char *__cdecl GetValueAsString(Operand operand)
+char *GetValueAsString(Operand operand)
 {
     char *result; // [esp+8h] [ebp-4h]
 
@@ -4463,12 +4463,12 @@ char *__cdecl GetValueAsString(Operand operand)
     return result;
 }
 
-void __cdecl Statement_AddEntry(statement_s *statement, expressionEntry *entry)
+void Statement_AddEntry(statement_s *statement, expressionEntry *entry)
 {
     statement->entries[statement->numEntries++] = entry;
 }
 
-void __cdecl Statement_AddOperator(statement_s *statement, operationEnum op)
+void Statement_AddOperator(statement_s *statement, operationEnum op)
 {
     uint32_t *v2; // eax
 
@@ -4478,7 +4478,7 @@ void __cdecl Statement_AddOperator(statement_s *statement, operationEnum op)
     Statement_AddEntry(statement, (expressionEntry *)v2);
 }
 
-void __cdecl Statement_AddIntOperand(statement_s *statement, int val)
+void Statement_AddIntOperand(statement_s *statement, int val)
 {
     uint32_t *v2; // eax
 
@@ -4489,7 +4489,7 @@ void __cdecl Statement_AddIntOperand(statement_s *statement, int val)
     Statement_AddEntry(statement, (expressionEntry *)v2);
 }
 
-void __cdecl Statement_AddFloatOperand(statement_s *statement, float val)
+void Statement_AddFloatOperand(statement_s *statement, float val)
 {
     uint32_t *v2; // eax
 
@@ -4500,7 +4500,7 @@ void __cdecl Statement_AddFloatOperand(statement_s *statement, float val)
     Statement_AddEntry(statement, (expressionEntry *)v2);
 }
 
-void __cdecl Statement_AddStringOperand(statement_s *statement, char *str)
+void Statement_AddStringOperand(statement_s *statement, char *str)
 {
     expressionEntry *entry; // [esp+20h] [ebp-4h]
 
@@ -4512,7 +4512,7 @@ void __cdecl Statement_AddStringOperand(statement_s *statement, char *str)
     Statement_AddEntry(statement, entry);
 }
 
-char __cdecl parse_expression_internal(int handle, statement_s *statement, int maxEntries)
+char parse_expression_internal(int handle, statement_s *statement, int maxEntries)
 {
     expressionEntry *v4; // edx
     operandInternalDataUnion v5; // ecx
@@ -4609,13 +4609,13 @@ char __cdecl parse_expression_internal(int handle, statement_s *statement, int m
     return 1;
 }
 
-char __cdecl parse_expression(int handle, statement_s *statement, int maxEntries)
+char parse_expression(int handle, statement_s *statement, int maxEntries)
 {
     statement->numEntries = 0;
     return parse_expression_internal(handle, statement, maxEntries);
 }
 
-int __cdecl MenuParse_visible(menuDef_t *menu, int handle)
+int MenuParse_visible(menuDef_t *menu, int handle)
 {
     const char *string; // [esp+0h] [ebp-Ch] BYREF
     int flags; // [esp+8h] [ebp-4h]
@@ -4638,22 +4638,22 @@ int __cdecl MenuParse_visible(menuDef_t *menu, int handle)
     return 1;
 }
 
-int __cdecl MenuParse_onOpen(menuDef_t *menu, int handle)
+int MenuParse_onOpen(menuDef_t *menu, int handle)
 {
     return PC_Script_Parse(handle, &menu->onOpen);
 }
 
-int __cdecl MenuParse_onClose(menuDef_t *menu, int handle)
+int MenuParse_onClose(menuDef_t *menu, int handle)
 {
     return PC_Script_Parse(handle, &menu->onClose);
 }
 
-int __cdecl MenuParse_onESC(menuDef_t *menu, int handle)
+int MenuParse_onESC(menuDef_t *menu, int handle)
 {
     return PC_Script_Parse(handle, &menu->onESC);
 }
 
-int __cdecl MenuParse_execExp(menuDef_t *menu, int handle)
+int MenuParse_execExp(menuDef_t *menu, int handle)
 {
     const char *expressionType; // [esp+0h] [ebp-41Ch] BYREF
     pc_token_s token; // [esp+4h] [ebp-418h] BYREF
@@ -4710,22 +4710,22 @@ int __cdecl MenuParse_execExp(menuDef_t *menu, int handle)
     return 0;
 }
 
-int __cdecl MenuParse_border(menuDef_t *menu, int handle)
+int MenuParse_border(menuDef_t *menu, int handle)
 {
     return PC_Int_Parse(handle, &menu->window.border);
 }
 
-int __cdecl MenuParse_borderSize(menuDef_t *menu, int handle)
+int MenuParse_borderSize(menuDef_t *menu, int handle)
 {
     return PC_Float_Parse(handle, &menu->window.borderSize);
 }
 
-int __cdecl MenuParse_backcolor(menuDef_t *menu, int handle)
+int MenuParse_backcolor(menuDef_t *menu, int handle)
 {
     return PC_Color_Parse(handle, (float (*)[4])menu->window.backColor);
 }
 
-int __cdecl MenuParse_forecolor(menuDef_t *menu, int handle)
+int MenuParse_forecolor(menuDef_t *menu, int handle)
 {
     if (!PC_Color_Parse(handle, (float (*)[4])menu->window.foreColor))
         return 0;
@@ -4733,27 +4733,27 @@ int __cdecl MenuParse_forecolor(menuDef_t *menu, int handle)
     return 1;
 }
 
-int __cdecl MenuParse_bordercolor(menuDef_t *menu, int handle)
+int MenuParse_bordercolor(menuDef_t *menu, int handle)
 {
     return PC_Color_Parse(handle, (float (*)[4])menu->window.borderColor);
 }
 
-int __cdecl MenuParse_focuscolor(menuDef_t *menu, int handle)
+int MenuParse_focuscolor(menuDef_t *menu, int handle)
 {
     return PC_Color_Parse(handle, (float (*)[4])menu->focusColor);
 }
 
-int __cdecl MenuParse_disablecolor(menuDef_t *menu, int handle)
+int MenuParse_disablecolor(menuDef_t *menu, int handle)
 {
     return PC_Color_Parse(handle, (float (*)[4])menu->disableColor);
 }
 
-int __cdecl MenuParse_outlinecolor(menuDef_t *menu, int handle)
+int MenuParse_outlinecolor(menuDef_t *menu, int handle)
 {
     return PC_Color_Parse(handle, (float (*)[4])menu->window.outlineColor);
 }
 
-int __cdecl MenuParse_background(menuDef_t *menu, int handle)
+int MenuParse_background(menuDef_t *menu, int handle)
 {
     char name[64]; // [esp+0h] [ebp-48h] BYREF
     const char *buff; // [esp+44h] [ebp-4h] BYREF
@@ -4766,24 +4766,24 @@ int __cdecl MenuParse_background(menuDef_t *menu, int handle)
     return 1;
 }
 
-int __cdecl MenuParse_ownerdraw(menuDef_t *menu, int handle)
+int MenuParse_ownerdraw(menuDef_t *menu, int handle)
 {
     return PC_Int_Parse(handle, &menu->window.ownerDraw);
 }
 
-int __cdecl MenuParse_popup(menuDef_t *menu)
+int MenuParse_popup(menuDef_t *menu)
 {
     Window_SetStaticFlags(&menu->window, menu->window.staticFlags | 0x1000000);
     return 1;
 }
 
-int __cdecl MenuParse_outOfBounds(menuDef_t *menu)
+int MenuParse_outOfBounds(menuDef_t *menu)
 {
     Window_SetStaticFlags(&menu->window, menu->window.staticFlags | 0x2000000);
     return 1;
 }
 
-int __cdecl MenuParse_soundLoop(menuDef_t *menu, int handle)
+int MenuParse_soundLoop(menuDef_t *menu, int handle)
 {
     pc_token_s token; // [esp+0h] [ebp-418h] BYREF
 
@@ -4794,27 +4794,27 @@ int __cdecl MenuParse_soundLoop(menuDef_t *menu, int handle)
     return 1;
 }
 
-int __cdecl MenuParse_fadeClamp(menuDef_t *menu, int handle)
+int MenuParse_fadeClamp(menuDef_t *menu, int handle)
 {
     return PC_Float_Parse(handle, &menu->fadeClamp);
 }
 
-int __cdecl MenuParse_fadeAmount(menuDef_t *menu, int handle)
+int MenuParse_fadeAmount(menuDef_t *menu, int handle)
 {
     return PC_Float_Parse(handle, &menu->fadeAmount);
 }
 
-int __cdecl MenuParse_fadeInAmount(menuDef_t *menu, int handle)
+int MenuParse_fadeInAmount(menuDef_t *menu, int handle)
 {
     return PC_Float_Parse(handle, &menu->fadeInAmount);
 }
 
-int __cdecl MenuParse_fadeCycle(menuDef_t *menu, int handle)
+int MenuParse_fadeCycle(menuDef_t *menu, int handle)
 {
     return PC_Int_Parse(handle, &menu->fadeCycle);
 }
 
-void __cdecl Window_Init(windowDef_t *w)
+void Window_Init(windowDef_t *w)
 {
     memset((uint8_t *)w, 0, sizeof(windowDef_t));
     w->borderSize = 1.0;
@@ -4824,7 +4824,7 @@ void __cdecl Window_Init(windowDef_t *w)
     w->foreColor[0] = 1.0;
 }
 
-void __cdecl Item_Init(itemDef_s *item, int imageTrack)
+void Item_Init(itemDef_s *item, int imageTrack)
 {
     memset((uint8_t *)item, 0, sizeof(itemDef_s));
     item->textscale = 0.55000001f;
@@ -4832,7 +4832,7 @@ void __cdecl Item_Init(itemDef_s *item, int imageTrack)
     Window_Init(&item->window);
 }
 
-int __cdecl KeywordHash_Key_256_3855_(const char *keyword)
+int KeywordHash_Key_256_3855_(const char *keyword)
 {
     int hash; // [esp+0h] [ebp-8h]
     int i; // [esp+4h] [ebp-4h]
@@ -4843,7 +4843,7 @@ int __cdecl KeywordHash_Key_256_3855_(const char *keyword)
     return (uint8_t)(hash + BYTE1(hash));
 }
 
-const KeywordHashEntry<itemDef_s, 256, 3855> *__cdecl KeywordHash_Find_itemDef_s_256_3855_(
+const KeywordHashEntry<itemDef_s, 256, 3855> *KeywordHash_Find_itemDef_s_256_3855_(
     const KeywordHashEntry<itemDef_s, 256, 3855> **table,
     const char *keyword)
 {
@@ -4856,7 +4856,7 @@ const KeywordHashEntry<itemDef_s, 256, 3855> *__cdecl KeywordHash_Find_itemDef_s
         return key;
 }
 
-int __cdecl Item_Parse(int handle, itemDef_s *item)
+int Item_Parse(int handle, itemDef_s *item)
 {
     const KeywordHashEntry<itemDef_s, 256, 3855> *key; // [esp+0h] [ebp-41Ch]
     pc_token_s token; // [esp+4h] [ebp-418h] BYREF
@@ -4889,7 +4889,7 @@ int __cdecl Item_Parse(int handle, itemDef_s *item)
     return 0;
 }
 
-void __cdecl Menu_FreeItemMemory(itemDef_s *item)
+void Menu_FreeItemMemory(itemDef_s *item)
 {
     if (!item)
         MyAssertHandler(".\\ui\\ui_shared_obj.cpp", 106, 0, "%s", "item");
@@ -4903,7 +4903,7 @@ void __cdecl Menu_FreeItemMemory(itemDef_s *item)
     free_expression(&item->forecolorAExp);
 }
 
-void __cdecl Item_InitControls(itemDef_s *item)
+void Item_InitControls(itemDef_s *item)
 {
     listBoxDef_s *listPtr; // [esp+0h] [ebp-4h]
 
@@ -4919,7 +4919,7 @@ void __cdecl Item_InitControls(itemDef_s *item)
     }
 }
 
-int __cdecl MenuParse_itemDef(menuDef_t *menu, int handle)
+int MenuParse_itemDef(menuDef_t *menu, int handle)
 {
     itemDef_s *item; // [esp+0h] [ebp-4h]
 
@@ -4939,7 +4939,7 @@ int __cdecl MenuParse_itemDef(menuDef_t *menu, int handle)
     return 1;
 }
 
-int __cdecl MenuParse_execKey(menuDef_t *menu, int handle)
+int MenuParse_execKey(menuDef_t *menu, int handle)
 {
     const char *action; // [esp+0h] [ebp-10h] BYREF
     __int16 keyindex; // [esp+4h] [ebp-Ch]
@@ -4959,7 +4959,7 @@ int __cdecl MenuParse_execKey(menuDef_t *menu, int handle)
     return 1;
 }
 
-int __cdecl MenuParse_execKeyInt(menuDef_t *menu, int handle)
+int MenuParse_execKeyInt(menuDef_t *menu, int handle)
 {
     const char *action; // [esp+0h] [ebp-Ch] BYREF
     int keyname; // [esp+4h] [ebp-8h] BYREF
@@ -4977,7 +4977,7 @@ int __cdecl MenuParse_execKeyInt(menuDef_t *menu, int handle)
     return 1;
 }
 
-int __cdecl SetItemStaticFlag(menuDef_t *menu, int handle, int flag)
+int SetItemStaticFlag(menuDef_t *menu, int handle, int flag)
 {
     if (!menu)
         MyAssertHandler(".\\ui\\ui_shared_obj.cpp", 1150, 0, "%s", "menu");
@@ -4985,7 +4985,7 @@ int __cdecl SetItemStaticFlag(menuDef_t *menu, int handle, int flag)
     return 1;
 }
 
-int __cdecl MenuParse_blurWorld(menuDef_t *menu, int handle)
+int MenuParse_blurWorld(menuDef_t *menu, int handle)
 {
     if (!menu)
         MyAssertHandler(".\\ui\\ui_shared_obj.cpp", 1134, 0, "%s", "menu");
@@ -4997,39 +4997,39 @@ int __cdecl MenuParse_blurWorld(menuDef_t *menu, int handle)
     return 0;
 }
 
-int __cdecl MenuParse_legacySplitScreenScale(menuDef_t *menu, int handle)
+int MenuParse_legacySplitScreenScale(menuDef_t *menu, int handle)
 {
     return SetItemStaticFlag(menu, handle, 0x4000000);
 }
 
-int __cdecl MenuParse_hiddenDuringScope(menuDef_t *menu, int handle)
+int MenuParse_hiddenDuringScope(menuDef_t *menu, int handle)
 {
     return SetItemStaticFlag(menu, handle, 0x20000000);
 }
 
-int __cdecl MenuParse_hiddenDuringFlashbang(menuDef_t *menu, int handle)
+int MenuParse_hiddenDuringFlashbang(menuDef_t *menu, int handle)
 {
     return SetItemStaticFlag(menu, handle, 0x10000000);
 }
 
-int __cdecl MenuParse_hiddenDuringUI(menuDef_t *menu, int handle)
+int MenuParse_hiddenDuringUI(menuDef_t *menu, int handle)
 {
     return SetItemStaticFlag(menu, handle, 0x40000000);
 }
 
-int __cdecl MenuParse_allowedBinding(menuDef_t *menu, int handle)
+int MenuParse_allowedBinding(menuDef_t *menu, int handle)
 {
     if (menu->allowedBinding)
         PC_SourceError(handle, (char*)"Only one 'allowedBinding' is supported");
     return PC_String_Parse(handle, &menu->allowedBinding);
 }
 
-int __cdecl ItemParse_style(itemDef_s *item, int handle)
+int ItemParse_style(itemDef_s *item, int handle)
 {
     return PC_Int_Parse(handle, &item->window.style);
 }
 
-int __cdecl ItemParse_ownerdrawFlag(itemDef_s *item, int handle)
+int ItemParse_ownerdrawFlag(itemDef_s *item, int handle)
 {
     int i; // [esp+0h] [ebp-4h] BYREF
 
@@ -5039,12 +5039,12 @@ int __cdecl ItemParse_ownerdrawFlag(itemDef_s *item, int handle)
     return 1;
 }
 
-int __cdecl ItemParse_name(itemDef_s *item, int handle)
+int ItemParse_name(itemDef_s *item, int handle)
 {
     return PC_String_Parse(handle, &item->window.name);
 }
 
-int __cdecl ItemParse_focusSound(itemDef_s *item, int handle)
+int ItemParse_focusSound(itemDef_s *item, int handle)
 {
     const char *temp; // [esp+0h] [ebp-4h] BYREF
 
@@ -5054,12 +5054,12 @@ int __cdecl ItemParse_focusSound(itemDef_s *item, int handle)
     return 1;
 }
 
-int __cdecl ItemParse_text(itemDef_s *item, int handle)
+int ItemParse_text(itemDef_s *item, int handle)
 {
     return PC_String_Parse(handle, &item->text);
 }
 
-char *__cdecl UI_FileText(char *fileName)
+char *UI_FileText(char *fileName)
 {
     uint32_t len; // [esp+4h] [ebp-8h]
     int f; // [esp+8h] [ebp-4h] BYREF
@@ -5082,7 +5082,7 @@ char *__cdecl UI_FileText(char *fileName)
     }
 }
 
-int __cdecl ItemParse_textfile(itemDef_s *item, int handle)
+int ItemParse_textfile(itemDef_s *item, int handle)
 {
     char *newtext; // [esp+0h] [ebp-41Ch]
     pc_token_s token; // [esp+4h] [ebp-418h] BYREF
@@ -5094,31 +5094,31 @@ int __cdecl ItemParse_textfile(itemDef_s *item, int handle)
     return 1;
 }
 
-int __cdecl ItemParse_textsavegame(itemDef_s *item, int handle)
+int ItemParse_textsavegame(itemDef_s *item, int handle)
 {
     item->text = "savegameinfo";
     item->itemFlags |= 1u;
     return 1;
 }
 
-int __cdecl ItemParse_textcinematicsubtitle(itemDef_s *item, int handle)
+int ItemParse_textcinematicsubtitle(itemDef_s *item, int handle)
 {
     item->text = "cinematicsubtitle";
     item->itemFlags |= 2u;
     return 1;
 }
 
-int __cdecl ItemParse_group(itemDef_s *item, int handle)
+int ItemParse_group(itemDef_s *item, int handle)
 {
     return PC_String_Parse(handle, &item->window.group);
 }
 
-int __cdecl ItemParse_rect(itemDef_s *item, int handle)
+int ItemParse_rect(itemDef_s *item, int handle)
 {
     return PC_Rect_Parse(handle, &item->window.rectClient);
 }
 
-int __cdecl ItemParse_origin(itemDef_s *item, int handle)
+int ItemParse_origin(itemDef_s *item, int handle)
 {
     int x; // [esp+0h] [ebp-8h] BYREF
     int y; // [esp+4h] [ebp-4h] BYREF
@@ -5132,13 +5132,13 @@ int __cdecl ItemParse_origin(itemDef_s *item, int handle)
     return 1;
 }
 
-int __cdecl ItemParse_decoration(itemDef_s *item, int handle)
+int ItemParse_decoration(itemDef_s *item, int handle)
 {
     Window_SetStaticFlags(&item->window, item->window.staticFlags | 0x100000);
     return 1;
 }
 
-void __cdecl Item_ValidateTypeData(itemDef_s *item, int handle)
+void Item_ValidateTypeData(itemDef_s *item, int handle)
 {
     editFieldDef_s *editDef; // [esp+0h] [ebp-4h]
 
@@ -5185,7 +5185,7 @@ void __cdecl Item_ValidateTypeData(itemDef_s *item, int handle)
     }
 }
 
-int __cdecl ItemParse_notselectable(itemDef_s *item, int handle)
+int ItemParse_notselectable(itemDef_s *item, int handle)
 {
     listBoxDef_s *listPtr; // [esp+0h] [ebp-4h]
 
@@ -5198,7 +5198,7 @@ int __cdecl ItemParse_notselectable(itemDef_s *item, int handle)
     return 1;
 }
 
-int __cdecl ItemParse_noScrollBars(itemDef_s *item, int handle)
+int ItemParse_noScrollBars(itemDef_s *item, int handle)
 {
     listBoxDef_s *listPtr; // [esp+0h] [ebp-4h]
 
@@ -5211,7 +5211,7 @@ int __cdecl ItemParse_noScrollBars(itemDef_s *item, int handle)
     return 1;
 }
 
-int __cdecl ItemParse_usePaging(itemDef_s *item, int handle)
+int ItemParse_usePaging(itemDef_s *item, int handle)
 {
     listBoxDef_s *listPtr; // [esp+0h] [ebp-4h]
 
@@ -5224,19 +5224,19 @@ int __cdecl ItemParse_usePaging(itemDef_s *item, int handle)
     return 1;
 }
 
-int __cdecl ItemParse_autowrapped(itemDef_s *item, int handle)
+int ItemParse_autowrapped(itemDef_s *item, int handle)
 {
     Window_SetStaticFlags(&item->window, item->window.staticFlags | 0x800000);
     return 1;
 }
 
-int __cdecl ItemParse_horizontalscroll(itemDef_s *item, int handle)
+int ItemParse_horizontalscroll(itemDef_s *item, int handle)
 {
     Window_SetStaticFlags(&item->window, item->window.staticFlags | 0x200000);
     return 1;
 }
 
-int __cdecl ItemParse_type(itemDef_s *item, int handle)
+int ItemParse_type(itemDef_s *item, int handle)
 {
     if (!PC_Int_Parse(handle, &item->type))
         return 0;
@@ -5244,7 +5244,7 @@ int __cdecl ItemParse_type(itemDef_s *item, int handle)
     return 1;
 }
 
-int __cdecl ItemParse_elementwidth(itemDef_s *item, int handle)
+int ItemParse_elementwidth(itemDef_s *item, int handle)
 {
     listBoxDef_s *listPtr; // [esp+0h] [ebp-4h]
 
@@ -5253,7 +5253,7 @@ int __cdecl ItemParse_elementwidth(itemDef_s *item, int handle)
     return listPtr && PC_Float_Parse(handle, &listPtr->elementWidth) != 0;
 }
 
-int __cdecl ItemParse_elementheight(itemDef_s *item, int handle)
+int ItemParse_elementheight(itemDef_s *item, int handle)
 {
     listBoxDef_s *listPtr; // [esp+0h] [ebp-4h]
 
@@ -5262,12 +5262,12 @@ int __cdecl ItemParse_elementheight(itemDef_s *item, int handle)
     return listPtr && PC_Float_Parse(handle, &listPtr->elementHeight) != 0;
 }
 
-int __cdecl ItemParse_special(itemDef_s *item, int handle)
+int ItemParse_special(itemDef_s *item, int handle)
 {
     return PC_Float_Parse(handle, &item->special) != 0;
 }
 
-int __cdecl ItemParse_elementtype(itemDef_s *item, int handle)
+int ItemParse_elementtype(itemDef_s *item, int handle)
 {
     listBoxDef_s *listPtr; // [esp+0h] [ebp-4h]
 
@@ -5278,7 +5278,7 @@ int __cdecl ItemParse_elementtype(itemDef_s *item, int handle)
     return listPtr && PC_Int_Parse(handle, &listPtr->elementStyle) != 0;
 }
 
-int __cdecl ItemParse_columns(itemDef_s *item, int handle)
+int ItemParse_columns(itemDef_s *item, int handle)
 {
     int pos; // [esp+0h] [ebp-1Ch] BYREF
     int width; // [esp+4h] [ebp-18h] BYREF
@@ -5314,17 +5314,17 @@ int __cdecl ItemParse_columns(itemDef_s *item, int handle)
     return 1;
 }
 
-int __cdecl ItemParse_border(itemDef_s *item, int handle)
+int ItemParse_border(itemDef_s *item, int handle)
 {
     return PC_Int_Parse(handle, &item->window.border) != 0;
 }
 
-int __cdecl ItemParse_bordersize(itemDef_s *item, int handle)
+int ItemParse_bordersize(itemDef_s *item, int handle)
 {
     return PC_Float_Parse(handle, &item->window.borderSize) != 0;
 }
 
-int __cdecl ItemParse_visible(itemDef_s *item, int handle)
+int ItemParse_visible(itemDef_s *item, int handle)
 {
     const char *string; // [esp+0h] [ebp-Ch] BYREF
     int flags; // [esp+8h] [ebp-4h]
@@ -5347,7 +5347,7 @@ int __cdecl ItemParse_visible(itemDef_s *item, int handle)
     return 1;
 }
 
-int __cdecl ItemParse_ownerdraw(itemDef_s *item, int handle)
+int ItemParse_ownerdraw(itemDef_s *item, int handle)
 {
     if (!PC_Int_Parse(handle, &item->window.ownerDraw))
         return 0;
@@ -5355,17 +5355,17 @@ int __cdecl ItemParse_ownerdraw(itemDef_s *item, int handle)
     return 1;
 }
 
-int __cdecl ItemParse_align(itemDef_s *item, int handle)
+int ItemParse_align(itemDef_s *item, int handle)
 {
     return PC_Int_Parse(handle, &item->alignment) != 0;
 }
 
-bool __cdecl ItemParse_IsValidTextAlignment(uint32_t textAlignMode)
+bool ItemParse_IsValidTextAlignment(uint32_t textAlignMode)
 {
     return textAlignMode < 0x10 && (textAlignMode & 3) != 3;
 }
 
-int __cdecl ItemParse_textalign(itemDef_s *item, int handle)
+int ItemParse_textalign(itemDef_s *item, int handle)
 {
     if (!PC_Int_Parse(handle, &item->textAlignMode))
         return 0;
@@ -5375,32 +5375,32 @@ int __cdecl ItemParse_textalign(itemDef_s *item, int handle)
     return 0;
 }
 
-int __cdecl ItemParse_textalignx(itemDef_s *item, int handle)
+int ItemParse_textalignx(itemDef_s *item, int handle)
 {
     return PC_Float_Parse(handle, &item->textalignx) != 0;
 }
 
-int __cdecl ItemParse_textaligny(itemDef_s *item, int handle)
+int ItemParse_textaligny(itemDef_s *item, int handle)
 {
     return PC_Float_Parse(handle, &item->textaligny) != 0;
 }
 
-int __cdecl ItemParse_textscale(itemDef_s *item, int handle)
+int ItemParse_textscale(itemDef_s *item, int handle)
 {
     return PC_Float_Parse(handle, &item->textscale) != 0;
 }
 
-int __cdecl ItemParse_textstyle(itemDef_s *item, int handle)
+int ItemParse_textstyle(itemDef_s *item, int handle)
 {
     return PC_Int_Parse(handle, &item->textStyle) != 0;
 }
 
-int __cdecl ItemParse_textfont(itemDef_s *item, int handle)
+int ItemParse_textfont(itemDef_s *item, int handle)
 {
     return PC_Int_Parse(handle, &item->fontEnum) != 0;
 }
 
-int __cdecl ItemParse_backcolor(itemDef_s *item, int handle)
+int ItemParse_backcolor(itemDef_s *item, int handle)
 {
     float f; // [esp+0h] [ebp-8h] BYREF
     int i; // [esp+4h] [ebp-4h]
@@ -5414,7 +5414,7 @@ int __cdecl ItemParse_backcolor(itemDef_s *item, int handle)
     return 1;
 }
 
-int __cdecl ItemParse_forecolor(itemDef_s *item, int handle)
+int ItemParse_forecolor(itemDef_s *item, int handle)
 {
     float f; // [esp+0h] [ebp-Ch] BYREF
     int i; // [esp+4h] [ebp-8h]
@@ -5431,7 +5431,7 @@ int __cdecl ItemParse_forecolor(itemDef_s *item, int handle)
     return 1;
 }
 
-int __cdecl ItemParse_bordercolor(itemDef_s *item, int handle)
+int ItemParse_bordercolor(itemDef_s *item, int handle)
 {
     float f; // [esp+0h] [ebp-8h] BYREF
     int i; // [esp+4h] [ebp-4h]
@@ -5445,12 +5445,12 @@ int __cdecl ItemParse_bordercolor(itemDef_s *item, int handle)
     return 1;
 }
 
-int __cdecl ItemParse_outlinecolor(itemDef_s *item, int handle)
+int ItemParse_outlinecolor(itemDef_s *item, int handle)
 {
     return PC_Color_Parse(handle, (float (*)[4])item->window.outlineColor) != 0;
 }
 
-int __cdecl ItemParse_background(itemDef_s *item, int handle)
+int ItemParse_background(itemDef_s *item, int handle)
 {
     char name[64]; // [esp+0h] [ebp-48h] BYREF
     const char *temp; // [esp+44h] [ebp-4h] BYREF
@@ -5463,7 +5463,7 @@ int __cdecl ItemParse_background(itemDef_s *item, int handle)
     return 1;
 }
 
-int __cdecl ItemParse_doubleClick(itemDef_s *item, int handle)
+int ItemParse_doubleClick(itemDef_s *item, int handle)
 {
     listBoxDef_s *listPtr; // [esp+0h] [ebp-4h]
 
@@ -5474,52 +5474,52 @@ int __cdecl ItemParse_doubleClick(itemDef_s *item, int handle)
     return listPtr && PC_Script_Parse(handle, &listPtr->doubleClick) != 0;
 }
 
-int __cdecl ItemParse_onFocus(itemDef_s *item, int handle)
+int ItemParse_onFocus(itemDef_s *item, int handle)
 {
     return PC_Script_Parse(handle, &item->onFocus) != 0;
 }
 
-int __cdecl ItemParse_leaveFocus(itemDef_s *item, int handle)
+int ItemParse_leaveFocus(itemDef_s *item, int handle)
 {
     return PC_Script_Parse(handle, &item->leaveFocus) != 0;
 }
 
-int __cdecl ItemParse_mouseEnter(itemDef_s *item, int handle)
+int ItemParse_mouseEnter(itemDef_s *item, int handle)
 {
     return PC_Script_Parse(handle, &item->mouseEnter) != 0;
 }
 
-int __cdecl ItemParse_mouseExit(itemDef_s *item, int handle)
+int ItemParse_mouseExit(itemDef_s *item, int handle)
 {
     return PC_Script_Parse(handle, &item->mouseExit) != 0;
 }
 
-int __cdecl ItemParse_mouseEnterText(itemDef_s *item, int handle)
+int ItemParse_mouseEnterText(itemDef_s *item, int handle)
 {
     return PC_Script_Parse(handle, &item->mouseEnterText) != 0;
 }
 
-int __cdecl ItemParse_mouseExitText(itemDef_s *item, int handle)
+int ItemParse_mouseExitText(itemDef_s *item, int handle)
 {
     return PC_Script_Parse(handle, &item->mouseExitText) != 0;
 }
 
-int __cdecl ItemParse_action(itemDef_s *item, int handle)
+int ItemParse_action(itemDef_s *item, int handle)
 {
     return PC_Script_Parse(handle, &item->action) != 0;
 }
 
-int __cdecl ItemParse_accept(itemDef_s *item, int handle)
+int ItemParse_accept(itemDef_s *item, int handle)
 {
     return PC_Script_Parse(handle, &item->onAccept) != 0;
 }
 
-int __cdecl ItemParse_dvarTest(itemDef_s *item, int handle)
+int ItemParse_dvarTest(itemDef_s *item, int handle)
 {
     return PC_String_Parse(handle, &item->dvarTest) != 0;
 }
 
-int __cdecl ItemParse_dvar(itemDef_s *item, int handle)
+int ItemParse_dvar(itemDef_s *item, int handle)
 {
     editFieldDef_s *editPtr; // [esp+0h] [ebp-4h]
 
@@ -5538,7 +5538,7 @@ int __cdecl ItemParse_dvar(itemDef_s *item, int handle)
     return 1;
 }
 
-int __cdecl ItemParse_maxChars(itemDef_s *item, int handle)
+int ItemParse_maxChars(itemDef_s *item, int handle)
 {
     editFieldDef_s *editPtr; // [esp+0h] [ebp-8h]
     int maxChars; // [esp+4h] [ebp-4h] BYREF
@@ -5555,7 +5555,7 @@ int __cdecl ItemParse_maxChars(itemDef_s *item, int handle)
     return 1;
 }
 
-int __cdecl ItemParse_maxPaintChars(itemDef_s *item, int handle)
+int ItemParse_maxPaintChars(itemDef_s *item, int handle)
 {
     editFieldDef_s *editPtr; // [esp+0h] [ebp-8h]
     int maxChars; // [esp+4h] [ebp-4h] BYREF
@@ -5572,7 +5572,7 @@ int __cdecl ItemParse_maxPaintChars(itemDef_s *item, int handle)
     return 1;
 }
 
-int __cdecl ItemParse_dvarFloat(itemDef_s *item, int handle)
+int ItemParse_dvarFloat(itemDef_s *item, int handle)
 {
     editFieldDef_s *editPtr; // [esp+0h] [ebp-4h]
 
@@ -5588,7 +5588,7 @@ int __cdecl ItemParse_dvarFloat(itemDef_s *item, int handle)
         && PC_Float_Parse(handle, &editPtr->maxVal);
 }
 
-int __cdecl ItemParse_dvarStrList(itemDef_s *item, int handle)
+int ItemParse_dvarStrList(itemDef_s *item, int handle)
 {
     int pass; // [esp+0h] [ebp-420h]
     multiDef_s *multiPtr; // [esp+4h] [ebp-41Ch]
@@ -5635,7 +5635,7 @@ int __cdecl ItemParse_dvarStrList(itemDef_s *item, int handle)
     return 0;
 }
 
-int __cdecl ItemParse_dvarFloatList(itemDef_s *item, int handle)
+int ItemParse_dvarFloatList(itemDef_s *item, int handle)
 {
     multiDef_s *multiPtr; // [esp+0h] [ebp-41Ch]
     pc_token_s token; // [esp+4h] [ebp-418h] BYREF
@@ -5674,7 +5674,7 @@ int __cdecl ItemParse_dvarFloatList(itemDef_s *item, int handle)
     return 0;
 }
 
-int __cdecl ItemParse_dvarEnumList(itemDef_s *item, int handle)
+int ItemParse_dvarEnumList(itemDef_s *item, int handle)
 {
     Item_ValidateTypeData(item, handle);
     if (item->type != 13)
@@ -5685,7 +5685,7 @@ int __cdecl ItemParse_dvarEnumList(itemDef_s *item, int handle)
     return 0;
 }
 
-int __cdecl ItemParse_enableDvar(itemDef_s *item, int handle)
+int ItemParse_enableDvar(itemDef_s *item, int handle)
 {
     if (!PC_Script_Parse(handle, &item->enableDvar))
         return 0;
@@ -5693,7 +5693,7 @@ int __cdecl ItemParse_enableDvar(itemDef_s *item, int handle)
     return 1;
 }
 
-int __cdecl ItemParse_disableDvar(itemDef_s *item, int handle)
+int ItemParse_disableDvar(itemDef_s *item, int handle)
 {
     if (!PC_Script_Parse(handle, &item->enableDvar))
         return 0;
@@ -5701,7 +5701,7 @@ int __cdecl ItemParse_disableDvar(itemDef_s *item, int handle)
     return 1;
 }
 
-int __cdecl ItemParse_showDvar(itemDef_s *item, int handle)
+int ItemParse_showDvar(itemDef_s *item, int handle)
 {
     if (!PC_Script_Parse(handle, &item->enableDvar))
         return 0;
@@ -5709,7 +5709,7 @@ int __cdecl ItemParse_showDvar(itemDef_s *item, int handle)
     return 1;
 }
 
-int __cdecl ItemParse_hideDvar(itemDef_s *item, int handle)
+int ItemParse_hideDvar(itemDef_s *item, int handle)
 {
     if (!PC_Script_Parse(handle, &item->enableDvar))
         return 0;
@@ -5717,7 +5717,7 @@ int __cdecl ItemParse_hideDvar(itemDef_s *item, int handle)
     return 1;
 }
 
-int __cdecl ItemParse_focusDvar(itemDef_s *item, int handle)
+int ItemParse_focusDvar(itemDef_s *item, int handle)
 {
     if (!PC_Script_Parse(handle, &item->enableDvar))
         return 0;
@@ -5725,7 +5725,7 @@ int __cdecl ItemParse_focusDvar(itemDef_s *item, int handle)
     return 1;
 }
 
-int __cdecl ItemParse_execKey(itemDef_s *item, int handle)
+int ItemParse_execKey(itemDef_s *item, int handle)
 {
     const char *action; // [esp+0h] [ebp-10h] BYREF
     __int16 keyindex; // [esp+4h] [ebp-Ch]
@@ -5745,7 +5745,7 @@ int __cdecl ItemParse_execKey(itemDef_s *item, int handle)
     return 1;
 }
 
-int __cdecl ItemParse_execKeyInt(itemDef_s *item, int handle)
+int ItemParse_execKeyInt(itemDef_s *item, int handle)
 {
     const char *action; // [esp+0h] [ebp-Ch] BYREF
     int keyname; // [esp+4h] [ebp-8h] BYREF
@@ -5763,7 +5763,7 @@ int __cdecl ItemParse_execKeyInt(itemDef_s *item, int handle)
     return 1;
 }
 
-int __cdecl ItemParse_execExp(itemDef_s *item, int handle)
+int ItemParse_execExp(itemDef_s *item, int handle)
 {
     const char *expressionType; // [esp+0h] [ebp-8h] BYREF
     int flags; // [esp+4h] [ebp-4h]
@@ -5864,21 +5864,21 @@ int __cdecl ItemParse_execExp(itemDef_s *item, int handle)
     return 0;
 }
 
-int __cdecl ItemParse_gameMsgWindowIndex(itemDef_s *item, int handle)
+int ItemParse_gameMsgWindowIndex(itemDef_s *item, int handle)
 {
     if (!item)
         MyAssertHandler(".\\ui\\ui_shared_obj.cpp", 2406, 0, "%s", "item");
     return PC_Int_Parse(handle, &item->gameMsgWindowIndex);
 }
 
-int __cdecl ItemParse_gameMsgWindowMode(itemDef_s *item, int handle)
+int ItemParse_gameMsgWindowMode(itemDef_s *item, int handle)
 {
     if (!item)
         MyAssertHandler(".\\ui\\ui_shared_obj.cpp", 2413, 0, "%s", "item");
     return PC_Int_Parse(handle, &item->gameMsgWindowMode);
 }
 
-int __cdecl ItemParse_selectBorder(itemDef_s *item, int handle)
+int ItemParse_selectBorder(itemDef_s *item, int handle)
 {
     listBoxDef_s *listPtr; // [esp+0h] [ebp-4h]
 
@@ -5890,7 +5890,7 @@ int __cdecl ItemParse_selectBorder(itemDef_s *item, int handle)
         return 0;
 }
 
-int __cdecl ItemParse_disableColor(itemDef_s *item, int handle)
+int ItemParse_disableColor(itemDef_s *item, int handle)
 {
     listBoxDef_s *listPtr; // [esp+0h] [ebp-4h]
 
@@ -5902,7 +5902,7 @@ int __cdecl ItemParse_disableColor(itemDef_s *item, int handle)
         return 0;
 }
 
-int __cdecl ItemParse_selectIcon(itemDef_s *item, int handle)
+int ItemParse_selectIcon(itemDef_s *item, int handle)
 {
     listBoxDef_s *listPtr; // [esp+0h] [ebp-4Ch]
     char name[64]; // [esp+4h] [ebp-48h] BYREF
@@ -5920,7 +5920,7 @@ int __cdecl ItemParse_selectIcon(itemDef_s *item, int handle)
     return 1;
 }
 
-int __cdecl Item_Parse_maxCharsGotoNext(itemDef_s *item, int handle)
+int Item_Parse_maxCharsGotoNext(itemDef_s *item, int handle)
 {
     editFieldDef_s *editPtr; // [esp+0h] [ebp-4h]
 
@@ -5941,7 +5941,7 @@ const KeywordHashEntry<menuDef_t, 128, 128> menuParseKeywords[36] =
   { "name", MenuParse_name },
   { "fullscreen", MenuParse_fullscreen },
   { "rect", MenuParse_rect },
-  { "style", (int(__cdecl *)(menuDef_t*, int))ItemParse_style},
+  { "style", (int(*)(menuDef_t*, int))ItemParse_style},
   { "visible", MenuParse_visible },
   { "onOpen", MenuParse_onOpen },
   { "onClose", MenuParse_onClose },
@@ -5956,12 +5956,12 @@ const KeywordHashEntry<menuDef_t, 128, 128> menuParseKeywords[36] =
   { "outlinecolor", MenuParse_outlinecolor },
   { "background", MenuParse_background },
   { "ownerdraw", MenuParse_ownerdraw },
-  { "ownerdrawFlag", (int(__cdecl *)(menuDef_t *, int)) ItemParse_ownerdrawFlag },
-  { "outOfBoundsClick", (int(__cdecl *)(menuDef_t *, int)) MenuParse_outOfBounds },
+  { "ownerdrawFlag", (int(*)(menuDef_t *, int)) ItemParse_ownerdrawFlag },
+  { "outOfBoundsClick", (int(*)(menuDef_t *, int)) MenuParse_outOfBounds },
   { "soundLoop", MenuParse_soundLoop },
   { "itemDef", MenuParse_itemDef },
   { "exp", MenuParse_execExp },
-  { "popup", (int(__cdecl *)(menuDef_t *, int)) MenuParse_popup },
+  { "popup", (int(*)(menuDef_t *, int)) MenuParse_popup },
   { "fadeClamp", MenuParse_fadeClamp },
   { "fadeCycle", MenuParse_fadeCycle },
   { "fadeAmount", MenuParse_fadeAmount },
@@ -6050,7 +6050,7 @@ const KeywordHashEntry<itemDef_s, 256, 3855> itemParseKeywords[71] =
   { "selectIcon", ItemParse_selectIcon }
 }; // idb
 
-int __cdecl KeywordHash_KeySeed(const char *keyword, int hashCount, int seed)
+int KeywordHash_KeySeed(const char *keyword, int hashCount, int seed)
 {
     int hash; // [esp+0h] [ebp-8h]
     int i; // [esp+4h] [ebp-4h]
@@ -6061,7 +6061,7 @@ int __cdecl KeywordHash_KeySeed(const char *keyword, int hashCount, int seed)
     return (hashCount - 1) & (hash + (hash >> 8));
 }
 
-char __cdecl KeywordHash_IsValidSeed_itemDef_s_256_3855_(
+char KeywordHash_IsValidSeed_itemDef_s_256_3855_(
     const KeywordHashEntry<itemDef_s, 256, 3855> *array,
     int count,
     int seed)
@@ -6081,7 +6081,7 @@ char __cdecl KeywordHash_IsValidSeed_itemDef_s_256_3855_(
     return 1;
 }
 
-void __cdecl KeywordHash_Add_itemDef_s_256_3855_(
+void KeywordHash_Add_itemDef_s_256_3855_(
     const KeywordHashEntry<itemDef_s, 256, 3855> **table,
     const KeywordHashEntry<itemDef_s, 256, 3855> *key)
 {
@@ -6093,7 +6093,7 @@ void __cdecl KeywordHash_Add_itemDef_s_256_3855_(
     table[hash] = key;
 }
 
-int __cdecl KeywordHash_PickSeed_itemDef_s_256_3855_(const KeywordHashEntry<itemDef_s, 256, 3855> *array, int count)
+int KeywordHash_PickSeed_itemDef_s_256_3855_(const KeywordHashEntry<itemDef_s, 256, 3855> *array, int count)
 {
     int seed; // [esp+0h] [ebp-4h]
 
@@ -6105,7 +6105,7 @@ int __cdecl KeywordHash_PickSeed_itemDef_s_256_3855_(const KeywordHashEntry<item
     return seed;
 }
 
-void __cdecl KeywordHash_Validate_itemDef_s_256_3855_(const KeywordHashEntry<itemDef_s, 256, 3855> *array, int count)
+void KeywordHash_Validate_itemDef_s_256_3855_(const KeywordHashEntry<itemDef_s, 256, 3855> *array, int count)
 {
     int v2; // eax
 
@@ -6122,7 +6122,7 @@ void __cdecl KeywordHash_Validate_itemDef_s_256_3855_(const KeywordHashEntry<ite
     }
 }
 
-void __cdecl Item_SetupKeywordHash()
+void Item_SetupKeywordHash()
 {
     KeywordHash_Validate_itemDef_s_256_3855_(itemParseKeywords, 71);
     memset((uint8_t *)itemParseKeywordHash, 0, sizeof(itemParseKeywordHash));
@@ -6130,7 +6130,7 @@ void __cdecl Item_SetupKeywordHash()
         KeywordHash_Add_itemDef_s_256_3855_(itemParseKeywordHash, &itemParseKeywords[i]);
 }
 
-char __cdecl KeywordHash_IsValidSeed_menuDef_t_128_128_(
+char KeywordHash_IsValidSeed_menuDef_t_128_128_(
     const KeywordHashEntry<menuDef_t, 128, 128> *array,
     int count,
     int seed)
@@ -6150,7 +6150,7 @@ char __cdecl KeywordHash_IsValidSeed_menuDef_t_128_128_(
     return 1;
 }
 
-int __cdecl KeywordHash_PickSeed_menuDef_t_128_128_(const KeywordHashEntry<menuDef_t, 128, 128> *array, int count)
+int KeywordHash_PickSeed_menuDef_t_128_128_(const KeywordHashEntry<menuDef_t, 128, 128> *array, int count)
 {
     int seed; // [esp+0h] [ebp-4h]
 
@@ -6162,7 +6162,7 @@ int __cdecl KeywordHash_PickSeed_menuDef_t_128_128_(const KeywordHashEntry<menuD
     return seed;
 }
 
-void __cdecl KeywordHash_Validate_menuDef_t_128_128_(const KeywordHashEntry<menuDef_t, 128, 128> *array, int count)
+void KeywordHash_Validate_menuDef_t_128_128_(const KeywordHashEntry<menuDef_t, 128, 128> *array, int count)
 {
     int v2; // eax
 
@@ -6179,7 +6179,7 @@ void __cdecl KeywordHash_Validate_menuDef_t_128_128_(const KeywordHashEntry<menu
     }
 }
 
-int __cdecl KeywordHash_Key_128_128_(const char *keyword)
+int KeywordHash_Key_128_128_(const char *keyword)
 {
     int hash; // [esp+0h] [ebp-8h]
     int i; // [esp+4h] [ebp-4h]
@@ -6190,7 +6190,7 @@ int __cdecl KeywordHash_Key_128_128_(const char *keyword)
     return ((_BYTE)hash + BYTE1(hash)) & 0x7F;
 }
 
-void __cdecl KeywordHash_Add_menuDef_t_128_128_(
+void KeywordHash_Add_menuDef_t_128_128_(
     const KeywordHashEntry<menuDef_t, 128, 128> **table,
     const KeywordHashEntry<menuDef_t, 128, 128> *key)
 {
@@ -6202,7 +6202,7 @@ void __cdecl KeywordHash_Add_menuDef_t_128_128_(
     table[hash] = key;
 }
 
-void __cdecl Menu_SetupKeywordHash()
+void Menu_SetupKeywordHash()
 {
     KeywordHash_Validate_menuDef_t_128_128_(menuParseKeywords, 36);
     memset((uint8_t *)menuParseKeywordHash, 0, sizeof(menuParseKeywordHash));
@@ -6210,7 +6210,7 @@ void __cdecl Menu_SetupKeywordHash()
         KeywordHash_Add_menuDef_t_128_128_(menuParseKeywordHash, &menuParseKeywords[i]);
 }
 
-void __cdecl Menu_Init(menuDef_t *menu, int imageTrack)
+void Menu_Init(menuDef_t *menu, int imageTrack)
 {
     memset((uint8_t *)menu, 0, sizeof(menuDef_t));
     Menu_SetCursorItem(0, menu, -1);
@@ -6223,7 +6223,7 @@ void __cdecl Menu_Init(menuDef_t *menu, int imageTrack)
     Window_Init(&menu->window);
 }
 
-const KeywordHashEntry<menuDef_t, 128, 128> *__cdecl KeywordHash_Find_menuDef_t_128_128_(
+const KeywordHashEntry<menuDef_t, 128, 128> *KeywordHash_Find_menuDef_t_128_128_(
     const KeywordHashEntry<menuDef_t, 128, 128> **table,
     const char *keyword)
 {
@@ -6236,7 +6236,7 @@ const KeywordHashEntry<menuDef_t, 128, 128> *__cdecl KeywordHash_Find_menuDef_t_
         return key;
 }
 
-int __cdecl Menu_Parse(int handle, menuDef_t *menu)
+int Menu_Parse(int handle, menuDef_t *menu)
 {
     const KeywordHashEntry<menuDef_t, 128, 128> *key; // [esp+0h] [ebp-41Ch]
     pc_token_s token; // [esp+4h] [ebp-418h] BYREF
@@ -6270,7 +6270,7 @@ int __cdecl Menu_Parse(int handle, menuDef_t *menu)
     return 0;
 }
 
-void __cdecl Menu_PostParse(menuDef_t *menu)
+void Menu_PostParse(menuDef_t *menu)
 {
     uint32_t size; // [esp+0h] [ebp-4h]
 
@@ -6289,7 +6289,7 @@ void __cdecl Menu_PostParse(menuDef_t *menu)
     Menu_UpdatePosition(0, menu);
 }
 
-char __cdecl Menu_New(int handle, int imageTrack)
+char Menu_New(int handle, int imageTrack)
 {
     menuDef_t *menu; // [esp+0h] [ebp-4h]
 
@@ -6319,7 +6319,7 @@ char __cdecl Menu_New(int handle, int imageTrack)
     }
 }
 
-int __cdecl Asset_Parse(int handle)
+int Asset_Parse(int handle)
 {
     pc_token_s token; // [esp+0h] [ebp-418h] BYREF
 
@@ -6370,7 +6370,7 @@ int __cdecl Asset_Parse(int handle)
     return 0;
 }
 
-char __cdecl UI_ParseMenuInternal(char *menuFile, int imageTrack)
+char UI_ParseMenuInternal(char *menuFile, int imageTrack)
 {
     int handle; // [esp+0h] [ebp-424h]
     const char *builtinDefines[2]; // [esp+4h] [ebp-420h] BYREF
@@ -6416,7 +6416,7 @@ char __cdecl UI_ParseMenuInternal(char *menuFile, int imageTrack)
     }
 }
 
-MenuList *__cdecl UI_LoadMenu_LoadObj(char *menuFile, int imageTrack)
+MenuList *UI_LoadMenu_LoadObj(char *menuFile, int imageTrack)
 {
     memset((uint8_t *)&g_load_0, 0, sizeof(g_load_0));
     g_load_0.menuList.menus = g_load_0.menus;
@@ -6429,7 +6429,7 @@ MenuList *__cdecl UI_LoadMenu_LoadObj(char *menuFile, int imageTrack)
     return &g_load_0.menuList;
 }
 
-int __cdecl Load_Menu(const char **p, int imageTrack)
+int Load_Menu(const char **p, int imageTrack)
 {
     parseInfo_t *token; // [esp+0h] [ebp-4h]
 
@@ -6448,7 +6448,7 @@ int __cdecl Load_Menu(const char **p, int imageTrack)
 }
 
 char menuBuf[32768];
-MenuList *__cdecl UI_LoadMenus_LoadObj(char *menuFile, int imageTrack)
+MenuList *UI_LoadMenus_LoadObj(char *menuFile, int imageTrack)
 {
     int len; // [esp+0h] [ebp-10h]
     int f; // [esp+4h] [ebp-Ch] BYREF

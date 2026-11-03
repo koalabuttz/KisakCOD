@@ -9,7 +9,7 @@ int g_phys_msecStep[3] = { 0x11, 0x11, 0x11 };
 int g_phys_maxMsecStep[3] = { 67, 67, 34 };
 int g_phys_minMsecStep[3] = { 17, 17, 17 };
 
-void __cdecl Phys_CheckOpposingNormals(dxBody *body0, dxBody *body1, ContactList *contacts)
+void Phys_CheckOpposingNormals(dxBody *body0, dxBody *body1, ContactList *contacts)
 {
     PhysObjUserData *userData; // [esp+0h] [ebp-Ch]
     PhysObjUserData *userDataa; // [esp+0h] [ebp-Ch]
@@ -51,7 +51,7 @@ LABEL_2:
     }
 }
 
-void __cdecl Phys_ReduceContacts(dxBody *body, const ContactList *in, ContactList *out)
+void Phys_ReduceContacts(dxBody *body, const ContactList *in, ContactList *out)
 {
     int i; // [esp+74h] [ebp-228h]
     float centroid[3][3]; // [esp+78h] [ebp-224h] BYREF
@@ -79,7 +79,7 @@ void __cdecl Phys_ReduceContacts(dxBody *body, const ContactList *in, ContactLis
     Phys_GenerateGroupContacts(body, in, centroid, group, out);
 }
 
-void __cdecl Phys_AssignInitialGroups(const ContactList *contacts, int *group)
+void Phys_AssignInitialGroups(const ContactList *contacts, int *group)
 {
     float v2; // [esp+0h] [ebp-48h]
     float v3; // [esp+4h] [ebp-44h]
@@ -143,7 +143,7 @@ void __cdecl Phys_AssignInitialGroups(const ContactList *contacts, int *group)
     group[bestDotContact] = 2;
 }
 
-void __cdecl Phys_KMeans(const ContactList *contacts, float (*centroid)[3], int *group)
+void Phys_KMeans(const ContactList *contacts, float (*centroid)[3], int *group)
 {
     float v3; // [esp+0h] [ebp-34h]
     float v4; // [esp+4h] [ebp-30h]
@@ -206,7 +206,7 @@ void __cdecl Phys_KMeans(const ContactList *contacts, float (*centroid)[3], int 
     }
 }
 
-void __cdecl Phys_DumpGroups(const float (*centroid)[3])
+void Phys_DumpGroups(const float (*centroid)[3])
 {
     int groupIter; // [esp+18h] [ebp-4h]
 
@@ -220,7 +220,7 @@ void __cdecl Phys_DumpGroups(const float (*centroid)[3])
             (*centroid)[3 * groupIter + 2]);
 }
 
-void __cdecl Phys_DumpContacts(const ContactList *contacts, const int *group)
+void Phys_DumpContacts(const ContactList *contacts, const int *group)
 {
     int contactIter; // [esp+3Ch] [ebp-4h]
 
@@ -239,7 +239,7 @@ void __cdecl Phys_DumpContacts(const ContactList *contacts, const int *group)
             contacts->contacts[contactIter].contact.depth);
 }
 
-void __cdecl Phys_MergeGroups(const ContactList *contacts, float (*centroid)[3], int *group)
+void Phys_MergeGroups(const ContactList *contacts, float (*centroid)[3], int *group)
 {
     float dot; // [esp+0h] [ebp-10h]
     int groupIter2; // [esp+4h] [ebp-Ch]
@@ -265,7 +265,7 @@ void __cdecl Phys_MergeGroups(const ContactList *contacts, float (*centroid)[3],
     }
 }
 
-void __cdecl Phys_GenerateGroupContacts(
+void Phys_GenerateGroupContacts(
     dxBody *body,
     const ContactList *inContacts,
     float (*centroid)[3],
@@ -402,7 +402,7 @@ void __cdecl Phys_GenerateGroupContacts(
     }
 }
 
-void __cdecl Phys_CreateBasisFromNormal(const float *normal, float *binormal, float *tangent)
+void Phys_CreateBasisFromNormal(const float *normal, float *binormal, float *tangent)
 {
     float v3; // [esp+0h] [ebp-2Ch]
     float independent[3]; // [esp+20h] [ebp-Ch] BYREF
@@ -425,7 +425,7 @@ void __cdecl Phys_CreateBasisFromNormal(const float *normal, float *binormal, fl
     Vec3Normalize(tangent);
 }
 
-void __cdecl Phys_DebugDrawContactPoint(const float *pos, const float *normal, float depth, const float *color)
+void Phys_DebugDrawContactPoint(const float *pos, const float *normal, float depth, const float *color)
 {
     float scale; // [esp+10h] [ebp-28h]
     float mins[3]; // [esp+14h] [ebp-24h] BYREF
@@ -444,7 +444,7 @@ void __cdecl Phys_DebugDrawContactPoint(const float *pos, const float *normal, f
     CG_DebugLine(pos, endpos, color, 0, 3);
 }
 
-void __cdecl Phys_DumpContact(int contactNum, const dContactGeom *contact)
+void Phys_DumpContact(int contactNum, const dContactGeom *contact)
 {
     Com_Printf(
         CON_CHANNEL_DONT_FILTER,
@@ -459,7 +459,7 @@ void __cdecl Phys_DumpContact(int contactNum, const dContactGeom *contact)
         contact->depth);
 }
 
-void __cdecl Phys_CreateJointForEachContact(
+void Phys_CreateJointForEachContact(
     ContactList *contactList,
     dxBody *body1,
     dxBody *body2,
@@ -629,7 +629,7 @@ void __cdecl Phys_CreateJointForEachContact(
     }
 }
 
-void __cdecl Phys_ApplyContactJitter(PhysWorld worldIndex, dContactGeom *contact, dxBody *body1, dxBody *body2)
+void Phys_ApplyContactJitter(PhysWorld worldIndex, dContactGeom *contact, dxBody *body1, dxBody *body2)
 {
     double v4; // [esp+8h] [ebp-6Ch]
     float v5; // [esp+10h] [ebp-64h]
@@ -699,7 +699,7 @@ void __cdecl Phys_ApplyContactJitter(PhysWorld worldIndex, dContactGeom *contact
     }
 }
 
-void __cdecl Phys_RemoveOpposingNormalContacts(const float *com, ContactList *contacts)
+void Phys_RemoveOpposingNormalContacts(const float *com, ContactList *contacts)
 {
     float c0PlaneDist; // [esp+14h] [ebp-2Ch]
     int contact1Idx; // [esp+18h] [ebp-28h]
@@ -737,7 +737,7 @@ void __cdecl Phys_RemoveOpposingNormalContacts(const float *com, ContactList *co
     }
 }
 
-void __cdecl Phys_AddCollisionContact(PhysWorld worldId, const PhysContact *physContact, dxBody *obj0, dxBody *obj1)
+void Phys_AddCollisionContact(PhysWorld worldId, const PhysContact *physContact, dxBody *obj0, dxBody *obj1)
 {
     dxGeom *v4; // [esp+0h] [ebp-1860h]
     dxGeom *FirstGeom; // [esp+4h] [ebp-185Ch]

@@ -17,7 +17,7 @@
 
 float playerEyePos[3];
 
-XAnimTree_s *__cdecl G_GetActorCorpseIndexAnimTree(unsigned int index)
+XAnimTree_s *G_GetActorCorpseIndexAnimTree(unsigned int index)
 {
     if (index >= 0x10)
         MyAssertHandler(
@@ -30,7 +30,7 @@ XAnimTree_s *__cdecl G_GetActorCorpseIndexAnimTree(unsigned int index)
     return g_scr_data.actorCorpseInfo[index].tree;
 }
 
-int __cdecl G_GetActorCorpseIndex(gentity_s *ent)
+int G_GetActorCorpseIndex(gentity_s *ent)
 {
     int number; // r9
     int result; // r3
@@ -188,7 +188,7 @@ int G_GetFreeActorCorpseIndex(int reuse)
 }
 
 
-void __cdecl G_RemoveActorCorpses(unsigned int allowedCorpseCount)
+void G_RemoveActorCorpses(unsigned int allowedCorpseCount)
 {
     signed int v2; // r28
     int actorCorpseCount; // r10
@@ -221,7 +221,7 @@ void __cdecl G_RemoveActorCorpses(unsigned int allowedCorpseCount)
     level.actorCorpseCount = allowedCorpseCount;
 }
 
-void __cdecl G_UpdateActorCorpses()
+void G_UpdateActorCorpses()
 {
     signed int integer; // r31
 
@@ -238,7 +238,7 @@ void __cdecl G_UpdateActorCorpses()
         G_RemoveActorCorpses(integer);
 }
 
-int __cdecl G_PruneCorpsesSortCmp(int *a, int *b)
+int G_PruneCorpsesSortCmp(int *a, int *b)
 {
     int v2; // r27
     int v3; // r29
@@ -295,7 +295,7 @@ int __cdecl G_PruneCorpsesSortCmp(int *a, int *b)
         return -1;
 }
 
-void __cdecl G_PruneLoadedCorpses()
+void G_PruneLoadedCorpses()
 {
     _QWORD *v0; // r11
     int v1; // ctr
@@ -343,7 +343,7 @@ void __cdecl G_PruneLoadedCorpses()
         iassert(ent);
         iassert(ent->sentient);
         Sentient_GetEyePosition(ent->sentient, playerEyePos);
-        qsort(corpseIndices, v2, 4u, (int(__cdecl *)(const void *, const void *))G_PruneCorpsesSortCmp);
+        qsort(corpseIndices, v2, 4u, (int(*)(const void *, const void *))G_PruneCorpsesSortCmp);
         v7 = v2 - 6;
         v8 = &corpseIndices[6]; // was: (int*)&v12 — really &v11[6] after stack-slot fix
         do
@@ -366,7 +366,7 @@ void __cdecl G_PruneLoadedCorpses()
     }
 }
 
-void __cdecl ActorCorpse_Free(gentity_s *ent)
+void ActorCorpse_Free(gentity_s *ent)
 {
     int ActorCorpseIndex; // r3
     int number; // r10
@@ -385,7 +385,7 @@ void __cdecl ActorCorpse_Free(gentity_s *ent)
     g_scr_data.actorCorpseInfo[v4].entnum = -1;
 }
 
-void __cdecl Actor_CorpseThink(gentity_s *self)
+void Actor_CorpseThink(gentity_s *self)
 {
     tagInfo_s *tagInfo; // r10
 
@@ -397,7 +397,7 @@ void __cdecl Actor_CorpseThink(gentity_s *self)
     //Profile_EndInternal(0);
 }
 
-float __cdecl Actor_SetBodyPlantAngle(
+float Actor_SetBodyPlantAngle(
     int iEntNum,
     int iClipMask,
     float *vOrigin,
@@ -515,7 +515,7 @@ float __cdecl Actor_SetBodyPlantAngle(
     }
 }
 
-void __cdecl Actor_GetBodyPlantAngles(
+void Actor_GetBodyPlantAngles(
     int iEntNum,
     int iClipMask,
     float *vOrigin,
@@ -602,7 +602,7 @@ float Actor_Orient_LerpWithLimit(float current, float newValue, float delta, flo
     }
 }
 
-void __cdecl Actor_OrientCorpseToGround(gentity_s *self, int bLerp)
+void Actor_OrientCorpseToGround(gentity_s *self, int bLerp)
 {
     int eType; // r11
     actor_prone_info_s *p_proneInfo; // r30
@@ -688,7 +688,7 @@ void __cdecl Actor_OrientCorpseToGround(gentity_s *self, int bLerp)
     }
 }
 
-void __cdecl Actor_OrientPitchToGround(gentity_s *self, int bLerp)
+void Actor_OrientPitchToGround(gentity_s *self, int bLerp)
 {
     actor_prone_info_s *p_ProneInfo; // r30
     float yaw; // fp1
@@ -752,7 +752,7 @@ void __cdecl Actor_OrientPitchToGround(gentity_s *self, int bLerp)
     }
 }
 
-int __cdecl Actor_BecomeCorpse(gentity_s *self)
+int Actor_BecomeCorpse(gentity_s *self)
 {
     int FreeActorCorpseIndex; // r27
     actor_s *actor; // r29
@@ -859,7 +859,7 @@ int __cdecl Actor_BecomeCorpse(gentity_s *self)
     return 1;
 }
 
-XAnimTree_s *__cdecl G_GetActorCorpseAnimTree(gentity_s *ent)
+XAnimTree_s *G_GetActorCorpseAnimTree(gentity_s *ent)
 {
     return g_scr_data.actorCorpseInfo[G_GetActorCorpseIndex(ent)].tree;
 }

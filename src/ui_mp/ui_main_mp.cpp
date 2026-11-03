@@ -249,20 +249,20 @@ const char *MonthAbbrev[12] =
 
 char menuBuf2[32768];
 
-void __cdecl LAN_GetServerAddressString(int source, uint32_t n, char *buf, int buflen);
-Material *__cdecl UI_GetLevelShot(int index);
-void __cdecl UI_SortPlayerProfiles(int selectIndex);
-int __cdecl UI_GetPlayerProfileListIndexFromName(const char *name);
-void __cdecl UI_SelectPlayerProfileIndex(int index);
-void __cdecl UI_SortPlayerProfiles(int selectIndex);
-int __cdecl UI_MapCountByGameType();
-int __cdecl UI_GetListIndexFromMapIndex(int testMapIndex);
-int __cdecl UI_GetClientNumForPlayerListNum(int playerListIndex);
-char *__cdecl UI_SelectedMap(int index, int *actual);
-void __cdecl UI_SetSystemCursorPos(UiContext *dc, float x, float y);
+void LAN_GetServerAddressString(int source, uint32_t n, char *buf, int buflen);
+Material *UI_GetLevelShot(int index);
+void UI_SortPlayerProfiles(int selectIndex);
+int UI_GetPlayerProfileListIndexFromName(const char *name);
+void UI_SelectPlayerProfileIndex(int index);
+void UI_SortPlayerProfiles(int selectIndex);
+int UI_MapCountByGameType();
+int UI_GetListIndexFromMapIndex(int testMapIndex);
+int UI_GetClientNumForPlayerListNum(int playerListIndex);
+char *UI_SelectedMap(int index, int *actual);
+void UI_SetSystemCursorPos(UiContext *dc, float x, float y);
 
 
-UILocalVarContext *__cdecl UI_GetLocalVarsContext(int localClientNum)
+UILocalVarContext *UI_GetLocalVarsContext(int localClientNum)
 {
     if (localClientNum)
         MyAssertHandler(
@@ -275,7 +275,7 @@ UILocalVarContext *__cdecl UI_GetLocalVarsContext(int localClientNum)
     return &uiInfoArray.uiDC.localVars;
 }
 
-void __cdecl TRACK_ui_main()
+void TRACK_ui_main()
 {
     track_static_alloc_internal(&sharedUiInfo, 116144, "sharedUiInfo", 34);
     track_static_alloc_internal(&uiInfoArray, 9392, "uiInfoArray", 34);
@@ -283,7 +283,7 @@ void __cdecl TRACK_ui_main()
     track_static_alloc_internal(menuBuf2, 0x8000, "menuBuf2", 34);
 }
 
-void __cdecl UI_DrawSides(
+void UI_DrawSides(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -327,7 +327,7 @@ void __cdecl UI_DrawSides(
         sharedUiInfo.assets.whiteMaterial);
 }
 
-void __cdecl UI_DrawTopBottom(
+void UI_DrawTopBottom(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -371,7 +371,7 @@ void __cdecl UI_DrawTopBottom(
         sharedUiInfo.assets.whiteMaterial);
 }
 
-void __cdecl UI_DrawRect(
+void UI_DrawRect(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -393,7 +393,7 @@ void __cdecl UI_DrawRect(
     UI_DrawSides(scrPlace, x, v9, width, h, horzAlign, vertAlign, size, color);
 }
 
-void __cdecl UI_DrawHighlightRect(
+void UI_DrawHighlightRect(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -491,7 +491,7 @@ void __cdecl UI_DrawHighlightRect(
     R_AddCmdDrawQuadPic(verts, loColor, sharedUiInfo.assets.whiteMaterial);
 }
 
-void __cdecl UI_DrawTextWithGlow(
+void UI_DrawTextWithGlow(
     const ScreenPlacement *scrPlace,
     const char *text,
     int maxChars,
@@ -545,7 +545,7 @@ void __cdecl UI_DrawTextWithGlow(
             0);
 }
 
-void __cdecl UI_DrawTextNoSnap(
+void UI_DrawTextNoSnap(
     const ScreenPlacement *scrPlace,
     const char *text,
     int maxChars,
@@ -567,7 +567,7 @@ void __cdecl UI_DrawTextNoSnap(
     CL_DrawTextPhysical(text, maxChars, font, x, y, xScale, yScale, color, style);
 }
 
-void __cdecl UI_DrawTextWithCursor(
+void UI_DrawTextWithCursor(
     const ScreenPlacement *scrPlace,
     const char *text,
     int maxChars,
@@ -601,7 +601,7 @@ void __cdecl UI_DrawTextWithCursor(
     CL_DrawTextPhysicalWithCursor((char*)text, maxChars, font, x, v13, xScale, yScale, color, style, cursorPos, cursor);
 }
 
-void __cdecl UI_MouseEvent(int localClientNum, int x, int y)
+void UI_MouseEvent(int localClientNum, int x, int y)
 {
     BOOL v3; // [esp+0h] [ebp-8h]
 
@@ -623,7 +623,7 @@ void __cdecl UI_MouseEvent(int localClientNum, int x, int y)
     }
 }
 
-void __cdecl UI_UpdateTime(int localClientNum, int realtime)
+void UI_UpdateTime(int localClientNum, int realtime)
 {
     if (localClientNum)
         MyAssertHandler(
@@ -636,7 +636,7 @@ void __cdecl UI_UpdateTime(int localClientNum, int realtime)
     UI_UpdateContextTime(&uiInfoArray.uiDC, &uiInfoArray.timeIndex, uiInfoArray.previousTimes, realtime);
 }
 
-void __cdecl UI_DrawBuildNumber(int localClientNum)
+void UI_DrawBuildNumber(int localClientNum)
 {
     int BuildNumberAsInt; // eax
     char *v2; // eax
@@ -654,12 +654,12 @@ void __cdecl UI_DrawBuildNumber(int localClientNum)
     UI_DrawText(&scrPlaceView[localClientNum], v2, 64, scale, x, y, 3, 0, value, colorMdGrey, 0);
 }
 
-int __cdecl LAN_GetServerStatus(char *serverAddress, char *serverStatus, int maxLen)
+int LAN_GetServerStatus(char *serverAddress, char *serverStatus, int maxLen)
 {
     return CL_ServerStatus(serverAddress, serverStatus, maxLen);
 }
 
-void __cdecl UI_SortServerStatusInfo(serverStatusInfo_t *info)
+void UI_SortServerStatusInfo(serverStatusInfo_t *info)
 {
     const char *v1; // eax
     int j; // [esp+18h] [ebp-14h]
@@ -713,7 +713,7 @@ void __cdecl UI_SortServerStatusInfo(serverStatusInfo_t *info)
     }
 }
 
-int __cdecl UI_GetServerStatusInfo(char *serverAddress, serverStatusInfo_t *info)
+int UI_GetServerStatusInfo(char *serverAddress, serverStatusInfo_t *info)
 {
     char *v3; // eax
     char *v4; // eax
@@ -965,7 +965,7 @@ uiInfo_s *UI_BuildFindPlayerList()
     return result;
 }
 
-void __cdecl UI_Refresh(int localClientNum)
+void UI_Refresh(int localClientNum)
 {
     float x; // [esp+20h] [ebp-18h]
     float y; // [esp+24h] [ebp-14h]
@@ -1006,7 +1006,7 @@ void __cdecl UI_Refresh(int localClientNum)
     }
 }
 
-void __cdecl LAN_SaveServersToCache()
+void LAN_SaveServersToCache()
 {
     int version; // [esp+8h] [ebp-10h] BYREF
     int size; // [esp+Ch] [ebp-Ch] BYREF
@@ -1039,7 +1039,7 @@ void __cdecl LAN_SaveServersToCache()
     }
 }
 
-void __cdecl UI_Shutdown(int localClientNum)
+void UI_Shutdown(int localClientNum)
 {
     if (localClientNum)
         MyAssertHandler(
@@ -1057,7 +1057,7 @@ void __cdecl UI_Shutdown(int localClientNum)
     LAN_SaveServersToCache();
 }
 
-char *__cdecl GetMenuBuffer_LoadObj(char *filename)
+char *GetMenuBuffer_LoadObj(char *filename)
 {
     int len; // [esp+0h] [ebp-8h]
     int f; // [esp+4h] [ebp-4h] BYREF
@@ -1086,7 +1086,7 @@ char *__cdecl GetMenuBuffer_LoadObj(char *filename)
     }
 }
 
-char *__cdecl GetMenuBuffer(char *filename)
+char *GetMenuBuffer(char *filename)
 {
     if (IsFastFileLoad())
         return (char *)GetMenuBuffer_FastFile(filename);
@@ -1094,7 +1094,7 @@ char *__cdecl GetMenuBuffer(char *filename)
         return GetMenuBuffer_LoadObj(filename);
 }
 
-XModelPiece *__cdecl GetMenuBuffer_FastFile(const char *filename)
+XModelPiece *GetMenuBuffer_FastFile(const char *filename)
 {
     RawFile *rawfile; // [esp+4h] [ebp-4h]
 
@@ -1105,7 +1105,7 @@ XModelPiece *__cdecl GetMenuBuffer_FastFile(const char *filename)
     return 0;
 }
 
-int __cdecl Load_ScriptMenu(int localClientNum, const char *pszMenu, int imageTrack)
+int Load_ScriptMenu(int localClientNum, const char *pszMenu, int imageTrack)
 {
     MenuList *menuList; // [esp+4h] [ebp-4h]
 
@@ -1124,7 +1124,7 @@ int __cdecl Load_ScriptMenu(int localClientNum, const char *pszMenu, int imageTr
     return 1;
 }
 
-MenuList *__cdecl Load_ScriptMenuInternal(const char *pszMenu, int imageTrack)
+MenuList *Load_ScriptMenuInternal(const char *pszMenu, int imageTrack)
 {
     char szMenuFile[260]; // [esp+0h] [ebp-108h] BYREF
 
@@ -1134,7 +1134,7 @@ MenuList *__cdecl Load_ScriptMenuInternal(const char *pszMenu, int imageTrack)
     return UI_LoadMenu(szMenuFile, imageTrack);
 }
 
-char *__cdecl UI_GetMapDisplayName(const char *pszMap)
+char *UI_GetMapDisplayName(const char *pszMap)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -1146,7 +1146,7 @@ char *__cdecl UI_GetMapDisplayName(const char *pszMap)
     return (char *)pszMap;
 }
 
-char *__cdecl UI_GetMapDisplayNameFromPartialLoadNameMatch(const char *mapName, int *mapLoadNameLen)
+char *UI_GetMapDisplayNameFromPartialLoadNameMatch(const char *mapName, int *mapLoadNameLen)
 {
     int i; // [esp+14h] [ebp-4h]
 
@@ -1161,7 +1161,7 @@ char *__cdecl UI_GetMapDisplayNameFromPartialLoadNameMatch(const char *mapName, 
     return 0;
 }
 
-char *__cdecl UI_GetGameTypeDisplayName(const char *pszGameType)
+char *UI_GetGameTypeDisplayName(const char *pszGameType)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -1173,7 +1173,7 @@ char *__cdecl UI_GetGameTypeDisplayName(const char *pszGameType)
     return (char *)pszGameType;
 }
 
-int __cdecl UI_OwnerDrawWidth(int ownerDraw, Font_s *font, float scale)
+int UI_OwnerDrawWidth(int ownerDraw, Font_s *font, float scale)
 {
     const char *v3; // eax
     const char *v4; // eax
@@ -1217,7 +1217,7 @@ int __cdecl UI_OwnerDrawWidth(int ownerDraw, Font_s *font, float scale)
         return 0;
 }
 
-void __cdecl UI_DrawMapLevelshot(int localClientNum)
+void UI_DrawMapLevelshot(int localClientNum)
 {
     menuDef_t *menu; // [esp+28h] [ebp-8h]
     menuDef_t *menua; // [esp+28h] [ebp-8h]
@@ -1259,7 +1259,7 @@ void __cdecl UI_DrawMapLevelshot(int localClientNum)
     }
 }
 
-void __cdecl UI_LoadIngameMenus(int localClientNum)
+void UI_LoadIngameMenus(int localClientNum)
 {
     MenuList *menuList; // [esp+4h] [ebp-4h]
 
@@ -1279,7 +1279,7 @@ void __cdecl UI_LoadIngameMenus(int localClientNum)
     }
 }
 
-void __cdecl UI_ParseMenuMaterial(const char *key, char *value)
+void UI_ParseMenuMaterial(const char *key, char *value)
 {
     Material *material; // [esp+0h] [ebp-4Ch]
     char name[68]; // [esp+4h] [ebp-48h] BYREF
@@ -1290,7 +1290,7 @@ void __cdecl UI_ParseMenuMaterial(const char *key, char *value)
     Material_Duplicate(material, name);
 }
 
-void __cdecl UI_MapLoadInfo(const char *filename)
+void UI_MapLoadInfo(const char *filename)
 {
     const char *parse; // [esp+14h] [ebp-118h] BYREF
     int tokenLen; // [esp+18h] [ebp-114h]
@@ -1337,7 +1337,7 @@ void __cdecl UI_MapLoadInfo(const char *filename)
     }
 }
 
-void __cdecl UI_SetMap(char *mapname, char *gametype)
+void UI_SetMap(char *mapname, char *gametype)
 {
     const char *v2; // eax
 
@@ -1353,7 +1353,7 @@ void __cdecl UI_SetMap(char *mapname, char *gametype)
     }
 }
 
-int __cdecl UI_GetTalkerClientNum(int localClientNum, int num)
+int UI_GetTalkerClientNum(int localClientNum, int num)
 {
     int client; // [esp+0h] [ebp-8h]
     int talker; // [esp+4h] [ebp-4h]
@@ -1371,7 +1371,7 @@ int __cdecl UI_GetTalkerClientNum(int localClientNum, int num)
     return -1;
 }
 
-char __cdecl UI_DrawRecordLevel(int localClientNum, rectDef_s *rect)
+char UI_DrawRecordLevel(int localClientNum, rectDef_s *rect)
 {
     float v3; // [esp+1Ch] [ebp-30h]
     float v4; // [esp+20h] [ebp-2Ch]
@@ -1412,7 +1412,7 @@ char __cdecl UI_DrawRecordLevel(int localClientNum, rectDef_s *rect)
     return 1;
 }
 
-void __cdecl UI_DrawGameType(
+void UI_DrawGameType(
     int localClientNum,
     const rectDef_s *rect,
     Font_s *font,
@@ -1440,7 +1440,7 @@ void __cdecl UI_DrawGameType(
         textStyle);
 }
 
-void __cdecl UI_DrawNetGameType(
+void UI_DrawNetGameType(
     int localClientNum,
     const rectDef_s *rect,
     Font_s *font,
@@ -1473,7 +1473,7 @@ void __cdecl UI_DrawNetGameType(
         textStyle);
 }
 
-void __cdecl UI_DrawJoinGameType(
+void UI_DrawJoinGameType(
     int localClientNum,
     const rectDef_s *rect,
     Font_s *font,
@@ -1503,7 +1503,7 @@ void __cdecl UI_DrawJoinGameType(
         textStyle);
 }
 
-void __cdecl UI_DrawNetFilter(
+void UI_DrawNetFilter(
     int localClientNum,
     const rectDef_s *rect,
     Font_s *font,
@@ -1532,7 +1532,7 @@ void __cdecl UI_DrawNetFilter(
         textStyle);
 }
 
-void __cdecl UI_DrawNetSource(
+void UI_DrawNetSource(
     int localClientNum,
     const rectDef_s *rect,
     Font_s *font,
@@ -1559,7 +1559,7 @@ void __cdecl UI_DrawNetSource(
         textStyle);
 }
 
-void __cdecl UI_DrawMapPreview(int localClientNum, const rectDef_s *rect, float scale, const float *color)
+void UI_DrawMapPreview(int localClientNum, const rectDef_s *rect, float scale, const float *color)
 {
     Material *mtl; // [esp+20h] [ebp-4h]
 
@@ -1577,7 +1577,7 @@ void __cdecl UI_DrawMapPreview(int localClientNum, const rectDef_s *rect, float 
 }
 
 
-void __cdecl UI_OwnerDraw(
+void UI_OwnerDraw(
     int localClientNum,
     float x,
     float y,
@@ -1675,7 +1675,7 @@ void __cdecl UI_OwnerDraw(
     }
 }
 
-void __cdecl UI_DrawServerRefreshDate(
+void UI_DrawServerRefreshDate(
     int localClientNum,
     rectDef_s *rect,
     Font_s *font,
@@ -1758,7 +1758,7 @@ void __cdecl UI_DrawServerRefreshDate(
     }
 }
 
-void __cdecl UI_DrawKeyBindStatus(
+void UI_DrawKeyBindStatus(
     int localClientNum,
     rectDef_s *rect,
     Font_s *font,
@@ -1785,7 +1785,7 @@ void __cdecl UI_DrawKeyBindStatus(
     UI_DrawText(&scrPlaceView[localClientNum], v6, 0x7FFFFFFF, font, x, y, horzAlign, vertAlign, scale, color, textStyle);
 }
 
-void __cdecl UI_DrawLocalTalking(int localClientNum, const rectDef_s *rect, const float *color)
+void UI_DrawLocalTalking(int localClientNum, const rectDef_s *rect, const float *color)
 {
     Material *material; // [esp+20h] [ebp-4h]
 
@@ -1805,7 +1805,7 @@ void __cdecl UI_DrawLocalTalking(int localClientNum, const rectDef_s *rect, cons
     }
 }
 
-void __cdecl UI_DrawTalkerNum(
+void UI_DrawTalkerNum(
     int localClientNum,
     int num,
     rectDef_s *rect,
@@ -1925,7 +1925,7 @@ void UI_AddPlayerProfiles()
     Dvar_SetInt(ui_playerProfileCount, uiInfo->playerProfileCount);
 }
 
-bool __cdecl UI_OwnerDrawVisible(__int16 flags)
+bool UI_OwnerDrawVisible(__int16 flags)
 {
     bool vis; // [esp+0h] [ebp-4h]
 
@@ -1937,7 +1937,7 @@ bool __cdecl UI_OwnerDrawVisible(__int16 flags)
     return vis;
 }
 
-int __cdecl UI_GameType_HandleKey(int flags, float *special, int key, int resetMap)
+int UI_GameType_HandleKey(int flags, float *special, int key, int resetMap)
 {
     int oldCount; // [esp+0h] [ebp-8h]
     int nextGameType; // [esp+4h] [ebp-4h]
@@ -1974,7 +1974,7 @@ LABEL_15:
     return 1;
 }
 
-int __cdecl UI_NetSource_HandleKey(int flags, float *special, int key)
+int UI_NetSource_HandleKey(int flags, float *special, int key)
 {
     int integer; // [esp+0h] [ebp-Ch]
     int nextNetSource; // [esp+8h] [ebp-4h]
@@ -2002,7 +2002,7 @@ int __cdecl UI_NetSource_HandleKey(int flags, float *special, int key)
     return 1;
 }
 
-int __cdecl UI_NetFilter_HandleKey(int flags, float *special, int key)
+int UI_NetFilter_HandleKey(int flags, float *special, int key)
 {
     if (key != K_MOUSE1 && key != K_MOUSE2 && key != K_ENTER && key != K_KP_ENTER)
         return 0;
@@ -2023,7 +2023,7 @@ int __cdecl UI_NetFilter_HandleKey(int flags, float *special, int key)
     return 1;
 }
 
-BOOL __cdecl UI_IsMapActive(int mapIndex)
+BOOL UI_IsMapActive(int mapIndex)
 {
     if (mapIndex < 0 || mapIndex >= sharedUiInfo.mapCount)
         MyAssertHandler(
@@ -2036,7 +2036,7 @@ BOOL __cdecl UI_IsMapActive(int mapIndex)
     return sharedUiInfo.serverHardwareIconList[40 * mapIndex - 5081] != 0;
 }
 
-void __cdecl UI_SelectListIndexForMapIndex(int mapIndex)
+void UI_SelectListIndexForMapIndex(int mapIndex)
 {
     int listIndex; // [esp+0h] [ebp-4h]
 
@@ -2060,7 +2060,7 @@ void UI_SelectFirstActiveMap()
     Com_Error(ERR_FATAL, "No active maps found for gametype '%s'.", ui_netGameTypeName->current.string);
 }
 
-void __cdecl UI_SelectCurrentMap(int localClientNum)
+void UI_SelectCurrentMap(int localClientNum)
 {
     const char *v1; // eax
     int iCount; // [esp+0h] [ebp-C60h]
@@ -2094,7 +2094,7 @@ void __cdecl UI_SelectCurrentMap(int localClientNum)
     }
 }
 
-int __cdecl UI_NetGameType_HandleKey(int flags, float *special, int key)
+int UI_NetGameType_HandleKey(int flags, float *special, int key)
 {
     int integer; // [esp+0h] [ebp-8h]
     int nextNetGameType; // [esp+4h] [ebp-4h]
@@ -2127,7 +2127,7 @@ int __cdecl UI_NetGameType_HandleKey(int flags, float *special, int key)
     return 1;
 }
 
-int __cdecl UI_JoinGameType_HandleKey(int flags, float *special, int key)
+int UI_JoinGameType_HandleKey(int flags, float *special, int key)
 {
     int integer; // [esp+0h] [ebp-8h]
     int nextJoinGameType; // [esp+4h] [ebp-4h]
@@ -2153,7 +2153,7 @@ int __cdecl UI_JoinGameType_HandleKey(int flags, float *special, int key)
     return 1;
 }
 
-int __cdecl UI_OwnerDrawHandleKey(int ownerDraw, int flags, float *special, int key)
+int UI_OwnerDrawHandleKey(int ownerDraw, int flags, float *special, int key)
 {
     switch (ownerDraw)
     {
@@ -2176,7 +2176,7 @@ int __cdecl UI_OwnerDrawHandleKey(int ownerDraw, int flags, float *special, int 
 
 // KISAKTODO header-ify
 extern int g_editingField;
-int __cdecl UI_CheckExecKey(int localClientNum, int key)
+int UI_CheckExecKey(int localClientNum, int key)
 {
     menuDef_t *menu; // [esp+4h] [ebp-8h]
     ItemKeyHandler *handler; // [esp+8h] [ebp-4h]
@@ -2204,7 +2204,7 @@ int __cdecl UI_CheckExecKey(int localClientNum, int key)
     return 0;
 }
 
-void __cdecl UI_LoadPlayerProfile(int localClientNum)
+void UI_LoadPlayerProfile(int localClientNum)
 {
     iassert(ui_playerProfileSelected);
 
@@ -2212,7 +2212,7 @@ void __cdecl UI_LoadPlayerProfile(int localClientNum)
         Com_ChangePlayerProfile(localClientNum, (char *)ui_playerProfileSelected->current.string);
 }
 
-void __cdecl UI_Update(const char *name)
+void UI_Update(const char *name)
 {
     char *value; // eax
     char *VariantString; // eax
@@ -2270,7 +2270,7 @@ void UI_SelectActivePlayerProfile()
         UI_SelectPlayerProfileIndex(selIndex);
 }
 
-int __cdecl LAN_AddServer(int source, char *name, char *address)
+int LAN_AddServer(int source, char *name, char *address)
 {
     const char *v3; // eax
     int i; // [esp+8h] [ebp-24h]
@@ -2306,7 +2306,7 @@ int __cdecl LAN_AddServer(int source, char *name, char *address)
     return 1;
 }
 
-void __cdecl UI_AddServerToFavoritesList(char *pszName, char *pszAddress)
+void UI_AddServerToFavoritesList(char *pszName, char *pszAddress)
 {
     char *v2; // eax
     char *v3; // eax
@@ -2366,7 +2366,7 @@ void __cdecl UI_AddServerToFavoritesList(char *pszName, char *pszAddress)
     }
 }
 
-void __cdecl LAN_RemoveServer(int source, char *addr)
+void LAN_RemoveServer(int source, char *addr)
 {
     const char *v2; // eax
     int j; // [esp+4h] [ebp-28h]
@@ -2403,7 +2403,7 @@ void __cdecl LAN_RemoveServer(int source, char *addr)
     }
 }
 
-int __cdecl UI_GetPlayerProfileListIndexFromName(const char *name)
+int UI_GetPlayerProfileListIndexFromName(const char *name)
 {
     uint32_t nameIndex; // [esp+4h] [ebp-8h]
     int profileIndex; // [esp+8h] [ebp-4h]
@@ -2474,7 +2474,7 @@ static int UI_PlayerProfilesQsortCompare(const void *a, const void *b)
         return -result;
 }
 
-void __cdecl UI_SelectPlayerProfileIndex(int index)
+void UI_SelectPlayerProfileIndex(int index)
 {
     for (int menuIndex = uiInfoArray.uiDC.openMenuCount - 1; menuIndex >= 0; --menuIndex)
     {
@@ -2483,7 +2483,7 @@ void __cdecl UI_SelectPlayerProfileIndex(int index)
     }
 }
 
-void __cdecl UI_SortPlayerProfiles(int selectIndex)
+void UI_SortPlayerProfiles(int selectIndex)
 {
     int profileIndex; // [esp+4h] [ebp-4h]
 
@@ -2539,7 +2539,7 @@ void UI_DeletePlayerProfile()
     }
 }
 
-void __cdecl LAN_GetServerAddressString(int source, uint32_t n, char *buf, int buflen)
+void LAN_GetServerAddressString(int source, uint32_t n, char *buf, int buflen)
 {
     const char *v4; // eax
     const char *v5; // eax
@@ -2589,7 +2589,7 @@ void UI_SelectCurrentGameType()
     }
 }
 
-void __cdecl UI_RunMenuScript(int localClientNum, const char **args, const char *actualScript)
+void UI_RunMenuScript(int localClientNum, const char **args, const char *actualScript)
 {
     char *v3; // eax
     const char *v4; // eax
@@ -3257,7 +3257,7 @@ void __cdecl UI_RunMenuScript(int localClientNum, const char **args, const char 
     }
 }
 
-void __cdecl UI_ServersSort(int column, int force)
+void UI_ServersSort(int column, int force)
 {
     if (force || *(uint32_t *)&sharedUiInfo.serverStatus.string[1112] != column)
     {
@@ -3266,11 +3266,11 @@ void __cdecl UI_ServersSort(int column, int force)
             &sharedUiInfo.serverStatus.string[1132],
             *(uint32_t *)&sharedUiInfo.gap8EB4[72900],
             4u,
-            (int(__cdecl *)(const void *, const void *))UI_ServersQsortCompare);
+            (int(*)(const void *, const void *))UI_ServersQsortCompare);
     }
 }
 
-int __cdecl UI_ServersQsortCompare(uint32_t *arg1, uint32_t *arg2)
+int UI_ServersQsortCompare(uint32_t *arg1, uint32_t *arg2)
 {
     return LAN_CompareServers(
         ui_netSource->current.integer,
@@ -3297,7 +3297,7 @@ void UI_VerifyLanguage()
         Dvar_SetBoolByName("ui_languagechanged", 1);
 }
 
-void __cdecl UI_UpdateDisplayServers(uiInfo_s *uiInfo)
+void UI_UpdateDisplayServers(uiInfo_s *uiInfo)
 {
     int serverCount; // [esp+0h] [ebp-4h]
 
@@ -3313,7 +3313,7 @@ void __cdecl UI_UpdateDisplayServers(uiInfo_s *uiInfo)
     }
 }
 
-char __cdecl UI_GetOpenOrCloseMenuOnDvarArgs(
+char UI_GetOpenOrCloseMenuOnDvarArgs(
     const char **args,
     const char *cmd,
     char *dvarName,
@@ -3350,7 +3350,7 @@ char __cdecl UI_GetOpenOrCloseMenuOnDvarArgs(
     }
 }
 
-void __cdecl UI_OpenMenuOnDvar(
+void UI_OpenMenuOnDvar(
     uiInfo_s *uiInfo,
     const char *cmd,
     const char *menuName,
@@ -3376,7 +3376,7 @@ void __cdecl UI_OpenMenuOnDvar(
         Menus_OpenByName(&uiInfo->uiDC, menuName);
 }
 
-bool __cdecl UI_DvarValueTest(const char *cmd, const char *dvarName, const char *testValue, bool wantMatch)
+bool UI_DvarValueTest(const char *cmd, const char *dvarName, const char *testValue, bool wantMatch)
 {
     const char *dvarValue; // [esp+8h] [ebp-4h]
 
@@ -3398,7 +3398,7 @@ bool __cdecl UI_DvarValueTest(const char *cmd, const char *dvarName, const char 
     }
 }
 
-void __cdecl UI_CloseMenuOnDvar(
+void UI_CloseMenuOnDvar(
     uiInfo_s *uiInfo,
     const char *cmd,
     const char *menuName,
@@ -3424,7 +3424,7 @@ void __cdecl UI_CloseMenuOnDvar(
         Menus_CloseByName(&uiInfo->uiDC, menuName);
 }
 
-void __cdecl UI_RemoveServerFromDisplayList(int num)
+void UI_RemoveServerFromDisplayList(int num)
 {
     int j; // [esp+0h] [ebp-8h]
     int i; // [esp+4h] [ebp-4h]
@@ -3442,7 +3442,7 @@ void __cdecl UI_RemoveServerFromDisplayList(int num)
 }
 
 int numclean;
-void __cdecl UI_BuildServerDisplayList(uiInfo_s *uiInfo, int force)
+void UI_BuildServerDisplayList(uiInfo_s *uiInfo, int force)
 {
     char *String; // eax
     const char *v3; // eax
@@ -3599,7 +3599,7 @@ void __cdecl UI_BuildServerDisplayList(uiInfo_s *uiInfo, int force)
     }
 }
 
-void __cdecl UI_BinaryServerInsertion(uint32_t num)
+void UI_BinaryServerInsertion(uint32_t num)
 {
     int offset; // [esp+0h] [ebp-10h]
     int len; // [esp+4h] [ebp-Ch]
@@ -3646,7 +3646,7 @@ void __cdecl UI_BinaryServerInsertion(uint32_t num)
     UI_InsertServerIntoDisplayList(num, offset);
 }
 
-void __cdecl UI_InsertServerIntoDisplayList(uint32_t num, int position)
+void UI_InsertServerIntoDisplayList(uint32_t num, int position)
 {
     int i; // [esp+0h] [ebp-8h]
     int res; // [esp+4h] [ebp-4h]
@@ -3723,7 +3723,7 @@ int UI_ClearDisplayedServers()
     return result;
 }
 
-void __cdecl UI_BuildServerStatus(uiInfo_s *uiInfo, int force)
+void UI_BuildServerStatus(uiInfo_s *uiInfo, int force)
 {
     if (!uiInfo->nextFindPlayerRefresh)
     {
@@ -3755,7 +3755,7 @@ void __cdecl UI_BuildServerStatus(uiInfo_s *uiInfo, int force)
     }
 }
 
-int __cdecl UI_MapCountByGameType()
+int UI_MapCountByGameType()
 {
     int c; // [esp+0h] [ebp-Ch]
     int game; // [esp+4h] [ebp-8h]
@@ -3775,7 +3775,7 @@ int __cdecl UI_MapCountByGameType()
     return c;
 }
 
-int __cdecl UI_FeederCount(int localClientNum, float feederID)
+int UI_FeederCount(int localClientNum, float feederID)
 {
     if (feederID == 4.0)
         return UI_MapCountByGameType();
@@ -3858,7 +3858,7 @@ int __cdecl UI_FeederCount(int localClientNum, float feederID)
     }
 }
 
-void __cdecl UI_BuildPlayerList(int localClientNum)
+void UI_BuildPlayerList(int localClientNum)
 {
     const char *info; // [esp+0h] [ebp-C44h]
     uiClientState_s state; // [esp+4h] [ebp-C40h] BYREF
@@ -3883,7 +3883,7 @@ void __cdecl UI_BuildPlayerList(int localClientNum)
     }
 }
 
-int __cdecl UI_GetClientNumForPlayerListNum(int playerListIndex)
+int UI_GetClientNumForPlayerListNum(int playerListIndex)
 {
     if (sharedUiInfo.playerClientNums[playerListIndex] >= 0x40u)
         MyAssertHandler(
@@ -3901,7 +3901,7 @@ int lastColumn;
 int lastTime;
 char clientBuff[38];
 
-const char *__cdecl UI_FeederItemText(
+const char *UI_FeederItemText(
     int localClientNum,
     itemDef_s *item,
     const float feederID,
@@ -4099,7 +4099,7 @@ const char *__cdecl UI_FeederItemText(
     return result;
 }
 
-Material *__cdecl UI_GetLevelShot(int index)
+Material *UI_GetLevelShot(int index)
 {
     if (index < 0 || index >= sharedUiInfo.mapCount)
         index = 0;
@@ -4110,7 +4110,7 @@ Material *__cdecl UI_GetLevelShot(int index)
     return sharedUiInfo.serverHardwareIconList[40 * index - 5082];
 }
 
-Material *__cdecl UI_FeederItemImage(float feederID, int index)
+Material *UI_FeederItemImage(float feederID, int index)
 {
     int actual; // [esp+0h] [ebp-4h] BYREF
 
@@ -4120,7 +4120,7 @@ Material *__cdecl UI_FeederItemImage(float feederID, int index)
     return UI_GetLevelShot(actual);
 }
 
-void __cdecl UI_FeederItemColor(
+void UI_FeederItemColor(
     int localClientNum,
     itemDef_s *item,
     float feederID,
@@ -4149,7 +4149,7 @@ void __cdecl UI_FeederItemColor(
     }
 }
 
-int __cdecl UI_GetListIndexFromMapIndex(int testMapIndex)
+int UI_GetListIndexFromMapIndex(int testMapIndex)
 {
     int listIndex; // [esp+0h] [ebp-8h]
     int mapIndex; // [esp+4h] [ebp-4h]
@@ -4175,7 +4175,7 @@ int __cdecl UI_GetListIndexFromMapIndex(int testMapIndex)
     return 0;
 }
 
-void __cdecl UI_OverrideCursorPos(int localClientNum, itemDef_s *item)
+void UI_OverrideCursorPos(int localClientNum, itemDef_s *item)
 {
     int v2; // [esp+4h] [ebp-1Ch]
     int v3; // [esp+Ch] [ebp-14h]
@@ -4218,7 +4218,7 @@ void __cdecl UI_OverrideCursorPos(int localClientNum, itemDef_s *item)
     }
 }
 
-char *__cdecl UI_SelectedMap(int index, int *actual)
+char *UI_SelectedMap(int index, int *actual)
 {
     int c; // [esp+0h] [ebp-8h]
     int i; // [esp+4h] [ebp-4h]
@@ -4241,7 +4241,7 @@ char *__cdecl UI_SelectedMap(int index, int *actual)
 }
 
 char info_0[1024];
-void __cdecl UI_FeederSelection(int localClientNum, float feederID, int index)
+void UI_FeederSelection(int localClientNum, float feederID, int index)
 {
     int actual; // [esp+8h] [ebp-8h] BYREF
     uiInfo_s *uiInfo; // [esp+Ch] [ebp-4h]
@@ -4350,9 +4350,9 @@ void UI_GetGameTypesList()
     sharedUiInfo.joinGameTypes[0].gameType = String_Alloc("All");
     sharedUiInfo.joinGameTypes[sharedUiInfo.numJoinGameTypes++].gameTypeName = "";
     if (IsFastFileLoad())
-        ((void(__cdecl *)(void (*)()))UI_GetGameTypesList_FastFile)(UI_GetGameTypesList_FastFile);
+        ((void(*)(void (*)()))UI_GetGameTypesList_FastFile)(UI_GetGameTypesList_FastFile);
     else
-        ((void(__cdecl *)(void (*)()))UI_GetGameTypesList_LoadObj)(UI_GetGameTypesList_LoadObj);
+        ((void(*)(void (*)()))UI_GetGameTypesList_LoadObj)(UI_GetGameTypesList_LoadObj);
     if (!sharedUiInfo.numGameTypes)
         Com_Error(ERR_FATAL, "No game type scripts found in maps/mp/gametypes folder");
 }
@@ -4400,7 +4400,7 @@ void UI_GetGameTypesList_FastFile()
     }
 }
 
-void __cdecl UI_Pause(int localClientNum, int b)
+void UI_Pause(int localClientNum, int b)
 {
     if (b)
     {
@@ -4415,7 +4415,7 @@ void __cdecl UI_Pause(int localClientNum, int b)
     }
 }
 
-void __cdecl UI_OpenMenu_f()
+void UI_OpenMenu_f()
 {
     char name[68]; // [esp+4h] [ebp-48h] BYREF
 
@@ -4423,12 +4423,12 @@ void __cdecl UI_OpenMenu_f()
     Menus_OpenByName(&uiInfoArray.uiDC, name);
 }
 
-void __cdecl UI_ListMenus_f()
+void UI_ListMenus_f()
 {
     Menus_PrintAllLoadedMenus(&uiInfoArray.uiDC);
 }
 
-void __cdecl CL_SelectStringTableEntryInDvar_f()
+void CL_SelectStringTableEntryInDvar_f()
 {
 #ifndef KISAK_NO_FASTFILES
     const char *v0; // eax
@@ -4465,7 +4465,7 @@ void __cdecl CL_SelectStringTableEntryInDvar_f()
 #endif
 }
 
-void __cdecl UI_CloseMenu_f()
+void UI_CloseMenu_f()
 {
     char name[68]; // [esp+4h] [ebp-48h] BYREF
 
@@ -4473,12 +4473,12 @@ void __cdecl UI_CloseMenu_f()
     Menus_CloseByName(&uiInfoArray.uiDC, name);
 }
 
-void __cdecl UI_LoadSoundAliases()
+void UI_LoadSoundAliases()
 {
     Com_LoadSoundAliases("menu", "all_mp", SASYS_UI);
 }
 
-BOOL __cdecl LAN_LoadCachedServersInternal(int fileIn)
+BOOL LAN_LoadCachedServersInternal(int fileIn)
 {
     int version; // [esp+0h] [ebp-8h] BYREF
     int size; // [esp+4h] [ebp-4h] BYREF
@@ -4504,7 +4504,7 @@ BOOL __cdecl LAN_LoadCachedServersInternal(int fileIn)
     return 0;
 }
 
-void __cdecl LAN_LoadCachedServers()
+void LAN_LoadCachedServers()
 {
     int fileIn; // [esp+0h] [ebp-8h] BYREF
     int success; // [esp+4h] [ebp-4h]
@@ -4521,7 +4521,7 @@ void __cdecl LAN_LoadCachedServers()
     }
 }
 
-void __cdecl UI_Init(int localClientNum)
+void UI_Init(int localClientNum)
 {
     if (localClientNum)
         MyAssertHandler(
@@ -4797,7 +4797,7 @@ void UI_AssetCache()
 }
 
 int bypassKeyClear;
-void __cdecl UI_KeyEvent(int localClientNum, int key, int down)
+void UI_KeyEvent(int localClientNum, int key, int down)
 {
     menuDef_t *menu; // [esp+8h] [ebp-4h]
 
@@ -4835,7 +4835,7 @@ void __cdecl UI_KeyEvent(int localClientNum, int key, int down)
     }
 }
 
-uiMenuCommand_t __cdecl UI_GetActiveMenu(int localClientNum)
+uiMenuCommand_t UI_GetActiveMenu(int localClientNum)
 {
   if ( localClientNum )
     MyAssertHandler(
@@ -4847,7 +4847,7 @@ uiMenuCommand_t __cdecl UI_GetActiveMenu(int localClientNum)
       localClientNum);
   return uiInfoArray.currentMenuType;
 }
-const char *__cdecl UI_GetTopActiveMenuName(int localClientNum)
+const char *UI_GetTopActiveMenuName(int localClientNum)
 {
     int topMenuStackIndex; // [esp+4h] [ebp-4h]
 
@@ -4868,7 +4868,7 @@ const char *__cdecl UI_GetTopActiveMenuName(int localClientNum)
 }
 
 // KISAKTODO lots of functions that call this do a bunch of useless casts
-int __cdecl UI_SetActiveMenu(int localClientNum, uiMenuCommand_t menu)
+int UI_SetActiveMenu(int localClientNum, uiMenuCommand_t menu)
 {
     int result; // eax
     const char *v3; // eax
@@ -4982,7 +4982,7 @@ int __cdecl UI_SetActiveMenu(int localClientNum, uiMenuCommand_t menu)
     return result;
 }
 
-int __cdecl UI_IsFullscreen(int localClientNum)
+int UI_IsFullscreen(int localClientNum)
 {
     if (localClientNum)
         MyAssertHandler(
@@ -4995,7 +4995,7 @@ int __cdecl UI_IsFullscreen(int localClientNum)
     return Menus_AnyFullScreenVisible(&uiInfoArray.uiDC);
 }
 
-void __cdecl UI_ReadableSize(char *buf, uint32_t bufsize, int value)
+void UI_ReadableSize(char *buf, uint32_t bufsize, int value)
 {
     char *v3; // eax
     char *v4; // eax
@@ -5042,7 +5042,7 @@ void __cdecl UI_ReadableSize(char *buf, uint32_t bufsize, int value)
     }
 }
 
-void __cdecl UI_PrintTime(char *buf, uint32_t bufsize, int time)
+void UI_PrintTime(char *buf, uint32_t bufsize, int time)
 {
     char *v3; // eax
     char *v4; // eax
@@ -5073,7 +5073,7 @@ void __cdecl UI_PrintTime(char *buf, uint32_t bufsize, int time)
 }
 
 int tleIndex;
-void __cdecl UI_DisplayDownloadInfo(char *downloadName, float centerPoint, float yStart, Font_s *font, float scale)
+void UI_DisplayDownloadInfo(char *downloadName, float centerPoint, float yStart, Font_s *font, float scale)
 {
     char *v5; // eax
     char *v6; // eax
@@ -5266,7 +5266,7 @@ void __cdecl UI_DisplayDownloadInfo(char *downloadName, float centerPoint, float
     }
 }
 
-void __cdecl UI_DrawConnectScreen(int localClientNum)
+void UI_DrawConnectScreen(int localClientNum)
 {
     char *v1; // eax
     char *v2; // eax
@@ -5442,7 +5442,7 @@ void __cdecl UI_DrawConnectScreen(int localClientNum)
     }
 }
 
-void __cdecl Text_PaintCenter(
+void Text_PaintCenter(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -5458,7 +5458,7 @@ void __cdecl Text_PaintCenter(
     UI_DrawTextWithGlow(scrPlace, text, 0x7FFFFFFF, font, v8, y, 0, 0, scale, color, 6, glowColor, 0, 0);
 }
 
-void __cdecl Text_PaintCenterWithDots(
+void Text_PaintCenterWithDots(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -5496,7 +5496,7 @@ void __cdecl Text_PaintCenterWithDots(
     UI_DrawTextWithGlow(scrPlace, v8, 0x7FFFFFFF, font, v9, y, 0, 0, scale, color, 6, glowColor, 0, 0);
 }
 
-double __cdecl UI_GetBlurRadius(int localClientNum)
+double UI_GetBlurRadius(int localClientNum)
 {
     if (localClientNum)
         MyAssertHandler(
@@ -5532,7 +5532,7 @@ void UI_StopServerRefresh()
     }
 }
 
-void __cdecl UI_DoServerRefresh(uiInfo_s *uiInfo)
+void UI_DoServerRefresh(uiInfo_s *uiInfo)
 {
     bool wait; // [esp+0h] [ebp-4h]
 
@@ -5563,7 +5563,7 @@ void __cdecl UI_DoServerRefresh(uiInfo_s *uiInfo)
     }
 }
 
-void __cdecl UI_StartServerRefresh(int localClientNum, int full)
+void UI_StartServerRefresh(int localClientNum, int full)
 {
     char *v2; // eax
     char *v3; // eax
@@ -5631,7 +5631,7 @@ void __cdecl UI_StartServerRefresh(int localClientNum, int full)
     }
 }
 
-void __cdecl UI_UpdatePendingPings(uiInfo_s *uiInfo)
+void UI_UpdatePendingPings(uiInfo_s *uiInfo)
 {
     LAN_ResetPings(ui_netSource->current.integer);
     *(uint32_t *)&sharedUiInfo.serverStatus.string[1124] = 1;
@@ -5639,7 +5639,7 @@ void __cdecl UI_UpdatePendingPings(uiInfo_s *uiInfo)
 }
 
 char errorString[1024];
-char *__cdecl UI_SafeTranslateString(const char *reference)
+char *UI_SafeTranslateString(const char *reference)
 {
     const char *translation; // [esp+10h] [ebp-4h]
 
@@ -5674,7 +5674,7 @@ char *__cdecl UI_SafeTranslateString(const char *reference)
     return (char *)translation;
 }
 
-bool __cdecl UI_AnyMenuVisible(int localClientNum)
+bool UI_AnyMenuVisible(int localClientNum)
 {
     if (localClientNum)
         MyAssertHandler(
@@ -5687,7 +5687,7 @@ bool __cdecl UI_AnyMenuVisible(int localClientNum)
     return uiInfoArray.uiDC.openMenuCount != 0;
 }
 
-char *__cdecl UI_ReplaceConversionString(char *sourceString, const char *replaceString)
+char *UI_ReplaceConversionString(char *sourceString, const char *replaceString)
 {
     char outputString[1028]; // [esp+0h] [ebp-430h] BYREF
     ConversionArguments convArgs; // [esp+408h] [ebp-28h] BYREF
@@ -5699,7 +5699,7 @@ char *__cdecl UI_ReplaceConversionString(char *sourceString, const char *replace
     return va(outputString);
 }
 
-char *__cdecl UI_ReplaceConversionInt(char *sourceString, int replaceInt)
+char *UI_ReplaceConversionInt(char *sourceString, int replaceInt)
 {
     char outputString[1028]; // [esp+0h] [ebp-450h] BYREF
     char tempString[32]; // [esp+404h] [ebp-4Ch] BYREF
@@ -5713,7 +5713,7 @@ char *__cdecl UI_ReplaceConversionInt(char *sourceString, int replaceInt)
     return va(outputString);
 }
 
-void __cdecl UI_ReplaceConversions(
+void UI_ReplaceConversions(
     char *sourceString,
     ConversionArguments *arguments,
     char *outputString,
@@ -5791,7 +5791,7 @@ void __cdecl UI_ReplaceConversions(
     }
 }
 
-void __cdecl UI_CloseAll(int localClientNum)
+void UI_CloseAll(int localClientNum)
 {
     if (localClientNum)
         MyAssertHandler(
@@ -5805,7 +5805,7 @@ void __cdecl UI_CloseAll(int localClientNum)
     UI_SetActiveMenu(localClientNum, UIMENU_NONE);
 }
 
-void __cdecl UI_CloseFocusedMenu(int localClientNum)
+void UI_CloseFocusedMenu(int localClientNum)
 {
     if (localClientNum)
         MyAssertHandler(
@@ -5829,7 +5829,7 @@ void __cdecl UI_CloseFocusedMenu(int localClientNum)
     }
 }
 
-int __cdecl UI_Popup(int localClientNum, const char *menu)
+int UI_Popup(int localClientNum, const char *menu)
 {
     if (!CL_AllowPopup(localClientNum) || UI_IsFullscreen(localClientNum))
         return 0;
@@ -5845,12 +5845,12 @@ int __cdecl UI_Popup(int localClientNum, const char *menu)
     return 1;
 }
 
-void __cdecl CL_SetCursorPos(tagPOINT x)
+void CL_SetCursorPos(tagPOINT x)
 {
     IN_SetCursorPos(x);
 }
 
-void __cdecl UI_SetSystemCursorPos(UiContext *dc, float x, float y)
+void UI_SetSystemCursorPos(UiContext *dc, float x, float y)
 {
     tagPOINT X; // [esp+0h] [ebp-28h]
     float v4; // [esp+8h] [ebp-20h]
@@ -5871,7 +5871,7 @@ void __cdecl UI_SetSystemCursorPos(UiContext *dc, float x, float y)
     CL_SetCursorPos(X);
 }
 
-int __cdecl UI_PopupScriptMenu(int localClientNum, const char *menuName, bool useMouse)
+int UI_PopupScriptMenu(int localClientNum, const char *menuName, bool useMouse)
 {
     menuDef_t *pFocus; // [esp+Ch] [ebp-4h]
 
@@ -5902,7 +5902,7 @@ int __cdecl UI_PopupScriptMenu(int localClientNum, const char *menuName, bool us
     return 1;
 }
 
-void __cdecl UI_ClosePopupScriptMenu(int localClientNum, bool allowResponse)
+void UI_ClosePopupScriptMenu(int localClientNum, bool allowResponse)
 {
     if (localClientNum)
         MyAssertHandler(
@@ -5920,7 +5920,7 @@ void __cdecl UI_ClosePopupScriptMenu(int localClientNum, bool allowResponse)
     }
 }
 
-bool __cdecl UI_AllowScriptMenuResponse(int localClientNum)
+bool UI_AllowScriptMenuResponse(int localClientNum)
 {
     if (localClientNum)
         MyAssertHandler(
@@ -5933,18 +5933,18 @@ bool __cdecl UI_AllowScriptMenuResponse(int localClientNum)
     return uiInfoArray.allowScriptMenuResponse;
 }
 
-void __cdecl UI_CloseInGameMenu(int localClientNum)
+void UI_CloseInGameMenu(int localClientNum)
 {
     if (!UI_IsFullscreen(localClientNum) && UI_GetActiveMenu(localClientNum) == 2)
         UI_CloseFocusedMenu(localClientNum);
 }
 
-void __cdecl UI_CloseAllMenus(int localClientNum)
+void UI_CloseAllMenus(int localClientNum)
 {
     UI_CloseAll(localClientNum);
 }
 
-bool __cdecl Menu_IsMenuOpenAndVisible(int localClientNum, const char *menuName)
+bool Menu_IsMenuOpenAndVisible(int localClientNum, const char *menuName)
 {
     menuDef_t *menu; // [esp+4h] [ebp-4h]
 
@@ -5964,12 +5964,12 @@ bool __cdecl Menu_IsMenuOpenAndVisible(int localClientNum, const char *menuName)
     return 0;
 }
 
-bool __cdecl UI_ShouldDrawCrosshair()
+bool UI_ShouldDrawCrosshair()
 {
     return ui_drawCrosshair->current.enabled;
 }
 
-Font_s *__cdecl UI_GetFontHandle(const ScreenPlacement *scrPlace,int fontEnum,float scale)
+Font_s *UI_GetFontHandle(const ScreenPlacement *scrPlace,int fontEnum,float scale)
 {
     return UI_SelectFont(scrPlace,fontEnum,scale,sharedUiInfo.assets,
                          ui_smallFont,ui_bigFont,ui_extraBigFont);

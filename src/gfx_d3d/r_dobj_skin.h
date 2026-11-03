@@ -45,8 +45,8 @@ struct SkinXModelCmd // sizeof=0x1C
     // padding byte
 };
 
-int __cdecl DObjBad(const DObj_s *obj);
-void __cdecl R_SkinSceneDObj(
+int DObjBad(const DObj_s *obj);
+void R_SkinSceneDObj(
     GfxSceneEntity *sceneEnt,
     GfxSceneEntity *localSceneEnt,
     const DObj_s *obj,
@@ -56,4 +56,4 @@ int  R_SkinSceneDObjModels(
     GfxSceneEntity *sceneEnt,
     const DObj_s *obj,
     DObjAnimMat *boneMatrix);
-void __cdecl R_SkinGfxEntityCmd(GfxSceneEntity **data);
+void R_SkinGfxEntityCmd(GfxSceneEntity **data);

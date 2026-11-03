@@ -308,12 +308,12 @@ const saveField_t sentientFields[10] =
 
 
 
-void __cdecl TRACK_g_save()
+void TRACK_g_save()
 {
     track_static_alloc_internal(&tempClient, sizeof(gclient_s), "tempClient", 9);
 }
 
-void __cdecl Scr_FreeFields(const saveField_t *fields, unsigned __int8 *base)
+void Scr_FreeFields(const saveField_t *fields, unsigned __int8 *base)
 {
     const saveFieldtype_t *p_type; // r11
     const saveField_t *i; // r31
@@ -343,17 +343,17 @@ void __cdecl Scr_FreeFields(const saveField_t *fields, unsigned __int8 *base)
     }
 }
 
-void __cdecl Scr_FreeEntityFields(gentity_s *ent)
+void Scr_FreeEntityFields(gentity_s *ent)
 {
     Scr_FreeFields(gentityFields, (unsigned char*)&ent->s.eType);
 }
 
-void __cdecl Scr_FreeActorFields(actor_s *pActor)
+void Scr_FreeActorFields(actor_s *pActor)
 {
     Scr_FreeFields(actorFields, (unsigned __int8 *)pActor);
 }
 
-void __cdecl Scr_FreeSentientFields(sentient_s *sentient)
+void Scr_FreeSentientFields(sentient_s *sentient)
 {
     Scr_FreeFields(sentientFields, (unsigned __int8 *)sentient);
 }
@@ -382,7 +382,7 @@ void G_SaveError(errorParm_t code, SaveErrorType errorType, const char *fmt, ...
     Com_Error(code, errMsg);
 }
 
-void __cdecl WriteCStyleString(const char *psz, int maxlen, SaveGame *save)
+void WriteCStyleString(const char *psz, int maxlen, SaveGame *save)
 {
     const char *v6; // r11
     int v8; // r31
@@ -425,7 +425,7 @@ void __cdecl WriteCStyleString(const char *psz, int maxlen, SaveGame *save)
     SaveMemory_SaveWrite(psz, v8, save);
 }
 
-void __cdecl ReadCStyleString(char *psz, int maxlen, SaveGame *save)
+void ReadCStyleString(char *psz, int maxlen, SaveGame *save)
 {
     int v6; // r31
     _BYTE v7[2]; // [sp+50h] [-30h] BYREF
@@ -457,7 +457,7 @@ void __cdecl ReadCStyleString(char *psz, int maxlen, SaveGame *save)
     psz[v6] = 0;
 }
 
-void __cdecl WriteWeaponIndex(unsigned int weapon, SaveGame *save)
+void WriteWeaponIndex(unsigned int weapon, SaveGame *save)
 {
     WeaponDef *WeaponDef; // r29
 
@@ -478,7 +478,7 @@ void __cdecl WriteWeaponIndex(unsigned int weapon, SaveGame *save)
     }
 }
 
-int __cdecl ReadWeaponIndex(SaveGame *save)
+int ReadWeaponIndex(SaveGame *save)
 {
     int v2; // r31
     _BYTE v4[16]; // [sp+50h] [-140h] BYREF
@@ -499,7 +499,7 @@ int __cdecl ReadWeaponIndex(SaveGame *save)
         return 0;
 }
 
-void __cdecl WriteItemIndex(int iIndex, SaveGame *save)
+void WriteItemIndex(int iIndex, SaveGame *save)
 {
     gitem_s *v4; // r29
     char v5; // [sp+50h] [-40h] BYREF
@@ -523,7 +523,7 @@ void __cdecl WriteItemIndex(int iIndex, SaveGame *save)
     }
 }
 
-int __cdecl ReadItemIndex(SaveGame *save)
+int ReadItemIndex(SaveGame *save)
 {
     int v2; // r31
     const gitem_s *Item; // r3
@@ -543,7 +543,7 @@ int __cdecl ReadItemIndex(SaveGame *save)
         return 0;
 }
 
-void __cdecl WriteVehicleIndex(__int16 index, SaveGame *save)
+void WriteVehicleIndex(__int16 index, SaveGame *save)
 {
     const char *VehicleInfoName; // r3
 
@@ -553,7 +553,7 @@ void __cdecl WriteVehicleIndex(__int16 index, SaveGame *save)
     WriteCStyleString(VehicleInfoName, 256, save);
 }
 
-int __cdecl ReadVehicleIndex(SaveGame *save)
+int ReadVehicleIndex(SaveGame *save)
 {
     int v2; // r31
     _BYTE v4[16]; // [sp+50h] [-140h] BYREF
@@ -571,7 +571,7 @@ int __cdecl ReadVehicleIndex(SaveGame *save)
     return G_GetVehicleInfoIndex(v5);
 }
 
-void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, unsigned __int8 *original)
+void WriteField1(const saveField_t *field, const unsigned __int8 *base, unsigned __int8 *original)
 {
     EntHandle *v3; // r28
     unsigned int v4; // r31
@@ -774,7 +774,7 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
     }
 }
 
-void __cdecl WriteField2(const saveField_t *field, unsigned __int8 *base, SaveGame *save)
+void WriteField2(const saveField_t *field, unsigned __int8 *base, SaveGame *save)
 {
     saveFieldtype_t type; // r11
     int ofs; // r30
@@ -838,7 +838,7 @@ void __cdecl WriteField2(const saveField_t *field, unsigned __int8 *base, SaveGa
     }
 }
 
-void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame *save)
+void ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame *save)
 {
     EntHandle *v7; // r31
     MemoryFile *MemoryFile; // r3
@@ -1021,7 +1021,7 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
     }
 }
 
-void __cdecl G_WriteStruct(
+void G_WriteStruct(
     const saveField_t *fields,
     unsigned __int8 *original,
     const unsigned __int8 *source,
@@ -1045,7 +1045,7 @@ void __cdecl G_WriteStruct(
         WriteField2(fields, original, save);
 }
 
-void __cdecl G_ReadStruct(const saveField_t *fields, unsigned __int8 *dest, int tempsize, SaveGame *save)
+void G_ReadStruct(const saveField_t *fields, unsigned __int8 *dest, int tempsize, SaveGame *save)
 {
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1214, 0, "%s", "save");
@@ -1054,7 +1054,7 @@ void __cdecl G_ReadStruct(const saveField_t *fields, unsigned __int8 *dest, int 
         ReadField(fields, dest, save);
 }
 
-void __cdecl WriteClient(gclient_s *cl, SaveGame *save)
+void WriteClient(gclient_s *cl, SaveGame *save)
 {
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1232, 0, "%s", "save");
@@ -1076,7 +1076,7 @@ void __cdecl WriteClient(gclient_s *cl, SaveGame *save)
     WriteWeaponIndex(cl->pers.cmd.offHandIndex, save);
 }
 
-void __cdecl ReadClient(gclient_s *client, SaveGame *save)
+void ReadClient(gclient_s *client, SaveGame *save)
 {
     unsigned __int8 WeaponIndex; // r3
     int weapon; // r4
@@ -1117,7 +1117,7 @@ void WriteEntity(gentity_s *ent, SaveGame *save)
     WriteEntityDisconnectedLinks(ent, save);
 }
 
-void __cdecl ReadEntity(gentity_s *ent, SaveGame *save)
+void ReadEntity(gentity_s *ent, SaveGame *save)
 {
     _BYTE v4[8]; // [sp+50h] [-20h] BYREF
 
@@ -1136,7 +1136,7 @@ void __cdecl ReadEntity(gentity_s *ent, SaveGame *save)
     }
 }
 
-void __cdecl WriteActorPotentialCoverNodes(actor_s *pActor, SaveGame *save)
+void WriteActorPotentialCoverNodes(actor_s *pActor, SaveGame *save)
 {
     int v4; // r30
     pathnode_t **pPotentialCoverNode; // r31
@@ -1156,7 +1156,7 @@ void __cdecl WriteActorPotentialCoverNodes(actor_s *pActor, SaveGame *save)
     }
 }
 
-void __cdecl ReadActorPotentialCoverNodes(actor_s *pActor, SaveGame *save)
+void ReadActorPotentialCoverNodes(actor_s *pActor, SaveGame *save)
 {
     int v4; // r30
     pathnode_t **pPotentialCoverNode; // r31
@@ -1176,7 +1176,7 @@ void __cdecl ReadActorPotentialCoverNodes(actor_s *pActor, SaveGame *save)
     }
 }
 
-void __cdecl WriteActor(actor_s *pActor, SaveGame *save)
+void WriteActor(actor_s *pActor, SaveGame *save)
 {
     unsigned __int8 v4[3832]; // [sp+50h] [-F10h] BYREF
 
@@ -1191,7 +1191,7 @@ void __cdecl WriteActor(actor_s *pActor, SaveGame *save)
     }
 }
 
-void __cdecl ReadActor(actor_s *pActor, SaveGame *save)
+void ReadActor(actor_s *pActor, SaveGame *save)
 {
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1385, 0, "%s", "save");
@@ -1206,7 +1206,7 @@ void __cdecl ReadActor(actor_s *pActor, SaveGame *save)
     }
 }
 
-void __cdecl WriteSentient(sentient_s *sentient, SaveGame *save)
+void WriteSentient(sentient_s *sentient, SaveGame *save)
 {
     unsigned __int8 v4[120]; // [sp+50h] [-90h] BYREF
 
@@ -1220,7 +1220,7 @@ void __cdecl WriteSentient(sentient_s *sentient, SaveGame *save)
     }
 }
 
-void __cdecl ReadSentient(sentient_s *sentient, SaveGame *save)
+void ReadSentient(sentient_s *sentient, SaveGame *save)
 {
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1437, 0, "%s", "save");
@@ -1233,7 +1233,7 @@ void __cdecl ReadSentient(sentient_s *sentient, SaveGame *save)
     }
 }
 
-void __cdecl WriteVehicle(scr_vehicle_s *pVehicle, SaveGame *save)
+void WriteVehicle(scr_vehicle_s *pVehicle, SaveGame *save)
 {
     unsigned __int8 v5[824]; // [sp+60h] [-350h] BYREF
 
@@ -1249,7 +1249,7 @@ void __cdecl WriteVehicle(scr_vehicle_s *pVehicle, SaveGame *save)
     }
 }
 
-void __cdecl ReadVehicle(scr_vehicle_s *pVehicle, SaveGame *save)
+void ReadVehicle(scr_vehicle_s *pVehicle, SaveGame *save)
 {
     int v4; // [sp+50h] [-20h] BYREF
 
@@ -1264,7 +1264,7 @@ void __cdecl ReadVehicle(scr_vehicle_s *pVehicle, SaveGame *save)
     }
 }
 
-void __cdecl WriteTurretInfo(TurretInfo *pTurretInfo, SaveGame *save)
+void WriteTurretInfo(TurretInfo *pTurretInfo, SaveGame *save)
 {
     unsigned __int8 v5[200]; // [sp+60h] [-E0h] BYREF
 
@@ -1277,7 +1277,7 @@ void __cdecl WriteTurretInfo(TurretInfo *pTurretInfo, SaveGame *save)
         G_WriteStruct(turretFields, (unsigned __int8 *)pTurretInfo, v5, 188, save);
 }
 
-void __cdecl ReadTurretInfo(TurretInfo *pTurretInfo, SaveGame *save)
+void ReadTurretInfo(TurretInfo *pTurretInfo, SaveGame *save)
 {
     int v4; // [sp+50h] [-20h] BYREF
 
@@ -1289,7 +1289,7 @@ void __cdecl ReadTurretInfo(TurretInfo *pTurretInfo, SaveGame *save)
         G_ReadStruct(turretFields, (unsigned __int8 *)pTurretInfo, 188, save);
 }
 
-void __cdecl WritePathNodes(SaveGame *save)
+void WritePathNodes(SaveGame *save)
 {
     pathnode_t *i; // r29
     unsigned __int8 *v3; // r10
@@ -1335,7 +1335,7 @@ void __cdecl WritePathNodes(SaveGame *save)
     }
 }
 
-void __cdecl ReadPathNodes(SaveGame *save)
+void ReadPathNodes(SaveGame *save)
 {
     pathnode_t *i; // r31
     int wLinkCount; // r11
@@ -1398,7 +1398,7 @@ void __cdecl ReadPathNodes(SaveGame *save)
     }
 }
 
-const saveField_t *__cdecl BadPlaceParmSaveFields(const badplace_t *badplace)
+const saveField_t *BadPlaceParmSaveFields(const badplace_t *badplace)
 {
     if (!badplace)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1618, 0, "%s", "badplace");
@@ -1408,7 +1408,7 @@ const saveField_t *__cdecl BadPlaceParmSaveFields(const badplace_t *badplace)
         return badplaceDefaultParmsFields;
 }
 
-void __cdecl WriteBadPlaces(SaveGame *save)
+void WriteBadPlaces(SaveGame *save)
 {
     int v2; // r27
     unsigned __int8 *v3; // r31
@@ -1459,7 +1459,7 @@ void __cdecl WriteBadPlaces(SaveGame *save)
     } while (v2);
 }
 
-void __cdecl ReadBadPlaces(SaveGame *save)
+void ReadBadPlaces(SaveGame *save)
 {
     int loops; // r27
     badplace_t *badplace; // r31
@@ -1484,7 +1484,7 @@ void __cdecl ReadBadPlaces(SaveGame *save)
     } while (loops);
 }
 
-void __cdecl WriteThreatBiasGroups(SaveGame *save)
+void WriteThreatBiasGroups(SaveGame *save)
 {
     unsigned __int8 v2[1064]; // [sp+50h] [-440h] BYREF
 
@@ -1494,12 +1494,12 @@ void __cdecl WriteThreatBiasGroups(SaveGame *save)
     G_WriteStruct(threatGroupFields, (unsigned __int8 *)&g_threatBias, v2, 1060, save);
 }
 
-void __cdecl ReadThreatBiasGroups(SaveGame *save)
+void ReadThreatBiasGroups(SaveGame *save)
 {
     G_ReadStruct(threatGroupFields, (unsigned __int8 *)&g_threatBias, 1060, save);
 }
 
-void __cdecl WriteAIEventListeners(SaveGame *save)
+void WriteAIEventListeners(SaveGame *save)
 {
     int v2[4]; // [sp+50h] [-20h] BYREF
 
@@ -1509,7 +1509,7 @@ void __cdecl WriteAIEventListeners(SaveGame *save)
         SaveMemory_SaveWrite(g_AIEVlisteners, 8 * v2[0], save);
 }
 
-void __cdecl ReadAIEventListeners(SaveGame *save)
+void ReadAIEventListeners(SaveGame *save)
 {
     int v2[4]; // [sp+50h] [-20h] BYREF
 
@@ -1526,7 +1526,7 @@ void __cdecl ReadAIEventListeners(SaveGame *save)
         SaveMemory_LoadRead(g_AIEVlisteners, 8 * v2[0], save);
 }
 
-char *__cdecl G_Save_DateStr()
+char *G_Save_DateStr()
 {
     qtime_s v1; // [sp+50h] [-30h] BYREF
 
@@ -1534,7 +1534,7 @@ char *__cdecl G_Save_DateStr()
     return va("%s %i, %i", monthStr[v1.tm_mon], v1.tm_mday, v1.tm_year + 1900);
 }
 
-void __cdecl G_SaveConfigstrings(int iFirst, int iCount, SaveGame *save)
+void G_SaveConfigstrings(int iFirst, int iCount, SaveGame *save)
 {
     int i; // r29
     char *v7; // r11
@@ -1563,7 +1563,7 @@ void __cdecl G_SaveConfigstrings(int iFirst, int iCount, SaveGame *save)
     }
 }
 
-void __cdecl G_LoadConfigstrings(int iFirst, int iCount, SaveGame *save)
+void G_LoadConfigstrings(int iFirst, int iCount, SaveGame *save)
 {
     int i; // r31
     int v7; // r30
@@ -1586,7 +1586,7 @@ void __cdecl G_LoadConfigstrings(int iFirst, int iCount, SaveGame *save)
     }
 }
 
-void __cdecl G_LoadModelPrecacheList(SaveGame *save)
+void G_LoadModelPrecacheList(SaveGame *save)
 {
     unsigned __int16 *modelMap; // r30
     int v3; // r31
@@ -1615,7 +1615,7 @@ void __cdecl G_LoadModelPrecacheList(SaveGame *save)
     } while ((int)modelMap < (int)&level.priorityNodeBias);
 }
 
-void __cdecl G_ClearConfigstrings(int iFirst, int iCount)
+void G_ClearConfigstrings(int iFirst, int iCount)
 {
     int i; // r31
 
@@ -1623,7 +1623,7 @@ void __cdecl G_ClearConfigstrings(int iFirst, int iCount)
         SV_SetConfigstring(i + iFirst, "");
 }
 
-void __cdecl G_ClearAllConfigstrings()
+void G_ClearAllConfigstrings()
 {
     int i; // r30
     int j; // r30
@@ -1657,7 +1657,7 @@ void __cdecl G_ClearAllConfigstrings()
         SV_SetConfigstring(jj + CS_TARGETS, "");
 }
 
-void __cdecl G_SaveInitConfigstrings(SaveGame *save)
+void G_SaveInitConfigstrings(SaveGame *save)
 {
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1871, 0, "%s", "save");
@@ -1677,7 +1677,7 @@ void __cdecl G_SaveInitConfigstrings(SaveGame *save)
     G_SaveConfigstrings(1118, 1, save);      // CS_VISIONSET_NIGHT    (was Xbox 1150)
 }
 
-void __cdecl G_LoadInitConfigstrings(SaveGame *save)
+void G_LoadInitConfigstrings(SaveGame *save)
 {
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1896, 0, "%s", "save");
@@ -1697,7 +1697,7 @@ void __cdecl G_LoadInitConfigstrings(SaveGame *save)
     G_LoadConfigstrings(1118, 1, save);      // CS_VISIONSET_NIGHT    (was Xbox 1150)
 }
 
-void __cdecl G_SaveItems(SaveGame *save)
+void G_SaveItems(SaveGame *save)
 {
     int v2; // r31
     _BYTE v3[8]; // [sp+50h] [-20h] BYREF
@@ -1719,7 +1719,7 @@ void __cdecl G_SaveItems(SaveGame *save)
     SaveMemory_SaveWrite(v3, 1, save);
 }
 
-void __cdecl G_SaveWeaponCue(SaveGame *save)
+void G_SaveWeaponCue(SaveGame *save)
 {
     EntHandle *droppedWeaponCue; // r31
     int number; // r11
@@ -1748,7 +1748,7 @@ void __cdecl G_SaveWeaponCue(SaveGame *save)
     } while ((int)droppedWeaponCue < (int)&level.changelevel);
 }
 
-void __cdecl G_LoadWeaponCue(SaveGame *save)
+void G_LoadWeaponCue(SaveGame *save)
 {
     EntHandle *droppedWeaponCue; // r30
     int number; // r11
@@ -1791,7 +1791,7 @@ void __cdecl G_LoadWeaponCue(SaveGame *save)
     } while ((int)droppedWeaponCue < (int)&level.changelevel);
 }
 
-void __cdecl G_SaveDvars(SaveGame *save)
+void G_SaveDvars(SaveGame *save)
 {
     MemoryFile *MemoryFile; // r3
 
@@ -1801,7 +1801,7 @@ void __cdecl G_SaveDvars(SaveGame *save)
     Dvar_SaveDvars(MemoryFile, 0x1000u);
 }
 
-void __cdecl G_LoadDvars(SaveGame *save)
+void G_LoadDvars(SaveGame *save)
 {
     MemoryFile *MemoryFile; // r3
 
@@ -1811,7 +1811,7 @@ void __cdecl G_LoadDvars(SaveGame *save)
     Dvar_LoadDvars(MemoryFile);
 }
 
-void __cdecl G_CheckEntityDefaultModel(gentity_s *e)
+void G_CheckEntityDefaultModel(gentity_s *e)
 {
     int model; // r3
     int eType; // r11
@@ -1835,7 +1835,7 @@ void __cdecl G_CheckEntityDefaultModel(gentity_s *e)
     }
 }
 
-void __cdecl G_UpdateAllEntities()
+void G_UpdateAllEntities()
 {
     for (int i = 0; i < level.num_entities; ++i)
     {
@@ -1864,7 +1864,7 @@ void G_CheckAllEntities()
     }
 }
 
-void __cdecl G_SaveInitState(SaveGame *save)
+void G_SaveInitState(SaveGame *save)
 {
     signed int i; // r28
     const char *psz; // r29
@@ -1902,7 +1902,7 @@ void __cdecl G_SaveInitState(SaveGame *save)
     G_SaveInitConfigstrings(save);
 }
 
-void __cdecl G_SaveMainState(bool savegame, SaveGame *save)
+void G_SaveMainState(bool savegame, SaveGame *save)
 {
     MemoryFile *memFile; // r3
     unsigned int UsedSize; // r3
@@ -2123,7 +2123,7 @@ void __cdecl G_SaveMainState(bool savegame, SaveGame *save)
     //ProfMem_End(v59);
 }
 
-void __cdecl G_SaveState(bool savegame, SaveGame *save)
+void G_SaveState(bool savegame, SaveGame *save)
 {
     CM_ValidateWorld(); // LWSS: note stubbed for now!
     if (!save)
@@ -2132,7 +2132,7 @@ void __cdecl G_SaveState(bool savegame, SaveGame *save)
     G_SaveMainState(savegame, save);
 }
 
-int __cdecl G_IsSavePossible(SaveType saveType)
+int G_IsSavePossible(SaveType saveType)
 {
     int result; // r3
 
@@ -2144,7 +2144,7 @@ int __cdecl G_IsSavePossible(SaveType saveType)
     return result;
 }
 
-int __cdecl G_WriteGame(const PendingSave *pendingSave, int checksum, SaveGame *save)
+int G_WriteGame(const PendingSave *pendingSave, int checksum, SaveGame *save)
 {
     MemoryFile *memFile; // r3
     unsigned int UsedSize; // r3
@@ -2206,7 +2206,7 @@ int __cdecl G_WriteGame(const PendingSave *pendingSave, int checksum, SaveGame *
     }
 }
 
-void __cdecl G_WriteCurrentCommitToDevice()
+void G_WriteCurrentCommitToDevice()
 {
     SaveGame *LastCommittedSave; // r3
     SaveGame *v1; // r31
@@ -2221,7 +2221,7 @@ void __cdecl G_WriteCurrentCommitToDevice()
     }
 }
 
-void __cdecl G_PrepareSaveMemoryForWrite(char commitLevel)
+void G_PrepareSaveMemoryForWrite(char commitLevel)
 {
     SaveGame *SaveHandle; // r30
     bool v3; // r31
@@ -2237,7 +2237,7 @@ void __cdecl G_PrepareSaveMemoryForWrite(char commitLevel)
         G_WriteCurrentCommitToDevice();
 }
 
-int __cdecl G_ProcessCommitActions(const PendingSave *pendingSave, SaveGame *save)
+int G_ProcessCommitActions(const PendingSave *pendingSave, SaveGame *save)
 {
     int v4; // r31
 
@@ -2259,7 +2259,7 @@ int __cdecl G_ProcessCommitActions(const PendingSave *pendingSave, SaveGame *sav
     return v4;
 }
 
-int __cdecl G_SaveGame(const PendingSave *pendingSave, int checksum)
+int G_SaveGame(const PendingSave *pendingSave, int checksum)
 {
     char v4; // r11
     SaveGame *SaveHandle; // r31
@@ -2280,7 +2280,7 @@ int __cdecl G_SaveGame(const PendingSave *pendingSave, int checksum)
         return 0;
 }
 
-bool __cdecl G_CommitSavedGame(int saveId)
+bool G_CommitSavedGame(int saveId)
 {
     SaveGame *SaveHandle; // r31
 
@@ -2290,7 +2290,7 @@ bool __cdecl G_CommitSavedGame(int saveId)
     return SaveMemory_CommitSave(SaveHandle, saveId);
 }
 
-void __cdecl G_LoadItems(SaveGame *save)
+void G_LoadItems(SaveGame *save)
 {
     _BYTE v2[16]; // [sp+50h] [-20h] BYREF
 
@@ -2304,12 +2304,12 @@ void __cdecl G_LoadItems(SaveGame *save)
     }
 }
 
-void __cdecl G_SetPendingLoadName(const char *filename)
+void G_SetPendingLoadName(const char *filename)
 {
     I_strncpyz(g_pendingLoadName, filename, 64);
 }
 
-void __cdecl G_PreLoadGame(int checksum, int *useLoadedSourceFiles, SaveGame **save)
+void G_PreLoadGame(int checksum, int *useLoadedSourceFiles, SaveGame **save)
 {
     void *LoadFromDevice; // r28
     const SaveHeader *Header; // r26
@@ -2389,7 +2389,7 @@ void __cdecl G_PreLoadGame(int checksum, int *useLoadedSourceFiles, SaveGame **s
     //Profile_EndInternal(0);
 }
 
-int __cdecl G_LoadWeapons(SaveGame *save)
+int G_LoadWeapons(SaveGame *save)
 {
     int v2; // r29
     int v3; // r31
@@ -2420,14 +2420,14 @@ int __cdecl G_LoadWeapons(SaveGame *save)
     return 0;
 }
 
-void __cdecl G_InitLoadGame(SaveGame *save)
+void G_InitLoadGame(SaveGame *save)
 {
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 2774, 0, "%s", "save");
     G_LoadInitConfigstrings(save);
 }
 
-void __cdecl G_LoadMainState(SaveGame *save)
+void G_LoadMainState(SaveGame *save)
 {
     MemoryFile *memFile; // r21
     int i; // r5
@@ -2680,7 +2680,7 @@ void __cdecl G_LoadMainState(SaveGame *save)
     level.initializing = 0;
 }
 
-void __cdecl G_LoadGame(int /*checksum*/, SaveGame *save)
+void G_LoadGame(int /*checksum*/, SaveGame *save)
 {
     const SaveHeader *header; // r31
     __int64 v4; // r10
@@ -2720,7 +2720,7 @@ void __cdecl G_LoadGame(int /*checksum*/, SaveGame *save)
     //Profile_EndInternal(0);
 }
 
-int __cdecl G_LoadErrorCleanup()
+int G_LoadErrorCleanup()
 {
     SaveGame *SaveHandle; // r31
     SaveGame *v1; // r30

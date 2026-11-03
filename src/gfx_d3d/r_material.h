@@ -691,57 +691,57 @@ struct $8E67C8D28114E56A26FBAF05ACADB66A // sizeof=0x11028
 };
 
 
-const char* __cdecl Material_GetName(Material* handle);
-const Material* __cdecl Material_FromHandle(Material* handle);
-char __cdecl Material_GetConstantValue(Material* material, const char* name, float* outValue);
+const char* Material_GetName(Material* handle);
+const Material* Material_FromHandle(Material* handle);
+char Material_GetConstantValue(Material* material, const char* name, float* outValue);
 #ifdef KISAK_RADIANT
-bool __cdecl Material_CastsStencilShadow(Material* handle); // 0x4FEE90 (editor-only)
+bool Material_CastsStencilShadow(Material* handle); // 0x4FEE90 (editor-only)
 #endif
 
-void __cdecl Material_ReloadAll();
-void __cdecl Material_ReleaseAll();
+void Material_ReloadAll();
+void Material_ReleaseAll();
 
-void __cdecl Material_Init();
-void __cdecl Material_Shutdown();
-void __cdecl Material_LoadBuiltIn(const BuiltInMaterialTable* mtlTable, int mtlTableCount);
-void __cdecl Material_ForEachTechniqueSet_FastFile(void(__cdecl* callback)(MaterialTechniqueSet*));
-bool __cdecl IsValidMaterialHandle(Material* const handle);
+void Material_Init();
+void Material_Shutdown();
+void Material_LoadBuiltIn(const BuiltInMaterialTable* mtlTable, int mtlTableCount);
+void Material_ForEachTechniqueSet_FastFile(void(* callback)(MaterialTechniqueSet*));
+bool IsValidMaterialHandle(Material* const handle);
 
-//void __cdecl R_GetMaterialList(XAssetHeader header, char *data);
-//void __cdecl Material_CollateTechniqueSets(XAssetHeader header, XAssetHeader *userData);
-//void __cdecl Material_ReleaseTechniqueSet(XAssetHeader header, void* crap);
+//void R_GetMaterialList(XAssetHeader header, char *data);
+//void Material_CollateTechniqueSets(XAssetHeader header, XAssetHeader *userData);
+//void Material_ReleaseTechniqueSet(XAssetHeader header, void* crap);
 
-void __cdecl TRACK_r_material();
+void TRACK_r_material();
 
-uint8_t *__cdecl Material_Alloc(uint32_t size);
-void __cdecl Load_CreateMaterialPixelShader(GfxPixelShaderLoadDef *loadDef, MaterialPixelShader *mtlShader);
-void __cdecl Load_CreateMaterialVertexShader(GfxVertexShaderLoadDef *loadDef, MaterialVertexShader *mtlShader);
-void __cdecl AssertValidVertexDeclOffsets(const stream_source_info_t *streamTable);
-void __cdecl Load_BuildVertexDecl(MaterialVertexDeclaration **mtlVertDecl);
-IDirect3DVertexDeclaration9 *__cdecl Material_BuildVertexDecl(
+uint8_t *Material_Alloc(uint32_t size);
+void Load_CreateMaterialPixelShader(GfxPixelShaderLoadDef *loadDef, MaterialPixelShader *mtlShader);
+void Load_CreateMaterialVertexShader(GfxVertexShaderLoadDef *loadDef, MaterialVertexShader *mtlShader);
+void AssertValidVertexDeclOffsets(const stream_source_info_t *streamTable);
+void Load_BuildVertexDecl(MaterialVertexDeclaration **mtlVertDecl);
+IDirect3DVertexDeclaration9 *Material_BuildVertexDecl(
     const MaterialStreamRouting *routingData,
     int streamCount,
     const stream_source_info_t *sourceTable);
-MaterialTechniqueSet *__cdecl Material_FindTechniqueSet(const char *name, MtlTechSetNotFoundBehavior notFoundBehavior);
-MaterialTechniqueSet *__cdecl Material_FindTechniqueSet_FastFile(
+MaterialTechniqueSet *Material_FindTechniqueSet(const char *name, MtlTechSetNotFoundBehavior notFoundBehavior);
+MaterialTechniqueSet *Material_FindTechniqueSet_FastFile(
     const char *name,
     MtlTechSetNotFoundBehavior notFoundBehavior);
-void __cdecl Material_DirtySort();
-bool __cdecl Material_IsDefault(const Material *material);
-Material *__cdecl Material_Register_FastFile(const char *name);
-Material *__cdecl Material_Register(const char *name, int imageTrack);
-Material *__cdecl Material_RegisterHandle(const char *name, int imageTrack);
+void Material_DirtySort();
+bool Material_IsDefault(const Material *material);
+Material *Material_Register_FastFile(const char *name);
+Material *Material_Register(const char *name, int imageTrack);
+Material *Material_RegisterHandle(const char *name, int imageTrack);
 
-void __cdecl Material_GetHashIndex(const char *name, uint16_t *hashIndex, bool *exists);
-void __cdecl Material_Add(Material *material, uint16_t hashIndex);
+void Material_GetHashIndex(const char *name, uint16_t *hashIndex, bool *exists);
+void Material_Add(Material *material, uint16_t hashIndex);
 
-void __cdecl R_MaterialList_f();
-int __cdecl R_GetMaterialMemory(Material *material);
+void R_MaterialList_f();
+int R_GetMaterialMemory(Material *material);
 
-void __cdecl Material_PreventOverrideTechniqueGeneration();
+void Material_PreventOverrideTechniqueGeneration();
 
-void __cdecl Material_UpdatePicmipAll();
-void __cdecl R_Cmd_ReloadMaterialTextures();
+void Material_UpdatePicmipAll();
+void R_Cmd_ReloadMaterialTextures();
 Material *Material_RegisterRawImage(const char *name, int imageTrack);
 
 struct GfxMtlFeatureMap // sizeof=0x10
@@ -767,21 +767,21 @@ extern MaterialGlobals materialGlobals;
 extern $4ABF24606230B73E4E420CE33A1F14B1 mtlOverrideGlob;
 
 // r_material_load_obj
-Material *__cdecl R_GetBspMaterial(uint32_t materialIndex);
-void __cdecl Material_FreeAll();
-void __cdecl Material_PreLoadAllShaderText();
-Material *__cdecl Material_Load(char *assetName, int imageTrack);
-MaterialTechniqueSet *__cdecl Material_FindTechniqueSet_LoadObj(
+Material *R_GetBspMaterial(uint32_t materialIndex);
+void Material_FreeAll();
+void Material_PreLoadAllShaderText();
+Material *Material_Load(char *assetName, int imageTrack);
+MaterialTechniqueSet *Material_FindTechniqueSet_LoadObj(
     const char *name,
     MtlTechSetNotFoundBehavior notFoundBehavior);
 
-void __cdecl Material_GetInfo(Material *handle, MaterialInfo *matInfo);
+void Material_GetInfo(Material *handle, MaterialInfo *matInfo);
 
-Material *__cdecl Material_Duplicate(Material *mtlCopy, char *name);
+Material *Material_Duplicate(Material *mtlCopy, char *name);
 
-void __cdecl Material_Sort();
+void Material_Sort();
 
-char __cdecl Material_SetPassShaderArguments_DX(
+char Material_SetPassShaderArguments_DX(
     const char **text,
     const char *shaderName,
     MaterialShaderType shaderType,
@@ -792,13 +792,13 @@ char __cdecl Material_SetPassShaderArguments_DX(
     uint32_t *argCount,
     MaterialShaderArgument *args);
 
-const char *__cdecl Material_RegisterString(char *string);
-const char *__cdecl Material_NameForStreamDest(uint8_t dest);
-MaterialTechniqueSet *__cdecl Material_RegisterTechniqueSet(const char *name);
-void __cdecl Material_SetMaterialDrawRegion(Material *material);
-char __cdecl Material_Validate(const Material *material);
-void __cdecl Material_SetStateBits(Material *material, uint32_t (*stateBitsTable)[2], uint32_t stateBitsCount);
-bool __cdecl Material_GenerateShaderString_r(
+const char *Material_RegisterString(char *string);
+const char *Material_NameForStreamDest(uint8_t dest);
+MaterialTechniqueSet *Material_RegisterTechniqueSet(const char *name);
+void Material_SetMaterialDrawRegion(Material *material);
+char Material_Validate(const Material *material);
+void Material_SetStateBits(Material *material, uint32_t (*stateBitsTable)[2], uint32_t stateBitsCount);
+bool Material_GenerateShaderString_r(
     GfxAssembledShaderText *prog,
     char *shaderName,
     const char *file,
@@ -806,22 +806,22 @@ bool __cdecl Material_GenerateShaderString_r(
     bool isInLibDir);
 
 // r_material_override
-const GfxMtlFeatureMap *__cdecl Material_FindFeature(
+const GfxMtlFeatureMap *Material_FindFeature(
     const char *featureName,
     const GfxMtlFeatureMap *featureMap,
     uint32_t featureCount);
-uint32_t __cdecl Material_ExtendTechniqueSetName(
+uint32_t Material_ExtendTechniqueSetName(
     char *nameSoFar,
     uint32_t nameLen,
     char *token,
     uint32_t tokenLen,
     bool prependUnderscore);
-uint32_t __cdecl Material_NextTechniqueSetNameToken(const char **parse, char *token);
-void __cdecl Material_OverrideTechniqueSets();
-void __cdecl Material_OriginalRemapTechniqueSet(MaterialTechniqueSet *techSet);
-void __cdecl Material_DirtyTechniqueSetOverrides();
-void __cdecl Material_ClearShaderUploadList();
-bool __cdecl Material_WouldTechniqueSetBeOverridden(const MaterialTechniqueSet *techSet);
+uint32_t Material_NextTechniqueSetNameToken(const char **parse, char *token);
+void Material_OverrideTechniqueSets();
+void Material_OriginalRemapTechniqueSet(MaterialTechniqueSet *techSet);
+void Material_DirtyTechniqueSetOverrides();
+void Material_ClearShaderUploadList();
+bool Material_WouldTechniqueSetBeOverridden(const MaterialTechniqueSet *techSet);
 
 
 inline bool Material_UsesDepthBuffer(Material *mat)

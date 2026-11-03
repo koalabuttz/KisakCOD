@@ -28,7 +28,7 @@
 struct ucmd_t // sizeof=0xC
 {                                       // ...
     const char *name;
-    void(__cdecl *func)(client_t *);
+    void(*func)(client_t *);
     int allowFromOldServer;
 };
 
@@ -51,7 +51,7 @@ ucmd_t ucmds[13] =
 
 uint16_t botport;
 
-BOOL __cdecl SV_ShouldAuthorizeAddress(netadr_t adr)
+BOOL SV_ShouldAuthorizeAddress(netadr_t adr)
 {
     if (net_lanauthorize->current.enabled)
         return 1;
@@ -60,7 +60,7 @@ BOOL __cdecl SV_ShouldAuthorizeAddress(netadr_t adr)
     return Sys_IsLANAddress(adr) == 0;
 }
 
-void __cdecl SV_AuthorizeRequest(netadr_t from, int challenge, const char *cdkeyHash)
+void SV_AuthorizeRequest(netadr_t from, int challenge, const char *cdkeyHash)
 {
     const char *v3; // eax
     const char *v4; // eax
@@ -115,7 +115,7 @@ void __cdecl SV_AuthorizeRequest(netadr_t from, int challenge, const char *cdkey
     }
 }
 
-int __cdecl SV_IsTempBannedGuid(const char *cdkeyHash)
+int SV_IsTempBannedGuid(const char *cdkeyHash)
 {
     uint32_t banSlot; // [esp+Ch] [ebp-4h]
     char key[32] = {};
@@ -174,7 +174,7 @@ static bool SV_RejectUnsafeTestHandshake(netadr_t from)
 static bool unverifiedGuidsCaptured = false;
 static bool unverifiedGuidsEnabled = false;
 
-void __cdecl SV_CaptureUnverifiedGuids()
+void SV_CaptureUnverifiedGuids()
 {
     if (unverifiedGuidsCaptured)
         return;
@@ -216,7 +216,7 @@ bool SV_UnverifiedGuidsEnabled()
 static bool advertisedProtocolCaptured = false;
 static int advertisedProtocolValue = 1;
 
-void __cdecl SV_CaptureAdvertisedProtocol()
+void SV_CaptureAdvertisedProtocol()
 {
     int value;
 
@@ -244,12 +244,12 @@ int SV_GetAdvertisedProtocol()
 
 // Both browse replies report this one value, so they cannot disagree with each
 // other or with a dvar an internal write has changed.
-void __cdecl SV_SetAdvertisedProtocolInfo(char *info)
+void SV_SetAdvertisedProtocolInfo(char *info)
 {
     Info_SetValueForKey(info, "protocol", va("%i", SV_GetAdvertisedProtocol()));
 }
 
-void __cdecl SV_GetChallenge(netadr_t from)
+void SV_GetChallenge(netadr_t from)
 {
 #if defined(__linux__) && defined(KISAK_DEDICATED)
     if (SV_RejectUnsafeTestHandshake(from))
@@ -453,7 +453,7 @@ void __cdecl SV_GetChallenge(netadr_t from)
     //}
 }
 
-int __cdecl SV_IsBannedGuid(const char *cdkeyHash)
+int SV_IsBannedGuid(const char *cdkeyHash)
 {
     char *file; // [esp+18h] [ebp-10h] BYREF
     int banned; // [esp+1Ch] [ebp-Ch]
@@ -482,7 +482,7 @@ int __cdecl SV_IsBannedGuid(const char *cdkeyHash)
     return banned;
 }
 
-void __cdecl SV_ReceiveStats(netadr_t from, msg_t *msg)
+void SV_ReceiveStats(netadr_t from, msg_t *msg)
 {
     const char *v2; // eax
     const char *v3; // eax
@@ -546,7 +546,7 @@ void __cdecl SV_ReceiveStats(netadr_t from, msg_t *msg)
     }
 }
 
-void __cdecl SV_SetClientStat(int clientNum, int index, uint32_t value)
+void SV_SetClientStat(int clientNum, int index, uint32_t value)
 {
     const char *v3; // eax
     client_t *v4; // [esp+0h] [ebp-8h]
@@ -594,7 +594,7 @@ void __cdecl SV_SetClientStat(int clientNum, int index, uint32_t value)
     }
 }
 
-int __cdecl SV_GetClientStat(int clientNum, int index)
+int SV_GetClientStat(int clientNum, int index)
 {
     const char *v3; // eax
 
@@ -624,7 +624,7 @@ int __cdecl SV_GetClientStat(int clientNum, int index)
     return 0;
 }
 
-void __cdecl SV_BanGuidBriefly(const char *cdkeyHash)
+void SV_BanGuidBriefly(const char *cdkeyHash)
 {
     uint32_t banSlot; // [esp+8h] [ebp-4h]
     char key[32] = {};
@@ -640,7 +640,7 @@ void __cdecl SV_BanGuidBriefly(const char *cdkeyHash)
     svs.tempBans[banSlot].banTime = svs.time;
 }
 
-uint32_t __cdecl SV_FindFreeTempBanSlot()
+uint32_t SV_FindFreeTempBanSlot()
 {
     uint32_t oldestSlot; // [esp+0h] [ebp-8h]
     uint32_t banSlot; // [esp+4h] [ebp-4h]
@@ -656,7 +656,7 @@ uint32_t __cdecl SV_FindFreeTempBanSlot()
     return oldestSlot;
 }
 
-void __cdecl SV_BanClient(client_t *cl)
+void SV_BanClient(client_t *cl)
 {
     int file; // [esp+0h] [ebp-4Ch] BYREF
     char cleanName[68]; // [esp+4h] [ebp-48h] BYREF
@@ -689,7 +689,7 @@ void __cdecl SV_BanClient(client_t *cl)
     }
 }
 
-void __cdecl SV_UnbanClient(char *name)
+void SV_UnbanClient(char *name)
 {
     bool v1; // [esp+0h] [ebp-7Ch]
     int nameLen; // [esp+14h] [ebp-68h]
@@ -738,7 +738,7 @@ void __cdecl SV_UnbanClient(char *name)
     }
 }
 
-void __cdecl SV_CloseDownload(client_t *cl)
+void SV_CloseDownload(client_t *cl)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -756,7 +756,7 @@ void __cdecl SV_CloseDownload(client_t *cl)
     }
 }
 
-void __cdecl SV_FreeClient(client_t *cl)
+void SV_FreeClient(client_t *cl)
 {
     if (cl->header.state < CS_CONNECTED)
         MyAssertHandler(".\\server_mp\\sv_client_mp.cpp", 686, 0, "%s", "cl->header.state >= CS_CONNECTED");
@@ -767,7 +767,7 @@ void __cdecl SV_FreeClient(client_t *cl)
     SV_FreeClientScriptId(cl);
 }
 
-void __cdecl SV_FreeClients()
+void SV_FreeClients()
 {
     client_t *clients; // [esp+0h] [ebp-8h]
     int i; // [esp+4h] [ebp-4h]
@@ -783,7 +783,7 @@ void __cdecl SV_FreeClients()
     }
 }
 
-void __cdecl SV_DirectConnect(netadr_t from)
+void SV_DirectConnect(netadr_t from)
 {
     const char *v6; // eax
     const char *v10; // eax
@@ -1097,7 +1097,7 @@ void __cdecl SV_DirectConnect(netadr_t from)
     }
 }
 
-void __cdecl SV_FreeClientScriptPers()
+void SV_FreeClientScriptPers()
 {
     client_t *clients; // [esp+0h] [ebp-Ch]
     uint32_t scriptId; // [esp+4h] [ebp-8h]
@@ -1126,7 +1126,7 @@ void __cdecl SV_FreeClientScriptPers()
     }
 }
 
-void __cdecl SV_SendDisconnect(
+void SV_SendDisconnect(
     client_t *client,
     int state,
     const char *reason,
@@ -1163,7 +1163,7 @@ void __cdecl SV_SendDisconnect(
     }
 }
 
-void __cdecl SV_DropClient(client_t *drop, const char *reason, bool tellThem)
+void SV_DropClient(client_t *drop, const char *reason, bool tellThem)
 {
     char v3; // [esp+Bh] [ebp-31h]
     char *v4; // [esp+10h] [ebp-2Ch]
@@ -1256,7 +1256,7 @@ void __cdecl SV_DropClient(client_t *drop, const char *reason, bool tellThem)
     }
 }
 
-void __cdecl SV_DelayDropClient(client_t *drop, const char *reason)
+void SV_DelayDropClient(client_t *drop, const char *reason)
 {
     if (!drop)
         MyAssertHandler(".\\server_mp\\sv_client_mp.cpp", 1356, 0, "%s", "drop");
@@ -1282,7 +1282,7 @@ void __cdecl SV_DelayDropClient(client_t *drop, const char *reason)
 }
 
 uint8_t msgBuffer_0[131072];
-void __cdecl SV_SendClientGameState(client_t *client)
+void SV_SendClientGameState(client_t *client)
 {
     int configStringCount; // [esp+38h] [ebp-16Ch]
     int numWritten; // [esp+138h] [ebp-6Ch]
@@ -1474,7 +1474,7 @@ void __cdecl SV_SendClientGameState(client_t *client)
     SV_GetServerStaticHeader();
 }
 
-void __cdecl SV_ClientEnterWorld(client_t *client, usercmd_s *cmd)
+void SV_ClientEnterWorld(client_t *client, usercmd_s *cmd)
 {
     gentity_s *v2; // eax
 
@@ -1489,12 +1489,12 @@ void __cdecl SV_ClientEnterWorld(client_t *client, usercmd_s *cmd)
     ClientBegin(client - svs.clients);
 }
 
-void __cdecl SV_Disconnect_f(client_t *cl)
+void SV_Disconnect_f(client_t *cl)
 {
     SV_DropClient(cl, "EXE_DISCONNECTED", 1);
 }
 
-void __cdecl SV_UserinfoChanged(client_t *cl)
+void SV_UserinfoChanged(client_t *cl)
 {
     const char *v1; // eax
     const char *val; // [esp+30h] [ebp-8h]
@@ -1562,7 +1562,7 @@ void __cdecl SV_UserinfoChanged(client_t *cl)
     }
 }
 
-void __cdecl SV_UpdateUserinfo_f(client_t *cl)
+void SV_UpdateUserinfo_f(client_t *cl)
 {
     char *v1; // eax
 
@@ -1572,7 +1572,7 @@ void __cdecl SV_UpdateUserinfo_f(client_t *cl)
     ClientUserinfoChanged(cl - svs.clients);
 }
 
-void __cdecl SV_ClientThink(client_t *cl, usercmd_s *cmd)
+void SV_ClientThink(client_t *cl, usercmd_s *cmd)
 {
     if (cmd->serverTime - svs.time <= 20000)
     {
@@ -1598,7 +1598,7 @@ void __cdecl SV_ClientThink(client_t *cl, usercmd_s *cmd)
     }
 }
 
-void __cdecl SV_UserMove(client_t *cl, msg_t *msg, int delta)
+void SV_UserMove(client_t *cl, msg_t *msg, int delta)
 {
     const char *v3; // eax
     int v4; // eax
@@ -1832,7 +1832,7 @@ void __cdecl SV_UserMove(client_t *cl, msg_t *msg, int delta)
     }
 }
 
-int __cdecl SV_ProcessClientCommands(client_t *cl, msg_t *msg, int fromOldServer, int *lastCommand)
+int SV_ProcessClientCommands(client_t *cl, msg_t *msg, int fromOldServer, int *lastCommand)
 {
     do
     {
@@ -1848,7 +1848,7 @@ int __cdecl SV_ProcessClientCommands(client_t *cl, msg_t *msg, int fromOldServer
 }
 
 uint8_t msgCompressed_buf_0[2048];
-void __cdecl SV_ExecuteClientMessage(client_t *cl, msg_t *msg)
+void SV_ExecuteClientMessage(client_t *cl, msg_t *msg)
 {
     msg_t v2; // [esp+60h] [ebp-54h] BYREF
     int c; // [esp+88h] [ebp-2Ch] BYREF
@@ -1926,7 +1926,7 @@ void __cdecl SV_ExecuteClientMessage(client_t *cl, msg_t *msg)
     }
 }
 
-int __cdecl SV_ClientCommand(client_t *cl, msg_t *msg, int fromOldServer)
+int SV_ClientCommand(client_t *cl, msg_t *msg, int fromOldServer)
 {
     int seq; // [esp+0h] [ebp-10h]
     int floodprotect; // [esp+4h] [ebp-Ch]
@@ -1970,7 +1970,7 @@ int __cdecl SV_ClientCommand(client_t *cl, msg_t *msg, int fromOldServer)
     }
 }
 
-void __cdecl SV_ExecuteClientCommand(client_t *cl, char *s, int clientOK, int fromOldServer)
+void SV_ExecuteClientCommand(client_t *cl, char *s, int clientOK, int fromOldServer)
 {
     const ucmd_t *u; // [esp+14h] [ebp-4h]
 
@@ -1989,7 +1989,7 @@ void __cdecl SV_ExecuteClientCommand(client_t *cl, char *s, int clientOK, int fr
     SV_Cmd_EndTokenizedString();
 }
 
-gentity_s *__cdecl SV_AddTestClient()
+gentity_s *SV_AddTestClient()
 {
     netadr_t v1; // [esp-14h] [ebp-458h]
     client_t *client; // [esp+0h] [ebp-444h]

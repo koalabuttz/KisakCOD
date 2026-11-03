@@ -73,7 +73,7 @@
 // src/EffectsCore/fx_load_obj.cpp:1221. In the multiplayer sources the config-string
 // field that would call this is already gated on com_dedicated
 // (universal/q_shared.cpp:1035), so a server only needs the fast-file lookup.
-const FxEffectDef *__cdecl FX_Register(const char *name)
+const FxEffectDef *FX_Register(const char *name)
 {
     if (!IsFastFileLoad())
         Com_Error(ERR_FATAL, "FX_Register('%s'): loading effects from source is not supported in the dedicated build\n", name);
@@ -101,10 +101,10 @@ const FxEffectDef *__cdecl FX_Register(const char *name)
 // can hold an alias and there is no alias state to preserve across a zone unload.
 // ---------------------------------------------------------------------------
 
-void __cdecl DB_SaveSounds()
+void DB_SaveSounds()
 {
 }
 
-void __cdecl DB_LoadSounds()
+void DB_LoadSounds()
 {
 }

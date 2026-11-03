@@ -4,7 +4,7 @@
 #include <DynEntity/DynEntity_client.h>
 
 
-void __cdecl R_AddCellDynModelSurfacesInFrustumCmd(const DpvsDynamicCellCmd *data)
+void R_AddCellDynModelSurfacesInFrustumCmd(const DpvsDynamicCellCmd *data)
 {
     uint32_t planeCount; // [esp+0h] [ebp-28h]
     const DpvsPlane *planes; // [esp+4h] [ebp-24h]
@@ -29,7 +29,7 @@ void __cdecl R_AddCellDynModelSurfacesInFrustumCmd(const DpvsDynamicCellCmd *dat
     }
 }
 
-void __cdecl R_CullDynModelInCell(
+void R_CullDynModelInCell(
     const uint32_t *dynEntCellBits,
     uint32_t dynEntClientWordCount,
     DynEntityPose *dynModelList,

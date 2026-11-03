@@ -26,7 +26,7 @@ EffectDefMap g_effectDefMap[32];
 
 float zeroVec3[3];
 
-void __cdecl CG_StartClientSideEffects(int32_t localClientNum)
+void CG_StartClientSideEffects(int32_t localClientNum)
 {
     char fxfilename[256]; // [esp+0h] [ebp-108h] BYREF
     const char *mapname; // [esp+104h] [ebp-4h]
@@ -47,7 +47,7 @@ void __cdecl CG_StartClientSideEffects(int32_t localClientNum)
     }
 }
 
-void __cdecl CG_LoadClientEffects_LoadObj(int32_t localClientNum, const char *filename)
+void CG_LoadClientEffects_LoadObj(int32_t localClientNum, const char *filename)
 {
     char *buffer; // [esp+0h] [ebp-8h] BYREF
     int32_t size; // [esp+4h] [ebp-4h]
@@ -64,7 +64,7 @@ void __cdecl CG_LoadClientEffects_LoadObj(int32_t localClientNum, const char *fi
     }
 }
 
-void __cdecl CG_LoadClientEffects(int32_t localClientNum, const char *filename)
+void CG_LoadClientEffects(int32_t localClientNum, const char *filename)
 {
     if (IsFastFileLoad())
         CG_LoadClientEffects_FastFile(localClientNum, filename);
@@ -72,7 +72,7 @@ void __cdecl CG_LoadClientEffects(int32_t localClientNum, const char *filename)
         CG_LoadClientEffects_LoadObj(localClientNum, filename);
 }
 
-void __cdecl CG_ParseClientEffects(int32_t localClientNum, char *buffer)
+void CG_ParseClientEffects(int32_t localClientNum, char *buffer)
 {
     char errorText[128]; // [esp+0h] [ebp-88h] BYREF
     const char *line; // [esp+84h] [ebp-4h]
@@ -127,7 +127,7 @@ void __cdecl CG_ParseClientEffects(int32_t localClientNum, char *buffer)
     }
 }
 
-const char *__cdecl CG_SkipLine(char *line, const char *skipLine)
+const char *CG_SkipLine(char *line, const char *skipLine)
 {
     char *linea; // [esp+8h] [ebp+8h]
 
@@ -138,14 +138,14 @@ const char *__cdecl CG_SkipLine(char *line, const char *skipLine)
         return 0;
 }
 
-const char *__cdecl CG_SkipWhiteSpace(const char *line)
+const char *CG_SkipWhiteSpace(const char *line)
 {
     while (isspace(*line) && *line)
         ++line;
     return line;
 }
 
-char *__cdecl CG_SkipText(char *line, const char *skipText)
+char *CG_SkipText(char *line, const char *skipText)
 {
     char errorText[128]; // [esp+10h] [ebp-88h] BYREF
     int32_t lineLength; // [esp+94h] [ebp-4h]
@@ -158,7 +158,7 @@ char *__cdecl CG_SkipText(char *line, const char *skipText)
     return 0;
 }
 
-const char *__cdecl CG_SkipLineStartingWith(char *line, const char *skipLine)
+const char *CG_SkipLineStartingWith(char *line, const char *skipLine)
 {
     char *linea; // [esp+8h] [ebp+8h]
 
@@ -169,19 +169,19 @@ const char *__cdecl CG_SkipLineStartingWith(char *line, const char *skipLine)
         return 0;
 }
 
-const char *__cdecl CG_SkipRestOfLine(const char *line)
+const char *CG_SkipRestOfLine(const char *line)
 {
     while (*line != 10 && *line != 13 && *line)
         ++line;
     return CG_SkipWhiteSpace(line);
 }
 
-bool __cdecl CG_MatchLineStartingWith(const char *line, const char *startLine)
+bool CG_MatchLineStartingWith(const char *line, const char *startLine)
 {
     return I_strncmp(startLine, line, strlen(startLine)) == 0;
 }
 
-const char *__cdecl CG_ParseSound(int32_t localClientNum, char *line)
+const char *CG_ParseSound(int32_t localClientNum, char *line)
 {
     float origin[3]; // [esp+0h] [ebp-11Ch] BYREF
     char soundalias[256]; // [esp+Ch] [ebp-110h] BYREF
@@ -220,7 +220,7 @@ const char *__cdecl CG_ParseSound(int32_t localClientNum, char *line)
     return lineg;
 }
 
-void __cdecl CG_AddClientEntSound(const float *origin, const char *soundalias)
+void CG_AddClientEntSound(const float *origin, const char *soundalias)
 {
     ClientEntSound *v2; // [esp+0h] [ebp-4h]
 
@@ -238,7 +238,7 @@ void __cdecl CG_AddClientEntSound(const float *origin, const char *soundalias)
     }
 }
 
-const char *__cdecl CG_ParseVec3Finish(char *line, float *origin)
+const char *CG_ParseVec3Finish(char *line, float *origin)
 {
     char errorText[132]; // [esp+0h] [ebp-88h] BYREF
 
@@ -249,7 +249,7 @@ const char *__cdecl CG_ParseVec3Finish(char *line, float *origin)
     return 0;
 }
 
-const char *__cdecl CG_ParseStringFinish(char *line, char *text, uint32_t bufferSize)
+const char *CG_ParseStringFinish(char *line, char *text, uint32_t bufferSize)
 {
     char *linea; // [esp+8h] [ebp+8h]
 
@@ -260,7 +260,7 @@ const char *__cdecl CG_ParseStringFinish(char *line, char *text, uint32_t buffer
         return 0;
 }
 
-char *__cdecl CG_ParseString(char *line, char *text, uint32_t bufferSize)
+char *CG_ParseString(char *line, char *text, uint32_t bufferSize)
 {
     char errorText[128]; // [esp+0h] [ebp-88h] BYREF
     uint32_t charCount; // [esp+84h] [ebp-4h]
@@ -285,7 +285,7 @@ char *__cdecl CG_ParseString(char *line, char *text, uint32_t bufferSize)
     }
 }
 
-char *__cdecl CG_ParseEffect(int32_t localClientNum, char *line)
+char *CG_ParseEffect(int32_t localClientNum, char *line)
 {
     float delay; // [esp+0h] [ebp-288h] BYREF
     float origin[3]; // [esp+4h] [ebp-284h] BYREF
@@ -353,7 +353,7 @@ char *__cdecl CG_ParseEffect(int32_t localClientNum, char *line)
     return linei;
 }
 
-const char *__cdecl CG_ParseFloatFinish(char *line, float *value)
+const char *CG_ParseFloatFinish(char *line, float *value)
 {
     char errorText[132]; // [esp+0h] [ebp-88h] BYREF
 
@@ -364,7 +364,7 @@ const char *__cdecl CG_ParseFloatFinish(char *line, float *value)
     return 0;
 }
 
-char __cdecl CG_FindFileName(const char *name, char *filename, int32_t size)
+char CG_FindFileName(const char *name, char *filename, int32_t size)
 {
     int32_t i; // [esp+0h] [ebp-4h]
 
@@ -380,7 +380,7 @@ char __cdecl CG_FindFileName(const char *name, char *filename, int32_t size)
     return 0;
 }
 
-void __cdecl CG_LoadClientEffects_FastFile(int32_t localClientNum, const char *filename)
+void CG_LoadClientEffects_FastFile(int32_t localClientNum, const char *filename)
 {
     RawFile *rawfile; // [esp+4h] [ebp-4h]
 
@@ -391,7 +391,7 @@ void __cdecl CG_LoadClientEffects_FastFile(int32_t localClientNum, const char *f
         Com_PrintError(CON_CHANNEL_ERROR, "file not found: %s\n", filename);
 }
 
-void __cdecl CG_LoadClientEffectMapping_LoadObj(const char *filename)
+void CG_LoadClientEffectMapping_LoadObj(const char *filename)
 {
     char *buffer; // [esp+0h] [ebp-8h] BYREF
     int32_t size; // [esp+4h] [ebp-4h]
@@ -408,7 +408,7 @@ void __cdecl CG_LoadClientEffectMapping_LoadObj(const char *filename)
     }
 }
 
-void __cdecl CG_LoadClientEffectMapping(const char *filename)
+void CG_LoadClientEffectMapping(const char *filename)
 {
     if (IsFastFileLoad())
         CG_LoadClientEffectMapping_FastFile(filename);
@@ -416,7 +416,7 @@ void __cdecl CG_LoadClientEffectMapping(const char *filename)
         CG_LoadClientEffectMapping_LoadObj(filename);
 }
 
-void __cdecl CG_ParseClientEffectMapping(const char *buffer)
+void CG_ParseClientEffectMapping(const char *buffer)
 {
     char filename[64]; // [esp+0h] [ebp-88h] BYREF
     char name[64]; // [esp+40h] [ebp-48h] BYREF
@@ -464,7 +464,7 @@ void __cdecl CG_ParseClientEffectMapping(const char *buffer)
     }
 }
 
-void __cdecl CG_AddPairToMap(char *name, char *filename)
+void CG_AddPairToMap(char *name, char *filename)
 {
     int32_t i; // [esp+0h] [ebp-4h]
 
@@ -494,7 +494,7 @@ void __cdecl CG_AddPairToMap(char *name, char *filename)
     }
 }
 
-void __cdecl CG_LoadClientEffectMapping_FastFile(const char *filename)
+void CG_LoadClientEffectMapping_FastFile(const char *filename)
 {
     RawFile *rawfile; // [esp+4h] [ebp-4h]
 
@@ -505,12 +505,12 @@ void __cdecl CG_LoadClientEffectMapping_FastFile(const char *filename)
         Com_PrintError(CON_CHANNEL_ERROR, "file not found: %s\n", filename);
 }
 
-void __cdecl CG_ClientSideEffectsRegisterDvars()
+void CG_ClientSideEffectsRegisterDvars()
 {
     cg_clientSideEffects = Dvar_RegisterBool("clientSideEffects", 1, DVAR_CHEAT, "Enable loading _fx.gsc files on the client");
 }
 
-void __cdecl CG_AddClientSideSounds(int32_t localClientNum)
+void CG_AddClientSideSounds(int32_t localClientNum)
 {
     int32_t i; // [esp+0h] [ebp-4h]
 
@@ -518,7 +518,7 @@ void __cdecl CG_AddClientSideSounds(int32_t localClientNum)
         CG_AddClientSideSound(localClientNum, i, &g_clientEntSounds[i]);
 }
 
-void __cdecl CG_AddClientSideSound(int32_t localClientNum, int32_t index, const ClientEntSound *sound)
+void CG_AddClientSideSound(int32_t localClientNum, int32_t index, const ClientEntSound *sound)
 {
     if (index + 1024 >= 1152)
         MyAssertHandler(
@@ -530,7 +530,7 @@ void __cdecl CG_AddClientSideSound(int32_t localClientNum, int32_t index, const 
     CG_PlaySoundAlias(localClientNum, index + 1024, sound->origin, sound->aliasList);
 }
 
-void __cdecl CG_CopyClientSideSoundEntityOrientation(
+void CG_CopyClientSideSoundEntityOrientation(
     uint32_t clientSoundEntIndex,
     float *origin_out,
     float (*axis_out)[3])

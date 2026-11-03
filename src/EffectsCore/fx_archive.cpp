@@ -5,7 +5,7 @@
 
 #include <physics/phys_local.h>
 
-void __cdecl FX_Restore(int32_t clientIndex, MemoryFile *memFile)
+void FX_Restore(int32_t clientIndex, MemoryFile *memFile)
 {
     int32_t v2; // [esp+0h] [ebp-201Ch] BYREF
     FxEffectDefTable table; // [esp+4h] [ebp-2018h] BYREF
@@ -35,7 +35,7 @@ void __cdecl FX_Restore(int32_t clientIndex, MemoryFile *memFile)
     *((_BYTE *)p + 2526) = 0;
 }
 
-void __cdecl FX_RestoreEffectDefTable(MemoryFile *memFile, FxEffectDefTable *table)
+void FX_RestoreEffectDefTable(MemoryFile *memFile, FxEffectDefTable *table)
 {
     uint32_t p; // [esp+0h] [ebp-10h] BYREF
     const FxEffectDef *effectDef; // [esp+4h] [ebp-Ch]
@@ -55,7 +55,7 @@ void __cdecl FX_RestoreEffectDefTable(MemoryFile *memFile, FxEffectDefTable *tab
     }
 }
 
-void __cdecl FX_AddEffectDefTableEntry(FxEffectDefTable *table, uint32_t key, const FxEffectDef *effectDef)
+void FX_AddEffectDefTableEntry(FxEffectDefTable *table, uint32_t key, const FxEffectDef *effectDef)
 {
     if (!table)
         MyAssertHandler(".\\EffectsCore\\fx_archive.cpp", 47, 0, "%s", "table");
@@ -73,7 +73,7 @@ void __cdecl FX_AddEffectDefTableEntry(FxEffectDefTable *table, uint32_t key, co
     table->entries[table->count++].effectDef = effectDef;
 }
 
-void __cdecl FX_FixupEffectDefHandles(FxSystem *system, FxEffectDefTable *table)
+void FX_FixupEffectDefHandles(FxSystem *system, FxEffectDefTable *table)
 {
     const FxEffectDef *effectDef; // [esp+Ch] [ebp-10h]
     FxEffect *effect; // [esp+10h] [ebp-Ch]
@@ -93,7 +93,7 @@ void __cdecl FX_FixupEffectDefHandles(FxSystem *system, FxEffectDefTable *table)
     }
 }
 
-FxEffect *__cdecl FX_EffectFromHandle(FxSystem *system, uint16_t handle)
+FxEffect *FX_EffectFromHandle(FxSystem *system, uint16_t handle)
 {
     const char *v2; // eax
 
@@ -114,7 +114,7 @@ FxEffect *__cdecl FX_EffectFromHandle(FxSystem *system, uint16_t handle)
     return (FxEffect *)((char *)system->effects + 4 * handle);
 }
 
-const FxEffectDef *__cdecl FX_FindEffectDefInTable(const FxEffectDefTable *table, uint32_t key)
+const FxEffectDef *FX_FindEffectDefInTable(const FxEffectDefTable *table, uint32_t key)
 {
     int32_t index; // [esp+0h] [ebp-4h]
 
@@ -126,7 +126,7 @@ const FxEffectDef *__cdecl FX_FindEffectDefInTable(const FxEffectDefTable *table
     return 0;
 }
 
-void __cdecl FX_RestorePhysicsData(FxSystem *system, MemoryFile *memFile)
+void FX_RestorePhysicsData(FxSystem *system, MemoryFile *memFile)
 {
     const XModel *visuals; // [esp+18h] [ebp-20h]
     uint16_t elemHandle; // [esp+1Ch] [ebp-1Ch]
@@ -162,7 +162,7 @@ void __cdecl FX_RestorePhysicsData(FxSystem *system, MemoryFile *memFile)
     }
 }
 
-FxElemVisuals __cdecl FX_GetElemVisuals(const FxElemDef *elemDef, int32_t randomSeed)
+FxElemVisuals FX_GetElemVisuals(const FxElemDef *elemDef, int32_t randomSeed)
 {
     if (!elemDef->visualCount)
         MyAssertHandler(
@@ -179,7 +179,7 @@ FxElemVisuals __cdecl FX_GetElemVisuals(const FxElemDef *elemDef, int32_t random
             * LOWORD(fx_randomTable[randomSeed + 21])) >> 16];
 }
 
-void __cdecl FX_Save(int32_t clientIndex, MemoryFile *memFile)
+void FX_Save(int32_t clientIndex, MemoryFile *memFile)
 {
     uint32_t UsedSize; // eax
     uint32_t v3; // eax
@@ -209,7 +209,7 @@ void __cdecl FX_Save(int32_t clientIndex, MemoryFile *memFile)
     system->isArchiving = 0;
 }
 
-void __cdecl FX_SaveEffectDefTable(FxSystem *system, MemoryFile *memFile)
+void FX_SaveEffectDefTable(FxSystem *system, MemoryFile *memFile)
 {
     if (IsFastFileLoad())
         FX_SaveEffectDefTable_FastFile(memFile);
@@ -218,7 +218,7 @@ void __cdecl FX_SaveEffectDefTable(FxSystem *system, MemoryFile *memFile)
     MemFile_WriteCString(memFile, "");
 }
 
-void __cdecl FX_SaveEffectDefTableEntry_FileLoadObj(const FxEffectDef* effectDef, MemoryFile* data)
+void FX_SaveEffectDefTableEntry_FileLoadObj(const FxEffectDef* effectDef, MemoryFile* data)
 {
     const FxEffectDef* p; // [esp+0h] [ebp-4h] BYREF
 
@@ -227,21 +227,21 @@ void __cdecl FX_SaveEffectDefTableEntry_FileLoadObj(const FxEffectDef* effectDef
     MemFile_WriteData(data, 4, &p);
 }
 
-void __cdecl FX_SaveEffectDefTable_LoadObj(MemoryFile* memFile)
+void FX_SaveEffectDefTable_LoadObj(MemoryFile* memFile)
 {
-    FX_ForEachEffectDef((void(__cdecl*)(const FxEffectDef*, void*))FX_SaveEffectDefTableEntry_FileLoadObj, memFile);
+    FX_ForEachEffectDef((void(*)(const FxEffectDef*, void*))FX_SaveEffectDefTableEntry_FileLoadObj, memFile);
 }
 
-void __cdecl FX_SaveEffectDefTable_FastFile(MemoryFile *memFile)
+void FX_SaveEffectDefTable_FastFile(MemoryFile *memFile)
 {
     DB_EnumXAssets(
         ASSET_TYPE_FX,
-        (void(__cdecl *)(XAssetHeader, void *))FX_SaveEffectDefTableEntry_FileLoadObj,
+        (void(*)(XAssetHeader, void *))FX_SaveEffectDefTableEntry_FileLoadObj,
         memFile,
         0);
 }
 
-void __cdecl FX_SavePhysicsData(FxSystem *system, MemoryFile *memFile)
+void FX_SavePhysicsData(FxSystem *system, MemoryFile *memFile)
 {
     uint16_t elemHandle; // [esp+Ch] [ebp-18h]
     const FxElemDef *elemDef; // [esp+10h] [ebp-14h]
@@ -270,7 +270,7 @@ void __cdecl FX_SavePhysicsData(FxSystem *system, MemoryFile *memFile)
     }
 }
 
-void __cdecl FX_Archive(int32_t clientIndex, MemoryFile *memFile)
+void FX_Archive(int32_t clientIndex, MemoryFile *memFile)
 {
     if (MemFile_IsWriting(memFile))
         FX_Save(clientIndex, memFile);

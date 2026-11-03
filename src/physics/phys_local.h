@@ -154,7 +154,7 @@ struct PhysWorldData // sizeof=0xCC
     int timeLastSnapshot;               // ...
     int timeLastUpdate;                 // ...
     float timeNowLerpFrac;              // ...
-    void(__cdecl *collisionCallback)(); // ...
+    void(*collisionCallback)(); // ...
     int numJitterRegions;               // ...
     bool useContactCentroids;           // ...
     // padding byte
@@ -290,68 +290,68 @@ struct ContactList // sizeof=0x1804
     int contactCount;                   // ...
 };
 
-void __cdecl TRACK_phys();
-void __cdecl Phys_Init();
-void __cdecl Phys_Go_f();
-void __cdecl Phys_EnableGeom(dxBody *body);
-void __cdecl Phys_Stop_f();
-void __cdecl Phys_DisableBodyAndGeom(dxBody *body);
-dxBody *__cdecl Phys_ObjCreateAxis(
+void TRACK_phys();
+void Phys_Init();
+void Phys_Go_f();
+void Phys_EnableGeom(dxBody *body);
+void Phys_Stop_f();
+void Phys_DisableBodyAndGeom(dxBody *body);
+dxBody *Phys_ObjCreateAxis(
     PhysWorld worldIndex,
     float *position,
     const float (*axis)[3],
     float *velocity,
     const PhysPreset *physPreset);
-dxBody *__cdecl Phys_CreateBodyFromState(PhysWorld worldIndex, const BodyState *state);
-void __cdecl Phys_BodyGetCenterOfMass(dxBody *body, float *outPosition);
-void __cdecl Phys_BodyAddGeomAndSetMass(
+dxBody *Phys_CreateBodyFromState(PhysWorld worldIndex, const BodyState *state);
+void Phys_BodyGetCenterOfMass(dxBody *body, float *outPosition);
+void Phys_BodyAddGeomAndSetMass(
     PhysWorld worldIndex,
     dxBody *body,
     float totalMass,
     GeomState *geomState,
     const float *centerOfMass);
-void __cdecl Phys_AdjustForNewCenterOfMass(dxBody *body, const float *newRelCenterOfMass);
-void __cdecl Phys_BodyGetRotation(dxBody *body, float (*outRotation)[3]);
-void __cdecl Phys_OdeMatrix3ToAxis(const float *inMatrix, float (*outAxis)[3]);
-void __cdecl Phys_ObjGetPositionFromCenterOfMass(
+void Phys_AdjustForNewCenterOfMass(dxBody *body, const float *newRelCenterOfMass);
+void Phys_BodyGetRotation(dxBody *body, float (*outRotation)[3]);
+void Phys_OdeMatrix3ToAxis(const float *inMatrix, float (*outAxis)[3]);
+void Phys_ObjGetPositionFromCenterOfMass(
     dxBody *body,
     const float (*rotation)[3],
     const float *centerOfGravity,
     float *objPos);
-void __cdecl Phys_MassSetBrushTotal(dMass *m, float totalMass, float *momentsOfInertia, const float *productsOfInertia);
-dxBody *__cdecl Phys_ObjCreate(
+void Phys_MassSetBrushTotal(dMass *m, float totalMass, float *momentsOfInertia, const float *productsOfInertia);
+dxBody *Phys_ObjCreate(
     PhysWorld worldIndex,
     float *position,
     float *quat,
     float *velocity,
     const PhysPreset *physPreset);
-void __cdecl Phys_ObjSetOrientation(
+void Phys_ObjSetOrientation(
     PhysWorld worldIndex,
     dxBody *id,
     const float *newPosition,
     const float *newOrientation);
-void __cdecl Phys_ObjAddGeomBox(PhysWorld worldIndex, dxBody *id, const float *boxMin, const float *boxMax);
-void __cdecl Phys_ObjAddGeomBoxRotated(
+void Phys_ObjAddGeomBox(PhysWorld worldIndex, dxBody *id, const float *boxMin, const float *boxMax);
+void Phys_ObjAddGeomBoxRotated(
     PhysWorld worldIndex,
     dxBody *id,
     const float *center,
     const float *halfLengths,
     const float (*orientation)[3]);
-void __cdecl Phys_ObjAddGeomBrushModel(
+void Phys_ObjAddGeomBrushModel(
     PhysWorld worldIndex,
     dxBody *id,
     unsigned __int16 brushModel,
     const PhysMass *physMass);
-void __cdecl Phys_ObjAddGeomBrush(PhysWorld worldIndex, dxBody *id, const cbrush_t *brush, const PhysMass *physMass);
-void __cdecl Phys_ObjAddGeomCylinder(PhysWorld worldIndex, dxBody *id, const float *boxMin, const float *boxMax);
-void __cdecl Phys_ObjAddGeomCylinderDirection(
+void Phys_ObjAddGeomBrush(PhysWorld worldIndex, dxBody *id, const cbrush_t *brush, const PhysMass *physMass);
+void Phys_ObjAddGeomCylinder(PhysWorld worldIndex, dxBody *id, const float *boxMin, const float *boxMax);
+void Phys_ObjAddGeomCylinderDirection(
     PhysWorld worldIndex,
     dxBody *id,
     int direction,
     float radius,
     float halfHeight,
     const float *centerOfMass);
-void __cdecl Phys_ObjAddGeomCylinderRotated(
+void Phys_ObjAddGeomCylinderRotated(
     PhysWorld worldIndex,
     dxBody *id,
     int direction,
@@ -359,72 +359,72 @@ void __cdecl Phys_ObjAddGeomCylinderRotated(
     float halfHeight,
     const float *center,
     const float (*orientation)[3]);
-void __cdecl Phys_ObjAddGeomCapsule(
+void Phys_ObjAddGeomCapsule(
     PhysWorld worldIndex,
     dxBody *id,
     int direction,
     float radius,
     float halfHeight,
     const float *centerOfMass);
-void __cdecl Phys_ObjSetCollisionFromXModel(const XModel *model, PhysWorld worldIndex, dxBody *physId);
-void __cdecl Phys_ObjSetAngularVelocity(dxBody *id, float *angularVel);
-void __cdecl Phys_ObjSetAngularVelocityRaw(dxBody *id, float *angularVel);
-void __cdecl Phys_ObjSetVelocity(dxBody *id, float *velocity);
-void __cdecl Phys_ObjGetPosition(dxBody *id, float *outPosition, float (*outRotation)[3]);
-void __cdecl Phys_ObjGetCenterOfMass(dxBody *id, float *outPosition);
-void __cdecl Phys_ObjDestroy(PhysWorld worldIndex, dxBody *id);
-void __cdecl Phys_ObjAddForce(PhysWorld worldIndex, dxBody *id, float *worldPos, const float *impulse);
-int __cdecl Phys_IndexFromODEWorld(dxWorld *world);
-void __cdecl Phys_ObjBulletImpact(
+void Phys_ObjSetCollisionFromXModel(const XModel *model, PhysWorld worldIndex, dxBody *physId);
+void Phys_ObjSetAngularVelocity(dxBody *id, float *angularVel);
+void Phys_ObjSetAngularVelocityRaw(dxBody *id, float *angularVel);
+void Phys_ObjSetVelocity(dxBody *id, float *velocity);
+void Phys_ObjGetPosition(dxBody *id, float *outPosition, float (*outRotation)[3]);
+void Phys_ObjGetCenterOfMass(dxBody *id, float *outPosition);
+void Phys_ObjDestroy(PhysWorld worldIndex, dxBody *id);
+void Phys_ObjAddForce(PhysWorld worldIndex, dxBody *id, float *worldPos, const float *impulse);
+int Phys_IndexFromODEWorld(dxWorld *world);
+void Phys_ObjBulletImpact(
     PhysWorld worldIndex,
     dxBody *id,
     const float *worldPosRaw,
     const float *bulletDirRaw,
     float bulletSpeed,
     float scale);
-void __cdecl Phys_TweakBulletImpact(float *worldPos, float *bulletDir, const float *centerOfMass);
-void __cdecl Phys_PlayCollisionSound(int localClientNum, dxBody *body, uint32_t sndClass, ContactList *contactList);
-void __cdecl Phys_BodyGetPointVelocity(dxBody *body, float *point, float *outVelocity);
-void __cdecl Phys_DrawDebugText(const ScreenPlacement *scrPlace);
-int __cdecl Phys_DrawDebugTextForWorld(
+void Phys_TweakBulletImpact(float *worldPos, float *bulletDir, const float *centerOfMass);
+void Phys_PlayCollisionSound(int localClientNum, dxBody *body, uint32_t sndClass, ContactList *contactList);
+void Phys_BodyGetPointVelocity(dxBody *body, float *point, float *outVelocity);
+void Phys_DrawDebugText(const ScreenPlacement *scrPlace);
+int Phys_DrawDebugTextForWorld(
     uint32_t worldIndex,
     char *worldText,
     float *x,
     float *y,
     float charHeight,
     const ScreenPlacement *scrPlace);
-void __cdecl Phys_ObjCountIfActive(dxBody *body);
-void __cdecl dxPostProcessIslands(PhysWorld worldIndex);
-void __cdecl Phys_CheckIfAliveTooLong(dxBody *body);
-int __cdecl Phys_DoBodyOncePerFrame(uint32_t worldIndex, dxBody *body, float deltaT);
-void __cdecl Phys_GeomUserGetAAContainedBox(dxGeom *geom, float *mins, float *maxs);
-int __cdecl Phys_ObjGetSnapshot(PhysWorld worldIndex, dxBody *id, float *outPos, float (*outMat)[3]);
-void __cdecl Phys_RewindCurrentTime(PhysWorld worldIndex, int timeNow);
-void __cdecl Phys_GetPerformance(float *average, int *mintime, int *maxtime);
-void __cdecl Phys_PerformanceEndFrame();
-void __cdecl Phys_RunToTime(int localClientNum, PhysWorld worldIndex, int timeNow);
-void __cdecl Phys_ObjDraw(dxBody *body);
-void __cdecl Phys_RunFrame(int localClientNum, PhysWorld worldIndex, float seconds);
-void __cdecl Phys_BodyGrabSnapshot(dxBody *body);
-void __cdecl Phys_DoBodyOncePerRun(dxBody *body);
-void __cdecl Phys_ObjTraceNewPos(dxBody *body);
-void __cdecl Phys_PerformanceAddTime(int time);
-void __cdecl Phys_ObjGetInterpolatedState(PhysWorld worldIndex, dxBody *id, float *outPos, float *outQuat);
-void __cdecl Phys_ObjSetInertialTensor(dxBody *id, const PhysMass *physMass);
-bool __cdecl Phys_ObjIsAsleep(dxBody *id);
-void __cdecl Phys_Shutdown();
-void __cdecl Phys_ObjSave(dxBody *id, MemoryFile *memFile);
-void __cdecl Phys_GetStateFromBody(dxBody *body, BodyState *state);
-dxBody *__cdecl Phys_ObjLoad(PhysWorld worldIndex, MemoryFile *memFile);
-void __cdecl Phys_InitJoints();
-void __cdecl Phys_SetHingeParams(
+void Phys_ObjCountIfActive(dxBody *body);
+void dxPostProcessIslands(PhysWorld worldIndex);
+void Phys_CheckIfAliveTooLong(dxBody *body);
+int Phys_DoBodyOncePerFrame(uint32_t worldIndex, dxBody *body, float deltaT);
+void Phys_GeomUserGetAAContainedBox(dxGeom *geom, float *mins, float *maxs);
+int Phys_ObjGetSnapshot(PhysWorld worldIndex, dxBody *id, float *outPos, float (*outMat)[3]);
+void Phys_RewindCurrentTime(PhysWorld worldIndex, int timeNow);
+void Phys_GetPerformance(float *average, int *mintime, int *maxtime);
+void Phys_PerformanceEndFrame();
+void Phys_RunToTime(int localClientNum, PhysWorld worldIndex, int timeNow);
+void Phys_ObjDraw(dxBody *body);
+void Phys_RunFrame(int localClientNum, PhysWorld worldIndex, float seconds);
+void Phys_BodyGrabSnapshot(dxBody *body);
+void Phys_DoBodyOncePerRun(dxBody *body);
+void Phys_ObjTraceNewPos(dxBody *body);
+void Phys_PerformanceAddTime(int time);
+void Phys_ObjGetInterpolatedState(PhysWorld worldIndex, dxBody *id, float *outPos, float *outQuat);
+void Phys_ObjSetInertialTensor(dxBody *id, const PhysMass *physMass);
+bool Phys_ObjIsAsleep(dxBody *id);
+void Phys_Shutdown();
+void Phys_ObjSave(dxBody *id, MemoryFile *memFile);
+void Phys_GetStateFromBody(dxBody *body, BodyState *state);
+dxBody *Phys_ObjLoad(PhysWorld worldIndex, MemoryFile *memFile);
+void Phys_InitJoints();
+void Phys_SetHingeParams(
     PhysWorld worldIndex,
     dxJointHinge *id,
     float motorSpeed,
     float motorMaxForce,
     float lowStop,
     float highStop);
-dxJointHinge *__cdecl Phys_CreateHinge(
+dxJointHinge *Phys_CreateHinge(
     PhysWorld worldIndex,
     dxBody *obj1,
     dxBody *obj2,
@@ -434,15 +434,15 @@ dxJointHinge *__cdecl Phys_CreateHinge(
     float motorMaxForce,
     float lowStop,
     float highStop);
-dxJointBall *__cdecl Phys_CreateBallAndSocket(PhysWorld worldIndex, dxBody *obj1, dxBody *obj2, float *anchor);
-void __cdecl Phys_SetAngularMotorParams(
+dxJointBall *Phys_CreateBallAndSocket(PhysWorld worldIndex, dxBody *obj1, dxBody *obj2, float *anchor);
+void Phys_SetAngularMotorParams(
     PhysWorld worldIndex,
     dxJointAMotor *id,
     const float *motorSpeeds,
     const float *motorFMaxs,
     const float *lowStops,
     const float *highStops);
-dxJointAMotor *__cdecl Phys_CreateAngularMotor(
+dxJointAMotor *Phys_CreateAngularMotor(
     PhysWorld worldIndex,
     dxBody *obj1,
     dxBody *obj2,
@@ -452,55 +452,55 @@ dxJointAMotor *__cdecl Phys_CreateAngularMotor(
     const float *motorFMaxs,
     const float *lowStops,
     const float *highStops);
-void __cdecl Phys_JointDestroy(PhysWorld worldIndex, dxJointHinge *id);
-void __cdecl Phys_SetCollisionCallback(PhysWorld worldIndex, void(__cdecl *callback)());
-void __cdecl Phys_AddJitterRegion(
+void Phys_JointDestroy(PhysWorld worldIndex, dxJointHinge *id);
+void Phys_SetCollisionCallback(PhysWorld worldIndex, void(*callback)());
+void Phys_AddJitterRegion(
     PhysWorld worldIndex,
     const float *origin,
     float innerRadius,
     float outerRadius,
     float minDisplacement,
     float maxDisplacement);
-void __cdecl Phys_ObjSetContactCentroid(dxBody *id, const float *worldPos);
+void Phys_ObjSetContactCentroid(dxBody *id, const float *worldPos);
 #ifdef KISAK_SP
 void Phys_SetGravityDir(float *down);
 void Phys_ArchiveState(struct MemoryFile *memFile);
 #endif
 
 // phys_world_collision
-int __cdecl Phys_GetSurfaceFlagsFromBrush(const cbrush_t *brush, uint32_t brushSideIndex);
-void __cdecl CM_ForEachBrushInLeafBrushNode_r(
+int Phys_GetSurfaceFlagsFromBrush(const cbrush_t *brush, uint32_t brushSideIndex);
+void CM_ForEachBrushInLeafBrushNode_r(
     cLeafBrushNode_s *node,
     const float *mins,
     const float *maxs,
     bool testMask,
     int clipMask,
-    void(__cdecl *f)(const cbrush_t *, void *),
+    void(*f)(const cbrush_t *, void *),
     void *userData);
-void __cdecl CM_MeshTestGeomInLeaf(cLeaf_t *leaf, const objInfo *input, Results *results);
-void __cdecl CM_PositionGeomTestInAabbTree_r(CollisionAabbTree *aabbTree, const objInfo *input, Results *results);
-bool __cdecl CM_CullBox2(const objInfo *input, const float *origin, const float *halfSize);
-void __cdecl CM_TestGeomInLeaf(cLeaf_t *leaf, const objInfo *input, Results *results);
-void __cdecl CM_TestGeomInLeafBrushNode(cLeaf_t *leaf, const objInfo *input, Results *results);
-void __cdecl Phys_TestGeomInBrush(const cbrush_t *brush, uint32_t *userData);
-void __cdecl Phys_TestAgainstEntities(const objInfo *input, Results *results);
-void __cdecl Phys_InitWorldCollision();
-void __cdecl Phys_InitBrushmodelGeomClass();
-void __cdecl Phys_GetBrushmodelAABB(dxGeom *geom, float *aabb);
-void __cdecl Phys_InitBrushGeomClass();
-void __cdecl Phys_GetBrushAABB(dxGeom *geom, float *aabb);
-void __cdecl Phys_InitCylinderGeomClass();
-void __cdecl Phys_GetCylinderAABB(dxGeom *geom, float *aabb);
-void __cdecl Phys_InitCapsuleGeomClass();
-void __cdecl Phys_GetCapsuleAABB(dxGeom *geom, float *aabb);
-dxGeom *__cdecl Phys_CreateBrushmodelGeom(
+void CM_MeshTestGeomInLeaf(cLeaf_t *leaf, const objInfo *input, Results *results);
+void CM_PositionGeomTestInAabbTree_r(CollisionAabbTree *aabbTree, const objInfo *input, Results *results);
+bool CM_CullBox2(const objInfo *input, const float *origin, const float *halfSize);
+void CM_TestGeomInLeaf(cLeaf_t *leaf, const objInfo *input, Results *results);
+void CM_TestGeomInLeafBrushNode(cLeaf_t *leaf, const objInfo *input, Results *results);
+void Phys_TestGeomInBrush(const cbrush_t *brush, uint32_t *userData);
+void Phys_TestAgainstEntities(const objInfo *input, Results *results);
+void Phys_InitWorldCollision();
+void Phys_InitBrushmodelGeomClass();
+void Phys_GetBrushmodelAABB(dxGeom *geom, float *aabb);
+void Phys_InitBrushGeomClass();
+void Phys_GetBrushAABB(dxGeom *geom, float *aabb);
+void Phys_InitCylinderGeomClass();
+void Phys_GetCylinderAABB(dxGeom *geom, float *aabb);
+void Phys_InitCapsuleGeomClass();
+void Phys_GetCapsuleAABB(dxGeom *geom, float *aabb);
+dxGeom *Phys_CreateBrushmodelGeom(
     dxSpace *space,
     dxBody *body,
     unsigned __int16 brushModel,
     const float *centerOfMass);
-dxGeom *__cdecl Phys_CreateBrushGeom(dxSpace *space, dxBody *body, const cbrush_t *brush, const float *centerOfMass);
-dxGeom *__cdecl Phys_CreateCylinderGeom(dxSpace *space, dxBody *body, const GeomStateCylinder *cyl);
-dxGeom *__cdecl Phys_CreateCapsuleGeom(dxSpace *space, dxBody *body, const GeomStateCylinder *cyl);
+dxGeom *Phys_CreateBrushGeom(dxSpace *space, dxBody *body, const cbrush_t *brush, const float *centerOfMass);
+dxGeom *Phys_CreateCylinderGeom(dxSpace *space, dxBody *body, const GeomStateCylinder *cyl);
+dxGeom *Phys_CreateCapsuleGeom(dxSpace *space, dxBody *body, const GeomStateCylinder *cyl);
 
 
 
@@ -531,31 +531,31 @@ struct BrushBrushData // sizeof=0xC
     const objInfo *input;               // ...
     Results *results;                   // ...
 };
-void __cdecl Phys_DrawPoly(const Poly *poly, const float *color);
-dContactGeomExt *__cdecl AddContact(Results *results);
-bool __cdecl Phys_AddContactData(Results *results, float depth, float *normal, float *pos, int surfaceFlags);
-PolyOrientation __cdecl GetPolyOrientation(const float *polyNormal, const float (*poly)[3], uint32_t ptCount);
-bool __cdecl Phys_GetChoppingPlaneForPolyEdge(
+void Phys_DrawPoly(const Poly *poly, const float *color);
+dContactGeomExt *AddContact(Results *results);
+bool Phys_AddContactData(Results *results, float depth, float *normal, float *pos, int surfaceFlags);
+PolyOrientation GetPolyOrientation(const float *polyNormal, const float (*poly)[3], uint32_t ptCount);
+bool Phys_GetChoppingPlaneForPolyEdge(
     const float *polyNormal,
     const float *pt1,
     const float *pt2,
     bool clockwise,
     float *outPlane);
-uint32_t __cdecl Phys_ClipLineSegmentAgainstPlane(float *pt1, float *pt2, const float *choppingPlane);
-uint32_t __cdecl Phys_ClipLineSegmentAgainstPoly(
+uint32_t Phys_ClipLineSegmentAgainstPlane(float *pt1, float *pt2, const float *choppingPlane);
+uint32_t Phys_ClipLineSegmentAgainstPoly(
     const float *polyNormal,
     const float (*poly)[3],
     uint32_t polyCount,
     float *pt1,
     float *pt2);
-void __cdecl Phys_ProjectFaceOntoFaceAndClip(
+void Phys_ProjectFaceOntoFaceAndClip(
     const float *referencePlane,
     const Poly *referencePoly,
     const Poly *poly2,
     int surfaceFlags,
     Results *results,
     float *collisionNormal);
-uint32_t __cdecl ClipPolys(
+uint32_t ClipPolys(
     const float *polyNormal,
     const float (*poly1)[3],
     uint32_t poly1Count,
@@ -563,14 +563,14 @@ uint32_t __cdecl ClipPolys(
     uint32_t poly2Count,
     float (*result)[3],
     uint32_t maxCount);
-void __cdecl Phys_GetWindingForBrushFace2(
+void Phys_GetWindingForBrushFace2(
     const cbrush_t *brush,
     uint32_t brushSide,
     Poly *outWinding,
     int maxVerts,
     const float (*axialPlanes)[4]);
-void __cdecl Phys_CollideBoxWithBrush(const cbrush_t *brush, const objInfo *info, Results *results);
-void __cdecl Phys_ProjectBoxFaceOntoBrushFaceAndClip(
+void Phys_CollideBoxWithBrush(const cbrush_t *brush, const objInfo *info, Results *results);
+void Phys_ProjectBoxFaceOntoBrushFaceAndClip(
     const objInfo *info,
     int boxAxis,
     int boxSign,
@@ -579,18 +579,18 @@ void __cdecl Phys_ProjectBoxFaceOntoBrushFaceAndClip(
     int surfaceFlags,
     Results *results,
     float *collisionNormal);
-int __cdecl GetClosestBrushFace(
+int GetClosestBrushFace(
     const float *normal,
     const cbrush_t *brush,
     const Poly *brushWindings,
     float *outBrushPlane);
-char __cdecl Phys_TestBoxAgainstEachBrushPlane(
+char Phys_TestBoxAgainstEachBrushPlane(
     const cbrush_t *brush,
     const objInfo *info,
     float *outBrushPlane,
     int *outSideIndex,
     float *outMaxSeparation);
-void __cdecl Phys_CollideBoxWithBrushFace(
+void Phys_CollideBoxWithBrushFace(
     const cbrush_t *brush,
     uint32_t brushSideIndex,
     const float *bestBrushPlane,
@@ -598,35 +598,35 @@ void __cdecl Phys_CollideBoxWithBrushFace(
     const objInfo *info,
     Results *results,
     float *collisionNormal);
-void __cdecl GetClosestBoxFace(const objInfo *info, const float *normal, int *minAxis, int *minSign);
-char __cdecl Phys_DoesPolyIntersectBox(const Poly *poly, const objInfo *info);
-void __cdecl Phys_CollideOrientedBrushWithBrush(
+void GetClosestBoxFace(const objInfo *info, const float *normal, int *minAxis, int *minSign);
+char Phys_DoesPolyIntersectBox(const Poly *poly, const objInfo *info);
+void Phys_CollideOrientedBrushWithBrush(
     const cbrush_t *orientedBrush,
     const cbrush_t *fixedBrush,
     const objInfo *input,
     Results *results);
-uint32_t __cdecl Phys_BuildWindingsForBrush(
+uint32_t Phys_BuildWindingsForBrush(
     const cbrush_t *brush,
     const float (*planes)[4],
     Poly *outPolys,
     uint32_t maxPolys,
     float (*outVerts)[3],
     uint32_t maxVerts);
-void __cdecl Phys_GetWindingForBrushFace(
+void Phys_GetWindingForBrushFace(
     const cbrush_t *brush,
     const float (*inPlanes)[4],
     uint32_t brushSide,
     Poly *outWinding,
     int maxVerts);
-uint32_t __cdecl Phys_BuildWindingsForBrush2(
+uint32_t Phys_BuildWindingsForBrush2(
     const cbrush_t *brush,
     Poly *outPolys,
     uint32_t maxPolys,
     float (*outVerts)[3],
     uint32_t maxVerts);
-double __cdecl Phys_TestVertsAgainstPlane_Wrapper(const float *plane, const Poly *verts);
-double __cdecl Phys_TestVertsAgainstPlane(const float (*verts)[3], uint32_t vertCount, const float *plane);
-char __cdecl Phys_TestVertsAgainstPlanes(
+double Phys_TestVertsAgainstPlane_Wrapper(const float *plane, const Poly *verts);
+double Phys_TestVertsAgainstPlane(const float (*verts)[3], uint32_t vertCount, const float *plane);
+char Phys_TestVertsAgainstPlanes(
     const float (*verts)[3],
     uint32_t vertCount,
     const cbrush_t *brushContainingThePlanes,
@@ -634,13 +634,13 @@ char __cdecl Phys_TestVertsAgainstPlanes(
     float *outPlane,
     int *outSideIndex,
     float *outMaxSeparation);
-void __cdecl Phys_TransformPlane(
+void Phys_TransformPlane(
     const float *normal,
     float dist,
     const float *translate,
     const float (*rotate)[3],
     float *outPlane);
-void __cdecl Phys_CollideOrientedBrushAgainstFixedBrushFace(
+void Phys_CollideOrientedBrushAgainstFixedBrushFace(
     const cbrush_t *fixedBrush,
     uint32_t fixedBrushSideIndex,
     float *bestFixedBrushPlane,
@@ -649,13 +649,13 @@ void __cdecl Phys_CollideOrientedBrushAgainstFixedBrushFace(
     const Poly *orientedBrushPolys,
     const float (*transformedPlanes)[4],
     Results *results);
-int __cdecl GetClosestOrientedBrushFace(
+int GetClosestOrientedBrushFace(
     const float *normal,
     const cbrush_t *brush,
     const Poly *brushPolys,
     const float (*orientedPlanes)[4],
     float *outBrushPlane);
-int __cdecl Phys_CollideBrushAgainstBrushFace(
+int Phys_CollideBrushAgainstBrushFace(
     const cbrush_t *brush,
     const Poly *brushPolys,
     const cbrush_t *referenceBrush,
@@ -663,13 +663,13 @@ int __cdecl Phys_CollideBrushAgainstBrushFace(
     float *referenceBrushPlane,
     const Poly *referenceBrushPolys,
     Results *results);
-char __cdecl Phys_DoesPolyIntersectOrientedBrush(
+char Phys_DoesPolyIntersectOrientedBrush(
     const Poly *poly,
     const float (*transformedPlanes)[4],
     uint32_t brushSides);
-void __cdecl Phys_CollideOrientedBrushModelWithBrush(const cbrush_t *fixedBrush, const objInfo *info, Results *results);
-void __cdecl Phys_CollideOrientedBrushWithBrush_Wrapper(const cbrush_t *orientedBrush, void *userData);
-void __cdecl Phys_CollideOrientedBrushWithTriangleList(
+void Phys_CollideOrientedBrushModelWithBrush(const cbrush_t *fixedBrush, const objInfo *info, Results *results);
+void Phys_CollideOrientedBrushWithBrush_Wrapper(const cbrush_t *orientedBrush, void *userData);
+void Phys_CollideOrientedBrushWithTriangleList(
     const cbrush_t *orientedBrush,
     const unsigned __int16 *indices,
     const float (*verts)[3],
@@ -677,36 +677,36 @@ void __cdecl Phys_CollideOrientedBrushWithTriangleList(
     const objInfo *input,
     int surfaceFlags,
     Results *results);
-int __cdecl Phys_GetPlaneForTriangle2(const float (*triangle)[3], const float *origin, float radius, float *result);
-void __cdecl Phys_CollideOrientedBrushWithTriangle(
+int Phys_GetPlaneForTriangle2(const float (*triangle)[3], const float *origin, float radius, float *result);
+void Phys_CollideOrientedBrushWithTriangle(
     const cbrush_t *orientedBrush,
     const float *tri0,
     const float *tri1,
     const float *tri2,
     BrushTrimeshData *data);
-void __cdecl Phys_CollideFixedBrushWithTriangle(const cbrush_t *brush, float (*triangle)[3], BrushTrimeshData *data);
-void __cdecl Phys_GetPlaneForTriangle(const float (*triangle)[3], float *result);
-uint32_t __cdecl Phys_AxialSideToJ(uint32_t axialSide);
-void __cdecl Phys_DrawPolyTransformed(const Poly *poly, const float *color, const float *pos, const float (*R)[3]);
-double __cdecl Phys_TestTriangleAgainstBrushPlane(const float *brushPlane, const float (*triangle)[3]);
-void __cdecl Phys_CollideOrientedBrushModelWithTriangleList(
+void Phys_CollideFixedBrushWithTriangle(const cbrush_t *brush, float (*triangle)[3], BrushTrimeshData *data);
+void Phys_GetPlaneForTriangle(const float (*triangle)[3], float *result);
+uint32_t Phys_AxialSideToJ(uint32_t axialSide);
+void Phys_DrawPolyTransformed(const Poly *poly, const float *color, const float *pos, const float (*R)[3]);
+double Phys_TestTriangleAgainstBrushPlane(const float *brushPlane, const float (*triangle)[3]);
+void Phys_CollideOrientedBrushModelWithTriangleList(
     const unsigned __int16 *indices,
     const float (*verts)[3],
     int triCount,
     const objInfo *info,
     int surfaceFlags,
     Results *results);
-void __cdecl Phys_CollideOrientedBrushWithTriangleList_Wrapper(const cbrush_t *orientedBrush, void *userData);
-void __cdecl Phys_CollideBoxWithTriangleList(
+void Phys_CollideOrientedBrushWithTriangleList_Wrapper(const cbrush_t *orientedBrush, void *userData);
+void Phys_CollideBoxWithTriangleList(
     const unsigned __int16 *indices,
     const float (*verts)[3],
     uint32_t triCount,
     const objInfo *info,
     int surfaceFlags,
     Results *results);
-void __cdecl Phys_AxisToOdeMatrix3(const float (*inAxis)[3], float *outMatrix);
+void Phys_AxisToOdeMatrix3(const float (*inAxis)[3], float *outMatrix);
 
-int __cdecl Phys_ClipPolyAgainstPlane(
+int Phys_ClipPolyAgainstPlane(
     float (*poly)[3],
     uint32_t polyCount,
     uint32_t maxCount,
@@ -714,34 +714,34 @@ int __cdecl Phys_ClipPolyAgainstPlane(
 
 
 // physpreset_load_obj
-PhysPreset *__cdecl PhysPresetPrecache(const char *name, void *(__cdecl *Alloc)(int));
+PhysPreset *PhysPresetPrecache(const char *name, void *(*Alloc)(int));
 
 // phys_contacts
-void __cdecl Phys_CheckOpposingNormals(dxBody *body0, dxBody *body1, ContactList *contacts);
-void __cdecl Phys_ReduceContacts(dxBody *body, const ContactList *in, ContactList *out);
-void __cdecl Phys_AssignInitialGroups(const ContactList *contacts, int *group);
-void __cdecl Phys_KMeans(const ContactList *contacts, float (*centroid)[3], int *group);
-void __cdecl Phys_DumpGroups(const float (*centroid)[3]);
-void __cdecl Phys_DumpContacts(const ContactList *contacts, const int *group);
-void __cdecl Phys_MergeGroups(const ContactList *contacts, float (*centroid)[3], int *group);
-void __cdecl Phys_GenerateGroupContacts(
+void Phys_CheckOpposingNormals(dxBody *body0, dxBody *body1, ContactList *contacts);
+void Phys_ReduceContacts(dxBody *body, const ContactList *in, ContactList *out);
+void Phys_AssignInitialGroups(const ContactList *contacts, int *group);
+void Phys_KMeans(const ContactList *contacts, float (*centroid)[3], int *group);
+void Phys_DumpGroups(const float (*centroid)[3]);
+void Phys_DumpContacts(const ContactList *contacts, const int *group);
+void Phys_MergeGroups(const ContactList *contacts, float (*centroid)[3], int *group);
+void Phys_GenerateGroupContacts(
     dxBody *body,
     const ContactList *inContacts,
     float (*centroid)[3],
     int *group,
     ContactList *outContacts);
-void __cdecl Phys_CreateBasisFromNormal(const float *normal, float *binormal, float *tangent);
-void __cdecl Phys_DebugDrawContactPoint(const float *pos, const float *normal, float depth, const float *color);
-void __cdecl Phys_DumpContact(int contactNum, const dContactGeom *contact);
-void __cdecl Phys_CreateJointForEachContact(
+void Phys_CreateBasisFromNormal(const float *normal, float *binormal, float *tangent);
+void Phys_DebugDrawContactPoint(const float *pos, const float *normal, float depth, const float *color);
+void Phys_DumpContact(int contactNum, const dContactGeom *contact);
+void Phys_CreateJointForEachContact(
     ContactList *contactList,
     dxBody *body1,
     dxBody *body2,
     const dSurfaceParameters *surfParms,
     PhysWorld worldIndex);
-void __cdecl Phys_ApplyContactJitter(PhysWorld worldIndex, dContactGeom *contact, dxBody *body1, dxBody *body2);
-void __cdecl Phys_RemoveOpposingNormalContacts(const float *com, ContactList *contacts);
-void __cdecl Phys_AddCollisionContact(PhysWorld worldId, const PhysContact *physContact, dxBody *obj0, dxBody *obj1);
+void Phys_ApplyContactJitter(PhysWorld worldIndex, dContactGeom *contact, dxBody *body1, dxBody *body2);
+void Phys_RemoveOpposingNormalContacts(const float *com, ContactList *contacts);
+void Phys_AddCollisionContact(PhysWorld worldId, const PhysContact *physContact, dxBody *obj0, dxBody *obj1);
 
 
 

@@ -49,7 +49,7 @@ XAnimPartQuatPtr *g_partQuatArray;
 XAnimPartTransPtr *g_partTransArray;
 char *g_simpleQuatBits;
 
-uint32_t __cdecl XAnimGetPartQuatType(uint32_t animPartIndex)
+uint32_t XAnimGetPartQuatType(uint32_t animPartIndex)
 {
     XAnimPartQuat *quat; // [esp+0h] [ebp-4h]
 
@@ -79,7 +79,7 @@ uint32_t __cdecl XAnimGetPartQuatType(uint32_t animPartIndex)
     }
 }
 
-uint32_t __cdecl XAnimGetPartTransType(uint32_t animPartIndex)
+uint32_t XAnimGetPartTransType(uint32_t animPartIndex)
 {
     XAnimPartTrans *trans; // [esp+0h] [ebp-4h]
 
@@ -93,7 +93,7 @@ uint32_t __cdecl XAnimGetPartTransType(uint32_t animPartIndex)
     return PART_TYPE_TRANS;
 }
 
-int __cdecl XAnimCompareTransParts(const void* arg1, const void* arg2)
+int XAnimCompareTransParts(const void* arg1, const void* arg2)
 {
     uint16_t *p0 = (uint16_t *)arg1;
     uint16_t *p1 = (uint16_t *)arg2;
@@ -117,7 +117,7 @@ int __cdecl XAnimCompareTransParts(const void* arg1, const void* arg2)
         return diff;
 }
 
-void __cdecl XAnimEmitFrameIndices(
+void XAnimEmitFrameIndices(
     uint32_t tableSize,
     unsigned __int8 **dataByte,
     __int16 **dataShort,
@@ -152,7 +152,7 @@ void __cdecl XAnimEmitFrameIndices(
     }
 }
 
-int __cdecl XAnimCompareQuatParts(const void *arg1, const void *arg2)
+int XAnimCompareQuatParts(const void *arg1, const void *arg2)
 {
     uint16_t *p0 = (uint16_t*)arg1;
     uint16_t *p1 = (uint16_t *)arg2;
@@ -177,7 +177,7 @@ int __cdecl XAnimCompareQuatParts(const void *arg1, const void *arg2)
         return diff;
 }
 
-int __cdecl XAnimIsHighPrecisionPart(const char *name)
+int XAnimIsHighPrecisionPart(const char *name)
 {
     int v2; // [esp+4h] [ebp-20h]
     uint32_t low; // [esp+18h] [ebp-Ch]
@@ -209,7 +209,7 @@ void* XAnimTempAlloc(uint32_t size)
     return Hunk_UserAlloc(g_animUser, size, 4);
 }
 
-XModelPieces *__cdecl XModelPiecesLoadFile(const char *name, void *(__cdecl *Alloc)(int))
+XModelPieces *XModelPiecesLoadFile(const char *name, void *(*Alloc)(int))
 {
     XModelPiece *piece; // [esp+38h] [ebp-A4h]
     int pieceIndex; // [esp+3Ch] [ebp-A0h]
@@ -298,7 +298,7 @@ XModelPieces *__cdecl XModelPiecesLoadFile(const char *name, void *(__cdecl *All
     }
 }
 
-XModelPieces *__cdecl XModelPiecesPrecache(const char *name, void *(__cdecl *Alloc)(int))
+XModelPieces *XModelPiecesPrecache(const char *name, void *(*Alloc)(int))
 {
     XModelPieces *xmodelPieces; // [esp+0h] [ebp-4h]
 
@@ -323,8 +323,8 @@ XModelPieces *__cdecl XModelPiecesPrecache(const char *name, void *(__cdecl *All
     }
 }
 
-unsigned __int8 *__cdecl LoadTrans(
-    void *(__cdecl *Alloc)(int),
+unsigned __int8 *LoadTrans(
+    void *(*Alloc)(int),
     unsigned __int8 *pos,
     uint16_t numTransIndices,
     XAnimPartTrans *trans)
@@ -359,7 +359,7 @@ unsigned __int8 *__cdecl LoadTrans(
     return &pos[size];
 }
 
-void __cdecl ConsumeQuat(unsigned __int8 **pos, __int16 *out)
+void ConsumeQuat(unsigned __int8 **pos, __int16 *out)
 {
     int v2; // [esp+8h] [ebp-34h]
     float v3; // [esp+Ch] [ebp-30h]
@@ -392,7 +392,7 @@ void __cdecl ConsumeQuat(unsigned __int8 **pos, __int16 *out)
     out[3] = v2;
 }
 
-void __cdecl ConsumeQuat2(unsigned __int8 **pos, __int16 *out)
+void ConsumeQuat2(unsigned __int8 **pos, __int16 *out)
 {
     int v2; // [esp+8h] [ebp-24h]
     float v3; // [esp+Ch] [ebp-20h]
@@ -421,7 +421,7 @@ void __cdecl ConsumeQuat2(unsigned __int8 **pos, __int16 *out)
     out[1] = v2;
 }
 
-void __cdecl ConsumeQuatNoSwap(unsigned __int8 **pos, __int16 *out)
+void ConsumeQuatNoSwap(unsigned __int8 **pos, __int16 *out)
 {
     int v2; // [esp+8h] [ebp-34h]
     float v3; // [esp+Ch] [ebp-30h]
@@ -453,9 +453,9 @@ void __cdecl ConsumeQuatNoSwap(unsigned __int8 **pos, __int16 *out)
     out[3] = v2;
 }
 
-unsigned __int8 *__cdecl GetDeltaQuaternions(
+unsigned __int8 *GetDeltaQuaternions(
     XAnimDeltaPart *deltaPart,
-    void *(__cdecl *Alloc)(int),
+    void *(*Alloc)(int),
     unsigned __int8 *pos,
     uint16_t numloopframes,
     bool useSmallIndices)
@@ -541,9 +541,9 @@ unsigned __int8 *__cdecl GetDeltaQuaternions(
     return pos;
 }
 
-unsigned __int8 *__cdecl GetDeltaTranslations(
+unsigned __int8 *GetDeltaTranslations(
     XAnimDeltaPart *deltaPart,
-    void *(__cdecl *Alloc)(int),
+    void *(*Alloc)(int),
     unsigned __int8 *pos,
     uint16_t numloopframes,
     bool useSmallIndices)
@@ -614,7 +614,7 @@ unsigned __int8 *__cdecl GetDeltaTranslations(
     return pos;
 }
 
-unsigned __int8 *__cdecl GetQuaternions(
+unsigned __int8 *GetQuaternions(
     XAnimPartQuatPtr *part,
     unsigned __int8 *pos,
     bool bFlipQuat,
@@ -778,7 +778,7 @@ unsigned __int8 *__cdecl GetQuaternions(
     return pos;
 }
 
-unsigned __int8 *__cdecl GetTranslations(
+unsigned __int8 *GetTranslations(
     XAnimPartTransPtr *part,
     unsigned __int8 *pos,
     uint16_t numloopframes,
@@ -850,7 +850,7 @@ unsigned __int8 *__cdecl GetTranslations(
     return pos;
 }
 
-void __cdecl ReadNoteTracks(const char *name, unsigned char **pos, XAnimParts *parts, void *(__cdecl *Alloc)(int))
+void ReadNoteTracks(const char *name, unsigned char **pos, XAnimParts *parts, void *(*Alloc)(int))
 {
     double v5; // [esp+8h] [ebp-30h]
     uint16_t v6; // [esp+24h] [ebp-14h]
@@ -887,7 +887,7 @@ void __cdecl ReadNoteTracks(const char *name, unsigned char **pos, XAnimParts *p
 
 int g_checkBoneOrder;
 
-XAnimParts *__cdecl XAnimLoadFile(char *name, void *(__cdecl *Alloc)(int))
+XAnimParts *XAnimLoadFile(char *name, void *(*Alloc)(int))
 {
     __int16 prev; // ax
     unsigned __int8 *Quaternions; // eax

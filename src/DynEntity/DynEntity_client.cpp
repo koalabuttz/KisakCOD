@@ -26,7 +26,7 @@ const dvar_t *dynEnt_explodeSpinScale;
 const dvar_t *dynEnt_explodeMinForce;
 const dvar_t *dynEnt_explodeMaxEnts;
 
-void __cdecl DynEntCl_RegisterDvars()
+void DynEntCl_RegisterDvars()
 {
     DvarLimits min; // [esp+4h] [ebp-10h]
     DvarLimits mina; // [esp+4h] [ebp-10h]
@@ -79,7 +79,7 @@ void __cdecl DynEntCl_RegisterDvars()
     DynEntPieces_RegisterDvars();
 }
 
-void __cdecl DynEntCl_InitEntities(int32_t localClientNum)
+void DynEntCl_InitEntities(int32_t localClientNum)
 {
     DynEntityPose *dynEntPose; // [esp+8h] [ebp-24h]
     DynEntityClient *dynEntClient; // [esp+18h] [ebp-14h]
@@ -118,7 +118,7 @@ void __cdecl DynEntCl_InitEntities(int32_t localClientNum)
     }
 }
 
-void __cdecl DynEntCl_LinkModel(uint16_t dynEntId)
+void DynEntCl_LinkModel(uint16_t dynEntId)
 {
     int32_t v1; // [esp+0h] [ebp-204h]
     int32_t v2; // [esp+4h] [ebp-200h]
@@ -293,7 +293,7 @@ void __cdecl DynEntCl_LinkModel(uint16_t dynEntId)
     R_LinkDynEnt(dynEntId, DYNENT_DRAW_MODEL, worldBoundsVec3[0], worldBoundsVec3[1]);
 }
 
-void __cdecl DynEntCl_LinkBrush(uint16_t dynEntId)
+void DynEntCl_LinkBrush(uint16_t dynEntId)
 {
     DynEntityPose *dynEntPose; // [esp+4h] [ebp-24h]
     float absMaxs[3]; // [esp+8h] [ebp-20h] BYREF
@@ -317,7 +317,7 @@ void __cdecl DynEntCl_LinkBrush(uint16_t dynEntId)
     R_LinkDynEnt(dynEntId, DYNENT_DRAW_BRUSH, absMins, absMaxs);
 }
 
-double __cdecl DynEntCl_UpdateBModelWorldBounds(const DynEntityDef *dynEntDef, const GfxPlacement *pose)
+double DynEntCl_UpdateBModelWorldBounds(const DynEntityDef *dynEntDef, const GfxPlacement *pose)
 {
     int32_t v3; // [esp+4h] [ebp-1C0h]
     int32_t v4; // [esp+8h] [ebp-1BCh]
@@ -430,7 +430,7 @@ double __cdecl DynEntCl_UpdateBModelWorldBounds(const DynEntityDef *dynEntDef, c
     return RadiusFromBounds(bmodel->bounds[0], bmodel->bounds[1]);
 }
 
-void __cdecl DynEntCl_ProcessEntities(int32_t localClientNum)
+void DynEntCl_ProcessEntities(int32_t localClientNum)
 {
     DynEntityPose *dynEntPose; // [esp+38h] [ebp-20h]
     DynEntityPose *dynEntPosea; // [esp+38h] [ebp-20h]
@@ -505,7 +505,7 @@ void __cdecl DynEntCl_ProcessEntities(int32_t localClientNum)
     }
 }
 
-void __cdecl DynEntCl_Shutdown(int32_t localClientNum)
+void DynEntCl_Shutdown(int32_t localClientNum)
 {
     DynEntityClient *dynEntClient; // [esp+0h] [ebp-Ch]
     DynEntityClient *dynEntClienta; // [esp+0h] [ebp-Ch]
@@ -544,13 +544,13 @@ void __cdecl DynEntCl_Shutdown(int32_t localClientNum)
     }
 }
 
-void __cdecl DynEntCl_UnlinkEntity(uint16_t dynEntId, DynEntityCollType drawType)
+void DynEntCl_UnlinkEntity(uint16_t dynEntId, DynEntityCollType drawType)
 {
     DynEnt_UnlinkEntity(drawType, dynEntId);
     R_UnlinkDynEnt(dynEntId, (DynEntityDrawType)drawType);
 }
 
-void __cdecl DynEntCl_PointTrace(const pointtrace_t *clip, trace_t *results)
+void DynEntCl_PointTrace(const pointtrace_t *clip, trace_t *results)
 {
     float start[4];
     float end[4];
@@ -586,7 +586,7 @@ void __cdecl DynEntCl_PointTrace(const pointtrace_t *clip, trace_t *results)
     }
 }
 
-void __cdecl DynEntCl_PointTrace_r(
+void DynEntCl_PointTrace_r(
     DynEntityCollType drawType,
     const pointtrace_t *clip,
     uint32_t sectorIndex,
@@ -707,7 +707,7 @@ void __cdecl DynEntCl_PointTrace_r(
     }
 }
 
-void __cdecl DynEntCl_ClipMoveTrace(const moveclip_t *clip, trace_t *results)
+void DynEntCl_ClipMoveTrace(const moveclip_t *clip, trace_t *results)
 {
     float start[4];
     float end[4];
@@ -736,7 +736,7 @@ void __cdecl DynEntCl_ClipMoveTrace(const moveclip_t *clip, trace_t *results)
     DynEntCl_ClipMoveTrace_r(clip, 1u, start, end, results);
 }
 
-void __cdecl DynEntCl_ClipMoveTrace_r(
+void DynEntCl_ClipMoveTrace_r(
     const moveclip_t *clip,
     uint32_t sectorIndex,
     float *p1,
@@ -879,7 +879,7 @@ void __cdecl DynEntCl_ClipMoveTrace_r(
     }
 }
 
-uint16_t __cdecl DynEntCl_AreaEntities(
+uint16_t DynEntCl_AreaEntities(
     DynEntityDrawType drawType,
     const float *mins,
     const float *maxs,
@@ -908,7 +908,7 @@ uint16_t __cdecl DynEntCl_AreaEntities(
     return areaParms.count;
 }
 
-void __cdecl DynEntCl_AreaEntities_r(
+void DynEntCl_AreaEntities_r(
     DynEntityCollType drawType,
     uint32_t sectorIndex,
     DynEntityAreaParms *areaParms)
@@ -968,7 +968,7 @@ void __cdecl DynEntCl_AreaEntities_r(
     }
 }
 
-void __cdecl DynEntCl_EntityImpactEvent(
+void DynEntCl_EntityImpactEvent(
     const trace_t *trace,
     int32_t localClientNum,
     int32_t sourceEntityNum,
@@ -1016,7 +1016,7 @@ void __cdecl DynEntCl_EntityImpactEvent(
     }
 }
 
-void __cdecl DynEntCl_PlayImpactEffects(
+void DynEntCl_PlayImpactEffects(
     int32_t localClientNum,
     uint32_t sourceEntityNum,
     uint32_t surfType,
@@ -1080,7 +1080,7 @@ void __cdecl DynEntCl_PlayImpactEffects(
         CG_PlaySoundAlias(localClientNum, ENTITYNUM_WORLD, hitPos, hitSound);
 }
 
-void __cdecl DynEntCl_PlayEventFx(const FxEffectDef *def, const float *origin, const float (*axis)[3])
+void DynEntCl_PlayEventFx(const FxEffectDef *def, const float *origin, const float (*axis)[3])
 {
     int32_t clientIndex; // [esp+4h] [ebp-4h]
 
@@ -1093,7 +1093,7 @@ void __cdecl DynEntCl_PlayEventFx(const FxEffectDef *def, const float *origin, c
     }
 }
 
-char __cdecl DynEntCl_EventNeedsProcessed(int32_t localClientNum, int32_t sourceEntityNum)
+char DynEntCl_EventNeedsProcessed(int32_t localClientNum, int32_t sourceEntityNum)
 {
     snapshot_s *nextSnap;
 
@@ -1118,7 +1118,7 @@ char __cdecl DynEntCl_EventNeedsProcessed(int32_t localClientNum, int32_t source
     return 1;
 }
 
-char __cdecl DynEntCl_DynEntImpactEvent(
+char DynEntCl_DynEntImpactEvent(
     int32_t localClientNum,
     int32_t sourceEntityNum,
     float *start,
@@ -1211,7 +1211,7 @@ char __cdecl DynEntCl_DynEntImpactEvent(
     return 1;
 }
 
-dxBody *__cdecl DynEntCl_CreatePhysObj(const DynEntityDef *dynEntDef, const GfxPlacement *pose)
+dxBody *DynEntCl_CreatePhysObj(const DynEntityDef *dynEntDef, const GfxPlacement *pose)
 {
     dxBody *physId; // [esp+0h] [ebp-4h]
 
@@ -1243,7 +1243,7 @@ dxBody *__cdecl DynEntCl_CreatePhysObj(const DynEntityDef *dynEntDef, const GfxP
     }
 }
 
-void __cdecl DynEntCl_Damage(
+void DynEntCl_Damage(
     int32_t localClientNum,
     uint16_t dynEntId,
     DynEntityCollType drawType,
@@ -1318,7 +1318,7 @@ void __cdecl DynEntCl_Damage(
     }
 }
 
-void __cdecl DynEntCl_TestPhysicsEntities(
+void DynEntCl_TestPhysicsEntities(
     int32_t localClientNum,
     int32_t sourceEntityNum,
     float *start,
@@ -1338,7 +1338,7 @@ void __cdecl DynEntCl_TestPhysicsEntities(
     }
 }
 
-void __cdecl DynEntCl_MeleeEvent(int32_t localClientNum, int32_t sourceEntityNum)
+void DynEntCl_MeleeEvent(int32_t localClientNum, int32_t sourceEntityNum)
 {
     float v2; // [esp+Ch] [ebp-58h]
     float scale; // [esp+10h] [ebp-54h]
@@ -1381,7 +1381,7 @@ void __cdecl DynEntCl_MeleeEvent(int32_t localClientNum, int32_t sourceEntityNum
     }
 }
 
-void __cdecl DynEntCl_ExplosionEvent(
+void DynEntCl_ExplosionEvent(
     int32_t localClientNum,
     bool isCylinder,
     float *origin,
@@ -1519,7 +1519,7 @@ void __cdecl DynEntCl_ExplosionEvent(
     }
 }
 
-uint32_t __cdecl DynEntCl_GetClosestEntities(
+uint32_t DynEntCl_GetClosestEntities(
     DynEntityDrawType drawType,
     float *radiusMins,
     float *radiusMaxs,
@@ -1547,11 +1547,11 @@ uint32_t __cdecl DynEntCl_GetClosestEntities(
             else
                 v10[i].distSq = DynEnt_GetRadiusDistSqr(dynEntPose, origin);
         }
-        //std::_Sort<ShadowCandidate *, int, bool(__cdecl *)(ShadowCandidate const &, ShadowCandidate const &)>(
+        //std::_Sort<ShadowCandidate *, int, bool(*)(ShadowCandidate const &, ShadowCandidate const &)>(
         //    v10,
         //    &v10[unsignedInt_low],
         //    (int)(8 * unsignedInt_low) >> 3,
-        //    (bool(__cdecl *)(const ShadowCandidate *, const ShadowCandidate *))DynEntCl_CompareDynEntsForExplosion);
+        //    (bool(*)(const ShadowCandidate *, const ShadowCandidate *))DynEntCl_CompareDynEntsForExplosion);
         std::sort(v10, v10 + hitCount, DynEntCl_CompareDynEntsForExplosion);
         hitCount = LOWORD(dynEnt_explodeMaxEnts->current.unsignedInt);
         if (hitCount != dynEnt_explodeMaxEnts->current.integer)
@@ -1567,12 +1567,12 @@ uint32_t __cdecl DynEntCl_GetClosestEntities(
     return hitCount;
 }
 
-bool __cdecl DynEntCl_CompareDynEntsForExplosion(const DynEntSortStruct& ent1, const DynEntSortStruct& ent2)
+bool DynEntCl_CompareDynEntsForExplosion(const DynEntSortStruct& ent1, const DynEntSortStruct& ent2)
 {
     return ent2.distSq > ent1.distSq;
 }
 
-void __cdecl DynEntCl_JitterEvent(
+void DynEntCl_JitterEvent(
     int32_t localClientNum,
     float *origin,
     float innerRadius,
@@ -1630,11 +1630,11 @@ void __cdecl DynEntCl_JitterEvent(
                     CylindricalRadiusDistSqr = DynEnt_GetCylindricalRadiusDistSqr(dynEntPose, origin);
                     v15[i].distSq = CylindricalRadiusDistSqr;
                 }
-                //std::_Sort<ShadowCandidate *, int, bool(__cdecl *)(ShadowCandidate const &, ShadowCandidate const &)>(
+                //std::_Sort<ShadowCandidate *, int, bool(*)(ShadowCandidate const &, ShadowCandidate const &)>(
                 //    v15,
                 //    &v15[unsignedInt],
                 //    (8 * unsignedInt) >> 3,
-                //    (bool(__cdecl *)(const ShadowCandidate *, const ShadowCandidate *))DynEntCl_CompareDynEntsForExplosion);
+                //    (bool(*)(const ShadowCandidate *, const ShadowCandidate *))DynEntCl_CompareDynEntsForExplosion);
                 std::sort(v15 + 0, v15 + unsignedInt, DynEntCl_CompareDynEntsForExplosion);
                 unsignedInt = dynEnt_explodeMaxEnts->current.unsignedInt;
                 if (unsignedInt != dynEnt_explodeMaxEnts->current.integer)
@@ -1665,7 +1665,7 @@ void __cdecl DynEntCl_JitterEvent(
     }
 }
 
-void __cdecl DynEntCl_DestroyEvent(
+void DynEntCl_DestroyEvent(
     int32_t localClientNum,
     uint16_t dynEntId,
     DynEntityCollType drawType,

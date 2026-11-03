@@ -22,7 +22,7 @@
 
 #include <cgame/cg_local.h>
 
-char __cdecl Bullet_Trace(
+char Bullet_Trace(
     const BulletFireParams *bp,
     const WeaponDef *weapDef,
     gentity_s *attacker,
@@ -81,7 +81,7 @@ char __cdecl Bullet_Trace(
     return 1;
 }
 
-float __cdecl G_GoodRandomFloat(int32_t *idum)
+float G_GoodRandomFloat(int32_t *idum)
 {
     double v4; // [esp+Ch] [ebp-90h]
     int32_t j; // [esp+14h] [ebp-88h]
@@ -106,7 +106,7 @@ float __cdecl G_GoodRandomFloat(int32_t *idum)
         return v4;
 }
 
-void __cdecl Bullet_Endpos(int32_t randSeed, float spread, float *end, float *dir, const weaponParms *wp, float maxRange)
+void Bullet_Endpos(int32_t randSeed, float spread, float *end, float *dir, const weaponParms *wp, float maxRange)
 {
     float v6; // [esp+Ch] [ebp-84h]
     float v7; // [esp+10h] [ebp-80h]
@@ -209,7 +209,7 @@ void __cdecl Bullet_Endpos(int32_t randSeed, float spread, float *end, float *di
     }
 }
 
-void __cdecl Bullet_RandomDir(int32_t time, float *x, float *y)
+void Bullet_RandomDir(int32_t time, float *x, float *y)
 {
     float v3; // [esp+8h] [ebp-14h]
     float sinT; // [esp+Ch] [ebp-10h]
@@ -230,7 +230,7 @@ void __cdecl Bullet_RandomDir(int32_t time, float *x, float *y)
     *y = r * sinT;
 }
 
-void __cdecl Bullet_Fire(
+void Bullet_Fire(
     gentity_s *attacker,
     float spread,
     const weaponParms *wp,
@@ -309,7 +309,7 @@ void __cdecl Bullet_Fire(
 #endif
 }
 
-void __cdecl Bullet_FireExtended(BulletFireParams *bp, const WeaponDef *weapDef, gentity_s *attacker, int32_t gameTime)
+void Bullet_FireExtended(BulletFireParams *bp, const WeaponDef *weapDef, gentity_s *attacker, int32_t gameTime)
 {
     int32_t extIndex; // [esp+4h] [ebp-50h]
     int32_t impactFlags; // [esp+8h] [ebp-4Ch] BYREF
@@ -357,7 +357,7 @@ void __cdecl Bullet_FireExtended(BulletFireParams *bp, const WeaponDef *weapDef,
     }
 }
 
-bool __cdecl Bullet_IgnoreHitEntity(const BulletFireParams *bp, const BulletTraceResults *br, gentity_s *attacker)
+bool Bullet_IgnoreHitEntity(const BulletFireParams *bp, const BulletTraceResults *br, gentity_s *attacker)
 {
     iassert(bp);
     iassert(br);
@@ -477,7 +477,7 @@ static void Bullet_NofifyActor(
 }
 #endif
 
-void __cdecl Bullet_Process(
+void Bullet_Process(
     const BulletFireParams *bp,
     BulletTraceResults *br,
     const WeaponDef *weapDef,
@@ -570,7 +570,7 @@ void __cdecl Bullet_Process(
         bulletEffectTempEnt->s.un1.scale |= (uint8_t)*outImpactFlags;
 }
 
-int32_t __cdecl Bullet_GetDamage(
+int32_t Bullet_GetDamage(
     const BulletFireParams *bp,
     const BulletTraceResults *br,
     const WeaponDef *weapDef,
@@ -632,7 +632,7 @@ int32_t __cdecl Bullet_GetDamage(
     return (int)((double)damage * bp->damageMultiplier);
 }
 
-void __cdecl Bullet_ImpactEffect(
+void Bullet_ImpactEffect(
     const BulletFireParams *bp,
     const BulletTraceResults *br,
     const float *normal,
@@ -797,7 +797,7 @@ void __cdecl Bullet_ImpactEffect(
 #endif 
 }
 
-void __cdecl Bullet_FirePenetrate(BulletFireParams *bp, const WeaponDef *weapDef, gentity_s *attacker, int32_t gameTime)
+void Bullet_FirePenetrate(BulletFireParams *bp, const WeaponDef *weapDef, gentity_s *attacker, int32_t gameTime)
 {
     float v4; // [esp+10h] [ebp-190h]
     float v5; // [esp+18h] [ebp-188h]

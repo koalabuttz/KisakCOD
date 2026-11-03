@@ -592,12 +592,12 @@ char *g_playerAnimTypeNames[64];
 
 WeaponDef bg_defaultWeaponDefs;
 
-char *__cdecl BG_GetPlayerAnimTypeName(int32_t index)
+char *BG_GetPlayerAnimTypeName(int32_t index)
 {
     return g_playerAnimTypeNames[index];
 }
 
-void __cdecl TRACK_bg_weapons_load_obj()
+void TRACK_bg_weapons_load_obj()
 {
     track_static_alloc_internal(szWeapOverlayReticleNames, 8, "szWeapOverlayReticleNames", 9);
     track_static_alloc_internal(szWeapStanceNames, 12, "szWeapStanceNames", 9);
@@ -610,21 +610,21 @@ void __cdecl TRACK_bg_weapons_load_obj()
     track_static_alloc_internal(szWeapInventoryTypeNames, 16, "szWeapInventoryTypeNames", 9);
 }
 
-const char *__cdecl BG_GetWeaponTypeName(weapType_t type)
+const char *BG_GetWeaponTypeName(weapType_t type)
 {
     bcassert(type < WEAPTYPE_NUM, ARRAY_COUNT(szWeapTypeNames));
 
     return szWeapTypeNames[type];
 }
 
-const char *__cdecl BG_GetWeaponClassName(weapClass_t type)
+const char *BG_GetWeaponClassName(weapClass_t type)
 {
     bcassert(type < WEAPCLASS_NUM, ARRAY_COUNT(szWeapClassNames));
 
     return szWeapClassNames[type];
 }
 
-const char *__cdecl BG_GetWeaponInventoryTypeName(weapInventoryType_t type)
+const char *BG_GetWeaponInventoryTypeName(weapInventoryType_t type)
 {
     bcassert(type < WEAPINVENTORYCOUNT, ARRAY_COUNT(szWeapInventoryTypeNames));
 
@@ -632,7 +632,7 @@ const char *__cdecl BG_GetWeaponInventoryTypeName(weapInventoryType_t type)
 }
 
 #ifdef KISAK_MP
-void __cdecl BG_LoadWeaponStrings()
+void BG_LoadWeaponStrings()
 {
     uint32_t i; // [esp+0h] [ebp-4h]
 
@@ -641,7 +641,7 @@ void __cdecl BG_LoadWeaponStrings()
 }
 #endif
 
-void __cdecl BG_LoadPlayerAnimTypes()
+void BG_LoadPlayerAnimTypes()
 {
 #ifdef KISAK_MP
     char v0; // [esp+3h] [ebp-29h]
@@ -685,7 +685,7 @@ void __cdecl BG_LoadPlayerAnimTypes()
 #endif
 }
 
-void __cdecl InitWeaponDef(WeaponDef *weapDef)
+void InitWeaponDef(WeaponDef *weapDef)
 {
     const cspField_t *pField; // [esp+4h] [ebp-8h]
     int iField; // [esp+8h] [ebp-4h]
@@ -702,7 +702,7 @@ void __cdecl InitWeaponDef(WeaponDef *weapDef)
     }
 }
 
-char __cdecl G_ParseAIWeaponAccurayGraphFile(
+char G_ParseAIWeaponAccurayGraphFile(
     const char *buffer,
     const char *fileName,
     float (*knots)[2],
@@ -767,7 +767,7 @@ char __cdecl G_ParseAIWeaponAccurayGraphFile(
     }
 }
 
-char __cdecl G_ParseWeaponAccurayGraphInternal(
+char G_ParseWeaponAccurayGraphInternal(
     WeaponDef *weaponDef,
     const char *dirName,
     const char *graphName,
@@ -842,7 +842,7 @@ char __cdecl G_ParseWeaponAccurayGraphInternal(
     }
 }
 
-char __cdecl G_ParseWeaponAccurayGraphs(WeaponDef *weaponDef)
+char G_ParseWeaponAccurayGraphs(WeaponDef *weaponDef)
 {
     uint32_t size; // [esp+4h] [ebp-8Ch]
     int weaponType; // [esp+8h] [ebp-88h]
@@ -877,7 +877,7 @@ char __cdecl G_ParseWeaponAccurayGraphs(WeaponDef *weaponDef)
     return 1;
 }
 
-WeaponDef *__cdecl BG_LoadDefaultWeaponDef_LoadObj()
+WeaponDef *BG_LoadDefaultWeaponDef_LoadObj()
 {
     InitWeaponDef(&bg_defaultWeaponDefs);
     bg_defaultWeaponDefs.szInternalName = "none";
@@ -888,7 +888,7 @@ WeaponDef *__cdecl BG_LoadDefaultWeaponDef_LoadObj()
     return &bg_defaultWeaponDefs;
 }
 
-WeaponDef *__cdecl BG_LoadDefaultWeaponDef()
+WeaponDef *BG_LoadDefaultWeaponDef()
 {
     if (IsFastFileLoad())
         return BG_LoadDefaultWeaponDef_FastFile();
@@ -896,12 +896,12 @@ WeaponDef *__cdecl BG_LoadDefaultWeaponDef()
         return BG_LoadDefaultWeaponDef_LoadObj();
 }
 
-WeaponDef *__cdecl BG_LoadDefaultWeaponDef_FastFile()
+WeaponDef *BG_LoadDefaultWeaponDef_FastFile()
 {
     return DB_FindXAssetHeader(ASSET_TYPE_WEAPON, "none").weapon;
 }
 
-int __cdecl Weapon_GetStringArrayIndex(const char *value, char **stringArray, int arraySize)
+int Weapon_GetStringArrayIndex(const char *value, char **stringArray, int arraySize)
 {
     int arrayIndex; // [esp+0h] [ebp-4h]
 
@@ -916,7 +916,7 @@ int __cdecl Weapon_GetStringArrayIndex(const char *value, char **stringArray, in
     return -1;
 }
 
-snd_alias_list_t **__cdecl BG_RegisterSurfaceTypeSounds(const char *surfaceSoundBase)
+snd_alias_list_t **BG_RegisterSurfaceTypeSounds(const char *surfaceSoundBase)
 {
     char *v2; // eax
     snd_alias_list_t *SoundAlias; // eax
@@ -968,7 +968,7 @@ snd_alias_list_t **__cdecl BG_RegisterSurfaceTypeSounds(const char *surfaceSound
     return result;
 }
 
-int __cdecl BG_ParseWeaponDefSpecificFieldType(uint8_t *pStruct, const char *pValue, int iFieldType)
+int BG_ParseWeaponDefSpecificFieldType(uint8_t *pStruct, const char *pValue, int iFieldType)
 {
     uint16_t LowercaseString_DONE; // ax
     uint16_t v5; // ax
@@ -1179,7 +1179,7 @@ int __cdecl BG_ParseWeaponDefSpecificFieldType(uint8_t *pStruct, const char *pVa
     return result;
 }
 
-void __cdecl BG_SetupTransitionTimes(WeaponDef *weapDef)
+void BG_SetupTransitionTimes(WeaponDef *weapDef)
 {
     double v1; // st7
     double v2; // st7
@@ -1196,7 +1196,7 @@ void __cdecl BG_SetupTransitionTimes(WeaponDef *weapDef)
     weapDef->fOOPosAnimLength[1] = v2;
 }
 
-void __cdecl BG_CheckWeaponDamageRanges(WeaponDef *weapDef)
+void BG_CheckWeaponDamageRanges(WeaponDef *weapDef)
 {
     if (weapDef->fMaxDamageRange <= 0.0f)
         weapDef->fMaxDamageRange = 999999.0f;
@@ -1204,7 +1204,7 @@ void __cdecl BG_CheckWeaponDamageRanges(WeaponDef *weapDef)
         weapDef->fMinDamageRange = 999999.12f;
 }
 
-void __cdecl BG_CheckProjectileValues(WeaponDef *weaponDef)
+void BG_CheckProjectileValues(WeaponDef *weaponDef)
 {
     iassert(weaponDef->weapType == WEAPTYPE_PROJECTILE);
 
@@ -1221,7 +1221,7 @@ void __cdecl BG_CheckProjectileValues(WeaponDef *weaponDef)
         Com_Error(ERR_DROP, "Destabilization rate time for for WeapType %s must be non-negative", weaponDef->szDisplayName);
 }
 
-WeaponDef *__cdecl BG_LoadWeaponDefInternal(const char *one, const char *two)
+WeaponDef *BG_LoadWeaponDefInternal(const char *one, const char *two)
 {
     snd_alias_list_t *SoundAlias; // eax
     snd_alias_list_t *v4; // eax
@@ -1351,7 +1351,7 @@ WeaponDef *__cdecl BG_LoadWeaponDefInternal(const char *one, const char *two)
 }
 
 
-WeaponDef *__cdecl BG_LoadWeaponDef_LoadObj(const char *name)
+WeaponDef *BG_LoadWeaponDef_LoadObj(const char *name)
 {
     WeaponDef *weapDef; // [esp+0h] [ebp-4h]
 

@@ -307,55 +307,55 @@ struct cgMedia_t
     Material *textDecodeCharactersGlow;
 };
 
-const rectDef_s *__cdecl Window_GetRect(const windowDef_t *w);
+const rectDef_s *Window_GetRect(const windowDef_t *w);
 void CG_RegisterDvars();
-void __cdecl TRACK_cg_main();
-void __cdecl CG_GetDObjOrientation(int localClientNum, int dobjHandle, float (*axis)[3], float *origin);
-void __cdecl CG_CopyEntityOrientation(int localClientNum, int entIndex, float *origin_out, float (*axis_out)[3]);
-void __cdecl CG_GetSoundEntityOrientation(SndEntHandle sndEnt, float *origin_out, float (*axis_out)[3]);
-unsigned int __cdecl CG_SoundEntityUseEq(SndEntHandle sndEnt);
-const playerState_s *__cdecl CG_GetPredictedPlayerState(int localClientNum);
-int __cdecl CG_IsValidRemoteInputState(int localClientNum);
-void __cdecl CG_SetTime(int serverTime);
-void __cdecl CG_SetServerCommandSequence(int reliableSent);
-void __cdecl CG_GameMessage(const char *msg, int flags);
-void __cdecl CG_BoldGameMessage(const char *msg, int flags);
-void __cdecl CG_RegisterSurfaceTypeSounds(const char *pszType, snd_alias_list_t **sound);
-void __cdecl CG_AddAudioPhysicsClass(PhysPreset *physPreset, char (*classes)[64], int *nclasses);
+void TRACK_cg_main();
+void CG_GetDObjOrientation(int localClientNum, int dobjHandle, float (*axis)[3], float *origin);
+void CG_CopyEntityOrientation(int localClientNum, int entIndex, float *origin_out, float (*axis_out)[3]);
+void CG_GetSoundEntityOrientation(SndEntHandle sndEnt, float *origin_out, float (*axis_out)[3]);
+unsigned int CG_SoundEntityUseEq(SndEntHandle sndEnt);
+const playerState_s *CG_GetPredictedPlayerState(int localClientNum);
+int CG_IsValidRemoteInputState(int localClientNum);
+void CG_SetTime(int serverTime);
+void CG_SetServerCommandSequence(int reliableSent);
+void CG_GameMessage(const char *msg, int flags);
+void CG_BoldGameMessage(const char *msg, int flags);
+void CG_RegisterSurfaceTypeSounds(const char *pszType, snd_alias_list_t **sound);
+void CG_AddAudioPhysicsClass(PhysPreset *physPreset, char (*classes)[64], int *nclasses);
 void CG_RegisterPhysicsSounds_FastFile();
 void CG_RegisterPhysicsSounds();
-void __cdecl CG_RegisterSounds();
-void __cdecl CG_LoadWorld(int savegame);
-void __cdecl RegisterNightVisionAssets(int localClientNum);
-void __cdecl CG_RegisterGraphics(int localClientNum, const char *mapname);
-void __cdecl CG_StartAmbient(int localClientNum);
-void __cdecl CG_StopSoundAlias(const int localClientNum, SndEntHandle entitynum, snd_alias_list_t *aliasList);
-void __cdecl CG_StopSoundsOnEnt(const int localClientNum, SndEntHandle entitynum);
-void __cdecl CG_StopSoundAliasByName(int localClientNum, SndEntHandle entityNum, const char *aliasName);
-void __cdecl CG_StopClientSoundAliasByName(int localClientNum, const char *aliasName);
-//void __cdecl CG_SubtitlePrint(int msec, snd_alias_t *alias);
-void __cdecl CG_SubtitleSndLengthNotify(int msec, const snd_alias_t *lengthNotifyData);
-void __cdecl CG_ScriptNotifySndLengthNotify(int msec, void *lengthNotifyData);
-void __cdecl CG_AddFXSoundAlias(int localClientNum, const float *origin, snd_alias_list_t *aliasList);
-int __cdecl CG_PlaySoundAlias(int localClientNum, SndEntHandle entitynum, const float *origin, snd_alias_list_t *aliasList);
-int __cdecl CG_PlaySoundAliasByName(int localClientNum, SndEntHandle entitynum, const float *origin, const char *aliasname);
-int __cdecl CG_PlaySoundAliasAsMasterByName(int localClientNum, SndEntHandle entitynum, const float *origin, const char *aliasname);
-void __cdecl CG_LoadHudMenu(int localClientNum);
-void __cdecl CG_InitViewDimensions(int localClientNum);
-const char *__cdecl CG_GetTeamName(team_t team);
-const char *__cdecl CG_GetPlayerTeamName(int localClientNum);
-const char *__cdecl CG_GetPlayerOpposingTeamName(int localClientNum);
-bool __cdecl CG_IsPlayerDead(int localClientNum);
-int __cdecl CG_GetPlayerClipAmmoCount(int localClientNum);
-void __cdecl CG_InitDof(GfxDepthOfField *dof);
-void __cdecl CG_Init(int localClientNum, int savegame);
-void __cdecl CG_FreeWeapons(int localClientNum);
-void __cdecl CG_Shutdown(int localClientNum);
-void *__cdecl Hunk_AllocXAnimClient(int size);
-int __cdecl CG_PlayClientSoundAlias(int localClientNum, snd_alias_list_t *aliasList);
-int __cdecl CG_PlayClientSoundAliasByName(int localClientNum, const char *aliasname);
-int __cdecl CG_PlayEntitySoundAlias(int localClientNum, SndEntHandle entitynum, snd_alias_list_t *aliasList);
-int __cdecl CG_PlayEntitySoundAliasByName(int localClientNum, SndEntHandle entitynum, const char *aliasname);
+void CG_RegisterSounds();
+void CG_LoadWorld(int savegame);
+void RegisterNightVisionAssets(int localClientNum);
+void CG_RegisterGraphics(int localClientNum, const char *mapname);
+void CG_StartAmbient(int localClientNum);
+void CG_StopSoundAlias(const int localClientNum, SndEntHandle entitynum, snd_alias_list_t *aliasList);
+void CG_StopSoundsOnEnt(const int localClientNum, SndEntHandle entitynum);
+void CG_StopSoundAliasByName(int localClientNum, SndEntHandle entityNum, const char *aliasName);
+void CG_StopClientSoundAliasByName(int localClientNum, const char *aliasName);
+//void CG_SubtitlePrint(int msec, snd_alias_t *alias);
+void CG_SubtitleSndLengthNotify(int msec, const snd_alias_t *lengthNotifyData);
+void CG_ScriptNotifySndLengthNotify(int msec, void *lengthNotifyData);
+void CG_AddFXSoundAlias(int localClientNum, const float *origin, snd_alias_list_t *aliasList);
+int CG_PlaySoundAlias(int localClientNum, SndEntHandle entitynum, const float *origin, snd_alias_list_t *aliasList);
+int CG_PlaySoundAliasByName(int localClientNum, SndEntHandle entitynum, const float *origin, const char *aliasname);
+int CG_PlaySoundAliasAsMasterByName(int localClientNum, SndEntHandle entitynum, const float *origin, const char *aliasname);
+void CG_LoadHudMenu(int localClientNum);
+void CG_InitViewDimensions(int localClientNum);
+const char *CG_GetTeamName(team_t team);
+const char *CG_GetPlayerTeamName(int localClientNum);
+const char *CG_GetPlayerOpposingTeamName(int localClientNum);
+bool CG_IsPlayerDead(int localClientNum);
+int CG_GetPlayerClipAmmoCount(int localClientNum);
+void CG_InitDof(GfxDepthOfField *dof);
+void CG_Init(int localClientNum, int savegame);
+void CG_FreeWeapons(int localClientNum);
+void CG_Shutdown(int localClientNum);
+void *Hunk_AllocXAnimClient(int size);
+int CG_PlayClientSoundAlias(int localClientNum, snd_alias_list_t *aliasList);
+int CG_PlayClientSoundAliasByName(int localClientNum, const char *aliasname);
+int CG_PlayEntitySoundAlias(int localClientNum, SndEntHandle entitynum, snd_alias_list_t *aliasList);
+int CG_PlayEntitySoundAliasByName(int localClientNum, SndEntHandle entitynum, const char *aliasname);
 
 extern UiContext cgDC;
 extern cgs_t cgsArray[1];
@@ -544,7 +544,7 @@ inline cg_s *CG_GetLocalClientGlobals(int32_t localClientNum)
     return &cgArray[localClientNum];
 }
 
-inline weaponInfo_s *__cdecl CG_GetLocalClientWeaponInfo(int localClientNum, int weaponIndex)
+inline weaponInfo_s *CG_GetLocalClientWeaponInfo(int localClientNum, int weaponIndex)
 {
     iassert(localClientNum == 0);
 
@@ -573,7 +573,7 @@ inline int CG_GetLocalClientTime(int localClientNum)
 
 
 // LWSS: this isn't really in SP
-inline float __cdecl CG_BannerScoreboardScaleMultiplier()
+inline float CG_BannerScoreboardScaleMultiplier()
 {
     return 1.0f;
 }

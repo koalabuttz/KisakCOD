@@ -4,7 +4,7 @@
 
 DynEntityCollWorld dynEntCollWorlds[2];
 
-void __cdecl TRACK_DynEntityCollWorld()
+void TRACK_DynEntityCollWorld()
 {
     int32_t collType; // [esp+0h] [ebp-4h]
 
@@ -12,7 +12,7 @@ void __cdecl TRACK_DynEntityCollWorld()
         track_static_alloc_internal(&dynEntCollWorlds[collType], 20508, "dynEntCollWorlds[collType]", 25);
 }
 
-DynEntityCollSector *__cdecl DynEnt_GetCollSector(DynEntityCollType collType, uint32_t sectorIndex)
+DynEntityCollSector *DynEnt_GetCollSector(DynEntityCollType collType, uint32_t sectorIndex)
 {
     iassert(sectorIndex);
     iassert(sectorIndex < 1024);
@@ -21,7 +21,7 @@ DynEntityCollSector *__cdecl DynEnt_GetCollSector(DynEntityCollType collType, ui
     return &dynEntCollWorlds[collType].sectors[sectorIndex];
 }
 
-void __cdecl DynEnt_ClearCollWorld(DynEntityCollType collType)
+void DynEnt_ClearCollWorld(DynEntityCollType collType)
 {
     float worldSize; // [esp+8h] [ebp-14h]
     float worldSize_4; // [esp+Ch] [ebp-10h]
@@ -49,7 +49,7 @@ void __cdecl DynEnt_ClearCollWorld(DynEntityCollType collType)
         * 0.5;
 }
 
-void __cdecl DynEnt_UnlinkEntity(DynEntityCollType collType, uint16_t dynEntId)
+void DynEnt_UnlinkEntity(DynEntityCollType collType, uint16_t dynEntId)
 {
     uint16_t EntityCount; // ax
     DynEntityClient *ClientEntity; // eax
@@ -162,7 +162,7 @@ void __cdecl DynEnt_UnlinkEntity(DynEntityCollType collType, uint16_t dynEntId)
     }
 }
 
-void __cdecl DynEnt_LinkEntity(
+void DynEnt_LinkEntity(
     DynEntityCollType collType,
     uint16_t dynEntId,
     const float *absMins,
@@ -261,7 +261,7 @@ LABEL_29:
     *p_flags |= 4u;
 }
 
-void __cdecl DynEnt_AddToCollSector(
+void DynEnt_AddToCollSector(
     DynEntityCollType collType,
     uint16_t dynEntId,
     uint16_t sectorIndex)
@@ -313,7 +313,7 @@ void __cdecl DynEnt_AddToCollSector(
     *prevListIndex = dynEntId + 1;
 }
 
-void __cdecl DynEnt_SortCollSector(
+void DynEnt_SortCollSector(
     DynEntityCollType collType,
     uint16_t sectorIndex,
     const float *mins,
@@ -423,7 +423,7 @@ void __cdecl DynEnt_SortCollSector(
     }
 }
 
-uint16_t __cdecl DynEnt_AllocCollSector(DynEntityCollType collType, const float *mins, const float *maxs)
+uint16_t DynEnt_AllocCollSector(DynEntityCollType collType, const float *mins, const float *maxs)
 {
     DynEntityCollSector *sector; // [esp+4h] [ebp-18h]
     float size[2]; // [esp+8h] [ebp-14h]
@@ -467,14 +467,14 @@ uint16_t __cdecl DynEnt_AllocCollSector(DynEntityCollType collType, const float 
     return sectorIndex;
 }
 
-int32_t __cdecl DynEnt_GetContents(const DynEntityDef *dynEntDef)
+int32_t DynEnt_GetContents(const DynEntityDef *dynEntDef)
 {
     if (!dynEntDef)
         MyAssertHandler(".\\DynEntity\\DynEntity_coll.cpp", 625, 0, "%s", "dynEntDef");
     return dynEntDef->contents;
 }
 
-void __cdecl DynEnt_GetLocalBounds(const DynEntityDef *dynEntDef, float *mins, float *maxs)
+void DynEnt_GetLocalBounds(const DynEntityDef *dynEntDef, float *mins, float *maxs)
 {
     if (!dynEntDef)
         MyAssertHandler(".\\DynEntity\\DynEntity_coll.cpp", 636, 0, "%s", "dynEntDef");
@@ -490,7 +490,7 @@ void __cdecl DynEnt_GetLocalBounds(const DynEntityDef *dynEntDef, float *mins, f
         CM_ModelBounds(dynEntDef->brushModel, mins, maxs);
 }
 
-void __cdecl DynEnt_GetWorldBounds(const DynEntityPose *dynEntPose, float *mins, float *maxs)
+void DynEnt_GetWorldBounds(const DynEntityPose *dynEntPose, float *mins, float *maxs)
 {
     float s; // [esp+0h] [ebp-Ch]
     float radius; // [esp+8h] [ebp-4h]
@@ -507,7 +507,7 @@ void __cdecl DynEnt_GetWorldBounds(const DynEntityPose *dynEntPose, float *mins,
     Vec3AddScalar(dynEntPose->pose.origin, radius, maxs);
 }
 
-double __cdecl DynEnt_GetRadiusDistSqr(const DynEntityPose *dynEntPose, const float *origin)
+double DynEnt_GetRadiusDistSqr(const DynEntityPose *dynEntPose, const float *origin)
 {
     float absMaxs[3]; // [esp+0h] [ebp-28h] BYREF
     float offset[3]; // [esp+Ch] [ebp-1Ch] BYREF
@@ -536,7 +536,7 @@ double __cdecl DynEnt_GetRadiusDistSqr(const DynEntityPose *dynEntPose, const fl
     return Vec3LengthSq(offset);
 }
 
-double __cdecl DynEnt_GetCylindricalRadiusDistSqr(const DynEntityPose *dynEntPose, const float *origin)
+double DynEnt_GetCylindricalRadiusDistSqr(const DynEntityPose *dynEntPose, const float *origin)
 {
     float absMaxs[3]; // [esp+4h] [ebp-24h] BYREF
     float offset[2]; // [esp+10h] [ebp-18h]
@@ -565,7 +565,7 @@ double __cdecl DynEnt_GetCylindricalRadiusDistSqr(const DynEntityPose *dynEntPos
     return (float)(offset[1] * offset[1] + offset[0] * offset[0]);
 }
 
-bool __cdecl DynEnt_EntityInArea(
+bool DynEnt_EntityInArea(
     const DynEntityDef *dynEntDef,
     const DynEntityPose *dynEntPose,
     const float *mins,
@@ -591,7 +591,7 @@ bool __cdecl DynEnt_EntityInArea(
     return *mins <= (double)absMaxs[0] && mins[1] <= (double)absMaxs[1] && mins[2] <= (double)absMaxs[2];
 }
 
-void __cdecl DynEnt_PointTraceToModel(
+void DynEnt_PointTraceToModel(
     const DynEntityDef *dynEntDef,
     const DynEntityPose *dynEntPose,
     const pointtrace_t *clip,
@@ -650,7 +650,7 @@ void __cdecl DynEnt_PointTraceToModel(
     }
 }
 
-void __cdecl DynEnt_PointTraceToBrush(
+void DynEnt_PointTraceToBrush(
     const DynEntityDef *dynEntDef,
     const DynEntityPose *dynEntPose,
     const pointtrace_t *clip,
@@ -710,7 +710,7 @@ void __cdecl DynEnt_PointTraceToBrush(
     }
 }
 
-void __cdecl DynEnt_ClipMoveTraceToBrush(
+void DynEnt_ClipMoveTraceToBrush(
     const DynEntityDef *dynEntDef,
     const DynEntityPose *dynEntPose,
     const moveclip_t *clip,
@@ -773,7 +773,7 @@ void __cdecl DynEnt_ClipMoveTraceToBrush(
     }
 }
 
-void __cdecl DynEnt_SetPhysObjCollision(const DynEntityDef *dynEntDef, dxBody *physId)
+void DynEnt_SetPhysObjCollision(const DynEntityDef *dynEntDef, dxBody *physId)
 {
     float mins[3]; // [esp+0h] [ebp-18h] BYREF
     float maxs[3]; // [esp+Ch] [ebp-Ch] BYREF

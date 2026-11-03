@@ -13,20 +13,20 @@
 XModelDefault g_default;
 Material *g_materials[1];
 
-void __cdecl TRACK_xmodel()
+void TRACK_xmodel()
 {
     track_static_alloc_internal(&g_default, sizeof(g_default), "g_default", 11);
 }
 
-XModelSurfs *__cdecl XModelSurfsFindData(const char *name)
+XModelSurfs *XModelSurfsFindData(const char *name)
 {
     return (XModelSurfs*)Hunk_FindDataForFile(3, name);
 }
 
-void __cdecl XModelReadSurface_BuildCollisionTree(
+void XModelReadSurface_BuildCollisionTree(
     XSurface *surface,
     uint32_t vertListIndex,
-    void *(__cdecl *Alloc)(int))
+    void *(*Alloc)(int))
 {
     unsigned __int8 *v3; // eax
     int v5; // [esp+64h] [ebp-134h]
@@ -330,7 +330,7 @@ void __cdecl XModelReadSurface_BuildCollisionTree(
     free(options.treeNodePool);
 }
 
-static void __cdecl XSurfaceTransferGetTexCoordRange(const XVertexInfo_s *v, int vertCount, float *texCoordAv)
+static void XSurfaceTransferGetTexCoordRange(const XVertexInfo_s *v, int vertCount, float *texCoordAv)
 {
     int vertIndex; // [esp+1Ch] [ebp-8h]
     char texCoordUnitRange[2]; // [esp+20h] [ebp-4h]
@@ -370,14 +370,14 @@ static void __cdecl XSurfaceTransferGetTexCoordRange(const XVertexInfo_s *v, int
     }
 }
 
-static void __cdecl XSurfaceTransfer_Position_GfxPackedVertex_(GfxPackedVertex *out, const XVertexInfo_s *v)
+static void XSurfaceTransfer_Position_GfxPackedVertex_(GfxPackedVertex *out, const XVertexInfo_s *v)
 {
     out->xyz[0] = v->offset[0];
     out->xyz[1] = v->offset[1];
     out->xyz[2] = v->offset[2];
 }
 
-static void __cdecl XSurfaceTransfer_BinormalSign_GfxPackedVertex_(GfxPackedVertex *out, const XVertexInfo_s *v)
+static void XSurfaceTransfer_BinormalSign_GfxPackedVertex_(GfxPackedVertex *out, const XVertexInfo_s *v)
 {
     float binormal[3]; // [esp+8h] [ebp-Ch] BYREF
 
@@ -388,13 +388,13 @@ static void __cdecl XSurfaceTransfer_BinormalSign_GfxPackedVertex_(GfxPackedVert
         out->binormalSign = 1.0f;
 }
 
-static void __cdecl XSurfaceTransfer_NormalTangent_GfxPackedVertex_(GfxPackedVertex *out, const XVertexInfo_s *v)
+static void XSurfaceTransfer_NormalTangent_GfxPackedVertex_(GfxPackedVertex *out, const XVertexInfo_s *v)
 {
     out->normal = Vec3PackUnitVec(v->normal);
     out->tangent = Vec3PackUnitVec(v->tangent);
 }
 
-static void __cdecl XSurfaceTransfer_Texcoord_GfxPackedVertex_(
+static void XSurfaceTransfer_Texcoord_GfxPackedVertex_(
     GfxPackedVertex *out,
     const XVertexInfo_s *v,
     const float *texCoordAv)
@@ -406,12 +406,12 @@ static void __cdecl XSurfaceTransfer_Texcoord_GfxPackedVertex_(
     out->texCoord = Vec2PackTexCoords(texCoord);
 }
 
-static void __cdecl XSurfaceTransfer_Color_GfxPackedVertex_(GfxPackedVertex *out, const XVertexInfo_s *v)
+static void XSurfaceTransfer_Color_GfxPackedVertex_(GfxPackedVertex *out, const XVertexInfo_s *v)
 {
     out->color.packed = *(_DWORD *)v->color;
 }
 
-void __cdecl XSurfaceTransfer(
+void XSurfaceTransfer(
     const XVertexBuffer *surfVerts,
     GfxPackedVertex *verts0,
     GfxPackedVertex *verts1,
@@ -447,7 +447,7 @@ static void ReadBlend(XSurface *surface, int *partBits, XBlendLoadInfo *blend, u
     blend->boneWeight = Buf_Read<unsigned short>(pos);
 }
 
-void __cdecl XModelReadSurface(XModel *model, unsigned char **pos, void *(__cdecl *Alloc)(int), XSurface *surface)
+void XModelReadSurface(XModel *model, unsigned char **pos, void *(*Alloc)(int), XSurface *surface)
 {
     int vertCount; // edx
     __int16 v32; // [esp+84h] [ebp-6BCh]
@@ -846,14 +846,14 @@ void __cdecl XModelReadSurface(XModel *model, unsigned char **pos, void *(__cdec
     Hunk_FreeTempMemory((char*)surfVerts);
 }
 
-void __cdecl XModelReadSurfaces(
+void XModelReadSurfaces(
     XModel *model,
     const char *name,
     XModelSurfs *modelSurfs,
     int *modelPartBits,
     int surfCount,
     unsigned char **pos,
-    void *(__cdecl *AllocMesh)(int))
+    void *(*AllocMesh)(int))
 {
     int j; // [esp+4h] [ebp-18h]
     int surfIndex; // [esp+8h] [ebp-14h]
@@ -888,10 +888,10 @@ void __cdecl XModelReadSurfaces(
     }
 }
 
-XModelSurfs *__cdecl R_XModelSurfsLoadFile(
+XModelSurfs *R_XModelSurfsLoadFile(
     XModel *model,
     const char *name,
-    void *(__cdecl *Alloc)(int),
+    void *(*Alloc)(int),
     __int16 modelNumsurfs,
     const char *modelName)
 {
@@ -966,15 +966,15 @@ XModelSurfs *__cdecl R_XModelSurfsLoadFile(
     }
 }
 
-void __cdecl XModelSurfsSetData(const char *name, XModelSurfs *modelSurfs, void *(__cdecl *Alloc)(int))
+void XModelSurfsSetData(const char *name, XModelSurfs *modelSurfs, void *(*Alloc)(int))
 {
     Hunk_SetDataForFile(3, name, modelSurfs, Alloc);
 }
 
-int __cdecl XModelSurfsPrecache(
+int XModelSurfsPrecache(
     XModel *model,
     const char *name,
-    void *(__cdecl *Alloc)(int),
+    void *(*Alloc)(int),
     __int16 modelNumsurfs,
     const char *modelName,
     XModelSurfs *outModelSurfs)
@@ -1005,17 +1005,17 @@ int __cdecl XModelSurfsPrecache(
     }
 }
 
-PhysPreset *__cdecl XModel_PhysPresetPrecache(const char *name, void *(__cdecl *Alloc)(int))
+PhysPreset *XModel_PhysPresetPrecache(const char *name, void *(*Alloc)(int))
 {
     iassert(name);
 
     return PhysPresetPrecache(name, Alloc);
 }
 
-void __cdecl XModelLoadCollData(
+void XModelLoadCollData(
     unsigned __int8 **pos,
     XModel *model,
-    void *(__cdecl *AllocColl)(int),
+    void *(*AllocColl)(int),
     const char *name)
 {
     iassert(!model->contents);
@@ -1089,7 +1089,7 @@ void __cdecl XModelLoadCollData(
     }
 }
 
-char __cdecl XModelLoadConfigFile(const char *name, unsigned __int8 **pos, XModelConfig *config)
+char XModelLoadConfigFile(const char *name, unsigned __int8 **pos, XModelConfig *config)
 {
     short version = Buf_Read<short>(pos);
 
@@ -1140,7 +1140,7 @@ char __cdecl XModelLoadConfigFile(const char *name, unsigned __int8 **pos, XMode
     return 1;
 }
 
-bool __cdecl XModelAllowLoadMesh()
+bool XModelAllowLoadMesh()
 {
 #ifdef KISAK_MP
     return com_dedicated->current.integer == 0;
@@ -1151,19 +1151,19 @@ bool __cdecl XModelAllowLoadMesh()
 #endif
 }
 
-static XModelPartsLoad *__cdecl XModelPartsFindData(const char *name)
+static XModelPartsLoad *XModelPartsFindData(const char *name)
 {
     return (XModelPartsLoad *)Hunk_FindDataForFile(4, name);
 }
 
-void __cdecl XModelPartsSetData(const char *name, XModelPartsLoad *modelParts, void *(__cdecl *Alloc)(int))
+void XModelPartsSetData(const char *name, XModelPartsLoad *modelParts, void *(*Alloc)(int))
 {
     Hunk_SetDataForFile(4, name, modelParts, Alloc);
 }
 
-XModelPartsLoad *__cdecl XModelPartsLoadFile(XModel *model, const char *name, void *(__cdecl *Alloc)(int));
+XModelPartsLoad *XModelPartsLoadFile(XModel *model, const char *name, void *(*Alloc)(int));
 
-XModelPartsLoad *__cdecl XModelPartsPrecache(XModel *model, const char *name, void *(__cdecl *Alloc)(int))
+XModelPartsLoad *XModelPartsPrecache(XModel *model, const char *name, void *(*Alloc)(int))
 {
     XModelPartsLoad *modelParts; // [esp+0h] [ebp-4h]
 
@@ -1184,7 +1184,7 @@ XModelPartsLoad *__cdecl XModelPartsPrecache(XModel *model, const char *name, vo
     }
 }
 
-void __cdecl XModelCopyXModelParts(const XModelPartsLoad *modelParts, XModel *model)
+void XModelCopyXModelParts(const XModelPartsLoad *modelParts, XModel *model)
 {
     model->numBones = modelParts->numBones;
     model->numRootBones = modelParts->numRootBones;
@@ -1196,7 +1196,7 @@ void __cdecl XModelCopyXModelParts(const XModelPartsLoad *modelParts, XModel *mo
     model->baseMat = modelParts->baseMat;
 }
 
-XModel *__cdecl XModelLoadFile(char *name, void *(__cdecl *Alloc)(int), void *(__cdecl *AllocColl)(int))
+XModel *XModelLoadFile(char *name, void *(*Alloc)(int), void *(*AllocColl)(int))
 {
     int *partBits; // edx
     Material *v6; // eax
@@ -1395,7 +1395,7 @@ XModel *__cdecl XModelLoadFile(char *name, void *(__cdecl *Alloc)(int), void *(_
     }
 }
 
-void __cdecl XModelCalcBasePose(XModelPartsLoad *modelParts)
+void XModelCalcBasePose(XModelPartsLoad *modelParts)
 {
     float len; // [esp+88h] [ebp-30h]
     int numBones; // [esp+90h] [ebp-28h]
@@ -1455,7 +1455,7 @@ void __cdecl XModelCalcBasePose(XModelPartsLoad *modelParts)
     }
 }
 
-XModelPartsLoad *__cdecl XModelPartsLoadFile(XModel *model, const char *name, void *(__cdecl *Alloc)(int))
+XModelPartsLoad *XModelPartsLoadFile(XModel *model, const char *name, void *(*Alloc)(int))
 {
     uint16_t prev; // ax
     unsigned __int8 *pos; // [esp+30h] [ebp-88h] BYREF
@@ -1598,7 +1598,7 @@ XModelPartsLoad *__cdecl XModelPartsLoadFile(XModel *model, const char *name, vo
     }
 }
 
-XModel *__cdecl XModelLoad(char *name, void *(__cdecl *Alloc)(int), void *(__cdecl *AllocColl)(int))
+XModel *XModelLoad(char *name, void *(*Alloc)(int), void *(*AllocColl)(int))
 {
     XModel *model; // [esp+0h] [ebp-4h]
 
@@ -1609,7 +1609,7 @@ XModel *__cdecl XModelLoad(char *name, void *(__cdecl *Alloc)(int), void *(__cde
         return 0;
 }
 
-static XModelPartsLoad *__cdecl XModelCreateDefaultParts()
+static XModelPartsLoad *XModelCreateDefaultParts()
 {
     g_default.modelParts.parentList = g_default.parentList;
     g_default.modelParts.boneNames = (uint16_t *)&g_default;
@@ -1623,7 +1623,7 @@ static XModelPartsLoad *__cdecl XModelCreateDefaultParts()
     return &g_default.modelParts;
 }
 
-static void __cdecl XModelMakeDefault(XModel *model)
+static void XModelMakeDefault(XModel *model)
 {
     const XModelPartsLoad *DefaultParts; // eax
 
@@ -1646,7 +1646,7 @@ static void __cdecl XModelMakeDefault(XModel *model)
     model->boneInfo = &g_default.boneInfo;
 }
 
-static XModel *__cdecl XModelCreateDefault(void *(__cdecl *Alloc)(int))
+static XModel *XModelCreateDefault(void *(*Alloc)(int))
 {
     XModel *model; // [esp+0h] [ebp-4h]
 
@@ -1655,7 +1655,7 @@ static XModel *__cdecl XModelCreateDefault(void *(__cdecl *Alloc)(int))
     return model;
 }
 
-static XModel *__cdecl XModelDefaultModel(const char *name, void *(__cdecl *Alloc)(int))
+static XModel *XModelDefaultModel(const char *name, void *(*Alloc)(int))
 {
     XModel *model; // [esp+0h] [ebp-4h]
 
@@ -1664,7 +1664,7 @@ static XModel *__cdecl XModelDefaultModel(const char *name, void *(__cdecl *Allo
     return model;
 }
 
-XModel *__cdecl XModelPrecache_LoadObj(char *name, void *(__cdecl *Alloc)(int), void *(__cdecl *AllocColl)(int))
+XModel *XModelPrecache_LoadObj(char *name, void *(*Alloc)(int), void *(*AllocColl)(int))
 {
     XModel *model; // [esp+0h] [ebp-4h]
     XModel *modela; // [esp+0h] [ebp-4h]

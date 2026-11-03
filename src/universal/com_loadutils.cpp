@@ -3,7 +3,7 @@
 #include "com_files.h"
 #include <database/database.h>
 
-char *__cdecl Com_LoadInfoString(char *fileName, const char *fileDesc, const char *ident, char *loadBuffer)
+char *Com_LoadInfoString(char *fileName, const char *fileDesc, const char *ident, char *loadBuffer)
 {
     char *buffer; // [esp+20h] [ebp-4h]
 
@@ -16,7 +16,7 @@ char *__cdecl Com_LoadInfoString(char *fileName, const char *fileDesc, const cha
     return buffer;
 }
 
-const char *__cdecl Com_LoadInfoString_FastFile(const char *fileName, const char *fileDesc, const char *ident)
+const char *Com_LoadInfoString_FastFile(const char *fileName, const char *fileDesc, const char *ident)
 {
     uint32_t v4; // [esp+0h] [ebp-20h]
     const char *buffer; // [esp+14h] [ebp-Ch]
@@ -32,7 +32,7 @@ const char *__cdecl Com_LoadInfoString_FastFile(const char *fileName, const char
     return &buffer[v4];
 }
 
-char *__cdecl Com_LoadInfoString_LoadObj(char *fileName, const char *fileDesc, const char *ident, char *loadBuffer)
+char *Com_LoadInfoString_LoadObj(char *fileName, const char *fileDesc, const char *ident, char *loadBuffer)
 {
     uint32_t v5; // [esp+0h] [ebp-1Ch]
     int fileHandle; // [esp+14h] [ebp-8h] BYREF
@@ -54,7 +54,7 @@ char *__cdecl Com_LoadInfoString_LoadObj(char *fileName, const char *fileDesc, c
     return loadBuffer;
 }
 
-char *__cdecl Com_LoadRawTextFile(const char *fullpath)
+char *Com_LoadRawTextFile(const char *fullpath)
 {
     if (IsFastFileLoad())
         return Com_LoadRawTextFile_FastFile(fullpath);
@@ -62,7 +62,7 @@ char *__cdecl Com_LoadRawTextFile(const char *fullpath)
         return Com_LoadRawTextFile_LoadObj(fullpath);
 }
 
-char *__cdecl Com_LoadRawTextFile_FastFile(const char *fullpath)
+char *Com_LoadRawTextFile_FastFile(const char *fullpath)
 {
     RawFile *rawfile; // [esp+4h] [ebp-4h]
 
@@ -73,7 +73,7 @@ char *__cdecl Com_LoadRawTextFile_FastFile(const char *fullpath)
         return 0;
 }
 
-char *__cdecl Com_LoadRawTextFile_LoadObj(const char *fullpath)
+char *Com_LoadRawTextFile_LoadObj(const char *fullpath)
 {
     char *filebuf; // [esp+4h] [ebp-4h] BYREF
 
@@ -83,7 +83,7 @@ char *__cdecl Com_LoadRawTextFile_LoadObj(const char *fullpath)
         return 0;
 }
 
-void __cdecl Com_UnloadRawTextFile(char *filebuf)
+void Com_UnloadRawTextFile(char *filebuf)
 {
     if (!IsFastFileLoad())
         FS_FreeFile(filebuf);

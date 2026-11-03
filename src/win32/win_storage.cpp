@@ -84,7 +84,7 @@ CaCItem cacItems[61] =
   { 193, 0, STAT_TYPE_EQUIPMENT }
 }; // idb
 
-const CaCItem *__cdecl Script_FindCacItem(int itemIndex)
+const CaCItem *Script_FindCacItem(int itemIndex)
 {
     uint32_t i; // [esp+0h] [ebp-4h]
 
@@ -96,7 +96,7 @@ const CaCItem *__cdecl Script_FindCacItem(int itemIndex)
     return 0;
 }
 
-void __cdecl Script_ValidateSlotItem(int itemIndex, int level, uint32_t typeMask)
+void Script_ValidateSlotItem(int itemIndex, int level, uint32_t typeMask)
 {
     const CaCItem *cacItem; // [esp+0h] [ebp-4h]
 
@@ -119,12 +119,12 @@ void __cdecl Script_ValidateSlotItem(int itemIndex, int level, uint32_t typeMask
             cacItem->type);
 }
 
-bool __cdecl Script_CaCHasOverkill(int controllerIndex, int index)
+bool Script_CaCHasOverkill(int controllerIndex, int index)
 {
     return LiveStorage_GetStat(controllerIndex, 10 * (index / 10) + 6) == 166;
 }
 
-void __cdecl LiveStorage_ValidateCaCStat(int controllerIndex, int index, int value)
+void LiveStorage_ValidateCaCStat(int controllerIndex, int index, int value)
 {
     int rank; // [esp+4h] [ebp-8h]
     int xp; // [esp+8h] [ebp-4h]
@@ -165,7 +165,7 @@ void __cdecl LiveStorage_ValidateCaCStat(int controllerIndex, int index, int val
     }
 }
 
-void __cdecl LiveStorage_ValidateSetStatCmd(int index, int value)
+void LiveStorage_ValidateSetStatCmd(int index, int value)
 {
     int controller; // [esp+0h] [ebp-4h]
 
@@ -184,7 +184,7 @@ void __cdecl LiveStorage_ValidateSetStatCmd(int index, int value)
     }
 }
 
-void __cdecl LiveStorage_StatsInit(int controllerIndex)
+void LiveStorage_StatsInit(int controllerIndex)
 {
     LiveStorage_WeaponPerkChallengeReset(controllerIndex);
     LiveStorage_TrySetStatRange(controllerIndex, 2300, 2353, 0);
@@ -213,19 +213,19 @@ void __cdecl LiveStorage_StatsInit(int controllerIndex)
     LiveStorage_TrySetStat(controllerIndex, 3002, 9u);
 }
 
-void __cdecl LiveStorage_TrySetStat(int controllerIndex, int index, uint32_t value)
+void LiveStorage_TrySetStat(int controllerIndex, int index, uint32_t value)
 {
     if (LiveStorage_GetStat(controllerIndex, index) != value)
         LiveStorage_SetStat(controllerIndex, index, value);
 }
 
-void __cdecl LiveStorage_TrySetStatRange(int controllerIndex, int first, int last, uint32_t value)
+void LiveStorage_TrySetStatRange(int controllerIndex, int first, int last, uint32_t value)
 {
     while (first <= last)
         LiveStorage_TrySetStat(controllerIndex, first++, value);
 }
 
-void __cdecl LiveStorage_WeaponPerkChallengeReset(int controllerIndex)
+void LiveStorage_WeaponPerkChallengeReset(int controllerIndex)
 {
     LiveStorage_TrySetStatRange(controllerIndex, 290, 298, 0);
     LiveStorage_TrySetStatRange(controllerIndex, 270, 289, 0);
@@ -235,7 +235,7 @@ void __cdecl LiveStorage_WeaponPerkChallengeReset(int controllerIndex)
     LiveStorage_TrySetStatRange(controllerIndex, 3000, 3149, 0);
 }
 
-void __cdecl LiveStorage_UnlockClassAssault(int controllerIndex)
+void LiveStorage_UnlockClassAssault(int controllerIndex)
 {
     LiveStorage_TrySetStat(controllerIndex, 201, 0x19u);
     LiveStorage_TrySetStat(controllerIndex, 202, 5u);
@@ -254,7 +254,7 @@ void __cdecl LiveStorage_UnlockClassAssault(int controllerIndex)
     LiveStorage_TrySetStat(controllerIndex, 103, 1u);
 }
 
-void __cdecl LiveStorage_UnlockClassDemolitions(int controllerIndex)
+void LiveStorage_UnlockClassDemolitions(int controllerIndex)
 {
     LiveStorage_TrySetStat(controllerIndex, 231, 0x47u);
     LiveStorage_TrySetStat(controllerIndex, 232, 0);
@@ -272,7 +272,7 @@ void __cdecl LiveStorage_UnlockClassDemolitions(int controllerIndex)
     LiveStorage_TrySetStat(controllerIndex, 102, 1u);
 }
 
-void __cdecl LiveStorage_UnlockClassHeavyGunner(int controllerIndex)
+void LiveStorage_UnlockClassHeavyGunner(int controllerIndex)
 {
     LiveStorage_TrySetStat(controllerIndex, 221, 0x51u);
     LiveStorage_TrySetStat(controllerIndex, 222, 0);
@@ -291,7 +291,7 @@ void __cdecl LiveStorage_UnlockClassHeavyGunner(int controllerIndex)
     LiveStorage_TrySetStat(controllerIndex, 103, 1u);
 }
 
-void __cdecl LiveStorage_UnlockClassSniper(int controllerIndex)
+void LiveStorage_UnlockClassSniper(int controllerIndex)
 {
     LiveStorage_TrySetStat(controllerIndex, 241, 0x3Du);
     LiveStorage_TrySetStat(controllerIndex, 242, 0);
@@ -309,7 +309,7 @@ void __cdecl LiveStorage_UnlockClassSniper(int controllerIndex)
     LiveStorage_TrySetStat(controllerIndex, 101, 1u);
 }
 
-void __cdecl LiveStorage_UnlockClassSpecOps(int controllerIndex)
+void LiveStorage_UnlockClassSpecOps(int controllerIndex)
 {
     LiveStorage_TrySetStat(controllerIndex, 211, 0xAu);
     LiveStorage_TrySetStat(controllerIndex, 212, 0);
@@ -328,7 +328,7 @@ void __cdecl LiveStorage_UnlockClassSpecOps(int controllerIndex)
     LiveStorage_TrySetStat(controllerIndex, 101, 1u);
 }
 
-void __cdecl LiveStorage_SetFromLocString(int controllerIndex, const char *dvarName, char *preLocalizedText)
+void LiveStorage_SetFromLocString(int controllerIndex, const char *dvarName, char *preLocalizedText)
 {
     char *localizedText; // [esp+0h] [ebp-4h]
 
@@ -341,12 +341,12 @@ void __cdecl LiveStorage_SetFromLocString(int controllerIndex, const char *dvarN
         Dvar_SetCommand(dvarName, preLocalizedText);
 }
 
-void __cdecl LiveStorage_ReadStats()
+void LiveStorage_ReadStats()
 {
     LiveStorage_ReadStatsFromDir((char *)fs_gameDirVar->current.string);
 }
 
-void __cdecl LiveStorage_ReadStatsFromDir(char *directory)
+void LiveStorage_ReadStatsFromDir(char *directory)
 {
     char path[268]; // [esp+0h] [ebp-2238h] BYREF
     int v2; // [esp+10Ch] [ebp-212Ch]
@@ -384,7 +384,7 @@ void __cdecl LiveStorage_ReadStatsFromDir(char *directory)
     }
 }
 
-void __cdecl xxtea_enc(uint32_t *v, uint32_t n, const uint32_t *k)
+void xxtea_enc(uint32_t *v, uint32_t n, const uint32_t *k)
 {
     uint32_t e; // [esp+4h] [ebp-18h]
     uint32_t z; // [esp+8h] [ebp-14h]
@@ -411,7 +411,7 @@ void __cdecl xxtea_enc(uint32_t *v, uint32_t n, const uint32_t *k)
     }
 }
 
-void __cdecl xxtea_dec(uint32_t *v, uint32_t n, const uint32_t *k)
+void xxtea_dec(uint32_t *v, uint32_t n, const uint32_t *k)
 {
     uint32_t e; // [esp+4h] [ebp-18h]
     uint32_t sum; // [esp+Ch] [ebp-10h]
@@ -434,7 +434,7 @@ void __cdecl xxtea_dec(uint32_t *v, uint32_t n, const uint32_t *k)
     }
 }
 
-bool __cdecl LiveStorage_DecryptAndCheck(StatsFile *statsFile, const char *statsDir)
+bool LiveStorage_DecryptAndCheck(StatsFile *statsFile, const char *statsDir)
 {
     uint32_t hash[4]; // [esp+64h] [ebp-20h] BYREF
     uint32_t key[4]; // [esp+74h] [ebp-10h] BYREF
@@ -455,7 +455,7 @@ bool __cdecl LiveStorage_DecryptAndCheck(StatsFile *statsFile, const char *stats
     return I_stricmp("", statsFile->body.statsData.path) == 0;
 }
 
-void __cdecl LiveStorage_GetCryptKey(uint32_t nonce, unsigned __int8 *outKey)
+void LiveStorage_GetCryptKey(uint32_t nonce, unsigned __int8 *outKey)
 {
 #ifdef KISAK_MP
     uint32_t hashR[4]; // [esp+0h] [ebp-44h] BYREF
@@ -475,7 +475,7 @@ void __cdecl LiveStorage_GetCryptKey(uint32_t nonce, unsigned __int8 *outKey)
 #endif
 }
 
-int __cdecl LiveStorage_ChecksumGamerStats(unsigned __int8 *buffer, int len)
+int LiveStorage_ChecksumGamerStats(unsigned __int8 *buffer, int len)
 {
     return Com_BlockChecksumKey32(buffer, len, 0);
 }
@@ -497,12 +497,12 @@ void LiveStorage_NoStatsFound()
     LiveStorage_SetStat(v0, 299, unsignedInt);
 }
 
-void __cdecl LiveStorage_WriteChecksumToBuffer(unsigned __int8 *buffer, int len)
+void LiveStorage_WriteChecksumToBuffer(unsigned __int8 *buffer, int len)
 {
     *(uint32_t *)buffer = LiveStorage_ChecksumGamerStats(buffer + 4, len - 4);
 }
 
-bool __cdecl LiveStorage_ReadStatsFile(const char *qpath, unsigned __int8 *buffer, uint32_t lenToRead)
+bool LiveStorage_ReadStatsFile(const char *qpath, unsigned __int8 *buffer, uint32_t lenToRead)
 {
     uint32_t len; // [esp+0h] [ebp-8h]
     uint32_t lena; // [esp+0h] [ebp-8h]
@@ -525,7 +525,7 @@ bool __cdecl LiveStorage_ReadStatsFile(const char *qpath, unsigned __int8 *buffe
     }
 }
 
-void __cdecl LiveStorage_HandleCorruptStats(char *filename)
+void LiveStorage_HandleCorruptStats(char *filename)
 {
     char corruptName[276]; // [esp+0h] [ebp-118h] BYREF
 
@@ -538,24 +538,24 @@ void __cdecl LiveStorage_HandleCorruptStats(char *filename)
     Com_Error(ERR_DROP, "PLATFORM_STATSREADERROR");
 }
 
-playerStatNetworkData *__cdecl LiveStorage_GetStatBuffer()
+playerStatNetworkData *LiveStorage_GetStatBuffer()
 {
     if (!statData.statsFetched)
         MyAssertHandler(".\\win32\\win_storage.cpp", 311, 0, "%s", "statData.statsFetched");
     return &statData;
 }
 
-bool __cdecl LiveStorage_DoWeHaveStats()
+bool LiveStorage_DoWeHaveStats()
 {
     return statData.statsFetched;
 }
 
-void __cdecl LiveStorage_StatsWriteNeeded()
+void LiveStorage_StatsWriteNeeded()
 {
     statData.statWriteNeeded = 1;
 }
 
-void __cdecl LiveStorage_UploadStats()
+void LiveStorage_UploadStats()
 {
     char path[264]; // [esp+0h] [ebp-2230h] BYREF
     StatsFile statsFile; // [esp+108h] [ebp-2128h] BYREF
@@ -594,7 +594,7 @@ void __cdecl LiveStorage_UploadStats()
     }
 }
 
-void __cdecl LiveStorage_Encrypt(StatsFile *statsFile)
+void LiveStorage_Encrypt(StatsFile *statsFile)
 {
     uint32_t key[4]; // [esp+5Ch] [ebp-10h] BYREF
 
@@ -609,7 +609,7 @@ void __cdecl LiveStorage_Encrypt(StatsFile *statsFile)
     xxtea_enc(statsFile->body.hash, 0x845u, key);
 }
 
-int __cdecl LiveStorage_GetStat(int __formal, int index)
+int LiveStorage_GetStat(int __formal, int index)
 {
     const char *v3; // eax
 
@@ -629,7 +629,7 @@ int __cdecl LiveStorage_GetStat(int __formal, int index)
     return 0;
 }
 
-void __cdecl LiveStorage_SetStat(int __formal, int index, uint32_t value)
+void LiveStorage_SetStat(int __formal, int index, uint32_t value)
 {
 #ifdef KISAK_SP
     iassert(0); // LWSS: do not use with SP!! Broken! Writes random addresses with crap!
@@ -703,7 +703,7 @@ void __cdecl LiveStorage_SetStat(int __formal, int index, uint32_t value)
     }
 }
 
-void __cdecl LiveStorage_TrySetStatForCmd(int index, uint32_t value)
+void LiveStorage_TrySetStatForCmd(int index, uint32_t value)
 {
     if (LiveStorage_GetStat(0, index) != value)
     {
@@ -712,7 +712,7 @@ void __cdecl LiveStorage_TrySetStatForCmd(int index, uint32_t value)
     }
 }
 
-void __cdecl LiveStorage_NewUser()
+void LiveStorage_NewUser()
 {
     memset(statData.playerStats, 0, sizeof(statData));
 }
@@ -723,7 +723,7 @@ cmd_function_s LiveStorage_UploadStatsCmd_VAR;
 cmd_function_s LiveStorage_ReadStatsCmd_VAR;
 cmd_function_s LiveStorage_StatGetCmd_VAR;
 
-void __cdecl LiveStorage_Init()
+void LiveStorage_Init()
 {
     memset(statData.playerStats, 0, sizeof(statData));
     Cmd_AddCommandInternal("statSet", LiveStorage_StatSetCmd, &LiveStorage_StatSetCmd_VAR);
@@ -735,7 +735,7 @@ void __cdecl LiveStorage_Init()
     stat_version = Dvar_RegisterInt("stat_version", 10, (DvarLimits)0xFF00000000LL, DVAR_NOFLAG, "Stats version number");
 }
 
-void __cdecl LiveStorage_StatSetCmd()
+void LiveStorage_StatSetCmd()
 {
     const char *v0; // eax
     const char *v1; // eax
@@ -757,7 +757,7 @@ void __cdecl LiveStorage_StatSetCmd()
     }
 }
 
-void __cdecl LiveStorage_StatGetCmd()
+void LiveStorage_StatGetCmd()
 {
     const char *v0; // eax
     int Stat; // eax
@@ -776,7 +776,7 @@ void __cdecl LiveStorage_StatGetCmd()
     }
 }
 
-void __cdecl LiveStorage_StatGetInDvarCmd()
+void LiveStorage_StatGetInDvarCmd()
 {
     const char *v0; // eax
     char *v1; // eax
@@ -799,14 +799,14 @@ void __cdecl LiveStorage_StatGetInDvarCmd()
     }
 }
 
-void __cdecl LiveStorage_UploadStatsCmd()
+void LiveStorage_UploadStatsCmd()
 {
 #ifdef KISAK_MP
     LiveStorage_UploadStats();
 #endif
 }
 
-void __cdecl LiveStorage_ReadStatsCmd()
+void LiveStorage_ReadStatsCmd()
 {
 #ifdef KISAK_MP
     LiveStorage_ReadStats();

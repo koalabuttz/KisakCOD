@@ -46,7 +46,7 @@
 #include <vector>
 
 // r_init.cpp defines these without declaring them in r_init.h.
-char __cdecl R_CreateWindow(GfxWindowParms *wndParms);
+char R_CreateWindow(GfxWindowParms *wndParms);
 void R_LoadGraphicsAssets();
 
 // The zone table (src/database/db_registry.cpp): g_zoneHandles[0, g_zoneCount)
@@ -594,7 +594,7 @@ double g_graphicsZoneSeconds = 0;
 // map view does not need. Unlike the dedicated server's CL_InitDedicated
 // (src/linux/server_device_counterparts.cpp) it latches nothing off and loads no
 // zone: Kisak_StartWorldDevice does that once the device exists.
-void __cdecl CL_InitDedicated()
+void CL_InitDedicated()
 {
     if (!onlinegame)
         onlinegame = Dvar_RegisterBool("onlinegame", 1, DVAR_CHEAT,

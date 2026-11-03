@@ -18,9 +18,9 @@ struct GfxDrawMethod // sizeof=0x68
     // padding byte
 };
 
-void __cdecl R_InitDrawMethod();
+void R_InitDrawMethod();
 void R_SetDefaultLitTechTypes();
-void __cdecl R_ForceLitTechType(MaterialTechniqueType litTechType);
-void __cdecl R_UpdateDrawMethod(GfxBackEndData *data, const GfxViewInfo *viewInfo);
+void R_ForceLitTechType(MaterialTechniqueType litTechType);
+void R_UpdateDrawMethod(GfxBackEndData *data, const GfxViewInfo *viewInfo);
 
 extern GfxDrawMethod gfxDrawMethod;

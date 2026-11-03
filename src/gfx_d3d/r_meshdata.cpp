@@ -11,7 +11,7 @@
 
 GfxMeshGlobals gfxMeshGlob;
 
-char __cdecl R_ReserveMeshIndices(GfxMeshData *mesh, int indexCount, r_double_index_t **indicesOut)
+char R_ReserveMeshIndices(GfxMeshData *mesh, int indexCount, r_double_index_t **indicesOut)
 {
     uint32_t usedCodeMeshIndexCount; // [esp+0h] [ebp-4h]
 
@@ -35,7 +35,7 @@ char __cdecl R_ReserveMeshIndices(GfxMeshData *mesh, int indexCount, r_double_in
     return 1;
 }
 
-char __cdecl R_ReserveMeshVerts(GfxMeshData *mesh, int vertCount, uint16_t *baseVertex)
+char R_ReserveMeshVerts(GfxMeshData *mesh, int vertCount, uint16_t *baseVertex)
 {
     volatile uint32_t usedCodeMeshVertBytes; // [esp+8h] [ebp-8h]
 
@@ -49,18 +49,18 @@ char __cdecl R_ReserveMeshVerts(GfxMeshData *mesh, int vertCount, uint16_t *base
     return 1;
 }
 
-uint8_t *__cdecl R_GetMeshVerts(GfxMeshData *mesh, uint16_t baseVertex)
+uint8_t *R_GetMeshVerts(GfxMeshData *mesh, uint16_t baseVertex)
 {
     return &mesh->vb.verts[mesh->vertSize * baseVertex];
 }
 
-void __cdecl R_ResetMesh(GfxMeshData *mesh)
+void R_ResetMesh(GfxMeshData *mesh)
 {
     mesh->vb.used = 0;
     mesh->indexCount = 0;
 }
 
-void __cdecl R_BeginMeshVerts(GfxMeshData *mesh)
+void R_BeginMeshVerts(GfxMeshData *mesh)
 {
     iassert( mesh->vb.verts == NULL );
     mesh->vb.verts = (uint8_t *)R_LockVertexBuffer(
@@ -70,7 +70,7 @@ void __cdecl R_BeginMeshVerts(GfxMeshData *mesh)
         mesh->vb.used != 0 ? 4096 : 0x2000);
 }
 
-void __cdecl R_SetQuadMeshData(
+void R_SetQuadMeshData(
     GfxMeshData *mesh,
     float x,
     float y,
@@ -115,7 +115,7 @@ void __cdecl R_SetQuadMeshData(
     mesh->vb.used = 128;
 }
 
-void __cdecl R_SetQuadMesh(
+void R_SetQuadMesh(
     GfxQuadMeshData *quadMesh,
     float x,
     float y,
@@ -135,7 +135,7 @@ void __cdecl R_SetQuadMesh(
     R_SetQuadMeshData(&quadMesh->meshData, x, y, w, h, s0, t0, s1, t1, color);
 }
 
-void __cdecl R_DrawQuadMesh(GfxCmdBufContext context, const Material *material, GfxMeshData *quadMesh)
+void R_DrawQuadMesh(GfxCmdBufContext context, const Material *material, GfxMeshData *quadMesh)
 {
     GfxViewport viewport; // [esp+0h] [ebp-1Ch] BYREF
     GfxDrawPrimArgs args; // [esp+10h] [ebp-Ch] BYREF

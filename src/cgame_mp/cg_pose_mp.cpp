@@ -207,7 +207,7 @@ void CG_VehPoseControllers(const cpose_t *pose, const DObj_s *obj, int32_t *part
     }
 }
 
-void __cdecl CG_DoControllers(const cpose_t *pose, const DObj_s *obj, int32_t *partBits)
+void CG_DoControllers(const cpose_t *pose, const DObj_s *obj, int32_t *partBits)
 {
     int32_t setPartBits[4]; // [esp+34h] [ebp-10h] BYREF
 
@@ -234,13 +234,13 @@ void __cdecl CG_DoControllers(const cpose_t *pose, const DObj_s *obj, int32_t *p
         Ragdoll_DoControllers(pose, (DObj_s*)obj, partBits);
 }
 
-void __cdecl CG_Player_DoControllers(const cpose_t *pose, const DObj_s *obj, int32_t *partBits)
+void CG_Player_DoControllers(const cpose_t *pose, const DObj_s *obj, int32_t *partBits)
 {
     if (pose->fx.triggerTime)
         BG_Player_DoControllers(&pose->player, obj, partBits);
 }
 
-void __cdecl CG_mg42_DoControllers(const cpose_t *pose, const DObj_s *obj, int32_t *partBits)
+void CG_mg42_DoControllers(const cpose_t *pose, const DObj_s *obj, int32_t *partBits)
 {
     float angles[3]; // [esp+10h] [ebp-10h] BYREF
     const float *viewAngles; // [esp+1Ch] [ebp-4h]
@@ -266,7 +266,7 @@ void __cdecl CG_mg42_DoControllers(const cpose_t *pose, const DObj_s *obj, int32
     DObjSetControlTagAngles((DObj_s *)obj, partBits, pose->turret.tag_flash, angles);
 }
 
-void __cdecl CG_DoBaseOriginController(const cpose_t *pose, const DObj_s *obj, int32_t *setPartBits)
+void CG_DoBaseOriginController(const cpose_t *pose, const DObj_s *obj, int32_t *setPartBits)
 {
     uint32_t rootBoneMask; // [esp+90h] [ebp-7Ch]
     float baseQuat[4]; // [esp+94h] [ebp-78h] BYREF
@@ -352,7 +352,7 @@ notSet:
     }
 }
 
-DObjAnimMat *__cdecl CG_DObjCalcPose(const cpose_t *pose, const DObj_s *obj, int32_t *partBits)
+DObjAnimMat *CG_DObjCalcPose(const cpose_t *pose, const DObj_s *obj, int32_t *partBits)
 {
     DObjAnimMat *boneMatrix; // [esp+0h] [ebp-4h] BYREF
 

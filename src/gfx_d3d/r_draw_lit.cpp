@@ -7,7 +7,7 @@
 #include "r_state.h"
 
 
-void __cdecl R_DrawLitCallback(const void *userData, GfxCmdBufContext context, GfxCmdBufContext prepassContext)
+void R_DrawLitCallback(const void *userData, GfxCmdBufContext context, GfxCmdBufContext prepassContext)
 {
     int height; // [esp+4h] [ebp-28h]
     int width; // [esp+8h] [ebp-24h]
@@ -52,7 +52,7 @@ void R_DrawLit(const GfxViewInfo *viewInfo, GfxCmdBuf *cmdBuf, GfxCmdBuf *prepas
         prepassCmdBuf);
 }
 
-void __cdecl R_DrawDecalCallback(const void *userdata, GfxCmdBufContext context, GfxCmdBufContext prepassContext)
+void R_DrawDecalCallback(const void *userdata, GfxCmdBufContext context, GfxCmdBufContext prepassContext)
 {
     int height; // [esp+4h] [ebp-28h]
     int width; // [esp+8h] [ebp-24h]

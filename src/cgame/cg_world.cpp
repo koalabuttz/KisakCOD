@@ -17,7 +17,7 @@
 #include <qcommon/ent.h>
 #endif
 
-bool __cdecl CG_IsEntityLinked(int32_t localClientNum, uint32_t entIndex)
+bool CG_IsEntityLinked(int32_t localClientNum, uint32_t entIndex)
 {
     //bcassert(localClientNum, MAX_LOCAL_CLIENTS);
     bcassert(entIndex, MAX_GENTITIES);
@@ -25,7 +25,7 @@ bool __cdecl CG_IsEntityLinked(int32_t localClientNum, uint32_t entIndex)
     return CG_GetEntityCollNode(localClientNum, entIndex)->sector != 0;
 }
 
-bool __cdecl CG_EntityNeedsLinked(int32_t localClientNum, uint32_t entIndex)
+bool CG_EntityNeedsLinked(int32_t localClientNum, uint32_t entIndex)
 {
     //bcassert(localClientNum, MAX_LOCAL_CLIENTS);
     bcassert(entIndex, MAX_GENTITIES);
@@ -34,7 +34,7 @@ bool __cdecl CG_EntityNeedsLinked(int32_t localClientNum, uint32_t entIndex)
         || CG_LocationalTraceDObj(localClientNum, entIndex) != 0;
 }
 
-DObj_s *__cdecl CG_LocationalTraceDObj(int32_t localClientNum, uint32_t entIndex)
+DObj_s *CG_LocationalTraceDObj(int32_t localClientNum, uint32_t entIndex)
 {
     centity_s *cent; // [esp+0h] [ebp-8h]
 
@@ -56,13 +56,13 @@ DObj_s *__cdecl CG_LocationalTraceDObj(int32_t localClientNum, uint32_t entIndex
     return 0;
 }
 
-void __cdecl CG_UnlinkEntity(int32_t localClientNum, uint32_t entIndex)
+void CG_UnlinkEntity(int32_t localClientNum, uint32_t entIndex)
 {
     PROF_SCOPED("CG_UnlinkEntity");
     CG_UnlinkEntityColl(localClientNum, entIndex);
 }
 
-void __cdecl CG_LinkEntity(int32_t localClientNum, uint32_t entIndex)
+void CG_LinkEntity(int32_t localClientNum, uint32_t entIndex)
 {
     float mins[3]; // [esp+4Ch] [ebp-3Ch] BYREF
     float maxs[3]; // [esp+58h] [ebp-30h] BYREF
@@ -95,7 +95,7 @@ void __cdecl CG_LinkEntity(int32_t localClientNum, uint32_t entIndex)
     }
 }
 
-void __cdecl CG_GetEntityBModelBounds(const centity_s *cent, float *mins, float *maxs, float *absMins, float *absMaxs)
+void CG_GetEntityBModelBounds(const centity_s *cent, float *mins, float *maxs, float *absMins, float *absMaxs)
 {
     int32_t zd; // [esp+0h] [ebp-14h]
     int32_t zu; // [esp+4h] [ebp-10h]
@@ -146,7 +146,7 @@ void __cdecl CG_GetEntityBModelBounds(const centity_s *cent, float *mins, float 
     Vec3Add(cent->pose.origin, absMaxs, absMaxs);
 }
 
-void __cdecl CG_GetEntityDobjBounds(const centity_s *cent, const DObj_s *dobj, float *absMins, float *absMaxs)
+void CG_GetEntityDobjBounds(const centity_s *cent, const DObj_s *dobj, float *absMins, float *absMaxs)
 {
     float v4; // [esp+0h] [ebp-1Ch]
     float v5; // [esp+4h] [ebp-18h]
@@ -175,7 +175,7 @@ void __cdecl CG_GetEntityDobjBounds(const centity_s *cent, const DObj_s *dobj, f
     absMaxs[2] = v6;
 }
 
-void __cdecl CG_LocationalTrace(trace_t *results, float *start, float *end, int32_t passEntityNum, int32_t contentMask)
+void CG_LocationalTrace(trace_t *results, float *start, float *end, int32_t passEntityNum, int32_t contentMask)
 {
     iassert(results);
     iassert(start);
@@ -186,7 +186,7 @@ void __cdecl CG_LocationalTrace(trace_t *results, float *start, float *end, int3
     CG_Trace(results, start, (float *)vec3_origin, (float *)vec3_origin, end, passEntityNum, contentMask, 1, 1);
 }
 
-void __cdecl CG_Trace(
+void CG_Trace(
     trace_t *results,
     float *start,
     float *mins,
@@ -289,7 +289,7 @@ void __cdecl CG_Trace(
     }
 }
 
-void __cdecl CG_ClipMoveToEntities(const moveclip_t *clip, trace_t *results)
+void CG_ClipMoveToEntities(const moveclip_t *clip, trace_t *results)
 {
     float start[4]; // [esp+40h] [ebp-20h] BYREF
     float end[4]; // [esp+50h] [ebp-10h] BYREF
@@ -311,7 +311,7 @@ void __cdecl CG_ClipMoveToEntities(const moveclip_t *clip, trace_t *results)
     CG_ClipMoveToEntities_r(clip, 1u, start, end, results);
 }
 
-void __cdecl CG_ClipMoveToEntities_r(
+void CG_ClipMoveToEntities_r(
     const moveclip_t *clip,
     uint16_t sectorIndex,
     const float *p1,
@@ -441,7 +441,7 @@ void __cdecl CG_ClipMoveToEntities_r(
     }
 }
 
-void __cdecl CG_ClipMoveToEntity(const moveclip_t *clip, uint32_t entIndex, trace_t *results)
+void CG_ClipMoveToEntity(const moveclip_t *clip, uint32_t entIndex, trace_t *results)
 {
     int64_t v3; // [esp-Ch] [ebp-6Ch]
     uint16_t number; // [esp+6h] [ebp-5Ah]
@@ -517,7 +517,7 @@ void __cdecl CG_ClipMoveToEntity(const moveclip_t *clip, uint32_t entIndex, trac
     }
 }
 
-int32_t __cdecl CG_GetEntityBModelContents(const centity_s *cent)
+int32_t CG_GetEntityBModelContents(const centity_s *cent)
 {
     iassert(cent);
     iassert(cent->nextState.solid);
@@ -528,7 +528,7 @@ int32_t __cdecl CG_GetEntityBModelContents(const centity_s *cent)
     return 1;
 }
 
-void __cdecl CG_PointTraceToEntities(const pointtrace_t *clip, trace_t *results)
+void CG_PointTraceToEntities(const pointtrace_t *clip, trace_t *results)
 {
     float start[4]; // [esp+3Ch] [ebp-20h] BYREF
     float end[4]; // [esp+4Ch] [ebp-10h] BYREF
@@ -550,7 +550,7 @@ void __cdecl CG_PointTraceToEntities(const pointtrace_t *clip, trace_t *results)
     CG_PointTraceToEntities_r(clip, 1u, start, end, results);
 }
 
-void __cdecl CG_PointTraceToEntities_r(
+void CG_PointTraceToEntities_r(
     const pointtrace_t *clip,
     uint16_t sectorIndex,
     const float *p1,
@@ -629,7 +629,7 @@ void __cdecl CG_PointTraceToEntities_r(
     }
 }
 
-void __cdecl CG_PointTraceToEntity(const pointtrace_t *clip, uint32_t entIndex, trace_t *results)
+void CG_PointTraceToEntity(const pointtrace_t *clip, uint32_t entIndex, trace_t *results)
 {
     int64_t v3; // [esp-Ch] [ebp-C4h]
     DObj_s *v4; // [esp+8h] [ebp-B0h]
@@ -758,7 +758,7 @@ void __cdecl CG_PointTraceToEntity(const pointtrace_t *clip, uint32_t entIndex, 
     }
 }
 
-void __cdecl CG_LocationTraceDobjCalcPose(const DObj_s *dobj, const cpose_t *pose, int32_t *partBits)
+void CG_LocationTraceDobjCalcPose(const DObj_s *dobj, const cpose_t *pose, int32_t *partBits)
 {
     iassert(dobj);
     iassert(pose);
@@ -768,7 +768,7 @@ void __cdecl CG_LocationTraceDobjCalcPose(const DObj_s *dobj, const cpose_t *pos
     iassert(DObjSkelAreBonesUpToDate(dobj, partBits));
 }
 
-void __cdecl CG_LocationalTraceEntitiesOnly(
+void CG_LocationalTraceEntitiesOnly(
     trace_t *results,
     float *start,
     float *end,
@@ -808,7 +808,7 @@ void __cdecl CG_LocationalTraceEntitiesOnly(
     }
 }
 
-void __cdecl CG_TraceCapsule(
+void CG_TraceCapsule(
     trace_t *results,
     const float *start,
     const float *mins,

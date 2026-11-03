@@ -2,23 +2,23 @@
 #include "r_sky.h"
 
 
-void __cdecl TRACK_rb_sky();
-uint32_t __cdecl RB_CalcSunSpriteSamples();
-void __cdecl RB_DrawSun(uint32_t localClientNum);
-void __cdecl RB_DrawSunQuerySprite(SunFlareDynamic *sunFlare);
-void __cdecl RB_HW_BeginOcclusionQuery(IDirect3DQuery9 *query);
-uint32_t __cdecl RB_HW_ReadOcclusionQuery(IDirect3DQuery9 *query);
-void __cdecl RB_TessSunBillboard(float widthInClipSpace, float heightInClipSpace, GfxColor color);
-GfxVertex *__cdecl RB_SetTessQuad(GfxColor color);
-void __cdecl RB_UpdateSunVisibilityWithoutQuery(SunFlareDynamic *sunFlare);
-double __cdecl RB_GetSunSampleRectRelativeArea(int widthInPixels, int heightInPixels);
-void __cdecl RB_AddSunEffects(SunFlareDynamic *sunFlare);
+void TRACK_rb_sky();
+uint32_t RB_CalcSunSpriteSamples();
+void RB_DrawSun(uint32_t localClientNum);
+void RB_DrawSunQuerySprite(SunFlareDynamic *sunFlare);
+void RB_HW_BeginOcclusionQuery(IDirect3DQuery9 *query);
+uint32_t RB_HW_ReadOcclusionQuery(IDirect3DQuery9 *query);
+void RB_TessSunBillboard(float widthInClipSpace, float heightInClipSpace, GfxColor color);
+GfxVertex *RB_SetTessQuad(GfxColor color);
+void RB_UpdateSunVisibilityWithoutQuery(SunFlareDynamic *sunFlare);
+double RB_GetSunSampleRectRelativeArea(int widthInPixels, int heightInPixels);
+void RB_AddSunEffects(SunFlareDynamic *sunFlare);
 void RB_DrawSunSprite();
-void __cdecl RB_FreeSunSpriteQueries();
-void __cdecl RB_DrawSunPostEffects(uint32_t localClientNum);
-void __cdecl RB_DrawSunFlare(SunFlareDynamic *sunFlare, int frameTime);
-double __cdecl R_UpdateOverTime(float fCurrent, float fGoal, int iFadeInTime, int iFadeOutTime, int frametime);
-void __cdecl RB_DrawSunFlareCore(float alpha, float sizeIn640x480);
-void __cdecl RB_DrawBlindAndGlare(SunFlareDynamic *sunFlare, int frameTime);
-void __cdecl RB_CalcSunBlind(SunFlareDynamic *sunFlare, int frameTime, float *blind, float *glare);
-void __cdecl RB_AllocSunSpriteQueries();
+void RB_FreeSunSpriteQueries();
+void RB_DrawSunPostEffects(uint32_t localClientNum);
+void RB_DrawSunFlare(SunFlareDynamic *sunFlare, int frameTime);
+double R_UpdateOverTime(float fCurrent, float fGoal, int iFadeInTime, int iFadeOutTime, int frametime);
+void RB_DrawSunFlareCore(float alpha, float sizeIn640x480);
+void RB_DrawBlindAndGlare(SunFlareDynamic *sunFlare, int frameTime);
+void RB_CalcSunBlind(SunFlareDynamic *sunFlare, int frameTime, float *blind, float *glare);
+void RB_AllocSunSpriteQueries();

@@ -40,19 +40,19 @@ const float g_color_table[8][4]
 };
 
 
-void __cdecl CL_SetLocalClientConnectionState(int localClientNum, connstate_t connstate)
+void CL_SetLocalClientConnectionState(int localClientNum, connstate_t connstate)
 {
     iassert(localClientNum == 0);
     clientUIActives[0].connectionState = connstate;
 }
 
-void __cdecl TRACK_cl_cgame()
+void TRACK_cl_cgame()
 {
     track_static_alloc_internal(bigConfigString, 0x2000, "bigConfigString", 9);
     track_static_alloc_internal((void *)g_color_table, 128, "g_color_table", 10);
 }
 
-void __cdecl CL_GetScreenDimensions(int *width, int *height, float *aspect)
+void CL_GetScreenDimensions(int *width, int *height, float *aspect)
 {
     iassert(width);
     iassert(height);
@@ -63,12 +63,12 @@ void __cdecl CL_GetScreenDimensions(int *width, int *height, float *aspect)
     *aspect = cls.vidConfig.aspectRatioWindow;
 }
 
-float __cdecl CL_GetScreenAspectRatioDisplayPixel()
+float CL_GetScreenAspectRatioDisplayPixel()
 {
     return cls.vidConfig.aspectRatioDisplayPixel;
 }
 
-int __cdecl CL_GetUserCmd(int localClientNum, int cmdNumber, usercmd_s *ucmd)
+int CL_GetUserCmd(int localClientNum, int cmdNumber, usercmd_s *ucmd)
 {
     iassert(localClientNum == 0);
     
@@ -85,13 +85,13 @@ int __cdecl CL_GetUserCmd(int localClientNum, int cmdNumber, usercmd_s *ucmd)
     return 1;
 }
 
-int __cdecl CL_GetCurrentCmdNumber(int localClientNum)
+int CL_GetCurrentCmdNumber(int localClientNum)
 {
     iassert(localClientNum == 0);
     return clients[0].cmdNumber;
 }
 
-void __cdecl CL_GetCurrentSnapshotNumber(int localClientNum, int *snapshotNumber, int *serverTime)
+void CL_GetCurrentSnapshotNumber(int localClientNum, int *snapshotNumber, int *serverTime)
 {
     iassert(localClientNum == 0);
 
@@ -99,7 +99,7 @@ void __cdecl CL_GetCurrentSnapshotNumber(int localClientNum, int *snapshotNumber
     *serverTime = clients[0].snap.serverTime;
 }
 
-int __cdecl CL_GetSnapshot(int localClientNum, snapshot_s *snapshot)
+int CL_GetSnapshot(int localClientNum, snapshot_s *snapshot)
 {
     int numEntities; // r28
     int v4; // r30
@@ -154,7 +154,7 @@ int __cdecl CL_GetSnapshot(int localClientNum, snapshot_s *snapshot)
     return 1;
 }
 
-void __cdecl CL_SetUserCmdWeapons(int localClientNum, int weapon, int offHandIndex)
+void CL_SetUserCmdWeapons(int localClientNum, int weapon, int offHandIndex)
 {
     if (localClientNum)
         MyAssertHandler(
@@ -168,7 +168,7 @@ void __cdecl CL_SetUserCmdWeapons(int localClientNum, int weapon, int offHandInd
     clients[0].cgameUserCmdOffHandIndex = offHandIndex;
 }
 
-void __cdecl CL_SetUserCmdAimValues(
+void CL_SetUserCmdAimValues(
     int localClientNum,
     double gunPitch,
     double gunYaw,
@@ -191,7 +191,7 @@ void __cdecl CL_SetUserCmdAimValues(
     clients[0].cgameUserCmdGunZOfs = gunZOfs;
 }
 
-void __cdecl CL_SetFOVSensitivityScale(int localClientNum, double scale)
+void CL_SetFOVSensitivityScale(int localClientNum, double scale)
 {
     if (localClientNum)
         MyAssertHandler(
@@ -204,7 +204,7 @@ void __cdecl CL_SetFOVSensitivityScale(int localClientNum, double scale)
     clients[0].cgameFOVSensitivityScale = scale;
 }
 
-void __cdecl CL_SetExtraButtons(int localClientNum, int buttons)
+void CL_SetExtraButtons(int localClientNum, int buttons)
 {
     if (localClientNum)
         MyAssertHandler(
@@ -259,7 +259,7 @@ void CL_ConfigstringModified()
     }
 }
 
-void __cdecl CL_Restart()
+void CL_Restart()
 {
     SND_ResetPauseSettingsToDefaults();
     //CG_StopAllRumbles(0); // KISAKTODO: cg_rumble
@@ -283,7 +283,7 @@ void __cdecl CL_Restart()
     CG_ParseSunLight(0);
 }
 
-int __cdecl CL_PreprocessServerCommand(const char *s)
+int CL_PreprocessServerCommand(const char *s)
 {
     int nesting; // r7
     char *v3; // r31
@@ -459,7 +459,7 @@ int __cdecl CL_PreprocessServerCommand(const char *s)
     return 0;
 }
 
-int __cdecl CL_CGameNeedsServerCommand(int localClientNum, int serverCommandNumber)
+int CL_CGameNeedsServerCommand(int localClientNum, int serverCommandNumber)
 {
     int sequence; // r11
     const char *v4; // r3
@@ -481,7 +481,7 @@ int __cdecl CL_CGameNeedsServerCommand(int localClientNum, int serverCommandNumb
     return CL_PreprocessServerCommand(v4);
 }
 
-void __cdecl CL_ArchiveServerCommands(MemoryFile *memFile)
+void CL_ArchiveServerCommands(MemoryFile *memFile)
 {
     int i; // r30
     int rover; // r30
@@ -515,7 +515,7 @@ void __cdecl CL_ArchiveServerCommands(MemoryFile *memFile)
     memFile->archiveProc(memFile, rover, (byte*)clientConnections[0].serverCommands.buf);
 }
 
-void __cdecl CL_LoadServerCommands(SaveGame *save)
+void CL_LoadServerCommands(SaveGame *save)
 {
     int i; // r31
 
@@ -531,7 +531,7 @@ void __cdecl CL_LoadServerCommands(SaveGame *save)
     SaveMemory_LoadRead(clientConnections[0].serverCommands.buf, clientConnections[0].serverCommands.header.rover, save);
 }
 
-void __cdecl CL_ShutdownCGame()
+void CL_ShutdownCGame()
 {
     // MP ADD
     Com_UnloadSoundAliases(SASYS_CGAME);
@@ -552,7 +552,7 @@ void __cdecl CL_ShutdownCGame()
 }
 
 static int warnCount;
-int __cdecl CL_DObjCreateSkelForBone(DObj_s *obj, int boneIndex)
+int CL_DObjCreateSkelForBone(DObj_s *obj, int boneIndex)
 {
     int SkelTimeStamp; // r31
     unsigned int AllocSkelSize; // r3
@@ -581,7 +581,7 @@ int __cdecl CL_DObjCreateSkelForBone(DObj_s *obj, int boneIndex)
     }
 }
 
-void __cdecl LoadWorld(const char *name, int savegame)
+void LoadWorld(const char *name, int savegame)
 {
     int checksum; // [sp+50h] [-10h] BYREF
 
@@ -589,7 +589,7 @@ void __cdecl LoadWorld(const char *name, int savegame)
     SV_SetCheckSum(checksum);
 }
 
-void __cdecl CL_SubtitlePrint(int localClientNum, const char *text, int duration, int pixelWidth)
+void CL_SubtitlePrint(int localClientNum, const char *text, int duration, int pixelWidth)
 {
     const char *String; // r3
 
@@ -615,7 +615,7 @@ void __cdecl CL_SubtitlePrint(int localClientNum, const char *text, int duration
     }
 }
 
-const char *__cdecl CL_GetConfigString(int localClientNum, unsigned int configStringIndex)
+const char *CL_GetConfigString(int localClientNum, unsigned int configStringIndex)
 {
     clientActive_t *cl = CL_GetLocalClientGlobals(localClientNum);
 
@@ -626,31 +626,31 @@ const char *__cdecl CL_GetConfigString(int localClientNum, unsigned int configSt
 }
 
 // attributes: thunk
-snd_alias_t *__cdecl CL_PickSoundAlias(const char *aliasname)
+snd_alias_t *CL_PickSoundAlias(const char *aliasname)
 {
     return Com_PickSoundAlias(aliasname);
 }
 
-void __cdecl CL_FinishLoadingModels()
+void CL_FinishLoadingModels()
 {
     ;
 }
 
-void __cdecl CL_GetViewForward(float *forward)
+void CL_GetViewForward(float *forward)
 {
     *forward = cls.renderForward[0];
     forward[1] = cls.renderForward[1];
     forward[2] = cls.renderForward[2];
 }
 
-void __cdecl CL_GetViewPos(float *pos)
+void CL_GetViewPos(float *pos)
 {
     *pos = cls.renderPos[0];
     pos[1] = cls.renderPos[1];
     pos[2] = cls.renderPos[2];
 }
 
-void __cdecl CL_RenderScene(const refdef_s *fd)
+void CL_RenderScene(const refdef_s *fd)
 {
     cls.renderPos[0] = fd->vieworg[0];
     cls.renderPos[1] = fd->vieworg[1];
@@ -661,7 +661,7 @@ void __cdecl CL_RenderScene(const refdef_s *fd)
     R_RenderScene(fd);
 }
 
-void __cdecl CL_SetFullScreenViewport()
+void CL_SetFullScreenViewport()
 {
     R_AddCmdSetViewportValues(0, 0, cls.vidConfig.displayWidth, cls.vidConfig.displayHeight);
 }
@@ -671,7 +671,7 @@ void __cdecl CL_SetFullScreenViewport()
 
 
 
-void __cdecl CL_DrawStretchPicPhysicalFlipST(
+void CL_DrawStretchPicPhysicalFlipST(
     float x,
     float y,
     float w,
@@ -688,7 +688,7 @@ void __cdecl CL_DrawStretchPicPhysicalFlipST(
 
 
 
-void __cdecl CL_DrawStretchPicPhysicalRotateXY(
+void CL_DrawStretchPicPhysicalRotateXY(
     float x,
     float y,
     float w,
@@ -704,7 +704,7 @@ void __cdecl CL_DrawStretchPicPhysicalRotateXY(
     R_AddCmdDrawStretchPicRotateXY(x, y, w, h, s1, t1, s2, t2, angle, color, material);
 }
 
-void __cdecl CL_DrawStretchPicFlipST(
+void CL_DrawStretchPicFlipST(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -723,7 +723,7 @@ void __cdecl CL_DrawStretchPicFlipST(
     CL_DrawStretchPicPhysicalFlipST(x, y, w, h, s1, t1, s2, t2, color, material);
 }
 
-void __cdecl CL_DrawStretchPicRotatedST(
+void CL_DrawStretchPicRotatedST(
     const ScreenPlacement *scrPlace,
     float x,
     float y,
@@ -757,18 +757,18 @@ void __cdecl CL_DrawStretchPicRotatedST(
 }
 
 // attributes: thunk
-void __cdecl CL_ProjectionSet2D()
+void CL_ProjectionSet2D()
 {
     R_AddCmdProjectionSet2D();
 }
 
 // attributes: thunk
-void __cdecl CL_ProjectionSet3D()
+void CL_ProjectionSet3D()
 {
     R_AddCmdProjectionSet3D();
 }
 
-void __cdecl CL_CapTurnRate(int localClientNum, double maxPitchSpeed, double maxYawSpeed)
+void CL_CapTurnRate(int localClientNum, double maxPitchSpeed, double maxYawSpeed)
 {
     if (localClientNum)
         MyAssertHandler(
@@ -782,7 +782,7 @@ void __cdecl CL_CapTurnRate(int localClientNum, double maxPitchSpeed, double max
     clients[0].cgameMaxYawSpeed = maxYawSpeed;
 }
 
-void __cdecl CL_SetViewAngles(int localClientNum, float *angles)
+void CL_SetViewAngles(int localClientNum, float *angles)
 {
     if (localClientNum)
         MyAssertHandler(
@@ -797,7 +797,7 @@ void __cdecl CL_SetViewAngles(int localClientNum, float *angles)
     clients[0].viewangles[2] = angles[2];
 }
 
-void __cdecl CL_StartLoading(const char *mapname)
+void CL_StartLoading(const char *mapname)
 {
     if (!clientUIActives[0].isRunning)
         MyAssertHandler(
@@ -813,7 +813,7 @@ void __cdecl CL_StartLoading(const char *mapname)
     Dvar_SetInt(cl_paused, 1);
 }
 
-void __cdecl CL_InitCGame(int localClientNum, int savegame)
+void CL_InitCGame(int localClientNum, int savegame)
 {
     int startTime; // r22
     unsigned __int16 v5; // r11
@@ -924,7 +924,7 @@ void __cdecl CL_InitCGame(int localClientNum, int savegame)
     Con_InitGameMsgChannels();
 }
 
-void __cdecl CL_FirstSnapshot()
+void CL_FirstSnapshot()
 {
     if (!clientUIActives[0].isRunning)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\client\\cl_cgame.cpp", 886, 0, "%s", "clUI->isRunning");
@@ -938,12 +938,12 @@ void __cdecl CL_FirstSnapshot()
     clientUIActives[0].cgameInitialized = 1;
 }
 
-void __cdecl CL_SetActive()
+void CL_SetActive()
 {
     clientUIActives[0].connectionState = CA_ACTIVE;
 }
 
-void __cdecl CL_CreateNextSnap()
+void CL_CreateNextSnap()
 {
     //int v1; // r4
 
@@ -952,7 +952,7 @@ void __cdecl CL_CreateNextSnap()
     CG_CreateNextSnap(0, SV_GetPartialFrametime() * 0.001f, 1);
 }
 
-char *__cdecl CL_TimeDemoLogBaseName(const char *mapname)
+char *CL_TimeDemoLogBaseName(const char *mapname)
 {
     char *v1; // r31
     const char *v2; // r30
@@ -1017,7 +1017,7 @@ void CL_UpdateTimeDemo()
     Com_Printf(CON_CHANNEL_CLIENT, "time %i (UpdateTimeDemo)\n", v5 + cls.timeDemoBaseTime);
 }
 
-void __cdecl CL_SetCGameTime(int localClientNum)
+void CL_SetCGameTime(int localClientNum)
 {
     int serverTime; // r11
 
@@ -1058,7 +1058,7 @@ void __cdecl CL_SetCGameTime(int localClientNum)
     }
 }
 
-void __cdecl CL_SetADS(int localClientNum, bool ads)
+void CL_SetADS(int localClientNum, bool ads)
 {
     if (localClientNum)
         MyAssertHandler(
@@ -1071,7 +1071,7 @@ void __cdecl CL_SetADS(int localClientNum, bool ads)
     clients[0].usingAds = ads;
 }
 
-void __cdecl CL_ArchiveClientState(MemoryFile *memFile, int segmentIndex)
+void CL_ArchiveClientState(MemoryFile *memFile, int segmentIndex)
 {
     unsigned int UsedSize; // r3
     unsigned int v5; // r3
@@ -1111,7 +1111,7 @@ void __cdecl CL_ArchiveClientState(MemoryFile *memFile, int segmentIndex)
     R_ArchiveFogState(memFile);
 }
 
-void __cdecl CL_LookupColor(unsigned __int8 c, float *color)
+void CL_LookupColor(unsigned __int8 c, float *color)
 {
     unsigned __int8 v3; // r3
     float *v4; // r11
@@ -1136,7 +1136,7 @@ void __cdecl CL_LookupColor(unsigned __int8 c, float *color)
     color[3] = v5;
 }
 
-bool __cdecl CL_IsCgameInitialized(int localClientNum)
+bool CL_IsCgameInitialized(int localClientNum)
 {
     if (localClientNum)
         MyAssertHandler(

@@ -20,12 +20,12 @@ static int32_t g_maxUsedEntHandle;
 
 //Line 53042:  0006 : 0050c928       uint32_t g_maxUsedEntHandle   82cbc928     enthandle.obj
 
-void __cdecl EntHandleDissociate(gentity_s *ent)
+void EntHandleDissociate(gentity_s *ent)
 {
     EntHandleDissociateInternal(&g_entitiesHandleList[ent - g_entities]);
 }
 
-void __cdecl EntHandleDissociateInternal(EntHandleList *entHandleList)
+void EntHandleDissociateInternal(EntHandleList *entHandleList)
 {
     const char *v1; // eax
     EntHandleInfo *info; // [esp+0h] [ebp-Ch]
@@ -57,7 +57,7 @@ void __cdecl EntHandleDissociateInternal(EntHandleList *entHandleList)
     }
 }
 
-void __cdecl RemoveEntHandleInfo(EntHandleList *entHandleList, uint32_t oldInfoIndex)
+void RemoveEntHandleInfo(EntHandleList *entHandleList, uint32_t oldInfoIndex)
 {
     const char *v2; // eax
     EntHandleInfo *info; // [esp+0h] [ebp-10h]
@@ -87,7 +87,7 @@ void __cdecl RemoveEntHandleInfo(EntHandleList *entHandleList, uint32_t oldInfoI
     }
 }
 
-uint32_t __cdecl AddEntHandleInfo(EntHandleList *entHandleList, void *handle)
+uint32_t AddEntHandleInfo(EntHandleList *entHandleList, void *handle)
 {
     uint32_t v3; // [esp+0h] [ebp-14h]
     EntHandleInfo *info; // [esp+4h] [ebp-10h]
@@ -215,7 +215,7 @@ void EntHandle::Shutdown()
     }
 }
 
-void __cdecl EntHandle::Init()
+void EntHandle::Init()
 {
     uint32_t i; // [esp+4h] [ebp-4h]
 

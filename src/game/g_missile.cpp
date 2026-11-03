@@ -60,7 +60,7 @@ const dvar_t *missileHellfireUpAccel;
 const dvar_t *missileDebugDraw;
 
 
-void __cdecl G_RegisterMissileDvars()
+void G_RegisterMissileDvars()
 {
     DvarLimits min; // [esp+4h] [ebp-10h]
     DvarLimits mina; // [esp+4h] [ebp-10h]
@@ -210,7 +210,7 @@ void __cdecl G_RegisterMissileDvars()
         "If a missile explodes deeper under water than this, they explosion effect/sound will not play.");
 }
 
-void __cdecl G_RegisterMissileDebugDvars()
+void G_RegisterMissileDebugDvars()
 {
     missileDebugDraw = Dvar_RegisterBool("missileDebugDraw", false, DVAR_NOFLAG, "Draw guided missile trajectories.");
     missileDebugText = Dvar_RegisterBool("missileDebugText", false, DVAR_NOFLAG, "Print debug missile info to console.");
@@ -221,14 +221,14 @@ void __cdecl G_RegisterMissileDebugDvars()
         "Draw the attractors and repulsors.  Attractors are green, and repulsors are yellow.");
 }
 
-void __cdecl G_TimedObjectThink(gentity_s *ent)
+void G_TimedObjectThink(gentity_s *ent)
 {
     ent->s.lerp.eFlags &= ~0x80000u;
 }
 
 const float MY_STRAIGHTUPNORMAL[3] = { 0.0, 0.0, 1.0 };
 
-void __cdecl G_ExplodeMissile(gentity_s *ent)
+void G_ExplodeMissile(gentity_s *ent)
 {
     int32_t v1; // eax
     float fInnerDamage; // [esp+0h] [ebp-E0h]
@@ -468,7 +468,7 @@ void __cdecl G_ExplodeMissile(gentity_s *ent)
     }
 }
 
-int32_t __cdecl GetSplashMethodOfDeath(gentity_s *ent)
+int32_t GetSplashMethodOfDeath(gentity_s *ent)
 {
     WeaponDef *weapDef; // [esp+4h] [ebp-4h]
 
@@ -485,7 +485,7 @@ int32_t __cdecl GetSplashMethodOfDeath(gentity_s *ent)
         return entityHandlers[ent->handler].splashMethodOfDeath;
 }
 
-void __cdecl G_MissileTrace(trace_t *results, float *start, float *end, int32_t passEntityNum, int32_t contentmask)
+void G_MissileTrace(trace_t *results, float *start, float *end, int32_t passEntityNum, int32_t contentmask)
 {
     float dir[3]; // [esp+0h] [ebp-Ch] BYREF
 
@@ -498,17 +498,17 @@ void __cdecl G_MissileTrace(trace_t *results, float *start, float *end, int32_t 
     }
 }
 
-void __cdecl TRACK_missile_attractors()
+void TRACK_missile_attractors()
 {
     track_static_alloc_internal(&attrGlob, sizeof(attrGlob), "attrGlob", 9);
 }
 
-void __cdecl Missile_InitAttractors()
+void Missile_InitAttractors()
 {
     memset((uint8_t *)&attrGlob, 0, sizeof(attrGlob));
 }
 
-void __cdecl Missile_FreeAttractorRefs(gentity_s *ent)
+void Missile_FreeAttractorRefs(gentity_s *ent)
 {
     AttractorRepulsor_t *v1; // ecx
     uint32_t attractorIndex; // [esp+0h] [ebp-4h]
@@ -529,7 +529,7 @@ void __cdecl Missile_FreeAttractorRefs(gentity_s *ent)
     }
 }
 
-void __cdecl Scr_MissileCreateAttractorEnt()
+void Scr_MissileCreateAttractorEnt()
 {
     uint32_t attractorIndex; // [esp+0h] [ebp-8h]
     gentity_s *ent; // [esp+4h] [ebp-4h]
@@ -547,7 +547,7 @@ void __cdecl Scr_MissileCreateAttractorEnt()
     Scr_AddInt(attractorIndex);
 }
 
-uint32_t __cdecl Missile_GetFreeAttractor()
+uint32_t Missile_GetFreeAttractor()
 {
     const char *v0; // eax
     uint32_t attractorIndex; // [esp+0h] [ebp-4h]
@@ -562,7 +562,7 @@ uint32_t __cdecl Missile_GetFreeAttractor()
     return attractorIndex;
 }
 
-void __cdecl Scr_MissileCreateAttractorOrigin()
+void Scr_MissileCreateAttractorOrigin()
 {
     uint32_t attractorIndex; // [esp+0h] [ebp-4h]
 
@@ -578,7 +578,7 @@ void __cdecl Scr_MissileCreateAttractorOrigin()
     Scr_AddInt(attractorIndex);
 }
 
-void __cdecl Scr_MissileCreateRepulsorEnt()
+void Scr_MissileCreateRepulsorEnt()
 {
     uint32_t attractorIndex; // [esp+0h] [ebp-4h]
 
@@ -593,7 +593,7 @@ void __cdecl Scr_MissileCreateRepulsorEnt()
     Scr_AddInt(attractorIndex);
 }
 
-void __cdecl Scr_MissileCreateRepulsorOrigin()
+void Scr_MissileCreateRepulsorOrigin()
 {
     uint32_t attractorIndex; // [esp+0h] [ebp-4h]
 
@@ -609,7 +609,7 @@ void __cdecl Scr_MissileCreateRepulsorOrigin()
     Scr_AddInt(attractorIndex);
 }
 
-void __cdecl Scr_MissileDeleteAttractor()
+void Scr_MissileDeleteAttractor()
 {
     AttractorRepulsor_t *v0; // ecx
     uint32_t attractorIndex; // [esp+0h] [ebp-4h]
@@ -627,7 +627,7 @@ void __cdecl Scr_MissileDeleteAttractor()
     v0->maxDist = 0.0;
 }
 
-void __cdecl G_MakeMissilePickupItem(gentity_s *ent)
+void G_MakeMissilePickupItem(gentity_s *ent)
 {
     const gitem_s *item; // [esp+8h] [ebp-8h]
     int32_t itemIndex; // [esp+Ch] [ebp-4h]
@@ -658,7 +658,7 @@ void __cdecl G_MakeMissilePickupItem(gentity_s *ent)
 }
 
 #ifdef KISAK_SP
-void __cdecl RunMissile_BroadcastActorEvents(gentity_s *missile)
+void RunMissile_BroadcastActorEvents(gentity_s *missile)
 {
     int32_t methodOfDeath; // r27
     WeaponDef *weapDef; // r28
@@ -687,7 +687,7 @@ void __cdecl RunMissile_BroadcastActorEvents(gentity_s *missile)
 }
 #endif
 
-void __cdecl G_RunMissile(gentity_s *ent)
+void G_RunMissile(gentity_s *ent)
 {
     const float *v1; // [esp+1Ch] [ebp-158h]
     float v7; // [esp+34h] [ebp-140h]
@@ -978,7 +978,7 @@ void __cdecl G_RunMissile(gentity_s *ent)
         goto LABEL_70;
 }
 
-void __cdecl MissileImpact(gentity_s *ent, trace_t *trace, float *dir, float *endpos)
+void MissileImpact(gentity_s *ent, trace_t *trace, float *dir, float *endpos)
 {
     uint8_t v4; // al
     bool v5; // eax
@@ -1328,7 +1328,7 @@ LABEL_92:
     SV_LinkEntity(ent);
 }
 
-bool __cdecl CheckCrumpleMissile(gentity_s *ent, trace_t *trace)
+bool CheckCrumpleMissile(gentity_s *ent, trace_t *trace)
 {
     double v3; // st7
     float scale; // [esp+Ch] [ebp-2Ch]
@@ -1361,7 +1361,7 @@ bool __cdecl CheckCrumpleMissile(gentity_s *ent, trace_t *trace)
     return cos45 < v3;
 }
 
-bool __cdecl BounceMissile(gentity_s *ent, trace_t *trace)
+bool BounceMissile(gentity_s *ent, trace_t *trace)
 {
     bool v3; // [esp+Ch] [ebp-84h]
     float scale; // [esp+10h] [ebp-80h]
@@ -1488,7 +1488,7 @@ bool __cdecl BounceMissile(gentity_s *ent, trace_t *trace)
     }
 }
 
-void __cdecl MissileLandAngles(gentity_s *ent, trace_t *trace, float *vAngles, int32_t bForceAlign)
+void MissileLandAngles(gentity_s *ent, trace_t *trace, float *vAngles, int32_t bForceAlign)
 {
     double v4; // st7
     double v5; // st7
@@ -1562,7 +1562,7 @@ void __cdecl MissileLandAngles(gentity_s *ent, trace_t *trace, float *vAngles, i
     }
 }
 
-void __cdecl MissileLandAnglesFlat(gentity_s *ent, trace_t *trace, float *angles)
+void MissileLandAnglesFlat(gentity_s *ent, trace_t *trace, float *angles)
 {
     float normalUpComponent; // [esp+Ch] [ebp-20h]
     float right[3]; // [esp+10h] [ebp-1Ch] BYREF
@@ -1587,7 +1587,7 @@ void __cdecl MissileLandAnglesFlat(gentity_s *ent, trace_t *trace, float *angles
     angles[2] = atan2(normalRightComponent, normalUpComponent) * 180.0f / 3.141592741012573f;
 }
 
-void __cdecl MissileLandAnglesFlatMaintainingDirection(gentity_s *ent, trace_t *trace, float *angles)
+void MissileLandAnglesFlatMaintainingDirection(gentity_s *ent, trace_t *trace, float *angles)
 {
     float normalUpComponent; // [esp+14h] [ebp-20h]
     float right[3]; // [esp+18h] [ebp-1Ch] BYREF
@@ -1609,7 +1609,7 @@ void __cdecl MissileLandAnglesFlatMaintainingDirection(gentity_s *ent, trace_t *
     angles[2] = atan2(normalRightComponent, normalUpComponent) * 180.0f / 3.141592741012573f;
 }
 
-void __cdecl CheckGrenadeDanger(gentity_s *grenadeEnt)
+void CheckGrenadeDanger(gentity_s *grenadeEnt)
 {
     float iExplosionRadius; // [esp+8h] [ebp-14h]
     float damageRadiusSquared; // [esp+Ch] [ebp-10h]
@@ -1652,7 +1652,7 @@ void __cdecl CheckGrenadeDanger(gentity_s *grenadeEnt)
     }
 }
 
-bool __cdecl GrenadeDud(gentity_s *ent, WeaponDef *weapDef)
+bool GrenadeDud(gentity_s *ent, WeaponDef *weapDef)
 {
     if (!ent)
         MyAssertHandler(".\\game\\g_missile.cpp", 406, 0, "%s", "ent");
@@ -1661,7 +1661,7 @@ bool __cdecl GrenadeDud(gentity_s *ent, WeaponDef *weapDef)
     return weapDef->iProjectileActivateDist > 0 && ent->missile.travelDist < (double)weapDef->iProjectileActivateDist;
 }
 
-bool __cdecl JavelinProjectile(gentity_s *ent, WeaponDef *weapDef)
+bool JavelinProjectile(gentity_s *ent, WeaponDef *weapDef)
 {
     if (!ent)
         MyAssertHandler(".\\game\\g_missile.cpp", 421, 0, "%s", "ent");
@@ -1670,7 +1670,7 @@ bool __cdecl JavelinProjectile(gentity_s *ent, WeaponDef *weapDef)
     return ent->s.eType == ET_MISSILE && weapDef->guidedMissileType == MISSILE_GUIDANCE_JAVELIN;
 }
 
-bool __cdecl JavelinDud(gentity_s *ent, WeaponDef *weapDef)
+bool JavelinDud(gentity_s *ent, WeaponDef *weapDef)
 {
     if (!ent)
         MyAssertHandler(".\\game\\g_missile.cpp", 435, 0, "%s", "ent");
@@ -1679,7 +1679,7 @@ bool __cdecl JavelinDud(gentity_s *ent, WeaponDef *weapDef)
     return JavelinProjectile(ent, weapDef) && ent->missile.stage == MISSILESTAGE_SOFTLAUNCH;
 }
 
-void __cdecl Missile_PenetrateGlass(
+void Missile_PenetrateGlass(
     trace_t *results,
     gentity_s *ent,
     float *start,
@@ -1759,7 +1759,7 @@ void __cdecl Missile_PenetrateGlass(
     }
 }
 
-void __cdecl DrawMissileDebug(float *start, float *end)
+void DrawMissileDebug(float *start, float *end)
 {
     float color[4] = { 1.0f, 0.0f, 0.0f, 1.0f };
 
@@ -1767,7 +1767,7 @@ void __cdecl DrawMissileDebug(float *start, float *end)
         G_DebugLineWithDuration(start, end, color, 1, 1000);
 }
 
-void __cdecl RunMissile_Destabilize(gentity_s *missile)
+void RunMissile_Destabilize(gentity_s *missile)
 {
     double v1; // st7
     double v2; // st7
@@ -1844,7 +1844,7 @@ void __cdecl RunMissile_Destabilize(gentity_s *missile)
     Missile_ApplyAttractorsRepulsors(missile);
 }
 
-double __cdecl RunMissile_GetPerturbation(float destabilizationCurvatureMax)
+double RunMissile_GetPerturbation(float destabilizationCurvatureMax)
 {
     if (destabilizationCurvatureMax >= 1000000000.0f || destabilizationCurvatureMax < 0.0f)
         MyAssertHandler(
@@ -1857,7 +1857,7 @@ double __cdecl RunMissile_GetPerturbation(float destabilizationCurvatureMax)
     return destabilizationCurvatureMax;
 }
 
-void __cdecl Missile_ApplyAttractorsRepulsors(gentity_s *missile)
+void Missile_ApplyAttractorsRepulsors(gentity_s *missile)
 {
     float scale; // [esp+0h] [ebp-ACh]
     float iProjectileSpeed; // [esp+4h] [ebp-A8h]
@@ -1978,7 +1978,7 @@ void __cdecl Missile_ApplyAttractorsRepulsors(gentity_s *missile)
     }
 }
 
-void __cdecl RunMissile_CreateWaterSplash(const gentity_s *missile, const trace_t *trace)
+void RunMissile_CreateWaterSplash(const gentity_s *missile, const trace_t *trace)
 {
     gentity_s *tent; // [esp+0h] [ebp-10h]
     float reflect[3]; // [esp+4h] [ebp-Ch] BYREF
@@ -1998,7 +1998,7 @@ void __cdecl RunMissile_CreateWaterSplash(const gentity_s *missile, const trace_
     tent->s.weapon = missile->s.weapon;
 }
 
-void __cdecl MissileTrajectory(gentity_s *ent, float *result)
+void MissileTrajectory(gentity_s *ent, float *result)
 {
     float v2; // [esp+Ch] [ebp-34h]
     float scale; // [esp+10h] [ebp-30h]
@@ -2073,7 +2073,7 @@ void __cdecl MissileTrajectory(gentity_s *ent, float *result)
     }
 }
 
-bool __cdecl MissileIsReadyForSteering(gentity_s *ent)
+bool MissileIsReadyForSteering(gentity_s *ent)
 {
     float timeLeft; // [esp+8h] [ebp-8h]
 
@@ -2082,7 +2082,7 @@ bool __cdecl MissileIsReadyForSteering(gentity_s *ent)
     return timeLeft <= 0.0f;
 }
 
-void __cdecl GuidedMissileSteering(gentity_s *ent)
+void GuidedMissileSteering(gentity_s *ent)
 {
     float v1; // [esp+10h] [ebp-4Ch]
     float currentHorzSpeed; // [esp+14h] [ebp-48h]
@@ -2139,7 +2139,7 @@ bool IsMissileLockedOn(gentity_s *ent)
     return 1;
 }
 
-void __cdecl MissileHorzSteerToTarget(
+void MissileHorzSteerToTarget(
     gentity_s *ent,
     const float *currentRight,
     const float *toTargetRelative,
@@ -2222,7 +2222,7 @@ void __cdecl MissileHorzSteerToTarget(
     }
 }
 
-void __cdecl MissileVerticalSteering(
+void MissileVerticalSteering(
     gentity_s *ent,
     const float *toTargetRelative,
     float currentHorzSpeed,
@@ -2306,7 +2306,7 @@ void __cdecl MissileVerticalSteering(
     }
 }
 
-void __cdecl MissileVerticalSteerToTarget(
+void MissileVerticalSteerToTarget(
     gentity_s *ent,
     const float *toTargetHorzRelDir,
     float horzDistToTarg,
@@ -2350,7 +2350,7 @@ void __cdecl MissileVerticalSteerToTarget(
     }
 }
 
-void __cdecl GetTargetPosition(gentity_s *ent, float *result)
+void GetTargetPosition(gentity_s *ent, float *result)
 {
     gentity_s *target; // [esp+0h] [ebp-4h]
 
@@ -2362,7 +2362,7 @@ void __cdecl GetTargetPosition(gentity_s *ent, float *result)
     Vec3Add(target->r.currentOrigin, ent->missile.targetOffset, result);
 }
 
-void __cdecl JavelinSteering(gentity_s *ent, WeaponDef *weapDef)
+void JavelinSteering(gentity_s *ent, WeaponDef *weapDef)
 {
     const char *v2; // [esp+20h] [ebp-50h]
     float diff[6]; // [esp+28h] [ebp-48h] BYREF
@@ -2420,7 +2420,7 @@ void __cdecl JavelinSteering(gentity_s *ent, WeaponDef *weapDef)
     }
 }
 
-void __cdecl JavelinClimbOffset(gentity_s *ent, float *targetPos)
+void JavelinClimbOffset(gentity_s *ent, float *targetPos)
 {
     gentity_s *v2; // [esp+0h] [ebp-20h]
     float value; // [esp+4h] [ebp-1Ch]
@@ -2460,7 +2460,7 @@ void __cdecl JavelinClimbOffset(gentity_s *ent, float *targetPos)
     }
 }
 
-void __cdecl JavelinRotateVelocity(gentity_s *ent, const float *currentVel, const float *targetDir, float *resultVel)
+void JavelinRotateVelocity(gentity_s *ent, const float *currentVel, const float *targetDir, float *resultVel)
 {
     float currentDir[3]; // [esp+8h] [ebp-20h] BYREF
     float len; // [esp+14h] [ebp-14h]
@@ -2490,7 +2490,7 @@ void __cdecl JavelinRotateVelocity(gentity_s *ent, const float *currentVel, cons
     Vec3Scale(resultDir, len, resultVel);
 }
 
-double __cdecl JavelinRotateDir(gentity_s *ent, const float *currentDir, const float *targetDir, float *resultDir)
+double JavelinRotateDir(gentity_s *ent, const float *currentDir, const float *targetDir, float *resultDir)
 {
     float end[3]; // [esp+20h] [ebp-4Ch] BYREF
     float maxDPS; // [esp+2Ch] [ebp-40h]
@@ -2551,7 +2551,7 @@ double __cdecl JavelinRotateDir(gentity_s *ent, const float *currentDir, const f
     }
 }
 
-double __cdecl JavelinMaxDPS(gentity_s *ent)
+double JavelinMaxDPS(gentity_s *ent)
 {
     if (!ent)
         MyAssertHandler(".\\game\\g_missile.cpp", 1698, 0, "%s", "ent");
@@ -2564,7 +2564,7 @@ double __cdecl JavelinMaxDPS(gentity_s *ent)
     return missileJavTurnRateDirect->current.value;
 }
 
-void __cdecl VecToQuat(const float *vec, float *quat)
+void VecToQuat(const float *vec, float *quat)
 {
     float angles[3]; // [esp+0h] [ebp-30h] BYREF
     float axis[3][3]; // [esp+Ch] [ebp-24h] BYREF
@@ -2574,7 +2574,7 @@ void __cdecl VecToQuat(const float *vec, float *quat)
     AxisToQuat(axis, quat);
 }
 
-double __cdecl JavelinClimbCeiling(gentity_s *ent)
+double JavelinClimbCeiling(gentity_s *ent)
 {
     if (!ent)
         MyAssertHandler(".\\game\\g_missile.cpp", 1819, 0, "%s", "ent");
@@ -2587,7 +2587,7 @@ double __cdecl JavelinClimbCeiling(gentity_s *ent)
     return missileJavClimbCeilingTop->current.value;
 }
 
-bool __cdecl JavelinClimbEnd(gentity_s *ent, const float *targetPos)
+bool JavelinClimbEnd(gentity_s *ent, const float *targetPos)
 {
     if (!JavelinClimbIsAboveCeiling(ent, targetPos))
         return 0;
@@ -2596,7 +2596,7 @@ bool __cdecl JavelinClimbEnd(gentity_s *ent, const float *targetPos)
     return JavelinClimbWithinDistance(ent, targetPos) != 0;
 }
 
-char __cdecl JavelinClimbExceededAngle(gentity_s *ent, const float *targetPos)
+char JavelinClimbExceededAngle(gentity_s *ent, const float *targetPos)
 {
     float v3; // [esp+0h] [ebp-30h]
     float v4; // [esp+4h] [ebp-2Ch]
@@ -2636,7 +2636,7 @@ char __cdecl JavelinClimbExceededAngle(gentity_s *ent, const float *targetPos)
     return 1;
 }
 
-char __cdecl JavelinClimbWithinDistance(gentity_s *ent, const float *targetPos)
+char JavelinClimbWithinDistance(gentity_s *ent, const float *targetPos)
 {
     float distance; // [esp+0h] [ebp-4h]
 
@@ -2652,7 +2652,7 @@ char __cdecl JavelinClimbWithinDistance(gentity_s *ent, const float *targetPos)
     return 1;
 }
 
-bool __cdecl JavelinClimbIsAboveCeiling(gentity_s *ent, const float *targetPos)
+bool JavelinClimbIsAboveCeiling(gentity_s *ent, const float *targetPos)
 {
     float limit; // [esp+0h] [ebp-8h]
     float height; // [esp+4h] [ebp-4h]
@@ -2666,7 +2666,7 @@ bool __cdecl JavelinClimbIsAboveCeiling(gentity_s *ent, const float *targetPos)
     return limit < (double)height;
 }
 
-void __cdecl G_InitGrenadeEntity(gentity_s *parent, gentity_s *grenade)
+void G_InitGrenadeEntity(gentity_s *parent, gentity_s *grenade)
 {
     gentity_s *ent; // [esp+0h] [ebp-10h]
     WeaponDef *weapDef; // [esp+Ch] [ebp-4h]
@@ -2731,7 +2731,7 @@ void __cdecl G_InitGrenadeEntity(gentity_s *parent, gentity_s *grenade)
     }
 }
 
-void __cdecl G_InitGrenadeMovement(gentity_s *grenade, const float *start, const float *dir, int32_t rotate)
+void G_InitGrenadeMovement(gentity_s *grenade, const float *start, const float *dir, int32_t rotate)
 {
     double v4; // [esp+Ch] [ebp-4Ch]
     double v5; // [esp+18h] [ebp-40h]
@@ -2789,7 +2789,7 @@ void __cdecl G_InitGrenadeMovement(gentity_s *grenade, const float *start, const
     }
 }
 
-gentity_s *__cdecl G_FireGrenade(
+gentity_s *G_FireGrenade(
     gentity_s *parent,
     float *start,
     float *dir,
@@ -2840,7 +2840,7 @@ gentity_s *__cdecl G_FireGrenade(
     return grenade;
 }
 
-int32_t __cdecl CalcMissileNoDrawTime(float speed)
+int32_t CalcMissileNoDrawTime(float speed)
 {
     int32_t v3; // [esp+4h] [ebp-8h]
 
@@ -2854,7 +2854,7 @@ int32_t __cdecl CalcMissileNoDrawTime(float speed)
         return 20;
 }
 
-void __cdecl InitGrenadeTimer(const gentity_s *parent, gentity_s *grenade, const WeaponDef *weapDef, int32_t time)
+void InitGrenadeTimer(const gentity_s *parent, gentity_s *grenade, const WeaponDef *weapDef, int32_t time)
 {
     iassert(parent);
     iassert(grenade);
@@ -2893,7 +2893,7 @@ void __cdecl InitGrenadeTimer(const gentity_s *parent, gentity_s *grenade, const
 float MYJAVELINOFFSET = 0.3f;
 float MYJAVELINOFFSET_RIGHT = 10.0f;
 
-gentity_s *__cdecl G_FireRocket(
+gentity_s *G_FireRocket(
     gentity_s *parent,
     uint32_t weaponIndex,
     float *start,
@@ -3090,7 +3090,7 @@ gentity_s *__cdecl G_FireRocket(
     return bolt;
 }
 
-void __cdecl InitRocketTimer(gentity_s *bolt, WeaponDef *weapDef)
+void InitRocketTimer(gentity_s *bolt, WeaponDef *weapDef)
 {
     if (!bolt)
         MyAssertHandler(".\\game\\g_missile.cpp", 2684, 0, "%s", "bolt");

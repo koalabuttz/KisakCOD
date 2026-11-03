@@ -11,7 +11,7 @@
 #include "cg_servercmds.h"
 #endif
 
-void __cdecl CG_Respawn(int32_t localClientNum)
+void CG_Respawn(int32_t localClientNum)
 {
     cg_s *cgameGlob;
 
@@ -75,7 +75,7 @@ void __cdecl CG_Respawn(int32_t localClientNum)
 #endif
 }
 
-void __cdecl CG_DamageFeedback(int32_t localClientNum, int32_t yawByte, int32_t pitchByte, int32_t damage)
+void CG_DamageFeedback(int32_t localClientNum, int32_t yawByte, int32_t pitchByte, int32_t damage)
 {
     double v4; // st7
     float angle; // [esp+8h] [ebp-3Ch]
@@ -136,14 +136,14 @@ void __cdecl CG_DamageFeedback(int32_t localClientNum, int32_t yawByte, int32_t 
 }
 
 #ifdef KISAK_MP
-int32_t __cdecl CG_TransitionPlayerState(int32_t localClientNum, playerState_s *ps, const transPlayerState_t *ops)
+int32_t CG_TransitionPlayerState(int32_t localClientNum, playerState_s *ps, const transPlayerState_t *ops)
 {
     if (ps->damageEvent != ops->damageEvent && ps->damageCount)
         CG_DamageFeedback(localClientNum, ps->damageYaw, ps->damagePitch, ps->damageCount);
     return CG_CheckPlayerstateEvents(localClientNum, ps, ops);
 }
 
-int32_t __cdecl CG_CheckPlayerstateEvents(int32_t localClientNum, playerState_s* ps, const transPlayerState_t* ops)
+int32_t CG_CheckPlayerstateEvents(int32_t localClientNum, playerState_s* ps, const transPlayerState_t* ops)
 {
     int32_t v4; // [esp+4h] [ebp-18h]
     int32_t event; // [esp+8h] [ebp-14h]
@@ -170,14 +170,14 @@ int32_t __cdecl CG_CheckPlayerstateEvents(int32_t localClientNum, playerState_s*
     return eventSequence;
 }
 #elif KISAK_SP
-void __cdecl CG_TransitionPlayerState(int32_t localClientNum, playerState_s *ps, const playerState_s *ops)
+void CG_TransitionPlayerState(int32_t localClientNum, playerState_s *ps, const playerState_s *ops)
 {
     if (ps->damageEvent != ops->damageEvent && ps->damageCount)
         CG_DamageFeedback(localClientNum, ps->damageYaw, ps->damagePitch, ps->damageCount);
     CG_CheckPlayerstateEvents(localClientNum, ps, ops);
 }
 
-void __cdecl CG_CheckPlayerstateEvents(int32_t localClientNum, playerState_s *ps, const playerState_s *ops)
+void CG_CheckPlayerstateEvents(int32_t localClientNum, playerState_s *ps, const playerState_s *ops)
 {
     int eventSequence; // r29
     int v6; // r8

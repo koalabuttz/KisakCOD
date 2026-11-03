@@ -5,7 +5,7 @@
 
 static FxPostLightInfo g_postLightInfo;
 
-void __cdecl FX_PostLight_GenerateVerts(FxPostLightInfo *postLightInfoAddr, FxSystem *system)
+void FX_PostLight_GenerateVerts(FxPostLightInfo *postLightInfoAddr, FxSystem *system)
 {
     int v2; // ecx
     float scale0; // [esp+0h] [ebp-F8h]
@@ -158,12 +158,12 @@ void __cdecl FX_PostLight_GenerateVerts(FxPostLightInfo *postLightInfoAddr, FxSy
     }
 }
 
-void __cdecl FX_PostLight_Begin()
+void FX_PostLight_Begin()
 {
     g_postLightInfo.postLightCount = 0;
 }
 
-void __cdecl FX_PostLight_Add(FxPostLight *postLight)
+void FX_PostLight_Add(FxPostLight *postLight)
 {
     if (g_postLightInfo.postLightCount != 96)
         memcpy(
@@ -172,7 +172,7 @@ void __cdecl FX_PostLight_Add(FxPostLight *postLight)
             sizeof(g_postLightInfo.postLights[g_postLightInfo.postLightCount++]));
 }
 
-FxPostLightInfo *__cdecl FX_PostLight_GetInfo()
+FxPostLightInfo *FX_PostLight_GetInfo()
 {
     return &g_postLightInfo;
 }

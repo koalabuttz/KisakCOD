@@ -228,7 +228,7 @@ void QDECL Com_PrintMessage(int channel, const char* msg, int error)
 
 }
 
-int __cdecl Debug_EventLoop(int localClientNum)
+int Debug_EventLoop(int localClientNum)
 {
     sysEvent_t result; // [esp+4h] [ebp-50h] BYREF
     sysEvent_t v3; // [esp+20h] [ebp-34h]
@@ -266,7 +266,7 @@ int __cdecl Debug_EventLoop(int localClientNum)
     }
 }
 
-void __cdecl Debug_Frame(int localClientNum)
+void Debug_Frame(int localClientNum)
 {
     uint32_t v1; // edx
     int lastFrameIndex; // [esp+0h] [ebp-18h]
@@ -436,7 +436,7 @@ void Com_Prefetch(const void* s, const uint32_t bytes, e_prefetch type)
 	}
 }
 
-void __cdecl Com_LogPrintMessage(int channel, const char* msg)
+void Com_LogPrintMessage(int channel, const char* msg)
 {
     Sys_EnterCriticalSection(CRITSECT_CONSOLE);
     if (FS_Initialized())
@@ -552,7 +552,7 @@ void Com_PrintWarning(int channel, const char *fmt, ...)
     Com_PrintMessage(channel, dest, 2);
 }
 
-void __cdecl Com_Shutdown(const char* finalmsg)
+void Com_Shutdown(const char* finalmsg)
 {
     Com_ShutdownInternal(finalmsg);
 #ifndef KISAK_SERVER_ONLY
@@ -566,7 +566,7 @@ void __cdecl Com_Shutdown(const char* finalmsg)
 #endif
 }
 
-void __cdecl CL_ShutdownDemo()
+void CL_ShutdownDemo()
 {
 #ifdef KISAK_MP
     clientConnection_t *clc; // [esp+0h] [ebp-4h]
@@ -610,7 +610,7 @@ void __cdecl CL_ShutdownDemo()
 #endif
 }
 
-void __cdecl Com_ShutdownInternal(const char* finalmsg)
+void Com_ShutdownInternal(const char* finalmsg)
 {
     int localClientNum; // [esp+0h] [ebp-4h]
 
@@ -628,7 +628,7 @@ void __cdecl Com_ShutdownInternal(const char* finalmsg)
     Com_Restart();
 }
 
-void __cdecl Com_SetLocalizedErrorMessage(char* localizedErrorMessage, const char* titleToken)
+void Com_SetLocalizedErrorMessage(char* localizedErrorMessage, const char* titleToken)
 {
     char* translation; // [esp+0h] [ebp-4h]
 
@@ -647,7 +647,7 @@ void __cdecl Com_SetLocalizedErrorMessage(char* localizedErrorMessage, const cha
     if (com_errorMessage != localizedErrorMessage) I_strncpyz(com_errorMessage, localizedErrorMessage, 4096);
 }
 
-void __cdecl Com_SetErrorMessage(char* errorMessage)
+void Com_SetErrorMessage(char* errorMessage)
 {
     char* translation; // [esp+0h] [ebp-8h]
     const char* title; // [esp+4h] [ebp-4h]
@@ -664,7 +664,7 @@ void __cdecl Com_SetErrorMessage(char* errorMessage)
     Com_SetLocalizedErrorMessage(translation, title);
 }
 
-char __cdecl Com_ErrorIsNotice(const char* errorMessage)
+char Com_ErrorIsNotice(const char* errorMessage)
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -676,7 +676,7 @@ char __cdecl Com_ErrorIsNotice(const char* errorMessage)
     return 0;
 }
 
-void __cdecl Com_PrintStackTrace()
+void Com_PrintStackTrace()
 {
     // KISAKTODO
    //DoStackTrace(g_stackTrace, 1);
@@ -685,7 +685,7 @@ void __cdecl Com_PrintStackTrace()
    //Com_Printf(CON_CHANNEL_SYSTEM, "STACKEND ---------------------------------------------------------------------\n");
 }
 
-void __cdecl  Com_ErrorAbort()
+void Com_ErrorAbort()
 {
     Sys_Error("%s", com_errorMessage);
 }
@@ -775,7 +775,7 @@ void Com_Error(errorParm_t code, const char* fmt, ...)
     }
 }
 
-void __cdecl  Com_Quit_f()
+void Com_Quit_f()
 {
     int localClientNum; // [esp+0h] [ebp-4h]
 
@@ -818,7 +818,7 @@ void Com_ClearTempMemory()
     Hunk_ClearTempMemoryHigh();
 }
 
-void __cdecl Com_ParseCommandLine(char* commandLine)
+void Com_ParseCommandLine(char* commandLine)
 {
     iassert( commandLine );
     com_consoleLines[0] = commandLine;
@@ -836,7 +836,7 @@ void __cdecl Com_ParseCommandLine(char* commandLine)
     }
 }
 
-int __cdecl Com_SafeMode()
+int Com_SafeMode()
 {
     const char* v0; // eax
     const char* v1; // eax
@@ -864,12 +864,12 @@ int __cdecl Com_SafeMode()
     return com_safemode;
 }
 
-void __cdecl Com_ForceSafeMode()
+void Com_ForceSafeMode()
 {
     com_safemode = 1;
 }
 
-void __cdecl Com_StartupVariable(const char* match)
+void Com_StartupVariable(const char* match)
 {
     const char* v1; // eax
     const char* v2; // eax
@@ -896,7 +896,7 @@ void __cdecl Com_StartupVariable(const char* match)
     }
 }
 
-void __cdecl Info_Print(const char* s)
+void Info_Print(const char* s)
 {
     uint8_t* o; // [esp+0h] [ebp-410h]
     char* oa; // [esp+0h] [ebp-410h]
@@ -936,14 +936,14 @@ void __cdecl Info_Print(const char* s)
     }
 }
 
-uint32_t* __cdecl Com_AllocEvent(int size)
+uint32_t* Com_AllocEvent(int size)
 {
     return (uint32_t *)Z_Malloc(size, "Com_AllocEvent", 10);
 }
 
 #ifdef KISAK_MP
 uint8_t clientCommonMsgBuf[0x20000];
-void __cdecl Com_ClientPacketEvent()
+void Com_ClientPacketEvent()
 {
     msg_t netmsg; // [esp+4Ch] [ebp-40h] BYREF
     netadr_t adr; // [esp+74h] [ebp-18h] BYREF
@@ -962,7 +962,7 @@ void __cdecl Com_ClientPacketEvent()
     }
 }
 
-void __cdecl Com_PacketEventLoop(netsrc_t client, msg_t* netmsg)
+void Com_PacketEventLoop(netsrc_t client, msg_t* netmsg)
 {
     netadr_t adr; // [esp+0h] [ebp-18h] BYREF
 
@@ -972,13 +972,13 @@ void __cdecl Com_PacketEventLoop(netsrc_t client, msg_t* netmsg)
     }
 }
 
-void __cdecl Com_DispatchClientPacketEvent(netadr_t adr, msg_t* netmsg)
+void Com_DispatchClientPacketEvent(netadr_t adr, msg_t* netmsg)
 {
     CL_PacketEvent(NS_CLIENT1, adr, netmsg, Sys_Milliseconds());
 }
 
 uint8_t serverCommonMsgBuf[0x20000];
-void __cdecl Com_ServerPacketEvent()
+void Com_ServerPacketEvent()
 {
     msg_t netmsg; // [esp+30h] [ebp-40h] BYREF
     netadr_t adr; // [esp+58h] [ebp-18h] BYREF
@@ -1002,7 +1002,7 @@ void __cdecl Com_ServerPacketEvent()
 }
 #endif
 
-void __cdecl Com_EventLoop()
+void Com_EventLoop()
 {
     sysEvent_t result; // [esp+4h] [ebp-48h] BYREF
     sysEvent_t ev; // [esp+34h] [ebp-18h]
@@ -1062,7 +1062,7 @@ END:
     return;
 }
 
-void __cdecl Com_SetScriptSettings()
+void Com_SetScriptSettings()
 {
     //Scr_Settings(
     //    (com_developer->current.integer || com_logfile->current.integer), 
@@ -1077,7 +1077,7 @@ void __cdecl Com_SetScriptSettings()
     );
 }
 
-void __cdecl Com_RunAutoExec(int localClientNum, int controllerIndex)
+void Com_RunAutoExec(int localClientNum, int controllerIndex)
 {
     // Developer presets enable developer_script as well as development options.
     // Keep ordinary startup in the configured script mode unless opted in.
@@ -1093,7 +1093,7 @@ void __cdecl Com_RunAutoExec(int localClientNum, int controllerIndex)
     Dvar_SetInAutoExec(0);
 }
 
-void __cdecl Com_ExecStartupConfigs(int localClientNum, const char* configFile)
+void Com_ExecStartupConfigs(int localClientNum, const char* configFile)
 {
 #ifdef KISAK_MP
     Cbuf_AddText(localClientNum, "exec default_mp.cfg\n");
@@ -1120,7 +1120,7 @@ void __cdecl Com_ExecStartupConfigs(int localClientNum, const char* configFile)
     Cbuf_Execute(localClientNum, CL_ControllerIndexFromClientNum(localClientNum));
 }
 
-void __cdecl Com_Init(char* commandLine)
+void Com_Init(char* commandLine)
 {
     jmp_buf* Value; // eax
     jmp_buf * v3; // eax
@@ -1162,7 +1162,7 @@ void __cdecl Com_Init(char* commandLine)
 }
 
 bool shouldQuitOnError;
-void __cdecl RefreshQuitOnErrorCondition()
+void RefreshQuitOnErrorCondition()
 {
     bool v0; // [esp+0h] [ebp-4h]
 
@@ -1173,7 +1173,7 @@ void __cdecl RefreshQuitOnErrorCondition()
     }
 }
 
-bool __cdecl QuitOnError()
+bool QuitOnError()
 {
     RefreshQuitOnErrorCondition();
     return shouldQuitOnError;
@@ -1337,7 +1337,7 @@ cmd_function_s Com_WriteConfig_f_VAR;
 cmd_function_s Com_WriteDefaults_f_VAR;
 
 static const char* comInitAllocName = "$init";
-void __cdecl Com_Init_Try_Block_Function(char* commandLine)
+void Com_Init_Try_Block_Function(char* commandLine)
 {
     int v1; // eax
     char* s; // [esp+14h] [ebp-8h]
@@ -1514,7 +1514,7 @@ void __cdecl Com_Init_Try_Block_Function(char* commandLine)
     Com_DvarDump(CON_CHANNEL_LOGFILEONLY, 0);
 }
 
-void __cdecl Com_Error_f()
+void Com_Error_f()
 {
     if (Cmd_Argc() <= 1)
         Com_Error(ERR_FATAL, "Testing fatal error");
@@ -1522,7 +1522,7 @@ void __cdecl Com_Error_f()
         Com_Error(ERR_DROP, "Testing drop error");
 }
 
-void __cdecl Com_Freeze_f()
+void Com_Freeze_f()
 {
     const char* v0; // eax
     uint32_t start; // [esp+4h] [ebp-Ch]
@@ -1572,12 +1572,12 @@ Com_Crash_f
 A way to force a bus error for development reasons
 =================
 */
-void __cdecl Com_Crash_f()
+void Com_Crash_f()
 {
     *(volatile int *)0 = 0x12345678;
 }
 
-void __cdecl Com_Assert_f()
+void Com_Assert_f()
 {
     MyAssertHandler(".\\qcommon\\common.cpp", 2323, 0, "%s", "a");
 }
@@ -1691,7 +1691,7 @@ void Com_InitDvars()
         "True if the game video is running in 16x9 aspect, false if 4x3.");
 }
 
-void __cdecl Com_StartupConfigs(int localClientNum)
+void Com_StartupConfigs(int localClientNum)
 {
 #ifdef KISAK_SERVER_ONLY
     // A dedicated server has no local player profile or hardware presets.
@@ -1706,7 +1706,7 @@ void Com_InitXAssets()
     DB_InitThread();
 }
 
-void __cdecl Com_WriteDefaultsToFile(char* filename)
+void Com_WriteDefaultsToFile(char* filename)
 {
     int file = FS_FOpenFileWrite(filename);
     if (file)
@@ -1721,7 +1721,7 @@ void __cdecl Com_WriteDefaultsToFile(char* filename)
     }
 }
 
-void __cdecl Com_WriteConfig_f()
+void Com_WriteConfig_f()
 {
     char* v0; // eax
     char filename[68]; // [esp+0h] [ebp-48h] BYREF
@@ -1740,7 +1740,7 @@ void __cdecl Com_WriteConfig_f()
     }
 }
 
-void __cdecl Com_WriteConfigToFile(int localClientNum, char* filename)
+void Com_WriteConfigToFile(int localClientNum, char* filename)
 {
     int file = FS_FOpenFileWriteToDir(filename, (char*)"players");
     if (file)
@@ -1760,7 +1760,7 @@ void __cdecl Com_WriteConfigToFile(int localClientNum, char* filename)
     }
 }
 
-void __cdecl Com_WriteDefaults_f()
+void Com_WriteDefaults_f()
 {
     char* v0; // eax
     char filename[68]; // [esp+0h] [ebp-48h] BYREF
@@ -1779,14 +1779,14 @@ void __cdecl Com_WriteDefaults_f()
     }
 }
 
-double __cdecl Com_GetTimescaleForSnd()
+double Com_GetTimescaleForSnd()
 {
     if (com_fixedtime->current.integer)
         return (double)com_fixedtime->current.integer;
     return (float)(com_timescale->current.value * dev_timescale->current.value);
 }
 
-void __cdecl Com_AdjustMaxFPS(int* maxFPS)
+void Com_AdjustMaxFPS(int* maxFPS)
 {
     int maxUserCmdsPerSecond; // [esp+0h] [ebp-4h]
 
@@ -1920,7 +1920,7 @@ static void Com_AttractMode(int localClientNum)
 }
 #endif
 
-void __cdecl Com_Frame_Try_Block_Function()
+void Com_Frame_Try_Block_Function()
 {
     float deltaTime; // [esp+4h] [ebp-78h]
     int lastFrameIndex; // [esp+68h] [ebp-14h]
@@ -2084,7 +2084,7 @@ void __cdecl Com_Frame_Try_Block_Function()
 #endif
 }
 
-void __cdecl Com_WriteConfiguration(int localClientNum)
+void Com_WriteConfiguration(int localClientNum)
 {
 #ifndef KISAK_SERVER_ONLY
     char configFile[68]; // [esp+0h] [ebp-48h] BYREF
@@ -2105,7 +2105,7 @@ void __cdecl Com_WriteConfiguration(int localClientNum)
 #endif
 }
 
-int __cdecl Com_ModifyMsec(int msec)
+int Com_ModifyMsec(int msec)
 {
     int clampTime; // [esp+18h] [ebp-Ch]
     int originalMsec; // [esp+1Ch] [ebp-8h]
@@ -2202,7 +2202,7 @@ int Com_UpdateMenu()
     return result;
 }
 
-void __cdecl Com_AssetLoadUI()
+void Com_AssetLoadUI()
 {
     XZoneInfo zoneInfo; // [esp+0h] [ebp-10h] BYREF
 
@@ -2227,7 +2227,7 @@ void __cdecl Com_AssetLoadUI()
     R_EndRemoteScreenUpdate();
 }
 
-void __cdecl Com_CheckSyncFrame()
+void Com_CheckSyncFrame()
 {
     iassert( Sys_IsMainThread() );
 #ifdef KISAK_SP
@@ -2237,7 +2237,7 @@ void __cdecl Com_CheckSyncFrame()
     DB_Update();
 }
 
-void __cdecl Com_Frame()
+void Com_Frame()
 {
 #ifdef TRACY_ENABLE
     TracyCFrameMarkStart("Com_Frame");
@@ -2303,7 +2303,7 @@ void Com_StartHunkUsers()
     Com_EventLoop();
 }
 
-void __cdecl Com_CloseLogfiles()
+void Com_CloseLogfiles()
 {
     if (logfile)
     {
@@ -2312,12 +2312,12 @@ void __cdecl Com_CloseLogfiles()
     }
 }
 
-bool __cdecl Com_LogFileOpen()
+bool Com_LogFileOpen()
 {
     return logfile != 0;
 }
 
-void __cdecl Com_Close()
+void Com_Close()
 {
     Com_ShutdownDObj();
     DObjShutdown();
@@ -2336,7 +2336,7 @@ void __cdecl Com_Close()
 }
 
 
-void __cdecl Com_Restart()
+void Com_Restart()
 {
 #ifndef KISAK_SERVER_ONLY
     CL_ShutdownHunkUsers();
@@ -2366,7 +2366,7 @@ void __cdecl Com_Restart()
     Com_InitDObj();
 }
 
-void __cdecl Com_SetWeaponInfoMemory(int source)
+void Com_SetWeaponInfoMemory(int source)
 {
     if (source != 1 && source != 2)
         MyAssertHandler(
@@ -2379,7 +2379,7 @@ void __cdecl Com_SetWeaponInfoMemory(int source)
     weaponInfoSource = source;
 }
 
-void __cdecl Com_FreeWeaponInfoMemory(int source)
+void Com_FreeWeaponInfoMemory(int source)
 {
     if (source != 1 && source != 2)
         MyAssertHandler(
@@ -2395,7 +2395,7 @@ void __cdecl Com_FreeWeaponInfoMemory(int source)
     }
 }
 
-int __cdecl Com_AddToString(const char* add, char* msg, int len, int maxlen, int mayAddQuotes)
+int Com_AddToString(const char* add, char* msg, int len, int maxlen, int mayAddQuotes)
 {
     int addQuotes; // [esp+0h] [ebp-8h]
     int i; // [esp+4h] [ebp-4h]
@@ -2429,7 +2429,7 @@ int __cdecl Com_AddToString(const char* add, char* msg, int len, int maxlen, int
     return len;
 }
 
-char __cdecl Com_GetDecimalDelimiter()
+char Com_GetDecimalDelimiter()
 {
     int lang; // [esp+0h] [ebp-4h]
 
@@ -2440,7 +2440,7 @@ char __cdecl Com_GetDecimalDelimiter()
         return 46;
 }
 
-void __cdecl Com_LocalizedFloatToString(float f, char* buffer, uint32_t maxlen, uint32_t numDecimalPlaces)
+void Com_LocalizedFloatToString(float f, char* buffer, uint32_t maxlen, uint32_t numDecimalPlaces)
 {
     uint32_t charPos; // [esp+8h] [ebp-8h]
     char delimiter; // [esp+Fh] [ebp-1h]
@@ -2461,7 +2461,7 @@ void __cdecl Com_LocalizedFloatToString(float f, char* buffer, uint32_t maxlen, 
     }
 }
 
-void __cdecl Com_SyncThreads()
+void Com_SyncThreads()
 {
 #ifndef KISAK_SP // called from Debug_Frame for script debugger
     iassert( Sys_IsMainThread() );
@@ -2476,7 +2476,7 @@ void __cdecl Com_SyncThreads()
 #endif
 }
 
-void __cdecl Com_FreeEvent(char* ptr)
+void Com_FreeEvent(char* ptr)
 {
     Z_Free(ptr, 10);
 }

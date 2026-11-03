@@ -15,7 +15,7 @@
 #include <client/cl_input.h>
 #include <universal/profile.h>
 
-void __cdecl P_DamageFeedback(gentity_s *player)
+void P_DamageFeedback(gentity_s *player)
 {
     gclient_s *client; // r31
     const float *v3; // r4
@@ -95,20 +95,20 @@ void __cdecl P_DamageFeedback(gentity_s *player)
     }
 }
 
-void __cdecl G_SetClientSound(gentity_s *ent)
+void G_SetClientSound(gentity_s *ent)
 {
     ent->s.loopSound = 0;
 }
 
-void __cdecl G_TouchEnts(gentity_s *ent, int numtouch, int *touchents)
+void G_TouchEnts(gentity_s *ent, int numtouch, int *touchents)
 {
     int v6; // r30
     int *v7; // r28
     int v8; // r10
     int *v9; // r11
     gentity_s *v10; // r31
-    void(__cdecl * touch)(gentity_s *, gentity_s *, int); // r11
-    void(__cdecl * v12)(gentity_s *, gentity_s *, int); // r11
+    void(* touch)(gentity_s *, gentity_s *, int); // r11
+    void(* v12)(gentity_s *, gentity_s *, int); // r11
 
     v6 = 0;
     if (numtouch > 0)
@@ -151,21 +151,21 @@ void __cdecl G_TouchEnts(gentity_s *ent, int numtouch, int *touchents)
     }
 }
 
-void __cdecl ClientImpacts(gentity_s *ent, pmove_t *pm)
+void ClientImpacts(gentity_s *ent, pmove_t *pm)
 {
     G_TouchEnts(ent, pm->numtouch, pm->touchents);
 }
 
-void __cdecl G_DoTouchTriggers(gentity_s *ent)
+void G_DoTouchTriggers(gentity_s *ent)
 {
     int contentMask; // r20
     sentient_s *sentient; // r11
     team_t eTeam; // r11
     int count; // r30
-    void(__cdecl * touch)(gentity_s *, gentity_s *, int); // r19
+    void(* touch)(gentity_s *, gentity_s *, int); // r19
     int i; // r17
     gentity_s *hit; // r30
-    void(__cdecl * hitTouch)(gentity_s *, gentity_s *, int); // r29
+    void(* hitTouch)(gentity_s *, gentity_s *, int); // r29
     gclient_s *client; // r3
     float mins[3];
     float maxs[3];
@@ -273,7 +273,7 @@ void __cdecl G_DoTouchTriggers(gentity_s *ent)
     }
 }
 
-void __cdecl NotifyGrenadePullback(gentity_s *ent, unsigned int weaponIndex)
+void NotifyGrenadePullback(gentity_s *ent, unsigned int weaponIndex)
 {
     WeaponDef *WeaponDef; // r29
 
@@ -290,7 +290,7 @@ void __cdecl NotifyGrenadePullback(gentity_s *ent, unsigned int weaponIndex)
     Scr_Notify(ent, scr_const.grenade_pullback, 1u);
 }
 
-bool __cdecl IsLiveGrenade(gentity_s *ent)
+bool IsLiveGrenade(gentity_s *ent)
 {
     WeaponDef *WeaponDef; // r31
 
@@ -302,10 +302,10 @@ bool __cdecl IsLiveGrenade(gentity_s *ent)
     return WeaponDef->offhandClass == OFFHAND_CLASS_FRAG_GRENADE;
 }
 
-void __cdecl AttemptLiveGrenadePickup(gentity_s *clientEnt)
+void AttemptLiveGrenadePickup(gentity_s *clientEnt)
 {
     gentity_s *v2; // r31
-    void(__cdecl * touch)(gentity_s *, gentity_s *, int); // r29
+    void(* touch)(gentity_s *, gentity_s *, int); // r29
 
     if (!clientEnt)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_active.cpp", 315, 0, "%s", "clientEnt");
@@ -344,7 +344,7 @@ void __cdecl AttemptLiveGrenadePickup(gentity_s *clientEnt)
     }
 }
 
-void __cdecl ClientEvents(gentity_s *ent, int oldEventSequence)
+void ClientEvents(gentity_s *ent, int oldEventSequence)
 {
     gclient_s *client; // r23
     int eventSequence; // r10
@@ -470,7 +470,7 @@ void __cdecl ClientEvents(gentity_s *ent, int oldEventSequence)
     }
 }
 
-void __cdecl Client_ClaimNode(gentity_s *ent)
+void Client_ClaimNode(gentity_s *ent)
 {
     pathnode_t *v2; // r29
     pathnode_t *pClaimedNode; // r11
@@ -515,7 +515,7 @@ void __cdecl Client_ClaimNode(gentity_s *ent)
     }
 }
 
-void __cdecl G_PlayerStateToEntityStateExtrapolate(playerState_s *ps, entityState_s *s, int time, int snap)
+void G_PlayerStateToEntityStateExtrapolate(playerState_s *ps, entityState_s *s, int time, int snap)
 {
     int entityEventSequence; // r10
     int eventSequence; // r11
@@ -583,7 +583,7 @@ void __cdecl G_PlayerStateToEntityStateExtrapolate(playerState_s *ps, entityStat
     s->groundEntityNum = groundEntityNum;
 }
 
-void __cdecl ClientThink_real(gentity_s *ent)
+void ClientThink_real(gentity_s *ent)
 {
     gclient_s *client; // r30
     usercmd_s *p_cmd; // r25
@@ -798,7 +798,7 @@ LABEL_35:
         respawn(ent);
 }
 
-void __cdecl ClientThink(int clientNum)
+void ClientThink(int clientNum)
 {
     gentity_s *v2; // r31
 
@@ -812,7 +812,7 @@ void __cdecl ClientThink(int clientNum)
         G_UpdateHeadHitEnt(v2);
 }
 
-void __cdecl ClientEndFrame(gentity_s *ent)
+void ClientEndFrame(gentity_s *ent)
 {
     gclient_s *client; // r11
     gclient_s *v3; // r11
@@ -879,12 +879,12 @@ void __cdecl ClientEndFrame(gentity_s *ent)
     ent->client->buttonsSinceLastFrame = 0;
 }
 
-gentity_s *__cdecl G_GetPlayer()
+gentity_s *G_GetPlayer()
 {
     return level.gentities;
 }
 
-void __cdecl G_UpdatePlayer(gentity_s *ent)
+void G_UpdatePlayer(gentity_s *ent)
 {
     int v2; // r3
 
@@ -899,7 +899,7 @@ void __cdecl G_UpdatePlayer(gentity_s *ent)
     }
 }
 
-void __cdecl G_UpdatePlayerTriggers(gentity_s *ent)
+void G_UpdatePlayerTriggers(gentity_s *ent)
 {
     sentient_s *sentient; // r11
     int v3; // r10

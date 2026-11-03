@@ -53,7 +53,7 @@ const dvar_t *replay_asserts;
 
 PendingSaveList pendingSaveGlob;
 
-void __cdecl TRACK_sv_main()
+void TRACK_sv_main()
 {
     track_static_alloc_internal(&svs, 40, "svs", 9);
     track_static_alloc_internal(&sv, 72480, "sv", 9);
@@ -61,7 +61,7 @@ void __cdecl TRACK_sv_main()
 }
 
 char string_2[1024];
-char *__cdecl SV_ExpandNewlines(char *in)
+char *SV_ExpandNewlines(char *in)
 {
     unsigned int l; // [esp+0h] [ebp-4h]
 
@@ -90,7 +90,7 @@ char *__cdecl SV_ExpandNewlines(char *in)
     return string_2;
 }
 
-void __cdecl SV_DumpServerCommands(client_t *client)
+void SV_DumpServerCommands(client_t *client)
 {
     int i; // r31
 
@@ -103,7 +103,7 @@ void __cdecl SV_DumpServerCommands(client_t *client)
             &client->reliableCommands.buf[client->reliableCommands.commands[(unsigned __int8)i]]);
 }
 
-void __cdecl AppendCommandsForInternalSave(const char *filename)
+void AppendCommandsForInternalSave(const char *filename)
 {
     if (!filename)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\server\\sv_main.cpp", 191, 0, "%s", "filename");
@@ -119,7 +119,7 @@ void __cdecl AppendCommandsForInternalSave(const char *filename)
 	}
 }
 
-void __cdecl SV_InitiatePendingSave(
+void SV_InitiatePendingSave(
     const char *filename,
     const char *description,
     const char *screenshot,
@@ -153,7 +153,7 @@ void __cdecl SV_InitiatePendingSave(
     }
 }
 
-int __cdecl SV_AddPendingSave(
+int SV_AddPendingSave(
     const char *filename,
     const char *description,
     const char *screenshot,
@@ -204,7 +204,7 @@ int __cdecl SV_AddPendingSave(
     }
 }
 
-int __cdecl SV_ProcessPendingSave(PendingSave *pendingSave)
+int SV_ProcessPendingSave(PendingSave *pendingSave)
 {
     int checksum; // r3
     int result; // r28
@@ -220,7 +220,7 @@ int __cdecl SV_ProcessPendingSave(PendingSave *pendingSave)
     return result;
 }
 
-int __cdecl SV_ProcessPendingSaves()
+int SV_ProcessPendingSaves()
 {
 	int anySaved;
 	int i;
@@ -247,13 +247,13 @@ int __cdecl SV_ProcessPendingSaves()
 	return anySaved;
 }
 
-void __cdecl SV_ClearPendingSaves()
+void SV_ClearPendingSaves()
 {
     pendingSaveGlob.count = 0;
     pendingSaveGlob.isAutoSaving = 0;
 }
 
-int __cdecl SV_IsInternalSave(const char *filename)
+int SV_IsInternalSave(const char *filename)
 {
     const char *v1; // r31
     int v2; // r11
@@ -279,7 +279,7 @@ LABEL_3:
     }
 }
 
-void __cdecl SV_SetLastSaveName(const char *filename)
+void SV_SetLastSaveName(const char *filename)
 {
     if (!filename)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\server\\sv_main.cpp", 374, 0, "%s", "filename");
@@ -287,7 +287,7 @@ void __cdecl SV_SetLastSaveName(const char *filename)
         Dvar_SetString(sv_lastSaveGame, filename);
 }
 
-void __cdecl SV_AddServerCommand(client_t *client, const char *cmd)
+void SV_AddServerCommand(client_t *client, const char *cmd)
 {
     int v4; // r4
 
@@ -337,7 +337,7 @@ void SV_SendServerCommand(client_t *cl, const char *fmt, ...)
 
 }
 
-void __cdecl SV_SaveServerCommands(SaveGame *save)
+void SV_SaveServerCommands(SaveGame *save)
 {
     client_t *clients; // r30
     int i; // r31
@@ -351,7 +351,7 @@ void __cdecl SV_SaveServerCommands(SaveGame *save)
     SaveMemory_SaveWrite(clients->reliableCommands.buf, clients->reliableCommands.header.rover, save);
 }
 
-void __cdecl SV_LoadServerCommands(SaveGame *save)
+void SV_LoadServerCommands(SaveGame *save)
 {
     client_t *clients; // r30
     int i; // r31
@@ -366,7 +366,7 @@ void __cdecl SV_LoadServerCommands(SaveGame *save)
     CG_SetServerCommandSequence(clients->reliableCommands.header.sent);
 }
 
-void __cdecl SV_PreFrame()
+void SV_PreFrame()
 {
     char v0; // r11
     const char *v1; // r3
@@ -393,7 +393,7 @@ void __cdecl SV_PreFrame()
     //Profile_EndInternal(0);
 }
 
-int __cdecl SV_RunFrame(ServerFrameExtent extent, int timeCap)
+int SV_RunFrame(ServerFrameExtent extent, int timeCap)
 {
     int v4; // r30
 
@@ -429,7 +429,7 @@ void SV_ProcessPostFrame()
 
 static int svPerfCounter = 0;
 int serverPreviousFrameTimes[200];
-void __cdecl SV_UpdatePerformanceFrame(int time)
+void SV_UpdatePerformanceFrame(int time)
 {
     volatile int max; // r7
     volatile int min; // r10
@@ -466,12 +466,12 @@ void __cdecl SV_UpdatePerformanceFrame(int time)
     }
 }
 
-bool __cdecl SV_CheckSkipTimeout()
+bool SV_CheckSkipTimeout()
 {
     return SV_CheckAutoSaveHistory(0) != 0;
 }
 
-int __cdecl SV_CheckStartServer()
+int SV_CheckStartServer()
 {
     int result; // r3
 
@@ -481,7 +481,7 @@ int __cdecl SV_CheckStartServer()
     return result;
 }
 
-int __cdecl SV_WaitStartServer()
+int SV_WaitStartServer()
 {
     int result; // r3
 
@@ -497,7 +497,7 @@ int __cdecl SV_WaitStartServer()
     return result;
 }
 
-void __cdecl  SV_ServerThread(unsigned int threadContext)
+void SV_ServerThread(unsigned int threadContext)
 {
     void *Value; // r3
     void *v2; // r3
@@ -599,13 +599,13 @@ void __cdecl  SV_ServerThread(unsigned int threadContext)
     }
 }
 
-void __cdecl SV_InitServerThread()
+void SV_InitServerThread()
 {
     if (!Sys_SpawnServerThread(SV_ServerThread))
         Sys_Error("Failed to create server thread");
 }
 
-void __cdecl SV_ExitAfterTime()
+void SV_ExitAfterTime()
 {
     const dvar_s *v0; // r3
     int integer; // r11
@@ -644,7 +644,7 @@ void SV_WakeServer()
     }
 }
 
-void __cdecl SV_WaitServer()
+void SV_WaitServer()
 {
     const dvar_s *v0; // r11
 
@@ -695,7 +695,7 @@ void __cdecl SV_WaitServer()
     }
 }
 
-void __cdecl SV_InitSnapshot()
+void SV_InitSnapshot()
 {
     if (com_inServerFrame)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\server\\sv_main.cpp", 942, 0, "%s", "!com_inServerFrame");
@@ -711,7 +711,7 @@ void __cdecl SV_InitSnapshot()
     sv.levelTime = G_GetTime();
 }
 
-void __cdecl SV_WaitSaveGame()
+void SV_WaitSaveGame()
 {
     if (sv.requestSaveGame)
     {
@@ -724,7 +724,7 @@ void __cdecl SV_WaitSaveGame()
     }
 }
 
-void __cdecl SV_BeginSaveGame()
+void SV_BeginSaveGame()
 {
     if (!Sys_IsMainThread())
     {
@@ -734,7 +734,7 @@ void __cdecl SV_BeginSaveGame()
     }
 }
 
-void __cdecl SV_EndSaveGame()
+void SV_EndSaveGame()
 {
     if (!Sys_IsMainThread())
     {
@@ -743,7 +743,7 @@ void __cdecl SV_EndSaveGame()
     }
 }
 
-int __cdecl SV_WaitServerSnapshot()
+int SV_WaitServerSnapshot()
 {
     int v1; // r29
     int timeResidual; // r11
@@ -825,7 +825,7 @@ int __cdecl SV_WaitServerSnapshot()
     }
 }
 
-bool __cdecl SV_ReachedServerCommandThreshold()
+bool SV_ReachedServerCommandThreshold()
 {
     client_t *clients; // r11
 
@@ -838,7 +838,7 @@ bool __cdecl SV_ReachedServerCommandThreshold()
     return clients->reliableCommands.header.sequence - clients->reliableCommands.header.sent >= 32;
 }
 
-void __cdecl SV_FrameInternal(int msec)
+void SV_FrameInternal(int msec)
 {
     int timeResidual; // r11
     int v3; // r11
@@ -1039,12 +1039,12 @@ LABEL_60:
     SV_ExitAfterTime();
 }
 
-int __cdecl SV_GetPartialFrametime()
+int SV_GetPartialFrametime()
 {
     return sv.partialFrametime;
 }
 
-int __cdecl SV_ForwardFrame()
+int SV_ForwardFrame()
 {
     __int64 v1; // r10
     int integer; // r27
@@ -1115,7 +1115,7 @@ int __cdecl SV_ForwardFrame()
     return 1;
 }
 
-int __cdecl SV_ClientFrameRateFix(int msec)
+int SV_ClientFrameRateFix(int msec)
 {
     const dvar_t *v2; // r11
     int v4; // r10
@@ -1149,7 +1149,7 @@ int __cdecl SV_ClientFrameRateFix(int msec)
     return result;
 }
 
-int __cdecl SV_Frame(int msec)
+int SV_Frame(int msec)
 {
     int v1; // r27
     int v2; // r3
@@ -1230,7 +1230,7 @@ int __cdecl SV_Frame(int msec)
     return v1;
 }
 
-bool __cdecl SV_SaveMemory_IsRecentlyLoaded()
+bool SV_SaveMemory_IsRecentlyLoaded()
 {
     bool IsRecentlyLoaded; // r31
 

@@ -70,21 +70,21 @@ const char *ai_orient_mode_text[7] =
 float g_pathAttemptGoalPos[3] = { 0.0f, 0.0f, 0.0f };
 AnimScriptList *g_animScriptTable[2] = { NULL, NULL };
 
-int __cdecl Path_IsValidClaimNode(const pathnode_t *node)
+int Path_IsValidClaimNode(const pathnode_t *node)
 {
     iassert(node);
 
     return node->constant.spawnflags & 0x8000;
 }
 
-int __cdecl Path_IsCoverNode(const pathnode_t *node)
+int Path_IsCoverNode(const pathnode_t *node)
 {
     iassert(node);
 
     return (1 << node->constant.type) & 0x41FFC;
 }
 
-team_t __cdecl Sentient_EnemyTeam(unsigned int eTeam)
+team_t Sentient_EnemyTeam(unsigned int eTeam)
 {
     unsigned int v3[8]; // [sp+50h] [-30h] BYREF
 
@@ -99,7 +99,7 @@ team_t __cdecl Sentient_EnemyTeam(unsigned int eTeam)
     return (team_t)v3[eTeam];
 }
 
-void __cdecl TRACK_actor()
+void TRACK_actor()
 {
     track_static_alloc_internal((void *)actorMins, 12, "actorMins", 5);
     track_static_alloc_internal((void *)actorMaxs, 12, "actorMaxs", 5);
@@ -108,7 +108,7 @@ void __cdecl TRACK_actor()
     track_static_alloc_internal(g_entinfoAITextNames, 24, "g_entinfoAITextNames", 0);
 }
 
-void __cdecl VisCache_Copy(vis_cache_t *pDstCache, const vis_cache_t *pSrcCache)
+void VisCache_Copy(vis_cache_t *pDstCache, const vis_cache_t *pSrcCache)
 {
     iassert(pDstCache);
     iassert(pSrcCache);
@@ -118,7 +118,7 @@ void __cdecl VisCache_Copy(vis_cache_t *pDstCache, const vis_cache_t *pSrcCache)
     pDstCache->iLastVisTime = pSrcCache->iLastVisTime;
 }
 
-void __cdecl VisCache_Update(vis_cache_t *pCache, bool bVisible)
+void VisCache_Update(vis_cache_t *pCache, bool bVisible)
 {
     iassert(pCache);
 
@@ -128,7 +128,7 @@ void __cdecl VisCache_Update(vis_cache_t *pCache, bool bVisible)
         pCache->iLastVisTime = level.time;
 }
 
-void __cdecl SentientInfo_Clear(sentient_info_t *pInfo)
+void SentientInfo_Clear(sentient_info_t *pInfo)
 {
     sentient_info_t *v2; // r11
     int v3; // ctr
@@ -145,7 +145,7 @@ void __cdecl SentientInfo_Clear(sentient_info_t *pInfo)
     } while (v3);
 }
 
-void __cdecl SentientInfo_ForceCopy(sentient_info_t *pTo, const sentient_info_t *pFrom)
+void SentientInfo_ForceCopy(sentient_info_t *pTo, const sentient_info_t *pFrom)
 {
     pTo->iLastAttackMeTime = 0;
     pTo->attackTime = 0;
@@ -156,7 +156,7 @@ void __cdecl SentientInfo_ForceCopy(sentient_info_t *pTo, const sentient_info_t 
     pTo->pLastKnownNode = pFrom->pLastKnownNode;
 }
 
-int __cdecl Actor_droptofloor(gentity_s *ent)
+int Actor_droptofloor(gentity_s *ent)
 {
     float vEnd[3]; // [sp+50h] [-70h] BYREF
     float dropMins[4]; // [sp+60h] [-60h] BYREF
@@ -189,7 +189,7 @@ int __cdecl Actor_droptofloor(gentity_s *ent)
     return 0;
 }
 
-int __cdecl Actor_IsDeletable(actor_s *actor)
+int Actor_IsDeletable(actor_s *actor)
 {
     int number; // r10
     int result; // r3
@@ -203,7 +203,7 @@ int __cdecl Actor_IsDeletable(actor_s *actor)
     return result;
 }
 
-void __cdecl G_InitActors()
+void G_InitActors()
 {
     int i; // r11
 
@@ -213,7 +213,7 @@ void __cdecl G_InitActors()
     Actor_EventListener_Init();
 }
 
-unsigned int __cdecl G_GetActorIndex(actor_s *actor)
+unsigned int G_GetActorIndex(actor_s *actor)
 {
     iassert(actor);
     iassert(actor - level.actors >= 0);
@@ -222,12 +222,12 @@ unsigned int __cdecl G_GetActorIndex(actor_s *actor)
     return (unsigned int)(actor - level.actors);
 }
 
-XAnimTree_s *__cdecl G_GetActorAnimTree(actor_s *actor)
+XAnimTree_s *G_GetActorAnimTree(actor_s *actor)
 {
     return g_scr_data.actorXAnimTrees[G_GetActorIndex(actor)];
 }
 
-XAnimTree_s *__cdecl G_AllocAnimClientTree()
+XAnimTree_s *G_AllocAnimClientTree()
 {
     int v0; // r9
     int actorFreeClientTree; // r11
@@ -254,7 +254,7 @@ XAnimTree_s *__cdecl G_AllocAnimClientTree()
     return g_scr_data.actorXAnimClientTrees[g_scr_data.actorFreeClientTree];
 }
 
-void __cdecl G_FreeAnimClientTree(XAnimTree_s *tree)
+void G_FreeAnimClientTree(XAnimTree_s *tree)
 {
     unsigned int v2; // r27
     XAnimTree_s **actorXAnimClientTrees; // r26
@@ -280,7 +280,7 @@ void __cdecl G_FreeAnimClientTree(XAnimTree_s *tree)
     g_scr_data.actorXAnimClientTreesInuse[v2] = 0;
 }
 
-void __cdecl Actor_SetDefaults(actor_s *actor)
+void Actor_SetDefaults(actor_s *actor)
 {
     Actor_SetDefaultState(actor);
     actor->species = AI_SPECIES_HUMAN;
@@ -304,7 +304,7 @@ void __cdecl Actor_SetDefaults(actor_s *actor)
     actor->goodShootPosValid = 0;
 }
 
-void __cdecl Actor_FinishSpawning(actor_s *self)
+void Actor_FinishSpawning(actor_s *self)
 {
     gentity_s *ent; // r28
     gentity_s *v3; // r29
@@ -350,7 +350,7 @@ void __cdecl Actor_FinishSpawning(actor_s *self)
     Scr_FreeThread(v6);
 }
 
-void __cdecl Actor_InitAnimScript(actor_s *self)
+void Actor_InitAnimScript(actor_s *self)
 {
     gentity_s *ent; // r27
     unsigned int stateLevel; // r8
@@ -374,7 +374,7 @@ void __cdecl Actor_InitAnimScript(actor_s *self)
     ent->nextthink = time;
 }
 
-actor_s *__cdecl Actor_FirstActor(int iTeamFlags)
+actor_s *Actor_FirstActor(int iTeamFlags)
 {
     int v2; // r25
     int v3; // r31
@@ -410,7 +410,7 @@ actor_s *__cdecl Actor_FirstActor(int iTeamFlags)
     return &actors[v2];
 }
 
-actor_s *__cdecl Actor_NextActor(actor_s *pPrevActor, int iTeamFlags)
+actor_s *Actor_NextActor(actor_s *pPrevActor, int iTeamFlags)
 {
     actor_s *actors; // r11
     int v5; // r30
@@ -470,7 +470,7 @@ actor_s *__cdecl Actor_NextActor(actor_s *pPrevActor, int iTeamFlags)
     return &actors[v5];
 }
 
-void __cdecl Actor_ClearArrivalPos(actor_s *self)
+void Actor_ClearArrivalPos(actor_s *self)
 {
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 1013, 0, "%s", "self");
@@ -478,7 +478,7 @@ void __cdecl Actor_ClearArrivalPos(actor_s *self)
     self->arrivalInfo.arrivalNotifyRequested = 0;
 }
 
-void __cdecl Actor_PreThink(actor_s *self)
+void Actor_PreThink(actor_s *self)
 {
     int flashBanged; // r10
     sentient_s *v3; // r3
@@ -504,7 +504,7 @@ void __cdecl Actor_PreThink(actor_s *self)
     }
 }
 
-void __cdecl Actor_ValidateReacquireNodes(actor_s *self)
+void Actor_ValidateReacquireNodes(actor_s *self)
 {
     int v2; // r30
     pathnode_t **pPotentialReacquireNode; // r31
@@ -522,7 +522,7 @@ void __cdecl Actor_ValidateReacquireNodes(actor_s *self)
     }
 }
 
-void __cdecl Actor_Touch(gentity_s *self, gentity_s *other, int bTouched)
+void Actor_Touch(gentity_s *self, gentity_s *other, int bTouched)
 {
     actor_s *actor; // r31
     unsigned int stateLevel; // r7
@@ -564,14 +564,14 @@ void __cdecl Actor_Touch(gentity_s *self, gentity_s *other, int bTouched)
     AIFuncTable[actor->species][actor->eState[actor->stateLevel]].pfnTouch(actor, other);
 }
 
-bool __cdecl Actor_InScriptedState(const actor_s *self)
+bool Actor_InScriptedState(const actor_s *self)
 {
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 1516, 0, "%s", "self");
     return Actor_IsStateOnStack(self, AIS_SCRIPTEDANIM) || Actor_IsStateOnStack(self, AIS_NEGOTIATION) != 0;
 }
 
-int __cdecl Actor_CheckDeathAllowed(actor_s *self, int damage)
+int Actor_CheckDeathAllowed(actor_s *self, int damage)
 {
     int health; // r11
 
@@ -586,7 +586,7 @@ int __cdecl Actor_CheckDeathAllowed(actor_s *self, int damage)
     return damage - health + 1;
 }
 
-void __cdecl Actor_Pain(
+void Actor_Pain(
     gentity_s *self,
     gentity_s *pAttacker,
     int iDamage,
@@ -689,7 +689,7 @@ void __cdecl Actor_Pain(
     }
 }
 
-void __cdecl Actor_Die(
+void Actor_Die(
     gentity_s *self,
     gentity_s *pInflictor,
     gentity_s *pAttacker,
@@ -787,14 +787,14 @@ void __cdecl Actor_Die(
     }
 }
 
-bool __cdecl Actor_IsDying(const actor_s *self)
+bool Actor_IsDying(const actor_s *self)
 {
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 1712, 0, "%s", "self");
     return self->eState[self->stateLevel] == AIS_DEATH;
 }
 
-bool __cdecl usingCodeGoal(actor_s *actor)
+bool usingCodeGoal(actor_s *actor)
 {
     return actor->codeGoalSrc
         && (actor->scriptGoalEnt.isDefined()
@@ -804,7 +804,7 @@ bool __cdecl usingCodeGoal(actor_s *actor)
             || actor->scriptGoal.radius != actor->codeGoal.radius);
 }
 
-gentity_s *__cdecl Actor_GetTargetEntity(actor_s *self)
+gentity_s *Actor_GetTargetEntity(actor_s *self)
 {
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 2308, 0, "%s", "self");
@@ -816,7 +816,7 @@ gentity_s *__cdecl Actor_GetTargetEntity(actor_s *self)
         return 0;
 }
 
-sentient_s *__cdecl Actor_GetTargetSentient(actor_s *self)
+sentient_s *Actor_GetTargetSentient(actor_s *self)
 {
     iassert(self);
     iassert(self->sentient);
@@ -827,7 +827,7 @@ sentient_s *__cdecl Actor_GetTargetSentient(actor_s *self)
         return 0;
 }
 
-void __cdecl Actor_GetTargetPosition(actor_s *self, float *position)
+void Actor_GetTargetPosition(actor_s *self, float *position)
 {
     gentity_s *v4; // r3
 
@@ -840,7 +840,7 @@ void __cdecl Actor_GetTargetPosition(actor_s *self, float *position)
     position[2] = v4->r.currentOrigin[2];
 }
 
-void __cdecl Actor_GetTargetLookPosition(actor_s *self, float *position)
+void Actor_GetTargetLookPosition(actor_s *self, float *position)
 {
     gentity_s *TargetEntity; // r3
 
@@ -855,7 +855,7 @@ void __cdecl Actor_GetTargetLookPosition(actor_s *self, float *position)
         G_EntityCentroid(TargetEntity, position);
 }
 
-void __cdecl Actor_InitMove(actor_s *self)
+void Actor_InitMove(actor_s *self)
 {
     iassert(self);
     iassert(self->ent);
@@ -877,7 +877,7 @@ void __cdecl Actor_InitMove(actor_s *self)
     Vec3Copy(self->ent->r.maxs, self->Physics.vMaxs);
 }
 
-bool __cdecl Actor_IsDodgeEntity(actor_s *self, int entnum)
+bool Actor_IsDodgeEntity(actor_s *self, int entnum)
 {
     gentity_s *gentities; // r11
     gentity_s *ent; // r11
@@ -896,7 +896,7 @@ bool __cdecl Actor_IsDodgeEntity(actor_s *self, int entnum)
     return result;
 }
 
-int __cdecl Actor_Physics_GetLeftOrRightDodge(actor_s *self, bool dodgeRight, double length)
+int Actor_Physics_GetLeftOrRightDodge(actor_s *self, bool dodgeRight, double length)
 {
     int flags; // r11
     int result; // r3
@@ -950,7 +950,7 @@ int __cdecl Actor_Physics_GetLeftOrRightDodge(actor_s *self, bool dodgeRight, do
     return result;
 }
 
-void __cdecl Actor_PhysicsBackupInputs(actor_s *self, PhysicsInputs *inputs)
+void Actor_PhysicsBackupInputs(actor_s *self, PhysicsInputs *inputs)
 {
     inputs->vVelocity[0] = self->Physics.vVelocity[0];
     inputs->vVelocity[1] = self->Physics.vVelocity[1];
@@ -961,7 +961,7 @@ void __cdecl Actor_PhysicsBackupInputs(actor_s *self, PhysicsInputs *inputs)
     inputs->iFootstepTimer = self->Physics.iFootstepTimer;
 }
 
-void __cdecl Actor_PhysicsRestoreInputs(actor_s *self, PhysicsInputs *inputs)
+void Actor_PhysicsRestoreInputs(actor_s *self, PhysicsInputs *inputs)
 {
     self->Physics.vVelocity[0] = inputs->vVelocity[0];
     self->Physics.vVelocity[1] = inputs->vVelocity[1];
@@ -972,12 +972,12 @@ void __cdecl Actor_PhysicsRestoreInputs(actor_s *self, PhysicsInputs *inputs)
     self->Physics.iFootstepTimer = inputs->iFootstepTimer;
 }
 
-bool __cdecl Actor_AtDifferentElevation(float *vOrgSelf, float *vOrgOther)
+bool Actor_AtDifferentElevation(float *vOrgSelf, float *vOrgOther)
 {
     return I_fabs((float)(vOrgSelf[2] - vOrgOther[2])) >= 80.0;
 }
 
-float __cdecl Actor_CalcultatePlayerPushDelta(const actor_s *self, const gentity_s *pusher, float *pushDir)
+float Actor_CalcultatePlayerPushDelta(const actor_s *self, const gentity_s *pusher, float *pushDir)
 {
     static const float ACTOR_PLAYER_PUSH_MIN_SPEED = 60.0f;
 
@@ -1014,7 +1014,7 @@ float __cdecl Actor_CalcultatePlayerPushDelta(const actor_s *self, const gentity
     return (speed / 20.0f); // KISAKHERTZ
 }
 
-bool __cdecl Actor_ShouldMoveAwayFromCloseEnt(actor_s *self)
+bool Actor_ShouldMoveAwayFromCloseEnt(actor_s *self)
 {
     bool result; // r3
     bool v3; // zf
@@ -1027,7 +1027,7 @@ bool __cdecl Actor_ShouldMoveAwayFromCloseEnt(actor_s *self)
     return result;
 }
 
-void __cdecl Actor_UpdateProneInformation(actor_s *self, int bDoProneCheck)
+void Actor_UpdateProneInformation(actor_s *self, int bDoProneCheck)
 {
     double v7; // fp31
     long double v8; // fp2
@@ -1090,7 +1090,7 @@ void __cdecl Actor_UpdateProneInformation(actor_s *self, int bDoProneCheck)
     }
 }
 
-void __cdecl actor_controller(const gentity_s *self, int *partBits)
+void actor_controller(const gentity_s *self, int *partBits)
 {
     actor_prone_info_s *p_ProneInfo; // r31
     double ActorProneFraction; // fp31
@@ -1113,7 +1113,7 @@ void __cdecl actor_controller(const gentity_s *self, int *partBits)
     }
 }
 
-bool __cdecl Actor_PointNear(const float *vPoint, const float *vGoalPos)
+bool Actor_PointNear(const float *vPoint, const float *vGoalPos)
 {
     double v2; // fp0
 
@@ -1121,7 +1121,7 @@ bool __cdecl Actor_PointNear(const float *vPoint, const float *vGoalPos)
     return (float)((float)v2 * (float)v2) <= 6400.0 && Vec2DistanceSq(vPoint, vGoalPos) <= 900.0;
 }
 
-bool __cdecl Actor_PointNearNode(const float *vPoint, const pathnode_t *node)
+bool Actor_PointNearNode(const float *vPoint, const pathnode_t *node)
 {
     double v2; // fp0
 
@@ -1129,7 +1129,7 @@ bool __cdecl Actor_PointNearNode(const float *vPoint, const pathnode_t *node)
     return (float)((float)v2 * (float)v2) <= 6400.0 && Vec2DistanceSq(vPoint, node->constant.vOrigin) <= 225.0;
 }
 
-int __cdecl Actor_PointAtGoal(const float *vPoint, const actor_goal_s *goal)
+int Actor_PointAtGoal(const float *vPoint, const actor_goal_s *goal)
 {
     double v4; // fp13
     int result; // r3
@@ -1153,7 +1153,7 @@ int __cdecl Actor_PointAtGoal(const float *vPoint, const actor_goal_s *goal)
     return result;
 }
 
-bool __cdecl Actor_PointNearGoal(const float *vPoint, const actor_goal_s *goal, double buffer)
+bool Actor_PointNearGoal(const float *vPoint, const actor_goal_s *goal, double buffer)
 {
     double v3; // fp13
     double v5; // fp0
@@ -1165,7 +1165,7 @@ bool __cdecl Actor_PointNearGoal(const float *vPoint, const actor_goal_s *goal, 
     return Vec2DistanceSq(vPoint, goal->pos) <= (double)(float)((float)v5 * (float)v5);
 }
 
-bool __cdecl Actor_PointNearPoint(const float *vPoint, const float *vGoalPos, double buffer)
+bool Actor_PointNearPoint(const float *vPoint, const float *vGoalPos, double buffer)
 {
     double v3; // fp0
 
@@ -1174,7 +1174,7 @@ bool __cdecl Actor_PointNearPoint(const float *vPoint, const float *vGoalPos, do
         && Vec2DistanceSq(vPoint, vGoalPos) <= (double)(float)((float)buffer * (float)buffer);
 }
 
-bool __cdecl Actor_PointAt(const float *vPoint, const float *vGoalPos)
+bool Actor_PointAt(const float *vPoint, const float *vGoalPos)
 {
     double v2; // fp0
 
@@ -1182,7 +1182,7 @@ bool __cdecl Actor_PointAt(const float *vPoint, const float *vGoalPos)
     return (float)((float)v2 * (float)v2) <= 6400.0 && Vec2DistanceSq(vPoint, vGoalPos) <= 4.0;
 }
 
-void __cdecl Actor_HandleInvalidPath(actor_s *self)
+void Actor_HandleInvalidPath(actor_s *self)
 {
     bool useMeleeAttackSpot; // r10
 
@@ -1220,7 +1220,7 @@ void __cdecl Actor_HandleInvalidPath(actor_s *self)
     }
 }
 
-pathnode_t *__cdecl Actor_FindClaimedNode(actor_s *self)
+pathnode_t *Actor_FindClaimedNode(actor_s *self)
 {
     pathnode_t *pClaimedNode; // r30
     char v3; // r29
@@ -1258,7 +1258,7 @@ pathnode_t *__cdecl Actor_FindClaimedNode(actor_s *self)
     return 0;
 }
 
-bool __cdecl Actor_EnemyInPathFightDist(actor_s *self, sentient_s *enemy)
+bool Actor_EnemyInPathFightDist(actor_s *self, sentient_s *enemy)
 {
     bool result; // r3
     double v5; // fp0
@@ -1277,7 +1277,7 @@ bool __cdecl Actor_EnemyInPathFightDist(actor_s *self, sentient_s *enemy)
     return result;
 }
 
-bool __cdecl Actor_IsCloseToSegment(
+bool Actor_IsCloseToSegment(
     float *origin,
     float *pathPoint,
     double len,
@@ -1305,7 +1305,7 @@ bool __cdecl Actor_IsCloseToSegment(
     return v9 < requiredDistFromPathSq;
 }
 
-int __cdecl Actor_IsAlongPath(actor_s *self, float *origin, float *pathPoint, int hadPath)
+int Actor_IsAlongPath(actor_s *self, float *origin, float *pathPoint, int hadPath)
 {
     path_t *path = &self->Path;
     iassert(path);
@@ -1344,7 +1344,7 @@ int __cdecl Actor_IsAlongPath(actor_s *self, float *origin, float *pathPoint, in
     return 0;
 }
 
-int __cdecl Actor_IsDoingCover(actor_s *self)
+int Actor_IsDoingCover(actor_s *self)
 {
     scr_animscript_t *pAnimScriptFunc; // r11
     unsigned __int8 v2; // r11
@@ -1368,7 +1368,7 @@ int __cdecl Actor_IsDoingCover(actor_s *self)
     return v2;
 }
 
-bool __cdecl Actor_IsReactingToEnemyDuringReacquireMove(actor_s *self)
+bool Actor_IsReactingToEnemyDuringReacquireMove(actor_s *self)
 {
     unsigned int stateLevel; // r11
 
@@ -1378,7 +1378,7 @@ bool __cdecl Actor_IsReactingToEnemyDuringReacquireMove(actor_s *self)
         && self->exposedDuration + self->exposedStartTime > level.time;
 }
 
-gentity_s *__cdecl Actor_IsKnownEnemyInRegion(
+gentity_s *Actor_IsKnownEnemyInRegion(
     const actor_s *self,
     const gentity_s *volume,
     const float *position,
@@ -1443,7 +1443,7 @@ LABEL_20:
     return level.sentients[v8].ent;
 }
 
-int __cdecl Actor_InFixedNodeExposedCombat(actor_s *self)
+int Actor_InFixedNodeExposedCombat(actor_s *self)
 {
     gentity_s *TargetEntity; // r3
     sentient_s *sentient; // r9
@@ -1475,20 +1475,20 @@ int __cdecl Actor_InFixedNodeExposedCombat(actor_s *self)
     return v8;
 }
 
-bool __cdecl Actor_HasPath(actor_s *self)
+bool Actor_HasPath(actor_s *self)
 {
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 4490, 0, "%s", "self");
     return Path_Exists(&self->Path);
 }
 
-void __cdecl Actor_InitPath(actor_s *self)
+void Actor_InitPath(actor_s *self)
 {
     Path_Begin(&self->Path);
     self->iTeamMoveDodgeTime = 0;
 }
 
-void __cdecl Actor_ClearPath(actor_s *self)
+void Actor_ClearPath(actor_s *self)
 {
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 4516, 0, "%s", "self");
@@ -1500,7 +1500,7 @@ void __cdecl Actor_ClearPath(actor_s *self)
     }
 }
 
-void __cdecl Actor_GetAnimDeltas(actor_s *self, float *rotation, float *translation)
+void Actor_GetAnimDeltas(actor_s *self, float *rotation, float *translation)
 {
     DObj_s *obj; // r28
 
@@ -1524,7 +1524,7 @@ void __cdecl Actor_GetAnimDeltas(actor_s *self, float *rotation, float *translat
         );
 }
 
-int __cdecl Actor_IsMovingToMeleeAttack(actor_s *self)
+int Actor_IsMovingToMeleeAttack(actor_s *self)
 {
     unsigned __int8 v1; // r11
 
@@ -1538,7 +1538,7 @@ int __cdecl Actor_IsMovingToMeleeAttack(actor_s *self)
     return v1;
 }
 
-bool __cdecl Actor_SkipPathEndActions(actor_s *self)
+bool Actor_SkipPathEndActions(actor_s *self)
 {
     double v4; // fp31
     double v5; // fp30
@@ -1579,7 +1579,7 @@ bool __cdecl Actor_SkipPathEndActions(actor_s *self)
     return v7 != 0;
 }
 
-void __cdecl Actor_PathEndActions(actor_s *self)
+void Actor_PathEndActions(actor_s *self)
 {
     double v2; // fp1
     double v3; // fp31
@@ -1664,7 +1664,7 @@ void __cdecl Actor_PathEndActions(actor_s *self)
     }
 }
 
-void __cdecl Actor_PredictAnim(actor_s *self)
+void Actor_PredictAnim(actor_s *self)
 {
     gentity_s *ent; // r29
     int Int; // r3
@@ -1680,7 +1680,7 @@ void __cdecl Actor_PredictAnim(actor_s *self)
     Scr_AddInt(updated);
 }
 
-bool __cdecl Actor_AtClaimNode(actor_s *self)
+bool Actor_AtClaimNode(actor_s *self)
 {
     pathnode_t *pClaimedNode; // r4
 
@@ -1688,7 +1688,7 @@ bool __cdecl Actor_AtClaimNode(actor_s *self)
     return pClaimedNode && Actor_PointNearNode(self->ent->r.currentOrigin, pClaimedNode);
 }
 
-bool __cdecl Actor_NearClaimNode(actor_s *self, double dist)
+bool Actor_NearClaimNode(actor_s *self, double dist)
 {
     pathnode_t *pClaimedNode; // r11
 
@@ -1696,7 +1696,7 @@ bool __cdecl Actor_NearClaimNode(actor_s *self, double dist)
     return pClaimedNode && Actor_PointNearPoint(self->ent->r.currentOrigin, pClaimedNode->constant.vOrigin, dist);
 }
 
-void __cdecl Actor_CheckCollisions(actor_s *self)
+void Actor_CheckCollisions(actor_s *self)
 {
     gentity_s *ent; // r11
     scr_animscript_t *pAnimScriptFunc; // r8
@@ -1738,13 +1738,13 @@ void __cdecl Actor_CheckCollisions(actor_s *self)
     }
 }
 
-void __cdecl Actor_ClearPileUp(actor_s *self)
+void Actor_ClearPileUp(actor_s *self)
 {
     self->pPileUpActor = 0;
     self->pPileUpEnt = 0;
 }
 
-void __cdecl Actor_ClipPathToGoal(actor_s *self)
+void Actor_ClipPathToGoal(actor_s *self)
 {
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 5045, 0, "%s", "self");
@@ -1754,14 +1754,14 @@ void __cdecl Actor_ClipPathToGoal(actor_s *self)
         Actor_ClearPath(self);
 }
 
-void __cdecl Actor_BeginTrimPath(actor_s *self)
+void Actor_BeginTrimPath(actor_s *self)
 {
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 5058, 0, "%s", "self");
     Path_BeginTrim(&self->Path, &self->TrimInfo);
 }
 
-int __cdecl Actor_TrimPathToAttack(actor_s *self)
+int Actor_TrimPathToAttack(actor_s *self)
 {
     gentity_s *targetEnt; // r28
 
@@ -1776,7 +1776,7 @@ int __cdecl Actor_TrimPathToAttack(actor_s *self)
     return Path_TrimToSeePoint(&self->Path, &self->TrimInfo, self, self->fMaxSightDistSqrd, targetEnt->s.number, vEnemyPos);
 }
 
-int __cdecl Actor_MayReacquireMove(actor_s *self)
+int Actor_MayReacquireMove(actor_s *self)
 {
     unsigned __int8 v1; // r11
 
@@ -1788,7 +1788,7 @@ int __cdecl Actor_MayReacquireMove(actor_s *self)
     return v1;
 }
 
-void __cdecl Actor_ClearMoveHistory(actor_s *self)
+void Actor_ClearMoveHistory(actor_s *self)
 {
     float *v1; // r11
     int v2; // r10
@@ -1805,7 +1805,7 @@ void __cdecl Actor_ClearMoveHistory(actor_s *self)
     self->moveHistoryIndex = 0;
 }
 
-void __cdecl Actor_GetMoveHistoryAverage(actor_s *self, float *vDir)
+void Actor_GetMoveHistoryAverage(actor_s *self, float *vDir)
 {
     *vDir = 0.0;
     vDir[1] = 0.0;
@@ -1832,7 +1832,7 @@ void __cdecl Actor_GetMoveHistoryAverage(actor_s *self, float *vDir)
     vDir[1] = self->moveHistory[9][1] + vDir[1];
 }
 
-void __cdecl Actor_UpdateMoveHistory(actor_s *self)
+void Actor_UpdateMoveHistory(actor_s *self)
 {
     int moveHistoryIndex; // r7
     int v2; // r11
@@ -2031,7 +2031,7 @@ void __cdecl Actor_UpdateMoveHistory(actor_s *self)
     self->moveHistoryIndex = (moveHistoryIndex + 1) % 10;
 }
 
-void __cdecl Path_UpdateLeanAmount(actor_s *self, float *vWishDir)
+void Path_UpdateLeanAmount(actor_s *self, float *vWishDir)
 {
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 5186, 0, "%s", "self");
@@ -2054,7 +2054,7 @@ void __cdecl Path_UpdateLeanAmount(actor_s *self, float *vWishDir)
     }
 }
 
-float __cdecl Path_UpdateMomentum(actor_s *self, float *vWishDir, double fMoveDist)
+float Path_UpdateMomentum(actor_s *self, float *vWishDir, double fMoveDist)
 {
     double leanAmount; // fp0
     double v7; // fp12
@@ -2088,12 +2088,12 @@ float __cdecl Path_UpdateMomentum(actor_s *self, float *vWishDir, double fMoveDi
     return fMoveDist;
 }
 
-bool __cdecl Path_UseMomentum(actor_s *self)
+bool Path_UseMomentum(actor_s *self)
 {
     return self->species == AI_SPECIES_DOG;
 }
 
-void __cdecl Path_UpdateMovementDelta(actor_s *self, double fMoveDist)
+void Path_UpdateMovementDelta(actor_s *self, double fMoveDist)
 {
     path_t *pPath; // r30
     int iHitEntnum; // r4
@@ -2216,7 +2216,7 @@ void __cdecl Path_UpdateMovementDelta(actor_s *self, double fMoveDist)
     Actor_UpdateMoveHistory(self);
 }
 
-void __cdecl Actor_AddStationaryMoveHistory(actor_s *self)
+void Actor_AddStationaryMoveHistory(actor_s *self)
 {
     if (level.time / 50 == 10 * (level.time / 50 / 10)) // KISAKHERTZ
     {
@@ -2234,7 +2234,7 @@ void __cdecl Actor_AddStationaryMoveHistory(actor_s *self)
     }
 }
 
-int __cdecl Actor_IsMoving(actor_s *self)
+int Actor_IsMoving(actor_s *self)
 {
     unsigned __int8 v1; // r11
 
@@ -2246,7 +2246,7 @@ int __cdecl Actor_IsMoving(actor_s *self)
     return v1;
 }
 
-unsigned int __cdecl G_GetActorFriendlyIndex(int iEntNum)
+unsigned int G_GetActorFriendlyIndex(int iEntNum)
 {
     gentity_s *ent; // r10
     actor_s *actor; // r11
@@ -2263,7 +2263,7 @@ unsigned int __cdecl G_GetActorFriendlyIndex(int iEntNum)
     return (int)(actor - level.actors);
 }
 
-void __cdecl G_BypassForCG_GetClientActorIndexAndTeam(int iEntNum, int *actorIndex, int *team)
+void G_BypassForCG_GetClientActorIndexAndTeam(int iEntNum, int *actorIndex, int *team)
 {
     gentity_s *v6; // r31
     double v7; // fp31
@@ -2307,7 +2307,7 @@ void __cdecl G_BypassForCG_GetClientActorIndexAndTeam(int iEntNum, int *actorInd
     *team = level.cgData_actorTeam[*actorIndex];
 }
 
-unsigned int __cdecl G_BypassForCG_GetClientActorFriendlyIndex(int iEntNum)
+unsigned int G_BypassForCG_GetClientActorFriendlyIndex(int iEntNum)
 {
     unsigned int v2; // r30
     gentity_s *v3; // r31
@@ -2352,14 +2352,14 @@ unsigned int __cdecl G_BypassForCG_GetClientActorFriendlyIndex(int iEntNum)
     return result;
 }
 
-gentity_s *__cdecl G_GetFriendlyIndexActor(int iFriendlyIndex)
+gentity_s *G_GetFriendlyIndexActor(int iFriendlyIndex)
 {
     if (iFriendlyIndex >= 32)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 5451, 0, "%s", "iFriendlyIndex < MAX_ACTORS");
     return level.actors[iFriendlyIndex].ent;
 }
 
-void __cdecl Actor_SetFlashed(actor_s *self, int flashed, double strength)
+void Actor_SetFlashed(actor_s *self, int flashed, double strength)
 {
     sentient_s *sentient; // r3
 
@@ -2381,7 +2381,7 @@ void __cdecl Actor_SetFlashed(actor_s *self, int flashed, double strength)
     }
 }
 
-void __cdecl Actor_UpdateDesiredChainPosInternal(
+void Actor_UpdateDesiredChainPosInternal(
     actor_s *self,
     int iFollowMin,
     int iFollowMax,
@@ -2442,7 +2442,7 @@ void __cdecl Actor_UpdateDesiredChainPosInternal(
     }
 }
 
-void __cdecl Actor_UpdateDesiredChainPos(actor_s *self)
+void Actor_UpdateDesiredChainPos(actor_s *self)
 {
     sentient_s *sentient; // r27
     sentient_s *v3; // r28
@@ -2482,7 +2482,7 @@ void __cdecl Actor_UpdateDesiredChainPos(actor_s *self)
     }
 }
 
-void __cdecl Actor_CheckOverridePos(actor_s *self, const float *prevGoalPos)
+void Actor_CheckOverridePos(actor_s *self, const float *prevGoalPos)
 {
     if (self->arrivalInfo.animscriptOverrideRunTo
         && (self->codeGoal.pos[0] != *prevGoalPos
@@ -2515,7 +2515,7 @@ void Actor_SetGoalHeight(actor_goal_s *goal, float height)
     goal->height = height;
 }
 
-bool __cdecl Actor_IsInsideArc(
+bool Actor_IsInsideArc(
     actor_s *self,
     const float *origin,
     double radius,
@@ -2529,7 +2529,7 @@ bool __cdecl Actor_IsInsideArc(
     return IsPosInsideArc(self->ent->r.currentOrigin, 15.0, origin, radius, angle0, angle1, halfHeight);
 }
 
-void __cdecl SentientInfo_Copy(actor_s *pTo, const actor_s *pFrom, int index)
+void SentientInfo_Copy(actor_s *pTo, const actor_s *pFrom, int index)
 {
     if (!pTo)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 153, 0, "%s", "pTo");
@@ -2552,7 +2552,7 @@ void __cdecl SentientInfo_Copy(actor_s *pTo, const actor_s *pFrom, int index)
     }
 }
 
-actor_s *__cdecl Actor_Alloc()
+actor_s *Actor_Alloc()
 {
     actor_s *actors; // r31
     int v1; // r11
@@ -2580,7 +2580,7 @@ actor_s *__cdecl Actor_Alloc()
     return actors;
 }
 
-void __cdecl Actor_Free(actor_s *actor)
+void Actor_Free(actor_s *actor)
 {
     actor_s *actors; // r11
     gentity_s *ent; // r27
@@ -2663,7 +2663,7 @@ void __cdecl Actor_Free(actor_s *actor)
     actor->inuse = 0;
 }
 
-void __cdecl Actor_FreeExpendable()
+void Actor_FreeExpendable()
 {
     gentity_s *player; // r30
     actor_s *v1; // r28
@@ -2840,7 +2840,7 @@ void __cdecl Actor_FreeExpendable()
 #define ACTOR_CLASSNAME_PREFIX "actor_"
 #define ACTOR_CLASSNAME_PREFIX_LEN 6
 
-void __cdecl Actor_FinishSpawningAll()
+void Actor_FinishSpawningAll()
 {
     gentity_s *pEnt; // r28
     int i; // r22
@@ -2886,7 +2886,7 @@ void __cdecl Actor_FinishSpawningAll()
     }
 }
 
-void __cdecl Actor_DissociateSentient(actor_s *self, sentient_s *other, team_t eOtherTeam)
+void Actor_DissociateSentient(actor_s *self, sentient_s *other, team_t eOtherTeam)
 {
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 860, 0, "%s", "self");
@@ -2902,7 +2902,7 @@ void __cdecl Actor_DissociateSentient(actor_s *self, sentient_s *other, team_t e
         Sentient_SetEnemy(self->sentient, 0, 1);
 }
 
-void __cdecl Actor_NodeClaimRevoked(actor_s *self, int invalidTime)
+void Actor_NodeClaimRevoked(actor_s *self, int invalidTime)
 {
     pathnode_t *pClaimedNode; // r31
 
@@ -2922,7 +2922,7 @@ void __cdecl Actor_NodeClaimRevoked(actor_s *self, int invalidTime)
     }
 }
 
-void __cdecl Actor_CheckClearNodeClaimCloseEnt(actor_s *self)
+void Actor_CheckClearNodeClaimCloseEnt(actor_s *self)
 {
     pathnode_t *pClaimedNode; // r29
     gentity_s *v3; // r3
@@ -2936,7 +2936,7 @@ void __cdecl Actor_CheckClearNodeClaimCloseEnt(actor_s *self)
     }
 }
 
-int __cdecl Actor_KeepClaimedNode(actor_s *self)
+int Actor_KeepClaimedNode(actor_s *self)
 {
     pathnode_t *pClaimedNode; // r11
 
@@ -2954,7 +2954,7 @@ int __cdecl Actor_KeepClaimedNode(actor_s *self)
     return 0;
 }
 
-void __cdecl Actor_ClearKeepClaimedNode(actor_s *self)
+void Actor_ClearKeepClaimedNode(actor_s *self)
 {
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 1003, 0, "%s", "self");
@@ -2964,7 +2964,7 @@ void __cdecl Actor_ClearKeepClaimedNode(actor_s *self)
     self->arrivalInfo.arrivalNotifyRequested = 0;
 }
 
-void __cdecl Actor_CheckNodeClaim(actor_s *self)
+void Actor_CheckNodeClaim(actor_s *self)
 {
     float *vFinalGoal; // r29
     pathnode_t *pClaimedNode; // r4
@@ -2999,7 +2999,7 @@ void __cdecl Actor_CheckNodeClaim(actor_s *self)
     }
 }
 
-void __cdecl Actor_UpdatePlayerPush(actor_s *self, gentity_s *player)
+void Actor_UpdatePlayerPush(actor_s *self, gentity_s *player)
 {
     gclient_s *client; // r11
     gentity_s *ent; // r5
@@ -3045,7 +3045,7 @@ void __cdecl Actor_UpdatePlayerPush(actor_s *self, gentity_s *player)
     }
 }
 
-void __cdecl Actor_UpdateCloseEnt(actor_s *self)
+void Actor_UpdateCloseEnt(actor_s *self)
 {
     actor_s *actor; // r29
     gentity_s *v3; // r3
@@ -3099,7 +3099,7 @@ void __cdecl Actor_UpdateCloseEnt(actor_s *self)
     }
 }
 
-actor_think_result_t __cdecl Actor_CallThink(actor_s *self)
+actor_think_result_t Actor_CallThink(actor_s *self)
 {
     unsigned int stateLevel; // r7
     actor_think_result_t eThinkResult; // r27
@@ -3154,7 +3154,7 @@ static const float colorTeam[5][4] =
   { 0.5f, 0.5f, 0.5f, 1.0f }
 };
 
-void __cdecl Actor_EntInfo(gentity_s *self, float *source)
+void Actor_EntInfo(gentity_s *self, float *source)
 {
     unsigned __int8 drawLines; // r29
     char drawGoalLineRadius; // r19
@@ -3808,7 +3808,7 @@ LABEL_87:
     }
 }
 
-int __cdecl Actor_MoveAwayNoWorse(actor_s *self)
+int Actor_MoveAwayNoWorse(actor_s *self)
 {
     int v2; // r26
     int i; // r28
@@ -3834,7 +3834,7 @@ int __cdecl Actor_MoveAwayNoWorse(actor_s *self)
     return v2;
 }
 
-int __cdecl Actor_PhysicsCheckMoveAwayNoWorse(
+int Actor_PhysicsCheckMoveAwayNoWorse(
     actor_s *self,
     gentity_s *other,
     gentityFlags_t flags,
@@ -3859,7 +3859,7 @@ int __cdecl Actor_PhysicsCheckMoveAwayNoWorse(
     return result;
 }
 
-int __cdecl Actor_PhysicsMoveAway(actor_s *self)
+int Actor_PhysicsMoveAway(actor_s *self)
 {
     gentity_s *other; // r3
     float distance; // fp31
@@ -3983,7 +3983,7 @@ int __cdecl Actor_PhysicsMoveAway(actor_s *self)
     }
 }
 
-int __cdecl Actor_IsAtScriptGoal(actor_s *self)
+int Actor_IsAtScriptGoal(actor_s *self)
 {
     iassert(self);
     iassert(self->ent);
@@ -3998,7 +3998,7 @@ int __cdecl Actor_IsAtScriptGoal(actor_s *self)
     return 1;
 }
 
-bool __cdecl Actor_IsNearClaimedNode(actor_s *self)
+bool Actor_IsNearClaimedNode(actor_s *self)
 {
     iassert(self);
     iassert(self->ent);
@@ -4008,7 +4008,7 @@ bool __cdecl Actor_IsNearClaimedNode(actor_s *self)
     return Actor_KeepClaimedNode(self) || Actor_PointNearNode(self->ent->r.currentOrigin, self->sentient->pClaimedNode);
 }
 
-int __cdecl Actor_IsFixedNodeUseable(actor_s *self)
+int Actor_IsFixedNodeUseable(actor_s *self)
 {
     pathnode_t *node; // r28
     actor_goal_s *p_codeGoal; // r3
@@ -4063,7 +4063,7 @@ int __cdecl Actor_IsFixedNodeUseable(actor_s *self)
     }
 }
 
-bool __cdecl Actor_FindPath(
+bool Actor_FindPath(
     actor_s *self,
     const float *vGoalPos,
     int bAllowNegotiationLinks,
@@ -4134,7 +4134,7 @@ bool __cdecl Actor_FindPath(
     }
 }
 
-void __cdecl Actor_RecalcPath(actor_s *self)
+void Actor_RecalcPath(actor_s *self)
 {
     int v2; // r29
     sentient_s *sentient; // r3
@@ -4161,7 +4161,7 @@ void __cdecl Actor_RecalcPath(actor_s *self)
     }
 }
 
-bool __cdecl Actor_FindPathToNode(actor_s *self, pathnode_t *pGoalNode, int bSuppressable)
+bool Actor_FindPathToNode(actor_s *self, pathnode_t *pGoalNode, int bSuppressable)
 {
     int planeCount; // r28
     pathnode_t *pNearestNode; // r3
@@ -4225,7 +4225,7 @@ bool __cdecl Actor_FindPathToNode(actor_s *self, pathnode_t *pGoalNode, int bSup
     return Actor_HasPath(self);
 }
 
-bool __cdecl Actor_FindPathToSentient(actor_s *self, sentient_s *pGoalEnt, int bSuppressable)
+bool Actor_FindPathToSentient(actor_s *self, sentient_s *pGoalEnt, int bSuppressable)
 {
     int planeCount; // r30
     pathnode_t *nodeFrom; // r29
@@ -4285,7 +4285,7 @@ bool __cdecl Actor_FindPathToSentient(actor_s *self, sentient_s *pGoalEnt, int b
     return Actor_HasPath(self);
 }
 
-void __cdecl Actor_FindPathInGoalWithLOS(
+void Actor_FindPathInGoalWithLOS(
     actor_s *self,
     const float *vGoalPos,
     double fWithinDistSqrd,
@@ -4342,7 +4342,7 @@ void __cdecl Actor_FindPathInGoalWithLOS(
     }
 }
 
-void __cdecl Actor_FindPathAway(
+void Actor_FindPathAway(
     actor_s *self,
     const float *vBadPos,
     double fMinSafeDist,
@@ -4356,7 +4356,7 @@ void __cdecl Actor_FindPathAway(
 }
 
 
-void __cdecl Actor_FindPathAwayNotCrossPlanes(
+void Actor_FindPathAwayNotCrossPlanes(
     actor_s *self,
     const float *vBadPos,
     float fMinSafeDist,
@@ -4399,7 +4399,7 @@ void __cdecl Actor_FindPathAwayNotCrossPlanes(
         bAllowNegotiationLinks);
 }
 
-void __cdecl Actor_BadPlacesChanged()
+void Actor_BadPlacesChanged()
 {
     actor_s *i; // r30
 
@@ -4410,7 +4410,7 @@ void __cdecl Actor_BadPlacesChanged()
     }
 }
 
-void __cdecl Actor_UpdateAnglesAndDelta(actor_s *self)
+void Actor_UpdateAnglesAndDelta(actor_s *self)
 {
     gentity_s *ent; // r28
     int iPathEndTime; // r10
@@ -4552,7 +4552,7 @@ void __cdecl Actor_UpdateAnglesAndDelta(actor_s *self)
     }
 }
 
-void __cdecl Actor_UpdatePileUp(actor_s *self)
+void Actor_UpdatePileUp(actor_s *self)
 {
     actor_s *v2; // r31
     int iTeamMoveWaitTime; // r10
@@ -4590,7 +4590,7 @@ void __cdecl Actor_UpdatePileUp(actor_s *self)
     self->pPileUpEnt = 0;
 }
 
-void __cdecl Actor_UpdateGoalPos(actor_s *self)
+void Actor_UpdateGoalPos(actor_s *self)
 {
     actor_goal_s *p_codeGoal; // r30
     double v3; // fp31
@@ -4690,7 +4690,7 @@ LABEL_25:
     }
 }
 
-int __cdecl SP_actor(gentity_s *ent)
+int SP_actor(gentity_s *ent)
 {
     actor_s *v3; // r31
     sentient_s *v4; // r3
@@ -4845,7 +4845,7 @@ int __cdecl SP_actor(gentity_s *ent)
     }
 }
 
-int __cdecl Actor_CheckGoalNotify(actor_s *self)
+int Actor_CheckGoalNotify(actor_s *self)
 {
     sentient_s *sentient; // r11
     const pathnode_t *pClaimedNode; // r31
@@ -4871,7 +4871,7 @@ int __cdecl Actor_CheckGoalNotify(actor_s *self)
     return v6;
 }
 
-void __cdecl Actor_CheckNotify(actor_s *self)
+void Actor_CheckNotify(actor_s *self)
 {
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 1289, 0, "%s", "self");
@@ -4893,7 +4893,7 @@ void __cdecl Actor_CheckNotify(actor_s *self)
 
 #define ACTOR_CALL_THINK_REPEAT_MAX 10
 
-void __cdecl Actor_Think(gentity_s *self)
+void Actor_Think(gentity_s *self)
 {
     int callThinkCounter; // r27
     actor_s *actor; // r26
@@ -5020,7 +5020,7 @@ void __cdecl Actor_Think(gentity_s *self)
     }
 }
 
-int __cdecl Actor_PhysicsAndDodge(actor_s *self)
+int Actor_PhysicsAndDodge(actor_s *self)
 {
     gentity_s *ent; // r11
     unsigned __int16 groundEntNum; // r22
@@ -5210,7 +5210,7 @@ LABEL_44:
     return 1;
 }
 
-void __cdecl Actor_DoMove(actor_s *self)
+void Actor_DoMove(actor_s *self)
 {
     ai_animmode_t eAnimMode; // r10
     sentient_s *sentient; // r3
@@ -5355,7 +5355,7 @@ LABEL_67:
         Scr_Notify(self->ent, scr_const.groundEntChanged, 0);
 }
 
-bool __cdecl Actor_IsAtGoal(actor_s *self)
+bool Actor_IsAtGoal(actor_s *self)
 {
     gentity_s *ent; // r28
 
@@ -5382,7 +5382,7 @@ bool __cdecl Actor_IsAtGoal(actor_s *self)
     return 1;
 }
 
-bool __cdecl Actor_FindPathToGoalDirectInternal(actor_s *self)
+bool Actor_FindPathToGoalDirectInternal(actor_s *self)
 {
     double sidemove; // fp31
     int iPlaneCount; // r25
@@ -5497,7 +5497,7 @@ bool __cdecl Actor_FindPathToGoalDirectInternal(actor_s *self)
     return Actor_HasPath(self);
 }
 
-void __cdecl Actor_FindPathToGoalDirect(actor_s *self)
+void Actor_FindPathToGoalDirect(actor_s *self)
 {
     bool PathToGoalDirectInternal; // r27
 
@@ -5523,7 +5523,7 @@ void __cdecl Actor_FindPathToGoalDirect(actor_s *self)
     }
 }
 
-int __cdecl Actor_FindPathToClaimNode(actor_s *self, pathnode_t *node)
+int Actor_FindPathToClaimNode(actor_s *self, pathnode_t *node)
 {
     bool v4; // r25
     int result; // r3
@@ -5579,7 +5579,7 @@ int __cdecl Actor_FindPathToClaimNode(actor_s *self, pathnode_t *node)
     return Path;
 }
 
-int __cdecl Actor_CheckStop(actor_s *self, bool canUseEnemyGoal, pathnode_t *node, int hadPath)
+int Actor_CheckStop(actor_s *self, bool canUseEnemyGoal, pathnode_t *node, int hadPath)
 {
     sentient_s *TargetSentient; // r29
     double v10; // fp9
@@ -5661,7 +5661,7 @@ int __cdecl Actor_CheckStop(actor_s *self, bool canUseEnemyGoal, pathnode_t *nod
     return v19;
 }
 
-void __cdecl Actor_TryPathToArrivalPos(actor_s *self)
+void Actor_TryPathToArrivalPos(actor_s *self)
 {
     path_t *p_Path; // r30
 
@@ -5676,7 +5676,7 @@ void __cdecl Actor_TryPathToArrivalPos(actor_s *self)
     }
 }
 
-void __cdecl Actor_FindPathToFixedNode(actor_s *self)
+void Actor_FindPathToFixedNode(actor_s *self)
 {
     double v2; // fp31
     double v3; // fp30
@@ -5789,7 +5789,7 @@ void __cdecl Actor_FindPathToFixedNode(actor_s *self)
     }
 }
 
-void __cdecl Actor_FindPathToGoal(actor_s *self)
+void Actor_FindPathToGoal(actor_s *self)
 {
     int v2; // r24
     bool v3; // r26
@@ -5920,7 +5920,7 @@ LABEL_46:
     }
 }
 
-void __cdecl Actor_UpdateOriginAndAngles(actor_s *self)
+void Actor_UpdateOriginAndAngles(actor_s *self)
 {
     gentity_s *ent; // r28
 
@@ -5956,7 +5956,7 @@ void __cdecl Actor_UpdateOriginAndAngles(actor_s *self)
     }
 }
 
-void __cdecl Actor_PredictOriginAndAngles(actor_s *self)
+void Actor_PredictOriginAndAngles(actor_s *self)
 {
     gentity_s *ent; // r28
 
@@ -5979,7 +5979,7 @@ void __cdecl Actor_PredictOriginAndAngles(actor_s *self)
     SV_DObjInitServerTime(ent, 0.050000001);
 }
 
-void __cdecl Actor_PostThink(actor_s *self)
+void Actor_PostThink(actor_s *self)
 {
     pathnode_t *pClaimedNode; // r29
     gentity_s *v3; // r3

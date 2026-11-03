@@ -12,7 +12,7 @@
 
 netadr_t adr;
 
-const netadr_t *__cdecl SV_MasterAddress()
+const netadr_t *SV_MasterAddress()
 {
     __int16 v1; // ax
 
@@ -47,7 +47,7 @@ const netadr_t *__cdecl SV_MasterAddress()
     return &adr;
 }
 
-void __cdecl SV_UpdateLastTimeMasterServerCommunicated(netadr_t from)
+void SV_UpdateLastTimeMasterServerCommunicated(netadr_t from)
 {
 #if 0 // LWSS: I am pretty sure the master server is already dead
     netadr_t v1; // [esp-14h] [ebp-18h]
@@ -59,7 +59,7 @@ void __cdecl SV_UpdateLastTimeMasterServerCommunicated(netadr_t from)
 }
 
 
-void __cdecl SV_MasterGameCompleteStatus()
+void SV_MasterGameCompleteStatus()
 {
     netadr_t *adr; // [esp+0h] [ebp-4h]
 
@@ -76,7 +76,7 @@ void __cdecl SV_MasterGameCompleteStatus()
     }
 }
 
-void __cdecl SV_MasterHeartbeat(const char *hbname)
+void SV_MasterHeartbeat(const char *hbname)
 {
     // LWSS: this was disabled because the master server sends responses back that end up in the Steam Auth code
     //const char *v1; // eax
@@ -97,13 +97,13 @@ void __cdecl SV_MasterHeartbeat(const char *hbname)
     //}
 }
 
-void __cdecl SV_MasterShutdown()
+void SV_MasterShutdown()
 {
     svs.nextHeartbeatTime = 0x80000000;
     SV_MasterHeartbeat("flatline");
 }
 
-void __cdecl SV_AuthorizeIpPacket(netadr_t from)
+void SV_AuthorizeIpPacket(netadr_t from)
 {
     const char *v1; // eax
     challenge_t *v2; // edx
@@ -216,7 +216,7 @@ void __cdecl SV_AuthorizeIpPacket(netadr_t from)
     }
 }
 
-void __cdecl SV_FlushRedirect(char *outputbuf)
+void SV_FlushRedirect(char *outputbuf)
 {
     char c; // [esp+13h] [ebp-525h]
     char buf[1304]; // [esp+18h] [ebp-520h] BYREF
@@ -238,7 +238,7 @@ void __cdecl SV_FlushRedirect(char *outputbuf)
 }
 
 int lasttime;
-void __cdecl SVC_RemoteCommand(netadr_t from)
+void SVC_RemoteCommand(netadr_t from)
 {
     const char *v1; // eax
     const char *v2; // eax
@@ -316,7 +316,7 @@ void __cdecl SVC_RemoteCommand(netadr_t from)
 }
 
 
-void __cdecl SV_VoicePacket(netadr_t from, msg_t *msg)
+void SV_VoicePacket(netadr_t from, msg_t *msg)
 {
     client_t *ClientByAddress; // [esp+0h] [ebp-Ch]
     int qport; // [esp+4h] [ebp-8h]

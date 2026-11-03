@@ -1,12 +1,12 @@
 #include <universal/q_shared.h>
 #include "ui_shared.h"
 
-int __cdecl compare_impact_files(const char **pe0, const char **pe1)
+int compare_impact_files(const char **pe0, const char **pe1)
 {
     return I_stricmp(*pe0, *pe1);
 }
 
-int __cdecl compare_hudelems(const void *pe0, const void *pe1)
+int compare_hudelems(const void *pe0, const void *pe1)
 {
     float delta; // [esp+0h] [ebp-Ch]
 
@@ -17,7 +17,7 @@ int __cdecl compare_hudelems(const void *pe0, const void *pe1)
         return -1;
 }
 
-void __cdecl compare_doesStringEqualString(Operand *leftSide, Operand *rightSide, Operand *result)
+void compare_doesStringEqualString(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType != VAL_STRING)
         MyAssertHandler(
@@ -39,7 +39,7 @@ void __cdecl compare_doesStringEqualString(Operand *leftSide, Operand *rightSide
     result->internals.intVal = I_stricmp(leftSide->internals.string, rightSide->internals.string) == 0;
 }
 
-void __cdecl compare_doesStringNotEqualString(Operand *leftSide, Operand *rightSide, Operand *result)
+void compare_doesStringNotEqualString(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType != VAL_STRING)
         MyAssertHandler(
@@ -61,7 +61,7 @@ void __cdecl compare_doesStringNotEqualString(Operand *leftSide, Operand *rightS
     result->internals.intVal = I_stricmp(leftSide->internals.string, rightSide->internals.string) != 0;
 }
 
-void __cdecl compare_doesIntEqualInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void compare_doesIntEqualInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType)
         MyAssertHandler(
@@ -83,7 +83,7 @@ void __cdecl compare_doesIntEqualInt(Operand *leftSide, Operand *rightSide, Oper
     result->internals.intVal = leftSide->internals.intVal == rightSide->internals.intVal;
 }
 
-void __cdecl compare_doesIntNotEqualInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void compare_doesIntNotEqualInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType)
         MyAssertHandler(
@@ -105,7 +105,7 @@ void __cdecl compare_doesIntNotEqualInt(Operand *leftSide, Operand *rightSide, O
     result->internals.intVal = leftSide->internals.intVal != rightSide->internals.intVal;
 }
 
-void __cdecl compare_doesIntEqualFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void compare_doesIntEqualFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType)
         MyAssertHandler(
@@ -127,12 +127,12 @@ void __cdecl compare_doesIntEqualFloat(Operand *leftSide, Operand *rightSide, Op
     result->internals.intVal = rightSide->internals.floatVal == (double)leftSide->internals.intVal;
 }
 
-void __cdecl compare_doesFloatEqualInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void compare_doesFloatEqualInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     compare_doesIntEqualFloat(rightSide, leftSide, result);
 }
 
-void __cdecl compare_doesFloatEqualFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void compare_doesFloatEqualFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType != VAL_FLOAT)
         MyAssertHandler(
@@ -154,7 +154,7 @@ void __cdecl compare_doesFloatEqualFloat(Operand *leftSide, Operand *rightSide, 
     result->internals.intVal = rightSide->internals.floatVal == leftSide->internals.floatVal;
 }
 
-void __cdecl compare_doesIntNotEqualFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void compare_doesIntNotEqualFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType)
         MyAssertHandler(
@@ -176,12 +176,12 @@ void __cdecl compare_doesIntNotEqualFloat(Operand *leftSide, Operand *rightSide,
     result->internals.intVal = rightSide->internals.floatVal != (double)leftSide->internals.intVal;
 }
 
-void __cdecl compare_doesFloatNotEqualInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void compare_doesFloatNotEqualInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     compare_doesIntNotEqualFloat(rightSide, leftSide, result);
 }
 
-void __cdecl compare_doesFloatNotEqualFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void compare_doesFloatNotEqualFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType != VAL_FLOAT)
         MyAssertHandler(
@@ -203,7 +203,7 @@ void __cdecl compare_doesFloatNotEqualFloat(Operand *leftSide, Operand *rightSid
     result->internals.intVal = rightSide->internals.floatVal != leftSide->internals.floatVal;
 }
 
-void __cdecl compare_isIntLessThanInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void compare_isIntLessThanInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType)
         MyAssertHandler(
@@ -225,7 +225,7 @@ void __cdecl compare_isIntLessThanInt(Operand *leftSide, Operand *rightSide, Ope
     result->internals.intVal = leftSide->internals.intVal < rightSide->internals.intVal;
 }
 
-void __cdecl compare_isIntLessThanFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void compare_isIntLessThanFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType)
         MyAssertHandler(
@@ -247,7 +247,7 @@ void __cdecl compare_isIntLessThanFloat(Operand *leftSide, Operand *rightSide, O
     result->internals.intVal = rightSide->internals.floatVal > (double)leftSide->internals.intVal;
 }
 
-void __cdecl compare_isFloatLessThanInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void compare_isFloatLessThanInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType != VAL_FLOAT)
         MyAssertHandler(
@@ -269,7 +269,7 @@ void __cdecl compare_isFloatLessThanInt(Operand *leftSide, Operand *rightSide, O
     result->internals.intVal = leftSide->internals.floatVal < (double)rightSide->internals.intVal;
 }
 
-void __cdecl compare_isFloatLessThanFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void compare_isFloatLessThanFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType != VAL_FLOAT)
         MyAssertHandler(
@@ -291,7 +291,7 @@ void __cdecl compare_isFloatLessThanFloat(Operand *leftSide, Operand *rightSide,
     result->internals.intVal = rightSide->internals.floatVal > (double)leftSide->internals.floatVal;
 }
 
-void __cdecl compare_isIntLessThanEqualToInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void compare_isIntLessThanEqualToInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType)
         MyAssertHandler(
@@ -313,7 +313,7 @@ void __cdecl compare_isIntLessThanEqualToInt(Operand *leftSide, Operand *rightSi
     result->internals.intVal = leftSide->internals.intVal <= rightSide->internals.intVal;
 }
 
-void __cdecl compare_isFloatGreaterThanEqualToInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void compare_isFloatGreaterThanEqualToInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType != VAL_FLOAT)
         MyAssertHandler(
@@ -335,12 +335,12 @@ void __cdecl compare_isFloatGreaterThanEqualToInt(Operand *leftSide, Operand *ri
     result->internals.intVal = leftSide->internals.floatVal >= (double)rightSide->internals.intVal;
 }
 
-void __cdecl compare_isIntLessThanEqualToFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void compare_isIntLessThanEqualToFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     compare_isFloatGreaterThanEqualToInt(rightSide, leftSide, result);
 }
 
-void __cdecl compare_isFloatLessThanEqualToInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void compare_isFloatLessThanEqualToInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType != VAL_FLOAT)
         MyAssertHandler(
@@ -362,7 +362,7 @@ void __cdecl compare_isFloatLessThanEqualToInt(Operand *leftSide, Operand *right
     result->internals.intVal = leftSide->internals.floatVal <= (double)rightSide->internals.intVal;
 }
 
-void __cdecl compare_isFloatLessThanEqualToFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void compare_isFloatLessThanEqualToFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType != VAL_FLOAT)
         MyAssertHandler(
@@ -384,17 +384,17 @@ void __cdecl compare_isFloatLessThanEqualToFloat(Operand *leftSide, Operand *rig
     result->internals.intVal = rightSide->internals.floatVal >= (double)leftSide->internals.floatVal;
 }
 
-void __cdecl compare_isIntGreaterThanInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void compare_isIntGreaterThanInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     compare_isIntLessThanInt(rightSide, leftSide, result);
 }
 
-void __cdecl compare_isIntGreaterThanFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void compare_isIntGreaterThanFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     compare_isFloatLessThanInt(rightSide, leftSide, result);
 }
 
-void __cdecl compare_isFloatGreaterThanInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void compare_isFloatGreaterThanInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType != VAL_FLOAT)
         MyAssertHandler(
@@ -416,7 +416,7 @@ void __cdecl compare_isFloatGreaterThanInt(Operand *leftSide, Operand *rightSide
     result->internals.intVal = leftSide->internals.floatVal > (double)rightSide->internals.intVal;
 }
 
-void __cdecl compare_isFloatGreaterThanFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void compare_isFloatGreaterThanFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType != VAL_FLOAT)
         MyAssertHandler(
@@ -438,7 +438,7 @@ void __cdecl compare_isFloatGreaterThanFloat(Operand *leftSide, Operand *rightSi
     result->internals.intVal = rightSide->internals.floatVal < (double)leftSide->internals.floatVal;
 }
 
-void __cdecl compare_isIntGreaterThanEqualToInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void compare_isIntGreaterThanEqualToInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType)
         MyAssertHandler(
@@ -460,7 +460,7 @@ void __cdecl compare_isIntGreaterThanEqualToInt(Operand *leftSide, Operand *righ
     result->internals.intVal = leftSide->internals.intVal >= rightSide->internals.intVal;
 }
 
-void __cdecl compare_isIntGreaterThanEqualToFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void compare_isIntGreaterThanEqualToFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType)
         MyAssertHandler(
@@ -482,7 +482,7 @@ void __cdecl compare_isIntGreaterThanEqualToFloat(Operand *leftSide, Operand *ri
     result->internals.intVal = rightSide->internals.floatVal <= (double)leftSide->internals.intVal;
 }
 
-void __cdecl compare_isFloatGreaterThanEqualToFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void compare_isFloatGreaterThanEqualToFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType != VAL_FLOAT)
         MyAssertHandler(
@@ -504,7 +504,7 @@ void __cdecl compare_isFloatGreaterThanEqualToFloat(Operand *leftSide, Operand *
     result->internals.intVal = rightSide->internals.floatVal <= (double)leftSide->internals.floatVal;
 }
 
-void __cdecl add_IntWithInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void add_IntWithInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType)
         MyAssertHandler(
@@ -526,7 +526,7 @@ void __cdecl add_IntWithInt(Operand *leftSide, Operand *rightSide, Operand *resu
     result->internals.intVal = rightSide->internals.intVal + leftSide->internals.intVal;
 }
 
-void __cdecl add_IntWithFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void add_IntWithFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType)
         MyAssertHandler(
@@ -548,12 +548,12 @@ void __cdecl add_IntWithFloat(Operand *leftSide, Operand *rightSide, Operand *re
     result->internals.floatVal = (double)leftSide->internals.intVal + rightSide->internals.floatVal;
 }
 
-void __cdecl add_FloatWithInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void add_FloatWithInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     add_IntWithFloat(rightSide, leftSide, result);
 }
 
-void __cdecl add_FloatWithFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void add_FloatWithFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType != VAL_FLOAT)
         MyAssertHandler(
@@ -576,7 +576,7 @@ void __cdecl add_FloatWithFloat(Operand *leftSide, Operand *rightSide, Operand *
 }
 
 char resultStr[256];
-void __cdecl add_StringWithString(Operand *leftSide, Operand *rightSide, Operand *result)
+void add_StringWithString(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     char rightSideStr[256]; // [esp+0h] [ebp-208h] BYREF
     char leftSideStr[260]; // [esp+100h] [ebp-108h] BYREF
@@ -605,7 +605,7 @@ void __cdecl add_StringWithString(Operand *leftSide, Operand *rightSide, Operand
 }
 
 char resultStr_0[256];
-void __cdecl add_StringWithInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void add_StringWithInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     char leftSideStr[260]; // [esp+0h] [ebp-108h] BYREF
 
@@ -632,7 +632,7 @@ void __cdecl add_StringWithInt(Operand *leftSide, Operand *rightSide, Operand *r
 }
 
 char resultStr_1[256];
-void __cdecl add_IntWithString(Operand *leftSide, Operand *rightSide, Operand *result)
+void add_IntWithString(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     char rightSideStr[260]; // [esp+0h] [ebp-108h] BYREF
 
@@ -659,7 +659,7 @@ void __cdecl add_IntWithString(Operand *leftSide, Operand *rightSide, Operand *r
 }
 
 char resultStr_2[256];
-void __cdecl add_FloatWithString(Operand *leftSide, Operand *rightSide, Operand *result)
+void add_FloatWithString(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     char rightSideStr[260]; // [esp+Ch] [ebp-108h] BYREF
 
@@ -686,7 +686,7 @@ void __cdecl add_FloatWithString(Operand *leftSide, Operand *rightSide, Operand 
 }
 
 char resultStr_3[256];
-void __cdecl add_StringWithFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void add_StringWithFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     char leftSideStr[260]; // [esp+8h] [ebp-108h] BYREF
 
@@ -712,7 +712,7 @@ void __cdecl add_StringWithFloat(Operand *leftSide, Operand *rightSide, Operand 
     result->internals.intVal = (int)resultStr_3;
 }
 
-void __cdecl multiply_IntByInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void multiply_IntByInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType)
         MyAssertHandler(
@@ -734,7 +734,7 @@ void __cdecl multiply_IntByInt(Operand *leftSide, Operand *rightSide, Operand *r
     result->internals.intVal = rightSide->internals.intVal * leftSide->internals.intVal;
 }
 
-void __cdecl multiply_IntByFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void multiply_IntByFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType)
         MyAssertHandler(
@@ -756,12 +756,12 @@ void __cdecl multiply_IntByFloat(Operand *leftSide, Operand *rightSide, Operand 
     result->internals.floatVal = (double)leftSide->internals.intVal * rightSide->internals.floatVal;
 }
 
-void __cdecl multiply_FloatByInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void multiply_FloatByInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     multiply_IntByFloat(rightSide, leftSide, result);
 }
 
-void __cdecl multiply_FloatByFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void multiply_FloatByFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType != VAL_FLOAT)
         MyAssertHandler(
@@ -783,7 +783,7 @@ void __cdecl multiply_FloatByFloat(Operand *leftSide, Operand *rightSide, Operan
     result->internals.floatVal = leftSide->internals.floatVal * rightSide->internals.floatVal;
 }
 
-void __cdecl divide_IntByInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void divide_IntByInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType)
         MyAssertHandler(
@@ -808,7 +808,7 @@ void __cdecl divide_IntByInt(Operand *leftSide, Operand *rightSide, Operand *res
         result->internals.floatVal = 0.0;
 }
 
-void __cdecl divide_IntByFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void divide_IntByFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType)
         MyAssertHandler(
@@ -833,7 +833,7 @@ void __cdecl divide_IntByFloat(Operand *leftSide, Operand *rightSide, Operand *r
         result->internals.floatVal = (double)leftSide->internals.intVal / rightSide->internals.floatVal;
 }
 
-void __cdecl divide_FloatByInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void divide_FloatByInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType != VAL_FLOAT)
         MyAssertHandler(
@@ -858,7 +858,7 @@ void __cdecl divide_FloatByInt(Operand *leftSide, Operand *rightSide, Operand *r
         result->internals.floatVal = 0.0;
 }
 
-void __cdecl divide_FloatByFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void divide_FloatByFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType != VAL_FLOAT)
         MyAssertHandler(
@@ -883,7 +883,7 @@ void __cdecl divide_FloatByFloat(Operand *leftSide, Operand *rightSide, Operand 
         result->internals.floatVal = leftSide->internals.floatVal / rightSide->internals.floatVal;
 }
 
-void __cdecl mod_IntByInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void mod_IntByInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType)
         MyAssertHandler(
@@ -908,7 +908,7 @@ void __cdecl mod_IntByInt(Operand *leftSide, Operand *rightSide, Operand *result
         result->internals.intVal = leftSide->internals.intVal;
 }
 
-void __cdecl mod_FloatByInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void mod_FloatByInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType != VAL_FLOAT)
         MyAssertHandler(
@@ -933,7 +933,7 @@ void __cdecl mod_FloatByInt(Operand *leftSide, Operand *rightSide, Operand *resu
         result->internals.intVal = leftSide->internals.intVal;
 }
 
-void __cdecl mod_IntByFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void mod_IntByFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     int right; // [esp+10h] [ebp-4h]
 
@@ -961,7 +961,7 @@ void __cdecl mod_IntByFloat(Operand *leftSide, Operand *rightSide, Operand *resu
         result->internals.intVal = leftSide->internals.intVal;
 }
 
-void __cdecl mod_FloatByFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void mod_FloatByFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     int right; // [esp+38h] [ebp-4h]
 
@@ -989,7 +989,7 @@ void __cdecl mod_FloatByFloat(Operand *leftSide, Operand *rightSide, Operand *re
         result->internals.intVal = SnapFloatToInt(leftSide->internals.floatVal);
 }
 
-void __cdecl and_IntWithInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void and_IntWithInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     bool v3; // [esp+0h] [ebp-4h]
 
@@ -1014,7 +1014,7 @@ void __cdecl and_IntWithInt(Operand *leftSide, Operand *rightSide, Operand *resu
     result->internals.intVal = v3;
 }
 
-void __cdecl and_FloatWithInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void and_FloatWithInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     bool v3; // [esp+0h] [ebp-4h]
 
@@ -1039,12 +1039,12 @@ void __cdecl and_FloatWithInt(Operand *leftSide, Operand *rightSide, Operand *re
     result->internals.intVal = v3;
 }
 
-void __cdecl and_IntWithFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void and_IntWithFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     and_FloatWithInt(rightSide, leftSide, result);
 }
 
-void __cdecl and_StringWithInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void and_StringWithInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     bool v3; // [esp+0h] [ebp-4h]
 
@@ -1069,12 +1069,12 @@ void __cdecl and_StringWithInt(Operand *leftSide, Operand *rightSide, Operand *r
     result->internals.intVal = v3;
 }
 
-void __cdecl and_IntWithString(Operand *leftSide, Operand *rightSide, Operand *result)
+void and_IntWithString(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     and_StringWithInt(rightSide, leftSide, result);
 }
 
-void __cdecl and_StringWithFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void and_StringWithFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     bool v3; // [esp+0h] [ebp-4h]
 
@@ -1099,12 +1099,12 @@ void __cdecl and_StringWithFloat(Operand *leftSide, Operand *rightSide, Operand 
     result->internals.intVal = v3;
 }
 
-void __cdecl and_FloatWithString(Operand *leftSide, Operand *rightSide, Operand *result)
+void and_FloatWithString(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     and_StringWithFloat(rightSide, leftSide, result);
 }
 
-void __cdecl and_FloatWithFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void and_FloatWithFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     bool v3; // [esp+0h] [ebp-4h]
 
@@ -1129,7 +1129,7 @@ void __cdecl and_FloatWithFloat(Operand *leftSide, Operand *rightSide, Operand *
     result->internals.intVal = v3;
 }
 
-void __cdecl or_IntWithInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void or_IntWithInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     bool v3; // [esp+0h] [ebp-4h]
 
@@ -1154,7 +1154,7 @@ void __cdecl or_IntWithInt(Operand *leftSide, Operand *rightSide, Operand *resul
     result->internals.intVal = v3;
 }
 
-void __cdecl or_FloatWithInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void or_FloatWithInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     bool v3; // [esp+0h] [ebp-4h]
 
@@ -1179,12 +1179,12 @@ void __cdecl or_FloatWithInt(Operand *leftSide, Operand *rightSide, Operand *res
     result->internals.intVal = v3;
 }
 
-void __cdecl or_IntWithFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void or_IntWithFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     or_FloatWithInt(rightSide, leftSide, result);
 }
 
-void __cdecl or_StringWithInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void or_StringWithInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     bool v3; // [esp+0h] [ebp-4h]
 
@@ -1209,12 +1209,12 @@ void __cdecl or_StringWithInt(Operand *leftSide, Operand *rightSide, Operand *re
     result->internals.intVal = v3;
 }
 
-void __cdecl or_IntWithString(Operand *leftSide, Operand *rightSide, Operand *result)
+void or_IntWithString(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     or_StringWithInt(rightSide, leftSide, result);
 }
 
-void __cdecl or_StringWithFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void or_StringWithFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     bool v3; // [esp+0h] [ebp-4h]
 
@@ -1239,12 +1239,12 @@ void __cdecl or_StringWithFloat(Operand *leftSide, Operand *rightSide, Operand *
     result->internals.intVal = v3;
 }
 
-void __cdecl or_FloatWithString(Operand *leftSide, Operand *rightSide, Operand *result)
+void or_FloatWithString(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     or_StringWithFloat(rightSide, leftSide, result);
 }
 
-void __cdecl or_FloatWithFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void or_FloatWithFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     bool v3; // [esp+0h] [ebp-4h]
 
@@ -1269,7 +1269,7 @@ void __cdecl or_FloatWithFloat(Operand *leftSide, Operand *rightSide, Operand *r
     result->internals.intVal = v3;
 }
 
-void __cdecl bitwiseAnd(Operand *leftSide, Operand *rightSide, Operand *result)
+void bitwiseAnd(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     operandInternalDataUnion v3; // esi
 
@@ -1278,7 +1278,7 @@ void __cdecl bitwiseAnd(Operand *leftSide, Operand *rightSide, Operand *result)
     result->internals.intVal = GetSourceInt(rightSide).intVal & v3.intVal;
 }
 
-void __cdecl bitwiseOr(Operand *leftSide, Operand *rightSide, Operand *result)
+void bitwiseOr(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     operandInternalDataUnion v3; // esi
 
@@ -1288,7 +1288,7 @@ void __cdecl bitwiseOr(Operand *leftSide, Operand *rightSide, Operand *result)
 }
 
 
-void __cdecl subtract_IntFromInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void subtract_IntFromInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType)
         MyAssertHandler(
@@ -1310,7 +1310,7 @@ void __cdecl subtract_IntFromInt(Operand *leftSide, Operand *rightSide, Operand 
     result->internals.intVal = leftSide->internals.intVal - rightSide->internals.intVal;
 }
 
-void __cdecl subtract_FloatFromInt(Operand *leftSide, Operand *rightSide, Operand *result)
+void subtract_FloatFromInt(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType)
         MyAssertHandler(
@@ -1332,7 +1332,7 @@ void __cdecl subtract_FloatFromInt(Operand *leftSide, Operand *rightSide, Operan
     result->internals.floatVal = (double)leftSide->internals.intVal - rightSide->internals.floatVal;
 }
 
-void __cdecl subtract_IntFromFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void subtract_IntFromFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType != VAL_FLOAT)
         MyAssertHandler(
@@ -1354,7 +1354,7 @@ void __cdecl subtract_IntFromFloat(Operand *leftSide, Operand *rightSide, Operan
     result->internals.floatVal = leftSide->internals.floatVal - (double)rightSide->internals.intVal;
 }
 
-void __cdecl subtract_FloatFromFloat(Operand *leftSide, Operand *rightSide, Operand *result)
+void subtract_FloatFromFloat(Operand *leftSide, Operand *rightSide, Operand *result)
 {
     if (leftSide->dataType != VAL_FLOAT)
         MyAssertHandler(

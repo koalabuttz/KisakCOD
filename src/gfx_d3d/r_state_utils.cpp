@@ -13,7 +13,7 @@
 #include <cgame/cg_local.h>
 #endif
 
-void __cdecl R_DeriveNearPlaneConstantsForView(GfxCmdBufSourceState *source)
+void R_DeriveNearPlaneConstantsForView(GfxCmdBufSourceState *source)
 {
     const GfxViewParms *viewParms = &source->viewParms;
     const GfxMatrix *mtx = &viewParms->inverseViewProjectionMatrix;
@@ -50,7 +50,7 @@ void __cdecl R_DeriveNearPlaneConstantsForView(GfxCmdBufSourceState *source)
     );
 }
 
-void __cdecl R_SetGameTime(GfxCmdBufSourceState *source, float gameTime)
+void R_SetGameTime(GfxCmdBufSourceState *source, float gameTime)
 {
     float v2; // [esp+8h] [ebp-30h]
     float v3; // [esp+28h] [ebp-10h]
@@ -70,7 +70,7 @@ void __cdecl R_SetGameTime(GfxCmdBufSourceState *source, float gameTime)
     R_DirtyCodeConstant(source, CONST_SRC_CODE_GAMETIME);
 }
 
-void __cdecl R_BeginView(GfxCmdBufSourceState *source, const GfxSceneDef *sceneDef, const GfxViewParms *viewParms)
+void R_BeginView(GfxCmdBufSourceState *source, const GfxSceneDef *sceneDef, const GfxViewParms *viewParms)
 {
     source->sceneDef = *sceneDef;
     source->viewParms3D = viewParms;
@@ -84,7 +84,7 @@ void __cdecl R_BeginView(GfxCmdBufSourceState *source, const GfxSceneDef *sceneD
     R_DeriveNearPlaneConstantsForView(source);
 }
 
-int __cdecl R_PickMaterial(
+int R_PickMaterial(
     int traceMask,
     const float *org,
     const float *dir,
@@ -160,13 +160,13 @@ int __cdecl R_PickMaterial(
     return 1;
 }
 
-void __cdecl R_SetShadowLookupMatrix(GfxCmdBufSourceState *source, const GfxMatrix *matrix)
+void R_SetShadowLookupMatrix(GfxCmdBufSourceState *source, const GfxMatrix *matrix)
 {
     ++source->matrixVersions[6];
     memcpy(&source->shadowLookupMatrix, matrix, sizeof(source->shadowLookupMatrix));
 }
 
-void __cdecl R_Set2D(GfxCmdBufSourceState *source)
+void R_Set2D(GfxCmdBufSourceState *source)
 {
     if (source->viewMode != VIEW_MODE_2D)
     {
@@ -183,7 +183,7 @@ void __cdecl R_Set2D(GfxCmdBufSourceState *source)
     }
 }
 
-void __cdecl R_CmdBufSet2D(GfxCmdBufSourceState* source, GfxViewport* viewport)
+void R_CmdBufSet2D(GfxCmdBufSourceState* source, GfxViewport* viewport)
 {
     float v3[16]; // [esp-8h] [ebp-9Ch] BYREF
     GfxMatrix identity_52; // [esp+38h] [ebp-5Ch] BYREF
@@ -219,7 +219,7 @@ void __cdecl R_CmdBufSet2D(GfxCmdBufSourceState* source, GfxViewport* viewport)
     memcpy(R_GetActiveWorldMatrix(source), v3, 0x40u);
 }
 
-void __cdecl R_WorldMatrixChanged(GfxCmdBufSourceState *source)
+void R_WorldMatrixChanged(GfxCmdBufSourceState *source)
 {
     ++source->matrixVersions[0];
     ++source->matrixVersions[3];
@@ -228,19 +228,19 @@ void __cdecl R_WorldMatrixChanged(GfxCmdBufSourceState *source)
     source->constVersions[58] = source->matrixVersions[0];
 }
 
-GfxCmdBufSourceState *__cdecl R_GetActiveWorldMatrix(GfxCmdBufSourceState *source)
+GfxCmdBufSourceState *R_GetActiveWorldMatrix(GfxCmdBufSourceState *source)
 {
     R_WorldMatrixChanged(source);
     return source;
 }
 
-double __cdecl R_GetAdjustedLodDist(float dist, XModelLodRampType lodRampType)
+double R_GetAdjustedLodDist(float dist, XModelLodRampType lodRampType)
 {
     iassert(rg.lodParms.valid);
     return (dist * rg.lodParms.ramp[lodRampType].scale + rg.lodParms.ramp[lodRampType].bias);
 }
 
-double __cdecl R_GetBaseLodDist(const float* origin)
+double R_GetBaseLodDist(const float* origin)
 {
     float diff[3]; // [esp+4h] [ebp-Ch] BYREF
 
@@ -255,13 +255,13 @@ const float g_identityMatrix44[4][4] =
   { 0.0, 0.0, 1.0, 0.0 },
   { 0.0, 0.0, 0.0, 1.0 }
 }; // idb
-void __cdecl R_MatrixIdentity44(float (*out)[4])
+void R_MatrixIdentity44(float (*out)[4])
 {
     iassert( out );
     qmemcpy(out, g_identityMatrix44, 0x40u);
 }
 
-void __cdecl R_Set3D(GfxCmdBufSourceState *source)
+void R_Set3D(GfxCmdBufSourceState *source)
 {
     iassert( source->viewParms3D );
     if (source->viewMode != VIEW_MODE_3D)
@@ -285,7 +285,7 @@ void __cdecl R_Set3D(GfxCmdBufSourceState *source)
     }
 }
 
-void __cdecl R_InitCmdBufSourceState(GfxCmdBufSourceState *source, const GfxCmdBufInput *input, int cameraView)
+void R_InitCmdBufSourceState(GfxCmdBufSourceState *source, const GfxCmdBufInput *input, int cameraView)
 {
     float *v3; // [esp+8h] [ebp-8h]
 
@@ -318,7 +318,7 @@ void __cdecl R_InitCmdBufSourceState(GfxCmdBufSourceState *source, const GfxCmdB
     source->cameraView = cameraView;
 }
 
-void __cdecl R_SetDefaultAlphaTestFunction(GfxCmdBufState *state)
+void R_SetDefaultAlphaTestFunction(GfxCmdBufState *state)
 {
     const char *v1; // eax
     int hr; // [esp+0h] [ebp-8h]
@@ -348,7 +348,7 @@ void __cdecl R_SetDefaultAlphaTestFunction(GfxCmdBufState *state)
     state->alphaRef = 0;
 }
 
-void __cdecl R_SetDefaultStateBits(uint32_t *stateBits)
+void R_SetDefaultStateBits(uint32_t *stateBits)
 {
     *stateBits = 0;
     stateBits[1] = 0;
@@ -361,7 +361,7 @@ void __cdecl R_SetDefaultStateBits(uint32_t *stateBits)
     stateBits[1] = stateBits[1];
 }
 
-void __cdecl R_HW_ForceSamplerState(IDirect3DDevice9 *device, uint32_t samplerIndex, uint32_t samplerState)
+void R_HW_ForceSamplerState(IDirect3DDevice9 *device, uint32_t samplerIndex, uint32_t samplerState)
 {
     const char *v3; // eax
     const char *v4; // eax
@@ -551,7 +551,7 @@ void __cdecl R_HW_ForceSamplerState(IDirect3DDevice9 *device, uint32_t samplerIn
     } while (alwaysfails);
 }
 
-void __cdecl R_InitCmdBufState(GfxCmdBufState *state)
+void R_InitCmdBufState(GfxCmdBufState *state)
 {
     uint32_t samplerIndex; // [esp+10h] [ebp-Ch]
     IDirect3DDevice9 *device; // [esp+14h] [ebp-8h]

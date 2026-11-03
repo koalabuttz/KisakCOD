@@ -195,7 +195,7 @@ struct ValidOperation // sizeof=0x10
     operationEnum op;
     expDataType leftSide;
     expDataType rightSide;
-    void(__cdecl *function)(Operand *, Operand *, Operand *);
+    void(*function)(Operand *, Operand *, Operand *);
 };
 
 static constexpr ValidOperation validOperations[84] =
@@ -311,7 +311,7 @@ static constexpr ValidOperation validOperations[84] =
   { OP_NOOP, VAL_INT, VAL_INT, NULL }
 }; // idb
 
-using OperationFunction = void(__cdecl *)(Operand *, Operand *, Operand *);
+using OperationFunction = void(*)(Operand *, Operand *, Operand *);
 
 // All binary operation/type combinations are known at build time. A table
 // lookup avoids scanning the complete list for each operator on every UI frame.
@@ -343,7 +343,7 @@ static OperationFunction FindOperationFunction(operationEnum op, expDataType lef
     return s_operationFunctions.functions[op][leftSide][rightSide];
 }
 
-char *__cdecl GetSourceString(Operand operand)
+char *GetSourceString(Operand operand)
 {
     char *result; // [esp+8h] [ebp-4h]
 
@@ -371,7 +371,7 @@ char *__cdecl GetSourceString(Operand operand)
     return result;
 }
 
-double __cdecl GetSourceFloat(Operand *source)
+double GetSourceFloat(Operand *source)
 {
     if (source->dataType == VAL_FLOAT)
         return source->internals.floatVal;
@@ -382,7 +382,7 @@ double __cdecl GetSourceFloat(Operand *source)
     return (float)atof(source->internals.string);
 }
 
-operandInternalDataUnion __cdecl GetSourceInt(Operand *source)
+operandInternalDataUnion GetSourceInt(Operand *source)
 {
     if (source->dataType == VAL_FLOAT)
     {
@@ -400,7 +400,7 @@ operandInternalDataUnion __cdecl GetSourceInt(Operand *source)
     }
 }
 
-void(__cdecl *__cdecl GetOperationFunction(
+void(*GetOperationFunction(
     operationEnum op,
     Operand *data1,
     Operand *data2))(Operand *, Operand *, Operand *)
@@ -446,12 +446,12 @@ void(__cdecl *__cdecl GetOperationFunction(
     return FindOperationFunction(op, data1->dataType, data2->dataType);
 }
 
-bool __cdecl OpPairsWithRightParen(operationEnum op)
+bool OpPairsWithRightParen(operationEnum op)
 {
     return op >= OP_SIN && op <= NUM_OPERATORS || op == OP_LEFTPAREN;
 }
 
-void __cdecl RunLogicOp(
+void RunLogicOp(
     int localClientNum,
     operationEnum op,
     OperandStack *dataStack,
@@ -470,7 +470,7 @@ void __cdecl RunLogicOp(
     char *v14; // [esp-4h] [ebp-10h]
     char *v15; // [esp-4h] [ebp-10h]
     Operand operandResult; // [esp+0h] [ebp-Ch] BYREF
-    void(__cdecl * function)(Operand *, Operand *, Operand *); // [esp+8h] [ebp-4h]
+    void(* function)(Operand *, Operand *, Operand *); // [esp+8h] [ebp-4h]
 
     if (uiscript_debug->current.integer)
     {
@@ -511,7 +511,7 @@ void __cdecl RunLogicOp(
     }
 }
 
-const char *__cdecl GetNameForValueType(expDataType valType)
+const char *GetNameForValueType(expDataType valType)
 {
     const char *v2; // eax
 
@@ -532,7 +532,7 @@ const char *__cdecl GetNameForValueType(expDataType valType)
     return "";
 }
 
-void __cdecl AddOperandToStack(OperandStack *dataStack, Operand *data)
+void AddOperandToStack(OperandStack *dataStack, Operand *data)
 {
     operandInternalDataUnion v2; // ecx
     int numOperandLists; // edx
@@ -551,7 +551,7 @@ void __cdecl AddOperandToStack(OperandStack *dataStack, Operand *data)
     dataStack->stack[dataStack->numOperandLists++].operandCount = 1;
 }
 
-char __cdecl GetOperand(OperandStack *dataStack, Operand *data)
+char GetOperand(OperandStack *dataStack, Operand *data)
 {
     operandInternalDataUnion v2; // edx
     operandInternalDataUnion v4; // eax
@@ -600,14 +600,14 @@ char __cdecl GetOperand(OperandStack *dataStack, Operand *data)
     }
 }
 
-char __cdecl GetTwoOperands(OperandStack *dataStack, Operand *data1, Operand *data2)
+char GetTwoOperands(OperandStack *dataStack, Operand *data1, Operand *data2)
 {
     GetOperand(dataStack, data2);
     GetOperand(dataStack, data1);
     return 1;
 }
 
-char __cdecl GetOperandList(OperandStack *dataStack, OperandList *list)
+char GetOperandList(OperandStack *dataStack, OperandList *list)
 {
     if (dataStack->numOperandLists >= 1)
     {
@@ -627,12 +627,12 @@ char __cdecl GetOperandList(OperandStack *dataStack, OperandList *list)
 }
 
 #ifdef KISAK_MP
-BOOL __cdecl CG_IsIntermission(int localClientNum)
+BOOL CG_IsIntermission(int localClientNum)
 {
     return CG_GetLocalClientGlobals(localClientNum)->nextSnap->ps.pm_type == PM_INTERMISSION;
 }
 
-void __cdecl GetIsIntermission(int localClientNum, Operand *result)
+void GetIsIntermission(int localClientNum, Operand *result)
 {
     result->dataType = VAL_INT;
     result->internals.intVal = CG_IsIntermission(localClientNum);
@@ -642,7 +642,7 @@ void __cdecl GetIsIntermission(int localClientNum, Operand *result)
 #endif
 
 
-void __cdecl RunOp(int localClientNum, OperatorStack *opStack, OperandStack *dataStack)
+void RunOp(int localClientNum, OperatorStack *opStack, OperandStack *dataStack)
 {
     operandInternalDataUnion v3; // eax
     const char *v4; // eax
@@ -1035,7 +1035,7 @@ void __cdecl RunOp(int localClientNum, OperatorStack *opStack, OperandStack *dat
     }
 }
 
-void __cdecl GetDvarStringValue(Operand *source, Operand *result)
+void GetDvarStringValue(Operand *source, Operand *result)
 {
     const char *NameForValueType; // eax
     char *VariantString; // eax
@@ -1069,7 +1069,7 @@ void __cdecl GetDvarStringValue(Operand *source, Operand *result)
     }
 }
 
-char *__cdecl CopyDvarString(const char *string)
+char *CopyDvarString(const char *string)
 {
     char *result; // [esp+0h] [ebp-4h]
 
@@ -1087,7 +1087,7 @@ char *__cdecl CopyDvarString(const char *string)
     return result;
 }
 
-void __cdecl GetDvarBoolValue(Operand *source, Operand *result)
+void GetDvarBoolValue(Operand *source, Operand *result)
 {
     const char *NameForValueType; // eax
     const char *VariantString; // eax
@@ -1109,7 +1109,7 @@ void __cdecl GetDvarBoolValue(Operand *source, Operand *result)
     }
 }
 
-void __cdecl GetDvarIntValue(Operand *source, Operand *result)
+void GetDvarIntValue(Operand *source, Operand *result)
 {
     const char *NameForValueType; // eax
     const char *VariantString; // eax
@@ -1131,7 +1131,7 @@ void __cdecl GetDvarIntValue(Operand *source, Operand *result)
     }
 }
 
-void __cdecl GetDvarFloatValue(Operand *source, Operand *result)
+void GetDvarFloatValue(Operand *source, Operand *result)
 {
     const char *NameForValueType; // eax
     const char *VariantString; // eax
@@ -1153,7 +1153,7 @@ void __cdecl GetDvarFloatValue(Operand *source, Operand *result)
     }
 }
 
-void __cdecl GetLocalVarStringValue(
+void GetLocalVarStringValue(
     int localClientNum,
     Operand *source,
     Operand *result,
@@ -1177,7 +1177,7 @@ void __cdecl GetLocalVarStringValue(
     }
 }
 
-UILocalVarContext *__cdecl GetLocalVar(int localClientNum, Operand *source)
+UILocalVarContext *GetLocalVar(int localClientNum, Operand *source)
 {
     const char *NameForValueType; // eax
     UILocalVarContext *LocalVarsContext; // eax
@@ -1197,7 +1197,7 @@ UILocalVarContext *__cdecl GetLocalVar(int localClientNum, Operand *source)
     }
 }
 
-void __cdecl GetLocalVarBoolValue(int localClientNum, Operand *source, Operand *result)
+void GetLocalVarBoolValue(int localClientNum, Operand *source, Operand *result)
 {
     UILocalVarContext *var; // [esp+0h] [ebp-4h]
 
@@ -1216,7 +1216,7 @@ void __cdecl GetLocalVarBoolValue(int localClientNum, Operand *source, Operand *
     }
 }
 
-void __cdecl GetLocalVarIntValue(int localClientNum, Operand *source, Operand *result)
+void GetLocalVarIntValue(int localClientNum, Operand *source, Operand *result)
 {
     UILocalVarContext *var; // [esp+0h] [ebp-4h]
 
@@ -1235,7 +1235,7 @@ void __cdecl GetLocalVarIntValue(int localClientNum, Operand *source, Operand *r
     }
 }
 
-void __cdecl GetLocalVarFloatValue(int localClientNum, Operand *source, Operand *result)
+void GetLocalVarFloatValue(int localClientNum, Operand *source, Operand *result)
 {
     UILocalVarContext *var; // [esp+8h] [ebp-4h]
 
@@ -1254,7 +1254,7 @@ void __cdecl GetLocalVarFloatValue(int localClientNum, Operand *source, Operand 
     }
 }
 
-void __cdecl GetSinValue(Operand *source, Operand *result)
+void GetSinValue(Operand *source, Operand *result)
 {
     float v2; // [esp+10h] [ebp-8h]
     float val; // [esp+14h] [ebp-4h]
@@ -1267,7 +1267,7 @@ void __cdecl GetSinValue(Operand *source, Operand *result)
         Com_Printf(CON_CHANNEL_UI, "sin( %f ) = %f\n", val, result->internals.floatVal);
 }
 
-void __cdecl GetCosValue(Operand *source, Operand *result)
+void GetCosValue(Operand *source, Operand *result)
 {
     float v2; // [esp+10h] [ebp-8h]
     float val; // [esp+14h] [ebp-4h]
@@ -1280,13 +1280,13 @@ void __cdecl GetCosValue(Operand *source, Operand *result)
         Com_Printf(CON_CHANNEL_UI, "cos( %f ) = %f\n", val, result->internals.floatVal);
 }
 
-void __cdecl GetMilliseconds(Operand *result)
+void GetMilliseconds(Operand *result)
 {
     result->dataType = VAL_INT;
     result->internals.intVal = Sys_Milliseconds();
 }
 
-void __cdecl GetPlayerField(int localClientNum, Operand *source, Operand *result)
+void GetPlayerField(int localClientNum, Operand *source, Operand *result)
 {
     const char *NameForValueType; // eax
     operandInternalDataUnion *OurClientScore; // [esp+0h] [ebp-10h]
@@ -1439,7 +1439,7 @@ void __cdecl GetPlayerField(int localClientNum, Operand *source, Operand *result
     }
 }
 
-void __cdecl GetOtherTeamField(int localClientNum, Operand *fieldName, Operand *result)
+void GetOtherTeamField(int localClientNum, Operand *fieldName, Operand *result)
 {
 #ifdef KISAK_MP
     team_t team; // [esp+8h] [ebp-8h]
@@ -1471,7 +1471,7 @@ void __cdecl GetOtherTeamField(int localClientNum, Operand *fieldName, Operand *
 #endif
 }
 
-void __cdecl GetFieldForTeam(int localClientNum, team_t team, Operand *fieldName, Operand *result)
+void GetFieldForTeam(int localClientNum, team_t team, Operand *fieldName, Operand *result)
 {
     const char *NameForValueType; // eax
     cg_s *cgameGlob = CG_GetLocalClientGlobals(localClientNum);
@@ -1515,7 +1515,7 @@ void __cdecl GetFieldForTeam(int localClientNum, team_t team, Operand *fieldName
     }
 }
 
-void __cdecl GetTeamField(int localClientNum, Operand *fieldName, Operand *result)
+void GetTeamField(int localClientNum, Operand *fieldName, Operand *result)
 {
 #ifdef KISAK_MP
     cg_s *cgameGlob = CG_GetLocalClientGlobals(localClientNum);
@@ -1529,17 +1529,17 @@ void __cdecl GetTeamField(int localClientNum, Operand *fieldName, Operand *resul
 #endif
 }
 
-void __cdecl GetTeamMarinesField(int localClientNum, Operand *fieldName, Operand *result)
+void GetTeamMarinesField(int localClientNum, Operand *fieldName, Operand *result)
 {
     GetFieldForTeam(localClientNum, TEAM_ALLIES, fieldName, result);
 }
 
-void __cdecl GetTeamOpForField(int localClientNum, Operand *fieldName, Operand *result)
+void GetTeamOpForField(int localClientNum, Operand *fieldName, Operand *result)
 {
     GetFieldForTeam(localClientNum, TEAM_AXIS, fieldName, result);
 }
 
-void __cdecl GetUIActive(int localClientNum, Operand *result)
+void GetUIActive(int localClientNum, Operand *result)
 {
     result->dataType = VAL_INT;
     result->internals.intVal = CL_IsUIActive(localClientNum);
@@ -1547,7 +1547,7 @@ void __cdecl GetUIActive(int localClientNum, Operand *result)
         Com_Printf(CON_CHANNEL_UI, "ui_active() = %i\n", result->internals.intVal);
 }
 
-void __cdecl GetFlashbanged(int localClientNum, Operand *result)
+void GetFlashbanged(int localClientNum, Operand *result)
 {
     result->dataType = VAL_INT;
     result->internals.intVal = CG_Flashbanged(localClientNum);
@@ -1555,7 +1555,7 @@ void __cdecl GetFlashbanged(int localClientNum, Operand *result)
         Com_Printf(CON_CHANNEL_UI, "flashbanged() = %i\n", result->internals.intVal);
 }
 
-void __cdecl GetScoped(int localClientNum, Operand *result)
+void GetScoped(int localClientNum, Operand *result)
 {
     result->dataType = VAL_INT;
     result->internals.intVal = (uint8_t)CG_ScopeIsOverlayed(localClientNum);
@@ -1563,7 +1563,7 @@ void __cdecl GetScoped(int localClientNum, Operand *result)
         Com_Printf(CON_CHANNEL_UI, "scoped() = %i\n", result->internals.intVal);
 }
 
-void __cdecl InKillcam(int localClientNum, Operand *result)
+void InKillcam(int localClientNum, Operand *result)
 {
     result->dataType = VAL_INT;
 #ifdef KISAK_MP
@@ -1576,7 +1576,7 @@ void __cdecl InKillcam(int localClientNum, Operand *result)
         Com_Printf(CON_CHANNEL_UI, "InKillcam() = %i\n", result->internals.intVal);
 }
 
-void __cdecl GetScoreboardVisible(int localClientNum, Operand *result)
+void GetScoreboardVisible(int localClientNum, Operand *result)
 {
     result->dataType = VAL_INT;
 #ifdef KISAK_MP
@@ -1588,7 +1588,7 @@ void __cdecl GetScoreboardVisible(int localClientNum, Operand *result)
         Com_Printf(CON_CHANNEL_UI, "scoreboard_visible() = %i\n", result->internals.intVal);
 }
 
-void __cdecl GetSelectingLocation(int localClientNum, Operand *result)
+void GetSelectingLocation(int localClientNum, Operand *result)
 {
     result->dataType = VAL_INT;
     result->internals.intVal = CG_IsSelectingLocation(localClientNum);
@@ -1596,7 +1596,7 @@ void __cdecl GetSelectingLocation(int localClientNum, Operand *result)
         Com_Printf(CON_CHANNEL_UI, "selecting_location() = %i\n", result->internals.intVal);
 }
 
-void __cdecl PrivatePartyHostInLobby(int localClientNum, Operand *result)
+void PrivatePartyHostInLobby(int localClientNum, Operand *result)
 {
     result->internals.intVal = 0;
     result->dataType = VAL_INT;
@@ -1604,7 +1604,7 @@ void __cdecl PrivatePartyHostInLobby(int localClientNum, Operand *result)
         Com_Printf(CON_CHANNEL_UI, "PrivatePartyHostInLobby() = %i\n", result->internals.intVal);
 }
 
-void __cdecl AloneInPrivateParty(int localClientNum, Operand *result)
+void AloneInPrivateParty(int localClientNum, Operand *result)
 {
     result->internals.intVal = 0;
     result->dataType = VAL_INT;
@@ -1612,7 +1612,7 @@ void __cdecl AloneInPrivateParty(int localClientNum, Operand *result)
         Com_Printf(CON_CHANNEL_UI, "AloneInPrivateParty() = %i\n", result->internals.intVal);
 }
 
-void __cdecl InLobby(int localClientNum, Operand *result)
+void InLobby(int localClientNum, Operand *result)
 {
     result->dataType = VAL_INT;
     result->internals.intVal = 0;
@@ -1620,7 +1620,7 @@ void __cdecl InLobby(int localClientNum, Operand *result)
         Com_Printf(CON_CHANNEL_UI, "InLobby() = %i\n", result->internals.intVal);
 }
 
-void __cdecl InPrivateParty(int localClientNum, Operand *result)
+void InPrivateParty(int localClientNum, Operand *result)
 {
     result->dataType = VAL_INT;
     result->internals.intVal = 0;
@@ -1628,7 +1628,7 @@ void __cdecl InPrivateParty(int localClientNum, Operand *result)
         Com_Printf(CON_CHANNEL_UI, "InPrivateParty() = %i\n", result->internals.intVal);
 }
 
-void __cdecl PrivatePartyHost(int localClientNum, Operand *result)
+void PrivatePartyHost(int localClientNum, Operand *result)
 {
     result->dataType = VAL_INT;
     result->internals.intVal = 0;
@@ -1636,7 +1636,7 @@ void __cdecl PrivatePartyHost(int localClientNum, Operand *result)
         Com_Printf(CON_CHANNEL_UI, "PrivatePartyHost() = %i\n", result->internals.intVal);
 }
 
-void __cdecl GetPlayerStat(int localClientNum, Operand *source, Operand *result)
+void GetPlayerStat(int localClientNum, Operand *source, Operand *result)
 {
     int v3; // eax
     int index; // [esp+0h] [ebp-4h]
@@ -1649,7 +1649,7 @@ void __cdecl GetPlayerStat(int localClientNum, Operand *source, Operand *result)
         Com_Printf(CON_CHANNEL_UI, "stat( %i ) = %i\n", index, result->internals.intVal);
 }
 
-operandInternalDataUnion __cdecl getOperandValueInt(Operand *source)
+operandInternalDataUnion getOperandValueInt(Operand *source)
 {
     if (source->dataType == VAL_STRING)
     {
@@ -1665,7 +1665,7 @@ operandInternalDataUnion __cdecl getOperandValueInt(Operand *source)
     }
 }
 
-void __cdecl GetPlayerStatRangeBitsSet(int localClientNum, OperandList *list, Operand *result)
+void GetPlayerStatRangeBitsSet(int localClientNum, OperandList *list, Operand *result)
 {
     int bitMask; // [esp+4h] [ebp-14h]
     int controllerIndex; // [esp+8h] [ebp-10h]
@@ -1720,7 +1720,7 @@ void __cdecl GetPlayerStatRangeBitsSet(int localClientNum, OperandList *list, Op
     }
 }
 
-int __cdecl GetKeyBindingLocalizedString(int localClientNum, const char *command, char *keys, bool single)
+int GetKeyBindingLocalizedString(int localClientNum, const char *command, char *keys, bool single)
 {
     char *v4; // eax
     const char *v6; // [esp+4h] [ebp-120h]
@@ -1769,12 +1769,12 @@ int __cdecl GetKeyBindingLocalizedString(int localClientNum, const char *command
     return bindCount;
 }
 
-int __cdecl UI_GetKeyBindingLocalizedStringSingle(int localClientNum, const char *command, char *keys)
+int UI_GetKeyBindingLocalizedStringSingle(int localClientNum, const char *command, char *keys)
 {
     return GetKeyBindingLocalizedString(localClientNum, command, keys, 1);
 }
 
-void __cdecl GetKeyBinding(int localClientNum, Operand *fieldName, Operand *result)
+void GetKeyBinding(int localClientNum, Operand *fieldName, Operand *result)
 {
     static char resultString[256];
 
@@ -1795,7 +1795,7 @@ void __cdecl GetKeyBinding(int localClientNum, Operand *fieldName, Operand *resu
     }
 }
 
-void __cdecl GetActionSlotUsable(int localClientNum, Operand *fieldName, Operand *result)
+void GetActionSlotUsable(int localClientNum, Operand *fieldName, Operand *result)
 {
     int slotId; // [esp+0h] [ebp-4h]
 
@@ -1813,7 +1813,7 @@ void __cdecl GetActionSlotUsable(int localClientNum, Operand *fieldName, Operand
     }
 }
 
-void __cdecl GetHudFade(int localClientNum, Operand *fieldName, Operand *result)
+void GetHudFade(int localClientNum, Operand *fieldName, Operand *result)
 {
     const char *v3; // eax
     const char *NameForValueType; // eax
@@ -1875,13 +1875,13 @@ void __cdecl GetHudFade(int localClientNum, Operand *fieldName, Operand *result)
     }
 }
 
-void __cdecl UI_GetOnlineFriendCount(int localClientNum, Operand *result)
+void UI_GetOnlineFriendCount(int localClientNum, Operand *result)
 {
     result->dataType = VAL_INT;
     result->internals.intVal = 0;
 }
 
-void __cdecl IsMenuOpen(int localClientNum, Operand *source, Operand *result)
+void IsMenuOpen(int localClientNum, Operand *source, Operand *result)
 {
     const char *NameForValueType; // eax
 
@@ -1901,7 +1901,7 @@ void __cdecl IsMenuOpen(int localClientNum, Operand *source, Operand *result)
     }
 }
 
-void __cdecl WritingData(int localClientNum, Operand *result)
+void WritingData(int localClientNum, Operand *result)
 {
     result->dataType = VAL_INT;
     result->internals.intVal = 0;
@@ -1909,7 +1909,7 @@ void __cdecl WritingData(int localClientNum, Operand *result)
         Com_Printf(CON_CHANNEL_UI, "writingdata() = %i\n", result->internals.intVal);
 }
 
-void __cdecl LogicalNot(int localClientNum, Operand *source, Operand *result)
+void LogicalNot(int localClientNum, Operand *source, Operand *result)
 {
     const char *NameForValueType; // eax
     char *SourceString; // [esp-4h] [ebp-Ch]
@@ -1935,7 +1935,7 @@ void __cdecl LogicalNot(int localClientNum, Operand *source, Operand *result)
     }
 }
 
-void __cdecl BitwiseNot(int localClientNum, Operand *source, Operand *result)
+void BitwiseNot(int localClientNum, Operand *source, Operand *result)
 {
     const char *NameForValueType; // eax
     char *SourceString; // [esp-4h] [ebp-Ch]
@@ -1973,7 +1973,7 @@ void __cdecl BitwiseNot(int localClientNum, Operand *source, Operand *result)
     }
 }
 
-void __cdecl BitShiftLeft(int localClientNum, Operand *source, Operand *bitsSource, Operand *result)
+void BitShiftLeft(int localClientNum, Operand *source, Operand *bitsSource, Operand *result)
 {
     int val; // [esp+0h] [ebp-8h]
     int bits; // [esp+4h] [ebp-4h]
@@ -1986,7 +1986,7 @@ void __cdecl BitShiftLeft(int localClientNum, Operand *source, Operand *bitsSour
         Com_Printf(CON_CHANNEL_UI, "%i << %i = %i\n", val, bits, result->internals.intVal);
 }
 
-void __cdecl BitShiftRight(int localClientNum, Operand *source, Operand *bitsSource, Operand *result)
+void BitShiftRight(int localClientNum, Operand *source, Operand *bitsSource, Operand *result)
 {
     int val; // [esp+0h] [ebp-8h]
     int bits; // [esp+4h] [ebp-4h]
@@ -1999,7 +1999,7 @@ void __cdecl BitShiftRight(int localClientNum, Operand *source, Operand *bitsSou
         Com_Printf(CON_CHANNEL_UI, "%i >> %i = %i\n", val, bits, result->internals.intVal);
 }
 
-void __cdecl GetAdsJavelin(int localClientNum, Operand *result)
+void GetAdsJavelin(int localClientNum, Operand *result)
 {
     result->dataType = VAL_INT;
     result->internals.intVal = CL_GetLocalClientConnectionState(localClientNum) >= CA_LOADING && CG_JavelinADS(localClientNum);
@@ -2007,7 +2007,7 @@ void __cdecl GetAdsJavelin(int localClientNum, Operand *result)
         Com_Printf(CON_CHANNEL_UI, "adsjavelin() = %i\n", result->internals.intVal);
 }
 
-void __cdecl GetWeapLockBlink(int localClientNum, Operand *source, Operand *result)
+void GetWeapLockBlink(int localClientNum, Operand *source, Operand *result)
 {
     float bps = GetSourceFloat(source);
     result->dataType = VAL_INT;
@@ -2036,7 +2036,7 @@ void __cdecl GetWeapLockBlink(int localClientNum, Operand *source, Operand *resu
         Com_Printf(CON_CHANNEL_UI, "weaplockblink( %.2f ) = %i\n", bps, result->internals.intVal);
 }
 
-void __cdecl GetWeapAttackTop(int localClientNum, Operand *result)
+void GetWeapAttackTop(int localClientNum, Operand *result)
 {
     result->dataType = VAL_INT;
 #ifdef KISAK_MP
@@ -2048,7 +2048,7 @@ void __cdecl GetWeapAttackTop(int localClientNum, Operand *result)
         Com_Printf(CON_CHANNEL_UI, "weapattacktop() = %i\n", result->internals.intVal);
 }
 
-void __cdecl GetWeapAttackDirect(int localClientNum, Operand *result)
+void GetWeapAttackDirect(int localClientNum, Operand *result)
 {
     result->dataType = VAL_INT;
 #ifdef KISAK_MP
@@ -2060,7 +2060,7 @@ void __cdecl GetWeapAttackDirect(int localClientNum, Operand *result)
         Com_Printf(CON_CHANNEL_UI, "weapattackdirect() = %i\n", result->internals.intVal);
 }
 
-void __cdecl SecondsToTimeDisplay(int localClientNum, Operand *source, Operand *result)
+void SecondsToTimeDisplay(int localClientNum, Operand *source, Operand *result)
 {
     static char resultString_0[128];
     int v3; // [esp+4h] [ebp-14h]
@@ -2079,7 +2079,7 @@ void __cdecl SecondsToTimeDisplay(int localClientNum, Operand *source, Operand *
         Com_Printf(CON_CHANNEL_UI, "secondsToTime() = %s\n", resultString_0);
 }
 
-void __cdecl SecondsToCountdownDisplay(int localClientNum, int seconds, Operand *result)
+void SecondsToCountdownDisplay(int localClientNum, int seconds, Operand *result)
 {
     static char resultString_1[128];
 
@@ -2097,7 +2097,7 @@ void __cdecl SecondsToCountdownDisplay(int localClientNum, int seconds, Operand 
     }
 }
 
-void __cdecl GetTimeLeft(int localClientNum, Operand *result)
+void GetTimeLeft(int localClientNum, Operand *result)
 {
 #ifdef KISAK_MP
     operandInternalDataUnion timeLeft; // [esp+0h] [ebp-Ch]
@@ -2123,7 +2123,7 @@ void __cdecl GetTimeLeft(int localClientNum, Operand *result)
 #endif
 }
 
-void __cdecl GetGametypeObjective(int localClientNum, Operand *result)
+void GetGametypeObjective(int localClientNum, Operand *result)
 {
 #ifdef KISAK_MP
     result->dataType = VAL_STRING;
@@ -2152,7 +2152,7 @@ void __cdecl GetGametypeObjective(int localClientNum, Operand *result)
 #endif
 }
 
-void __cdecl GetGametypeName(int localClientNum, Operand *result)
+void GetGametypeName(int localClientNum, Operand *result)
 {
 #ifdef KISAK_MP
     cgs_t *cgs;
@@ -2181,7 +2181,7 @@ void __cdecl GetGametypeName(int localClientNum, Operand *result)
 #endif
 }
 
-void __cdecl GetGametypeInternal(int localClientNum, Operand *result)
+void GetGametypeInternal(int localClientNum, Operand *result)
 {
 #ifdef KISAK_MP
     cgs_t *cgs = CG_GetLocalClientStaticGlobals(localClientNum);
@@ -2201,7 +2201,7 @@ void __cdecl GetGametypeInternal(int localClientNum, Operand *result)
 #endif
 }
 
-void __cdecl GetScore(int localClientNum, Operand *source, Operand *result)
+void GetScore(int localClientNum, Operand *source, Operand *result)
 {
 #ifdef KISAK_MP
     const char *NameForValueType; // eax
@@ -2231,7 +2231,7 @@ void __cdecl GetScore(int localClientNum, Operand *source, Operand *result)
 #endif
 }
 
-void __cdecl GetGameMessageWindowActive(int localClientNum, Operand *source, Operand *result)
+void GetGameMessageWindowActive(int localClientNum, Operand *source, Operand *result)
 {
     int windowIndex; // [esp+0h] [ebp-4h]
 
@@ -2244,7 +2244,7 @@ void __cdecl GetGameMessageWindowActive(int localClientNum, Operand *source, Ope
         Com_PrintError(CON_CHANNEL_UI, "UI Script error: gameMsgWndActive was passed an invalid window index\n");
 }
 
-void __cdecl GetFollowing(int localClientNum, Operand *result)
+void GetFollowing(int localClientNum, Operand *result)
 {
     result->dataType = VAL_INT;
     result->internals.intVal = 0;
@@ -2253,7 +2253,7 @@ void __cdecl GetFollowing(int localClientNum, Operand *result)
         result->internals.intVal = 1;
 }
 
-void __cdecl RunCommaOp(int localClientNum, OperandStack *dataStack, OperandList *list1, OperandList *list2)
+void RunCommaOp(int localClientNum, OperandStack *dataStack, OperandList *list1, OperandList *list2)
 {
     operandInternalDataUnion v4; // edx
     operandInternalDataUnion v5; // eax
@@ -2307,7 +2307,7 @@ void __cdecl RunCommaOp(int localClientNum, OperandStack *dataStack, OperandList
     }
 }
 
-void __cdecl TableLookup(int localClientNum, OperandList *list, Operand *operandResult)
+void TableLookup(int localClientNum, OperandList *list, Operand *operandResult)
 {
     char *SourceString; // eax
     operandInternalDataUnion v4; // eax
@@ -2362,7 +2362,7 @@ void __cdecl TableLookup(int localClientNum, OperandList *list, Operand *operand
     }
 }
 
-void __cdecl MinValue(OperandList *list, Operand *operandResult)
+void MinValue(OperandList *list, Operand *operandResult)
 {
     float val; // [esp+0h] [ebp-Ch]
     int operandNum; // [esp+4h] [ebp-8h]
@@ -2388,7 +2388,7 @@ void __cdecl MinValue(OperandList *list, Operand *operandResult)
     }
 }
 
-void __cdecl MaxValue(OperandList *list, Operand *operandResult)
+void MaxValue(OperandList *list, Operand *operandResult)
 {
     float max; // [esp+0h] [ebp-Ch]
     float val; // [esp+4h] [ebp-8h]
@@ -2414,7 +2414,7 @@ void __cdecl MaxValue(OperandList *list, Operand *operandResult)
     }
 }
 
-void __cdecl LocalizeString(OperandList *list, Operand *operandResult)
+void LocalizeString(OperandList *list, Operand *operandResult)
 {
     const char *v2; // eax
     char string[1024]; // [esp+20h] [ebp-428h] BYREF
@@ -2485,7 +2485,7 @@ void __cdecl LocalizeString(OperandList *list, Operand *operandResult)
         operandResult->internals.intVal = (int)"";
 }
 
-void __cdecl LocalizationError(const char *errorMessage)
+void LocalizationError(const char *errorMessage)
 {
     if (Dvar_GetBool("loc_warnings"))
     {
@@ -2498,7 +2498,7 @@ void __cdecl LocalizationError(const char *errorMessage)
     }
 }
 
-void __cdecl ValidateLocalizedStringRef(const char *token, int tokenLen)
+void ValidateLocalizedStringRef(const char *token, int tokenLen)
 {
     const char *v2; // eax
     const char *v3; // eax
@@ -2525,7 +2525,7 @@ void __cdecl ValidateLocalizedStringRef(const char *token, int tokenLen)
     }
 }
 
-void __cdecl RunHigherPriorityOperators(
+void RunHigherPriorityOperators(
     int localClientNum,
     operationEnum op,
     OperatorStack *opStack,
@@ -2547,7 +2547,7 @@ void __cdecl RunHigherPriorityOperators(
     }
 }
 
-bool __cdecl IsOpAssociative(operationEnum op)
+bool IsOpAssociative(operationEnum op)
 {
     return op < OP_DIVIDE || op > OP_MODULUS && op != OP_SUBTRACT;
 }
@@ -2555,7 +2555,7 @@ bool __cdecl IsOpAssociative(operationEnum op)
 
 
 const statement_s *g_releaseBuildStatement;
-Operand *__cdecl EvaluateExpression(int localClientNum, const statement_s *statement, Operand *result)
+Operand *EvaluateExpression(int localClientNum, const statement_s *statement, Operand *result)
 {
     expressionEntry *v4; // [esp+0h] [ebp-14BCh]
     OperatorStack opStack; // [esp+4h] [ebp-14B8h] BYREF
@@ -2620,14 +2620,14 @@ Operand *__cdecl EvaluateExpression(int localClientNum, const statement_s *state
     }
 }
 
-bool __cdecl IsExpressionTrue(int localClientNum, const statement_s *statement)
+bool IsExpressionTrue(int localClientNum, const statement_s *statement)
 {
     Operand result; // [esp+0h] [ebp-8h] BYREF
 
     return EvaluateExpression(localClientNum, statement, &result) && GetSourceInt(&result).intVal != 0;
 }
 
-double __cdecl GetExpressionFloat(int localClientNum, const statement_s *statement)
+double GetExpressionFloat(int localClientNum, const statement_s *statement)
 {
     PROF_SCOPED("GetExpressionFloat");
 

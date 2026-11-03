@@ -108,7 +108,7 @@ const char *s_analyzeEntityTypeNames[23] =
   "Baselines"
 }; // idb
 
-void __cdecl SV_ClearPacketAnalysis()
+void SV_ClearPacketAnalysis()
 {
     int client; // [esp+0h] [ebp-8h]
     int dataType; // [esp+4h] [ebp-4h]
@@ -128,7 +128,7 @@ void __cdecl SV_ClearPacketAnalysis()
     newDataReady = 0;
 }
 
-void __cdecl SV_TrackETypeBytes(uint32_t eType, int bits)
+void SV_TrackETypeBytes(uint32_t eType, int bits)
 {
     if (eType >= ET_EVENTS + EV_MAX_EVENTS)
         MyAssertHandler(
@@ -141,73 +141,73 @@ void __cdecl SV_TrackETypeBytes(uint32_t eType, int bits)
     bitsUsedPerEType[eType] += bits;
 }
 
-void __cdecl SV_TrackPSBits(int bits)
+void SV_TrackPSBits(int bits)
 {
     bitsUsedForPlayerstates[0] += bits;
 }
 
-void __cdecl SV_TrackPSFieldDeltasBits(int bits)
+void SV_TrackPSFieldDeltasBits(int bits)
 {
     bitsUsedForPlayerstates[1] += bits;
 }
 
-void __cdecl SV_TrackPSHudelemBits(int bits)
+void SV_TrackPSHudelemBits(int bits)
 {
     bitsUsedForPlayerstates[5] += bits;
 }
 
-void __cdecl SV_TrackPSStatsBits(int bits)
+void SV_TrackPSStatsBits(int bits)
 {
     bitsUsedForPlayerstates[2] += bits;
 }
 
-void __cdecl SV_TrackPSAmmoBits(int bits)
+void SV_TrackPSAmmoBits(int bits)
 {
     bitsUsedForPlayerstates[3] += bits;
 }
 
-void __cdecl SV_TrackPSObjectivesBits(int bits)
+void SV_TrackPSObjectivesBits(int bits)
 {
     bitsUsedForPlayerstates[4] += bits;
 }
 
-void __cdecl SV_TrackPSWeaponModelBits(int bits)
+void SV_TrackPSWeaponModelBits(int bits)
 {
     bitsUsedForPlayerstates[6] += bits;
 }
 
-void __cdecl SV_TrackFieldsChanged(int lc)
+void SV_TrackFieldsChanged(int lc)
 {
     ++playerStateFieldsChanged[lc];
 }
 
-void __cdecl SV_DisablePacketData()
+void SV_DisablePacketData()
 {
     s_packetDataEnabled = 0;
 }
 
-void __cdecl SV_EnablePacketData()
+void SV_EnablePacketData()
 {
     s_packetDataEnabled = 1;
 }
 
-void __cdecl SV_ResetPacketData(int clientNum, const msg_t *msg)
+void SV_ResetPacketData(int clientNum, const msg_t *msg)
 {
     s_packetModeStart[clientNum] = MSG_GetUsedBitCount(msg);
     s_packetMode[clientNum] = PACKETDATA_FIRST;
 }
 
-bool __cdecl SV_IsPacketDataNetworkData()
+bool SV_IsPacketDataNetworkData()
 {
     return !g_archivingSnapshot;
 }
 
-void __cdecl SV_PacketDataIsGroundEntity(int clientNum, const msg_t *msg)
+void SV_PacketDataIsGroundEntity(int clientNum, const msg_t *msg)
 {
     SV_PacketDataIsType(clientNum, msg, PACKETDATA_GROUNDENTITY);
 }
 
-void __cdecl SV_PacketDataIsType(int clientNum, const msg_t *msg, packetModeList mode)
+void SV_PacketDataIsType(int clientNum, const msg_t *msg, packetModeList mode)
 {
     const char *v3; // eax
     const char *PacketDataTypeName; // eax
@@ -249,7 +249,7 @@ void __cdecl SV_PacketDataIsType(int clientNum, const msg_t *msg, packetModeList
     }
 }
 
-const char *__cdecl SV_GetPacketDataTypeName(int dataType)
+const char *SV_GetPacketDataTypeName(int dataType)
 {
     const char *result; // eax
     const char *v2; // eax
@@ -325,102 +325,102 @@ const char *__cdecl SV_GetPacketDataTypeName(int dataType)
     return result;
 }
 
-void __cdecl SV_PacketDataIsEntityNum(int clientNum, const msg_t *msg)
+void SV_PacketDataIsEntityNum(int clientNum, const msg_t *msg)
 {
     SV_PacketDataIsType(clientNum, msg, PACKETDATA_ENTITYNUM);
 }
 
-void __cdecl SV_PacketDataIsLastFieldChanged(int clientNum, const msg_t *msg)
+void SV_PacketDataIsLastFieldChanged(int clientNum, const msg_t *msg)
 {
     SV_PacketDataIsType(clientNum, msg, PACKETDATA_LASTFIELDCHANGED);
 }
 
-void __cdecl SV_PacketDataIsUnknown(int clientNum, const msg_t *msg)
+void SV_PacketDataIsUnknown(int clientNum, const msg_t *msg)
 {
     SV_PacketDataIsType(clientNum, msg, PACKETDATA_FIRST);
 }
 
-void __cdecl SV_PacketDataIsHeader(int clientNum, const msg_t *msg)
+void SV_PacketDataIsHeader(int clientNum, const msg_t *msg)
 {
     SV_PacketDataIsType(clientNum, msg, PACKETDATA_HEADER);
 }
 
-void __cdecl SV_PacketDataIsNotNetworkData(int clientNum, const msg_t *msg)
+void SV_PacketDataIsNotNetworkData(int clientNum, const msg_t *msg)
 {
     SV_PacketDataIsType(clientNum, msg, PACKETDATA_NOTNETWORKDATA);
 }
 
-void __cdecl SV_PacketDataIsOverhead(int clientNum, const msg_t *msg)
+void SV_PacketDataIsOverhead(int clientNum, const msg_t *msg)
 {
     SV_PacketDataIsType(clientNum, msg, PACKETDATA_OVERHEAD);
 }
 
-void __cdecl SV_PacketDataIs24BitFlagIndex(int clientNum, const msg_t *msg)
+void SV_PacketDataIs24BitFlagIndex(int clientNum, const msg_t *msg)
 {
     SV_PacketDataIsType(clientNum, msg, PACKETDATA_24BITFLAGINDEX);
 }
 
-void __cdecl SV_PacketDataIsTimeDelta(int clientNum, const msg_t *msg)
+void SV_PacketDataIsTimeDelta(int clientNum, const msg_t *msg)
 {
     SV_PacketDataIsType(clientNum, msg, PACKETDATA_TIMEDELTA);
 }
 
-void __cdecl SV_PacketDataIsTime(int clientNum, const msg_t *msg)
+void SV_PacketDataIsTime(int clientNum, const msg_t *msg)
 {
     SV_PacketDataIsType(clientNum, msg, PACKETDATA_TIME);
 }
 
-void __cdecl SV_PacketDataIsReliableData(int clientNum, const msg_t *msg)
+void SV_PacketDataIsReliableData(int clientNum, const msg_t *msg)
 {
     SV_PacketDataIsType(clientNum, msg, PACKETDATA_RELIABLEDATA);
 }
 
-void __cdecl SV_PacketDataIsData(int clientNum, const msg_t *msg)
+void SV_PacketDataIsData(int clientNum, const msg_t *msg)
 {
     SV_PacketDataIsType(clientNum, msg, PACKETDATA_DATA);
 }
 
-void __cdecl SV_PacketDataIsZeroFloat(int clientNum, const msg_t *msg)
+void SV_PacketDataIsZeroFloat(int clientNum, const msg_t *msg)
 {
     SV_PacketDataIsType(clientNum, msg, PACKETDATA_ZEROFLOAT);
 }
 
-void __cdecl SV_PacketDataIsSmallFloat(int clientNum, const msg_t *msg)
+void SV_PacketDataIsSmallFloat(int clientNum, const msg_t *msg)
 {
     SV_PacketDataIsType(clientNum, msg, PACKETDATA_SMALLFLOAT);
 }
 
-void __cdecl SV_PacketDataIsLargeFloat(int clientNum, const msg_t *msg)
+void SV_PacketDataIsLargeFloat(int clientNum, const msg_t *msg)
 {
     SV_PacketDataIsType(clientNum, msg, PACKETDATA_LARGEFLOAT);
 }
 
-void __cdecl SV_PacketDataIsOriginDelta(int clientNum, const msg_t *msg)
+void SV_PacketDataIsOriginDelta(int clientNum, const msg_t *msg)
 {
     SV_PacketDataIsType(clientNum, msg, PACKETDATA_ORIGINDELTA);
 }
 
-void __cdecl SV_PacketDataIsOrigin(int clientNum, const msg_t *msg)
+void SV_PacketDataIsOrigin(int clientNum, const msg_t *msg)
 {
     SV_PacketDataIsType(clientNum, msg, PACKETDATA_ORIGIN);
 }
 
-void __cdecl SV_PacketDataIsZeroAngle(int clientNum, const msg_t *msg)
+void SV_PacketDataIsZeroAngle(int clientNum, const msg_t *msg)
 {
     SV_PacketDataIsType(clientNum, msg, PACKETDATA_ZEROANGLE);
 }
 
-void __cdecl SV_PacketDataIsSmallAngle(int clientNum, const msg_t *msg)
+void SV_PacketDataIsSmallAngle(int clientNum, const msg_t *msg)
 {
     SV_PacketDataIsType(clientNum, msg, PACKETDATA_SMALLANGLE);
 }
 
-void __cdecl SV_PacketDataIsZeroInt(int clientNum, const msg_t *msg)
+void SV_PacketDataIsZeroInt(int clientNum, const msg_t *msg)
 {
     SV_PacketDataIsType(clientNum, msg, PACKETDATA_ZEROINT);
 }
 
-void __cdecl SV_TrackFloatCompressedBits(uint32_t bits)
+void SV_TrackFloatCompressedBits(uint32_t bits)
 {
     if (bits >= 0x3C)
         MyAssertHandler(
@@ -433,35 +433,35 @@ void __cdecl SV_TrackFloatCompressedBits(uint32_t bits)
     ++s_floatBitsCompressed[bits];
 }
 
-void __cdecl SV_TrackOriginDeltaBits(int bits)
+void SV_TrackOriginDeltaBits(int bits)
 {
     if (bits > 7)
         MyAssertHandler(".\\server_mp\\sv_snapshot_profile_mp.cpp", 509, 0, "%s\n\t(bits) = %i", "(bits <= 7)", bits);
     ++s_originDeltaBits[bits];
 }
 
-void __cdecl SV_TrackOriginZDeltaBits(int bits)
+void SV_TrackOriginZDeltaBits(int bits)
 {
     if (bits > 7)
         MyAssertHandler(".\\server_mp\\sv_snapshot_profile_mp.cpp", 516, 0, "%s\n\t(bits) = %i", "(bits <= 7)", bits);
     ++s_originZDeltaBits[bits];
 }
 
-void __cdecl SV_TrackOriginZFullBits(int bits)
+void SV_TrackOriginZFullBits(int bits)
 {
     if (bits > 16)
         MyAssertHandler(".\\server_mp\\sv_snapshot_profile_mp.cpp", 523, 0, "%s\n\t(bits) = %i", "(bits <= 16)", bits);
     ++s_originZFullBits[bits];
 }
 
-void __cdecl SV_TrackOriginFullBits(int bits)
+void SV_TrackOriginFullBits(int bits)
 {
     if (bits > 16)
         MyAssertHandler(".\\server_mp\\sv_snapshot_profile_mp.cpp", 530, 0, "%s\n\t(bits) = %i", "(bits <= 16)", bits);
     ++s_originFullBits[bits];
 }
 
-const char *__cdecl SV_GetEntityTypeString(uint32_t packetEntityType)
+const char *SV_GetEntityTypeString(uint32_t packetEntityType)
 {
     if (packetEntityType >= 0x17)
         MyAssertHandler(
@@ -476,7 +476,7 @@ const char *__cdecl SV_GetEntityTypeString(uint32_t packetEntityType)
 
 int largestSize;
 float s_avgSnapshotSize;
-void __cdecl SV_AnalyzePacketData(int clientNum, const msg_t *msg)
+void SV_AnalyzePacketData(int clientNum, const msg_t *msg)
 {
     const char *PacketDataTypeName; // eax
     DWORD v3; // eax
@@ -606,7 +606,7 @@ void __cdecl SV_AnalyzePacketData(int clientNum, const msg_t *msg)
     memset(s_packetMetaDataSize[clientNum], 0, sizeof(int[20]));
 }
 
-int __cdecl SV_TrackPacketData(
+int SV_TrackPacketData(
     uint32_t clientNum,
     PacketDataType datatype,
     int eType,
@@ -632,18 +632,18 @@ int __cdecl SV_TrackPacketData(
     return bitsUsedNow;
 }
 
-void __cdecl SV_SetNextEntityStart(int eType, int entNum)
+void SV_SetNextEntityStart(int eType, int entNum)
 {
     s_currentEntType = eType;
     s_currentEntNum = entNum;
 }
 
-bool __cdecl SV_NewPacketAnalysisReady()
+bool SV_NewPacketAnalysisReady()
 {
     return newDataReady;
 }
 
-void __cdecl SV_TrackFieldChange(int clientNum, int entityType, uint32_t field)
+void SV_TrackFieldChange(int clientNum, int entityType, uint32_t field)
 {
     const char *string; // [esp+30h] [ebp-4h]
 
@@ -705,7 +705,7 @@ void __cdecl SV_TrackFieldChange(int clientNum, int entityType, uint32_t field)
     }
 }
 
-void __cdecl SV_WriteEntityFieldNumbers()
+void SV_WriteEntityFieldNumbers()
 {
     char *EntityTypeName; // eax
     __int64 v1; // [esp+4h] [ebp-34h]
@@ -878,7 +878,7 @@ void __cdecl SV_WriteEntityFieldNumbers()
     }
 }
 
-void __cdecl SV_GetAnalyzeEntityFields(int analyzeEntityType, NetFieldList *stateFields, uint32_t *numFields)
+void SV_GetAnalyzeEntityFields(int analyzeEntityType, NetFieldList *stateFields, uint32_t *numFields)
 {
     if (analyzeEntityType > 17)
     {
@@ -921,7 +921,7 @@ void __cdecl SV_GetAnalyzeEntityFields(int analyzeEntityType, NetFieldList *stat
     }
 }
 
-int __cdecl SV_GetClientSnapshotPing(int clientNum, char snapshotNum)
+int SV_GetClientSnapshotPing(int clientNum, char snapshotNum)
 {
     int start; // [esp+8h] [ebp-4h]
 
@@ -932,7 +932,7 @@ int __cdecl SV_GetClientSnapshotPing(int clientNum, char snapshotNum)
         return svs.clients[clientNum].frames[start].messageAcked - svs.clients[clientNum].frames[start].messageSent;
 }
 
-void __cdecl SV_TrackSnapshotSize(int size)
+void SV_TrackSnapshotSize(int size)
 {
     if (size > s_maxSnapshotSize)
         s_maxSnapshotSize = size;
@@ -944,7 +944,7 @@ void __cdecl SV_TrackSnapshotSize(int size)
     s_uncompressedDataSinceLastPoll += size;
 }
 
-void __cdecl SV_TrackPacketCompression(uint32_t clientNum, int originalSize, int compressedSize)
+void SV_TrackPacketCompression(uint32_t clientNum, int originalSize, int compressedSize)
 {
     int slot; // [esp+0h] [ebp-4h]
 
@@ -964,7 +964,7 @@ void __cdecl SV_TrackPacketCompression(uint32_t clientNum, int originalSize, int
     s_compressedDataSinceLastPoll += compressedSize;
 }
 
-int __cdecl SV_GetPacketCompressionForClient(int clientNum)
+int SV_GetPacketCompressionForClient(int clientNum)
 {
     int slot; // [esp+0h] [ebp-Ch]
     int avgCompressedSize; // [esp+4h] [ebp-8h]
@@ -983,7 +983,7 @@ int __cdecl SV_GetPacketCompressionForClient(int clientNum)
         return 0;
 }
 
-void __cdecl SV_Netchan_PrintProfileStats(int bPrintToConsole)
+void SV_Netchan_PrintProfileStats(int bPrintToConsole)
 {
     int iTotalMinRecieved; // [esp+4h] [ebp-49Ch]
     int packet; // [esp+8h] [ebp-498h]
@@ -1278,7 +1278,7 @@ void __cdecl SV_Netchan_PrintProfileStats(int bPrintToConsole)
     }
 }
 
-void __cdecl SV_ProfDraw(int y, char *string, bool showHighlight)
+void SV_ProfDraw(int y, char *string, bool showHighlight)
 {
     // Purely on-screen presentation: it draws a highlight rect and a text line
     // for the in-game network profile overlay. A dedicated server has no client

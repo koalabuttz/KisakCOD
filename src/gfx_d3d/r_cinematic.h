@@ -94,73 +94,73 @@ extern CinematicGlob cinematicGlob;
 
 void R_Cinematic_RelinquishIO();
 void R_Cinematic_CheckBinkError();
-void __cdecl R_Cinematic_InitBinkVolumes();
-void __cdecl R_Cinematic_Init();
+void R_Cinematic_InitBinkVolumes();
+void R_Cinematic_Init();
 void R_Cinematic_ReserveMemory();
-void __cdecl  R_Cinematic_Thread(uint32_t threadContext);
+void R_Cinematic_Thread(uint32_t threadContext);
 void R_Cinematic_UpdateFrame_Core2();
-void __cdecl R_Cinematic_UpdateFrame_Core(
+void R_Cinematic_UpdateFrame_Core(
     bool localTargetChanged,
     char *localTargetCinematic,
     uint32_t localPlaybackFlags);
-char __cdecl R_Cinematic_AreHunksOpen();
-char __cdecl CinematicHunk_IsOpen(CinematicHunk *hunk);
+char R_Cinematic_AreHunksOpen();
+char CinematicHunk_IsOpen(CinematicHunk *hunk);
 void R_Cinematic_HunksClose();
-void __cdecl CinematicHunk_Close(CinematicHunk *hunk);
-char __cdecl R_Cinematic_Advance();
-uint32_t __cdecl R_Cinematic_GetPercentageFull();
+void CinematicHunk_Close(CinematicHunk *hunk);
+char R_Cinematic_Advance();
+uint32_t R_Cinematic_GetPercentageFull();
 void R_Cinematic_SeizeIO();
-void __cdecl R_Cinematic_UpdateTimeInMsec(const BINKREALTIME *binkRealtime);
+void R_Cinematic_UpdateTimeInMsec(const BINKREALTIME *binkRealtime);
 void R_Cinematic_StopPlayback_Now();
-void __cdecl CinematicHunk_Reset(CinematicHunk *hunk);
-char __cdecl R_Cinematic_StartPlayback_Now(const char *filename, uint32_t playbackFlags);
-bool __cdecl CinematicHunk_IsEmpty(CinematicHunk *hunk);
-void __cdecl R_Cinematic_HunksOpen(int activeTexture, char playbackFlags);
-void __cdecl CinematicHunk_Open(CinematicHunk *hunk, char *memory, int size);
-void __cdecl R_Cinematic_HunksAllocate(int activeTexture, char playbackFlags);
-void __cdecl R_Cinematic_HunksReset(int activeTexture, char playbackFlags);
+void CinematicHunk_Reset(CinematicHunk *hunk);
+char R_Cinematic_StartPlayback_Now(const char *filename, uint32_t playbackFlags);
+bool CinematicHunk_IsEmpty(CinematicHunk *hunk);
+void R_Cinematic_HunksOpen(int activeTexture, char playbackFlags);
+void CinematicHunk_Open(CinematicHunk *hunk, char *memory, int size);
+void R_Cinematic_HunksAllocate(int activeTexture, char playbackFlags);
+void R_Cinematic_HunksReset(int activeTexture, char playbackFlags);
 void R_Cinematic_InitBinkTextures();
 void* __stdcall R_Cinematic_Bink_Alloc(uint32_t bytes);
 void __stdcall R_Cinematic_Bink_Free(void *ptr);
-bool __cdecl R_Cinematic_BinkOpen(
+bool R_Cinematic_BinkOpen(
     const char *filename,
     uint32_t playbackFlags,
     char *errText,
     uint32_t errTextSize);
-char __cdecl R_Cinematic_BinkOpenPath(
+char R_Cinematic_BinkOpenPath(
     const char *filepath,
     char playbackFlags,
     char *errText,
     uint32_t errTextSize);
-int __cdecl CinematicHunk_GetFreeSpace(CinematicHunk *hunk);
+int CinematicHunk_GetFreeSpace(CinematicHunk *hunk);
 bool R_CinematicThread_EndBinkAsync();
-char __cdecl R_Cinematic_BinkOpenPath_MemoryResident(
+char R_Cinematic_BinkOpenPath_MemoryResident(
     const char *filename,
     const void **outPtr,
     char *errText,
     uint32_t errTextSize);
 bool R_CinematicThread_WaitForHostEvent();
-void __cdecl R_Cinematic_Shutdown();
-void __cdecl R_Cinematic_StartPlayback(char *name, uint32_t playbackFlags, float volume);
-void __cdecl R_Cinematic_StartPlayback_Internal(char *name, uint32_t playbackFlags, float volume);
-void __cdecl R_Cinematic_StartNextPlayback();
-bool __cdecl R_Cinematic_IsNextReady_Internal();
-void __cdecl R_Cinematic_StopPlayback();
-void __cdecl R_Cinematic_UpdateFrame();
+void R_Cinematic_Shutdown();
+void R_Cinematic_StartPlayback(char *name, uint32_t playbackFlags, float volume);
+void R_Cinematic_StartPlayback_Internal(char *name, uint32_t playbackFlags, float volume);
+void R_Cinematic_StartNextPlayback();
+bool R_Cinematic_IsNextReady_Internal();
+void R_Cinematic_StopPlayback();
+void R_Cinematic_UpdateFrame();
 void R_Cinematic_UpdateRendererImages();
-void __cdecl R_Cinematic_SetRendererImagesToFrame(int frameToSetTo);
-char __cdecl R_Cinematic_ThreadFinish(bool midBinkIsOkay);
-void __cdecl R_Cinematic_SyncNow();
-void __cdecl R_Cinematic_DrawStretchPic_Letterboxed();
-bool __cdecl R_Cinematic_IsFinished();
-bool __cdecl R_Cinematic_IsStarted();
+void R_Cinematic_SetRendererImagesToFrame(int frameToSetTo);
+char R_Cinematic_ThreadFinish(bool midBinkIsOkay);
+void R_Cinematic_SyncNow();
+void R_Cinematic_DrawStretchPic_Letterboxed();
+bool R_Cinematic_IsFinished();
+bool R_Cinematic_IsStarted();
 bool R_Cinematic_IsPending();
-bool __cdecl R_Cinematic_IsNextReady();
-bool __cdecl R_Cinematic_IsUnderrun();
+bool R_Cinematic_IsNextReady();
+bool R_Cinematic_IsUnderrun();
 
-void __cdecl R_Cinematic_BeginLostDevice();
-void __cdecl R_Cinematic_EndLostDevice();
+void R_Cinematic_BeginLostDevice();
+void R_Cinematic_EndLostDevice();
 
-void __cdecl R_Cinematic_SetPaused(CinematicEnum paused);
+void R_Cinematic_SetPaused(CinematicEnum paused);
 void R_Cinematic_SetNextPlayback(const char *name, uint32_t playbackFlags);
 void R_Cinematic_UnsetNextPlayback();

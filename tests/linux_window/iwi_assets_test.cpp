@@ -7,8 +7,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-void __cdecl Image_DecompressDxt3(uint8_t *,GfxRawImage *,int,int);
-void __cdecl Image_DecompressDxt5(uint8_t *,GfxRawImage *,int,int);
+void Image_DecompressDxt3(uint8_t *,GfxRawImage *,int,int);
+void Image_DecompressDxt5(uint8_t *,GfxRawImage *,int,int);
 void MyAssertHandler(const char *,int,int,const char *,...){std::abort();}
 namespace {int checks=0,failures=0;void Check(bool ok,const char *name){++checks;failures+=!ok;std::printf("%s: %s\n",ok?"PASS":"FAIL",name);}}
 int main(int argc,char **argv){

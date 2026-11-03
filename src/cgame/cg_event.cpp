@@ -26,7 +26,7 @@
 #include <universal/com_sndalias.h>
 
 
-int32_t __cdecl CG_GetBoneIndex(
+int32_t CG_GetBoneIndex(
     int32_t localClientNum,
     uint32_t dobjHandle,
     uint32_t boneName,
@@ -43,7 +43,7 @@ int32_t __cdecl CG_GetBoneIndex(
         return 0;
 }
 
-void __cdecl CG_PlayBoltedEffect(
+void CG_PlayBoltedEffect(
     int32_t localClientNum,
     const FxEffectDef *fxDef,
     uint32_t dobjHandle,
@@ -60,7 +60,7 @@ void __cdecl CG_PlayBoltedEffect(
     }
 }
 
-void __cdecl CG_EntityEvent(int32_t localClientNum, centity_s *cent, int32_t event)
+void CG_EntityEvent(int32_t localClientNum, centity_s *cent, int32_t event)
 {
     const char *ConfigString; // eax
     float innerRadius_4; // [esp+4h] [ebp-150h]
@@ -973,7 +973,7 @@ void __cdecl CG_EntityEvent(int32_t localClientNum, centity_s *cent, int32_t eve
 }
 
 #ifdef KISAK_MP
-void __cdecl CG_Obituary(int32_t localClientNum, const entityState_s *ent)
+void CG_Obituary(int32_t localClientNum, const entityState_s *ent)
 {
     const char *v2; // eax
     weaponIconRatioType_t killIconRatio; // [esp+10h] [ebp-A0h]
@@ -1152,7 +1152,7 @@ void __cdecl CG_Obituary(int32_t localClientNum, const entityState_s *ent)
     }
 }
 #endif
-void __cdecl CG_ItemPickup(int32_t localClientNum, int32_t weapIndex)
+void CG_ItemPickup(int32_t localClientNum, int32_t weapIndex)
 {
     WeaponDef *weapDef;
     cg_s *cgameGlob;
@@ -1174,7 +1174,7 @@ void __cdecl CG_ItemPickup(int32_t localClientNum, int32_t weapIndex)
     }
 }
 
-void __cdecl CG_EquipmentSound(int32_t localClientNum, int32_t entNum, bool isPlayerView, EquipmentSound_t type)
+void CG_EquipmentSound(int32_t localClientNum, int32_t entNum, bool isPlayerView, EquipmentSound_t type)
 {
 #ifdef KISAK_MP
     if (isPlayerView)
@@ -1263,7 +1263,7 @@ void __cdecl CG_EquipmentSound(int32_t localClientNum, int32_t entNum, bool isPl
 #endif
 }
 
-void __cdecl CG_PlayFx(int32_t localClientNum, centity_s *cent, const float *angles)
+void CG_PlayFx(int32_t localClientNum, centity_s *cent, const float *angles)
 {
     const FxEffectDef *fxDef; // [esp+4h] [ebp-30h]
     int32_t fxId; // [esp+Ch] [ebp-28h]
@@ -1283,7 +1283,7 @@ void __cdecl CG_PlayFx(int32_t localClientNum, centity_s *cent, const float *ang
     }
 }
 
-void __cdecl CG_PlayFxOnTag(int32_t localClientNum, centity_s *cent, int32_t eventParm)
+void CG_PlayFxOnTag(int32_t localClientNum, centity_s *cent, int32_t eventParm)
 {
     uint16_t tagName; // [esp+0h] [ebp-1Ch] BYREF
     int32_t dobjHandle; // [esp+4h] [ebp-18h]
@@ -1310,7 +1310,7 @@ void __cdecl CG_PlayFxOnTag(int32_t localClientNum, centity_s *cent, int32_t eve
     Scr_SetString(&tagName, 0);
 }
 
-void __cdecl CG_SetInvalidCmdHint(cg_s *cgameGlob, InvalidCmdHintType hintType)
+void CG_SetInvalidCmdHint(cg_s *cgameGlob, InvalidCmdHintType hintType)
 {
     if (cgameGlob->invalidCmdHintType != hintType)
     {
@@ -1319,7 +1319,7 @@ void __cdecl CG_SetInvalidCmdHint(cg_s *cgameGlob, InvalidCmdHintType hintType)
     }
 }
 
-void __cdecl CG_StopWeaponSound(
+void CG_StopWeaponSound(
     int32_t localClientNum,
     bool isPlayerView,
     const WeaponDef *weaponDef,
@@ -1363,7 +1363,7 @@ void __cdecl CG_StopWeaponSound(
     }
 }
 
-void __cdecl CG_CheckEvents(int32_t localClientNum, centity_s *cent)
+void CG_CheckEvents(int32_t localClientNum, centity_s *cent)
 {
     int32_t v2; // [esp+0h] [ebp-14h]
     int32_t previousEventSequence; // [esp+4h] [ebp-10h]

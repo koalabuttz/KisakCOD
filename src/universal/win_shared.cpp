@@ -9,7 +9,7 @@
 int initialized_1 = 0;
 int sys_timeBase;
 
-uint32_t __cdecl Sys_Milliseconds()
+uint32_t Sys_Milliseconds()
 {
     if (!initialized_1)
     {
@@ -19,12 +19,12 @@ uint32_t __cdecl Sys_Milliseconds()
     return timeGetTime() - sys_timeBase;
 }
 
-uint32_t __cdecl Sys_MillisecondsRaw()
+uint32_t Sys_MillisecondsRaw()
 {
     return timeGetTime();
 }
 
-void __cdecl Sys_SnapVector(float *v)
+void Sys_SnapVector(float *v)
 {
     v[0] = SnapFloat(v[0]);
     v[1] = SnapFloat(v[1]);

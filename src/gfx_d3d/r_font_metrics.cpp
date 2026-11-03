@@ -2,7 +2,7 @@
 #include "r_font.h"
 #include <stringed/stringed_hooks.h>
 
-const Glyph *__cdecl R_GetCharacterGlyph(Font_s *font, uint32_t letter)
+const Glyph *R_GetCharacterGlyph(Font_s *font, uint32_t letter)
 {
     Glyph *glyph; // [esp+0h] [ebp-10h]
     int top; // [esp+4h] [ebp-Ch]
@@ -33,19 +33,19 @@ const Glyph *__cdecl R_GetCharacterGlyph(Font_s *font, uint32_t letter)
     }
 }
 
-double __cdecl R_NormalizedTextScale(Font_s *font, float scale)
+double R_NormalizedTextScale(Font_s *font, float scale)
 {
     iassert( font );
     iassert( font->pixelHeight > 0 );
     return (float)(scale * 48.0 / (double)font->pixelHeight);
 }
 
-int __cdecl R_LetterWidth(uint32_t letter, Font_s *font)
+int R_LetterWidth(uint32_t letter, Font_s *font)
 {
     return R_GetCharacterGlyph(font, letter)->dx;
 }
 
-int __cdecl R_TextWidth(const char *text, int maxChars, Font_s *font)
+int R_TextWidth(const char *text, int maxChars, Font_s *font)
 {
     uint32_t letter; // [esp+0h] [ebp-10h]
     int lineWidth; // [esp+4h] [ebp-Ch]
@@ -81,13 +81,13 @@ int __cdecl R_TextWidth(const char *text, int maxChars, Font_s *font)
     return maxWidth;
 }
 
-int __cdecl R_TextHeight(Font_s *font)
+int R_TextHeight(Font_s *font)
 {
     iassert( font );
     return font->pixelHeight;
 }
 
-const char *__cdecl R_TextLineWrapPosition(
+const char *R_TextLineWrapPosition(
     const char *text,
     int bufferSize,
     int pixelsAvailable,

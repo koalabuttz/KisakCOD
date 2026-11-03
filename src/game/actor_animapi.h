@@ -53,23 +53,23 @@ struct AnimScriptList
 struct actor_s;
 enum ai_movemode_t : unsigned __int8;
 
-void __cdecl Actor_InitAnim(actor_s *self);
-unsigned int __cdecl Actor_IsAnimScriptAlive(actor_s *self);
-void __cdecl Actor_KillAnimScript(actor_s *self);
-void __cdecl Actor_SetAnimScript(
+void Actor_InitAnim(actor_s *self);
+unsigned int Actor_IsAnimScriptAlive(actor_s *self);
+void Actor_KillAnimScript(actor_s *self);
+void Actor_SetAnimScript(
     actor_s *self,
     scr_animscript_t *pAnimScriptFunc,
     ai_movemode_t moveMode,
     ai_animmode_t animMode);
-void __cdecl Actor_AnimMoveAway(actor_s *self, scr_animscript_t *pAnimScriptFunc);
-void __cdecl Actor_AnimStop(actor_s *self, scr_animscript_t *pAnimScriptFunc);
-void __cdecl Actor_AnimWalk(actor_s *self, scr_animscript_t *pAfterMoveAnimScriptFunc);
-scr_animscript_t *__cdecl Actor_GetStopAnim(actor_s *self);
-void __cdecl Actor_AnimTryWalk(actor_s *self);
-void __cdecl Actor_AnimRun(actor_s *self, scr_animscript_t *pAfterMoveAnimScriptFunc);
-void __cdecl Actor_AnimTryRun(actor_s *self);
-void __cdecl Actor_AnimCombat(actor_s *self);
-void __cdecl Actor_AnimPain(actor_s *self);
-void __cdecl Actor_AnimDeath(actor_s *self);
-void __cdecl Actor_AnimSpecific(actor_s *self, scr_animscript_t *func, ai_animmode_t eAnimMode, bool bUseGoalWeight);
-void __cdecl Actor_AnimScripted(actor_s *self);
+void Actor_AnimMoveAway(actor_s *self, scr_animscript_t *pAnimScriptFunc);
+void Actor_AnimStop(actor_s *self, scr_animscript_t *pAnimScriptFunc);
+void Actor_AnimWalk(actor_s *self, scr_animscript_t *pAfterMoveAnimScriptFunc);
+scr_animscript_t *Actor_GetStopAnim(actor_s *self);
+void Actor_AnimTryWalk(actor_s *self);
+void Actor_AnimRun(actor_s *self, scr_animscript_t *pAfterMoveAnimScriptFunc);
+void Actor_AnimTryRun(actor_s *self);
+void Actor_AnimCombat(actor_s *self);
+void Actor_AnimPain(actor_s *self);
+void Actor_AnimDeath(actor_s *self);
+void Actor_AnimSpecific(actor_s *self, scr_animscript_t *func, ai_animmode_t eAnimMode, bool bUseGoalWeight);
+void Actor_AnimScripted(actor_s *self);

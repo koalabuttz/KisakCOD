@@ -54,7 +54,7 @@ BuiltinFunctionDef functions[] =
   { "spawn", &GScr_Spawn, 0 },
   { "spawnplane", &GScr_SpawnPlane, 0 },
   { "spawnturret", &GScr_SpawnTurret, 0 },
-  { "precacheturret", (void(__cdecl *)())&GScr_PrecacheTurret, 0},
+  { "precacheturret", (void(*)())&GScr_PrecacheTurret, 0},
   { "spawnstruct", &Scr_AddStruct, 0 },
   { "spawnhelicopter", &GScr_SpawnHelicopter, 0 },
   { "assert", &assertCmd, 1 },
@@ -79,7 +79,7 @@ BuiltinFunctionDef functions[] =
   { "objective_state", &Scr_Objective_State, 0 },
   { "objective_icon", &Scr_Objective_Icon, 0 },
   { "objective_position", &Scr_Objective_Position, 0 },
-  { "objective_onentity",  (void(__cdecl *)()) & Scr_Objective_OnEntity, 0 },
+  { "objective_onentity",  (void(*)()) & Scr_Objective_OnEntity, 0 },
   { "objective_current", &Scr_Objective_Current, 0 },
   { "missile_createattractorent", &Scr_MissileCreateAttractorEnt, 0 },
   { "missile_createattractororigin", &Scr_MissileCreateAttractorOrigin, 0 },
@@ -136,11 +136,11 @@ BuiltinFunctionDef functions[] =
   { "soundfade", &Scr_SoundFade, 0 },
   { "ambientplay", &Scr_AmbientPlay, 0 },
   { "ambientstop", &Scr_AmbientStop, 0 },
-  { "precachemodel", (void(__cdecl *)()) & Scr_PrecacheModel, 0 },
+  { "precachemodel", (void(*)()) & Scr_PrecacheModel, 0 },
   { "precacheshellshock", &Scr_PrecacheShellShock, 0 },
   { "precacheitem", &Scr_PrecacheItem, 0 },
-  { "precacheshader", (void(__cdecl *)()) & Scr_PrecacheShader, 0 },
-  { "precachestring", (void(__cdecl *)()) & Scr_PrecacheString, 0 },
+  { "precacheshader", (void(*)()) & Scr_PrecacheShader, 0 },
+  { "precachestring", (void(*)()) & Scr_PrecacheString, 0 },
   { "precacherumble", &KISAK_NULLSUB, 0 },
   { "loadfx", &Scr_LoadFX, 0 },
   { "playfx", &Scr_PlayFX, 0 },
@@ -155,10 +155,10 @@ BuiltinFunctionDef functions[] =
   { "setexpfog", &Scr_SetExponentialFog, 0 },
   { "grenadeexplosioneffect", &Scr_GrenadeExplosionEffect, 0 },
   { "radiusdamage", &GScr_RadiusDamage, 0 },
-  { "setplayerignoreradiusdamage", (void(__cdecl *)()) & GScr_SetPlayerIgnoreRadiusDamage, 0 },
+  { "setplayerignoreradiusdamage", (void(*)()) & GScr_SetPlayerIgnoreRadiusDamage, 0 },
   { "getnumparts", &GScr_GetNumParts, 0 },
   { "getpartname", &GScr_GetPartName, 0 },
-  { "earthquake", (void(__cdecl *)()) & GScr_Earthquake, 0 },
+  { "earthquake", (void(*)()) & GScr_Earthquake, 0 },
   { "newhudelem", &GScr_NewHudElem, 0 },
   { "newclienthudelem", &GScr_NewClientHudElem, 0 },
   { "newteamhudelem", &GScr_NewTeamHudElem, 0 },
@@ -190,7 +190,7 @@ BuiltinFunctionDef functions[] =
   { "objective_team", &GScr_Objective_Team, 0 },
   { "logprint", &GScr_LogPrint, 0 },
   { "worldentnumber", &GScr_WorldEntNumber, 0 },
-  { "obituary",  (void(__cdecl *)()) & GScr_Obituary, 0 },
+  { "obituary",  (void(*)()) & GScr_Obituary, 0 },
   { "positionwouldtelefrag", &GScr_positionWouldTelefrag, 0 },
   { "getstarttime", &GScr_getStartTime, 0 },
   { "precachemenu", &GScr_PrecacheMenu, 0 },
@@ -210,9 +210,9 @@ BuiltinFunctionDef functions[] =
   { "setplayerteamrank", &KISAK_NULLSUB, 0 },
   { "sendranks", &KISAK_NULLSUB, 0 },
   { "endparty", &KISAK_NULLSUB, 0 },
-  { "setteamradar",  (void(__cdecl *)()) & GScr_SetTeamRadar, 0 },
+  { "setteamradar",  (void(*)()) & GScr_SetTeamRadar, 0 },
   { "getteamradar", &GScr_GetTeamRadar, 0 },
-  { "getassignedteam", (void(__cdecl *)()) & PlayerCmd_buttonPressedDEVONLY, 0 },
+  { "getassignedteam", (void(*)()) & PlayerCmd_buttonPressedDEVONLY, 0 },
   { "setvotestring", &GScr_SetVoteString, 0 },
   { "setvotetime", &GScr_SetVoteTime, 0 },
   { "setvoteyescount", &GScr_SetVoteYesCount, 0 },
@@ -230,7 +230,7 @@ BuiltinFunctionDef functions[] =
   { "playrumblelooponposition", &KISAK_NULLSUB, 0 },
   { "stopallrumbles", &KISAK_NULLSUB, 0 },
   { "soundexists", &ScrCmd_SoundExists, 0 },
-  { "issplitscreen", (void(__cdecl *)()) & PlayerCmd_buttonPressedDEVONLY, 0 },
+  { "issplitscreen", (void(*)()) & PlayerCmd_buttonPressedDEVONLY, 0 },
   { "setminimap", &GScr_SetMiniMap, 0 },
   { "setmapcenter", &GScr_SetMapCenter, 0 },
   { "setgameendtime", &GScr_SetGameEndTime, 0 },
@@ -247,7 +247,7 @@ BuiltinFunctionDef functions[] =
   { "endlobby", &KISAK_NULLSUB, 0 }
 }; // idb
 
-void __cdecl ScrCmd_NULLSUB(scr_entref_t entref)
+void ScrCmd_NULLSUB(scr_entref_t entref)
 {
 
 }
@@ -338,18 +338,18 @@ BuiltinMethodDef methods_2[] =
   { "itemweaponsetammo", &ScrCmd_ItemWeaponSetAmmo, 0 }
 }; // idb
 
-uint32_t __cdecl GScr_AllocString(const char *s)
+uint32_t GScr_AllocString(const char *s)
 {
     return Scr_AllocString((char*)s, 1);
 }
 
-void __cdecl TRACK_g_scr_main()
+void TRACK_g_scr_main()
 {
     track_static_alloc_internal(&scr_const, 372, "scr_const", 7);
     track_static_alloc_internal(&g_scr_data, 14236, "g_scr_data", 7);
 }
 
-void __cdecl Scr_LoadLevel()
+void Scr_LoadLevel()
 {
     uint16_t t; // [esp+0h] [ebp-4h]
 
@@ -360,7 +360,7 @@ void __cdecl Scr_LoadLevel()
     }
 }
 
-void __cdecl GScr_LoadGameTypeScript()
+void GScr_LoadGameTypeScript()
 {
     char filename[68]; // [esp+0h] [ebp-48h] BYREF
 
@@ -392,7 +392,7 @@ void __cdecl GScr_LoadGameTypeScript()
         1);
 }
 
-int32_t __cdecl GScr_LoadScriptAndLabel(const char *filename, const char *label, int32_t bEnforceExists)
+int32_t GScr_LoadScriptAndLabel(const char *filename, const char *label, int32_t bEnforceExists)
 {
     int32_t func; // [esp+0h] [ebp-4h]
 
@@ -409,7 +409,7 @@ int32_t __cdecl GScr_LoadScriptAndLabel(const char *filename, const char *label,
     return func;
 }
 
-void __cdecl GScr_LoadScripts()
+void GScr_LoadScripts()
 {
     Scr_BeginLoadScripts();
     g_scr_data.delete_ = GScr_LoadScriptAndLabel("codescripts/delete", "main", 1);
@@ -446,7 +446,7 @@ void GScr_PostLoadScripts()
     GScr_AddFieldsForRadiant();
 }
 
-void __cdecl GScr_FreeScripts()
+void GScr_FreeScripts()
 {
     int32_t classnum; // [esp+0h] [ebp-4h]
 
@@ -454,12 +454,12 @@ void __cdecl GScr_FreeScripts()
         Scr_RemoveClassMap(classnum);
 }
 
-void __cdecl ScrCmd_GetClanId(scr_entref_t entref)
+void ScrCmd_GetClanId(scr_entref_t entref)
 {
     Scr_AddString("0");
 }
 
-void __cdecl ScrCmd_GetClanName(scr_entref_t entref)
+void ScrCmd_GetClanName(scr_entref_t entref)
 {
     Scr_AddString((char *)"");
 }
@@ -547,12 +547,12 @@ void println()
     }
 }
 
-void __cdecl Scr_LocalizationError(uint32_t  iParm, const char *pszErrorMessage)
+void Scr_LocalizationError(uint32_t  iParm, const char *pszErrorMessage)
 {
     Scr_ParamError(iParm, pszErrorMessage);
 }
 
-void __cdecl Scr_ConstructMessageString(
+void Scr_ConstructMessageString(
     int32_t firstParmIndex,
     int32_t lastParmIndex,
     const char *errorContext,
@@ -652,7 +652,7 @@ void __cdecl Scr_ConstructMessageString(
     string[stringLen] = 0;
 }
 
-void __cdecl Scr_ValidateLocalizedStringRef(uint32_t  parmIndex, const char *token, int32_t tokenLen)
+void Scr_ValidateLocalizedStringRef(uint32_t  parmIndex, const char *token, int32_t tokenLen)
 {
     int32_t charIter; // [esp+0h] [ebp-4h]
 
@@ -671,7 +671,7 @@ void __cdecl Scr_ValidateLocalizedStringRef(uint32_t  parmIndex, const char *tok
     }
 }
 
-void __cdecl Scr_MakeGameMessage(int32_t iClientNum, const char *pszCmd)
+void Scr_MakeGameMessage(int32_t iClientNum, const char *pszCmd)
 {
     uint32_t  NumParam; // eax
     const char *v3; // eax
@@ -683,7 +683,7 @@ void __cdecl Scr_MakeGameMessage(int32_t iClientNum, const char *pszCmd)
     SV_GameSendServerCommand(iClientNum, SV_CMD_CAN_IGNORE, v3);
 }
 
-void __cdecl Scr_VerifyWeaponIndex(int32_t weaponIndex, const char *weaponName)
+void Scr_VerifyWeaponIndex(int32_t weaponIndex, const char *weaponName)
 {
     const char *v2; // eax
 
@@ -1035,7 +1035,7 @@ void Scr_GetWeaponModel()
     }
 }
 
-void __cdecl GScr_GetAmmoCount(scr_entref_t entref)
+void GScr_GetAmmoCount(scr_entref_t entref)
 {
     int32_t v1; // eax
     const char *weaponName; // [esp+0h] [ebp-Ch]
@@ -1060,7 +1060,7 @@ void __cdecl GScr_GetAmmoCount(scr_entref_t entref)
     }
 }
 
-gentity_s *__cdecl GetPlayerEntity(scr_entref_t entref)
+gentity_s *GetPlayerEntity(scr_entref_t entref)
 {
     const char *v2; // eax
     const char *v4; // [esp+20h] [ebp-8h]
@@ -1088,7 +1088,7 @@ gentity_s *__cdecl GetPlayerEntity(scr_entref_t entref)
     return ent;
 }
 
-gentity_s *__cdecl GetEntity(scr_entref_t entref)
+gentity_s *GetEntity(scr_entref_t entref)
 {
     if (entref.classnum)
     {
@@ -1275,7 +1275,7 @@ uint32_t  GScr_PrecacheTurret()
     return G_GetWeaponIndexForName(turretInfo);
 }
 
-void __cdecl ScrCmd_SetMoveSpeedScale(scr_entref_t entref)
+void ScrCmd_SetMoveSpeedScale(scr_entref_t entref)
 {
     gentity_s *ent; // [esp+0h] [ebp-4h]
 
@@ -1287,7 +1287,7 @@ void __cdecl ScrCmd_SetMoveSpeedScale(scr_entref_t entref)
     ent->client->sess.moveSpeedScaleMultiplier = Scr_GetFloat(0);
 }
 
-void __cdecl ScrCmd_attach(scr_entref_t entref)
+void ScrCmd_attach(scr_entref_t entref)
 {
     uint32_t  v5; // [esp+0h] [ebp-18h]
     uint32_t  v6; // [esp+4h] [ebp-14h]
@@ -1317,7 +1317,7 @@ void __cdecl ScrCmd_attach(scr_entref_t entref)
     }
 }
 
-void __cdecl ScrCmd_detach(scr_entref_t entref)
+void ScrCmd_detach(scr_entref_t entref)
 {
     uint32_t  v6; // [esp+0h] [ebp-14h]
     const char *modelName; // [esp+8h] [ebp-Ch]
@@ -1347,7 +1347,7 @@ void __cdecl ScrCmd_detach(scr_entref_t entref)
     }
 }
 
-void __cdecl ScrCmd_detachAll(scr_entref_t entref)
+void ScrCmd_detachAll(scr_entref_t entref)
 {
     gentity_s *ent; // [esp+0h] [ebp-4h]
 
@@ -1355,7 +1355,7 @@ void __cdecl ScrCmd_detachAll(scr_entref_t entref)
     G_EntDetachAll(ent);
 }
 
-void __cdecl ScrCmd_GetAttachSize(scr_entref_t entref)
+void ScrCmd_GetAttachSize(scr_entref_t entref)
 {
     gentity_s *ent; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
@@ -1366,7 +1366,7 @@ void __cdecl ScrCmd_GetAttachSize(scr_entref_t entref)
     Scr_AddInt(i);
 }
 
-void __cdecl ScrCmd_GetAttachModelName(scr_entref_t entref)
+void ScrCmd_GetAttachModelName(scr_entref_t entref)
 {
     uint32_t  v1; // eax
     gentity_s *ent; // [esp+0h] [ebp-8h]
@@ -1380,7 +1380,7 @@ void __cdecl ScrCmd_GetAttachModelName(scr_entref_t entref)
     Scr_AddConstString(v1);
 }
 
-void __cdecl ScrCmd_GetAttachTagName(scr_entref_t entref)
+void ScrCmd_GetAttachTagName(scr_entref_t entref)
 {
     gentity_s *ent; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
@@ -1394,7 +1394,7 @@ void __cdecl ScrCmd_GetAttachTagName(scr_entref_t entref)
     Scr_AddConstString(ent->attachTagNames[i]);
 }
 
-void __cdecl ScrCmd_GetAttachIgnoreCollision(scr_entref_t entref)
+void ScrCmd_GetAttachIgnoreCollision(scr_entref_t entref)
 {
     gentity_s *ent; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
@@ -1406,7 +1406,7 @@ void __cdecl ScrCmd_GetAttachIgnoreCollision(scr_entref_t entref)
     Scr_AddBool((ent->attachIgnoreCollision & (1 << i)) != 0);
 }
 
-void __cdecl G_EntityStateSetPartBits(gentity_s *ent, const uint32_t  *partBits)
+void G_EntityStateSetPartBits(gentity_s *ent, const uint32_t  *partBits)
 {
     if (!ent)
         MyAssertHandler(".\\game_mp\\g_scr_main_mp.cpp", 1222, 0, "%s", "ent");
@@ -1416,7 +1416,7 @@ void __cdecl G_EntityStateSetPartBits(gentity_s *ent, const uint32_t  *partBits)
     ent->s.partBits[3] = partBits[3];
 }
 
-void __cdecl G_EntityStateGetPartBits(const gentity_s *ent, uint32_t  *partBits)
+void G_EntityStateGetPartBits(const gentity_s *ent, uint32_t  *partBits)
 {
     if (!ent)
         MyAssertHandler(".\\game_mp\\g_scr_main_mp.cpp", 1230, 0, "%s", "ent");
@@ -1426,7 +1426,7 @@ void __cdecl G_EntityStateGetPartBits(const gentity_s *ent, uint32_t  *partBits)
     partBits[3] = ent->s.partBits[3];
 }
 
-void __cdecl ScrCmd_hidepart(scr_entref_t entref)
+void ScrCmd_hidepart(scr_entref_t entref)
 {
     uint32_t  tagName; // [esp+0h] [ebp-24h]
     uint8_t boneIndex; // [esp+7h] [ebp-1Dh] BYREF
@@ -1462,7 +1462,7 @@ void __cdecl ScrCmd_hidepart(scr_entref_t entref)
     G_EntityStateSetPartBits(ent, partBits);
 }
 
-void __cdecl ScrCmd_showpart(scr_entref_t entref)
+void ScrCmd_showpart(scr_entref_t entref)
 {
     uint32_t  tagName; // [esp+0h] [ebp-24h]
     uint8_t boneIndex; // [esp+7h] [ebp-1Dh] BYREF
@@ -1498,7 +1498,7 @@ void __cdecl ScrCmd_showpart(scr_entref_t entref)
     G_EntityStateSetPartBits(ent, partBits);
 }
 
-void __cdecl ScrCmd_showallparts(scr_entref_t entref)
+void ScrCmd_showallparts(scr_entref_t entref)
 {
     DObj_s *obj; // [esp+0h] [ebp-18h]
     gentity_s *ent; // [esp+4h] [ebp-14h]
@@ -1513,7 +1513,7 @@ void __cdecl ScrCmd_showallparts(scr_entref_t entref)
     G_EntityStateSetPartBits(ent, partBits);
 }
 
-void __cdecl ScrCmd_LinkTo(scr_entref_t entref)
+void ScrCmd_LinkTo(scr_entref_t entref)
 {
     uint32_t  tagName; // [esp+0h] [ebp-28h]
     float originOffset[3]; // [esp+4h] [ebp-24h] BYREF
@@ -1568,7 +1568,7 @@ void __cdecl ScrCmd_LinkTo(scr_entref_t entref)
     Scr_Error("failed to link entity");
 }
 
-void __cdecl ScrCmd_Unlink(scr_entref_t entref)
+void ScrCmd_Unlink(scr_entref_t entref)
 {
     gentity_s *ent; // [esp+0h] [ebp-4h]
 
@@ -1576,7 +1576,7 @@ void __cdecl ScrCmd_Unlink(scr_entref_t entref)
     G_EntUnlink(ent);
 }
 
-void __cdecl ScrCmd_EnableLinkTo(scr_entref_t entref)
+void ScrCmd_EnableLinkTo(scr_entref_t entref)
 {
     gentity_s *ent; // [esp+0h] [ebp-4h]
 
@@ -1593,7 +1593,7 @@ void __cdecl ScrCmd_EnableLinkTo(scr_entref_t entref)
     ent->flags |= FL_SUPPORTS_LINKTO;
 }
 
-void __cdecl ScrCmd_GetOrigin(scr_entref_t entref)
+void ScrCmd_GetOrigin(scr_entref_t entref)
 {
     float origin[3]; // [esp+4h] [ebp-10h] BYREF
     gentity_s *ent; // [esp+10h] [ebp-4h]
@@ -1605,7 +1605,7 @@ void __cdecl ScrCmd_GetOrigin(scr_entref_t entref)
     Scr_AddVector(origin);
 }
 
-void __cdecl ScrCmd_GetEye(scr_entref_t entref)
+void ScrCmd_GetEye(scr_entref_t entref)
 {
     gentity_s *ent; // [esp+4h] [ebp-10h]
     float eye[3]; // [esp+8h] [ebp-Ch] BYREF
@@ -1617,10 +1617,10 @@ void __cdecl ScrCmd_GetEye(scr_entref_t entref)
     Scr_AddVector(eye);
 }
 
-void __cdecl ScrCmd_UseBy(scr_entref_t entref)
+void ScrCmd_UseBy(scr_entref_t entref)
 {
     gentity_s *pOther; // [esp+0h] [ebp-Ch]
-    void(__cdecl * use)(gentity_s *, gentity_s *, gentity_s *); // [esp+4h] [ebp-8h]
+    void(* use)(gentity_s *, gentity_s *, gentity_s *); // [esp+4h] [ebp-8h]
     gentity_s *pEnt; // [esp+8h] [ebp-4h]
 
     pEnt = GetEntity(entref);
@@ -1632,7 +1632,7 @@ void __cdecl ScrCmd_UseBy(scr_entref_t entref)
         use(pEnt, pOther, pOther);
 }
 
-void __cdecl ScrCmd_IsTouching(scr_entref_t entref)
+void ScrCmd_IsTouching(scr_entref_t entref)
 {
     const gentity_s *pOther; // [esp+1Ch] [ebp-28h]
     float vMins[3]; // [esp+20h] [ebp-24h] BYREF
@@ -1677,7 +1677,7 @@ void ScrCmd_SoundExists()
     Scr_AddBool(SoundAlias != 0);
 }
 
-void __cdecl ScrCmd_PlaySound(scr_entref_t entref)
+void ScrCmd_PlaySound(scr_entref_t entref)
 {
     uint32_t  NumParam; // eax
     const char *v2; // eax
@@ -1691,7 +1691,7 @@ void __cdecl ScrCmd_PlaySound(scr_entref_t entref)
     }
 }
 
-gentity_s *__cdecl StartScriptPlaySoundOnEnt(scr_entref_t entref)
+gentity_s *StartScriptPlaySoundOnEnt(scr_entref_t entref)
 {
     gentity_s *result; // eax
     const char *pszSoundName; // [esp+0h] [ebp-10h]
@@ -1707,7 +1707,7 @@ gentity_s *__cdecl StartScriptPlaySoundOnEnt(scr_entref_t entref)
     return result;
 }
 
-void __cdecl ScrCmd_PlaySoundToTeam(scr_entref_t entref)
+void ScrCmd_PlaySoundToTeam(scr_entref_t entref)
 {
     gentity_s *tempEnt; // [esp+0h] [ebp-18h]
     int32_t teamNum; // [esp+4h] [ebp-14h]
@@ -1754,7 +1754,7 @@ void __cdecl ScrCmd_PlaySoundToTeam(scr_entref_t entref)
     }
 }
 
-void __cdecl ScrCmd_PlaySoundToPlayer(scr_entref_t entref)
+void ScrCmd_PlaySoundToPlayer(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *tempEnt; // [esp+0h] [ebp-8h]
@@ -1772,7 +1772,7 @@ void __cdecl ScrCmd_PlaySoundToPlayer(scr_entref_t entref)
     tempEnt->r.clientMask[clientEnt->s.number >> 5] &= ~(1 << (clientEnt->s.number & 0x1F));
 }
 
-void __cdecl ScrCmd_PlaySoundAsMaster(scr_entref_t entref)
+void ScrCmd_PlaySoundAsMaster(scr_entref_t entref)
 {
     uint32_t  NumParam; // eax
     const char *pszSoundName; // [esp+0h] [ebp-10h]
@@ -1793,7 +1793,7 @@ void __cdecl ScrCmd_PlaySoundAsMaster(scr_entref_t entref)
     }
 }
 
-void __cdecl ScrCmd_PlayLoopSound(scr_entref_t entref)
+void ScrCmd_PlayLoopSound(scr_entref_t entref)
 {
     const char *pszSoundName; // [esp+0h] [ebp-Ch]
     gentity_s *pEnt; // [esp+8h] [ebp-4h]
@@ -1804,7 +1804,7 @@ void __cdecl ScrCmd_PlayLoopSound(scr_entref_t entref)
     pEnt->s.loopSound = G_SoundAliasIndex((char*)pszSoundName);
 }
 
-void __cdecl ScrCmd_StopLoopSound(scr_entref_t entref)
+void ScrCmd_StopLoopSound(scr_entref_t entref)
 {
     gentity_s *Entity; // edx
 
@@ -1813,7 +1813,7 @@ void __cdecl ScrCmd_StopLoopSound(scr_entref_t entref)
     Entity->s.loopSound = 0;
 }
 
-void __cdecl ScrCmd_Delete(scr_entref_t entref)
+void ScrCmd_Delete(scr_entref_t entref)
 {
     gentity_s *pEnt; // [esp+0h] [ebp-4h]
 
@@ -1826,7 +1826,7 @@ void __cdecl ScrCmd_Delete(scr_entref_t entref)
     G_FreeEntity(pEnt);
 }
 
-void __cdecl ScrCmd_SetModel(scr_entref_t entref)
+void ScrCmd_SetModel(scr_entref_t entref)
 {
     const char *modelName; // [esp+0h] [ebp-8h]
     gentity_s *pEnt; // [esp+4h] [ebp-4h]
@@ -1838,7 +1838,7 @@ void __cdecl ScrCmd_SetModel(scr_entref_t entref)
     SV_LinkEntity(pEnt);
 }
 
-void __cdecl ScrCmd_GetNormalHealth(scr_entref_t entref)
+void ScrCmd_GetNormalHealth(scr_entref_t entref)
 {
     gentity_s *pEnt; // [esp+8h] [ebp-4h]
 
@@ -1860,7 +1860,7 @@ void __cdecl ScrCmd_GetNormalHealth(scr_entref_t entref)
     }
 }
 
-void __cdecl ScrCmd_SetNormalHealth(scr_entref_t entref)
+void ScrCmd_SetNormalHealth(scr_entref_t entref)
 {
     int32_t newHealth; // [esp+10h] [ebp-Ch]
     float normalHealth; // [esp+14h] [ebp-8h]
@@ -1889,7 +1889,7 @@ void __cdecl ScrCmd_SetNormalHealth(scr_entref_t entref)
         Com_PrintError(CON_CHANNEL_PARSERSCRIPT, "ERROR: Cannot setnormalhealth to 0 or below.\n");
 }
 
-void __cdecl ScrCmd_Show(scr_entref_t entref)
+void ScrCmd_Show(scr_entref_t entref)
 {
     gentity_s *Entity; // eax
 
@@ -1899,7 +1899,7 @@ void __cdecl ScrCmd_Show(scr_entref_t entref)
     Entity->r.clientMask[1] = 0;
 }
 
-void __cdecl ScrCmd_Hide(scr_entref_t entref)
+void ScrCmd_Hide(scr_entref_t entref)
 {
     gentity_s *Entity; // eax
 
@@ -1909,7 +1909,7 @@ void __cdecl ScrCmd_Hide(scr_entref_t entref)
     Entity->r.clientMask[1] = -1;
 }
 
-void __cdecl ScrCmd_LaserOn(scr_entref_t entref)
+void ScrCmd_LaserOn(scr_entref_t entref)
 {
     gentity_s *ent; // [esp+0h] [ebp-4h]
 
@@ -1917,7 +1917,7 @@ void __cdecl ScrCmd_LaserOn(scr_entref_t entref)
     ent->s.lerp.eFlags |= 0x4000u;
 }
 
-void __cdecl ScrCmd_LaserOff(scr_entref_t entref)
+void ScrCmd_LaserOff(scr_entref_t entref)
 {
     gentity_s *ent; // [esp+0h] [ebp-4h]
 
@@ -1925,7 +1925,7 @@ void __cdecl ScrCmd_LaserOff(scr_entref_t entref)
     ent->s.lerp.eFlags &= ~0x4000u;
 }
 
-void __cdecl ScrCmd_ShowToPlayer(scr_entref_t entref)
+void ScrCmd_ShowToPlayer(scr_entref_t entref)
 {
     gentity_s *pEnt; // [esp+0h] [ebp-8h]
     gentity_s *clientEnt; // [esp+4h] [ebp-4h]
@@ -1943,7 +1943,7 @@ void __cdecl ScrCmd_ShowToPlayer(scr_entref_t entref)
     }
 }
 
-void __cdecl ScrCmd_SetContents(scr_entref_t entref)
+void ScrCmd_SetContents(scr_entref_t entref)
 {
     int32_t contents; // [esp+0h] [ebp-8h]
     gentity_s *ent; // [esp+4h] [ebp-4h]
@@ -1955,7 +1955,7 @@ void __cdecl ScrCmd_SetContents(scr_entref_t entref)
     SV_LinkEntity(ent);
 }
 
-void __cdecl ScrCmd_GetStance(scr_entref_t entref)
+void ScrCmd_GetStance(scr_entref_t entref)
 {
     gentity_s *ent; // [esp+0h] [ebp-4h]
 
@@ -1981,7 +1981,7 @@ void __cdecl ScrCmd_GetStance(scr_entref_t entref)
     }
 }
 
-void __cdecl Scr_SetStableMissile(scr_entref_t entref)
+void Scr_SetStableMissile(scr_entref_t entref)
 {
     gentityFlags_t  v1; // eax
     int32_t stableMissile; // [esp+0h] [ebp-8h]
@@ -1998,7 +1998,7 @@ void __cdecl Scr_SetStableMissile(scr_entref_t entref)
     ent->flags = v1;
 }
 
-void __cdecl GScr_SetCursorHint(scr_entref_t entref)
+void GScr_SetCursorHint(scr_entref_t entref)
 {
     const char *pszHint; // [esp+0h] [ebp-Ch]
     gentity_s *pEnt; // [esp+4h] [ebp-8h]
@@ -2034,7 +2034,7 @@ void __cdecl GScr_SetCursorHint(scr_entref_t entref)
     }
 }
 
-int32_t __cdecl G_GetHintStringIndex(int32_t *piIndex, char *pszString)
+int32_t G_GetHintStringIndex(int32_t *piIndex, char *pszString)
 {
     char szConfigString[1024]; // [esp+14h] [ebp-408h] BYREF
     int32_t i; // [esp+418h] [ebp-4h]
@@ -2058,7 +2058,7 @@ int32_t __cdecl G_GetHintStringIndex(int32_t *piIndex, char *pszString)
     return 0;
 }
 
-void __cdecl GScr_SetHintString(scr_entref_t entref)
+void GScr_SetHintString(scr_entref_t entref)
 {
     const char *String; // eax
     uint32_t  NumParam; // eax
@@ -2089,7 +2089,7 @@ void __cdecl GScr_SetHintString(scr_entref_t entref)
     }
 }
 
-void __cdecl GScr_UseTriggerRequireLookAt(scr_entref_t entref)
+void GScr_UseTriggerRequireLookAt(scr_entref_t entref)
 {
     gentity_s *ent; // [esp+0h] [ebp-4h]
 
@@ -2099,7 +2099,7 @@ void __cdecl GScr_UseTriggerRequireLookAt(scr_entref_t entref)
     ent->trigger.requireLookAt = 1;
 }
 
-void __cdecl GScr_GetEntityNumber(scr_entref_t entref)
+void GScr_GetEntityNumber(scr_entref_t entref)
 {
     gentity_s *pEnt; // [esp+0h] [ebp-4h]
 
@@ -2107,7 +2107,7 @@ void __cdecl GScr_GetEntityNumber(scr_entref_t entref)
     Scr_AddInt(pEnt->s.number);
 }
 
-void __cdecl GScr_EnableGrenadeTouchDamage(scr_entref_t entref)
+void GScr_EnableGrenadeTouchDamage(scr_entref_t entref)
 {
     gentity_s *ent; // [esp+0h] [ebp-4h]
 
@@ -2117,7 +2117,7 @@ void __cdecl GScr_EnableGrenadeTouchDamage(scr_entref_t entref)
     ent->flags |= FL_GRENADE_TOUCH_DAMAGE;
 }
 
-void __cdecl GScr_DisableGrenadeTouchDamage(scr_entref_t entref)
+void GScr_DisableGrenadeTouchDamage(scr_entref_t entref)
 {
     gentity_s *ent; // [esp+0h] [ebp-4h]
 
@@ -2127,7 +2127,7 @@ void __cdecl GScr_DisableGrenadeTouchDamage(scr_entref_t entref)
     ent->flags &= ~(FL_GRENADE_TOUCH_DAMAGE);
 }
 
-void __cdecl GScr_MissileSetTarget(scr_entref_t entref)
+void GScr_MissileSetTarget(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *Entity; // [esp+0h] [ebp-14h]
@@ -2156,7 +2156,7 @@ void __cdecl GScr_MissileSetTarget(scr_entref_t entref)
     }
 }
 
-void __cdecl GScr_EnableAimAssist(scr_entref_t entref)
+void GScr_EnableAimAssist(scr_entref_t entref)
 {
     gentity_s *ent; // [esp+0h] [ebp-4h]
 
@@ -2166,7 +2166,7 @@ void __cdecl GScr_EnableAimAssist(scr_entref_t entref)
     ent->s.lerp.eFlags |= 0x800u;
 }
 
-void __cdecl GScr_DisableAimAssist(scr_entref_t entref)
+void GScr_DisableAimAssist(scr_entref_t entref)
 {
     gentity_s *ent; // [esp+0h] [ebp-4h]
 
@@ -2176,7 +2176,7 @@ void __cdecl GScr_DisableAimAssist(scr_entref_t entref)
     ent->s.lerp.eFlags &= ~0x800u;
 }
 
-void __cdecl G_InitObjectives()
+void G_InitObjectives()
 {
     int32_t i; // [esp+0h] [ebp-4h]
 
@@ -2184,7 +2184,7 @@ void __cdecl G_InitObjectives()
         ClearObjective(&level.objectives[i]);
 }
 
-int32_t __cdecl ObjectiveStateIndexFromString(objectiveState_t *piStateIndex, uint32_t  stateString)
+int32_t ObjectiveStateIndexFromString(objectiveState_t *piStateIndex, uint32_t  stateString)
 {
     if (stateString == scr_const.empty)
     {
@@ -2210,7 +2210,7 @@ int32_t __cdecl ObjectiveStateIndexFromString(objectiveState_t *piStateIndex, ui
     return 1;
 }
 
-void __cdecl ClearObjective(objective_t *obj)
+void ClearObjective(objective_t *obj)
 {
     obj->state = OBJST_EMPTY;
     obj->origin[0] = 0.0;
@@ -2260,7 +2260,7 @@ void Scr_Objective_Add()
     obj->teamNum = TEAM_FREE;
 }
 
-void __cdecl ClearObjective_OnEntity(objective_t *obj)
+void ClearObjective_OnEntity(objective_t *obj)
 {
     gentity_s *pEnt; // [esp+0h] [ebp-4h]
 
@@ -2273,7 +2273,7 @@ void __cdecl ClearObjective_OnEntity(objective_t *obj)
     }
 }
 
-void __cdecl SetObjectiveIcon(objective_t *obj, uint32_t  paramNum)
+void SetObjectiveIcon(objective_t *obj, uint32_t  paramNum)
 {
     const char *shaderName; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
@@ -2570,7 +2570,7 @@ void GScr_PrecacheMenu()
     SV_SetConfigstring(iConfigNuma + CS_SCRIPT_MENUS, pszNewMenu);
 }
 
-int32_t __cdecl GScr_GetScriptMenuIndex(const char *pszMenu)
+int32_t GScr_GetScriptMenuIndex(const char *pszMenu)
 {
     const char *v2; // eax
     int32_t iConfigNum; // [esp+0h] [ebp-40Ch]
@@ -2617,7 +2617,7 @@ void GScr_PrecacheStatusIcon()
     SV_SetConfigstring(iConfigNuma + CS_STATUS_ICONS, pszNewIcon);
 }
 
-int32_t __cdecl GScr_GetStatusIconIndex(const char *pszIcon)
+int32_t GScr_GetStatusIconIndex(const char *pszIcon)
 {
     int32_t iConfigNum; // [esp+0h] [ebp-40Ch]
     char szConfigString[1028]; // [esp+4h] [ebp-408h] BYREF
@@ -2666,7 +2666,7 @@ void GScr_PrecacheHeadIcon()
     SV_SetConfigstring(iConfigNuma + CS_HEAD_ICONS, pszNewIcon);
 }
 
-int32_t __cdecl GScr_GetHeadIconIndex(const char *pszIcon)
+int32_t GScr_GetHeadIconIndex(const char *pszIcon)
 {
     int32_t iConfigNum; // [esp+0h] [ebp-40Ch]
     char szConfigString[1028]; // [esp+4h] [ebp-408h] BYREF
@@ -2914,7 +2914,7 @@ void GScr_PrecacheLocationSelector()
     SV_SetConfigstring(iConfigNuma + CS_LOC_SEL_MTLS, (char *)pszNewMtl);
 }
 
-int32_t __cdecl GScr_GetLocSelIndex(const char *mtlName)
+int32_t GScr_GetLocSelIndex(const char *mtlName)
 {
     const char *v2; // eax
     int32_t iConfigNum; // [esp+0h] [ebp-40Ch]
@@ -3019,7 +3019,7 @@ void Scr_BulletTracePassed()
     Scr_AddBool(v0);
 }
 
-void __cdecl Scr_SightTracePassed()
+void Scr_SightTracePassed()
 {
     float vEnd[3]; // [esp+0h] [ebp-2Ch] BYREF
     gentity_s *pIgnoreEnt; // [esp+Ch] [ebp-20h]
@@ -3724,7 +3724,7 @@ void Scr_SoundFade()
     SV_GameSendServerCommand(-1, SV_CMD_RELIABLE, va("%c %f %i\n", 113, fTargetVol, iFadeTime));
 }
 
-void __cdecl Scr_ErrorOnDefaultAsset(XAssetType type, const char *assetName)
+void Scr_ErrorOnDefaultAsset(XAssetType type, const char *assetName)
 {
     const char *XAssetTypeName; // eax
     const char *v3; // eax
@@ -3915,7 +3915,7 @@ void GScr_RadiusDamage()
     GScr_RadiusDamageInternal(0);
 }
 
-void __cdecl GScr_RadiusDamageInternal(gentity_s *inflictor)
+void GScr_RadiusDamageInternal(gentity_s *inflictor)
 {
     gentity_s *attacker; // [esp+20h] [ebp-24h]
     meansOfDeath_t mod; // [esp+24h] [ebp-20h]
@@ -3945,7 +3945,7 @@ void __cdecl GScr_RadiusDamageInternal(gentity_s *inflictor)
     level.bPlayerIgnoreRadiusDamage = 0;
 }
 
-void __cdecl GScr_EntityRadiusDamage(scr_entref_t entref)
+void GScr_EntityRadiusDamage(scr_entref_t entref)
 {
     gentity_s *ent; // [esp+0h] [ebp-4h]
 
@@ -3953,7 +3953,7 @@ void __cdecl GScr_EntityRadiusDamage(scr_entref_t entref)
     GScr_RadiusDamageInternal(ent);
 }
 
-void __cdecl GScr_Detonate(scr_entref_t entref)
+void GScr_Detonate(scr_entref_t entref)
 {
     gentity_s *ent; // [esp+0h] [ebp-Ch]
     WeaponDef *weapDef; // [esp+4h] [ebp-8h]
@@ -3989,12 +3989,12 @@ VariableUnion GScr_SetPlayerIgnoreRadiusDamage()
     return result;
 }
 
-void __cdecl GScr_DamageConeTrace(scr_entref_t entref)
+void GScr_DamageConeTrace(scr_entref_t entref)
 {
     GScr_DamageConeTraceInternal(entref, 0x802011);
 }
 
-void __cdecl GScr_DamageConeTraceInternal(scr_entref_t entref, int32_t contentMask)
+void GScr_DamageConeTraceInternal(scr_entref_t entref, int32_t contentMask)
 {
     float damageOrigin[3]; // [esp+Ch] [ebp-18h] BYREF
     gentity_s *ignoreEnt; // [esp+18h] [ebp-Ch]
@@ -4010,7 +4010,7 @@ void __cdecl GScr_DamageConeTraceInternal(scr_entref_t entref, int32_t contentMa
     Scr_AddFloat(damageAmount);
 }
 
-void __cdecl GScr_SightConeTrace(scr_entref_t entref)
+void GScr_SightConeTrace(scr_entref_t entref)
 {
     GScr_DamageConeTraceInternal(entref, 2049);
 }
@@ -4170,7 +4170,7 @@ void Scr_PlayFX()
     }
 }
 
-void __cdecl Scr_SetFxAngles(uint32_t  givenAxisCount, float (*axis)[3], float *angles)
+void Scr_SetFxAngles(uint32_t  givenAxisCount, float (*axis)[3], float *angles)
 {
     const char *v3; // eax
     float scale; // [esp+0h] [ebp-20h]
@@ -4210,7 +4210,7 @@ void __cdecl Scr_SetFxAngles(uint32_t  givenAxisCount, float (*axis)[3], float *
     }
 }
 
-void __cdecl Scr_FxParamError(uint32_t  paramIndex, const char *errorString, int32_t fxId)
+void Scr_FxParamError(uint32_t  paramIndex, const char *errorString, int32_t fxId)
 {
     const char *v3; // eax
     char fxName[1028]; // [esp+0h] [ebp-408h] BYREF
@@ -4521,7 +4521,7 @@ void Scr_SetExponentialFog()
     Scr_SetFog("setExpFog", startDist, density, red, green, blue, time);
 }
 
-void __cdecl Scr_SetFog(const char *cmd, float start, float density, float r, float g, float b, float time)
+void Scr_SetFog(const char *cmd, float start, float density, float r, float g, float b, float time)
 {
     const char *v7; // eax
     const char *v8; // eax
@@ -4864,7 +4864,7 @@ void GScr_GetTeamPlayersAlive()
     Scr_AddInt(iLivePlayers);
 }
 
-void __cdecl GScr_GetNumParts()
+void GScr_GetNumParts()
 {
     const XModel *model; // [esp+0h] [ebp-4h]
 
@@ -4872,7 +4872,7 @@ void __cdecl GScr_GetNumParts()
     Scr_AddInt(XModelNumBones(model));
 }
 
-void __cdecl GScr_GetPartName()
+void GScr_GetPartName()
 {
     XModel *model; // [esp+0h] [ebp-10h]
     uint16_t name; // [esp+4h] [ebp-Ch]
@@ -4919,7 +4919,7 @@ gentity_s *GScr_Earthquake()
     return result;
 }
 
-void __cdecl GScr_ShellShock(scr_entref_t entref)
+void GScr_ShellShock(scr_entref_t entref)
 {
     int32_t duration; // [esp+18h] [ebp-414h]
     const char *shock; // [esp+1Ch] [ebp-410h]
@@ -4961,7 +4961,7 @@ void __cdecl GScr_ShellShock(scr_entref_t entref)
     }
 }
 
-void __cdecl GScr_StopShellShock(scr_entref_t entref)
+void GScr_StopShellShock(scr_entref_t entref)
 {
     gentity_s *ent; // [esp+0h] [ebp-4h]
 
@@ -4974,7 +4974,7 @@ void __cdecl GScr_StopShellShock(scr_entref_t entref)
     ent->client->ps.pm_flags &= ~PMF_SHELLSHOCKED;
 }
 
-void __cdecl GScr_GetTagOrigin(scr_entref_t entref)
+void GScr_GetTagOrigin(scr_entref_t entref)
 {
     uint32_t  tagName; // [esp+0h] [ebp-8h]
     gentity_s *ent; // [esp+4h] [ebp-4h]
@@ -4985,7 +4985,7 @@ void __cdecl GScr_GetTagOrigin(scr_entref_t entref)
     Scr_AddVector(level.cachedTagMat.tagMat[3]);
 }
 
-int32_t __cdecl GScr_UpdateTagInternal(
+int32_t GScr_UpdateTagInternal(
     gentity_s *ent,
     uint32_t  tagName,
     cached_tag_mat_t *cachedTag,
@@ -5019,7 +5019,7 @@ int32_t __cdecl GScr_UpdateTagInternal(
     return 0;
 }
 
-void __cdecl GScr_GetTagAngles(scr_entref_t entref)
+void GScr_GetTagAngles(scr_entref_t entref)
 {
     uint32_t  tagName; // [esp+0h] [ebp-14h]
     float angles[3]; // [esp+4h] [ebp-10h] BYREF
@@ -5032,7 +5032,7 @@ void __cdecl GScr_GetTagAngles(scr_entref_t entref)
     Scr_AddVector(angles);
 }
 
-void __cdecl GScr_SetDepthOfField(scr_entref_t entref)
+void GScr_SetDepthOfField(scr_entref_t entref)
 {
     const char *v1; // eax
     const char *v2; // eax
@@ -5095,7 +5095,7 @@ void __cdecl GScr_SetDepthOfField(scr_entref_t entref)
     ent->client->ps.dofFarBlur = dofFarBlur;
 }
 
-void __cdecl GScr_SetViewModelDepthOfField(scr_entref_t entref)
+void GScr_SetViewModelDepthOfField(scr_entref_t entref)
 {
     gentity_s *ent; // [esp+0h] [ebp-Ch]
     float dofEnd; // [esp+4h] [ebp-8h]
@@ -5117,7 +5117,7 @@ void __cdecl GScr_SetViewModelDepthOfField(scr_entref_t entref)
     ent->client->ps.dofViewmodelEnd = dofEnd;
 }
 
-void __cdecl GScr_ViewKick(scr_entref_t entref)
+void GScr_ViewKick(scr_entref_t entref)
 {
     double Float; // st7
     const char *v2; // eax
@@ -5138,7 +5138,7 @@ void __cdecl GScr_ViewKick(scr_entref_t entref)
     Vec3Sub(ent->client->ps.origin, origin, ent->client->damage_from);
 }
 
-void __cdecl GScr_LocalToWorldCoords(scr_entref_t entref)
+void GScr_LocalToWorldCoords(scr_entref_t entref)
 {
     float vLocal[3]; // [esp+0h] [ebp-40h] BYREF
     float vWorld[3]; // [esp+Ch] [ebp-34h] BYREF
@@ -5153,7 +5153,7 @@ void __cdecl GScr_LocalToWorldCoords(scr_entref_t entref)
     Scr_AddVector(vWorld);
 }
 
-void __cdecl GScr_SetRightArc(scr_entref_t entref)
+void GScr_SetRightArc(scr_entref_t entref)
 {
     turretInfo_s *pTurretInfo; // [esp+0h] [ebp-8h]
 
@@ -5165,7 +5165,7 @@ void __cdecl GScr_SetRightArc(scr_entref_t entref)
         pTurretInfo->arcmin[1] = 0.0;
 }
 
-void __cdecl GScr_SetLeftArc(scr_entref_t entref)
+void GScr_SetLeftArc(scr_entref_t entref)
 {
     turretInfo_s *pTurretInfo; // [esp+0h] [ebp-8h]
 
@@ -5177,7 +5177,7 @@ void __cdecl GScr_SetLeftArc(scr_entref_t entref)
         pTurretInfo->arcmax[1] = 0.0;
 }
 
-void __cdecl GScr_SetTopArc(scr_entref_t entref)
+void GScr_SetTopArc(scr_entref_t entref)
 {
     turretInfo_s *pTurretInfo; // [esp+0h] [ebp-8h]
 
@@ -5189,7 +5189,7 @@ void __cdecl GScr_SetTopArc(scr_entref_t entref)
         pTurretInfo->arcmin[0] = 0.0;
 }
 
-void __cdecl GScr_SetBottomArc(scr_entref_t entref)
+void GScr_SetBottomArc(scr_entref_t entref)
 {
     turretInfo_s *pTurretInfo; // [esp+0h] [ebp-8h]
 
@@ -5201,7 +5201,7 @@ void __cdecl GScr_SetBottomArc(scr_entref_t entref)
         pTurretInfo->arcmax[0] = 0.0;
 }
 
-void __cdecl GScr_PlaceSpawnPoint(scr_entref_t entref)
+void GScr_PlaceSpawnPoint(scr_entref_t entref)
 {
     uint16_t EntityHitId; // ax
     float vEnd[3]; // [esp+10h] [ebp-48h] BYREF
@@ -5618,7 +5618,7 @@ void GScr_FPrintln()
     Scr_FPrint_internal(0);
 }
 
-void __cdecl Scr_FPrint_internal(bool commaBetweenFields)
+void Scr_FPrint_internal(bool commaBetweenFields)
 {
     uint32_t  NumParam; // eax
     const char *s; // [esp+10h] [ebp-Ch]
@@ -5790,7 +5790,7 @@ void GScr_FGetArg()
     }
 }
 
-void __cdecl GScr_GetStat(scr_entref_t entref)
+void GScr_GetStat(scr_entref_t entref)
 {
     const char *v1; // eax
     gentity_s *playerEnt; // [esp+0h] [ebp-Ch]
@@ -5812,7 +5812,7 @@ void __cdecl GScr_GetStat(scr_entref_t entref)
     Scr_AddInt(value);
 }
 
-void __cdecl GScr_SetStat(scr_entref_t entref)
+void GScr_SetStat(scr_entref_t entref)
 {
     const char *v1; // eax
     const char *v2; // eax
@@ -5851,7 +5851,7 @@ void __cdecl GScr_SetStat(scr_entref_t entref)
     SV_SetClientStat(playerEnt->s.number, index.intValue, value);
 }
 
-void __cdecl GScr_SetTeamForTrigger(scr_entref_t entref)
+void GScr_SetTeamForTrigger(scr_entref_t entref)
 {
     uint16_t team; // [esp+0h] [ebp-8h]
     gentity_s *ent; // [esp+4h] [ebp-4h]
@@ -5880,7 +5880,7 @@ void __cdecl GScr_SetTeamForTrigger(scr_entref_t entref)
     }
 }
 
-void __cdecl GScr_ClientClaimTrigger(scr_entref_t entref)
+void GScr_ClientClaimTrigger(scr_entref_t entref)
 {
     gentity_s *clientEnt; // [esp+0h] [ebp-8h]
     gentity_s *triggerEnt; // [esp+4h] [ebp-4h]
@@ -5897,7 +5897,7 @@ void __cdecl GScr_ClientClaimTrigger(scr_entref_t entref)
         triggerEnt->item[1].ammoCount = clientEnt->client->ps.clientNum;
 }
 
-void __cdecl GScr_ClientReleaseTrigger(scr_entref_t entref)
+void GScr_ClientReleaseTrigger(scr_entref_t entref)
 {
     gentity_s *clientEnt; // [esp+0h] [ebp-8h]
     gentity_s *triggerEnt; // [esp+4h] [ebp-4h]
@@ -5914,7 +5914,7 @@ void __cdecl GScr_ClientReleaseTrigger(scr_entref_t entref)
         triggerEnt->item[1].ammoCount = ENTITYNUM_NONE;
 }
 
-void __cdecl GScr_ReleaseClaimedTrigger(scr_entref_t entref)
+void GScr_ReleaseClaimedTrigger(scr_entref_t entref)
 {
     gentity_s *triggerEnt; // [esp+0h] [ebp-4h]
 
@@ -6049,7 +6049,7 @@ void GScr_GetArrayKeys()
     Scr_AddArrayKeys(Scr_GetObject(0));
 }
 
-void __cdecl GScr_IsOnLadder(scr_entref_t entref)
+void GScr_IsOnLadder(scr_entref_t entref)
 {
     gentity_s *ent; // [esp+0h] [ebp-4h]
 
@@ -6059,7 +6059,7 @@ void __cdecl GScr_IsOnLadder(scr_entref_t entref)
     Scr_AddBool((ent->client->ps.pm_flags & PMF_LADDER) != 0);
 }
 
-void __cdecl GScr_IsMantling(scr_entref_t entref)
+void GScr_IsMantling(scr_entref_t entref)
 {
     gentity_s *ent; // [esp+0h] [ebp-4h]
 
@@ -6069,7 +6069,7 @@ void __cdecl GScr_IsMantling(scr_entref_t entref)
     Scr_AddBool((ent->client->ps.pm_flags & PMF_MANTLE) != 0);
 }
 
-void __cdecl GScr_StartRagdoll(scr_entref_t entref)
+void GScr_StartRagdoll(scr_entref_t entref)
 {
     trType_t v1; // [esp+0h] [ebp-10h]
     trType_t trType; // [esp+4h] [ebp-Ch]
@@ -6106,7 +6106,7 @@ void __cdecl GScr_StartRagdoll(scr_entref_t entref)
     }
 }
 
-void __cdecl GScr_IsRagdoll(scr_entref_t entref)
+void GScr_IsRagdoll(scr_entref_t entref)
 {
     bool isRagdoll; // [esp+0h] [ebp-Ch]
     gentity_s *ent; // [esp+8h] [ebp-4h]
@@ -6116,7 +6116,7 @@ void __cdecl GScr_IsRagdoll(scr_entref_t entref)
     Scr_AddInt(isRagdoll);
 }
 
-void __cdecl GScr_GetCorpseAnim(scr_entref_t entref)
+void GScr_GetCorpseAnim(scr_entref_t entref)
 {
     const char *v1; // eax
     XAnim_s *treeAnims; // [esp+0h] [ebp-14h]
@@ -6140,7 +6140,7 @@ void __cdecl GScr_GetCorpseAnim(scr_entref_t entref)
     }
 }
 
-void __cdecl ScrCmd_ItemWeaponSetAmmo(scr_entref_t entref)
+void ScrCmd_ItemWeaponSetAmmo(scr_entref_t entref)
 {
     const char *v1; // eax
     int32_t v2; // edx
@@ -6187,7 +6187,7 @@ void __cdecl ScrCmd_ItemWeaponSetAmmo(scr_entref_t entref)
     }
 }
 
-void __cdecl Scr_SetOrigin(gentity_s *ent, int32_t i)
+void Scr_SetOrigin(gentity_s *ent, int32_t i)
 {
     float org[3]; // [esp+0h] [ebp-Ch] BYREF
 
@@ -6197,7 +6197,7 @@ void __cdecl Scr_SetOrigin(gentity_s *ent, int32_t i)
         SV_LinkEntity(ent);
 }
 
-void __cdecl Scr_SetAngles(gentity_s *ent, int32_t i)
+void Scr_SetAngles(gentity_s *ent, int32_t i)
 {
     float angles[3]; // [esp+0h] [ebp-Ch] BYREF
 
@@ -6205,7 +6205,7 @@ void __cdecl Scr_SetAngles(gentity_s *ent, int32_t i)
     G_SetAngle(ent, angles);
 }
 
-void __cdecl Scr_SetHealth(gentity_s *ent, int32_t i)
+void Scr_SetHealth(gentity_s *ent, int32_t i)
 {
     int32_t health; // [esp+0h] [ebp-4h]
 
@@ -6222,7 +6222,7 @@ void __cdecl Scr_SetHealth(gentity_s *ent, int32_t i)
     }
 }
 
-void __cdecl GScr_AddEntity(gentity_s *pEnt)
+void GScr_AddEntity(gentity_s *pEnt)
 {
     if (pEnt)
         Scr_AddEntity(pEnt);
@@ -6309,7 +6309,7 @@ int32_t Scr_ParseGameTypeList_LoadObj()
     return result;
 }
 
-void __cdecl Scr_ParseGameTypeList()
+void Scr_ParseGameTypeList()
 {
     if (IsFastFileLoad())
         Scr_ParseGameTypeList_FastFile();
@@ -6398,7 +6398,7 @@ XAssetHeader Scr_ParseGameTypeList_FastFile()
     return result;
 }
 
-char *__cdecl Scr_GetGameTypeNameForScript(const char *pszGameTypeScript)
+char *Scr_GetGameTypeNameForScript(const char *pszGameTypeScript)
 {
     int32_t i; // [esp+0h] [ebp-4h]
 
@@ -6410,12 +6410,12 @@ char *__cdecl Scr_GetGameTypeNameForScript(const char *pszGameTypeScript)
     return 0;
 }
 
-bool __cdecl Scr_IsValidGameType(const char *pszGameType)
+bool Scr_IsValidGameType(const char *pszGameType)
 {
     return Scr_GetGameTypeNameForScript(pszGameType) != 0;
 }
 
-void __cdecl Scr_LoadGameType()
+void Scr_LoadGameType()
 {
     uint16_t t; // [esp+0h] [ebp-4h]
 
@@ -6425,7 +6425,7 @@ void __cdecl Scr_LoadGameType()
     Scr_FreeThread(t);
 }
 
-void __cdecl Scr_StartupGameType()
+void Scr_StartupGameType()
 {
     uint16_t callback; // [esp+0h] [ebp-4h]
 
@@ -6433,7 +6433,7 @@ void __cdecl Scr_StartupGameType()
     Scr_FreeThread(callback);
 }
 
-void __cdecl Scr_PlayerConnect(gentity_s *self)
+void Scr_PlayerConnect(gentity_s *self)
 {
     uint16_t callback; // [esp+0h] [ebp-4h]
 
@@ -6441,7 +6441,7 @@ void __cdecl Scr_PlayerConnect(gentity_s *self)
     Scr_FreeThread(callback);
 }
 
-void __cdecl Scr_PlayerDisconnect(gentity_s *self)
+void Scr_PlayerDisconnect(gentity_s *self)
 {
     uint16_t callback; // [esp+0h] [ebp-4h]
 
@@ -6449,7 +6449,7 @@ void __cdecl Scr_PlayerDisconnect(gentity_s *self)
     Scr_FreeThread(callback);
 }
 
-void __cdecl Scr_PlayerDamage(
+void Scr_PlayerDamage(
     gentity_s *self,
     gentity_s *inflictor,
     gentity_s *attacker,
@@ -6485,7 +6485,7 @@ void __cdecl Scr_PlayerDamage(
     Scr_FreeThread(callback);
 }
 
-void __cdecl Scr_PlayerKilled(
+void Scr_PlayerKilled(
     gentity_s *self,
     gentity_s *inflictor,
     gentity_s *attacker,
@@ -6519,7 +6519,7 @@ void __cdecl Scr_PlayerKilled(
     Scr_FreeThread(callback);
 }
 
-void __cdecl Scr_PlayerLastStand(
+void Scr_PlayerLastStand(
     gentity_s *self,
     gentity_s *inflictor,
     gentity_s *attacker,
@@ -6552,7 +6552,7 @@ void __cdecl Scr_PlayerLastStand(
     Scr_FreeThread(callback);
 }
 
-void __cdecl Scr_VoteCalled(gentity_s *self, char *command, char *param1, char *param2)
+void Scr_VoteCalled(gentity_s *self, char *command, char *param1, char *param2)
 {
     Scr_AddString(param2);
     Scr_AddString(param1);
@@ -6560,7 +6560,7 @@ void __cdecl Scr_VoteCalled(gentity_s *self, char *command, char *param1, char *
     Scr_Notify(self, scr_const.call_vote, 3u);
 }
 
-void __cdecl Scr_PlayerVote(gentity_s *self, char *option)
+void Scr_PlayerVote(gentity_s *self, char *option)
 {
     Scr_AddString(option);
     Scr_Notify(self, scr_const.vote, 1u);
@@ -6580,7 +6580,7 @@ void GScr_GetAnimLength()
     Scr_AddFloat(value);
 }
 
-void(__cdecl *__cdecl Scr_GetFunction(const char **pName, int *type))()
+void(*Scr_GetFunction(const char **pName, int *type))()
 {
     uint32_t i; // [esp+18h] [ebp-4h]
 
@@ -6596,7 +6596,7 @@ void(__cdecl *__cdecl Scr_GetFunction(const char **pName, int *type))()
     return 0;
 }
 
-void(__cdecl *__cdecl BuiltIn_GetMethod(const char **pName, int *type))(scr_entref_t)
+void(*BuiltIn_GetMethod(const char **pName, int *type))(scr_entref_t)
 {
     uint32_t i; // [esp+18h] [ebp-4h]
 
@@ -6612,9 +6612,9 @@ void(__cdecl *__cdecl BuiltIn_GetMethod(const char **pName, int *type))(scr_entr
     return 0;
 }
 
-void(__cdecl *__cdecl Scr_GetMethod(const char **pName, int *type))(scr_entref_t)
+void(*Scr_GetMethod(const char **pName, int *type))(scr_entref_t)
 {
-    void(__cdecl * method)(scr_entref_t); // [esp+0h] [ebp-4h]
+    void(* method)(scr_entref_t); // [esp+0h] [ebp-4h]
 
     *type = 0;
 
@@ -6636,7 +6636,7 @@ void(__cdecl *__cdecl Scr_GetMethod(const char **pName, int *type))(scr_entref_t
     return BuiltIn_GetMethod(pName, type);
 }
 
-void __cdecl GScr_Shutdown()
+void GScr_Shutdown()
 {
     if (level.cachedTagMat.name)
         Scr_SetString(&level.cachedTagMat.name, 0);

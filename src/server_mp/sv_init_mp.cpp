@@ -45,7 +45,7 @@ const dvar_t *sv_wwwDlDisconnected;
 const dvar_t *sv_loadMyChanges;
 const dvar_t *sv_clientArchive;
 
-void __cdecl SV_SetConfigstring(int index, const char *val)
+void SV_SetConfigstring(int index, const char *val)
 {
     uint16_t v2; // [esp+20h] [ebp-444h]
     client_t *client; // [esp+38h] [ebp-42Ch]
@@ -124,7 +124,7 @@ void __cdecl SV_SetConfigstring(int index, const char *val)
     }
 }
 
-void __cdecl SV_GetConfigstring(uint32_t index, char *buffer, int bufferSize)
+void SV_GetConfigstring(uint32_t index, char *buffer, int bufferSize)
 {
     if (bufferSize < 1)
         Com_Error(ERR_DROP, "SV_GetConfigstring: bufferSize == %i", bufferSize);
@@ -135,7 +135,7 @@ void __cdecl SV_GetConfigstring(uint32_t index, char *buffer, int bufferSize)
     I_strncpyz(buffer, SL_ConvertToString(sv.configstrings[index]), bufferSize);
 }
 
-uint32_t __cdecl SV_GetConfigstringConst(uint32_t index)
+uint32_t SV_GetConfigstringConst(uint32_t index)
 {
     iassert((unsigned)index < MAX_CONFIGSTRINGS);
     iassert(sv.configstrings[index]);
@@ -143,7 +143,7 @@ uint32_t __cdecl SV_GetConfigstringConst(uint32_t index)
     return sv.configstrings[index];
 }
 
-void __cdecl SV_SetConfigValueForKey(int start, int max, char *key, char *value)
+void SV_SetConfigValueForKey(int start, int max, char *key, char *value)
 {
     uint32_t string; // [esp+0h] [ebp-14h]
     uint32_t name; // [esp+4h] [ebp-10h]
@@ -187,7 +187,7 @@ void __cdecl SV_SetConfigValueForKey(int start, int max, char *key, char *value)
     SV_SetConfigstring(ia + max + start, value);
 }
 
-void __cdecl SV_SetUserinfo(int index, char *val)
+void SV_SetUserinfo(int index, char *val)
 {
     const char *v2; // eax
 
@@ -200,7 +200,7 @@ void __cdecl SV_SetUserinfo(int index, char *val)
     I_strncpyz(svs.clients[index].name, v2, 16);
 }
 
-void __cdecl SV_GetUserinfo(int index, char *buffer, int bufferSize)
+void SV_GetUserinfo(int index, char *buffer, int bufferSize)
 {
     if (bufferSize < 1)
         Com_Error(ERR_DROP, "SV_GetUserinfo: bufferSize == %i", bufferSize);
@@ -209,7 +209,7 @@ void __cdecl SV_GetUserinfo(int index, char *buffer, int bufferSize)
     I_strncpyz(buffer, svs.clients[index].userinfo, bufferSize);
 }
 
-void __cdecl SV_CreateBaseline()
+void SV_CreateBaseline()
 {
     float *absmax; // [esp+8h] [ebp-18h]
     float *absmin; // [esp+10h] [ebp-10h]
@@ -240,7 +240,7 @@ void __cdecl SV_CreateBaseline()
     }
 }
 
-void __cdecl SV_BoundMaxClients(int minimum)
+void SV_BoundMaxClients(int minimum)
 {
     DvarLimits v1; // [esp-10h] [ebp-14h]
 
@@ -262,7 +262,7 @@ void __cdecl SV_BoundMaxClients(int minimum)
         Dvar_SetInt((dvar_s *)sv_maxclients, minimum);
 }
 
-void __cdecl SV_Startup()
+void SV_Startup()
 {
     iassert(!svs.initialized);
     SV_BoundMaxClients(1);
@@ -274,7 +274,7 @@ void __cdecl SV_Startup()
     Dvar_SetBool((dvar_s *)com_sv_running, 1);
 }
 
-void __cdecl SV_ClearServer()
+void SV_ClearServer()
 {
     int i; // [esp+0h] [ebp-4h]
 
@@ -289,7 +289,7 @@ void __cdecl SV_ClearServer()
     com_inServerFrame = 0;
 }
 
-void __cdecl SV_InitArchivedSnapshot()
+void SV_InitArchivedSnapshot()
 {
     svs.nextArchivedSnapshotFrames = 0;
     svs.nextArchivedSnapshotBuffer = 0;
@@ -298,12 +298,12 @@ void __cdecl SV_InitArchivedSnapshot()
     svs.nextCachedSnapshotFrames = 0;
 }
 
-void __cdecl SV_InitDvar()
+void SV_InitDvar()
 {
     Dvar_ResetScriptInfo();
 }
 
-void __cdecl SV_ChangeMaxClients()
+void SV_ChangeMaxClients()
 {
     int oldMaxClients; // [esp+0h] [ebp-10h]
     client_t *oldClients; // [esp+4h] [ebp-Ch]
@@ -344,7 +344,7 @@ void __cdecl SV_ChangeMaxClients()
     }
 }
 
-void __cdecl SV_SetExpectedHunkUsage(char *mapname)
+void SV_SetExpectedHunkUsage(char *mapname)
 {
     int handle; // [esp+0h] [ebp-18h] BYREF
     char *buf; // [esp+8h] [ebp-10h]
@@ -385,7 +385,7 @@ void __cdecl SV_SetExpectedHunkUsage(char *mapname)
     }
 }
 
-void __cdecl SV_SpawnServer(char *mapname)
+void SV_SpawnServer(char *mapname)
 {
     const char *denied; // [esp+18h] [ebp-B0h]
     client_t *client; // [esp+1Ch] [ebp-ACh]
@@ -671,12 +671,12 @@ void SV_SaveSystemInfo()
     dvar_modifiedFlags &= ~0x100u;
 }
 
-bool __cdecl SV_Loaded()
+bool SV_Loaded()
 {
     return sv.state == SS_GAME;
 }
 
-void __cdecl SV_Init()
+void SV_Init()
 {
     DvarLimits min; // [esp+4h] [ebp-18h]
     DvarLimits mina; // [esp+4h] [ebp-18h]
@@ -882,7 +882,7 @@ void __cdecl SV_Init()
     Dvar_RegisterBool("clientSideEffects", 1, DVAR_CHEAT, "Enable loading _fx.gsc files on the client");
 }
 
-void __cdecl SV_DropAllClients()
+void SV_DropAllClients()
 {
     client_t *drop; // [esp+0h] [ebp-8h]
     int i; // [esp+4h] [ebp-4h]
@@ -898,7 +898,7 @@ void __cdecl SV_DropAllClients()
     }
 }
 
-void __cdecl SV_Shutdown(const char *finalmsg)
+void SV_Shutdown(const char *finalmsg)
 {
     int client; // [esp+0h] [ebp-4h]
 
@@ -934,7 +934,7 @@ void __cdecl SV_Shutdown(const char *finalmsg)
     }
 }
 
-void __cdecl SV_FinalMessage(const char *message)
+void SV_FinalMessage(const char *message)
 {
     int j; // [esp+0h] [ebp-38h]
     client_t *client; // [esp+4h] [ebp-34h]
@@ -967,7 +967,7 @@ void __cdecl SV_FinalMessage(const char *message)
     }
 }
 
-void __cdecl SV_CheckThread()
+void SV_CheckThread()
 {
     if (!Sys_IsMainThread())
         MyAssertHandler(".\\server_mp\\sv_init_mp.cpp", 1663, 0, "%s", "Sys_IsMainThread()");

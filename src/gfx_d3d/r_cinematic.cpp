@@ -27,7 +27,7 @@ CinematicGlob cinematicGlob;
 bool g_cinematicThreadInitialized;
 CinematicThreadState g_cinematicThreadState;
 
-int __cdecl CinematicHunk_Alloc(CinematicHunk* hunk, int size)
+int CinematicHunk_Alloc(CinematicHunk* hunk, int size)
 {
     const char* v2; // eax
     char* alloced; // [esp+0h] [ebp-4h]
@@ -75,7 +75,7 @@ void R_Cinematic_CheckBinkError()
     }
 }
 
-void __cdecl R_Cinematic_InitBinkVolumes()
+void R_Cinematic_InitBinkVolumes()
 {
     int v0; // [esp+0h] [ebp-50h]
     int v1; // [esp+28h] [ebp-28h]
@@ -119,7 +119,7 @@ void __cdecl R_Cinematic_InitBinkVolumes()
     R_Cinematic_CheckBinkError();
 }
 
-void __cdecl R_Cinematic_Init()
+void R_Cinematic_Init()
 {
     iassert(!g_cinematicThreadInitialized || g_cinematicThreadState == CINEMATIC_THREAD_STATE_TO_HOST_BETWEEN_UPDATES);
 
@@ -146,7 +146,7 @@ void R_Cinematic_ReserveMemory()
     cinematicGlob.memPool = Z_Malloc(0xD00000, "R_Cinematic_ReserveMemory", 18);
 }
 
-void __cdecl  R_Cinematic_Thread(uint32_t threadContext)
+void R_Cinematic_Thread(uint32_t threadContext)
 {
     iassert(threadContext == THREAD_CONTEXT_CINEMATIC);
     while (1)
@@ -182,7 +182,7 @@ void R_Cinematic_UpdateFrame_Core2()
     R_Cinematic_UpdateFrame_Core(localTargetChanged, localTargetCinematic, localTargetPlaybackFlags);
 }
 
-void __cdecl R_Cinematic_UpdateFrame_Core(
+void R_Cinematic_UpdateFrame_Core(
     bool localTargetChanged,
     char *localTargetCinematic,
     uint32_t localPlaybackFlags)
@@ -225,7 +225,7 @@ void __cdecl R_Cinematic_UpdateFrame_Core(
     }
 }
 
-char __cdecl R_Cinematic_AreHunksOpen()
+char R_Cinematic_AreHunksOpen()
 {
     if (CinematicHunk_IsOpen(&cinematicGlob.masterHunk))
     {
@@ -241,7 +241,7 @@ char __cdecl R_Cinematic_AreHunksOpen()
     }
 }
 
-char __cdecl CinematicHunk_IsOpen(CinematicHunk *hunk)
+char CinematicHunk_IsOpen(CinematicHunk *hunk)
 {
     if (hunk->base)
     {
@@ -266,7 +266,7 @@ void R_Cinematic_HunksClose()
     CinematicHunk_Close(&cinematicGlob.residentHunk);
 }
 
-void __cdecl CinematicHunk_Close(CinematicHunk *hunk)
+void CinematicHunk_Close(CinematicHunk *hunk)
 {
     iassert( hunk->base );
     iassert( hunk->atFront );
@@ -278,7 +278,7 @@ void __cdecl CinematicHunk_Close(CinematicHunk *hunk)
     hunk->end = 0;
 }
 
-char __cdecl R_Cinematic_Advance()
+char R_Cinematic_Advance()
 {
     CinematicEnum targetPaused; // [esp+A0h] [ebp-44h]
     BINKREALTIME binkRealtime; // [esp+A4h] [ebp-40h] BYREF
@@ -383,7 +383,7 @@ char __cdecl R_Cinematic_Advance()
     }
 }
 
-uint32_t __cdecl R_Cinematic_GetPercentageFull()
+uint32_t R_Cinematic_GetPercentageFull()
 {
     BINKREALTIME binkRealtime; // [esp+4h] [ebp-38h] BYREF
 
@@ -406,7 +406,7 @@ void R_Cinematic_SeizeIO()
     cinematicGlob.hasFileIO = 1;
 }
 
-void __cdecl R_Cinematic_UpdateTimeInMsec(const BINKREALTIME *binkRealtime)
+void R_Cinematic_UpdateTimeInMsec(const BINKREALTIME *binkRealtime)
 {
     const char *v1; // eax
     unsigned __int64 frameNum; // [esp+8h] [ebp-20h]
@@ -452,7 +452,7 @@ void R_Cinematic_StopPlayback_Now()
     CinematicHunk_Reset(&cinematicGlob.binkHunk);
 }
 
-void __cdecl CinematicHunk_Reset(CinematicHunk *hunk)
+void CinematicHunk_Reset(CinematicHunk *hunk)
 {
     iassert( hunk->base );
     iassert( hunk->atFront );
@@ -462,7 +462,7 @@ void __cdecl CinematicHunk_Reset(CinematicHunk *hunk)
     hunk->atBack = hunk->end;
 }
 
-char __cdecl R_Cinematic_StartPlayback_Now(const char *filename, uint32_t playbackFlags)
+char R_Cinematic_StartPlayback_Now(const char *filename, uint32_t playbackFlags)
 {
     _DIG_DRIVER *Driver; // eax
     uint32_t TrackIDsToPlay[5]; // [esp+1Ch] [ebp-9Ch] BYREF
@@ -548,7 +548,7 @@ char __cdecl R_Cinematic_StartPlayback_Now(const char *filename, uint32_t playba
     }
 }
 
-bool __cdecl CinematicHunk_IsEmpty(CinematicHunk *hunk)
+bool CinematicHunk_IsEmpty(CinematicHunk *hunk)
 {
     iassert( hunk->base );
     iassert( hunk->atFront );
@@ -557,13 +557,13 @@ bool __cdecl CinematicHunk_IsEmpty(CinematicHunk *hunk)
     return hunk->atFront == hunk->base && hunk->atBack == hunk->end;
 }
 
-void __cdecl R_Cinematic_HunksOpen(int activeTexture, char playbackFlags)
+void R_Cinematic_HunksOpen(int activeTexture, char playbackFlags)
 {
     CinematicHunk_Open(&cinematicGlob.masterHunk, (char *)cinematicGlob.memPool, 0xD00000);
     R_Cinematic_HunksAllocate(activeTexture, playbackFlags);
 }
 
-void __cdecl CinematicHunk_Open(CinematicHunk *hunk, char *memory, int size)
+void CinematicHunk_Open(CinematicHunk *hunk, char *memory, int size)
 {
     iassert( !hunk->base );
     iassert( !hunk->atFront );
@@ -575,7 +575,7 @@ void __cdecl CinematicHunk_Open(CinematicHunk *hunk, char *memory, int size)
     hunk->atBack = hunk->end;
 }
 
-void __cdecl R_Cinematic_HunksAllocate(int activeTexture, char playbackFlags)
+void R_Cinematic_HunksAllocate(int activeTexture, char playbackFlags)
 {
     char *residentBufferBase; // [esp+8h] [ebp-14h]
     int newResidentBufferSize; // [esp+Ch] [ebp-10h]
@@ -595,7 +595,7 @@ void __cdecl R_Cinematic_HunksAllocate(int activeTexture, char playbackFlags)
     CinematicHunk_Open(&cinematicGlob.residentHunk, residentBufferBase, newResidentBufferSize);
 }
 
-void __cdecl R_Cinematic_HunksReset(int activeTexture, char playbackFlags)
+void R_Cinematic_HunksReset(int activeTexture, char playbackFlags)
 {
     CinematicHunk_Close(&cinematicGlob.binkHunk);
     CinematicHunk_Close(&cinematicGlob.residentHunk);
@@ -603,7 +603,7 @@ void __cdecl R_Cinematic_HunksReset(int activeTexture, char playbackFlags)
     R_Cinematic_HunksAllocate(activeTexture, playbackFlags);
 }
 
-static void __cdecl R_Cinematic_ReleaseImages(CinematicTextureSet *textureSet)
+static void R_Cinematic_ReleaseImages(CinematicTextureSet *textureSet)
 {
     int frameIter; // [esp+0h] [ebp-4h]
 
@@ -620,7 +620,7 @@ static void __cdecl R_Cinematic_ReleaseImages(CinematicTextureSet *textureSet)
     Image_Release(&textureSet->drawImageA);
 }
 
-IDirect3DTexture9 *__cdecl R_Cinematic_MakeBinkTexture_PC(
+IDirect3DTexture9 *R_Cinematic_MakeBinkTexture_PC(
     GfxImage *image,
     uint32_t width,
     uint32_t height,
@@ -732,7 +732,7 @@ void __stdcall R_Cinematic_Bink_Free(void *ptr)
     ;
 }
 
-bool __cdecl R_Cinematic_BinkOpen(
+bool R_Cinematic_BinkOpen(
     const char *filename,
     uint32_t playbackFlags,
     char *errText,
@@ -766,7 +766,7 @@ bool __cdecl R_Cinematic_BinkOpen(
     return filepath[1][0] && R_Cinematic_BinkOpenPath(filepath[1], playbackFlags, errText, errTextSize);
 }
 
-char __cdecl R_Cinematic_BinkOpenPath(
+char R_Cinematic_BinkOpenPath(
     const char *filepath,
     char playbackFlags,
     char *errText,
@@ -847,7 +847,7 @@ char __cdecl R_Cinematic_BinkOpenPath(
     return 0;
 }
 
-int __cdecl CinematicHunk_GetFreeSpace(CinematicHunk *hunk)
+int CinematicHunk_GetFreeSpace(CinematicHunk *hunk)
 {
     iassert( hunk->base );
     iassert( hunk->atFront );
@@ -871,7 +871,7 @@ bool R_CinematicThread_EndBinkAsync()
     return result;
 }
 
-char __cdecl R_Cinematic_BinkOpenPath_MemoryResident(
+char R_Cinematic_BinkOpenPath_MemoryResident(
     const char *filename,
     const void **outPtr,
     char *errText,
@@ -938,7 +938,7 @@ bool R_CinematicThread_WaitForHostEvent()
     return result;
 }
 
-void __cdecl R_Cinematic_Shutdown()
+void R_Cinematic_Shutdown()
 {
     int setIter; // [esp+0h] [ebp-4h]
 
@@ -949,14 +949,14 @@ void __cdecl R_Cinematic_Shutdown()
     Z_Free(cinematicGlob.memPool, 18);
 }
 
-void __cdecl R_Cinematic_StartPlayback(char *name, uint32_t playbackFlags, float volume)
+void R_Cinematic_StartPlayback(char *name, uint32_t playbackFlags, float volume)
 {
     Sys_EnterCriticalSection(CRITSECT_CINEMATIC);
     R_Cinematic_StartPlayback_Internal(name, playbackFlags, volume);
     Sys_LeaveCriticalSection(CRITSECT_CINEMATIC);
 }
 
-void __cdecl R_Cinematic_StartPlayback_Internal(char *name, uint32_t playbackFlags, float volume)
+void R_Cinematic_StartPlayback_Internal(char *name, uint32_t playbackFlags, float volume)
 {
     Sys_EnterCriticalSection(CRITSECT_CINEMATIC_TARGET_CHANGE);
     I_strncpyz(cinematicGlob.targetCinematicName, name, 256);
@@ -968,7 +968,7 @@ void __cdecl R_Cinematic_StartPlayback_Internal(char *name, uint32_t playbackFla
     Sys_LeaveCriticalSection(CRITSECT_CINEMATIC_TARGET_CHANGE);
 }
 
-void __cdecl R_Cinematic_StartNextPlayback()
+void R_Cinematic_StartNextPlayback()
 {
     Sys_EnterCriticalSection(CRITSECT_CINEMATIC);
     if (R_Cinematic_IsNextReady_Internal())
@@ -982,12 +982,12 @@ void __cdecl R_Cinematic_StartNextPlayback()
     Sys_LeaveCriticalSection(CRITSECT_CINEMATIC);
 }
 
-bool __cdecl R_Cinematic_IsNextReady_Internal()
+bool R_Cinematic_IsNextReady_Internal()
 {
     return cinematicGlob.nextCinematicName[0] != 0;
 }
 
-void __cdecl R_Cinematic_StopPlayback()
+void R_Cinematic_StopPlayback()
 {
     Sys_EnterCriticalSection(CRITSECT_CINEMATIC);
     Sys_EnterCriticalSection(CRITSECT_CINEMATIC_TARGET_CHANGE);
@@ -998,7 +998,7 @@ void __cdecl R_Cinematic_StopPlayback()
     Sys_LeaveCriticalSection(CRITSECT_CINEMATIC);
 }
 
-void __cdecl R_Cinematic_UpdateFrame()
+void R_Cinematic_UpdateFrame()
 {
     bool v0; // [esp+0h] [ebp-44h]
 
@@ -1049,7 +1049,7 @@ void R_Cinematic_UpdateRendererImages()
     }
 }
 
-void __cdecl R_Cinematic_SetRendererImagesToFrame(int frameToSetTo)
+void R_Cinematic_SetRendererImagesToFrame(int frameToSetTo)
 {
     CinematicTextureSet *textureSet; // [esp+0h] [ebp-4h]
 
@@ -1065,7 +1065,7 @@ void __cdecl R_Cinematic_SetRendererImagesToFrame(int frameToSetTo)
         gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_A] = rgp.whiteImage;
 }
 
-char __cdecl R_Cinematic_ThreadFinish(bool midBinkIsOkay)
+char R_Cinematic_ThreadFinish(bool midBinkIsOkay)
 {
     do
     {
@@ -1102,13 +1102,13 @@ char __cdecl R_Cinematic_ThreadFinish(bool midBinkIsOkay)
     return 0;
 }
 
-void __cdecl R_Cinematic_SyncNow()
+void R_Cinematic_SyncNow()
 {
     cinematicGlob.fullSyncNextUpdate = 1;
     R_Cinematic_UpdateFrame();
 }
 
-void __cdecl R_Cinematic_DrawLetterbox_OptionalCinematic(bool drawCinematic, float letterboxAlpha)
+void R_Cinematic_DrawLetterbox_OptionalCinematic(bool drawCinematic, float letterboxAlpha)
 {
     float rectY; // [esp+3Ch] [ebp-2Ch]
     float width; // [esp+44h] [ebp-24h]
@@ -1146,32 +1146,32 @@ void __cdecl R_Cinematic_DrawLetterbox_OptionalCinematic(bool drawCinematic, flo
             rgp.cinematicMaterial);
 }
 
-void __cdecl R_Cinematic_DrawStretchPic_Letterboxed()
+void R_Cinematic_DrawStretchPic_Letterboxed()
 {
     R_Cinematic_DrawLetterbox_OptionalCinematic(1, 1.0);
 }
 
-bool __cdecl R_Cinematic_IsFinished()
+bool R_Cinematic_IsFinished()
 {
     return cinematicGlob.cinematicFinished;
 }
 
-bool __cdecl R_Cinematic_IsStarted()
+bool R_Cinematic_IsStarted()
 {
     return !R_Cinematic_IsFinished() && cinematicGlob.currentCinematicName[0];
 }
 
-bool __cdecl R_Cinematic_IsNextReady()
+bool R_Cinematic_IsNextReady()
 {
     return R_Cinematic_IsNextReady_Internal();
 }
 
-bool __cdecl R_Cinematic_IsUnderrun()
+bool R_Cinematic_IsUnderrun()
 {
     return cinematicGlob.underrun;
 }
 
-void __cdecl R_Cinematic_BeginLostDevice()
+void R_Cinematic_BeginLostDevice()
 {
     uint32_t setIter; // [esp+4h] [ebp-8h]
     CinematicTextureSet *textureSet; // [esp+8h] [ebp-4h]
@@ -1195,7 +1195,7 @@ void __cdecl R_Cinematic_BeginLostDevice()
     Sys_LeaveCriticalSection(CRITSECT_CINEMATIC);
 }
 
-void __cdecl R_Cinematic_ClearTexture(IDirect3DTexture9 *texture, int width, int height, uint8_t clearValue)
+void R_Cinematic_ClearTexture(IDirect3DTexture9 *texture, int width, int height, uint8_t clearValue)
 {
     const char *v4; // eax
     HRESULT hr; // [esp+0h] [ebp-Ch]
@@ -1247,7 +1247,7 @@ void R_Cinematic_ClearBinkDrawTextures()
             0);
 }
 
-void __cdecl R_Cinematic_EndLostDevice()
+void R_Cinematic_EndLostDevice()
 {
     Sys_EnterCriticalSection(CRITSECT_CINEMATIC);
     if (cinematicGlob.bink)
@@ -1258,7 +1258,7 @@ void __cdecl R_Cinematic_EndLostDevice()
     Sys_LeaveCriticalSection(CRITSECT_CINEMATIC);
 }
 
-void __cdecl R_Cinematic_SetPaused(CinematicEnum paused) 
+void R_Cinematic_SetPaused(CinematicEnum paused) 
 {
     iassert(paused == CINEMATIC_PAUSED || paused == CINEMATIC_NOT_PAUSED);
     cinematicGlob.targetPaused = paused;
@@ -1288,22 +1288,22 @@ bool R_Cinematic_IsPending()
 }
 
 #else
-void __cdecl R_Cinematic_Init() { /* THUNK */ }
-void __cdecl R_Cinematic_Shutdown() { /* THUNK */ }
-void __cdecl R_Cinematic_StartPlayback(char *name, uint32_t playbackFlags, float volume) { /* THUNK */ }
-void __cdecl R_Cinematic_StartNextPlayback() { /* THUNK */ }
-void __cdecl R_Cinematic_StopPlayback() { /* THUNK */ }
-void __cdecl R_Cinematic_UpdateFrame() { /* THUNK */ }
-void __cdecl R_Cinematic_SyncNow() { /* THUNK */ }
-void __cdecl R_Cinematic_DrawStretchPic_Letterboxed() { /* THUNK */ }
-bool __cdecl R_Cinematic_IsFinished() { /* THUNK */ return true; }
-bool __cdecl R_Cinematic_IsStarted() { /* THUNK */ return false; }
+void R_Cinematic_Init() { /* THUNK */ }
+void R_Cinematic_Shutdown() { /* THUNK */ }
+void R_Cinematic_StartPlayback(char *name, uint32_t playbackFlags, float volume) { /* THUNK */ }
+void R_Cinematic_StartNextPlayback() { /* THUNK */ }
+void R_Cinematic_StopPlayback() { /* THUNK */ }
+void R_Cinematic_UpdateFrame() { /* THUNK */ }
+void R_Cinematic_SyncNow() { /* THUNK */ }
+void R_Cinematic_DrawStretchPic_Letterboxed() { /* THUNK */ }
+bool R_Cinematic_IsFinished() { /* THUNK */ return true; }
+bool R_Cinematic_IsStarted() { /* THUNK */ return false; }
 bool R_Cinematic_IsPending() { return false; }
-bool __cdecl R_Cinematic_IsNextReady() { /* THUNK */ return true; }
-bool __cdecl R_Cinematic_IsUnderrun() { /* THUNK */ return false; }
-void __cdecl R_Cinematic_BeginLostDevice() { /* THUNK */ }
-void __cdecl R_Cinematic_EndLostDevice() { /* THUNK */ }
-void __cdecl R_Cinematic_SetPaused(CinematicEnum paused) {}
+bool R_Cinematic_IsNextReady() { /* THUNK */ return true; }
+bool R_Cinematic_IsUnderrun() { /* THUNK */ return false; }
+void R_Cinematic_BeginLostDevice() { /* THUNK */ }
+void R_Cinematic_EndLostDevice() { /* THUNK */ }
+void R_Cinematic_SetPaused(CinematicEnum paused) {}
 void R_Cinematic_SetNextPlayback(const char *name, uint32_t playbackFlags) {}
 void R_Cinematic_UnsetNextPlayback() {}
 #endif

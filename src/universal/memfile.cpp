@@ -220,7 +220,7 @@ void MemFile_StartSegment(MemoryFile* memFile, int index)
     }
 }
 
-void __cdecl MemFile_deflateInit(uint8_t* next_out, uint32_t avail_out, bool compress)
+void MemFile_deflateInit(uint8_t* next_out, uint32_t avail_out, bool compress)
 {
     AssertStreamMode(MEM_FILE_MODE_DEFAULT);
     if (compress)
@@ -235,7 +235,7 @@ void __cdecl MemFile_deflateInit(uint8_t* next_out, uint32_t avail_out, bool com
     g_compress = compress;
 }
 
-void __cdecl MemFile_EndSegment(MemoryFile* memFile)
+void MemFile_EndSegment(MemoryFile* memFile)
 {
     uint32_t err; // [esp+0h] [ebp-Ch]
     uint32_t index; // [esp+8h] [ebp-4h]
@@ -308,7 +308,7 @@ void __cdecl MemFile_EndSegment(MemoryFile* memFile)
     }
 }
 
-uint32_t __cdecl MemFile_deflateEnd(bool compress)
+uint32_t MemFile_deflateEnd(bool compress)
 {
     uint32_t err; // [esp+0h] [ebp-4h]
 
@@ -321,7 +321,7 @@ uint32_t __cdecl MemFile_deflateEnd(bool compress)
     return err;
 }
 
-void __cdecl MemFile_MoveToSegment(MemoryFile* memFile, int index)
+void MemFile_MoveToSegment(MemoryFile* memFile, int index)
 {
     uint8_t* data; // [esp+4h] [ebp-8h]
     uint32_t len; // [esp+8h] [ebp-4h]
@@ -351,7 +351,7 @@ void __cdecl MemFile_MoveToSegment(MemoryFile* memFile, int index)
     }
 }
 
-void __cdecl MemFile_inflateInit(uint8_t* next_in, uint32_t len, bool compress)
+void MemFile_inflateInit(uint8_t* next_in, uint32_t len, bool compress)
 {
     AssertStreamMode(MEM_FILE_MODE_DEFAULT);
     if (compress)
@@ -366,7 +366,7 @@ void __cdecl MemFile_inflateInit(uint8_t* next_in, uint32_t len, bool compress)
     g_compress = compress;
 }
 
-int __cdecl MemFile_inflateEnd(bool compress)
+int MemFile_inflateEnd(bool compress)
 {
     int err; // [esp+0h] [ebp-4h]
 
@@ -379,7 +379,7 @@ int __cdecl MemFile_inflateEnd(bool compress)
     return err;
 }
 
-uint8_t* __cdecl MemFile_GetSegmentAddess(MemoryFile* memFile, uint32_t index)
+uint8_t* MemFile_GetSegmentAddess(MemoryFile* memFile, uint32_t index)
 {
     int segmentStart; // [esp+0h] [ebp-4h]
 
@@ -416,7 +416,7 @@ uint8_t* __cdecl MemFile_GetSegmentAddess(MemoryFile* memFile, uint32_t index)
     return &memFile->buffer[segmentStart];
 }
 
-void __cdecl MemFile_WriteError(MemoryFile* memFile)
+void MemFile_WriteError(MemoryFile* memFile)
 {
     if (memFile->memoryOverflow)
         MyAssertHandler(".\\universal\\memfile.cpp", 523, 0, "%s", "!memFile->memoryOverflow");
@@ -427,7 +427,7 @@ void __cdecl MemFile_WriteError(MemoryFile* memFile)
     memFile->memoryOverflow = 1;
 }
 
-int __cdecl MemFile_WriteDataInternal(
+int MemFile_WriteDataInternal(
     MemoryFile* memFile,
     int bytes,
     char nonZeroCount,
@@ -514,14 +514,14 @@ int __cdecl MemFile_WriteDataInternal(
     }
 }
 
-int __cdecl MemFile_GetUsedSize(MemoryFile* memFile)
+int MemFile_GetUsedSize(MemoryFile* memFile)
 {
     if (!memFile)
         MyAssertHandler(".\\universal\\memfile.cpp", 612, 0, "%s", "memFile");
     return memFile->bytesUsed;
 }
 
-void __cdecl MemFile_WriteData(MemoryFile* memFile, int byteCount, const void* dat)
+void MemFile_WriteData(MemoryFile* memFile, int byteCount, const void* dat)
 {
     uint32_t moveByte; // [esp+0h] [ebp-20h]
     uint32_t nextByte; // [esp+8h] [ebp-18h]
@@ -796,14 +796,14 @@ LABEL_56:
     MemFile_WriteError(memFile);
 }
 
-void __cdecl MemFile_WriteCString(MemoryFile* memFile, const char* string)
+void MemFile_WriteCString(MemoryFile* memFile, const char* string)
 {
     if (!string)
         MyAssertHandler(".\\universal\\memfile.cpp", 813, 0, "%s", "string");
     MemFile_WriteData(memFile, strlen(string) + 1, string);
 }
 
-const char* __cdecl MemFile_ReadCString(MemoryFile* memFile)
+const char* MemFile_ReadCString(MemoryFile* memFile)
 {
     uint8_t* string; // [esp+0h] [ebp-4h]
 
@@ -836,7 +836,7 @@ const char* __cdecl MemFile_ReadCString(MemoryFile* memFile)
     return (const char*)g_saveBuffer;
 }
 
-void __cdecl MemFile_ReadData(MemoryFile* memFile, int byteCount, uint8_t* p)
+void MemFile_ReadData(MemoryFile* memFile, int byteCount, uint8_t* p)
 {
     uint8_t* data; // [esp+0h] [ebp-8h]
     uint8_t code; // [esp+7h] [ebp-1h]
@@ -898,7 +898,7 @@ void __cdecl MemFile_ReadData(MemoryFile* memFile, int byteCount, uint8_t* p)
     }
 }
 
-uint8_t __cdecl MemFile_ReadByteInternal(MemoryFile* memFile)
+uint8_t MemFile_ReadByteInternal(MemoryFile* memFile)
 {
     uint32_t err; // [esp+0h] [ebp-8h]
     uint8_t result; // [esp+7h] [ebp-1h] BYREF

@@ -70,7 +70,7 @@ struct collData_t // sizeof=0xC4
     const float *bodyCenter;            // ...
 };
 
-char __cdecl cldTestFace(
+char cldTestFace(
     collData_t *tbData,
     float fp0,
     float fp1,
@@ -163,7 +163,7 @@ char __cdecl cldTestFace(
     return 1;
 }
 
-char __cdecl cldTestNormal(collData_t *tbData, dReal fp0, dReal fR, float *vNormal, int iAxis)
+char cldTestNormal(collData_t *tbData, dReal fp0, dReal fR, float *vNormal, int iAxis)
 {
     const char *v6; // eax
     float fOneOverLength; // [esp+34h] [ebp-Ch]
@@ -220,7 +220,7 @@ char __cdecl cldTestNormal(collData_t *tbData, dReal fp0, dReal fR, float *vNorm
     return 1;
 }
 
-char __cdecl cldTestEdge(collData_t *tbData, float fp0, float fp1, float fR, float fD, float *vNormal, int iAxis)
+char cldTestEdge(collData_t *tbData, float fp0, float fp1, float fR, float fD, float *vNormal, int iAxis)
 {
     const char *v8; // eax
     float fOneOverLength; // [esp+20h] [ebp-1Ch]
@@ -285,7 +285,7 @@ char __cdecl cldTestEdge(collData_t *tbData, float fp0, float fp1, float fR, flo
     return 1;
 }
 
-char __cdecl cldTestSeparatingAxes(collData_t *tbData, const dVector3 *v0, const dVector3 *v1, const dVector3 *v2)
+char cldTestSeparatingAxes(collData_t *tbData, const dVector3 *v0, const dVector3 *v1, const dVector3 *v2)
 {
     const char *v5; // eax
     const char *v6; // eax
@@ -886,7 +886,7 @@ char __cdecl cldTestSeparatingAxes(collData_t *tbData, const dVector3 *v0, const
     return 1;
 }
 
-void __cdecl cldClipPolyToPlane(
+void cldClipPolyToPlane(
     collData_t *tbData,
     dVector3 avArrayIn[],
     int ctIn,
@@ -940,7 +940,7 @@ void __cdecl cldClipPolyToPlane(
     }
 }
 
-char __cdecl cldClosestPointOnTwoLines(
+char cldClosestPointOnTwoLines(
     float *vPoint1,
     float *vLenVec1,
     float *vPoint2,
@@ -975,7 +975,7 @@ char __cdecl cldClosestPointOnTwoLines(
     }
 }
 
-void __cdecl cldClipping(collData_t *tbData, const dVector3 *v0, const dVector3 *v1, const dVector3 *v2)
+void cldClipping(collData_t *tbData, const dVector3 *v0, const dVector3 *v1, const dVector3 *v2)
 {
     double v5; // st7
     const char *v7; // eax
@@ -1486,7 +1486,7 @@ static void _cldTestOneTriangle(collData_t *tbData, const dVector3 &v0, const dV
 }
 
 
-int __cdecl dCollideBoxTriangleList(
+int dCollideBoxTriangleList(
     const unsigned __int16 *indices,
     const float (*verts)[3],
     int triCount,

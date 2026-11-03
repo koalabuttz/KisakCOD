@@ -4,7 +4,7 @@
 #include <xanim/xanim.h>
 #include <cgame/cg_local.h>
 
-void __cdecl CM_TraceStaticModel(
+void CM_TraceStaticModel(
     cStaticModel_s *sm,
     trace_t *trace,
     const float *start,
@@ -33,7 +33,7 @@ void __cdecl CM_TraceStaticModel(
     }
 }
 
-bool __cdecl CM_TraceStaticModelComplete(cStaticModel_s *sm, const float *start, const float *end, int contentmask)
+bool CM_TraceStaticModelComplete(cStaticModel_s *sm, const float *start, const float *end, int contentmask)
 {
     float localStart[3]; // [esp+0h] [ebp-50h] BYREF
     float delta[3]; // [esp+Ch] [ebp-44h] BYREF

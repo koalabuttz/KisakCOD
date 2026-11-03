@@ -1,6 +1,6 @@
 #pragma once
 
-int __cdecl RB_AddDebugLine(
+int RB_AddDebugLine(
     const float *start,
     const float *end,
     const float *color,
@@ -9,6 +9,6 @@ int __cdecl RB_AddDebugLine(
     int vertLimit,
     struct GfxPointVertex *verts);
 
-int __cdecl RB_EndDebugLines(bool depthTest, int vertCount, const struct GfxPointVertex *verts);
+int RB_EndDebugLines(bool depthTest, int vertCount, const struct GfxPointVertex *verts);
 
-void __cdecl RB_DrawDebug(const struct GfxViewParms *viewParms);
+void RB_DrawDebug(const struct GfxViewParms *viewParms);

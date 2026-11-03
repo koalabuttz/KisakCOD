@@ -42,7 +42,7 @@ clientActive_t clients[STATIC_MAX_LOCAL_CLIENTS];
 
 static clientConnection_t s_connection[STATIC_MAX_LOCAL_CLIENTS];
 
-clientConnection_t *__cdecl CL_GetLocalClientConnection(int32_t localClientNum)
+clientConnection_t *CL_GetLocalClientConnection(int32_t localClientNum)
 {
     iassert(localClientNum >= 0 && localClientNum < STATIC_MAX_LOCAL_CLIENTS);
     return &s_connection[localClientNum];
@@ -65,7 +65,7 @@ void MyAssertHandler(const char *filename, int line, int type, const char *fmt, 
 
 // SV_Netchan_Encode has no header declaration (it is only called from its own
 // TU), so the test declares the production signature itself.
-void __cdecl SV_Netchan_Encode(client_t *client, uint8_t *data, int size);
+void SV_Netchan_Encode(client_t *client, uint8_t *data, int size);
 
 // ---------------------------------------------------------------------------
 // Harness

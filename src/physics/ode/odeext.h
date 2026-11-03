@@ -8,10 +8,10 @@
 
 #define ODE_GEOM_POOL_COUNT 2048
 
-dxUserGeom *__cdecl Phys_GetWorldGeom();
-void __cdecl ODE_LeakCheck();
+dxUserGeom *Phys_GetWorldGeom();
+void ODE_LeakCheck();
 
-void __cdecl ODE_Init();
+void ODE_Init();
 
 struct odeGlob_t // sizeof=0x2C64E0
 {                                       // ...

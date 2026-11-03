@@ -77,14 +77,14 @@ server_t sv;
 int com_inServerFrame;
 int com_time;
 
-void __cdecl TRACK_sv_main()
+void TRACK_sv_main()
 {
     track_static_alloc_internal(&svs, 0xB227480, "svs", 9);
     track_static_alloc_internal(&sv, 392288, "sv", 9);
 }
 
 char string_2[1024];
-char *__cdecl SV_ExpandNewlines(char *in)
+char *SV_ExpandNewlines(char *in)
 {
     uint32_t l; // [esp+0h] [ebp-4h]
 
@@ -113,7 +113,7 @@ char *__cdecl SV_ExpandNewlines(char *in)
     return string_2;
 }
 
-void __cdecl SV_AddServerCommand(client_t *client, svscmd_type type, char *cmd)
+void SV_AddServerCommand(client_t *client, svscmd_type type, char *cmd)
 {
     int from; // [esp+8h] [ebp-10h]
     int index; // [esp+Ch] [ebp-Ch]
@@ -162,7 +162,7 @@ void __cdecl SV_AddServerCommand(client_t *client, svscmd_type type, char *cmd)
     }
 }
 
-int __cdecl SV_CanReplaceServerCommand(client_t *client, const char *cmd)
+int SV_CanReplaceServerCommand(client_t *client, const char *cmd)
 {
     int result; // eax
     int index; // [esp+1Ch] [ebp-8h]
@@ -217,7 +217,7 @@ int __cdecl SV_CanReplaceServerCommand(client_t *client, const char *cmd)
     return result;
 }
 
-bool __cdecl SV_IsFirstTokenEqual(const char *str1, const char *str2)
+bool SV_IsFirstTokenEqual(const char *str1, const char *str2)
 {
     while (*str1 && *str2 && *str1 != 32 && *str2 != 32)
     {
@@ -229,7 +229,7 @@ bool __cdecl SV_IsFirstTokenEqual(const char *str1, const char *str2)
     return (!*str1 || *str1 == 32) && (!*str2 || *str2 == 32);
 }
 
-void __cdecl SV_CullIgnorableServerCommands(client_t *client)
+void SV_CullIgnorableServerCommands(client_t *client)
 {
     int from; // [esp+8h] [ebp-10h]
     int fromIndex; // [esp+Ch] [ebp-Ch]
@@ -285,7 +285,7 @@ void SV_SendServerCommand(client_t *cl, svscmd_type type, const char *fmt, ...)
     }
 }
 
-client_t *__cdecl SV_FindClientByAddress(netadr_t from, int qport)
+client_t *SV_FindClientByAddress(netadr_t from, int qport)
 {
     client_t *j; // [esp+0h] [ebp-Ch]
     int i; // [esp+4h] [ebp-8h]
@@ -311,7 +311,7 @@ client_t *__cdecl SV_FindClientByAddress(netadr_t from, int qport)
     return j;
 }
 
-void __cdecl SVC_Status(netadr_t from)
+void SVC_Status(netadr_t from)
 {
     const char *v1; // eax
     const char *v2; // eax
@@ -423,7 +423,7 @@ void __cdecl SVC_Status(netadr_t from)
     NET_OutOfBandPrint(NS_SERVER, from, data);
 }
 
-void __cdecl SVC_GameCompleteStatus(netadr_t from)
+void SVC_GameCompleteStatus(netadr_t from)
 {
     const char *v1; // eax
     const char *v2; // eax
@@ -490,7 +490,7 @@ void __cdecl SVC_GameCompleteStatus(netadr_t from)
     NET_OutOfBandPrint(NS_SERVER, from, v4);
 }
 
-void __cdecl SVC_Info(netadr_t from)
+void SVC_Info(netadr_t from)
 {
     const char *v1; // eax
     const char *v3; // eax
@@ -637,7 +637,7 @@ void __cdecl SVC_Info(netadr_t from)
     NET_OutOfBandPrint(NS_SERVER, from, response);
 }
 
-void __cdecl SV_ConnectionlessPacket(netadr_t from, msg_t *msg)
+void SV_ConnectionlessPacket(netadr_t from, msg_t *msg)
 {
     const char *c; // [esp+8h] [ebp-14h]
     int clientIndex; // [esp+Ch] [ebp-10h]
@@ -744,7 +744,7 @@ void __cdecl SV_ConnectionlessPacket(netadr_t from, msg_t *msg)
     SV_Cmd_EndTokenizedString();
 }
 
-void __cdecl SV_PacketEvent(netadr_t from, msg_t *msg)
+void SV_PacketEvent(netadr_t from, msg_t *msg)
 {
     iassert(Sys_IsMainThread());
 
@@ -807,7 +807,7 @@ void __cdecl SV_PacketEvent(netadr_t from, msg_t *msg)
     }
 }
 
-void __cdecl SV_CalcPings()
+void SV_CalcPings()
 {
     int j; // [esp+4h] [ebp-18h]
     client_t *v1; // [esp+8h] [ebp-14h]
@@ -861,7 +861,7 @@ void __cdecl SV_CalcPings()
     }
 }
 
-void __cdecl SV_FreeClientScriptId(client_t *cl)
+void SV_FreeClientScriptId(client_t *cl)
 {
     Com_Printf(CON_CHANNEL_SERVER, "SV_FreeClientScriptId: %d, %d -> 0\n", cl - svs.clients, cl->scriptId);
     if (!cl->scriptId)
@@ -870,7 +870,7 @@ void __cdecl SV_FreeClientScriptId(client_t *cl)
     cl->scriptId = 0;
 }
 
-void __cdecl SV_CheckTimeouts()
+void SV_CheckTimeouts()
 {
     client_t *drop; // [esp+0h] [ebp-14h]
     int connectdroppoint; // [esp+4h] [ebp-10h]
@@ -916,7 +916,7 @@ void __cdecl SV_CheckTimeouts()
     }
 }
 
-int __cdecl SV_CheckPaused()
+int SV_CheckPaused()
 {
     client_t *clients; // [esp+0h] [ebp-Ch]
     int i; // [esp+4h] [ebp-8h]
@@ -946,7 +946,7 @@ int __cdecl SV_CheckPaused()
     }
 }
 
-void __cdecl SV_RunFrame()
+void SV_RunFrame()
 {
     unsigned __int64 v0; // [esp+40h] [ebp-44h]
     unsigned __int64 start; // [esp+6Ch] [ebp-18h]
@@ -988,7 +988,7 @@ void __cdecl SV_RunFrame()
 int s_lastWallClockEndTime;
 int s_serverDebugFrame;
 ServerProfileTimes s_serverProfileTimes[10];
-void __cdecl SV_UpdatePerformanceFrame(float time)
+void SV_UpdatePerformanceFrame(float time)
 {
     float v1; // [esp+0h] [ebp-28h]
     float v2; // [esp+4h] [ebp-24h]
@@ -1039,7 +1039,7 @@ void __cdecl SV_UpdatePerformanceFrame(float time)
     }
 }
 
-void __cdecl SV_BotUserMove(client_t *cl)
+void SV_BotUserMove(client_t *cl)
 {
     playerState_s *v1; // esi
     usercmd_s nullcmd; // [esp+4h] [ebp-24h] BYREF
@@ -1092,7 +1092,7 @@ void __cdecl SV_BotUserMove(client_t *cl)
     }
 }
 
-void __cdecl SV_UpdateBots()
+void SV_UpdateBots()
 {
     client_t *clients; // [esp+30h] [ebp-8h]
     int i; // [esp+34h] [ebp-4h]
@@ -1124,7 +1124,7 @@ void __cdecl SV_UpdateBots()
     }
 }
 
-void __cdecl SV_WaitServer()
+void SV_WaitServer()
 {
     if (!Sys_IsMainThread())
         MyAssertHandler(".\\server_mp\\sv_main_mp.cpp", 2156, 0, "%s", "Sys_IsMainThread()");
@@ -1139,7 +1139,7 @@ void __cdecl SV_WaitServer()
     }
 }
 
-void __cdecl SV_InitSnapshot()
+void SV_InitSnapshot()
 {
     if (com_inServerFrame)
         MyAssertHandler(".\\server_mp\\sv_main_mp.cpp", 2186, 0, "%s", "!com_inServerFrame");
@@ -1148,13 +1148,13 @@ void __cdecl SV_InitSnapshot()
     sv.inFrame = 0;
 }
 
-void __cdecl SV_KillLocalServer()
+void SV_KillLocalServer()
 {
     if (com_sv_running->current.enabled)
         sv.killServer = 1;
 }
 
-void __cdecl SV_SetSystemInfoConfig()
+void SV_SetSystemInfoConfig()
 {
     char *v0; // eax
     char dest[0x2000]; // [esp+24h] [ebp-2008h] BYREF
@@ -1172,7 +1172,7 @@ void __cdecl SV_SetSystemInfoConfig()
     dvar_modifiedFlags &= ~8u;
 }
 
-void __cdecl SV_PreFrame()
+void SV_PreFrame()
 {
     char *v0; // eax
 
@@ -1194,7 +1194,7 @@ void __cdecl SV_PreFrame()
     }
 }
 
-int __cdecl SV_Frame(int msec)
+int SV_Frame(int msec)
 {
     PROF_SCOPED("SV_Frame");
     Hunk_CheckTempMemoryClear();
@@ -1224,7 +1224,7 @@ int __cdecl SV_Frame(int msec)
     }
 }
 
-void __cdecl SV_FrameInternal(int msec)
+void SV_FrameInternal(int msec)
 {
     int frameMsec; // [esp+0h] [ebp-4h]
 
@@ -1281,7 +1281,7 @@ void SV_PostFrame()
     }
 }
 
-char __cdecl SV_CheckOverflow()
+char SV_CheckOverflow()
 {
     const char *v0; // eax
     const char *v2; // eax

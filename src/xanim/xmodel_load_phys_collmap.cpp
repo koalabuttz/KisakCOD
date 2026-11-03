@@ -8,10 +8,10 @@
 #include <physics/phys_local.h>
 
 // KISAKTODO: move to "mass.cpp", but it's different from the ODE one.
-void __cdecl Phys_ComputeMassProperties(
+void Phys_ComputeMassProperties(
     const float *mins,
     const float *maxs,
-    bool(__cdecl *isBoxInSolid)(const float *, const float *, const PhysGeomList *),
+    bool(*isBoxInSolid)(const float *, const float *, const PhysGeomList *),
     void *userData,
     float *centerOfMass,
     float *momentsOfInertia,
@@ -130,7 +130,7 @@ void __cdecl Phys_ComputeMassProperties(
 
 
 
-char __cdecl SkipEpair(char *token, const char **file)
+char SkipEpair(char *token, const char **file)
 {
     char *v3; // eax
     char *v5; // eax
@@ -196,7 +196,7 @@ char __cdecl SkipEpair(char *token, const char **file)
     }
 }
 
-uint32_t __cdecl Xmodel_CountPhysicsCollMapGeoms(const char **file, const char *name)
+uint32_t Xmodel_CountPhysicsCollMapGeoms(const char **file, const char *name)
 {
     int CurrentParseLine; // eax
     uint32_t brushCount; // [esp+B4h] [ebp-8h]
@@ -302,7 +302,7 @@ uint32_t __cdecl Xmodel_CountPhysicsCollMapGeoms(const char **file, const char *
     }
 }
 
-char __cdecl IsBoxInBrush(const float *boxCenter, const float *boxHalfLengths, const BrushWrapper *brush)
+char IsBoxInBrush(const float *boxCenter, const float *boxHalfLengths, const BrushWrapper *brush)
 {
     float v4; // [esp+0h] [ebp-30h]
     float v5; // [esp+4h] [ebp-2Ch]
@@ -340,7 +340,7 @@ char __cdecl IsBoxInBrush(const float *boxCenter, const float *boxHalfLengths, c
     return 1;
 }
 
-char __cdecl IsBoxInBox(const float *boxCenter, const float *boxHalfLengths, const PhysGeomInfo *geom)
+char IsBoxInBox(const float *boxCenter, const float *boxHalfLengths, const PhysGeomInfo *geom)
 {
     float v4; // [esp+0h] [ebp-44h]
     float v5; // [esp+4h] [ebp-40h]
@@ -378,7 +378,7 @@ char __cdecl IsBoxInBox(const float *boxCenter, const float *boxHalfLengths, con
     return 1;
 }
 
-char __cdecl IsBoxInCylinder(const float *boxCenter, const float *boxHalfLengths, const PhysGeomInfo *geom)
+char IsBoxInCylinder(const float *boxCenter, const float *boxHalfLengths, const PhysGeomInfo *geom)
 {
     float v4; // [esp+0h] [ebp-38h]
     float v5; // [esp+4h] [ebp-34h]
@@ -413,7 +413,7 @@ char __cdecl IsBoxInCylinder(const float *boxCenter, const float *boxHalfLengths
     return 1;
 }
 
-bool __cdecl IsBoxInGeom(const float *boxCenter, const float *boxHalfLengths, const PhysGeomList *geomList)
+bool IsBoxInGeom(const float *boxCenter, const float *boxHalfLengths, const PhysGeomList *geomList)
 {
     int type; // [esp+0h] [ebp-Ch]
     PhysGeomInfo *geomIter; // [esp+4h] [ebp-8h]
@@ -452,7 +452,7 @@ bool __cdecl IsBoxInGeom(const float *boxCenter, const float *boxHalfLengths, co
     return 0;
 }
 
-char __cdecl Xmodel_ParsePhysicsCylinder(const char **file, PhysGeomInfo *geom)
+char Xmodel_ParsePhysicsCylinder(const char **file, PhysGeomInfo *geom)
 {
     float angles[3]; // [esp+0h] [ebp-1Ch] BYREF
     const char *token; // [esp+Ch] [ebp-10h]
@@ -490,7 +490,7 @@ char __cdecl Xmodel_ParsePhysicsCylinder(const char **file, PhysGeomInfo *geom)
     }
 }
 
-bool __cdecl Xmodel_ParsePhysicsBox(const char **file, PhysGeomInfo *geom)
+bool Xmodel_ParsePhysicsBox(const char **file, PhysGeomInfo *geom)
 {
     if (!geom)
         MyAssertHandler(".\\xanim\\xmodel_load_phys_collmap.cpp", 445, 0, "%s", "geom");
@@ -521,7 +521,7 @@ bool __cdecl Xmodel_ParsePhysicsBox(const char **file, PhysGeomInfo *geom)
     }
 }
 
-char __cdecl AddBrushBevels(
+char AddBrushBevels(
     float (*planes)[4],
     adjacencyWinding_t *windings,
     uint32_t *sideCount,
@@ -596,7 +596,7 @@ char __cdecl AddBrushBevels(
     return 1;
 }
 
-void __cdecl Map_SkipOptionalArg(const char **file, const char *argName)
+void Map_SkipOptionalArg(const char **file, const char *argName)
 {
     if (!strcmp(Com_Parse(file)->token, argName))
         Com_ParseOnLine(file);
@@ -604,7 +604,7 @@ void __cdecl Map_SkipOptionalArg(const char **file, const char *argName)
         Com_UngetToken();
 }
 
-char __cdecl Map_SkipNamedFlags(const char **file, const char *key)
+char Map_SkipNamedFlags(const char **file, const char *key)
 {
     parseInfo_t *token; // [esp+14h] [ebp-4h]
 
@@ -628,7 +628,7 @@ char __cdecl Map_SkipNamedFlags(const char **file, const char *key)
     }
 }
 
-char __cdecl SnapAxialVector(float *normal)
+char SnapAxialVector(float *normal)
 {
     float v2; // [esp+0h] [ebp-14h]
     float v3; // [esp+4h] [ebp-10h]
@@ -662,7 +662,7 @@ char __cdecl SnapAxialVector(float *normal)
     return 0;
 }
 
-void __cdecl SnapPlane(float *plane)
+void SnapPlane(float *plane)
 {
     float v1; // [esp+4h] [ebp-8h]
     float v2; // [esp+8h] [ebp-4h]
@@ -674,7 +674,7 @@ void __cdecl SnapPlane(float *plane)
         plane[3] = Q_rint(plane[3]);
 }
 
-bool __cdecl PlaneEqual(const float *p1, const float *p2)
+bool PlaneEqual(const float *p1, const float *p2)
 {
     float v3; // [esp+8h] [ebp-8h]
     float v4; // [esp+Ch] [ebp-4h]
@@ -686,7 +686,7 @@ bool __cdecl PlaneEqual(const float *p1, const float *p2)
     return v3 < 0.001;
 }
 
-char __cdecl RemoveDuplicateBrushPlanes(
+char RemoveDuplicateBrushPlanes(
     float (*planes)[4],
     uint32_t *sideCount,
     const char *mapname,
@@ -753,7 +753,7 @@ char __cdecl RemoveDuplicateBrushPlanes(
     return 1;
 }
 
-int __cdecl AddSimplePoint(
+int AddSimplePoint(
     const float (*planes)[4],
     uint32_t planeCount,
     const uint32_t *planeIndex,
@@ -797,7 +797,7 @@ int __cdecl AddSimplePoint(
     }
 }
 
-uint32_t __cdecl GetPlaneIntersections(
+uint32_t GetPlaneIntersections(
     const float (*planes)[4],
     uint32_t planeCount,
     SimplePlaneIntersection *OutPts,
@@ -833,12 +833,12 @@ uint32_t __cdecl GetPlaneIntersections(
     return ptCount;
 }
 
-char __cdecl Xmodel_ParsePhysicsBrush(
+char Xmodel_ParsePhysicsBrush(
     char **file,
     char *mapname,
     uint32_t brushCount,
     PhysGeomInfo *geom,
-    void *(__cdecl *Alloc)(int))
+    void *(*Alloc)(int))
 {
     cplane_s *v6; // [esp+18h] [ebp-68F8h]
     float *v7; // [esp+1Ch] [ebp-68F4h]
@@ -1026,7 +1026,7 @@ char __cdecl Xmodel_ParsePhysicsBrush(
     return 1;
 }
 
-void __cdecl GetGeomAABB(const PhysGeomInfo *geom, float *mins, float *maxs)
+void GetGeomAABB(const PhysGeomInfo *geom, float *mins, float *maxs)
 {
     float v3; // [esp+0h] [ebp-40h]
     float v4; // [esp+4h] [ebp-3Ch]
@@ -1091,11 +1091,11 @@ void __cdecl GetGeomAABB(const PhysGeomInfo *geom, float *mins, float *maxs)
     }
 }
 
-PhysGeomList *__cdecl Xmodel_ParsePhysicsCollMap(
+PhysGeomList *Xmodel_ParsePhysicsCollMap(
     const char **file,
     char *name,
     uint32_t geomCount,
-    void *(__cdecl *Alloc)(int))
+    void *(*Alloc)(int))
 {
     int CurrentParseLine; // eax
     float v6; // [esp+0h] [ebp-120h]
@@ -1293,7 +1293,7 @@ PhysGeomList *__cdecl Xmodel_ParsePhysicsCollMap(
     }
 }
 
-PhysGeomList *__cdecl XModel_LoadPhysicsCollMap(const char *name, void *(__cdecl *Alloc)(int))
+PhysGeomList *XModel_LoadPhysicsCollMap(const char *name, void *(*Alloc)(int))
 {
     char filename[1024]; // [esp+0h] [ebp-418h] BYREF
     const char *buf; // [esp+404h] [ebp-14h] BYREF

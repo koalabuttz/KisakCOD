@@ -15,7 +15,7 @@
 #include <vector>
 
 static clientConnection_t connection;
-clientConnection_t *__cdecl CL_GetLocalClientConnection(int32_t localClientNum)
+clientConnection_t *CL_GetLocalClientConnection(int32_t localClientNum)
 {
     iassert(localClientNum == 0);
     return &connection;
@@ -34,7 +34,7 @@ uint32_t frame_msec;
 int com_frameTime;
 static const char *keyArgument = "", *timeArgument = "";
 static int warnings;
-const char *__cdecl Cmd_Argv(int index)
+const char *Cmd_Argv(int index)
 {
     iassert(index == 1 || index == 2);
     return index == 1 ? keyArgument : timeArgument;

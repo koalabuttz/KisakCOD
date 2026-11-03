@@ -8,7 +8,7 @@
 #include <universal/q_parse.h>
 #include <devgui/devgui.h>
 
-void __cdecl GraphFloat_Load(GraphFloat *graph, char *fileName, float scale)
+void GraphFloat_Load(GraphFloat *graph, char *fileName, float scale)
 {
     char *InfoString; // eax
     char loadBuffer[8196]; // [esp+4h] [ebp-2008h] BYREF
@@ -21,7 +21,7 @@ void __cdecl GraphFloat_Load(GraphFloat *graph, char *fileName, float scale)
     graph->scale = scale;
 }
 
-void __cdecl GraphFloat_ParseBuffer(GraphFloat *graph, const char *buffer, char *fileName)
+void GraphFloat_ParseBuffer(GraphFloat *graph, const char *buffer, char *fileName)
 {
     parseInfo_t *tokenb; // [esp+0h] [ebp-10h]
     parseInfo_t *token; // [esp+0h] [ebp-10h]
@@ -59,20 +59,20 @@ void __cdecl GraphFloat_ParseBuffer(GraphFloat *graph, const char *buffer, char 
         Com_Error(ERR_DROP, "GraphFloat_ParseBuffer: Error parsing graph file [%s]", fileName);
 }
 
-void __cdecl GraphFloat_CreateDevGui(GraphFloat *graph, const char *devguiPath)
+void GraphFloat_CreateDevGui(GraphFloat *graph, const char *devguiPath)
 {
     iassert( graph );
     iassert( devguiPath );
     graph->devguiGraph.knotCountMax = 32;
     graph->devguiGraph.knots = graph->knots;
     graph->devguiGraph.knotCount = &graph->knotCount;
-    graph->devguiGraph.eventCallback = (void(__cdecl *)(const DevGraph *, DevEventType, int))GraphFloat_DevGuiCB_Event;
-    graph->devguiGraph.textCallback = (void(__cdecl *)(const DevGraph *, const float, const float, char *, const int))GraphFloat_DevGuiCB_Text;
+    graph->devguiGraph.eventCallback = (void(*)(const DevGraph *, DevEventType, int))GraphFloat_DevGuiCB_Event;
+    graph->devguiGraph.textCallback = (void(*)(const DevGraph *, const float, const float, char *, const int))GraphFloat_DevGuiCB_Text;
     graph->devguiGraph.data = graph;
     DevGui_AddGraph(devguiPath, &graph->devguiGraph);
 }
 
-void __cdecl GraphFloat_DevGuiCB_Event(const DevGraph *graph, DevEventType event)
+void GraphFloat_DevGuiCB_Event(const DevGraph *graph, DevEventType event)
 {
     iassert( graph );
     iassert( graph->data );
@@ -80,7 +80,7 @@ void __cdecl GraphFloat_DevGuiCB_Event(const DevGraph *graph, DevEventType event
         GraphFloat_SaveToFile((const GraphFloat *)graph->data);
 }
 
-void __cdecl GraphFloat_SaveToFile(const GraphFloat *graph)
+void GraphFloat_SaveToFile(const GraphFloat *graph)
 {
     char buffer[1028]; // [esp+30h] [ebp-418h] BYREF
     int knotCount; // [esp+438h] [ebp-10h]
@@ -111,7 +111,7 @@ void __cdecl GraphFloat_SaveToFile(const GraphFloat *graph)
     }
 }
 
-void __cdecl GraphFloat_DevGuiCB_Text(const DevGraph *devGuiGraph, float inputX, float inputY, char *text, const int textLength)
+void GraphFloat_DevGuiCB_Text(const DevGraph *devGuiGraph, float inputX, float inputY, char *text, const int textLength)
 {
     float inputYa; // [esp+24h] [ebp+10h]
 

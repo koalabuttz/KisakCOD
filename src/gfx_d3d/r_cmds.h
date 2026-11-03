@@ -1,4 +1,4 @@
 #pragma once
 
-void __cdecl R_RegisterCmds();
-void __cdecl R_UnregisterCmds();
+void R_RegisterCmds();
+void R_UnregisterCmds();

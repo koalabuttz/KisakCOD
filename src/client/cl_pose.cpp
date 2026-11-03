@@ -11,7 +11,7 @@
 #include <xanim/dobj_utils.h>
 
 
-char *__cdecl CL_AllocSkelMemory(unsigned int size)
+char *CL_AllocSkelMemory(unsigned int size)
 {
     iassert(size);
 
@@ -37,13 +37,13 @@ char *__cdecl CL_AllocSkelMemory(unsigned int size)
     return result;
 }
 
-int __cdecl CL_GetSkelTimeStamp()
+int CL_GetSkelTimeStamp()
 {
     return clients[R_GetLocalClientNum()].skelTimeStamp;
 }
 
 int warnCount_0 = 0;
-int __cdecl CL_DObjCreateSkelForBones(const DObj_s *obj, int *partBits, DObjAnimMat **pMatOut)
+int CL_DObjCreateSkelForBones(const DObj_s *obj, int *partBits, DObjAnimMat **pMatOut)
 {
     int timeStamp; // r31
     unsigned int AllocSkelSize; // r3

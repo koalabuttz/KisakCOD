@@ -21,7 +21,7 @@ static scrStringGlob_t scrStringGlob; // 0x244E300
 
 #define SCR_SYS_GAME 1
 
-static uint32_t __cdecl GetHashCode(const char *str, uint32_t len)
+static uint32_t GetHashCode(const char *str, uint32_t len)
 {
 	uint32_t hash; // [esp+4h] [ebp-8h]
 
@@ -42,7 +42,7 @@ static uint32_t __cdecl GetHashCode(const char *str, uint32_t len)
 	return hash % (STRINGLIST_SIZE-1) + 1;
 }
 
-uint32_t __cdecl Scr_AllocString(char *s, int sys)
+uint32_t Scr_AllocString(char *s, int sys)
 {
 	iassert(sys == SCR_SYS_GAME);
 	return SL_GetString(s, 1);
@@ -515,7 +515,7 @@ uint32_t SL_FindString(const char* str)
 	return FindStringOfSize(str, strlen(str) + 1);
 }
 
-void __cdecl SL_TransferRefToUser(uint32_t stringValue, uint32_t user)
+void SL_TransferRefToUser(uint32_t stringValue, uint32_t user)
 {
 	volatile LONG Comperand; // [esp+20h] [ebp-28h]
 	RefString *refStr; // [esp+44h] [ebp-4h]
@@ -704,7 +704,7 @@ static void SL_FreeString(uint32_t stringValue, RefString* refStr, uint32_t len)
 	}
 }
 
-const char* __cdecl SL_DebugConvertToString(uint32_t stringValue)
+const char* SL_DebugConvertToString(uint32_t stringValue)
 {
 	int len; // [esp+0h] [ebp-10h]
 	int i; // [esp+8h] [ebp-8h]
@@ -791,7 +791,7 @@ void SL_RemoveRefToStringOfSize(uint32_t stringValue, uint32_t len)
 	}
 }
 
-void __cdecl SL_AddUser(uint32_t stringValue, uint32_t user)
+void SL_AddUser(uint32_t stringValue, uint32_t user)
 {
 	RefString *RefString; // eax
 
@@ -799,7 +799,7 @@ void __cdecl SL_AddUser(uint32_t stringValue, uint32_t user)
 	SL_AddUserInternal(RefString, user);
 }
 
-void __cdecl Scr_SetString(uint16_t *to, uint32_t from)
+void Scr_SetString(uint16_t *to, uint32_t from)
 {
 	if (from)
 		SL_AddRefToString(from);
@@ -808,7 +808,7 @@ void __cdecl Scr_SetString(uint16_t *to, uint32_t from)
 	*to = from;
 }
 
-uint32_t __cdecl SL_ConvertToLowercase(uint32_t stringValue, uint32_t user, mtType_t type)
+uint32_t SL_ConvertToLowercase(uint32_t stringValue, uint32_t user, mtType_t type)
 {
 	const char *v4; // [esp+4Ch] [ebp-2014h]
 	char str[8192]; // [esp+50h] [ebp-2010h] BYREF
@@ -834,7 +834,7 @@ uint32_t __cdecl SL_ConvertToLowercase(uint32_t stringValue, uint32_t user, mtTy
 	}
 }
 
-void __cdecl CreateCanonicalFilename(char *newFilename, const char *filename, int count)
+void CreateCanonicalFilename(char *newFilename, const char *filename, int count)
 {
 	uint32_t c; // [esp+0h] [ebp-4h]
 	const int oldCount = count; // addition because the old assert was broken, lol
@@ -863,7 +863,7 @@ void __cdecl CreateCanonicalFilename(char *newFilename, const char *filename, in
 	*newFilename = 0;
 }
 
-uint32_t __cdecl Scr_CreateCanonicalFilename(const char *filename)
+uint32_t Scr_CreateCanonicalFilename(const char *filename)
 {
 	char newFilename[1028]; // [esp+0h] [ebp-408h] BYREF
 

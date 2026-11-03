@@ -1,3 +1,3 @@
 #pragma once
 
-void __cdecl RB_DrawSpotShadowOverlay();
+void RB_DrawSpotShadowOverlay();

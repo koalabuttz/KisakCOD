@@ -26,44 +26,44 @@ union GfxStaticModelPreTessSurf // sizeof=0x4
 //};
 
 
-void __cdecl RB_ShowTess(GfxCmdBufContext context, const float *center, const char *tessName, const float *color);
-uint32_t __cdecl R_TessCodeMeshList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext);
-void __cdecl R_SetVertexDeclTypeNormal(GfxCmdBufState *state, MaterialVertexDeclType vertDeclType);
-void __cdecl R_TessCodeMeshList_AddCodeMeshArgs(
+void RB_ShowTess(GfxCmdBufContext context, const float *center, const char *tessName, const float *color);
+uint32_t R_TessCodeMeshList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext);
+void R_SetVertexDeclTypeNormal(GfxCmdBufState *state, MaterialVertexDeclType vertDeclType);
+void R_TessCodeMeshList_AddCodeMeshArgs(
     GfxCmdBufSourceState *source,
     const GfxBackEndData *data,
     const FxCodeMeshData *codeMesh);
-void __cdecl R_SetParticleCloudConstants(GfxCmdBufSourceState *source, const GfxParticleCloud *cloud);
-void __cdecl RB_Vec3DirWorldToView(const GfxCmdBufSourceState *source, const float *worldDir, float *viewDir);
-void __cdecl RB_CreateParticleCloud2dAxis(const GfxParticleCloud *cloud, const float *viewUp, float (*viewAxis)[2][2]);
-void __cdecl R_DrawXModelSkinnedUncached(GfxCmdBufContext context, XSurface *xsurf, GfxPackedVertex *skinnedVert);
-void __cdecl R_DrawXModelSkinnedModelSurf(GfxCmdBufContext context, const GfxModelSkinnedSurface *modelSurf);
-void __cdecl R_DrawXModelSkinnedCached(GfxCmdBufContext context, const GfxModelSkinnedSurface *modelSurf);
-void __cdecl R_SetVertexDeclTypeWorld(GfxCmdBufState *state);
+void R_SetParticleCloudConstants(GfxCmdBufSourceState *source, const GfxParticleCloud *cloud);
+void RB_Vec3DirWorldToView(const GfxCmdBufSourceState *source, const float *worldDir, float *viewDir);
+void RB_CreateParticleCloud2dAxis(const GfxParticleCloud *cloud, const float *viewUp, float (*viewAxis)[2][2]);
+void R_DrawXModelSkinnedUncached(GfxCmdBufContext context, XSurface *xsurf, GfxPackedVertex *skinnedVert);
+void R_DrawXModelSkinnedModelSurf(GfxCmdBufContext context, const GfxModelSkinnedSurface *modelSurf);
+void R_DrawXModelSkinnedCached(GfxCmdBufContext context, const GfxModelSkinnedSurface *modelSurf);
+void R_SetVertexDeclTypeWorld(GfxCmdBufState *state);
 
-uint32_t __cdecl R_TessTrianglesList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext);
-uint32_t __cdecl R_TessCodeMeshList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext);
-uint32_t __cdecl R_TessMarkMeshList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext);
-uint32_t __cdecl R_TessParticleCloudList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext);
-uint32_t __cdecl R_TessXModelSkinnedDrawSurfList(
+uint32_t R_TessTrianglesList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext);
+uint32_t R_TessCodeMeshList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext);
+uint32_t R_TessMarkMeshList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext);
+uint32_t R_TessParticleCloudList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext);
+uint32_t R_TessXModelSkinnedDrawSurfList(
     const GfxDrawSurfListArgs *listArgs,
     GfxCmdBufContext prepassContext);
-uint32_t __cdecl R_TessXModelRigidDrawSurfList(
+uint32_t R_TessXModelRigidDrawSurfList(
     const GfxDrawSurfListArgs *listArgs,
     GfxCmdBufContext prepassContext);
-uint32_t __cdecl R_TessXModelRigidSkinnedDrawSurfList(
+uint32_t R_TessXModelRigidSkinnedDrawSurfList(
     const GfxDrawSurfListArgs *listArgs,
     GfxCmdBufContext prepassContext);
-uint32_t __cdecl R_TessStaticModelRigidDrawSurfList(
+uint32_t R_TessStaticModelRigidDrawSurfList(
     const GfxDrawSurfListArgs *listArgs,
     GfxCmdBufContext prepassContext);
-uint32_t __cdecl R_TessStaticModelSkinnedDrawSurfList(
+uint32_t R_TessStaticModelSkinnedDrawSurfList(
     const GfxDrawSurfListArgs *listArgs,
     GfxCmdBufContext prepassContext);
-uint32_t __cdecl R_TessStaticModelPreTessList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext);
-uint32_t __cdecl R_TessStaticModelCachedList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext);
-uint32_t __cdecl R_TessTrianglesPreTessList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext);
-uint32_t __cdecl R_TessBModel(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext);
+uint32_t R_TessStaticModelPreTessList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext);
+uint32_t R_TessStaticModelCachedList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext);
+uint32_t R_TessTrianglesPreTessList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext);
+uint32_t R_TessBModel(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext);
 
 
 

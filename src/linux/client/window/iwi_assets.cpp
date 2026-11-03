@@ -8,8 +8,8 @@
 #include <stdexcept>
 #include <vector>
 
-void __cdecl Image_CopyBitmapData(GfxRawImage *,GfxImageFileHeader *,uint8_t *);
-void __cdecl Image_CopyDxtcData(GfxRawImage *,GfxImageFileHeader *,uint8_t *);
+void Image_CopyBitmapData(GfxRawImage *,GfxImageFileHeader *,uint8_t *);
+void Image_CopyDxtcData(GfxRawImage *,GfxImageFileHeader *,uint8_t *);
 namespace kisak::window {
 namespace {
 constexpr size_t MaxFileBytes=32*1024*1024;

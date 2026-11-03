@@ -22,9 +22,9 @@ const char *g_block_mem_name[9] =
 };
 
 // --- file-local forward declarations (moved out of database.h) ---
-static uint8_t *__cdecl DB_MemAlloc(uint32_t size, uint32_t type, uint32_t allocType);
+static uint8_t *DB_MemAlloc(uint32_t size, uint32_t type, uint32_t allocType);
 
-void __cdecl DB_RecoverGeometryBuffers(XZoneMemory *zoneMem)
+void DB_RecoverGeometryBuffers(XZoneMemory *zoneMem)
 {
     uint8_t *lockedData; // [esp+4h] [ebp-4h]
     uint8_t *lockedDataa; // [esp+4h] [ebp-4h]
@@ -53,7 +53,7 @@ void __cdecl DB_RecoverGeometryBuffers(XZoneMemory *zoneMem)
     }
 }
 
-void __cdecl DB_ReleaseGeometryBuffers(XZoneMemory *zoneMem)
+void DB_ReleaseGeometryBuffers(XZoneMemory *zoneMem)
 {
     IDirect3DVertexBuffer9 *vb; // [esp+0h] [ebp-8h]
     IDirect3DIndexBuffer9 *ib; // [esp+4h] [ebp-4h]
@@ -76,7 +76,7 @@ void __cdecl DB_ReleaseGeometryBuffers(XZoneMemory *zoneMem)
     }
 }
 
-void __cdecl DB_AllocXZoneMemory(
+void DB_AllocXZoneMemory(
     uint32_t *blockSize,
     const char *filename,
     XZoneMemory *zoneMem,
@@ -123,7 +123,7 @@ void __cdecl DB_AllocXZoneMemory(
         zoneMem->lockedIndexData = (uint8_t *)R_AllocStaticIndexBuffer((IDirect3DIndexBuffer9 **)&zoneMem->indexBuffer, zoneMem->blocks[8].size);
 }
 
-uint8_t *__cdecl DB_MemAlloc(uint32_t size, uint32_t type, uint32_t allocType)
+uint8_t *DB_MemAlloc(uint32_t size, uint32_t type, uint32_t allocType)
 {
     if (type <= 1)
         return PMem_Alloc(size + 15, 0x1000u, 4, allocType);

@@ -18,7 +18,7 @@ static int com_lastDObjIndex;
 static __int16 clientObjMapBuffered[CLIENT_DOBJ_HANDLE_MAX];
 static uint8_t serverObjDirty[272];
 
-void __cdecl TRACK_dobj_management()
+void TRACK_dobj_management()
 {
     track_static_alloc_internal(objBuf, 204800, "objBuf", 11);
     track_static_alloc_internal(objAlloced, 2048, "objAlloced", 11);
@@ -26,7 +26,7 @@ void __cdecl TRACK_dobj_management()
     track_static_alloc_internal(serverObjMap, 2048, "serverObjMap", 11);
 }
 
-DObj_s *__cdecl Com_GetClientDObj(uint32_t handle, int localClientNum)
+DObj_s *Com_GetClientDObj(uint32_t handle, int localClientNum)
 {
     iassert(handle >= 0 && handle < CLIENT_DOBJ_HANDLE_MAX);
     iassert(localClientNum == 0);
@@ -62,7 +62,7 @@ DObj_s *Com_GetClientDObjBuffered(uint32_t handle, int localClientNum)
         return 0;
 }
 
-DObj_s *__cdecl Com_GetServerDObj(uint32_t handle)
+DObj_s *Com_GetServerDObj(uint32_t handle)
 {
     iassert(((unsigned)handle < (sizeof(serverObjMap) / (sizeof(serverObjMap[0]) * (sizeof(serverObjMap) != 4 || sizeof(serverObjMap[0]) <= 4)))));
     iassert((unsigned)serverObjMap[handle] < DOBJ_HANDLE_MAX);
@@ -85,7 +85,7 @@ bool Com_ServerDObjDirty(int handle)
     return ((1 << (handle & 7)) & serverObjDirty[handle >> 3]) != 0;
 }
 
-DObj_s *__cdecl Com_ClientDObjCreate(
+DObj_s *Com_ClientDObjCreate(
     DObjModel_s *dobjModels,
     uint16_t numModels,
     XAnimTree_s *tree,
@@ -114,7 +114,7 @@ DObj_s *__cdecl Com_ClientDObjCreate(
     return &objBuf[index];
 }
 
-int __cdecl Com_GetFreeDObjIndex()
+int Com_GetFreeDObjIndex()
 {
 #ifdef KISAK_MP
     iassert(Sys_IsMainThread());
@@ -168,7 +168,7 @@ int __cdecl Com_GetFreeDObjIndex()
     return 0;
 }
 
-void __cdecl Com_ClientDObjClearAllSkel()
+void Com_ClientDObjClearAllSkel()
 {
     int handleOffset; // [esp+4h] [ebp-4h]
 
@@ -179,7 +179,7 @@ void __cdecl Com_ClientDObjClearAllSkel()
     }
 }
 
-DObj_s *__cdecl Com_ServerDObjCreate(
+DObj_s *Com_ServerDObjCreate(
     DObjModel_s *dobjModels,
     uint16_t numModels,
     XAnimTree_s *tree,
@@ -211,7 +211,7 @@ DObj_s *__cdecl Com_ServerDObjCreate(
     return &objBuf[index];
 }
 
-void __cdecl Com_SafeClientDObjFree(uint32_t handle, int localClientNum)
+void Com_SafeClientDObjFree(uint32_t handle, int localClientNum)
 {
     uint32_t index; // [esp+0h] [ebp-4h]
 
@@ -240,7 +240,7 @@ void __cdecl Com_SafeClientDObjFree(uint32_t handle, int localClientNum)
     }
 }
 
-void __cdecl Com_SafeServerDObjFree(uint32_t handle)
+void Com_SafeServerDObjFree(uint32_t handle)
 {
     uint32_t index; // [esp+0h] [ebp-4h]
 
@@ -273,7 +273,7 @@ void __cdecl Com_SafeServerDObjFree(uint32_t handle)
 }
 
 static int g_bDObjInited;
-void __cdecl Com_InitDObj()
+void Com_InitDObj()
 {
     Com_Memset(objAlloced, 0, ARRAY_COUNT(objAlloced) * sizeof(bool));
     objFreeCount = ARRAY_COUNT(objAlloced) - 1;
@@ -286,7 +286,7 @@ void __cdecl Com_InitDObj()
     g_bDObjInited = 1;
 }
 
-void __cdecl Com_ShutdownDObj()
+void Com_ShutdownDObj()
 {
 
     if (g_bDObjInited)

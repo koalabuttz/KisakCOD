@@ -26,12 +26,12 @@ void	IN_KillRumbleScripts(int controller);
 void	IN_KillRumbleScripts( void );
 
 // LWSS add
-void __cdecl IN_SetForegroundWindow();
-bool __cdecl IN_IsForegroundWindow();
+void IN_SetForegroundWindow();
+bool IN_IsForegroundWindow();
 
 void IN_ActivateMouse(qboolean force);
-void __cdecl IN_RecenterMouse();
-void __cdecl IN_SetCursorPos(tagPOINT x);
+void IN_RecenterMouse();
+void IN_SetCursorPos(tagPOINT x);
 // LWSS end
 
 #define IN_CMD_GOTO_XTIMES	-5
