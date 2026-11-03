@@ -2076,16 +2076,17 @@ void Phys_CollideOrientedBrushModelWithBrush(const cbrush_t *fixedBrush, const o
 
 void Phys_CollideOrientedBrushWithBrush_Wrapper(const cbrush_t *orientedBrush, void *userData)
 {
+    const BrushBrushData *data = (const BrushBrushData *)userData;
     Results *results; // [esp+4h] [ebp-4h]
 
     if (!userData)
         MyAssertHandler(".\\physics\\phys_coll_boxbrush.cpp", 1673, 0, "%s", "userData");
-    results = (Results *)*((uint32_t *)userData + 2);
+    results = data->results;
     if (results->contactCount < results->maxContacts)
         Phys_CollideOrientedBrushWithBrush(
             orientedBrush,
-            *(const cbrush_t **)userData,
-            *((const objInfo **)userData + 1),
+            data->fixedBrush,
+            data->input,
             results);
 }
 

@@ -929,9 +929,9 @@ void Phys_ObjAddGeomBrush(PhysWorld worldIndex, dxBody *id, const cbrush_t *brus
         MyAssertHandler(".\\physics\\phys_ode.cpp", 798, 0, "%s", "id");
     body = id;
     geomState.type = PHYS_GEOM_BRUSH;
-    geomState.u.cylinderState.direction = (int)brush;
-    geomState.u.cylinderState.radius = physMass->momentsOfInertia[0];
-    geomState.u.cylinderState.halfHeight = physMass->momentsOfInertia[1];
+    geomState.u.brushState.u.brush = brush;
+    geomState.u.brushState.momentsOfInertia[0] = physMass->momentsOfInertia[0];
+    geomState.u.brushState.momentsOfInertia[1] = physMass->momentsOfInertia[1];
     geomState.u.brushState.momentsOfInertia[2] = physMass->momentsOfInertia[2];
     geomState.u.brushState.productsOfInertia[0] = physMass->productsOfInertia[0];
     geomState.u.brushState.productsOfInertia[1] = physMass->productsOfInertia[1];
@@ -1213,7 +1213,7 @@ void Phys_ObjAddForce(PhysWorld worldIndex, dxBody *id, float *worldPos, const f
     dBodyEnable(id);
     userData = (PhysObjUserData *)dBodyGetData(id);
     odeWorld = ODE_BodyGetWorld(id);
-    userData->timeLastAsleep = (int)physGlob.space[51 * Phys_IndexFromODEWorld(odeWorld) - 152];
+    userData->timeLastAsleep = physGlob.worldData[Phys_IndexFromODEWorld(odeWorld)].timeLastUpdate;
 }
 
 int Phys_IndexFromODEWorld(dxWorld *world)
@@ -1432,7 +1432,7 @@ int Phys_DrawDebugTextForWorld(
     v6 = va("   Awake: %i", physGlob.debugActiveObjCount);
     CG_DrawStringExt(scrPlace, *x, *y, v6, colorGreen, 0, 1, charHeight);
     *y = *y + charHeight;
-    text = va("   Asleep: %i", (char *)bodyCount - physGlob.debugActiveObjCount);
+    text = va("   Asleep: %i", bodyCount - physGlob.debugActiveObjCount);
     CG_DrawStringExt(scrPlace, *x, *y, text, colorGreen, 0, 1, charHeight);
     *y = *y + charHeight;
     return physGlob.debugActiveObjCount;
@@ -1476,7 +1476,7 @@ void dxPostProcessIslands(PhysWorld worldIndex)
         }
     }
     dJointGroupEmpty(physGlob.contactgroup[worldIndex]);
-    physGlob.space[51 * worldIndex - 149] = 0;
+    physGlob.worldData[worldIndex].numJitterRegions = 0;
     seconds = world->seconds;
     bodyEnableCount = 0;
     for (bodyIter = world->firstbody; bodyIter; bodyIter = (dxBody *)bodyIter->next)
