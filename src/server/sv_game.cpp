@@ -141,7 +141,11 @@ void SV_GetServerinfo(char *buffer, int bufferSize)
     if (bufferSize < 1)
         Com_Error(ERR_DROP, "SV_GetServerinfo: bufferSize == %i", bufferSize);
 
-    I_strncpyz(buffer, Dvar_InfoString(0, 4), bufferSize);
+#ifdef KISAK_MP
+    I_strncpyz(buffer, Dvar_InfoString(0, DVAR_SERVERINFO | DVAR_SCRIPTINFO), bufferSize);
+#else
+    I_strncpyz(buffer, Dvar_InfoString(0, DVAR_SERVERINFO), bufferSize);
+#endif
 }
 
 void SV_LocateGameData(

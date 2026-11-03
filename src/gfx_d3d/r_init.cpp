@@ -3180,7 +3180,7 @@ void R_EnumDisplayModes(uint32_t adapterIndex)
         "r_displayRefresh",
         dx.refreshRateNameTable,
         defaultRefreshRateIndex,
-        DVAR_ARCHIVE | DVAR_LATCH | DVAR_AUTOEXEC,
+        DVAR_ARCHIVE | DVAR_LATCH | DVAR_CHANGEABLE_RESET,
         "Refresh rate");
 
     r_noborder = Dvar_RegisterBool("r_noborder", false, DVAR_ARCHIVE, "Do not use a border in windowed mode");

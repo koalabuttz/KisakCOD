@@ -982,7 +982,7 @@ void SV_Serverinfo_f()
     char *v0; // eax
 
     Com_Printf(CON_CHANNEL_DONT_FILTER, "Server info settings:\n");
-    v0 = Dvar_InfoString(0, 4);
+    v0 = Dvar_InfoString(0, DVAR_SERVERINFO | DVAR_SCRIPTINFO);
     Info_Print(v0);
 }
 

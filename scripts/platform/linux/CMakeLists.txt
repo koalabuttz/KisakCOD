@@ -117,6 +117,7 @@ if(KISAK_BUILD_LINUX_CLIENT_CORE)
         "${SRC_DIR}/client_mp/cl_connection_mp.cpp"
         "${SRC_DIR}/client_mp/cl_connection_receive_mp.cpp"
         "${SRC_DIR}/client_mp/cl_main_mp.cpp"
+        "${SRC_DIR}/client_mp/cl_main_pc_mp.cpp"
     )
 
     add_library(KisakCOD-client-core OBJECT ${KISAK_CLIENT_CORE_SOURCES})
@@ -204,7 +205,16 @@ if(KISAK_BUILD_LINUX_CLIENT_CORE)
         "${SRC_DIR}/client_mp/cl_main_mp.cpp"
         "${SRC_DIR}/universal/q_shared.cpp"
     )
-    foreach(client_test KisakCOD-client-platform-test KisakCOD-client-receive-test KisakCOD-client-auth-test KisakCOD-client-headless KisakCOD-client-netchan-test KisakCOD-client-state-test KisakCOD-client-packet-test)
+    # The production connect command: the in-process server ("localhost") is
+    # joined the retail way, every other address fails closed on Linux.
+    add_executable(KisakCOD-client-connect-test
+        "${TESTS_DIR}/linux_client_core/client_connect_test.cpp"
+        "${SRC_DIR}/client_mp/cl_main_pc_mp.cpp"
+        "${SRC_DIR}/qcommon/net_chan_mp.cpp"
+        "${SRC_DIR}/linux/net.cpp"
+        "${SRC_DIR}/universal/q_shared.cpp"
+    )
+    foreach(client_test KisakCOD-client-connect-test KisakCOD-client-platform-test KisakCOD-client-receive-test KisakCOD-client-auth-test KisakCOD-client-headless KisakCOD-client-netchan-test KisakCOD-client-state-test KisakCOD-client-packet-test)
         target_compile_features(${client_test} PRIVATE cxx_std_20)
         target_compile_definitions(${client_test} PRIVATE
             KISAK_MP KISAK_OPENAL RELEASE_ASSERTS

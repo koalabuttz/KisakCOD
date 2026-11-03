@@ -182,7 +182,7 @@ void Com_InitPlayerProfiles(int localClientNum)
         "ui_playerProfileAlreadyChosen",
         0,
         (DvarLimits)0x100000000LL,
-        DVAR_AUTOEXEC,
+        DVAR_CHANGEABLE_RESET,
         "true if player profile has been selected.");
     Dvar_ChangeResetValue((dvar_t*)ui_playerProfileAlreadyChosen, 1);
     com_playerProfile = Dvar_RegisterString("com_playerProfile", (char *)"", DVAR_ROM, "Player profile");

@@ -10,7 +10,7 @@ Verified here:
    no fake call is made to reach them (see ``check_header_offsets``).
 
 2. **The real compile commands**, from the generated ``compile_commands.json``:
-   eight full client TUs, ``-m32``, ``-DKISAK_MP``, no dedicated defines, and
+   ten full client TUs, ``-m32``, ``-DKISAK_MP``, no dedicated defines, and
    ``-DKISAK_OPENAL`` present only as the header shim. Static CMake text is not
    enough on its own -- a comment can say anything.
 
@@ -59,6 +59,7 @@ EXPECTED_TUS = (
     "src/client_mp/cl_connection_mp.cpp",
     "src/client_mp/cl_connection_receive_mp.cpp",
     "src/client_mp/cl_main_mp.cpp",
+    "src/client_mp/cl_main_pc_mp.cpp",
     "src/client_mp/cl_cgame_mp.cpp",
     "src/client/cl_ui_draw.cpp",
     "src/client_mp/cl_net_chan_mp.cpp",
@@ -95,6 +96,11 @@ RECEIVE_RUNTIME_TUS = (
     "src/universal/q_shared.cpp", "src/universal/com_shared.cpp",
 )
 PLATFORM_RUNTIME_TUS = ("src/client_mp/cl_main_mp.cpp", "src/universal/q_shared.cpp")
+# The production connect command with the real address parsing it relies on.
+CONNECT_RUNTIME_TUS = (
+    "src/client_mp/cl_main_pc_mp.cpp", "src/qcommon/net_chan_mp.cpp",
+    "src/linux/net.cpp", "src/universal/q_shared.cpp",
+)
 
 HEADLESS_RUNTIME_TUS = (
     "src/linux/client/headless_main.cpp", "src/linux/client/diagnostic_host.cpp",
@@ -352,6 +358,7 @@ def check_compile_commands(build_dir):
 
     for target, sources in (("state", STATE_RUNTIME_TUS), ("packet", PACKET_RUNTIME_TUS), ("auth", AUTH_RUNTIME_TUS),
                             ("receive", RECEIVE_RUNTIME_TUS), ("platform", PLATFORM_RUNTIME_TUS),
+                            ("connect", CONNECT_RUNTIME_TUS),
                             ("headless", HEADLESS_RUNTIME_TUS)):
         for rel in sources:
             commands = by_file.get(os.path.realpath(ROOT / rel), [])
@@ -421,7 +428,8 @@ def check_build_and_run(cxx, cc, build_dir, build_type, jobs, timeout, build_tim
         targets = ["--target", "KisakCOD-client-core", "KisakCOD-client-netchan-test",
                    "KisakCOD-client-state-test", "KisakCOD-client-packet-test",
                    "KisakCOD-client-auth-test", "KisakCOD-client-headless",
-                   "KisakCOD-client-receive-test", "KisakCOD-client-platform-test", "-j", str(jobs)]
+                   "KisakCOD-client-receive-test", "KisakCOD-client-platform-test",
+                   "KisakCOD-client-connect-test", "-j", str(jobs)]
         result = run(["cmake", "--build", build_dir] + targets, build_timeout)
         if not check(f"build ({build_type}) client core and runtime tests",
                      result.returncode == 0,
@@ -442,6 +450,7 @@ def check_build_and_run(cxx, cc, build_dir, build_type, jobs, timeout, build_tim
             ("KisakCOD-client-auth-test", "client authentication/resend test", (), 15),
             ("KisakCOD-client-receive-test", "client receive/lifecycle test", (), 34),
             ("KisakCOD-client-platform-test", "client platform test", (), 10),
+            ("KisakCOD-client-connect-test", "client connect test", (), 25),
             ("KisakCOD-client-state-test", "client state test", ("parser", "input"), 15),
         ):
             binary = build_dir / "bin" / name
@@ -497,6 +506,7 @@ def check_default_build_has_no_client_targets(cxx, cc, timeout, build_timeout):
               "KisakCOD-client-packet-test" not in help_text)
         for name in ("KisakCOD-client-auth-test", "KisakCOD-client-headless",
                      "KisakCOD-client-receive-test", "KisakCOD-client-platform-test",
+                     "KisakCOD-client-connect-test",
                      "KisakCOD-client-window", "KisakCOD-window-platform", "KisakCOD-window-test", "KisakCOD-client-input", "KisakCOD-client-input-test", "KisakCOD-shutdown-signal-test", "KisakCOD-client-command-test", "KisakCOD-client-runtime-test", "KisakCOD-string-owner-test", "KisakCOD-string-consumers-test", "KisakCOD-dvar-string-failure-test", "KisakCOD-client-input-startup-test", "KisakCOD-presentation-test", "KisakCOD-frame-deadline-test", "KisakCOD-pixel-resource-test", "KisakCOD-cpu-renderer-test", "KisakCOD-cpu-renderer-fault-test", "KisakCOD-cpu-raw-test", "KisakCOD-material-clone-mp-test", "KisakCOD-material-clone-radiant-test", "KisakCOD-cpu-ui-test", "KisakCOD-material-layered-mp-test", "KisakCOD-material-layered-sp-test", "KisakCOD-material-layered-radiant-test", "KisakCOD-cpu-text-test", "KisakCOD-cpu-menu-test", "KisakCOD-menu-assets-test", "KisakCOD-ui-material-assets-test", "KisakCOD-menu-composition-assets-test", "KisakCOD-iwi-assets-test", "KisakCOD-ui-asset-export", "KisakCOD-font-assets-test", "KisakCOD-menu-input-owner-test", "KisakCOD-menu-control-assets-test", "KisakCOD-menu-script-test", "KisakCOD-ui-audio-test", "KisakCOD-ui-audio-assets-test", "KisakCOD-ui-audio-failure-test", "KisakCOD-menu-input-failure-test", "KisakCOD-cpu-viewport-test", "KisakCOD-ui-time-test", "KisakCOD-ui-registration-test", "KisakCOD-cpu-composition-test", "KisakCOD-cpu-traversal-test", "KisakCOD-cpu-menu-frame-test", "KisakCOD-cpu-frame-owner-test"):
             check(f"default build exposes no {name} target", name not in help_text)
     finally:

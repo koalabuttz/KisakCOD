@@ -36,7 +36,7 @@ bool Sys_IsLANAddress(netadr_t) { return true; }
 void CL_RequestAuthorization(int) { std::abort(); } // LAN configuration excludes legacy auth.
 bool NET_OutOfBandPrint(netsrc_t, netadr_t, const char *) { ++sends; return true; }
 bool NET_OutOfBandData(netsrc_t, netadr_t, const uint8_t *, int) { ++sends; return true; }
-char *Dvar_InfoString(int, char) { std::abort(); }
+char *Dvar_InfoString(int, int) { std::abort(); }
 bool LiveStorage_DoWeHaveStats() { std::abort(); }
 playerStatNetworkData *LiveStorage_GetStatBuffer() { std::abort(); }
 

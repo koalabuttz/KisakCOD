@@ -13,8 +13,6 @@
 
 #ifdef WIN32
 #include <win32/win_steam.h>
-#else
-#error Steam Auth for Arch
 #endif
 
 bool s_playerMute[64];
@@ -389,7 +387,11 @@ bool CL_CDKeyValidate(netadr_t addr)
 #ifdef WIN32
     return Steam_UpdateClientAuthTicket(addr);
 #else
-#error Steam Auth for Arch
+    // Native Linux has no Steam ticket provider yet. Refuse every remote server
+    // here; CL_Connect_f only asks for a non-local address, so joining the
+    // in-process server ("localhost", NA_LOOPBACK) is unaffected.
+    Com_PrintError(CON_CHANNEL_CLIENT,
+        "Client authentication unavailable: native Linux cannot join remote servers yet\n");
     return false;
 #endif
 }
