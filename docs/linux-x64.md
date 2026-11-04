@@ -441,6 +441,52 @@ retail sizes on purpose (see "Fastfile records"), and the raw asset loaders
 CI runs the check in the x86_64 client job on the client build, which compiles
 the dedicated server's sources too.
 
+## Byte offsets and union copies
+
+The size check misses a second family of decompiled shapes: a field reached
+through the byte offset the i386 binary used rather than through the field.
+Each of these crashed or misbehaved on the x86_64 client:
+`*(const float **)((uintptr_t)context + 12)` in the mark callback,
+`*(VariableUnion *)((char *)&hud->elem.type + ofs)` storing 8 bytes into a
+4-byte HUD field, and `v.intVal = (int)x.internals` copying a union that
+holds a string pointer through its int. `scripts/tools/check_32bit_layout_offsets.py`
+parses every source twice with libclang, as i386 and as x86_64, and reports:
+
+- **offset**: a pointer to a record (or a member's address) cast to another
+  pointer or integer type and moved by a constant, where the field at that
+  i386 byte offset sits elsewhere on x86_64 (the field path is printed);
+- **stride**: the same base moved by `K * n` where K is the i386 size of a
+  record or array element inside it whose x86_64 size differs;
+- **spill**: a member array indexed by a constant past its end into a
+  neighbour whose x86_64 position is not where that index lands;
+- **width**: a type whose size differs between the two (a pointer,
+  `VariableUnion`) read or written at a byte offset from an untyped base;
+- **union**: a union copied through a member narrower than the union on
+  x86_64 (`a.u.intValue = b.u.intValue`);
+- **pun**: a cast from `U *` to `T *` where U and T have the same i386 size
+  but not the same x86_64 size, such as `(int *)&pointerField`.
+
+`scripts/tests/test_check_32bit_layout_offsets.py` checks these rules on a
+small generated file. Offset tables built with numbers (`g_animRateOffsets`
+was one) and `void *` arithmetic whose result is read as a 4-byte value are
+out of its reach; those still need reading.
+
+```sh
+/usr/bin/python3 scripts/tools/check_32bit_layout_offsets.py --build-dir build-x64-mp
+```
+
+The first full scan (2026-11-04) found: `CG_ClearUnion` clearing 8 or 16
+bytes of the client entity pose union, which on x86_64 left an effect entity's
+`CEntFx::effect` pointer behind; the script debugger's watch values and
+expression compiler copying `VariableUnion` and `sval_u` values (vectors,
+node and function pointers) through their 4-byte members; the static model
+dump reading the last LOD distance at an i386 offset from `parentList`; and
+the effect mark handle asserts bounding pool byte offsets by the smaller
+non-pool record size. `scripts/tools/check_32bit_layout_offsets_allow.txt`
+lists the remaining reports and why each is fine (offsets rescaled at load,
+sizeof-based steps, handles in 4-byte units, int-only union copies). CI runs
+the check in the x86_64 client job after the size check.
+
 ## Windows MSVC x64 census
 
 The Windows workflow has a matching report-only job, "MSVC x64 compile census"
