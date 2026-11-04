@@ -707,6 +707,13 @@ void Material_LoadBuiltIn(const BuiltInMaterialTable* mtlTable, int mtlTableCoun
 void Material_ForEachTechniqueSet_FastFile(void(* callback)(MaterialTechniqueSet*));
 bool IsValidMaterialHandle(Material* const handle);
 
+// HUD icons travel inside text (the kill feed's ^ icon command) as 4 bytes. On
+// i386 those bytes are the Material pointer, as in retail. A pointer does not
+// fit elsewhere, so there they hold a slot in a table of icon materials, with
+// every byte 0x80 or above so the text never gains a NUL, digit or caret.
+uint32_t Material_ToTextIconHandle(Material *material);
+Material *Material_FromTextIconHandle(uint32_t handle);
+
 //void R_GetMaterialList(XAssetHeader header, void *data);
 //void Material_CollateTechniqueSets(XAssetHeader header, XAssetHeader *userData);
 //void Material_ReleaseTechniqueSet(XAssetHeader header, void* crap);

@@ -63,7 +63,7 @@ void FX_InitSystem(int32_t localClientNum);
 void FX_ResetSystem(FxSystem *system);
 int32_t FX_EffectToHandle(FxSystem *system, FxEffect *effect);
 void FX_ShutdownSystem(int32_t localClientNum);
-void FX_RelocateSystem(FxSystem *system, int32_t relocationDistance);
+void FX_RelocateSystem(FxSystem *system, intptr_t relocationDistance);
 void FX_EffectNoLongerReferenced(FxSystem *system, FxEffect *remoteEffect);
 void FX_DelRefToEffect(FxSystem *system, FxEffect *effect);
 void FX_RunGarbageCollection(FxSystem *system);
@@ -721,7 +721,7 @@ bool FX_ExistingElemSortsBeforeNewElem(
 // fx_archive
 struct FxEffectDefTableEntry // sizeof=0x8
 {                                       // ...
-    uint32_t key;
+    uintptr_t key; // the saving process's FxEffectDef pointer
     const FxEffectDef *effectDef;
 };
 static_assert(LAYOUT_32BIT(sizeof(FxEffectDefTableEntry) == 0x8));
@@ -735,10 +735,10 @@ static_assert(LAYOUT_32BIT(sizeof(FxEffectDefTable) == 0x2004));
 
 void FX_Restore(int32_t clientIndex, MemoryFile *memFile);
 void FX_RestoreEffectDefTable(MemoryFile *memFile, FxEffectDefTable *table);
-void FX_AddEffectDefTableEntry(FxEffectDefTable *table, uint32_t key, const FxEffectDef *effectDef);
+void FX_AddEffectDefTableEntry(FxEffectDefTable *table, uintptr_t key, const FxEffectDef *effectDef);
 void FX_FixupEffectDefHandles(FxSystem *system, FxEffectDefTable *table);
 FxEffect *FX_EffectFromHandle(FxSystem *system, uint16_t handle);
-const FxEffectDef *FX_FindEffectDefInTable(const FxEffectDefTable *table, uint32_t key);
+const FxEffectDef *FX_FindEffectDefInTable(const FxEffectDefTable *table, uintptr_t key);
 void FX_RestorePhysicsData(FxSystem *system, MemoryFile *memFile);
 FxElemVisuals FX_GetElemVisuals(const FxElemDef *elemDef, int32_t randomSeed);
 void FX_Save(int32_t clientIndex, MemoryFile *memFile);

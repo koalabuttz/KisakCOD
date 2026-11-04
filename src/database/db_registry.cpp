@@ -990,15 +990,15 @@ void DB_DynamicCloneMenu(XAssetHeader from, XAssetHeader to, int32_t swag)
     int32_t fromIndex; // [esp+1Ch] [ebp-10h]
     windowDef_t *fromWindow; // [esp+24h] [ebp-8h]
 
-    to.xmodelPieces[6].pieces = from.xmodelPieces[6].pieces;
-    for (toIndex = 0; toIndex < (int)to.xmodelPieces[13].pieces; ++toIndex)
+    to.menu->window.dynamicFlags[0] = from.menu->window.dynamicFlags[0];
+    for (toIndex = 0; toIndex < to.menu->itemCount; ++toIndex)
     {
-        toWindow = *(windowDef_t **)(to.xmodelPieces[23].numpieces + 4 * toIndex);
+        toWindow = &to.menu->items[toIndex]->window;
         if (toWindow->name)
         {
-            for (fromIndex = 0; fromIndex < (int)from.xmodelPieces[13].pieces; ++fromIndex)
+            for (fromIndex = 0; fromIndex < from.menu->itemCount; ++fromIndex)
             {
-                fromWindow = *(windowDef_t **)(from.xmodelPieces[23].numpieces + 4 * fromIndex);
+                fromWindow = &from.menu->items[fromIndex]->window;
                 if (fromWindow->name && !strcmp(fromWindow->name, toWindow->name))
                 {
                     toWindow->dynamicFlags[0] = fromWindow->dynamicFlags[0];

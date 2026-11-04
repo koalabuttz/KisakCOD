@@ -480,7 +480,7 @@ void DevGui_FreeMenu_r(uint16_t handle)
             DevGui_FreeMenu_r(menu->menus[0].child.menu);
         }
         DevGui_FreeMenu_r(menu->menus[0].nextSibling);
-        *(uint32_t*)menu->menus[0].label = (uint32_t)devguiGlob.nextFreeMenu;
+        *(DevMenuItem **)menu->menus[0].label = devguiGlob.nextFreeMenu; // free list link
         devguiGlob.nextFreeMenu = (DevMenuItem *)menu;
     }
 }
@@ -1185,8 +1185,8 @@ void DevGui_Init()
     screen_xPad = RETURN_ZERO32();
     screen_yPad = RETURN_ZERO32();
     for (menuIndex = 0; menuIndex < 0x257; ++menuIndex)
-        *(uint32_t *)devguiGlob.menus[menuIndex].label = (uint32_t)&devguiGlob.menus[menuIndex + 1];
-    *(uint32_t *)devguiGlob.menus[menuIndex].label = 0;
+        *(DevMenuItem **)devguiGlob.menus[menuIndex].label = &devguiGlob.menus[menuIndex + 1]; // free list link
+    *(DevMenuItem **)devguiGlob.menus[menuIndex].label = 0;
     devguiGlob.nextFreeMenu = (DevMenuItem *)&devguiGlob;
     devguiGlob.topmostMenu.childType = 0;
     devguiGlob.topmostMenu.childMenuMemory = 0;

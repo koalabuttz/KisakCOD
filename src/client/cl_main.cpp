@@ -589,7 +589,7 @@ void CL_MapLoading_CalcMovieToPlay_FastFile(const char *inMapName, char *outMovi
     if (!asset.rawfile)
         Com_Error(ERR_FATAL, "Could not open %s", "video/cin_levels.txt");
 
-    CL_MapLoading_CalcMovieToPlay((const char *)asset.xmodelPieces->pieces, inMapName, outMovieName);
+    CL_MapLoading_CalcMovieToPlay(asset.rawfile->buffer, inMapName, outMovieName);
 }
 
 void CL_MapLoading_StartCinematic(const char *mapname, float volume)
@@ -603,7 +603,7 @@ void CL_MapLoading_StartCinematic(const char *mapname, float volume)
     if (!asset.rawfile)
         Com_Error(ERR_FATAL, "Could not open %s", "video/cin_levels.txt");
 
-    CL_MapLoading_CalcMovieToPlay((const char *)asset.xmodelPieces->pieces, mapname, movieName);
+    CL_MapLoading_CalcMovieToPlay(asset.rawfile->buffer, mapname, movieName);
 #else
     if (IsFastFileLoad())
         CL_MapLoading_CalcMovieToPlay_FastFile(mapname, movieName);

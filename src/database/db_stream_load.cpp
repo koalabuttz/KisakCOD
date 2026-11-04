@@ -226,7 +226,7 @@ void Load_TempStringCustom(char **str)
 
     Load_XStringCustom(str);
     if (*str)
-        string = (const char*)SL_GetString(*str, 4u); // KISAKTODO: this seems way wrong but it's what the decomp is showing
+        string = (const char*)(uintptr_t)SL_GetString(*str, 4u); // KISAKTODO: this seems way wrong but it's what the decomp is showing
     else
         string= 0;
     *str = (char *)string;

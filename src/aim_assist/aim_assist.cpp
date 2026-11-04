@@ -1104,22 +1104,22 @@ void AimAssist_DrawDebugOverlay(uint32_t localClientNum)
 
         if (aim_slowdown_debug->current.enabled)
         {
-            AimAssist_DrawTargets(localClientNum, red);
+            AimAssist_DrawTargets(localClientNum, ps, red);
             AimAssist_DrawCenterBox(aaGlob, tweaks->slowdownRegionWidth, tweaks->slowdownRegionHeight, green);
         }
         if (aim_autoaim_debug->current.enabled)
         {
-            AimAssist_DrawTargets(localClientNum, red);
+            AimAssist_DrawTargets(localClientNum, ps, red);
             AimAssist_DrawCenterBox(aaGlob, tweaks->autoAimRegionWidth, tweaks->autoAimRegionHeight, green);
         }
         if (aim_automelee_debug->current.enabled)
         {
-            AimAssist_DrawTargets(localClientNum, red);
+            AimAssist_DrawTargets(localClientNum, ps, red);
             AimAssist_DrawCenterBox(aaGlob, tweaks->autoMeleeRegionWidth, tweaks->autoMeleeRegionHeight, green);
         }
         if (aim_lockon_debug->current.enabled)
         {
-            AimAssist_DrawTargets(localClientNum, red);
+            AimAssist_DrawTargets(localClientNum, ps, red);
             AimAssist_DrawCenterBox(aaGlob, tweaks->lockOnRegionWidth, tweaks->lockOnRegionHeight, green);
         }
     }
@@ -1146,7 +1146,9 @@ void AimAssist_DrawCenterBox(
     CL_DrawStretchPicPhysical(x, y, width, height, 0.0, 0.0, 1.0, 1.0, color, cgMedia.whiteMaterial);
 }
 
-void AimAssist_DrawTargets(int64_t localClientNum, const float *color)
+// Retail passed localClientNum and ps; the decompiler merged them into one
+// int64 and read ps back as HIDWORD(localClientNum).
+void AimAssist_DrawTargets(int32_t localClientNum, const playerState_s *ps, const float *color)
 {
     char *v2; // eax
     char *v3; // eax
@@ -1177,10 +1179,10 @@ void AimAssist_DrawTargets(int64_t localClientNum, const float *color)
     //if (!HIDWORD(localClientNum))
     //    MyAssertHandler(".\\aim_assist\\aim_assist.cpp", 1627, 0, "%s", "ps");
     // TODO: Check that these are equivalent
-    iassert(HIDWORD(localClientNum));
+    iassert(ps);
     iassert(color);
 
-    int32_t weapIndex = AimAssist_GetWeaponIndex(localClientNum, (const playerState_s *)HIDWORD(localClientNum)); // [esp+78h] [ebp-1Ch]
+    int32_t weapIndex = AimAssist_GetWeaponIndex(localClientNum, ps); // [esp+78h] [ebp-1Ch]
     if (weapIndex)
     {
         weapDef = BG_GetWeaponDef(weapIndex);
