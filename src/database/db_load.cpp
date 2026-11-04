@@ -6266,6 +6266,17 @@ void Load_StaticModelIndexArray(bool atStreamStart, int32_t count)
 void Load_GfxAabbTree(bool atStreamStart)
 {
     Load_Stream(atStreamStart, varGfxAabbTree, 44);
+#if KISAK_DB_CONVERT_RECORDS
+    // childrenOffset is a byte offset from this node to its children in the
+    // same array, counted in 44-byte retail records. The records are wider
+    // here, so rescale it to native records; the renderer adds it to the node.
+    {
+        constexpr int diskSize = DB_DiskLayoutOf<GfxAabbTree>::diskSize;
+        const int diskOffset = varGfxAabbTree->childrenOffset;
+        iassert(diskOffset % diskSize == 0);
+        varGfxAabbTree->childrenOffset = diskOffset / diskSize * (int)sizeof(GfxAabbTree);
+    }
+#endif
     if (varGfxAabbTree->smodelIndexes)
     {
         if (varGfxAabbTree->smodelIndexes == (uint16_t *)-1)
