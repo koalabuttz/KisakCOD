@@ -4240,8 +4240,9 @@ void Scr_ScriptWindow::EnterCallInternal()
             //Scr_ScriptWindow::ToggleBreakpointInternal(this, 0, 0, 0, 4u, 1);
             Scr_ScriptWindow::ToggleBreakpointInternal(0, 0, 0, 4u, 1);
         }
-        v2 = (const char*)*++codePos;
-        codePos += 4;
+        ++codePos;
+        memcpy(&v2, codePos, sizeof(v2));
+        codePos += sizeof(v2);
         destCodePos = v2;
         Scr_GetSourcePosOfType(v2 - 1, 4, &pos);
         Scr_SelectScriptLine(pos.bufferIndex, pos.lineNum);
