@@ -301,7 +301,7 @@ void HudElem_GetFlagHideWhenInMenu(game_hudelem_s *hud, int32_t offset)
 
 void HudElem_SetBoolean(game_hudelem_s *hud, int32_t offset)
 {
-    *(VariableUnion *)((char *)&hud->elem.type + fields_0[offset].ofs) = Scr_GetInt(0);
+    *(int32_t *)((char *)&hud->elem.type + fields_0[offset].ofs) = Scr_GetInt(0);
 }
 
 void HudElem_SetColor(game_hudelem_s *hud, int32_t offset)
