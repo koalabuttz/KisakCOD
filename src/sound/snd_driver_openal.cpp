@@ -436,7 +436,7 @@ int SND_StartAlias2DSample(SndStartAliasInfo *startAliasInfo, int *pChannel)
     ALuint source = alGlob.source[index];
     MssSoundCOD4 *sound = &startAliasInfo->alias0->soundFile->u.loadSnd->sound;
 
-    // dr_wav (Phase 3) always decoded loaded sounds to 16-bit PCM, so the format is always
+    // SND_SetData stores every loaded sound as 16-bit PCM, so the format is always
     // mono/stereo 16-bit - no need to replicate MSS_DigitalFormatType's branching here.
     SND_ReleaseChannelBuffer(index);
     ALuint buffer;
@@ -1523,10 +1523,125 @@ void SND_SetHWND(HWND hwnd)
     // OpenAL has no window-handle dependency (no DirectSound backend to bind).
 }
 
+// Retail Miles sound formats (MSS_DigitalFormatType): 1 is PCM, 17 is IMA ADPCM.
+#define SND_FORMAT_PCM 1
+#define SND_FORMAT_IMA_ADPCM 17
+
+static void SND_PutLE16(uint8_t *p, uint32_t v)
+{
+    p[0] = (uint8_t)v;
+    p[1] = (uint8_t)(v >> 8);
+}
+
+static void SND_PutLE32(uint8_t *p, uint32_t v)
+{
+    SND_PutLE16(p, v);
+    SND_PutLE16(p + 2, v >> 16);
+}
+
+// Decodes fastfile IMA ADPCM through dr_wav by putting a standard WAVE header
+// (format 0x11, the given block size) in front of the raw blocks. Returns the number of
+// frames written to pcm, which holds room for info.samples frames.
+static uint32_t SND_DecodeImaAdpcm(const _AILSOUNDINFO_COD4 *info, const void *srcData, int16_t *pcm)
+{
+    const uint32_t channels = (uint32_t)info->channels;
+    const uint32_t blockSize = info->block_size;
+    if (blockSize <= 4 * channels)
+        return 0;
+
+    const uint32_t samplesPerBlock = (blockSize - 4 * channels) * 2 / channels + 1;
+    const uint32_t headerSize = 12 + 8 + 20 + 8 + 4 + 8;
+    const uint32_t fileSize = headerSize + info->data_len;
+    uint8_t *file = (uint8_t *)Z_Malloc(fileSize, "SND_DecodeImaAdpcm", 15);
+
+    uint8_t *p = file;
+    memcpy(p, "RIFF", 4);
+    SND_PutLE32(p + 4, fileSize - 8);
+    memcpy(p + 8, "WAVE", 4);
+    p += 12;
+    memcpy(p, "fmt ", 4);
+    SND_PutLE32(p + 4, 20);
+    SND_PutLE16(p + 8, 0x11);
+    SND_PutLE16(p + 10, channels);
+    SND_PutLE32(p + 12, info->rate);
+    SND_PutLE32(p + 16, (uint32_t)((uint64_t)info->rate * blockSize / samplesPerBlock));
+    SND_PutLE16(p + 20, blockSize);
+    SND_PutLE16(p + 22, 4);
+    SND_PutLE16(p + 24, 2);
+    SND_PutLE16(p + 26, samplesPerBlock);
+    p += 28;
+    memcpy(p, "fact", 4);
+    SND_PutLE32(p + 4, 4);
+    SND_PutLE32(p + 8, info->samples);
+    p += 12;
+    memcpy(p, "data", 4);
+    SND_PutLE32(p + 4, info->data_len);
+    p += 8;
+    memcpy(p, srcData, info->data_len);
+
+    uint32_t framesRead = 0;
+    drwav wav;
+    if (drwav_init_memory(&wav, file, fileSize, NULL))
+    {
+        framesRead = (uint32_t)drwav_read_pcm_frames_s16(&wav, info->samples, pcm);
+        drwav_uninit(&wav);
+    }
+    Z_Free(file, 15);
+    return framesRead;
+}
+
+// Turns a loaded sound into 16-bit PCM, the only layout the OpenAL calls below use.
+// Sounds loaded from loose files already are (dr_wav, SND_LoadFromBuffer). Fastfile sounds
+// keep the retail format: IMA ADPCM, 8-bit or 16-bit PCM. Returns a Z_Malloc buffer the
+// caller frees, or null when the sound is already 16-bit PCM.
+static int16_t *SND_ConvertToPcm16(_AILSOUNDINFO_COD4 *info, const void *srcData)
+{
+    const int format = info->format;
+    if (format == SND_FORMAT_PCM && info->bits == 16)
+        return nullptr;
+
+    const uint32_t channels = info->channels > 0 ? (uint32_t)info->channels : 1;
+    uint32_t frames = info->samples;
+    if (format == SND_FORMAT_PCM && info->bits == 8)
+        frames = info->data_len / channels;
+
+    int16_t *pcm = (int16_t *)Z_Malloc(frames * channels * sizeof(int16_t) + sizeof(int16_t), "SND_ConvertToPcm16", 15);
+    uint32_t written = 0;
+    if (format == SND_FORMAT_PCM && info->bits == 8)
+    {
+        // 8-bit WAVE data is unsigned with silence at 128.
+        const uint8_t *src8 = (const uint8_t *)srcData;
+        for (uint32_t i = 0; i < frames * channels; ++i)
+            pcm[i] = (int16_t)(((int)src8[i] - 128) << 8);
+        written = frames;
+    }
+    else if (format == SND_FORMAT_IMA_ADPCM)
+    {
+        written = SND_DecodeImaAdpcm(info, srcData, pcm);
+    }
+
+    if (written == 0)
+        Com_PrintWarning(CON_CHANNEL_SOUND, "WARNING: can't decode a sound (format %i, %i bits); it will be silent\n", format, info->bits);
+
+    // Frames the decoder couldn't fill play as silence instead of noise.
+    if (written < frames)
+        memset(pcm + written * channels, 0, (frames - written) * channels * sizeof(int16_t));
+
+    info->format = SND_FORMAT_PCM;
+    info->bits = 16;
+    info->channels = (int)channels;
+    info->samples = frames;
+    info->block_size = channels * sizeof(int16_t);
+    info->data_len = frames * channels * sizeof(int16_t);
+    return pcm;
+}
+
 void SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
 {
-    // dr_wav (see SND_LoadFromBuffer, snd_driver_load_obj.cpp) always decodes to 16-bit PCM
-    // for us, so unlike the Miles branch above there's no ADPCM format to worry about here.
+    int16_t *converted = SND_ConvertToPcm16(&mssSound->info, srcData);
+    if (converted)
+        srcData = converted;
+
     if (mssSound->info.rate > g_snd.playback_rate)
     {
         // Resample down to g_snd.playback_rate via simple decimation (nearest-frame
@@ -1565,6 +1680,9 @@ void SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
         mssSound->data = MSS_Alloc(mssSound->info.data_len, mssSound->info.rate);
         Com_Memcpy(mssSound->data, srcData, mssSound->info.data_len);
     }
+
+    if (converted)
+        Z_Free(converted, 15);
 
     mssSound->info.data_ptr = mssSound->data;
     mssSound->info.initial_ptr = mssSound->data;
