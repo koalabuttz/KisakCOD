@@ -1646,11 +1646,8 @@ void DevGui_Accept(int32_t localClientNum)
     case 3u:
         devguiGlob.editingMenuItem = !devguiGlob.editingMenuItem;
         devguiGlob.selRow = 0;
-        if (menu->menus[0].child.command && *((uint32_t *)menu->menus[0].child.command + 4))
-            (*((void(**)(DevMenuChild, uint32_t, int))menu->menus[0].child.command + 4))(
-                menu->menus[0].child,
-                0,
-                localClientNum);
+        if (menu->menus[0].child.graph && menu->menus[0].child.graph->eventCallback)
+            menu->menus[0].child.graph->eventCallback(menu->menus[0].child.graph, EVENT_ACTIVATE, localClientNum);
         break;
     default:
         if (!alwaysfails)
