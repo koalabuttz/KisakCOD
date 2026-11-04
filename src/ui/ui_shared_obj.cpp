@@ -4568,7 +4568,7 @@ char parse_expression_internal(int handle, statement_s *statement, int maxEntrie
                 if (type == 1)
                 {
                     v4 = statement->entries[statement->numEntries - 1];
-                    v5.intVal = (int)v4->data.operand.internals;
+                    v5 = v4->data.operand.internals;
                     lastOperand.dataType = v4->data.operand.dataType;
                     lastOperand.internals = v5;
                     //ValueAsString = GetValueAsString((Operand)__PAIR64__(v5.intVal, lastOperand.dataType));
