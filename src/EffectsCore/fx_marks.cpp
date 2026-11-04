@@ -56,7 +56,7 @@ FxMark *FX_MarkFromHandle(FxMarksSystem *marksSystem, uint16_t handle)
 
 static FxTriGroupPool *FX_TriGroupFromHandle(FxMarksSystem *marksSystem, uint32_t handle)
 {
-    bcassert(handle, FX_TRI_GROUP_LIMIT * sizeof(FxTriGroup));
+    bcassert(handle, FX_TRI_GROUP_LIMIT * sizeof(FxTriGroupPool));
     iassert(marksSystem);
 
     return (FxTriGroupPool *)((char *)marksSystem->triGroups + handle);
@@ -64,7 +64,7 @@ static FxTriGroupPool *FX_TriGroupFromHandle(FxMarksSystem *marksSystem, uint32_
 
 static FxPointGroupPool *FX_PointGroupFromHandle(FxMarksSystem *marksSystem, uint32_t handle)
 {
-    bcassert(handle, FX_POINT_GROUP_LIMIT * sizeof(FxPointGroup));
+    bcassert(handle, FX_POINT_GROUP_LIMIT * sizeof(FxPointGroupPool));
     iassert(marksSystem);
     return (FxPointGroupPool *)((char *)marksSystem->pointGroups + handle);
 }
@@ -75,7 +75,7 @@ static int32_t FX_TriGroupToHandle(FxMarksSystem *marksSystem, FxTriGroup *group
     iassert(group);
 
     uint handle = (char *)group - (char *)marksSystem->triGroups;
-    bcassert(handle, FX_TRI_GROUP_LIMIT * sizeof(FxTriGroup));
+    bcassert(handle, FX_TRI_GROUP_LIMIT * sizeof(FxTriGroupPool));
 
     return handle;
 }
@@ -86,7 +86,7 @@ static int32_t FX_PointGroupToHandle(FxMarksSystem *marksSystem, FxPointGroup *g
     iassert(group);
 
     uint handle = (char *)group - (char *)marksSystem->pointGroups;
-    bcassert(handle, FX_POINT_GROUP_LIMIT * sizeof(FxPointGroup));
+    bcassert(handle, FX_POINT_GROUP_LIMIT * sizeof(FxPointGroupPool));
     
     return (char *)group - (char *)marksSystem->pointGroups;
 }
