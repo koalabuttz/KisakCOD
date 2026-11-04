@@ -286,7 +286,16 @@ void R_GetBspOmniLightSurfs(const GfxLight *light, int lightIndex, GfxBspDrawSur
     maxs[1] = light->origin[1] + light->radius;
     maxs[2] = light->origin[2] + light->radius;
     drawSurfs = scene.visLight[lightIndex].drawSurfs;
+#if UINTPTR_MAX > 0xFFFFFFFFu
+    // Retail gathers up to 0x400 surface pointers in the top half of
+    // drawSurfs (512 GfxDrawSurfs = 4096 bytes). 8-byte pointers need twice
+    // that and would run past the array, so use a separate scratch buffer.
+    GfxSurface *surfaceScratch[0x400];
+    surfaces[0] = surfaceScratch;
+#else
+    static_assert(sizeof(GfxSurface *) * 0x400 <= sizeof(GfxDrawSurf) * 512);
     surfaces[0] = (GfxSurface **)&drawSurfs[512];
+#endif
     bspLightCallback.surfaceVisData = surfaceVisData;
     bspLightCallback.position[0] = light->origin[0];
     bspLightCallback.position[1] = light->origin[1];
@@ -374,9 +383,18 @@ void R_GetBspSpotLightSurfs(const GfxLight *light, int lightIndex, GfxBspDrawSur
     maxs[2] = light->origin[2] + light->radius;
 
     drawSurfs[0] = scene.visLight[lightIndex].drawSurfs;
-    surfaces[0] = (GfxSurface **)&drawSurfs[0][512];
     drawSurfs[1] = scene.visLightShadow[lightIndex].drawSurfs;
+#if UINTPTR_MAX > 0xFFFFFFFFu
+    // As in R_GetBspOmniLightSurfs: the top half of each drawSurfs array
+    // holds 0x400 4-byte pointers on i386 only.
+    GfxSurface *surfaceScratch[2][0x400];
+    surfaces[0] = surfaceScratch[0];
+    surfaces[1] = surfaceScratch[1];
+#else
+    static_assert(sizeof(GfxSurface *) * 0x400 <= sizeof(GfxDrawSurf) * 512);
+    surfaces[0] = (GfxSurface **)&drawSurfs[0][512];
     surfaces[1] = (GfxSurface **)&drawSurfs[1][512];
+#endif
     bspLightCallback.surfaceVisData = surfaceVisData;
     R_CalcSpotLightPlanes(light, bspLightCallback.planes);
     R_BoxSurfaces(mins, maxs, allowSurf_1, &bspLightCallback, surfaces, 0x400u, surfCounts, 2u);
