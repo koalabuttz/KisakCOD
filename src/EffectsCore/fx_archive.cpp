@@ -98,7 +98,10 @@ FxEffect *FX_EffectFromHandle(FxSystem *system, uint16_t handle)
 
     if (!system)
         MyAssertHandler("c:\\trees\\cod3\\src\\effectscore\\fx_system.h", 256, 0, "%s", "system");
-    if (handle >= 0x8000u || handle % 0x20u)
+    // A handle is the effect's byte offset in units of 4 (FX_EffectToHandle).
+    constexpr uint32_t effectStride = sizeof(FxEffect) / 4;
+    static_assert(sizeof(FxEffect) % 4 == 0 && FX_EFFECT_LIMIT * effectStride <= 0x10000, "effect handles are 16-bit");
+    if (handle >= FX_EFFECT_LIMIT * effectStride || handle % effectStride)
     {
         v2 = va("%p %i", system->effects, handle);
         MyAssertHandler(

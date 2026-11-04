@@ -409,11 +409,13 @@ union operandInternalDataUnion // sizeof=0x4
         string = str;
     }
 
-    operator int()
+    // Explicit, so that copying an operand through an int (which cuts a
+    // string pointer to 32 bits on x86_64) does not compile silently.
+    explicit operator int() const
     {
         return intVal;
     }
-    operator float()
+    explicit operator float() const
     {
         return floatVal;
     }

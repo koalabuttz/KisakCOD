@@ -78,7 +78,7 @@ devguiGlob_t *DevGui_GetMenu(uint16_t handle)
             handle,
             1,
             600);
-    return (devguiGlob_t *)((char *)&devguiGlob + 40 * handle - 40);
+    return (devguiGlob_t *)&devguiGlob.menus[handle - 1];
 }
 
 uint16_t DevGui_ConstructPath_r(uint16_t parent, const char *path)

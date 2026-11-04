@@ -544,7 +544,7 @@ void AddOperandToStack(OperandStack *dataStack, Operand *data)
             0,
             "%s",
             "data->dataType != VAL_STRING || data->internals.string");
-    v2.intVal = (int)data->internals;
+    v2 = data->internals;
     numOperandLists = dataStack->numOperandLists;
     dataStack->stack[numOperandLists].operands[0].dataType = data->dataType;
     dataStack->stack[numOperandLists].operands[0].internals = v2;
@@ -562,7 +562,7 @@ char GetOperand(OperandStack *dataStack, Operand *data)
         list = &dataStack->stack[dataStack->numOperandLists - 1];
         if (list->operandCount == 1)
         {
-            v4.intVal = (int)list->operands[0].internals;
+            v4 = list->operands[0].internals;
             data->dataType = list->operands[0].dataType;
             data->internals = v4;
             --dataStack->numOperandLists;
@@ -591,7 +591,7 @@ char GetOperand(OperandStack *dataStack, Operand *data)
         Com_PrintError(CON_CHANNEL_UI, "Error: Invalid operation - missing parameter inside function or parenthesis\n");
         dataStack->numOperandLists = 1;
         dataStack->stack[0].operandCount = 1;
-        v2.intVal = (int)dataStack->stack[0].operands[0].internals;
+        v2 = dataStack->stack[0].operands[0].internals;
         data->dataType = dataStack->stack[0].operands[0].dataType;
         data->internals = v2;
         data->dataType = VAL_INT;
@@ -2270,7 +2270,7 @@ void RunCommaOp(int localClientNum, OperandStack *dataStack, OperandList *list1,
         operand = 0;
         for (list1Operand = 0; list1Operand < list1->operandCount; ++list1Operand)
         {
-            v4.intVal = (int)list1->operands[list1Operand].internals;
+            v4 = list1->operands[list1Operand].internals;
             finalList[operand].dataType = list1->operands[list1Operand].dataType;
             finalList[operand].internals = v4;
             if (finalList[operand].dataType == VAL_STRING && !finalList[operand].internals.string)
@@ -2284,7 +2284,7 @@ void RunCommaOp(int localClientNum, OperandStack *dataStack, OperandList *list1,
         }
         for (list2Operand = 0; list2Operand < list2->operandCount; ++list2Operand)
         {
-            v5.intVal = (int)list2->operands[list2Operand].internals;
+            v5 = list2->operands[list2Operand].internals;
             finalList[operand].dataType = list2->operands[list2Operand].dataType;
             finalList[operand].internals = v5;
             if (finalList[operand].dataType == VAL_STRING && !finalList[operand].internals.string)
