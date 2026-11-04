@@ -1330,19 +1330,22 @@ void CG_ClearUnion(int32_t localClientNum, centity_s *cent)
 {
     switch (cent->pose.eTypeUnion)
     {
+    // The decompiled form cleared the first 8, 12 or 16 bytes of the union,
+    // which on i386 is exactly the member in use. On x86_64 those byte counts
+    // stop short of it (CEntFx::effect sits at byte 8 there), so clear the
+    // member itself.
     case ET_PLAYER:
-        *(_QWORD *)&cent->pose.player.control = 0;
+        memset(&cent->pose.player, 0, sizeof(cent->pose.player));
         cent->pose.turret.barrelPitch = 0.0;
         break;
     case ET_FX:
     case ET_LOOP_FX:
         if (cent->pose.fx.effect)
             FX_ThroughWithEffect(localClientNum, cent->pose.fx.effect);
-        *(_QWORD *)&cent->pose.player.control = 0;
+        memset(&cent->pose.fx, 0, sizeof(cent->pose.fx));
         break;
     case ET_MG42:
-        *(_QWORD *)&cent->pose.player.control = 0;
-        *((_QWORD *)&cent->pose.fx + 1) = 0;
+        memset(&cent->pose.turret, 0, sizeof(cent->pose.turret));
         break;
     case ET_HELICOPTER:
     case ET_VEHICLE:
