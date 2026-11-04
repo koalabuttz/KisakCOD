@@ -93,6 +93,7 @@ char MSS_Init()
     alGenAuxiliaryEffectSlots(1, &alGlob.auxSlot);
     alGenEffects(1, &alGlob.reverbEffect);
     alEffecti(alGlob.reverbEffect, AL_EFFECT_TYPE, AL_EFFECT_EAXREVERB);
+    alGlob.reverbRoomtype = -1;
 
     g_snd.Initialized2d = 1;
     g_snd.Initialized3d = 1;

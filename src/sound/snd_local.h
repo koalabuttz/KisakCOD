@@ -126,6 +126,7 @@ struct AlLocal
 
     ALuint auxSlot;                     // global reverb auxiliary effect slot
     ALuint reverbEffect;                // global reverb effect object (EAXREVERB, one room preset active at a time)
+    int reverbRoomtype;                 // room preset currently loaded in auxSlot, -1 before the first one
     // Per-channel AL_FILTER_LOWPASS object, allocated once at init (unlike channelBuffer,
     // its params just get updated in place, not recreated per-play). Used purely as a
     // per-source wet-send *gain* carrier for AL_AUXILIARY_SEND_FILTER (AL_LOWPASS_GAIN set

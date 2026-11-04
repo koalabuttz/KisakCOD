@@ -280,6 +280,7 @@ jobs:
           python3 scripts/tools/strip_cdecl.py --check
           python3 scripts/tests/test_float_int_rounding.py
           python3 scripts/tests/test_retail_float_int_scan.py
+          python3 scripts/tests/test_openal_sound_formats.py
 
       - name: Run asset-free native checks
         timeout-minutes: 30
