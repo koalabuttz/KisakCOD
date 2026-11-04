@@ -406,8 +406,13 @@ holds a pointer is larger on x86_64, so these allocate, clear or copy too few
 bytes there. The check below parses every source in a build twice with
 libclang, as i386 and as x86_64, and reports an integer literal that equals
 the i386 size of a struct the same statement uses when that struct's x86_64
-size is different. It also reports a pointer-to-pointer allocation sized as a
-multiple of 4 without `sizeof`.
+size is different. Literals below 8 are left out (they are mostly indexes and
+flags), except a 4 that multiplies a count: `Alloc(4 * n)` for an array of
+4-byte records such as `GfxEntCellRefInfo` (a float or pointer union, 8 bytes on
+x86_64) is reported, `Alloc(sizeof(T) * 4)` is not. It also reports a
+pointer-to-pointer allocation sized as a multiple of 4 without `sizeof`.
+`scripts/tests/test_check_32bit_size_literals.py` checks these rules on a small
+generated file; CI runs it before the scan.
 
 ```sh
 /usr/bin/python3 scripts/tools/check_32bit_size_literals.py --build-dir build-x64-mp
@@ -421,7 +426,10 @@ parsing allocations (items, list boxes, key handlers, expression arrays,
 define and punctuation hash tables), the script debugger's allocations, and
 pointer-sized reads in `scr_evaluate.cpp` (`expr->type + 4` is `node[1]`).
 `Scr_PrintProfileTimes` indexed its sorted table by `24 * i` elements instead
-of `i`; that was wrong on i386 too.
+of `i`; that was wrong on i386 too. The `4 * n` rule found the scene
+entity cell info buffer (allocated and cleared as `4 * entCount` while each
+entry is 8 bytes on x86_64, so the renderer wrote past it) and mark visual
+copies in `fx_convert.cpp`.
 
 A literal can match a size by chance (flags, counts, indexes, a retail record
 size on purpose). `scripts/tools/check_32bit_size_literals_allow.txt` lists

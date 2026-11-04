@@ -732,6 +732,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          /usr/bin/python3 scripts/tests/test_check_32bit_size_literals.py
           /usr/bin/python3 scripts/tools/check_32bit_size_literals.py --build-dir "$BUILD_DIR"
 
       - name: Run the x86_64 multiplayer client's fail-closed start
