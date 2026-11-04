@@ -445,13 +445,13 @@ void Scr_CompilePrimitiveExpression(sval_u *expr)
         break;
     case ENUM_variable:
         Scr_CompileVariableExpression(&expr->node[1]);
-        tempVariableId.block = (scr_block_s*)AllocValue();
+        tempVariableId.idValue = AllocValue();
         *expr = debugger_node2(ENUM_variable, expr->node[1], tempVariableId);
         break;
     case ENUM_call_expression:
         if (!Scr_CompileCallExpression(&expr->node[1]))
             goto LABEL_13;
-        tempVariableIda.block = (scr_block_s*)AllocValue();
+        tempVariableIda.idValue = AllocValue();
         *expr = debugger_node2(ENUM_call_expression, expr->node[1], tempVariableIda);
         break;
     case ENUM_undefined:
@@ -508,7 +508,7 @@ void Scr_CompileVariableExpression(sval_u *expr)
         expr->node[1].stringValue = Scr_CompileCanonicalString(expr->node[1].stringValue);
         if (expr->node[1].stringValue)
         {
-            tempVariableId.block = (scr_block_s*)AllocValue();
+            tempVariableId.idValue = AllocValue();
             *expr = debugger_node4(ENUM_local_variable, expr->node[1], 0, 0, tempVariableId);
         }
         else
@@ -584,12 +584,12 @@ void Scr_CompilePrimitiveExpressionFieldObject(sval_u *expr)
     {
     case ENUM_variable:
         Scr_CompileVariableExpression(&expr->node[1]);
-        tempVariableId.block = (scr_block_s*)AllocValue();
+        tempVariableId.idValue = AllocValue();
         *expr = debugger_node2(ENUM_variable, expr->node[1], tempVariableId);
         break;
     case ENUM_call_expression:
         Scr_CompileCallExpression(&expr->node[1]);
-        tempVariableIda.block = (scr_block_s*)AllocValue();
+        tempVariableIda.idValue = AllocValue();
         *expr = debugger_node2(ENUM_call_expression, expr->node[1], tempVariableIda);
         break;
     case ENUM_self:
