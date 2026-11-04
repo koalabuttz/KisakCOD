@@ -1,0 +1,77 @@
+# Lines check_32bit_layout_offsets.py reports that read the right bytes on x86_64.
+# Each entry is `path: source line` (whitespace collapsed). Read the line before
+# adding it; a field belongs in a member access or offsetof, not here.
+
+# Mark pool handles are byte offsets into the pool array (FX_*GroupToHandle
+# subtracts the same way), and the pool union starts with the group, so the
+# FxPointGroupPool -> FxPointGroup casts read the group on both builds.
+src/EffectsCore/fx_marks.cpp: group = (const FxPointGroup*)FX_PointGroupFromHandle(marksSystem, groupHandle);
+src/EffectsCore/fx_marks.cpp: group = (const FxPointGroup *)FX_PointGroupFromHandle(marksSystem, groupHandle);
+src/EffectsCore/fx_marks.cpp: groupHandle = FX_PointGroupToHandle(marksSystem, (FxPointGroup *)newGroup);
+src/EffectsCore/fx_marks.cpp: return (FxPointGroupPool *)((char *)marksSystem->pointGroups + handle);
+
+# Decompiled null checks of an element address (msg, frame, entry): always
+# false on both builds, nothing is read.
+src/cgame_mp/cg_draw_mp.cpp: if ((cgs_t *)((char *)cgsArray + v1 * 160) == (cgs_t *)-3728 // KISAKTODO: something to do with cgs->teamChatMsgs
+src/xanim/xanim.cpp: if ((const XAnim_s*)((char*)anims + 8 * animIndex) == (const XAnim_s*)-12)
+
+# Model surface ids count 4-byte units from the start of GfxBackEndData
+# (surfsBuffer is at offset 0 on both builds; R_AddDObjSurfaces and
+# R_AllocModelSurfaces store byte offset >> 2), so 4 * objectId is the byte
+# offset of the record on either build.
+src/gfx_d3d/r_draw_xmodel.cpp: modelSurf = (const GfxModelRigidSurface*)((char*)data + 4 * drawSurf.fields.objectId);
+src/gfx_d3d/r_draw_xmodel.cpp: modelSurf = (const GfxModelRigidSurface *)((char*)data + 4 * drawSurf.fields.objectId);
+src/gfx_d3d/r_draw_xmodel.cpp: modelSurf = (const GfxModelRigidSurface*)((char*)data + 4 * drawSurfList[drawSurfIndex].fields.objectId);
+src/gfx_d3d/r_draw_xmodel.cpp: modelSurf = (const GfxModelRigidSurface*)((char *)data + 4 * drawSurf.fields.objectId);
+src/gfx_d3d/r_scene.cpp: modelSurf = (BModelSurface *)((char *)frontEndDataOut + 4 * surfId);
+src/gfx_d3d/r_scene.cpp: modelSurf = (GfxModelRigidSurface*)((char*)frontEndDataOut + 4 * surfId);
+src/gfx_d3d/r_scene.cpp: modelSurf = (GfxModelRigidSurface *)((char *)frontEndDataOut + 4 * surfId);
+src/gfx_d3d/rb_tess.cpp: modelSurf = (const GfxModelRigidSurface *)((char*)data + 4 * drawSurf.fields.objectId);
+src/gfx_d3d/rb_tess.cpp: bmodelSurf = (const BModelSurface *)((char *)data + 4 * drawSurf.fields.objectId);
+src/gfx_d3d/rb_tess.cpp: modelSurf = (const GfxModelSkinnedSurface *)((char *)data + 4 * drawSurf.fields.objectId);
+src/gfx_d3d/rb_tess.cpp: modelSurfa = (const GfxModelSkinnedSurface *)((char *)data + 4 * drawSurf.fields.objectId);
+src/gfx_d3d/rb_tess.cpp: modelSurf = (const GfxModelRigidSurface *)((char *)data + 4 * drawSurf.fields.objectId);
+
+# int-only values copied through intValue: ammo counts, object, thread and
+# string ids (VAR_POINTER ids are ints, not addresses), array keys, enum
+# results of GetSourceInt and int operands of UI integer operators.
+src/game_mp/g_client_script_cmd_mp.cpp: v3.intValue = v5.intValue;
+src/game_mp/g_client_script_cmd_mp.cpp: v2.intValue = v4.intValue;
+src/script/scr_debugger.cpp: v5.intValue = top->u.intValue;
+src/script/scr_debugger.cpp: value[i].u.intValue = ArrayIndexValue.u.intValue;
+src/script/scr_evaluate.cpp: threadId.intValue = value->u.intValue;
+src/script/scr_evaluate.cpp: objectId.intValue = objectValue.u.intValue;
+src/script/scr_evaluate.cpp: id.intValue = value->u.intValue;
+src/script/scr_variable.cpp: stringValue.intValue = value->u.intValue;
+src/script/scr_variable.cpp: id.intValue = varValue.u.intValue;
+src/script/scr_variable.cpp: id.pointerValue = valuea.u.pointerValue;
+src/script/scr_vm.cpp: notifyListOwnerId.intValue = GetVariableValueAddress(v4)->u.intValue;
+src/script/scr_vm.cpp: parentId.intValue = GetVariableValueAddress(idb)->u.intValue;
+src/ui/ui_expressions.cpp: v4.intVal = GetSourceInt(&list->operands[1]).intVal;
+src/ui/ui_expressions.cpp: v9.intVal = GetSourceInt(&list->operands[3]).intVal;
+src/ui/ui_expressions.cpp: v6.intVal = GetSourceInt(&list->operands[1]).intVal;
+src/ui/ui_expressions.cpp: v3.intVal = GetSourceInt(&data1).intVal;
+src/ui/ui_expressions_logicfunctions.cpp: v3.intVal = GetSourceInt(leftSide).intVal;
+src/ui/ui_expressions_logicfunctions.cpp: result->internals.intVal = leftSide->internals.intVal;
+
+# sourcePosValue is the member the script compiler writes; the rest of the
+# union is unused for source positions.
+src/script/scr_compiler2.cpp: scrCompileGlob.value_start[valueIndex].sourcePos.sourcePosValue = constValue->sourcePos.sourcePosValue;
+
+# debug allocators return unsigned int *; each size is sizeof(T *) * count.
+src/script/scr_debugger.cpp: elementList = (Scr_WatchElement_s **)Scr_AllocDebugMem(sizeof(elementList[0]) * count, "Scr_SortElementChildren");
+src/ui/ui_component.cpp: newElementOldRef = (Scr_WatchElement_s**)Scr_AllocDebugMem(sizeof(Scr_WatchElement_s *) * count, "Scr_ScriptWatch::EvaluateWatchChildren");
+src/ui/ui_component.cpp: this->scriptWindows = (Scr_ScriptWindow **)Scr_AllocDebugMem(sizeof(Scr_ScriptWindow *) * this->numLines, "Scr_ScriptList::Init2");
+src/ui/ui_component.cpp: newScriptWindows = (Scr_ScriptWindow **)Scr_AllocDebugMem(sizeof(newScriptWindows[0]) * newNumLines, "Scr_AbstractScriptList::AddEntry");
+src/ui/ui_shared_obj.cpp: script->punctuationtable = (punctuation_s **)GetMemory(256 * sizeof(punctuation_s *));
+
+# reads node[0].type, the first 4 bytes of the root node, on both builds.
+src/script/scr_evaluate.cpp: expr = (uint32_t *)scriptExpr->parseData.node;
+
+# Raw .menu preprocessor (PC_* / Eval_*), which only runs on raw menu files;
+# Linux loads menus from fastfiles. Left for the raw-loader pass.
+src/ui/ui_shared_obj.cpp: v3[1] = *((EvalOperatorType *)&v2->type + 1);
+src/ui/ui_shared_obj.cpp: v3[3] = *((EvalOperatorType *)&v2->u.s + 1);
+
+# aligns the address of the trailing buffer, not a field offset.
+src/universal/com_memory.cpp: pos = (void*)(((uintptr_t)user->buf + 4095) & ~(uintptr_t)4095);

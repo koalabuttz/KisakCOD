@@ -624,26 +624,26 @@ void Scr_CompilePrimitiveExpressionList(sval_u *exprlist)
     int i; // [esp+10h] [ebp-10h]
     sval_u expr[3]; // [esp+14h] [ebp-Ch]
 
-    expr_count = GetExpressionCount((sval_u)exprlist->type);
+    expr_count = GetExpressionCount(*exprlist);
     if (expr_count == 1)
     {
-        nodea = *(sval_u **)exprlist->type;
+        nodea = exprlist->node[0].node;
         Scr_CompileExpression(nodea->node);
-        exprlist->type = nodea->node->type;
+        *exprlist = nodea->node[0];
     }
     else if (expr_count == 3)
     {
         i = 0;
-        for (node = *(sval_u **)exprlist->type; node; node = node[1].node)
+        for (node = exprlist->node[0].node; node; node = node[1].node)
         {
             Scr_CompileExpression(node->node);
-            expr[i++] = (sval_u)node->node->type;
+            expr[i++] = node->node[0];
         }
-        exprlist->type = debugger_node3(ENUM_vector, expr[0], expr[1], expr[2]).type;
+        *exprlist = debugger_node3(ENUM_vector, expr[0], expr[1], expr[2]);
     }
     else
     {
-        exprlist->type = debugger_node0(ENUM_bad_expression).type;
+        *exprlist = debugger_node0(ENUM_bad_expression);
     }
 }
 
@@ -701,7 +701,7 @@ char Scr_CompileFunction(sval_u *func_name, sval_u *params)
     const char *pName; // [esp+8h] [ebp-8h] BYREF
     int type; // [esp+Ch] [ebp-4h] BYREF
 
-    name = Scr_GetBuiltin((sval_u)func_name->type);
+    name = Scr_GetBuiltin(*func_name);
     if (!name)
         return 0;
     pName = SL_ConvertToString(name);
@@ -719,13 +719,13 @@ void Scr_CompileCallExpressionList(sval_u *exprlist)
     sval_u *node; // [esp+8h] [ebp-8h]
     sval_u expr; // [esp+Ch] [ebp-4h]
 
-    expr.type = debugger_node0(ENUM_NOP).type;
-    for (node = *(sval_u **)exprlist->type; node; node = node[1].node)
+    expr = debugger_node0(ENUM_NOP);
+    for (node = exprlist->node[0].node; node; node = node[1].node)
     {
         Scr_CompileExpression(node->node);
-        expr.type = debugger_prepend_node((sval_u)node->node->type, expr).type;
+        expr = debugger_prepend_node(node->node[0], expr);
     }
-    exprlist->type = expr.type;
+    *exprlist = expr;
 }
 
 char Scr_CompileMethod(sval_u *expr, sval_u *func_name, sval_u *params)
@@ -735,7 +735,7 @@ char Scr_CompileMethod(sval_u *expr, sval_u *func_name, sval_u *params)
     const char *pName; // [esp+8h] [ebp-8h] BYREF
     int type; // [esp+Ch] [ebp-4h] BYREF
 
-    name = Scr_GetBuiltin((sval_u)func_name->type);
+    name = Scr_GetBuiltin(*func_name);
     if (!name)
         return 0;
     pName = SL_ConvertToString(name);
@@ -1384,7 +1384,7 @@ void Scr_EvalFunction(sval_u func_name, sval_u params, uint32_t localId, Variabl
             33);
 
     if (!setjmp(g_script_error[g_script_error_level]))
-        ((void (*)(void))func_name.type)();
+        ((void (*)(void))func_name.block)(); // Scr_CompileFunction stored it in block
     if (g_script_error_level < 0)
         MyAssertHandler(
             ".\\script\\scr_evaluate.cpp",
@@ -1416,8 +1416,8 @@ void Scr_PreEvalBuiltin(sval_u params, uint32_t localId)
     if (scrVmPub.top > scrVmPub.maxstack)
         MyAssertHandler(".\\script\\scr_evaluate.cpp", 1581, 0, "%s", "scrVmPub.top <= scrVmPub.maxstack");
     index = 0;
-    for (node = *(sval_u **)params.type; node; node = node[1].node)
-        Scr_EvalExpression((sval_u)node->type, localId, &scrVmPub.top[-index++]);
+    for (node = params.node[0].node; node; node = node[1].node)
+        Scr_EvalExpression(node[0], localId, &scrVmPub.top[-index++]);
     scrVmPub.outparamcount = expr_count;
     if (!scrVarPub.evaluate)
         MyAssertHandler(".\\script\\scr_evaluate.cpp", 1593, 0, "%s", "scrVarPub.evaluate");
@@ -1495,7 +1495,7 @@ void Scr_EvalMethod(sval_u expr, sval_u func_name, sval_u params, uint32_t local
         }
         entref = Scr_GetEntityIdRef(objectId.stringValue);
         RemoveRefToObject(objectId.stringValue);
-        ((void(*)(uint32_t))func_name.type)(entref.entnum); // KISAKTODO: fubar'd union 'entref'
+        ((void (*)(scr_entref_t))func_name.block)(entref); // Scr_CompileMethod stored it in block
     }
     if (g_script_error_level < 0)
         MyAssertHandler(
@@ -1784,9 +1784,9 @@ bool Scr_RefCall(sval_u params)
     bool exprRemoved; // [esp+7h] [ebp-1h]
 
     exprRemoved = 0;
-    for (node = *(sval_u **)params.type; node; node = node[1].node)
+    for (node = params.node[0].node; node; node = node[1].node)
     {
-        if (Scr_RefExpression((sval_u)node->type))
+        if (Scr_RefExpression(node[0]))
             exprRemoved = 1;
     }
     return exprRemoved;

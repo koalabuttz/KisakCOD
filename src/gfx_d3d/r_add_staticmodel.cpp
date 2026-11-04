@@ -546,7 +546,7 @@ void R_StaticModelWriteInfo(int fileHandle, const GfxStaticModelDrawInst *smodel
     iassert( xmodel );
     iassert( xmodel->name );
     iassert( xmodel->numLods > 0 );
-    lodDist = *((float *)&xmodel->parentList + 7 * xmodel->numLods);
+    lodDist = XModelGetLodOutDist(xmodel);
     iassert( lodDist > 0.0f );
     v6 = radius2pixels * xmodel->radius / lodDist;
     v8 = radius2pixels * xmodel->radius;

@@ -736,6 +736,18 @@ jobs:
           /usr/bin/python3 scripts/tests/test_check_32bit_size_literals.py
           /usr/bin/python3 scripts/tools/check_32bit_size_literals.py --build-dir "$BUILD_DIR"
 
+      # A field reached through its i386 byte offset, a pointer read at a fixed
+      # byte offset, or a union copied through a 4-byte member lands on the
+      # wrong bytes on x86_64 (docs/linux-x64.md, "Byte offsets and union
+      # copies").
+      - name: Check for 32-bit byte offsets and union copies
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/bin/python3 scripts/tests/test_check_32bit_layout_offsets.py
+          /usr/bin/python3 scripts/tools/check_32bit_layout_offsets.py --build-dir "$BUILD_DIR"
+
       - name: Run the x86_64 multiplayer client's fail-closed start
         timeout-minutes: 10
         shell: bash

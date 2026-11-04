@@ -2580,7 +2580,7 @@ bool Scr_ScriptWatch::PostEvaluateWatchElement(
         {
             element->valueDefined = 1;
             type = value->type;
-            element->value.u.intValue = value->u.intValue;
+            element->value.u = value->u; // the whole union: vectors and code positions are pointers
             element->value.type = (Vartype_t)type;
         }
         else
