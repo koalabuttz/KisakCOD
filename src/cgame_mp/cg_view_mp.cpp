@@ -23,7 +23,10 @@
 #include <game_mp/g_main_mp.h>
 
 TestEffect s_testEffect[1];
-ClientViewParams clientViewParamsArray[1][1];
+// One full-screen view, in fractions of the render target. The shellshock
+// screen effects (flashbang white-out, concussion blur) size their quads from
+// it, so a zero-filled entry draws them at 0x0 and they never show.
+ClientViewParams clientViewParamsArray[1][1] = { { { 0.0f, 0.0f, 1.0f, 1.0f } } };
 
 const dvar_t *cg_heliKillCamDist;
 const dvar_t *cg_heliKillCamFov;

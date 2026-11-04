@@ -8,8 +8,13 @@ on:
       - src/bgame/bg_misc.cpp
       - src/bgame/bg_local.h
       - src/cgame/cg_shellshock.cpp
+      - src/cgame/cg_view.cpp
+      - src/cgame/cg_view.h
+      - src/cgame_mp/cg_view_mp.cpp
+      - src/cgame_mp/cg_local_mp.h
       - src/universal/dvar.cpp
       - scripts/tests/test_shellshock_settings.py
+      - scripts/tests/test_shellshock_view_rect.py
       - .github/workflows/shellshock-settings.yaml
   push:
     branches: [master]
@@ -17,8 +22,13 @@ on:
       - src/bgame/bg_misc.cpp
       - src/bgame/bg_local.h
       - src/cgame/cg_shellshock.cpp
+      - src/cgame/cg_view.cpp
+      - src/cgame/cg_view.h
+      - src/cgame_mp/cg_view_mp.cpp
+      - src/cgame_mp/cg_local_mp.h
       - src/universal/dvar.cpp
       - scripts/tests/test_shellshock_settings.py
+      - scripts/tests/test_shellshock_view_rect.py
       - .github/workflows/shellshock-settings.yaml
 
 jobs:
@@ -28,3 +38,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 scripts/tests/test_shellshock_settings.py
+      - run: python3 scripts/tests/test_shellshock_view_rect.py
