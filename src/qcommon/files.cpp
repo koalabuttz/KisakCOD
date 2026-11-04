@@ -430,8 +430,8 @@ void FS_PureServerSetLoadedIwds(char *iwdSums, char *iwdNames)
     if (v7)
     {
         Com_DPrintf(CON_CHANNEL_FILES, "Connected to a pure server.\n");
-        Com_Memcpy(fs_serverIwds, src, 4 * fs_numServerIwds);
-        Com_Memcpy(fs_serverIwdNames, s0, 4 * fs_numServerIwds);
+        Com_Memcpy(fs_serverIwds, src, sizeof(fs_serverIwds[0]) * fs_numServerIwds);
+        Com_Memcpy(fs_serverIwdNames, s0, sizeof(fs_serverIwdNames[0]) * fs_numServerIwds);
         fs_fakeChkSum = 0;
     }
 }

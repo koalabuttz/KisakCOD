@@ -123,6 +123,7 @@ union GfxEntCellRefInfo // sizeof=0x4
     float radius;
     GfxBrushModel *bmodel;
 };
+static_assert(LAYOUT_32BIT(sizeof(GfxEntCellRefInfo) == 4));
 
 struct GfxSceneDpvs // sizeof=0x38
 {                                       // ...

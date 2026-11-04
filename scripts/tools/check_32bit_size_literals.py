@@ -10,8 +10,8 @@ This parses every source in a build's compile_commands.json twice with
 libclang, once as i386 (-m32) and once as x86_64 (-m64). In each statement it
 looks at the record types the statement's expressions use (through pointers,
 arrays and references) and reports an integer literal of at least --min-size
-that equals one of those records' i386 size when the record's x86_64 size is
-different. Write sizeof(T) instead, or assert the literal with LAYOUT_32BIT.
+(or a 4 that multiplies a count, as in ``Alloc(4 * n)``) that equals one of
+those records' i386 size when the record's x86_64 size is different. Write sizeof(T) instead, or assert the literal with LAYOUT_32BIT.
 
 It also reports an allocation cast to a pointer-to-pointer type whose size is
 a multiple of 4 written without sizeof, such as `(T **)Alloc(4 * n)` or
@@ -141,7 +141,17 @@ def scan_arch(ci, path, args, arch, min_size):
     # statement extent -> {record: size}
     statements = {}
 
-    def visit(cursor, statement):
+    def visit(cursor, statement, multiplied=False):
+        # A literal below --min-size still counts as a size when it multiplies a
+        # count, as in Alloc(4 * n) for an array of 4-byte (i386) records.
+        if cursor.kind == K.BINARY_OPERATOR:
+            # n * sizeof(T): the 4 is a count, not a size.
+            child_multiplied = is_multiply(cursor) and not any(
+                c.kind == K.CXX_UNARY_EXPR for c in cursor.get_children())
+        elif cursor.kind in (K.UNEXPOSED_EXPR, K.PAREN_EXPR):
+            child_multiplied = multiplied
+        else:
+            child_multiplied = False
         for child in cursor.get_children():
             loc = child.location
             if loc.file is not None and loc.file.name != path:
@@ -153,7 +163,7 @@ def scan_arch(ci, path, args, arch, min_size):
                 continue
             if child.kind == K.INTEGER_LITERAL and inner is not None:
                 value = literal_value(child)
-                if value is not None and value >= min_size:
+                if value is not None and (value >= min_size or (child_multiplied and value == 4)):
                     key = (inner.extent.start.offset, inner.extent.end.offset)
                     if key not in statements:
                         types = {}
@@ -164,12 +174,21 @@ def scan_arch(ci, path, args, arch, min_size):
                 value = pointer_array_literal(ci, child)
                 if value is not None:
                     yield "pointers", loc.line, loc.column, value, None
-            yield from visit(child, inner)
+            yield from visit(child, inner, child_multiplied)
 
     found = []
     for kind, line, column, value, types in visit(tu.cursor, None):
         found.append((kind, line, column, value, dict(types or {})))
     return found, None
+
+
+def is_multiply(node):
+    """True for a binary `*`: the operator is the token between the two operands."""
+    children = list(node.get_children())
+    if len(children) != 2:
+        return False
+    start, end = children[0].extent.end.offset, children[1].extent.start.offset
+    return any(t.spelling == "*" for t in node.get_tokens() if start <= t.extent.start.offset < end)
 
 
 def pointer_array_literal(ci, cast):
@@ -231,7 +250,7 @@ def scan(job):
         wide_sizes.update(types)
     hits = []
     source = Path(path).read_text(errors="replace").splitlines()
-    rel = Path(path).relative_to(ROOT)
+    rel = Path(path).relative_to(ROOT) if ROOT in Path(path).parents else Path(path)
     for kind, line, column, value, types in narrow:
         text = " ".join(source[line - 1].split())
         if kind == "pointers":
