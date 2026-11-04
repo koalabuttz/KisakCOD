@@ -838,7 +838,6 @@ char *CG_GetWeaponUseString(int localClientNum, const char **secondaryString)
     int cursorHintIcon; // r11
     int v5; // r30
     WeaponDef *WeaponDef; // r29
-    char *v7; // r28
     char *v8; // r30
     char *v9; // r30
     char v11[336]; // [sp+50h] [-150h] BYREF
@@ -872,7 +871,6 @@ char *CG_GetWeaponUseString(int localClientNum, const char **secondaryString)
             "%s\n\t(localClientNum) = %i",
             "(localClientNum == 0)",
             localClientNum);
-    v7 = (char *)cg_weaponsArray + 72 * v5;
     if (WeaponDef->inventoryType)
     {
         if (WeaponDef->offhandClass == OFFHAND_CLASS_FRAG_GRENADE)
@@ -892,7 +890,7 @@ char *CG_GetWeaponUseString(int localClientNum, const char **secondaryString)
         else
             v8 = UI_SafeTranslateString("PLATFORM_PICKUPNEWWEAPON");
     }
-    *secondaryString = (const char *)*((unsigned int *)v7 + 15);
+    *secondaryString = CG_GetLocalClientWeaponInfo(localClientNum, v5)->translatedDisplayName;
     return UI_ReplaceConversionString(v8, v11);
 }
 
