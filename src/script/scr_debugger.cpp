@@ -2998,7 +2998,7 @@ char Scr_WatchElementHasSameValue(Scr_WatchElement_s *element, VariableValue *ne
         return 0;
     }
     type = element->value.type;
-    oldValue.u.intValue = element->value.u.intValue;
+    oldValue.u = element->value.u; // the whole union: vectors and code positions are pointers
     oldValue.type = type;
     AddRefToValue(type, oldValue.u);
     Scr_EvalEquality(&oldValue, newValue);
