@@ -612,8 +612,8 @@ void Scr_ScriptWatch::AddElement(Scr_WatchElement_s *element, char *text)
             return;
         }
         Scr_CompileText(text, &scriptExpr);
-        v3 = *(const char *)scriptExpr.parseData.type;
-        if (*(const char *)scriptExpr.parseData.type != 83)
+        v3 = scriptExpr.parseData.node[0].type;
+        if (v3 != ENUM_statement)
         {
             if (v3 > 83 && v3 <= 85)
             {
@@ -625,7 +625,7 @@ void Scr_ScriptWatch::AddElement(Scr_WatchElement_s *element, char *text)
         if (!scrVarPub.evaluate)
             MyAssertHandler(".\\script\\scr_debugger.cpp", 6623, 0, "%s", "scrVarPub.evaluate");
         scrVarPub.evaluate = 0;
-        Scr_ExecCode(*(const char**)(scriptExpr.parseData.type + 4), this->localId);
+        Scr_ExecCode(scriptExpr.parseData.node[1].codePosValue, this->localId);
         scrVarPub.evaluate = 1;
         SL_ShutdownSystem(2);
         Scr_FreeDebugExpr(&scriptExpr);
