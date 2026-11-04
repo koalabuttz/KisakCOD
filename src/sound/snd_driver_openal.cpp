@@ -935,8 +935,15 @@ void SND_ApplyReverbSend(int index, const snd_alias_t *alias)
 void SND_SetRoomtype(int roomtype)
 {
     iassert(roomtype >= 0 && roomtype < ARRAY_COUNT(AL_RoomPresets));
+
+    // Shellshock calls this every frame with the same room. Only send the preset to
+    // OpenAL when the room changes, so the reverb isn't reloaded 85 times a second.
+    if (roomtype == alGlob.reverbRoomtype)
+        return;
+
     AL_ApplyReverbPreset(alGlob.reverbEffect, AL_RoomPresets[roomtype]);
     alAuxiliaryEffectSloti(alGlob.auxSlot, AL_EFFECTSLOT_EFFECT, alGlob.reverbEffect);
+    alGlob.reverbRoomtype = roomtype;
 }
 
 void SND_UpdateEqs()
