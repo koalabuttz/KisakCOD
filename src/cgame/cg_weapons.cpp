@@ -39,42 +39,60 @@ const float MYLERP_END = 0.1f;
 
 int32_t removeMeWhenMPStopsCrashingInHere;
 
-int32_t g_animRateOffsets[NUM_WEAP_ANIMS] =
+// Where each weapon anim's duration lives in WeaponDef; -1 plays the
+// anim at its natural rate. Retail stored these as i386 byte offsets
+// (888 for iHoldFireTime and so on), which point at the wrong fields once
+// WeaponDef's pointers widen on x86_64.
+#define WEAP_ANIM_TIME(field) static_cast<int32_t>(offsetof(WeaponDef, field))
+const int32_t g_animRateOffsets[NUM_WEAP_ANIMS] =
 {
-  -1,
-  -1,
-  -1,
-  -1,
-  888,
-  -1,
-  -1,
-  896,
-  900,
-  904,
-  912,
-  920,
-  928,
-  936,
-  956,
-  932,
-  944,
-  940,
-  952,
-  948,
-  960,
-  964,
-  968,
-  972,
-  976,
-  -1,
-  980,
-  992,
-  -1,
-  -1,
-  -1,
-  -1,
-  -1
-}; // idb
+  -1,                                       // WEAP_ANIM_ROOT
+  -1,                                       // WEAP_ANIM_IDLE
+  -1,                                       // WEAP_ANIM_EMPTY_IDLE
+  -1,                                       // WEAP_ANIM_FIRE
+  WEAP_ANIM_TIME(iHoldFireTime),            // WEAP_ANIM_HOLD_FIRE
+  -1,                                       // WEAP_ANIM_LASTSHOT
+  -1,                                       // WEAP_ANIM_RECHAMBER
+  WEAP_ANIM_TIME(iMeleeTime),               // WEAP_ANIM_MELEE
+  WEAP_ANIM_TIME(meleeChargeTime),          // WEAP_ANIM_MELEE_CHARGE
+  WEAP_ANIM_TIME(iReloadTime),              // WEAP_ANIM_RELOAD
+  WEAP_ANIM_TIME(iReloadEmptyTime),         // WEAP_ANIM_RELOAD_EMPTY
+  WEAP_ANIM_TIME(iReloadStartTime),         // WEAP_ANIM_RELOAD_START
+  WEAP_ANIM_TIME(iReloadEndTime),           // WEAP_ANIM_RELOAD_END
+  WEAP_ANIM_TIME(iRaiseTime),               // WEAP_ANIM_RAISE
+  WEAP_ANIM_TIME(iFirstRaiseTime),          // WEAP_ANIM_FIRST_RAISE
+  WEAP_ANIM_TIME(iDropTime),                // WEAP_ANIM_DROP
+  WEAP_ANIM_TIME(iAltRaiseTime),            // WEAP_ANIM_ALT_RAISE
+  WEAP_ANIM_TIME(iAltDropTime),             // WEAP_ANIM_ALT_DROP
+  WEAP_ANIM_TIME(quickRaiseTime),           // WEAP_ANIM_QUICK_RAISE
+  WEAP_ANIM_TIME(quickDropTime),            // WEAP_ANIM_QUICK_DROP
+  WEAP_ANIM_TIME(iEmptyRaiseTime),          // WEAP_ANIM_EMPTY_RAISE
+  WEAP_ANIM_TIME(iEmptyDropTime),           // WEAP_ANIM_EMPTY_DROP
+  WEAP_ANIM_TIME(sprintInTime),             // WEAP_ANIM_SPRINT_IN
+  WEAP_ANIM_TIME(sprintLoopTime),           // WEAP_ANIM_SPRINT_LOOP
+  WEAP_ANIM_TIME(sprintOutTime),            // WEAP_ANIM_SPRINT_OUT
+  -1,                                       // WEAP_ANIM_DETONATE
+  WEAP_ANIM_TIME(nightVisionWearTime),      // WEAP_ANIM_NIGHTVISION_WEAR
+  WEAP_ANIM_TIME(nightVisionRemoveTime),    // WEAP_ANIM_NIGHTVISION_REMOVE
+  -1,                                       // WEAP_ANIM_ADS_FIRE
+  -1,                                       // WEAP_ANIM_ADS_LASTSHOT
+  -1,                                       // WEAP_ANIM_ADS_RECHAMBER
+  -1,                                       // WEAP_ANIM_ADS_UP
+  -1                                        // WEAP_ANIM_ADS_DOWN
+};
+#undef WEAP_ANIM_TIME
+// The retail i386 table, kept as a check that the fields above are the same.
+static_assert(LAYOUT_32BIT(offsetof(WeaponDef, iHoldFireTime) == 888 && offsetof(WeaponDef, iMeleeTime) == 896
+    && offsetof(WeaponDef, meleeChargeTime) == 900 && offsetof(WeaponDef, iReloadTime) == 904
+    && offsetof(WeaponDef, iReloadEmptyTime) == 912 && offsetof(WeaponDef, iReloadStartTime) == 920
+    && offsetof(WeaponDef, iReloadEndTime) == 928 && offsetof(WeaponDef, iRaiseTime) == 936
+    && offsetof(WeaponDef, iFirstRaiseTime) == 956 && offsetof(WeaponDef, iDropTime) == 932
+    && offsetof(WeaponDef, iAltRaiseTime) == 944 && offsetof(WeaponDef, iAltDropTime) == 940
+    && offsetof(WeaponDef, quickRaiseTime) == 952 && offsetof(WeaponDef, quickDropTime) == 948
+    && offsetof(WeaponDef, iEmptyRaiseTime) == 960 && offsetof(WeaponDef, iEmptyDropTime) == 964
+    && offsetof(WeaponDef, sprintInTime) == 968 && offsetof(WeaponDef, sprintLoopTime) == 972
+    && offsetof(WeaponDef, sprintOutTime) == 976 && offsetof(WeaponDef, nightVisionWearTime) == 980
+    && offsetof(WeaponDef, nightVisionRemoveTime) == 992));
 
 bool CG_JavelinADS(int32_t localClientNum)
 {
@@ -978,7 +996,7 @@ double GetWeaponAnimRate(WeaponDef *weapDef, XAnim_s *anims, uint32_t animIndex)
     offset = g_animRateOffsets[animIndex];
     if (offset < 0)
         return 1.0;
-    time = *(int32_t *)((char *)&weapDef->szInternalName + offset);
+    time = *(const int32_t *)((const char *)weapDef + offset);
     iassert(time >= 0);
     if (!time)
         return 0.0;
