@@ -3010,7 +3010,7 @@ void Scr_AbstractScriptList::AddEntry(Scr_ScriptWindow *scriptWindow, bool selec
     int newIndex; // [esp+28h] [ebp-10h]
     float newWidth; // [esp+2Ch] [ebp-Ch]
     int i; // [esp+30h] [ebp-8h]
-    uint8_t *newScriptWindows; // [esp+34h] [ebp-4h]
+    Scr_ScriptWindow **newScriptWindows; // [esp+34h] [ebp-4h]
 
     if (select && this->selectedLine >= 0)
         selectedLine = this->selectedLine;
@@ -3023,28 +3023,28 @@ void Scr_AbstractScriptList::AddEntry(Scr_ScriptWindow *scriptWindow, bool selec
         {
             if (selectedLine <= i)
             {
-                memmove(&this->scriptWindows[selectedLine + 1], &this->scriptWindows[selectedLine], 4 * (i - selectedLine));
+                memmove(&this->scriptWindows[selectedLine + 1], &this->scriptWindows[selectedLine], sizeof(this->scriptWindows[0]) * (i - selectedLine));
             }
             else
             {
                 newIndex = selectedLine - 1;
-                memmove(&this->scriptWindows[i], &this->scriptWindows[i + 1], 4 * (selectedLine - 1 - i));
+                memmove(&this->scriptWindows[i], &this->scriptWindows[i + 1], sizeof(this->scriptWindows[0]) * (selectedLine - 1 - i));
             }
             goto found_0;
         }
     }
     newNumLines = this->numLines + 1;
-    newScriptWindows = (unsigned char*)Scr_AllocDebugMem(4 * newNumLines, "Scr_AbstractScriptList::AddEntry");
+    newScriptWindows = (Scr_ScriptWindow **)Scr_AllocDebugMem(sizeof(newScriptWindows[0]) * newNumLines, "Scr_AbstractScriptList::AddEntry");
     if (this->scriptWindows)
     {
-        memcpy(newScriptWindows, this->scriptWindows, 4 * selectedLine);
+        memcpy(newScriptWindows, this->scriptWindows, sizeof(newScriptWindows[0]) * selectedLine);
         memcpy(
-            &newScriptWindows[4 * selectedLine + 4],
+            &newScriptWindows[selectedLine + 1],
             &this->scriptWindows[selectedLine],
-            4 * (this->numLines - selectedLine));
+            sizeof(newScriptWindows[0]) * (this->numLines - selectedLine));
         Scr_FreeDebugMem(this->scriptWindows);
     }
-    this->scriptWindows = (Scr_ScriptWindow**)newScriptWindows;
+    this->scriptWindows = newScriptWindows;
     this->numLines = newNumLines;
     //newWidth = strlen(Scr_ScriptWindow::GetFilename(scriptWindow)) * UI_Component::g.charWidth;
     newWidth = strlen(scriptWindow->GetFilename()) * UI_Component::g.charWidth;
