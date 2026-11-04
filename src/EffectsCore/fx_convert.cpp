@@ -1085,7 +1085,7 @@ void FX_CopyMarkVisuals(const FxEditorElemDef *edElemDef, FxElemMarkVisuals *mar
 
 void FX_CopyVisuals(const FxEditorElemDef *edElemDef, FxElemVisuals *visualsArray)
 {
-    memcpy(visualsArray, &edElemDef->markVisuals, 4 * edElemDef->visualCount);
+    memcpy(visualsArray, &edElemDef->markVisuals, sizeof(FxElemVisuals) * edElemDef->visualCount);
 }
 
 void FX_ConvertTrail_CalcNormForSegment(const float *vert0, const float *vert1, float *outNormal)
@@ -1513,7 +1513,7 @@ int32_t FX_CopyEmittedElemDefs(
     const FxEditorEffectDef *editorEffect,
     uint8_t **memPool)
 {
-    uint8_t **elemDefEmit; // [esp+8h] [ebp-20h]
+    const FxElemDef *elemDefEmit; // [esp+8h] [ebp-20h]
     const FxEffectDef *emission; // [esp+Ch] [ebp-1Ch]
     int32_t elemIndexEmit; // [esp+10h] [ebp-18h]
     FxElemDef *elemDef; // [esp+14h] [ebp-14h]
@@ -1533,7 +1533,7 @@ int32_t FX_CopyEmittedElemDefs(
             for (elemIndexEmit = emission->elemDefCountLooping; elemIndexEmit != elemIndexStop; ++elemIndexEmit)
             {
                 elemDef = &elemDefArray[elemCount++];
-                elemDefEmit = (uint8_t **)&emission->elemDefs[elemIndexEmit];
+                elemDefEmit = &emission->elemDefs[elemIndexEmit];
                 memcpy((void *)elemDef, elemDefEmit, sizeof(FxElemDef));
                 if ((elemDef->flags & 0xC0) == 0x40)
                 {
@@ -1541,11 +1541,11 @@ int32_t FX_CopyEmittedElemDefs(
                     elemDef->flags = elemDef->flags;
                 }
                 FX_ReserveElemDefMemory(elemDef, memPool);
-                memcpy((uint8_t *)elemDef->velSamples, elemDefEmit[45], 96 * (elemDef->velIntervalCount + 1));
+                memcpy((void *)elemDef->velSamples, elemDefEmit->velSamples, sizeof(FxElemVelStateSample) * (elemDef->velIntervalCount + 1));
                 if (elemDef->visSamples)
-                    memcpy(elemDef->visSamples->base.color, elemDefEmit[46], 48 * (elemDef->visStateIntervalCount + 1));
+                    memcpy((void *)elemDef->visSamples, elemDefEmit->visSamples, sizeof(FxElemVisStateSample) * (elemDef->visStateIntervalCount + 1));
                 if (elemDef->visualCount > 1u)
-                    memcpy((uint8_t *)elemDef->visuals.markArray, elemDefEmit[47], 4 * elemDef->visualCount);
+                    memcpy(elemDef->visuals.array, elemDefEmit->visuals.array, sizeof(FxElemVisuals) * elemDef->visualCount);
             }
         }
     }
