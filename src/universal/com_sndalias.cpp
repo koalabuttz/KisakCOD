@@ -455,7 +455,7 @@ void Com_StreamedSoundList(snd_alias_system_t system)
 
     if (g_sa.initialized[system])
     {
-        aliases = *(snd_alias_t **)(&g_sa.soundFileInfo[-4].count + 3 * system);
+        aliases = g_sa.aliasInfo[system].head;
         for (i = 0; i < g_sa.aliasInfo[system].count; ++i)
         {
             if ((aliases[i].flags & 0xC0) >> 6 == 2)
@@ -489,7 +489,7 @@ void Com_LoadedSoundList(snd_alias_system_t system)
     if (g_sa.initialized[system])
     {
         totalMem = 0;
-        aliases = *(snd_alias_t **)(&g_sa.soundFileInfo[-4].count + 3 * system);
+        aliases = g_sa.aliasInfo[system].head;
         for (i = 0; i < g_sa.aliasInfo[system].count; ++i)
         {
             if ((aliases[i].flags & 0xC0) >> 6 == 1)
@@ -705,11 +705,11 @@ void Com_UnloadSoundAliases(snd_alias_system_t system)
                 0,
                 "%s",
                 "system != SASYS_GAME || !g_sa.initialized[SASYS_CGAME]");
-        if (*(&g_sa.soundFileInfo[-4].count + 3 * system))
+        if (g_sa.aliasInfo[system].head)
         {
-            *(&g_sa.soundFileInfo[-4].count + 3 * system) = 0;
+            g_sa.aliasInfo[system].head = nullptr;
             g_sa.aliasInfo[system].count = 0;
-            memset((uint8_t *)g_sa.hash, 0, 4 * g_sa.hashSize);
+            memset(g_sa.hash, 0, sizeof(g_sa.hash[0]) * g_sa.hashSize);
             g_sa.hashUsed = 0;
         }
         else if (g_sa.aliasInfo[system].count)
@@ -1239,7 +1239,7 @@ void Com_InitSoundAliasHash(uint32_t aliasCount)
     g_sa.hashUsed = 0;
     g_sa.hashSize = (3 * aliasCount + 1) >> 1;
     g_sa.hash = (snd_alias_list_t**)CM_Hunk_Alloc(sizeof(snd_alias_list_t *) * ((3 * aliasCount + 1) >> 1), "Com_InitSoundAliasHash", 15);
-    memset(g_sa.hash, 0, 4 * ((3 * aliasCount + 1) >> 1));
+    memset(g_sa.hash, 0, sizeof(g_sa.hash[0]) * g_sa.hashSize);
 }
 
 cmd_function_s Com_RefreshSpeakerMaps_f_VAR;
