@@ -309,7 +309,6 @@ void WriteStack(const VariableStackBuffer *stackBuf, MemoryFile *memFile)
     const char *buf; // r31
     unsigned int v7; // r3
     __int16 v8; // r30
-    VariableUnion *v9; // r4
     _WORD v10[24]; // [sp+50h] [-30h] BYREF
 
     iassert(stackBuf);
@@ -329,9 +328,8 @@ void WriteStack(const VariableStackBuffer *stackBuf, MemoryFile *memFile)
         {
             v7 = (unsigned __int8)*buf;
             v8 = v5 - 1;
-            v9 = *(VariableUnion **)(buf + 1);
-            buf += 5;
-            DoSaveEntryInternal(v7, v9, memFile);
+            DoSaveEntryInternal(v7, Scr_ReadStackValue(buf + 1), memFile);
+            buf += SCR_STACK_ENTRY_SIZE;
             v5 = v8;
         } while (v8);
     }
@@ -339,53 +337,33 @@ void WriteStack(const VariableStackBuffer *stackBuf, MemoryFile *memFile)
 
 VariableStackBuffer *Scr_ReadStack(MemoryFile *memFile)
 {
-    __int16 v2; // r27
-    int v3; // r28
-    int v4; // r31
-    unsigned __int16 v5; // r29
-    _WORD *v6; // r31
-    char *v7; // r29
-    __int16 v8; // r11
-    __int16 v9; // r28
-    unsigned __int8 v11[8]; // [sp+50h] [-40h] BYREF
-    VariableValue v12; // [sp+58h] [-38h] BYREF
+    unsigned __int16 size;
+    unsigned __int8 opcode;
+    VariableValue value;
 
-    MemFile_ReadData(memFile, 2, v11);
-    v2 = *(_WORD *)v11;
-    v3 = *(unsigned __int16 *)v11;
-    v4 = 5 * *(unsigned __int16 *)v11 + 11;
-    v5 = 5 * *(_WORD *)v11 + 11;
-    if (v4 != v5)
-        MyAssertHandler(
-            "c:\\trees\\cod3\\cod3src\\src\\script\\scr_readwrite.cpp",
-            268,
-            0,
-            "%s",
-            "bufLen == (unsigned short)bufLen");
-    v6 = (uint16*)MT_Alloc(v4, MT_TYPE_THREAD);
+    MemFile_ReadData(memFile, 2, (unsigned char *)&size);
+    // 5 * size + 11 on i386; each entry is the type byte plus the whole VariableUnion.
+    int bufLen = SCR_STACK_ENTRY_SIZE * size + (int)offsetof(VariableStackBuffer, buf);
+    iassert(bufLen == (unsigned short)bufLen);
+    VariableStackBuffer *stackBuf = (VariableStackBuffer *)MT_Alloc(bufLen, MT_TYPE_THREAD);
     ++scrVarPub.numScriptThreads;
-    v6[2] = v2;
-    v6[3] = v5;
-    *(unsigned int *)v6 = (unsigned int)Scr_ReadCodepos(memFile);
-    MemFile_ReadData(memFile, 1, v11);
-    v6[4] = Scr_ReadId(memFile, v11[0]);
-    MemFile_ReadData(memFile, 1, v11);
-    v7 = (char *)v6 + 11;
-    *((_BYTE *)v6 + 10) = v11[0];
-    if (v3)
+    stackBuf->size = size;
+    stackBuf->bufLen = (unsigned short)bufLen;
+    stackBuf->pos = Scr_ReadCodepos(memFile);
+    MemFile_ReadData(memFile, 1, &opcode);
+    stackBuf->localId = Scr_ReadId(memFile, opcode);
+    MemFile_ReadData(memFile, 1, &opcode);
+    stackBuf->time = opcode;
+
+    char *buf = stackBuf->buf;
+    for (int i = 0; i < size; i++)
     {
-        v8 = v3;
-        do
-        {
-            v9 = v8 - 1;
-            Scr_DoLoadEntryInternal(&v12, memFile);
-            v8 = v9;
-            *v7 = v12.type;
-            *(unsigned int *)(v7 + 1) = v12.u.intValue;
-            v7 += 5;
-        } while (v9);
+        Scr_DoLoadEntryInternal(&value, memFile);
+        *buf = value.type;
+        Scr_WriteStackValue(buf + 1, value.u);
+        buf += SCR_STACK_ENTRY_SIZE;
     }
-    return (VariableStackBuffer *)v6;
+    return stackBuf;
 }
 
 void Scr_DoLoadEntryInternal(VariableValue *value, MemoryFile *memFile)
@@ -398,10 +376,11 @@ void Scr_DoLoadEntryInternal(VariableValue *value, MemoryFile *memFile)
 
     MemFile_ReadData(memFile, 1, v7);
     v4 = v7[0];
+    value->u = VariableUnion(); // pointer sized on x64: clear the upper half too
     if ((v7[0] & 7) != 0)
     {
         value->type = VAR_POINTER;
-        value->u.intValue = Scr_ReadId(memFile, v4);
+        value->u.pointerValue = Scr_ReadId(memFile, v4);
     }
     else
     {
@@ -417,7 +396,7 @@ void Scr_DoLoadEntryInternal(VariableValue *value, MemoryFile *memFile)
             value->u.intValue = (unsigned __int16)Scr_ReadString(memFile);
             break;
         case VAR_VECTOR:
-            value->u.intValue = (int)Scr_ReadVec3(memFile);
+            value->u.vectorValue = Scr_ReadVec3(memFile);
             break;
         case VAR_FLOAT:
             value->u.floatValue = MemFile_ReadFloat(memFile);
@@ -429,10 +408,10 @@ void Scr_DoLoadEntryInternal(VariableValue *value, MemoryFile *memFile)
             break;
         case VAR_CODEPOS:
         case VAR_FUNCTION:
-            value->u.intValue = (int)Scr_ReadCodepos(memFile);
+            value->u.codePosValue = Scr_ReadCodepos(memFile);
             break;
         case VAR_STACK:
-            value->u.intValue = (int)Scr_ReadStack(memFile);
+            value->u.stackValue = Scr_ReadStack(memFile);
             break;
         default:
             if (!alwaysfails)
@@ -663,7 +642,7 @@ void Scr_DoLoadObjectInfo(unsigned __int16 parentId, MemoryFile *memFile)
             iassert(!(entryValue->w.type & VAR_MASK));
             --v13;
             v20 = type | entryValue->w.type;
-            entryValue->u.u.intValue = value.u.intValue;
+            entryValue->u.u = value.u;
             entryValue->w.type = v20;
         } while (v13);
     }
@@ -689,7 +668,7 @@ void Scr_ReadGameEntry(MemoryFile *memFile)
             "%s",
             "!(tempValue.type & ~VAR_MASK)");
     gameId = scrVarPub.gameId;
-    v4.intValue = (int)v5.u.intValue;
+    v4 = v5.u;
     scrVarGlob.variableList[gameId + VARIABLELIST_CHILD_BEGIN].w.type |= type;
     scrVarGlob.variableList[gameId + VARIABLELIST_CHILD_BEGIN].u.u = v4;
 }
@@ -1173,7 +1152,7 @@ void Scr_LoadShutdown()
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\script\\scr_readwrite.cpp", 1115, 0, "%s", "CheckReferences()");
 }
 
-void DoSaveEntryInternal(unsigned int type, VariableUnion *u, MemoryFile *memFile)
+void DoSaveEntryInternal(unsigned int type, VariableUnion u, MemoryFile *memFile)
 {
     unsigned int UsedSize; // r3
     unsigned int v7; // r3
@@ -1213,7 +1192,7 @@ void DoSaveEntryInternal(unsigned int type, VariableUnion *u, MemoryFile *memFil
     {
         UsedSize = MemFile_GetUsedSize(memFile);
         //ProfMem_Begin("pointer", UsedSize);
-        WriteId((unsigned int)u, 1u, memFile);
+        WriteId(u.pointerValue, 1u, memFile);
         v7 = MemFile_GetUsedSize(memFile);
         //ProfMem_End(v7);
     }
@@ -1234,38 +1213,38 @@ void DoSaveEntryInternal(unsigned int type, VariableUnion *u, MemoryFile *memFil
         case VAR_ISTRING:
             v19 = MemFile_GetUsedSize(memFile);
             //ProfMem_Begin("string", v19);
-            v20 = SL_ConvertToString((unsigned __int16)u);
+            v20 = SL_ConvertToString((unsigned __int16)u.stringValue);
             MemFile_WriteCString(memFile, v20);
             v21 = MemFile_GetUsedSize(memFile);
             //ProfMem_End(v21);
             break;
         case VAR_VECTOR:
-            WriteVector(&u->floatValue, memFile);
+            WriteVector((float *)u.vectorValue, memFile);
             break;
         case VAR_FLOAT:
-            WriteFloat(*(float *)&u, memFile);
+            WriteFloat(u.floatValue, memFile);
             break;
         case VAR_INTEGER:
             v22 = MemFile_GetUsedSize(memFile);
             //ProfMem_Begin("int", v22);
-            v31[0] = (unsigned int)(uintptr_t)u;
+            v31[0] = (unsigned int)u.intValue;
             MemFile_WriteData(memFile, 4, v31);
             v23 = MemFile_GetUsedSize(memFile);
             //ProfMem_End(v23);
             break;
         case VAR_CODEPOS:
         case VAR_FUNCTION:
-            WriteCodepos((const char *)u, memFile);
+            WriteCodepos(u.codePosValue, memFile);
             break;
         case VAR_STACK:
             v24 = MemFile_GetUsedSize(memFile);
             //ProfMem_Begin("stack", v24);
-            WriteStack((const VariableStackBuffer *)u, memFile);
+            WriteStack(u.stackValue, memFile);
             v25 = MemFile_GetUsedSize(memFile);
             //ProfMem_End(v25);
             break;
         case VAR_ANIMATION:
-            v31[0] = (unsigned int)(uintptr_t)u;
+            v31[0] = (unsigned int)u.intValue;
             MemFile_WriteData(memFile, 4, v31);
             break;
         default:
@@ -1431,7 +1410,6 @@ void AddSaveStackInternal(const VariableStackBuffer *stackBuf)
     const char *buf; // r31
     unsigned int v4; // r3
     unsigned __int16 v5; // r30
-    VariableUnion *v6; // r4
 
     localId = stackBuf->localId;
     if (stackBuf->localId && !scrVarPub.saveIdMap[localId])
@@ -1447,27 +1425,26 @@ void AddSaveStackInternal(const VariableStackBuffer *stackBuf)
         {
             v4 = (unsigned __int8)*buf;
             v5 = size - 1;
-            v6 = *(VariableUnion **)(buf + 1);
-            buf += 5;
-            AddSaveEntryInternal(v4, (const VariableStackBuffer*)v6);
+            AddSaveEntryInternal(v4, Scr_ReadStackValue(buf + 1));
+            buf += SCR_STACK_ENTRY_SIZE;
             size = v5;
         } while (v5);
     }
 }
 
-void AddSaveEntryInternal(unsigned int type, const VariableStackBuffer *u)
+void AddSaveEntryInternal(unsigned int type, VariableUnion u)
 {
     if (type == VAR_POINTER)
     {
-        if (u && !scrVarPub.saveIdMap[(unsigned int)u])
+        if (u.pointerValue && !scrVarPub.saveIdMap[u.pointerValue])
         {
-            scrVarPub.saveIdMap[(unsigned int)u] = ++scrVarPub.savecount;
-            *(unsigned __int16 *)((char *)scrVarPub.saveIdMapRev + __ROL4__(scrVarPub.savecount, 1)) = (unsigned __int16)u;
+            scrVarPub.saveIdMap[u.pointerValue] = ++scrVarPub.savecount;
+            scrVarPub.saveIdMapRev[scrVarPub.savecount] = (unsigned __int16)u.pointerValue;
         }
     }
     else if (type == VAR_STACK)
     {
-        AddSaveStackInternal(u);
+        AddSaveStackInternal(u.stackValue);
     }
 }
 
@@ -1502,7 +1479,7 @@ void DoSaveEntry(VariableValue *value, VariableValue *name, bool isArray, Memory
     //ProfMem_Begin("DoSaveEntry", UsedSize);
     v9 = MemFile_GetUsedSize(memFile);
     //ProfMem_Begin("DoSaveEntryInternal", v9);
-    DoSaveEntryInternal(value->type, (VariableUnion *)value->u.intValue, memFile);
+    DoSaveEntryInternal(value->type, value->u, memFile);
     v10 = MemFile_GetUsedSize(memFile);
     //ProfMem_End(v10);
     if (!isArray)
@@ -1605,8 +1582,7 @@ void AddSaveObjectChildren(unsigned int parentId)
     parentType = parentValue->w.type & 0x1F;
     for (i = FindLastSibling(parentId); i; i = FindPrevSibling(i))
     {
-        entryValue = (VariableValueInternal *)((char *)&scrVarGlob.variableList[VARIABLELIST_CHILD_BEGIN]
-            + __ROL4__(scrVarGlob.variableList[i + VARIABLELIST_CHILD_BEGIN].hash.id, 4));
+        entryValue = &scrVarGlob.variableList[VARIABLELIST_CHILD_BEGIN + scrVarGlob.variableList[i + VARIABLELIST_CHILD_BEGIN].hash.id];
         iassert(!IsObject(entryValue));
         if (parentType == VAR_ARRAY)
         {
@@ -1770,8 +1746,7 @@ void DoSaveObjectInfo(unsigned int parentId, MemoryFile *memFile)
         MemFile_WriteData(memFile, 2, v18);
         for (j = FindLastSibling(parentId); j; j = FindPrevSibling(j))
         {
-            v14 = (VariableValueInternal *)((char *)&scrVarGlob.variableList[VARIABLELIST_CHILD_BEGIN]
-                + __ROL4__(scrVarGlob.variableList[j + VARIABLELIST_CHILD_BEGIN].hash.id, 4));
+            v14 = &scrVarGlob.variableList[VARIABLELIST_CHILD_BEGIN + scrVarGlob.variableList[j + VARIABLELIST_CHILD_BEGIN].hash.id];
             v15 = v14->w.status & 0x60;
             if (!v15 || v15 == 96)
                 MyAssertHandler(
@@ -1788,7 +1763,7 @@ void DoSaveObjectInfo(unsigned int parentId, MemoryFile *memFile)
                     "%s",
                     "!IsObject( entryValue )");
             w = v14->w;
-            v18[0].u.intValue = v14->u.u.intValue;
+            v18[0].u = v14->u.u;
             v18[0].type = (Vartype_t)(w.type & 0x1F);
             DoSaveEntry(v18, (VariableValue *)((unsigned int)w.status >> 8), v9, memFile);
         }
@@ -1822,7 +1797,7 @@ void WriteGameEntry(MemoryFile *memFile)
 {
     DoSaveEntryInternal(
         scrVarGlob.variableList[scrVarPub.gameId + VARIABLELIST_CHILD_BEGIN].w.type & 0x1F,
-        (VariableUnion *)scrVarGlob.variableList[scrVarPub.gameId + VARIABLELIST_CHILD_BEGIN].u.u.intValue,
+        scrVarGlob.variableList[scrVarPub.gameId + VARIABLELIST_CHILD_BEGIN].u.u,
         memFile);
 }
 
@@ -1859,7 +1834,7 @@ void Scr_SavePost(MemoryFile *memFile)
     //ProfMem_End(v5);
     DoSaveEntryInternal(
         scrVarGlob.variableList[scrVarPub.gameId + VARIABLELIST_CHILD_BEGIN].w.type & VAR_MASK,
-        (VariableUnion *)scrVarGlob.variableList[scrVarPub.gameId + VARIABLELIST_CHILD_BEGIN].u.u.intValue,
+        scrVarGlob.variableList[scrVarPub.gameId + VARIABLELIST_CHILD_BEGIN].u.u,
         memFile);
     WriteId(scrVarPub.levelId, 0, memFile);
     WriteId(scrVarPub.animId, 0, memFile);
@@ -1882,7 +1857,7 @@ void AddSaveStack(const VariableStackBuffer *stackBuf)
     const char *buf; // r31
     int v4; // r10
     __int16 v5; // r29
-    const VariableStackBuffer *v6; // r3
+    VariableUnion u; // r3
 
     AddSaveObject(stackBuf->localId);
     size = stackBuf->size;
@@ -1893,15 +1868,15 @@ void AddSaveStack(const VariableStackBuffer *stackBuf)
         {
             v4 = (unsigned __int8)*buf;
             v5 = size - 1;
-            v6 = *(const VariableStackBuffer **)(buf + 1);
-            buf += 5;
+            u = Scr_ReadStackValue(buf + 1);
+            buf += SCR_STACK_ENTRY_SIZE;
             if (v4 == VAR_POINTER)
             {
-                AddSaveObject((unsigned int)v6);
+                AddSaveObject(u.pointerValue);
             }
             else if (v4 == VAR_STACK)
             {
-                AddSaveStack(v6);
+                AddSaveStack(u.stackValue);
             }
             //LOWORD(size) = v5;
             size = (size & 0xFFFF0000) | ((uint32_t)v5 & 0xFFFF);
@@ -1910,15 +1885,15 @@ void AddSaveStack(const VariableStackBuffer *stackBuf)
     }
 }
 
-void AddSaveEntry(unsigned int type, const VariableStackBuffer *u)
+void AddSaveEntry(unsigned int type, VariableUnion u)
 {
     if (type == VAR_POINTER)
     {
-        AddSaveObject((unsigned int)u);
+        AddSaveObject(u.pointerValue);
     }
     else if (type == VAR_STACK)
     {
-        AddSaveStack(u);
+        AddSaveStack(u.stackValue);
     }
 }
 
