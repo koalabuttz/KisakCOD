@@ -30,12 +30,11 @@ void R_DrawSunShadowMapCallback(const void *userData, GfxCmdBufContext context, 
     rect.right = partition->viewport.x + width;
     rect.bottom = verticalOffset + height;
 
-    context.state->prim.device->SetRenderState(D3DRS_SCISSORTESTENABLE, 1);
-    context.state->prim.device->SetScissorRect(&rect);
+    R_HW_EnableScissor(context.state->prim.device, &rect);
 
     R_DrawSurfs(context, 0, &partition->info);
 
-    context.state->prim.device->SetRenderState(D3DRS_SCISSORTESTENABLE, 0);
+    R_HW_DisableScissor(context.state->prim.device);
 }
 
 void R_DrawSunShadowMap(

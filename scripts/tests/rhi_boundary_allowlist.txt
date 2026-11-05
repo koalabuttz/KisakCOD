@@ -1,0 +1,29 @@
+# Direct3D 9 calls that may stay outside the renderer's graphics interface
+# (src/gfx_d3d/rhi). Read by scripts/tests/check_rhi_boundary.py.
+#
+# Format: `path: count: reason`. The check fails when a file has more direct
+# calls than its entry allows (a regression) and when it has fewer (a stale
+# entry: lower the count or delete the line in the same change).
+#
+# Not moved yet (renderer plan M1a, in progress): each of these files' calls
+# moves behind r_rhi.h in a later commit of the same series.
+src/gfx_d3d/r_buffers.cpp: 13: not moved yet
+src/gfx_d3d/r_cinematic.cpp: 2: not moved yet
+src/gfx_d3d/r_image.cpp: 12: not moved yet
+src/gfx_d3d/r_image_load_common.cpp: 6: not moved yet
+src/gfx_d3d/r_init.cpp: 28: not moved yet
+src/gfx_d3d/r_material.cpp: 3: not moved yet
+src/gfx_d3d/r_material_load_obj.cpp: 8: not moved yet
+src/gfx_d3d/r_model_lighting.cpp: 4: not moved yet
+src/gfx_d3d/r_rendertarget.cpp: 16: not moved yet
+src/gfx_d3d/r_scene.cpp: 1: not moved yet
+src/gfx_d3d/r_screenshot.cpp: 17: not moved yet
+src/gfx_d3d/r_setstate_d3d.cpp: 1: not moved yet
+src/gfx_d3d/r_texturemem.cpp: 5: not moved yet
+src/gfx_d3d/r_utils.cpp: 1: not moved yet
+src/gfx_d3d/rb_backend.cpp: 20: not moved yet
+src/gfx_d3d/rb_draw3d.cpp: 1: not moved yet
+src/gfx_d3d/rb_imagetouch.cpp: 2: not moved yet
+src/gfx_d3d/rb_pixelcost.cpp: 1: not moved yet
+src/gfx_d3d/rb_sky.cpp: 8: not moved yet
+src/gfx_d3d/rb_uploadshaders.cpp: 1: not moved yet

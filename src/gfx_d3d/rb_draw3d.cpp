@@ -232,12 +232,10 @@ void R_DrawDebugShaderLitCallback(const void *data, GfxCmdBufContext context, Gf
     //    device,
     //    174,
     //    1);
-    device->SetRenderState(D3DRS_SCISSORTESTENABLE, 1);
-    //device->SetScissorRect(device, (const tagRECT *)v6);
-    device->SetScissorRect(&v6);
+    R_HW_EnableScissor(device, &v6);
     R_DrawSurfs(context, 0, &viewInfo->litInfo);
     //context.state->prim.device->SetRenderState(context.state->prim.device, D3DRS_SCISSORTESTENABLE, 0);
-    context.state->prim.device->SetRenderState(D3DRS_SCISSORTESTENABLE, 0);
+    R_HW_DisableScissor(context.state->prim.device);
 }
 
 void R_DrawFullbrightDecalCallback(const void *data, GfxCmdBufContext context, GfxCmdBufContext prepassContext)
@@ -264,11 +262,9 @@ void R_DrawFullbrightDecalCallback(const void *data, GfxCmdBufContext context, G
     //    device,
     //    174,
     //    1);
-    device->SetRenderState(D3DRS_SCISSORTESTENABLE, 1);
-    //device->SetScissorRect(device, (const tagRECT *)v6);
-    device->SetScissorRect(&v6);
+    R_HW_EnableScissor(device, &v6);
     R_DrawSurfs(context, 0, &viewInfo->decalInfo);
-    context.state->prim.device->SetRenderState(D3DRS_SCISSORTESTENABLE, 0);
+    R_HW_DisableScissor(context.state->prim.device);
 }
 
 void R_DrawDebugShaderEmissiveCallback(const void *data, GfxCmdBufContext context, GfxCmdBufContext prepassContext)
@@ -295,13 +291,12 @@ void R_DrawDebugShaderEmissiveCallback(const void *data, GfxCmdBufContext contex
     //    device,
     //    174,
     //    1);
-    device->SetRenderState(D3DRS_SCISSORTESTENABLE, 1);
-    device->SetScissorRect(&v6);
+    R_HW_EnableScissor(device, &v6);
     R_DrawSurfs(context, 0, &viewInfo->emissiveInfo);
     R_ShowTris(context, &viewInfo->litInfo);
     R_ShowTris(context, &viewInfo->decalInfo);
     R_ShowTris(context, &viewInfo->emissiveInfo);
-    context.state->prim.device->SetRenderState(D3DRS_SCISSORTESTENABLE, 0);
+    R_HW_DisableScissor(context.state->prim.device);
 }
 
 void RB_DebugShaderDrawCommands(const GfxViewInfo *viewInfo)
@@ -633,12 +628,11 @@ void R_DrawPointLitSurfsCallback(const void *userData, GfxCmdBufContext context,
     rect.right = w + rect.left;
     rect.bottom = h + y;
 
-    device->SetRenderState(D3DRS_SCISSORTESTENABLE, 1u);
-    device->SetScissorRect(&rect);
+    R_HW_EnableScissor(device, &rect);
 
     R_DrawSurfs(context, 0, info->drawSurfInfo);
 
-    context.state->prim.device->SetRenderState(D3DRS_SCISSORTESTENABLE, 0);
+    R_HW_DisableScissor(context.state->prim.device);
 }
 
 void R_DrawEmissiveCallback(const void *userData, GfxCmdBufContext context, GfxCmdBufContext prepassContext)
@@ -661,14 +655,13 @@ void R_DrawEmissiveCallback(const void *userData, GfxCmdBufContext context, GfxC
     v6.top = y;
     v6.right = width + v6.left;
     v6.bottom = height + y;
-    device->SetRenderState(D3DRS_SCISSORTESTENABLE, 1u);
-    device->SetScissorRect(&v6);
+    R_HW_EnableScissor(device, &v6);
     KISAK_NULLSUB();
     R_DrawSurfs(context, 0, &viewInfo->emissiveInfo);
     R_ShowTris(context, &viewInfo->litInfo);
     R_ShowTris(context, &viewInfo->decalInfo);
     R_ShowTris(context, &viewInfo->emissiveInfo);
-    context.state->prim.device->SetRenderState(D3DRS_SCISSORTESTENABLE, 0);
+    R_HW_DisableScissor(context.state->prim.device);
 }
 
 void R_DrawEmissive(const GfxViewInfo *viewInfo, GfxCmdBuf *cmdBuf)

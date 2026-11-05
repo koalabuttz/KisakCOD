@@ -1,5 +1,6 @@
 #pragma once
 #include "rb_backend.h"
+#include "rhi/r_rhi.h"
 #include "r_buffers.h"
 
 struct GfxShaderConstantState_s // sizeof=0x8
@@ -19,7 +20,6 @@ void R_ChangeObjectPlacement(GfxCmdBufSourceState *source, const GfxScaledPlacem
 int R_SetIndexData(GfxCmdBufPrimState *state, uint8_t *indices, int triCount);
 void R_SetupPassPerPrimArgs(GfxCmdBufContext context);
 void R_SetVertexShaderConstantFromCode(GfxCmdBufContext context, const MaterialShaderArgument *routingData);
-void R_HW_SetVertexShaderConstant(__int64 device, __int64 data);
 float *R_GetCodeConstant(GfxCmdBufContext context, uint32_t constant);
 char R_IsVertexShaderConstantUpToDate(GfxCmdBufContext context, const MaterialShaderArgument *routingData);
 char R_IsShaderMatrixUpToDate(
@@ -32,11 +32,6 @@ char R_IsShaderConstantUpToDate(
     const MaterialShaderArgument *routingData);
 void R_SetupPassPerObjectArgs(GfxCmdBufContext context);
 void R_SetPixelShaderConstantFromLiteral(GfxCmdBufState *state, uint32_t dest, const float *literal);
-void R_HW_SetPixelShaderConstant(
-    IDirect3DDevice9 *device,
-    uint32_t dest,
-    const float *data,
-    uint32_t rowCount);
 int R_IsPixelShaderConstantUpToDate(GfxCmdBufContext context, const MaterialShaderArgument *routingData);
 void R_SetPixelShaderConstantFromCode(GfxCmdBufContext context, const MaterialShaderArgument *routingData);
 void R_SetupPassCriticalPixelShaderArgs(GfxCmdBufContext context);

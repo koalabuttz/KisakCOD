@@ -120,7 +120,7 @@ class PlanTests(unittest.TestCase):
             self.assertNotIn("-D_DEBUG", step.argv)
 
     def test_engine_checks_use_the_engine_compiler_and_flags(self):
-        for name in ("engine_layout_standin", "engine_layout_native", "renderer_proof-r_state"):
+        for name in ("engine_layout_standin", "engine_layout_native", "renderer_proof-r_rhi_d3d9_state"):
             argv = self.by_name[name].steps[0].argv
             with self.subTest(check=name):
                 self.assertEqual(argv[0], "clang++")

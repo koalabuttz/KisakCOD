@@ -35,6 +35,9 @@ on:
       - 'scripts/tests/test_voice_lifecycle.py'
       - 'scripts/tests/test_script_console_watchdog.py'
       - 'scripts/tests/test_exec_command_ownership.py'
+      - 'scripts/tests/check_rhi_boundary.py'
+      - 'scripts/tests/test_rhi_boundary.py'
+      - 'scripts/tests/rhi_boundary_allowlist.txt'
   pull_request:
     branches: [ "master" ]
     paths:
@@ -65,6 +68,9 @@ on:
       - 'scripts/tests/test_voice_lifecycle.py'
       - 'scripts/tests/test_script_console_watchdog.py'
       - 'scripts/tests/test_exec_command_ownership.py'
+      - 'scripts/tests/check_rhi_boundary.py'
+      - 'scripts/tests/test_rhi_boundary.py'
+      - 'scripts/tests/rhi_boundary_allowlist.txt'
 
 # A newer push to a pull request cancels that pull request's older run, and a
 # newer push to master cancels an older master run (the newer one checks
@@ -97,6 +103,10 @@ jobs:
         run: python3 scripts/tests/test_script_console_watchdog.py
       - name: Config command ownership
         run: python3 scripts/tests/test_exec_command_ownership.py
+      - name: Renderer graphics interface boundary
+        # Only src/gfx_d3d/rhi calls Direct3D 9 (renderer plan M1a); the test also
+        # runs the check on this checkout.
+        run: python3 scripts/tests/test_rhi_boundary.py
       - name: MSVC x64 census summarizer
         run: python3 scripts/ci/test_summarize_msvc_x64.py
 

@@ -82,48 +82,6 @@ void R_SetupPassPerPrimArgs(GfxCmdBufContext context)
         R_SetPassShaderPrimArguments(context, pass->perPrimArgCount, pass->args);
 }
 
-void R_HW_SetVertexShaderConstant(
-    IDirect3DDevice9 *device,
-    uint32_t dest,
-    const float *data,
-    uint32_t rowCount)
-{
-    const char *v4; // eax
-    const char *v5; // eax
-    int hr; // [esp+30h] [ebp-4h]
-
-    do
-    {
-        if (r_logFile && r_logFile->current.integer)
-            RB_LogPrint("device->SetVertexShaderConstantF( dest, data, rowCount )\n");
-        hr = device->SetVertexShaderConstantF(dest, data, rowCount);
-        if (hr < 0)
-        {
-            do
-            {
-                ++g_disableRendering;
-                v4 = R_ErrorDescription(hr);
-                Com_Error(
-                    ERR_FATAL,
-                    "c:\\trees\\cod3\\src\\gfx_d3d\\r_setstate_d3d.h (%i) device->SetVertexShaderConstantF( dest, data, rowCount ) failed: %s\n",
-                    94,
-                    v4);
-            } while (alwaysfails);
-        }
-    } while (alwaysfails);
-    if (r_logFile->current.integer)
-    {
-        while (rowCount)
-        {
-            v5 = va("vertex const %i: %g %g %g %g\n", dest, *data, data[1], data[2], data[3]);
-            RB_LogPrint(v5);
-            ++dest;
-            data += 4;
-            --rowCount;
-        }
-    }
-}
-
 void R_SetVertexShaderConstantFromCode(GfxCmdBufContext context, const MaterialShaderArgument *routingData)
 {
     const float *data; // [esp+8h] [ebp-4h]
@@ -238,36 +196,6 @@ void R_SetPixelShaderConstantFromLiteral(GfxCmdBufState *state, uint32_t dest, c
     LODWORD(state->pixelShaderConstState[dest]) = -1;
     HIDWORD(state->pixelShaderConstState[dest]) = -1;
     R_HW_SetPixelShaderConstant(state->prim.device, dest, literal, 1u);
-}
-
-void R_HW_SetPixelShaderConstant(
-    IDirect3DDevice9 *device,
-    uint32_t dest,
-    const float *data,
-    uint32_t rowCount)
-{
-    const char *v4; // eax
-    int hr; // [esp+0h] [ebp-4h]
-
-    do
-    {
-        if (r_logFile && r_logFile->current.integer)
-            RB_LogPrint("device->SetPixelShaderConstantF( dest, data, rowCount )\n");
-        hr = device->SetPixelShaderConstantF(dest, data, rowCount);
-        if (hr < 0)
-        {
-            do
-            {
-                ++g_disableRendering;
-                v4 = R_ErrorDescription(hr);
-                Com_Error(
-                    ERR_FATAL,
-                    "c:\\trees\\cod3\\src\\gfx_d3d\\r_setstate_d3d.h (%i) device->SetPixelShaderConstantF( dest, data, rowCount ) failed: %s\n",
-                    113,
-                    v4);
-            } while (alwaysfails);
-        }
-    } while (alwaysfails);
 }
 
 int R_IsPixelShaderConstantUpToDate(GfxCmdBufContext context, const MaterialShaderArgument *routingData)
