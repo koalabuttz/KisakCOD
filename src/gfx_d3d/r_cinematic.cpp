@@ -14,6 +14,7 @@
 #include <qcommon/com_fileaccess.h>
 #include <cgame/cg_local.h>
 #include <universal/profile.h>
+#include <universal/com_files.h>
 #if defined(CINEMA) && defined(__linux__)
 #include <linux/client/cinematic/bink_shim.h>
 #endif
@@ -762,8 +763,12 @@ bool R_Cinematic_BinkOpen(
     else
     {
 #ifdef __linux__
-        snprintf(filepath[0], 0x100u, "%s/main/video/%s.%s", cwd, filename, "bik");
-        snprintf(filepath[1], 0x100u, "%s/raw/video/%s.%s", cwd, filename, "bik");
+        // Windows looks next to the exe (the working directory). A Linux
+        // binary is rarely started from the game folder, so look under
+        // fs_basepath, where the rest of the game data comes from.
+        const char *base = (fs_basepath && *fs_basepath->current.string) ? fs_basepath->current.string : cwd;
+        snprintf(filepath[0], 0x100u, "%s/main/video/%s.%s", base, filename, "bik");
+        snprintf(filepath[1], 0x100u, "%s/raw/video/%s.%s", base, filename, "bik");
 #else
         snprintf(filepath[0], 0x100u, "%s\\main\\video\\%s.%s", cwd, filename, "bik");
         snprintf(filepath[1], 0x100u, "%s\\raw\\video\\%s.%s", cwd, filename, "bik");

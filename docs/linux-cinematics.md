@@ -57,6 +57,11 @@ reads each frame with `pread` when it needs it. It reports its read buffer as
 full, so the engine never pauses a movie for data. Memory-resident movies
 (playback flag 8) are read whole by the engine, as on Windows.
 
+**Where movies are found.** On Windows the engine looks in `main\video` and
+then `raw\video` under the working directory, which is the game folder there.
+On Linux it looks under `fs_basepath` instead, so the game can be started from
+any directory.
+
 **File names.** Script and console names can use any letter case, and the
 engine builds paths with `\`. `KisakBink_ResolvePath` turns separators into `/`
 and matches each missing path component without regard to case.
