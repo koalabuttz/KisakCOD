@@ -41,6 +41,7 @@ on:
       - tests/linux_free_camera/**
       - tests/linux_mp_client/**
       - tests/linux_cinematic/**
+      - tests/skinning/**
       - .github/workflows/build-kisakcod-linux.yaml
       - .github/workflows/build-kisarcod-win.yaml
   pull_request:
@@ -64,6 +65,7 @@ on:
       - tests/linux_free_camera/**
       - tests/linux_mp_client/**
       - tests/linux_cinematic/**
+      - tests/skinning/**
       - .github/workflows/build-kisakcod-linux.yaml
       - .github/workflows/build-kisarcod-win.yaml
 
@@ -714,7 +716,8 @@ jobs:
             -DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3" \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
           cmake --build "$BUILD_DIR" --target KisakCOD-mp KisakCOD-mp-client-window-test \
-            KisakCOD-native-d3d9-proofs KisakCOD-bink-shim-test --parallel "$(nproc)"
+            KisakCOD-native-d3d9-proofs KisakCOD-bink-shim-test KisakCOD-skin-sse2-test \
+            --parallel "$(nproc)"
           for binary in "$OUT_DIR/KisakCOD-mp" "$OUT_DIR/KisakCOD-mp-client-window-test"; do
             readelf -h "$binary" | grep -Eq 'Class:[[:space:]]+ELF64'
             readelf -h "$binary" | grep -Eq 'Machine:[[:space:]]+Advanced Micro Devices X86-64'
@@ -786,6 +789,15 @@ jobs:
         run: |
           set -euo pipefail
           LD_LIBRARY_PATH="$RUNNER_TEMP/stand-ins" "$OUT_DIR/KisakCOD-bink-shim-test"
+
+      # The SSE2 form of the vertex skinning code (x64 Windows has no MMX
+      # intrinsics) against the MMX form, on random surfaces and bones.
+      - name: Run the skinning SSE2 check
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$OUT_DIR/KisakCOD-skin-sse2-test"
 
       - name: Report compiler cache
         if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}

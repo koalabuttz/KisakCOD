@@ -336,3 +336,11 @@ if(KISAK_LINUX_CINEMATICS)
     endif()
     target_link_libraries(KisakCOD-bink-shim-test PRIVATE "${KISAK_OPENAL_LIBRARY}" PkgConfig::KISAK_FFMPEG)
 endif()
+
+# Asset-free check that the SSE2 form of the vertex skinning code, which x64
+# Windows builds use, writes the same bytes as the MMX form.
+add_executable(KisakCOD-skin-sse2-test "${TESTS_DIR}/skinning/skin_sse2_test.cpp")
+target_compile_features(KisakCOD-skin-sse2-test PRIVATE cxx_std_20)
+target_compile_definitions(KisakCOD-skin-sse2-test PRIVATE ${KISAK_MP_CLIENT_DEFINITIONS})
+target_compile_options(KisakCOD-skin-sse2-test PRIVATE ${KISAK_MP_CLIENT_OPTIONS} -O2 -Wno-missing-declarations)
+target_include_directories(KisakCOD-skin-sse2-test PRIVATE "${SRC_DIR}" "${DEPS_DIR}" "${tracy_SOURCE_DIR}/public")
