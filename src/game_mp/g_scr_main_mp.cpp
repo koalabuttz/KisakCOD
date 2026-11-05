@@ -814,7 +814,7 @@ void GScr_line()
     }
     // The script still consumes its arguments above; only the draw is dropped,
     // because a dedicated server has no client renderer to receive the line.
-#if !defined(__linux__) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
     CL_AddDebugLine(start, end, color, depthTest, duration.intValue, 1);
 #endif
 }

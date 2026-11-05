@@ -414,7 +414,7 @@ void SV_SpawnServer(char *mapname)
     Scr_ParseGameTypeList();
     SV_SetGametype();
 
-#if !defined(__linux__) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
     // Tells the local client which map and gametype it is about to load. A
     // dedicated server has no local client; the zone loading above and below is
     // unaffected.
@@ -469,7 +469,7 @@ void SV_SpawnServer(char *mapname)
             // CL_MapLoading and CL_ShutdownAll drive the local client's loading
             // screen and its own subsystems. A dedicated server has neither, so
             // only the remote-screen update pair is kept there.
-#if !defined(__linux__) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
             CL_MapLoading(mapname);
             R_BeginRemoteScreenUpdate();
             R_EndRemoteScreenUpdate();
@@ -517,7 +517,7 @@ void SV_SpawnServer(char *mapname)
 
     if (!mapIsPreloaded)
     {
-#if !defined(__linux__) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
         {
             PROF_SCOPED("start loading client");
             CL_StartLoading();
@@ -917,7 +917,7 @@ void SV_Shutdown(const char *finalmsg)
         SV_FreeClients();
         SV_ClearServer();
         Dvar_SetBool((dvar_s *)com_sv_running, 0);
-#if !defined(__linux__) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
         // A listen-server host keeps a local client that has to be told the
         // server is gone. A dedicated server has no local client to disconnect.
         for (client = 0; client < 1; ++client)

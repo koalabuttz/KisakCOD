@@ -13,7 +13,7 @@
 
 #ifndef _XBOX
 #define DIRECTINPUT_VERSION 0x0800  //[ 0x0300 | 0x0500 | 0x0700 | 0x0800 ]
-#ifdef __linux__
+#if defined(__linux__) || defined(__APPLE__)
 // Native Linux has no Windows SDK: dinput/winsock/wsipx are DirectInput and
 // WinSock 1.x headers. The dedicated server uses the engine's own input and net
 // entry points (Sys_*, NET_*, IN_*), which the POSIX backend implements against

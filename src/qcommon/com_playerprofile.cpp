@@ -569,7 +569,7 @@ static bool Sys_ConfirmChangePrompt(const char *titleRef, const char *bodyRef)
 
     title = Win_LocalizeRef(titleRef);
     body = Win_LocalizeRef(bodyRef);
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
     Com_PrintWarning(
         CON_CHANNEL_SYSTEM,
         "WARNING: %s: %s\nWARNING: no profile confirmation dialog is available on this platform; "

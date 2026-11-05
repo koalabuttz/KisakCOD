@@ -1,7 +1,7 @@
 #pragma once
 #include "scr_stringlist.h"
 #include <cstdio> // FILE
-#ifdef __linux__
+#if defined(__linux__) || defined(__APPLE__)
 #include <linux/compat.h>
 #else
 #include <windows.h>

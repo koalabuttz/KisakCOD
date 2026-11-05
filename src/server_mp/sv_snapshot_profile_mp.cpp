@@ -1028,7 +1028,7 @@ void SV_Netchan_PrintProfileStats(int bPrintToConsole)
     iTotalMinSent = 9999;
     iTotalMaxRecieved = 0;
     iTotalMinRecieved = 9999;
-#if !defined(__linux__) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
     iYPos = cl_profileTextY->current.integer;
 #else
     // Screen-space origin for the profile overlay, which a dedicated server does
@@ -1266,7 +1266,7 @@ void SV_Netchan_PrintProfileStats(int bPrintToConsole)
             else
             {
                 iYPos += 10;
-#if !defined(__linux__) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
                 SV_ProfDraw(iYPos, szLine, i == cg_packetAnalysisClient->current.integer);
 #else
                 SV_ProfDraw(iYPos, szLine, false);
@@ -1284,7 +1284,7 @@ void SV_ProfDraw(int y, char *string, bool showHighlight)
     // for the in-game network profile overlay. A dedicated server has no client
     // screen, so the same lines reach it only through the console path taken
     // when bPrintToConsole is set.
-#if !defined(__linux__) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
     float color[4]; // [esp+Ch] [ebp-10h] BYREF
 
     if (showHighlight)

@@ -8,7 +8,7 @@
 #include "scr_compiler.h"
 
 #include <qcommon/qcommon.h>
-#ifdef __linux__
+#if defined(__linux__) || defined(__APPLE__)
 #include <linux/compat.h>
 #else
 #include <windows.h>
