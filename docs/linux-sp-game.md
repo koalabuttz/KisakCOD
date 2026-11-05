@@ -6,9 +6,10 @@ renderer, from the Windows `KisakCOD-sp` source lists. It is opt-in and off by
 default, and built the way the multiplayer client is
 ([linux-mp-client.md](linux-mp-client.md)).
 
-Status: it links and starts. Without game files it stops where the engine needs
-them (the autoconfigure step's `configure.csv`). Nothing has loaded a level yet:
-that needs the game files and a GPU, so it is run on a developer machine.
+Status: killhouse and cargoship load and play on a developer laptop (Intel
+GPU, DXVK, cinematics on): the pregame ends by itself, about a minute of play,
+clean quit. Without game files it stops where the engine needs them (the
+autoconfigure step's `configure.csv`), which is how CI runs it.
 
 ## Building
 
@@ -62,9 +63,23 @@ stub of `fileSysCheck.cfg` gets through the file system to autoconfigure and
 stops there. CI builds and runs it in the device-probe job, Debug and
 RelWithDebInfo.
 
+## Fixes the first level loads found
+
+- Fast skinning (`r_fastSkin`, which autoconfigure turns on) took the
+  "no history" marker for last frame's normals offset and read far outside
+  the buffer (`R_SkinXModelCmd`). Singleplayer keeps no skin-cache history,
+  so every animated model crashed the worker threads.
+- `CIN_PlayCinematic` is the multiplayer body. A level's pregame cinematic
+  closed the pregame menu and moved the client to the cinematic state while
+  rendering was held, so the level never started (an assert on Linux, a
+  black screen in a Windows Release build). In singleplayer it now plays
+  under the pregame menu. This is the port's reading of the pregame flow,
+  not decompiled code.
+- The Linux CPU benchmark is now the Windows one, so autoconfigure picks
+  its CPU row on the same scale.
+
 ## Next
 
-1. A first level load on the laptop with the game files (`+devmap killhouse`),
-   with and without the movie shim.
-2. A baseline of the Windows `KisakCOD-sp` build on the same data, to tell
+1. Longer play and more levels, with sound.
+2. Compare with the Windows `KisakCOD-sp` build on the same data, to tell
    port bugs from bugs the Windows build shares.
