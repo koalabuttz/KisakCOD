@@ -99,7 +99,7 @@ void R_SkinXModelCmd(_WORD *data)
                 if (sseStateUsed)
                 {
                     sseStateUsed = false;
-                    _m_empty();
+                    R_SkinEmptyMmxState();
                 }
 
                 DObjSkelMat mat0, mat1;
@@ -144,7 +144,7 @@ void R_SkinXModelCmd(_WORD *data)
             if (!sseStateUsed)
             {
                 sseStateUsed = true;
-                _m_empty();
+                R_SkinEmptyMmxState();
             }
         
             GfxPackedVertexNormal *skinVertNormalIn = 0, *skinVertNormalOut = 0;
@@ -169,7 +169,7 @@ void R_SkinXModelCmd(_WORD *data)
     }
 
     if (sseStateUsed)
-        _m_empty();
+        R_SkinEmptyMmxState();
 }
 
 

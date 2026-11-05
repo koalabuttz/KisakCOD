@@ -497,16 +497,34 @@ lists the remaining reports and why each is fine (offsets rescaled at load,
 sizeof-based steps, handles in 4-byte units, int-only union copies). CI runs
 the check in the x86_64 client job after the size check.
 
-## Windows MSVC x64 census
+## Windows MSVC x64 build
 
-The Windows workflow has a matching report-only job, "MSVC x64 compile census"
-(upstream issue 1 asks for x64 CI rows). It configures the normal CMake project
-with `-A x64`, builds `KisakCOD-sp`, `KisakCOD-mp` and `KisakCOD-dedi` with one
-MSBuild log each, and `scripts/ci/summarize_msvc_x64.py` sorts the diagnostics
-into the categories above, deduplicated by site. Compile errors never fail the
-job; a broken configure or a missing log does. It runs on pushes to `master`
-and manual runs only, not on pull request pushes. The summary is on the run
-page and in the `KisakCOD-msvc-x64-census` artifact.
+All three Windows targets build for x64 since 2026-11-05 (PR 81). The Windows
+workflow's "MSVC x64 build" job (upstream issue 1 asks for x64 CI rows)
+configures the normal CMake project with `-A x64` and movies on
+(`KISAK_WIN64_CINEMATICS`, FFmpeg from vcpkg, see `docs/linux-cinematics.md`),
+builds `KisakCOD-sp`, `KisakCOD-mp` and `KisakCOD-dedi` with one MSBuild log
+each, and fails when any of them does not build.
+`scripts/ci/summarize_msvc_x64.py` sorts the errors and 64-bit warnings into
+the categories above, deduplicated by site. It runs on pushes to `master` and
+manual runs only, not on pull request pushes. The summary is on the run page
+and in the `KisakCOD-msvc-x64-census` artifact.
+
+What the x64 Windows build does differently:
+
+- Sound goes through OpenAL (`KISAK_OPENAL` is forced on); Miles is 32-bit only.
+- Steam is unavailable (`src/win32/win_steam_unavailable.cpp`): the client
+  sends no ticket and a server it hosts rejects Steam tickets.
+- Movies need the opt-in FFmpeg Bink shim; without it they are built out.
+- Vertex skinning uses SSE2 in place of MMX (`KISAK_SKIN_SSE2`), checked
+  byte for byte against the MMX form by `KisakCOD-skin-sse2-test`.
+
+It has not been run on a Windows machine yet.
+
+### Census history
+
+Before the build worked, the job was report-only and was called "MSVC x64
+compile census".
 
 The first run (2026-11-03, before the per-platform layout asserts landed)
 stopped all three targets in 37 to 38 files:

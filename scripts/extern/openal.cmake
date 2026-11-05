@@ -48,6 +48,14 @@ if (KISAK_PLATFORM STREQUAL "mingw")
     # DirectSound / WinMM are the Windows-relevant ones; let them stay ON.
 endif()
 
+# OpenAL Soft defines NTDDI_VERSION=NTDDI_VISTA when this configure check fails,
+# and with MSVC it fails here, so its sources then stop on the Windows SDK's
+# "NTDDI_VERSION setting conflicts with _WIN32_WINNT" error. Every Windows SDK
+# MSVC builds with has SHGetKnownFolderPath without it.
+if (MSVC)
+    set(HAVE_SHGETKNOWNFOLDERPATH_NO_NTDDI 1 CACHE INTERNAL "")
+endif()
+
 FetchContent_Declare (
 	openal
 	GIT_REPOSITORY https://github.com/kcat/openal-soft.git

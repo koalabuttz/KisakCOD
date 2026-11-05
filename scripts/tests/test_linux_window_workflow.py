@@ -708,6 +708,7 @@ class CiTriggerTests(unittest.TestCase):
         'src/gfx_d3d/r_image.cpp',
         'src/universal/q_shared.h',
         'src/win32/win_main.cpp',
+        'src/linux/client/cinematic/bink_player.cpp',
         'scripts/common_files.cmake',
         'scripts/platform/win32/platform.cmake',
         'scripts/ci/check-windows-bootstrap.ps1',

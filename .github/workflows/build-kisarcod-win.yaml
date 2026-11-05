@@ -16,7 +16,10 @@ on:
       - '!docs/**'
       - '!**/*.md'
       - '!src/linux/**'
+      # ...except the Bink shim, which 64-bit Windows movies build from.
+      - 'src/linux/client/cinematic/**'
       - '!tests/linux_*/**'
+      - '!tests/skinning/**'
       - '!scripts/platform/linux/**'
       - '!build-linux.sh'
       - '!.github/workflows/build-kisakcod-linux.yaml'
@@ -43,7 +46,10 @@ on:
       - '!docs/**'
       - '!**/*.md'
       - '!src/linux/**'
+      # ...except the Bink shim, which 64-bit Windows movies build from.
+      - 'src/linux/client/cinematic/**'
       - '!tests/linux_*/**'
+      - '!tests/skinning/**'
       - '!scripts/platform/linux/**'
       - '!build-linux.sh'
       - '!.github/workflows/build-kisakcod-linux.yaml'
@@ -185,17 +191,17 @@ jobs:
           retention-days: 1
 
   x64-census:
-    # The Windows x64 row of the CI matrix upstream issue 1 asks for, ahead of a
-    # working x64 build (docs/linux-x64.md). Configures the normal project with
-    # -A x64, builds the SP, MP and dedicated targets, which do not compile for
-    # x64 yet, and publishes what stopped them in the same categories as the
-    # Linux x86_64 census. Report only: compile errors never fail this job; a
-    # broken configure or a missing log does. It runs after a merge and on
-    # manual runs, not on every pull request push.
-    name: MSVC x64 compile census
+    # The Windows x64 row of the CI matrix upstream issue 1 asks for
+    # (docs/linux-x64.md). Configures the normal project with -A x64 and movies
+    # on (KISAK_WIN64_CINEMATICS, FFmpeg from vcpkg), builds the SP, MP and
+    # dedicated targets, and fails when any of them does not build. The
+    # summary sorts the remaining 64-bit warnings into the categories of the
+    # Linux x86_64 census. It runs after a merge and on manual runs, not on
+    # every pull request push.
+    name: MSVC x64 build
     if: github.event_name != 'pull_request'
     runs-on: windows-2022
-    timeout-minutes: 75
+    timeout-minutes: 110
 
     env:
       NUGET_PACKAGES: ${{ github.workspace }}\.nuget\packages
@@ -233,22 +239,50 @@ jobs:
           python scripts/ci/test_summarize_msvc_x64.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      # Movies on x64 (KISAK_WIN64_CINEMATICS) need FFmpeg's libavcodec and
+      # libavutil. vcpkg builds them once per runner image; the cache keeps the
+      # built package.
+      - name: Note the runner image for the FFmpeg cache
+        id: image
+        run: echo "version=$env:ImageVersion" >> $env:GITHUB_OUTPUT
+
+      - name: Restore the FFmpeg build cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}\vcpkg-cache
+          key: vcpkg-ffmpeg-avcodec-x64-windows-release-${{ steps.image.outputs.version }}
+
+      - name: Install FFmpeg (libavcodec, libavutil) with vcpkg
+        env:
+          VCPKG_DEFAULT_BINARY_CACHE: ${{ runner.temp }}\vcpkg-cache
+        run: |
+          New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install "ffmpeg[core,avcodec]:x64-windows-release" --clean-after-build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          echo "KISAK_FFMPEG_ROOT=$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows-release" >> $env:GITHUB_ENV
+
       - name: Configure x64
         run: |
-          cmake -S . -B build-x64 -G "Visual Studio 17 2022" -A x64 -DDXSDK_DIR="${{ env.DXSDK_DIR }}" -DCICD=1 -DCMAKE_BUILD_TYPE=Release
+          cmake -S . -B build-x64 -G "Visual Studio 17 2022" -A x64 -DDXSDK_DIR="${{ env.DXSDK_DIR }}" -DCICD=1 -DCMAKE_BUILD_TYPE=Release `
+            -DKISAK_WIN64_CINEMATICS=ON -DKISAK_FFMPEG_ROOT="${{ env.KISAK_FFMPEG_ROOT }}"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Build x64 (expected to fail; logs kept)
+      # Every target is built and logged before the job fails, so one run
+      # shows all of them.
+      - name: Build x64
         run: |
           New-Item -ItemType Directory -Force artifacts | Out-Null
+          $failed = @()
           foreach ($target in @("KisakCOD-sp", "KisakCOD-mp", "KisakCOD-dedi")) {
             $log = Join-Path $PWD "artifacts\msvc-x64-$target.log"
             cmake --build build-x64 --config Release --target $target -- /m "/flp:LogFile=$log;Verbosity=minimal;Encoding=UTF-8"
             Write-Host "$target exit code: $LASTEXITCODE"
+            if ($LASTEXITCODE -ne 0) { $failed += $target }
           }
+          echo "X64_FAILED=$($failed -join ' ')" >> $env:GITHUB_ENV
           exit 0
 
-      - name: Summarize x64 compile
+      - name: Summarize x64 build
         run: |
           python scripts/ci/summarize_msvc_x64.py --root "${{ github.workspace }}" --report-dir artifacts/msvc-x64 `
             "KisakCOD-sp=artifacts/msvc-x64-KisakCOD-sp.log" `
@@ -256,6 +290,17 @@ jobs:
             "KisakCOD-dedi=artifacts/msvc-x64-KisakCOD-dedi.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Get-Content artifacts/msvc-x64/msvc-x64-census.md | Add-Content $env:GITHUB_STEP_SUMMARY
+          # The summary shows a few sites per category; list every distinct error here.
+          Get-Content artifacts/msvc-x64-*.log | Select-String -Pattern ': (fatal )?error ' |
+            ForEach-Object { ($_.Line -replace '\[[^\]]*\.vcxproj\]', '').Trim() } | Sort-Object -Unique
+
+      - name: Fail when an x64 target did not build
+        run: |
+          if ($env:X64_FAILED) {
+            Write-Host "::error::Did not build for x64: $env:X64_FAILED"
+            exit 1
+          }
+          Write-Host "KisakCOD-sp, KisakCOD-mp and KisakCOD-dedi built for x64"
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -265,3 +310,12 @@ jobs:
           path: artifacts/
           if-no-files-found: warn
           retention-days: 7
+
+      # The x64 executables with their FFmpeg DLLs, for a run on a Windows
+      # machine (the game files are not part of it).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KisakCOD-x64-Release
+          path: ${{ github.workspace }}/bin
+          compression-level: 9
+          retention-days: 3
