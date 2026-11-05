@@ -169,6 +169,14 @@ int main()
     expect_download("mods\\mymod\\mod.ff", true, "backslash separators are accepted as separators");
     expect_download("MODS/MYMOD/MOD.FF", true, "extension check is case-insensitive");
     expect_download("main/pack.IWD", true, "upper-case iwd");
+    expect_download("usermaps/mp_custom/mp_custom.ff", true, "usermap fastfile");
+    expect_download("usermaps/mp_custom/mp_custom_load.ff", true, "usermap load fastfile");
+    // Mod folder names retail's fs_game accepts (it refuses only ".." and "::").
+    expect_download("mods/[NL]promod/mod.ff", true, "brackets in a mod folder");
+    expect_download("mods/rock&roll!/z_svr.iwd", true, "ampersand and bang in a mod folder");
+    expect_download("mods/clan#1 ~mod~/mod.ff", true, "hash and tilde in a mod folder");
+    expect_download("mods/it's@home/mod.ff", true, "apostrophe and at sign in a mod folder");
+    expect_download("mods/.hidden/mod.ff", true, "leading dot that is not . or ..");
 
     // What the fix exists for.
     expect_download("main/server.cfg", false, "server config");
@@ -199,6 +207,14 @@ int main()
     expect_download("main/zz\xc3\xa9.iwd", false, "non-ASCII byte");
     expect_download("main/zzz.iwd\n", false, "newline");
     expect_download("main/zzz.iwd ", false, "trailing space is not part of the extension");
+    // Windows drops trailing dots and spaces from a path component, so these
+    // would resolve to ".." there.
+    expect_download("mods/.../zzz.iwd", false, "three dots");
+    expect_download("mods/.. /zzz.iwd", false, "dot dot space");
+    expect_download("mods/x./zzz.iwd", false, "component ending in a dot");
+    expect_download("mods/x /zzz.iwd", false, "component ending in a space");
+    expect_download("main/zzz.iwd.", false, "file name ending in a dot");
+    expect_download("main/zzz\x7f.iwd", false, "DEL byte");
 
     if (failures)
     {

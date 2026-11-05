@@ -581,7 +581,8 @@ digits, so with this switch on:
   clear text in every rcon packet; use a long one and do not reuse it. With
   `sv_allowDownload 1` (the default) a connected client can fetch any plain
   relative `.iwd`/`.ff` path under `fs_homepath`/`fs_basepath`; other names,
-  `..` and absolute paths are refused.
+  `..`, absolute paths, `:`, `;`, `"`, non-ASCII bytes and folder names ending
+  in `.` or a space are refused.
 
 Example launch for retail 1.7 hosting:
 
