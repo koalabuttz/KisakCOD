@@ -1696,20 +1696,21 @@ void SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
 }
 
 #ifdef KISAK_SP
-void SND_SetEqLerp(double lerp)
+// Declared with a float in snd_local.h, as the Miles backend defines it.
+void SND_SetEqLerp(float lerp)
 {
-    if (lerp < 0.0 || lerp > 1.0)
+    if (lerp < 0.0f || lerp > 1.0f)
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\xenon\\snd_driver.cpp",
             1740,
             0,
             "%s\n\t(lerp) = %g",
-            HIDWORD(lerp),
-            LODWORD(lerp));
+            "(lerp >= 0.0f && lerp <= 1.0f)",
+            (double)lerp);
 #if KISAK_XBOX
     xaGlob.eqLerp = lerp;
 #else
-    alGlob.eqLerp = (float)lerp;
+    alGlob.eqLerp = lerp;
     SND_UpdateEqs();
 #endif
 }

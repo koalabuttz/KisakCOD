@@ -23,11 +23,20 @@
 #include "sys_threads.h"
 #include "sys_time.h"
 #include "sys_events.h"
-#ifdef KISAK_LINUX_MP_CLIENT
+
+// The game builds with a window, renderer and input: the multiplayer client
+// (KisakCOD-mp) and the singleplayer game (KisakCOD-sp). The dedicated server
+// is neither.
+#if defined(KISAK_LINUX_MP_CLIENT) || defined(KISAK_LINUX_SP_GAME)
+#define KISAK_LINUX_GAME_CLIENT 1
+#endif
+
+#ifdef KISAK_LINUX_GAME_CLIENT
 #include "client/mp_client_input.h"
 #endif
 
 #include <errno.h>
+#include <sched.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -243,7 +252,7 @@ namespace
         }
         return false;
     }
-#ifdef KISAK_LINUX_MP_CLIENT
+#ifdef KISAK_LINUX_GAME_CLIENT
     // Where the client keeps its configs and player profiles when the command
     // line does not say. The engine's own default for fs_homepath is
     // fs_basepath, the game folder: the client would write there, and a stats
@@ -352,7 +361,7 @@ void Sys_DetectCpuVendorAndName(char *vendor, char *name)
 
 void Sys_DetectVideoCard(int descLimit, char *description)
 {
-#ifdef KISAK_LINUX_MP_CLIENT
+#ifdef KISAK_LINUX_GAME_CLIENT
     // Sys_FindInfo runs before the renderer opens a device, so the adapter is not
     // known yet; the renderer logs DXVK's adapter when it creates the device.
     I_strncpyz(description, "Direct3D 9 through DXVK Native (adapter reported by the renderer)", descLimit);
@@ -362,25 +371,42 @@ void Sys_DetectVideoCard(int descLimit, char *description)
 #endif
 }
 
-// Short arithmetic benchmark producing a comparable GHz figure, used only for
-// the informational auto-configure output.
+// The Windows build's CPU benchmark (win32/win_configure.cpp): the same logistic
+// map and rand steps, timed in raw timer ticks, best of 1000 attempts, scaled by
+// the same constant. Autoconfigure picks its configure_mp.csv CPU row from this
+// figure, so it has to be on the Windows build's scale. The results go to a
+// volatile sink so the compiler keeps the loop. Windows raises the thread's
+// priority around it; a normal user can't do that here, and the best of 1000
+// short attempts rarely needs it.
 double Sys_BenchmarkGHz()
 {
-    const uint32_t startMsec = Sys_MillisecondsRaw();
-    volatile float accumulator = 1.0f;
-    uint32_t iterations = 0;
-
-    do
+    const float k = 2.5999999f;
+    uint64_t minTime = UINT64_MAX;
+    for (uint32_t attempt = 0; attempt < 1000; ++attempt)
     {
-        for (int i = 0; i < 10000; ++i)
-            accumulator = accumulator * 1.0000001f + 1.0f;
-        ++iterations;
-    } while (Sys_MillisecondsRaw() - startMsec < 20);
-
-    const float operations = (float)iterations * 10000.0f;
-    // Calibrated so a modern core lands near its nominal clock; this value is
-    // only ever printed and used as an auto-configure hint.
-    return (double)operations / 20000000.0;
+        sched_yield();
+        const uint64_t start = Posix_RawTimerTicks();
+        int holdrand = 0;
+        float x = 0.25f;
+        float y = 0.75f;
+        for (uint32_t i = 0; i < 1000; ++i)
+        {
+            const float xa = (1.0f - x) * x * k + x;
+            const float ya = (1.0f - y) * y * k + y;
+            x = (1.0f - xa) * xa * k + xa;
+            y = (1.0f - ya) * ya * k + ya;
+            if ((i & 1) != 0)
+                holdrand = (int)(0x343FDu * (0x343FDu * (0x343FDu * (uint32_t)holdrand + 0x269EC3u) + 0x269EC3u) + 0x269EC3u);
+        }
+        const uint64_t elapsed = Posix_RawTimerTicks() - start;
+        static volatile float sink;
+        sink = x + y + (float)holdrand;
+        if (elapsed < minTime)
+            minTime = elapsed;
+    }
+    if (minTime == 0)
+        minTime = 1;
+    return 0.1010328 / ((double)minTime * msecPerRawTimerTick);
 }
 
 void Sys_SetAutoConfigureGHz(SysInfo *sysInfo)
@@ -438,7 +464,7 @@ sysEvent_t *Win_GetEvent(sysEvent_t *result)
     PROF_SCOPED("Win_GetEvent");
 
     if (PollEngineEvent(result)) return result;
-#ifdef KISAK_LINUX_MP_CLIENT
+#ifdef KISAK_LINUX_GAME_CLIENT
     // The window procedure: once the queue is empty, the game window's events
     // join it, as PeekMessage/DispatchMessage feed it on Windows.
     Sys_PumpClientWindow();
@@ -585,7 +611,7 @@ void Sys_Quit()
     Sys_EnterCriticalSection(CRITSECT_COM_ERROR);
 
     Sys_SpawnQuitProcess();
-#ifdef KISAK_LINUX_MP_CLIENT
+#ifdef KISAK_LINUX_GAME_CLIENT
     // As win_main.cpp's Sys_Quit. Key_Shutdown frees the key bindings, which
     // are script strings (CopyString); left in place, SL_Shutdown's leak check
     // below asserts on every quit.
@@ -615,7 +641,7 @@ void Sys_Quit()
 
 void Sys_Print(const char *msg)
 {
-#ifdef KISAK_LINUX_MP_CLIENT
+#ifdef KISAK_LINUX_GAME_CLIENT
     // A client build's Com_PrintMessage already copies every message to stderr
     // (the Windows client's debug console). Writing it to stdout as well would
     // show each line twice in a terminal.
@@ -631,7 +657,7 @@ void Sys_Print(const char *msg)
 
 void Sys_In_Restart_f()
 {
-#ifdef KISAK_LINUX_MP_CLIENT
+#ifdef KISAK_LINUX_GAME_CLIENT
     IN_Shutdown();
     IN_Init();
 #else
@@ -657,8 +683,11 @@ void Sys_ShowSplashWindow()
 void Sys_Init()
 {
     Cmd_AddCommandInternal("in_restart", Sys_In_Restart_f, &Sys_In_Restart_f_VAR);
+#ifdef KISAK_MP
+    // As win_main.cpp: singleplayer has neither command.
     Cmd_AddCommandInternal("net_restart", Sys_Net_Restart_f, &Sys_Net_Restart_f_VAR);
     Cmd_AddCommandInternal("net_listen", Sys_Listen_f, &Sys_Listen_f_VAR);
+#endif
 
     Com_Printf(CON_CHANNEL_SYSTEM, "CPU vendor is \"%s\"\n", sys_info.cpuVendor);
     Com_Printf(CON_CHANNEL_SYSTEM, "CPU name is \"%s\"\n", sys_info.cpuName);
@@ -684,7 +713,7 @@ void Sys_Init()
         Com_Printf(CON_CHANNEL_SYSTEM, "Streaming SIMD Extensions (SSE) %ssupported\n", "not ");
 
     Com_Printf(CON_CHANNEL_SYSTEM, "\n");
-#ifdef KISAK_LINUX_MP_CLIENT
+#ifdef KISAK_LINUX_GAME_CLIENT
     IN_Init();
 #endif
 }
@@ -702,7 +731,12 @@ static void PrintWorkingDir()
 
 namespace
 {
-#ifdef KISAK_LINUX_MP_CLIENT
+#if defined(KISAK_LINUX_SP_GAME)
+    const char *kVersionBanner = "KisakCOD singleplayer (native Linux)\n";
+    const char *kProgramName = "KisakCOD-sp";
+    const char *kExampleArguments = "+set fs_basepath <game folder>  +devmap killhouse";
+    const char *kInitializedLine = "Singleplayer initialized (native Linux port; gameplay unverified)\n";
+#elif defined(KISAK_LINUX_MP_CLIENT)
     const char *kVersionBanner = "KisakCOD multiplayer client (native Linux)\n";
     const char *kProgramName = "KisakCOD-mp";
     const char *kExampleArguments = "+set fs_basepath <game folder>  +devmap mp_crash";
@@ -726,7 +760,7 @@ namespace
             "\n",
             stream);
         fprintf(stream, "Engine arguments such as  %s  are passed\nthrough unchanged.\n", kExampleArguments);
-#ifdef KISAK_LINUX_MP_CLIENT
+#ifdef KISAK_LINUX_GAME_CLIENT
         fputs(
             "\n"
             "Configs and player profiles go to $XDG_DATA_HOME/KisakCOD (by default\n"
@@ -756,7 +790,7 @@ int main(int argc, char **argv)
     // not fit must refuse to start the server: truncating them would silently run
     // with a different command line than the operator asked for.
     const char *defaultHome = nullptr;
-#ifdef KISAK_LINUX_MP_CLIENT
+#ifdef KISAK_LINUX_GAME_CLIENT
     char homePath[256];
     if (!SetsHomePath(argc, argv))
     {
@@ -796,7 +830,7 @@ int main(int argc, char **argv)
     Profile_Init();
     Profile_InitContext(0);
 
-#ifdef KISAK_LINUX_MP_CLIENT
+#ifdef KISAK_LINUX_GAME_CLIENT
     // Before the renderer creates its window, so the window is adopted at once.
     Sys_InstallClientWindow();
 #endif
@@ -805,7 +839,7 @@ int main(int argc, char **argv)
     PrintWorkingDir();
 
     Steam_Init(); // Announces the unavailable authentication backend; never bypasses it.
-#ifdef KISAK_LINUX_MP_CLIENT
+#if defined(KISAK_LINUX_MP_CLIENT)
     // WinMain's client step: load the player's stats (LiveStorage) once the
     // file system is up.
     if (!com_dedicated->current.integer)

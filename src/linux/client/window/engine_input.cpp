@@ -1,7 +1,11 @@
 #include "engine_input.h"
 #include <qcommon/qcommon.h>
 #include <win32/win_local.h>
+#ifdef KISAK_MP
 #include <client_mp/client_mp.h>
+#else
+#include <client/cl_input.h>
+#endif
 #include <ui/keycodes.h>
 #include <type_traits>
 #include <stdexcept>

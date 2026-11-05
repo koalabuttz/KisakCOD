@@ -18,8 +18,10 @@
 // Joysticks, MIDI and raw DirectInput are not ported; the Windows build does not
 // use them either (IN_StartupMouse never starts DirectInput).
 
-#if !defined(KISAK_LINUX_MP_CLIENT)
-#error "mp_client_input.cpp is the multiplayer client's input: build it in KisakCOD-mp"
+// KisakCOD-sp links it too: the singleplayer client's input and window
+// procedure are the same Windows units built with KISAK_SP.
+#if !defined(KISAK_LINUX_MP_CLIENT) && !defined(KISAK_LINUX_SP_GAME)
+#error "mp_client_input.cpp is the game client's input: build it in KisakCOD-mp or KisakCOD-sp"
 #endif
 
 #include "mp_client_input.h"
@@ -30,7 +32,11 @@
 #include <qcommon/qcommon.h>
 #include <qcommon/cmd.h>
 #include <client/client.h>
+#ifdef KISAK_MP
 #include <client_mp/client_mp.h>
+#else
+#include <client/cl_input.h>
+#endif
 #include <sound/snd_public.h>
 #include <win32/win_input.h>
 #include <win32/win_local.h>

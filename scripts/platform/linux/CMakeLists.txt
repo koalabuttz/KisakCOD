@@ -75,6 +75,8 @@ include(${SCRIPTS_DIR}/platform/linux/world_draw_probe.cmake)
 # After the native D3D9 boundary: the multiplayer client links its renderer units
 # through it, with SDL3.
 include(${SCRIPTS_DIR}/platform/linux/mp_client.cmake)
+# The singleplayer game, built the same way from the KisakCOD-sp source lists.
+include(${SCRIPTS_DIR}/platform/linux/sp_game.cmake)
 
 # ---------------------------------------------------------------------------
 # Opt-in native Linux client network core (KISAK_BUILD_LINUX_CLIENT_CORE)
