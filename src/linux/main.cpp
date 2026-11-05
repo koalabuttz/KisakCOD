@@ -434,7 +434,8 @@ void Sys_FindInfo()
     sys_info.sysMB = Sys_SystemMemoryMB();
 
     Sys_DetectVideoCard(512, sys_info.gpuDescription);
-    sys_info.SSE = 1;
+    // SSE only exists on x86; Arm takes the engine's scalar paths (skinning).
+    sys_info.SSE = KISAK_ARCH_X86;
     Sys_DetectCpuVendorAndName(sys_info.cpuVendor, sys_info.cpuName);
     Sys_SetAutoConfigureGHz(&sys_info);
 }

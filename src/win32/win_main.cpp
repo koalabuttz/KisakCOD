@@ -2,6 +2,7 @@
 
 //#include "../client/client.h
 #include <universal/q_shared.h>
+#include <universal/arch_intrin.h> // KISAK_ARCH_X86
 #include "win_configure.h"
 #include "win_local.h"
 #include "win_localize.h"
@@ -746,7 +747,7 @@ void Sys_FindInfo()
 	sys_info.cpuGHz = 1.0 / (((double)1LL - (double)0LL) * msecPerRawTimerTick * 1000000.0);
 	sys_info.sysMB = Sys_SystemMemoryMB();
 	Sys_DetectVideoCard(512, sys_info.gpuDescription);
-	sys_info.SSE = 1; // KISAKTODO if someone from 1990 time travels and complains Sys_SupportsSSE();
+	sys_info.SSE = KISAK_ARCH_X86; // Arm (ARM64) has no SSE. KISAKTODO if someone from 1990 time travels and complains Sys_SupportsSSE();
 	Sys_DetectCpuVendorAndName(sys_info.cpuVendor, sys_info.cpuName);
 	Sys_SetAutoConfigureGHz(&sys_info);
 }

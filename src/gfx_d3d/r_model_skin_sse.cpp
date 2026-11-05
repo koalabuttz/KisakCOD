@@ -13,6 +13,9 @@
 #include <universal/q_shared.h>
 #include "r_model_skin.h"
 
+// x86 only: Arm builds skin with the scalar code in r_model_skin.cpp.
+#if KISAK_ARCH_X86
+
 #include <xanim/xanim.h>
 #include <universal/profile.h>
 
@@ -529,3 +532,5 @@ void R_SkinXSurfaceSkinnedSse(const XSurface *xsurf, const DObjSkelMat *boneMatr
             R_SkinXSurfaceRigidSse(xsurf, xsurf->vertCount, boneMatrix, skinVerticesOut);
     }
 }
+
+#endif // KISAK_ARCH_X86
