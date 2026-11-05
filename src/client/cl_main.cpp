@@ -659,7 +659,7 @@ void CL_ClearState()
         if (*configstrings)
             SL_RemoveRefToString(*configstrings);
         ++configstrings;
-    } while ((int)configstrings < (int)clients[0].mapname);
+    } while ((uintptr_t)configstrings < (uintptr_t)clients[0].mapname);
     memset(clients, 0, sizeof(clients));
     Com_ClientDObjClearAllSkel();
     memset(clientConnections, 0, sizeof(clientConnections));
