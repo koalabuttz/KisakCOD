@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$BuildOutput,
-    [Parameter(Mandatory = $true)][string]$DxSdkPackage
+    [Parameter(Mandatory = $true)][string]$DxSdkPackage,
+    [ValidateSet('x86', 'x64')][string]$Arch = 'x86'
 )
 $ErrorActionPreference = 'Stop'
 
@@ -10,13 +11,24 @@ $startup = Join-Path $env:RUNNER_TEMP 'kisakcod-windows-bootstrap'
 New-Item -ItemType Directory -Path $startup -Force | Out-Null
 Copy-Item (Join-Path $BuildOutput '*.exe') $startup
 Copy-Item (Join-Path $BuildOutput '*.dll') $startup
-Copy-Item 'deps/binklib/binkw32.dll' $startup
+if ($Arch -eq 'x86') {
+    # The 64-bit build has no binkw32 (its movies use FFmpeg DLLs, already in the output).
+    Copy-Item 'deps/binklib/binkw32.dll' $startup
+}
 Get-ChildItem $DxSdkPackage -Recurse -File -Filter '*.dll' |
-    Where-Object { $_.FullName -match '[\\/](x86|win-x86)[\\/]' } |
+    Where-Object { $_.FullName -match "[\\/]($Arch|win-$Arch)[\\/]" } |
     Copy-Item -Destination $startup
 # Minimal localization configuration prevents a missing-config assertion from
 # obscuring the missing game-assets error; this contains no game data.
 [IO.File]::WriteAllText((Join-Path $startup 'localization.txt'), "english`n")
+# An empty zip (just the 22-byte end-of-central-directory record, no game data)
+# as main\*.iwd, so the start-up iwd scan finds a file and goes on to
+# _findnext. A find handle kept in a 32-bit int crashed there on x64.
+$main = Join-Path $startup 'main'
+New-Item -ItemType Directory -Path $main -Force | Out-Null
+$emptyZip = New-Object byte[] 22
+$emptyZip[0] = 0x50; $emptyZip[1] = 0x4B; $emptyZip[2] = 0x05; $emptyZip[3] = 0x06
+[IO.File]::WriteAllBytes((Join-Path $main 'kisak_ci_empty.iwd'), $emptyZip)
 
 Add-Type @'
 using System;

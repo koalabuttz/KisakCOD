@@ -294,6 +294,14 @@ jobs:
           Get-Content artifacts/msvc-x64-*.log | Select-String -Pattern ': (fatal )?error ' |
             ForEach-Object { ($_.Line -replace '\[[^\]]*\.vcxproj\]', '').Trim() } | Sort-Object -Unique
 
+      # The same start-up check as the 32-bit jobs, on the x64 multiplayer
+      # executable: it must reach the missing-game-assets error.
+      - name: Check native Windows x64 bootstrap
+        if: env.X64_FAILED == ''
+        run: |
+          $nugetDxsdk = Join-Path "${env:NUGET_PACKAGES}" "$env:DXSDK_PKG\$env:DXSDK_VER"
+          ./scripts/ci/check-windows-bootstrap.ps1 -BuildOutput "bin/Release" -DxSdkPackage $nugetDxsdk -Arch x64
+
       - name: Fail when an x64 target did not build
         run: |
           if ($env:X64_FAILED) {
