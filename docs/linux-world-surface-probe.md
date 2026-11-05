@@ -3,7 +3,7 @@
 > Initial one-surface checkpoint. Later independent pixel, multi-triangle and lit
 > validation supersedes the next-gate section below; see
 > [renderer validation](linux-renderer-validation.md) and the
-> [current handoff](progress-2026-11-01.md). Counts here describe this initial run.
+> [current status](status.md). Counts here describe this initial run.
 
 ## Bounded result
 

@@ -2,9 +2,17 @@
 
 ## Start here
 
-**[Current Linux handoff — 2026-11-01](progress-2026-11-01.md)**: what works,
-what is verified and where, and the next milestone. Build steps are in the
+**[Linux port status](status.md)**: what works, what is verified and where, and
+what is still missing. Build steps are in the
 [top-level README](../README.md#how-to-build).
+
+## Playing on Linux (opt-in)
+
+- [Multiplayer client](linux-mp-client.md): `KisakCOD-mp`, the whole game in one
+  native process; playable on a listen server (i386 and x86_64), remote servers
+  refused without Steam authentication
+- [Cinematics](linux-cinematics.md): Bink movies through an FFmpeg-backed shim
+  (`KISAK_LINUX_CINEMATICS`)
 
 ## Linux dedicated server
 
@@ -14,12 +22,13 @@ what is verified and where, and the next milestone. Build steps are in the
 
 ## 64-bit track (opt-in)
 
-- [x86_64 track and compile census](linux-x64.md): staged plan, how it lines up
-  with the upstream "64-bit Support" milestone, and what stops a 64-bit compile today
+- [x86_64 track](linux-x64.md): the 64-bit dedicated server and multiplayer
+  client, the checks that catch 32-bit assumptions, and the Linux and MSVC x64
+  compile censuses
 
-## Linux client (opt-in)
+## Linux client foundations (opt-in)
 
-- [Native Linux client](linux-client.md) and
+- [Client core test targets](linux-client.md) and
   [frame startup dependencies](linux-client-frame-dependencies.md)
 - [Optional SDL3 platform prototype](linux-sdl3-prototype.md)
 - UI and menus: [UI assets](linux-ui-assets.md),
@@ -39,12 +48,11 @@ what is verified and where, and the next milestone. Build steps are in the
 - [Packaged world-surface replay](linux-world-surface-probe.md)
 - [Renderer frame ownership](linux-render-frame-owner.md)
 - [Native D3D9 engine boundary](linux-native-d3d9.md) (opt-in, DXVK Native headers)
-- [Renderer world front end](linux-world-frontend.md): asset-free proof of DPVS/BSP batching, the offline probe that runs it over a real map's world, and the [static map view handoff](progress-2026-11-01-static-map-view.md)
+- [Renderer world front end](linux-world-frontend.md): asset-free proof of DPVS/BSP batching and the offline probe that runs it over a real map's world
 - [D3D9 device probe](linux-device-probe.md) (opt-in): the engine's `r_init.cpp` creates the device through DXVK Native from an SDL3 window
 - [World device probe](linux-world-device-probe.md) (opt-in): the graphics zones and one map loaded onto that device through the engine's own loaders, and every device object they create checked
 - [World draw probe](linux-world-draw-probe.md) (opt-in): views of that map drawn through the engine's own renderer (`R_Init`, `R_LoadWorld`, `R_RenderScene`, the backend's material passes), read back and checked
-- [Multiplayer client](linux-mp-client.md) (opt-in): `KisakCOD-mp`, the whole game in one native process; links, starts and takes window input; on the laptop a listen server on mp_crash spawns the player, who can move and shoot
-- [Free camera](linux-free-camera.md) (groundwork, not yet wired): the host camera, its key bindings and the frame owner that sequences input, device reset, resize, map reload and shutdown around a `SceneRenderer`
+- [Free camera](linux-free-camera.md) (opt-in): a host camera flown through the engine renderer on a real map, live or by a checked script, with the frame owner that sequences input, device reset, resize, map reload and shutdown
 - [Standalone renderer build/run](../tests/linux_renderer/README.md)
 
 ## Tests
@@ -54,5 +62,6 @@ what is verified and where, and the next milestone. Build steps are in the
 
 ## History
 
-Superseded progress notes and the 2026-10-31 overnight review are in
+Superseded progress notes, including the 2026-11-01 handoff, and the
+2026-10-31 overnight review are in
 [history](history/README.md). They are kept as written and are not current state.

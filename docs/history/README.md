@@ -2,10 +2,17 @@
 
 > **Historical checkpoints — not current state.** Each note records one branch on
 > one date and is left as written; its counts and limits are not today's tree.
-> Start from the [current handoff](../progress-2026-11-01.md) and the
+> Start from the [current status](../status.md) and the
 > [docs index](../README.md).
 
 Newest first within each day.
+
+## 2026-11-01 — handoffs before the playable client
+
+- [Linux client and renderer handoff](progress-2026-11-01.md): the status page
+  until 2026-11-05
+- [Static map view groundwork](progress-2026-11-01-static-map-view.md), with its
+  2026-11-02 device, map and first-draw follow-ups
 
 ## 2026-10-31 — overnight review
 

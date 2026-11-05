@@ -1,13 +1,20 @@
-# Native Linux client
+# Native Linux client core
 
 ## Status
 
-There is **no playable native Linux client**. The opt-in foundation now includes
-ten full production client translation units, asset-free runtime integration tests,
-a runnable Linux discovery diagnostic, and an independently opt-in SDL2 window/input shell. The diagnostic starts real UDP/event
-handling and sends read-only `getinfo`; it explicitly reports `connected=false`
-and unavailable Linux authentication. It does not initialize `CL_Frame`, load game
-assets, authenticate, or join a server.
+This page covers the client **core** targets: production client translation
+units compiled into small asset-free tests, a discovery diagnostic and an SDL2
+window/input shell. They came before the game client and are still built and
+run in CI. The playable client is a separate target, `KisakCOD-mp`
+([linux-mp-client.md](linux-mp-client.md)); this page still owns the rule for
+[joining servers](#joining-servers-local-yes-remote-no).
+
+The opt-in foundation includes ten full production client translation units,
+asset-free runtime integration tests, a runnable Linux discovery diagnostic, and
+an independently opt-in SDL2 window/input shell. The diagnostic starts real
+UDP/event handling and sends read-only `getinfo`; it explicitly reports
+`connected=false` and unavailable Linux authentication. It does not initialize
+`CL_Frame`, load game assets, authenticate, or join a server.
 
 The default native Linux build is still the dedicated multiplayer server. This
 window option adds no SDL dependency to it. The shared event queue is extracted without changing its normal overflow or console-polling behavior.
@@ -267,6 +274,11 @@ Joining a remote server from Linux needs a real ticket provider; until then it
 stays refused rather than sending an unauthenticated challenge.
 
 ## What still blocks a real native client
+
+> Written before `KisakCOD-mp` existed. That target now covers engine startup,
+> the D3D9 renderer through DXVK Native and the remaining client units
+> ([linux-mp-client.md](linux-mp-client.md)); the authentication point below
+> still holds. The list is kept as the core targets' original scope.
 
 Compiling ten client TUs is not a client. In rough order of weight:
 

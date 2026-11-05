@@ -1,9 +1,13 @@
 # Static map view: device-free groundwork — 2026-11-01
 
+> **Historical checkpoint — not current state.** Moved here on 2026-11-05 and
+> otherwise left as written; its "next" items have since landed. Current:
+> [status](../status.md).
+
 Goal of the milestone: one fixed view of a genuine map drawn through the engine's
 own renderer on native i386 Linux. This change does the part that needs neither a
 device nor assets, so the device work can start from proven ground on top of the
-native D3D9 boundary ([linux-native-d3d9.md](linux-native-d3d9.md), PR #15).
+native D3D9 boundary ([linux-native-d3d9.md](../linux-native-d3d9.md), PR #15).
 Nothing here loads a map or draws.
 
 ## Added
@@ -15,7 +19,7 @@ Nothing here loads a map or draws.
 | CRT shims | `src/linux/compat.h`, `tests/linux_compat/crt_shims_test.cpp` | `_itoa`, the array `strcpy_s`, `_time64` and `_localtime64`, failing closed on bad input; `_ctime64` deliberately not shimmed (its one caller frees the CRT's static buffer) |
 | CI | `world_frontend` (Debug, RelWithDebInfo) and `client_census` jobs | the above on hosted runners, with no DXVK, SDL, GPU, assets or engine build |
 
-Details, link rules and limits: [linux-world-frontend.md](linux-world-frontend.md).
+Details, link rules and limits: [linux-world-frontend.md](../linux-world-frontend.md).
 
 ## Verified, and where
 
@@ -72,7 +76,7 @@ Verified locally on David's laptop (Intel Processor U300, Debian 13, clang 19.1.
 the owner's `mp_crash.ff` read in place): at 629c67d, mp_crash passes all 178
 views in RelWithDebInfo and Debug, with identical reports apart from timing.
 The numbers are in
-[linux-world-frontend.md](linux-world-frontend.md#evidence-mp_crash-2026-11-02).
+[linux-world-frontend.md](../linux-world-frontend.md#evidence-mp_crash-2026-11-02).
 Hosted CI builds the probe in both configurations, checks it is a 32-bit i386
 binary needing only the C and C++ runtimes, and runs its asset-free test; it
 never runs the probe.
@@ -98,7 +102,7 @@ Verified locally, not in CI. On David's laptop GPU (Intel Raptor Lake-P, Mesa
 ANV 25.0.7, DXVK 2.7.1 i386), the probe passes in Debug and RelWithDebInfo on
 both Wayland and XWayland: shader model 3 path, 0 of 307,200 read-back pixels
 wrong, 120 frames presented. It also passes in the sandbox on Mesa lavapipe
-under Xvfb. Details and limits: [linux-device-probe.md](linux-device-probe.md).
+under Xvfb. Details and limits: [linux-device-probe.md](../linux-device-probe.md).
 
 ## Follow-up: a map on the device, 2026-11-02
 
@@ -127,7 +131,7 @@ Mesa ANV 25.0.7, DXVK 2.7.1 i386) mp_crash passes in Debug and RelWithDebInfo
 with no problems. 1,630 images, 1,270 shader model 3 shaders and both world
 vertex buffers are on the device, and so is everything the world's 5,558
 surfaces draw with. Details and limits:
-[linux-world-device-probe.md](linux-world-device-probe.md).
+[linux-world-device-probe.md](../linux-world-device-probe.md).
 
 ## Follow-up: the first draw, 2026-11-02
 
@@ -165,7 +169,7 @@ with no problems and bit-identical frames. The intermission view settles after
 spawn view after 6. The first draw after the map load was dark until the probe
 presented an empty frame first (explained in the probe's doc). Details, limits
 and evidence:
-[linux-world-draw-probe.md](linux-world-draw-probe.md).
+[linux-world-draw-probe.md](../linux-world-draw-probe.md).
 
 ## Not done
 
@@ -179,7 +183,7 @@ and evidence:
 
 ## Next
 
-Follow the order in [linux-world-frontend.md](linux-world-frontend.md#order-of-work-toward-one-static-map-view):
+Follow the order in [linux-world-frontend.md](../linux-world-frontend.md#order-of-work-toward-one-static-map-view):
 put the world draw probe's start, map load and frame behind the free-camera
 `SceneRenderer` interface, then GPU evidence of selected pixels against
 independent predictions.

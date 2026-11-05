@@ -19,10 +19,10 @@ Windows game and tools:
 - [DirectX SDK 2010](https://www.microsoft.com/en-us/download/details.aspx?id=6812)
 - Steam with a copy of [Call of Duty 4](https://store.steampowered.com/app/7940/Call_of_Duty_4_Modern_Warfare_2007/)
 
-Native Linux dedicated server: CMake, Ninja, Clang and the 32-bit C++
-development libraries (see [Linux](#linux-native-i386-dedicated-server) below).
-Licensed game assets are only needed to run a server, not to build or test it.
-
+Native Linux (no Wine): CMake, Ninja, Clang and the 32-bit C++ development
+libraries for the dedicated server; DXVK Native, SDL3 and OpenAL as well for the
+opt-in game client (see [Linux](#linux-native) below). Licensed game assets are
+only needed to run the game or a server, not to build or test them.
 
 ## How to build
 
@@ -43,10 +43,11 @@ Keep in Mind: This is a ~20 year old game with some known exploits. We will try 
 However, there is a non-zero chance of some type of binary exploitation when playing online. Use a sandbox (Sandboxie?) for peace of mind. 
 ```
 
-### Linux (native i386 dedicated server)
+### Linux (native)
 
-The native Linux port builds the **32-bit x86 multiplayer dedicated server**
-(native ELF, no Wine), not a graphical client.
+The native Linux port builds native ELF programs, no Wine. The default build is
+the **32-bit x86 multiplayer dedicated server**. The game client is opt-in and
+has its own guide. Where things stand: [Linux port status](docs/status.md).
 
 1) Install the build tools (Debian/Ubuntu shown):
 
@@ -76,22 +77,35 @@ The native Linux port builds the **32-bit x86 multiplayer dedicated server**
 4) To run a server, point it at your own copy of the CoD4 game files. Licensed
    game assets remain external to the repository.
 
-Dedicated map/server lifecycle is working, but **Linux Steam authentication is
-unavailable and ordinary client tickets are rejected**. Two explicit opt-ins can
-admit a client without a ticket: a loopback-only test mode, and
-`sv_allowUnverifiedGuids`, which accepts the retail GUID handshake from any
-address without verification. With the latter on, GUIDs are spoofable and must
-not carry bans, privileges or persistent identity. Stock retail CoD4 1.7 and
-CoD4x 21.1 have each played in separate brief local sessions; grenade death,
-team switching and timer-driven rotation were retested. Native internal-bot
-refill/map-cycle checks also pass. These are not simultaneous human-player,
-mixed-client, public-server authentication or general compatibility proof.
+On a developer machine with the game files, the dedicated server loads all 21
+stock maps and hosts bots through map cycles, and a 64-bit (x86_64) build of it
+does the same ([x86_64 track](docs/linux-x64.md)).
+
+**Game client.** `KisakCOD-mp` (`-DKISAK_BUILD_LINUX_MP_CLIENT=ON`) is the whole
+multiplayer game in one native process, for i386 or x86_64. It renders through
+the engine's own D3D9 renderer on DXVK Native, with SDL3 for the window and
+OpenAL for sound. On a developer laptop with the game files it hosts a listen
+server, spawns the player, and plays: moving, shooting, grenades, sound and a
+clean quit. Movies play with the opt-in FFmpeg shim
+([cinematics](docs/linux-cinematics.md)). Build steps:
+[multiplayer client](docs/linux-mp-client.md). A singleplayer build is in
+progress.
+
+**Authentication.** Linux Steam authentication is unavailable, so the Linux
+client cannot join a remote server, and the dedicated server rejects ordinary
+client tickets. Two explicit opt-ins can admit a client without a ticket: a
+loopback-only test mode, and `sv_allowUnverifiedGuids`, which accepts the retail
+GUID handshake from any address without verification. With the latter on, GUIDs
+are spoofable and must not carry bans, privileges or persistent identity. Stock
+retail CoD4 1.7 and CoD4x 21.1 have each played in separate brief local sessions
+against the Linux server. These are not simultaneous human-player, mixed-client,
+public-server authentication or general compatibility proof.
 
 Further reading:
-- [Current Linux status and next milestone](docs/progress-2026-11-01.md)
-- [Linux build and verification details](docs/linux-dedicated.md): supported
-  scope, prerequisites, tests and remaining work
-- [Opt-in native client pieces](docs/linux-client.md) (window host, input, menus)
+- [Linux port status](docs/status.md): what works, what is verified and where,
+  and what is missing
+- [Linux dedicated server](docs/linux-dedicated.md): supported scope,
+  prerequisites, tests and remaining work
 - [All Linux docs](docs/README.md), including the [history](docs/history/README.md)
   of earlier progress notes
 
@@ -129,18 +143,14 @@ and reflection use the real D3DX APIs; an asset-free
 Radiant requires MSVC/MFC and is excluded from the MinGW configuration. A
 successful build does not establish full rendering or gameplay compatibility.
 
-### Renderer and world-surface experiments
+### Renderer probes
 
-Rendering work is standalone. [`tests/linux_renderer`](tests/linux_renderer/README.md)
-replays individual exported world surfaces through DXVK Native 2.7.1 and SDL3 and
-compares bounded pixel readbacks against a CPU prediction. It is not a graphical
-client and not a playable game: a replay describes one surface, not a rendered
-level. The asset-free parts run in CI without a GPU, DXVK, SDL or game assets; the
-device experiments are run by hand on a machine with a real GPU.
-
-Status, limits and the evidence for each checkpoint are recorded in
-[renderer validation](docs/linux-renderer-validation.md) and the
-[packaged world-surface replay](docs/linux-world-surface-probe.md).
+Before the game client could draw, the renderer was brought up in separate
+opt-in probes: a [standalone surface replay](tests/linux_renderer/README.md)
+checked against CPU pixel predictions, then the engine renderer drawing a map
+([world draw probe](docs/linux-world-draw-probe.md)) and a
+[free camera](docs/linux-free-camera.md) flying through it. Their asset-free
+parts still run in CI without a GPU, DXVK, SDL or game assets.
 
 ## Known Issues
 (Use the **[issues](https://github.com/SwagSoftware/KisakCOD/issues)** section)
