@@ -36,6 +36,7 @@
 #endif
 
 #include <errno.h>
+#include <sched.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -370,25 +371,42 @@ void Sys_DetectVideoCard(int descLimit, char *description)
 #endif
 }
 
-// Short arithmetic benchmark producing a comparable GHz figure, used only for
-// the informational auto-configure output.
+// The Windows build's CPU benchmark (win32/win_configure.cpp): the same logistic
+// map and rand steps, timed in raw timer ticks, best of 1000 attempts, scaled by
+// the same constant. Autoconfigure picks its configure_mp.csv CPU row from this
+// figure, so it has to be on the Windows build's scale. The results go to a
+// volatile sink so the compiler keeps the loop. Windows raises the thread's
+// priority around it; a normal user can't do that here, and the best of 1000
+// short attempts rarely needs it.
 double Sys_BenchmarkGHz()
 {
-    const uint32_t startMsec = Sys_MillisecondsRaw();
-    volatile float accumulator = 1.0f;
-    uint32_t iterations = 0;
-
-    do
+    const float k = 2.5999999f;
+    uint64_t minTime = UINT64_MAX;
+    for (uint32_t attempt = 0; attempt < 1000; ++attempt)
     {
-        for (int i = 0; i < 10000; ++i)
-            accumulator = accumulator * 1.0000001f + 1.0f;
-        ++iterations;
-    } while (Sys_MillisecondsRaw() - startMsec < 20);
-
-    const float operations = (float)iterations * 10000.0f;
-    // Calibrated so a modern core lands near its nominal clock; this value is
-    // only ever printed and used as an auto-configure hint.
-    return (double)operations / 20000000.0;
+        sched_yield();
+        const uint64_t start = Posix_RawTimerTicks();
+        int holdrand = 0;
+        float x = 0.25f;
+        float y = 0.75f;
+        for (uint32_t i = 0; i < 1000; ++i)
+        {
+            const float xa = (1.0f - x) * x * k + x;
+            const float ya = (1.0f - y) * y * k + y;
+            x = (1.0f - xa) * xa * k + xa;
+            y = (1.0f - ya) * ya * k + ya;
+            if ((i & 1) != 0)
+                holdrand = (int)(0x343FDu * (0x343FDu * (0x343FDu * (uint32_t)holdrand + 0x269EC3u) + 0x269EC3u) + 0x269EC3u);
+        }
+        const uint64_t elapsed = Posix_RawTimerTicks() - start;
+        static volatile float sink;
+        sink = x + y + (float)holdrand;
+        if (elapsed < minTime)
+            minTime = elapsed;
+    }
+    if (minTime == 0)
+        minTime = 1;
+    return 0.1010328 / ((double)minTime * msecPerRawTimerTick);
 }
 
 void Sys_SetAutoConfigureGHz(SysInfo *sysInfo)
