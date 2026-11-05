@@ -34,8 +34,9 @@ if(KISAK_PLATFORM STREQUAL "macos")
             "set CMAKE_OSX_ARCHITECTURES to arm64 or x86_64, not '${CMAKE_OSX_ARCHITECTURES}'")
     endif()
     set(KISAK_MACOS_ARCH "${CMAKE_OSX_ARCHITECTURES}")
-    # macOS 11 is the first release with Apple silicon.
-    set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS version")
+    # macOS 13.3: Apple's libc++ offers floating-point std::to_chars, which
+    # std::format (qcommon) needs, from 13.3 on.
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "13.3" CACHE STRING "Minimum macOS version")
     # Apple silicon has fused multiply-add, which Clang would use for a * b + c,
     # rounding once instead of twice. Keep x86's results, as the Linux aarch64
     # build does: client prediction replays the server's movement math.

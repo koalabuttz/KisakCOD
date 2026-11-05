@@ -28,7 +28,9 @@ cmake --build build-macos --target KisakCOD-dedi
   One architecture per build directory: a universal binary needs per-slice
   flags (the SSE options are x86_64-only), so it is not offered yet. An x86_64
   build on Apple silicon runs under Rosetta 2.
-- The minimum macOS version defaults to 11.0 (`CMAKE_OSX_DEPLOYMENT_TARGET`).
+- The minimum macOS version defaults to 13.3 (`CMAKE_OSX_DEPLOYMENT_TARGET`):
+  the engine uses `std::format`, whose float formatting Apple's C++ library
+  offers from macOS 13.3 on.
 - Apple Clang is used as is; `-fms-extensions` covers the engine's Microsoft
   spellings, as on Linux.
 - Every other opt-in (client, window host, probes, movies, Tracy GUI build) is
