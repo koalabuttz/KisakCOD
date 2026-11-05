@@ -25,7 +25,9 @@
 #include <intrin.h>
 inline unsigned __int64 __rdtsc()
 {
-    return static_cast<unsigned __int64>(_ReadStatusReg(ARM64_CNTVCT));
+    // CNTVCT_EL0, encoded as winnt.h's ARM64_SYSREG(3, 3, 14, 0, 2) spells it
+    // (ARM64_CNTVCT); winnt.h is not included here.
+    return static_cast<unsigned __int64>(_ReadStatusReg(0x5F02));
 }
 #else
 inline uint64_t __rdtsc()
