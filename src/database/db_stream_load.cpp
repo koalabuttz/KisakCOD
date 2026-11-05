@@ -164,7 +164,10 @@ void Load_StreamConverted(bool atStreamStart, uint8_t *ptr, int32_t diskSize, co
 
     uint32_t prefix;
     uint32_t count = DB_DiskRecordCount(diskSize, layout, &prefix);
-    uint32_t nativeSize = prefix ? DB_NativePrefixSize(layout, prefix) : count * layout->nativeSize;
+    uint64_t nativeSize64 = prefix ? DB_NativePrefixSize(layout, prefix) : (uint64_t)count * layout->nativeSize;
+    // Check before writing: the records below are converted straight into the block.
+    DB_CheckStreamRoom(nativeSize64, diskSize, layout);
+    uint32_t nativeSize = (uint32_t)nativeSize64;
     if (g_streamPosIndex - 1 < 3)
     {
         if (g_streamPosIndex == 1)

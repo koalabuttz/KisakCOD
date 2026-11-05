@@ -322,6 +322,12 @@ static void RefusesToOverrunABlock()
         threw = true;
     }
     CHECK(threw);
+    // The check runs before the records are converted, so nothing past the
+    // block's 16 bytes was written.
+    bool untouched = true;
+    for (size_t i = 16; i < 48; ++i)
+        untouched = untouched && zone.memory[5][i] == 0xCD;
+    CHECK(untouched);
 }
 
 static void TablesMatchTheTypes()
