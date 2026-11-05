@@ -814,12 +814,74 @@ class CiTriggerTests(unittest.TestCase):
         self.assertFalse(_selected('src/linux/a.cpp', ['*.cpp']))
 
 
+class VulkanWindowWorkflowTests(unittest.TestCase):
+    """The Vulkan window probe: built x86_64, run on lavapipe with validation required."""
+
+    JOB = 'vulkan_window'
+
+    @classmethod
+    def setUpClass(cls):
+        cls.workflow = yaml.load(
+            (ROOT / '.github/workflows/build-kisakcod-linux.yaml').read_text(),
+            Loader=yaml.BaseLoader)
+        cls.job = cls.workflow['jobs'][cls.JOB]
+        cls.text = '\n'.join(step.get('run', '') for step in cls.job['steps'])
+
+    def step(self, name):
+        return next(step for step in self.job['steps'] if step.get('name') == name)
+
+    def test_both_configurations_on_hosted_ubuntu(self):
+        self.assertEqual(self.job['strategy']['matrix']['config'], ['Debug', 'RelWithDebInfo'])
+        self.assertEqual(self.job['runs-on'], 'ubuntu-24.04')
+        self.assertIn('timeout-minutes', self.job)
+
+    def test_it_builds_only_the_opt_in_probe_for_x86_64(self):
+        build = self.step('Build the Vulkan window probe')['run']
+        self.assertIn('-DKISAK_BUILD_VULKAN_PROBE=ON', build)
+        self.assertIn('-DKISAK_LINUX_ARCH=x86_64', build)
+        self.assertIn('--target KisakCOD-vulkan-probe', build)
+        self.assertIn("grep -q 'libvulkan'", build)
+        # No D3D9, DXVK, game data or Steam.
+        for forbidden in ('dxvk', 'kisak_build_linux_native_d3d9', 'steam', 'zone/', 'main/'):
+            self.assertNotIn(forbidden, self.text.lower())
+
+    def test_the_sdl3_sdk_matches_the_x86_64_client(self):
+        mine = self.step('Build pinned x86_64 SDL3 SDK')['run']
+        client = next(step for step in self.workflow['jobs']['x64_client']['steps']
+                      if step.get('name') == 'Build pinned x86_64 SDL3 SDK')['run']
+        # Same cmake options, so the shared cache key holds the same SDK.
+        options = lambda run: [line.strip() for line in run.splitlines() if line.strip().startswith('-D')]
+        self.assertEqual(options(mine), options(client))
+        self.assertEqual(self.step('Restore pinned x86_64 SDL3 SDK')['with']['key'],
+                         next(step for step in self.workflow['jobs']['x64_client']['steps']
+                              if step.get('name') == 'Restore pinned x86_64 SDL3 SDK')['with']['key'])
+        self.assertEqual(self.job['env']['SDL3_REVISION'], self.workflow['jobs']['x64_client']['env']['SDL3_REVISION'])
+
+    def test_it_runs_on_lavapipe_offscreen_with_validation_required(self):
+        install = next(step['run'] for step in self.job['steps'] if step.get('name', '').startswith('Install '))
+        for package in ('libvulkan-dev', 'mesa-vulkan-drivers', 'vulkan-validationlayers'):
+            self.assertIn(package, install)
+        run = self.step('Run the Vulkan window probe on lavapipe')['run']
+        self.assertIn('scripts/tests/test_vulkan_window_probe.py', run)
+        self.assertIn('--video-driver offscreen', run)
+        self.assertIn('--validation require', run)
+        self.assertNotIn('xvfb', self.text.lower())
+
+    def test_no_other_job_builds_the_probe(self):
+        for name, job in self.workflow['jobs'].items():
+            if name == self.JOB:
+                continue
+            text = '\n'.join(step.get('run', '') for step in job['steps'])
+            with self.subTest(job=name):
+                self.assertNotIn('KISAK_BUILD_VULKAN_PROBE', text)
+
+
 class CiCacheTests(unittest.TestCase):
     """The build caches only skip unchanged compiles; every check still runs."""
 
     # Jobs that configure and build the engine with CMake.
     CCACHE_JOBS = ('window', 'native', 'native_d3d9_boundary', 'device_probe', 'x64_dedicated',
-                   'arm64_dedicated', 'x64_client', 'arm64_client')
+                   'arm64_dedicated', 'x64_client', 'arm64_client', 'vulkan_window')
     SDL3_JOBS = ('window', 'device_probe')
 
     @classmethod
