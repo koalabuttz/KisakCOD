@@ -254,9 +254,6 @@ void SV_Init()
 
 void SV_Shutdown(const char *finalmsg)
 {
-    serverStatic_t *v1; // r11
-    int v2; // ctr
-
     if (com_sv_running && com_sv_running->current.enabled)
     {
         //LSP_LogStringEvenIfControllerIsInactive("server shutdown");
@@ -267,14 +264,9 @@ void SV_Shutdown(const char *finalmsg)
         SaveMemory_CleanupSaveMemory();
         SaveMemory_ShutdownSaveSystem();
         SV_ClearServer();
-        v1 = &svs;
-        v2 = 10;
-        do
-        {
-            v1->initialized = 0;
-            v1 = (serverStatic_t *)((char *)v1 + 4);
-            --v2;
-        } while (v2);
+        // Retail cleared ten dwords; svs holds the clients pointer.
+        static_assert(LAYOUT_32BIT(sizeof(serverStatic_t) == 40));
+        memset(&svs, 0, sizeof(svs));
         Dvar_SetBool(com_sv_running, 0);
         Dvar_SetFloat(com_timescale, 1.0);
         Com_Printf(CON_CHANNEL_SERVER, "---------------------------\n");
