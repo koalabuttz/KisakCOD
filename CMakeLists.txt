@@ -31,6 +31,20 @@ endif()
 
 project(KisakCOD)
 
+# 64-bit Windows: Miles (mss32), Bink (binkw32) and the bundled Steam library
+# exist only as 32-bit binaries. Sound goes through OpenAL, movies are built
+# out (r_cinematic.cpp without CINEMA) and Steam is unavailable
+# (src/win32/win_steam_unavailable.cpp); see scripts/common_files.cmake.
+if(NOT KISAK_PLATFORM STREQUAL "linux" AND CMAKE_SIZEOF_VOID_P EQUAL 8)
+    set(KISAK_WIN64 ON)
+    if(NOT KISAK_OPENAL)
+        message(STATUS "64-bit Windows build: Miles is 32-bit only, so KISAK_OPENAL is turned on")
+        set(KISAK_OPENAL ON CACHE BOOL "Build the sound system against OpenAL instead of Miles/MSS" FORCE)
+    endif()
+else()
+    set(KISAK_WIN64 OFF)
+endif()
+
 # Set the default C++ standard
 set(CMAKE_CXX_STANDARD 20)
 

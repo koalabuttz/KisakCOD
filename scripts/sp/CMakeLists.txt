@@ -55,7 +55,11 @@ add_executable(${PROJECT_NAME}
     ${STEAM_HEADERS}
 )
 
-target_compile_definitions(${PROJECT_NAME} PUBLIC KISAK_SP CINEMA USE_SEPARATE_BLIT_TEXTURE)
+target_compile_definitions(${PROJECT_NAME} PUBLIC KISAK_SP USE_SEPARATE_BLIT_TEXTURE)
+# Movies need binkw32, which is 32-bit only.
+if (NOT KISAK_WIN64)
+    target_compile_definitions(${PROJECT_NAME} PUBLIC CINEMA)
+endif()
 
 # Feature flag to swap the sound backend from Miles/MSS to OpenAL (see SOUND_BACKEND above).
 if (KISAK_OPENAL)

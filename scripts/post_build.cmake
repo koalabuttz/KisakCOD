@@ -1,3 +1,8 @@
+# 64-bit Windows builds use neither Miles nor the 32-bit Steam library.
+if (KISAK_WIN64)
+    return()
+endif()
+
 # [POST_BUILD] Copy over MILES dependency.
 # copy_directory_if_different, NOT copy_directory: every target (mp/sp/dedi) runs this
 # into the same bin/<config> dir, so unconditional copies race each other during parallel
