@@ -17,6 +17,7 @@ on:
       - '!**/*.md'
       - '!src/linux/**'
       - '!tests/linux_*/**'
+      - '!tests/skinning/**'
       - '!scripts/platform/linux/**'
       - '!build-linux.sh'
       - '!.github/workflows/build-kisakcod-linux.yaml'
@@ -44,6 +45,7 @@ on:
       - '!**/*.md'
       - '!src/linux/**'
       - '!tests/linux_*/**'
+      - '!tests/skinning/**'
       - '!scripts/platform/linux/**'
       - '!build-linux.sh'
       - '!.github/workflows/build-kisakcod-linux.yaml'
@@ -256,6 +258,9 @@ jobs:
             "KisakCOD-dedi=artifacts/msvc-x64-KisakCOD-dedi.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Get-Content artifacts/msvc-x64/msvc-x64-census.md | Add-Content $env:GITHUB_STEP_SUMMARY
+          # The summary shows a few sites per category; list every distinct error here.
+          Get-Content artifacts/msvc-x64-*.log | Select-String -Pattern ': (fatal )?error ' |
+            ForEach-Object { ($_.Line -replace '\[[^\]]*\.vcxproj\]', '').Trim() } | Sort-Object -Unique
 
       - uses: actions/upload-artifact@v4
         if: always()
