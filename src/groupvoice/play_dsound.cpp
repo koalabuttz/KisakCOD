@@ -7,6 +7,9 @@
 #include <universal/assertive.h>
 #include <qcommon/qcommon.h>
 
+// dwSize is sizeof: 36 bytes on x86 as retail, more on x64.
+static_assert(LAYOUT_32BIT(sizeof(_DSBUFFERDESC) == 36));
+
 bool dsoundplay_initialized;
 
 LPDIRECTSOUND8 lpds;
@@ -276,7 +279,6 @@ HRESULT CreateBasicBuffer(
     wfx.nAvgBytesPerSec = sampleRate * wfx.nBlockAlign;
     dsbdesc.dwReserved = 0;
     memset(&dsbdesc.guid3DAlgorithm, 0, sizeof(dsbdesc.guid3DAlgorithm));
-    static_assert(LAYOUT_32BIT(sizeof(dsbdesc) == 36));
     dsbdesc.dwSize = sizeof(dsbdesc); // 36 on x86, 40 on x64
     dsbdesc.dwFlags = 33000;
     dsbdesc.dwBufferBytes = bufferSize;
