@@ -37,9 +37,16 @@ target_compile_features(KisakCOD-dedi PRIVATE cxx_std_20)
 target_compile_definitions(KisakCOD-dedi PRIVATE
     KISAK_MP KISAK_DEDICATED DEDICATED
     _FILE_OFFSET_BITS=64 _GNU_SOURCE
-    TRACY_ENABLE TRACY_ON_DEMAND TRACY_ONLY_LOCALHOST
     $<$<CONFIG:Debug>:_DEBUG>
 )
+# The Tracy profiler is opt-in, as for the game clients: KISAK_LINUX_TRACY
+# (declared with the client in mp_client.cmake, read here from the cache).  A
+# Tracy build listens on 127.0.0.1:8086 and answers source-file requests from
+# any local user, so player and server builds leave it off.
+if(KISAK_LINUX_TRACY)
+    target_compile_definitions(KisakCOD-dedi PRIVATE TRACY_ENABLE TRACY_ON_DEMAND TRACY_ONLY_LOCALHOST)
+    message(STATUS "KisakCOD-dedi: Tracy profiler on (on demand, localhost only)")
+endif()
 target_include_directories(KisakCOD-dedi PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
 target_compile_options(KisakCOD-dedi PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:-fms-extensions>

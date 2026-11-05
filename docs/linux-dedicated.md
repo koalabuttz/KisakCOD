@@ -35,7 +35,10 @@ bash build-linux.sh
 
 The script defaults to `RelWithDebInfo`, builds only `KisakCOD-dedi`, and writes
 `bin/KisakCOD-dedi`. Configuration fetches the pinned Tracy dependency and needs
-network access on its first run. Clang is required for the Microsoft C++ language
+network access on its first run. The server is built without the profiler; a
+profiling build needs `-DKISAK_LINUX_TRACY=ON` (Tracy's listener answers
+source-file requests from any local user, so do not run that build on a shared
+host). Clang is required for the Microsoft C++ language
 extensions still used by the shared engine code. The compiler and linker both
 use `-m32`. The script builds i386 only; the opt-in x86_64 build is configured
 by hand ([linux-x64.md](linux-x64.md#x86_64-dedicated-server)). The Linux code

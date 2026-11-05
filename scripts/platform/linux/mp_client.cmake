@@ -49,7 +49,7 @@
 option(KISAK_LINUX_CINEMATICS
     "Play Bink movies in KisakCOD-mp through the Linux Bink shim (needs libavcodec and libavutil, found with pkg-config)" OFF)
 option(KISAK_LINUX_TRACY
-    "Build KisakCOD-mp and KisakCOD-sp with the Tracy profiler, as the dedicated server is: idle until a profiler connects, localhost only. For profiling runs" OFF)
+    "Build KisakCOD-dedi, KisakCOD-mp and KisakCOD-sp with the Tracy profiler: idle until a profiler connects, localhost only. For profiling runs" OFF)
 option(KISAK_BUILD_LINUX_MP_CLIENT
     "Build the native Linux multiplayer client KisakCOD-mp (needs KISAK_BUILD_LINUX_NATIVE_D3D9, KISAK_DXVK_NATIVE_LIBRARY, KISAK_OPENAL_LIBRARY and SDL3)" OFF)
 if(NOT KISAK_BUILD_LINUX_MP_CLIENT)
