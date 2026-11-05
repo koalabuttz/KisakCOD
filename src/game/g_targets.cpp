@@ -25,72 +25,50 @@ void G_InitTargets()
 
 void G_LoadTargets()
 {
-    int v0; // r20
-    float *v1; // r31
-    const char *v2; // r3
-    const char *v3; // r30
-    unsigned int v4; // r7
-    const char *v5; // r3
-    const char *v6; // r3
-    int v7; // r11
-    const char *v8; // r3
-    int v9; // r3
-    char v10[1032]; // [sp+50h] [-480h] BYREF
+    char info[1032];
 
-    v0 = 0;
-    v1 = &targGlob.targets[0].offset[2];
+    // Indexed by target: the decompiled loop stepped a float pointer by the 28-byte
+    // i386 target_t and stored the entity pointer as a 4-byte value.
     targGlob.targetCount = 0;
-    do
+    for (int i = 0; i < (int)ARRAY_COUNT(targGlob.targets); ++i)
     {
-        SV_GetConfigstring(v0 + 27, v10, 1024);
-        if (v10[0])
+        target_t *target = &targGlob.targets[i];
+        SV_GetConfigstring(i + 27, info, 1024);
+        if (!info[0])
         {
-            ++targGlob.targetCount;
-            v2 = Info_ValueForKey(v10, "ent");
-            v3 = v2;
-            if (*v2)
-            {
-                v4 = atol(v2);
-                if (v4 >= 0x880)
-                    MyAssertHandler(
-                        "c:\\trees\\cod3\\cod3src\\src\\game\\g_targets.cpp",
-                        64,
-                        0,
-                        "entNum doesn't index MAX_GENTITIES\n\t%i not in [0, %i)",
-                        v4,
-                        2176);
-                *((unsigned int *)v1 - 3) = (unsigned int)&level.gentities[atol(v3)];
-            }
-            else
-            {
-                *(v1 - 3) = 0.0;
-            }
-            v5 = Info_ValueForKey(v10, "offs");
-            *(v1 - 2) = 0.0;
-            *(v1 - 1) = 0.0;
-            *v1 = 0.0;
-            if (*v5)
-                sscanf(v5, "%f %f %f", v1 - 2, v1 - 1, v1);
-            v6 = Info_ValueForKey(v10, "mat");
-            if (*v6)
-                v7 = atol(v6);
-            else
-                v7 = -1;
-            *((unsigned int *)v1 + 1) = v7;
-            v8 = Info_ValueForKey(v10, "offmat");
-            if (*v8)
-                v9 = atol(v8);
-            else
-                v9 = -1;
-            *((unsigned int *)v1 + 2) = v9;
+            target->ent = NULL;
+            continue;
+        }
+        ++targGlob.targetCount;
+        const char *entNum = Info_ValueForKey(info, "ent");
+        if (*entNum)
+        {
+            unsigned int index = atol(entNum);
+            if (index >= 0x880)
+                MyAssertHandler(
+                    "c:\\trees\\cod3\\cod3src\\src\\game\\g_targets.cpp",
+                    64,
+                    0,
+                    "entNum doesn't index MAX_GENTITIES\n\t%i not in [0, %i)",
+                    index,
+                    2176);
+            target->ent = &level.gentities[atol(entNum)];
         }
         else
         {
-            *(v1 - 3) = 0.0;
+            target->ent = NULL;
         }
-        v1 += 7;
-        ++v0;
-    } while ((uintptr_t)v1 < (uintptr_t)&targGlob.targets[32]);
+        const char *offs = Info_ValueForKey(info, "offs");
+        target->offset[0] = 0.0;
+        target->offset[1] = 0.0;
+        target->offset[2] = 0.0;
+        if (*offs)
+            sscanf(offs, "%f %f %f", &target->offset[0], &target->offset[1], &target->offset[2]);
+        const char *mat = Info_ValueForKey(info, "mat");
+        target->materialIndex = *mat ? atol(mat) : -1;
+        const char *offmat = Info_ValueForKey(info, "offmat");
+        target->offscreenMaterialIndex = *offmat ? atol(offmat) : -1;
+    }
 }
 
 void Scr_Target_SetShader()
