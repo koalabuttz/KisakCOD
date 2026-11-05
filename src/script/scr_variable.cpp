@@ -4573,7 +4573,7 @@ VariableValue  Scr_EvalVariableEntityField(uint32_t entId, uint32_t fieldName)
 	else
 	{
 		valuea.type = VAR_UNDEFINED;
-		valuea.u.intValue = 0;
+		valuea.u = VariableUnion();
 		return valuea;
 	}
 }
