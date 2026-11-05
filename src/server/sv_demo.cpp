@@ -1344,11 +1344,14 @@ server_demo_history_t *SV_GetMarkHistory(const char *name)
     return g_history;
 }
 
+// Retail read these as sv.state + 60052 / + 60060.
+static_assert(LAYOUT_32BIT(offsetof(server_t, demo.msg.cursize) == 60052));
+static_assert(LAYOUT_32BIT(offsetof(server_t, demo.msg.readcount) == 60060));
+
 int SV_DemoSaveHistory(server_demo_history_t *history)
 {
     server_demo_save_t *p_save; // r27
     bool playing; // r11
-    int v4; // r11
     int v5; // r3
     int v7; // r3
 
@@ -1367,7 +1370,7 @@ int SV_DemoSaveHistory(server_demo_history_t *history)
             MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\server\\sv_demo.cpp", 2287, 0, "%s", "!sv.demo.recording");
         history->nextFramePos = sv.demo.nextFramePos;
         history->readType = sv.demo.readType;
-        v4 = 60060;
+        history->msgReadcount = sv.demo.msg.readcount;
     }
     else
     {
@@ -1380,9 +1383,8 @@ int SV_DemoSaveHistory(server_demo_history_t *history)
             MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\server\\sv_demo.cpp", 2299, 0, "%s", "!sv.demo.playing");
         history->nextFramePos = G_GetFramePos();
         history->readType = 9;
-        v4 = 60052;
+        history->msgReadcount = sv.demo.msg.cursize;
     }
-    history->msgReadcount = *(serverState_t *)((char *)&sv.state + v4);
     history->msgBit = sv.demo.msg.bit;
     history->randomSeed = G_GetRandomSeed();
     memcpy(&history->lastUsercmd, &svs.clients->lastUsercmd, sizeof(history->lastUsercmd));

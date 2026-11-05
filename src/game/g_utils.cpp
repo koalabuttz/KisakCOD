@@ -1860,65 +1860,42 @@ void G_FreeEntityAfterEvent(gentity_s *ent)
     ent->r.eventType |= 1u;
 }
 
+// Replay history buffer: first/last free entity, then each free entity's
+// nextFree link, all as raw pointers (4 bytes each on i386, 8 on x64).
 int G_SaveFreeEntities(unsigned __int8 *buf)
 {
-    gentity_s *firstFreeEnt; // r9
-    int result; // r3
-    unsigned __int8 *v4; // r11
+    gentity_s *ent;
+    int result;
 
     if (buf)
     {
-        *(unsigned int *)buf = (unsigned int)level.firstFreeEnt;
-        *((unsigned int *)buf + 1) = (unsigned int)level.lastFreeEnt;
+        memcpy(buf, &level.firstFreeEnt, sizeof(gentity_s *));
+        memcpy(buf + sizeof(gentity_s *), &level.lastFreeEnt, sizeof(gentity_s *));
     }
-    firstFreeEnt = level.firstFreeEnt;
-    result = 8;
-    if (level.firstFreeEnt)
+    result = 2 * sizeof(gentity_s *);
+    for (ent = level.firstFreeEnt; ent; ent = ent->nextFree)
     {
-        v4 = buf + 8;
-        do
-        {
-            if (buf)
-            {
-                *v4 = (unsigned __int8)firstFreeEnt->nextFree;
-                v4[1] = BYTE1(firstFreeEnt->nextFree);
-                v4[2] = BYTE2(firstFreeEnt->nextFree);
-                v4[3] = HIBYTE(firstFreeEnt->nextFree);
-            }
-            firstFreeEnt = firstFreeEnt->nextFree;
-            result += 4;
-            v4 += 4;
-        } while (firstFreeEnt);
+        if (buf)
+            memcpy(buf + result, &ent->nextFree, sizeof(gentity_s *));
+        result += sizeof(gentity_s *);
     }
     return result;
 }
 
 void G_LoadFreeEntities(unsigned __int8 *buf)
 {
-    _BYTE *v2; // r11
-    bool v3; // cr58
-    unsigned __int8 *v4; // r9
-    unsigned __int8 v5; // r10
+    gentity_s *ent;
+    unsigned __int8 *pos;
 
     if (!buf)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_utils.cpp", 2608, 0, "%s", "buf");
-    v2 = *(_BYTE **)buf;
-    v3 = *(unsigned int *)buf == 0;
-    level.firstFreeEnt = *(gentity_s **)buf;
-    level.lastFreeEnt = (gentity_s *)*((unsigned int *)buf + 1);
-    if (!v3)
+    memcpy(&level.firstFreeEnt, buf, sizeof(gentity_s *));
+    memcpy(&level.lastFreeEnt, buf + sizeof(gentity_s *), sizeof(gentity_s *));
+    pos = buf + 2 * sizeof(gentity_s *);
+    for (ent = level.firstFreeEnt; ent; ent = ent->nextFree)
     {
-        v4 = buf + 8;
-        do
-        {
-            v2[624] = *v4;
-            v2[625] = v4[1];
-            v2[626] = v4[2];
-            v5 = v4[3];
-            v4 += 4;
-            v2[627] = v5;
-            v2 = (_BYTE *)*((unsigned int *)v2 + 156);
-        } while (v2);
+        memcpy(&ent->nextFree, pos, sizeof(gentity_s *));
+        pos += sizeof(gentity_s *);
     }
 }
 
