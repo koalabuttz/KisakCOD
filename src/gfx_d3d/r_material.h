@@ -2,7 +2,7 @@
 
 #include <universal/layout_assert.h>
 
-#ifdef __linux__
+#if defined(__linux__) || defined(__APPLE__)
 #include <linux/d3d9_types.h> // native Linux: D3D9 type surface only, no D3D9 API
 #else
 #include <d3d9.h>

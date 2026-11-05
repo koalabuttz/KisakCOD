@@ -3,13 +3,15 @@
 
 The build produces an asset-free ELF32 i386 executable at bin/KisakCOD-dedi (or,
 with --arch x86_64 or --arch aarch64, the opt-in ELF64 builds from
-docs/linux-x64.md and docs/linux-arm64.md). No game data
+docs/linux-x64.md and docs/linux-arm64.md; with --arch macos-arm64 or
+--arch macos-x86_64, the opt-in Mach-O builds from docs/macos.md). No game data
 is needed to prove it is the right artefact and that it reaches its own startup
 code, so every check here works from the binary alone:
 
   * the header bytes say ELF, little-endian, and the class and machine of the
     requested architecture: 32-bit machine 3 (i386, the default), 64-bit
-    machine 62 (x86_64) or 64-bit machine 183 (aarch64);
+    machine 62 (x86_64) or 64-bit machine 183 (aarch64); for macOS, a 64-bit
+    Mach-O executable for CPU type 0x0100000c (arm64) or 0x01000007 (x86_64);
   * --help and --version answer without touching the engine;
   * an asset-free launch reaches FS_Startup and then fails on the missing
     fileSysCheck.cfg, which is the expected end state for a data-less tree;
@@ -28,7 +30,8 @@ checkout and the temporary directory is removed afterwards, taking the log with
 it.
 
 Usage:
-    python3 scripts/tests/test_linux_bootstrap.py [--arch i386|x86_64|aarch64] [--emulator CMD] [path/to/binary]
+    python3 scripts/tests/test_linux_bootstrap.py [--arch i386|x86_64|aarch64|macos-arm64|macos-x86_64]
+        [--emulator CMD] [path/to/binary]
 """
 
 import argparse
@@ -61,6 +64,18 @@ ARCHITECTURES = {
     "i386": (ELFCLASS32, "ELFCLASS32 (EI_CLASS == 1)", EM_386, "e_machine EM_386 (3, i386)"),
     "x86_64": (ELFCLASS64, "ELFCLASS64 (EI_CLASS == 2)", EM_X86_64, "e_machine EM_X86_64 (62, x86_64)"),
     "aarch64": (ELFCLASS64, "ELFCLASS64 (EI_CLASS == 2)", EM_AARCH64, "e_machine EM_AARCH64 (183, aarch64)"),
+}
+
+# Mach-O header fields this test reads (<mach-o/loader.h>, <mach/machine.h>).
+MACHO_MAGIC_64 = 0xFEEDFACF
+MH_EXECUTE = 2
+CPU_TYPE_X86_64 = 0x01000007
+CPU_TYPE_ARM64 = 0x0100000C
+
+# macOS --arch value -> (cputype, label)
+MACOS_ARCHITECTURES = {
+    "macos-arm64": (CPU_TYPE_ARM64, "cputype CPU_TYPE_ARM64 (0x0100000c)"),
+    "macos-x86_64": (CPU_TYPE_X86_64, "cputype CPU_TYPE_X86_64 (0x01000007)"),
 }
 
 # Command prefix for running a binary built for another architecture, such as
@@ -133,6 +148,37 @@ def run(binary, arguments, cwd, timeout):
     return completed.returncode, completed.stdout.decode("utf-8", "replace"), False
 
 
+def check_macho_header(checker, binary, arch):
+    """Read the Mach-O header bytes directly: no otool or `file` involved."""
+    try:
+        with binary.open("rb") as handle:
+            header = handle.read(32)
+    except OSError as error:
+        checker.failed(f"read {binary}: {error}")
+        return
+
+    if len(header) < 16:
+        checker.failed(f"{binary} is too short to hold a Mach-O header ({len(header)} bytes)")
+        return
+
+    magic, cputype, _cpusubtype, filetype = struct.unpack_from("<IiII", header, 0)
+    checker.require(
+        magic == MACHO_MAGIC_64,
+        "64-bit little-endian Mach-O magic 0xfeedfacf (a single-architecture binary)",
+        f"magic is {magic:#010x}",
+    )
+    expected_cputype, label = MACOS_ARCHITECTURES[arch]
+    checker.require(cputype == expected_cputype, label, f"cputype is {cputype:#010x}")
+    checker.require(filetype == MH_EXECUTE, "filetype MH_EXECUTE (2)", f"filetype is {filetype}")
+
+
+def check_binary_header(checker, binary, arch="i386"):
+    if arch in MACOS_ARCHITECTURES:
+        check_macho_header(checker, binary, arch)
+    else:
+        check_elf_header(checker, binary, arch)
+
+
 def check_elf_header(checker, binary, arch="i386"):
     """Read the header bytes directly: no objdump or `file` involved."""
     try:
@@ -172,7 +218,7 @@ def no_engine_start(checker, output, label):
     )
 
 
-def check_help(checker, binary, workdir):
+def check_help(checker, binary, workdir, arch="i386"):
     code, output, timed_out = run(binary, ["--help"], workdir, HELP_TIMEOUT)
 
     if timed_out:
@@ -180,9 +226,10 @@ def check_help(checker, binary, workdir):
         return
 
     checker.require(code == 0, f"--help exits 0 (got {code})", last_lines(output))
+    native = "native macOS" if arch in MACOS_ARCHITECTURES else "native Linux"
     checker.require(
-        "native Linux" in output,
-        "--help names the native Linux server",
+        native in output,
+        f"--help names the {native} server",
         last_lines(output),
     )
     checker.require("Usage:" in output, "--help prints usage", last_lines(output))
@@ -205,7 +252,13 @@ def check_version(checker, binary, workdir):
 
 # --arch value -> the CPUSTRING prefix in the build banner (universal/q_shared.h).
 # "linux-x86" is also a prefix of the x86_64 build's "linux-x86_64".
-BANNER_CPU = {"i386": "linux-x86", "x86_64": "linux-x86_64", "aarch64": "linux-arm64"}
+BANNER_CPU = {
+    "i386": "linux-x86",
+    "x86_64": "linux-x86_64",
+    "aarch64": "linux-arm64",
+    "macos-arm64": "macos-arm64",
+    "macos-x86_64": "macos-x86_64",
+}
 
 
 def check_asset_free_launch(checker, binary, workdir, arch="i386"):
@@ -423,7 +476,7 @@ def main():
     )
     parser.add_argument(
         "--arch",
-        choices=sorted(ARCHITECTURES),
+        choices=sorted(ARCHITECTURES) + sorted(MACOS_ARCHITECTURES),
         default="i386",
         help="architecture the binary must be built for (default: i386, the shipping build)",
     )
@@ -451,7 +504,7 @@ def main():
     checker = Checker()
 
     print("\nbinary format", flush=True)
-    check_elf_header(checker, binary, arguments.arch)
+    check_binary_header(checker, binary, arguments.arch)
 
     print("\ncommand-line exits", flush=True)
     with tempfile.TemporaryDirectory(prefix="kisakcod-bootstrap-cli-") as temporary:
@@ -464,7 +517,7 @@ def main():
             print("\n1 bootstrap check(s) failed", flush=True)
             return 1
 
-        check_help(checker, binary, cli_dir)
+        check_help(checker, binary, cli_dir, arguments.arch)
         check_version(checker, binary, cli_dir)
         check_oversized_command_line(checker, binary)
 

@@ -10,7 +10,7 @@
 
 #include "db_disk_layout_gen.h"
 
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
 #include <linux/compat.h>
 #include <qcommon/threads_interlock.h>
 #endif
@@ -55,7 +55,7 @@ static int32_t DB_ReadData();
 static void Load_XAssetListCustom();
 static void Load_XAssetArrayCustom(int32_t count);
 
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
 // Bytes the most recent ReadFileEx() completion actually delivered.
 //
 // The Win32 build below credits a whole FILE_BUFFER_SIZE on the assumption that
@@ -85,7 +85,7 @@ int32_t DB_WaitXFileStage()
 
     if (!g_load.f)
         MyAssertHandler(".\\database\\db_file_load.cpp", 278, 0, "%s", "g_load.f");
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
     if (g_load.outstandingReads <= 0)
         Com_Error(ERR_DROP, "Unexpected end of fastfile '%s'", g_load.filename);
     g_lastReadBytes = 0;
@@ -94,14 +94,14 @@ int32_t DB_WaitXFileStage()
         MyAssertHandler(".\\database\\db_file_load.cpp", 280, 0, "%s", "g_load.outstandingReads > 0");
 #endif
     --g_load.outstandingReads;
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
     if (SleepEx(0xFFFFFFFF, 1) != WAIT_IO_COMPLETION || !g_lastReadBytes)
         Com_Error(ERR_DROP, "Incomplete read of fastfile '%s'", g_load.filename);
 #else
     SleepEx(0xFFFFFFFF, 1);
 #endif
     result = InterlockedIncrement(&g_loadedSize);
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
     g_load.stream.avail_in += g_lastReadBytes;
 #else
     g_load.stream.avail_in += 0x40000;
@@ -218,7 +218,7 @@ void __stdcall DB_FileReadCompletion(
     uint32_t dwNumberOfBytesTransfered,
     _OVERLAPPED *lpOverlapped)
 {
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
     // SleepEx() below calls this when the read finishes, so the delivered length
     // is known by the time DB_WaitXFileStage() credits the buffer.
     (void)lpOverlapped;
@@ -269,7 +269,7 @@ void DB_LoadXFileInternal()
         Com_Error(ERR_DROP, "Fastfile for zone '%s' is empty.", g_load.filename);
     DB_WaitXFileStage();
     DB_ReadXFileStage();
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
     if (g_load.stream.avail_in < sizeof(magic) + sizeof(version))
         Com_Error(ERR_DROP, "Fastfile for zone '%s' has a truncated header.", g_load.filename);
 #else

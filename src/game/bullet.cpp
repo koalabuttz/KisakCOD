@@ -526,7 +526,7 @@ void Bullet_Process(
         if (hitLoc == HITLOC_HEAD || hitLoc == HITLOC_HELMET)
             *outImpactFlags |= 1u;
 
-#if !defined(__linux__) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
         if (g_debugLocDamage->current.enabled)
             CL_AddDebugStar(br->hitPos, colorRed, 100, 1);
 #endif

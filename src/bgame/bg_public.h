@@ -1043,7 +1043,7 @@ void CG_TraceCapsule(
     int contentMask);
 
 #ifdef KISAK_MP
-#if defined(__linux__) && defined(KISAK_DEDICATED)
+#if (defined(__linux__) || defined(__APPLE__)) && defined(KISAK_DEDICATED)
 // Context zero is local-client prediction, which cannot run on this server.
 // Keep the authoritative server handler in context one unchanged.
 static void BG_ClientTraceUnavailable(trace_t*, const float*, const float*, const float*, const float*, int, int)

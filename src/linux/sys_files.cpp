@@ -17,6 +17,10 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#if defined(__APPLE__)
+#include <mach-o/dyld.h> // _NSGetExecutablePath
+#include <stdlib.h>      // realpath
+#endif
 
 namespace
 {
@@ -176,6 +180,17 @@ char *Sys_DefaultInstallPath()
     if (exePath[0])
         return exePath;
 
+#if defined(__APPLE__)
+    // macOS has no /proc. dyld knows the path the executable was started from,
+    // and realpath resolves its symlinks as /proc/self/exe would.
+    char launchPath[PATH_MAX];
+    uint32_t launchPathSize = sizeof(launchPath);
+    if (_NSGetExecutablePath(launchPath, &launchPathSize) != 0 || !realpath(launchPath, exePath))
+    {
+        I_strncpyz(exePath, Sys_Cwd(), (int)sizeof(exePath));
+        return exePath;
+    }
+#else
     // /proc/self/exe gives the real executable regardless of how it was invoked.
     const ssize_t length = readlink("/proc/self/exe", exePath, sizeof(exePath) - 1);
     if (length <= 0)
@@ -185,6 +200,7 @@ char *Sys_DefaultInstallPath()
     }
 
     exePath[length] = '\0';
+#endif
 
     // Strip the executable name, leaving the directory it lives in.
     char *lastSeparator = strrchr(exePath, '/');

@@ -1019,7 +1019,7 @@ bool ParseConfigStringToStructCustomSize(
                     *(uint32_t *)&pStruct[v20->iOffset] = (int)(v15 * 1000.0);
                     break;
                 case CSPFT_FX:
-#if defined(__linux__) && defined(KISAK_DEDICATED)
+#if (defined(__linux__) || defined(__APPLE__)) && defined(KISAK_DEDICATED)
                     // A dedicated server has no renderer: the effect name is
                     // parsed but never registered, and the destination keeps the
                     // value it already had, exactly as the runtime com_dedicated
@@ -1042,7 +1042,7 @@ bool ParseConfigStringToStructCustomSize(
                         v18 = 1;
                     break;
                 case CSPFT_MATERIAL:
-#if defined(__linux__) && defined(KISAK_DEDICATED)
+#if (defined(__linux__) || defined(__APPLE__)) && defined(KISAK_DEDICATED)
                     // See CSPFT_FX: no renderer on a dedicated server, so the
                     // material handle is not resolved and the destination is left
                     // as it was.

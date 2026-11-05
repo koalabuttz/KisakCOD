@@ -33,8 +33,8 @@
 
 #pragma once
 
-#ifndef __linux__
-#error "src/linux/d3d9_types.h is the stand-in for <d3d9.h> on native Linux only"
+#if !defined(__linux__) && !defined(__APPLE__)
+#error "src/linux/d3d9_types.h is the stand-in for <d3d9.h> on native Linux and macOS only"
 #endif
 
 // A D3D9 header that arrived first would have brought DXVK's windows_base.h macros

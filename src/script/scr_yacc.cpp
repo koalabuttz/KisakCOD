@@ -25,7 +25,11 @@
 
 #include "scr_yacc.h"
 
+#if defined(__APPLE__)
+#include <alloca.h> // macOS has no <malloc.h>
+#else
 #include <malloc.h> // alloca
+#endif
 #include "scr_parsetree.h"
 #include "scr_parser.h"
 #include "scr_main.h"

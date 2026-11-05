@@ -20,7 +20,7 @@
 #include <script/scr_debugger.h>
 #include <universal/profile.h>
 
-#if defined(WIN32) || defined(__linux__)
+#if defined(WIN32) || defined(__linux__) || defined(__APPLE__)
 #include <win32/win_steam.h>
 #else
 #error Steam auth is not implemented for this platform
@@ -961,7 +961,7 @@ void SV_RunFrame()
         start = (int)Sys_MillisecondsRaw();
     SV_ResetSkeletonCache();
 
-#if !defined(__linux__) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
     CL_FlushDebugServerData();
 #endif
     G_RunFrame(svs.time);
@@ -969,7 +969,7 @@ void SV_RunFrame()
     //Scr_ProfileBuiltinUpdate();
     //Profile_ResetCounters(1);
     //Profile_ResetScriptCounters();
-#if !defined(__linux__) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
     CL_UpdateDebugServerData();
 #endif
 
