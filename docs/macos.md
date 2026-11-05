@@ -33,8 +33,8 @@ cmake --build build-macos --target KisakCOD-dedi
   offers from macOS 13.3 on.
 - Apple Clang is used as is; `-fms-extensions` covers the engine's Microsoft
   spellings, as on Linux.
-- Every other opt-in (client, window host, probes, movies, Tracy GUI build) is
-  refused with `KISAK_PLATFORM=macos` for now.
+- Every other opt-in (client, window host, probes, movies, the Linux and
+  Windows Tracy builds) is refused with `KISAK_PLATFORM=macos` for now.
 
 Run it like the Linux server, with the game files from your own install:
 
