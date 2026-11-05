@@ -804,7 +804,10 @@ int main(int argc, char **argv)
 
     PrintWorkingDir();
 
-    Steam_Init(); // Announces the unavailable authentication backend; never bypasses it.
+    // Without KISAK_LINUX_STEAM this announces the unavailable authentication
+    // backend; with it, it connects to the running Steam client. It never
+    // bypasses authentication.
+    Steam_Init();
 #ifdef KISAK_LINUX_MP_CLIENT
     // WinMain's client step: load the player's stats (LiveStorage) once the
     // file system is up.
@@ -824,5 +827,8 @@ int main(int argc, char **argv)
         }
 
         Com_Frame();
+        // Reads Steam's verdicts when no dedicated SV_Frame does (a no-op
+        // without KISAK_LINUX_STEAM).
+        Steam_Frame();
     }
 }

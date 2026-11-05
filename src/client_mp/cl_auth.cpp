@@ -2,7 +2,8 @@
 #include <universal/base64.h>
 #include <cstdio>
 #include <cstring>
-#ifdef WIN32
+#if defined(WIN32) || defined(KISAK_LINUX_STEAM)
+#include <universal/q_shared.h>
 #include <win32/win_steam.h>
 #endif
 
@@ -33,7 +34,7 @@ ClientAuthResult CL_FormatSteamChallenge(const unsigned char *ticket, uint32_t s
 ClientAuthResult CL_GetPlatformChallenge(char *output, size_t capacity)
 {
     if (output && capacity) output[0] = '\0';
-#ifdef WIN32
+#if defined(WIN32) || defined(KISAK_LINUX_STEAM)
     unsigned char *ticket = nullptr;
     uint32 size = 0;
     if (!Steam_GetRawClientTicket(&ticket, &size)) return ClientAuthResult::unavailable;
@@ -45,7 +46,7 @@ ClientAuthResult CL_GetPlatformChallenge(char *output, size_t capacity)
 
 void CL_CancelPlatformAuthTicket()
 {
-#ifdef WIN32
+#if defined(WIN32) || defined(KISAK_LINUX_STEAM)
     Steam_CancelClientTicket();
 #endif
 }

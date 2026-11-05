@@ -18,6 +18,7 @@ without a GPU or game data, against stand-in D3D9 and OpenAL libraries.
 | Multiplayer client `KisakCOD-mp`, i386 | `-DKISAK_BUILD_LINUX_MP_CLIENT=ON` | Playable on a listen server (laptop): `+devmap mp_crash`, team and class menus, spawn, move, shoot, grenades, OpenAL sound, flashbang white-out, clean quit. [Guide](linux-mp-client.md) |
 | Multiplayer client, x86_64 | the same, with `-DKISAK_LINUX_ARCH=x86_64` | Playable on the same terms as i386 (laptop), including sprint and mantle animations and a clean quit. [Guide](linux-x64.md#x86_64-multiplayer-client) |
 | Movies | `-DKISAK_LINUX_CINEMATICS=ON` | Bink movies play through an FFmpeg-backed shim on i386 and x86_64 (laptop). Off by default. [Guide](linux-cinematics.md) |
+| Steam authentication | `-DKISAK_LINUX_STEAM=ON` | In review. Logs in through the running Steam client's `steamclient.so`; a probe got a ticket validated on i386 and x86_64 (laptop). The game joining a remote server is not verified yet. Off by default. [Guide](linux-steam.md) |
 | Singleplayer `KisakCOD-sp`, i386 | in review (PR 83) | killhouse and cargoship load and play about a minute each, clean quit (laptop). The compile census (PR 82) is merged. |
 
 The client builds need DXVK Native, SDL3 3.2.10 or newer and OpenAL for the
@@ -26,11 +27,13 @@ always come from your own install (`+set fs_basepath <game folder>`).
 
 ## What does not work yet
 
-- **Joining a remote server.** Linux has no Steam ticket provider, so the client
-  refuses to send an unauthenticated challenge, and the dedicated server rejects
-  ordinary client tickets unless an explicit opt-in is set
+- **Joining a remote server.** The default build has no Steam ticket provider,
+  so the client refuses to send an unauthenticated challenge, and the dedicated
+  server rejects ordinary client tickets unless an explicit opt-in is set
   ([details](linux-dedicated.md#local-connection-testing-without-steam-authentication)).
-  This stays refused until a real provider exists.
+  The opt-in `-DKISAK_LINUX_STEAM=ON` authenticates through the Steam client
+  running on the machine ([guide](linux-steam.md)); login and ticket checks are
+  laptop-verified with a probe, a game joining a remote server is not yet.
 - **Prediction.** The Linux client logs about five times as many prediction
   errors and misses as the Windows build does over the same kind of play
   (laptop vs a Windows PC, 2026-11-04). Being investigated.

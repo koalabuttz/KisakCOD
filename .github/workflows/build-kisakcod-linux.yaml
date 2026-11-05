@@ -41,6 +41,7 @@ on:
       - tests/linux_free_camera/**
       - tests/linux_mp_client/**
       - tests/linux_cinematic/**
+      - tests/linux_steam/**
       - .github/workflows/build-kisakcod-linux.yaml
       - .github/workflows/build-kisarcod-win.yaml
   pull_request:
@@ -64,6 +65,7 @@ on:
       - tests/linux_free_camera/**
       - tests/linux_mp_client/**
       - tests/linux_cinematic/**
+      - tests/linux_steam/**
       - .github/workflows/build-kisakcod-linux.yaml
       - .github/workflows/build-kisarcod-win.yaml
 

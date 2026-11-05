@@ -9,7 +9,8 @@ enum class ClientAuthResult { ready, unavailable, invalidTicket, bufferTooSmall 
 // for this call; never acquires, cancels, prints or retains a ticket.
 ClientAuthResult CL_FormatSteamChallenge(const unsigned char *ticket, uint32_t size,
     uint64_t steamId, char *output, size_t capacity);
-// Uses the platform's existing ticket lifetime. Linux currently fails closed.
+// Uses the platform's existing ticket lifetime. Native Linux fails closed
+// unless built with KISAK_LINUX_STEAM.
 ClientAuthResult CL_GetPlatformChallenge(char *output, size_t capacity);
 void CL_CancelPlatformAuthTicket();
 const char *CL_AuthResultName(ClientAuthResult result);

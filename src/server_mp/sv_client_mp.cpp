@@ -407,7 +407,7 @@ void SV_GetChallenge(netadr_t from)
     }
     else
     {
-#if defined(__linux__) && defined(KISAK_DEDICATED)
+#if defined(__linux__) && defined(KISAK_DEDICATED) && !defined(KISAK_LINUX_STEAM)
         NET_OutOfBandPrint(NS_SERVER, from, "error\nSteam authentication is unavailable in this native Linux build.");
 #else
         Com_Printf(CON_CHANNEL_SERVER, "rejected connection from invalid Steam GUID \"%s\"\n", identity);

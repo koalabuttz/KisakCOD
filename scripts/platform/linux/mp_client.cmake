@@ -37,6 +37,9 @@
 #     the Win32 window layer over SDL3 the renderer creates its window with,
 #     texture_memory.cpp (r_texturemem.cpp's answer without DirectDraw) and the
 #     Material_Sort span of r_material_load_obj.cpp.
+#   * With KISAK_LINUX_STEAM (scripts/platform/linux/CMakeLists.txt), the Steam
+#     backend in src/linux/steam.cpp and its steamclient.so session, so the
+#     client can join Steam-authenticated servers.
 #   * src/linux/client/mp_client_unavailable.cpp: client services Linux does not
 #     have yet (remote script debugger, HTTP downloads, voice, mouse, window
 #     procedure). Each answers as the engine does on Windows when the service is
@@ -197,6 +200,9 @@ set(mp_client_own_sources
     "${SRC_DIR}/linux/client/mp_client_unavailable.cpp"
     "${SRC_DIR}/linux/client/texture_memory.cpp"
     ${KISAK_MP_CLIENT_WINDOW_SOURCES})
+if(KISAK_LINUX_STEAM)
+    list(APPEND mp_client_own_sources ${KISAK_LINUX_STEAM_SOURCES})
+endif()
 
 # The Windows client's definitions without CINEMA (see r_cinematic.cpp above).
 set(KISAK_MP_CLIENT_DEFINITIONS
@@ -204,6 +210,7 @@ set(KISAK_MP_CLIENT_DEFINITIONS
     KISAK_LINUX_MP_CLIENT
     _FILE_OFFSET_BITS=64 _GNU_SOURCE
     $<$<CONFIG:Debug>:_DEBUG>
+    $<$<BOOL:${KISAK_LINUX_STEAM}>:KISAK_LINUX_STEAM>
 )
 set(KISAK_MP_CLIENT_OPTIONS
     $<$<COMPILE_LANGUAGE:CXX>:-fms-extensions>
