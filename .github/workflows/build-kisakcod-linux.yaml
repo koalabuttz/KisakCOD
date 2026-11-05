@@ -1794,7 +1794,13 @@ jobs:
           openal="$RUNNER_TEMP/openal-unavailable/libopenal_unavailable.so"
           clang++ -m32 -shared -fPIC -Wall -Wextra -Werror -Wl,-soname,libopenal_unavailable.so \
             tests/linux_mp_client/openal_unavailable.cpp -o "$openal"
+          # The Debug build also turns on the opt-in Tracy profiler, so the
+          # profiling build compiles and links on every push; RelWithDebInfo
+          # stays the player build with no profiler.
+          tracy=OFF
+          if [ "${{ matrix.config }}" = Debug ]; then tracy=ON; fi
           cmake -S . -B "$BUILD_DIR" -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_OPENAL_LIBRARY="$openal" \
+            -DKISAK_LINUX_TRACY="$tracy" \
             2>&1 | tee "artifacts/mp-client-${{ matrix.config }}.log"
           cmake --build "$BUILD_DIR" --target KisakCOD-mp KisakCOD-mp-client-window-test --parallel "$(nproc)" \
             2>&1 | tee -a "artifacts/mp-client-${{ matrix.config }}.log"
