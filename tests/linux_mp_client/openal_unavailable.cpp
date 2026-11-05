@@ -16,6 +16,13 @@ extern "C" __attribute__((visibility("default"))) void *alcOpenDevice(const char
     return nullptr;
 }
 
+// No device, so no context either. The Linux Bink shim asks before it makes a
+// source (src/linux/client/cinematic/bink_audio_openal.cpp).
+extern "C" __attribute__((visibility("default"))) void *alcGetCurrentContext()
+{
+    return nullptr;
+}
+
 #define KISAK_OPENAL_UNREACHABLE(name)                                                      \
     extern "C" __attribute__((visibility("default"))) void name()                           \
     {                                                                                      \
@@ -40,6 +47,7 @@ KISAK_OPENAL_UNREACHABLE(alGenBuffers)
 KISAK_OPENAL_UNREACHABLE(alGenEffects)
 KISAK_OPENAL_UNREACHABLE(alGenFilters)
 KISAK_OPENAL_UNREACHABLE(alGenSources)
+KISAK_OPENAL_UNREACHABLE(alGetError)
 KISAK_OPENAL_UNREACHABLE(alGetSource3f)
 KISAK_OPENAL_UNREACHABLE(alGetSourcef)
 KISAK_OPENAL_UNREACHABLE(alGetSourcei)

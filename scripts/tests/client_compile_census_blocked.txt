@@ -35,7 +35,7 @@ src/gfx_d3d/rb_sky.cpp: IDirect3DDevice9/IDirect3DQuery9 methods
 src/gfx_d3d/rb_uploadshaders.cpp: IDirect3DDevice9 draw, D3DPT_TRIANGLELIST
 
 # --- Renderer, but not a D3D9 boundary problem. ---
-src/gfx_d3d/r_cinematic.cpp: Bink texture helpers (Lock_Bink_textures, BinkSetMemory) are Windows-only in deps/binklib
+src/gfx_d3d/r_cinematic.cpp: the Bink player locks D3D9 textures; KISAK_LINUX_CINEMATICS builds it through the native D3D9 boundary on the Linux Bink shim
 src/gfx_d3d/r_texturemem.cpp: includes <ddraw.h> for video-memory queries
 
 # --- Windows platform implementations. The dedicated Linux target already

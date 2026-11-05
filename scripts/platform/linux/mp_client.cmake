@@ -27,6 +27,9 @@
 #     (mp_client_platform_sources.txt, which the census compiles too).
 #   * src/gfx_d3d/r_cinematic.cpp without CINEMA: the engine's own build of it
 #     with no Bink, where no cinematic ever plays. CINEMA is read nowhere else.
+#     With KISAK_LINUX_CINEMATICS it is built with CINEMA instead, through the
+#     native D3D9 boundary, on the Bink shim in src/linux/client/cinematic
+#     (FFmpeg's libavcodec decodes the movies; see docs/linux-cinematics.md).
 #   * The native platform layer the dedicated server uses (src/linux), minus its
 #     server-only stand-ins for client systems this target links for real and
 #     its non-interactive script debugger (the client links the in-game one).
@@ -42,6 +45,8 @@
 # The link uses --gc-sections like the dedicated target. See
 # docs/linux-mp-client.md.
 # ---------------------------------------------------------------------------
+option(KISAK_LINUX_CINEMATICS
+    "Play Bink movies in KisakCOD-mp through the Linux Bink shim (needs libavcodec and libavutil, found with pkg-config)" OFF)
 option(KISAK_BUILD_LINUX_MP_CLIENT
     "Build the native Linux multiplayer client KisakCOD-mp (needs KISAK_BUILD_LINUX_NATIVE_D3D9, KISAK_DXVK_NATIVE_LIBRARY, KISAK_OPENAL_LIBRARY and SDL3)" OFF)
 if(NOT KISAK_BUILD_LINUX_MP_CLIENT)
@@ -126,12 +131,26 @@ endif()
 list(REMOVE_ITEM mp_client_blocked_kept "${mp_client_cinematic_source}")
 list(REMOVE_ITEM mp_client_engine_sources ${mp_client_blocked_kept})
 
+if(KISAK_LINUX_CINEMATICS)
+    # The Bink player draws into D3D9 textures it locks itself, so it compiles
+    # through the boundary like the proof-list units.
+    list(REMOVE_ITEM mp_client_engine_sources "${mp_client_cinematic_source}")
+    find_package(PkgConfig REQUIRED)
+    # For an i386 build on an x86_64 host, point pkg-config at the i386 files:
+    # PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig
+    pkg_check_modules(KISAK_FFMPEG REQUIRED IMPORTED_TARGET libavcodec libavutil)
+    message(STATUS "KisakCOD-mp cinematics: libavcodec ${KISAK_FFMPEG_libavcodec_VERSION}, libavutil ${KISAK_FFMPEG_libavutil_VERSION}")
+endif()
+
 # The renderer: the units on the native D3D9 proof list compile through the
 # boundary (the census blocks them only because it compiles with the stand-in
 # types); every other engine unit keeps the stand-in.
 # r_utils.cpp compiles either way but defines R_ReleaseD3DSurface only through
 # the boundary, as the world device probe builds it.
 set(mp_client_native_sources ${KISAK_NATIVE_D3D9_RENDERER_PROOF_SOURCES} "${SRC_DIR}/gfx_d3d/r_utils.cpp")
+if(KISAK_LINUX_CINEMATICS)
+    list(APPEND mp_client_native_sources "${mp_client_cinematic_source}")
+endif()
 set(mp_client_standin_sources ${mp_client_engine_sources})
 list(REMOVE_ITEM mp_client_standin_sources ${mp_client_native_sources})
 
@@ -211,6 +230,30 @@ endforeach()
 set_property(SOURCE "${SRC_DIR}/sound/snd_driver_load_obj.cpp" TARGET_DIRECTORY KisakCOD-mp-standin
     APPEND PROPERTY COMPILE_DEFINITIONS DR_WAV_IMPLEMENTATION DR_MP3_IMPLEMENTATION)
 target_link_libraries(KisakCOD-mp-native PRIVATE kisak_linux_native_d3d9)
+
+# The Bink shim (KISAK_LINUX_CINEMATICS): the Bink API over a libavcodec
+# decoder and an OpenAL output, and RAD's texture lock functions over the
+# native D3D9 boundary. Its test below links the same files but the textures.
+set(KISAK_BINK_SHIM_SOURCES
+    "${SRC_DIR}/linux/client/cinematic/bink_audio_openal.cpp"
+    "${SRC_DIR}/linux/client/cinematic/bink_decoder_ffmpeg.cpp"
+    "${SRC_DIR}/linux/client/cinematic/bink_file.cpp"
+    "${SRC_DIR}/linux/client/cinematic/bink_player.cpp")
+if(KISAK_LINUX_CINEMATICS)
+    set_property(SOURCE "${mp_client_cinematic_source}" TARGET_DIRECTORY KisakCOD-mp-native
+        APPEND PROPERTY COMPILE_DEFINITIONS CINEMA)
+    add_library(KisakCOD-mp-cinematic OBJECT
+        ${KISAK_BINK_SHIM_SOURCES}
+        "${SRC_DIR}/linux/client/cinematic/bink_textures.cpp")
+    target_compile_features(KisakCOD-mp-cinematic PRIVATE cxx_std_20)
+    target_compile_definitions(KisakCOD-mp-cinematic PRIVATE ${KISAK_MP_CLIENT_DEFINITIONS})
+    target_compile_options(KisakCOD-mp-cinematic PRIVATE ${KISAK_MP_CLIENT_OPTIONS} -Wall -Wextra -Werror)
+    target_include_directories(KisakCOD-mp-cinematic PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
+    if(KISAK_OPENAL_INCLUDE_DIR)
+        target_include_directories(KisakCOD-mp-cinematic SYSTEM PRIVATE "${KISAK_OPENAL_INCLUDE_DIR}")
+    endif()
+    target_link_libraries(KisakCOD-mp-cinematic PRIVATE kisak_linux_native_d3d9 PkgConfig::KISAK_FFMPEG)
+endif()
 target_compile_definitions(KisakCOD-mp-own PRIVATE KISAK_LINUX_SDL_MAJOR=3)
 target_link_libraries(KisakCOD-mp-own PRIVATE kisak_linux_native_d3d9 SDL3::SDL3)
 
@@ -226,13 +269,17 @@ add_executable(KisakCOD-mp
     ${mp_client_c_sources}
     $<TARGET_OBJECTS:KisakCOD-mp-native>
     $<TARGET_OBJECTS:KisakCOD-mp-standin>
-    $<TARGET_OBJECTS:KisakCOD-mp-own>)
+    $<TARGET_OBJECTS:KisakCOD-mp-own>
+    $<$<BOOL:${KISAK_LINUX_CINEMATICS}>:$<TARGET_OBJECTS:KisakCOD-mp-cinematic>>)
 target_include_directories(KisakCOD-mp PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
 target_compile_options(KisakCOD-mp PRIVATE -msse2 -mfpmath=sse -fno-strict-aliasing)
 target_link_options(KisakCOD-mp PRIVATE -Wl,--gc-sections)
 target_link_libraries(KisakCOD-mp PRIVATE
     "${KISAK_DXVK_NATIVE_LIBRARY}" "${KISAK_OPENAL_LIBRARY}" SDL3::SDL3 Threads::Threads ${CMAKE_DL_LIBS})
 add_dependencies(KisakCOD-mp update_build_number)
+if(KISAK_LINUX_CINEMATICS)
+    target_link_libraries(KisakCOD-mp PRIVATE PkgConfig::KISAK_FFMPEG)
+endif()
 
 # The game window's asset-free test, on SDL's dummy video driver. The Win32 layer
 # asks SDL for a Vulkan window, which the dummy driver cannot make, so the test
@@ -261,3 +308,20 @@ set_source_files_properties(
 target_link_options(KisakCOD-mp-client-window-test PRIVATE
     -Wl,--as-needed -Wl,--gc-sections -Wl,--wrap=SDL_CreateWindowWithProperties)
 target_link_libraries(KisakCOD-mp-client-window-test PRIVATE kisak_linux_native_d3d9 SDL3::SDL3 Threads::Threads)
+
+# The Bink shim's asset-free test (KISAK_LINUX_CINEMATICS): the file reader on
+# made-up files, the Bink API on a stand-in decoder and clock, and libavcodec's
+# Bink decoders opened the way the shim opens them. No game movie is read.
+if(KISAK_LINUX_CINEMATICS)
+    add_executable(KisakCOD-bink-shim-test
+        "${TESTS_DIR}/linux_cinematic/bink_shim_test.cpp"
+        ${KISAK_BINK_SHIM_SOURCES})
+    target_compile_features(KisakCOD-bink-shim-test PRIVATE cxx_std_20)
+    target_compile_definitions(KisakCOD-bink-shim-test PRIVATE _FILE_OFFSET_BITS=64 _GNU_SOURCE)
+    target_compile_options(KisakCOD-bink-shim-test PRIVATE -Wall -Wextra -Werror -Wno-ignored-attributes)
+    target_include_directories(KisakCOD-bink-shim-test PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
+    if(KISAK_OPENAL_INCLUDE_DIR)
+        target_include_directories(KisakCOD-bink-shim-test SYSTEM PRIVATE "${KISAK_OPENAL_INCLUDE_DIR}")
+    endif()
+    target_link_libraries(KisakCOD-bink-shim-test PRIVATE "${KISAK_OPENAL_LIBRARY}" PkgConfig::KISAK_FFMPEG)
+endif()
