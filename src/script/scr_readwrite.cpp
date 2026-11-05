@@ -763,34 +763,30 @@ static void Scr_RemoveDebuggerRefs()
 void Scr_SaveShutdown(bool savegame)
 {
     char v2; // r20
-    unsigned __int16 *v3; // r25
-    int v4; // r30
-    VariableValueInternal_w *p_w; // r27
-    int v6; // r26
     const char *v7; // r31
 
     v2 = 0;
     if (scrVarDebugPub)
     {
-        v3 = &scrVarPub.saveIdMap[1];
-        v4 = 1;
-        p_w = &scrVarGlob.variableList[2].w;
-        v6 = 0x7FFF;
-        do
+        // Retail stepped variableList[id + 1].w by 4 ints (the 16-byte i386
+        // VariableValueInternal) and found the entry 2 ints before w; index it.
+        for (unsigned int id = 1; id < 0x8000; ++id)
         {
-            if ((p_w->type & 0x60) != 0)
+            VariableValueInternal *entryValue = &scrVarGlob.variableList[id + 1];
+
+            if ((entryValue->w.type & 0x60) != 0)
             {
-                if (!IsObject((VariableValueInternal *)&p_w[-2]))
+                if (!IsObject(entryValue))
                     MyAssertHandler(
                         "c:\\trees\\cod3\\cod3src\\src\\script\\scr_readwrite.cpp",
                         968,
                         0,
                         "%s",
                         "IsObject( entryValue )");
-                v7 = scrVarDebugPub->varUsage[v4 + 1];
+                v7 = scrVarDebugPub->varUsage[id + 1];
                 if (!v7)
                     MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\script\\scr_readwrite.cpp", 970, 0, "%s", "pos");
-                if (!*v3 && (p_w->type & VAR_MASK) != VAR_ARRAY)
+                if (!scrVarPub.saveIdMap[id] && (entryValue->w.type & VAR_MASK) != VAR_ARRAY)
                 {
                     if (!v2)
                     {
@@ -800,11 +796,7 @@ void Scr_SaveShutdown(bool savegame)
                     Scr_PrintPrevCodePos(CON_CHANNEL_PARSERSCRIPT, (char*)v7, 0);
                 }
             }
-            --v6;
-            p_w += 4;
-            ++v4;
-            ++v3;
-        } while (v6);
+        }
     }
     Scr_AddDebuggerRefs();
     if (v2)
@@ -946,7 +938,7 @@ void Scr_LoadPre(int sys, MemoryFile *memFile)
         if (v22)
             ++v22->extRefCount[v21];
         --v19;
-        p_entArrayId += 6;
+        p_entArrayId = (decltype(p_entArrayId))((char *)p_entArrayId + sizeof(g_classMap[0])); // was += 6 (12-byte i386 entry)
     } while (v19);
 }
 
@@ -1088,15 +1080,15 @@ static void CheckReferenceRange(unsigned int begin, unsigned int end)
     }
 }
 
+// Retail used i386 byte offsets here: varUsage + 0x70002 is &refCount[1] only
+// when varUsage holds 4-byte pointers, and the variable walk stepped 16-byte
+// VariableValueInternal entries. Index both by object id instead:
+// refCount[id] pairs with variableList[id + 1].
+static_assert(LAYOUT_32BIT(offsetof(scrVarDebugPub_t, refCount) == 0x70000));
+static_assert(LAYOUT_32BIT(sizeof(VariableValueInternal) == 16));
+
 static int CheckReferences()
 {
-    int v0; // r11
-    unsigned int i; // r31
-    int v2; // r30
-    int v3; // r9
-    unsigned int v4; // r7
-    VariableValueInternal_w *j; // r11
-
     if (!scrVarDebugPub || scrStringDebugGlob && scrStringDebugGlob->ignoreLeaks)
         return 1;
     memcpy(scrVarDebugPub->refCount, scrVarDebugPub->extRefCount, sizeof(scrVarDebugPub->refCount));
@@ -1105,30 +1097,24 @@ static int CheckReferences()
     CheckReferenceRange(0x8002u, 0x18000u);
     if (scrVarPub.developer)
     {
-        v0 = 1;
-        for (i = 458754; i < 0x80000; i += 2)
+        for (unsigned int id = 1; id < ARRAY_COUNT(scrVarDebugPub->refCount); ++id)
         {
-            v2 = v0 + 1;
-            if (Scr_IsVariableBreakpoint(v0 + 1))
-                ++*(_WORD *)((char *)scrVarDebugPub->varUsage + i);
-            v0 = v2;
+            if (Scr_IsVariableBreakpoint(id + 1))
+                ++scrVarDebugPub->refCount[id];
         }
     }
-    v3 = 458754;
-    v4 = 16;
-    for (j = &scrVarGlob.variableList[2].w;
-        (j->status & 0x60) == 0
-        || (j->type & VAR_MASK) < VAR_THREAD
-        || *(_WORD *)((char *)scrVarDebugPub->varUsage + v3)
-        && *(unsigned __int16 *)((char *)scrVarDebugPub->varUsage + v3) == (unsigned __int16)j[-1].status + 1;
-        j += 4)
+    for (unsigned int id = 1; id < ARRAY_COUNT(scrVarDebugPub->refCount); ++id)
     {
-        v4 += 16;
-        v3 += 2;
-        if (v4 >= 0x80000)
-            return 1;
+        const VariableValueInternal *entry = &scrVarGlob.variableList[id + 1];
+        const unsigned int refCount = scrVarDebugPub->refCount[id];
+
+        if ((entry->w.status & 0x60) == 0 || (entry->w.type & VAR_MASK) < VAR_THREAD)
+            continue;
+        if (refCount && refCount == entry->u.o.refCount + 1u)
+            continue;
+        return 0;
     }
-    return 0;
+    return 1;
 }
 
 void Scr_LoadShutdown()
@@ -1280,14 +1266,12 @@ void Scr_SaveSourceImmediate(SaveImmediate *save)
     unsigned int sourceBufferLookupLen = scrParserPub.sourceBufferLookupLen;
     if (sourceBufferLookupLen)
     {
-        bool *p_archive = &scrParserPub.sourceBufferLookup->archive;
-        do
+        // Retail stepped 44 bytes (the i386 SourceBufferInfo); index instead.
+        for (unsigned int lookupIndex = 0; lookupIndex < sourceBufferLookupLen; ++lookupIndex)
         {
-            if (*p_archive)
+            if (scrParserPub.sourceBufferLookup[lookupIndex].archive)
                 countOut = ++archivedCount;
-            --sourceBufferLookupLen;
-            p_archive += 44;  // sizeof(SourceBufferInfo) per IDA stride
-        } while (sourceBufferLookupLen);
+        }
     }
     SaveMemory_SaveWriteImmediate(&countOut, 4u, save);
 
@@ -1848,7 +1832,7 @@ void Scr_SavePost(MemoryFile *memFile)
     {
         WriteId(*p_entArrayId, 0, memFile);
         --v6;
-        p_entArrayId += 6;
+        p_entArrayId = (decltype(p_entArrayId))((char *)p_entArrayId + sizeof(g_classMap[0])); // was += 6 (12-byte i386 entry)
     } while (v6);
 }
 
@@ -1927,7 +1911,7 @@ void Scr_SavePre(int sys)
     {
         AddSaveObject(*p_entArrayId);
         --v2;
-        p_entArrayId += 6;
+        p_entArrayId = (decltype(p_entArrayId))((char *)p_entArrayId + sizeof(g_classMap[0])); // was += 6 (12-byte i386 entry)
     } while (v2);
     v4 = &scrVarGlob.variableList[scrVarPub.gameId + VARIABLELIST_CHILD_BEGIN];
     stackValue = v4->u.u.stackValue;
