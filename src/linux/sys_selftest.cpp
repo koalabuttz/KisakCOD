@@ -75,6 +75,42 @@ namespace
         Posix_DestroyEvent(event);
     }
 
+    void TestZeroTimeoutPollDoesNotSleep()
+    {
+        printf("zero-timeout poll\n");
+        PosixEvent *manual = Posix_CreateEvent(true, false);
+        PosixEvent *automatic = Posix_CreateEvent(false, false);
+
+        // Before the fix each of these polls blocked in pthread_cond_timedwait
+        // until the kernel timer fired (about 50 us with the default timer
+        // slack, so 1000 polls took 50 ms or more). An untimed check takes well
+        // under a microsecond; the bound leaves room for a loaded runner.
+        constexpr int kPolls = 1000;
+        int signalled = 0;
+        const uint64_t start = Posix_MonotonicNanoseconds();
+        for (int i = 0; i < kPolls; ++i)
+        {
+            signalled += Posix_WaitEvent(manual, 0) ? 1 : 0;
+            signalled += Posix_WaitEvent(automatic, 0) ? 1 : 0;
+        }
+        const uint64_t elapsedMsec = (Posix_MonotonicNanoseconds() - start) / 1000000ull;
+
+        Check(signalled == 0, "zero-timeout polls of unsignalled events report false");
+        printf("  %d polls in %llu ms\n", 2 * kPolls, (unsigned long long)elapsedMsec);
+        Check(elapsedMsec < 20, "zero-timeout polls return without sleeping");
+
+        // The poll still observes and consumes a signal exactly as a timed wait does.
+        Posix_SetEvent(automatic);
+        Check(Posix_WaitEvent(automatic, 0), "zero-timeout poll sees an auto-reset signal");
+        Check(!Posix_WaitEvent(automatic, 0), "zero-timeout poll consumed the auto-reset signal");
+        Posix_SetEvent(manual);
+        Check(Posix_WaitEvent(manual, 0), "zero-timeout poll sees a manual-reset signal");
+        Check(Posix_WaitEvent(manual, 0), "zero-timeout poll leaves a manual-reset signal set");
+
+        Posix_DestroyEvent(automatic);
+        Posix_DestroyEvent(manual);
+    }
+
     struct ManualResetWaiterArgs
     {
         PosixEvent *event;
@@ -454,6 +490,7 @@ int main()
     TestMonotonicClock();
     TestManualResetEvent();
     TestAutoResetEvent();
+    TestZeroTimeoutPollDoesNotSleep();
     TestManualResetWakesAllWaiters();
     TestTimedWaitAccuracy();
     TestRecursiveCriticalSection();
