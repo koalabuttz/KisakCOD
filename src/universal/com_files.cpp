@@ -1647,7 +1647,7 @@ void FS_AddIwdFilesForGameDirectory(char *path, char *pszGameFolder)
 int Sys_DirectoryHasContents(const char *directory)
 {
     _finddata64i32_t findinfo; // [esp+0h] [ebp-238h] BYREF
-    int findhandle; // [esp+12Ch] [ebp-10Ch]
+    intptr_t findhandle; // [esp+12Ch] [ebp-10Ch]
     char search[260]; // [esp+130h] [ebp-108h] BYREF
 
     Com_sprintf(search, 0x100u, "%s\\*", directory);
