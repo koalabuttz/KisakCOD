@@ -42,8 +42,9 @@ always come from your own install (`+set fs_basepath <game folder>`).
   are in review (PR 81). No 64-bit Windows binary links yet.
 - **arm64 client and Windows ARM64.** The aarch64 multiplayer client builds and
   passes its asset-free checks (qemu and hosted Arm CI) but has not drawn a
-  frame: no aarch64 DXVK build yet. Windows ARM64 is census only
-  ([arm64 track](linux-arm64.md)).
+  frame: no aarch64 DXVK build yet. Windows ARM64 builds sp, mp and dedi with
+  MSVC and starts up to the missing-game-data error on hosted Windows on Arm;
+  not run with game data ([arm64 track](linux-arm64.md)).
 - **HTTP downloads, voice chat and the remote script debugger** are missing from
   the Linux client; each answers as Windows does when that service is absent
   ([list](linux-mp-client.md#what-it-does-not-have-yet)).
