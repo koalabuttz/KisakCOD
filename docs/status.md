@@ -36,6 +36,9 @@ always come from your own install (`+set fs_basepath <game folder>`).
 - **Prediction.** The Linux client logs about five times as many prediction
   errors and misses as the Windows build does over the same kind of play
   (laptop vs a Windows PC, 2026-11-04). Being investigated.
+- **Most singleplayer levels.** Only killhouse and cargoship have run on Linux.
+  The other 19, mission changes and loading saves are untried; the sweep tool
+  and run plan are in [linux-sp-levels.md](linux-sp-levels.md).
 - **x86_64 singleplayer.** The 64-bit configuration refuses the SP game for now.
 - **Windows x64.** The MSVC x64 compile census runs on master
   ([census](linux-x64.md#windows-msvc-x64-census)); the first compile fixes
