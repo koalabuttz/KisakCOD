@@ -864,7 +864,7 @@ uint32_t FS_FOpenFileReadForThread(const char *filename, int *file, FsThread thr
                 v6 = impureIwd;
                 v4 = SEH_SafeTranslateString((char*)"EXE_UNPURECLIENTDETECTED");
                 v5 = va("%s %s", v4, v6);
-                Com_Error(ERR_DROP, v5);
+                Com_Error(ERR_DROP, "%s", v5);
             }
             if (!wasSkipped)
                 return -1;

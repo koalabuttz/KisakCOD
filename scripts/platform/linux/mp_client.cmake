@@ -213,7 +213,7 @@ set(KISAK_MP_CLIENT_OPTIONS
     ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing
     -ffunction-sections -fdata-sections
     -Wno-c++11-narrowing -Wno-invalid-token-paste
-    -Wno-ignored-attributes -Wno-format-security
+    -Wno-ignored-attributes -Werror=format-security
 )
 
 # The engine's PROF_SCOPED zones (src/universal/profile.h) become Tracy zones.

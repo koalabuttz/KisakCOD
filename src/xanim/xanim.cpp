@@ -2425,7 +2425,7 @@ void DObjDisplayAnim(const DObj_s* obj, const char* header)
 
     iassert(header);
     DObjDisplayAnimToBuffer(obj, header, buffer, 2048);
-    Com_Printf(CON_CHANNEL_ANIM, buffer);
+    Com_Printf(CON_CHANNEL_ANIM, "%s", buffer);
 }
 
 void XAnimCalcDelta(DObj_s* obj, uint32_t animIndex, float* rot, float* trans, bool bUseGoalWeight)

@@ -76,7 +76,7 @@ set(KISAK_NATIVE_D3D9_ENGINE_OPTIONS
     ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing
     -ffunction-sections -fdata-sections
     -Wno-c++11-narrowing -Wno-invalid-token-paste
-    -Wno-ignored-attributes -Wno-format-security
+    -Wno-ignored-attributes -Werror=format-security
 )
 
 # The boundary header alone, and the D3D9-bearing engine layouts once per view.

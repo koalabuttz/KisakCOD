@@ -174,7 +174,7 @@ set(KISAK_SP_GAME_OPTIONS
     ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing
     -ffunction-sections -fdata-sections
     -Wno-c++11-narrowing -Wno-invalid-token-paste
-    -Wno-ignored-attributes -Wno-format-security
+    -Wno-ignored-attributes -Werror=format-security
 )
 
 # KISAK_LINUX_TRACY is declared with the multiplayer client (mp_client.cmake).

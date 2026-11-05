@@ -116,7 +116,7 @@ ENGINE_FLAGS = (
     "-Wno-c++11-narrowing",
     "-Wno-invalid-token-paste",
     "-Wno-ignored-attributes",
-    "-Wno-format-security",
+    "-Werror=format-security",
 )
 
 TEST_DIR = "tests/linux_d3d9_boundary"

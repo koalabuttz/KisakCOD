@@ -71,7 +71,7 @@ set(KISAK_WORLD_FRONTEND_CLIENT_OPTIONS
     ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing
     -ffunction-sections -fdata-sections
     -Wno-c++11-narrowing -Wno-invalid-token-paste
-    -Wno-ignored-attributes -Wno-format-security
+    -Wno-ignored-attributes -Werror=format-security
 )
 # The synthetic test's renderer closure (scripts/tests/run_world_frontend_checks.py),
 # r_bsp.cpp for R_SetWorldPtr_FastFile, rb_logfile.cpp, the generated Material_Sort

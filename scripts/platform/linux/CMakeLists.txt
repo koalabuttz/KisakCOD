@@ -53,7 +53,7 @@ target_compile_options(KisakCOD-dedi PRIVATE
     ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing
     -ffunction-sections -fdata-sections
     -Wno-c++11-narrowing -Wno-invalid-token-paste
-    -Wno-ignored-attributes -Wno-format-security
+    -Wno-ignored-attributes -Werror=format-security
 )
 # Shared source files also contain client-only helpers. Discard unreachable
 # functions rather than linking their Windows presentation dependencies.
@@ -160,7 +160,7 @@ if(KISAK_BUILD_LINUX_CLIENT_CORE)
         ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing
         -ffunction-sections -fdata-sections
         -Wno-c++11-narrowing -Wno-invalid-token-paste
-        -Wno-ignored-attributes -Wno-format-security
+        -Wno-ignored-attributes -Werror=format-security
     )
 
     # Asset-free test for the real netchan command codec. It compiles the two
@@ -248,7 +248,7 @@ if(KISAK_BUILD_LINUX_CLIENT_CORE)
             ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing
             -ffunction-sections -fdata-sections
             -Wno-c++11-narrowing -Wno-invalid-token-paste
-            -Wno-ignored-attributes -Wno-format-security
+            -Wno-ignored-attributes -Werror=format-security
         )
         target_link_options(${client_test} PRIVATE -Wl,--gc-sections)
     endforeach()
@@ -540,7 +540,7 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
         target_compile_options(${window_target} PRIVATE
             -fms-extensions ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing
             -ffunction-sections -fdata-sections
-            -Wno-c++11-narrowing -Wno-invalid-token-paste -Wno-ignored-attributes -Wno-format-security
+            -Wno-c++11-narrowing -Wno-invalid-token-paste -Wno-ignored-attributes -Werror=format-security
         )
         target_link_libraries(${window_target} PRIVATE ${KISAK_SDL_TARGET} Threads::Threads)
         target_link_options(${window_target} PRIVATE -Wl,--gc-sections)
