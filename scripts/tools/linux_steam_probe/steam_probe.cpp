@@ -51,6 +51,9 @@ using CreateInterfaceFn = void *(*)(const char *);
 using CreateInterfaceRetFn = void *(*)(const char *, int *);
 using PipeFn = void (*)(HSteamPipe);
 using NextCallbackFn = bool (*)(HSteamPipe, CallbackMsg_t *);
+// steamclient.so's own exports. Some versions take a third out-parameter; a
+// caller-cleaned cdecl call with an extra valid pointer is safe either way.
+using ClientNextCallbackFn = bool (*)(HSteamPipe, CallbackMsg_t *, int32 *);
 
 struct Session
 {
@@ -63,6 +66,7 @@ struct Session
     PipeFn freeCallback = nullptr;
     PipeFn runFrame = nullptr;
     VoidFn shutdown = nullptr;
+    ClientNextCallbackFn clientNextCallback = nullptr;
 };
 
 void *Sym(void *lib, const char *name)
@@ -148,6 +152,9 @@ bool OpenClient(const char *path, Session *s)
         return false;
     }
     auto create = reinterpret_cast<CreateInterfaceRetFn>(Sym(s->lib, "CreateInterface"));
+    s->clientNextCallback = reinterpret_cast<ClientNextCallbackFn>(Sym(s->lib, "Steam_BGetCallback"));
+    s->freeCallback = reinterpret_cast<PipeFn>(Sym(s->lib, "Steam_FreeLastCallback"));
+    Sym(s->lib, "Steam_GetAPICallResult");
     if (!create)
         return false;
     int rc = 0;
@@ -162,9 +169,18 @@ bool OpenClient(const char *path, Session *s)
     return s->pipe && s->user;
 }
 
+bool NextCallback(Session *s, CallbackMsg_t *msg)
+{
+    if (s->manualDispatch)
+        return s->nextCallback(s->pipe, msg);
+    int32 call = 0;
+    return s->clientNextCallback(s->pipe, msg, &call);
+}
+
 void PumpCallbacks(Session *s, int ms, HAuthTicket ticket, CSteamID self)
 {
-    if (!s->manualDispatch)
+    const bool canRead = s->manualDispatch || (s->clientNextCallback && s->freeCallback);
+    if (!canRead)
     {
         std::printf("(no manual dispatch: waiting %d ms without reading callbacks)\n", ms);
         std::this_thread::sleep_for(std::chrono::milliseconds(ms));
@@ -173,9 +189,10 @@ void PumpCallbacks(Session *s, int ms, HAuthTicket ticket, CSteamID self)
     const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
     while (std::chrono::steady_clock::now() < end)
     {
-        s->runFrame(s->pipe);
+        if (s->manualDispatch)
+            s->runFrame(s->pipe);
         CallbackMsg_t msg;
-        while (s->nextCallback(s->pipe, &msg))
+        while (NextCallback(s, &msg))
         {
             if (msg.m_iCallback == GetAuthSessionTicketResponse_t::k_iCallback)
             {
