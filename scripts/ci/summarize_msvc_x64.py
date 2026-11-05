@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """Summarize an MSVC x64 compile of KisakCOD into the 64-bit census categories.
 
-The Windows "x64 compile census" job configures the normal CMake project with
-``-A x64`` and builds the SP, MP and dedicated targets, which do not compile or
-link for x64 yet. This reads the MSBuild output of those builds and reports what
-stopped them, deduplicated by source location, in the same categories as the
+The Windows "MSVC x64 build" job configures the normal CMake project with
+``-A x64`` and builds the SP, MP and dedicated targets. This reads the MSBuild
+output of those builds and reports their errors and 64-bit warnings,
+deduplicated by source location, in the same categories as the
 Linux x86_64 census (scripts/tests/run_x64_compile_census.py and
 docs/linux-x64.md). It is the Windows half of the x64 CI rows upstream issue 1
 asks for; MSVC also shows what Clang on Linux cannot, such as inline ``__asm``,
 which MSVC x64 rejects outright.
 
 Report only: the exit status is 0 whatever the compiler said, 1 when a log is
-missing or holds no MSBuild output at all (a broken job, not a finding).
+missing or holds no MSBuild output at all (a broken job, not a finding). The
+job itself fails when a target does not build.
 
 Usage:
     python scripts/ci/summarize_msvc_x64.py --root . --report-dir out \\

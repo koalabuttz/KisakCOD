@@ -191,14 +191,14 @@ jobs:
           retention-days: 1
 
   x64-census:
-    # The Windows x64 row of the CI matrix upstream issue 1 asks for, ahead of a
-    # working x64 build (docs/linux-x64.md). Configures the normal project with
-    # -A x64, builds the SP, MP and dedicated targets, which do not compile for
-    # x64 yet, and publishes what stopped them in the same categories as the
-    # Linux x86_64 census. Report only: compile errors never fail this job; a
-    # broken configure or a missing log does. It runs after a merge and on
-    # manual runs, not on every pull request push.
-    name: MSVC x64 compile census
+    # The Windows x64 row of the CI matrix upstream issue 1 asks for
+    # (docs/linux-x64.md). Configures the normal project with -A x64 and movies
+    # on (KISAK_WIN64_CINEMATICS, FFmpeg from vcpkg), builds the SP, MP and
+    # dedicated targets, and fails when any of them does not build. The
+    # summary sorts the remaining 64-bit warnings into the categories of the
+    # Linux x86_64 census. It runs after a merge and on manual runs, not on
+    # every pull request push.
+    name: MSVC x64 build
     if: github.event_name != 'pull_request'
     runs-on: windows-2022
     timeout-minutes: 110
@@ -267,17 +267,22 @@ jobs:
             -DKISAK_WIN64_CINEMATICS=ON -DKISAK_FFMPEG_ROOT="${{ env.KISAK_FFMPEG_ROOT }}"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Build x64 (expected to fail; logs kept)
+      # Every target is built and logged before the job fails, so one run
+      # shows all of them.
+      - name: Build x64
         run: |
           New-Item -ItemType Directory -Force artifacts | Out-Null
+          $failed = @()
           foreach ($target in @("KisakCOD-sp", "KisakCOD-mp", "KisakCOD-dedi")) {
             $log = Join-Path $PWD "artifacts\msvc-x64-$target.log"
             cmake --build build-x64 --config Release --target $target -- /m "/flp:LogFile=$log;Verbosity=minimal;Encoding=UTF-8"
             Write-Host "$target exit code: $LASTEXITCODE"
+            if ($LASTEXITCODE -ne 0) { $failed += $target }
           }
+          echo "X64_FAILED=$($failed -join ' ')" >> $env:GITHUB_ENV
           exit 0
 
-      - name: Summarize x64 compile
+      - name: Summarize x64 build
         run: |
           python scripts/ci/summarize_msvc_x64.py --root "${{ github.workspace }}" --report-dir artifacts/msvc-x64 `
             "KisakCOD-sp=artifacts/msvc-x64-KisakCOD-sp.log" `
@@ -288,6 +293,14 @@ jobs:
           # The summary shows a few sites per category; list every distinct error here.
           Get-Content artifacts/msvc-x64-*.log | Select-String -Pattern ': (fatal )?error ' |
             ForEach-Object { ($_.Line -replace '\[[^\]]*\.vcxproj\]', '').Trim() } | Sort-Object -Unique
+
+      - name: Fail when an x64 target did not build
+        run: |
+          if ($env:X64_FAILED) {
+            Write-Host "::error::Did not build for x64: $env:X64_FAILED"
+            exit 1
+          }
+          Write-Host "KisakCOD-sp, KisakCOD-mp and KisakCOD-dedi built for x64"
 
       - uses: actions/upload-artifact@v4
         if: always()
