@@ -832,7 +832,7 @@ void Path_DrawDebugLink(const pathnode_t *node, const int i, bool bShowAll)
 
     for (; reverseIndex < linkCount; ++reverseIndex)
     {
-        const pathnode_t *linked = (const pathnode_t *)((char *)gameWorldSp.path.nodes + (otherNode->constant.Links[reverseIndex].nodeNum << 7));
+        const pathnode_t *linked = &gameWorldSp.path.nodes[otherNode->constant.Links[reverseIndex].nodeNum];
         if (linked == node)
         {
             found = 1;
