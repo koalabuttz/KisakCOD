@@ -369,6 +369,7 @@ boundary rules and what a pass does not claim.
 
 ```sh
 python3 scripts/tests/run_client_compile_census.py --cxx clang++ --jobs 4
+python3 scripts/tests/run_client_compile_census.py --target sp --cxx clang++ --jobs 4
 python3 scripts/tests/test_client_compile_census.py
 python3 scripts/tests/test_linux_crt_shims.py --cxx clang++
 ```
@@ -381,7 +382,10 @@ regression. Each blocked entry names what the compiler stops on. The
 build-generated `buildnumber.h` is written by the build's own
 `scripts/extern/write_build_number.cmake` into a private directory, so a fresh
 checkout needs no prior build. It compiles, it does not link, so a pass is not a
-claim that a client binary builds. The CRT
+claim that a client binary builds. `--target sp` runs the same pass over the
+Windows `KisakCOD-sp` sources (`scripts/sp/sp_files.cmake`) with `KISAK_SP` in
+place of `KISAK_MP`, against `sp_compile_census_blocked.txt`; every entry on
+that list is also on the multiplayer list, for the same reason. The CRT
 shim test covers the MSVC CRT names `src/linux/compat.h` supplies to client
 sources (`_itoa`, the array `strcpy_s`, `_time64`, `_localtime64`), including the
 fail-closed cases; `run_linux_checks.py` runs it as `crt_shims`.

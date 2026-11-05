@@ -341,10 +341,11 @@ jobs:
     # No link, no engine build, no DXVK, no SDL, no GPU, no game data. OpenAL
     # headers are needed because the sound sources include <AL/al.h>. One job:
     # a front-end pass has no optimization level, so Debug and RelWithDebInfo
-    # would compile identically.
+    # would compile identically. A second pass covers the singleplayer game
+    # (KisakCOD-sp, --target sp) against sp_compile_census_blocked.txt.
     name: Asset-free client compile census
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout repository
@@ -381,6 +382,22 @@ jobs:
             --cxx clang++ --jobs 4 \
             --log-dir artifacts/client-census \
             2>&1 | tee artifacts/client-census.log
+
+      - name: Run singleplayer compile census
+        # The same pass over the Windows KisakCOD-sp sources with KISAK_SP
+        # (scripts/tests/sp_compile_census_blocked.txt). No SP target links yet.
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
+        shell: bash
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 -u scripts/tests/run_client_compile_census.py --target sp \
+            --cxx clang++ --jobs 4 \
+            --log-dir artifacts/sp-census \
+            2>&1 | tee artifacts/sp-census.log
 
       - name: Upload client census logs
         if: always()
@@ -1192,9 +1209,11 @@ jobs:
     # with an OpenAL stand-in as well, and run by
     # scripts/tests/test_linux_mp_client.py from temporary trees with no game
     # data, where it must stop at the file system check or at autoconfigure.
+    # The singleplayer game KisakCOD-sp (scripts/platform/linux/sp_game.cmake)
+    # is built and run the same way by scripts/tests/test_linux_sp_game.py.
     name: D3D9 device probe without a GPU ${{ matrix.config }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 75
+    timeout-minutes: 110
 
     strategy:
       fail-fast: false
@@ -1518,6 +1537,54 @@ jobs:
           python3 -u scripts/tests/test_linux_mp_client.py \
             --binary "$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-mp" \
             2>&1 | tee "artifacts/mp-client-run-${{ matrix.config }}.log"
+
+      - name: Build the singleplayer game against the stand-in D3D9 and OpenAL libraries
+        timeout-minutes: 40
+        shell: bash
+        run: |
+          set -euo pipefail
+          # KisakCOD-sp (scripts/platform/linux/sp_game.cmake): the singleplayer
+          # game from the KisakCOD-sp source lists, built like KisakCOD-mp in the
+          # same directory with the same stand-ins. Only built and inspected here.
+          openal="$RUNNER_TEMP/openal-unavailable/libopenal_unavailable.so"
+          cmake -S . -B "$BUILD_DIR" -DKISAK_BUILD_LINUX_SP_GAME=ON -DKISAK_OPENAL_LIBRARY="$openal" \
+            2>&1 | tee "artifacts/sp-game-${{ matrix.config }}.log"
+          cmake --build "$BUILD_DIR" --target KisakCOD-sp --parallel "$(nproc)" \
+            2>&1 | tee -a "artifacts/sp-game-${{ matrix.config }}.log"
+          game="$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-sp"
+          readelf -h "$game" | grep -Eq 'Class:[[:space:]]+ELF32'
+          readelf -h "$game" | grep -Eq 'Machine:[[:space:]]+Intel 80386'
+          readelf -d "$game" | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p' > "$RUNNER_TEMP/sp-game-needed.txt"
+          cat "$RUNNER_TEMP/sp-game-needed.txt"
+          grep -qx 'libSDL3.so.0' "$RUNNER_TEMP/sp-game-needed.txt"
+          grep -qx 'libd3d9_unavailable.so' "$RUNNER_TEMP/sp-game-needed.txt"
+          grep -qx 'libopenal_unavailable.so' "$RUNNER_TEMP/sp-game-needed.txt"
+          if grep -Ev '^(libSDL3\.so\.0|libd3d9_unavailable\.so|libopenal_unavailable\.so|libstdc\+\+\.so\.6|libm\.so\.6|libgcc_s\.so\.1|libc\.so\.6|libpthread\.so\.0|libdl\.so\.2)$' \
+              "$RUNNER_TEMP/sp-game-needed.txt"; then
+            echo "the singleplayer game needs a library beyond SDL3, D3D9, OpenAL and the runtimes" >&2
+            exit 1
+          fi
+          if nm -D --defined-only "$game" | awk '{print $3}' | grep -vx '_IO_stdin_used'; then
+            echo "the singleplayer game exports names to shared libraries" >&2
+            exit 1
+          fi
+
+      - name: Run the singleplayer game's fail-closed start
+        timeout-minutes: 10
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/d3d9-unavailable:$RUNNER_TEMP/openal-unavailable"
+          # From temporary trees with no game data: an empty one must be refused
+          # at the file system check, a stub one must stop at autoconfigure for
+          # want of configure.csv.
+          python3 -u scripts/tests/test_linux_sp_game.py \
+            --binary "$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-sp" \
+            2>&1 | tee "artifacts/sp-game-run-${{ matrix.config }}.log"
 
       - name: Upload device probe logs
         if: always()

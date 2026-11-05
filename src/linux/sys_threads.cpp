@@ -6,6 +6,9 @@
 #include <universal/profile.h>
 
 #include "sys_posix.h"
+#ifdef KISAK_SP
+#include <win32/win_local.h> // CRITSECT_START_SERVER, Sys_EnterCriticalSection
+#endif
 
 uint32_t Win_InitThreads();
 
@@ -35,6 +38,26 @@ static WinThreadLock s_threadLock;
 
 bool dediRenderHack = false;
 
+#ifdef KISAK_SP
+// Singleplayer's contexts (gfx_d3d/rb_backend.h): it adds a third worker, the
+// server thread, the stream and sound callback threads and the server demo
+// thread. Names as in src/qcommon/threads.cpp.
+static const char *s_threadNames[THREAD_CONTEXT_COUNT] =
+{
+    "MAIN",
+    "BACKEND",
+    "WORKER0",
+    "WORKER1",
+    "WORKER2",
+    "SERVER",
+    "CINEMATIC",
+    "TITLE_SERVER",
+    "DATABASE",
+    "STREAM",
+    "SNDSTREAMPACKETCALLBACK",
+    "SERVER_DEMO"
+};
+#else
 static const char *s_threadNames[THREAD_CONTEXT_COUNT] =
 {
     "Main",
@@ -45,6 +68,7 @@ static const char *s_threadNames[THREAD_CONTEXT_COUNT] =
     "Titleserver",
     "Database",
 };
+#endif
 
 namespace
 {
@@ -609,8 +633,23 @@ void Sys_WaitDatabaseThread()
     Sys_WaitForSingleObject((void **)&resumedDatabaseEvent);
 }
 
+#ifdef KISAK_SP
+// Singleplayer's server thread (below) must not start a server while the
+// database thread is registering assets; threads.cpp keeps this flag.
+int isDoingDatabaseInit;
+static PosixEvent *serverCompletedEvent;
+#endif
+
 void Sys_DatabaseCompleted()
 {
+#ifdef KISAK_SP
+    // As threads.cpp: hold off the server thread, then wait for it to finish
+    // the frame it is in.
+    Sys_EnterCriticalSection(CRITSECT_START_SERVER);
+    isDoingDatabaseInit = 1;
+    Sys_LeaveCriticalSection(CRITSECT_START_SERVER);
+    Sys_WaitForSingleObject((void **)&serverCompletedEvent);
+#endif
     EnsureEvent(&databaseCompletedEvent, true, true);
     Sys_SetEvent((void **)&databaseCompletedEvent);
 }
@@ -646,6 +685,11 @@ void Sys_NotifyDatabase()
 
 void Sys_DatabaseCompleted2()
 {
+#ifdef KISAK_SP
+    Sys_EnterCriticalSection(CRITSECT_START_SERVER);
+    isDoingDatabaseInit = 0;
+    Sys_LeaveCriticalSection(CRITSECT_START_SERVER);
+#endif
     EnsureEvent(&databaseCompletedEvent2, true, true);
     Sys_SetEvent((void **)&databaseCompletedEvent2);
 }
@@ -714,3 +758,205 @@ void Sys_ResetCinematicsHostOutstandingRequestEvent()
     EnsureEvent(&g_cinematicsHostOutstandingRequestEvent, true, false);
     Sys_ResetEvent((void **)&g_cinematicsHostOutstandingRequestEvent);
 }
+
+#ifdef KISAK_SP
+// ---------------------------------------------------------------------------
+// Singleplayer server thread and server demo thread
+//
+// Singleplayer runs its server in a thread of its own (SV_ServerThread in
+// server/sv_main.cpp), paced by these events. Each one mirrors the KISAK_SP
+// block of src/qcommon/threads.cpp, with the same reset modes and initial
+// states. Windows waits on some of them with WaitForSingleObject directly;
+// here every wait goes through the suspend-aware wrappers above.
+// ---------------------------------------------------------------------------
+
+static PosixEvent *wakeServerEvent;
+static PosixEvent *allowSendClientMessagesEvent;
+static PosixEvent *serverSnapshotEvent;
+static PosixEvent *clientMessageReceived;
+static PosixEvent *g_saveHistoryEvent;
+static PosixEvent *g_saveHistoryDoneEvent;
+
+volatile int g_timeout;
+
+bool Sys_IsServerThread()
+{
+    return threadId[THREAD_CONTEXT_SERVER] == Sys_GetCurrentThreadId();
+}
+
+int Sys_WaitStartServer(uint32_t timeout)
+{
+    Sys_EnterCriticalSection(CRITSECT_START_SERVER);
+    int started = Sys_WaitForSingleObjectTimeout((void **)&wakeServerEvent, timeout);
+    if (isDoingDatabaseInit)
+        started = 0;
+    else if (started)
+        Sys_ResetEvent((void **)&serverCompletedEvent);
+    Sys_LeaveCriticalSection(CRITSECT_START_SERVER);
+    return started;
+}
+
+void Sys_InitServerEvents()
+{
+    Sys_ResetEvent((void **)&wakeServerEvent);
+    Sys_ResetEvent((void **)&serverCompletedEvent);
+    Sys_SetEvent((void **)&allowSendClientMessagesEvent);
+    Sys_ResetEvent((void **)&serverSnapshotEvent);
+    Sys_SetEvent((void **)&clientMessageReceived);
+    g_timeout = 0;
+}
+
+void Sys_ClientMessageReceived()
+{
+    Sys_SetEvent((void **)&clientMessageReceived);
+}
+
+void Sys_ClearClientMessage()
+{
+    Sys_ResetEvent((void **)&clientMessageReceived);
+}
+
+int Sys_SpawnServerThread(void (*function)(uint32_t))
+{
+    wakeServerEvent = Posix_CreateEvent(true, false);
+    serverCompletedEvent = Posix_CreateEvent(true, false);
+    allowSendClientMessagesEvent = Posix_CreateEvent(true, false);
+    serverSnapshotEvent = Posix_CreateEvent(false, false);
+    clientMessageReceived = Posix_CreateEvent(true, true);
+    Sys_CreateThread(function, THREAD_CONTEXT_SERVER);
+    if (!threadHandle[THREAD_CONTEXT_SERVER])
+        return 0;
+    Sys_ResumeThread(THREAD_CONTEXT_SERVER);
+    return 1;
+}
+
+void Sys_WaitClientMessageReceived()
+{
+    PROF_SCOPED("wait receive msg");
+    Sys_WaitForSingleObject((void **)&clientMessageReceived);
+}
+
+void Sys_ServerSnapshotCompleted()
+{
+    Sys_SetEvent((void **)&serverSnapshotEvent);
+}
+
+bool Sys_WaitServerSnapshot()
+{
+    PROF_SCOPED("wait snapshot");
+    return Sys_WaitForSingleObjectTimeout((void **)&serverSnapshotEvent, 1);
+}
+
+void Sys_AllowSendClientMessages()
+{
+    Sys_SetEvent((void **)&allowSendClientMessagesEvent);
+}
+
+void Sys_DisallowSendClientMessages()
+{
+    Sys_ResetEvent((void **)&allowSendClientMessagesEvent);
+}
+
+int Sys_CanSendClientMessages()
+{
+    return Sys_WaitForSingleObjectTimeout((void **)&allowSendClientMessagesEvent, 0);
+}
+
+void Sys_ServerCompleted()
+{
+    Sys_SetEvent((void **)&serverCompletedEvent);
+}
+
+int Sys_ServerTimeout()
+{
+    const int time = g_timeout;
+    if (!time)
+        return 1;
+
+    const int timeMS = Sys_Milliseconds();
+    if (timeMS - time >= 0)
+    {
+        // As threads.cpp: move the deadline on by one 50 ms server frame, unless
+        // another thread already moved it.
+        const int nextTimeout = timeMS - (int)(-50.0f / com_timescaleValue);
+        __sync_bool_compare_and_swap(&g_timeout, time, nextTimeout);
+        return 1;
+    }
+    return 0;
+}
+
+void Sys_WakeServer()
+{
+    Sys_SetEvent((void **)&wakeServerEvent);
+}
+
+bool Sys_WaitServer()
+{
+    PROF_SCOPED("wait server");
+    return Sys_WaitForSingleObjectTimeout((void **)&serverCompletedEvent, 1);
+}
+
+void Sys_SleepServer()
+{
+    if (Sys_WaitForSingleObjectTimeout((void **)&wakeServerEvent, 0))
+    {
+        Sys_EnterCriticalSection(CRITSECT_START_SERVER);
+        Sys_ResetEvent((void **)&wakeServerEvent);
+        Sys_LeaveCriticalSection(CRITSECT_START_SERVER);
+    }
+}
+
+void Sys_Sleep(uint32_t msec)
+{
+    usleep(msec * 1000u);
+}
+
+void Sys_SetServerTimeout(int timeout)
+{
+    iassert(timeout >= 0);
+    iassert(com_timescaleValue);
+
+    if (timeout)
+    {
+        const int val = (int)((float)timeout / com_timescaleValue);
+        const int timeMS = Sys_Milliseconds();
+        if (!(g_timeout && timeMS - g_timeout < 0 && g_timeout - (timeMS + val) <= 0))
+            g_timeout = timeMS + val;
+    }
+    else
+    {
+        g_timeout = 0;
+    }
+}
+
+bool Sys_WaitForSaveHistoryDone()
+{
+    return Sys_WaitForSingleObjectTimeout((void **)&g_saveHistoryDoneEvent, 2000);
+}
+
+int Sys_SpawnServerDemoThread(void (*function)(uint32_t))
+{
+    g_saveHistoryEvent = Posix_CreateEvent(false, false);
+    g_saveHistoryDoneEvent = Posix_CreateEvent(false, false);
+    Sys_CreateThread(function, THREAD_CONTEXT_SERVER_DEMO);
+    if (!threadHandle[THREAD_CONTEXT_SERVER_DEMO])
+        return 0;
+    Sys_ResumeThread(THREAD_CONTEXT_SERVER_DEMO);
+    return 1;
+}
+
+void Sys_SetSaveHistoryEvent()
+{
+    Sys_SetEvent((void **)&g_saveHistoryEvent);
+}
+
+void Sys_WaitForSaveHistory()
+{
+    Sys_WaitForSingleObject((void **)&g_saveHistoryEvent);
+}
+
+void Sys_SetSaveHistoryDoneEvent()
+{
+    Sys_SetEvent((void **)&g_saveHistoryDoneEvent);
+}
+#endif // KISAK_SP

@@ -9,9 +9,9 @@ The evidence here is unchanged since its 2026-10-31 checkpoint. Native Steam
 ticket verification is still unimplemented, so a retail client on this build needs
 one of the explicit authentication opt-ins from that guide. The retail 1.7 and
 CoD4x 21.1 sessions were separate brief single-player tests on loopback; no
-two-human or mixed-client session has been run, and none of the experimental
-renderer work in progress makes a native Linux client playable. Current status:
-[2026-11-01 checkpoint](progress-2026-11-01.md).
+two-human or mixed-client session has been run. The native Linux client
+(`KisakCOD-mp`) plays only on its own listen server and does not change this
+evidence. Current status: [status](status.md).
 
 ## Targets and method
 

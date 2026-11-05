@@ -2,7 +2,7 @@
 
 > **Historical checkpoint — not current state.** The results below record one
 > branch on one date and are not rewritten here; do not read them as today's
-> status. Current: [2026-11-01 checkpoint](../progress-2026-11-01.md). Current guides:
+> status. Current: [status](../status.md). Current guides:
 > [Native Linux client](../linux-client.md),
 > [renderer validation](../linux-renderer-validation.md).
 

@@ -49,6 +49,11 @@ class ParsingTests(unittest.TestCase):
         self.assertIn("GFX_D3D", groups)
         self.assertIn("WIN32_SRC", census.EXCLUDED_GROUPS)
 
+    def test_the_real_sp_target_is_fully_covered(self):
+        groups = census.target_groups(census.SP_TARGET.read_text(encoding="utf-8"), census.SP_TARGET)
+        self.assertEqual(census.check_group_coverage(groups, "KisakCOD-sp"), [])
+        self.assertIn("GAME", groups)
+
     def test_group_drift_in_either_direction_is_reported(self):
         groups = list(census.CENSUS_GROUPS) + list(census.EXCLUDED_GROUPS)
         gained = census.check_group_coverage(groups + ["NEW_GROUP"])
@@ -111,6 +116,32 @@ class BlockedListTests(unittest.TestCase):
                 self.assertTrue((ROOT / path).is_file(), path)
                 self.assertTrue(path.endswith(".cpp"))
 
+    def test_the_checked_in_sp_list_parses_and_adds_no_blocker_of_its_own(self):
+        # Singleplayer is blocked only where multiplayer is, for the same reason.
+        sp = census.load_blocked(census.SP_BLOCKED_LIST)
+        mp = census.load_blocked(census.BLOCKED_LIST)
+        self.assertGreater(len(sp), 0)
+        for path, reason in sp.items():
+            with self.subTest(path=path):
+                self.assertTrue((ROOT / path).is_file(), path)
+                self.assertEqual(mp.get(path), reason)
+
+    def test_the_sp_profile_swaps_only_the_game_define(self):
+        profile = census.TARGETS["sp"]
+        self.assertIn("-DKISAK_SP", profile["defines"])
+        self.assertNotIn("-DKISAK_MP", profile["defines"])
+        self.assertEqual(set(profile["defines"]) - {"-DKISAK_SP"}, set(census.CLIENT_DEFINES) - {"-DKISAK_MP"})
+        self.assertEqual(profile["blocked"], census.SP_BLOCKED_LIST)
+        self.assertEqual(census.TARGETS["mp"]["blocked"], census.BLOCKED_LIST)
+
+    @unittest.skipUnless(shutil.which("cmake"), "cmake is required to list the sources")
+    def test_the_sp_listing_has_the_singleplayer_game(self):
+        sources = {census.relative(path) for _, path in census.list_sources("cmake", ["GAME"], "sp/sp_files.cmake")}
+        self.assertIn("src/game/actor.cpp", sources)
+        self.assertIn("src/game/g_save.cpp", sources)
+        mp = {census.relative(path) for _, path in census.list_sources("cmake", ["GAME"])}
+        self.assertNotIn("src/game/actor.cpp", mp)
+
     def test_platform_units_must_be_windows_platform_sources(self):
         win32 = [ROOT / "src" / "win32" / "win_storage.cpp", ROOT / "src" / "win32" / "win_main.cpp"]
         with tempfile.TemporaryDirectory(prefix="kisak-census-platform-") as workdir:
@@ -160,7 +191,7 @@ class FakeCompilerTests(unittest.TestCase):
         status, output = run_main(["--cxx", str(cxx), "--jobs", "8",
                                    "--blocked", str(self.blocked(["src/gfx_d3d/r_init.cpp"]))])
         self.assertEqual(status, 0, output)
-        self.assertIn("PASS: client compile census", output)
+        self.assertIn("PASS: KisakCOD-mp compile census", output)
 
     def test_an_unlisted_failure_is_a_regression(self):
         cxx = self.fake_compiler(failing=["src/gfx_d3d/r_dpvs.cpp"])
@@ -214,6 +245,18 @@ class FakeCompilerTests(unittest.TestCase):
         self.assertIn("kisak-census-generated-", includes[0])
         self.assertEqual(includes[1], str(ROOT / "src"))
 
+    def test_the_sp_target_compiles_with_kisak_sp_against_its_own_list(self):
+        cxx = self.fake_compiler(failing=["src/game/actor.cpp"])
+        log_dir = self.dir / "logs"
+        status, output = run_main(["--target", "sp", "--cxx", str(cxx), "--jobs", "8", "--log-dir", str(log_dir),
+                                   "--blocked", str(self.blocked(["src/game/actor.cpp"]))])
+        self.assertEqual(status, 0, output)
+        self.assertIn("KisakCOD-sp sources", output)
+        self.assertIn("PASS: KisakCOD-sp compile census", output)
+        command = (log_dir / "src_game_actor.cpp.log").read_text(encoding="utf-8").splitlines()[0].split()
+        self.assertIn("-DKISAK_SP", command)
+        self.assertNotIn("-DKISAK_MP", command)
+
     def test_a_missing_compiler_fails_instead_of_passing(self):
         status, output = run_main(["--cxx", str(self.dir / "no-such-cxx"),
                                    "--blocked", str(self.blocked([]))])
@@ -251,6 +294,8 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("python3 scripts/tests/test_client_compile_census.py", self.commands)
         self.assertIn("scripts/tests/run_client_compile_census.py", self.commands)
         self.assertIn("--cxx clang++", self.commands)
+        self.assertLess(names.index("Run client compile census"), names.index("Run singleplayer compile census"))
+        self.assertIn("--target sp", self.commands)
 
     def test_every_command_block_propagates_failure(self):
         for step in self.job["steps"]:

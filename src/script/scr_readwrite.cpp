@@ -1879,7 +1879,7 @@ void Scr_SavePost(MemoryFile *memFile)
 void AddSaveStack(const VariableStackBuffer *stackBuf)
 {
     int size; // r9
-    CONST char *buf; // r31
+    const char *buf; // r31
     int v4; // r10
     __int16 v5; // r29
     const VariableStackBuffer *v6; // r3

@@ -19,6 +19,7 @@
 #include <qcommon/net_chan_mp.h>
 #elif defined(KISAK_SP)
 #include <qcommon/net_chan.h>
+#include <qcommon/msg.h>
 #else
 #error The Linux network layer requires KISAK_MP or KISAK_SP
 #endif

@@ -28,6 +28,10 @@ Windows platform units the Linux client links as they are
 the MP target gains or loses fails the run until this file is updated, so the
 census cannot silently stop covering part of the client.
 
+``--target sp`` censuses the singleplayer game the same way: the Windows
+``KisakCOD-sp`` lists (``scripts/sp/sp_files.cmake``), ``KISAK_SP`` in place of
+``KISAK_MP``, against ``scripts/tests/sp_compile_census_blocked.txt``.
+
 What this does not claim
 ------------------------
 A file that passes was accepted by the compiler front end for i386 with these
@@ -41,6 +45,7 @@ Usage:
     python3 scripts/tests/run_client_compile_census.py --cxx clang++ --jobs 4 \\
         --log-dir artifacts/client-census
     python3 scripts/tests/run_client_compile_census.py --list   # print, compile nothing
+    python3 scripts/tests/run_client_compile_census.py --target sp   # KisakCOD-sp
 
 Exit status: 0 when every compile matches the list, 1 on any regression, stale
 entry, group drift, timeout or tool failure, 2 on a usage error.
@@ -64,6 +69,8 @@ BLOCKED_LIST = SCRIPTS / "tests" / "client_compile_census_blocked.txt"
 # engine groups (see that file's header).
 PLATFORM_LIST = SCRIPTS / "platform" / "linux" / "mp_client_platform_sources.txt"
 MP_TARGET = SCRIPTS / "mp" / "CMakeLists.txt"
+SP_TARGET = SCRIPTS / "sp" / "CMakeLists.txt"
+SP_BLOCKED_LIST = SCRIPTS / "tests" / "sp_compile_census_blocked.txt"
 DEFAULT_TIMEOUT = 300
 
 # Every variable the Windows KisakCOD-mp add_executable() expands. The census
@@ -91,6 +98,10 @@ CLIENT_DEFINES = (
     "-DKISAK_MP", "-DCINEMA", "-DUSE_SEPARATE_BLIT_TEXTURE", "-DKISAK_OPENAL",
     "-DRELEASE_ASSERTS", "-D_FILE_OFFSET_BITS=64", "-D_GNU_SOURCE",
 )
+# The singleplayer game (KisakCOD-sp) builds the same way with KISAK_SP in place
+# of KISAK_MP, as the Windows target defines it (scripts/sp/CMakeLists.txt).
+SP_DEFINES = ("-DKISAK_SP",) + tuple(define for define in CLIENT_DEFINES if define != "-DKISAK_MP")
+
 # The flags the native Linux targets use (scripts/platform/linux/CMakeLists.txt),
 # minus code generation: this is a front-end pass.
 CLIENT_FLAGS = (
@@ -98,6 +109,15 @@ CLIENT_FLAGS = (
     "-fno-strict-aliasing", "-Wno-c++11-narrowing", "-Wno-invalid-token-paste",
     "-Wno-ignored-attributes", "-Wno-format-security", "-fsyntax-only",
 )
+
+# What --target selects: the Windows target whose groups are censused, its own
+# source list on top of common_files.cmake, its definitions and its blocked list.
+TARGETS = {
+    "mp": {"name": "KisakCOD-mp", "cmake": MP_TARGET, "files": "mp/mp_files.cmake",
+           "defines": CLIENT_DEFINES, "blocked": BLOCKED_LIST},
+    "sp": {"name": "KisakCOD-sp", "cmake": SP_TARGET, "files": "sp/sp_files.cmake",
+           "defines": SP_DEFINES, "blocked": SP_BLOCKED_LIST},
+}
 
 # The build's generator for src/buildnumber.h (see generate_build_header).
 BUILD_HEADER_SCRIPT = SCRIPTS / "extern" / "write_build_number.cmake"
@@ -107,7 +127,7 @@ set(SRC_DIR "{src}")
 set(SCRIPTS_DIR "{scripts}")
 set(DEPS_DIR "{deps}")
 include("${{SCRIPTS_DIR}}/common_files.cmake")
-include("${{SCRIPTS_DIR}}/mp/mp_files.cmake")
+include("${{SCRIPTS_DIR}}/{files}")
 foreach(group {groups})
   foreach(path ${{${{group}}}})
     message("${{group}}|${{path}}")
@@ -120,14 +140,14 @@ class CensusError(Exception):
     """A tool or configuration failure, as opposed to a census mismatch."""
 
 
-def target_groups(cmake_text):
-    """The ``${VAR}`` names listed in the KisakCOD-mp add_executable() call."""
+def target_groups(cmake_text, target=MP_TARGET):
+    """The ``${VAR}`` names listed in the target's add_executable() call."""
     start = cmake_text.find("add_executable(${PROJECT_NAME}")
     if start < 0:
-        raise CensusError(f"{MP_TARGET}: no add_executable(${{PROJECT_NAME}} block")
+        raise CensusError(f"{target}: no add_executable(${{PROJECT_NAME}} block")
     end = cmake_text.find(")", start + len("add_executable("))
     if end < 0:
-        raise CensusError(f"{MP_TARGET}: unterminated add_executable block")
+        raise CensusError(f"{target}: unterminated add_executable block")
     block = cmake_text[start:end]
     groups = []
     for token in block.split():
@@ -136,15 +156,15 @@ def target_groups(cmake_text):
     return groups
 
 
-def check_group_coverage(groups):
+def check_group_coverage(groups, name="KisakCOD-mp"):
     """Every target group is either censused or excluded with a reason."""
     known = set(CENSUS_GROUPS) | set(EXCLUDED_GROUPS)
     problems = []
     for group in groups:
         if group not in known:
-            problems.append(f"KisakCOD-mp gained group {group}: census it or exclude it with a reason")
+            problems.append(f"{name} gained group {group}: census it or exclude it with a reason")
     for group in sorted(known - set(groups)):
-        problems.append(f"KisakCOD-mp no longer lists group {group}: remove it from the census")
+        problems.append(f"{name} no longer lists group {group}: remove it from the census")
     return problems
 
 
@@ -162,10 +182,14 @@ def load_platform_sources(path, win32_sources):
     return sources
 
 
-def list_sources(cmake, groups):
-    """Return [(group, absolute path)] for the .cpp sources of ``groups``."""
+def list_sources(cmake, groups, files="mp/mp_files.cmake"):
+    """Return [(group, absolute path)] for the .cpp sources of ``groups``.
+
+    ``files`` is the target's own list on top of common_files.cmake, relative to
+    scripts/: mp/mp_files.cmake for KisakCOD-mp, sp/sp_files.cmake for KisakCOD-sp.
+    """
     script = LIST_SCRIPT.format(src=SRC.as_posix(), scripts=SCRIPTS.as_posix(),
-                                deps=(ROOT / "deps").as_posix(), groups=" ".join(groups))
+                                deps=(ROOT / "deps").as_posix(), groups=" ".join(groups), files=files)
     with tempfile.TemporaryDirectory(prefix="kisak-census-") as workdir:
         path = Path(workdir) / "list.cmake"
         path.write_text(script, encoding="utf-8")
@@ -239,11 +263,11 @@ def generate_build_header(cmake, directory):
     return header
 
 
-def compile_one(cxx, source, timeout, generated_dir=None):
+def compile_one(cxx, source, timeout, generated_dir=None, defines=CLIENT_DEFINES):
     # The generated directory comes first, so <buildnumber.h> never resolves to a
     # stale header a local build left in src/.
     generated = ["-I", str(generated_dir)] if generated_dir else []
-    argv = [cxx, *CLIENT_DEFINES, *generated, "-I", str(SRC), "-I", str(ROOT / "deps"), *CLIENT_FLAGS,
+    argv = [cxx, *defines, *generated, "-I", str(SRC), "-I", str(ROOT / "deps"), *CLIENT_FLAGS,
             str(source)]
     process = subprocess.Popen(argv, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                text=True, start_new_session=True)
@@ -263,20 +287,26 @@ def main(argv=None):
     parser.add_argument("--jobs", type=int, default=os.cpu_count() or 2)
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, help="seconds per source")
     parser.add_argument("--log-dir", type=Path)
-    parser.add_argument("--blocked", type=Path, default=BLOCKED_LIST)
+    parser.add_argument("--target", choices=sorted(TARGETS), default="mp",
+                        help="mp: the multiplayer client KisakCOD-mp (default); sp: the singleplayer game KisakCOD-sp")
+    parser.add_argument("--blocked", type=Path, help="blocked list (default: the target's own)")
     parser.add_argument("--list", action="store_true", help="print the sources and exit")
     options = parser.parse_args(argv)
     if options.jobs < 1:
         parser.error("--jobs must be at least 1")
+    profile = TARGETS[options.target]
+    if options.blocked is None:
+        options.blocked = profile["blocked"]
 
     try:
-        groups = target_groups(MP_TARGET.read_text(encoding="utf-8"))
-        problems = check_group_coverage(groups)
+        groups = target_groups(profile["cmake"].read_text(encoding="utf-8"), profile["cmake"])
+        problems = check_group_coverage(groups, profile["name"])
         blocked = load_blocked(options.blocked)
         if shutil.which(options.cmake) is None:
             raise CensusError(f"{options.cmake} not found")
-        sources = list_sources(options.cmake, CENSUS_GROUPS)
-        sources += load_platform_sources(PLATFORM_LIST, [path for _, path in list_sources(options.cmake, ["WIN32_SRC"])])
+        sources = list_sources(options.cmake, CENSUS_GROUPS, profile["files"])
+        sources += load_platform_sources(
+            PLATFORM_LIST, [path for _, path in list_sources(options.cmake, ["WIN32_SRC"], profile["files"])])
     except (CensusError, OSError, subprocess.SubprocessError) as error:
         print(f"FAIL: census setup: {error}")
         return 1
@@ -294,7 +324,7 @@ def main(argv=None):
     if shutil.which(options.cxx) is None:
         print(f"FAIL: compiler {options.cxx} not found")
         return 1
-    print(f"census: {len(sources)} client sources, {options.jobs} jobs, {options.cxx}")
+    print(f"census: {len(sources)} {profile['name']} sources, {options.jobs} jobs, {options.cxx}")
     with tempfile.TemporaryDirectory(prefix="kisak-census-generated-") as generated_dir:
         try:
             generate_build_header(options.cmake, generated_dir)
@@ -303,7 +333,8 @@ def main(argv=None):
             return 1
         with ThreadPoolExecutor(max_workers=options.jobs) as pool:
             outcomes = list(pool.map(
-                lambda item: (item, compile_one(options.cxx, item[1], options.timeout, generated_dir)), sources))
+                lambda item: (item, compile_one(options.cxx, item[1], options.timeout, generated_dir,
+                                                profile["defines"])), sources))
 
     results = {}
     timeouts = []
@@ -338,7 +369,7 @@ def main(argv=None):
         print(f"FAIL: timeout: {path}")
     if problems or regressions or stale or timeouts:
         return 1
-    print("PASS: client compile census matches the blocked list")
+    print(f"PASS: {profile['name']} compile census matches the blocked list")
     return 0
 
 

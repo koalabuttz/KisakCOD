@@ -1307,6 +1307,10 @@ bool R_Cinematic_IsPending()
 }
 
 #else
+// No movie ever plays without CINEMA; the singleplayer subtitle code
+// (ui_shared.cpp) still names the state, which stays empty.
+CinematicGlob cinematicGlob;
+
 void R_Cinematic_Init() { /* THUNK */ }
 void R_Cinematic_Shutdown() { /* THUNK */ }
 void R_Cinematic_StartPlayback(char *name, uint32_t playbackFlags, float volume) { /* THUNK */ }

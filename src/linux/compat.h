@@ -222,6 +222,11 @@ static_assert(sizeof(SYSTEMTIME) == 16, "SYSTEMTIME layout must match winbase.h"
 static_assert(sizeof(POINT) == 8, "POINT must be two 32-bit LONGs, as in windef.h");
 static_assert(offsetof(POINT, y) == 4, "POINT.y offset");
 
+// MSVC's CRT names its FILE structure _iobuf, and the singleplayer demo and
+// history code (server/server.h, sv_demo.cpp) spells that name. glibc's FILE
+// is the same opaque stdio handle under another tag.
+typedef FILE _iobuf;
+
 // ---------------------------------------------------------------------------
 // Microsoft CRT compatibility
 // ---------------------------------------------------------------------------

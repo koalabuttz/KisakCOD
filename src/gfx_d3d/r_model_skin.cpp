@@ -154,7 +154,10 @@ void R_SkinXModelCmd(_WORD *data)
                     skinVertNormalOut = &gfxBuf.skinnedCacheNormalsAddr[skinnedSurf->skinnedCachedOffset >> 5];
                 // The union holds last frame's cache offset here (R_SkinSceneDObjModels),
                 // written as an int; on x86_64 the pointer's upper half is not part of it.
-                if (skinnedSurf->oldSkinnedCachedOffset)
+                // A model with no usable history gets 0x80000001 plus its surface offset,
+                // which is negative: skin it without last frame's normals. Singleplayer
+                // keeps no history at all, so every surface takes that path there.
+                if (skinVertNormalOut && skinnedSurf->oldSkinnedCachedOffset >= 0)
                     skinVertNormalIn = &gfxBuf.oldSkinnedCacheNormalsAddr[skinnedSurf->oldSkinnedCachedOffset >> 5];
             }
             R_SkinXSurfaceSkinnedSse(xsurf, &boneSkelMats[boneIndex], skinVertNormalIn, skinVertNormalOut, skinVerticesOut);

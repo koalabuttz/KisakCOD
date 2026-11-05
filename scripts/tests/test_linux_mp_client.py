@@ -122,7 +122,7 @@ def source_checks(checker):
     main_code = MAIN.read_text(encoding="utf-8")
     quit_body = main_code[main_code.index("void Sys_Quit()"):]
     quit_body = quit_body[:quit_body.index("\n}\n")]
-    checker.require(re.search(r"#ifdef KISAK_LINUX_MP_CLIENT\s+(//[^\n]*\s+)*IN_Shutdown\(\);\s+Key_Shutdown\(\);\s+#endif",
+    checker.require(re.search(r"#ifdef KISAK_LINUX_GAME_CLIENT\s+(//[^\n]*\s+)*IN_Shutdown\(\);\s+Key_Shutdown\(\);\s+#endif",
                               quit_body) is not None
                     and quit_body.index("Key_Shutdown();") < quit_body.index("SL_Shutdown();"),
                     "the client's quit frees the key bindings before the script string leak check")
