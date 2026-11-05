@@ -14,6 +14,8 @@ what is still missing. Build steps are in the
 - [Singleplayer game](linux-sp-game.md): `KisakCOD-sp` (i386), built like the
   multiplayer client from the singleplayer lists; killhouse and cargoship load
   and play
+- [Singleplayer levels](linux-sp-levels.md): what the other levels use, the
+  level sweep tool and the laptop run plan
 - [Cinematics](linux-cinematics.md): Bink movies through an FFmpeg-backed shim
   (`KISAK_LINUX_CINEMATICS`)
 

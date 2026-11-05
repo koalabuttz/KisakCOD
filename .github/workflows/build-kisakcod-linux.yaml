@@ -285,6 +285,8 @@ jobs:
           python3 scripts/tests/test_float_int_rounding.py
           python3 scripts/tests/test_retail_float_int_scan.py
           python3 scripts/tests/test_openal_sound_formats.py
+          python3 scripts/tests/test_openal_stream_seek.py
+          python3 scripts/tests/test_linux_sp_level_sweep.py
 
       - name: Run asset-free native checks
         timeout-minutes: 30
