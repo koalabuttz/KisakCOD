@@ -956,12 +956,13 @@ static void Scr_AddDebugExprValueRefCount(unsigned __int16 *refCount, sval_u *va
         ++refCount[val[1].type];
 }
 
-static void Scr_AddDebugExprRefCount(unsigned __int16 *refCount, sval_u *debugExprHead)
+// Walk the list the way Scr_ClearDebugExpr does: each debugger_sval_s link is
+// followed by its value (see Scr_AllocDebugExpr). Retail read the link as a
+// 4-byte sval_u and took the next sval_u as the value, which is i386-only.
+static void Scr_AddDebugExprRefCount(unsigned __int16 *refCount, debugger_sval_s *debugExprHead)
 {
-    sval_u *i; // r31
-
-    for (i = debugExprHead; i; i = (sval_u *)i->type)
-        Scr_AddDebugExprValueRefCount(refCount, i + 1);
+    for (debugger_sval_s *expr = debugExprHead; expr; expr = expr->next)
+        Scr_AddDebugExprValueRefCount(refCount, (sval_u *)((char *)expr + sizeof(debugger_sval_s)));
 }
 
 static void Scr_AddDebugRefCountChildren(Scr_WatchElement_s *element, unsigned __int16 *refCount)
@@ -984,7 +985,7 @@ static void Scr_AddDebugRefCount(unsigned __int16 *refCount)
         {
             if (!i->expr.exprHead)
                 MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\script\\scr_debugger.cpp", 7231, 0, "%s", "expr->exprHead");
-            Scr_AddDebugExprRefCount(refCount, (sval_u*)i->expr.exprHead);
+            Scr_AddDebugExprRefCount(refCount, i->expr.exprHead);
         }
         Scr_AddDebugRefCountChildren(i, refCount);
     }
