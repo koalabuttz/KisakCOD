@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "r_image.h"
+#include "rhi/r_rhi.h"
 #include <qcommon/mem_track.h>
 #include <qcommon/qcommon.h>
 #include <universal/com_memory.h>
@@ -99,7 +100,7 @@ void R_DelayLoadImage(XAssetHeader header)
                 Image_AssignDefaultTexture(image);
             if (!image->texture.basemap)
             {
-                HRESULT hr = dx.device->TestCooperativeLevel();
+                HRESULT hr = R_HW_TestCooperativeLevel(dx.device);
                 if (hr != 0x88760868 && hr != 0x88760869)
                     Com_Error(ERR_DROP, "Couldn't load image '%s'\n", image->name);
             }
@@ -185,7 +186,7 @@ void Image_Release(GfxImage *image)
     if (image->texture.basemap)
     {
         //image->texture.basemap->Release(image->texture.basemap);
-        image->texture.basemap->Release();
+        R_HW_Release(image->texture.basemap);
         image->texture.basemap = 0;
         image->cardMemory.platform[0] = 0;
         image->cardMemory.platform[1] = 0;
@@ -655,7 +656,7 @@ IDirect3DSurface9 *Image_GetSurface(GfxImage *image)
         //    (GfxTexture)image->texture.basemap,
         //    0,
         //    &surface);
-        hr = image->texture.map->GetSurfaceLevel(0, &surface);
+        hr = R_HW_GetSurfaceLevel(image->texture.map, 0, &surface);
         if (hr < 0)
         {
             do
@@ -1042,7 +1043,7 @@ char R_DuplicateTexture(GfxImage *dstImage, const GfxImage *srcImage)
         return 0;
     dstImage->texture.basemap = srcImage->texture.basemap;
     //dstImage->texture.basemap->AddRef(dstImage->texture.basemap);
-    dstImage->texture.basemap->AddRef();
+    R_HW_AddRef(dstImage->texture.basemap);
     return 1;
 }
 
@@ -1149,20 +1150,20 @@ _D3DFORMAT R_ImagePixelFormat(const GfxImage *image)
     {
         iassert( image->texture.map );
 
-        image->texture.map->GetLevelDesc(0, &surfaceDesc);
+        R_HW_GetLevelDesc(image->texture.map, 0, &surfaceDesc);
         return surfaceDesc.Format;
     }
 
     if (mapType == MAPTYPE_3D)
     {
         iassert( image->texture.volmap );
-        image->texture.volmap->GetLevelDesc(0, &volumeDesc);
+        R_HW_GetLevelDesc(image->texture.volmap, 0, &volumeDesc);
         return volumeDesc.Format;
     }
     if (mapType == MAPTYPE_CUBE)
     {
         iassert( image->texture.cubemap );
-        image->texture.cubemap->GetLevelDesc(0, &surfaceDesc);
+        R_HW_GetLevelDesc(image->texture.cubemap, 0, &surfaceDesc);
         return surfaceDesc.Format;
     }
 
@@ -1194,7 +1195,7 @@ void Image_CreateCubeTexture_PC(
     image->mapType = MAPTYPE_CUBE;
     if (!gfxMetrics.canMipCubemaps)
         mipmapCount = 1;
-    hr = dx.device->CreateCubeTexture(edgeLen, mipmapCount, 0, imageFormat, D3DPOOL_MANAGED, (IDirect3DCubeTexture9 **)&image->texture, 0);
+    hr = R_HW_CreateCubeTexture(dx.device, edgeLen, mipmapCount, 0, imageFormat, D3DPOOL_MANAGED, (IDirect3DCubeTexture9 **)&image->texture, 0);
     if (hr < 0)
     {
         v4 = R_ErrorDescription(hr);
@@ -1249,11 +1250,11 @@ void Image_Create3DTexture_PC(
     usage = Image_GetUsage(imageFlags, imageFormat);
     if ((imageFlags & IMG_FLAG_SYSTEMMEM) != 0)
     {
-        v7 = dx.device->CreateVolumeTexture(width, height, depth, mipmapCount, 0, imageFormat, D3DPOOL_SYSTEMMEM, (IDirect3DVolumeTexture9 **)&image->texture, 0);
+        v7 = R_HW_CreateVolumeTexture(dx.device, width, height, depth, mipmapCount, 0, imageFormat, D3DPOOL_SYSTEMMEM, (IDirect3DVolumeTexture9 **)&image->texture, 0);
     }
     else
     {
-        v7 = dx.device->CreateVolumeTexture(width, height, depth, mipmapCount, 0, imageFormat, (_D3DPOOL)(usage == 0), (IDirect3DVolumeTexture9 **)&image->texture, 0);
+        v7 = R_HW_CreateVolumeTexture(dx.device, width, height, depth, mipmapCount, 0, imageFormat, (_D3DPOOL)(usage == 0), (IDirect3DVolumeTexture9 **)&image->texture, 0);
     }
     hr = v7;
     if (v7 < 0)
@@ -1342,7 +1343,7 @@ void Image_Create2DTexture_PC(
     image->mapType = MAPTYPE_2D;
     usage = Image_GetUsage(imageFlags, imageFormat);
     if ((imageFlags & IMG_FLAG_SYSTEMMEM) != 0)
-        v6 = dx.device->CreateTexture(
+        v6 = R_HW_CreateTexture(dx.device,
             width,
             height,
             mipmapCount,
@@ -1352,7 +1353,7 @@ void Image_Create2DTexture_PC(
             (IDirect3DTexture9 **)&image->texture,
             0);
     else
-        v6 = dx.device->CreateTexture(
+        v6 = R_HW_CreateTexture(dx.device,
             width,
             height,
             mipmapCount,

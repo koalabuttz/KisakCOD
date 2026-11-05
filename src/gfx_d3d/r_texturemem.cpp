@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "r_texturemem.h"
+#include "rhi/r_rhi.h"
 #include <universal/assertive.h>
 #include "r_init.h"
 
@@ -159,7 +160,7 @@ uint32_t R_DetectCurrentTextureMemory()
 
     iassert( dx.device );
     vidMemInMegs = R_VideoMemory();
-    texMemInMegs = dx.device->GetAvailableTextureMem() >> 20;
+    texMemInMegs = R_HW_GetAvailableTextureMem(dx.device) >> 20;
     if (vidMemInMegs)
     {
         Com_Printf(

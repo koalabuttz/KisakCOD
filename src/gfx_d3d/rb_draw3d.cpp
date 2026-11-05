@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "rb_draw3d.h"
+#include "rhi/r_rhi.h"
 #include "rb_logfile.h"
 #include "r_dvars.h"
 #include "r_state.h"
@@ -33,7 +34,7 @@ void R_HW_InsertFence(IDirect3DQuery9 **fence)
     {
         if (r_logFile && r_logFile->current.integer)
             RB_LogPrint("(*fence)->Issue( (1 << 0) )\n");
-        hr = (*fence)->Issue(D3DISSUE_END);
+        hr = R_HW_Issue(*fence, D3DISSUE_END);
         if (hr < 0)
         {
             do

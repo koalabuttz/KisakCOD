@@ -49,6 +49,7 @@ what is still missing. Build steps are in the
 
 ## Linux renderer
 
+- [Renderer graphics interface](renderer-interface.md): every Direct3D 9 call the renderer makes goes through `src/gfx_d3d/rhi/r_rhi.h` (all platforms), and a CI check keeps it that way
 - [Renderer validation and limitations](linux-renderer-validation.md)
 - [Native D3D9 device experiment](linux-renderer-probe.md)
 - [Packaged world-surface replay](linux-world-surface-probe.md)

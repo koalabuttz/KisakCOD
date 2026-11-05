@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "rb_sky.h"
+#include "rhi/r_rhi.h"
 #include <qcommon/mem_track.h>
 #include "r_init.h"
 #include "rb_backend.h"
@@ -62,7 +63,7 @@ uint32_t RB_CalcSunSpriteSamples()
     {
         if (r_logFile && r_logFile->current.integer)
             RB_LogPrint("dx.device->BeginScene()\n");
-        v8 = dx.device->BeginScene();
+        v8 = R_HW_BeginScene(dx.device);
         if (v8 < 0)
         {
             do
@@ -79,7 +80,7 @@ uint32_t RB_CalcSunSpriteSamples()
     {
         if (r_logFile && r_logFile->current.integer)
             RB_LogPrint("occlusionQuery->Issue( (1 << 1) )\n");
-        v7 = occlusionQuery->Issue(2);
+        v7 = R_HW_Issue(occlusionQuery, 2);
         if (v7 < 0)
         {
             do
@@ -98,7 +99,7 @@ uint32_t RB_CalcSunSpriteSamples()
     {
         if (r_logFile && r_logFile->current.integer)
             RB_LogPrint("occlusionQuery->Issue( (1 << 0) )\n");
-        v6 = occlusionQuery->Issue(1);
+        v6 = R_HW_Issue(occlusionQuery, 1);
         if (v6 < 0)
         {
             do
@@ -113,7 +114,7 @@ uint32_t RB_CalcSunSpriteSamples()
     {
         if (r_logFile && r_logFile->current.integer)
             RB_LogPrint("dx.device->EndScene()\n");
-        v5 = dx.device->EndScene();
+        v5 = R_HW_EndScene(dx.device);
         if (v5 < 0)
         {
             do
@@ -126,7 +127,7 @@ uint32_t RB_CalcSunSpriteSamples()
     } while (alwaysfails);
     while (1)
     {
-        hr = occlusionQuery->GetData(&sampleCount, 4u, 1u);
+        hr = R_HW_GetData(occlusionQuery, &sampleCount, 4u, 1u);
         if (hr != 1)
             break;
         Sleep(0);
@@ -223,7 +224,7 @@ void RB_DrawSunQuerySprite(SunFlareDynamic *sunFlare)
         {
             RB_HW_BeginOcclusionQuery(sunFlare->sunQuery[queryIndex]);
             RB_EndTessSurface();
-            sunFlare->sunQuery[queryIndex]->Issue(1);
+            R_HW_Issue(sunFlare->sunQuery[queryIndex], 1);
             sunFlare->sunQueryIssued[queryIndex] = 1;
         }
     }
@@ -236,7 +237,7 @@ void RB_DrawSunQuerySprite(SunFlareDynamic *sunFlare)
 void RB_HW_BeginOcclusionQuery(IDirect3DQuery9 *query)
 {
     iassert(query);
-    query->Issue(D3DISSUE_BEGIN);
+    R_HW_Issue(query, D3DISSUE_BEGIN);
 }
 
 uint32_t RB_HW_ReadOcclusionQuery(IDirect3DQuery9 *query)
@@ -246,7 +247,7 @@ uint32_t RB_HW_ReadOcclusionQuery(IDirect3DQuery9 *query)
 
     while (1)
     {
-        hr = query->GetData(&pixelCount, 4u, 1u);
+        hr = R_HW_GetData(query, &pixelCount, 4u, 1u);
         if (hr != 1)
             break;
         Sleep(0);

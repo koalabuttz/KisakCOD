@@ -1,29 +1,14 @@
-# Direct3D 9 calls that may stay outside the renderer's graphics interface
-# (src/gfx_d3d/rhi). Read by scripts/tests/check_rhi_boundary.py.
+# Calls outside the renderer's graphics interface (src/gfx_d3d/rhi) that the
+# Direct3D 9 boundary check counts but that are not Direct3D 9 calls. Read by
+# scripts/tests/check_rhi_boundary.py.
 #
-# Format: `path: count: reason`. The check fails when a file has more direct
+# Format: `path: count: reason`. The check fails when a file has more matching
 # calls than its entry allows (a regression) and when it has fewer (a stale
 # entry: lower the count or delete the line in the same change).
 #
-# Not moved yet (renderer plan M1a, in progress): each of these files' calls
-# moves behind r_rhi.h in a later commit of the same series.
-src/gfx_d3d/r_buffers.cpp: 13: not moved yet
-src/gfx_d3d/r_cinematic.cpp: 2: not moved yet
-src/gfx_d3d/r_image.cpp: 12: not moved yet
-src/gfx_d3d/r_image_load_common.cpp: 6: not moved yet
-src/gfx_d3d/r_init.cpp: 28: not moved yet
-src/gfx_d3d/r_material.cpp: 3: not moved yet
-src/gfx_d3d/r_material_load_obj.cpp: 8: not moved yet
-src/gfx_d3d/r_model_lighting.cpp: 4: not moved yet
-src/gfx_d3d/r_rendertarget.cpp: 16: not moved yet
-src/gfx_d3d/r_scene.cpp: 1: not moved yet
-src/gfx_d3d/r_screenshot.cpp: 17: not moved yet
-src/gfx_d3d/r_setstate_d3d.cpp: 1: not moved yet
-src/gfx_d3d/r_texturemem.cpp: 5: not moved yet
-src/gfx_d3d/r_utils.cpp: 1: not moved yet
-src/gfx_d3d/rb_backend.cpp: 20: not moved yet
-src/gfx_d3d/rb_draw3d.cpp: 1: not moved yet
-src/gfx_d3d/rb_imagetouch.cpp: 2: not moved yet
-src/gfx_d3d/rb_pixelcost.cpp: 1: not moved yet
-src/gfx_d3d/rb_sky.cpp: 8: not moved yet
-src/gfx_d3d/rb_uploadshaders.cpp: 1: not moved yet
+# The check matches D3D9 method names, and other COM objects share some of
+# them. Every renderer call to the Direct3D 9 API itself goes through
+# rhi/r_rhi.h; add a forwarder or an operation there instead of a line here.
+src/gfx_d3d/r_material_load_obj.cpp: 6: Release on the D3DX shader compiler's ID3DXBuffer and ID3DXConstantTable results, not Direct3D 9 objects
+src/gfx_d3d/r_screenshot.cpp: 1: Release on the IStream the GDI+ JPEG writer saves into (Windows only), not a Direct3D 9 object
+src/gfx_d3d/r_texturemem.cpp: 4: Release on DirectDraw's IDirectDraw7, used only to ask for the video memory size

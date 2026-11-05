@@ -31,6 +31,7 @@ src/gfx_d3d/rb_imagetouch.cpp: IDirect3DDevice9 draw methods
 src/gfx_d3d/rb_pixelcost.cpp: IDirect3DQuery9 issue, D3DISSUE_END
 src/gfx_d3d/rb_sky.cpp: IDirect3DDevice9/IDirect3DQuery9 methods
 src/gfx_d3d/rb_uploadshaders.cpp: IDirect3DDevice9 draw, D3DPT_TRIANGLELIST
+src/gfx_d3d/rhi/r_rhi_d3d9_calls.cpp: the D3D9 implementation of rhi/r_rhi.h; one forwarder per Direct3D 9 interface method the renderer calls
 src/gfx_d3d/rhi/r_rhi_d3d9_state.cpp: the D3D9 implementation of rhi/r_rhi.h; IDirect3DDevice9 state, shader and draw methods
 
 # --- Renderer, but not a D3D9 boundary problem. ---

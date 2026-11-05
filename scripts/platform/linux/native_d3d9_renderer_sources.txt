@@ -33,4 +33,5 @@ src/gfx_d3d/rb_imagetouch.cpp
 src/gfx_d3d/rb_pixelcost.cpp
 src/gfx_d3d/rb_sky.cpp
 src/gfx_d3d/rb_uploadshaders.cpp
+src/gfx_d3d/rhi/r_rhi_d3d9_calls.cpp
 src/gfx_d3d/rhi/r_rhi_d3d9_state.cpp

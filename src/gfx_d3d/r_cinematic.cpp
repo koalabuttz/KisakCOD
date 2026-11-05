@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "r_cinematic.h"
+#include "rhi/r_rhi.h"
 
 #include <universal/assertive.h>
 #include <qcommon/threads.h>
@@ -1220,12 +1221,12 @@ void R_Cinematic_ClearTexture(IDirect3DTexture9 *texture, int width, int height,
     HRESULT hr; // [esp+0h] [ebp-Ch]
     _D3DLOCKED_RECT lockedRect; // [esp+4h] [ebp-8h] BYREF
 
-    hr = texture->LockRect(0, &lockedRect, 0, 0x2000u);
+    hr = R_HW_LockRect(texture, 0, &lockedRect, 0, 0x2000u);
     if (hr >= 0)
     {
         iassert( lockedRect.Pitch >= width );
         memset((uint8_t *)lockedRect.pBits, clearValue, lockedRect.Pitch * height);
-        texture->UnlockRect(0);
+        R_HW_UnlockRect(texture, 0);
     }
     else
     {
