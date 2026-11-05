@@ -535,9 +535,9 @@ char g_module[MAX_PATH];
 
 #include <intrin.h>
 
-#if defined(_M_X64)
-// x64 MSVC has no inline assembler and does not keep a frame-pointer chain, so
-// ask Windows for the return addresses. The 32-bit map-file lookup below does
+#if defined(_M_X64) || defined(_M_ARM64)
+// x64 and ARM64 MSVC have no inline assembler, and x64 does not keep a
+// frame-pointer chain, so ask Windows for the return addresses. The 32-bit map-file lookup below does
 // not apply: the addresses are printed as they are.
 int DoStackTrace(char* msg, int msgSize, int nIgnore)
 {

@@ -327,3 +327,112 @@ jobs:
           path: ${{ github.workspace }}/bin
           compression-level: 9
           retention-days: 3
+
+  arm64:
+    # Windows on Arm (docs/linux-arm64.md): MSVC ARM64 build of the SP, MP and
+    # dedicated games on GitHub's native Arm runner (free for public
+    # repositories), the same missing-game-assets start-up check as the other
+    # Windows jobs, and a check that MSVC fused no multiply-adds into engine
+    # code (float results must match x86, as on Arm Linux). Movies stay off: no
+    # FFmpeg here. No game data.
+    name: MSVC ARM64 build
+    runs-on: windows-11-arm
+    timeout-minutes: 90
+
+    env:
+      NUGET_PACKAGES: ${{ github.workspace }}\.nuget\packages
+      DXSDK_PKG: Microsoft.DXSDK.D3DX
+      DXSDK_VER: 9.29.952.8
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Only the D3DX9 headers are used: the package has no ARM64 libraries.
+      - name: Install .NET SDK (for nuget usage)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.x'
+
+      - name: Restore DXSDK NuGet package
+        run: |
+          dotnet new classlib -o dxsdk-temp
+          cd dxsdk-temp
+          dotnet add package $env:DXSDK_PKG --version $env:DXSDK_VER
+          cd ..
+
+      - name: Extract DXSDK paths from NuGet
+        shell: powershell
+        run: |
+          $pkgPath = Join-Path "${env:NUGET_PACKAGES}" "$env:DXSDK_PKG\$env:DXSDK_VER"
+          $sdkDir = Join-Path $pkgPath "build\native"
+          echo "DXSDK_DIR=$sdkDir" >> $env:GITHUB_ENV
+          echo "DXSDK_DIR_NUGET=$pkgPath" >> $env:GITHUB_ENV
+
+      - name: Report tools
+        run: |
+          cmake --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          & $vswhere -latest -products * -format value -property displayName
+          $dumpbin = & $vswhere -latest -products * -find 'VC\Tools\MSVC\**\bin\Hostarm64\arm64\dumpbin.exe' | Select-Object -First 1
+          if (-not $dumpbin) {
+            $dumpbin = & $vswhere -latest -products * -find 'VC\Tools\MSVC\**\dumpbin.exe' | Select-Object -First 1
+          }
+          if (-not $dumpbin) { Write-Host "::error::dumpbin.exe not found"; exit 1 }
+          Write-Host "dumpbin: $dumpbin"
+          echo "DUMPBIN=$dumpbin" >> $env:GITHUB_ENV
+
+      # The windows-11-arm image carries Visual Studio 2026 (no 2022).
+      - name: Configure ARM64
+        run: |
+          cmake -S . -B build-arm64 -G "Visual Studio 18 2026" -A ARM64 -DDXSDK_DIR="${{ env.DXSDK_DIR }}" -DCICD=1 -DCMAKE_BUILD_TYPE=Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build ARM64
+        run: |
+          cmake --build build-arm64 --config Release --parallel `
+            --target KisakCOD-sp KisakCOD-mp KisakCOD-dedi
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Check the executables are ARM64 and free of fused multiply-adds
+        run: |
+          foreach ($exe in @("KisakCOD-sp", "KisakCOD-mp", "KisakCOD-dedi")) {
+            $headers = & $env:DUMPBIN /nologo /headers "bin/Release/$exe.exe" | Out-String
+            if ($headers -notmatch 'AA64 machine \(ARM64\)') {
+              Write-Host "::error::$exe.exe is not an ARM64 executable"
+              exit 1
+            }
+          }
+          # The engine's own object files, not the static C runtime (its math
+          # functions may use fused multiply-add on purpose).
+          $objects = Get-ChildItem build-arm64 -Recurse -Filter *.obj |
+            Where-Object { $_.FullName -match '[\\/]KisakCOD-(sp|mp|dedi)\.dir[\\/]' }
+          Write-Host "$($objects.Count) engine object files"
+          if ($objects.Count -lt 100) { Write-Host "::error::engine object files not found"; exit 1 }
+          $fused = @()
+          foreach ($obj in $objects) {
+            $hits = & $env:DUMPBIN /nologo /disasm $obj.FullName |
+              Select-String -Pattern '\s(fmadd|fmsub|fnmadd|fnmsub|fmla|fmls)\s'
+            if ($hits) { $fused += "$($obj.Name): $($hits[0].Line.Trim())" }
+          }
+          if ($fused.Count -ne 0) {
+            $fused | Select-Object -First 20 | ForEach-Object { Write-Host $_ }
+            Write-Host "::error::$($fused.Count) engine object files contain fused multiply-add instructions"
+            exit 1
+          }
+          Write-Host "No fused multiply-add instructions in engine code"
+
+      - name: Check native Windows ARM64 bootstrap
+        run: |
+          ./scripts/ci/check-windows-bootstrap.ps1 -BuildOutput "bin/Release" -DxSdkPackage "${{ env.DXSDK_DIR_NUGET }}" -Arch arm64
+
+      # The ARM64 executables with their OpenAL DLL, for a run on a Windows on
+      # Arm machine (the game files are not part of it).
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: KisakCOD-arm64-Release
+          path: ${{ github.workspace }}/bin
+          compression-level: 9
+          retention-days: 3

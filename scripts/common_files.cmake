@@ -625,6 +625,11 @@ if (KISAK_WIN64)
     list(APPEND WIN32_SRC "${SRC_DIR}/win32/win_steam_unavailable.cpp")
 endif()
 
+# D3DX9 has no ARM64 library (see the top-level CMakeLists.txt).
+if (KISAK_WIN_ARM64)
+    list(APPEND WIN32_SRC "${SRC_DIR}/win32/win_d3dx_unavailable.cpp")
+endif()
+
 set(XANIM
     "${SRC_DIR}/xanim/dobj.cpp"
     "${SRC_DIR}/xanim/dobj.h"

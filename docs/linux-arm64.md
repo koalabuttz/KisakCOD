@@ -21,7 +21,9 @@ The track is staged like the x86_64 one:
    `KisakCOD-mp` builds for aarch64 and passes the client's asset-free checks.
    It has not drawn a frame yet: no aarch64 DXVK Native library has been built
    and no Arm machine with game data has run it.
-4. **Windows ARM64**: MSVC ARM64 build of sp, mp and dedi.
+4. **Windows ARM64** (build check, see [below](#building-for-windows-arm64)):
+   MSVC ARM64 build of sp, mp and dedi that starts up to the missing-game-data
+   error on GitHub's Windows on Arm runner. Not yet run with game data.
 
 ## Building the aarch64 dedicated server
 
@@ -131,6 +133,40 @@ the old path unchanged. The virtual-memory self-test has a new case for this;
 with the old code it crashes at 16 KiB pages, with the new code it passes at 4,
 16 and 64 KiB under qemu.
 
+## Building for Windows ARM64
+
+With Visual Studio 2022 or 2026 and its C++ ARM64 build tools, on any Windows
+machine (use the `"Visual Studio 18 2026"` generator for 2026, as the CI job
+does):
+
+```powershell
+cmake -S . -B build-arm64 -G "Visual Studio 17 2022" -A ARM64 -DCMAKE_BUILD_TYPE=Release
+cmake --build build-arm64 --config Release --target KisakCOD-mp KisakCOD-sp KisakCOD-dedi
+```
+
+It is the x64 build (`KISAK_WIN64`: OpenAL Soft instead of Miles, no Steam,
+movies only with `KISAK_WIN64_CINEMATICS`) with these differences, keyed on
+`KISAK_WIN_ARM64`:
+
+- **No D3DX9.** The DirectX SDK has no ARM64 D3DX library, so ARM64 links
+  [`win32/win_d3dx_unavailable.cpp`](../src/win32/win_d3dx_unavailable.cpp)
+  instead. Its D3DX entry points fail with an error, which only matters when a
+  map loads from raw assets (`useFastFile 0`) and its shaders have to be
+  compiled from HLSL. Fastfile loading, the normal path, never calls D3DX. The
+  D3DX headers are still needed.
+- **No SSE**: skinning takes the scalar path, as on Arm Linux.
+- **No `cpuid`**: the Intel-only physical core count is skipped. The engine
+  already reports a fixed CPU vendor on every Windows build, so it never ran.
+- **Stack traces** in assert messages use `RtlCaptureStackBackTrace`, as on x64.
+- `CPUSTRING` is `win-arm64`, and the linker machine is `ARM64`.
+
+Hosted CI: the Windows workflow's **MSVC ARM64 build** job builds the three
+games natively on `windows-11-arm`, checks that they are ARM64 executables and
+that no engine object file contains a fused multiply-add instruction (the same
+rule as `-ffp-contract=off` on Linux), and runs the start-up check the 32-bit and
+x64 jobs run. Windows x64 binaries also run on Windows on Arm through
+emulation, so the native build is about speed, not reach.
+
 ## Census: Linux client (step 3)
 
 From a trial compile of the client sources and a look at the dependencies:
@@ -154,6 +190,9 @@ From a trial compile of the client sources and a look at the dependencies:
   on one thread.
 
 ## Census: Windows ARM64 (step 4)
+
+The census below led to the [ARM64 build](#building-for-windows-arm64); it is
+kept as the record of what was found.
 
 A syntax-only compile of every `KisakCOD-mp` source with llvm-mingw's
 `aarch64-w64-mingw32` target (2026-11-05, against the MinGW configuration's
@@ -197,6 +236,7 @@ branch:
   used yet).
 - Build DXVK Native for aarch64 and run the device probe and the client on a
   real Vulkan driver.
-- Windows ARM64 (step 4).
+- Run the Windows ARM64 build with game data on a Windows on Arm machine.
+- Windows ARM64 movies (`KISAK_WIN64_CINEMATICS` with an ARM64 FFmpeg).
 - The virtual-memory self-test's checks of 32-bit address-space limits fail on
   every 64-bit build (x86_64 too); `run_linux_checks.py` only runs it as i386.
