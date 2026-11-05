@@ -77,6 +77,8 @@ include(${SCRIPTS_DIR}/platform/linux/world_draw_probe.cmake)
 include(${SCRIPTS_DIR}/platform/linux/mp_client.cmake)
 # The singleplayer game, built the same way from the KisakCOD-sp source lists.
 include(${SCRIPTS_DIR}/platform/linux/sp_game.cmake)
+# The Vulkan window probe and the shared Vulkan core: no engine units, no D3D9.
+include(${SCRIPTS_DIR}/platform/linux/vulkan_probe.cmake)
 
 # ---------------------------------------------------------------------------
 # Opt-in native Linux client network core (KISAK_BUILD_LINUX_CLIENT_CORE)

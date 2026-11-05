@@ -1993,3 +1993,126 @@ jobs:
           path: artifacts/
           if-no-files-found: warn
           retention-days: 7
+
+  vulkan_window:
+    # Opt-in Vulkan back end, first piece (docs/vulkan-core.md): the shared
+    # Vulkan core in src/gfx_vk and KisakCOD-vulkan-probe, which opens an SDL3
+    # window and clears, presents and resizes it through the core. Built for
+    # x86_64, the primary Vulkan target, against the x86_64 SDL3 pin (same
+    # options and cache key as x64_client). It runs on Mesa's lavapipe, a CPU
+    # Vulkan driver, through SDL's offscreen video driver (VK_EXT_headless_surface):
+    # no GPU, no display server, no DXVK, no game data. The validation layer is
+    # required, with synchronisation checks, and any error fails the job.
+    name: Vulkan window probe on lavapipe ${{ matrix.config }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [Debug, RelWithDebInfo]
+
+    env:
+      SDL3_REVISION: 877399b2b2cf21e67554ed9046410f268ce1d1b2
+      BUILD_DIR: build-x64/vulkan-probe-${{ matrix.config }}
+      OUT_DIR: ${{ github.workspace }}/out/vulkan-probe-${{ matrix.config }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install x86_64 build tools and the lavapipe Vulkan driver
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          # libvulkan-dev for the headers (the probe does not link the loader;
+          # SDL3 opens it), mesa-vulkan-drivers for lavapipe,
+          # vulkan-validationlayers for the required validation run.
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            cmake ninja-build clang binutils python3 ccache \
+            libvulkan-dev mesa-vulkan-drivers vulkan-validationlayers
+
+      - name: Restore compiler cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-vulkan-window-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-vulkan-window-${{ matrix.config }}-
+      - name: Use compiler cache
+        id: ccache
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/ci/use-ccache.sh
+
+      - name: Restore pinned x86_64 SDL3 SDK
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/SDL3-sdk
+          key: sdl3-sdk-x86_64-${{ env.SDL3_REVISION }}-${{ hashFiles('.github/workflows/build-kisakcod-linux.yaml') }}
+
+      - name: Build pinned x86_64 SDL3 SDK
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The same pin and options as the x86_64 client job, so the two share
+          # the cached SDK. X11 and Wayland are off: the probe uses SDL's
+          # offscreen driver, which supports Vulkan through headless surfaces.
+          if [[ ! -f "$RUNNER_TEMP/SDL3-sdk/lib/libSDL3.so.0" ]]; then
+            git init "$RUNNER_TEMP/SDL3-source"
+            git -C "$RUNNER_TEMP/SDL3-source" remote add origin https://github.com/libsdl-org/SDL.git
+            git -C "$RUNNER_TEMP/SDL3-source" fetch --depth 1 origin "$SDL3_REVISION"
+            git -C "$RUNNER_TEMP/SDL3-source" checkout --detach FETCH_HEAD
+            test "$(git -C "$RUNNER_TEMP/SDL3-source" rev-parse HEAD)" = "$SDL3_REVISION"
+            cmake -S "$RUNNER_TEMP/SDL3-source" -B "$RUNNER_TEMP/SDL3-build" -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang \
+              -DCMAKE_C_FLAGS=-m64 -DCMAKE_SHARED_LINKER_FLAGS=-m64 \
+              -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/SDL3-sdk" -DCMAKE_INSTALL_LIBDIR=lib \
+              -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TESTS=OFF -DSDL_TEST_LIBRARY=OFF \
+              -DSDL_EXAMPLES=OFF -DSDL_X11=OFF -DSDL_WAYLAND=OFF -DSDL_UNIX_CONSOLE_BUILD=ON \
+              -DSDL_ALSA=OFF -DSDL_PULSEAUDIO=OFF -DSDL_PIPEWIRE=OFF -DSDL_JACK=OFF
+            cmake --build "$RUNNER_TEMP/SDL3-build" --parallel "$(nproc)"
+            cmake --install "$RUNNER_TEMP/SDL3-build"
+          fi
+          readelf -h "$RUNNER_TEMP/SDL3-sdk/lib/libSDL3.so.0" | grep -Eq 'Class:[[:space:]]+ELF64'
+
+      - name: Build the Vulkan window probe
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B "$BUILD_DIR" -G Ninja \
+            -DKISAK_PLATFORM=linux -DKISAK_LINUX_ARCH=x86_64 \
+            -DCMAKE_BUILD_TYPE="${{ matrix.config }}" \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$OUT_DIR" \
+            -DKISAK_BUILD_VULKAN_PROBE=ON \
+            -DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3"
+          cmake --build "$BUILD_DIR" --target KisakCOD-vulkan-probe --parallel "$(nproc)"
+          readelf -h "$OUT_DIR/KisakCOD-vulkan-probe" | grep -Eq 'Class:[[:space:]]+ELF64'
+          # The loader is opened at run time through SDL, never linked.
+          if readelf -d "$OUT_DIR/KisakCOD-vulkan-probe" | grep -q 'libvulkan'; then
+            echo "KisakCOD-vulkan-probe must not link libvulkan" >&2
+            exit 1
+          fi
+
+      - name: Run the Vulkan window probe on lavapipe
+        timeout-minutes: 10
+        shell: bash
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          python3 -u scripts/tests/test_vulkan_window_probe.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-probe" \
+            --video-driver offscreen --validation require
+
+      - name: Save compiler cache
+        if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-vulkan-window-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
