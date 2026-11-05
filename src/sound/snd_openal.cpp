@@ -70,6 +70,28 @@ char MSS_Init()
         return 0;
     }
 
+    // One line naming the output device and the rate OpenAL actually mixes at (it may
+    // differ from the requested one), so a sound report can say what the game used.
+    {
+        const ALCchar *deviceName = NULL;
+        if (alcIsExtensionPresent(alGlob.device, "ALC_ENUMERATE_ALL_EXT"))
+            deviceName = alcGetString(alGlob.device, ALC_ALL_DEVICES_SPECIFIER);
+        if (!deviceName)
+            deviceName = alcGetString(alGlob.device, ALC_DEVICE_SPECIFIER);
+        ALCint mixHertz = 0;
+        ALCint refresh = 0;
+        alcGetIntegerv(alGlob.device, ALC_FREQUENCY, 1, &mixHertz);
+        alcGetIntegerv(alGlob.device, ALC_REFRESH, 1, &refresh);
+        const ALchar *version = alGetString(AL_VERSION);
+        Com_Printf(
+            CON_CHANNEL_SOUND,
+            "OpenAL device '%s', mixing at %i Hz, %i updates/s, %s\n",
+            deviceName ? deviceName : "?",
+            mixHertz,
+            refresh,
+            version ? version : "?");
+    }
+
     // Distance falloff is computed entirely by SND_Attenuate's curve and baked directly
     // into AL_GAIN (see the Phase 4 playback functions); disable OpenAL's own automatic
     // distance attenuation so it isn't applied a second time. Mirrors Miles'

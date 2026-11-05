@@ -24,6 +24,7 @@ AlLocal alGlob;
 
 const dvar_t *snd_khz;
 const dvar_t *snd_outputConfiguration;
+static const dvar_t *snd_alDebug;
 
 void TRACK_snd_driver()
 {
@@ -44,6 +45,12 @@ char SND_InitDriver()
         0,
         DVAR_ARCHIVE | DVAR_LATCH,
         "Sound output configuration");
+    snd_alDebug = Dvar_RegisterInt(
+        "snd_alDebug",
+        0,
+        DvarLimits(0, 2),
+        DVAR_NOFLAG,
+        "OpenAL sound diagnostics: 1 prints errors, stream underruns and a summary every 5 seconds, 2 also prints each sound start");
 
     if (MSS_Startup())
     {
@@ -93,11 +100,165 @@ void SND_Set3DPosition(int index, const float *org)
 }
 
 #ifdef KISAK_OPENAL
+// Opt-in OpenAL diagnostics, off by default. snd_alDebug 1 prints OpenAL errors, stream
+// underruns and a summary every 5 seconds; 2 also prints every loaded sound that starts.
+// Nothing here changes what is played. snd_alDebug is registered in SND_InitDriver.
+
+struct AlDebugStats
+{
+    int starts;
+    int cuts;            // sounds whose source was still playing when the channel stopped
+    int underruns;       // stream sources that ran dry and were restarted
+    int alErrors;
+    int printedErrors;   // errors printed in this report window (capped to keep the console readable)
+    int maxUpdateGapMs;  // longest time between two sound updates in this window
+    int lastUpdateTime;
+    int lastReportTime;
+};
+static AlDebugStats g_alDebug;
+
+static const int AL_DEBUG_REPORT_MS = 5000;
+static const int AL_DEBUG_MAX_PRINTED_ERRORS = 20;
+
+static bool SND_AlDebug(int level)
+{
+    return snd_alDebug && snd_alDebug->current.integer >= level;
+}
+
+static const char *SND_AlDebugAliasName(int index)
+{
+    const snd_alias_t *alias = g_snd.chaninfo[index].alias0;
+    return alias && alias->aliasName ? alias->aliasName : "<none>";
+}
+
+// Reports the first OpenAL error raised since the last check. Only reads the error state
+// when snd_alDebug is on, so the default build makes no extra OpenAL calls.
+static void SND_AlCheckError(const char *where)
+{
+    if (!SND_AlDebug(1))
+        return;
+    ALenum err = alGetError();
+    if (err == AL_NO_ERROR)
+        return;
+    ++g_alDebug.alErrors;
+    if (g_alDebug.printedErrors++ < AL_DEBUG_MAX_PRINTED_ERRORS)
+        Com_PrintWarning(CON_CHANNEL_SOUND, "snd_al: OpenAL error 0x%x in %s\n", err, where);
+}
+
+static void SND_AlDebugNoteCut(int index)
+{
+    ++g_alDebug.cuts;
+    if (SND_AlDebug(2))
+        Com_Printf(CON_CHANNEL_SOUND, "snd_al: stop ch %i '%s' while still playing\n", index, SND_AlDebugAliasName(index));
+}
+
+static void SND_AlDebugNoteUnderrun(int index)
+{
+    ++g_alDebug.underruns;
+    if (SND_AlDebug(1))
+        Com_PrintWarning(CON_CHANNEL_SOUND, "snd_al: stream ch %i '%s' ran dry, restarted\n", index, SND_AlDebugAliasName(index));
+}
+
+static void SND_AlDebugNoteStart(const char *kind, int index, const char *aliasName, int rate, int channels, float pitch, float gain, int startMsec)
+{
+    ++g_alDebug.starts;
+    if (SND_AlDebug(2))
+        Com_Printf(
+            CON_CHANNEL_SOUND,
+            "snd_al: start %s ch %i '%s' %i Hz %i ch pitch %.2f gain %.2f at %i ms\n",
+            kind,
+            index,
+            aliasName ? aliasName : "<none>",
+            rate,
+            channels,
+            pitch,
+            gain,
+            startMsec);
+}
+
+// Called once per sound update. Tracks the longest gap between updates (a gap longer than
+// a stream's queued audio starves it) and prints the summary line.
+static void SND_AlDebugFrame()
+{
+    if (!SND_AlDebug(1))
+    {
+        g_alDebug.lastUpdateTime = 0;
+        return;
+    }
+
+    int now = g_snd.time;
+    if (g_alDebug.lastUpdateTime)
+    {
+        int gap = now - g_alDebug.lastUpdateTime;
+        if (gap > g_alDebug.maxUpdateGapMs)
+            g_alDebug.maxUpdateGapMs = gap;
+    }
+    else
+    {
+        g_alDebug.lastReportTime = now;
+    }
+    g_alDebug.lastUpdateTime = now;
+    SND_AlCheckError("sound update");
+
+    if (now - g_alDebug.lastReportTime < AL_DEBUG_REPORT_MS)
+        return;
+
+    int playing[3] = { 0, 0, 0 };
+    const int counts[3] = { g_snd.max_2D_channels, g_snd.max_3D_channels, g_snd.max_stream_channels };
+    int index = 0;
+    for (int kind = 0; kind < 3; ++kind)
+    {
+        for (int i = 0; i < counts[kind]; ++i, ++index)
+        {
+            ALint state = AL_INITIAL;
+            alGetSourcei(alGlob.source[index], AL_SOURCE_STATE, &state);
+            if (state == AL_PLAYING)
+                ++playing[kind];
+        }
+    }
+
+    Com_Printf(
+        CON_CHANNEL_SOUND,
+        "snd_al: last %.1f s: %i starts, %i cut while playing, %i stream underruns, %i OpenAL errors; "
+        "playing 2D %i/%i 3D %i/%i stream %i/%i; longest update gap %i ms\n",
+        (now - g_alDebug.lastReportTime) / 1000.0f,
+        g_alDebug.starts,
+        g_alDebug.cuts,
+        g_alDebug.underruns,
+        g_alDebug.alErrors,
+        playing[0],
+        counts[0],
+        playing[1],
+        counts[1],
+        playing[2],
+        counts[2],
+        g_alDebug.maxUpdateGapMs);
+
+    memset(&g_alDebug, 0, sizeof(g_alDebug));
+    g_alDebug.lastUpdateTime = now;
+    g_alDebug.lastReportTime = now;
+}
+
+// Stops a 2D/3D channel's source and frees its buffer. OpenAL refuses to change AL_BUFFER
+// on a playing or paused source and refuses to delete a buffer a source still holds (both
+// AL_INVALID_OPERATION), so the source must be stopped first. Without that, a sound
+// stopped early (stolen channel, chained alias, a stopped loop) kept playing, its buffer
+// leaked, and the next sound started on the channel never attached: the source replayed
+// the old sound instead. Miles' AIL_end_sample stops the sample the same way.
+// alSourceRewind stops the source and leaves it AL_INITIAL, so a sound queued behind a
+// start delay or a pause is not mistaken for a finished one.
 void SND_ReleaseChannelBuffer(int index)
 {
+    ALuint source = alGlob.source[index];
+    ALint state = AL_INITIAL;
+    alGetSourcei(source, AL_SOURCE_STATE, &state);
+    if (state == AL_PLAYING || state == AL_PAUSED)
+        SND_AlDebugNoteCut(index);
+
+    alSourceRewind(source);
+    alSourcei(source, AL_BUFFER, 0);
     if (alGlob.channelBuffer[index])
     {
-        alSourcei(alGlob.source[index], AL_BUFFER, 0);
         alDeleteBuffers(1, &alGlob.channelBuffer[index]);
         alGlob.channelBuffer[index] = 0;
     }
@@ -225,13 +386,19 @@ static void SND_ReleaseStreamChannel(int index)
 // Handles looping by seeking back to the start of the audio data when the decoder runs dry.
 // Returns false once the stream has ended (not looping) with nothing left queued - the
 // caller uses that to know when the channel should stop/free itself.
-static bool SND_FillStreamBuffers(int index)
+// With restartIfStarved, a source that played every queued buffer before this refill is
+// started again: OpenAL stops a streaming source that runs dry (AL_STOPPED) and queuing new
+// buffers does not restart it, so one long frame used to silence the stream for good.
+static bool SND_FillStreamBuffers(int index, bool restartIfStarved)
 {
     AlStreamState *stream = &g_streamState[index];
     if (!stream->active)
         return false;
 
     ALuint source = alGlob.source[index];
+
+    ALint stateBefore = AL_INITIAL;
+    alGetSourcei(source, AL_SOURCE_STATE, &stateBefore);
 
     ALint processed = 0;
     alGetSourcei(source, AL_BUFFERS_PROCESSED, &processed);
@@ -278,6 +445,12 @@ static bool SND_FillStreamBuffers(int index)
         alSourceQueueBuffers(source, 1, &buffer);
         stream->framesQueued += framesRead;
         ++queued;
+    }
+
+    if (restartIfStarved && stateBefore == AL_STOPPED && queued > 0)
+    {
+        SND_AlDebugNoteUnderrun(index);
+        alSourcePlay(source);
     }
 
     return queued > 0;
@@ -504,6 +677,8 @@ int SND_StartAlias2DSample(SndStartAliasInfo *startAliasInfo, int *pChannel)
     {
         alSourcePlay(source);
     }
+    SND_AlDebugNoteStart("2D", index, startAliasInfo->alias0->aliasName, sound->info.rate, sound->info.channels, pitch, realVolume, start_msec);
+    SND_AlCheckError("SND_StartAlias2DSample");
 
     total_msec += startAliasInfo->startDelay;
     if ((startAliasInfo->alias0->flags & 1) != 0)
@@ -627,6 +802,8 @@ int SND_StartAlias3DSample(SndStartAliasInfo *startAliasInfo, int *pChannel)
     {
         alSourcePlay(source);
     }
+    SND_AlDebugNoteStart("3D", index, startAliasInfo->alias0->aliasName, sound->info.rate, sound->info.channels, pitch, realVolume, start_msec);
+    SND_AlCheckError("SND_StartAlias3DSample");
     int totalMsecForChan = total_msec + startAliasInfo->startDelay;
     if ((startAliasInfo->alias0->flags & 1) != 0)
         totalMsecForChan = 0;
@@ -819,7 +996,7 @@ int SND_StartAliasStreamOnChannel(SndStartAliasInfo *startAliasInfo, int index)
         stream->framesQueued = targetFrame; // SND_FillStreamBuffers adds onto this below
     }
 
-    SND_FillStreamBuffers(index);
+    SND_FillStreamBuffers(index, false);
 
     if (!startAliasInfo->startDelay
         && (!g_snd.paused || !g_snd.pauseSettings[(startAliasInfo->alias0->flags & 0x3F00) >> 8]))
@@ -850,6 +1027,8 @@ int SND_StartAliasStreamOnChannel(SndStartAliasInfo *startAliasInfo, int index)
         SND_ApplyChannelMap(source, startAliasInfo->alias0, srcChannelCount);
     }
     SND_SetStreamChannelVolume(index, realVolume);
+    SND_AlDebugNoteStart("stream", index, startAliasInfo->alias0->aliasName, baserate, srcChannelCount, pitch, realVolume, start_msec);
+    SND_AlCheckError("SND_StartAliasStreamOnChannel");
 
     int playbackId = SND_AcquirePlaybackId(index, totalMsecForChan);
     if (playbackId != -1)
@@ -1356,6 +1535,7 @@ void SND_DriverPostUpdate()
 #ifndef KISAK_XBOX
     SND_UpdateEqs();
 #endif
+    SND_AlDebugFrame();
     KISAK_NULLSUB();
 }
 
@@ -1484,7 +1664,8 @@ void SND_UpdateStreamChannel(int i, int frametime)
         iassert(alias0);
         iassert(alias1);
         volume = chaninfo->basevolume;
-        bool hasMoreToPlay = SND_FillStreamBuffers(i);
+        // A delayed stream is started below once its delay runs out, not here.
+        bool hasMoreToPlay = SND_FillStreamBuffers(i, !g_snd.chaninfo[i].startDelay);
         ALint state;
         alGetSourcei(alGlob.source[i], AL_SOURCE_STATE, &state);
         bool stillPlaying = g_snd.chaninfo[i].startDelay || hasMoreToPlay || state != AL_STOPPED;
