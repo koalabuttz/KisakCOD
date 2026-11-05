@@ -219,7 +219,8 @@ int Sys_IsGameProcess(DWORD id)
 	if (snapshot == (void*)-1)
 		return 0;
 	isGame = 0;
-	me.dwSize = 548;
+	static_assert(LAYOUT_32BIT(sizeof(me) == 548));
+	me.dwSize = sizeof(me); // 548 on x86, 568 on x64
 	if (Module32First(snapshot, &me))
 	{
 		GetModuleFileNameA(0, modulePath, 0x104u);
@@ -382,7 +383,8 @@ void Sys_SpawnQuitProcess()
 	if (sys_exitCmdLine[0])
 	{
 		memset((unsigned __int8*)&dst, 0, sizeof(dst));
-		dst.cb = 68;
+		static_assert(LAYOUT_32BIT(sizeof(dst) == 68));
+		dst.cb = sizeof(dst); // 68 on x86, 104 on x64
 		if (!CreateProcessA(0, sys_exitCmdLine, 0, 0, 0, 0, 0, 0, &dst, &pi))
 		{
 			error = GetLastError();

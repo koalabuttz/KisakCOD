@@ -276,7 +276,8 @@ HRESULT CreateBasicBuffer(
     wfx.nAvgBytesPerSec = sampleRate * wfx.nBlockAlign;
     dsbdesc.dwReserved = 0;
     memset(&dsbdesc.guid3DAlgorithm, 0, sizeof(dsbdesc.guid3DAlgorithm));
-    dsbdesc.dwSize = 36;
+    static_assert(LAYOUT_32BIT(sizeof(dsbdesc) == 36));
+    dsbdesc.dwSize = sizeof(dsbdesc); // 36 on x86, 40 on x64
     dsbdesc.dwFlags = 33000;
     dsbdesc.dwBufferBytes = bufferSize;
     dsbdesc.lpwfxFormat = &wfx;
