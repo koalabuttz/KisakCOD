@@ -135,8 +135,9 @@ with the old code it crashes at 16 KiB pages, with the new code it passes at 4,
 
 ## Building for Windows ARM64
 
-With Visual Studio 2022 and its ARM64 build tools (the "MSVC v143 - VS 2022 C++
-ARM64 build tools" component), on any Windows machine:
+With Visual Studio 2022 or 2026 and its C++ ARM64 build tools, on any Windows
+machine (use the `"Visual Studio 18 2026"` generator for 2026, as the CI job
+does):
 
 ```powershell
 cmake -S . -B build-arm64 -G "Visual Studio 17 2022" -A ARM64 -DCMAKE_BUILD_TYPE=Release

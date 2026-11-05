@@ -383,9 +383,10 @@ jobs:
           Write-Host "dumpbin: $dumpbin"
           echo "DUMPBIN=$dumpbin" >> $env:GITHUB_ENV
 
+      # The windows-11-arm image carries Visual Studio 2026 (no 2022).
       - name: Configure ARM64
         run: |
-          cmake -S . -B build-arm64 -G "Visual Studio 17 2022" -A ARM64 -DDXSDK_DIR="${{ env.DXSDK_DIR }}" -DCICD=1 -DCMAKE_BUILD_TYPE=Release
+          cmake -S . -B build-arm64 -G "Visual Studio 18 2026" -A ARM64 -DDXSDK_DIR="${{ env.DXSDK_DIR }}" -DCICD=1 -DCMAKE_BUILD_TYPE=Release
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build ARM64
