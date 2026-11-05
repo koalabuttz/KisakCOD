@@ -20,5 +20,13 @@ set_property(TARGET TracyClient PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<
 #Tracy is default off, but turned on by simply defining TRACY_ENABLE
 set_property(TARGET TracyClient PROPERTY INTERFACE_COMPILE_DEFINITIONS TRACY_ON_DEMAND TRACY_ONLY_LOCALHOST)
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_BINARY_DIR}/_deps/tracy-src/public)
+
+# Windows profiling builds (KISAK_WIN_TRACY in the root CMakeLists.txt): the
+# game's PROF_SCOPED zones (src/universal/profile.h) become Tracy zones, with
+# the same definitions as the Linux profiling builds.
+if(KISAK_WIN_TRACY AND NOT KISAK_PLATFORM STREQUAL "linux")
+	target_compile_definitions(${PROJECT_NAME} PRIVATE TRACY_ENABLE TRACY_ON_DEMAND TRACY_ONLY_LOCALHOST)
+	message(STATUS "${PROJECT_NAME}: Tracy profiler on (on demand, localhost only)")
+endif()
 target_link_libraries(${PROJECT_NAME} PUBLIC TracyClient)
 #################
