@@ -3,7 +3,7 @@
 > **Historical checkpoint — not current state.** This is the handoff for the
 > combined review branch as it stood on that date, including its own validation
 > counts and limits. It is left as recorded; the tree has since moved on. Current:
-> [2026-11-01 checkpoint](../progress-2026-11-01.md). Current guides:
+> [status](../status.md). Current guides:
 > [Linux dedicated server](../linux-dedicated.md),
 > [Native Linux client](../linux-client.md).
 
