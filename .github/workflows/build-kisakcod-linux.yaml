@@ -339,10 +339,11 @@ jobs:
     # No link, no engine build, no DXVK, no SDL, no GPU, no game data. OpenAL
     # headers are needed because the sound sources include <AL/al.h>. One job:
     # a front-end pass has no optimization level, so Debug and RelWithDebInfo
-    # would compile identically.
+    # would compile identically. A second pass covers the singleplayer game
+    # (KisakCOD-sp, --target sp) against sp_compile_census_blocked.txt.
     name: Asset-free client compile census
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout repository
@@ -379,6 +380,22 @@ jobs:
             --cxx clang++ --jobs 4 \
             --log-dir artifacts/client-census \
             2>&1 | tee artifacts/client-census.log
+
+      - name: Run singleplayer compile census
+        # The same pass over the Windows KisakCOD-sp sources with KISAK_SP
+        # (scripts/tests/sp_compile_census_blocked.txt). No SP target links yet.
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
+        shell: bash
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 -u scripts/tests/run_client_compile_census.py --target sp \
+            --cxx clang++ --jobs 4 \
+            --log-dir artifacts/sp-census \
+            2>&1 | tee artifacts/sp-census.log
 
       - name: Upload client census logs
         if: always()

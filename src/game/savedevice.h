@@ -8,10 +8,15 @@
 static const char *CONSOLE_DEFAULT_SAVE_NAME = "savegame.svg";
 #endif
 
+// Declared with its fixed underlying type in server/server.h. A bare
+// "enum SaveType" in a parameter list is an MSVC forward reference, which
+// standard C++ only allows once the underlying type is known.
+enum SaveType : __int32;
+
 void Memcard_InitializeSystem(void);
 void SaveDevice_Init(void);
 void SV_DisplaySaveErrorUI(void);
-bool BuildCleanSavePath(char *, unsigned int, char const *, enum SaveType);
+bool BuildCleanSavePath(char *, unsigned int, char const *, SaveType);
 bool SaveDevice_IsAccessingDevice(void);
 void WriteSaveToDeviceCleanup(void);
 bool SaveDevice_IsSaveSuccessful(void);
