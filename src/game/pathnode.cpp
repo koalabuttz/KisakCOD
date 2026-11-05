@@ -816,16 +816,15 @@ void Path_DrawDebugLink(const pathnode_t *node, const int i, bool bShowAll)
         node->constant.vOrigin[2] + 16.0f
     };
 
-    float *destNode = (float *)((char *)gameWorldSp.path.nodes + (nodeNum << 7));
+    const pathnode_t *otherNode = &gameWorldSp.path.nodes[nodeNum];
 
     float end[3] =
     {
-        destNode[5],
-        destNode[6],
-        destNode[7] + 16.0f
+        otherNode->constant.vOrigin[0],
+        otherNode->constant.vOrigin[1],
+        otherNode->constant.vOrigin[2] + 16.0f
     };
 
-    const pathnode_t *otherNode = (const pathnode_t *)destNode;
     int linkCount = bShowAll ? otherNode->constant.totalLinkCount : otherNode->dynamic.wLinkCount;
     int found = 0;
     int reverseIndex = 0;
@@ -886,7 +885,7 @@ void Path_DrawDebugLink(const pathnode_t *node, const int i, bool bShowAll)
         return;
     }
 
-    if (node <= (const pathnode_t *)destNode)
+    if (node <= otherNode)
         return;
 
     int flags = 0;
@@ -1509,7 +1508,7 @@ pathnode_t *Path_FindChainPos(const float *vOrigin, pathnode_t *pPrevChainPos)
         v6 = 4 * v9;
         do
         {
-            v10 = (pathnode_t *)((char *)gameWorldSp.path.nodes + __ROL4__(*(v8 - 2), 7));
+            v10 = &gameWorldSp.path.nodes[*(v8 - 2)];
             if (v10->constant.wChainId == wChainId)
             {
                 v13 = (float)(v10->constant.vOrigin[2] - vOrigin[2]);
@@ -1523,7 +1522,7 @@ pathnode_t *Path_FindChainPos(const float *vOrigin, pathnode_t *pPrevChainPos)
                     result = v10;
                 }
             }
-            v15 = (pathnode_t *)((char *)gameWorldSp.path.nodes + __ROL4__(*(v8 - 1), 7));
+            v15 = &gameWorldSp.path.nodes[*(v8 - 1)];
             if (v15->constant.wChainId == wChainId)
             {
                 v18 = (float)(v15->constant.vOrigin[2] - vOrigin[2]);
@@ -1537,7 +1536,7 @@ pathnode_t *Path_FindChainPos(const float *vOrigin, pathnode_t *pPrevChainPos)
                     result = v15;
                 }
             }
-            v20 = (pathnode_t *)((char *)gameWorldSp.path.nodes + __ROL4__(*v8, 7));
+            v20 = &gameWorldSp.path.nodes[*v8];
             if (v20->constant.wChainId == wChainId)
             {
                 v23 = (float)(v20->constant.vOrigin[2] - vOrigin[2]);
@@ -1551,7 +1550,7 @@ pathnode_t *Path_FindChainPos(const float *vOrigin, pathnode_t *pPrevChainPos)
                     result = v20;
                 }
             }
-            v25 = (pathnode_t *)((char *)gameWorldSp.path.nodes + __ROL4__(v8[1], 7));
+            v25 = &gameWorldSp.path.nodes[v8[1]];
             if (v25->constant.wChainId == wChainId)
             {
                 v28 = (float)(v25->constant.vOrigin[2] - vOrigin[2]);
@@ -1575,7 +1574,7 @@ pathnode_t *Path_FindChainPos(const float *vOrigin, pathnode_t *pPrevChainPos)
         v31 = gameWorldSp.path.chainNodeCount - v6;
         do
         {
-            v32 = (pathnode_t *)((char *)gameWorldSp.path.nodes + __ROL4__(*v30, 7));
+            v32 = &gameWorldSp.path.nodes[*v30];
             if (v32->constant.wChainId == wChainId)
             {
                 v35 = (float)(v32->constant.vOrigin[2] - vOrigin[2]);
@@ -1671,7 +1670,7 @@ void Path_AttachSentientToChainNode(sentient_s *sentient, unsigned __int16 targe
                 v9 = gameWorldSp.path.nodeForChainNode;
                 while (1)
                 {
-                    v10 = (pathnode_t *)((char *)gameWorldSp.path.nodes + __ROL4__(*v9, 7));
+                    v10 = &gameWorldSp.path.nodes[*v9];
                     if (v10->constant.targetname == targetname)
                         break;
                     ++v6;
@@ -1690,7 +1689,7 @@ void Path_AttachSentientToChainNode(sentient_s *sentient, unsigned __int16 targe
                     v12 = v6;
                     do
                     {
-                        if (*(unsigned __int16 *)((char *)&nodes->constant.targetname + __ROL4__(nodeForChainNode[v12], 7)) == v4)
+                        if (nodes[nodeForChainNode[v12]].constant.targetname == v4)
                         {
                             v13 = SL_ConvertToString(v4);
                             Com_Error(ERR_DROP, "\x15Node '%s' is not part of a friendly chain\n", v13);
@@ -2447,7 +2446,7 @@ void Path_ConnectPathsForEntity(gentity_s *ent)
         {
             v5 = next;
             Path_ConnectPath_0(
-                (pathnode_t *)((char *)gameWorldSp.path.nodes + __ROL4__(g_path.pathLinkInfoArray[next].from, 7)),
+                &gameWorldSp.path.nodes[g_path.pathLinkInfoArray[next].from],
                 g_path.pathLinkInfoArray[next].to);
             next = g_path.pathLinkInfoArray[v5].next;
         } while (g_path.pathLinkInfoArray[v5].next);
@@ -2536,7 +2535,7 @@ void Path_DisconnectPathsForEntity(gentity_s *ent)
                         v10,
                         disconnectMins,
                         disconnectMaxs,
-                        (float *)((char *)gameWorldSp.path.nodes->constant.vOrigin + __ROL4__(v9->nodeNum, 7)),
+                        gameWorldSp.path.nodes[v9->nodeNum].constant.vOrigin,
                         number,
                         42074129))
                     {
@@ -2629,7 +2628,7 @@ void Path_UpdateArcBadPlaceCount(badplace_arc_t *arc, int teamFlags, int delta)
         for (unsigned int linkIdx = 0; linkIdx < node->constant.totalLinkCount; ++linkIdx)
         {
             pathlink_s *link = &node->constant.Links[linkIdx];
-            float *vOtherOrigin = (float *)((char *)gameWorldSp.path.nodes + __ROL4__(link->nodeNum, 7)) + 5;
+            float *vOtherOrigin = gameWorldSp.path.nodes[link->nodeNum].constant.vOrigin;
             float dx2 = (float)(vOtherOrigin[0] - arc->origin[0]);
             float dy2 = (float)(vOtherOrigin[1] - arc->origin[1]);
             float dz2 = (float)(vOtherOrigin[2] - arc->origin[2]);
@@ -3659,7 +3658,7 @@ pathnode_t *Path_ChooseSubsequentChainNode_r(
         v16 = v14;
         do
         {
-            v17 = (pathnode_t *)((char *)gameWorldSp.path.nodes + __ROL4__(gameWorldSp.path.nodeForChainNode[v16], 7));
+            v17 = &gameWorldSp.path.nodes[gameWorldSp.path.nodeForChainNode[v16]];
             if (v17->constant.wChainId != v15)
                 break;
             wChainDepth = v17->constant.wChainDepth;
@@ -3732,7 +3731,7 @@ pathnode_t *Path_ChooseAnyChainNodeIfDeadEnd(
         v12 = v10;
         do
         {
-            v13 = (pathnode_t *)((char *)gameWorldSp.path.nodes + __ROL4__(gameWorldSp.path.nodeForChainNode[v12], 7));
+            v13 = &gameWorldSp.path.nodes[gameWorldSp.path.nodeForChainNode[v12]];
             if (v13->constant.wChainId != v11)
                 break;
             wChainDepth = v13->constant.wChainDepth;
@@ -3832,7 +3831,7 @@ pathnode_t *Path_ChooseDesperationChainNode(
         v13 = v11;
         do
         {
-            v14 = (pathnode_t *)((char *)nodes + __ROL4__(gameWorldSp.path.nodeForChainNode[v13], 7));
+            v14 = &nodes[gameWorldSp.path.nodeForChainNode[v13]];
             if (v14->constant.wChainId != refPos->constant.wChainId)
                 return (pathnode_t *)v8;
             wChainDepth = v14->constant.wChainDepth;
@@ -3908,7 +3907,7 @@ pathnode_t *Path_ChooseDesperationNewChainNode(
         v13 = v11;
         do
         {
-            v14 = (pathnode_t *)((char *)nodes + __ROL4__(gameWorldSp.path.nodeForChainNode[v13], 7));
+            v14 = &nodes[gameWorldSp.path.nodeForChainNode[v13]];
             if (v14->constant.wChainId != refPos->constant.wChainId)
                 break;
             if (level.time <= v14->dynamic.iFreeTime)
