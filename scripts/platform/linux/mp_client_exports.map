@@ -1,0 +1,14 @@
+/* KisakCOD-mp exports nothing to the shared libraries it loads.
+ *
+ * A linked library that refers to a name the game also defines (zlib's
+ * inflate, GLib's g_log) makes the linker export the game's definition, and
+ * every library loaded later then calls the game's code by that name: GTK,
+ * loaded by SDL's window decorations, called the engine's g_log variable.
+ * _IO_stdin_used stays visible: i386 glibc reads it to pick its stdio ABI.
+ */
+{
+  global:
+    _IO_stdin_used;
+  local:
+    *;
+};

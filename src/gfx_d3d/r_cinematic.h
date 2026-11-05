@@ -5,8 +5,14 @@
 #else
 #include <d3d9.h>
 #endif
+#ifdef __linux__
+// The Bink API comes from the Linux shim (src/linux/client/cinematic), which
+// keeps RAD's texture-set layout without its D3DX shader code.
+#include <linux/client/cinematic/bink_textures.h>
+#else
 #include <binklib/bink.h>
 #include <binklib/binktextures.h>
+#endif
 #include "r_material.h"
 
 #define CINEMATIC_INVALID_IMAGE_FRAME -1
@@ -120,8 +126,15 @@ void CinematicHunk_Open(CinematicHunk *hunk, char *memory, int size);
 void R_Cinematic_HunksAllocate(int activeTexture, char playbackFlags);
 void R_Cinematic_HunksReset(int activeTexture, char playbackFlags);
 void R_Cinematic_InitBinkTextures();
-void* __stdcall R_Cinematic_Bink_Alloc(uint32_t bytes);
-void __stdcall R_Cinematic_Bink_Free(void *ptr);
+// Bink's memory callbacks take its own calling convention: __stdcall on
+// Windows, cdecl in the Linux shim's bink.h.
+#ifdef __linux__
+#define R_CINEMATIC_BINK_CALLBACK RADLINK
+#else
+#define R_CINEMATIC_BINK_CALLBACK __stdcall
+#endif
+void* R_CINEMATIC_BINK_CALLBACK R_Cinematic_Bink_Alloc(uint32_t bytes);
+void R_CINEMATIC_BINK_CALLBACK R_Cinematic_Bink_Free(void *ptr);
 bool R_Cinematic_BinkOpen(
     const char *filename,
     uint32_t playbackFlags,

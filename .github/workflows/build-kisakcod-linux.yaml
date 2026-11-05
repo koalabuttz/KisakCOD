@@ -40,6 +40,7 @@ on:
       - tests/linux_device_probe/**
       - tests/linux_free_camera/**
       - tests/linux_mp_client/**
+      - tests/linux_cinematic/**
       - .github/workflows/build-kisakcod-linux.yaml
       - .github/workflows/build-kisarcod-win.yaml
   pull_request:
@@ -62,6 +63,7 @@ on:
       - tests/linux_device_probe/**
       - tests/linux_free_camera/**
       - tests/linux_mp_client/**
+      - tests/linux_cinematic/**
       - .github/workflows/build-kisakcod-linux.yaml
       - .github/workflows/build-kisarcod-win.yaml
 
@@ -605,8 +607,11 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           # libopenal-dev only for <AL/al.h>; the client links the OpenAL stand-in.
+          # libavcodec-dev and libavutil-dev for the Bink shim the client is
+          # built with here (KISAK_LINUX_CINEMATICS, docs/linux-cinematics.md).
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            cmake ninja-build clang binutils python3 python3-clang-18 ccache libopenal-dev
+            cmake ninja-build clang binutils python3 python3-clang-18 ccache libopenal-dev \
+            libavcodec-dev libavutil-dev
 
       # The size literal check parses every source as i386 and as x86_64, so it
       # needs the i386 C and C++ headers. Nothing in this job builds i386 code.
@@ -705,10 +710,11 @@ jobs:
             -DKISAK_DXVK_NATIVE_INCLUDE_DIR="$RUNNER_TEMP/dxvk-include/dxvk" \
             -DKISAK_DXVK_NATIVE_LIBRARY="$d3d9" \
             -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_OPENAL_LIBRARY="$openal" \
+            -DKISAK_LINUX_CINEMATICS=ON \
             -DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3" \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
           cmake --build "$BUILD_DIR" --target KisakCOD-mp KisakCOD-mp-client-window-test \
-            KisakCOD-native-d3d9-proofs --parallel "$(nproc)"
+            KisakCOD-native-d3d9-proofs KisakCOD-bink-shim-test --parallel "$(nproc)"
           for binary in "$OUT_DIR/KisakCOD-mp" "$OUT_DIR/KisakCOD-mp-client-window-test"; do
             readelf -h "$binary" | grep -Eq 'Class:[[:space:]]+ELF64'
             readelf -h "$binary" | grep -Eq 'Machine:[[:space:]]+Advanced Micro Devices X86-64'
@@ -718,9 +724,19 @@ jobs:
           grep -qx 'libSDL3.so.0' "$RUNNER_TEMP/x64-mp-client-needed.txt"
           grep -qx 'libd3d9_unavailable.so' "$RUNNER_TEMP/x64-mp-client-needed.txt"
           grep -qx 'libopenal_unavailable.so' "$RUNNER_TEMP/x64-mp-client-needed.txt"
-          if grep -Ev '^(libSDL3\.so\.0|libd3d9_unavailable\.so|libopenal_unavailable\.so|libstdc\+\+\.so\.6|libm\.so\.6|libgcc_s\.so\.1|libc\.so\.6|libpthread\.so\.0|libdl\.so\.2)$' \
+          # Built with the Bink shim, which decodes movies with libavcodec.
+          grep -Eqx 'libavcodec\.so\.[0-9]+' "$RUNNER_TEMP/x64-mp-client-needed.txt"
+          grep -Eqx 'libavutil\.so\.[0-9]+' "$RUNNER_TEMP/x64-mp-client-needed.txt"
+          if grep -Ev '^(libSDL3\.so\.0|libd3d9_unavailable\.so|libopenal_unavailable\.so|libavcodec\.so\.[0-9]+|libavutil\.so\.[0-9]+|libstdc\+\+\.so\.6|libm\.so\.6|libgcc_s\.so\.1|libc\.so\.6|libpthread\.so\.0|libdl\.so\.2)$' \
               "$RUNNER_TEMP/x64-mp-client-needed.txt"; then
-            echo "the multiplayer client needs a library beyond SDL3, D3D9, OpenAL and the runtimes" >&2
+            echo "the multiplayer client needs a library beyond SDL3, D3D9, OpenAL, libavcodec and the runtimes" >&2
+            exit 1
+          fi
+          # libavcodec refers to zlib names the game also defines; the client
+          # must not export them, or any other name, to the libraries it loads
+          # (scripts/platform/linux/mp_client_exports.map).
+          if nm -D --defined-only "$OUT_DIR/KisakCOD-mp" | awk '{print $3}' | grep -vx '_IO_stdin_used'; then
+            echo "the multiplayer client exports names to shared libraries" >&2
             exit 1
           fi
 
@@ -760,6 +776,16 @@ jobs:
           export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/stand-ins"
           "$OUT_DIR/KisakCOD-mp-client-window-test"
           python3 -u scripts/tests/test_linux_mp_client.py --binary "$OUT_DIR/KisakCOD-mp"
+
+      # The Bink shim on made-up movies and a stand-in decoder, plus
+      # libavcodec's Bink decoders opened as the shim opens them. No game
+      # movie is read (docs/linux-cinematics.md).
+      - name: Run the Bink shim's asset-free test
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          LD_LIBRARY_PATH="$RUNNER_TEMP/stand-ins" "$OUT_DIR/KisakCOD-bink-shim-test"
 
       - name: Report compiler cache
         if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
@@ -1449,6 +1475,12 @@ jobs:
           if grep -Ev '^(libSDL3\.so\.0|libd3d9_unavailable\.so|libopenal_unavailable\.so|libstdc\+\+\.so\.6|libm\.so\.6|libgcc_s\.so\.1|libc\.so\.6|libpthread\.so\.0|libdl\.so\.2)$' \
               "$RUNNER_TEMP/mp-client-needed.txt"; then
             echo "the multiplayer client needs a library beyond SDL3, D3D9, OpenAL and the runtimes" >&2
+            exit 1
+          fi
+          # No game name is exported to the libraries it loads
+          # (scripts/platform/linux/mp_client_exports.map).
+          if nm -D --defined-only "$client" | awk '{print $3}' | grep -vx '_IO_stdin_used'; then
+            echo "the multiplayer client exports names to shared libraries" >&2
             exit 1
           fi
 

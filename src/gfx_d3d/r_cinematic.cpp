@@ -14,6 +14,10 @@
 #include <qcommon/com_fileaccess.h>
 #include <cgame/cg_local.h>
 #include <universal/profile.h>
+#include <universal/com_files.h>
+#if defined(CINEMA) && defined(__linux__)
+#include <linux/client/cinematic/bink_shim.h>
+#endif
 
 // #define CINEMA
 
@@ -27,7 +31,7 @@ CinematicGlob cinematicGlob;
 bool g_cinematicThreadInitialized;
 CinematicThreadState g_cinematicThreadState;
 
-int CinematicHunk_Alloc(CinematicHunk* hunk, int size)
+void *CinematicHunk_Alloc(CinematicHunk* hunk, int size)
 {
     const char* v2; // eax
     char* alloced; // [esp+0h] [ebp-4h]
@@ -40,13 +44,13 @@ int CinematicHunk_Alloc(CinematicHunk* hunk, int size)
     alloced = (char*)hunk->atFront;
     hunk->atFront = &alloced[size];
     if (hunk->atFront <= hunk->atBack)
-        return (int)alloced;
+        return alloced;
     if (!alwaysfails)
     {
-        v2 = va("CinematicHunk_Alloc failed: 0x%08x 0x%08x 0x%08x\n", hunk->atFront, size, hunk->atBack);
+        v2 = va("CinematicHunk_Alloc failed: %p 0x%08x %p\n", hunk->atFront, size, hunk->atBack);
         MyAssertHandler(".\\r_cinematic.cpp", 376, 0, v2);
     }
-    return -1;
+    return nullptr;
 }
 
 void R_Cinematic_RelinquishIO()
@@ -722,12 +726,12 @@ void R_Cinematic_InitBinkTextures()
     R_Cinematic_MakeBinkDrawTextures();
 }
 
-void* __stdcall R_Cinematic_Bink_Alloc(uint32_t bytes)
+void* R_CINEMATIC_BINK_CALLBACK R_Cinematic_Bink_Alloc(uint32_t bytes)
 {
-    return (void*)CinematicHunk_Alloc(&cinematicGlob.binkHunk, bytes);
+    return CinematicHunk_Alloc(&cinematicGlob.binkHunk, bytes);
 }
 
-void __stdcall R_Cinematic_Bink_Free(void *ptr)
+void R_CINEMATIC_BINK_CALLBACK R_Cinematic_Bink_Free(void *ptr)
 {
     ;
 }
@@ -758,8 +762,17 @@ bool R_Cinematic_BinkOpen(
     }
     else
     {
+#ifdef __linux__
+        // Windows looks next to the exe (the working directory). A Linux
+        // binary is rarely started from the game folder, so look under
+        // fs_basepath, where the rest of the game data comes from.
+        const char *base = (fs_basepath && *fs_basepath->current.string) ? fs_basepath->current.string : cwd;
+        snprintf(filepath[0], 0x100u, "%s/main/video/%s.%s", base, filename, "bik");
+        snprintf(filepath[1], 0x100u, "%s/raw/video/%s.%s", base, filename, "bik");
+#else
         snprintf(filepath[0], 0x100u, "%s\\main\\video\\%s.%s", cwd, filename, "bik");
         snprintf(filepath[1], 0x100u, "%s\\raw\\video\\%s.%s", cwd, filename, "bik");
+#endif
     }
     if (R_Cinematic_BinkOpenPath(filepath[0], playbackFlags, errText, errTextSize))
         return 1;
@@ -883,6 +896,12 @@ char R_Cinematic_BinkOpenPath_MemoryResident(
     int numberOfBytesRead; // [esp+1Ch] [ebp-8h]
     int freeBufferSpace; // [esp+20h] [ebp-4h]
 
+#ifdef __linux__
+    // The movie's name comes from a script or the console in any letter case.
+    char resolvedPath[256];
+    if (KisakBink_ResolvePath(filename, resolvedPath, sizeof(resolvedPath)))
+        filename = resolvedPath;
+#endif
     fileHandle = fopen(filename, "rb");
     if (!fileHandle)
     {
@@ -911,7 +930,7 @@ char R_Cinematic_BinkOpenPath_MemoryResident(
             snprintf(errText, errTextSize, "Cinematic too big (%i > %i)", fileSize, freeBufferSpace);
         goto LABEL_14;
     }
-    allocedBuffer = (void *)CinematicHunk_Alloc(&cinematicGlob.residentHunk, fileSize);
+    allocedBuffer = CinematicHunk_Alloc(&cinematicGlob.residentHunk, fileSize);
     *outPtr = allocedBuffer;
     numberOfBytesRead = fread(allocedBuffer, 1u, fileSize, fileHandle);
     fclose(fileHandle);
