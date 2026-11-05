@@ -11,7 +11,7 @@
 #include <client/client.h>
 #include <cgame_mp/cg_local_mp.h>
 
-#ifdef WIN32
+#if defined(WIN32) || defined(KISAK_LINUX_STEAM)
 #include <win32/win_steam.h>
 #endif
 
@@ -384,10 +384,11 @@ void CL_Connect_f()
 // This is called by the Client to see if the Auth is even valid before sending to the Server.
 bool CL_CDKeyValidate(netadr_t addr)
 {
-#ifdef WIN32
+#if defined(WIN32) || defined(KISAK_LINUX_STEAM)
+    // KISAK_LINUX_STEAM: src/linux/steam.cpp asks the running Steam client.
     return Steam_UpdateClientAuthTicket(addr);
 #else
-    // Native Linux has no Steam ticket provider yet. Refuse every remote server
+    // The default native Linux build has no Steam ticket provider. Refuse every remote server
     // here; CL_Connect_f only asks for a non-local address, so joining the
     // in-process server ("localhost", NA_LOOPBACK) is unaffected.
     Com_PrintError(CON_CHANNEL_CLIENT,

@@ -20,6 +20,7 @@ without a GPU or game data, against stand-in D3D9 and OpenAL libraries.
 | Dedicated server, aarch64 (64-bit Arm) | `-DKISAK_LINUX_ARCH=aarch64` | Builds natively on Arm or cross-compiled from x86, boots without game data (qemu and hosted Arm CI). Not yet run with game data. [Guide](linux-arm64.md) |
 | Multiplayer client, aarch64 | the client options with `-DKISAK_LINUX_ARCH=aarch64` | Builds and passes the asset-free client checks (qemu and hosted Arm CI) against a D3D9 stand-in; no aarch64 DXVK build yet, so it has not drawn a frame. [Guide](linux-arm64.md#building-the-aarch64-client) |
 | Movies | `-DKISAK_LINUX_CINEMATICS=ON` | Bink movies play through an FFmpeg-backed shim on i386 and x86_64 (laptop). Off by default. [Guide](linux-cinematics.md) |
+| Steam authentication | `-DKISAK_LINUX_STEAM=ON` | Added by PR 85. Logs in through the running Steam client's `steamclient.so`; a probe got a ticket validated on i386 and x86_64, and an i386 client joined, reconnected to and was refused by (with Steam off) an i386 dedicated server (laptop, one Steam account). Off by default. [Guide](linux-steam.md) |
 | Singleplayer `KisakCOD-sp`, i386 | `-DKISAK_BUILD_LINUX_SP_GAME=ON` | killhouse and cargoship load, leave the pregame by themselves and play about a minute each, clean quit (laptop). [Guide](linux-sp-game.md) |
 
 The client builds need DXVK Native, SDL3 3.2.10 or newer and OpenAL for the
@@ -28,11 +29,14 @@ always come from your own install (`+set fs_basepath <game folder>`).
 
 ## What does not work yet
 
-- **Joining a remote server.** Linux has no Steam ticket provider, so the client
-  refuses to send an unauthenticated challenge, and the dedicated server rejects
-  ordinary client tickets unless an explicit opt-in is set
-  ([details](linux-dedicated.md#local-connection-testing-without-steam-authentication)).
-  This stays refused until a real provider exists.
+- **Joining a remote server in the default build.** It has no Steam ticket
+  provider, so the client refuses to send an unauthenticated challenge, and the
+  dedicated server rejects ordinary client tickets unless an explicit opt-in is
+  set ([details](linux-dedicated.md#local-connection-testing-without-steam-authentication)).
+  Build with `-DKISAK_LINUX_STEAM=ON` to authenticate through the Steam client
+  running on the machine ([guide](linux-steam.md)). Not yet tried that way: a
+  Windows client or server on the other end, two Steam accounts, x86_64 game
+  runs.
 - **Prediction.** The Linux client logs about five times as many prediction
   errors and misses as the Windows build does over the same kind of play
   (laptop vs a Windows PC, 2026-11-04). Being investigated.
