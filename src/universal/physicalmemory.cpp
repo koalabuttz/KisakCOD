@@ -11,12 +11,21 @@
 PhysicalMemory g_mem;
 int g_overAllocatedSize;
 
+// 128 MB, as retail. A 64-bit build expands fastfile records as it loads them
+// (DB_NativeBlockSize), so it needs more: 512 MB, the same as the x86_64 Linux
+// arena (src/linux/sys_memory.cpp).
+#ifdef _WIN64
+static constexpr uint32_t PMEM_SIZE = 0x20000000u;
+#else
+static constexpr uint32_t PMEM_SIZE = 0x8000000u;
+#endif
+
 void PMem_Init()
 {
     uint8_t *memory; // [esp+0h] [ebp-4h]
 
-    memory = (uint8_t *)VirtualAlloc(0, 0x8000000u, 0x1000u, 4u);
-    PMem_InitPhysicalMemory(&g_mem, memory, 0x8000000u);
+    memory = (uint8_t *)VirtualAlloc(0, PMEM_SIZE, MEM_COMMIT, PAGE_READWRITE);
+    PMem_InitPhysicalMemory(&g_mem, memory, PMEM_SIZE);
 }
 
 void PMem_DumpMemStats()
