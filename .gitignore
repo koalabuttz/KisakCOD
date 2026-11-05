@@ -30,6 +30,7 @@ build-dedi/
 build-mp/
 build-x64/
 build-arm64/
+build-arm64-*/
 build-sp/
 build-radiant-selftest/
 build-mingw/

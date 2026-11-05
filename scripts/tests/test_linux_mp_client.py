@@ -29,6 +29,7 @@ import argparse
 import os
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -69,12 +70,12 @@ def source_checks(checker):
                     "the optional OpenAL header directory is checked for AL/al.h")
     fence = (ROOT / "scripts" / "platform" / "linux" / "platform.cmake").read_text(encoding="utf-8")
     d3d9_module = (ROOT / "scripts" / "platform" / "linux" / "native_d3d9.cmake").read_text(encoding="utf-8")
-    # The x86_64 block of the fence must not refuse the client; the aarch64
-    # block (dedicated server only, docs/linux-arm64.md) does.
-    x64_fence = fence.split('if(KISAK_LINUX_ARCH STREQUAL "x86_64")', 1)[-1].split("elseif(", 1)[0]
-    checker.require("KISAK_BUILD_LINUX_MP_CLIENT" not in x64_fence
-                    and 'if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4 AND NOT KISAK_LINUX_ARCH STREQUAL "x86_64")' in d3d9_module,
-                    "a 64-bit toolchain builds the client and its D3D9 boundary only under KISAK_LINUX_ARCH=x86_64")
+    # Neither 64-bit block of the fence (x86_64, aarch64) refuses the client.
+    fences = fence.split('if(KISAK_LINUX_ARCH STREQUAL "x86_64")', 1)[-1].split("elseif(NOT CMAKE_SIZEOF_VOID_P", 1)[0]
+    checker.require("KISAK_BUILD_LINUX_MP_CLIENT" not in fences
+                    and 'if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4 AND NOT KISAK_LINUX_ARCH MATCHES "^(x86_64|aarch64)$")'
+                    in d3d9_module,
+                    "a 64-bit toolchain builds the client and its D3D9 boundary only under KISAK_LINUX_ARCH=x86_64 or aarch64")
     checker.require("KISAK_BUILD_WORLD_DRAW_PROBE)" in fence, "the 64-bit configuration still refuses the renderer probes")
 
     definitions = re.search(r"set\(KISAK_MP_CLIENT_DEFINITIONS(.*?)\)", module, re.S)
@@ -131,8 +132,14 @@ def source_checks(checker):
                     "the client's quit frees the key bindings before the script string leak check")
 
 
+# Command prefix for a binary built for another architecture, such as
+# "qemu-aarch64 -L /usr/aarch64-linux-gnu" for a cross-compiled aarch64 client
+# (--emulator). Empty: run the binary directly.
+EMULATOR = []
+
+
 def run(binary, arguments, cwd, env):
-    return subprocess.run([str(binary), *arguments], cwd=cwd, env=env, stdin=subprocess.DEVNULL,
+    return subprocess.run([*EMULATOR, str(binary), *arguments], cwd=cwd, env=env, stdin=subprocess.DEVNULL,
                           capture_output=True, text=True, errors="replace", timeout=RUN_TIMEOUT, check=False)
 
 
@@ -296,7 +303,10 @@ def run_checks(checker, binary):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n", 1)[0])
     parser.add_argument("--binary", type=Path, help="a built KisakCOD-mp to run (source checks only without it)")
+    parser.add_argument("--emulator", default="",
+                        help='command that runs a foreign-architecture binary, e.g. "qemu-aarch64 -L /usr/aarch64-linux-gnu"')
     options = parser.parse_args(argv)
+    EMULATOR[:] = shlex.split(options.emulator)
 
     checker = Checker()
     source_checks(checker)

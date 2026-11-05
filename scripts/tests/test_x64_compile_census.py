@@ -368,7 +368,9 @@ class CMakeKnobTests(unittest.TestCase):
             with self.subTest(option=option):
                 self.assertNotIn(option, fence)
         boundary = (ROOT / "scripts" / "platform" / "linux" / "native_d3d9.cmake").read_text(encoding="utf-8")
-        self.assertIn('if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4 AND NOT KISAK_LINUX_ARCH STREQUAL "x86_64")', boundary)
+        # aarch64 shares the 64-bit boundary (docs/linux-arm64.md).
+        self.assertIn('if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4 AND NOT KISAK_LINUX_ARCH MATCHES "^(x86_64|aarch64)$")',
+                      boundary)
 
 
 class WorkflowTests(unittest.TestCase):

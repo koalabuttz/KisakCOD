@@ -60,7 +60,8 @@ void R_SkinXModelCmd(_WORD *data)
 
     PROF_SCOPED("R_SkinXModel");
 
-    bool sseEnabled = sys_SSE->current.enabled && r_sse_skinning->current.enabled;
+    // sys_SSE is never set off x86 (Sys_FindInfo), so Arm takes the scalar path.
+    bool sseEnabled = KISAK_ARCH_X86 && sys_SSE->current.enabled && r_sse_skinning->current.enabled;
     bool sseStateUsed = false;
 
     SkinXModelCmd* skinCmd = (SkinXModelCmd*)data;
@@ -160,7 +161,9 @@ void R_SkinXModelCmd(_WORD *data)
                 if (skinVertNormalOut && skinnedSurf->oldSkinnedCachedOffset >= 0)
                     skinVertNormalIn = &gfxBuf.oldSkinnedCacheNormalsAddr[skinnedSurf->oldSkinnedCachedOffset >> 5];
             }
+#if KISAK_ARCH_X86
             R_SkinXSurfaceSkinnedSse(xsurf, &boneSkelMats[boneIndex], skinVertNormalIn, skinVertNormalOut, skinVerticesOut);
+#endif
         }
         else
         {

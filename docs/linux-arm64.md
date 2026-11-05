@@ -17,8 +17,10 @@ The track is staged like the x86_64 one:
 2. **aarch64 Linux dedicated server** (this page, first step done): builds,
    boots without game data and passes the record conversion test. Loading a
    retail map has not been tried on Arm yet.
-3. **aarch64 Linux client**: DXVK Native, SDL3, OpenAL and FFmpeg for aarch64,
-   plus the skinning change below.
+3. **aarch64 Linux client** (builds; see [below](#building-the-aarch64-client)):
+   `KisakCOD-mp` builds for aarch64 and passes the client's asset-free checks.
+   It has not drawn a frame yet: no aarch64 DXVK Native library has been built
+   and no Arm machine with game data has run it.
 4. **Windows ARM64**: MSVC ARM64 build of sp, mp and dedi.
 
 ## Building the aarch64 dedicated server
@@ -38,8 +40,8 @@ which drives Clang with `--target=aarch64-linux-gnu` against the GNU cross
 sysroot. Install it first (Debian/Ubuntu: `g++-aarch64-linux-gnu`; `qemu-user` to
 run the result). Pass `-DCMAKE_TOOLCHAIN_FILE` to use another toolchain.
 
-The configuration refuses every other Linux target for now (client, SP game,
-probes); only `KisakCOD-dedi` builds.
+The configuration refuses the SP game and the probes for now; `KisakCOD-dedi`
+and, with the options below, the multiplayer client build.
 
 Checks (no game data):
 
@@ -56,6 +58,42 @@ which is how the page-size work below was checked.
 Hosted CI: the Linux workflow's **aarch64 dedicated server** job builds Debug and
 RelWithDebInfo natively on `ubuntu-24.04-arm` (free for public repositories) and
 runs both checks. It does not load a map: there is no game data in CI.
+
+## Building the aarch64 client
+
+The multiplayer client takes the same options as the x86_64 one
+([linux-mp-client.md](linux-mp-client.md#building)) plus
+`-DKISAK_LINUX_ARCH=aarch64`, with aarch64 builds of SDL3 3.2.10 or newer,
+OpenAL Soft and (for movies) FFmpeg. DXVK 2.7.1 has Arm code paths but has not
+been built for aarch64 here yet, so the checks so far link the device probe's
+D3D9 stand-in, as the x86 CI jobs do.
+
+Checks (no game data, no GPU):
+
+```sh
+# Cross-compiled: run through qemu-user. On an Arm host leave --emulator out.
+python3 scripts/tests/test_linux_mp_client.py --binary bin/KisakCOD-mp \
+    --emulator "qemu-aarch64 -L /usr/aarch64-linux-gnu"
+bin/KisakCOD-skin-scalar-test
+```
+
+Hosted CI: the **aarch64 multiplayer client** job builds the client natively on
+`ubuntu-24.04-arm` against aarch64 SDL3 and the D3D9 and OpenAL stand-ins, then
+runs the game window test, the client's start from game-data-free trees, the
+Bink shim test and the scalar skinning test. It also fails if the client
+contains fused multiply-add instructions.
+
+### Skinning
+
+`r_model_skin_sse.cpp` (SSE and MMX) compiles empty off x86, `sys_info.SSE` is
+false on Arm, and skinned models go through the engine's scalar code
+(`R_SkinXSurfaceSkinned`), the same path x86 takes with `r_sse_skinning 0`.
+`tests/skinning/skin_scalar_test.cpp` runs that code on generated surfaces and
+bones and checks two things: its output bytes hash to the same value on i386,
+x86_64 and aarch64, and on x86 it matches the SSE path (positions to float
+rounding, packed normals and tangents to one step, everything else exactly).
+With multiply-add fusion turned back on, the aarch64 hash changes, which is the
+check that `-ffp-contract=off` is in force.
 
 ## What had to change
 
@@ -97,14 +135,12 @@ with the old code it crashes at 16 KiB pages, with the new code it passes at 4,
 
 From a trial compile of the client sources and a look at the dependencies:
 
-- **SSE skinning.** `r_model_skin.h` includes `<mmintrin.h>` and
-  `r_model_skin_sse.cpp` is SSE/MMX code. The engine already has a scalar path
-  (`r_sse_skinning` / `sys_SSE` off), so the Arm client should build the SSE
-  file out and keep `sys_SSE` off. This is the only intrinsic code in the
-  client.
+- **SSE skinning** (done, [above](#skinning)). `r_model_skin.h` included
+  `<mmintrin.h>` and `r_model_skin_sse.cpp` is SSE/MMX code. This is the only
+  intrinsic code in the client.
 - **DXVK Native.** 2.7.1, the pinned version, has `DXVK_ARCH_ARM64` guards in
   `src/util/util_bit.h` and an Arm spin-lock path in `sync_spinlock.h`, so it is
-  meant to build for aarch64. Not built here yet; the first client step is to
+  meant to build for aarch64. Not built here yet; the next client step is to
   build it (natively on the Arm runner, or cross with Meson) and run the device
   probe on lavapipe.
 - **SDL3, OpenAL Soft, FFmpeg**: all build for aarch64 Linux (distribution
@@ -159,6 +195,8 @@ branch:
 
 - Load a retail map on an Arm machine (no Arm hardware with game data has been
   used yet).
-- Client and Windows ARM64 steps above.
+- Build DXVK Native for aarch64 and run the device probe and the client on a
+  real Vulkan driver.
+- Windows ARM64 (step 4).
 - The virtual-memory self-test's checks of 32-bit address-space limits fail on
   every 64-bit build (x86_64 too); `run_linux_checks.py` only runs it as i386.

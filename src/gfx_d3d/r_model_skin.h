@@ -1,15 +1,18 @@
 #pragma once
 #include "r_material.h"
+#include <universal/arch_intrin.h> // KISAK_ARCH_X86
 
 // The SSE skinning path (r_model_skin_sse.cpp) moves 8-byte vertex halves in MMX
 // registers, which share the x87 stack and need EMMS before float code runs.
 // MSVC has no MMX intrinsics for x64, so x64 Windows builds use SSE2 registers
 // for those halves instead (KISAK_SKIN_SSE2), and there is no MMX state to clear.
 // Defining KISAK_SKIN_SSE2 elsewhere selects the SSE2 form too.
+// Arm (aarch64 Linux, Windows ARM64) has neither: it always skins with the
+// scalar code (sys_SSE is off there) and r_model_skin_sse.cpp builds empty.
 #if defined(_M_X64) && !defined(KISAK_SKIN_SSE2)
 #define KISAK_SKIN_SSE2 1
 #endif
-#ifdef KISAK_SKIN_SSE2
+#if defined(KISAK_SKIN_SSE2) || !KISAK_ARCH_X86
 inline void R_SkinEmptyMmxState() {}
 #else
 #include <mmintrin.h>

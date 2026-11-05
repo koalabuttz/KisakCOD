@@ -3,7 +3,8 @@
 #
 # Off by default. Builds KisakCOD-mp, the multiplayer game itself (server, game,
 # cgame, client, UI, sound and renderer in one process (i386; x86_64 under
-# KISAK_LINUX_ARCH=x86_64, see docs/linux-x64.md), as the Windows
+# KISAK_LINUX_ARCH=x86_64, see docs/linux-x64.md; aarch64 under
+# KISAK_LINUX_ARCH=aarch64, see docs/linux-arm64.md), as the Windows
 # KisakCOD-mp target is), for the player-spawn milestone: a listen server whose
 # own client joins over the engine's in-process loopback.
 #
@@ -338,9 +339,30 @@ if(KISAK_LINUX_CINEMATICS)
 endif()
 
 # Asset-free check that the SSE2 form of the vertex skinning code, which x64
-# Windows builds use, writes the same bytes as the MMX form.
-add_executable(KisakCOD-skin-sse2-test "${TESTS_DIR}/skinning/skin_sse2_test.cpp")
-target_compile_features(KisakCOD-skin-sse2-test PRIVATE cxx_std_20)
-target_compile_definitions(KisakCOD-skin-sse2-test PRIVATE ${KISAK_MP_CLIENT_DEFINITIONS})
-target_compile_options(KisakCOD-skin-sse2-test PRIVATE ${KISAK_MP_CLIENT_OPTIONS} -O2 -Wno-missing-declarations)
-target_include_directories(KisakCOD-skin-sse2-test PRIVATE "${SRC_DIR}" "${DEPS_DIR}" "${tracy_SOURCE_DIR}/public")
+# Windows builds use, writes the same bytes as the MMX form. x86 only: Arm skins
+# with the scalar code.
+# Asset-free check of the scalar skinning code Arm builds use: the same output
+# bytes on every architecture, and on x86 the same result as the SSE path.
+add_executable(KisakCOD-skin-scalar-test
+    "${TESTS_DIR}/skinning/skin_scalar_test.cpp"
+    "${SRC_DIR}/gfx_d3d/r_model_skin.cpp"
+    "${SRC_DIR}/universal/com_math.cpp"
+    "${SRC_DIR}/qcommon/com_pack.cpp")
+target_compile_features(KisakCOD-skin-scalar-test PRIVATE cxx_std_20)
+target_compile_definitions(KisakCOD-skin-scalar-test PRIVATE ${KISAK_MP_CLIENT_DEFINITIONS})
+target_compile_options(KisakCOD-skin-scalar-test PRIVATE ${KISAK_MP_CLIENT_OPTIONS} -O2 -Wno-missing-declarations)
+target_include_directories(KisakCOD-skin-scalar-test PRIVATE "${SRC_DIR}" "${DEPS_DIR}" "${tracy_SOURCE_DIR}/public")
+if(KISAK_OPENAL_INCLUDE_DIR)
+    target_include_directories(KisakCOD-skin-scalar-test SYSTEM PRIVATE "${KISAK_OPENAL_INCLUDE_DIR}")
+endif()
+# r_model_skin.cpp's command entry point reaches the renderer; only the
+# skinning functions are kept.
+target_link_options(KisakCOD-skin-scalar-test PRIVATE -Wl,--gc-sections)
+
+if(NOT KISAK_LINUX_ARCH STREQUAL "aarch64")
+    add_executable(KisakCOD-skin-sse2-test "${TESTS_DIR}/skinning/skin_sse2_test.cpp")
+    target_compile_features(KisakCOD-skin-sse2-test PRIVATE cxx_std_20)
+    target_compile_definitions(KisakCOD-skin-sse2-test PRIVATE ${KISAK_MP_CLIENT_DEFINITIONS})
+    target_compile_options(KisakCOD-skin-sse2-test PRIVATE ${KISAK_MP_CLIENT_OPTIONS} -O2 -Wno-missing-declarations)
+    target_include_directories(KisakCOD-skin-sse2-test PRIVATE "${SRC_DIR}" "${DEPS_DIR}" "${tracy_SOURCE_DIR}/public")
+endif()
