@@ -68,3 +68,12 @@ if(KISAK_HAVE_STACK_CLASH_PROTECTION)
     list(APPEND KISAK_LINUX_HARDENING_OPTIONS -fstack-clash-protection)
 endif()
 set(KISAK_LINUX_HARDENING_LINK_OPTIONS -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack)
+# glibc's checked string and memory calls (_FORTIFY_SOURCE=2): a copy that
+# would run past the end of a known-size buffer stops the process.  Level 2
+# also checks copies into struct members, which is where decompiled code is
+# most likely to write past one field into the next on purpose, so this needs
+# a bot soak on every stock map before it ships.  It needs optimisation, so
+# Debug builds leave it off.
+list(APPEND KISAK_LINUX_HARDENING_OPTIONS
+    $<$<NOT:$<CONFIG:Debug>>:-U_FORTIFY_SOURCE>
+    $<$<NOT:$<CONFIG:Debug>>:-D_FORTIFY_SOURCE=2>)

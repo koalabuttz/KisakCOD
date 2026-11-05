@@ -40,7 +40,8 @@ profiling build needs `-DKISAK_LINUX_TRACY=ON` (Tracy's listener answers
 source-file requests from any local user, so do not run that build on a shared
 host). The server, `KisakCOD-mp` and `KisakCOD-sp` are built with stack
 canaries (`-fstack-protector-strong`), stack-clash probes, a read-only
-relocation table (`-z relro -z now`) and a non-executable stack, and printf
+relocation table (`-z relro -z now`) and a non-executable stack (plus glibc's
+checked copies, `_FORTIFY_SOURCE=2`, in every configuration but Debug), and printf
 format mistakes in the `Com_*` printers are compile errors
 (`-Werror=format-security`). Clang is required for the Microsoft C++ language
 extensions still used by the shared engine code. The compiler and linker both
