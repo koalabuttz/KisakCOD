@@ -1,7 +1,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$BuildOutput,
     [Parameter(Mandatory = $true)][string]$DxSdkPackage,
-    [ValidateSet('x86', 'x64')][string]$Arch = 'x86'
+    [ValidateSet('x86', 'x64', 'arm64')][string]$Arch = 'x86'
 )
 $ErrorActionPreference = 'Stop'
 
@@ -15,6 +15,8 @@ if ($Arch -eq 'x86') {
     # The 64-bit build has no binkw32 (its movies use FFmpeg DLLs, already in the output).
     Copy-Item 'deps/binklib/binkw32.dll' $startup
 }
+# There is no ARM64 D3DX9 runtime; the ARM64 build does not use one, so the
+# filter below copies nothing for it.
 Get-ChildItem $DxSdkPackage -Recurse -File -Filter '*.dll' |
     Where-Object { $_.FullName -match "[\\/]($Arch|win-$Arch)[\\/]" } |
     Copy-Item -Destination $startup

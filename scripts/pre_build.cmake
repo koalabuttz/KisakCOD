@@ -21,7 +21,9 @@ if (KISAK_PLATFORM STREQUAL "win32")
 endif()
 
 # Library folder and linker machine for the target architecture.
-if (KISAK_WIN64)
+if (KISAK_WIN_ARM64)
+    set(KISAK_WIN_ARCH ARM64)
+elseif (KISAK_WIN64)
     set(KISAK_WIN_ARCH x64)
 else()
     set(KISAK_WIN_ARCH x86)
@@ -51,8 +53,11 @@ if (WIN32 AND NOT KISAK_PLATFORM STREQUAL "mingw")
     set(DXSDK_LIB_DIR ${DXSDK_DIR}/lib/${KISAK_WIN_ARCH})
   endif() # DEFINED CICD
 
-  # Set the required library
-  if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  # Set the required library. The DirectX SDK has no ARM64 D3DX9 library;
+  # ARM64 builds link src/win32/win_d3dx_unavailable.cpp instead.
+  if(KISAK_WIN_ARM64)
+    set(D3DX_LIB "")
+  elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(D3DX_LIB d3dx9d.lib)
   else()
     set(D3DX_LIB d3dx9.lib)
@@ -73,7 +78,9 @@ endif()
 if (WIN32 AND NOT KISAK_PLATFORM STREQUAL "mingw")
   target_include_directories(${PROJECT_NAME} PUBLIC ${DXSDK_INC_DIR})
 
-  target_link_directories(${PROJECT_NAME} PUBLIC ${DXSDK_LIB_DIR})
+  if (NOT KISAK_WIN_ARM64)
+    target_link_directories(${PROJECT_NAME} PUBLIC ${DXSDK_LIB_DIR})
+  endif()
   target_link_directories(${PROJECT_NAME} PUBLIC "${DEPS_DIR}/msslib")
   target_link_directories(${PROJECT_NAME} PUBLIC "${DEPS_DIR}/steamsdk")
   target_link_directories(${PROJECT_NAME} PUBLIC "${DEPS_DIR}/binklib")

@@ -62,6 +62,15 @@ else()
     set(KISAK_WIN64 OFF)
 endif()
 
+# Windows on Arm (MSVC with -A ARM64; docs/linux-arm64.md). A 64-bit build like
+# x64 above, plus: no D3DX9 library exists for ARM64 (see
+# src/win32/win_d3dx_unavailable.cpp) and the CPU has no SSE.
+set(KISAK_WIN_ARM64 OFF)
+if(KISAK_WIN64 AND MSVC AND CMAKE_CXX_COMPILER_ARCHITECTURE_ID STREQUAL "ARM64")
+    set(KISAK_WIN_ARM64 ON)
+    message(STATUS "Windows ARM64 build: raw-asset shader compiles (D3DX9) are unavailable")
+endif()
+
 # Set the default C++ standard
 set(CMAKE_CXX_STANDARD 20)
 
