@@ -2124,7 +2124,7 @@ const char *G_GetEntityTypeName(const gentity_s *ent)
             0,
             "%s",
             "(unsigned)ent->s.eType < ET_EVENTS");
-    return *(const char **)((char *)entityTypeNames + __ROL4__(ent->s.eType, 2));
+    return entityTypeNames[ent->s.eType];
 }
 
 unsigned int holdrand;

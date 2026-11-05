@@ -688,45 +688,17 @@ bool Path_IsBadPlaceLink(unsigned int nodeNumFrom, unsigned int nodeNumTo, team_
 
 unsigned int Path_InitLinkCounts()
 {
-    unsigned int result; // r3
-    pathnode_t *nodes; // r7
-    int v2; // r4
-    unsigned int v3; // r6
-    int v4; // r11
-    int v5; // r9
-    int v6; // r7
-
-    result = 0;
-    if (gameWorldSp.path.nodeCount)
+    // Every link starts with no bad places on it. (The decompiled loop walked
+    // the 32-bit layout: a 128-byte node and the Links pointer at +64.)
+    unsigned int nodeIndex;
+    for (nodeIndex = 0; nodeIndex < gameWorldSp.path.nodeCount; ++nodeIndex)
     {
-        nodes = gameWorldSp.path.nodes;
-        v2 = 0;
-        do
-        {
-            v3 = 0;
-            nodes[v2].dynamic.wLinkCount = nodes[v2].constant.totalLinkCount;
-            nodes = gameWorldSp.path.nodes;
-            if (gameWorldSp.path.nodes[v2].constant.totalLinkCount)
-            {
-                v4 = 0;
-                v5 = v2 * 128 + 64;
-                do
-                {
-                    ++v3;
-                    *(_BYTE *)(*(nodeType *)((char *)&nodes->constant.type + v5) + v4 + 8) = 0;
-                    *(_BYTE *)(*(nodeType *)((char *)&gameWorldSp.path.nodes->constant.type + v5) + v4 + 9) = 0;
-                    *(_BYTE *)(*(nodeType *)((char *)&gameWorldSp.path.nodes->constant.type + v5) + v4 + 10) = 0;
-                    v6 = *(nodeType *)((char *)&gameWorldSp.path.nodes->constant.type + v5) + v4;
-                    v4 += 12;
-                    *(_BYTE *)(v6 + 11) = 0;
-                    nodes = gameWorldSp.path.nodes;
-                } while (v3 < gameWorldSp.path.nodes[v2].constant.totalLinkCount);
-            }
-            ++result;
-            ++v2;
-        } while (result < gameWorldSp.path.nodeCount);
+        pathnode_t *node = &gameWorldSp.path.nodes[nodeIndex];
+        node->dynamic.wLinkCount = node->constant.totalLinkCount;
+        for (unsigned int linkIndex = 0; linkIndex < node->constant.totalLinkCount; ++linkIndex)
+            memset(node->constant.Links[linkIndex].ubBadPlaceCount, 0, sizeof(node->constant.Links[linkIndex].ubBadPlaceCount));
     }
-    return result;
+    return nodeIndex;
 }
 
 void Path_InitLinkInfoArray()
@@ -753,29 +725,13 @@ void Path_InitLinkInfoArray()
 
 void Path_InitNodeDynamic(pathnode_t *loadNode)
 {
-    pathnode_dynamic_t *p_dynamic; // r11
-    int v3; // ctr
-    pathnode_transient_t *p_transient; // r11
-    int v5; // ctr
     double v6; // fp13
     float v7[4]; // [sp+50h] [-20h] BYREF
 
-    p_dynamic = &loadNode->dynamic;
-    v3 = 8;
-    do
-    {
-        p_dynamic->pOwner = (SentientHandle)0;
-        p_dynamic = (pathnode_dynamic_t *)((char *)p_dynamic + 4);
-        --v3;
-    } while (v3);
-    p_transient = &loadNode->transient;
-    v5 = 7;
-    do
-    {
-        p_transient->iSearchFrame = 0;
-        p_transient = (pathnode_transient_t *)((char *)p_transient + 4);
-        --v5;
-    } while (v5);
+    // Clear the dynamic and transient parts (sizeof: transient holds pointers,
+    // 28 bytes on x86 and 48 on x64).
+    memset((void *)&loadNode->dynamic, 0, sizeof(loadNode->dynamic));
+    memset((void *)&loadNode->transient, 0, sizeof(loadNode->transient));
 
     YawVectors(loadNode->constant.fAngle, v7, NULL);
     v6 = v7[1];
@@ -789,10 +745,6 @@ void Path_InitNodesDynamic()
     unsigned int v1; // r28
     int v2; // r30
     pathnode_t *v3; // r31
-    pathnode_dynamic_t *p_dynamic; // r11
-    int v5; // ctr
-    pathnode_transient_t *p_transient; // r11
-    int v7; // ctr
     float v8[16]; // [sp+50h] [-40h] BYREF
 
     v1 = 0;
@@ -802,22 +754,10 @@ void Path_InitNodesDynamic()
         do
         {
             v3 = &gameWorldSp.path.nodes[v2];
-            p_dynamic = &gameWorldSp.path.nodes[v2].dynamic;
-            v5 = 8;
-            do
-            {
-                p_dynamic->pOwner = (SentientHandle)0;
-                p_dynamic = (pathnode_dynamic_t *)((char *)p_dynamic + 4);
-                --v5;
-            } while (v5);
-            p_transient = &v3->transient;
-            v7 = 7;
-            do
-            {
-                p_transient->iSearchFrame = 0;
-                p_transient = (pathnode_transient_t *)((char *)p_transient + 4);
-                --v7;
-            } while (v7);
+            // Clear the dynamic and transient parts (sizeof: transient holds pointers,
+            // 28 bytes on x86 and 48 on x64).
+            memset((void *)&v3->dynamic, 0, sizeof(v3->dynamic));
+            memset((void *)&v3->transient, 0, sizeof(v3->transient));
 
             YawVectors(v3->constant.fAngle, v8, NULL);
             v3->constant.forward[0] = v8[0];
@@ -892,7 +832,7 @@ void Path_DrawDebugLink(const pathnode_t *node, const int i, bool bShowAll)
 
     for (; reverseIndex < linkCount; ++reverseIndex)
     {
-        const pathnode_t *linked = (const pathnode_t *)((char *)gameWorldSp.path.nodes + (otherNode->constant.Links[reverseIndex].nodeNum << 7));
+        const pathnode_t *linked = &gameWorldSp.path.nodes[otherNode->constant.Links[reverseIndex].nodeNum];
         if (linked == node)
         {
             found = 1;
@@ -3549,23 +3489,10 @@ void G_SpawnPathnodeDynamic()
                 v1 = &gameWorldSp.path.nodes[g_path.actualNodeCount++];
                 if (g_path.actualNodeCount > gameWorldSp.path.nodeCount)
                 {
-                    p_dynamic = &v1->dynamic;
-                    v3 = 8;
-                    do
-                    {
-                        p_dynamic->pOwner = (SentientHandle)0;
-                        p_dynamic = (pathnode_dynamic_t *)((char *)p_dynamic + 4);
-                        --v3;
-                    } while (v3);
-
-                    p_transient = &v1->transient;
-                    v5 = 7;
-                    do
-                    {
-                        p_transient->iSearchFrame = 0;
-                        p_transient = (pathnode_transient_t *)((char *)p_transient + 4);
-                        --v5;
-                    } while (v5);
+                    // Clear the dynamic and transient parts (sizeof: transient holds pointers,
+                    // 28 bytes on x86 and 48 on x64).
+                    memset((void *)&v1->dynamic, 0, sizeof(v1->dynamic));
+                    memset((void *)&v1->transient, 0, sizeof(v1->transient));
                 }
                 G_ParsePathnodeScriptFields(v1);
                 YawVectors(v1->constant.fAngle, forward, NULL);

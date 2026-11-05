@@ -152,6 +152,7 @@ struct pathnode_dynamic_t
     __int16 turretEntNumber;
     __int16 userCount;
 };
+static_assert(sizeof(pathnode_dynamic_t) == 32); // no pointers: g_save copies 32 bytes on every target
 #elif defined(KISAK_RADIANT)
 struct pathnode_dynamic_t // sizeof=0x20 — same layout as MP; Radiant has no AI
 {
