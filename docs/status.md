@@ -15,7 +15,7 @@ without a GPU or game data, against stand-in D3D9 and OpenAL libraries.
 | --- | --- | --- |
 | Dedicated server, i386 | `build-linux.sh` (default) | Loads all 21 stock maps, hosts bots through map cycles, clean shutdown (laptop). Retail CoD4 1.7 and CoD4x 21.1 clients have each played a brief local session through the authentication opt-ins. [Guide](linux-dedicated.md) |
 | Dedicated server, x86_64 | `-DKISAK_LINUX_ARCH=x86_64` | Same as i386: 21 of 21 stock maps, bots through map cycles, clean quit (laptop). [Guide](linux-x64.md#x86_64-dedicated-server) |
-| Multiplayer client `KisakCOD-mp`, i386 | `-DKISAK_BUILD_LINUX_MP_CLIENT=ON` | Playable on a listen server (laptop): `+devmap mp_crash`, team and class menus, spawn, move, shoot, grenades, OpenAL sound, flashbang white-out, clean quit. [Guide](linux-mp-client.md) |
+| Multiplayer client `KisakCOD-mp`, i386 | `-DKISAK_BUILD_LINUX_MP_CLIENT=ON` | Playable on a listen server (laptop): `+devmap mp_crash`, team and class menus, spawn, move, shoot, grenades, OpenAL sound, flashbang white-out, clean quit. Client prediction misses as often as the Windows build (see [Prediction](#prediction)). [Guide](linux-mp-client.md) |
 | Multiplayer client, x86_64 | the same, with `-DKISAK_LINUX_ARCH=x86_64` | Playable on the same terms as i386 (laptop), including sprint and mantle animations and a clean quit. [Guide](linux-x64.md#x86_64-multiplayer-client) |
 | Dedicated server, aarch64 (64-bit Arm) | `-DKISAK_LINUX_ARCH=aarch64` | Builds natively on Arm or cross-compiled from x86, boots without game data (qemu and hosted Arm CI). Not yet run with game data. [Guide](linux-arm64.md) |
 | Multiplayer client, aarch64 | the client options with `-DKISAK_LINUX_ARCH=aarch64` | Builds and passes the asset-free client checks (qemu and hosted Arm CI) against a D3D9 stand-in; no aarch64 DXVK build yet, so it has not drawn a frame. [Guide](linux-arm64.md#building-the-aarch64-client) |
@@ -26,6 +26,26 @@ The client builds need DXVK Native, SDL3 3.2.10 or newer and OpenAL for the
 target architecture; the guides above give the CMake lines. The game files
 always come from your own install (`+set fs_basepath <game folder>`).
 
+## Prediction
+
+An early laptop session (2026-11-03) logged about five times as many
+`cg_showmiss 1` prediction misses as a later Windows session (2026-11-04).
+Follow-up laptop runs put that down to what happened in play, not to the Linux
+build:
+
+| Session | Play | Misses | Mean size |
+| --- | --- | --- | --- |
+| Windows PC, CI build | ~5 min by hand | 32 (34 error lines) | 0.47 units |
+| Laptop, i386, scripted moves | run, strafe, turn, jump, sprint, twice | 1 | 0.3 units |
+| Laptop, i386, by hand | ~2.5 min, incl. concussion grenades | 19 | 0.65 units |
+
+Misses per minute by hand are about the same (6.4 Windows, 7.6 Linux). The
+x86_64 client was compared side by side with i386 by eye only. Two build
+settings keep the movement math the same as the Windows build, which matters
+because the client replays the server's movement code: x86 Linux builds use SSE
+float math (`-msse2 -mfpmath=sse`, no x87 excess precision), and aarch64 builds
+use `-ffp-contract=off` (no fused multiply-add).
+
 ## What does not work yet
 
 - **Joining a remote server.** Linux has no Steam ticket provider, so the client
@@ -33,9 +53,6 @@ always come from your own install (`+set fs_basepath <game folder>`).
   ordinary client tickets unless an explicit opt-in is set
   ([details](linux-dedicated.md#local-connection-testing-without-steam-authentication)).
   This stays refused until a real provider exists.
-- **Prediction.** The Linux client logs about five times as many prediction
-  errors and misses as the Windows build does over the same kind of play
-  (laptop vs a Windows PC, 2026-11-04). Being investigated.
 - **x86_64 singleplayer.** The 64-bit configuration refuses the SP game for now.
 - **Windows x64.** The MSVC x64 compile census runs on master
   ([census](linux-x64.md#windows-msvc-x64-census)); the first compile fixes
