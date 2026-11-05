@@ -54,10 +54,11 @@ target_compile_options(KisakCOD-dedi PRIVATE
     -ffunction-sections -fdata-sections
     -Wno-c++11-narrowing -Wno-invalid-token-paste
     -Wno-ignored-attributes -Werror=format-security
+    ${KISAK_LINUX_HARDENING_OPTIONS}
 )
 # Shared source files also contain client-only helpers. Discard unreachable
 # functions rather than linking their Windows presentation dependencies.
-target_link_options(KisakCOD-dedi PRIVATE -Wl,--gc-sections)
+target_link_options(KisakCOD-dedi PRIVATE -Wl,--gc-sections ${KISAK_LINUX_HARDENING_LINK_OPTIONS})
 find_package(Threads REQUIRED)
 target_link_libraries(KisakCOD-dedi PRIVATE Threads::Threads ${CMAKE_DL_LIBS})
 add_dependencies(KisakCOD-dedi update_build_number)

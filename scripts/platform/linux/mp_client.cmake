@@ -214,6 +214,7 @@ set(KISAK_MP_CLIENT_OPTIONS
     -ffunction-sections -fdata-sections
     -Wno-c++11-narrowing -Wno-invalid-token-paste
     -Wno-ignored-attributes -Werror=format-security
+    ${KISAK_LINUX_HARDENING_OPTIONS}
 )
 
 # The engine's PROF_SCOPED zones (src/universal/profile.h) become Tracy zones.
@@ -292,8 +293,8 @@ add_executable(KisakCOD-mp
     $<TARGET_OBJECTS:KisakCOD-mp-own>
     $<$<BOOL:${KISAK_LINUX_CINEMATICS}>:$<TARGET_OBJECTS:KisakCOD-mp-cinematic>>)
 target_include_directories(KisakCOD-mp PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
-target_compile_options(KisakCOD-mp PRIVATE ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing)
-target_link_options(KisakCOD-mp PRIVATE -Wl,--gc-sections
+target_compile_options(KisakCOD-mp PRIVATE ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing ${KISAK_LINUX_HARDENING_OPTIONS})
+target_link_options(KisakCOD-mp PRIVATE -Wl,--gc-sections ${KISAK_LINUX_HARDENING_LINK_OPTIONS}
     "-Wl,--version-script=${SCRIPTS_DIR}/platform/linux/mp_client_exports.map")
 set_property(TARGET KisakCOD-mp APPEND PROPERTY LINK_DEPENDS "${SCRIPTS_DIR}/platform/linux/mp_client_exports.map")
 target_link_libraries(KisakCOD-mp PRIVATE
