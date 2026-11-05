@@ -97,8 +97,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # -k 0: report every unit that fails, not only the first.
-          cmake --build "$BUILD_DIR" --target KisakCOD-dedi --parallel "$(sysctl -n hw.ncpu)" -- -k 0
+          # -k 0: report every unit that fails, not only the first. On a
+          # failure, end with each distinct error once so the cause is not
+          # buried under the warnings of the units that built.
+          status=0
+          cmake --build "$BUILD_DIR" --target KisakCOD-dedi --parallel "$(sysctl -n hw.ncpu)" -- -k 0 \
+            2>&1 | tee "$RUNNER_TEMP/build.log" || status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "::group::Distinct errors"
+            grep -E "error:|Undefined symbols|referenced from|ld: " "$RUNNER_TEMP/build.log" | sed 's#^.*/KisakCOD/KisakCOD/##' | sort | uniq -c | sort -rn | head -n 300
+            echo "::endgroup::"
+            exit "$status"
+          fi
           ls -l "$BINARY"
           file "$BINARY"
 

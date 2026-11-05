@@ -210,7 +210,9 @@
 #   define FAR
 #endif
 
-#if !defined(MACOS) && !defined(TARGET_OS_MAC)
+/* KisakCOD: later zlib releases test __MACTYPES__ instead (macOS SDK headers
+   define TARGET_OS_MAC without supplying Byte). */
+#if !defined(__MACTYPES__)
 typedef unsigned char  Byte;  /* 8 bits */
 #endif
 typedef unsigned int   uInt;  /* 16 bits or more */
