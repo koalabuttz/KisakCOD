@@ -91,6 +91,7 @@ struct fileData_s // sizeof=0xC
     // padding byte
     // padding byte
 };
+static_assert(LAYOUT_32BIT(offsetof(fileData_s, name) == 9));
 
 void Hunk_ClearData();
 void Hunk_ClearDataFor(fileData_s** pFileData, uint8_t* low, uint8_t* high);
