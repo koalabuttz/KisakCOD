@@ -77,4 +77,19 @@ as `steam_session`) needs no Steam:
   through `~/.steam/sdk32/steamclient.so` and `sdk64` as app 7940, was logged on
   and subscribed, got a 234-byte ticket, and Steam validated it
   (`BeginAuthSession` OK, then `ValidateAuthTicketResponse` OK).
-- Not yet: the game itself joining a Steam-authenticated server.
+- 2026-11-05, laptop game run 1 (PR 85 first commit, i386 dedi and client, both
+  flag on, same Steam account): the client joined the dedicated server on
+  127.0.0.1:28960; the server logged "A player passed the Steam auth check";
+  the client reached the game and spawned. With the server's Steam backend off
+  (`KISAK_STEAMCLIENT_LIBRARY=/nonexistent/...`), the same client was refused
+  with "Your Steam Client Ticket was Invalid". That run found two bugs, fixed
+  since: Steam started after the command line ran, so `+connect` on the
+  command line could not authenticate (Steam_Init now runs before Com_Init, as
+  in WinMain); and every Steam-on process crashed on quit, releasing its Steam
+  pipe from an exit-time destructor after steamclient.so's own teardown
+  (Sys_Quit now shuts Steam down first, and the destructor never calls Steam).
+
+Steam delivers auth verdicts to every process logged in to the same account,
+so each process acts only on verdicts for SteamIDs it started a session for. A
+player who reconnects before their old session ended (a listen server does not
+end it on drop) gets the old session ended and the new ticket checked.

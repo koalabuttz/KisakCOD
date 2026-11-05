@@ -251,7 +251,10 @@ void TestCloseAndReopen(linux_steam::Session &session)
         linux_steam::Session scoped;
         Check(scoped.Open(g_library, 7940) == linux_steam::OpenResult::ok, "a second session opens");
     }
-    Check(g_control->pipesReleased == 1 && g_control->usersReleased == 1, "the destructor closes the session");
+    // A static session is destroyed at exit, after steamclient.so's own
+    // teardown: calling into the library then crashed the game on quit.
+    Check(g_control->pipesReleased == 0 && g_control->usersReleased == 0 && g_control->cancelCalls == 0,
+        "the destructor does not call into the library");
 }
 } // namespace
 

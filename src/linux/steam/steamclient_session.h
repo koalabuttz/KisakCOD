@@ -32,9 +32,10 @@ enum class OpenResult
 
 const char *OpenResultName(OpenResult result);
 
-// The SDK's k_EBeginAuthSessionResultOK and k_EAuthSessionResponseOK, for
-// callers that do not include the SDK headers.
+// The SDK's k_EBeginAuthSessionResultOK, ...DuplicateRequest and
+// k_EAuthSessionResponseOK, for callers that do not include the SDK headers.
 constexpr int kBeginAuthOK = 0;
+constexpr int kBeginAuthDuplicateRequest = 2;
 constexpr int kAuthResponseOK = 0;
 
 // One ValidateAuthTicketResponse_t: Steam's verdict on a ticket passed to
@@ -57,6 +58,7 @@ public:
     Session() = default;
     Session(const Session &) = delete;
     Session &operator=(const Session &) = delete;
+    // Does not close: call Close() before exit (see the definition).
     ~Session();
 
     // Sets SteamAppId/SteamGameId to appId for this process, loads the

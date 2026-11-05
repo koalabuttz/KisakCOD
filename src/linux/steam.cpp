@@ -78,6 +78,31 @@ static uint32 steamClientTicketSize = 0;
 
 static std::mutex kickPlayerMutex;
 static std::vector<uint64_t> steamIDsToKick;
+// SteamIDs this process started an auth session for (BeginAuthSession OK and
+// not yet ended). Steam can deliver verdicts to every process logged in to the
+// same account, so verdicts for anyone else are not ours to act on.
+static std::vector<uint64_t> steamAuthSessions;
+
+static bool Steam_HasAuthSession(uint64_t steamID64)
+{
+    for (uint64_t id : steamAuthSessions)
+        if (id == steamID64)
+            return true;
+    return false;
+}
+
+static void Steam_ForgetAuthSession(uint64_t steamID64)
+{
+    for (size_t i = 0; i < steamAuthSessions.size(); ++i)
+    {
+        if (steamAuthSessions[i] == steamID64)
+        {
+            steamAuthSessions[i] = steamAuthSessions.back();
+            steamAuthSessions.pop_back();
+            return;
+        }
+    }
+}
 
 uint64_t Steam_GetClientSteamID64()
 {
@@ -106,6 +131,8 @@ void Steam_CancelClientTicket()
 
 static void Steam_OnVerdict(const linux_steam::AuthVerdict &verdict, void *)
 {
+    if (!Steam_HasAuthSession(verdict.steamId))
+        return;
     if (verdict.response != linux_steam::kAuthResponseOK)
     {
         // Logged without the SteamID: the console log is often shared.
@@ -207,12 +234,20 @@ void Steam_Init()
         return;
     }
     g_steamInitialized = true;
-    Com_Printf(CON_CHANNEL_SYSTEM, "[Kisak] Steam: logged on as app %u through %s\n", appId, path);
+    if (appId)
+        Com_Printf(CON_CHANNEL_SYSTEM, "[Kisak] Steam: logged on as app %u through %s\n", appId, path);
+    else
+        Com_Printf(CON_CHANNEL_SYSTEM, "[Kisak] Steam: logged on through %s (app id not reported)\n", path);
 }
 
 void Steam_Shutdown()
 {
+    if (!g_steamInitialized)
+        return;
     Steam_CancelClientTicket();
+    for (uint64_t id : steamAuthSessions)
+        s_steam.EndAuth(id);
+    steamAuthSessions.clear();
     s_steam.Close();
     g_steamInitialized = false;
     memset(g_steamName, 0, sizeof(g_steamName));
@@ -249,15 +284,32 @@ bool Steam_CheckClientTicket(const void *pAuthTicket, uint32 authTicketLen, uint
     }
     if (!steamID64)
         return false;
+    int result = s_steam.BeginAuth(pAuthTicket, authTicketLen, steamID64);
+    if (result == linux_steam::kBeginAuthDuplicateRequest && Steam_HasAuthSession(steamID64))
+    {
+        // A player reconnecting before this process ended their last session
+        // (a listen server's SV_DropClient does not end it): end it and check
+        // the new ticket instead. The new ticket still has to pass.
+        s_steam.EndAuth(steamID64);
+        Steam_ForgetAuthSession(steamID64);
+        result = s_steam.BeginAuth(pAuthTicket, authTicketLen, steamID64);
+    }
+    if (result != linux_steam::kBeginAuthOK)
+        return false;
+    if (!Steam_HasAuthSession(steamID64))
+        steamAuthSessions.push_back(steamID64);
     // Good for now: Steam's verdict arrives later, and Steam_CheckClients drops
     // the player if it is negative.
-    return s_steam.BeginAuth(pAuthTicket, authTicketLen, steamID64) == linux_steam::kBeginAuthOK;
+    return true;
 }
 
 void Steam_OnClientDropped(uint64_t steamID64)
 {
     if (g_steamInitialized && steamID64)
+    {
         s_steam.EndAuth(steamID64);
+        Steam_ForgetAuthSession(steamID64);
+    }
 }
 
 #ifdef KISAK_MP

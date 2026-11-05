@@ -39,6 +39,7 @@ const char *OpenResultName(OpenResult result)
     case OpenResult::noUserInterface: return "no-user-interface";
     }
     static_assert(kBeginAuthOK == k_EBeginAuthSessionResultOK, "SDK enum changed");
+    static_assert(kBeginAuthDuplicateRequest == k_EBeginAuthSessionResultDuplicateRequest, "SDK enum changed");
     static_assert(kAuthResponseOK == k_EAuthSessionResponseOK, "SDK enum changed");
     return "invalid-result";
 }
@@ -72,7 +73,11 @@ bool DefaultLibraryPath(char *buffer, size_t capacity)
 
 Session::~Session()
 {
-    Close();
+    // No calls into steamclient.so here: a session that is still open at
+    // process exit is destroyed by an atexit handler, after the library's own
+    // exit-time teardown, and releasing the pipe then crashes. Close() it
+    // before exit instead; the Steam client drops the pipe when the process
+    // ends either way.
 }
 
 OpenResult Session::Open(const char *libraryPath, uint32_t appId)
