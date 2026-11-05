@@ -1,7 +1,9 @@
 # Native Linux multiplayer client (KisakCOD-mp)
 
 `KisakCOD-mp` is the whole multiplayer game in one native Linux process (i386,
-or x86_64 as described in [linux-x64.md](linux-x64.md#x86_64-multiplayer-client)):
+or x86_64 as described in [linux-x64.md](linux-x64.md#x86_64-multiplayer-client);
+an aarch64 build compiles and passes the asset-free checks, see
+[linux-arm64.md](linux-arm64.md#building-the-aarch64-client)):
 server, game, cgame, client, UI, sound and renderer, as the Windows `KisakCOD-mp`
 target builds them. It is opt-in and off by default. It reached the
 player-spawn milestone: a listen server whose own client joins it over the
