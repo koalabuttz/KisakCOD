@@ -88,6 +88,14 @@ as `steam_session`) needs no Steam:
   in WinMain); and every Steam-on process crashed on quit, releasing its Steam
   pipe from an exit-time destructor after steamclient.so's own teardown
   (Sys_Quit now shuts Steam down first, and the destructor never calls Steam).
+- 2026-11-05, laptop game run 2 (the fixes): a command-line `+connect` to the
+  Steam-on dedicated server authenticated on the first try and reached the
+  game; `disconnect` and a console `connect` passed again; the client logged no
+  verdicts of its own; with the server's Steam off the client was refused; all
+  four processes quit with exit 0.
+
+Not verified: an x86_64 game run (the probe covered x86_64 login), a Windows
+client or server on the other end, and two different Steam accounts.
 
 Steam delivers auth verdicts to every process logged in to the same account,
 so each process acts only on verdicts for SteamIDs it started a session for. A
