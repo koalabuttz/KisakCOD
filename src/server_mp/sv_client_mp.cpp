@@ -38,7 +38,7 @@ extern "C" __declspec(dllimport) unsigned char __stdcall SystemFunction036(void 
 // KISAK: retail built the challenge token from svs.time ^ rand() ^ (rand() << 16)
 // with rand() seeded once from the clock, so a spoofer who saw a few tokens
 // could predict the next.  The client only echoes the value back in "connect",
-// so any 32-bit value works (CoD4x uses a keyed hash and retail clients connect
+// so any positive 31-bit value works (CoD4x uses a keyed hash and retail clients connect
 // to it); draw it from the operating system's generator.  The retail formula
 // stays as the fallback if that ever fails.
 static int SV_NewChallengeValue()
@@ -62,7 +62,10 @@ static int SV_NewChallengeValue()
         const int high = rand() << 16;
         value = static_cast<uint32_t>(svs.time ^ rand() ^ high);
     }
-    return static_cast<int>(value);
+    // Retail tokens are positive 31-bit values (MSVC's rand() is 15 bits), and
+    // clients and tools parse them as such; keep that range, and never 0.
+    value &= 0x7FFFFFFFu;
+    return value ? static_cast<int>(value) : 1;
 }
 
 struct ucmd_t // sizeof=0xC
