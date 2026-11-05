@@ -1008,7 +1008,11 @@ void DynEntCl_EntityImpactEvent(
                 MyAssertHandler(".\\DynEntity\\DynEntity_client.cpp", 1013, 0, "%s", "physPreset");
             Phys_ObjBulletImpact(
                 PHYS_WORLD_DYNENT,
+#ifdef KISAK_SP
+                (dxBody *)cent->pose.physObjId, // SP cpose_t keeps the body pointer itself
+#else
                 Phys_ObjFromId(cent->pose.physObjId),
+#endif
                 hitPos,
                 hitDir,
                 dynEnt_bulletForce->current.value,
@@ -1753,7 +1757,7 @@ void DynEntCl_WakeUpAroundPlayer(int localClientNum)
                 if (DynEnt_GetEntityProps(EntityDef->type)->usePhysics && !dynEntClient->physObjId)
                 {
                     ClientPose = DynEnt_GetClientPose(dynEntId, drawType);
-                    dynEntClient->physObjId = (int32_t)DynEntCl_CreatePhysObj(EntityDef, &ClientPose->pose);
+                    dynEntClient->physObjId = Phys_IdFromObj(DynEntCl_CreatePhysObj(EntityDef, &ClientPose->pose));
                 }
             }
 
