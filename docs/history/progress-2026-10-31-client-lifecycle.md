@@ -2,7 +2,7 @@
 
 > **Historical checkpoint — not current state.** The results below record one
 > branch on one date and are not rewritten here; do not read them as today's
-> status. Current: [2026-11-01 checkpoint](../progress-2026-11-01.md). Current guide:
+> status. Current: [status](../status.md). Current guide:
 > [Native Linux client](../linux-client.md).
 
 Branch `dot/client-lifecycle-2026-10-31` starts from `3da5d07e`, the prior headless

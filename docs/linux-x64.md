@@ -10,9 +10,14 @@ The track is staged:
 1. **Compile census** (this page, done): measure what stops a 64-bit compile and
    where the 32-bit assumptions are, filed under the upstream issues.
 2. **x86_64 dedicated server**: make `KisakCOD-dedi` build and run 64-bit, which
-   is where the fastfile loader and script VM work lands.
-3. **x86_64 client**: the renderer and client on DXVK Native x86_64 (started:
-   builds, not playable yet).
+   is where the fastfile loader and script VM work lands (done: all 21 stock
+   maps and bots, see [below](#x86_64-dedicated-server)).
+3. **x86_64 client**: the renderer and client on DXVK Native x86_64 (done:
+   playable on a developer laptop, see
+   [below](#x86_64-multiplayer-client)).
+
+Steps 2 and 3 are done for multiplayer. Still open: an x86_64 singleplayer
+game and a Windows x64 build (see [the MSVC x64 census](#windows-msvc-x64-census)).
 
 ## Upstream alignment
 
@@ -332,7 +337,7 @@ With bots connected, two more 32-bit assumptions showed up:
 It parses every source in the build with libclang and reports a unary minus on
 an `unsigned int` that is used as an index or added to a pointer.
 
-Still i386-shaped and off the dedicated path: the SP save game stack format in
+Off the dedicated path and left for later at that point: the SP save game stack format in
 `scr_readwrite.cpp`, client-side literal offset and size tables (effects,
 devgui, static model cache, server browser), and the pointer/integer casts the
 census lists in the raw asset (`*_load_obj.cpp`) loaders.
@@ -341,8 +346,11 @@ census lists in the raw asset (`*_load_obj.cpp`) loaders.
 
 Step 3 starts here. `KisakCOD-mp` and its native D3D9 boundary configure under
 `KISAK_LINUX_ARCH=x86_64`; the renderer probes and the other opt-in client
-targets stay i386-only. The client **builds and starts but is not playable
-yet**: the work below lists what still assumes 32-bit pointers.
+targets stay i386-only. The client **is playable** on a developer laptop with
+the game files (not CI evidence): on 2026-11-04 it reached the in-game state on
+`mp_crash`, spawned, moved, shot, played sound and quit cleanly, and its sprint
+and mantle animations match i386. The sections below list the 32-bit
+assumptions that had to go, and the checks that now look for them.
 
 ```sh
 cmake -S . -B build-x64-mp -G Ninja -DKISAK_PLATFORM=linux -DKISAK_LINUX_ARCH=x86_64 \
@@ -373,11 +381,11 @@ the same asset-free checks as the i386 client job: the game window test and
 `test_linux_mp_client.py` (file system refusal, autoconfigure stop, home folder
 rules).
 
-### What still assumes 32-bit pointers
+### What assumed 32-bit pointers
 
-The x86_64 client build warns at 336 casts between pointers and narrower
-integers (209 int-to-pointer, 127 pointer-to-int); 237 of them are in sources
-only the client compiles. The main groups:
+When the x86_64 client first built, it warned at 336 casts between pointers and
+narrower integers (209 int-to-pointer, 127 pointer-to-int); 237 of them were in
+sources only the client compiles. The main groups, all now fixed:
 
 - **Physics object ids**: fixed. `physObjId` fields (`cpose_t`, dynamic
   entities, breakable pieces, effect elements) keep a `dxBody *` in an `int`,
@@ -387,13 +395,15 @@ only the client compiles. The main groups:
   a table of live bodies that `dBodyCreate` fills and `dBodyDestroy` and
   `dWorldDestroy` empty (2048 slots; the retail body pool held 512). The
   `phys_objid` check in `run_linux_checks.py` tests both.
-- **Renderer streams that pack pointers into 32-bit words**: the static model
-  primitive draw stream (`R_WritePrimDrawSurfInt`), model surfaces, the worker
-  command data in `r_scene.cpp`/`r_dpvs_entity.cpp`, and the light and shadow
-  receiver callbacks.
-- **Decompiled byte offsets into structs** that hold pointers: menu expressions
-  (`ui_expressions*.cpp`), the script debugger, `rb_imagetouch.cpp`,
-  `cg_pose_mp.cpp`.
+- **Renderer streams that pack pointers into 32-bit words**: fixed (PR 69,
+  and PR 79 for the receiver scratch). The static model primitive draw stream
+  (`R_WritePrimDrawSurfInt`), model surfaces, the worker command data in
+  `r_scene.cpp`/`r_dpvs_entity.cpp`, and the light and shadow receiver
+  callbacks.
+- **Decompiled byte offsets into structs** that hold pointers: fixed (PRs 70,
+  71, 73 to 76). Menu expressions (`ui_expressions*.cpp`), the script debugger,
+  `rb_imagetouch.cpp`, `cg_pose_mp.cpp`, and the further cases in
+  [Byte offsets and union copies](#byte-offsets-and-union-copies).
 - **Struct sizes written as i386 numbers**: fixed, see below.
 
 ### Struct sizes written as numbers

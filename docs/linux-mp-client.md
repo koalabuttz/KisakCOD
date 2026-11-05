@@ -1,8 +1,9 @@
 # Native Linux multiplayer client (KisakCOD-mp)
 
-`KisakCOD-mp` is the whole multiplayer game in one native i386 Linux process:
+`KisakCOD-mp` is the whole multiplayer game in one native Linux process (i386,
+or x86_64 as described in [linux-x64.md](linux-x64.md#x86_64-multiplayer-client)):
 server, game, cgame, client, UI, sound and renderer, as the Windows `KisakCOD-mp`
-target builds them. It is opt-in and off by default. It is the target for the
+target builds them. It is opt-in and off by default. It reached the
 player-spawn milestone: a listen server whose own client joins it over the
 engine's in-process loopback (see [linux-client.md](linux-client.md#joining-servers-local-yes-remote-no)).
 
@@ -10,8 +11,9 @@ Status: it links and starts, and its game window takes keyboard and mouse
 input. Without game files it stops where the engine needs them. On a developer
 laptop with the game files and a GPU (not CI evidence), `+devmap mp_crash`
 reaches the in-game state, the team and class menus spawn the player in first
-person, and the player can move, shoot and throw grenades. See
-[On the laptop](#on-the-laptop).
+person, and the player can move, shoot and throw grenades, with sound, and quit
+cleanly. The x86_64 build does the same. See [On the laptop](#on-the-laptop).
+Movies are opt-in ([linux-cinematics.md](linux-cinematics.md)).
 
 ## Building
 
@@ -31,8 +33,9 @@ It needs the native D3D9 boundary ([linux-native-d3d9.md](linux-native-d3d9.md))
 with a DXVK Native library, SDL3 3.2.10 or newer, and an i386 OpenAL library.
 CI links stand-ins for the last two parts instead: the device probe's
 `libd3d9_unavailable.so`, and `tests/linux_mp_client/openal_unavailable.cpp`,
-whose `alcOpenDevice` finds no device. The 64-bit configuration refuses the
-option.
+whose `alcOpenDevice` finds no device. For an x86_64 build, add
+`-DKISAK_LINUX_ARCH=x86_64` and use x86_64 builds of the same libraries
+([linux-x64.md](linux-x64.md#x86_64-multiplayer-client)).
 
 The SDL3 3.2 SDK build used on the laptop links its own i386 `libpipewire`,
 found next to `libSDL3.so`. The client's run path covers its own libraries,
@@ -220,7 +223,12 @@ evidence. All three pass as of master `998344d`:
    hand: the player runs, aims with the mouse, shoots and throws grenades.
    With `cg_showmiss 1`, scripted moves printed no prediction errors. Four
    minutes of play printed about 140 prediction misses, 1.2 units on average
-   and 7.7 at most. There is no Windows figure to compare them with yet.
+   and 7.7 at most, and about 190 prediction errors. The Windows build over
+   similar play (2026-11-04, a desktop PC) printed 32 misses, 0.47 units on
+   average, and 34 errors; the gap is being investigated.
+
+The x86_64 build passed the same steps on the same laptop on 2026-11-04,
+including a clean quit ([linux-x64.md](linux-x64.md#x86_64-multiplayer-client)).
 
 Run it with `+set net_ip 127.0.0.1`, and windowed
 (`+set r_fullscreen 0 +set r_mode 1024x768`) unless the DXVK library has the

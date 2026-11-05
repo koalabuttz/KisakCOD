@@ -4,11 +4,12 @@ The native Linux target is a **32-bit x86 multiplayer dedicated server**. It
 produces an ELF executable, not a Windows executable, and does not use Wine.
 The Windows MP/SP/editor build paths remain separate.
 
-This is an initial port, not a gameplay-ready release. There is no playable
-native Linux graphical client: an optional experimental standalone renderer
-(SDL3 with DXVK) draws unlit and lit world surfaces and is checked against native
-GPU readout oracles, but it is a bounded harness, not a game client — see
-[renderer validation](linux-renderer-validation.md). In particular, **Steam
+This is an initial port, not a gameplay-ready release. The native Linux game
+client is a separate opt-in target, `KisakCOD-mp`
+([linux-mp-client.md](linux-mp-client.md)); it plays on its own listen server
+but cannot join a remote one. This page is about the dedicated server, and a
+64-bit build of it is described in [linux-x64.md](linux-x64.md#x86_64-dedicated-server).
+In particular, **Steam
 authentication is not implemented on Linux yet: ordinary client tickets are
 rejected**. An explicit startup-only, loopback-only test mode can skip ticket
 verification; it does not by itself establish playable-client compatibility.
@@ -36,8 +37,9 @@ The script defaults to `RelWithDebInfo`, builds only `KisakCOD-dedi`, and writes
 `bin/KisakCOD-dedi`. Configuration fetches the pinned Tracy dependency and needs
 network access on its first run. Clang is required for the Microsoft C++ language
 extensions still used by the shared engine code. The compiler and linker both
-use `-m32`; 64-bit asset/VM layouts are not supported. The Linux code requires
-SSE2 and a little-endian x86 host.
+use `-m32`. The script builds i386 only; the opt-in x86_64 build is configured
+by hand ([linux-x64.md](linux-x64.md#x86_64-dedicated-server)). The Linux code
+requires SSE2 and a little-endian x86 host.
 
 Optional arguments and parallelism:
 
@@ -96,9 +98,9 @@ Console commands come from stdin; SIGINT/SIGTERM request shutdown on the main
 thread. Fatal initialization errors print to the terminal and exit nonzero,
 rather than displaying a Windows dialog.
 
-The first compile-and-test-only native client milestone is documented in
-[Native Linux client](linux-client.md). It is opt-in and does not yet produce a
-playable client or replace the dedicated server.
+The native game client, `KisakCOD-mp`, is documented in
+[linux-mp-client.md](linux-mp-client.md). It is opt-in and does not replace
+the dedicated server.
 
 ## Asset-free checks
 

@@ -17,7 +17,7 @@ final-cohort identities, both authentication opt-ins zero and clean exit 0 in
 [native follow-up validation](history/native-review-2026-10-31.md#results-reproduced-directly-on-this-machine);
 the earlier emulated runs stay recorded in the
 [2026-10-31 refill checkpoint](history/progress-2026-10-31-refill.md), and current status
-is in the [2026-11-01 checkpoint](progress-2026-11-01.md).
+is in [status](status.md).
 
 These are internal server slots, not a real second client: this is not a client
 decoder, a human second player, or proof of multi-player synchronization.
