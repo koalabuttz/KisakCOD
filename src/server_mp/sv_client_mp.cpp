@@ -25,6 +25,46 @@
 #error Steam auth is not implemented for this platform
 #endif
 
+#if defined(_WIN32)
+// RtlGenRandom; advapi32 is already linked by every Windows target.
+extern "C" __declspec(dllimport) unsigned char __stdcall SystemFunction036(void *buffer, unsigned long length);
+#elif defined(__linux__)
+#include <sys/random.h>
+#include <cerrno>
+#elif defined(__APPLE__)
+#include <stdlib.h>
+#endif
+
+// KISAK: retail built the challenge token from svs.time ^ rand() ^ (rand() << 16)
+// with rand() seeded once from the clock, so a spoofer who saw a few tokens
+// could predict the next.  The client only echoes the value back in "connect",
+// so any 32-bit value works (CoD4x uses a keyed hash and retail clients connect
+// to it); draw it from the operating system's generator.  The retail formula
+// stays as the fallback if that ever fails.
+static int SV_NewChallengeValue()
+{
+    uint32_t value = 0;
+    bool filled = false;
+#if defined(_WIN32)
+    filled = SystemFunction036(&value, sizeof(value)) != 0;
+#elif defined(__linux__)
+    ssize_t generated;
+    do
+        generated = getrandom(&value, sizeof(value), 0);
+    while (generated < 0 && errno == EINTR);
+    filled = generated == static_cast<ssize_t>(sizeof(value));
+#elif defined(__APPLE__)
+    arc4random_buf(&value, sizeof(value));
+    filled = true;
+#endif
+    if (!filled)
+    {
+        const int high = rand() << 16;
+        value = static_cast<uint32_t>(svs.time ^ rand() ^ high);
+    }
+    return static_cast<int>(value);
+}
+
 struct ucmd_t // sizeof=0xC
 {                                       // ...
     const char *name;
@@ -309,6 +349,11 @@ void SV_GetChallenge(netadr_t from)
         {
             // Invalidate an earlier challenge from this address as well: a
             // failed authentication retry must not retain an accepted token.
+            // NET_CompareAdr matches the port too, so only a sender that
+            // spoofs this exact ip:port can cancel someone's pending challenge
+            // this way, and getchallenge is rate limited per address
+            // (sv_query_limit.h).  getchallenge carries no server token, so
+            // there is no narrower slot to pick.
             for (int slot = 0; slot < 1024; ++slot)
                 if (NET_CompareAdr(from, svs.challenges[slot].adr))
                     memset(&svs.challenges[slot], 0, sizeof(svs.challenges[slot]));
@@ -317,7 +362,6 @@ void SV_GetChallenge(netadr_t from)
         }
     }
 
-    int v1; // esi
     challenge_t *challenge; // [esp+8h] [ebp-14h]
     int oldest; // [esp+Ch] [ebp-10h]
     int i; // [esp+10h] [ebp-Ch]
@@ -338,8 +382,7 @@ void SV_GetChallenge(netadr_t from)
     if (i == 1024)
     {
         challenge = &svs.challenges[oldest];
-        v1 = rand() << 16;
-        challenge->challenge = svs.time ^ rand() ^ v1;
+        challenge->challenge = SV_NewChallengeValue();
         challenge->adr = from;
         challenge->firstTime = svs.time;
         challenge->firstPing = 0;
