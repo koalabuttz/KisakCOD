@@ -1,6 +1,6 @@
 # Linux port status
 
-Last updated 2026-11-05 (master `cd54c17`). This page is the current state of
+Last updated 2026-11-05 (master `7160b20` plus the arm64 dedicated server). This page is the current state of
 the native Linux port. The [docs index](README.md) lists the detailed guides;
 older handoffs are in [history](history/README.md) and are not current.
 
@@ -17,6 +17,7 @@ without a GPU or game data, against stand-in D3D9 and OpenAL libraries.
 | Dedicated server, x86_64 | `-DKISAK_LINUX_ARCH=x86_64` | Same as i386: 21 of 21 stock maps, bots through map cycles, clean quit (laptop). [Guide](linux-x64.md#x86_64-dedicated-server) |
 | Multiplayer client `KisakCOD-mp`, i386 | `-DKISAK_BUILD_LINUX_MP_CLIENT=ON` | Playable on a listen server (laptop): `+devmap mp_crash`, team and class menus, spawn, move, shoot, grenades, OpenAL sound, flashbang white-out, clean quit. [Guide](linux-mp-client.md) |
 | Multiplayer client, x86_64 | the same, with `-DKISAK_LINUX_ARCH=x86_64` | Playable on the same terms as i386 (laptop), including sprint and mantle animations and a clean quit. [Guide](linux-x64.md#x86_64-multiplayer-client) |
+| Dedicated server, aarch64 (64-bit Arm) | `-DKISAK_LINUX_ARCH=aarch64` | Builds natively on Arm or cross-compiled from x86, boots without game data (qemu and hosted Arm CI). Not yet run with game data. [Guide](linux-arm64.md) |
 | Movies | `-DKISAK_LINUX_CINEMATICS=ON` | Bink movies play through an FFmpeg-backed shim on i386 and x86_64 (laptop). Off by default. [Guide](linux-cinematics.md) |
 | Singleplayer `KisakCOD-sp`, i386 | `-DKISAK_BUILD_LINUX_SP_GAME=ON` | killhouse and cargoship load, leave the pregame by themselves and play about a minute each, clean quit (laptop). [Guide](linux-sp-game.md) |
 
@@ -38,6 +39,9 @@ always come from your own install (`+set fs_basepath <game folder>`).
 - **Windows x64.** The MSVC x64 compile census runs on master
   ([census](linux-x64.md#windows-msvc-x64-census)); the first compile fixes
   are in review (PR 81). No 64-bit Windows binary links yet.
+- **arm64 client and Windows ARM64.** Census only so far
+  ([arm64 track](linux-arm64.md#census-linux-client-step-3)); the aarch64
+  configuration builds the dedicated server and refuses the other targets.
 - **HTTP downloads, voice chat and the remote script debugger** are missing from
   the Linux client; each answers as Windows does when that service is absent
   ([list](linux-mp-client.md#what-it-does-not-have-yet)).

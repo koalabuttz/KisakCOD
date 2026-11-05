@@ -28,6 +28,9 @@ what is still missing. Build steps are in the
 - [x86_64 track](linux-x64.md): the 64-bit dedicated server and multiplayer
   client, the checks that catch 32-bit assumptions, and the Linux and MSVC x64
   compile censuses
+- [64-bit Arm track](linux-arm64.md): the aarch64 Linux dedicated server, the
+  x86 assumptions it needed fixed (including pages over 4 KiB), and the census
+  for the arm64 client and Windows ARM64
 
 ## Linux client foundations (opt-in)
 
