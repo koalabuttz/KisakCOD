@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "r_init.h"
+#include "rhi/r_rhi.h"
 #include <qcommon/mem_track.h>
 #include <qcommon/threads.h>
 #include <win32/win_local.h>
@@ -2965,7 +2966,7 @@ void R_Init()
     R_InitWater();
     if (!dx.deviceLost)
     {
-        hr = dx.device->TestCooperativeLevel();
+        hr = R_HW_TestCooperativeLevel(dx.device);
         if (hr != -2005530520 && hr != -2005530519)
         {
             dx.sunSpriteSamples = RB_CalcSunSpriteSamples();
@@ -3112,11 +3113,11 @@ void R_EnumDisplayModes(uint32_t adapterIndex)
     int refreshRateIndex; // [esp+C28h] [ebp-8h]
     int defaultResolutionIndex; // [esp+C2Ch] [ebp-4h]
 
-    modeCountReported = dx.d3d9->GetAdapterModeCount(adapterIndex, D3DFMT_X8R8G8B8);
+    modeCountReported = R_HW_GetAdapterModeCount(dx.d3d9, adapterIndex, D3DFMT_X8R8G8B8);
     dx.displayModeCount = 0;
     for (modeIndex = 0; modeIndex < modeCountReported && dx.displayModeCount < 0x100; ++modeIndex)
     {
-        hr = dx.d3d9->EnumAdapterModes(
+        hr = R_HW_EnumAdapterModes(dx.d3d9,
             adapterIndex,
             D3DFMT_X8R8G8B8,
             modeIndex,
@@ -3196,7 +3197,7 @@ char R_PreCreateWindow()
     else
     {
         Com_Printf(CON_CHANNEL_GFX, "Getting Direct3D 9 interface...\n");
-        dx.d3d9 = Direct3DCreate9(0x20u);
+        dx.d3d9 = R_HW_Direct3DCreate9(0x20u);
         if (!dx.d3d9)
         {
             Com_Printf(CON_CHANNEL_GFX, "Direct3D 9 failed to initialize\n");
@@ -3343,7 +3344,7 @@ void R_PickRenderer(_D3DCAPS9 *caps)
 bool R_CheckTransparencyMsaa(uint32_t adapterIndex)
 {
     return r_aaSamples->current.integer != 1
-        && dx.d3d9->CheckDeviceFormat(
+        && R_HW_CheckDeviceFormat(dx.d3d9,
             adapterIndex,
             D3DDEVTYPE_HAL,
             D3DFMT_X8R8G8B8,
@@ -3406,7 +3407,7 @@ void R_GetDirect3DCaps(uint32_t adapterIndex, _D3DCAPS9 *caps)
         //    adapterIndex,
         //    1,
         //    caps);
-        hr = dx.d3d9->GetDeviceCaps(adapterIndex, D3DDEVTYPE_HAL, caps);
+        hr = R_HW_GetDeviceCaps(dx.d3d9, adapterIndex, D3DDEVTYPE_HAL, caps);
         if (hr >= 0)
             break;
         Sleep(0x64u);
@@ -3435,8 +3436,8 @@ void R_SetShadowmapFormats_DX(uint32_t adapterIndex)
     {
         depthFormat = formats[formatIndex][0];
         colorFormat = formats[formatIndex][1];
-        bool cond1 = dx.d3d9->CheckDepthStencilMatch(adapterIndex, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8, colorFormat, depthFormat);
-        bool cond2 = dx.d3d9->CheckDeviceFormat(adapterIndex, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8, 2, D3DRTYPE_TEXTURE, depthFormat);
+        bool cond1 = R_HW_CheckDepthStencilMatch(dx.d3d9, adapterIndex, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8, colorFormat, depthFormat);
+        bool cond2 = R_HW_CheckDeviceFormat(dx.d3d9, adapterIndex, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8, 2, D3DRTYPE_TEXTURE, depthFormat);
         //if (!((int(__thiscall *)(IDirect3D9 *, IDirect3D9 *, uint32_t, int, int, _D3DFORMAT, _D3DFORMAT))dx.d3d9->CheckDepthStencilMatch)(
         //    dx.d3d9,
         //    dx.d3d9,
@@ -3522,16 +3523,16 @@ uint32_t R_ChooseAdapter()
 
     desiredMonitor = R_ChooseMonitor();
     foundAdapterIndex = 0;
-    adapterCount = dx.d3d9->GetAdapterCount();
+    adapterCount = R_HW_GetAdapterCount(dx.d3d9);
     for (adapterIndex = 0; adapterIndex < adapterCount; ++adapterIndex)
     {
         if (desiredMonitor)
         {
-            if (dx.d3d9->GetAdapterMonitor(adapterIndex) != desiredMonitor)
+            if (R_HW_GetAdapterMonitor(dx.d3d9, adapterIndex) != desiredMonitor)
                 continue;
             foundAdapterIndex = adapterIndex;
         }
-        if (dx.d3d9->GetAdapterIdentifier(adapterIndex, 0, &id) >= 0
+        if (R_HW_GetAdapterIdentifier(dx.d3d9, adapterIndex, 0, &id) >= 0
             && !strcmp(id.Description, "NVIDIA NVPerfHUD"))
         {
             return adapterIndex;
@@ -3867,12 +3868,12 @@ char R_CreateForInitOrReset()
     dx.flushGpuQueryIssued = 0;
     dx.flushGpuQueryCount = 0;
 
-    hr = dx.device->CreateQuery(D3DQUERYTYPE_EVENT, &dx.flushGpuQuery);
+    hr = R_HW_CreateQuery(dx.device, D3DQUERYTYPE_EVENT, &dx.flushGpuQuery);
     if (hr >= 0)
     {
         for (fenceIter = 0; fenceIter < 8; ++fenceIter)
         {
-            hr = dx.device->CreateQuery(D3DQUERYTYPE_EVENT, &dx.fencePool[fenceIter]);
+            hr = R_HW_CreateQuery(dx.device, D3DQUERYTYPE_EVENT, &dx.fencePool[fenceIter]);
 
             if (hr < 0)
                 goto LABEL_6;
@@ -3899,7 +3900,7 @@ IDirect3DQuery9 *RB_HW_AllocOcclusionQuery()
     int hr; // [esp+0h] [ebp-8h]
     IDirect3DQuery9 *query; // [esp+4h] [ebp-4h] BYREF
 
-    hr = dx.device->CreateQuery(D3DQUERYTYPE_OCCLUSION, &query);
+    hr = R_HW_CreateQuery(dx.device, D3DQUERYTYPE_OCCLUSION, &query);
     if (hr >= 0)
         return query;
     v0 = R_ErrorDescription(hr);
@@ -3992,7 +3993,7 @@ void R_SetupAntiAliasing(const GfxWindowParms *wndParms)
     while (multiSampleCount > D3DMULTISAMPLE_NONMASKABLE)
     {
         dx.multiSampleType = multiSampleCount;
-        if (dx.d3d9->CheckDeviceMultiSampleType(
+        if (R_HW_CheckDeviceMultiSampleType(dx.d3d9,
             0,
             D3DDEVTYPE_HAL,
             D3DFMT_A8R8G8B8,
@@ -4015,7 +4016,7 @@ bool R_GetMonitorDimensions(int *width, int *height)
     tagMONITORINFO mi; // [esp+0h] [ebp-2Ch] BYREF
     HMONITOR__ *adapterMonitor; // [esp+28h] [ebp-4h]
 
-    adapterMonitor = dx.d3d9->GetAdapterMonitor(dx.adapterIndex);
+    adapterMonitor = R_HW_GetAdapterMonitor(dx.d3d9, dx.adapterIndex);
     mi.cbSize = 40;
     if (GetMonitorInfoA(adapterMonitor, &mi))
     {
@@ -4044,7 +4045,7 @@ HRESULT R_CreateDeviceInternal(HWND__ *hwnd, uint32_t behavior, _D3DPRESENT_PARA
     {
         dx.adapterNativeIsValid = R_GetMonitorDimensions(&dx.adapterNativeWidth, &dx.adapterNativeHeight);
         DeviceType = (_D3DDEVTYPE)R_GetDeviceType();
-        hr = dx.d3d9->CreateDevice(dx.adapterIndex, DeviceType, hwnd, behavior, d3dpp, &dx.device);
+        hr = R_HW_CreateDevice(dx.d3d9, dx.adapterIndex, DeviceType, hwnd, behavior, d3dpp, &dx.device);
         if (hr >= 0)
             break;
         Sleep(100);
@@ -4056,7 +4057,7 @@ HRESULT R_CreateDeviceInternal(HWND__ *hwnd, uint32_t behavior, _D3DPRESENT_PARA
             return R_CreateDeviceInternal(hwnd, behavior, d3dpp);
         }
     }
-    if (dx.d3d9->GetAdapterDisplayMode(dx.adapterIndex, &getModeResult) < 0)
+    if (R_HW_GetAdapterDisplayMode(dx.d3d9, dx.adapterIndex, &getModeResult) < 0)
     {
         dx.adapterFullscreenWidth = d3dpp->BackBufferWidth;
         dx.adapterFullscreenHeight = d3dpp->BackBufferHeight;
@@ -4246,7 +4247,7 @@ void R_ComErrorCleanup()
     if (dx.inScene)
     {
         //((void(__thiscall *)(IDirect3DDevice9 *, IDirect3DDevice9 *))dx.device->EndScene)(dx.device, dx.device);
-        dx.device->EndScene();
+        R_HW_EndScene(dx.device);
         dx.inScene = 0;
     }
 }
@@ -4257,7 +4258,7 @@ bool R_CanRecoverLostDevice()
 
     iassert( dx.device );
     iassert( dx.deviceLost );
-    hr = dx.device->TestCooperativeLevel();
+    hr = R_HW_TestCooperativeLevel(dx.device);
     iassert( hr == D3DERR_DEVICELOST || hr == D3DERR_DEVICENOTRESET );
     return hr != -2005530520;
 }
@@ -4366,7 +4367,7 @@ void R_ResetDevice()
     R_SetD3DPresentParameters(&d3dpp, &wndParms);
     R_ReleaseForShutdownOrReset();
     //hr = dx.device->Reset(dx.device, &d3dpp);
-    hr = dx.device->Reset(&d3dpp);
+    hr = R_HW_Reset(dx.device, &d3dpp);
     if (hr < 0)
     {
         v0 = R_ErrorDescription(hr);
@@ -4451,7 +4452,7 @@ bool R_CheckLostDevice()
     
     if (!dx.deviceLost)
     {
-        HRESULT hr = dx.device->TestCooperativeLevel();
+        HRESULT hr = R_HW_TestCooperativeLevel(dx.device);
         if (hr != D3DERR_DEVICELOST && hr != D3DERR_DEVICENOTRESET)
             return true;
 
@@ -4548,7 +4549,7 @@ char R_TestDevice()
 {
     if ( !dx.deviceLost )
     {
-        if ( dx.device->TestCooperativeLevel() >= 0 )
+        if ( R_HW_TestCooperativeLevel(dx.device) >= 0 )
         {
             if ( !dx.deviceLost )
                 return 1;
@@ -4598,9 +4599,9 @@ void R_SetupTargetWindow(int windowIndex)
     // consumed by the first call). The SCENE render target shares the init color pointer
     // but the editor's line views never render SCENE, so the stale share is inert.
     if (fb->surface.color)
-        fb->surface.color->Release();
+        R_HW_Release(fb->surface.color);
     fb->surface.color = nullptr;
-    HRESULT hr = dx.windows[windowIndex].swapChain->GetBackBuffer(
+    HRESULT hr = R_HW_GetBackBuffer(dx.windows[windowIndex].swapChain,
         0, D3DBACKBUFFER_TYPE_MONO, &fb->surface.color);
     if (hr < 0)
     {
@@ -4732,7 +4733,7 @@ HWND R_CreateSwapChains(int hz, GfxWindowParms *wnd, int sharedHandle)
 
     _D3DPRESENT_PARAMETERS_ d3dpp;
     R_SetD3DPresentParameters(&d3dpp, wnd);
-    HRESULT hr = dx.device->CreateAdditionalSwapChain(&d3dpp, &dx.windows[dx.windowCount].swapChain);
+    HRESULT hr = R_HW_CreateAdditionalSwapChain(dx.device, &d3dpp, &dx.windows[dx.windowCount].swapChain);
     if ( hr < 0 )
         Com_Error(ERR_FATAL, "Couldn't create an additional swap chain: %s\n", R_ErrorDescription(hr));
 
@@ -4782,9 +4783,9 @@ void R_Hwnd_Resize(HWND__ *hwnd, int width, int height)
     IDirect3DSwapChain9 *old = dx.windows[idx].swapChain;
     dx.windows[idx].swapChain = nullptr;
     if ( old )
-        old->Release();
+        R_HW_Release(old);
 
-    HRESULT hr = dx.device->CreateAdditionalSwapChain(&d3dpp, &dx.windows[idx].swapChain);
+    HRESULT hr = R_HW_CreateAdditionalSwapChain(dx.device, &d3dpp, &dx.windows[idx].swapChain);
     if ( hr < 0 )
     {
         ++g_disableRendering;

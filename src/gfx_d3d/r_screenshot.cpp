@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "r_screenshot.h"
+#include "rhi/r_rhi.h"
 #include <qcommon/mem_track.h>
 #include "r_init.h"
 #include "rb_logfile.h"
@@ -909,14 +910,14 @@ char R_GetFrontBufferData(int x, int y, int width, int height, int bytesPerPixel
     //    3,
     //    &surface,
     //    0);
-    hr = dx.device->CreateOffscreenPlainSurface(
+    hr = R_HW_CreateOffscreenPlainSurface(dx.device,
         surfWidth,
         surfHeight,
         D3DFMT_A8R8G8B8, D3DPOOL_SCRATCH, &surface, 0);
 
     if (hr < 0)
         goto LABEL_12;
-    hr = dx.windows[0].swapChain->GetFrontBufferData(surface);
+    hr = R_HW_GetFrontBufferData(dx.windows[0].swapChain, surface);
     if (hr < 0)
     {
         do
@@ -940,7 +941,7 @@ char R_GetFrontBufferData(int x, int y, int width, int height, int bytesPerPixel
     sourceRect.right = width + pt.x;
     sourceRect.top = pt.y;
     sourceRect.bottom = height + pt.y;
-    hr = surface->LockRect(&lockedRect, &sourceRect, 16u);
+    hr = R_HW_LockRect(surface, &lockedRect, &sourceRect, 16u);
     if (hr >= 0)
     {
         srcPixel = (const uint8_t *)lockedRect.pBits;
@@ -976,7 +977,7 @@ char R_GetFrontBufferData(int x, int y, int width, int height, int bytesPerPixel
                 srcPixel += lockedRect.Pitch;
             }
         }
-        surface->UnlockRect();
+        R_HW_UnlockRect(surface);
         do
         {
             if (r_logFile && r_logFile->current.integer)
@@ -1395,7 +1396,7 @@ void R_CubemapShotSetInitialState()
         //    -65281,
         //    1.0,
         //    0);
-        hr = dx.device->Clear(0, 0, 7, -65281, 1.0f, 0);
+        hr = R_HW_Clear(dx.device, 0, 0, 7, -65281, 1.0f, 0);
         if (hr < 0)
         {
             do
@@ -1471,10 +1472,10 @@ char R_GetBackBufferData(int x, int y, int width, int height, int bytesPerPixel,
 
     surfaceBackBuffer = 0;
     surface = 0;
-    hr = dx.device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &surfaceBackBuffer);
+    hr = R_HW_GetBackBuffer(dx.device, 0, 0, D3DBACKBUFFER_TYPE_MONO, &surfaceBackBuffer);
     if (hr >= 0)
     {
-        hra = surfaceBackBuffer->GetDesc(&desc);
+        hra = R_HW_GetDesc(surfaceBackBuffer, &desc);
         if (hra >= 0)
         {
             //hrb = ((int(__thiscall *)(IDirect3DDevice9 *, IDirect3DDevice9 *, uint32_t, uint32_t, _D3DFORMAT, int, IDirect3DSurface9 **, _DWORD))dx.device->CreateOffscreenPlainSurface)(
@@ -1486,7 +1487,7 @@ char R_GetBackBufferData(int x, int y, int width, int height, int bytesPerPixel,
             //    2,
             //    &surface,
             //    0);
-            hrb = dx.device->CreateOffscreenPlainSurface(desc.Width, desc.Height, desc.Format, D3DPOOL_SYSTEMMEM, &surface, 0);
+            hrb = R_HW_CreateOffscreenPlainSurface(dx.device, desc.Width, desc.Height, desc.Format, D3DPOOL_SYSTEMMEM, &surface, 0);
             if (hrb >= 0)
             {
                 //hrc = ((int(__thiscall *)(IDirect3DDevice9 *, IDirect3DDevice9 *, IDirect3DSurface9 *, IDirect3DSurface9 *))dx.device->GetRenderTargetData)(
@@ -1494,14 +1495,14 @@ char R_GetBackBufferData(int x, int y, int width, int height, int bytesPerPixel,
                 //    dx.device,
                 //    surfaceBackBuffer,
                 //    surface);
-                hrc = dx.device->GetRenderTargetData(surfaceBackBuffer, surface);
+                hrc = R_HW_GetRenderTargetData(dx.device, surfaceBackBuffer, surface);
                 if (hrc >= 0)
                 {
                     sourceRect.left = x;
                     sourceRect.right = width + x;
                     sourceRect.top = y;
                     sourceRect.bottom = height + y;
-                    hrd = surface->LockRect(&lockedRect, &sourceRect, 16u);
+                    hrd = R_HW_LockRect(surface, &lockedRect, &sourceRect, 16u);
                     if (hrd >= 0)
                     {
                         srcPixel = (const uint8_t *)lockedRect.pBits;
@@ -1537,8 +1538,8 @@ char R_GetBackBufferData(int x, int y, int width, int height, int bytesPerPixel,
                                 srcPixel += lockedRect.Pitch;
                             }
                         }
-                        surface->UnlockRect();
-                        surfaceBackBuffer->Release();
+                        R_HW_UnlockRect(surface);
+                        R_HW_Release(surfaceBackBuffer);
                         do
                         {
                             if (r_logFile && r_logFile->current.integer)
@@ -1571,7 +1572,7 @@ char R_GetBackBufferData(int x, int y, int width, int height, int bytesPerPixel,
                 {
                     v10 = R_ErrorDescription(hrc);
                     Com_PrintError(CON_CHANNEL_GFX, "ERROR: cannot take screenshot: GetRenderTargetData failed: %s (0x%08x)\n", v10, hrc);
-                    surfaceBackBuffer->Release();
+                    R_HW_Release(surfaceBackBuffer);
                     return 0;
                 }
             }
@@ -1583,7 +1584,7 @@ char R_GetBackBufferData(int x, int y, int width, int height, int bytesPerPixel,
                     "ERROR: cannot take screenshot: couldn't create the off-screen surface: %s (0x%08x)\n",
                     v9,
                     hrb);
-                surfaceBackBuffer->Release();
+                R_HW_Release(surfaceBackBuffer);
                 return 0;
             }
         }
@@ -1591,7 +1592,7 @@ char R_GetBackBufferData(int x, int y, int width, int height, int bytesPerPixel,
         {
             v8 = R_ErrorDescription(hra);
             Com_PrintError(CON_CHANNEL_GFX, "ERROR: cannot take screenshot: couldn't get desc: %s (0x%08x)\n", v8, hra);
-            surfaceBackBuffer->Release();
+            R_HW_Release(surfaceBackBuffer);
             return 0;
         }
     }
@@ -1599,7 +1600,7 @@ char R_GetBackBufferData(int x, int y, int width, int height, int bytesPerPixel,
     {
         v6 = R_ErrorDescription(hr);
         Com_PrintError(CON_CHANNEL_GFX, "ERROR: cannot take screenshot: couldn't get back buffer surface: %s (0x%08x)\n", v6, hr);
-        surfaceBackBuffer->Release();
+        R_HW_Release(surfaceBackBuffer);
         return 0;
     }
 }

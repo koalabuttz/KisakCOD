@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "rb_backend.h"
+#include "rhi/r_rhi.h"
 #include "rb_shade.h"
 #include "rb_logfile.h"
 #include "r_image.h"
@@ -64,7 +65,7 @@ void RB_TouchAllImages()
         {
             if (r_logFile && r_logFile->current.integer)
                 RB_LogPrint("dx.device->BeginScene()\n");
-            hr = dx.device->BeginScene();
+            hr = R_HW_BeginScene(dx.device);
             if (hr < 0)
             {
                 do
@@ -93,7 +94,7 @@ void RB_TouchAllImages()
         {
             if (r_logFile && r_logFile->current.integer)
                 RB_LogPrint("dx.device->EndScene()\n");
-            v2 = dx.device->EndScene();
+            v2 = R_HW_EndScene(dx.device);
             if (v2 < 0)
             {
                 do

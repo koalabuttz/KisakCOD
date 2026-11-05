@@ -1,5 +1,6 @@
 #pragma once
 #include "rb_backend.h"
+#include "rhi/r_rhi.h"
 
 enum $A1823DBB2E1ECBBFE5B3FD011D242004 : __int32
 {
@@ -10,9 +11,7 @@ enum $A1823DBB2E1ECBBFE5B3FD011D242004 : __int32
 
 void R_SetVertexDecl(GfxCmdBufPrimState *primState, const MaterialVertexDeclaration *vertexDecl);
 void RB_ClearPixelShader();
-void R_HW_SetPixelShader(IDirect3DDevice9 *device, const MaterialPixelShader *mtlShader);
 void RB_ClearVertexShader();
-void R_HW_SetVertexShader(IDirect3DDevice9 *device, const MaterialVertexShader *mtlShader);
 void RB_ClearVertexDecl();
 void RB_SetTessTechnique(const Material *material, MaterialTechniqueType techType);
 void RB_BeginSurface(const Material *material, MaterialTechniqueType techType);

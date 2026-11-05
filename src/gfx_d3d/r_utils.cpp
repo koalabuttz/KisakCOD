@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "r_utils.h"
+#include "rhi/r_rhi.h"
 #include <universal/com_memory.h>
 #include <aim_assist/aim_assist.h>
 #include "r_dvars.h"
@@ -10,7 +11,7 @@
 #if !defined(__linux__) || defined(KISAK_LINUX_NATIVE_D3D9)
 uint32_t R_ReleaseD3DSurface(IDirect3DSurface9 *surface)
 {
-    return surface->Release();
+    return R_HW_Release(surface);
 }
 #endif
 

@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "rb_uploadshaders.h"
+#include "rhi/r_rhi.h"
 #include <qcommon/threads.h>
 #include "r_dvars.h"
 #include "rb_backend.h"
@@ -76,7 +77,7 @@ uint32_t RB_UploadMaterialPassVertexDecl(
     primState->vertDeclType = vertDeclType;
     R_SetVertexDecl(primState, vertexDecl);
     //(dx.device->DrawPrimitiveUP)(dx.device, dx.device, 4, 1, data, stride);
-    dx.device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 1, data, stride);
+    R_HW_DrawPrimitiveUP(dx.device, D3DPT_TRIANGLELIST, 1, data, stride);
     return 1;
 }
 

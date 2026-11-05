@@ -1,0 +1,14 @@
+# Calls outside the renderer's graphics interface (src/gfx_d3d/rhi) that the
+# Direct3D 9 boundary check counts but that are not Direct3D 9 calls. Read by
+# scripts/tests/check_rhi_boundary.py.
+#
+# Format: `path: count: reason`. The check fails when a file has more matching
+# calls than its entry allows (a regression) and when it has fewer (a stale
+# entry: lower the count or delete the line in the same change).
+#
+# The check matches D3D9 method names, and other COM objects share some of
+# them. Every renderer call to the Direct3D 9 API itself goes through
+# rhi/r_rhi.h; add a forwarder or an operation there instead of a line here.
+src/gfx_d3d/r_material_load_obj.cpp: 6: Release on the D3DX shader compiler's ID3DXBuffer and ID3DXConstantTable results, not Direct3D 9 objects
+src/gfx_d3d/r_screenshot.cpp: 1: Release on the IStream the GDI+ JPEG writer saves into (Windows only), not a Direct3D 9 object
+src/gfx_d3d/r_texturemem.cpp: 4: Release on DirectDraw's IDirectDraw7, used only to ask for the video memory size

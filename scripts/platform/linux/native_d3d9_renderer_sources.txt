@@ -14,7 +14,6 @@
 # asset-free CI proof always cover the same files. Add a file only together with a
 # passing run of that runner. Paths are relative to the repository root.
 src/gfx_d3d/r_buffers.cpp
-src/gfx_d3d/r_draw_bsp.cpp
 src/gfx_d3d/r_draw_lit.cpp
 src/gfx_d3d/r_draw_sunshadow.cpp
 src/gfx_d3d/r_image.cpp
@@ -27,13 +26,12 @@ src/gfx_d3d/r_scene.cpp
 src/gfx_d3d/r_screenshot.cpp
 src/gfx_d3d/r_setstate_d3d.cpp
 src/gfx_d3d/r_shade.cpp
-src/gfx_d3d/r_state.cpp
-src/gfx_d3d/r_state_utils.cpp
 src/gfx_d3d/rb_backend.cpp
 src/gfx_d3d/rb_depthprepass.cpp
 src/gfx_d3d/rb_draw3d.cpp
 src/gfx_d3d/rb_imagetouch.cpp
 src/gfx_d3d/rb_pixelcost.cpp
-src/gfx_d3d/rb_shade.cpp
 src/gfx_d3d/rb_sky.cpp
 src/gfx_d3d/rb_uploadshaders.cpp
+src/gfx_d3d/rhi/r_rhi_d3d9_calls.cpp
+src/gfx_d3d/rhi/r_rhi_d3d9_state.cpp
