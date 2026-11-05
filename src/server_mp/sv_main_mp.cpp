@@ -2,8 +2,6 @@
 #error This File is MultiPlayer Only
 #endif
 
-#include <ctime>
-
 #include <universal/q_shared.h>
 #include "server_mp.h"
 #include "sv_query_limit.h"
@@ -22,6 +20,8 @@
 #include <universal/timing.h>
 #include <script/scr_debugger.h>
 #include <universal/profile.h>
+
+#include <ctime>
 
 #if defined(WIN32) || defined(__linux__)
 #include <win32/win_steam.h>
