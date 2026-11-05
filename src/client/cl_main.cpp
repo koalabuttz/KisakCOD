@@ -1863,7 +1863,7 @@ void CL_Init(int localClientNum)
         Com_sprintf(v29, 32, "s%d", v21);
         *v22++ = Dvar_RegisterInt(v29, 0, 0, 0x7FFFFFFF, 0x4001u, "Used by script for keeping track of arcade scores");
         ++v21;
-    } while ((int)v22 < (int)&arcadeScore[19]);
+    } while ((uintptr_t)v22 < (uintptr_t)&arcadeScore[19]);
 
     input_invertPitch = Dvar_RegisterBool("input_invertPitch", 0, 0x400u, "Invert gamepad pitch");
     input_viewSensitivity = Dvar_RegisterFloat("input_viewSensitivity", 1.0, 0.000099999997, 5.0, 0, 0);
