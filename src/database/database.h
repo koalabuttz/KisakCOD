@@ -215,6 +215,9 @@ void DB_IncStreamPos(int32_t size);
 const void **DB_InsertPointer();
 #if KISAK_DB_CONVERT_RECORDS
 void DB_IncStreamPosConverted(int32_t nativeSize, int32_t diskSize, const DBDiskLayout *layout);
+// Stops the load with an error when the current block has no room for nativeSize
+// more bytes at the stream position. Called before converted records are written.
+void DB_CheckStreamRoom(uint64_t nativeSize, int32_t diskSize, const DBDiskLayout *layout);
 uint8_t *DB_ResolveDiskOffset(uint32_t offset);
 #endif
 
