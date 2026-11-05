@@ -121,7 +121,7 @@ void PMem_EndAllocInPrim(PhysicalMemoryPrim *prim, const char *name)
     prim->allocName = 0;
     if (!prim->allocListCount)
         MyAssertHandler(".\\universal\\physicalmemory.cpp", 368, 0, "%s", "prim->allocListCount > 0");
-    v2 = prim->pos - *(&prim->pos + 2 * prim->allocListCount);
+    v2 = prim->pos - prim->allocList[prim->allocListCount - 1].pos;
     //track_physical_alloc((HIunsigned int(v2) ^ v2) - HIunsigned int(v2), name, 10);
 }
 
@@ -178,7 +178,9 @@ void PMem_FreeIndex(PhysicalMemoryPrim *prim, uint32_t allocIndex)
                 MyAssertHandler(".\\universal\\physicalmemory.cpp", 424, 0, "%s", "prim->allocListCount");
             if (!--prim->allocListCount)
                 break;
-            allocEntry = (PhysicalMemoryAllocation *)(&prim->allocListCount + 2 * prim->allocListCount);
+            // The new last entry. (Decompiled as &allocListCount + 2 * count, which
+            // is allocList[count - 1] only in the 32-bit layout.)
+            allocEntry = &prim->allocList[prim->allocListCount - 1];
         } while (!allocEntry->name);
     }
     else
