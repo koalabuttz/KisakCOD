@@ -43,7 +43,7 @@ target_compile_definitions(KisakCOD-dedi PRIVATE
 target_include_directories(KisakCOD-dedi PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
 target_compile_options(KisakCOD-dedi PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:-fms-extensions>
-    -msse2 -mfpmath=sse -fno-strict-aliasing
+    ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing
     -ffunction-sections -fdata-sections
     -Wno-c++11-narrowing -Wno-invalid-token-paste
     -Wno-ignored-attributes -Wno-format-security
@@ -150,7 +150,7 @@ if(KISAK_BUILD_LINUX_CLIENT_CORE)
     target_include_directories(KisakCOD-client-core PRIVATE "${SRC_DIR}" "${DEPS_DIR}" "${tracy_SOURCE_DIR}/public")
     target_compile_options(KisakCOD-client-core PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:-fms-extensions>
-        -msse2 -mfpmath=sse -fno-strict-aliasing
+        ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing
         -ffunction-sections -fdata-sections
         -Wno-c++11-narrowing -Wno-invalid-token-paste
         -Wno-ignored-attributes -Wno-format-security
@@ -238,7 +238,7 @@ if(KISAK_BUILD_LINUX_CLIENT_CORE)
         target_include_directories(${client_test} PRIVATE "${SRC_DIR}" "${DEPS_DIR}" "${tracy_SOURCE_DIR}/public")
         target_compile_options(${client_test} PRIVATE
             $<$<COMPILE_LANGUAGE:CXX>:-fms-extensions>
-            -msse2 -mfpmath=sse -fno-strict-aliasing
+            ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing
             -ffunction-sections -fdata-sections
             -Wno-c++11-narrowing -Wno-invalid-token-paste
             -Wno-ignored-attributes -Wno-format-security
@@ -531,7 +531,7 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
         endif()
         target_include_directories(${window_target} PRIVATE "${SRC_DIR}" "${DEPS_DIR}" "${tracy_SOURCE_DIR}/public")
         target_compile_options(${window_target} PRIVATE
-            -fms-extensions -msse2 -mfpmath=sse -fno-strict-aliasing
+            -fms-extensions ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing
             -ffunction-sections -fdata-sections
             -Wno-c++11-narrowing -Wno-invalid-token-paste -Wno-ignored-attributes -Wno-format-security
         )

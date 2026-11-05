@@ -69,7 +69,10 @@ def source_checks(checker):
                     "the optional OpenAL header directory is checked for AL/al.h")
     fence = (ROOT / "scripts" / "platform" / "linux" / "platform.cmake").read_text(encoding="utf-8")
     d3d9_module = (ROOT / "scripts" / "platform" / "linux" / "native_d3d9.cmake").read_text(encoding="utf-8")
-    checker.require("KISAK_BUILD_LINUX_MP_CLIENT" not in fence
+    # The x86_64 block of the fence must not refuse the client; the aarch64
+    # block (dedicated server only, docs/linux-arm64.md) does.
+    x64_fence = fence.split('if(KISAK_LINUX_ARCH STREQUAL "x86_64")', 1)[-1].split("elseif(", 1)[0]
+    checker.require("KISAK_BUILD_LINUX_MP_CLIENT" not in x64_fence
                     and 'if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4 AND NOT KISAK_LINUX_ARCH STREQUAL "x86_64")' in d3d9_module,
                     "a 64-bit toolchain builds the client and its D3D9 boundary only under KISAK_LINUX_ARCH=x86_64")
     checker.require("KISAK_BUILD_WORLD_DRAW_PROBE)" in fence, "the 64-bit configuration still refuses the renderer probes")

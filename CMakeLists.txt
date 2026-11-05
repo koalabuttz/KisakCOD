@@ -5,10 +5,11 @@ cmake_minimum_required(VERSION 3.18)
 # i386 is the shipping Linux build. x86_64 is an opt-in 64-bit track: the
 # dedicated server builds and boots without game data, and the compile census
 # (scripts/tests/run_x64_compile_census.py) covers the rest. Fastfile loading is
-# not 64-bit yet. See docs/linux-x64.md.
+# not 64-bit yet. See docs/linux-x64.md. aarch64 (64-bit Arm) is a newer
+# opt-in track that builds the dedicated server only; see docs/linux-arm64.md.
 set(KISAK_LINUX_ARCH "i386" CACHE STRING
-    "Native Linux architecture: i386 (shipping) or x86_64 (opt-in 64-bit track: dedicated server and compile census)")
-set_property(CACHE KISAK_LINUX_ARCH PROPERTY STRINGS i386 x86_64)
+    "Native Linux architecture: i386 (shipping), x86_64 (opt-in 64-bit track) or aarch64 (opt-in 64-bit Arm track: dedicated server)")
+set_property(CACHE KISAK_LINUX_ARCH PROPERTY STRINGS i386 x86_64 aarch64)
 if(NOT DEFINED KISAK_PLATFORM)
     if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
         set(KISAK_PLATFORM "linux" CACHE STRING "Build platform: win32|mingw|linux")
@@ -21,8 +22,22 @@ if(KISAK_PLATFORM STREQUAL "linux")
         set(KISAK_LINUX_ARCH_FLAG -m32)
     elseif(KISAK_LINUX_ARCH STREQUAL "x86_64")
         set(KISAK_LINUX_ARCH_FLAG -m64)
+    elseif(KISAK_LINUX_ARCH STREQUAL "aarch64")
+        # The engine was written for x86, where plain char is signed. Arm Linux
+        # makes it unsigned unless told otherwise (Windows on Arm keeps it signed).
+        # Arm also has fused multiply-add, which Clang would use for a * b + c,
+        # rounding once instead of twice; keep x86's results (client prediction
+        # replays the server's movement math and must land on the same floats).
+        set(KISAK_LINUX_ARCH_FLAG "-fsigned-char -ffp-contract=off")
+        # On an x86 host, cross-compile with Clang against the Debian/Ubuntu
+        # aarch64-linux-gnu sysroot. An Arm host builds natively.
+        # (CMAKE_HOST_SYSTEM_PROCESSOR is not known before project().)
+        execute_process(COMMAND uname -m OUTPUT_VARIABLE kisak_host_machine OUTPUT_STRIP_TRAILING_WHITESPACE)
+        if(NOT CMAKE_TOOLCHAIN_FILE AND NOT kisak_host_machine MATCHES "^(aarch64|arm64)$")
+            set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_LIST_DIR}/scripts/platform/linux/aarch64-linux-gnu.cmake")
+        endif()
     else()
-        message(FATAL_ERROR "KISAK_LINUX_ARCH must be i386 or x86_64, not '${KISAK_LINUX_ARCH}'")
+        message(FATAL_ERROR "KISAK_LINUX_ARCH must be i386, x86_64 or aarch64, not '${KISAK_LINUX_ARCH}'")
     endif()
     set(CMAKE_C_FLAGS_INIT "${CMAKE_C_FLAGS_INIT} ${KISAK_LINUX_ARCH_FLAG}")
     set(CMAKE_CXX_FLAGS_INIT "${CMAKE_CXX_FLAGS_INIT} ${KISAK_LINUX_ARCH_FLAG}")

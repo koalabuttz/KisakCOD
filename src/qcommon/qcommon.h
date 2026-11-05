@@ -1602,14 +1602,14 @@ inline T Buf_Read(unsigned char **pos)
     return value;
 }
 
-#include <xmmintrin.h>  // SSE
+#include <universal/arch_intrin.h> // SSE on x86; __rdtsc stand-in elsewhere
 #ifdef __linux__
-#include <x86intrin.h>
 // Clang's Microsoft intrinsic takes a pointer to the Windows 32-bit LONG type:
 // unsigned long* on i386, where Linux DWORD is an unsigned int, so this overload
-// adapts it. On x86_64 that type is unsigned int: the builtin already has the
-// signature below, so it is declared (Clang lowers it inline) instead of defined.
-#if defined(__clang__) && defined(__x86_64__)
+// adapts it. On 64-bit Linux (x86_64, aarch64) that type is unsigned int: the
+// builtin already has the signature below, so it is declared (Clang lowers it
+// inline) instead of defined.
+#if defined(__clang__) && defined(__LP64__)
 extern "C" unsigned char _BitScanReverse(unsigned int* index, unsigned int mask);
 #else
 inline unsigned char _BitScanReverse(unsigned int* index, unsigned int mask)
@@ -1644,7 +1644,13 @@ inline int SnapFloatToInt(float x)
     return i;
 #endif
 
+#if KISAK_ARCH_X86
     int retval = _mm_cvtss_si32(_mm_set_ss(x));
+#else
+    // cvtss2si rounds in the current mode (nearest, ties to even); lrintf does
+    // the same. Out-of-range values differ: x86 gives INT_MIN, Arm saturates.
+    int retval = static_cast<int>(lrintf(x));
+#endif
 
 #if defined(_DEBUG) && defined(_WIN32)
     const float input = x;
