@@ -65,30 +65,25 @@ void CG_ModPrvUpdateMru(const dvar_s **mruDvars, const char **stringTable, const
 {
     const dvar_s **v3; // r31
     int v6; // r30
-    char *v7; // r27
 
     v3 = mruDvars;
     if (!mruDvars)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\cgame\\cg_modelpreviewer.cpp", 345, 0, "%s", "mruDvars");
     if (!stringTable)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\cgame\\cg_modelpreviewer.cpp", 346, 0, "%s", "stringTable");
-    v6 = 0;
-    v7 = (char *)((char *)stringTable - (char *)v3);
-    do
+    for (v6 = 0; v6 < 4; ++v6)
     {
-        if (!*v3)
+        if (!v3[v6])
             MyAssertHandler(
                 "c:\\trees\\cod3\\cod3src\\src\\cgame\\cg_modelpreviewer.cpp",
                 350,
                 0,
                 "%s",
                 "mruDvars[dvarIndex]");
-        if (v6 && !*(_BYTE *)(*v3)->current.integer)
+        if (v6 && !*v3[v6]->current.string)
             break;
-        ++v6;
-        *(const dvar_s **)((char *)v3 + (unsigned int)v7) = (const dvar_s *)(*v3)->current.integer;
-        ++v3;
-    } while (v6 < 4);
+        stringTable[v6] = v3[v6]->current.string;
+    }
     stringTable[v6] = 0;
     if (dvar)
         Dvar_UpdateEnumDomain((dvar_s*)(dvar_s*)dvar, stringTable);

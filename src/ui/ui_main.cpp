@@ -571,7 +571,6 @@ void UI_DrawSaveGameShot(rectDef_s *rect, double scale, float *color)
     int v4; // r3
     int v5; // r30
     Material *sshotImage; // r3
-    int v11; // r30
 
     v4 = UI_SavegameIndexFromFilename(uiInfo.savegameName);
     if (v4 >= 0 && (v5 = uiInfo.savegameStatus.displaySavegames[v4], v5 >= 0))
@@ -583,15 +582,14 @@ void UI_DrawSaveGameShot(rectDef_s *rect, double scale, float *color)
                 goto LABEL_14;
             sshotImage = uiInfo.sshotImage;
         }
-        v11 = v5 << 6;
-        if (*(const char **)((char *)&uiInfo.savegameList[0].imageName + v11))
+        if (uiInfo.savegameList[v5].imageName)
         {
-            sshotImage = Material_RegisterRawImage(*(const char **)((char *)&uiInfo.savegameList[0].imageName + v11), IMAGE_TRACK_UI);
+            sshotImage = Material_RegisterRawImage(uiInfo.savegameList[v5].imageName, IMAGE_TRACK_UI);
             uiInfo.sshotImage = sshotImage;
         }
-        if (!*(const char **)((char *)&uiInfo.savegameList[0].imageName + v11) || !sshotImage)
+        if (!uiInfo.savegameList[v5].imageName || !sshotImage)
             uiInfo.sshotImage = Material_RegisterHandle("unknownsave", IMAGE_TRACK_UI);
-        I_strncpyz(uiInfo.sshotImageName, *(const char **)((char *)&uiInfo.savegameList[0].imageName + v11), 64);
+        I_strncpyz(uiInfo.sshotImageName, uiInfo.savegameList[v5].imageName, 64);
     }
     else
     {
@@ -1378,12 +1376,8 @@ void UI_ReplaceConversions(
     int v13; // r28
     char *v14; // r30
     int v15; // r31
-    int v16; // r31
-    unsigned __int8 *v17; // r11
-    unsigned __int8 *v19; // r10
     int v20; // r11
     int v21; // r10
-    char v22; // r9
 
     if (!sourceString)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\ui\\ui_main.cpp", 2701, 0, "%s", "sourceString");
@@ -1442,23 +1436,11 @@ void UI_ReplaceConversions(
                         "%s\n\t(argIndex) = %i",
                         "(argIndex < 9)",
                         v15);
-                v16 = 4 * (v15 + 1);
-                if (!*(int *)((char *)&arguments->argCount + v16))
+                if (!arguments->args[v15])
                     MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\ui\\ui_main.cpp", 2731, 0, "%s", "arguments->args[argIndex]");
-                v17 = *(unsigned __int8 **)((char *)&arguments->argCount + v16);
-                while (*v17++)
-                    ;
-                v19 = &v17[-*(int *)((char *)&arguments->argCount + v16)];
-                v20 = 0;
-                v21 = (int)(v19 - 1);
-                if (v21 > 0)
-                {
-                    do
-                    {
-                        v22 = *(_BYTE *)(*(int *)((char *)&arguments->argCount + v16) + v20++);
-                        outputString[v12++] = v22;
-                    } while (v20 < v21);
-                }
+                v21 = (int)strlen(arguments->args[v15]);
+                for (v20 = 0; v20 < v21; ++v20)
+                    outputString[v12++] = arguments->args[v15][v20];
                 v13 += 3;
             }
         }

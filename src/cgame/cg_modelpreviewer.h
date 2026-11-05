@@ -99,7 +99,7 @@ struct MdlPrvBtnTimes
     int ragdollSpeed;
 };
 
-struct alignas(4) ModelPreviewer_System
+struct ModelPreviewer_System // 4-aligned on i386 as retail; holds pointers, so 8 on x64
 {
     int modelCount;
     const char **modelNames;
