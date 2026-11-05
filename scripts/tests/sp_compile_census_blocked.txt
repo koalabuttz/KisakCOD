@@ -1,0 +1,55 @@
+# Singleplayer sources (KisakCOD-sp) that do not compile for native i386 Linux yet.
+#
+# Read by scripts/tests/run_client_compile_census.py --target sp, which compiles
+# the Windows KisakCOD-sp source set with KISAK_SP in place of KISAK_MP. Format
+# and rules as client_compile_census_blocked.txt: ; a source not
+# listed that stops compiling is a regression, a listed source that compiles is
+# stale. Every entry here is also on the multiplayer list, for the same reason:
+# singleplayer adds no blocker of its own.
+
+# --- Renderer: needs real D3D9 methods, enums or Win32 rect/monitor types. ---
+# The native D3D9 boundary (DXVK Native behind src/linux/d3d9_types.h) is what
+# unblocks these; with the stand-in header they only see opaque interface tags.
+src/gfx_d3d/r_buffers.cpp: calls IDirect3DDevice9 buffer methods, D3DPOOL_* enums
+src/gfx_d3d/r_draw_bsp.cpp: calls IDirect3DDevice9 draw methods
+src/gfx_d3d/r_draw_lit.cpp: tagRECT scissor and IDirect3DDevice9 render states
+src/gfx_d3d/r_draw_sunshadow.cpp: RECT and D3DCLEAR_* for shadow map clears
+src/gfx_d3d/r_image.cpp: IDirect3DDevice9/texture creation and lock methods
+src/gfx_d3d/r_image_load_common.cpp: _D3DLOCKED_BOX and volume texture locks
+src/gfx_d3d/r_init.cpp: Win32 window/monitor API and IDirect3D9 device creation
+src/gfx_d3d/r_material.cpp: IDirect3DDevice9 shader/declaration creation, _D3DVERTEXELEMENT9
+src/gfx_d3d/r_material_load_obj.cpp: includes <d3d9.h> directly
+src/gfx_d3d/r_model_lighting.cpp: _D3DLOCKED_BOX/_D3DBOX volume texture updates
+src/gfx_d3d/r_rendertarget.cpp: IDirect3D9 format queries, D3DDEVTYPE_HAL
+src/gfx_d3d/r_scene.cpp: IDirect3DQuery9 methods
+src/gfx_d3d/r_screenshot.cpp: tagMONITORINFO/HMONITOR and _D3DLOCKED_RECT
+src/gfx_d3d/r_setstate_d3d.cpp: IDirect3DQuery9 methods
+src/gfx_d3d/r_shade.cpp: D3DLOCK_* flags and IDirect3DDevice9 methods
+src/gfx_d3d/r_state.cpp: IDirect3DDevice9 state methods
+src/gfx_d3d/r_state_utils.cpp: IDirect3DDevice9 render states, D3DRS_* enums
+src/gfx_d3d/rb_backend.cpp: IDirect3DQuery9/IDirect3DSurface9/device methods
+src/gfx_d3d/rb_depthprepass.cpp: tagRECT scissor and IDirect3DDevice9 render states
+src/gfx_d3d/rb_draw3d.cpp: IDirect3DQuery9 issue, D3DISSUE_END, tagRECT
+src/gfx_d3d/rb_imagetouch.cpp: IDirect3DDevice9 draw methods
+src/gfx_d3d/rb_pixelcost.cpp: IDirect3DQuery9 issue, D3DISSUE_END
+src/gfx_d3d/rb_shade.cpp: IDirect3DDevice9 methods
+src/gfx_d3d/rb_sky.cpp: IDirect3DDevice9/IDirect3DQuery9 methods
+src/gfx_d3d/rb_uploadshaders.cpp: IDirect3DDevice9 draw, D3DPT_TRIANGLELIST
+
+# --- Renderer, but not a D3D9 boundary problem. ---
+src/gfx_d3d/r_cinematic.cpp: the Bink player locks D3D9 textures; KISAK_LINUX_CINEMATICS builds it through the native D3D9 boundary on the Linux Bink shim
+src/gfx_d3d/r_texturemem.cpp: includes <ddraw.h> for video-memory queries
+
+# --- Windows platform implementations. The dedicated Linux target already
+#     supplies native equivalents in src/linux/ (sys_threads, sys_time,
+#     sys_memory/sys_virtualmem, sys_files/sys_posix, sys_assert); a client
+#     target links those instead of compiling these. ---
+src/qcommon/threads.cpp: includes <windows.h> (native: src/linux/sys_threads.cpp)
+src/universal/assertive.cpp: Win32 clipboard/HGLOBAL assert dialog (native: src/linux/sys_assert.cpp)
+src/universal/physicalmemory.cpp: includes <windows.h> (native: src/linux/sys_memory.cpp)
+src/universal/timing.cpp: includes <windows.h> (native: src/linux/sys_time.cpp)
+src/universal/win_common.cpp: includes <direct.h> (native: src/linux/sys_files.cpp, sys_posix.cpp)
+src/universal/win_shared.cpp: includes <windows.h> (native: src/linux/sys_posix.cpp)
+
+# --- Client services without a native implementation yet. ---
+src/qcommon/dl_main.cpp: includes <curl/curl.h>
