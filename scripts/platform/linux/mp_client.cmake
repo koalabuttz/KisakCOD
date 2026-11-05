@@ -253,6 +253,15 @@ if(KISAK_LINUX_CINEMATICS)
         target_include_directories(KisakCOD-mp-cinematic SYSTEM PRIVATE "${KISAK_OPENAL_INCLUDE_DIR}")
     endif()
     target_link_libraries(KisakCOD-mp-cinematic PRIVATE kisak_linux_native_d3d9 PkgConfig::KISAK_FFMPEG)
+    # The FFmpeg headers often sit in the compiler's own multiarch directory,
+    # so the compile line names no directory for them. Name it after the
+    # system directories: the build finds the same headers, and tools that
+    # parse this unit again for the other architecture (the 32-bit layout
+    # checks) find them too.
+    pkg_get_variable(KISAK_FFMPEG_INCLUDEDIR libavcodec includedir)
+    if(KISAK_FFMPEG_INCLUDEDIR)
+        target_compile_options(KisakCOD-mp-cinematic PRIVATE "-idirafter${KISAK_FFMPEG_INCLUDEDIR}")
+    endif()
 endif()
 target_compile_definitions(KisakCOD-mp-own PRIVATE KISAK_LINUX_SDL_MAJOR=3)
 target_link_libraries(KisakCOD-mp-own PRIVATE kisak_linux_native_d3d9 SDL3::SDL3)
