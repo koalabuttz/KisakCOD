@@ -1,4 +1,4 @@
-message(STATUS "----- KisakCOD native Linux Dedicated(MP) -----")
+message(STATUS "----- KisakCOD native ${KISAK_PLATFORM} Dedicated(MP) -----")
 include(${CMAKE_CURRENT_LIST_DIR}/platform.cmake)
 include(${SCRIPTS_DIR}/common_files.cmake)
 include(${SCRIPTS_DIR}/mp/mp_files.cmake)
@@ -50,7 +50,13 @@ target_compile_options(KisakCOD-dedi PRIVATE
 )
 # Shared source files also contain client-only helpers. Discard unreachable
 # functions rather than linking their Windows presentation dependencies.
-target_link_options(KisakCOD-dedi PRIVATE -Wl,--gc-sections)
+# Apple's linker spells it -dead_strip (Mach-O objects keep every function in
+# a subsection of its own, so the -f*-sections flags change nothing there).
+if(APPLE)
+    target_link_options(KisakCOD-dedi PRIVATE -Wl,-dead_strip)
+else()
+    target_link_options(KisakCOD-dedi PRIVATE -Wl,--gc-sections)
+endif()
 find_package(Threads REQUIRED)
 target_link_libraries(KisakCOD-dedi PRIVATE Threads::Threads ${CMAKE_DL_LIBS})
 add_dependencies(KisakCOD-dedi update_build_number)

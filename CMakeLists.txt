@@ -7,17 +7,41 @@ cmake_minimum_required(VERSION 3.18)
 # (scripts/tests/run_x64_compile_census.py) covers the rest. Fastfile loading is
 # not 64-bit yet. See docs/linux-x64.md. aarch64 (64-bit Arm) is a newer
 # opt-in track that builds the dedicated server only; see docs/linux-arm64.md.
+# KISAK_PLATFORM=macos is the opt-in macOS track: the same POSIX platform layer
+# (src/linux) builds the dedicated server for one Mac architecture per build
+# directory, arm64 or x86_64; see docs/macos.md.
 set(KISAK_LINUX_ARCH "i386" CACHE STRING
     "Native Linux architecture: i386 (shipping), x86_64 (opt-in 64-bit track) or aarch64 (opt-in 64-bit Arm track: dedicated server)")
 set_property(CACHE KISAK_LINUX_ARCH PROPERTY STRINGS i386 x86_64 aarch64)
 if(NOT DEFINED KISAK_PLATFORM)
     if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
-        set(KISAK_PLATFORM "linux" CACHE STRING "Build platform: win32|mingw|linux")
+        set(KISAK_PLATFORM "linux" CACHE STRING "Build platform: win32|mingw|linux|macos")
     else()
-        set(KISAK_PLATFORM "win32" CACHE STRING "Build platform: win32|mingw|linux")
+        set(KISAK_PLATFORM "win32" CACHE STRING "Build platform: win32|mingw|linux|macos")
     endif()
 endif()
-if(KISAK_PLATFORM STREQUAL "linux")
+if(KISAK_PLATFORM STREQUAL "macos")
+    # One architecture per build directory: arm64 (Apple silicon) or x86_64
+    # (Intel Macs), the host's unless CMAKE_OSX_ARCHITECTURES says otherwise.
+    # A universal binary needs per-slice flags (SSE options on x86_64 only),
+    # so it is not offered yet.
+    if(NOT CMAKE_OSX_ARCHITECTURES)
+        execute_process(COMMAND uname -m OUTPUT_VARIABLE kisak_host_machine OUTPUT_STRIP_TRAILING_WHITESPACE)
+        set(CMAKE_OSX_ARCHITECTURES "${kisak_host_machine}" CACHE STRING "macOS architecture: arm64 or x86_64")
+    endif()
+    if(NOT CMAKE_OSX_ARCHITECTURES MATCHES "^(arm64|x86_64)$")
+        message(FATAL_ERROR "KISAK_PLATFORM=macos builds one architecture per build directory: "
+            "set CMAKE_OSX_ARCHITECTURES to arm64 or x86_64, not '${CMAKE_OSX_ARCHITECTURES}'")
+    endif()
+    set(KISAK_MACOS_ARCH "${CMAKE_OSX_ARCHITECTURES}")
+    # macOS 11 is the first release with Apple silicon.
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS version")
+    # Apple silicon has fused multiply-add, which Clang would use for a * b + c,
+    # rounding once instead of twice. Keep x86's results, as the Linux aarch64
+    # build does: client prediction replays the server's movement math.
+    set(CMAKE_C_FLAGS_INIT "${CMAKE_C_FLAGS_INIT} -ffp-contract=off")
+    set(CMAKE_CXX_FLAGS_INIT "${CMAKE_CXX_FLAGS_INIT} -ffp-contract=off")
+elseif(KISAK_PLATFORM STREQUAL "linux")
     if(KISAK_LINUX_ARCH STREQUAL "i386")
         set(KISAK_LINUX_ARCH_FLAG -m32)
     elseif(KISAK_LINUX_ARCH STREQUAL "x86_64")
@@ -52,7 +76,7 @@ project(KisakCOD)
 # scripts/common_files.cmake), and movies are built out (r_cinematic.cpp
 # without CINEMA) unless KISAK_WIN64_CINEMATICS plays them through the FFmpeg
 # Bink shim (scripts/extern/bink_shim.cmake).
-if(NOT KISAK_PLATFORM STREQUAL "linux" AND CMAKE_SIZEOF_VOID_P EQUAL 8)
+if(NOT KISAK_PLATFORM MATCHES "^(linux|macos)$" AND CMAKE_SIZEOF_VOID_P EQUAL 8)
     set(KISAK_WIN64 ON)
     if(NOT KISAK_OPENAL)
         message(STATUS "64-bit Windows build: Miles is 32-bit only, so KISAK_OPENAL is turned on")
@@ -78,8 +102,8 @@ add_compile_definitions(_CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_DEPRECATE)
 
 # Set this to match the folder name in scripts/platform
 # This will handle the path overrides if needed
-set(KISAK_PLATFORM "win32" CACHE STRING "Build platform: win32|mingw|linux")
-set_property(CACHE KISAK_PLATFORM PROPERTY STRINGS win32 mingw linux)
+set(KISAK_PLATFORM "win32" CACHE STRING "Build platform: win32|mingw|linux|macos")
+set_property(CACHE KISAK_PLATFORM PROPERTY STRINGS win32 mingw linux macos)
 
 # Set Address Sanitizer
 # NOTE: If you use this you will need to copy to the game's directory
@@ -150,7 +174,8 @@ message("Building KISAK_PLATFORM: ${KISAK_PLATFORM}")
 
 # Native Linux currently builds the multiplayer dedicated server only.
 # Keep the Windows client/editor source and dependency selection unchanged.
-if(KISAK_PLATFORM STREQUAL "linux")
+# macOS shares the POSIX platform directory (and the src/linux layer).
+if(KISAK_PLATFORM MATCHES "^(linux|macos)$")
     add_subdirectory(${SCRIPTS_DIR}/platform/linux)
 else()
     add_subdirectory(${SCRIPTS_DIR}/mp)
