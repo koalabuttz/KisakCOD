@@ -4010,12 +4010,6 @@ void VEH_SetupCollmap(gentity_s *ent)
 void G_UpdateVehicleTags(gentity_s *ent)
 {
     scr_vehicle_s *veh; // r30
-    int *flash; // r28
-    uint16_t **v4; // r29
-    int BoneIndex; // r3
-    int *wheel; // r29
-    uint16_t **v7; // r30
-    int v8; // r3
 
     iassert(ent);
     iassert(ent->scr_vehicle);
@@ -4028,22 +4022,13 @@ void G_UpdateVehicleTags(gentity_s *ent)
     veh->boneIndex.turret = SV_DObjGetBoneIndex(ent, scr_const.tag_turret);
     veh->boneIndex.barrel = SV_DObjGetBoneIndex(ent, scr_const.tag_barrel);
     veh->boneIndex.turret_base = SV_DObjGetBoneIndex(ent, scr_const.tag_turret_base);
-    flash = veh->boneIndex.flash;
-
-    v4 = s_flashTags;
-    do
-    {
-        BoneIndex = SV_DObjGetBoneIndex(ent, **v4++);
-        *flash++ = BoneIndex;
-    } while ((int)v4 < (int)&s_flashTags[5]);
-
-    wheel = veh->boneIndex.wheel;
-    v7 = s_wheelTags;
-    do
-    {
-        v8 = SV_DObjGetBoneIndex(ent, **v7++);
-        *wheel++ = v8;
-    } while ((int)v7 < (int)&s_wheelTags[6]);
+    // Indexed: the decompiled loops compared the tag pointers as 32-bit ints.
+    static_assert(ARRAY_COUNT(s_flashTags) == ARRAY_COUNT(veh->boneIndex.flash));
+    static_assert(ARRAY_COUNT(s_wheelTags) == ARRAY_COUNT(veh->boneIndex.wheel));
+    for (unsigned int i = 0; i < ARRAY_COUNT(s_flashTags); ++i)
+        veh->boneIndex.flash[i] = SV_DObjGetBoneIndex(ent, *s_flashTags[i]);
+    for (unsigned int i = 0; i < ARRAY_COUNT(s_wheelTags); ++i)
+        veh->boneIndex.wheel[i] = SV_DObjGetBoneIndex(ent, *s_wheelTags[i]);
 }
 
 #endif

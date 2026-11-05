@@ -29,17 +29,17 @@ struct node_field_t
 
 node_field_t fields_3[12] =
 {
-  { "targetname", 6, F_STRING, NULL },
-  { "target", 12, F_STRING, NULL },
-  { "animscript", 14, F_STRING, NULL },
-  { "script_linkname", 8, F_STRING, NULL },
-  { "script_noteworthy", 10, F_STRING, NULL },
-  { "origin", 20, F_VECTOR, NULL },
-  { "angles", 32, F_VECTORHACK, NULL },
-  { "radius", 44, F_FLOAT, NULL },
-  { "minusedistsq", 48, F_FLOAT, NULL },
-  { "spawnflags", 4, F_SHORT, NULL },
-  { "type", 0, F_INT, &Path_GetType },
+  { "targetname", offsetof(pathnode_constant_t, targetname), F_STRING, NULL },
+  { "target", offsetof(pathnode_constant_t, target), F_STRING, NULL },
+  { "animscript", offsetof(pathnode_constant_t, animscript), F_STRING, NULL },
+  { "script_linkname", offsetof(pathnode_constant_t, script_linkName), F_STRING, NULL },
+  { "script_noteworthy", offsetof(pathnode_constant_t, script_noteworthy), F_STRING, NULL },
+  { "origin", offsetof(pathnode_constant_t, vOrigin), F_VECTOR, NULL },
+  { "angles", offsetof(pathnode_constant_t, fAngle), F_VECTORHACK, NULL },
+  { "radius", offsetof(pathnode_constant_t, fRadius), F_FLOAT, NULL },
+  { "minusedistsq", offsetof(pathnode_constant_t, minUseDistSq), F_FLOAT, NULL },
+  { "spawnflags", offsetof(pathnode_constant_t, spawnflags), F_SHORT, NULL },
+  { "type", offsetof(pathnode_constant_t, type), F_INT, &Path_GetType },
   { NULL, 0, F_INT, NULL }
 };
 
