@@ -81,6 +81,13 @@ def source_checks(checker):
     definitions = re.search(r"set\(KISAK_MP_CLIENT_DEFINITIONS(.*?)\)", module, re.S)
     checker.require(definitions is not None and "CINEMA" not in definitions.group(1).split(),
                     "the client compiles without CINEMA")
+    # The profiler is opt-in: player builds carry no Tracy, profiling builds turn it on.
+    checker.require(re.search(r'option\(KISAK_LINUX_TRACY\s+"[^"]*"\s+OFF\)', module) is not None,
+                    "KISAK_LINUX_TRACY is off by default")
+    checker.require(definitions is not None and "TRACY_ENABLE" not in definitions.group(1).split(),
+                    "the client's own definitions leave Tracy off")
+    checker.require("if(KISAK_LINUX_TRACY)\n    target_link_libraries(KisakCOD-mp PRIVATE TracyClient)" in module,
+                    "KISAK_LINUX_TRACY links the Tracy client library into KisakCOD-mp")
     readers = []
     for path in SRC.rglob("*"):
         if path.suffix in (".cpp", ".h") and path.is_file():
