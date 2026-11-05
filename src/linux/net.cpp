@@ -35,6 +35,7 @@
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/uio.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -379,6 +380,42 @@ qboolean Sys_StringToAdr(const char *s, netadr_t *a)
 
 /*
 ====================
+NET_ReceiveDatagram
+
+Takes one datagram off `socket` into `buffer` and returns its REAL length,
+which is more than `size` when it did not fit (nothing is written past
+`size`), or -1 with errno set.  Linux reports the real length when asked with
+MSG_TRUNC.  macOS ignores MSG_TRUNC as an input flag and only marks the
+truncation in recvmsg's msg_flags, so there an oversize datagram is reported
+as size + 1.
+====================
+*/
+static int NET_ReceiveDatagram(int socket, void *buffer, int size, struct sockaddr_in *from, socklen_t *fromlen)
+{
+#if defined(__APPLE__)
+    struct iovec chunk;
+    chunk.iov_base = buffer;
+    chunk.iov_len = (size_t)size;
+
+    struct msghdr header;
+    memset(&header, 0, sizeof(header));
+    header.msg_name = from;
+    header.msg_namelen = *fromlen;
+    header.msg_iov = &chunk;
+    header.msg_iovlen = 1;
+
+    const int ret = (int)recvmsg(socket, &header, 0);
+    *fromlen = header.msg_namelen;
+    if (ret >= 0 && (header.msg_flags & MSG_TRUNC) != 0)
+        return size + 1;
+    return ret;
+#else
+    return (int)recvfrom(socket, buffer, (size_t)size, MSG_TRUNC, (struct sockaddr *)from, fromlen);
+#endif
+}
+
+/*
+====================
 Sys_GetPacket
 
 Never called by the game logic, only by the system event pump.  Non-blocking:
@@ -406,11 +443,10 @@ qboolean Sys_GetPacket(netadr_t *net_from, msg_t *net_message)
         fromlen = sizeof(from);
         memset(&from, 0, sizeof(from));
 
-        // MSG_TRUNC makes the return value the REAL datagram length, so an
-        // oversize datagram is recognisable instead of looking like a full
-        // buffer read.  The copy itself is still capped at maxsize.
-        ret = (int)recvfrom(ip_socket, net_message->data, (size_t)maxsize, MSG_TRUNC,
-                            (struct sockaddr *)&from, &fromlen);
+        // The return value is the REAL datagram length, so an oversize
+        // datagram is recognisable instead of looking like a full buffer read.
+        // The copy itself is still capped at maxsize.
+        ret = NET_ReceiveDatagram(ip_socket, net_message->data, maxsize, &from, &fromlen);
 
         if (ret == -1)
         {
@@ -432,7 +468,7 @@ qboolean Sys_GetPacket(netadr_t *net_from, msg_t *net_message)
 
         if (ret > maxsize)
         {
-            // Truncated by MSG_TRUNC: nothing was written past maxsize.  Report
+            // Truncated: nothing was written past maxsize.  Report
             // it (matching win_net.cpp's oversize warning) and drop the packet.
             SockadrToNetadr((struct sockaddr *)&from, net_from);
             Com_Printf(CON_CHANNEL_SYSTEM, "Oversize packet from %s\n", NET_AdrToString(*net_from));

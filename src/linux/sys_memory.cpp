@@ -14,7 +14,11 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/mman.h>
+#if defined(__APPLE__)
+#include <sys/sysctl.h> // sysctlbyname("hw.memsize")
+#else
 #include <sys/sysinfo.h>
+#endif
 #include <unistd.h>
 
 // Defined by the engine and shared with the database; the layout is fixed by
@@ -288,11 +292,18 @@ void PMem_DumpMemStats()
 
 int Sys_SystemMemoryMB()
 {
+#if defined(__APPLE__)
+    uint64_t totalBytes = 0;
+    size_t totalBytesSize = sizeof(totalBytes);
+    if (sysctlbyname("hw.memsize", &totalBytes, &totalBytesSize, nullptr, 0) != 0)
+        return 1024;
+#else
     struct sysinfo info;
     if (sysinfo(&info) != 0)
         return 1024;
 
     const uint64_t totalBytes = (uint64_t)info.totalram * (uint64_t)info.mem_unit;
+#endif
     uint64_t megabytes = totalBytes / (1024ull * 1024ull);
 
     // The engine caps its arena planning at 1 GB.

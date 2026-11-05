@@ -9,7 +9,10 @@
 #include <cstdlib>
 #include <cstring>
 #include <execinfo.h>
+#include <pthread.h>
+#if !defined(__APPLE__)
 #include <sys/syscall.h>
+#endif
 #include <unistd.h>
 
 namespace
@@ -159,7 +162,13 @@ void SL_TraceRecord(uint32_t stringValue, SlTraceOp op, uint32_t user)
     event.depth = static_cast<uint8_t>(depth);
     event.op = op;
     event.user = static_cast<uint8_t>(user);
+#if defined(__APPLE__)
+    uint64_t threadId = 0;
+    pthread_threadid_np(nullptr, &threadId);
+    event.thread = static_cast<uint32_t>(threadId);
+#else
     event.thread = static_cast<uint32_t>(syscall(SYS_gettid));
+#endif
     event.seq = g_seq.fetch_add(1, std::memory_order_relaxed);
     CountSite(history, event);
 }

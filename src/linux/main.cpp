@@ -43,6 +43,9 @@
 #include <string.h>
 #include <strings.h>
 #include <unistd.h>
+#if defined(__APPLE__)
+#include <sys/sysctl.h> // sysctlbyname: CPU vendor and name
+#endif
 
 // ---------------------------------------------------------------------------
 // Globals the engine and the other platform files expect.
@@ -309,6 +312,27 @@ static void ReadCpuInfo(char *vendor, int vendorSize, char *name, int nameSize)
 {
     I_strncpyz(vendor, "Unknown", vendorSize);
     I_strncpyz(name, "Unknown", nameSize);
+
+#if defined(__APPLE__)
+    // macOS has no /proc/cpuinfo. Intel Macs report both values; Apple
+    // silicon has only the brand string ("Apple M1", ...).
+    char value[256];
+    size_t valueSize = sizeof(value);
+    if (sysctlbyname("machdep.cpu.brand_string", value, &valueSize, nullptr, 0) == 0 && valueSize > 0)
+    {
+        value[sizeof(value) - 1] = '\0';
+        I_strncpyz(name, value, nameSize);
+        if (strncmp(value, "Apple", 5) == 0)
+            I_strncpyz(vendor, "Apple", vendorSize);
+    }
+    valueSize = sizeof(value);
+    if (sysctlbyname("machdep.cpu.vendor", value, &valueSize, nullptr, 0) == 0 && valueSize > 0)
+    {
+        value[sizeof(value) - 1] = '\0';
+        I_strncpyz(vendor, value, vendorSize);
+    }
+    return;
+#endif
 
     FILE *file = fopen("/proc/cpuinfo", "r");
     if (!file)
@@ -730,23 +754,30 @@ static void PrintWorkingDir()
 // Entry point
 // ---------------------------------------------------------------------------
 
+// The same POSIX layer builds for Linux and macOS (docs/macos.md).
+#if defined(__APPLE__)
+#define KISAK_NATIVE_OS "macOS"
+#else
+#define KISAK_NATIVE_OS "Linux"
+#endif
+
 namespace
 {
 #if defined(KISAK_LINUX_SP_GAME)
-    const char *kVersionBanner = "KisakCOD singleplayer (native Linux)\n";
+    const char *kVersionBanner = "KisakCOD singleplayer (native " KISAK_NATIVE_OS ")\n";
     const char *kProgramName = "KisakCOD-sp";
     const char *kExampleArguments = "+set fs_basepath <game folder>  +devmap killhouse";
-    const char *kInitializedLine = "Singleplayer initialized (native Linux port; gameplay unverified)\n";
+    const char *kInitializedLine = "Singleplayer initialized (native " KISAK_NATIVE_OS " port; gameplay unverified)\n";
 #elif defined(KISAK_LINUX_MP_CLIENT)
-    const char *kVersionBanner = "KisakCOD multiplayer client (native Linux)\n";
+    const char *kVersionBanner = "KisakCOD multiplayer client (native " KISAK_NATIVE_OS ")\n";
     const char *kProgramName = "KisakCOD-mp";
     const char *kExampleArguments = "+set fs_basepath <game folder>  +devmap mp_crash";
-    const char *kInitializedLine = "Multiplayer client initialized (native Linux port; gameplay unverified)\n";
+    const char *kInitializedLine = "Multiplayer client initialized (native " KISAK_NATIVE_OS " port; gameplay unverified)\n";
 #else
-    const char *kVersionBanner = "KisakCOD dedicated server (native Linux)\n";
+    const char *kVersionBanner = "KisakCOD dedicated server (native " KISAK_NATIVE_OS ")\n";
     const char *kProgramName = "kisakcod-dedi";
     const char *kExampleArguments = "+set dedicated 2  +map mp_crash";
-    const char *kInitializedLine = "Dedicated server initialized (native Linux port; gameplay unverified)\n";
+    const char *kInitializedLine = "Dedicated server initialized (native " KISAK_NATIVE_OS " port; gameplay unverified)\n";
 #endif
 
     void PrintUsage(FILE *stream)
