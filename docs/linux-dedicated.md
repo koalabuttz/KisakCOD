@@ -566,11 +566,14 @@ digits, so with this switch on:
   banned. Do not grant privileges, admin, or persistent identity on a GUID.
 - Two players who happen to send the same GUID are indistinguishable to the
   server, and a reconnecting player can appear as a different person.
-- There is **no rate limiting** anywhere in this handshake. Each request costs a
-  challenge slot and, for GUID requests, no Steam call. If the server is exposed
-  to the internet, limit inbound UDP with the firewall (a `limit` rule in
-  `nftables`, or `hashlimit` in `iptables`) and consider `sv_maxPing`,
-  `sv_minPing` and `sv_reconnectlimit` as cheap additional friction.
+- `getchallenge`, `getinfo`, `getstatus` and `rcon` replies are rate limited
+  per source address with a global cap on top (see
+  [Query rate limits](#query-rate-limits)), but `connect` is not, and each
+  `getchallenge` still costs a challenge slot and, for GUID requests, no Steam
+  call. If the server is exposed to the internet, also limit inbound UDP with
+  the firewall (a `limit` rule in `nftables`, or `hashlimit` in `iptables`) and
+  consider `sv_maxPing`, `sv_minPing` and `sv_reconnectlimit` as cheap
+  additional friction.
 - Use a strong `g_password`/`sv_privatePassword` and do not treat either as an
   identity mechanism; both are unchanged by this switch and both remain the only
   admission control you actually have besides the GUID.
@@ -602,6 +605,28 @@ that line is the record that the process considers retail GUIDs acceptable. To
 roll back, remove `+set sv_allowUnverifiedGuids 1` (or set it to `0`) and restart
 the process; every client must then present a Steam ticket, which on this native
 Linux build means no retail client can connect.
+
+## Query rate limits
+
+Retail answers every out-of-band query from whatever address the datagram
+claims, which made CoD4 servers useful as UDP reflectors, and allows one `rcon`
+packet per 500 ms from anyone, so a stream of bad passwords locks the admin
+out. KisakCOD limits replies with leaky buckets (`src/server_mp/sv_query_limit.h`),
+using CoD4x's per-address numbers where it has them:
+
+| Query | Per source address | All addresses together |
+| --- | --- | --- |
+| `getstatus` | 2, then 1 per 2 s | 20, then 10 per s |
+| `getinfo` | 4, then 1 per 2 s | 50, then 50 per s |
+| `getchallenge` | 4, then 1 per s | 50, then 50 per s |
+| `rcon` | 10, then 5 per s (checked before the password) | replies to wrong passwords only: 10, then 10 per s |
+
+A limited query is dropped silently, like a lost packet; clients and server
+browsers already retry. Nothing on the wire changes. Queries from loopback and
+private addresses (10/8, 172.16/12, 192.168/16, 169.254/16, 127/8) are not
+limited, so LAN browsers and the local checks behave as before; `rcon` is
+limited for every IPv4 source. A correct `rcon` password is never refused
+because of someone else's flood. There is no switch to turn the limits off.
 
 ## Supported boundaries and remaining verification
 

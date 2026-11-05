@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the production validators for rcon passwords and download names.
+"""Check the production validators for rcon, download names and query rate limits.
 
 ``src/server_mp/sv_remote_input.h`` holds two header-only rules that stand
 between a UDP packet and the server console or file system:
@@ -12,6 +12,11 @@ between a UDP packet and the server console or file system:
   ``SV_IsSafeDownloadName``    decides whether a ``download <name>`` client
                                command may reach ``FS_SV_FOpenFileRead``, which
                                prepends ``fs_homepath`` and nothing else.
+
+``src/server_mp/sv_query_limit.h`` holds the per-address and global leaky
+buckets for getstatus, getinfo, getchallenge and rcon replies, which stop the
+server from being used as a UDP reflector and stop bad-password floods from
+locking the admin out of rcon.
 
 The real header is compiled into a small native program, 64-bit and - when the
 toolchain can - 32-bit like the shipped server, and every rule is exercised with
@@ -30,11 +35,14 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 HEADER = ROOT / "src" / "server_mp" / "sv_remote_input.h"
+LIMIT_HEADER = ROOT / "src" / "server_mp" / "sv_query_limit.h"
 
 PROGRAM = r'''
 #include "sv_remote_input.h"
+#include "sv_query_limit.h"
 
 #include <cstdio>
+#include <cstdlib>
 
 static int failures = 0;
 
@@ -57,8 +65,86 @@ static void expect_download(const char* name, bool want, const char* what)
     expect(SV_IsSafeDownloadName(name), want, what);
 }
 
+static int count_allowed(SvQueryLimits* limits, SvQueryKind kind, uint32_t address, uint32_t now, int tries)
+{
+    int allowed = 0;
+    for (int i = 0; i < tries; ++i)
+        allowed += SV_QueryLimitAllow(limits, kind, address, now) ? 1 : 0;
+    return allowed;
+}
+
+static void expect_count(int got, int want, const char* what)
+{
+    if (got != want)
+    {
+        ++failures;
+        std::printf("FAIL: %s: got %d, want %d\n", what, got, want);
+    }
+}
+
+static void check_query_limits()
+{
+    // Static storage: the tables start zeroed like the server's.
+    static SvQueryLimits limits;
+    limits = SvQueryLimits{};
+    limits.salt = 0x5eed1234u;
+    const uint32_t a = 0x0100000au, b = 0x0200000bu;
+
+    // getstatus: 2 at once per address, then one per 2 s.
+    expect_count(count_allowed(&limits, SV_QUERY_STATUS, a, 1000, 5), 2, "getstatus burst per address");
+    expect_count(count_allowed(&limits, SV_QUERY_STATUS, a, 1999, 1), 0, "getstatus before the period drains");
+    expect_count(count_allowed(&limits, SV_QUERY_STATUS, a, 3000, 3), 1, "getstatus one more after 2 s");
+    expect_count(count_allowed(&limits, SV_QUERY_STATUS, b, 3000, 5), 2, "another address has its own bucket");
+    expect_count(count_allowed(&limits, SV_QUERY_STATUS, a, 3000 + 60000, 5), 2, "idle address gets its full burst back");
+
+    // Global getstatus bucket: 20 at once, then 10/s, however many addresses.
+    limits = SvQueryLimits{};
+    int allowed = 0;
+    for (uint32_t i = 0; i < 200; ++i)
+        allowed += SV_QueryLimitAllow(&limits, SV_QUERY_STATUS, 0x01000000u + i * 7919u, 50000) ? 1 : 0;
+    expect_count(allowed, 20, "global getstatus burst over 200 spoofed addresses");
+    allowed = 0;
+    for (uint32_t i = 0; i < 200; ++i)
+        allowed += SV_QueryLimitAllow(&limits, SV_QUERY_STATUS, 0x05000000u + i * 7919u, 51000) ? 1 : 0;
+    expect_count(allowed, 10, "global getstatus refill is 10 per second");
+
+    // getinfo and getchallenge: 4 at once per address.
+    limits = SvQueryLimits{};
+    expect_count(count_allowed(&limits, SV_QUERY_INFO, a, 7, 10), 4, "getinfo burst per address");
+    expect_count(count_allowed(&limits, SV_QUERY_CHALLENGE, a, 7, 10), 4, "getchallenge burst per address");
+    expect_count(count_allowed(&limits, SV_QUERY_CHALLENGE, a, 1007, 10), 1, "getchallenge one per second after");
+
+    // rcon: 10 at once per address, then 5/s; failure replies 10 at once then 10/s globally.
+    limits = SvQueryLimits{};
+    expect_count(count_allowed(&limits, SV_QUERY_RCON, a, 100, 30), 10, "rcon burst per address");
+    expect_count(count_allowed(&limits, SV_QUERY_RCON, b, 100, 3), 3, "rcon flood from one address leaves another alone");
+    int replies = 0;
+    for (int i = 0; i < 30; ++i)
+        replies += SV_RconFailureReplyAllow(&limits, 100) ? 1 : 0;
+    expect_count(replies, 10, "bad rcon replies share a global burst");
+    expect_count(count_allowed(&limits, SV_QUERY_RCON, b, 100, 1), 1, "bad-reply limit does not block a password check");
+
+    // Clock wrap: no lockout when Sys_Milliseconds wraps.
+    limits = SvQueryLimits{};
+    expect_count(count_allowed(&limits, SV_QUERY_STATUS, a, 0xfffff000u, 2), 2, "fill just before the wrap");
+    expect_count(count_allowed(&limits, SV_QUERY_STATUS, a, 0x00001000u, 2), 2, "drained across the wrap");
+
+    // Table pressure: more addresses than slots never refuses a fresh address
+    // outright beyond its own burst.
+    limits = SvQueryLimits{};
+    for (uint32_t i = 0; i < 5000; ++i)
+        (void)SV_QueryLimitAllow(&limits, SV_QUERY_INFO, 0x09000000u + i, 100000 + i * 30);
+    expect_count(count_allowed(&limits, SV_QUERY_INFO, a, 100000 + 5000 * 30 + 5000, 1), 1, "new address after the table filled");
+
+    // Bad kinds fail closed.
+    expect(SV_QueryLimitAllow(&limits, SV_QUERY_KIND_COUNT, a, 0), false, "unknown kind refuses");
+    expect(SV_QueryLimitAllow(nullptr, SV_QUERY_STATUS, a, 0), false, "null limits refuse");
+}
+
 int main()
 {
+    check_query_limits();
+
     // --- rcon -------------------------------------------------------------
     // The default: rcon_password is registered as "".  Nothing may pass.
     expect_rcon("", "", false, "unset password refuses the empty password (rcon \"\" <cmd>)");
@@ -145,9 +231,10 @@ def main() -> int:
                         help="compile without -fsanitize=address,undefined")
     args = parser.parse_args()
 
-    if not HEADER.is_file():
-        print(f"FAIL: {HEADER} is missing", file=sys.stderr)
-        return 1
+    for header in (HEADER, LIMIT_HEADER):
+        if not header.is_file():
+            print(f"FAIL: {header} is missing", file=sys.stderr)
+            return 1
 
     with tempfile.TemporaryDirectory(prefix="kisak-remote-input-") as temp:
         workdir = Path(temp)
