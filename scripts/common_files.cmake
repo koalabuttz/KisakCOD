@@ -658,7 +658,9 @@ set(MSSLIB
     "${DEPS_DIR}/msslib/mss.h"
 )
 
-# binkw32 is 32-bit only: 64-bit Windows builds play no movies (no CINEMA).
+# binkw32 is 32-bit only: 64-bit Windows builds play no movies (no CINEMA)
+# unless KISAK_WIN64_CINEMATICS adds the FFmpeg Bink shim
+# (scripts/extern/bink_shim.cmake), which brings its own texture code.
 if (KISAK_WIN64)
     set(BINKLIB "")
 endif()

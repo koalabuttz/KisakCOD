@@ -59,7 +59,8 @@ add_executable(${PROJECT_NAME}
 
 # Add multiplayer flag
 target_compile_definitions(${PROJECT_NAME} PUBLIC KISAK_MP USE_SEPARATE_BLIT_TEXTURE)
-# Movies need binkw32, which is 32-bit only.
+# Movies need binkw32, which is 32-bit only; 64-bit builds can opt into the
+# FFmpeg Bink shim instead (bink_shim.cmake below).
 if (NOT KISAK_WIN64)
     target_compile_definitions(${PROJECT_NAME} PUBLIC CINEMA)
 endif()
@@ -91,4 +92,9 @@ endif()
 # OpenAL (sound backend, only needed when KISAK_OPENAL is enabled)
 if (KISAK_OPENAL)
     include(${SCRIPTS_DIR}/extern/openal.cmake)
+endif()
+
+# 64-bit Windows movies through the FFmpeg Bink shim (sound through OpenAL above)
+if (KISAK_WIN64 AND KISAK_WIN64_CINEMATICS)
+    include(${SCRIPTS_DIR}/extern/bink_shim.cmake)
 endif()

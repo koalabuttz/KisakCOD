@@ -32,9 +32,11 @@ endif()
 project(KisakCOD)
 
 # 64-bit Windows: Miles (mss32), Bink (binkw32) and the bundled Steam library
-# exist only as 32-bit binaries. Sound goes through OpenAL, movies are built
-# out (r_cinematic.cpp without CINEMA) and Steam is unavailable
-# (src/win32/win_steam_unavailable.cpp); see scripts/common_files.cmake.
+# exist only as 32-bit binaries. Sound goes through OpenAL, Steam is
+# unavailable (src/win32/win_steam_unavailable.cpp; see
+# scripts/common_files.cmake), and movies are built out (r_cinematic.cpp
+# without CINEMA) unless KISAK_WIN64_CINEMATICS plays them through the FFmpeg
+# Bink shim (scripts/extern/bink_shim.cmake).
 if(NOT KISAK_PLATFORM STREQUAL "linux" AND CMAKE_SIZEOF_VOID_P EQUAL 8)
     set(KISAK_WIN64 ON)
     if(NOT KISAK_OPENAL)
@@ -60,6 +62,11 @@ set_property(CACHE KISAK_PLATFORM PROPERTY STRINGS win32 mingw linux)
 # clang_rt.asan_dbg_dynamic-i386.dll and clang_rt.asan_dynamic-i386.dll from the MSVC C directory located below (or similar)
 # C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Tools\MSVC\14.44.35207\bin\Hostx86\x86
 set(USE_ASAN OFF)
+
+# Opt-in, 64-bit Windows only: play Bink movies in KisakCOD-mp and -sp through
+# the FFmpeg Bink shim (needs FFmpeg's libavcodec and libavutil; see
+# scripts/extern/bink_shim.cmake). 32-bit Windows always uses RAD's binkw32.
+option(KISAK_WIN64_CINEMATICS "64-bit Windows: play Bink movies through the FFmpeg Bink shim" OFF)
 
 # Set to ON to build the sound system against OpenAL instead of Miles/MSS.
 # When OFF (default), the original Miles Sound System (MSS/AIL) backend is used.
