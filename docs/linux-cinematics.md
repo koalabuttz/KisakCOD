@@ -1,9 +1,10 @@
 # Cinematics on Linux (Bink shim)
 
 The game's movies (`main/video/*.bik`) are Bink 1 files. The engine plays them
-with RAD's Bink library, which exists only for Windows (`deps/binklib`). No
-build played them before this: `r_cinematic.cpp` is built without `CINEMA` on
-every platform, Windows included.
+with RAD's Bink library, which exists only for 32-bit Windows (`deps/binklib`).
+The Windows `KisakCOD-mp` and `KisakCOD-sp` targets define `CINEMA` and link it.
+The Linux client builds `r_cinematic.cpp` without `CINEMA` by default, so it
+plays no movies.
 
 On Linux, `KisakCOD-mp` can play them through a Bink shim. It is off by
 default.
