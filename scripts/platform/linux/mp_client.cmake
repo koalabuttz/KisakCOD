@@ -282,7 +282,9 @@ add_executable(KisakCOD-mp
     $<$<BOOL:${KISAK_LINUX_CINEMATICS}>:$<TARGET_OBJECTS:KisakCOD-mp-cinematic>>)
 target_include_directories(KisakCOD-mp PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
 target_compile_options(KisakCOD-mp PRIVATE -msse2 -mfpmath=sse -fno-strict-aliasing)
-target_link_options(KisakCOD-mp PRIVATE -Wl,--gc-sections)
+target_link_options(KisakCOD-mp PRIVATE -Wl,--gc-sections
+    "-Wl,--version-script=${SCRIPTS_DIR}/platform/linux/mp_client_exports.map")
+set_property(TARGET KisakCOD-mp APPEND PROPERTY LINK_DEPENDS "${SCRIPTS_DIR}/platform/linux/mp_client_exports.map")
 target_link_libraries(KisakCOD-mp PRIVATE
     "${KISAK_DXVK_NATIVE_LIBRARY}" "${KISAK_OPENAL_LIBRARY}" SDL3::SDL3 Threads::Threads ${CMAKE_DL_LIBS})
 add_dependencies(KisakCOD-mp update_build_number)

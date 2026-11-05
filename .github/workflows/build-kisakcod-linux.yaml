@@ -732,6 +732,13 @@ jobs:
             echo "the multiplayer client needs a library beyond SDL3, D3D9, OpenAL, libavcodec and the runtimes" >&2
             exit 1
           fi
+          # libavcodec refers to zlib names the game also defines; the client
+          # must not export them, or any other name, to the libraries it loads
+          # (scripts/platform/linux/mp_client_exports.map).
+          if nm -D --defined-only "$OUT_DIR/KisakCOD-mp" | awk '{print $3}' | grep -vx '_IO_stdin_used'; then
+            echo "the multiplayer client exports names to shared libraries" >&2
+            exit 1
+          fi
 
       # A struct's i386 size written as a number allocates or clears too few
       # bytes on x86_64 when the struct holds a pointer (docs/linux-x64.md,
@@ -1468,6 +1475,12 @@ jobs:
           if grep -Ev '^(libSDL3\.so\.0|libd3d9_unavailable\.so|libopenal_unavailable\.so|libstdc\+\+\.so\.6|libm\.so\.6|libgcc_s\.so\.1|libc\.so\.6|libpthread\.so\.0|libdl\.so\.2)$' \
               "$RUNNER_TEMP/mp-client-needed.txt"; then
             echo "the multiplayer client needs a library beyond SDL3, D3D9, OpenAL and the runtimes" >&2
+            exit 1
+          fi
+          # No game name is exported to the libraries it loads
+          # (scripts/platform/linux/mp_client_exports.map).
+          if nm -D --defined-only "$client" | awk '{print $3}' | grep -vx '_IO_stdin_used'; then
+            echo "the multiplayer client exports names to shared libraries" >&2
             exit 1
           fi
 
