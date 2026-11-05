@@ -73,7 +73,7 @@ set(KISAK_NATIVE_D3D9_ENGINE_DEFINITIONS
 )
 set(KISAK_NATIVE_D3D9_ENGINE_OPTIONS
     $<$<COMPILE_LANGUAGE:CXX>:-fms-extensions>
-    -msse2 -mfpmath=sse -fno-strict-aliasing
+    ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing
     -ffunction-sections -fdata-sections
     -Wno-c++11-narrowing -Wno-invalid-token-paste
     -Wno-ignored-attributes -Wno-format-security

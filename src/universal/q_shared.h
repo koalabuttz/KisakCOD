@@ -138,6 +138,8 @@ constexpr auto max(T a, U b) { return a > b ? a : b; }
 #define	CPUSTRING	"win-x86"
 #elif defined _M_X64
 #define	CPUSTRING	"win-x64"
+#elif defined _M_ARM64
+#define	CPUSTRING	"win-arm64"
 #elif defined _M_ALPHA
 #define	CPUSTRING	"win-AXP"
 #endif
@@ -146,6 +148,8 @@ constexpr auto max(T a, U b) { return a > b ? a : b; }
 #define	CPUSTRING	"win-x86-debug"
 #elif defined _M_X64
 #define	CPUSTRING	"win-x64-debug"
+#elif defined _M_ARM64
+#define	CPUSTRING	"win-arm64-debug"
 #elif defined _M_ALPHA
 #define	CPUSTRING	"win-AXP-debug"
 #endif
@@ -189,6 +193,12 @@ static ID_INLINE int BigLong(int l) { return LongSwap(l); }
 #define	CPUSTRING	"linux-x86_64"
 #else
 #define	CPUSTRING	"linux-x86_64-debug"
+#endif
+#elif defined(__aarch64__)
+#ifdef NDEBUG
+#define	CPUSTRING	"linux-arm64"
+#else
+#define	CPUSTRING	"linux-arm64-debug"
 #endif
 #elif defined(NDEBUG)
 #define	CPUSTRING	"linux-x86"

@@ -28,6 +28,7 @@
 
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 
 namespace
 {
@@ -58,6 +59,21 @@ namespace
         // so there is no static-initialisation-order dependency on sysconf.
         static const std::uintptr_t pageSize = QueryPageSize();
         return pageSize;
+    }
+
+    // The engine was written for 4 KiB pages: the hunk commits and decommits
+    // 4 KiB-aligned ranges that share host pages with live data when the host
+    // page is bigger (16 KiB on Apple silicon Linux, 64 KiB on some Arm
+    // distributions). On such a host a reservation keeps one commit flag per
+    // 4 KiB unit (Reservation::units): a host page stays mapped while any unit
+    // in it is committed, and decommitting the others only zeroes them, which is
+    // what a later Windows commit would hand back. With 4 KiB host pages the
+    // flags are not kept and every call maps straight onto mprotect/madvise.
+    constexpr std::uintptr_t kWindowsPageSize = 4096u;
+
+    bool LargeHostPages()
+    {
+        return PageSize() > kWindowsPageSize;
     }
 
     // A value that fits the host pointer width. On the -m32 engine build this
@@ -104,6 +120,9 @@ namespace
         void *base;             // as returned by mmap, therefore page-aligned
         std::size_t length;     // page-rounded, exactly the length passed to mmap
         Reservation *next;
+        // Hosts with pages over 4 KiB only: one byte per 4 KiB unit, nonzero
+        // while that unit is committed read/write. Null otherwise.
+        std::uint8_t *units;
     };
 
     pthread_mutex_t s_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -202,7 +221,8 @@ namespace
     // Translates a caller's (address, size) pair into the page-aligned range
     // Windows would operate on. Rejects a zero size, a sum that overflows, and a
     // rounded range that does not fit the pointer width.
-    bool ResolveRange(const void *address, SIZE_T size, std::uint64_t *begin, std::uint64_t *end)
+    bool ResolveRangeIn(const void *address, SIZE_T size, std::uint64_t page, std::uint64_t *begin,
+                        std::uint64_t *end)
     {
         if (size == 0)
             return false;
@@ -212,12 +232,93 @@ namespace
         if (!AddChecked(start, static_cast<std::uint64_t>(size), &last) || !Representable(last))
             return false;
 
-        std::uint64_t limit = 0;
-        if (!PageCeilChecked(last, &limit) || !Representable(limit))
+        const std::uint64_t mask = page - 1;
+        if (last > UINT64_MAX - mask)
+            return false;
+        const std::uint64_t limit = (last + mask) & ~mask;
+        if (!Representable(limit))
             return false;
 
-        *begin = PageFloor(start);
+        *begin = start & ~mask;
         *end = limit;
+        return true;
+    }
+
+    bool ResolveRange(const void *address, SIZE_T size, std::uint64_t *begin, std::uint64_t *end)
+    {
+        return ResolveRangeIn(address, size, PageSize(), begin, end);
+    }
+
+    // -----------------------------------------------------------------------
+    // 4 KiB units on hosts with larger pages (see LargeHostPages)
+    // -----------------------------------------------------------------------
+
+    std::size_t UnitIndex(const Reservation &reservation, std::uint64_t address)
+    {
+        return static_cast<std::size_t>((address - reinterpret_cast<std::uintptr_t>(reservation.base)) /
+                                        kWindowsPageSize);
+    }
+
+    bool HostPageHasCommittedUnit(const Reservation &reservation, std::uint64_t hostPage)
+    {
+        const std::size_t first = UnitIndex(reservation, hostPage);
+        const std::size_t count = static_cast<std::size_t>(PageSize() / kWindowsPageSize);
+        for (std::size_t unit = first; unit < first + count; ++unit)
+        {
+            if (reservation.units[unit] != 0)
+                return true;
+        }
+        return false;
+    }
+
+    // Commit of the 4 KiB-rounded [begin, end) in `reservation`. s_lock held.
+    bool CommitUnits(Reservation &reservation, std::uint64_t begin, std::uint64_t end, DWORD protect)
+    {
+        const std::uint64_t hostBegin = PageFloor(begin);
+        std::uint64_t hostEnd = 0;
+        if (!PageCeilChecked(end, &hostEnd))
+            return false;
+        if (protect != PAGE_READWRITE)
+        {
+            // A no-access commit leaves the units uncommitted: host pages that
+            // hold none of them already have no access, and the others must
+            // stay readable for their neighbours. The engine never asks for it.
+            return true;
+        }
+        if (mprotect(reinterpret_cast<void *>(static_cast<std::uintptr_t>(hostBegin)),
+                     static_cast<std::size_t>(hostEnd - hostBegin), PROT_READ | PROT_WRITE) != 0)
+            return false;
+        for (std::size_t unit = UnitIndex(reservation, begin); unit < UnitIndex(reservation, end); ++unit)
+            reservation.units[unit] = 1;
+        return true;
+    }
+
+    // Decommit of the 4 KiB-rounded [begin, end) in `reservation`. A host page
+    // left with no committed unit is discarded and made inaccessible; one that
+    // still holds a committed unit keeps its mapping and only the decommitted
+    // part is zeroed. s_lock held.
+    bool DecommitUnits(Reservation &reservation, std::uint64_t begin, std::uint64_t end)
+    {
+        for (std::size_t unit = UnitIndex(reservation, begin); unit < UnitIndex(reservation, end); ++unit)
+            reservation.units[unit] = 0;
+
+        const std::uint64_t page = PageSize();
+        for (std::uint64_t hostPage = PageFloor(begin); hostPage < end; hostPage += page)
+        {
+            void *const start = reinterpret_cast<void *>(static_cast<std::uintptr_t>(hostPage));
+            if (HostPageHasCommittedUnit(reservation, hostPage))
+            {
+                const std::uint64_t from = (begin > hostPage) ? begin : hostPage;
+                const std::uint64_t to = (end < hostPage + page) ? end : hostPage + page;
+                std::memset(reinterpret_cast<void *>(static_cast<std::uintptr_t>(from)), 0,
+                            static_cast<std::size_t>(to - from));
+            }
+            else if (madvise(start, static_cast<std::size_t>(page), MADV_DONTNEED) != 0 ||
+                     mprotect(start, static_cast<std::size_t>(page), PROT_NONE) != 0)
+            {
+                return false;
+            }
+        }
         return true;
     }
 
@@ -252,6 +353,20 @@ namespace
         }
         record->base = base;
         record->length = static_cast<std::size_t>(length);
+        if (LargeHostPages())
+        {
+            const std::size_t unitCount = record->length / kWindowsPageSize;
+            record->units = static_cast<std::uint8_t *>(std::calloc(unitCount, 1));
+            if (record->units == nullptr)
+            {
+                munmap(base, static_cast<std::size_t>(length));
+                std::free(record);
+                SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+                return nullptr;
+            }
+            if (prot != PROT_NONE)
+                std::memset(record->units, 1, unitCount);
+        }
 
         pthread_mutex_lock(&s_lock);
         Attach(record);
@@ -289,9 +404,20 @@ namespace
         pthread_mutex_lock(&s_lock);
         // The lock is held across mprotect so a concurrent release cannot unmap
         // the range between the lookup and the call.
-        if (FindContaining(begin, end) == nullptr)
+        Reservation *const reservation = FindContaining(begin, end);
+        if (reservation == nullptr)
         {
             SetLastError(ERROR_INVALID_ADDRESS);
+        }
+        else if (reservation->units != nullptr)
+        {
+            std::uint64_t unitBegin = 0;
+            std::uint64_t unitEnd = 0;
+            ResolveRangeIn(address, size, kWindowsPageSize, &unitBegin, &unitEnd);
+            if (CommitUnits(*reservation, unitBegin, unitEnd, protect))
+                result = address;
+            else
+                PublishErrno(ERROR_INVALID_ADDRESS);
         }
         else if (mprotect(reinterpret_cast<void *>(static_cast<std::uintptr_t>(begin)),
                           static_cast<std::size_t>(end - begin), ProtFor(protect)) != 0)
@@ -326,11 +452,22 @@ namespace
 
         BOOL ok = FALSE;
         pthread_mutex_lock(&s_lock);
-        if (FindContaining(begin, end) == nullptr)
+        Reservation *const reservation = FindContaining(begin, end);
+        if (reservation == nullptr)
         {
             // Also covers an interior pointer whose page rounds outside the
             // reservation, and any address from an unrelated mapping.
             SetLastError(ERROR_INVALID_ADDRESS);
+        }
+        else if (reservation->units != nullptr)
+        {
+            std::uint64_t unitBegin = 0;
+            std::uint64_t unitEnd = 0;
+            ResolveRangeIn(address, size, kWindowsPageSize, &unitBegin, &unitEnd);
+            if (DecommitUnits(*reservation, unitBegin, unitEnd))
+                ok = TRUE;
+            else
+                PublishErrno(ERROR_INVALID_ADDRESS);
         }
         else if (madvise(start, length, MADV_DONTNEED) != 0)
         {
@@ -382,6 +519,7 @@ namespace
         }
         else
         {
+            std::free(record->units);
             std::free(record);
             ok = TRUE;
         }
@@ -679,6 +817,64 @@ int main()
         CHECK(Sys_VirtualMemReservationCount() == baseline);
         // The address is unmapped now, so touching it faults.
         CHECK(FaultsOnRead(base));
+    }
+
+    // --- 4 KiB decommits never take a neighbour's data -----------------------
+    // The hunk works in 4 KiB pages. On a host with bigger pages, decommitting
+    // one 4 KiB unit must leave the other units of the same host page mapped and
+    // intact, and zero only that unit; the host page goes away with its last
+    // committed unit. On a 4 KiB host this is the plain page behaviour above.
+    {
+        const std::size_t unit = 4096;
+        const std::size_t units = (page > unit) ? page / unit : 3;
+        const std::size_t length = unit * units;
+        unsigned char *base = static_cast<unsigned char *>(
+            VirtualAlloc(nullptr, static_cast<SIZE_T>(length), MEM_RESERVE, PAGE_READWRITE));
+        CHECK(base != nullptr);
+        CHECK(VirtualAlloc(base, static_cast<SIZE_T>(length), MEM_COMMIT, PAGE_READWRITE) == static_cast<LPVOID>(base));
+        memset(base, 0x5A, length);
+
+        // Decommit the first unit only.
+        CHECK(VirtualFree(base, static_cast<SIZE_T>(unit), MEM_DECOMMIT) == TRUE);
+        if (page > unit)
+        {
+            int zeroed = 0;
+            for (std::size_t offset = 0; offset < unit; ++offset)
+                zeroed += (base[offset] == 0);
+            CHECK(zeroed == static_cast<int>(unit));
+        }
+        else
+        {
+            CHECK(FaultsOnRead(base));
+        }
+        int kept = 0;
+        for (std::size_t offset = unit; offset < length; ++offset)
+            kept += (base[offset] == 0x5A);
+        CHECK(kept == static_cast<int>(length - unit));
+
+        // An unaligned 2-byte decommit inside the last unit covers that unit.
+        CHECK(VirtualFree(base + length - unit + 100, 2, MEM_DECOMMIT) == TRUE);
+        CHECK(base[length - unit - 1] == 0x5A);
+        if (page == unit)
+            CHECK(FaultsOnRead(base + length - 1));
+        else
+            CHECK(base[length - 1] == 0);
+
+        // Decommitting every unit takes the whole host page away.
+        CHECK(VirtualFree(base, static_cast<SIZE_T>(length), MEM_DECOMMIT) == TRUE);
+        CHECK(FaultsOnRead(base));
+        CHECK(FaultsOnRead(base + length - 1));
+
+        // Recommitting one unit makes it usable again and zero-filled.
+        CHECK(VirtualAlloc(base + unit, static_cast<SIZE_T>(unit), MEM_COMMIT, PAGE_READWRITE) ==
+              static_cast<LPVOID>(base + unit));
+        int nonzero = 0;
+        for (std::size_t offset = unit; offset < unit * 2; ++offset)
+            nonzero += (base[offset] != 0);
+        CHECK(nonzero == 0);
+
+        CHECK(VirtualFree(base, 0, MEM_RELEASE) == TRUE);
+        CHECK(Sys_VirtualMemReservationCount() == baseline);
     }
 
     // --- Releasing must not disturb a neighbour -----------------------------

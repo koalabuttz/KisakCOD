@@ -171,7 +171,7 @@ set(KISAK_SP_GAME_DEFINITIONS
 )
 set(KISAK_SP_GAME_OPTIONS
     $<$<COMPILE_LANGUAGE:CXX>:-fms-extensions>
-    -msse2 -mfpmath=sse -fno-strict-aliasing
+    ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing
     -ffunction-sections -fdata-sections
     -Wno-c++11-narrowing -Wno-invalid-token-paste
     -Wno-ignored-attributes -Wno-format-security
@@ -226,7 +226,7 @@ add_executable(KisakCOD-sp
     $<TARGET_OBJECTS:KisakCOD-sp-own>
     $<$<BOOL:${KISAK_LINUX_CINEMATICS}>:$<TARGET_OBJECTS:KisakCOD-sp-cinematic>>)
 target_include_directories(KisakCOD-sp PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
-target_compile_options(KisakCOD-sp PRIVATE -msse2 -mfpmath=sse -fno-strict-aliasing)
+target_compile_options(KisakCOD-sp PRIVATE ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing)
 # The same export rule as KisakCOD-mp: the game exports nothing to the libraries it loads.
 target_link_options(KisakCOD-sp PRIVATE -Wl,--gc-sections
     "-Wl,--version-script=${SCRIPTS_DIR}/platform/linux/mp_client_exports.map")

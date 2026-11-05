@@ -2,13 +2,14 @@
 """Smoke-test the native Linux dedicated server binary.
 
 The build produces an asset-free ELF32 i386 executable at bin/KisakCOD-dedi (or,
-with --arch x86_64, the opt-in ELF64 build from docs/linux-x64.md). No game data
+with --arch x86_64 or --arch aarch64, the opt-in ELF64 builds from
+docs/linux-x64.md and docs/linux-arm64.md). No game data
 is needed to prove it is the right artefact and that it reaches its own startup
 code, so every check here works from the binary alone:
 
   * the header bytes say ELF, little-endian, and the class and machine of the
-    requested architecture: 32-bit machine 3 (i386, the default) or 64-bit
-    machine 62 (x86_64);
+    requested architecture: 32-bit machine 3 (i386, the default), 64-bit
+    machine 62 (x86_64) or 64-bit machine 183 (aarch64);
   * --help and --version answer without touching the engine;
   * an asset-free launch reaches FS_Startup and then fails on the missing
     fileSysCheck.cfg, which is the expected end state for a data-less tree;
@@ -27,13 +28,14 @@ checkout and the temporary directory is removed afterwards, taking the log with
 it.
 
 Usage:
-    python3 scripts/tests/test_linux_bootstrap.py [--arch i386|x86_64] [path/to/binary]
+    python3 scripts/tests/test_linux_bootstrap.py [--arch i386|x86_64|aarch64] [--emulator CMD] [path/to/binary]
 """
 
 import argparse
 from pathlib import Path
 import re
 import struct
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -52,12 +54,19 @@ ELFCLASS64 = 2
 ELFDATA2LSB = 1
 EM_386 = 3
 EM_X86_64 = 62
+EM_AARCH64 = 183
 
 # --arch value -> (EI_CLASS, class label, e_machine, machine label)
 ARCHITECTURES = {
     "i386": (ELFCLASS32, "ELFCLASS32 (EI_CLASS == 1)", EM_386, "e_machine EM_386 (3, i386)"),
     "x86_64": (ELFCLASS64, "ELFCLASS64 (EI_CLASS == 2)", EM_X86_64, "e_machine EM_X86_64 (62, x86_64)"),
+    "aarch64": (ELFCLASS64, "ELFCLASS64 (EI_CLASS == 2)", EM_AARCH64, "e_machine EM_AARCH64 (183, aarch64)"),
 }
+
+# Command prefix for running a binary built for another architecture, such as
+# "qemu-aarch64 -L /usr/aarch64-linux-gnu" for a cross-compiled aarch64 build
+# on an x86 host (--emulator). Empty: run the binary directly.
+EMULATOR = []
 
 HELP_TIMEOUT = 10
 LAUNCH_TIMEOUT = 30
@@ -101,7 +110,7 @@ class Checker:
 
 def run(binary, arguments, cwd, timeout):
     """Run the binary and return (returncode, combined output, timed out)."""
-    command = [str(binary), *arguments]
+    command = [*EMULATOR, str(binary), *arguments]
     try:
         completed = subprocess.run(
             command,
@@ -194,7 +203,12 @@ def check_version(checker, binary, workdir):
     no_engine_start(checker, output, "--version")
 
 
-def check_asset_free_launch(checker, binary, workdir):
+# --arch value -> the CPUSTRING prefix in the build banner (universal/q_shared.h).
+# "linux-x86" is also a prefix of the x86_64 build's "linux-x86_64".
+BANNER_CPU = {"i386": "linux-x86", "x86_64": "linux-x86_64", "aarch64": "linux-arm64"}
+
+
+def check_asset_free_launch(checker, binary, workdir, arch="i386"):
     """Start with no game data: FS starts, then fileSysCheck.cfg is missing."""
     arguments = [
         "+set", "fs_basepath", str(workdir),
@@ -214,9 +228,10 @@ def check_asset_free_launch(checker, binary, workdir):
         "asset-free launch exits 1 rather than crashing or being signalled",
         f"returncode {code}",
     )
+    cpu = BANNER_CPU[arch]
     checker.require(
-        "KisakCoD4 1.0 build" in output and "linux-x86" in output,
-        "launch prints the KisakCoD4 build banner for linux-x86",
+        "KisakCoD4 1.0 build" in output and cpu in output,
+        f"launch prints the KisakCoD4 build banner for {cpu}",
         last_lines(output),
     )
     checker.require("FS_Startup" in output, "launch reaches FS_Startup", last_lines(output))
@@ -412,7 +427,13 @@ def main():
         default="i386",
         help="architecture the binary must be built for (default: i386, the shipping build)",
     )
+    parser.add_argument(
+        "--emulator",
+        default="",
+        help='command that runs a foreign-architecture binary, e.g. "qemu-aarch64 -L /usr/aarch64-linux-gnu"',
+    )
     arguments = parser.parse_args()
+    EMULATOR[:] = shlex.split(arguments.emulator)
 
     binary = Path(arguments.binary).expanduser().resolve()
 
@@ -420,6 +441,8 @@ def main():
     print("===================================================", flush=True)
     print(f"binary: {binary}", flush=True)
     print(f"arch:   {arguments.arch}", flush=True)
+    if EMULATOR:
+        print(f"via:    {' '.join(EMULATOR)}", flush=True)
 
     if not binary.is_file():
         print(f"FAIL: binary not found at {binary}", flush=True)
@@ -448,7 +471,7 @@ def main():
     print("\nengine startup without assets", flush=True)
     with tempfile.TemporaryDirectory(prefix="kisakcod-bootstrap-run-") as temporary:
         run_dir = Path(temporary)
-        check_asset_free_launch(checker, binary, run_dir)
+        check_asset_free_launch(checker, binary, run_dir, arguments.arch)
         check_fastfile_rejected(checker, binary, run_dir)
 
     with tempfile.TemporaryDirectory(prefix="kisakcod-bootstrap-empty-") as temporary:
