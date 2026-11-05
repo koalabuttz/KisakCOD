@@ -18,6 +18,17 @@ int32_t CIN_PlayCinematic(int32_t localClientNum, char *arg)
         MyAssertHandler(".\\client\\cl_cin.cpp", 33, 0, "%s", "arg");
     volume = SND_GetVolumeNormalized() * snd_cinematicVolumeScale->current.value;
     R_Cinematic_StartPlayback(arg, 5u, volume);
+#ifdef KISAK_SP
+    // A level that has loaded waits on the pregame menu, with rendering held off,
+    // until its cinematic finishes (UI_Refresh) or the player starts
+    // (UI_PlayerStart); both stop the playback and clear the hold. A cinematic
+    // started there plays under that menu: closing the menus or taking the client
+    // to CA_CINEMATIC would leave the level waiting on a black screen. This body
+    // comes from the multiplayer build; singleplayer's own was not decompiled, so
+    // this branch is the port's reading of the pregame flow, not retail code.
+    if (UI_GetActiveMenu(localClientNum) == UIMENU_PREGAME && CL_SkipRendering())
+        return 1;
+#endif
     if (cls.uiStarted)
         UI_SetActiveMenu(localClientNum, UIMENU_NONE);
     Con_Close(localClientNum);
