@@ -41,6 +41,10 @@ target_compile_definitions(KisakCOD-dedi PRIVATE
     $<$<CONFIG:Debug>:_DEBUG>
 )
 target_include_directories(KisakCOD-dedi PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
+if(KISAK_PLATFORM STREQUAL "macos")
+    # Must match TracyClient (platform.cmake): Tracy's inline clock differs.
+    target_compile_definitions(KisakCOD-dedi PRIVATE TRACY_TIMER_FALLBACK)
+endif()
 target_compile_options(KisakCOD-dedi PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:-fms-extensions>
     ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing

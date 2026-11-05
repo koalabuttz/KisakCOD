@@ -19,6 +19,11 @@ if(KISAK_PLATFORM STREQUAL "macos")
             message(FATAL_ERROR "${kisak_not_on_macos} is not available on macOS yet; KISAK_PLATFORM=macos builds KisakCOD-dedi only")
         endif()
     endforeach()
+    # Tracy (compiled in, on demand) refuses to start on an x86 CPU without an
+    # invariant TSC, which hosted Intel Mac runners (VMs) and some older Macs
+    # lack. Its portable clock (mach_absolute_time) works everywhere; the
+    # engine units take the same define in scripts/platform/linux/CMakeLists.txt.
+    set(TRACY_TIMER_FALLBACK ON CACHE BOOL "Use lower resolution timers" FORCE)
     message(WARNING "KISAK_PLATFORM=macos is the opt-in macOS track (${KISAK_MACOS_ARCH}): KisakCOD-dedi builds and "
         "starts without game data; it has not loaded a map on a Mac yet. See docs/macos.md.")
 elseif(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")

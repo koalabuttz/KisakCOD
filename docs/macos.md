@@ -72,6 +72,10 @@ The Mac build uses the same POSIX platform layer as Linux (`src/linux`,
   as the aarch64 Linux build). x86_64 keeps `-msse2 -mfpmath=sse`. Apple's
   linker strips unused code with `-dead_strip` where GNU ld uses
   `--gc-sections`; plain `char` is already signed on both Apple ABIs.
+- **Tracy timer.** The server keeps Tracy compiled in (on demand), built with
+  `TRACY_TIMER_FALLBACK` on macOS. Without it, Tracy stops the process at
+  startup on an Intel CPU that reports no invariant TSC, as the hosted Intel
+  runners (virtual machines) do; Apple silicon has no such check.
 - **Build banner.** `--version` says `native macOS`, and the build string is
   `macos-arm64` or `macos-x86_64` (`-debug` for Debug builds).
 
