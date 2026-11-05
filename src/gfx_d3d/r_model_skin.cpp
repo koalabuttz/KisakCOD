@@ -60,7 +60,8 @@ void R_SkinXModelCmd(_WORD *data)
 
     PROF_SCOPED("R_SkinXModel");
 
-    bool sseEnabled = sys_SSE->current.enabled && r_sse_skinning->current.enabled;
+    // sys_SSE is never set off x86 (Sys_FindInfo), so Arm takes the scalar path.
+    bool sseEnabled = KISAK_ARCH_X86 && sys_SSE->current.enabled && r_sse_skinning->current.enabled;
     bool sseStateUsed = false;
 
     SkinXModelCmd* skinCmd = (SkinXModelCmd*)data;
@@ -99,7 +100,7 @@ void R_SkinXModelCmd(_WORD *data)
                 if (sseStateUsed)
                 {
                     sseStateUsed = false;
-                    _m_empty();
+                    R_SkinEmptyMmxState();
                 }
 
                 DObjSkelMat mat0, mat1;
@@ -144,7 +145,7 @@ void R_SkinXModelCmd(_WORD *data)
             if (!sseStateUsed)
             {
                 sseStateUsed = true;
-                _m_empty();
+                R_SkinEmptyMmxState();
             }
         
             GfxPackedVertexNormal *skinVertNormalIn = 0, *skinVertNormalOut = 0;
@@ -154,10 +155,15 @@ void R_SkinXModelCmd(_WORD *data)
                     skinVertNormalOut = &gfxBuf.skinnedCacheNormalsAddr[skinnedSurf->skinnedCachedOffset >> 5];
                 // The union holds last frame's cache offset here (R_SkinSceneDObjModels),
                 // written as an int; on x86_64 the pointer's upper half is not part of it.
-                if (skinnedSurf->oldSkinnedCachedOffset)
+                // A model with no usable history gets 0x80000001 plus its surface offset,
+                // which is negative: skin it without last frame's normals. Singleplayer
+                // keeps no history at all, so every surface takes that path there.
+                if (skinVertNormalOut && skinnedSurf->oldSkinnedCachedOffset >= 0)
                     skinVertNormalIn = &gfxBuf.oldSkinnedCacheNormalsAddr[skinnedSurf->oldSkinnedCachedOffset >> 5];
             }
+#if KISAK_ARCH_X86
             R_SkinXSurfaceSkinnedSse(xsurf, &boneSkelMats[boneIndex], skinVertNormalIn, skinVertNormalOut, skinVerticesOut);
+#endif
         }
         else
         {
@@ -166,7 +172,7 @@ void R_SkinXModelCmd(_WORD *data)
     }
 
     if (sseStateUsed)
-        _m_empty();
+        R_SkinEmptyMmxState();
 }
 
 

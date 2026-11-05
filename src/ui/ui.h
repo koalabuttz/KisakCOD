@@ -21,7 +21,7 @@ extern const dvar_t *mis_01;
 extern const dvar_t *mis_difficulty;
 
 // ui_main
-struct alignas(4) SaveTimeGlob
+struct SaveTimeGlob // 4-aligned on i386 as retail; holds a pointer, so 8 on x64
 {
     bool isSaving;
     bool callWrite;

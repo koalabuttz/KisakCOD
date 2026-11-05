@@ -43,7 +43,9 @@
 #include "net_internal.h"
 // SV_UnverifiedGuidsEnabled(): the start-up conflict check needs the server's
 // frozen sv_allowUnverifiedGuids answer.  See NET_InitLoopbackAuthTest().
+#ifdef KISAK_MP
 #include <server_mp/server_mp.h>
+#endif
 
 // 65507 == 65535 - sizeof(struct iphdr) - sizeof(struct udphdr)
 static const int NET_MAX_UDP_PAYLOAD = 65507;
@@ -659,10 +661,15 @@ static bool NET_LoopbackTestConfigSafe(const char *bindIP)
     if (!bindIP || strcmp(bindIP, NET_LOOPBACK_TEST_ADDRESS) != 0)
         return false;
 
+#ifdef KISAK_MP
     if (!com_dedicated || com_dedicated->current.integer == 0)
         return false;
 
     return true;
+#else
+    // Singleplayer is never a dedicated server.
+    return false;
+#endif
 }
 
 /*
@@ -729,7 +736,14 @@ void NET_InitLoopbackAuthTest()
     // removes it for any source claiming a retail GUID.  Enabling both is a
     // configuration the server was never designed to reason about, so refuse to
     // come up at all, before any socket is bound.
-    if (loopbackAuthTestEnabled && SV_UnverifiedGuidsEnabled())
+#ifdef KISAK_MP
+    const bool unverifiedGuids = SV_UnverifiedGuidsEnabled();
+#else
+    // The singleplayer server has no sv_allowUnverifiedGuids: it never accepts
+    // a GUID from anyone.
+    const bool unverifiedGuids = false;
+#endif
+    if (loopbackAuthTestEnabled && unverifiedGuids)
     {
         // Disable the bypass first, so a build whose Com_Error does not exit
         // still cannot fall through to a bound, bypassing socket.

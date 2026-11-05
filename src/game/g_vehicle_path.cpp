@@ -30,14 +30,14 @@ vehicle_node_t s_nodes[4000] = { 0 };
 
 vn_field_t vn_fields[9] =
 {
-  { "targetname", 0, F_STRING },
-  { "target", 2, F_STRING },
-  { "script_linkname", 4, F_STRING },
-  { "script_noteworthy", 6, F_STRING },
-  { "origin", 24, F_VECTOR },
-  { "angles", 48, F_VECTOR },
-  { "speed", 16, F_FLOAT },
-  { "lookahead", 20, F_FLOAT },
+  { "targetname", offsetof(vehicle_node_t, name), F_STRING },
+  { "target", offsetof(vehicle_node_t, target), F_STRING },
+  { "script_linkname", offsetof(vehicle_node_t, script_linkname), F_STRING },
+  { "script_noteworthy", offsetof(vehicle_node_t, script_noteworthy), F_STRING },
+  { "origin", offsetof(vehicle_node_t, origin), F_VECTOR },
+  { "angles", offsetof(vehicle_node_t, angles), F_VECTOR },
+  { "speed", offsetof(vehicle_node_t, speed), F_FLOAT },
+  { "lookahead", offsetof(vehicle_node_t, lookAhead), F_FLOAT },
   { NULL, 0, F_INT }
 };
 

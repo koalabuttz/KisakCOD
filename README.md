@@ -88,8 +88,9 @@ OpenAL for sound. On a developer laptop with the game files it hosts a listen
 server, spawns the player, and plays: moving, shooting, grenades, sound and a
 clean quit. Movies play with the opt-in FFmpeg shim
 ([cinematics](docs/linux-cinematics.md)). Build steps:
-[multiplayer client](docs/linux-mp-client.md). A singleplayer build is in
-progress.
+[multiplayer client](docs/linux-mp-client.md). The singleplayer game
+([guide](docs/linux-sp-game.md), i386) loads and plays its first levels,
+killhouse and cargoship.
 
 **Authentication.** Linux Steam authentication is unavailable, so the Linux
 client cannot join a remote server, and the dedicated server rejects ordinary

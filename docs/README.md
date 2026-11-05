@@ -11,6 +11,9 @@ what is still missing. Build steps are in the
 - [Multiplayer client](linux-mp-client.md): `KisakCOD-mp`, the whole game in one
   native process; playable on a listen server (i386 and x86_64), remote servers
   refused without Steam authentication
+- [Singleplayer game](linux-sp-game.md): `KisakCOD-sp` (i386), built like the
+  multiplayer client from the singleplayer lists; killhouse and cargoship load
+  and play
 - [Cinematics](linux-cinematics.md): Bink movies through an FFmpeg-backed shim
   (`KISAK_LINUX_CINEMATICS`)
 - [Steam authentication](linux-steam.md): join and host Steam-authenticated
@@ -27,6 +30,9 @@ what is still missing. Build steps are in the
 - [x86_64 track](linux-x64.md): the 64-bit dedicated server and multiplayer
   client, the checks that catch 32-bit assumptions, and the Linux and MSVC x64
   compile censuses
+- [64-bit Arm track](linux-arm64.md): the aarch64 Linux dedicated server, the
+  x86 assumptions it needed fixed (including pages over 4 KiB), and the census
+  for the arm64 client and Windows ARM64
 
 ## Linux client foundations (opt-in)
 

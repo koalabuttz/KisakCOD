@@ -20,6 +20,15 @@ if (KISAK_PLATFORM STREQUAL "win32")
     set(CMAKE_GENERATOR_PLATFORM "WIN32")
 endif()
 
+# Library folder and linker machine for the target architecture.
+if (KISAK_WIN_ARM64)
+    set(KISAK_WIN_ARCH ARM64)
+elseif (KISAK_WIN64)
+    set(KISAK_WIN_ARCH x64)
+else()
+    set(KISAK_WIN_ARCH x86)
+endif()
+
 # If we are building with the MSVC toolchain (native Windows build)
 if (WIN32 AND NOT KISAK_PLATFORM STREQUAL "mingw")
   # Check to see if we are running a github action
@@ -35,17 +44,20 @@ if (WIN32 AND NOT KISAK_PLATFORM STREQUAL "mingw")
 
     # Example: C:\Users\USERNAME\.nuget\packages\microsoft.dxsdk.d3dx\9.29.952.8\build\native
     set(DXSDK_INC_DIR ${DXSDK_DIR}/include)
-    set(DXSDK_LIB_DIR ${DXSDK_DIR}/${CMAKE_BUILD_TYPE}/lib/x86)
+    set(DXSDK_LIB_DIR ${DXSDK_DIR}/${CMAKE_BUILD_TYPE}/lib/${KISAK_WIN_ARCH})
     message("DXSDK_LIB_DIR: ${DXSDK_LIB_DIR}")
   else()
     message("===== BUILDING FOR LOCAL DXSDK =====")
     set(DXSDK_DIR $ENV{DXSDK_DIR})
     set(DXSDK_INC_DIR ${DXSDK_DIR}/include)
-    set(DXSDK_LIB_DIR ${DXSDK_DIR}/lib/x86)
+    set(DXSDK_LIB_DIR ${DXSDK_DIR}/lib/${KISAK_WIN_ARCH})
   endif() # DEFINED CICD
 
-  # Set the required library
-  if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  # Set the required library. The DirectX SDK has no ARM64 D3DX9 library;
+  # ARM64 builds link src/win32/win_d3dx_unavailable.cpp instead.
+  if(KISAK_WIN_ARM64)
+    set(D3DX_LIB "")
+  elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(D3DX_LIB d3dx9d.lib)
   else()
     set(D3DX_LIB d3dx9.lib)
@@ -66,7 +78,9 @@ endif()
 if (WIN32 AND NOT KISAK_PLATFORM STREQUAL "mingw")
   target_include_directories(${PROJECT_NAME} PUBLIC ${DXSDK_INC_DIR})
 
-  target_link_directories(${PROJECT_NAME} PUBLIC ${DXSDK_LIB_DIR})
+  if (NOT KISAK_WIN_ARM64)
+    target_link_directories(${PROJECT_NAME} PUBLIC ${DXSDK_LIB_DIR})
+  endif()
   target_link_directories(${PROJECT_NAME} PUBLIC "${DEPS_DIR}/msslib")
   target_link_directories(${PROJECT_NAME} PUBLIC "${DEPS_DIR}/steamsdk")
   target_link_directories(${PROJECT_NAME} PUBLIC "${DEPS_DIR}/binklib")
@@ -78,7 +92,7 @@ if (KISAK_PLATFORM STREQUAL "win32")
     target_link_options(${PROJECT_NAME} PRIVATE "$<$<CONFIG:Release>:/OPT:REF>")
     target_link_options(${PROJECT_NAME} PRIVATE "$<$<CONFIG:Release>:/OPT:ICF>")
 
-    target_link_options(${PROJECT_NAME} PRIVATE /machine:x86)
+    target_link_options(${PROJECT_NAME} PRIVATE /machine:${KISAK_WIN_ARCH})
     set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE TRUE)
 endif()
 
@@ -88,12 +102,15 @@ if (MSVC OR KISAK_PLATFORM STREQUAL "win32")
         ws2_32.lib winmm.lib kernel32.lib user32.lib gdi32.lib
         winspool.lib comdlg32.lib advapi32.lib shell32.lib
         ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib
-        binkw32.lib steam_api.lib dxguid.lib
+        dxguid.lib
     )
+    if (NOT KISAK_WIN64)
+        target_link_libraries(${PROJECT_NAME} PUBLIC binkw32.lib steam_api.lib)
+    endif()
     if (NOT KISAK_OPENAL)
         target_link_libraries(${PROJECT_NAME} PUBLIC mss32.lib)
     endif()
-    target_link_options(${PROJECT_NAME} PRIVATE /machine:x86)
+    target_link_options(${PROJECT_NAME} PRIVATE /machine:${KISAK_WIN_ARCH})
     set_target_properties(${PROJECT_NAME} PROPERTIES
         MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
         WIN32_EXECUTABLE TRUE

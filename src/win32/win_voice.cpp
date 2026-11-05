@@ -5,6 +5,14 @@
 
 #include <server_mp/server_mp.h>
 
+// The mixer structs' cbStruct is their size: the retail literals on x86, larger
+// on x64 where they hold pointer-sized members.
+static_assert(LAYOUT_32BIT(sizeof(tagMIXERLINEA) == 168));
+static_assert(LAYOUT_32BIT(sizeof(tagMIXERLINECONTROLSA) == 24));
+static_assert(LAYOUT_32BIT(sizeof(tMIXERCONTROLDETAILS) == 24));
+static_assert(sizeof(tagMIXERCONTROLA) == 148);
+static_assert(sizeof(tagMIXERCONTROLDETAILS_LISTTEXTA) == 72);
+
 
 const dvar_t *winvoice_mic_mute;
 const dvar_t *winvoice_mic_reclevel;
@@ -48,7 +56,7 @@ static uint32_t mixerGetRecordLevel(char *SrcName)
         return -1;
     if (mixerOpen(&phmx, 0, 0, 0, 0))
         return -1;
-    mixerline.cbStruct = 168;
+    mixerline.cbStruct = sizeof(mixerline);
     mixerline.dwComponentType = 7;
     MMRESULT res = mixerGetLineInfoA((HMIXEROBJ)phmx, &mixerline, 3u); // KISAKTODO: this fails with ret: 0x400 - idk why
     jj = mixerline.cConnections;
@@ -59,7 +67,7 @@ static uint32_t mixerGetRecordLevel(char *SrcName)
         v2 = strstr(mixerline.szName, SrcName);
         if (v2)
         {
-            mxlc.cbStruct = 24;
+            mxlc.cbStruct = sizeof(mxlc);
             mxlc.dwLineID = mixerline.dwLineID;
             mxlc.dwControlID = 1342373889;
             mxlc.cControls = 1;
@@ -67,7 +75,7 @@ static uint32_t mixerGetRecordLevel(char *SrcName)
             mxlc.pamxctrl = &mxc;
             if (!mixerGetLineControlsA((HMIXEROBJ)phmx, &mxlc, 2u))
             {
-                mxcd.cbStruct = 24;
+                mxcd.cbStruct = sizeof(mxcd);
                 mxcd.cChannels = 1;
                 mxcd.cbDetails = 4;
                 mxcd.paDetails = &newSetting;
@@ -122,7 +130,7 @@ int mixerSetRecordSource(char *SrcName)
     lpmxc = 0;
     lpListText = 0;
     lpListBool = 0;
-    mixerline.cbStruct = 168;
+    mixerline.cbStruct = sizeof(mixerline);
     mixerline.dwComponentType = 7;
     if (mixerGetLineInfoA(phmx, &mixerline, 3u) != MMSYSERR_NOERROR)
     {
@@ -130,7 +138,7 @@ int mixerSetRecordSource(char *SrcName)
         return 0;
     }
     lpmxc = (tagMIXERCONTROLA*)calloc(148 * mixerline.cControls, 1u);
-    mxlc.cbStruct = 24;
+    mxlc.cbStruct = sizeof(mxlc);
     mxlc.dwLineID = mixerline.dwLineID;
     mxlc.dwControlID = 0;
     mxlc.cControls = mixerline.cControls;
@@ -150,7 +158,7 @@ int mixerSetRecordSource(char *SrcName)
                 if ((lpmxc[ii].fdwControl & 2) != 0)
                     iMultipleItems = lpmxc[ii].cMultipleItems;
                 lpListText = (tagMIXERCONTROLDETAILS_LISTTEXTA*)calloc(72 * iMultipleItems * iNumChannels, 1u);
-                mxcd.cbStruct = 24;
+                mxcd.cbStruct = sizeof(mxcd);
                 mxcd.dwControlID = lpmxc[ii].dwControlID;
                 mxcd.cChannels = iNumChannels;
                 mxcd.cMultipleItems = iMultipleItems;
@@ -241,7 +249,7 @@ int mixerGetRecordSource(char *srcName)
         return 0;
     }
     lpmxc = (tagMIXERCONTROLA*)calloc(148 * mixerline.cControls, 1u);
-    mxlc.cbStruct = 24;
+    mxlc.cbStruct = sizeof(mxlc);
     mxlc.dwLineID = mixerline.dwLineID;
     mxlc.dwControlID = 0;
     mxlc.cControls = mixerline.cControls;
@@ -261,7 +269,7 @@ int mixerGetRecordSource(char *srcName)
                 if ((lpmxc[ii].fdwControl & 2) != 0)
                     iMultipleItems = lpmxc[ii].cMultipleItems;
                 lpListText = (tagMIXERCONTROLDETAILS_LISTTEXTA*)calloc(72 * iMultipleItems * iNumChannels, 1u);
-                mxcd.cbStruct = 24;
+                mxcd.cbStruct = sizeof(mxcd);
                 mxcd.dwControlID = lpmxc[ii].dwControlID;
                 mxcd.cChannels = iNumChannels;
                 mxcd.cMultipleItems = iMultipleItems;
@@ -334,7 +342,7 @@ int mixerSetRecordLevel(char *SrcName, unsigned __int16 newLevel)
     // LWSS: Winapi sucks
     HMIXEROBJ phmx = (HMIXEROBJ)mixerHandle;
 
-    mixerline.cbStruct = 168;
+    mixerline.cbStruct = sizeof(mixerline);
     mixerline.dwComponentType = 7;
     if (mixerGetLineInfoA(phmx, &mixerline, 3u))
         return 0;
@@ -347,7 +355,7 @@ int mixerSetRecordLevel(char *SrcName, unsigned __int16 newLevel)
             v3 = strstr(mixerline.szName, SrcName);
             if (v3)
             {
-                mxlc.cbStruct = 24;
+                mxlc.cbStruct = sizeof(mxlc);
                 mxlc.dwLineID = mixerline.dwLineID;
                 mxlc.dwControlID = 1342373889;
                 mxlc.cControls = 1;
@@ -356,7 +364,7 @@ int mixerSetRecordLevel(char *SrcName, unsigned __int16 newLevel)
                 err = mixerGetLineControlsA(phmx, &mxlc, 2u);
                 if (!err)
                 {
-                    mxcd.cbStruct = 24;
+                    mxcd.cbStruct = sizeof(mxcd);
                     mxcd.cChannels = 1;
                     mxcd.cbDetails = 4;
                     mxcd.paDetails = &newSetting;
@@ -400,7 +408,7 @@ int mixerSetMicrophoneMute(unsigned __int8 bMute)
     // LWSS: Winapi sucks
     HMIXEROBJ phmx = (HMIXEROBJ)mixerHandle;
 
-    mixerline.cbStruct = 168;
+    mixerline.cbStruct = sizeof(mixerline);
     mixerline.dwComponentType = 4;
     err = mixerGetLineInfoA(phmx, &mixerline, 3u);
     if (!err)
@@ -413,7 +421,7 @@ int mixerSetMicrophoneMute(unsigned __int8 bMute)
             v2 = strstr(mixerline.szName, "Mic");
             if (v2)
             {
-                mxlc.cbStruct = 24;
+                mxlc.cbStruct = sizeof(mxlc);
                 mxlc.dwLineID = mixerline.dwLineID;
                 mxlc.dwControlID = 536936450;
                 mxlc.cControls = 1;
@@ -422,7 +430,7 @@ int mixerSetMicrophoneMute(unsigned __int8 bMute)
                 err = mixerGetLineControlsA(phmx, &mxlc, 2u);
                 if (!err)
                 {
-                    mxcd.cbStruct = 24;
+                    mxcd.cbStruct = sizeof(mxcd);
                     mxcd.cChannels = 1;
                     mxcd.cbDetails = 4;
                     mxcd.paDetails = &newSetting;

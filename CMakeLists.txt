@@ -5,10 +5,11 @@ cmake_minimum_required(VERSION 3.18)
 # i386 is the shipping Linux build. x86_64 is an opt-in 64-bit track: the
 # dedicated server builds and boots without game data, and the compile census
 # (scripts/tests/run_x64_compile_census.py) covers the rest. Fastfile loading is
-# not 64-bit yet. See docs/linux-x64.md.
+# not 64-bit yet. See docs/linux-x64.md. aarch64 (64-bit Arm) is a newer
+# opt-in track that builds the dedicated server only; see docs/linux-arm64.md.
 set(KISAK_LINUX_ARCH "i386" CACHE STRING
-    "Native Linux architecture: i386 (shipping) or x86_64 (opt-in 64-bit track: dedicated server and compile census)")
-set_property(CACHE KISAK_LINUX_ARCH PROPERTY STRINGS i386 x86_64)
+    "Native Linux architecture: i386 (shipping), x86_64 (opt-in 64-bit track) or aarch64 (opt-in 64-bit Arm track: dedicated server)")
+set_property(CACHE KISAK_LINUX_ARCH PROPERTY STRINGS i386 x86_64 aarch64)
 if(NOT DEFINED KISAK_PLATFORM)
     if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
         set(KISAK_PLATFORM "linux" CACHE STRING "Build platform: win32|mingw|linux")
@@ -21,8 +22,22 @@ if(KISAK_PLATFORM STREQUAL "linux")
         set(KISAK_LINUX_ARCH_FLAG -m32)
     elseif(KISAK_LINUX_ARCH STREQUAL "x86_64")
         set(KISAK_LINUX_ARCH_FLAG -m64)
+    elseif(KISAK_LINUX_ARCH STREQUAL "aarch64")
+        # The engine was written for x86, where plain char is signed. Arm Linux
+        # makes it unsigned unless told otherwise (Windows on Arm keeps it signed).
+        # Arm also has fused multiply-add, which Clang would use for a * b + c,
+        # rounding once instead of twice; keep x86's results (client prediction
+        # replays the server's movement math and must land on the same floats).
+        set(KISAK_LINUX_ARCH_FLAG "-fsigned-char -ffp-contract=off")
+        # On an x86 host, cross-compile with Clang against the Debian/Ubuntu
+        # aarch64-linux-gnu sysroot. An Arm host builds natively.
+        # (CMAKE_HOST_SYSTEM_PROCESSOR is not known before project().)
+        execute_process(COMMAND uname -m OUTPUT_VARIABLE kisak_host_machine OUTPUT_STRIP_TRAILING_WHITESPACE)
+        if(NOT CMAKE_TOOLCHAIN_FILE AND NOT kisak_host_machine MATCHES "^(aarch64|arm64)$")
+            set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_LIST_DIR}/scripts/platform/linux/aarch64-linux-gnu.cmake")
+        endif()
     else()
-        message(FATAL_ERROR "KISAK_LINUX_ARCH must be i386 or x86_64, not '${KISAK_LINUX_ARCH}'")
+        message(FATAL_ERROR "KISAK_LINUX_ARCH must be i386, x86_64 or aarch64, not '${KISAK_LINUX_ARCH}'")
     endif()
     set(CMAKE_C_FLAGS_INIT "${CMAKE_C_FLAGS_INIT} ${KISAK_LINUX_ARCH_FLAG}")
     set(CMAKE_CXX_FLAGS_INIT "${CMAKE_CXX_FLAGS_INIT} ${KISAK_LINUX_ARCH_FLAG}")
@@ -30,6 +45,31 @@ if(KISAK_PLATFORM STREQUAL "linux")
 endif()
 
 project(KisakCOD)
+
+# 64-bit Windows: Miles (mss32), Bink (binkw32) and the bundled Steam library
+# exist only as 32-bit binaries. Sound goes through OpenAL, Steam is
+# unavailable (src/win32/win_steam_unavailable.cpp; see
+# scripts/common_files.cmake), and movies are built out (r_cinematic.cpp
+# without CINEMA) unless KISAK_WIN64_CINEMATICS plays them through the FFmpeg
+# Bink shim (scripts/extern/bink_shim.cmake).
+if(NOT KISAK_PLATFORM STREQUAL "linux" AND CMAKE_SIZEOF_VOID_P EQUAL 8)
+    set(KISAK_WIN64 ON)
+    if(NOT KISAK_OPENAL)
+        message(STATUS "64-bit Windows build: Miles is 32-bit only, so KISAK_OPENAL is turned on")
+        set(KISAK_OPENAL ON CACHE BOOL "Build the sound system against OpenAL instead of Miles/MSS" FORCE)
+    endif()
+else()
+    set(KISAK_WIN64 OFF)
+endif()
+
+# Windows on Arm (MSVC with -A ARM64; docs/linux-arm64.md). A 64-bit build like
+# x64 above, plus: no D3DX9 library exists for ARM64 (see
+# src/win32/win_d3dx_unavailable.cpp) and the CPU has no SSE.
+set(KISAK_WIN_ARM64 OFF)
+if(KISAK_WIN64 AND MSVC AND CMAKE_CXX_COMPILER_ARCHITECTURE_ID STREQUAL "ARM64")
+    set(KISAK_WIN_ARM64 ON)
+    message(STATUS "Windows ARM64 build: raw-asset shader compiles (D3DX9) are unavailable")
+endif()
 
 # Set the default C++ standard
 set(CMAKE_CXX_STANDARD 20)
@@ -46,6 +86,11 @@ set_property(CACHE KISAK_PLATFORM PROPERTY STRINGS win32 mingw linux)
 # clang_rt.asan_dbg_dynamic-i386.dll and clang_rt.asan_dynamic-i386.dll from the MSVC C directory located below (or similar)
 # C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Tools\MSVC\14.44.35207\bin\Hostx86\x86
 set(USE_ASAN OFF)
+
+# Opt-in, 64-bit Windows only: play Bink movies in KisakCOD-mp and -sp through
+# the FFmpeg Bink shim (needs FFmpeg's libavcodec and libavutil; see
+# scripts/extern/bink_shim.cmake). 32-bit Windows always uses RAD's binkw32.
+option(KISAK_WIN64_CINEMATICS "64-bit Windows: play Bink movies through the FFmpeg Bink shim" OFF)
 
 # Set to ON to build the sound system against OpenAL instead of Miles/MSS.
 # When OFF (default), the original Miles Sound System (MSS/AIL) backend is used.

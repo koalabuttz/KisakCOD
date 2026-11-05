@@ -18,7 +18,12 @@
 #endif
 
 #ifdef KISAK_DEDICATED
+// No sound on a dedicated server; the signature follows the backend's caller below.
+#ifdef KISAK_OPENAL
+LoadedSound* SND_LoadFromBuffer(void* buffer, uint32_t bufferSize, const char* soundName)
+#else
 LoadedSound* SND_LoadFromBuffer(void* buffer, const char* soundName)
+#endif
 {
     return NULL;
 }

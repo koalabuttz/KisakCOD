@@ -535,8 +535,20 @@ char g_module[MAX_PATH];
 
 #include <intrin.h>
 
-// KISAKX64
-// this is broken right now
+#if defined(_M_X64) || defined(_M_ARM64)
+// x64 and ARM64 MSVC have no inline assembler, and x64 does not keep a
+// frame-pointer chain, so ask Windows for the return addresses. The 32-bit map-file lookup below does
+// not apply: the addresses are printed as they are.
+int DoStackTrace(char* msg, int msgSize, int nIgnore)
+{
+    void *frames[32];
+    const USHORT count = RtlCaptureStackBackTrace((DWORD)(nIgnore + 1), 32, frames, nullptr);
+    int curPos = 0;
+    for (USHORT i = 0; i < count; ++i)
+        Com_sprintfPos(msg, msgSize, &curPos, "address %p\n", frames[i]);
+    return curPos;
+}
+#else
 int DoStackTrace(char* msg, int msgSize, int nIgnore)
 {
     int* v2; // ecx
@@ -568,6 +580,7 @@ int DoStackTrace(char* msg, int msgSize, int nIgnore)
     }
     return LoadMapFiles(msg, msgSize);
 }
+#endif
 
 void BuildAssertMessage(const char* expr, const char* filename, int line, int type, int skipLevels, char* message, int messageSize)
 {

@@ -1,4 +1,5 @@
-// The Bink 1.9 API the engine's cinematic player calls, on Linux.
+// The Bink 1.9 API the engine's cinematic player calls, on Linux and on
+// 64-bit Windows (which has no 64-bit binkw32 to link).
 //
 // src/gfx_d3d/r_cinematic.cpp drives Bink as it does on Windows: BinkOpen,
 // BinkGetFrameBuffersInfo/BinkRegisterFrameBuffers to decode into its own
@@ -20,11 +21,21 @@
 
 #include <binklib/bink.h>
 
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
 #include <dirent.h>
 #include <fcntl.h>
 #include <strings.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
 
 #include <algorithm>
 #include <cerrno>
@@ -33,6 +44,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -106,13 +118,99 @@ void SetError(const std::string &error)
 // BinkSetSoundTrack's list, used by the next BinkOpen with BINKSNDTRACK.
 std::vector<uint32_t> g_soundTrackIds;
 
+// A movie file opened for reading at any offset.
+class MovieFile
+{
+  public:
+    MovieFile() = default;
+    MovieFile(const MovieFile &) = delete;
+    MovieFile &operator=(const MovieFile &) = delete;
+    ~MovieFile()
+    {
+#ifdef _WIN32
+        if (handle != INVALID_HANDLE_VALUE)
+            CloseHandle(handle);
+#else
+        if (fd >= 0)
+            close(fd);
+#endif
+    }
+
+    bool Open(const char *path, std::string *error)
+    {
+#ifdef _WIN32
+        handle = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (handle == INVALID_HANDLE_VALUE)
+        {
+            *error = std::string("open '") + path + "': error " + std::to_string((unsigned long)GetLastError());
+            return false;
+        }
+#else
+        fd = open(path, O_RDONLY | O_CLOEXEC);
+        if (fd < 0)
+        {
+            *error = std::string("open '") + path + "': " + std::strerror(errno);
+            return false;
+        }
+#endif
+        return true;
+    }
+
+    // Reads exactly `size` bytes at `offset` into `out`.
+    bool Read(uint64_t offset, size_t size, std::vector<uint8_t> *out) const
+    {
+        out->resize(size);
+        size_t done = 0;
+        while (done < size)
+        {
+#ifdef _WIN32
+            const uint64_t at = offset + done;
+            OVERLAPPED where = {};
+            where.Offset = (DWORD)at;
+            where.OffsetHigh = (DWORD)(at >> 32);
+            const DWORD want = (DWORD)std::min<size_t>(size - done, 1u << 30);
+            DWORD got = 0;
+            if (!ReadFile(handle, out->data() + done, want, &got, &where) || got == 0)
+                return false;
+#else
+            const ssize_t got = pread(fd, out->data() + done, size - done, (off_t)(offset + done));
+            if (got < 0 && errno == EINTR)
+                continue;
+            if (got <= 0)
+                return false;
+#endif
+            done += (size_t)got;
+        }
+        return true;
+    }
+
+    // The file's size in bytes, or 0 when it can't be read.
+    uint64_t Size() const
+    {
+#ifdef _WIN32
+        LARGE_INTEGER size = {};
+        return GetFileSizeEx(handle, &size) ? (uint64_t)size.QuadPart : 0;
+#else
+        struct stat st = {};
+        return fstat(fd, &st) == 0 ? (uint64_t)st.st_size : 0;
+#endif
+    }
+
+  private:
+#ifdef _WIN32
+    HANDLE handle = INVALID_HANDLE_VALUE;
+#else
+    int fd = -1;
+#endif
+};
+
 struct ShimBink
 {
     BINK pub; // first: HBINK points here, and the engine reads FrameNum/Frames
 
     BinkFileInfo info;
     const uint8_t *memory = nullptr; // BINKFROMMEMORY: the whole file
-    int fd = -1;
+    MovieFile file;
     std::vector<uint8_t> videoBytes;
     std::vector<uint8_t> audioBytes;
 
@@ -140,33 +238,11 @@ struct ShimBink
     // For the KISAK_BINK_TRACE summary.
     uint32_t decodedFrames = 0;
     uint32_t failedFrames = 0;
-
-    ~ShimBink()
-    {
-        if (fd >= 0)
-            close(fd);
-    }
 };
 
 ShimBink *FromHandle(HBINK bink)
 {
     return reinterpret_cast<ShimBink *>(bink);
-}
-
-bool ReadFileRange(int fd, uint64_t offset, size_t size, std::vector<uint8_t> *out)
-{
-    out->resize(size);
-    size_t done = 0;
-    while (done < size)
-    {
-        const ssize_t got = pread(fd, out->data() + done, size - done, (off_t)(offset + done));
-        if (got < 0 && errno == EINTR)
-            continue;
-        if (got <= 0)
-            return false;
-        done += (size_t)got;
-    }
-    return true;
 }
 
 // A frame's bytes, from memory or read from the file into `scratch`.
@@ -175,7 +251,7 @@ const uint8_t *FrameBytes(ShimBink *b, uint32_t index, std::vector<uint8_t> *scr
     const BinkFrameIndexEntry &entry = b->info.frames[index];
     if (b->memory)
         return b->memory + entry.offset;
-    if (!ReadFileRange(b->fd, entry.offset, entry.size, scratch))
+    if (!b->file.Read(entry.offset, entry.size, scratch))
     {
         *error = "read of frame " + std::to_string(index + 1) + " failed";
         return nullptr;
@@ -304,14 +380,10 @@ bool OpenSource(ShimBink *b, const char *name, U32 flags, std::string *error)
         *error = std::string("no file '") + name + "'";
         return false;
     }
-    b->fd = open(path, O_RDONLY | O_CLOEXEC);
-    if (b->fd < 0)
-    {
-        *error = std::string("open '") + path + "': " + std::strerror(errno);
+    if (!b->file.Open(path, error))
         return false;
-    }
     std::vector<uint8_t> header;
-    if (!ReadFileRange(b->fd, 0, BinkFixedHeaderSize(), &header))
+    if (!b->file.Read(0, BinkFixedHeaderSize(), &header))
     {
         *error = "file too short for a Bink header";
         return false;
@@ -322,15 +394,14 @@ bool OpenSource(ShimBink *b, const char *name, U32 flags, std::string *error)
         *error = "not a Bink 1 movie";
         return false;
     }
-    if (!ReadFileRange(b->fd, 0, headerSize, &header))
+    if (!b->file.Read(0, headerSize, &header))
     {
         *error = "file too short for its frame table";
         return false;
     }
     if (!ParseBinkHeader(header.data(), header.size(), &b->info, error))
         return false;
-    struct stat st = {};
-    if (fstat(b->fd, &st) != 0 || (uint64_t)st.st_size < b->info.fileSize)
+    if (b->file.Size() < b->info.fileSize)
     {
         *error = "file is shorter than its header says";
         return false;
@@ -392,6 +463,17 @@ extern "C" bool KisakBink_ResolvePath(const char *path, char *out, size_t outSiz
 {
     if (!path || !*path || !out || !outSize)
         return false;
+#ifdef _WIN32
+    // Windows paths already ignore case: take the path as given when it names a file.
+    const DWORD attributes = GetFileAttributesA(path);
+    if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY))
+        return false;
+    const size_t length = std::strlen(path);
+    if (length + 1 > outSize)
+        return false;
+    std::memcpy(out, path, length + 1);
+    return true;
+#else
     std::string wanted(path);
     std::replace(wanted.begin(), wanted.end(), '\\', '/');
 
@@ -448,6 +530,7 @@ extern "C" bool KisakBink_ResolvePath(const char *path, char *out, size_t outSiz
         return false;
     std::memcpy(out, resolved.c_str(), resolved.size() + 1);
     return true;
+#endif
 }
 
 // ---- the Bink API ----------------------------------------------------------

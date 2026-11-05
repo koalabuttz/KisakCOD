@@ -22,7 +22,11 @@ typedef short SHORT;
 typedef int BOOL;
 typedef long LONG;
 typedef CHAR *LPSTR, *PSTR;
+#ifdef _WIN64
+typedef unsigned __int64 ULONG_PTR, *PULONG_PTR; // pointer-sized, as in basetsd.h
+#else
 typedef unsigned long ULONG_PTR, *PULONG_PTR;
+#endif
 typedef ULONG_PTR DWORD_PTR, *PDWORD_PTR;
 typedef unsigned long DWORD;
 typedef unsigned short WORD;

@@ -1,6 +1,6 @@
 # Linux port status
 
-Last updated 2026-11-05 (master `cd54c17`). This page is the current state of
+Last updated 2026-11-05 (master `7160b20` plus the arm64 dedicated server and client). This page is the current state of
 the native Linux port. The [docs index](README.md) lists the detailed guides;
 older handoffs are in [history](history/README.md) and are not current.
 
@@ -17,9 +17,11 @@ without a GPU or game data, against stand-in D3D9 and OpenAL libraries.
 | Dedicated server, x86_64 | `-DKISAK_LINUX_ARCH=x86_64` | Same as i386: 21 of 21 stock maps, bots through map cycles, clean quit (laptop). [Guide](linux-x64.md#x86_64-dedicated-server) |
 | Multiplayer client `KisakCOD-mp`, i386 | `-DKISAK_BUILD_LINUX_MP_CLIENT=ON` | Playable on a listen server (laptop): `+devmap mp_crash`, team and class menus, spawn, move, shoot, grenades, OpenAL sound, flashbang white-out, clean quit. [Guide](linux-mp-client.md) |
 | Multiplayer client, x86_64 | the same, with `-DKISAK_LINUX_ARCH=x86_64` | Playable on the same terms as i386 (laptop), including sprint and mantle animations and a clean quit. [Guide](linux-x64.md#x86_64-multiplayer-client) |
+| Dedicated server, aarch64 (64-bit Arm) | `-DKISAK_LINUX_ARCH=aarch64` | Builds natively on Arm or cross-compiled from x86, boots without game data (qemu and hosted Arm CI). Not yet run with game data. [Guide](linux-arm64.md) |
+| Multiplayer client, aarch64 | the client options with `-DKISAK_LINUX_ARCH=aarch64` | Builds and passes the asset-free client checks (qemu and hosted Arm CI) against a D3D9 stand-in; no aarch64 DXVK build yet, so it has not drawn a frame. [Guide](linux-arm64.md#building-the-aarch64-client) |
 | Movies | `-DKISAK_LINUX_CINEMATICS=ON` | Bink movies play through an FFmpeg-backed shim on i386 and x86_64 (laptop). Off by default. [Guide](linux-cinematics.md) |
 | Steam authentication | `-DKISAK_LINUX_STEAM=ON` | Added by PR 85. Logs in through the running Steam client's `steamclient.so`; a probe got a ticket validated on i386 and x86_64, and an i386 client joined, reconnected to and was refused by (with Steam off) an i386 dedicated server (laptop, one Steam account). Off by default. [Guide](linux-steam.md) |
-| Singleplayer `KisakCOD-sp`, i386 | in review (PR 83) | killhouse and cargoship load and play about a minute each, clean quit (laptop). The compile census (PR 82) is merged. |
+| Singleplayer `KisakCOD-sp`, i386 | `-DKISAK_BUILD_LINUX_SP_GAME=ON` | killhouse and cargoship load, leave the pregame by themselves and play about a minute each, clean quit (laptop). [Guide](linux-sp-game.md) |
 
 The client builds need DXVK Native, SDL3 3.2.10 or newer and OpenAL for the
 target architecture; the guides above give the CMake lines. The game files
@@ -27,13 +29,14 @@ always come from your own install (`+set fs_basepath <game folder>`).
 
 ## What does not work yet
 
-- **Joining a remote server.** The default build has no Steam ticket provider,
-  so the client refuses to send an unauthenticated challenge, and the dedicated
-  server rejects ordinary client tickets unless an explicit opt-in is set
-  ([details](linux-dedicated.md#local-connection-testing-without-steam-authentication)).
-  The opt-in `-DKISAK_LINUX_STEAM=ON` authenticates through the Steam client
-  running on the machine ([guide](linux-steam.md)); login and ticket checks are
-  laptop-verified with a probe, a game joining a remote server is not yet.
+- **Joining a remote server in the default build.** It has no Steam ticket
+  provider, so the client refuses to send an unauthenticated challenge, and the
+  dedicated server rejects ordinary client tickets unless an explicit opt-in is
+  set ([details](linux-dedicated.md#local-connection-testing-without-steam-authentication)).
+  Build with `-DKISAK_LINUX_STEAM=ON` to authenticate through the Steam client
+  running on the machine ([guide](linux-steam.md)). Not yet tried that way: a
+  Windows client or server on the other end, two Steam accounts, x86_64 game
+  runs.
 - **Prediction.** The Linux client logs about five times as many prediction
   errors and misses as the Windows build does over the same kind of play
   (laptop vs a Windows PC, 2026-11-04). Being investigated.
@@ -41,6 +44,11 @@ always come from your own install (`+set fs_basepath <game folder>`).
 - **Windows x64.** The MSVC x64 compile census runs on master
   ([census](linux-x64.md#windows-msvc-x64-census)); the first compile fixes
   are in review (PR 81). No 64-bit Windows binary links yet.
+- **arm64 client and Windows ARM64.** The aarch64 multiplayer client builds and
+  passes its asset-free checks (qemu and hosted Arm CI) but has not drawn a
+  frame: no aarch64 DXVK build yet. Windows ARM64 builds sp, mp and dedi with
+  MSVC and starts up to the missing-game-data error on hosted Windows on Arm;
+  not run with game data ([arm64 track](linux-arm64.md)).
 - **HTTP downloads, voice chat and the remote script debugger** are missing from
   the Linux client; each answers as Windows does when that service is absent
   ([list](linux-mp-client.md#what-it-does-not-have-yet)).

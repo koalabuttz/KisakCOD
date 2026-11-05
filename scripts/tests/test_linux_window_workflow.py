@@ -313,8 +313,9 @@ class NativeD3D9BoundaryWorkflowTests(unittest.TestCase):
 
     # Jobs that turn the boundary's CMake option on. device_probe does it to link
     # the device probe against a stand-in D3D9 library (DeviceProbeWorkflowTests);
-    # x64_client does it to build the x86_64 multiplayer client against stand-ins.
-    BOUNDARY_JOBS = ('native_d3d9_boundary', 'device_probe', 'x64_client')
+    # x64_client and arm64_client do it to build the 64-bit multiplayer clients
+    # against stand-ins.
+    BOUNDARY_JOBS = ('native_d3d9_boundary', 'device_probe', 'x64_client', 'arm64_client')
 
     def test_other_jobs_keep_their_defaults(self):
         # The boundary stays opt-in: no other job turns the CMake option on, and
@@ -561,8 +562,10 @@ class DeviceProbeWorkflowTests(unittest.TestCase):
         self.assertIn('tempfile.TemporaryDirectory(prefix="kisak-mp-client-")', script)
         self.assertEqual(script.count('.write_text('), 1)
         self.assertIn('"// stub written by the check; no game data\\n"', script)
-        self.assertEqual(script.count('add_argument('), 1)
+        # The binary, and how to run it on another architecture; never a game tree.
+        self.assertEqual(script.count('add_argument('), 2)
         self.assertIn('add_argument("--binary"', script)
+        self.assertIn('add_argument("--emulator"', script)
         for forbidden in ('game_dir', '.ff"', '.iwd', 'symlink'):
             self.assertNotIn(forbidden, script.lower())
 
@@ -708,6 +711,7 @@ class CiTriggerTests(unittest.TestCase):
         'src/gfx_d3d/r_image.cpp',
         'src/universal/q_shared.h',
         'src/win32/win_main.cpp',
+        'src/linux/client/cinematic/bink_player.cpp',
         'scripts/common_files.cmake',
         'scripts/platform/win32/platform.cmake',
         'scripts/ci/check-windows-bootstrap.ps1',
@@ -815,7 +819,7 @@ class CiCacheTests(unittest.TestCase):
 
     # Jobs that configure and build the engine with CMake.
     CCACHE_JOBS = ('window', 'native', 'native_d3d9_boundary', 'device_probe', 'x64_dedicated',
-                   'x64_client')
+                   'arm64_dedicated', 'x64_client', 'arm64_client')
     SDL3_JOBS = ('window', 'device_probe')
 
     @classmethod

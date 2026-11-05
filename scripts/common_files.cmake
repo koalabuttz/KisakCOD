@@ -619,6 +619,17 @@ if (NOT KISAK_PLATFORM STREQUAL "mingw")
     )
 endif()
 
+# The bundled Steam library is 32-bit only (see the top-level CMakeLists.txt).
+if (KISAK_WIN64)
+    list(REMOVE_ITEM WIN32_SRC "${SRC_DIR}/win32/win_steam.cpp")
+    list(APPEND WIN32_SRC "${SRC_DIR}/win32/win_steam_unavailable.cpp")
+endif()
+
+# D3DX9 has no ARM64 library (see the top-level CMakeLists.txt).
+if (KISAK_WIN_ARM64)
+    list(APPEND WIN32_SRC "${SRC_DIR}/win32/win_d3dx_unavailable.cpp")
+endif()
+
 set(XANIM
     "${SRC_DIR}/xanim/dobj.cpp"
     "${SRC_DIR}/xanim/dobj.h"
@@ -651,6 +662,13 @@ set(BINKLIB
 set(MSSLIB
     "${DEPS_DIR}/msslib/mss.h"
 )
+
+# binkw32 is 32-bit only: 64-bit Windows builds play no movies (no CINEMA)
+# unless KISAK_WIN64_CINEMATICS adds the FFmpeg Bink shim
+# (scripts/extern/bink_shim.cmake), which brings its own texture code.
+if (KISAK_WIN64)
+    set(BINKLIB "")
+endif()
 
 set(ODE
     "${DEPS_DIR}/ode/collision.h"

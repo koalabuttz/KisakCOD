@@ -2,6 +2,7 @@
 
 //#include "../client/client.h
 #include <universal/q_shared.h>
+#include <universal/arch_intrin.h> // KISAK_ARCH_X86
 #include "win_configure.h"
 #include "win_local.h"
 #include "win_localize.h"
@@ -219,7 +220,8 @@ int Sys_IsGameProcess(DWORD id)
 	if (snapshot == (void*)-1)
 		return 0;
 	isGame = 0;
-	me.dwSize = 548;
+	static_assert(LAYOUT_32BIT(sizeof(me) == 548));
+	me.dwSize = sizeof(me); // 548 on x86, 568 on x64
 	if (Module32First(snapshot, &me))
 	{
 		GetModuleFileNameA(0, modulePath, 0x104u);
@@ -382,7 +384,8 @@ void Sys_SpawnQuitProcess()
 	if (sys_exitCmdLine[0])
 	{
 		memset((unsigned __int8*)&dst, 0, sizeof(dst));
-		dst.cb = 68;
+		static_assert(LAYOUT_32BIT(sizeof(dst) == 68));
+		dst.cb = sizeof(dst); // 68 on x86, 104 on x64
 		if (!CreateProcessA(0, sys_exitCmdLine, 0, 0, 0, 0, 0, 0, &dst, &pi))
 		{
 			error = GetLastError();
@@ -744,7 +747,7 @@ void Sys_FindInfo()
 	sys_info.cpuGHz = 1.0 / (((double)1LL - (double)0LL) * msecPerRawTimerTick * 1000000.0);
 	sys_info.sysMB = Sys_SystemMemoryMB();
 	Sys_DetectVideoCard(512, sys_info.gpuDescription);
-	sys_info.SSE = 1; // KISAKTODO if someone from 1990 time travels and complains Sys_SupportsSSE();
+	sys_info.SSE = KISAK_ARCH_X86; // Arm (ARM64) has no SSE. KISAKTODO if someone from 1990 time travels and complains Sys_SupportsSSE();
 	Sys_DetectCpuVendorAndName(sys_info.cpuVendor, sys_info.cpuName);
 	Sys_SetAutoConfigureGHz(&sys_info);
 }

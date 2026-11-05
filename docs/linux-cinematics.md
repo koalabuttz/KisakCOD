@@ -1,9 +1,11 @@
 # Cinematics on Linux (Bink shim)
 
 The game's movies (`main/video/*.bik`) are Bink 1 files. The engine plays them
-with RAD's Bink library, which exists only for Windows (`deps/binklib`). No
-build played them before this: `r_cinematic.cpp` is built without `CINEMA` on
-every platform, Windows included.
+with RAD's Bink library, which exists only for 32-bit Windows (`deps/binklib`).
+The 32-bit Windows `KisakCOD-mp` and `KisakCOD-sp` targets define `CINEMA` and
+link it. The Linux client and 64-bit Windows build `r_cinematic.cpp` without
+`CINEMA` by default, so they play no movies. Both can opt into the Bink shim
+described here; for 64-bit Windows see [64-bit Windows](#64-bit-windows).
 
 On Linux, `KisakCOD-mp` can play them through a Bink shim. It is off by
 default.
@@ -69,6 +71,38 @@ and matches each missing path component without regard to case.
 **Errors.** `BinkGetError` hands out the last error once. The engine checks for
 an empty error after most Bink calls, so a movie that failed to open must not
 fail the checks of the next one.
+
+## 64-bit Windows
+
+There is no 64-bit `binkw32`, so a 64-bit Windows build plays movies through
+the same shim. It is off by default:
+
+```bat
+vcpkg install ffmpeg[core,avcodec]:x64-windows
+cmake -S . -B build-x64 -A x64 -DKISAK_WIN64_CINEMATICS=ON ^
+  -DKISAK_FFMPEG_ROOT=C:\vcpkg\installed\x64-windows
+```
+
+`KISAK_FFMPEG_ROOT` is any folder with FFmpeg's `include\`, `lib\` and `bin\`
+(a vcpkg tree, or an FFmpeg "shared" release). `scripts/extern/bink_shim.cmake`
+adds the shim sources to `KisakCOD-mp` and `KisakCOD-sp`, defines `CINEMA` and
+`__RADINEXE__` (so `bink.h` declares the API as plain functions of the
+executable instead of `binkw32.dll` imports), links `avcodec` and `avutil`, and
+copies their DLLs next to the executable. Use an LGPL FFmpeg build (vcpkg's
+default, without the `gpl` feature).
+
+What differs from Linux:
+
+- `bink_textures.cpp` is built on RAD's `binktextures.h` and the system
+  `d3d9.h`. RAD's `binktextures.cpp` is left out: it locks the buffer the shim
+  decodes into read-only.
+- Files are read with `ReadFile` at an offset instead of `pread`.
+- Paths are used as the engine builds them: Windows already ignores letter
+  case and accepts `\`.
+- Movies are found under the working directory, as on 32-bit Windows.
+
+The 32-bit Windows build keeps RAD's `binkw32.dll`. The CI x64 job builds with
+the option on, with FFmpeg from vcpkg.
 
 ## Checks
 

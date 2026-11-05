@@ -82,8 +82,8 @@
 #if !defined(KISAK_LINUX_D3D9_TYPES_DISPATCH)
 #error "include <linux/d3d9_types.h> (or a gfx_d3d header), the single D3D9 entry point, not d3d9_native.h"
 #endif
-#if !defined(__i386__) && !defined(__x86_64__)
-#error "the DXVK Native D3D9 boundary is validated for i386 and x86_64 only"
+#if !defined(__i386__) && !defined(__x86_64__) && !defined(__aarch64__)
+#error "the DXVK Native D3D9 boundary is validated for i386, x86_64 and aarch64 only"
 #endif
 
 #include <linux/compat.h>
@@ -196,10 +196,10 @@ static_assert(std::is_same_v<SpelledWinapi, EngineStdcall>,
               "WINAPI must still mean stdcall for engine declarations after the DXVK headers");
 static_assert(!std::is_same_v<EngineStdcall, EngineCdecl>, "the compiler distinguishes stdcall from cdecl");
 #else
-// x86_64 has one C calling convention, so stdcall and cdecl are the same type
-// and the engine's spellings only have to survive as macros.
-static_assert(std::is_same_v<void(__stdcall *)(int), void (*)(int)>, "__stdcall is the x86_64 C convention");
-static_assert(std::is_same_v<void(WINAPI *)(int), void (*)(int)>, "WINAPI is the x86_64 C convention");
+// x86_64 and aarch64 have one C calling convention, so stdcall and cdecl are
+// the same type and the engine's spellings only have to survive as macros.
+static_assert(std::is_same_v<void(__stdcall *)(int), void (*)(int)>, "__stdcall is the 64-bit C convention");
+static_assert(std::is_same_v<void(WINAPI *)(int), void (*)(int)>, "WINAPI is the 64-bit C convention");
 #endif
 
 // DXVK's exports keep DXVK's (cdecl) convention, which is how libdxvk_d3d9.so

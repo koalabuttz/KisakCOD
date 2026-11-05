@@ -18,14 +18,10 @@ int sys_timeBase;
 
 uint64_t Posix_RawTimerTicks()
 {
-    // x86 TSC. The engine only builds for x86 (32-bit), where this is always
-    // available; on any other host fall back to the monotonic clock so the
-    // platform layer still reports a sane, non-decreasing tick source.
-#if defined(__i386__) || defined(__x86_64__)
+    // The engine reads __rdtsc directly for profiling, so this must be the same
+    // counter: the x86 TSC, or on 64-bit Arm the virtual counter that
+    // universal/arch_intrin.h reads under the same name.
     return __rdtsc();
-#else
-    return Posix_MonotonicNanoseconds();
-#endif
 }
 
 double SecondsPerTick()

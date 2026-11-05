@@ -16,12 +16,20 @@ which feeds them retail (32-bit) record bytes from memory and checks:
 The build uses AddressSanitizer and UndefinedBehaviorSanitizer. The i386 build
 needs no run: there the generated layout tables are checked at compile time.
 
+--arch aarch64 builds the same test for 64-bit Arm (docs/linux-arm64.md), with
+UndefinedBehaviorSanitizer in trap mode only (no sanitizer runtime to cross-link,
+and AddressSanitizer does not work under qemu-user). On an x86 host it
+cross-compiles and runs the result through --emulator (default
+"qemu-aarch64 -L /usr/aarch64-linux-gnu").
+
 Usage:
-    python3 scripts/tests/test_db_record_conversion.py [--cxx clang++]
+    python3 scripts/tests/test_db_record_conversion.py [--cxx clang++] [--arch x86_64|aarch64] [--emulator CMD]
 """
 
 import argparse
 from pathlib import Path
+import platform
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -32,23 +40,38 @@ SOURCES = (
     ROOT / "src" / "database" / "db_stream.cpp",
     ROOT / "src" / "database" / "db_stream_load.cpp",
 )
-FLAGS = (
-    "-m64", "-std=gnu++20", "-g", "-O1", "-fms-extensions", "-msse2", "-fno-strict-aliasing",
+COMMON_FLAGS = (
+    "-std=gnu++20", "-g", "-O1", "-fms-extensions", "-fno-strict-aliasing",
     "-DDEDICATED", "-DKISAK_DEDICATED", "-DKISAK_MP", "-D_DEBUG", "-D_GNU_SOURCE",
-    "-fsanitize=address,undefined", "-fno-sanitize-recover=undefined", "-fno-omit-frame-pointer",
+    "-fno-sanitize-recover=undefined", "-fno-omit-frame-pointer",
     "-Wno-everything",
 )
+ARCH_FLAGS = {
+    "x86_64": ("-m64", "-msse2", "-fsanitize=address,undefined"),
+    # Matches KISAK_LINUX_ARCH=aarch64: plain char stays signed and no fused
+    # multiply-add, as on x86.
+    "aarch64": ("--target=aarch64-linux-gnu", "-fsigned-char", "-ffp-contract=off", "-fsanitize=undefined", "-fsanitize-trap=undefined"),
+}
+DEFAULT_AARCH64_EMULATOR = "qemu-aarch64 -L /usr/aarch64-linux-gnu"
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--cxx", default="clang++")
     parser.add_argument("--timeout", type=int, default=120)
+    parser.add_argument("--arch", choices=sorted(ARCH_FLAGS), default="x86_64")
+    parser.add_argument("--emulator", default=None,
+                        help="command prefix that runs the test binary (default: none, or qemu-aarch64 "
+                             "for --arch aarch64 on a non-Arm host)")
     args = parser.parse_args()
+    emulator = args.emulator
+    if emulator is None:
+        native_arm = platform.machine().lower() in ("aarch64", "arm64")
+        emulator = DEFAULT_AARCH64_EMULATOR if args.arch == "aarch64" and not native_arm else ""
 
     with tempfile.TemporaryDirectory(prefix="kisak-db-convert-") as temporary:
         binary = Path(temporary) / "db_convert_test"
-        command = [args.cxx, *FLAGS, "-I", str(ROOT / "src"), "-I", str(ROOT / "deps"),
+        command = [args.cxx, *ARCH_FLAGS[args.arch], *COMMON_FLAGS, "-I", str(ROOT / "src"), "-I", str(ROOT / "deps"),
                    *map(str, SOURCES), "-o", str(binary)]
         print("+ " + " ".join(command), flush=True)
         built = subprocess.run(command, check=False)
@@ -56,14 +79,14 @@ def main():
             print("FAIL: the conversion test did not build", flush=True)
             return 1
         try:
-            ran = subprocess.run([str(binary)], check=False, timeout=args.timeout)
+            ran = subprocess.run([*shlex.split(emulator), str(binary)], check=False, timeout=args.timeout)
         except subprocess.TimeoutExpired:
             print(f"FAIL: the conversion test ran longer than {args.timeout}s", flush=True)
             return 1
         if ran.returncode != 0:
             print(f"FAIL: the conversion test exited {ran.returncode}", flush=True)
             return 1
-    print("PASS: 64-bit fastfile record conversion", flush=True)
+    print(f"PASS: 64-bit fastfile record conversion ({args.arch})", flush=True)
     return 0
 
 

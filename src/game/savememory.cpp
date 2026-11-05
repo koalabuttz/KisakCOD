@@ -12,7 +12,7 @@
 #include <server/sv_game.h>
 #include "savedevice.h"     // OpenDevice/CloseDevice/ReadFromDevice/WriteSaveToDevice
 
-struct alignas(4) SaveMemoryGlob
+struct SaveMemoryGlob // 4-aligned on i386 as retail; holds pointers, so 8 on x64
 {
     SaveGame *committedGameSave;
     SaveGame *currentGameSave;

@@ -6,6 +6,9 @@
 #include "directsound.h"
 #include <qcommon/qcommon.h>
 
+// dwSize is sizeof: 28 bytes on x86 as retail, more on x64.
+static_assert(LAYOUT_32BIT(sizeof(_DSCBUFFERDESC) == 28));
+
 dsound_sample_t *s_recordingSamplePtr;
 dsound_sample_t *g_current_sample;
 dsound_sample_t s_recordingSamples[65];
@@ -187,7 +190,7 @@ HRESULT DSOUNDRecord_Start(dsound_sample_t *pRecSample)
     wfx.nAvgBytesPerSec = 2 * g_sound_channels * g_sound_recordFrequency;
     wfx.nBlockAlign = 2 * g_sound_channels;
     wfx.cbSize = 0;
-    dscbd.dwSize = 28;
+    dscbd.dwSize = sizeof(dscbd); // 28 on x86, 40 on x64
     dscbd.dwFlags = 0;
     dscbd.dwBufferBytes = g_sound_recordBufferSize;
     dscbd.dwReserved = 0;

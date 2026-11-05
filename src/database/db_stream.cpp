@@ -156,13 +156,21 @@ void DB_IncStreamPos(int32_t size)
 }
 
 #if KISAK_DB_CONVERT_RECORDS
+void DB_CheckStreamRoom(uint64_t nativeSize, int32_t diskSize, const DBDiskLayout *layout)
+{
+    iassert(g_streamPos);
+    const XBlock *block = &g_streamZoneMem->blocks[g_streamPosIndex];
+    const size_t used = (size_t)(g_streamPos - block->data);
+    if (used > block->size || nativeSize > block->size - used)
+        Com_Error(ERR_DROP, "Fastfile block %u needs more than the %u bytes reserved for 64-bit records "
+            "(%zu used, %llu more for %d retail bytes of %s)",
+            g_streamPosIndex, block->size, used, (unsigned long long)nativeSize, diskSize, layout ? layout->name : "raw data");
+}
+
 void DB_IncStreamPosConverted(int32_t nativeSize, int32_t diskSize, const DBDiskLayout *layout)
 {
     iassert(g_streamPos);
-    XBlock *block = &g_streamZoneMem->blocks[g_streamPosIndex];
-    if (g_streamPos + nativeSize > block->data + block->size)
-        Com_Error(ERR_DROP, "Fastfile block %u needs more than the %u bytes reserved for 64-bit records",
-            g_streamPosIndex, block->size);
+    DB_CheckStreamRoom((uint64_t)(uint32_t)nativeSize, diskSize, layout);
 
     if (diskSize > 0)
     {

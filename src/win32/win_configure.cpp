@@ -99,6 +99,9 @@ void Sys_GetPhysicalCpuCount(SysInfo* sysInfo)
     v15 = -v1 - (v1 - 1);
 LABEL_8:
     v14[4] = v15;
+    // Only an Intel CPU gets the per-core APIC count below. Arm has no cpuid
+    // (and Sys_DetectCpuVendorAndName never reports GenuineIntel anyway).
+#if KISAK_ARCH_X86
     if (!v15)
     {
         int cpuinfo[4]{};
@@ -164,6 +167,7 @@ LABEL_8:
             }
         }
     }
+#endif // KISAK_ARCH_X86
 }
 
 double Sys_BenchmarkGHz()

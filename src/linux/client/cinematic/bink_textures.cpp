@@ -8,7 +8,16 @@
 // current one read-only, because Bink on Windows writes the next frame in place
 // of the current one's neighbour; the shim decodes into the buffer after the
 // current one too, and a read-only lock does not promise that writes land.
+//
+// 64-bit Windows movie builds (KISAK_WIN64_CINEMATICS) use this file in place
+// of RAD's binktextures.cpp for the same reason, with RAD's header and the
+// system d3d9.h.
+#ifdef _WIN32
+#include <d3d9.h>
+#include <binklib/binktextures.h>
+#else
 #include "bink_textures.h"
+#endif
 
 void Lock_Bink_textures(BINKTEXTURESET *set_textures)
 {

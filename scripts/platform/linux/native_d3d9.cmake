@@ -20,7 +20,7 @@
 #                                         native_d3d9_renderer_sources.txt
 #
 # The first three describe the i386 layouts and calling conventions; under
-# KISAK_LINUX_ARCH=x86_64 only the renderer proof is built.
+# KISAK_LINUX_ARCH=x86_64 or aarch64 only the renderer proof is built.
 #
 # scripts/tests/run_native_d3d9_boundary_checks.py runs the same proofs without
 # CMake and compares the two layout views. The dedicated server never sees any
@@ -32,8 +32,8 @@ endif()
 
 message(STATUS "----- KisakCOD native D3D9 boundary (opt-in, DXVK Native) -----")
 
-if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4 AND NOT KISAK_LINUX_ARCH STREQUAL "x86_64")
-    message(FATAL_ERROR "KISAK_BUILD_LINUX_NATIVE_D3D9 needs a 32-bit (-m32) build, or KISAK_LINUX_ARCH=x86_64 for the 64-bit track")
+if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4 AND NOT KISAK_LINUX_ARCH MATCHES "^(x86_64|aarch64)$")
+    message(FATAL_ERROR "KISAK_BUILD_LINUX_NATIVE_D3D9 needs a 32-bit (-m32) build, or KISAK_LINUX_ARCH=x86_64 or aarch64 for the 64-bit tracks")
 endif()
 if(NOT KISAK_DXVK_NATIVE_INCLUDE_DIR)
     message(FATAL_ERROR
@@ -73,7 +73,7 @@ set(KISAK_NATIVE_D3D9_ENGINE_DEFINITIONS
 )
 set(KISAK_NATIVE_D3D9_ENGINE_OPTIONS
     $<$<COMPILE_LANGUAGE:CXX>:-fms-extensions>
-    -msse2 -mfpmath=sse -fno-strict-aliasing
+    ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing
     -ffunction-sections -fdata-sections
     -Wno-c++11-narrowing -Wno-invalid-token-paste
     -Wno-ignored-attributes -Wno-format-security
@@ -84,7 +84,7 @@ set(KISAK_NATIVE_D3D9_ENGINE_OPTIONS
 # split, so the x86_64 track builds the renderer proof only; there every unit
 # that includes the boundary checks that __stdcall is the plain C convention.
 set(native_d3d9_i386_checks "")
-if(NOT KISAK_LINUX_ARCH STREQUAL "x86_64")
+if(KISAK_LINUX_ARCH STREQUAL "i386")
     add_executable(KisakCOD-native-d3d9-boundary-check
         "${TESTS_DIR}/linux_d3d9_boundary/boundary_header_check.cpp")
     target_compile_features(KisakCOD-native-d3d9-boundary-check PRIVATE cxx_std_20)

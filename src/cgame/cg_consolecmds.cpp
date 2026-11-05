@@ -361,7 +361,7 @@ void CG_SetViewPos_f()
                 if (cmd_args.argc[nesting] <= 4)
                     v5 = "";
                 else
-                    v5 = (const char *)*((unsigned int *)cmd_args.argv[nesting] + 4);
+                    v5 = (const char *)cmd_args.argv[nesting][4];
                 v6 = atof(v5);
                 v7 = cmd_args.nesting;
                 v10[1] = *(double *)&v6;
@@ -379,7 +379,7 @@ void CG_SetViewPos_f()
                 if (cmd_args.argc[v7] <= 5)
                     v8 = "";
                 else
-                    v8 = (const char *)*((unsigned int *)cmd_args.argv[v7] + 5);
+                    v8 = (const char *)cmd_args.argv[v7][5];
                 v9 = atof(v8);
                 v10[2] = 0.0;
                 v10[0] = *(double *)&v9;

@@ -1,7 +1,9 @@
 # Native Linux multiplayer client (KisakCOD-mp)
 
 `KisakCOD-mp` is the whole multiplayer game in one native Linux process (i386,
-or x86_64 as described in [linux-x64.md](linux-x64.md#x86_64-multiplayer-client)):
+or x86_64 as described in [linux-x64.md](linux-x64.md#x86_64-multiplayer-client);
+an aarch64 build compiles and passes the asset-free checks, see
+[linux-arm64.md](linux-arm64.md#building-the-aarch64-client)):
 server, game, cgame, client, UI, sound and renderer, as the Windows `KisakCOD-mp`
 target builds them. It is opt-in and off by default. It reached the
 player-spawn milestone: a listen server whose own client joins it over the
@@ -36,6 +38,14 @@ CI links stand-ins for the last two parts instead: the device probe's
 whose `alcOpenDevice` finds no device. For an x86_64 build, add
 `-DKISAK_LINUX_ARCH=x86_64` and use x86_64 builds of the same libraries
 ([linux-x64.md](linux-x64.md#x86_64-multiplayer-client)).
+
+For profiling, add `-DKISAK_LINUX_TRACY=ON`. It builds `KisakCOD-mp` and
+`KisakCOD-sp` with the Tracy profiler (the version `scripts/extern/tracy.cmake`
+fetches), as the dedicated server already is: the engine's `PROF_SCOPED` zones
+become Tracy zones, one `MainThread` zone per frame. It stays idle until a
+profiler of the same Tracy version connects from the same machine, for example
+`tracy-capture -o run.tracy -s 120`. Player builds leave it off. CI builds the
+Debug client with it on, so it keeps compiling and linking.
 
 The SDL3 3.2 SDK build used on the laptop links its own i386 `libpipewire`,
 found next to `libSDL3.so`. The client's run path covers its own libraries,

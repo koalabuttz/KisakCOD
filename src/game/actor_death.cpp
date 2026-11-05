@@ -71,13 +71,12 @@ void Actor_Death_Cleanup(actor_s *self)
 
 actor_think_result_t Actor_Death_Think(actor_s *self)
 {
-    unsigned int v2; // r10
 
     if (!self)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_death.cpp", 79, 0, "%s", "self");
-    v2 = 4 * (self->stateLevel + 8);
     self->pszDebugInfo = "death";
-    if (*(gentity_s **)((char *)&self->ent + v2) == (gentity_s *)200 && level.time - self->iStateTime >= 800)
+    // eSubState[stateLevel] (decompiled as an i386 byte offset from &self->ent).
+    if (self->eSubState[self->stateLevel] == STATE_DEATH_PRECLEANUP && level.time - self->iStateTime >= 800)
     {
         Actor_Death_Cleanup(self);
         Actor_SetSubState(self, STATE_DEATH_POSTCLEANUP);

@@ -160,7 +160,7 @@ void Sys_Mkdir(const char *path)
 BOOL Sys_RemoveDirTree(const char *path)
 {
     bool v2; // [esp+8h] [ebp-250h]
-    int handle; // [esp+1Ch] [ebp-23Ch]
+    intptr_t handle; // [esp+1Ch] [ebp-23Ch]; a pointer-sized find handle on x64
     char childPath[256]; // [esp+20h] [ebp-238h] BYREF
     _finddata64i32_t find; // [esp+120h] [ebp-138h] BYREF
     bool hasError; // [esp+252h] [ebp-6h]
@@ -206,7 +206,7 @@ void Sys_ListFilteredFiles(
 {
     char filename[256]; // [esp+10h] [ebp-338h] BYREF
     _finddata64i32_t findinfo; // [esp+110h] [ebp-238h] BYREF
-    int findhandle; // [esp+23Ch] [ebp-10Ch]
+    intptr_t findhandle; // [esp+23Ch] [ebp-10Ch]
     char search[260]; // [esp+240h] [ebp-108h] BYREF
 
     if (*numfiles < 0x1FFF)
@@ -274,7 +274,7 @@ char **Sys_ListFiles(
     _finddata64i32_t findinfo; // [esp+18h] [ebp-250h] BYREF
     int flag; // [esp+140h] [ebp-128h]
     char **listCopy; // [esp+144h] [ebp-124h]
-    int findhandle; // [esp+148h] [ebp-120h]
+    intptr_t findhandle; // [esp+148h] [ebp-120h]
     char *(*list)[8192]; // [esp+14Ch] [ebp-11Ch]
     int nfiles; // [esp+150h] [ebp-118h] BYREF
     HunkUser *user; // [esp+154h] [ebp-114h]

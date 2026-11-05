@@ -3,7 +3,8 @@
 #
 # Off by default. Builds KisakCOD-mp, the multiplayer game itself (server, game,
 # cgame, client, UI, sound and renderer in one process (i386; x86_64 under
-# KISAK_LINUX_ARCH=x86_64, see docs/linux-x64.md), as the Windows
+# KISAK_LINUX_ARCH=x86_64, see docs/linux-x64.md; aarch64 under
+# KISAK_LINUX_ARCH=aarch64, see docs/linux-arm64.md), as the Windows
 # KisakCOD-mp target is), for the player-spawn milestone: a listen server whose
 # own client joins over the engine's in-process loopback.
 #
@@ -50,6 +51,8 @@
 # ---------------------------------------------------------------------------
 option(KISAK_LINUX_CINEMATICS
     "Play Bink movies in KisakCOD-mp through the Linux Bink shim (needs libavcodec and libavutil, found with pkg-config)" OFF)
+option(KISAK_LINUX_TRACY
+    "Build KisakCOD-mp and KisakCOD-sp with the Tracy profiler, as the dedicated server is: idle until a profiler connects, localhost only. For profiling runs" OFF)
 option(KISAK_BUILD_LINUX_MP_CLIENT
     "Build the native Linux multiplayer client KisakCOD-mp (needs KISAK_BUILD_LINUX_NATIVE_D3D9, KISAK_DXVK_NATIVE_LIBRARY, KISAK_OPENAL_LIBRARY and SDL3)" OFF)
 if(NOT KISAK_BUILD_LINUX_MP_CLIENT)
@@ -214,18 +217,26 @@ set(KISAK_MP_CLIENT_DEFINITIONS
 )
 set(KISAK_MP_CLIENT_OPTIONS
     $<$<COMPILE_LANGUAGE:CXX>:-fms-extensions>
-    -msse2 -mfpmath=sse -fno-strict-aliasing
+    ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing
     -ffunction-sections -fdata-sections
     -Wno-c++11-narrowing -Wno-invalid-token-paste
     -Wno-ignored-attributes -Wno-format-security
 )
+
+# The engine's PROF_SCOPED zones (src/universal/profile.h) become Tracy zones.
+# Off by default: player builds carry no profiler.
+set(KISAK_LINUX_TRACY_DEFINITIONS "")
+if(KISAK_LINUX_TRACY)
+    set(KISAK_LINUX_TRACY_DEFINITIONS TRACY_ENABLE TRACY_ON_DEMAND TRACY_ONLY_LOCALHOST)
+    message(STATUS "KisakCOD-mp: Tracy profiler on (on demand, localhost only)")
+endif()
 
 add_library(KisakCOD-mp-native OBJECT ${mp_client_native_sources})
 add_library(KisakCOD-mp-standin OBJECT ${mp_client_standin_sources} ${mp_client_linux_sources})
 add_library(KisakCOD-mp-own OBJECT ${mp_client_own_sources})
 foreach(mp_target KisakCOD-mp-native KisakCOD-mp-standin KisakCOD-mp-own)
     target_compile_features(${mp_target} PRIVATE cxx_std_20)
-    target_compile_definitions(${mp_target} PRIVATE ${KISAK_MP_CLIENT_DEFINITIONS})
+    target_compile_definitions(${mp_target} PRIVATE ${KISAK_MP_CLIENT_DEFINITIONS} ${KISAK_LINUX_TRACY_DEFINITIONS})
     target_compile_options(${mp_target} PRIVATE ${KISAK_MP_CLIENT_OPTIONS})
     target_include_directories(${mp_target} PRIVATE "${SRC_DIR}" "${DEPS_DIR}" "${tracy_SOURCE_DIR}/public")
     if(KISAK_OPENAL_INCLUDE_DIR)
@@ -288,7 +299,7 @@ add_executable(KisakCOD-mp
     $<TARGET_OBJECTS:KisakCOD-mp-own>
     $<$<BOOL:${KISAK_LINUX_CINEMATICS}>:$<TARGET_OBJECTS:KisakCOD-mp-cinematic>>)
 target_include_directories(KisakCOD-mp PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
-target_compile_options(KisakCOD-mp PRIVATE -msse2 -mfpmath=sse -fno-strict-aliasing)
+target_compile_options(KisakCOD-mp PRIVATE ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing)
 target_link_options(KisakCOD-mp PRIVATE -Wl,--gc-sections
     "-Wl,--version-script=${SCRIPTS_DIR}/platform/linux/mp_client_exports.map")
 set_property(TARGET KisakCOD-mp APPEND PROPERTY LINK_DEPENDS "${SCRIPTS_DIR}/platform/linux/mp_client_exports.map")
@@ -297,6 +308,9 @@ target_link_libraries(KisakCOD-mp PRIVATE
 add_dependencies(KisakCOD-mp update_build_number)
 if(KISAK_LINUX_CINEMATICS)
     target_link_libraries(KisakCOD-mp PRIVATE PkgConfig::KISAK_FFMPEG)
+endif()
+if(KISAK_LINUX_TRACY)
+    target_link_libraries(KisakCOD-mp PRIVATE TracyClient)
 endif()
 
 # The game window's asset-free test, on SDL's dummy video driver. The Win32 layer
@@ -342,4 +356,33 @@ if(KISAK_LINUX_CINEMATICS)
         target_include_directories(KisakCOD-bink-shim-test SYSTEM PRIVATE "${KISAK_OPENAL_INCLUDE_DIR}")
     endif()
     target_link_libraries(KisakCOD-bink-shim-test PRIVATE "${KISAK_OPENAL_LIBRARY}" PkgConfig::KISAK_FFMPEG)
+endif()
+
+# Asset-free check that the SSE2 form of the vertex skinning code, which x64
+# Windows builds use, writes the same bytes as the MMX form. x86 only: Arm skins
+# with the scalar code.
+# Asset-free check of the scalar skinning code Arm builds use: the same output
+# bytes on every architecture, and on x86 the same result as the SSE path.
+add_executable(KisakCOD-skin-scalar-test
+    "${TESTS_DIR}/skinning/skin_scalar_test.cpp"
+    "${SRC_DIR}/gfx_d3d/r_model_skin.cpp"
+    "${SRC_DIR}/universal/com_math.cpp"
+    "${SRC_DIR}/qcommon/com_pack.cpp")
+target_compile_features(KisakCOD-skin-scalar-test PRIVATE cxx_std_20)
+target_compile_definitions(KisakCOD-skin-scalar-test PRIVATE ${KISAK_MP_CLIENT_DEFINITIONS})
+target_compile_options(KisakCOD-skin-scalar-test PRIVATE ${KISAK_MP_CLIENT_OPTIONS} -O2 -Wno-missing-declarations)
+target_include_directories(KisakCOD-skin-scalar-test PRIVATE "${SRC_DIR}" "${DEPS_DIR}" "${tracy_SOURCE_DIR}/public")
+if(KISAK_OPENAL_INCLUDE_DIR)
+    target_include_directories(KisakCOD-skin-scalar-test SYSTEM PRIVATE "${KISAK_OPENAL_INCLUDE_DIR}")
+endif()
+# r_model_skin.cpp's command entry point reaches the renderer; only the
+# skinning functions are kept.
+target_link_options(KisakCOD-skin-scalar-test PRIVATE -Wl,--gc-sections)
+
+if(NOT KISAK_LINUX_ARCH STREQUAL "aarch64")
+    add_executable(KisakCOD-skin-sse2-test "${TESTS_DIR}/skinning/skin_sse2_test.cpp")
+    target_compile_features(KisakCOD-skin-sse2-test PRIVATE cxx_std_20)
+    target_compile_definitions(KisakCOD-skin-sse2-test PRIVATE ${KISAK_MP_CLIENT_DEFINITIONS})
+    target_compile_options(KisakCOD-skin-sse2-test PRIVATE ${KISAK_MP_CLIENT_OPTIONS} -O2 -Wno-missing-declarations)
+    target_include_directories(KisakCOD-skin-sse2-test PRIVATE "${SRC_DIR}" "${DEPS_DIR}" "${tracy_SOURCE_DIR}/public")
 endif()
