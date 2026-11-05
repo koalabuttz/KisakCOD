@@ -44,6 +44,7 @@ what is verified and where, and the next milestone. Build steps are in the
 - [World device probe](linux-world-device-probe.md) (opt-in): the graphics zones and one map loaded onto that device through the engine's own loaders, and every device object they create checked
 - [World draw probe](linux-world-draw-probe.md) (opt-in): views of that map drawn through the engine's own renderer (`R_Init`, `R_LoadWorld`, `R_RenderScene`, the backend's material passes), read back and checked
 - [Multiplayer client](linux-mp-client.md) (opt-in): `KisakCOD-mp`, the whole game in one native process; links, starts and takes window input; on the laptop a listen server on mp_crash spawns the player, who can move and shoot
+- [Singleplayer game](linux-sp-game.md) (opt-in): `KisakCOD-sp`, built like the multiplayer client from the singleplayer lists; links and starts, no level loaded yet
 - [Free camera](linux-free-camera.md) (groundwork, not yet wired): the host camera, its key bindings and the frame owner that sequences input, device reset, resize, map reload and shutdown around a `SceneRenderer`
 - [Standalone renderer build/run](../tests/linux_renderer/README.md)
 

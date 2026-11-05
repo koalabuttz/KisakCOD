@@ -15,11 +15,17 @@
 //
 // Nothing here pretends a service works. Each entry leaves this file when the
 // real service is ported; see docs/linux-mp-client.md.
+//
+// KisakCOD-sp (the singleplayer game) links this file too. Singleplayer has no
+// HTTP downloads, voice or net_listen command, so those entries are
+// multiplayer-only; the rest it calls the same way. See docs/linux-sp-game.md.
 
 #include <universal/q_shared.h>
 #include <qcommon/qcommon.h>
+#ifdef KISAK_MP
 #include <qcommon/dl_main.h>
 #include <client_mp/client_mp.h>
+#endif
 #include <database/database.h>
 #include <gfx_d3d/r_material.h>
 #include <win32/win_local.h>
@@ -56,6 +62,7 @@ int Sys_UpdateDebugSocket()
     return 0;
 }
 
+#ifdef KISAK_MP
 void Sys_Listen_f()
 {
     Com_PrintWarning(CON_CHANNEL_DONT_FILTER,
@@ -125,6 +132,8 @@ bool Voice_IsClientTalking(uint32_t clientNum)
     return false;
 }
 
+#endif // KISAK_MP
+
 // win_wndproc.cpp's storage; R_RegisterDvars registers all three. The window
 // procedure itself is src/linux/client/mp_client_input.cpp.
 const dvar_t *r_fullscreen;
@@ -173,7 +182,9 @@ KISAK_UNREACHABLE(void, Sys_WriteDebugSocketInt, (int), KISAK_REMOTE_DEBUGGER)
 KISAK_UNREACHABLE(void, Sys_WriteDebugSocketMessageType, (unsigned __int8), KISAK_REMOTE_DEBUGGER)
 KISAK_UNREACHABLE(void, Sys_WriteDebugSocketString, (char *), KISAK_REMOTE_DEBUGGER)
 
+#ifdef KISAK_MP
 // HTTP download progress, reached only while a download that began is running.
 #define KISAK_HTTP "an HTTP download in progress (libcurl)"
 KISAK_UNREACHABLE(int, DL_DownloadLoop, (), KISAK_HTTP)
 KISAK_UNREACHABLE(bool, DL_DLIsMotd, (), KISAK_HTTP)
+#endif // KISAK_MP
