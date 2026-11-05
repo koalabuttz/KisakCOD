@@ -310,3 +310,12 @@ jobs:
           path: artifacts/
           if-no-files-found: warn
           retention-days: 7
+
+      # The x64 executables with their FFmpeg DLLs, for a run on a Windows
+      # machine (the game files are not part of it).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KisakCOD-x64-Release
+          path: ${{ github.workspace }}/bin
+          compression-level: 9
+          retention-days: 3
