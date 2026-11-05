@@ -1091,7 +1091,9 @@ jobs:
           grep -qx 'libopenal_unavailable.so' "$RUNNER_TEMP/arm64-mp-client-needed.txt"
           grep -Eqx 'libavcodec\.so\.[0-9]+' "$RUNNER_TEMP/arm64-mp-client-needed.txt"
           grep -Eqx 'libavutil\.so\.[0-9]+' "$RUNNER_TEMP/arm64-mp-client-needed.txt"
-          if grep -Ev '^(libSDL3\.so\.0|libd3d9_unavailable\.so|libopenal_unavailable\.so|libavcodec\.so\.[0-9]+|libavutil\.so\.[0-9]+|libstdc\+\+\.so\.6|libm\.so\.6|libgcc_s\.so\.1|libc\.so\.6|libpthread\.so\.0|libdl\.so\.2)$' \
+          # Arm glibc keeps the stack-protector canary (__stack_chk_guard) in the
+          # dynamic loader, so a -fstack-protector build lists it too.
+          if grep -Ev '^(libSDL3\.so\.0|libd3d9_unavailable\.so|libopenal_unavailable\.so|libavcodec\.so\.[0-9]+|libavutil\.so\.[0-9]+|libstdc\+\+\.so\.6|libm\.so\.6|libgcc_s\.so\.1|libc\.so\.6|libpthread\.so\.0|libdl\.so\.2|ld-linux-aarch64\.so\.1)$' \
               "$RUNNER_TEMP/arm64-mp-client-needed.txt"; then
             echo "the multiplayer client needs a library beyond SDL3, D3D9, OpenAL, libavcodec and the runtimes" >&2
             exit 1
