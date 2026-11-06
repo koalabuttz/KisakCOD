@@ -65,6 +65,22 @@ FetchContent_Declare (
 )
 FetchContent_MakeAvailable ( openal )
 
+# The tag above is mutable; refuse a checkout that is not the commit it named
+# when this pin was set (1.25.2 = b2c48f7718ef).  A source directory supplied
+# through FETCHCONTENT_SOURCE_DIR_OPENAL without git metadata is not checked.
+set(KISAK_OPENAL_COMMIT b2c48f7718ef3fcf67921a8b6534c4914e328970)
+find_package(Git QUIET)
+if(GIT_EXECUTABLE AND EXISTS "${openal_SOURCE_DIR}/.git")
+	execute_process(
+		COMMAND "${GIT_EXECUTABLE}" -C "${openal_SOURCE_DIR}" rev-parse HEAD
+		OUTPUT_VARIABLE KISAK_OPENAL_HEAD
+		OUTPUT_STRIP_TRAILING_WHITESPACE
+		RESULT_VARIABLE KISAK_OPENAL_REV_RESULT)
+	if(NOT KISAK_OPENAL_REV_RESULT EQUAL 0 OR NOT KISAK_OPENAL_HEAD STREQUAL KISAK_OPENAL_COMMIT)
+		message(FATAL_ERROR "openal checkout is ${KISAK_OPENAL_HEAD}, expected ${KISAK_OPENAL_COMMIT} (1.25.2); the tag may have moved")
+	endif()
+endif()
+
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     # OpenAL enables -Werror on its own target; keep Clang's function-effects
     # diagnostics as warnings without changing flags for unrelated targets.

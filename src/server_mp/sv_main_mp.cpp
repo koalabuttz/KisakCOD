@@ -4,6 +4,7 @@
 
 #include <universal/q_shared.h>
 #include "server_mp.h"
+#include "sv_query_limit.h"
 
 #include <qcommon/qcommon.h>
 #include <qcommon/mem_track.h>
@@ -19,6 +20,8 @@
 #include <universal/timing.h>
 #include <script/scr_debugger.h>
 #include <universal/profile.h>
+
+#include <ctime>
 
 #if defined(WIN32) || defined(__linux__)
 #include <win32/win_steam.h>
@@ -637,6 +640,46 @@ void SVC_Info(netadr_t from)
     NET_OutOfBandPrint(NS_SERVER, from, response);
 }
 
+bool Sys_IsLANAddress_IgnoreSubnet(netadr_t adr);
+
+// KISAK: retail answered every out-of-band query from any claimed source, so the
+// server worked as a DDoS reflector.  See sv_query_limit.h for the limits.
+static SvQueryLimits sv_queryLimits;
+static bool sv_queryLimitsSalted;
+
+static SvQueryLimits *SV_QueryLimits()
+{
+    if (!sv_queryLimitsSalted)
+    {
+        // The salt only keeps outsiders from aiming spoofed addresses at one
+        // bucket chain; ASLR and the clock are enough for that.
+        sv_queryLimits.salt = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&sv_queryLimits))
+            ^ (static_cast<uint32_t>(time(nullptr)) * 2654435761u) ^ Sys_Milliseconds();
+        sv_queryLimitsSalted = true;
+    }
+    return &sv_queryLimits;
+}
+
+bool SV_QueryLimitAllows(netadr_t from, int kind)
+{
+    // Only IPv4 sources reach the buckets.  Queries from private and loopback
+    // addresses are not limited (as in CoD4x), so LAN browsers and local tools
+    // behave as before.  rcon is limited for every IPv4 source: a correct
+    // password always gets through its own address's allowance, and a LAN
+    // host should not get unlimited password guesses.
+    if (from.type != NA_IP)
+        return true;
+    if (kind != SV_QUERY_RCON && Sys_IsLANAddress_IgnoreSubnet(from))
+        return true;
+    return SV_QueryLimitAllow(SV_QueryLimits(), static_cast<SvQueryKind>(kind),
+                              SV_QueryLimitAddressKey(from.ip), Sys_Milliseconds());
+}
+
+bool SV_RconFailureReplyAllowed()
+{
+    return SV_RconFailureReplyAllow(SV_QueryLimits(), Sys_Milliseconds());
+}
+
 void SV_ConnectionlessPacket(netadr_t from, msg_t *msg)
 {
     const char *c; // [esp+8h] [ebp-14h]
@@ -693,7 +736,8 @@ void SV_ConnectionlessPacket(netadr_t from, msg_t *msg)
     if (!I_stricmp(c, "getstatus"))
     {
         SV_UpdateLastTimeMasterServerCommunicated(from);
-        SVC_Status(from);
+        if (SV_QueryLimitAllows(from, SV_QUERY_STATUS))
+            SVC_Status(from);
     }
     else if (!I_stricmp(c, "v"))
     {
@@ -701,13 +745,15 @@ void SV_ConnectionlessPacket(netadr_t from, msg_t *msg)
     }
     else if (!I_stricmp(c, "getinfo"))
     {
-        SVC_Info(from);
+        if (SV_QueryLimitAllows(from, SV_QUERY_INFO))
+            SVC_Info(from);
         SV_UpdateLastTimeMasterServerCommunicated(from);
     }
     else if (!I_stricmp(c, "getchallenge"))
     {
         SV_UpdateLastTimeMasterServerCommunicated(from);
-        SV_GetChallenge(from);
+        if (SV_QueryLimitAllows(from, SV_QUERY_CHALLENGE))
+            SV_GetChallenge(from);
     }
     else if (!I_stricmp(c, "connect"))
     {

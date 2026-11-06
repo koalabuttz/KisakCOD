@@ -975,7 +975,7 @@ void CL_DisconnectError(char *message)
     v3 = SEH_SafeTranslateString(message);
     v1 = SEH_SafeTranslateString((char*)"EXE_SERVERDISCONNECTREASON");
     v2 = UI_ReplaceConversionString(v1, v3);
-    Com_Error(ERR_SERVERDISCONNECT, v2);
+    Com_Error(ERR_SERVERDISCONNECT, "%s", v2);
 }
 
 void CL_UpdateInfoPacket(netadr_t from)
@@ -2203,7 +2203,7 @@ void CL_PlayDemo_f()
             if (!clc->demofile)
             {
                 v1 = va("EXE_ERR_NOT_FOUND %s", name);
-                Com_Error(ERR_DROP, v1);
+                Com_Error(ERR_DROP, "%s", v1);
             }
             v2 = Cmd_Argv(1);
             I_strncpyz(clc->demoName, v2, 64);
@@ -2536,7 +2536,7 @@ void CL_UpdateLevelHunkUsage()
         if (!handle)
         {
             v1 = va("EXE_ERR_CANT_CREATE %s", memlistfile);
-            Com_Error(ERR_DROP, v1);
+            Com_Error(ERR_DROP, "%s", v1);
         }
         len = strlen(outbuf);
         v2 = FS_Write(outbuf, len, handle);

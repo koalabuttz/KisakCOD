@@ -364,7 +364,7 @@ void Sys_OpenURL(const char *url, int doexit)
 	if (!ShellExecuteA(0, "open", url, 0, 0, 9))
 	{
 		v2 = va("EXE_ERR_COULDNT_OPEN_URL", url);
-		Com_Error(ERR_DROP, v2);
+		Com_Error(ERR_DROP, "%s", v2);
 	}
 	wnd = GetForegroundWindow();
 	if (wnd)
@@ -391,7 +391,7 @@ void Sys_SpawnQuitProcess()
 			error = GetLastError();
 			FormatMessageA(0x1300u, 0, error, 0x400u, (LPSTR)&msgBuf, 0, 0);
 			v0 = va("EXE_ERR_COULDNT_START_PROCESS", sys_exitCmdLine, msgBuf, error);
-			Com_Error(ERR_DROP, v0);
+			Com_Error(ERR_DROP, "%s", v0);
 		}
 	}
 }

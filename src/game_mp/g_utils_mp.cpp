@@ -112,7 +112,7 @@ int G_FindConfigstringIndex(char *name, int start, int max, int create, const ch
                     Com_Printf(CON_CHANNEL_SERVER, "%i: %s\n", ic, SL_ConvertToString(ConfigstringConst));
                 }
                 v9 = va("G_FindConfigstringIndex: overflow (%d): %s", start, name);
-                Com_Error(ERR_DROP, v9);
+                Com_Error(ERR_DROP, "%s", v9);
             }
             SV_SetConfigstring(ic + start, name);
             return ic;

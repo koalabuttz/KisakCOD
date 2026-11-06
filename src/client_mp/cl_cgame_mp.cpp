@@ -294,7 +294,7 @@ int32_t CL_CGameNeedsServerCommand(int32_t localClientNum, int32_t serverCommand
                 v4 = SEH_SafeTranslateString((char*)"EXE_SERVERDISCONNECTREASON");
                 v5 = UI_ReplaceConversionString(v4, v9);
                 v6 = va("%s", v5);
-                Com_Error(ERR_SERVERDISCONNECT, v6);
+                Com_Error(ERR_SERVERDISCONNECT, "%s", v6);
             }
             else if (argc >= 2)
             {   

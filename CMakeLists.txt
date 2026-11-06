@@ -96,7 +96,7 @@ option(KISAK_WIN64_CINEMATICS "64-bit Windows: play Bink movies through the FFmp
 # (scripts/extern/tracy.cmake), so the engine's PROF_SCOPED zones show in a
 # Tracy capture. It stays idle until a profiler connects from the same machine.
 # For profiling runs; player builds leave it off. Linux has KISAK_LINUX_TRACY
-# for its game clients (its dedicated server always builds with Tracy).
+# for its game clients and dedicated server.
 option(KISAK_WIN_TRACY "Windows: build the games with the Tracy profiler (idle until a profiler connects, localhost only). For profiling runs" OFF)
 
 # Set to ON to build the sound system against OpenAL instead of Miles/MSS.

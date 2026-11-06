@@ -37,20 +37,28 @@ target_compile_features(KisakCOD-dedi PRIVATE cxx_std_20)
 target_compile_definitions(KisakCOD-dedi PRIVATE
     KISAK_MP KISAK_DEDICATED DEDICATED
     _FILE_OFFSET_BITS=64 _GNU_SOURCE
-    TRACY_ENABLE TRACY_ON_DEMAND TRACY_ONLY_LOCALHOST
     $<$<CONFIG:Debug>:_DEBUG>
 )
+# The Tracy profiler is opt-in, as for the game clients: KISAK_LINUX_TRACY
+# (declared with the client in mp_client.cmake, read here from the cache).  A
+# Tracy build listens on 127.0.0.1:8086 and answers source-file requests from
+# any local user, so player and server builds leave it off.
+if(KISAK_LINUX_TRACY)
+    target_compile_definitions(KisakCOD-dedi PRIVATE TRACY_ENABLE TRACY_ON_DEMAND TRACY_ONLY_LOCALHOST)
+    message(STATUS "KisakCOD-dedi: Tracy profiler on (on demand, localhost only)")
+endif()
 target_include_directories(KisakCOD-dedi PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
 target_compile_options(KisakCOD-dedi PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:-fms-extensions>
     ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing
     -ffunction-sections -fdata-sections
     -Wno-c++11-narrowing -Wno-invalid-token-paste
-    -Wno-ignored-attributes -Wno-format-security
+    -Wno-ignored-attributes -Werror=format-security
+    ${KISAK_LINUX_HARDENING_OPTIONS}
 )
 # Shared source files also contain client-only helpers. Discard unreachable
 # functions rather than linking their Windows presentation dependencies.
-target_link_options(KisakCOD-dedi PRIVATE -Wl,--gc-sections)
+target_link_options(KisakCOD-dedi PRIVATE -Wl,--gc-sections ${KISAK_LINUX_HARDENING_LINK_OPTIONS})
 find_package(Threads REQUIRED)
 target_link_libraries(KisakCOD-dedi PRIVATE Threads::Threads ${CMAKE_DL_LIBS})
 add_dependencies(KisakCOD-dedi update_build_number)
@@ -155,7 +163,7 @@ if(KISAK_BUILD_LINUX_CLIENT_CORE)
         ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing
         -ffunction-sections -fdata-sections
         -Wno-c++11-narrowing -Wno-invalid-token-paste
-        -Wno-ignored-attributes -Wno-format-security
+        -Wno-ignored-attributes -Werror=format-security
     )
 
     # Asset-free test for the real netchan command codec. It compiles the two
@@ -243,7 +251,7 @@ if(KISAK_BUILD_LINUX_CLIENT_CORE)
             ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing
             -ffunction-sections -fdata-sections
             -Wno-c++11-narrowing -Wno-invalid-token-paste
-            -Wno-ignored-attributes -Wno-format-security
+            -Wno-ignored-attributes -Werror=format-security
         )
         target_link_options(${client_test} PRIVATE -Wl,--gc-sections)
     endforeach()
@@ -535,7 +543,7 @@ if(KISAK_BUILD_LINUX_WINDOW_HOST)
         target_compile_options(${window_target} PRIVATE
             -fms-extensions ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing
             -ffunction-sections -fdata-sections
-            -Wno-c++11-narrowing -Wno-invalid-token-paste -Wno-ignored-attributes -Wno-format-security
+            -Wno-c++11-narrowing -Wno-invalid-token-paste -Wno-ignored-attributes -Werror=format-security
         )
         target_link_libraries(${window_target} PRIVATE ${KISAK_SDL_TARGET} Threads::Threads)
         target_link_options(${window_target} PRIVATE -Wl,--gc-sections)

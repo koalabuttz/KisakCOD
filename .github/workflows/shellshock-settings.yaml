@@ -31,6 +31,10 @@ on:
       - scripts/tests/test_shellshock_view_rect.py
       - .github/workflows/shellshock-settings.yaml
 
+# Read-only token: these jobs only check out, build and upload artifacts.
+permissions:
+  contents: read
+
 jobs:
   settings:
     runs-on: ubuntu-latest

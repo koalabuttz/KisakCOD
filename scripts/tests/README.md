@@ -38,8 +38,11 @@ client compatibility.
 `src/server_mp/sv_remote_input.h` rules 64- and 32-bit: `rcon` is refused until
 `rcon_password` is set and matches exactly (an unset password used to accept
 `rcon "" <command>` from any address), and a `download <name>` client command
-is served only for a plain relative `.iwd`/`.ff` path with no `..`, `:` or
-leading separator (any file under `fs_homepath` used to be downloadable).
+is served only for a plain relative `.iwd`/`.ff` path of printable ASCII with
+no `..`, `:`, `;`, `"`, leading separator or component ending in `.` or a space
+(any file under `fs_homepath` used to be downloadable). It also runs the
+`src/server_mp/sv_query_limit.h` leaky buckets that rate-limit `getstatus`,
+`getinfo`, `getchallenge` and `rcon` replies per address and globally.
 
 `test_server_test_clients.py` checks the extracted internal bot functions with
 controlled connection and movement services; the native runner runs its 32-bit
