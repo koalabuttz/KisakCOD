@@ -77,6 +77,10 @@ These came before the playable client and still build and run in CI:
   units into small asset-free tests.
 - The [standalone renderer](../tests/linux_renderer/README.md) replays single
   exported world surfaces and checks pixels against CPU predictions.
+- The [Vulkan core and window probe](vulkan-core.md) (`-DKISAK_BUILD_VULKAN_PROBE=ON`)
+  open a window and clear, present and resize it through Vulkan. It is the
+  first piece of the Vulkan back end; no game rendering goes through it yet.
+  Hosted CI runs it on lavapipe; not yet run on a GPU.
 
 ## Checks before a push
 

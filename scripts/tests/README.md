@@ -419,6 +419,20 @@ cmake --build build-x64 --target KisakCOD-dedi
 python3 scripts/tests/test_linux_bootstrap.py --arch x86_64 bin/KisakCOD-dedi
 ```
 
+## Vulkan window probe
+
+```sh
+python3 scripts/tests/test_vulkan_window_probe.py --binary <build>/KisakCOD-vulkan-probe \
+  [--video-driver offscreen] [--validation require|auto|off]
+```
+
+Runs the opt-in `KisakCOD-vulkan-probe` (`-DKISAK_BUILD_VULKAN_PROBE=ON`): bad
+arguments, the device list, a fail-closed run with no Vulkan driver visible,
+and a full run that resizes the window, reads back a cleared frame and must
+have no validation errors. It needs SDL3, a Vulkan loader and a driver; hosted
+CI uses Mesa's lavapipe through SDL's offscreen video driver, so no GPU or
+display is involved. See [docs/vulkan-core.md](../../docs/vulkan-core.md).
+
 ## Free camera checks
 
 ```sh
