@@ -70,7 +70,7 @@ actor_think_result_t Actor_Negotiation_Think(actor_s *pSelf)
     else
     {
         HasNegotiationNode = (pathnode_t *)Path_HasNegotiationNode(&pSelf->Path);
-        if ((_BYTE)HasNegotiationNode)
+        if (HasNegotiationNode)
         {
             if (pSelf->Path.wNegotiationStartNode >= pSelf->Path.wPathLen)
                 MyAssertHandler(

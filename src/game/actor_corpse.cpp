@@ -34,16 +34,15 @@ int G_GetActorCorpseIndex(gentity_s *ent)
 {
     int number; // r9
     int result; // r3
-    int *p_entnum; // r11
 
+    // Indexed: the decompiled loop stepped an int pointer by the 32-byte i386
+    // corpseInfo_t (it holds an XAnimTree_s pointer, so 40 bytes on x64).
     number = ent->s.number;
     result = 0;
-    p_entnum = &g_scr_data.actorCorpseInfo[0].entnum;
-    while (*p_entnum != number)
+    while (g_scr_data.actorCorpseInfo[result].entnum != number)
     {
-        p_entnum += 8;
         ++result;
-        if ((int)p_entnum >= (int)&g_scr_data.actorBackup)
+        if (result >= (int)ARRAY_COUNT(g_scr_data.actorCorpseInfo))
         {
             if (!alwaysfails)
                 MyAssertHandler(
@@ -192,7 +191,6 @@ void G_RemoveActorCorpses(unsigned int allowedCorpseCount)
 {
     signed int v2; // r28
     int actorCorpseCount; // r10
-    int *p_entnum; // r30
 
     if (allowedCorpseCount > 0x10)
         MyAssertHandler(
@@ -206,16 +204,14 @@ void G_RemoveActorCorpses(unsigned int allowedCorpseCount)
     actorCorpseCount = level.actorCorpseCount;
     if ((int)allowedCorpseCount < level.actorCorpseCount)
     {
-        p_entnum = &g_scr_data.actorCorpseInfo[allowedCorpseCount].entnum;
         do
         {
-            if (*p_entnum >= 0)
+            if (g_scr_data.actorCorpseInfo[v2].entnum >= 0)
             {
-                G_FreeEntity(&level.gentities[*p_entnum]);
+                G_FreeEntity(&level.gentities[g_scr_data.actorCorpseInfo[v2].entnum]);
                 actorCorpseCount = level.actorCorpseCount;
             }
             ++v2;
-            p_entnum += 8;
         } while (v2 < actorCorpseCount);
     }
     level.actorCorpseCount = allowedCorpseCount;
@@ -302,7 +298,6 @@ void G_PruneLoadedCorpses()
     signed int v2; // r28
     int v3; // r11
     unsigned int *v4; // r9
-    int *p_entnum; // r10
     gentity_s *ent; // r30
     int v7; // r27
     int *v8; // r29
@@ -325,18 +320,16 @@ void G_PruneLoadedCorpses()
     v2 = 0;
     v3 = 0;
     v4 = (unsigned int*)corpseIndices;
-    p_entnum = &g_scr_data.actorCorpseInfo[0].entnum;
     do
     {
-        if (*p_entnum >= 0)
+        if (g_scr_data.actorCorpseInfo[v3].entnum >= 0)
         {
             *v4 = v3;
             ++v2;
             ++v4;
         }
-        p_entnum += 8;
         ++v3;
-    } while ((int)p_entnum < (int)&g_scr_data.actorBackup);
+    } while (v3 < (int)ARRAY_COUNT(g_scr_data.actorCorpseInfo));
     if (v2 > 6)
     {
         ent = G_Find(0, offsetof(gentity_s, classname), scr_const.player);

@@ -4567,7 +4567,7 @@ void GScr_SetCursorHint(scr_entref_t entref)
                 break;
             Com_Printf(CON_CHANNEL_PARSERSCRIPT, "%s\n", *v8++);
         //} while ((int)v8 < (int)&functions[9].actionFunc);
-        } while ((int)v8 < (uintptr_t)&hintStrings[4]);
+        } while ((uintptr_t)v8 < (uintptr_t)&hintStrings[4]);
         v9 = va("%s is not a valid hint type. See above for list of valid hint types\n", v4);
         Scr_Error(v9);
     }
@@ -9482,10 +9482,13 @@ void GScr_ViewKick(scr_entref_t entref)
         Scr_Error(v2);
     }
     Scr_GetVector(1u, v5);
+    // Retail wrote damage_from as float 11490 past ps.commandTime (i386 offset).
+    static_assert(LAYOUT_32BIT(offsetof(gclient_s, damage_from) - offsetof(gclient_s, ps.commandTime) == 11490 * 4));
+    static_assert(offsetof(playerState_s, origin) - offsetof(playerState_s, commandTime) == 7 * 4);
     p_commandTime = (float *)&PlayerEntity->client->ps.commandTime;
-    p_commandTime[11490] = p_commandTime[7] - v5[0];
-    p_commandTime[11491] = p_commandTime[8] - v5[1];
-    p_commandTime[11492] = p_commandTime[9] - v5[2];
+    PlayerEntity->client->damage_from[0] = p_commandTime[7] - v5[0];
+    PlayerEntity->client->damage_from[1] = p_commandTime[8] - v5[1];
+    PlayerEntity->client->damage_from[2] = p_commandTime[9] - v5[2];
 }
 
 void GScr_GetEntnum(scr_entref_t entref)
@@ -10035,7 +10038,7 @@ void GScr_OpenFile()
         {
             ++openScriptIOFileHandles;
             ++v2;
-            if ((int)openScriptIOFileHandles >= (int)level.openScriptIOFileBuffers)
+            if ((uintptr_t)openScriptIOFileHandles >= (uintptr_t)level.openScriptIOFileBuffers)
                 goto LABEL_7;
         }
         v4 = v2;
