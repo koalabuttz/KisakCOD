@@ -36,15 +36,22 @@ build:
 | Session | Play | Misses | Mean size |
 | --- | --- | --- | --- |
 | Windows PC, CI build | ~5 min by hand | 32 (34 error lines) | 0.47 units |
-| Laptop, i386, scripted moves | run, strafe, turn, jump, sprint, twice | 1 | 0.3 units |
 | Laptop, i386, by hand | ~2.5 min, incl. concussion grenades | 19 | 0.65 units |
+| Laptop, i386, scripted moves | run, strafe, turn, jump, sprint, two passes | 0 | - |
+| Laptop, x86_64, scripted moves | the same two passes | 31 | 0.14 units (max 0.34) |
 
 Misses per minute by hand are about the same (6.4 Windows, 7.6 Linux). The
-x86_64 client was compared side by side with i386 by eye only. Two build
-settings keep the movement math the same as the Windows build, which matters
-because the client replays the server's movement code: x86 Linux builds use SSE
-float math (`-msse2 -mfpmath=sse`, no x87 excess precision), and aarch64 builds
-use `-ffp-contract=off` (no fused multiply-add).
+scripted rows are laptop run 13 (2026-11-06, master `342e6b5`), with the moves
+typed into the console: CoD4 runs an `exec`'d config all at once, so `wait`
+lines in it have no effect. The x86_64 player spawned somewhere else and spent
+most of the script pushed against obstacles (it moved far less than the i386 player);
+29 of its 31 misses came in one sprint phase. So the x86_64 row is not a clean
+comparison with i386, but every miss was smaller than the Windows average.
+
+Two build settings keep the movement math the same as the Windows build, which
+matters because the client replays the server's movement code: x86 Linux builds
+use SSE float math (`-msse2 -mfpmath=sse`, no x87 excess precision), and aarch64
+builds use `-ffp-contract=off` (no fused multiply-add).
 
 ## What does not work yet
 
