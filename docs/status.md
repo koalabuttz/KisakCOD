@@ -1,7 +1,8 @@
 # Linux port status
 
-Last updated 2026-11-05 (master `7160b20` plus the arm64 dedicated server and client). This page is the current state of
-the native Linux port. The [docs index](README.md) lists the detailed guides;
+Last updated 2026-11-06 (master `353d615`). This page is the current state of
+the native Linux port and the other platform builds, the open pull requests and
+the roadmap. The [docs index](README.md) lists the detailed guides;
 older handoffs are in [history](history/README.md) and are not current.
 
 Results marked *laptop* come from one developer machine (Intel Raptor Lake-U,
@@ -21,6 +22,9 @@ without a GPU or game data, against stand-in D3D9 and OpenAL libraries.
 | Multiplayer client, aarch64 | the client options with `-DKISAK_LINUX_ARCH=aarch64` | Builds and passes the asset-free client checks (qemu and hosted Arm CI) against a D3D9 stand-in; no aarch64 DXVK build yet, so it has not drawn a frame. [Guide](linux-arm64.md#building-the-aarch64-client) |
 | Movies | `-DKISAK_LINUX_CINEMATICS=ON` | Bink movies play through an FFmpeg-backed shim on i386 and x86_64 (laptop). Off by default. [Guide](linux-cinematics.md) |
 | Singleplayer `KisakCOD-sp`, i386 | `-DKISAK_BUILD_LINUX_SP_GAME=ON` | killhouse and cargoship load, leave the pregame by themselves and play about a minute each, clean quit (laptop). [Guide](linux-sp-game.md) |
+| Windows x64 | MSVC `KISAK_WIN64` | sp, mp and dedi build and link (CI job "MSVC x64 build"); opt-in FFmpeg movies. On the Windows PC, mp_crash loads to class select and the dedicated server hosts bots. Singleplayer still crashes during level load (fixes in PR 95). |
+| Windows ARM64 | MSVC `KISAK_WIN_ARM64` | sp, mp and dedi build and start up to the missing-game-data error on hosted Windows on Arm. Not run with game data. [arm64 track](linux-arm64.md) |
+| Profiling | `KISAK_LINUX_TRACY` / `KISAK_WIN_TRACY` | Opt-in Tracy builds of the game clients on Linux and Windows. |
 
 The client builds need DXVK Native, SDL3 3.2.10 or newer and OpenAL for the
 target architecture; the guides above give the CMake lines. The game files
@@ -61,9 +65,10 @@ builds use `-ffp-contract=off` (no fused multiply-add).
   ([details](linux-dedicated.md#local-connection-testing-without-steam-authentication)).
   This stays refused until a real provider exists.
 - **x86_64 singleplayer.** The 64-bit configuration refuses the SP game for now.
-- **Windows x64.** The MSVC x64 compile census runs on master
-  ([census](linux-x64.md#windows-msvc-x64-census)); the first compile fixes
-  are in review (PR 81). No 64-bit Windows binary links yet.
+- **Windows x64 singleplayer.** Each PC run gets one step further into level
+  load; the fixes so far are in PR 95.
+- **macOS.** The dedicated server builds for arm64 and x86_64 Macs in a draft
+  (PR 104); no client yet.
 - **arm64 client and Windows ARM64.** The aarch64 multiplayer client builds and
   passes its asset-free checks (qemu and hosted Arm CI) but has not drawn a
   frame: no aarch64 DXVK build yet. Windows ARM64 builds sp, mp and dedi with
@@ -72,6 +77,14 @@ builds use `-ffp-contract=off` (no fused multiply-add).
 - **HTTP downloads, voice chat and the remote script debugger** are missing from
   the Linux client; each answers as Windows does when that service is absent
   ([list](linux-mp-client.md#what-it-does-not-have-yet)).
+
+## Security
+
+The 2026-11-01 security audit is closed: PR 18 fixed findings 1 to 3 and PR 106
+(2026-11-06) fixed findings 4 to 11, widened the download file name check and
+built the Linux games and server with `_FORTIFY_SOURCE=2` and the usual
+hardening flags (laptop soak run passed). PR 106 also made CI retry slow apt
+mirrors instead of timing out.
 
 ## Other Linux pieces
 
@@ -88,6 +101,51 @@ These came before the playable client and still build and run in CI:
   open a window and clear, present and resize it through Vulkan. It is the
   first piece of the Vulkan back end; no game rendering goes through it yet.
   Hosted CI runs it on lavapipe; not yet run on a GPU.
+
+## Open pull requests
+
+As of 2026-11-06. Hosted CI is red on the latest run of each; each needs
+master merged in and a green run before it can merge.
+
+| PR | What | Waits on |
+| --- | --- | --- |
+| 85 | Steam login on Linux through the running Steam client (opt-in) | Laptop game runs 1 and 2 passed (auth, reconnect, refusal without Steam, clean quit). Needs master merged and green CI. |
+| 95 | Windows x64 singleplayer level-load fixes from PC runs 6 to 11 | More PC runs until killhouse and cargoship play; then green CI. |
+| 98 | Linux singleplayer sweep tool for all 21 levels, two fixes | Laptop sweep run (the plan is in `docs/linux-sp-levels.md` on the PR branch). |
+| 99 | Every renderer D3D9 call behind `src/gfx_d3d/rhi/r_rhi.h` (renderer plan M1a) | Laptop image check (world draw and free-camera digests match master, i386 and x86_64, Debug and RelWithDebInfo) and a Windows PC before/after look. |
+| 103 | Shader converter spike tools (dxbc-spirv recommended, 80 of 81 cases) | David's pick of converter, the laptop corpus run, green CI. |
+| 104 (draft) | macOS dedicated server, arm64 and x86_64 | Green macOS CI, then review. |
+
+## Laptop and PC runs still to do
+
+- Speed test of the zero-timeout poll fix (PR 97, merged): perf run 3 plan in
+  the project files (`perf/laptop-perf-run-3-plan.md`).
+- Sound listening run for the OpenAL fix (PR 102, merged): plan in
+  `sound/laptop-sound-run-1.md`, with `+set snd_alDebug 1`.
+- Singleplayer sweep of all 21 levels (PR 98).
+- D3D9 interface image checks on the laptop and the PC (PR 99).
+- Vulkan window probe on a real GPU (laptop ANV, PC RTX 2080 Super).
+
+## Roadmap
+
+In rough order:
+
+1. **Land the open work above**: Steam login (85), SP sweep and its fixes (98),
+   Windows x64 SP (95), D3D9 interface (99).
+2. **Linux singleplayer beyond two levels**: fix what the 21-level sweep
+   finds, chained levels and save/load, then x86_64 singleplayer.
+3. **Renderer**: pick the shader converter (S0), then the backend handles
+   (M1b), then draw the game through the Vulkan back end with Legacy visuals
+   first and the Modern path after (plan in the project files,
+   `renderer/modern-renderer-plan.md`). The target is Modern at 60 fps on the laptop's Intel U300.
+4. **Performance**: laptop A/B runs, a function-level profile, then the
+   candidates in the main-thread notes (`r_gpuSync`, ThinLTO, asserts off).
+5. **Other platforms**: an aarch64 DXVK build and a first Arm run with game
+   data, Windows ARM64 with game data, the macOS client once the renderer
+   choice allows it (first run on an Intel MacBook Pro).
+6. **Remote play**: joining a remote server needs the Steam ticket provider
+   (PR 85); admission is never weakened to fake it. HTTP downloads, voice chat
+   and the remote script debugger come after.
 
 ## Checks before a push
 
