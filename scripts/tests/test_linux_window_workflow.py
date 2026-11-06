@@ -933,10 +933,41 @@ class CiCacheTests(unittest.TestCase):
         for name, job in self.workflow['jobs'].items():
             if name in self.CCACHE_JOBS:
                 continue
-            text = '\n'.join(step.get('run', '') + step.get('uses', '') for step in job['steps'])
+            # The apt package cache (test below) is not a compiler cache.
+            text = '\n'.join(step.get('run', '') + step.get('uses', '') for step in job['steps']
+                              if step.get('name') != self.APT_CACHE_STEP)
             with self.subTest(job=name):
                 self.assertNotIn('ccache', text)
                 self.assertNotIn('actions/cache', text)
+
+    APT_CACHE_STEP = 'Restore downloaded apt packages'
+
+    def test_apt_installs_go_through_the_cached_retrying_script(self):
+        # A slow package mirror must not time a job out before it builds:
+        # every install uses scripts/ci/apt-install.sh, which retries stalled
+        # downloads and keeps the .deb files in a directory each job caches.
+        for name, job in self.workflow['jobs'].items():
+            runs = [step.get('run', '') for step in job['steps']]
+            installs = [index for index, run in enumerate(runs) if 'scripts/ci/apt-install.sh' in run]
+            with self.subTest(job=name):
+                for run in runs:
+                    self.assertNotIn('apt-get install', run)
+                if not installs:
+                    self.assertNotIn(self.APT_CACHE_STEP, [step.get('name') for step in job['steps']])
+                    continue
+                cache = self.step(name, self.APT_CACHE_STEP)
+                names = [step.get('name') for step in job['steps']]
+                self.assertLess(names.index(self.APT_CACHE_STEP), installs[0])
+                self.assertTrue(cache['uses'].startswith('actions/cache@'))
+                self.assertEqual(cache['with']['path'], '${{ runner.temp }}/apt-archives')
+                self.assertIn('${{ github.job }}', cache['with']['key'])
+                # Only the first install refreshes the package lists.
+                for index in installs[1:]:
+                    self.assertIn('apt-install.sh --no-update', runs[index])
+        script = (ROOT / 'scripts/ci/apt-install.sh').read_text()
+        self.assertIn('Acquire::Retries', script)
+        self.assertIn('Dir::Cache::Archives=$archives', script)
+        self.assertIn('${RUNNER_TEMP:-/tmp}/apt-archives', script)
 
     def test_ccache_setup_launches_cmake_compiles_only(self):
         script = (ROOT / 'scripts/ci/use-ccache.sh').read_text()

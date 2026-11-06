@@ -97,14 +97,18 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1
       - name: Install 32-bit window build tools
-        timeout-minutes: 15
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
           sudo dpkg --add-architecture i386
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          scripts/ci/apt-install.sh \
             cmake ninja-build clang g++-multilib python3 python3-yaml libsdl2-dev:i386 ccache
           test -f /usr/lib/i386-linux-gnu/cmake/SDL2/sdl2-config.cmake
       - name: Restore compiler cache
@@ -216,13 +220,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1
+
       - name: Install native 32-bit build tools
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          scripts/ci/apt-install.sh \
             cmake ninja-build clang g++-multilib python3 ccache
 
       - name: Restore compiler cache
@@ -351,13 +360,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1
+
       - name: Install client census tools
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          scripts/ci/apt-install.sh \
             cmake clang g++-multilib python3 python3-yaml libopenal-dev
           clang++ --version
           printf 'int main(){return 0;}\n' > "$RUNNER_TEMP/m32-probe.cpp"
@@ -434,13 +448,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1
+
       - name: Install x64 census tools
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          scripts/ci/apt-install.sh \
             cmake ninja-build clang python3 python3-yaml libopenal-dev
           clang++ --version
 
@@ -508,23 +527,28 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1
+
       - name: Install x86_64 build tools
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          scripts/ci/apt-install.sh \
             cmake ninja-build clang python3 python3-clang-18 ccache
 
       # The layout check parses db_load.cpp as i386 and as x86_64, so it needs
       # the i386 C and C++ headers. Nothing in this job builds i386 code.
       - name: Install i386 headers for the layout check
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y g++-multilib
+          scripts/ci/apt-install.sh --no-update g++-multilib
 
       - name: Restore compiler cache
         uses: actions/cache/restore@v4
@@ -630,14 +654,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1
+
       - name: Install aarch64 build tools
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
           test "$(uname -m)" = aarch64
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          scripts/ci/apt-install.sh \
             cmake ninja-build clang python3 ccache
 
       - name: Restore compiler cache
@@ -730,27 +759,32 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1
+
       - name: Install x86_64 build tools
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
           # libopenal-dev only for <AL/al.h>; the client links the OpenAL stand-in.
           # libavcodec-dev and libavutil-dev for the Bink shim the client is
           # built with here (KISAK_LINUX_CINEMATICS, docs/linux-cinematics.md).
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          scripts/ci/apt-install.sh \
             cmake ninja-build clang binutils python3 python3-clang-18 ccache libopenal-dev \
             libavcodec-dev libavutil-dev
 
       # The size literal check parses every source as i386 and as x86_64, so it
       # needs the i386 C and C++ headers. Nothing in this job builds i386 code.
       - name: Install i386 headers for the size literal check
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y g++-multilib
+          scripts/ci/apt-install.sh --no-update g++-multilib
 
       - name: Restore compiler cache
         uses: actions/cache/restore@v4
@@ -973,17 +1007,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1
+
       - name: Install aarch64 build tools
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
           test "$(uname -m)" = aarch64
-          sudo apt-get update
           # libopenal-dev only for <AL/al.h>; the client links the OpenAL stand-in.
           # libavcodec-dev and libavutil-dev for the Bink shim the client is
           # built with here (KISAK_LINUX_CINEMATICS, docs/linux-cinematics.md).
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          scripts/ci/apt-install.sh \
             cmake ninja-build clang binutils python3 ccache libopenal-dev \
             libavcodec-dev libavutil-dev
 
@@ -1179,13 +1218,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1
+
       - name: Install world front-end tools
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          scripts/ci/apt-install.sh \
             cmake clang g++-multilib python3 python3-yaml libopenal-dev
           clang++ --version
           printf 'int main(){return 0;}\n' > "$RUNNER_TEMP/m32-probe.cpp"
@@ -1266,13 +1310,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1
+
       - name: Install 32-bit C++ toolchain
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y g++ g++-multilib python3
+          scripts/ci/apt-install.sh g++ g++-multilib python3
 
       - name: Verify the 32-bit C++20 toolchain
         shell: bash
@@ -1347,13 +1396,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1
+
       - name: Install 32-bit C++ toolchains
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          scripts/ci/apt-install.sh \
             cmake ninja-build clang g++ g++-multilib binutils python3 ccache
 
       - name: Restore compiler cache
@@ -1552,15 +1606,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1
+
       - name: Install 32-bit C++ toolchain
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
           # libopenal-dev only for <AL/al.h>, which the multiplayer client's
           # sound headers include; the client links the OpenAL stand-in.
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          scripts/ci/apt-install.sh \
             cmake ninja-build clang g++ g++-multilib binutils python3 ccache libopenal-dev
 
       - name: Restore compiler cache
@@ -1955,13 +2014,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1
+
       - name: Install 32-bit Clang toolchain
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y clang g++-multilib python3
+          scripts/ci/apt-install.sh clang g++-multilib python3
 
       - name: Verify the 32-bit C++20 toolchain
         shell: bash
@@ -2032,16 +2096,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1
+
       - name: Install x86_64 build tools and the lavapipe Vulkan driver
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
           # libvulkan-dev for the headers (the probe does not link the loader;
           # SDL3 opens it), mesa-vulkan-drivers for lavapipe,
           # vulkan-validationlayers for the required validation run.
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          scripts/ci/apt-install.sh \
             cmake ninja-build clang binutils python3 ccache \
             libvulkan-dev mesa-vulkan-drivers vulkan-validationlayers
 
