@@ -648,9 +648,11 @@ because of someone else's flood. There is no switch to turn the limits off.
 - Rendering, audio playback/capture, cinematics, local-player input and the
   interactive/remote script debugger are excluded. Sound-channel metadata,
   shellshock configuration, script compilation, and the script VM remain.
-- Native Steam GameServer initialization and callback-based ticket verification
-  remain to be implemented and tested with the official Linux runtime. There is
-  no automatic authentication fallback; only the explicit local test mode above.
+- Steam ticket verification is opt-in: `-DKISAK_LINUX_STEAM=ON` checks tickets
+  through a Steam client running on the server machine, as the Windows build
+  does ([linux-steam.md](linux-steam.md)). Steam GameServer login (a headless
+  server without a Steam client) is not implemented. There is no automatic
+  authentication fallback; only the explicit local test mode above.
 - Windows source paths are retained, but native MSVC/MinGW builds must still be
   checked in their own environments after shared-header changes.
 

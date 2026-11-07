@@ -21,6 +21,7 @@ without a GPU or game data, against stand-in D3D9 and OpenAL libraries.
 | Dedicated server, aarch64 (64-bit Arm) | `-DKISAK_LINUX_ARCH=aarch64` | Builds natively on Arm or cross-compiled from x86, boots without game data (qemu and hosted Arm CI). Not yet run with game data. [Guide](linux-arm64.md) |
 | Multiplayer client, aarch64 | the client options with `-DKISAK_LINUX_ARCH=aarch64` | Builds and passes the asset-free client checks (qemu and hosted Arm CI) against a D3D9 stand-in; no aarch64 DXVK build yet, so it has not drawn a frame. [Guide](linux-arm64.md#building-the-aarch64-client) |
 | Movies | `-DKISAK_LINUX_CINEMATICS=ON` | Bink movies play through an FFmpeg-backed shim on i386 and x86_64 (laptop). Off by default. [Guide](linux-cinematics.md) |
+| Steam authentication | `-DKISAK_LINUX_STEAM=ON` | Added by PR 85. Logs in through the running Steam client's `steamclient.so`; a probe got a ticket validated on i386 and x86_64, and an i386 client joined, reconnected to and was refused by (with Steam off) an i386 dedicated server (laptop, one Steam account). Off by default. [Guide](linux-steam.md) |
 | Singleplayer `KisakCOD-sp`, i386 | `-DKISAK_BUILD_LINUX_SP_GAME=ON` | killhouse and cargoship load, leave the pregame by themselves and play about a minute each, clean quit (laptop). [Guide](linux-sp-game.md) |
 | Windows x64 | MSVC `KISAK_WIN64` | sp, mp and dedi build and link (CI job "MSVC x64 build"); opt-in FFmpeg movies. On the Windows PC, mp_crash loads to class select and the dedicated server hosts bots. Singleplayer still crashes during level load (fixes in PR 95). |
 | Windows ARM64 | MSVC `KISAK_WIN_ARM64` | sp, mp and dedi build and start up to the missing-game-data error on hosted Windows on Arm. Not run with game data. [arm64 track](linux-arm64.md) |
@@ -59,11 +60,14 @@ builds use `-ffp-contract=off` (no fused multiply-add).
 
 ## What does not work yet
 
-- **Joining a remote server.** Linux has no Steam ticket provider, so the client
-  refuses to send an unauthenticated challenge, and the dedicated server rejects
-  ordinary client tickets unless an explicit opt-in is set
-  ([details](linux-dedicated.md#local-connection-testing-without-steam-authentication)).
-  This stays refused until a real provider exists.
+- **Joining a remote server in the default build.** It has no Steam ticket
+  provider, so the client refuses to send an unauthenticated challenge, and the
+  dedicated server rejects ordinary client tickets unless an explicit opt-in is
+  set ([details](linux-dedicated.md#local-connection-testing-without-steam-authentication)).
+  Build with `-DKISAK_LINUX_STEAM=ON` to authenticate through the Steam client
+  running on the machine ([guide](linux-steam.md)). Not yet tried that way: a
+  Windows client or server on the other end, two Steam accounts, x86_64 game
+  runs.
 - **x86_64 singleplayer.** The 64-bit configuration refuses the SP game for now.
 - **Windows x64 singleplayer.** Each PC run gets one step further into level
   load; the fixes so far are in PR 95.
@@ -109,7 +113,6 @@ master merged in and a green run before it can merge.
 
 | PR | What | Waits on |
 | --- | --- | --- |
-| 85 | Steam login on Linux through the running Steam client (opt-in) | Laptop game runs 1 and 2 passed (auth, reconnect, refusal without Steam, clean quit). Needs master merged and green CI. |
 | 95 | Windows x64 singleplayer level-load fixes from PC runs 6 to 11 | More PC runs until killhouse and cargoship play; then green CI. |
 | 98 | Linux singleplayer sweep tool for all 21 levels, two fixes | Laptop sweep run (the plan is in `docs/linux-sp-levels.md` on the PR branch). |
 | 99 | Every renderer D3D9 call behind `src/gfx_d3d/rhi/r_rhi.h` (renderer plan M1a) | Laptop image check (world draw and free-camera digests match master, i386 and x86_64, Debug and RelWithDebInfo) and a Windows PC before/after look. |
@@ -130,7 +133,7 @@ master merged in and a green run before it can merge.
 
 In rough order:
 
-1. **Land the open work above**: Steam login (85), SP sweep and its fixes (98),
+1. **Land the open work above**: SP sweep and its fixes (98),
    Windows x64 SP (95), D3D9 interface (99).
 2. **Linux singleplayer beyond two levels**: fix what the 21-level sweep
    finds, chained levels and save/load, then x86_64 singleplayer.
@@ -143,8 +146,9 @@ In rough order:
 5. **Other platforms**: an aarch64 DXVK build and a first Arm run with game
    data, Windows ARM64 with game data, the macOS client once the renderer
    choice allows it (first run on an Intel MacBook Pro).
-6. **Remote play**: joining a remote server needs the Steam ticket provider
-   (PR 85); admission is never weakened to fake it. HTTP downloads, voice chat
+6. **Remote play**: Steam login is opt-in (`KISAK_LINUX_STEAM`, PR 85); next
+   are a run against a Windows client or server and one with two Steam
+   accounts. Admission is never weakened to fake it. HTTP downloads, voice chat
    and the remote script debugger come after.
 
 ## Checks before a push
