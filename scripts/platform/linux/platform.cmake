@@ -69,10 +69,31 @@ elseif(KISAK_LINUX_ARCH STREQUAL "aarch64")
     endforeach()
     message(WARNING "KISAK_LINUX_ARCH=aarch64 is the opt-in 64-bit Arm track. KisakCOD-dedi and KisakCOD-mp build; "
         "neither has loaded a map on Arm yet. Ship the i386 build. See docs/linux-arm64.md.")
+elseif(KISAK_LINUX_ARCH STREQUAL "armv7")
+    # Opt-in 32-bit Arm track: the dedicated server only, as the first step
+    # toward a PS Vita port (docs/linux-armv7.md). Pointers are 4 bytes, so the
+    # retail fastfile layout checks in db_disk_layout.h apply exactly as on i386.
+    if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4 OR NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^arm")
+        message(FATAL_ERROR "KISAK_LINUX_ARCH=armv7 requires a 32-bit Arm toolchain (got ${CMAKE_SYSTEM_PROCESSOR}, "
+            "${CMAKE_SIZEOF_VOID_P}-byte pointers). Use a new build directory.")
+    endif()
+    foreach(kisak_dedi_only
+            KISAK_BUILD_LINUX_CLIENT_CORE KISAK_BUILD_LINUX_WINDOW_HOST KISAK_BUILD_LINUX_MP_CLIENT
+            KISAK_BUILD_LINUX_NATIVE_D3D9 KISAK_BUILD_VULKAN_PROBE
+            KISAK_BUILD_UI_ASSET_EXPORT KISAK_BUILD_WORLD_FRONTEND_PROBE KISAK_BUILD_DEVICE_PROBE
+            KISAK_BUILD_WORLD_DEVICE_PROBE KISAK_BUILD_WORLD_DRAW_PROBE
+            KISAK_BUILD_LINUX_SP_GAME)
+        if(${kisak_dedi_only})
+            message(FATAL_ERROR "${kisak_dedi_only} is not available with KISAK_LINUX_ARCH=armv7, which supports KisakCOD-dedi only")
+        endif()
+    endforeach()
+    message(WARNING "KISAK_LINUX_ARCH=armv7 is the opt-in 32-bit Arm track. KisakCOD-dedi builds and boots "
+        "without game data; it has not loaded a map on Arm yet. Ship the i386 build. See docs/linux-armv7.md.")
 elseif(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
     message(FATAL_ERROR "The Linux dedicated server requires a 32-bit toolchain (-m32). Use a new build directory.")
 endif()
-# The CPU the native build targets, whatever the OS: i386, x86_64 or aarch64.
+# The CPU the native build targets, whatever the OS: i386, x86_64, aarch64 or
+# armv7.
 # Code that differs by CPU (the i386-only layout proofs, the SSE tests) reads
 # this, so a Mac build takes the same branch as the Linux build of its CPU.
 if(KISAK_PLATFORM STREQUAL "macos")
@@ -91,7 +112,7 @@ endif()
 # x86 builds keep scalar float math in SSE registers, as the retail binary did
 # (no x87 excess precision). Arm has no such switch: its float math is already
 # IEEE single/double.
-if(KISAK_LINUX_ARCH STREQUAL "aarch64" OR KISAK_MACOS_ARCH STREQUAL "arm64")
+if(KISAK_LINUX_ARCH MATCHES "^(aarch64|armv7)$" OR KISAK_MACOS_ARCH STREQUAL "arm64")
     set(KISAK_LINUX_SIMD_OPTIONS "")
 else()
     set(KISAK_LINUX_SIMD_OPTIONS -msse2 -mfpmath=sse)

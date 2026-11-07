@@ -37,6 +37,17 @@ inline uint64_t __rdtsc()
     return ticks;
 }
 #endif
+#elif defined(__arm__)
+// 32-bit Arm (armv7, the PS Vita's Cortex-A9). The A9 has no architectural
+// generic timer, so count nanoseconds from the monotonic clock instead.
+#define KISAK_ARCH_X86 0
+#include <time.h>
+inline uint64_t __rdtsc()
+{
+    timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return static_cast<uint64_t>(ts.tv_sec) * 1000000000ull + static_cast<uint64_t>(ts.tv_nsec);
+}
 #else
-#error "arch_intrin.h: unsupported target architecture (expected x86, x86_64 or 64-bit Arm)"
+#error "arch_intrin.h: unsupported target architecture (expected x86, x86_64, 64-bit Arm or armv7)"
 #endif

@@ -51,6 +51,19 @@ any other Vulkan-Headers include directory. The runtime needs a Vulkan loader
 and driver for the same architecture (on Debian and Ubuntu, `libvulkan1` and
 `mesa-vulkan-drivers`, with `:i386` for the 32-bit build).
 
+On Windows the probe builds on its own with MSVC, without the game or the
+DirectX SDK, from `scripts/vulkan_probe/CMakeLists.txt` (the Linux tree includes
+the same `scripts/vulkan_probe/vulkan_probe.cmake`):
+
+```sh
+cmake -S scripts/vulkan_probe -B build-vulkan -A x64 \
+  -DCMAKE_PREFIX_PATH=<sdl3-sdk> -DKISAK_VULKAN_INCLUDE_DIR=<Vulkan-Headers>/include
+cmake --build build-vulkan --config Release --target KisakCOD-vulkan-probe
+```
+
+The build copies `SDL3.dll` next to the executable. The GPU driver supplies
+`vulkan-1.dll`; the validation layer needs the Vulkan SDK.
+
 ## Running
 
 ```sh
@@ -105,10 +118,14 @@ which falls outside the render-done semaphore's signal scope
 (`SYNC-HAZARD-PRESENT-AFTER-WRITE`). The barrier and the signal now use the same
 stage (`kPresentHandOffStage` in `vk_core.cpp`).
 
+The Windows workflow's `vulkan-probe` job builds the probe with MSVC for x64
+(SDL3 at the Linux jobs' pin, Vulkan-Headers v1.3.296), checks that it does not
+import `vulkan-1.dll` and that it starts, and uploads it with `SDL3.dll` as the
+`KisakCOD-vulkan-probe-x64` artifact. Hosted Windows runners have no GPU, so it
+does not run there.
+
 Not yet run on a GPU: the laptop (Intel ANV) and the Windows PC (RTX 2080
-Super) are the next places to run it. The Windows build is not wired up yet;
-the core and the probe use only SDL3 and Vulkan, so it needs a CMake target, not
-code changes.
+Super) are the next places to run it.
 
 ## Next
 

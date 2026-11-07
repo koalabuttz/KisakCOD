@@ -1,6 +1,6 @@
 # Linux port status
 
-Last updated 2026-11-07 (master `1aa9515` plus the macOS dedicated server). This page is the current state of
+Last updated 2026-11-07 (master `7a3d61e` plus the armv7 dedicated server). This page is the current state of
 the native Linux port and the other platform builds, the open pull requests and
 the roadmap. The [docs index](README.md) lists the detailed guides;
 older handoffs are in [history](history/README.md) and are not current.
@@ -20,6 +20,7 @@ without a GPU or game data, against stand-in D3D9 and OpenAL libraries.
 | Multiplayer client, x86_64 | the same, with `-DKISAK_LINUX_ARCH=x86_64` | Playable on the same terms as i386 (laptop), including sprint and mantle animations and a clean quit. [Guide](linux-x64.md#x86_64-multiplayer-client) |
 | Dedicated server, aarch64 (64-bit Arm) | `-DKISAK_LINUX_ARCH=aarch64` | Builds natively on Arm or cross-compiled from x86, boots without game data (qemu and hosted Arm CI). Not yet run with game data. [Guide](linux-arm64.md) |
 | Multiplayer client, aarch64 | the client options with `-DKISAK_LINUX_ARCH=aarch64` | Builds and passes the asset-free client checks (qemu and hosted Arm CI) against a D3D9 stand-in; no aarch64 DXVK build yet, so it has not drawn a frame. [Guide](linux-arm64.md#building-the-aarch64-client) |
+| Dedicated server, armv7 (32-bit Arm) | `-DKISAK_LINUX_ARCH=armv7` | Cross-compiled from x86, boots without game data under qemu-arm (hosted CI). First step toward a PS Vita port. Not yet run with game data. [Guide](linux-armv7.md) |
 | Dedicated server, macOS (arm64 and x86_64) | `-DKISAK_PLATFORM=macos` | Builds with Apple Clang on hosted macOS runners (Apple silicon and Intel) and boots without game data to the first missing fastfile. Not yet run with game data or on a real Mac. [Guide](macos.md) |
 | Movies | `-DKISAK_LINUX_CINEMATICS=ON` | Bink movies play through an FFmpeg-backed shim on i386 and x86_64 (laptop). Off by default. [Guide](linux-cinematics.md) |
 | Steam authentication | `-DKISAK_LINUX_STEAM=ON` | Added by PR 85. Logs in through the running Steam client's `steamclient.so`; a probe got a ticket validated on i386 and x86_64, and an i386 client joined, reconnected to and was refused by (with Steam off) an i386 dedicated server (laptop, one Steam account). Off by default. [Guide](linux-steam.md) |
@@ -150,7 +151,9 @@ In rough order:
    candidates in the main-thread notes (`r_gpuSync`, ThinLTO, asserts off).
 5. **Other platforms**: an aarch64 DXVK build and a first Arm run with game
    data, Windows ARM64 with game data, the macOS client once the renderer
-   choice allows it (first run on an Intel MacBook Pro).
+   choice allows it (first run on an Intel MacBook Pro). PS Vita (stretch
+   goal): the armv7 dedicated server first, then a Vita dedicated server; a
+   client waits for the backend handles (M1b) ([armv7 track](linux-armv7.md)).
 6. **Remote play**: Steam login is opt-in (`KISAK_LINUX_STEAM`, PR 85); next
    are a run against a Windows client or server and one with two Steam
    accounts. Admission is never weakened to fake it. HTTP downloads, voice chat

@@ -3,15 +3,17 @@
 
 The build produces an asset-free ELF32 i386 executable at bin/KisakCOD-dedi (or,
 with --arch x86_64 or --arch aarch64, the opt-in ELF64 builds from
-docs/linux-x64.md and docs/linux-arm64.md; with --arch macos-arm64 or
+docs/linux-x64.md and docs/linux-arm64.md; with --arch armv7, the opt-in
+32-bit Arm build from docs/linux-armv7.md; with --arch macos-arm64 or
 --arch macos-x86_64, the opt-in Mach-O builds from docs/macos.md). No game data
 is needed to prove it is the right artefact and that it reaches its own startup
 code, so every check here works from the binary alone:
 
   * the header bytes say ELF, little-endian, and the class and machine of the
     requested architecture: 32-bit machine 3 (i386, the default), 64-bit
-    machine 62 (x86_64) or 64-bit machine 183 (aarch64); for macOS, a 64-bit
-    Mach-O executable for CPU type 0x0100000c (arm64) or 0x01000007 (x86_64);
+    machine 62 (x86_64), 64-bit machine 183 (aarch64) or 32-bit machine 40
+    (armv7); for macOS, a 64-bit Mach-O executable for CPU type 0x0100000c
+    (arm64) or 0x01000007 (x86_64);
   * --help and --version answer without touching the engine;
   * an asset-free launch reaches FS_Startup and then fails on the missing
     fileSysCheck.cfg, which is the expected end state for a data-less tree;
@@ -30,7 +32,7 @@ checkout and the temporary directory is removed afterwards, taking the log with
 it.
 
 Usage:
-    python3 scripts/tests/test_linux_bootstrap.py [--arch i386|x86_64|aarch64|macos-arm64|macos-x86_64]
+    python3 scripts/tests/test_linux_bootstrap.py [--arch i386|x86_64|aarch64|armv7|macos-arm64|macos-x86_64]
         [--emulator CMD] [path/to/binary]
 """
 
@@ -58,12 +60,14 @@ ELFDATA2LSB = 1
 EM_386 = 3
 EM_X86_64 = 62
 EM_AARCH64 = 183
+EM_ARM = 40
 
 # --arch value -> (EI_CLASS, class label, e_machine, machine label)
 ARCHITECTURES = {
     "i386": (ELFCLASS32, "ELFCLASS32 (EI_CLASS == 1)", EM_386, "e_machine EM_386 (3, i386)"),
     "x86_64": (ELFCLASS64, "ELFCLASS64 (EI_CLASS == 2)", EM_X86_64, "e_machine EM_X86_64 (62, x86_64)"),
     "aarch64": (ELFCLASS64, "ELFCLASS64 (EI_CLASS == 2)", EM_AARCH64, "e_machine EM_AARCH64 (183, aarch64)"),
+    "armv7": (ELFCLASS32, "ELFCLASS32 (EI_CLASS == 1)", EM_ARM, "e_machine EM_ARM (40, armv7)"),
 }
 
 # Mach-O header fields this test reads (<mach-o/loader.h>, <mach/machine.h>).
@@ -256,6 +260,7 @@ BANNER_CPU = {
     "i386": "linux-x86",
     "x86_64": "linux-x86_64",
     "aarch64": "linux-arm64",
+    "armv7": "linux-armv7",
     "macos-arm64": "macos-arm64",
     "macos-x86_64": "macos-x86_64",
 }

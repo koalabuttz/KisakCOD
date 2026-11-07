@@ -70,8 +70,12 @@ def source_checks(checker):
                     "the optional OpenAL header directory is checked for AL/al.h")
     fence = (ROOT / "scripts" / "platform" / "linux" / "platform.cmake").read_text(encoding="utf-8")
     d3d9_module = (ROOT / "scripts" / "platform" / "linux" / "native_d3d9.cmake").read_text(encoding="utf-8")
-    # No 64-bit block of the fence (macOS, x86_64, aarch64) refuses the client.
-    fences = fence.split('if(KISAK_PLATFORM STREQUAL "macos")', 1)[-1].split("elseif(NOT CMAKE_SIZEOF_VOID_P", 1)[0]
+    # No 64-bit block of the fence (macOS, x86_64, aarch64) refuses the client;
+    # the 32-bit Arm block after them (armv7, dedicated server only) does.
+    fences, armv7 = fence.split('if(KISAK_PLATFORM STREQUAL "macos")', 1)[-1].split(
+        "elseif(NOT CMAKE_SIZEOF_VOID_P", 1)[0].split('elseif(KISAK_LINUX_ARCH STREQUAL "armv7")', 1)
+    checker.require("KISAK_BUILD_LINUX_MP_CLIENT" in armv7,
+                    "the armv7 configuration refuses the client")
     checker.require("KISAK_BUILD_LINUX_MP_CLIENT" not in fences
                     and 'if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4 AND NOT KISAK_NATIVE_ARCH MATCHES "^(x86_64|aarch64)$")'
                     in d3d9_module,

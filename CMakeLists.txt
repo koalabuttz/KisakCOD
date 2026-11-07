@@ -11,8 +11,8 @@ cmake_minimum_required(VERSION 3.18)
 # (src/linux) builds the dedicated server for one Mac architecture per build
 # directory, arm64 or x86_64; see docs/macos.md.
 set(KISAK_LINUX_ARCH "i386" CACHE STRING
-    "Native Linux architecture: i386 (shipping), x86_64 (opt-in 64-bit track) or aarch64 (opt-in 64-bit Arm track: dedicated server)")
-set_property(CACHE KISAK_LINUX_ARCH PROPERTY STRINGS i386 x86_64 aarch64)
+    "Native Linux architecture: i386 (shipping), x86_64 (opt-in 64-bit track), aarch64 (opt-in 64-bit Arm track) or armv7 (opt-in 32-bit Arm: dedicated server, the PS Vita groundwork)")
+set_property(CACHE KISAK_LINUX_ARCH PROPERTY STRINGS i386 x86_64 aarch64 armv7)
 if(NOT DEFINED KISAK_PLATFORM)
     if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
         set(KISAK_PLATFORM "linux" CACHE STRING "Build platform: win32|mingw|linux|macos")
@@ -61,8 +61,17 @@ elseif(KISAK_PLATFORM STREQUAL "linux")
         if(NOT CMAKE_TOOLCHAIN_FILE AND NOT kisak_host_machine MATCHES "^(aarch64|arm64)$")
             set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_LIST_DIR}/scripts/platform/linux/aarch64-linux-gnu.cmake")
         endif()
+    elseif(KISAK_LINUX_ARCH STREQUAL "armv7")
+        # 32-bit Arm (armv7-a, hard float, NEON), the PS Vita's CPU family. Same
+        # signed char and no-FMA rules as aarch64. Pointers are 4 bytes, so
+        # fastfile records stream unchanged, as on i386.
+        set(KISAK_LINUX_ARCH_FLAG "-fsigned-char -ffp-contract=off")
+        execute_process(COMMAND uname -m OUTPUT_VARIABLE kisak_host_machine OUTPUT_STRIP_TRAILING_WHITESPACE)
+        if(NOT CMAKE_TOOLCHAIN_FILE AND NOT kisak_host_machine MATCHES "^arm")
+            set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_LIST_DIR}/scripts/platform/linux/armv7-linux-gnueabihf.cmake")
+        endif()
     else()
-        message(FATAL_ERROR "KISAK_LINUX_ARCH must be i386, x86_64 or aarch64, not '${KISAK_LINUX_ARCH}'")
+        message(FATAL_ERROR "KISAK_LINUX_ARCH must be i386, x86_64, aarch64 or armv7, not '${KISAK_LINUX_ARCH}'")
     endif()
     set(CMAKE_C_FLAGS_INIT "${CMAKE_C_FLAGS_INIT} ${KISAK_LINUX_ARCH_FLAG}")
     set(CMAKE_CXX_FLAGS_INIT "${CMAKE_CXX_FLAGS_INIT} ${KISAK_LINUX_ARCH_FLAG}")
