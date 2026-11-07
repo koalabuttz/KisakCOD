@@ -1030,16 +1030,13 @@ static void CheckReferenceRange(unsigned int begin, unsigned int end)
                     "%s",
                     "entryValue->u.u.stackValue->localId");
             ++scrVarDebugPub->refCount[sb->localId];
-            unsigned __int8 *p = (unsigned __int8 *)&sb->buf[0];
-            unsigned int count = sb->size;
-            while (count)
+            // Each entry is the type byte and then the whole VariableUnion
+            // (5 bytes on i386, 9 on x86_64).
+            const char *p = sb->buf;
+            for (unsigned int count = sb->size; count; --count, p += SCR_STACK_ENTRY_SIZE)
             {
-                unsigned int entryType = *p;
-                unsigned int entryVal = *(unsigned int *)(p + 1);
-                p += 5;
-                --count;
-                if (entryType == VAR_POINTER)
-                    ++scrVarDebugPub->refCount[entryVal];
+                if ((unsigned __int8)*p == VAR_POINTER)
+                    ++scrVarDebugPub->refCount[Scr_ReadStackValue(p + 1).pointerValue];
             }
             break;
         }
