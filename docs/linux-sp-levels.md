@@ -1,13 +1,11 @@
 # Singleplayer levels on Linux: sweep tool and run plan
 
 Status: killhouse and cargoship play on a developer laptop
-([linux-sp-game.md](linux-sp-game.md)). No other level has been run on
-Linux yet. This page lists what the other 19 levels use that those two do
-not, gives a tool that runs many levels in one go, and the order to run
-them in.
-
-Nothing here has been checked on a machine with game data. It was written
-from the code alone.
+([linux-sp-game.md](linux-sp-game.md)). Sweep run 1 (below) loaded and ran
+all 21 levels unattended, changed missions in one process, and saved and
+loaded. No level beyond the first two has been played by hand yet. This page
+lists what the other 19 levels use that those two do not, gives a tool that
+runs many levels in one go, the order to run them in, and the results.
 
 ## What later levels use that the first two do not
 
@@ -66,7 +64,7 @@ python3 scripts/tests/run_linux_sp_level_sweep.py "$GAME" --binary "$BUILD/Kisak
 ```
 
 - `--plan levels` (default) starts one process per level with `+devmap`, waits
-  for `Load time: N msec`, holds, asks for `sv_mapname` on the console (proof
+  for `Load time: N msec`, holds, asks for `mapname` on the console (proof
   the main loop still answers), and quits.
 - `--plan chain` loads the first level, then each next one with `spdevmap` in
   the same process, the way a mission change does.
@@ -113,3 +111,27 @@ rebuilt at the commit under test. Sound on: the sweep sets `snd_volume 0.8`.
 
 Report back the `report.md` tables and the failing levels' logs. Report
 console lines and file names, never game file contents.
+
+## Sweep run 1 (laptop, 2026-11-07)
+
+Commit 0ce99b9 (master with PR 98), i386 `sp-rel-al`, sound off, 1280x720.
+
+- **Step 1, all 21 levels:** each loaded in 4 to 21 s (killhouse, the first,
+  21 s; most 7 to 10 s), held 45 s and quit with exit 0. No assertions, no
+  errors, no signals. Steps 2 and 3 had nothing to run.
+- **Step 4, chain** killhouse, cargoship, coup, blackout: all four loaded in one
+  process (later loads 5 to 6 s), exit 0.
+- **Step 5, save and load** on killhouse, cargoship, blackout and ac130: the save
+  file was written, `loadgame` reloaded each level, the console answered after
+  it, exit 0.
+- The sweep's own failures came from two tool bugs, both fixed: the console
+  probe asked `sv_mapname` (never set in singleplayer; the server's dvar is
+  `mapname`), and the save check took the "time to write" line of the
+  level-start save being flushed again for the `devsave` one.
+- Engine messages worth a later look: hunted prints "Max scene drawsurfs
+  exceed" 5 times, ac130 "Too many visible static models" twice, airplane "AI
+  couldn't find path to goal" twice. Six levels print the "computer changed"
+  profile warning at start: the CPU estimate (`sys_configureGHz`) varies
+  between processes by more than the profile's 10 % check. The profile is left
+  unchanged.
+- Nobody watched the screen. Hand play (step 6) is next.
