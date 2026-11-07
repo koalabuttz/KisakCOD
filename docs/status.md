@@ -68,6 +68,9 @@ builds use `-ffp-contract=off` (no fused multiply-add).
   running on the machine ([guide](linux-steam.md)). Not yet tried that way: a
   Windows client or server on the other end, two Steam accounts, x86_64 game
   runs.
+- **Most singleplayer levels.** Only killhouse and cargoship have run on Linux.
+  The other 19, mission changes and loading saves are untried; the sweep tool
+  and run plan are in [linux-sp-levels.md](linux-sp-levels.md).
 - **x86_64 singleplayer.** The 64-bit configuration refuses the SP game for now.
 - **Windows x64 singleplayer.** Each PC run gets one step further into level
   load; the fixes so far are in PR 95.
@@ -114,7 +117,6 @@ master merged in and a green run before it can merge.
 | PR | What | Waits on |
 | --- | --- | --- |
 | 95 | Windows x64 singleplayer level-load fixes from PC runs 6 to 11 | More PC runs until killhouse and cargoship play; then green CI. |
-| 98 | Linux singleplayer sweep tool for all 21 levels, two fixes | Laptop sweep run (the plan is in `docs/linux-sp-levels.md` on the PR branch). |
 | 99 | Every renderer D3D9 call behind `src/gfx_d3d/rhi/r_rhi.h` (renderer plan M1a) | Laptop image check (world draw and free-camera digests match master, i386 and x86_64, Debug and RelWithDebInfo) and a Windows PC before/after look. |
 | 103 | Shader converter spike tools (dxbc-spirv recommended, 80 of 81 cases) | David's pick of converter, the laptop corpus run, green CI. |
 | 104 (draft) | macOS dedicated server, arm64 and x86_64 | Green macOS CI, then review. |
@@ -125,7 +127,9 @@ master merged in and a green run before it can merge.
   the project files (`perf/laptop-perf-run-3-plan.md`).
 - Sound listening run for the OpenAL fix (PR 102, merged): plan in
   `sound/laptop-sound-run-1.md`, with `+set snd_alDebug 1`.
-- Singleplayer sweep of all 21 levels (PR 98).
+- Singleplayer sweep of all 21 levels (tool merged in PR 98): steps in the
+  project files (`singleplayer/laptop-sp-sweep-run-1.md`), background in
+  [linux-sp-levels.md](linux-sp-levels.md).
 - D3D9 interface image checks on the laptop and the PC (PR 99).
 - Vulkan window probe on a real GPU (laptop ANV, PC RTX 2080 Super).
 
@@ -133,8 +137,7 @@ master merged in and a green run before it can merge.
 
 In rough order:
 
-1. **Land the open work above**: SP sweep and its fixes (98),
-   Windows x64 SP (95), D3D9 interface (99).
+1. **Land the open work above**: Windows x64 SP (95), D3D9 interface (99).
 2. **Linux singleplayer beyond two levels**: fix what the 21-level sweep
    finds, chained levels and save/load, then x86_64 singleplayer.
 3. **Renderer**: pick the shader converter (S0), then the backend handles

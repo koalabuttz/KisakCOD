@@ -309,27 +309,26 @@ static size_t AL_StreamReadCallback(void *pUserData, void *pBufferOut, size_t by
     return FS_Read((uint8_t *)pBufferOut, (uint32_t)bytesToRead, stream->fsHandle);
 }
 
-// FS_Seek's zip-archive branch (com_files.cpp, used whenever a streamed sound is packed into an
-// .iwd rather than sitting as a loose file on disk) doesn't implement standard SEEK_SET/CUR/END
-// semantics - its three origin values are rotated by one relative to what every caller (including
-// the original Miles snd_mss.cpp callback, and dr_wav/dr_mp3 here) assumes:
-//   want SEEK_SET (absolute)         -> must pass origin 2 to FS_Seek
-//   want SEEK_CUR (relative-to-here) -> must pass origin 0 to FS_Seek
-//   want SEEK_END (relative-to-EOF)  -> must pass origin 1 to FS_Seek
-// This is inherited unmodified from the original decompiled engine, so it isn't safe to fix inside
-// FS_Seek itself without risking every other zip-file seek in the game (save data, Miles' own
-// zip-streamed audio, etc.) - instead, rotate only here, and only for zip-backed handles; loose
-// files go through a plain FS_FileSeek/fseek and are unaffected by this.
-static int AL_FixupZipSeekOrigin(int fsHandle, int trueOrigin)
+// FS_Seek takes the engine's own origin values, not the C library's: 0 is
+// "from here", 1 is "from the end" and 2 is "from the start". Both of its branches
+// read them that way: the zip-archive branch (a streamed sound packed into an .iwd)
+// and the loose-file branch, whose FileWrapper_Seek (qcommon/com_fileaccess.cpp)
+// maps 0/1/2 to SEEK_CUR/SEEK_END/SEEK_SET. Miles' MSS_FileSeekCallback
+// (snd_mss.cpp) converts its origins for every handle the same way. dr_wav and
+// dr_mp3 pass SEEK_SET/SEEK_CUR/SEEK_END order, so convert for every handle too:
+// converting only zip handles turned a loose file's "from the start" into "from
+// here" and its "from here" into "from the end".
+static int AL_FsSeekOrigin(int trueOrigin)
 {
-    static const int kZipOriginRotation[3] = { 2, 0, 1 }; // SEEK_SET->2, SEEK_CUR->0, SEEK_END->1
-    return FS_IsFileInZip(fsHandle) ? kZipOriginRotation[trueOrigin] : trueOrigin;
+    static const int kFsOrigin[3] = { 2, 0, 1 }; // SEEK_SET->2, SEEK_CUR->0, SEEK_END->1
+    iassert(trueOrigin >= 0 && trueOrigin < 3);
+    return kFsOrigin[trueOrigin];
 }
 
 static drwav_bool32 AL_WavSeekCallback(void *pUserData, int offset, drwav_seek_origin origin)
 {
     AlStreamState *stream = (AlStreamState *)pUserData;
-    FS_Seek(stream->fsHandle, offset, AL_FixupZipSeekOrigin(stream->fsHandle, (int)origin));
+    FS_Seek(stream->fsHandle, offset, AL_FsSeekOrigin((int)origin));
     return DRWAV_TRUE;
 }
 
@@ -343,7 +342,7 @@ static drwav_bool32 AL_WavTellCallback(void *pUserData, drwav_int64 *pCursor)
 static drmp3_bool32 AL_Mp3SeekCallback(void *pUserData, int offset, drmp3_seek_origin origin)
 {
     AlStreamState *stream = (AlStreamState *)pUserData;
-    FS_Seek(stream->fsHandle, offset, AL_FixupZipSeekOrigin(stream->fsHandle, (int)origin));
+    FS_Seek(stream->fsHandle, offset, AL_FsSeekOrigin((int)origin));
     return DRMP3_TRUE;
 }
 

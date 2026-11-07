@@ -219,6 +219,7 @@ class PlannedCommandTests(unittest.TestCase):
             "bot_driver",
             "database_publication",
             "crt_shims",
+            "assert_continue",
             "sl_trace",
             "phys_objid",
         ]

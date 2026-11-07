@@ -317,6 +317,15 @@ def plan_checks(options, workdir, build_dir, binary, python, cxx):
             [Command([python, TESTS / "test_linux_crt_shims.py", "--cxx", cxx], timeout=300)],
         )
     )
+    # The native assertion handler stops the process; KISAK_ASSERT_CONTINUE=1 is
+    # an opt-in survey mode that reports and returns instead.
+    checks.append(
+        Check(
+            "assert_continue",
+            "native assertion handler: fatal by default, opt-in report-and-continue",
+            [Command([python, TESTS / "test_linux_assert_continue.py", "--cxx", cxx], timeout=300)],
+        )
+    )
     checks.append(
         Check(
             "sl_trace",
@@ -531,7 +540,7 @@ def main():
     parser.add_argument("--list", action="store_true", help="print the command list and exit without running")
     options = parser.parse_args()
 
-    known = ["bootstrap", "runtime", "lifecycle_driver", "handshake_auth", "remote_input", "debugger", "fastfile", "net_deadline", "huffman", "udp", "sys_fileio", "sys_virtualmem", "lexer_eof", "random_range", "gameplay_lifecycle", "server_test_clients", "weapon_def_ownership", "bot_driver", "database_publication", "crt_shims", "sl_trace", "phys_objid"]
+    known = ["bootstrap", "runtime", "lifecycle_driver", "handshake_auth", "remote_input", "debugger", "fastfile", "net_deadline", "huffman", "udp", "sys_fileio", "sys_virtualmem", "lexer_eof", "random_range", "gameplay_lifecycle", "server_test_clients", "weapon_def_ownership", "bot_driver", "database_publication", "crt_shims", "assert_continue", "sl_trace", "phys_objid"]
     options.only = parse_names(options.only)
     options.skip = parse_names(options.skip)
     for name in options.only | options.skip:
