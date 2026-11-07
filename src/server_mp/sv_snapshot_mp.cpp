@@ -1503,7 +1503,7 @@ int SV_WWWRedirectClient(client_t *cl, msg_t *msg)
     }
     else
     {
-        Com_Printf(CON_CHANNEL_SERVER, "ERROR: Client '%s': couldn't extract file size for %s\n", cl->downloadName, handle);
+        Com_Printf(CON_CHANNEL_SERVER, "ERROR: Client '%s': couldn't extract file size for %s\n", cl->name, cl->downloadName);
         return 0;
     }
 }

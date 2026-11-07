@@ -39,9 +39,9 @@ whose `alcOpenDevice` finds no device. For an x86_64 build, add
 `-DKISAK_LINUX_ARCH=x86_64` and use x86_64 builds of the same libraries
 ([linux-x64.md](linux-x64.md#x86_64-multiplayer-client)).
 
-For profiling, add `-DKISAK_LINUX_TRACY=ON`. It builds `KisakCOD-mp` and
-`KisakCOD-sp` with the Tracy profiler (the version `scripts/extern/tracy.cmake`
-fetches), as the dedicated server already is: the engine's `PROF_SCOPED` zones
+For profiling, add `-DKISAK_LINUX_TRACY=ON`. It builds `KisakCOD-mp`,
+`KisakCOD-sp` and `KisakCOD-dedi` with the Tracy profiler (the version
+`scripts/extern/tracy.cmake` fetches): the engine's `PROF_SCOPED` zones
 become Tracy zones, one `MainThread` zone per frame. It stays idle until a
 profiler of the same Tracy version connects from the same machine, for example
 `tracy-capture -o run.tracy -s 120`. Player builds leave it off. CI builds the
@@ -52,6 +52,13 @@ found next to `libSDL3.so`. The client's run path covers its own libraries,
 not their dependencies, so keep the SDK's `lib` directory on `LD_LIBRARY_PATH`
 when running the client. OpenAL may then log a PipeWire error while it opens
 the device and still play sound through another backend.
+
+At startup the client prints one line naming the OpenAL device and the rate it
+mixes at. For sound problems, `+set snd_alDebug 1` adds OpenAL errors, stream
+underruns and a summary every 5 seconds (sounds started, sounds cut while still
+playing, sources playing, longest gap between sound updates); `snd_alDebug 2`
+also prints every sound start. It is off by default and changes nothing that is
+played.
 
 The OpenAL headers (`AL/al.h`) are needed too, whichever library is linked,
 because the sound headers include them. Without `libopenal-dev` installed, unpack

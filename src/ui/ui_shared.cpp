@@ -4078,12 +4078,12 @@ void Item_GameMsgWindow_Paint(UiContext *dc, itemDef_s *item)
         if (item->gameMsgWindowIndex >= 4u)
         {
             v2 = va("Game message window index %d is not valid. Must be in [0, %d).", item->gameMsgWindowIndex, 4);
-            Com_Error(ERR_DROP, v2);
+            Com_Error(ERR_DROP, "%s", v2);
         }
         if (item->gameMsgWindowMode >= 2u && item->gameMsgWindowMode != 3 && item->gameMsgWindowMode != 2)
         {
             v3 = va("Game message window mode %d is not valid.", item->gameMsgWindowMode);
-            Com_Error(ERR_DROP, v3);
+            Com_Error(ERR_DROP, "%s", v3);
         }
         color[0] = item->window.foreColor[0];
         color[1] = item->window.foreColor[1];

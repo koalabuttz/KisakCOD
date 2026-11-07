@@ -638,7 +638,7 @@ void Com_LoadSoundAliases(const char *loadspec, const char *loadspecCurGame, snd
         {
             if (snd_errorOnMissing->current.enabled)
             {
-                Com_Error((errorParm_t)(system != SASYS_UI), va("%i sound file(s) are missing or in a bad format", numMissing));
+                Com_Error((errorParm_t)(system != SASYS_UI), "%s", va("%i sound file(s) are missing or in a bad format", numMissing));
             }
         }
     }

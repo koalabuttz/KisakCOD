@@ -21,6 +21,10 @@ on:
       - scripts/tests/test_mp_vehicle_audio.py
       - .github/workflows/mp-vehicle-audio.yaml
 
+# Read-only token: these jobs only check out, build and upload artifacts.
+permissions:
+  contents: read
+
 jobs:
   audio:
     runs-on: ubuntu-latest

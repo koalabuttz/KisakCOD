@@ -162,7 +162,7 @@ COMMON_FLAGS = (
 PRODUCTION_FLAGS = (
     "-I", "src", "-I", "deps",
     "-Wno-c++11-narrowing", "-Wno-invalid-token-paste", "-Wno-ignored-attributes",
-    "-Wno-format-security",
+    "-Werror=format-security",
 )
 # The two test units are this change's own code: every warning is an error.
 # Engine headers are system headers for them, so only the test code is judged.

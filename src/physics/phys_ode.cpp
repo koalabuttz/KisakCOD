@@ -1641,7 +1641,7 @@ void Phys_GeomUserGetAAContainedBox(dxGeom *geom, float *mins, float *maxs)
         {
             Com_PrintError(CON_CHANNEL_PHYS, "Assert Info\n");
             v4 = va("brush: 0x%x, %i, 0x%x, 0x%x\n", brush, brush->numsides, brush->sides, brush->baseAdjacentSide);
-            Com_PrintError(CON_CHANNEL_PHYS, v4);
+            Com_PrintError(CON_CHANNEL_PHYS, "%s", v4);
             v5 = va(
                 "brush->edgeCount: %i %i %i, %i %i %i\n",
                 brush->edgeCount[0][0],
@@ -1650,14 +1650,14 @@ void Phys_GeomUserGetAAContainedBox(dxGeom *geom, float *mins, float *maxs)
                 brush->edgeCount[1][0],
                 brush->edgeCount[1][1],
                 brush->edgeCount[1][2]);
-            Com_PrintError(CON_CHANNEL_PHYS, v5);
+            Com_PrintError(CON_CHANNEL_PHYS, "%s", v5);
             v6 = va("mins/maxs: (%f %f %f), (%f %f %f)\n", *mins, mins[1], mins[2], *maxs, maxs[1], maxs[2]);
-            Com_PrintError(CON_CHANNEL_PHYS, v6);
+            Com_PrintError(CON_CHANNEL_PHYS, "%s", v6);
             Body = dGeomGetBody(geom);
             World = ODE_BodyGetWorld(Body);
             v9 = (PhysWorld)Phys_IndexFromODEWorld(World);
             v10 = va("Physics world: %i\n", v9);
-            Com_PrintError(CON_CHANNEL_PHYS, v10);
+            Com_PrintError(CON_CHANNEL_PHYS, "%s", v10);
             if (!alwaysfails)
                 MyAssertHandler(
                     ".\\physics\\phys_ode.cpp",

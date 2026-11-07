@@ -27,6 +27,10 @@ on:
       - scripts/tests/http/**
       - .github/workflows/http-downloads.yaml
 
+# Read-only token: these jobs only check out, build and upload artifacts.
+permissions:
+  contents: read
+
 jobs:
   download:
     strategy:

@@ -686,7 +686,7 @@ void MyAssertHandler(const char *filename, int line, int type, const char *fmt, 
         {
             isHandlingAssert = 2;
             Com_Printf(CON_CHANNEL_SYSTEM, "ASSERTBEGIN - ( Recursive assert )---------------------------------------------\n");
-            Com_Printf(CON_CHANNEL_SYSTEM, assertMessage);
+            Com_Printf(CON_CHANNEL_SYSTEM, "%s", assertMessage);
             Com_Printf(CON_CHANNEL_SYSTEM, "ASSERTEND - ( Recursive assert ) ----------------------------------------------\n\n");
         }
         exit(-1);

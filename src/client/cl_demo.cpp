@@ -646,7 +646,7 @@ void CL_CheckStartPlayingDemo()
         FS_FOpenFileRead(buf, &cls.demofile);
         if (!cls.demofile)
         {
-            Com_Error(ERR_DROP, va("EXE_ERR_CANT_READ", buf));
+            Com_Error(ERR_DROP, "%s", va("EXE_ERR_CANT_READ", buf));
         }
         Con_Close(0);
         cls.demoplaying = 1;

@@ -97,14 +97,19 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
       - name: Install 32-bit window build tools
-        timeout-minutes: 15
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
           sudo dpkg --add-architecture i386
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          scripts/ci/apt-install.sh \
             cmake ninja-build clang g++-multilib python3 python3-yaml libsdl2-dev:i386 ccache
           test -f /usr/lib/i386-linux-gnu/cmake/SDL2/sdl2-config.cmake
       - name: Restore compiler cache
@@ -216,13 +221,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
+
       - name: Install native 32-bit build tools
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          scripts/ci/apt-install.sh \
             cmake ninja-build clang g++-multilib python3 ccache
 
       - name: Restore compiler cache
@@ -278,6 +289,7 @@ jobs:
         shell: bash
         run: |
           python3 scripts/tests/test_linux_check_runner.py
+          python3 scripts/tests/test_ci_apt_install.py
           python3 scripts/tests/test_linux_fastfile_driver.py
           python3 scripts/tests/test_linux_client_core_driver.py
           python3 scripts/tests/test_strip_cdecl.py
@@ -287,6 +299,7 @@ jobs:
           python3 scripts/tests/test_openal_sound_formats.py
           python3 scripts/tests/test_openal_stream_seek.py
           python3 scripts/tests/test_linux_sp_level_sweep.py
+          python3 scripts/tests/test_shader_spike.py
 
       - name: Run asset-free native checks
         timeout-minutes: 30
@@ -353,13 +366,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
+
       - name: Install client census tools
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          scripts/ci/apt-install.sh \
             cmake clang g++-multilib python3 python3-yaml libopenal-dev
           clang++ --version
           printf 'int main(){return 0;}\n' > "$RUNNER_TEMP/m32-probe.cpp"
@@ -371,6 +390,15 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/tests/test_client_compile_census.py
+
+      - name: Check OpenAL channel stop and stream restart
+        # Runs the sound driver's channel-stop and stream-refill code against the
+        # system OpenAL Soft (libopenal-dev above) through its offline loopback
+        # device. No sound card, no game data.
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/tests/test_openal_channel_stop.py
 
       - name: Run client compile census
         timeout-minutes: 20
@@ -427,13 +455,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
+
       - name: Install x64 census tools
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          scripts/ci/apt-install.sh \
             cmake ninja-build clang python3 python3-yaml libopenal-dev
           clang++ --version
 
@@ -501,23 +535,29 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
+
       - name: Install x86_64 build tools
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          scripts/ci/apt-install.sh \
             cmake ninja-build clang python3 python3-clang-18 ccache
 
       # The layout check parses db_load.cpp as i386 and as x86_64, so it needs
       # the i386 C and C++ headers. Nothing in this job builds i386 code.
       - name: Install i386 headers for the layout check
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y g++-multilib
+          scripts/ci/apt-install.sh --no-update g++-multilib
 
       - name: Restore compiler cache
         uses: actions/cache/restore@v4
@@ -623,14 +663,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
+
       - name: Install aarch64 build tools
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
           test "$(uname -m)" = aarch64
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          scripts/ci/apt-install.sh \
             cmake ninja-build clang python3 ccache
 
       - name: Restore compiler cache
@@ -723,27 +769,33 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
+
       - name: Install x86_64 build tools
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
           # libopenal-dev only for <AL/al.h>; the client links the OpenAL stand-in.
           # libavcodec-dev and libavutil-dev for the Bink shim the client is
           # built with here (KISAK_LINUX_CINEMATICS, docs/linux-cinematics.md).
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          scripts/ci/apt-install.sh \
             cmake ninja-build clang binutils python3 python3-clang-18 ccache libopenal-dev \
             libavcodec-dev libavutil-dev
 
       # The size literal check parses every source as i386 and as x86_64, so it
       # needs the i386 C and C++ headers. Nothing in this job builds i386 code.
       - name: Install i386 headers for the size literal check
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y g++-multilib
+          scripts/ci/apt-install.sh --no-update g++-multilib
 
       - name: Restore compiler cache
         uses: actions/cache/restore@v4
@@ -966,17 +1018,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
+
       - name: Install aarch64 build tools
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
           test "$(uname -m)" = aarch64
-          sudo apt-get update
           # libopenal-dev only for <AL/al.h>; the client links the OpenAL stand-in.
           # libavcodec-dev and libavutil-dev for the Bink shim the client is
           # built with here (KISAK_LINUX_CINEMATICS, docs/linux-cinematics.md).
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          scripts/ci/apt-install.sh \
             cmake ninja-build clang binutils python3 ccache libopenal-dev \
             libavcodec-dev libavutil-dev
 
@@ -1084,7 +1142,9 @@ jobs:
           grep -qx 'libopenal_unavailable.so' "$RUNNER_TEMP/arm64-mp-client-needed.txt"
           grep -Eqx 'libavcodec\.so\.[0-9]+' "$RUNNER_TEMP/arm64-mp-client-needed.txt"
           grep -Eqx 'libavutil\.so\.[0-9]+' "$RUNNER_TEMP/arm64-mp-client-needed.txt"
-          if grep -Ev '^(libSDL3\.so\.0|libd3d9_unavailable\.so|libopenal_unavailable\.so|libavcodec\.so\.[0-9]+|libavutil\.so\.[0-9]+|libstdc\+\+\.so\.6|libm\.so\.6|libgcc_s\.so\.1|libc\.so\.6|libpthread\.so\.0|libdl\.so\.2)$' \
+          # Arm glibc keeps the stack-protector canary (__stack_chk_guard) in the
+          # dynamic loader, so a -fstack-protector build lists it too.
+          if grep -Ev '^(libSDL3\.so\.0|libd3d9_unavailable\.so|libopenal_unavailable\.so|libavcodec\.so\.[0-9]+|libavutil\.so\.[0-9]+|libstdc\+\+\.so\.6|libm\.so\.6|libgcc_s\.so\.1|libc\.so\.6|libpthread\.so\.0|libdl\.so\.2|ld-linux-aarch64\.so\.1)$' \
               "$RUNNER_TEMP/arm64-mp-client-needed.txt"; then
             echo "the multiplayer client needs a library beyond SDL3, D3D9, OpenAL, libavcodec and the runtimes" >&2
             exit 1
@@ -1155,7 +1215,7 @@ jobs:
     # OpenAL headers are needed because client sound headers include <AL/al.h>.
     name: Asset-free world front-end checks ${{ matrix.config }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 40
 
     strategy:
       fail-fast: false
@@ -1170,13 +1230,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
+
       - name: Install world front-end tools
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          scripts/ci/apt-install.sh \
             cmake clang g++-multilib python3 python3-yaml libopenal-dev
           clang++ --version
           printf 'int main(){return 0;}\n' > "$RUNNER_TEMP/m32-probe.cpp"
@@ -1246,7 +1312,7 @@ jobs:
     # configures anything, so it cannot serve a check that must not need them.
     name: Asset-free world surface checks ${{ matrix.config }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 40
 
     strategy:
       fail-fast: false
@@ -1257,13 +1323,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
+
       - name: Install 32-bit C++ toolchain
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y g++ g++-multilib python3
+          scripts/ci/apt-install.sh g++ g++-multilib python3
 
       - name: Verify the 32-bit C++20 toolchain
         shell: bash
@@ -1338,13 +1410,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
+
       - name: Install 32-bit C++ toolchains
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          scripts/ci/apt-install.sh \
             cmake ninja-build clang g++ g++-multilib binutils python3 ccache
 
       - name: Restore compiler cache
@@ -1543,15 +1621,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
+
       - name: Install 32-bit C++ toolchain
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
           # libopenal-dev only for <AL/al.h>, which the multiplayer client's
           # sound headers include; the client links the OpenAL stand-in.
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          scripts/ci/apt-install.sh \
             cmake ninja-build clang g++ g++-multilib binutils python3 ccache libopenal-dev
 
       - name: Restore compiler cache
@@ -1935,7 +2019,7 @@ jobs:
     # recording fake: no DXVK, no SDL, no GPU, no game assets, no CMake configure.
     name: Asset-free free camera checks ${{ matrix.config }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 40
 
     strategy:
       fail-fast: false
@@ -1946,13 +2030,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
+
       - name: Install 32-bit Clang toolchain
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y clang g++-multilib python3
+          scripts/ci/apt-install.sh clang g++-multilib python3
 
       - name: Verify the 32-bit C++20 toolchain
         shell: bash
@@ -1995,3 +2085,132 @@ jobs:
           path: artifacts/
           if-no-files-found: warn
           retention-days: 7
+
+  vulkan_window:
+    # Opt-in Vulkan back end, first piece (docs/vulkan-core.md): the shared
+    # Vulkan core in src/gfx_vk and KisakCOD-vulkan-probe, which opens an SDL3
+    # window and clears, presents and resizes it through the core. Built for
+    # x86_64, the primary Vulkan target, against the x86_64 SDL3 pin (same
+    # options and cache key as x64_client). It runs on Mesa's lavapipe, a CPU
+    # Vulkan driver, through SDL's offscreen video driver (VK_EXT_headless_surface):
+    # no GPU, no display server, no DXVK, no game data. The validation layer is
+    # required, with synchronisation checks, and any error fails the job.
+    name: Vulkan window probe on lavapipe ${{ matrix.config }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [Debug, RelWithDebInfo]
+
+    env:
+      SDL3_REVISION: 877399b2b2cf21e67554ed9046410f268ce1d1b2
+      BUILD_DIR: build-x64/vulkan-probe-${{ matrix.config }}
+      OUT_DIR: ${{ github.workspace }}/out/vulkan-probe-${{ matrix.config }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
+
+      - name: Install x86_64 build tools and the lavapipe Vulkan driver
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          # libvulkan-dev for the headers (the probe does not link the loader;
+          # SDL3 opens it), mesa-vulkan-drivers for lavapipe,
+          # vulkan-validationlayers for the required validation run.
+          scripts/ci/apt-install.sh \
+            cmake ninja-build clang binutils python3 ccache \
+            libvulkan-dev mesa-vulkan-drivers vulkan-validationlayers
+
+      - name: Restore compiler cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-vulkan-window-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-vulkan-window-${{ matrix.config }}-
+      - name: Use compiler cache
+        id: ccache
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/ci/use-ccache.sh
+
+      - name: Restore pinned x86_64 SDL3 SDK
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/SDL3-sdk
+          key: sdl3-sdk-x86_64-${{ env.SDL3_REVISION }}-${{ hashFiles('.github/workflows/build-kisakcod-linux.yaml') }}
+
+      - name: Build pinned x86_64 SDL3 SDK
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The same pin and options as the x86_64 client job, so the two share
+          # the cached SDK. X11 and Wayland are off: the probe uses SDL's
+          # offscreen driver, which supports Vulkan through headless surfaces.
+          if [[ ! -f "$RUNNER_TEMP/SDL3-sdk/lib/libSDL3.so.0" ]]; then
+            git init "$RUNNER_TEMP/SDL3-source"
+            git -C "$RUNNER_TEMP/SDL3-source" remote add origin https://github.com/libsdl-org/SDL.git
+            git -C "$RUNNER_TEMP/SDL3-source" fetch --depth 1 origin "$SDL3_REVISION"
+            git -C "$RUNNER_TEMP/SDL3-source" checkout --detach FETCH_HEAD
+            test "$(git -C "$RUNNER_TEMP/SDL3-source" rev-parse HEAD)" = "$SDL3_REVISION"
+            cmake -S "$RUNNER_TEMP/SDL3-source" -B "$RUNNER_TEMP/SDL3-build" -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang \
+              -DCMAKE_C_FLAGS=-m64 -DCMAKE_SHARED_LINKER_FLAGS=-m64 \
+              -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/SDL3-sdk" -DCMAKE_INSTALL_LIBDIR=lib \
+              -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TESTS=OFF -DSDL_TEST_LIBRARY=OFF \
+              -DSDL_EXAMPLES=OFF -DSDL_X11=OFF -DSDL_WAYLAND=OFF -DSDL_UNIX_CONSOLE_BUILD=ON \
+              -DSDL_ALSA=OFF -DSDL_PULSEAUDIO=OFF -DSDL_PIPEWIRE=OFF -DSDL_JACK=OFF
+            cmake --build "$RUNNER_TEMP/SDL3-build" --parallel "$(nproc)"
+            cmake --install "$RUNNER_TEMP/SDL3-build"
+          fi
+          readelf -h "$RUNNER_TEMP/SDL3-sdk/lib/libSDL3.so.0" | grep -Eq 'Class:[[:space:]]+ELF64'
+
+      - name: Build the Vulkan window probe
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B "$BUILD_DIR" -G Ninja \
+            -DKISAK_PLATFORM=linux -DKISAK_LINUX_ARCH=x86_64 \
+            -DCMAKE_BUILD_TYPE="${{ matrix.config }}" \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$OUT_DIR" \
+            -DKISAK_BUILD_VULKAN_PROBE=ON \
+            -DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3"
+          cmake --build "$BUILD_DIR" --target KisakCOD-vulkan-probe --parallel "$(nproc)"
+          readelf -h "$OUT_DIR/KisakCOD-vulkan-probe" | grep -Eq 'Class:[[:space:]]+ELF64'
+          # The loader is opened at run time through SDL, never linked.
+          if readelf -d "$OUT_DIR/KisakCOD-vulkan-probe" | grep -q 'libvulkan'; then
+            echo "KisakCOD-vulkan-probe must not link libvulkan" >&2
+            exit 1
+          fi
+
+      - name: Run the Vulkan window probe on lavapipe
+        timeout-minutes: 10
+        shell: bash
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          python3 -u scripts/tests/test_vulkan_window_probe.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-probe" \
+            --video-driver offscreen --validation require
+
+      - name: Save compiler cache
+        if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-vulkan-window-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
