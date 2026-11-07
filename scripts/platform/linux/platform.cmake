@@ -14,7 +14,7 @@ if(KISAK_PLATFORM STREQUAL "macos")
             KISAK_BUILD_UI_ASSET_EXPORT KISAK_BUILD_WORLD_FRONTEND_PROBE KISAK_BUILD_DEVICE_PROBE
             KISAK_BUILD_WORLD_DEVICE_PROBE KISAK_BUILD_WORLD_DRAW_PROBE
             KISAK_BUILD_LINUX_MP_CLIENT KISAK_BUILD_LINUX_SP_GAME
-            KISAK_LINUX_CINEMATICS KISAK_LINUX_TRACY KISAK_WIN_TRACY)
+            KISAK_LINUX_CINEMATICS KISAK_LINUX_TRACY KISAK_WIN_TRACY KISAK_BUILD_VULKAN_PROBE)
         if(${kisak_not_on_macos})
             message(FATAL_ERROR "${kisak_not_on_macos} is not available on macOS yet; KISAK_PLATFORM=macos builds KisakCOD-dedi only")
         endif()
@@ -82,3 +82,31 @@ if(KISAK_LINUX_ARCH STREQUAL "aarch64" OR KISAK_MACOS_ARCH STREQUAL "arm64")
 else()
     set(KISAK_LINUX_SIMD_OPTIONS -msse2 -mfpmath=sse)
 endif()
+
+# Hardening for the shipped Linux games and server (security audit finding 6):
+# stack canaries in functions with local arrays, probes so a large stack frame
+# cannot step over the guard page, and a read-only relocation table resolved at
+# start-up.  None of this changes behaviour unless memory is already corrupt,
+# when the process stops instead of running on.
+include(CheckCXXCompilerFlag)
+set(KISAK_LINUX_HARDENING_OPTIONS -fstack-protector-strong)
+check_cxx_compiler_flag(-fstack-clash-protection KISAK_HAVE_STACK_CLASH_PROTECTION)
+if(KISAK_HAVE_STACK_CLASH_PROTECTION)
+    list(APPEND KISAK_LINUX_HARDENING_OPTIONS -fstack-clash-protection)
+endif()
+set(KISAK_LINUX_HARDENING_LINK_OPTIONS -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack)
+if(APPLE)
+    # ld64 has no -z options. Mach-O executables already get a non-executable
+    # stack, and their imports are bound at load time (chained fixups) and the
+    # pointers kept read-only, which is what relro and now ask for on ELF.
+    set(KISAK_LINUX_HARDENING_LINK_OPTIONS "")
+endif()
+# glibc's checked string and memory calls (_FORTIFY_SOURCE=2): a copy that
+# would run past the end of a known-size buffer stops the process.  Level 2
+# also checks copies into struct members, which is where decompiled code is
+# most likely to write past one field into the next on purpose, so this needs
+# a bot soak on every stock map before it ships.  It needs optimisation, so
+# Debug builds leave it off.
+list(APPEND KISAK_LINUX_HARDENING_OPTIONS
+    $<$<NOT:$<CONFIG:Debug>>:-U_FORTIFY_SOURCE>
+    $<$<NOT:$<CONFIG:Debug>>:-D_FORTIFY_SOURCE=2>)

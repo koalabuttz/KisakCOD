@@ -39,9 +39,9 @@ whose `alcOpenDevice` finds no device. For an x86_64 build, add
 `-DKISAK_LINUX_ARCH=x86_64` and use x86_64 builds of the same libraries
 ([linux-x64.md](linux-x64.md#x86_64-multiplayer-client)).
 
-For profiling, add `-DKISAK_LINUX_TRACY=ON`. It builds `KisakCOD-mp` and
-`KisakCOD-sp` with the Tracy profiler (the version `scripts/extern/tracy.cmake`
-fetches), as the dedicated server already is: the engine's `PROF_SCOPED` zones
+For profiling, add `-DKISAK_LINUX_TRACY=ON`. It builds `KisakCOD-mp`,
+`KisakCOD-sp` and `KisakCOD-dedi` with the Tracy profiler (the version
+`scripts/extern/tracy.cmake` fetches): the engine's `PROF_SCOPED` zones
 become Tracy zones, one `MainThread` zone per frame. It stays idle until a
 profiler of the same Tracy version connects from the same machine, for example
 `tracy-capture -o run.tracy -s 120`. Player builds leave it off. CI builds the

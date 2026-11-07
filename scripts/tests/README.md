@@ -38,8 +38,11 @@ client compatibility.
 `src/server_mp/sv_remote_input.h` rules 64- and 32-bit: `rcon` is refused until
 `rcon_password` is set and matches exactly (an unset password used to accept
 `rcon "" <command>` from any address), and a `download <name>` client command
-is served only for a plain relative `.iwd`/`.ff` path with no `..`, `:` or
-leading separator (any file under `fs_homepath` used to be downloadable).
+is served only for a plain relative `.iwd`/`.ff` path of printable ASCII with
+no `..`, `:`, `;`, `"`, leading separator or component ending in `.` or a space
+(any file under `fs_homepath` used to be downloadable). It also runs the
+`src/server_mp/sv_query_limit.h` leaky buckets that rate-limit `getstatus`,
+`getinfo`, `getchallenge` and `rcon` replies per address and globally.
 
 `test_server_test_clients.py` checks the extracted internal bot functions with
 controlled connection and movement services; the native runner runs its 32-bit
@@ -147,6 +150,11 @@ When the hosted workflows run:
 
 What makes them faster without dropping a check:
 
+- Ubuntu package installs use the main archive in place of the hosted runner's
+  slow Azure mirror. Arm ports and other repositories are unchanged. Each job
+  restores its latest downloaded `.deb` cache and saves a new version per run,
+  so newly downloaded package versions are retained too. The installer still
+  refreshes package lists; normal APT signature and hash checks remain enabled.
 - The four Linux jobs that build the engine with CMake (window, native, native
   D3D9 boundary, device probe) compile through ccache
   (`scripts/ci/use-ccache.sh`). Each job and configuration restores the newest
@@ -415,6 +423,20 @@ of the default i386 header checks:
 cmake --build build-x64 --target KisakCOD-dedi
 python3 scripts/tests/test_linux_bootstrap.py --arch x86_64 bin/KisakCOD-dedi
 ```
+
+## Vulkan window probe
+
+```sh
+python3 scripts/tests/test_vulkan_window_probe.py --binary <build>/KisakCOD-vulkan-probe \
+  [--video-driver offscreen] [--validation require|auto|off]
+```
+
+Runs the opt-in `KisakCOD-vulkan-probe` (`-DKISAK_BUILD_VULKAN_PROBE=ON`): bad
+arguments, the device list, a fail-closed run with no Vulkan driver visible,
+and a full run that resizes the window, reads back a cleared frame and must
+have no validation errors. It needs SDL3, a Vulkan loader and a driver; hosted
+CI uses Mesa's lavapipe through SDL's offscreen video driver, so no GPU or
+display is involved. See [docs/vulkan-core.md](../../docs/vulkan-core.md).
 
 ## Free camera checks
 

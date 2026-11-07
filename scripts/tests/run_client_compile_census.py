@@ -107,7 +107,7 @@ SP_DEFINES = ("-DKISAK_SP",) + tuple(define for define in CLIENT_DEFINES if defi
 CLIENT_FLAGS = (
     "-m32", "-std=gnu++20", "-fms-extensions", "-msse2", "-mfpmath=sse",
     "-fno-strict-aliasing", "-Wno-c++11-narrowing", "-Wno-invalid-token-paste",
-    "-Wno-ignored-attributes", "-Wno-format-security", "-fsyntax-only",
+    "-Wno-ignored-attributes", "-Werror=format-security", "-fsyntax-only",
 )
 
 # What --target selects: the Windows target whose groups are censused, its own

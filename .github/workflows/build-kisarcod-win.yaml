@@ -86,6 +86,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
   cancel-in-progress: true
 
+# Read-only token: these jobs only check out, build and upload artifacts.
+permissions:
+  contents: read
+
 jobs:
   runtime-regressions:
     name: Runtime regression checks
@@ -163,7 +167,7 @@ jobs:
           Write-Host $sdkDir
 
       - name: Install latest CMake
-        uses: lukka/get-cmake@latest
+        uses: lukka/get-cmake@30aea713799f46b5b60e60f5fa83f849abd52c22 # the "latest" branch on 2026-11-05
 
       # The Debug build also turns on the opt-in Tracy profiler, so the
       # profiling build compiles and links on every push; Release stays the
@@ -253,7 +257,7 @@ jobs:
           echo "DXSDK_DIR=$sdkDir" >> $env:GITHUB_ENV
 
       - name: Install latest CMake
-        uses: lukka/get-cmake@latest
+        uses: lukka/get-cmake@30aea713799f46b5b60e60f5fa83f849abd52c22 # the "latest" branch on 2026-11-05
 
       - name: Check the MSVC x64 summarizer
         run: |

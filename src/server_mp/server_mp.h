@@ -867,6 +867,9 @@ void SVC_Status(netadr_t from);
 void SVC_GameCompleteStatus(netadr_t from);
 void SVC_Info(netadr_t from);
 void SV_ConnectionlessPacket(netadr_t from, msg_t *msg);
+// Out-of-band reply limits (sv_query_limit.h); kind is an SvQueryKind.
+bool SV_QueryLimitAllows(netadr_t from, int kind);
+bool SV_RconFailureReplyAllowed();
 void SV_PacketEvent(netadr_t from, msg_t *msg);
 void SV_CalcPings();
 void SV_FreeClientScriptId(client_t *cl);

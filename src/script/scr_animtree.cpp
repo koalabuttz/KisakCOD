@@ -214,7 +214,7 @@ void Scr_LoadAnimTreeAtIndex(uint32_t index, void *(*Alloc)(int), int user)
             animtree_node = scrAnimPub.animtree_node;
             if (!Scr_LoadAnimTreeInternal(SL_ConvertToString(filenameId), animtree_node, names))
             {
-                Com_Error(ERR_DROP, va("unknown anim tree '%s'", SL_ConvertToString(filenameId)));
+                Com_Error(ERR_DROP, "%s", va("unknown anim tree '%s'", SL_ConvertToString(filenameId)));
             }
             Hunk_CheckTempMemoryClear();
             Hunk_CheckTempMemoryHighClear();

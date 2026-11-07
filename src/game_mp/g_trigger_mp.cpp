@@ -125,7 +125,7 @@ void SP_trigger_radius(gentity_s *ent)
                 ent->r.currentOrigin[0],
                 ent->r.currentOrigin[1],
                 ent->r.currentOrigin[2]);
-            Com_Error(ERR_DROP, v1);
+            Com_Error(ERR_DROP, "%s", v1);
         }
         if (!G_SpawnFloat("height", "", &height))
         {
@@ -134,7 +134,7 @@ void SP_trigger_radius(gentity_s *ent)
                 ent->r.currentOrigin[0],
                 ent->r.currentOrigin[1],
                 ent->r.currentOrigin[2]);
-            Com_Error(ERR_DROP, v2);
+            Com_Error(ERR_DROP, "%s", v2);
         }
     }
     else
@@ -169,7 +169,7 @@ void SP_trigger_disk(gentity_s *ent)
             ent->r.currentOrigin[0],
             ent->r.currentOrigin[1],
             ent->r.currentOrigin[2]);
-        Com_Error(ERR_DROP, v1);
+        Com_Error(ERR_DROP, "%s", v1);
     }
     ent->handler = ENT_HANDLER_TRIGGER_MULTIPLE;
     radius = radius + 64.0;

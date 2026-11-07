@@ -29,6 +29,10 @@ on:
       - scripts/tests/test_mp_vehicle_lifecycle.py
       - .github/workflows/mp-vehicle-lifecycle.yaml
 
+# Read-only token: these jobs only check out, build and upload artifacts.
+permissions:
+  contents: read
+
 jobs:
   lifecycle:
     runs-on: ubuntu-latest

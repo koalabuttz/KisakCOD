@@ -3572,7 +3572,7 @@ char* Scr_GetSourceFile_FastFile(char const* filename)
 	if (!rawfile)
 	{
 		v1 = va("cannot find %s", filename);
-		Com_Error(ERR_DROP, v1);
+		Com_Error(ERR_DROP, "%s", v1);
 	}
 	return (char*)rawfile->buffer;
 }
@@ -3588,7 +3588,7 @@ char* Scr_GetSourceFile(char const* filename)
 	if (len < 0)
 	{
 		v1 = va("cannot find %s", filename);
-		Com_Error(ERR_DROP, v1);
+		Com_Error(ERR_DROP, "%s", v1);
 	}
 	sourceBuffer = (char*)Hunk_AllocateTempMemoryHigh(len + 1, "Scr_LoadAnimTreeInternal");
 	FS_Read((unsigned char*)sourceBuffer, len, f);
@@ -3608,7 +3608,7 @@ char *Scr_GetSourceFile_LoadObj(const char *filename)
 	if (len < 0)
 	{
 		v1 = va("cannot find %s", filename);
-		Com_Error(ERR_DROP, v1);
+		Com_Error(ERR_DROP, "%s", v1);
 	}
 	sourceBuffer = (char*)Hunk_AllocateTempMemoryHigh(len + 1, "Scr_LoadAnimTreeInternal");
 	FS_Read((unsigned char*)sourceBuffer, len, f);
@@ -3665,7 +3665,7 @@ void  Scr_AddFieldsForFile(char const* filename)
 			if (strcmp(token, "vector"))
 			{
 				v2 = va("Unknown type %s in %s", token, filename);
-				Com_Error(ERR_DROP, v2);
+				Com_Error(ERR_DROP, "%s", v2);
 				return;
 			}
 			type = VAR_VECTOR;
@@ -3674,7 +3674,7 @@ void  Scr_AddFieldsForFile(char const* filename)
 		if (!sourcePos)
 		{
 			v3 = va("missing field name in %s", filename);
-			Com_Error(ERR_DROP, v3);
+			Com_Error(ERR_DROP, "%s", v3);
 		}
 		v7 = strlen(token);
 		len = v7 + 1;

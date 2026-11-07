@@ -814,7 +814,7 @@ void G_PrintFastFileErrors(const char *fastfile)
     if (rawfile->len)
     {
         Com_PrintError(CON_CHANNEL_ERROR, "There were errors when building fast file '%s'\n", fastfile);
-        Com_PrintError(CON_CHANNEL_ERROR, (char *)rawfile->buffer);
+        Com_PrintError(CON_CHANNEL_ERROR, "%s", (char *)rawfile->buffer);
     }
 }
 

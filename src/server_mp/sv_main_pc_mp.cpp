@@ -5,6 +5,7 @@
 #include <universal/q_shared.h>
 #include "server_mp.h"
 #include "sv_remote_input.h"
+#include "sv_query_limit.h"
 #include <qcommon/cmd.h>
 
 #include <cgame_mp/cg_local_mp.h>
@@ -237,7 +238,6 @@ void SV_FlushRedirect(char *outputbuf)
     NET_OutOfBandPrint(NS_SERVER, svs.redirectAddress, buf);
 }
 
-int lasttime;
 void SVC_RemoteCommand(netadr_t from)
 {
     const char *v1; // eax
@@ -251,13 +251,15 @@ void SVC_RemoteCommand(netadr_t from)
     int valid; // [esp+C08h] [ebp-18h]
     int len; // [esp+C0Ch] [ebp-14h]
     const char *password; // [esp+C10h] [ebp-10h]
-    int time; // [esp+C14h] [ebp-Ch]
     int i; // [esp+C18h] [ebp-8h]
 
-    time = Sys_Milliseconds();
-    if (!lasttime || time - lasttime >= 500)
+    // KISAK: retail allowed one rcon packet per 500 ms from anyone, so a stream of
+    // bad passwords locked the admin out.  Now each address has its own limit,
+    // checked before the password, and only replies to wrong passwords share a
+    // global limit (sv_query_limit.h).  A correct password is never refused for
+    // someone else's flood.
+    if (SV_QueryLimitAllows(from, SV_QUERY_RCON))
     {
-        lasttime = time;
         password = SV_Cmd_Argv(1);
         // KISAK: `current.integer` on a string dvar is the string pointer and never 0,
         // so an unset rcon_password used to accept `rcon "" <command>` from anyone.
@@ -268,6 +270,10 @@ void SVC_RemoteCommand(netadr_t from)
             v6 = SV_Cmd_Argv(2);
             v2 = NET_AdrToString(from);
             Com_Printf(CON_CHANNEL_SERVER, "Rcon from %s:\n%s\n", v2, v6);
+        }
+        else if (!SV_RconFailureReplyAllowed())
+        {
+            return; // flood of wrong passwords: drop silently
         }
         else
         {
