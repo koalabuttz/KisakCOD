@@ -31,8 +31,8 @@
 
 #pragma once
 
-#if !defined(__linux__) && !defined(__APPLE__)
-#error "src/linux/compat.h describes the POSIX bridge and is only valid on Linux and macOS"
+#if !defined(__linux__) && !defined(__APPLE__) && !defined(__vita__)
+#error "src/linux/compat.h describes the POSIX bridge and is only valid on Linux, macOS and the PS Vita"
 #endif
 
 #include <cstddef>

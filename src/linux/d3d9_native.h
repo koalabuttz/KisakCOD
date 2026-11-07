@@ -73,7 +73,7 @@
 
 #pragma once
 
-#if !defined(__linux__) && !defined(__APPLE__)
+#if !defined(__linux__) && !defined(__APPLE__) && !defined(__vita__)
 #error "src/linux/d3d9_native.h is the native Linux and macOS DXVK boundary only"
 #endif
 #if !defined(KISAK_LINUX_NATIVE_D3D9)

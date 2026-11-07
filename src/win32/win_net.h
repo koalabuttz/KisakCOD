@@ -18,7 +18,7 @@ void		NET_Init(void);
 void		NET_Shutdown(void);
 void		NET_Restart(void);
 void		NET_Config(bool enableNetworking);
-#if !defined(__linux__) && !defined(__APPLE__)
+#if !defined(__linux__) && !defined(__APPLE__) && !defined(__vita__)
 void		NET_SendPacket(netsrc_t sock, int length, const void* data, netadr_t to);
 #endif
 const char* NET_ErrorString(void);

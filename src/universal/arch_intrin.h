@@ -16,7 +16,7 @@
 #if defined(__i386__) || defined(__x86_64__) || defined(_M_IX86) || defined(_M_X64)
 #define KISAK_ARCH_X86 1
 #include <xmmintrin.h> // SSE
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
 #include <x86intrin.h> // __rdtsc, _BitScanReverse
 #endif
 #elif defined(__aarch64__) || defined(_M_ARM64)
@@ -37,6 +37,15 @@ inline uint64_t __rdtsc()
     return ticks;
 }
 #endif
+#elif defined(__arm__) && defined(__vita__)
+// PS Vita (Cortex-A9): the process clock counts microseconds and costs one
+// system call, like the Linux armv7 clock_gettime path below.
+#define KISAK_ARCH_X86 0
+#include <psp2/kernel/processmgr.h>
+inline uint64_t __rdtsc()
+{
+    return static_cast<uint64_t>(sceKernelGetProcessTimeWide());
+}
 #elif defined(__arm__)
 // 32-bit Arm (armv7, the PS Vita's Cortex-A9). The A9 has no architectural
 // generic timer, so count nanoseconds from the monotonic clock instead.

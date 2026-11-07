@@ -8,7 +8,7 @@
 
 // On Linux this needs the D3D9 API: the native boundary (KISAK_LINUX_NATIVE_D3D9)
 // provides it; with the type-only stand-in nothing may release a device object.
-#if !(defined(__linux__) || defined(__APPLE__)) || defined(KISAK_LINUX_NATIVE_D3D9)
+#if !(defined(__linux__) || defined(__APPLE__) || defined(__vita__)) || defined(KISAK_LINUX_NATIVE_D3D9)
 uint32_t R_ReleaseD3DSurface(IDirect3DSurface9 *surface)
 {
     return R_HW_Release(surface);

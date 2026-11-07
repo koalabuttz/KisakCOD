@@ -7,6 +7,9 @@
 #include <universal/assertive.h>
 
 #include "sys_console.h"
+#if defined(__vita__)
+#include <vita/vita_platform.h> // Vita_ConsoleWrite
+#endif
 
 #include <errno.h>
 #include <fcntl.h>
@@ -61,6 +64,12 @@ namespace
         if (length == 0)
             return;
 
+#if defined(__vita__)
+        // No terminal on the Vita: the console goes to a log file
+        // (src/vita/vita_main.cpp).
+        Vita_ConsoleWrite(text, length);
+        return;
+#endif
         // stdout is the console; ignore short writes the same way the engine
         // ignores failed window messages.
         size_t written = 0;
@@ -81,6 +90,11 @@ namespace
     {
         if (s_stdinNonBlocking)
             return;
+#if defined(__vita__)
+        // No stdin on the Vita: commands come from the command line file and rcon.
+        s_stdinEof = true;
+        return;
+#endif
 
         const int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
         if (flags < 0)

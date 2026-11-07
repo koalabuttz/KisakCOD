@@ -6,7 +6,7 @@
 #include <universal/q_parse.h>
 #include <qcommon/com_bsp.h>
 
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
 // This file scans only numeric vectors, with no scanf_s buffer-size arguments.
 #define sscanf_s sscanf
 #endif

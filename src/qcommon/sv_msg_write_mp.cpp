@@ -1393,7 +1393,7 @@ void MSG_WriteEntityRemoval(
 {
     iassert( from );
     iassert( !msg->readOnly );
-#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__) || defined(__vita__)) || !defined(KISAK_DEDICATED)
     if (cl_shownet && (cl_shownet->current.integer >= 2 || cl_shownet->current.integer == -1))
         Com_Printf(CON_CHANNEL_SYSTEM, "W|%3i: #%-3i remove\n", msg->cursize, *(uint32_t *)from);
 #endif

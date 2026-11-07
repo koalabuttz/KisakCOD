@@ -25,7 +25,7 @@
 
 #include "scr_yacc.h"
 
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(__vita__)
 #include <alloca.h> // macOS has no <malloc.h>
 #else
 #include <malloc.h> // alloca

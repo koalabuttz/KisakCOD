@@ -13,6 +13,9 @@
 uint32_t Win_InitThreads();
 
 #include <pthread.h>
+#if defined(__vita__)
+#include <vita/vita_platform.h> // Vita_SetIeeeFloatMode
+#endif
 #include <string.h>
 #include <unistd.h>
 
@@ -156,6 +159,9 @@ void SetThreadName(uint32_t threadId_, const char *threadName)
 #if defined(__APPLE__)
     // macOS only names the calling thread, which is the thread asked about here.
     pthread_setname_np(name);
+#elif defined(__vita__)
+    // The Vita names a thread when it is created; pthreads there cannot rename one.
+    (void)name;
 #else
     pthread_setname_np(pthread_self(), name);
 #endif
@@ -167,6 +173,11 @@ static void *ThreadTrampoline(void *argument)
 
     threadId[context] = Sys_GetCurrentThreadId();
     s_threadSlots[context].id = threadId[context];
+#if defined(__vita__)
+    // Each Vita thread starts with the kernel's float mode; use the IEEE one
+    // the main thread set (src/vita/vita_main.cpp).
+    Vita_SetIeeeFloatMode();
+#endif
 
     SetThreadName(0xFFFFFFFFu, s_threadNames[context]);
 
@@ -200,7 +211,18 @@ void Sys_CreateThread(void (*function)(uint32_t), ThreadContext_t threadContext)
     // Sys_ResumeThread; worker threads stay parked until their caller resumes.
     Posix_RequestSuspend((int)threadContext);
 
+#if defined(__vita__)
+    // Vita threads get a small stack unless asked; the Windows build ran its
+    // worker threads on the 1 MB default, so ask for that.
+    pthread_attr_t attributes;
+    pthread_attr_init(&attributes);
+    pthread_attr_setstacksize(&attributes, 1024 * 1024);
+    const int created = pthread_create(&slot.tid, &attributes, ThreadTrampoline, (void *)(intptr_t)threadContext);
+    pthread_attr_destroy(&attributes);
+    if (created != 0)
+#else
     if (pthread_create(&slot.tid, nullptr, ThreadTrampoline, (void *)(intptr_t)threadContext) != 0)
+#endif
     {
         // Nothing owns the gate now, so drop the request rather than leaving a
         // context that looks permanently suspended.
@@ -331,7 +353,12 @@ bool Sys_IsDatabaseThread()
 
 uint32_t Win_InitThreads()
 {
+#if defined(__vita__)
+    // Of the Vita's four Cortex-A9 cores, applications run on three.
+    long detected = 3;
+#else
     long detected = sysconf(_SC_NPROCESSORS_ONLN);
+#endif
     if (detected < 1)
         detected = 1;
 

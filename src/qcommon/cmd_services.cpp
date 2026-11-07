@@ -33,7 +33,7 @@ public:
     bool ServerRunning() override { return com_sv_running && com_sv_running->current.enabled; }
     bool ServerGameCommand() override { return SV_GameCommand(); }
     void Forward(int client,const char *text) override {
-#if (defined(__linux__) || defined(__APPLE__)) && defined(KISAK_DEDICATED)
+#if (defined(__linux__) || defined(__APPLE__) || defined(__vita__)) && defined(KISAK_DEDICATED)
         Com_Printf(CON_CHANNEL_SYSTEM,"Unknown command: %s\n",Cmd_Argv(0));
 #elif !defined(KISAK_RADIANT)
         CL_ForwardCommandToServer(client,text);

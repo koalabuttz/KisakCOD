@@ -2,7 +2,7 @@
 #include "msg_mp.h"
 #include "huffman.h"
 
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
 #include <linux/compat.h>
 #else
 #include <windows.h>
@@ -1276,7 +1276,7 @@ double MSG_ReadOriginFloat(int bits, msg_t *msg, float oldValue)
             iassert( bits == MSG_FIELD_ORIGINY );
             index = 1;
         }
-#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__) || defined(__vita__)) || !defined(KISAK_DEDICATED)
         roundedCenter = MSG_RoundMapCenter((*CL_GetMapCenter())[index]);
 #else
         // A dedicated server has no client static. svs.mapCenter is the same
@@ -1298,7 +1298,7 @@ double MSG_ReadOriginZFloat(msg_t *msg, float oldValue)
 
     if (MSG_ReadBit(msg))
     {
-#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__) || defined(__vita__)) || !defined(KISAK_DEDICATED)
         roundedCenter = MSG_RoundMapCenter((*CL_GetMapCenter())[2]);
 #else
         // See MSG_ReadOriginFloat: the dedicated server decodes against the
@@ -1335,7 +1335,7 @@ int MSG_ReadDeltaEntityStruct(msg_t *msg, int time, const char *from, char *to, 
     {
         // cl_shownet is a client-only network trace dvar; a dedicated server
         // never registers it.
-#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__) || defined(__vita__)) || !defined(KISAK_DEDICATED)
         if (cl_shownet && (cl_shownet->current.integer >= 2 || cl_shownet->current.integer == -1))
             Com_Printf(CON_CHANNEL_SYSTEM, "%3i: #%-3i remove\n", msg->readcount, number);
 #endif
@@ -1347,7 +1347,7 @@ int MSG_ReadDeltaEntityStruct(msg_t *msg, int time, const char *from, char *to, 
         print = 0;
         // cl_shownet is a client-only network trace dvar; a dedicated server
         // never registers it, so wire-trace printing is compiled out there.
-#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__) || defined(__vita__)) || !defined(KISAK_DEDICATED)
         if (cl_shownet && (cl_shownet->current.integer >= 2 || cl_shownet->current.integer == -1))
         {
             print = 1;
@@ -1468,7 +1468,7 @@ int MSG_ReadDeltaStruct(
     {
         // cl_shownet is a client-only network trace dvar; a dedicated server
         // never registers it.
-#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__) || defined(__vita__)) || !defined(KISAK_DEDICATED)
         if (cl_shownet && (cl_shownet->current.integer >= 2 || cl_shownet->current.integer == -1))
             Com_Printf(CON_CHANNEL_SYSTEM, "%3i: #%-3i remove\n", msg->readcount, number);
 #endif
@@ -1483,7 +1483,7 @@ int MSG_ReadDeltaStruct(
             print = 0;
             // cl_shownet is a client-only network trace dvar; a dedicated
             // server never registers it.
-#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__) || defined(__vita__)) || !defined(KISAK_DEDICATED)
             if (cl_shownet && (cl_shownet->current.integer >= 2 || cl_shownet->current.integer == -1))
             {
                 print = 1;
@@ -1648,7 +1648,7 @@ void MSG_ReadDeltaPlayerstate(
 
     // cl_shownet is a client-only network trace dvar; a dedicated server never
     // registers it.
-#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__) || defined(__vita__)) || !defined(KISAK_DEDICATED)
     if (cl_shownet && (cl_shownet->current.integer >= 2 || cl_shownet->current.integer == -2))
     {
         print = 1;
@@ -1684,7 +1684,7 @@ void MSG_ReadDeltaPlayerstate(
     // Fields past lastChangedField keep their `from` values through the
     // memcpy above (upstream #36), so they need no copy of their own.
 
-#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__) || defined(__vita__)) || !defined(KISAK_DEDICATED)
     // Client-side prediction bookkeeping: the client records the origin it sent
     // so the reassembled delta base matches what the server encoded against. A
     // dedicated server has no predicted origin to look up and no client globals
@@ -1712,7 +1712,7 @@ void MSG_ReadDeltaPlayerstate(
 
     if (MSG_ReadBit(msg))
     {
-#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__) || defined(__vita__)) || !defined(KISAK_DEDICATED)
         if (cl_shownet && cl_shownet->current.integer == 4)
             Com_Printf(CON_CHANNEL_SYSTEM, "%s ", "PS_STATS");
 #endif
@@ -1735,7 +1735,7 @@ void MSG_ReadDeltaPlayerstate(
         {
             if (MSG_ReadBit(msg))
             {
-#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__) || defined(__vita__)) || !defined(KISAK_DEDICATED)
                 if (cl_shownet && cl_shownet->current.integer == 4)
                     Com_Printf(CON_CHANNEL_SYSTEM, "%s ", "PS_AMMO");
 #endif
@@ -1755,7 +1755,7 @@ void MSG_ReadDeltaPlayerstate(
     {
         if (MSG_ReadBit(msg))
         {
-#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__) || defined(__vita__)) || !defined(KISAK_DEDICATED)
             if (cl_shownet && cl_shownet->current.integer == 4)
                 Com_Printf(CON_CHANNEL_SYSTEM, "%s ", "PS_AMMOCLIP");
 #endif

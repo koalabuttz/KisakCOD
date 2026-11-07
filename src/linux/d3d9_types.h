@@ -33,7 +33,7 @@
 
 #pragma once
 
-#if !defined(__linux__) && !defined(__APPLE__)
+#if !defined(__linux__) && !defined(__APPLE__) && !defined(__vita__)
 #error "src/linux/d3d9_types.h is the stand-in for <d3d9.h> on native Linux and macOS only"
 #endif
 

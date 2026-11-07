@@ -41,7 +41,7 @@
 #include <universal/q_shared.h> // va()
 #include "collision_trimesh_KISAK.h"
 
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
 #include <linux/compat.h>
 #else
 #include <windows.h>

@@ -3,7 +3,7 @@
 #include <universal/layout_assert.h>
 
 #include <qcommon/qcommon.h>
-#if (defined(__linux__) || defined(__APPLE__)) && defined(KISAK_DEDICATED)
+#if (defined(__linux__) || defined(__APPLE__) || defined(__vita__)) && defined(KISAK_DEDICATED)
 #include <linux/compat.h>
 #elif !defined(KISAK_OPENAL)
 #include <msslib/mss.h>

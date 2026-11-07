@@ -30,7 +30,7 @@
 // so templating keeps the source identical on both platforms instead of forcing
 // casts at every call site.
 
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
 
 namespace qcommon_interlock
 {

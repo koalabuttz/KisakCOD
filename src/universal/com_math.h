@@ -5,7 +5,7 @@
 #include <math.h>
 #include <cstdint>
 
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
 // This header is included on its own (database, sound, UI), so it carries the
 // same non-Clang compiler spellings as q_shared.h: Clang has __cdecl/__int32 as
 // keywords under -fms-extensions, GCC needs the GNU attributes. The #ifndef
@@ -35,7 +35,7 @@
 #define MAX_11BIT_FLT 0.99951172f // not a real name
 
 #define CLAMP(x, low, high) ((x) < (low) ? (low) : ((x) > (high) ? (high) : (x)))
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
 // _isnan is an MSVC CRT intrinsic; the C library's isnan is the same predicate
 // (nonzero iff the value is a NaN).
 #define IS_NAN(x) isnan(x)
@@ -198,7 +198,7 @@ void TRACK_com_math();
 // == RANDOM == 
 void Rand_Init(int seed);
 
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
 // POSIX <stdlib.h> declares `long int random(void)`. C++ cannot overload on
 // return type, so the engine's `float random()` cannot carry that name in the
 // same translation unit. The alias below keeps the call sites unchanged while
@@ -217,7 +217,7 @@ float random();
 #endif
 float crandom();
 
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
 #define random Q_random
 #endif
 

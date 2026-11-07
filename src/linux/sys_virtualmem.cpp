@@ -25,7 +25,11 @@
 
 #include <errno.h>
 #include <pthread.h>
+#if defined(__vita__)
+#include <vita/vita_mman.h> // memory blocks behind the mmap calls
+#else
 #include <sys/mman.h>
+#endif
 #include <unistd.h>
 
 #include <cstdint>
