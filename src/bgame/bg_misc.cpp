@@ -1289,7 +1289,7 @@ bool BG_CanItemBeGrabbed(const entityState_s *ent, const playerState_s *ps, int3
 
     if (ent->index.brushmodel < 1 || ent->index.brushmodel >= 2048)
     {
-        Com_Error(ERR_DROP, va("BG_CanItemBeGrabbed: index out of range (index is %i, eType is %i)", ent->index.brushmodel, ent->eType));
+        Com_Error(ERR_DROP, "%s", va("BG_CanItemBeGrabbed: index out of range (index is %i, eType is %i)", ent->index.brushmodel, ent->eType));
     }
 
 #ifdef KISAK_MP
@@ -1382,7 +1382,7 @@ bool BG_PlayerHasRoomForEntAllAmmoTypes(const entityState_s *ent, const playerSt
     if (ent->index.brushmodel < 1 || ent->index.brushmodel >= 2048)
     {
         v2 = va("BG_PlayerHasRoomForAllAmmoTypesOfEnt: index out of range (index is %i, eType is %i)", ent->index.brushmodel, ent->eType);
-        Com_Error(ERR_DROP, v2);
+        Com_Error(ERR_DROP, "%s", v2);
     }
 
     v3 = ent->index.brushmodel % 128;

@@ -2819,7 +2819,7 @@ int Phys_ClipPolyAgainstPlane(
         {
             Com_PrintError(CON_CHANNEL_PHYS, "Physics poly-clipping bug!!\n");
             v5 = va("    polyCount: %i. poly points:\n", polyCount);
-            Com_PrintError(CON_CHANNEL_PHYS, v5);
+            Com_PrintError(CON_CHANNEL_PHYS, "%s", v5);
             for (ptIndexa = 0; ptIndexa < polyCount; ++ptIndexa)
             {
                 v6 = va(
@@ -2828,7 +2828,7 @@ int Phys_ClipPolyAgainstPlane(
                     (*poly)[3 * ptIndexa],
                     (*poly)[3 * ptIndexa + 1],
                     (*poly)[3 * ptIndexa + 2]);
-                Com_PrintError(CON_CHANNEL_PHYS, v6);
+                Com_PrintError(CON_CHANNEL_PHYS, "%s", v6);
             }
             v7 = va(
                 " choppingPlane: (0x%x, 0x%x, 0x%x), 0x%x\n",
@@ -2836,7 +2836,7 @@ int Phys_ClipPolyAgainstPlane(
                 *((_DWORD *)choppingPlane + 1),
                 *((_DWORD *)choppingPlane + 2),
                 *((_DWORD *)choppingPlane + 3));
-            Com_PrintError(CON_CHANNEL_PHYS, v7);
+            Com_PrintError(CON_CHANNEL_PHYS, "%s", v7);
             if (!alwaysfails)
                 MyAssertHandler(".\\physics\\phys_coll_boxbrush.cpp", 319, 0, "Physics poly-clipping assert");
         }

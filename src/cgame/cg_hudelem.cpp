@@ -253,7 +253,7 @@ void CG_TranslateHudElemMessage(
     else
     {
         v4 = va("Translated message too long to process: %s\n", message);
-        Com_Error(ERR_DROP, v4);
+        Com_Error(ERR_DROP, "%s", v4);
     }
 }
 
@@ -326,21 +326,21 @@ char ReplaceDirective(int32_t localClientNum, uint32_t *searchPos, uint32_t *dst
             else
             {
                 v9 = va("String too long to add key binding: %s\n", dstString);
-                Com_Error(ERR_DROP, v9);
+                Com_Error(ERR_DROP, "%s", v9);
                 return 0;
             }
         }
         else
         {
             v8 = va("Directive empty in string '%s'", dstString);
-            Com_Error(ERR_DROP, v8);
+            Com_Error(ERR_DROP, "%s", v8);
             return 0;
         }
     }
     else
     {
         v7 = va("No end token to match begin token in string '%s'", dstString);
-        Com_Error(ERR_DROP, v7);
+        Com_Error(ERR_DROP, "%s", v7);
         return 0;
     }
 }
@@ -1109,7 +1109,7 @@ void CopyStringToHudElemString(char *string, char *hudElemString)
     else
     {
         v3 = va("Hud elem string too long, %s", string);
-        Com_Error(ERR_DROP, v3);
+        Com_Error(ERR_DROP, "%s", v3);
     }
 }
 

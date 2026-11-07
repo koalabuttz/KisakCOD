@@ -93,8 +93,14 @@ bool Posix_WaitEvent(PosixEvent *event, uint32_t msec)
     bool result = false;
     pthread_mutex_lock(&event->mutex);
 
+    // A zero timeout only tests the state, as WaitForSingleObject(h, 0) does on
+    // Windows. It must not reach pthread_cond_timedwait: a deadline that has
+    // already passed still blocks until the kernel's timer fires, about 50 us
+    // with the default timer slack, so every "is it ready yet?" poll by the
+    // main, render and worker threads would sleep instead of returning.
+    //
     // Predicate loop: a spurious wakeup is not a signal.
-    if (!event->signalled)
+    if (!event->signalled && msec != 0)
     {
         struct timespec deadline;
         clock_gettime(CLOCK_MONOTONIC, &deadline);

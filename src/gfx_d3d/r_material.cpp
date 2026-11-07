@@ -1077,7 +1077,7 @@ void R_Cmd_ReloadMaterialTextures()
         else
         {
             v0 = va("ReloadMaterialTextures: Material '%s' is not currently loaded.\n", name);
-            Com_Printf(CON_CHANNEL_GFX, v0);
+            Com_Printf(CON_CHANNEL_GFX, "%s", v0);
         }
     }
     else

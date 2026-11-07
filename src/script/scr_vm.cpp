@@ -55,7 +55,7 @@ void Log(char const *format, ...)
     va_list args;
     va_start(args, format);
     vsnprintf(buffer, 4096, format, args);
-    fprintf(logFile, buffer);
+    fprintf(logFile, "%s", buffer);
     va_end(args);
     fclose(logFile);
 }

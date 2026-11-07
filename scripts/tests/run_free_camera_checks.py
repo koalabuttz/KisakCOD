@@ -93,7 +93,7 @@ PRODUCTION_FLAGS = (
     "-Wno-c++11-narrowing",
     "-Wno-invalid-token-paste",
     "-Wno-ignored-attributes",
-    "-Wno-format-security",
+    "-Werror=format-security",
 )
 
 # Only on the new sources and tests: a warning there is a defect in this change.

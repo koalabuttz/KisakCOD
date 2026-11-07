@@ -53,7 +53,7 @@ set(KISAK_DEVICE_PROBE_OPTIONS
     ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing
     -ffunction-sections -fdata-sections
     -Wno-c++11-narrowing -Wno-invalid-token-paste
-    -Wno-ignored-attributes -Wno-format-security
+    -Wno-ignored-attributes -Werror=format-security
 )
 
 # Production units that call D3D9: r_init.cpp itself, R_GetDepthStencilFormat

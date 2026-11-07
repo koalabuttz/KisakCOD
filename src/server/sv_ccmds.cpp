@@ -358,7 +358,7 @@ void ShowLoadErrorsSummary(const char *mapName, unsigned int count)
     }
 
     if (showError)
-        Com_Error(ERR_MAPLOADERRORSUMMARY, errstr);
+        Com_Error(ERR_MAPLOADERRORSUMMARY, "%s", errstr);
 }
 
 void SV_ClearLoadGame()

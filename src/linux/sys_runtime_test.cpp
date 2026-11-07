@@ -43,6 +43,15 @@ void Com_InitThreadData(int threadContext)
     (void)threadContext;
 }
 
+#ifndef TRACY_ENABLE
+// Without the profiler, profile.h declares this out of line (profile.cpp),
+// which the test does not link.
+void Profile_InitContext(int profileContext)
+{
+    (void)profileContext;
+}
+#endif
+
 void MyAssertHandler(const char *filename, int line, int type, const char *fmt, ...)
 {
     if (s_expectRuntimeAssertion)
