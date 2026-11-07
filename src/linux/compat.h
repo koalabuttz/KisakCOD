@@ -85,8 +85,17 @@ typedef unsigned char byte;
 typedef std::uintptr_t ULONG_PTR, *PULONG_PTR;
 typedef std::intptr_t LONG_PTR, *PLONG_PTR;
 typedef ULONG_PTR DWORD_PTR, *PDWORD_PTR;
-typedef ULONG_PTR UINT_PTR;
-typedef LONG_PTR INT_PTR;
+// INT_PTR and UINT_PTR are the fixed-width types, as DXVK Native's
+// windows_base.h spells them, so both headers can be included together. On
+// Linux they are the same types as LONG_PTR and ULONG_PTR; on macOS int64_t is
+// long long while intptr_t is long.
+#if INTPTR_MAX == INT64_MAX
+typedef std::uint64_t UINT_PTR;
+typedef std::int64_t INT_PTR;
+#else
+typedef std::uint32_t UINT_PTR;
+typedef std::int32_t INT_PTR;
+#endif
 typedef ULONG_PTR SIZE_T, *PSIZE_T;
 typedef LONG_PTR LRESULT;       // LONG_PTR on Windows
 typedef LONG_PTR LPARAM;        // LONG_PTR on Windows

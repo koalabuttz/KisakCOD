@@ -104,7 +104,12 @@ endif()
 # when the process stops instead of running on.
 include(CheckCXXCompilerFlag)
 set(KISAK_LINUX_HARDENING_OPTIONS -fstack-protector-strong)
+# Apple Clang accepts the flag for arm64 but ignores it there, with an
+# "argument unused" warning; count that as unsupported so -Werror units build.
+set(kisak_saved_required_flags "${CMAKE_REQUIRED_FLAGS}")
+string(APPEND CMAKE_REQUIRED_FLAGS " -Werror=unused-command-line-argument")
 check_cxx_compiler_flag(-fstack-clash-protection KISAK_HAVE_STACK_CLASH_PROTECTION)
+set(CMAKE_REQUIRED_FLAGS "${kisak_saved_required_flags}")
 if(KISAK_HAVE_STACK_CLASH_PROTECTION)
     list(APPEND KISAK_LINUX_HARDENING_OPTIONS -fstack-clash-protection)
 endif()
