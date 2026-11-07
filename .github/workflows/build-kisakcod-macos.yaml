@@ -487,6 +487,13 @@ jobs:
           # Apple silicon. The probe finds SDL3 through its own rpath.
           export SDL_VULKAN_LIBRARY="$(brew --prefix vulkan-loader)/lib/libvulkan.1.dylib"
           export DYLD_FALLBACK_LIBRARY_PATH="$(brew --prefix)/lib:/usr/local/lib:/usr/lib"
+          if [[ "${{ matrix.arch }}" == x86_64 ]]; then
+            # The Intel runner is a VM whose paravirtualized Metal device aborts
+            # when MoltenVK sizes Metal argument buffers while creating the
+            # instance (inside -[MTLDevice newArgumentEncoderWithArguments:]).
+            # Without argument buffers MoltenVK never asks.
+            export MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=0
+          fi
           python3 -u scripts/tests/test_vulkan_window_probe.py \
             --binary "$OUT_DIR/KisakCOD-vulkan-probe" \
             --video-driver cocoa --validation auto
@@ -503,6 +510,9 @@ jobs:
           export SDL_VIDEODRIVER=cocoa
           export VK_LOADER_DEBUG=error,warn,driver
           export MVK_CONFIG_LOG_LEVEL=3
+          if [[ "${{ matrix.arch }}" == x86_64 ]]; then
+            export MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=0
+          fi
           system_profiler SPDisplaysDataType
           "$OUT_DIR/KisakCOD-vulkan-probe" --list-devices --validation off
           echo "exit status $?"
