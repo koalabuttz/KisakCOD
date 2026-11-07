@@ -16,6 +16,8 @@ what is still missing. Build steps are in the
   and play
 - [Cinematics](linux-cinematics.md): Bink movies through an FFmpeg-backed shim
   (`KISAK_LINUX_CINEMATICS`)
+- [Steam authentication](linux-steam.md): join and host Steam-authenticated
+  servers through the running Steam client (`KISAK_LINUX_STEAM`)
 
 ## Linux dedicated server
 

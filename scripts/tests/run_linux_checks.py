@@ -130,6 +130,14 @@ def plan_checks(options, workdir, build_dir, binary, python, cxx):
 
     checks.append(
         Check(
+            "steam_session",
+            "opt-in Steam backend against a stand-in steamclient.so, and its flag-on compile proof",
+            [Command([python, TESTS / "test_linux_steam_session.py", "--cxx", cxx, "--m32"], timeout=300)],
+        )
+    )
+
+    checks.append(
+        Check(
             "debugger",
             "script debugger boundary without a UI",
             [Command([python, TESTS / "test_linux_debugger.py", "--cxx", cxx], timeout=300)],

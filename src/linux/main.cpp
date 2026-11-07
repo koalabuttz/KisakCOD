@@ -636,6 +636,9 @@ void Sys_Quit()
     Sys_EnterCriticalSection(CRITSECT_COM_ERROR);
 
     Sys_SpawnQuitProcess();
+    // Releases the Steam session (KISAK_LINUX_STEAM) while steamclient.so is
+    // still intact; at exit() it is not.
+    Steam_Shutdown();
 #ifdef KISAK_LINUX_GAME_CLIENT
     // As win_main.cpp's Sys_Quit. Key_Shutdown frees the key bindings, which
     // are script strings (CopyString); left in place, SL_Shutdown's leak check
@@ -866,11 +869,19 @@ int main(int argc, char **argv)
     // Before the renderer creates its window, so the window is adopted at once.
     Sys_InstallClientWindow();
 #endif
+#ifdef KISAK_LINUX_STEAM
+    // As WinMain: Steam is up before Com_Init runs the command line, so a
+    // +connect on it can get a ticket. It never bypasses authentication.
+    Steam_Init();
+#endif
     Com_Init(sys_cmdline);
 
     PrintWorkingDir();
 
-    Steam_Init(); // Announces the unavailable authentication backend; never bypasses it.
+#ifndef KISAK_LINUX_STEAM
+    // Announces the unavailable authentication backend.
+    Steam_Init();
+#endif
 #if defined(KISAK_LINUX_MP_CLIENT)
     // WinMain's client step: load the player's stats (LiveStorage) once the
     // file system is up.
@@ -890,5 +901,8 @@ int main(int argc, char **argv)
         }
 
         Com_Frame();
+        // Reads Steam's verdicts when no dedicated SV_Frame does (a no-op
+        // without KISAK_LINUX_STEAM).
+        Steam_Frame();
     }
 }

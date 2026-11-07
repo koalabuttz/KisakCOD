@@ -24,6 +24,21 @@ list(REMOVE_ITEM UNIVERSAL
 list(REMOVE_ITEM SCRIPT "${SRC_DIR}/script/scr_debugger.cpp")
 
 file(GLOB LINUX_SOURCES CONFIGURE_DEPENDS "${SRC_DIR}/linux/*.cpp")
+
+# Opt-in Steam authentication (KISAK_LINUX_STEAM), for KisakCOD-dedi and
+# KisakCOD-mp. Off by default: src/linux/steam.cpp then refuses every Steam
+# ticket and the client cannot join remote servers. On, it connects at start-up
+# to the Steam client running on the machine, through the steamclient.so every
+# Steam install has (~/.steam/sdk32, or sdk64 on x86_64; KISAK_STEAMCLIENT_LIBRARY
+# overrides the path), and authenticates as the Windows build does. Nothing
+# links against Steam: the library is loaded at run time, so the build needs
+# only the SDK headers in deps/steamsdk. See docs/linux-steam.md.
+option(KISAK_LINUX_STEAM
+    "Authenticate through the running Steam client (loads steamclient.so at run time)" OFF)
+set(KISAK_LINUX_STEAM_SOURCES "${SRC_DIR}/linux/steam/steamclient_session.cpp")
+if(KISAK_LINUX_STEAM)
+    message(STATUS "KISAK_LINUX_STEAM: Steam authentication through the running Steam client")
+endif()
 add_executable(KisakCOD-dedi
     ${SRCROOT} ${BGAME} ${COMMON} ${DATABASE} ${GAME} ${GAME_MP}
     ${ODE} ${PHYSICS} ${PHYSICS_ODE} ${QCOMMON} ${SCRIPT}
@@ -31,6 +46,7 @@ add_executable(KisakCOD-dedi
     "${SRC_DIR}/client/con_channels.cpp"
     "${SRC_DIR}/DynEntity/DynEntity_load_obj.cpp"
     ${LINUX_SOURCES}
+    $<$<BOOL:${KISAK_LINUX_STEAM}>:${KISAK_LINUX_STEAM_SOURCES}>
 )
 set(PROJECT_NAME KisakCOD-dedi)
 target_compile_features(KisakCOD-dedi PRIVATE cxx_std_20)
@@ -38,6 +54,7 @@ target_compile_definitions(KisakCOD-dedi PRIVATE
     KISAK_MP KISAK_DEDICATED DEDICATED
     _FILE_OFFSET_BITS=64 _GNU_SOURCE
     $<$<CONFIG:Debug>:_DEBUG>
+    $<$<BOOL:${KISAK_LINUX_STEAM}>:KISAK_LINUX_STEAM>
 )
 # The Tracy profiler is opt-in, as for the game clients: KISAK_LINUX_TRACY
 # (declared with the client in mp_client.cmake, read here from the cache).  A
