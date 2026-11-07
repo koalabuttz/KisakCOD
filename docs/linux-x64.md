@@ -217,7 +217,9 @@ directory per architecture and configuration. The build string is
 `linux-x86_64` (`linux-x86_64-debug` in Debug builds).
 
 The CI job `x86_64 dedicated server` builds Debug and RelWithDebInfo and runs
-the bootstrap test against each binary with `--arch x86_64`.
+`run_linux_checks.py --arch x86_64` against each binary: the bootstrap test,
+then the platform self-tests (runtime wrappers, network deadlines, UDP, file
+I/O, virtual memory) built at 64 bits. The other checks stay i386-only.
 
 ### What had to change to boot
 

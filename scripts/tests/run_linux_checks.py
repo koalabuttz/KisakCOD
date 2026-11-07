@@ -19,6 +19,11 @@ client, credentials, or a listening game server:
   * the random-helper ranges, which must stay 15-bit where Linux rand() is 31-bit;
   * the MSVC CRT shims in ``src/linux/compat.h`` that client sources call.
 
+``--arch x86_64``, ``aarch64``, ``macos-arm64`` or ``macos-x86_64`` checks a
+64-bit or macOS build instead: the bootstrap and the platform self-tests
+(runtime, network deadlines, UDP, file I/O, virtual memory) are built for the
+host's own width, and the i386-only checks are left out.
+
 Each command runs in its own process group with its own timeout, so a stuck
 check is killed instead of hanging the job. Every command prints the exact argv
 it ran, its working directory, its exit status and its output, and the run ends
@@ -55,6 +60,20 @@ DEFAULT_BUILD_DIR = ROOT / "build-linux"
 DEFAULT_TIMEOUT = 300
 COMPILER_PREFIX = ("-m32", "-fms-extensions", "-pthread")
 
+# --arch: i386 is the shipped server and runs every check. The 64-bit builds
+# (x86_64, aarch64) and macOS run the checks that build for the host's own
+# width, so the platform code they exercise (timed waits, sockets, virtual
+# memory, files) is tested on that platform; the rest stay i386 checks.
+ARCHITECTURES = ("i386", "x86_64", "aarch64", "macos-arm64", "macos-x86_64")
+NATIVE_CHECKS = ("bootstrap", "runtime", "net_deadline", "udp", "sys_fileio", "sys_virtualmem")
+
+
+def compiler_prefix(arch):
+    """Flags every built-from-source self-test starts with."""
+    if arch == "i386":
+        return COMPILER_PREFIX
+    return tuple(flag for flag in COMPILER_PREFIX if flag != "-m32")
+
 
 class Check:
     """One named check and the commands it runs, in order."""
@@ -83,13 +102,17 @@ class Command:
 
 def plan_checks(options, workdir, build_dir, binary, python, cxx):
     """The documented command list, in execution order."""
+    arch = getattr(options, "arch", "i386")
+    prefix = compiler_prefix(arch)
+    native = arch != "i386"
     checks = []
 
     checks.append(
         Check(
             "bootstrap",
             "native bootstrap against the compiled server",
-            [Command([python, TESTS / "test_linux_bootstrap.py", binary], timeout=180)],
+            [Command([python, TESTS / "test_linux_bootstrap.py",
+                      *(["--arch", arch] if native else []), binary], timeout=180)],
             requires=binary,
         )
     )
@@ -163,7 +186,8 @@ def plan_checks(options, workdir, build_dir, binary, python, cxx):
         Check(
             "net_deadline",
             "fractional network wait deadlines remain positive",
-            [Command([python, TESTS / "test_linux_net_deadline.py", "--cxx", cxx], timeout=180)],
+            [Command([python, TESTS / "test_linux_net_deadline.py", "--cxx", cxx,
+                      *(["--native"] if native else [])], timeout=180)],
         )
     )
 
@@ -184,7 +208,8 @@ def plan_checks(options, workdir, build_dir, binary, python, cxx):
             [
                 Command(
                     ["bash", ROOT / "tests" / "linux_net" / "run_tests.sh"],
-                    env={"TMPDIR": workdir / "udp", "CXX": cxx},
+                    env={"TMPDIR": workdir / "udp", "CXX": cxx,
+                         **({"KISAK_TEST_ARCH_FLAGS": ""} if native else {})},
                     timeout=300,
                 )
             ],
@@ -200,7 +225,7 @@ def plan_checks(options, workdir, build_dir, binary, python, cxx):
                 Command(
                     [
                         cxx,
-                        *COMPILER_PREFIX,
+                        *prefix,
                         "-std=c++20",
                         "-I",
                         ROOT / "src",
@@ -225,7 +250,7 @@ def plan_checks(options, workdir, build_dir, binary, python, cxx):
                 Command(
                     [
                         cxx,
-                        *COMPILER_PREFIX,
+                        *prefix,
                         "-std=gnu++20",
                         "-D_GNU_SOURCE",
                         "-I",
@@ -342,6 +367,8 @@ def plan_checks(options, workdir, build_dir, binary, python, cxx):
         )
     )
 
+    if native and not options.only:
+        checks = [check for check in checks if check.name in NATIVE_CHECKS]
     if options.only:
         checks = [check for check in checks if check.name in options.only]
     if options.skip:
@@ -533,6 +560,13 @@ def main():
         default=sys.executable or "python3",
         help="interpreter for the Python checks (default: this interpreter)",
     )
+    parser.add_argument(
+        "--arch",
+        choices=ARCHITECTURES,
+        default="i386",
+        help="build being checked: i386 (default) runs every check; the 64-bit and macOS builds run "
+        "the checks that build for the host's own width (" + ", ".join(NATIVE_CHECKS) + ")",
+    )
     parser.add_argument("--timeout", type=int, help="override the timeout of every command, in seconds")
     parser.add_argument("--log-dir", type=Path, help="write one text log per command, plus summary.txt")
     parser.add_argument("--only", help="comma-separated check names to run")
@@ -546,6 +580,8 @@ def main():
     for name in options.only | options.skip:
         if name not in known:
             parser.error(f"unknown check: {name} (known: {', '.join(known)})")
+        if options.arch != "i386" and name in options.only and name not in NATIVE_CHECKS:
+            parser.error(f"{name} is an i386 check; --arch {options.arch} runs {', '.join(NATIVE_CHECKS)}")
     if options.timeout is not None and options.timeout <= 0:
         parser.error("--timeout must be positive")
 

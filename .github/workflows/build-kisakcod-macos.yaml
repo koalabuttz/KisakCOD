@@ -3,9 +3,10 @@ name: macOS dedicated server
 # Opt-in macOS track, step one (docs/macos.md): build the dedicated server
 # KisakCOD-dedi with -DKISAK_PLATFORM=macos for Apple silicon (arm64) and Intel
 # Macs (x86_64), each on a hosted runner of its own architecture, and run the
-# asset-free bootstrap test against the Mach-O binary. No game data, Steam or
-# GPU is involved, so loading a real map is not covered here. The Linux and
-# Windows builds are untouched.
+# asset-free bootstrap test against the Mach-O binary and the platform
+# self-tests built for the Mac (run_linux_checks.py --arch). No game data,
+# Steam or GPU is involved, so loading a real map is not covered here. The
+# Linux and Windows builds are untouched.
 
 on:
   workflow_dispatch:
@@ -18,6 +19,10 @@ on:
       - scripts/extern/**
       - scripts/platform/linux/**
       - scripts/tests/test_linux_bootstrap.py
+      - scripts/tests/run_linux_checks.py
+      - scripts/tests/test_linux_runtime.py
+      - scripts/tests/test_linux_net_deadline.py
+      - tests/linux_net/**
       - src/**
       - deps/**
       - .github/workflows/build-kisakcod-macos.yaml
@@ -30,6 +35,10 @@ on:
       - scripts/extern/**
       - scripts/platform/linux/**
       - scripts/tests/test_linux_bootstrap.py
+      - scripts/tests/run_linux_checks.py
+      - scripts/tests/test_linux_runtime.py
+      - scripts/tests/test_linux_net_deadline.py
+      - tests/linux_net/**
       - src/**
       - deps/**
       - .github/workflows/build-kisakcod-macos.yaml
@@ -125,12 +134,28 @@ jobs:
             exit 1
           fi
 
-      - name: Bootstrap KisakCOD-dedi
-        timeout-minutes: 5
+      # The bootstrap test, then the platform self-tests built for this Mac:
+      # the POSIX primitives and engine wrappers (timed waits on macOS's
+      # relative condition-variable wait), network deadlines, UDP through
+      # recvmsg (oversize datagrams included), file I/O, and the virtual
+      # memory layer (decommit by remapping; 16 KiB pages on Apple silicon).
+      - name: Asset-free checks
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/tests/test_linux_bootstrap.py --arch macos-${{ matrix.arch }} "$BINARY"
+          python3 scripts/tests/run_linux_checks.py --arch macos-${{ matrix.arch }} \
+            --build-dir "$BUILD_DIR" --binary "$BINARY" --cxx clang++ \
+            --log-dir "$RUNNER_TEMP/checks"
+
+      - name: Upload check logs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: checks-macos-${{ matrix.arch }}-${{ matrix.config }}
+          path: ${{ runner.temp }}/checks
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Upload executable
         if: ${{ matrix.config == 'RelWithDebInfo' }}

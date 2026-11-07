@@ -976,21 +976,26 @@ int main()
         CHECK(VirtualAlloc(base, static_cast<SIZE_T>(page), MEM_COMMIT, PAGE_READONLY) == nullptr);
         CHECK(GetLastError() == ERROR_INVALID_PARAMETER);
 
-        // Overflow: a size that makes start + size wrap the 32-bit address
-        // space, and a rounded end that no longer fits a pointer.
+        // Overflow: a size that makes start + size wrap the address space, and
+        // a rounded end that no longer fits a pointer. The values are the top
+        // 4 KiB page and the largest size of the build's own width, so i386
+        // tests 0xFFFFF000 and 0xFFFFFFFF as before and 64-bit hosts wrap too
+        // (a 4 GiB reservation is legal there).
+        const std::uintptr_t topPage = ~static_cast<std::uintptr_t>(0) & ~static_cast<std::uintptr_t>(0xFFFu);
+        const SIZE_T hugeSize = ~static_cast<SIZE_T>(0);
         SetLastError(ERROR_SUCCESS);
-        CHECK(VirtualAlloc(reinterpret_cast<void *>(static_cast<std::uintptr_t>(0xFFFFF000u)),
+        CHECK(VirtualAlloc(reinterpret_cast<void *>(topPage),
                            static_cast<SIZE_T>(0x2000u), MEM_COMMIT, PAGE_READWRITE) == nullptr);
         CHECK(GetLastError() == ERROR_INVALID_PARAMETER);
         SetLastError(ERROR_SUCCESS);
-        CHECK(VirtualAlloc(base, static_cast<SIZE_T>(0xFFFFFFFFu), MEM_COMMIT, PAGE_READWRITE) == nullptr);
+        CHECK(VirtualAlloc(base, hugeSize, MEM_COMMIT, PAGE_READWRITE) == nullptr);
         CHECK(GetLastError() == ERROR_INVALID_PARAMETER);
         SetLastError(ERROR_SUCCESS);
-        CHECK(VirtualFree(reinterpret_cast<void *>(static_cast<std::uintptr_t>(0xFFFFF000u)),
+        CHECK(VirtualFree(reinterpret_cast<void *>(topPage),
                           static_cast<SIZE_T>(0x2000u), MEM_DECOMMIT) == FALSE);
         CHECK(GetLastError() == ERROR_INVALID_PARAMETER);
         SetLastError(ERROR_SUCCESS);
-        CHECK(VirtualAlloc(nullptr, static_cast<SIZE_T>(0xFFFFFFFFu), MEM_RESERVE, PAGE_READWRITE) == nullptr);
+        CHECK(VirtualAlloc(nullptr, hugeSize, MEM_RESERVE, PAGE_READWRITE) == nullptr);
         CHECK(GetLastError() == ERROR_INVALID_PARAMETER);
 
         // Nothing above disturbed the live reservation.

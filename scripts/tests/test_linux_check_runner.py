@@ -53,13 +53,16 @@ BINARY = Path("/nonexistent-build-linux/debug/bin/KisakCOD-dedi")
 PYTHON = "/sentinel/python3"
 
 
-def default_options(only=(), skip=()):
-    return argparse.Namespace(only=set(only), skip=set(skip))
+def default_options(only=(), skip=(), arch=None):
+    options = argparse.Namespace(only=set(only), skip=set(skip))
+    if arch is not None:
+        options.arch = arch
+    return options
 
 
-def plan_checks(workdir, cxx=CXX, build_dir=BUILD_DIR, only=(), skip=()):
+def plan_checks(workdir, cxx=CXX, build_dir=BUILD_DIR, only=(), skip=(), arch=None):
     return runner.plan_checks(
-        default_options(only, skip), Path(workdir), Path(build_dir), BINARY, PYTHON, cxx
+        default_options(only, skip, arch), Path(workdir), Path(build_dir), BINARY, PYTHON, cxx
     )
 
 
@@ -231,6 +234,47 @@ class PlannedCommandTests(unittest.TestCase):
 
         without_runtime = plan_checks(self.workdir, skip=["runtime"])
         self.assertNotIn("runtime", [check.name for check in without_runtime])
+
+
+class ArchitectureTests(unittest.TestCase):
+    """--arch: 64-bit and macOS builds run the self-tests at the host's width."""
+
+    def setUp(self):
+        self._temporary = tempfile.TemporaryDirectory(prefix="kisakcod-arch-test-")
+        self.addCleanup(self._temporary.cleanup)
+        self.workdir = Path(self._temporary.name)
+
+    def test_i386_is_the_default_and_keeps_every_check(self):
+        self.assertEqual([c.name for c in plan_checks(self.workdir, arch="i386")],
+                         [c.name for c in plan_checks(self.workdir)])
+
+    def test_native_architectures_plan_only_the_native_checks(self):
+        for arch in runner.ARCHITECTURES[1:]:
+            with self.subTest(arch=arch):
+                names = [c.name for c in plan_checks(self.workdir, arch=arch)]
+                self.assertEqual(names, list(runner.NATIVE_CHECKS))
+
+    def test_native_checks_build_without_m32(self):
+        for arch in runner.ARCHITECTURES[1:]:
+            with self.subTest(arch=arch):
+                checks = plan_checks(self.workdir, arch=arch)
+                for check in checks:
+                    for command in check.commands:
+                        self.assertNotIn("-m32", command.argv, command.describe())
+                        self.assertNotIn("--m32", command.argv, command.describe())
+                self.assertIn("--native", check_named(checks, "net_deadline").commands[0].argv)
+                self.assertEqual(check_named(checks, "udp").commands[0].env.get("KISAK_TEST_ARCH_FLAGS"), "")
+
+    def test_native_bootstrap_names_its_architecture(self):
+        argv = check_named(plan_checks(self.workdir, arch="macos-arm64"), "bootstrap").commands[0].argv
+        self.assertEqual(argv[argv.index("--arch") + 1], "macos-arm64")
+        self.assertEqual(argv[-1], str(BINARY))
+
+    def test_i386_bootstrap_and_udp_are_unchanged(self):
+        checks = plan_checks(self.workdir, arch="i386")
+        self.assertNotIn("--arch", check_named(checks, "bootstrap").commands[0].argv)
+        self.assertNotIn("KISAK_TEST_ARCH_FLAGS", check_named(checks, "udp").commands[0].env)
+        self.assertNotIn("--native", check_named(checks, "net_deadline").commands[0].argv)
 
 
 class RecordedFlagTests(unittest.TestCase):

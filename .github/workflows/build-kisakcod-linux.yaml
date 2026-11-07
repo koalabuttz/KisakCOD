@@ -621,12 +621,15 @@ jobs:
           set -euo pipefail
           /usr/bin/python3 scripts/tools/check_unsigned_negation.py --build-dir "$BUILD_DIR"
 
-      - name: Bootstrap x86_64 KisakCOD-dedi
-        timeout-minutes: 5
+      # The bootstrap test, then the platform self-tests (runtime wrappers,
+      # network deadlines, UDP, file I/O, virtual memory) built at 64 bits.
+      - name: Asset-free x86_64 checks
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/tests/test_linux_bootstrap.py --arch x86_64 "$BINARY"
+          python3 scripts/tests/run_linux_checks.py --arch x86_64 \
+            --build-dir "$BUILD_DIR" --binary "$BINARY" --cxx clang++
 
       - name: Report compiler cache
         if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
@@ -729,12 +732,15 @@ jobs:
             exit 1
           fi
 
-      - name: Bootstrap aarch64 KisakCOD-dedi
-        timeout-minutes: 5
+      # The bootstrap test, then the platform self-tests (runtime wrappers,
+      # network deadlines, UDP, file I/O, virtual memory) built at 64 bits.
+      - name: Asset-free aarch64 checks
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/tests/test_linux_bootstrap.py --arch aarch64 "$BINARY"
+          python3 scripts/tests/run_linux_checks.py --arch aarch64 \
+            --build-dir "$BUILD_DIR" --binary "$BINARY" --cxx clang++
 
       - name: Report compiler cache
         if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
