@@ -124,8 +124,36 @@ import `vulkan-1.dll` and that it starts, and uploads it with `SDL3.dll` as the
 `KisakCOD-vulkan-probe-x64` artifact. Hosted Windows runners have no GPU, so it
 does not run there.
 
-Not yet run on a GPU: the laptop (Intel ANV) and the Windows PC (RTX 2080
-Super) are the next places to run it.
+### GPU runs (2026-11-07)
+
+These are local results from two developer machines, not CI evidence. Neither
+machine has the Khronos validation layer installed, so validation was off in
+every run below: **synchronisation validation has not yet run on a real GPU**,
+only on lavapipe in CI.
+
+| Machine | GPU and driver | Build | Window system | Result |
+| --- | --- | --- | --- | --- |
+| Laptop | Intel RPL-U iGPU, Mesa 25.0.7 ANV, Vulkan 1.4.305 | Linux x86_64 and i386, RelWithDebInfo (`459543f`) | Wayland and SDL offscreen | pass |
+| Windows PC | NVIDIA RTX 2080 SUPER, driver 621.14, Vulkan 1.4.357 | Windows x64 Release, CI artifact (`a2178a4`) | Win32 | pass |
+
+The probe passed every check on both machines:
+
+- the device listing and a full run with `--resize --check-capture`: the
+  swapchain followed the resize to 1088x612 and the capture matched the clear
+  colour with 0 mismatched pixels;
+- an uncapped run with `--no-vsync`;
+- on the laptop, `scripts/tests/test_vulkan_window_probe.py --validation auto`
+  (all 14 checks) on both SDL offscreen and Wayland.
+
+| Machine | Build | Vsync run (FIFO) | `--no-vsync` run (MAILBOX) | Clear pass GPU ms, avg |
+| --- | --- | ---: | ---: | ---: |
+| Laptop | x86_64 | 48.7 fps | 838.9 fps | 0.17 |
+| Laptop | i386 | 50.2 fps | 1195.3 fps | 0.17 |
+| Windows PC | x64 | 75.5 fps (74 Hz monitor) | 76.5 fps | 0.015 |
+
+On the PC, windowed MAILBOX stays paced by the 74 Hz display, so the
+`--no-vsync` run there is not uncapped. With `--validation require`, the probe
+stops at the core stage with a clear message when the layer is missing (exit 1).
 
 ## Next
 

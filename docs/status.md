@@ -112,7 +112,9 @@ These came before the playable client and still build and run in CI:
 - The [Vulkan core and window probe](vulkan-core.md) (`-DKISAK_BUILD_VULKAN_PROBE=ON`)
   open a window and clear, present and resize it through Vulkan. It is the
   first piece of the Vulkan back end; no game rendering goes through it yet.
-  Hosted CI runs it on lavapipe; not yet run on a GPU.
+  Hosted CI runs it on lavapipe. It passed on the laptop's Intel GPU (x86_64 and
+  i386) and on the PC's RTX 2080 Super (Windows x64) on 2026-11-07, with
+  validation off: synchronisation validation has only run on lavapipe so far.
 
 ## Open pull requests
 
@@ -134,7 +136,8 @@ master merged in and a green run before it can merge.
 - Singleplayer hand play on the levels the sweep passed (step 6 in
   [linux-sp-levels.md](linux-sp-levels.md)); sweep run 1 is done.
 - D3D9 interface image checks on the laptop and the PC (PR 99).
-- Vulkan window probe on a real GPU (laptop ANV, PC RTX 2080 Super).
+- Vulkan window probe with the Khronos validation layer (synchronisation
+  checks) on a real GPU; the laptop and PC runs so far had no layer installed.
 
 ## Roadmap
 
