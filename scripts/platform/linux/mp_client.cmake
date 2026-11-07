@@ -301,9 +301,17 @@ add_executable(KisakCOD-mp
     $<$<BOOL:${KISAK_LINUX_CINEMATICS}>:$<TARGET_OBJECTS:KisakCOD-mp-cinematic>>)
 target_include_directories(KisakCOD-mp PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
 target_compile_options(KisakCOD-mp PRIVATE ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing ${KISAK_LINUX_HARDENING_OPTIONS})
-target_link_options(KisakCOD-mp PRIVATE -Wl,--gc-sections ${KISAK_LINUX_HARDENING_LINK_OPTIONS}
-    "-Wl,--version-script=${SCRIPTS_DIR}/platform/linux/mp_client_exports.map")
-set_property(TARGET KisakCOD-mp APPEND PROPERTY LINK_DEPENDS "${SCRIPTS_DIR}/platform/linux/mp_client_exports.map")
+if(APPLE)
+    # No export map on macOS: Mach-O's two-level namespace binds every library
+    # to the image that defined each name when it was linked, so a library
+    # loaded later cannot pick up the game's zlib or g_log by name (the ELF
+    # problem mp_client_exports.map solves).
+    target_link_options(KisakCOD-mp PRIVATE -Wl,-dead_strip ${KISAK_LINUX_HARDENING_LINK_OPTIONS})
+else()
+    target_link_options(KisakCOD-mp PRIVATE -Wl,--gc-sections ${KISAK_LINUX_HARDENING_LINK_OPTIONS}
+        "-Wl,--version-script=${SCRIPTS_DIR}/platform/linux/mp_client_exports.map")
+    set_property(TARGET KisakCOD-mp APPEND PROPERTY LINK_DEPENDS "${SCRIPTS_DIR}/platform/linux/mp_client_exports.map")
+endif()
 target_link_libraries(KisakCOD-mp PRIVATE
     "${KISAK_DXVK_NATIVE_LIBRARY}" "${KISAK_OPENAL_LIBRARY}" SDL3::SDL3 Threads::Threads ${CMAKE_DL_LIBS})
 add_dependencies(KisakCOD-mp update_build_number)
@@ -338,8 +346,15 @@ set_source_files_properties(
     "${SRC_DIR}/linux/client/mp_client_window.cpp"
     TARGET_DIRECTORY KisakCOD-mp-client-window-test
     PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra;-Werror")
-target_link_options(KisakCOD-mp-client-window-test PRIVATE
-    -Wl,--as-needed -Wl,--gc-sections -Wl,--wrap=SDL_CreateWindowWithProperties)
+if(APPLE)
+    # ld64 has no --wrap: the test defines SDL_CreateWindowWithProperties
+    # itself and reaches SDL's through dlsym(RTLD_NEXT). -dead_strip_dylibs
+    # does what --as-needed does.
+    target_link_options(KisakCOD-mp-client-window-test PRIVATE -Wl,-dead_strip -Wl,-dead_strip_dylibs)
+else()
+    target_link_options(KisakCOD-mp-client-window-test PRIVATE
+        -Wl,--as-needed -Wl,--gc-sections -Wl,--wrap=SDL_CreateWindowWithProperties)
+endif()
 target_link_libraries(KisakCOD-mp-client-window-test PRIVATE kisak_linux_native_d3d9 SDL3::SDL3 Threads::Threads)
 
 # The Bink shim's asset-free test (KISAK_LINUX_CINEMATICS): the file reader on
@@ -378,9 +393,13 @@ if(KISAK_OPENAL_INCLUDE_DIR)
 endif()
 # r_model_skin.cpp's command entry point reaches the renderer; only the
 # skinning functions are kept.
-target_link_options(KisakCOD-skin-scalar-test PRIVATE -Wl,--gc-sections)
+if(APPLE)
+    target_link_options(KisakCOD-skin-scalar-test PRIVATE -Wl,-dead_strip)
+else()
+    target_link_options(KisakCOD-skin-scalar-test PRIVATE -Wl,--gc-sections)
+endif()
 
-if(NOT KISAK_LINUX_ARCH STREQUAL "aarch64")
+if(NOT KISAK_NATIVE_ARCH STREQUAL "aarch64")
     add_executable(KisakCOD-skin-sse2-test "${TESTS_DIR}/skinning/skin_sse2_test.cpp")
     target_compile_features(KisakCOD-skin-sse2-test PRIVATE cxx_std_20)
     target_compile_definitions(KisakCOD-skin-sse2-test PRIVATE ${KISAK_MP_CLIENT_DEFINITIONS})

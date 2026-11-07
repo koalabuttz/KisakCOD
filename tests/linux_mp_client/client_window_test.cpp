@@ -37,7 +37,29 @@
 #include <thread>
 #include <vector>
 
+#if defined(__APPLE__)
+#include <dlfcn.h>
+#endif
+
+#if defined(__APPLE__)
+// ld64 has no --wrap. This executable defines SDL_CreateWindowWithProperties
+// itself, so the window layer linked into it calls this one, which passes the
+// call on to SDL's own definition, the next one in load order.
+extern "C" SDL_Window *__wrap_SDL_CreateWindowWithProperties(SDL_PropertiesID props);
+static SDL_Window *__real_SDL_CreateWindowWithProperties(SDL_PropertiesID props)
+{
+    using CreateWindowFn = SDL_Window *(SDLCALL *)(SDL_PropertiesID);
+    static const CreateWindowFn sdlCreateWindow =
+        reinterpret_cast<CreateWindowFn>(dlsym(RTLD_NEXT, "SDL_CreateWindowWithProperties"));
+    return sdlCreateWindow ? sdlCreateWindow(props) : nullptr;
+}
+extern "C" SDL_Window *SDLCALL SDL_CreateWindowWithProperties(SDL_PropertiesID props)
+{
+    return __wrap_SDL_CreateWindowWithProperties(props);
+}
+#else
 extern "C" SDL_Window *__real_SDL_CreateWindowWithProperties(SDL_PropertiesID props);
+#endif
 extern "C" SDL_Window *__wrap_SDL_CreateWindowWithProperties(SDL_PropertiesID props)
 {
     const Sint64 flags = SDL_GetNumberProperty(props, SDL_PROP_WINDOW_CREATE_FLAGS_NUMBER, 0);

@@ -4,7 +4,9 @@ An opt-in build of the **dedicated server** (`KisakCOD-dedi`) for macOS, on
 Apple silicon (arm64) and Intel Macs (x86_64). It is the first step of the Mac
 plan in the project's macOS research report: get the engine compiling and
 starting on a Mac in hosted CI, before any test on real Mac hardware. The
-client and singleplayer are not built for macOS yet.
+multiplayer client (`KisakCOD-mp`) also builds, against the CI stand-ins only
+(see [Multiplayer client](#multiplayer-client)); singleplayer is not built
+for macOS yet.
 
 macOS has run no 32-bit process since 10.15, so this track sits on the 64-bit
 work: the x86_64 track ([linux-x64.md](linux-x64.md)) and the aarch64 track
@@ -33,14 +35,50 @@ cmake --build build-macos --target KisakCOD-dedi
   offers from macOS 13.3 on.
 - Apple Clang is used as is; `-fms-extensions` covers the engine's Microsoft
   spellings, as on Linux.
-- Every other opt-in (client, window host, probes, movies, the Linux and
-  Windows Tracy builds) is refused with `KISAK_PLATFORM=macos` for now.
+- The multiplayer client's opt-ins (`KISAK_BUILD_LINUX_NATIVE_D3D9` and
+  `KISAK_BUILD_LINUX_MP_CLIENT`) are accepted; see below. Every other opt-in
+  (window host, probes, movies, Steam, the Linux and Windows Tracy builds) is
+  refused with `KISAK_PLATFORM=macos` for now.
 
 Run it like the Linux server, with the game files from your own install:
 
 ```sh
 bin/KisakCOD-dedi +set fs_basepath "/path/to/Call of Duty 4" +set dedicated 2 +map mp_crash
 ```
+
+## Multiplayer client
+
+`KisakCOD-mp` builds with the same options as the 64-bit Linux client
+([linux-x64.md](linux-x64.md)): SDL3 for the window and input, a D3D9 library
+behind the renderer boundary (`KISAK_DXVK_NATIVE_LIBRARY`, with the DXVK
+Native 2.7.1 headers) and an OpenAL library (`KISAK_OPENAL_LIBRARY`, headers
+from `brew install openal-soft`). There is no D3D9 library for macOS yet (DXVK
+on MoltenVK or the planned Vulkan back end), so CI links the stand-ins that
+answer "no device" and "no sound device", and the client can only show that it
+starts and stops cleanly without game data.
+
+```sh
+cmake -S . -B build-macos-client -G Ninja \
+    -DKISAK_PLATFORM=macos -DCMAKE_OSX_ARCHITECTURES=arm64 \
+    -DKISAK_BUILD_LINUX_NATIVE_D3D9=ON \
+    -DKISAK_DXVK_NATIVE_INCLUDE_DIR=/path/to/staged/dxvk \
+    -DKISAK_DXVK_NATIVE_LIBRARY=/path/to/libd3d9.dylib \
+    -DKISAK_BUILD_LINUX_MP_CLIENT=ON \
+    -DKISAK_OPENAL_LIBRARY=/path/to/libopenal.dylib \
+    -DKISAK_OPENAL_INCLUDE_DIR="$(brew --prefix openal-soft)/include" \
+    -DSDL3_DIR=/path/to/SDL3/lib/cmake/SDL3
+cmake --build build-macos-client --target KisakCOD-mp
+```
+
+- The client links with `-dead_strip` and no export list: Mach-O's two-level
+  namespace already keeps the engine's names from binding to a library's.
+- The game window test replaces `SDL_CreateWindowWithProperties` by defining
+  it in the test and reaching SDL's own through `dlsym(RTLD_NEXT)`, since
+  Apple's linker has no `--wrap`.
+- The client keeps its files under `$XDG_DATA_HOME/KisakCOD` (or
+  `~/.local/share/KisakCOD`) as on Linux for now; the Mac convention,
+  `~/Library/Application Support`, comes with the app bundle.
+- Movies (the Bink shim) are not built for macOS yet.
 
 ## How it differs from the Linux build
 
@@ -108,6 +146,14 @@ python3 scripts/tests/run_linux_checks.py --arch macos-arm64 \
 The other `run_linux_checks.py` checks are i386-only and stay on Linux. The
 RelWithDebInfo binaries are kept as CI artifacts for 14 days.
 
+A second job per architecture builds the multiplayer client against the pinned
+SDL3 (built from source) and the D3D9 and OpenAL stand-ins, checks with
+`otool -L` that it needs only those libraries and the system ones (and, on
+arm64, that it has no fused multiply-adds), then runs the game window test,
+`scripts/tests/test_linux_mp_client.py --native-os macOS` (the client's
+fail-closed start from temporary trees with no game data) and the skinning
+tests.
+
 ## Not covered yet
 
 - No map has been loaded on a Mac: hosted runners have no game data. The first
@@ -115,6 +161,6 @@ RelWithDebInfo binaries are kept as CI artifacts for 14 days.
 - Hidden runtime differences that only game data reaches, such as the 16 KiB
   pages of Apple silicon under a real map load (the virtual-memory self-test
   covers the layer itself) and float results compared with x86.
-- The client: the renderer path on macOS (DXVK on MoltenVK or the planned
-  Vulkan back end), SDL3, OpenAL Soft, the app bundle and signing are later
-  steps.
+- The client draws nothing yet: the renderer path on macOS (DXVK on MoltenVK
+  or the planned Vulkan back end), sound through OpenAL Soft, movies, the app
+  bundle and signing are later steps.
