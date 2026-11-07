@@ -59,7 +59,9 @@ which is how the page-size work below was checked.
 
 Hosted CI: the Linux workflow's **aarch64 dedicated server** job builds Debug and
 RelWithDebInfo natively on `ubuntu-24.04-arm` (free for public repositories) and
-runs both checks. It does not load a map: there is no game data in CI.
+runs both checks, plus `run_linux_checks.py --arch aarch64` (the platform
+self-tests built natively: runtime wrappers, network deadlines, UDP, file I/O,
+virtual memory). It does not load a map: there is no game data in CI.
 
 ## Building the aarch64 client
 
@@ -238,5 +240,3 @@ branch:
   real Vulkan driver.
 - Run the Windows ARM64 build with game data on a Windows on Arm machine.
 - Windows ARM64 movies (`KISAK_WIN64_CINEMATICS` with an ARM64 FFmpeg).
-- The virtual-memory self-test's checks of 32-bit address-space limits fail on
-  every 64-bit build (x86_64 too); `run_linux_checks.py` only runs it as i386.

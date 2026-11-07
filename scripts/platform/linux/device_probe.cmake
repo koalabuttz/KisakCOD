@@ -57,12 +57,14 @@ set(KISAK_DEVICE_PROBE_OPTIONS
 )
 
 # Production units that call D3D9: r_init.cpp itself, R_GetDepthStencilFormat
-# (r_rendertarget.cpp) and the override-technique switch R_RegisterDvars flips
-# (r_material.cpp).
+# (r_rendertarget.cpp), the override-technique switch R_RegisterDvars flips
+# (r_material.cpp) and the renderer's graphics interface they call it through
+# (rhi/r_rhi_d3d9_calls.cpp).
 set(KISAK_DEVICE_PROBE_NATIVE_SOURCES
     "${SRC_DIR}/gfx_d3d/r_init.cpp"
     "${SRC_DIR}/gfx_d3d/r_rendertarget.cpp"
     "${SRC_DIR}/gfx_d3d/r_material.cpp"
+    "${SRC_DIR}/gfx_d3d/rhi/r_rhi_d3d9_calls.cpp"
 )
 # Production units that do not: the renderer dvars (r_dvars.cpp, with the sun
 # dvars in r_sky.cpp and the warning dvars in r_warn.cpp), the dvar system and

@@ -28,10 +28,9 @@ void R_DrawLitCallback(const void *userData, GfxCmdBufContext context, GfxCmdBuf
     v7.top = y;
     v7.right = width + v7.left;
     v7.bottom = height + y;
-    device->SetRenderState(D3DRS_SCISSORTESTENABLE, 1u);
-    device->SetScissorRect(&v7);
+    R_HW_EnableScissor(device, &v7);
     R_DrawSurfs(context, prepassContext.state, &viewInfo->litInfo);
-    context.state->prim.device->SetRenderState(D3DRS_SCISSORTESTENABLE, 0);
+    R_HW_DisableScissor(context.state->prim.device);
 }
 
 void R_DrawLit(const GfxViewInfo *viewInfo, GfxCmdBuf *cmdBuf, GfxCmdBuf *prepassCmdBuf)
@@ -73,10 +72,9 @@ void R_DrawDecalCallback(const void *userdata, GfxCmdBufContext context, GfxCmdB
     v7.top = y;
     v7.right = width + v7.left;
     v7.bottom = height + y;
-    device->SetRenderState(D3DRS_SCISSORTESTENABLE, 1u);
-    device->SetScissorRect(&v7);
+    R_HW_EnableScissor(device, &v7);
     R_DrawSurfs(context, prepassContext.state, &viewInfo->decalInfo);
-    context.state->prim.device->SetRenderState(D3DRS_SCISSORTESTENABLE, 0);
+    R_HW_DisableScissor(context.state->prim.device);
 }
 
 void R_DrawDecal(const GfxViewInfo *viewInfo, GfxCmdBuf *cmdBuf, GfxCmdBuf *prepassCmdBuf)

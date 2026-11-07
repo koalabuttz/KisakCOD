@@ -369,7 +369,7 @@ class CMakeKnobTests(unittest.TestCase):
                 self.assertNotIn(option, fence)
         boundary = (ROOT / "scripts" / "platform" / "linux" / "native_d3d9.cmake").read_text(encoding="utf-8")
         # aarch64 shares the 64-bit boundary (docs/linux-arm64.md).
-        self.assertIn('if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4 AND NOT KISAK_LINUX_ARCH MATCHES "^(x86_64|aarch64)$")',
+        self.assertIn('if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4 AND NOT KISAK_NATIVE_ARCH MATCHES "^(x86_64|aarch64)$")',
                       boundary)
 
 
@@ -418,7 +418,9 @@ class X64DedicatedWorkflowTests(unittest.TestCase):
         self.assertEqual(self.job["strategy"]["matrix"]["config"], ["Debug", "RelWithDebInfo"])
         self.assertIn("-DKISAK_LINUX_ARCH=x86_64", self.commands)
         self.assertIn("--target KisakCOD-dedi", self.commands)
-        self.assertIn('scripts/tests/test_linux_bootstrap.py --arch x86_64 "$BINARY"', self.commands)
+        # run_linux_checks.py --arch x86_64 runs the bootstrap check with
+        # --arch x86_64, plus the other native checks.
+        self.assertIn('scripts/tests/run_linux_checks.py --arch x86_64', self.commands)
 
     def test_layout_tables_and_conversion_are_checked_before_the_build(self):
         names = [step.get("name") for step in self.job["steps"]]

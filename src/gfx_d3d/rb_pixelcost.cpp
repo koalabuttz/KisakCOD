@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "rb_pixelcost.h"
+#include "rhi/r_rhi.h"
 #include "rb_sky.h"
 #include <universal/timing.h>
 #include "r_state.h"
@@ -276,7 +277,7 @@ void R_PixelCost_EndSurface(GfxCmdBufContext context)
 
     if (pixelCostMode == GFX_PIXEL_COST_MODE_MEASURE_COST)
     {
-        gfxAssets.pixelCountQuery->Issue(D3DISSUE_END);
+        R_HW_Issue(gfxAssets.pixelCountQuery, D3DISSUE_END);
 
         RB_PixelCost_EndTiming();
         pixelCount = RB_HW_ReadOcclusionQuery(gfxAssets.pixelCountQuery);

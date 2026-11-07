@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "rb_backend.h"
+#include "rhi/r_rhi.h"
 #include <universal/arch_intrin.h>
 #include <qcommon/mem_track.h>
 
@@ -162,7 +163,7 @@ void R_InsertGpuFence()
     {
         if (r_logFile && r_logFile->current.integer)
             RB_LogPrint("dx.flushGpuQuery->Issue( (1 << 0) )\n");
-        hr = dx.flushGpuQuery->Issue(1);
+        hr = R_HW_Issue(dx.flushGpuQuery, 1);
         if (hr < 0)
         {
             do
@@ -448,7 +449,7 @@ void R_Resolve(GfxCmdBufContext context, GfxImage *image)
         if (r_logFile && r_logFile->current.integer)
             RB_LogPrint("context.state->prim.device->StretchRect( gfxRenderTargets[context.state->renderTargetId].surface.color, 0, imageSurface, 0, D3DTEXF_LINEAR )\n");
 
-        hr = context.state->prim.device->StretchRect(gfxRenderTargets[context.state->renderTargetId].surface.color, 0, imageSurface, 0, D3DTEXF_LINEAR);
+        hr = R_HW_StretchRect(context.state->prim.device, gfxRenderTargets[context.state->renderTargetId].surface.color, 0, imageSurface, 0, D3DTEXF_LINEAR);
 
         if (hr < 0)
         {
@@ -469,7 +470,7 @@ void R_Resolve(GfxCmdBufContext context, GfxImage *image)
     {
         if (r_logFile && r_logFile->current.integer)
             RB_LogPrint("imageSurface->Release()\n");
-        v6 = imageSurface->Release();
+        v6 = R_HW_Release(imageSurface);
         if (v6 < 0)
         {
             do
@@ -685,13 +686,13 @@ void RB_StretchRaw(int x, int y, int w, int h, int cols, int rows, const uint8_t
     int newline; // [esp+34h] [ebp-8h]
     int rowIndex; // [esp+38h] [ebp-4h]
 
-    if (dx.device->CreateOffscreenPlainSurface(cols, rows, D3DFMT_X8R8G8B8, D3DPOOL_DEFAULT, &rawSurf, 0) >= 0)
+    if (R_HW_CreateOffscreenPlainSurface(dx.device, cols, rows, D3DFMT_X8R8G8B8, D3DPOOL_DEFAULT, &rawSurf, 0) >= 0)
     {
         do
         {
             if (r_logFile && r_logFile->current.integer)
                 RB_LogPrint("rawSurf->LockRect( &lockedRect, 0, 0x00002000L )\n");
-            v8 = rawSurf->LockRect(&lockedRect, 0, 0x2000u);
+            v8 = R_HW_LockRect(rawSurf, &lockedRect, 0, 0x2000u);
             if (v8 < 0)
             {
                 do
@@ -718,7 +719,7 @@ void RB_StretchRaw(int x, int y, int w, int h, int cols, int rows, const uint8_t
             }
             dest += newline;
         }
-        rawSurf->UnlockRect();
+        R_HW_UnlockRect(rawSurf);
         dstRect.left = x;
         dstRect.top = y;
         dstRect.right = w + x;
@@ -731,9 +732,9 @@ void RB_StretchRaw(int x, int y, int w, int h, int cols, int rows, const uint8_t
         //    gfxRenderTargets[1].surface.color,
         //    &dstRect,
         //    2);
-        dx.device->StretchRect(rawSurf, 0, gfxRenderTargets[R_RENDERTARGET_FRAME_BUFFER].surface.color, &dstRect, D3DTEXF_LINEAR);
+        R_HW_StretchRect(dx.device, rawSurf, 0, gfxRenderTargets[R_RENDERTARGET_FRAME_BUFFER].surface.color, &dstRect, D3DTEXF_LINEAR);
 
-        rawSurf->Release();
+        R_HW_Release(rawSurf);
     }
 }
 
@@ -910,7 +911,7 @@ void RB_SetGammaRamp(const GfxGammaRamp *gammaTable)
         d3dGammaRamp.green[colorIndex] = gammaTable->entries[colorIndex];
         d3dGammaRamp.blue[colorIndex] = gammaTable->entries[colorIndex];
     }
-    dx.device->SetGammaRamp(dx.targetWindowIndex, 0, &d3dGammaRamp);
+    R_HW_SetGammaRamp(dx.device, dx.targetWindowIndex, 0, &d3dGammaRamp);
 }
 
 void RB_SaveScreenCmd(GfxRenderCommandExecState *execState)
@@ -1357,13 +1358,13 @@ void RB_DrawLines3D(int count, int width, const GfxPointVertex *verts, bool dept
             DWORD abe=9, sb=9, db=9, zw=9, zt=9, zf=9, cwe=9;
             if (dev)
             {
-                dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &abe);
-                dev->GetRenderState(D3DRS_SRCBLEND, &sb);
-                dev->GetRenderState(D3DRS_DESTBLEND, &db);
-                dev->GetRenderState(D3DRS_ZWRITEENABLE, &zw);
-                dev->GetRenderState(D3DRS_ZENABLE, &zt);
-                dev->GetRenderState(D3DRS_ZFUNC, &zf);
-                dev->GetRenderState(D3DRS_COLORWRITEENABLE, &cwe);
+                R_HW_GetRenderState(dev, D3DRS_ALPHABLENDENABLE, &abe);
+                R_HW_GetRenderState(dev, D3DRS_SRCBLEND, &sb);
+                R_HW_GetRenderState(dev, D3DRS_DESTBLEND, &db);
+                R_HW_GetRenderState(dev, D3DRS_ZWRITEENABLE, &zw);
+                R_HW_GetRenderState(dev, D3DRS_ZENABLE, &zt);
+                R_HW_GetRenderState(dev, D3DRS_ZFUNC, &zf);
+                R_HW_GetRenderState(dev, D3DRS_COLORWRITEENABLE, &cwe);
             }
             const float *mc = gfxCmdBufSourceState.input.consts[CONST_SRC_CODE_MATERIAL_COLOR];
             const unsigned char *c0 = (const unsigned char *)verts[0].color;
@@ -2663,7 +2664,7 @@ void RB_BeginFrame(const GfxBackEndData *data)
         {
             if (r_logFile && r_logFile->current.integer)
                 RB_LogPrint("dx.device->BeginScene()\n");
-            hr = dx.device->BeginScene();
+            hr = R_HW_BeginScene(dx.device);
             if (hr < 0)
             {
                 do
@@ -2711,7 +2712,7 @@ GfxIndexBufferState *RB_SwapBuffers()
 
     {
         PROF_SCOPED("Present");
-        hr = dx.windows[dx.targetWindowIndex].swapChain->Present(0, 0, 0, 0, 0);
+        hr = R_HW_Present(dx.windows[dx.targetWindowIndex].swapChain, 0, 0, 0, 0, 0);
     }
 
 #ifdef KISAK_RADIANT
@@ -2923,7 +2924,7 @@ void RB_CallExecuteRenderCommands()
             if (r_logFile && r_logFile->current.integer)
                 RB_LogPrint("dx.device->EndScene()\n");
             //hr = ((int(__thiscall *)(IDirect3DDevice9 *, IDirect3DDevice9 *))dx.device->EndScene)(dx.device, dx.device);
-            hr = dx.device->EndScene();
+            hr = R_HW_EndScene(dx.device);
             if (hr < 0)
             {
                 do
@@ -3066,7 +3067,7 @@ int RB_BackendTimeout()
     if (dx.swapFence)
     {
         //v1 = dx.swapFence->GetData(dx.swapFence, v2, 4u, 1u) == 1;
-        v1 = dx.swapFence->GetData(v2, 4, 1) == 1;
+        v1 = R_HW_GetData(dx.swapFence, v2, 4, 1) == 1;
     }
     else
         v1 = 0;

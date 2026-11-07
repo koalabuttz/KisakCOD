@@ -27,8 +27,7 @@ void R_DepthPrepassCallback(const void *userData, GfxCmdBufContext context, GfxC
     v6.top = y;
     v6.right = width + v6.left;
     v6.bottom = height + y;
-    device->SetRenderState(D3DRS_SCISSORTESTENABLE, 1u);
-    device->SetScissorRect(&v6);
+    R_HW_EnableScissor(device, &v6);
     if (viewInfo->needsFloatZ)
     {
         iassert( R_HaveFloatZ() );
@@ -52,7 +51,7 @@ void R_DepthPrepassCallback(const void *userData, GfxCmdBufContext context, GfxC
     qmemcpy(&info, &viewInfo->decalInfo, sizeof(info));
     info.baseTechType = baseTechType;
     R_DrawSurfs(context, 0, &info);
-    context.state->prim.device->SetRenderState(D3DRS_SCISSORTESTENABLE, 0);
+    R_HW_DisableScissor(context.state->prim.device);
 }
 
 void R_DepthPrepass(

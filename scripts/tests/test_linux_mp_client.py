@@ -70,12 +70,16 @@ def source_checks(checker):
                     "the optional OpenAL header directory is checked for AL/al.h")
     fence = (ROOT / "scripts" / "platform" / "linux" / "platform.cmake").read_text(encoding="utf-8")
     d3d9_module = (ROOT / "scripts" / "platform" / "linux" / "native_d3d9.cmake").read_text(encoding="utf-8")
-    # Neither 64-bit block of the fence (x86_64, aarch64) refuses the client.
-    fences = fence.split('if(KISAK_LINUX_ARCH STREQUAL "x86_64")', 1)[-1].split("elseif(NOT CMAKE_SIZEOF_VOID_P", 1)[0]
+    # No 64-bit block of the fence (macOS, x86_64, aarch64) refuses the client;
+    # the 32-bit Arm block after them (armv7, dedicated server only) does.
+    fences, armv7 = fence.split('if(KISAK_PLATFORM STREQUAL "macos")', 1)[-1].split(
+        "elseif(NOT CMAKE_SIZEOF_VOID_P", 1)[0].split('elseif(KISAK_LINUX_ARCH STREQUAL "armv7")', 1)
+    checker.require("KISAK_BUILD_LINUX_MP_CLIENT" in armv7,
+                    "the armv7 configuration refuses the client")
     checker.require("KISAK_BUILD_LINUX_MP_CLIENT" not in fences
-                    and 'if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4 AND NOT KISAK_LINUX_ARCH MATCHES "^(x86_64|aarch64)$")'
+                    and 'if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4 AND NOT KISAK_NATIVE_ARCH MATCHES "^(x86_64|aarch64)$")'
                     in d3d9_module,
-                    "a 64-bit toolchain builds the client and its D3D9 boundary only under KISAK_LINUX_ARCH=x86_64 or aarch64")
+                    "a 64-bit toolchain builds the client and its D3D9 boundary only on the x86_64, aarch64 and macOS tracks")
     checker.require("KISAK_BUILD_WORLD_DRAW_PROBE)" in fence, "the 64-bit configuration still refuses the renderer probes")
 
     definitions = re.search(r"set\(KISAK_MP_CLIENT_DEFINITIONS(.*?)\)", module, re.S)
@@ -143,6 +147,8 @@ def source_checks(checker):
 # "qemu-aarch64 -L /usr/aarch64-linux-gnu" for a cross-compiled aarch64 client
 # (--emulator). Empty: run the binary directly.
 EMULATOR = []
+# "Linux", or "macOS" for the KISAK_PLATFORM=macos build: the banners name it.
+NATIVE_OS = ["Linux"]
 
 
 def run(binary, arguments, cwd, env):
@@ -185,14 +191,15 @@ def run_checks(checker, binary):
         env["XDG_DATA_HOME"] = str(unused_home)
 
         completed = run(binary, ["--help"], cwd, env)
-        checker.require(completed.returncode == 0 and "KisakCOD multiplayer client (native Linux)" in completed.stdout
+        banner = f"KisakCOD multiplayer client (native {NATIVE_OS[0]})"
+        checker.require(completed.returncode == 0 and banner in completed.stdout
                         and "Usage: KisakCOD-mp" in completed.stdout, "--help prints the client's usage and exits 0",
                         completed.stdout + completed.stderr)
         checker.require("$XDG_DATA_HOME/KisakCOD" in completed.stdout and "not the game folder" in completed.stdout,
                         "--help says where configs and profiles go", completed.stdout)
         completed = run(binary, ["--version"], cwd, env)
         checker.require(completed.returncode == 0
-                        and completed.stdout == "KisakCOD multiplayer client (native Linux)\n",
+                        and completed.stdout == banner + "\n",
                         "--version prints the client banner and exits 0", completed.stdout + completed.stderr)
         checker.require(not any(cwd.iterdir()), "the early exits write nothing")
 
@@ -312,8 +319,11 @@ def main(argv=None):
     parser.add_argument("--binary", type=Path, help="a built KisakCOD-mp to run (source checks only without it)")
     parser.add_argument("--emulator", default="",
                         help='command that runs a foreign-architecture binary, e.g. "qemu-aarch64 -L /usr/aarch64-linux-gnu"')
+    parser.add_argument("--native-os", choices=("Linux", "macOS"), default="Linux",
+                        help="the OS the binary was built for, as its banner names it (default: Linux)")
     options = parser.parse_args(argv)
     EMULATOR[:] = shlex.split(options.emulator)
+    NATIVE_OS[0] = options.native_os
 
     checker = Checker()
     source_checks(checker)

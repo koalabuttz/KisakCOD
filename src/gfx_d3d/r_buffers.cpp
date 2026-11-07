@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "r_buffers.h"
+#include "rhi/r_rhi.h"
 #include <qcommon/mem_track.h>
 #include "r_init.h"
 #include <universal/com_memory.h>
@@ -27,7 +28,7 @@ void *R_AllocDynamicVertexBuffer(IDirect3DVertexBuffer9 **vb, int sizeInBytes)
     if (!r_loadForRenderer->current.enabled)
         return 0;
 
-    hr = dx.device->CreateVertexBuffer(sizeInBytes, 520, 0, D3DPOOL_DEFAULT, vb, 0);
+    hr = R_HW_CreateVertexBuffer(dx.device, sizeInBytes, 520, 0, D3DPOOL_DEFAULT, vb, 0);
     if (hr < 0)
     {
         R_FatalInitError(va("DirectX didn't create a %i-byte dynamic vertex buffer: %s\n", sizeInBytes, R_ErrorDescription(hr)));
@@ -49,7 +50,7 @@ void *R_AllocStaticVertexBuffer(IDirect3DVertexBuffer9 **vb, int sizeInBytes)
     iassert( (sizeInBytes > 0) );
     if (!r_loadForRenderer->current.enabled)
         return 0;
-    hr = dx.device->CreateVertexBuffer(sizeInBytes, 8, 0, D3DPOOL_DEFAULT, vb, 0);
+    hr = R_HW_CreateVertexBuffer(dx.device, sizeInBytes, 8, 0, D3DPOOL_DEFAULT, vb, 0);
     if (hr < 0)
     {
         v3 = R_ErrorDescription(hr);
@@ -57,7 +58,7 @@ void *R_AllocStaticVertexBuffer(IDirect3DVertexBuffer9 **vb, int sizeInBytes)
         R_FatalInitError(v4);
     }
     //hra = (*vb)->Lock(*vb, 0, 0, &vertexBufferData, 0);
-    hra = (*vb)->Lock(0, 0, &vertexBufferData, 0);
+    hra = R_HW_Lock(*vb, 0, 0, &vertexBufferData, 0);
     if (hra < 0)
     {
         v5 = R_ErrorDescription(hra);
@@ -76,7 +77,7 @@ void *R_AllocDynamicIndexBuffer(IDirect3DIndexBuffer9 **ib, uint32_t sizeInBytes
     if (!r_loadForRenderer->current.enabled)
         return 0;
     //hr = dx.device->CreateIndexBuffer(dx.device, sizeInBytes, 520u, D3DFMT_INDEX16, D3DPOOL_DEFAULT, ib, 0);
-    hr = dx.device->CreateIndexBuffer(sizeInBytes, 520, D3DFMT_INDEX16, D3DPOOL_DEFAULT, ib, 0);
+    hr = R_HW_CreateIndexBuffer(dx.device, sizeInBytes, 520, D3DFMT_INDEX16, D3DPOOL_DEFAULT, ib, 0);
     if (hr < 0)
     {
         v3 = R_ErrorDescription(hr);
@@ -104,18 +105,18 @@ void *R_AllocStaticIndexBuffer(IDirect3DIndexBuffer9 **ib, int sizeInBytes)
     //    ib,
     //    0) < 0)
     //    return 0;
-    if (dx.device->CreateIndexBuffer(sizeInBytes, 8, (D3DFORMAT)101, D3DPOOL_DEFAULT, ib, 0) < 0)
+    if (R_HW_CreateIndexBuffer(dx.device, sizeInBytes, 8, (D3DFORMAT)101, D3DPOOL_DEFAULT, ib, 0) < 0)
     {
         return 0;
     }
     //if ((*ib)->Lock(*ib, 0, 0, &indexBufferData, 0) >= 0)
     //    return indexBufferData;
     //(*ib)->Release(*ib);
-    if ((*ib)->Lock(0, 0, &indexBufferData, 0) >= 0)
+    if (R_HW_Lock(*ib, 0, 0, &indexBufferData, 0) >= 0)
     {
         return indexBufferData;
     }
-    (*ib)->Release();
+    R_HW_Release(*ib);
     return 0;
 }
 
@@ -219,7 +220,7 @@ void R_FinishStaticIndexBuffer(IDirect3DIndexBuffer9 *ib)
         if (r_logFile && r_logFile->current.integer)
             RB_LogPrint("ib->Unlock()\n");
         //hr = ib->Unlock(ib);
-        hr = ib->Unlock();
+        hr = R_HW_Unlock(ib);
         if (hr < 0)
         {
             do
@@ -321,7 +322,7 @@ void R_FinishStaticVertexBuffer(IDirect3DVertexBuffer9 *vb)
         if (r_logFile && r_logFile->current.integer)
             RB_LogPrint("vb->Unlock()\n");
         //hr = vb->Unlock(vb);
-        hr = vb->Unlock();
+        hr = R_HW_Unlock(vb);
         if (hr < 0)
         {
             do
@@ -337,7 +338,7 @@ void R_FinishStaticVertexBuffer(IDirect3DVertexBuffer9 *vb)
 void R_UnlockVertexBuffer(IDirect3DVertexBuffer9* handle)
 {
     iassert( handle );
-    handle->Unlock();
+    R_HW_Unlock(handle);
 }
 
 void *R_LockVertexBuffer(IDirect3DVertexBuffer9 *handle, int offset, int bytes, int lockFlags)
@@ -354,7 +355,7 @@ void *R_LockVertexBuffer(IDirect3DVertexBuffer9 *handle, int offset, int bytes, 
     //    bytes,
     //    &bufferData,
     //    lockFlags);
-    hr = handle->Lock(offset, bytes, &bufferData, lockFlags);
+    hr = R_HW_Lock(handle, offset, bytes, &bufferData, lockFlags);
     if (hr < 0)
         R_FatalLockError(hr);
     return bufferData;
@@ -528,7 +529,7 @@ void *R_LockIndexBuffer(IDirect3DIndexBuffer9 *handle, int offset, int bytes, in
     //    bytes,
     //    &bufferData,
     //    lockFlags);
-    hr = handle->Lock(offset, bytes, &bufferData, lockFlags);
+    hr = R_HW_Lock(handle, offset, bytes, &bufferData, lockFlags);
     if (hr < 0)
         R_FatalLockError(hr);
     return bufferData;
@@ -537,7 +538,7 @@ void *R_LockIndexBuffer(IDirect3DIndexBuffer9 *handle, int offset, int bytes, in
 void R_UnlockIndexBuffer(IDirect3DIndexBuffer9 *handle)
 {
     iassert( handle );
-    handle->Unlock();
+    R_HW_Unlock(handle);
 }
 
 void R_CreateWorldVertexBuffer(IDirect3DVertexBuffer9 **vb, int *srcData, uint32_t sizeInBytes)

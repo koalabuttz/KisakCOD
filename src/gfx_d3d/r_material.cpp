@@ -1,6 +1,7 @@
 #include <universal/q_shared.h>
 #include <universal/surfaceflags.h>
 #include "r_material.h"
+#include "rhi/r_rhi.h"
 #include "r_init.h"
 #include "r_state.h"
 #include <universal/com_memory.h>
@@ -293,7 +294,7 @@ void Load_CreateMaterialPixelShader(GfxPixelShaderLoadDef *loadDef, MaterialPixe
     if (r_loadForRenderer->current.enabled && loadDef->loadForRenderer == r_rendererInUse->current.integer)
     {
         ProfLoad_Begin("Create pixel shader");
-        dx.device->CreatePixelShader((DWORD*)loadDef->program, (IDirect3DPixelShader9 **)&mtlShader->prog);
+        R_HW_CreatePixelShader(dx.device, (DWORD*)loadDef->program, (IDirect3DPixelShader9 **)&mtlShader->prog);
         ProfLoad_End();
     }
     else
@@ -308,7 +309,7 @@ void Load_CreateMaterialVertexShader(GfxVertexShaderLoadDef *loadDef, MaterialVe
     if (r_loadForRenderer->current.enabled && loadDef->loadForRenderer == r_rendererInUse->current.integer)
     {
         ProfLoad_Begin("Create vertex shader");
-        dx.device->CreateVertexShader((DWORD*)loadDef->program, (IDirect3DVertexShader9 **)&mtlShader->prog);
+        R_HW_CreateVertexShader(dx.device, (DWORD*)loadDef->program, (IDirect3DVertexShader9 **)&mtlShader->prog);
         ProfLoad_End();
     }
     else
@@ -435,7 +436,7 @@ IDirect3DVertexDeclaration9 *Material_BuildVertexDecl(
     {
         if (r_logFile && r_logFile->current.integer)
             RB_LogPrint("dx.device->CreateVertexDeclaration( elemTable, &decl )\n");
-        hr = dx.device->CreateVertexDeclaration(elemTable, &decl);
+        hr = R_HW_CreateVertexDeclaration(dx.device, elemTable, &decl);
         if (hr < 0)
         {
             do

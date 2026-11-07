@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "r_image.h"
+#include "rhi/r_rhi.h"
 #include "rb_logfile.h"
 #include <universal/profile.h>
 #include "r_init.h"
@@ -219,7 +220,7 @@ void Image_Upload3D_CopyData_PC(
         if (r_logFile && r_logFile->current.integer)
             RB_LogPrint("image->texture.volmap->LockBox( mipLevel, &lockedBox, 0, 0 )\n");
 
-        hr = image->texture.volmap->LockBox(mipLevel, &lockedBox, NULL, NULL);
+        hr = R_HW_LockBox(image->texture.volmap, mipLevel, &lockedBox, NULL, NULL);
         if (hr < 0)
         {
             do
@@ -246,7 +247,7 @@ void Image_Upload3D_CopyData_PC(
         if (r_logFile && r_logFile->current.integer)
             RB_LogPrint("image->texture.volmap->UnlockBox( mipLevel )\n");
 
-        v9 = image->texture.volmap->UnlockBox(mipLevel);
+        v9 = R_HW_UnlockBox(image->texture.volmap, mipLevel);
         if (v9 < 0)
         {
             do
@@ -297,7 +298,7 @@ void Image_Upload2D_CopyData_PC(
             if (r_logFile && r_logFile->current.integer)
                 RB_LogPrint("image->texture.map->LockRect( mipLevel, &lockedRect, 0, 0 )\n");
 
-            hr = image->texture.map->LockRect(mipLevel, &lockedRect, 0, 0);
+            hr = R_HW_LockRect(image->texture.map, mipLevel, &lockedRect, 0, 0);
             if (hr < 0)
             {
                 do
@@ -317,7 +318,7 @@ void Image_Upload2D_CopyData_PC(
             if (r_logFile && r_logFile->current.integer)
                 RB_LogPrint("image->texture.map->UnlockRect( mipLevel )\n");
 
-            v13 = image->texture.map->UnlockRect(mipLevel);
+            v13 = R_HW_UnlockRect(image->texture.map, mipLevel);
             if (v13 < 0)
             {
                 do
@@ -342,7 +343,7 @@ void Image_Upload2D_CopyData_PC(
         {
             if (r_logFile && r_logFile->current.integer)
                 RB_LogPrint("image->texture.cubemap->LockRect( face, mipLevel, &lockedRect, 0, 0 )\n");
-            v12 = image->texture.cubemap->LockRect(face, mipLevel, &lockedRect, 0, 0);
+            v12 = R_HW_LockRect(image->texture.cubemap, face, mipLevel, &lockedRect, 0, 0);
             if (v12 < 0)
             {
                 do
@@ -362,7 +363,7 @@ void Image_Upload2D_CopyData_PC(
             if (r_logFile && r_logFile->current.integer)
                 RB_LogPrint("image->texture.cubemap->UnlockRect( face, mipLevel )\n");
 
-            v11 = image->texture.cubemap->UnlockRect(face, mipLevel);
+            v11 = R_HW_UnlockRect(image->texture.cubemap, face, mipLevel);
             if (v11 < 0)
             {
                 do

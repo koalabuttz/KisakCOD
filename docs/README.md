@@ -35,6 +35,8 @@ what is still missing. Build steps are in the
 - [64-bit Arm track](linux-arm64.md): the aarch64 Linux dedicated server, the
   x86 assumptions it needed fixed (including pages over 4 KiB), and the census
   for the arm64 client and Windows ARM64
+- [32-bit Arm track](linux-armv7.md): the armv7 Linux dedicated server, the
+  first step toward a PS Vita port
 - [macOS track](macos.md): the opt-in macOS dedicated server (arm64 and
   x86_64), what differs from the Linux build, and its hosted CI checks
 
@@ -55,6 +57,7 @@ what is still missing. Build steps are in the
 
 ## Linux renderer
 
+- [Renderer graphics interface](renderer-interface.md): every Direct3D 9 call the renderer makes goes through `src/gfx_d3d/rhi/r_rhi.h` (all platforms), and a CI check keeps it that way
 - [Renderer validation and limitations](linux-renderer-validation.md)
 - [Native D3D9 device experiment](linux-renderer-probe.md)
 - [Packaged world-surface replay](linux-world-surface-probe.md)

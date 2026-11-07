@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "r_setstate_d3d.h"
+#include "rhi/r_rhi.h"
 #include "r_init.h"
 
 
@@ -13,7 +14,7 @@ bool RB_IsGpuFinished()
     //    MyAssertHandler(".\\r_setstate_d3d.cpp", 16, 0, "%s", "dx.flushGpuQuery");
     //if (dx.flushGpuQueryCount != 1)
     //    MyAssertHandler(".\\r_setstate_d3d.cpp", 17, 0, "%s", "dx.flushGpuQueryCount == 1");
-    hr = dx.flushGpuQuery->GetData(0, 0, 1);
+    hr = R_HW_GetData(dx.flushGpuQuery, 0, 0, 1);
     if (hr == -2005530520)
     {
         --dx.flushGpuQueryCount;

@@ -44,6 +44,9 @@ on:
       - 'scripts/tests/test_voice_lifecycle.py'
       - 'scripts/tests/test_script_console_watchdog.py'
       - 'scripts/tests/test_exec_command_ownership.py'
+      - 'scripts/tests/check_rhi_boundary.py'
+      - 'scripts/tests/test_rhi_boundary.py'
+      - 'scripts/tests/rhi_boundary_allowlist.txt'
       - 'scripts/tests/test_windows_tracy_option.py'
   pull_request:
     branches: [ "master" ]
@@ -76,6 +79,9 @@ on:
       - 'scripts/tests/test_voice_lifecycle.py'
       - 'scripts/tests/test_script_console_watchdog.py'
       - 'scripts/tests/test_exec_command_ownership.py'
+      - 'scripts/tests/check_rhi_boundary.py'
+      - 'scripts/tests/test_rhi_boundary.py'
+      - 'scripts/tests/rhi_boundary_allowlist.txt'
       - 'scripts/tests/test_windows_tracy_option.py'
 
 # A newer push to a pull request cancels that pull request's older run, and a
@@ -113,6 +119,10 @@ jobs:
         run: python3 scripts/tests/test_script_console_watchdog.py
       - name: Config command ownership
         run: python3 scripts/tests/test_exec_command_ownership.py
+      - name: Renderer graphics interface boundary
+        # Only src/gfx_d3d/rhi calls Direct3D 9 (renderer plan M1a); the test also
+        # runs the check on this checkout.
+        run: python3 scripts/tests/test_rhi_boundary.py
       - name: Windows Tracy profiler option
         run: python3 scripts/tests/test_windows_tracy_option.py
       - name: MSVC x64 census summarizer
@@ -463,4 +473,99 @@ jobs:
           name: KisakCOD-arm64-Release
           path: ${{ github.workspace }}/bin
           compression-level: 9
+          retention-days: 3
+
+  vulkan-probe:
+    # The Vulkan window probe (docs/vulkan-core.md) built with MSVC for x64 on
+    # its own (scripts/vulkan_probe/CMakeLists.txt): no game, no DirectX SDK.
+    # SDL3 and the Vulkan headers are built or fetched at pinned revisions (SDL3
+    # is the same pin as the Linux jobs). Hosted runners have no GPU, so the
+    # check here only starts the executable (proving SDL3.dll loads); the
+    # artifact is for a run on a Windows PC with a Vulkan driver.
+    name: Vulkan window probe (MSVC x64)
+    runs-on: windows-2022
+    timeout-minutes: 30
+
+    env:
+      SDL3_REVISION: 877399b2b2cf21e67554ed9046410f268ce1d1b2
+      # Vulkan-Headers v1.3.296
+      VULKAN_HEADERS_REVISION: 29f979ee5aa58b7b005f805ea8df7a855c39ff37
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore the pinned SDL3 SDK
+        id: sdl3-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}\SDL3-sdk
+          key: sdl3-sdk-msvc-x64-${{ env.SDL3_REVISION }}
+
+      - name: Build the pinned SDL3 SDK
+        if: steps.sdl3-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          src="$RUNNER_TEMP/SDL3-source"
+          git init "$src"
+          git -C "$src" remote add origin https://github.com/libsdl-org/SDL.git
+          git -C "$src" fetch --depth 1 origin "$SDL3_REVISION"
+          git -C "$src" checkout --detach FETCH_HEAD
+          test "$(git -C "$src" rev-parse HEAD)" = "$SDL3_REVISION"
+          cmake -S "$src" -B "$RUNNER_TEMP/SDL3-build" -A x64 \
+            -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/SDL3-sdk" \
+            -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TESTS=OFF -DSDL_TEST_LIBRARY=OFF \
+            -DSDL_EXAMPLES=OFF
+          cmake --build "$RUNNER_TEMP/SDL3-build" --config Release --parallel
+          cmake --install "$RUNNER_TEMP/SDL3-build" --config Release
+
+      - name: Fetch the pinned Vulkan headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          dst="$RUNNER_TEMP/Vulkan-Headers"
+          git init "$dst"
+          git -C "$dst" remote add origin https://github.com/KhronosGroup/Vulkan-Headers.git
+          git -C "$dst" fetch --depth 1 origin "$VULKAN_HEADERS_REVISION"
+          git -C "$dst" checkout --detach FETCH_HEAD
+          test "$(git -C "$dst" rev-parse HEAD)" = "$VULKAN_HEADERS_REVISION"
+
+      - name: Build the Vulkan window probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S scripts/vulkan_probe -B build-vulkan -A x64 \
+            -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/SDL3-sdk" \
+            -DKISAK_VULKAN_INCLUDE_DIR="$RUNNER_TEMP/Vulkan-Headers/include"
+          cmake --build build-vulkan --config Release --target KisakCOD-vulkan-probe --parallel
+          mkdir -p artifacts/vulkan-probe
+          cp build-vulkan/Release/KisakCOD-vulkan-probe.exe build-vulkan/Release/SDL3.dll artifacts/vulkan-probe/
+
+      - name: Check the Vulkan window probe starts
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The Vulkan loader is opened at run time through SDL, never linked.
+          if grep -aqi 'vulkan-1\.dll' artifacts/vulkan-probe/KisakCOD-vulkan-probe.exe; then
+            echo "KisakCOD-vulkan-probe.exe must not import vulkan-1.dll" >&2
+            exit 1
+          fi
+          # Usage errors exit 2 after printing usage, which needs SDL3.dll to
+          # have loaded; a missing DLL fails before main.
+          set +e
+          artifacts/vulkan-probe/KisakCOD-vulkan-probe.exe --help > artifacts/vulkan-probe-help.log 2>&1
+          status=$?
+          set -e
+          cat artifacts/vulkan-probe-help.log
+          test "$status" -eq 2
+          grep -q '^usage:' artifacts/vulkan-probe-help.log
+
+      # The probe with SDL3.dll, for a run on a Windows PC with a Vulkan driver.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: KisakCOD-vulkan-probe-x64
+          path: artifacts/vulkan-probe
           retention-days: 3

@@ -536,7 +536,7 @@ void SV_InitReadDemoSavegame(SaveGame **saveHandle)
 
     SaveGame *demohandle = SaveMemory_GetSaveHandle(1);
     SaveMemory_InitializeLoadFromBuffer(demohandle, p_save->buf, p_save->bufLen);
-    Dvar_LoadDvars(SaveMemory_GetMemoryFile(demohandle));
+    Dvar_LoadDvars(SaveMemory_GetMemoryFile(demohandle), DVAR_SOURCE_EXTERNAL);
     Scr_SkipSource(SaveMemory_GetMemoryFile(demohandle), 0);
 
     MemoryFile *mf = SaveMemory_GetMemoryFile(demohandle);

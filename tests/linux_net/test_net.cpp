@@ -163,7 +163,10 @@ static void TestLayout()
 {
     Section("engine type layout");
     Check(sizeof(netadr_t) == 20, "netadr_t is 20 bytes");
-    Check(sizeof(msg_t) == 40, "msg_t is 40 bytes");
+    // msg_t holds pointers: 40 bytes is the i386 (and retail) layout. 64-bit
+    // builds (x86_64, aarch64, macOS) run the rest of the test natively.
+    if (sizeof(void *) == 4)
+        Check(sizeof(msg_t) == 40, "msg_t is 40 bytes");
     Check(offsetof(netadr_t, ip) == 4, "netadr_t.ip offset 4");
     Check(offsetof(netadr_t, port) == 8, "netadr_t.port offset 8");
 }
@@ -760,12 +763,6 @@ int main()
 
     printf("POSIX network layer test (src/linux/net.cpp)\n");
     printf("sizeof(void*)=%u\n", (unsigned)sizeof(void *));
-
-    if (sizeof(void *) != 4)
-    {
-        printf("FATAL: this test must run as a 32-bit binary\n");
-        return 2;
-    }
 
     TestLayout();
 

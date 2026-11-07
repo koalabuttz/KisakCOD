@@ -97,7 +97,7 @@ SUITES: Tuple[Suite, ...] = (
           summary="free camera window: ", sdl3_minimum=68),
     Suite("client-input-test", "actual client input lifecycle suite passes", 54),
     Suite("client-command-test", "actual command lifecycle suite passes", 28),
-    Suite("client-runtime-test", "actual runtime lifecycle suite passes", 42),
+    Suite("client-runtime-test", "actual runtime lifecycle suite passes", 44),
     Suite("client-input-startup-test", "actual input-startup lifecycle suite passes", 23),
     Suite("string-owner-test", "actual string-owner ownership suite passes", 9,
           summary="string owner: "),

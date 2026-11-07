@@ -108,7 +108,8 @@ def build_runtime_test(workdir, compiler="clang++"):
             "-DSYS_RUNTIME_TEST",
             str(LINUX_SRC / "sys_runtime_test.cpp"),
             str(LINUX_SRC / "sys_posix.cpp"),
-            "-Wl,--gc-sections",
+            # Apple's linker spells section garbage collection -dead_strip.
+            "-Wl,-dead_strip" if sys.platform == "darwin" else "-Wl,--gc-sections",
             "-pthread",
             "-o",
             str(executable),

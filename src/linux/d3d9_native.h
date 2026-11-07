@@ -73,8 +73,8 @@
 
 #pragma once
 
-#ifndef __linux__
-#error "src/linux/d3d9_native.h is the native Linux DXVK boundary only"
+#if !defined(__linux__) && !defined(__APPLE__)
+#error "src/linux/d3d9_native.h is the native Linux and macOS DXVK boundary only"
 #endif
 #if !defined(KISAK_LINUX_NATIVE_D3D9)
 #error "d3d9_native.h requires KISAK_LINUX_NATIVE_D3D9: link the kisak_linux_native_d3d9 target"

@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "r_rendertarget.h"
+#include "rhi/r_rhi.h"
 #include "r_init.h"
 #include "r_image.h"
 #include "r_dvars.h"
@@ -21,7 +22,7 @@ void AssertUninitializedRenderTarget(const GfxRenderTarget *renderTarget)
 
 bool R_IsDepthStencilFormatOk(_D3DFORMAT renderTargetFormat, _D3DFORMAT depthStencilFormat)
 {
-    return dx.d3d9->CheckDeviceFormat(
+    return R_HW_CheckDeviceFormat(dx.d3d9,
         dx.adapterIndex,
         D3DDEVTYPE_HAL,
         D3DFMT_X8R8G8B8,
@@ -29,7 +30,7 @@ bool R_IsDepthStencilFormatOk(_D3DFORMAT renderTargetFormat, _D3DFORMAT depthSte
         D3DRTYPE_SURFACE,
         depthStencilFormat) >= 0
         && 
-        dx.d3d9->CheckDepthStencilMatch(
+        R_HW_CheckDepthStencilMatch(dx.d3d9,
             dx.adapterIndex,
             D3DDEVTYPE_HAL,
             D3DFMT_X8R8G8B8,
@@ -123,9 +124,9 @@ void R_ShareRenderTarget(GfxRenderTargetId idFrom, GfxRenderTargetId idTo)
     v3->width = v2->width;
     v3->height = v2->height;
     if (gfxRenderTargets[idTo].surface.color)
-        gfxRenderTargets[idTo].surface.color->AddRef();
+        R_HW_AddRef(gfxRenderTargets[idTo].surface.color);
     if (gfxRenderTargets[idTo].surface.depthStencil)
-        gfxRenderTargets[idTo].surface.depthStencil->AddRef();
+        R_HW_AddRef(gfxRenderTargets[idTo].surface.depthStencil);
 }
 
 void R_InitFullscreenRenderTargetImage(
@@ -225,13 +226,13 @@ IDirect3DSurface9 *R_AssignSingleSampleDepthStencilSurface()
         dx.singleSampleDepthStencilSurface = gfxRenderTargets[R_RENDERTARGET_FRAME_BUFFER].surface.depthStencil;
     if (dx.singleSampleDepthStencilSurface)
     {
-        dx.singleSampleDepthStencilSurface->AddRef();
+        R_HW_AddRef(dx.singleSampleDepthStencilSurface);
         return dx.singleSampleDepthStencilSurface;
     }
     else
     {
         R_GetFrameBufferDepthStencilRes(&depthStencilWidth, &depthStencilHeight);
-        hr = dx.device->CreateDepthStencilSurface(
+        hr = R_HW_CreateDepthStencilSurface(dx.device,
             depthStencilWidth,
             depthStencilHeight,
             dx.depthStencilFormat,
@@ -339,7 +340,7 @@ void R_InitShadowmapRenderTarget(
         renderTarget);
     if (usage)
     {
-        hra = dx.device->CreateDepthStencilSurface(
+        hra = R_HW_CreateDepthStencilSurface(dx.device,
             tileRes,
             totalHeight,
             gfxMetrics.shadowmapFormatSecondary,
@@ -356,7 +357,7 @@ void R_InitShadowmapRenderTarget(
     }
     else
     {
-        hr = dx.device->CreateRenderTarget(
+        hr = R_HW_CreateRenderTarget(dx.device,
             tileRes,
             totalHeight,
             gfxMetrics.shadowmapFormatSecondary,
@@ -409,12 +410,12 @@ void R_AssignShadowCookieDepthStencilSurface(GfxRenderTargetSurface *surface)
     if (gfxRenderTargets[R_RENDERTARGET_SHADOWCOOKIE].surface.depthStencil)
     {
         surface->depthStencil = gfxRenderTargets[R_RENDERTARGET_SHADOWCOOKIE].surface.depthStencil;
-        surface->depthStencil->AddRef();
+        R_HW_AddRef(surface->depthStencil);
     }
     else
     {
         depthStencilFormat = (_D3DFORMAT)R_GetDepthStencilFormat(D3DFMT_A8R8G8B8);
-        hr = dx.device->CreateDepthStencilSurface(
+        hr = R_HW_CreateDepthStencilSurface(dx.device,
             128u,
             128u,
             depthStencilFormat,
@@ -480,7 +481,7 @@ void R_InitFrameBufferRenderTarget_Win32(GfxRenderTarget *renderTarget)
     iassert( renderTarget );
     renderTarget->width = vidConfig.displayWidth;
     renderTarget->height = vidConfig.displayHeight;
-    hr = dx.device->GetSwapChain(0, &dx.windows[0].swapChain);
+    hr = R_HW_GetSwapChain(dx.device, 0, &dx.windows[0].swapChain);
     if (hr < 0)
     {
         v1 = R_ErrorDescription(hr);
@@ -490,7 +491,7 @@ void R_InitFrameBufferRenderTarget_Win32(GfxRenderTarget *renderTarget)
     {
         if (r_logFile && r_logFile->current.integer)
             RB_LogPrint("dx.device->GetBackBuffer( 0, 0, D3DBACKBUFFER_TYPE_MONO, &renderTarget->surface.color )\n");
-        v6 = dx.device->GetBackBuffer(
+        v6 = R_HW_GetBackBuffer(dx.device,
             0,
             0,
             D3DBACKBUFFER_TYPE_MONO,
@@ -518,7 +519,7 @@ void R_InitFrameBufferRenderTarget_Win32(GfxRenderTarget *renderTarget)
     else
     {
         R_GetFrameBufferDepthStencilRes(&depthStencilWidth, &depthStencilHeight);
-        hr = dx.device->CreateDepthStencilSurface(
+        hr = R_HW_CreateDepthStencilSurface(dx.device,
             depthStencilWidth,
             depthStencilHeight,
             dx.depthStencilFormat,
@@ -550,7 +551,7 @@ _D3DFORMAT R_InitFrameBufferRenderTarget()
     R_ShareRenderTarget(R_RENDERTARGET_FRAME_BUFFER, R_RENDERTARGET_SCENE);
     v0 = R_DescribeFormat(D3DFMT_A8R8G8B8);
     Com_Printf(CON_CHANNEL_GFX, "Requested frame buffer to be %s\n", v0);
-    gfxRenderTargets[R_RENDERTARGET_FRAME_BUFFER].surface.color->GetDesc(&surfaceDesc);
+    R_HW_GetDesc(gfxRenderTargets[R_RENDERTARGET_FRAME_BUFFER].surface.color, &surfaceDesc);
     iassert( surfaceDesc.Format != D3DFMT_UNKNOWN );
     v1 = R_DescribeFormat(surfaceDesc.Format);
     Com_Printf(CON_CHANNEL_GFX, "DirectX returned a frame buffer that is %s\n", v1);
@@ -572,9 +573,9 @@ void R_ShutdownRenderTargets()
     for (renderTargetId = 0; renderTargetId < 15; ++renderTargetId)
     {
         if (gfxRenderTargets[renderTargetId].surface.color)
-            gfxRenderTargets[renderTargetId].surface.color->Release();
+            R_HW_Release(gfxRenderTargets[renderTargetId].surface.color);
         if (gfxRenderTargets[renderTargetId].surface.depthStencil)
-            gfxRenderTargets[renderTargetId].surface.depthStencil->Release();
+            R_HW_Release(gfxRenderTargets[renderTargetId].surface.depthStencil);
         if (gfxRenderTargets[renderTargetId].image)
             Image_Release(gfxRenderTargets[renderTargetId].image);
     }

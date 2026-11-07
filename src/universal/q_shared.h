@@ -215,6 +215,12 @@ static ID_INLINE int BigLong(int l) { return LongSwap(l); }
 #else
 #define	CPUSTRING	"linux-arm64-debug"
 #endif
+#elif defined(__arm__)
+#ifdef NDEBUG
+#define	CPUSTRING	"linux-armv7"
+#else
+#define	CPUSTRING	"linux-armv7-debug"
+#endif
 #elif defined(NDEBUG)
 #define	CPUSTRING	"linux-x86"
 #else

@@ -1,11 +1,16 @@
-name: macOS dedicated server
+name: macOS
 
 # Opt-in macOS track, step one (docs/macos.md): build the dedicated server
 # KisakCOD-dedi with -DKISAK_PLATFORM=macos for Apple silicon (arm64) and Intel
 # Macs (x86_64), each on a hosted runner of its own architecture, and run the
-# asset-free bootstrap test against the Mach-O binary. No game data, Steam or
-# GPU is involved, so loading a real map is not covered here. The Linux and
-# Windows builds are untouched.
+# asset-free bootstrap test against the Mach-O binary and the platform
+# self-tests built for the Mac (run_linux_checks.py --arch). No game data,
+# Steam or GPU is involved, so loading a real map is not covered here. The
+# Linux and Windows builds are untouched.
+#
+# Step two builds the multiplayer client KisakCOD-mp the same way against the
+# pinned SDL3 and the D3D9 and OpenAL stand-ins (no MoltenVK or DXVK library
+# yet), and runs the client's asset-free checks. Nothing draws a frame.
 
 on:
   workflow_dispatch:
@@ -18,6 +23,15 @@ on:
       - scripts/extern/**
       - scripts/platform/linux/**
       - scripts/tests/test_linux_bootstrap.py
+      - scripts/tests/run_linux_checks.py
+      - scripts/tests/test_linux_runtime.py
+      - scripts/tests/test_linux_net_deadline.py
+      - tests/linux_net/**
+      - scripts/tests/test_linux_mp_client.py
+      - scripts/tests/run_native_d3d9_boundary_checks.py
+      - tests/linux_mp_client/**
+      - tests/linux_device_probe/d3d9_unavailable.cpp
+      - tests/skinning/**
       - src/**
       - deps/**
       - .github/workflows/build-kisakcod-macos.yaml
@@ -30,6 +44,15 @@ on:
       - scripts/extern/**
       - scripts/platform/linux/**
       - scripts/tests/test_linux_bootstrap.py
+      - scripts/tests/run_linux_checks.py
+      - scripts/tests/test_linux_runtime.py
+      - scripts/tests/test_linux_net_deadline.py
+      - tests/linux_net/**
+      - scripts/tests/test_linux_mp_client.py
+      - scripts/tests/run_native_d3d9_boundary_checks.py
+      - tests/linux_mp_client/**
+      - tests/linux_device_probe/d3d9_unavailable.cpp
+      - tests/skinning/**
       - src/**
       - deps/**
       - .github/workflows/build-kisakcod-macos.yaml
@@ -125,12 +148,28 @@ jobs:
             exit 1
           fi
 
-      - name: Bootstrap KisakCOD-dedi
-        timeout-minutes: 5
+      # The bootstrap test, then the platform self-tests built for this Mac:
+      # the POSIX primitives and engine wrappers (timed waits on macOS's
+      # relative condition-variable wait), network deadlines, UDP through
+      # recvmsg (oversize datagrams included), file I/O, and the virtual
+      # memory layer (decommit by remapping; 16 KiB pages on Apple silicon).
+      - name: Asset-free checks
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/tests/test_linux_bootstrap.py --arch macos-${{ matrix.arch }} "$BINARY"
+          python3 scripts/tests/run_linux_checks.py --arch macos-${{ matrix.arch }} \
+            --build-dir "$BUILD_DIR" --binary "$BINARY" --cxx clang++ \
+            --log-dir "$RUNNER_TEMP/checks"
+
+      - name: Upload check logs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: checks-macos-${{ matrix.arch }}-${{ matrix.config }}
+          path: ${{ runner.temp }}/checks
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Upload executable
         if: ${{ matrix.config == 'RelWithDebInfo' }}
@@ -140,3 +179,193 @@ jobs:
           path: ${{ env.BINARY }}
           retention-days: 14
           if-no-files-found: error
+
+  client:
+    # Step two (docs/macos.md): the multiplayer client KisakCOD-mp, built with
+    # -DKISAK_PLATFORM=macos against the pinned SDL3 (built here from source)
+    # and the CI stand-ins for D3D9 and OpenAL, as the aarch64 Linux client
+    # job does. Then the asset-free checks: the game window test, the client's
+    # fail-closed start from temporary trees with no game data, and the
+    # skinning tests. No MoltenVK, DXVK library, GPU or game data is involved,
+    # and the Bink movie shim is not built for macOS yet.
+    name: macOS ${{ matrix.arch }} multiplayer client
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, x86_64]
+        include:
+          - arch: arm64
+            runner: macos-26
+          - arch: x86_64
+            runner: macos-15-intel
+
+    env:
+      DXVK_REVISION: c3dd74be6baec53786d4e064a572185b70347a17
+      DXVK_DIRECTX_HEADERS_REVISION: 9df86f2341616ef1888ae59919feaa6d4fad693d
+      SDL3_REVISION: 877399b2b2cf21e67554ed9046410f268ce1d1b2
+      BUILD_DIR: build-macos/${{ matrix.arch }}-mp-client
+      OUT_DIR: ${{ github.workspace }}/out/macos-${{ matrix.arch }}-mp-client
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build tools
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "${{ matrix.arch }}"
+          command -v ninja >/dev/null || brew install ninja
+          # openal-soft only for <AL/al.h>; the client links the OpenAL stand-in.
+          brew list openal-soft >/dev/null 2>&1 || brew install openal-soft
+          test -f "$(brew --prefix openal-soft)/include/AL/al.h"
+          sw_vers
+          xcrun clang++ --version
+          cmake --version | head -n 1
+
+      - name: Restore pinned SDL3 SDK
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/SDL3-sdk
+          key: sdl3-sdk-macos-${{ matrix.arch }}-${{ env.SDL3_REVISION }}-${{ hashFiles('.github/workflows/build-kisakcod-macos.yaml') }}
+
+      - name: Build pinned SDL3 SDK
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The same SDL3 commit the Linux client jobs pin.
+          if [[ ! -f "$RUNNER_TEMP/SDL3-sdk/lib/libSDL3.0.dylib" ]]; then
+            git init "$RUNNER_TEMP/SDL3-source"
+            git -C "$RUNNER_TEMP/SDL3-source" remote add origin https://github.com/libsdl-org/SDL.git
+            git -C "$RUNNER_TEMP/SDL3-source" fetch --depth 1 origin "$SDL3_REVISION"
+            git -C "$RUNNER_TEMP/SDL3-source" checkout --detach FETCH_HEAD
+            test "$(git -C "$RUNNER_TEMP/SDL3-source" rev-parse HEAD)" = "$SDL3_REVISION"
+            cmake -S "$RUNNER_TEMP/SDL3-source" -B "$RUNNER_TEMP/SDL3-build" -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} -DCMAKE_OSX_DEPLOYMENT_TARGET=13.3 \
+              -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/SDL3-sdk" -DCMAKE_INSTALL_LIBDIR=lib \
+              -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TESTS=OFF -DSDL_TEST_LIBRARY=OFF \
+              -DSDL_EXAMPLES=OFF
+            cmake --build "$RUNNER_TEMP/SDL3-build" --parallel "$(sysctl -n hw.ncpu)"
+            cmake --install "$RUNNER_TEMP/SDL3-build"
+          fi
+          ls -l "$RUNNER_TEMP/SDL3-sdk/lib"
+          lipo -archs "$RUNNER_TEMP/SDL3-sdk/lib/libSDL3.0.dylib" | grep -qx "${{ matrix.arch }}"
+
+      - name: Fetch pinned DXVK Native 2.7.1 headers
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The same source-only fetch as the Linux client jobs: the headers the
+          # renderer boundary compiles against. Nothing is built.
+          src="$RUNNER_TEMP/dxvk-source"
+          git init "$src"
+          git -C "$src" remote add origin https://github.com/doitsujin/dxvk.git
+          git -C "$src" fetch --depth 1 origin "$DXVK_REVISION"
+          git -C "$src" checkout --detach FETCH_HEAD
+          test "$(git -C "$src" rev-parse HEAD)" = "$DXVK_REVISION"
+          recorded="$(git -C "$src" ls-tree HEAD include/native/directx | awk '{print $3}')"
+          test "$recorded" = "$DXVK_DIRECTX_HEADERS_REVISION"
+          headers="$src/include/native/directx"
+          git init "$headers"
+          git -C "$headers" remote add origin https://github.com/Joshua-Ashton/mingw-directx-headers.git
+          git -C "$headers" fetch --depth 1 origin "$DXVK_DIRECTX_HEADERS_REVISION"
+          git -C "$headers" checkout --detach FETCH_HEAD
+          test "$(git -C "$headers" rev-parse HEAD)" = "$DXVK_DIRECTX_HEADERS_REVISION"
+          grep -q "version : '2.7.1'" "$src/meson.build"
+          python3 scripts/tests/run_native_d3d9_boundary_checks.py \
+            --dxvk-source "$src" --stage-dxvk-headers "$RUNNER_TEMP/dxvk-include/dxvk"
+
+      - name: Build the multiplayer client against the stand-ins
+        timeout-minutes: 45
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/stand-ins"
+          d3d9="$RUNNER_TEMP/stand-ins/libd3d9_unavailable.dylib"
+          openal="$RUNNER_TEMP/stand-ins/libopenal_unavailable.dylib"
+          xcrun clang++ -dynamiclib -arch ${{ matrix.arch }} -mmacosx-version-min=13.3 \
+            -Wall -Wextra -Werror -install_name @rpath/libd3d9_unavailable.dylib \
+            tests/linux_device_probe/d3d9_unavailable.cpp -o "$d3d9"
+          xcrun clang++ -dynamiclib -arch ${{ matrix.arch }} -mmacosx-version-min=13.3 \
+            -Wall -Wextra -Werror -install_name @rpath/libopenal_unavailable.dylib \
+            tests/linux_mp_client/openal_unavailable.cpp -o "$openal"
+          cmake -S . -B "$BUILD_DIR" -G Ninja \
+            -DKISAK_PLATFORM=macos \
+            -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$OUT_DIR" \
+            -DKISAK_BUILD_LINUX_NATIVE_D3D9=ON \
+            -DKISAK_DXVK_NATIVE_INCLUDE_DIR="$RUNNER_TEMP/dxvk-include/dxvk" \
+            -DKISAK_DXVK_NATIVE_LIBRARY="$d3d9" \
+            -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_OPENAL_LIBRARY="$openal" \
+            -DKISAK_OPENAL_INCLUDE_DIR="$(brew --prefix openal-soft)/include" \
+            -DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3" \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          targets=(KisakCOD-mp KisakCOD-mp-client-window-test KisakCOD-native-d3d9-proofs KisakCOD-skin-scalar-test)
+          if [[ "${{ matrix.arch }}" == x86_64 ]]; then
+            targets+=(KisakCOD-skin-sse2-test)
+          fi
+          # -k 0: report every unit that fails, then each distinct error once.
+          status=0
+          cmake --build "$BUILD_DIR" --target "${targets[@]}" --parallel "$(sysctl -n hw.ncpu)" -- -k 0 \
+            2>&1 | tee "$RUNNER_TEMP/build.log" || status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "::group::Distinct errors"
+            grep -E "error:|Undefined symbols|referenced from|ld: " "$RUNNER_TEMP/build.log" | sed 's#^.*/KisakCOD/KisakCOD/##' | sort | uniq -c | sort -rn | head -n 300
+            echo "::endgroup::"
+            exit "$status"
+          fi
+          for binary in "$OUT_DIR/KisakCOD-mp" "$OUT_DIR/KisakCOD-mp-client-window-test"; do
+            file "$binary"
+            lipo -archs "$binary" | grep -qx "${{ matrix.arch }}"
+          done
+          otool -L "$OUT_DIR/KisakCOD-mp" | tail -n +2 | awk '{print $1}' > "$RUNNER_TEMP/mp-client-needed.txt"
+          cat "$RUNNER_TEMP/mp-client-needed.txt"
+          grep -qx '@rpath/libSDL3.0.dylib' "$RUNNER_TEMP/mp-client-needed.txt"
+          grep -qx '@rpath/libd3d9_unavailable.dylib' "$RUNNER_TEMP/mp-client-needed.txt"
+          grep -qx '@rpath/libopenal_unavailable.dylib' "$RUNNER_TEMP/mp-client-needed.txt"
+          if grep -Ev '^(@rpath/libSDL3\.0\.dylib|@rpath/libd3d9_unavailable\.dylib|@rpath/libopenal_unavailable\.dylib|/usr/lib/libc\+\+\.1\.dylib|/usr/lib/libSystem\.B\.dylib)$' \
+              "$RUNNER_TEMP/mp-client-needed.txt"; then
+            echo "the multiplayer client needs a library beyond SDL3, D3D9, OpenAL and the system runtimes" >&2
+            exit 1
+          fi
+          if [[ "${{ matrix.arch }}" == arm64 ]]; then
+            # Apple silicon must not fuse multiply-adds (-ffp-contract=off):
+            # float results have to match x86 (docs/macos.md).
+            if xcrun objdump -d --no-show-raw-insn "$OUT_DIR/KisakCOD-mp" | grep -Eq $'\t(fmadd|fmsub|fnmadd|fnmsub|fmla|fmls)\\b'; then
+              echo "the client contains fused multiply-add instructions" >&2
+              exit 1
+            fi
+          fi
+
+      - name: Run the multiplayer client's fail-closed start
+        timeout-minutes: 10
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          export DYLD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/stand-ins"
+          "$OUT_DIR/KisakCOD-mp-client-window-test"
+          python3 -u scripts/tests/test_linux_mp_client.py --binary "$OUT_DIR/KisakCOD-mp" --native-os macOS
+
+      # Apple silicon skins with the engine's scalar code; its output must be
+      # the bytes every architecture produces (tests/skinning/skin_scalar_test.cpp).
+      - name: Run the skinning checks
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$OUT_DIR/KisakCOD-skin-scalar-test"
+          if [[ "${{ matrix.arch }}" == x86_64 ]]; then
+            "$OUT_DIR/KisakCOD-skin-sse2-test"
+          fi

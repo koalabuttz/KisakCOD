@@ -36,7 +36,7 @@ What this does not claim
 ------------------------
 A file that passes was accepted by the compiler front end for i386 with these
 definitions. That is not a link, not a run and not behavioural equivalence with
-the Windows build. In particular, the 29 renderer sources that need real D3D9
+the Windows build. In particular, the renderer sources that need real D3D9
 methods are listed as blocked here; the native D3D9 boundary is what unblocks
 them, and when it does, entries come off the list.
 

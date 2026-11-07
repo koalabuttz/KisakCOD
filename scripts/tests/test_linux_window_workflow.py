@@ -562,10 +562,12 @@ class DeviceProbeWorkflowTests(unittest.TestCase):
         self.assertIn('tempfile.TemporaryDirectory(prefix="kisak-mp-client-")', script)
         self.assertEqual(script.count('.write_text('), 1)
         self.assertIn('"// stub written by the check; no game data\\n"', script)
-        # The binary, and how to run it on another architecture; never a game tree.
-        self.assertEqual(script.count('add_argument('), 2)
+        # The binary, how to run it on another architecture, and the OS its
+        # banner names (Linux or macOS); never a game tree.
+        self.assertEqual(script.count('add_argument('), 3)
         self.assertIn('add_argument("--binary"', script)
         self.assertIn('add_argument("--emulator"', script)
+        self.assertIn('add_argument("--native-os", choices=("Linux", "macOS")', script)
         for forbidden in ('game_dir', '.ff"', '.iwd', 'symlink'):
             self.assertNotIn(forbidden, script.lower())
 
@@ -883,7 +885,7 @@ class CiCacheTests(unittest.TestCase):
 
     # Jobs that configure and build the engine with CMake.
     CCACHE_JOBS = ('window', 'native', 'native_d3d9_boundary', 'device_probe', 'x64_dedicated',
-                   'arm64_dedicated', 'x64_client', 'arm64_client', 'vulkan_window')
+                   'arm64_dedicated', 'armv7_dedicated', 'x64_client', 'arm64_client', 'vulkan_window')
     SDL3_JOBS = ('window', 'device_probe')
 
     @classmethod
