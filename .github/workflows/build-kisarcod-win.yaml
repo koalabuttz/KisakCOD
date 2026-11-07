@@ -2,6 +2,14 @@ name: Windows CMake DirectX Build
 
 on:
   workflow_dispatch:
+    inputs:
+      tracy:
+        # For a profiling run on a Windows PC: the Win32 Release and x64
+        # executables of this run carry the Tracy profiler (KISAK_WIN_TRACY),
+        # and their artifact names end in -Tracy. ARM64 stays without it.
+        description: 'Build the Win32 and x64 games with the Tracy profiler'
+        type: boolean
+        default: false
   # Changes that cannot affect the Windows builds skip this workflow. The path
   # list is the same for both events, and the order matters: a later pattern
   # overrides an earlier one. scripts/tests/test_linux_window_workflow.py checks it.
@@ -35,6 +43,7 @@ on:
       - 'scripts/tests/test_voice_lifecycle.py'
       - 'scripts/tests/test_script_console_watchdog.py'
       - 'scripts/tests/test_exec_command_ownership.py'
+      - 'scripts/tests/test_windows_tracy_option.py'
   pull_request:
     branches: [ "master" ]
     paths:
@@ -65,6 +74,7 @@ on:
       - 'scripts/tests/test_voice_lifecycle.py'
       - 'scripts/tests/test_script_console_watchdog.py'
       - 'scripts/tests/test_exec_command_ownership.py'
+      - 'scripts/tests/test_windows_tracy_option.py'
 
 # A newer push to a pull request cancels that pull request's older run, and a
 # newer push to master cancels an older master run (the newer one checks
@@ -73,6 +83,10 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
   cancel-in-progress: true
+
+# Read-only token: these jobs only check out, build and upload artifacts.
+permissions:
+  contents: read
 
 jobs:
   runtime-regressions:
@@ -97,6 +111,8 @@ jobs:
         run: python3 scripts/tests/test_script_console_watchdog.py
       - name: Config command ownership
         run: python3 scripts/tests/test_exec_command_ownership.py
+      - name: Windows Tracy profiler option
+        run: python3 scripts/tests/test_windows_tracy_option.py
       - name: MSVC x64 census summarizer
         run: python3 scripts/ci/test_summarize_msvc_x64.py
 
@@ -149,11 +165,17 @@ jobs:
           Write-Host $sdkDir
 
       - name: Install latest CMake
-        uses: lukka/get-cmake@latest
+        uses: lukka/get-cmake@30aea713799f46b5b60e60f5fa83f849abd52c22 # the "latest" branch on 2026-11-05
 
+      # The Debug build also turns on the opt-in Tracy profiler, so the
+      # profiling build compiles and links on every push; Release stays the
+      # player build with no profiler unless a manual run asks for it.
       - name: Configure CMake ${{ matrix.config }}
         run: |
-          cmake -S . -B build-${{ matrix.config }} -G "Visual Studio 17 2022" -A Win32 -DDXSDK_DIR="${{ env.DXSDK_DIR }}" -DCICD=1 -DCMAKE_BUILD_TYPE=${{ matrix.config }}
+          $tracy = 'OFF'
+          if ('${{ matrix.config }}' -eq 'Debug' -or '${{ inputs.tracy }}' -eq 'true') { $tracy = 'ON' }
+          cmake -S . -B build-${{ matrix.config }} -G "Visual Studio 17 2022" -A Win32 -DDXSDK_DIR="${{ env.DXSDK_DIR }}" -DCICD=1 -DCMAKE_BUILD_TYPE=${{ matrix.config }} `
+            -DKISAK_WIN_TRACY="$tracy"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build ${{ matrix.config }}
@@ -185,10 +207,11 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: KisakCOD-${{ matrix.config }}
+          name: KisakCOD-${{ matrix.config }}${{ inputs.tracy && '-Tracy' || '' }}
           path: ${{ github.workspace }}/bin
           compression-level: 9
-          retention-days: 1
+          # A profiling build is kept as long as the x64 one, for the next PC run.
+          retention-days: ${{ inputs.tracy && 3 || 1 }}
 
   x64-census:
     # The Windows x64 row of the CI matrix upstream issue 1 asks for
@@ -232,7 +255,7 @@ jobs:
           echo "DXSDK_DIR=$sdkDir" >> $env:GITHUB_ENV
 
       - name: Install latest CMake
-        uses: lukka/get-cmake@latest
+        uses: lukka/get-cmake@30aea713799f46b5b60e60f5fa83f849abd52c22 # the "latest" branch on 2026-11-05
 
       - name: Check the MSVC x64 summarizer
         run: |
@@ -261,10 +284,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           echo "KISAK_FFMPEG_ROOT=$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows-release" >> $env:GITHUB_ENV
 
+      # A manual run with the tracy input builds the profiling executables.
       - name: Configure x64
         run: |
+          $tracy = 'OFF'
+          if ('${{ inputs.tracy }}' -eq 'true') { $tracy = 'ON' }
           cmake -S . -B build-x64 -G "Visual Studio 17 2022" -A x64 -DDXSDK_DIR="${{ env.DXSDK_DIR }}" -DCICD=1 -DCMAKE_BUILD_TYPE=Release `
-            -DKISAK_WIN64_CINEMATICS=ON -DKISAK_FFMPEG_ROOT="${{ env.KISAK_FFMPEG_ROOT }}"
+            -DKISAK_WIN64_CINEMATICS=ON -DKISAK_FFMPEG_ROOT="${{ env.KISAK_FFMPEG_ROOT }}" -DKISAK_WIN_TRACY="$tracy"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       # Every target is built and logged before the job fails, so one run
@@ -323,7 +349,7 @@ jobs:
       # machine (the game files are not part of it).
       - uses: actions/upload-artifact@v4
         with:
-          name: KisakCOD-x64-Release
+          name: KisakCOD-x64-Release${{ inputs.tracy && '-Tracy' || '' }}
           path: ${{ github.workspace }}/bin
           compression-level: 9
           retention-days: 3

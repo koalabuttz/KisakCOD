@@ -62,6 +62,7 @@ what is still missing. Build steps are in the
 - [World draw probe](linux-world-draw-probe.md) (opt-in): views of that map drawn through the engine's own renderer (`R_Init`, `R_LoadWorld`, `R_RenderScene`, the backend's material passes), read back and checked
 - [Free camera](linux-free-camera.md) (opt-in): a host camera flown through the engine renderer on a real map, live or by a checked script, with the frame owner that sequences input, device reset, resize, map reload and shutdown
 - [Standalone renderer build/run](../tests/linux_renderer/README.md)
+- [Vulkan core and window probe](vulkan-core.md) (opt-in): the first piece of the Vulkan back end; opens an SDL3 window and clears, presents and resizes it through `src/gfx_vk`
 
 ## Tests
 

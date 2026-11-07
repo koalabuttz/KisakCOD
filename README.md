@@ -37,6 +37,17 @@ only needed to run the game or a server, not to build or test them.
 7) Copy `deps/steamsdk/steam_api.dll`  ^^
 8) Run the game via Visual Studio play button or just the .exe
 
+For profiling, configure with `-DKISAK_WIN_TRACY=ON` (Win32, x64 or ARM64). It
+builds `KisakCOD-sp`, `KisakCOD-mp` and `KisakCOD-dedi` with the Tracy profiler
+(the version `scripts/extern/tracy.cmake` fetches): the engine's `PROF_SCOPED`
+zones become Tracy zones, one `MainThread` zone per frame. The game stays idle
+until a Tracy profiler or `tracy-capture` of the same version connects from the
+same machine (it listens on localhost only). Player builds leave it off. CI
+builds the Win32 Debug games with it on, so it keeps compiling; a manual run of
+the Windows workflow with the `tracy` input builds Win32 Release and x64
+profiling executables (artifacts named `-Tracy`). Linux has `KISAK_LINUX_TRACY`
+([Linux client](docs/linux-mp-client.md)).
+
 
 ```
 Keep in Mind: This is a ~20 year old game with some known exploits. We will try to fix these as we become aware of them.

@@ -107,6 +107,7 @@ CLIENT_FUNCTIONS = (
     ("SV_BanGuidBriefly", "void SV_BanGuidBriefly("),
     ("SV_RejectUnsafeTestHandshake", "static bool SV_RejectUnsafeTestHandshake("),
     ("SV_IsTempBannedGuid", "int SV_IsTempBannedGuid("),
+    ("SV_NewChallengeValue", "static int SV_NewChallengeValue()"),
     ("SV_GetChallenge", "void SV_GetChallenge("),
     ("SV_DirectConnect", "void SV_DirectConnect("),
     ("SV_DropClient", "void SV_DropClient("),
@@ -186,6 +187,7 @@ PREAMBLE = r'''
 // each double records its calls so the tests can assert the decision made by
 // production code and the order in which side effects happened.
 
+#include <cerrno>
 #include <cstdarg>
 #include <cstddef>
 #include <cstdint>
@@ -194,6 +196,7 @@ PREAMBLE = r'''
 #include <cstring>
 #include <string>
 #include <vector>
+#include <sys/random.h>
 
 #ifdef NDEBUG
 #error Assertions must remain enabled
@@ -3263,6 +3266,7 @@ def build_harness(client_functions: dict, base64_functions: dict) -> str:
     extracted_client += client_functions["SV_FindFreeTempBanSlot"] + "\n"
     extracted_client += client_functions["SV_BanGuidBriefly"] + "\n"
     extracted_client += client_functions["SV_IsTempBannedGuid"] + "\n"
+    extracted_client += client_functions["SV_NewChallengeValue"] + "\n"
     extracted_client += client_functions["SV_GetChallenge"] + "\n"
     extracted_client += client_functions["SV_DirectConnect"] + "\n"
     extracted_client += client_functions["SV_DropClient"]

@@ -42,11 +42,14 @@ inline bool SV_RconPasswordAccepted(const char* configured, const char* supplied
 // served to any connected client while sv_allowDownload was on.
 //
 // Accepted: a relative path of one or more non-empty components separated by
-// '/' or '\\', each component made of ASCII letters, digits, space and
-// "_-.()+,", no component equal to "." or "..", and a final component ending
-// in ".iwd" or ".ff" (case-insensitive).  That covers "main/xyz.iwd",
-// "mods/mymod/mod.ff" and "mods/mymod/mymod.iwd", which is everything the
-// retail client auto-download asks for, and nothing that is not game content.
+// '/' or '\\', each component made of printable ASCII other than ':', ';' and
+// '"', not ending in '.' or ' ' (Windows drops those, so "..." or ".. " would
+// become ".."), and a final component ending in ".iwd" or ".ff"
+// (case-insensitive).  That covers "main/xyz.iwd", "mods/mymod/mod.ff",
+// "usermaps/mp_x/mp_x.ff" and mod folders such as "mods/[NL]promod" or
+// "mods/rock&roll", which retail's fs_game accepts (it only refuses ".." and
+// "::").  Bytes outside printable ASCII are still refused: code-page
+// conversions on Windows make their meaning platform-dependent.
 inline bool SV_IsSafeDownloadName(const char* name)
 {
     if (!name || !name[0])
@@ -63,18 +66,18 @@ inline bool SV_IsSafeDownloadName(const char* name)
             const size_t componentLength = static_cast<size_t>(p - componentStart);
             if (componentLength == 0)
                 return false;            // leading, doubled or trailing separator
-            if (componentStart[0] == '.' &&
-                (componentLength == 1 || (componentLength == 2 && componentStart[1] == '.')))
-                return false;            // "." or ".."
+            const char last = p[-1];
+            if (last == '.' || last == ' ')
+                return false;            // ".", "..", "..." and "x. " all end here
             if (c == 0)
                 break;
             componentStart = p + 1;
             continue;
         }
-        const bool letter = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
-        const bool digit = c >= '0' && c <= '9';
-        if (!letter && !digit && !strchr("_-. ()+,", static_cast<char>(c)))
-            return false;                // anything else, ':' and non-ASCII included
+        if (c < 0x20 || c > 0x7e)
+            return false;                // control bytes and non-ASCII
+        if (c == ':' || c == ';' || c == '"')
+            return false;                // drive letters and streams, command and quote breaks
     }
 
     // p now points at the terminating NUL and componentStart at the file name.

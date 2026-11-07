@@ -391,7 +391,7 @@ void CL_ParseDownload(int localClientNum, msg_t *msg)
             legacyHacks.cl_downloadSize = cls.downloadSize;
             if (cls.downloadSize < 0)
             {
-                Com_Error(ERR_DROP, va("%s", MSG_ReadString(msg)));
+                Com_Error(ERR_DROP, "%s", MSG_ReadString(msg));
                 return;
             }
         }
