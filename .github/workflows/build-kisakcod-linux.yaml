@@ -101,7 +101,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/apt-archives
-          key: apt-${{ github.job }}-${{ runner.arch }}-v1
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
       - name: Install 32-bit window build tools
         timeout-minutes: 20
         shell: bash
@@ -224,7 +225,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/apt-archives
-          key: apt-${{ github.job }}-${{ runner.arch }}-v1
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
 
       - name: Install native 32-bit build tools
         timeout-minutes: 20
@@ -287,6 +289,7 @@ jobs:
         shell: bash
         run: |
           python3 scripts/tests/test_linux_check_runner.py
+          python3 scripts/tests/test_ci_apt_install.py
           python3 scripts/tests/test_linux_fastfile_driver.py
           python3 scripts/tests/test_linux_client_core_driver.py
           python3 scripts/tests/test_strip_cdecl.py
@@ -364,7 +367,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/apt-archives
-          key: apt-${{ github.job }}-${{ runner.arch }}-v1
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
 
       - name: Install client census tools
         timeout-minutes: 20
@@ -452,7 +456,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/apt-archives
-          key: apt-${{ github.job }}-${{ runner.arch }}-v1
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
 
       - name: Install x64 census tools
         timeout-minutes: 20
@@ -531,7 +536,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/apt-archives
-          key: apt-${{ github.job }}-${{ runner.arch }}-v1
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
 
       - name: Install x86_64 build tools
         timeout-minutes: 20
@@ -658,7 +664,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/apt-archives
-          key: apt-${{ github.job }}-${{ runner.arch }}-v1
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
 
       - name: Install aarch64 build tools
         timeout-minutes: 20
@@ -763,7 +770,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/apt-archives
-          key: apt-${{ github.job }}-${{ runner.arch }}-v1
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
 
       - name: Install x86_64 build tools
         timeout-minutes: 20
@@ -1011,7 +1019,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/apt-archives
-          key: apt-${{ github.job }}-${{ runner.arch }}-v1
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
 
       - name: Install aarch64 build tools
         timeout-minutes: 20
@@ -1203,7 +1212,7 @@ jobs:
     # OpenAL headers are needed because client sound headers include <AL/al.h>.
     name: Asset-free world front-end checks ${{ matrix.config }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 40
 
     strategy:
       fail-fast: false
@@ -1222,7 +1231,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/apt-archives
-          key: apt-${{ github.job }}-${{ runner.arch }}-v1
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
 
       - name: Install world front-end tools
         timeout-minutes: 20
@@ -1299,7 +1309,7 @@ jobs:
     # configures anything, so it cannot serve a check that must not need them.
     name: Asset-free world surface checks ${{ matrix.config }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 40
 
     strategy:
       fail-fast: false
@@ -1314,7 +1324,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/apt-archives
-          key: apt-${{ github.job }}-${{ runner.arch }}-v1
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
 
       - name: Install 32-bit C++ toolchain
         timeout-minutes: 20
@@ -1400,7 +1411,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/apt-archives
-          key: apt-${{ github.job }}-${{ runner.arch }}-v1
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
 
       - name: Install 32-bit C++ toolchains
         timeout-minutes: 20
@@ -1610,7 +1622,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/apt-archives
-          key: apt-${{ github.job }}-${{ runner.arch }}-v1
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
 
       - name: Install 32-bit C++ toolchain
         timeout-minutes: 20
@@ -2003,7 +2016,7 @@ jobs:
     # recording fake: no DXVK, no SDL, no GPU, no game assets, no CMake configure.
     name: Asset-free free camera checks ${{ matrix.config }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 40
 
     strategy:
       fail-fast: false
@@ -2018,7 +2031,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/apt-archives
-          key: apt-${{ github.job }}-${{ runner.arch }}-v1
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
 
       - name: Install 32-bit Clang toolchain
         timeout-minutes: 20
@@ -2100,7 +2114,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/apt-archives
-          key: apt-${{ github.job }}-${{ runner.arch }}-v1
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
 
       - name: Install x86_64 build tools and the lavapipe Vulkan driver
         timeout-minutes: 20
