@@ -11,6 +11,10 @@ name: macOS
 # Step two builds the multiplayer client KisakCOD-mp the same way against the
 # pinned SDL3 and the D3D9 and OpenAL stand-ins (no MoltenVK or DXVK library
 # yet), and runs the client's asset-free checks. Nothing draws a frame.
+#
+# Step three builds the Vulkan window probe (the shared core of the planned
+# Vulkan back end, docs/vulkan-core.md) against MoltenVK and runs it in a real
+# window on each runner.
 
 on:
   workflow_dispatch:
@@ -32,6 +36,8 @@ on:
       - tests/linux_mp_client/**
       - tests/linux_device_probe/d3d9_unavailable.cpp
       - tests/skinning/**
+      - scripts/vulkan_probe/**
+      - scripts/tests/test_vulkan_window_probe.py
       - src/**
       - deps/**
       - .github/workflows/build-kisakcod-macos.yaml
@@ -53,6 +59,8 @@ on:
       - tests/linux_mp_client/**
       - tests/linux_device_probe/d3d9_unavailable.cpp
       - tests/skinning/**
+      - scripts/vulkan_probe/**
+      - scripts/tests/test_vulkan_window_probe.py
       - src/**
       - deps/**
       - .github/workflows/build-kisakcod-macos.yaml
@@ -369,3 +377,114 @@ jobs:
           if [[ "${{ matrix.arch }}" == x86_64 ]]; then
             "$OUT_DIR/KisakCOD-skin-sse2-test"
           fi
+
+  vulkan_probe:
+    # Step three (docs/macos.md): the Vulkan window probe, the first piece of
+    # the planned Vulkan back end, built with -DKISAK_PLATFORM=macos against
+    # the pinned SDL3 and Homebrew's Vulkan headers, loader and MoltenVK, then
+    # run in a Cocoa window by the same checks the Linux lavapipe job runs.
+    # Nothing of the engine is compiled in and no game data is read.
+    name: macOS ${{ matrix.arch }} Vulkan window probe
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, x86_64]
+        include:
+          - arch: arm64
+            runner: macos-26
+          - arch: x86_64
+            runner: macos-15-intel
+
+    env:
+      SDL3_REVISION: 877399b2b2cf21e67554ed9046410f268ce1d1b2
+      BUILD_DIR: build-macos/${{ matrix.arch }}-vulkan-probe
+      OUT_DIR: ${{ github.workspace }}/out/macos-${{ matrix.arch }}-vulkan-probe
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build tools, MoltenVK and the Vulkan loader
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "${{ matrix.arch }}"
+          command -v ninja >/dev/null || brew install ninja
+          brew install vulkan-headers vulkan-loader molten-vk vulkan-validationlayers
+          for formula in vulkan-headers vulkan-loader molten-vk vulkan-validationlayers; do
+            echo "$formula $(brew list --versions "$formula")"
+          done
+          test -f "$(brew --prefix vulkan-headers)/include/vulkan/vulkan.h"
+          test -f "$(brew --prefix vulkan-loader)/lib/libvulkan.1.dylib"
+          system_profiler SPDisplaysDataType || true
+          sw_vers
+
+      - name: Restore pinned SDL3 SDK
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/SDL3-sdk
+          key: sdl3-sdk-macos-${{ matrix.arch }}-${{ env.SDL3_REVISION }}-${{ hashFiles('.github/workflows/build-kisakcod-macos.yaml') }}
+
+      - name: Build pinned SDL3 SDK
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The same SDL3 commit and options as the client job (one cache).
+          if [[ ! -f "$RUNNER_TEMP/SDL3-sdk/lib/libSDL3.0.dylib" ]]; then
+            git init "$RUNNER_TEMP/SDL3-source"
+            git -C "$RUNNER_TEMP/SDL3-source" remote add origin https://github.com/libsdl-org/SDL.git
+            git -C "$RUNNER_TEMP/SDL3-source" fetch --depth 1 origin "$SDL3_REVISION"
+            git -C "$RUNNER_TEMP/SDL3-source" checkout --detach FETCH_HEAD
+            test "$(git -C "$RUNNER_TEMP/SDL3-source" rev-parse HEAD)" = "$SDL3_REVISION"
+            cmake -S "$RUNNER_TEMP/SDL3-source" -B "$RUNNER_TEMP/SDL3-build" -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} -DCMAKE_OSX_DEPLOYMENT_TARGET=13.3 \
+              -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/SDL3-sdk" -DCMAKE_INSTALL_LIBDIR=lib \
+              -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TESTS=OFF -DSDL_TEST_LIBRARY=OFF \
+              -DSDL_EXAMPLES=OFF
+            cmake --build "$RUNNER_TEMP/SDL3-build" --parallel "$(sysctl -n hw.ncpu)"
+            cmake --install "$RUNNER_TEMP/SDL3-build"
+          fi
+          lipo -archs "$RUNNER_TEMP/SDL3-sdk/lib/libSDL3.0.dylib" | grep -qx "${{ matrix.arch }}"
+
+      - name: Build the Vulkan window probe
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B "$BUILD_DIR" -G Ninja \
+            -DKISAK_PLATFORM=macos \
+            -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$OUT_DIR" \
+            -DKISAK_BUILD_VULKAN_PROBE=ON \
+            -DKISAK_VULKAN_INCLUDE_DIR="$(brew --prefix vulkan-headers)/include" \
+            -DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3"
+          cmake --build "$BUILD_DIR" --target KisakCOD-vulkan-probe --parallel "$(sysctl -n hw.ncpu)"
+          lipo -archs "$OUT_DIR/KisakCOD-vulkan-probe" | grep -qx "${{ matrix.arch }}"
+          otool -L "$OUT_DIR/KisakCOD-vulkan-probe"
+          # The loader is opened at run time through SDL, never linked.
+          if otool -L "$OUT_DIR/KisakCOD-vulkan-probe" | grep -Eqi 'vulkan|moltenvk'; then
+            echo "KisakCOD-vulkan-probe must not link the Vulkan loader or MoltenVK" >&2
+            exit 1
+          fi
+
+      - name: Run the Vulkan window probe through MoltenVK
+        timeout-minutes: 10
+        shell: bash
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          # SDL looks for libvulkan.1.dylib on the default library path, which
+          # does not include Homebrew's prefix on Apple silicon.
+          export SDL_VULKAN_LIBRARY="$(brew --prefix vulkan-loader)/lib/libvulkan.1.dylib"
+          export DYLD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib"
+          python3 -u scripts/tests/test_vulkan_window_probe.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-probe" \
+            --video-driver cocoa --validation auto

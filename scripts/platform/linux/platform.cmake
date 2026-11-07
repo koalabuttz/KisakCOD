@@ -1,6 +1,7 @@
 if(KISAK_PLATFORM STREQUAL "macos")
-    # Opt-in macOS track (docs/macos.md): the dedicated server, and the
-    # multiplayer client with the native D3D9 boundary it needs, built from the
+    # Opt-in macOS track (docs/macos.md): the dedicated server, the
+    # multiplayer client with the native D3D9 boundary it needs, and the Vulkan
+    # window probe (through MoltenVK), built from the
     # same POSIX layer (src/linux) with its few Linux-only calls swapped for
     # macOS ones. 64-bit only: macOS has run no 32-bit process since 10.15, so
     # this rides on the x86_64 and aarch64 tracks' 64-bit fixes.
@@ -15,10 +16,10 @@ if(KISAK_PLATFORM STREQUAL "macos")
             KISAK_BUILD_UI_ASSET_EXPORT KISAK_BUILD_WORLD_FRONTEND_PROBE KISAK_BUILD_DEVICE_PROBE
             KISAK_BUILD_WORLD_DEVICE_PROBE KISAK_BUILD_WORLD_DRAW_PROBE
             KISAK_BUILD_LINUX_SP_GAME
-            KISAK_LINUX_CINEMATICS KISAK_LINUX_TRACY KISAK_WIN_TRACY KISAK_BUILD_VULKAN_PROBE
+            KISAK_LINUX_CINEMATICS KISAK_LINUX_TRACY KISAK_WIN_TRACY
             KISAK_LINUX_STEAM)
         if(${kisak_not_on_macos})
-            message(FATAL_ERROR "${kisak_not_on_macos} is not available on macOS yet; KISAK_PLATFORM=macos builds KisakCOD-dedi and KisakCOD-mp")
+            message(FATAL_ERROR "${kisak_not_on_macos} is not available on macOS yet; KISAK_PLATFORM=macos builds KisakCOD-dedi, KisakCOD-mp and the Vulkan window probe")
         endif()
     endforeach()
     # Tracy (compiled in, on demand) refuses to start on an x86 CPU without an

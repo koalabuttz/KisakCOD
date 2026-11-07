@@ -13,7 +13,8 @@
 # KISAK_VULKAN_INCLUDE_DIR). The Vulkan loader is not linked: SDL3 opens it at
 # run time, so a machine without one fails the probe's "loader" stage instead
 # of failing to start. Nothing of the engine is compiled into it, it reads no
-# game data and it works for every KISAK_LINUX_ARCH. See docs/vulkan-core.md.
+# game data and it works for every KISAK_LINUX_ARCH and on macOS, where the
+# loader reaches Metal through MoltenVK. See docs/vulkan-core.md.
 #
 # The Linux build includes this from scripts/platform/linux. Windows builds it
 # on its own through scripts/vulkan_probe/CMakeLists.txt (MSVC, x64), which
