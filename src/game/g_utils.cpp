@@ -90,7 +90,7 @@ int G_FindConfigstringIndex(const char *name, int start, int max, int create, co
     {
         G_DumpConfigStrings(start, max);
         v16 = va("G_FindConfigstringIndex overflow (%d) : %s", start, name);
-        Com_Error(ERR_DROP, v16);
+        Com_Error(ERR_DROP, "%s", v16);
     }
     SV_SetConfigstring(i + start, name);
 LABEL_16:
@@ -157,7 +157,7 @@ int G_LocalizedStringIndex(const char *string)
         {
             G_DumpConfigStrings(91, 1023);
             v9 = va("G_LocalizedStringIndex: overflow (%d) : %s", 91, string);
-            Com_Error(ERR_DROP, v9);
+            Com_Error(ERR_DROP, "%s", v9);
         }
         SV_SetConfigstring(CS_LOCALIZED_STRINGS + i, string);
     LABEL_22:
@@ -191,7 +191,7 @@ LABEL_24:
         {
             G_DumpConfigStrings(91, 1023);
             v12 = va("G_LocalizedStringIndex: overflow (%d) : %s", 91, string);
-            Com_Error(ERR_DROP, v12);
+            Com_Error(ERR_DROP, "%s", v12);
         }
         SV_SetConfigstring(CS_LOCALIZED_STRINGS + i, string);
     LABEL_34:

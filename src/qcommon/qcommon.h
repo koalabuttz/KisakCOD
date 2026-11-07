@@ -219,8 +219,18 @@ inline bool Con_IsNotifyChannel(int channel)
     return (channel == CON_CHANNEL_GAMENOTIFY || channel == CON_CHANNEL_BOLDGAME || channel == CON_CHANNEL_SUBTITLE);
 }
 
-void QDECL Com_Printf(int channel, const char* fmt, ...);
-void QDECL Com_Error(errorParm_t code, const char* fmt, ...);
+// KISAK: printf-style checking for the Com_* printers on Linux builds, so a
+// non-literal format (a player name, a script string) is a compile error
+// (-Werror=format-security) instead of a format-string bug.  MSVC and MinGW
+// builds are unchanged.
+#if defined(__linux__) && (defined(__GNUC__) || defined(__clang__))
+#define KISAK_PRINTF_FORMAT(formatIndex, firstArgIndex) __attribute__((format(printf, formatIndex, firstArgIndex)))
+#else
+#define KISAK_PRINTF_FORMAT(formatIndex, firstArgIndex)
+#endif
+
+void QDECL Com_Printf(int channel, const char* fmt, ...) KISAK_PRINTF_FORMAT(2, 3);
+void QDECL Com_Error(errorParm_t code, const char* fmt, ...) KISAK_PRINTF_FORMAT(2, 3);
 
 void QDECL RefreshQuitOnErrorCondition();
 
@@ -242,9 +252,9 @@ void Com_PrintMessage(int channel, const char* msg, int error);
 #endif
 void Com_LogPrintMessage(int channel, const char* msg);
 void Com_OpenLogFile();
-void Com_DPrintf(int channel, const char* fmt, ...);
-void Com_PrintError(int channel, const char* fmt, ...);
-void Com_PrintWarning(int channel, const char* fmt, ...);
+void Com_DPrintf(int channel, const char* fmt, ...) KISAK_PRINTF_FORMAT(2, 3);
+void Com_PrintError(int channel, const char* fmt, ...) KISAK_PRINTF_FORMAT(2, 3);
+void Com_PrintWarning(int channel, const char* fmt, ...) KISAK_PRINTF_FORMAT(2, 3);
 void Com_SetLocalizedErrorMessage(char* localizedErrorMessage, const char* titleToken);
 void Com_SetErrorMessage(char* errorMessage);
 char Com_ErrorIsNotice(const char* errorMessage);

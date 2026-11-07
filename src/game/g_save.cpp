@@ -396,7 +396,7 @@ void G_SaveError(errorParm_t code, SaveErrorType errorType, const char *fmt, ...
     }
 
     Com_PrintError(CON_CHANNEL_FILES, "%s", buf);
-    Com_Error(code, errMsg);
+    Com_Error(code, "%s", errMsg);
 }
 
 void WriteCStyleString(const char *psz, int maxlen, SaveGame *save)

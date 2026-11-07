@@ -814,12 +814,74 @@ class CiTriggerTests(unittest.TestCase):
         self.assertFalse(_selected('src/linux/a.cpp', ['*.cpp']))
 
 
+class VulkanWindowWorkflowTests(unittest.TestCase):
+    """The Vulkan window probe: built x86_64, run on lavapipe with validation required."""
+
+    JOB = 'vulkan_window'
+
+    @classmethod
+    def setUpClass(cls):
+        cls.workflow = yaml.load(
+            (ROOT / '.github/workflows/build-kisakcod-linux.yaml').read_text(),
+            Loader=yaml.BaseLoader)
+        cls.job = cls.workflow['jobs'][cls.JOB]
+        cls.text = '\n'.join(step.get('run', '') for step in cls.job['steps'])
+
+    def step(self, name):
+        return next(step for step in self.job['steps'] if step.get('name') == name)
+
+    def test_both_configurations_on_hosted_ubuntu(self):
+        self.assertEqual(self.job['strategy']['matrix']['config'], ['Debug', 'RelWithDebInfo'])
+        self.assertEqual(self.job['runs-on'], 'ubuntu-24.04')
+        self.assertIn('timeout-minutes', self.job)
+
+    def test_it_builds_only_the_opt_in_probe_for_x86_64(self):
+        build = self.step('Build the Vulkan window probe')['run']
+        self.assertIn('-DKISAK_BUILD_VULKAN_PROBE=ON', build)
+        self.assertIn('-DKISAK_LINUX_ARCH=x86_64', build)
+        self.assertIn('--target KisakCOD-vulkan-probe', build)
+        self.assertIn("grep -q 'libvulkan'", build)
+        # No D3D9, DXVK, game data or Steam.
+        for forbidden in ('dxvk', 'kisak_build_linux_native_d3d9', 'steam', 'zone/', 'main/'):
+            self.assertNotIn(forbidden, self.text.lower())
+
+    def test_the_sdl3_sdk_matches_the_x86_64_client(self):
+        mine = self.step('Build pinned x86_64 SDL3 SDK')['run']
+        client = next(step for step in self.workflow['jobs']['x64_client']['steps']
+                      if step.get('name') == 'Build pinned x86_64 SDL3 SDK')['run']
+        # Same cmake options, so the shared cache key holds the same SDK.
+        options = lambda run: [line.strip() for line in run.splitlines() if line.strip().startswith('-D')]
+        self.assertEqual(options(mine), options(client))
+        self.assertEqual(self.step('Restore pinned x86_64 SDL3 SDK')['with']['key'],
+                         next(step for step in self.workflow['jobs']['x64_client']['steps']
+                              if step.get('name') == 'Restore pinned x86_64 SDL3 SDK')['with']['key'])
+        self.assertEqual(self.job['env']['SDL3_REVISION'], self.workflow['jobs']['x64_client']['env']['SDL3_REVISION'])
+
+    def test_it_runs_on_lavapipe_offscreen_with_validation_required(self):
+        install = next(step['run'] for step in self.job['steps'] if step.get('name', '').startswith('Install '))
+        for package in ('libvulkan-dev', 'mesa-vulkan-drivers', 'vulkan-validationlayers'):
+            self.assertIn(package, install)
+        run = self.step('Run the Vulkan window probe on lavapipe')['run']
+        self.assertIn('scripts/tests/test_vulkan_window_probe.py', run)
+        self.assertIn('--video-driver offscreen', run)
+        self.assertIn('--validation require', run)
+        self.assertNotIn('xvfb', self.text.lower())
+
+    def test_no_other_job_builds_the_probe(self):
+        for name, job in self.workflow['jobs'].items():
+            if name == self.JOB:
+                continue
+            text = '\n'.join(step.get('run', '') for step in job['steps'])
+            with self.subTest(job=name):
+                self.assertNotIn('KISAK_BUILD_VULKAN_PROBE', text)
+
+
 class CiCacheTests(unittest.TestCase):
     """The build caches only skip unchanged compiles; every check still runs."""
 
     # Jobs that configure and build the engine with CMake.
     CCACHE_JOBS = ('window', 'native', 'native_d3d9_boundary', 'device_probe', 'x64_dedicated',
-                   'arm64_dedicated', 'x64_client', 'arm64_client')
+                   'arm64_dedicated', 'x64_client', 'arm64_client', 'vulkan_window')
     SDL3_JOBS = ('window', 'device_probe')
 
     @classmethod
@@ -871,10 +933,53 @@ class CiCacheTests(unittest.TestCase):
         for name, job in self.workflow['jobs'].items():
             if name in self.CCACHE_JOBS:
                 continue
-            text = '\n'.join(step.get('run', '') + step.get('uses', '') for step in job['steps'])
+            # The apt package cache (test below) is not a compiler cache.
+            text = '\n'.join(step.get('run', '') + step.get('uses', '') for step in job['steps']
+                              if step.get('name') != self.APT_CACHE_STEP)
             with self.subTest(job=name):
                 self.assertNotIn('ccache', text)
                 self.assertNotIn('actions/cache', text)
+
+    APT_CACHE_STEP = 'Restore downloaded apt packages'
+
+    def test_apt_installs_go_through_the_cached_retrying_script(self):
+        # A slow package mirror must not time a job out before it builds:
+        # every install uses scripts/ci/apt-install.sh, which retries stalled
+        # downloads and keeps the .deb files in a directory each job caches.
+        for name, job in self.workflow['jobs'].items():
+            runs = [step.get('run', '') for step in job['steps']]
+            installs = [index for index, run in enumerate(runs) if 'scripts/ci/apt-install.sh' in run]
+            with self.subTest(job=name):
+                for run in runs:
+                    self.assertNotIn('apt-get install', run)
+                if not installs:
+                    self.assertNotIn(self.APT_CACHE_STEP, [step.get('name') for step in job['steps']])
+                    continue
+                cache = self.step(name, self.APT_CACHE_STEP)
+                names = [step.get('name') for step in job['steps']]
+                self.assertLess(names.index(self.APT_CACHE_STEP), installs[0])
+                self.assertTrue(cache['uses'].startswith('actions/cache@'))
+                self.assertEqual(cache['with']['path'], '${{ runner.temp }}/apt-archives')
+                self.assertIn('${{ github.job }}', cache['with']['key'])
+                # Caches are immutable: a new key must save updated .deb files,
+                # while the prefix can restore the previous run's packages.
+                self.assertIn('${{ github.run_id }}', cache['with']['key'])
+                self.assertIn('${{ github.run_attempt }}', cache['with']['key'])
+                self.assertEqual(cache['with']['restore-keys'],
+                                 'apt-${{ github.job }}-${{ runner.arch }}-v1')
+                self.assertGreater(int(job['timeout-minutes']),
+                                   max(int(job['steps'][index]['timeout-minutes']) for index in installs))
+                # Only the first install refreshes the package lists.
+                for index in installs[1:]:
+                    self.assertIn('apt-install.sh --no-update', runs[index])
+        script = (ROOT / 'scripts/ci/apt-install.sh').read_text()
+        self.assertIn('Acquire::Retries', script)
+        self.assertIn('Dir::Cache::Archives=$archives', script)
+        self.assertIn('${RUNNER_TEMP:-/tmp}/apt-archives', script)
+
+    def test_apt_installer_regressions_run_in_ci(self):
+        self.assertIn('python3 scripts/tests/test_ci_apt_install.py',
+                      self.step('native', 'Check test-runner configuration and failure handling')['run'])
 
     def test_ccache_setup_launches_cmake_compiles_only(self):
         script = (ROOT / 'scripts/ci/use-ccache.sh').read_text()

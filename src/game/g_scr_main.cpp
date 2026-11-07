@@ -1926,7 +1926,7 @@ void Scr_GetWeaponModel()
             if (I_stricmp(String, "none"))
             {
                 v3 = va("unknown weapon '%s' in getWeaponModel\n", String);
-                Com_Printf(CON_CHANNEL_PARSERSCRIPT, v3);
+                Com_Printf(CON_CHANNEL_PARSERSCRIPT, "%s", v3);
             }
         }
         Scr_AddString("");
@@ -1957,7 +1957,7 @@ void Scr_GetWeaponClipModel()
     else if (*String && I_stricmp(String, "none"))
     {
         v3 = va("unknown weapon '%s' in getWeaponClipModel\n", String);
-        Com_Printf(CON_CHANNEL_PARSERSCRIPT, v3);
+        Com_Printf(CON_CHANNEL_PARSERSCRIPT, "%s", v3);
     }
     Name = "";
 LABEL_6:

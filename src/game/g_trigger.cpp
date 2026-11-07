@@ -140,7 +140,7 @@ void SP_trigger_radius(gentity_s *ent)
                 ent->r.currentOrigin[1],
                 ent->r.currentOrigin[2]
             );
-            Com_Error(ERR_DROP, v2);
+            Com_Error(ERR_DROP, "%s", v2);
         }
         if (!G_SpawnFloat("height", "", &v8))
         {
@@ -150,7 +150,7 @@ void SP_trigger_radius(gentity_s *ent)
                 ent->r.currentOrigin[1],
                 ent->r.currentOrigin[2]
             );
-            Com_Error(ERR_DROP, v3);
+            Com_Error(ERR_DROP, "%s", v3);
         }
     }
     else
@@ -190,7 +190,7 @@ void SP_trigger_disk(gentity_s *ent)
             ent->r.currentOrigin[1],
             ent->r.currentOrigin[2]
         );
-        Com_Error(ERR_DROP, v2);
+        Com_Error(ERR_DROP, "%s", v2);
     }
     v3 = (float)(v4[0] + (float)64.0);
     ent->handler = ENT_HANDLER_TRIGGER_MULTIPLE;

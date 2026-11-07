@@ -17,6 +17,10 @@ on:
       - scripts/tests/test_ui_expression_dispatch.py
       - .github/workflows/ui-expression-dispatch.yaml
 
+# Read-only token: these jobs only check out, build and upload artifacts.
+permissions:
+  contents: read
+
 jobs:
   dispatch:
     runs-on: ubuntu-latest

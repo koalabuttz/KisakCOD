@@ -174,15 +174,23 @@ set(KISAK_SP_GAME_OPTIONS
     ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing
     -ffunction-sections -fdata-sections
     -Wno-c++11-narrowing -Wno-invalid-token-paste
-    -Wno-ignored-attributes -Wno-format-security
+    -Wno-ignored-attributes -Werror=format-security
+    ${KISAK_LINUX_HARDENING_OPTIONS}
 )
+
+# KISAK_LINUX_TRACY is declared with the multiplayer client (mp_client.cmake).
+set(KISAK_SP_TRACY_DEFINITIONS "")
+if(KISAK_LINUX_TRACY)
+    set(KISAK_SP_TRACY_DEFINITIONS TRACY_ENABLE TRACY_ON_DEMAND TRACY_ONLY_LOCALHOST)
+    message(STATUS "KisakCOD-sp: Tracy profiler on (on demand, localhost only)")
+endif()
 
 add_library(KisakCOD-sp-native OBJECT ${sp_game_native_sources})
 add_library(KisakCOD-sp-standin OBJECT ${sp_game_standin_sources} ${sp_game_linux_sources})
 add_library(KisakCOD-sp-own OBJECT ${sp_game_own_sources})
 foreach(sp_target KisakCOD-sp-native KisakCOD-sp-standin KisakCOD-sp-own)
     target_compile_features(${sp_target} PRIVATE cxx_std_20)
-    target_compile_definitions(${sp_target} PRIVATE ${KISAK_SP_GAME_DEFINITIONS})
+    target_compile_definitions(${sp_target} PRIVATE ${KISAK_SP_GAME_DEFINITIONS} ${KISAK_SP_TRACY_DEFINITIONS})
     target_compile_options(${sp_target} PRIVATE ${KISAK_SP_GAME_OPTIONS})
     target_include_directories(${sp_target} PRIVATE "${SRC_DIR}" "${DEPS_DIR}" "${tracy_SOURCE_DIR}/public")
     if(KISAK_OPENAL_INCLUDE_DIR)
@@ -226,9 +234,9 @@ add_executable(KisakCOD-sp
     $<TARGET_OBJECTS:KisakCOD-sp-own>
     $<$<BOOL:${KISAK_LINUX_CINEMATICS}>:$<TARGET_OBJECTS:KisakCOD-sp-cinematic>>)
 target_include_directories(KisakCOD-sp PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
-target_compile_options(KisakCOD-sp PRIVATE ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing)
+target_compile_options(KisakCOD-sp PRIVATE ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing ${KISAK_LINUX_HARDENING_OPTIONS})
 # The same export rule as KisakCOD-mp: the game exports nothing to the libraries it loads.
-target_link_options(KisakCOD-sp PRIVATE -Wl,--gc-sections
+target_link_options(KisakCOD-sp PRIVATE -Wl,--gc-sections ${KISAK_LINUX_HARDENING_LINK_OPTIONS}
     "-Wl,--version-script=${SCRIPTS_DIR}/platform/linux/mp_client_exports.map")
 set_property(TARGET KisakCOD-sp APPEND PROPERTY LINK_DEPENDS "${SCRIPTS_DIR}/platform/linux/mp_client_exports.map")
 target_link_libraries(KisakCOD-sp PRIVATE
@@ -236,4 +244,7 @@ target_link_libraries(KisakCOD-sp PRIVATE
 add_dependencies(KisakCOD-sp update_build_number)
 if(KISAK_LINUX_CINEMATICS)
     target_link_libraries(KisakCOD-sp PRIVATE PkgConfig::KISAK_FFMPEG)
+endif()
+if(KISAK_LINUX_TRACY)
+    target_link_libraries(KisakCOD-sp PRIVATE TracyClient)
 endif()

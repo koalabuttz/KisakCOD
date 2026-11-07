@@ -48,6 +48,8 @@
 # ---------------------------------------------------------------------------
 option(KISAK_LINUX_CINEMATICS
     "Play Bink movies in KisakCOD-mp through the Linux Bink shim (needs libavcodec and libavutil, found with pkg-config)" OFF)
+option(KISAK_LINUX_TRACY
+    "Build KisakCOD-dedi, KisakCOD-mp and KisakCOD-sp with the Tracy profiler: idle until a profiler connects, localhost only. For profiling runs" OFF)
 option(KISAK_BUILD_LINUX_MP_CLIENT
     "Build the native Linux multiplayer client KisakCOD-mp (needs KISAK_BUILD_LINUX_NATIVE_D3D9, KISAK_DXVK_NATIVE_LIBRARY, KISAK_OPENAL_LIBRARY and SDL3)" OFF)
 if(NOT KISAK_BUILD_LINUX_MP_CLIENT)
@@ -211,15 +213,24 @@ set(KISAK_MP_CLIENT_OPTIONS
     ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing
     -ffunction-sections -fdata-sections
     -Wno-c++11-narrowing -Wno-invalid-token-paste
-    -Wno-ignored-attributes -Wno-format-security
+    -Wno-ignored-attributes -Werror=format-security
+    ${KISAK_LINUX_HARDENING_OPTIONS}
 )
+
+# The engine's PROF_SCOPED zones (src/universal/profile.h) become Tracy zones.
+# Off by default: player builds carry no profiler.
+set(KISAK_LINUX_TRACY_DEFINITIONS "")
+if(KISAK_LINUX_TRACY)
+    set(KISAK_LINUX_TRACY_DEFINITIONS TRACY_ENABLE TRACY_ON_DEMAND TRACY_ONLY_LOCALHOST)
+    message(STATUS "KisakCOD-mp: Tracy profiler on (on demand, localhost only)")
+endif()
 
 add_library(KisakCOD-mp-native OBJECT ${mp_client_native_sources})
 add_library(KisakCOD-mp-standin OBJECT ${mp_client_standin_sources} ${mp_client_linux_sources})
 add_library(KisakCOD-mp-own OBJECT ${mp_client_own_sources})
 foreach(mp_target KisakCOD-mp-native KisakCOD-mp-standin KisakCOD-mp-own)
     target_compile_features(${mp_target} PRIVATE cxx_std_20)
-    target_compile_definitions(${mp_target} PRIVATE ${KISAK_MP_CLIENT_DEFINITIONS})
+    target_compile_definitions(${mp_target} PRIVATE ${KISAK_MP_CLIENT_DEFINITIONS} ${KISAK_LINUX_TRACY_DEFINITIONS})
     target_compile_options(${mp_target} PRIVATE ${KISAK_MP_CLIENT_OPTIONS})
     target_include_directories(${mp_target} PRIVATE "${SRC_DIR}" "${DEPS_DIR}" "${tracy_SOURCE_DIR}/public")
     if(KISAK_OPENAL_INCLUDE_DIR)
@@ -282,8 +293,8 @@ add_executable(KisakCOD-mp
     $<TARGET_OBJECTS:KisakCOD-mp-own>
     $<$<BOOL:${KISAK_LINUX_CINEMATICS}>:$<TARGET_OBJECTS:KisakCOD-mp-cinematic>>)
 target_include_directories(KisakCOD-mp PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
-target_compile_options(KisakCOD-mp PRIVATE ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing)
-target_link_options(KisakCOD-mp PRIVATE -Wl,--gc-sections
+target_compile_options(KisakCOD-mp PRIVATE ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing ${KISAK_LINUX_HARDENING_OPTIONS})
+target_link_options(KisakCOD-mp PRIVATE -Wl,--gc-sections ${KISAK_LINUX_HARDENING_LINK_OPTIONS}
     "-Wl,--version-script=${SCRIPTS_DIR}/platform/linux/mp_client_exports.map")
 set_property(TARGET KisakCOD-mp APPEND PROPERTY LINK_DEPENDS "${SCRIPTS_DIR}/platform/linux/mp_client_exports.map")
 target_link_libraries(KisakCOD-mp PRIVATE
@@ -291,6 +302,9 @@ target_link_libraries(KisakCOD-mp PRIVATE
 add_dependencies(KisakCOD-mp update_build_number)
 if(KISAK_LINUX_CINEMATICS)
     target_link_libraries(KisakCOD-mp PRIVATE PkgConfig::KISAK_FFMPEG)
+endif()
+if(KISAK_LINUX_TRACY)
+    target_link_libraries(KisakCOD-mp PRIVATE TracyClient)
 endif()
 
 # The game window's asset-free test, on SDL's dummy video driver. The Win32 layer
