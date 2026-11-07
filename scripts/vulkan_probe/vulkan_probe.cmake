@@ -14,6 +14,10 @@
 # run time, so a machine without one fails the probe's "loader" stage instead
 # of failing to start. Nothing of the engine is compiled into it, it reads no
 # game data and it works for every KISAK_LINUX_ARCH. See docs/vulkan-core.md.
+#
+# The Linux build includes this from scripts/platform/linux. Windows builds it
+# on its own through scripts/vulkan_probe/CMakeLists.txt (MSVC, x64), which
+# needs nothing of the game's Windows build (no DirectX SDK).
 # ---------------------------------------------------------------------------
 option(KISAK_BUILD_VULKAN_PROBE
     "Build the Vulkan window probe and the shared Vulkan core (needs SDL3 and the Vulkan headers)" OFF)
@@ -60,8 +64,20 @@ target_compile_features(kisak_gfx_vk PUBLIC cxx_std_20)
 target_include_directories(kisak_gfx_vk PUBLIC "${SRC_DIR}")
 target_include_directories(kisak_gfx_vk SYSTEM PUBLIC "${KISAK_VULKAN_HEADERS}")
 target_compile_definitions(kisak_gfx_vk PUBLIC VK_NO_PROTOTYPES)
-target_compile_options(kisak_gfx_vk PRIVATE -Wall -Wextra -Werror)
+if(MSVC)
+    set(KISAK_VULKAN_WARNINGS /W4 /WX /permissive-)
+else()
+    set(KISAK_VULKAN_WARNINGS -Wall -Wextra -Werror)
+endif()
+target_compile_options(kisak_gfx_vk PRIVATE ${KISAK_VULKAN_WARNINGS})
 
 add_executable(KisakCOD-vulkan-probe "${SRC_DIR}/gfx_vk/tools/vk_window_probe.cpp")
-target_compile_options(KisakCOD-vulkan-probe PRIVATE -Wall -Wextra -Werror)
+target_compile_options(KisakCOD-vulkan-probe PRIVATE ${KISAK_VULKAN_WARNINGS})
 target_link_libraries(KisakCOD-vulkan-probe PRIVATE kisak_gfx_vk SDL3::SDL3)
+if(WIN32)
+    # Windows finds DLLs next to the executable: copy SDL3.dll there.
+    add_custom_command(TARGET KisakCOD-vulkan-probe POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_RUNTIME_DLLS:KisakCOD-vulkan-probe> $<TARGET_FILE_DIR:KisakCOD-vulkan-probe>
+        COMMAND_EXPAND_LISTS)
+endif()
