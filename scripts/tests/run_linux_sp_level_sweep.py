@@ -12,7 +12,7 @@ Plans
 -----
 ``levels`` (default)
     One process per level: ``+devmap <level>``, wait for the load to finish
-    ("Load time: N msec"), hold, ask for ``sv_mapname`` on the console and
+    ("Load time: N msec"), hold, ask for ``mapname`` on the console and
     check the answer, then ``quit``.
 ``chain``
     One process for all levels: ``+devmap`` the first one, then load each next
@@ -100,6 +100,10 @@ STOCK_LEVELS = (
 
 PROFILE = "sweep"
 SAVE_NAME = "sweep"
+# The server's map name dvar (sv_init.cpp registers sv_mapname as "mapname").
+# The game also registers a read-only "sv_mapname" (g_main.cpp) that singleplayer
+# never sets, so asking for that one always answers "".
+MAP_DVAR = "mapname"
 
 LOAD_DONE = re.compile(r"^Load time: (\d+) msec")
 SERVER_START = re.compile(r"^Server: (\S+)")
@@ -329,11 +333,11 @@ def run_level_steps(game, result, options, home, expect_load=True):
     alive = game.hold(options.hold)
     if not result.step(f"held {options.hold} s", alive, "" if alive else "process ended"):
         return False
-    answer = dvar_answer("sv_mapname")
-    game.send("sv_mapname")
+    answer = dvar_answer(MAP_DVAR)
+    game.send(MAP_DVAR)
     match = game.wait_for(answer, options.probe_timeout)
     if not result.step("console answers", match is not None and match.group(1) == result.level,
-                       f"sv_mapname is '{match.group(1)}'" if match else f"no answer in {options.probe_timeout} s"):
+                       f"{MAP_DVAR} is '{match.group(1)}'" if match else f"no answer in {options.probe_timeout} s"):
         return False
     if options.save_load:
         save_file = home / "players" / "profiles" / PROFILE / "save" / f"{SAVE_NAME}.svg"
@@ -350,7 +354,7 @@ def run_level_steps(game, result, options, home, expect_load=True):
         alive = game.hold(options.hold_after_load)
         if not result.step(f"held {options.hold_after_load} s after loadgame", alive):
             return False
-        game.send("sv_mapname")
+        game.send(MAP_DVAR)
         match = game.wait_for(answer, options.probe_timeout)
         if not result.step("console answers after loadgame", match is not None and match.group(1) == result.level):
             return False

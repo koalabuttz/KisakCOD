@@ -3,7 +3,8 @@
 
 The sweep drives KisakCOD-sp through its console. Here a small stand-in program
 plays the game's part: it prints the console lines the sweep waits for, answers
-``sv_mapname``, writes the save file ``devsave`` would, and quits on ``quit``.
+``mapname`` (and, as the game does, an empty ``sv_mapname``), writes the save
+file ``devsave`` would, and quits on ``quit``.
 Each case runs the sweep against a stand-in tree (an empty ``main/`` and empty
 ``zone/english/<level>.ff`` placeholders) and checks the exit status, the
 report and that nothing is written outside the work directory.
@@ -65,8 +66,11 @@ FAKE_GAME = textwrap.dedent('''\
             if os.environ.get("FAKE_IGNORE_QUIT"):
                 continue
             sys.exit(0)
+        elif cmd[0] == "mapname":
+            print('"mapname" is: "%s^7" default: "^7"' % level, flush=True)
         elif cmd[0] == "sv_mapname":
-            print('"sv_mapname" is: "%s^7" default: "^7"' % level, flush=True)
+            # Singleplayer never sets this one (g_main.cpp registers it read-only).
+            print('"sv_mapname" is: "^7" default: "^7"', flush=True)
         elif cmd[0] == "spdevmap":
             load(cmd[1])
         elif cmd[0] == "devsave":
@@ -82,10 +86,12 @@ FAKE_GAME = textwrap.dedent('''\
 
 class SweepPatternTests(unittest.TestCase):
     def test_console_answer_with_and_without_colour_codes(self):
-        answer = sweep.dvar_answer("sv_mapname")
-        self.assertEqual(answer.search('"sv_mapname" is: "killhouse^7" default: "^7"').group(1), "killhouse")
-        self.assertEqual(answer.search('"sv_mapname" is: "killhouse" default: ""').group(1), "killhouse")
-        self.assertIsNone(answer.search('"sv_mapnames" is: "x"'))
+        self.assertEqual(sweep.MAP_DVAR, "mapname")
+        answer = sweep.dvar_answer(sweep.MAP_DVAR)
+        self.assertEqual(answer.search('"mapname" is: "killhouse^7" default: "^7"').group(1), "killhouse")
+        self.assertEqual(answer.search('"mapname" is: "killhouse" default: ""').group(1), "killhouse")
+        self.assertIsNone(answer.search('"sv_mapname" is: "killhouse^7" default: "^7"'))
+        self.assertIsNone(answer.search('"mapnames" is: "x"'))
 
     def test_gdb_status_lines(self):
         self.assertEqual(sweep.GDB_EXITED.search("[Inferior 1 (process 42) exited normally]").group(1), "normally")

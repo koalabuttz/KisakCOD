@@ -66,7 +66,7 @@ python3 scripts/tests/run_linux_sp_level_sweep.py "$GAME" --binary "$BUILD/Kisak
 ```
 
 - `--plan levels` (default) starts one process per level with `+devmap`, waits
-  for `Load time: N msec`, holds, asks for `sv_mapname` on the console (proof
+  for `Load time: N msec`, holds, asks for `mapname` on the console (proof
   the main loop still answers), and quits.
 - `--plan chain` loads the first level, then each next one with `spdevmap` in
   the same process, the way a mission change does.
