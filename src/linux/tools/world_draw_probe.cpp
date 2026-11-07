@@ -16,6 +16,7 @@
 #include <cgame/cg_local.h>
 #include <client_mp/client_mp.h>
 #include <EffectsCore/fx_system.h>
+#include <physics/phys_local.h>
 #include <gfx_d3d/r_bsp.h>
 #include <gfx_d3d/r_buffers.h>
 #include <gfx_d3d/r_dvars.h>
@@ -415,6 +416,12 @@ void Kisak_DrawWorld(const std::filesystem::path &directory, const char *mapName
     const std::string worldName = LoadMap(mapName);
     const double mapSeconds = Seconds(mapStarted);
     Say("world_draw_map=loaded map=%s world=%s seconds=%.2f\n", mapName, worldName.c_str(), mapSeconds);
+
+    // Physics, which CG_Init starts before the first frame. This mode plays no
+    // effects, but every scene still steps the effects' physics world
+    // (R_GenerateSortedDrawSurfs calls FX_RunPhysics), and Phys_RunToTime needs
+    // Phys_Init. The free camera's MapEffects::Start does the same for its mode.
+    Phys_Init();
 
     // 2. The cameras.
     Camera a, b;
