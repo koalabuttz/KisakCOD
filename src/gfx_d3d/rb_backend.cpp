@@ -1,6 +1,7 @@
 #include <universal/q_shared.h>
 #include "rb_backend.h"
 #include "rhi/r_rhi.h"
+#include <universal/arch_intrin.h>
 #include <qcommon/mem_track.h>
 
 #include "rb_logfile.h"
@@ -85,10 +86,48 @@ void TRACK_rb_backend()
     track_static_alloc_internal(&gfxCmdBufInput, 1072, "gfxCmdBufInput", 18);
 }
 
+#if !defined(_WIN32)
+// R_SyncGpu calls R_GpuFenceTimeout in a tight loop, and between worker
+// commands, until the previous frame's GPU fence passes or the adaptive delay
+// runs out. On Windows each poll is a cheap D3D9 query. Through DXVK each
+// GetData takes the device lock the render thread needs for every D3D9 call
+// (the device is created D3DCREATE_MULTITHREADED), and may flush, so the main
+// thread spent about 1.6 ms of CPU per frame polling on a laptop (perf run 3).
+// Here the fence is queried at most once every kGpuFencePollMsec; the delay
+// check between queries still reads the clock on every call. The wait ends at
+// the same condition as before, at most one interval after the fence passes.
+static constexpr double kGpuFencePollMsec = 0.02;
+static uint64_t s_gpuFenceLastPoll;
+
+static bool R_ShouldPollGpuFence()
+{
+    const uint64_t now = __rdtsc();
+    // The first call of each R_SyncGpu (which sets gpuSyncStart just before
+    // it) always queries, so a fence that has already passed costs no wait.
+    if (s_gpuFenceLastPoll < dx.gpuSyncStart
+        || (double)(now - s_gpuFenceLastPoll) * msecPerRawTimerTick >= kGpuFencePollMsec)
+    {
+        s_gpuFenceLastPoll = now;
+        return true;
+    }
+#if KISAK_ARCH_X86
+    _mm_pause();
+#elif defined(__aarch64__)
+    __asm__ __volatile__("yield");
+#endif
+    return false;
+}
+#endif
+
 bool R_GpuFenceTimeout()
 {
-    if (RB_IsGpuFenceFinished())
-        return 1;
+#if !defined(_WIN32)
+    if (R_ShouldPollGpuFence())
+#endif
+    {
+        if (RB_IsGpuFenceFinished())
+            return 1;
+    }
     dx.gpuSyncEnd = __rdtsc();
     return dx.gpuSyncEnd - dx.gpuSyncStart >= dx.gpuSyncDelay;
 }
