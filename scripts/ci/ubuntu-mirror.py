@@ -6,10 +6,12 @@ import sys
 
 
 def use_main_archive(apt_dir: Path) -> None:
-    # Support both legacy sources.list and Ubuntu 24.04's deb822 .sources.
+    # Support legacy sources.list, deb822 .sources, and the mirror+file list
+    # used by GitHub's Ubuntu runners. Their sources point at apt-mirrors.txt
+    # rather than spelling the Azure URI in the .sources file itself.
     # Only change this exact mirror: Arm ports and third-party repos keep
     # their URIs, and suites, components, architecture and signing options stay.
-    sources = [apt_dir / 'sources.list']
+    sources = [apt_dir / 'sources.list', apt_dir / 'apt-mirrors.txt']
     sources.extend(sorted((apt_dir / 'sources.list.d').glob('*.list')))
     sources.extend(sorted((apt_dir / 'sources.list.d').glob('*.sources')))
     for path in sources:

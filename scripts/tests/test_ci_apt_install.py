@@ -59,6 +59,24 @@ class MirrorTests(unittest.TestCase):
             self.assertEqual(path.read_text(), original)
             self.assertEqual(path.stat().st_mtime_ns, before)
 
+    def test_hosted_runner_mirror_list_is_rewritten_without_losing_priorities(self):
+        with tempfile.TemporaryDirectory() as temp:
+            apt = Path(temp)
+            (apt / 'sources.list.d').mkdir()
+            source = apt / 'sources.list.d/ubuntu.sources'
+            content = ('Types: deb\nURIs: mirror+file:/etc/apt/apt-mirrors.txt\n'
+                       'Suites: noble noble-updates noble-security\n'
+                       'Components: main universe\nSigned-By: /ubuntu-keyring.gpg\n')
+            source.write_text(content)
+            mirrors = apt / 'apt-mirrors.txt'
+            mirrors.write_text('http://azure.archive.ubuntu.com/ubuntu\tpriority:1\n'
+                               'http://archive.ubuntu.com/ubuntu\tpriority:2\n')
+            mirror.use_main_archive(apt)
+            self.assertEqual(source.read_text(), content)
+            self.assertEqual(mirrors.read_text(),
+                             'https://archive.ubuntu.com/ubuntu\tpriority:1\n'
+                             'http://archive.ubuntu.com/ubuntu\tpriority:2\n')
+
     def test_missing_sources_and_repeated_setup_are_harmless(self):
         with tempfile.TemporaryDirectory() as temp:
             apt = Path(temp)
