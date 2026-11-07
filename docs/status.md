@@ -77,8 +77,9 @@ builds use `-ffp-contract=off` (no fused multiply-add).
 - **x86_64 singleplayer.** The 64-bit configuration refuses the SP game for now.
 - **Windows x64 singleplayer.** Each PC run gets one step further into level
   load; the fixes so far are in PR 95.
-- **macOS client.** Only the dedicated server builds for Macs; the client waits
-  on the renderer choice ([macOS track](macos.md#not-covered-yet)).
+- **macOS client.** The multiplayer client builds for Macs and passes its
+  asset-free checks in hosted CI against the D3D9 and OpenAL stand-ins; drawing
+  waits on the renderer choice ([macOS track](macos.md#not-covered-yet)).
 - **arm64 client and Windows ARM64.** The aarch64 multiplayer client builds and
   passes its asset-free checks (qemu and hosted Arm CI) but has not drawn a
   frame: no aarch64 DXVK build yet. Windows ARM64 builds sp, mp and dedi with
