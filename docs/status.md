@@ -23,7 +23,7 @@ without a GPU or game data, against stand-in D3D9 and OpenAL libraries.
 | Dedicated server, macOS (arm64 and x86_64) | `-DKISAK_PLATFORM=macos` | Builds with Apple Clang on hosted macOS runners (Apple silicon and Intel) and boots without game data to the first missing fastfile. Not yet run with game data or on a real Mac. [Guide](macos.md) |
 | Movies | `-DKISAK_LINUX_CINEMATICS=ON` | Bink movies play through an FFmpeg-backed shim on i386 and x86_64 (laptop). Off by default. [Guide](linux-cinematics.md) |
 | Steam authentication | `-DKISAK_LINUX_STEAM=ON` | Added by PR 85. Logs in through the running Steam client's `steamclient.so`; a probe got a ticket validated on i386 and x86_64, and an i386 client joined, reconnected to and was refused by (with Steam off) an i386 dedicated server (laptop, one Steam account). Off by default. [Guide](linux-steam.md) |
-| Singleplayer `KisakCOD-sp`, i386 | `-DKISAK_BUILD_LINUX_SP_GAME=ON` | killhouse and cargoship load, leave the pregame by themselves and play about a minute each, clean quit (laptop). [Guide](linux-sp-game.md) |
+| Singleplayer `KisakCOD-sp`, i386 | `-DKISAK_BUILD_LINUX_SP_GAME=ON` | killhouse and cargoship load, leave the pregame by themselves and play about a minute each, clean quit (laptop). All 21 levels load, run 45 s and quit cleanly; a 4-level mission chain and devsave/loadgame pass (laptop sweep run 1, [levels](linux-sp-levels.md)). [Guide](linux-sp-game.md) |
 | Windows x64 | MSVC `KISAK_WIN64` | sp, mp and dedi build and link (CI job "MSVC x64 build"); opt-in FFmpeg movies. On the Windows PC, mp_crash loads to class select and the dedicated server hosts bots. Singleplayer still crashes during level load (fixes in PR 95). |
 | Windows ARM64 | MSVC `KISAK_WIN_ARM64` | sp, mp and dedi build and start up to the missing-game-data error on hosted Windows on Arm. Not run with game data. [arm64 track](linux-arm64.md) |
 | Profiling | `KISAK_LINUX_TRACY` / `KISAK_WIN_TRACY` | Opt-in Tracy builds of the game clients on Linux and Windows. |
@@ -69,9 +69,11 @@ builds use `-ffp-contract=off` (no fused multiply-add).
   running on the machine ([guide](linux-steam.md)). Not yet tried that way: a
   Windows client or server on the other end, two Steam accounts, x86_64 game
   runs.
-- **Most singleplayer levels.** Only killhouse and cargoship have run on Linux.
-  The other 19, mission changes and loading saves are untried; the sweep tool
-  and run plan are in [linux-sp-levels.md](linux-sp-levels.md).
+- **Singleplayer played by hand past two levels.** All 21 levels load and run
+  unattended, and mission changes and save loading work from the console
+  ([linux-sp-levels.md](linux-sp-levels.md)). Only killhouse and cargoship
+  have been played by hand; night vision, ac130, the Javelin, slow motion,
+  death and retry, and the victory screen are untried.
 - **x86_64 singleplayer.** The 64-bit configuration refuses the SP game for now.
 - **Windows x64 singleplayer.** Each PC run gets one step further into level
   load; the fixes so far are in PR 95.
@@ -127,9 +129,8 @@ master merged in and a green run before it can merge.
   the project files (`perf/laptop-perf-run-3-plan.md`).
 - Sound listening run for the OpenAL fix (PR 102, merged): plan in
   `sound/laptop-sound-run-1.md`, with `+set snd_alDebug 1`.
-- Singleplayer sweep of all 21 levels (tool merged in PR 98): steps in the
-  project files (`singleplayer/laptop-sp-sweep-run-1.md`), background in
-  [linux-sp-levels.md](linux-sp-levels.md).
+- Singleplayer hand play on the levels the sweep passed (step 6 in
+  [linux-sp-levels.md](linux-sp-levels.md)); sweep run 1 is done.
 - D3D9 interface image checks on the laptop and the PC (PR 99).
 - Vulkan window probe on a real GPU (laptop ANV, PC RTX 2080 Super).
 
@@ -138,8 +139,8 @@ master merged in and a green run before it can merge.
 In rough order:
 
 1. **Land the open work above**: Windows x64 SP (95), D3D9 interface (99).
-2. **Linux singleplayer beyond two levels**: fix what the 21-level sweep
-   finds, chained levels and save/load, then x86_64 singleplayer.
+2. **Linux singleplayer beyond two levels**: hand play of the swept levels,
+   then x86_64 singleplayer.
 3. **Renderer**: pick the shader converter (S0), then the backend handles
    (M1b), then draw the game through the Vulkan back end with Legacy visuals
    first and the Modern path after (plan in the project files,
