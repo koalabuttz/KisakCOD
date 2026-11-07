@@ -3024,7 +3024,7 @@ void Dvar_SaveDvars(MemoryFile *memFile, uint16_t filter)
     InterlockedDecrement(&g_dvarCritSect.readCount);
 }
 
-void Dvar_LoadDvars(MemoryFile *memFile)
+void Dvar_LoadDvars(MemoryFile *memFile, DvarSetSource source)
 {
     int nameLen;
     int valueLenBuf[3];
@@ -3051,7 +3051,7 @@ void Dvar_LoadDvars(MemoryFile *memFile)
         if (malleableVar)
         {
             Dvar_StringToValue(&parsedValue, malleableVar->type, malleableVar->domain, valueBuf);
-            Dvar_SetVariant(malleableVar, parsedValue, DVAR_SOURCE_EXTERNAL);
+            Dvar_SetVariant(malleableVar, parsedValue, source);
         }
         else
         {
