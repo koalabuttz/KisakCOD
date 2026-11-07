@@ -289,7 +289,8 @@ namespace
         int status = 0;
         waitpid(child, &status, 0);
 
-        const bool faulted = WIFSIGNALED(status) && WTERMSIG(status) == SIGSEGV;
+        // Linux raises SIGSEGV here; macOS raises SIGBUS for a PROT_NONE page.
+        const bool faulted = WIFSIGNALED(status) && (WTERMSIG(status) == SIGSEGV || WTERMSIG(status) == SIGBUS);
         Check(faulted, "reserved-but-uncommitted memory faults on access");
 
         Posix_ArenaRelease(base, kArenaSize);
