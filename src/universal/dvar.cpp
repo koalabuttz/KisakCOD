@@ -2315,7 +2315,7 @@ const dvar_s *Dvar_RegisterColor(
     else
         v8 = 0.0;
     dvarValue.color[3] = SnapFloatToInt(v8 * 255.0f);
-    dvarValue.enabled = SnapFloatToInt(v17 * 255.0f);
+    dvarValue.color[0] = SnapFloatToInt(v17 * 255.0f);
     dvarValue.color[1] = SnapFloatToInt(v14 * 255.0f);
     dvarValue.color[2] = SnapFloatToInt(v11 * 255.0f);
     return Dvar_RegisterVariant(dvarName, DVAR_TYPE_COLOR, flags, dvarValue, 0, description);
@@ -3024,7 +3024,7 @@ void Dvar_SaveDvars(MemoryFile *memFile, uint16_t filter)
     InterlockedDecrement(&g_dvarCritSect.readCount);
 }
 
-void Dvar_LoadDvars(MemoryFile *memFile)
+void Dvar_LoadDvars(MemoryFile *memFile, DvarSetSource source)
 {
     int nameLen;
     int valueLenBuf[3];
@@ -3051,7 +3051,7 @@ void Dvar_LoadDvars(MemoryFile *memFile)
         if (malleableVar)
         {
             Dvar_StringToValue(&parsedValue, malleableVar->type, malleableVar->domain, valueBuf);
-            Dvar_SetVariant(malleableVar, parsedValue, DVAR_SOURCE_EXTERNAL);
+            Dvar_SetVariant(malleableVar, parsedValue, source);
         }
         else
         {

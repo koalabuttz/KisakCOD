@@ -1787,7 +1787,7 @@ void G_LoadDvars(SaveGame *save)
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 2013, 0, "%s", "save");
     MemoryFile = SaveMemory_GetMemoryFile(save);
-    Dvar_LoadDvars(MemoryFile);
+    Dvar_LoadDvars(MemoryFile, DVAR_SOURCE_INTERNAL);
 }
 
 void G_CheckEntityDefaultModel(gentity_s *e)
@@ -2328,7 +2328,7 @@ void G_PreLoadGame(int checksum, int *useLoadedSourceFiles, SaveGame **save)
     if (Header->demoPlayback)
     {
         memFile = SaveMemory_GetMemoryFile(*save);
-        Dvar_LoadDvars(memFile);
+        Dvar_LoadDvars(memFile, DVAR_SOURCE_INTERNAL);
     }
     if (*useLoadedSourceFiles
         && (!LoadFromDevice
@@ -2464,7 +2464,7 @@ void G_LoadMainState(SaveGame *save)
     SaveMemory_LoadRead(&level.bPlayerIgnoreRadiusDamageLatched, 4, save);
     iassert(save);
 
-    Dvar_LoadDvars(SaveMemory_GetMemoryFile(save));
+    Dvar_LoadDvars(SaveMemory_GetMemoryFile(save), DVAR_SOURCE_INTERNAL);
     SaveMemory_LoadRead(g_hudelems, /*44032*/ sizeof(game_hudelem_s) * 256, save); // KISAKTODO: not the right array size
     SaveMemory_LoadRead(&level.fFogOpaqueDist, 4, save);
     SaveMemory_LoadRead(&level.fFogOpaqueDistSqrd, 4, save);

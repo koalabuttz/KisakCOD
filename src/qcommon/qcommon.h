@@ -668,7 +668,11 @@ int Com_SaveDvarsToBuffer(const char **dvarnames, uint32_t numDvars, char *buffe
 
 #ifdef KISAK_SP
 void Dvar_SaveDvars(struct MemoryFile *memFile, uint16_t filter);
-void Dvar_LoadDvars(struct MemoryFile *memFile);
+// Savegame loads pass DVAR_SOURCE_INTERNAL: restoring a save is the game, not a
+// user, and an external set refuses the read-only saved dvars (the
+// g_fog*ReadOnly mirrors, com_timescale) and, with cheats off, the
+// cheat-protected ones. The replay history keeps DVAR_SOURCE_EXTERNAL.
+void Dvar_LoadDvars(struct MemoryFile *memFile, DvarSetSource source);
 #endif
 
 // dvar_cmds
