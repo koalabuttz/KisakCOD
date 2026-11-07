@@ -1,6 +1,6 @@
 # Linux port status
 
-Last updated 2026-11-06 (master `353d615`). This page is the current state of
+Last updated 2026-11-07 (master `1aa9515` plus the macOS dedicated server). This page is the current state of
 the native Linux port and the other platform builds, the open pull requests and
 the roadmap. The [docs index](README.md) lists the detailed guides;
 older handoffs are in [history](history/README.md) and are not current.
@@ -20,6 +20,7 @@ without a GPU or game data, against stand-in D3D9 and OpenAL libraries.
 | Multiplayer client, x86_64 | the same, with `-DKISAK_LINUX_ARCH=x86_64` | Playable on the same terms as i386 (laptop), including sprint and mantle animations and a clean quit. [Guide](linux-x64.md#x86_64-multiplayer-client) |
 | Dedicated server, aarch64 (64-bit Arm) | `-DKISAK_LINUX_ARCH=aarch64` | Builds natively on Arm or cross-compiled from x86, boots without game data (qemu and hosted Arm CI). Not yet run with game data. [Guide](linux-arm64.md) |
 | Multiplayer client, aarch64 | the client options with `-DKISAK_LINUX_ARCH=aarch64` | Builds and passes the asset-free client checks (qemu and hosted Arm CI) against a D3D9 stand-in; no aarch64 DXVK build yet, so it has not drawn a frame. [Guide](linux-arm64.md#building-the-aarch64-client) |
+| Dedicated server, macOS (arm64 and x86_64) | `-DKISAK_PLATFORM=macos` | Builds with Apple Clang on hosted macOS runners (Apple silicon and Intel) and boots without game data to the first missing fastfile. Not yet run with game data or on a real Mac. [Guide](macos.md) |
 | Movies | `-DKISAK_LINUX_CINEMATICS=ON` | Bink movies play through an FFmpeg-backed shim on i386 and x86_64 (laptop). Off by default. [Guide](linux-cinematics.md) |
 | Steam authentication | `-DKISAK_LINUX_STEAM=ON` | Added by PR 85. Logs in through the running Steam client's `steamclient.so`; a probe got a ticket validated on i386 and x86_64, and an i386 client joined, reconnected to and was refused by (with Steam off) an i386 dedicated server (laptop, one Steam account). Off by default. [Guide](linux-steam.md) |
 | Singleplayer `KisakCOD-sp`, i386 | `-DKISAK_BUILD_LINUX_SP_GAME=ON` | killhouse and cargoship load, leave the pregame by themselves and play about a minute each, clean quit (laptop). [Guide](linux-sp-game.md) |
@@ -74,8 +75,8 @@ builds use `-ffp-contract=off` (no fused multiply-add).
 - **x86_64 singleplayer.** The 64-bit configuration refuses the SP game for now.
 - **Windows x64 singleplayer.** Each PC run gets one step further into level
   load; the fixes so far are in PR 95.
-- **macOS.** The dedicated server builds for arm64 and x86_64 Macs in a draft
-  (PR 104); no client yet.
+- **macOS client.** Only the dedicated server builds for Macs; the client waits
+  on the renderer choice ([macOS track](macos.md#not-covered-yet)).
 - **arm64 client and Windows ARM64.** The aarch64 multiplayer client builds and
   passes its asset-free checks (qemu and hosted Arm CI) but has not drawn a
   frame: no aarch64 DXVK build yet. Windows ARM64 builds sp, mp and dedi with
@@ -119,7 +120,6 @@ master merged in and a green run before it can merge.
 | 95 | Windows x64 singleplayer level-load fixes from PC runs 6 to 11 | More PC runs until killhouse and cargoship play; then green CI. |
 | 99 | Every renderer D3D9 call behind `src/gfx_d3d/rhi/r_rhi.h` (renderer plan M1a) | Laptop image check (world draw and free-camera digests match master, i386 and x86_64, Debug and RelWithDebInfo) and a Windows PC before/after look. |
 | 103 | Shader converter spike tools (dxbc-spirv recommended, 80 of 81 cases) | David's pick of converter, the laptop corpus run, green CI. |
-| 104 (draft) | macOS dedicated server, arm64 and x86_64 | Green macOS CI, then review. |
 
 ## Laptop and PC runs still to do
 

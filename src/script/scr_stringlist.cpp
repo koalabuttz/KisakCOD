@@ -9,7 +9,7 @@
 #include "scr_memorytree.h"
 #include <universal/profile.h>
 #include <universal/com_constantconfigstrings.h>
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
 #include <linux/sl_trace.h>
 #else
 #define SL_TRACE(stringValue, op, user) ((void)0)

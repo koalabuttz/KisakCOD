@@ -3,11 +3,13 @@
 // bookkeeping that keeps commit, decommit and release inside the regions this
 // module actually handed out.
 //
-// The one invariant everything else follows from: this module never calls
-// mmap with an address, so MAP_FIXED never appears and no mapping that belongs
-// to something else can be replaced. Commit and decommit translate into
+// The one invariant everything else follows from: no mapping that belongs to
+// something else can be replaced. On Linux this module never calls mmap with
+// an address, so MAP_FIXED never appears. Commit and decommit translate into
 // mprotect/madvise, which are only ever pointed at a region found in the
-// reservation table under s_lock, and release is the matching munmap. Address
+// reservation table under s_lock, and release is the matching munmap. macOS
+// has no zero-filling MADV_DONTNEED, so there a decommit maps fresh pages with
+// MAP_FIXED, and only over a range found in that table under s_lock. Address
 // arithmetic is done in 64 bits and compared against the host's pointer width,
 // so a range that would wrap the 32-bit address space is rejected rather than
 // truncated into something that looks valid.
@@ -293,6 +295,21 @@ namespace
         return true;
     }
 
+    // Throws away the contents of [start, start + length), host pages inside a
+    // reservation found under s_lock, and makes them inaccessible. The next
+    // commit reads zeros, as after VirtualFree(MEM_DECOMMIT). On Linux
+    // MADV_DONTNEED gives private anonymous pages back zero-filled. macOS keeps
+    // the old contents after MADV_DONTNEED, so there the range is replaced by
+    // a fresh anonymous mapping instead.
+    bool DiscardPages(void *start, std::size_t length)
+    {
+#if defined(__APPLE__)
+        return mmap(start, length, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) == start;
+#else
+        return madvise(start, length, MADV_DONTNEED) == 0 && mprotect(start, length, PROT_NONE) == 0;
+#endif
+    }
+
     // Decommit of the 4 KiB-rounded [begin, end) in `reservation`. A host page
     // left with no committed unit is discarded and made inaccessible; one that
     // still holds a committed unit keeps its mapping and only the decommitted
@@ -313,8 +330,7 @@ namespace
                 std::memset(reinterpret_cast<void *>(static_cast<std::uintptr_t>(from)), 0,
                             static_cast<std::size_t>(to - from));
             }
-            else if (madvise(start, static_cast<std::size_t>(page), MADV_DONTNEED) != 0 ||
-                     mprotect(start, static_cast<std::size_t>(page), PROT_NONE) != 0)
+            else if (!DiscardPages(start, static_cast<std::size_t>(page)))
             {
                 return false;
             }
@@ -469,16 +485,11 @@ namespace
             else
                 PublishErrno(ERROR_INVALID_ADDRESS);
         }
-        else if (madvise(start, length, MADV_DONTNEED) != 0)
+        else if (!DiscardPages(start, length))
         {
             // The ranges the engine decommits are anonymous private mappings,
-            // for which MADV_DONTNEED is always supported and leaves the next
-            // access zero-filled. A failure here is reported rather than
-            // papered over.
-            PublishErrno(ERROR_INVALID_ADDRESS);
-        }
-        else if (mprotect(start, length, PROT_NONE) != 0)
-        {
+            // which DiscardPages always supports. A failure here is reported
+            // rather than papered over.
             PublishErrno(ERROR_INVALID_ADDRESS);
         }
         else

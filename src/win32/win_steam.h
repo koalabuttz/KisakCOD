@@ -29,7 +29,7 @@ void Steam_OnClientDropped(uint64_t steamID64);
 
 void Steam_SV_AddTestCommands();
 
-#ifdef __linux__
+#if defined(__linux__) || defined(__APPLE__)
 // Linux main loop, once a frame: reads Steam callbacks outside a dedicated
 // server's SV_Frame (src/linux/steam.cpp).
 void Steam_Frame();

@@ -1335,7 +1335,7 @@ void ClientEndFrame(gentity_s *ent)
                     SV_XModelDebugBoxes(ent);
                     // The pose and debug boxes above are real server work; only
                     // the on-screen text is client-only.
-#if !defined(__linux__) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
                     v5 = va(
                         "[%i] %.3f, %.3f, %.3f\n",
                         clientNum,

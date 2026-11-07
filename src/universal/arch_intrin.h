@@ -16,7 +16,7 @@
 #if defined(__i386__) || defined(__x86_64__) || defined(_M_IX86) || defined(_M_X64)
 #define KISAK_ARCH_X86 1
 #include <xmmintrin.h> // SSE
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
 #include <x86intrin.h> // __rdtsc, _BitScanReverse
 #endif
 #elif defined(__aarch64__) || defined(_M_ARM64)

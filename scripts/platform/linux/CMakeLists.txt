@@ -1,4 +1,4 @@
-message(STATUS "----- KisakCOD native Linux Dedicated(MP) -----")
+message(STATUS "----- KisakCOD native ${KISAK_PLATFORM} Dedicated(MP) -----")
 include(${CMAKE_CURRENT_LIST_DIR}/platform.cmake)
 include(${SCRIPTS_DIR}/common_files.cmake)
 include(${SCRIPTS_DIR}/mp/mp_files.cmake)
@@ -65,6 +65,10 @@ if(KISAK_LINUX_TRACY)
     message(STATUS "KisakCOD-dedi: Tracy profiler on (on demand, localhost only)")
 endif()
 target_include_directories(KisakCOD-dedi PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
+if(KISAK_PLATFORM STREQUAL "macos")
+    # Must match TracyClient (platform.cmake): Tracy's inline clock differs.
+    target_compile_definitions(KisakCOD-dedi PRIVATE TRACY_TIMER_FALLBACK)
+endif()
 target_compile_options(KisakCOD-dedi PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:-fms-extensions>
     ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing
@@ -75,7 +79,13 @@ target_compile_options(KisakCOD-dedi PRIVATE
 )
 # Shared source files also contain client-only helpers. Discard unreachable
 # functions rather than linking their Windows presentation dependencies.
-target_link_options(KisakCOD-dedi PRIVATE -Wl,--gc-sections ${KISAK_LINUX_HARDENING_LINK_OPTIONS})
+# Apple's linker spells it -dead_strip (Mach-O objects keep every function in
+# a subsection of its own, so the -f*-sections flags change nothing there).
+if(APPLE)
+    target_link_options(KisakCOD-dedi PRIVATE -Wl,-dead_strip ${KISAK_LINUX_HARDENING_LINK_OPTIONS})
+else()
+    target_link_options(KisakCOD-dedi PRIVATE -Wl,--gc-sections ${KISAK_LINUX_HARDENING_LINK_OPTIONS})
+endif()
 find_package(Threads REQUIRED)
 target_link_libraries(KisakCOD-dedi PRIVATE Threads::Threads ${CMAKE_DL_LIBS})
 add_dependencies(KisakCOD-dedi update_build_number)

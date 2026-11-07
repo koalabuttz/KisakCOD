@@ -1,0 +1,142 @@
+name: macOS dedicated server
+
+# Opt-in macOS track, step one (docs/macos.md): build the dedicated server
+# KisakCOD-dedi with -DKISAK_PLATFORM=macos for Apple silicon (arm64) and Intel
+# Macs (x86_64), each on a hosted runner of its own architecture, and run the
+# asset-free bootstrap test against the Mach-O binary. No game data, Steam or
+# GPU is involved, so loading a real map is not covered here. The Linux and
+# Windows builds are untouched.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "master" ]
+    paths:
+      - CMakeLists.txt
+      - scripts/common_files.cmake
+      - scripts/mp/**
+      - scripts/extern/**
+      - scripts/platform/linux/**
+      - scripts/tests/test_linux_bootstrap.py
+      - src/**
+      - deps/**
+      - .github/workflows/build-kisakcod-macos.yaml
+  pull_request:
+    branches: [ "master" ]
+    paths:
+      - CMakeLists.txt
+      - scripts/common_files.cmake
+      - scripts/mp/**
+      - scripts/extern/**
+      - scripts/platform/linux/**
+      - scripts/tests/test_linux_bootstrap.py
+      - src/**
+      - deps/**
+      - .github/workflows/build-kisakcod-macos.yaml
+
+permissions:
+  contents: read
+
+# Same rule as the Linux and Windows workflows: a newer push to a branch
+# cancels that branch's older run; manual runs always finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dedicated:
+    name: macOS ${{ matrix.arch }} dedicated server ${{ matrix.config }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, x86_64]
+        config: [Debug, RelWithDebInfo]
+        include:
+          - arch: arm64
+            runner: macos-26
+          - arch: x86_64
+            runner: macos-15-intel
+
+    env:
+      BUILD_DIR: build-macos/${{ matrix.arch }}-${{ matrix.config }}
+      CMAKE_RUNTIME_OUTPUT_DIRECTORY: ${{ github.workspace }}/out/macos-${{ matrix.arch }}-${{ matrix.config }}
+      BINARY: out/macos-${{ matrix.arch }}-${{ matrix.config }}/KisakCOD-dedi
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build tools
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "${{ matrix.arch }}"
+          command -v ninja >/dev/null || brew install ninja
+          sw_vers
+          xcrun clang++ --version
+          cmake --version | head -n 1
+
+      - name: Configure ${{ matrix.arch }} ${{ matrix.config }}
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B "$BUILD_DIR" -G Ninja \
+            -DKISAK_PLATFORM=macos \
+            -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
+            -DCMAKE_BUILD_TYPE=${{ matrix.config }} \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$CMAKE_RUNTIME_OUTPUT_DIRECTORY"
+
+      - name: Build KisakCOD-dedi
+        timeout-minutes: 30
+        shell: bash
+        run: |
+          set -euo pipefail
+          # -k 0: report every unit that fails, not only the first. On a
+          # failure, end with each distinct error once so the cause is not
+          # buried under the warnings of the units that built.
+          status=0
+          cmake --build "$BUILD_DIR" --target KisakCOD-dedi --parallel "$(sysctl -n hw.ncpu)" -- -k 0 \
+            2>&1 | tee "$RUNNER_TEMP/build.log" || status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "::group::Distinct errors"
+            grep -E "error:|Undefined symbols|referenced from|ld: " "$RUNNER_TEMP/build.log" | sed 's#^.*/KisakCOD/KisakCOD/##' | sort | uniq -c | sort -rn | head -n 300
+            echo "::endgroup::"
+            exit "$status"
+          fi
+          ls -l "$BINARY"
+          file "$BINARY"
+
+      - name: Check for fused multiply-adds
+        if: ${{ matrix.arch == 'arm64' }}
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Apple silicon must not fuse multiply-adds (-ffp-contract=off):
+          # float results have to match x86 (docs/macos.md).
+          if xcrun objdump -d --no-show-raw-insn "$BINARY" | grep -Eq $'\t(fmadd|fmsub|fnmadd|fnmsub|fmla|fmls)\\b'; then
+            echo "the server contains fused multiply-add instructions" >&2
+            exit 1
+          fi
+
+      - name: Bootstrap KisakCOD-dedi
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/tests/test_linux_bootstrap.py --arch macos-${{ matrix.arch }} "$BINARY"
+
+      - name: Upload executable
+        if: ${{ matrix.config == 'RelWithDebInfo' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: KisakCOD-dedi-macos-${{ matrix.arch }}
+          path: ${{ env.BINARY }}
+          retention-days: 14
+          if-no-files-found: error

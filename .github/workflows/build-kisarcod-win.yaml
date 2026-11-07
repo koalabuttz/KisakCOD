@@ -18,9 +18,9 @@ on:
     paths:
       - '**'
       # Nothing below reaches the MSVC builds or the regression checks: the
-      # documentation, and the native Linux port's own sources, tests, CMake,
-      # script and workflow (shared sources include src/linux headers only in
-      # Linux builds).
+      # documentation, and the native Linux and macOS ports' own sources, tests,
+      # CMake, script and workflows (shared sources include src/linux headers
+      # only in Linux and macOS builds).
       - '!docs/**'
       - '!**/*.md'
       - '!src/linux/**'
@@ -31,6 +31,7 @@ on:
       - '!scripts/platform/linux/**'
       - '!build-linux.sh'
       - '!.github/workflows/build-kisakcod-linux.yaml'
+      - '!.github/workflows/build-kisakcod-macos.yaml'
       # scripts/tests holds the Linux runners too. Only the scripts and the
       # D3DX project this workflow runs are its own; add any new one here.
       - '!scripts/tests/**'
@@ -49,9 +50,9 @@ on:
     paths:
       - '**'
       # Nothing below reaches the MSVC builds or the regression checks: the
-      # documentation, and the native Linux port's own sources, tests, CMake,
-      # script and workflow (shared sources include src/linux headers only in
-      # Linux builds).
+      # documentation, and the native Linux and macOS ports' own sources, tests,
+      # CMake, script and workflows (shared sources include src/linux headers
+      # only in Linux and macOS builds).
       - '!docs/**'
       - '!**/*.md'
       - '!src/linux/**'
@@ -62,6 +63,7 @@ on:
       - '!scripts/platform/linux/**'
       - '!build-linux.sh'
       - '!.github/workflows/build-kisakcod-linux.yaml'
+      - '!.github/workflows/build-kisakcod-macos.yaml'
       # scripts/tests holds the Linux runners too. Only the scripts and the
       # D3DX project this workflow runs are its own; add any new one here.
       - '!scripts/tests/**'

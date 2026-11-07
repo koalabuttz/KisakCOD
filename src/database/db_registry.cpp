@@ -23,7 +23,7 @@
 #include <win32/win_localize.h>
 #include <universal/profile.h>
 
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
 // db_registry.cpp opens zone files and writes/reads csv exports through the
 // Win32 file API (CreateFileA/ReadFile/WriteFile/GetFileSize/CloseHandle).
 #include <linux/compat.h>
@@ -664,7 +664,7 @@ void DB_BuildOSPath_Mod(const char *zoneName, uint32_t size, char *filename)
     if (!*(_BYTE *)fs_gameDirVar->current.string)
         MyAssertHandler(".\\database\\db_registry.cpp", 3204, 0, "%s", "IsUsingMods()");
     string = fs_gameDirVar->current.string;
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
     v3 = fs_basepath->current.string;
     Com_sprintf(filename, size, "%s/%s/%s.ff", v3, string, zoneName);
 #else
@@ -859,7 +859,7 @@ void Mark_ClipMapAsset(clipMap_t *clipMap)
 
 void DB_RemoveLoadedSound(XAssetHeader header)
 {
-#if defined(__linux__) && defined(KISAK_DEDICATED)
+#if (defined(__linux__) || defined(__APPLE__)) && defined(KISAK_DEDICATED)
     // The metadata-only sound loader retains data in the owning zone block.
     // No playback buffer was allocated; DB_UnloadXZoneMemory releases it.
     (void)header;
@@ -2235,7 +2235,7 @@ void DB_UpdateDebugZone()
         zoneInfo[1].allocFlags = DB_ZONE_DEV;
         zoneInfo[1].freeFlags = DB_ZONE_DEV;
         DB_LoadXAssets(zoneInfo, 2u, 1);
-#if !defined(__linux__) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
         CG_VisionSetMyChanges();
 #endif
     }
@@ -2405,7 +2405,7 @@ void DB_Thread(uint32_t threadContext)
     if (setjmp(*Value))
     {
         Profile_Recover(1);
-#ifndef __linux__
+#if !defined(__linux__) && !defined(__APPLE__)
 #ifdef __llvm__
         __builtin_debugtrap();
 #else
@@ -2820,7 +2820,7 @@ void DB_BuildOSPath(const char *zoneName, uint32_t size, char *filename)
     char *Language; // [esp-8h] [ebp-8h]
 
     Language = Win_GetLanguage();
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
     v3 = fs_basepath->current.string;
     Com_sprintf(filename, size, "%s/zone/%s/%s.ff", v3, Language, zoneName);
 #else

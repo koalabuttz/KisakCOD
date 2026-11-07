@@ -31,8 +31,8 @@
 
 #pragma once
 
-#ifndef __linux__
-#error "src/linux/compat.h describes the POSIX bridge and is only valid on Linux"
+#if !defined(__linux__) && !defined(__APPLE__)
+#error "src/linux/compat.h describes the POSIX bridge and is only valid on Linux and macOS"
 #endif
 
 #include <cstddef>

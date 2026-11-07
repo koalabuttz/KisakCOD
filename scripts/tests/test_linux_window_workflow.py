@@ -704,6 +704,7 @@ class CiTriggerTests(unittest.TestCase):
         'scripts/tests/README.md',
         'build-linux.sh',
         '.github/workflows/build-kisakcod-linux.yaml',
+        '.github/workflows/build-kisakcod-macos.yaml',
     )
     # Changes that must still build Windows.
     WINDOWS_RUNS = (
@@ -728,10 +729,11 @@ class CiTriggerTests(unittest.TestCase):
                              Loader=yaml.BaseLoader)
         cls.linux = load('build-kisakcod-linux.yaml')
         cls.windows = load('build-kisarcod-win.yaml')
+        cls.macos = load('build-kisakcod-macos.yaml')
         cls.windows_paths = cls.windows['on']['pull_request']['paths']
 
     def test_a_newer_push_cancels_only_the_same_branchs_older_run(self):
-        for name, workflow in (('linux', self.linux), ('windows', self.windows)):
+        for name, workflow in (('linux', self.linux), ('windows', self.windows), ('macos', self.macos)):
             with self.subTest(workflow=name):
                 self.assertEqual(workflow['concurrency'], self.CONCURRENCY)
 

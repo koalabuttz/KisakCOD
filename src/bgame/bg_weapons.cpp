@@ -2723,7 +2723,7 @@ void PM_WeaponUseAmmo(playerState_s *ps, uint32_t wp, int32_t amount)
 
 #if KISAK_SP
     if (!player_sustainAmmo->current.enabled )// || !WeaponValidForSustainAmmoCheat(wp))
-#elif defined(__linux__) && defined(KISAK_DEDICATED)
+#elif (defined(__linux__) || defined(__APPLE__)) && defined(KISAK_DEDICATED)
     // CG_ShouldPlaySoundOnLocalClient() is a cgame function that returns a
     // constant 1 in MP, so the second clause is always false; the dedicated
     // build keeps only the dvar test, which is what the client build evaluates.
