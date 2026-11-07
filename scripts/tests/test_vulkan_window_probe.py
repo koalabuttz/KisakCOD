@@ -97,8 +97,8 @@ def main():
         print(stderr, end='', file=sys.stderr)
     found = values(stdout)
     checks.expect('frames run passes', code == 0 and found.get('vulkan_probe') == 'passed', f'status {code}')
-    checks.expect('all frames presented', found.get('vulkan_probe.frames_presented', '0').isdigit()
-                  and int(found['vulkan_probe.frames_presented']) >= args.frames)
+    presented = found.get('vulkan_probe.frames_presented', '0')
+    checks.expect('all frames presented', presented.isdigit() and int(presented) >= args.frames)
     resize = re.match(r'(\d+)x(\d+) window_pixels=(\d+)x(\d+) swapchain=(\d+)x(\d+) builds=(\d+)',
                       found.get('vulkan_probe.resize', ''))
     checks.expect('swapchain followed the resize', bool(resize) and resize.group(3, 4) == resize.group(5, 6)

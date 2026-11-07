@@ -496,7 +496,8 @@ jobs:
         timeout-minutes: 10
         shell: bash
         run: |
-          set -uo pipefail
+          # Diagnostics only: keep going past a crash (the step still fails).
+          set +e -u
           export SDL_VULKAN_LIBRARY="$(brew --prefix vulkan-loader)/lib/libvulkan.1.dylib"
           export DYLD_FALLBACK_LIBRARY_PATH="$(brew --prefix)/lib:/usr/local/lib:/usr/lib"
           export SDL_VIDEODRIVER=cocoa
@@ -508,3 +509,5 @@ jobs:
           sudo DevToolsSecurity -enable || true
           lldb --batch -o run -k "thread backtrace all" -k quit \
             -- "$OUT_DIR/KisakCOD-vulkan-probe" --list-devices --validation off
+          ls -t "$HOME/Library/Logs/DiagnosticReports" 2>/dev/null | head -n 5
+          exit 1
