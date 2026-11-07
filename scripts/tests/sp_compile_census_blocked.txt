@@ -11,7 +11,6 @@
 # The native D3D9 boundary (DXVK Native behind src/linux/d3d9_types.h) is what
 # unblocks these; with the stand-in header they only see opaque interface tags.
 src/gfx_d3d/r_buffers.cpp: calls IDirect3DDevice9 buffer methods, D3DPOOL_* enums
-src/gfx_d3d/r_draw_bsp.cpp: calls IDirect3DDevice9 draw methods
 src/gfx_d3d/r_draw_lit.cpp: tagRECT scissor and IDirect3DDevice9 render states
 src/gfx_d3d/r_draw_sunshadow.cpp: RECT and D3DCLEAR_* for shadow map clears
 src/gfx_d3d/r_image.cpp: IDirect3DDevice9/texture creation and lock methods
@@ -25,16 +24,15 @@ src/gfx_d3d/r_scene.cpp: IDirect3DQuery9 methods
 src/gfx_d3d/r_screenshot.cpp: tagMONITORINFO/HMONITOR and _D3DLOCKED_RECT
 src/gfx_d3d/r_setstate_d3d.cpp: IDirect3DQuery9 methods
 src/gfx_d3d/r_shade.cpp: D3DLOCK_* flags and IDirect3DDevice9 methods
-src/gfx_d3d/r_state.cpp: IDirect3DDevice9 state methods
-src/gfx_d3d/r_state_utils.cpp: IDirect3DDevice9 render states, D3DRS_* enums
 src/gfx_d3d/rb_backend.cpp: IDirect3DQuery9/IDirect3DSurface9/device methods
 src/gfx_d3d/rb_depthprepass.cpp: tagRECT scissor and IDirect3DDevice9 render states
 src/gfx_d3d/rb_draw3d.cpp: IDirect3DQuery9 issue, D3DISSUE_END, tagRECT
 src/gfx_d3d/rb_imagetouch.cpp: IDirect3DDevice9 draw methods
 src/gfx_d3d/rb_pixelcost.cpp: IDirect3DQuery9 issue, D3DISSUE_END
-src/gfx_d3d/rb_shade.cpp: IDirect3DDevice9 methods
 src/gfx_d3d/rb_sky.cpp: IDirect3DDevice9/IDirect3DQuery9 methods
 src/gfx_d3d/rb_uploadshaders.cpp: IDirect3DDevice9 draw, D3DPT_TRIANGLELIST
+src/gfx_d3d/rhi/r_rhi_d3d9_calls.cpp: the D3D9 implementation of rhi/r_rhi.h; one forwarder per Direct3D 9 interface method the renderer calls
+src/gfx_d3d/rhi/r_rhi_d3d9_state.cpp: the D3D9 implementation of rhi/r_rhi.h; IDirect3DDevice9 state, shader and draw methods
 
 # --- Renderer, but not a D3D9 boundary problem. ---
 src/gfx_d3d/r_cinematic.cpp: the Bink player locks D3D9 textures; KISAK_LINUX_CINEMATICS builds it through the native D3D9 boundary on the Linux Bink shim

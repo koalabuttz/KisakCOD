@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "r_model_lighting.h"
+#include "rhi/r_rhi.h"
 #include "r_image.h"
 #include "r_dvars.h"
 #include "r_staticmodelcache.h"
@@ -730,7 +731,7 @@ void RB_PatchModelLighting(const GfxModelLightingPatch *patchList, uint32_t patc
         {
             if (r_logFile && r_logFile->current.integer)
                 RB_LogPrint("lightImage->texture.volmap->LockBox( 0, &modelLightGlob.lockedBox, 0, lockValue )\n");
-            hr = lightImage->texture.volmap->LockBox(0, &modelLightGlob.lockedBox, 0, lockValue);
+            hr = R_HW_LockBox(lightImage->texture.volmap, 0, &modelLightGlob.lockedBox, 0, lockValue);
             if (hr < 0)
             {
                 do
@@ -757,7 +758,7 @@ void RB_PatchModelLighting(const GfxModelLightingPatch *patchList, uint32_t patc
                 dirtyBox.Right = dirtyBox.Left + 4;
                 dirtyBox.Top = (modelLightingIndex >> 4) & 0xFFFFFFFC;
                 dirtyBox.Bottom = y0 + 4;
-                lightImage->texture.volmap->AddDirtyBox(&dirtyBox);
+                R_HW_AddDirtyBox(lightImage->texture.volmap, &dirtyBox);
             }
             pixels = (unsigned char*)modelLightGlob.lockedBox.pBits
                 + 16 * (modelLightingIndex & 0x3F)
@@ -785,7 +786,7 @@ void RB_PatchModelLighting(const GfxModelLightingPatch *patchList, uint32_t patc
         {
             if (r_logFile && r_logFile->current.integer)
                 RB_LogPrint("lightImage->texture.volmap->UnlockBox( 0 )\n");
-            v7 = lightImage->texture.volmap->UnlockBox(0);
+            v7 = R_HW_UnlockBox(lightImage->texture.volmap, 0);
             if (v7 < 0)
             {
                 do
@@ -808,7 +809,7 @@ void RB_PatchModelLighting(const GfxModelLightingPatch *patchList, uint32_t patc
             {
                 if (r_logFile && r_logFile->current.integer)
                     RB_LogPrint("dx.device->UpdateTexture( lightImage->texture.volmap, modelLightGlob.lightImages[0]->texture.volmap )\n");
-                v6 = dx.device->UpdateTexture(lightImage->texture.volmap, modelLightGlob.lightImages[0]->texture.volmap);
+                v6 = R_HW_UpdateTexture(dx.device, lightImage->texture.volmap, modelLightGlob.lightImages[0]->texture.volmap);
                 if (v6 < 0)
                 {
                     do

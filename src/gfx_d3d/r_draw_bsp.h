@@ -1,5 +1,6 @@
 #pragma once
 #include "rb_backend.h"
+#include "rhi/r_rhi.h"
 
 struct GfxTrianglesDrawStream // sizeof=0x30
 {                                       // ...
@@ -22,7 +23,6 @@ void R_SetStreamSource(
     IDirect3DVertexBuffer9 *vb,
     uint32_t vertexOffset,
     uint32_t vertexStride);
-void R_HW_SetSamplerTexture(IDirect3DDevice9 *device, uint32_t samplerIndex, const GfxTexture *texture);
 void R_SetStreamsForBspSurface(GfxCmdBufPrimState *state, const srfTriangles_t *tris);
 void R_DrawBspDrawSurfsLit(
     const uint32_t *primDrawSurfPos,

@@ -69,21 +69,18 @@ endif()
 # not link yet: the draw, state and backend units.
 set(KISAK_WORLD_DRAW_NATIVE_SOURCES
     ${KISAK_WORLD_DEVICE_NATIVE_SOURCES}
-    "${SRC_DIR}/gfx_d3d/r_draw_bsp.cpp"
     "${SRC_DIR}/gfx_d3d/r_draw_lit.cpp"
     "${SRC_DIR}/gfx_d3d/r_draw_sunshadow.cpp"
     "${SRC_DIR}/gfx_d3d/r_model_lighting.cpp"
     "${SRC_DIR}/gfx_d3d/r_setstate_d3d.cpp"
     "${SRC_DIR}/gfx_d3d/r_shade.cpp"
-    "${SRC_DIR}/gfx_d3d/r_state.cpp"
-    "${SRC_DIR}/gfx_d3d/r_state_utils.cpp"
     "${SRC_DIR}/gfx_d3d/rb_backend.cpp"
     "${SRC_DIR}/gfx_d3d/rb_depthprepass.cpp"
     "${SRC_DIR}/gfx_d3d/rb_draw3d.cpp"
     "${SRC_DIR}/gfx_d3d/rb_imagetouch.cpp"
     "${SRC_DIR}/gfx_d3d/rb_pixelcost.cpp"
-    "${SRC_DIR}/gfx_d3d/rb_shade.cpp"
     "${SRC_DIR}/gfx_d3d/rb_sky.cpp"
+    "${SRC_DIR}/gfx_d3d/rhi/r_rhi_d3d9_state.cpp"
 )
 # The rest of the renderer, with the stand-in D3D9 types.
 set(KISAK_WORLD_DRAW_STANDIN_SOURCES
@@ -95,6 +92,7 @@ set(KISAK_WORLD_DRAW_STANDIN_SOURCES
     "${SRC_DIR}/gfx_d3d/r_command_buffer.cpp"
     "${SRC_DIR}/gfx_d3d/r_devgui.cpp"
     "${SRC_DIR}/gfx_d3d/r_dobj_skin.cpp"
+    "${SRC_DIR}/gfx_d3d/r_draw_bsp.cpp"
     "${SRC_DIR}/gfx_d3d/r_draw_material.cpp"
     "${SRC_DIR}/gfx_d3d/r_draw_pixelshader.cpp"
     "${SRC_DIR}/gfx_d3d/r_draw_shadowable_light.cpp"
@@ -121,6 +119,8 @@ set(KISAK_WORLD_DRAW_STANDIN_SOURCES
     "${SRC_DIR}/gfx_d3d/r_reflection_probe_load_obj.cpp"
     "${SRC_DIR}/gfx_d3d/r_shadowcookie.cpp"
     "${SRC_DIR}/gfx_d3d/r_spotshadow.cpp"
+    "${SRC_DIR}/gfx_d3d/r_state.cpp"
+    "${SRC_DIR}/gfx_d3d/r_state_utils.cpp"
     "${SRC_DIR}/gfx_d3d/r_staticmodel.cpp"
     "${SRC_DIR}/gfx_d3d/r_staticmodelcache.cpp"
     "${SRC_DIR}/gfx_d3d/r_sunshadow.cpp"
@@ -134,6 +134,7 @@ set(KISAK_WORLD_DRAW_STANDIN_SOURCES
     "${SRC_DIR}/gfx_d3d/rb_imagefilter.cpp"
     "${SRC_DIR}/gfx_d3d/rb_light.cpp"
     "${SRC_DIR}/gfx_d3d/rb_postfx.cpp"
+    "${SRC_DIR}/gfx_d3d/rb_shade.cpp"
     "${SRC_DIR}/gfx_d3d/rb_shadowcookie.cpp"
     "${SRC_DIR}/gfx_d3d/rb_showcollision.cpp"
     "${SRC_DIR}/gfx_d3d/rb_spotshadow.cpp"
@@ -171,7 +172,7 @@ set(KISAK_WORLD_DRAW_CLIENT_SOURCES
 # Every renderer unit is in exactly one list, and the census-blocked ones are in
 # none: a unit added to src/gfx_d3d, or one the census unblocks, fails the
 # configure until this file says where it goes.
-file(GLOB world_draw_all_renderer_units "${SRC_DIR}/gfx_d3d/*.cpp")
+file(GLOB world_draw_all_renderer_units "${SRC_DIR}/gfx_d3d/*.cpp" "${SRC_DIR}/gfx_d3d/rhi/*.cpp")
 set(world_draw_census_blocked
     "${SRC_DIR}/gfx_d3d/r_material_load_obj.cpp"
     "${SRC_DIR}/gfx_d3d/r_screenshot.cpp"

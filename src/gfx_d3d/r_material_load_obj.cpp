@@ -1,6 +1,7 @@
 #include <universal/q_shared.h>
 #include <universal/surfaceflags.h>
 #include "r_material.h"
+#include "rhi/r_rhi.h"
 #include "r_material_layered.h"
 #include "r_utils.h"
 #include <universal/com_files.h>
@@ -2139,7 +2140,7 @@ MaterialVertexShader *Material_LoadVertexShader(char *shaderName, int shaderVers
     mtlShader->name = (const char*)&mtlShader[1] + programSize;
     memcpy((void*)mtlShader->name, shaderName, nameSize);
     memcpy(program, shader->GetBufferPointer(), programSize);
-    hr = dx.device->CreateVertexShader((const DWORD*)program, &mtlShader->prog.vs);
+    hr = R_HW_CreateVertexShader(dx.device, (const DWORD*)program, &mtlShader->prog.vs);
     if (hr >= 0)
     {
         mtlShader->prog.loadDef.loadForRenderer = renderer;
@@ -2337,7 +2338,7 @@ MaterialPixelShader *Material_LoadPixelShader(char *shaderName, int shaderVersio
     memcpy((void*)mtlShader->name, shaderName, nameSize);
     memcpy(program, shader->GetBufferPointer(), programSize);
 
-    hr = dx.device->CreatePixelShader((const DWORD*)program, &mtlShader->prog.ps);
+    hr = R_HW_CreatePixelShader(dx.device, (const DWORD*)program, &mtlShader->prog.ps);
 
     if (hr >= 0)
     {

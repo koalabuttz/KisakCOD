@@ -128,9 +128,11 @@ PRODUCTION_SOURCES = (
     "src/xanim/xmodel_utils.cpp",
     "src/xanim/dobj_utils.cpp",
     # Compiled through the native D3D9 boundary (NATIVE_D3D9_SOURCES): the scene
-    # setup and `scene` storage, and the `gfxBuf` storage.
+    # setup and `scene` storage, the `gfxBuf` storage, and the renderer's graphics
+    # interface those two call D3D9 through.
     "src/gfx_d3d/r_scene.cpp",
     "src/gfx_d3d/r_buffers.cpp",
+    "src/gfx_d3d/rhi/r_rhi_d3d9_calls.cpp",
     # Native platform layer, as the dedicated Linux target links it.
     "src/linux/sys_threads.cpp",
     "src/linux/sys_critical.cpp",
@@ -145,7 +147,11 @@ PRODUCTION_SOURCES = (
 # Production units that call the D3D9 API and so see DXVK's real d3d9.h through
 # the boundary. Each must also be on the boundary's own proof list
 # (scripts/platform/linux/native_d3d9_renderer_sources.txt).
-NATIVE_D3D9_SOURCES = ("src/gfx_d3d/r_scene.cpp", "src/gfx_d3d/r_buffers.cpp")
+NATIVE_D3D9_SOURCES = (
+    "src/gfx_d3d/r_scene.cpp",
+    "src/gfx_d3d/r_buffers.cpp",
+    "src/gfx_d3d/rhi/r_rhi_d3d9_calls.cpp",
+)
 
 CONFIG_FLAGS = {
     "Debug": ("-O0", "-D_DEBUG"),

@@ -279,6 +279,9 @@ set(RADIANT_GFX_D3D
     "${SRC_DIR}/gfx_d3d/r_state.cpp"
     "${SRC_DIR}/gfx_d3d/r_state.h"
     "${SRC_DIR}/gfx_d3d/r_state_utils.cpp"
+    "${SRC_DIR}/gfx_d3d/rhi/r_rhi.h"
+    "${SRC_DIR}/gfx_d3d/rhi/r_rhi_d3d9_calls.cpp"
+    "${SRC_DIR}/gfx_d3d/rhi/r_rhi_d3d9_state.cpp"
     "${SRC_DIR}/gfx_d3d/r_viewport.cpp"
     # r_staticmodel_load_obj.cpp folded into r_staticmodel.cpp in KisakCOD; use r_staticmodel.cpp
     "${SRC_DIR}/gfx_d3d/r_staticmodel.cpp"

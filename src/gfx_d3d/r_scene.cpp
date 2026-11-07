@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "r_scene.h"
+#include "rhi/r_rhi.h"
 #include <qcommon/mem_track.h>
 #include "r_init.h"
 #include "r_debug.h"
@@ -1015,7 +1016,7 @@ bool R_EndFencePending()
 {
     _BYTE v2[4]; // [esp+Ch] [ebp-4h] BYREF
 
-    return frontEndDataOut->endFence && frontEndDataOut->endFence->GetData(v2, 4u, 1u) == 1;
+    return frontEndDataOut->endFence && R_HW_GetData(frontEndDataOut->endFence, v2, 4u, 1u) == 1;
 }
 
 void R_SetEndTime(int endTime)
