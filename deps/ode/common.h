@@ -26,7 +26,11 @@
 #define USE_POOL_ALLOCATOR
 
 // make alloca happy
+#if defined(__APPLE__)
+#include <alloca.h> // KisakCOD: macOS has no <malloc.h>
+#else
 #include <malloc.h>
+#endif
 
 #ifndef alloca
 #define alloca _alloca

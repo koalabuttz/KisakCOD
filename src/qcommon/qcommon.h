@@ -223,7 +223,7 @@ inline bool Con_IsNotifyChannel(int channel)
 // non-literal format (a player name, a script string) is a compile error
 // (-Werror=format-security) instead of a format-string bug.  MSVC and MinGW
 // builds are unchanged.
-#if defined(__linux__) && (defined(__GNUC__) || defined(__clang__))
+#if (defined(__linux__) || defined(__APPLE__)) && (defined(__GNUC__) || defined(__clang__))
 #define KISAK_PRINTF_FORMAT(formatIndex, firstArgIndex) __attribute__((format(printf, formatIndex, firstArgIndex)))
 #else
 #define KISAK_PRINTF_FORMAT(formatIndex, firstArgIndex)
@@ -1613,7 +1613,7 @@ inline T Buf_Read(unsigned char **pos)
 }
 
 #include <universal/arch_intrin.h> // SSE on x86; __rdtsc stand-in elsewhere
-#ifdef __linux__
+#if defined(__linux__) || defined(__APPLE__)
 // Clang's Microsoft intrinsic takes a pointer to the Windows 32-bit LONG type:
 // unsigned long* on i386, where Linux DWORD is an unsigned int, so this overload
 // adapts it. On 64-bit Linux (x86_64, aarch64) that type is unsigned int: the

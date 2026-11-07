@@ -234,7 +234,9 @@
             #define IS_LE
             #define IS_X86
           #else
-            #if (defined(__MWERKS__) && !defined(__INTEL__)) || defined(__MRC__) || defined(THINK_C) || defined(powerc) || defined(macintosh) || defined(__powerc) || defined(__APPLE__) || defined(__MACH__)
+            // KisakCOD: modern macOS (64-bit Mach-O) takes the Linux branch below; this one
+            // describes the classic and 32-bit Mac SDKs.
+            #if (defined(__MWERKS__) && !defined(__INTEL__)) || defined(__MRC__) || defined(THINK_C) || defined(powerc) || defined(macintosh) || defined(__powerc)
               #define IS_MAC
               #if TARGET_API_MAC_CARBON
                 #define IS_CARBON
@@ -265,7 +267,7 @@
               #endif
               
             #else
-              #ifdef linux
+              #if defined(linux) || defined(__APPLE__)
                 #define IS_LINUX
                 #define IS_32
                 #define IS_LE

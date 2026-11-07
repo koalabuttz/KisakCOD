@@ -1299,24 +1299,19 @@ void Actor_InitWeaponAccuracyGraphForWeapon(unsigned int weaponIndex)
 void Actor_ShutdownWeaponAccuracyGraph()
 {
     unsigned int v0; // r30
-    const char ***p_data; // r29
     const char **v2; // r31
     char v3[320]; // [sp+50h] [-140h] BYREF
 
-    v0 = 0;
-    if (g_numAccuracyGraphs)
+    // Retail stepped &g_accuracyGraphs[i].data by 8 pointers (32-byte i386
+    // DevGraph); index instead. data points at a struct whose first field is
+    // the weapon name.
+    for (v0 = 0; v0 < g_numAccuracyGraphs; ++v0)
     {
-        p_data = (const char ***)&g_accuracyGraphs[0].data;
-        do
-        {
-            v2 = *p_data;
-            snprintf(v3, ARRAYSIZE(v3), "AI/AI Vs. AI Accuracy/%s", **p_data);
-            DevGui_RemoveMenu(v3);
-            snprintf(v3, ARRAYSIZE(v3), "AI/AI Vs. Player Accuracy/%s", *v2);
-            DevGui_RemoveMenu(v3);
-            ++v0;
-            p_data += 8;
-        } while (v0 < g_numAccuracyGraphs);
+        v2 = (const char **)g_accuracyGraphs[v0].data;
+        snprintf(v3, ARRAYSIZE(v3), "AI/AI Vs. AI Accuracy/%s", *v2);
+        DevGui_RemoveMenu(v3);
+        snprintf(v3, ARRAYSIZE(v3), "AI/AI Vs. Player Accuracy/%s", *v2);
+        DevGui_RemoveMenu(v3);
     }
     g_numAccuracyGraphs = 0;
 }

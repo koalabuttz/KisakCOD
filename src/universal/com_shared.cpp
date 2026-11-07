@@ -4,7 +4,7 @@
 #include <string.h>
 #include <qcommon/qcommon.h>
 
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
 #include <errno.h>  // errno, for the failure text in Com_RealTime
 #include <time.h>   // time, localtime_r
 #endif
@@ -162,7 +162,7 @@ int Com_HashKey(const char *string, int maxlen)
 
 int Com_RealTime(qtime_s *qtime)
 {
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
     time_t t; // [esp+0h] [ebp-10h] BYREF
     tm tmBuf; // storage for localtime_r, which has no static buffer
     tm *tms; // [esp+Ch] [ebp-4h]
@@ -171,7 +171,7 @@ int Com_RealTime(qtime_s *qtime)
     tm *tms; // [esp+Ch] [ebp-4h]
 #endif
 
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
     t = time(NULL);
     if (t == (time_t)-1)
         Com_PrintWarning(CON_CHANNEL_SYSTEM, "WARNING: Com_RealTime: time() failed: %s\n", strerror(errno));
@@ -200,7 +200,7 @@ int Com_RealTime(qtime_s *qtime)
         qtime->tm_yday = tms->tm_yday;
         qtime->tm_isdst = tms->tm_isdst;
     }
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
     return (int)t;
 #else
     return t;

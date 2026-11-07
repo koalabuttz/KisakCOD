@@ -80,6 +80,10 @@ RelWithDebInfo.
 
 ## Next
 
-1. Longer play and more levels, with sound.
+1. Longer play and more levels, with sound: what the other levels use, the
+   sweep tool (`scripts/tests/run_linux_sp_level_sweep.py`) and the run plan
+   are in [linux-sp-levels.md](linux-sp-levels.md).
 2. Compare with the Windows `KisakCOD-sp` build on the same data, to tell
-   port bugs from bugs the Windows build shares.
+   port bugs from bugs the Windows build shares. Linux keeps assertions on in
+   every configuration and the Windows Release build does not, so compare
+   assertions with a Windows Debug build.

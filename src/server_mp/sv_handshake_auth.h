@@ -103,7 +103,7 @@ inline bool SV_ValidateSteamTicketBase64(const char* text, size_t outputCapacity
     return true;
 }
 
-#if defined(__linux__) && defined(KISAK_DEDICATED)
+#if (defined(__linux__) || defined(__APPLE__)) && defined(KISAK_DEDICATED)
 inline bool SV_IsLoopbackTestIdentity(const char* identity)
 {
     static const char prefix[] = "local-test-";

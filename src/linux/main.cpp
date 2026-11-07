@@ -43,6 +43,9 @@
 #include <string.h>
 #include <strings.h>
 #include <unistd.h>
+#if defined(__APPLE__)
+#include <sys/sysctl.h> // sysctlbyname: CPU vendor and name
+#endif
 
 // ---------------------------------------------------------------------------
 // Globals the engine and the other platform files expect.
@@ -309,6 +312,27 @@ static void ReadCpuInfo(char *vendor, int vendorSize, char *name, int nameSize)
 {
     I_strncpyz(vendor, "Unknown", vendorSize);
     I_strncpyz(name, "Unknown", nameSize);
+
+#if defined(__APPLE__)
+    // macOS has no /proc/cpuinfo. Intel Macs report both values; Apple
+    // silicon has only the brand string ("Apple M1", ...).
+    char value[256];
+    size_t valueSize = sizeof(value);
+    if (sysctlbyname("machdep.cpu.brand_string", value, &valueSize, nullptr, 0) == 0 && valueSize > 0)
+    {
+        value[sizeof(value) - 1] = '\0';
+        I_strncpyz(name, value, nameSize);
+        if (strncmp(value, "Apple", 5) == 0)
+            I_strncpyz(vendor, "Apple", vendorSize);
+    }
+    valueSize = sizeof(value);
+    if (sysctlbyname("machdep.cpu.vendor", value, &valueSize, nullptr, 0) == 0 && valueSize > 0)
+    {
+        value[sizeof(value) - 1] = '\0';
+        I_strncpyz(vendor, value, vendorSize);
+    }
+    return;
+#endif
 
     FILE *file = fopen("/proc/cpuinfo", "r");
     if (!file)
@@ -612,6 +636,9 @@ void Sys_Quit()
     Sys_EnterCriticalSection(CRITSECT_COM_ERROR);
 
     Sys_SpawnQuitProcess();
+    // Releases the Steam session (KISAK_LINUX_STEAM) while steamclient.so is
+    // still intact; at exit() it is not.
+    Steam_Shutdown();
 #ifdef KISAK_LINUX_GAME_CLIENT
     // As win_main.cpp's Sys_Quit. Key_Shutdown frees the key bindings, which
     // are script strings (CopyString); left in place, SL_Shutdown's leak check
@@ -730,23 +757,30 @@ static void PrintWorkingDir()
 // Entry point
 // ---------------------------------------------------------------------------
 
+// The same POSIX layer builds for Linux and macOS (docs/macos.md).
+#if defined(__APPLE__)
+#define KISAK_NATIVE_OS "macOS"
+#else
+#define KISAK_NATIVE_OS "Linux"
+#endif
+
 namespace
 {
 #if defined(KISAK_LINUX_SP_GAME)
-    const char *kVersionBanner = "KisakCOD singleplayer (native Linux)\n";
+    const char *kVersionBanner = "KisakCOD singleplayer (native " KISAK_NATIVE_OS ")\n";
     const char *kProgramName = "KisakCOD-sp";
     const char *kExampleArguments = "+set fs_basepath <game folder>  +devmap killhouse";
-    const char *kInitializedLine = "Singleplayer initialized (native Linux port; gameplay unverified)\n";
+    const char *kInitializedLine = "Singleplayer initialized (native " KISAK_NATIVE_OS " port; gameplay unverified)\n";
 #elif defined(KISAK_LINUX_MP_CLIENT)
-    const char *kVersionBanner = "KisakCOD multiplayer client (native Linux)\n";
+    const char *kVersionBanner = "KisakCOD multiplayer client (native " KISAK_NATIVE_OS ")\n";
     const char *kProgramName = "KisakCOD-mp";
     const char *kExampleArguments = "+set fs_basepath <game folder>  +devmap mp_crash";
-    const char *kInitializedLine = "Multiplayer client initialized (native Linux port; gameplay unverified)\n";
+    const char *kInitializedLine = "Multiplayer client initialized (native " KISAK_NATIVE_OS " port; gameplay unverified)\n";
 #else
-    const char *kVersionBanner = "KisakCOD dedicated server (native Linux)\n";
+    const char *kVersionBanner = "KisakCOD dedicated server (native " KISAK_NATIVE_OS ")\n";
     const char *kProgramName = "kisakcod-dedi";
     const char *kExampleArguments = "+set dedicated 2  +map mp_crash";
-    const char *kInitializedLine = "Dedicated server initialized (native Linux port; gameplay unverified)\n";
+    const char *kInitializedLine = "Dedicated server initialized (native " KISAK_NATIVE_OS " port; gameplay unverified)\n";
 #endif
 
     void PrintUsage(FILE *stream)
@@ -835,11 +869,19 @@ int main(int argc, char **argv)
     // Before the renderer creates its window, so the window is adopted at once.
     Sys_InstallClientWindow();
 #endif
+#ifdef KISAK_LINUX_STEAM
+    // As WinMain: Steam is up before Com_Init runs the command line, so a
+    // +connect on it can get a ticket. It never bypasses authentication.
+    Steam_Init();
+#endif
     Com_Init(sys_cmdline);
 
     PrintWorkingDir();
 
-    Steam_Init(); // Announces the unavailable authentication backend; never bypasses it.
+#ifndef KISAK_LINUX_STEAM
+    // Announces the unavailable authentication backend.
+    Steam_Init();
+#endif
 #if defined(KISAK_LINUX_MP_CLIENT)
     // WinMain's client step: load the player's stats (LiveStorage) once the
     // file system is up.
@@ -859,5 +901,8 @@ int main(int argc, char **argv)
         }
 
         Com_Frame();
+        // Reads Steam's verdicts when no dedicated SV_Frame does (a no-op
+        // without KISAK_LINUX_STEAM).
+        Steam_Frame();
     }
 }

@@ -14,8 +14,12 @@ what is still missing. Build steps are in the
 - [Singleplayer game](linux-sp-game.md): `KisakCOD-sp` (i386), built like the
   multiplayer client from the singleplayer lists; killhouse and cargoship load
   and play
+- [Singleplayer levels](linux-sp-levels.md): what the other levels use, the
+  level sweep tool and the laptop run plan
 - [Cinematics](linux-cinematics.md): Bink movies through an FFmpeg-backed shim
   (`KISAK_LINUX_CINEMATICS`)
+- [Steam authentication](linux-steam.md): join and host Steam-authenticated
+  servers through the running Steam client (`KISAK_LINUX_STEAM`)
 
 ## Linux dedicated server
 
@@ -31,6 +35,8 @@ what is still missing. Build steps are in the
 - [64-bit Arm track](linux-arm64.md): the aarch64 Linux dedicated server, the
   x86 assumptions it needed fixed (including pages over 4 KiB), and the census
   for the arm64 client and Windows ARM64
+- [macOS track](macos.md): the opt-in macOS dedicated server (arm64 and
+  x86_64), what differs from the Linux build, and its hosted CI checks
 
 ## Linux client foundations (opt-in)
 

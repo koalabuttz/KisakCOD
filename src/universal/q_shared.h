@@ -28,7 +28,7 @@
 #pragma warning(disable : 4786)		// identifier was truncated
 #endif // _WIN32
 
-#ifdef __linux__
+#if defined(__linux__) || defined(__APPLE__)
 // libstdc++ headers (<cmath>, <iostream>, <mutex>, <algorithm>, ...) spell
 // numeric_limits<T>::min()/max() and use std::min/std::max internally, so the
 // function-like macros below cannot exist in a native Linux build: they would
@@ -63,9 +63,10 @@ constexpr auto max(T a, U b) { return a > b ? a : b; }
 #include <ctype.h>
 #include <cfloat> // FLT_MAX
 #include <cstdint>
-#ifdef __linux__
+#if defined(__linux__) || defined(__APPLE__)
 // <climits>: INT_MIN / INT_MAX for DvarLimits (winnt.h supplies them on Win32).
-// <endian.h>: host byte order, checked next to LOW_IND/HIGH_IND below.
+// <endian.h>: host byte order, checked next to LOW_IND/HIGH_IND below (macOS
+// has no <endian.h>; the compiler's __BYTE_ORDER__ is checked there instead).
 // <linux/compat.h>: the Win32 base types plus the MSVC CRT shims (_snprintf,
 // _vsnprintf_s, _stricmp) that the engine sources call directly.
 // <qcommon/threads_interlock.h>: the portable Interlocked* intrinsics (adding it
@@ -73,7 +74,9 @@ constexpr auto max(T a, U b) { return a > b ? a : b; }
 // Every module includes q_shared.h first, so this is the one place that has to
 // make all of that visible.
 #include <climits>
+#if defined(__linux__)
 #include <endian.h>
+#endif
 #include <linux/compat.h>
 #include <qcommon/threads_interlock.h>
 #endif
@@ -95,7 +98,7 @@ constexpr auto max(T a, U b) { return a > b ? a : b; }
 // with the equivalent GNU attributes instead of being dropped. Engine sources
 // no longer spell __cdecl (it is the default convention; see
 // scripts/tools/strip_cdecl.py); its alias stays for third-party headers.
-#ifdef __linux__
+#if defined(__linux__) || defined(__APPLE__)
 #if !defined(__clang__)
 #if defined(__i386__) || defined(__x86_64__)
 #ifndef __cdecl
@@ -177,10 +180,10 @@ static ID_INLINE int BigLong(int l) { return LongSwap(l); }
 #endif // WIN32
 
 //======================= LINUX DEFINES =================================
-// Native (POSIX) Linux build. Mirrors the WIN32 block above so that the rest of
-// the engine sees the same macro surface; only the values that are genuinely
-// platform facts (build string, path separator) differ.
-#ifdef __linux__
+// Native (POSIX) Linux and macOS builds. Mirrors the WIN32 block above so that
+// the rest of the engine sees the same macro surface; only the values that are
+// genuinely platform facts (build string, path separator) differ.
+#if defined(__linux__) || defined(__APPLE__)
 
 #define	MAC_STATIC
 
@@ -188,7 +191,19 @@ static ID_INLINE int BigLong(int l) { return LongSwap(l); }
 // convention is what __cdecl means on Windows, so no attribute is needed.
 
 // buildstring will be incorporated into the version string
-#if defined(__x86_64__)
+#if defined(__APPLE__) && defined(__x86_64__)
+#ifdef NDEBUG
+#define	CPUSTRING	"macos-x86_64"
+#else
+#define	CPUSTRING	"macos-x86_64-debug"
+#endif
+#elif defined(__APPLE__) && defined(__aarch64__)
+#ifdef NDEBUG
+#define	CPUSTRING	"macos-arm64"
+#else
+#define	CPUSTRING	"macos-arm64-debug"
+#endif
+#elif defined(__x86_64__)
 #ifdef NDEBUG
 #define	CPUSTRING	"linux-x86_64"
 #else
@@ -641,7 +656,8 @@ typedef ull             uint64;
 #define LAST_IND(x,part_type)    (sizeof(x)/sizeof(part_type) - 1)
 // The swap layer below assumes a little-endian host: on a big-endian host the
 // Little* helpers would silently return swapped data instead of not swapping.
-#if defined(__BYTE_ORDER) && defined(__LITTLE_ENDIAN) && __BYTE_ORDER != __LITTLE_ENDIAN
+#if (defined(__BYTE_ORDER) && defined(__LITTLE_ENDIAN) && __BYTE_ORDER != __LITTLE_ENDIAN) \
+    || (defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__)
 #error "q_shared.h: the byte-swap layer requires a little-endian host"
 #endif
 #if defined(__BYTE_ORDER) && __BYTE_ORDER == __BIG_ENDIAN
@@ -1064,7 +1080,7 @@ uint32_t LongNoSwap(uint32_t color);
 #define arr_esize(a) (sizeof((a)[0]))
 #define arr_cnt(a) (sizeof(a)/arr_esize(a))
 #define ARRAY_COUNT(a) arr_cnt(a)
-#ifdef __linux__
+#if defined(__linux__) || defined(__APPLE__)
 // The Win32 name for the same macro. Deliberately built on ARRAY_COUNT so it
 // stays array-only: it rejects pointers with the same compile error the Windows
 // definition produces, instead of quietly reporting a bogus constant.

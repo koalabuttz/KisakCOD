@@ -8,7 +8,7 @@
 #include "scr_compiler.h"
 
 #include <qcommon/qcommon.h>
-#ifdef __linux__
+#if defined(__linux__) || defined(__APPLE__)
 #include <linux/compat.h>
 #else
 #include <windows.h>
@@ -4573,7 +4573,7 @@ VariableValue  Scr_EvalVariableEntityField(uint32_t entId, uint32_t fieldName)
 	else
 	{
 		valuea.type = VAR_UNDEFINED;
-		valuea.u.intValue = 0;
+		valuea.u = VariableUnion();
 		return valuea;
 	}
 }

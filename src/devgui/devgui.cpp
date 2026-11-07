@@ -532,9 +532,13 @@ bool DevGui_EditableMenuItem(const DevMenuItem *menu)
         return 1;
     if (menu->childType != 1)
         return 0;
-    if (*((_BYTE *)menu->child.command + 10) == 7)
+    // Retail read the dvar's type at byte 10 and its enum count at dword 15.
+    static_assert(LAYOUT_32BIT(offsetof(dvar_s, type) == 10));
+    static_assert(LAYOUT_32BIT(offsetof(dvar_s, domain.enumeration.stringCount) == 15 * 4));
+    const dvar_s *dvar = menu->child.dvar;
+    if (dvar->type == DVAR_TYPE_STRING)
         return 0;
-    return *((_BYTE *)menu->child.command + 10) != 6 || *((uint32_t *)menu->child.command + 15);
+    return dvar->type != DVAR_TYPE_ENUM || dvar->domain.enumeration.stringCount;
 }
 
 void DevGui_Draw(int32_t localClientNum)

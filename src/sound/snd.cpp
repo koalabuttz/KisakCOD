@@ -4509,50 +4509,41 @@ void SND_MapInit()
     }
 }
 
+// sndEnt carries an entity number (see cg_event.cpp), not an alias pointer.
+// Retail walked chaninfo through alias0 with i386 offsets (sndEnt at -18,
+// playbackId at -12, alias1 at +1, 35-word stride); index it by field instead.
+static_assert(LAYOUT_32BIT(sizeof(snd_channel_info_t) == 35 * 4));
+static_assert(LAYOUT_32BIT(offsetof(snd_channel_info_t, alias0) - offsetof(snd_channel_info_t, sndEnt) == 18 * 4));
+static_assert(LAYOUT_32BIT(offsetof(snd_channel_info_t, alias0) - offsetof(snd_channel_info_t, playbackId) == 12 * 4));
 int SND_FindPlaybackId(const snd_alias_t *sndEnt, const char *aliasName)
 {
-    int v4; // r31
-    const snd_alias_t **p_alias0; // r29
-    bool IsStreamChannelFree; // r3
-    const char **v7; // r11
+    const int sndEntHandle = (int)(intptr_t)sndEnt;
 
     if (!g_snd.Initialized2d)
         return SND_PLAYBACKID_NOTPLAYED;
-    v4 = 0;
-    p_alias0 = &g_snd.chaninfo[0].alias0;
-    while (1)
+    for (int chanIndex = 0; chanIndex < SND_MAX_CHANNELS; ++chanIndex)
     {
-        if (*(p_alias0 - 18) != sndEnt)
-            goto LABEL_18;
-        if (v4 >= 0 && v4 < g_snd.max_2D_channels)
-        {
-            IsStreamChannelFree = SND_Is2DChannelFree(v4);
-            goto LABEL_13;
-        }
-        if (v4 >= 8 && v4 < g_snd.max_3D_channels + 8)
-        {
-            IsStreamChannelFree = SND_Is3DChannelFree(v4);
-            goto LABEL_13;
-        }
-        if (v4 < SND_FIRST_STREAM_CHANNEL || v4 >= SND_FIRST_STREAM_CHANNEL + g_snd.max_stream_channels)
-            break;
-        IsStreamChannelFree = SND_IsStreamChannelFree(v4);
-    LABEL_13:
-        if (!IsStreamChannelFree)
-            break;
-    LABEL_18:
-        p_alias0 += 35;
-        ++v4;
-        if ((int)p_alias0 >= (int)&g_sndPhysics.info[4].org[2])
-            return SND_PLAYBACKID_NOTPLAYED;
+        const snd_channel_info_t *chan = &g_snd.chaninfo[chanIndex];
+        bool isFree;
+
+        if (chan->sndEnt.handle != sndEntHandle)
+            continue;
+        if (chanIndex >= 0 && chanIndex < g_snd.max_2D_channels)
+            isFree = SND_Is2DChannelFree(chanIndex);
+        else if (chanIndex >= 8 && chanIndex < g_snd.max_3D_channels + 8)
+            isFree = SND_Is3DChannelFree(chanIndex);
+        else if (chanIndex >= SND_FIRST_STREAM_CHANNEL && chanIndex < SND_FIRST_STREAM_CHANNEL + g_snd.max_stream_channels)
+            isFree = SND_IsStreamChannelFree(chanIndex);
+        else
+            isFree = false;
+        if (isFree)
+            continue;
+        if (chan->alias0 && !I_stricmp(chan->alias0->aliasName, aliasName))
+            return chan->playbackId;
+        if (chan->alias1 && !I_stricmp(chan->alias1->aliasName, aliasName))
+            return chan->playbackId;
     }
-    if (!*p_alias0 || I_stricmp((*p_alias0)->aliasName, aliasName))
-    {
-        v7 = (const char **)p_alias0[1];
-        if (!v7 || I_stricmp(*v7, aliasName))
-            goto LABEL_18;
-    }
-    return (int)*(p_alias0 - 12);
+    return SND_PLAYBACKID_NOTPLAYED;
 }
 
 #endif // KISAK_SP

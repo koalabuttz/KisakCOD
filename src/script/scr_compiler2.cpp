@@ -2688,7 +2688,7 @@ uint32_t SpecifyThreadPosition(uint32_t posId, uint32_t name, uint32_t sourcePos
 	if (pos.type == VAR_UNDEFINED)
 	{
 		pos.type = (Vartype_t)type;
-		pos.u.intValue = 0;
+		pos.u = VariableUnion(); // whole union: EmitFunction tests codePosValue (8 bytes on x64)
 
 		SetNewVariableValue(id, &pos);
 		return id;
@@ -3355,7 +3355,7 @@ void LinkFile(uint32_t fileId)
 	uint32_t posId, threadCountId, threadCountPtr;
 
 	emptyValue.type = VAR_UNDEFINED;
-	emptyValue.u.intValue = 0;
+	emptyValue.u = VariableUnion(); // LinkThread copies codePosValue
 
 	for (threadCountPtr = FindFirstSibling(fileId); threadCountPtr; threadCountPtr = FindNextSibling(threadCountPtr))
 	{

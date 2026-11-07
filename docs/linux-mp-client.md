@@ -174,8 +174,11 @@ Functions that only raw-asset loading (`useFastFile 0`) or an attached remote
 debugger reaches abort with their name. `Material_FreeAll` runs its fast-file
 branch: it releases the technique sets and nothing else.
 
-Joining a remote server is refused, because Linux has no Steam ticket provider
+Joining a remote server is refused, because the default build has no Steam
+ticket provider
 ([linux-client.md](linux-client.md#joining-servers-local-yes-remote-no)).
+Build with `-DKISAK_LINUX_STEAM=ON` to authenticate through the running Steam
+client instead ([linux-steam.md](linux-steam.md)).
 
 ## Checks
 

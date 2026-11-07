@@ -20,6 +20,67 @@ uint64_t Posix_MonotonicNanoseconds()
 }
 
 // ---------------------------------------------------------------------------
+// Monotonic condition variables
+//
+// Timed waits run against CLOCK_MONOTONIC so a wall-clock step cannot skew
+// them. Linux sets that clock on the condition variable. macOS has no
+// pthread_condattr_setclock, so there each wait converts the monotonic
+// deadline into the relative timeout pthread_cond_timedwait_relative_np takes;
+// a spurious early return just goes round the caller's predicate loop again.
+// ---------------------------------------------------------------------------
+
+static void Posix_InitMonotonicCond(pthread_cond_t *cond)
+{
+#if defined(__APPLE__)
+    pthread_cond_init(cond, nullptr);
+#else
+    pthread_condattr_t attr;
+    pthread_condattr_init(&attr);
+    pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
+    pthread_cond_init(cond, &attr);
+    pthread_condattr_destroy(&attr);
+#endif
+}
+
+// The CLOCK_MONOTONIC time `msec` milliseconds from now.
+static struct timespec Posix_MonotonicDeadline(uint32_t msec)
+{
+    struct timespec deadline;
+    clock_gettime(CLOCK_MONOTONIC, &deadline);
+    deadline.tv_sec += (time_t)(msec / 1000u);
+    deadline.tv_nsec += (long)(msec % 1000u) * 1000000L;
+    if (deadline.tv_nsec >= 1000000000L)
+    {
+        deadline.tv_sec += 1;
+        deadline.tv_nsec -= 1000000000L;
+    }
+    return deadline;
+}
+
+// pthread_cond_timedwait against a CLOCK_MONOTONIC deadline; ETIMEDOUT once it
+// has passed.
+static int Posix_CondTimedWaitMonotonic(pthread_cond_t *cond, pthread_mutex_t *mutex, const struct timespec *deadline)
+{
+#if defined(__APPLE__)
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    struct timespec remaining;
+    remaining.tv_sec = deadline->tv_sec - now.tv_sec;
+    remaining.tv_nsec = deadline->tv_nsec - now.tv_nsec;
+    if (remaining.tv_nsec < 0)
+    {
+        remaining.tv_sec -= 1;
+        remaining.tv_nsec += 1000000000L;
+    }
+    if (remaining.tv_sec < 0 || (remaining.tv_sec == 0 && remaining.tv_nsec == 0))
+        return ETIMEDOUT;
+    return pthread_cond_timedwait_relative_np(cond, mutex, &remaining);
+#else
+    return pthread_cond_timedwait(cond, mutex, deadline);
+#endif
+}
+
+// ---------------------------------------------------------------------------
 // Events
 // ---------------------------------------------------------------------------
 
@@ -38,13 +99,8 @@ PosixEvent *Posix_CreateEvent(bool manualReset, bool initialState)
         return nullptr;
 
     pthread_mutex_init(&event->mutex, nullptr);
-
-    pthread_condattr_t attr;
-    pthread_condattr_init(&attr);
     // Monotonic so a timed wait cannot be skewed by a wall-clock step.
-    pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
-    pthread_cond_init(&event->cond, &attr);
-    pthread_condattr_destroy(&attr);
+    Posix_InitMonotonicCond(&event->cond);
 
     event->manualReset = manualReset;
     event->signalled = initialState;
@@ -102,19 +158,11 @@ bool Posix_WaitEvent(PosixEvent *event, uint32_t msec)
     // Predicate loop: a spurious wakeup is not a signal.
     if (!event->signalled && msec != 0)
     {
-        struct timespec deadline;
-        clock_gettime(CLOCK_MONOTONIC, &deadline);
-        deadline.tv_sec += (time_t)(msec / 1000u);
-        deadline.tv_nsec += (long)(msec % 1000u) * 1000000L;
-        if (deadline.tv_nsec >= 1000000000L)
-        {
-            deadline.tv_sec += 1;
-            deadline.tv_nsec -= 1000000000L;
-        }
+        const struct timespec deadline = Posix_MonotonicDeadline(msec);
 
         while (!event->signalled)
         {
-            const int status = pthread_cond_timedwait(&event->cond, &event->mutex, &deadline);
+            const int status = Posix_CondTimedWaitMonotonic(&event->cond, &event->mutex, &deadline);
             if (status == ETIMEDOUT)
                 break;
         }
@@ -179,12 +227,7 @@ void Posix_InitSuspendGates(int count)
         if (i >= s_gateCount)
         {
             pthread_mutex_init(&s_gates[i].mutex, nullptr);
-
-            pthread_condattr_t attr;
-            pthread_condattr_init(&attr);
-            pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
-            pthread_cond_init(&s_gates[i].cond, &attr);
-            pthread_condattr_destroy(&attr);
+            Posix_InitMonotonicCond(&s_gates[i].cond);
         }
 
         pthread_mutex_lock(&s_gates[i].mutex);
@@ -287,19 +330,11 @@ bool Posix_WaitForSuspendAck(int index, uint32_t msec)
     }
     else
     {
-        struct timespec deadline;
-        clock_gettime(CLOCK_MONOTONIC, &deadline);
-        deadline.tv_sec += (time_t)(msec / 1000u);
-        deadline.tv_nsec += (long)(msec % 1000u) * 1000000L;
-        if (deadline.tv_nsec >= 1000000000L)
-        {
-            deadline.tv_sec += 1;
-            deadline.tv_nsec -= 1000000000L;
-        }
+        const struct timespec deadline = Posix_MonotonicDeadline(msec);
 
         while (!s_gates[index].parked && s_gates[index].suspendCount > 0)
         {
-            if (pthread_cond_timedwait(&s_gates[index].cond, &s_gates[index].mutex, &deadline) == ETIMEDOUT)
+            if (Posix_CondTimedWaitMonotonic(&s_gates[index].cond, &s_gates[index].mutex, &deadline) == ETIMEDOUT)
                 break;
         }
 

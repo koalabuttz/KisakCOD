@@ -15,7 +15,7 @@
 // the game module still links.
 void G_DebugLine(const float *start, const float *end, const float *color, int32_t depthTest)
 {
-#if !defined(__linux__) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
     CL_AddDebugLine(start, end, color, depthTest, 0, 1);
 #endif
 }
@@ -27,14 +27,14 @@ void G_DebugLineWithDuration(
     int32_t depthTest,
     int32_t duration)
 {
-#if !defined(__linux__) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
     CL_AddDebugLine(start, end, color, depthTest, duration, 1);
 #endif
 }
 
 void G_DebugStar(const float *point, const float *color)
 {
-#if !defined(__linux__) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
     CL_AddDebugStar(point, color, 0, 1);
 #endif
 }
@@ -46,7 +46,7 @@ void G_DebugStarWithText(
     char *string,
     float fontsize)
 {
-#if !defined(__linux__) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
     CL_AddDebugStarWithText(point, starColor, textColor, string, fontsize, 0, 1);
 #endif
 }
@@ -211,7 +211,7 @@ void G_DebugDrawBrush_r(cLeafBrushNode_s *node, const float *color)
     brushes = node->data.leaf.brushes;
     do
     {
-        CM_ShowSingleBrushCollision((const cbrush_t *)((char *)cm.brushes + 16 * *brushes + 16 * __ROL4__(*brushes, 2)), color, DrawBrushPoly);
+        CM_ShowSingleBrushCollision(&cm.brushes[*brushes], color, DrawBrushPoly); // was an 80-byte (i386) stride
         ++v4;
         ++brushes;
     } while (v4 < node->leafBrushCount);

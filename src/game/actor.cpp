@@ -130,19 +130,11 @@ void VisCache_Update(vis_cache_t *pCache, bool bVisible)
 
 void SentientInfo_Clear(sentient_info_t *pInfo)
 {
-    sentient_info_t *v2; // r11
-    int v3; // ctr
-
     iassert(pInfo);
 
-    v2 = pInfo;
-    v3 = 10;
-    do
-    {
-        *(unsigned int *)&v2->VisCache.bVisible = 0;
-        v2 = (sentient_info_t *)((char *)v2 + 4);
-        --v3;
-    } while (v3);
+    // Retail cleared ten dwords; the struct holds a node pointer.
+    static_assert(LAYOUT_32BIT(sizeof(sentient_info_t) == 40));
+    memset(pInfo, 0, sizeof(*pInfo));
 }
 
 void SentientInfo_ForceCopy(sentient_info_t *pTo, const sentient_info_t *pFrom)
@@ -4700,9 +4692,6 @@ int SP_actor(gentity_s *ent)
     float *currentOrigin; // r26
     float *v10; // r11
     int v11; // r10
-    actor_goal_s *p_scriptGoal; // r28
-    actor_goal_s *p_codeGoal; // r11
-    int v14; // ctr
 
     ent->model = 0;
     if (!g_spawnai->current.enabled)
@@ -4787,7 +4776,6 @@ int SP_actor(gentity_s *ent)
             *v10 = 0.0;
             v10 += 2;
         } while (v11);
-        p_scriptGoal = &v3->scriptGoal;
         v3->moveHistoryIndex = 0;
         v3->scriptGoal.pos[0] = *currentOrigin;
         v3->scriptGoal.pos[1] = ent->r.currentOrigin[1];
@@ -4798,15 +4786,9 @@ int SP_actor(gentity_s *ent)
             MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 307, 0, "%s", "!actor->scriptGoal.volume");
         Actor_SetGoalRadius(&v3->scriptGoal, 0.0);
         Actor_SetGoalHeight(&v3->scriptGoal, 0.0);
-        p_codeGoal = &v3->codeGoal;
-        v14 = 7;
-        do
-        {
-            p_codeGoal->pos[0] = p_scriptGoal->pos[0];
-            p_scriptGoal = (actor_goal_s *)((char *)p_scriptGoal + 4);
-            p_codeGoal = (actor_goal_s *)((char *)p_codeGoal + 4);
-            --v14;
-        } while (v14);
+        // Retail copied the goal as seven dwords.
+        static_assert(LAYOUT_32BIT(sizeof(actor_goal_s) == 28));
+        v3->codeGoal = v3->scriptGoal;
         v3->keepClaimedNode = 0;
         v3->keepClaimedNodeInGoal = 0;
         v3->noDodgeMove = 0;

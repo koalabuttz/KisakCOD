@@ -153,7 +153,7 @@ void R_MatrixIdentity44(float (*out)[4]);
 double R_GetBaseLodDist(const float *origin);
 double R_GetAdjustedLodDist(float dist, XModelLodRampType lodRampType);
 
-#if !defined(__linux__) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
 // Keep backend method calls out of shared headers. The real D3D backend owns
 // this definition; Linux has no successful fallback for releasing GPU objects.
 uint32_t R_ReleaseD3DSurface(IDirect3DSurface9 *surface);

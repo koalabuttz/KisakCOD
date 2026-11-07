@@ -331,7 +331,7 @@ void G_ReduceOriginError(float *origin, float *originError, double maxChange)
 void G_ReduceAnglesError(float *angles, float *anglesError, double maxChange)
 {
     float *v4; // r31
-    int v5; // r30
+    ptrdiff_t v5; // r30: angles - anglesError (a 64-bit difference on x64)
     int v6; // r29
     double v7; // fp0
 

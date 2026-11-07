@@ -4199,8 +4199,6 @@ void CG_ArchiveWeaponInfo(MemoryFile *memFile)
     BOOL IsWriting; // r22
     float numWeapons; // r30
     uint32_t NumWeapons; // r3
-    int v5; // r28
-    int *p_hasAnimTree; // r30
     const DObj_s *v7; // r3
     float v8[24]; // [sp+50h] [-60h] BYREF
 
@@ -4218,25 +4216,26 @@ void CG_ArchiveWeaponInfo(MemoryFile *memFile)
         numWeapons = v8[0];
         iassert(LODWORD(numWeapons) <= BG_GetNumWeapons());
     }
-    if (LODWORD(numWeapons) > 1)
+    // Retail walked hasAnimTree as an int pointer: viewModelDObj at -11 ints,
+    // iPrevAnim's last byte at -1 byte, 18-int stride. Index the array instead.
+    static_assert(LAYOUT_32BIT(sizeof(weaponInfo_s) == 18 * 4));
+    static_assert(LAYOUT_32BIT(offsetof(weaponInfo_s, hasAnimTree) - offsetof(weaponInfo_s, viewModelDObj) == 11 * 4));
+    for (uint32_t weapIndex = 1; weapIndex < LODWORD(numWeapons); ++weapIndex)
     {
-        v5 = LODWORD(numWeapons) - 1;
-        p_hasAnimTree = &cg_weaponsArray[0][1].hasAnimTree;
-        do
+        weaponInfo_s *weapInfo = &cg_weaponsArray[0][weapIndex];
+
+        if (IsWriting)
         {
-            if (IsWriting)
-            {
-                v7 = (const DObj_s *)*(p_hasAnimTree - 11);
-                *p_hasAnimTree = v7 && DObjGetTree(v7);
-            }
-            iassert(memFile);
-            iassert(memFile->archiveProc);
-            memFile->archiveProc(memFile, 4, (byte*)p_hasAnimTree);
-            iassert(memFile->archiveProc);
-            memFile->archiveProc(memFile, 4, (byte *)p_hasAnimTree - 1);
-            --v5;
-            p_hasAnimTree += 18;
-        } while (v5);
+            v7 = weapInfo->viewModelDObj;
+            weapInfo->hasAnimTree = v7 && DObjGetTree(v7);
+        }
+        iassert(memFile);
+        iassert(memFile->archiveProc);
+        memFile->archiveProc(memFile, 4, (byte *)&weapInfo->hasAnimTree);
+        iassert(memFile->archiveProc);
+        // Same bytes as before: one byte back from hasAnimTree (likely meant
+        // iPrevAnim; kept so i386 saves stay byte-identical).
+        memFile->archiveProc(memFile, 4, (byte *)&weapInfo->hasAnimTree - 1);
     }
     iassert(memFile);
     iassert(memFile->archiveProc);

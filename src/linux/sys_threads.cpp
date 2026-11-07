@@ -153,7 +153,12 @@ void SetThreadName(uint32_t threadId_, const char *threadName)
     char name[16]; // Linux limit includes the terminator
     strncpy(name, threadName, sizeof(name) - 1);
     name[sizeof(name) - 1] = '\0';
+#if defined(__APPLE__)
+    // macOS only names the calling thread, which is the thread asked about here.
+    pthread_setname_np(name);
+#else
     pthread_setname_np(pthread_self(), name);
+#endif
 }
 
 static void *ThreadTrampoline(void *argument)

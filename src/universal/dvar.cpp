@@ -1,7 +1,7 @@
 #include <universal/q_shared.h>
 #include <qcommon/qcommon.h>
 
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
 #include <linux/compat.h>
 #include <qcommon/threads_interlock.h>
 #else
@@ -169,7 +169,7 @@ char *Dvar_InfoString(int localClientNum, int bit)
 
     info1[0] = 0;
     Dvar_ForEach((void(*)(const dvar_s *, void *))Dvar_InfoStringSingle, &bit);
-#if defined(KISAK_MP) && !(defined(__linux__) && defined(KISAK_DEDICATED))
+#if defined(KISAK_MP) && !((defined(__linux__) || defined(__APPLE__)) && defined(KISAK_DEDICATED))
     if ((bit & 2) != 0)
     {
         UsernameForLocalClient = CL_GetUsernameForLocalClient();

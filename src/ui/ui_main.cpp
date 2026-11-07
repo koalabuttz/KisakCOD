@@ -2482,16 +2482,11 @@ void UI_DrawConnectScreen()
 
 char *UI_ReplaceConversionString(const char *sourceString, const char *replaceString)
 {
-    int v2[2]; // r10
-    ConversionArguments v4; // [sp+50h] [-440h] BYREF
+    // The decompiled 4-byte pairs stored into args[1..8] were register
+    // leftovers; only args[0] is read (argCount 1). Clear the rest by type.
+    ConversionArguments v4{}; // [sp+50h] [-440h] BYREF
     char v5[1032]; // [sp+80h] [-410h] BYREF
 
-    v2[1] = 0;
-    v2[0] = (int)replaceString;
-    *(_QWORD *)&v4.args[1] = *(_QWORD *)v2;
-    *(_QWORD *)&v4.args[3] = *(_QWORD *)v2;
-    *(_QWORD *)&v4.args[5] = *(_QWORD *)v2;
-    *(_QWORD *)&v4.args[7] = *(_QWORD *)v2;
     v4.args[0] = replaceString;
     v4.argCount = 1;
     UI_ReplaceConversions(sourceString, &v4, v5, 1024);
@@ -2500,17 +2495,11 @@ char *UI_ReplaceConversionString(const char *sourceString, const char *replaceSt
 
 char *UI_ReplaceConversionInt(const char *sourceString, int replaceInt)
 {
-    __int64 v2; // r10
-    ConversionArguments v5; // [sp+50h] [-460h] BYREF
+    // args[1..8] held Xbox register leftovers (0x82000000); only args[0] is read.
+    ConversionArguments v5{}; // [sp+50h] [-460h] BYREF
     char v6[32]; // [sp+80h] [-430h] BYREF
     char v7[1024]; // [sp+A0h] [-410h] BYREF
 
-    LODWORD(v2) = 0;
-    HIDWORD(v2) = 0x82000000;
-    *(_QWORD *)&v5.args[1] = v2;
-    *(_QWORD *)&v5.args[3] = v2;
-    *(_QWORD *)&v5.args[5] = v2;
-    *(_QWORD *)&v5.args[7] = v2;
     snprintf(v6, ARRAYSIZE(v6), "%d", replaceInt);
     v5.argCount = 1;
     v5.args[0] = v6;
