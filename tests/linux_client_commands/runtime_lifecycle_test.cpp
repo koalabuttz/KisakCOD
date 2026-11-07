@@ -96,6 +96,10 @@ int main()
             Check(Dvar_FindVar("lifecycle_owned")==nullptr,"previous runtime dvar storage is gone");
             const auto *dvar=Dvar_RegisterString("lifecycle_owned","initial",DVAR_NOFLAG,"lifecycle fixture");
             Dvar_SetString(dvar,"changed allocated string");
+            // Retail stores the red byte through the value's first byte; a bool store left it 1.
+            const auto *color=Dvar_RegisterColor("lifecycle_color",0.75f,0.25f,0.25f,1.0f,DVAR_NOFLAG,"lifecycle fixture");
+            Check(color->current.color[0]==191 && color->current.color[1]==64 && color->current.color[2]==64 &&
+                color->current.color[3]==255,"color dvar registers all four channels");
             Cmd_AddCommandInternal("lifecycle_mark",Mark,&marker);
             Cmd_AddCommandInternal("lifecycle_drop",Drop,&drop);
             executed.clear();
