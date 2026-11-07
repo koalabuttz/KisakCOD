@@ -36,7 +36,7 @@ spec.loader.exec_module(sweep)
 # prints the load line, FAKE_IGNORE_QUIT keeps running after quit.
 FAKE_GAME = textwrap.dedent('''\
     #!{python}
-    import os, signal, sys
+    import os, signal, sys, time
     args = sys.argv[1:]
     def arg(name):
         return args[args.index(name) + 1] if name in args else None
@@ -74,10 +74,17 @@ FAKE_GAME = textwrap.dedent('''\
         elif cmd[0] == "spdevmap":
             load(cmd[1])
         elif cmd[0] == "devsave":
+            # As the game does when the level-start save is still pending:
+            # that one is flushed first, with its own "time to write" line,
+            # and this save's file appears a moment later.
+            print("** Save was already written to a device; it is being saved again.  This is not an error.",
+                  flush=True)
+            print("time to write: 17  ms", flush=True)
+            time.sleep(0.5)
+            print("G_WriteGame '%s' ''" % cmd[1], flush=True)
             save = os.path.join(home, "players", "profiles", "sweep", "save")
             os.makedirs(save, exist_ok=True)
             open(os.path.join(save, cmd[1] + ".svg"), "wb").close()
-            print("G_WriteGame 'x' 'y'", flush=True)
             print("time to write: 3  ms", flush=True)
         elif cmd[0] == "loadgame":
             print("=== G_LoadGame ===", flush=True)

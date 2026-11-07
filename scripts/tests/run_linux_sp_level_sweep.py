@@ -107,6 +107,10 @@ MAP_DVAR = "mapname"
 
 LOAD_DONE = re.compile(r"^Load time: (\d+) msec")
 SERVER_START = re.compile(r"^Server: (\S+)")
+# devsave prints "G_WriteGame '<name>' ..." and then "time to write: N ms" when
+# the file is written. A level-start or autosave still pending is flushed
+# first, with its own "time to write" line, so wait for this save's line.
+SAVE_STARTED = re.compile(r"^G_WriteGame '" + re.escape(SAVE_NAME) + "'")
 SAVE_WRITTEN = re.compile(r"^time to write: ")
 LOADGAME_STARTED = re.compile(r"^=== G_LoadGame ===")
 ASSERTION = re.compile(r"ASSERT FAILED: (.*)")
@@ -344,9 +348,17 @@ def run_level_steps(game, result, options, home, expect_load=True):
         if save_file.exists():
             save_file.unlink()
         game.send(f"devsave {SAVE_NAME}")
-        written = game.wait_for(SAVE_WRITTEN, options.probe_timeout)
-        result.step("devsave written", written is not None and save_file.is_file(),
-                    "" if save_file.is_file() else f"{save_file.relative_to(home)} missing")
+        started = game.wait_for(SAVE_STARTED, options.probe_timeout)
+        written = started and game.wait_for(SAVE_WRITTEN, options.probe_timeout)
+        if not started:
+            detail = f"no \"G_WriteGame '{SAVE_NAME}'\" in {options.probe_timeout} s"
+        elif not written:
+            detail = f"no 'time to write' in {options.probe_timeout} s"
+        elif not save_file.is_file():
+            detail = f"{save_file.relative_to(home)} missing"
+        else:
+            detail = ""
+        result.step("devsave written", not detail, detail)
         game.send(f"loadgame {SAVE_NAME}")
         loaded = game.wait_for(LOADGAME_STARTED, options.load_timeout)
         if not result.step("loadgame started", loaded is not None):
