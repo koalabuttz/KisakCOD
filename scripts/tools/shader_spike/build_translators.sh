@@ -10,12 +10,17 @@
 # Needs: git, gcc/g++, bison, flex, meson, ninja, SPIRV-Tools (libspirv-tools
 # dev files), SPIR-V headers, and x86_64-w64-mingw32-widl when the tarball has
 # no generated headers (the Debian/Ubuntu "+ds" tarball).
+# Without root, unpack the spirv-tools and spirv-headers packages somewhere and
+# set SPIRV_PREFIX to their usr folder; MESON can name a meson to run.
 # Outputs: <work-dir>/bin/{vkd3d-compiler,mojo_spv,dxbc_compiler,dxbc_disasm}
 set -euo pipefail
 
 MOJOSHADER_COMMIT=ad5dff84830c2863c841f4b1f4e3df78c705b383
 DXBC_SPIRV_COMMIT=f528e1e821527e361f34829f78d1fbd5340e6f6a
 VKD3D_URL=https://dl.winehq.org/vkd3d/source/vkd3d-2.0.tar.xz
+SPIRV_PREFIX=${SPIRV_PREFIX:-/usr}
+MESON=${MESON:-meson}
+MULTIARCH=$(gcc -print-multiarch)
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../../.." && pwd)
@@ -31,7 +36,7 @@ if [ ! -d "$W/src/dxbc-spirv" ]; then
 fi
 git -C "$W/src/dxbc-spirv" checkout -q "$DXBC_SPIRV_COMMIT"
 git -C "$W/src/dxbc-spirv" submodule update -q --init --depth 1
-meson setup --reconfigure "$W/build/dxbc-spirv" "$W/src/dxbc-spirv" -Denable_tools=true -Dbuildtype=release >/dev/null
+$MESON setup --reconfigure "$W/build/dxbc-spirv" "$W/src/dxbc-spirv" -Denable_tools=true -Dbuildtype=release >/dev/null
 ninja -C "$W/build/dxbc-spirv" >/dev/null
 cp "$W/build/dxbc-spirv/tools/dxbc_compiler" "$W/build/dxbc-spirv/tools/dxbc_disasm" "$W/bin/"
 
@@ -78,7 +83,7 @@ cat > "$O/gen/config.h" <<'H'
 #define HAVE_BUILTIN_ADD_OVERFLOW 1
 H
 for h in spirv.h GLSL.std.450.h; do
-  ln -sf "/usr/include/spirv/unified1/$h" "$O/gen/vulkan/$h"
+  ln -sf "$SPIRV_PREFIX/include/spirv/unified1/$h" "$O/gen/vulkan/$h"
 done
 for idl in d3d12 d3d12sdklayers d3d12shader d3dcommon d3dx9shader dxgi dxgi1_2 dxgi1_3 dxgi1_4 dxgibase dxgiformat dxgitype; do
   [ -f "$S/include/vkd3d_$idl.h" ] || x86_64-w64-mingw32-widl -I"$S/include" -h -o "$O/gen/vkd3d_$idl.h" "$S/include/vkd3d_$idl.idl"
@@ -87,14 +92,14 @@ for g in preproc hlsl; do
   bison -d -o "$O/gen/libs/vkd3d-shader/$g.tab.c" "$S/libs/vkd3d-shader/$g.y"
   flex -o "$O/gen/libs/vkd3d-shader/$g.yy.c" "$S/libs/vkd3d-shader/$g.l"
 done
-CF="-O2 -std=gnu99 -D_GNU_SOURCE -DHAVE_CONFIG_H -include $O/gen/config.h -I$O/gen -I$O/gen/include/private -I$S/include -I$S/include/private -I$S/libs/vkd3d-shader -I$O/gen/libs/vkd3d-shader"
+CF="-O2 -std=gnu99 -D_GNU_SOURCE -DHAVE_CONFIG_H -include $O/gen/config.h -I$O/gen -I$O/gen/include/private -I$S/include -I$S/include/private -I$S/libs/vkd3d-shader -I$O/gen/libs/vkd3d-shader -I$SPIRV_PREFIX/include"
 OBJS=()
 for f in "$S"/libs/vkd3d-common/*.c "$S"/libs/vkd3d-shader/*.c "$O"/gen/libs/vkd3d-shader/*.c; do
   o=$O/obj/$(basename "$f" .c).o
   gcc $CF -DLIBVKD3D_SHADER_SOURCE -DVKD3D_DEBUG_ENV=VKD3D_SHADER_DEBUG -c "$f" -o "$o"
   OBJS+=("$o")
 done
-gcc $CF -o "$W/bin/vkd3d-compiler" "$S/programs/vkd3d-compiler/main.c" "${OBJS[@]}" -lSPIRV-Tools -lstdc++ -lm -lpthread
+gcc $CF -o "$W/bin/vkd3d-compiler" "$S/programs/vkd3d-compiler/main.c" "${OBJS[@]}" -L"$SPIRV_PREFIX/lib/$MULTIARCH" -L"$SPIRV_PREFIX/lib" -lSPIRV-Tools -lstdc++ -lm -lpthread
 
 "$W/bin/vkd3d-compiler" --version
 echo "translators in $W/bin"
