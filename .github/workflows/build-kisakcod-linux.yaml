@@ -755,6 +755,113 @@ jobs:
           path: ${{ runner.temp }}/ccache
           key: ccache-arm64-dedicated-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
 
+  armv7_dedicated:
+    # Opt-in 32-bit Arm track, the first step toward a PS Vita port
+    # (docs/linux-armv7.md): cross-compile KisakCOD-dedi with
+    # -DKISAK_LINUX_ARCH=armv7 on the x86 runner, check that engine code keeps
+    # x86's float results (no fused multiply-add, no NEON float math), and run
+    # the asset-free bootstrap test under qemu-arm. No game data, so loading a
+    # real map is not covered here. The other builds are untouched.
+    name: armv7 dedicated server ${{ matrix.config }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [Debug, RelWithDebInfo]
+
+    env:
+      BUILD_DIR: build-armv7/${{ matrix.config }}
+      CMAKE_RUNTIME_OUTPUT_DIRECTORY: ${{ github.workspace }}/out/armv7-${{ matrix.config }}
+      BINARY: out/armv7-${{ matrix.config }}/KisakCOD-dedi
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
+
+      - name: Install armv7 cross tools
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/ci/apt-install.sh \
+            cmake ninja-build clang python3 ccache g++-arm-linux-gnueabihf qemu-user
+
+      - name: Restore compiler cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-armv7-dedicated-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-armv7-dedicated-${{ matrix.config }}-
+      - name: Use compiler cache
+        id: ccache
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/ci/use-ccache.sh
+
+      - name: Configure armv7 ${{ matrix.config }}
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang++ --version
+          cmake -S . -B "$BUILD_DIR" -G Ninja \
+            -DKISAK_PLATFORM=linux -DKISAK_LINUX_ARCH=armv7 \
+            -DCMAKE_BUILD_TYPE=${{ matrix.config }} \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$CMAKE_RUNTIME_OUTPUT_DIRECTORY"
+
+      - name: Build armv7 KisakCOD-dedi
+        timeout-minutes: 30
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build "$BUILD_DIR" --target KisakCOD-dedi --parallel "$(nproc)"
+          ls -l "$BINARY"
+          # Float results have to match x86 (docs/linux-armv7.md): no fused
+          # multiply-adds (-ffp-contract=off), and no NEON float math, which
+          # flushes denormals to zero on ARMv7 (-mfpu=vfpv3).
+          arm-linux-gnueabihf-objdump -d "$BINARY" > "$RUNNER_TEMP/armv7-dedi.dis"
+          if grep -Eq $'\t(vfma|vfms|vfnma|vfnms)' "$RUNNER_TEMP/armv7-dedi.dis"; then
+            echo "the server contains fused multiply-add instructions" >&2
+            exit 1
+          fi
+          if grep -Eq $'\tv[a-z0-9]+\.f(32|64)\tq' "$RUNNER_TEMP/armv7-dedi.dis"; then
+            echo "the server contains NEON float instructions" >&2
+            exit 1
+          fi
+
+      - name: Bootstrap armv7 KisakCOD-dedi
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/tests/test_linux_bootstrap.py --arch armv7 \
+            --emulator "qemu-arm -L /usr/arm-linux-gnueabihf" "$BINARY"
+
+      - name: Report compiler cache
+        if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ccache --show-stats
+      - name: Save compiler cache
+        if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-armv7-dedicated-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
+
   x64_client:
     # Opt-in 64-bit track, step three (docs/linux-x64.md): build the multiplayer
     # client KisakCOD-mp with -DKISAK_LINUX_ARCH=x86_64 against x86_64 SDL3 and
