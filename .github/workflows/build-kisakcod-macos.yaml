@@ -482,10 +482,29 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           set -euo pipefail
-          # SDL looks for libvulkan.1.dylib on the default library path, which
-          # does not include Homebrew's prefix on Apple silicon.
+          # SDL and the loader find the loader and the validation layer by bare
+          # name; the default search path does not include Homebrew's prefix on
+          # Apple silicon. The probe finds SDL3 through its own rpath.
           export SDL_VULKAN_LIBRARY="$(brew --prefix vulkan-loader)/lib/libvulkan.1.dylib"
-          export DYLD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib"
+          export DYLD_FALLBACK_LIBRARY_PATH="$(brew --prefix)/lib:/usr/local/lib:/usr/lib"
           python3 -u scripts/tests/test_vulkan_window_probe.py \
             --binary "$OUT_DIR/KisakCOD-vulkan-probe" \
             --video-driver cocoa --validation auto
+
+      - name: Show where the probe stopped
+        if: ${{ failure() }}
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -uo pipefail
+          export SDL_VULKAN_LIBRARY="$(brew --prefix vulkan-loader)/lib/libvulkan.1.dylib"
+          export DYLD_FALLBACK_LIBRARY_PATH="$(brew --prefix)/lib:/usr/local/lib:/usr/lib"
+          export SDL_VIDEODRIVER=cocoa
+          export VK_LOADER_DEBUG=error,warn,driver
+          export MVK_CONFIG_LOG_LEVEL=3
+          system_profiler SPDisplaysDataType
+          "$OUT_DIR/KisakCOD-vulkan-probe" --list-devices --validation off
+          echo "exit status $?"
+          sudo DevToolsSecurity -enable || true
+          lldb --batch -o run -k "thread backtrace all" -k quit \
+            -- "$OUT_DIR/KisakCOD-vulkan-probe" --list-devices --validation off
