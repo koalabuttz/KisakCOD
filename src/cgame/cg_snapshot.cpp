@@ -264,9 +264,9 @@ int CG_DObjCloneToBuffer(int localClientNum, centity_s *cent, const XAnimTree_s 
             MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\cgame\\cg_snapshot.cpp", 241, 0, "%s", "tree");
         goto LABEL_9;
     }
-    result = (int)G_AllocAnimClientTree();
-    SmallTree = (XAnimTree_s *)result;
-    if (result)
+    SmallTree = G_AllocAnimClientTree();
+    result = 0;
+    if (SmallTree)
     {
     LABEL_9:
         XAnimCloneClientAnimTree(serverTree, SmallTree);

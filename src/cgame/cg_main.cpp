@@ -1032,7 +1032,7 @@ void CG_RegisterGraphics(int localClientNum, const char *mapname)
             MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\cgame\\cg_main.cpp", 1026, 0, "%s", "cgs->fxs[i]");
         ++v7;
         ++v6;
-    } while ((int)v7 < (int)&cgsArray[0].holdBreathParams);
+    } while ((uintptr_t)v7 < (uintptr_t)&cgsArray[0].holdBreathParams);
     ProfLoad_End();
     ProfLoad_Begin("Register shellshocks");
     for (j = 1; j < 16; ++j)
@@ -1553,34 +1553,26 @@ void CG_Init(int localClientNum, int savegame)
 
 void CG_FreeWeapons(int localClientNum)
 {
-    unsigned int v2; // r26
-    XAnimTree_s **p_tree; // r30
-    int v4; // r3
-
-    v2 = 1;
-    if (BG_GetNumWeapons() > 1)
+    // Retail stepped &cg_weaponsArray[0][i].tree by 18 pointers (the 72-byte
+    // i386 weaponInfo_s); index the array so the stride follows the struct.
+    for (unsigned int weapIndex = 1; weapIndex < BG_GetNumWeapons(); ++weapIndex)
     {
-        p_tree = &cg_weaponsArray[0][1].tree;
-        do
+        weaponInfo_s *weapInfo = &cg_weaponsArray[0][weapIndex];
+
+        Com_SafeClientDObjFree(CG_WeaponDObjHandle(weapIndex), localClientNum);
+        if (localClientNum)
+            MyAssertHandler(
+                "c:\\trees\\cod3\\cod3src\\src\\cgame\\cg_local.h",
+                924,
+                0,
+                "%s\n\t(localClientNum) = %i",
+                "(localClientNum == 0)",
+                localClientNum);
+        if (weapInfo->tree)
         {
-            v4 = CG_WeaponDObjHandle(v2);
-            Com_SafeClientDObjFree(v4, localClientNum);
-            if (localClientNum)
-                MyAssertHandler(
-                    "c:\\trees\\cod3\\cod3src\\src\\cgame\\cg_local.h",
-                    924,
-                    0,
-                    "%s\n\t(localClientNum) = %i",
-                    "(localClientNum == 0)",
-                    localClientNum);
-            if (*p_tree)
-            {
-                XAnimFreeTree(*p_tree, 0);
-                *p_tree = 0;
-            }
-            ++v2;
-            p_tree += 18;
-        } while (v2 < BG_GetNumWeapons());
+            XAnimFreeTree(weapInfo->tree, 0);
+            weapInfo->tree = 0;
+        }
     }
     memset(cg_weaponsArray[localClientNum], 0, sizeof(weaponInfo_s[128]));
 }

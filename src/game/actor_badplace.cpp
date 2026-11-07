@@ -313,17 +313,11 @@ void Path_InitBadPlaces()
 
 void Path_ShutdownBadPlaces()
 {
-    int v0; // r31
-    unsigned __int16 *p_name; // r30
-
-    v0 = 32;
-    p_name = &g_badplaces[0].name;
-    do
-    {
-        Scr_SetString(p_name, 0);
-        --v0;
-        p_name += 20;
-    } while (v0);
+    // Retail stepped &g_badplaces[i].name by 20 shorts (40-byte i386 badplace_t);
+    // on x64 badplace_brush_t holds an 8-byte pointer, so index instead.
+    static_assert(LAYOUT_32BIT(sizeof(badplace_t) == 40));
+    for (unsigned int i = 0; i < ARRAY_COUNT(g_badplaces); ++i)
+        Scr_SetString(&g_badplaces[i].name, 0);
     memset(g_badplaces, 0, sizeof(g_badplaces));
 }
 
@@ -389,24 +383,27 @@ actor_s *Actor_BadPlace_UpdateFleeingActors()
 float Actor_BadPlace_GetMaximumFleeRadius()
 {
     int v0; // r28
-    unsigned __int8 *p_type; // r31
     double v2; // fp31
     int v3; // r4
     const char *v4; // r3
     double v5; // fp0
     double v6; // fp1
 
-    v0 = 32;
-    p_type = &g_badplaces[0].type;
+    // Retail stepped &g_badplaces[i].type by 40 bytes and read the arc radius at
+    // type+14 and the brush radius at type+6 (i386 offsets); use the fields.
+    static_assert(LAYOUT_32BIT(offsetof(badplace_t, parms.arc.radius) - offsetof(badplace_t, type) == 14));
+    static_assert(LAYOUT_32BIT(offsetof(badplace_t, parms.brush.radius) - offsetof(badplace_t, type) == 6));
     v2 = -1.0;
-    do
+    for (v0 = 0; v0 < (int)ARRAY_COUNT(g_badplaces); ++v0)
     {
-        v3 = *p_type;
-        if (!*p_type)
-            goto LABEL_11;
+        const badplace_t *place = &g_badplaces[v0];
+
+        v3 = place->type;
+        if (!v3)
+            continue;
         if (v3 == 1)
         {
-            v5 = *(float *)(p_type + 14);
+            v5 = place->parms.arc.radius;
         }
         else
         {
@@ -417,16 +414,13 @@ float Actor_BadPlace_GetMaximumFleeRadius()
                     v4 = va("unhandled bad place type %i", v3);
                     MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_badplace.cpp", 500, 0, v4);
                 }
-                goto LABEL_11;
+                continue;
             }
-            v5 = *(float *)(p_type + 6);
+            v5 = place->parms.brush.radius;
         }
         if (v5 > v2)
             v2 = v5;
-    LABEL_11:
-        --v0;
-        p_type += 40;
-    } while (v0);
+    }
     v6 = v2;
     return (float)v6;
 }
@@ -527,13 +521,12 @@ void Actor_BadPlace_Flee_Finish(actor_s *self, ai_state_t eNextState)
 void Path_RemoveBadPlace(unsigned int name)
 {
     int v1; // r10
-    unsigned __int16 *p_name; // r11
 
+    // Walks g_badplaces by index (retail stepped name by 20 shorts, the 40-byte
+    // i386 badplace_t). Falls back to -1 as the KISAKFIX sentinel did.
     v1 = 0;
-    p_name = &g_badplaces[0].name;
-    while (*p_name != name)
+    while (g_badplaces[v1].name != name)
     {
-        p_name += 20;
         ++v1;
         // KISAKFIX: magic-address sentinel — see Path_FindBadPlace.
         if (v1 >= 32)

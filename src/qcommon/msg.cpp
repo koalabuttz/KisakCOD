@@ -214,13 +214,18 @@ const netField_t playerStateFields[143] =
   { NETF_PL(meleeChargeDist), 8 },
   { NETF_PL(meleeChargeTime), 32 },
 };
+// The delta loops below step these tables by element; retail stepped them as
+// 3 ints (12-byte netField_t), which is 16 bytes on x64. hudelem_s keeps its
+// retail 172-byte stride on both widths.
+static_assert(LAYOUT_32BIT(sizeof(netField_t) == 12));
+static_assert(sizeof(hudelem_s) == 172);
 
 
 
 
 void TRACK_msg()
 {
-    track_static_alloc_internal((void *)playerStateFields, 1716, "playerStateFields", 9);
+    track_static_alloc_internal((void *)playerStateFields, sizeof(playerStateFields), "playerStateFields", 9);
 }
 
 void MSG_Init(msg_t *buf, unsigned __int8 *data, int length)
@@ -1392,7 +1397,7 @@ void MSG_WriteDeltaHudElems(msg_t *msg, hudelem_s *to, int count)
     int v9; // r24
     int v10; // r31
     int v11; // r9
-    int *p_offset; // r11
+    const netField_t *p_offset; // r11
     int v13; // r8
     const netField_t *v14; // r30
     int v15; // r31
@@ -1425,15 +1430,15 @@ void MSG_WriteDeltaHudElems(msg_t *msg, hudelem_s *to, int count)
         {
             v10 = 0;
             v11 = 0;
-            p_offset = &hudElemFields[0].offset;
+            p_offset = hudElemFields;
             v13 = 43;
             do
             {
-                if (*(he_type_t *)((char *)&to->type + *p_offset + v8 * 172))
+                if (*(he_type_t *)((char *)&to->type + p_offset->offset + v8 * 172))
                     v10 = v11;
                 --v13;
                 ++v11;
-                p_offset += 3;
+                ++p_offset; // i386 netField_t was 3 ints
             } while (v13);
             MSG_WriteBits(msg, v10, 6u);
             v14 = hudElemFields;
@@ -1457,7 +1462,7 @@ void MSG_ReadDeltaHudElems(msg_t *msg, hudelem_s *to, unsigned int count)
     int v8; // r26
     int i; // r21
     unsigned int v10; // r27
-    int *p_bits; // r29
+    const netField_t *p_bits; // r29
     unsigned int v12; // r25
     int v13; // r31
     msg_t *v14; // r3
@@ -1465,7 +1470,7 @@ void MSG_ReadDeltaHudElems(msg_t *msg, hudelem_s *to, unsigned int count)
     __int64 v16; // r11
     unsigned int v17; // r4
     unsigned int v18; // r11
-    int *p_offset; // r10
+    const netField_t *p_offset; // r10
     int v20; // r9
     hudelem_s *v21; // r31
 
@@ -1484,24 +1489,24 @@ void MSG_ReadDeltaHudElems(msg_t *msg, hudelem_s *to, unsigned int count)
         for (i = Bits; i; --i)
         {
             v10 = MSG_ReadBits(msg, 6u) + 1;
-            p_bits = &hudElemFields[0].bits;
+            p_bits = hudElemFields;
             v12 = v10;
             do
             {
-                v13 = *(p_bits - 1) + v8;
+                v13 = p_bits->offset + v8;
                 if (!MSG_ReadBits(msg, 1u))
                 {
                     *(he_type_t *)((char *)&to->type + v13) = HE_TYPE_FREE;
                     goto LABEL_18;
                 }
-                if (*p_bits)
+                if (p_bits->bits)
                 {
                     if (!MSG_ReadBits(msg, 1u))
                     {
                         *(he_type_t *)((char *)&to->type + v13) = HE_TYPE_FREE;
                         goto LABEL_18;
                     }
-                    v17 = *p_bits;
+                    v17 = p_bits->bits;
                     v14 = msg;
                 }
                 else
@@ -1524,17 +1529,17 @@ void MSG_ReadDeltaHudElems(msg_t *msg, hudelem_s *to, unsigned int count)
                 *(he_type_t *)((char *)&to->type + v13) = (he_type_t)MSG_ReadBits(v14, v17);
             LABEL_18:
                 --v12;
-                p_bits += 3;
+                ++p_bits; // i386 netField_t was 3 ints
             } while (v12);
             if (v10 < 0x2B)
             {
                 v18 = 43 - v10;
-                p_offset = &hudElemFields[v10].offset;
+                p_offset = &hudElemFields[v10];
                 do
                 {
                     --v18;
-                    v20 = *p_offset + v8;
-                    p_offset += 3;
+                    v20 = p_offset->offset + v8;
+                    ++p_offset; // i386 netField_t was 3 ints
                     *(he_type_t *)((char *)&to->type + v20) = HE_TYPE_FREE;
                 } while (v18);
             }
@@ -1570,7 +1575,7 @@ void MSG_WriteDeltaPlayerstate(msg_t *msg, playerState_s *to)
     int integer; // r11
     int v8; // r19
     int v9; // r23
-    const int *p_bits; // r26
+    const netField_t *p_bits; // r26
     int v11; // r27
     __int64 v12; // r11
     double v13; // fp0
@@ -1643,21 +1648,21 @@ void MSG_WriteDeltaPlayerstate(msg_t *msg, playerState_s *to)
         v8 = 0;
     }
     v9 = 143;
-    p_bits = &playerStateFields[0].bits;
+    p_bits = playerStateFields;
     do
     {
-        v11 = *(p_bits - 1);
+        v11 = p_bits->offset;
         if (!*(int *)((char *)&to->commandTime + v11))
         {
             MSG_WriteBits(msg, 0, 1u);
             goto LABEL_31;
         }
         MSG_WriteBits(msg, 1, 1u);
-        LODWORD(v12) = *p_bits;
-        if (*p_bits)
+        LODWORD(v12) = p_bits->bits;
+        if (p_bits->bits)
         {
             v16 = *(int *)((char *)&to->commandTime + v11);
-            v17 = *p_bits;
+            v17 = p_bits->bits;
             if ((int)v12 <= 0)
                 v17 = -(int)v12;
             v18 = v17 & 7;
@@ -1685,7 +1690,7 @@ void MSG_WriteDeltaPlayerstate(msg_t *msg, playerState_s *to)
             {
                 v15 = *(int *)((char *)&to->commandTime + v11);
             LABEL_30:
-                Com_Printf(CON_CHANNEL_SYSTEM, "%s:%i ", (const char *)*(p_bits - 2), v15);
+                Com_Printf(CON_CHANNEL_SYSTEM, "%s:%i ", p_bits->name, v15);
             }
         }
         else
@@ -1704,11 +1709,11 @@ void MSG_WriteDeltaPlayerstate(msg_t *msg, playerState_s *to)
             MSG_WriteBits(msg, 1, 1u);
             MSG_WriteBits(msg, *(int *)((char *)&to->commandTime + v11), 0x20u);
             if (v8)
-                Com_Printf(CON_CHANNEL_SYSTEM, "%s:%f ", (const char *)*(p_bits - 2), *(float *)((char *)&to->commandTime + v11));
+                Com_Printf(CON_CHANNEL_SYSTEM, "%s:%f ", p_bits->name, *(float *)((char *)&to->commandTime + v11));
         }
     LABEL_31:
         --v9;
-        p_bits += 3;
+        ++p_bits; // i386 netField_t was 3 ints
     } while (v9);
     v20 = 0;
     v21 = 2;
@@ -2082,7 +2087,7 @@ void MSG_ReadDeltaPlayerstate(msg_t *msg, playerState_s *to)
     int integer; // r11
     int print; // r18
     int v9; // r23
-    const int *p_bits; // r26
+    const netField_t *p_bits; // r26
     int v11; // r28
     unsigned int v12; // r11
     int Bits; // r6
@@ -2186,19 +2191,19 @@ void MSG_ReadDeltaPlayerstate(msg_t *msg, playerState_s *to)
     }
 
     v9 = 143;
-    p_bits = &playerStateFields[0].bits;
+    p_bits = playerStateFields;
     do
     {
-        v11 = *(p_bits - 1);
+        v11 = p_bits->offset;
         if (!MSG_ReadBits(msg, 1u))
         {
             *(int *)((char *)&to->commandTime + v11) = 0;
             goto LABEL_34;
         }
-        v12 = *p_bits;
-        if (*p_bits)
+        v12 = p_bits->bits;
+        if (p_bits->bits)
         {
-            v15 = *p_bits;
+            v15 = p_bits->bits;
             //v16 = _cntlzw(v12) == 0;
             v16 = (v12 & 0x80000000u) != 0;
             if (v16)
@@ -2241,15 +2246,15 @@ void MSG_ReadDeltaPlayerstate(msg_t *msg, playerState_s *to)
             *(float *)((char *)&to->commandTime + v11) = (float)Bits;
         LABEL_32:
             if (print)
-                Com_Printf(CON_CHANNEL_SYSTEM, "%s:%i ", (const char *)*(p_bits - 2), Bits);
+                Com_Printf(CON_CHANNEL_SYSTEM, "%s:%i ", p_bits->name, Bits);
             goto LABEL_34;
         }
         *(int *)((char *)&to->commandTime + v11) = MSG_ReadBits(msg, 0x20u);
         if (print)
-            Com_Printf(CON_CHANNEL_SYSTEM, "%s:%f ", (const char *)*(p_bits - 2), *(float *)((char *)&to->commandTime + v11));
+            Com_Printf(CON_CHANNEL_SYSTEM, "%s:%f ", p_bits->name, *(float *)((char *)&to->commandTime + v11));
     LABEL_34:
         --v9;
-        p_bits += 3;
+        ++p_bits; // i386 netField_t was 3 ints
     } while (v9);
     if (MSG_ReadBits(msg, 1u))
     {

@@ -211,7 +211,7 @@ void G_DebugDrawBrush_r(cLeafBrushNode_s *node, const float *color)
     brushes = node->data.leaf.brushes;
     do
     {
-        CM_ShowSingleBrushCollision((const cbrush_t *)((char *)cm.brushes + 16 * *brushes + 16 * __ROL4__(*brushes, 2)), color, DrawBrushPoly);
+        CM_ShowSingleBrushCollision(&cm.brushes[*brushes], color, DrawBrushPoly); // was an 80-byte (i386) stride
         ++v4;
         ++brushes;
     } while (v4 < node->leafBrushCount);

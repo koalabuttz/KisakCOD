@@ -273,7 +273,7 @@ void CG_mg42_PreControllers(int localClientNum, const DObj_s *obj, centity_s *ce
     if (v5)
     {
         cent->pose.cullIn = 0;
-        cent->pose.actor.proneType = (int)cgArray[0].refdefViewAngles;
+        cent->pose.turret.viewAngles = cgArray[0].refdefViewAngles;
     }
     else
     {
@@ -1770,11 +1770,12 @@ void CG_DrawEntEqDebug(const centity_s *cent)
     }
 }
 
+static_assert(sizeof(CEntActorInfo) == 16);
+static_assert(sizeof(CEntVehicleInfo) == 40);
+
 void CG_ClearUnion(int localClientNum, centity_s *cent)
 {
     FxEffect *effect; // r4
-    CEntActorInfo *v4; // r11
-    int v5; // ctr
 
     switch (cent->pose.eTypeUnion)
     {
@@ -1787,26 +1788,22 @@ void CG_ClearUnion(int localClientNum, centity_s *cent)
         cent->pose.fx.effect = 0;
         break;
     case 0xAu:
-        cent->pose.actor.proneType = 0;
-        *(_QWORD *)&cent->pose.fx.effect = 0;
-        cent->pose.actor.height = 0.0;
+        // Retail cleared the 16-byte actor/turret view: proneType, then a
+        // 64-bit store at fx.effect (offset 4 on i386), then height.
+        // On x64 fx.effect sits at offset 8, so clear the bytes by name.
+        memset(&cent->pose.actor, 0, sizeof(cent->pose.actor));
         break;
     case 0xBu:
     case 0xDu:
-        v4 = &cent->pose.actor;
-        v5 = 10;
-        do
-        {
-            v4->proneType = 0;
-            v4 = (CEntActorInfo *)((char *)v4 + 4);
-            --v5;
-        } while (v5);
+        // Retail cleared ten 4-byte words: the whole vehicle view.
+        memset(&cent->pose.vehicle, 0, sizeof(cent->pose.vehicle));
         break;
     case 0xEu:
     case 0x10u:
-        cent->pose.actor.proneType = 0;
-        *(_QWORD *)&cent->pose.fx.effect = 0;
-        cent->pose.actor.height = 0.0;
+        // Retail cleared the 16-byte actor/turret view: proneType, then a
+        // 64-bit store at fx.effect (offset 4 on i386), then height.
+        // On x64 fx.effect sits at offset 8, so clear the bytes by name.
+        memset(&cent->pose.actor, 0, sizeof(cent->pose.actor));
         break;
     default:
         break;

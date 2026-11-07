@@ -382,7 +382,6 @@ void Sentient_SetEnemy(sentient_s *self, gentity_s *enemy, int bNotify)
 sentient_s *Sentient_FirstSentient(int iTeamFlags)
 {
     int v2; // r10
-    team_t *i; // r11
 
     if (iTeamFlags > 31)
         MyAssertHandler(
@@ -391,13 +390,16 @@ sentient_s *Sentient_FirstSentient(int iTeamFlags)
             0,
             "%s",
             "iTeamFlags <= (1 << TEAM_NUM_TEAMS) - 1");
-    v2 = 0;
-    for (i = &level.sentients->eTeam; !*((_BYTE *)i + 106) || ((1 << *i) & iTeamFlags) == 0; i += 29)
+    // Retail walked eTeam at a 116-byte stride and read inuse at +106.
+    static_assert(LAYOUT_32BIT(sizeof(sentient_s) == 116));
+    static_assert(LAYOUT_32BIT(offsetof(sentient_s, inuse) - offsetof(sentient_s, eTeam) == 106));
+    for (v2 = 0; v2 < 33; ++v2)
     {
-        if (++v2 >= 33)
-            return 0;
+        const sentient_s *sentient = &level.sentients[v2];
+        if (sentient->inuse && ((1 << sentient->eTeam) & iTeamFlags) != 0)
+            return &level.sentients[v2];
     }
-    return &level.sentients[v2];
+    return 0;
 }
 
 sentient_s *Sentient_NextSentient(sentient_s *pPrevSentient, int iTeamFlags)

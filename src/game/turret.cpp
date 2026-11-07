@@ -632,7 +632,7 @@ int turret_CanTargetPoint(const gentity_s *self, const float *vPoint, float *vSo
     TurretInfo *pTurretInfo; // r27
     double v10; // fp2
     float *arcmin; // r30
-    int v12; // r27
+    ptrdiff_t v12; // r27: v22 - localAngles (a 64-bit difference on x64)
     int v13; // r28
     const float *currentAngles; // r29
     double v15; // fp31

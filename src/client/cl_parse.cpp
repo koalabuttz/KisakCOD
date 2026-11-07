@@ -373,7 +373,7 @@ void CL_ParseGamestate(char *configstrings)
     LABEL_15:
         ++v3;
         ++v2;
-    } while ((int)v3 < (int)clients[0].mapname);
+    } while ((uintptr_t)v3 < (uintptr_t)clients[0].mapname);
 }
 
 void CL_ParseServerCommands(msg_t *msg)

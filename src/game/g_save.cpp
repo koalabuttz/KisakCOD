@@ -1591,7 +1591,7 @@ void G_LoadModelPrecacheList(SaveGame *save)
         else
             v4 = 0;
         *modelMap++ = v4;
-    } while ((int)modelMap < (int)&level.priorityNodeBias);
+    } while ((uintptr_t)modelMap < (uintptr_t)&level.priorityNodeBias);
 }
 
 void G_ClearConfigstrings(int iFirst, int iCount)
@@ -1724,7 +1724,7 @@ void G_SaveWeaponCue(SaveGame *save)
             v4 = 0;
         SaveMemory_SaveWrite(&v4, 4, save);
         ++droppedWeaponCue;
-    } while ((int)droppedWeaponCue < (int)&level.changelevel);
+    } while ((uintptr_t)droppedWeaponCue < (uintptr_t)&level.changelevel);
 }
 
 void G_LoadWeaponCue(SaveGame *save)
@@ -1767,7 +1767,7 @@ void G_LoadWeaponCue(SaveGame *save)
         if (!v5)
             droppedWeaponCue->setEnt(&g_entities[v4 - 1]);
         ++droppedWeaponCue;
-    } while ((int)droppedWeaponCue < (int)&level.changelevel);
+    } while ((uintptr_t)droppedWeaponCue < (uintptr_t)&level.changelevel);
 }
 
 void G_SaveDvars(SaveGame *save)

@@ -924,27 +924,17 @@ LABEL_14:
 
 void G_ShutdownClientDemo()
 {
-    int v0; // r29
-    int num_entities; // r11
-    XAnimTree_s **p_pAnimTree; // r31
-
-    v0 = 0;
-    num_entities = level.num_entities;
-    if (level.num_entities > 0)
+    // Retail stepped &g_entities[i].pAnimTree by 157 pointers (628-byte i386 gentity_s).
+    for (int entIndex = 0; entIndex < level.num_entities; ++entIndex)
     {
-        p_pAnimTree = &g_entities[0].pAnimTree;
-        do
+        gentity_s *ent = &g_entities[entIndex];
+
+        if (ent->pAnimTree)
         {
-            if (*p_pAnimTree)
-            {
-                XAnimClearTree(*p_pAnimTree);
-                Com_XAnimFreeSmallTree(*p_pAnimTree);
-                num_entities = level.num_entities;
-                *p_pAnimTree = 0;
-            }
-            ++v0;
-            p_pAnimTree += 157;
-        } while (v0 < num_entities);
+            XAnimClearTree(ent->pAnimTree);
+            Com_XAnimFreeSmallTree(ent->pAnimTree);
+            ent->pAnimTree = 0;
+        }
     }
 }
 
@@ -1678,7 +1668,6 @@ void G_InitGentity(gentity_s *e)
 void G_PrintEntities()
 {
     int v0; // r30
-    unsigned __int16 *p_model; // r31
     unsigned int v2; // r11
     double v3; // fp31
     double v4; // fp30
@@ -1690,23 +1679,26 @@ void G_PrintEntities()
     double v10; // fp29
     const char *v11; // r3
 
-    v0 = 0;
-    if (level.num_entities > 0)
+    // Retail walked &g_entities[i].model in 314-short (628-byte i386 gentity_s)
+    // steps, reaching r.inuse, classname, r.currentOrigin and s.eType by byte
+    // offsets from model; use the fields.
+    static_assert(LAYOUT_32BIT(offsetof(gentity_s, model) - offsetof(gentity_s, r.currentOrigin) == 14 * 4));
+    for (v0 = 0; v0 < level.num_entities; ++v0)
     {
-        p_model = &g_entities[0].model;
-        do
+        const gentity_s *ent = &g_entities[v0];
+
         {
-            if (*((_BYTE *)p_model - 112))
+            if (ent->r.inuse)
             {
-                v2 = p_model[2];
-                if (scr_const.script_model == v2 && *p_model)
+                v2 = ent->classname;
+                if (scr_const.script_model == v2 && ent->model)
                 {
-                    const char *modelName = G_GetModel(*p_model)->name;
-                    v3 = *((float *)p_model - 12);
-                    v4 = *((float *)p_model - 13);
-                    v5 = *((float *)p_model - 14);
-                    v6 = SL_ConvertToStringSafe(p_model[2]);
-                    EntityTypeName = BG_GetEntityTypeName(*((unsigned __int8 *)p_model - 280));
+                    const char *modelName = G_GetModel(ent->model)->name;
+                    v3 = ent->r.currentOrigin[2];
+                    v4 = ent->r.currentOrigin[1];
+                    v5 = ent->r.currentOrigin[0];
+                    v6 = SL_ConvertToStringSafe(ent->classname);
+                    EntityTypeName = BG_GetEntityTypeName(ent->s.eType);
                     Com_Printf(
                         CON_CHANNEL_SERVER,
                         "%4i: Type: %s, Class: %s, model '%s', origin: %6.1f %6.1f %6.1f\n",
@@ -1721,10 +1713,10 @@ void G_PrintEntities()
                 else
                 {
                     const char *className = SL_ConvertToStringSafe(v2);
-                    v8 = *((float *)p_model - 12);
-                    v9 = *((float *)p_model - 13);
-                    v10 = *((float *)p_model - 14);
-                    v11 = BG_GetEntityTypeName(*((unsigned __int8 *)p_model - 280));
+                    v8 = ent->r.currentOrigin[2];
+                    v9 = ent->r.currentOrigin[1];
+                    v10 = ent->r.currentOrigin[0];
+                    v11 = BG_GetEntityTypeName(ent->s.eType);
                     Com_Printf(
                         CON_CHANNEL_SERVER,
                         "%4i: Type: %s, Class: %s, origin: %6.1f %6.1f %6.1f\n",
@@ -1736,9 +1728,7 @@ void G_PrintEntities()
                         v8);
                 }
             }
-            ++v0;
-            p_model += 314;
-        } while (v0 < level.num_entities);
+        }
     }
 }
 
@@ -1774,21 +1764,22 @@ void G_FreeEntityRefs(gentity_s *ed)
 {
     int number; // r29
     int num_entities; // r10
-    unsigned __int16 *p_groundEntityNum; // r11
     gclient_s *client; // r31
 
     number = ed->s.number;
     if ((ed->flags & 0x100000) != 0 && level.num_entities > 0)
     {
+        // Retail stepped &g_entities[i].s.groundEntityNum by 314 shorts (628-byte
+        // i386 gentity_s) and read r.inuse 46 bytes on; index the entities.
+        static_assert(LAYOUT_32BIT(offsetof(gentity_s, r.inuse) - offsetof(gentity_s, s.groundEntityNum) == 46));
         num_entities = level.num_entities;
-        p_groundEntityNum = &g_entities[0].s.groundEntityNum;
-        do
+        for (int entIndex = 0; entIndex < num_entities; ++entIndex)
         {
-            if (*((_BYTE *)p_groundEntityNum + 46) && *p_groundEntityNum == number)
-                *p_groundEntityNum = ENTITYNUM_NONE;
-            --num_entities;
-            p_groundEntityNum += 314;
-        } while (num_entities);
+            gentity_s *ent = &g_entities[entIndex];
+
+            if (ent->r.inuse && ent->s.groundEntityNum == number)
+                ent->s.groundEntityNum = ENTITYNUM_NONE;
+        }
     }
     if ((ed->flags & 0x400000) != 0 && g_entities[0].r.inuse)
     {
@@ -1826,7 +1817,7 @@ void G_FreeAllEntityRefs()
     droppedWeaponCue = level.droppedWeaponCue;
     do
         droppedWeaponCue++->setEnt(0);
-    while ((int)droppedWeaponCue < (int)&level.droppedWeaponCue[32]);
+    while ((uintptr_t)droppedWeaponCue < (uintptr_t)&level.droppedWeaponCue[32]);
     Targ_RemoveAll();
 }
 
@@ -1860,65 +1851,42 @@ void G_FreeEntityAfterEvent(gentity_s *ent)
     ent->r.eventType |= 1u;
 }
 
+// Replay history buffer: first/last free entity, then each free entity's
+// nextFree link, all as raw pointers (4 bytes each on i386, 8 on x64).
 int G_SaveFreeEntities(unsigned __int8 *buf)
 {
-    gentity_s *firstFreeEnt; // r9
-    int result; // r3
-    unsigned __int8 *v4; // r11
+    gentity_s *ent;
+    int result;
 
     if (buf)
     {
-        *(unsigned int *)buf = (unsigned int)level.firstFreeEnt;
-        *((unsigned int *)buf + 1) = (unsigned int)level.lastFreeEnt;
+        memcpy(buf, &level.firstFreeEnt, sizeof(gentity_s *));
+        memcpy(buf + sizeof(gentity_s *), &level.lastFreeEnt, sizeof(gentity_s *));
     }
-    firstFreeEnt = level.firstFreeEnt;
-    result = 8;
-    if (level.firstFreeEnt)
+    result = 2 * sizeof(gentity_s *);
+    for (ent = level.firstFreeEnt; ent; ent = ent->nextFree)
     {
-        v4 = buf + 8;
-        do
-        {
-            if (buf)
-            {
-                *v4 = (unsigned __int8)firstFreeEnt->nextFree;
-                v4[1] = BYTE1(firstFreeEnt->nextFree);
-                v4[2] = BYTE2(firstFreeEnt->nextFree);
-                v4[3] = HIBYTE(firstFreeEnt->nextFree);
-            }
-            firstFreeEnt = firstFreeEnt->nextFree;
-            result += 4;
-            v4 += 4;
-        } while (firstFreeEnt);
+        if (buf)
+            memcpy(buf + result, &ent->nextFree, sizeof(gentity_s *));
+        result += sizeof(gentity_s *);
     }
     return result;
 }
 
 void G_LoadFreeEntities(unsigned __int8 *buf)
 {
-    _BYTE *v2; // r11
-    bool v3; // cr58
-    unsigned __int8 *v4; // r9
-    unsigned __int8 v5; // r10
+    gentity_s *ent;
+    unsigned __int8 *pos;
 
     if (!buf)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_utils.cpp", 2608, 0, "%s", "buf");
-    v2 = *(_BYTE **)buf;
-    v3 = *(unsigned int *)buf == 0;
-    level.firstFreeEnt = *(gentity_s **)buf;
-    level.lastFreeEnt = (gentity_s *)*((unsigned int *)buf + 1);
-    if (!v3)
+    memcpy(&level.firstFreeEnt, buf, sizeof(gentity_s *));
+    memcpy(&level.lastFreeEnt, buf + sizeof(gentity_s *), sizeof(gentity_s *));
+    pos = buf + 2 * sizeof(gentity_s *);
+    for (ent = level.firstFreeEnt; ent; ent = ent->nextFree)
     {
-        v4 = buf + 8;
-        do
-        {
-            v2[624] = *v4;
-            v2[625] = v4[1];
-            v2[626] = v4[2];
-            v5 = v4[3];
-            v4 += 4;
-            v2[627] = v5;
-            v2 = (_BYTE *)*((unsigned int *)v2 + 156);
-        } while (v2);
+        memcpy(&ent->nextFree, pos, sizeof(gentity_s *));
+        pos += sizeof(gentity_s *);
     }
 }
 
