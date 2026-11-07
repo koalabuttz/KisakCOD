@@ -84,26 +84,37 @@ The Mac build uses the same POSIX platform layer as Linux (`src/linux`,
 Hosted CI (`.github/workflows/build-kisakcod-macos.yaml`) builds Debug and
 RelWithDebInfo for each architecture on its own runner (`macos-26` for arm64,
 `macos-15-intel` for x86_64), checks that the arm64 binary contains no fused
-multiply-add instructions, and runs the asset-free bootstrap test:
+multiply-add instructions, and runs the asset-free checks:
 
 ```sh
-python3 scripts/tests/test_linux_bootstrap.py --arch macos-arm64 build-macos-bin/KisakCOD-dedi
+python3 scripts/tests/run_linux_checks.py --arch macos-arm64 \
+    --build-dir build-macos --binary bin/KisakCOD-dedi --cxx clang++
 ```
 
-That test reads the Mach-O header (64-bit executable, CPU type), checks
-`--help` and `--version`, and starts the engine without game data until it
-stops at the missing `fileSysCheck.cfg` and, with a generated stub tree, at the
-first missing fastfile. The RelWithDebInfo binaries are kept as CI artifacts
-for 14 days.
+- **bootstrap** reads the Mach-O header (64-bit executable, CPU type), checks
+  `--help` and `--version`, and starts the engine without game data until it
+  stops at the missing `fileSysCheck.cfg` and, with a generated stub tree, at
+  the first missing fastfile.
+- **runtime** builds `src/linux/sys_posix.cpp` and the platform wrappers with
+  the build's own flags and runs their self-tests: events and timed waits
+  (the macOS relative wait), threads, the render-thread handshakes, console
+  input through a pipe, files and the command line.
+- **net_deadline** and **udp** run the network layer against real loopback
+  sockets, including an oversize datagram (the `recvmsg` path).
+- **sys_fileio** and **sys_virtualmem** run the file and virtual-memory
+  self-tests, the latter on Apple silicon's 16 KiB pages (decommit by
+  remapping).
+
+The other `run_linux_checks.py` checks are i386-only and stay on Linux. The
+RelWithDebInfo binaries are kept as CI artifacts for 14 days.
 
 ## Not covered yet
 
 - No map has been loaded on a Mac: hosted runners have no game data. The first
   real run will be on an Intel MacBook Pro (x86_64).
 - Hidden runtime differences that only game data reaches, such as the 16 KiB
-  pages of Apple silicon (the virtual memory layer keeps 4 KiB commit units on
-  bigger pages, tested on Linux under qemu with 16 KiB pages) and float results
-  compared with x86.
+  pages of Apple silicon under a real map load (the virtual-memory self-test
+  covers the layer itself) and float results compared with x86.
 - The client: the renderer path on macOS (DXVK on MoltenVK or the planned
   Vulkan back end), SDL3, OpenAL Soft, the app bundle and signing are later
   steps.

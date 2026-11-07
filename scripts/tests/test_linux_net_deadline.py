@@ -373,6 +373,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--cxx", default=os.environ.get("CXX", "clang++"),
                         help="C++ compiler (default: clang++, or $CXX)")
+    parser.add_argument("--native", action="store_true",
+                        help="build the harness for the host's own width instead of -m32 (64-bit and macOS jobs)")
     parser.add_argument("--timeout", type=int, default=120,
                         help="hard timeout for the compiled harness, in seconds")
     args = parser.parse_args()
@@ -391,7 +393,7 @@ def main() -> int:
 
         binary = workdir / "deadline_harness"
         compile_cmd = [
-            args.cxx, "-m32", "-std=c++20", "-O1", "-g",
+            args.cxx, *([] if args.native else ["-m32"]), "-std=c++20", "-O1", "-g",
             "-Wall", "-Wextra", "-Wno-unused-parameter",
             str(harness), "-o", str(binary),
         ]
