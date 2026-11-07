@@ -150,6 +150,11 @@ When the hosted workflows run:
 
 What makes them faster without dropping a check:
 
+- Ubuntu package installs use the main archive in place of the hosted runner's
+  slow Azure mirror. Arm ports and other repositories are unchanged. Each job
+  restores its latest downloaded `.deb` cache and saves a new version per run,
+  so newly downloaded package versions are retained too. The installer still
+  refreshes package lists; normal APT signature and hash checks remain enabled.
 - The four Linux jobs that build the engine with CMake (window, native, native
   D3D9 boundary, device probe) compile through ccache
   (`scripts/ci/use-ccache.sh`). Each job and configuration restores the newest

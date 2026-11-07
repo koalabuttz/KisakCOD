@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+"""Exercise CI mirror selection and installer failures without sudo or network."""
+import importlib.util
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import unittest
+
+ROOT = Path(__file__).resolve().parents[2]
+spec = importlib.util.spec_from_file_location('ubuntu_mirror', ROOT / 'scripts/ci/ubuntu-mirror.py')
+mirror = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mirror)
+
+
+class MirrorTests(unittest.TestCase):
+    def test_both_source_formats_preserve_repository_options(self):
+        with tempfile.TemporaryDirectory() as temp:
+            apt = Path(temp)
+            (apt / 'sources.list.d').mkdir()
+            fixtures = {
+                'sources.list': (
+                    'deb [arch=amd64,i386 signed-by=/key.gpg] '
+                    'http://azure.archive.ubuntu.com/ubuntu noble main universe\n'),
+                'sources.list.d/ubuntu.sources': (
+                    'Types: deb deb-src\n'
+                    'URIs: https://azure.archive.ubuntu.com/ubuntu/\n'
+                    'Suites: noble noble-updates noble-backports\n'
+                    'Components: main restricted universe multiverse\n'
+                    'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n'),
+                'sources.list.d/extra.list': (
+                    'deb http://azure.archive.ubuntu.com/ubuntu noble-security main\n'),
+            }
+            for name, content in fixtures.items():
+                (apt / name).write_text(content)
+            mirror.use_main_archive(apt)
+            for name, content in fixtures.items():
+                expected = content.replace('http://azure.archive.ubuntu.com/ubuntu',
+                                           'https://archive.ubuntu.com/ubuntu')
+                expected = expected.replace('https://azure.archive.ubuntu.com/ubuntu',
+                                            'https://archive.ubuntu.com/ubuntu')
+                self.assertEqual((apt / name).read_text(), expected)
+
+    def test_arm_ports_security_and_third_party_sources_stay_unchanged(self):
+        with tempfile.TemporaryDirectory() as temp:
+            apt = Path(temp)
+            path = apt / 'sources.list'
+            original = (
+                'deb http://ports.ubuntu.com/ubuntu-ports noble main\n'
+                'deb http://security.ubuntu.com/ubuntu noble-security main\n'
+                'deb https://packages.microsoft.com/repos/code stable main\n'
+                'deb https://azure.archive.ubuntu.com/ubuntu-other noble main\n'
+                'deb https://azure.archive.ubuntu.com.example/ubuntu noble main\n')
+            path.write_text(original)
+            before = path.stat().st_mtime_ns
+            mirror.use_main_archive(apt)
+            self.assertEqual(path.read_text(), original)
+            self.assertEqual(path.stat().st_mtime_ns, before)
+
+    def test_missing_sources_and_repeated_setup_are_harmless(self):
+        with tempfile.TemporaryDirectory() as temp:
+            apt = Path(temp)
+            mirror.use_main_archive(apt)
+            path = apt / 'sources.list'
+            path.write_text('deb http://azure.archive.ubuntu.com/ubuntu noble main\n')
+            mirror.use_main_archive(apt)
+            before = path.stat().st_mtime_ns
+            mirror.use_main_archive(apt)
+            self.assertEqual(path.stat().st_mtime_ns, before)
+
+
+class InstallerTests(unittest.TestCase):
+    def run_installer(self, args, fail=''):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            sudo = folder / 'sudo'
+            # The only privileged commands run by the script are recorded here;
+            # no host apt configuration or installed package can be changed.
+            sudo.write_text(f'#!{sys.executable}\n' + '''
+import json, os, sys
+from pathlib import Path
+args = sys.argv[1:]
+entry = {'args': args}
+if args[0] == 'tee':
+    entry['stdin'] = sys.stdin.read()
+with open(os.environ['FAKE_SUDO_LOG'], 'a') as log:
+    log.write(json.dumps(entry) + '\\n')
+if args[0] == 'mkdir':
+    assert Path(args[-1]).is_relative_to(os.environ['RUNNER_TEMP'])
+    Path(args[-1]).mkdir(parents=True, exist_ok=True)
+apt_args = args[1:] if args[0] == 'DEBIAN_FRONTEND=noninteractive' else args
+if apt_args[0] == 'apt-get' and apt_args[1] == os.environ.get('FAKE_APT_FAIL'):
+    sys.exit(42)
+''')
+            sudo.chmod(0o755)
+            log = folder / 'commands.jsonl'
+            env = dict(os.environ, PATH=f'{folder}:{os.environ["PATH"]}',
+                       RUNNER_TEMP=temp, FAKE_SUDO_LOG=str(log), FAKE_APT_FAIL=fail)
+            env.pop('KISAK_APT_ARCHIVES', None)
+            result = subprocess.run(['bash', str(ROOT / 'scripts/ci/apt-install.sh'), *args],
+                                    env=env, capture_output=True, text=True, timeout=10)
+            entries = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
+            return result, entries, str(folder / 'apt-archives')
+
+    def test_mirror_setup_precedes_update_and_install_keeps_requested_packages(self):
+        result, entries, archives = self.run_installer(['clang', 'libsdl2-dev:i386'])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        commands = [entry['args'] for entry in entries]
+        setup = ['python3', str(ROOT / 'scripts/ci/ubuntu-mirror.py')]
+        self.assertLess(commands.index(setup), commands.index(['apt-get', 'update']))
+        install = next(cmd for cmd in commands if 'install' in cmd)
+        self.assertEqual(install, ['DEBIAN_FRONTEND=noninteractive', 'apt-get', 'install', '-y',
+                                   '-o', f'Dir::Cache::Archives={archives}', 'clang', 'libsdl2-dev:i386'])
+        config = next(entry['stdin'] for entry in entries if entry['args'][0] == 'tee')
+        self.assertIn('Acquire::Retries "5";', config)
+        self.assertNotIn('AllowUnauthenticated', config)
+
+    def test_second_install_uses_existing_lists(self):
+        result, entries, _ = self.run_installer(['--no-update', 'g++-multilib'])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        commands = [entry['args'] for entry in entries]
+        self.assertNotIn(['apt-get', 'update'], commands)
+        self.assertFalse(any(cmd[0] == 'python3' for cmd in commands))
+        self.assertEqual(next(cmd for cmd in commands if 'install' in cmd)[-1], 'g++-multilib')
+
+    def test_update_failure_stops_before_install(self):
+        result, entries, _ = self.run_installer(['clang'], fail='update')
+        self.assertEqual(result.returncode, 42)
+        self.assertFalse(any('install' in entry['args'] for entry in entries))
+
+    def test_install_failure_is_not_hidden_by_cache_cleanup(self):
+        result, entries, _ = self.run_installer(['clang'], fail='install')
+        self.assertEqual(result.returncode, 42)
+        self.assertFalse(any(entry['args'][0] == 'chown' for entry in entries))
+
+    def test_missing_packages_exit_before_privileged_commands(self):
+        for args in ([], ['--no-update']):
+            with self.subTest(args=args):
+                result, entries, _ = self.run_installer(args)
+                self.assertEqual(result.returncode, 2)
+                self.assertEqual(entries, [])
+
+
+if __name__ == '__main__':
+    unittest.main()

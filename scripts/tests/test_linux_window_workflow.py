@@ -961,6 +961,14 @@ class CiCacheTests(unittest.TestCase):
                 self.assertTrue(cache['uses'].startswith('actions/cache@'))
                 self.assertEqual(cache['with']['path'], '${{ runner.temp }}/apt-archives')
                 self.assertIn('${{ github.job }}', cache['with']['key'])
+                # Caches are immutable: a new key must save updated .deb files,
+                # while the prefix can restore the previous run's packages.
+                self.assertIn('${{ github.run_id }}', cache['with']['key'])
+                self.assertIn('${{ github.run_attempt }}', cache['with']['key'])
+                self.assertEqual(cache['with']['restore-keys'],
+                                 'apt-${{ github.job }}-${{ runner.arch }}-v1')
+                self.assertGreater(int(job['timeout-minutes']),
+                                   max(int(job['steps'][index]['timeout-minutes']) for index in installs))
                 # Only the first install refreshes the package lists.
                 for index in installs[1:]:
                     self.assertIn('apt-install.sh --no-update', runs[index])
@@ -968,6 +976,10 @@ class CiCacheTests(unittest.TestCase):
         self.assertIn('Acquire::Retries', script)
         self.assertIn('Dir::Cache::Archives=$archives', script)
         self.assertIn('${RUNNER_TEMP:-/tmp}/apt-archives', script)
+
+    def test_apt_installer_regressions_run_in_ci(self):
+        self.assertIn('python3 scripts/tests/test_ci_apt_install.py',
+                      self.step('native', 'Check test-runner configuration and failure handling')['run'])
 
     def test_ccache_setup_launches_cmake_compiles_only(self):
         script = (ROOT / 'scripts/ci/use-ccache.sh').read_text()

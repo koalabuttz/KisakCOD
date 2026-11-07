@@ -5,12 +5,12 @@
 #
 # The runners' Azure package mirror has at times served packages at a few
 # tens of KB/s, so a plain apt-get install ran past the step timeout before
-# anything was built.  This keeps the downloaded .deb files in
+# anything was built, even with retries. Replace that mirror with Ubuntu's
+# main archive before refreshing the package lists. Downloaded .deb files stay in
 # $RUNNER_TEMP/apt-archives (or $KISAK_APT_ARCHIVES), which the workflow
 # restores and saves with actions/cache, so once a job has saved its cache it
-# only downloads packages that have been updated since.  apt also retries a stalled download instead
-# of waiting on it.  The installed packages are exactly the ones named; only
-# where their files are downloaded to changes.
+# only downloads packages that have been updated since. apt also retries a
+# stalled download. Package choices and signature checks stay unchanged.
 set -euo pipefail
 
 update=1
@@ -35,6 +35,7 @@ Acquire::https::Timeout "60";
 EOF
 
 if (( update )); then
+    sudo python3 "$(dirname -- "$0")/ubuntu-mirror.py"
     sudo apt-get update
 fi
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
