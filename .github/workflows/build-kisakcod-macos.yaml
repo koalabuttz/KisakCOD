@@ -468,8 +468,9 @@ jobs:
           cmake --build "$BUILD_DIR" --target KisakCOD-vulkan-probe --parallel "$(sysctl -n hw.ncpu)"
           lipo -archs "$OUT_DIR/KisakCOD-vulkan-probe" | grep -qx "${{ matrix.arch }}"
           otool -L "$OUT_DIR/KisakCOD-vulkan-probe"
-          # The loader is opened at run time through SDL, never linked.
-          if otool -L "$OUT_DIR/KisakCOD-vulkan-probe" | grep -Eqi 'vulkan|moltenvk'; then
+          # The loader is opened at run time through SDL, never linked. otool's
+          # first line names the probe itself, so it is skipped.
+          if otool -L "$OUT_DIR/KisakCOD-vulkan-probe" | tail -n +2 | grep -Eqi 'vulkan|moltenvk'; then
             echo "KisakCOD-vulkan-probe must not link the Vulkan loader or MoltenVK" >&2
             exit 1
           fi
