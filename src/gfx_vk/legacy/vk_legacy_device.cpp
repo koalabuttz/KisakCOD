@@ -19,6 +19,8 @@ void VLog(Device &device, const char *prefix, const char *format, va_list args)
     device.desc.log(device.desc.logUser, line);
 }
 
+// The back buffer and the front buffer: two render targets that Present
+// swaps (see FrontBuffer in vk_legacy.h).
 bool CreateBackBuffer(Device &device, uint32_t width, uint32_t height)
 {
     TextureDesc desc;
@@ -32,10 +34,25 @@ bool CreateBackBuffer(Device &device, uint32_t width, uint32_t height)
     device.backBuffer = CreateTextureInternal(device, desc, 0);
     if (!device.backBuffer)
         return Fail(device, "cannot create the %ux%u back buffer", width, height);
-    device.backBufferSurface.texture = device.backBuffer;
-    device.backBufferSurface.face = 0;
-    device.backBufferSurface.level = 0;
+    desc.name = "front buffer";
+    device.frontBuffer = CreateTextureInternal(device, desc, 0);
+    if (!device.frontBuffer)
+        return Fail(device, "cannot create the %ux%u front buffer", width, height);
+    device.backBufferSurface = Surface{device.backBuffer, 0, 0, false};
+    device.frontBufferSurface = Surface{device.frontBuffer, 0, 0, false};
     return true;
+}
+
+void DestroyBackBuffer(Device &device)
+{
+    for (Texture **texture : {&device.backBuffer, &device.frontBuffer})
+    {
+        ForgetTexture(device, *texture);
+        DestroyTextureNow(device, *texture);
+        *texture = nullptr;
+    }
+    device.backBufferSurface.texture = nullptr;
+    device.frontBufferSurface.texture = nullptr;
 }
 
 // 1x1 textures of each kind, cleared to zero, for samplers with nothing bound.
@@ -248,8 +265,7 @@ void DestroyDevice(Device *device)
         DestroyTextureNow(*device, texture);
         texture = nullptr;
     }
-    DestroyTextureNow(*device, device->backBuffer);
-    device->backBuffer = nullptr;
+    DestroyBackBuffer(*device);
     DestroyBuffer(core, device->zeroVertices);
     gfx_vk::WaitIdle(core);
     if (!device->shaderCachePath.empty())
@@ -267,16 +283,15 @@ const DeviceStats &Stats(const Device *device) { return device->stats; }
 
 Surface *BackBuffer(Device *device) { return &device->backBufferSurface; }
 
+Surface *FrontBuffer(Device *device) { return &device->frontBufferSurface; }
+
 bool ResizeBackBuffer(Device *device, uint32_t width, uint32_t height)
 {
     if (!Usable(*device) || !width || !height)
         return false;
     EndPassIfOpen(*device);
-    Texture *old = device->backBuffer;
     const bool wasTarget = device->renderTargets[0] == &device->backBufferSurface;
-    ForgetTexture(*device, old);
-    DestroyTextureNow(*device, old);
-    device->backBuffer = nullptr;
+    DestroyBackBuffer(*device);
     if (!CreateBackBuffer(*device, width, height))
         return false;
     if (wasTarget)

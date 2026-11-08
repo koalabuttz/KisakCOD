@@ -62,6 +62,13 @@ device it replaces.
   viewport and scissor like D3D9's.
 * **Present.** The back buffer is an offscreen A8R8G8B8 image; `Present` blits it
   into the swapchain image and presents. A minimised window skips the frame.
+  There are two such images, and `Present` swaps them, as D3D9's DISCARD swap
+  effect allows: the one just shown becomes the front buffer (`FrontBuffer`),
+  and the next frame draws into the other. So the front buffer always holds
+  the last frame shown, even while the next one is half drawn. The engine's
+  screenshot command runs on the main thread while the render thread draws,
+  and PC run 2 found screenshots taken from the back buffer were half-drawn
+  frames, 1.8 times too bright.
 
 ## Resources and D3D9's lock rules
 
@@ -94,8 +101,10 @@ The file holds the translator's revision, a digest of
 `vulkan_shaders.cmake` computes at configure time (editing either source
 re-runs the configure step). A file from another revision, another file
 version, or with a wrong checksum is ignored whole and replaced at the next
-write. The device stats count the shaders the cache served (`shadersCached`,
-`N from the cache` in the front's `device stats` line).
+write. The device stats count the shaders the cache served (`shadersCached`).
+The front's `device stats` line gives the rest: `N translated`. Bytecode
+created twice in one run is translated once, so even with the cache off this
+is below the shader count.
 
 ## Known limits
 

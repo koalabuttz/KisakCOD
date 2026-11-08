@@ -373,7 +373,7 @@ Texture *CreateTexture(Device *device, const TextureDesc &desc)
 
 void DestroyTexture(Device *device, Texture *texture)
 {
-    if (!texture || texture == device->backBuffer)
+    if (!texture || texture == device->backBuffer || texture == device->frontBuffer)
         return;
     ForgetTexture(*device, texture);
     DestroyTextureNow(*device, texture);
@@ -518,6 +518,8 @@ Surface *GetSurfaceLevel(Device *device, Texture *texture, uint32_t face, uint32
         return nullptr;
     if (texture == device->backBuffer)
         return &device->backBufferSurface;
+    if (texture == device->frontBuffer)
+        return &device->frontBufferSurface;
     std::unique_ptr<Surface> &surface = texture->surfaces[face * texture->desc.levels + level];
     if (!surface)
     {

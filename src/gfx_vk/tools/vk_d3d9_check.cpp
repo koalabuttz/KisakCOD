@@ -968,11 +968,14 @@ void Check::ResetDevice()
 }
 
 // Present through the device and the swap chain, and read the front buffer.
+// The back buffer's contents are undefined after a Present (DISCARD), so
+// each frame clears first.
 void Check::Present()
 {
-    Reset(Argb(255, 200, 100, 50));
+    Reset(Argb(255, 10, 20, 30));
     const uint64_t before = Counters().presents + Counters().presentsSkipped;
     Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    Reset(Argb(255, 200, 100, 50));
     IDirect3DSwapChain9 *chain = nullptr;
     if (Ok(device->GetSwapChain(0, &chain), "GetSwapChain"))
     {
@@ -982,10 +985,21 @@ void Check::Present()
     const front::DeviceCounters counters = Counters();
     Equal("presents_counted", counters.presents + counters.presentsSkipped, before + 2);
     presented += counters.presents > 0;
+
+    // Halfway through the next frame, as when the engine's screenshot command
+    // runs on the main thread while the render thread draws: the front buffer
+    // is still the frame last shown, not the back buffer being drawn.
+    Reset(Argb(255, 0, 0, 255));
+    DrawQuad(0, 0, 8, 8, 0.5f, Argb(255, 0, 255, 0));
     if (readSize != kSize)
         Read();
     if (Ok(device->GetFrontBufferData(0, readSurface), "GetFrontBufferData") && ReadLocked(kSize))
+    {
         Expect("front_buffer", 5, 5, 200, 100, 50);
+        Expect("front_buffer_far", kSize - 1, kSize - 1, 200, 100, 50);
+    }
+    if (Read())
+        Expect("back_buffer_mid_frame", 5, 5, 0, 255, 0);
 
     // Windowed screenshots: the renderer asks for the front buffer in a surface
     // the size of the display, and finds the window's image at the window's

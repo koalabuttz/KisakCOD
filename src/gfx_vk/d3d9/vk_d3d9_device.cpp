@@ -258,10 +258,10 @@ void Device::Destroy()
         // Where the CPU time went, for comparing loads and first frames.
         const lg::DeviceStats &stats = lg::Stats(legacy_);
         HostLog(host(),
-                "vulkan d3d9: device stats: %llu draws, %u shaders (%u from the cache, %.1f ms translating), "
+                "vulkan d3d9: device stats: %llu draws, %u shaders (%u translated in %.1f ms), "
                 "%u pipelines (%.1f ms building), %llu texture uploads (%.1f MB, %.1f ms)",
-                static_cast<unsigned long long>(stats.draws), stats.shaders, stats.shadersCached,
-                stats.shaderMicros / 1000.0,
+                static_cast<unsigned long long>(stats.draws), stats.shaders,
+                stats.shaders - std::min(stats.shaders, stats.shadersCached), stats.shaderMicros / 1000.0,
                 stats.pipelines, stats.pipelineMicros / 1000.0, static_cast<unsigned long long>(stats.textureUploads),
                 stats.uploadBytes / (1024.0 * 1024.0), stats.uploadMicros / 1000.0);
         // What each frame cost, for comparing frame rates: the work recorded
@@ -760,17 +760,20 @@ HRESULT STDMETHODCALLTYPE Device::GetRenderTargetData(IDirect3DSurface9 *renderT
 HRESULT STDMETHODCALLTYPE Device::GetFrontBufferData(UINT swapChain, IDirect3DSurface9 *dst)
 {
     const FrontLock lock;
-    // The last presented image is still in the back buffer (Present copies it
-    // to the swapchain), so the copy comes from there.
+    // The adapter keeps the last presented image apart from the back buffer
+    // (Present flips the two). The engine's screenshot command runs on the
+    // main thread while the render thread may be halfway through the next
+    // frame, so the back buffer would give a half-drawn image.
     if (swapChain != 0 || !dst)
         return D3DERR_INVALIDCALL;
+    lg::Surface *const front = lg::FrontBuffer(legacy_);
     lg::Surface *const target = static_cast<Surface *>(dst)->handle();
     uint32_t width = 0, height = 0, targetWidth = 0, targetHeight = 0;
     lg::d3d::Format format = lg::d3d::FMT_UNKNOWN, targetFormat = lg::d3d::FMT_UNKNOWN;
-    lg::SurfaceSize(backBuffer_->handle(), width, height, format);
+    lg::SurfaceSize(front, width, height, format);
     lg::SurfaceSize(target, targetWidth, targetHeight, targetFormat);
     if (targetWidth == width && targetHeight == height)
-        return lg::GetRenderTargetData(legacy_, backBuffer_->handle(), target) ? D3D_OK : D3DERR_INVALIDCALL;
+        return lg::GetRenderTargetData(legacy_, front, target) ? D3D_OK : D3DERR_INVALIDCALL;
 
     // Windowed, as in D3D9: the surface has the display's size, and the window's
     // image lands where its client area is on the display. The rest is left as
@@ -786,7 +789,7 @@ HRESULT STDMETHODCALLTYPE Device::GetFrontBufferData(UINT swapChain, IDirect3DSu
     lg::Surface *copy =
         lg::CreatePlainSurface(legacy_, width, height, format, lg::d3d::POOL_SYSTEMMEM, "front buffer copy");
     lg::LockedRect from{}, to{};
-    bool ok = copy && lg::GetRenderTargetData(legacy_, backBuffer_->handle(), copy)
+    bool ok = copy && lg::GetRenderTargetData(legacy_, front, copy)
         && lg::LockSurface(legacy_, copy, nullptr, lg::d3d::LOCK_READONLY, from);
     const bool fromLocked = ok;
     ok = ok && lg::LockSurface(legacy_, target, nullptr, 0, to);

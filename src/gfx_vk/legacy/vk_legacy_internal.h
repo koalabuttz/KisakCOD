@@ -266,8 +266,11 @@ struct Device
     Buffer *zeroVertices = nullptr;
     Texture *nullTexture[3] = {}; // 2D, cube, volume (TextureKind order)
 
+    // Present swaps the two textures; the surfaces keep their addresses.
     Texture *backBuffer = nullptr;
     Surface backBufferSurface;
+    Texture *frontBuffer = nullptr;
+    Surface frontBufferSurface;
 
     // D3D9 state.
     uint32_t renderStates[d3d::RS_COUNT] = {};

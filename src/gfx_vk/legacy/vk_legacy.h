@@ -334,6 +334,10 @@ Surface *CreatePlainSurface(Device *device, uint32_t width, uint32_t height, d3d
 // standalone ones (and is a no-op for texture levels and the back buffer).
 void DestroySurface(Device *device, Surface *surface);
 Surface *BackBuffer(Device *device);
+// The image the last Present showed (D3D9's front buffer). Present flips the
+// two, as D3D9's DISCARD swap effect allows, so drawing the next frame never
+// touches it: GetFrontBufferData reads it at any point of a frame.
+Surface *FrontBuffer(Device *device);
 void SurfaceSize(const Surface *surface, uint32_t &width, uint32_t &height, d3d::Format &format);
 // box null: the whole surface.
 bool LockSurface(Device *device, Surface *surface, const Box *box, uint32_t flags, LockedRect &out);
@@ -431,7 +435,9 @@ bool GetRenderTargetData(Device *device, Surface *renderTarget, Surface *dst);
 void UpdateTexture(Device *device, Texture *src, Texture *dst);
 
 // D3D9's BeginScene/EndScene bracket nothing here; Present shows the back
-// buffer (scaled to the window when their sizes differ).
+// buffer (scaled to the window when their sizes differ), then makes it the
+// front buffer and the old front buffer the back buffer. The new back
+// buffer's contents are undefined, as with D3D9's DISCARD swap effect.
 enum class PresentResult
 {
     Ok,
