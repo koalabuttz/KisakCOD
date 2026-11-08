@@ -1044,10 +1044,12 @@ void ApplyDynamicState(Device &device, VkCommandBuffer cmd, d3d::PrimitiveType t
     state.frontDepthFail = StencilOp(rs[d3d::RS_STENCILZFAIL]);
     state.frontCompare = CompareOp(rs[d3d::RS_STENCILFUNC]);
     const bool twoSided = rs[d3d::RS_TWOSIDEDSTENCILMODE] != 0;
-    state.backFail = twoSided ? StencilOp(rs[d3d::RS_CCW_STENCILFAIL]) : state.frontFail;
-    state.backPass = twoSided ? StencilOp(rs[d3d::RS_CCW_STENCILPASS]) : state.frontPass;
-    state.backDepthFail = twoSided ? StencilOp(rs[d3d::RS_CCW_STENCILZFAIL]) : state.frontDepthFail;
-    state.backCompare = twoSided ? CompareOp(rs[d3d::RS_CCW_STENCILFUNC]) : state.frontCompare;
+    // The fields are plain integers; GCC's -Wextra refuses an enum and an
+    // integer in one conditional.
+    state.backFail = twoSided ? uint32_t(StencilOp(rs[d3d::RS_CCW_STENCILFAIL])) : state.frontFail;
+    state.backPass = twoSided ? uint32_t(StencilOp(rs[d3d::RS_CCW_STENCILPASS])) : state.frontPass;
+    state.backDepthFail = twoSided ? uint32_t(StencilOp(rs[d3d::RS_CCW_STENCILZFAIL])) : state.frontDepthFail;
+    state.backCompare = twoSided ? uint32_t(CompareOp(rs[d3d::RS_CCW_STENCILFUNC])) : state.frontCompare;
     state.stencilRef = rs[d3d::RS_STENCILREF] & 0xff;
     state.stencilMask = rs[d3d::RS_STENCILMASK] & 0xff;
     state.stencilWriteMask = rs[d3d::RS_STENCILWRITEMASK] & 0xff;
