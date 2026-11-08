@@ -59,7 +59,7 @@ Pipelines (`vk_pipeline.cpp`):
 
 | Piece | How |
 | --- | --- |
-| Pipeline cache | Read at start-up from `CoreDesc::pipelineCachePath` when its header names this device and driver, written back (to a temporary file, then moved) by `DestroyCore`. |
+| Pipeline cache | Read at start-up from `CoreDesc::pipelineCachePath` when its header names this device and driver, written back (to a temporary file, then moved) by `DestroyCore` unless it holds exactly what was read. |
 | Pipelines | Graphics pipelines through the cache, with pipeline creation feedback: the core counts pipelines, cache hits, CPU time, and pipelines built during a frame, which the plan's target says should be none during play. |
 | Samplers | One per distinct description, owned by the core. |
 

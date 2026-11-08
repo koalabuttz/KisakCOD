@@ -71,7 +71,8 @@ struct HostState
     HMODULE loader = nullptr; // vulkan-1.dll, kept for the life of the process
     PFN_vkGetInstanceProcAddr getInstanceProcAddr = nullptr;
     std::vector<DisplayMode> modes;
-    std::string shaderCachePath; // what Host::shaderCachePath points at
+    std::string shaderCachePath;   // what Host::shaderCachePath points at
+    std::string pipelineCachePath; // what Host::pipelineCachePath points at
 };
 // Not s_host: winsock.h defines that name as a macro.
 HostState s_vkHost;
@@ -259,9 +260,11 @@ void HostCoreDestroyed(void *, const gfx_vk::CoreStats &stats)
                stats.validationWarnings);
 }
 
-// The Legacy adapter's shader cache file: <fs_homepath>\\vulkan\\shaders.bin.
-// Empty (no file) when r_vkShaderCache is off or there is no home path.
-std::string ShaderCachePath()
+// Where the caches live: <fs_homepath>\\vulkan, holding the Legacy adapter's
+// shaders.bin (translated shaders) and the core's pipelines.bin (the Vulkan
+// pipeline cache). Empty (no files) when r_vkShaderCache is off or there is no
+// home path.
+std::string CacheDirectory()
 {
     if (!r_vkShaderCache->current.enabled)
         return {};
@@ -271,10 +274,10 @@ std::string ShaderCachePath()
     const std::string directory = std::string(home) + "\\vulkan";
     if (!CreateDirectoryA(directory.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS)
     {
-        Com_Printf(CON_CHANNEL_GFX, "Vulkan: no shader cache: cannot create %s\n", directory.c_str());
+        Com_Printf(CON_CHANNEL_GFX, "Vulkan: no shader or pipeline cache: cannot create %s\n", directory.c_str());
         return {};
     }
-    return directory + "\\shaders.bin";
+    return directory;
 }
 
 gfx_vk::Validation ValidationSetting()
@@ -301,7 +304,8 @@ void RegisterDvars()
     r_vkDevice = Dvar_RegisterInt("r_vkDevice", -1, uint32_t(-1), 63, DVAR_ARCHIVE | DVAR_LATCH,
                                   "Vulkan device: -1 picks one, N the Nth device the Vulkan driver lists");
     r_vkShaderCache = Dvar_RegisterBool("r_vkShaderCache", true, DVAR_ARCHIVE | DVAR_LATCH,
-                                        "Keep translated shaders in fs_homepath/vulkan/shaders.bin between runs");
+                                        "Keep translated shaders and Vulkan pipelines in fs_homepath/vulkan "
+                                        "(shaders.bin, pipelines.bin) between runs");
 }
 } // namespace
 
@@ -330,8 +334,11 @@ IDirect3D9 *Kisak_VulkanDirect3DCreate9()
     host.validation = ValidationSetting();
     host.deviceIndex = r_vkDevice->current.integer;
     host.coreDestroyed = HostCoreDestroyed;
-    s_vkHost.shaderCachePath = ShaderCachePath();
+    const std::string cacheDirectory = CacheDirectory();
+    s_vkHost.shaderCachePath = cacheDirectory.empty() ? std::string() : cacheDirectory + "\\shaders.bin";
+    s_vkHost.pipelineCachePath = cacheDirectory.empty() ? std::string() : cacheDirectory + "\\pipelines.bin";
     host.shaderCachePath = s_vkHost.shaderCachePath.empty() ? nullptr : s_vkHost.shaderCachePath.c_str();
+    host.pipelineCachePath = s_vkHost.pipelineCachePath.empty() ? nullptr : s_vkHost.pipelineCachePath.c_str();
     Com_Printf(CON_CHANNEL_GFX, "Graphics back end: Vulkan (validation %s, device %d, shader cache %s)\n",
                s_validationNames[r_vkValidation->current.integer], r_vkDevice->current.integer,
                s_vkHost.shaderCachePath.empty() ? "off" : s_vkHost.shaderCachePath.c_str());

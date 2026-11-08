@@ -71,6 +71,7 @@ bool CreatePipelineCache(Core &core)
     info.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
     info.initialDataSize = data.size();
     info.pInitialData = data.empty() ? nullptr : data.data();
+    core.pipelineCacheLoadedData = data;
     return Check(core, core.vk.vkCreatePipelineCache(core.dev, &info, nullptr, &core.pipelineCache),
                  "vkCreatePipelineCache");
 }
@@ -96,6 +97,12 @@ bool SavePipelineCache(Core *core)
     std::vector<uint8_t> data(size);
     if (core->vk.vkGetPipelineCacheData(core->dev, core->pipelineCache, &size, data.data()) != VK_SUCCESS)
         return false;
+    data.resize(size);
+    if (data == core->pipelineCacheLoadedData)
+    {
+        Log(*core, "pipeline cache: %s unchanged", path);
+        return true;
+    }
     // Write a temporary file and move it into place, so a crash never leaves a
     // half-written cache behind.
     const std::string temporary = std::string(path) + ".tmp";

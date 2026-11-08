@@ -239,9 +239,11 @@ archived and latched (a change applies at the next `vid_restart`):
 * `r_vkValidation`: `off` (default), `auto` (when installed) or `require`.
 * `r_vkDevice`: -1 (default) lets the core pick a GPU; N picks the Nth device
   the Vulkan driver lists.
-* `r_vkShaderCache`: 1 (default) keeps translated shaders in
-  `<fs_homepath>/vulkan/shaders.bin` between runs (the Legacy adapter's shader
-  cache); 0 translates every shader at every start.
+* `r_vkShaderCache`: 1 (default) keeps two caches in `<fs_homepath>/vulkan`
+  between runs: the translated shaders in `shaders.bin` (the Legacy adapter's
+  shader cache), and the Vulkan pipeline cache in `pipelines.bin` (the core's,
+  ignored when another device or driver wrote it). 0 translates every shader
+  and builds every pipeline from scratch at every start.
 
 With `r_backend vulkan`, `R_HW_Direct3DCreate9`
 (`src/gfx_d3d/rhi/r_rhi_d3d9_calls.cpp`, built with `KISAK_VULKAN_BACKEND`)
@@ -252,12 +254,13 @@ is SDL3, as for DXVK's SDL3 WSI: the `HWND` the Win32 window layer makes is the
 display modes are SDL's fullscreen modes (or the desktop mode where SDL lists
 none, as with its offscreen driver), and the front's log lines go to the
 console as `Vulkan: ...`. When the device goes, the front logs where the CPU
-time went (`vulkan d3d9: device stats: ...`: shaders created and the time
-how many of them were translated (the rest came from the shader cache) and
-the time it took, pipelines and the time
-building them, texture uploads with their size and time), for comparing loads
-and first frames with DXVK. No
-pipeline cache file is written yet.
+time went, for comparing loads and first frames with DXVK. The
+`vulkan d3d9: device stats: ...` line gives the shaders created and how many
+of them were translated (the rest came from the shader cache) with the time
+it took, the pipelines built with their time, and the texture uploads with
+their size and time. The core logs `pipeline cache: N bytes from ...` when it
+starts from the pipeline cache file, and `pipeline cache: N bytes to ...`
+when it writes the file back at teardown.
 
 At quit `R_ShutdownDirect3D` destroys the game's window before it releases the
 device, and a Vulkan surface must not outlive its window. So the window layer
