@@ -134,7 +134,23 @@ so a `batch` run over the dump covers every shader the game has.
 - Both builds give byte-identical SPIR-V for all 76 cases.
 - Translation averages about 5 ms per case shader in a Debug build.
 
-**Not yet run:**
+**Laptop run 1** (2026-11-08, ee6d019, David's laptop, x86_64 and i386
+RelWithDebInfo, dxbc-spirv from the DXVK 3.1.1 checkout with no fetch):
 
-- The game's 899 + 37 shaders, which needs the laptop.
-- Shaders executed on a GPU. The Legacy adapter's draw tests will cover that.
+- Both builds compile with 0 warnings, and the test passes on both.
+- Every shader the game has translates: 936 of 936 (ps_1_1 7, ps_2_0 255,
+  ps_3_0 468, vs_1_1 30, vs_2_0 124, vs_3_0 52).
+- spirv-val (Vulkan 1.3, scalar block layout) accepts all 936 on both builds.
+- The two builds' SPIR-V is byte-identical for all 936.
+- Translation averages 7.1 ms per shader on x86_64 and 10.8 ms on i386.
+
+What the game's shaders use:
+
+- Float constants only. No int or bool constants, and no shader indexes c[].
+  The most read is 32 registers in a vertex shader and 22 in a pixel shader.
+- No texture-stage (bump-mapping) state.
+- Samplers declare 2D 2682 times, 3D 332 times and cube 218 times. 4 ps 1.x
+  samplers have no declared type.
+
+**Not yet run:** shaders executed on a GPU. The Legacy adapter's draw tests
+will cover that.
