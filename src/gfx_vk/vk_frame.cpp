@@ -37,8 +37,11 @@ constexpr VkPipelineStageFlags2 kBufferReadStages = VK_PIPELINE_STAGE_2_VERTEX_I
 constexpr VkAccessFlags2 kBufferReadAccess = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_2_INDEX_READ_BIT
     | VK_ACCESS_2_UNIFORM_READ_BIT | VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_TRANSFER_READ_BIT;
 
+// Device writes only. Host writes need no barrier: submitting the command
+// buffer makes them visible. A HOST_WRITE source access is also invalid with
+// the ALL_COMMANDS stage the buffer-copy barrier uses.
 constexpr VkAccessFlags2 kWriteAccess = VK_ACCESS_2_SHADER_WRITE_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
-    | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT | VK_ACCESS_2_HOST_WRITE_BIT
+    | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT
     | VK_ACCESS_2_MEMORY_WRITE_BIT;
 
 VkDeviceSize AlignUp(VkDeviceSize value, VkDeviceSize alignment)
