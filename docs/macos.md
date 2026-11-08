@@ -99,7 +99,9 @@ cmake --build build-macos-client --target KisakCOD-mp
 
   RAD's `radbase.h` takes its Macintosh branch on Apple compilers (it
   describes a 68K or PowerPC Mac); nothing the shim or `r_cinematic.cpp` uses
-  depends on that branch.
+  depends on that branch. The default Mac file system ignores letter case, so the
+  shim opens a movie path as the engine spells it, with `/` for `\`, and
+  needs none of the case-matching walk it does on Linux.
 
 ## Vulkan window probe
 

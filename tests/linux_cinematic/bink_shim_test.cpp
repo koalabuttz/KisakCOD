@@ -585,7 +585,14 @@ void TestErrors()
     char resolved[256];
     CHECK(!KisakBink_ResolvePath((dir + "/missing/cut.bik").c_str(), resolved, sizeof(resolved)));
     CHECK(KisakBink_ResolvePath((dir + "\\CUT.BIK").c_str(), resolved, sizeof(resolved)));
-    CHECK(std::string(resolved) == dir + "/cut.bik");
+    // A case-sensitive file system (Linux) needs the walk, which returns the
+    // name on disk. A case-insensitive one (macOS's default APFS) opens the
+    // path as given, so only the separators change.
+    struct stat st = {};
+    if (stat((dir + "/CUT.BIK").c_str(), &st) != 0)
+        CHECK(std::string(resolved) == dir + "/cut.bik");
+    else
+        CHECK(std::string(resolved) == dir + "/CUT.BIK");
     CHECK(!KisakBink_ResolvePath((dir + "/cut.bik").c_str(), resolved, 8)); // too long for the buffer
 
     unlink((dir + "/junk.bik").c_str());
