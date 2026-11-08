@@ -290,13 +290,16 @@ jobs:
           grep -qx '7.1.5' "$src/RELEASE"
           mkdir -p "$RUNNER_TEMP/ffmpeg-build"
           cd "$RUNNER_TEMP/ffmpeg-build"
+          # /usr/bin/clang, not the toolchain's own clang: the shim finds the
+          # SDK, which the bare toolchain binary cannot link without.
           "$src/configure" --prefix="$RUNNER_TEMP/ffmpeg-sdk" --install-name-dir='@rpath' \
-            --cc="$(xcrun -f clang)" \
+            --cc=/usr/bin/clang \
             --extra-cflags=-mmacosx-version-min=13.3 --extra-ldflags=-mmacosx-version-min=13.3 \
             --enable-shared --disable-static --disable-programs --disable-doc \
             --disable-everything --disable-autodetect --disable-network \
             --disable-avformat --disable-avdevice --disable-avfilter --disable-swscale --disable-swresample \
-            --disable-x86asm --enable-decoder=bink,binkaudio_rdft,binkaudio_dct
+            --disable-x86asm --enable-decoder=bink,binkaudio_rdft,binkaudio_dct \
+            || { tail -n 80 ffbuild/config.log; exit 1; }
           make -j"$(sysctl -n hw.ncpu)"
           make install
           ls -l "$RUNNER_TEMP/ffmpeg-sdk/lib"
