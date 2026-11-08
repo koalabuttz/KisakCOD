@@ -16,6 +16,7 @@
 #include "gfx_vk/shader/vk_legacy_shader.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -36,7 +37,7 @@ namespace
 int Usage()
 {
     std::fprintf(stderr,
-                 "usage: KisakCOD-vulkan-shaders translate FILE [--vertex VSFILE] [--out SPV] [--ir]\n"
+                 "usage: KisakCOD-vulkan-shaders translate FILE [--vertex VSFILE] [--out SPV] [--ir] [--depth-samplers MASK]\n"
                  "       KisakCOD-vulkan-shaders batch DIR [--out-dir DIR] [--threads N]\n");
     return 2;
 }
@@ -125,6 +126,8 @@ int RunTranslate(int argc, char **argv)
 {
     const char *file = nullptr, *vertexFile = nullptr, *out = nullptr;
     bool ir = false;
+    bool fixDepth = false;
+    uint32_t depthSamplers = 0;
     for (int i = 0; i < argc; ++i)
     {
         const char *next = i + 1 < argc ? argv[i + 1] : nullptr;
@@ -134,6 +137,15 @@ int RunTranslate(int argc, char **argv)
             out = argv[++i];
         else if (!std::strcmp(argv[i], "--ir"))
             ir = true;
+        else if (!std::strcmp(argv[i], "--depth-samplers") && next)
+        {
+            // As MoltenVK builds it: depth compare fixed per sampler (bit mask).
+            char *end = nullptr;
+            depthSamplers = static_cast<uint32_t>(std::strtoul(argv[++i], &end, 0));
+            if (!end || *end)
+                return Usage();
+            fixDepth = true;
+        }
         else if (argv[i][0] != '-' && !file)
             file = argv[i];
         else
@@ -165,12 +177,14 @@ int RunTranslate(int argc, char **argv)
         }
     }
     std::vector<uint32_t> spirv;
-    if (!BuildSpirv(shader, vertexFile ? &vertexShader : nullptr, spirv, error))
+    if (!BuildSpirv(shader, vertexFile ? &vertexShader : nullptr, spirv, error, fixDepth ? &depthSamplers : nullptr))
     {
         std::printf("legacy_shader=failed reason=%s\n", error.c_str());
         return 1;
     }
     PrintReflection(shader);
+    if (fixDepth)
+        std::printf("legacy_shader.depth_samplers=0x%x\n", depthSamplers);
     if (vertexFile)
         std::printf("legacy_shader.linked=%s\n", StagesLinkDirectly(vertexShader, shader) ? "direct" : "resolved");
     std::printf("legacy_shader.spirv_words=%zu\n", spirv.size());

@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstdarg>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <vector>
@@ -558,6 +559,30 @@ VkFormat PickDepthStencilFormat(Core &core)
     return VK_FORMAT_UNDEFINED;
 }
 
+// VK_KHR_portability_subset's feature struct (vulkan_beta.h, which the build
+// does not enable): fifteen VkBool32 features after the header.
+struct PortabilitySubsetFeatures
+{
+    VkStructureType sType;
+    void *pNext;
+    VkBool32 features[15];
+};
+constexpr VkStructureType kPortabilitySubsetFeaturesType = static_cast<VkStructureType>(1000163000);
+
+bool EnvEquals(const char *name, const char *value)
+{
+#if defined(_MSC_VER)
+    char *text = nullptr;
+    size_t length = 0;
+    const bool equal = _dupenv_s(&text, &length, name) == 0 && text && std::strcmp(text, value) == 0;
+    std::free(text);
+    return equal;
+#else
+    const char *text = std::getenv(name);
+    return text && std::strcmp(text, value) == 0;
+#endif
+}
+
 bool CreateDevice(Core &core)
 {
     Dispatch &vk = core.vk;
@@ -567,7 +592,8 @@ bool CreateDevice(Core &core)
     vk.vkEnumerateDeviceExtensionProperties(core.physical, nullptr, &count, available.data());
     available.resize(count);
     std::vector<const char *> extensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-    if (HasExtension(available, kPortabilitySubset))
+    const bool portability = HasExtension(available, kPortabilitySubset);
+    if (portability)
         extensions.push_back(kPortabilitySubset);
 
     const float priority = 1.0f;
@@ -582,8 +608,15 @@ bool CreateDevice(Core &core)
     // distances (user clip planes) and 16-bit floats in translated shaders.
     VkPhysicalDeviceFeatures supported{};
     VkPhysicalDeviceVulkan12Features supported12{};
+    // On a portability device (MoltenVK) every subset feature it has is
+    // enabled: the D3D9 formats need swizzled image views
+    // (imageViewFormatSwizzle), and the validation layer holds the device to
+    // what was enabled.
+    PortabilitySubsetFeatures portabilityFeatures{};
+    portabilityFeatures.sType = kPortabilitySubsetFeaturesType;
     {
         supported12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+        supported12.pNext = portability ? &portabilityFeatures : nullptr;
         VkPhysicalDeviceFeatures2 query{};
         query.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
         query.pNext = &supported12;
@@ -595,12 +628,18 @@ bool CreateDevice(Core &core)
     core.optional.independentBlend = supported.independentBlend;
     core.optional.shaderClipDistance = supported.shaderClipDistance;
     core.optional.shaderFloat16 = supported12.shaderFloat16;
+    // MoltenVK's paths (see OptionalFeatures), or forced for testing.
+    core.optional.dynamicVertexStride = !portability && !EnvEquals("KISAK_VK_VERTEX_STRIDE", "static");
+    core.optional.fixedDepthCompare = portability || EnvEquals("KISAK_VK_DEPTH_COMPARE", "fixed");
+    core.optional.forceWideRenderTargets = EnvEquals("KISAK_VK_RENDER_TARGETS", "wide");
 
     VkPhysicalDeviceVulkan13Features features13{};
     features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
     features13.dynamicRendering = VK_TRUE;
     features13.synchronization2 = VK_TRUE;
     features13.shaderDemoteToHelperInvocation = VK_TRUE;
+    portabilityFeatures.pNext = nullptr;
+    features13.pNext = portability ? &portabilityFeatures : nullptr;
     VkPhysicalDeviceVulkan12Features features12{};
     features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
     features12.pNext = &features13;

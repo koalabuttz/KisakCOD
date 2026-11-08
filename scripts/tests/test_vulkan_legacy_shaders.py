@@ -23,6 +23,10 @@ for linking. The checks:
   linking    a pixel shader linked to a vertex shader that writes its inputs at
              other locations reads them from there, and one the vertex shader
              does not write is dropped
+  depth      --depth-samplers (depth compare fixed at build time, as on
+             MoltenVK): every case with samplers still passes spirv-val, with
+             no depth-reference sampling when no sampler is a depth one, and
+             only depth-reference sampling of 2D and cube images when all are
 
 Usage:
   test_vulkan_legacy_shaders.py --binary build/bin/KisakCOD-vulkan-shaders
@@ -86,6 +90,10 @@ OP_TYPE_ARRAY, OP_TYPE_STRUCT, OP_TYPE_POINTER, OP_CONSTANT = 28, 30, 32, 43
 OP_VARIABLE, OP_DECORATE, OP_MEMBER_DECORATE = 59, 71, 72
 DEC_ARRAY_STRIDE, DEC_LOCATION, DEC_BINDING, DEC_SET, DEC_OFFSET = 6, 30, 33, 34, 35
 SC_INPUT, SC_UNIFORM_CONSTANT, SC_UNIFORM, SC_OUTPUT = 1, 0, 2, 3
+# OpImageSample{Implicit,Explicit}Lod, OpImageSampleProj{Implicit,Explicit}Lod, OpImageGather
+OPS_SAMPLE_PLAIN = (87, 88, 91, 92, 96)
+# OpImageSampleDref{Implicit,Explicit}Lod, OpImageSampleProjDref{Implicit,Explicit}Lod, OpImageDrefGather
+OPS_SAMPLE_DREF = (89, 90, 93, 94, 97)
 
 
 class Spirv:
@@ -98,10 +106,12 @@ class Spirv:
         self.types = {}         # id -> (opcode, operands)
         self.constants = {}     # id -> value
         self.variables = []     # (id, pointer type id, storage class)
+        self.opcodes = {}       # opcode -> count
         i = 5
         while i < len(words):
             count, opcode = words[i] >> 16, words[i] & 0xffff
             ops = words[i + 1:i + count]
+            self.opcodes[opcode] = self.opcodes.get(opcode, 0) + 1
             if opcode == OP_DECORATE and len(ops) >= 3:
                 self.decorations.setdefault(ops[0], {})[ops[1]] = ops[2]
             elif opcode == OP_DECORATE and len(ops) == 2:
@@ -330,6 +340,37 @@ def main():
                 layout_problems.append(f'{name}: descriptors in other sets {stray}')
         checks.expect('uniform blocks, textures and samplers match the Legacy layout', not layout_problems,
                       '\n  '.join(layout_problems[:20]))
+
+        # depth: depth compare fixed per sampler at build time
+        code, _, _ = run(binary, ['translate', os.path.join(case_dir, 'ps3_texld_cube.bin'), '--depth-samplers', 'x'])
+        checks.expect('usage --depth-samplers x', code == 2, f'status {code}')
+        depth_problems, depth_cases = [], 0
+        for name, (found, _) in sorted(results.items()):
+            if found['samplers'] == 'none':
+                continue
+            depth_cases += 1
+            types = {t for t in (s.split(':')[1] for s in found['samplers'].split(','))}
+            for mask in ('0', '0xffff'):
+                spv = os.path.join(work, f'{name}-depth-{mask}.spv')
+                code, stdout, _ = run(binary, ['translate', os.path.join(case_dir, name + '.bin'),
+                                               '--depth-samplers', mask, '--out', spv])
+                if code != 0 or parse(stdout).get('result') != 'passed':
+                    depth_problems.append(f'{name} {mask}: {stdout.strip()[:200]}')
+                    continue
+                problem = validate(spv)
+                if problem:
+                    depth_problems.append(f'{name} {mask}: spirv-val: {problem}')
+                    continue
+                with open(spv, 'rb') as f:
+                    ops = Spirv(f.read()).opcodes
+                dref = sum(ops.get(op, 0) for op in OPS_SAMPLE_DREF)
+                plain = sum(ops.get(op, 0) for op in OPS_SAMPLE_PLAIN)
+                if mask == '0' and dref:
+                    depth_problems.append(f'{name} 0: {dref} depth-reference samples left')
+                if mask != '0' and types <= {'2d', 'cube'} and (plain or not dref):
+                    depth_problems.append(f'{name} {mask}: {plain} plain and {dref} depth-reference samples')
+        checks.expect(f'depth compare fixed at build time ({depth_cases} cases with samplers)',
+                      depth_cases > 0 and not depth_problems, '\n  '.join(depth_problems[:20]))
 
         # reflection of chosen cases
         def reflected(name, key):

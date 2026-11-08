@@ -128,7 +128,9 @@ struct Shader
     // Vertex shaders: their module. Pixel shaders: the module for vertex
     // shaders whose outputs it reads as they stand (built on first use).
     VkShaderModule module = VK_NULL_HANDLE;
-    std::unordered_map<uint32_t, VkShaderModule> linked; // pixel shader modules by vertex shader id
+    // Pixel shaders: the other modules, by PixelModuleKey (the vertex shader
+    // they are linked to, and the depth samplers where those are fixed).
+    std::unordered_map<uint64_t, VkShaderModule> linked;
 };
 
 struct VertexDecl
@@ -157,7 +159,12 @@ struct PipelineKey
     uint8_t srcColor = 0, dstColor = 0, colorOp = 0; // VkBlendFactor, VkBlendOp
     uint8_t srcAlpha = 0, dstAlpha = 0, alphaOp = 0;
     uint8_t writeMask[kMaxRenderTargets] = {};
-    uint8_t pad[2] = {};
+    // Pixel samplers bound to depth textures, where the device fixes depth
+    // compare in the shader (OptionalFeatures::fixedDepthCompare); else 0.
+    uint16_t depthSamplers = 0;
+    // Each stream's stride when the device has no dynamic vertex stride
+    // (OptionalFeatures::dynamicVertexStride); all zero otherwise.
+    uint16_t strides[kMaxStreams] = {};
     bool operator==(const PipelineKey &other) const { return std::memcmp(this, &other, sizeof(*this)) == 0; }
 };
 struct PipelineKeyHash

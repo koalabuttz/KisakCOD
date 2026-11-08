@@ -236,6 +236,24 @@ struct OptionalFeatures
     bool independentBlend;
     bool shaderClipDistance;
     bool shaderFloat16;
+    // VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE in pipelines. Core in
+    // Vulkan 1.3, but MoltenVK has it only from macOS 14 on Mac2 or Apple4
+    // GPUs and cannot say so, so it is off on every portability-subset device
+    // (and when KISAK_VK_VERTEX_STRIDE=static): strides are then baked into
+    // the pipelines.
+    bool dynamicVertexStride;
+    // Translated pixel shaders get each sampler's depth compare fixed when
+    // they are built (legacy_shader::BuildSpirv's fixedDepthCompare) instead
+    // of choosing at run time. On every portability-subset device: MoltenVK's
+    // converter turns an image sampled both ways into a Metal depth texture,
+    // which cannot sample colour. KISAK_VK_DEPTH_COMPARE=fixed forces it.
+    bool fixedDepthCompare;
+    // The Legacy adapter makes a render target in a 16-bit packed format
+    // (R5G6B5, X1R5G5B5, A1R5G5B5) as B8G8R8A8 where the device cannot render
+    // to the packed format: Metal has those formats only on Apple GPUs, so
+    // MoltenVK on Intel and AMD Macs (and macOS VMs) lacks them. True forces
+    // that on every device (KISAK_VK_RENDER_TARGETS=wide), for testing.
+    bool forceWideRenderTargets;
 };
 const OptionalFeatures &Features(const Core *core);
 // Whether images of this format with optimal tiling support these features.

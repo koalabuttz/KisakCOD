@@ -116,6 +116,11 @@ needs no GPU, game data or network. It covers:
 - **Linking:** a pixel shader linked to a vertex shader that writes its input
   at another location reads it from there. An input the vertex shader does not
   write is dropped. fxc-style texcoord pairs link without changes.
+- **Fixed depth compare:** every case with samplers is built again with
+  `--depth-samplers 0` and `0xffff`, the build MoltenVK gets
+  ([vulkan-legacy-adapter.md](vulkan-legacy-adapter.md#moltenvk-macos)). Both
+  pass `spirv-val`. With `0` no depth-reference sample is left. With `0xffff`,
+  2D and cube images are sampled only with a depth reference.
 
 Hosted CI runs this test in two places:
 

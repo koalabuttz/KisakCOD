@@ -7,7 +7,7 @@
 
 namespace gfx_vk::legacy
 {
-static_assert(sizeof(PipelineKey) == 48, "PipelineKey must have no padding: it is hashed and compared as bytes");
+static_assert(sizeof(PipelineKey) == 48 + 2 * kMaxStreams, "PipelineKey must have no padding: it is hashed and compared as bytes");
 
 namespace
 {
@@ -424,11 +424,13 @@ LayoutKey LayoutFor(const Shader &vs, const Shader &ps)
     return key;
 }
 
-VkShaderModule PixelModule(Device &device, Shader &ps, Shader &vs)
+VkShaderModule PixelModule(Device &device, Shader &ps, Shader &vs, uint32_t depthSamplers)
 {
     std::vector<uint32_t> spirv;
     std::string error;
-    if (ls::StagesLinkDirectly(vs.translated, ps.translated))
+    const bool direct = ls::StagesLinkDirectly(vs.translated, ps.translated);
+    const bool fixed = Features(device.core).fixedDepthCompare;
+    if (direct && !fixed)
     {
         if (ps.module)
             return ps.module;
@@ -440,10 +442,15 @@ VkShaderModule PixelModule(Device &device, Shader &ps, Shader &vs)
         ps.module = CreateShaderModule(device.core, spirv.data(), spirv.size() * sizeof(uint32_t));
         return ps.module;
     }
-    auto found = ps.linked.find(vs.id);
+    // The vertex shader's id (none when the stages link as they stand), and
+    // the depth samplers above it where they are fixed.
+    const uint64_t moduleKey =
+        (fixed ? uint64_t(depthSamplers | 0x10000u) << 32 : 0) | (direct ? 0xffffffffu : vs.id);
+    auto found = ps.linked.find(moduleKey);
     if (found != ps.linked.end())
         return found->second;
-    if (!ls::BuildSpirv(ps.translated, &vs.translated, spirv, error))
+    if (!ls::BuildSpirv(ps.translated, direct ? nullptr : &vs.translated, spirv, error,
+                        fixed ? &depthSamplers : nullptr))
     {
         Fail(device, "pixel shader %08x with vertex shader %08x: %s", ps.translated.bytecodeHash,
              vs.translated.bytecodeHash, error.c_str());
@@ -452,8 +459,9 @@ VkShaderModule PixelModule(Device &device, Shader &ps, Shader &vs)
     VkShaderModule module = CreateShaderModule(device.core, spirv.data(), spirv.size() * sizeof(uint32_t));
     if (module)
     {
-        ps.linked.emplace(vs.id, module);
-        ++device.stats.shaderPairs;
+        ps.linked.emplace(moduleKey, module);
+        if (!direct)
+            ++device.stats.shaderPairs;
     }
     return module;
 }
@@ -462,7 +470,7 @@ Pipeline *BuildPipeline(Device &device, const PipelineKey &key, Shader &vs, Shad
 {
     const TimeInto timer(device.stats.pipelineMicros);
     Layout *layout = GetLayout(device, LayoutFor(vs, ps));
-    const VkShaderModule fragment = layout ? PixelModule(device, ps, vs) : VK_NULL_HANDLE;
+    const VkShaderModule fragment = layout ? PixelModule(device, ps, vs, key.depthSamplers) : VK_NULL_HANDLE;
     if (!fragment)
     {
         if (device.error.empty())
@@ -505,15 +513,18 @@ Pipeline *BuildPipeline(Device &device, const PipelineKey &key, Shader &vs, Shad
         bindingMask |= 1u << attribute.binding;
         attributes.push_back(attribute);
     }
+    const bool dynamicStride = Features(device.core).dynamicVertexStride;
     std::vector<VkVertexInputBindingDescription> bindings;
     for (uint32_t binding = 0; binding <= kZeroBinding; ++binding)
     {
         if (bindingMask & (1u << binding))
         {
-            // The stride is dynamic. The zero binding steps per instance, so
-            // every vertex reads its first element.
-            bindings.push_back({binding, 16, binding == kZeroBinding ? VK_VERTEX_INPUT_RATE_INSTANCE
-                                                                      : VK_VERTEX_INPUT_RATE_VERTEX});
+            // The stride is dynamic where the device allows it, else the
+            // key's. The zero binding steps per instance, so every vertex
+            // reads its first element.
+            const uint32_t stride = binding == kZeroBinding || dynamicStride ? 16 : key.strides[binding];
+            bindings.push_back({binding, stride, binding == kZeroBinding ? VK_VERTEX_INPUT_RATE_INSTANCE
+                                                                          : VK_VERTEX_INPUT_RATE_VERTEX});
         }
     }
     VkPipelineVertexInputStateCreateInfo vertexInput{};
@@ -569,17 +580,18 @@ Pipeline *BuildPipeline(Device &device, const PipelineKey &key, Shader &vs, Shad
         VK_DYNAMIC_STATE_CULL_MODE,
         VK_DYNAMIC_STATE_FRONT_FACE,
         VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY,
-        VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE,
         VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE,
         VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE,
         VK_DYNAMIC_STATE_DEPTH_COMPARE_OP,
         VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE,
         VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE,
         VK_DYNAMIC_STATE_STENCIL_OP,
+        VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE, // last: left out when strides are baked in
     };
+    constexpr uint32_t kDynamicCount = static_cast<uint32_t>(sizeof(kDynamic) / sizeof(kDynamic[0]));
     VkPipelineDynamicStateCreateInfo dynamic{};
     dynamic.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamic.dynamicStateCount = static_cast<uint32_t>(sizeof(kDynamic) / sizeof(kDynamic[0]));
+    dynamic.dynamicStateCount = dynamicStride ? kDynamicCount : kDynamicCount - 1;
     dynamic.pDynamicStates = kDynamic;
 
     VkFormat colorFormats[kMaxRenderTargets];
@@ -623,13 +635,19 @@ Pipeline *BuildPipeline(Device &device, const PipelineKey &key, Shader &vs, Shad
 }
 
 PipelineKey MakeKey(const Device &device, const Shader &vs, const Shader &ps, const VertexDecl &decl,
-                    d3d::PrimitiveType type)
+                    d3d::PrimitiveType type, uint32_t depthSamplers)
 {
     const uint32_t *rs = device.renderStates;
     PipelineKey key{};
     key.vs = vs.id;
     key.ps = ps.id;
     key.decl = decl.id;
+    key.depthSamplers = static_cast<uint16_t>(depthSamplers);
+    if (!Features(device.core).dynamicVertexStride)
+    {
+        for (const VertexElement &element : decl.elements)
+            key.strides[element.stream] = static_cast<uint16_t>(device.streams[element.stream].stride);
+    }
     key.colorCount = static_cast<uint8_t>(ColorCount(device.passTargets));
     for (uint32_t i = 0; i < key.colorCount; ++i)
         key.colorFormats[i] = static_cast<uint32_t>(device.passTargets[i]->texture->vkFormat);
@@ -1106,7 +1124,19 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
         if (!BeginTargetsPass(device))
             return false;
     }
-    const PipelineKey key = MakeKey(device, *vs, *ps, *decl, type);
+    // Where depth compare is fixed in the pixel shader, the samplers it reads
+    // that have a depth texture bound (the rule SamplerStateBlock follows).
+    uint32_t depthSamplers = 0;
+    if (Features(device.core).fixedDepthCompare)
+    {
+        for (uint32_t sampler = 0; sampler < ls::kSamplerCount; ++sampler)
+        {
+            const Texture *texture = textures.bound[SlotForBit(sampler)];
+            if ((ps->translated.reflection.samplers & (1u << sampler)) && texture && texture->format->depth)
+                depthSamplers |= 1u << sampler;
+        }
+    }
+    const PipelineKey key = MakeKey(device, *vs, *ps, *decl, type, depthSamplers);
     auto found = device.pipelines.find(key);
     Pipeline *pipeline = found != device.pipelines.end() ? &found->second : BuildPipeline(device, key, *vs, *ps, *decl);
     if (!pipeline)
@@ -1151,11 +1181,13 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
         device.boundPipeline = pipeline->pipeline;
     }
     ApplyDynamicState(device, cmd, type);
+    // Without dynamic strides the pipeline holds them (PipelineKey::strides).
+    const bool dynamicStride = Features(device.core).dynamicVertexStride;
     for (uint32_t binding = 0; binding <= kZeroBinding; ++binding)
     {
         if (pipeline->bindings & (1u << binding))
             vk.vkCmdBindVertexBuffers2(cmd, binding, 1, &buffers[binding], &offsets[binding], nullptr,
-                                       &strides[binding]);
+                                       dynamicStride ? &strides[binding] : nullptr);
     }
 
     const Layout &layout = *pipeline->layout;

@@ -107,6 +107,24 @@ VkFormatFeatureFlags NeededFeatures(uint32_t usage)
     return features;
 }
 
+// The Vulkan format a texture of this D3D9 format and usage is made in. A
+// render target in a 16-bit packed format the device cannot render to is
+// made as B8G8R8A8 (the packed formats' channels in the same order, so the
+// format's swizzle still applies): the shader writes and blends the same
+// colour, at 8 bits a channel. VK_FORMAT_UNDEFINED when neither will do.
+VkFormat ChooseVkFormat(const Device &device, const FormatInfo &format, uint32_t usage)
+{
+    const VkFormat packed = format.depth ? device.depthFormat : format.vk;
+    const VkFormatFeatureFlags needed = NeededFeatures(usage);
+    const bool wideStandIn = (usage & d3d::USAGE_RENDERTARGET)
+                             && (format.d3d == d3d::FMT_R5G6B5 || format.d3d == d3d::FMT_X1R5G5B5
+                                 || format.d3d == d3d::FMT_A1R5G5B5);
+    if (wideStandIn && (Features(device.core).forceWideRenderTargets || !FormatSupports(device.core, packed, needed)))
+        return FormatSupports(device.core, VK_FORMAT_B8G8R8A8_UNORM, needed) ? VK_FORMAT_B8G8R8A8_UNORM
+                                                                             : VK_FORMAT_UNDEFINED;
+    return FormatSupports(device.core, packed, needed) ? packed : VK_FORMAT_UNDEFINED;
+}
+
 template <typename T>
 T *CreateGpuBuffer(Device &device, uint32_t bytes, uint32_t usage, d3d::Pool pool, bool index, d3d::Format format,
                    const char *name)
@@ -306,12 +324,14 @@ Texture *CreateTextureInternal(Device &device, const TextureDesc &desc, uint32_t
             Log(device, "texture %s: render targets and depth surfaces must be 2D with one level", name);
             return nullptr;
         }
-        if (!FormatSupports(device.core, texture->vkFormat, NeededFeatures(desc.usage)))
+        const VkFormat chosen = ChooseVkFormat(device, *format, desc.usage);
+        if (chosen == VK_FORMAT_UNDEFINED)
         {
             Log(device, "texture %s: the device cannot use %s for usage 0x%x", name, FormatName(texture->vkFormat),
                 desc.usage);
             return nullptr;
         }
+        texture->vkFormat = chosen;
         ImageDesc image;
         image.kind = ToImageKind(desc.kind);
         image.format = texture->vkFormat;
@@ -369,7 +389,7 @@ bool FormatSupported(Device *device, d3d::Format format, uint32_t usage)
         return false;
     if (!device)
         return true;
-    return FormatSupports(device->core, info->depth ? device->depthFormat : info->vk, NeededFeatures(usage));
+    return ChooseVkFormat(*device, *info, usage) != VK_FORMAT_UNDEFINED;
 }
 
 bool LockRect(Device *device_, Texture *texture, uint32_t face, uint32_t level, const Box *box, uint32_t flags,
@@ -663,7 +683,11 @@ Shader *CreateShader(Device *device_, const void *bytecode, size_t bytes, std::s
     if (shader->stage == ls::Stage::Vertex)
     {
         std::vector<uint32_t> spirv;
-        if (!ls::BuildSpirv(shader->translated, nullptr, spirv, error))
+        // Vertex textures are never depth-compared here; where the device
+        // fixes depth compare in the shader, say so (see fixedDepthCompare).
+        const uint32_t noDepthSamplers = 0;
+        if (!ls::BuildSpirv(shader->translated, nullptr, spirv, error,
+                            Features(device.core).fixedDepthCompare ? &noDepthSamplers : nullptr))
         {
             Log(device, "vertex shader %08x: %s", shader->translated.bytecodeHash, error.c_str());
             return nullptr;
