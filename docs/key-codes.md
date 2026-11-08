@@ -62,6 +62,17 @@ own listen server (`localhost`) never asks for either.
 that accepts only GUIDs, such as a default native Linux dedicated server with
 `sv_allowUnverifiedGuids 1`.
 
+## Verified
+
+2026-11-08, David's laptop (x86_64 KisakCOD-mp and KisakCOD-dedi, default
+builds without Steam, 127.0.0.1, a made-up key with a valid checksum): with
+`sv_allowUnverifiedGuids 1` the client joined with its GUID, spawned,
+disconnected and joined again with the same GUID. Without the opt-in the
+server refused it ("unverified retail GUIDs are not accepted"). With no key
+file, a group-readable file or a mistyped key, the client refused to connect
+and said why, and nothing reached the server. The key text appeared in no log.
+Not yet run: a Windows client (registry or file), a real key.
+
 ## Checks
 
 `scripts/tests/test_linux_client_core.py` runs the client's connect command and
