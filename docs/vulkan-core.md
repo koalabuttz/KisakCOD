@@ -1,10 +1,11 @@
 # Vulkan core and window probe
 
-Opt-in, off by default. This is the first piece of the planned Vulkan renderer
-back end: the shared Vulkan core (`src/gfx_vk`) and `KisakCOD-vulkan-probe`, a
-small program that opens an SDL3 window and clears, presents and resizes it
-through the core. Nothing of the engine is compiled into either, no game file is
-read, and the default build does not change.
+Opt-in, off by default. This is the base of the planned Vulkan renderer back
+end: the shared Vulkan core (`src/gfx_vk`) and `KisakCOD-vulkan-probe`, a small
+program that opens an SDL3 window and clears, presents and resizes it through
+the core, or draws a small textured scene through it and checks the pixels.
+Nothing of the engine is compiled into either, no game file is read, and the
+default build does not change.
 
 ## Where it fits
 
@@ -16,22 +17,82 @@ translator is chosen; that choice only affects the Legacy adapter. The seam's
 signatures still use D3D9 types until its interface freeze (plan step M1b), so
 nothing in the renderer calls the core yet.
 
-What the core does today:
+The core has what both users need to draw (plan section 3.2), behind a small
+C++ API in `vk_core.h`. Users that build pipelines and descriptor sets get the
+device and the function table (`Functions`, `DeviceHandle`) and record Vulkan
+commands themselves; memory, lifetime and synchronisation stay in the core.
+
+Start-up (`vk_core.cpp`):
 
 | Piece | How |
 | --- | --- |
 | Loader | Not linked. The window system hands the core `vkGetInstanceProcAddr` (SDL3 opens the loader), and every function is looked up through it (`vk_dispatch.h`). A machine without Vulkan fails with a message, not a dynamic-linker error. |
 | Instance | Vulkan 1.3. The window system's surface extensions, portability enumeration where offered (MoltenVK), and the Khronos validation layer on request. With validation on, synchronisation validation is on too. |
-| Device | Needs Vulkan 1.3, dynamic rendering, synchronization2, `VK_KHR_swapchain` and one queue that draws and presents to the window. Picks discrete, then integrated, then virtual, then CPU devices, or the index given. |
+| Device | Needs Vulkan 1.3, dynamic rendering, synchronization2, timeline semaphores, `VK_KHR_swapchain` and one queue that draws and presents to the window. Picks discrete, then integrated, then virtual, then CPU devices, or the index given. Turns on anisotropic filtering, wireframe fill and independent blend where the device has them. Picks the depth-stencil format: D24S8 where it can be an attachment and sampled, else D32S8. |
 | Swapchain | `B8G8R8A8_UNORM` or `R8G8B8A8_UNORM` in sRGB-nonlinear colour space: UNORM because the retail renderer writes gamma-space values and never asks for sRGB conversion. FIFO with vsync, otherwise mailbox, then immediate. Rebuilt when the surface is out of date or suboptimal, or when the window reports a new size; a minimised window skips frames. |
-| Frames | Two frames in flight, one command pool, fence and acquire semaphore each, and one render-done semaphore per swapchain image. |
-| Pass | One dynamic-rendering pass that clears the swapchain image, with synchronization2 barriers. |
-| Timing | GPU timestamps around the pass, read when the frame's fence has signalled (min, max, average). |
-| Read-back | On request, the next presented frame is copied to host memory for checks. |
+| Swapchain images | Wrapped as core images, so passes, blits and read-back treat them like any other image. Copyable and blit targets where the surface allows. |
+
+Memory (`vk_memory.cpp`):
+
+| Piece | How |
+| --- | --- |
+| Allocation | Pooled blocks per memory type (64 MB device, 16 MB mapped), first fit with coalescing; buffers and images never share a block, so `bufferImageGranularity` never applies. Requests over half a block get their own allocation. Only Upload and Readback memory is mapped, even where every type is host-visible (integrated GPUs): a 32-bit build keeps its address space for the game. |
+| Buffers | Device (written through staging), Upload (mapped, CPU writes) and Readback (mapped, cached where possible). |
+| Images | 2D, cube and 3D, with levels; a view of the whole image; usage as asked (sampled images can also be copied into). |
+| Lifetime | `Destroy*` waits for every submission recorded so far: objects go once the timeline passes that point, so a frame still using one on the GPU is safe. Pipelines and shader modules follow the same rule. |
+
+Frames (`vk_frame.cpp`):
+
+| Piece | How |
+| --- | --- |
+| Recording | A command buffer is always open, so work recorded outside a frame (a map load's uploads) needs no frame; it goes with the next `Flush` or `Present`. Every submission signals a timeline semaphore with the next serial, which is how the core knows what the GPU has finished. |
+| Frames | `BeginFrame` acquires a swapchain image; `Present` hands it over, submits and presents. Two frames in flight: after a present the next frame slot waits for its previous use and recycles its command buffers, staging, transient memory, descriptor pools and queries. |
+| Image state | Each image's layout and last access are tracked; passes, copies, uploads and `UseImage` record the synchronization2 barriers they need (none for a read after a read in the same layout). A pass cannot record barriers, so images it samples are made Sampled first; images written by uploads go back to Sampled before the next pass on their own. |
+| Passes | Dynamic rendering with up to four colour attachments and a depth-stencil attachment, clear or load. A clear or don't-care load discards the old contents (no layout transition cost). |
+| Uploads | `StageBufferWrite` and `StageImageWrite` return staging memory and record the copy at once, so it is ordered with the work around it. Buffer copies share one barrier before and one after a run of them. Rewriting a texture level already written since the last barrier gets a barrier first; other levels do not. A frame slot that holds 64 MB of staging flushes and waits instead of growing (a long map load). |
+| Transient memory | Per-frame host-visible memory for vertex, index and uniform data. |
+| Descriptor sets | Allocated from per-frame pools, reset when the slot comes round again. |
+| Copies and read-back | Blits between images (scaling and format conversion), and read-back of a level of any 4-byte colour image, the swapchain image included, waited on by `WaitReadback`. |
+| Timing | GPU timestamps around every pass, kept per pass name (min, max, average), and around each whole frame. |
+
+Pipelines (`vk_pipeline.cpp`):
+
+| Piece | How |
+| --- | --- |
+| Pipeline cache | Read at start-up from `CoreDesc::pipelineCachePath` when its header names this device and driver, written back (to a temporary file, then moved) by `DestroyCore`. |
+| Pipelines | Graphics pipelines through the cache, with pipeline creation feedback: the core counts pipelines, cache hits, CPU time, and pipelines built during a frame, which the plan's target says should be none during play. |
+| Samplers | One per distinct description, owned by the core. |
 
 The probe's frames cycle slowly through colours, so a person watching sees that
-frames are live. Escape or closing the window ends a run early; that still
-passes if at least one frame was presented.
+frames are live. With `--draw` they show a small scene instead: a textured
+quad that wobbles slowly, a grey quad in front of it, and a magenta one. Escape
+or closing the window ends a run early; that still passes if at least one frame
+was presented.
+
+### The draw scene (`--draw`)
+
+`src/gfx_vk/tools/vk_probe_draw.cpp` uses every resource path of the core each
+frame: a device-local vertex and index buffer written through staging; a
+64x64 texture with four levels uploaded one by one; a 256x256 offscreen colour
+target and a depth target; a pipeline from SPIR-V built before the first frame
+through the pipeline cache; a descriptor set per frame with the transform in
+transient memory; a quad whose vertices are written into transient memory
+every frame and sampled at an explicit level; a blit of the target into the
+swapchain. Every frame it also creates, fills and destroys a buffer, and every
+30 frames it rewrites the smallest texture level, which the same frame samples.
+
+At the end it draws one still frame and reads back the target and the
+swapchain image, and compares seven points of known colour (within 2 per
+channel): the clear colour, the texture's four quadrants (level 0), a grey
+quad drawn first but nearer, which the depth test must keep in front of the
+textured quad drawn after it, and the quad sampled at level 2.
+
+The probe's two shaders are GLSL in `src/gfx_vk/tools/shaders`, compiled into
+`src/gfx_vk/tools/vk_probe_shaders.h` by `scripts/tools/vulkan/gen_spirv_header.py`
+(needs `glslangValidator`), so no shader compiler is needed to build the probe.
+The header records each source's SHA-256; `gen_spirv_header.py --check` fails
+when a source changed without regenerating the header, and runs `spirv-val` on
+the embedded words.
 
 ## Building
 
@@ -72,7 +133,7 @@ through MoltenVK; see [macos.md](macos.md#vulkan-window-probe).
 ```sh
 KisakCOD-vulkan-probe [--frames N] [--size WxH] [--validation off|auto|require]
                       [--device N] [--no-vsync] [--resize] [--check-capture]
-                      [--list-devices]
+                      [--list-devices] [--draw] [--pipeline-cache PATH]
 ```
 
 - `--list-devices` prints every physical device and why it can or cannot be used.
@@ -84,11 +145,18 @@ KisakCOD-vulkan-probe [--frames N] [--size WxH] [--validation off|auto|require]
   swapchain followed it.
 - `--check-capture` clears the last frame to a known colour, reads it back and
   compares every pixel in memory. Nothing is written to disk.
+- `--draw` draws the scene above every frame and checks the still frame's
+  points (in the swapchain too with `--check-capture`). It fails if a pipeline
+  was built during a frame.
+- `--pipeline-cache PATH` reads the pipeline cache from `PATH` and writes it
+  back at the end.
 
 Output is `key=value` lines on stdout ending in `vulkan_probe=passed` or
 `vulkan_probe=failed stage=<stage>` with a `vulkan_probe.reason=` line. Exit
 status 0 is a pass, 1 a failed stage, 2 a usage error. The stages are `sdl`,
-`loader`, `window`, `core`, `frames`, `resize`, `capture` and `validation`.
+`loader`, `window`, `core`, `frames`, `resize`, `draw`, `capture` and
+`validation`. Each run also prints its pass and frame GPU times, submissions,
+memory, upload and descriptor counts, and pipeline counts.
 
 To see it on a desktop, run it with no options: a 960x540 window cycles colours
 for 300 frames (about five seconds with vsync).
@@ -97,15 +165,21 @@ for 300 frames (about five seconds with vsync).
 
 `scripts/tests/test_vulkan_window_probe.py --binary <probe>` runs the probe
 several ways: bad arguments exit 2; `--list-devices` finds a usable device; with
-no Vulkan driver visible it fails closed (stage `loader` or `core`); and a full
-run with `--resize --check-capture` passes, follows the resize, reads back the
-cleared colour, times the pass and has no validation errors.
+no Vulkan driver visible it fails closed (stage `loader` or `core`); a full run
+with `--resize --check-capture` passes, follows the resize, reads back the
+cleared colour, times the pass and has no validation errors; and two `--draw`
+runs sharing a pipeline cache file pass every point in the target and the
+swapchain, build their pipeline before the first frame, time the scene pass,
+run uploads, transient memory, descriptor sets and deferred destruction, and
+have no validation errors, the second one starting from the cache file the
+first wrote.
 
 The hosted CI job `vulkan_window` builds the probe for x86_64 in Debug and
 RelWithDebInfo and runs that script on Mesa's lavapipe (a CPU Vulkan driver)
 through SDL's offscreen video driver, which supports Vulkan through
 `VK_EXT_headless_surface`. It needs no GPU, display server or game data, and
-requires the validation layer with synchronisation checks.
+requires the validation layer with synchronisation checks. It also runs
+`gen_spirv_header.py --check`.
 
 Results so far (2026-11-05, cloud sandbox, no GPU, lavapipe from Mesa 25.2.8):
 
@@ -134,13 +208,19 @@ synchronisation checks on (2026-11-07, MoltenVK 1.4.2), the first runs on a
 GPU of any kind; the Intel VM needs `MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=0`
 ([macos.md](macos.md#vulkan-window-probe)).
 
-Not yet run on a physical GPU: the laptop (Intel ANV) and the Windows PC (RTX
-2080 Super) are the next places to run it.
+The clear-and-present probe has run on both physical GPUs (2026-11-07): the
+Windows PC's RTX 2080 Super and the laptop's Intel ANV, i386 and x86_64 (report
+in the project files, `renderer/vulkan-probe-laptop-run-1.md`). The draw scene
+has so far run on lavapipe only (2026-11-08, cloud sandbox, x86_64 Debug, Mesa
+25.2.8, validation with synchronisation checks: all points match, no errors).
 
 ## Next
 
-Further core pieces from the renderer plan, in roughly this order: memory and
-resource lifetime with deferred destruction, uploads, pipelines from SPIR-V
-with an on-disk pipeline cache and a compile counter, descriptors, a pass list
-that places the barriers, and offscreen targets. The Legacy adapter starts after
-the seam's interface freeze.
+The core now has the pieces the Legacy adapter needs to draw. Next, in order:
+the Legacy shader translator (dxbc-spirv's SM3 front end and our own lowering
+of CoD4's shaders to SPIR-V), the Legacy adapter on top of the core (the
+engine's state bits, samplers, constants, dynamic buffers and render targets),
+then the `r_backend vulkan` switch and mp_crash drawn through it, compared
+with DXVK on the laptop and the PC. Not in the core yet, because nothing needs
+them so far: compute pipelines, memory budgets (`VK_EXT_memory_budget`), and
+multisampled targets.

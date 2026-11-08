@@ -114,43 +114,46 @@ These came before the playable client and still build and run in CI:
 - The [standalone renderer](../tests/linux_renderer/README.md) replays single
   exported world surfaces and checks pixels against CPU predictions.
 - The [Vulkan core and window probe](vulkan-core.md) (`-DKISAK_BUILD_VULKAN_PROBE=ON`)
-  open a window and clear, present and resize it through Vulkan. It is the
-  first piece of the Vulkan back end; no game rendering goes through it yet.
-  Hosted CI runs it on lavapipe; not yet run on a GPU.
+  open a window and clear, present and resize it through Vulkan, or draw a
+  small textured scene through the core's memory, upload, pass and pipeline
+  paths and check its pixels. It is the base of the Vulkan back end; no game
+  rendering goes through it yet. Hosted CI runs it on lavapipe (Linux) and
+  MoltenVK (macOS); the clear probe also ran on the laptop and the PC GPU.
 
 ## Open pull requests
 
-As of 2026-11-06. Hosted CI is red on the latest run of each; each needs
-master merged in and a green run before it can merge.
+As of 2026-11-08.
 
 | PR | What | Waits on |
 | --- | --- | --- |
-| 95 | Windows x64 singleplayer level-load fixes from PC runs 6 to 11 | More PC runs until killhouse and cargoship play; then green CI. |
-| 99 | Every renderer D3D9 call behind `src/gfx_d3d/rhi/r_rhi.h` (renderer plan M1a) | Laptop image check (world draw and free-camera digests match master, i386 and x86_64, Debug and RelWithDebInfo) and a Windows PC before/after look. |
-| 103 | Shader converter spike tools (dxbc-spirv recommended, 80 of 81 cases) | David's pick of converter, the laptop corpus run, green CI. |
+| 120 | Record the Vulkan probe's first GPU runs (docs) | Review. |
+| 123 | Keep the Mac client's files in Application Support | Green CI. |
+| 124 | Vulkan core memory, uploads, passes, pipeline cache and the probe's `--draw` test (first piece of the Vulkan Legacy back end) | Green CI and the laptop draw run (`renderer/vulkan-probe-laptop-run-2-steps.md`). |
 
 ## Laptop and PC runs still to do
 
-- Speed test of the zero-timeout poll fix (PR 97, merged): perf run 3 plan in
-  the project files (`perf/laptop-perf-run-3-plan.md`).
 - Sound listening run for the OpenAL fix (PR 102, merged): plan in
   `sound/laptop-sound-run-1.md`, with `+set snd_alDebug 1`.
 - Singleplayer hand play on the levels the sweep passed (step 6 in
   [linux-sp-levels.md](linux-sp-levels.md)); sweep run 1 is done.
-- D3D9 interface image checks on the laptop and the PC (PR 99).
-- Vulkan window probe on a real GPU (laptop ANV, PC RTX 2080 Super).
+- Vulkan probe `--draw` on the laptop, x86_64 and i386 (PR 124).
+- Vulkan probe with the Khronos validation layer (synchronisation checks) on a
+  real GPU; the laptop and PC runs so far had no layer installed.
 
 ## Roadmap
 
 In rough order:
 
-1. **Land the open work above**: Windows x64 SP (95), D3D9 interface (99).
+1. **Land the open work above**.
 2. **Linux singleplayer beyond two levels**: hand play of the swept levels,
    then x86_64 singleplayer.
-3. **Renderer**: pick the shader converter (S0), then the backend handles
-   (M1b), then draw the game through the Vulkan back end with Legacy visuals
-   first and the Modern path after (plan in the project files,
-   `renderer/modern-renderer-plan.md`). The target is Modern at 60 fps on the laptop's Intel U300.
+3. **Renderer**: the shader converter (dxbc-spirv) and the D3D9 interface
+   (M1a) are done. Next is the Vulkan back end with Legacy visuals behind that
+   interface: the core's drawing pieces (PR 124), the shader translator, the
+   Legacy adapter, then mp_crash drawn through Vulkan and compared with DXVK on
+   the laptop and the PC. The Modern path comes after (plan in the project
+   files, `renderer/modern-renderer-plan.md`). The target is Modern at 60 fps
+   on the laptop's Intel U300.
 4. **Performance**: laptop A/B runs, a function-level profile, then the
    candidates in the main-thread notes (`r_gpuSync`, ThinLTO, asserts off).
 5. **Other platforms**: an aarch64 DXVK build and a first Arm run with game

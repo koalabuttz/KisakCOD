@@ -91,7 +91,48 @@
     X(vkBindBufferMemory) \
     X(vkMapMemory) \
     X(vkUnmapMemory) \
-    X(vkInvalidateMappedMemoryRanges)
+    X(vkInvalidateMappedMemoryRanges) \
+    X(vkFlushMappedMemoryRanges) \
+    X(vkWaitSemaphores) \
+    X(vkGetSemaphoreCounterValue) \
+    X(vkCreateImage) \
+    X(vkDestroyImage) \
+    X(vkGetImageMemoryRequirements) \
+    X(vkBindImageMemory) \
+    X(vkCmdCopyBufferToImage) \
+    X(vkCmdCopyBuffer) \
+    X(vkCmdBlitImage) \
+    X(vkCreateSampler) \
+    X(vkDestroySampler) \
+    X(vkCreateShaderModule) \
+    X(vkDestroyShaderModule) \
+    X(vkCreatePipelineCache) \
+    X(vkDestroyPipelineCache) \
+    X(vkGetPipelineCacheData) \
+    X(vkCreateGraphicsPipelines) \
+    X(vkDestroyPipeline) \
+    X(vkCreatePipelineLayout) \
+    X(vkDestroyPipelineLayout) \
+    X(vkCreateDescriptorSetLayout) \
+    X(vkDestroyDescriptorSetLayout) \
+    X(vkCreateDescriptorPool) \
+    X(vkDestroyDescriptorPool) \
+    X(vkResetDescriptorPool) \
+    X(vkAllocateDescriptorSets) \
+    X(vkUpdateDescriptorSets) \
+    X(vkCmdBindPipeline) \
+    X(vkCmdBindDescriptorSets) \
+    X(vkCmdBindVertexBuffers) \
+    X(vkCmdBindIndexBuffer) \
+    X(vkCmdPushConstants) \
+    X(vkCmdSetViewport) \
+    X(vkCmdSetScissor) \
+    X(vkCmdSetStencilReference) \
+    X(vkCmdSetDepthBias) \
+    X(vkCmdSetBlendConstants) \
+    X(vkCmdDraw) \
+    X(vkCmdDrawIndexed) \
+    X(vkCmdClearAttachments)
 
 namespace gfx_vk
 {
