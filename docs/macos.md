@@ -174,6 +174,27 @@ SDL_VULKAN_LIBRARY="$(brew --prefix vulkan-loader)/lib/libvulkan.1.dylib" \
   x86_64 probe with `MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=0`. Apple silicon
   runners and real Macs do not need it.
 
+### Vulkan back end
+
+The rest of the Vulkan back end builds on macOS too: the Legacy shader
+translator, the Legacy adapter ([vulkan-legacy-adapter.md](vulkan-legacy-adapter.md))
+and its D3D9 front ([vulkan-d3d9-front.md](vulkan-d3d9-front.md)). Add
+`-DKISAK_BUILD_VULKAN_SHADERS=ON -DKISAK_BUILD_VULKAN_LEGACY=ON` and the native
+D3D9 boundary's options (`-DKISAK_BUILD_LINUX_NATIVE_D3D9=ON`,
+`-DKISAK_DXVK_NATIVE_INCLUDE_DIR`, headers only) to the configure line above.
+CI runs the same checks as the Linux lavapipe job through MoltenVK, in a Cocoa
+window on each runner: `test_vulkan_legacy_shaders.py`,
+`test_vulkan_legacy_adapter.py` and `test_vulkan_d3d9_front.py`, with
+`--validation auto`.
+
+The client job also configures `KisakCOD-mp` with
+`-DKISAK_BUILD_VULKAN_BACKEND=ON`, so it carries `r_backend vulkan` next to the
+default D3D9 path. Nothing on the runners draws the game itself: that needs
+the game's files, so the first `+set r_backend vulkan` run of a map on a Mac
+waits for a Mac with the game installed. Such a run also needs the Vulkan
+loader and MoltenVK where SDL finds them (`SDL_VULKAN_LIBRARY`); the app
+bundle does not carry them yet.
+
 ## How it differs from the Linux build
 
 The Mac build uses the same POSIX platform layer as Linux (`src/linux`,
