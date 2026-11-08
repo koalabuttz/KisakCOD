@@ -260,18 +260,30 @@ first map load with an existing retail profile drops once (see
 ### Flashbang and concussion screen effects
 
 `scripts/tools/shellshock_screenshot_check.py` checks the flashbang white-out
-and the concussion blur from the game's own screenshots, with nobody playing.
-`write-cfg <home>/main/shk.cfg` writes a config; launching with
-`+exec shk.cfg +devmap mp_crash +wait 5000 +vstr shk_go` (plus the usual
-`fs_basepath`, `fs_homepath`, `net_ip` and window options, and
-`+set com_maxfps 85`) closes the team menu, waits about 15 s, takes seven screenshots from the
-still spectator view and quits. Each shock (`cg_shellshock 4 flashbang`,
+and the concussion effect from the game's own screenshots, with nobody
+playing. `write-cfg <home>/main/shk.cfg` writes a config whose `vstr shk_go`
+waits about 15 s, takes seven screenshots from the still spectator view and
+quits. Each shock (`cg_shellshock 4 flashbang`,
 `cg_shellshock 4 concussion_grenade_mp`) is shot twice, with
 `cg_drawShellshock` 1 and 0, so the camera shake is the same and only the
 screen effect differs. `check <home>/main/screenshots` prints brightness and
-edge-strength numbers and PASS or FAIL. The window must be fully on screen and
-uncovered, because `screenshot` reads the front buffer. On Windows that
-command line works as it is (run it from the game folder). On Linux, `+wait`
-lets the map connect before the start-up stats load and trips the stats upload
-assert, so launch with `+exec shk.cfg +devmap mp_crash` and type
-`vstr shk_go` on stdin once the map is up.
+edge-strength numbers and PASS or FAIL.
+
+- Windows: add `+exec shk.cfg +devmap mp_crash +wait 5000 +vstr shk_go` to
+  the usual command line and run it from the game folder.
+- Linux: `+wait` lets the map connect before the start-up stats load and
+  trips the stats upload assert. Launch with `+exec shk.cfg +devmap mp_crash`
+  and type `vstr shk_go` on stdin once the stats have arrived. Add
+  `+set vid_xpos 0 +set vid_ypos 0` when the window fills the display, or
+  `screenshot` refuses a window it sees as partly off screen.
+- `screenshot` reads the front buffer, so the window must be uncovered.
+
+Results on 2026-11-08 (local runs, not CI evidence): the flashbang whites
+out and the concussion effect draws on Windows Win32 and x64 (CI build of
+47017e3, RTX 2080 Super) and on the x86_64 Linux client (laptop, Intel
+graphics through DXVK). The concussion effect blends the previous frame back
+in at about 99% weight; from a still view the frame drifts brighter on the
+NVIDIA PC and darker on the laptop rather than smearing, which looks like
+8-bit blend rounding in the feedback loop. On the i386 Linux client the
+screenshots were unreliable (several frames taken seconds apart came out
+identical, one an older view), so i386 rests on the earlier checks by hand.

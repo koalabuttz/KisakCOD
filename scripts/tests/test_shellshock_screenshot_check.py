@@ -70,6 +70,13 @@ def main() -> int:
         if run_check(tmp / "moving").returncode == 0:
             failures.append("a moving view was not failed")
 
+        # A concussion frame that only drifted darker (the feedback blend on
+        # some GPUs) still shows the effect was drawn.
+        darker = dict(good, shk_conc_on=[max(v - 50, 0) for v in checker(1)])
+        write_set(tmp / "darker", darker)
+        if run_check(tmp / "darker").returncode != 0:
+            failures.append("a concussion frame that drifted darker was not passed")
+
         faded = dict(good, shk_none_c=[v // 2 for v in checker()])
         write_set(tmp / "faded", faded)
         if run_check(tmp / "faded").returncode == 0:
