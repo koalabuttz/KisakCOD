@@ -264,7 +264,7 @@ public:
             return false;
         }
         lg::LockedRect locked;
-        if (!lg::LockSurface(device, readSurface, d3d::LOCK_READONLY, locked))
+        if (!lg::LockSurface(device, readSurface, nullptr, d3d::LOCK_READONLY, locked))
         {
             Fail("LockSurface on the read-back surface failed");
             return false;

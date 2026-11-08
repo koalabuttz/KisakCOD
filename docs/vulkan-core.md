@@ -221,8 +221,9 @@ has so far run on lavapipe only (2026-11-08, cloud sandbox, x86_64 Debug, Mesa
 
 The [Legacy adapter](vulkan-legacy-adapter.md) now sits on the core, with the
 [Legacy shader translator](vulkan-legacy-shaders.md) turning the game's shaders
-into SPIR-V for it. Next: the `r_backend vulkan` switch, which connects the
-renderer's `r_rhi.h` calls to the adapter, and mp_crash drawn through it,
-compared with DXVK on the laptop and the PC. Not in the core yet, because
+into SPIR-V for it, and its [D3D9 front](vulkan-d3d9-front.md) implementing
+the D3D9 interfaces the renderer calls. Next: the `r_backend vulkan` switch,
+which hands the renderer the front at device creation, and mp_crash drawn
+through it, compared with DXVK on the laptop and the PC. Not in the core yet, because
 nothing needs them so far: compute pipelines, memory budgets
 (`VK_EXT_memory_budget`), and multisampled targets.

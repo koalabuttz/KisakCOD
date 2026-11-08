@@ -314,8 +314,10 @@ class NativeD3D9BoundaryWorkflowTests(unittest.TestCase):
     # Jobs that turn the boundary's CMake option on. device_probe does it to link
     # the device probe against a stand-in D3D9 library (DeviceProbeWorkflowTests);
     # x64_client and arm64_client do it to build the 64-bit multiplayer clients
-    # against stand-ins.
-    BOUNDARY_JOBS = ('native_d3d9_boundary', 'device_probe', 'x64_client', 'arm64_client')
+    # against stand-ins; vulkan_window does it to compile the Vulkan D3D9 front
+    # against the renderer's D3D9 declarations, linking no D3D9 library
+    # (VulkanWindowWorkflowTests).
+    BOUNDARY_JOBS = ('native_d3d9_boundary', 'device_probe', 'x64_client', 'arm64_client', 'vulkan_window')
 
     def test_other_jobs_keep_their_defaults(self):
         # The boundary stays opt-in: no other job turns the CMake option on, and
@@ -844,9 +846,11 @@ class VulkanWindowWorkflowTests(unittest.TestCase):
         self.assertIn('-DKISAK_BUILD_VULKAN_PROBE=ON', build)
         self.assertIn('-DKISAK_LINUX_ARCH=x86_64', build)
         self.assertIn('--target KisakCOD-vulkan-probe', build)
-        self.assertIn("grep -q 'libvulkan'", build)
-        # No D3D9, DXVK, game data or Steam.
-        for forbidden in ('dxvk', 'kisak_build_linux_native_d3d9', 'steam', 'zone/', 'main/'):
+        self.assertIn("grep -Eq 'libvulkan|d3d9|dxvk'", build)
+        # No game data or Steam, and of DXVK only its headers (for the D3D9
+        # front): no DXVK library is built or linked, no D3D9 stand-in either.
+        for forbidden in ('steam', 'zone/', 'main/', 'kisak_dxvk_native_library', 'meson setup', 'ninja -c',
+                          'libd3d9'):
             self.assertNotIn(forbidden, self.text.lower())
 
     def test_the_sdl3_sdk_matches_the_x86_64_client(self):
@@ -897,6 +901,23 @@ class VulkanWindowWorkflowTests(unittest.TestCase):
         run = self.step('Run the Legacy adapter check on lavapipe')['run']
         self.assertIn('scripts/tests/test_vulkan_legacy_adapter.py', run)
         self.assertIn('"$OUT_DIR/KisakCOD-vulkan-legacy-check"', run)
+        self.assertIn('--video-driver offscreen', run)
+        self.assertIn('--validation require', run)
+
+    def test_the_d3d9_front_is_built_against_staged_headers_and_checked(self):
+        fetch = self.step('Fetch pinned DXVK Native 2.7.1 headers')['run']
+        self.assertIn('--stage-dxvk-headers "$RUNNER_TEMP/dxvk-include/dxvk"', fetch)
+        # The same pin as the x86_64 client, whose renderer the front will serve.
+        client = self.workflow['jobs']['x64_client']['env']
+        for key in ('DXVK_REVISION', 'DXVK_DIRECTX_HEADERS_REVISION'):
+            self.assertEqual(self.job['env'][key], client[key])
+        build = self.step('Build the Vulkan window probe')['run']
+        self.assertIn('-DKISAK_BUILD_LINUX_NATIVE_D3D9=ON', build)
+        self.assertIn('-DKISAK_DXVK_NATIVE_INCLUDE_DIR="$RUNNER_TEMP/dxvk-include/dxvk"', build)
+        self.assertIn('KisakCOD-vulkan-d3d9-check', build)
+        run = self.step('Run the D3D9 front check on lavapipe')['run']
+        self.assertIn('scripts/tests/test_vulkan_d3d9_front.py', run)
+        self.assertIn('"$OUT_DIR/KisakCOD-vulkan-d3d9-check"', run)
         self.assertIn('--video-driver offscreen', run)
         self.assertIn('--validation require', run)
 

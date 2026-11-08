@@ -5,8 +5,8 @@ Direct3D 9 the renderer uses, built on the shared [Vulkan core](vulkan-core.md)
 and the [Legacy shader translator](vulkan-legacy-shaders.md), with a check
 program, `KisakCOD-vulkan-legacy-check`, that draws small D3D9-style scenes
 through it and checks their pixels. Nothing of the engine is compiled in yet
-and no game file is read; the renderer will reach the adapter through
-`src/gfx_d3d/rhi/r_rhi.h` in the next step.
+and no game file is read; the renderer will reach the adapter through its
+[D3D9 front](vulkan-d3d9-front.md).
 
 ## Where it fits
 
@@ -23,7 +23,7 @@ device it replaces.
 | File | What |
 | --- | --- |
 | `vk_legacy.h` | The public API and the D3D9 values it uses. |
-| `vk_legacy_device.cpp` | Device creation (D3D9's default states, 1x1 stand-in textures for empty samplers, the back buffer), errors and one-time warnings. |
+| `vk_legacy_device.cpp` | Device creation (D3D9's default states, 1x1 stand-in textures for empty samplers, the back buffer), `ResetState`, errors and one-time warnings. |
 | `vk_legacy_resources.cpp` | Formats, textures and their locks, surfaces, buffers and their locks, shaders, vertex declarations. |
 | `vk_legacy_draw.cpp` | States, pipelines, descriptors, constants, passes, draws, clears, copies, present, queries. |
 
@@ -180,6 +180,8 @@ timeline semaphores). The read-back barrier now covers later commands too.
 
 ## Next
 
-The `r_rhi.h` shim: the renderer's `R_HW_*` calls on the adapter behind
-`r_backend vulkan`, then mp_crash drawn through it and compared image by image
-with DXVK on the laptop and the PC.
+The [D3D9 front](vulkan-d3d9-front.md) implements the D3D9 interfaces on the
+adapter, so the renderer's `R_HW_*` calls reach it unchanged. Next is
+`r_backend vulkan`, which hands the renderer the front at device creation, then
+mp_crash drawn through it and compared image by image with DXVK on the laptop
+and the PC.

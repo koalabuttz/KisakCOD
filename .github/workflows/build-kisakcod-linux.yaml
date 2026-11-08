@@ -2325,14 +2325,18 @@ jobs:
     # src/gfx_vk and KisakCOD-vulkan-probe, which opens an SDL3 window and
     # clears, presents and resizes it through the core, then draws a small
     # textured scene through the core's resource paths and checks its pixels,
-    # the Legacy shader translator (KisakCOD-vulkan-shaders), and the Legacy
+    # the Legacy shader translator (KisakCOD-vulkan-shaders), the Legacy
     # adapter's pixel check (KisakCOD-vulkan-legacy-check,
-    # docs/vulkan-legacy-adapter.md). Built for
+    # docs/vulkan-legacy-adapter.md) and the check of its D3D9 front
+    # (KisakCOD-vulkan-d3d9-check, docs/vulkan-d3d9-front.md). Built for
     # x86_64, the primary Vulkan target, against the x86_64 SDL3 pin (same
-    # options and cache key as x64_client). It runs on Mesa's lavapipe, a CPU
-    # Vulkan driver, through SDL's offscreen video driver (VK_EXT_headless_surface):
-    # no GPU, no display server, no DXVK, no game data. The validation layer is
-    # required, with synchronisation checks, and any error fails the job.
+    # options and cache key as x64_client). The D3D9 front compiles against the
+    # renderer's own D3D9 declarations, so DXVK Native's headers are staged (the
+    # same pin as x64_client); no DXVK library is built or linked. It runs on
+    # Mesa's lavapipe, a CPU Vulkan driver, through SDL's offscreen video driver
+    # (VK_EXT_headless_surface): no GPU, no display server, no game data. The
+    # validation layer is required, with synchronisation checks, and any error
+    # fails the job.
     name: Vulkan window probe on lavapipe ${{ matrix.config }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -2344,6 +2348,8 @@ jobs:
 
     env:
       SDL3_REVISION: 877399b2b2cf21e67554ed9046410f268ce1d1b2
+      DXVK_REVISION: c3dd74be6baec53786d4e064a572185b70347a17
+      DXVK_DIRECTX_HEADERS_REVISION: 9df86f2341616ef1888ae59919feaa6d4fad693d
       BUILD_DIR: build-x64/vulkan-probe-${{ matrix.config }}
       OUT_DIR: ${{ github.workspace }}/out/vulkan-probe-${{ matrix.config }}
 
@@ -2416,6 +2422,31 @@ jobs:
           fi
           readelf -h "$RUNNER_TEMP/SDL3-sdk/lib/libSDL3.so.0" | grep -Eq 'Class:[[:space:]]+ELF64'
 
+      - name: Fetch pinned DXVK Native 2.7.1 headers
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Headers only, for the D3D9 front: the same source-only fetch as the
+          # x86_64 client job. Nothing of DXVK is built.
+          src="$RUNNER_TEMP/dxvk-source"
+          git init "$src"
+          git -C "$src" remote add origin https://github.com/doitsujin/dxvk.git
+          git -C "$src" fetch --depth 1 origin "$DXVK_REVISION"
+          git -C "$src" checkout --detach FETCH_HEAD
+          test "$(git -C "$src" rev-parse HEAD)" = "$DXVK_REVISION"
+          recorded="$(git -C "$src" ls-tree HEAD include/native/directx | awk '{print $3}')"
+          test "$recorded" = "$DXVK_DIRECTX_HEADERS_REVISION"
+          headers="$src/include/native/directx"
+          git init "$headers"
+          git -C "$headers" remote add origin https://github.com/Joshua-Ashton/mingw-directx-headers.git
+          git -C "$headers" fetch --depth 1 origin "$DXVK_DIRECTX_HEADERS_REVISION"
+          git -C "$headers" checkout --detach FETCH_HEAD
+          test "$(git -C "$headers" rev-parse HEAD)" = "$DXVK_DIRECTX_HEADERS_REVISION"
+          grep -q "version : '2.7.1'" "$src/meson.build"
+          python3 scripts/tests/run_native_d3d9_boundary_checks.py \
+            --dxvk-source "$src" --stage-dxvk-headers "$RUNNER_TEMP/dxvk-include/dxvk"
+
       - name: Build the Vulkan window probe
         timeout-minutes: 15
         shell: bash
@@ -2428,15 +2459,19 @@ jobs:
             -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$OUT_DIR" \
             -DKISAK_BUILD_VULKAN_PROBE=ON -DKISAK_BUILD_VULKAN_SHADERS=ON \
             -DKISAK_BUILD_VULKAN_LEGACY=ON \
+            -DKISAK_BUILD_LINUX_NATIVE_D3D9=ON \
+            -DKISAK_DXVK_NATIVE_INCLUDE_DIR="$RUNNER_TEMP/dxvk-include/dxvk" \
             -DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3"
           cmake --build "$BUILD_DIR" \
             --target KisakCOD-vulkan-probe KisakCOD-vulkan-shaders KisakCOD-vulkan-legacy-check \
+            KisakCOD-vulkan-d3d9-check \
             --parallel "$(nproc)"
-          for tool in KisakCOD-vulkan-probe KisakCOD-vulkan-legacy-check; do
+          for tool in KisakCOD-vulkan-probe KisakCOD-vulkan-legacy-check KisakCOD-vulkan-d3d9-check; do
             readelf -h "$OUT_DIR/$tool" | grep -Eq 'Class:[[:space:]]+ELF64'
-            # The loader is opened at run time through SDL, never linked.
-            if readelf -d "$OUT_DIR/$tool" | grep -q 'libvulkan'; then
-              echo "$tool must not link libvulkan" >&2
+            # The loader is opened at run time through SDL, never linked, and
+            # no D3D9 library is: the front is the D3D9 implementation.
+            if readelf -d "$OUT_DIR/$tool" | grep -Eq 'libvulkan|d3d9|dxvk'; then
+              echo "$tool must not link libvulkan or a D3D9 library" >&2
               exit 1
             fi
           done
@@ -2487,6 +2522,20 @@ jobs:
           # and checked pixel by pixel, with the validation layer required.
           python3 -u scripts/tests/test_vulkan_legacy_adapter.py \
             --binary "$OUT_DIR/KisakCOD-vulkan-legacy-check" \
+            --video-driver offscreen --validation require
+
+      - name: Run the D3D9 front check on lavapipe
+        timeout-minutes: 15
+        shell: bash
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          # The adapter driven through IDirect3D9 and IDirect3DDevice9, as the
+          # renderer calls it: pixels, reference counts, state getters,
+          # queries, Reset, Present and teardown, with validation required.
+          python3 -u scripts/tests/test_vulkan_d3d9_front.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-d3d9-check" \
             --video-driver offscreen --validation require
 
       - name: Save compiler cache

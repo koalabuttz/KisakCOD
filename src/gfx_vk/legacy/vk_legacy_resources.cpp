@@ -364,8 +364,11 @@ const TextureDesc &Describe(const Texture *texture) { return texture->desc; }
 bool FormatSupported(Device *device, d3d::Format format, uint32_t usage)
 {
     const FormatInfo *info = LookupFormat(format);
-    if (!info || (info->depth && (usage & d3d::USAGE_RENDERTARGET)) || (!info->depth && (usage & d3d::USAGE_DEPTHSTENCIL)))
+    if (!info || (info->depth && (usage & d3d::USAGE_RENDERTARGET)) || (!info->depth && (usage & d3d::USAGE_DEPTHSTENCIL))
+        || (info->compressed && (usage & d3d::USAGE_RENDERTARGET)))
         return false;
+    if (!device)
+        return true;
     return FormatSupports(device->core, info->depth ? device->depthFormat : info->vk, NeededFeatures(usage));
 }
 
@@ -560,10 +563,10 @@ void SurfaceSize(const Surface *surface, uint32_t &width, uint32_t &height, d3d:
     format = desc.format;
 }
 
-bool LockSurface(Device *device, Surface *surface, uint32_t flags, LockedRect &out)
+bool LockSurface(Device *device, Surface *surface, const Box *box, uint32_t flags, LockedRect &out)
 {
     out = LockedRect{};
-    return surface && LockRect(device, surface->texture, surface->face, surface->level, nullptr, flags, out);
+    return surface && LockRect(device, surface->texture, surface->face, surface->level, box, flags, out);
 }
 
 void UnlockSurface(Device *device, Surface *surface)

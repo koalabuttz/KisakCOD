@@ -15,8 +15,20 @@
 #                                  shaders assembled from D3D9 assembly) and
 #                                  checks their pixels; no game data
 #
-# Nothing of the engine is compiled in yet: the renderer reaches it through
-# src/gfx_d3d/rhi/r_rhi.h in a later step. See docs/vulkan-legacy-adapter.md.
+# and, where the renderer's own D3D9 declarations are available (the Windows
+# SDK, or the native D3D9 boundary, KISAK_BUILD_LINUX_NATIVE_D3D9, on Linux and
+# macOS):
+#
+#   kisak_gfx_vk_d3d9              src/gfx_vk/d3d9: IDirect3D9, IDirect3DDevice9
+#                                  and the resource interfaces on the adapter,
+#                                  so the renderer's D3D9 calls land on Vulkan
+#   KisakCOD-vulkan-d3d9-check     src/gfx_vk/tools/vk_d3d9_check.cpp: drives
+#                                  the front through the D3D9 interfaces and
+#                                  checks pixels, counts and errors; no game data
+#
+# Nothing of the engine is compiled in yet: the renderer reaches the front
+# through R_HW_Direct3DCreate9 (src/gfx_d3d/rhi) in a later step. See
+# docs/vulkan-legacy-adapter.md and docs/vulkan-d3d9-front.md.
 # ---------------------------------------------------------------------------
 option(KISAK_BUILD_VULKAN_LEGACY
     "Build the Vulkan Legacy adapter (D3D9 on the Vulkan core) and its check tool; needs KISAK_BUILD_VULKAN_PROBE and KISAK_BUILD_VULKAN_SHADERS" OFF)
@@ -51,4 +63,42 @@ if(WIN32)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             $<TARGET_RUNTIME_DLLS:KisakCOD-vulkan-legacy-check> $<TARGET_FILE_DIR:KisakCOD-vulkan-legacy-check>
         COMMAND_EXPAND_LISTS)
+endif()
+
+# The D3D9 front, compiled against the same D3D9 declarations as the renderer.
+if(WIN32 OR TARGET kisak_linux_native_d3d9)
+    set(vk_d3d9_sources
+        "${SRC_DIR}/gfx_vk/d3d9/vk_d3d9_device.cpp"
+        "${SRC_DIR}/gfx_vk/d3d9/vk_d3d9_direct3d.cpp"
+        "${SRC_DIR}/gfx_vk/d3d9/vk_d3d9_resources.cpp")
+    add_library(kisak_gfx_vk_d3d9 STATIC ${vk_d3d9_sources})
+    target_link_libraries(kisak_gfx_vk_d3d9 PUBLIC kisak_gfx_vk_legacy)
+    target_include_directories(kisak_gfx_vk_d3d9 PUBLIC "${SRC_DIR}")
+    target_compile_options(kisak_gfx_vk_d3d9 PRIVATE ${KISAK_VULKAN_WARNINGS})
+    if(MSVC)
+        target_compile_definitions(kisak_gfx_vk_d3d9 PRIVATE NOMINMAX)
+    endif()
+    if(NOT WIN32)
+        # DXVK Native's COM headers need Microsoft extensions (anonymous
+        # structs and unions), as every renderer unit that includes them does;
+        # the boundary's __stdcall is ignored off i386, as in the engine.
+        target_link_libraries(kisak_gfx_vk_d3d9 PUBLIC kisak_linux_native_d3d9)
+        target_compile_options(kisak_gfx_vk_d3d9 PUBLIC $<$<COMPILE_LANGUAGE:CXX>:-fms-extensions>
+            -Wno-ignored-attributes)
+    endif()
+
+    add_executable(KisakCOD-vulkan-d3d9-check "${SRC_DIR}/gfx_vk/tools/vk_d3d9_check.cpp")
+    target_compile_options(KisakCOD-vulkan-d3d9-check PRIVATE ${KISAK_VULKAN_WARNINGS})
+    target_link_libraries(KisakCOD-vulkan-d3d9-check PRIVATE kisak_gfx_vk_d3d9 SDL3::SDL3)
+    if(MSVC)
+        target_compile_definitions(KisakCOD-vulkan-d3d9-check PRIVATE NOMINMAX)
+    endif()
+    if(WIN32)
+        add_custom_command(TARGET KisakCOD-vulkan-d3d9-check POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_RUNTIME_DLLS:KisakCOD-vulkan-d3d9-check> $<TARGET_FILE_DIR:KisakCOD-vulkan-d3d9-check>
+            COMMAND_EXPAND_LISTS)
+    endif()
+else()
+    message(STATUS "Vulkan D3D9 front: skipped (needs the Windows SDK or KISAK_BUILD_LINUX_NATIVE_D3D9)")
 endif()
