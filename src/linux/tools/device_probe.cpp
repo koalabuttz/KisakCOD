@@ -20,7 +20,15 @@
 //
 // No game file is read, nothing is written, and no image leaves the process:
 // the read-back is compared in memory, and DXVK's log file is switched off
-// unless DXVK_LOG_PATH asks for one (DXVK Native still logs to stderr). Output is key=value lines on stdout; the
+// unless DXVK_LOG_PATH asks for one (DXVK Native still logs to stderr).
+//
+// With --backend vulkan (programs built with KISAK_BUILD_VULKAN_BACKEND) the
+// same steps run with r_backend vulkan: R_HW_Direct3DCreate9 returns the Vulkan
+// back end's D3D9 front (src/linux/client/vulkan/vulkan_backend.h) and DXVK is
+// never called. The probe then also requires that the engine reached no method
+// the front leaves unsupported, that the device was destroyed at its last
+// release, and that the Vulkan validation layer (--validation) reported no
+// error. Output is key=value lines on stdout; the
 // engine's own messages are printed as they come. Exit status 0 means every
 // check passed, 1 a failed stage (the last line names it), 2 a usage error.
 
@@ -36,6 +44,11 @@
 #include <linux/client/window/win32_window_sdl3.h>
 
 #include "device_probe.h"
+
+#if defined(KISAK_VULKAN_BACKEND)
+#include <gfx_vk/d3d9/vk_d3d9.h>
+#include <linux/client/vulkan/vulkan_backend.h>
+#endif
 
 #include <chrono>
 #include <cinttypes>
@@ -63,6 +76,8 @@ struct Options
     int width = 640;
     int height = 480;
     int frames = 3;
+    bool vulkan = false;           // --backend vulkan
+    const char *validation = "off"; // --validation, for r_vkValidation
 };
 
 class StageFailure : public std::runtime_error
@@ -110,7 +125,9 @@ int Usage(const char *problem)
         std::fprintf(stderr, "device_probe: %s\n", problem);
     std::fprintf(stderr,
                  "usage: KisakCOD-device-probe [--width %d..%d] [--height %d..%d] [--frames 1..%d]\n"
-                 "Creates the D3D9 device through the engine's r_init.cpp (DXVK Native, SDL3 WSI).\n"
+                 "           [--backend d3d9|vulkan] [--validation off|auto|require]\n"
+                 "Creates the D3D9 device through the engine's r_init.cpp (DXVK Native, SDL3 WSI),\n"
+                 "or with --backend vulkan through the Vulkan back end (r_backend vulkan).\n"
                  "Needs libdxvk_d3d9.so and libSDL3.so.0 on the library path and a Vulkan driver.\n",
                  kMinimumSide, kMaximumSide, kMinimumSide, kMaximumSide, kMaximumFrames);
     return 2;
@@ -173,6 +190,15 @@ void StartEngineRuntime(const Options &options)
     // R_RegisterDvars reads it when it registers the worker thread dvars.
     sys_smp_allowed = Dvar_RegisterBool("sys_smp_allowed", Sys_GetCpuCount() > 1u, DVAR_INIT, "Allow multi-threading");
     R_RegisterDvars();
+#if defined(KISAK_VULKAN_BACKEND)
+    // r_backend and its settings latch, as r_fullscreen does below.
+    Kisak_VulkanRegisterDvars();
+    Dvar_SetFromStringByName("r_backend", options.vulkan ? "vulkan" : "d3d9");
+    Dvar_SetFromStringByName("r_vkValidation", options.validation);
+    for (const char *name : {"r_backend", "r_vkValidation"})
+        Dvar_MakeLatchedValueCurrent(const_cast<dvar_s *>(Dvar_FindVar(name)));
+    std::printf("backend=%s validation=%s\n", Dvar_GetString("r_backend"), Dvar_GetString("r_vkValidation"));
+#endif
     // Windowed at the requested client size: r_customMode is the engine's own
     // way to ask for a size that is not in the display mode list. Both dvars
     // latch, so the latched values are made current, as R_MakeDedicated does.
@@ -339,6 +365,51 @@ void ReleaseDevice(GfxWindowParms &window, bool failOnLeak)
         Fail("shutdown", "something outlived the probe's release");
 }
 
+#if defined(KISAK_VULKAN_BACKEND)
+// The Vulkan back end's own counts, while the device lives: everything the
+// engine called is implemented, and the validation layer is on when asked for.
+void CheckVulkanDevice()
+{
+    gfx_vk::d3d9::DeviceCounters counters{};
+    if (!gfx_vk::d3d9::Counters(dx.device, counters))
+        Fail("vulkan", "the device is not the Vulkan back end's (r_backend did not reach R_HW_Direct3DCreate9)");
+    std::printf("vulkan presents=%llu skipped=%llu unsupported_calls=%llu live_objects=%u validation=%s "
+                "validation_errors=%u\n",
+                static_cast<unsigned long long>(counters.presents),
+                static_cast<unsigned long long>(counters.presentsSkipped),
+                static_cast<unsigned long long>(counters.unsupportedCalls), counters.liveObjects,
+                counters.validation ? "on" : "off", counters.validationErrors);
+    if (counters.unsupportedCalls)
+        Fail("vulkan", "the engine called a D3D9 method the Vulkan back end does not support (see the Vulkan: lines)");
+    if (!std::strcmp(Dvar_GetString("r_vkValidation"), "require") && !counters.validation)
+        Fail("vulkan", "the validation layer was required but is not on");
+}
+
+// After the last release: the core was destroyed, and validation stayed clean
+// through the teardown.
+void CheckVulkanTeardown()
+{
+    KisakVulkanTeardown teardown{};
+    const bool destroyed = Kisak_VulkanLastTeardown(teardown);
+    std::printf("vulkan_teardown destroyed=%s frames=%llu validation_errors=%u validation_warnings=%u\n",
+                destroyed ? "yes" : "no", static_cast<unsigned long long>(teardown.framesPresented),
+                teardown.validationErrors, teardown.validationWarnings);
+    if (!destroyed)
+        Fail("vulkan", "the Vulkan device outlived its last release");
+    if (teardown.validationErrors)
+        Fail("vulkan", std::to_string(teardown.validationErrors) + " Vulkan validation error(s) (see the Vulkan: lines)");
+}
+#else
+[[noreturn]] void CheckVulkanDevice()
+{
+    Fail("vulkan", "built without the Vulkan back end");
+}
+[[noreturn]] void CheckVulkanTeardown()
+{
+    Fail("vulkan", "built without the Vulkan back end");
+}
+#endif
+
 void Run(const Options &options)
 {
     SelectWsi();
@@ -375,6 +446,8 @@ void Run(const Options &options)
             Fail("device", "the new device is not ready: " + Hex(uint32_t(level)));
         CheckClearReadBack(0xFF336699u, options.width, options.height);
         PresentFrames(options.frames);
+        if (options.vulkan)
+            CheckVulkanDevice();
     }
     catch (...)
     {
@@ -382,6 +455,8 @@ void Run(const Options &options)
         throw;
     }
     ReleaseDevice(window, true);
+    if (options.vulkan)
+        CheckVulkanTeardown();
 }
 
 } // namespace
@@ -401,11 +476,27 @@ int main(int argc, char **argv)
             ++index;
         else if (!std::strcmp(arg, "--frames") && ParseInt(value, 1, kMaximumFrames, options.frames))
             ++index;
+        else if (!std::strcmp(arg, "--backend") && value && (!std::strcmp(value, "d3d9") || !std::strcmp(value, "vulkan")))
+        {
+            options.vulkan = !std::strcmp(value, "vulkan");
+            ++index;
+        }
+        else if (!std::strcmp(arg, "--validation") && value &&
+                 (!std::strcmp(value, "off") || !std::strcmp(value, "auto") || !std::strcmp(value, "require")))
+        {
+            options.validation = value;
+            ++index;
+        }
         else
             return Usage((std::string("bad argument ") + arg).c_str());
     }
 
-    std::printf("device_probe=start width=%d height=%d frames=%d\n", options.width, options.height, options.frames);
+#if !defined(KISAK_VULKAN_BACKEND)
+    if (options.vulkan)
+        return Usage("--backend vulkan needs a probe built with KISAK_BUILD_VULKAN_BACKEND");
+#endif
+    std::printf("device_probe=start width=%d height=%d frames=%d backend=%s\n", options.width, options.height,
+                options.frames, options.vulkan ? "vulkan" : "d3d9");
     std::fflush(stdout);
     int status = 0;
     try

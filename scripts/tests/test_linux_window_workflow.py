@@ -316,8 +316,11 @@ class NativeD3D9BoundaryWorkflowTests(unittest.TestCase):
     # x64_client and arm64_client do it to build the 64-bit multiplayer clients
     # against stand-ins; vulkan_window does it to compile the Vulkan D3D9 front
     # against the renderer's D3D9 declarations, linking no D3D9 library
-    # (VulkanWindowWorkflowTests).
-    BOUNDARY_JOBS = ('native_d3d9_boundary', 'device_probe', 'x64_client', 'arm64_client', 'vulkan_window')
+    # (VulkanWindowWorkflowTests); vulkan_engine does it to build the engine's
+    # programs with the Vulkan back end against the stand-ins
+    # (VulkanEngineWorkflowTests).
+    BOUNDARY_JOBS = ('native_d3d9_boundary', 'device_probe', 'x64_client', 'arm64_client', 'vulkan_window',
+                     'vulkan_engine')
 
     def test_other_jobs_keep_their_defaults(self):
         # The boundary stays opt-in: no other job turns the CMake option on, and
@@ -921,13 +924,90 @@ class VulkanWindowWorkflowTests(unittest.TestCase):
         self.assertIn('--video-driver offscreen', run)
         self.assertIn('--validation require', run)
 
+    def test_the_front_lock_is_checked_with_thread_sanitizer(self):
+        step = self.step("Check the D3D9 front's lock with ThreadSanitizer")
+        self.assertEqual(step['if'], "${{ matrix.config == 'Debug' }}")
+        self.assertEqual(step['env']['SDL_VIDEODRIVER'], 'offscreen')
+        self.assertIn('halt_on_error=1', step['env']['TSAN_OPTIONS'])
+        run = step['run']
+        self.assertIn('-DCMAKE_CXX_FLAGS=-fsanitize=thread', run)
+        self.assertIn('--scene threads', run)
+        self.assertIn("grep -qx 'd3d9_check=passed'", run)
+        self.assertIn('python3 scripts/tests/test_compare_frames.py', self.step('Check the frame comparison script')['run'])
+
     def test_no_other_job_builds_the_probe(self):
         for name, job in self.workflow['jobs'].items():
-            if name == self.JOB:
+            if name in (self.JOB, VulkanEngineWorkflowTests.JOB):
                 continue
             text = '\n'.join(step.get('run', '') for step in job['steps'])
             with self.subTest(job=name):
                 self.assertNotIn('KISAK_BUILD_VULKAN_PROBE', text)
+
+
+class VulkanEngineWorkflowTests(unittest.TestCase):
+    """The engine's programs on the Vulkan back end: i386, lavapipe, stand-ins, no game data."""
+
+    JOB = 'vulkan_engine'
+    BUILD_STEP = "Build the engine's programs with the Vulkan back end"
+    RUN_STEP = 'Run the device probe through the Vulkan back end on lavapipe'
+
+    @classmethod
+    def setUpClass(cls):
+        cls.workflow = yaml.load(
+            (ROOT / '.github/workflows/build-kisakcod-linux.yaml').read_text(),
+            Loader=yaml.BaseLoader)
+        cls.job = cls.workflow['jobs'][cls.JOB]
+        cls.text = '\n'.join(step.get('run', '') for step in cls.job['steps'])
+
+    def step(self, name):
+        return next(step for step in self.job['steps'] if step.get('name') == name)
+
+    def test_pins_and_sdk_match_the_device_probe(self):
+        probe = self.workflow['jobs']['device_probe']
+        for key in ('DXVK_REVISION', 'DXVK_DIRECTX_HEADERS_REVISION', 'SDL3_REVISION'):
+            self.assertEqual(self.job['env'][key], probe['env'][key])
+        options = lambda run: [line.strip().rstrip('\\').strip() for line in run.splitlines()
+                               if line.strip().startswith('-D')]
+        mine = self.step('Build pinned 32-bit SDL3 SDK')['run']
+        theirs = next(step for step in probe['steps'] if step.get('name') == 'Build pinned 32-bit SDL3 SDK')['run']
+        self.assertEqual(options(mine), options(theirs))
+        self.assertEqual(self.step('Restore pinned 32-bit SDL3 SDK')['with']['key'],
+                         next(step for step in probe['steps']
+                              if step.get('name') == 'Restore pinned 32-bit SDL3 SDK')['with']['key'])
+
+    def test_it_builds_the_programs_with_the_back_end_against_the_stand_ins(self):
+        build = self.step(self.BUILD_STEP)['run']
+        for flag in ('-DKISAK_BUILD_VULKAN_BACKEND=ON', '-DKISAK_BUILD_VULKAN_LEGACY=ON', '-DKISAK_BUILD_DEVICE_PROBE=ON',
+                     '-DKISAK_BUILD_WORLD_DRAW_PROBE=ON', '-DKISAK_BUILD_LINUX_MP_CLIENT=ON',
+                     '-DKISAK_DXVK_NATIVE_LIBRARY="$stubs/libd3d9_unavailable.so"',
+                     '-DKISAK_OPENAL_LIBRARY="$stubs/libopenal_unavailable.so"'):
+            self.assertIn(flag, build)
+        self.assertNotIn('KISAK_LINUX_ARCH', build)
+        self.assertIn('tests/linux_device_probe/d3d9_unavailable.cpp', build)
+        self.assertIn('Machine:[[:space:]]+Intel 80386', build)
+        self.assertIn("grep -q 'libvulkan'", build)
+        for program in ('KisakCOD-device-probe', 'KisakCOD-world-draw-probe', 'KisakCOD-mp'):
+            self.assertIn(program, build)
+
+    def test_the_device_probe_runs_through_the_back_end_on_lavapipe(self):
+        install = next(step['run'] for step in self.job['steps'] if step.get('name', '').startswith('Install '))
+        for package in ('libvulkan-dev', 'libvulkan1:i386', 'mesa-vulkan-drivers:i386'):
+            self.assertIn(package, install)
+        step = self.step(self.RUN_STEP)
+        self.assertEqual(step['env']['SDL_VIDEODRIVER'], 'offscreen')
+        run = step['run']
+        self.assertIn('--backend vulkan', run)
+        self.assertIn("grep -q '^vulkan presents=3 skipped=0 unsupported_calls=0 '", run)
+        self.assertIn("grep -q '^vulkan_teardown destroyed=yes '", run)
+        self.assertIn("grep -qx 'device_probe=passed renderer=shader_model_3 frames=3'", run)
+        self.assertIn("grep -q '^device_probe=failed stage=direct3d '", run)
+        front = self.step('Run the D3D9 front check on i386 lavapipe')['run']
+        self.assertIn('scripts/tests/test_vulkan_d3d9_front.py', front)
+
+    def test_no_dxvk_build_no_display_server_and_no_game_data(self):
+        for forbidden in ('meson setup', 'ninja -c', 'libdxvk', 'xvfb', 'steam', 'zone/', 'main/', 'fs_basepath',
+                          'kisak_world_draw_map', 'kisak_free_camera_map'):
+            self.assertNotIn(forbidden, self.text.lower())
 
 
 class CiCacheTests(unittest.TestCase):
@@ -936,8 +1016,8 @@ class CiCacheTests(unittest.TestCase):
     # Jobs that configure and build the engine with CMake.
     CCACHE_JOBS = ('window', 'native', 'native_d3d9_boundary', 'device_probe', 'x64_dedicated',
                    'arm64_dedicated', 'armv7_dedicated', 'vita_dedicated', 'x64_client', 'arm64_client',
-                   'vulkan_window')
-    SDL3_JOBS = ('window', 'device_probe')
+                   'vulkan_window', 'vulkan_engine')
+    SDL3_JOBS = ('window', 'device_probe', 'vulkan_engine')
 
     @classmethod
     def setUpClass(cls):

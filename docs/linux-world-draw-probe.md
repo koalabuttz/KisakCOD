@@ -59,7 +59,7 @@ probe's own code is in `src/linux/tools/world_draw_probe.cpp`.
 
 | Stage | When and what | Fails closed when |
 | --- | --- | --- |
-| `arguments` | before any device work | `KISAK_WORLD_DRAW_MAP` is unset, combined with another export mode, or not an allowlisted map name; `KISAK_WORLD_DRAW_SHOW_SECONDS` is set and not a whole number from 0 to 60 |
+| `arguments` | before any device work | `KISAK_WORLD_DRAW_MAP` is unset, combined with another export mode, or not an allowlisted map name; `KISAK_WORLD_DRAW_SHOW_SECONDS` is set and not a whole number from 0 to 60; `KISAK_WORLD_DRAW_IMAGES` is set and not 0 or 1 |
 | `layout` | the probe and the database loader are compiled with different definitions | any of the shared structs differs in size between the two views, as in the world device probe |
 | `start` | inside `$init`, where a client's `CL_InitRenderer` runs | a zone, a D3D object, a world or a registration exists already; `r_loadForRenderer` is off; the renderer would start threads; `fx_marks` is on; `sys_sysMB` is not set; `rand()` is not the Microsoft runtime's ([below](#how-it-links)); the render commands are not set up |
 | `environment` | `DXVK_WSI_DRIVER`, `DXVK_LOG_PATH`, SDL video | the WSI is set to something other than SDL3, or SDL video cannot start |
@@ -169,6 +169,14 @@ they happen:
 A pass ends with `asset_export=complete mode=world_draw_probe map=<map>` and exit
 0. Any failure ends with
 `Offline asset export failed: world_draw_probe stage=<stage>: <reason>` and exit 1.
+
+`KISAK_WORLD_DRAW_IMAGES=1` also writes each view's settled frame as a PPM
+image beside the report (`view-A.ppm`, `view-B.ppm`, listed under `images`),
+for comparing the DXVK and Vulkan back ends image by image
+([vulkan-d3d9-front.md](vulkan-d3d9-front.md#comparing-with-dxvk)); they stay
+in the private output directory. A probe built with
+`KISAK_BUILD_VULKAN_BACKEND` draws through Vulkan with `+set r_backend vulkan`,
+and its start line names the back end.
 
 `KISAK_WORLD_DRAW_SHOW_SECONDS=<n>` (0 to 60) keeps drawing view A for that many
 seconds after a pass, so a person at the machine can see it. Each frame is only

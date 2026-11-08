@@ -26,9 +26,10 @@
 #                                  the front through the D3D9 interfaces and
 #                                  checks pixels, counts and errors; no game data
 #
-# Nothing of the engine is compiled in yet: the renderer reaches the front
-# through R_HW_Direct3DCreate9 (src/gfx_d3d/rhi) in a later step. See
-# docs/vulkan-legacy-adapter.md and docs/vulkan-d3d9-front.md.
+# Nothing of the engine is compiled in here: the game's programs link the front
+# with KISAK_BUILD_VULKAN_BACKEND (vulkan_backend.cmake), and the renderer
+# reaches it through R_HW_Direct3DCreate9 (src/gfx_d3d/rhi) with r_backend
+# vulkan. See docs/vulkan-legacy-adapter.md and docs/vulkan-d3d9-front.md.
 # ---------------------------------------------------------------------------
 option(KISAK_BUILD_VULKAN_LEGACY
     "Build the Vulkan Legacy adapter (D3D9 on the Vulkan core) and its check tool; needs KISAK_BUILD_VULKAN_PROBE and KISAK_BUILD_VULKAN_SHADERS" OFF)

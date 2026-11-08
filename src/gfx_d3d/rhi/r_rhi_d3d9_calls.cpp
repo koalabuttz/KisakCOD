@@ -188,8 +188,21 @@ ULONG R_HW_AddRef(IDirect3DVolumeTexture9 *object)
 
 // ---- The Direct3D 9 object: adapters, formats and the device ----------------
 
+#if defined(KISAK_VULKAN_BACKEND)
+// The Vulkan back end (src/linux/client/vulkan/vulkan_backend.h): its D3D9
+// front when r_backend is vulkan, null otherwise.
+IDirect3D9 *Kisak_VulkanDirect3DCreate9();
+int Kisak_VulkanBackendSelected();
+#endif
+
 IDirect3D9 *R_HW_Direct3DCreate9(UINT SDKVersion)
 {
+#if defined(KISAK_VULKAN_BACKEND)
+    // r_backend vulkan: every later D3D9 call lands on the front this returns.
+    // No fallback to the system's D3D9 when it fails: the setting was asked for.
+    if (Kisak_VulkanBackendSelected())
+        return Kisak_VulkanDirect3DCreate9();
+#endif
     return Direct3DCreate9(SDKVersion);
 }
 

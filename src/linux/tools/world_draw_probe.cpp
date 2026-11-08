@@ -27,6 +27,7 @@
 #include <gfx_d3d/r_scene.h>
 #include <gfx_d3d/rb_logfile.h>
 #include <gfx_d3d/rb_stats.h>
+#include <gfx_d3d/rhi/r_rhi.h>
 #include <linux/d3d9_types.h>
 #include <linux/client/window/sdl_api.h>
 
@@ -127,10 +128,11 @@ void StartVideo()
 // R_InitGraphicsApi ignores R_PreCreateWindow's answer and goes on to create a
 // device on whatever interface it got, so a missing D3D9 library or Vulkan
 // driver would crash inside R_Init. The probe asks for an interface once first,
-// releases it, and names this stage instead.
+// releases it, and names this stage instead. It asks R_HW_Direct3DCreate9, so
+// with r_backend vulkan the interface checked is the Vulkan back end's.
 void RequireDirect3D()
 {
-    IDirect3D9 *const d3d9 = Direct3DCreate9(D3D_SDK_VERSION);
+    IDirect3D9 *const d3d9 = R_HW_Direct3DCreate9(D3D_SDK_VERSION);
     Require(d3d9 != nullptr, "direct3d",
             "Direct3DCreate9 returned no interface (no DXVK library, no Vulkan driver, or no adapter)");
     d3d9->Release();
@@ -163,6 +165,8 @@ FrameResult DrawView(const Camera &camera, refdef_s &refdef)
 std::chrono::steady_clock::time_point g_started;
 // KISAK_WORLD_DRAW_SHOW_SECONDS, read with the other arguments before any device work.
 int g_showSeconds = 0;
+// KISAK_WORLD_DRAW_IMAGES=1: write each view's settled frame next to the report.
+bool g_writeImages = false;
 // KISAK_FREE_CAMERA_INPUT and KISAK_FREE_CAMERA_SECONDS, read the same way.
 FreeCameraInput g_cameraInput = FreeCameraInput::Replay;
 int g_cameraSeconds = 0;
@@ -265,6 +269,11 @@ void Kisak_StartWorldDraw(WorldDrawMode drawMode, const char *mapName, const wf:
                 "KISAK_WORLD_DRAW_SHOW_SECONDS must be a whole number from 0 to " + std::to_string(kMaxShowSeconds));
         g_showSeconds = int(value);
     }
+    const char *const images = std::getenv("KISAK_WORLD_DRAW_IMAGES");
+    Require(!images || !freeCamera, "arguments", "KISAK_WORLD_DRAW_IMAGES belongs to KISAK_WORLD_DRAW_MAP");
+    Require(!images || !std::strcmp(images, "0") || !std::strcmp(images, "1"), "arguments",
+            "KISAK_WORLD_DRAW_IMAGES must be 0 or 1");
+    g_writeImages = images && !std::strcmp(images, "1");
     // The loader and this probe are compiled with different definitions, and this
     // side sees the D3D9 types through DXVK's headers: both must agree on every
     // struct they hand each other before anything is created.
@@ -379,9 +388,11 @@ void Kisak_StartWorldDraw(WorldDrawMode drawMode, const char *mapName, const wf:
     char description[sizeof(id.Description) + 1]{};
     if (SUCCEEDED(dx.d3d9->GetAdapterIdentifier(dx.adapterIndex, 0, &id)))
         std::memcpy(description, id.Description, sizeof(id.Description));
-    Say("world_draw_renderer=started renderer=shader_model_3 window=%s scene=%ux%u adapter=\"%s\" sys_mb=%d "
-        "picmip=%d/%d/%d seconds=%.2f\n",
-        mode.c_str(), vidConfig.sceneWidth, vidConfig.sceneHeight, description, Dvar_GetInt("sys_sysMB"),
+    // r_backend exists in probes built with KISAK_BUILD_VULKAN_BACKEND.
+    const char *const backend = Dvar_FindVar("r_backend") ? Dvar_GetString("r_backend") : "d3d9";
+    Say("world_draw_renderer=started renderer=shader_model_3 backend=%s window=%s scene=%ux%u adapter=\"%s\" "
+        "sys_mb=%d picmip=%d/%d/%d seconds=%.2f\n",
+        backend, mode.c_str(), vidConfig.sceneWidth, vidConfig.sceneHeight, description, Dvar_GetInt("sys_sysMB"),
         imageGlobals.picmip, imageGlobals.picmipBump, imageGlobals.picmipSpec, Seconds(g_started));
 }
 
@@ -481,8 +492,10 @@ void Kisak_DrawWorld(const std::filesystem::path &directory, const char *mapName
     };
     std::vector<FrameResult> framesA, framesB;
     std::vector<uint64_t> digestsA, digestsB;
+    KeepFramePixels(g_writeImages);
     drawUntilSettled(a, "A", framesA, digestsA);
     drawUntilSettled(b, "B", framesB, digestsB);
+    KeepFramePixels(false);
     const FrameResult &frameB = framesB.back();
 
     // 5. The rules.
@@ -515,7 +528,27 @@ void Kisak_DrawWorld(const std::filesystem::path &directory, const char *mapName
     }
     const double seconds = Seconds(g_started);
 
-    // 7. The report: the cameras, counts and measurements. No pixels.
+    // 7. With KISAK_WORLD_DRAW_IMAGES=1, each view's settled frame as a PPM
+    // image beside the report, for comparing two back ends image by image
+    // (scripts/tools/compare_frames.py). They stay in the private output
+    // directory with the report.
+    std::vector<std::string> imageFiles;
+    if (g_writeImages)
+    {
+        for (const auto &[label, frame] : {std::pair<const char *, const FrameResult *>{"A", &framesA.back()},
+                                           std::pair<const char *, const FrameResult *>{"B", &frameB}})
+        {
+            const std::string image = FramePpm(*frame);
+            Require(!image.empty(), "images", std::string("view ") + label + " kept no pixels");
+            const std::string name = std::string("view-") + label + ".ppm";
+            WriteExclusiveFile(directory / name, image);
+            imageFiles.push_back(name);
+            Say("world_draw_image view=%s file=%s size=%ux%u digest=%s\n", label, name.c_str(), frame->stats.width,
+                frame->stats.height, Hex64(frame->stats.digest).c_str());
+        }
+    }
+
+    // 8. The report: the cameras, counts and measurements. No pixels.
     std::ostringstream json;
     json << "{\"schema\":1,\"tool\":\"world_draw_probe\",\"map\":" << Json(mapName)
          << ",\"world\":" << Json(worldName) << ",\"renderer\":\"shader_model_3\",\"window\":[" << kWindowWidth
@@ -529,7 +562,10 @@ void Kisak_DrawWorld(const std::filesystem::path &directory, const char *mapName
         json << (i ? "," : "") << FrameJson(framesB[i]);
     json << "]},\"max_settle_draws\":" << kMaxSettleDraws << ",\"shown_frames\":" << shownFrames
          << ",\"start_seconds\":" << startSeconds << ",\"map_seconds\":" << mapSeconds << ",\"seconds\":" << seconds
-         << ",\"problem_count\":" << problems.size() << ",\"problems\":[";
+         << ",\"images\":[";
+    for (size_t i = 0; i < imageFiles.size(); ++i)
+        json << (i ? "," : "") << Json(imageFiles[i]);
+    json << "],\"problem_count\":" << problems.size() << ",\"problems\":[";
     for (size_t i = 0; i < problems.size(); ++i)
         json << (i ? "," : "") << "\n" << Json(problems[i]);
     json << "]}\n";

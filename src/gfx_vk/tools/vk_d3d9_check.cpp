@@ -23,11 +23,13 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace
@@ -419,6 +421,7 @@ public:
     void Draw();
     void RenderTarget();
     void References();
+    void Threads();
     void Queries();
     void ResetDevice();
     void Present();
@@ -717,6 +720,75 @@ void Check::References()
     SafeRelease(owner);
 }
 
+// The renderer's threads. The engine creates its device with
+// D3DCREATE_MULTITHREADED and, during a map load, its database thread creates
+// and fills textures while the render thread draws. Here a worker does the
+// same (create, lock, fill, unlock, release, with the last one kept) while
+// this thread draws and presents; then the kept texture is drawn and read.
+void Check::Threads()
+{
+    constexpr int kTextures = 200;
+    constexpr UINT kEdge = 16;
+    std::atomic<int> made{0};
+    std::atomic<bool> failed{false};
+    IDirect3DTexture9 *kept = nullptr;
+    const uint32_t liveBefore = Counters().liveObjects;
+    IDirect3DDevice9 *const shared = device;
+    std::thread worker([&] {
+        for (int i = 0; i < kTextures; ++i)
+        {
+            IDirect3DTexture9 *texture = nullptr;
+            D3DLOCKED_RECT locked{};
+            if (FAILED(shared->CreateTexture(kEdge, kEdge, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &texture,
+                                             nullptr)))
+            {
+                failed = true;
+                return;
+            }
+            if (FAILED(texture->LockRect(0, &locked, nullptr, 0)))
+            {
+                texture->Release();
+                failed = true;
+                return;
+            }
+            const uint32_t value = Argb(255, uint32_t(i) & 0xff, 0x80, 0x40);
+            for (UINT y = 0; y < kEdge; ++y)
+                for (UINT x = 0; x < kEdge; ++x)
+                    std::memcpy(static_cast<uint8_t *>(locked.pBits) + y * locked.Pitch + 4 * x, &value, 4);
+            texture->UnlockRect(0);
+            if (i == kTextures - 1)
+                kept = texture;
+            else
+                texture->Release();
+            ++made;
+        }
+    });
+    int frames = 0;
+    do
+    {
+        Reset(Argb(255, 0, 0, uint32_t(frames) & 0xff));
+        DrawQuad(0, 0, 32, 32, 0.5f, Argb(255, 255, 0, 0));
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+        ++frames;
+    } while (made.load() < kTextures && !failed.load());
+    worker.join();
+    Equal("worker_failed", failed.load(), false);
+    Equal("worker_textures", made.load(), kTextures);
+    Equal("frames_meanwhile", frames > 0, true);
+    Equal("live_after_worker", Counters().liveObjects, liveBefore + (kept ? 1 : 0));
+    if (!kept)
+        return;
+    Reset();
+    device->SetPixelShader(psTexture);
+    Ok(device->SetTexture(0, kept), "SetTexture");
+    DrawQuad(0, 0, 64, 64, 0.5f, 0xffffffffu);
+    device->SetTexture(0, nullptr);
+    if (Read())
+        Expect("worker_texture", 32, 32, (kTextures - 1) & 0xff, 0x80, 0x40);
+    Equal("kept_release", kept->Release(), 0ul);
+    Equal("live_at_end", Counters().liveObjects, liveBefore);
+}
+
 // Event and occlusion queries.
 void Check::Queries()
 {
@@ -924,6 +996,7 @@ int Run(const Options &options)
         {"draw", &Check::Draw, true},
         {"render_target", &Check::RenderTarget, true},
         {"references", &Check::References, true},
+        {"threads", &Check::Threads, true},
         {"queries", &Check::Queries, true},
         {"reset", &Check::ResetDevice, true},
         {"present", &Check::Present, true},

@@ -118,6 +118,9 @@ include(${SCRIPTS_DIR}/vulkan_probe/vulkan_probe.cmake)
 include(${SCRIPTS_DIR}/vulkan_probe/vulkan_shaders.cmake)
 # The Vulkan Legacy adapter: needs both of the above.
 include(${SCRIPTS_DIR}/vulkan_probe/vulkan_legacy.cmake)
+# The Vulkan back end in the programs above that start the renderer: needs the
+# Legacy adapter's D3D9 front and those programs' targets.
+include(${SCRIPTS_DIR}/vulkan_probe/vulkan_backend.cmake)
 
 # ---------------------------------------------------------------------------
 # Opt-in native Linux client network core (KISAK_BUILD_LINUX_CLIENT_CORE)

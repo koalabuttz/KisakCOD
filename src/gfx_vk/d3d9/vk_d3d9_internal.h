@@ -9,6 +9,11 @@
 // and the back buffer and the implicit swap chain share the device's. Every
 // object keeps the device alive until it goes: the device is destroyed once
 // its own count and its live objects are both zero.
+//
+// Threads: the renderer creates its device with D3DCREATE_MULTITHREADED and
+// calls it from more than one thread (the render thread draws while the
+// database thread creates and fills textures), so every method holds
+// FrontLock, as DXVK holds its device lock.
 
 #include "vk_d3d9.h"
 
@@ -16,6 +21,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -27,6 +33,21 @@ class Direct3D;
 class Device;
 
 void HostLog(const Host &host, const char *format, ...);
+
+// The lock every method of every front object holds for its whole call. One
+// for the process and recursive: a method calls others (Release from a
+// setter, a device method from a resource's), and it must outlive the
+// objects, because a Release can destroy the device whose method is running.
+// The renderer has one device, so a lock per device would gain nothing.
+std::recursive_mutex &FrontMutex();
+class FrontLock
+{
+public:
+    FrontLock() { FrontMutex().lock(); }
+    ~FrontLock() { FrontMutex().unlock(); }
+    FrontLock(const FrontLock &) = delete;
+    FrontLock &operator=(const FrontLock &) = delete;
+};
 // The devices Counters can answer for.
 void RegisterDevice(Device *device, bool live);
 
@@ -369,7 +390,11 @@ public:
     explicit Direct3D(const Host &host) : host_(host) {}
 
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void **object) override;
-    ULONG STDMETHODCALLTYPE AddRef() override { return ++refs_; }
+    ULONG STDMETHODCALLTYPE AddRef() override
+    {
+        const FrontLock lock;
+        return ++refs_;
+    }
     ULONG STDMETHODCALLTYPE Release() override;
 
     HRESULT STDMETHODCALLTYPE RegisterSoftwareDevice(void *init) override;
@@ -423,7 +448,11 @@ public:
     DeviceCounters counters() const;
 
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void **object) override;
-    ULONG STDMETHODCALLTYPE AddRef() override { return ++refs_; }
+    ULONG STDMETHODCALLTYPE AddRef() override
+    {
+        const FrontLock lock;
+        return ++refs_;
+    }
     ULONG STDMETHODCALLTYPE Release() override;
 
     HRESULT STDMETHODCALLTYPE TestCooperativeLevel() override;

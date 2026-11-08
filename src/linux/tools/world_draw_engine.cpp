@@ -55,6 +55,7 @@ namespace wf = kisak_world_frontend;
 
 constexpr size_t kMaxSpawnViews = 256;
 const char *g_tool = "world_draw_probe";
+bool g_keepFramePixels = false;
 
 template <class Asset> struct Collected
 {
@@ -218,8 +219,8 @@ void BackBufferSize(uint32_t &width, uint32_t &height)
 // engine's cubemap frames: the back buffer, which a windowed device with one
 // back buffer and D3DSWAPEFFECT_DISCARD keeps through Present (DXVK keeps it
 // too: d3d9_swapchain.h, SwapWithFrontBuffer). Copied to system memory, locked
-// read-only and measured; the pixels are not kept.
-wdr::FrameStats ReadBackBuffer()
+// read-only and measured; the pixels are copied out only when rgb is given.
+wdr::FrameStats ReadBackBuffer(std::vector<uint8_t> *rgb)
 {
     IDirect3DSurface9 *backBuffer = nullptr;
     HRESULT hr = dx.device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuffer);
@@ -256,6 +257,22 @@ wdr::FrameStats ReadBackBuffer()
     }
     const wdr::FrameStats stats = wdr::MeasureFrame(static_cast<const uint8_t *>(locked.pBits), desc.Width,
                                                     desc.Height, size_t(locked.Pitch));
+    if (rgb)
+    {
+        // B, G, R, X in memory (X8R8G8B8 or A8R8G8B8), as MeasureFrame reads it.
+        rgb->resize(size_t(desc.Width) * desc.Height * 3);
+        for (uint32_t y = 0; y < desc.Height; ++y)
+        {
+            const uint8_t *row = static_cast<const uint8_t *>(locked.pBits) + size_t(y) * size_t(locked.Pitch);
+            uint8_t *out = rgb->data() + size_t(y) * desc.Width * 3;
+            for (uint32_t x = 0; x < desc.Width; ++x)
+            {
+                out[3 * x + 0] = row[4 * x + 2];
+                out[3 * x + 1] = row[4 * x + 1];
+                out[3 * x + 2] = row[4 * x + 0];
+            }
+        }
+    }
     copy->UnlockRect();
     copy->Release();
     return stats;
@@ -396,9 +413,25 @@ FrameResult DrawRefdef(refdef_s &refdef, bool readBack, const std::function<void
     const HRESULT level = dx.device->TestCooperativeLevel();
     Require(level == D3D_OK, "frame", "the device is not ready after the frame: " + Hex(uint32_t(level)));
     if (readBack)
-        result.stats = ReadBackBuffer();
+        result.stats = ReadBackBuffer(g_keepFramePixels ? &result.rgb : nullptr);
     result.seconds = Seconds(started);
     return result;
+}
+
+void KeepFramePixels(bool keep)
+{
+    g_keepFramePixels = keep;
+}
+
+std::string FramePpm(const FrameResult &frame)
+{
+    const size_t pixels = size_t(frame.stats.width) * frame.stats.height;
+    if (frame.rgb.empty() || frame.rgb.size() != pixels * 3)
+        return std::string();
+    std::string image = "P6\n" + std::to_string(frame.stats.width) + " " + std::to_string(frame.stats.height) +
+                        "\n255\n";
+    image.append(reinterpret_cast<const char *>(frame.rgb.data()), frame.rgb.size());
+    return image;
 }
 
 std::vector<std::string> DroppedDrawWarnings()

@@ -70,14 +70,23 @@ struct FrameResult
     // a view has not settled while it is filling.
     uint32_t smcPatches = 0;
     double seconds = 0;
+    // The read-back pixels, 8-bit RGB rows top to bottom, only while
+    // KeepFramePixels is on (for image comparison); empty otherwise.
+    std::vector<uint8_t> rgb;
 };
+
+// Whether DrawRefdef keeps the pixels it reads back in FrameResult::rgb.
+void KeepFramePixels(bool keep);
+// A frame's kept pixels as a binary PPM (P6) image, or empty when none were kept.
+std::string FramePpm(const FrameResult &frame);
 
 // The renderer R_Init started, with its graphics zones and code images.
 void RequireStartedRenderer();
 // The back buffer's size, as the device reports it.
 void BackBufferSize(uint32_t &width, uint32_t &height);
-// The back buffer copied to system memory and measured; the pixels are not kept.
-wdr::FrameStats ReadBackBuffer();
+// The back buffer copied to system memory and measured. The pixels are copied
+// to rgb (8-bit RGB rows) when it is given, and not kept otherwise.
+wdr::FrameStats ReadBackBuffer(std::vector<uint8_t> *rgb = nullptr);
 // Whether the backend will draw this frame's pre-tessellated surfaces from the
 // index buffer the front end fills for it (docs/linux-world-draw-probe.md, "The
 // first frame").

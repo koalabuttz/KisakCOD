@@ -102,6 +102,7 @@ Counted::~Counted()
 
 ULONG Counted::AddRefPublic()
 {
+    const FrontLock lock;
     if (deviceChild_)
         return device_->AddRef();
     if (container_)
@@ -111,6 +112,7 @@ ULONG Counted::AddRefPublic()
 
 ULONG Counted::ReleasePublic()
 {
+    const FrontLock lock;
     if (deviceChild_)
         return device_->Release();
     if (container_)
@@ -157,6 +159,7 @@ void Counted::DestroyIfUnused()
 template <class Interface>
 HRESULT STDMETHODCALLTYPE Object<Interface>::QueryInterface(REFIID riid, void **object)
 {
+    const FrontLock lock;
     if (!object)
         return E_POINTER;
     *object = nullptr;
@@ -177,6 +180,7 @@ HRESULT STDMETHODCALLTYPE Object<Interface>::QueryInterface(REFIID riid, void **
 template <class Interface>
 HRESULT STDMETHODCALLTYPE Resource<Interface>::GetDevice(IDirect3DDevice9 **device)
 {
+    const FrontLock lock;
     if (!device)
         return D3DERR_INVALIDCALL;
     this->device_->AddRef();
@@ -187,24 +191,28 @@ HRESULT STDMETHODCALLTYPE Resource<Interface>::GetDevice(IDirect3DDevice9 **devi
 template <class Interface>
 HRESULT STDMETHODCALLTYPE Resource<Interface>::SetPrivateData(REFGUID guid, const void *data, DWORD size, DWORD flags)
 {
+    const FrontLock lock;
     return private_.Set(guid, data, size, flags);
 }
 
 template <class Interface>
 HRESULT STDMETHODCALLTYPE Resource<Interface>::GetPrivateData(REFGUID guid, void *data, DWORD *size)
 {
+    const FrontLock lock;
     return private_.Get(guid, data, size);
 }
 
 template <class Interface>
 HRESULT STDMETHODCALLTYPE Resource<Interface>::FreePrivateData(REFGUID guid)
 {
+    const FrontLock lock;
     return private_.Free(guid);
 }
 
 template <class Interface>
 DWORD STDMETHODCALLTYPE Resource<Interface>::SetPriority(DWORD priority)
 {
+    const FrontLock lock;
     const DWORD old = priority_;
     priority_ = priority;
     return old;
@@ -213,6 +221,7 @@ DWORD STDMETHODCALLTYPE Resource<Interface>::SetPriority(DWORD priority)
 template <class Interface>
 DWORD STDMETHODCALLTYPE Resource<Interface>::GetPriority()
 {
+    const FrontLock lock;
     return priority_;
 }
 
@@ -242,6 +251,7 @@ Surface::~Surface()
 
 HRESULT STDMETHODCALLTYPE Surface::GetContainer(REFIID riid, void **container)
 {
+    const FrontLock lock;
     if (!container)
         return D3DERR_INVALIDCALL;
     // A texture level's container is its texture; any other surface's is the
@@ -254,6 +264,7 @@ HRESULT STDMETHODCALLTYPE Surface::GetContainer(REFIID riid, void **container)
 
 HRESULT STDMETHODCALLTYPE Surface::GetDesc(D3DSURFACE_DESC *desc)
 {
+    const FrontLock lock;
     if (!desc)
         return D3DERR_INVALIDCALL;
     uint32_t width = 0, height = 0;
@@ -272,6 +283,7 @@ HRESULT STDMETHODCALLTYPE Surface::GetDesc(D3DSURFACE_DESC *desc)
 
 HRESULT STDMETHODCALLTYPE Surface::LockRect(D3DLOCKED_RECT *locked, const RECT *rect, DWORD flags)
 {
+    const FrontLock lock;
     if (!locked)
         return D3DERR_INVALIDCALL;
     locked->pBits = nullptr;
@@ -293,17 +305,20 @@ HRESULT STDMETHODCALLTYPE Surface::LockRect(D3DLOCKED_RECT *locked, const RECT *
 
 HRESULT STDMETHODCALLTYPE Surface::UnlockRect()
 {
+    const FrontLock lock;
     lg::UnlockSurface(device_->legacy(), surface_);
     return D3D_OK;
 }
 
 HRESULT STDMETHODCALLTYPE Surface::GetDC(HDC *)
 {
+    const FrontLock lock;
     return device_->Unsupported("IDirect3DSurface9::GetDC");
 }
 
 HRESULT STDMETHODCALLTYPE Surface::ReleaseDC(HDC)
 {
+    const FrontLock lock;
     return device_->Unsupported("IDirect3DSurface9::ReleaseDC");
 }
 
@@ -353,6 +368,7 @@ BaseTexture<Interface>::~BaseTexture()
 template <class Interface>
 DWORD STDMETHODCALLTYPE BaseTexture<Interface>::SetLOD(DWORD lod)
 {
+    const FrontLock lock;
     // Only managed textures have a LOD; the adapter samples every level.
     const DWORD old = state_.lod;
     if (state_.pool == D3DPOOL_MANAGED)
@@ -363,6 +379,7 @@ DWORD STDMETHODCALLTYPE BaseTexture<Interface>::SetLOD(DWORD lod)
 template <class Interface>
 HRESULT STDMETHODCALLTYPE BaseTexture<Interface>::SetAutoGenFilterType(D3DTEXTUREFILTERTYPE)
 {
+    const FrontLock lock;
     return this->device_->Unsupported("IDirect3DBaseTexture9::SetAutoGenFilterType");
 }
 
@@ -438,54 +455,64 @@ HRESULT BaseTexture<Interface>::Unlock(UINT face, UINT level)
 
 HRESULT STDMETHODCALLTYPE Texture::GetLevelDesc(UINT level, D3DSURFACE_DESC *desc)
 {
+    const FrontLock lock;
     return LevelDesc(level, desc);
 }
 
 HRESULT STDMETHODCALLTYPE Texture::GetSurfaceLevel(UINT level, IDirect3DSurface9 **surface)
 {
+    const FrontLock lock;
     return LevelSurface(0, level, surface);
 }
 
 HRESULT STDMETHODCALLTYPE Texture::LockRect(UINT level, D3DLOCKED_RECT *locked, const RECT *rect, DWORD flags)
 {
+    const FrontLock lock;
     return Lock(0, level, locked, rect, flags);
 }
 
 HRESULT STDMETHODCALLTYPE Texture::UnlockRect(UINT level)
 {
+    const FrontLock lock;
     return Unlock(0, level);
 }
 
 HRESULT STDMETHODCALLTYPE Texture::AddDirtyRect(const RECT *)
 {
+    const FrontLock lock;
     // Every unlock uploads what was written, so there is nothing to mark.
     return D3D_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CubeTexture::GetLevelDesc(UINT level, D3DSURFACE_DESC *desc)
 {
+    const FrontLock lock;
     return LevelDesc(level, desc);
 }
 
 HRESULT STDMETHODCALLTYPE CubeTexture::GetCubeMapSurface(D3DCUBEMAP_FACES face, UINT level,
                                                          IDirect3DSurface9 **surface)
 {
+    const FrontLock lock;
     return LevelSurface(static_cast<UINT>(face), level, surface);
 }
 
 HRESULT STDMETHODCALLTYPE CubeTexture::LockRect(D3DCUBEMAP_FACES face, UINT level, D3DLOCKED_RECT *locked,
                                                 const RECT *rect, DWORD flags)
 {
+    const FrontLock lock;
     return Lock(static_cast<UINT>(face), level, locked, rect, flags);
 }
 
 HRESULT STDMETHODCALLTYPE CubeTexture::UnlockRect(D3DCUBEMAP_FACES face, UINT level)
 {
+    const FrontLock lock;
     return Unlock(static_cast<UINT>(face), level);
 }
 
 HRESULT STDMETHODCALLTYPE CubeTexture::AddDirtyRect(D3DCUBEMAP_FACES, const RECT *)
 {
+    const FrontLock lock;
     return D3D_OK;
 }
 
@@ -498,6 +525,7 @@ Volume::Volume(Device *device, VolumeTexture *texture, UINT level)
 
 HRESULT STDMETHODCALLTYPE Volume::GetDevice(IDirect3DDevice9 **device)
 {
+    const FrontLock lock;
     if (!device)
         return D3DERR_INVALIDCALL;
     device_->AddRef();
@@ -507,21 +535,25 @@ HRESULT STDMETHODCALLTYPE Volume::GetDevice(IDirect3DDevice9 **device)
 
 HRESULT STDMETHODCALLTYPE Volume::SetPrivateData(REFGUID guid, const void *data, DWORD size, DWORD flags)
 {
+    const FrontLock lock;
     return private_.Set(guid, data, size, flags);
 }
 
 HRESULT STDMETHODCALLTYPE Volume::GetPrivateData(REFGUID guid, void *data, DWORD *size)
 {
+    const FrontLock lock;
     return private_.Get(guid, data, size);
 }
 
 HRESULT STDMETHODCALLTYPE Volume::FreePrivateData(REFGUID guid)
 {
+    const FrontLock lock;
     return private_.Free(guid);
 }
 
 HRESULT STDMETHODCALLTYPE Volume::GetContainer(REFIID riid, void **container)
 {
+    const FrontLock lock;
     if (!container)
         return D3DERR_INVALIDCALL;
     return texture_->QueryInterface(riid, container);
@@ -529,21 +561,25 @@ HRESULT STDMETHODCALLTYPE Volume::GetContainer(REFIID riid, void **container)
 
 HRESULT STDMETHODCALLTYPE Volume::GetDesc(D3DVOLUME_DESC *desc)
 {
+    const FrontLock lock;
     return texture_->GetLevelDesc(level_, desc);
 }
 
 HRESULT STDMETHODCALLTYPE Volume::LockBox(D3DLOCKED_BOX *locked, const D3DBOX *box, DWORD flags)
 {
+    const FrontLock lock;
     return texture_->LockBox(level_, locked, box, flags);
 }
 
 HRESULT STDMETHODCALLTYPE Volume::UnlockBox()
 {
+    const FrontLock lock;
     return texture_->UnlockBox(level_);
 }
 
 HRESULT STDMETHODCALLTYPE VolumeTexture::GetLevelDesc(UINT level, D3DVOLUME_DESC *desc)
 {
+    const FrontLock lock;
     if (!desc || level >= state_.levels)
         return D3DERR_INVALIDCALL;
     desc->Format = state_.format;
@@ -558,6 +594,7 @@ HRESULT STDMETHODCALLTYPE VolumeTexture::GetLevelDesc(UINT level, D3DVOLUME_DESC
 
 HRESULT STDMETHODCALLTYPE VolumeTexture::GetVolumeLevel(UINT level, IDirect3DVolume9 **volume)
 {
+    const FrontLock lock;
     if (!volume)
         return D3DERR_INVALIDCALL;
     *volume = nullptr;
@@ -574,6 +611,7 @@ HRESULT STDMETHODCALLTYPE VolumeTexture::GetVolumeLevel(UINT level, IDirect3DVol
 
 HRESULT STDMETHODCALLTYPE VolumeTexture::LockBox(UINT level, D3DLOCKED_BOX *locked, const D3DBOX *box, DWORD flags)
 {
+    const FrontLock lock;
     if (!locked)
         return D3DERR_INVALIDCALL;
     locked->pBits = nullptr;
@@ -604,11 +642,13 @@ HRESULT STDMETHODCALLTYPE VolumeTexture::LockBox(UINT level, D3DLOCKED_BOX *lock
 
 HRESULT STDMETHODCALLTYPE VolumeTexture::UnlockBox(UINT level)
 {
+    const FrontLock lock;
     return Unlock(0, level);
 }
 
 HRESULT STDMETHODCALLTYPE VolumeTexture::AddDirtyBox(const D3DBOX *)
 {
+    const FrontLock lock;
     return D3D_OK;
 }
 
@@ -627,6 +667,7 @@ VertexBuffer::~VertexBuffer()
 
 HRESULT STDMETHODCALLTYPE VertexBuffer::Lock(UINT offset, UINT size, void **data, DWORD flags)
 {
+    const FrontLock lock;
     if (!data)
         return D3DERR_INVALIDCALL;
     *data = lg::Lock(device_->legacy(), buffer_, offset, size, flags);
@@ -635,12 +676,14 @@ HRESULT STDMETHODCALLTYPE VertexBuffer::Lock(UINT offset, UINT size, void **data
 
 HRESULT STDMETHODCALLTYPE VertexBuffer::Unlock()
 {
+    const FrontLock lock;
     lg::Unlock(device_->legacy(), buffer_);
     return D3D_OK;
 }
 
 HRESULT STDMETHODCALLTYPE VertexBuffer::GetDesc(D3DVERTEXBUFFER_DESC *desc)
 {
+    const FrontLock lock;
     if (!desc)
         return D3DERR_INVALIDCALL;
     desc->Format = D3DFMT_VERTEXDATA;
@@ -666,6 +709,7 @@ IndexBuffer::~IndexBuffer()
 
 HRESULT STDMETHODCALLTYPE IndexBuffer::Lock(UINT offset, UINT size, void **data, DWORD flags)
 {
+    const FrontLock lock;
     if (!data)
         return D3DERR_INVALIDCALL;
     *data = lg::Lock(device_->legacy(), buffer_, offset, size, flags);
@@ -674,12 +718,14 @@ HRESULT STDMETHODCALLTYPE IndexBuffer::Lock(UINT offset, UINT size, void **data,
 
 HRESULT STDMETHODCALLTYPE IndexBuffer::Unlock()
 {
+    const FrontLock lock;
     lg::Unlock(device_->legacy(), buffer_);
     return D3D_OK;
 }
 
 HRESULT STDMETHODCALLTYPE IndexBuffer::GetDesc(D3DINDEXBUFFER_DESC *desc)
 {
+    const FrontLock lock;
     if (!desc)
         return D3DERR_INVALIDCALL;
     desc->Format = format_;
@@ -708,6 +754,7 @@ Shader<Interface>::~Shader()
 template <class Interface>
 HRESULT STDMETHODCALLTYPE Shader<Interface>::GetDevice(IDirect3DDevice9 **device)
 {
+    const FrontLock lock;
     if (!device)
         return D3DERR_INVALIDCALL;
     this->device_->AddRef();
@@ -718,6 +765,7 @@ HRESULT STDMETHODCALLTYPE Shader<Interface>::GetDevice(IDirect3DDevice9 **device
 template <class Interface>
 HRESULT STDMETHODCALLTYPE Shader<Interface>::GetFunction(void *data, UINT *size)
 {
+    const FrontLock lock;
     if (!size)
         return D3DERR_INVALIDCALL;
     const UINT bytes = static_cast<UINT>(code_.size());
@@ -748,6 +796,7 @@ VertexDeclaration::~VertexDeclaration()
 
 HRESULT STDMETHODCALLTYPE VertexDeclaration::GetDevice(IDirect3DDevice9 **device)
 {
+    const FrontLock lock;
     if (!device)
         return D3DERR_INVALIDCALL;
     device_->AddRef();
@@ -757,6 +806,7 @@ HRESULT STDMETHODCALLTYPE VertexDeclaration::GetDevice(IDirect3DDevice9 **device
 
 HRESULT STDMETHODCALLTYPE VertexDeclaration::GetDeclaration(D3DVERTEXELEMENT9 *elements, UINT *count)
 {
+    const FrontLock lock;
     if (!count)
         return D3DERR_INVALIDCALL;
     const UINT total = static_cast<UINT>(elements_.size());
@@ -777,6 +827,7 @@ Query::~Query()
 
 HRESULT STDMETHODCALLTYPE Query::GetDevice(IDirect3DDevice9 **device)
 {
+    const FrontLock lock;
     if (!device)
         return D3DERR_INVALIDCALL;
     device_->AddRef();
@@ -786,11 +837,13 @@ HRESULT STDMETHODCALLTYPE Query::GetDevice(IDirect3DDevice9 **device)
 
 DWORD STDMETHODCALLTYPE Query::GetDataSize()
 {
+    const FrontLock lock;
     return type_ == D3DQUERYTYPE_EVENT ? sizeof(BOOL) : sizeof(DWORD);
 }
 
 HRESULT STDMETHODCALLTYPE Query::Issue(DWORD flags)
 {
+    const FrontLock lock;
     if (flags == D3DISSUE_END)
         lg::IssueQuery(device_->legacy(), query_, false);
     else if (flags == D3DISSUE_BEGIN && type_ == D3DQUERYTYPE_OCCLUSION)
@@ -802,6 +855,7 @@ HRESULT STDMETHODCALLTYPE Query::Issue(DWORD flags)
 
 HRESULT STDMETHODCALLTYPE Query::GetData(void *data, DWORD size, DWORD flags)
 {
+    const FrontLock lock;
     if (size && !data)
         return D3DERR_INVALIDCALL;
     uint32_t result = 0;
@@ -826,31 +880,37 @@ SwapChain::SwapChain(Device *device) : Object(device, nullptr, true) {}
 HRESULT STDMETHODCALLTYPE SwapChain::Present(const RECT *src, const RECT *dst, D3D9Window window, const RGNDATA *dirty,
                                              DWORD)
 {
+    const FrontLock lock;
     return device_->Present(src, dst, window, dirty);
 }
 
 HRESULT STDMETHODCALLTYPE SwapChain::GetFrontBufferData(IDirect3DSurface9 *dst)
 {
+    const FrontLock lock;
     return device_->GetFrontBufferData(0, dst);
 }
 
 HRESULT STDMETHODCALLTYPE SwapChain::GetBackBuffer(UINT index, D3DBACKBUFFER_TYPE type, IDirect3DSurface9 **surface)
 {
+    const FrontLock lock;
     return device_->GetBackBuffer(0, index, type, surface);
 }
 
 HRESULT STDMETHODCALLTYPE SwapChain::GetRasterStatus(D3DRASTER_STATUS *status)
 {
+    const FrontLock lock;
     return device_->GetRasterStatus(0, status);
 }
 
 HRESULT STDMETHODCALLTYPE SwapChain::GetDisplayMode(D3DDISPLAYMODE *mode)
 {
+    const FrontLock lock;
     return device_->GetDisplayMode(0, mode);
 }
 
 HRESULT STDMETHODCALLTYPE SwapChain::GetDevice(IDirect3DDevice9 **device)
 {
+    const FrontLock lock;
     if (!device)
         return D3DERR_INVALIDCALL;
     device_->AddRef();
@@ -860,6 +920,7 @@ HRESULT STDMETHODCALLTYPE SwapChain::GetDevice(IDirect3DDevice9 **device)
 
 HRESULT STDMETHODCALLTYPE SwapChain::GetPresentParameters(D3DPRESENT_PARAMETERS *params)
 {
+    const FrontLock lock;
     if (!params)
         return D3DERR_INVALIDCALL;
     *params = device_->params_;
