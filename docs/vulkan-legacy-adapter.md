@@ -108,8 +108,9 @@ message apart (`CoreStats::validationIgnored`, printed as
 On a device with the portability subset (MoltenVK), the core enables every
 subset feature the device has. The D3D9 formats need swizzled image views
 (`imageViewFormatSwizzle`), and the validation layer holds the device to what
-was enabled. The adapter also takes two other paths. The Legacy device's ready
-line names both (`vertex stride static, depth compare fixed`):
+was enabled. The adapter also takes three other paths. The Legacy device's
+ready line names them (`vertex stride static, depth compare fixed, 16-bit
+targets wide`):
 
 - **Vertex strides in the pipeline.** MoltenVK has
   `VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE` only from macOS 14 on Mac2 or
@@ -122,10 +123,19 @@ line names both (`vertex stride static, depth compare fixed`):
   bound (`PipelineKey::depthSamplers`). `legacy_shader::BuildSpirv` replaces
   the `useDepthCompare` loads with constants and removes the branch not taken.
   Vertex shaders are built with no depth samplers.
+- **16-bit render targets as B8G8R8A8.** Metal has the 16-bit packed formats
+  only on Apple GPUs, so MoltenVK on Intel and AMD Macs (and the Intel CI VM)
+  cannot render to R5G6B5, X1R5G5B5 or A1R5G5B5. A render target in one of
+  them is made as B8G8R8A8 instead, with the same channel order and swizzle.
+  The renderer's sun shadow pass uses an R5G6B5 colour target
+  (`R_SetShadowmapFormats_DX`). This is decided per device, not only on
+  MoltenVK. Copies between such a target and a lockable texture of the D3D9
+  format are refused, since the formats differ.
 
-`KISAK_VK_VERTEX_STRIDE=static` and `KISAK_VK_DEPTH_COMPARE=fixed` force
-either path on any device. The Linux lavapipe job runs the adapter and D3D9
-front checks with both set, with the validation layer required.
+`KISAK_VK_VERTEX_STRIDE=static`, `KISAK_VK_DEPTH_COMPARE=fixed` and
+`KISAK_VK_RENDER_TARGETS=wide` force each path on any device. The Linux
+lavapipe job runs the adapter and D3D9 front checks with all three set, with
+the validation layer required.
 
 ## Building and running
 

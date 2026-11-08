@@ -200,9 +200,15 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
         ResetState(*device);
         if (Flush(core, false))
         {
-            Log(*device, "device ready: back buffer %ux%u, depth %s, vertex stride %s, depth compare %s", width, height,
-                FormatName(device->depthFormat), Features(device->core).dynamicVertexStride ? "dynamic" : "static",
-                Features(device->core).fixedDepthCompare ? "fixed" : "dynamic");
+            const bool packedTargets = !Features(device->core).forceWideRenderTargets
+                                       && FormatSupports(device->core, VK_FORMAT_R5G6B5_UNORM_PACK16,
+                                                         VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT
+                                                             | VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT);
+            Log(*device,
+                "device ready: back buffer %ux%u, depth %s, vertex stride %s, depth compare %s, 16-bit targets %s",
+                width, height, FormatName(device->depthFormat),
+                Features(device->core).dynamicVertexStride ? "dynamic" : "static",
+                Features(device->core).fixedDepthCompare ? "fixed" : "dynamic", packedTargets ? "packed" : "wide");
             return device.release();
         }
         Fail(*device, "core: %s", LastError(core));
