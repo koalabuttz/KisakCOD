@@ -262,6 +262,25 @@ void Device::Destroy()
                 static_cast<unsigned long long>(stats.draws), stats.shaders, stats.shaderMicros / 1000.0,
                 stats.pipelines, stats.pipelineMicros / 1000.0, static_cast<unsigned long long>(stats.textureUploads),
                 stats.uploadBytes / (1024.0 * 1024.0), stats.uploadMicros / 1000.0);
+        // What each frame cost, for comparing frame rates: the work recorded
+        // per presented frame, and the GPU's time from a frame's first
+        // command to its last (idle gaps between its submissions included).
+        if (core_)
+        {
+            const CoreStats &core = Stats(core_);
+            const double frames = core.framesPresented ? double(core.framesPresented) : 1.0;
+            const double gpuAverage = core.frame.samples ? core.frame.totalMs / double(core.frame.samples) : 0.0;
+            HostLog(host(),
+                    "vulkan d3d9: frame stats: %llu frames; per frame %.0f draws, %.1f passes, %.0f descriptor "
+                    "sets, %.1f KB constants, %.1f dynamic renames, %.2f submissions (%llu flushes in all); "
+                    "GPU frame %.2f ms average, %.2f min, %.2f max over %llu frames",
+                    static_cast<unsigned long long>(core.framesPresented), double(stats.draws) / frames,
+                    double(stats.passes) / frames, double(stats.descriptorSets) / frames,
+                    double(stats.constantBytes) / 1024.0 / frames, double(stats.dynamicRenames) / frames,
+                    double(core.submissions) / frames, static_cast<unsigned long long>(core.flushes), gpuAverage,
+                    core.frame.samples ? core.frame.minMs : 0.0, core.frame.samples ? core.frame.maxMs : 0.0,
+                    static_cast<unsigned long long>(core.frame.samples));
+        }
         lg::DestroyDevice(legacy_);
         legacy_ = nullptr;
     }
