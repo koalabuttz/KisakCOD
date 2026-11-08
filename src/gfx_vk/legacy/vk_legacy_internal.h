@@ -8,6 +8,7 @@
 #include <gfx_vk/shader/vk_legacy_shader.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstdarg>
 #include <cstring>
 #include <memory>
@@ -18,6 +19,25 @@
 namespace gfx_vk::legacy
 {
 namespace ls = gfx_vk::legacy_shader;
+
+// Adds the time from its construction to its destruction to a counter, in
+// microseconds.
+class TimeInto
+{
+public:
+    explicit TimeInto(uint64_t &sink) : sink_(sink), start_(std::chrono::steady_clock::now()) {}
+    ~TimeInto()
+    {
+        sink_ += static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_).count());
+    }
+    TimeInto(const TimeInto &) = delete;
+    TimeInto &operator=(const TimeInto &) = delete;
+
+private:
+    uint64_t &sink_;
+    std::chrono::steady_clock::time_point start_;
+};
 
 // ---- Formats (vk_legacy_resources.cpp) ------------------------------------------------
 

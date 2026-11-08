@@ -236,7 +236,11 @@ is SDL3, as for DXVK's SDL3 WSI: the `HWND` the Win32 window layer makes is the
 `SDL_Window`, the `HMONITOR` is the primary display's `SDL_DisplayID`, the
 display modes are SDL's fullscreen modes (or the desktop mode where SDL lists
 none, as with its offscreen driver), and the front's log lines go to the
-console as `Vulkan: ...`. No pipeline cache file is written yet. The Windows
+console as `Vulkan: ...`. When the device goes, the front logs where the CPU
+time went (`vulkan d3d9: device stats: ...`: shaders created and the time
+translating them, pipelines and the time building them, texture uploads with
+their size and time), for comparing loads and first frames with DXVK. No
+pipeline cache file is written yet. The Windows
 game does not link the front yet.
 
 The device probe with `--backend vulkan` runs `r_init.cpp`'s device start
