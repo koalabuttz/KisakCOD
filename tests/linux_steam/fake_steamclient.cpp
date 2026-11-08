@@ -266,7 +266,11 @@ public:
     void RunFrame() override {}
     uint32 GetIPCCallCount() override { return 0; }
     void SetWarningMessageHook(SteamAPIWarningMessageHook_t) override {}
-    bool BShutdownIfAllPipesClosed() override { return false; }
+    bool BShutdownIfAllPipesClosed() override
+    {
+        ++g_control.shutdownIfAllPipesClosedCalls;
+        return g_control.pipesReleased > 0;
+    }
     ISteamHTTP *GetISteamHTTP(HSteamUser, HSteamPipe, const char *) override { return nullptr; }
     ISteamController *GetISteamController(HSteamUser, HSteamPipe, const char *) override { return nullptr; }
     ISteamUGC *GetISteamUGC(HSteamUser, HSteamPipe, const char *) override { return nullptr; }

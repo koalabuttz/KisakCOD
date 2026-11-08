@@ -97,6 +97,7 @@ void TestOpenFailures()
     Check(session.Open(g_library, 7940) == linux_steam::OpenResult::noUser, "no logged-in user: noUser");
     Check(g_control->pipesReleased == 1 && g_control->releasedPipe == 7 && g_control->usersReleased == 0,
         "noUser: the pipe is released");
+    Check(g_control->shutdownIfAllPipesClosedCalls == 0, "a client pipe never shuts steamclient down");
 
     Reset();
     g_control->serveUser = false;
@@ -244,6 +245,7 @@ void TestCloseAndReopen(linux_steam::Session &session)
               g_control->pipesReleased == 1 && g_control->releasedPipe == 7,
         "Close releases the user and the pipe");
     Check(!session.IsOpen() && session.SteamId() == 0 && !session.LoggedOn(), "a closed session answers nothing");
+    Check(g_control->shutdownIfAllPipesClosedCalls == 0, "closing a client session leaves steamclient running");
     session.Close();
     Check(g_control->pipesReleased == 1, "a second Close does nothing");
     Reset();
@@ -302,8 +304,8 @@ void TestGameServerFailures()
     Check(session.OpenGameServer(g_library, 7940, 28960, "1.7") == linux_steam::OpenResult::noServerInterface,
         "no ISteamGameServer: noServerInterface");
     Check(g_control->usersReleased == 1 && g_control->releasedUser == 4 && g_control->pipesReleased == 1 &&
-              g_control->serverLogOffCalls == 0,
-        "noServerInterface: user and pipe released, no LogOff");
+              g_control->serverLogOffCalls == 0 && g_control->shutdownIfAllPipesClosedCalls == 1,
+        "noServerInterface: user and pipe released, steamclient told, no LogOff");
 
     Reset();
     g_control->serverInitResult = false;
@@ -382,9 +384,12 @@ void TestGameServer()
     Check(g_control->serverLogOffCalls == 1 && g_control->usersReleased == 1 && g_control->releasedUser == 4 &&
               g_control->releasedUserPipe == 9 && g_control->pipesReleased == 1 && g_control->releasedPipe == 9,
         "Close logs off and releases the game-server user and pipe");
+    Check(g_control->shutdownIfAllPipesClosedCalls == 1,
+        "Close lets steamclient stop its in-process threads (BShutdownIfAllPipesClosed)");
     Check(!session.IsOpen() && !session.IsGameServer() && !session.LoggedOn(), "a closed game server answers nothing");
     session.Close();
-    Check(g_control->serverLogOffCalls == 1, "a second Close does nothing");
+    Check(g_control->serverLogOffCalls == 1 && g_control->shutdownIfAllPipesClosedCalls == 1,
+        "a second Close does nothing");
 
     Reset();
     Check(session.Open(g_library, 7940) == linux_steam::OpenResult::ok && !session.IsGameServer(),

@@ -181,6 +181,7 @@ OpenResult Session::OpenGameServer(const char *libraryPath, uint32_t appId, uint
     HSteamPipe pipe = 0;
     steamUser_ = client->CreateLocalUser(&pipe, k_EAccountTypeGameServer);
     pipe_ = pipe;
+    localPipe_ = pipe_ != 0;
     if (!pipe_ || !steamUser_)
     {
         Close();
@@ -217,6 +218,13 @@ void Session::Close()
         if (steamUser_)
             Client(client_)->ReleaseUser(pipe_, steamUser_);
         Client(client_)->BReleaseSteamPipe(pipe_);
+        // A game-server pipe lives inside this process: steamclient.so runs
+        // its own threads for it until told every pipe is gone, as
+        // SteamGameServer_Shutdown does. Left running, they crashed the
+        // dedicated server in exit() after a clean quit. A pipe to the Steam
+        // client (Open) has no such threads here.
+        if (localPipe_)
+            Client(client_)->BShutdownIfAllPipesClosed();
     }
     // The library stays loaded: steamclient.so keeps threads of its own, and
     // unloading it under them is not safe.
@@ -226,6 +234,7 @@ void Session::Close()
     server_ = nullptr;
     utils_ = nullptr;
     pipe_ = 0;
+    localPipe_ = false;
     steamUser_ = 0;
     getCallback_ = nullptr;
     freeCallback_ = nullptr;

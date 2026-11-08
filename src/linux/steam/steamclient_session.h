@@ -126,6 +126,7 @@ private:
     void *utils_ = nullptr;  // ISteamUtils, optional
     int32_t pipe_ = 0;
     int32_t steamUser_ = 0; // global user (Open) or game-server user (OpenGameServer)
+    bool localPipe_ = false; // pipe_ is an in-process game-server pipe (OpenGameServer)
     bool (*getCallback_)(int32_t, void *, int32_t *) = nullptr;
     void (*freeCallback_)(int32_t) = nullptr;
     char loaderError_[256] = {};

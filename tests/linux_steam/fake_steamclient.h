@@ -94,6 +94,7 @@ struct FakeSteamControl
     int serverEndCalls = 0;
     uint64_t serverEndSteamId = 0;
     int serverTicketRequests = 0;
+    int shutdownIfAllPipesClosedCalls = 0;
 };
 
 extern "C" FakeSteamControl *FakeSteam_Control();
