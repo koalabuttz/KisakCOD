@@ -24,7 +24,7 @@ without a GPU or game data, against stand-in D3D9 and OpenAL libraries.
 | Dedicated server, PS Vita | `-DKISAK_PLATFORM=vita` | Clang + VitaSDK build packed into `KisakCOD-dedi.vpk` (hosted CI job, artifact). Boots in Vita3K without game data; capped at 24 players so its snapshot buffers fit the Vita's memory. Not yet run on a Vita. [Guide](vita.md) |
 | Dedicated server, macOS (arm64 and x86_64) | `-DKISAK_PLATFORM=macos` | Builds with Apple Clang on hosted macOS runners (Apple silicon and Intel) and boots without game data to the first missing fastfile. Not yet run with game data or on a real Mac. [Guide](macos.md) |
 | Movies | `-DKISAK_LINUX_CINEMATICS=ON` | Bink movies play through an FFmpeg-backed shim on i386 and x86_64 (laptop). Off by default. [Guide](linux-cinematics.md) |
-| Steam authentication | `-DKISAK_LINUX_STEAM=ON` | Added by PR 85. Logs in through the running Steam client's `steamclient.so`; a probe got a ticket validated on i386 and x86_64, and an i386 client joined, reconnected to and was refused by (with Steam off) an i386 dedicated server; the same passed with x86_64 client and server, and across i386 and x86_64 in both directions (laptop, one Steam account). A dedicated server can instead log on as an anonymous Steam game server (`KISAK_STEAM_SERVER_LOGIN=anonymous`; logon probed on the laptop, no game run yet). Off by default. [Guide](linux-steam.md) |
+| Steam authentication | `-DKISAK_LINUX_STEAM=ON` | Added by PR 85. Logs in through the running Steam client's `steamclient.so`; a probe got a ticket validated on i386 and x86_64, and an i386 client joined, reconnected to and was refused by (with Steam off) an i386 dedicated server; the same passed with x86_64 client and server, and across i386 and x86_64 in both directions (laptop, one Steam account). A dedicated server can instead log on as an anonymous Steam game server (`KISAK_STEAM_SERVER_LOGIN=anonymous`); a Windows client on David's PC joined such a laptop server and was refused with the server's Steam off. Off by default. [Guide](linux-steam.md) |
 | Singleplayer `KisakCOD-sp`, i386 | `-DKISAK_BUILD_LINUX_SP_GAME=ON` | killhouse and cargoship load, leave the pregame by themselves and play about a minute each, clean quit (laptop). All 21 levels load, run 45 s and quit cleanly; a 4-level mission chain and devsave/loadgame pass (laptop sweep run 1, [levels](linux-sp-levels.md)). [Guide](linux-sp-game.md) |
 | Windows x64 | MSVC `KISAK_WIN64` | sp, mp and dedi build and link (CI job "MSVC x64 build"); opt-in FFmpeg movies. On the Windows PC, mp_crash loads to class select and the dedicated server hosts bots. Singleplayer still crashes during level load (fixes in PR 95). |
 | Windows ARM64 | MSVC `KISAK_WIN_ARM64` | sp, mp and dedi build and start up to the missing-game-data error on hosted Windows on Arm. Not run with game data. [arm64 track](linux-arm64.md) |
@@ -68,8 +68,9 @@ builds use `-ffp-contract=off` (no fused multiply-add).
   dedicated server rejects ordinary client tickets unless an explicit opt-in is
   set ([details](linux-dedicated.md#local-connection-testing-without-steam-authentication)).
   Build with `-DKISAK_LINUX_STEAM=ON` to authenticate through the Steam client
-  running on the machine ([guide](linux-steam.md)). Not yet tried that way: a
-  Windows client or server on the other end, two Steam accounts.
+  running on the machine ([guide](linux-steam.md)). A Windows client has
+  joined a Linux server that way. Not yet tried: a Windows server, two Steam
+  accounts.
 - **Singleplayer played by hand past two levels.** All 21 levels load and run
   unattended, and mission changes and save loading work from the console
   ([linux-sp-levels.md](linux-sp-levels.md)). Only killhouse and cargoship
@@ -169,9 +170,10 @@ In rough order:
    goal): the armv7 dedicated server, then the Vita dedicated server (builds;
    first run on David's Vita next, [guide](vita.md)); a client waits for the
    backend handles (M1b) ([armv7 track](linux-armv7.md)).
-6. **Remote play**: Steam login is opt-in (`KISAK_LINUX_STEAM`, PR 85); next
-   are a run against a Windows client or server and one with two Steam
-   accounts. Admission is never weakened to fake it. HTTP downloads, voice chat
+6. **Remote play**: Steam login is opt-in (`KISAK_LINUX_STEAM`, PR 85); a
+   Windows client joined a Linux server logged on as an anonymous game server
+   (PR 133). Next: a CD-key-only client for servers that accept unverified
+   GUIDs, and a run with two Steam accounts. Admission is never weakened to fake it. HTTP downloads, voice chat
    and the remote script debugger come after.
 
 ## Checks before a push

@@ -139,8 +139,24 @@ as `steam_session`) needs no Steam:
   (`SteamServersConnected`, logged on, anonymous game server ID) and rejected a
   junk ticket. The desktop Steam client was not used.
 
-Not verified: a Windows client or server on the other end, two different Steam
-accounts, and a game run of the anonymous game server login.
+- 2026-11-08, laptop run 17 with the Windows PC (PR 133 at 4ead239, x86_64
+  dedi on the laptop's LAN address with `KISAK_STEAM_SERVER_LOGIN=anonymous`;
+  a Windows Win32 KisakCOD client on the PC, signed in to the same Steam
+  account the laptop's desktop Steam had been using): the server logged on as
+  an anonymous game server, the PC joined, and the server logged "A player
+  passed the Steam auth check"; the PC reached the game and disconnected
+  normally. With the server's Steam backend off the PC was refused ("Your Steam
+  Client Ticket was Invalid"). That run found an exit-time crash (exit 139):
+  steamclient's own threads for the game server pipe were still running when
+  `exit()` tore the library down. Close now calls `BShutdownIfAllPipesClosed`
+  after releasing that pipe, as `SteamGameServer_Shutdown` does.
+- 2026-11-08, laptop run 19 (PR 133 at 046a161): three anonymous-login quits
+  after the logon line, one quit before the logon finished, and one client-mode
+  quit all exited 0.
+
+Not verified: a Windows server, two different Steam accounts, and a Windows
+client against a Linux server in client mode (one account can't be signed in on
+two computers at once, which is why the anonymous login exists).
 
 Steam delivers auth verdicts to every process logged in to the same account,
 so each process acts only on verdicts for SteamIDs it started a session for. A
