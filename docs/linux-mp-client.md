@@ -270,5 +270,8 @@ still spectator view and quits. Each shock (`cg_shellshock 4 flashbang`,
 `cg_drawShellshock` 1 and 0, so the camera shake is the same and only the
 screen effect differs. `check <home>/main/screenshots` prints brightness and
 edge-strength numbers and PASS or FAIL. The window must be fully on screen and
-uncovered, because `screenshot` reads the front buffer. The same steps work on
-Windows.
+uncovered, because `screenshot` reads the front buffer. On Windows that
+command line works as it is (run it from the game folder). On Linux, `+wait`
+lets the map connect before the start-up stats load and trips the stats upload
+assert, so launch with `+exec shk.cfg +devmap mp_crash` and type
+`vstr shk_go` on stdin once the map is up.

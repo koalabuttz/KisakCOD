@@ -20,6 +20,11 @@ Two steps, both run on the machine that has the game:
 
        +exec shk.cfg +devmap mp_crash +wait 5000 +vstr shk_go
 
+   On the Linux client, holding the command buffer with ``+wait`` lets the map
+   connect before the start-up stats load and trips an assert in the stats
+   upload. There, launch with ``+exec shk.cfg +devmap mp_crash`` only and send
+   ``vstr shk_go`` through the console (stdin) once the map and stats are in.
+
    The game quits by itself when done. Nothing has to be spawned: the config
    closes the team menu and uses the still spectator view, and ``devmap``
    allows the cheat dvar.
@@ -34,7 +39,9 @@ Pass rules:
   same shock with the effect off (by at least 40).
 - concussion: with the effect on, the frame is blurred, i.e. its edge strength
   (mean absolute luma gradient) is at most 0.85x the effect-off frame, while the
-  two no-shock frames agree within 0.95-1.05x (a still view).
+  two no-shock frames agree within 0.95-1.05x (a still view). An extra
+  information line gives fine-over-coarse edge strength, which drops with blur
+  but not with a plain brightness change (the concussion also brightens).
 
 The numbers are computed over the whole frame and over its right half (the
 team menu sits on the left); the verdict uses the right half.
@@ -63,6 +70,7 @@ FLASH_MIN_MEAN = 200.0
 FLASH_MIN_WHITE = 0.5
 FLASH_MIN_GAIN = 40.0
 BLUR_MAX_RATIO = 0.85
+COARSE = 4  # pixel step of the coarse difference
 STILL_RANGE = (0.95, 1.05)
 
 
@@ -108,6 +116,8 @@ def metrics(img: Image, x0_frac: float = 0.0) -> dict[str, float]:
     w, h, l = img.width, img.height, img.luma
     x0 = int(w * x0_frac)
     total = 0.0
+    coarse = 0.0
+    ccount = 0
     white = 0
     grad = 0.0
     count = 0
@@ -123,10 +133,18 @@ def metrics(img: Image, x0_frac: float = 0.0) -> dict[str, float]:
             if x + 1 < w and y + 1 < h:
                 grad += abs(l[base + x + 1] - v) + abs(l[base + w + x] - v)
                 gcount += 1
+            if x + COARSE < w and y + COARSE < h:
+                coarse += abs(l[base + x + COARSE] - v) + abs(l[base + COARSE * w + x] - v)
+                ccount += 1
+    edge = grad / gcount if gcount else 0.0
+    coarse = coarse / ccount if ccount else 0.0
     return {
         "mean": total / count,
         "white": white / count,
-        "edge": grad / gcount if gcount else 0.0,
+        "edge": edge,
+        # Fine over coarse differences: a blur lowers it, a plain brightness or
+        # contrast change scales both and leaves it alone.
+        "sharp": edge / coarse if coarse > 1e-6 else 0.0,
     }
 
 
@@ -142,8 +160,8 @@ def check(shot_dir: Path) -> int:
         full[name] = metrics(img)
         right[name] = metrics(img, 0.5)
         print(f"{name:14s} {img.width}x{img.height}  "
-              f"full: mean {full[name]['mean']:6.1f} white {full[name]['white']:.3f} edge {full[name]['edge']:6.2f}  "
-              f"right half: mean {right[name]['mean']:6.1f} white {right[name]['white']:.3f} edge {right[name]['edge']:6.2f}")
+              f"full: mean {full[name]['mean']:6.1f} white {full[name]['white']:.3f} edge {full[name]['edge']:6.2f} sharp {full[name]['sharp']:.3f}  "
+              f"right half: mean {right[name]['mean']:6.1f} white {right[name]['white']:.3f} edge {right[name]['edge']:6.2f} sharp {right[name]['sharp']:.3f}")
 
     r = right
     ok = True
@@ -162,6 +180,9 @@ def check(shot_dir: Path) -> int:
     conc_ok = ratio <= BLUR_MAX_RATIO and still_ok
     print(f"concussion: edge on {on['edge']:.2f} off {off['edge']:.2f} ratio {ratio:.3f} "
           f"(blur needs <= {BLUR_MAX_RATIO}) -> {'PASS' if conc_ok else 'FAIL'}")
+    sharp_ratio = on["sharp"] / max(off["sharp"], 1e-6)
+    print(f"concussion (info): fine/coarse on {on['sharp']:.3f} off {off['sharp']:.3f} ratio {sharp_ratio:.3f}, "
+          f"mean on {on['mean']:.1f} off {off['mean']:.1f} (a ratio well under 1 means blur, not just brightening)")
     ok &= conc_ok
     print("RESULT " + ("PASS" if ok else "FAIL"))
     return 0 if ok else 1
