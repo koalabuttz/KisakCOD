@@ -64,6 +64,9 @@ cmake --build build-vulkan --config Release --target KisakCOD-vulkan-probe
 The build copies `SDL3.dll` next to the executable. The GPU driver supplies
 `vulkan-1.dll`; the validation layer needs the Vulkan SDK.
 
+On macOS the probe builds with `-DKISAK_PLATFORM=macos` and runs on Metal
+through MoltenVK; see [macos.md](macos.md#vulkan-window-probe).
+
 ## Running
 
 ```sh
@@ -124,8 +127,15 @@ import `vulkan-1.dll` and that it starts, and uploads it with `SDL3.dll` as the
 `KisakCOD-vulkan-probe-x64` artifact. Hosted Windows runners have no GPU, so it
 does not run there.
 
-Not yet run on a GPU: the laptop (Intel ANV) and the Windows PC (RTX 2080
-Super) are the next places to run it.
+The macOS workflow's `vulkan_probe` job builds the probe for arm64 and x86_64
+against Homebrew's MoltenVK and runs the same script in a Cocoa window on the
+hosted runners' paravirtualized Metal GPU. Both pass with validation and
+synchronisation checks on (2026-11-07, MoltenVK 1.4.2), the first runs on a
+GPU of any kind; the Intel VM needs `MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=0`
+([macos.md](macos.md#vulkan-window-probe)).
+
+Not yet run on a physical GPU: the laptop (Intel ANV) and the Windows PC (RTX
+2080 Super) are the next places to run it.
 
 ## Next
 
