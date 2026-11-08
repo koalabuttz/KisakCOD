@@ -444,6 +444,9 @@ public:
     void ObjectCreated() { ++objects_; }
     void ObjectDestroyed();
     lg::Device *legacy() const { return legacy_; }
+    D3D9Window window() const { return window_; }
+    // The window is going: the core lets go of its swapchain and surface.
+    void DetachWindow();
     const Host &host() const { return parent_->host(); }
     HRESULT Unsupported(const char *method);
     DeviceCounters counters() const;

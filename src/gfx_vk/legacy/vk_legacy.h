@@ -417,6 +417,11 @@ enum class PresentResult
     Failed,
 };
 PresentResult Present(Device *device);
+
+// The device's window is about to be destroyed: an open pass and frame end
+// unshown, and the core lets go of its swapchain and surface (DetachWindow in
+// vk_core.h). Everything else stays usable; Present skips from now on.
+void DetachWindow(Device *device);
 // Changes the back buffer size (D3D9's Reset); the window's swapchain follows
 // on its own. Every resource stays valid.
 bool ResizeBackBuffer(Device *device, uint32_t width, uint32_t height);

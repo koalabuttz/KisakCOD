@@ -78,6 +78,19 @@ void RegisterDevice(Device *device, bool live)
             }
 }
 
+uint32_t WindowDestroying(D3D9Window window)
+{
+    const FrontLock lock;
+    uint32_t count = 0;
+    for (Device *live : LiveDevices())
+        if (live->window() == window)
+        {
+            live->DetachWindow();
+            ++count;
+        }
+    return count;
+}
+
 bool Counters(IDirect3DDevice9 *device, DeviceCounters &out)
 {
     const FrontLock lock;

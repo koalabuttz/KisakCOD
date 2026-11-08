@@ -50,6 +50,7 @@ on:
       - 'scripts/tests/test_rhi_boundary.py'
       - 'scripts/tests/rhi_boundary_allowlist.txt'
       - 'scripts/tests/test_windows_tracy_option.py'
+      - 'scripts/tests/test_windows_vulkan_backend_option.py'
   pull_request:
     branches: [ "master" ]
     paths:
@@ -87,6 +88,7 @@ on:
       - 'scripts/tests/test_rhi_boundary.py'
       - 'scripts/tests/rhi_boundary_allowlist.txt'
       - 'scripts/tests/test_windows_tracy_option.py'
+      - 'scripts/tests/test_windows_vulkan_backend_option.py'
 
 # A newer push to a pull request cancels that pull request's older run, and a
 # newer push to master cancels an older master run (the newer one checks
@@ -129,6 +131,8 @@ jobs:
         run: python3 scripts/tests/test_rhi_boundary.py
       - name: Windows Tracy profiler option
         run: python3 scripts/tests/test_windows_tracy_option.py
+      - name: Windows Vulkan back end option
+        run: python3 scripts/tests/test_windows_vulkan_backend_option.py
       - name: MSVC x64 census summarizer
         run: python3 scripts/ci/test_summarize_msvc_x64.py
 
@@ -146,6 +150,8 @@ jobs:
       NUGET_PACKAGES: ${{ github.workspace }}\.nuget\packages
       DXSDK_PKG: Microsoft.DXSDK.D3DX
       DXSDK_VER: 9.29.952.8
+      # Vulkan-Headers v1.3.296, as the vulkan-probe job
+      VULKAN_HEADERS_REVISION: 29f979ee5aa58b7b005f805ea8df7a855c39ff37
 
     steps:
       - name: Checkout repository
@@ -183,16 +189,38 @@ jobs:
       - name: Install latest CMake
         uses: lukka/get-cmake@30aea713799f46b5b60e60f5fa83f849abd52c22 # the "latest" branch on 2026-11-05
 
-      # The Debug build also turns on the opt-in Tracy profiler, so the
-      # profiling build compiles and links on every push; Release stays the
-      # player build with no profiler unless a manual run asks for it.
+      - name: Fetch the pinned Vulkan headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          dst="$RUNNER_TEMP/Vulkan-Headers"
+          git init "$dst"
+          git -C "$dst" remote add origin https://github.com/KhronosGroup/Vulkan-Headers.git
+          git -C "$dst" fetch --depth 1 origin "$VULKAN_HEADERS_REVISION"
+          git -C "$dst" checkout --detach FETCH_HEAD
+          test "$(git -C "$dst" rev-parse HEAD)" = "$VULKAN_HEADERS_REVISION"
+
+      # The Debug build also turns on the opt-in Tracy profiler and the opt-in
+      # Vulkan back end (r_backend vulkan in KisakCOD-mp), so both compile and
+      # link for Win32 on every push; Release stays the player build with
+      # neither unless a manual run asks for the profiler.
       - name: Configure CMake ${{ matrix.config }}
         run: |
           $tracy = 'OFF'
           if ('${{ matrix.config }}' -eq 'Debug' -or '${{ inputs.tracy }}' -eq 'true') { $tracy = 'ON' }
+          $vulkan = @()
+          if ('${{ matrix.config }}' -eq 'Debug') {
+            $vulkan = @('-DKISAK_BUILD_VULKAN_BACKEND=ON', "-DKISAK_VULKAN_INCLUDE_DIR=$env:RUNNER_TEMP/Vulkan-Headers/include")
+          }
           cmake -S . -B build-${{ matrix.config }} -G "Visual Studio 17 2022" -A Win32 -DDXSDK_DIR="${{ env.DXSDK_DIR }}" -DCICD=1 -DCMAKE_BUILD_TYPE=${{ matrix.config }} `
-            -DKISAK_WIN_TRACY="$tracy"
+            -DKISAK_WIN_TRACY="$tracy" @vulkan | Tee-Object -FilePath configure.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ('${{ matrix.config }}' -eq 'Debug') {
+            if (-not (Select-String -Path configure.log -SimpleMatch -Quiet 'Vulkan back end: linked into KisakCOD-mp')) {
+              Write-Host "::error::the Vulkan back end was not linked into KisakCOD-mp"
+              exit 1
+            }
+          }
 
       - name: Build ${{ matrix.config }}
         # One MSBuild call for the three games: --parallel lets the projects
@@ -206,6 +234,29 @@ jobs:
       - name: Check native Windows bootstrap
         run: |
           ./scripts/ci/check-windows-bootstrap.ps1 -BuildOutput "bin/${{ matrix.config }}" -DxSdkPackage "${{ env.DXSDK_DIR_NUGET }}"
+
+      # The Vulkan loader is opened at run time (src/win32/vulkan), never
+      # imported, so the game still starts on a machine without Vulkan; the
+      # bootstrap check above starts the Debug game with the back end linked.
+      # dumpbin reads the import table itself: the name also appears in the
+      # host's messages, so a plain text search would match.
+      - name: Check KisakCOD-mp does not import vulkan-1.dll
+        if: matrix.config == 'Debug'
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $dumpbin = & $vswhere -latest -products * -find 'VC\Tools\MSVC\**\bin\Hostx64\x64\dumpbin.exe' | Select-Object -First 1
+          if (-not $dumpbin) { Write-Host "::error::dumpbin.exe not found"; exit 1 }
+          $imports = & $dumpbin /nologo /dependents "bin/${{ matrix.config }}/KisakCOD-mp.exe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $imports | Write-Host
+          if ($imports -match '(?i)^\s*vulkan-1\.dll\s*$') {
+            Write-Host "::error::KisakCOD-mp.exe must not import vulkan-1.dll"
+            exit 1
+          }
+          if (-not ($imports -match '(?i)^\s*d3d9\.dll\s*$')) {
+            Write-Host "::error::KisakCOD-mp.exe should still import d3d9.dll"
+            exit 1
+          }
 
       - name: Check D3DX shader runtime
         run: |
@@ -246,6 +297,8 @@ jobs:
       NUGET_PACKAGES: ${{ github.workspace }}\.nuget\packages
       DXSDK_PKG: Microsoft.DXSDK.D3DX
       DXSDK_VER: 9.29.952.8
+      # Vulkan-Headers v1.3.296, as the vulkan-probe job
+      VULKAN_HEADERS_REVISION: 29f979ee5aa58b7b005f805ea8df7a855c39ff37
 
     steps:
       - name: Checkout repository
@@ -300,14 +353,32 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           echo "KISAK_FFMPEG_ROOT=$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows-release" >> $env:GITHUB_ENV
 
+      - name: Fetch the pinned Vulkan headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          dst="$RUNNER_TEMP/Vulkan-Headers"
+          git init "$dst"
+          git -C "$dst" remote add origin https://github.com/KhronosGroup/Vulkan-Headers.git
+          git -C "$dst" fetch --depth 1 origin "$VULKAN_HEADERS_REVISION"
+          git -C "$dst" checkout --detach FETCH_HEAD
+          test "$(git -C "$dst" rev-parse HEAD)" = "$VULKAN_HEADERS_REVISION"
+
       # A manual run with the tracy input builds the profiling executables.
+      # KisakCOD-mp carries the opt-in Vulkan back end, off until a player sets
+      # r_backend vulkan, so this artifact can run it on a Windows PC.
       - name: Configure x64
         run: |
           $tracy = 'OFF'
           if ('${{ inputs.tracy }}' -eq 'true') { $tracy = 'ON' }
           cmake -S . -B build-x64 -G "Visual Studio 17 2022" -A x64 -DDXSDK_DIR="${{ env.DXSDK_DIR }}" -DCICD=1 -DCMAKE_BUILD_TYPE=Release `
-            -DKISAK_WIN64_CINEMATICS=ON -DKISAK_FFMPEG_ROOT="${{ env.KISAK_FFMPEG_ROOT }}" -DKISAK_WIN_TRACY="$tracy"
+            -DKISAK_WIN64_CINEMATICS=ON -DKISAK_FFMPEG_ROOT="${{ env.KISAK_FFMPEG_ROOT }}" -DKISAK_WIN_TRACY="$tracy" `
+            -DKISAK_BUILD_VULKAN_BACKEND=ON -DKISAK_VULKAN_INCLUDE_DIR="$env:RUNNER_TEMP/Vulkan-Headers/include" | Tee-Object -FilePath configure-x64.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Select-String -Path configure-x64.log -SimpleMatch -Quiet 'Vulkan back end: linked into KisakCOD-mp')) {
+            Write-Host "::error::the Vulkan back end was not linked into KisakCOD-mp"
+            exit 1
+          }
 
       # Every target is built and logged before the job fails, so one run
       # shows all of them.

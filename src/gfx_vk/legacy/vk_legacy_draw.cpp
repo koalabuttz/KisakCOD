@@ -1062,10 +1062,12 @@ void ApplyDynamicState(Device &device, VkCommandBuffer cmd, d3d::PrimitiveType t
     state.frontDepthFail = StencilOp(rs[d3d::RS_STENCILZFAIL]);
     state.frontCompare = CompareOp(rs[d3d::RS_STENCILFUNC]);
     const bool twoSided = rs[d3d::RS_TWOSIDEDSTENCILMODE] != 0;
-    state.backFail = twoSided ? StencilOp(rs[d3d::RS_CCW_STENCILFAIL]) : state.frontFail;
-    state.backPass = twoSided ? StencilOp(rs[d3d::RS_CCW_STENCILPASS]) : state.frontPass;
-    state.backDepthFail = twoSided ? StencilOp(rs[d3d::RS_CCW_STENCILZFAIL]) : state.frontDepthFail;
-    state.backCompare = twoSided ? CompareOp(rs[d3d::RS_CCW_STENCILFUNC]) : state.frontCompare;
+    // The fields are plain integers; GCC's -Wextra refuses an enum and an
+    // integer in one conditional.
+    state.backFail = twoSided ? uint32_t(StencilOp(rs[d3d::RS_CCW_STENCILFAIL])) : state.frontFail;
+    state.backPass = twoSided ? uint32_t(StencilOp(rs[d3d::RS_CCW_STENCILPASS])) : state.frontPass;
+    state.backDepthFail = twoSided ? uint32_t(StencilOp(rs[d3d::RS_CCW_STENCILZFAIL])) : state.frontDepthFail;
+    state.backCompare = twoSided ? uint32_t(CompareOp(rs[d3d::RS_CCW_STENCILFUNC])) : state.frontCompare;
     state.stencilRef = rs[d3d::RS_STENCILREF] & 0xff;
     state.stencilMask = rs[d3d::RS_STENCILMASK] & 0xff;
     state.stencilWriteMask = rs[d3d::RS_STENCILWRITEMASK] & 0xff;
@@ -1694,6 +1696,19 @@ void UpdateTexture(Device *device_, Texture *src, Texture *dst)
 
 // ---- Frames and queries ----------------------------------------------------------------------
 
+void DetachWindow(Device *device_)
+{
+    Device &device = *device_;
+    EndPassIfOpen(device);
+    gfx_vk::DetachWindow(device.core); // ends an open frame without showing it
+    device.frameOpen = false;
+    device.frameSkipped = false;
+    device.stateCommands = VK_NULL_HANDLE;
+    device.boundPipeline = VK_NULL_HANDLE;
+    device.dynamicValid = false;
+}
+
+
 PresentResult Present(Device *device_)
 {
     Device &device = *device_;
@@ -1747,8 +1762,13 @@ void DestroyQuery(Device *device, Query *query)
 
 void IssueQuery(Device *device, Query *query, bool begin)
 {
+    // An event marks everything recorded before it. Right after Present
+    // nothing is being recorded, so it is the frame just submitted, not the
+    // next one: the engine's swap fence (RB_SwapBuffers) then finishes with
+    // its frame, and the render thread no longer waits for the next frame's
+    // GPU work as well before it ends that frame.
     if (query && !begin)
-        query->serial = SubmissionSerial(device->core);
+        query->serial = RecordedSerial(device->core);
 }
 
 bool GetQueryData(Device *device_, Query *query, bool flush, uint32_t &result)

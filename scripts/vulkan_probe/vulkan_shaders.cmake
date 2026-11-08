@@ -107,6 +107,10 @@ else()
 endif()
 target_compile_options(kisak_vk_legacy_shader PRIVATE ${KISAK_VULKAN_SHADER_WARNINGS})
 
+if(KISAK_VULKAN_LIBRARIES_ONLY)
+    return()
+endif()
+
 add_executable(KisakCOD-vulkan-shaders "${SRC_DIR}/gfx_vk/tools/vk_shader_tool.cpp")
 target_compile_options(KisakCOD-vulkan-shaders PRIVATE ${KISAK_VULKAN_SHADER_WARNINGS})
 target_link_libraries(KisakCOD-vulkan-shaders PRIVATE kisak_vk_legacy_shader)

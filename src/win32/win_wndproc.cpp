@@ -16,6 +16,10 @@
 #include <gfx_d3d/r_dvars.h>
 #include <qcommon/cmd.h>
 
+#if defined(KISAK_VULKAN_BACKEND)
+void Kisak_VulkanWindowDestroying(HWND window); // src/win32/vulkan/win_vulkan_backend.cpp
+#endif
+
 const dvar_t *vid_xpos;
 const dvar_t *vid_ypos;
 const dvar_t *r_fullscreen;
@@ -434,6 +438,10 @@ LRESULT WINAPI MainWndProc(
 		MSH_MOUSEWHEEL = RegisterWindowMessageA("MSWHEEL_ROLLMSG");
 		return DefWindowProcA(hWnd, uMsg, wParam, lParam);
 	case WM_DESTROY:
+#if defined(KISAK_VULKAN_BACKEND)
+		// r_backend vulkan: the device's Vulkan surface goes before its window.
+		Kisak_VulkanWindowDestroying(hWnd);
+#endif
 		g_wv.hWnd = NULL;
 		return DefWindowProcA(hWnd, uMsg, wParam, lParam);
 	case WM_MOVE:

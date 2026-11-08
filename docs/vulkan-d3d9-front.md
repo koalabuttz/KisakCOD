@@ -173,8 +173,9 @@ SDK's `d3d9.h`.
 The check opens a small window, creates the device through `IDirect3D9` with
 a 128x128 back buffer and runs its scenes. Output is `key=value` lines: one
 `d3d9_check.scene=<name> points=<n> mismatched=<n>` line per scene, the present
-and unsupported-call counts, the live objects at teardown, the device's last
-release, the validation counts, and `d3d9_check=passed` or
+and unsupported-call counts, the live objects at teardown, the window going
+before the device as at the game's quit (`d3d9_check.window_detached=1
+present_after=skipped`), the device's last release, the validation counts, and `d3d9_check=passed` or
 `d3d9_check=failed stage=<stage>` last. Exit status 0 is a pass, 1 a failure, 2
 a usage error.
 
@@ -187,7 +188,7 @@ a usage error.
 | `shadow_map` | The sun shadow's path: a D24S8 texture made with `D3DUSAGE_DEPTHSTENCIL` as the depth target beside a R5G6B5 colour target, then sampled with linear filtering as a hardware shadow map (0 behind the stored depth, 1 in front). |
 | `references` | Counts of textures and their levels, `GetContainer`, `QueryInterface`, a released texture that still draws while bound and goes when unbound, the back buffer's and swap chain's own counts (last `Release` returns 0) and the device reference they hold. |
 | `threads` | A worker thread creating and filling textures while this thread draws and presents; the last one drawn and read back; nothing left alive. |
-| `queries` | Support checks, an event query and an occlusion query finishing. |
+| `queries` | Support checks, an event query and an occlusion query finishing, and an event issued right after `Present` (the engine's swap fence) finishing without a flush while the next frame records. |
 | `reset` | `Reset` to 96x96 and back: the new size, default state, nothing bound, drawing at the new size. |
 | `present` | `Present` through the device and the swap chain, `GetFrontBufferData`. |
 
@@ -246,8 +247,62 @@ console as `Vulkan: ...`. When the device goes, the front logs where the CPU
 time went (`vulkan d3d9: device stats: ...`: shaders created and the time
 translating them, pipelines and the time building them, texture uploads with
 their size and time), for comparing loads and first frames with DXVK. No
-pipeline cache file is written yet. The Windows
-game does not link the front yet.
+pipeline cache file is written yet.
+
+At quit `R_ShutdownDirect3D` destroys the game's window before it releases the
+device, and a Vulkan surface must not outlive its window. So the window layer
+tells the host first (`SetRendererWindowDestroying` in
+`src/linux/client/window/win32_window_sdl3.h`, called from `DestroyWindow`
+before `SDL_DestroyWindow`), and the host calls `front::WindowDestroying`: each
+device made for that window ends an open frame unshown, waits for the GPU and
+destroys its swapchain and surface (`vulkan: window detached: ...`). The device
+stays usable until its release, and its presents are skipped. SDL also unloads
+the Vulkan loader with its last Vulkan window, which used to leave the device's
+teardown calling into an unloaded library (a crash at quit, after the `device
+stats` line); the host holds one more loader reference
+(`SDL_Vulkan_LoadLibrary`) for the rest of the process.
+
+### On Windows
+
+On Windows the same option links the front into `KisakCOD-mp` only
+(`scripts/vulkan_probe/vulkan_backend_windows.cmake`, included from the root
+`CMakeLists.txt` before `scripts/mp`). The one option is enough: it builds the
+Vulkan core, the shader translator, the Legacy adapter and the front as
+libraries only (`KISAK_VULKAN_LIBRARIES_ONLY`: no SDL3, none of the tools), with
+the game's static C runtime. It needs MSVC (Win32, x64 or ARM64; MinGW refuses
+it) and the Vulkan headers 1.3 or newer:
+
+```
+cmake -S . -B build -A Win32 -DDXSDK_DIR=<dxsdk> -DKISAK_BUILD_VULKAN_BACKEND=ON ^
+  -DKISAK_VULKAN_INCLUDE_DIR=<Vulkan-Headers>/include
+```
+
+With the Vulkan SDK installed, `VULKAN_SDK` is found and the include directory
+can be left out. dxbc-spirv is fetched at configure time, as for the tools.
+
+The host is `src/win32/vulkan/win_vulkan_backend.cpp`, with plain Win32 and the
+same three dvars:
+
+* The `HWND` is the game's own window. The surface comes from
+  `vkCreateWin32SurfaceKHR`, and the size in pixels from `GetClientRect` (0 x 0
+  while minimised).
+* `vulkan-1.dll` is opened at run time from the system directory
+  (`LoadLibraryExW` with `LOAD_LIBRARY_SEARCH_SYSTEM32`), never imported. The
+  game still starts on a machine without Vulkan; `r_backend vulkan` then fails
+  at `Direct3DCreate9`, as a missing D3D9 would.
+* Display modes are the primary display's 32-bit modes (`EnumDisplaySettingsW`),
+  and the monitor is the primary one.
+* `WM_DESTROY` (`src/win32/win_wndproc.cpp`) calls
+  `Kisak_VulkanWindowDestroying`, which detaches the device's surface from the
+  window as on Linux. `vulkan-1.dll` is never unloaded.
+
+The front never changes the display mode. In fullscreen the window covers the
+mode's size at the desktop's resolution, so use windowed mode or the desktop's
+own resolution for now. The Windows workflow builds it for Win32 Debug and for
+x64 (whose artifact is the PC's), checks the configure log says `Vulkan back
+end: linked into KisakCOD-mp`, and checks the Win32 executable does not import
+`vulkan-1.dll`. Hosted runners have no GPU, so the game has not drawn through
+it on Windows yet.
 
 The device probe with `--backend vulkan` runs `r_init.cpp`'s device start
 unchanged (`R_PreCreateWindow`, `R_CreateWindow`, `R_CreateDevice`), clears,
@@ -294,6 +349,7 @@ the one DXVK 3.1.1 (dxbc-spirv too) gave in the shader spike. Vulkan took
 
 ## Next
 
-`KisakCOD-mp` played with `r_backend vulkan` on the laptop; the PC comparison
-(the Windows game needs a Win32 host for the front first); why the probe takes
-longer on Vulkan (pipeline creation at first use is the likely part).
+`KisakCOD-mp` played with `r_backend vulkan` on the laptop (laptop run 4); the
+PC comparison through the Windows host; and the load-time gap. Laptop run 4
+measured it at +4.5 s warm, mostly while zones load (shader translation and
+uploads), and +9.9 s cold, mostly pipelines built at the first draw.

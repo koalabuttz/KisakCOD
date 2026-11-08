@@ -361,6 +361,17 @@ void EndTimed(Core &core, int query)
 }
 } // namespace
 
+bool AbandonFrame(Core &core)
+{
+    if (!core.inFrame || core.inPass)
+        return false;
+    SettleUploads(core);
+    const bool submitted = SubmitRecording(core, false);
+    core.inFrame = false;
+    core.acquireWaitPending = false;
+    return submitted;
+}
+
 namespace
 {
 // Buffer copies recorded since the last barrier must finish before anything
@@ -393,6 +404,7 @@ void CloseBufferCopies(Core &core)
 uint64_t PendingSerial(const Core &core) { return core.nextSerial; }
 
 uint64_t SubmissionSerial(const Core *core) { return PendingSerial(*core); }
+uint64_t RecordedSerial(const Core *core) { return core->recording ? core->nextSerial : core->nextSerial - 1; }
 bool SerialFinished(Core *core, uint64_t serial) { return PollCompletedSerial(*core) >= serial; }
 
 uint64_t PollCompletedSerial(Core &core)
@@ -525,6 +537,12 @@ FrameResult BeginFrame(Core *core_)
     {
         Fail(core, "BeginFrame inside a frame");
         return FrameResult::Failed;
+    }
+    if (core.windowDetached)
+    {
+        // No surface any more: nothing can be shown.
+        ++core.stats.framesSkipped;
+        return FrameResult::Skipped;
     }
 
     if (core.resizePending && !core.rebuildPending)

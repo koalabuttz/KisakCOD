@@ -193,6 +193,13 @@ const CoreStats &Stats(const Core *core);
 // frame checks the surface and rebuilds the swapchain if the size differs.
 void NotifyResize(Core *core);
 
+// The window is about to be destroyed: waits for the GPU, then destroys the
+// swapchain and the surface, which must go before their window does. Work
+// recorded in an open frame is submitted (not inside a pass). The device and
+// everything made on it stay usable until DestroyCore; from now on BeginFrame
+// skips every frame. Harmless to call again.
+void DetachWindow(Core *core);
+
 // The simplest frame: BeginFrame, one pass named "clear" that clears the
 // whole swapchain image to rgba (0..1, written as-is: the swapchain is UNORM,
 // like the gamma-space retail renderer), Present.
@@ -368,6 +375,11 @@ bool Flush(Core *core, bool wait);
 // finished that submission (and every one before it), without waiting.
 uint64_t SubmissionSerial(const Core *core);
 bool SerialFinished(Core *core, uint64_t serial);
+// The submission holding the last command recorded so far: SubmissionSerial()
+// while commands are being recorded, the last one submitted when nothing is
+// (as right after Present), and 0 before the first. For fences such as D3D9's
+// event queries, which finish once everything recorded before them has.
+uint64_t RecordedSerial(const Core *core);
 
 // ---- Passes and image state ------------------------------------------------------
 //

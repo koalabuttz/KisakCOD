@@ -903,6 +903,24 @@ void Check::Queries()
     Equal("occlusion_done", hr == S_OK && samples > 0, true);
     Equal("event_size", event->GetDataSize(), static_cast<DWORD>(sizeof(BOOL)));
     std::printf("d3d9_check.event_query_polls=%d\n", polls);
+
+    // The engine's swap fence: an event issued right after Present marks the
+    // end of that frame, so it finishes with the frame's submission, without a
+    // flush and without waiting for the next frame's work (RB_BackendTimeout
+    // polls it before every frame ends).
+    DrawQuad(0, 0, 64, 64, 0.5f, Argb(255, 255, 255, 255));
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    Ok(event->Issue(D3DISSUE_END), "Issue(event after Present)");
+    DrawQuad(64, 64, 64, 64, 0.5f, Argb(255, 0, 0, 255)); // the next frame's work, not submitted
+    int fencePolls = 0;
+    done = FALSE;
+    while ((hr = event->GetData(&done, sizeof(done), 0)) == S_FALSE && fencePolls < 5000)
+    {
+        ++fencePolls;
+        SDL_Delay(1);
+    }
+    Equal("swap_fence_done_without_flush", hr == S_OK && done == TRUE, true);
+    std::printf("d3d9_check.swap_fence_polls=%d\n", fencePolls);
     SafeRelease(event);
     SafeRelease(occlusion);
 }
@@ -1164,6 +1182,21 @@ int Run(const Options &options)
             failedStage = "teardown";
             failedReason = std::to_string(live) + " objects outlived their last release";
         }
+        // The engine's order at quit: the window goes first (WM_DESTROY, which
+        // detaches the device's surface), then the device is released.
+        const uint32_t detached = front::WindowDestroying(WindowHandle(sdl));
+        const uint64_t skippedBefore = check.Counters().presentsSkipped;
+        const HRESULT detachedPresent = check.device->Present(nullptr, nullptr, nullptr, nullptr);
+        const bool presentSkipped = check.Counters().presentsSkipped == skippedBefore + 1;
+        SDL_DestroyWindow(sdl.window);
+        sdl.window = nullptr;
+        std::printf("d3d9_check.window_detached=%u present_after=%s\n", detached,
+                    SUCCEEDED(detachedPresent) ? (presentSkipped ? "skipped" : "shown") : "failed");
+        if (!failedStage && (detached != 1 || FAILED(detachedPresent) || !presentSkipped))
+        {
+            failedStage = "teardown";
+            failedReason = "the device did not let go of its window when the window went";
+        }
         IDirect3DDevice9 *device = check.device;
         check.device = nullptr;
         const ULONG refs = device->Release();
@@ -1183,7 +1216,8 @@ int Run(const Options &options)
         failedStage = "teardown";
         failedReason = "IDirect3D9 outlived its last release";
     }
-    SDL_DestroyWindow(sdl.window);
+    if (sdl.window)
+        SDL_DestroyWindow(sdl.window);
     std::printf("d3d9_check.validation_errors=%u\n", sdl.finalStats.validationErrors);
     std::printf("d3d9_check.validation_warnings=%u\n", sdl.finalStats.validationWarnings);
     std::printf("d3d9_check.validation_ignored=%u\n", sdl.finalStats.validationIgnored);

@@ -53,17 +53,21 @@ if(MSVC)
     target_compile_definitions(kisak_gfx_vk_legacy PRIVATE NOMINMAX)
 endif()
 
-add_executable(KisakCOD-vulkan-legacy-check "${SRC_DIR}/gfx_vk/tools/vk_legacy_check.cpp")
-target_compile_options(KisakCOD-vulkan-legacy-check PRIVATE ${KISAK_VULKAN_WARNINGS})
-target_link_libraries(KisakCOD-vulkan-legacy-check PRIVATE kisak_gfx_vk_legacy SDL3::SDL3)
-if(MSVC)
-    target_compile_definitions(KisakCOD-vulkan-legacy-check PRIVATE NOMINMAX)
-endif()
-if(WIN32)
-    add_custom_command(TARGET KisakCOD-vulkan-legacy-check POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            $<TARGET_RUNTIME_DLLS:KisakCOD-vulkan-legacy-check> $<TARGET_FILE_DIR:KisakCOD-vulkan-legacy-check>
-        COMMAND_EXPAND_LISTS)
+# The check tools need SDL3; the Windows game's libraries-only build
+# (KISAK_VULKAN_LIBRARIES_ONLY, vulkan_probe.cmake) leaves them out.
+if(NOT KISAK_VULKAN_LIBRARIES_ONLY)
+    add_executable(KisakCOD-vulkan-legacy-check "${SRC_DIR}/gfx_vk/tools/vk_legacy_check.cpp")
+    target_compile_options(KisakCOD-vulkan-legacy-check PRIVATE ${KISAK_VULKAN_WARNINGS})
+    target_link_libraries(KisakCOD-vulkan-legacy-check PRIVATE kisak_gfx_vk_legacy SDL3::SDL3)
+    if(MSVC)
+        target_compile_definitions(KisakCOD-vulkan-legacy-check PRIVATE NOMINMAX)
+    endif()
+    if(WIN32)
+        add_custom_command(TARGET KisakCOD-vulkan-legacy-check POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_RUNTIME_DLLS:KisakCOD-vulkan-legacy-check> $<TARGET_FILE_DIR:KisakCOD-vulkan-legacy-check>
+            COMMAND_EXPAND_LISTS)
+    endif()
 endif()
 
 # The D3D9 front, compiled against the same D3D9 declarations as the renderer.
@@ -88,6 +92,9 @@ if(WIN32 OR TARGET kisak_linux_native_d3d9)
             -Wno-ignored-attributes)
     endif()
 
+    if(KISAK_VULKAN_LIBRARIES_ONLY)
+        return()
+    endif()
     add_executable(KisakCOD-vulkan-d3d9-check "${SRC_DIR}/gfx_vk/tools/vk_d3d9_check.cpp")
     target_compile_options(KisakCOD-vulkan-d3d9-check PRIVATE ${KISAK_VULKAN_WARNINGS})
     target_link_libraries(KisakCOD-vulkan-d3d9-check PRIVATE kisak_gfx_vk_d3d9 SDL3::SDL3)

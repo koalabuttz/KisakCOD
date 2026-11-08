@@ -94,6 +94,11 @@ if (KISAK_OPENAL)
     include(${SCRIPTS_DIR}/extern/openal.cmake)
 endif()
 
+# Opt-in r_backend vulkan (scripts/vulkan_probe/vulkan_backend_windows.cmake)
+if (KISAK_BUILD_VULKAN_BACKEND)
+    kisak_link_windows_vulkan_backend(${PROJECT_NAME})
+endif()
+
 # 64-bit Windows movies through the FFmpeg Bink shim (sound through OpenAL above)
 if (KISAK_WIN64 AND KISAK_WIN64_CINEMATICS)
     include(${SCRIPTS_DIR}/extern/bink_shim.cmake)

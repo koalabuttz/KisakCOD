@@ -32,4 +32,10 @@ struct WindowObserver {
 };
 void SetWindowObserver(const WindowObserver *observer);
 
+// A second WM_DESTROY listener, for the renderer's Vulkan back end: it must
+// destroy its Vulkan surface before the window goes, whoever holds the observer
+// above. Runs after the observer's `destroying`, under the same rules.
+// nullptr removes it.
+void SetRendererWindowDestroying(void (*destroying)(void *hwnd));
+
 } // namespace kisak::win32_window

@@ -81,4 +81,11 @@ struct DeviceCounters
     bool validation;           // the validation layer is loaded
 };
 bool Counters(IDirect3DDevice9 *device, DeviceCounters &out);
+
+// The window is about to be destroyed (WM_DESTROY on Windows, before
+// SDL_DestroyWindow elsewhere). Every device the front made for it lets go of
+// its Vulkan swapchain and surface now, while the window still exists; a
+// surface must not outlive its window. The devices stay usable until they are
+// released, but present nothing. Returns how many devices used the window.
+uint32_t WindowDestroying(D3D9Window window);
 } // namespace gfx_vk::d3d9
