@@ -256,3 +256,19 @@ Run it with `+set net_ip 127.0.0.1`, and windowed
 fullscreen fix above. The listen server then opens no outside port. The
 first map load with an existing retail profile drops once (see
 [Where it writes](#where-it-writes)).
+
+### Flashbang and concussion screen effects
+
+`scripts/tools/shellshock_screenshot_check.py` checks the flashbang white-out
+and the concussion blur from the game's own screenshots, with nobody playing.
+`write-cfg <home>/main/shk.cfg` writes a config; launching with
+`+exec shk.cfg +devmap mp_crash +wait 5000 +vstr shk_go` (plus the usual
+`fs_basepath`, `fs_homepath`, `net_ip` and window options, and
+`+set com_maxfps 85`) closes the team menu, takes six screenshots from the
+still spectator view and quits. Each shock (`cg_shellshock 4 flashbang`,
+`cg_shellshock 4 concussion_grenade_mp`) is shot twice, with
+`cg_drawShellshock` 1 and 0, so the camera shake is the same and only the
+screen effect differs. `check <home>/main/screenshots` prints brightness and
+edge-strength numbers and PASS or FAIL. The window must be fully on screen and
+uncovered, because `screenshot` reads the front buffer. The same steps work on
+Windows.

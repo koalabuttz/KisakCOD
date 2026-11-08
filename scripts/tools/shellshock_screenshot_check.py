@@ -1,0 +1,186 @@
+#!/usr/bin/env python3
+"""Check the multiplayer flashbang white-out and concussion blur from screenshots.
+
+Two steps, both run on the machine that has the game:
+
+1. ``write-cfg <file>`` writes a config that, once the map is up, takes six
+   screenshots with the game's own ``screenshot`` command:
+
+   - ``shk_none_a`` and ``shk_none_b``: no shock, to measure frame-to-frame noise;
+   - ``shk_flash_on`` / ``shk_flash_off``: ``cg_shellshock 4 flashbang`` with
+     ``cg_drawShellshock`` 1 and 0;
+   - ``shk_conc_on`` / ``shk_conc_off``: the same with ``concussion_grenade_mp``.
+
+   ``cg_drawShellshock 0`` keeps the camera shake but skips the screen effect, so
+   each on/off pair isolates the effect from everything else. The config only
+   sets dvars: ``exec`` runs a file in one go and ignores ``wait``, so the steps
+   run through ``vstr shk_go`` from the command line, where ``wait`` works.
+
+   Launch the game with, for example::
+
+       +exec shk.cfg +devmap mp_crash +wait 5000 +vstr shk_go
+
+   The game quits by itself when done. Nothing has to be spawned: the config
+   closes the team menu and uses the still spectator view, and ``devmap``
+   allows the cheat dvar.
+
+2. ``check <screenshots dir>`` reads the six TGA files and prints numbers and a
+   verdict. Only numbers are printed; the images stay where they are.
+
+Pass rules:
+
+- flashbang: with the effect on, the frame is mostly white (mean luma at least
+  200 and at least half the pixels above 240), and clearly brighter than the
+  same shock with the effect off (by at least 40).
+- concussion: with the effect on, the frame is blurred, i.e. its edge strength
+  (mean absolute luma gradient) is at most 0.85x the effect-off frame, while the
+  two no-shock frames agree within 0.95-1.05x (a still view).
+
+The numbers are computed over the whole frame and over its right half (the
+team menu sits on the left); the verdict uses the right half.
+"""
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+import struct
+import sys
+
+SHOTS = ("shk_none_a", "shk_none_b", "shk_flash_on", "shk_flash_off", "shk_conc_on", "shk_conc_off")
+
+# Wait counts are command buffer passes (about two per frame). At com_maxfps 85
+# that is roughly 180 per second.
+CFG_TEXT = """// Written by scripts/tools/shellshock_screenshot_check.py write-cfg.
+// Launch: +exec shk.cfg +devmap mp_crash +wait 5000 +vstr shk_go
+set shk_go "closemenu team_marinesopfor; wait 120; screenshot shk_none_a; wait 120; screenshot shk_none_b; wait 60; vstr shk_flash"
+set shk_flash "cg_drawShellshock 1; cg_shellshock 4 flashbang; wait 60; screenshot shk_flash_on; wait 1500; cg_drawShellshock 0; cg_shellshock 4 flashbang; wait 60; screenshot shk_flash_off; wait 1500; vstr shk_conc"
+set shk_conc "cg_drawShellshock 1; cg_shellshock 4 concussion_grenade_mp; wait 120; screenshot shk_conc_on; wait 1500; cg_drawShellshock 0; cg_shellshock 4 concussion_grenade_mp; wait 120; screenshot shk_conc_off; wait 1500; vstr shk_end"
+set shk_end "cg_drawShellshock 1; quit"
+"""
+
+FLASH_MIN_MEAN = 200.0
+FLASH_MIN_WHITE = 0.5
+FLASH_MIN_GAIN = 40.0
+BLUR_MAX_RATIO = 0.85
+STILL_RANGE = (0.95, 1.05)
+
+
+class Image:
+    def __init__(self, width: int, height: int, luma: list[float]):
+        self.width = width
+        self.height = height
+        self.luma = luma  # row-major, top row first
+
+
+def read_tga(path: Path) -> Image:
+    data = path.read_bytes()
+    if len(data) < 18:
+        raise ValueError(f"{path}: too short for a TGA header")
+    id_len, cmap_type, img_type = data[0], data[1], data[2]
+    width, height, bpp, desc = struct.unpack_from("<HHBB", data, 12)
+    if cmap_type != 0 or img_type != 2 or bpp not in (24, 32):
+        raise ValueError(f"{path}: only uncompressed 24/32-bit true-colour TGA is supported")
+    step = bpp // 8
+    offset = 18 + id_len
+    need = offset + width * height * step
+    if len(data) < need:
+        raise ValueError(f"{path}: pixel data is truncated")
+    top_first = bool(desc & 0x20)
+    rows = []
+    for row in range(height):
+        start = offset + row * width * step
+        px = data[start:start + width * step]
+        # BGR(A) order.
+        rows.append([0.114 * px[i] + 0.587 * px[i + 1] + 0.299 * px[i + 2] for i in range(0, len(px), step)])
+    if not top_first:
+        rows.reverse()
+    return Image(width, height, [v for r in rows for v in r])
+
+
+def write_tga(path: Path, width: int, height: int, gray: list[int]) -> None:
+    """Writes a grey 24-bit top-first TGA (used by the self-test)."""
+    header = bytes([0, 0, 2]) + bytes(9) + struct.pack("<HHBB", width, height, 24, 0x20)
+    path.write_bytes(header + bytes(v for g in gray for v in (g, g, g)))
+
+
+def metrics(img: Image, x0_frac: float = 0.0) -> dict[str, float]:
+    w, h, l = img.width, img.height, img.luma
+    x0 = int(w * x0_frac)
+    total = 0.0
+    white = 0
+    grad = 0.0
+    count = 0
+    gcount = 0
+    for y in range(h):
+        base = y * w
+        for x in range(x0, w):
+            v = l[base + x]
+            total += v
+            if v > 240:
+                white += 1
+            count += 1
+            if x + 1 < w and y + 1 < h:
+                grad += abs(l[base + x + 1] - v) + abs(l[base + w + x] - v)
+                gcount += 1
+    return {
+        "mean": total / count,
+        "white": white / count,
+        "edge": grad / gcount if gcount else 0.0,
+    }
+
+
+def check(shot_dir: Path) -> int:
+    missing = [n for n in SHOTS if not (shot_dir / f"{n}.tga").exists()]
+    if missing:
+        print("FAIL missing screenshots: " + ", ".join(missing))
+        return 1
+    full = {}
+    right = {}
+    for name in SHOTS:
+        img = read_tga(shot_dir / f"{name}.tga")
+        full[name] = metrics(img)
+        right[name] = metrics(img, 0.5)
+        print(f"{name:14s} {img.width}x{img.height}  "
+              f"full: mean {full[name]['mean']:6.1f} white {full[name]['white']:.3f} edge {full[name]['edge']:6.2f}  "
+              f"right half: mean {right[name]['mean']:6.1f} white {right[name]['white']:.3f} edge {right[name]['edge']:6.2f}")
+
+    r = right
+    ok = True
+    still = r["shk_none_b"]["edge"] / max(r["shk_none_a"]["edge"], 1e-6)
+    still_ok = STILL_RANGE[0] <= still <= STILL_RANGE[1]
+    print(f"still view: edge ratio none_b/none_a {still:.3f} ({'ok' if still_ok else 'MOVING'})")
+
+    on, off = r["shk_flash_on"], r["shk_flash_off"]
+    flash_ok = on["mean"] >= FLASH_MIN_MEAN and on["white"] >= FLASH_MIN_WHITE and on["mean"] - off["mean"] >= FLASH_MIN_GAIN
+    print(f"flashbang: on mean {on['mean']:.1f} white {on['white']:.3f}, off mean {off['mean']:.1f}, "
+          f"gain {on['mean'] - off['mean']:.1f} -> {'PASS' if flash_ok else 'FAIL'}")
+    ok &= flash_ok
+
+    on, off = r["shk_conc_on"], r["shk_conc_off"]
+    ratio = on["edge"] / max(off["edge"], 1e-6)
+    conc_ok = ratio <= BLUR_MAX_RATIO and still_ok
+    print(f"concussion: edge on {on['edge']:.2f} off {off['edge']:.2f} ratio {ratio:.3f} "
+          f"(blur needs <= {BLUR_MAX_RATIO}) -> {'PASS' if conc_ok else 'FAIL'}")
+    ok &= conc_ok
+    print("RESULT " + ("PASS" if ok else "FAIL"))
+    return 0 if ok else 1
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    w = sub.add_parser("write-cfg", help="write the screenshot config")
+    w.add_argument("path", type=Path)
+    c = sub.add_parser("check", help="measure the six screenshots")
+    c.add_argument("dir", type=Path)
+    args = parser.parse_args()
+    if args.cmd == "write-cfg":
+        args.path.write_text(CFG_TEXT)
+        print(f"wrote {args.path}")
+        return 0
+    return check(args.dir)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
