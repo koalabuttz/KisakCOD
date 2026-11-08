@@ -560,8 +560,9 @@ practical consequences:
 - **Steam clients are unaffected.** A request in the four-field Steam form
   (`getchallenge <n> <base64 ticket> <SteamID64>`) is still verified by the Steam
   backend whether or not GUIDs are enabled, and a rejected ticket never falls back
-  to the GUID path. Native Linux builds still have no working Steam verification,
-  so on this platform only the GUID path admits retail clients.
+  to the GUID path. The default native Linux build has no Steam verification, so
+  there only the GUID path admits retail clients; a `KISAK_LINUX_STEAM` build
+  verifies Steam tickets ([guide](linux-steam.md)).
 - **Independent of `sv_allowProtocol6`.** One controls authentication, the other
   the version number a client may advertise. Retail 1.7 hosting needs both;
   either can be set on its own.

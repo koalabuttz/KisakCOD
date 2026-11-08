@@ -1,7 +1,7 @@
 // A stand-in for Steam's steamclient.so, for the asset-free test of
 // src/linux/steam/steamclient_session.cpp. It exports what the session loads
 // (CreateInterface, Steam_BGetCallback, Steam_FreeLastCallback) and serves this
-// SDK's ISteamClient and ISteamUser. The test drives it through
+// SDK's ISteamClient, ISteamUser and ISteamGameServer. The test drives it through
 // FakeSteam_Control(): what each call answers, and a record of what was asked.
 // No Steam install is looked for or touched.
 
@@ -9,7 +9,9 @@
 
 #include <steamsdk/steam/steam_api.h>
 #include <steamsdk/steam/isteamclient.h>
+#include <steamsdk/steam/isteamgameserver.h>
 
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
@@ -101,6 +103,101 @@ public:
 
 FakeUser g_user;
 
+void CopyName(char *out, size_t capacity, const char *in)
+{
+    std::snprintf(out, capacity, "%s", in ? in : "(null)");
+}
+
+class FakeGameServer final : public ISteamGameServer
+{
+public:
+    bool InitGameServer(uint32 ip, uint16 gamePort, uint16 queryPort, uint32 flags, AppId_t appId,
+        const char *version) override
+    {
+        ++g_control.serverInits;
+        g_control.serverInitIp = ip;
+        g_control.serverInitGamePort = gamePort;
+        g_control.serverInitQueryPort = queryPort;
+        g_control.serverInitFlags = flags;
+        g_control.serverInitAppId = appId;
+        CopyName(g_control.serverInitVersion, sizeof(g_control.serverInitVersion), version);
+        return g_control.serverInitResult;
+    }
+    void SetProduct(const char *product) override
+    {
+        CopyName(g_control.serverProduct, sizeof(g_control.serverProduct), product);
+    }
+    void SetGameDescription(const char *) override {}
+    void SetModDir(const char *dir) override { CopyName(g_control.serverModDir, sizeof(g_control.serverModDir), dir); }
+    void SetDedicatedServer(bool dedicated) override { g_control.serverDedicated = dedicated; }
+    void LogOn(const char *) override { ++g_control.serverLogOnCalls; }
+    void LogOnAnonymous() override { ++g_control.serverLogOnAnonymousCalls; }
+    void LogOff() override { ++g_control.serverLogOffCalls; }
+    bool BLoggedOn() override { return g_control.serverLoggedOn; }
+    bool BSecure() override { return false; }
+    CSteamID GetSteamID() override
+    {
+        CSteamID id;
+        id.SetFromUint64(g_control.serverLoggedOn ? g_control.serverSteamId : 0);
+        return id;
+    }
+    bool WasRestartRequested() override { return false; }
+    void SetMaxPlayerCount(int) override {}
+    void SetBotPlayerCount(int) override {}
+    void SetServerName(const char *) override {}
+    void SetMapName(const char *) override {}
+    void SetPasswordProtected(bool) override {}
+    void SetSpectatorPort(uint16) override {}
+    void SetSpectatorServerName(const char *) override {}
+    void ClearAllKeyValues() override {}
+    void SetKeyValue(const char *, const char *) override {}
+    void SetGameTags(const char *) override {}
+    void SetGameData(const char *) override {}
+    void SetRegion(const char *) override {}
+    void SetAdvertiseServerActive(bool) override {}
+    HAuthTicket GetAuthSessionTicket(void *, int, uint32 *written, const SteamNetworkingIdentity *) override
+    {
+        ++g_control.serverTicketRequests;
+        if (written)
+            *written = 0;
+        return k_HAuthTicketInvalid;
+    }
+    EBeginAuthSessionResult BeginAuthSession(const void *ticket, int size, CSteamID id) override
+    {
+        ++g_control.serverBeginCalls;
+        g_control.serverBeginSteamId = id.ConvertToUint64();
+        g_control.serverBeginTicketMatches = size == static_cast<int>(g_control.ticketSize) &&
+            !std::memcmp(ticket, g_control.ticket, g_control.ticketSize);
+        return static_cast<EBeginAuthSessionResult>(g_control.serverBeginResult);
+    }
+    void EndAuthSession(CSteamID id) override
+    {
+        ++g_control.serverEndCalls;
+        g_control.serverEndSteamId = id.ConvertToUint64();
+    }
+    void CancelAuthTicket(HAuthTicket) override {}
+    EUserHasLicenseForAppResult UserHasLicenseForApp(CSteamID, AppId_t) override
+    {
+        return k_EUserHasLicenseResultDoesNotHaveLicense;
+    }
+    bool RequestUserGroupStatus(CSteamID, CSteamID) override { return false; }
+    void GetGameplayStats() override {}
+    SteamAPICall_t GetServerReputation() override { return k_uAPICallInvalid; }
+    SteamIPAddress_t GetPublicIP() override { return SteamIPAddress_t{}; }
+    bool HandleIncomingPacket(const void *, int, uint32, uint16) override { return false; }
+    int GetNextOutgoingPacket(void *, int, uint32 *, uint16 *) override { return 0; }
+    SteamAPICall_t AssociateWithClan(CSteamID) override { return k_uAPICallInvalid; }
+    SteamAPICall_t ComputeNewPlayerCompatibility(CSteamID) override { return k_uAPICallInvalid; }
+    bool SendUserConnectAndAuthenticate_DEPRECATED(uint32, const void *, uint32, CSteamID *) override { return false; }
+    CSteamID CreateUnauthenticatedUserConnection() override { return CSteamID(); }
+    void SendUserDisconnect_DEPRECATED(CSteamID) override {}
+    bool BUpdateUserData(CSteamID, const char *, uint32) override { return false; }
+    void SetMasterServerHeartbeatInterval_DEPRECATED(int) override {}
+    void ForceMasterServerHeartbeat_DEPRECATED() override {}
+};
+
+FakeGameServer g_server;
+
 class FakeClient final : public ISteamClient
 {
 public:
@@ -124,7 +221,14 @@ public:
         g_control.connectPipe = pipe;
         return g_control.user;
     }
-    HSteamUser CreateLocalUser(HSteamPipe *, EAccountType) override { return 0; }
+    HSteamUser CreateLocalUser(HSteamPipe *pipe, EAccountType type) override
+    {
+        ++g_control.localUsersCreated;
+        g_control.localUserAccountType = type;
+        if (pipe)
+            *pipe = g_control.serverPipe;
+        return g_control.serverUser;
+    }
     void ReleaseUser(HSteamPipe pipe, HSteamUser user) override
     {
         ++g_control.usersReleased;
@@ -137,7 +241,12 @@ public:
         g_control.userInterfaceHandlesMatch = user == g_control.user && pipe == g_control.pipe;
         return g_control.serveUser ? &g_user : nullptr;
     }
-    ISteamGameServer *GetISteamGameServer(HSteamUser, HSteamPipe, const char *) override { return nullptr; }
+    ISteamGameServer *GetISteamGameServer(HSteamUser user, HSteamPipe pipe, const char *version) override
+    {
+        g_control.serverVersionMatches = !std::strcmp(version, STEAMGAMESERVER_INTERFACE_VERSION);
+        g_control.serverInterfaceHandlesMatch = user == g_control.serverUser && pipe == g_control.serverPipe;
+        return g_control.serveServer ? &g_server : nullptr;
+    }
     void SetLocalIPBinding(const SteamIPAddress_t &, uint16) override {}
     ISteamFriends *GetISteamFriends(HSteamUser, HSteamPipe, const char *) override { return nullptr; }
     ISteamUtils *GetISteamUtils(HSteamPipe, const char *) override { return nullptr; }
@@ -205,7 +314,7 @@ extern "C" __attribute__((visibility("default"))) bool Steam_BGetCallback(HSteam
     int32 *call)
 {
     ++g_control.getCallbackCalls;
-    if (pipe != g_control.pipe || g_control.callbackNext >= g_control.callbackCount)
+    if ((pipe != g_control.pipe && pipe != g_control.serverPipe) || g_control.callbackNext >= g_control.callbackCount)
         return false;
     if (g_callbackOut)
         ++g_control.callbackReadWithoutFree;
@@ -221,6 +330,23 @@ extern "C" __attribute__((visibility("default"))) bool Steam_BGetCallback(HSteam
         std::memcpy(g_payload, &response, sizeof(response));
         if (size < 0)
             size = sizeof(response);
+    }
+    else if (next.id == SteamServerConnectFailure_t::k_iCallback)
+    {
+        SteamServerConnectFailure_t failure = {};
+        failure.m_eResult = static_cast<EResult>(next.response);
+        failure.m_bStillRetrying = next.retrying;
+        std::memcpy(g_payload, &failure, sizeof(failure));
+        if (size < 0)
+            size = sizeof(failure);
+    }
+    else if (next.id == SteamServersDisconnected_t::k_iCallback)
+    {
+        SteamServersDisconnected_t disconnected = {};
+        disconnected.m_eResult = static_cast<EResult>(next.response);
+        std::memcpy(g_payload, &disconnected, sizeof(disconnected));
+        if (size < 0)
+            size = sizeof(disconnected);
     }
     else if (size < 0)
     {
@@ -239,7 +365,7 @@ extern "C" __attribute__((visibility("default"))) bool Steam_BGetCallback(HSteam
 extern "C" __attribute__((visibility("default"))) void Steam_FreeLastCallback(HSteamPipe pipe)
 {
     ++g_control.freeCallbackCalls;
-    if (pipe != g_control.pipe || !g_callbackOut)
+    if ((pipe != g_control.pipe && pipe != g_control.serverPipe) || !g_callbackOut)
     {
         ++g_control.freeWithoutCallback;
         return;

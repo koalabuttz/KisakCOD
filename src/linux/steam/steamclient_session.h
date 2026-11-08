@@ -1,10 +1,16 @@
 #pragma once
 
-// A session with the Steam client that is already running on this machine,
-// through the steamclient.so every Steam install ships (~/.steam/sdk32 for
-// i386, ~/.steam/sdk64 for x86_64). It does what src/win32/win_steam.cpp does
-// with steam_api.dll: log in as an app, issue auth session tickets, and check
-// tickets other players send with BeginAuthSession.
+// A session with Steam through the steamclient.so every Steam install ships
+// (~/.steam/sdk32 for i386, ~/.steam/sdk64 for x86_64). It opens one of two ways:
+//
+// - Open(): as the user signed in to the Steam client running on this machine.
+//   It does what src/win32/win_steam.cpp does with steam_api.dll: log in as an
+//   app, issue auth session tickets, and check tickets other players send with
+//   BeginAuthSession.
+// - OpenGameServer(): as an anonymous Steam game server, the way most Linux
+//   dedicated servers check tickets. It needs steamclient.so but no running or
+//   signed-in Steam client, and it uses nobody's account; it only checks
+//   tickets.
 //
 // Nothing links against Steam. The library is dlopen()ed when the session
 // opens, so a build needs only the SDK headers in deps/steamsdk, and a machine
@@ -28,6 +34,19 @@ enum class OpenResult
     noPipe,            // the Steam client is not running
     noUser,            // no logged-in Steam user to connect to
     noUserInterface,   // the library does not serve this SDK's ISteamUser
+    noServerUser,      // OpenGameServer: no game-server user or pipe
+    noServerInterface, // OpenGameServer: the library does not serve this SDK's ISteamGameServer
+    serverInitFailed,  // OpenGameServer: InitGameServer refused the app or ports
+};
+
+// What Steam says about a game-server session's logon, passed to Pump's
+// onServerEvent. result is the callback's EResult (0 where it has none).
+enum class ServerEvent
+{
+    connected,       // SteamServersConnected_t: logged on
+    connectFailed,   // SteamServerConnectFailure_t, Steam has stopped retrying
+    connectRetrying, // SteamServerConnectFailure_t, Steam keeps trying
+    disconnected,    // SteamServersDisconnected_t: logged off; Steam reconnects by itself
 };
 
 const char *OpenResultName(OpenResult result);
@@ -65,11 +84,19 @@ public:
     // library and connects to the logged-in user. On failure nothing stays
     // open; LoaderError() has dlerror()'s text for libraryMissing.
     OpenResult Open(const char *libraryPath, uint32_t appId);
+    // Loads the library and logs on to Steam as an anonymous game server for
+    // appId, a dedicated server on gamePort that shares its query port with the
+    // game socket (so Steam opens no socket of its own). The logon finishes
+    // later: Pump reports it, and LoggedOn() turns true. Such a session issues
+    // no tickets and has no SteamID of a user.
+    OpenResult OpenGameServer(const char *libraryPath, uint32_t appId, uint16_t gamePort, const char *version);
     void Close();
-    bool IsOpen() const { return user_ != nullptr; }
+    bool IsOpen() const { return user_ != nullptr || server_ != nullptr; }
+    bool IsGameServer() const { return server_ != nullptr; }
     const char *LoaderError() const { return loaderError_; }
 
     bool LoggedOn() const;
+    // The user's SteamID, or the game server's own once it is logged on.
     uint64_t SteamId() const;
     // The app id Steam says this process runs as, or 0 if unknown.
     uint32_t AppId() const;
@@ -84,16 +111,21 @@ public:
     void EndAuth(uint64_t steamId);
 
     // Reads every pending callback. Each ValidateAuthTicketResponse_t is passed
-    // to onVerdict; the rest are released unread. Returns how many were read.
-    int Pump(void (*onVerdict)(const AuthVerdict &verdict, void *context), void *context);
+    // to onVerdict, a game server's logon callbacks to onServerEvent; the rest
+    // are released unread. Returns how many were read.
+    int Pump(void (*onVerdict)(const AuthVerdict &verdict, void *context), void *context,
+        void (*onServerEvent)(ServerEvent event, int result, void *context) = nullptr);
 
 private:
+    OpenResult LoadClientLibrary(const char *libraryPath, uint32_t appId);
+
     void *library_ = nullptr;
     void *client_ = nullptr; // ISteamClient
     void *user_ = nullptr;   // ISteamUser
+    void *server_ = nullptr; // ISteamGameServer
     void *utils_ = nullptr;  // ISteamUtils, optional
     int32_t pipe_ = 0;
-    int32_t steamUser_ = 0;
+    int32_t steamUser_ = 0; // global user (Open) or game-server user (OpenGameServer)
     bool (*getCallback_)(int32_t, void *, int32_t *) = nullptr;
     void (*freeCallback_)(int32_t) = nullptr;
     char loaderError_[256] = {};

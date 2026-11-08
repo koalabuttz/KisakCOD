@@ -52,6 +52,11 @@ void Steam_Frame() {}
 // Without a running, logged-in Steam client, Steam_Init leaves the backend off:
 // the client cannot join remote servers and the server rejects every Steam
 // ticket, exactly as the default build does.
+//
+// A dedicated server can instead log on to Steam as an anonymous game server
+// (KISAK_STEAM_SERVER_LOGIN=anonymous, see Steam_Init): it then checks tickets
+// without a Steam client or anyone's account on its machine. Until that logon
+// completes it rejects every ticket.
 
 #include <linux/steam/steamclient_session.h>
 #include <qcommon/cmd.h>
@@ -61,6 +66,8 @@ void Steam_Frame() {}
 #include <server_mp/sv_handshake_auth.h>
 #endif
 
+#include <cstdlib>
+#include <cstring>
 #include <mutex>
 #include <vector>
 
@@ -72,6 +79,8 @@ uint64_t g_steamID = 0;
 char g_steamName[64] = {};
 
 static linux_steam::Session s_steam;
+// Game-server sessions only: the logon outcome was printed once.
+static bool s_serverLogonReported = false;
 static uint32_t steamClientAuthTicket = 0;
 static unsigned char steamClientTicket[1024] = {};
 static uint32 steamClientTicketSize = 0;
@@ -147,11 +156,42 @@ static void Steam_OnVerdict(const linux_steam::AuthVerdict &verdict, void *)
     }
 }
 
+static void Steam_OnServerEvent(linux_steam::ServerEvent event, int result, void *)
+{
+    switch (event)
+    {
+    case linux_steam::ServerEvent::connected:
+        Com_Printf(CON_CHANNEL_SYSTEM, "[Kisak] Steam: logged on as an anonymous game server for app %u\n",
+            kSteamAppId);
+        s_serverLogonReported = true;
+        break;
+    case linux_steam::ServerEvent::connectRetrying:
+        if (!s_serverLogonReported)
+            Com_PrintWarning(CON_CHANNEL_SYSTEM,
+                "[Kisak] Steam: game server logon failed (result %i), retrying. Tickets are rejected until it "
+                "logs on.\n",
+                result);
+        s_serverLogonReported = true;
+        break;
+    case linux_steam::ServerEvent::connectFailed:
+        Com_PrintWarning(CON_CHANNEL_SYSTEM,
+            "[Kisak] Steam: game server logon failed (result %i). Tickets are rejected.\n", result);
+        s_serverLogonReported = true;
+        break;
+    case linux_steam::ServerEvent::disconnected:
+        Com_PrintWarning(CON_CHANNEL_SYSTEM,
+            "[Kisak] Steam: game server lost its Steam connection (result %i). New tickets are rejected until "
+            "it reconnects.\n",
+            result);
+        break;
+    }
+}
+
 void Steam_CheckClients()
 {
     if (!g_steamInitialized)
         return;
-    s_steam.Pump(&Steam_OnVerdict, nullptr);
+    s_steam.Pump(&Steam_OnVerdict, nullptr, &Steam_OnServerEvent);
 
     std::lock_guard<std::mutex> _(kickPlayerMutex);
     if (steamIDsToKick.empty())
@@ -191,6 +231,41 @@ void Steam_Frame()
     Steam_CheckClients();
 }
 
+#ifdef KISAK_DEDICATED
+// KISAK_STEAM_SERVER_LOGIN=anonymous: log on as an anonymous Steam game server
+// rather than as the Steam client's signed-in user. It has to be known before
+// Com_Init (Steam starts first, as in WinMain), so it is an environment
+// variable rather than a dvar. Any other value turns the backend off.
+static bool Steam_InitGameServer(const char *path, const char *login)
+{
+    if (strcmp(login, "anonymous"))
+    {
+        Com_PrintWarning(CON_CHANNEL_SYSTEM,
+            "[Kisak] Steam: KISAK_STEAM_SERVER_LOGIN must be \"anonymous\" or unset, not \"%s\". "
+            "Steam authentication is off.\n",
+            login);
+        return false;
+    }
+    // The game port only describes the server to Steam; with the query port
+    // shared, Steam opens no socket of its own and the server is not listed.
+    const linux_steam::OpenResult result = s_steam.OpenGameServer(path, kSteamAppId, 28960, "1.7.0.0");
+    if (result != linux_steam::OpenResult::ok)
+    {
+        Com_PrintWarning(CON_CHANNEL_SYSTEM,
+            "[Kisak] Steam: could not start an anonymous game server through %s (%s%s%s). "
+            "Steam authentication is off.\n",
+            path, linux_steam::OpenResultName(result), s_steam.LoaderError()[0] ? ": " : "",
+            s_steam.LoaderError());
+        return false;
+    }
+    s_serverLogonReported = false;
+    g_steamInitialized = true;
+    Com_Printf(CON_CHANNEL_SYSTEM,
+        "[Kisak] Steam: logging on as an anonymous game server for app %u through %s\n", kSteamAppId, path);
+    return true;
+}
+#endif
+
 void Steam_Init()
 {
     char path[512];
@@ -201,6 +276,14 @@ void Steam_Init()
             "Steam authentication is off.\n");
         return;
     }
+#ifdef KISAK_DEDICATED
+    const char *serverLogin = getenv("KISAK_STEAM_SERVER_LOGIN");
+    if (serverLogin && *serverLogin)
+    {
+        Steam_InitGameServer(path, serverLogin);
+        return;
+    }
+#endif
     const linux_steam::OpenResult result = s_steam.Open(path, kSteamAppId);
     if (result != linux_steam::OpenResult::ok)
     {
@@ -284,6 +367,12 @@ bool Steam_CheckClientTicket(const void *pAuthTicket, uint32 authTicketLen, uint
     }
     if (!steamID64)
         return false;
+    if (s_steam.IsGameServer() && !s_steam.LoggedOn())
+    {
+        Com_Printf(CON_CHANNEL_SYSTEM,
+            "[Kisak] Steam_CheckClientTicket() - the game server is not logged on to Steam yet. Returning False\n");
+        return false;
+    }
     int result = s_steam.BeginAuth(pAuthTicket, authTicketLen, steamID64);
     if (result == linux_steam::kBeginAuthDuplicateRequest && Steam_HasAuthSession(steamID64))
     {

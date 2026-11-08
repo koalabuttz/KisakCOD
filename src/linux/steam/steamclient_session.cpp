@@ -2,6 +2,7 @@
 
 #include <steamsdk/steam/steam_api.h>
 #include <steamsdk/steam/isteamclient.h>
+#include <steamsdk/steam/isteamgameserver.h>
 
 #include <dlfcn.h>
 
@@ -23,6 +24,21 @@ using FreeCallbackFn = void (*)(HSteamPipe pipe);
 ISteamClient *Client(void *p) { return static_cast<ISteamClient *>(p); }
 ISteamUser *User(void *p) { return static_cast<ISteamUser *>(p); }
 ISteamUtils *Utils(void *p) { return static_cast<ISteamUtils *>(p); }
+ISteamGameServer *Server(void *p) { return static_cast<ISteamGameServer *>(p); }
+
+// InitGameServer is protected in the SDK headers because SteamGameServer_Init
+// (in steam_api, which nothing here links) calls it. A derived class may name
+// it, and the pointer to member it gives is ISteamGameServer's own, so the call
+// below is an ordinary virtual call on the library's object (no downcast).
+struct GameServerAccess : ISteamGameServer
+{
+    static auto InitGameServerMember() { return &GameServerAccess::InitGameServer; }
+};
+
+// The SDK's k_unServerFlagDedicated, which isteamgameserver.h no longer
+// defines, and STEAMGAMESERVER_QUERY_PORT_SHARED from steam_gameserver.h.
+constexpr uint32 kServerFlagDedicated = 4;
+constexpr uint16 kQueryPortShared = 0xffff;
 } // namespace
 
 const char *OpenResultName(OpenResult result)
@@ -37,6 +53,9 @@ const char *OpenResultName(OpenResult result)
     case OpenResult::noPipe: return "steam-not-running";
     case OpenResult::noUser: return "no-logged-in-user";
     case OpenResult::noUserInterface: return "no-user-interface";
+    case OpenResult::noServerUser: return "no-game-server-user";
+    case OpenResult::noServerInterface: return "no-game-server-interface";
+    case OpenResult::serverInitFailed: return "game-server-init-failed";
     }
     static_assert(kBeginAuthOK == k_EBeginAuthSessionResultOK, "SDK enum changed");
     static_assert(kBeginAuthDuplicateRequest == k_EBeginAuthSessionResultDuplicateRequest, "SDK enum changed");
@@ -80,7 +99,7 @@ Session::~Session()
     // ends either way.
 }
 
-OpenResult Session::Open(const char *libraryPath, uint32_t appId)
+OpenResult Session::LoadClientLibrary(const char *libraryPath, uint32_t appId)
 {
     Close();
     loaderError_[0] = '\0';
@@ -117,6 +136,17 @@ OpenResult Session::Open(const char *libraryPath, uint32_t appId)
         return OpenResult::noClientInterface;
     }
     client_ = client;
+    getCallback_ = reinterpret_cast<bool (*)(int32_t, void *, int32_t *)>(getCallback);
+    freeCallback_ = freeCallback;
+    return OpenResult::ok;
+}
+
+OpenResult Session::Open(const char *libraryPath, uint32_t appId)
+{
+    const OpenResult loaded = LoadClientLibrary(libraryPath, appId);
+    if (loaded != OpenResult::ok)
+        return loaded;
+    ISteamClient *client = Client(client_);
     pipe_ = client->CreateSteamPipe();
     if (!pipe_)
     {
@@ -137,13 +167,51 @@ OpenResult Session::Open(const char *libraryPath, uint32_t appId)
     }
     user_ = user;
     utils_ = client->GetISteamUtils(pipe_, STEAMUTILS_INTERFACE_VERSION);
-    getCallback_ = reinterpret_cast<bool (*)(int32_t, void *, int32_t *)>(getCallback);
-    freeCallback_ = freeCallback;
+    return OpenResult::ok;
+}
+
+OpenResult Session::OpenGameServer(const char *libraryPath, uint32_t appId, uint16_t gamePort, const char *version)
+{
+    const OpenResult loaded = LoadClientLibrary(libraryPath, appId);
+    if (loaded != OpenResult::ok)
+        return loaded;
+    ISteamClient *client = Client(client_);
+    // A game-server user gets a pipe of its own inside this process; the Steam
+    // client's signed-in user, if any, is not involved.
+    HSteamPipe pipe = 0;
+    steamUser_ = client->CreateLocalUser(&pipe, k_EAccountTypeGameServer);
+    pipe_ = pipe;
+    if (!pipe_ || !steamUser_)
+    {
+        Close();
+        return OpenResult::noServerUser;
+    }
+    ISteamGameServer *server = client->GetISteamGameServer(steamUser_, pipe_, STEAMGAMESERVER_INTERFACE_VERSION);
+    if (!server)
+    {
+        Close();
+        return OpenResult::noServerInterface;
+    }
+    const auto initGameServer = GameServerAccess::InitGameServerMember();
+    if (!(server->*initGameServer)(0, gamePort, kQueryPortShared, kServerFlagDedicated, appId,
+            version ? version : ""))
+    {
+        Close();
+        return OpenResult::serverInitFailed;
+    }
+    server_ = server;
+    server->SetProduct("cod4");
+    server->SetGameDescription("Call of Duty 4");
+    server->SetModDir("main");
+    server->SetDedicatedServer(true);
+    server->LogOnAnonymous();
     return OpenResult::ok;
 }
 
 void Session::Close()
 {
+    if (server_)
+        Server(server_)->LogOff();
     if (client_ && pipe_)
     {
         if (steamUser_)
@@ -155,6 +223,7 @@ void Session::Close()
     library_ = nullptr;
     client_ = nullptr;
     user_ = nullptr;
+    server_ = nullptr;
     utils_ = nullptr;
     pipe_ = 0;
     steamUser_ = 0;
@@ -164,11 +233,15 @@ void Session::Close()
 
 bool Session::LoggedOn() const
 {
+    if (server_)
+        return Server(server_)->BLoggedOn();
     return user_ && User(user_)->BLoggedOn();
 }
 
 uint64_t Session::SteamId() const
 {
+    if (server_)
+        return Server(server_)->GetSteamID().ConvertToUint64();
     return user_ ? User(user_)->GetSteamID().ConvertToUint64() : 0;
 }
 
@@ -206,27 +279,33 @@ void Session::CancelTicket(uint32_t handle)
 
 int Session::BeginAuth(const void *ticket, uint32_t size, uint64_t steamId)
 {
-    if (!user_)
+    if (!IsOpen())
         return -1;
     if (!ticket || !size || size > 0x7FFFFFFF || !steamId)
         return k_EBeginAuthSessionResultInvalidTicket;
     CSteamID id;
     id.SetFromUint64(steamId);
+    if (server_)
+        return Server(server_)->BeginAuthSession(ticket, static_cast<int>(size), id);
     return User(user_)->BeginAuthSession(ticket, static_cast<int>(size), id);
 }
 
 void Session::EndAuth(uint64_t steamId)
 {
-    if (!user_ || !steamId)
+    if (!IsOpen() || !steamId)
         return;
     CSteamID id;
     id.SetFromUint64(steamId);
-    User(user_)->EndAuthSession(id);
+    if (server_)
+        Server(server_)->EndAuthSession(id);
+    else
+        User(user_)->EndAuthSession(id);
 }
 
-int Session::Pump(void (*onVerdict)(const AuthVerdict &verdict, void *context), void *context)
+int Session::Pump(void (*onVerdict)(const AuthVerdict &verdict, void *context), void *context,
+    void (*onServerEvent)(ServerEvent event, int result, void *context))
 {
-    if (!user_)
+    if (!IsOpen())
         return 0;
     int count = 0;
     CallbackMsg_t message;
@@ -243,6 +322,28 @@ int Session::Pump(void (*onVerdict)(const AuthVerdict &verdict, void *context), 
                 response.m_OwnerSteamID.ConvertToUint64(), static_cast<int>(response.m_eAuthSessionResponse)};
             if (onVerdict)
                 onVerdict(verdict, context);
+        }
+        else if (server_ && onServerEvent && message.m_pubParam)
+        {
+            if (message.m_iCallback == SteamServersConnected_t::k_iCallback)
+            {
+                onServerEvent(ServerEvent::connected, 0, context);
+            }
+            else if (message.m_iCallback == SteamServerConnectFailure_t::k_iCallback &&
+                message.m_cubParam >= static_cast<int>(sizeof(SteamServerConnectFailure_t)))
+            {
+                SteamServerConnectFailure_t failure;
+                std::memcpy(&failure, message.m_pubParam, sizeof(failure));
+                onServerEvent(failure.m_bStillRetrying ? ServerEvent::connectRetrying : ServerEvent::connectFailed,
+                    static_cast<int>(failure.m_eResult), context);
+            }
+            else if (message.m_iCallback == SteamServersDisconnected_t::k_iCallback &&
+                message.m_cubParam >= static_cast<int>(sizeof(SteamServersDisconnected_t)))
+            {
+                SteamServersDisconnected_t disconnected;
+                std::memcpy(&disconnected, message.m_pubParam, sizeof(disconnected));
+                onServerEvent(ServerEvent::disconnected, static_cast<int>(disconnected.m_eResult), context);
+            }
         }
         freeCallback_(pipe_);
     }

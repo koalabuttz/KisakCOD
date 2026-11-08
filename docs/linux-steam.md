@@ -40,9 +40,40 @@ Set `KISAK_STEAMCLIENT_LIBRARY` to load a different `steamclient.so`.
 ## What you need
 
 - The Steam client running and logged in, on an account that owns CoD4.
-- For a server: the same, on the server machine. The Windows build works this
-  way too (it uses the client API, not the GameServer API), so a headless box
-  without a Steam client cannot check tickets.
+- For a server: either the same, on the server machine (the Windows build works
+  this way too: it uses the client API, not the GameServer API), or, for the
+  dedicated server, an anonymous Steam game server login (below).
+
+Steam keeps an account signed in on one computer at a time. With one account, a
+player on one machine and a server checking tickets as that account on another
+cannot both be online; use the anonymous game server login for the server.
+
+## Anonymous game server login (dedicated server, opt-in)
+
+Set `KISAK_STEAM_SERVER_LOGIN=anonymous` in the dedicated server's environment
+and it logs on to Steam as an anonymous game server for app 7940, the way most
+Linux game servers check tickets, instead of as the Steam client's user:
+
+```sh
+KISAK_STEAM_SERVER_LOGIN=anonymous ./KisakCOD-dedi +set dedicated 2 +map mp_crash
+```
+
+- It still loads `steamclient.so` (`~/.steam/sdk32` or `sdk64`, or
+  `KISAK_STEAMCLIENT_LIBRARY`), so Steam must be installed, but the Steam client
+  need not run, and nobody's account is used.
+- The logon finishes a moment after start-up: the server prints
+  `[Kisak] Steam: logged on as an anonymous game server for app 7940`. Until
+  then, and while Steam is unreachable, it rejects every ticket.
+- Tickets are checked with the game server's `BeginAuthSession`; the verdict
+  handling is the same as in the client mode.
+- The server is not listed in Steam's server browser (the query port is
+  shared with the game socket, and nothing answers Steam's queries).
+- It is an environment variable because Steam starts before the command line
+  runs. Any other value turns the backend off. A client or listen server
+  ignores it.
+
+`scripts/tools/linux_steam_probe/steam_probe.cpp gameserver <steamclient.so>`
+checks the logon on its own.
 
 If Steam is not running, not logged in, or the library is missing, start-up
 prints why and the backend stays off: the client refuses remote servers and the
@@ -103,8 +134,13 @@ as `steam_session`) needs no Steam:
   ways (x86_64 client to an i386 server, i386 client to an x86_64 server; the
   i386 builds were run 2's). Every process quit with exit 0.
 
-Not verified: a Windows client or server on the other end, and two different
-Steam accounts.
+- 2026-11-08, laptop probe (`steam_probe gameserver`, x86_64 and i386, twice
+  each): Steam accepted an anonymous game server logon for app 7940
+  (`SteamServersConnected`, logged on, anonymous game server ID) and rejected a
+  junk ticket. The desktop Steam client was not used.
+
+Not verified: a Windows client or server on the other end, two different Steam
+accounts, and a game run of the anonymous game server login.
 
 Steam delivers auth verdicts to every process logged in to the same account,
 so each process acts only on verdicts for SteamIDs it started a session for. A
