@@ -27,7 +27,7 @@ endif()
 if(NOT TARGET kisak_gfx_vk_d3d9 OR WIN32)
     message(FATAL_ERROR
         "KISAK_BUILD_VULKAN_BACKEND needs KISAK_BUILD_VULKAN_LEGACY=ON and KISAK_BUILD_LINUX_NATIVE_D3D9=ON "
-        "(Linux and macOS; the Windows game does not link it yet)")
+        "(Linux and macOS; Windows builds it through vulkan_backend_windows.cmake)")
 endif()
 
 message(STATUS "----- KisakCOD Vulkan back end in the game's programs (opt-in, r_backend vulkan) -----")

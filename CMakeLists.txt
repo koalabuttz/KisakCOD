@@ -203,6 +203,9 @@ if(KISAK_PLATFORM STREQUAL "vita")
 elseif(KISAK_PLATFORM MATCHES "^(linux|macos)$")
     add_subdirectory(${SCRIPTS_DIR}/platform/linux)
 else()
+    # Opt-in r_backend vulkan for KisakCOD-mp (KISAK_BUILD_VULKAN_BACKEND):
+    # its libraries, before the game that links them.
+    include(${SCRIPTS_DIR}/vulkan_probe/vulkan_backend_windows.cmake)
     add_subdirectory(${SCRIPTS_DIR}/mp)
     add_subdirectory(${SCRIPTS_DIR}/sp)
     add_subdirectory(${SCRIPTS_DIR}/dedi)

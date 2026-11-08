@@ -32,9 +32,16 @@ if(NOT KISAK_BUILD_VULKAN_PROBE)
     return()
 endif()
 
-message(STATUS "----- KisakCOD Vulkan window probe (opt-in, Vulkan + SDL3) -----")
-find_package(SDL3 3.2.10 CONFIG REQUIRED)
-message(STATUS "Vulkan probe: SDL3 ${SDL3_VERSION} from ${SDL3_DIR}")
+# KISAK_VULKAN_LIBRARIES_ONLY (set by vulkan_backend_windows.cmake for the
+# Windows game): build the libraries here and in vulkan_shaders.cmake and
+# vulkan_legacy.cmake, but none of the tools, so SDL3 is not needed.
+if(KISAK_VULKAN_LIBRARIES_ONLY)
+    message(STATUS "----- KisakCOD Vulkan core (libraries only, no SDL3) -----")
+else()
+    message(STATUS "----- KisakCOD Vulkan window probe (opt-in, Vulkan + SDL3) -----")
+    find_package(SDL3 3.2.10 CONFIG REQUIRED)
+    message(STATUS "Vulkan probe: SDL3 ${SDL3_VERSION} from ${SDL3_DIR}")
+endif()
 
 set(KISAK_VULKAN_INCLUDE_DIR "" CACHE PATH
     "Directory holding vulkan/vulkan.h (empty: search the system include paths)")
@@ -44,10 +51,12 @@ if(KISAK_VULKAN_INCLUDE_DIR)
     endif()
     set(KISAK_VULKAN_HEADERS "${KISAK_VULKAN_INCLUDE_DIR}")
 else()
-    find_path(KISAK_VULKAN_HEADERS vulkan/vulkan.h)
+    # The Vulkan SDK's installer sets VULKAN_SDK (its headers are in Include on
+    # Windows, include elsewhere).
+    find_path(KISAK_VULKAN_HEADERS vulkan/vulkan.h HINTS "$ENV{VULKAN_SDK}/Include" "$ENV{VULKAN_SDK}/include")
     if(NOT KISAK_VULKAN_HEADERS)
         message(FATAL_ERROR
-            "KISAK_BUILD_VULKAN_PROBE needs the Vulkan headers: install libvulkan-dev "
+            "KISAK_BUILD_VULKAN_PROBE needs the Vulkan headers: install libvulkan-dev or the Vulkan SDK, "
             "or set KISAK_VULKAN_INCLUDE_DIR to a Vulkan-Headers include directory")
     endif()
 endif()
@@ -81,6 +90,10 @@ else()
     set(KISAK_VULKAN_WARNINGS -Wall -Wextra -Werror)
 endif()
 target_compile_options(kisak_gfx_vk PRIVATE ${KISAK_VULKAN_WARNINGS})
+
+if(KISAK_VULKAN_LIBRARIES_ONLY)
+    return()
+endif()
 
 add_executable(KisakCOD-vulkan-probe
     "${SRC_DIR}/gfx_vk/tools/vk_window_probe.cpp"

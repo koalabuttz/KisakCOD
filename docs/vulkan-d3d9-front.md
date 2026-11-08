@@ -246,8 +246,46 @@ console as `Vulkan: ...`. When the device goes, the front logs where the CPU
 time went (`vulkan d3d9: device stats: ...`: shaders created and the time
 translating them, pipelines and the time building them, texture uploads with
 their size and time), for comparing loads and first frames with DXVK. No
-pipeline cache file is written yet. The Windows
-game does not link the front yet.
+pipeline cache file is written yet.
+
+### On Windows
+
+On Windows the same option links the front into `KisakCOD-mp` only
+(`scripts/vulkan_probe/vulkan_backend_windows.cmake`, included from the root
+`CMakeLists.txt` before `scripts/mp`). The one option is enough: it builds the
+Vulkan core, the shader translator, the Legacy adapter and the front as
+libraries only (`KISAK_VULKAN_LIBRARIES_ONLY`: no SDL3, none of the tools), with
+the game's static C runtime. It needs MSVC (Win32, x64 or ARM64; MinGW refuses
+it) and the Vulkan headers 1.3 or newer:
+
+```
+cmake -S . -B build -A Win32 -DDXSDK_DIR=<dxsdk> -DKISAK_BUILD_VULKAN_BACKEND=ON ^
+  -DKISAK_VULKAN_INCLUDE_DIR=<Vulkan-Headers>/include
+```
+
+With the Vulkan SDK installed, `VULKAN_SDK` is found and the include directory
+can be left out. dxbc-spirv is fetched at configure time, as for the tools.
+
+The host is `src/win32/vulkan/win_vulkan_backend.cpp`, with plain Win32 and the
+same three dvars:
+
+* The `HWND` is the game's own window. The surface comes from
+  `vkCreateWin32SurfaceKHR`, and the size in pixels from `GetClientRect` (0 x 0
+  while minimised).
+* `vulkan-1.dll` is opened at run time from the system directory
+  (`LoadLibraryExW` with `LOAD_LIBRARY_SEARCH_SYSTEM32`), never imported. The
+  game still starts on a machine without Vulkan; `r_backend vulkan` then fails
+  at `Direct3DCreate9`, as a missing D3D9 would.
+* Display modes are the primary display's 32-bit modes (`EnumDisplaySettingsW`),
+  and the monitor is the primary one.
+
+The front never changes the display mode. In fullscreen the window covers the
+mode's size at the desktop's resolution, so use windowed mode or the desktop's
+own resolution for now. The Windows workflow builds it for Win32 Debug and for
+x64 (whose artifact is the PC's), checks the configure log says `Vulkan back
+end: linked into KisakCOD-mp`, and checks the Win32 executable does not import
+`vulkan-1.dll`. Hosted runners have no GPU, so the game has not drawn through
+it on Windows yet.
 
 The device probe with `--backend vulkan` runs `r_init.cpp`'s device start
 unchanged (`R_PreCreateWindow`, `R_CreateWindow`, `R_CreateDevice`), clears,
@@ -294,6 +332,7 @@ the one DXVK 3.1.1 (dxbc-spirv too) gave in the shader spike. Vulkan took
 
 ## Next
 
-`KisakCOD-mp` played with `r_backend vulkan` on the laptop; the PC comparison
-(the Windows game needs a Win32 host for the front first); why the probe takes
-longer on Vulkan (pipeline creation at first use is the likely part).
+`KisakCOD-mp` played with `r_backend vulkan` on the laptop (laptop run 4); the
+PC comparison through the Windows host; and the load-time gap. Laptop run 4
+measured it at +4.5 s warm, mostly while zones load (shader translation and
+uploads), and +9.9 s cold, mostly pipelines built at the first draw.
