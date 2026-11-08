@@ -132,6 +132,18 @@ python3 scripts/platform/macos/make_app_bundle.py \
   `+set fs_basepath "/path/to/Call of Duty 4"`, for example
   `KisakCOD-mp.app/Contents/MacOS/KisakCOD-mp +set fs_basepath ...`.
 
+#### Universal bundle
+
+One bundle for both kinds of Mac holds an arm64 and an x86_64 slice in the
+executable and in each library. Running the macOS workflow by hand with
+`universal` ticked builds the client RelWithDebInfo on both runners, packs each
+bundle as above, merges them with `lipo -create`, signs the result ad hoc
+again, runs the client's fail-closed checks from it (the x86_64 slice under
+Rosetta 2 when the runner has it) and writes a size table to the run's
+summary: each bundle as built, stripped (`strip -S -x`) and zipped. The
+libraries in it are the CI ones, so the D3D9 and OpenAL stand-ins weigh almost
+nothing; a release would carry its real graphics and sound libraries instead.
+
 ## Vulkan window probe
 
 The shared core of the planned Vulkan back end and its window probe

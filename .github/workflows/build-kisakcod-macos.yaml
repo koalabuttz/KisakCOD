@@ -15,9 +15,18 @@ name: macOS
 # Step three builds the Vulkan window probe (the shared core of the planned
 # Vulkan back end, docs/vulkan-core.md) against MoltenVK and runs it in a real
 # window on each runner.
+#
+# A manual run with universal=true also builds the client RelWithDebInfo for
+# each architecture, packs each as an app bundle, merges the two into one
+# universal (arm64 + x86_64) KisakCOD-mp.app and reports its size.
 
 on:
   workflow_dispatch:
+    inputs:
+      universal:
+        description: Also build an optimised universal app bundle and report its size
+        type: boolean
+        default: false
   push:
     branches: [ "master" ]
     paths:
@@ -201,7 +210,7 @@ jobs:
     # the game window test, the client's fail-closed start from temporary
     # trees with no game data, the Bink shim test and the skinning tests. No
     # MoltenVK, DXVK library, GPU, game data or game movie is involved.
-    name: macOS ${{ matrix.arch }} multiplayer client
+    name: macOS ${{ matrix.arch }} multiplayer client${{ matrix.config != 'Debug' && format(' {0}', matrix.config) || '' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
 
@@ -209,6 +218,9 @@ jobs:
       fail-fast: false
       matrix:
         arch: [arm64, x86_64]
+        # Debug on every run; a manual universal=true run adds an optimised
+        # build whose app bundle the universal job merges.
+        config: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.universal && '["Debug", "RelWithDebInfo"]' || '["Debug"]') }}
         include:
           - arch: arm64
             runner: macos-26
@@ -221,8 +233,8 @@ jobs:
       SDL3_REVISION: 877399b2b2cf21e67554ed9046410f268ce1d1b2
       # FFmpeg n7.1.5 (LGPL), for the Bink shim's libavcodec and libavutil.
       FFMPEG_REVISION: 3a0867c2bfda4a4d4309ca1a8cbdc6175e67f587
-      BUILD_DIR: build-macos/${{ matrix.arch }}-mp-client
-      OUT_DIR: ${{ github.workspace }}/out/macos-${{ matrix.arch }}-mp-client
+      BUILD_DIR: build-macos/${{ matrix.arch }}-mp-client-${{ matrix.config }}
+      OUT_DIR: ${{ github.workspace }}/out/macos-${{ matrix.arch }}-mp-client-${{ matrix.config }}
 
     steps:
       - name: Checkout repository
@@ -353,7 +365,7 @@ jobs:
           cmake -S . -B "$BUILD_DIR" -G Ninja \
             -DKISAK_PLATFORM=macos \
             -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
-            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_BUILD_TYPE=${{ matrix.config }} \
             -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$OUT_DIR" \
             -DKISAK_BUILD_LINUX_NATIVE_D3D9=ON \
             -DKISAK_DXVK_NATIVE_INCLUDE_DIR="$RUNNER_TEMP/dxvk-include/dxvk" \
@@ -457,6 +469,23 @@ jobs:
           test "$(cat "$RUNNER_TEMP/rpaths.txt")" = "@executable_path/../Frameworks"
           python3 -u scripts/tests/test_linux_mp_client.py --binary "$app/Contents/MacOS/KisakCOD-mp" --native-os macOS
 
+      # tar keeps the bundle's execute bits, which an artifact zip drops.
+      - name: Keep the optimised app bundle for the universal job
+        if: ${{ matrix.config != 'Debug' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -C "$RUNNER_TEMP/bundle" -cf "$RUNNER_TEMP/KisakCOD-mp-app-${{ matrix.arch }}.tar" KisakCOD-mp.app
+
+      - name: Upload the optimised app bundle
+        if: ${{ matrix.config != 'Debug' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: KisakCOD-mp-app-macos-${{ matrix.arch }}
+          path: ${{ runner.temp }}/KisakCOD-mp-app-${{ matrix.arch }}.tar
+          retention-days: 7
+          if-no-files-found: error
+
       # Apple silicon skins with the engine's scalar code; its output must be
       # the bytes every architecture produces (tests/skinning/skin_scalar_test.cpp).
       - name: Run the skinning checks
@@ -468,6 +497,122 @@ jobs:
           if [[ "${{ matrix.arch }}" == x86_64 ]]; then
             "$OUT_DIR/KisakCOD-skin-sse2-test"
           fi
+
+  universal:
+    # Manual runs with universal=true only: the two optimised client bundles
+    # merged into one KisakCOD-mp.app whose executable and libraries each hold
+    # an arm64 and an x86_64 slice (lipo), signed ad hoc again, started from
+    # the bundle like the per-architecture ones, and measured. The libraries
+    # are the CI ones (SDL3, the minimal FFmpeg and the D3D9 and OpenAL
+    # stand-ins), so the size is the game code's plus those; no game data.
+    name: macOS universal app bundle size
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.universal }}
+    needs: client
+    runs-on: macos-26
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download the optimised app bundles
+        uses: actions/download-artifact@v4
+        with:
+          pattern: KisakCOD-mp-app-macos-*
+          path: ${{ runner.temp }}/slices
+          merge-multiple: true
+
+      - name: Merge, sign and run the universal bundle
+        timeout-minutes: 10
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          unset DYLD_LIBRARY_PATH DYLD_FALLBACK_LIBRARY_PATH
+          slices="$RUNNER_TEMP/slices"
+          for arch in arm64 x86_64; do
+            mkdir -p "$slices/$arch"
+            tar -C "$slices/$arch" -xf "$slices/KisakCOD-mp-app-$arch.tar"
+          done
+          arm="$slices/arm64/KisakCOD-mp.app"
+          intel="$slices/x86_64/KisakCOD-mp.app"
+          app="$RUNNER_TEMP/universal/KisakCOD-mp.app"
+          mkdir -p "$RUNNER_TEMP/universal"
+          cp -R "$arm" "$app"
+          # The two bundles must hold the same files; each Mach-O becomes fat.
+          diff <(cd "$arm" && find . -type f | sort) <(cd "$intel" && find . -type f | sort)
+          merged=0
+          while IFS= read -r file; do
+            if lipo -archs "$arm/$file" >/dev/null 2>&1; then
+              lipo -create "$arm/$file" "$intel/$file" -output "$app/$file"
+              test "$(lipo -archs "$app/$file")" = "x86_64 arm64"
+              merged=$((merged + 1))
+            fi
+          done < <(cd "$arm" && find . -type f -not -path './Contents/_CodeSignature/*')
+          test "$merged" -eq 6
+          for library in "$app"/Contents/Frameworks/*.dylib; do
+            codesign --force --sign - "$library"
+          done
+          codesign --force --sign - "$app"
+          codesign --verify --strict --deep --verbose=2 "$app"
+          python3 -u scripts/tests/test_linux_mp_client.py --binary "$app/Contents/MacOS/KisakCOD-mp" --native-os macOS
+          # The Intel slice too, when the runner has Rosetta 2.
+          if arch -x86_64 /usr/bin/true 2>/dev/null; then
+            python3 -u scripts/tests/test_linux_mp_client.py --binary "$app/Contents/MacOS/KisakCOD-mp" \
+              --native-os macOS --emulator "arch -x86_64"
+          else
+            echo "no Rosetta 2 on this runner; the x86_64 slice ran in its own client job"
+          fi
+
+      - name: Report the sizes
+        shell: bash
+        run: |
+          set -euo pipefail
+          bytes() { stat -f %z "$1"; }
+          tree_bytes() { find "$1" -type f -exec stat -f %z {} + | awk '{s += $1} END {print s}'; }
+          mib() { awk -v b="$1" 'BEGIN {printf "%.1f MiB", b / 1048576}'; }
+          zip_bytes() {
+            ditto -c -k --keepParent "$1" "$RUNNER_TEMP/measure.zip"
+            bytes "$RUNNER_TEMP/measure.zip"
+            rm -f "$RUNNER_TEMP/measure.zip"
+          }
+          stripped_bytes() {
+            # strip -S -x drops the debug map and local symbols, as a release
+            # would; on a copy, since it breaks the signature.
+            rm -rf "$RUNNER_TEMP/stripped"
+            mkdir -p "$RUNNER_TEMP/stripped"
+            cp -R "$1" "$RUNNER_TEMP/stripped/"
+            local copy="$RUNNER_TEMP/stripped/$(basename "$1")"
+            while IFS= read -r file; do
+              if lipo -archs "$file" >/dev/null 2>&1; then
+                xcrun strip -S -x "$file" 2>/dev/null || true
+              fi
+            done < <(find "$copy" -type f)
+            tree_bytes "$copy"
+          }
+          {
+            echo "### KisakCOD-mp.app size (RelWithDebInfo, CI libraries, no game data)"
+            echo
+            echo "| Bundle | Executable | Whole bundle | Bundle, stripped | Bundle, zipped |"
+            echo "|---|---|---|---|---|"
+            for entry in "arm64:$RUNNER_TEMP/slices/arm64/KisakCOD-mp.app" \
+                         "x86_64:$RUNNER_TEMP/slices/x86_64/KisakCOD-mp.app" \
+                         "universal:$RUNNER_TEMP/universal/KisakCOD-mp.app"; do
+              label="${entry%%:*}"
+              app="${entry#*:}"
+              echo "| $label | $(mib "$(bytes "$app/Contents/MacOS/KisakCOD-mp")") | $(mib "$(tree_bytes "$app")") | $(mib "$(stripped_bytes "$app")") | $(mib "$(zip_bytes "$app")") |"
+            done
+            echo
+            echo "| File in the universal bundle | Size |"
+            echo "|---|---|"
+            app="$RUNNER_TEMP/universal/KisakCOD-mp.app"
+            while IFS= read -r file; do
+              echo "| ${file#$app/} | $(mib "$(bytes "$file")") |"
+            done < <(find "$app/Contents/MacOS" "$app/Contents/Frameworks" -type f | sort)
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
   vulkan_probe:
     # Step three (docs/macos.md): the Vulkan window probe, the first piece of
