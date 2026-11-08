@@ -559,6 +559,20 @@ VkFormat PickDepthStencilFormat(Core &core)
     return VK_FORMAT_UNDEFINED;
 }
 
+bool EnvEquals(const char *name, const char *value)
+{
+#if defined(_MSC_VER)
+    char *text = nullptr;
+    size_t length = 0;
+    const bool equal = _dupenv_s(&text, &length, name) == 0 && text && std::strcmp(text, value) == 0;
+    std::free(text);
+    return equal;
+#else
+    const char *text = std::getenv(name);
+    return text && std::strcmp(text, value) == 0;
+#endif
+}
+
 bool CreateDevice(Core &core)
 {
     Dispatch &vk = core.vk;
@@ -597,9 +611,9 @@ bool CreateDevice(Core &core)
     core.optional.independentBlend = supported.independentBlend;
     core.optional.shaderClipDistance = supported.shaderClipDistance;
     core.optional.shaderFloat16 = supported12.shaderFloat16;
-    const char *strideMode = std::getenv("KISAK_VK_VERTEX_STRIDE");
-    const bool forceStatic = strideMode && std::strcmp(strideMode, "static") == 0;
-    core.optional.dynamicVertexStride = !portability && !forceStatic;
+    // MoltenVK's paths (see OptionalFeatures), or forced for testing.
+    core.optional.dynamicVertexStride = !portability && !EnvEquals("KISAK_VK_VERTEX_STRIDE", "static");
+    core.optional.fixedDepthCompare = portability || EnvEquals("KISAK_VK_DEPTH_COMPARE", "fixed");
 
     VkPhysicalDeviceVulkan13Features features13{};
     features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;

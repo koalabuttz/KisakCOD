@@ -242,6 +242,12 @@ struct OptionalFeatures
     // (and when KISAK_VK_VERTEX_STRIDE=static): strides are then baked into
     // the pipelines.
     bool dynamicVertexStride;
+    // Translated pixel shaders get each sampler's depth compare fixed when
+    // they are built (legacy_shader::BuildSpirv's fixedDepthCompare) instead
+    // of choosing at run time. On every portability-subset device: MoltenVK's
+    // converter turns an image sampled both ways into a Metal depth texture,
+    // which cannot sample colour. KISAK_VK_DEPTH_COMPARE=fixed forces it.
+    bool fixedDepthCompare;
 };
 const OptionalFeatures &Features(const Core *core);
 // Whether images of this format with optimal tiling support these features.

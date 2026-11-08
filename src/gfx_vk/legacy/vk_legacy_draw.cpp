@@ -424,11 +424,13 @@ LayoutKey LayoutFor(const Shader &vs, const Shader &ps)
     return key;
 }
 
-VkShaderModule PixelModule(Device &device, Shader &ps, Shader &vs)
+VkShaderModule PixelModule(Device &device, Shader &ps, Shader &vs, uint32_t depthSamplers)
 {
     std::vector<uint32_t> spirv;
     std::string error;
-    if (ls::StagesLinkDirectly(vs.translated, ps.translated))
+    const bool direct = ls::StagesLinkDirectly(vs.translated, ps.translated);
+    const bool fixed = Features(device.core).fixedDepthCompare;
+    if (direct && !fixed)
     {
         if (ps.module)
             return ps.module;
@@ -440,10 +442,15 @@ VkShaderModule PixelModule(Device &device, Shader &ps, Shader &vs)
         ps.module = CreateShaderModule(device.core, spirv.data(), spirv.size() * sizeof(uint32_t));
         return ps.module;
     }
-    auto found = ps.linked.find(vs.id);
+    // The vertex shader's id (none when the stages link as they stand), and
+    // the depth samplers above it where they are fixed.
+    const uint64_t moduleKey =
+        (fixed ? uint64_t(depthSamplers | 0x10000u) << 32 : 0) | (direct ? 0xffffffffu : vs.id);
+    auto found = ps.linked.find(moduleKey);
     if (found != ps.linked.end())
         return found->second;
-    if (!ls::BuildSpirv(ps.translated, &vs.translated, spirv, error))
+    if (!ls::BuildSpirv(ps.translated, direct ? nullptr : &vs.translated, spirv, error,
+                        fixed ? &depthSamplers : nullptr))
     {
         Fail(device, "pixel shader %08x with vertex shader %08x: %s", ps.translated.bytecodeHash,
              vs.translated.bytecodeHash, error.c_str());
@@ -452,8 +459,9 @@ VkShaderModule PixelModule(Device &device, Shader &ps, Shader &vs)
     VkShaderModule module = CreateShaderModule(device.core, spirv.data(), spirv.size() * sizeof(uint32_t));
     if (module)
     {
-        ps.linked.emplace(vs.id, module);
-        ++device.stats.shaderPairs;
+        ps.linked.emplace(moduleKey, module);
+        if (!direct)
+            ++device.stats.shaderPairs;
     }
     return module;
 }
@@ -461,7 +469,7 @@ VkShaderModule PixelModule(Device &device, Shader &ps, Shader &vs)
 Pipeline *BuildPipeline(Device &device, const PipelineKey &key, Shader &vs, Shader &ps, const VertexDecl &decl)
 {
     Layout *layout = GetLayout(device, LayoutFor(vs, ps));
-    const VkShaderModule fragment = layout ? PixelModule(device, ps, vs) : VK_NULL_HANDLE;
+    const VkShaderModule fragment = layout ? PixelModule(device, ps, vs, key.depthSamplers) : VK_NULL_HANDLE;
     if (!fragment)
     {
         if (device.error.empty())
@@ -626,13 +634,14 @@ Pipeline *BuildPipeline(Device &device, const PipelineKey &key, Shader &vs, Shad
 }
 
 PipelineKey MakeKey(const Device &device, const Shader &vs, const Shader &ps, const VertexDecl &decl,
-                    d3d::PrimitiveType type)
+                    d3d::PrimitiveType type, uint32_t depthSamplers)
 {
     const uint32_t *rs = device.renderStates;
     PipelineKey key{};
     key.vs = vs.id;
     key.ps = ps.id;
     key.decl = decl.id;
+    key.depthSamplers = static_cast<uint16_t>(depthSamplers);
     if (!Features(device.core).dynamicVertexStride)
     {
         for (const VertexElement &element : decl.elements)
@@ -1114,7 +1123,19 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
         if (!BeginTargetsPass(device))
             return false;
     }
-    const PipelineKey key = MakeKey(device, *vs, *ps, *decl, type);
+    // Where depth compare is fixed in the pixel shader, the samplers it reads
+    // that have a depth texture bound (the rule SamplerStateBlock follows).
+    uint32_t depthSamplers = 0;
+    if (Features(device.core).fixedDepthCompare)
+    {
+        for (uint32_t sampler = 0; sampler < ls::kSamplerCount; ++sampler)
+        {
+            const Texture *texture = textures.bound[SlotForBit(sampler)];
+            if ((ps->translated.reflection.samplers & (1u << sampler)) && texture && texture->format->depth)
+                depthSamplers |= 1u << sampler;
+        }
+    }
+    const PipelineKey key = MakeKey(device, *vs, *ps, *decl, type, depthSamplers);
     auto found = device.pipelines.find(key);
     Pipeline *pipeline = found != device.pipelines.end() ? &found->second : BuildPipeline(device, key, *vs, *ps, *decl);
     if (!pipeline)

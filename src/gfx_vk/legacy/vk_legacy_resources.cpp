@@ -658,7 +658,11 @@ Shader *CreateShader(Device *device_, const void *bytecode, size_t bytes, std::s
     if (shader->stage == ls::Stage::Vertex)
     {
         std::vector<uint32_t> spirv;
-        if (!ls::BuildSpirv(shader->translated, nullptr, spirv, error))
+        // Vertex textures are never depth-compared here; where the device
+        // fixes depth compare in the shader, say so (see fixedDepthCompare).
+        const uint32_t noDepthSamplers = 0;
+        if (!ls::BuildSpirv(shader->translated, nullptr, spirv, error,
+                            Features(device.core).fixedDepthCompare ? &noDepthSamplers : nullptr))
         {
             Log(device, "vertex shader %08x: %s", shader->translated.bytecodeHash, error.c_str());
             return nullptr;

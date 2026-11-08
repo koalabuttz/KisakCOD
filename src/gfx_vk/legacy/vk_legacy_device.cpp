@@ -200,8 +200,9 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
         ResetState(*device);
         if (Flush(core, false))
         {
-            Log(*device, "device ready: back buffer %ux%u, depth %s, vertex stride %s", width, height,
-                FormatName(device->depthFormat), Features(device->core).dynamicVertexStride ? "dynamic" : "static");
+            Log(*device, "device ready: back buffer %ux%u, depth %s, vertex stride %s, depth compare %s", width, height,
+                FormatName(device->depthFormat), Features(device->core).dynamicVertexStride ? "dynamic" : "static",
+                Features(device->core).fixedDepthCompare ? "fixed" : "dynamic");
             return device.release();
         }
         Fail(*device, "core: %s", LastError(core));

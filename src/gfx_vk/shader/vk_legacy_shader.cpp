@@ -13,7 +13,11 @@
 #include "ir/ir_disasm.h"
 #include "ir/ir_legalize.h"
 #include "ir/ir_serialize.h"
+#include "ir/passes/ir_pass_arithmetic.h"
+#include "ir/passes/ir_pass_cfg_cleanup.h"
 #include "ir/passes/ir_pass_lower_io.h"
+#include "ir/passes/ir_pass_remove_unused.h"
+#include "ir/passes/ir_pass_ssa.h"
 #include "sm3/sm3_converter.h"
 #include "spirv/spirv_builder.h"
 #include "spirv/spirv_mapping.h"
@@ -103,6 +107,96 @@ public:
 private:
     Stage m_stage;
 };
+
+// The legalisation DXVK 3.1.1 runs for D3D9 shaders, without the options that
+// depend on device features it does not need here.
+ir::CompileOptions CompileOptions()
+{
+    ir::CompileOptions options;
+    options.arithmeticOptions.lowerDot = true;
+    options.arithmeticOptions.lowerMsad = true;
+    options.arithmeticOptions.lowerUdiv = true;
+    options.arithmeticOptions.lowerGsVertexCountIn = false;
+    // Partial precision (_pp) at 32 bits, as D3D9 hardware ran it and as DXVK
+    // does unless d3d9.useFP16 is set. dxbc-spirv maps it to 16-bit floats by
+    // default, which overflow in the game's specular terms and brighten every
+    // lit surface.
+    options.min16Options.enableFloat16 = false;
+    options.min16Options.enableInt16 = false;
+    options.resourceOptions.allowSubDwordScratchAndLds = true;
+    options.resourceOptions.flattenLds = false;
+    options.resourceOptions.flattenScratch = false;
+    options.resourceOptions.structuredCbv = true;
+    options.resourceOptions.structuredSrvUav = true;
+    options.bufferOptions.useTypedForSparseFeedback = true;
+    options.scalarizeOptions.subDwordVectors = true;
+    options.derivativeOptions.hoistNontrivialDerivativeOps = true;
+    options.derivativeOptions.hoistNontrivialImplicitLodOps = false;
+    options.derivativeOptions.hoistDescriptorLoads = true;
+    options.cseOptions.relocateDescriptorLoad = true;
+    return options;
+}
+
+// Replaces every load of SamplerStateBlock::useDepthCompare with a constant
+// from depthSamplers (bit per sampler), then folds the branches it decides
+// and drops the dead code, so each image is sampled one way only. Returns the
+// number of loads replaced.
+uint32_t FixDepthCompare(ir::Builder &builder, uint32_t depthSamplers)
+{
+    ir::SsaDef cbv = {};
+    auto [begin, end] = builder.getDeclarations();
+    for (auto it = begin; it != end; ++it)
+    {
+        if (it->getOpCode() == ir::OpCode::eDclCbv && uint32_t(it->getOperand(1u)) == kUniformRegSpace &&
+            uint32_t(it->getOperand(2u)) == static_cast<uint32_t>(Uniform::SamplerState))
+            cbv = it->getDef();
+    }
+    if (!cbv)
+        return 0;
+
+    std::vector<std::pair<ir::SsaDef, uint32_t>> loads; // load, value
+    std::vector<ir::SsaDef> descriptors;
+    builder.getUses(cbv, descriptors);
+    for (ir::SsaDef descriptor : descriptors)
+    {
+        if (builder.getOp(descriptor).getOpCode() != ir::OpCode::eDescriptorLoad)
+            continue;
+        std::vector<ir::SsaDef> uses;
+        builder.getUses(descriptor, uses);
+        for (ir::SsaDef use : uses)
+        {
+            const ir::Op &load = builder.getOp(use);
+            if (load.getOpCode() != ir::OpCode::eBufferLoad || ir::SsaDef(load.getOperand(0u)) != descriptor)
+                continue;
+            const ir::Op &address = builder.getOp(ir::SsaDef(load.getOperand(1u)));
+            if (!address.isConstant() || address.getOperandCount() != 2u ||
+                uint32_t(address.getOperand(1u)) != uint32_t(ir::LegacySamplerStateLayout::eUseDepthCompare) ||
+                !(load.getType() == ir::Type(ir::BasicType(ir::ScalarType::eU32))))
+                continue;
+            const uint32_t sampler = uint32_t(address.getOperand(0u));
+            loads.push_back({use, sampler < 32u ? (depthSamplers >> sampler) & 1u : 0u});
+        }
+    }
+    for (const auto &[load, value] : loads)
+        builder.rewriteDef(load, builder.makeConstant(value));
+    if (loads.empty())
+        return 0;
+
+    const ir::CompileOptions options = CompileOptions();
+    while (true)
+    {
+        bool progress = false;
+        progress |= ir::ArithmeticPass::runPass(builder, options.arithmeticOptions);
+        progress |= ir::CleanupControlFlowPass::runPass(builder);
+        progress |= ir::SsaConstructionPass::runResolveTrivialPhiPass(builder);
+        if (!progress)
+            break;
+        ir::RemoveUnusedPass::runPass(builder);
+    }
+    ir::RemoveUnusedPass::runPass(builder);
+    return static_cast<uint32_t>(loads.size());
+}
+
 
 uint32_t Fnv1a(const void *data, size_t bytes)
 {
@@ -406,33 +500,7 @@ bool Translate(const void *bytecode, size_t bytes, Shader &shader, std::string &
             pass.lowerLegacyBuiltInToCbv(input.builtIn, kUniformRegSpace, static_cast<uint32_t>(input.uniform));
     }
 
-    // The legalisation DXVK 3.1.1 runs for D3D9 shaders, without the options
-    // that depend on device features it does not need here.
-    {
-        ir::CompileOptions options;
-        options.arithmeticOptions.lowerDot = true;
-        options.arithmeticOptions.lowerMsad = true;
-        options.arithmeticOptions.lowerUdiv = true;
-        options.arithmeticOptions.lowerGsVertexCountIn = false;
-        // Partial precision (_pp) at 32 bits, as D3D9 hardware ran it and as
-        // DXVK does unless d3d9.useFP16 is set. dxbc-spirv maps it to 16-bit
-        // floats by default, which overflow in the game's specular terms and
-        // brighten every lit surface.
-        options.min16Options.enableFloat16 = false;
-        options.min16Options.enableInt16 = false;
-        options.resourceOptions.allowSubDwordScratchAndLds = true;
-        options.resourceOptions.flattenLds = false;
-        options.resourceOptions.flattenScratch = false;
-        options.resourceOptions.structuredCbv = true;
-        options.resourceOptions.structuredSrvUav = true;
-        options.bufferOptions.useTypedForSparseFeedback = true;
-        options.scalarizeOptions.subDwordVectors = true;
-        options.derivativeOptions.hoistNontrivialDerivativeOps = true;
-        options.derivativeOptions.hoistNontrivialImplicitLodOps = false;
-        options.derivativeOptions.hoistDescriptorLoads = true;
-        options.cseOptions.relocateDescriptorLoad = true;
-        ir::legalizeIr(builder, options);
-    }
+    ir::legalizeIr(builder, CompileOptions());
 
     ReflectResources(builder, reflection);
     if (!(reflection.uniforms & (1u << static_cast<uint32_t>(Uniform::FloatConstants))))
@@ -463,7 +531,8 @@ bool StagesLinkDirectly(const Shader &vertexShader, const Shader &pixelShader)
                                          ir::ShaderStage::ePixel, FromEntries(pixelShader.reflection.inputs), true);
 }
 
-bool BuildSpirv(const Shader &shader, const Shader *vertexShader, std::vector<uint32_t> &spirv, std::string &error)
+bool BuildSpirv(const Shader &shader, const Shader *vertexShader, std::vector<uint32_t> &spirv, std::string &error,
+                const uint32_t *fixedDepthCompare)
 {
     spirv.clear();
     error.clear();
@@ -485,6 +554,8 @@ bool BuildSpirv(const Shader &shader, const Shader *vertexShader, std::vector<ui
         pass.resolveSemanticIo(previous);
         pass.resolveMismatchedIo(ir::ShaderStage::eVertex, previous);
     }
+    if (fixedDepthCompare)
+        FixDepthCompare(builder, *fixedDepthCompare);
 
     spirv::SpirvBuilder::Options options = {};
     options.includeDebugNames = true;

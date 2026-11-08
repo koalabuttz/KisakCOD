@@ -210,8 +210,15 @@ bool Translate(const void *bytecode, size_t bytes, Shader &shader, std::string &
 // vertex shader it is drawn with: inputs the vertex shader does not write read
 // as zero, and inputs it writes at another location are moved there. Pass
 // nullptr to keep the pixel shader's own locations.
+//
+// fixedDepthCompare, when given, decides each sampler's depth compare at build
+// time instead of by SamplerStateBlock::useDepthCompare: bit N set means
+// sampler N is bound to a depth texture, clear means a colour one, and the
+// branch not taken is removed. MoltenVK needs this: its shader converter
+// (SPIRV-Cross) declares an image sampled both with and without a depth
+// reference as a Metal depth texture, which cannot sample colour.
 bool BuildSpirv(const Shader &shader, const Shader *vertexShader, std::vector<uint32_t> &spirv,
-                std::string &error);
+                std::string &error, const uint32_t *fixedDepthCompare = nullptr);
 
 // True when the pixel shader's inputs read the vertex shader's outputs as they
 // stand (BuildSpirv then needs no linking).

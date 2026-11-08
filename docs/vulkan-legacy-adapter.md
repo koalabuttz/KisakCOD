@@ -103,6 +103,28 @@ never compares, so it reports every textured draw. The core counts that one
 message apart (`CoreStats::validationIgnored`, printed as
 `validation_ignored`), not as an error, and logs it once.
 
+## MoltenVK (macOS)
+
+On a device with the portability subset (MoltenVK), the adapter takes two
+other paths. The Legacy device's ready line names both
+(`vertex stride static, depth compare fixed`):
+
+- **Vertex strides in the pipeline.** MoltenVK has
+  `VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE` only from macOS 14 on Mac2 or
+  Apple4 GPUs, and no Vulkan query says so. The pipeline key carries each
+  stream's stride instead, and buffers are bound without strides.
+- **Depth compare fixed per pipeline.** MoltenVK's shader converter
+  (SPIRV-Cross) declares an image sampled both with and without a depth
+  reference as a Metal depth texture, and a depth texture cannot sample colour.
+  So the pixel shader is built per set of samplers that have a depth texture
+  bound (`PipelineKey::depthSamplers`). `legacy_shader::BuildSpirv` replaces
+  the `useDepthCompare` loads with constants and removes the branch not taken.
+  Vertex shaders are built with no depth samplers.
+
+`KISAK_VK_VERTEX_STRIDE=static` and `KISAK_VK_DEPTH_COMPARE=fixed` force
+either path on any device. The Linux lavapipe job runs the adapter and D3D9
+front checks with both set, with the validation layer required.
+
 ## Building and running
 
 ```sh

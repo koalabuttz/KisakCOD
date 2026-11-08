@@ -2538,15 +2538,17 @@ jobs:
             --binary "$OUT_DIR/KisakCOD-vulkan-d3d9-check" \
             --video-driver offscreen --validation require
 
-      - name: Run both checks again with strides baked into the pipelines
+      - name: Run both checks again on MoltenVK's paths
         if: ${{ matrix.config == 'Debug' }}
         timeout-minutes: 15
         shell: bash
         env:
           PYTHONUNBUFFERED: "1"
-          # The path MoltenVK takes (no dynamic vertex stride), here with the
-          # validation layer required.
+          # The paths the adapter takes on MoltenVK (docs/vulkan-legacy-adapter.md):
+          # strides baked into pipelines and depth compare fixed per pipeline,
+          # here with the validation layer required.
           KISAK_VK_VERTEX_STRIDE: static
+          KISAK_VK_DEPTH_COMPARE: fixed
         run: |
           set -euo pipefail
           python3 -u scripts/tests/test_vulkan_legacy_adapter.py \
