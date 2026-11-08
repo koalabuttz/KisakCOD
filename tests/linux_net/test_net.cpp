@@ -771,6 +771,17 @@ int main()
     // forked child (see test_loopback_auth.cpp).
     RunLoopbackAuthScenarioProcesses();
 
+    // The peer binds first. PickFreeUdpPort closes the port it finds, and a
+    // kernel may hand that same port to the next bind to port 0 (macOS did:
+    // the peer took the seed port and NET_Init fell back to the next one).
+    // Holding the peer's port first keeps the seed port free for NET_Init.
+    peer = MakePeerSocket(&peerPort);
+    if (peer == -1)
+    {
+        printf("FATAL: could not create the peer socket\n");
+        return 2;
+    }
+
     // Seed a free port before init so the bound port is predictable.
     seedPort = PickFreeUdpPort();
     if (seedPort <= 0)
@@ -779,13 +790,6 @@ int main()
         return 2;
     }
     Shim_DvarSeedInt("net_port", seedPort);
-
-    peer = MakePeerSocket(&peerPort);
-    if (peer == -1)
-    {
-        printf("FATAL: could not create the peer socket\n");
-        return 2;
-    }
 
     Section("NET_Init");
     NET_Init();
