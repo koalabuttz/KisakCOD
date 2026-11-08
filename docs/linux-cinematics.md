@@ -118,7 +118,10 @@ game data:
 
 CI builds the x86_64 client with the option on, checks that it links
 libavcodec, and runs the test (`.github/workflows/build-kisakcod-linux.yaml`,
-"x86_64 multiplayer client").
+"x86_64 multiplayer client"). The aarch64 Linux job does the same, and the
+macOS client jobs (arm64 and x86_64) build the shim against a minimal FFmpeg
+made from source and run the same test
+([macos.md](macos.md#multiplayer-client)).
 
 Playing a game movie needs the game files. That runs on a developer machine,
 for example from the console:

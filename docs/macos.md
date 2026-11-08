@@ -35,11 +35,12 @@ cmake --build build-macos --target KisakCOD-dedi
   offers from macOS 13.3 on.
 - Apple Clang is used as is; `-fms-extensions` covers the engine's Microsoft
   spellings, as on Linux.
-- The multiplayer client's opt-ins (`KISAK_BUILD_LINUX_NATIVE_D3D9` and
-  `KISAK_BUILD_LINUX_MP_CLIENT`) and the Vulkan window probe
-  (`KISAK_BUILD_VULKAN_PROBE`) are accepted; see below. Every other opt-in
-  (window host, the D3D9 and world probes, movies, Steam, the Linux and Windows
-  Tracy builds) is refused with `KISAK_PLATFORM=macos` for now.
+- The multiplayer client's opt-ins (`KISAK_BUILD_LINUX_NATIVE_D3D9`,
+  `KISAK_BUILD_LINUX_MP_CLIENT` and its movies, `KISAK_LINUX_CINEMATICS`) and
+  the Vulkan window probe (`KISAK_BUILD_VULKAN_PROBE`) are accepted; see below.
+  Every other opt-in (window host, the D3D9 and world probes, singleplayer,
+  Steam, the Linux and Windows Tracy builds) is refused with
+  `KISAK_PLATFORM=macos` for now.
 
 Run it like the Linux server, with the game files from your own install:
 
@@ -79,7 +80,28 @@ cmake --build build-macos-client --target KisakCOD-mp
 - The client keeps its files under `$XDG_DATA_HOME/KisakCOD` (or
   `~/.local/share/KisakCOD`) as on Linux for now; the Mac convention,
   `~/Library/Application Support`, comes with the app bundle.
-- Movies (the Bink shim) are not built for macOS yet.
+- Movies: `-DKISAK_LINUX_CINEMATICS=ON` builds the Bink shim
+  ([linux-cinematics.md](linux-cinematics.md)) as on Linux. It needs
+  libavcodec and libavutil, found with pkg-config: Homebrew's `ffmpeg`, or a
+  minimal LGPL build with only the Bink decoders, as CI makes:
+
+  ```sh
+  ./configure --prefix="$PWD/../ffmpeg-sdk" --install-name-dir='@rpath' \
+      --extra-cflags=-mmacosx-version-min=13.3 --extra-ldflags=-mmacosx-version-min=13.3 \
+      --enable-shared --disable-static --disable-programs --disable-doc \
+      --disable-everything --disable-autodetect --disable-network \
+      --disable-avformat --disable-avdevice --disable-avfilter \
+      --disable-swscale --disable-swresample --disable-x86asm \
+      --enable-decoder=bink,binkaudio_rdft,binkaudio_dct
+  make && make install
+  PKG_CONFIG_PATH="$PWD/../ffmpeg-sdk/lib/pkgconfig" cmake ... -DKISAK_LINUX_CINEMATICS=ON
+  ```
+
+  RAD's `radbase.h` takes its Macintosh branch on Apple compilers (it
+  describes a 68K or PowerPC Mac); nothing the shim or `r_cinematic.cpp` uses
+  depends on that branch. The default Mac file system ignores letter case, so the
+  shim opens a movie path as the engine spells it, with `/` for `\`, and
+  needs none of the case-matching walk it does on Linux.
 
 ## Vulkan window probe
 
@@ -178,12 +200,14 @@ The other `run_linux_checks.py` checks are i386-only and stay on Linux. The
 RelWithDebInfo binaries are kept as CI artifacts for 14 days.
 
 A second job per architecture builds the multiplayer client against the pinned
-SDL3 (built from source) and the D3D9 and OpenAL stand-ins, checks with
-`otool -L` that it needs only those libraries and the system ones (and, on
-arm64, that it has no fused multiply-adds), then runs the game window test,
-`scripts/tests/test_linux_mp_client.py --native-os macOS` (the client's
-fail-closed start from temporary trees with no game data) and the skinning
-tests.
+SDL3 (built from source), the D3D9 and OpenAL stand-ins and, for movies, a
+minimal FFmpeg n7.1.5 built from source with only the Bink decoders. It checks
+with `otool -L` that the client needs only those libraries and the system ones
+(and, on arm64, that it has no fused multiply-adds), then runs the game window
+test, `scripts/tests/test_linux_mp_client.py --native-os macOS` (the client's
+fail-closed start from temporary trees with no game data), the Bink shim test
+(made-up movies, and libavcodec's Bink decoders opened as the shim opens them;
+no game movie) and the skinning tests.
 
 A third job per architecture builds the Vulkan window probe against Homebrew's
 MoltenVK and runs `scripts/tests/test_vulkan_window_probe.py --video-driver
@@ -203,6 +227,6 @@ timings mean nothing there.
   covers the layer itself) and float results compared with x86.
 - The client draws nothing yet: the Vulkan core runs on Metal through
   MoltenVK, but the renderer does not use it yet (the Legacy adapter comes
-  later in the renderer plan). Sound through OpenAL Soft, movies, the app
-  bundle and signing are later steps too.
+  later in the renderer plan). Sound through OpenAL Soft, a game movie played
+  through the Bink shim, the app bundle and signing are later steps too.
 - No run on a real Mac's GPU yet: the hosted runners' GPU is a virtual one.

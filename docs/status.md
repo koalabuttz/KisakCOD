@@ -79,8 +79,9 @@ builds use `-ffp-contract=off` (no fused multiply-add).
 - **x86_64 singleplayer.** The 64-bit configuration refuses the SP game for now.
 - **Windows x64 singleplayer.** Each PC run gets one step further into level
   load; the fixes so far are in PR 95.
-- **macOS client.** The multiplayer client builds for Macs and passes its
-  asset-free checks in hosted CI against the D3D9 and OpenAL stand-ins; drawing
+- **macOS client.** The multiplayer client builds for Macs, with the Bink movie
+  shim, and passes its asset-free checks in hosted CI against the D3D9 and
+  OpenAL stand-ins; drawing
   waits on the renderer. The Vulkan core and its window probe run on Metal
   through MoltenVK on both hosted Mac runners
   ([macOS track](macos.md#vulkan-window-probe)).
