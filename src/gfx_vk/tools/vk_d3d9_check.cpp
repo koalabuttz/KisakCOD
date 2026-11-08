@@ -186,6 +186,16 @@ bool HostCurrentMode(void *, uint32_t &width, uint32_t &height, uint32_t &refres
     return HostMode(nullptr, 1, width, height, refreshRate);
 }
 
+// A made-up place for the window on its display, so the windowed front buffer
+// copy has an offset to get right.
+constexpr int32_t kWindowOriginX = 16, kWindowOriginY = 8;
+bool HostWindowOrigin(void *, front::D3D9Window, int32_t &x, int32_t &y)
+{
+    x = kWindowOriginX;
+    y = kWindowOriginY;
+    return true;
+}
+
 void HostCoreDestroyed(void *user, const gfx_vk::CoreStats &stats)
 {
     SdlHost *host = static_cast<SdlHost *>(user);
@@ -976,6 +986,36 @@ void Check::Present()
         Read();
     if (Ok(device->GetFrontBufferData(0, readSurface), "GetFrontBufferData") && ReadLocked(kSize))
         Expect("front_buffer", 5, 5, 200, 100, 50);
+
+    // Windowed screenshots: the renderer asks for the front buffer in a surface
+    // the size of the display, and finds the window's image at the window's
+    // place on it (Host::windowOrigin).
+    IDirect3DSurface9 *display = nullptr;
+    constexpr UINT kDisplay = kSize * 2;
+    if (Ok(device->CreateOffscreenPlainSurface(kDisplay, kDisplay, D3DFMT_A8R8G8B8, D3DPOOL_SCRATCH, &display, nullptr),
+           "CreateOffscreenPlainSurface(display)"))
+    {
+        D3DLOCKED_RECT locked{};
+        if (Ok(display->LockRect(&locked, nullptr, 0), "LockRect(display)"))
+        {
+            for (UINT y = 0; y < kDisplay; ++y)
+                std::memset(static_cast<uint8_t *>(locked.pBits) + y * locked.Pitch, 0x11, kDisplay * 4);
+            display->UnlockRect();
+        }
+        if (Ok(device->GetFrontBufferData(0, display), "GetFrontBufferData(display)")
+            && Ok(display->LockRect(&locked, nullptr, D3DLOCK_READONLY), "LockRect(display)"))
+        {
+            const auto at = [&](UINT x, UINT y) {
+                const uint8_t *p = static_cast<const uint8_t *>(locked.pBits) + y * locked.Pitch + x * 4;
+                return Argb(p[3], p[2], p[1], p[0]);
+            };
+            Equal("windowed_front_buffer", at(kWindowOriginX + 5, kWindowOriginY + 5), Argb(255, 200, 100, 50));
+            Equal("windowed_outside_left", at(kWindowOriginX - 1, kWindowOriginY + 5), 0x11111111u);
+            Equal("windowed_outside_below", at(kWindowOriginX + 5, kWindowOriginY + kSize), 0x11111111u);
+            display->UnlockRect();
+        }
+        SafeRelease(display);
+    }
 }
 
 bool Check::CreateDevice(std::string &error)
@@ -1082,6 +1122,7 @@ int Run(const Options &options)
     host.validation = options.validation;
     host.deviceIndex = options.device;
     host.coreDestroyed = HostCoreDestroyed;
+    host.windowOrigin = HostWindowOrigin;
 
     Check check;
     check.host = &sdl;

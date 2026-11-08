@@ -230,6 +230,21 @@ HMONITOR HostMonitor(void *)
     return MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
 }
 
+// The window's client area on its monitor, for windowed screenshots (the
+// renderer measures it the same way, with MonitorFromWindow).
+bool HostWindowOrigin(void *, front::D3D9Window window, int32_t &x, int32_t &y)
+{
+    POINT origin{0, 0};
+    MONITORINFO info{};
+    info.cbSize = sizeof(info);
+    if (!ClientToScreen(window, &origin)
+        || !GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST), &info))
+        return false;
+    x = origin.x - info.rcMonitor.left;
+    y = origin.y - info.rcMonitor.top;
+    return true;
+}
+
 void HostLog(void *, const char *line)
 {
     Com_Printf(CON_CHANNEL_GFX, "Vulkan: %s\n", line);
@@ -310,6 +325,7 @@ IDirect3D9 *Kisak_VulkanDirect3DCreate9()
     host.mode = HostMode;
     host.currentMode = HostCurrentMode;
     host.monitor = HostMonitor;
+    host.windowOrigin = HostWindowOrigin;
     host.log = HostLog;
     host.validation = ValidationSetting();
     host.deviceIndex = r_vkDevice->current.integer;

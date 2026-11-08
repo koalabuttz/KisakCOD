@@ -55,6 +55,9 @@ instead (`vk_d3d9.h`), which the program fills once:
   `CreateDevice` is given (on Linux and macOS the `HWND` is the SDL window).
 * `modeCount`, `mode`, `currentMode`, `monitor`: display modes of the one
   adapter (reported as `X8R8G8B8`) and its monitor.
+* `windowOrigin`: where the window's client area starts on its monitor. A
+  windowed screenshot asks `GetFrontBufferData` for a surface the size of the
+  display, as D3D9 does; the front puts the back buffer there at that place.
 * `log`: one line per call.
 * `validation`, `deviceIndex`, `pipelineCachePath`: how the core is created.
   Vsync follows `PresentationInterval` at `CreateDevice`.

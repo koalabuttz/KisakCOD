@@ -202,6 +202,20 @@ HMONITOR HostMonitor(void *)
     return reinterpret_cast<HMONITOR>(static_cast<std::uintptr_t>(Display()));
 }
 
+// The window's client area on its display, for windowed screenshots.
+bool HostWindowOrigin(void *, front::D3D9Window handle, int32_t &x, int32_t &y)
+{
+    SDL_Window *const window = reinterpret_cast<SDL_Window *>(handle);
+    int windowX = 0, windowY = 0;
+    SDL_Rect bounds{};
+    const SDL_DisplayID display = window ? SDL_GetDisplayForWindow(window) : 0;
+    if (!display || !SDL_GetWindowPosition(window, &windowX, &windowY) || !SDL_GetDisplayBounds(display, &bounds))
+        return false;
+    x = windowX - bounds.x;
+    y = windowY - bounds.y;
+    return true;
+}
+
 void HostLog(void *, const char *line)
 {
     Com_Printf(CON_CHANNEL_GFX, "Vulkan: %s\n", line);
@@ -318,6 +332,7 @@ IDirect3D9 *Kisak_VulkanDirect3DCreate9()
     host.mode = HostMode;
     host.currentMode = HostCurrentMode;
     host.monitor = HostMonitor;
+    host.windowOrigin = HostWindowOrigin;
     host.log = HostLog;
     host.validation = ValidationSetting();
     host.deviceIndex = r_vkDevice->current.integer;
