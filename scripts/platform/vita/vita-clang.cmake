@@ -62,13 +62,19 @@ set(kisak_vita_include "${VITASDK}/arm-vita-eabi/include")
 #  (built with --disable-tls) does; the Vita loader has no ELF TLS segment.
 # -fno-pic: Vita executables are fixed-address ELFs relocated by the loader
 #  from the -q relocation records, not position-independent code.
+# -mllvm -arm-assume-misaligned-load-store: never pair two word accesses into
+#  LDRD/STRD or LDM/STM unless the address is known to be aligned. The engine
+#  type-puns byte buffers (*(DWORD *)&buf[i]); a single LDR or STR copes with
+#  an unaligned address, but the paired forms raise an alignment fault, and the
+#  Vita, unlike Linux, does not fix those up (first console run: a STRD to an
+#  odd address in FS_AddIwdFilesForGameDirectory). Vita3K does not fault.
 # Enums stay int-sized (Clang's default for this triple), unlike VitaSDK's
 # libraries (-fshort-enums): the engine's retail struct layouts need 4-byte
 # enums, and no newlib, libstdc++ or SceLibKernel structure the engine passes
 # across the boundary holds an unscoped enum (docs/vita.md).
 set(kisak_vita_flags
     "-mcpu=cortex-a9 -mthumb -mfloat-abi=hard -mfpu=vfpv3 -D__vita__ -femulated-tls -fno-pic"
-    "-fsigned-char -ffp-contract=off"
+    "-fsigned-char -ffp-contract=off -mllvm -arm-assume-misaligned-load-store"
     "-nostdinc -nostdinc++"
     "-isystem ${kisak_vita_cxx_include} -isystem ${kisak_vita_cxx_include}/arm-vita-eabi"
     "-isystem ${kisak_vita_cxx_include}/backward"

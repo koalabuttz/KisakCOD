@@ -37,7 +37,10 @@
 extern "C" int _newlib_heap_size_user = 64 * 1024 * 1024;
 
 // The main thread runs Com_Frame. Linux gives it 8 MB; the Vita default is
-// far smaller, and engine code keeps large arrays on the stack.
+// 256 KB, and engine code keeps large arrays on the stack. vita-elf-create
+// copies this symbol into the process parameters, and nothing else refers to
+// it, so the link keeps it with -Wl,--undefined (CMakeLists.txt): --gc-sections
+// dropped it from the first console build, which then ran on 256 KB.
 extern "C" unsigned int sceUserMainThreadStackSize = 8 * 1024 * 1024;
 
 namespace

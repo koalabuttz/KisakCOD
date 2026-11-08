@@ -9,9 +9,13 @@ macOS or Windows builds.
 **State:** the server compiles, links and packs into a `.vpk` (sandbox and
 hosted CI), and boots in the Vita3K emulator: start-up, the data folder, the
 log, threads and the file system work, and with no game data it stops at the
-missing first zone, as the Linux build does. It has **not run on a Vita yet**:
-the network, map loading and the memory budget are first checked on David's
-console with the steps below.
+missing first zone, as the Linux build does. The first run on David's Vita
+(2026-11-08) started up, logged 208 MB of main memory free, then crashed
+while listing the `.iwd` files: an 8-byte store to an odd address, which the
+Vita's CPU refuses and Vita3K allows (see "Alignment" below). The main
+thread also had 256 KB of stack instead of 8 MB. Both are fixed; the network,
+map loading and the memory budget are next checked on the console with the
+steps below.
 
 The Vita build takes at most **24 players** (`sv_maxclients` 1 to 24, default
 24). The server's snapshot buffers are sized by that cap; at retail's 64 they
@@ -141,6 +145,21 @@ linker script and stub libraries). `-Wl,-q` keeps the relocations that
   of the C++ library.
 - **Fastfiles.** Pointers are 4 bytes and the CPU little-endian, so PC
   fastfiles load unchanged, as on i386 and armv7 Linux.
+- **Alignment.** The Cortex-A9 handles an unaligned single load or store
+  (`LDR`/`STR`), but faults on the paired and multiple forms
+  (`LDRD`/`STRD`/`LDM`/`STM`, and `VLDR`) at an unaligned address. Linux
+  fixes these up in the kernel; the Vita does not, and Vita3K does not model
+  the fault. The engine reads and writes words at any address (decompiled
+  byte-buffer code), so every unit is compiled with
+  `-mllvm -arm-assume-misaligned-load-store`, which stops Clang pairing two
+  word accesses into one. Copies of whole 8-byte structures still use the
+  paired forms; they are safe while those structures stay aligned. A crash
+  with stop reason `0x30004` (data abort) on the console is the first thing
+  to check for this.
+- **Main thread stack.** `sceUserMainThreadStackSize` (8 MB, in
+  `vita_main.cpp`) is read only by `vita-elf-create`, so the link keeps it
+  with `--undefined`; `--gc-sections` dropped it in the first build and the
+  main thread got the 256 KB default.
 
 ### Platform layer
 
@@ -177,7 +196,9 @@ in memory from launch:
 | Engine reservations (`vita_mman.cpp`) | 128 MB zone arena, 10 MB hunk, 16 MB debug hunk, small listing hunks |
 | Stacks and network pool | main thread 8 MB, workers 1 MB each, network 1 MB (static) |
 
-That leaves about 45 MB. In retail `svs` is 178 MB: its rings are sized for
+That leaves about 45 MB. On the console the system reported 208 MB of
+main memory free once the server had started (Vita3K reports 301 MB, because
+it leaves the program out). In retail `svs` is 178 MB: its rings are sized for
 64 clients (64 `client_t` of 662 KB, delta-snapshot entity and client states,
 and the cached snapshots behind killcam). The Vita build sets `SV_MAX_CLIENTS`
 (`bg_local.h`) to 24 and the rings scale with it (`server_mp.h`): the same
@@ -192,10 +213,11 @@ Vita cannot raise.
 
 ## Next steps
 
-1. Map load in Vita3K with game data (David's laptop has Vita3K and the
+1. Second run on David's Vita (steps above), with the alignment and stack
+   fixes: reach "Dedicated server initialized", load mp_crash, join from the
+   laptop. Expect more alignment faults; each dump's PC maps to source.
+2. Map load in Vita3K with game data (David's laptop has Vita3K and the
    data): checks the zones load and gives the heap's use after a map.
-2. First run on David's Vita (steps above): reach "Dedicated server
-   initialized", load mp_crash, join from the laptop.
 3. Run 0, 4 and 8 bots at `sv_fps 20` and read the load lines; size the
    player cap, the heap and the zone arena from them.
 4. Commit the reservations lazily (the 16 MB debug hunk is rarely used) if

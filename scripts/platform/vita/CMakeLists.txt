@@ -84,7 +84,10 @@ target_compile_options(KisakCOD-dedi PRIVATE
 # VitaSDK's libraries use short enums and the engine 4-byte ones (see
 # vita-clang.cmake and docs/vita.md for why that is safe here); the linker
 # would warn about every object.
-target_link_options(KisakCOD-dedi PRIVATE -Wl,--gc-sections -Wl,--no-enum-size-warning)
+# --undefined keeps sceUserMainThreadStackSize (src/vita/vita_main.cpp) through
+# --gc-sections: only vita-elf-create reads it, so nothing in the link uses it.
+target_link_options(KisakCOD-dedi PRIVATE -Wl,--gc-sections -Wl,--no-enum-size-warning
+    -Wl,--undefined=sceUserMainThreadStackSize)
 target_link_libraries(KisakCOD-dedi PRIVATE
     pthread
     SceNet_stub SceNetCtl_stub SceSysmodule_stub SceKernelThreadMgr_stub
