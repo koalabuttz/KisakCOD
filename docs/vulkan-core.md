@@ -28,7 +28,7 @@ Start-up (`vk_core.cpp`):
 | --- | --- |
 | Loader | Not linked. The window system hands the core `vkGetInstanceProcAddr` (SDL3 opens the loader), and every function is looked up through it (`vk_dispatch.h`). A machine without Vulkan fails with a message, not a dynamic-linker error. |
 | Instance | Vulkan 1.3. The window system's surface extensions, portability enumeration where offered (MoltenVK), and the Khronos validation layer on request. With validation on, synchronisation validation is on too. |
-| Device | Needs Vulkan 1.3, dynamic rendering, synchronization2, timeline semaphores, scalar block layout (for the [Legacy shaders](vulkan-legacy-shaders.md)' uniform blocks), `VK_KHR_swapchain` and one queue that draws and presents to the window. Picks discrete, then integrated, then virtual, then CPU devices, or the index given. Turns on anisotropic filtering, wireframe fill and independent blend where the device has them. Picks the depth-stencil format: D24S8 where it can be an attachment and sampled, else D32S8. |
+| Device | Needs Vulkan 1.3, dynamic rendering, synchronization2, timeline semaphores, scalar block layout (for the [Legacy shaders](vulkan-legacy-shaders.md)' uniform blocks), the Vulkan memory model, buffer device addresses and demote-to-helper (all three used by the Legacy shaders' SPIR-V and required by Vulkan 1.3), `VK_KHR_swapchain` and one queue that draws and presents to the window. Picks discrete, then integrated, then virtual, then CPU devices, or the index given. Turns on anisotropic filtering, wireframe fill, independent blend, clip distances and 16-bit shader floats where the device has them (`Features` says which). Picks the depth-stencil format: D24S8 where it can be an attachment and sampled, else D32S8. |
 | Swapchain | `B8G8R8A8_UNORM` or `R8G8B8A8_UNORM` in sRGB-nonlinear colour space: UNORM because the retail renderer writes gamma-space values and never asks for sRGB conversion. FIFO with vsync, otherwise mailbox, then immediate. Rebuilt when the surface is out of date or suboptimal, or when the window reports a new size; a minimised window skips frames. |
 | Swapchain images | Wrapped as core images, so passes, blits and read-back treat them like any other image. Copyable and blit targets where the surface allows. |
 
@@ -38,21 +38,21 @@ Memory (`vk_memory.cpp`):
 | --- | --- |
 | Allocation | Pooled blocks per memory type (64 MB device, 16 MB mapped), first fit with coalescing; buffers and images never share a block, so `bufferImageGranularity` never applies. Requests over half a block get their own allocation. Only Upload and Readback memory is mapped, even where every type is host-visible (integrated GPUs): a 32-bit build keeps its address space for the game. |
 | Buffers | Device (written through staging), Upload (mapped, CPU writes) and Readback (mapped, cached where possible). |
-| Images | 2D, cube and 3D, with levels; a view of the whole image; usage as asked (sampled images can also be copied into). |
+| Images | 2D, cube and 3D, with levels; a view of the whole image for attachments and copies, and for sampled images a second view shaders sample, with the image's swizzle (`ImageDesc::sampleSwizzle`, so one-channel formats read as D3D9's L8 or A8) and the depth aspect only; usage as asked (sampled images can also be copied into). |
 | Lifetime | `Destroy*` waits for every submission recorded so far: objects go once the timeline passes that point, so a frame still using one on the GPU is safe. Pipelines and shader modules follow the same rule. |
 
 Frames (`vk_frame.cpp`):
 
 | Piece | How |
 | --- | --- |
-| Recording | A command buffer is always open, so work recorded outside a frame (a map load's uploads) needs no frame; it goes with the next `Flush` or `Present`. Every submission signals a timeline semaphore with the next serial, which is how the core knows what the GPU has finished. |
+| Recording | A command buffer is always open, so work recorded outside a frame (a map load's uploads) needs no frame; it goes with the next `Flush` or `Present`. Every submission signals a timeline semaphore with the next serial, which is how the core knows what the GPU has finished; `SubmissionSerial` and `SerialFinished` give users the same answer for memory they recycle themselves. |
 | Frames | `BeginFrame` acquires a swapchain image; `Present` hands it over, submits and presents. Two frames in flight: after a present the next frame slot waits for its previous use and recycles its command buffers, staging, transient memory, descriptor pools and queries. |
 | Image state | Each image's layout and last access are tracked; passes, copies, uploads and `UseImage` record the synchronization2 barriers they need (none for a read after a read in the same layout). A pass cannot record barriers, so images it samples are made Sampled first; images written by uploads go back to Sampled before the next pass on their own. |
 | Passes | Dynamic rendering with up to four colour attachments and a depth-stencil attachment, clear or load. A clear or don't-care load discards the old contents (no layout transition cost). |
 | Uploads | `StageBufferWrite` and `StageImageWrite` return staging memory and record the copy at once, so it is ordered with the work around it. Buffer copies share one barrier before and one after a run of them. Rewriting a texture level already written since the last barrier gets a barrier first; other levels do not. A frame slot that holds 64 MB of staging flushes and waits instead of growing (a long map load). |
 | Transient memory | Per-frame host-visible memory for vertex, index and uniform data. |
 | Descriptor sets | Allocated from per-frame pools, reset when the slot comes round again. |
-| Copies and read-back | Blits between images (scaling and format conversion), and read-back of a level of any 4-byte colour image, the swapchain image included, waited on by `WaitReadback`. |
+| Copies and read-back | Blits between any level and layer of two images (scaling and format conversion), and read-back of a level of any 4-byte colour image, the swapchain image included, waited on by `WaitReadback`. |
 | Timing | GPU timestamps around every pass, kept per pass name (min, max, average), and around each whole frame. |
 
 Pipelines (`vk_pipeline.cpp`):
@@ -179,7 +179,10 @@ RelWithDebInfo and runs that script on Mesa's lavapipe (a CPU Vulkan driver)
 through SDL's offscreen video driver, which supports Vulkan through
 `VK_EXT_headless_surface`. It needs no GPU, display server or game data, and
 requires the validation layer with synchronisation checks. It also runs
-`gen_spirv_header.py --check`.
+`gen_spirv_header.py --check`. One validation message, the depth-compare format
+rule the layer checks statically against the Legacy shaders, is counted apart
+from errors (`validation_ignored`; see
+[vulkan-legacy-adapter.md](vulkan-legacy-adapter.md#the-validation-layer-and-depth-compare)).
 
 Results so far (2026-11-05, cloud sandbox, no GPU, lavapipe from Mesa 25.2.8):
 
@@ -216,11 +219,10 @@ has so far run on lavapipe only (2026-11-08, cloud sandbox, x86_64 Debug, Mesa
 
 ## Next
 
-The core now has the pieces the Legacy adapter needs to draw, and the
-[Legacy shader translator](vulkan-legacy-shaders.md) turns the game's shaders
-into SPIR-V for it. Next, in order: the Legacy adapter on top of the core (the
-engine's state bits, samplers, constants, dynamic buffers and render targets),
-then the `r_backend vulkan` switch and mp_crash drawn through it, compared
-with DXVK on the laptop and the PC. Not in the core yet, because nothing needs
-them so far: compute pipelines, memory budgets (`VK_EXT_memory_budget`), and
-multisampled targets.
+The [Legacy adapter](vulkan-legacy-adapter.md) now sits on the core, with the
+[Legacy shader translator](vulkan-legacy-shaders.md) turning the game's shaders
+into SPIR-V for it. Next: the `r_backend vulkan` switch, which connects the
+renderer's `r_rhi.h` calls to the adapter, and mp_crash drawn through it,
+compared with DXVK on the laptop and the PC. Not in the core yet, because
+nothing needs them so far: compute pipelines, memory budgets
+(`VK_EXT_memory_budget`), and multisampled targets.

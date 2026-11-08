@@ -128,7 +128,19 @@
     X(vkCmdSetViewport) \
     X(vkCmdSetScissor) \
     X(vkCmdSetStencilReference) \
+    X(vkCmdSetStencilCompareMask) \
+    X(vkCmdSetStencilWriteMask) \
     X(vkCmdSetDepthBias) \
+    X(vkCmdSetCullMode) \
+    X(vkCmdSetFrontFace) \
+    X(vkCmdSetPrimitiveTopology) \
+    X(vkCmdSetDepthTestEnable) \
+    X(vkCmdSetDepthWriteEnable) \
+    X(vkCmdSetDepthCompareOp) \
+    X(vkCmdSetDepthBiasEnable) \
+    X(vkCmdSetStencilTestEnable) \
+    X(vkCmdSetStencilOp) \
+    X(vkCmdBindVertexBuffers2) \
     X(vkCmdSetBlendConstants) \
     X(vkCmdDraw) \
     X(vkCmdDrawIndexed) \

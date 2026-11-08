@@ -363,6 +363,8 @@ void DestroyBufferNow(Core &core, Buffer *buffer)
 
 void DestroyImageNow(Core &core, Image *image)
 {
+    if (image->sampleView)
+        core.vk.vkDestroyImageView(core.dev, image->sampleView, nullptr);
     if (image->view)
         core.vk.vkDestroyImageView(core.dev, image->view, nullptr);
     if (image->image)
@@ -526,14 +528,29 @@ Image *CreateImage(Core *core, const ImageDesc &desc)
     viewInfo.image = image->image;
     viewInfo.viewType = ViewType(desc.kind);
     viewInfo.format = desc.format;
-    // A view of a depth-stencil image for sampling or attachment: depth only
-    // would be needed for sampling; attachments take both aspects. Users that
-    // sample depth make their own view.
+    // The attachment and copy view: every aspect, identity swizzle.
     viewInfo.subresourceRange = {image->aspect, 0, desc.mipLevels, 0, image->layers};
     if (!Check(*core, core->vk.vkCreateImageView(core->dev, &viewInfo, nullptr, &image->view), "vkCreateImageView"))
     {
         DestroyImageNow(*core, image);
         return nullptr;
+    }
+    // Shaders sample depth only, through the requested swizzle.
+    const VkComponentMapping &swizzle = desc.sampleSwizzle;
+    const bool swizzled = swizzle.r != VK_COMPONENT_SWIZZLE_IDENTITY || swizzle.g != VK_COMPONENT_SWIZZLE_IDENTITY
+        || swizzle.b != VK_COMPONENT_SWIZZLE_IDENTITY || swizzle.a != VK_COMPONENT_SWIZZLE_IDENTITY;
+    const bool depthStencil = (image->aspect & VK_IMAGE_ASPECT_DEPTH_BIT) && (image->aspect & VK_IMAGE_ASPECT_STENCIL_BIT);
+    if ((desc.usage & VK_IMAGE_USAGE_SAMPLED_BIT) && (swizzled || depthStencil))
+    {
+        viewInfo.components = swizzle;
+        if (image->aspect & VK_IMAGE_ASPECT_DEPTH_BIT)
+            viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        if (!Check(*core, core->vk.vkCreateImageView(core->dev, &viewInfo, nullptr, &image->sampleView),
+                   "vkCreateImageView"))
+        {
+            DestroyImageNow(*core, image);
+            return nullptr;
+        }
     }
     return image;
 }
@@ -547,4 +564,9 @@ void DestroyImage(Core *core, Image *image)
 const ImageDesc &ImageInfo(const Image *image) { return image->desc; }
 VkImage ImageHandle(const Image *image) { return image->image; }
 VkImageView ImageView(const Image *image) { return image->view; }
+VkImageView ImageSampleView(const Image *image) { return image->sampleView ? image->sampleView : image->view; }
+bool ImageReadyToSample(const Image *image)
+{
+    return image->layout == VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL && !image->uploadPending;
+}
 } // namespace gfx_vk

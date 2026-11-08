@@ -65,6 +65,7 @@ struct Image
 {
     VkImage image = VK_NULL_HANDLE;
     VkImageView view = VK_NULL_HANDLE;
+    VkImageView sampleView = VK_NULL_HANDLE; // null: same as view
     ImageDesc desc{};
     Allocation allocation{};
     std::string name;
@@ -192,6 +193,7 @@ public:
     VkPhysicalDevice physical = VK_NULL_HANDLE;
     DeviceInfo device{};
     VkPhysicalDeviceProperties properties{};
+    OptionalFeatures optional{};
     VkPhysicalDeviceMemoryProperties memory{};
     uint32_t queueFamily = 0;
     VkDevice dev = VK_NULL_HANDLE;

@@ -570,6 +570,7 @@ int Run(const Options &options)
     const uint32_t validationErrors = ending.validationErrors;
     std::printf("vulkan_probe.validation_errors=%u\n", ending.validationErrors);
     std::printf("vulkan_probe.validation_warnings=%u\n", ending.validationWarnings);
+    std::printf("vulkan_probe.validation_ignored=%u\n", ending.validationIgnored);
 
     if (!failedStage && validation && validationErrors)
     {

@@ -2325,7 +2325,9 @@ jobs:
     # src/gfx_vk and KisakCOD-vulkan-probe, which opens an SDL3 window and
     # clears, presents and resizes it through the core, then draws a small
     # textured scene through the core's resource paths and checks its pixels,
-    # and the Legacy shader translator (KisakCOD-vulkan-shaders). Built for
+    # the Legacy shader translator (KisakCOD-vulkan-shaders), and the Legacy
+    # adapter's pixel check (KisakCOD-vulkan-legacy-check,
+    # docs/vulkan-legacy-adapter.md). Built for
     # x86_64, the primary Vulkan target, against the x86_64 SDL3 pin (same
     # options and cache key as x64_client). It runs on Mesa's lavapipe, a CPU
     # Vulkan driver, through SDL's offscreen video driver (VK_EXT_headless_surface):
@@ -2425,14 +2427,19 @@ jobs:
             -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
             -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$OUT_DIR" \
             -DKISAK_BUILD_VULKAN_PROBE=ON -DKISAK_BUILD_VULKAN_SHADERS=ON \
+            -DKISAK_BUILD_VULKAN_LEGACY=ON \
             -DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3"
-          cmake --build "$BUILD_DIR" --target KisakCOD-vulkan-probe KisakCOD-vulkan-shaders --parallel "$(nproc)"
-          readelf -h "$OUT_DIR/KisakCOD-vulkan-probe" | grep -Eq 'Class:[[:space:]]+ELF64'
-          # The loader is opened at run time through SDL, never linked.
-          if readelf -d "$OUT_DIR/KisakCOD-vulkan-probe" | grep -q 'libvulkan'; then
-            echo "KisakCOD-vulkan-probe must not link libvulkan" >&2
-            exit 1
-          fi
+          cmake --build "$BUILD_DIR" \
+            --target KisakCOD-vulkan-probe KisakCOD-vulkan-shaders KisakCOD-vulkan-legacy-check \
+            --parallel "$(nproc)"
+          for tool in KisakCOD-vulkan-probe KisakCOD-vulkan-legacy-check; do
+            readelf -h "$OUT_DIR/$tool" | grep -Eq 'Class:[[:space:]]+ELF64'
+            # The loader is opened at run time through SDL, never linked.
+            if readelf -d "$OUT_DIR/$tool" | grep -q 'libvulkan'; then
+              echo "$tool must not link libvulkan" >&2
+              exit 1
+            fi
+          done
 
       - name: Check the probe's generated SPIR-V header
         shell: bash
@@ -2441,6 +2448,9 @@ jobs:
           # vk_probe_shaders.h is generated from src/gfx_vk/tools/shaders: each
           # source's hash must match the header, and the words must pass spirv-val.
           python3 scripts/tools/vulkan/gen_spirv_header.py --check
+          # vk_legacy_check_shaders.h is the Legacy check's D3D9 shaders,
+          # assembled from the assembly in the script; rebuilt and compared.
+          python3 scripts/tools/vulkan/gen_legacy_check_shaders.py --check
 
       - name: Run the Vulkan window probe on lavapipe
         timeout-minutes: 15
@@ -2464,6 +2474,20 @@ jobs:
           # reflection and linking (docs/vulkan-legacy-shaders.md).
           python3 -u scripts/tests/test_vulkan_legacy_shaders.py \
             --binary "$OUT_DIR/KisakCOD-vulkan-shaders"
+
+      - name: Run the Legacy adapter check on lavapipe
+        timeout-minutes: 15
+        shell: bash
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          # D3D9-style scenes drawn through the Legacy adapter (translation,
+          # pipelines, descriptors, textures, buffers, render state, queries)
+          # and checked pixel by pixel, with the validation layer required.
+          python3 -u scripts/tests/test_vulkan_legacy_adapter.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-legacy-check" \
+            --video-driver offscreen --validation require
 
       - name: Save compiler cache
         if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
