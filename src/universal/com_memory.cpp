@@ -19,7 +19,7 @@
 
 #include <cstdint>
 
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
 // Z_VirtualReserve/Commit/Decommit/Free below drive the Win32 virtual-memory
 // calls directly, so the declaration surface has to be present even when
 // win_local.h stops pulling in <windows.h>.

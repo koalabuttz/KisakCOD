@@ -14,11 +14,11 @@
 #include <universal/com_constantconfigstrings.h>
 #include <universal/profile.h>
 #include "sv_handshake_auth.h"
-#if (defined(__linux__) || defined(__APPLE__)) && defined(KISAK_DEDICATED)
+#if (defined(__linux__) || defined(__APPLE__) || defined(__vita__)) && defined(KISAK_DEDICATED)
 #include <linux/net_internal.h>
 #endif
 
-#if defined(WIN32) || defined(__linux__) || defined(__APPLE__)
+#if defined(WIN32) || defined(__linux__) || defined(__APPLE__) || defined(__vita__)
 #include <win32/win_steam.h>
 #include <universal/base64.h>
 #else
@@ -33,6 +33,8 @@ extern "C" __declspec(dllimport) unsigned char __stdcall SystemFunction036(void 
 #include <cerrno>
 #elif defined(__APPLE__)
 #include <stdlib.h>
+#elif defined(__vita__)
+#include <psp2/kernel/rng.h>
 #endif
 
 // KISAK: retail built the challenge token from svs.time ^ rand() ^ (rand() << 16)
@@ -56,6 +58,8 @@ static int SV_NewChallengeValue()
 #elif defined(__APPLE__)
     arc4random_buf(&value, sizeof(value));
     filled = true;
+#elif defined(__vita__)
+    filled = sceKernelGetRandomNumber(&value, sizeof(value)) >= 0;
 #endif
     if (!filled)
     {
@@ -182,7 +186,7 @@ int SV_IsTempBannedGuid(const char *cdkeyHash)
     return 0;
 }
 
-#if (defined(__linux__) || defined(__APPLE__)) && defined(KISAK_DEDICATED)
+#if (defined(__linux__) || defined(__APPLE__) || defined(__vita__)) && defined(KISAK_DEDICATED)
 static bool SV_RejectUnsafeTestHandshake(netadr_t from)
 {
     // Fail closed if both trust-widening switches are somehow on at once.  The
@@ -294,7 +298,7 @@ void SV_SetAdvertisedProtocolInfo(char *info)
 
 void SV_GetChallenge(netadr_t from)
 {
-#if (defined(__linux__) || defined(__APPLE__)) && defined(KISAK_DEDICATED)
+#if (defined(__linux__) || defined(__APPLE__) || defined(__vita__)) && defined(KISAK_DEDICATED)
     if (SV_RejectUnsafeTestHandshake(from))
         return;
     const bool localTest = NET_CanBypassLoopbackAuth(from);
@@ -399,7 +403,7 @@ void SV_GetChallenge(netadr_t from)
     char identity[33] = {};
     if (localTest)
     {
-#if (defined(__linux__) || defined(__APPLE__)) && defined(KISAK_DEDICATED)
+#if (defined(__linux__) || defined(__APPLE__) || defined(__vita__)) && defined(KISAK_DEDICATED)
         // This is a label for an unauthenticated local session, not a Steam ID.
         Com_sprintf(identity, sizeof(identity), "local-test-%08x%04x",
             static_cast<unsigned int>(challenge->challenge), static_cast<unsigned int>(from.port));
@@ -453,7 +457,7 @@ void SV_GetChallenge(netadr_t from)
     }
     else
     {
-#if (defined(__linux__) || defined(__APPLE__)) && defined(KISAK_DEDICATED) && !defined(KISAK_LINUX_STEAM)
+#if (defined(__linux__) || defined(__APPLE__) || defined(__vita__)) && defined(KISAK_DEDICATED) && !defined(KISAK_LINUX_STEAM)
         NET_OutOfBandPrint(NS_SERVER, from, "error\nSteam authentication is unavailable in this native Linux build.");
 #else
         Com_Printf(CON_CHANNEL_SERVER, "rejected connection from invalid Steam GUID \"%s\"\n", identity);
@@ -856,7 +860,7 @@ void SV_DirectConnect(netadr_t from)
     int count; // [esp+47Ch] [ebp-Ch]
     int qport; // [esp+480h] [ebp-8h]
 
-#if (defined(__linux__) || defined(__APPLE__)) && defined(KISAK_DEDICATED)
+#if (defined(__linux__) || defined(__APPLE__) || defined(__vita__)) && defined(KISAK_DEDICATED)
     if (SV_RejectUnsafeTestHandshake(from))
         return;
 #endif
@@ -875,7 +879,7 @@ void SV_DirectConnect(netadr_t from)
         NET_OutOfBandPrint(NS_SERVER, from,
             va("error\nThis server requires protocol version %i (CoD4 1.0)%s; your client uses protocol %i.\n",
                1, sv_allowProtocol6->current.enabled ? " or 6 (CoD4 1.7)" : "", version));
-#if (defined(__linux__) || defined(__APPLE__)) && defined(KISAK_DEDICATED)
+#if (defined(__linux__) || defined(__APPLE__) || defined(__vita__)) && defined(KISAK_DEDICATED)
         Com_Printf(CON_CHANNEL_SERVER, "Rejected connect: client protocol %i, required protocol %i; authentication bypass does not change protocol compatibility.\n", version, 1);
 #else
         Com_DPrintf(CON_CHANNEL_SERVER, "    rejected connect from protocol version %i (should be %i)\n", version, 1);
@@ -933,7 +937,7 @@ void SV_DirectConnect(netadr_t from)
         //    retail GUID only when unverified GUIDs were enabled at start-up.
         // Anything else is a forged or stale challenge and is rejected.
         bool identityAccepted = false;
-#if (defined(__linux__) || defined(__APPLE__)) && defined(KISAK_DEDICATED)
+#if (defined(__linux__) || defined(__APPLE__) || defined(__vita__)) && defined(KISAK_DEDICATED)
         if (NET_LoopbackAuthTestEnabled())
         {
             identityAccepted = SV_IsLoopbackTestIdentity(cdkeyHash);
@@ -1221,7 +1225,7 @@ void SV_DropClient(client_t *drop, const char *reason, bool tellThem)
     int i; // [esp+38h] [ebp-4h]
 
     if (com_dedicated->current.integer
-#if (defined(__linux__) || defined(__APPLE__)) && defined(KISAK_DEDICATED)
+#if (defined(__linux__) || defined(__APPLE__) || defined(__vita__)) && defined(KISAK_DEDICATED)
         && !SV_IsLoopbackTestIdentity(drop->cdkeyHash)
 #endif
         )

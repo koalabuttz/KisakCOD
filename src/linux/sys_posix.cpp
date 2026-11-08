@@ -4,7 +4,11 @@
 #include <limits.h>
 #include <pthread.h>
 #include <string.h>
+#if defined(__vita__)
+#include <vita/vita_mman.h> // memory blocks behind the mmap calls
+#else
 #include <sys/mman.h>
+#endif
 #include <time.h>
 #include <unistd.h>
 

@@ -28,7 +28,7 @@
 #pragma warning(disable : 4786)		// identifier was truncated
 #endif // _WIN32
 
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
 // libstdc++ headers (<cmath>, <iostream>, <mutex>, <algorithm>, ...) spell
 // numeric_limits<T>::min()/max() and use std::min/std::max internally, so the
 // function-like macros below cannot exist in a native Linux build: they would
@@ -63,7 +63,7 @@ constexpr auto max(T a, U b) { return a > b ? a : b; }
 #include <ctype.h>
 #include <cfloat> // FLT_MAX
 #include <cstdint>
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
 // <climits>: INT_MIN / INT_MAX for DvarLimits (winnt.h supplies them on Win32).
 // <endian.h>: host byte order, checked next to LOW_IND/HIGH_IND below (macOS
 // has no <endian.h>; the compiler's __BYTE_ORDER__ is checked there instead).
@@ -98,7 +98,7 @@ constexpr auto max(T a, U b) { return a > b ? a : b; }
 // with the equivalent GNU attributes instead of being dropped. Engine sources
 // no longer spell __cdecl (it is the default convention; see
 // scripts/tools/strip_cdecl.py); its alias stays for third-party headers.
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
 #if !defined(__clang__)
 #if defined(__i386__) || defined(__x86_64__)
 #ifndef __cdecl
@@ -183,7 +183,7 @@ static ID_INLINE int BigLong(int l) { return LongSwap(l); }
 // Native (POSIX) Linux and macOS builds. Mirrors the WIN32 block above so that
 // the rest of the engine sees the same macro surface; only the values that are
 // genuinely platform facts (build string, path separator) differ.
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
 
 #define	MAC_STATIC
 
@@ -214,6 +214,12 @@ static ID_INLINE int BigLong(int l) { return LongSwap(l); }
 #define	CPUSTRING	"linux-arm64"
 #else
 #define	CPUSTRING	"linux-arm64-debug"
+#endif
+#elif defined(__vita__)
+#ifdef NDEBUG
+#define	CPUSTRING	"vita-armv7"
+#else
+#define	CPUSTRING	"vita-armv7-debug"
 #endif
 #elif defined(__arm__)
 #ifdef NDEBUG
@@ -1086,7 +1092,7 @@ uint32_t LongNoSwap(uint32_t color);
 #define arr_esize(a) (sizeof((a)[0]))
 #define arr_cnt(a) (sizeof(a)/arr_esize(a))
 #define ARRAY_COUNT(a) arr_cnt(a)
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
 // The Win32 name for the same macro. Deliberately built on ARRAY_COUNT so it
 // stays array-only: it rejects pointers with the same compile error the Windows
 // definition produces, instead of quietly reporting a bogus constant.

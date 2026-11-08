@@ -26,8 +26,8 @@
 #define USE_POOL_ALLOCATOR
 
 // make alloca happy
-#if defined(__APPLE__)
-#include <alloca.h> // KisakCOD: macOS has no <malloc.h>
+#if defined(__APPLE__) || defined(__vita__)
+#include <alloca.h> // KisakCOD: macOS has no <malloc.h>; newlib's is not C++-clean
 #else
 #include <malloc.h>
 #endif

@@ -862,6 +862,125 @@ jobs:
           path: ${{ runner.temp }}/ccache
           key: ccache-armv7-dedicated-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
 
+  vita_dedicated:
+    # Opt-in PS Vita track (docs/vita.md): build KisakCOD-dedi with Clang
+    # against the pinned VitaSDK (scripts/ci/install-vitasdk.sh), pack the
+    # .vpk, and check that the server keeps x86's float results (no fused
+    # multiply-add, no NEON float math). Nothing runs: there is no Vita here,
+    # so start-up and map loading are checked on David's console.
+    name: PS Vita dedicated server ${{ matrix.config }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [Debug, RelWithDebInfo]
+
+    env:
+      BUILD_DIR: build-vita/${{ matrix.config }}
+      CMAKE_RUNTIME_OUTPUT_DIRECTORY: ${{ github.workspace }}/out/vita-${{ matrix.config }}
+      BINARY: out/vita-${{ matrix.config }}/KisakCOD-dedi
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
+
+      - name: Install build tools
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/ci/apt-install.sh cmake ninja-build clang python3 ccache
+
+      - name: Restore VitaSDK
+        id: vitasdk_cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/vitasdk
+          key: vitasdk-${{ hashFiles('scripts/ci/install-vitasdk.sh') }}
+
+      - name: Install VitaSDK
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "VITASDK=$(scripts/ci/install-vitasdk.sh "$RUNNER_TEMP/vitasdk")" >> "$GITHUB_ENV"
+
+      - name: Restore compiler cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-vita-dedicated-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-vita-dedicated-${{ matrix.config }}-
+      - name: Use compiler cache
+        id: ccache
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/ci/use-ccache.sh
+
+      - name: Configure PS Vita ${{ matrix.config }}
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang++ --version
+          cmake -S . -B "$BUILD_DIR" -G Ninja \
+            -DKISAK_PLATFORM=vita \
+            -DCMAKE_BUILD_TYPE=${{ matrix.config }} \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$CMAKE_RUNTIME_OUTPUT_DIRECTORY"
+
+      - name: Build PS Vita KisakCOD-dedi and its .vpk
+        timeout-minutes: 30
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build "$BUILD_DIR" --target KisakCOD-dedi-vpk --parallel "$(nproc)"
+          ls -l "$BINARY" "$BINARY.vpk"
+          # Float results have to match x86 (docs/vita.md): no fused
+          # multiply-adds, and no NEON float math on Q or D registers (NEON
+          # flushes denormals to zero); scalar VFP uses S registers for floats.
+          "$VITASDK/bin/arm-vita-eabi-objdump" -d "$BINARY" > "$RUNNER_TEMP/vita-dedi.dis"
+          if grep -Eq $'\t(vfma|vfms|vfnma|vfnms)' "$RUNNER_TEMP/vita-dedi.dis"; then
+            echo "the server contains fused multiply-add instructions" >&2
+            exit 1
+          fi
+          if grep -Eq $'\tv[a-z0-9]+\.f(32|64)\tq|\tv[a-z0-9]+\.f32\td' "$RUNNER_TEMP/vita-dedi.dis"; then
+            echo "the server contains NEON float instructions" >&2
+            exit 1
+          fi
+
+      - name: Upload the .vpk
+        if: ${{ matrix.config == 'RelWithDebInfo' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: KisakCOD-dedi-vita-${{ matrix.config }}
+          path: ${{ env.BINARY }}.vpk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Report compiler cache
+        if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ccache --show-stats
+      - name: Save compiler cache
+        if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-vita-dedicated-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
+
   x64_client:
     # Opt-in 64-bit track, step three (docs/linux-x64.md): build the multiplayer
     # client KisakCOD-mp with -DKISAK_LINUX_ARCH=x86_64 against x86_64 SDL3 and

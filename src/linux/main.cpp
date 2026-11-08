@@ -35,6 +35,9 @@
 #include "client/mp_client_input.h"
 #endif
 
+#if defined(__vita__)
+#include <vita/vita_platform.h> // Vita_Startup, Vita_QuitRequested
+#endif
 #include <errno.h>
 #include <sched.h>
 #include <signal.h>
@@ -81,6 +84,12 @@ namespace
     // can reflect that instead of looking like a clean quit.
     volatile sig_atomic_t s_quitSignal = 0;
 
+#if defined(__vita__)
+    // The Vita has no signals: the quit request comes from the buttons instead
+    // (Vita_QuitRequested in the main loop).
+    void InstallSignalHandlers() {}
+    void RestoreSignalHandlers() {}
+#else
     struct sigaction s_previousSigint;
     struct sigaction s_previousSigterm;
     struct sigaction s_previousSigpipe;
@@ -126,6 +135,7 @@ namespace
         sigaction(SIGPIPE, &s_previousSigpipe, nullptr);
         s_signalsInstalled = false;
     }
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -331,6 +341,10 @@ static void ReadCpuInfo(char *vendor, int vendorSize, char *name, int nameSize)
         value[sizeof(value) - 1] = '\0';
         I_strncpyz(vendor, value, vendorSize);
     }
+    return;
+#elif defined(__vita__)
+    I_strncpyz(vendor, "ARM", vendorSize);
+    I_strncpyz(name, "Cortex-A9 (PS Vita)", nameSize);
     return;
 #endif
 
@@ -760,6 +774,8 @@ static void PrintWorkingDir()
 // The same POSIX layer builds for Linux and macOS (docs/macos.md).
 #if defined(__APPLE__)
 #define KISAK_NATIVE_OS "macOS"
+#elif defined(__vita__)
+#define KISAK_NATIVE_OS "PS Vita"
 #else
 #define KISAK_NATIVE_OS "Linux"
 #endif
@@ -808,6 +824,12 @@ namespace
 
 int main(int argc, char **argv)
 {
+#if defined(__vita__)
+    // Network, data folder, console log and the command line from
+    // cmdline.txt, before anything else runs (src/vita/vita_main.cpp).
+    if (!Vita_Startup(&argc, &argv))
+        return 1;
+#endif
     // Asset-free early exits. These never touch the engine.
     if (HasArgument(argc, argv, "--help") || HasArgument(argc, argv, "-h"))
     {
@@ -894,6 +916,10 @@ int main(int argc, char **argv)
     // where running an engine command is safe.
     while (true)
     {
+#if defined(__vita__)
+        if (Vita_QuitRequested())
+            s_quitRequested = 1;
+#endif
         if (s_quitRequested)
         {
             s_quitRequested = 0;

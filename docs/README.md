@@ -37,6 +37,8 @@ what is still missing. Build steps are in the
   for the arm64 client and Windows ARM64
 - [32-bit Arm track](linux-armv7.md): the armv7 Linux dedicated server, the
   first step toward a PS Vita port
+- [PS Vita dedicated server](vita.md): `KISAK_PLATFORM=vita`, Clang with
+  VitaSDK, packed as a `.vpk`
 - [macOS track](macos.md): the opt-in macOS dedicated server (arm64 and
   x86_64), what differs from the Linux build, and its hosted CI checks
 

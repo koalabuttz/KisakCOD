@@ -648,7 +648,7 @@ bool Scr_RefToVariable(uint32_t id, int isObject)
 // interactive debugger, so the list is always empty and there is nothing to do.
 //=============================================================================
 
-#if (defined(__linux__) || defined(__APPLE__)) && defined(KISAK_DEDICATED)
+#if (defined(__linux__) || defined(__APPLE__) || defined(__vita__)) && defined(KISAK_DEDICATED)
 void ScrDebuggerWatchStorage::Evaluate()
 {
 }

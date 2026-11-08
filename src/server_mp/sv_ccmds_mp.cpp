@@ -18,7 +18,7 @@
 #include <script/scr_memorytree.h>
 #include <database/database.h>
 
-#if defined(WIN32) || defined(__linux__) || defined(__APPLE__)
+#if defined(WIN32) || defined(__linux__) || defined(__APPLE__) || defined(__vita__)
 #include <win32/win_steam.h>
 #else
 #error Steam auth is not implemented for this platform

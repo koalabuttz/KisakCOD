@@ -1,7 +1,7 @@
 #pragma once
 #include "scr_stringlist.h"
 #include <cstdio> // FILE
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
 #include <linux/compat.h>
 #else
 #include <windows.h>

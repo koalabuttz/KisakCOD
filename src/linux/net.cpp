@@ -25,8 +25,13 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
+#if defined(__vita__)
+// No getifaddrs on the Vita: the network library reports the one Wi-Fi address.
+#include <psp2/net/netctl.h>
+#else
 #include <ifaddrs.h>
 #include <net/if.h>
+#endif
 #include <netdb.h>
 #include <netinet/in.h>
 #include <stdint.h>
@@ -35,7 +40,9 @@
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#if !defined(__vita__)
 #include <sys/uio.h>
+#endif
 #include <time.h>
 #include <unistd.h>
 
@@ -407,6 +414,14 @@ static int NET_ReceiveDatagram(int socket, void *buffer, int size, struct sockad
     const int ret = (int)recvmsg(socket, &header, 0);
     *fromlen = header.msg_namelen;
     if (ret >= 0 && (header.msg_flags & MSG_TRUNC) != 0)
+        return size + 1;
+    return ret;
+#elif defined(__vita__)
+    // The Vita's network library has no MSG_TRUNC. A datagram that fills the
+    // whole buffer may have been cut short, so report it as oversize, which
+    // drops it as the Linux path would; game packets are far smaller.
+    const int ret = (int)recvfrom(socket, buffer, (size_t)size, 0, (struct sockaddr *)from, fromlen);
+    if (ret == size)
         return size + 1;
     return ret;
 #else
@@ -975,6 +990,40 @@ included) because Sys_IsLANAddress() compares against the /24 of each one;
 nothing here decides LAN-ness by itself.
 ====================
 */
+#if defined(__vita__)
+int NET_GetLocalAddress()
+{
+    numIP = 0;
+
+    // Loopback first, as getifaddrs lists it on Linux.
+    localIP[numIP][0] = 127;
+    localIP[numIP][1] = 0;
+    localIP[numIP][2] = 0;
+    localIP[numIP][3] = 1;
+    numIP++;
+
+    SceNetCtlInfo info;
+    memset(&info, 0, sizeof(info));
+    const int result = sceNetCtlInetGetInfo(SCE_NETCTL_INFO_GET_IP_ADDRESS, &info);
+    if (result < 0)
+    {
+        Com_PrintWarning(CON_CHANNEL_SYSTEM, "WARNING: NET_GetLocalAddress: sceNetCtlInetGetInfo failed (0x%08x); is Wi-Fi on?\n",
+                         (unsigned int)result);
+        return result;
+    }
+    info.ip_address[sizeof(info.ip_address) - 1] = '\0';
+
+    struct in_addr address;
+    if (inet_pton(AF_INET, info.ip_address, &address) == 1 && numIP < MAX_IPS)
+    {
+        memcpy(localIP[numIP], &address, sizeof(localIP[numIP]));
+        Com_Printf(CON_CHANNEL_SYSTEM, "IP: %i.%i.%i.%i\n",
+                   localIP[numIP][0], localIP[numIP][1], localIP[numIP][2], localIP[numIP][3]);
+        numIP++;
+    }
+    return 0;
+}
+#else
 int NET_GetLocalAddress()
 {
     struct ifaddrs *ifaddr = NULL;
@@ -1017,6 +1066,7 @@ int NET_GetLocalAddress()
     freeifaddrs(ifaddr);
     return result;
 }
+#endif
 
 /*
 ====================

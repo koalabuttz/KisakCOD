@@ -137,7 +137,7 @@ int FileWrapper_GetFileSize(FILE *h)
 }
 
 #ifdef KISAK_SP
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
 #include <linux/compat.h>
 // The Windows server build below asks SetFilePointerEx() about handle 0 and
 // stores the answer in a BYREF LARGE_INTEGER that it then reads back, so it

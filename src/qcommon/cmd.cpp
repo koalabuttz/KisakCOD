@@ -1377,7 +1377,7 @@ void Cmd_ExecuteSingleCommand(int32_t  localClientNum, int32_t  controllerIndex,
                 {
                     if (!Cmd_GetServices().DvarCommand() && (!Cmd_GetServices().ServerRunning() || !Cmd_GetServices().ServerGameCommand()))
                     {
-    #if (defined(__linux__) || defined(__APPLE__)) && defined(KISAK_DEDICATED)
+    #if (defined(__linux__) || defined(__APPLE__) || defined(__vita__)) && defined(KISAK_DEDICATED)
                         Com_Printf(CON_CHANNEL_SYSTEM, "Unknown command: %s\n", Cmd_Argv(0));
                         goto LABEL_26;
     #elif !defined(KISAK_RADIANT)

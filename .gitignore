@@ -35,6 +35,7 @@ build-sp/
 build-radiant-selftest/
 build-mingw/
 build-linux/
+build-vita/
 build-bots/
 [Oo]bj/
 [Oo]ut/

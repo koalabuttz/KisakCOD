@@ -885,7 +885,8 @@ class CiCacheTests(unittest.TestCase):
 
     # Jobs that configure and build the engine with CMake.
     CCACHE_JOBS = ('window', 'native', 'native_d3d9_boundary', 'device_probe', 'x64_dedicated',
-                   'arm64_dedicated', 'armv7_dedicated', 'x64_client', 'arm64_client', 'vulkan_window')
+                   'arm64_dedicated', 'armv7_dedicated', 'vita_dedicated', 'x64_client', 'arm64_client',
+                   'vulkan_window')
     SDL3_JOBS = ('window', 'device_probe')
 
     @classmethod

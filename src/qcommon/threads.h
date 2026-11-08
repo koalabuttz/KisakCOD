@@ -1,6 +1,6 @@
 #pragma once
 
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
 // Native Linux: no Windows SDK. qcommon/threads.h only needs the Win32 base
 // types at the bottom of this file (DWORD/HANDLE), which the POSIX bridge
 // declares with the fixed 32-bit Windows widths.

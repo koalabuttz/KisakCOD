@@ -26,7 +26,7 @@
 #include <buildnumber.h>
 #include <win32/win_net.h>
 #include <xanim/dobj.h>
-#if (defined(__linux__) || defined(__APPLE__)) && defined(KISAK_DEDICATED)
+#if (defined(__linux__) || defined(__APPLE__) || defined(__vita__)) && defined(KISAK_DEDICATED)
 #include <sound/snd_public.h>
 #else
 #include <sound/snd_local.h>
@@ -47,7 +47,7 @@
 #include <linux/tools/font_asset_export.h>
 #endif
 
-#if (defined(__linux__) || defined(__APPLE__)) && defined(KISAK_DEDICATED)
+#if (defined(__linux__) || defined(__APPLE__) || defined(__vita__)) && defined(KISAK_DEDICATED)
 #define KISAK_SERVER_ONLY
 #endif
 
@@ -425,7 +425,7 @@ void Com_Prefetch(const void* s, const uint32_t bytes, e_prefetch type)
 		}
 #else
         // DI: lol
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
         __builtin_prefetch(s, 0, 0);
 #else
         PreFetchCacheLine(PF_NON_TEMPORAL_LEVEL_ALL, s);
@@ -457,7 +457,7 @@ void Com_OpenLogFile()
 {
     const char* BuildNumber; // eax
     const char* v1; // [esp-4h] [ebp-14h]
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
     time_t aclock;
     tm localTime;
 #else
@@ -468,7 +468,7 @@ void Com_OpenLogFile()
     if (Sys_IsMainThread() && !opening_qconsole)
     {
         opening_qconsole = 1;
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
         aclock = time(nullptr);
         newtime = localtime_r(&aclock, &localTime);
         if (!newtime)

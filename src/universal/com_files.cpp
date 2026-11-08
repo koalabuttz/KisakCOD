@@ -12,7 +12,7 @@
 #include <qcommon/com_bsp.h>
 #include <qcommon/cmd.h>
 #include <qcommon/files.h>
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
 #include <linux/compat.h>
 #include <qcommon/threads_interlock.h> // InterlockedCompareExchange in FS_FileExists etc.
 #include <dirent.h>   // readdir/opendir, used by Sys_DirectoryHasContents
@@ -300,7 +300,7 @@ int FS_GetFileOsPath(const char *filename, char *ospath)
 
 int FS_OpenFileOverwrite(char *qpath)
 {
-#if !defined(__linux__) && !defined(__APPLE__)
+#if !defined(__linux__) && !defined(__APPLE__) && !defined(__vita__)
     DWORD oldAttributes; // [esp+0h] [ebp-10Ch]
     uint32_t attributes; // [esp+108h] [ebp-4h]
 #endif
@@ -313,7 +313,7 @@ int FS_OpenFileOverwrite(char *qpath)
     {
         if (fs_debug->current.integer)
             Com_Printf(CON_CHANNEL_FILES, "FS_FOpenFileOverWrite: %s\n", ospath);
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
         // The Win32 path clears FILE_ATTRIBUTE_READONLY so an existing read-only
         // file can be rewritten. Linux expresses that as the mode bits, so drop
         // only the owner write bit's absence and leave every other bit alone.
@@ -1666,7 +1666,7 @@ int Sys_DirectoryHasContents(const char *directory)
     _findclose(findhandle);
     return 0;
 }
-#elif defined(__linux__) || defined(__APPLE__)
+#elif defined(__linux__) || defined(__APPLE__) || defined(__vita__)
 // FS_AddGameDirectory() calls this for every localized game directory, so the
 // Linux build needs a real definition. It answers the same question as the
 // _findfirst()/_findnext() scan above: an entry makes the directory "non-empty"
@@ -1676,6 +1676,13 @@ static bool Sys_ReaddirEntryIsDirectory(const char *directory, const struct dire
     char ospath[260];
     struct stat statInfo;
 
+#if defined(__vita__)
+    // newlib on the Vita fills each entry with the full SceIoStat instead of d_type.
+    (void)directory;
+    (void)ospath;
+    (void)statInfo;
+    return SCE_S_ISDIR(entry->d_stat.st_mode);
+#else
     if (entry->d_type == DT_DIR)
         return true;
     if (entry->d_type != DT_UNKNOWN)
@@ -1684,6 +1691,7 @@ static bool Sys_ReaddirEntryIsDirectory(const char *directory, const struct dire
     // Some filesystems report DT_UNKNOWN and leave the type to stat().
     Com_sprintf(ospath, sizeof(ospath), "%s/%s", directory, entry->d_name);
     return stat(ospath, &statInfo) == 0 && S_ISDIR(statInfo.st_mode);
+#endif
 }
 
 int Sys_DirectoryHasContents(const char *directory)

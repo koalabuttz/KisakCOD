@@ -13,9 +13,15 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#if defined(__vita__)
+#include <vita/vita_mman.h> // memory blocks behind the mmap calls
+#else
 #include <sys/mman.h>
+#endif
 #if defined(__APPLE__)
 #include <sys/sysctl.h> // sysctlbyname("hw.memsize")
+#elif defined(__vita__)
+#include <psp2/kernel/sysmem.h> // sceKernelGetFreeMemorySize
 #else
 #include <sys/sysinfo.h>
 #endif
@@ -297,6 +303,15 @@ int Sys_SystemMemoryMB()
     size_t totalBytesSize = sizeof(totalBytes);
     if (sysctlbyname("hw.memsize", &totalBytes, &totalBytesSize, nullptr, 0) != 0)
         return 1024;
+#elif defined(__vita__)
+    // The memory this process can still allocate, not the console's total:
+    // the Vita has no call for the latter, and the free amount is what the
+    // engine's planning cares about.
+    SceKernelFreeMemorySizeInfo info;
+    info.size = sizeof(info);
+    if (sceKernelGetFreeMemorySize(&info) < 0)
+        return 256;
+    const uint64_t totalBytes = (uint64_t)(uint32_t)info.size_user;
 #else
     struct sysinfo info;
     if (sysinfo(&info) != 0)

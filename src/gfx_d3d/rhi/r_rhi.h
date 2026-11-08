@@ -111,7 +111,7 @@ void R_HW_SetSamplerTexture(IDirect3DDevice9 *device, uint32_t samplerIndex, con
 // compiled through the native D3D9 boundary. Linux and macOS units built with the
 // stand-in D3D9 types (src/linux/d3d9_types.h) cannot call D3D9 methods and do
 // not need them.
-#if !(defined(__linux__) || defined(__APPLE__)) || defined(KISAK_LINUX_NATIVE_D3D9)
+#if !(defined(__linux__) || defined(__APPLE__) || defined(__vita__)) || defined(KISAK_LINUX_NATIVE_D3D9)
 
 // ---- Reference counts -------------------------------------------------------
 ULONG R_HW_Release(IDirect3D9 *object);
@@ -230,4 +230,4 @@ HRESULT R_HW_DrawPrimitiveUP(IDirect3DDevice9 *object, D3DPRIMITIVETYPE primitiv
 HRESULT R_HW_GetRenderState(IDirect3DDevice9 *object, D3DRENDERSTATETYPE State, DWORD* pValue);
 HRESULT R_HW_Issue(IDirect3DQuery9 *object, DWORD dwIssueFlags);
 HRESULT R_HW_GetData(IDirect3DQuery9 *object, void* pData, DWORD dwSize, DWORD dwGetDataFlags);
-#endif // !(defined(__linux__) || defined(__APPLE__)) || defined(KISAK_LINUX_NATIVE_D3D9)
+#endif // !(defined(__linux__) || defined(__APPLE__) || defined(__vita__)) || defined(KISAK_LINUX_NATIVE_D3D9)

@@ -11,7 +11,7 @@
 #include <universal/com_files.h>
 #include <server_mp/server_mp.h>
 
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
 #include <linux/compat.h>
 #include <qcommon/threads_interlock.h>
 #endif
@@ -90,7 +90,7 @@ void NetProf_PrepProfiling(netProfileInfo_t *prof)
     {
         if (!net_iProfilingOn)
         {
-#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__) || defined(__vita__)) || !defined(KISAK_DEDICATED)
             if (!com_sv_running->current.enabled || CL_AnyLocalClientsRunning() && net_profile->current.integer == 2)
 #else
             // Mode 1 profiles the client's netchan stream; a dedicated server has
@@ -250,7 +250,7 @@ void Net_DisplayProfile(int localClientNum)
     {
         if (net_iProfilingOn == 1)
         {
-#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__) || defined(__vita__)) || !defined(KISAK_DEDICATED)
             CL_Netchan_PrintProfileStats(localClientNum, 0);
 #endif
         }
@@ -724,7 +724,7 @@ void Net_DumpProfile_f()
   {
     if (net_iProfilingOn == 1)
     {
-#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__) || defined(__vita__)) || !defined(KISAK_DEDICATED)
       CL_Netchan_PrintProfileStats(0, 1);
 #endif
     }
@@ -808,7 +808,7 @@ void BADPACKET(void *buffer, uint32_t len)
 {
     // badpacket.dat is a client developer aid gated on the client-only
     // cl_shownet dvar; the dedicated server has no way to enable it.
-#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__) || defined(__vita__)) || !defined(KISAK_DEDICATED)
     if (cl_shownet && cl_shownet->current.integer >= 1) // LWSS: move behind `cl_shownet`
     {
         int file = FS_FOpenFileWrite((char *)"badpacket.dat");
@@ -1208,7 +1208,7 @@ bool NET_OutOfBandPrint(netsrc_t sock, netadr_t adr, const char *data)
 
         if (sock == NS_SERVER)
             SV_Netchan_AddOOBProfilePacket(v6);
-#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__) || defined(__vita__)) || !defined(KISAK_DEDICATED)
         else
             CL_Netchan_AddOOBProfilePacket(sock, v6);
 #endif
@@ -1250,7 +1250,7 @@ bool NET_OutOfBandData(netsrc_t sock, netadr_t adr, const uint8_t *format, int l
 
     if (sock == NS_SERVER)
         SV_Netchan_AddOOBProfilePacket(mbuf_20);
-#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__) || defined(__vita__)) || !defined(KISAK_DEDICATED)
     else
         CL_Netchan_AddOOBProfilePacket(sock, mbuf_20);
 #endif
@@ -1277,7 +1277,7 @@ bool NET_OutOfBandVoiceData(netsrc_t sock, netadr_t adr, uint8_t *format, uint32
 
     if (sock == NS_SERVER)
         SV_Netchan_AddOOBProfilePacket(mbuf_20);
-#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__) || defined(__vita__)) || !defined(KISAK_DEDICATED)
     else
         CL_Netchan_AddOOBProfilePacket(sock, mbuf_20);
 #endif

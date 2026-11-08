@@ -20,11 +20,25 @@
 
 // If off_t is narrower than 64 bits, reads and writes past 4 GiB would silently
 // address the wrong location. Fail the build rather than corrupt a fastfile.
+// The Vita's newlib has only a 32-bit off_t and no 64-bit calls; there every
+// positional read and write is checked against it instead (OffsetFits), and one
+// that ends past 2 GiB fails. The stock fastfiles and IWDs are far smaller.
+#if defined(__vita__)
+static_assert(sizeof(off_t) == 4, "the Vita path below assumes newlib's 32-bit off_t");
+#else
 static_assert(sizeof(off_t) >= 8, "sys_fileio.cpp requires a 64-bit off_t for the >4 GiB read path");
+#endif
 
 #ifndef ERROR_INVALID_PARAMETER
 #define ERROR_INVALID_PARAMETER 87
 #endif
+
+// True when [offset, offset + length) can be addressed with off_t.
+static bool OffsetFits(uint64_t offset, uint64_t length)
+{
+    constexpr uint64_t kMaxOffset = (uint64_t)(((uint64_t)1 << (8 * sizeof(off_t) - 1)) - 1);
+    return offset <= kMaxOffset && length <= kMaxOffset - offset;
+}
 
 namespace
 {
@@ -393,6 +407,12 @@ BOOL ReadFile(
         ? (((uint64_t)overlapped->OffsetHigh << 32) | (uint64_t)overlapped->Offset)
         : 0ull;
 
+    if (overlapped && !OffsetFits(baseOffset, numberOfBytesToRead))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
     size_t total = 0;
     while (total < numberOfBytesToRead)
     {
@@ -462,6 +482,12 @@ BOOL WriteFile(
         ? (((uint64_t)overlapped->OffsetHigh << 32) | (uint64_t)overlapped->Offset)
         : 0ull;
 
+    if (overlapped && !OffsetFits(baseOffset, numberOfBytesToWrite))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
     size_t total = 0;
     while (total < numberOfBytesToWrite)
     {
@@ -522,6 +548,11 @@ BOOL ReadFileEx(
     }
 
     const uint64_t baseOffset = ((uint64_t)overlapped->OffsetHigh << 32) | (uint64_t)overlapped->Offset;
+    if (!OffsetFits(baseOffset, numberOfBytesToRead))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
 
     size_t total = 0;
     if (numberOfBytesToRead > 0)

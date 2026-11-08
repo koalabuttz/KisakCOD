@@ -16,7 +16,7 @@
 #include <cgame/cg_local.h>
 #include <universal/profile.h>
 #include <universal/com_files.h>
-#if defined(CINEMA) && (defined(__linux__) || defined(__APPLE__))
+#if defined(CINEMA) && (defined(__linux__) || defined(__APPLE__) || defined(__vita__))
 #include <linux/client/cinematic/bink_shim.h>
 #endif
 
@@ -763,7 +763,7 @@ bool R_Cinematic_BinkOpen(
     }
     else
     {
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
         // Windows looks next to the exe (the working directory). A Linux
         // binary is rarely started from the game folder, so look under
         // fs_basepath, where the rest of the game data comes from.
@@ -897,7 +897,7 @@ char R_Cinematic_BinkOpenPath_MemoryResident(
     int numberOfBytesRead; // [esp+1Ch] [ebp-8h]
     int freeBufferSpace; // [esp+20h] [ebp-4h]
 
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
     // The movie's name comes from a script or the console in any letter case.
     char resolvedPath[256];
     if (KisakBink_ResolvePath(filename, resolvedPath, sizeof(resolvedPath)))

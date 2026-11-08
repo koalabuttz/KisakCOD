@@ -1450,7 +1450,7 @@ const dvar_s *ShowEntityInfo()
                     EntityTypeName = G_GetEntityTypeName(ent);
                     // Entity info overlay: client-only debug text, so a dedicated
                     // server skips it and keeps walking the entity list.
-#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__) || defined(__vita__)) || !defined(KISAK_DEDICATED)
                     text = va("#%i; \"%s\"", i, EntityTypeName);
                     CL_AddDebugString(origin, colorWhiteFaded, 0.5, (char *)text, 1, 1);
                     origin[2] = origin[2] - 10.0;
@@ -1489,7 +1489,7 @@ void ShowEntityInfo_Items(gentity_s *ent)
         {
             weapDef = BG_GetWeaponDef(ent->item[idx].index);
             // Item info overlay is client-only debug text.
-#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__) || defined(__vita__)) || !defined(KISAK_DEDICATED)
             text = va("%s (%i + %i)", weapDef->szInternalName, ent->item[idx].clipAmmoCount, ent->item[idx].ammoCount);
             CL_AddDebugString(origin, colorRedFaded, 0.30000001f, text, 1, 1);
             origin[2] = origin[2] + -4.0f;
@@ -1683,7 +1683,7 @@ void G_AddDebugString(const float *xyz, const float *color, float scale, const c
 {
     // Debug text only ever feeds the client's draw list; a dedicated server has
     // no renderer to receive it.
-#if !(defined(__linux__) || defined(__APPLE__)) || !defined(KISAK_DEDICATED)
+#if !(defined(__linux__) || defined(__APPLE__) || defined(__vita__)) || !defined(KISAK_DEDICATED)
     CL_AddDebugString(xyz, color, scale, text, 1, duration);
 #endif
 }

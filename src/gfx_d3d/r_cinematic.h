@@ -1,11 +1,11 @@
 #pragma once
 
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
 #include <linux/d3d9_types.h> // native Linux: D3D9 type surface only, no D3D9 API
 #else
 #include <d3d9.h>
 #endif
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
 // The Bink API comes from the Linux shim (src/linux/client/cinematic), which
 // keeps RAD's texture-set layout without its D3DX shader code.
 #include <linux/client/cinematic/bink_textures.h>
@@ -128,7 +128,7 @@ void R_Cinematic_HunksReset(int activeTexture, char playbackFlags);
 void R_Cinematic_InitBinkTextures();
 // Bink's memory callbacks take its own calling convention: __stdcall on
 // Windows, cdecl in the Linux shim's bink.h.
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
 #define R_CINEMATIC_BINK_CALLBACK RADLINK
 #else
 #define R_CINEMATIC_BINK_CALLBACK __stdcall

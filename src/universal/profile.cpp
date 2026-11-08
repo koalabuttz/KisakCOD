@@ -4,7 +4,7 @@
 #include <qcommon/threads.h>
 #include "timing.h"
 
-#if !defined(__linux__) && !defined(__APPLE__)
+#if !defined(__linux__) && !defined(__APPLE__) && !defined(__vita__)
 #include <windows.h>
 #endif
 
@@ -844,7 +844,7 @@ int Profile_EndInternal(double *duration)
     return 0;
 
     // The legacy profiler already returns above; its dormant tail uses Win32.
-#if !defined(__linux__) && !defined(__APPLE__)
+#if !defined(__linux__) && !defined(__APPLE__) && !defined(__vita__)
     LARGE_INTEGER qpc;
 
     ProfileAtom end;
@@ -942,7 +942,7 @@ void Profile_Begin(int index)
 
     return;
     // The legacy profiler already returns above; its dormant tail uses Win32.
-#if !defined(__linux__) && !defined(__APPLE__)
+#if !defined(__linux__) && !defined(__APPLE__) && !defined(__vita__)
     LARGE_INTEGER qpc;
 
     ProfileStack* prof_stack = (ProfileStack*)Sys_GetValue(0);

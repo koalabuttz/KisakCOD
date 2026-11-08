@@ -267,7 +267,7 @@
               #endif
               
             #else
-              #if defined(linux) || defined(__APPLE__)
+              #if defined(linux) || defined(__APPLE__) || defined(__vita__)
                 #define IS_LINUX
                 #define IS_32
                 #define IS_LE

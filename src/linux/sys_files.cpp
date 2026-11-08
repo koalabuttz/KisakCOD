@@ -21,6 +21,9 @@
 #include <mach-o/dyld.h> // _NSGetExecutablePath
 #include <stdlib.h>      // realpath
 #endif
+#if defined(__vita__)
+#include <vita/vita_platform.h> // Sys_VitaDataPath
+#endif
 
 namespace
 {
@@ -56,6 +59,37 @@ namespace
         return false;
     }
 
+#if defined(__vita__)
+    // The Vita has no symbolic links and newlib there has no *at() calls, so
+    // the tree is walked by path. Entries carry their SceIoStat (no d_type).
+    bool RemovePathTree(const char *path)
+    {
+        DIR *dir = opendir(path);
+        if (!dir)
+            return false;
+
+        bool ok = true;
+        for (struct dirent *entry = readdir(dir); entry && ok; entry = readdir(dir))
+        {
+            if (IsDotEntry(entry->d_name))
+                continue;
+            char child[PATH_MAX];
+            Com_sprintf(child, (uint32_t)sizeof(child), "%s/%s", path, entry->d_name);
+            if (SCE_S_ISDIR(entry->d_stat.st_mode))
+                ok = RemovePathTree(child);
+            else
+                ok = unlink(child) == 0;
+        }
+        const int savedError = errno;
+        closedir(dir);
+        if (!ok)
+        {
+            errno = savedError;
+            return false;
+        }
+        return rmdir(path) == 0;
+    }
+#else
     bool RemoveEntry(int dirFd, const char *name);
 
     // Empties the directory open at dirFd and closes it. The descriptor is the
@@ -129,8 +163,22 @@ namespace
         return unlinkat(dirFd, name, AT_REMOVEDIR) == 0;
     }
 
+#endif
+
     struct DirEntryIsDirectory
     {
+#if defined(__vita__)
+        bool operator()(const char *fullPath, const struct dirent *entry) const
+        {
+            (void)fullPath;
+            return SCE_S_ISDIR(entry->d_stat.st_mode);
+        }
+#else
+        bool operator()(const char *fullPath, const struct dirent *entry) const
+        {
+            return (*this)(fullPath, entry->d_type);
+        }
+
         bool operator()(const char *fullPath, unsigned char dType) const
         {
             if (dType == DT_DIR)
@@ -143,6 +191,7 @@ namespace
                 return S_ISDIR(info.st_mode);
             return false;
         }
+#endif
     };
 }
 
@@ -157,6 +206,14 @@ bool Posix_IsAbsolutePath(const char *path)
         return false;
     if (path[0] == '/')
         return true;
+#if defined(__vita__)
+    // Vita paths start with a device: "ux0:data/KisakCOD".
+    for (const char *c = path; *c && *c != '/'; ++c)
+    {
+        if (*c == ':')
+            return true;
+    }
+#endif
     return false;
 }
 
@@ -180,7 +237,12 @@ char *Sys_DefaultInstallPath()
     if (exePath[0])
         return exePath;
 
-#if defined(__APPLE__)
+#if defined(__vita__)
+    // The game data lives in a fixed folder (src/vita/vita_main.cpp); the
+    // executable itself sits read-only in app0:.
+    I_strncpyz(exePath, Sys_VitaDataPath(), (int)sizeof(exePath));
+    return exePath;
+#elif defined(__APPLE__)
     // macOS has no /proc. dyld knows the path the executable was started from,
     // and realpath resolves its symlinks as /proc/self/exe would.
     char launchPath[PATH_MAX];
@@ -248,6 +310,9 @@ BOOL Sys_RemoveDirTree(const char *path)
     while (length > 1 && posixPath[length - 1] == '/')
         posixPath[--length] = '\0';
 
+#if defined(__vita__)
+    return RemovePathTree(posixPath) ? 1 : 0;
+#else
     // The root is opened without following links. A symlinked root is refused
     // instead of deleting whatever it points at; the caller sees the failure
     // through errno, which stays ELOOP for that case.
@@ -263,6 +328,7 @@ BOOL Sys_RemoveDirTree(const char *path)
 
     // rmdir semantics: fails rather than following a link that replaced the name.
     return unlinkat(AT_FDCWD, posixPath, AT_REMOVEDIR) == 0 ? 1 : 0;
+#endif
 }
 
 BOOL HasFileExtension(const char *name, const char *extension)
@@ -409,7 +475,7 @@ char **Sys_ListFiles(
         char fullPath[PATH_MAX];
         Com_sprintf(fullPath, (uint32_t)sizeof(fullPath), "%s/%s", posixDir, entry->d_name);
 
-        const bool isDirectory = DirEntryIsDirectory()(fullPath, entry->d_type);
+        const bool isDirectory = DirEntryIsDirectory()(fullPath, entry);
         const int entryAttribute = isDirectory ? 16 : 0;
 
         // Excluded directories the engine never wants to see.
