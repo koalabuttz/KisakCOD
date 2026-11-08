@@ -13,12 +13,19 @@
 // Run from an empty private directory (it writes steam_appid.txt there):
 //   steam_probe api <path/to/libsteam_api.so>
 //   steam_probe client <path/to/steamclient.so>
+//   steam_probe gameserver <path/to/steamclient.so>
+//
+// gameserver mode asks whether Steam lets an anonymous game server for app
+// 7940 log on, as a dedicated server would to check players' tickets without
+// anyone's Steam account. It needs Steam installed for steamclient.so but not
+// running or logged in, and it never logs in as a user.
 //
 // The probe never prints ticket bytes, and only the last four digits of the
 // SteamID, so its output can be shared.
 
 #include <steam/steam_api.h>
 #include <steam/isteamclient.h>
+#include <steam/isteamgameserver.h>
 
 #include <dlfcn.h>
 #include <unistd.h>
@@ -271,17 +278,175 @@ int Run(Session *s)
     std::printf("ticket cancelled\n");
     return 0;
 }
+
+// InitGameServer is marked private in the SDK headers (steam_api calls it from
+// SteamGameServer_Init); it is an ordinary vtable entry of the interface.
+struct GameServerAccess : ISteamGameServer
+{
+    using ISteamGameServer::InitGameServer;
+};
+
+const char *CallbackName(int id)
+{
+    switch (id)
+    {
+    case SteamServersConnected_t::k_iCallback: return "SteamServersConnected";
+    case SteamServerConnectFailure_t::k_iCallback: return "SteamServerConnectFailure";
+    case SteamServersDisconnected_t::k_iCallback: return "SteamServersDisconnected";
+    case ValidateAuthTicketResponse_t::k_iCallback: return "ValidateAuthTicketResponse";
+    case GSPolicyResponse_t::k_iCallback: return "GSPolicyResponse";
+    default: return nullptr;
+    }
+}
+
+// Reads game-server callbacks for up to ms milliseconds; returns early once the
+// logon outcome is known. Sets *connected to 1 (connected), 0 (failed, no
+// retry) or leaves -1 (still unknown).
+void PumpServerCallbacks(Session *s, int ms, int *connected)
+{
+    const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
+    while (std::chrono::steady_clock::now() < end)
+    {
+        CallbackMsg_t msg;
+        int32 call = 0;
+        while (s->clientNextCallback(s->pipe, &msg, &call))
+        {
+            const char *name = CallbackName(msg.m_iCallback);
+            if (msg.m_iCallback == SteamServerConnectFailure_t::k_iCallback &&
+                msg.m_cubParam >= static_cast<int>(sizeof(SteamServerConnectFailure_t)))
+            {
+                SteamServerConnectFailure_t r;
+                std::memcpy(&r, msg.m_pubParam, sizeof(r));
+                std::printf("callback %s: result %d, still retrying %d\n", name,
+                    static_cast<int>(r.m_eResult), r.m_bStillRetrying);
+                if (!r.m_bStillRetrying)
+                    *connected = 0;
+            }
+            else if (msg.m_iCallback == SteamServersDisconnected_t::k_iCallback &&
+                msg.m_cubParam >= static_cast<int>(sizeof(SteamServersDisconnected_t)))
+            {
+                SteamServersDisconnected_t r;
+                std::memcpy(&r, msg.m_pubParam, sizeof(r));
+                std::printf("callback %s: result %d\n", name, static_cast<int>(r.m_eResult));
+            }
+            else if (msg.m_iCallback == ValidateAuthTicketResponse_t::k_iCallback &&
+                msg.m_cubParam >= static_cast<int>(sizeof(ValidateAuthTicketResponse_t)))
+            {
+                ValidateAuthTicketResponse_t r;
+                std::memcpy(&r, msg.m_pubParam, sizeof(r));
+                std::printf("callback %s: response %d\n", name, static_cast<int>(r.m_eAuthSessionResponse));
+            }
+            else if (name)
+            {
+                std::printf("callback %s\n", name);
+                if (msg.m_iCallback == SteamServersConnected_t::k_iCallback)
+                    *connected = 1;
+            }
+            else
+            {
+                std::printf("callback id %d (%d bytes)\n", msg.m_iCallback, msg.m_cubParam);
+            }
+            s->freeCallback(s->pipe);
+        }
+        if (*connected >= 0)
+            return;
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+}
+
+int RunGameServer(const char *path)
+{
+    Session s;
+    s.lib = dlopen(path, RTLD_NOW | RTLD_LOCAL);
+    if (!s.lib)
+    {
+        std::printf("dlopen failed: %s\n", dlerror());
+        return 1;
+    }
+    auto create = reinterpret_cast<CreateInterfaceRetFn>(Sym(s.lib, "CreateInterface"));
+    s.clientNextCallback = reinterpret_cast<ClientNextCallbackFn>(Sym(s.lib, "Steam_BGetCallback"));
+    s.freeCallback = reinterpret_cast<PipeFn>(Sym(s.lib, "Steam_FreeLastCallback"));
+    if (!create || !s.clientNextCallback || !s.freeCallback)
+        return 1;
+    int rc = 0;
+    s.client = static_cast<ISteamClient *>(create(STEAMCLIENT_INTERFACE_VERSION, &rc));
+    std::printf("CreateInterface(%s) -> %s rc %d\n", STEAMCLIENT_INTERFACE_VERSION,
+        s.client ? "ok" : "null", rc);
+    if (!s.client)
+        return 1;
+
+    // A game-server user gets its own pipe; this does not touch the desktop
+    // Steam client's logged-in user.
+    s.user = s.client->CreateLocalUser(&s.pipe, k_EAccountTypeGameServer);
+    std::printf("CreateLocalUser(game server) -> pipe %d user %d\n", s.pipe, s.user);
+    if (!s.pipe || !s.user)
+        return 1;
+    ISteamGameServer *server = s.client->GetISteamGameServer(s.user, s.pipe, STEAMGAMESERVER_INTERFACE_VERSION);
+    std::printf("GetISteamGameServer(%s) -> %s\n", STEAMGAMESERVER_INTERFACE_VERSION, server ? "ok" : "null");
+    int result = 1;
+    if (server)
+    {
+        // Same arguments SteamGameServer_Init would pass for a dedicated,
+        // non-VAC server on a probe port (nothing listens on it here).
+        constexpr uint32 kFlagDedicated = 4;
+        constexpr uint16 kQueryPortShared = 0xffff; // STEAMGAMESERVER_QUERY_PORT_SHARED
+        const bool init = static_cast<GameServerAccess *>(server)->InitGameServer(0, 28999,
+            kQueryPortShared, kFlagDedicated, kCod4AppId, "1.7.0.0");
+        std::printf("InitGameServer(app 7940) -> %d\n", init);
+        if (init)
+        {
+            server->SetProduct("cod4");
+            server->SetGameDescription("Call of Duty 4");
+            server->SetModDir("main");
+            server->SetDedicatedServer(true);
+            server->LogOnAnonymous();
+            std::printf("LogOnAnonymous called\n");
+            int connected = -1;
+            PumpServerCallbacks(&s, 20000, &connected);
+            const CSteamID id = server->GetSteamID();
+            std::printf("connected %d, BLoggedOn %d, BSecure %d, SteamID valid %d, game server %d, anonymous %d\n",
+                connected, server->BLoggedOn(), server->BSecure(), id.IsValid(), id.BGameServerAccount(),
+                id.BAnonGameServerAccount());
+            if (server->BLoggedOn())
+            {
+                // A ticket that cannot be valid: BeginAuthSession must reject
+                // it straight away (k_EBeginAuthSessionResultInvalidTicket = 1).
+                unsigned char junk[64] = {};
+                const CSteamID fake(1u, k_EUniversePublic, k_EAccountTypeIndividual);
+                const EBeginAuthSessionResult begin = server->BeginAuthSession(junk, sizeof(junk), fake);
+                std::printf("BeginAuthSession(junk ticket) -> %d\n", static_cast<int>(begin));
+                if (begin == k_EBeginAuthSessionResultOK)
+                    server->EndAuthSession(fake);
+                result = 0;
+            }
+            server->LogOff();
+            int ignored = -1;
+            PumpServerCallbacks(&s, 2000, &ignored);
+        }
+    }
+    s.client->ReleaseUser(s.pipe, s.user);
+    s.client->BReleaseSteamPipe(s.pipe);
+    std::printf("BShutdownIfAllPipesClosed -> %d\n", s.client->BShutdownIfAllPipesClosed());
+    return result;
+}
 } // namespace
 
 int main(int argc, char **argv)
 {
-    if (argc != 3 || (std::strcmp(argv[1], "api") && std::strcmp(argv[1], "client")))
+    if (argc != 3 || (std::strcmp(argv[1], "api") && std::strcmp(argv[1], "client") &&
+        std::strcmp(argv[1], "gameserver")))
     {
-        std::fprintf(stderr, "usage: %s api|client <library>\n", argv[0]);
+        std::fprintf(stderr, "usage: %s api|client|gameserver <library>\n", argv[0]);
         return 2;
     }
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     std::printf("probe: %zu-bit, mode %s\n", sizeof(void *) * 8, argv[1]);
+    if (!std::strcmp(argv[1], "gameserver"))
+    {
+        const int rc = RunGameServer(argv[2]);
+        std::printf("RESULT: %s (code %d)\n", rc == 0 ? "anonymous game server logged on" : "failed", rc);
+        return rc;
+    }
     WriteAppIdFile();
     Session s;
     const bool open = !std::strcmp(argv[1], "api") ? OpenApi(argv[2], &s) : OpenClient(argv[2], &s);
