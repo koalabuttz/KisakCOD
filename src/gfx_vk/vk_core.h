@@ -350,6 +350,11 @@ bool Flush(Core *core, bool wait);
 // finished that submission (and every one before it), without waiting.
 uint64_t SubmissionSerial(const Core *core);
 bool SerialFinished(Core *core, uint64_t serial);
+// The submission holding the last command recorded so far: SubmissionSerial()
+// while commands are being recorded, the last one submitted when nothing is
+// (as right after Present), and 0 before the first. For fences such as D3D9's
+// event queries, which finish once everything recorded before them has.
+uint64_t RecordedSerial(const Core *core);
 
 // ---- Passes and image state ------------------------------------------------------
 //

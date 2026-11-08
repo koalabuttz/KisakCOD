@@ -1717,8 +1717,13 @@ void DestroyQuery(Device *device, Query *query)
 
 void IssueQuery(Device *device, Query *query, bool begin)
 {
+    // An event marks everything recorded before it. Right after Present
+    // nothing is being recorded, so it is the frame just submitted, not the
+    // next one: the engine's swap fence (RB_SwapBuffers) then finishes with
+    // its frame, and the render thread no longer waits for the next frame's
+    // GPU work as well before it ends that frame.
     if (query && !begin)
-        query->serial = SubmissionSerial(device->core);
+        query->serial = RecordedSerial(device->core);
 }
 
 bool GetQueryData(Device *device_, Query *query, bool flush, uint32_t &result)
