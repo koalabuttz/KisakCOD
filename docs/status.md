@@ -1,6 +1,6 @@
 # Linux port status
 
-Last updated 2026-11-07 (master `7a3d61e` plus the armv7 dedicated server). This page is the current state of
+Last updated 2026-11-08 (master `3319ba0`, the Vulkan back end checks on macOS). This page is the current state of
 the native Linux port and the other platform builds, the open pull requests and
 the roadmap. The [docs index](README.md) lists the detailed guides;
 older handoffs are in [history](history/README.md) and are not current.
@@ -79,11 +79,13 @@ builds use `-ffp-contract=off` (no fused multiply-add).
 - **Windows x64 singleplayer.** Each PC run gets one step further into level
   load; the fixes so far are in PR 95.
 - **macOS client.** The multiplayer client builds for Macs, with the Bink movie
-  shim, and passes its asset-free checks in hosted CI against the D3D9 and
-  OpenAL stand-ins; drawing
-  waits on the renderer. The Vulkan core and its window probe run on Metal
-  through MoltenVK on both hosted Mac runners
-  ([macOS track](macos.md#vulkan-window-probe)).
+  shim and the Vulkan back end (`r_backend vulkan`) linked in. It passes its
+  asset-free checks in hosted CI against the D3D9 and OpenAL stand-ins. The
+  Vulkan back end's own checks (shader translator, Legacy adapter, D3D9 front)
+  pass on Metal through MoltenVK on both hosted Mac runners (PR 136, which also
+  worked around three MoltenVK gaps). A universal app bundle is about 8 MiB
+  zipped. Not yet run with game data or on a real Mac
+  ([macOS track](macos.md#vulkan-back-end)).
 - **arm64 client and Windows ARM64.** The aarch64 multiplayer client builds and
   passes its asset-free checks (qemu and hosted Arm CI) but has not drawn a
   frame: no aarch64 DXVK build yet. Windows ARM64 builds sp, mp and dedi with
@@ -135,8 +137,6 @@ As of 2026-11-08.
 | PR | What | Waits on |
 | --- | --- | --- |
 | 120 | Record the Vulkan probe's first GPU runs (docs) | Review. |
-| 123 | Keep the Mac client's files in Application Support | Green CI. |
-| 132 | `r_backend vulkan`: the Vulkan back end in the device probe, the draw probe and the client; frames saved for image comparison; `_pp` shader math at 32 bits | Green CI (the laptop mp_crash comparison passed, run 3). |
 
 ## Laptop and PC runs still to do
 
@@ -171,8 +171,9 @@ In rough order:
 4. **Performance**: laptop A/B runs, a function-level profile, then the
    candidates in the main-thread notes (`r_gpuSync`, ThinLTO, asserts off).
 5. **Other platforms**: an aarch64 DXVK build and a first Arm run with game
-   data, Windows ARM64 with game data, the macOS client once the renderer
-   choice allows it (first run on an Intel MacBook Pro). PS Vita (stretch
+   data, Windows ARM64 with game data, the macOS client with game data
+   through `r_backend vulkan` (first run on an Intel MacBook Pro; a release
+   bundle also needs MoltenVK and the Vulkan loader). PS Vita (stretch
    goal): the armv7 dedicated server, then the Vita dedicated server (builds;
    first run on David's Vita next, [guide](vita.md)); a client waits for the
    backend handles (M1b) ([armv7 track](linux-armv7.md)).
