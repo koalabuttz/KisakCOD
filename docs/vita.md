@@ -112,6 +112,47 @@ The emulated `ux0:` is `~/.local/share/Vita3K/Vita3K/ux0`, so the log is at
 that `scripts/tests/test_linux_bootstrap.py` makes (two small `.iwd` files and
 a one-line `fileSysCheck.cfg` in `main/`) to get as far as the first zone.
 
+## Finding alignment faults before a console run
+
+Vita3K and x86 PCs read a float or an 8-byte value at any address, so the
+alignment faults described under "Alignment" below only show on the console,
+one crash per run. The i386 Linux server has the same structure layouts as
+the Vita build (4-byte pointers, little-endian), so it can find them first: a
+build with `-DKISAK_ALIGNMENT_CHECK=ON` compiles KisakCOD-dedi with UBSan's
+alignment check, which reports every load and store at an address its type
+is not aligned for, once per source line, and carries on.
+
+```sh
+cmake -S . -B build-linux/align -G Ninja \
+  -DKISAK_PLATFORM=linux -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+  -DKISAK_ALIGNMENT_CHECK=ON \
+  -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$PWD/build-linux/align/bin"
+cmake --build build-linux/align --target KisakCOD-dedi
+mkdir -p ~/kisak-private/align
+export UBSAN_OPTIONS=log_path=$HOME/kisak-private/align/ubsan:print_stacktrace=1
+# then run the server: the asset start-up test on each map, the bots test with
+# --cycles, or a server by hand
+python3 scripts/tools/summarize_alignment_report.py ~/kisak-private/align/ubsan.*
+```
+
+Each process writes its own `ubsan.<pid>`. The summary sorts the reported
+source lines into three tables: **faults** (a float, double or 64-bit access
+at an address that is not a multiple of 4, which crashes the Vita), **check**
+(a structure, union or enum reached through a misaligned pointer: it faults
+only if the code reads a float or 8-byte member through it), and **fine** (word
+aligned, or a single int, short or pointer, which the Cortex-A9 handles). It
+exits 1 when anything faults. The report holds source lines and addresses
+only, no game data.
+
+What it cannot see: code the run never reaches, the Vita-only code in
+`src/vita/`, and VitaSDK's own libraries. UBSan keeps
+a few client-only functions in the link that the normal server drops; they
+are never called, and `scripts/platform/linux/alignment_check_stubs.txt`
+defines their symbols as address 0 so the link completes; if a later change
+makes the link fail on another undefined client symbol, add its mangled name
+there.
+
 ## How the port works
 
 ### Toolchain: Clang compiles, VitaSDK links
@@ -172,7 +213,8 @@ linker script and stub libraries). `-Wl,-q` keeps the relocations that
   reference-counted copy of the constant instead of a pointer into the code.
   A crash
   with stop reason `0x30004` (data abort) on the console is the first thing
-  to check for this.
+  to check for this; "Finding alignment faults before a console run" above
+  finds them on a PC.
 - **Main thread stack.** `sceUserMainThreadStackSize` (8 MB, in
   `vita_main.cpp`) is read only by `vita-elf-create`, so the link keeps it
   with `--undefined`; `--gc-sections` dropped it in the first build and the
