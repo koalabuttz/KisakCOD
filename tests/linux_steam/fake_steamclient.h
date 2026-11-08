@@ -11,7 +11,8 @@ struct FakeSteamCallback
     int size; // -1: the payload's natural size
     uint64_t steamId;
     uint64_t ownerSteamId;
-    int response;
+    int response;      // ValidateAuthTicketResponse_t: EAuthSessionResponse; server callbacks: EResult
+    bool retrying = false; // SteamServerConnectFailure_t::m_bStillRetrying
 };
 
 struct FakeSteamControl
@@ -28,6 +29,14 @@ struct FakeSteamControl
     uint32_t ticketSize = 0;
     uint32_t reportedTicketSize = 0; // nonzero: claim this size instead
     int beginResult = 0;
+    // OpenGameServer: CreateLocalUser hands out serverPipe and serverUser.
+    int32_t serverPipe = 9;
+    int32_t serverUser = 4;
+    bool serveServer = true;
+    bool serverInitResult = true;
+    bool serverLoggedOn = false;
+    uint64_t serverSteamId = 90071992547409920ull; // an anonymous game-server ID
+    int serverBeginResult = 0;
     FakeSteamCallback callbacks[8] = {};
     int callbackCount = 0;
     int callbackNext = 0;
@@ -62,6 +71,30 @@ struct FakeSteamControl
     int freeCallbackCalls = 0;
     int freeWithoutCallback = 0;
     int callbackReadWithoutFree = 0;
+    int localUsersCreated = 0;
+    int localUserAccountType = 0;
+    bool serverVersionMatches = false;
+    bool serverInterfaceHandlesMatch = false;
+    int serverInits = 0;
+    uint32_t serverInitIp = 0;
+    uint16_t serverInitGamePort = 0;
+    uint16_t serverInitQueryPort = 0;
+    uint32_t serverInitFlags = 0;
+    uint32_t serverInitAppId = 0;
+    char serverInitVersion[32] = {};
+    char serverProduct[32] = {};
+    char serverModDir[32] = {};
+    bool serverDedicated = false;
+    int serverLogOnAnonymousCalls = 0;
+    int serverLogOnCalls = 0; // with a token: never expected
+    int serverLogOffCalls = 0;
+    int serverBeginCalls = 0;
+    uint64_t serverBeginSteamId = 0;
+    bool serverBeginTicketMatches = false;
+    int serverEndCalls = 0;
+    uint64_t serverEndSteamId = 0;
+    int serverTicketRequests = 0;
+    int shutdownIfAllPipesClosedCalls = 0;
 };
 
 extern "C" FakeSteamControl *FakeSteam_Control();

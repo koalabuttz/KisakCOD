@@ -1,5 +1,6 @@
 // Asset-free test of src/linux/steam/steamclient_session.cpp, the Linux Steam
-// backend's connection to the running Steam client. It loads the stand-in
+// backend's connection to the running Steam client or, for a dedicated server,
+// to Steam as an anonymous game server. It loads the stand-in
 // steamclient.so built from fake_steamclient.cpp (path in argv[1]) through the
 // real Session code: no Steam install is looked for or used.
 //
@@ -15,6 +16,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace
@@ -95,6 +97,7 @@ void TestOpenFailures()
     Check(session.Open(g_library, 7940) == linux_steam::OpenResult::noUser, "no logged-in user: noUser");
     Check(g_control->pipesReleased == 1 && g_control->releasedPipe == 7 && g_control->usersReleased == 0,
         "noUser: the pipe is released");
+    Check(g_control->shutdownIfAllPipesClosedCalls == 0, "a client pipe never shuts steamclient down");
 
     Reset();
     g_control->serveUser = false;
@@ -242,6 +245,7 @@ void TestCloseAndReopen(linux_steam::Session &session)
               g_control->pipesReleased == 1 && g_control->releasedPipe == 7,
         "Close releases the user and the pipe");
     Check(!session.IsOpen() && session.SteamId() == 0 && !session.LoggedOn(), "a closed session answers nothing");
+    Check(g_control->shutdownIfAllPipesClosedCalls == 0, "closing a client session leaves steamclient running");
     session.Close();
     Check(g_control->pipesReleased == 1, "a second Close does nothing");
     Reset();
@@ -255,6 +259,150 @@ void TestCloseAndReopen(linux_steam::Session &session)
     // teardown: calling into the library then crashed the game on quit.
     Check(g_control->pipesReleased == 0 && g_control->usersReleased == 0 && g_control->cancelCalls == 0,
         "the destructor does not call into the library");
+}
+
+struct ServerEvents
+{
+    std::vector<std::pair<linux_steam::ServerEvent, int>> events;
+    std::vector<linux_steam::AuthVerdict> verdicts;
+};
+
+void OnServerEvent(linux_steam::ServerEvent event, int result, void *context)
+{
+    static_cast<ServerEvents *>(context)->events.emplace_back(event, result);
+}
+
+void OnServerVerdict(const linux_steam::AuthVerdict &verdict, void *context)
+{
+    static_cast<ServerEvents *>(context)->verdicts.push_back(verdict);
+}
+
+void TestGameServerFailures()
+{
+    linux_steam::Session session;
+    Check(session.OpenGameServer(nullptr, 7940, 28960, "1.7") == linux_steam::OpenResult::noLibraryPath,
+        "game server, no path: noLibraryPath");
+    Check(session.OpenGameServer("/nonexistent/kisak/steamclient.so", 7940, 28960, "1.7") ==
+              linux_steam::OpenResult::libraryMissing,
+        "game server, missing library: libraryMissing");
+
+    Reset();
+    g_control->serverPipe = 0;
+    Check(session.OpenGameServer(g_library, 7940, 28960, "1.7") == linux_steam::OpenResult::noServerUser,
+        "no game-server pipe: noServerUser");
+    Check(g_control->pipesReleased == 0 && g_control->usersReleased == 0, "noServerUser without a pipe: nothing released");
+
+    Reset();
+    g_control->serverUser = 0;
+    Check(session.OpenGameServer(g_library, 7940, 28960, "1.7") == linux_steam::OpenResult::noServerUser,
+        "no game-server user: noServerUser");
+    Check(g_control->pipesReleased == 1 && g_control->releasedPipe == 9 && g_control->usersReleased == 0,
+        "noServerUser: the game-server pipe is released");
+
+    Reset();
+    g_control->serveServer = false;
+    Check(session.OpenGameServer(g_library, 7940, 28960, "1.7") == linux_steam::OpenResult::noServerInterface,
+        "no ISteamGameServer: noServerInterface");
+    Check(g_control->usersReleased == 1 && g_control->releasedUser == 4 && g_control->pipesReleased == 1 &&
+              g_control->serverLogOffCalls == 0 && g_control->shutdownIfAllPipesClosedCalls == 1,
+        "noServerInterface: user and pipe released, steamclient told, no LogOff");
+
+    Reset();
+    g_control->serverInitResult = false;
+    Check(session.OpenGameServer(g_library, 7940, 28960, "1.7") == linux_steam::OpenResult::serverInitFailed,
+        "InitGameServer refused: serverInitFailed");
+    Check(g_control->serverLogOnAnonymousCalls == 0 && g_control->usersReleased == 1 && g_control->pipesReleased == 1,
+        "serverInitFailed: no logon, user and pipe released");
+    Check(!session.IsOpen() && !session.IsGameServer(), "serverInitFailed: nothing open");
+}
+
+void TestGameServer()
+{
+    Reset();
+    linux_steam::Session session;
+    Check(session.OpenGameServer(g_library, 7940, 28961, "1.7.0.0") == linux_steam::OpenResult::ok,
+        "OpenGameServer succeeds");
+    Check(session.IsOpen() && session.IsGameServer(), "the game-server session is open");
+    Check(g_control->localUsersCreated == 1 && g_control->localUserAccountType == 3 /* k_EAccountTypeGameServer */,
+        "a local game-server user is created");
+    Check(g_control->pipesCreated == 0 && g_control->connectPipe == 0,
+        "no pipe to the desktop Steam client and no global user");
+    Check(g_control->serverVersionMatches && g_control->serverInterfaceHandlesMatch,
+        "ISteamGameServer is asked for by this SDK's version, with the game-server pipe and user");
+    Check(g_control->serverInits == 1 && g_control->serverInitAppId == 7940 && g_control->serverInitIp == 0 &&
+              g_control->serverInitGamePort == 28961 && g_control->serverInitQueryPort == 0xffff &&
+              g_control->serverInitFlags == 4 && !std::strcmp(g_control->serverInitVersion, "1.7.0.0"),
+        "InitGameServer: app 7940, any address, the game port, shared query port, dedicated flag, version");
+    Check(!std::strcmp(g_control->serverProduct, "cod4") && !std::strcmp(g_control->serverModDir, "main") &&
+              g_control->serverDedicated,
+        "product, mod dir and dedicated are set before logon");
+    Check(g_control->serverLogOnAnonymousCalls == 1 && g_control->serverLogOnCalls == 0,
+        "the server logs on anonymously, never with a token");
+    Check(!session.LoggedOn() && session.SteamId() == 0, "until Steam answers, the server is not logged on");
+
+    unsigned char buffer[64];
+    uint32_t size = 99;
+    Check(session.RequestTicket(1, 2, buffer, sizeof(buffer), &size) == 0 && size == 0 &&
+              g_control->ticketRequests == 0 && g_control->serverTicketRequests == 0,
+        "a game server issues no tickets");
+
+    ServerEvents seen;
+    g_control->callbacks[0] = {102, -1, 0, 0, 3, true};  // SteamServerConnectFailure_t, retrying
+    g_control->callbacks[1] = {101, -1, 0, 0, 0};        // SteamServersConnected_t
+    g_control->callbacks[2] = {103, -1, 0, 0, 6};        // SteamServersDisconnected_t
+    g_control->callbacks[3] = {102, -1, 0, 0, 15, false}; // failure, no retry
+    g_control->callbacks[4] = {102, 4, 0, 0, 2, false};   // truncated: ignored
+    g_control->callbacks[5] = {g_validateId, -1, 31, 31, 0};
+    g_control->callbackCount = 6;
+    Check(session.Pump(&OnServerVerdict, &seen, &OnServerEvent) == 6, "Pump reads the game server's callbacks");
+    Check(g_control->freeCallbackCalls == 6 && g_control->freeWithoutCallback == 0, "each is released once");
+    const bool eventsOk = seen.events.size() == 4 &&
+        seen.events[0] == std::make_pair(linux_steam::ServerEvent::connectRetrying, 3) &&
+        seen.events[1] == std::make_pair(linux_steam::ServerEvent::connected, 0) &&
+        seen.events[2] == std::make_pair(linux_steam::ServerEvent::disconnected, 6) &&
+        seen.events[3] == std::make_pair(linux_steam::ServerEvent::connectFailed, 15);
+    Check(eventsOk, "logon callbacks become retrying(3), connected, disconnected(6), failed(15); truncated ones are dropped");
+    Check(seen.verdicts.size() == 1 && seen.verdicts[0].steamId == 31, "verdicts still reach onVerdict");
+
+    g_control->serverLoggedOn = true;
+    Check(session.LoggedOn() && session.SteamId() == 90071992547409920ull,
+        "once logged on, LoggedOn and SteamId read the game server");
+
+    Check(session.BeginAuth(g_control->ticket, 40, 76561197960287932ull) == linux_steam::kBeginAuthOK,
+        "BeginAuth returns the game server's OK");
+    Check(g_control->serverBeginCalls == 1 && g_control->beginCalls == 0 &&
+              g_control->serverBeginSteamId == 76561197960287932ull && g_control->serverBeginTicketMatches,
+        "BeginAuthSession goes to ISteamGameServer with the ticket and claimed SteamID");
+    g_control->serverBeginResult = 1;
+    Check(session.BeginAuth(g_control->ticket, 40, 5) == 1, "the game server's refusal is passed through");
+    session.EndAuth(76561197960287932ull);
+    Check(g_control->serverEndCalls == 1 && g_control->endCalls == 0 &&
+              g_control->serverEndSteamId == 76561197960287932ull,
+        "EndAuth goes to ISteamGameServer");
+
+    session.Close();
+    Check(g_control->serverLogOffCalls == 1 && g_control->usersReleased == 1 && g_control->releasedUser == 4 &&
+              g_control->releasedUserPipe == 9 && g_control->pipesReleased == 1 && g_control->releasedPipe == 9,
+        "Close logs off and releases the game-server user and pipe");
+    Check(g_control->shutdownIfAllPipesClosedCalls == 1,
+        "Close lets steamclient stop its in-process threads (BShutdownIfAllPipesClosed)");
+    Check(!session.IsOpen() && !session.IsGameServer() && !session.LoggedOn(), "a closed game server answers nothing");
+    session.Close();
+    Check(g_control->serverLogOffCalls == 1 && g_control->shutdownIfAllPipesClosedCalls == 1,
+        "a second Close does nothing");
+
+    Reset();
+    Check(session.Open(g_library, 7940) == linux_steam::OpenResult::ok && !session.IsGameServer(),
+        "the same session can reopen as a client");
+    Check(session.BeginAuth(g_control->ticket, 40, 7) == 0 && g_control->beginCalls == 1 &&
+              g_control->serverBeginCalls == 0,
+        "a client session's BeginAuth goes to ISteamUser");
+    ServerEvents clientSeen;
+    g_control->callbacks[0] = {101, -1, 0, 0, 0};
+    g_control->callbackCount = 1;
+    session.Pump(nullptr, &clientSeen, &OnServerEvent);
+    Check(clientSeen.events.empty(), "a client session reports no server events");
+    session.Close();
 }
 } // namespace
 
@@ -290,6 +438,9 @@ int main(int argc, char **argv)
     TestBeginAuth(session);
     TestPump(session);
     TestCloseAndReopen(session);
+    session.Close();
+    TestGameServerFailures();
+    TestGameServer();
 
     std::printf("%s: %d checks, %d failures (%zu-bit)\n", g_failures ? "FAIL" : "PASS", g_checks, g_failures,
         sizeof(void *) * 8);
