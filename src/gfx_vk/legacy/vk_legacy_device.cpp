@@ -3,6 +3,7 @@
 #include "vk_legacy_internal.h"
 
 #include <cstdio>
+#include <cstring>
 
 namespace gfx_vk::legacy
 {
@@ -255,6 +256,32 @@ bool ResizeBackBuffer(Device *device, uint32_t width, uint32_t height)
     if (wasTarget)
         SetRenderTarget(device, 0, &device->backBufferSurface);
     return true;
+}
+
+void ResetState(Device *device)
+{
+    EndPassIfOpen(*device);
+    std::memset(device->renderStates, 0, sizeof(device->renderStates));
+    std::memset(device->samplerStates, 0, sizeof(device->samplerStates));
+    DefaultStates(*device);
+    for (uint32_t slot = 0; slot < kSamplerSlots; ++slot)
+    {
+        device->textures[slot] = nullptr;
+        device->samplers[slot] = VK_NULL_HANDLE;
+    }
+    device->vertexShader = nullptr;
+    device->pixelShader = nullptr;
+    device->decl = nullptr;
+    for (StreamBinding &stream : device->streams)
+        stream = StreamBinding{};
+    device->indices = nullptr;
+    std::memset(device->vsConstants, 0, sizeof(device->vsConstants));
+    std::memset(device->psConstants, 0, sizeof(device->psConstants));
+    for (Surface *&target : device->renderTargets)
+        target = nullptr;
+    device->depthStencil = nullptr;
+    device->dynamicValid = false;
+    SetRenderTarget(device, 0, &device->backBufferSurface);
 }
 
 void WaitIdle(Device *device)

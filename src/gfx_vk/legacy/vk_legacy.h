@@ -273,6 +273,8 @@ Texture *CreateTexture(Device *device, const TextureDesc &desc);
 void DestroyTexture(Device *device, Texture *texture);
 const TextureDesc &Describe(const Texture *texture); // levels resolved
 // Whether the adapter can create textures of this format for this usage.
+// Without a device, whether the adapter knows the format for that usage at all
+// (D3D9's format checks run before a device exists).
 bool FormatSupported(Device *device, d3d::Format format, uint32_t usage);
 
 struct LockedRect
@@ -304,7 +306,8 @@ Surface *CreatePlainSurface(Device *device, uint32_t width, uint32_t height, d3d
 void DestroySurface(Device *device, Surface *surface);
 Surface *BackBuffer(Device *device);
 void SurfaceSize(const Surface *surface, uint32_t &width, uint32_t &height, d3d::Format &format);
-bool LockSurface(Device *device, Surface *surface, uint32_t flags, LockedRect &out);
+// box null: the whole surface.
+bool LockSurface(Device *device, Surface *surface, const Box *box, uint32_t flags, LockedRect &out);
 void UnlockSurface(Device *device, Surface *surface);
 
 VertexBuffer *CreateVertexBuffer(Device *device, uint32_t bytes, uint32_t usage, d3d::Pool pool, const char *name);
@@ -410,6 +413,9 @@ PresentResult Present(Device *device);
 // Changes the back buffer size (D3D9's Reset); the window's swapchain follows
 // on its own. Every resource stays valid.
 bool ResizeBackBuffer(Device *device, uint32_t width, uint32_t height);
+// Puts every state back to D3D9's defaults and unbinds everything, with the
+// back buffer as render target 0 (what D3D9's Reset does to state).
+void ResetState(Device *device);
 void WaitIdle(Device *device);
 
 enum class QueryKind : uint8_t

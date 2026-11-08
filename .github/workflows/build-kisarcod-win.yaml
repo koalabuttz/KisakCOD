@@ -481,7 +481,9 @@ jobs:
 
   vulkan-probe:
     # The Vulkan window probe (docs/vulkan-core.md) built with MSVC for x64 on
-    # its own (scripts/vulkan_probe/CMakeLists.txt): no game, no DirectX SDK.
+    # its own (scripts/vulkan_probe/CMakeLists.txt): no game, no DirectX SDK
+    # (the D3D9 front's check compiles against the Windows SDK's d3d9.h and
+    # links no D3D9 library).
     # SDL3 and the Vulkan headers are built or fetched at pinned revisions (SDL3
     # is the same pin as the Linux jobs). Hosted runners have no GPU, so the
     # check here only starts the executable (proving SDL3.dll loads); the
@@ -545,11 +547,13 @@ jobs:
             -DKISAK_VULKAN_INCLUDE_DIR="$RUNNER_TEMP/Vulkan-Headers/include" \
             -DKISAK_BUILD_VULKAN_SHADERS=ON -DKISAK_BUILD_VULKAN_LEGACY=ON
           cmake --build build-vulkan --config Release \
-            --target KisakCOD-vulkan-probe KisakCOD-vulkan-shaders KisakCOD-vulkan-legacy-check --parallel
+            --target KisakCOD-vulkan-probe KisakCOD-vulkan-shaders KisakCOD-vulkan-legacy-check \
+            KisakCOD-vulkan-d3d9-check --parallel
           mkdir -p artifacts/vulkan-probe
           cp build-vulkan/Release/KisakCOD-vulkan-probe.exe build-vulkan/Release/SDL3.dll \
             build-vulkan/Release/KisakCOD-vulkan-shaders.exe \
-            build-vulkan/Release/KisakCOD-vulkan-legacy-check.exe artifacts/vulkan-probe/
+            build-vulkan/Release/KisakCOD-vulkan-legacy-check.exe \
+            build-vulkan/Release/KisakCOD-vulkan-d3d9-check.exe artifacts/vulkan-probe/
 
       - name: Check the Legacy shader translator
         shell: bash
@@ -569,10 +573,15 @@ jobs:
           # The Vulkan loader is opened at run time through SDL, never linked.
           # Usage errors exit 2 after printing usage, which needs SDL3.dll to
           # have loaded; a missing DLL fails before main. The runner has no
-          # Vulkan driver, so the Legacy check's scenes run on the PC.
-          for tool in KisakCOD-vulkan-probe KisakCOD-vulkan-legacy-check; do
+          # Vulkan driver, so the Legacy and D3D9 checks' scenes run on the PC.
+          for tool in KisakCOD-vulkan-probe KisakCOD-vulkan-legacy-check KisakCOD-vulkan-d3d9-check; do
             if grep -aqi 'vulkan-1\.dll' "artifacts/vulkan-probe/$tool.exe"; then
               echo "$tool.exe must not import vulkan-1.dll" >&2
+              exit 1
+            fi
+            # The D3D9 front is the D3D9 implementation: no d3d9.dll import.
+            if grep -aqi 'd3d9\.dll' "artifacts/vulkan-probe/$tool.exe"; then
+              echo "$tool.exe must not import d3d9.dll" >&2
               exit 1
             fi
             set +e
