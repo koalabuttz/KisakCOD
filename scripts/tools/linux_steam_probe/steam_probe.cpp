@@ -279,11 +279,12 @@ int Run(Session *s)
     return 0;
 }
 
-// InitGameServer is marked private in the SDK headers (steam_api calls it from
-// SteamGameServer_Init); it is an ordinary vtable entry of the interface.
+// InitGameServer is protected in the SDK headers (steam_api calls it from
+// SteamGameServer_Init). A derived class may name it; the pointer to member is
+// ISteamGameServer's own, so calling through it needs no downcast.
 struct GameServerAccess : ISteamGameServer
 {
-    using ISteamGameServer::InitGameServer;
+    static auto InitGameServerMember() { return &GameServerAccess::InitGameServer; }
 };
 
 const char *CallbackName(int id)
@@ -390,8 +391,9 @@ int RunGameServer(const char *path)
         // non-VAC server on a probe port (nothing listens on it here).
         constexpr uint32 kFlagDedicated = 4;
         constexpr uint16 kQueryPortShared = 0xffff; // STEAMGAMESERVER_QUERY_PORT_SHARED
-        const bool init = static_cast<GameServerAccess *>(server)->InitGameServer(0, 28999,
-            kQueryPortShared, kFlagDedicated, kCod4AppId, "1.7.0.0");
+        const auto initGameServer = GameServerAccess::InitGameServerMember();
+        const bool init = (server->*initGameServer)(0, 28999, kQueryPortShared, kFlagDedicated, kCod4AppId,
+            "1.7.0.0");
         std::printf("InitGameServer(app 7940) -> %d\n", init);
         if (init)
         {
