@@ -1008,7 +1008,14 @@ void Check::ShaderCache()
     point("from_file", cached() == before + 2);
 
     // A damaged file is ignored whole, and shaders are translated again.
-    if (std::FILE *file = std::fopen(path.c_str(), "r+b"))
+#ifdef _MSC_VER
+    std::FILE *file = nullptr;
+    if (fopen_s(&file, path.c_str(), "r+b") != 0)
+        file = nullptr;
+#else
+    std::FILE *file = std::fopen(path.c_str(), "r+b");
+#endif
+    if (file)
     {
         std::fseek(file, 40, SEEK_SET);
         const char junk[8] = {'d', 'a', 'm', 'a', 'g', 'e', 'd', '!'};

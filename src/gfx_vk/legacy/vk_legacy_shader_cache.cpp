@@ -50,6 +50,17 @@ Cache &TheCache()
     return *cache;
 }
 
+// MSVC rejects fopen as unsafe (C4996, an error under /WX).
+std::FILE *OpenFile(const char *path, const char *mode)
+{
+#ifdef _MSC_VER
+    std::FILE *file = nullptr;
+    return fopen_s(&file, path, mode) == 0 ? file : nullptr;
+#else
+    return std::fopen(path, mode);
+#endif
+}
+
 uint64_t Hash(const void *data, size_t bytes)
 {
     const uint8_t *p = static_cast<const uint8_t *>(data);
@@ -133,7 +144,7 @@ private:
 
 bool ReadFile(const char *path, std::vector<uint8_t> &out, std::string &message)
 {
-    std::FILE *file = std::fopen(path, "rb");
+    std::FILE *file = OpenFile(path, "rb");
     if (!file)
     {
         message = "no cache file yet";
@@ -306,7 +317,7 @@ bool SaveShaderCache(const char *path, std::string &message)
     // A new file beside the old one, then swapped in, so a crash mid-write
     // leaves the old file whole.
     const std::string temporary = std::string(path) + ".tmp";
-    std::FILE *file = std::fopen(temporary.c_str(), "wb");
+    std::FILE *file = OpenFile(temporary.c_str(), "wb");
     bool ok = file && std::fwrite(out.data(), 1, out.size(), file) == out.size();
     ok = file && std::fclose(file) == 0 && ok;
 #if defined(_WIN32)

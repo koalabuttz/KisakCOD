@@ -798,10 +798,10 @@ HRESULT STDMETHODCALLTYPE Device::GetFrontBufferData(UINT swapChain, IDirect3DSu
         const int64_t y1 = std::min<int64_t>(targetHeight, int64_t(originY) + height);
         for (int64_t y = y0; y < y1 && x0 < x1; ++y)
         {
-            const uint8_t *src = static_cast<const uint8_t *>(from.bits) + (y - originY) * int64_t(from.pitch)
-                + (x0 - originX) * 4;
-            uint8_t *out = static_cast<uint8_t *>(to.bits) + y * int64_t(to.pitch) + x0 * 4;
-            std::memcpy(out, src, size_t(x1 - x0) * 4);
+            const ptrdiff_t fromOffset = static_cast<ptrdiff_t>((y - originY) * int64_t(from.pitch) + (x0 - originX) * 4);
+            const ptrdiff_t toOffset = static_cast<ptrdiff_t>(y * int64_t(to.pitch) + x0 * 4);
+            std::memcpy(static_cast<uint8_t *>(to.bits) + toOffset, static_cast<const uint8_t *>(from.bits) + fromOffset,
+                        static_cast<size_t>(x1 - x0) * 4);
         }
         lg::UnlockSurface(legacy_, target);
     }

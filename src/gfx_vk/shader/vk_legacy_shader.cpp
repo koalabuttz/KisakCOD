@@ -709,7 +709,7 @@ void WriteIo(Writer &w, const std::vector<IoEntry> &entries)
     w.U32(static_cast<uint32_t>(entries.size()));
     for (const IoEntry &entry : entries)
     {
-        w.U8(entry.builtIn ? 1 : 0);
+        w.U8(static_cast<uint8_t>(entry.builtIn ? 1 : 0));
         w.U8(entry.location);
         w.U8(entry.mask);
         w.U8(entry.semanticUsage);
@@ -746,7 +746,7 @@ void Serialize(const Shader &shader, std::vector<uint8_t> &out)
     w.U8(reflection.major);
     w.U8(reflection.minor);
     w.U32(reflection.floatConstants);
-    w.U8(reflection.floatIndexed ? 1 : 0);
+    w.U8(static_cast<uint8_t>(reflection.floatIndexed ? 1 : 0));
     w.U32(reflection.intConstants);
     w.U32(reflection.boolConstants);
     w.U32(reflection.uniforms);
