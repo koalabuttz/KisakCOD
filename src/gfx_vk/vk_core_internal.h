@@ -234,6 +234,9 @@ public:
     std::vector<Deferred> deferred;
 
     VkPipelineCache pipelineCache = VK_NULL_HANDLE;
+    // What the cache file held at start-up (empty: none), so an unchanged cache
+    // is not written again at teardown.
+    std::vector<uint8_t> pipelineCacheLoadedData;
     std::map<SamplerKey, VkSampler> samplers;
 
     // ClearAndPresent's capture of a presented frame.
