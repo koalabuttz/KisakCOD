@@ -275,11 +275,15 @@ Run 2 switched features off one at a time: with `r_specular 0` the two back
 ends match (PSNR 57.9 and 59.8, no pixel more than 2 apart). The cause was the
 translator computing `_pp` instructions in 16-bit floats, where the specular
 terms overflow ([vulkan-legacy-adapter.md](vulkan-legacy-adapter.md)); it now
-computes them at 32 bits, as DXVK does. Reports: `renderer/vulkan-backend-laptop-run-{1,2}.md`
-in the project files.
+computes them at 32 bits, as DXVK does. Run 3 (79186f8e) confirmed it: view A
+mean_abs 0.001, PSNR 66.7 (about 120 pixels in one small spot differ, 9 of
+them by more than 8 levels), view B max 1, PSNR 100; view B's Vulkan digest is
+the one DXVK 3.1.1 (dxbc-spirv too) gave in the shader spike. Vulkan took
+16.8 s against DXVK's 6.2 s for the whole probe. Reports:
+`renderer/vulkan-backend-laptop-run-{1,2,3}.md` in the project files.
 
 ## Next
 
-mp_crash drawn by the world draw probe through the front and compared with
-DXVK on the laptop, then on the PC (the Windows game needs a Win32 host for
-the front first), then `KisakCOD-mp` played with `r_backend vulkan`.
+`KisakCOD-mp` played with `r_backend vulkan` on the laptop; the PC comparison
+(the Windows game needs a Win32 host for the front first); why the probe takes
+longer on Vulkan (pipeline creation at first use is the likely part).
