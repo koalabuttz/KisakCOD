@@ -37,6 +37,7 @@ on:
       - tests/linux_device_probe/d3d9_unavailable.cpp
       - tests/skinning/**
       - tests/linux_cinematic/**
+      - scripts/platform/macos/**
       - scripts/vulkan_probe/**
       - scripts/tests/test_vulkan_window_probe.py
       - src/**
@@ -61,6 +62,7 @@ on:
       - tests/linux_device_probe/d3d9_unavailable.cpp
       - tests/skinning/**
       - tests/linux_cinematic/**
+      - scripts/platform/macos/**
       - scripts/vulkan_probe/**
       - scripts/tests/test_vulkan_window_probe.py
       - src/**
@@ -423,6 +425,37 @@ jobs:
         run: |
           set -euo pipefail
           DYLD_LIBRARY_PATH="$RUNNER_TEMP/stand-ins:$RUNNER_TEMP/ffmpeg-sdk/lib" "$OUT_DIR/KisakCOD-bink-shim-test"
+
+      # The client packed as KisakCOD-mp.app with its libraries inside
+      # (docs/macos.md#app-bundle), signed ad hoc, then started from the bundle
+      # with no library path set: it must find everything through its own run
+      # path and pass the same fail-closed checks.
+      - name: Pack and run the app bundle
+        timeout-minutes: 10
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          unset DYLD_LIBRARY_PATH DYLD_FALLBACK_LIBRARY_PATH
+          python3 scripts/platform/macos/make_app_bundle.py \
+            --executable "$OUT_DIR/KisakCOD-mp" --output "$RUNNER_TEMP/bundle" \
+            --library "$RUNNER_TEMP/SDL3-sdk/lib/libSDL3.0.dylib" \
+            --library "$RUNNER_TEMP/stand-ins/libd3d9_unavailable.dylib" \
+            --library "$RUNNER_TEMP/stand-ins/libopenal_unavailable.dylib" \
+            --library "$RUNNER_TEMP/ffmpeg-sdk/lib/libavcodec.61.dylib" \
+            --library "$RUNNER_TEMP/ffmpeg-sdk/lib/libavutil.59.dylib"
+          app="$RUNNER_TEMP/bundle/KisakCOD-mp.app"
+          find "$app" -print
+          plutil -lint "$app/Contents/Info.plist"
+          codesign --verify --strict --deep --verbose=2 "$app"
+          # One run path, the bundle's own; no build-tree folder survives.
+          otool -l "$app/Contents/MacOS/KisakCOD-mp" | awk '$1 == "path" {print $2}' > "$RUNNER_TEMP/rpaths.txt"
+          cat "$RUNNER_TEMP/rpaths.txt"
+          test "$(cat "$RUNNER_TEMP/rpaths.txt")" = "@executable_path/../Frameworks"
+          python3 -u scripts/tests/test_linux_mp_client.py --binary "$app/Contents/MacOS/KisakCOD-mp" --native-os macOS
 
       # Apple silicon skins with the engine's scalar code; its output must be
       # the bytes every architecture produces (tests/skinning/skin_scalar_test.cpp).
