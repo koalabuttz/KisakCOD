@@ -10,9 +10,20 @@ namespace gfx_vk
 {
 namespace
 {
+// MSVC rejects fopen as unsafe (C4996, an error under /WX).
+FILE *OpenFile(const char *path, const char *mode)
+{
+#ifdef _MSC_VER
+    FILE *file = nullptr;
+    return fopen_s(&file, path, mode) == 0 ? file : nullptr;
+#else
+    return std::fopen(path, mode);
+#endif
+}
+
 bool ReadFile(const char *path, std::vector<uint8_t> &out)
 {
-    FILE *file = std::fopen(path, "rb");
+    FILE *file = OpenFile(path, "rb");
     if (!file)
         return false;
     out.clear();
@@ -88,7 +99,7 @@ bool SavePipelineCache(Core *core)
     // Write a temporary file and move it into place, so a crash never leaves a
     // half-written cache behind.
     const std::string temporary = std::string(path) + ".tmp";
-    FILE *file = std::fopen(temporary.c_str(), "wb");
+    FILE *file = OpenFile(temporary.c_str(), "wb");
     if (!file)
     {
         Log(*core, "pipeline cache: cannot write %s", temporary.c_str());
