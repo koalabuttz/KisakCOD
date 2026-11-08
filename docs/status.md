@@ -133,6 +133,7 @@ As of 2026-11-08.
 | --- | --- | --- |
 | 120 | Record the Vulkan probe's first GPU runs (docs) | Review. |
 | 123 | Keep the Mac client's files in Application Support | Green CI. |
+| 131 | D3D9 front for the Vulkan Legacy adapter (the D3D9 interfaces on Vulkan) and its 8-scene check | Green CI. |
 
 ## Laptop and PC runs still to do
 
@@ -140,7 +141,8 @@ As of 2026-11-08.
   `sound/laptop-sound-run-1.md`, with `+set snd_alDebug 1`.
 - Singleplayer hand play on the levels the sweep passed (step 6 in
   [linux-sp-levels.md](linux-sp-levels.md)); sweep run 1 is done.
-- Vulkan Legacy adapter check on the PC (the laptop passed, PR 130).
+- Vulkan Legacy adapter check on the PC (the laptop passed, PR 130); the D3D9
+  front check (PR 131) on the laptop and the PC.
 - Vulkan probe with the Khronos validation layer (synchronisation checks) on a
   real GPU; the laptop and PC runs so far had no layer installed.
 
