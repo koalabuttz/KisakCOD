@@ -189,6 +189,7 @@ public:
     lg::Device *device = nullptr;
     lg::Shader *vsBasic = nullptr, *psColor = nullptr, *psConstant = nullptr, *psTexture = nullptr;
     lg::Shader *psCube = nullptr, *psVolume = nullptr, *vs20 = nullptr, *ps20 = nullptr;
+    lg::Shader *psPartialPrecision = nullptr;
     lg::VertexDecl *decl = nullptr;
     lg::VertexDecl *declNoColor = nullptr;
     lg::Surface *readSurface = nullptr;
@@ -396,6 +397,7 @@ public:
     void StaticBuffers();
     void CubeVolume();
     void ShaderModel2();
+    void PartialPrecision();
     void MissingInput();
     void EventQuery();
 };
@@ -897,6 +899,20 @@ void Check::ShaderModel2()
     Expect("unbound_texture", 80, 48, 0, 0, 0, 255);
 }
 
+// D3D9 hardware ran _pp instructions at 32-bit precision (and so does DXVK by
+// default); the game's lighting shaders use _pp throughout, and their
+// specular terms overflow 16-bit floats.
+void Check::PartialPrecision()
+{
+    Reset();
+    lg::SetPixelShader(device, psPartialPrecision);
+    SetConstant(false, 0, 300.0f, 1.0f / 180000.0f, 0.0f, 1.0f);
+    DrawQuadPx(0, 0, 128, 128, 0.5f, Argb(255, 255, 255, 255));
+    if (!Read())
+        return;
+    Expect("full_precision", 64, 64, 128, 128, 128);
+}
+
 void Check::MissingInput()
 {
     Reset(Argb(255, 255, 0, 0));
@@ -960,6 +976,8 @@ bool Check::Init(std::string &error)
         {&psVolume, shaders::kPsVolume, sizeof(shaders::kPsVolume), "kPsVolume"},
         {&vs20, shaders::kVs20, sizeof(shaders::kVs20), "kVs20"},
         {&ps20, shaders::kPs20, sizeof(shaders::kPs20), "kPs20"},
+        {&psPartialPrecision, shaders::kPsPartialPrecision, sizeof(shaders::kPsPartialPrecision),
+         "kPsPartialPrecision"},
     };
     for (const ShaderSource &source : sources)
     {
@@ -994,7 +1012,7 @@ void Check::Destroy()
     for (auto it = cleanup.rbegin(); it != cleanup.rend(); ++it)
         (*it)();
     cleanup.clear();
-    lg::Shader *all[] = {vsBasic, psColor, psConstant, psTexture, psCube, psVolume, vs20, ps20};
+    lg::Shader *all[] = {vsBasic, psColor, psConstant, psTexture, psCube, psVolume, vs20, ps20, psPartialPrecision};
     for (lg::Shader *shader : all)
         lg::DestroyShader(device, shader);
     lg::DestroyVertexDecl(device, decl);
@@ -1071,6 +1089,7 @@ int Run(const Options &options)
         {"static_buffers", &Check::StaticBuffers},
         {"cube_volume", &Check::CubeVolume},
         {"shader_model_2", &Check::ShaderModel2},
+        {"partial_precision", &Check::PartialPrecision},
         {"missing_input", &Check::MissingInput},
         {"event_query", &Check::EventQuery},
     };

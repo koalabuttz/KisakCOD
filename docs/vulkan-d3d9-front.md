@@ -178,6 +178,7 @@ a usage error.
 | `states` | Defaults after `CreateDevice`, render and sampler state round trips (vertex samplers included), constant ranges, refusals, one deliberate unsupported call. |
 | `draw` | Static vertex and index buffers, a draw from memory (stream 0 unbound after it), a textured quad, a vertex shader constant, `GetTexture`. |
 | `render_target` | A render-target texture's level with a depth surface (viewport follows the target), the getters, sampling it afterwards, `StretchRect` into the back buffer. |
+| `shadow_map` | The sun shadow's path: a D24S8 texture made with `D3DUSAGE_DEPTHSTENCIL` as the depth target beside a R5G6B5 colour target, then sampled with linear filtering as a hardware shadow map (0 behind the stored depth, 1 in front). |
 | `references` | Counts of textures and their levels, `GetContainer`, `QueryInterface`, a released texture that still draws while bound and goes when unbound, the back buffer and swap chain counting as the device. |
 | `threads` | A worker thread creating and filling textures while this thread draws and presents; the last one drawn and read back; nothing left alive. |
 | `queries` | Support checks, an event query and an occlusion query finishing. |
@@ -201,7 +202,7 @@ Windows `vulkan-probe` job builds it with MSVC, checks that it imports neither
 `KisakCOD-vulkan-probe-x64` artifact.
 
 Results so far (2026-11-08, cloud sandbox, no GPU, lavapipe from Mesa 25.2.8):
-all 9 scenes pass on x86_64 (Debug and RelWithDebInfo, validation with
+all 10 scenes pass on x86_64 (Debug and RelWithDebInfo, validation with
 synchronisation checks, no errors) and on i386 (Debug, no validation layer:
 Ubuntu ships none for i386), with the one deliberate unsupported call.
 
@@ -265,6 +266,17 @@ It prints the mean and largest channel difference, the share of pixels off by
 more than 8 and by more than 32, and the PSNR, and writes the difference
 scaled up so that what differs shows bright. The images stay with the reports
 on that machine.
+
+Laptop run 1 (2026-11-08, Intel iGPU, ANV, i386 RelWithDebInfo, 289ae039):
+the front check, the device probe with `--backend vulkan` and mp_crash through
+the world draw probe all pass, and two Vulkan runs give identical frames, but
+the lit world drew brighter than through DXVK (view A PSNR 17.0, view B 20.7).
+Run 2 switched features off one at a time: with `r_specular 0` the two back
+ends match (PSNR 57.9 and 59.8, no pixel more than 2 apart). The cause was the
+translator computing `_pp` instructions in 16-bit floats, where the specular
+terms overflow ([vulkan-legacy-adapter.md](vulkan-legacy-adapter.md)); it now
+computes them at 32 bits, as DXVK does. Reports: `renderer/vulkan-backend-laptop-run-{1,2}.md`
+in the project files.
 
 ## Next
 
