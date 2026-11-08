@@ -68,8 +68,14 @@ Objects follow D3D9's two counts. The public count is the program's (`AddRef`,
 texture, stream, index buffer, shader, declaration) it holds it too, so an
 object the program released but the device still draws with stays alive until
 it is unbound, as in D3D9. Surfaces of a texture's levels and volumes of a
-volume texture use their texture's counts (`GetContainer` returns it); the back
-buffer and the implicit swap chain use the device's. The device itself goes once
+volume texture use their texture's counts (`GetContainer` returns it). The back
+buffer and the implicit swap chain have counts of their own, starting at 0; while
+the program holds one, it holds the device once, and they go with the device, as
+in D3D9 and DXVK. The engine relies on this: before every reset and at shutdown
+it asserts that releasing the swap chain returns 0 (`R_ReleaseAndSetNULL` in
+`R_ReleaseForShutdownOrReset`). Until laptop run 4 found it, the front returned
+the device's count there, so a resize, `vid_restart` or quit on Vulkan stopped
+on that assert. The device itself goes once
 its own count and its live objects are both zero; its last `Release` drops every
 binding first. The check counts all of this (`references` scene, teardown).
 
@@ -179,7 +185,7 @@ a usage error.
 | `draw` | Static vertex and index buffers, a draw from memory (stream 0 unbound after it), a textured quad, a vertex shader constant, `GetTexture`. |
 | `render_target` | A render-target texture's level with a depth surface (viewport follows the target), the getters, sampling it afterwards, `StretchRect` into the back buffer. |
 | `shadow_map` | The sun shadow's path: a D24S8 texture made with `D3DUSAGE_DEPTHSTENCIL` as the depth target beside a R5G6B5 colour target, then sampled with linear filtering as a hardware shadow map (0 behind the stored depth, 1 in front). |
-| `references` | Counts of textures and their levels, `GetContainer`, `QueryInterface`, a released texture that still draws while bound and goes when unbound, the back buffer and swap chain counting as the device. |
+| `references` | Counts of textures and their levels, `GetContainer`, `QueryInterface`, a released texture that still draws while bound and goes when unbound, the back buffer's and swap chain's own counts (last `Release` returns 0) and the device reference they hold. |
 | `threads` | A worker thread creating and filling textures while this thread draws and presents; the last one drawn and read back; nothing left alive. |
 | `queries` | Support checks, an event query and an occlusion query finishing. |
 | `reset` | `Reset` to 96x96 and back: the new size, default state, nothing bound, drawing at the new size. |

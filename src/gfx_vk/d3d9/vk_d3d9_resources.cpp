@@ -90,6 +90,10 @@ HRESULT PrivateData::Free(REFGUID guid)
 Counted::Counted(Device *device, Counted *container, bool deviceChild)
     : device_(device), container_(container), deviceChild_(deviceChild)
 {
+    // A device child starts with no public references: only the device holds
+    // it until GetBackBuffer or GetSwapChain hands it out.
+    if (deviceChild_)
+        refs_ = 0;
     if (!container_ && !deviceChild_)
         device_->ObjectCreated();
 }
@@ -104,7 +108,13 @@ ULONG Counted::AddRefPublic()
 {
     const FrontLock lock;
     if (deviceChild_)
-        return device_->AddRef();
+    {
+        // As in D3D9 (and DXVK): the child has a count of its own, and while
+        // the program holds it, it holds the device once.
+        if (refs_++ == 0)
+            device_->AddRef();
+        return refs_;
+    }
     if (container_)
         return container_->AddRefPublic();
     return ++refs_;
@@ -114,7 +124,17 @@ ULONG Counted::ReleasePublic()
 {
     const FrontLock lock;
     if (deviceChild_)
-        return device_->Release();
+    {
+        // The engine asserts the last Release of the implicit swap chain and
+        // of the back buffer returns 0 (R_ReleaseAndSetNULL before a reset or
+        // at shutdown). The child itself lives until the device goes.
+        if (!refs_)
+            return 0;
+        const ULONG refs = --refs_;
+        if (!refs)
+            device_->Release(); // may destroy the device, and this child with it
+        return refs;
+    }
     if (container_)
         return container_->ReleasePublic();
     if (!refs_)
