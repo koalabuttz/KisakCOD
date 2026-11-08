@@ -104,6 +104,34 @@ cmake --build build-macos-client --target KisakCOD-mp
   shim opens a movie path as the engine spells it, with `/` for `\`, and
   needs none of the case-matching walk it does on Linux.
 
+### App bundle
+
+`scripts/platform/macos/make_app_bundle.py` packs a built client into
+`KisakCOD-mp.app`:
+
+```sh
+python3 scripts/platform/macos/make_app_bundle.py \
+    --executable bin/KisakCOD-mp --output dist \
+    --library /path/to/SDL3/lib/libSDL3.0.dylib \
+    --library /path/to/libd3d9.dylib --library /path/to/libopenal.dylib \
+    --library /path/to/ffmpeg/lib/libavcodec.61.dylib \
+    --library /path/to/ffmpeg/lib/libavutil.59.dylib
+```
+
+- The libraries go in `Contents/Frameworks` under their `@rpath/` install
+  names. The executable keeps one run path, `@executable_path/../Frameworks`;
+  the build's own folders are removed. The script stops if a library the
+  executable needs is missing, one passed is not needed, or something outside
+  the bundle and the system would be loaded.
+- `Info.plist` names the bundle (`io.github.kisakcod.mp` unless
+  `--bundle-id` says otherwise) and the minimum macOS (13.3).
+- It is signed ad hoc, which Apple silicon needs to run it. That is not a
+  release signature: Gatekeeper still asks on another Mac. Signing with a
+  Developer ID and notarising are later steps.
+- The game files stay outside the bundle: start it with
+  `+set fs_basepath "/path/to/Call of Duty 4"`, for example
+  `KisakCOD-mp.app/Contents/MacOS/KisakCOD-mp +set fs_basepath ...`.
+
 ## Vulkan window probe
 
 The shared core of the planned Vulkan back end and its window probe
@@ -208,7 +236,10 @@ with `otool -L` that the client needs only those libraries and the system ones
 test, `scripts/tests/test_linux_mp_client.py --native-os macOS` (the client's
 fail-closed start from temporary trees with no game data), the Bink shim test
 (made-up movies, and libavcodec's Bink decoders opened as the shim opens them;
-no game movie) and the skinning tests.
+no game movie) and the skinning tests. Last it packs the client into
+`KisakCOD-mp.app`, checks the signature, the `Info.plist` and the single run
+path, and runs the fail-closed checks again from the bundle with no library
+path set.
 
 A third job per architecture builds the Vulkan window probe against Homebrew's
 MoltenVK and runs `scripts/tests/test_vulkan_window_probe.py --video-driver
@@ -229,5 +260,5 @@ timings mean nothing there.
 - The client draws nothing yet: the Vulkan core runs on Metal through
   MoltenVK, but the renderer does not use it yet (the Legacy adapter comes
   later in the renderer plan). Sound through OpenAL Soft, a game movie played
-  through the Bink shim, the app bundle and signing are later steps too.
+  through the Bink shim, and a signed, notarised app are later steps too.
 - No run on a real Mac's GPU yet: the hosted runners' GPU is a virtual one.
