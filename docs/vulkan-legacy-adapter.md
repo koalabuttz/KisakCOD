@@ -165,7 +165,13 @@ artifact for a run on the PC.
 
 Results so far (2026-11-08, cloud sandbox, no GPU, x86_64 Debug, lavapipe from
 Mesa 25.2.8, validation with synchronisation checks): all 17 scenes match, no
-validation errors, 11 pipelines. Not yet run on a GPU.
+validation errors, 11 pipelines.
+
+Laptop run 1 (2026-11-08, Intel RPL-U iGPU, Mesa 25.0.7 ANV, x86_64 and i386
+RelWithDebInfo, SDL offscreen and Wayland, no validation layer installed): all
+17 scenes match in all four runs, with identical scene lines; no adapter
+warnings; the probe test still passes on both builds (report in the project
+files, `renderer/vulkan-legacy-laptop-run-1.md`). Not yet run on the PC.
 
 Synchronisation validation found one core hazard while this was written: a
 read-back's memory, reused after the host had waited for the copy, was written
