@@ -94,8 +94,17 @@ as `steam_session`) needs no Steam:
   verdicts of its own; with the server's Steam off the client was refused; all
   four processes quit with exit 0.
 
-Not verified: an x86_64 game run (the probe covered x86_64 login), a Windows
-client or server on the other end, and two different Steam accounts.
+- 2026-11-08, laptop game run 3 (master d9b78de, x86_64 dedi and client, both
+  flag on, same Steam account): both logged on through
+  `~/.steam/sdk64/steamclient.so`; a command-line `+connect` passed the server's
+  Steam auth check and spawned, and `disconnect` plus a console `connect` passed
+  again; with the server's Steam off the client was refused ("Your Steam Client
+  Ticket was Invalid") and never entered the game. Mixed builds also passed both
+  ways (x86_64 client to an i386 server, i386 client to an x86_64 server; the
+  i386 builds were run 2's). Every process quit with exit 0.
+
+Not verified: a Windows client or server on the other end, and two different
+Steam accounts.
 
 Steam delivers auth verdicts to every process logged in to the same account,
 so each process acts only on verdicts for SteamIDs it started a session for. A
