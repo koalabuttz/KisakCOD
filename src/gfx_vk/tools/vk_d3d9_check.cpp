@@ -726,8 +726,8 @@ void Check::ShadowMap()
 }
 
 // D3D9's reference counts: levels share their texture's count, objects the
-// device has bound outlive the program's last reference, the back buffer
-// counts as the device.
+// device has bound outlive the program's last reference, and the back buffer
+// and the implicit swap chain have counts of their own that hold the device.
 void Check::References()
 {
     Reset();
@@ -764,15 +764,38 @@ void Check::References()
     if (Read())
         Expect("released_but_bound", 32, 32, 255, 255, 255);
 
-    // The back buffer and the swap chain count as the device.
-    const ULONG deviceRefs = device->AddRef() - 1;
-    device->Release();
+    // The back buffer and the implicit swap chain have counts of their own,
+    // and hold the device while the program holds them. The engine asserts
+    // their last Release returns 0 before every reset and at shutdown.
+    const auto deviceRefs = [this]() {
+        const ULONG refs = device->AddRef() - 1;
+        device->Release();
+        return refs;
+    };
+    // The check holds the back buffer (backBuffer) from its setup on.
+    const ULONG refsHeld = deviceRefs();
     IDirect3DSurface9 *surface = nullptr;
     Ok(device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &surface), "GetBackBuffer");
-    Equal("back_buffer_counts_device", surface->Release(), deviceRefs);
+    Equal("back_buffer_same", surface == backBuffer, true);
+    Equal("back_buffer_holds_device_once", deviceRefs(), refsHeld);
+    Equal("back_buffer_addref", surface->AddRef(), 3ul);
+    Equal("back_buffer_release", surface->Release(), 2ul);
+    Equal("back_buffer_release_again", surface->Release(), 1ul);
+    // The check's own last reference, then taken again for the scenes after.
+    Equal("back_buffer_last_release", backBuffer->Release(), 0ul);
+    backBuffer = nullptr;
+    const ULONG refsReleased = deviceRefs();
+    Equal("back_buffer_lets_device_go", refsReleased, refsHeld - 1);
+    Ok(device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuffer), "GetBackBuffer again");
+    Equal("back_buffer_holds_device", deviceRefs(), refsHeld);
     IDirect3DSwapChain9 *chain = nullptr;
     Ok(device->GetSwapChain(0, &chain), "GetSwapChain");
-    Equal("swap_chain_counts_device", chain->Release(), deviceRefs);
+    Equal("swap_chain_holds_device", deviceRefs(), refsHeld + 1);
+    Equal("swap_chain_last_release", chain->Release(), 0ul);
+    Equal("swap_chain_lets_device_go", deviceRefs(), refsHeld);
+    // Handed out again after the last release, as before a reset.
+    Ok(device->GetSwapChain(0, &chain), "GetSwapChain again");
+    Equal("swap_chain_again", chain->Release(), 0ul);
     IDirect3DDevice9 *owner = nullptr;
     Ok(decl->GetDevice(&owner), "GetDevice");
     Equal("get_device", owner == device, true);

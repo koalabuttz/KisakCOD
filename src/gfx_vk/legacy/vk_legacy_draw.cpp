@@ -460,6 +460,7 @@ VkShaderModule PixelModule(Device &device, Shader &ps, Shader &vs)
 
 Pipeline *BuildPipeline(Device &device, const PipelineKey &key, Shader &vs, Shader &ps, const VertexDecl &decl)
 {
+    const TimeInto timer(device.stats.pipelineMicros);
     Layout *layout = GetLayout(device, LayoutFor(vs, ps));
     const VkShaderModule fragment = layout ? PixelModule(device, ps, vs) : VK_NULL_HANDLE;
     if (!fragment)

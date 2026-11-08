@@ -447,6 +447,8 @@ void UnlockRect(Device *device_, Texture *texture, uint32_t face, uint32_t level
         return;
 
     EndPassIfOpen(device);
+    const TimeInto timer(device.stats.uploadMicros);
+    ++device.stats.textureUploads;
     uint32_t rowBytes = 0, rows = 0, depth = 0;
     LevelLayout(*texture, level, rowBytes, rows, depth);
     const size_t slice = static_cast<size_t>(rowBytes) * rows;
@@ -481,6 +483,7 @@ void UnlockRect(Device *device_, Texture *texture, uint32_t face, uint32_t level
                         stageRow);
         }
     }
+    device.stats.uploadBytes += static_cast<uint64_t>(stageRow) * blockRows * region.depth;
     // The GPU keeps the texture; D3D9's managed copy is not kept, to save
     // memory (a 32-bit process has little). See docs/vulkan-legacy-adapter.md.
     std::vector<uint8_t>().swap(sub.cpu);
@@ -647,6 +650,8 @@ Shader *CreateShader(Device *device_, const void *bytecode, size_t bytes, std::s
         error = device.error;
         return nullptr;
     }
+    const TimeInto timer(device.stats.shaderMicros);
+    ++device.stats.shaders;
     std::unique_ptr<Shader> shader(new Shader());
     if (!ls::Translate(bytecode, bytes, shader->translated, error))
     {

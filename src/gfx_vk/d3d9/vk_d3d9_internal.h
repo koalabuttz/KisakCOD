@@ -78,8 +78,9 @@ private:
 //
 // Container: the object whose counts this one uses instead of its own (the
 // texture of a level surface or volume). Device children (the back buffer and
-// the implicit swap chain) use the device's public count and are destroyed with
-// the device.
+// the implicit swap chain) have a public count of their own that starts at 0;
+// while it is above 0 they hold one reference on the device, and they are
+// destroyed with the device, as in D3D9.
 class Counted
 {
 public:
@@ -368,7 +369,7 @@ private:
     D3DQUERYTYPE type_;
 };
 
-// The implicit swap chain (index 0); its count is the device's.
+// The implicit swap chain (index 0), a device child (see Counted).
 class SwapChain final : public Object<IDirect3DSwapChain9>
 {
 public:

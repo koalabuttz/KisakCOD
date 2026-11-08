@@ -246,6 +246,13 @@ struct DeviceStats
     uint64_t descriptorSets;
     uint64_t constantBytes;   // constant and render-state uniform data written
     uint64_t dynamicRenames;  // DISCARD locks that took a new buffer
+    // Where the time goes on the CPU, for the load and first-draw costs.
+    uint32_t shaders;          // shaders created
+    uint64_t shaderMicros;     // translating them (vertex modules included)
+    uint64_t pipelineMicros;   // building pipelines (pixel modules included)
+    uint64_t textureUploads;   // texture levels uploaded by UnlockRect
+    uint64_t uploadBytes;
+    uint64_t uploadMicros;     // staging those uploads
 };
 const DeviceStats &Stats(const Device *device);
 
