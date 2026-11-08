@@ -238,17 +238,25 @@ jobs:
       # The Vulkan loader is opened at run time (src/win32/vulkan), never
       # imported, so the game still starts on a machine without Vulkan; the
       # bootstrap check above starts the Debug game with the back end linked.
+      # dumpbin reads the import table itself: the name also appears in the
+      # host's messages, so a plain text search would match.
       - name: Check KisakCOD-mp does not import vulkan-1.dll
         if: matrix.config == 'Debug'
-        shell: bash
         run: |
-          set -euo pipefail
-          exe="bin/${{ matrix.config }}/KisakCOD-mp.exe"
-          test -f "$exe"
-          if grep -aqi 'vulkan-1\.dll' "$exe"; then
-            echo "$exe must not import vulkan-1.dll" >&2
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $dumpbin = & $vswhere -latest -products * -find 'VC\Tools\MSVC\**\bin\Hostx64\x64\dumpbin.exe' | Select-Object -First 1
+          if (-not $dumpbin) { Write-Host "::error::dumpbin.exe not found"; exit 1 }
+          $imports = & $dumpbin /nologo /dependents "bin/${{ matrix.config }}/KisakCOD-mp.exe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $imports | Write-Host
+          if ($imports -match '(?i)^\s*vulkan-1\.dll\s*$') {
+            Write-Host "::error::KisakCOD-mp.exe must not import vulkan-1.dll"
             exit 1
-          fi
+          }
+          if (-not ($imports -match '(?i)^\s*d3d9\.dll\s*$')) {
+            Write-Host "::error::KisakCOD-mp.exe should still import d3d9.dll"
+            exit 1
+          }
 
       - name: Check D3DX shader runtime
         run: |
