@@ -41,6 +41,8 @@ on:
       - 'scripts/tests/test_shader_constant_order.py'
       - 'scripts/tests/test_shellshock_channel_metadata.py'
       - 'scripts/tests/test_script_loading_watchdog.py'
+      - 'scripts/tests/test_vulkan_legacy_shaders.py'
+      - 'scripts/tools/shader_spike/**'
       - 'scripts/tests/test_voice_lifecycle.py'
       - 'scripts/tests/test_script_console_watchdog.py'
       - 'scripts/tests/test_exec_command_ownership.py'
@@ -76,6 +78,8 @@ on:
       - 'scripts/tests/test_shader_constant_order.py'
       - 'scripts/tests/test_shellshock_channel_metadata.py'
       - 'scripts/tests/test_script_loading_watchdog.py'
+      - 'scripts/tests/test_vulkan_legacy_shaders.py'
+      - 'scripts/tools/shader_spike/**'
       - 'scripts/tests/test_voice_lifecycle.py'
       - 'scripts/tests/test_script_console_watchdog.py'
       - 'scripts/tests/test_exec_command_ownership.py'
@@ -538,10 +542,23 @@ jobs:
           set -euo pipefail
           cmake -S scripts/vulkan_probe -B build-vulkan -A x64 \
             -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/SDL3-sdk" \
-            -DKISAK_VULKAN_INCLUDE_DIR="$RUNNER_TEMP/Vulkan-Headers/include"
-          cmake --build build-vulkan --config Release --target KisakCOD-vulkan-probe --parallel
+            -DKISAK_VULKAN_INCLUDE_DIR="$RUNNER_TEMP/Vulkan-Headers/include" \
+            -DKISAK_BUILD_VULKAN_SHADERS=ON
+          cmake --build build-vulkan --config Release --target KisakCOD-vulkan-probe KisakCOD-vulkan-shaders --parallel
           mkdir -p artifacts/vulkan-probe
-          cp build-vulkan/Release/KisakCOD-vulkan-probe.exe build-vulkan/Release/SDL3.dll artifacts/vulkan-probe/
+          cp build-vulkan/Release/KisakCOD-vulkan-probe.exe build-vulkan/Release/SDL3.dll \
+            build-vulkan/Release/KisakCOD-vulkan-shaders.exe artifacts/vulkan-probe/
+
+      - name: Check the Legacy shader translator
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The MSVC build of dxbc-spirv and our lowering, on the shader spike's
+          # test shaders: translation, refusals, uniform block layouts,
+          # reflection and linking. The runner has no spirv-val; the Linux
+          # vulkan_window job validates the same shaders' SPIR-V.
+          python -u scripts/tests/test_vulkan_legacy_shaders.py \
+            --binary artifacts/vulkan-probe/KisakCOD-vulkan-shaders.exe --no-spirv-val
 
       - name: Check the Vulkan window probe starts
         shell: bash

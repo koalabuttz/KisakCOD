@@ -26,6 +26,11 @@ python3 scripts/tools/shader_spike/run_translators.py --corpus ~/s0/bytecode \
     --dxbc-spirv ~/s0/tools/bin/dxbc_compiler --out ~/s0/translators.json
 ```
 
+`--dump-dir` also writes the shader model 1.x programs the scan does not parse,
+so a translator run over the dump covers every shader. The chosen translator now
+lives in the build as the [Legacy shader translator](vulkan-legacy-shaders.md)
+(`KisakCOD-vulkan-shaders batch <dump-dir>`).
+
 Game bytecode, translated SPIR-V and translator builds stay out of the repository.
 `scripts/tests/test_shader_spike.py` checks the tools with hand-made shaders and a
 synthetic fastfile; it needs no game files and no translators.

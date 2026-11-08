@@ -96,6 +96,10 @@ PS2_PLAIN = program(
     ins(1, [dst(sc.REG_COLOROUT, 0), src(sc.REG_TEMP, 0)]),
 )
 
+# vs_1_1: dcl_position v0; mov oPos, v0 (shader model 1 has no length fields).
+VS11 = struct.pack("<8I", 0xFFFE0101, 0x0000001F, 0x80000000, 0x900F0000,
+                   0x00000001, 0xC00F0000, 0x90E40000, 0x0000FFFF)
+
 
 def shader_record(name, code, renderer=1):
     head = struct.pack("<IIIHH", 0xFFFFFFFF, 0, 0xFFFFFFFF, len(code) // 4, renderer)
@@ -186,6 +190,16 @@ class FastfileTests(unittest.TestCase):
             self.assertEqual(report["predicted"]["dxbc-spirv"]["accept"], 3)
             self.assertEqual(report["predicted"]["mojoshader"]["reject"], 1)
             self.assertEqual(len(os.listdir(dump)), 3)
+
+    def test_shader_model_1_is_dumped(self):
+        # Not parsed (the report counts it as an error) but dumped, so
+        # translator runs over the dump see every shader the game has.
+        with tempfile.TemporaryDirectory() as tmp:
+            fastfile(os.path.join(tmp, "old.ff"), shader_record("old_vs", VS11),
+                     shader_record("postfx_glow", PS2_PLAIN))
+            dump = os.path.join(tmp, "dump")
+            sc.build_report(sc.resolve_groups(["mp=%s/old.ff" % tmp]), dump)
+            self.assertEqual(sorted(name.split(".")[1] for name in os.listdir(dump)), ["ps", "vs"])
 
     def test_cli_refuses_dump_in_repo(self):
         with tempfile.TemporaryDirectory() as tmp:

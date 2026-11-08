@@ -114,6 +114,8 @@ include(${SCRIPTS_DIR}/platform/linux/mp_client.cmake)
 include(${SCRIPTS_DIR}/platform/linux/sp_game.cmake)
 # The Vulkan window probe and the shared Vulkan core: no engine units, no D3D9.
 include(${SCRIPTS_DIR}/vulkan_probe/vulkan_probe.cmake)
+# The Legacy shader translator (dxbc-spirv): no engine units, no Vulkan headers.
+include(${SCRIPTS_DIR}/vulkan_probe/vulkan_shaders.cmake)
 
 # ---------------------------------------------------------------------------
 # Opt-in native Linux client network core (KISAK_BUILD_LINUX_CLIENT_CORE)
