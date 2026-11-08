@@ -103,11 +103,13 @@ clean quit. Movies play with the opt-in FFmpeg shim
 ([guide](docs/linux-sp-game.md), i386) loads and plays its first levels,
 killhouse and cargoship.
 
-**Authentication.** Linux Steam authentication is unavailable, so the Linux
-client cannot join a remote server, and the dedicated server rejects ordinary
-client tickets. Two explicit opt-ins can admit a client without a ticket: a
-loopback-only test mode, and `sv_allowUnverifiedGuids`, which accepts the retail
-GUID handshake from any address without verification. With the latter on, GUIDs
+**Authentication.** Steam authentication on Linux is opt-in
+(`KISAK_LINUX_STEAM`, [guide](docs/linux-steam.md)); without it the dedicated
+server rejects Steam tickets. Two explicit opt-ins can admit a client without a
+ticket: a loopback-only test mode, and `sv_allowUnverifiedGuids`, which accepts
+the retail GUID handshake from any address without verification. A KisakCOD
+client without Steam joins such servers with a GUID derived from the player's
+key code ([key codes](docs/key-codes.md)). With the latter on, GUIDs
 are spoofable and must not carry bans, privileges or persistent identity. Stock
 retail CoD4 1.7 and CoD4x 21.1 have each played in separate brief local sessions
 against the Linux server. These are not simultaneous human-player, mixed-client,

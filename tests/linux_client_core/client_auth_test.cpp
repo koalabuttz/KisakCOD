@@ -1,4 +1,8 @@
 #include <client_mp/cl_auth.h>
+#include <client_mp/cl_keycode.h>
+#include <universal/sha256.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <client_mp/client_mp.h>
 #include <universal/assertive.h>
 #include <win32/win_storage.h>
@@ -34,7 +38,8 @@ void Com_PrintError(int, const char *format, ...) {
 }
 bool Sys_IsLANAddress(netadr_t) { return true; }
 void CL_RequestAuthorization(int) { std::abort(); } // LAN configuration excludes legacy auth.
-bool NET_OutOfBandPrint(netsrc_t, netadr_t, const char *) { ++sends; return true; }
+static std::string lastPrint;
+bool NET_OutOfBandPrint(netsrc_t, netadr_t, const char *text) { ++sends; lastPrint = text; return true; }
 bool NET_OutOfBandData(netsrc_t, netadr_t, const uint8_t *, int) { ++sends; return true; }
 char *Dvar_InfoString(int, int) { std::abort(); }
 bool LiveStorage_DoWeHaveStats() { std::abort(); }
@@ -101,6 +106,77 @@ int main()
     check(connection.connectPacketCount == 2 && authErrors == 2 && !sends, "demo playback does not retry authentication");
     connection.demoplaying = false; clientUIActives[0].connectionState = CA_DISCONNECTED; CL_CheckForResend(0);
     check(connection.connectPacketCount == 2 && authErrors == 2 && !sends, "disconnected state does not retry authentication");
+
+    // ---- key codes (made-up key; no real key is used anywhere) ----
+    auto hex = [](const unsigned char *bytes, size_t size) {
+        std::string text;
+        char pair[3];
+        for (size_t i = 0; i < size; ++i) { std::snprintf(pair, sizeof(pair), "%02x", bytes[i]); text += pair; }
+        return text;
+    };
+    unsigned char digest[32];
+    Sha256 sha;
+    Sha256_Init(&sha); Sha256_Update(&sha, "abc", 3); Sha256_Final(&sha, digest);
+    check(hex(digest, 32) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", "SHA-256 of abc");
+    std::string thousand(1000, 'a');
+    Sha256_Init(&sha);
+    for (size_t at = 0; at < thousand.size(); at += 7)
+        Sha256_Update(&sha, thousand.data() + at, std::min<size_t>(7, thousand.size() - at));
+    Sha256_Final(&sha, digest);
+    check(hex(digest, 32) == "41edece42d63e8d9bf515a9ba6932e1c20cbc9f5a5d134645adb5db1b9737ea3",
+        "SHA-256 of 1000 bytes fed in uneven pieces");
+    check(CL_KeyCodeCrc("123456789", 9) == 0xBB3D, "key checksum is CRC-16/ARC (check value 0xBB3D)");
+    char key[17], sum[5];
+    check(CL_ParseKeyCode("k1sa-kc0d-test-key9-8b44", key, sum) && !std::strcmp(key, "K1SAKC0DTESTKEY9")
+        && !std::strcmp(sum, "8B44"), "key code parses with dashes in lower case");
+    check(CL_ParseKeyCode(" K1SAKC0DTESTKEY98B44\r\n", key, sum), "key code parses bare with spaces and a line ending");
+    check(CL_KeyCodeChecksumMatches("K1SAKC0DTESTKEY9", "8b44") && !CL_KeyCodeChecksumMatches("K1SAKC0DTESTKEY9", "8B45"),
+        "checksum match is exact, letter case aside");
+    check(!CL_ParseKeyCode("K1SAKC0DTESTKEY98B4", key, sum), "19 characters rejected");
+    check(!CL_ParseKeyCode("K1SAKC0DTESTKEY98B440", key, sum), "21 characters rejected");
+    check(!CL_ParseKeyCode("K1SAKC0DTESTKEY9_8B44", key, sum), "other punctuation rejected");
+    check(!CL_ParseKeyCode("K1SAKC0DTESTKEY9\xC3" "8B4", key, sum), "non-ASCII rejected");
+    char guid[33];
+    check(CL_KeyCodeGuidFromText("K1SAK-C0DTE-STKEY-98B44", guid) == KeyCodeStatus::ok
+        && !std::strcmp(guid, "33e2463444a0b14224e9592469933bd1"), "GUID is the first half of the domain-separated SHA-256");
+    check(CL_KeyCodeGuidFromText("K1SAKC0DTESTKEY98B45", guid) == KeyCodeStatus::badChecksum && !guid[0], "mistyped key gives no GUID");
+    check(CL_FormatKeyCodeChallenge("33e2463444a0b14224e9592469933bd1", output, sizeof(output)) == ClientAuthResult::ready
+        && !std::strcmp(output, "getchallenge 0 \"33e2463444a0b14224e9592469933bd1\""), "key code request is the retail two-field form");
+    check(CL_FormatKeyCodeChallenge("33e2463444a0b14224e9592469933bd", output, sizeof(output)) == ClientAuthResult::invalidTicket
+        && !output[0], "31-digit GUID refused");
+    check(CL_FormatKeyCodeChallenge("33e2463444a0b14224e9592469933bdz", output, sizeof(output)) == ClientAuthResult::invalidTicket,
+        "non-hex GUID refused");
+    check(CL_FormatKeyCodeChallenge("33e2463444a0b14224e9592469933bd1", output, 49) == ClientAuthResult::bufferTooSmall
+        && !output[0], "short output fails closed");
+
+    // The resend state machine sends the key code request once a connect picked it.
+    char home[] = "/tmp/kisak-auth-XXXXXX";
+    check(mkdtemp(home) != nullptr, "temporary home folder");
+    const std::string keyPath = std::string(home) + "/codkey.txt";
+    std::FILE *file = std::fopen(keyPath.c_str(), "w");
+    std::fputs("K1SAK-C0DTE-STKEY-98B44\n", file);
+    std::fclose(file);
+    chmod(keyPath.c_str(), 0600);
+    netadr_t server{};
+    server.type = NA_IP;
+    check(CL_PrepareRemoteAuth(server, home, false) == ClientAuthMethod::keyCode, "key file picks the key code method");
+    connection = {};
+    sends = 0;
+    clientUIActives[0].connectionState = CA_CONNECTING;
+    cls.realtime = 20000; CL_CheckForResend(0);
+    check(sends == 1 && lastPrint == "getchallenge 0 \"33e2463444a0b14224e9592469933bd1\"" && authErrors == 2,
+        "resend sends the key code GUID request");
+    chmod(keyPath.c_str(), 0640);
+    check(CL_PrepareRemoteAuth(server, home, false) == ClientAuthMethod::none && authErrors == 3,
+        "group-readable key file refused");
+    cls.realtime = 30000; CL_CheckForResend(0);
+    check(sends == 1 && authErrors == 4, "after a refused key file, resend sends nothing");
+    unlink(keyPath.c_str());
+    check(CL_PrepareRemoteAuth(server, home, true) == ClientAuthMethod::none && authErrors == 5,
+        "no key file and no Steam: none");
+    rmdir(home);
+    clientUIActives[0].connectionState = CA_DISCONNECTED;
+
     std::printf("-- %d checks, %d failures --\n", checks, failures);
     return failures ? 1 : 0;
 }

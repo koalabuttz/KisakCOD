@@ -10,10 +10,8 @@
 #include <server_mp/server_mp.h>
 #include <client/client.h>
 #include <cgame_mp/cg_local_mp.h>
-
-#if defined(WIN32) || defined(KISAK_LINUX_STEAM)
-#include <win32/win_steam.h>
-#endif
+#include <universal/com_files.h>
+#include "cl_auth.h"
 
 bool s_playerMute[64];
 
@@ -381,20 +379,17 @@ void CL_Connect_f()
     }
 }
 
+const dvar_t *cl_keyCodeOnly;
+
 // This is called by the Client to see if the Auth is even valid before sending to the Server.
+// KISAK: Steam when it is running (src/win32/win_steam.cpp, or src/linux/steam.cpp in a
+// KISAK_LINUX_STEAM build), otherwise the player's key code (cl_auth.cpp). CL_Connect_f only
+// asks for a non-local address, so joining the in-process server ("localhost") is unaffected.
 bool CL_CDKeyValidate(netadr_t addr)
 {
-#if defined(WIN32) || defined(KISAK_LINUX_STEAM)
-    // KISAK_LINUX_STEAM: src/linux/steam.cpp asks the running Steam client.
-    return Steam_UpdateClientAuthTicket(addr);
-#else
-    // The default native Linux build has no Steam ticket provider. Refuse every remote server
-    // here; CL_Connect_f only asks for a non-local address, so joining the
-    // in-process server ("localhost", NA_LOOPBACK) is unaffected.
-    Com_PrintError(CON_CHANNEL_CLIENT,
-        "Client authentication unavailable: native Linux cannot join remote servers yet\n");
-    return false;
-#endif
+    const char *homePath = fs_homepath ? fs_homepath->current.string : "";
+    const bool keyCodeOnly = cl_keyCodeOnly && cl_keyCodeOnly->current.enabled;
+    return CL_PrepareRemoteAuth(addr, homePath, keyCodeOnly) != ClientAuthMethod::none;
 }
 
 //bool CL_CDKeyValidate(const char *key, const char *checksum)

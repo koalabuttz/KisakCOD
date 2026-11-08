@@ -11,9 +11,16 @@
 //     straight to CA_CHALLENGING without asking for authentication, which is the
 //     retail path a listen server's own client takes.
 //   * Every other address, including 127.0.0.1 over UDP, asks the platform for
-//     authentication; on Linux that fails closed: the command drops with
-//     EXE_ERR_INVALID_CD_KEY and the connection is never started.
+//     authentication; on Linux without a key code that fails closed: the
+//     command drops with EXE_ERR_INVALID_CD_KEY and the connection is never
+//     started.
+//   * With a valid key code in <fs_homepath>/codkey.txt (chmod 600) the same
+//     command starts the connection, and the getchallenge it will send is the
+//     retail two-field form carrying the key code's GUID, never the key. A
+//     mistyped, malformed or group-readable key file is refused.
 #include <client_mp/client_mp.h>
+#include <client_mp/cl_auth.h>
+#include <client_mp/cl_keycode.h>
 #include <qcommon/qcommon.h>
 #include <universal/assertive.h>
 #include <sound/snd_public.h>
@@ -22,6 +29,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
+#include <sys/stat.h>
+#include <unistd.h>
 
 // ---- storage whose owners are not linked ----------------------------------
 clientActive_t clients[1];
@@ -29,6 +39,7 @@ clientConnection_t clientConnections[1];
 clientUIActive_t clientUIActives[1];
 clientStatic_t cls;
 int cl_serverLoadingMap;
+const dvar_t *fs_homepath;
 int g_waitingForServer;
 
 clientConnection_t *CL_GetLocalClientConnection(int localClientNum)
@@ -55,6 +66,7 @@ void CL_Disconnect(int) { ++disconnects; }
 void Con_Close(int) {}
 bool Com_HasPlayerProfile() { ++profileQueries; return true; }
 void Cbuf_ExecuteBuffer(int, int, const char *) {}
+static std::string printed;
 void UI_CloseAll(int) { ++closeAlls; }
 void SCR_UpdateLoadScreen() { ++loadScreens; }
 uint32_t Sys_Milliseconds() { return 4242; }
@@ -64,16 +76,26 @@ void MyAssertHandler(const char *file, int line, int, const char *format, ...)
     std::fprintf(stderr, "assert %s:%d %s\n", file, line, format);
     std::abort();
 }
-void Com_Printf(int, const char *, ...) {}
-void Com_DPrintf(int, const char *, ...) {}
-void Com_PrintWarning(int, const char *, ...) {}
-void Com_PrintError(int, const char *format, ...)
+void Com_Printf(int, const char *format, ...)
 {
-    char text[256];
+    char text[512];
     va_list args;
     va_start(args, format);
     std::vsnprintf(text, sizeof(text), format, args);
     va_end(args);
+    printed += text;
+}
+void Com_DPrintf(int, const char *, ...) {}
+void Com_PrintWarning(int, const char *, ...) {}
+static std::string lastError;
+void Com_PrintError(int, const char *format, ...)
+{
+    char text[512];
+    va_list args;
+    va_start(args, format);
+    std::vsnprintf(text, sizeof(text), format, args);
+    va_end(args);
+    lastError = text;
     if (std::strstr(text, "Client authentication unavailable"))
         ++authErrors;
     else
@@ -112,6 +134,8 @@ static void reset()
     killLocalServer = svFrames = disconnects = profileQueries = closeAlls = loadScreens = 0;
     authErrors = otherErrors = 0;
     lastDrop[0] = 0;
+    printed.clear();
+    lastError.clear();
 }
 
 // Runs "connect <server>" and reports whether it dropped through Com_Error.
@@ -174,6 +198,68 @@ int main()
     netadr_t address{};
     address.type = NA_IP;
     check(!CL_CDKeyValidate(address) && authErrors == 1, "CL_CDKeyValidate refuses NA_IP");
+
+    // ---- key codes -----------------------------------------------------------
+    char home[] = "/tmp/kisak-keycode-XXXXXX";
+    check(mkdtemp(home) != nullptr, "key code: temporary home folder");
+    dvar_t homeDvar{};
+    homeDvar.current.string = home;
+    fs_homepath = &homeDvar;
+    const std::string keyPath = std::string(home) + "/codkey.txt";
+    // A made-up key with a matching checksum; no real key is used anywhere.
+    const char *madeUpKey = "K1SAKC0DTESTKEY9";
+    char keyText[64];
+    std::snprintf(keyText, sizeof(keyText), "%.4s-%.4s-%.4s-%.4s-%04X\n", madeUpKey, madeUpKey + 4,
+        madeUpKey + 8, madeUpKey + 12, CL_KeyCodeCrc(madeUpKey, 16));
+    auto writeKey = [&](const char *text, mode_t mode) {
+        std::FILE *file = std::fopen(keyPath.c_str(), "w");
+        std::fputs(text, file);
+        std::fclose(file);
+        chmod(keyPath.c_str(), mode);
+    };
+
+    refusedRemote("192.0.2.10:28960", "no key file");
+    check(lastError.find(keyPath) != std::string::npos, "no key file: the error names where the key code goes");
+
+    writeKey(keyText, 0600);
+    reset();
+    check(!connect("192.0.2.10:28960"), "key code: no drop");
+    check(clientUIActives[0].connectionState == CA_CONNECTING && authErrors == 0 && otherErrors == 0,
+        "key code: the connection starts (CA_CONNECTING) with no error");
+    char guid[33];
+    CL_KeyCodeGuid(madeUpKey, guid);
+    char request[256];
+    check(CL_GetPlatformChallenge(request, sizeof(request)) == ClientAuthResult::ready
+        && request == std::string("getchallenge 0 \"") + guid + "\"",
+        "key code: getchallenge carries the key code's GUID in the retail two-field form");
+    check(!std::strstr(request, madeUpKey) && printed.find(madeUpKey) == std::string::npos
+        && printed.find(guid) != std::string::npos,
+        "key code: the key never appears in the request or the console; the GUID does");
+
+    char typo[64];
+    std::snprintf(typo, sizeof(typo), "%s", keyText);
+    typo[0] = typo[0] == 'K' ? 'L' : 'K';
+    writeKey(typo, 0600);
+    refusedRemote("192.0.2.10:28960", "mistyped key code");
+    check(lastError.find("mistyped") != std::string::npos, "mistyped key code: says so");
+    check(CL_GetPlatformChallenge(request, sizeof(request)) == ClientAuthResult::unavailable && !request[0],
+        "mistyped key code: no request is formatted from the earlier key");
+
+    writeKey("not a key\n", 0600);
+    refusedRemote("192.0.2.10:28960", "malformed key file");
+
+    writeKey(keyText, 0644);
+    refusedRemote("192.0.2.10:28960", "group-readable key file");
+    check(lastError.find("chmod 600") != std::string::npos, "group-readable key file: says chmod 600");
+
+    writeKey(keyText, 0600);
+    reset();
+    check(!connect("localhost") && authErrors == 0 && printed.find("key code") == std::string::npos,
+        "key code: localhost still never asks for authentication");
+
+    unlink(keyPath.c_str());
+    rmdir(home);
+    fs_homepath = nullptr;
 
     // An already connected client is not touched (retail behaviour).
     reset();
