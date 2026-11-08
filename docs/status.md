@@ -132,6 +132,7 @@ As of 2026-11-08.
 | --- | --- | --- |
 | 120 | Record the Vulkan probe's first GPU runs (docs) | Review. |
 | 123 | Keep the Mac client's files in Application Support | Green CI. |
+| 130 | Vulkan Legacy adapter (D3D9 on the Vulkan core) and its 17-scene pixel check | Green CI and the laptop run of the check. |
 
 ## Laptop and PC runs still to do
 
