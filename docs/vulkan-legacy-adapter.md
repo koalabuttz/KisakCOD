@@ -67,8 +67,12 @@ device it replaces.
   and the next frame draws into the other. So the front buffer always holds
   the last frame shown, even while the next one is half drawn. The engine's
   screenshot command runs on the main thread while the render thread draws,
-  and PC run 2 found screenshots taken from the back buffer were half-drawn
-  frames, 1.8 times too bright.
+  so a screenshot read from the back buffer could catch a half-drawn frame
+  (one PC run 2 shot had an odd tint). The 1.8x brightness PC runs 2-3
+  measured was not the screenshot: that PC's desktop shows every window at
+  0.553 times its brightness, so desktop captures, and real D3D9's windowed
+  screenshots (a copy of the desktop), read darker than the frame drawn. In
+  exclusive fullscreen, d3d9 and Vulkan screenshots agree (PC run 4).
 
 ## Resources and D3D9's lock rules
 
