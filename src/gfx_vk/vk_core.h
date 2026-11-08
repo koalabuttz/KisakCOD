@@ -24,8 +24,9 @@
 // that are easy to get wrong (memory, lifetime, synchronisation) behind its API.
 //
 // Requirements on the driver: Vulkan 1.3 (dynamic rendering, synchronization2
-// and pipeline creation feedback are core there), timeline semaphores (core
-// since 1.2, required by the core here), VK_KHR_swapchain, and one queue family
+// and pipeline creation feedback are core there), timeline semaphores and
+// scalar block layout (core since 1.2, optional there, required by the core
+// here; the Legacy shaders' uniform blocks use it), VK_KHR_swapchain, and one queue family
 // that does graphics and presents to the window. Mesa's lavapipe, Intel ANV,
 // NVIDIA's driver for the RTX 2080 Super and MoltenVK all meet them.
 //

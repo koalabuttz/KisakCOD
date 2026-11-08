@@ -2324,7 +2324,8 @@ jobs:
     # Opt-in Vulkan back end (docs/vulkan-core.md): the shared Vulkan core in
     # src/gfx_vk and KisakCOD-vulkan-probe, which opens an SDL3 window and
     # clears, presents and resizes it through the core, then draws a small
-    # textured scene through the core's resource paths and checks its pixels. Built for
+    # textured scene through the core's resource paths and checks its pixels,
+    # and the Legacy shader translator (KisakCOD-vulkan-shaders). Built for
     # x86_64, the primary Vulkan target, against the x86_64 SDL3 pin (same
     # options and cache key as x64_client). It runs on Mesa's lavapipe, a CPU
     # Vulkan driver, through SDL's offscreen video driver (VK_EXT_headless_surface):
@@ -2423,9 +2424,9 @@ jobs:
             -DCMAKE_BUILD_TYPE="${{ matrix.config }}" \
             -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
             -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$OUT_DIR" \
-            -DKISAK_BUILD_VULKAN_PROBE=ON \
+            -DKISAK_BUILD_VULKAN_PROBE=ON -DKISAK_BUILD_VULKAN_SHADERS=ON \
             -DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3"
-          cmake --build "$BUILD_DIR" --target KisakCOD-vulkan-probe --parallel "$(nproc)"
+          cmake --build "$BUILD_DIR" --target KisakCOD-vulkan-probe KisakCOD-vulkan-shaders --parallel "$(nproc)"
           readelf -h "$OUT_DIR/KisakCOD-vulkan-probe" | grep -Eq 'Class:[[:space:]]+ELF64'
           # The loader is opened at run time through SDL, never linked.
           if readelf -d "$OUT_DIR/KisakCOD-vulkan-probe" | grep -q 'libvulkan'; then
@@ -2451,6 +2452,18 @@ jobs:
           python3 -u scripts/tests/test_vulkan_window_probe.py \
             --binary "$OUT_DIR/KisakCOD-vulkan-probe" \
             --video-driver offscreen --validation require
+
+      - name: Check the Legacy shader translator
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          # dxbc-spirv (fetched at a pinned commit) and our lowering, on the
+          # shader spike's 81 test shaders: valid SPIR-V for Vulkan 1.3 with
+          # scalar block layout, predication refused, uniform block layouts,
+          # reflection and linking (docs/vulkan-legacy-shaders.md).
+          python3 -u scripts/tests/test_vulkan_legacy_shaders.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-shaders"
 
       - name: Save compiler cache
         if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}

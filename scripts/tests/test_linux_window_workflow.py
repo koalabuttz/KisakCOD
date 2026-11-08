@@ -877,6 +877,16 @@ class VulkanWindowWorkflowTests(unittest.TestCase):
         check = self.step("Check the probe's generated SPIR-V header")['run']
         self.assertIn('scripts/tools/vulkan/gen_spirv_header.py --check', check)
 
+    def test_the_legacy_shader_translator_is_built_and_checked(self):
+        build = self.step('Build the Vulkan window probe')['run']
+        self.assertIn('-DKISAK_BUILD_VULKAN_SHADERS=ON', build)
+        self.assertIn('KisakCOD-vulkan-shaders', build)
+        check = self.step('Check the Legacy shader translator')['run']
+        self.assertIn('scripts/tests/test_vulkan_legacy_shaders.py', check)
+        self.assertIn('"$OUT_DIR/KisakCOD-vulkan-shaders"', check)
+        # spirv-val validates every translated shader here.
+        self.assertNotIn('--no-spirv-val', check)
+
     def test_no_other_job_builds_the_probe(self):
         for name, job in self.workflow['jobs'].items():
             if name == self.JOB:

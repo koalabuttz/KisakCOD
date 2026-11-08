@@ -6,6 +6,9 @@
 #     -DSDL3_DIR=<sdl3-sdk>/cmake -DKISAK_VULKAN_INCLUDE_DIR=<Vulkan-Headers>/include
 #   cmake --build build-vulkan --config Release --target KisakCOD-vulkan-probe
 #
+# -DKISAK_BUILD_VULKAN_SHADERS=ON adds the Legacy shader translator and its
+# tool, KisakCOD-vulkan-shaders (vulkan_shaders.cmake).
+#
 # See docs/vulkan-core.md.
 cmake_minimum_required(VERSION 3.24)
 project(KisakCOD-vulkan-probe LANGUAGES C CXX)
@@ -13,3 +16,4 @@ project(KisakCOD-vulkan-probe LANGUAGES C CXX)
 get_filename_component(SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/../../src" ABSOLUTE)
 set(KISAK_BUILD_VULKAN_PROBE ON)
 include("${CMAKE_CURRENT_LIST_DIR}/vulkan_probe.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/vulkan_shaders.cmake")

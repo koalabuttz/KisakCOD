@@ -380,6 +380,13 @@ Candidate Evaluate(Core &core, VkPhysicalDevice physical)
         std::snprintf(candidate.why, sizeof(candidate.why), "no timeline semaphores");
         return candidate;
     }
+    // The Legacy shader translator lays uniform blocks out tightly (dxbc-spirv
+    // emits scalar block layout, as DXVK requires).
+    if (!features12.scalarBlockLayout)
+    {
+        std::snprintf(candidate.why, sizeof(candidate.why), "no scalar block layout");
+        return candidate;
+    }
 
     vk.vkGetPhysicalDeviceQueueFamilyProperties(physical, &count, nullptr);
     std::vector<VkQueueFamilyProperties> families(count);
@@ -565,6 +572,7 @@ bool CreateDevice(Core &core)
     features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
     features12.pNext = &features13;
     features12.timelineSemaphore = VK_TRUE;
+    features12.scalarBlockLayout = VK_TRUE;
     VkPhysicalDeviceFeatures2 features{};
     features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     features.pNext = &features12;

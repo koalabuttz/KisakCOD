@@ -28,7 +28,7 @@ Start-up (`vk_core.cpp`):
 | --- | --- |
 | Loader | Not linked. The window system hands the core `vkGetInstanceProcAddr` (SDL3 opens the loader), and every function is looked up through it (`vk_dispatch.h`). A machine without Vulkan fails with a message, not a dynamic-linker error. |
 | Instance | Vulkan 1.3. The window system's surface extensions, portability enumeration where offered (MoltenVK), and the Khronos validation layer on request. With validation on, synchronisation validation is on too. |
-| Device | Needs Vulkan 1.3, dynamic rendering, synchronization2, timeline semaphores, `VK_KHR_swapchain` and one queue that draws and presents to the window. Picks discrete, then integrated, then virtual, then CPU devices, or the index given. Turns on anisotropic filtering, wireframe fill and independent blend where the device has them. Picks the depth-stencil format: D24S8 where it can be an attachment and sampled, else D32S8. |
+| Device | Needs Vulkan 1.3, dynamic rendering, synchronization2, timeline semaphores, scalar block layout (for the [Legacy shaders](vulkan-legacy-shaders.md)' uniform blocks), `VK_KHR_swapchain` and one queue that draws and presents to the window. Picks discrete, then integrated, then virtual, then CPU devices, or the index given. Turns on anisotropic filtering, wireframe fill and independent blend where the device has them. Picks the depth-stencil format: D24S8 where it can be an attachment and sampled, else D32S8. |
 | Swapchain | `B8G8R8A8_UNORM` or `R8G8B8A8_UNORM` in sRGB-nonlinear colour space: UNORM because the retail renderer writes gamma-space values and never asks for sRGB conversion. FIFO with vsync, otherwise mailbox, then immediate. Rebuilt when the surface is out of date or suboptimal, or when the window reports a new size; a minimised window skips frames. |
 | Swapchain images | Wrapped as core images, so passes, blits and read-back treat them like any other image. Copyable and blit targets where the surface allows. |
 
@@ -216,9 +216,9 @@ has so far run on lavapipe only (2026-11-08, cloud sandbox, x86_64 Debug, Mesa
 
 ## Next
 
-The core now has the pieces the Legacy adapter needs to draw. Next, in order:
-the Legacy shader translator (dxbc-spirv's SM3 front end and our own lowering
-of CoD4's shaders to SPIR-V), the Legacy adapter on top of the core (the
+The core now has the pieces the Legacy adapter needs to draw, and the
+[Legacy shader translator](vulkan-legacy-shaders.md) turns the game's shaders
+into SPIR-V for it. Next, in order: the Legacy adapter on top of the core (the
 engine's state bits, samplers, constants, dynamic buffers and render targets),
 then the `r_backend vulkan` switch and mp_crash drawn through it, compared
 with DXVK on the laptop and the PC. Not in the core yet, because nothing needs

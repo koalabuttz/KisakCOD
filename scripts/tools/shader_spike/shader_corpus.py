@@ -429,6 +429,13 @@ def check_dump_dir(path: str) -> None:
         raise SystemExit("--dump-dir must be outside the repository (game bytecode stays out of git)")
 
 
+def dump_stage(code: bytes, error: str):
+    """'vs' or 'ps' for a shader model 1.x program the parser skipped, else None."""
+    if not error or not error.startswith("shader model 1."):
+        return None
+    return "vs" if struct.unpack_from("<I", code)[0] >> 16 == 0xFFFE else "ps"
+
+
 def build_report(groups, dump_dir=None):
     shaders = {}          # sha -> record
     zones = []
@@ -455,9 +462,12 @@ def build_report(groups, dump_dir=None):
                     rec = {"info": info, "error": error, "groups": set(), "renderers": set(),
                            "families": collections.Counter(), "prefixes": collections.Counter()}
                     shaders[sha] = rec
-                    if dump_dir and info:
+                    # Shader model 1.x is not parsed here but is still dumped, so
+                    # translator runs cover every shader the game has.
+                    stage = info["stage"] if info else dump_stage(code, error)
+                    if dump_dir and stage:
                         os.makedirs(dump_dir, exist_ok=True)
-                        with open(os.path.join(dump_dir, "%s.%s" % (sha[:20], info["stage"])), "wb") as f:
+                        with open(os.path.join(dump_dir, "%s.%s" % (sha[:20], stage)), "wb") as f:
                             f.write(code)
                 rec["groups"].add(label)
                 rec["renderers"].add(renderer)
