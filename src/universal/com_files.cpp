@@ -1570,10 +1570,11 @@ void FS_AddIwdFilesForGameDirectory(char *path, char *pszGameFolder)
         s0[i] = list[i];
         if (!I_strncmp(s0[i], "localized_", 10))
         {
+            // Blank "localized_" so these sort last. The name can sit at any
+            // address, so write bytes, not words (an odd address faults the
+            // paired store the words became on the PS Vita).
             v2 = s0[i];
-            *(_DWORD *)v2 = *(_DWORD *)"          ";
-            *((_DWORD *)v2 + 1) = 538976288;    
-            *((_WORD *)v2 + 4) = 8224;
+            memset(v2, ' ', 10);
         }
     }
     qsort(s0, numfiles, sizeof(s0[0]), (int(*)(const void *, const void *))iwdsort);

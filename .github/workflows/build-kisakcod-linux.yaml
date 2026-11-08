@@ -958,6 +958,22 @@ jobs:
             echo "the server contains NEON float instructions" >&2
             exit 1
           fi
+          # Symbols the link must keep (scripts/platform/vita/CMakeLists.txt):
+          # libgcc's weak pthread references (an unresolved one switches its
+          # thread support off, and every thread_local becomes shared), and
+          # sceUserMainThreadStackSize, which sets the main thread's stack.
+          "$VITASDK/bin/arm-vita-eabi-nm" "$BINARY" > "$RUNNER_TEMP/vita-dedi.sym"
+          if grep -Eq '^ +w pthread_' "$RUNNER_TEMP/vita-dedi.sym"; then
+            grep -E '^ +w pthread_' "$RUNNER_TEMP/vita-dedi.sym" >&2
+            echo "the server leaves weak pthread references unresolved" >&2
+            exit 1
+          fi
+          for symbol in pthread_cancel pthread_once sceUserMainThreadStackSize; do
+            if ! grep -Eq " [TD] $symbol\$" "$RUNNER_TEMP/vita-dedi.sym"; then
+              echo "the server does not link $symbol" >&2
+              exit 1
+            fi
+          done
 
       - name: Upload the .vpk
         if: ${{ matrix.config == 'RelWithDebInfo' }}

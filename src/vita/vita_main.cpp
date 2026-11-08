@@ -37,7 +37,10 @@
 extern "C" int _newlib_heap_size_user = 64 * 1024 * 1024;
 
 // The main thread runs Com_Frame. Linux gives it 8 MB; the Vita default is
-// far smaller, and engine code keeps large arrays on the stack.
+// 256 KB, and engine code keeps large arrays on the stack. vita-elf-create
+// copies this symbol into the process parameters, and nothing else refers to
+// it, so the link keeps it with -Wl,--undefined (CMakeLists.txt): --gc-sections
+// dropped it from the first console build, which then ran on 256 KB.
 extern "C" unsigned int sceUserMainThreadStackSize = 8 * 1024 * 1024;
 
 namespace
@@ -152,6 +155,29 @@ namespace
         return count;
     }
 
+    // thread_local goes through libgcc's emulated TLS (vita-clang.cmake). It
+    // keeps one copy per thread only if libgcc sees threads in the link (its
+    // weak pthread_cancel reference, see CMakeLists.txt); otherwise every
+    // thread shares one copy and the engine's per-thread state (the thread
+    // context, the trace scratch boxes) mixes between threads.
+    thread_local int s_tlsProbe;
+
+    void *SetTlsProbe(void *)
+    {
+        s_tlsProbe = 2;
+        return nullptr;
+    }
+
+    bool ThreadLocalsArePerThread()
+    {
+        s_tlsProbe = 1;
+        pthread_t thread;
+        if (pthread_create(&thread, nullptr, SetTlsProbe, nullptr) != 0)
+            return false;
+        pthread_join(thread, nullptr);
+        return s_tlsProbe == 1;
+    }
+
     void LoadCommandLine()
     {
         FILE *file = fopen(kCommandLinePath, "rb");
@@ -252,6 +278,12 @@ bool Vita_Startup(int *argc, char ***argv)
     if (sceKernelGetFreeMemorySize(&memory) >= 0)
         LogFormat("Vita: free memory at start-up: %d MB main, %d MB CDRAM, %d MB phycont\n",
             memory.size_user >> 20, memory.size_cdram >> 20, memory.size_phycont >> 20);
+
+    if (!ThreadLocalsArePerThread())
+    {
+        LogText("Vita: thread_local is shared between threads; this build is broken\n");
+        return false;
+    }
 
     if (chdir(kDataPath) != 0)
     {
