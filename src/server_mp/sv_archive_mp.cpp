@@ -72,7 +72,7 @@ void SV_ArchiveSnapshot(msg_t *msg)
         if (v36->archivedFrame >= svsHeader.nextArchivedSnapshotFrames - svsHeader.fps && !v36->usesDelta)
         {
             if (v36->first_entity >= svsHeader.nextCachedSnapshotEntities - 0x4000
-                && v36->first_client >= svsHeader.nextCachedSnapshotClients - 4096)
+                && v36->first_client >= svsHeader.nextCachedSnapshotClients - SV_NUM_CACHED_SNAPSHOT_CLIENTS)
             {
                 MSG_WriteBit0(msg);
                 MSG_WriteLong(msg, v36->archivedFrame);
@@ -89,7 +89,7 @@ void SV_ArchiveSnapshot(msg_t *msg)
                     {
                         if (v21 < num_clients)
                         {
-                            v14 = &svsHeader.cachedSnapshotClients[(v21 + v36->first_client) % 4096];
+                            v14 = &svsHeader.cachedSnapshotClients[(v21 + v36->first_client) % SV_NUM_CACHED_SNAPSHOT_CLIENTS];
                             clientIndex = v14->cs.clientIndex;
                         }
                         else
@@ -227,7 +227,7 @@ void SV_ArchiveSnapshot(msg_t *msg)
     {
         if (clients->header.state >= CS_CONNECTED)
         {
-            v37 = &svsHeader.cachedSnapshotClients[svsHeader.nextCachedSnapshotClients % 4096];
+            v37 = &svsHeader.cachedSnapshotClients[svsHeader.nextCachedSnapshotClients % SV_NUM_CACHED_SNAPSHOT_CLIENTS];
             v6 = G_GetClientStateLocal(i);
             memcpy(&v37->cs, v6, sizeof(v37->cs));
             MSG_WriteDeltaClient(&snapInfo, msg, svsHeader.time, 0, &v37->cs, 1);

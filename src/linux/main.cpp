@@ -36,7 +36,7 @@
 #endif
 
 #if defined(__vita__)
-#include <vita/vita_platform.h> // Vita_Startup, Vita_QuitRequested
+#include <vita/vita_platform.h> // Vita_Startup, Vita_QuitRequested, Vita_Frame*
 #endif
 #include <errno.h>
 #include <sched.h>
@@ -578,6 +578,10 @@ void Sys_Error(const char *error, ...)
     Conbuf_AppendText(message);
     Conbuf_AppendText("\n");
     Sys_SetErrorText(message);
+#if defined(__vita__)
+    Vita_LogMemoryAtError();
+    Vita_Exit(1);
+#endif
 
     fflush(stdout);
     _exit(1);
@@ -588,6 +592,9 @@ void Sys_NoFreeFilesError()
     Sys_EnterCriticalSection(CRITSECT_FATAL_ERROR);
     Com_PrintError(CON_CHANNEL_SYSTEM, "Unable to open file: out of file descriptors\n");
     Sys_SetErrorText("Unable to open file: out of file descriptors");
+#if defined(__vita__)
+    Vita_Exit(1);
+#endif
     _exit(1);
 }
 
@@ -687,6 +694,9 @@ void Sys_Quit()
     RestoreSignalHandlers();
 
     fflush(stdout);
+#if defined(__vita__)
+    Vita_Exit(0);
+#endif
     exit(0);
 }
 
@@ -925,6 +935,10 @@ int main(int argc, char **argv)
         Cbuf_AddText(0, "readStats\n");
 #endif
     Com_Printf(CON_CHANNEL_SYSTEM, "%s", kInitializedLine);
+#if defined(__vita__)
+    // Memory left after start-up, then a load line once a minute.
+    Vita_StatsInit();
+#endif
 
     // Main loop. Outstanding signals are actioned here, on the main thread,
     // where running an engine command is safe.
@@ -940,7 +954,13 @@ int main(int argc, char **argv)
             Cbuf_AddText(0, "quit\n");
         }
 
+#if defined(__vita__)
+        Vita_FrameBegin();
+#endif
         Com_Frame();
+#if defined(__vita__)
+        Vita_FrameEnd();
+#endif
         // Reads Steam's verdicts when no dedicated SV_Frame does (a no-op
         // without KISAK_LINUX_STEAM).
         Steam_Frame();

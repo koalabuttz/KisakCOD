@@ -5,6 +5,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -18,13 +19,22 @@
 #include <psp2/net/net.h>
 #include <psp2/net/netctl.h>
 #include <psp2/power.h>
+#include <psp2/kernel/sysmem.h>
 #include <psp2/sysmodule.h>
 
-// newlib's heap (malloc, new). The rest of the memory goes to the engine's
-// reservations, which take whole memory blocks of their own
-// (vita_mman.cpp): the 128 MB physical memory arena, the 10 MB hunk and the
-// 16 MB debug hunk. Without this newlib would take 128 MB for its heap.
-extern "C" int _newlib_heap_size_user = 96 * 1024 * 1024;
+// newlib's heap (malloc, new), taken whole at launch. Without this newlib
+// would take 128 MB. The Vita gives the application 365 MB (extended mode,
+// ATTRIBUTE2=12); the budget (docs/vita.md):
+//   program and its static data   ~87 MB (svs, the server's snapshot buffers,
+//                                  is 70 MB at the Vita's 24-client cap)
+//   this heap                      64 MB
+//   engine reservations           ~155 MB in memory blocks (vita_mman.cpp):
+//                                  128 MB arena for zones, 10 MB hunk, 16 MB
+//                                  debug hunk, small listing hunks
+//   main thread stack 8 MB, worker stacks 1 MB each
+// which leaves about 45 MB. console.log reports the heap's use once a minute
+// (vita_stats.cpp); size it again from the first runs.
+extern "C" int _newlib_heap_size_user = 64 * 1024 * 1024;
 
 // The main thread runs Com_Frame. Linux gives it 8 MB; the Vita default is
 // far smaller, and engine code keeps large arrays on the stack.
@@ -43,6 +53,9 @@ namespace
     alignas(64) uint8_t s_netPool[kNetPoolSize];
 
     int s_logFd = -1;
+    pthread_mutex_t s_logLock = PTHREAD_MUTEX_INITIALIZER;
+    bool s_logAtLineStart = true;
+    uint64_t s_startTime;
 
     // Room for the arguments read from cmdline.txt.
     constexpr int kMaxArguments = 64;
@@ -50,6 +63,18 @@ namespace
     char *s_arguments[kMaxArguments + 1];
 
     uint64_t s_lastPowerTick;
+
+    void WriteAll(const char *text, size_t length)
+    {
+        size_t written = 0;
+        while (written < length)
+        {
+            const ssize_t result = write(s_logFd, text + written, length - written);
+            if (result <= 0)
+                break;
+            written += (size_t)result;
+        }
+    }
 
     void LogText(const char *text)
     {
@@ -147,6 +172,18 @@ namespace
     }
 }
 
+void Vita_Exit(int status)
+{
+    sceKernelExitProcess(status);
+    for (;;)
+        ;
+}
+
+int Vita_HeapSizeMB()
+{
+    return _newlib_heap_size_user >> 20;
+}
+
 const char *Sys_VitaDataPath()
 {
     return kDataPath;
@@ -156,14 +193,30 @@ void Vita_ConsoleWrite(const char *text, size_t length)
 {
     if (s_logFd < 0 || length == 0)
         return;
-    size_t written = 0;
-    while (written < length)
+    // Worker threads print too; keep their lines and time stamps whole.
+    pthread_mutex_lock(&s_logLock);
+    const char *const end = text + length;
+    while (text < end)
     {
-        const ssize_t result = write(s_logFd, text + written, length - written);
-        if (result <= 0)
-            break;
-        written += (size_t)result;
+        if (s_logAtLineStart)
+        {
+            // Seconds since start-up, so the log shows how long the map took.
+            const uint64_t elapsed = sceKernelGetProcessTimeWide() - s_startTime;
+            char stamp[24];
+            const int stampLength = snprintf(stamp, sizeof(stamp), "[%5u.%03u] ",
+                (unsigned int)(elapsed / 1000000u), (unsigned int)(elapsed / 1000u % 1000u));
+            if (stampLength > 0)
+                WriteAll(stamp, (size_t)stampLength);
+            s_logAtLineStart = false;
+        }
+        const char *const newline = static_cast<const char *>(memchr(text, '\n', (size_t)(end - text)));
+        const char *const lineEnd = newline ? newline + 1 : end;
+        WriteAll(text, (size_t)(lineEnd - text));
+        if (newline)
+            s_logAtLineStart = true;
+        text = lineEnd;
     }
+    pthread_mutex_unlock(&s_logLock);
 }
 
 unsigned int Vita_SetIeeeFloatMode()
@@ -184,6 +237,7 @@ bool Vita_Startup(int *argc, char ***argv)
     scePowerSetArmClockFrequency(444);
     scePowerSetBusClockFrequency(222);
 
+    s_startTime = sceKernelGetProcessTimeWide();
     mkdir("ux0:data", 0777);
     mkdir(kDataPath, 0777);
     s_logFd = open(kLogPath, O_WRONLY | O_CREAT | O_TRUNC, 0666);
@@ -191,6 +245,13 @@ bool Vita_Startup(int *argc, char ***argv)
     LogFormat("Vita: KisakCOD dedicated server starting, CPU at %d MHz\n", scePowerGetArmClockFrequency());
     const unsigned int fpscr = Vita_SetIeeeFloatMode();
     LogFormat("Vita: FPSCR was 0x%08x (flush-to-zero %s)\n", fpscr, (fpscr & (1u << 24)) ? "on, now off" : "off");
+    // newlib's heap block is already taken; the engine's reservations come
+    // out of what is left here (Vita_StatsInit logs the remainder).
+    SceKernelFreeMemorySizeInfo memory;
+    memory.size = sizeof(memory);
+    if (sceKernelGetFreeMemorySize(&memory) >= 0)
+        LogFormat("Vita: free memory at start-up: %d MB main, %d MB CDRAM, %d MB phycont\n",
+            memory.size_user >> 20, memory.size_cdram >> 20, memory.size_phycont >> 20);
 
     if (chdir(kDataPath) != 0)
     {

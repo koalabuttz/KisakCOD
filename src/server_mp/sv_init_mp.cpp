@@ -246,14 +246,14 @@ void SV_BoundMaxClients(int minimum)
 
     v1.integer.max = Dvar_RegisterInt(
         "ui_maxclients",
-        32,
-        (DvarLimits)0x4000000001LL,
+        SV_DEFAULT_MAX_CLIENTS,
+        DvarLimits(1, SV_MAX_CLIENTS),
         DVAR_ARCHIVE | DVAR_SERVERINFO | DVAR_LATCH,
         "The maximum number of clients that can connect to a server")->current.integer;
     v1.enumeration.stringCount = 1;
     sv_maxclients = Dvar_RegisterInt(
         "sv_maxclients",
-        32,
+        SV_DEFAULT_MAX_CLIENTS,
         v1,
         DVAR_ARCHIVE | DVAR_SERVERINFO | DVAR_LATCH,
         "The maximum number of clients that can connect to a server");
@@ -266,8 +266,8 @@ void SV_Startup()
 {
     iassert(!svs.initialized);
     SV_BoundMaxClients(1);
-    iassert(sv_maxclients->current.integer <= 64);
-    svs.numSnapshotEntities = 172032;
+    iassert(sv_maxclients->current.integer <= SV_MAX_CLIENTS);
+    svs.numSnapshotEntities = SV_NUM_SNAPSHOT_ENTITIES;
     svs.numSnapshotClients = sv_maxclients->current.integer * 32 * sv_maxclients->current.integer;
     svs.sv_lastTimeMasterServerCommunicated = svs.time;
     svs.initialized = 1;
@@ -339,7 +339,7 @@ void SV_ChangeMaxClients()
                 memcpy(&svs.clients[ib], &oldClients[ib], sizeof(svs.clients[ib]));
         }
         Hunk_FreeTempMemory((char*)oldClients);
-        svs.numSnapshotEntities = 172032;
+        svs.numSnapshotEntities = SV_NUM_SNAPSHOT_ENTITIES;
         svs.numSnapshotClients = sv_maxclients->current.integer * 32 * sv_maxclients->current.integer;
     }
 }
@@ -692,19 +692,19 @@ void SV_Init()
     sv_privateClients = Dvar_RegisterInt(
         "sv_privateClients",
         0,
-        (DvarLimits)0x4000000000LL,
+        DvarLimits(0, SV_MAX_CLIENTS),
         DVAR_SERVERINFO,
         "Maximum number of private clients allowed on the server");
     min.integer.max = Dvar_RegisterInt(
         "ui_maxclients",
-        32,
-        (DvarLimits)0x4000000001LL,
+        SV_DEFAULT_MAX_CLIENTS,
+        DvarLimits(1, SV_MAX_CLIENTS),
         DVAR_ARCHIVE | DVAR_SERVERINFO | DVAR_LATCH,
         "The maximum number of clients that can connect to a server")->current.integer;
     min.enumeration.stringCount = 1;
     sv_maxclients = Dvar_RegisterInt(
         "sv_maxclients",
-        32,
+        SV_DEFAULT_MAX_CLIENTS,
         min,
         DVAR_ARCHIVE | DVAR_SERVERINFO | DVAR_LATCH,
         "The maximum number of clients that can connect to a server");

@@ -32,6 +32,17 @@ constexpr auto MAX_FRIENDLY_DIST = 15000.0;
 
 #define STATIC_MAX_LOCAL_CLIENTS 1 // LWSS Add
 #define MAX_CLIENTS 64
+// The most clients a server takes (sv_maxclients' upper bound). Retail: 64.
+// The PS Vita build caps it at 24 so the server's per-client snapshot buffers
+// (serverStatic_t, server_mp.h) fit in the Vita's memory (docs/vita.md).
+#if defined(__vita__)
+inline constexpr int SV_MAX_CLIENTS = 24;
+#else
+inline constexpr int SV_MAX_CLIENTS = MAX_CLIENTS;
+#endif
+static_assert(SV_MAX_CLIENTS <= MAX_CLIENTS, "client numbers stay below MAX_CLIENTS");
+// sv_maxclients' default (32 in retail), within the cap.
+inline constexpr int SV_DEFAULT_MAX_CLIENTS = SV_MAX_CLIENTS < 32 ? SV_MAX_CLIENTS : 32;
 #define WEAPONSTATE_RAISING(x) (x == WEAPON_RAISING || x == WEAPON_RAISING_ALTSWITCH)
 #define WEAPONSTATE_DROPPING(x) (x == WEAPON_DROPPING || x == WEAPON_DROPPING_QUICK)
 

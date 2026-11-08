@@ -173,7 +173,7 @@ void SV_PreGameUserVoice(client_t *cl, msg_t *msg)
             if (&voicePacket == (VoicePacket_t *)-1)
                 MyAssertHandler(".\\server_mp\\sv_voice_mp.cpp", 241, 0, "%s", "voicePacket.data");
             MSG_ReadData(msg, voicePacket.data, voicePacket.dataSize);
-            for (otherPlayer = 0; otherPlayer < 64; ++otherPlayer)
+            for (otherPlayer = 0; otherPlayer < SV_MAX_CLIENTS; ++otherPlayer)
             {
                 if (otherPlayer != talker
                     && svs.clients[otherPlayer].header.state >= CS_CONNECTED
