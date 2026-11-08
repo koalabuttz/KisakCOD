@@ -633,7 +633,7 @@ int SV_GetArchivedClientInfo(int clientNum, int *pArchiveTime, playerState_s *ps
         {
             if (i >= cachedFrame->num_clients)
                 goto LABEL_14;
-            cachedClient = &svs.cachedSnapshotClients[(i + cachedFrame->first_client) % 0x1000];
+            cachedClient = &svs.cachedSnapshotClients[(i + cachedFrame->first_client) % SV_NUM_CACHED_SNAPSHOT_CLIENTS];
             if (cachedClient->cs.clientIndex == clientNum)
                 break;
         }
@@ -744,7 +744,7 @@ cachedSnapshot_t *SV_GetCachedSnapshotInternal(int archivedFrame)
     cachedSnapshot_t *oldCachedFrame; // [esp+58h] [ebp-8h]
     cachedClient_s *cachedClient; // [esp+5Ch] [ebp-4h]
 
-    if (svs.archivedSnapshotFrames[archivedFrame % 1200].start < svs.nextArchivedSnapshotBuffer - 0x2000000)
+    if (svs.archivedSnapshotFrames[archivedFrame % 1200].start < svs.nextArchivedSnapshotBuffer - SV_ARCHIVED_SNAPSHOT_BUFFER_SIZE)
         return 0;
     firstCachedSnapshotFrame = svs.nextCachedSnapshotFrames - 512;
     if (svs.nextCachedSnapshotFrames - 512 < 0)
@@ -755,27 +755,27 @@ cachedSnapshot_t *SV_GetCachedSnapshotInternal(int archivedFrame)
         if (cachedFrame->archivedFrame == archivedFrame)
         {
             if (cachedFrame->first_entity >= svs.nextCachedSnapshotEntities - 0x4000
-                && cachedFrame->first_client >= svs.nextCachedSnapshotClients - 4096)
+                && cachedFrame->first_client >= svs.nextCachedSnapshotClients - SV_NUM_CACHED_SNAPSHOT_CLIENTS)
             {
                 return cachedFrame;
             }
             break;
         }
     }
-    v2 = svs.archivedSnapshotFrames[archivedFrame % 1200].start % 0x2000000;
-    partSize = 0x2000000 - v2;
-    if (*(_DWORD *)&svs.archivedSnapshotBuffer[8 * (archivedFrame % 1200) - 9596] > 0x2000000 - v2)
+    v2 = svs.archivedSnapshotFrames[archivedFrame % 1200].start % SV_ARCHIVED_SNAPSHOT_BUFFER_SIZE;
+    partSize = SV_ARCHIVED_SNAPSHOT_BUFFER_SIZE - v2;
+    if (svs.archivedSnapshotFrames[archivedFrame % 1200].size > SV_ARCHIVED_SNAPSHOT_BUFFER_SIZE - v2)
         MSG_InitReadOnlySplit(
             &msg,
             &svs.archivedSnapshotBuffer[v2],
             partSize,
             svs.archivedSnapshotBuffer,
-            *(_DWORD *)&svs.archivedSnapshotBuffer[8 * (archivedFrame % 1200) - 9596] - partSize);
+            svs.archivedSnapshotFrames[archivedFrame % 1200].size - partSize);
     else
         MSG_InitReadOnly(
             &msg,
             &svs.archivedSnapshotBuffer[v2],
-            *(_DWORD *)&svs.archivedSnapshotBuffer[8 * (archivedFrame % 1200) - 9596]);
+            svs.archivedSnapshotFrames[archivedFrame % 1200].size);
     MSG_BeginReading(&msg);
     if (MSG_ReadBit(&msg))
     {
@@ -794,7 +794,7 @@ cachedSnapshot_t *SV_GetCachedSnapshotInternal(int archivedFrame)
             newnumb = MSG_ReadEntityIndex(&msg, 6u);
             if (msg.overflowed)
                 Com_Error(ERR_DROP, "SV_GetCachedSnapshot: end of message");
-            cachedClient = &svs.cachedSnapshotClients[svs.nextCachedSnapshotClients % 4096];
+            cachedClient = &svs.cachedSnapshotClients[svs.nextCachedSnapshotClients % SV_NUM_CACHED_SNAPSHOT_CLIENTS];
             MSG_ReadDeltaClient(&msg, cachedFrame->time, 0, &cachedClient->cs, newnumb);
             v7 = MSG_ReadBit(&msg);
             cachedClient->playerStateExists = v7;
@@ -832,7 +832,7 @@ cachedSnapshot_t *SV_GetCachedSnapshotInternal(int archivedFrame)
         oldArchivedFrame = MSG_ReadLong(&msg);
         if (oldArchivedFrame < svs.nextArchivedSnapshotFrames - 1200)
             return 0;
-        if (svs.archivedSnapshotFrames[oldArchivedFrame % 1200].start < svs.nextArchivedSnapshotBuffer - 0x2000000)
+        if (svs.archivedSnapshotFrames[oldArchivedFrame % 1200].start < svs.nextArchivedSnapshotBuffer - SV_ARCHIVED_SNAPSHOT_BUFFER_SIZE)
             return 0;
         oldCachedFrame = SV_GetCachedSnapshotInternal(oldArchivedFrame);
         if (!oldCachedFrame)
@@ -852,7 +852,7 @@ cachedSnapshot_t *SV_GetCachedSnapshotInternal(int archivedFrame)
         oldCachedClient = 0;
         if (oldCachedFrame->num_clients > 0)
         {
-            oldCachedClient = &svs.cachedSnapshotClients[oldCachedFrame->first_client % 4096];
+            oldCachedClient = &svs.cachedSnapshotClients[oldCachedFrame->first_client % SV_NUM_CACHED_SNAPSHOT_CLIENTS];
             oldnum = oldCachedClient->cs.clientIndex;
         }
         else
@@ -871,7 +871,7 @@ cachedSnapshot_t *SV_GetCachedSnapshotInternal(int archivedFrame)
             {
                 if (++oldindex < oldCachedFrame->num_clients)
                 {
-                    oldCachedClient = &svs.cachedSnapshotClients[(oldindex + oldCachedFrame->first_client) % 4096];
+                    oldCachedClient = &svs.cachedSnapshotClients[(oldindex + oldCachedFrame->first_client) % SV_NUM_CACHED_SNAPSHOT_CLIENTS];
                     oldnum = oldCachedClient->cs.clientIndex;
                 }
                 else
@@ -881,7 +881,7 @@ cachedSnapshot_t *SV_GetCachedSnapshotInternal(int archivedFrame)
             }
             if (oldnum == newnum)
             {
-                cachedClient = &svs.cachedSnapshotClients[svs.nextCachedSnapshotClients % 4096];
+                cachedClient = &svs.cachedSnapshotClients[svs.nextCachedSnapshotClients % SV_NUM_CACHED_SNAPSHOT_CLIENTS];
                 MSG_ReadDeltaClient(&msg, cachedFrame->time, &oldCachedClient->cs, &cachedClient->cs, newnum);
                 v4 = MSG_ReadBit(&msg);
                 cachedClient->playerStateExists = v4;
@@ -899,7 +899,7 @@ cachedSnapshot_t *SV_GetCachedSnapshotInternal(int archivedFrame)
                 ++cachedFrame->num_clients;
                 if (++oldindex < oldCachedFrame->num_clients)
                 {
-                    oldCachedClient = &svs.cachedSnapshotClients[(oldindex + oldCachedFrame->first_client) % 4096];
+                    oldCachedClient = &svs.cachedSnapshotClients[(oldindex + oldCachedFrame->first_client) % SV_NUM_CACHED_SNAPSHOT_CLIENTS];
                     oldnum = oldCachedClient->cs.clientIndex;
                 }
                 else
@@ -911,7 +911,7 @@ cachedSnapshot_t *SV_GetCachedSnapshotInternal(int archivedFrame)
             {
                 if (oldnum <= newnum)
                     MyAssertHandler(".\\server_mp\\sv_snapshot_mp.cpp", 1264, 0, "%s", "oldnum > newnum");
-                cachedClient = &svs.cachedSnapshotClients[svs.nextCachedSnapshotClients % 4096];
+                cachedClient = &svs.cachedSnapshotClients[svs.nextCachedSnapshotClients % SV_NUM_CACHED_SNAPSHOT_CLIENTS];
                 MSG_ReadDeltaClient(&msg, cachedFrame->time, 0, &cachedClient->cs, newnum);
                 v5 = MSG_ReadBit(&msg);
                 cachedClient->playerStateExists = v5;
@@ -953,7 +953,7 @@ cachedSnapshot_t *SV_GetCachedSnapshotInternal(int archivedFrame)
             "%s\n\t(cachedFrame->num_entities) = %i",
             "(cachedFrame->num_entities < (64 * 64 * 4))",
             cachedFrame->num_entities);
-    if (cachedFrame->num_clients >= 4096)
+    if (cachedFrame->num_clients >= SV_NUM_CACHED_SNAPSHOT_CLIENTS)
         MyAssertHandler(
             ".\\server_mp\\sv_snapshot_mp.cpp",
             1378,
@@ -968,7 +968,7 @@ cachedSnapshot_t *SV_GetCachedSnapshotInternal(int archivedFrame)
             1,
             "%s",
             "cachedFrame->first_entity >= svs.nextCachedSnapshotEntities - NUM_CACHED_SNAPSHOT_ENTITIES");
-    if (cachedFrame->first_client < svs.nextCachedSnapshotClients - 4096)
+    if (cachedFrame->first_client < svs.nextCachedSnapshotClients - SV_NUM_CACHED_SNAPSHOT_CLIENTS)
         MyAssertHandler(
             ".\\server_mp\\sv_snapshot_mp.cpp",
             1380,
@@ -1081,7 +1081,7 @@ void SV_BuildClientSnapshot(client_t *client)
                     }
                     for (i = 0; i < CachedSnapshot->num_clients; ++i)
                     {
-                        v20 = &svs.cachedSnapshotClients[(i + CachedSnapshot->first_client) % 4096];
+                        v20 = &svs.cachedSnapshotClients[(i + CachedSnapshot->first_client) % SV_NUM_CACHED_SNAPSHOT_CLIENTS];
                         v9 = &svs.snapshotClients[svs.nextSnapshotClients % svs.numSnapshotClients];
                         memcpy(v9, &v20->cs, sizeof(clientState_s));
                         if (v12[v9->clientIndex])
@@ -2040,12 +2040,12 @@ void SV_SendClientMessages()
             frame = &svs.archivedSnapshotFrames[svs.nextArchivedSnapshotFrames % 1200];
             frame->start = svs.nextArchivedSnapshotBuffer;
             frame->size = g_archiveMsg.cursize;
-            startIndex = svs.nextArchivedSnapshotBuffer % 0x2000000;
+            startIndex = svs.nextArchivedSnapshotBuffer % SV_ARCHIVED_SNAPSHOT_BUFFER_SIZE;
             svs.nextArchivedSnapshotBuffer += g_archiveMsg.cursize;
             if (svs.nextArchivedSnapshotBuffer >= 2147483646)
                 Com_Error(ERR_FATAL, "svs.nextArchivedSnapshotBuffer wrapped");
-            partSize = 0x2000000 - startIndex;
-            if (g_archiveMsg.cursize > 0x2000000 - startIndex)
+            partSize = SV_ARCHIVED_SNAPSHOT_BUFFER_SIZE - startIndex;
+            if (g_archiveMsg.cursize > SV_ARCHIVED_SNAPSHOT_BUFFER_SIZE - startIndex)
             {
                 memcpy(&svs.archivedSnapshotBuffer[startIndex], g_archiveMsg.data, partSize);
                 memcpy(svs.archivedSnapshotBuffer, &g_archiveMsg.data[partSize], g_archiveMsg.cursize - partSize);

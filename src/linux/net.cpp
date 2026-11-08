@@ -28,6 +28,8 @@
 #if defined(__vita__)
 // No getifaddrs on the Vita: the network library reports the one Wi-Fi address.
 #include <psp2/net/netctl.h>
+#include <psp2/kernel/processmgr.h> // sceKernelGetProcessTimeWide
+#include <vita/vita_platform.h>     // Vita_AddIdleTime
 #else
 #include <ifaddrs.h>
 #include <net/if.h>
@@ -1342,6 +1344,16 @@ void NET_Sleep(int msec)
     struct timespec deadline;
     fd_set readfds;
     int err;
+
+#if defined(__vita__)
+    // The time spent waiting here is the server's idle time in the load
+    // figures that console.log reports (src/vita/vita_stats.cpp).
+    struct IdleTimer
+    {
+        const uint64_t start = sceKernelGetProcessTimeWide();
+        ~IdleTimer() { Vita_AddIdleTime(sceKernelGetProcessTimeWide() - start); }
+    } idleTimer;
+#endif
 
     if (ip_socket == NET_INVALID_SOCKET)
     {

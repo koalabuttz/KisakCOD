@@ -22,6 +22,7 @@
 #include <sys/sysctl.h> // sysctlbyname("hw.memsize")
 #elif defined(__vita__)
 #include <psp2/kernel/sysmem.h> // sceKernelGetFreeMemorySize
+#include <vita/vita_platform.h>   // Vita_LogMemoryAtError, Vita_Exit
 #else
 #include <sys/sysinfo.h>
 #endif
@@ -341,5 +342,10 @@ void Sys_OutOfMemErrorInternal(const char *filename, int line)
 
     // Nothing sane can continue once the arena is exhausted.
     fflush(stdout);
+#if defined(__vita__)
+    // Which pool ran out: the zone arena, the heap or the system.
+    Vita_LogMemoryAtError();
+    Vita_Exit(1);
+#endif
     _exit(-1);
 }

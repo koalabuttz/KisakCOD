@@ -82,7 +82,7 @@ int com_time;
 
 void TRACK_sv_main()
 {
-    track_static_alloc_internal(&svs, 0xB227480, "svs", 9);
+    track_static_alloc_internal(&svs, sizeof(svs), "svs", 9);
     track_static_alloc_internal(&sv, 392288, "sv", 9);
 }
 

@@ -389,14 +389,14 @@ const dvar_s *G_RegisterDvars()
     g_gametype = Dvar_RegisterString("g_gametype", "war", DVAR_SERVERINFO | DVAR_LATCH, "The current campaign");
     min.integer.max = Dvar_RegisterInt(
         "ui_maxclients",
-        32,
-        (DvarLimits)0x4000000001LL,
+        SV_DEFAULT_MAX_CLIENTS,
+        DvarLimits(1, SV_MAX_CLIENTS),
         DVAR_ARCHIVE | DVAR_SERVERINFO | DVAR_LATCH,
         "The maximum number of clients that can connect to a server")->current.integer;
     min.enumeration.stringCount = 1;
     g_maxclients = Dvar_RegisterInt(
         "sv_maxclients",
-        32,
+        SV_DEFAULT_MAX_CLIENTS,
         min,
         DVAR_ARCHIVE | DVAR_SERVERINFO | DVAR_LATCH,
         "The maximum number of clients that can connect to a server");
