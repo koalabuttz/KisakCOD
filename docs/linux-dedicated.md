@@ -563,6 +563,8 @@ practical consequences:
   to the GUID path. The default native Linux build has no Steam verification, so
   there only the GUID path admits retail clients; a `KISAK_LINUX_STEAM` build
   verifies Steam tickets ([guide](linux-steam.md)).
+- **KisakCOD clients without Steam** send the same two-field request, with a
+  GUID derived from the player's key code ([key codes](key-codes.md)).
 - **Independent of `sv_allowProtocol6`.** One controls authentication, the other
   the version number a client may advertise. Retail 1.7 hosting needs both;
   either can be set on its own.

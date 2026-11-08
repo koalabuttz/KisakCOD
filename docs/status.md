@@ -25,6 +25,7 @@ without a GPU or game data, against stand-in D3D9 and OpenAL libraries.
 | Dedicated server, macOS (arm64 and x86_64) | `-DKISAK_PLATFORM=macos` | Builds with Apple Clang on hosted macOS runners (Apple silicon and Intel) and boots without game data to the first missing fastfile. Not yet run with game data or on a real Mac. [Guide](macos.md) |
 | Movies | `-DKISAK_LINUX_CINEMATICS=ON` | Bink movies play through an FFmpeg-backed shim on i386 and x86_64 (laptop). Off by default. [Guide](linux-cinematics.md) |
 | Steam authentication | `-DKISAK_LINUX_STEAM=ON` | Added by PR 85. Logs in through the running Steam client's `steamclient.so`; a probe got a ticket validated on i386 and x86_64, and an i386 client joined, reconnected to and was refused by (with Steam off) an i386 dedicated server; the same passed with x86_64 client and server, and across i386 and x86_64 in both directions (laptop, one Steam account). A dedicated server can instead log on as an anonymous Steam game server (`KISAK_STEAM_SERVER_LOGIN=anonymous`); a Windows client on David's PC joined such a laptop server and was refused with the server's Steam off. Off by default. [Guide](linux-steam.md) |
+| Key codes (no Steam) | default | A client without Steam (or with `cl_keyCodeOnly 1`) joins servers with `sv_allowUnverifiedGuids 1` using a GUID derived from `codkey.txt` or, on Windows, the retail registry key. Unverified by design. Laptop run (x86_64 client and dedi, made-up key): joined, spawned and reconnected with the GUID; refused without the server opt-in, without a key file, with a group-readable file and with a mistyped key. [Guide](key-codes.md) |
 | Singleplayer `KisakCOD-sp`, i386 | `-DKISAK_BUILD_LINUX_SP_GAME=ON` | killhouse and cargoship load, leave the pregame by themselves and play about a minute each, clean quit (laptop). All 21 levels load, run 45 s and quit cleanly; a 4-level mission chain and devsave/loadgame pass (laptop sweep run 1, [levels](linux-sp-levels.md)). [Guide](linux-sp-game.md) |
 | Windows x64 | MSVC `KISAK_WIN64` | sp, mp and dedi build and link (CI job "MSVC x64 build"); opt-in FFmpeg movies. On the Windows PC, mp_crash loads to class select and the dedicated server hosts bots. Singleplayer still crashes during level load (fixes in PR 95). |
 | Windows ARM64 | MSVC `KISAK_WIN_ARM64` | sp, mp and dedi build and start up to the missing-game-data error on hosted Windows on Arm. Not run with game data. [arm64 track](linux-arm64.md) |
@@ -63,14 +64,12 @@ builds use `-ffp-contract=off` (no fused multiply-add).
 
 ## What does not work yet
 
-- **Joining a remote server in the default build.** It has no Steam ticket
-  provider, so the client refuses to send an unauthenticated challenge, and the
-  dedicated server rejects ordinary client tickets unless an explicit opt-in is
-  set ([details](linux-dedicated.md#local-connection-testing-without-steam-authentication)).
-  Build with `-DKISAK_LINUX_STEAM=ON` to authenticate through the Steam client
-  running on the machine ([guide](linux-steam.md)). A Windows client has
-  joined a Linux server that way. Not yet tried: a Windows server, two Steam
-  accounts.
+- **Joining a Steam-only server from the default build.** It has no Steam
+  ticket provider; it joins only servers that accept key code GUIDs
+  (`sv_allowUnverifiedGuids 1`, [key codes](key-codes.md)). Build with `-DKISAK_LINUX_STEAM=ON` to authenticate through the
+  Steam client running on the machine ([guide](linux-steam.md)). A Windows
+  client has joined a Linux server that way. Not yet tried: a Windows server,
+  two Steam accounts.
 - **Singleplayer played by hand past two levels.** All 21 levels load and run
   unattended, and mission changes and save loading work from the console
   ([linux-sp-levels.md](linux-sp-levels.md)). Only killhouse and cargoship

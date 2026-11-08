@@ -770,6 +770,7 @@ extern clientStatic_t cls;
 extern uint32_t frame_msec;
 
 extern char cl_cdkey[34];
+extern const dvar_t *cl_keyCodeOnly;
 
 extern BOOL updateScreenCalled;
 

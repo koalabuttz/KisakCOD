@@ -36,6 +36,8 @@ set(CGAME_MP
 
 set(CLIENT_MP
     "${SRC_DIR}/client_mp/cl_auth.cpp"
+    "${SRC_DIR}/client_mp/cl_keycode.cpp"
+    "${SRC_DIR}/client_mp/cl_keycode.h"
     "${SRC_DIR}/client_mp/cl_connection_mp.cpp"
     "${SRC_DIR}/client_mp/cl_connection_receive_mp.cpp"
     "${SRC_DIR}/client_mp/client_mp.h"

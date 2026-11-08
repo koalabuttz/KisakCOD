@@ -56,6 +56,7 @@ OPTION = "KISAK_BUILD_LINUX_CLIENT_CORE"
 # The milestone compiles exactly these client translation units.
 EXPECTED_TUS = (
     "src/client_mp/cl_auth.cpp",
+    "src/client_mp/cl_keycode.cpp",
     "src/client_mp/cl_connection_mp.cpp",
     "src/client_mp/cl_connection_receive_mp.cpp",
     "src/client_mp/cl_main_mp.cpp",
@@ -85,8 +86,8 @@ PACKET_RUNTIME_TUS = (
 )
 
 AUTH_RUNTIME_TUS = (
-    "src/client_mp/cl_auth.cpp", "src/client_mp/cl_connection_mp.cpp",
-    "src/universal/base64.cpp", "src/universal/q_shared.cpp",
+    "src/client_mp/cl_auth.cpp", "src/client_mp/cl_keycode.cpp", "src/client_mp/cl_connection_mp.cpp",
+    "src/universal/base64.cpp", "src/universal/sha256.cpp", "src/universal/q_shared.cpp",
     "src/qcommon/msg_mp.cpp", "src/qcommon/huffman.cpp", "src/universal/com_shared.cpp",
 )
 
@@ -98,8 +99,9 @@ RECEIVE_RUNTIME_TUS = (
 PLATFORM_RUNTIME_TUS = ("src/client_mp/cl_main_mp.cpp", "src/universal/q_shared.cpp")
 # The production connect command with the real address parsing it relies on.
 CONNECT_RUNTIME_TUS = (
-    "src/client_mp/cl_main_pc_mp.cpp", "src/qcommon/net_chan_mp.cpp",
-    "src/linux/net.cpp", "src/universal/q_shared.cpp",
+    "src/client_mp/cl_main_pc_mp.cpp", "src/client_mp/cl_auth.cpp", "src/client_mp/cl_keycode.cpp",
+    "src/qcommon/net_chan_mp.cpp", "src/linux/net.cpp", "src/universal/q_shared.cpp",
+    "src/universal/base64.cpp", "src/universal/sha256.cpp",
 )
 
 HEADLESS_RUNTIME_TUS = (
@@ -109,7 +111,8 @@ HEADLESS_RUNTIME_TUS = (
     "src/linux/net.cpp", "src/linux/sys_threads.cpp", "src/linux/sys_critical.cpp",
     "src/linux/sys_posix.cpp", "src/qcommon/net_chan_mp.cpp", "src/universal/dvar.cpp",
     "src/universal/q_shared.cpp", "src/universal/com_shared.cpp", "src/universal/com_math.cpp",
-    "src/client_mp/cl_auth.cpp", "src/universal/base64.cpp",
+    "src/client_mp/cl_auth.cpp", "src/client_mp/cl_keycode.cpp",
+    "src/universal/base64.cpp", "src/universal/sha256.cpp",
 )
 
 failures = []

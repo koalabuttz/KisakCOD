@@ -155,7 +155,9 @@ set(KISAK_CLIENT_RUNTIME_SOURCES
     "${SRC_DIR}/universal/com_shared.cpp"
     "${SRC_DIR}/universal/com_math.cpp"
     "${SRC_DIR}/client_mp/cl_auth.cpp"
+    "${SRC_DIR}/client_mp/cl_keycode.cpp"
     "${SRC_DIR}/universal/base64.cpp"
+    "${SRC_DIR}/universal/sha256.cpp"
 )
 
 if(KISAK_BUILD_LINUX_CLIENT_CORE)
@@ -170,6 +172,7 @@ if(KISAK_BUILD_LINUX_CLIENT_CORE)
         "${SRC_DIR}/client_mp/cl_cgame_mp.cpp"
         "${SRC_DIR}/client/cl_ui_draw.cpp"
         "${SRC_DIR}/client_mp/cl_auth.cpp"
+        "${SRC_DIR}/client_mp/cl_keycode.cpp"
         "${SRC_DIR}/client_mp/cl_connection_mp.cpp"
         "${SRC_DIR}/client_mp/cl_connection_receive_mp.cpp"
         "${SRC_DIR}/client_mp/cl_main_mp.cpp"
@@ -244,7 +247,9 @@ if(KISAK_BUILD_LINUX_CLIENT_CORE)
         "${SRC_DIR}/qcommon/msg_mp.cpp"
         "${SRC_DIR}/universal/q_shared.cpp"
         "${SRC_DIR}/client_mp/cl_auth.cpp"
+        "${SRC_DIR}/client_mp/cl_keycode.cpp"
         "${SRC_DIR}/universal/base64.cpp"
+        "${SRC_DIR}/universal/sha256.cpp"
     )
     add_executable(KisakCOD-client-receive-test
         "${TESTS_DIR}/linux_client_core/client_receive_test.cpp"
@@ -266,9 +271,13 @@ if(KISAK_BUILD_LINUX_CLIENT_CORE)
     add_executable(KisakCOD-client-connect-test
         "${TESTS_DIR}/linux_client_core/client_connect_test.cpp"
         "${SRC_DIR}/client_mp/cl_main_pc_mp.cpp"
+        "${SRC_DIR}/client_mp/cl_auth.cpp"
+        "${SRC_DIR}/client_mp/cl_keycode.cpp"
         "${SRC_DIR}/qcommon/net_chan_mp.cpp"
         "${SRC_DIR}/linux/net.cpp"
         "${SRC_DIR}/universal/q_shared.cpp"
+        "${SRC_DIR}/universal/base64.cpp"
+        "${SRC_DIR}/universal/sha256.cpp"
     )
     foreach(client_test KisakCOD-client-connect-test KisakCOD-client-platform-test KisakCOD-client-receive-test KisakCOD-client-auth-test KisakCOD-client-headless KisakCOD-client-netchan-test KisakCOD-client-state-test KisakCOD-client-packet-test)
         target_compile_features(${client_test} PRIVATE cxx_std_20)
