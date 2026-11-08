@@ -112,6 +112,20 @@ VKAPI_ATTR VkBool32 VKAPI_CALL OnDebugMessage(
         Log(core, "loader: %s", text);
         return VK_FALSE;
     }
+    // The Legacy shaders sample every 2D texture through a branch on a
+    // uniform (SamplerStateBlock::useDepthCompare): a depth-compare sample for
+    // depth textures, a plain one otherwise. The layer checks the compare
+    // instruction's format rule statically, against colour textures the
+    // branch never compares, so it reports every textured draw. Counted
+    // apart, not as errors.
+    const char *id = data && data->pMessageIdName ? data->pMessageIdName : "";
+    const size_t idLength = std::strlen(id);
+    if (idLength > 11 && std::strcmp(id + idLength - 11, "-None-06479") == 0 && std::strncmp(id, "VUID-vkCmdDraw", 14) == 0)
+    {
+        if (++core.stats.validationIgnored == 1)
+            Log(core, "validation: %s (depth-compare format rule, checked statically) is counted apart from errors", id);
+        return VK_FALSE;
+    }
     const char *kind = "info";
     uint32_t seen = 0;
     if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
@@ -387,6 +401,15 @@ Candidate Evaluate(Core &core, VkPhysicalDevice physical)
         std::snprintf(candidate.why, sizeof(candidate.why), "no scalar block layout");
         return candidate;
     }
+    // Its SPIR-V also uses the Vulkan memory model, buffer device addresses and
+    // demote-to-helper (all required by Vulkan 1.3, checked for a clear message).
+    if (!features12.vulkanMemoryModel || !features12.bufferDeviceAddress
+        || !features13.shaderDemoteToHelperInvocation)
+    {
+        std::snprintf(candidate.why, sizeof(candidate.why),
+                      "no Vulkan memory model, buffer device address or demote to helper invocation");
+        return candidate;
+    }
 
     vk.vkGetPhysicalDeviceQueueFamilyProperties(physical, &count, nullptr);
     std::vector<VkQueueFamilyProperties> families(count);
@@ -554,31 +577,45 @@ bool CreateDevice(Core &core)
     queueInfo.queueCount = 1;
     queueInfo.pQueuePriorities = &priority;
 
-    // Optional Vulkan 1.0 features D3D9 content uses where the device has them:
-    // anisotropic filtering, wireframe fill, and independent blend for MRT.
+    // Optional features D3D9 content uses where the device has them:
+    // anisotropic filtering, wireframe fill, independent blend for MRT, clip
+    // distances (user clip planes) and 16-bit floats in translated shaders.
     VkPhysicalDeviceFeatures supported{};
+    VkPhysicalDeviceVulkan12Features supported12{};
     {
+        supported12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
         VkPhysicalDeviceFeatures2 query{};
         query.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        query.pNext = &supported12;
         vk.vkGetPhysicalDeviceFeatures2(core.physical, &query);
         supported = query.features;
     }
+    core.optional.samplerAnisotropy = supported.samplerAnisotropy;
+    core.optional.fillModeNonSolid = supported.fillModeNonSolid;
+    core.optional.independentBlend = supported.independentBlend;
+    core.optional.shaderClipDistance = supported.shaderClipDistance;
+    core.optional.shaderFloat16 = supported12.shaderFloat16;
 
     VkPhysicalDeviceVulkan13Features features13{};
     features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
     features13.dynamicRendering = VK_TRUE;
     features13.synchronization2 = VK_TRUE;
+    features13.shaderDemoteToHelperInvocation = VK_TRUE;
     VkPhysicalDeviceVulkan12Features features12{};
     features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
     features12.pNext = &features13;
     features12.timelineSemaphore = VK_TRUE;
     features12.scalarBlockLayout = VK_TRUE;
+    features12.vulkanMemoryModel = VK_TRUE;
+    features12.bufferDeviceAddress = VK_TRUE;
+    features12.shaderFloat16 = supported12.shaderFloat16;
     VkPhysicalDeviceFeatures2 features{};
     features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     features.pNext = &features12;
     features.features.samplerAnisotropy = supported.samplerAnisotropy;
     features.features.fillModeNonSolid = supported.fillModeNonSolid;
     features.features.independentBlend = supported.independentBlend;
+    features.features.shaderClipDistance = supported.shaderClipDistance;
 
     VkDeviceCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -941,6 +978,8 @@ VkPhysicalDevice PhysicalDeviceHandle(const Core *core) { return core->physical;
 const VkPhysicalDeviceLimits &Limits(const Core *core) { return core->properties.limits; }
 VkFormat DepthStencilFormat(const Core *core) { return core->depthStencilFormat; }
 
+const OptionalFeatures &Features(const Core *core) { return core->optional; }
+
 bool FormatSupports(const Core *core, VkFormat format, VkFormatFeatureFlags features)
 {
     VkFormatProperties props{};
@@ -971,6 +1010,8 @@ const char *FormatName(VkFormat format)
     case VK_FORMAT_A2B10G10R10_UNORM_PACK32: return "A2B10G10R10_UNORM";
     case VK_FORMAT_A2R10G10B10_UNORM_PACK32: return "A2R10G10B10_UNORM";
     case VK_FORMAT_R16G16B16A16_SFLOAT: return "R16G16B16A16_SFLOAT";
+    case VK_FORMAT_D24_UNORM_S8_UINT: return "D24_UNORM_S8_UINT";
+    case VK_FORMAT_D32_SFLOAT_S8_UINT: return "D32_SFLOAT_S8_UINT";
     default: return "OTHER";
     }
 }

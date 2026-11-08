@@ -117,7 +117,12 @@ These came before the playable client and still build and run in CI:
   small textured scene through the core's memory, upload, pass and pipeline
   paths and check its pixels. It is the base of the Vulkan back end; no game
   rendering goes through it yet. Hosted CI runs it on lavapipe (Linux) and
-  MoltenVK (macOS); the clear probe also ran on the laptop and the PC GPU.
+  MoltenVK (macOS); the clear and draw probes also ran on the laptop GPU, the
+  clear probe on the PC. On top of it, the
+  [Legacy shader translator](vulkan-legacy-shaders.md) and the
+  [Legacy adapter](vulkan-legacy-adapter.md) (`-DKISAK_BUILD_VULKAN_LEGACY=ON`),
+  the part of D3D9 the renderer uses, with a 17-scene pixel check that hosted
+  CI runs on lavapipe.
 
 ## Open pull requests
 
@@ -127,7 +132,7 @@ As of 2026-11-08.
 | --- | --- | --- |
 | 120 | Record the Vulkan probe's first GPU runs (docs) | Review. |
 | 123 | Keep the Mac client's files in Application Support | Green CI. |
-| 124 | Vulkan core memory, uploads, passes, pipeline cache and the probe's `--draw` test (first piece of the Vulkan Legacy back end) | Green CI and the laptop draw run (`renderer/vulkan-probe-laptop-run-2-steps.md`). |
+| 130 | Vulkan Legacy adapter (D3D9 on the Vulkan core) and its 17-scene pixel check | Green CI (laptop run 1 passed, x86_64 and i386). |
 
 ## Laptop and PC runs still to do
 
@@ -135,7 +140,7 @@ As of 2026-11-08.
   `sound/laptop-sound-run-1.md`, with `+set snd_alDebug 1`.
 - Singleplayer hand play on the levels the sweep passed (step 6 in
   [linux-sp-levels.md](linux-sp-levels.md)); sweep run 1 is done.
-- Vulkan probe `--draw` on the laptop, x86_64 and i386 (PR 124).
+- Vulkan Legacy adapter check on the PC (the laptop passed, PR 130).
 - Vulkan probe with the Khronos validation layer (synchronisation checks) on a
   real GPU; the laptop and PC runs so far had no layer installed.
 
@@ -148,9 +153,9 @@ In rough order:
    then x86_64 singleplayer.
 3. **Renderer**: the shader converter (dxbc-spirv) and the D3D9 interface
    (M1a) are done. Next is the Vulkan back end with Legacy visuals behind that
-   interface: the core's drawing pieces (PR 124), the shader translator, the
-   Legacy adapter, then mp_crash drawn through Vulkan and compared with DXVK on
-   the laptop and the PC. The Modern path comes after (plan in the project
+   interface: the core's drawing pieces (PR 124) and the shader translator
+   (PR 126) are merged and the Legacy adapter is in review; next is mp_crash
+   drawn through Vulkan and compared with DXVK on the laptop and the PC. The Modern path comes after (plan in the project
    files, `renderer/modern-renderer-plan.md`). The target is Modern at 60 fps
    on the laptop's Intel U300.
 4. **Performance**: laptop A/B runs, a function-level profile, then the

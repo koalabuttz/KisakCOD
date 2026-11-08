@@ -1,0 +1,266 @@
+// Vulkan Legacy adapter: the device, messages and the back buffer. See vk_legacy.h.
+
+#include "vk_legacy_internal.h"
+
+#include <cstdio>
+
+namespace gfx_vk::legacy
+{
+namespace
+{
+void VLog(Device &device, const char *prefix, const char *format, va_list args)
+{
+    if (!device.desc.log)
+        return;
+    char line[1024];
+    const int used = std::snprintf(line, sizeof(line), "%s", prefix);
+    std::vsnprintf(line + used, sizeof(line) - used, format, args);
+    device.desc.log(device.desc.logUser, line);
+}
+
+bool CreateBackBuffer(Device &device, uint32_t width, uint32_t height)
+{
+    TextureDesc desc;
+    desc.width = width;
+    desc.height = height;
+    desc.levels = 1;
+    desc.usage = d3d::USAGE_RENDERTARGET;
+    desc.format = d3d::FMT_A8R8G8B8;
+    desc.pool = d3d::POOL_DEFAULT;
+    desc.name = "back buffer";
+    device.backBuffer = CreateTextureInternal(device, desc, 0);
+    if (!device.backBuffer)
+        return Fail(device, "cannot create the %ux%u back buffer", width, height);
+    device.backBufferSurface.texture = device.backBuffer;
+    device.backBufferSurface.face = 0;
+    device.backBufferSurface.level = 0;
+    return true;
+}
+
+// 1x1 textures of each kind, cleared to zero, for samplers with nothing bound.
+bool CreateNullTextures(Device &device)
+{
+    static const char *const names[3] = {"null 2D texture", "null cube texture", "null volume texture"};
+    for (uint32_t kind = 0; kind < 3; ++kind)
+    {
+        TextureDesc desc;
+        desc.kind = static_cast<TextureKind>(kind);
+        desc.levels = 1;
+        desc.format = d3d::FMT_A8R8G8B8;
+        desc.pool = d3d::POOL_MANAGED;
+        desc.name = names[kind];
+        Texture *texture = CreateTextureInternal(device, desc, 0);
+        if (!texture)
+            return Fail(device, "cannot create the %s", names[kind]);
+        device.nullTexture[kind] = texture;
+        for (uint32_t face = 0; face < texture->faces; ++face)
+        {
+            ImageRegion region;
+            region.layer = face;
+            region.width = region.height = region.depth = 1;
+            void *data = StageImageWrite(device.core, texture->image, region, nullptr, nullptr);
+            if (!data)
+                return Fail(device, "cannot clear the %s: %s", names[kind], LastError(device.core));
+            std::memset(data, 0, 4);
+        }
+    }
+    return true;
+}
+
+void DefaultStates(Device &device)
+{
+    // d3d9's defaults for the states the adapter reads.
+    uint32_t *rs = device.renderStates;
+    rs[d3d::RS_ZENABLE] = 1;
+    rs[d3d::RS_FILLMODE] = d3d::FILL_SOLID;
+    rs[d3d::RS_ZWRITEENABLE] = 1;
+    rs[d3d::RS_SRCBLEND] = d3d::BLEND_ONE;
+    rs[d3d::RS_DESTBLEND] = d3d::BLEND_ZERO;
+    rs[d3d::RS_CULLMODE] = d3d::CULL_CCW;
+    rs[d3d::RS_ZFUNC] = d3d::CMP_LESSEQUAL;
+    rs[d3d::RS_ALPHAFUNC] = d3d::CMP_ALWAYS;
+    rs[d3d::RS_STENCILFAIL] = d3d::STENCILOP_KEEP;
+    rs[d3d::RS_STENCILZFAIL] = d3d::STENCILOP_KEEP;
+    rs[d3d::RS_STENCILPASS] = d3d::STENCILOP_KEEP;
+    rs[d3d::RS_STENCILFUNC] = d3d::CMP_ALWAYS;
+    rs[d3d::RS_STENCILMASK] = 0xffffffffu;
+    rs[d3d::RS_STENCILWRITEMASK] = 0xffffffffu;
+    rs[d3d::RS_TEXTUREFACTOR] = 0xffffffffu;
+    rs[d3d::RS_MULTISAMPLEANTIALIAS] = 1;
+    rs[d3d::RS_COLORWRITEENABLE] = 0xf;
+    rs[d3d::RS_BLENDOP] = d3d::BLENDOP_ADD;
+    rs[d3d::RS_CCW_STENCILFAIL] = d3d::STENCILOP_KEEP;
+    rs[d3d::RS_CCW_STENCILZFAIL] = d3d::STENCILOP_KEEP;
+    rs[d3d::RS_CCW_STENCILPASS] = d3d::STENCILOP_KEEP;
+    rs[d3d::RS_CCW_STENCILFUNC] = d3d::CMP_ALWAYS;
+    rs[d3d::RS_COLORWRITEENABLE1] = 0xf;
+    rs[d3d::RS_COLORWRITEENABLE2] = 0xf;
+    rs[d3d::RS_COLORWRITEENABLE3] = 0xf;
+    rs[d3d::RS_BLENDFACTOR] = 0xffffffffu;
+    rs[d3d::RS_SRCBLENDALPHA] = d3d::BLEND_ONE;
+    rs[d3d::RS_DESTBLENDALPHA] = d3d::BLEND_ZERO;
+    rs[d3d::RS_BLENDOPALPHA] = d3d::BLENDOP_ADD;
+    for (uint32_t slot = 0; slot < kSamplerSlots; ++slot)
+    {
+        uint32_t *ss = device.samplerStates[slot];
+        ss[d3d::SAMP_ADDRESSU] = d3d::TADDRESS_WRAP;
+        ss[d3d::SAMP_ADDRESSV] = d3d::TADDRESS_WRAP;
+        ss[d3d::SAMP_ADDRESSW] = d3d::TADDRESS_WRAP;
+        ss[d3d::SAMP_MAGFILTER] = d3d::TEXF_POINT;
+        ss[d3d::SAMP_MINFILTER] = d3d::TEXF_POINT;
+        ss[d3d::SAMP_MIPFILTER] = d3d::TEXF_NONE;
+        ss[d3d::SAMP_MAXANISOTROPY] = 1;
+    }
+}
+} // namespace
+
+bool Fail(Device &device, const char *format, ...)
+{
+    char line[1024];
+    va_list args;
+    va_start(args, format);
+    std::vsnprintf(line, sizeof(line), format, args);
+    va_end(args);
+    if (device.error.empty())
+        device.error = line;
+    if (device.desc.log)
+    {
+        std::string message = std::string("legacy: error: ") + line;
+        device.desc.log(device.desc.logUser, message.c_str());
+    }
+    return false;
+}
+
+void Log(Device &device, const char *format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    VLog(device, "legacy: ", format, args);
+    va_end(args);
+}
+
+void WarnOnce(Device &device, uint32_t bit, const char *format, ...)
+{
+    if (device.warnedOnce & (1u << bit))
+        return;
+    device.warnedOnce |= 1u << bit;
+    va_list args;
+    va_start(args, format);
+    VLog(device, "legacy: warning: ", format, args);
+    va_end(args);
+}
+
+bool Usable(Device &device)
+{
+    if (!device.error.empty())
+        return false;
+    const char *coreError = LastError(device.core);
+    if (coreError && coreError[0])
+        return Fail(device, "core: %s", coreError);
+    return true;
+}
+
+Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
+{
+    std::unique_ptr<Device> device(new Device());
+    device->core = core;
+    device->vk = &Functions(core);
+    device->dev = DeviceHandle(core);
+    device->desc = desc;
+    device->depthFormat = DepthStencilFormat(core);
+    // D3DRS_DEPTHBIAS is in units of the depth range; Vulkan's constant factor
+    // is in units of the format's smallest step.
+    device->depthBiasScale = device->depthFormat == VK_FORMAT_D24_UNORM_S8_UINT ? float(1u << 24) : float(1u << 23);
+    device->uniformAlignment = static_cast<uint32_t>(std::max<VkDeviceSize>(16, Limits(core).minUniformBufferOffsetAlignment));
+    DefaultStates(*device);
+
+    uint32_t width = desc.width ? desc.width : Swapchain(core).width;
+    uint32_t height = desc.height ? desc.height : Swapchain(core).height;
+    if (!width || !height)
+    {
+        width = 640;
+        height = 480;
+    }
+
+    BufferDesc zero;
+    zero.size = kZeroBufferBytes;
+    zero.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    zero.name = "legacy zero vertices";
+    device->zeroVertices = CreateBuffer(core, zero);
+    void *zeroData = device->zeroVertices ? StageBufferWrite(core, device->zeroVertices, 0, kZeroBufferBytes) : nullptr;
+    if (zeroData)
+        std::memset(zeroData, 0, kZeroBufferBytes);
+    else
+        Fail(*device, "cannot create the zero vertex buffer: %s", LastError(core));
+
+    if (device->error.empty() && CreatePipelineObjects(*device) && CreateNullTextures(*device)
+        && CreateBackBuffer(*device, width, height))
+    {
+        ResetState(*device);
+        if (Flush(core, false))
+        {
+            Log(*device, "device ready: back buffer %ux%u, depth %s", width, height, FormatName(device->depthFormat));
+            return device.release();
+        }
+        Fail(*device, "core: %s", LastError(core));
+    }
+    error = device->error.empty() ? "device creation failed" : device->error;
+    DestroyDevice(device.release());
+    return nullptr;
+}
+
+void DestroyDevice(Device *device)
+{
+    if (!device)
+        return;
+    Core *core = device->core;
+    if (device->passOpen && InPass(core))
+        EndPass(core);
+    device->passOpen = false;
+    if (device->frameOpen && InFrame(core))
+        gfx_vk::Present(core); // the core needs its frame closed; nothing new is shown
+    device->frameOpen = false;
+    gfx_vk::WaitIdle(core);
+    DestroyPipelineObjects(*device);
+    for (Texture *&texture : device->nullTexture)
+    {
+        DestroyTextureNow(*device, texture);
+        texture = nullptr;
+    }
+    DestroyTextureNow(*device, device->backBuffer);
+    device->backBuffer = nullptr;
+    DestroyBuffer(core, device->zeroVertices);
+    gfx_vk::WaitIdle(core);
+    delete device;
+}
+
+const char *DeviceError(const Device *device) { return device->error.c_str(); }
+
+const DeviceStats &Stats(const Device *device) { return device->stats; }
+
+Surface *BackBuffer(Device *device) { return &device->backBufferSurface; }
+
+bool ResizeBackBuffer(Device *device, uint32_t width, uint32_t height)
+{
+    if (!Usable(*device) || !width || !height)
+        return false;
+    EndPassIfOpen(*device);
+    Texture *old = device->backBuffer;
+    const bool wasTarget = device->renderTargets[0] == &device->backBufferSurface;
+    ForgetTexture(*device, old);
+    DestroyTextureNow(*device, old);
+    device->backBuffer = nullptr;
+    if (!CreateBackBuffer(*device, width, height))
+        return false;
+    if (wasTarget)
+        SetRenderTarget(device, 0, &device->backBufferSurface);
+    return true;
+}
+
+void WaitIdle(Device *device)
+{
+    EndPassIfOpen(*device);
+    if (Usable(*device))
+        Flush(device->core, true);
+}
+} // namespace gfx_vk::legacy

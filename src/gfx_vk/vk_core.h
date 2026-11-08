@@ -124,6 +124,10 @@ struct CoreStats
     uint32_t swapchainBuilds; // the first one included
     uint32_t validationErrors;
     uint32_t validationWarnings;
+    // Validation messages known not to apply (see OnDebugMessage in vk_core.cpp):
+    // the depth-compare format rule, which the layer checks statically against
+    // the Legacy shaders' branch between compare and plain sampling.
+    uint32_t validationIgnored;
     PassTimings clearPass;    // the pass ClearAndPresent records
     PassTimings frame;        // first to last timestamp of each presented frame
 
@@ -224,6 +228,16 @@ const Dispatch &Functions(const Core *core);
 VkDevice DeviceHandle(const Core *core);
 VkPhysicalDevice PhysicalDeviceHandle(const Core *core);
 const VkPhysicalDeviceLimits &Limits(const Core *core);
+// Optional device features the core enabled because the device has them.
+struct OptionalFeatures
+{
+    bool samplerAnisotropy;
+    bool fillModeNonSolid;
+    bool independentBlend;
+    bool shaderClipDistance;
+    bool shaderFloat16;
+};
+const OptionalFeatures &Features(const Core *core);
 // Whether images of this format with optimal tiling support these features.
 bool FormatSupports(const Core *core, VkFormat format, VkFormatFeatureFlags features);
 // The depth-stencil format for depth targets: D24S8 where it can be a depth
@@ -267,6 +281,10 @@ struct ImageDesc
     uint32_t depth = 1;    // Tex3D only
     uint32_t mipLevels = 1;
     VkImageUsageFlags usage = 0; // TRANSFER_DST is added when SAMPLED is set
+    // Applied to the view shaders sample (ImageSampleView), never to
+    // attachments: lets one-channel formats read as D3D9's L8 or A8 do.
+    VkComponentMapping sampleSwizzle = {VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
+                                        VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY};
     const char *name = nullptr;
 };
 
@@ -287,8 +305,16 @@ Image *CreateImage(Core *core, const ImageDesc &desc);
 void DestroyImage(Core *core, Image *image);
 const ImageDesc &ImageInfo(const Image *image);
 VkImage ImageHandle(const Image *image);
-// A view of every level and layer (2D, cube or 3D as the image is).
+// A view of every level and layer (2D, cube or 3D as the image is), for
+// attachments and copies: identity swizzle, every aspect.
 VkImageView ImageView(const Image *image);
+// The view shaders sample: ImageDesc::sampleSwizzle applied, and the depth
+// aspect only for depth-stencil formats. Images without SAMPLED usage: the
+// same as ImageView.
+VkImageView ImageSampleView(const Image *image);
+// The image is in the layout a shader samples it in, so a pass that is open
+// can sample it without a barrier (see UseImage).
+bool ImageReadyToSample(const Image *image);
 
 // ---- Frames, recording and submission (vk_frame.cpp) -----------------------------
 //
@@ -318,6 +344,12 @@ VkCommandBuffer Commands(Core *core);
 // before it) to finish. Not inside a pass. A flush inside a frame keeps the
 // frame going.
 bool Flush(Core *core, bool wait);
+
+// GPU progress, for users that recycle their own memory: work recorded now is
+// submitted under SubmissionSerial(); SerialFinished says whether the GPU has
+// finished that submission (and every one before it), without waiting.
+uint64_t SubmissionSerial(const Core *core);
+bool SerialFinished(Core *core, uint64_t serial);
 
 // ---- Passes and image state ------------------------------------------------------
 //
@@ -405,8 +437,11 @@ VkDescriptorSet AllocateDescriptorSet(Core *core, VkDescriptorSetLayout layout);
 // ---- Copies and read-back ---------------------------------------------------------
 
 // vkCmdBlitImage between two images, with the barriers. Not inside a pass.
+// Levels and layers (cube faces) pick the subresources; depth-stencil images
+// blit every aspect and need VK_FILTER_NEAREST.
 void BlitImage(Core *core, Image *src, const VkOffset3D srcBox[2], Image *dst, const VkOffset3D dstBox[2],
-               VkFilter filter);
+               VkFilter filter, uint32_t srcLevel = 0, uint32_t srcLayer = 0, uint32_t dstLevel = 0,
+               uint32_t dstLayer = 0);
 
 // Copies one level and layer of an image into host memory. The copy is recorded
 // at the call; ReadbackData waits for it (flushing if needed). Images with a

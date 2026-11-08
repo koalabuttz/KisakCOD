@@ -392,6 +392,9 @@ void CloseBufferCopies(Core &core)
 
 uint64_t PendingSerial(const Core &core) { return core.nextSerial; }
 
+uint64_t SubmissionSerial(const Core *core) { return PendingSerial(*core); }
+bool SerialFinished(Core *core, uint64_t serial) { return PollCompletedSerial(*core) >= serial; }
+
 uint64_t PollCompletedSerial(Core &core)
 {
     if (core.timeline)
@@ -999,7 +1002,7 @@ VkDescriptorSet AllocateDescriptorSet(Core *core_, VkDescriptorSetLayout layout)
 // ---- Public API: copies and read-back ---------------------------------------------------
 
 void BlitImage(Core *core_, Image *src, const VkOffset3D srcBox[2], Image *dst, const VkOffset3D dstBox[2],
-               VkFilter filter)
+               VkFilter filter, uint32_t srcLevel, uint32_t srcLayer, uint32_t dstLevel, uint32_t dstLayer)
 {
     Core &core = *core_;
     if (core.failed)
@@ -1009,16 +1012,22 @@ void BlitImage(Core *core_, Image *src, const VkOffset3D srcBox[2], Image *dst, 
         Fail(core, "BlitImage inside a pass");
         return;
     }
+    if (srcLevel >= src->desc.mipLevels || srcLayer >= src->layers || dstLevel >= dst->desc.mipLevels
+        || dstLayer >= dst->layers || src == dst)
+    {
+        Fail(core, "BlitImage: no such level or layer, or %s onto itself", src->name.c_str());
+        return;
+    }
     UseImage(&core, src, ImageUse::TransferSrc);
     UseImage(&core, dst, ImageUse::TransferDst);
     VkCommandBuffer cmd = EnsureRecording(core);
     if (!cmd)
         return;
     VkImageBlit blit{};
-    blit.srcSubresource = {src->aspect, 0, 0, 1};
+    blit.srcSubresource = {src->aspect, srcLevel, srcLayer, 1};
     blit.srcOffsets[0] = srcBox[0];
     blit.srcOffsets[1] = srcBox[1];
-    blit.dstSubresource = {dst->aspect, 0, 0, 1};
+    blit.dstSubresource = {dst->aspect, dstLevel, dstLayer, 1};
     blit.dstOffsets[0] = dstBox[0];
     blit.dstOffsets[1] = dstBox[1];
     core.vk.vkCmdBlitImage(cmd, src->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst->image,
@@ -1074,8 +1083,11 @@ Readback *ReadImage(Core *core_, Image *image, uint32_t mipLevel, uint32_t layer
     toHost.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
     toHost.srcStageMask = VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
     toHost.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-    toHost.dstStageMask = VK_PIPELINE_STAGE_2_HOST_BIT;
-    toHost.dstAccessMask = VK_ACCESS_2_HOST_READ_BIT;
+    // The host reads it; and once destroyed its memory serves other buffers,
+    // so later device work is ordered after the copy too (the host wait on the
+    // timeline is not something every validation layer tracks).
+    toHost.dstStageMask = VK_PIPELINE_STAGE_2_HOST_BIT | VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    toHost.dstAccessMask = VK_ACCESS_2_HOST_READ_BIT | VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT;
     toHost.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     toHost.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     toHost.buffer = BufferHandle(buffer);

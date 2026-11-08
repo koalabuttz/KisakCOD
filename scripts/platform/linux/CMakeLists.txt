@@ -116,6 +116,8 @@ include(${SCRIPTS_DIR}/platform/linux/sp_game.cmake)
 include(${SCRIPTS_DIR}/vulkan_probe/vulkan_probe.cmake)
 # The Legacy shader translator (dxbc-spirv): no engine units, no Vulkan headers.
 include(${SCRIPTS_DIR}/vulkan_probe/vulkan_shaders.cmake)
+# The Vulkan Legacy adapter: needs both of the above.
+include(${SCRIPTS_DIR}/vulkan_probe/vulkan_legacy.cmake)
 
 # ---------------------------------------------------------------------------
 # Opt-in native Linux client network core (KISAK_BUILD_LINUX_CLIENT_CORE)

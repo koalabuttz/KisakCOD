@@ -543,11 +543,13 @@ jobs:
           cmake -S scripts/vulkan_probe -B build-vulkan -A x64 \
             -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/SDL3-sdk" \
             -DKISAK_VULKAN_INCLUDE_DIR="$RUNNER_TEMP/Vulkan-Headers/include" \
-            -DKISAK_BUILD_VULKAN_SHADERS=ON
-          cmake --build build-vulkan --config Release --target KisakCOD-vulkan-probe KisakCOD-vulkan-shaders --parallel
+            -DKISAK_BUILD_VULKAN_SHADERS=ON -DKISAK_BUILD_VULKAN_LEGACY=ON
+          cmake --build build-vulkan --config Release \
+            --target KisakCOD-vulkan-probe KisakCOD-vulkan-shaders KisakCOD-vulkan-legacy-check --parallel
           mkdir -p artifacts/vulkan-probe
           cp build-vulkan/Release/KisakCOD-vulkan-probe.exe build-vulkan/Release/SDL3.dll \
-            build-vulkan/Release/KisakCOD-vulkan-shaders.exe artifacts/vulkan-probe/
+            build-vulkan/Release/KisakCOD-vulkan-shaders.exe \
+            build-vulkan/Release/KisakCOD-vulkan-legacy-check.exe artifacts/vulkan-probe/
 
       - name: Check the Legacy shader translator
         shell: bash
@@ -560,24 +562,27 @@ jobs:
           python -u scripts/tests/test_vulkan_legacy_shaders.py \
             --binary artifacts/vulkan-probe/KisakCOD-vulkan-shaders.exe --no-spirv-val
 
-      - name: Check the Vulkan window probe starts
+      - name: Check the Vulkan tools start
         shell: bash
         run: |
           set -euo pipefail
           # The Vulkan loader is opened at run time through SDL, never linked.
-          if grep -aqi 'vulkan-1\.dll' artifacts/vulkan-probe/KisakCOD-vulkan-probe.exe; then
-            echo "KisakCOD-vulkan-probe.exe must not import vulkan-1.dll" >&2
-            exit 1
-          fi
           # Usage errors exit 2 after printing usage, which needs SDL3.dll to
-          # have loaded; a missing DLL fails before main.
-          set +e
-          artifacts/vulkan-probe/KisakCOD-vulkan-probe.exe --help > artifacts/vulkan-probe-help.log 2>&1
-          status=$?
-          set -e
-          cat artifacts/vulkan-probe-help.log
-          test "$status" -eq 2
-          grep -q '^usage:' artifacts/vulkan-probe-help.log
+          # have loaded; a missing DLL fails before main. The runner has no
+          # Vulkan driver, so the Legacy check's scenes run on the PC.
+          for tool in KisakCOD-vulkan-probe KisakCOD-vulkan-legacy-check; do
+            if grep -aqi 'vulkan-1\.dll' "artifacts/vulkan-probe/$tool.exe"; then
+              echo "$tool.exe must not import vulkan-1.dll" >&2
+              exit 1
+            fi
+            set +e
+            "artifacts/vulkan-probe/$tool.exe" --help > "artifacts/$tool-help.log" 2>&1
+            status=$?
+            set -e
+            cat "artifacts/$tool-help.log"
+            test "$status" -eq 2
+            grep -q '^usage:' "artifacts/$tool-help.log"
+          done
 
       # The probe with SDL3.dll, for a run on a Windows PC with a Vulkan driver.
       - uses: actions/upload-artifact@v4
