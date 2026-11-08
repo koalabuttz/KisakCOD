@@ -36,6 +36,7 @@ on:
       - tests/linux_mp_client/**
       - tests/linux_device_probe/d3d9_unavailable.cpp
       - tests/skinning/**
+      - tests/linux_cinematic/**
       - scripts/vulkan_probe/**
       - scripts/tests/test_vulkan_window_probe.py
       - src/**
@@ -59,6 +60,7 @@ on:
       - tests/linux_mp_client/**
       - tests/linux_device_probe/d3d9_unavailable.cpp
       - tests/skinning/**
+      - tests/linux_cinematic/**
       - scripts/vulkan_probe/**
       - scripts/tests/test_vulkan_window_probe.py
       - src/**
@@ -192,10 +194,11 @@ jobs:
     # Step two (docs/macos.md): the multiplayer client KisakCOD-mp, built with
     # -DKISAK_PLATFORM=macos against the pinned SDL3 (built here from source)
     # and the CI stand-ins for D3D9 and OpenAL, as the aarch64 Linux client
-    # job does. Then the asset-free checks: the game window test, the client's
-    # fail-closed start from temporary trees with no game data, and the
-    # skinning tests. No MoltenVK, DXVK library, GPU or game data is involved,
-    # and the Bink movie shim is not built for macOS yet.
+    # job does, with the Bink movie shim (KISAK_LINUX_CINEMATICS) over a
+    # minimal FFmpeg built here from a pinned tag. Then the asset-free checks:
+    # the game window test, the client's fail-closed start from temporary
+    # trees with no game data, the Bink shim test and the skinning tests. No
+    # MoltenVK, DXVK library, GPU, game data or game movie is involved.
     name: macOS ${{ matrix.arch }} multiplayer client
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
@@ -214,6 +217,8 @@ jobs:
       DXVK_REVISION: c3dd74be6baec53786d4e064a572185b70347a17
       DXVK_DIRECTX_HEADERS_REVISION: 9df86f2341616ef1888ae59919feaa6d4fad693d
       SDL3_REVISION: 877399b2b2cf21e67554ed9046410f268ce1d1b2
+      # FFmpeg n7.1.5 (LGPL), for the Bink shim's libavcodec and libavutil.
+      FFMPEG_REVISION: 3a0867c2bfda4a4d4309ca1a8cbdc6175e67f587
       BUILD_DIR: build-macos/${{ matrix.arch }}-mp-client
       OUT_DIR: ${{ github.workspace }}/out/macos-${{ matrix.arch }}-mp-client
 
@@ -228,6 +233,8 @@ jobs:
           set -euo pipefail
           test "$(uname -m)" = "${{ matrix.arch }}"
           command -v ninja >/dev/null || brew install ninja
+          # CMake finds the FFmpeg build below through pkg-config.
+          command -v pkg-config >/dev/null || brew install pkgconf
           # openal-soft only for <AL/al.h>; the client links the OpenAL stand-in.
           brew list openal-soft >/dev/null 2>&1 || brew install openal-soft
           test -f "$(brew --prefix openal-soft)/include/AL/al.h"
@@ -264,6 +271,39 @@ jobs:
           fi
           ls -l "$RUNNER_TEMP/SDL3-sdk/lib"
           lipo -archs "$RUNNER_TEMP/SDL3-sdk/lib/libSDL3.0.dylib" | grep -qx "${{ matrix.arch }}"
+
+      - name: Build a minimal pinned FFmpeg
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Only what the Bink shim needs (docs/linux-cinematics.md): libavcodec
+          # with the Bink video and audio decoders, and libavutil. Shared
+          # libraries named @rpath/..., like the stand-ins. --disable-x86asm
+          # spares the runner nasm; the decoders keep their C code.
+          src="$RUNNER_TEMP/ffmpeg-source"
+          git init "$src"
+          git -C "$src" remote add origin https://github.com/FFmpeg/FFmpeg.git
+          git -C "$src" fetch --depth 1 origin "$FFMPEG_REVISION"
+          git -C "$src" checkout --detach FETCH_HEAD
+          test "$(git -C "$src" rev-parse HEAD)" = "$FFMPEG_REVISION"
+          grep -qx '7.1.5' "$src/RELEASE"
+          mkdir -p "$RUNNER_TEMP/ffmpeg-build"
+          cd "$RUNNER_TEMP/ffmpeg-build"
+          "$src/configure" --prefix="$RUNNER_TEMP/ffmpeg-sdk" --install-name-dir='@rpath' \
+            --cc="$(xcrun -f clang)" \
+            --extra-cflags=-mmacosx-version-min=13.3 --extra-ldflags=-mmacosx-version-min=13.3 \
+            --enable-shared --disable-static --disable-programs --disable-doc \
+            --disable-everything --disable-autodetect --disable-network \
+            --disable-avformat --disable-avdevice --disable-avfilter --disable-swscale --disable-swresample \
+            --disable-x86asm --enable-decoder=bink,binkaudio_rdft,binkaudio_dct
+          make -j"$(sysctl -n hw.ncpu)"
+          make install
+          ls -l "$RUNNER_TEMP/ffmpeg-sdk/lib"
+          for library in libavcodec.61.dylib libavutil.59.dylib; do
+            lipo -archs "$RUNNER_TEMP/ffmpeg-sdk/lib/$library" | grep -qx "${{ matrix.arch }}"
+            otool -D "$RUNNER_TEMP/ffmpeg-sdk/lib/$library" | tail -n 1 | grep -qx "@rpath/$library"
+          done
 
       - name: Fetch pinned DXVK Native 2.7.1 headers
         timeout-minutes: 10
@@ -304,6 +344,7 @@ jobs:
           xcrun clang++ -dynamiclib -arch ${{ matrix.arch }} -mmacosx-version-min=13.3 \
             -Wall -Wextra -Werror -install_name @rpath/libopenal_unavailable.dylib \
             tests/linux_mp_client/openal_unavailable.cpp -o "$openal"
+          export PKG_CONFIG_PATH="$RUNNER_TEMP/ffmpeg-sdk/lib/pkgconfig"
           cmake -S . -B "$BUILD_DIR" -G Ninja \
             -DKISAK_PLATFORM=macos \
             -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
@@ -314,9 +355,11 @@ jobs:
             -DKISAK_DXVK_NATIVE_LIBRARY="$d3d9" \
             -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_OPENAL_LIBRARY="$openal" \
             -DKISAK_OPENAL_INCLUDE_DIR="$(brew --prefix openal-soft)/include" \
+            -DKISAK_LINUX_CINEMATICS=ON \
             -DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3" \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-          targets=(KisakCOD-mp KisakCOD-mp-client-window-test KisakCOD-native-d3d9-proofs KisakCOD-skin-scalar-test)
+          targets=(KisakCOD-mp KisakCOD-mp-client-window-test KisakCOD-native-d3d9-proofs KisakCOD-bink-shim-test
+            KisakCOD-skin-scalar-test)
           if [[ "${{ matrix.arch }}" == x86_64 ]]; then
             targets+=(KisakCOD-skin-sse2-test)
           fi
@@ -339,9 +382,11 @@ jobs:
           grep -qx '@rpath/libSDL3.0.dylib' "$RUNNER_TEMP/mp-client-needed.txt"
           grep -qx '@rpath/libd3d9_unavailable.dylib' "$RUNNER_TEMP/mp-client-needed.txt"
           grep -qx '@rpath/libopenal_unavailable.dylib' "$RUNNER_TEMP/mp-client-needed.txt"
-          if grep -Ev '^(@rpath/libSDL3\.0\.dylib|@rpath/libd3d9_unavailable\.dylib|@rpath/libopenal_unavailable\.dylib|/usr/lib/libc\+\+\.1\.dylib|/usr/lib/libSystem\.B\.dylib)$' \
+          grep -qx '@rpath/libavcodec.61.dylib' "$RUNNER_TEMP/mp-client-needed.txt"
+          grep -qx '@rpath/libavutil.59.dylib' "$RUNNER_TEMP/mp-client-needed.txt"
+          if grep -Ev '^(@rpath/libSDL3\.0\.dylib|@rpath/libd3d9_unavailable\.dylib|@rpath/libopenal_unavailable\.dylib|@rpath/libavcodec\.61\.dylib|@rpath/libavutil\.59\.dylib|/usr/lib/libc\+\+\.1\.dylib|/usr/lib/libSystem\.B\.dylib)$' \
               "$RUNNER_TEMP/mp-client-needed.txt"; then
-            echo "the multiplayer client needs a library beyond SDL3, D3D9, OpenAL and the system runtimes" >&2
+            echo "the multiplayer client needs a library beyond SDL3, D3D9, OpenAL, FFmpeg and the system runtimes" >&2
             exit 1
           fi
           if [[ "${{ matrix.arch }}" == arm64 ]]; then
@@ -362,9 +407,19 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           set -euo pipefail
-          export DYLD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/stand-ins"
+          export DYLD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/stand-ins:$RUNNER_TEMP/ffmpeg-sdk/lib"
           "$OUT_DIR/KisakCOD-mp-client-window-test"
           python3 -u scripts/tests/test_linux_mp_client.py --binary "$OUT_DIR/KisakCOD-mp" --native-os macOS
+
+      # The Bink shim on made-up movies and a stand-in decoder, plus
+      # libavcodec's Bink decoders opened as the shim opens them. No game
+      # movie is read (docs/linux-cinematics.md).
+      - name: Run the Bink shim's asset-free test
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          DYLD_LIBRARY_PATH="$RUNNER_TEMP/stand-ins:$RUNNER_TEMP/ffmpeg-sdk/lib" "$OUT_DIR/KisakCOD-bink-shim-test"
 
       # Apple silicon skins with the engine's scalar code; its output must be
       # the bytes every architecture produces (tests/skinning/skin_scalar_test.cpp).
