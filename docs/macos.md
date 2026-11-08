@@ -36,9 +36,10 @@ cmake --build build-macos --target KisakCOD-dedi
 - Apple Clang is used as is; `-fms-extensions` covers the engine's Microsoft
   spellings, as on Linux.
 - The multiplayer client's opt-ins (`KISAK_BUILD_LINUX_NATIVE_D3D9` and
-  `KISAK_BUILD_LINUX_MP_CLIENT`) are accepted; see below. Every other opt-in
-  (window host, probes, movies, Steam, the Linux and Windows Tracy builds) is
-  refused with `KISAK_PLATFORM=macos` for now.
+  `KISAK_BUILD_LINUX_MP_CLIENT`) and the Vulkan window probe
+  (`KISAK_BUILD_VULKAN_PROBE`) are accepted; see below. Every other opt-in
+  (window host, the D3D9 and world probes, movies, Steam, the Linux and Windows
+  Tracy builds) is refused with `KISAK_PLATFORM=macos` for now.
 
 Run it like the Linux server, with the game files from your own install:
 
@@ -79,6 +80,36 @@ cmake --build build-macos-client --target KisakCOD-mp
   `~/.local/share/KisakCOD`) as on Linux for now; the Mac convention,
   `~/Library/Application Support`, comes with the app bundle.
 - Movies (the Bink shim) are not built for macOS yet.
+
+## Vulkan window probe
+
+The shared core of the planned Vulkan back end and its window probe
+([vulkan-core.md](vulkan-core.md)) build and run on macOS through MoltenVK, the
+Vulkan-on-Metal layer. With Homebrew's `vulkan-headers`, `vulkan-loader` and
+`molten-vk`:
+
+```sh
+cmake -S . -B build-macos-vulkan -G Ninja \
+    -DKISAK_PLATFORM=macos -DCMAKE_OSX_ARCHITECTURES=arm64 \
+    -DKISAK_BUILD_VULKAN_PROBE=ON \
+    -DKISAK_VULKAN_INCLUDE_DIR="$(brew --prefix vulkan-headers)/include" \
+    -DSDL3_DIR=/path/to/SDL3/lib/cmake/SDL3
+cmake --build build-macos-vulkan --target KisakCOD-vulkan-probe
+SDL_VULKAN_LIBRARY="$(brew --prefix vulkan-loader)/lib/libvulkan.1.dylib" \
+    bin/KisakCOD-vulkan-probe --resize --check-capture
+```
+
+- The probe does not link the loader: SDL opens it at run time, by bare name.
+  On Apple silicon Homebrew's prefix is not on the default library path, so
+  point `SDL_VULKAN_LIBRARY` at it (and add `$(brew --prefix)/lib` to
+  `DYLD_FALLBACK_LIBRARY_PATH` for the validation layer).
+- The core already turns on portability enumeration and the portability
+  subset, which MoltenVK needs.
+- Hosted Intel runners are VMs whose paravirtualized Metal device aborts when
+  MoltenVK 1.4.2 sizes Metal argument buffers while creating the instance
+  (inside `-[MTLDevice newArgumentEncoderWithArguments:]`), so CI runs the
+  x86_64 probe with `MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=0`. Apple silicon
+  runners and real Macs do not need it.
 
 ## How it differs from the Linux build
 
@@ -154,6 +185,15 @@ arm64, that it has no fused multiply-adds), then runs the game window test,
 fail-closed start from temporary trees with no game data) and the skinning
 tests.
 
+A third job per architecture builds the Vulkan window probe against Homebrew's
+MoltenVK and runs `scripts/tests/test_vulkan_window_probe.py --video-driver
+cocoa --validation auto` in a real window. On both runners (2026-11-07,
+MoltenVK 1.4.2, Apple's paravirtualized GPU) it lists the device, fails closed
+with no driver, and presents 121 frames through a resize with the cleared
+colour read back exactly and no validation errors (validation with
+synchronisation checks was on). The GPU timestamps read zero on these VMs, so
+timings mean nothing there.
+
 ## Not covered yet
 
 - No map has been loaded on a Mac: hosted runners have no game data. The first
@@ -161,6 +201,8 @@ tests.
 - Hidden runtime differences that only game data reaches, such as the 16 KiB
   pages of Apple silicon under a real map load (the virtual-memory self-test
   covers the layer itself) and float results compared with x86.
-- The client draws nothing yet: the renderer path on macOS (DXVK on MoltenVK
-  or the planned Vulkan back end), sound through OpenAL Soft, movies, the app
-  bundle and signing are later steps.
+- The client draws nothing yet: the Vulkan core runs on Metal through
+  MoltenVK, but the renderer does not use it yet (the Legacy adapter comes
+  later in the renderer plan). Sound through OpenAL Soft, movies, the app
+  bundle and signing are later steps too.
+- No run on a real Mac's GPU yet: the hosted runners' GPU is a virtual one.

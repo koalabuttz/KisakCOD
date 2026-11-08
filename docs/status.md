@@ -81,7 +81,9 @@ builds use `-ffp-contract=off` (no fused multiply-add).
   load; the fixes so far are in PR 95.
 - **macOS client.** The multiplayer client builds for Macs and passes its
   asset-free checks in hosted CI against the D3D9 and OpenAL stand-ins; drawing
-  waits on the renderer choice ([macOS track](macos.md#not-covered-yet)).
+  waits on the renderer. The Vulkan core and its window probe run on Metal
+  through MoltenVK on both hosted Mac runners
+  ([macOS track](macos.md#vulkan-window-probe)).
 - **arm64 client and Windows ARM64.** The aarch64 multiplayer client builds and
   passes its asset-free checks (qemu and hosted Arm CI) but has not drawn a
   frame: no aarch64 DXVK build yet. Windows ARM64 builds sp, mp and dedi with
