@@ -3,10 +3,11 @@
 
 Two steps, both run on the machine that has the game:
 
-1. ``write-cfg <file>`` writes a config that, once the map is up, takes six
+1. ``write-cfg <file>`` writes a config that, once the map is up, takes seven
    screenshots with the game's own ``screenshot`` command:
 
-   - ``shk_none_a`` and ``shk_none_b``: no shock, to measure frame-to-frame noise;
+   - ``shk_none_a``, ``shk_none_b`` and (last) ``shk_none_c``: no shock, to show
+     the view stays still for the whole run;
    - ``shk_flash_on`` / ``shk_flash_off``: ``cg_shellshock 4 flashbang`` with
      ``cg_drawShellshock`` 1 and 0;
    - ``shk_conc_on`` / ``shk_conc_off``: the same with ``concussion_grenade_mp``.
@@ -29,7 +30,7 @@ Two steps, both run on the machine that has the game:
    closes the team menu and uses the still spectator view, and ``devmap``
    allows the cheat dvar.
 
-2. ``check <screenshots dir>`` reads the six TGA files and prints numbers and a
+2. ``check <screenshots dir>`` reads the seven TGA files and prints numbers and a
    verdict. Only numbers are printed; the images stay where they are.
 
 Pass rules:
@@ -39,7 +40,8 @@ Pass rules:
   same shock with the effect off (by at least 40).
 - concussion: with the effect on, the frame is blurred, i.e. its edge strength
   (mean absolute luma gradient) is at most 0.85x the effect-off frame, while the
-  two no-shock frames agree within 0.95-1.05x (a still view). An extra
+  three no-shock frames (before and after the shocks) agree within 0.95-1.05x
+  in edge strength and mean luma (a still view). An extra
   information line gives fine-over-coarse edge strength, which drops with blur
   but not with a plain brightness change (the concussion also brightens).
 
@@ -54,16 +56,16 @@ from pathlib import Path
 import struct
 import sys
 
-SHOTS = ("shk_none_a", "shk_none_b", "shk_flash_on", "shk_flash_off", "shk_conc_on", "shk_conc_off")
+SHOTS = ("shk_none_a", "shk_none_b", "shk_none_c", "shk_flash_on", "shk_flash_off", "shk_conc_on", "shk_conc_off")
 
 # Wait counts are command buffer passes (about two per frame). At com_maxfps 85
 # that is roughly 180 per second.
 CFG_TEXT = """// Written by scripts/tools/shellshock_screenshot_check.py write-cfg.
 // Launch: +exec shk.cfg +devmap mp_crash +wait 5000 +vstr shk_go
-set shk_go "closemenu team_marinesopfor; wait 120; screenshot shk_none_a; wait 120; screenshot shk_none_b; wait 60; vstr shk_flash"
+set shk_go "closemenu team_marinesopfor; wait 3000; screenshot shk_none_a; wait 120; screenshot shk_none_b; wait 60; vstr shk_flash"
 set shk_flash "cg_drawShellshock 1; cg_shellshock 4 flashbang; wait 60; screenshot shk_flash_on; wait 1500; cg_drawShellshock 0; cg_shellshock 4 flashbang; wait 60; screenshot shk_flash_off; wait 1500; vstr shk_conc"
 set shk_conc "cg_drawShellshock 1; cg_shellshock 4 concussion_grenade_mp; wait 120; screenshot shk_conc_on; wait 1500; cg_drawShellshock 0; cg_shellshock 4 concussion_grenade_mp; wait 120; screenshot shk_conc_off; wait 1500; vstr shk_end"
-set shk_end "cg_drawShellshock 1; quit"
+set shk_end "screenshot shk_none_c; cg_drawShellshock 1; quit"
 """
 
 FLASH_MIN_MEAN = 200.0
@@ -165,15 +167,19 @@ def check(shot_dir: Path) -> int:
 
     r = right
     ok = True
-    still = r["shk_none_b"]["edge"] / max(r["shk_none_a"]["edge"], 1e-6)
-    still_ok = STILL_RANGE[0] <= still <= STILL_RANGE[1]
-    print(f"still view: edge ratio none_b/none_a {still:.3f} ({'ok' if still_ok else 'MOVING'})")
+    still_ok = True
+    for later in ("shk_none_b", "shk_none_c"):
+        edge = r[later]["edge"] / max(r["shk_none_a"]["edge"], 1e-6)
+        mean = r[later]["mean"] / max(r["shk_none_a"]["mean"], 1e-6)
+        good = all(STILL_RANGE[0] <= v <= STILL_RANGE[1] for v in (edge, mean))
+        still_ok &= good
+        print(f"still view: {later[4:]}/none_a edge {edge:.3f} mean {mean:.3f} ({'ok' if good else 'MOVING'})")
 
     on, off = r["shk_flash_on"], r["shk_flash_off"]
     flash_ok = on["mean"] >= FLASH_MIN_MEAN and on["white"] >= FLASH_MIN_WHITE and on["mean"] - off["mean"] >= FLASH_MIN_GAIN
     print(f"flashbang: on mean {on['mean']:.1f} white {on['white']:.3f}, off mean {off['mean']:.1f}, "
           f"gain {on['mean'] - off['mean']:.1f} -> {'PASS' if flash_ok else 'FAIL'}")
-    ok &= flash_ok
+    ok &= flash_ok and still_ok
 
     on, off = r["shk_conc_on"], r["shk_conc_off"]
     ratio = on["edge"] / max(off["edge"], 1e-6)
@@ -193,7 +199,7 @@ def main() -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
     w = sub.add_parser("write-cfg", help="write the screenshot config")
     w.add_argument("path", type=Path)
-    c = sub.add_parser("check", help="measure the six screenshots")
+    c = sub.add_parser("check", help="measure the seven screenshots")
     c.add_argument("dir", type=Path)
     args = parser.parse_args()
     if args.cmd == "write-cfg":

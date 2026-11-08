@@ -264,7 +264,7 @@ and the concussion blur from the game's own screenshots, with nobody playing.
 `write-cfg <home>/main/shk.cfg` writes a config; launching with
 `+exec shk.cfg +devmap mp_crash +wait 5000 +vstr shk_go` (plus the usual
 `fs_basepath`, `fs_homepath`, `net_ip` and window options, and
-`+set com_maxfps 85`) closes the team menu, takes six screenshots from the
+`+set com_maxfps 85`) closes the team menu, waits about 15 s, takes seven screenshots from the
 still spectator view and quits. Each shock (`cg_shellshock 4 flashbang`,
 `cg_shellshock 4 concussion_grenade_mp`) is shot twice, with
 `cg_drawShellshock` 1 and 0, so the camera shake is the same and only the

@@ -50,7 +50,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         good = {
-            "shk_none_a": checker(), "shk_none_b": checker(),
+            "shk_none_a": checker(), "shk_none_b": checker(), "shk_none_c": checker(),
             "shk_flash_on": [250] * (W * H), "shk_flash_off": checker(1),
             "shk_conc_on": blurred(1), "shk_conc_off": checker(2),
         }
@@ -69,6 +69,11 @@ def main() -> int:
         write_set(tmp / "moving", moving)
         if run_check(tmp / "moving").returncode == 0:
             failures.append("a moving view was not failed")
+
+        faded = dict(good, shk_none_c=[v // 2 for v in checker()])
+        write_set(tmp / "faded", faded)
+        if run_check(tmp / "faded").returncode == 0:
+            failures.append("a view that faded by the end was not failed")
 
         (tmp / "partial").mkdir()
         if run_check(tmp / "partial").returncode == 0:
