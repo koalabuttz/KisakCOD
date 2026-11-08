@@ -15,8 +15,9 @@ Two parts:
   configure_mp.csv (a game file) is missing. Either way it exits 1, prints each
   console line once (stderr; the fatal error goes to stdout as on the dedicated
   server), and writes nothing outside the temporary tree. Without fs_homepath
-  the client writes to $XDG_DATA_HOME/KisakCOD (or ~/.local/share/KisakCOD), never
-  to the game folder, and refuses to start when it has neither.
+  the client writes to $XDG_DATA_HOME/KisakCOD (or ~/.local/share/KisakCOD; on
+  macOS ~/Library/Application Support/KisakCOD), never to the game folder, and
+  refuses to start when it has no such folder.
 
 Run on SDL's dummy drivers with the stand-in D3D9 and OpenAL libraries on
 LD_LIBRARY_PATH, as CI does. No GPU, Steam install, credentials or game files.
@@ -195,7 +196,9 @@ def run_checks(checker, binary):
         checker.require(completed.returncode == 0 and banner in completed.stdout
                         and "Usage: KisakCOD-mp" in completed.stdout, "--help prints the client's usage and exits 0",
                         completed.stdout + completed.stderr)
-        checker.require("$XDG_DATA_HOME/KisakCOD" in completed.stdout and "not the game folder" in completed.stdout,
+        default_home = ("~/Library/Application Support/KisakCOD" if NATIVE_OS[0] == "macOS"
+                        else "$XDG_DATA_HOME/KisakCOD")
+        checker.require(default_home in completed.stdout and "not the game folder" in completed.stdout,
                         "--help says where configs and profiles go", completed.stdout)
         completed = run(binary, ["--version"], cwd, env)
         checker.require(completed.returncode == 0
@@ -277,12 +280,21 @@ def run_checks(checker, binary):
                         == before, "the game folder's players/ is left as it was")
 
         # Without fs_homepath the client keeps out of the game folder: it writes
-        # to $XDG_DATA_HOME/KisakCOD, or ~/.local/share/KisakCOD without one.
-        for index, (name, extra, home_dir) in enumerate((
+        # to $XDG_DATA_HOME/KisakCOD, or ~/.local/share/KisakCOD without one. On
+        # macOS it writes to ~/Library/Application Support/KisakCOD, whatever
+        # XDG_DATA_HOME says.
+        if NATIVE_OS[0] == "macOS":
+            default_cases = (
+                ("HOME", {"XDG_DATA_HOME": None, "HOME": "user"}, "user/Library/Application Support/KisakCOD"),
+                ("HOME, XDG_DATA_HOME ignored", {"XDG_DATA_HOME": "xdg", "HOME": "user"},
+                 "user/Library/Application Support/KisakCOD"))
+        else:
+            default_cases = (
                 ("XDG_DATA_HOME", {"XDG_DATA_HOME": "xdg", "HOME": "user"}, "xdg/KisakCOD"),
                 ("HOME", {"XDG_DATA_HOME": None, "HOME": "user"}, "user/.local/share/KisakCOD"),
                 ("HOME when XDG_DATA_HOME is relative", {"XDG_DATA_HOME": "relative/xdg", "HOME": "user"},
-                 "user/.local/share/KisakCOD"))):
+                 "user/.local/share/KisakCOD"))
+        for index, (name, extra, home_dir) in enumerate(default_cases):
             tree = work / f"default-home-{index}"
             make_stub_tree(tree / "base")
             run_env = dict(env)

@@ -273,13 +273,21 @@ namespace
     // build has none) is renamed and deleted there by
     // LiveStorage_HandleCorruptStats. So the Linux client keeps out of the game
     // folder by default, in $XDG_DATA_HOME/KisakCOD, or ~/.local/share/KisakCOD
-    // when XDG_DATA_HOME is unset or not absolute (the XDG rule).
+    // when XDG_DATA_HOME is unset or not absolute (the XDG rule). On macOS it
+    // is ~/Library/Application Support/KisakCOD, where Mac apps keep their
+    // per-user data; XDG_DATA_HOME is not a Mac convention and is ignored.
     //
     // Fills 'out' and returns nullptr, or returns why there is no default.
     const char *DefaultHomePath(char *out, size_t outSize)
     {
-        const char *const dataHome = getenv("XDG_DATA_HOME");
         int written;
+#if defined(__APPLE__)
+        const char *const home = getenv("HOME");
+        if (!home || home[0] != '/')
+            return "HOME is not an absolute path";
+        written = snprintf(out, outSize, "%s/Library/Application Support/KisakCOD", home);
+#else
+        const char *const dataHome = getenv("XDG_DATA_HOME");
         if (dataHome && dataHome[0] == '/')
         {
             written = snprintf(out, outSize, "%s/KisakCOD", dataHome);
@@ -291,6 +299,7 @@ namespace
                 return "neither XDG_DATA_HOME nor HOME is an absolute path";
             written = snprintf(out, outSize, "%s/.local/share/KisakCOD", home);
         }
+#endif
         if (written < 0 || (size_t)written >= outSize)
             return "the default folder's path is too long";
         if (strpbrk(out, "+\n"))
@@ -814,9 +823,14 @@ namespace
 #ifdef KISAK_LINUX_GAME_CLIENT
         fputs(
             "\n"
+#if defined(__APPLE__)
+            "Configs and player profiles go to ~/Library/Application Support/KisakCOD,\n"
+            "not the game folder; +set fs_homepath <folder> chooses another.\n",
+#else
             "Configs and player profiles go to $XDG_DATA_HOME/KisakCOD (by default\n"
             "~/.local/share/KisakCOD), not the game folder; +set fs_homepath <folder>\n"
             "chooses another.\n",
+#endif
             stream);
 #endif
     }

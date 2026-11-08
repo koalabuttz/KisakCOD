@@ -77,9 +77,10 @@ cmake --build build-macos-client --target KisakCOD-mp
 - The game window test replaces `SDL_CreateWindowWithProperties` by defining
   it in the test and reaching SDL's own through `dlsym(RTLD_NEXT)`, since
   Apple's linker has no `--wrap`.
-- The client keeps its files under `$XDG_DATA_HOME/KisakCOD` (or
-  `~/.local/share/KisakCOD`) as on Linux for now; the Mac convention,
-  `~/Library/Application Support`, comes with the app bundle.
+- The client keeps its configs and player profiles in
+  `~/Library/Application Support/KisakCOD`, where Mac apps keep per-user data
+  (`XDG_DATA_HOME` is ignored on macOS); `+set fs_homepath <folder>` chooses
+  another, as on Linux.
 - Movies: `-DKISAK_LINUX_CINEMATICS=ON` builds the Bink shim
   ([linux-cinematics.md](linux-cinematics.md)) as on Linux. It needs
   libavcodec and libavutil, found with pkg-config: Homebrew's `ffmpeg`, or a

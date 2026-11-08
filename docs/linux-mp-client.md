@@ -139,7 +139,8 @@ when the command line sets none: `$XDG_DATA_HOME/KisakCOD`, or
 `~/.local/share/KisakCOD` when `XDG_DATA_HOME` is unset or not absolute. With
 neither that nor `HOME` usable it refuses to start and asks for
 `+set fs_homepath <folder>`. Files in the game folder are still read, through
-the search path.
+the search path. The macOS build uses `~/Library/Application Support/KisakCOD`
+instead ([macos.md](macos.md#multiplayer-client)).
 
 This keeps the client away from the game's own stats. This build has no CD key
 (`cl_cdkey` stays blank, on Windows too), and the stats file (`mpdata`) is
