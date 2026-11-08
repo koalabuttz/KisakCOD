@@ -559,6 +559,16 @@ VkFormat PickDepthStencilFormat(Core &core)
     return VK_FORMAT_UNDEFINED;
 }
 
+// VK_KHR_portability_subset's feature struct (vulkan_beta.h, which the build
+// does not enable): fifteen VkBool32 features after the header.
+struct PortabilitySubsetFeatures
+{
+    VkStructureType sType;
+    void *pNext;
+    VkBool32 features[15];
+};
+constexpr VkStructureType kPortabilitySubsetFeaturesType = static_cast<VkStructureType>(1000163000);
+
 bool EnvEquals(const char *name, const char *value)
 {
 #if defined(_MSC_VER)
@@ -598,8 +608,15 @@ bool CreateDevice(Core &core)
     // distances (user clip planes) and 16-bit floats in translated shaders.
     VkPhysicalDeviceFeatures supported{};
     VkPhysicalDeviceVulkan12Features supported12{};
+    // On a portability device (MoltenVK) every subset feature it has is
+    // enabled: the D3D9 formats need swizzled image views
+    // (imageViewFormatSwizzle), and the validation layer holds the device to
+    // what was enabled.
+    PortabilitySubsetFeatures portabilityFeatures{};
+    portabilityFeatures.sType = kPortabilitySubsetFeaturesType;
     {
         supported12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+        supported12.pNext = portability ? &portabilityFeatures : nullptr;
         VkPhysicalDeviceFeatures2 query{};
         query.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
         query.pNext = &supported12;
@@ -620,6 +637,8 @@ bool CreateDevice(Core &core)
     features13.dynamicRendering = VK_TRUE;
     features13.synchronization2 = VK_TRUE;
     features13.shaderDemoteToHelperInvocation = VK_TRUE;
+    portabilityFeatures.pNext = nullptr;
+    features13.pNext = portability ? &portabilityFeatures : nullptr;
     VkPhysicalDeviceVulkan12Features features12{};
     features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
     features12.pNext = &features13;

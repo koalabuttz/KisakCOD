@@ -105,9 +105,11 @@ message apart (`CoreStats::validationIgnored`, printed as
 
 ## MoltenVK (macOS)
 
-On a device with the portability subset (MoltenVK), the adapter takes two
-other paths. The Legacy device's ready line names both
-(`vertex stride static, depth compare fixed`):
+On a device with the portability subset (MoltenVK), the core enables every
+subset feature the device has. The D3D9 formats need swizzled image views
+(`imageViewFormatSwizzle`), and the validation layer holds the device to what
+was enabled. The adapter also takes two other paths. The Legacy device's ready
+line names both (`vertex stride static, depth compare fixed`):
 
 - **Vertex strides in the pipeline.** MoltenVK has
   `VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE` only from macOS 14 on Mac2 or
