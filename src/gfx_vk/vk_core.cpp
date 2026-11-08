@@ -1,7 +1,7 @@
-// gfx_vk shared core: instance, device, swapchain and a cleared, presented frame.
+// gfx_vk shared core, start-up: instance, device, queue and swapchain.
 // See vk_core.h for the contract and docs/vulkan-core.md for how it is checked.
 
-#include "vk_core.h"
+#include "vk_core_internal.h"
 
 #include <algorithm>
 #include <cstdarg>
@@ -14,95 +14,31 @@ namespace gfx_vk
 namespace
 {
 constexpr uint32_t kRequiredApiVersion = VK_API_VERSION_1_3;
-constexpr uint32_t kFramesInFlight = 2;
 constexpr const char *kValidationLayer = "VK_LAYER_KHRONOS_validation";
 // Optional extensions. Portability enumeration lists MoltenVK (macOS) devices;
 // the spec requires enabling the portability subset wherever a device offers it.
 constexpr const char *kPortabilityEnumeration = "VK_KHR_portability_enumeration";
 constexpr const char *kPortabilitySubset = "VK_KHR_portability_subset";
-// The stage that hands a swapchain image to the present engine: the last
-// barrier's destination and the render-done semaphore's signal stage. They must
-// match, or the layout transition to PRESENT_SRC falls outside the semaphore's
-// scope and is not ordered before the present (synchronization validation
-// reports SYNC-HAZARD-PRESENT-AFTER-WRITE; a destination of NONE does that).
-constexpr VkPipelineStageFlags2 kPresentHandOffStage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
 // Validation messages printed per severity; the rest are only counted.
 constexpr uint32_t kValidationMessagesLogged = 20;
 
-struct FrameSlot
+void FormatVersion(uint32_t version, char *out, size_t size)
 {
-    VkCommandPool pool = VK_NULL_HANDLE;
-    VkCommandBuffer cmd = VK_NULL_HANDLE;
-    VkSemaphore acquired = VK_NULL_HANDLE;
-    VkFence done = VK_NULL_HANDLE;
-    bool timestampsWritten = false;
-};
+    std::snprintf(out, size, "%u.%u.%u", VK_API_VERSION_MAJOR(version), VK_API_VERSION_MINOR(version),
+                  VK_API_VERSION_PATCH(version));
+}
 
-enum class BuildResult
+bool HasExtension(const std::vector<VkExtensionProperties> &list, const char *name)
 {
-    Built,
-    Minimised,
-    Failed,
-};
+    for (const VkExtensionProperties &extension : list)
+    {
+        if (std::strcmp(extension.extensionName, name) == 0)
+            return true;
+    }
+    return false;
+}
 } // namespace
 
-class Core
-{
-public:
-    CoreDesc desc{};
-    WindowSystem window{};
-    Dispatch vk{};
-    char error[512] = {};
-    bool failed = false;
-
-    VkInstance instance = VK_NULL_HANDLE;
-    uint32_t instanceApiVersion = 0;
-    bool validation = false;
-    bool debugUtils = false;
-    bool syncValidation = false;
-    bool portabilityEnumeration = false;
-    VkDebugUtilsMessengerEXT messenger = VK_NULL_HANDLE;
-    VkSurfaceKHR surface = VK_NULL_HANDLE;
-
-    VkPhysicalDevice physical = VK_NULL_HANDLE;
-    DeviceInfo device{};
-    VkPhysicalDeviceMemoryProperties memory{};
-    uint32_t queueFamily = 0;
-    VkDevice dev = VK_NULL_HANDLE;
-    VkQueue queue = VK_NULL_HANDLE;
-
-    VkSwapchainKHR swapchain = VK_NULL_HANDLE;
-    SwapchainInfo swapInfo{};
-    std::vector<VkImage> images;
-    std::vector<VkImageView> views;
-    std::vector<VkSemaphore> renderDone; // one per swapchain image
-    // Rebuild before the next frame: the swapchain is out of date or suboptimal,
-    // or there is none yet.
-    bool rebuildPending = false;
-    // The window may have changed size: rebuild only if the size differs.
-    bool resizePending = false;
-
-    FrameSlot frames[kFramesInFlight];
-    uint32_t frameIndex = 0;
-
-    VkQueryPool timestamps = VK_NULL_HANDLE;
-    double timestampPeriodNs = 0.0;
-    uint64_t timestampMask = 0;
-
-    bool captureRequested = false;
-    VkBuffer captureBuffer = VK_NULL_HANDLE;
-    VkDeviceMemory captureMemory = VK_NULL_HANDLE;
-    VkDeviceSize captureSize = 0;
-    bool captureCoherent = false;
-    void *captureMapped = nullptr;
-    std::vector<uint8_t> capturePixels;
-    Capture capture{};
-
-    CoreStats stats{};
-};
-
-namespace
-{
 void Log(const Core &core, const char *format, ...)
 {
     if (!core.desc.log)
@@ -142,6 +78,9 @@ const char *ResultName(VkResult result)
     case VK_ERROR_EXTENSION_NOT_PRESENT: return "VK_ERROR_EXTENSION_NOT_PRESENT";
     case VK_ERROR_FEATURE_NOT_PRESENT: return "VK_ERROR_FEATURE_NOT_PRESENT";
     case VK_ERROR_INCOMPATIBLE_DRIVER: return "VK_ERROR_INCOMPATIBLE_DRIVER";
+    case VK_ERROR_FORMAT_NOT_SUPPORTED: return "VK_ERROR_FORMAT_NOT_SUPPORTED";
+    case VK_ERROR_FRAGMENTED_POOL: return "VK_ERROR_FRAGMENTED_POOL";
+    case VK_ERROR_OUT_OF_POOL_MEMORY: return "VK_ERROR_OUT_OF_POOL_MEMORY";
     case VK_ERROR_SURFACE_LOST_KHR: return "VK_ERROR_SURFACE_LOST_KHR";
     case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR: return "VK_ERROR_NATIVE_WINDOW_IN_USE_KHR";
     case VK_ERROR_OUT_OF_DATE_KHR: return "VK_ERROR_OUT_OF_DATE_KHR";
@@ -156,22 +95,8 @@ bool Check(Core &core, VkResult result, const char *what)
     return Fail(core, "%s failed: %s (%d)", what, ResultName(result), static_cast<int>(result));
 }
 
-void FormatVersion(uint32_t version, char *out, size_t size)
+namespace
 {
-    std::snprintf(out, size, "%u.%u.%u", VK_API_VERSION_MAJOR(version), VK_API_VERSION_MINOR(version),
-                  VK_API_VERSION_PATCH(version));
-}
-
-bool HasExtension(const std::vector<VkExtensionProperties> &list, const char *name)
-{
-    for (const VkExtensionProperties &extension : list)
-    {
-        if (std::strcmp(extension.extensionName, name) == 0)
-            return true;
-    }
-    return false;
-}
-
 VKAPI_ATTR VkBool32 VKAPI_CALL OnDebugMessage(
     VkDebugUtilsMessageSeverityFlagBitsEXT severity,
     VkDebugUtilsMessageTypeFlagsEXT types,
@@ -438,13 +363,21 @@ Candidate Evaluate(Core &core, VkPhysicalDevice physical)
 
     VkPhysicalDeviceVulkan13Features features13{};
     features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+    VkPhysicalDeviceVulkan12Features features12{};
+    features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+    features12.pNext = &features13;
     VkPhysicalDeviceFeatures2 features{};
     features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-    features.pNext = &features13;
+    features.pNext = &features12;
     vk.vkGetPhysicalDeviceFeatures2(physical, &features);
     if (!features13.dynamicRendering || !features13.synchronization2)
     {
         std::snprintf(candidate.why, sizeof(candidate.why), "no dynamic rendering or synchronization2");
+        return candidate;
+    }
+    if (!features12.timelineSemaphore)
+    {
+        std::snprintf(candidate.why, sizeof(candidate.why), "no timeline semaphores");
         return candidate;
     }
 
@@ -567,16 +500,33 @@ bool PickDevice(Core &core)
     if (core.desc.deviceIndex >= static_cast<int>(devices.size()))
         return Fail(core, "device index %d is out of range: %zu devices", core.desc.deviceIndex, devices.size());
     if (best < 0)
-        return Fail(core, "no Vulkan device meets the requirements (Vulkan 1.3, swapchain, a queue that presents here)");
+        return Fail(core, "no Vulkan device meets the requirements (Vulkan 1.3, timeline semaphores, swapchain, "
+                          "a queue that presents here)");
 
     core.physical = devices[static_cast<size_t>(best)];
     core.queueFamily = bestFamily;
     FillDeviceInfo(core, core.physical, core.device);
+    core.vk.vkGetPhysicalDeviceProperties(core.physical, &core.properties);
     core.vk.vkGetPhysicalDeviceMemoryProperties(core.physical, &core.memory);
     return true;
 }
 
-// ---- Logical device, frames and timestamps --------------------------------------------
+// ---- Logical device and timestamps ------------------------------------------------------
+
+VkFormat PickDepthStencilFormat(Core &core)
+{
+    const VkFormatFeatureFlags needed =
+        VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
+    const VkFormat candidates[] = {VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT_S8_UINT};
+    for (VkFormat format : candidates)
+    {
+        VkFormatProperties props{};
+        core.vk.vkGetPhysicalDeviceFormatProperties(core.physical, format, &props);
+        if ((props.optimalTilingFeatures & needed) == needed)
+            return format;
+    }
+    return VK_FORMAT_UNDEFINED;
+}
 
 bool CreateDevice(Core &core)
 {
@@ -597,13 +547,30 @@ bool CreateDevice(Core &core)
     queueInfo.queueCount = 1;
     queueInfo.pQueuePriorities = &priority;
 
+    // Optional Vulkan 1.0 features D3D9 content uses where the device has them:
+    // anisotropic filtering, wireframe fill, and independent blend for MRT.
+    VkPhysicalDeviceFeatures supported{};
+    {
+        VkPhysicalDeviceFeatures2 query{};
+        query.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        vk.vkGetPhysicalDeviceFeatures2(core.physical, &query);
+        supported = query.features;
+    }
+
     VkPhysicalDeviceVulkan13Features features13{};
     features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
     features13.dynamicRendering = VK_TRUE;
     features13.synchronization2 = VK_TRUE;
+    VkPhysicalDeviceVulkan12Features features12{};
+    features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+    features12.pNext = &features13;
+    features12.timelineSemaphore = VK_TRUE;
     VkPhysicalDeviceFeatures2 features{};
     features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-    features.pNext = &features13;
+    features.pNext = &features12;
+    features.features.samplerAnisotropy = supported.samplerAnisotropy;
+    features.features.fillModeNonSolid = supported.fillModeNonSolid;
+    features.features.independentBlend = supported.independentBlend;
 
     VkDeviceCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -626,50 +593,35 @@ bool CreateDevice(Core &core)
         return Fail(core, "the Vulkan device does not provide %s", missing);
     vk.vkGetDeviceQueue(core.dev, core.queueFamily, 0, &core.queue);
 
-    for (FrameSlot &frame : core.frames)
-    {
-        VkCommandPoolCreateInfo poolInfo{};
-        poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        poolInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-        poolInfo.queueFamilyIndex = core.queueFamily;
-        if (!Check(core, vk.vkCreateCommandPool(core.dev, &poolInfo, nullptr, &frame.pool), "vkCreateCommandPool"))
-            return false;
-        VkCommandBufferAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        allocInfo.commandPool = frame.pool;
-        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        allocInfo.commandBufferCount = 1;
-        if (!Check(core, vk.vkAllocateCommandBuffers(core.dev, &allocInfo, &frame.cmd), "vkAllocateCommandBuffers"))
-            return false;
-        VkSemaphoreCreateInfo semaphoreInfo{};
-        semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-        if (!Check(core, vk.vkCreateSemaphore(core.dev, &semaphoreInfo, nullptr, &frame.acquired), "vkCreateSemaphore"))
-            return false;
-        VkFenceCreateInfo fenceInfo{};
-        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-        if (!Check(core, vk.vkCreateFence(core.dev, &fenceInfo, nullptr, &frame.done), "vkCreateFence"))
-            return false;
-    }
+    core.depthStencilFormat = PickDepthStencilFormat(core);
+    if (core.depthStencilFormat == VK_FORMAT_UNDEFINED)
+        return Fail(core, "the device has no sampled depth-stencil format (D24S8 or D32S8)");
+
+    VkSemaphoreTypeCreateInfo timelineType{};
+    timelineType.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
+    timelineType.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
+    timelineType.initialValue = 0;
+    VkSemaphoreCreateInfo timelineInfo{};
+    timelineInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    timelineInfo.pNext = &timelineType;
+    if (!Check(core, vk.vkCreateSemaphore(core.dev, &timelineInfo, nullptr, &core.timeline), "vkCreateSemaphore"))
+        return false;
 
     // GPU timestamps around every pass, from the first commit (renderer plan 3.2).
     vk.vkGetPhysicalDeviceQueueFamilyProperties(core.physical, &count, nullptr);
     std::vector<VkQueueFamilyProperties> families(count);
     vk.vkGetPhysicalDeviceQueueFamilyProperties(core.physical, &count, families.data());
-    VkPhysicalDeviceProperties props{};
-    vk.vkGetPhysicalDeviceProperties(core.physical, &props);
     const uint32_t bits = families[core.queueFamily].timestampValidBits;
-    if (bits && props.limits.timestampPeriod > 0.0f)
+    if (bits && core.properties.limits.timestampPeriod > 0.0f)
     {
         VkQueryPoolCreateInfo queryInfo{};
         queryInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
         queryInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
-        queryInfo.queryCount = 2 * kFramesInFlight;
+        queryInfo.queryCount = kTimestampsPerSlot * kFramesInFlight;
         if (!Check(core, vk.vkCreateQueryPool(core.dev, &queryInfo, nullptr, &core.timestamps), "vkCreateQueryPool"))
             return false;
-        core.timestampPeriodNs = props.limits.timestampPeriod;
+        core.timestampPeriodNs = core.properties.limits.timestampPeriod;
         core.timestampMask = bits >= 64 ? ~0ull : ((1ull << bits) - 1);
-        core.stats.clearPass.supported = true;
     }
     else
     {
@@ -678,79 +630,19 @@ bool CreateDevice(Core &core)
     return true;
 }
 
-// ---- Swapchain and capture buffer ---------------------------------------------------
-
-void DestroyCaptureBuffer(Core &core)
-{
-    if (core.captureMapped)
-        core.vk.vkUnmapMemory(core.dev, core.captureMemory);
-    if (core.captureBuffer)
-        core.vk.vkDestroyBuffer(core.dev, core.captureBuffer, nullptr);
-    if (core.captureMemory)
-        core.vk.vkFreeMemory(core.dev, core.captureMemory, nullptr);
-    core.captureMapped = nullptr;
-    core.captureBuffer = VK_NULL_HANDLE;
-    core.captureMemory = VK_NULL_HANDLE;
-    core.captureSize = 0;
-}
-
-bool CreateCaptureBuffer(Core &core, VkDeviceSize size)
-{
-    Dispatch &vk = core.vk;
-    VkBufferCreateInfo info{};
-    info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    info.size = size;
-    info.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    if (!Check(core, vk.vkCreateBuffer(core.dev, &info, nullptr, &core.captureBuffer), "vkCreateBuffer"))
-        return false;
-    VkMemoryRequirements requirements{};
-    vk.vkGetBufferMemoryRequirements(core.dev, core.captureBuffer, &requirements);
-
-    // Host-visible memory; cached reads first, since the CPU reads all of it.
-    uint32_t chosen = UINT32_MAX;
-    const VkMemoryPropertyFlags wanted[] = {
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-    };
-    for (VkMemoryPropertyFlags flags : wanted)
-    {
-        for (uint32_t i = 0; i < core.memory.memoryTypeCount && chosen == UINT32_MAX; ++i)
-        {
-            if ((requirements.memoryTypeBits & (1u << i)) && (core.memory.memoryTypes[i].propertyFlags & flags) == flags)
-                chosen = i;
-        }
-        if (chosen != UINT32_MAX)
-            break;
-    }
-    if (chosen == UINT32_MAX)
-        return Fail(core, "no host-visible memory type for the capture buffer");
-    core.captureCoherent = (core.memory.memoryTypes[chosen].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
-
-    VkMemoryAllocateInfo alloc{};
-    alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    alloc.allocationSize = requirements.size;
-    alloc.memoryTypeIndex = chosen;
-    if (!Check(core, vk.vkAllocateMemory(core.dev, &alloc, nullptr, &core.captureMemory), "vkAllocateMemory"))
-        return false;
-    if (!Check(core, vk.vkBindBufferMemory(core.dev, core.captureBuffer, core.captureMemory, 0), "vkBindBufferMemory"))
-        return false;
-    if (!Check(core, vk.vkMapMemory(core.dev, core.captureMemory, 0, VK_WHOLE_SIZE, 0, &core.captureMapped),
-               "vkMapMemory"))
-        return false;
-    core.captureSize = size;
-    return true;
-}
+// ---- Swapchain -----------------------------------------------------------------------
 
 void DestroySwapchainResources(Core &core)
 {
-    for (VkImageView view : core.views)
-        core.vk.vkDestroyImageView(core.dev, view, nullptr);
+    for (Image *image : core.swapImages)
+    {
+        core.vk.vkDestroyImageView(core.dev, image->view, nullptr);
+        delete image;
+    }
     for (VkSemaphore semaphore : core.renderDone)
         core.vk.vkDestroySemaphore(core.dev, semaphore, nullptr);
-    core.views.clear();
+    core.swapImages.clear();
     core.renderDone.clear();
-    core.images.clear();
 }
 
 VkSurfaceFormatKHR ChooseFormat(const std::vector<VkSurfaceFormatKHR> &formats)
@@ -783,6 +675,7 @@ VkPresentModeKHR ChoosePresentMode(const std::vector<VkPresentModeKHR> &modes, b
     }
     return VK_PRESENT_MODE_FIFO_KHR;
 }
+} // namespace
 
 bool SurfaceExtent(Core &core, VkSurfaceCapabilitiesKHR &caps, VkExtent2D &extent)
 {
@@ -841,6 +734,9 @@ BuildResult BuildSwapchain(Core &core)
     VkImageUsageFlags usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     if (canCapture)
         usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    // Blits into the swapchain (a scene drawn offscreen, then shown).
+    if (caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+        usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
     VkCompositeAlphaFlagBitsKHR alpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     if (!(caps.supportedCompositeAlpha & alpha))
@@ -888,23 +784,33 @@ BuildResult BuildSwapchain(Core &core)
 
     if (!Check(core, vk.vkGetSwapchainImagesKHR(core.dev, core.swapchain, &count, nullptr), "vkGetSwapchainImagesKHR"))
         return BuildResult::Failed;
-    core.images.resize(count);
-    if (!Check(core, vk.vkGetSwapchainImagesKHR(core.dev, core.swapchain, &count, core.images.data()),
+    std::vector<VkImage> images(count);
+    if (!Check(core, vk.vkGetSwapchainImagesKHR(core.dev, core.swapchain, &count, images.data()),
                "vkGetSwapchainImagesKHR"))
         return BuildResult::Failed;
-    core.images.resize(count);
-    for (VkImage image : core.images)
+    images.resize(count);
+    for (VkImage handle : images)
     {
+        Image *image = new Image();
+        image->image = handle;
+        image->swapchain = true;
+        image->name = "swapchain";
+        image->desc.kind = ImageKind::Tex2D;
+        image->desc.format = format.format;
+        image->desc.width = extent.width;
+        image->desc.height = extent.height;
+        image->desc.usage = usage;
+        image->desc.name = "swapchain";
+        core.swapImages.push_back(image);
+
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfo.image = image;
+        viewInfo.image = handle;
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
         viewInfo.format = format.format;
         viewInfo.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-        VkImageView view = VK_NULL_HANDLE;
-        if (!Check(core, vk.vkCreateImageView(core.dev, &viewInfo, nullptr, &view), "vkCreateImageView"))
+        if (!Check(core, vk.vkCreateImageView(core.dev, &viewInfo, nullptr, &image->view), "vkCreateImageView"))
             return BuildResult::Failed;
-        core.views.push_back(view);
         VkSemaphoreCreateInfo semaphoreInfo{};
         semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
         VkSemaphore semaphore = VK_NULL_HANDLE;
@@ -913,23 +819,8 @@ BuildResult BuildSwapchain(Core &core)
         core.renderDone.push_back(semaphore);
     }
 
-    if (canCapture)
-    {
-        const VkDeviceSize size = static_cast<VkDeviceSize>(extent.width) * extent.height * 4;
-        if (size != core.captureSize)
-        {
-            DestroyCaptureBuffer(core);
-            if (!CreateCaptureBuffer(core, size))
-                return BuildResult::Failed;
-        }
-    }
-    else
-    {
-        DestroyCaptureBuffer(core);
-    }
-
     core.swapInfo = {extent.width, extent.height, format.format, format.colorSpace, mode,
-                     static_cast<uint32_t>(core.images.size()), canCapture};
+                     static_cast<uint32_t>(core.swapImages.size()), canCapture};
     core.rebuildPending = false;
     core.resizePending = false;
     ++core.stats.swapchainBuilds;
@@ -938,79 +829,6 @@ BuildResult BuildSwapchain(Core &core)
     return BuildResult::Built;
 }
 
-// ---- Frame ----------------------------------------------------------------------------
-
-VkImageMemoryBarrier2 ImageBarrier(VkImage image, VkPipelineStageFlags2 srcStage, VkAccessFlags2 srcAccess,
-                                   VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess, VkImageLayout from,
-                                   VkImageLayout to)
-{
-    VkImageMemoryBarrier2 barrier{};
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-    barrier.srcStageMask = srcStage;
-    barrier.srcAccessMask = srcAccess;
-    barrier.dstStageMask = dstStage;
-    barrier.dstAccessMask = dstAccess;
-    barrier.oldLayout = from;
-    barrier.newLayout = to;
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = image;
-    barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-    return barrier;
-}
-
-void Barrier(Core &core, VkCommandBuffer cmd, const VkImageMemoryBarrier2 *images, uint32_t imageCount,
-             const VkBufferMemoryBarrier2 *buffers = nullptr, uint32_t bufferCount = 0)
-{
-    VkDependencyInfo dependency{};
-    dependency.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    dependency.imageMemoryBarrierCount = imageCount;
-    dependency.pImageMemoryBarriers = images;
-    dependency.bufferMemoryBarrierCount = bufferCount;
-    dependency.pBufferMemoryBarriers = buffers;
-    core.vk.vkCmdPipelineBarrier2(cmd, &dependency);
-}
-
-void CollectTimestamps(Core &core, uint32_t slot)
-{
-    FrameSlot &frame = core.frames[slot];
-    if (!frame.timestampsWritten)
-        return;
-    frame.timestampsWritten = false;
-    uint64_t ticks[2] = {};
-    // The slot's fence has signalled, so the results are there; no wait flag.
-    if (core.vk.vkGetQueryPoolResults(core.dev, core.timestamps, 2 * slot, 2, sizeof(ticks), ticks, sizeof(uint64_t),
-                                      VK_QUERY_RESULT_64_BIT)
-        != VK_SUCCESS)
-        return;
-    const uint64_t elapsed = (ticks[1] - ticks[0]) & core.timestampMask;
-    const double ms = static_cast<double>(elapsed) * core.timestampPeriodNs / 1.0e6;
-    PassTimings &timings = core.stats.clearPass;
-    timings.lastMs = ms;
-    timings.minMs = timings.samples ? std::min(timings.minMs, ms) : ms;
-    timings.maxMs = timings.samples ? std::max(timings.maxMs, ms) : ms;
-    timings.totalMs += ms;
-    ++timings.samples;
-}
-
-void ReadCapture(Core &core, uint32_t width, uint32_t height, VkFormat format)
-{
-    if (!core.captureCoherent)
-    {
-        VkMappedMemoryRange range{};
-        range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-        range.memory = core.captureMemory;
-        range.offset = 0;
-        range.size = VK_WHOLE_SIZE;
-        core.vk.vkInvalidateMappedMemoryRanges(core.dev, 1, &range);
-    }
-    const size_t size = static_cast<size_t>(width) * height * 4;
-    core.capturePixels.assign(static_cast<const uint8_t *>(core.captureMapped),
-                              static_cast<const uint8_t *>(core.captureMapped) + size);
-    core.capture = {core.capturePixels.data(), width, height, format};
-}
-} // namespace
-
 // ---- Public API ---------------------------------------------------------------------------
 
 Core *CreateCore(const CoreDesc &desc, const WindowSystem &window, char *error, size_t errorSize)
@@ -1018,7 +836,8 @@ Core *CreateCore(const CoreDesc &desc, const WindowSystem &window, char *error, 
     Core *core = new Core();
     core->desc = desc;
     core->window = window;
-    bool ok = CreateInstance(*core) && PickDevice(*core) && CreateDevice(*core);
+    bool ok = CreateInstance(*core) && PickDevice(*core) && CreateDevice(*core) && CreateFrameResources(*core)
+        && CreatePipelineCache(*core);
     if (ok)
     {
         const BuildResult built = BuildSwapchain(*core);
@@ -1044,21 +863,19 @@ void DestroyCore(Core *core, CoreStats *finalStats)
     if (core->dev)
     {
         vk.vkDeviceWaitIdle(core->dev);
-        DestroyCaptureBuffer(*core);
+        if (core->pipelineCache)
+            SavePipelineCache(core);
+        RunDeferred(*core, true);
+        DestroyFrameResources(*core);
+        DestroyPipelineObjects(*core);
         DestroySwapchainResources(*core);
         if (core->swapchain)
             vk.vkDestroySwapchainKHR(core->dev, core->swapchain, nullptr);
         if (core->timestamps)
             vk.vkDestroyQueryPool(core->dev, core->timestamps, nullptr);
-        for (FrameSlot &frame : core->frames)
-        {
-            if (frame.done)
-                vk.vkDestroyFence(core->dev, frame.done, nullptr);
-            if (frame.acquired)
-                vk.vkDestroySemaphore(core->dev, frame.acquired, nullptr);
-            if (frame.pool)
-                vk.vkDestroyCommandPool(core->dev, frame.pool, nullptr);
-        }
+        if (core->timeline)
+            vk.vkDestroySemaphore(core->dev, core->timeline, nullptr);
+        DestroyMemoryPools(*core);
         vk.vkDestroyDevice(core->dev, nullptr);
     }
     if (core->surface && vk.vkDestroySurfaceKHR)
@@ -1110,211 +927,17 @@ const SwapchainInfo &Swapchain(const Core *core) { return core->swapInfo; }
 const CoreStats &Stats(const Core *core) { return core->stats; }
 void NotifyResize(Core *core) { core->resizePending = true; }
 
-bool CaptureNextFrame(Core *core)
+const Dispatch &Functions(const Core *core) { return core->vk; }
+VkDevice DeviceHandle(const Core *core) { return core->dev; }
+VkPhysicalDevice PhysicalDeviceHandle(const Core *core) { return core->physical; }
+const VkPhysicalDeviceLimits &Limits(const Core *core) { return core->properties.limits; }
+VkFormat DepthStencilFormat(const Core *core) { return core->depthStencilFormat; }
+
+bool FormatSupports(const Core *core, VkFormat format, VkFormatFeatureFlags features)
 {
-    if (core->rebuildPending || core->resizePending)
-    {
-        // The swapchain about to be built decides; ask for it if allowed at all.
-        core->captureRequested = core->desc.allowCapture;
-        return core->desc.allowCapture;
-    }
-    core->captureRequested = core->swapInfo.canCapture;
-    return core->swapInfo.canCapture;
-}
-
-Capture LastCapture(const Core *core) { return core->capture; }
-
-void WaitIdle(Core *core)
-{
-    if (core->dev)
-        core->vk.vkDeviceWaitIdle(core->dev);
-    for (uint32_t slot = 0; slot < kFramesInFlight; ++slot)
-        CollectTimestamps(*core, slot);
-}
-
-FrameResult ClearAndPresent(Core *core_, const float rgba[4])
-{
-    Core &core = *core_;
-    Dispatch &vk = core.vk;
-    if (core.failed)
-        return FrameResult::Failed;
-
-    if (core.resizePending && !core.rebuildPending)
-    {
-        // A size event: rebuild only when the size really changed (or the
-        // window was minimised, which skips frames until it comes back).
-        VkSurfaceCapabilitiesKHR caps{};
-        VkExtent2D extent{};
-        if (!SurfaceExtent(core, caps, extent))
-            return FrameResult::Failed;
-        if (extent.width != core.swapInfo.width || extent.height != core.swapInfo.height)
-            core.rebuildPending = true;
-        core.resizePending = false;
-    }
-    if (core.rebuildPending)
-    {
-        const BuildResult built = BuildSwapchain(core);
-        if (built == BuildResult::Failed)
-            return FrameResult::Failed;
-        if (built == BuildResult::Minimised)
-        {
-            ++core.stats.framesSkipped;
-            return FrameResult::Skipped;
-        }
-    }
-
-    const uint32_t slot = core.frameIndex;
-    FrameSlot &frame = core.frames[slot];
-    if (!Check(core, vk.vkWaitForFences(core.dev, 1, &frame.done, VK_TRUE, UINT64_MAX), "vkWaitForFences"))
-        return FrameResult::Failed;
-    CollectTimestamps(core, slot);
-
-    uint32_t imageIndex = 0;
-    VkResult result = vk.vkAcquireNextImageKHR(core.dev, core.swapchain, UINT64_MAX, frame.acquired, VK_NULL_HANDLE,
-                                               &imageIndex);
-    if (result == VK_ERROR_OUT_OF_DATE_KHR)
-    {
-        // Nothing was signalled; the fence is still signalled too. Rebuild next time.
-        core.rebuildPending = true;
-        ++core.stats.framesSkipped;
-        return FrameResult::Skipped;
-    }
-    if (result == VK_SUBOPTIMAL_KHR)
-        core.rebuildPending = true; // still usable: draw this one, rebuild after
-    else if (!Check(core, result, "vkAcquireNextImageKHR"))
-        return FrameResult::Failed;
-
-    if (!Check(core, vk.vkResetFences(core.dev, 1, &frame.done), "vkResetFences")
-        || !Check(core, vk.vkResetCommandPool(core.dev, frame.pool, 0), "vkResetCommandPool"))
-        return FrameResult::Failed;
-
-    VkCommandBufferBeginInfo begin{};
-    begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    VkCommandBuffer cmd = frame.cmd;
-    if (!Check(core, vk.vkBeginCommandBuffer(cmd, &begin), "vkBeginCommandBuffer"))
-        return FrameResult::Failed;
-
-    const VkImage image = core.images[imageIndex];
-    const bool timed = core.timestamps != VK_NULL_HANDLE;
-    if (timed)
-        vk.vkCmdResetQueryPool(cmd, core.timestamps, 2 * slot, 2);
-
-    // The previous contents are not needed: the pass clears everything.
-    VkImageMemoryBarrier2 toAttachment = ImageBarrier(
-        image, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_NONE,
-        VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    Barrier(core, cmd, &toAttachment, 1);
-
-    if (timed)
-        vk.vkCmdWriteTimestamp2(cmd, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, core.timestamps, 2 * slot);
-
-    VkRenderingAttachmentInfo color{};
-    color.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    color.imageView = core.views[imageIndex];
-    color.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    color.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    std::memcpy(color.clearValue.color.float32, rgba, 4 * sizeof(float));
-    VkRenderingInfo rendering{};
-    rendering.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-    rendering.renderArea = {{0, 0}, {core.swapInfo.width, core.swapInfo.height}};
-    rendering.layerCount = 1;
-    rendering.colorAttachmentCount = 1;
-    rendering.pColorAttachments = &color;
-    vk.vkCmdBeginRendering(cmd, &rendering);
-    vk.vkCmdEndRendering(cmd);
-
-    if (timed)
-        vk.vkCmdWriteTimestamp2(cmd, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, core.timestamps, 2 * slot + 1);
-
-    const bool capturing = core.captureRequested && core.swapInfo.canCapture;
-    core.captureRequested = false;
-    if (capturing)
-    {
-        VkImageMemoryBarrier2 toCopy = ImageBarrier(
-            image, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-            VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-        Barrier(core, cmd, &toCopy, 1);
-        VkBufferImageCopy region{};
-        region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        region.imageExtent = {core.swapInfo.width, core.swapInfo.height, 1};
-        vk.vkCmdCopyImageToBuffer(cmd, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, core.captureBuffer, 1, &region);
-        VkBufferMemoryBarrier2 toHost{};
-        toHost.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
-        toHost.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
-        toHost.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-        toHost.dstStageMask = VK_PIPELINE_STAGE_2_HOST_BIT;
-        toHost.dstAccessMask = VK_ACCESS_2_HOST_READ_BIT;
-        toHost.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        toHost.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        toHost.buffer = core.captureBuffer;
-        toHost.offset = 0;
-        toHost.size = VK_WHOLE_SIZE;
-        VkImageMemoryBarrier2 toPresent = ImageBarrier(
-            image, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_NONE, kPresentHandOffStage, VK_ACCESS_2_NONE,
-            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-        Barrier(core, cmd, &toPresent, 1, &toHost, 1);
-    }
-    else
-    {
-        VkImageMemoryBarrier2 toPresent = ImageBarrier(
-            image, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-            kPresentHandOffStage, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-        Barrier(core, cmd, &toPresent, 1);
-    }
-    if (!Check(core, vk.vkEndCommandBuffer(cmd), "vkEndCommandBuffer"))
-        return FrameResult::Failed;
-
-    VkSemaphoreSubmitInfo wait{};
-    wait.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-    wait.semaphore = frame.acquired;
-    wait.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-    VkSemaphoreSubmitInfo signal{};
-    signal.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-    signal.semaphore = core.renderDone[imageIndex];
-    signal.stageMask = kPresentHandOffStage;
-    VkCommandBufferSubmitInfo cmdInfo{};
-    cmdInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
-    cmdInfo.commandBuffer = cmd;
-    VkSubmitInfo2 submit{};
-    submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
-    submit.waitSemaphoreInfoCount = 1;
-    submit.pWaitSemaphoreInfos = &wait;
-    submit.commandBufferInfoCount = 1;
-    submit.pCommandBufferInfos = &cmdInfo;
-    submit.signalSemaphoreInfoCount = 1;
-    submit.pSignalSemaphoreInfos = &signal;
-    if (!Check(core, vk.vkQueueSubmit2(core.queue, 1, &submit, frame.done), "vkQueueSubmit2"))
-        return FrameResult::Failed;
-    frame.timestampsWritten = timed;
-
-    VkPresentInfoKHR present{};
-    present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    present.waitSemaphoreCount = 1;
-    present.pWaitSemaphores = &core.renderDone[imageIndex];
-    present.swapchainCount = 1;
-    present.pSwapchains = &core.swapchain;
-    present.pImageIndices = &imageIndex;
-    result = vk.vkQueuePresentKHR(core.queue, &present);
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
-        core.rebuildPending = true;
-    else if (!Check(core, result, "vkQueuePresentKHR"))
-        return FrameResult::Failed;
-
-    if (capturing)
-    {
-        if (!Check(core, vk.vkWaitForFences(core.dev, 1, &frame.done, VK_TRUE, UINT64_MAX), "vkWaitForFences"))
-            return FrameResult::Failed;
-        ReadCapture(core, core.swapInfo.width, core.swapInfo.height, core.swapInfo.format);
-    }
-
-    core.frameIndex = (core.frameIndex + 1) % kFramesInFlight;
-    ++core.stats.framesPresented;
-    return FrameResult::Ok;
+    VkFormatProperties props{};
+    core->vk.vkGetPhysicalDeviceFormatProperties(core->physical, format, &props);
+    return (props.optimalTilingFeatures & features) == features;
 }
 
 const char *PresentModeName(VkPresentModeKHR mode)

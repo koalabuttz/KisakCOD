@@ -2321,9 +2321,10 @@ jobs:
           retention-days: 7
 
   vulkan_window:
-    # Opt-in Vulkan back end, first piece (docs/vulkan-core.md): the shared
-    # Vulkan core in src/gfx_vk and KisakCOD-vulkan-probe, which opens an SDL3
-    # window and clears, presents and resizes it through the core. Built for
+    # Opt-in Vulkan back end (docs/vulkan-core.md): the shared Vulkan core in
+    # src/gfx_vk and KisakCOD-vulkan-probe, which opens an SDL3 window and
+    # clears, presents and resizes it through the core, then draws a small
+    # textured scene through the core's resource paths and checks its pixels. Built for
     # x86_64, the primary Vulkan target, against the x86_64 SDL3 pin (same
     # options and cache key as x64_client). It runs on Mesa's lavapipe, a CPU
     # Vulkan driver, through SDL's offscreen video driver (VK_EXT_headless_surface):
@@ -2361,10 +2362,11 @@ jobs:
           set -euo pipefail
           # libvulkan-dev for the headers (the probe does not link the loader;
           # SDL3 opens it), mesa-vulkan-drivers for lavapipe,
-          # vulkan-validationlayers for the required validation run.
+          # vulkan-validationlayers for the required validation run,
+          # spirv-tools to validate the probe's checked-in SPIR-V.
           scripts/ci/apt-install.sh \
             cmake ninja-build clang binutils python3 ccache \
-            libvulkan-dev mesa-vulkan-drivers vulkan-validationlayers
+            libvulkan-dev mesa-vulkan-drivers vulkan-validationlayers spirv-tools
 
       - name: Restore compiler cache
         uses: actions/cache/restore@v4
@@ -2431,8 +2433,16 @@ jobs:
             exit 1
           fi
 
+      - name: Check the probe's generated SPIR-V header
+        shell: bash
+        run: |
+          set -euo pipefail
+          # vk_probe_shaders.h is generated from src/gfx_vk/tools/shaders: each
+          # source's hash must match the header, and the words must pass spirv-val.
+          python3 scripts/tools/vulkan/gen_spirv_header.py --check
+
       - name: Run the Vulkan window probe on lavapipe
-        timeout-minutes: 10
+        timeout-minutes: 15
         shell: bash
         env:
           PYTHONUNBUFFERED: "1"

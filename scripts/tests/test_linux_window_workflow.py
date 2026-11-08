@@ -871,6 +871,12 @@ class VulkanWindowWorkflowTests(unittest.TestCase):
         self.assertIn('--validation require', run)
         self.assertNotIn('xvfb', self.text.lower())
 
+    def test_the_generated_spirv_header_is_checked(self):
+        install = next(step['run'] for step in self.job['steps'] if step.get('name', '').startswith('Install '))
+        self.assertIn('spirv-tools', install)
+        check = self.step("Check the probe's generated SPIR-V header")['run']
+        self.assertIn('scripts/tools/vulkan/gen_spirv_header.py --check', check)
+
     def test_no_other_job_builds_the_probe(self):
         for name, job in self.workflow['jobs'].items():
             if name == self.JOB:

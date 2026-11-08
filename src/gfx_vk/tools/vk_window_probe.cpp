@@ -1,10 +1,12 @@
 // KisakCOD-vulkan-probe: opens an SDL3 window and clears and presents it through
 // the shared Vulkan core (src/gfx_vk/vk_core.h).
 //
-// This is the first visible step of the Vulkan renderer back end (renderer plan
-// M2): instance, device, swapchain, a cleared frame presented every refresh,
-// swapchain rebuilds when the window changes size, and GPU timestamps around
-// the clear pass. Nothing of the engine is linked and no game file is read.
+// This is the visible test of the Vulkan renderer back end's shared core
+// (renderer plan M2): instance, device, swapchain, a cleared frame presented
+// every refresh, swapchain rebuilds when the window changes size, and GPU
+// timestamps per pass. With --draw every frame instead draws a small textured
+// scene offscreen through the core's resource paths (vk_probe_draw.h) and blits
+// it into the window. Nothing of the engine is linked and no game file is read.
 //
 // Checks, each one a stage whose failure ends the run:
 //   sdl       SDL's video subsystem starts
@@ -15,6 +17,9 @@
 //             closed by hand after at least one
 //   resize    with --resize: the window is resized halfway and the swapchain
 //             follows it to the new size
+//   draw      with --draw: a still frame of the scene is read back and known
+//             points compared (also in the swapchain with --check-capture),
+//             and no pipeline was built during a frame
 //   capture   with --check-capture: the last frame is cleared to a known colour,
 //             copied back and compared in memory (no image is written)
 //   validation  with the validation layer loaded: it reported no errors
@@ -24,6 +29,8 @@
 // See docs/vulkan-core.md.
 
 #include <gfx_vk/vk_core.h>
+
+#include "vk_probe_draw.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
@@ -56,13 +63,16 @@ struct Options
     bool resize = false;
     bool checkCapture = false;
     bool listDevices = false;
+    bool draw = false;
+    std::string pipelineCache;
 };
 
 void Usage(const char *argv0)
 {
     std::fprintf(stderr,
                  "usage: %s [--frames N] [--size WxH] [--validation off|auto|require] [--device N]\n"
-                 "          [--no-vsync] [--resize] [--check-capture] [--list-devices]\n",
+                 "          [--no-vsync] [--resize] [--check-capture] [--list-devices] [--draw]\n"
+                 "          [--pipeline-cache PATH]\n",
                  argv0);
 }
 
@@ -126,6 +136,13 @@ bool ParseOptions(int argc, char **argv, Options *options)
             options->checkCapture = true;
         else if (arg == "--list-devices")
             options->listDevices = true;
+        else if (arg == "--draw")
+            options->draw = true;
+        else if (arg == "--pipeline-cache" && next && next[0])
+        {
+            options->pipelineCache = next;
+            ++i;
+        }
         else
             return false;
     }
@@ -254,6 +271,7 @@ int Run(const Options &options)
     desc.deviceIndex = options.device;
     desc.vsync = options.vsync;
     desc.allowCapture = options.checkCapture;
+    desc.pipelineCachePath = options.pipelineCache.empty() ? nullptr : options.pipelineCache.c_str();
     desc.log = LogLine;
 
     char error[512] = {};
@@ -286,6 +304,18 @@ int Run(const Options &options)
                 gfx_vk::FormatName(first.format), gfx_vk::PresentModeName(first.presentMode), first.imageCount);
     std::fflush(stdout);
 
+    vk_probe::DrawScene *scene = nullptr;
+    if (options.draw)
+    {
+        std::string reason;
+        scene = vk_probe::CreateDrawScene(core, reason);
+        if (!scene)
+        {
+            gfx_vk::DestroyCore(core);
+            return Failed("draw", reason.c_str());
+        }
+    }
+
     int resizeWidth = 0;
     int resizeHeight = 0;
     bool open = true;
@@ -310,12 +340,27 @@ int Run(const Options &options)
             // core rebuilds before the next frame.
             gfx_vk::NotifyResize(core);
         }
-        float rgba[4];
-        FrameColor(presented, rgba);
-        const gfx_vk::FrameResult result = gfx_vk::ClearAndPresent(core, rgba);
+        gfx_vk::FrameResult result = gfx_vk::FrameResult::Failed;
+        std::string drawError;
+        if (scene)
+        {
+            result = gfx_vk::BeginFrame(core);
+            if (result == gfx_vk::FrameResult::Ok)
+            {
+                result = vk_probe::RecordDrawFrame(core, scene, presented + 1, drawError) ? gfx_vk::Present(core)
+                                                                                          : gfx_vk::FrameResult::Failed;
+            }
+        }
+        else
+        {
+            float rgba[4];
+            FrameColor(presented, rgba);
+            result = gfx_vk::ClearAndPresent(core, rgba);
+        }
         if (result == gfx_vk::FrameResult::Failed)
         {
-            const std::string reason = gfx_vk::LastError(core);
+            const std::string reason = !drawError.empty() ? drawError : std::string(gfx_vk::LastError(core));
+            vk_probe::DestroyDrawScene(core, scene);
             gfx_vk::DestroyCore(core);
             return Failed("frames", reason.c_str());
         }
@@ -326,6 +371,7 @@ int Run(const Options &options)
         }
         else if (++skippedInARow > 1000)
         {
+            vk_probe::DestroyDrawScene(core, scene);
             gfx_vk::DestroyCore(core);
             return Failed("frames", "no frame could be presented 1000 times in a row");
         }
@@ -337,6 +383,7 @@ int Run(const Options &options)
     const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
     if (!presented)
     {
+        vk_probe::DestroyDrawScene(core, scene);
         gfx_vk::DestroyCore(core);
         return Failed("frames", "the window was closed before any frame was presented");
     }
@@ -360,6 +407,53 @@ int Run(const Options &options)
         {
             failedStage = "resize";
             failedReason = "the swapchain did not follow the window to its new size";
+        }
+    }
+
+    if (!failedStage && scene)
+    {
+        // A still frame of the scene, read back from the target (and from the
+        // swapchain image the blit wrote, when the surface can be copied from).
+        vk_probe::DrawCheck target;
+        vk_probe::DrawCheck shown;
+        std::string reason;
+        gfx_vk::FrameResult result = gfx_vk::FrameResult::Skipped;
+        for (int attempt = 0; attempt < 100 && result == gfx_vk::FrameResult::Skipped; ++attempt)
+        {
+            PumpEvents(sdl.window, core);
+            result = gfx_vk::BeginFrame(core);
+        }
+        bool ok = result == gfx_vk::FrameResult::Ok && vk_probe::RecordDrawFrame(core, scene, 0, reason)
+            && vk_probe::StartDrawCheck(core, scene, options.checkCapture, reason)
+            && gfx_vk::Present(core) == gfx_vk::FrameResult::Ok
+            && vk_probe::FinishDrawCheck(core, scene, target, shown, reason);
+        if (!ok)
+        {
+            failedStage = "draw";
+            failedReason = !reason.empty() ? reason : std::string(gfx_vk::LastError(core));
+            if (failedReason.empty())
+                failedReason = "no frame could be drawn for the check";
+        }
+        else
+        {
+            std::printf("vulkan_probe.draw_target=points %d mismatched %d%s%s\n", target.points, target.mismatched,
+                        target.detail.empty() ? "" : " ", target.detail.c_str());
+            if (shown.points)
+                std::printf("vulkan_probe.draw_swapchain=points %d mismatched %d%s%s\n", shown.points,
+                            shown.mismatched, shown.detail.empty() ? "" : " ", shown.detail.c_str());
+            else
+                std::printf("vulkan_probe.draw_swapchain=not read (needs --check-capture and a copyable surface)\n");
+            const gfx_vk::CoreStats &now = gfx_vk::Stats(core);
+            if (target.mismatched || shown.mismatched)
+            {
+                failedStage = "draw";
+                failedReason = "the drawn scene does not have the expected colours";
+            }
+            else if (now.pipelinesCreatedInFrame)
+            {
+                failedStage = "draw";
+                failedReason = "a pipeline was built during a frame";
+            }
         }
     }
 
@@ -422,6 +516,7 @@ int Run(const Options &options)
         }
     }
 
+    vk_probe::DestroyDrawScene(core, scene);
     gfx_vk::WaitIdle(core);
     const gfx_vk::CoreStats &stats = gfx_vk::Stats(core);
     std::printf("vulkan_probe.frames_presented=%llu\n", static_cast<unsigned long long>(stats.framesPresented));
@@ -438,6 +533,36 @@ int Run(const Options &options)
     {
         std::printf("vulkan_probe.clear_pass_gpu_ms=unsupported\n");
     }
+    if (scene)
+    {
+        const gfx_vk::PassTimings timings = gfx_vk::PassTimingsFor(core, "scene");
+        if (timings.supported && timings.samples)
+            std::printf("vulkan_probe.scene_pass_gpu_ms=avg %.4f min %.4f max %.4f samples %llu\n",
+                        timings.totalMs / static_cast<double>(timings.samples), timings.minMs, timings.maxMs,
+                        static_cast<unsigned long long>(timings.samples));
+        else
+            std::printf("vulkan_probe.scene_pass_gpu_ms=unsupported\n");
+    }
+    if (stats.frame.supported && stats.frame.samples)
+        std::printf("vulkan_probe.frame_gpu_ms=avg %.4f min %.4f max %.4f samples %llu\n",
+                    stats.frame.totalMs / static_cast<double>(stats.frame.samples), stats.frame.minMs,
+                    stats.frame.maxMs, static_cast<unsigned long long>(stats.frame.samples));
+    std::printf("vulkan_probe.submissions=%llu flushes=%llu\n", static_cast<unsigned long long>(stats.submissions),
+                static_cast<unsigned long long>(stats.flushes));
+    std::printf("vulkan_probe.memory=device %llu host %llu blocks %u buffers %u images %u\n",
+                static_cast<unsigned long long>(stats.deviceMemoryBytes),
+                static_cast<unsigned long long>(stats.hostMemoryBytes), stats.memoryBlocks, stats.buffersAlive,
+                stats.imagesAlive);
+    std::printf("vulkan_probe.uploads=staging_bytes %llu transient_bytes %llu descriptor_sets %llu barriers %u "
+                "deferred_destroyed %llu\n",
+                static_cast<unsigned long long>(stats.stagingBytes),
+                static_cast<unsigned long long>(stats.transientBytes),
+                static_cast<unsigned long long>(stats.descriptorSets), stats.barriers,
+                static_cast<unsigned long long>(stats.deferredDestroyed));
+    std::printf("vulkan_probe.pipelines=created %u in_frame %u cache_hits %u cache_loaded %d create_ms %.3f "
+                "samplers %u\n",
+                stats.pipelinesCreated, stats.pipelinesCreatedInFrame, stats.pipelineCacheHits,
+                stats.pipelineCacheLoaded ? 1 : 0, stats.pipelineCreateMs, stats.samplersCreated);
     const bool validation = gfx_vk::ValidationEnabled(core);
     gfx_vk::CoreStats ending{};
     gfx_vk::DestroyCore(core, &ending);

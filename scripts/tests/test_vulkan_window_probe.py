@@ -14,6 +14,12 @@ server or game data is involved. The checks:
                  the swapchain followed the resize, the captured frame is the
                  cleared colour, the clear pass was timed, and the validation
                  layer (when loaded) reported no errors
+  draw           --draw runs twice with a pipeline cache file: the scene's
+                 points have their colours in the offscreen target and in the
+                 swapchain the target was blitted into, no pipeline was built
+                 during a frame, the scene pass was timed, uploads and deferred
+                 destruction ran, the second run loaded the cache file, and the
+                 validation layer reported no errors
 
 Usage:
   test_vulkan_window_probe.py --binary build/bin/KisakCOD-vulkan-probe
@@ -112,6 +118,43 @@ def main():
         checks.expect('validation with synchronisation checks was on',
                       found.get('vulkan_probe.validation') == 'on+sync', found.get('vulkan_probe.validation'))
     checks.expect('no validation errors', found.get('vulkan_probe.validation_errors') == '0')
+
+    # draw, twice: the second run starts from the pipeline cache the first wrote.
+    with tempfile.TemporaryDirectory() as scratch:
+        cache = os.path.join(scratch, 'pipelines.bin')
+        for run_index in (1, 2):
+            code, stdout, stderr = run(binary, ['--draw', '--frames', str(args.frames), '--validation',
+                                                args.validation, '--resize', '--check-capture',
+                                                '--pipeline-cache', cache], env)
+            print(stdout, end='')
+            if stderr.strip():
+                print(stderr, end='', file=sys.stderr)
+            found = values(stdout)
+            name = f'draw run {run_index}'
+            checks.expect(f'{name} passes', code == 0 and found.get('vulkan_probe') == 'passed', f'status {code}')
+            checks.expect(f'{name} target points', found.get('vulkan_probe.draw_target', '').endswith('mismatched 0'),
+                          found.get('vulkan_probe.draw_target', 'missing'))
+            checks.expect(f'{name} swapchain points',
+                          found.get('vulkan_probe.draw_swapchain', '').startswith('points 7 mismatched 0'),
+                          found.get('vulkan_probe.draw_swapchain', 'missing'))
+            pipelines = re.match(r'created (\d+) in_frame (\d+) cache_hits (\d+) cache_loaded (\d)',
+                                 found.get('vulkan_probe.pipelines', ''))
+            checks.expect(f'{name} built its pipeline at load', bool(pipelines) and pipelines.group(1) == '1'
+                          and pipelines.group(2) == '0', found.get('vulkan_probe.pipelines', 'missing'))
+            checks.expect(f'{name} cache file {"loaded" if run_index == 2 else "not there yet"}',
+                          bool(pipelines) and pipelines.group(4) == ('1' if run_index == 2 else '0'),
+                          found.get('vulkan_probe.pipelines', 'missing'))
+            checks.expect(f'{name} scene pass timed',
+                          found.get('vulkan_probe.scene_pass_gpu_ms', '').startswith('avg '),
+                          found.get('vulkan_probe.scene_pass_gpu_ms', 'missing'))
+            uploads = re.match(r'staging_bytes (\d+) transient_bytes (\d+) descriptor_sets (\d+) barriers (\d+) '
+                               r'deferred_destroyed (\d+)', found.get('vulkan_probe.uploads', ''))
+            checks.expect(f'{name} uploads and deferred destruction ran',
+                          bool(uploads) and all(int(uploads.group(i)) > 0 for i in range(1, 6))
+                          and int(uploads.group(5)) >= args.frames,
+                          found.get('vulkan_probe.uploads', 'missing'))
+            checks.expect(f'{name} no validation errors', found.get('vulkan_probe.validation_errors') == '0')
+        checks.expect('pipeline cache file written', os.path.isfile(cache) and os.path.getsize(cache) > 0)
 
     if checks.failures:
         print(f'{len(checks.failures)} check(s) failed: {", ".join(checks.failures)}')
