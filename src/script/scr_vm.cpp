@@ -2278,13 +2278,14 @@ thread_return:
         case OP_GetVector:
             INC_TOP();
             fs.top->type = VAR_VECTOR;
-#if defined(__arm__)
+#if defined(__arm__) || defined(KISAK_ALIGNMENT_CHECK)
             {
                 // A vector constant sits unaligned in the bytecode, and every
                 // vector operation reads it with float loads (VLDR), which
                 // fault on an unaligned address on a 32-bit ARM CPU (the PS
                 // Vita; Linux does not fix them up either). Push an aligned,
-                // reference-counted copy instead.
+                // reference-counted copy instead. The alignment check build
+                // takes this path too, so its report matches the Vita's.
                 // (Copy from the char pointer: a float pointer would let
                 // the compiler assume it is aligned.)
                 float vector[3];

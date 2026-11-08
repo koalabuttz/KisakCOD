@@ -151,7 +151,18 @@ a few client-only functions in the link that the normal server drops; they
 are never called, and `scripts/platform/linux/alignment_check_stubs.txt`
 defines their symbols as address 0 so the link completes; if a later change
 makes the link fail on another undefined client symbol, add its mangled name
-there.
+there. The build defines `KISAK_ALIGNMENT_CHECK`, so code with a separate
+32-bit ARM path (the script VM's vector constants) takes that path and the
+report shows what the Vita build would do.
+
+First scan (laptop, 2026-11-08, all 21 stock maps plus bots, before the
+build took the ARM vector path): 35 source lines. The 10 that fault are all
+reads of script vector constants inside the bytecode (`Scr_EvalPlus`,
+`Scr_EvalMinus`, vector indexing, `Scr_GetVector`): the console run 3 crash,
+already fixed on ARM. The 4 to check are `CM_AddStaticModelToNode`, which
+treats a sector's 2-byte model list head as a `cStaticModel_s` but only reads
+and writes its 2-byte first member (one halfword access, fine). The rest are
+word and halfword operands in the packed bytecode (fine).
 
 ## How the port works
 

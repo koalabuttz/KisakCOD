@@ -105,6 +105,8 @@ endif()
 option(KISAK_ALIGNMENT_CHECK "Report misaligned memory accesses in KisakCOD-dedi (diagnostic, for the PS Vita port)" OFF)
 if(KISAK_ALIGNMENT_CHECK)
     target_compile_options(KisakCOD-dedi PRIVATE -fsanitize=alignment -fno-omit-frame-pointer)
+    # Code that differs for 32-bit ARM's alignment rules takes its ARM path.
+    target_compile_definitions(KisakCOD-dedi PRIVATE KISAK_ALIGNMENT_CHECK)
     # The report calls keep a few client-only paths in the link that the
     # normal build drops; alignment_check_stubs.txt names their missing
     # symbols, defined here as address 0.
