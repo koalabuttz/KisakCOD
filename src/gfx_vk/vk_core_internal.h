@@ -211,6 +211,7 @@ public:
     std::vector<VkSemaphore> renderDone; // one per swapchain image
     bool rebuildPending = false;
     bool resizePending = false;
+    bool windowDetached = false; // DetachWindow: no swapchain or surface any more
 
     FrameSlot frames[kFramesInFlight];
     uint32_t frameIndex = 0;
@@ -263,6 +264,10 @@ VkImageAspectFlags FormatAspect(VkFormat format);
 
 // vk_frame.cpp
 bool CreateFrameResources(Core &core);
+// Ends an open frame without presenting it: what was recorded is submitted
+// (it takes the acquire wait, so nothing stays pending on the swapchain).
+// Not inside a pass. For DetachWindow.
+bool AbandonFrame(Core &core);
 void DestroyFrameResources(Core &core);
 // Waits until the timeline reaches serial (or it is already known done).
 bool WaitSerial(Core &core, uint64_t serial);

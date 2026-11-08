@@ -173,8 +173,9 @@ SDK's `d3d9.h`.
 The check opens a small window, creates the device through `IDirect3D9` with
 a 128x128 back buffer and runs its scenes. Output is `key=value` lines: one
 `d3d9_check.scene=<name> points=<n> mismatched=<n>` line per scene, the present
-and unsupported-call counts, the live objects at teardown, the device's last
-release, the validation counts, and `d3d9_check=passed` or
+and unsupported-call counts, the live objects at teardown, the window going
+before the device as at the game's quit (`d3d9_check.window_detached=1
+present_after=skipped`), the device's last release, the validation counts, and `d3d9_check=passed` or
 `d3d9_check=failed stage=<stage>` last. Exit status 0 is a pass, 1 a failure, 2
 a usage error.
 
@@ -248,6 +249,19 @@ translating them, pipelines and the time building them, texture uploads with
 their size and time), for comparing loads and first frames with DXVK. No
 pipeline cache file is written yet.
 
+At quit `R_ShutdownDirect3D` destroys the game's window before it releases the
+device, and a Vulkan surface must not outlive its window. So the window layer
+tells the host first (`SetRendererWindowDestroying` in
+`src/linux/client/window/win32_window_sdl3.h`, called from `DestroyWindow`
+before `SDL_DestroyWindow`), and the host calls `front::WindowDestroying`: each
+device made for that window ends an open frame unshown, waits for the GPU and
+destroys its swapchain and surface (`vulkan: window detached: ...`). The device
+stays usable until its release, and its presents are skipped. SDL also unloads
+the Vulkan loader with its last Vulkan window, which used to leave the device's
+teardown calling into an unloaded library (a crash at quit, after the `device
+stats` line); the host holds one more loader reference
+(`SDL_Vulkan_LoadLibrary`) for the rest of the process.
+
 ### On Windows
 
 On Windows the same option links the front into `KisakCOD-mp` only
@@ -278,6 +292,9 @@ same three dvars:
   at `Direct3DCreate9`, as a missing D3D9 would.
 * Display modes are the primary display's 32-bit modes (`EnumDisplaySettingsW`),
   and the monitor is the primary one.
+* `WM_DESTROY` (`src/win32/win_wndproc.cpp`) calls
+  `Kisak_VulkanWindowDestroying`, which detaches the device's surface from the
+  window as on Linux. `vulkan-1.dll` is never unloaded.
 
 The front never changes the display mode. In fullscreen the window covers the
 mode's size at the desktop's resolution, so use windowed mode or the desktop's

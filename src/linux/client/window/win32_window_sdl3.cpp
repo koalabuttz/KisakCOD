@@ -50,11 +50,18 @@ std::mutex g_windowsLock;
 std::unordered_set<SDL_Window *> g_windows;
 bool g_videoReferenced = false;
 kisak::win32_window::WindowObserver g_observer;
+void (*g_rendererDestroying)(void *hwnd) = nullptr;
 
 kisak::win32_window::WindowObserver Observer()
 {
     std::lock_guard<std::mutex> lock(g_windowsLock);
     return g_observer;
+}
+
+void (*RendererDestroying())(void *hwnd)
+{
+    std::lock_guard<std::mutex> lock(g_windowsLock);
+    return g_rendererDestroying;
 }
 
 bool EnsureVideo()
@@ -144,6 +151,12 @@ void SetWindowObserver(const WindowObserver *observer)
     g_observer = observer ? *observer : WindowObserver{};
 }
 
+void SetRendererWindowDestroying(void (*destroying)(void *hwnd))
+{
+    std::lock_guard<std::mutex> lock(g_windowsLock);
+    g_rendererDestroying = destroying;
+}
+
 } // namespace kisak::win32_window
 
 HWND WINAPI CreateWindowExA(DWORD dwExStyle,
@@ -226,8 +239,12 @@ BOOL WINAPI DestroyWindow(HWND hWnd)
     SDL_Window *const window = reinterpret_cast<SDL_Window *>(hWnd);
     // WM_DESTROY: whoever borrowed the window lets go while it still exists.
     if (KnownWindow(hWnd))
+    {
         if (const auto destroying = Observer().destroying)
             destroying(window);
+        if (const auto destroying = RendererDestroying())
+            destroying(window);
+    }
     {
         std::lock_guard<std::mutex> lock(g_windowsLock);
         if (!window || !g_windows.erase(window))

@@ -934,6 +934,31 @@ void DestroyCore(Core *core, CoreStats *finalStats)
     delete core;
 }
 
+void DetachWindow(Core *core_)
+{
+    if (!core_ || core_->windowDetached)
+        return;
+    Core &core = *core_;
+    Dispatch &vk = core.vk;
+    core.windowDetached = true;
+    if (core.dev)
+    {
+        // The acquired image is never presented.
+        AbandonFrame(core);
+        vk.vkDeviceWaitIdle(core.dev);
+        DestroySwapchainResources(core);
+        if (core.swapchain)
+            vk.vkDestroySwapchainKHR(core.dev, core.swapchain, nullptr);
+        core.swapchain = VK_NULL_HANDLE;
+    }
+    if (core.surface && vk.vkDestroySurfaceKHR)
+        vk.vkDestroySurfaceKHR(core.instance, core.surface, nullptr);
+    core.surface = VK_NULL_HANDLE;
+    core.resizePending = false;
+    core.rebuildPending = false;
+    Log(core, "window detached: swapchain and surface destroyed before their window");
+}
+
 bool LogDevices(const CoreDesc &desc, const WindowSystem &window, char *error, size_t errorSize)
 {
     Core core;

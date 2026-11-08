@@ -299,6 +299,14 @@ void Device::Destroy()
     }
 }
 
+void Device::DetachWindow()
+{
+    if (legacy_)
+        lg::DetachWindow(legacy_);
+    else if (core_)
+        gfx_vk::DetachWindow(core_);
+}
+
 DeviceCounters Device::counters() const
 {
     const FrontLock lock;

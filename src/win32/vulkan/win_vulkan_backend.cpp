@@ -34,6 +34,7 @@
 
 IDirect3D9 *Kisak_VulkanDirect3DCreate9();
 int Kisak_VulkanBackendSelected();
+void Kisak_VulkanWindowDestroying(HWND window);
 
 namespace
 {
@@ -293,4 +294,12 @@ IDirect3D9 *Kisak_VulkanDirect3DCreate9()
     Com_Printf(CON_CHANNEL_GFX, "Graphics back end: Vulkan (validation %s, device %d)\n",
                s_validationNames[r_vkValidation->current.integer], r_vkDevice->current.integer);
     return front::CreateDirect3D9(host);
+}
+
+// WM_DESTROY: a device made for the window lets go of its Vulkan surface while
+// the window still exists (the engine destroys its window before it releases
+// the device, and a surface must not outlive its window).
+void Kisak_VulkanWindowDestroying(HWND window)
+{
+    front::WindowDestroying(window);
 }

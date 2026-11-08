@@ -361,6 +361,17 @@ void EndTimed(Core &core, int query)
 }
 } // namespace
 
+bool AbandonFrame(Core &core)
+{
+    if (!core.inFrame || core.inPass)
+        return false;
+    SettleUploads(core);
+    const bool submitted = SubmitRecording(core, false);
+    core.inFrame = false;
+    core.acquireWaitPending = false;
+    return submitted;
+}
+
 namespace
 {
 // Buffer copies recorded since the last barrier must finish before anything
@@ -526,6 +537,12 @@ FrameResult BeginFrame(Core *core_)
     {
         Fail(core, "BeginFrame inside a frame");
         return FrameResult::Failed;
+    }
+    if (core.windowDetached)
+    {
+        // No surface any more: nothing can be shown.
+        ++core.stats.framesSkipped;
+        return FrameResult::Skipped;
     }
 
     if (core.resizePending && !core.rebuildPending)

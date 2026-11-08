@@ -1182,6 +1182,21 @@ int Run(const Options &options)
             failedStage = "teardown";
             failedReason = std::to_string(live) + " objects outlived their last release";
         }
+        // The engine's order at quit: the window goes first (WM_DESTROY, which
+        // detaches the device's surface), then the device is released.
+        const uint32_t detached = front::WindowDestroying(WindowHandle(sdl));
+        const uint64_t skippedBefore = check.Counters().presentsSkipped;
+        const HRESULT detachedPresent = check.device->Present(nullptr, nullptr, nullptr, nullptr);
+        const bool presentSkipped = check.Counters().presentsSkipped == skippedBefore + 1;
+        SDL_DestroyWindow(sdl.window);
+        sdl.window = nullptr;
+        std::printf("d3d9_check.window_detached=%u present_after=%s\n", detached,
+                    SUCCEEDED(detachedPresent) ? (presentSkipped ? "skipped" : "shown") : "failed");
+        if (!failedStage && (detached != 1 || FAILED(detachedPresent) || !presentSkipped))
+        {
+            failedStage = "teardown";
+            failedReason = "the device did not let go of its window when the window went";
+        }
         IDirect3DDevice9 *device = check.device;
         check.device = nullptr;
         const ULONG refs = device->Release();
@@ -1201,7 +1216,8 @@ int Run(const Options &options)
         failedStage = "teardown";
         failedReason = "IDirect3D9 outlived its last release";
     }
-    SDL_DestroyWindow(sdl.window);
+    if (sdl.window)
+        SDL_DestroyWindow(sdl.window);
     std::printf("d3d9_check.validation_errors=%u\n", sdl.finalStats.validationErrors);
     std::printf("d3d9_check.validation_warnings=%u\n", sdl.finalStats.validationWarnings);
     std::printf("d3d9_check.validation_ignored=%u\n", sdl.finalStats.validationIgnored);

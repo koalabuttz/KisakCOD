@@ -1664,6 +1664,19 @@ void UpdateTexture(Device *device_, Texture *src, Texture *dst)
 
 // ---- Frames and queries ----------------------------------------------------------------------
 
+void DetachWindow(Device *device_)
+{
+    Device &device = *device_;
+    EndPassIfOpen(device);
+    gfx_vk::DetachWindow(device.core); // ends an open frame without showing it
+    device.frameOpen = false;
+    device.frameSkipped = false;
+    device.stateCommands = VK_NULL_HANDLE;
+    device.boundPipeline = VK_NULL_HANDLE;
+    device.dynamicValid = false;
+}
+
+
 PresentResult Present(Device *device_)
 {
     Device &device = *device_;

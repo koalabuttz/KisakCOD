@@ -13,6 +13,7 @@
 
 #include <gfx_vk/d3d9/vk_d3d9.h>
 #include <linux/client/window/sdl_api.h>
+#include <linux/client/window/win32_window_sdl3.h>
 
 #if KISAK_LINUX_SDL_MAJOR != 3
 #error "the Vulkan back end's host is SDL3 (KISAK_LINUX_SDL_MAJOR=3)"
@@ -217,6 +218,29 @@ void HostCoreDestroyed(void *, const gfx_vk::CoreStats &stats)
                stats.validationWarnings);
 }
 
+// WM_DESTROY of any window: a device made for it lets go of its Vulkan surface
+// while the window still exists (the engine destroys its windows before it
+// releases the device).
+void HostWindowDestroying(void *hwnd)
+{
+    front::WindowDestroying(reinterpret_cast<front::D3D9Window>(hwnd));
+}
+
+// SDL loads the Vulkan loader with the first Vulkan window and unloads it with
+// the last one, which the engine destroys before it releases the device: the
+// device's teardown would then call into an unloaded library. Holding one more
+// reference for the rest of the process keeps the loader where it is.
+void HoldVulkanLoader()
+{
+    static bool held = false;
+    if (held)
+        return;
+    if (SDL_Vulkan_LoadLibrary(nullptr))
+        held = true;
+    else
+        Com_Printf(CON_CHANNEL_GFX, "Vulkan: SDL_Vulkan_LoadLibrary failed: %s\n", SDL_GetError());
+}
+
 gfx_vk::Validation ValidationSetting()
 {
     switch (r_vkValidation->current.integer)
@@ -259,6 +283,8 @@ IDirect3D9 *Kisak_VulkanDirect3DCreate9()
         Com_Printf(CON_CHANNEL_GFX, "Vulkan: SDL video did not start: %s\n", SDL_GetError());
         return nullptr;
     }
+    HoldVulkanLoader();
+    kisak::win32_window::SetRendererWindowDestroying(HostWindowDestroying);
     front::Host host;
     host.user = &s_host;
     host.windowSystem = HostWindowSystem;
