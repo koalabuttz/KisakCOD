@@ -7,7 +7,7 @@
 
 namespace gfx_vk::legacy
 {
-static_assert(sizeof(PipelineKey) == 48, "PipelineKey must have no padding: it is hashed and compared as bytes");
+static_assert(sizeof(PipelineKey) == 48 + 2 * kMaxStreams, "PipelineKey must have no padding: it is hashed and compared as bytes");
 
 namespace
 {
@@ -504,15 +504,18 @@ Pipeline *BuildPipeline(Device &device, const PipelineKey &key, Shader &vs, Shad
         bindingMask |= 1u << attribute.binding;
         attributes.push_back(attribute);
     }
+    const bool dynamicStride = Features(device.core).dynamicVertexStride;
     std::vector<VkVertexInputBindingDescription> bindings;
     for (uint32_t binding = 0; binding <= kZeroBinding; ++binding)
     {
         if (bindingMask & (1u << binding))
         {
-            // The stride is dynamic. The zero binding steps per instance, so
-            // every vertex reads its first element.
-            bindings.push_back({binding, 16, binding == kZeroBinding ? VK_VERTEX_INPUT_RATE_INSTANCE
-                                                                      : VK_VERTEX_INPUT_RATE_VERTEX});
+            // The stride is dynamic where the device allows it, else the
+            // key's. The zero binding steps per instance, so every vertex
+            // reads its first element.
+            const uint32_t stride = binding == kZeroBinding || dynamicStride ? 16 : key.strides[binding];
+            bindings.push_back({binding, stride, binding == kZeroBinding ? VK_VERTEX_INPUT_RATE_INSTANCE
+                                                                          : VK_VERTEX_INPUT_RATE_VERTEX});
         }
     }
     VkPipelineVertexInputStateCreateInfo vertexInput{};
@@ -568,17 +571,18 @@ Pipeline *BuildPipeline(Device &device, const PipelineKey &key, Shader &vs, Shad
         VK_DYNAMIC_STATE_CULL_MODE,
         VK_DYNAMIC_STATE_FRONT_FACE,
         VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY,
-        VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE,
         VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE,
         VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE,
         VK_DYNAMIC_STATE_DEPTH_COMPARE_OP,
         VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE,
         VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE,
         VK_DYNAMIC_STATE_STENCIL_OP,
+        VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE, // last: left out when strides are baked in
     };
+    constexpr uint32_t kDynamicCount = static_cast<uint32_t>(sizeof(kDynamic) / sizeof(kDynamic[0]));
     VkPipelineDynamicStateCreateInfo dynamic{};
     dynamic.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamic.dynamicStateCount = static_cast<uint32_t>(sizeof(kDynamic) / sizeof(kDynamic[0]));
+    dynamic.dynamicStateCount = dynamicStride ? kDynamicCount : kDynamicCount - 1;
     dynamic.pDynamicStates = kDynamic;
 
     VkFormat colorFormats[kMaxRenderTargets];
@@ -629,6 +633,11 @@ PipelineKey MakeKey(const Device &device, const Shader &vs, const Shader &ps, co
     key.vs = vs.id;
     key.ps = ps.id;
     key.decl = decl.id;
+    if (!Features(device.core).dynamicVertexStride)
+    {
+        for (const VertexElement &element : decl.elements)
+            key.strides[element.stream] = static_cast<uint16_t>(device.streams[element.stream].stride);
+    }
     key.colorCount = static_cast<uint8_t>(ColorCount(device.passTargets));
     for (uint32_t i = 0; i < key.colorCount; ++i)
         key.colorFormats[i] = static_cast<uint32_t>(device.passTargets[i]->texture->vkFormat);
@@ -1150,11 +1159,13 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
         device.boundPipeline = pipeline->pipeline;
     }
     ApplyDynamicState(device, cmd, type);
+    // Without dynamic strides the pipeline holds them (PipelineKey::strides).
+    const bool dynamicStride = Features(device.core).dynamicVertexStride;
     for (uint32_t binding = 0; binding <= kZeroBinding; ++binding)
     {
         if (pipeline->bindings & (1u << binding))
             vk.vkCmdBindVertexBuffers2(cmd, binding, 1, &buffers[binding], &offsets[binding], nullptr,
-                                       &strides[binding]);
+                                       dynamicStride ? &strides[binding] : nullptr);
     }
 
     const Layout &layout = *pipeline->layout;

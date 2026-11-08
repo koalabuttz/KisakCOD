@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstdarg>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <vector>
@@ -567,7 +568,8 @@ bool CreateDevice(Core &core)
     vk.vkEnumerateDeviceExtensionProperties(core.physical, nullptr, &count, available.data());
     available.resize(count);
     std::vector<const char *> extensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-    if (HasExtension(available, kPortabilitySubset))
+    const bool portability = HasExtension(available, kPortabilitySubset);
+    if (portability)
         extensions.push_back(kPortabilitySubset);
 
     const float priority = 1.0f;
@@ -595,6 +597,9 @@ bool CreateDevice(Core &core)
     core.optional.independentBlend = supported.independentBlend;
     core.optional.shaderClipDistance = supported.shaderClipDistance;
     core.optional.shaderFloat16 = supported12.shaderFloat16;
+    const char *strideMode = std::getenv("KISAK_VK_VERTEX_STRIDE");
+    const bool forceStatic = strideMode && std::strcmp(strideMode, "static") == 0;
+    core.optional.dynamicVertexStride = !portability && !forceStatic;
 
     VkPhysicalDeviceVulkan13Features features13{};
     features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;

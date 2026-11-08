@@ -2538,6 +2538,24 @@ jobs:
             --binary "$OUT_DIR/KisakCOD-vulkan-d3d9-check" \
             --video-driver offscreen --validation require
 
+      - name: Run both checks again with strides baked into the pipelines
+        if: ${{ matrix.config == 'Debug' }}
+        timeout-minutes: 15
+        shell: bash
+        env:
+          PYTHONUNBUFFERED: "1"
+          # The path MoltenVK takes (no dynamic vertex stride), here with the
+          # validation layer required.
+          KISAK_VK_VERTEX_STRIDE: static
+        run: |
+          set -euo pipefail
+          python3 -u scripts/tests/test_vulkan_legacy_adapter.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-legacy-check" \
+            --video-driver offscreen --validation require
+          python3 -u scripts/tests/test_vulkan_d3d9_front.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-d3d9-check" \
+            --video-driver offscreen --validation require
+
       - name: Check the D3D9 front's lock with ThreadSanitizer
         if: ${{ matrix.config == 'Debug' }}
         timeout-minutes: 15

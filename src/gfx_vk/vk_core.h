@@ -236,6 +236,12 @@ struct OptionalFeatures
     bool independentBlend;
     bool shaderClipDistance;
     bool shaderFloat16;
+    // VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE in pipelines. Core in
+    // Vulkan 1.3, but MoltenVK has it only from macOS 14 on Mac2 or Apple4
+    // GPUs and cannot say so, so it is off on every portability-subset device
+    // (and when KISAK_VK_VERTEX_STRIDE=static): strides are then baked into
+    // the pipelines.
+    bool dynamicVertexStride;
 };
 const OptionalFeatures &Features(const Core *core);
 // Whether images of this format with optimal tiling support these features.
