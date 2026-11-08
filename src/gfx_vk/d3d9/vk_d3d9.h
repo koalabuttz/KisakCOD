@@ -53,6 +53,10 @@ struct Host
     bool (*mode)(void *user, uint32_t index, uint32_t &width, uint32_t &height, uint32_t &refreshRate) = nullptr;
     bool (*currentMode)(void *user, uint32_t &width, uint32_t &height, uint32_t &refreshRate) = nullptr;
     HMONITOR (*monitor)(void *user) = nullptr;
+    // Where the window's client area starts on its monitor, in pixels, for
+    // GetFrontBufferData into a display-sized surface (windowed screenshots).
+    // Null: the monitor's top-left corner.
+    bool (*windowOrigin)(void *user, D3D9Window window, int32_t &x, int32_t &y) = nullptr;
     // One line per call, no newline. Null: nowhere.
     void (*log)(void *user, const char *line) = nullptr;
 
@@ -61,6 +65,10 @@ struct Host
     Validation validation = Validation::Off;
     int deviceIndex = -1;
     const char *pipelineCachePath = nullptr;
+    // The Legacy adapter's shader cache file (lg::DeviceDesc::shaderCachePath):
+    // translated shaders kept between runs. Null: none (translated shaders are
+    // still shared within the process).
+    const char *shaderCachePath = nullptr;
     // Called when a device's core is destroyed, with its final statistics
     // (validation messages about the teardown included). Null: not called.
     void (*coreDestroyed)(void *user, const CoreStats &stats) = nullptr;

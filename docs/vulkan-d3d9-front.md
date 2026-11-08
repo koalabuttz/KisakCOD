@@ -55,6 +55,10 @@ instead (`vk_d3d9.h`), which the program fills once:
   `CreateDevice` is given (on Linux and macOS the `HWND` is the SDL window).
 * `modeCount`, `mode`, `currentMode`, `monitor`: display modes of the one
   adapter (reported as `X8R8G8B8`) and its monitor.
+* `windowOrigin`: where the window's client area starts on its monitor. A
+  windowed screenshot asks `GetFrontBufferData` for a surface the size of the
+  display, as D3D9 does; the front puts the last frame shown there at that
+  place.
 * `log`: one line per call.
 * `validation`, `deviceIndex`, `pipelineCachePath`: how the core is created.
   Vsync follows `PresentationInterval` at `CreateDevice`.
@@ -112,7 +116,8 @@ Everything in `r_rhi.h`, and the getters D3D9 pairs with each setter:
   shader float constants, viewport and scissor, `Clear`, `DrawPrimitive`,
   `DrawIndexedPrimitive`, `DrawPrimitiveUP` (stream 0 unbound afterwards, as in
   D3D9), `StretchRect`, `UpdateTexture`, `GetRenderTargetData`,
-  `GetFrontBufferData` (from the back buffer, at its size), event and occlusion
+  `GetFrontBufferData` (the last frame shown, kept apart from the back buffer),
+  event and occlusion
   queries, the implicit swap chain, `Reset` (new back buffer size, every state
   back to its default), `Present`, gamma ramps (kept, not applied: DXVK applies
   them only to fullscreen swapchains), `GetAvailableTextureMem` (device-local
@@ -190,7 +195,7 @@ a usage error.
 | `threads` | A worker thread creating and filling textures while this thread draws and presents; the last one drawn and read back; nothing left alive. |
 | `queries` | Support checks, an event query and an occlusion query finishing, and an event issued right after `Present` (the engine's swap fence) finishing without a flush while the next frame records. |
 | `reset` | `Reset` to 96x96 and back: the new size, default state, nothing bound, drawing at the new size. |
-| `present` | `Present` through the device and the swap chain, `GetFrontBufferData`. |
+| `present` | `Present` through the device and the swap chain, then `GetFrontBufferData` halfway through the next frame: it must give the frame last shown. |
 
 `scripts/tests/test_vulkan_d3d9_front.py --binary <check>` runs it the way the
 adapter's runner does: usage errors, an unknown scene, one scene alone (with no
@@ -227,13 +232,16 @@ into whichever of these programs the build configures:
 
 The probes are i386, as before; `KisakCOD-mp` is any client architecture. The
 programs still link the system's D3D9 (DXVK Native) and use it by default.
-`src/linux/client/vulkan/vulkan_backend.cpp` registers three dvars, all
+`src/linux/client/vulkan/vulkan_backend.cpp` registers four dvars, all
 archived and latched (a change applies at the next `vid_restart`):
 
 * `r_backend`: `d3d9` (default: DXVK on Linux) or `vulkan`.
 * `r_vkValidation`: `off` (default), `auto` (when installed) or `require`.
 * `r_vkDevice`: -1 (default) lets the core pick a GPU; N picks the Nth device
   the Vulkan driver lists.
+* `r_vkShaderCache`: 1 (default) keeps translated shaders in
+  `<fs_homepath>/vulkan/shaders.bin` between runs (the Legacy adapter's shader
+  cache); 0 translates every shader at every start.
 
 With `r_backend vulkan`, `R_HW_Direct3DCreate9`
 (`src/gfx_d3d/rhi/r_rhi_d3d9_calls.cpp`, built with `KISAK_VULKAN_BACKEND`)
@@ -245,8 +253,10 @@ display modes are SDL's fullscreen modes (or the desktop mode where SDL lists
 none, as with its offscreen driver), and the front's log lines go to the
 console as `Vulkan: ...`. When the device goes, the front logs where the CPU
 time went (`vulkan d3d9: device stats: ...`: shaders created and the time
-translating them, pipelines and the time building them, texture uploads with
-their size and time), for comparing loads and first frames with DXVK. No
+how many of them were translated (the rest came from the shader cache) and
+the time it took, pipelines and the time
+building them, texture uploads with their size and time), for comparing loads
+and first frames with DXVK. No
 pipeline cache file is written yet.
 
 At quit `R_ShutdownDirect3D` destroys the game's window before it releases the

@@ -633,4 +633,160 @@ const char *TextureTypeName(TextureType type)
         return "none";
     }
 }
+// ---- Caches ------------------------------------------------------------------------------
+
+#if !defined(KISAK_LEGACY_SHADER_REVISION)
+#error "vulkan_shaders.cmake defines KISAK_LEGACY_SHADER_REVISION"
+#endif
+
+const char *TranslatorRevision() { return KISAK_LEGACY_SHADER_REVISION; }
+
+namespace
+{
+constexpr uint32_t kSerialVersion = 1;
+
+class Writer
+{
+public:
+    explicit Writer(std::vector<uint8_t> &out) : out_(out) {}
+    void U8(uint8_t value) { out_.push_back(value); }
+    void U32(uint32_t value)
+    {
+        for (int i = 0; i < 4; ++i)
+            out_.push_back(static_cast<uint8_t>(value >> (8 * i)));
+    }
+    void Bytes(const void *data, size_t size)
+    {
+        U32(static_cast<uint32_t>(size));
+        const uint8_t *bytes = static_cast<const uint8_t *>(data);
+        out_.insert(out_.end(), bytes, bytes + size);
+    }
+    void String(const std::string &value) { Bytes(value.data(), value.size()); }
+
+private:
+    std::vector<uint8_t> &out_;
+};
+
+class Reader
+{
+public:
+    Reader(const uint8_t *data, size_t size) : data_(data), size_(size) {}
+    bool U8(uint8_t &value)
+    {
+        if (size_ - at_ < 1)
+            return false;
+        value = data_[at_++];
+        return true;
+    }
+    bool U32(uint32_t &value)
+    {
+        if (size_ - at_ < 4)
+            return false;
+        value = 0;
+        for (int i = 0; i < 4; ++i)
+            value |= uint32_t(data_[at_++]) << (8 * i);
+        return true;
+    }
+    template <class T> bool Bytes(T &out)
+    {
+        uint32_t size = 0;
+        if (!U32(size) || size_ - at_ < size)
+            return false;
+        out.assign(data_ + at_, data_ + at_ + size);
+        at_ += size;
+        return true;
+    }
+    bool Done() const { return at_ == size_; }
+
+private:
+    const uint8_t *data_;
+    size_t size_;
+    size_t at_ = 0;
+};
+
+void WriteIo(Writer &w, const std::vector<IoEntry> &entries)
+{
+    w.U32(static_cast<uint32_t>(entries.size()));
+    for (const IoEntry &entry : entries)
+    {
+        w.U8(static_cast<uint8_t>(entry.builtIn ? 1 : 0));
+        w.U8(entry.location);
+        w.U8(entry.mask);
+        w.U8(entry.semanticUsage);
+        w.U32(entry.semanticIndex);
+        w.String(entry.semantic);
+    }
+}
+
+bool ReadIo(Reader &r, std::vector<IoEntry> &entries)
+{
+    uint32_t count = 0;
+    if (!r.U32(count) || count > 64)
+        return false;
+    entries.resize(count);
+    for (IoEntry &entry : entries)
+    {
+        uint8_t builtIn = 0;
+        if (!r.U8(builtIn) || builtIn > 1 || !r.U8(entry.location) || !r.U8(entry.mask) || !r.U8(entry.semanticUsage)
+            || !r.U32(entry.semanticIndex) || !r.Bytes(entry.semantic))
+            return false;
+        entry.builtIn = builtIn != 0;
+    }
+    return true;
+}
+} // namespace
+
+void Serialize(const Shader &shader, std::vector<uint8_t> &out)
+{
+    out.clear();
+    Writer w(out);
+    const Reflection &reflection = shader.reflection;
+    w.U32(kSerialVersion);
+    w.U8(static_cast<uint8_t>(reflection.stage));
+    w.U8(reflection.major);
+    w.U8(reflection.minor);
+    w.U32(reflection.floatConstants);
+    w.U8(static_cast<uint8_t>(reflection.floatIndexed ? 1 : 0));
+    w.U32(reflection.intConstants);
+    w.U32(reflection.boolConstants);
+    w.U32(reflection.uniforms);
+    w.U32(reflection.samplers);
+    for (TextureType type : reflection.samplerTypes)
+        w.U8(static_cast<uint8_t>(type));
+    WriteIo(w, reflection.inputs);
+    WriteIo(w, reflection.outputs);
+    w.Bytes(shader.ir.data(), shader.ir.size());
+    w.U32(shader.bytecodeHash);
+    w.String(shader.warnings);
+}
+
+bool Deserialize(const uint8_t *data, size_t size, Shader &shader)
+{
+    shader = Shader();
+    Reader r(data, size);
+    Reflection &reflection = shader.reflection;
+    uint32_t version = 0;
+    uint8_t stage = 0, floatIndexed = 0;
+    if (!r.U32(version) || version != kSerialVersion || !r.U8(stage) || stage > uint8_t(Stage::Pixel)
+        || !r.U8(reflection.major) || !r.U8(reflection.minor) || !r.U32(reflection.floatConstants)
+        || !r.U8(floatIndexed) || floatIndexed > 1 || !r.U32(reflection.intConstants)
+        || !r.U32(reflection.boolConstants) || !r.U32(reflection.uniforms) || !r.U32(reflection.samplers))
+        return false;
+    reflection.stage = static_cast<Stage>(stage);
+    reflection.floatIndexed = floatIndexed != 0;
+    for (TextureType &type : reflection.samplerTypes)
+    {
+        uint8_t value = 0;
+        if (!r.U8(value) || value > uint8_t(TextureType::Any))
+            return false;
+        type = static_cast<TextureType>(value);
+    }
+    if (!ReadIo(r, reflection.inputs) || !ReadIo(r, reflection.outputs) || !r.Bytes(shader.ir)
+        || !r.U32(shader.bytecodeHash) || !r.Bytes(shader.warnings) || !r.Done() || shader.ir.empty())
+    {
+        shader = Shader();
+        return false;
+    }
+    return true;
+}
 } // namespace gfx_vk::legacy_shader

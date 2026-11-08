@@ -24,7 +24,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -400,6 +402,7 @@ public:
     void PartialPrecision();
     void MissingInput();
     void EventQuery();
+    void ShaderCache();
 };
 
 void Check::Clear()
@@ -952,6 +955,97 @@ void Check::EventQuery()
     Expect("drawn", 32, 32, 255, 255, 255);
 }
 
+// Translated shaders come back from the process's cache and from the cache
+// file, and draw like freshly translated ones; a damaged file is ignored.
+void Check::ShaderCache()
+{
+    const std::string path = (std::filesystem::temp_directory_path() / "kisak_legacy_check_shaders.bin").string();
+    std::remove(path.c_str());
+    // Destroyed after the scene's frame is presented.
+    auto made = std::make_shared<std::vector<lg::Shader *>>();
+    cleanup.push_back([this, made, path] {
+        for (lg::Shader *shader : *made)
+            lg::DestroyShader(device, shader);
+        std::remove(path.c_str());
+    });
+    auto point = [this](const char *name, bool ok) {
+        ++result->points;
+        if (!ok)
+        {
+            ++result->mismatched;
+            result->detail += std::string(" ") + name;
+        }
+    };
+    auto create = [&](const uint32_t *code, size_t bytes) {
+        std::string reason;
+        lg::Shader *shader = lg::CreateShader(device, code, bytes, reason);
+        if (!shader)
+            Fail("CreateShader: " + reason);
+        else
+            made->push_back(shader);
+        return shader;
+    };
+    auto cached = [this] { return lg::Stats(device).shadersCached; };
+
+    lg::ClearShaderCache();
+    uint32_t before = cached();
+    lg::Shader *vs = create(shaders::kVsBasic, sizeof(shaders::kVsBasic));
+    lg::Shader *ps = create(shaders::kPsConstant, sizeof(shaders::kPsConstant));
+    point("fresh_translated", cached() == before && lg::ShaderCacheSize() == 2);
+    create(shaders::kVsBasic, sizeof(shaders::kVsBasic));
+    point("again_from_memory", cached() == before + 1 && lg::ShaderCacheSize() == 2);
+
+    std::string message;
+    point("saved", lg::SaveShaderCache(path.c_str(), message));
+    std::printf("legacy_check.shader_cache_save=%s\n", message.c_str());
+    point("save_unchanged", lg::SaveShaderCache(path.c_str(), message) && message == "unchanged");
+    lg::ClearShaderCache();
+    point("loaded", lg::LoadShaderCache(path.c_str(), message) && lg::ShaderCacheSize() == 2);
+    std::printf("legacy_check.shader_cache_load=%s\n", message.c_str());
+    before = cached();
+    lg::Shader *vsFile = create(shaders::kVsBasic, sizeof(shaders::kVsBasic));
+    lg::Shader *psFile = create(shaders::kPsConstant, sizeof(shaders::kPsConstant));
+    point("from_file", cached() == before + 2);
+
+    // A damaged file is ignored whole, and shaders are translated again.
+#ifdef _MSC_VER
+    std::FILE *file = nullptr;
+    if (fopen_s(&file, path.c_str(), "r+b") != 0)
+        file = nullptr;
+#else
+    std::FILE *file = std::fopen(path.c_str(), "r+b");
+#endif
+    if (file)
+    {
+        std::fseek(file, 40, SEEK_SET);
+        const char junk[8] = {'d', 'a', 'm', 'a', 'g', 'e', 'd', '!'};
+        std::fwrite(junk, 1, sizeof(junk), file);
+        std::fclose(file);
+    }
+    lg::ClearShaderCache();
+    point("damaged_refused", !lg::LoadShaderCache(path.c_str(), message) && lg::ShaderCacheSize() == 0);
+    std::printf("legacy_check.shader_cache_damaged=%s\n", message.c_str());
+    before = cached();
+    create(shaders::kPsConstant, sizeof(shaders::kPsConstant));
+    point("damaged_translated", cached() == before && lg::ShaderCacheSize() == 1);
+    if (!vs || !ps || !vsFile || !psFile)
+        return;
+
+    // The pair read back from the file draws like the fresh pair.
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        Reset();
+        lg::SetVertexShader(device, pass ? vsFile : vs);
+        lg::SetPixelShader(device, pass ? psFile : ps);
+        const float colour[4] = {0.0f, 1.0f, 0.0f, 1.0f};
+        lg::SetPixelShaderConstantF(device, 0, colour, 1);
+        DrawQuadPx(16, 16, 48, 48, 0.5f, Argb(255, 255, 0, 0));
+        if (!Read())
+            return;
+        Expect(pass ? "file_pair" : "fresh_pair", 32, 32, 0, 255, 0);
+    }
+}
+
 bool Check::Init(std::string &error)
 {
     lg::DeviceDesc desc;
@@ -1092,6 +1186,7 @@ int Run(const Options &options)
         {"partial_precision", &Check::PartialPrecision},
         {"missing_input", &Check::MissingInput},
         {"event_query", &Check::EventQuery},
+        {"shader_cache", &Check::ShaderCache},
     };
     const char *failedStage = nullptr;
     std::string failedReason;

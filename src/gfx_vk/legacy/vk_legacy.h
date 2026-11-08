@@ -226,6 +226,10 @@ struct DeviceDesc
     // Where the adapter's messages go (one line, no newline). Null: nowhere.
     void (*log)(void *user, const char *line) = nullptr;
     void *logUser = nullptr;
+    // The shader cache file (see LoadShaderCache): read when the device is
+    // created, unless the process already read it, and written when the device
+    // is destroyed if anything new was translated. Null or empty: none.
+    const char *shaderCachePath = nullptr;
 };
 
 // The device draws through an existing core, which keeps owning the window,
@@ -248,6 +252,7 @@ struct DeviceStats
     uint64_t dynamicRenames;  // DISCARD locks that took a new buffer
     // Where the time goes on the CPU, for the load and first-draw costs.
     uint32_t shaders;          // shaders created
+    uint32_t shadersCached;    // of those, served by the shader cache (not translated)
     uint64_t shaderMicros;     // translating them (vertex modules included)
     uint64_t pipelineMicros;   // building pipelines (pixel modules included)
     uint64_t textureUploads;   // texture levels uploaded by UnlockRect
@@ -255,6 +260,23 @@ struct DeviceStats
     uint64_t uploadMicros;     // staging those uploads
 };
 const DeviceStats &Stats(const Device *device);
+
+// The shader cache. Translated shaders are kept by their D3D9 bytecode for the
+// whole process and shared by every device, so bytecode created again (another
+// device, a vid_restart, the same shader twice) is not translated again. A file
+// keeps them between runs: it holds the translator's revision
+// (legacy_shader::TranslatorRevision) and is ignored whole when that differs or
+// when anything in it is damaged.
+//
+// LoadShaderCache adds a file's shaders; false when there is no usable file
+// (message says why). SaveShaderCache writes every cached shader when some are
+// not in the file yet (message says what it did); the file is replaced whole,
+// through a temporary file beside it.
+bool LoadShaderCache(const char *path, std::string &message);
+bool SaveShaderCache(const char *path, std::string &message);
+// Forgets every cached shader (the file stays). For checks and tools.
+void ClearShaderCache();
+uint32_t ShaderCacheSize();
 
 // ---- Resources ---------------------------------------------------------------------
 
@@ -312,6 +334,10 @@ Surface *CreatePlainSurface(Device *device, uint32_t width, uint32_t height, d3d
 // standalone ones (and is a no-op for texture levels and the back buffer).
 void DestroySurface(Device *device, Surface *surface);
 Surface *BackBuffer(Device *device);
+// The image the last Present showed (D3D9's front buffer). Present flips the
+// two, as D3D9's DISCARD swap effect allows, so drawing the next frame never
+// touches it: GetFrontBufferData reads it at any point of a frame.
+Surface *FrontBuffer(Device *device);
 void SurfaceSize(const Surface *surface, uint32_t &width, uint32_t &height, d3d::Format &format);
 // box null: the whole surface.
 bool LockSurface(Device *device, Surface *surface, const Box *box, uint32_t flags, LockedRect &out);
@@ -409,7 +435,9 @@ bool GetRenderTargetData(Device *device, Surface *renderTarget, Surface *dst);
 void UpdateTexture(Device *device, Texture *src, Texture *dst);
 
 // D3D9's BeginScene/EndScene bracket nothing here; Present shows the back
-// buffer (scaled to the window when their sizes differ).
+// buffer (scaled to the window when their sizes differ), then makes it the
+// front buffer and the old front buffer the back buffer. The new back
+// buffer's contents are undefined, as with D3D9's DISCARD swap effect.
 enum class PresentResult
 {
     Ok,

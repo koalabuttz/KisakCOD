@@ -121,6 +121,7 @@ bool Device::Init()
     legacyDesc.height = params_.BackBufferHeight;
     legacyDesc.log = h.log;
     legacyDesc.logUser = h.user;
+    legacyDesc.shaderCachePath = h.shaderCachePath;
     std::string legacyError;
     legacy_ = lg::CreateDevice(core_, legacyDesc, legacyError);
     if (!legacy_)
@@ -257,9 +258,10 @@ void Device::Destroy()
         // Where the CPU time went, for comparing loads and first frames.
         const lg::DeviceStats &stats = lg::Stats(legacy_);
         HostLog(host(),
-                "vulkan d3d9: device stats: %llu draws, %u shaders (%.1f ms translating), %u pipelines "
-                "(%.1f ms building), %llu texture uploads (%.1f MB, %.1f ms)",
-                static_cast<unsigned long long>(stats.draws), stats.shaders, stats.shaderMicros / 1000.0,
+                "vulkan d3d9: device stats: %llu draws, %u shaders (%u translated in %.1f ms), "
+                "%u pipelines (%.1f ms building), %llu texture uploads (%.1f MB, %.1f ms)",
+                static_cast<unsigned long long>(stats.draws), stats.shaders,
+                stats.shaders - std::min(stats.shaders, stats.shadersCached), stats.shaderMicros / 1000.0,
                 stats.pipelines, stats.pipelineMicros / 1000.0, static_cast<unsigned long long>(stats.textureUploads),
                 stats.uploadBytes / (1024.0 * 1024.0), stats.uploadMicros / 1000.0);
         // What each frame cost, for comparing frame rates: the work recorded
@@ -758,11 +760,57 @@ HRESULT STDMETHODCALLTYPE Device::GetRenderTargetData(IDirect3DSurface9 *renderT
 HRESULT STDMETHODCALLTYPE Device::GetFrontBufferData(UINT swapChain, IDirect3DSurface9 *dst)
 {
     const FrontLock lock;
-    // The last presented image is still in the back buffer (Present copies it
-    // to the swapchain), so the copy comes from there, at back buffer size.
+    // The adapter keeps the last presented image apart from the back buffer
+    // (Present flips the two). The engine's screenshot command runs on the
+    // main thread while the render thread may be halfway through the next
+    // frame, so the back buffer would give a half-drawn image.
     if (swapChain != 0 || !dst)
         return D3DERR_INVALIDCALL;
-    const bool ok = lg::GetRenderTargetData(legacy_, backBuffer_->handle(), static_cast<Surface *>(dst)->handle());
+    lg::Surface *const front = lg::FrontBuffer(legacy_);
+    lg::Surface *const target = static_cast<Surface *>(dst)->handle();
+    uint32_t width = 0, height = 0, targetWidth = 0, targetHeight = 0;
+    lg::d3d::Format format = lg::d3d::FMT_UNKNOWN, targetFormat = lg::d3d::FMT_UNKNOWN;
+    lg::SurfaceSize(front, width, height, format);
+    lg::SurfaceSize(target, targetWidth, targetHeight, targetFormat);
+    if (targetWidth == width && targetHeight == height)
+        return lg::GetRenderTargetData(legacy_, front, target) ? D3D_OK : D3DERR_INVALIDCALL;
+
+    // Windowed, as in D3D9: the surface has the display's size, and the window's
+    // image lands where its client area is on the display. The rest is left as
+    // it was (D3D9 would show the desktop there).
+    const auto fourBytes = [](lg::d3d::Format f) {
+        return f == lg::d3d::FMT_A8R8G8B8 || f == lg::d3d::FMT_X8R8G8B8;
+    };
+    if (!fourBytes(format) || !fourBytes(targetFormat))
+        return D3DERR_INVALIDCALL;
+    int32_t originX = 0, originY = 0;
+    if (host().windowOrigin && !host().windowOrigin(host().user, window_, originX, originY))
+        originX = originY = 0;
+    lg::Surface *copy =
+        lg::CreatePlainSurface(legacy_, width, height, format, lg::d3d::POOL_SYSTEMMEM, "front buffer copy");
+    lg::LockedRect from{}, to{};
+    bool ok = copy && lg::GetRenderTargetData(legacy_, front, copy)
+        && lg::LockSurface(legacy_, copy, nullptr, lg::d3d::LOCK_READONLY, from);
+    const bool fromLocked = ok;
+    ok = ok && lg::LockSurface(legacy_, target, nullptr, 0, to);
+    if (ok)
+    {
+        const int64_t x0 = std::max<int64_t>(0, originX);
+        const int64_t y0 = std::max<int64_t>(0, originY);
+        const int64_t x1 = std::min<int64_t>(targetWidth, int64_t(originX) + width);
+        const int64_t y1 = std::min<int64_t>(targetHeight, int64_t(originY) + height);
+        for (int64_t y = y0; y < y1 && x0 < x1; ++y)
+        {
+            const ptrdiff_t fromOffset = static_cast<ptrdiff_t>((y - originY) * int64_t(from.pitch) + (x0 - originX) * 4);
+            const ptrdiff_t toOffset = static_cast<ptrdiff_t>(y * int64_t(to.pitch) + x0 * 4);
+            std::memcpy(static_cast<uint8_t *>(to.bits) + toOffset, static_cast<const uint8_t *>(from.bits) + fromOffset,
+                        static_cast<size_t>(x1 - x0) * 4);
+        }
+        lg::UnlockSurface(legacy_, target);
+    }
+    if (fromLocked)
+        lg::UnlockSurface(legacy_, copy);
+    lg::DestroySurface(legacy_, copy);
     return ok ? D3D_OK : D3DERR_INVALIDCALL;
 }
 

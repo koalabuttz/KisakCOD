@@ -1728,6 +1728,12 @@ PresentResult Present(Device *device_)
     const VkOffset3D dst[2] = {{0, 0, 0}, {int32_t(shown.width), int32_t(shown.height), 1}};
     const bool scaled = shown.width != back.width || shown.height != back.height;
     BlitImage(device.core, device.backBuffer->image, src, swapchain, dst, scaled ? VK_FILTER_LINEAR : VK_FILTER_NEAREST);
+    // Flip: the image just shown becomes the front buffer, and the next frame
+    // draws into the other one. Render target 0 and every other use of the
+    // back buffer go through backBufferSurface, which keeps its address.
+    std::swap(device.backBuffer, device.frontBuffer);
+    device.backBufferSurface.texture = device.backBuffer;
+    device.frontBufferSurface.texture = device.frontBuffer;
     const FrameResult result = gfx_vk::Present(device.core);
     device.frameOpen = false;
     device.stateCommands = VK_NULL_HANDLE;

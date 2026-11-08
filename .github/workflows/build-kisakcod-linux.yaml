@@ -2793,7 +2793,7 @@ jobs:
           export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/stand-ins"
           log="$RUNNER_TEMP/device-probe-vulkan.log"
           "$OUT_DIR/KisakCOD-device-probe" --backend vulkan --validation auto 2>&1 | tee "$log"
-          grep -qx 'Graphics back end: Vulkan (validation auto, device -1)' "$log"
+          grep -qx 'Graphics back end: Vulkan (validation auto, device -1, shader cache off)' "$log"
           grep -q '^vulkan presents=3 skipped=0 unsupported_calls=0 ' "$log"
           grep -q '^readback width=640 height=480 .* mismatched_pixels=0$' "$log"
           grep -q '^vulkan_teardown destroyed=yes ' "$log"
