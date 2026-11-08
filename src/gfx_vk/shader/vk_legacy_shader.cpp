@@ -414,6 +414,12 @@ bool Translate(const void *bytecode, size_t bytes, Shader &shader, std::string &
         options.arithmeticOptions.lowerMsad = true;
         options.arithmeticOptions.lowerUdiv = true;
         options.arithmeticOptions.lowerGsVertexCountIn = false;
+        // Partial precision (_pp) at 32 bits, as D3D9 hardware ran it and as
+        // DXVK does unless d3d9.useFP16 is set. dxbc-spirv maps it to 16-bit
+        // floats by default, which overflow in the game's specular terms and
+        // brighten every lit surface.
+        options.min16Options.enableFloat16 = false;
+        options.min16Options.enableInt16 = false;
         options.resourceOptions.allowSubDwordScratchAndLds = true;
         options.resourceOptions.flattenLds = false;
         options.resourceOptions.flattenScratch = false;

@@ -139,6 +139,7 @@ statistics, the validation counts, and `legacy_check=passed` or
 | `static_buffers` | Static vertex buffers with 16- and 32-bit index buffers, a base vertex, and a rewrite between draws. |
 | `cube_volume` | Cube and volume textures. |
 | `shader_model_2` | `vs_2_0` and `ps_2_0` through their fixed output registers. |
+| `partial_precision` | `_pp` instructions computed at 32-bit precision, as D3D9 hardware and DXVK compute them (a 16-bit overflow would turn the pixel white). |
 | `missing_input` | A vertex shader input the declaration does not supply reads zero. |
 | `event_query` | An event query finishes after the GPU passes it. |
 
@@ -165,13 +166,22 @@ artifact for a run on the PC.
 
 Results so far (2026-11-08, cloud sandbox, no GPU, x86_64 Debug, lavapipe from
 Mesa 25.2.8, validation with synchronisation checks): all 17 scenes match, no
-validation errors, 11 pipelines.
+validation errors, 11 pipelines. The `partial_precision` scene, added later
+(18 scenes), passes there too, and failed (white) before the fix below.
 
 Laptop run 1 (2026-11-08, Intel RPL-U iGPU, Mesa 25.0.7 ANV, x86_64 and i386
 RelWithDebInfo, SDL offscreen and Wayland, no validation layer installed): all
 17 scenes match in all four runs, with identical scene lines; no adapter
 warnings; the probe test still passes on both builds (report in the project
 files, `renderer/vulkan-legacy-laptop-run-1.md`). Not yet run on the PC.
+
+The translator computes `_pp` (partial precision) at 32 bits:
+`vk_legacy_shader.cpp` turns off dxbc-spirv's mapping of minimum-precision
+types to 16-bit floats, as DXVK does unless `d3d9.useFP16` is set. With the
+16-bit mapping, the game's specular terms overflowed and every lit surface of
+mp_crash drew brighter than through DXVK (laptop Vulkan back end runs 1 and 2,
+`renderer/vulkan-backend-laptop-run-{1,2}.md`: the difference went away with
+`r_specular 0`).
 
 Synchronisation validation found one core hazard while this was written: a
 read-back's memory, reused after the host had waited for the copy, was written

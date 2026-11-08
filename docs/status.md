@@ -124,7 +124,10 @@ These came before the playable client and still build and run in CI:
   [Legacy adapter](vulkan-legacy-adapter.md) (`-DKISAK_BUILD_VULKAN_LEGACY=ON`),
   the part of D3D9 the renderer uses, with a 17-scene pixel check, and its
   [D3D9 front](vulkan-d3d9-front.md), the D3D9 interfaces on the adapter with
-  an 8-scene check; hosted CI runs both on lavapipe.
+  a 9-scene check; hosted CI runs both on lavapipe. With
+  `-DKISAK_BUILD_VULKAN_BACKEND=ON` the device probe, the world draw probe and
+  `KisakCOD-mp` link it, and `r_backend vulkan` draws the renderer through it
+  (the device probe passes on lavapipe in hosted CI; no map drawn yet).
 
 ## Open pull requests
 
@@ -134,7 +137,7 @@ As of 2026-11-08.
 | --- | --- | --- |
 | 120 | Record the Vulkan probe's first GPU runs (docs) | Review. |
 | 123 | Keep the Mac client's files in Application Support | Green CI. |
-| 131 | D3D9 front for the Vulkan Legacy adapter (the D3D9 interfaces on Vulkan) and its 8-scene check | Green CI. |
+| 132 | `r_backend vulkan`: the Vulkan back end in the device probe, the draw probe and the client; frames saved for image comparison; `_pp` shader math at 32 bits | Green CI (the laptop mp_crash comparison passed, run 3). |
 
 ## Laptop and PC runs still to do
 
@@ -143,7 +146,10 @@ As of 2026-11-08.
 - Singleplayer hand play on the levels the sweep passed (step 6 in
   [linux-sp-levels.md](linux-sp-levels.md)); sweep run 1 is done.
 - Vulkan Legacy adapter check on the PC (the laptop passed, PR 130); the D3D9
-  front check (PR 131) on the laptop and the PC.
+  front check (PR 131, merged) on the laptop and the PC.
+- mp_crash drawn by the world draw probe with `r_backend vulkan` and with DXVK,
+  compared image by image on the PC (the laptop matched in run 3, PR 132; the
+  Windows game needs a Win32 host for the front first).
 - Vulkan probe with the Khronos validation layer (synchronisation checks) on a
   real GPU; the laptop and PC runs so far had no layer installed.
 
@@ -157,9 +163,10 @@ In rough order:
 3. **Renderer**: the shader converter (dxbc-spirv) and the D3D9 interface
    (M1a) are done. Next is the Vulkan back end with Legacy visuals behind that
    interface: the core's drawing pieces (PR 124), the shader translator
-   (PR 126) and the Legacy adapter (PR 130) are merged, and its D3D9 front is
-   in review; next is `r_backend vulkan` and mp_crash drawn through Vulkan,
-   compared with DXVK on the laptop and the PC. The Modern path comes after (plan in the project
+   (PR 126), the Legacy adapter (PR 130) and its D3D9 front (PR 131) are
+   merged; `r_backend vulkan` (PR 132) draws mp_crash on the laptop as DXVK
+   does (PSNR 67 and 100), and next is the client played through Vulkan, then
+   the PC. The Modern path comes after (plan in the project
    files, `renderer/modern-renderer-plan.md`). The target is Modern at 60 fps
    on the laptop's Intel U300.
 4. **Performance**: laptop A/B runs, a function-level profile, then the

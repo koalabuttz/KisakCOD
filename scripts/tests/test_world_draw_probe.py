@@ -86,11 +86,11 @@ POST_REASON = "; the free camera checks the map's own glow and film"
 MODE_VARIABLES = ("KISAK_WORLD_DRAW_MAP", "KISAK_FREE_CAMERA_MAP", "KISAK_WORLD_DEVICE_MAP",
                   "KISAK_WORLD_SURFACE_MAP", "KISAK_WORLD_FRONTEND_MAP", "KISAK_UI_ASSET_EXPORT_MENUS",
                   "KISAK_UI_ASSET_EXPORT_DIR", "KISAK_WORLD_DRAW_SHOW_SECONDS", "KISAK_FREE_CAMERA_INPUT",
-                  "KISAK_FREE_CAMERA_SECONDS")
+                  "KISAK_FREE_CAMERA_SECONDS", "KISAK_WORLD_DRAW_IMAGES")
 
 
 def run_probe(probe, tree, output, map_name, timeout, show_seconds=None, camera_map=None, camera_input=None,
-              camera_seconds=None, dvars=()):
+              camera_seconds=None, dvars=(), images=None):
     environment = {key: value for key, value in os.environ.items() if key not in MODE_VARIABLES}
     environment["KISAK_UI_ASSET_EXPORT_DIR"] = str(output)
     if map_name is not None:
@@ -103,6 +103,8 @@ def run_probe(probe, tree, output, map_name, timeout, show_seconds=None, camera_
         environment["KISAK_FREE_CAMERA_INPUT"] = camera_input
     if camera_seconds is not None:
         environment["KISAK_FREE_CAMERA_SECONDS"] = camera_seconds
+    if images is not None:
+        environment["KISAK_WORLD_DRAW_IMAGES"] = images
     command = [str(probe), "+set", "fs_basepath", str(tree / "base"), "+set", "fs_homepath", str(tree / "home"),
                "+set", "dedicated", "2", "+set", "useFastFile", "1"]
     for name, value in dvars:
@@ -177,6 +179,20 @@ def main():
               "a show time over 60 seconds is refused at the arguments stage")
         check(not any(line.startswith("world_draw_layout=") for line in text.splitlines()),
               "a bad show time is refused before the layout check and any device work")
+
+        # Frame images: 0 or 1 only, and only for the draw mode; 1 still stops at
+        # the direct3d stage with nothing written.
+        status, text = run_probe(probe, tree, outputs / "images-bad", "mp_crash", args.timeout, images="2")
+        check(status == 1, f"KISAK_WORLD_DRAW_IMAGES=2 exits 1 (got {status})")
+        check(last_line(text).startswith(UNKNOWN_MAP + "KISAK_WORLD_DRAW_IMAGES"),
+              "KISAK_WORLD_DRAW_IMAGES other than 0 or 1 is refused at the arguments stage")
+        status, text = run_probe(probe, tree, outputs / "images", "mp_crash", args.timeout, images="1")
+        check(status == 1 and last_line(text).startswith(DEVICE_FAILURE),
+              f"KISAK_WORLD_DRAW_IMAGES=1 without a device stops at the direct3d stage (got {status})")
+        status, text = run_probe(probe, tree, outputs / "camera-images", None, args.timeout, camera_map="mp_crash",
+                                 images="1")
+        check(status == 1 and last_line(text).startswith(CAMERA_ARGUMENTS + "KISAK_WORLD_DRAW_IMAGES"),
+              "the replay refuses KISAK_WORLD_DRAW_IMAGES at the arguments stage")
 
         # The free-camera replay: the same start, the same refusals, named by the replay.
         status, text = run_probe(probe, tree, outputs / "camera", None, args.timeout, camera_map="mp_crash")

@@ -70,6 +70,29 @@ mov r1.z, v1.x
 texld r0, r1, s0
 mov oC0, r0
 """),
+    # A depth texture sampled as a shadow map: the colour's red is the depth
+    # it is compared with (D3D9's hardware shadow maps return 1 where the
+    # reference is at or in front of the stored depth, 0 behind it).
+    ("kPsShadow", """ps_3_0
+dcl_texcoord0 v0.xy
+dcl_color0 v1
+dcl_2d s0
+mov r1.xy, v0
+mov r1.z, v1.x
+texld r0, r1, s0
+mov oC0, r0
+"""),
+    # Partial precision (_pp) as D3D9 hardware ran it, at full 32-bit
+    # precision: c0.x squared is 90000, past 16-bit float's 65504, and times
+    # c0.y gives 0.5. Computed in 16 bits it would overflow to infinity and
+    # saturate to white.
+    ("kPsPartialPrecision", """ps_3_0
+mul_pp r0.x, c0.x, c0.x
+mul_pp r0.x, r0.x, c0.y
+mov r1, c0.w
+mov_sat r1.xyz, r0.x
+mov oC0, r1
+"""),
     # Shader model 2: the same path through fixed output registers.
     ("kVs20", """vs_2_0
 dcl_position v0

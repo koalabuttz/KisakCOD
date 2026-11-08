@@ -51,6 +51,13 @@ void HostLog(const Host &host, const char *format, ...)
     host.log(host.user, line);
 }
 
+std::recursive_mutex &FrontMutex()
+{
+    // Never destroyed: a device released from a static destructor still locks it.
+    static std::recursive_mutex *const mutex = new std::recursive_mutex;
+    return *mutex;
+}
+
 IDirect3D9 *CreateDirect3D9(const Host &host)
 {
     return new Direct3D(host);
@@ -58,6 +65,7 @@ IDirect3D9 *CreateDirect3D9(const Host &host)
 
 void RegisterDevice(Device *device, bool live)
 {
+    const FrontLock lock;
     std::vector<Device *> &devices = LiveDevices();
     if (live)
         devices.push_back(device);
@@ -72,6 +80,7 @@ void RegisterDevice(Device *device, bool live)
 
 bool Counters(IDirect3DDevice9 *device, DeviceCounters &out)
 {
+    const FrontLock lock;
     for (Device *live : LiveDevices())
         if (static_cast<IDirect3DDevice9 *>(live) == device)
         {
@@ -85,6 +94,7 @@ bool Counters(IDirect3DDevice9 *device, DeviceCounters &out)
 
 HRESULT STDMETHODCALLTYPE Direct3D::QueryInterface(REFIID, void **object)
 {
+    const FrontLock lock;
     if (object)
         *object = nullptr;
     return E_NOINTERFACE;
@@ -92,6 +102,7 @@ HRESULT STDMETHODCALLTYPE Direct3D::QueryInterface(REFIID, void **object)
 
 ULONG STDMETHODCALLTYPE Direct3D::Release()
 {
+    const FrontLock lock;
     const ULONG refs = --refs_;
     if (!refs)
         delete this;
@@ -102,11 +113,13 @@ ULONG STDMETHODCALLTYPE Direct3D::Release()
 
 HRESULT STDMETHODCALLTYPE Direct3D::RegisterSoftwareDevice(void *)
 {
+    const FrontLock lock;
     return D3DERR_INVALIDCALL;
 }
 
 HRESULT STDMETHODCALLTYPE Direct3D::GetAdapterIdentifier(UINT adapter, DWORD, D3DADAPTER_IDENTIFIER9 *id)
 {
+    const FrontLock lock;
     if (adapter != 0 || !id)
         return D3DERR_INVALIDCALL;
     std::memset(id, 0, sizeof(*id));
@@ -138,6 +151,7 @@ bool Direct3D::Mode(UINT index, D3DDISPLAYMODE &mode) const
 
 UINT STDMETHODCALLTYPE Direct3D::GetAdapterModeCount(UINT adapter, D3DFORMAT format)
 {
+    const FrontLock lock;
     if (adapter != 0 || format != D3DFMT_X8R8G8B8)
         return 0;
     if (host_.modeCount && host_.mode)
@@ -147,6 +161,7 @@ UINT STDMETHODCALLTYPE Direct3D::GetAdapterModeCount(UINT adapter, D3DFORMAT for
 
 HRESULT STDMETHODCALLTYPE Direct3D::EnumAdapterModes(UINT adapter, D3DFORMAT format, UINT index, D3DDISPLAYMODE *mode)
 {
+    const FrontLock lock;
     if (adapter != 0 || format != D3DFMT_X8R8G8B8 || !mode || !Mode(index, *mode))
         return D3DERR_INVALIDCALL;
     return D3D_OK;
@@ -154,6 +169,7 @@ HRESULT STDMETHODCALLTYPE Direct3D::EnumAdapterModes(UINT adapter, D3DFORMAT for
 
 HRESULT STDMETHODCALLTYPE Direct3D::GetAdapterDisplayMode(UINT adapter, D3DDISPLAYMODE *mode)
 {
+    const FrontLock lock;
     if (adapter != 0 || !mode)
         return D3DERR_INVALIDCALL;
     uint32_t width = 0, height = 0, refresh = 0;
@@ -168,6 +184,7 @@ HRESULT STDMETHODCALLTYPE Direct3D::GetAdapterDisplayMode(UINT adapter, D3DDISPL
 
 HMONITOR STDMETHODCALLTYPE Direct3D::GetAdapterMonitor(UINT adapter)
 {
+    const FrontLock lock;
     if (adapter != 0 || !host_.monitor)
         return nullptr;
     return host_.monitor(host_.user);
@@ -178,6 +195,7 @@ HMONITOR STDMETHODCALLTYPE Direct3D::GetAdapterMonitor(UINT adapter)
 HRESULT STDMETHODCALLTYPE Direct3D::CheckDeviceType(UINT adapter, D3DDEVTYPE type, D3DFORMAT displayFormat,
                                                     D3DFORMAT backBufferFormat, BOOL)
 {
+    const FrontLock lock;
     if (adapter != 0 || type != D3DDEVTYPE_HAL)
         return D3DERR_INVALIDCALL;
     if (displayFormat != D3DFMT_X8R8G8B8 && displayFormat != D3DFMT_UNKNOWN)
@@ -194,6 +212,7 @@ HRESULT STDMETHODCALLTYPE Direct3D::CheckDeviceType(UINT adapter, D3DDEVTYPE typ
 HRESULT STDMETHODCALLTYPE Direct3D::CheckDeviceFormat(UINT adapter, D3DDEVTYPE type, D3DFORMAT, DWORD usage,
                                                       D3DRESOURCETYPE resourceType, D3DFORMAT format)
 {
+    const FrontLock lock;
     if (adapter != 0 || type != D3DDEVTYPE_HAL)
         return D3DERR_INVALIDCALL;
     if (resourceType == D3DRTYPE_VERTEXBUFFER || resourceType == D3DRTYPE_INDEXBUFFER)
@@ -217,6 +236,7 @@ HRESULT STDMETHODCALLTYPE Direct3D::CheckDeviceFormat(UINT adapter, D3DDEVTYPE t
 HRESULT STDMETHODCALLTYPE Direct3D::CheckDeviceMultiSampleType(UINT adapter, D3DDEVTYPE type, D3DFORMAT, BOOL,
                                                                D3DMULTISAMPLE_TYPE samples, DWORD *qualityLevels)
 {
+    const FrontLock lock;
     if (adapter != 0 || type != D3DDEVTYPE_HAL)
         return D3DERR_INVALIDCALL;
     // No multisampled targets yet: only "none".
@@ -230,6 +250,7 @@ HRESULT STDMETHODCALLTYPE Direct3D::CheckDeviceMultiSampleType(UINT adapter, D3D
 HRESULT STDMETHODCALLTYPE Direct3D::CheckDepthStencilMatch(UINT adapter, D3DDEVTYPE type, D3DFORMAT,
                                                            D3DFORMAT renderTargetFormat, D3DFORMAT depthFormat)
 {
+    const FrontLock lock;
     if (adapter != 0 || type != D3DDEVTYPE_HAL)
         return D3DERR_INVALIDCALL;
     if (!lg::FormatSupported(nullptr, static_cast<lg::d3d::Format>(renderTargetFormat), lg::d3d::USAGE_RENDERTARGET)
@@ -241,6 +262,7 @@ HRESULT STDMETHODCALLTYPE Direct3D::CheckDepthStencilMatch(UINT adapter, D3DDEVT
 HRESULT STDMETHODCALLTYPE Direct3D::CheckDeviceFormatConversion(UINT adapter, D3DDEVTYPE type, D3DFORMAT src,
                                                                 D3DFORMAT dst)
 {
+    const FrontLock lock;
     if (adapter != 0 || type != D3DDEVTYPE_HAL)
         return D3DERR_INVALIDCALL;
     return src == dst ? D3D_OK : D3DERR_NOTAVAILABLE;
@@ -376,6 +398,7 @@ void FillCaps(D3DCAPS9 &caps)
 
 HRESULT STDMETHODCALLTYPE Direct3D::GetDeviceCaps(UINT adapter, D3DDEVTYPE type, D3DCAPS9 *caps)
 {
+    const FrontLock lock;
     if (adapter != 0 || !caps)
         return D3DERR_INVALIDCALL;
     if (type != D3DDEVTYPE_HAL)
@@ -389,6 +412,7 @@ HRESULT STDMETHODCALLTYPE Direct3D::GetDeviceCaps(UINT adapter, D3DDEVTYPE type,
 HRESULT STDMETHODCALLTYPE Direct3D::CreateDevice(UINT adapter, D3DDEVTYPE type, D3D9Window focusWindow, DWORD behavior,
                                                  D3DPRESENT_PARAMETERS *params, IDirect3DDevice9 **out)
 {
+    const FrontLock lock;
     if (!out)
         return D3DERR_INVALIDCALL;
     *out = nullptr;

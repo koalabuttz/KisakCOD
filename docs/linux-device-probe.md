@@ -10,6 +10,12 @@ compared in memory. DXVK Native would write `KisakCOD-device-probe_d3d9.log`
 into the working directory, so the probe sets `DXVK_LOG_PATH=none` unless the
 caller set it; DXVK's lines still go to stderr.
 
+
+Built with `-DKISAK_BUILD_VULKAN_BACKEND=ON`, `--backend vulkan` runs the same
+steps through the Vulkan back end instead of DXVK, with `--validation
+off|auto|require` for the Vulkan validation layer; see
+[vulkan-d3d9-front.md](vulkan-d3d9-front.md#in-the-game-r_backend-vulkan).
+
 ## What runs
 
 The part of `R_InitGraphicsApi` that ends with a device, in the engine's order,

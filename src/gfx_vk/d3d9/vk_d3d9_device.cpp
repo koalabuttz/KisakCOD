@@ -162,6 +162,7 @@ void Device::ObjectDestroyed()
 
 ULONG STDMETHODCALLTYPE Device::Release()
 {
+    const FrontLock lock;
     if (!refs_)
         return 0;
     const ULONG refs = --refs_;
@@ -179,6 +180,7 @@ ULONG STDMETHODCALLTYPE Device::Release()
 
 HRESULT STDMETHODCALLTYPE Device::QueryInterface(REFIID riid, void **object)
 {
+    const FrontLock lock;
     if (!object)
         return E_POINTER;
     *object = nullptr;
@@ -272,6 +274,7 @@ void Device::Destroy()
 
 DeviceCounters Device::counters() const
 {
+    const FrontLock lock;
     DeviceCounters out = counters_;
     out.liveObjects = objects_;
     out.validationErrors = core_ ? Stats(core_).validationErrors : 0;
@@ -294,11 +297,13 @@ HRESULT Device::Unsupported(const char *method)
 
 HRESULT STDMETHODCALLTYPE Device::TestCooperativeLevel()
 {
+    const FrontLock lock;
     return D3D_OK;
 }
 
 UINT STDMETHODCALLTYPE Device::GetAvailableTextureMem()
 {
+    const FrontLock lock;
     // Device-local memory, as DXVK reports it, kept below 4 GB.
     VkPhysicalDeviceMemoryProperties memory{};
     Functions(core_).vkGetPhysicalDeviceMemoryProperties(PhysicalDeviceHandle(core_), &memory);
@@ -311,6 +316,7 @@ UINT STDMETHODCALLTYPE Device::GetAvailableTextureMem()
 
 HRESULT STDMETHODCALLTYPE Device::GetDirect3D(IDirect3D9 **d3d)
 {
+    const FrontLock lock;
     if (!d3d)
         return D3DERR_INVALIDCALL;
     parent_->AddRef();
@@ -320,6 +326,7 @@ HRESULT STDMETHODCALLTYPE Device::GetDirect3D(IDirect3D9 **d3d)
 
 HRESULT STDMETHODCALLTYPE Device::GetDeviceCaps(D3DCAPS9 *caps)
 {
+    const FrontLock lock;
     if (!caps)
         return D3DERR_INVALIDCALL;
     FillCaps(*caps);
@@ -328,6 +335,7 @@ HRESULT STDMETHODCALLTYPE Device::GetDeviceCaps(D3DCAPS9 *caps)
 
 HRESULT STDMETHODCALLTYPE Device::GetDisplayMode(UINT swapChain, D3DDISPLAYMODE *mode)
 {
+    const FrontLock lock;
     if (swapChain != 0)
         return D3DERR_INVALIDCALL;
     return parent_->GetAdapterDisplayMode(0, mode);
@@ -335,6 +343,7 @@ HRESULT STDMETHODCALLTYPE Device::GetDisplayMode(UINT swapChain, D3DDISPLAYMODE 
 
 HRESULT STDMETHODCALLTYPE Device::GetCreationParameters(D3DDEVICE_CREATION_PARAMETERS *params)
 {
+    const FrontLock lock;
     if (!params)
         return D3DERR_INVALIDCALL;
     params->AdapterOrdinal = 0;
@@ -346,11 +355,13 @@ HRESULT STDMETHODCALLTYPE Device::GetCreationParameters(D3DDEVICE_CREATION_PARAM
 
 HRESULT STDMETHODCALLTYPE Device::SetCursorProperties(UINT, UINT, IDirect3DSurface9 *)
 {
+    const FrontLock lock;
     return Unsupported("IDirect3DDevice9::SetCursorProperties");
 }
 
 HRESULT STDMETHODCALLTYPE Device::CreateAdditionalSwapChain(D3DPRESENT_PARAMETERS *, IDirect3DSwapChain9 **swapChain)
 {
+    const FrontLock lock;
     if (swapChain)
         *swapChain = nullptr;
     return Unsupported("IDirect3DDevice9::CreateAdditionalSwapChain");
@@ -358,6 +369,7 @@ HRESULT STDMETHODCALLTYPE Device::CreateAdditionalSwapChain(D3DPRESENT_PARAMETER
 
 HRESULT STDMETHODCALLTYPE Device::GetSwapChain(UINT index, IDirect3DSwapChain9 **swapChain)
 {
+    const FrontLock lock;
     if (!swapChain)
         return D3DERR_INVALIDCALL;
     *swapChain = nullptr;
@@ -370,6 +382,7 @@ HRESULT STDMETHODCALLTYPE Device::GetSwapChain(UINT index, IDirect3DSwapChain9 *
 
 HRESULT STDMETHODCALLTYPE Device::Reset(D3DPRESENT_PARAMETERS *params)
 {
+    const FrontLock lock;
     if (!params)
         return D3DERR_INVALIDCALL;
     if (params->MultiSampleType != D3DMULTISAMPLE_NONE)
@@ -418,6 +431,7 @@ HRESULT STDMETHODCALLTYPE Device::Reset(D3DPRESENT_PARAMETERS *params)
 
 HRESULT STDMETHODCALLTYPE Device::Present(const RECT *src, const RECT *dst, D3D9Window window, const RGNDATA *dirty)
 {
+    const FrontLock lock;
     if (src || dst || dirty || (window && window != window_))
         Unsupported("IDirect3DDevice9::Present with rects, a dirty region or another window (presented whole)");
     switch (lg::Present(legacy_))
@@ -437,6 +451,7 @@ HRESULT STDMETHODCALLTYPE Device::Present(const RECT *src, const RECT *dst, D3D9
 HRESULT STDMETHODCALLTYPE Device::GetBackBuffer(UINT swapChain, UINT index, D3DBACKBUFFER_TYPE type,
                                                 IDirect3DSurface9 **surface)
 {
+    const FrontLock lock;
     if (!surface)
         return D3DERR_INVALIDCALL;
     *surface = nullptr;
@@ -449,6 +464,7 @@ HRESULT STDMETHODCALLTYPE Device::GetBackBuffer(UINT swapChain, UINT index, D3DB
 
 HRESULT STDMETHODCALLTYPE Device::GetRasterStatus(UINT swapChain, D3DRASTER_STATUS *status)
 {
+    const FrontLock lock;
     if (swapChain != 0 || !status)
         return D3DERR_INVALIDCALL;
     status->InVBlank = FALSE;
@@ -458,11 +474,13 @@ HRESULT STDMETHODCALLTYPE Device::GetRasterStatus(UINT swapChain, D3DRASTER_STAT
 
 HRESULT STDMETHODCALLTYPE Device::SetDialogBoxMode(BOOL)
 {
+    const FrontLock lock;
     return D3D_OK;
 }
 
 void STDMETHODCALLTYPE Device::SetGammaRamp(UINT swapChain, DWORD, const D3DGAMMARAMP *ramp)
 {
+    const FrontLock lock;
     // Kept for GetGammaRamp. DXVK applies the ramp only to fullscreen
     // swapchains; the Vulkan front draws windowed and leaves it out.
     if (swapChain == 0 && ramp)
@@ -471,6 +489,7 @@ void STDMETHODCALLTYPE Device::SetGammaRamp(UINT swapChain, DWORD, const D3DGAMM
 
 void STDMETHODCALLTYPE Device::GetGammaRamp(UINT swapChain, D3DGAMMARAMP *ramp)
 {
+    const FrontLock lock;
     if (swapChain == 0 && ramp)
         *ramp = gamma_;
 }
@@ -515,6 +534,7 @@ HRESULT MakeTexture(Device &device, TextureState &state, lg::TextureKind kind, U
 HRESULT STDMETHODCALLTYPE Device::CreateTexture(UINT width, UINT height, UINT levels, DWORD usage, D3DFORMAT format,
                                                 D3DPOOL pool, IDirect3DTexture9 **texture, HANDLE *shared)
 {
+    const FrontLock lock;
     if (!texture)
         return D3DERR_INVALIDCALL;
     *texture = nullptr;
@@ -536,6 +556,7 @@ HRESULT STDMETHODCALLTYPE Device::CreateVolumeTexture(UINT width, UINT height, U
                                                       D3DFORMAT format, D3DPOOL pool,
                                                       IDirect3DVolumeTexture9 **texture, HANDLE *shared)
 {
+    const FrontLock lock;
     if (!texture)
         return D3DERR_INVALIDCALL;
     *texture = nullptr;
@@ -556,6 +577,7 @@ HRESULT STDMETHODCALLTYPE Device::CreateVolumeTexture(UINT width, UINT height, U
 HRESULT STDMETHODCALLTYPE Device::CreateCubeTexture(UINT edge, UINT levels, DWORD usage, D3DFORMAT format,
                                                     D3DPOOL pool, IDirect3DCubeTexture9 **texture, HANDLE *shared)
 {
+    const FrontLock lock;
     if (!texture)
         return D3DERR_INVALIDCALL;
     *texture = nullptr;
@@ -576,6 +598,7 @@ HRESULT STDMETHODCALLTYPE Device::CreateCubeTexture(UINT edge, UINT levels, DWOR
 HRESULT STDMETHODCALLTYPE Device::CreateVertexBuffer(UINT length, DWORD usage, DWORD fvf, D3DPOOL pool,
                                                      IDirect3DVertexBuffer9 **buffer, HANDLE *shared)
 {
+    const FrontLock lock;
     if (!buffer)
         return D3DERR_INVALIDCALL;
     *buffer = nullptr;
@@ -594,6 +617,7 @@ HRESULT STDMETHODCALLTYPE Device::CreateVertexBuffer(UINT length, DWORD usage, D
 HRESULT STDMETHODCALLTYPE Device::CreateIndexBuffer(UINT length, DWORD usage, D3DFORMAT format, D3DPOOL pool,
                                                     IDirect3DIndexBuffer9 **buffer, HANDLE *shared)
 {
+    const FrontLock lock;
     if (!buffer)
         return D3DERR_INVALIDCALL;
     *buffer = nullptr;
@@ -614,6 +638,7 @@ HRESULT STDMETHODCALLTYPE Device::CreateRenderTarget(UINT width, UINT height, D3
                                                      D3DMULTISAMPLE_TYPE samples, DWORD, BOOL,
                                                      IDirect3DSurface9 **surface, HANDLE *shared)
 {
+    const FrontLock lock;
     if (!surface)
         return D3DERR_INVALIDCALL;
     *surface = nullptr;
@@ -632,6 +657,7 @@ HRESULT STDMETHODCALLTYPE Device::CreateDepthStencilSurface(UINT width, UINT hei
                                                             D3DMULTISAMPLE_TYPE samples, DWORD, BOOL,
                                                             IDirect3DSurface9 **surface, HANDLE *shared)
 {
+    const FrontLock lock;
     if (!surface)
         return D3DERR_INVALIDCALL;
     *surface = nullptr;
@@ -650,6 +676,7 @@ HRESULT STDMETHODCALLTYPE Device::CreateOffscreenPlainSurface(UINT width, UINT h
                                                               D3DPOOL pool, IDirect3DSurface9 **surface,
                                                               HANDLE *shared)
 {
+    const FrontLock lock;
     if (!surface)
         return D3DERR_INVALIDCALL;
     *surface = nullptr;
@@ -668,11 +695,13 @@ HRESULT STDMETHODCALLTYPE Device::CreateOffscreenPlainSurface(UINT width, UINT h
 HRESULT STDMETHODCALLTYPE Device::UpdateSurface(IDirect3DSurface9 *, const RECT *, IDirect3DSurface9 *,
                                                 const D3D9Point *)
 {
+    const FrontLock lock;
     return Unsupported("IDirect3DDevice9::UpdateSurface");
 }
 
 HRESULT STDMETHODCALLTYPE Device::UpdateTexture(IDirect3DBaseTexture9 *src, IDirect3DBaseTexture9 *dst)
 {
+    const FrontLock lock;
     lg::Texture *from = TextureHandle(src);
     lg::Texture *to = TextureHandle(dst);
     if (!from || !to || src->GetType() != dst->GetType())
@@ -683,6 +712,7 @@ HRESULT STDMETHODCALLTYPE Device::UpdateTexture(IDirect3DBaseTexture9 *src, IDir
 
 HRESULT STDMETHODCALLTYPE Device::GetRenderTargetData(IDirect3DSurface9 *renderTarget, IDirect3DSurface9 *dst)
 {
+    const FrontLock lock;
     if (!renderTarget || !dst)
         return D3DERR_INVALIDCALL;
     const bool ok = lg::GetRenderTargetData(legacy_, static_cast<Surface *>(renderTarget)->handle(),
@@ -692,6 +722,7 @@ HRESULT STDMETHODCALLTYPE Device::GetRenderTargetData(IDirect3DSurface9 *renderT
 
 HRESULT STDMETHODCALLTYPE Device::GetFrontBufferData(UINT swapChain, IDirect3DSurface9 *dst)
 {
+    const FrontLock lock;
     // The last presented image is still in the back buffer (Present copies it
     // to the swapchain), so the copy comes from there, at back buffer size.
     if (swapChain != 0 || !dst)
@@ -703,6 +734,7 @@ HRESULT STDMETHODCALLTYPE Device::GetFrontBufferData(UINT swapChain, IDirect3DSu
 HRESULT STDMETHODCALLTYPE Device::StretchRect(IDirect3DSurface9 *src, const RECT *srcRect, IDirect3DSurface9 *dst,
                                               const RECT *dstRect, D3DTEXTUREFILTERTYPE filter)
 {
+    const FrontLock lock;
     if (!src || !dst)
         return D3DERR_INVALIDCALL;
     lg::Rect from{}, to{};
@@ -717,6 +749,7 @@ HRESULT STDMETHODCALLTYPE Device::StretchRect(IDirect3DSurface9 *src, const RECT
 
 HRESULT STDMETHODCALLTYPE Device::ColorFill(IDirect3DSurface9 *, const RECT *, D3DCOLOR)
 {
+    const FrontLock lock;
     return Unsupported("IDirect3DDevice9::ColorFill");
 }
 
@@ -724,6 +757,7 @@ HRESULT STDMETHODCALLTYPE Device::ColorFill(IDirect3DSurface9 *, const RECT *, D
 
 HRESULT STDMETHODCALLTYPE Device::SetRenderTarget(DWORD index, IDirect3DSurface9 *surface)
 {
+    const FrontLock lock;
     if (index >= lg::kMaxRenderTargets || (index == 0 && !surface))
         return D3DERR_INVALIDCALL;
     Surface *target = static_cast<Surface *>(surface);
@@ -749,6 +783,7 @@ HRESULT STDMETHODCALLTYPE Device::SetRenderTarget(DWORD index, IDirect3DSurface9
 
 HRESULT STDMETHODCALLTYPE Device::GetRenderTarget(DWORD index, IDirect3DSurface9 **surface)
 {
+    const FrontLock lock;
     if (!surface || index >= lg::kMaxRenderTargets)
         return D3DERR_INVALIDCALL;
     *surface = renderTargets_[index];
@@ -760,6 +795,7 @@ HRESULT STDMETHODCALLTYPE Device::GetRenderTarget(DWORD index, IDirect3DSurface9
 
 HRESULT STDMETHODCALLTYPE Device::SetDepthStencilSurface(IDirect3DSurface9 *surface)
 {
+    const FrontLock lock;
     Surface *depth = static_cast<Surface *>(surface);
     if (depth)
     {
@@ -775,6 +811,7 @@ HRESULT STDMETHODCALLTYPE Device::SetDepthStencilSurface(IDirect3DSurface9 *surf
 
 HRESULT STDMETHODCALLTYPE Device::GetDepthStencilSurface(IDirect3DSurface9 **surface)
 {
+    const FrontLock lock;
     if (!surface)
         return D3DERR_INVALIDCALL;
     *surface = depthStencil_;
@@ -787,6 +824,7 @@ HRESULT STDMETHODCALLTYPE Device::GetDepthStencilSurface(IDirect3DSurface9 **sur
 HRESULT STDMETHODCALLTYPE Device::Clear(DWORD count, const D3DRECT *rects, DWORD flags, D3DCOLOR color, float z,
                                         DWORD stencil)
 {
+    const FrontLock lock;
     if (count && !rects)
         return D3DERR_INVALIDCALL;
     if ((flags & (D3DCLEAR_ZBUFFER | D3DCLEAR_STENCIL)) && !depthStencil_)
@@ -801,6 +839,7 @@ HRESULT STDMETHODCALLTYPE Device::Clear(DWORD count, const D3DRECT *rects, DWORD
 
 HRESULT STDMETHODCALLTYPE Device::SetViewport(const D3DVIEWPORT9 *viewport)
 {
+    const FrontLock lock;
     if (!viewport)
         return D3DERR_INVALIDCALL;
     viewport_ = *viewport;
@@ -811,6 +850,7 @@ HRESULT STDMETHODCALLTYPE Device::SetViewport(const D3DVIEWPORT9 *viewport)
 
 HRESULT STDMETHODCALLTYPE Device::GetViewport(D3DVIEWPORT9 *viewport)
 {
+    const FrontLock lock;
     if (!viewport)
         return D3DERR_INVALIDCALL;
     *viewport = viewport_;
@@ -819,6 +859,7 @@ HRESULT STDMETHODCALLTYPE Device::GetViewport(D3DVIEWPORT9 *viewport)
 
 HRESULT STDMETHODCALLTYPE Device::SetScissorRect(const RECT *rect)
 {
+    const FrontLock lock;
     if (!rect)
         return D3DERR_INVALIDCALL;
     scissor_ = *rect;
@@ -828,6 +869,7 @@ HRESULT STDMETHODCALLTYPE Device::SetScissorRect(const RECT *rect)
 
 HRESULT STDMETHODCALLTYPE Device::GetScissorRect(RECT *rect)
 {
+    const FrontLock lock;
     if (!rect)
         return D3DERR_INVALIDCALL;
     *rect = scissor_;
@@ -838,106 +880,127 @@ HRESULT STDMETHODCALLTYPE Device::GetScissorRect(RECT *rect)
 
 HRESULT STDMETHODCALLTYPE Device::SetTransform(D3DTRANSFORMSTATETYPE, const D3DMATRIX *)
 {
+    const FrontLock lock;
     return Unsupported("IDirect3DDevice9::SetTransform");
 }
 
 HRESULT STDMETHODCALLTYPE Device::GetTransform(D3DTRANSFORMSTATETYPE, D3DMATRIX *)
 {
+    const FrontLock lock;
     return Unsupported("IDirect3DDevice9::GetTransform");
 }
 
 HRESULT STDMETHODCALLTYPE Device::MultiplyTransform(D3DTRANSFORMSTATETYPE, const D3DMATRIX *)
 {
+    const FrontLock lock;
     return Unsupported("IDirect3DDevice9::MultiplyTransform");
 }
 
 HRESULT STDMETHODCALLTYPE Device::SetMaterial(const D3DMATERIAL9 *)
 {
+    const FrontLock lock;
     return Unsupported("IDirect3DDevice9::SetMaterial");
 }
 
 HRESULT STDMETHODCALLTYPE Device::GetMaterial(D3DMATERIAL9 *)
 {
+    const FrontLock lock;
     return Unsupported("IDirect3DDevice9::GetMaterial");
 }
 
 HRESULT STDMETHODCALLTYPE Device::SetLight(DWORD, const D3DLIGHT9 *)
 {
+    const FrontLock lock;
     return Unsupported("IDirect3DDevice9::SetLight");
 }
 
 HRESULT STDMETHODCALLTYPE Device::GetLight(DWORD, D3DLIGHT9 *)
 {
+    const FrontLock lock;
     return Unsupported("IDirect3DDevice9::GetLight");
 }
 
 HRESULT STDMETHODCALLTYPE Device::LightEnable(DWORD, BOOL)
 {
+    const FrontLock lock;
     return Unsupported("IDirect3DDevice9::LightEnable");
 }
 
 HRESULT STDMETHODCALLTYPE Device::GetLightEnable(DWORD, BOOL *)
 {
+    const FrontLock lock;
     return Unsupported("IDirect3DDevice9::GetLightEnable");
 }
 
 HRESULT STDMETHODCALLTYPE Device::SetClipPlane(DWORD, const float *)
 {
+    const FrontLock lock;
     return Unsupported("IDirect3DDevice9::SetClipPlane");
 }
 
 HRESULT STDMETHODCALLTYPE Device::GetClipPlane(DWORD, float *)
 {
+    const FrontLock lock;
     return Unsupported("IDirect3DDevice9::GetClipPlane");
 }
 
 HRESULT STDMETHODCALLTYPE Device::SetClipStatus(const D3DCLIPSTATUS9 *)
 {
+    const FrontLock lock;
     return Unsupported("IDirect3DDevice9::SetClipStatus");
 }
 
 HRESULT STDMETHODCALLTYPE Device::GetClipStatus(D3DCLIPSTATUS9 *)
 {
+    const FrontLock lock;
     return Unsupported("IDirect3DDevice9::GetClipStatus");
 }
 
 HRESULT STDMETHODCALLTYPE Device::GetTextureStageState(DWORD, D3DTEXTURESTAGESTATETYPE, DWORD *)
 {
+    const FrontLock lock;
     return Unsupported("IDirect3DDevice9::GetTextureStageState");
 }
 
 HRESULT STDMETHODCALLTYPE Device::SetTextureStageState(DWORD, D3DTEXTURESTAGESTATETYPE, DWORD)
 {
+    const FrontLock lock;
     return Unsupported("IDirect3DDevice9::SetTextureStageState");
 }
 
 HRESULT STDMETHODCALLTYPE Device::SetPaletteEntries(UINT, const PALETTEENTRY *)
 {
+    const FrontLock lock;
     return Unsupported("IDirect3DDevice9::SetPaletteEntries");
 }
 
 HRESULT STDMETHODCALLTYPE Device::GetPaletteEntries(UINT, PALETTEENTRY *)
 {
+    const FrontLock lock;
     return Unsupported("IDirect3DDevice9::GetPaletteEntries");
 }
 
 HRESULT STDMETHODCALLTYPE Device::SetCurrentTexturePalette(UINT)
 {
+    const FrontLock lock;
     return Unsupported("IDirect3DDevice9::SetCurrentTexturePalette");
 }
 
 HRESULT STDMETHODCALLTYPE Device::GetCurrentTexturePalette(UINT *)
 {
+    const FrontLock lock;
     return Unsupported("IDirect3DDevice9::GetCurrentTexturePalette");
 }
 
 HRESULT STDMETHODCALLTYPE Device::SetFVF(DWORD fvf)
 {
+    const FrontLock lock;
     return fvf ? Unsupported("IDirect3DDevice9::SetFVF") : D3D_OK;
 }
 
 HRESULT STDMETHODCALLTYPE Device::GetFVF(DWORD *fvf)
 {
+    const FrontLock lock;
     if (!fvf)
         return D3DERR_INVALIDCALL;
     *fvf = 0;
@@ -947,36 +1010,43 @@ HRESULT STDMETHODCALLTYPE Device::GetFVF(DWORD *fvf)
 HRESULT STDMETHODCALLTYPE Device::ProcessVertices(UINT, UINT, UINT, IDirect3DVertexBuffer9 *,
                                                   IDirect3DVertexDeclaration9 *, DWORD)
 {
+    const FrontLock lock;
     return Unsupported("IDirect3DDevice9::ProcessVertices");
 }
 
 HRESULT STDMETHODCALLTYPE Device::SetSoftwareVertexProcessing(BOOL software)
 {
+    const FrontLock lock;
     return software ? Unsupported("IDirect3DDevice9::SetSoftwareVertexProcessing") : D3D_OK;
 }
 
 HRESULT STDMETHODCALLTYPE Device::SetNPatchMode(float segments)
 {
+    const FrontLock lock;
     return segments > 0.0f ? Unsupported("IDirect3DDevice9::SetNPatchMode") : D3D_OK;
 }
 
 HRESULT STDMETHODCALLTYPE Device::DrawRectPatch(UINT, const float *, const D3DRECTPATCH_INFO *)
 {
+    const FrontLock lock;
     return Unsupported("IDirect3DDevice9::DrawRectPatch");
 }
 
 HRESULT STDMETHODCALLTYPE Device::DrawTriPatch(UINT, const float *, const D3DTRIPATCH_INFO *)
 {
+    const FrontLock lock;
     return Unsupported("IDirect3DDevice9::DrawTriPatch");
 }
 
 HRESULT STDMETHODCALLTYPE Device::DeletePatch(UINT)
 {
+    const FrontLock lock;
     return Unsupported("IDirect3DDevice9::DeletePatch");
 }
 
 HRESULT STDMETHODCALLTYPE Device::CreateStateBlock(D3DSTATEBLOCKTYPE, IDirect3DStateBlock9 **block)
 {
+    const FrontLock lock;
     if (block)
         *block = nullptr;
     return Unsupported("IDirect3DDevice9::CreateStateBlock");
@@ -984,11 +1054,13 @@ HRESULT STDMETHODCALLTYPE Device::CreateStateBlock(D3DSTATEBLOCKTYPE, IDirect3DS
 
 HRESULT STDMETHODCALLTYPE Device::BeginStateBlock()
 {
+    const FrontLock lock;
     return Unsupported("IDirect3DDevice9::BeginStateBlock");
 }
 
 HRESULT STDMETHODCALLTYPE Device::EndStateBlock(IDirect3DStateBlock9 **block)
 {
+    const FrontLock lock;
     if (block)
         *block = nullptr;
     return Unsupported("IDirect3DDevice9::EndStateBlock");
@@ -996,6 +1068,7 @@ HRESULT STDMETHODCALLTYPE Device::EndStateBlock(IDirect3DStateBlock9 **block)
 
 HRESULT STDMETHODCALLTYPE Device::ValidateDevice(DWORD *passes)
 {
+    const FrontLock lock;
     if (passes)
         *passes = 1;
     return D3D_OK;
@@ -1005,6 +1078,7 @@ HRESULT STDMETHODCALLTYPE Device::ValidateDevice(DWORD *passes)
 
 HRESULT STDMETHODCALLTYPE Device::SetRenderState(D3DRENDERSTATETYPE state, DWORD value)
 {
+    const FrontLock lock;
     if (static_cast<uint32_t>(state) >= lg::d3d::RS_COUNT)
         return D3DERR_INVALIDCALL;
     lg::SetRenderState(legacy_, static_cast<lg::d3d::RenderState>(state), value);
@@ -1013,6 +1087,7 @@ HRESULT STDMETHODCALLTYPE Device::SetRenderState(D3DRENDERSTATETYPE state, DWORD
 
 HRESULT STDMETHODCALLTYPE Device::GetRenderState(D3DRENDERSTATETYPE state, DWORD *value)
 {
+    const FrontLock lock;
     if (!value || static_cast<uint32_t>(state) >= lg::d3d::RS_COUNT)
         return D3DERR_INVALIDCALL;
     *value = lg::GetRenderState(legacy_, static_cast<lg::d3d::RenderState>(state));
@@ -1021,6 +1096,7 @@ HRESULT STDMETHODCALLTYPE Device::GetRenderState(D3DRENDERSTATETYPE state, DWORD
 
 HRESULT STDMETHODCALLTYPE Device::GetSamplerState(DWORD sampler, D3DSAMPLERSTATETYPE type, DWORD *value)
 {
+    const FrontLock lock;
     const int slot = SamplerSlot(sampler);
     if (!value || slot < 0 || static_cast<uint32_t>(type) >= lg::d3d::SAMP_COUNT)
         return D3DERR_INVALIDCALL;
@@ -1030,6 +1106,7 @@ HRESULT STDMETHODCALLTYPE Device::GetSamplerState(DWORD sampler, D3DSAMPLERSTATE
 
 HRESULT STDMETHODCALLTYPE Device::SetSamplerState(DWORD sampler, D3DSAMPLERSTATETYPE type, DWORD value)
 {
+    const FrontLock lock;
     const int slot = SamplerSlot(sampler);
     if (slot < 0 || static_cast<uint32_t>(type) >= lg::d3d::SAMP_COUNT)
         return D3DERR_INVALIDCALL;
@@ -1040,6 +1117,7 @@ HRESULT STDMETHODCALLTYPE Device::SetSamplerState(DWORD sampler, D3DSAMPLERSTATE
 
 HRESULT STDMETHODCALLTYPE Device::GetTexture(DWORD stage, IDirect3DBaseTexture9 **texture)
 {
+    const FrontLock lock;
     const int slot = SamplerSlot(stage);
     if (!texture || slot < 0)
         return D3DERR_INVALIDCALL;
@@ -1051,6 +1129,7 @@ HRESULT STDMETHODCALLTYPE Device::GetTexture(DWORD stage, IDirect3DBaseTexture9 
 
 HRESULT STDMETHODCALLTYPE Device::SetTexture(DWORD stage, IDirect3DBaseTexture9 *texture)
 {
+    const FrontLock lock;
     const int slot = SamplerSlot(stage);
     if (slot < 0)
         return D3DERR_INVALIDCALL;
@@ -1086,16 +1165,19 @@ HRESULT Device::CreateShaderObject(const DWORD *code, Interface **out, bool pixe
 
 HRESULT STDMETHODCALLTYPE Device::CreateVertexShader(const DWORD *code, IDirect3DVertexShader9 **shader)
 {
+    const FrontLock lock;
     return CreateShaderObject(code, shader, false);
 }
 
 HRESULT STDMETHODCALLTYPE Device::CreatePixelShader(const DWORD *code, IDirect3DPixelShader9 **shader)
 {
+    const FrontLock lock;
     return CreateShaderObject(code, shader, true);
 }
 
 HRESULT STDMETHODCALLTYPE Device::SetVertexShader(IDirect3DVertexShader9 *shader)
 {
+    const FrontLock lock;
     VertexShader *object = static_cast<VertexShader *>(shader);
     lg::SetVertexShader(legacy_, object ? object->handle() : nullptr);
     Rebind(vertexShader_, object);
@@ -1104,6 +1186,7 @@ HRESULT STDMETHODCALLTYPE Device::SetVertexShader(IDirect3DVertexShader9 *shader
 
 HRESULT STDMETHODCALLTYPE Device::GetVertexShader(IDirect3DVertexShader9 **shader)
 {
+    const FrontLock lock;
     if (!shader)
         return D3DERR_INVALIDCALL;
     *shader = vertexShader_;
@@ -1114,6 +1197,7 @@ HRESULT STDMETHODCALLTYPE Device::GetVertexShader(IDirect3DVertexShader9 **shade
 
 HRESULT STDMETHODCALLTYPE Device::SetPixelShader(IDirect3DPixelShader9 *shader)
 {
+    const FrontLock lock;
     PixelShader *object = static_cast<PixelShader *>(shader);
     lg::SetPixelShader(legacy_, object ? object->handle() : nullptr);
     Rebind(pixelShader_, object);
@@ -1122,6 +1206,7 @@ HRESULT STDMETHODCALLTYPE Device::SetPixelShader(IDirect3DPixelShader9 *shader)
 
 HRESULT STDMETHODCALLTYPE Device::GetPixelShader(IDirect3DPixelShader9 **shader)
 {
+    const FrontLock lock;
     if (!shader)
         return D3DERR_INVALIDCALL;
     *shader = pixelShader_;
@@ -1158,6 +1243,7 @@ HRESULT GetConstants(const std::vector<T> &store, UINT width, UINT start, T *dat
 
 HRESULT STDMETHODCALLTYPE Device::SetVertexShaderConstantF(UINT start, const float *data, UINT count)
 {
+    const FrontLock lock;
     const HRESULT hr = SetConstants(vsConstantsF_, 4, start, data, count);
     if (SUCCEEDED(hr))
         lg::SetVertexShaderConstantF(legacy_, start, data, count);
@@ -1166,11 +1252,13 @@ HRESULT STDMETHODCALLTYPE Device::SetVertexShaderConstantF(UINT start, const flo
 
 HRESULT STDMETHODCALLTYPE Device::GetVertexShaderConstantF(UINT start, float *data, UINT count)
 {
+    const FrontLock lock;
     return GetConstants(vsConstantsF_, 4, start, data, count);
 }
 
 HRESULT STDMETHODCALLTYPE Device::SetPixelShaderConstantF(UINT start, const float *data, UINT count)
 {
+    const FrontLock lock;
     const HRESULT hr = SetConstants(psConstantsF_, 4, start, data, count);
     if (SUCCEEDED(hr))
         lg::SetPixelShaderConstantF(legacy_, start, data, count);
@@ -1179,6 +1267,7 @@ HRESULT STDMETHODCALLTYPE Device::SetPixelShaderConstantF(UINT start, const floa
 
 HRESULT STDMETHODCALLTYPE Device::GetPixelShaderConstantF(UINT start, float *data, UINT count)
 {
+    const FrontLock lock;
     return GetConstants(psConstantsF_, 4, start, data, count);
 }
 
@@ -1187,6 +1276,7 @@ HRESULT STDMETHODCALLTYPE Device::GetPixelShaderConstantF(UINT start, float *dat
 // value counts as unsupported.
 HRESULT STDMETHODCALLTYPE Device::SetVertexShaderConstantI(UINT start, const int *data, UINT count)
 {
+    const FrontLock lock;
     const HRESULT hr = SetConstants(vsConstantsI_, 4, start, data, count);
     if (SUCCEEDED(hr) && std::any_of(data, data + static_cast<size_t>(count) * 4, [](int v) { return v != 0; }))
         Unsupported("IDirect3DDevice9::SetVertexShaderConstantI (shaders read zero)");
@@ -1195,11 +1285,13 @@ HRESULT STDMETHODCALLTYPE Device::SetVertexShaderConstantI(UINT start, const int
 
 HRESULT STDMETHODCALLTYPE Device::GetVertexShaderConstantI(UINT start, int *data, UINT count)
 {
+    const FrontLock lock;
     return GetConstants(vsConstantsI_, 4, start, data, count);
 }
 
 HRESULT STDMETHODCALLTYPE Device::SetVertexShaderConstantB(UINT start, const BOOL *data, UINT count)
 {
+    const FrontLock lock;
     const HRESULT hr = SetConstants(vsConstantsB_, 1, start, data, count);
     if (SUCCEEDED(hr) && std::any_of(data, data + count, [](BOOL v) { return v != FALSE; }))
         Unsupported("IDirect3DDevice9::SetVertexShaderConstantB (shaders read zero)");
@@ -1208,11 +1300,13 @@ HRESULT STDMETHODCALLTYPE Device::SetVertexShaderConstantB(UINT start, const BOO
 
 HRESULT STDMETHODCALLTYPE Device::GetVertexShaderConstantB(UINT start, BOOL *data, UINT count)
 {
+    const FrontLock lock;
     return GetConstants(vsConstantsB_, 1, start, data, count);
 }
 
 HRESULT STDMETHODCALLTYPE Device::SetPixelShaderConstantI(UINT start, const int *data, UINT count)
 {
+    const FrontLock lock;
     const HRESULT hr = SetConstants(psConstantsI_, 4, start, data, count);
     if (SUCCEEDED(hr) && std::any_of(data, data + static_cast<size_t>(count) * 4, [](int v) { return v != 0; }))
         Unsupported("IDirect3DDevice9::SetPixelShaderConstantI (shaders read zero)");
@@ -1221,11 +1315,13 @@ HRESULT STDMETHODCALLTYPE Device::SetPixelShaderConstantI(UINT start, const int 
 
 HRESULT STDMETHODCALLTYPE Device::GetPixelShaderConstantI(UINT start, int *data, UINT count)
 {
+    const FrontLock lock;
     return GetConstants(psConstantsI_, 4, start, data, count);
 }
 
 HRESULT STDMETHODCALLTYPE Device::SetPixelShaderConstantB(UINT start, const BOOL *data, UINT count)
 {
+    const FrontLock lock;
     const HRESULT hr = SetConstants(psConstantsB_, 1, start, data, count);
     if (SUCCEEDED(hr) && std::any_of(data, data + count, [](BOOL v) { return v != FALSE; }))
         Unsupported("IDirect3DDevice9::SetPixelShaderConstantB (shaders read zero)");
@@ -1234,12 +1330,14 @@ HRESULT STDMETHODCALLTYPE Device::SetPixelShaderConstantB(UINT start, const BOOL
 
 HRESULT STDMETHODCALLTYPE Device::GetPixelShaderConstantB(UINT start, BOOL *data, UINT count)
 {
+    const FrontLock lock;
     return GetConstants(psConstantsB_, 1, start, data, count);
 }
 
 HRESULT STDMETHODCALLTYPE Device::CreateVertexDeclaration(const D3DVERTEXELEMENT9 *elements,
                                                           IDirect3DVertexDeclaration9 **decl)
 {
+    const FrontLock lock;
     if (!decl)
         return D3DERR_INVALIDCALL;
     *decl = nullptr;
@@ -1270,6 +1368,7 @@ HRESULT STDMETHODCALLTYPE Device::CreateVertexDeclaration(const D3DVERTEXELEMENT
 
 HRESULT STDMETHODCALLTYPE Device::SetVertexDeclaration(IDirect3DVertexDeclaration9 *decl)
 {
+    const FrontLock lock;
     VertexDeclaration *object = static_cast<VertexDeclaration *>(decl);
     lg::SetVertexDecl(legacy_, object ? object->handle() : nullptr);
     Rebind(declaration_, object);
@@ -1278,6 +1377,7 @@ HRESULT STDMETHODCALLTYPE Device::SetVertexDeclaration(IDirect3DVertexDeclaratio
 
 HRESULT STDMETHODCALLTYPE Device::GetVertexDeclaration(IDirect3DVertexDeclaration9 **decl)
 {
+    const FrontLock lock;
     if (!decl)
         return D3DERR_INVALIDCALL;
     *decl = declaration_;
@@ -1289,6 +1389,7 @@ HRESULT STDMETHODCALLTYPE Device::GetVertexDeclaration(IDirect3DVertexDeclaratio
 HRESULT STDMETHODCALLTYPE Device::SetStreamSource(UINT stream, IDirect3DVertexBuffer9 *buffer, UINT offset,
                                                   UINT stride)
 {
+    const FrontLock lock;
     if (stream >= lg::kMaxStreams)
         return D3DERR_INVALIDCALL;
     VertexBuffer *object = static_cast<VertexBuffer *>(buffer);
@@ -1302,6 +1403,7 @@ HRESULT STDMETHODCALLTYPE Device::SetStreamSource(UINT stream, IDirect3DVertexBu
 HRESULT STDMETHODCALLTYPE Device::GetStreamSource(UINT stream, IDirect3DVertexBuffer9 **buffer, UINT *offset,
                                                   UINT *stride)
 {
+    const FrontLock lock;
     if (stream >= lg::kMaxStreams || !buffer || !offset || !stride)
         return D3DERR_INVALIDCALL;
     *buffer = streams_[stream].buffer;
@@ -1314,6 +1416,7 @@ HRESULT STDMETHODCALLTYPE Device::GetStreamSource(UINT stream, IDirect3DVertexBu
 
 HRESULT STDMETHODCALLTYPE Device::SetStreamSourceFreq(UINT stream, UINT divider)
 {
+    const FrontLock lock;
     if (stream >= lg::kMaxStreams)
         return D3DERR_INVALIDCALL;
     if (divider != 1)
@@ -1324,6 +1427,7 @@ HRESULT STDMETHODCALLTYPE Device::SetStreamSourceFreq(UINT stream, UINT divider)
 
 HRESULT STDMETHODCALLTYPE Device::GetStreamSourceFreq(UINT stream, UINT *divider)
 {
+    const FrontLock lock;
     if (stream >= lg::kMaxStreams || !divider)
         return D3DERR_INVALIDCALL;
     *divider = streams_[stream].divider;
@@ -1332,6 +1436,7 @@ HRESULT STDMETHODCALLTYPE Device::GetStreamSourceFreq(UINT stream, UINT *divider
 
 HRESULT STDMETHODCALLTYPE Device::SetIndices(IDirect3DIndexBuffer9 *buffer)
 {
+    const FrontLock lock;
     IndexBuffer *object = static_cast<IndexBuffer *>(buffer);
     lg::SetIndices(legacy_, object ? object->handle() : nullptr);
     Rebind(indices_, object);
@@ -1340,6 +1445,7 @@ HRESULT STDMETHODCALLTYPE Device::SetIndices(IDirect3DIndexBuffer9 *buffer)
 
 HRESULT STDMETHODCALLTYPE Device::GetIndices(IDirect3DIndexBuffer9 **buffer)
 {
+    const FrontLock lock;
     if (!buffer)
         return D3DERR_INVALIDCALL;
     *buffer = indices_;
@@ -1352,6 +1458,7 @@ HRESULT STDMETHODCALLTYPE Device::GetIndices(IDirect3DIndexBuffer9 **buffer)
 
 HRESULT STDMETHODCALLTYPE Device::DrawPrimitive(D3DPRIMITIVETYPE type, UINT startVertex, UINT count)
 {
+    const FrontLock lock;
     lg::DrawPrimitive(legacy_, static_cast<lg::d3d::PrimitiveType>(type), startVertex, count);
     return D3D_OK;
 }
@@ -1359,6 +1466,7 @@ HRESULT STDMETHODCALLTYPE Device::DrawPrimitive(D3DPRIMITIVETYPE type, UINT star
 HRESULT STDMETHODCALLTYPE Device::DrawIndexedPrimitive(D3DPRIMITIVETYPE type, INT baseVertex, UINT minIndex,
                                                        UINT vertexCount, UINT startIndex, UINT count)
 {
+    const FrontLock lock;
     lg::DrawIndexedPrimitive(legacy_, static_cast<lg::d3d::PrimitiveType>(type), baseVertex, minIndex, vertexCount,
                              startIndex, count);
     return D3D_OK;
@@ -1366,6 +1474,7 @@ HRESULT STDMETHODCALLTYPE Device::DrawIndexedPrimitive(D3DPRIMITIVETYPE type, IN
 
 HRESULT STDMETHODCALLTYPE Device::DrawPrimitiveUP(D3DPRIMITIVETYPE type, UINT count, const void *data, UINT stride)
 {
+    const FrontLock lock;
     if (!data || !stride)
         return D3DERR_INVALIDCALL;
     lg::DrawPrimitiveUP(legacy_, static_cast<lg::d3d::PrimitiveType>(type), count, data, stride);
@@ -1379,6 +1488,7 @@ HRESULT STDMETHODCALLTYPE Device::DrawPrimitiveUP(D3DPRIMITIVETYPE type, UINT co
 HRESULT STDMETHODCALLTYPE Device::DrawIndexedPrimitiveUP(D3DPRIMITIVETYPE, UINT, UINT, UINT, const void *, D3DFORMAT,
                                                          const void *, UINT)
 {
+    const FrontLock lock;
     return Unsupported("IDirect3DDevice9::DrawIndexedPrimitiveUP");
 }
 
@@ -1386,6 +1496,7 @@ HRESULT STDMETHODCALLTYPE Device::DrawIndexedPrimitiveUP(D3DPRIMITIVETYPE, UINT,
 
 HRESULT STDMETHODCALLTYPE Device::CreateQuery(D3DQUERYTYPE type, IDirect3DQuery9 **query)
 {
+    const FrontLock lock;
     if (type != D3DQUERYTYPE_EVENT && type != D3DQUERYTYPE_OCCLUSION)
     {
         if (query)

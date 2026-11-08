@@ -5,9 +5,9 @@ Opt-in, part of the [Legacy adapter](vulkan-legacy-adapter.md)'s build
 `IDirect3DDevice9` and the resource interfaces on the adapter, so the
 renderer's own Direct3D 9 calls, unchanged, draw through Vulkan. A check
 program, `KisakCOD-vulkan-d3d9-check`, drives it through those interfaces and
-checks what comes back. Nothing of the engine is compiled in yet; the next step
-makes `R_HW_Direct3DCreate9` return the front's `IDirect3D9` when `r_backend`
-is `vulkan`.
+checks what comes back. With `-DKISAK_BUILD_VULKAN_BACKEND=ON` the game's Linux
+programs link it, and `r_backend vulkan` makes `R_HW_Direct3DCreate9` return
+the front's `IDirect3D9` ([In the game](#in-the-game-r_backend-vulkan)).
 
 ## Why a front, not a second set of R_HW_* functions
 
@@ -24,7 +24,7 @@ difference, which is what lets mp_crash be compared image by image with DXVK.
 ```
 renderer -> R_HW_* (src/gfx_d3d/rhi) -> IDirect3DDevice9 ...
                                         |-- d3d9.dll or DXVK (r_backend d3d9)
-                                        `-- the D3D9 front (r_backend vulkan, next step)
+                                        `-- the D3D9 front (r_backend vulkan)
                                               -> Legacy adapter (src/gfx_vk/legacy)
                                               -> Vulkan core (src/gfx_vk)
 ```
@@ -72,6 +72,24 @@ volume texture use their texture's counts (`GetContainer` returns it); the back
 buffer and the implicit swap chain use the device's. The device itself goes once
 its own count and its live objects are both zero; its last `Release` drops every
 binding first. The check counts all of this (`references` scene, teardown).
+
+## Threads
+
+The renderer creates its device with `D3DCREATE_MULTITHREADED` and calls it
+from more than one thread: during a map load the database thread creates and
+fills textures while the render thread draws. So every method of every front
+object, `AddRef` and `Release` included, holds one process-wide recursive
+lock (`FrontLock`, `vk_d3d9_internal.h`), as DXVK holds its device lock. It is
+one lock rather than one per device because the renderer has one device and a
+`Release` can destroy the device whose method is running. The core and the
+adapter stay single-threaded behind it. The host's callbacks run under the
+lock too.
+
+The check's `threads` scene does what the database thread does (a worker
+creates, locks, fills, unlocks and releases 200 textures while the main thread
+draws and presents), then draws the last one. Built with ThreadSanitizer it
+reports 29 data races with the lock taken out (in the adapter's pass state and
+the core's frame state) and none with it; hosted CI runs that build.
 
 ## What is implemented
 
@@ -160,7 +178,9 @@ a usage error.
 | `states` | Defaults after `CreateDevice`, render and sampler state round trips (vertex samplers included), constant ranges, refusals, one deliberate unsupported call. |
 | `draw` | Static vertex and index buffers, a draw from memory (stream 0 unbound after it), a textured quad, a vertex shader constant, `GetTexture`. |
 | `render_target` | A render-target texture's level with a depth surface (viewport follows the target), the getters, sampling it afterwards, `StretchRect` into the back buffer. |
+| `shadow_map` | The sun shadow's path: a D24S8 texture made with `D3DUSAGE_DEPTHSTENCIL` as the depth target beside a R5G6B5 colour target, then sampled with linear filtering as a hardware shadow map (0 behind the stored depth, 1 in front). |
 | `references` | Counts of textures and their levels, `GetContainer`, `QueryInterface`, a released texture that still draws while bound and goes when unbound, the back buffer and swap chain counting as the device. |
+| `threads` | A worker thread creating and filling textures while this thread draws and presents; the last one drawn and read back; nothing left alive. |
 | `queries` | Support checks, an event query and an occlusion query finishing. |
 | `reset` | `Reset` to 96x96 and back: the new size, default state, nothing bound, drawing at the new size. |
 | `present` | `Present` through the device and the swap chain, `GetFrontBufferData`. |
@@ -174,18 +194,96 @@ validation layer reports no errors.
 
 The hosted `vulkan_window` job (Linux) stages DXVK Native's headers at the
 x86_64 client's pin, builds the check in Debug and RelWithDebInfo and runs that
-script on lavapipe with validation and synchronisation checks required. The
+script on lavapipe with validation and synchronisation checks required. Its
+Debug run also builds the check with ThreadSanitizer and runs the `threads`
+scene, which fails on any data race. The
 Windows `vulkan-probe` job builds it with MSVC, checks that it imports neither
 `vulkan-1.dll` nor `d3d9.dll` and that it starts, and adds it to the
 `KisakCOD-vulkan-probe-x64` artifact.
 
-Results so far (2026-11-08, cloud sandbox, no GPU, lavapipe from Mesa 25.2.8,
-validation with synchronisation checks): all 8 scenes pass in Debug and
-RelWithDebInfo, one deliberate unsupported call, no validation errors. The
-front also compiles for i386 against the boundary.
+Results so far (2026-11-08, cloud sandbox, no GPU, lavapipe from Mesa 25.2.8):
+all 10 scenes pass on x86_64 (Debug and RelWithDebInfo, validation with
+synchronisation checks, no errors) and on i386 (Debug, no validation layer:
+Ubuntu ships none for i386), with the one deliberate unsupported call.
+
+## In the game: r_backend vulkan
+
+`-DKISAK_BUILD_VULKAN_BACKEND=ON` (`scripts/vulkan_probe/vulkan_backend.cmake`,
+with `KISAK_BUILD_VULKAN_LEGACY` and the native D3D9 boundary) links the front
+into whichever of these programs the build configures:
+
+| Program | How to choose Vulkan |
+| --- | --- |
+| `KisakCOD-device-probe` | `--backend vulkan [--validation off\|auto\|require]` |
+| `KisakCOD-world-draw-probe` | `+set r_backend vulkan` |
+| `KisakCOD-mp` | `+set r_backend vulkan` |
+
+The probes are i386, as before; `KisakCOD-mp` is any client architecture. The
+programs still link the system's D3D9 (DXVK Native) and use it by default.
+`src/linux/client/vulkan/vulkan_backend.cpp` registers three dvars, all
+archived and latched (a change applies at the next `vid_restart`):
+
+* `r_backend`: `d3d9` (default: DXVK on Linux) or `vulkan`.
+* `r_vkValidation`: `off` (default), `auto` (when installed) or `require`.
+* `r_vkDevice`: -1 (default) lets the core pick a GPU; N picks the Nth device
+  the Vulkan driver lists.
+
+With `r_backend vulkan`, `R_HW_Direct3DCreate9`
+(`src/gfx_d3d/rhi/r_rhi_d3d9_calls.cpp`, built with `KISAK_VULKAN_BACKEND`)
+returns the front and DXVK is never called. There is no fallback: if the Vulkan
+device cannot be made, `R_CreateDevice` fails as it would with DXVK. The host
+is SDL3, as for DXVK's SDL3 WSI: the `HWND` the Win32 window layer makes is the
+`SDL_Window`, the `HMONITOR` is the primary display's `SDL_DisplayID`, the
+display modes are SDL's fullscreen modes (or the desktop mode where SDL lists
+none, as with its offscreen driver), and the front's log lines go to the
+console as `Vulkan: ...`. No pipeline cache file is written yet. The Windows
+game does not link the front yet.
+
+The device probe with `--backend vulkan` runs `r_init.cpp`'s device start
+unchanged (`R_PreCreateWindow`, `R_CreateWindow`, `R_CreateDevice`), clears,
+reads back and presents, and also requires no unsupported call, the device
+destroyed at its last release and no validation error. The hosted
+`vulkan_engine` job builds the device probe, the world draw probe and
+`KisakCOD-mp` for i386 with the back end, runs the device probe that way on
+i386 lavapipe through SDL's offscreen driver, and runs the front's check there
+too. In the sandbox (2026-11-08) the probe passed: shader model 3 path picked,
+640x480 back buffer read back with no pixel off, 3 frames presented, nothing
+unsupported, the device destroyed at release.
+
+### Comparing with DXVK
+
+The world draw probe writes each view's settled frame beside its report with
+`KISAK_WORLD_DRAW_IMAGES=1` (`view-A.ppm`, `view-B.ppm`). Run it twice on the
+same machine into two private output directories, once with
+`+set r_backend d3d9` and once with `+set r_backend vulkan` (the rest of the
+command as in [linux-world-draw-probe.md](linux-world-draw-probe.md)), then:
+
+```sh
+python3 scripts/tools/vulkan/compare_frames.py dxvk/view-A.ppm vulkan/view-A.ppm --diff diff-A.ppm
+```
+
+It prints the mean and largest channel difference, the share of pixels off by
+more than 8 and by more than 32, and the PSNR, and writes the difference
+scaled up so that what differs shows bright. The images stay with the reports
+on that machine.
+
+Laptop run 1 (2026-11-08, Intel iGPU, ANV, i386 RelWithDebInfo, 289ae039):
+the front check, the device probe with `--backend vulkan` and mp_crash through
+the world draw probe all pass, and two Vulkan runs give identical frames, but
+the lit world drew brighter than through DXVK (view A PSNR 17.0, view B 20.7).
+Run 2 switched features off one at a time: with `r_specular 0` the two back
+ends match (PSNR 57.9 and 59.8, no pixel more than 2 apart). The cause was the
+translator computing `_pp` instructions in 16-bit floats, where the specular
+terms overflow ([vulkan-legacy-adapter.md](vulkan-legacy-adapter.md)); it now
+computes them at 32 bits, as DXVK does. Run 3 (79186f8e) confirmed it: view A
+mean_abs 0.001, PSNR 66.7 (about 120 pixels in one small spot differ, 9 of
+them by more than 8 levels), view B max 1, PSNR 100; view B's Vulkan digest is
+the one DXVK 3.1.1 (dxbc-spirv too) gave in the shader spike. Vulkan took
+16.8 s against DXVK's 6.2 s for the whole probe. Reports:
+`renderer/vulkan-backend-laptop-run-{1,2,3}.md` in the project files.
 
 ## Next
 
-`r_backend vulkan`: `R_HW_Direct3DCreate9` returns the front with an SDL host,
-the multiplayer client and the world draw probe link it, and mp_crash is drawn
-through it and compared image by image with DXVK on the laptop and the PC.
+`KisakCOD-mp` played with `r_backend vulkan` on the laptop; the PC comparison
+(the Windows game needs a Win32 host for the front first); why the probe takes
+longer on Vulkan (pipeline creation at first use is the likely part).
