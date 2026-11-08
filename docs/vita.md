@@ -15,9 +15,11 @@ while listing the `.iwd` files: an 8-byte store to an odd address, which the
 Vita's CPU refuses and Vita3K allows (see "Alignment" below). The main
 thread also had 256 KB of stack instead of 8 MB. The second run loaded
 mp_crash's zones in 32 s and crashed as the game started: every `thread_local`
-was one copy shared by all threads (see "Thread-local storage" below). All
-three are fixed; the network, the map and the memory budget are next checked
-on the console with the steps below.
+was one copy shared by all threads (see "Thread-local storage" below). The
+third run started the game and stopped in the first script vector sum: the
+script's vector constants sit unaligned in the bytecode, and float loads
+(`VLDR`) fault there (see "Alignment"). All are fixed; the network, the map
+and the memory budget are next checked on the console with the steps below.
 
 The Vita build takes at most **24 players** (`sv_maxclients` 1 to 24, default
 24). The server's snapshot buffers are sized by that cap; at retail's 64 they
@@ -163,7 +165,12 @@ linker script and stub libraries). `-Wl,-q` keeps the relocations that
   byte-buffer code), so every unit is compiled with
   `-mllvm -arm-assume-misaligned-load-store`, which stops Clang pairing two
   word accesses into one. Copies of whole 8-byte structures still use the
-  paired forms; they are safe while those structures stay aligned. A crash
+  paired forms; they are safe while those structures stay aligned. Float
+  loads and stores (`VLDR`/`VSTR`) need 4-byte alignment on every ARMv7, so
+  the script compiler and VM copy float operands out of the packed bytecode
+  with `memcpy`, and on 32-bit ARM `OP_GetVector` pushes an aligned,
+  reference-counted copy of the constant instead of a pointer into the code.
+  A crash
   with stop reason `0x30004` (data abort) on the console is the first thing
   to check for this.
 - **Main thread stack.** `sceUserMainThreadStackSize` (8 MB, in
@@ -223,8 +230,8 @@ Vita cannot raise.
 
 ## Next steps
 
-1. Third run on David's Vita (steps above), with the alignment, stack and
-   thread-local fixes: reach "Dedicated server initialized", load mp_crash,
+1. Fourth run on David's Vita (steps above), with the alignment, stack,
+   thread-local and script vector fixes: reach "Dedicated server initialized", load mp_crash,
    join from the laptop. Expect more alignment faults; each dump's PC maps to
    source.
 2. Map load in Vita3K with game data (David's laptop has Vita3K and the
