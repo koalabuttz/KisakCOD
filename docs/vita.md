@@ -13,9 +13,11 @@ missing first zone, as the Linux build does. The first run on David's Vita
 (2026-11-08) started up, logged 208 MB of main memory free, then crashed
 while listing the `.iwd` files: an 8-byte store to an odd address, which the
 Vita's CPU refuses and Vita3K allows (see "Alignment" below). The main
-thread also had 256 KB of stack instead of 8 MB. Both are fixed; the network,
-map loading and the memory budget are next checked on the console with the
-steps below.
+thread also had 256 KB of stack instead of 8 MB. The second run loaded
+mp_crash's zones in 32 s and crashed as the game started: every `thread_local`
+was one copy shared by all threads (see "Thread-local storage" below). All
+three are fixed; the network, the map and the memory budget are next checked
+on the console with the steps below.
 
 The Vita build takes at most **24 players** (`sv_maxclients` 1 to 24, default
 24). The server's snapshot buffers are sized by that cap; at retail's 64 they
@@ -128,7 +130,15 @@ linker script and stub libraries). `-Wl,-q` keeps the relocations that
   records what the system had set.
 - **Thread-local storage.** VitaSDK's GCC is built without native TLS, and the
   Vita loader has no TLS segment, so Clang uses `-femulated-tls`, the same
-  `__emutls_get_address` scheme as GCC's libgcc.
+  `__emutls_get_address` scheme as GCC's libgcc. libgcc keeps one copy per
+  thread only if its weak references to `pthread_cancel` and `pthread_once`
+  resolve; nothing else in the link uses them, so they are pulled in with
+  `--undefined`. Without them every `thread_local` (the engine's thread
+  context among them) is shared by all threads: the second console run's
+  database thread switched the main thread's context, and the main thread
+  then crashed on another thread's empty trace data. CI fails on any weak
+  `pthread_` reference left unresolved, and at start-up the server checks
+  that a second thread sees its own copy, and stops if not.
 - **Enum size.** VitaSDK's libraries use short enums (`Tag_ABI_enum_size:
   small`); the engine keeps 4-byte enums, because its retail structures (and
   the fastfile layout checks in `db_disk_layout.h`) need them. This is safe at
@@ -213,9 +223,10 @@ Vita cannot raise.
 
 ## Next steps
 
-1. Second run on David's Vita (steps above), with the alignment and stack
-   fixes: reach "Dedicated server initialized", load mp_crash, join from the
-   laptop. Expect more alignment faults; each dump's PC maps to source.
+1. Third run on David's Vita (steps above), with the alignment, stack and
+   thread-local fixes: reach "Dedicated server initialized", load mp_crash,
+   join from the laptop. Expect more alignment faults; each dump's PC maps to
+   source.
 2. Map load in Vita3K with game data (David's laptop has Vita3K and the
    data): checks the zones load and gives the heap's use after a map.
 3. Run 0, 4 and 8 bots at `sv_fps 20` and read the load lines; size the

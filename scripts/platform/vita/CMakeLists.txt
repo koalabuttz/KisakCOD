@@ -86,8 +86,17 @@ target_compile_options(KisakCOD-dedi PRIVATE
 # would warn about every object.
 # --undefined keeps sceUserMainThreadStackSize (src/vita/vita_main.cpp) through
 # --gc-sections: only vita-elf-create reads it, so nothing in the link uses it.
+# libgcc's thread support (gthr-posix.h, behind emulated TLS and the C++
+# runtime) refers to pthreads through weak references, which pull nothing out
+# of libpthread.a. pthread_cancel tells it threads exist (__gthread_active_p)
+# and pthread_once runs emulated TLS's set-up; nothing else links them, so
+# --undefined does. Without them every thread_local is one copy shared by all
+# threads, which crashed the first map load on a Vita. CI checks that no weak
+# pthread reference is left unresolved, and the server refuses to start
+# without per-thread copies.
 target_link_options(KisakCOD-dedi PRIVATE -Wl,--gc-sections -Wl,--no-enum-size-warning
-    -Wl,--undefined=sceUserMainThreadStackSize)
+    -Wl,--undefined=sceUserMainThreadStackSize
+    -Wl,--undefined=pthread_cancel -Wl,--undefined=pthread_once)
 target_link_libraries(KisakCOD-dedi PRIVATE
     pthread
     SceNet_stub SceNetCtl_stub SceSysmodule_stub SceKernelThreadMgr_stub
