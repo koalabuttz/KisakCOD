@@ -70,6 +70,18 @@ mov r1.z, v1.x
 texld r0, r1, s0
 mov oC0, r0
 """),
+    # A depth texture sampled as a shadow map: the colour's red is the depth
+    # it is compared with (D3D9's hardware shadow maps return 1 where the
+    # reference is at or in front of the stored depth, 0 behind it).
+    ("kPsShadow", """ps_3_0
+dcl_texcoord0 v0.xy
+dcl_color0 v1
+dcl_2d s0
+mov r1.xy, v0
+mov r1.z, v1.x
+texld r0, r1, s0
+mov oC0, r0
+"""),
     # Shader model 2: the same path through fixed output registers.
     ("kVs20", """vs_2_0
 dcl_position v0

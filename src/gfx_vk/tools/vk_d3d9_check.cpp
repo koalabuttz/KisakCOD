@@ -253,7 +253,7 @@ public:
     IDirect3D9 *d3d = nullptr;
     IDirect3DDevice9 *device = nullptr;
     IDirect3DVertexShader9 *vsBasic = nullptr;
-    IDirect3DPixelShader9 *psColor = nullptr, *psTexture = nullptr;
+    IDirect3DPixelShader9 *psColor = nullptr, *psTexture = nullptr, *psShadow = nullptr;
     IDirect3DVertexDeclaration9 *decl = nullptr;
     IDirect3DSurface9 *readSurface = nullptr;
     IDirect3DSurface9 *backBuffer = nullptr;
@@ -420,6 +420,7 @@ public:
     void States();
     void Draw();
     void RenderTarget();
+    void ShadowMap();
     void References();
     void Threads();
     void Queries();
@@ -666,6 +667,64 @@ void Check::RenderTarget()
     SafeRelease(texture);
 }
 
+// The renderer's sun shadow (R_SetShadowmapFormats_DX): a D24S8 texture made
+// with D3DUSAGE_DEPTHSTENCIL is the depth target of the shadow pass, beside a
+// R5G6B5 colour target, then sampled with linear filtering as a hardware
+// shadow map, which compares the coordinate's z with the stored depth and
+// returns 1 where z is at or in front of it, 0 behind.
+void Check::ShadowMap()
+{
+    Reset();
+    IDirect3DTexture9 *shadow = nullptr, *color = nullptr;
+    IDirect3DSurface9 *shadowLevel = nullptr, *colorLevel = nullptr;
+    if (!Ok(device->CreateTexture(64, 64, 1, D3DUSAGE_DEPTHSTENCIL, D3DFMT_D24S8, D3DPOOL_DEFAULT, &shadow, nullptr),
+            "CreateTexture(D24S8 depth)")
+        || !Ok(shadow->GetSurfaceLevel(0, &shadowLevel), "GetSurfaceLevel(depth)")
+        || !Ok(device->CreateTexture(64, 64, 1, D3DUSAGE_RENDERTARGET, D3DFMT_R5G6B5, D3DPOOL_DEFAULT, &color,
+                                     nullptr),
+               "CreateTexture(R5G6B5 target)")
+        || !Ok(color->GetSurfaceLevel(0, &colorLevel), "GetSurfaceLevel(colour)"))
+    {
+        SafeRelease(colorLevel);
+        SafeRelease(color);
+        SafeRelease(shadowLevel);
+        SafeRelease(shadow);
+        return;
+    }
+    D3DSURFACE_DESC desc{};
+    shadowLevel->GetDesc(&desc);
+    Equal("depth_usage", desc.Usage, static_cast<DWORD>(D3DUSAGE_DEPTHSTENCIL));
+
+    // The shadow pass: depth 0.25 on the left half, the clear's 1.0 elsewhere.
+    Ok(device->SetRenderTarget(0, colorLevel), "SetRenderTarget(colour)");
+    Ok(device->SetDepthStencilSurface(shadowLevel), "SetDepthStencilSurface(depth texture)");
+    Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 1.0f, 0), "Clear(shadow)");
+    device->SetRenderState(D3DRS_ZENABLE, TRUE);
+    device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+    DrawQuad(0, 0, 32, 64, 0.25f, Argb(255, 255, 255, 255), 64);
+
+    // Sampled with the reference depth from the colour's red.
+    Reset();
+    Ok(device->SetTexture(0, shadow), "SetTexture(depth)");
+    device->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+    device->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+    device->SetPixelShader(psShadow);
+    DrawQuad(0, 0, 128, 64, 0.5f, Argb(255, 0x80, 0, 0));  // 0.5: behind 0.25, in front of 1.0
+    DrawQuad(0, 64, 128, 128, 0.5f, Argb(255, 0x20, 0, 0)); // 0.125: in front of both
+    device->SetTexture(0, nullptr);
+    if (Read())
+    {
+        Expect("behind_shadowed", 32, 32, 0, 0, 0);
+        Expect("in_front_lit", 96, 32, 255, 255, 255);
+        Expect("nearer_lit", 32, 96, 255, 255, 255);
+        Expect("nearer_lit_right", 96, 96, 255, 255, 255);
+    }
+    SafeRelease(colorLevel);
+    SafeRelease(color);
+    SafeRelease(shadowLevel);
+    SafeRelease(shadow);
+}
+
 // D3D9's reference counts: levels share their texture's count, objects the
 // device has bound outlive the program's last reference, the back buffer
 // counts as the device.
@@ -908,6 +967,8 @@ bool Check::CreateObjects(std::string &error)
         hr = device->CreatePixelShader(reinterpret_cast<const DWORD *>(shaders::kPsColor), &psColor);
     if (SUCCEEDED(hr))
         hr = device->CreatePixelShader(reinterpret_cast<const DWORD *>(shaders::kPsTexture), &psTexture);
+    if (SUCCEEDED(hr))
+        hr = device->CreatePixelShader(reinterpret_cast<const DWORD *>(shaders::kPsShadow), &psShadow);
     const D3DVERTEXELEMENT9 elements[] = {
         {0, 0, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0},
         {0, 12, D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0},
@@ -950,6 +1011,7 @@ void Check::ReleaseObjects()
     SafeRelease(vsBasic);
     SafeRelease(psColor);
     SafeRelease(psTexture);
+    SafeRelease(psShadow);
     SafeRelease(decl);
     SafeRelease(readSurface);
     SafeRelease(backBuffer);
@@ -995,6 +1057,7 @@ int Run(const Options &options)
         {"states", &Check::States, true},
         {"draw", &Check::Draw, true},
         {"render_target", &Check::RenderTarget, true},
+        {"shadow_map", &Check::ShadowMap, true},
         {"references", &Check::References, true},
         {"threads", &Check::Threads, true},
         {"queries", &Check::Queries, true},
