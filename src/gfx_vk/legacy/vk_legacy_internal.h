@@ -250,6 +250,7 @@ struct Device
     const Dispatch *vk = nullptr;
     VkDevice dev = VK_NULL_HANDLE;
     DeviceDesc desc{};
+    std::string shaderCachePath; // desc.shaderCachePath, kept
     std::string error;
     DeviceStats stats{};
     uint32_t nextId = 1;
@@ -326,4 +327,15 @@ void DestroyPipelineObjects(Device &device);
 // Index into Device::textures and samplerStates for a D3D9 sampler number; -1 for none.
 int SamplerSlot(uint32_t sampler);
 void ResetState(Device &device);
+
+// vk_legacy_shader_cache.cpp: translated shaders by their bytecode, shared by
+// every device in the process (the file side is public, in vk_legacy.h).
+struct CachedShader
+{
+    ls::Shader translated;
+    std::vector<uint32_t> spirv; // a vertex shader's module; empty for pixel shaders (and with fixedDepthCompare)
+};
+bool FindCachedShader(const void *bytecode, size_t bytes, CachedShader &out);
+void AddCachedShader(const void *bytecode, size_t bytes, CachedShader shader);
+bool ShaderCacheLoadedFrom(const char *path);
 } // namespace gfx_vk::legacy

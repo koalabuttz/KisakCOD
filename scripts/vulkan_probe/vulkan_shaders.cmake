@@ -107,6 +107,25 @@ else()
 endif()
 target_compile_options(kisak_vk_legacy_shader PRIVATE ${KISAK_VULKAN_SHADER_WARNINGS})
 
+# The translator's revision, for caches of translated shaders (the Legacy
+# adapter's shader cache): a digest of the translator's sources and
+# dxbc-spirv's commit. Editing a source re-runs the configure step, so the
+# revision follows every change that could change a translation.
+set(kisak_legacy_shader_sources
+    "${SRC_DIR}/gfx_vk/shader/vk_legacy_shader.cpp"
+    "${SRC_DIR}/gfx_vk/shader/vk_legacy_shader.h")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${kisak_legacy_shader_sources})
+set(kisak_legacy_shader_digests "dxbc-spirv ${KISAK_DXBC_SPIRV_COMMIT}")
+foreach(source IN LISTS kisak_legacy_shader_sources)
+    file(SHA256 "${source}" source_digest)
+    string(APPEND kisak_legacy_shader_digests " ${source_digest}")
+endforeach()
+string(SHA256 kisak_legacy_shader_revision "${kisak_legacy_shader_digests}")
+string(SUBSTRING "${kisak_legacy_shader_revision}" 0 16 kisak_legacy_shader_revision)
+target_compile_definitions(kisak_vk_legacy_shader PRIVATE
+    KISAK_LEGACY_SHADER_REVISION="${kisak_legacy_shader_revision}")
+message(STATUS "Legacy shaders: translator revision ${kisak_legacy_shader_revision}")
+
 if(KISAK_VULKAN_LIBRARIES_ONLY)
     return()
 endif()

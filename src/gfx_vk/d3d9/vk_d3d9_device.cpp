@@ -121,6 +121,7 @@ bool Device::Init()
     legacyDesc.height = params_.BackBufferHeight;
     legacyDesc.log = h.log;
     legacyDesc.logUser = h.user;
+    legacyDesc.shaderCachePath = h.shaderCachePath;
     std::string legacyError;
     legacy_ = lg::CreateDevice(core_, legacyDesc, legacyError);
     if (!legacy_)
@@ -257,9 +258,10 @@ void Device::Destroy()
         // Where the CPU time went, for comparing loads and first frames.
         const lg::DeviceStats &stats = lg::Stats(legacy_);
         HostLog(host(),
-                "vulkan d3d9: device stats: %llu draws, %u shaders (%.1f ms translating), %u pipelines "
-                "(%.1f ms building), %llu texture uploads (%.1f MB, %.1f ms)",
-                static_cast<unsigned long long>(stats.draws), stats.shaders, stats.shaderMicros / 1000.0,
+                "vulkan d3d9: device stats: %llu draws, %u shaders (%u from the cache, %.1f ms translating), "
+                "%u pipelines (%.1f ms building), %llu texture uploads (%.1f MB, %.1f ms)",
+                static_cast<unsigned long long>(stats.draws), stats.shaders, stats.shadersCached,
+                stats.shaderMicros / 1000.0,
                 stats.pipelines, stats.pipelineMicros / 1000.0, static_cast<unsigned long long>(stats.textureUploads),
                 stats.uploadBytes / (1024.0 * 1024.0), stats.uploadMicros / 1000.0);
         // What each frame cost, for comparing frame rates: the work recorded

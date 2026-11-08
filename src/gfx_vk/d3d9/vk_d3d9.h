@@ -61,6 +61,10 @@ struct Host
     Validation validation = Validation::Off;
     int deviceIndex = -1;
     const char *pipelineCachePath = nullptr;
+    // The Legacy adapter's shader cache file (lg::DeviceDesc::shaderCachePath):
+    // translated shaders kept between runs. Null: none (translated shaders are
+    // still shared within the process).
+    const char *shaderCachePath = nullptr;
     // Called when a device's core is destroyed, with its final statistics
     // (validation messages about the teardown included). Null: not called.
     void (*coreDestroyed)(void *user, const CoreStats &stats) = nullptr;

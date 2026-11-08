@@ -30,6 +30,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 IDirect3D9 *Kisak_VulkanDirect3DCreate9();
@@ -51,6 +52,7 @@ enum : int
 const dvar_s *r_backend;
 const dvar_s *r_vkValidation;
 const dvar_s *r_vkDevice;
+const dvar_s *r_vkShaderCache;
 
 const char *const s_instanceExtensions[] = {
     VK_KHR_SURFACE_EXTENSION_NAME,
@@ -69,6 +71,7 @@ struct HostState
     HMODULE loader = nullptr; // vulkan-1.dll, kept for the life of the process
     PFN_vkGetInstanceProcAddr getInstanceProcAddr = nullptr;
     std::vector<DisplayMode> modes;
+    std::string shaderCachePath; // what Host::shaderCachePath points at
 };
 // Not s_host: winsock.h defines that name as a macro.
 HostState s_vkHost;
@@ -241,6 +244,24 @@ void HostCoreDestroyed(void *, const gfx_vk::CoreStats &stats)
                stats.validationWarnings);
 }
 
+// The Legacy adapter's shader cache file: <fs_homepath>\\vulkan\\shaders.bin.
+// Empty (no file) when r_vkShaderCache is off or there is no home path.
+std::string ShaderCachePath()
+{
+    if (!r_vkShaderCache->current.enabled)
+        return {};
+    const char *home = Dvar_GetString("fs_homepath");
+    if (!home || !*home)
+        return {};
+    const std::string directory = std::string(home) + "\\vulkan";
+    if (!CreateDirectoryA(directory.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS)
+    {
+        Com_Printf(CON_CHANNEL_GFX, "Vulkan: no shader cache: cannot create %s\n", directory.c_str());
+        return {};
+    }
+    return directory + "\\shaders.bin";
+}
+
 gfx_vk::Validation ValidationSetting()
 {
     switch (r_vkValidation->current.integer)
@@ -264,6 +285,8 @@ void RegisterDvars()
                                        "Vulkan validation layer: off, auto (when installed) or require");
     r_vkDevice = Dvar_RegisterInt("r_vkDevice", -1, uint32_t(-1), 63, DVAR_ARCHIVE | DVAR_LATCH,
                                   "Vulkan device: -1 picks one, N the Nth device the Vulkan driver lists");
+    r_vkShaderCache = Dvar_RegisterBool("r_vkShaderCache", true, DVAR_ARCHIVE | DVAR_LATCH,
+                                        "Keep translated shaders in fs_homepath/vulkan/shaders.bin between runs");
 }
 } // namespace
 
@@ -291,8 +314,11 @@ IDirect3D9 *Kisak_VulkanDirect3DCreate9()
     host.validation = ValidationSetting();
     host.deviceIndex = r_vkDevice->current.integer;
     host.coreDestroyed = HostCoreDestroyed;
-    Com_Printf(CON_CHANNEL_GFX, "Graphics back end: Vulkan (validation %s, device %d)\n",
-               s_validationNames[r_vkValidation->current.integer], r_vkDevice->current.integer);
+    s_vkHost.shaderCachePath = ShaderCachePath();
+    host.shaderCachePath = s_vkHost.shaderCachePath.empty() ? nullptr : s_vkHost.shaderCachePath.c_str();
+    Com_Printf(CON_CHANNEL_GFX, "Graphics back end: Vulkan (validation %s, device %d, shader cache %s)\n",
+               s_validationNames[r_vkValidation->current.integer], r_vkDevice->current.integer,
+               s_vkHost.shaderCachePath.empty() ? "off" : s_vkHost.shaderCachePath.c_str());
     return front::CreateDirect3D9(host);
 }
 

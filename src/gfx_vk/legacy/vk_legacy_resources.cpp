@@ -673,21 +673,34 @@ Shader *CreateShader(Device *device_, const void *bytecode, size_t bytes, std::s
     const TimeInto timer(device.stats.shaderMicros);
     ++device.stats.shaders;
     std::unique_ptr<Shader> shader(new Shader());
-    if (!ls::Translate(bytecode, bytes, shader->translated, error))
+    // The same bytecode was translated before (this run, or an earlier one
+    // through the cache file): take that translation and vertex module.
+    CachedShader cached;
+    const bool hit = FindCachedShader(bytecode, bytes, cached);
+    if (hit)
+    {
+        shader->translated = std::move(cached.translated);
+        ++device.stats.shadersCached;
+    }
+    else if (!ls::Translate(bytecode, bytes, shader->translated, error))
     {
         Log(device, "shader translation failed: %s", error.c_str());
         return nullptr;
     }
     shader->id = device.nextId++;
     shader->stage = shader->translated.reflection.stage;
+    std::vector<uint32_t> spirv;
     if (shader->stage == ls::Stage::Vertex)
     {
-        std::vector<uint32_t> spirv;
         // Vertex textures are never depth-compared here; where the device
         // fixes depth compare in the shader, say so (see fixedDepthCompare).
+        // The cache keeps only the module built without it.
+        const bool fixedDepthCompare = Features(device.core).fixedDepthCompare;
         const uint32_t noDepthSamplers = 0;
-        if (!ls::BuildSpirv(shader->translated, nullptr, spirv, error,
-                            Features(device.core).fixedDepthCompare ? &noDepthSamplers : nullptr))
+        if (hit && !fixedDepthCompare && !cached.spirv.empty())
+            spirv = std::move(cached.spirv);
+        else if (!ls::BuildSpirv(shader->translated, nullptr, spirv, error,
+                                 fixedDepthCompare ? &noDepthSamplers : nullptr))
         {
             Log(device, "vertex shader %08x: %s", shader->translated.bytecodeHash, error.c_str());
             return nullptr;
@@ -699,6 +712,12 @@ Shader *CreateShader(Device *device_, const void *bytecode, size_t bytes, std::s
             Fail(device, "vertex shader %08x: %s", shader->translated.bytecodeHash, error.c_str());
             return nullptr;
         }
+    }
+    if (!hit)
+    {
+        if (Features(device.core).fixedDepthCompare)
+            spirv.clear();
+        AddCachedShader(bytecode, bytes, CachedShader{shader->translated, std::move(spirv)});
     }
     return shader.release();
 }

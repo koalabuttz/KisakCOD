@@ -227,6 +227,17 @@ bool StagesLinkDirectly(const Shader &vertexShader, const Shader &pixelShader);
 // dxbc-spirv's IR as text, for the tool's --ir.
 std::string DisassembleIr(const Shader &shader);
 
+// What makes translations differ between builds: a digest of the translator's
+// sources and dxbc-spirv's commit (KISAK_LEGACY_SHADER_REVISION, from
+// vulkan_shaders.cmake). A cache of translated shaders keeps it and drops
+// everything when it changes.
+const char *TranslatorRevision();
+
+// A translated shader as bytes, and back, for caches. Deserialize refuses
+// anything malformed or cut short.
+void Serialize(const Shader &shader, std::vector<uint8_t> &out);
+bool Deserialize(const uint8_t *data, size_t size, Shader &shader);
+
 // Names for logs and the tool.
 const char *UniformName(Uniform uniform);
 const char *TextureTypeName(TextureType type);

@@ -168,6 +168,18 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
     device->vk = &Functions(core);
     device->dev = DeviceHandle(core);
     device->desc = desc;
+    if (desc.shaderCachePath && *desc.shaderCachePath)
+    {
+        device->shaderCachePath = desc.shaderCachePath;
+        // Pointers in desc are the caller's; keep none of them.
+        device->desc.shaderCachePath = nullptr;
+        if (!ShaderCacheLoadedFrom(desc.shaderCachePath))
+        {
+            std::string message;
+            LoadShaderCache(desc.shaderCachePath, message);
+            Log(*device, "shader cache %s: %s", desc.shaderCachePath, message.c_str());
+        }
+    }
     device->depthFormat = DepthStencilFormat(core);
     // D3DRS_DEPTHBIAS is in units of the depth range; Vulkan's constant factor
     // is in units of the format's smallest step.
@@ -240,6 +252,12 @@ void DestroyDevice(Device *device)
     device->backBuffer = nullptr;
     DestroyBuffer(core, device->zeroVertices);
     gfx_vk::WaitIdle(core);
+    if (!device->shaderCachePath.empty())
+    {
+        std::string message;
+        SaveShaderCache(device->shaderCachePath.c_str(), message);
+        Log(*device, "shader cache %s: %s", device->shaderCachePath.c_str(), message.c_str());
+    }
     delete device;
 }
 

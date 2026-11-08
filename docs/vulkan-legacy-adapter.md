@@ -74,6 +74,29 @@ device it replaces.
 | Dynamic buffers | Mapped upload memory. `D3DLOCK_DISCARD` while the GPU still reads the old contents renames the buffer onto new memory; `NOOVERWRITE` writes in place; a plain lock of a busy buffer renames and copies the old contents. |
 | Queries | Event queries finish when the GPU passes the point they were issued at: the open recording's submission, or the last one submitted when nothing is being recorded (right after `Present`). Until laptop run 4, an event issued after `Present` waited for the next frame's submission instead. The engine polls such an event (its swap fence) before ending every frame, so the CPU and GPU never overlapped. |
 
+## The shader cache
+
+Translating a D3D9 shader (dxbc-spirv's conversion and passes, and the vertex
+shader's SPIR-V) was the largest part of a Vulkan load: laptop run 4 measured
+1270 shaders and 5.5 s in `KisakCOD-mp`, every start
+(`renderer/vulkan-backend-laptop-run-4.md`). `vk_legacy_shader_cache.cpp` keeps
+each translation by its bytecode:
+
+* In the process, for every device: a shader created again (another device, a
+  `vid_restart`, the same bytecode twice) is not translated again.
+* In a file between runs, when `DeviceDesc::shaderCachePath` is set (the game's
+  hosts use `<fs_homepath>/vulkan/shaders.bin`, dvar `r_vkShaderCache`). The
+  first device reads it; a device that goes writes it if anything new was
+  translated, through a temporary file renamed over the old one.
+
+The file holds the translator's revision, a digest of
+`vk_legacy_shader.cpp`/`.h` and dxbc-spirv's commit that
+`vulkan_shaders.cmake` computes at configure time (editing either source
+re-runs the configure step). A file from another revision, another file
+version, or with a wrong checksum is ignored whole and replaced at the next
+write. The device stats count the shaders the cache served (`shadersCached`,
+`N from the cache` in the front's `device stats` line).
+
 ## Known limits
 
 These are not needed by the shaders and calls checked so far; each is listed
@@ -188,7 +211,10 @@ spike's assembler (plain Python) into `src/gfx_vk/tools/vk_legacy_check_shaders.
 several ways: bad arguments exit 2; an unknown scene fails at the `usage`
 stage; one scene runs alone; and a full run passes every scene in order with no
 mismatched pixel, presents every scene, renames the dynamic buffer, finishes
-the event query, builds pipelines and has no validation errors.
+the event query, builds pipelines and has no validation errors. The
+`shader_cache` scene translates two shaders, takes one again from memory,
+writes and reads back a cache file in the temporary directory, draws with the
+shaders read from it, and checks that a damaged file is refused.
 
 The hosted CI job `vulkan_window` (Linux) builds the check for x86_64 in Debug
 and RelWithDebInfo, runs `gen_legacy_check_shaders.py --check`, and runs that

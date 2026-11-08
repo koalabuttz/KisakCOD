@@ -227,13 +227,16 @@ into whichever of these programs the build configures:
 
 The probes are i386, as before; `KisakCOD-mp` is any client architecture. The
 programs still link the system's D3D9 (DXVK Native) and use it by default.
-`src/linux/client/vulkan/vulkan_backend.cpp` registers three dvars, all
+`src/linux/client/vulkan/vulkan_backend.cpp` registers four dvars, all
 archived and latched (a change applies at the next `vid_restart`):
 
 * `r_backend`: `d3d9` (default: DXVK on Linux) or `vulkan`.
 * `r_vkValidation`: `off` (default), `auto` (when installed) or `require`.
 * `r_vkDevice`: -1 (default) lets the core pick a GPU; N picks the Nth device
   the Vulkan driver lists.
+* `r_vkShaderCache`: 1 (default) keeps translated shaders in
+  `<fs_homepath>/vulkan/shaders.bin` between runs (the Legacy adapter's shader
+  cache); 0 translates every shader at every start.
 
 With `r_backend vulkan`, `R_HW_Direct3DCreate9`
 (`src/gfx_d3d/rhi/r_rhi_d3d9_calls.cpp`, built with `KISAK_VULKAN_BACKEND`)
@@ -245,8 +248,9 @@ display modes are SDL's fullscreen modes (or the desktop mode where SDL lists
 none, as with its offscreen driver), and the front's log lines go to the
 console as `Vulkan: ...`. When the device goes, the front logs where the CPU
 time went (`vulkan d3d9: device stats: ...`: shaders created and the time
-translating them, pipelines and the time building them, texture uploads with
-their size and time), for comparing loads and first frames with DXVK. No
+translating them and how many the shader cache served, pipelines and the time
+building them, texture uploads with their size and time), for comparing loads
+and first frames with DXVK. No
 pipeline cache file is written yet.
 
 At quit `R_ShutdownDirect3D` destroys the game's window before it releases the
