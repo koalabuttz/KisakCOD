@@ -1199,10 +1199,17 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
         }
     }
     const PipelineKey key = MakeKey(device, *vs, *ps, *decl, type, depthSamplers);
-    auto found = device.pipelines.find(key);
-    Pipeline *pipeline = found != device.pipelines.end() ? &found->second : BuildPipeline(device, key, *vs, *ps, *decl);
-    if (!pipeline)
-        return false;
+    // Consecutive draws often keep their pipeline: compare before hashing.
+    Pipeline *pipeline = device.lastPipeline;
+    if (!pipeline || !(key == device.lastPipelineKey))
+    {
+        auto found = device.pipelines.find(key);
+        pipeline = found != device.pipelines.end() ? &found->second : BuildPipeline(device, key, *vs, *ps, *decl);
+        if (!pipeline)
+            return false;
+        device.lastPipeline = pipeline;
+        device.lastPipelineKey = key;
+    }
 
     // Vertex streams first: an unbound one skips the draw before anything is recorded.
     VkBuffer buffers[kMaxStreams + 1];
@@ -1285,14 +1292,19 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
 
 size_t PipelineKeyHash::operator()(const PipelineKey &key) const
 {
+    // Eight bytes at a time: a byte-wise hash of the 80-byte key was a
+    // measurable part of every draw (laptop run 6).
+    static_assert(sizeof(PipelineKey) % 8 == 0, "the key is hashed in 8-byte words");
     const uint8_t *bytes = reinterpret_cast<const uint8_t *>(&key);
-    uint64_t hash = 1469598103934665603ull;
-    for (size_t i = 0; i < sizeof(key); ++i)
+    uint64_t hash = 0x9e3779b97f4a7c15ull;
+    for (size_t i = 0; i < sizeof(key); i += 8)
     {
-        hash ^= bytes[i];
-        hash *= 1099511628211ull;
+        uint64_t word;
+        std::memcpy(&word, bytes + i, 8);
+        hash = (hash ^ word) * 0xff51afd7ed558ccdull;
+        hash ^= hash >> 32;
     }
-    return static_cast<size_t>(hash ^ (hash >> 32));
+    return static_cast<size_t>(hash);
 }
 
 int SamplerSlot(uint32_t sampler)
@@ -1370,6 +1382,7 @@ void ForgetTexture(Device &device, Texture *texture)
 
 void ForgetPipelines(Device &device, uint32_t id)
 {
+    device.lastPipeline = nullptr;
     for (auto it = device.pipelines.begin(); it != device.pipelines.end();)
     {
         if (it->first.vs == id || it->first.ps == id || it->first.decl == id)
@@ -1400,6 +1413,7 @@ void DestroyPipelineObjects(Device &device)
     for (const auto &entry : device.pipelines)
         DestroyPipeline(device.core, entry.second.pipeline);
     device.pipelines.clear();
+    device.lastPipeline = nullptr;
     // Layouts are not used by the GPU after recording.
     for (const auto &entry : device.layouts)
     {
