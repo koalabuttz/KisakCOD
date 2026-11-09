@@ -15,8 +15,9 @@
 //   programs per variant, vertex variant, blend state and target format.
 // - Textures are linear, laid out as sceGxm reads a linear texture (rows of
 //   whole multiples of 8 texels, mip levels sized from the power of two
-//   above the base). Render-target textures are strided. Cube and depth
-//   textures are not sampled yet: draws bind a stand-in.
+//   above the base). Render-target textures are strided. Cube textures are
+//   swizzled into a copy at each UnlockRect. Depth textures are not sampled
+//   yet: draws bind a stand-in.
 // - Memory the GPU may still read (a DISCARD's old buffer, a destroyed
 //   resource, released programs) is freed three frames later: the display
 //   queue lets the CPU run at most two frames ahead.
@@ -915,7 +916,7 @@ void BindTextures(Device &device, const Variant &pixel, void *uniforms)
         }
         else if (texture->desc.kind == TextureKind::Cube)
         {
-            NotYet(device, "sampling cube textures (a grey stand-in is bound)");
+            NotYet(device, "sampling a cube texture sceGxm cannot take (a grey stand-in is bound)");
             view = d.cube;
         }
         else
@@ -1263,12 +1264,98 @@ uint32_t LayoutTexture(Texture &texture)
     return total;
 }
 
+namespace
+{
+uint32_t Part1By1(uint32_t x)
+{
+    x &= 0x0000ffff;
+    x = (x ^ (x << 8)) & 0x00ff00ff;
+    x = (x ^ (x << 4)) & 0x0f0f0f0f;
+    x = (x ^ (x << 2)) & 0x33333333;
+    x = (x ^ (x << 1)) & 0x55555555;
+    return x;
+}
+
+// A square level's texel (or 4x4 block) in sceGxm's swizzled order: y in
+// the even bits, x in the odd ones.
+uint32_t Morton(uint32_t x, uint32_t y)
+{
+    return Part1By1(y) | Part1By1(x) << 1;
+}
+
+// sceGxm's cube layout: each face holds every level down to 1x1 whatever
+// the texture has, swizzled, and faces of larger textures start on 2 KB.
+bool LayOutCube(Texture &texture)
+{
+    const FormatInfo &format = *texture.format;
+    const uint32_t size = texture.desc.width;
+    if (size & (size - 1))
+        return false;
+    const uint32_t block = format.compressed ? 4 : 1;
+    const uint32_t bits = format.compressed ? format.blockBytes * 8 / 16 : format.blockBytes * 8;
+    uint32_t offset = 0, level = 0;
+    for (uint32_t side = size; side >= 1; side >>= 1, ++level)
+    {
+        if (level < 14)
+            texture.mipOffset[level] = offset;
+        const uint32_t blocks = AlignUp(side, block) / block;
+        offset += blocks * blocks * format.blockBytes;
+    }
+    const bool wide = (size >= 32 && (bits <= 8 || format.compressed)) || (size >= 16 && (bits == 16 || bits == 32)) ||
+                      (size >= 8 && bits == 64);
+    texture.faceStride = AlignUp(offset, wide ? 2048 : 4);
+    return true;
+}
+} // namespace
+
+bool StagedTexture(const TextureDesc &desc)
+{
+    return desc.kind == TextureKind::Cube && desc.pool != d3d::POOL_SYSTEMMEM && desc.pool != d3d::POOL_SCRATCH;
+}
+
+void TextureWritten(Device &, Texture &texture, uint32_t face, uint32_t level)
+{
+    if (!texture.swizzled.data || face >= 6 || level >= texture.desc.levels || level >= 14)
+        return;
+    const FormatInfo &format = *texture.format;
+    const Level &from = texture.levels[face * texture.desc.levels + level];
+    uint8_t *to = texture.swizzled.data + face * texture.faceStride + texture.mipOffset[level];
+    const uint32_t bytes = format.blockBytes;
+    const uint32_t side = format.compressed ? std::max(1u, (from.width + 3) / 4) : from.width;
+    for (uint32_t y = 0; y < side; ++y)
+    {
+        const uint8_t *row = texture.memory.data + from.offset + size_t(y) * from.pitch;
+        for (uint32_t x = 0; x < side; ++x)
+            std::memcpy(to + size_t(Morton(x, y)) * bytes, row + size_t(x) * bytes, bytes);
+    }
+}
+
 void SetUpTexture(Device &device, Texture &texture)
 {
     texture.sampleable = false;
+    const TextureDesc &desc = texture.desc;
+    if (StagedTexture(desc))
+    {
+        SceGxmTextureFormat format;
+        if (!TextureFormat(desc.format, format) || !LayOutCube(texture) || desc.width > 4096)
+            return;
+        if (!AllocateMemory(device, texture.swizzled, texture.faceStride * 6, 4096, d3d::POOL_DEFAULT, true,
+                            texture.name.c_str()))
+            return;
+        std::memset(texture.swizzled.data, 0x80, texture.faceStride * 6);
+        const int result = sceGxmTextureInitCube(&texture.sampled, texture.swizzled.data, format, desc.width,
+                                                 desc.width, std::min(desc.levels, 13u));
+        if (result < 0)
+        {
+            Log(device, "sceGxmTextureInitCube for %s (%u, format %u) failed (0x%08x)", texture.name.c_str(),
+                desc.width, unsigned(desc.format), unsigned(result));
+            return;
+        }
+        texture.sampleable = true;
+        return;
+    }
     if (!texture.memory.gpu)
         return;
-    const TextureDesc &desc = texture.desc;
     if (texture.format->depth)
     {
         const int result = sceGxmDepthStencilSurfaceInit(&texture.depthSurface, SCE_GXM_DEPTH_STENCIL_FORMAT_S8D24,

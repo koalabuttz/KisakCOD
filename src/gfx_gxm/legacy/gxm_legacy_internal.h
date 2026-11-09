@@ -117,6 +117,11 @@ struct Texture
     bool sampleable = false;
     // Depth formats: the depth-stencil surface scenes use.
     SceGxmDepthStencilSurface depthSurface;
+    // Cube textures: memory holds the levels as D3D9 locks them (in the C
+    // heap); sceGxm samples a swizzled copy, made at each UnlockRect.
+    Memory swizzled;
+    uint32_t faceStride = 0;
+    uint32_t mipOffset[14] = {};
 };
 
 enum class SurfaceKind : uint8_t
@@ -274,6 +279,11 @@ void ShutdownDraw(Device &device); // after the GPU is idle
 // once the memory is there.
 uint32_t LayoutTexture(Texture &texture);
 void SetUpTexture(Device &device, Texture &texture);
+// Whether the texture's levels stay in the C heap (cube textures, which
+// sceGxm samples from a swizzled copy).
+bool StagedTexture(const TextureDesc &desc);
+// A level the CPU wrote (UnlockRect, UpdateTexture) for the GPU to see.
+void TextureWritten(Device &device, Texture &texture, uint32_t face, uint32_t level);
 // GPU memory the GPU may still read: freed once the frames using it are done.
 void Retire(Device &device, Memory &memory);
 // The open scene, if any, goes to the GPU; Finish also waits for it.

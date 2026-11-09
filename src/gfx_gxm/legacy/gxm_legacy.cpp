@@ -412,8 +412,10 @@ Texture *CreateTexture(Device *device, const TextureDesc &desc)
     texture->desc.height = desc.kind == TextureKind::Cube ? desc.width : desc.height;
     texture->levels.resize(texture->faces * texture->desc.levels);
     const uint32_t total = LayoutTexture(*texture);
-    // Textures and targets prefer CDRAM, the GPU's own memory.
-    if (!AllocateMemory(*device, texture->memory, total, 256, desc.pool, true, desc.name))
+    // Textures and targets prefer CDRAM, the GPU's own memory. Cube textures
+    // keep D3D9's layout in the C heap and give the GPU a swizzled copy.
+    if (!AllocateMemory(*device, texture->memory, total, 256,
+                        StagedTexture(texture->desc) ? d3d::POOL_SYSTEMMEM : desc.pool, true, desc.name))
         return nullptr;
     SetUpTexture(*device, *texture);
     texture->surfaces.resize(texture->levels.size());
@@ -442,6 +444,7 @@ void DestroyTexture(Device *device, Texture *texture)
             device->depthStencil = nullptr;
     }
     Retire(*device, texture->memory);
+    Retire(*device, texture->swizzled);
     --device->live;
     delete texture;
 }
@@ -493,6 +496,7 @@ void UnlockRect(Device *device, Texture *texture, uint32_t face, uint32_t level)
     if (!lock.locked)
         return;
     lock.locked = false;
+    TextureWritten(*device, *texture, face, level);
     ++device->stats.textureUploads;
     device->stats.uploadBytes += uint64_t(lock.slicePitch) * lock.depth;
 }
@@ -1076,6 +1080,7 @@ void UpdateTexture(Device *device, Texture *src, Texture *dst)
             for (uint32_t row = 0; row < rows; ++row)
                 std::memcpy(dst->memory.data + to.offset + size_t(row) * to.pitch,
                             src->memory.data + from.offset + size_t(row) * from.pitch, bytes);
+            TextureWritten(*device, *dst, face, level);
         }
     }
 }

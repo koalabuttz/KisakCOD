@@ -132,7 +132,7 @@ What the GXM back end does so far (step 2d):
 - Clears and draws happen in sceGxm scenes (`legacy/gxm_legacy_draw.cpp`,
   below). Present ends the scene and shows the back buffer with vsync.
 - StretchRect draws a textured quad into the destination.
-- Locks of the back buffer, cube and depth textures as shader inputs,
+- Locks of the back buffer, depth textures as shader inputs,
   two-sided stencil and the blend factor colour are logged once as not done
   yet.
 
@@ -163,8 +163,10 @@ What the GXM back end does so far (step 2d):
   levels of a mipmapped texture sized from the power of two above the base,
   which is how sceGxm reads them and also a layout LockRect can hand out.
   Render-target textures are strided (rows of 32 texels, as colour surfaces
-  want). Volume textures are their slices stacked. Cube and depth textures
-  are not sampled yet: draws bind a grey cube or a white texture.
+  want). Volume textures are their slices stacked. sceGxm samples cube
+  textures only swizzled, so a cube keeps D3D9's layout in the C heap and
+  each UnlockRect swizzles the level into the GPU's copy. Depth textures are
+  not sampled yet: draws bind a white texture.
 - **State.** The viewport moves half a pixel (D3D9 samples pixel centres at
   whole coordinates); the viewport and scissor rect become the region clip;
   depth, stencil, cull, fill mode and depth bias map to sceGxm's; blending
