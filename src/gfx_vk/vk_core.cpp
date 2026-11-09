@@ -671,6 +671,7 @@ bool CreateDevice(Core &core)
     core.optional.fixedDepthCompare = portability || EnvEquals("KISAK_VK_DEPTH_COMPARE", "fixed");
     core.optional.forceWideRenderTargets = EnvEquals("KISAK_VK_RENDER_TARGETS", "wide");
     core.optional.staticUniforms = EnvEquals("KISAK_VK_UNIFORMS", "static");
+    core.optional.fenceFlush = !EnvEquals("KISAK_VK_FENCE_FLUSH", "0");
 
     VkPhysicalDeviceVulkan13Features features13{};
     features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;

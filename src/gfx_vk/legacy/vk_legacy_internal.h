@@ -147,6 +147,11 @@ struct Query
 {
     QueryKind kind = QueryKind::Event;
     uint64_t serial = 0; // submission that contains its end; 0: never issued
+    // Issued between frames with nothing recorded since Present: it marks the
+    // end of the frame just presented (the engine's swap fence). See
+    // GetQueryData.
+    bool frameFence = false;
+    bool flushedAhead = false; // a poll has submitted the work recorded after it
 };
 
 // ---- Pipelines (vk_legacy_draw.cpp) --------------------------------------------------

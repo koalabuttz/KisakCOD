@@ -282,6 +282,10 @@ struct OptionalFeatures
     // instead of binding its pipeline's set again with dynamic offsets
     // (KISAK_VK_UNIFORMS=static), to compare the two or rule one out.
     bool staticUniforms;
+    // The Legacy adapter submits a frame's work ahead of its Present when the
+    // engine waits for the frame before it (legacy::GetQueryData). On unless
+    // KISAK_VK_FENCE_FLUSH=0, to compare the two.
+    bool fenceFlush;
 };
 const OptionalFeatures &Features(const Core *core);
 // Whether images of this format with optimal tiling support these features.

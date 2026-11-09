@@ -27,7 +27,8 @@ import subprocess
 import sys
 
 # The scenes the check runs, in order. A scene added to the check is added here.
-SCENES = ('adapter', 'states', 'draw', 'render_target', 'shadow_map', 'references', 'threads', 'queries', 'reset', 'present')
+SCENES = ('adapter', 'states', 'draw', 'render_target', 'shadow_map', 'references', 'threads', 'queries', 'frame_loop',
+          'reset', 'present')
 
 
 def run(binary, args, env, timeout=300):
@@ -120,6 +121,17 @@ def main():
                   found.get('d3d9_check.device_release', 'missing'))
     polls = found.get('d3d9_check.event_query_polls', '')
     checks.expect('event query finished', polls.isdigit(), polls or 'missing')
+    # A swap fence polled with FLUSH while its frame is unfinished submits the
+    # next frame's work ahead of its Present, once (not at all with
+    # KISAK_VK_FENCE_FLUSH=0). Without the record thread a software GPU has
+    # finished the frame inside vkQueueSubmit2, before any poll.
+    fence_flushes = '0' if env.get('KISAK_VK_FENCE_FLUSH') == '0' else '1'
+    fence_paths = [f'ahead flushes={fence_flushes}']
+    if env.get('KISAK_VK_RECORD_THREAD') == '0':
+        fence_paths.append('finished_first flushes=0')
+    checks.expect('swap fence poll flushes the next frame once',
+                  found.get('d3d9_check.fence_flush') in fence_paths,
+                  found.get('d3d9_check.fence_flush', 'missing'))
     if args.validation == 'require':
         checks.expect('validation was on', found.get('d3d9_check.validation') == 'on',
                       found.get('d3d9_check.validation', 'missing'))

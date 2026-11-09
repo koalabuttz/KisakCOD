@@ -99,5 +99,7 @@ void BackendCounters(const Backend *, DeviceCounters &out)
 {
     out.validationErrors = 0;
     out.validation = false;
+    out.submissions = 0;
+    out.fenceFlushes = 0;
 }
 } // namespace gfx_vk::d3d9

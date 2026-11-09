@@ -54,6 +54,6 @@ uint64_t BackendTextureMemory(const Backend *backend);
 // The window's size in pixels, for a Reset that asks for 0 x 0. False when
 // the back end cannot tell.
 bool BackendWindowSize(const Backend *backend, uint32_t &width, uint32_t &height);
-// Fills the back end's part of DeviceCounters (validation).
+// Fills the back end's part of DeviceCounters (validation, submissions).
 void BackendCounters(const Backend *backend, DeviceCounters &out);
 } // namespace gfx_vk::d3d9

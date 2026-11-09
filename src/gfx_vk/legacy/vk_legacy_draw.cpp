@@ -1921,7 +1921,13 @@ void IssueQuery(Device *device, Query *query, bool begin)
     // its frame, and the render thread no longer waits for the next frame's
     // GPU work as well before it ends that frame.
     if (query && !begin)
+    {
         query->serial = RecordedSerial(device->core);
+        // Between frames with nothing recorded: the end of the frame just
+        // presented. (Not an event issued inside a frame after a flush.)
+        query->frameFence = !device->frameOpen && query->serial != SubmissionSerial(device->core);
+        query->flushedAhead = false;
+    }
 }
 
 bool GetQueryData(Device *device_, Query *query, bool flush, uint32_t &result)
@@ -1937,11 +1943,28 @@ bool GetQueryData(Device *device_, Query *query, bool flush, uint32_t &result)
         result = done;
         return true;
     }
-    if (flush && query->serial == SubmissionSerial(device.core))
+    if (!flush)
+        return false;
+    const uint64_t recording = SubmissionSerial(device.core);
+    // Its own end is not submitted yet.
+    const bool own = query->serial == recording;
+    // A frame fence the caller waits on, with the next frame's work recorded
+    // and not submitted: the GPU gets it now, behind the frame it is still on,
+    // so it has no gap to wait through when that frame ends. The engine polls
+    // its swap fence this way once a frame is drawn, in steps of up to 1 ms
+    // (RB_BackendTimeout), and presents only afterwards.
+    const bool ahead = !own && query->frameFence && !query->flushedAhead && Features(device.core).fenceFlush
+        && RecordedSerial(device.core) == recording;
+    if (own || ahead)
     {
         EndPassIfOpen(device);
         if (!Flush(device.core, false))
             Fail(device, "Flush: %s", LastError(device.core));
+        if (ahead)
+        {
+            query->flushedAhead = true;
+            ++device.stats.fenceFlushes;
+        }
     }
     return false;
 }

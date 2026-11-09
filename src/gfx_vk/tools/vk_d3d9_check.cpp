@@ -434,6 +434,7 @@ public:
     void References();
     void Threads();
     void Queries();
+    void FrameLoop();
     void ResetDevice();
     void Present();
 };
@@ -931,8 +932,131 @@ void Check::Queries()
     }
     Equal("swap_fence_done_without_flush", hr == S_OK && done == TRUE, true);
     std::printf("d3d9_check.swap_fence_polls=%d\n", fencePolls);
+
+    // Polled with FLUSH, as the engine polls it once the next frame is drawn:
+    // it still finishes with its own frame, and the first poll that finds it
+    // unfinished hands the next frame's work to the GPU, once, ahead of its
+    // Present. The frame then goes on in a new submission with its state and
+    // its target's contents. A heavy frame first, so that the poll finds the
+    // fence unfinished; a GPU that still finishes first gets another try.
+    const char *fencePath = "finished_first";
+    unsigned long long fenceFlushes = 0;
+    for (int attempt = 0; attempt < 8 && fencePath[0] == 'f'; ++attempt)
+    {
+        Reset();
+        for (int i = 0; i < 256; ++i)
+            DrawQuad(0, 0, kSize, kSize, 0.5f, Argb(255, 32, 32, 32));
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+        Ok(event->Issue(D3DISSUE_END), "Issue(event after Present)");
+        Reset(Argb(255, 0, 64, 0));
+        DrawQuad(0, 0, 32, 32, 0.5f, Argb(255, 255, 0, 0)); // the next frame's work so far
+        const uint64_t before = Counters().fenceFlushes;
+        done = FALSE;
+        if (event->GetData(&done, sizeof(done), D3DGETDATA_FLUSH) != S_FALSE)
+            continue;
+        fencePath = "ahead";
+        const uint64_t afterFirst = Counters().fenceFlushes;
+        int waits = 0;
+        while ((hr = event->GetData(&done, sizeof(done), D3DGETDATA_FLUSH)) == S_FALSE && waits < 5000)
+        {
+            ++waits;
+            SDL_Delay(1);
+        }
+        Equal("swap_fence_done_after_flush", hr == S_OK && done == TRUE, true);
+        Equal("swap_fence_flushes_once", Counters().fenceFlushes, afterFirst);
+        fenceFlushes = afterFirst - before;
+        DrawQuad(64, 64, 96, 96, 0.5f, Argb(255, 0, 0, 255));
+        if (Read())
+        {
+            Expect("fence_flush_drawn_before", 16, 16, 255, 0, 0);
+            Expect("fence_flush_drawn_after", 80, 80, 0, 0, 255);
+            Expect("fence_flush_clear", 120, 16, 0, 64, 0);
+        }
+    }
+    std::printf("d3d9_check.fence_flush=%s flushes=%llu\n", fencePath, fenceFlushes);
     SafeRelease(event);
     SafeRelease(occlusion);
+}
+
+// The engine's frame, as its render thread runs it (RB_RenderCommandFrame,
+// RB_EndFrame, RB_SwapBuffers): draw; poll the swap fence with FLUSH until the
+// frame before has finished; issue the GPU sync fence; Present; issue the swap
+// fence. Meanwhile another thread polls the GPU sync fence with FLUSH, as the
+// main thread does in R_SyncGpu. Every frame takes at most three submissions
+// (the swap fence's flush or the sync fence's own, and the present), the swap
+// fence flushes at most once a frame, and the last frame comes out whole,
+// drawn on both sides of its wait.
+void Check::FrameLoop()
+{
+    constexpr int kFrames = 48;
+    IDirect3DQuery9 *swapFence = nullptr, *syncFence = nullptr;
+    if (!Ok(device->CreateQuery(D3DQUERYTYPE_EVENT, &swapFence), "CreateQuery(swap fence)")
+        || !Ok(device->CreateQuery(D3DQUERYTYPE_EVENT, &syncFence), "CreateQuery(sync fence)"))
+    {
+        SafeRelease(swapFence);
+        return;
+    }
+    std::atomic<bool> stop{false};
+    std::atomic<bool> pollFailed{false};
+    IDirect3DQuery9 *const polled = syncFence;
+    std::thread mainThread([&] {
+        while (!stop.load())
+        {
+            BOOL done = FALSE;
+            if (FAILED(polled->GetData(&done, sizeof(done), D3DGETDATA_FLUSH)))
+                pollFailed = true;
+            std::this_thread::yield();
+        }
+    });
+    const front::DeviceCounters before = Counters();
+    int stuck = 0;
+    for (int frame = 0; frame < kFrames; ++frame)
+    {
+        const bool last = frame == kFrames - 1;
+        Reset(Argb(255, 0, 64, 0));
+        for (int i = 0; i < 24; ++i)
+            DrawQuad(0, 0, 32, 32, 0.5f, Argb(255, 255, 0, 0));
+        BOOL done = FALSE;
+        int waits = 0;
+        while (swapFence->GetData(&done, sizeof(done), D3DGETDATA_FLUSH) == S_FALSE && waits < 20000)
+        {
+            ++waits;
+            if (waits > 200)
+                SDL_Delay(1);
+            else
+                std::this_thread::yield();
+        }
+        stuck += waits >= 20000;
+        Ok(syncFence->Issue(D3DISSUE_END), "Issue(sync fence)");
+        if (last)
+        {
+            DrawQuad(64, 64, 96, 96, 0.5f, Argb(255, 0, 0, 255));
+            if (Read())
+            {
+                Expect("frame_drawn_before_wait", 16, 16, 255, 0, 0);
+                Expect("frame_drawn_after_wait", 80, 80, 0, 0, 255);
+                Expect("frame_clear", 120, 16, 0, 64, 0);
+            }
+        }
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+        Ok(swapFence->Issue(D3DISSUE_END), "Issue(swap fence)");
+    }
+    stop = true;
+    mainThread.join();
+    const front::DeviceCounters after = Counters();
+    const uint64_t presents = after.presents - before.presents;
+    const uint64_t submissions = after.submissions - before.submissions;
+    const uint64_t flushes = after.fenceFlushes - before.fenceFlushes;
+    Equal("frames_presented", presents + (after.presentsSkipped - before.presentsSkipped), uint64_t(kFrames));
+    Equal("swap_fence_never_stuck", stuck, 0);
+    Equal("sync_fence_polls_ok", pollFailed.load(), false);
+    // The read-back of the last frame is one more.
+    Equal("at_most_three_submissions_a_frame", submissions <= 3u * kFrames + 1, true);
+    Equal("swap_fence_flushes_at_most_once_a_frame", flushes <= uint64_t(kFrames), true);
+    std::printf("d3d9_check.frame_loop=frames=%d submissions=%llu fence_flushes=%llu\n", kFrames,
+                static_cast<unsigned long long>(submissions), static_cast<unsigned long long>(flushes));
+    SafeRelease(swapFence);
+    SafeRelease(syncFence);
 }
 
 // Reset to another back buffer size and back: the new size, default state,
@@ -1157,6 +1281,7 @@ int Run(const Options &options)
         {"references", &Check::References, true},
         {"threads", &Check::Threads, true},
         {"queries", &Check::Queries, true},
+        {"frame_loop", &Check::FrameLoop, true},
         {"reset", &Check::ResetDevice, true},
         {"present", &Check::Present, true},
     };

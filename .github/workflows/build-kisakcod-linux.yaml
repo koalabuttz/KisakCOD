@@ -2768,6 +2768,11 @@ jobs:
           KISAK_VK_RECORD_THREAD=0 python3 -u scripts/tests/test_vulkan_d3d9_front.py \
             --binary "$OUT_DIR/KisakCOD-vulkan-d3d9-check" \
             --video-driver offscreen --validation require
+          # And with the swap fence's flush off (docs/vulkan-legacy-adapter.md,
+          # Queries): a frame is then submitted at its Present only.
+          KISAK_VK_FENCE_FLUSH=0 python3 -u scripts/tests/test_vulkan_d3d9_front.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-d3d9-check" \
+            --video-driver offscreen --validation require
 
       - name: Check the D3D9 front's lock with ThreadSanitizer
         if: ${{ matrix.config == 'Debug' }}
@@ -2800,6 +2805,11 @@ jobs:
           # checks the hand-over between the two.
           "$OUT_DIR/tsan/KisakCOD-vulkan-d3d9-check" --scene threads --validation off | tee "$RUNNER_TEMP/tsan.log"
           grep -qx 'd3d9_check=passed' "$RUNNER_TEMP/tsan.log"
+          # The engine's frame: the render thread draws, waits on its swap
+          # fence and presents while another thread polls the GPU sync fence.
+          "$OUT_DIR/tsan/KisakCOD-vulkan-d3d9-check" --scene frame_loop --validation off \
+            | tee "$RUNNER_TEMP/tsan-frames.log"
+          grep -qx 'd3d9_check=passed' "$RUNNER_TEMP/tsan-frames.log"
           # Frames, draws, read-back and swapchain rebuilds with the record
           # thread on (the adapter check is not run here: lavapipe's own
           # threads race in it, with or without ours).

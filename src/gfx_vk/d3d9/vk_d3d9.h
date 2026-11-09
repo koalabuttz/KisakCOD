@@ -95,6 +95,8 @@ struct DeviceCounters
     uint32_t liveObjects;      // resources, shaders, declarations and queries not yet destroyed
     uint32_t validationErrors; // the core's so far
     bool validation;           // the validation layer is loaded
+    uint64_t submissions;      // queue submissions so far (Vulkan back end)
+    uint64_t fenceFlushes;     // of those, frames submitted ahead of their Present by a swap fence poll
 };
 bool Counters(IDirect3DDevice9 *device, DeviceCounters &out);
 
