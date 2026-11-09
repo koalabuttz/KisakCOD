@@ -997,6 +997,7 @@ bool Emitter::Run(std::string &cg, std::string &error)
     auto local = [&](const std::string &name) { return declared_.count(name) != 0; };
     if (vertex_)
     {
+        std::string positionInput; // the register local holding POSITION0, when the program reads it
         for (const VertexInput &input : r_.inputs)
         {
             const std::string name = "in_v" + std::to_string(input.reg);
@@ -1014,6 +1015,8 @@ bool Emitter::Run(std::string &cg, std::string &error)
                 if (!absent && components < 4)
                     value = "float4(" + name + kFill[components] + ")";
                 prologue += "    float4 v" + std::to_string(input.reg) + " = " + value + ";\n";
+                if (input.usage == 0 && input.usageIndex == 0)
+                    positionInput = "v" + std::to_string(input.reg);
                 declared_.erase("v" + std::to_string(input.reg));
             }
         }
@@ -1075,6 +1078,16 @@ bool Emitter::Run(std::string &cg, std::string &error)
         }
         if (options_.farPlaneInside)
             epilogue += "    out_POSITION.z = min(out_POSITION.z, out_POSITION.w * 0.99999);\n";
+        if (options_.diagPosition == 1 && !positionInput.empty())
+            epilogue += "    out_POSITION = float4(" + positionInput + ".x / 480.0 - 1.0, 1.0 - " + positionInput +
+                        ".y / 272.0, 0.5, 1.0);\n";
+        else if (options_.diagPosition == 2 && !positionInput.empty() && r_.floatConstants >= 2)
+            epilogue += "    out_POSITION = float4(dot(" + positionInput + ", c[0]), dot(" + positionInput +
+                        ", c[1]), 0.5, 1.0);\n";
+        else if (options_.diagPosition == 3)
+            epilogue += "    out_POSITION.zw = float2(0.5, 1.0);\n";
+        else if (options_.diagPosition == 4)
+            epilogue += "    out_POSITION.z = out_POSITION.w * 0.5;\n";
     }
     else
     {

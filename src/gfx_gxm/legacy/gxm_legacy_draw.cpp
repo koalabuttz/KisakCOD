@@ -262,34 +262,44 @@ struct DrawState
     Variant diagPass;
     const SceGxmProgramParameter *diagPassPosition = nullptr;
     std::map<uint32_t, SceGxmVertexProgram *> diagPassPrograms;
+    // A hand-written vertex program that does what the game's does to the
+    // position: four dots with the constants c[0] to c[3].
+    Variant diagMimic;
+    const SceGxmProgramParameter *diagMimicPosition = nullptr;
+    std::map<uint32_t, SceGxmVertexProgram *> diagMimicPrograms;
 };
 
 // Run diagnostics (DiagnoseDraw, DiagnoseFrame): which frames.
-constexpr uint64_t kDiagnosedFrames[] = {300};
-constexpr uint64_t kReadBackFrames[] = {300, 700, 1000, 1300, 1600, 1900};
+// The first is logged at length (8 draws); the others sit inside a test's
+// window and log 2 draws, for what that test's program variant takes.
+constexpr uint64_t kDiagnosedFrames[] = {300, 960, 1260, 1560, 1860, 2160, 2460};
+constexpr uint64_t kReadBackFrames[] = {300, 700, 1000, 1300, 1600, 1900, 2200, 2500};
 constexpr uint64_t kTestRectFirst = 600, kTestRectLast = 779;
-// Tests on the game's own draws, three seconds each (read back at 1000,
-// 1300, 1600 and 1900). Every test writes opaque green with no blending
-// (run G: the game's draws make no fragments at all, green or not).
+// Tests on the game's own draws, three seconds each from frame 900, one
+// every 300 frames (read back 100 frames in). Every test writes opaque green
+// with no blending. Run H: a pass-through vertex program on the game's
+// vertices fills the screen, the game's translated vertex program draws
+// nothing, so these replace parts of the translated program's position
+// (gxm::cg::Options::diagPosition).
 enum DiagMode
 {
     DiagNone = 0,
-    DiagPassThrough = 1, // frames 900-1079: a pass-through vertex program reads the game's positions as pixels
-    DiagExpand = 2,      // frames 1200-1379: the game's program, vertices copied out, no index buffer
-    DiagPassExpand = 3,  // frames 1500-1679: both
-    DiagGreen = 4,       // frames 1800-1979: the game's program and buffers (run G's test 1 again)
+    DiagPosPixels = 1,   // the translated program; position replaced by the POSITION input as pixels
+    DiagPosDots = 2,     // x and y from dots with c[0] and c[1], z 0.5, w 1
+    DiagPosZW = 3,       // x and y as computed, z 0.5, w 1
+    DiagPosZ = 4,        // z half the computed w
+    DiagMimic = 5,       // a hand-written program: four dots with c[0] to c[3]
+    DiagPassThrough = 6, // run H's pass-through program (the control: fills the screen)
+    DiagModeCount
 };
 int DiagModeFor(uint64_t frame)
 {
-    if (frame >= 900 && frame < 1080)
-        return DiagPassThrough;
-    if (frame >= 1200 && frame < 1380)
-        return DiagExpand;
-    if (frame >= 1500 && frame < 1680)
-        return DiagPassExpand;
-    if (frame >= 1800 && frame < 1980)
-        return DiagGreen;
-    return DiagNone;
+    if (frame < 900)
+        return DiagNone;
+    const uint64_t test = (frame - 900) / 300;
+    if (test + 1 >= DiagModeCount || (frame - 900) % 300 >= 180)
+        return DiagNone;
+    return int(test) + 1;
 }
 
 namespace
@@ -328,6 +338,30 @@ void *Transient(Device &device, uint32_t bytes)
     if (block)
         Defer(device, [block] { gxm::Free(gxm::MemoryKind::Main, block); });
     return block;
+}
+
+// A program's size and parameters, for the run diagnostics.
+std::string DescribeProgram(const SceGxmProgram *program)
+{
+    char part[160];
+    const unsigned parameters = sceGxmProgramGetParameterCount(program);
+    std::snprintf(part, sizeof(part), "%u bytes, %u parameters, uniform buffer %u bytes:",
+                  unsigned(sceGxmProgramGetSize(program)), parameters,
+                  unsigned(sceGxmProgramGetDefaultUniformBufferSize(program)));
+    std::string line = part;
+    for (unsigned i = 0; i < parameters && i < 24; ++i)
+    {
+        const SceGxmProgramParameter *p = sceGxmProgramGetParameter(program, i);
+        if (!p)
+            continue;
+        const char *name = sceGxmProgramParameterGetName(p);
+        std::snprintf(part, sizeof(part), " %s(cat %u type %u x%u [%u] cont %u res %u)", name ? name : "?",
+                      unsigned(sceGxmProgramParameterGetCategory(p)), unsigned(sceGxmProgramParameterGetType(p)),
+                      sceGxmProgramParameterGetComponentCount(p), sceGxmProgramParameterGetArraySize(p),
+                      sceGxmProgramParameterGetContainerIndex(p), sceGxmProgramParameterGetResourceIndex(p));
+        line += part;
+    }
+    return line;
 }
 
 bool Register(Device &device, Variant &variant, const char *what)
@@ -375,7 +409,7 @@ uint64_t VariantKey(const gxm::cg::Options &options)
         components |= uint64_t(options.inputComponents[i] & 3) << (2 * i);
     return (uint64_t(options.bgraInputs) | uint64_t(options.absentInputs) << 16) ^ (components << 32) ^
            (options.alphaFunc == gxm::cg::AlphaFunc::Always ? 0 : uint64_t(options.alphaFunc)) ^
-           (options.farPlaneInside ? 0x5a5a000000000000ull : 0);
+           (options.farPlaneInside ? 0x5a5a000000000000ull : 0) ^ (uint64_t(options.diagPosition) * 0x9e3779b97f4a7c15ull);
 }
 
 // The shader's program for these options: made, compiled and registered on
@@ -1249,6 +1283,19 @@ bool InitDraw(Device &device, std::string &error)
         if (!d.diagPassPosition)
             d.diagPass.failed = true;
     }
+    if (!gxm::GetProgram("// KisakCOD: diagnostics\nuniform float4 c[4];\n"
+                         "void main(float4 in_position, out float4 out_POSITION : POSITION)\n{\n"
+                         "    out_POSITION = float4(dot(in_position, c[0]), dot(in_position, c[1]), "
+                         "dot(in_position, c[2]), dot(in_position, c[3]));\n}\n",
+                         gxm::ShaderStage::Vertex, d.diagMimic.gxp, log))
+        Log(device, "diag: the mimic program did not compile: %s", log.substr(0, log.find('\n')).c_str());
+    if (Register(device, d.diagMimic, "diag mimic program"))
+    {
+        d.diagMimicPosition = sceGxmProgramFindParameterByName(d.diagMimic.program(), "in_position");
+        if (!d.diagMimicPosition || !d.diagMimic.constants)
+            d.diagMimic.failed = true;
+        Log(device, "diag: mimic program %s", DescribeProgram(d.diagMimic.program()).c_str());
+    }
     return true;
 }
 
@@ -1574,10 +1621,12 @@ void FrameDone(Device &device)
     d.ringUsed = 0;
     for (const uint64_t frame : kDiagnosedFrames)
         if (d.frame == frame)
-            d.diagnosedDraws = 8;
+            d.diagnosedDraws = frame == kDiagnosedFrames[0] ? 8 : 2;
     const int mode = DiagModeFor(d.frame);
     if (mode != d.diagMode)
-        Log(device, "diag: frame %llu, test %d (1 pass-through, 2 copied vertices, 3 both, 4 green, 0 none)",
+        Log(device,
+            "diag: frame %llu, test %d (1 position from pixels, 2 x y from dots, 3 z w fixed, 4 z fixed, 5 mimic, "
+            "6 pass-through, 0 none)",
             (unsigned long long)d.frame, mode);
     d.diagMode = mode;
     // Work recorded in frame F was queued before Present F + 1, and after
@@ -1778,6 +1827,28 @@ void DiagnoseDraw(Device &device, d3d::PrimitiveType type, uint32_t indexCount, 
         "diag frame %llu draw: vs c0 %g %g %g %g, c1 %g %g %g %g, c2 %g %g %g %g, c3 %g %g %g %g",
         (unsigned long long)d.frame, c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9], c[10], c[11], c[12],
         c[13], c[14], c[15]);
+    Log(device, "diag frame %llu draw: vs c4 %g %g %g %g, c5 %g %g %g %g, c6 %g %g %g %g, c7 %g %g %g %g",
+        (unsigned long long)d.frame, c[16], c[17], c[18], c[19], c[20], c[21], c[22], c[23], c[24], c[25], c[26],
+        c[27], c[28], c[29], c[30], c[31]);
+    {
+        const gxm::cg::Reflection &r = device.vertexShader->parsed.reflection;
+        std::string inputs, varyings;
+        char part[48];
+        for (const gxm::cg::VertexInput &input : r.inputs)
+        {
+            std::snprintf(part, sizeof(part), " v%u=usage %u.%u mask 0x%x", unsigned(input.reg), unsigned(input.usage),
+                          unsigned(input.usageIndex), unsigned(input.mask));
+            inputs += part;
+        }
+        for (const gxm::cg::Varying &varying : r.varyings)
+        {
+            std::snprintf(part, sizeof(part), " %s%u", gxm::cg::SemanticName(varying.semantic), unsigned(varying.index));
+            varyings += part;
+        }
+        Log(device, "diag frame %llu draw: vs %u instructions, relative constants %u; inputs:%s; writes POSITION and:%s",
+            (unsigned long long)d.frame, unsigned(r.instructions), unsigned(r.relativeConstants), inputs.c_str(),
+            varyings.c_str());
+    }
     // The first vertex's position element, as the draw reads it.
     const VertexElement *position = nullptr;
     for (const VertexElement &e : device.decl->elements)
@@ -1877,6 +1948,8 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     InputPlan plan;
     PlanInputs(device, *vs, *device.decl, plan);
     const int diag = d.diagMode;
+    if (diag >= DiagPosPixels && diag <= DiagPosZ)
+        plan.options.diagPosition = uint8_t(diag);
     Variant *vertex = GetVariant(device, *vs, plan.options);
     gxm::cg::Options pixelOptions;
     if (device.renderStates[d3d::RS_ALPHATESTENABLE])
@@ -1893,7 +1966,23 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     }
     if (diag != DiagNone && !d.diagGreen.failed)
         pixel = &d.diagGreen;
-    const bool passThrough = (diag == DiagPassThrough || diag == DiagPassExpand) && !d.diagPass.failed;
+    // A stand-in vertex program for this draw.
+    Variant *standIn = nullptr;
+    const SceGxmProgramParameter *standInPosition = nullptr;
+    std::map<uint32_t, SceGxmVertexProgram *> *standInPrograms = nullptr;
+    if (diag == DiagPassThrough && !d.diagPass.failed)
+    {
+        standIn = &d.diagPass;
+        standInPosition = d.diagPassPosition;
+        standInPrograms = &d.diagPassPrograms;
+    }
+    else if (diag == DiagMimic && !d.diagMimic.failed)
+    {
+        standIn = &d.diagMimic;
+        standInPosition = d.diagMimicPosition;
+        standInPrograms = &d.diagMimicPrograms;
+    }
+    const bool passThrough = standIn != nullptr;
     if (!OpenScene(device))
     {
         CountSkip(device, SkipNoScene);
@@ -1915,7 +2004,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     SceGxmBlendInfo blend{};
     const bool blended = pixel != &d.diagGreen && MakeBlend(device, d.color.noAlpha, blend);
     const FragmentProgramEntry *fragmentProgram =
-        GetFragmentProgram(device, *pixel, passThrough ? d.diagPass : *vertex, blended ? &blend : nullptr);
+        GetFragmentProgram(device, *pixel, passThrough ? *standIn : *vertex, blended ? &blend : nullptr);
     if (!fragmentProgram)
         return;
 
@@ -1957,43 +2046,12 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     }
     ApplyFixedState(device, state);
 
-    // Run-diagnostic tests: vertices copied out of the game's buffers, and a
-    // pass-through vertex program.
+    // Run-diagnostic tests: a stand-in vertex program fed the game's
+    // position stream.
     const SceGxmVertexProgram *vertexGxm = vertexProgram->program;
     const void *drawIndices = indexData;
     bool drawIndex32 = index32;
     uint8_t drawStreams = vertexProgram->streamCount;
-    if ((diag == DiagExpand || diag == DiagPassExpand) && indexCount <= kSequentialIndices)
-    {
-        bool copied = true;
-        for (uint8_t i = 0; i < vertexProgram->streamCount && copied; ++i)
-        {
-            const uint32_t stride = strides[vertexProgram->streams[i]];
-            uint8_t *copy = static_cast<uint8_t *>(Transient(device, indexCount * stride + 16));
-            if (!copy)
-            {
-                copied = false;
-                break;
-            }
-            const uint8_t *from = static_cast<const uint8_t *>(streamData[i]);
-            for (uint32_t k = 0; k < indexCount; ++k)
-            {
-                const uint32_t at = !indexData ? k
-                                    : index32  ? static_cast<const uint32_t *>(indexData)[k]
-                                               : static_cast<const uint16_t *>(indexData)[k];
-                std::memcpy(copy + size_t(k) * stride, from + size_t(at) * stride, stride);
-            }
-            streamData[i] = copy;
-        }
-        if (copied)
-        {
-            drawIndices = d.sequential;
-            drawIndex32 = false;
-            if (const VertexProgramEntry *sequential =
-                    GetVertexProgram(device, *vertex, *device.decl, plan, false, strides))
-                vertexGxm = sequential->program;
-        }
-    }
     if (passThrough)
     {
         const VertexElement *position = nullptr;
@@ -2011,7 +2069,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             const uint32_t stride = strides[position->stream];
             const uint32_t key = stride | uint32_t(position->offset) << 12 | uint32_t(components) << 24 |
                                  uint32_t(drawIndex32) << 30;
-            SceGxmVertexProgram *&program = d.diagPassPrograms[key];
+            SceGxmVertexProgram *&program = (*standInPrograms)[key];
             if (!program)
             {
                 SceGxmVertexAttribute attribute{};
@@ -2019,14 +2077,14 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
                 attribute.offset = position->offset;
                 attribute.format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
                 attribute.componentCount = components;
-                attribute.regIndex = uint16_t(sceGxmProgramParameterGetResourceIndex(d.diagPassPosition));
+                attribute.regIndex = uint16_t(sceGxmProgramParameterGetResourceIndex(standInPosition));
                 SceGxmVertexStream stream{uint16_t(stride), drawIndex32 ? SCE_GXM_INDEX_SOURCE_INDEX_32BIT
                                                                         : SCE_GXM_INDEX_SOURCE_INDEX_16BIT};
-                const int made = sceGxmShaderPatcherCreateVertexProgram(gxm::ShaderPatcher(), d.diagPass.id,
+                const int made = sceGxmShaderPatcherCreateVertexProgram(gxm::ShaderPatcher(), standIn->id,
                                                                         &attribute, 1, &stream, 1, &program);
                 if (made < 0)
                 {
-                    Log(device, "diag: the pass-through vertex program could not be made (0x%08x)", unsigned(made));
+                    Log(device, "diag: a stand-in vertex program could not be made (0x%08x)", unsigned(made));
                     program = nullptr;
                 }
             }
@@ -2070,25 +2128,10 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     if (d.diagnosedDraws)
     {
         // What the vertex program takes, and what this draw feeds it.
-        const SceGxmProgram *program = vertex->program();
         std::string line;
         char part[160];
-        const unsigned parameters = sceGxmProgramGetParameterCount(program);
-        for (unsigned i = 0; i < parameters && i < 24; ++i)
-        {
-            const SceGxmProgramParameter *p = sceGxmProgramGetParameter(program, i);
-            const char *name = p ? sceGxmProgramParameterGetName(p) : nullptr;
-            if (!p)
-                continue;
-            std::snprintf(part, sizeof(part), " %s(cat %u type %u x%u [%u] cont %u res %u)", name ? name : "?",
-                          unsigned(sceGxmProgramParameterGetCategory(p)), unsigned(sceGxmProgramParameterGetType(p)),
-                          sceGxmProgramParameterGetComponentCount(p), sceGxmProgramParameterGetArraySize(p),
-                          sceGxmProgramParameterGetContainerIndex(p), sceGxmProgramParameterGetResourceIndex(p));
-            line += part;
-        }
-        Log(device, "diag frame %llu draw: vertex program %u bytes, %u parameters, uniform buffer %u bytes:%s",
-            (unsigned long long)d.frame, unsigned(sceGxmProgramGetSize(program)), parameters,
-            unsigned(sceGxmProgramGetDefaultUniformBufferSize(program)), line.c_str());
+        Log(device, "diag frame %llu draw: vertex program %s", (unsigned long long)d.frame,
+            DescribeProgram(vertex->program()).c_str());
         line.clear();
         for (int reg = 0; reg < 16; ++reg)
         {
@@ -2110,6 +2153,16 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             (unsigned long long)d.frame, unsigned(vertexProgram->streamCount),
             vertexProgram->streamCount ? unsigned(strides[vertexProgram->streams[0]]) : 0u,
             unsigned(plan.options.absentInputs), unsigned(plan.options.bgraInputs), line.c_str());
+    }
+    if (standIn == &d.diagMimic && vertexGxm != vertexProgram->program)
+    {
+        void *uniforms = nullptr;
+        const int reserved = sceGxmReserveVertexDefaultUniformBuffer(context, &uniforms);
+        const int set = reserved >= 0
+                            ? sceGxmSetUniformDataF(uniforms, d.diagMimic.constants, 0, 16, device.vsConstants.data())
+                            : 0;
+        if ((reserved < 0 || set < 0) && d.uniformFailures++ < 5)
+            Log(device, "diag: mimic constants not set: reserve 0x%08x, set 0x%08x", unsigned(reserved), unsigned(set));
     }
     void *pixelUniforms = nullptr;
     if (pixel->uniforms)

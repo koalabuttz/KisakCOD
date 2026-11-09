@@ -129,6 +129,13 @@ struct Options
     // (z <= w * 0.99999). D3D9 draws z == w; a run-diagnostic option while
     // finding out whether GXM clips it.
     bool farPlaneInside = false;
+    // Vertex shaders, run diagnostics: replace part of the position the
+    // program computed, to find which part a console gets wrong.
+    //   1: all of it, from the POSITION input read as 960x544 pixels
+    //   2: x and y from dot(position, c[0]) and dot(position, c[1]); z 0.5, w 1
+    //   3: z 0.5 and w 1; x and y as computed
+    //   4: z half of the computed w
+    uint8_t diagPosition = 0;
 };
 
 // ---- Parsed form ---------------------------------------------------------------------------

@@ -95,7 +95,7 @@ void Log(Device &device, const char *format, ...)
 {
     if (!device.desc.log)
         return;
-    char line[512];
+    char line[1024];
     int prefix = std::snprintf(line, sizeof(line), "gxm legacy: ");
     va_list args;
     va_start(args, format);

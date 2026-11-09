@@ -90,6 +90,12 @@ CHECKS = [
     ("ps3_odepth", [], "return oC0;", "instructions=3"),
     ("vs2_oT_oD_fog", ["--far-plane-inside"], "out_POSITION.z = min(out_POSITION.z, out_POSITION.w * 0.99999);",
      "constants=6"),
+    ("vs2_oT_oD_fog", ["--diag-position", "1"], "out_POSITION = float4(v0.x / 480.0 - 1.0, 1.0 - v0.y / 272.0, 0.5, 1.0);",
+     "constants=6"),
+    ("vs2_oT_oD_fog", ["--diag-position", "2"], "out_POSITION = float4(dot(v0, c[0]), dot(v0, c[1]), 0.5, 1.0);",
+     "constants=6"),
+    ("vs3_psize_fog", ["--diag-position", "3"], "out_POSITION.zw = float2(0.5, 1.0);", "constants=5"),
+    ("vs3_psize_fog", ["--diag-position", "4"], "out_POSITION.z = out_POSITION.w * 0.5;", "constants=5"),
 ]
 
 
