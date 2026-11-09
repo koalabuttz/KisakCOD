@@ -43,23 +43,39 @@ Hosted CI: the Linux workflow's **PS Vita dedicated server** job builds Debug
 and RelWithDebInfo, checks the binary for fused multiply-add and NEON float
 instructions, and uploads the RelWithDebInfo `.vpk` as an artifact.
 
-## Running on the Vita (first run)
+## Running on the Vita
 
 1. Install `KisakCOD-dedi.vpk` with VitaShell. The bubble has no icon yet.
 2. Copy the PC game's `main/` and `zone/` folders to `ux0:data/KisakCOD/`
    (for mp_crash: `zone/english/code_post_gfx_mp.ff`, `common_mp.ff`,
    `localized_common_mp.ff`, `mp_crash.ff`, `localized_mp_crash.ff`, plus
    `main/*.iwd`). Game data stays on your devices.
-3. Optional: write the server's command line to
-   `ux0:data/KisakCOD/cmdline.txt`, all on one line. Without it the server
-   runs `+set dedicated 1 +map mp_crash`. Quotes keep spaces in one argument.
-   The [Linux guide](linux-dedicated.md) lists the settings, for example the
-   retail-client ones (`sv_allowUnverifiedGuids`, `sv_allowProtocol6`).
+3. Write the server's command line to `ux0:data/KisakCOD/cmdline.txt`, all
+   on one line. Without it the server runs `+set dedicated 1 +map mp_crash`.
+   Quotes keep spaces in one argument. The Vita has no Steam, so clients join
+   with a key code (a KisakCOD client in key-code mode, or a retail 1.7
+   client), which the server refuses unless `sv_allowUnverifiedGuids` is on:
+   `+set dedicated 1 +set sv_allowUnverifiedGuids 1 +map mp_crash`. That
+   accepts unverified GUIDs, so keep it to your own network. The
+   [Linux guide](linux-dedicated.md) lists the other settings (a retail 1.7
+   client also needs `sv_allowProtocol6 1`).
 4. Turn Wi-Fi on and start the bubble. The screen stays black: the server has
    no display. Everything it prints goes to `ux0:data/KisakCOD/console.log`.
 5. Join from a PC on the same network (`/connect <vita ip>`). The Vita's
    address is in the log (`IP: ...`).
 6. Hold **START + SELECT** to quit cleanly (the same as typing `quit`).
+
+VitaShell's FTP server reaches `ux0:data/KisakCOD` from a PC for new builds,
+`cmdline.txt`, `console.log` and crash dumps (`ux0:data/*.psp2dmp`). It serves
+only while its FTP screen is open, so quit the server first.
+
+Console runs so far (2026-11-08/09): runs 1-3 each crashed on one fault (an
+unaligned 8-byte store, shared thread-locals, an unaligned script vector),
+all fixed. The run 4 build ran 9 h 10 min idle on mp_crash without a crash
+(8 % busy, memory flat: 46 MB of the zone arena and 45 MB of system memory
+free), and a key-code client on the laptop joined it over Wi-Fi (ping 18 ms;
+15-17 % busy with one player, slowest frame about 20 ms after the join
+minute).
 
 What to send back from the first runs: `console.log` and whether a client
 could join. The log answers the rest (next section). Then run with 0, 4 and 8
@@ -283,14 +299,10 @@ Vita cannot raise.
 
 ## Next steps
 
-1. Fourth run on David's Vita (steps above), with the alignment, stack,
-   thread-local and script vector fixes: reach "Dedicated server initialized", load mp_crash,
-   join from the laptop. Expect more alignment faults; each dump's PC maps to
-   source.
-2. Map load in Vita3K with game data (David's laptop has Vita3K and the
-   data): checks the zones load and gives the heap's use after a map.
-3. Run 0, 4 and 8 bots at `sv_fps 20` and read the load lines; size the
+1. Run 0, 4 and 8 bots at `sv_fps 20` and read the load lines; size the
    player cap, the heap and the zone arena from them.
-4. Commit the reservations lazily (the 16 MB debug hunk is rarely used) if
+2. More players and other maps; rerun the alignment scan after big engine
+   changes.
+3. Commit the reservations lazily (the 16 MB debug hunk is rarely used) if
    memory is short.
-5. Optimisations from the feasibility study (bots, collision, script VM).
+4. Optimisations from the feasibility study (bots, collision, script VM).
