@@ -39,12 +39,20 @@ bool Reserve(MemoryKind kind, uint32_t bytes, std::string &error)
     if (!bytes)
         return true;
     const bool cdram = kind == MemoryKind::Cdram;
-    const uint32_t size = RoundUp(bytes, cdram ? 256 * 1024 : 4096);
+    uint32_t size = RoundUp(bytes, cdram ? 256 * 1024 : 4096);
     const SceKernelMemBlockType type =
         cdram ? SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW : SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE;
     char name[32];
     std::snprintf(name, sizeof(name), "kisak_gxm_%s", MemoryKindName(kind));
-    const SceUID block = sceKernelAllocMemBlock(name, type, size, nullptr);
+    SceUID block = sceKernelAllocMemBlock(name, type, size, nullptr);
+    // CDRAM is asked for nearly whole; what the system holds back is not
+    // reported, so step down 4 MB at a time to what it gives, keeping half.
+    const uint32_t floor = size / 2;
+    while (block < 0 && cdram && size > floor + (4u << 20))
+    {
+        size -= 4u << 20;
+        block = sceKernelAllocMemBlock(name, type, size, nullptr);
+    }
     if (block < 0)
     {
         char line[160];

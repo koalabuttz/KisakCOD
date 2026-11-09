@@ -1,21 +1,70 @@
 // The PS Vita client's Direct3DCreate9: the renderer's way to its graphics
 // device (R_HW_Direct3DCreate9 in src/gfx_d3d/rhi/r_rhi_d3d9_calls.cpp).
 //
-// Stage 1 (docs/vita-client.md) has no GXM back end yet. Answering "no
-// device" as DXVK does would not stop the renderer: R_PreCreateWindow's
-// failure is ignored and the next step asserts on the empty display mode
-// list (first Vita run). So the client stops here, through Sys_Error, which
-// logs the memory pools to console-mp.log and exits without a crash dump.
-// The GXM back end replaces this file.
+// It hands out the D3D9 front (src/gfx_vk/d3d9), the same IDirect3D9 that
+// r_backend vulkan uses on the PC, on the GXM Legacy back end
+// (src/gfx_gxm/legacy). This file is the front's host: the one display mode,
+// the one monitor and the log. See docs/vita-client.md.
 
 #include "vita_client.h"
 
 #include <linux/d3d9_types.h>
 
-#include <win32/win_local.h> // Sys_Error
+#include <gfx_vk/d3d9/vk_d3d9.h>
+
+#include <universal/q_shared.h>
+#include <qcommon/qcommon.h>
+
+#include <win32/win_local.h>
+
+namespace
+{
+namespace front = gfx_vk::d3d9;
+
+uint32_t HostModeCount(void *)
+{
+    return 1;
+}
+
+bool HostMode(void *, uint32_t index, uint32_t &width, uint32_t &height, uint32_t &refreshRate)
+{
+    if (index)
+        return false;
+    width = kVitaScreenWidth;
+    height = kVitaScreenHeight;
+    refreshRate = 60;
+    return true;
+}
+
+bool HostCurrentMode(void *user, uint32_t &width, uint32_t &height, uint32_t &refreshRate)
+{
+    return HostMode(user, 0, width, height, refreshRate);
+}
+
+HMONITOR HostMonitor(void *)
+{
+    return MonitorFromPoint(tagPOINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+}
+
+void HostLog(void *, const char *line)
+{
+    Com_Printf(CON_CHANNEL_GFX, "%s\n", line);
+}
+} // namespace
 
 IDirect3D9 *WINAPI Direct3DCreate9(UINT)
 {
-    Sys_Error("vita: no GXM graphics back end in this build yet (stage 1): the client stops at the renderer");
-    return nullptr; // Sys_Error does not return
+    front::Host host;
+    host.modeCount = HostModeCount;
+    host.mode = HostMode;
+    host.currentMode = HostCurrentMode;
+    host.monitor = HostMonitor;
+    host.log = HostLog;
+    Com_Printf(CON_CHANNEL_GFX, "Graphics back end: GXM (stage 2: no shaders or draws yet)\n");
+    return front::CreateDirect3D9(host);
+}
+
+void Vita_RendererWindowDestroying(void *hwnd)
+{
+    front::WindowDestroying(reinterpret_cast<front::D3D9Window>(hwnd));
 }

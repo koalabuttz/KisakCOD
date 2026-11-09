@@ -52,8 +52,9 @@ bool DisplayReady();
 SceGxmContext *Context();
 SceGxmShaderPatcher *ShaderPatcher();
 
-// The buffer the frame draws into.
+// The buffer the frame draws into, and the one queued for display last.
 void *BackBufferData();
+void *FrontBufferData();
 const SceGxmColorSurface *BackBufferSurface();
 const SceGxmDepthStencilSurface *DepthStencilSurface();
 

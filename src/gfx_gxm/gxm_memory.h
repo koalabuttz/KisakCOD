@@ -35,7 +35,9 @@ const char *MemoryKindName(MemoryKind kind);
 struct MemorySizes
 {
     // Bytes to reserve per kind; rounded up to the kernel's granule (256 KB
-    // for CDRAM, 4 KB otherwise). 0 reserves nothing for that kind.
+    // for CDRAM, 4 KB otherwise). 0 reserves nothing for that kind. CDRAM
+    // settles for less, down to half, when the system will not give it all
+    // (Stats says what it got).
     uint32_t cdram = 0;
     uint32_t main = 0;
     uint32_t vertexUsse = 0;

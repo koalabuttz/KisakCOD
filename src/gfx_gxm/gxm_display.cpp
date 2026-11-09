@@ -315,6 +315,11 @@ void *BackBufferData()
     return g.displayData[g.back];
 }
 
+void *FrontBufferData()
+{
+    return g.displayData[g.front];
+}
+
 const SceGxmColorSurface *BackBufferSurface()
 {
     return &g.displaySurface[g.back];

@@ -9,9 +9,10 @@
 #   * vita_win32_window.cpp: the Win32 window and monitor calls the renderer
 #     makes (src/linux/win32_window.h), for the Vita's one fixed 960x544 screen.
 #   * vita_client_input.cpp: the client's window pump and IN_* functions.
-#   * vita_d3d9.cpp: the renderer's Direct3DCreate9. Stage 1 has no GXM back
-#     end yet, so it answers "no device" and the client stops with the
-#     renderer's own error, after everything before it has started.
+#   * vita_d3d9.cpp: the renderer's Direct3DCreate9. It hands out the D3D9
+#     front of the Vulkan work (src/gfx_vk/d3d9) on the GXM Legacy back end
+#     (src/gfx_gxm/legacy), which owns the Vita's screen. Stage 2 so far: no
+#     shaders or draws yet.
 #
 # The D3D9 declarations come from DXVK Native's headers through the native D3D9
 # boundary (KISAK_DXVK_NATIVE_INCLUDE_DIR), as on Linux and macOS: only the
@@ -130,7 +131,7 @@ set(vita_mp_own_sources
 
 set(KISAK_VITA_MP_DEFINITIONS
     KISAK_MP USE_SEPARATE_BLIT_TEXTURE KISAK_OPENAL RELEASE_ASSERTS
-    KISAK_LINUX_MP_CLIENT KISAK_VITA_MP_CLIENT
+    KISAK_LINUX_MP_CLIENT KISAK_VITA_MP_CLIENT KISAK_GFX_GXM
     ENABLE_VITASDK_BUILD_ASSERT
     $<$<CONFIG:Debug>:_DEBUG>)
 set(KISAK_VITA_MP_OPTIONS
@@ -150,6 +151,28 @@ foreach(mp_target KisakCOD-mp-vita-native KisakCOD-mp-vita-standin KisakCOD-mp-v
     target_include_directories(${mp_target} SYSTEM PRIVATE "${KISAK_OPENAL_INCLUDE_DIR}")
     add_dependencies(${mp_target} update_build_number)
 endforeach()
+# The graphics device: the D3D9 front of the Vulkan work (src/gfx_vk/d3d9) on
+# the GXM Legacy back end (src/gfx_gxm), with the front's own warnings.
+set(vita_mp_gfx_sources
+    "${SRC_DIR}/gfx_vk/d3d9/vk_d3d9_device.cpp"
+    "${SRC_DIR}/gfx_vk/d3d9/vk_d3d9_direct3d.cpp"
+    "${SRC_DIR}/gfx_vk/d3d9/vk_d3d9_resources.cpp"
+    "${SRC_DIR}/gfx_gxm/gxm_display.cpp"
+    "${SRC_DIR}/gfx_gxm/gxm_heap.cpp"
+    "${SRC_DIR}/gfx_gxm/gxm_memory.cpp"
+    "${SRC_DIR}/gfx_gxm/legacy/gxm_d3d9_backend.cpp"
+    "${SRC_DIR}/gfx_gxm/legacy/gxm_legacy.cpp")
+add_library(KisakCOD-mp-vita-gfx OBJECT ${vita_mp_gfx_sources})
+target_compile_features(KisakCOD-mp-vita-gfx PRIVATE cxx_std_20)
+target_compile_definitions(KisakCOD-mp-vita-gfx PRIVATE KISAK_GFX_GXM ENABLE_VITASDK_BUILD_ASSERT)
+target_compile_options(KisakCOD-mp-vita-gfx PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:-fms-extensions> -Wno-ignored-attributes -Wall -Werror=format-security)
+target_include_directories(KisakCOD-mp-vita-gfx PRIVATE "${SRC_DIR}")
+target_link_libraries(KisakCOD-mp-vita-gfx PRIVATE kisak_linux_native_d3d9)
+# psp2/display.h's enum size checks assume -fshort-enums (gxm_display.cpp).
+set_source_files_properties("${SRC_DIR}/gfx_gxm/gxm_display.cpp" TARGET_DIRECTORY KisakCOD-mp-vita-gfx
+    PROPERTIES COMPILE_OPTIONS "-UENABLE_VITASDK_BUILD_ASSERT")
+
 set_property(SOURCE "${SRC_DIR}/sound/snd_driver_load_obj.cpp" TARGET_DIRECTORY KisakCOD-mp-vita-standin
     APPEND PROPERTY COMPILE_DEFINITIONS DR_WAV_IMPLEMENTATION DR_MP3_IMPLEMENTATION)
 target_link_libraries(KisakCOD-mp-vita-native PRIVATE kisak_linux_native_d3d9)
@@ -166,14 +189,16 @@ add_executable(KisakCOD-mp
     ${vita_mp_c_sources}
     $<TARGET_OBJECTS:KisakCOD-mp-vita-native>
     $<TARGET_OBJECTS:KisakCOD-mp-vita-standin>
-    $<TARGET_OBJECTS:KisakCOD-mp-vita-own>)
+    $<TARGET_OBJECTS:KisakCOD-mp-vita-own>
+    $<TARGET_OBJECTS:KisakCOD-mp-vita-gfx>)
 target_compile_features(KisakCOD-mp PRIVATE cxx_std_20)
 target_compile_definitions(KisakCOD-mp PRIVATE ${KISAK_VITA_MP_DEFINITIONS})
 target_compile_options(KisakCOD-mp PRIVATE ${KISAK_VITA_MP_OPTIONS})
 target_include_directories(KisakCOD-mp PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
 # The dedicated server's link rules (CMakeLists.txt beside this file).
 target_link_options(KisakCOD-mp PRIVATE ${KISAK_VITA_LINK_OPTIONS})
-target_link_libraries(KisakCOD-mp PRIVATE ${KISAK_VITA_LINK_LIBRARIES} SceCtrl_stub SceTouch_stub)
+target_link_libraries(KisakCOD-mp PRIVATE ${KISAK_VITA_LINK_LIBRARIES} SceCtrl_stub SceTouch_stub
+    SceGxm_stub SceDisplay_stub)
 add_dependencies(KisakCOD-mp update_build_number)
 
 set(KISAK_VITA_MP_TITLE_ID "KSKD00002" CACHE STRING "PS Vita title ID of the multiplayer client .vpk (9 characters)")
