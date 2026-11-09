@@ -52,7 +52,7 @@ Frames (`vk_frame.cpp`):
 | Uploads | `StageBufferWrite` and `StageImageWrite` return staging memory and record the copy at once, so it is ordered with the work around it. Buffer copies share one barrier before and one after a run of them. Rewriting a texture level already written since the last barrier gets a barrier first; other levels do not. A frame slot that holds 64 MB of staging flushes and waits instead of growing (a long map load). |
 | Transient memory | Per-frame host-visible memory for vertex, index and uniform data. |
 | Descriptor sets | Allocated from per-frame pools, reset when the slot comes round again. |
-| Copies and read-back | Blits between any level and layer of two images (scaling and format conversion), and read-back of a level of any 4-byte colour image, the swapchain image included, waited on by `WaitReadback`. |
+| Copies and read-back | Blits between any level and layer of two images (scaling and format conversion), and read-back of a level of any colour image (every slice of a 3D one, compressed formats as blocks), the swapchain image included, waited on by `WaitReadback`. |
 | Timing | GPU timestamps around every pass, kept per pass name (min, max, average), and around each whole frame. |
 
 Pipelines (`vk_pipeline.cpp`):

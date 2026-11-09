@@ -477,17 +477,21 @@ void BlitImage(Core *core, Image *src, const VkOffset3D srcBox[2], Image *dst, c
                VkFilter filter, uint32_t srcLevel = 0, uint32_t srcLayer = 0, uint32_t dstLevel = 0,
                uint32_t dstLayer = 0);
 
-// Copies one level and layer of an image into host memory. The copy is recorded
-// at the call; ReadbackData waits for it (flushing if needed). Images with a
-// colour format of 4 bytes per texel only.
+// Copies one level and layer of a colour image into host memory: every depth
+// slice of a 3D image, and rows of 4x4 blocks for block-compressed formats.
+// The copy is recorded at the call; WaitReadback waits for it (flushing if
+// needed).
 struct Readback;
 Readback *ReadImage(Core *core, Image *image, uint32_t mipLevel, uint32_t layer);
 struct ReadbackData
 {
-    const uint8_t *pixels; // tightly packed rows of width * 4 bytes
-    uint32_t width;
+    const uint8_t *pixels; // tightly packed rows of rowBytes, rows per slice, then slices
+    uint32_t width;        // texels
     uint32_t height;
     VkFormat format;
+    uint32_t depth;    // slices (1 unless 3D)
+    uint32_t rowBytes; // one row of texels, or of blocks; width * 4 for 4-byte formats
+    uint32_t rows;     // rows per slice (blocks down for compressed formats)
 };
 bool WaitReadback(Core *core, Readback *readback, ReadbackData *out);
 void DestroyReadback(Core *core, Readback *readback);

@@ -266,6 +266,34 @@ void UnlockGpuBuffer(Device &device, GpuBuffer *buffer)
     std::memcpy(data, buffer->shadow.data() + buffer->lockOffset, buffer->lockBytes);
 }
 
+// A level's contents from the GPU, in LockRect's layout. Waits for the GPU.
+bool ReadBackLevel(Device &device, Texture &texture, uint32_t face, uint32_t level, std::vector<uint8_t> &out,
+                   size_t bytes)
+{
+    EndPassIfOpen(device);
+    Readback *readback = ReadImage(device.core, texture.image, level, face);
+    ReadbackData data{};
+    if (!readback || !WaitReadback(device.core, readback, &data))
+    {
+        DestroyReadback(device.core, readback);
+        Fail(device, "LockRect: cannot read %s level %u back: %s", texture.name.c_str(), level, LastError(device.core));
+        return false;
+    }
+    const size_t got = static_cast<size_t>(data.rowBytes) * data.rows * data.depth;
+    if (got == bytes)
+        out.assign(data.pixels, data.pixels + bytes);
+    else
+    {
+        // The image's format packs texels differently from the D3D9 format.
+        WarnOnce(device, WarnReadBackLayout,
+                 "LockRect: %s level %u cannot be read back (%zu bytes, not %zu); it locks as zero",
+                 texture.name.c_str(), level, got, bytes);
+        out.assign(bytes, 0);
+    }
+    DestroyReadback(device.core, readback);
+    return true;
+}
+
 } // namespace
 
 const FormatInfo *LookupFormat(d3d::Format format)
@@ -441,7 +469,23 @@ bool LockRect(Device *device_, Texture *texture, uint32_t face, uint32_t level, 
     LevelLayout(*texture, level, rowBytes, rows, depth);
     const size_t slice = static_cast<size_t>(rowBytes) * rows;
     if (sub.cpu.empty())
-        sub.cpu.assign(slice * depth, 0);
+    {
+        // D3D9 keeps what a lock does not overwrite. The copy is dropped after
+        // the first upload to save memory, so a texture locked again (the
+        // game's model lighting volume, patched a few cells at a time) reads
+        // its level back from the GPU once and keeps the copy from then on.
+        if (sub.uploaded && texture->image && !(flags & d3d::LOCK_DISCARD))
+        {
+            if (!ReadBackLevel(device, *texture, face, level, sub.cpu, slice * depth))
+                return false;
+            sub.keepCpu = true;
+            ++device.stats.textureReadbacks;
+        }
+        else
+        {
+            sub.cpu.assign(slice * depth, 0);
+        }
+    }
     sub.locked = true;
     sub.readOnly = (flags & d3d::LOCK_READONLY) != 0;
     sub.box = region;
@@ -504,9 +548,12 @@ void UnlockRect(Device *device_, Texture *texture, uint32_t face, uint32_t level
         }
     }
     device.stats.uploadBytes += static_cast<uint64_t>(stageRow) * blockRows * region.depth;
+    sub.uploaded = true;
     // The GPU keeps the texture; D3D9's managed copy is not kept, to save
-    // memory (a 32-bit process has little). See docs/vulkan-legacy-adapter.md.
-    std::vector<uint8_t>().swap(sub.cpu);
+    // memory (a 32-bit process has little), unless the level was locked again
+    // (LockRect). See docs/vulkan-legacy-adapter.md.
+    if (!sub.keepCpu)
+        std::vector<uint8_t>().swap(sub.cpu);
 }
 
 // ---- Surfaces ----------------------------------------------------------------------------

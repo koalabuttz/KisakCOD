@@ -63,6 +63,10 @@ struct Subresource
     std::vector<uint8_t> cpu; // the whole level, rows of blocks tightly packed
     bool locked = false;
     bool readOnly = false;
+    bool uploaded = false; // the image holds data from an earlier unlock
+    // Locked again after an upload: the level was read back from the image,
+    // and cpu is kept from then on, as D3D9's managed copy is.
+    bool keepCpu = false;
     Box box{};                // the locked region, in texels
 };
 
@@ -326,6 +330,18 @@ struct Device
 // vk_legacy_device.cpp
 bool Fail(Device &device, const char *format, ...);
 void Log(Device &device, const char *format, ...);
+// One-time warnings (Device::warnedOnce bits).
+enum Warning : uint32_t
+{
+    WarnFixedFunction,
+    WarnFeedback,
+    WarnNoTargets,
+    WarnUnboundStream,
+    WarnSystemMemTexture,
+    WarnRenderTargetGap,
+    WarnStretchRect,
+    WarnReadBackLayout,
+};
 // One message per kind for the device's life (bit 0-31).
 void WarnOnce(Device &device, uint32_t bit, const char *format, ...);
 bool Usable(Device &device);
