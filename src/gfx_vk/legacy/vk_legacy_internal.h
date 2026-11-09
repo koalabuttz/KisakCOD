@@ -272,6 +272,10 @@ struct Device
     VkDescriptorSetLayout emptySet = VK_NULL_HANDLE; // fills set 0 when a pair reads textures only
     std::unordered_map<LayoutKey, std::unique_ptr<Layout>, LayoutKeyHash> layouts;
     std::unordered_map<PipelineKey, Pipeline, PipelineKeyHash> pipelines;
+    // The last draw's pipeline and key: a draw with the same key skips the
+    // hash lookup. Pipelines erased from the map clear it.
+    Pipeline *lastPipeline = nullptr;
+    PipelineKey lastPipelineKey{};
 
     // Stand-ins for missing vertex inputs and unbound textures.
     Buffer *zeroVertices = nullptr;
