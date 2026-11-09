@@ -39,6 +39,8 @@ what is still missing. Build steps are in the
   first step toward a PS Vita port
 - [PS Vita dedicated server](vita.md): `KISAK_PLATFORM=vita`, Clang with
   VitaSDK, packed as a `.vpk`
+- [PS Vita multiplayer client](vita-client.md): `KISAK_BUILD_VITA_MP_CLIENT`,
+  stage 1 (builds and packs; no graphics back end yet)
 - [macOS track](macos.md): the opt-in macOS dedicated server (arm64 and
   x86_64), what differs from the Linux build, and its hosted CI checks
 

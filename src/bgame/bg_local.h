@@ -34,8 +34,12 @@ constexpr auto MAX_FRIENDLY_DIST = 15000.0;
 #define MAX_CLIENTS 64
 // The most clients a server takes (sv_maxclients' upper bound). Retail: 64.
 // The PS Vita build caps it at 24 so the server's per-client snapshot buffers
-// (serverStatic_t, server_mp.h) fit in the Vita's memory (docs/vita.md).
-#if defined(__vita__)
+// (serverStatic_t, server_mp.h) fit in the Vita's memory (docs/vita.md). The
+// Vita client caps its own listen server at 8: it links the whole server, and
+// the memory those buffers would take is the renderer's (docs/vita-client.md).
+#if defined(__vita__) && defined(KISAK_VITA_MP_CLIENT)
+inline constexpr int SV_MAX_CLIENTS = 8;
+#elif defined(__vita__)
 inline constexpr int SV_MAX_CLIENTS = 24;
 #else
 inline constexpr int SV_MAX_CLIENTS = MAX_CLIENTS;

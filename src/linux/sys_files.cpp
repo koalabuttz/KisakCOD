@@ -222,6 +222,17 @@ char *Sys_Cwd()
     static char cwd[PATH_MAX];
     if (!getcwd(cwd, sizeof(cwd)))
         I_strncpyz(cwd, ".", (int)sizeof(cwd));
+#if defined(__vita__)
+    // newlib spells the working directory "ux0:/data/KisakCOD", the data
+    // folder is "ux0:data/KisakCOD" everywhere else. The file system compares
+    // fs_basepath (the working directory) and fs_homepath as strings, so two
+    // spellings of one folder put every pack in the search path twice.
+    if (char *device = strchr(cwd, ':'))
+    {
+        if (device[1] == '/')
+            memmove(device + 1, device + 2, strlen(device + 2) + 1);
+    }
+#endif
     return cwd;
 }
 

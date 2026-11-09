@@ -82,8 +82,8 @@
 #if !defined(KISAK_LINUX_D3D9_TYPES_DISPATCH)
 #error "include <linux/d3d9_types.h> (or a gfx_d3d header), the single D3D9 entry point, not d3d9_native.h"
 #endif
-#if !defined(__i386__) && !defined(__x86_64__) && !defined(__aarch64__)
-#error "the DXVK Native D3D9 boundary is validated for i386, x86_64 and aarch64 only"
+#if !defined(__i386__) && !defined(__x86_64__) && !defined(__aarch64__) && !defined(__vita__)
+#error "the DXVK Native D3D9 boundary is validated for i386, x86_64, aarch64 and the PS Vita (armv7) only"
 #endif
 
 #include <linux/compat.h>
