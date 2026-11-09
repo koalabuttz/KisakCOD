@@ -571,7 +571,18 @@ bool Emitter::Texture(const Instruction &ins, std::string &value)
     std::string sample;
     const bool cube = type == SamplerType::Cube;
     if (type == SamplerType::Volume)
-        return Fail("samples a volume texture, which GXM does not have");
+    {
+        // GXM has no 3D textures: the back end stores a volume's slices one
+        // under the other in a 2D texture (as D3D9 lays them out in memory),
+        // and kisak_tex3D blends the two nearest slices. Bias, level and
+        // gradients are dropped; volumes get one level.
+        const std::string depth = "kisak_depth_" + s;
+        std::string uvw = "(" + coord + ").xyz";
+        if (ins.opcode == kTex && ins.control == 1)
+            uvw = "(" + coord + ").xyz / (" + coord + ").w";
+        value = "kisak_tex3D(" + s + ", " + uvw + ", " + depth + ")" + SwizzleSuffix(ins.sources[1].swizzle);
+        return true;
+    }
     if (type == SamplerType::None)
         return Fail("samples " + s + " without declaring it");
     switch (ins.opcode)
@@ -828,6 +839,16 @@ float4 kisak_lit(float4 v)
     float specular = v.x > 0.0 && v.y > 0.0 ? exp2(power * log2(v.y)) : 0.0;
     return float4(1.0, diffuse, specular, 1.0);
 }
+float4 kisak_tex3D(sampler2D s, float3 p, float depth)
+{
+    float z = p.z * depth - 0.5;
+    float first = floor(z);
+    float blend = z - first;
+    float a = first - depth * floor(first / depth);
+    float b = (a + 1.0) - depth * floor((a + 1.0) / depth);
+    float v = frac(p.y);
+    return lerp(tex2D(s, float2(p.x, (a + v) / depth)), tex2D(s, float2(p.x, (b + v) / depth)), blend);
+}
 float4 kisak_expp(float x)
 {
     float whole = floor(x);
@@ -958,6 +979,9 @@ bool Emitter::Run(std::string &cg, std::string &error)
             out += "uniform sampler2D s" + std::to_string(i) + ";\n";
         else if (r_.samplers[i] == SamplerType::Cube)
             out += "uniform samplerCUBE s" + std::to_string(i) + ";\n";
+        else if (r_.samplers[i] == SamplerType::Volume)
+            out += "uniform sampler2D s" + std::to_string(i) + ";\nuniform float kisak_depth_s" + std::to_string(i) +
+                   ";\n";
     }
     const bool alphaTest = !vertex_ && options_.alphaFunc != AlphaFunc::Always;
     if (alphaTest)

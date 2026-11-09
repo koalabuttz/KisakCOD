@@ -50,7 +50,9 @@ int main(int argc, char **argv)
     for (int i = 0; i < 16; ++i)
         if (r.samplers[i] != SamplerType::None)
             samplers += (samplers.empty() ? "" : ",") + std::to_string(i) + ":" +
-                        (r.samplers[i] == SamplerType::Cube ? "cube" : "2d");
+                        (r.samplers[i] == SamplerType::Cube     ? "cube"
+                         : r.samplers[i] == SamplerType::Volume ? "volume"
+                                                                : "2d");
     for (const Varying &v : r.varyings)
         varyings += (varyings.empty() ? "" : ",") + std::string(SemanticName(v.semantic)) + std::to_string(v.index);
     for (const VertexInput &v : r.inputs)

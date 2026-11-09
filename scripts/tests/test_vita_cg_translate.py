@@ -45,7 +45,6 @@ SOURCES = [
 # Cases the translator refuses, and a word its reason must contain. The
 # game's shaders use none of these (renderer plan S0's corpus scan).
 REFUSED = {
-    "ps3_texld_volume": "volume",
     "ps3_setp_predicated": "predicated",
     "ps3_predicate_not": "predicated",
     "ps3_if_bool": "if",
@@ -84,6 +83,7 @@ CHECKS = [
     ("vs3_m4x3_m3x4_m3x2", [], "dot((v1).xyz, (c[13]).xyz)", "constants=14"),
     ("ps2_texldp_color", [], "tex2D(s0, (t0).xy / (t0).w)", "varyings=TEXCOORD0,COLOR0"),
     ("ps3_texld_cube", [], "texCUBE(s0, (v0).xyz)", "samplers=0:cube"),
+    ("ps3_texld_volume", [], "kisak_tex3D(s0, (v0).xyz, kisak_depth_s0)", "samplers=0:volume"),
     ("vs3_psize_fog", [], "out_FOG = o3.x;", "varyings=TEXCOORD0,FOG0,PSIZE0"),
     ("ps3_odepth", [], "return oC0;", "instructions=3"),
 ]

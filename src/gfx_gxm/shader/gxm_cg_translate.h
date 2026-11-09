@@ -8,7 +8,8 @@
 // one float4 local per register, one statement per instruction, in the order
 // the bytecode gives them. The shaders the game ships use no loops, calls or
 // predicates; those, ps 1.x and a few rare registers are refused with a
-// reason.
+// reason. Volume textures, which GXM lacks, are sampled from their slices
+// laid out in a 2D texture.
 //
 // Two steps:
 //   Parse  bytecode -> Shader (instructions + Reflection). Once per shader.
@@ -19,7 +20,9 @@
 // How the Cg program meets the rest of the back end:
 //   - float constants: the uniform array "c", Reflection::floatConstants
 //     long (256 for a vertex shader that indexes it with a0);
-//   - samplers: uniforms "s0" to "s15" (Reflection::samplers);
+//   - samplers: uniforms "s0" to "s15" (Reflection::samplers); a volume
+//     sampler is a sampler2D over its slices stacked vertically, with the
+//     slice count in the uniform "kisak_depth_s<n>";
 //   - vertex inputs: parameters "in_v0" to "in_v15", no semantics, bound by
 //     name (Reflection::inputs gives each one's D3D9 usage);
 //   - varyings: GXM semantics, TEXCOORD0-9, COLOR0-1, FOG, PSIZE, from the

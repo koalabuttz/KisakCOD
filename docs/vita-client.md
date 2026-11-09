@@ -143,9 +143,12 @@ draws themselves.
 `src/gfx_gxm/shader/gxm_cg_translate.cpp` turns D3D9 shader bytecode
 (vs_1_1 to vs_3_0, ps_2_0 to ps_3_0) into Cg: a float4 local per register and
 one statement per instruction. Loops, calls, predicates, `if` on boolean
-constants, `vPos`, `vFace`, volume textures, more than one colour output and
-ps 1.x are refused with a reason; the game's shaders use none of them (the
-renderer plan's corpus scan). The Cg program meets the back end through:
+constants, `vPos`, `vFace`, more than one colour output and ps 1.x are
+refused with a reason; the game's shaders use none of them (the renderer
+plan's corpus scan). GXM has no volume textures, so a volume is stored as its
+slices one under the other in a 2D texture and sampled by blending the two
+nearest slices (`kisak_tex3D`, slice count in `kisak_depth_s<n>`). The Cg
+program meets the back end through:
 - the uniform array `c` (float constants), as long as the highest one the
   shader reads from the API, or 256 when it indexes them with `a0`;
 - the samplers `s0` to `s15`, and vertex inputs `in_v0` to `in_v15`, by name;
@@ -158,7 +161,8 @@ renderer plan's corpus scan). The Cg program meets the back end through:
 `src/gfx_gxm/gxm_program_cache.cpp` keeps each compiled program in
 `ux0:data/KisakCOD/gxp/<hash>.gxp`, named by a hash of its Cg source, so a
 console compiles a program once (about 0.1 s each). A program that does not
-compile is logged with the compiler's first error (the first 40 failures)
+compile is logged with the compiler's first error (the first 40 failures;
+each reason a shader is not translated is logged once and counted at the end)
 and its Cg is left beside the cache as `failed-<hash>.cg`. A shader that
 cannot be translated or compiled is still created, as D3D9 would; draws with
 it will be skipped.
@@ -166,7 +170,7 @@ it will be skipped.
 The client is packed unsafe for the compiler, like the probe.
 
 `scripts/tests/test_vita_cg_translate.py` checks the translator on the
-host: the shader spike's 81 op-by-op cases are translated or refused as
+host: the shader spike's 81 op-by-op cases are translated (58) or refused (23) as
 expected, glslang's HLSL front end accepts every program (Cg and DX9 HLSL
 share the syntax the translator writes), a few outputs are checked by hand,
 and damaged bytecode is refused without a crash (ASan and UBSan on). Only the

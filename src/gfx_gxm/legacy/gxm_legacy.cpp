@@ -264,6 +264,8 @@ struct Device
         uint32_t created = 0, refused = 0, compiled = 0, failed = 0;
         uint32_t loggedFailures = 0;
         uint64_t translateMicros = 0;
+        // Each reason the translator gave, with how many shaders it refused.
+        std::vector<std::pair<std::string, uint32_t>> refusals;
     } shaderCounts;
     uint32_t live = 0; // resources not yet destroyed
 };
@@ -923,9 +925,12 @@ void LogShaderSummary(Device &device, const char *when)
         "%u failed to compile; %u compiled in %.1f s, %u read from the card in %.1f ms, %u not written",
         when, c.created, c.refused, c.translateMicros / 1000.0, c.compiled, c.failed, p.compiled,
         p.compileMicros / 1e6, p.fromFiles, p.readMicros / 1000.0, p.writeFailures);
+    if (std::strcmp(when, "in all") == 0)
+        for (const auto &[reason, count] : c.refusals)
+            Log(device, "shaders not translated: %u x %s", count, reason.c_str());
 }
 
-// Up to this many translation or compile failures are logged one by one.
+// Up to this many compile failures are logged one by one.
 constexpr uint32_t kLoggedShaderFailures = 40;
 
 void CompileDefaultVariant(Device &device, Shader &shader, uint64_t hash)
@@ -941,9 +946,18 @@ void CompileDefaultVariant(Device &device, Shader &shader, uint64_t hash)
     if (!emitted)
     {
         ++counts.refused;
-        if (counts.loggedFailures++ < kLoggedShaderFailures)
-            Log(device, "shader %016llx (%s_%u_%u, %u tokens) not translated: %s", (unsigned long long)hash,
-                shader.pixel ? "ps" : "vs", r.major, r.minor, unsigned(shader.bytecode.size() / 4), reason.c_str());
+        // One line per distinct reason; the summary counts them all.
+        auto known = std::find_if(counts.refusals.begin(), counts.refusals.end(),
+                                  [&](const auto &entry) { return entry.first == reason; });
+        if (known != counts.refusals.end())
+        {
+            ++known->second;
+            return;
+        }
+        counts.refusals.emplace_back(reason, 1u);
+        Log(device, "shader %016llx (%s_%u_%u, %u tokens) not translated: %s (first of its kind)",
+            (unsigned long long)hash, shader.pixel ? "ps" : "vs", r.major, r.minor,
+            unsigned(shader.bytecode.size() / 4), reason.c_str());
         return;
     }
     shader.translated = true;
