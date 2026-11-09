@@ -883,6 +883,37 @@ void Check::CubeVolume()
     lg::SetPixelShader(device, psVolume);
     DrawQuadPx(0, 64, 32, 96, 0.5f, Argb(255, 0x40, 0, 0), 0.5f, 0.5f, 0.5f, 0.5f);
     DrawQuadPx(40, 64, 72, 96, 0.5f, Argb(255, 0xc0, 0, 0), 0.5f, 0.5f, 0.5f, 0.5f);
+    // Locked again whole, with no flags, and only slice 1 written: slice 0
+    // keeps its texels, as D3D9 keeps them. The game's model lighting volume
+    // is patched this way, a few cells a frame.
+    const uint64_t readbacksBefore = lg::Stats(device).textureReadbacks;
+    lg::LockedRect locked;
+    if (!lg::LockRect(device, volume, 0, 0, nullptr, 0, locked))
+        return Fail("second LockRect of the volume failed");
+    for (uint32_t y = 0; y < 2; ++y)
+    {
+        for (uint32_t x = 0; x < 2; ++x)
+        {
+            const uint32_t green = Argb(255, 0, 255, 0);
+            std::memcpy(static_cast<uint8_t *>(locked.bits) + locked.slicePitch + y * locked.pitch + 4 * x, &green, 4);
+        }
+    }
+    lg::UnlockRect(device, volume, 0, 0);
+    DrawQuadPx(0, 100, 32, 124, 0.5f, Argb(255, 0x40, 0, 0), 0.5f, 0.5f, 0.5f, 0.5f);
+    DrawQuadPx(40, 100, 72, 124, 0.5f, Argb(255, 0xc0, 0, 0), 0.5f, 0.5f, 0.5f, 0.5f);
+    // A third lock uses the copy kept since the second: no new read-back.
+    if (!lg::LockRect(device, volume, 0, 0, nullptr, 0, locked))
+        return Fail("third LockRect of the volume failed");
+    lg::UnlockRect(device, volume, 0, 0);
+    DrawQuadPx(80, 100, 112, 124, 0.5f, Argb(255, 0x40, 0, 0), 0.5f, 0.5f, 0.5f, 0.5f);
+    const uint64_t readbacks = lg::Stats(device).textureReadbacks - readbacksBefore;
+    std::printf("legacy_check.volume_readbacks=%llu\n", static_cast<unsigned long long>(readbacks));
+    ++result->points;
+    if (readbacks != 1)
+    {
+        ++result->mismatched;
+        result->detail += " volume_readbacks";
+    }
     lg::SetTexture(device, 0, nullptr);
     if (!Read())
         return;
@@ -891,6 +922,9 @@ void Check::CubeVolume()
     Expect("cube_pz", 96, 16, 255, 0, 255);
     Expect("volume_slice0", 16, 80, 255, 0, 0);
     Expect("volume_slice1", 56, 80, 0, 0, 255);
+    Expect("relocked_slice0_kept", 16, 112, 255, 0, 0);
+    Expect("relocked_slice1_written", 56, 112, 0, 255, 0);
+    Expect("third_lock_slice0", 96, 112, 255, 0, 0);
 }
 
 void Check::ShaderModel2()

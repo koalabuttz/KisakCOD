@@ -90,7 +90,7 @@ device it replaces.
 
 | Resource | How |
 | --- | --- |
-| Managed and default textures | A lock returns CPU memory for that level (or box); unlock uploads it through staging and frees the CPU copy. Compressed formats lock whole 4x4 blocks. |
+| Managed and default textures | A lock returns CPU memory for that level (or box); unlock uploads it through staging and frees the CPU copy. A level locked again without `DISCARD` is read back from the GPU once, and its CPU copy is kept from then on, so a lock keeps the texels it does not overwrite, as in D3D9 (the game's model lighting volume relies on this). Compressed formats lock whole 4x4 blocks. |
 | SYSTEMMEM and SCRATCH textures | CPU memory only, kept; the source of `UpdateTexture` and the destination of `GetRenderTargetData`. |
 | Render targets and depth surfaces | 2D, one level. A texture with RENDERTARGET usage can be drawn to and sampled. |
 | Static buffers | Device memory with a CPU shadow; unlock uploads the locked range. |
@@ -128,8 +128,6 @@ These are not needed by the shaders and calls checked so far; each is listed
 so the renderer hookup can see where it stands.
 
 * Occlusion queries are a stub: they finish at once and report 0xffffff pixels.
-* A managed texture's CPU copy is freed after the upload, so locking it again
-  to read returns zeros, not the old texels.
 * Render targets are single-level 2D (no rendering into a cube face or a mip
   level yet).
 * No fixed-function pipeline: draws without both shaders are skipped with a
@@ -220,7 +218,7 @@ statistics, the validation counts, and `legacy_check=passed` or
 | `render_to_texture` | Drawing into a render-target texture, then sampling it. |
 | `dynamic_buffer` | `DISCARD` and `NOOVERWRITE` locks across draws in one frame (renames counted). |
 | `static_buffers` | Static vertex buffers with 16- and 32-bit index buffers, a base vertex, and a rewrite between draws. |
-| `cube_volume` | Cube and volume textures. |
+| `cube_volume` | Cube and volume textures; a volume locked again keeps the slice it does not write, with one read-back. |
 | `shader_model_2` | `vs_2_0` and `ps_2_0` through their fixed output registers. |
 | `partial_precision` | `_pp` instructions computed at 32-bit precision, as D3D9 hardware and DXVK compute them (a 16-bit overflow would turn the pixel white). |
 | `missing_input` | A vertex shader input the declaration does not supply reads zero. |

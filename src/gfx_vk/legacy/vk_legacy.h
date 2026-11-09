@@ -257,6 +257,7 @@ struct DeviceStats
     uint64_t shaderMicros;     // translating them (vertex modules included)
     uint64_t pipelineMicros;   // building pipelines (pixel modules included)
     uint64_t textureUploads;   // texture levels uploaded by UnlockRect
+    uint64_t textureReadbacks; // levels read back to lock a texture again (once each)
     uint64_t uploadBytes;
     uint64_t uploadMicros;     // staging those uploads
 };

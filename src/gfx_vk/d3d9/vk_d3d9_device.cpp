@@ -259,11 +259,13 @@ void Device::Destroy()
         const lg::DeviceStats &stats = lg::Stats(legacy_);
         HostLog(host(),
                 "vulkan d3d9: device stats: %llu draws, %u shaders (%u translated in %.1f ms), "
-                "%u pipelines (%.1f ms building), %llu texture uploads (%.1f MB, %.1f ms)",
+                "%u pipelines (%.1f ms building), %llu texture uploads (%.1f MB, %.1f ms), %llu read back to lock "
+                "again",
                 static_cast<unsigned long long>(stats.draws), stats.shaders,
                 stats.shaders - std::min(stats.shaders, stats.shadersCached), stats.shaderMicros / 1000.0,
                 stats.pipelines, stats.pipelineMicros / 1000.0, static_cast<unsigned long long>(stats.textureUploads),
-                stats.uploadBytes / (1024.0 * 1024.0), stats.uploadMicros / 1000.0);
+                stats.uploadBytes / (1024.0 * 1024.0), stats.uploadMicros / 1000.0,
+                static_cast<unsigned long long>(stats.textureReadbacks));
         // What each frame cost, for comparing frame rates: the work recorded
         // per presented frame, and the GPU's time from a frame's first
         // command to its last (idle gaps between its submissions included).
