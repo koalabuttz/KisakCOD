@@ -238,7 +238,6 @@ struct Recorder
     uint32_t validationWarnings = 0;
     uint32_t validationIgnored = 0;
     uint32_t messagesSeen = 0; // all record thread messages so far
-    std::thread::id owner;
 };
 
 enum class BuildResult
@@ -381,9 +380,10 @@ bool WaitPresents(Core &core);
 // Takes the record thread's results: failures, presents that want a rebuild,
 // validation messages. False once the core has failed.
 bool SyncRecorder(Core &core);
-// True on a thread other than the core's owner (the record thread): the
-// validation callback keeps its messages for SyncRecorder then.
-bool OffOwnerThread(const Core &core);
+// True on a core's record thread: the validation callback keeps that thread's
+// messages for SyncRecorder then. Every other thread that calls the core may
+// log and count at once (callers take turns: see vk_core.h on threading).
+bool OnRecordThread();
 // Space for a packet in the current chunk (null once the core has failed).
 void *ReservePacket(Core &core, size_t size, RecordFn run);
 // Bookkeeping packets (begin, submit, present, pool resets): f(RecordState &).

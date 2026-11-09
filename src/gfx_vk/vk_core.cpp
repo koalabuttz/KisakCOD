@@ -142,7 +142,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL OnDebugMessage(
 {
     Core &core = *static_cast<Core *>(user);
     const char *text = data && data->pMessage ? data->pMessage : "(no message)";
-    if (OffOwnerThread(core))
+    if (OnRecordThread())
         return OnRecordThreadMessage(core, severity, types, data, text);
     if (!(types & (VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)))
     {

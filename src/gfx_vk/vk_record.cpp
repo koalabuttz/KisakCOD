@@ -18,6 +18,9 @@ namespace gfx_vk
 {
 namespace
 {
+// Set on a record thread for its whole life (see OnRecordThread).
+thread_local bool t_recordThread = false;
+
 void RunChunk(RecordState &state, RecordChunk &chunk)
 {
     // After a failure nothing more runs: the command buffer may not exist.
@@ -32,6 +35,7 @@ void RunChunk(RecordState &state, RecordChunk &chunk)
 
 void RecordThread(Core *core)
 {
+    t_recordThread = true;
     Recorder &recorder = core->recorder;
     RecordState &state = core->record;
     std::unique_lock<std::mutex> lock(recorder.mutex);
@@ -101,7 +105,6 @@ bool StartRecorder(Core &core)
     core.record.vk = &core.vk;
     core.record.queue = core.queue;
     core.record.cmd = VK_NULL_HANDLE;
-    core.recorder.owner = std::this_thread::get_id();
     core.stats.recordThread = core.desc.recordThread;
     if (!core.desc.recordThread)
         return true;
@@ -205,10 +208,7 @@ bool SyncRecorder(Core &core)
     return !core.failed;
 }
 
-bool OffOwnerThread(const Core &core)
-{
-    return core.recorder.threaded && std::this_thread::get_id() != core.recorder.owner;
-}
+bool OnRecordThread() { return t_recordThread; }
 
 bool RecordCheck(RecordState &state, VkResult result, const char *what)
 {

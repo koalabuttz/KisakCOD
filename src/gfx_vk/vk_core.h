@@ -30,7 +30,9 @@
 // that does graphics and presents to the window. Mesa's lavapipe, Intel ANV,
 // NVIDIA's driver for the RTX 2080 Super and MoltenVK all meet them.
 //
-// Threading: one thread owns a Core and calls everything on it. With
+// Threading: one thread at a time calls a Core, the "owning thread" in these
+// comments. It need not always be the same one: the D3D9 front's callers (the
+// engine's render, database and main threads) take turns behind its lock. With
 // CoreDesc::recordThread the core keeps a second thread of its own that makes
 // the vkCmd* calls, vkQueueSubmit2 and vkQueuePresentKHR (see Record()).
 // See docs/vulkan-core.md.
