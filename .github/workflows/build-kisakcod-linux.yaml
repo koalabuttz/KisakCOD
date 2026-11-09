@@ -2781,13 +2781,24 @@ jobs:
         env:
           SDL_VIDEODRIVER: offscreen
           TSAN_OPTIONS: halt_on_error=1
+          # llvmpipe rasterizes on the thread that runs the commands, with no
+          # worker threads of its own (see below).
+          LP_NUM_THREADS: "0"
         run: |
           set -euo pipefail
           # The renderer calls D3D9 from several threads; the check's threads
           # scene does too (a worker creates and fills textures while this
           # thread draws). Built with ThreadSanitizer, any data race in the
-          # front, the adapter or the core fails the run. Lavapipe itself is
-          # not instrumented.
+          # front, the adapter or the core fails the run.
+          #
+          # Lavapipe itself is not instrumented, so ThreadSanitizer sees only
+          # the pthread calls it makes, and it reports a race inside the
+          # driver: one of lavapipe's threads destroys a mutex and a condition
+          # variable that an llvmpipe rasterizer thread locked and signalled
+          # (some frame_loop runs, every run of the adapter check; both
+          # threads are the driver's own). LP_NUM_THREADS=0 takes the
+          # rasterizer threads away and leaves lavapipe's other threads and
+          # every thread of ours as they are.
           tsan_build="build-x64/vulkan-probe-tsan"
           cmake -S . -B "$tsan_build" -G Ninja \
             -DKISAK_PLATFORM=linux -DKISAK_LINUX_ARCH=x86_64 \
@@ -2800,7 +2811,9 @@ jobs:
             -DKISAK_BUILD_LINUX_NATIVE_D3D9=ON \
             -DKISAK_DXVK_NATIVE_INCLUDE_DIR="$RUNNER_TEMP/dxvk-include/dxvk" \
             -DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3"
-          cmake --build "$tsan_build" --target KisakCOD-vulkan-d3d9-check KisakCOD-vulkan-probe --parallel "$(nproc)"
+          cmake --build "$tsan_build" \
+            --target KisakCOD-vulkan-d3d9-check KisakCOD-vulkan-probe KisakCOD-vulkan-legacy-check \
+            --parallel "$(nproc)"
           # The front records on the core's record thread, so this also
           # checks the hand-over between the two.
           "$OUT_DIR/tsan/KisakCOD-vulkan-d3d9-check" --scene threads --validation off | tee "$RUNNER_TEMP/tsan.log"
@@ -2811,11 +2824,15 @@ jobs:
             | tee "$RUNNER_TEMP/tsan-frames.log"
           grep -qx 'd3d9_check=passed' "$RUNNER_TEMP/tsan-frames.log"
           # Frames, draws, read-back and swapchain rebuilds with the record
-          # thread on (the adapter check is not run here: lavapipe's own
-          # threads race in it, with or without ours).
+          # thread on.
           KISAK_VK_RECORD_THREAD=1 "$OUT_DIR/tsan/KisakCOD-vulkan-probe" --draw --frames 60 --resize \
             --validation off | tee "$RUNNER_TEMP/tsan-probe.log"
           grep -qx 'vulkan_probe=passed' "$RUNNER_TEMP/tsan-probe.log"
+          # And every scene of the adapter check, which leaves the record
+          # thread off unless told.
+          KISAK_VK_RECORD_THREAD=1 "$OUT_DIR/tsan/KisakCOD-vulkan-legacy-check" --validation off \
+            | tee "$RUNNER_TEMP/tsan-legacy.log"
+          grep -qx 'legacy_check=passed' "$RUNNER_TEMP/tsan-legacy.log"
 
       - name: Check the frame comparison script
         shell: bash

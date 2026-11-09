@@ -930,10 +930,18 @@ class VulkanWindowWorkflowTests(unittest.TestCase):
         self.assertEqual(step['if'], "${{ matrix.config == 'Debug' }}")
         self.assertEqual(step['env']['SDL_VIDEODRIVER'], 'offscreen')
         self.assertIn('halt_on_error=1', step['env']['TSAN_OPTIONS'])
+        # Lavapipe is not instrumented: its rasterizer threads' hand-over to
+        # its queue thread reads as a race, so they are off for these runs.
+        self.assertEqual(step['env']['LP_NUM_THREADS'], '0')
         run = step['run']
         self.assertIn('-DCMAKE_CXX_FLAGS=-fsanitize=thread', run)
         self.assertIn('--scene threads', run)
+        self.assertIn('--scene frame_loop', run)
         self.assertIn("grep -qx 'd3d9_check=passed'", run)
+        self.assertIn('KISAK_VK_RECORD_THREAD=1 "$OUT_DIR/tsan/KisakCOD-vulkan-probe"', run)
+        self.assertIn("grep -qx 'vulkan_probe=passed'", run)
+        self.assertIn('KISAK_VK_RECORD_THREAD=1 "$OUT_DIR/tsan/KisakCOD-vulkan-legacy-check"', run)
+        self.assertIn("grep -qx 'legacy_check=passed'", run)
         self.assertIn('python3 scripts/tests/test_compare_frames.py', self.step('Check the frame comparison script')['run'])
 
     def test_no_other_job_builds_the_probe(self):

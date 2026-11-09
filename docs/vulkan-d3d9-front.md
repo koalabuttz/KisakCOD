@@ -217,7 +217,8 @@ The hosted `vulkan_window` job (Linux) stages DXVK Native's headers at the
 x86_64 client's pin, builds the check in Debug and RelWithDebInfo and runs that
 script on lavapipe with validation and synchronisation checks required. Its
 Debug run also builds the check with ThreadSanitizer and runs the `threads`
-scene, which fails on any data race. The
+and `frame_loop` scenes, which fail on any data race in our code (llvmpipe's
+rasterizer threads are off there, [vulkan-core.md](vulkan-core.md)). The
 Windows `vulkan-probe` job builds it with MSVC, checks that it imports neither
 `vulkan-1.dll` nor `d3d9.dll` and that it starts, and adds it to the
 `KisakCOD-vulkan-probe-x64` artifact.

@@ -238,11 +238,16 @@ probe, the Legacy adapter check and the D3D9 front check pass with the thread
 on and off, x86_64 with validation and synchronisation checks and i386 without;
 the device probe draws its frames through the engine with it on. The CI job
 runs each check again with the thread switched the other way, and under
-ThreadSanitizer the D3D9 front's threads scene and a probe run with draws,
-read-back and swapchain rebuilds, both with the thread on: no races in the
-core, the adapter or the front. (Lavapipe's own threads race with each other
-in the adapter check, with or without the record thread, so that check is not
-run under ThreadSanitizer.)
+ThreadSanitizer the D3D9 front's `threads` and `frame_loop` scenes, a probe run
+with draws, read-back and swapchain rebuilds and the Legacy adapter check, all
+with the thread on: no races in the core, the adapter or the front. Those runs
+set `LP_NUM_THREADS=0`. Lavapipe is not built with ThreadSanitizer, which then
+sees only the pthread calls the driver makes and reports a race inside it: one
+of lavapipe's threads destroys a mutex and a condition variable that an
+llvmpipe rasterizer thread locked and signalled (3 of 40 `frame_loop` runs
+here, every run of the adapter check, with or without the record thread).
+Without rasterizer threads lavapipe's other threads and every thread of ours
+are still there.
 
 The clear-and-present probe has run on both physical GPUs (2026-11-07): the
 Windows PC's RTX 2080 Super and the laptop's Intel ANV, i386 and x86_64 (report
