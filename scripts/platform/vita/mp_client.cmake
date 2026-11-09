@@ -160,6 +160,9 @@ set(vita_mp_gfx_sources
     "${SRC_DIR}/gfx_gxm/gxm_display.cpp"
     "${SRC_DIR}/gfx_gxm/gxm_heap.cpp"
     "${SRC_DIR}/gfx_gxm/gxm_memory.cpp"
+    "${SRC_DIR}/gfx_gxm/gxm_program_cache.cpp"
+    "${SRC_DIR}/gfx_gxm/gxm_shader_compiler.cpp"
+    "${SRC_DIR}/gfx_gxm/shader/gxm_cg_translate.cpp"
     "${SRC_DIR}/gfx_gxm/legacy/gxm_d3d9_backend.cpp"
     "${SRC_DIR}/gfx_gxm/legacy/gxm_legacy.cpp")
 add_library(KisakCOD-mp-vita-gfx OBJECT ${vita_mp_gfx_sources})
@@ -197,12 +200,15 @@ target_compile_options(KisakCOD-mp PRIVATE ${KISAK_VITA_MP_OPTIONS})
 target_include_directories(KisakCOD-mp PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
 # The dedicated server's link rules (CMakeLists.txt beside this file).
 target_link_options(KisakCOD-mp PRIVATE ${KISAK_VITA_LINK_OPTIONS})
+# The shader compiler is the user's own libshacccg.suprx, loaded at run time
+# (gxm_shader_compiler.h): weak imports, so the client starts without it.
 target_link_libraries(KisakCOD-mp PRIVATE ${KISAK_VITA_LINK_LIBRARIES} SceCtrl_stub SceTouch_stub
-    SceGxm_stub SceDisplay_stub)
+    SceGxm_stub SceDisplay_stub SceShaccCg_stub_weak)
 add_dependencies(KisakCOD-mp update_build_number)
 
 set(KISAK_VITA_MP_TITLE_ID "KSKD00002" CACHE STRING "PS Vita title ID of the multiplayer client .vpk (9 characters)")
-kisak_vita_pack_vpk(KisakCOD-mp "${KISAK_VITA_MP_TITLE_ID}" "KisakCOD Multiplayer")
+# Unsafe: the shader compiler lives in ur0:data, which safe homebrew can't read.
+kisak_vita_pack_vpk(KisakCOD-mp "${KISAK_VITA_MP_TITLE_ID}" "KisakCOD Multiplayer" UNSAFE)
 
 # The graphics layer on its own (stage 2).
 include(${CMAKE_CURRENT_LIST_DIR}/gxm_probe.cmake)

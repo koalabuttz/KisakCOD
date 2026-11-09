@@ -60,7 +60,9 @@ IDirect3D9 *WINAPI Direct3DCreate9(UINT)
     host.currentMode = HostCurrentMode;
     host.monitor = HostMonitor;
     host.log = HostLog;
-    Com_Printf(CON_CHANNEL_GFX, "Graphics back end: GXM (stage 2: no shaders or draws yet)\n");
+    // Compiled GXM programs, one file each (gxm_program_cache.h).
+    host.shaderCachePath = "ux0:data/KisakCOD/gxp";
+    Com_Printf(CON_CHANNEL_GFX, "Graphics back end: GXM (stage 2c: shaders compiled, no draws yet)\n");
     return front::CreateDirect3D9(host);
 }
 

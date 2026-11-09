@@ -1,15 +1,17 @@
 // The Legacy adapter's API (src/gfx_vk/legacy/vk_legacy.h) on the PS Vita's
 // sceGxm, for the D3D9 front (src/gfx_vk/d3d9) in the Vita client.
 //
-// Stage 2, step 2b (docs/vita-client.md): everything but drawing.
+// Stage 2, step 2c (docs/vita-client.md): everything but drawing.
 // - The device owns the screen (gxm_display.h) and the GPU memory pools.
 // - Resources live in GPU-mapped memory with D3D9's lock semantics.
 // - Clears fill colour targets with sceGxmTransferFill.
 // - Present shows the back buffer.
-// - Shaders and vertex declarations are kept but not compiled yet.
+// - Shaders are translated to Cg (shader/gxm_cg_translate.h) and compiled,
+//   through the program cache (gxm_program_cache.h). Vertex declarations
+//   are kept.
 // - Draws are counted and skipped.
 // This lets the client run its menus, with real resource memory, on the
-// Vita. The next step translates the shaders and draws.
+// Vita. The next step draws.
 //
 // Texture levels are stored row by row (blocks of 4x4 for DXT), exactly as
 // D3D9 locks them, and LockRect hands out the GPU memory itself. The layouts
@@ -26,6 +28,8 @@
 
 #include <gfx_gxm/gxm_display.h>
 #include <gfx_gxm/gxm_memory.h>
+#include <gfx_gxm/gxm_program_cache.h>
+#include <gfx_gxm/shader/gxm_cg_translate.h>
 
 #include <psp2/gxm.h>
 #include <psp2/kernel/processmgr.h>
@@ -206,6 +210,11 @@ struct Shader
 {
     std::vector<uint8_t> bytecode;
     bool pixel = false;
+    // Translated (cg::Parse) and its default variant compiled: no alpha
+    // test, no D3DCOLOR inputs. Draw state picks other variants later.
+    bool translated = false;
+    gfx_gxm::cg::Shader parsed;
+    std::vector<uint8_t> program; // empty when it did not compile
 };
 
 struct VertexDecl
@@ -249,6 +258,13 @@ struct Device
     // Things the back end does not do yet, each logged once.
     std::vector<const char *> notYet;
     bool fillFailureLogged = false;
+    // Shader translation and compilation, for the summary lines.
+    struct ShaderCounts
+    {
+        uint32_t created = 0, refused = 0, compiled = 0, failed = 0;
+        uint32_t loggedFailures = 0;
+        uint64_t translateMicros = 0;
+    } shaderCounts;
     uint32_t live = 0; // resources not yet destroyed
 };
 
@@ -279,6 +295,8 @@ uint64_t Micros()
 {
     return sceKernelGetProcessTimeWide();
 }
+
+void LogShaderSummary(Device &device, const char *when); // with CreateShader
 
 // GPU memory: the preferred pool, then the other one. SYSTEMMEM and SCRATCH
 // resources stay in the C heap.
@@ -486,6 +504,9 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
     }
     std::unique_ptr<Device> device(new Device);
     device->desc = desc;
+    // The GXM back end reads shaderCachePath as a folder of compiled
+    // programs (gxm_program_cache.h).
+    gxm::SetProgramCacheFolder(desc.shaderCachePath);
     device->backBuffer.kind = SurfaceKind::BackBuffer;
     device->frontBuffer.kind = SurfaceKind::FrontBuffer;
     device->vsConstants.assign(256 * 4, 0.0f);
@@ -512,6 +533,7 @@ void DestroyDevice(Device *device)
         return;
     if (device->live)
         Log(*device, "%u resources were not destroyed before the device", device->live);
+    LogShaderSummary(*device, "in all");
     Log(*device, "%s", gxm::DescribeMemory().c_str());
     gxm::ShutdownDisplay();
     delete device;
@@ -890,6 +912,75 @@ void Unlock(Device *, IndexBuffer *buffer)
 
 // ---- Shaders and declarations -------------------------------------------------------------
 
+namespace
+{
+void LogShaderSummary(Device &device, const char *when)
+{
+    const Device::ShaderCounts &c = device.shaderCounts;
+    const gxm::ProgramCacheStats &p = gxm::GetProgramCacheStats();
+    Log(device,
+        "shaders %s: %u created, %u refused by the translator (%.1f ms translating), %u programs ready, "
+        "%u failed to compile; %u compiled in %.1f s, %u read from the card in %.1f ms, %u not written",
+        when, c.created, c.refused, c.translateMicros / 1000.0, c.compiled, c.failed, p.compiled,
+        p.compileMicros / 1e6, p.fromFiles, p.readMicros / 1000.0, p.writeFailures);
+}
+
+// Up to this many translation or compile failures are logged one by one.
+constexpr uint32_t kLoggedShaderFailures = 40;
+
+void CompileDefaultVariant(Device &device, Shader &shader, uint64_t hash)
+{
+    Device::ShaderCounts &counts = device.shaderCounts;
+    std::string reason;
+    uint64_t begin = Micros();
+    const bool parsed = gxm::cg::Parse(shader.bytecode.data(), shader.bytecode.size(), shader.parsed, reason);
+    std::string cg;
+    const bool emitted = parsed && gxm::cg::Emit(shader.parsed, gxm::cg::Options{}, cg, reason);
+    counts.translateMicros += Micros() - begin;
+    const gxm::cg::Reflection &r = shader.parsed.reflection;
+    if (!emitted)
+    {
+        ++counts.refused;
+        if (counts.loggedFailures++ < kLoggedShaderFailures)
+            Log(device, "shader %016llx (%s_%u_%u, %u tokens) not translated: %s", (unsigned long long)hash,
+                shader.pixel ? "ps" : "vs", r.major, r.minor, unsigned(shader.bytecode.size() / 4), reason.c_str());
+        return;
+    }
+    shader.translated = true;
+    std::string log;
+    if (!gxm::GetProgram(cg, shader.pixel ? gxm::ShaderStage::Fragment : gxm::ShaderStage::Vertex, shader.program,
+                         log))
+    {
+        shader.program.clear();
+        ++counts.failed;
+        if (counts.loggedFailures++ < kLoggedShaderFailures)
+        {
+            // The compiler's first error is enough to find the cause; the
+            // program itself stays on the card next to the cache.
+            std::string first = log.substr(0, log.find('\n'));
+            Log(device, "shader %016llx (%s_%u_%u) did not compile: %s", (unsigned long long)hash,
+                shader.pixel ? "ps" : "vs", r.major, r.minor, first.c_str());
+            if (device.desc.shaderCachePath && *device.desc.shaderCachePath)
+            {
+                char path[256];
+                std::snprintf(path, sizeof(path), "%s/failed-%016llx.cg", device.desc.shaderCachePath,
+                              (unsigned long long)hash);
+                if (FILE *file = std::fopen(path, "wb"))
+                {
+                    std::fwrite(cg.data(), 1, cg.size(), file);
+                    std::fputs("\n/* compiler log:\n", file);
+                    std::fwrite(log.data(), 1, log.size(), file);
+                    std::fputs("\n*/\n", file);
+                    std::fclose(file);
+                }
+            }
+        }
+        return;
+    }
+    ++counts.compiled;
+}
+} // namespace
+
 Shader *CreateShader(Device *device, const void *bytecode, size_t bytes, std::string &error)
 {
     if (!device || !bytecode || bytes < 8)
@@ -905,9 +996,14 @@ Shader *CreateShader(Device *device, const void *bytecode, size_t bytes, std::st
     uint32_t version = 0;
     std::memcpy(&version, code, sizeof(version));
     shader->pixel = (version >> 16) == 0xffffu;
+    // A shader that cannot be translated or compiled is still created, as
+    // D3D9 would; draws with it are skipped. The log says why.
+    CompileDefaultVariant(*device, *shader, gxm::cg::Hash(code, bytes));
     ++device->stats.shaders;
     device->stats.shaderMicros += Micros() - begin;
     ++device->live;
+    if (++device->shaderCounts.created % 100 == 0)
+        LogShaderSummary(*device, "so far");
     return shader.release();
 }
 

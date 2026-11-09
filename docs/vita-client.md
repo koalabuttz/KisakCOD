@@ -6,8 +6,9 @@ multiplayer client, `KisakCOD-mp`, for a hacked PS Vita and packs it as
 it follows the [Vita dedicated server](vita.md), which shares its toolchain,
 platform layer and memory rules. Started 2026-11-09.
 
-**State: stage 1 done (build and boot); stage 2 (graphics) started with the
-GXM probe below.**
+**State: stage 1 done (build and boot); stage 2 (graphics) under way: the
+GXM probe ran at 60 fps, the device runs the menu loop without drawing, and
+shaders are translated and compiled on the Vita.**
 - The whole client compiles, links and packs into a `.vpk`: client, cgame, UI, sound, renderer and its own listen server.
 - Stage 1 had no graphics back end, so the client stopped at the renderer through `Sys_Error`. Stage 2 replaces that: the renderer gets the D3D9 front on the GXM back end ("Graphics" below), which does everything but draw.
 - Sound links the OpenAL stand-in ("no device").
@@ -50,11 +51,15 @@ uploads the RelWithDebInfo `.vpk`.
    as the PC game does.
 3. Start the bubble. The log is `ux0:data/KisakCOD/console-mp.log`. Configs
    and the player profile go to the same folder (`fs_homepath`).
-4. Expected now (stage 2, step 2b): start-up, the file system, then
-   `Graphics back end: GXM`, the GPU memory lines (`gxm legacy:`, `gxm:`), the
-   front-end zones and the menu loop. The screen shows clear colours only,
-   since nothing is drawn yet. Stage 1 builds stopped at the renderer
-   instead, with `vita: no GXM graphics back end in this build yet`.
+4. Expected now (stage 2, step 2c part 1): start-up, the file system, then
+   `Graphics back end: GXM`, the GPU memory lines (`gxm legacy:`, `gxm:`),
+   the front-end zones and the menu loop. Every shader the game creates is
+   translated to Cg and compiled (`gxm legacy: shaders so far: ...` every
+   100 shaders, `shaders in all` at the end), and the compiled programs are
+   kept in `ux0:data/KisakCOD/gxp`. The screen shows clear colours only,
+   since nothing is drawn yet. The client needs `ur0:data/libshacccg.suprx`
+   for this, as the GXM probe does; without it the log says so and the
+   shaders are counted as failed.
 
 START + SELECT quits.
 
@@ -122,14 +127,50 @@ What the GXM back end does so far (step 2b):
   Textures go to CDRAM first, dynamic buffers to main memory first.
 - Clears of 16- and 32-bit colour targets use `sceGxmTransferFill`.
 - Present shows the back buffer with vsync.
-- Shaders and vertex declarations are kept but not translated.
+- Shaders are translated to Cg and compiled on the Vita (below). Vertex
+  declarations are kept.
 - Draws are counted and skipped.
 - StretchRect, depth clears and locks of the back buffer are logged once as
   not done yet.
 
 The screen shows only clear colours. The client should run its menus, and
-the log shows the GPU memory taken. Next is drawing: the shader translator to
-Cg, compiled on the Vita (see the probe below), and sceGxm's texture layouts.
+the log shows the GPU memory taken and how the shaders fared. Next is
+drawing: sceGxm's texture layouts, vertex streams, blend state and the
+draws themselves.
+
+### Shaders (step 2c)
+
+`src/gfx_gxm/shader/gxm_cg_translate.cpp` turns D3D9 shader bytecode
+(vs_1_1 to vs_3_0, ps_2_0 to ps_3_0) into Cg: a float4 local per register and
+one statement per instruction. Loops, calls, predicates, `if` on boolean
+constants, `vPos`, `vFace`, volume textures, more than one colour output and
+ps 1.x are refused with a reason; the game's shaders use none of them (the
+renderer plan's corpus scan). The Cg program meets the back end through:
+- the uniform array `c` (float constants), as long as the highest one the
+  shader reads from the API, or 256 when it indexes them with `a0`;
+- the samplers `s0` to `s15`, and vertex inputs `in_v0` to `in_v15`, by name;
+- varyings by GXM semantic: texcoord n is `TEXCOORDn`, color n is `COLORn`,
+  fog `FOG`, point size `PSIZE`;
+- options for the draw state D3D9 keeps outside the shader: vertex inputs in
+  D3DCOLOR byte order (swapped back with `.zyxw`), and the alpha test, which
+  GXM does not have (`kisak_alpha_ref` and a discard).
+
+`src/gfx_gxm/gxm_program_cache.cpp` keeps each compiled program in
+`ux0:data/KisakCOD/gxp/<hash>.gxp`, named by a hash of its Cg source, so a
+console compiles a program once (about 0.1 s each). A program that does not
+compile is logged with the compiler's first error (the first 40 failures)
+and its Cg is left beside the cache as `failed-<hash>.cg`. A shader that
+cannot be translated or compiled is still created, as D3D9 would; draws with
+it will be skipped.
+
+The client is packed unsafe for the compiler, like the probe.
+
+`scripts/tests/test_vita_cg_translate.py` checks the translator on the
+host: the shader spike's 81 op-by-op cases are translated or refused as
+expected, glslang's HLSL front end accepts every program (Cg and DX9 HLSL
+share the syntax the translator writes), a few outputs are checked by hand,
+and damaged bytecode is refused without a crash (ASan and UBSan on). Only the
+Vita's own compiler is the real check, and it runs in the client.
 
 ## GXM probe (stage 2, step 1)
 
