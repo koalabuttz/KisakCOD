@@ -131,9 +131,10 @@ What the GXM back end does so far (step 2d):
 - Shaders are translated to Cg and compiled on the Vita (below).
 - Clears and draws happen in sceGxm scenes (`legacy/gxm_legacy_draw.cpp`,
   below). Present ends the scene and shows the back buffer with vsync.
-- StretchRect, locks of the back buffer, cube and depth textures as shader
-  inputs, two-sided stencil and the blend factor colour are logged once as
-  not done yet.
+- StretchRect draws a textured quad into the destination.
+- Locks of the back buffer, cube and depth textures as shader inputs,
+  two-sided stencil and the blend factor colour are logged once as not done
+  yet.
 
 ### Draws (step 2d)
 
@@ -144,6 +145,9 @@ What the GXM back end does so far (step 2d):
   object per surface size; `gxm_display` keeps one per size. Depth-stencil
   surfaces (tiled S8D24) load and store their contents every scene, so a
   frame can come back to a target.
+- **StretchRect** (the renderer's resolves and cinematic frames) draws the
+  source, the back buffer or a texture level, as a textured quad into the
+  destination with two more built-in programs.
 - **Clears** are quads drawn in the scene with two small built-in programs:
   colour by the fragment program, depth and stencil by an always-pass depth
   test. sceGxm has no clear call, and fills on the transfer queue would race

@@ -290,5 +290,7 @@ void ClearTargets(Device &device, uint32_t rectCount, const Rect *rects, uint32_
                   uint32_t stencil);
 void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t startIndex, uint32_t primitiveCount,
           bool indexed, const void *upVertices, uint32_t upStride);
+// StretchRect: a textured quad drawn into dst.
+void Copy(Device &device, Surface *src, const Rect *srcRect, Surface *dst, const Rect *dstRect, bool linear);
 void LogDrawSummary(Device &device);
 } // namespace gfx_vk::legacy

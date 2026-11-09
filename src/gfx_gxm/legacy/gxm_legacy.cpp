@@ -7,7 +7,8 @@
 //   renames a buffer a draw read.
 // - Shaders are translated to Cg (shader/gxm_cg_translate.h) and compiled,
 //   through the program cache (gxm_program_cache.h).
-// - Clears and draws happen in sceGxm scenes (gxm_legacy_draw.cpp).
+// - Clears, draws and StretchRect happen in sceGxm scenes
+//   (gxm_legacy_draw.cpp).
 // - Present ends the scene and shows the back buffer.
 //
 // Texture levels are stored as sceGxm reads a linear texture, which is also
@@ -1020,10 +1021,10 @@ void DrawPrimitiveUP(Device *device, d3d::PrimitiveType type, uint32_t primitive
 
 // ---- Copies, frames and queries ---------------------------------------------------------------
 
-void StretchRect(Device *device, Surface *, const Rect *, Surface *, const Rect *, bool)
+void StretchRect(Device *device, Surface *src, const Rect *srcRect, Surface *dst, const Rect *dstRect, bool linear)
 {
-    if (device)
-        NotYet(*device, "StretchRect");
+    if (device && !device->detached)
+        Copy(*device, src, srcRect, dst, dstRect, linear);
 }
 
 bool GetRenderTargetData(Device *device, Surface *renderTarget, Surface *dst)

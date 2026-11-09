@@ -6,7 +6,8 @@
 //   CPU reads a target, and at Present. Depth-stencil surfaces load and store
 //   their contents every scene, so a frame may come back to a target.
 // - Clears are quads drawn in the scene (sceGxm has no clear call), with the
-//   depth and stencil written by the depth test.
+//   depth and stencil written by the depth test. StretchRect draws a
+//   textured quad into the destination.
 // - Programs. A shader's variant (translator options: alpha test, D3DCOLOR
 //   inputs, inputs the declaration lacks, element widths) is compiled through
 //   the program cache and registered with the shader patcher on first use.
@@ -228,6 +229,10 @@ struct DrawState
     Variant clearVertex, clearFragment;
     SceGxmVertexProgram *clearVertexProgram = nullptr;
     const SceGxmProgramParameter *clearDepth = nullptr, *clearColor = nullptr;
+    // StretchRect.
+    Variant copyVertex, copyFragment;
+    SceGxmVertexProgram *copyVertexProgram = nullptr;
+    int copyUnit = -1;
 
     uint16_t *sequential = nullptr; // 0, 1, 2, ... for draws without indices
     uint8_t *ring = nullptr;
@@ -243,6 +248,7 @@ struct DrawState
     uint64_t drawn = 0, skipped[SkipCount] = {};
     uint64_t renames = 0, ringOverflows = 0;
     uint32_t drawFailures = 0;
+    uint64_t copies = 0;
     uint32_t variantsMade = 0, variantFailures = 0;
 };
 
@@ -1019,6 +1025,65 @@ bool MakeClearPrograms(Device &device, std::string &error)
     return true;
 }
 
+const char kCopyVertexCg[] = "// KisakCOD: StretchRect quad\n"
+                             "void main(float2 in_position, float2 in_texcoord,\n"
+                             "          out float4 out_POSITION : POSITION, out float2 out_TEXCOORD0 : TEXCOORD0)\n"
+                             "{\n"
+                             "    out_POSITION = float4(in_position, 0.0, 1.0);\n"
+                             "    out_TEXCOORD0 = in_texcoord;\n"
+                             "}\n";
+const char kCopyFragmentCg[] = "// KisakCOD: StretchRect quad\n"
+                               "float4 main(float2 in_TEXCOORD0 : TEXCOORD0, uniform sampler2D s0) : COLOR\n"
+                               "{\n"
+                               "    return tex2D(s0, in_TEXCOORD0);\n"
+                               "}\n";
+
+bool MakeCopyPrograms(Device &device, std::string &error)
+{
+    DrawState &d = *device.draw;
+    std::string log;
+    if (!gxm::GetProgram(kCopyVertexCg, gxm::ShaderStage::Vertex, d.copyVertex.gxp, log) ||
+        !gxm::GetProgram(kCopyFragmentCg, gxm::ShaderStage::Fragment, d.copyFragment.gxp, log))
+    {
+        error = "the copy programs did not compile: " + log.substr(0, log.find('\n'));
+        return false;
+    }
+    if (!Register(device, d.copyVertex, "copy vertex program") ||
+        !Register(device, d.copyFragment, "copy fragment program"))
+    {
+        error = "the copy programs could not be registered";
+        return false;
+    }
+    const SceGxmProgramParameter *position = sceGxmProgramFindParameterByName(d.copyVertex.program(), "in_position");
+    const SceGxmProgramParameter *texcoord = sceGxmProgramFindParameterByName(d.copyVertex.program(), "in_texcoord");
+    d.copyUnit = d.copyFragment.textureUnit[0];
+    if (!position || !texcoord || d.copyUnit < 0)
+    {
+        error = "the copy programs lack their parameters";
+        return false;
+    }
+    SceGxmVertexAttribute attributes[2]{};
+    for (int i = 0; i < 2; ++i)
+    {
+        attributes[i].streamIndex = 0;
+        attributes[i].offset = uint16_t(i * 8);
+        attributes[i].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+        attributes[i].componentCount = 2;
+        attributes[i].regIndex = uint16_t(sceGxmProgramParameterGetResourceIndex(i ? texcoord : position));
+    }
+    SceGxmVertexStream stream{16, SCE_GXM_INDEX_SOURCE_INDEX_16BIT};
+    const int result = sceGxmShaderPatcherCreateVertexProgram(gxm::ShaderPatcher(), d.copyVertex.id, attributes, 2,
+                                                              &stream, 1, &d.copyVertexProgram);
+    if (result < 0)
+    {
+        char line[96];
+        std::snprintf(line, sizeof(line), "the copy vertex program could not be made (0x%08x)", unsigned(result));
+        error = line;
+        return false;
+    }
+    return true;
+}
+
 SceGxmFragmentProgram *ClearFragmentProgram(Device &device, bool writeColor)
 {
     DrawState &d = *device.draw;
@@ -1122,7 +1187,7 @@ bool InitDraw(Device &device, std::string &error)
     }
     for (uint32_t i = 0; i < kSequentialIndices; ++i)
         d.sequential[i] = uint16_t(i);
-    return MakeStandIns(device, error) && MakeClearPrograms(device, error);
+    return MakeStandIns(device, error) && MakeClearPrograms(device, error) && MakeCopyPrograms(device, error);
 }
 
 void ShutdownDraw(Device &device)
@@ -1601,15 +1666,125 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     ++d.drawn;
 }
 
+void Copy(Device &device, Surface *src, const Rect *srcRect, Surface *dst, const Rect *dstRect, bool linear)
+{
+    DrawState &d = *device.draw;
+    if (!src || !dst || src == dst)
+        return;
+    // The source as a texture: the back buffer, or one level of a texture.
+    SceGxmTexture view;
+    uint32_t width = 0, height = 0;
+    int result = -1;
+    if (src->kind == SurfaceKind::BackBuffer)
+    {
+        width = gxm::kDisplayWidth;
+        height = gxm::kDisplayHeight;
+        result = sceGxmTextureInitLinearStrided(&view, gxm::BackBufferData(), SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_ABGR,
+                                                width, height, gxm::kDisplayStride * 4);
+    }
+    else if (src->kind == SurfaceKind::TextureLevel && src->texture->memory.gpu && !src->texture->format->depth)
+    {
+        const Texture &texture = *src->texture;
+        const Level &level = texture.levels[src->face * texture.desc.levels + src->level];
+        SceGxmTextureFormat format;
+        width = level.width;
+        height = level.height;
+        if (TextureFormat(texture.desc.format, format))
+        {
+            if (!texture.format->compressed)
+                result = sceGxmTextureInitLinearStrided(&view, texture.memory.data + level.offset, format, width,
+                                                        height, level.pitch);
+            else if (texture.sampleable && src->level == 0 && texture.desc.kind == TextureKind::Tex2D)
+            {
+                view = texture.sampled;
+                result = 0;
+            }
+        }
+    }
+    if (result < 0)
+    {
+        NotYet(device, "StretchRect from this kind of surface (skipped)");
+        return;
+    }
+    Rect from = srcRect ? *srcRect : Rect{0, 0, int32_t(width), int32_t(height)};
+
+    // Draw into the destination, then let the next draw go back to the
+    // device's own targets.
+    Surface *targets = device.renderTargets[0];
+    Surface *depth = device.depthStencil;
+    device.renderTargets[0] = dst;
+    device.depthStencil = nullptr;
+    const bool open = OpenScene(device);
+    device.renderTargets[0] = targets;
+    device.depthStencil = depth;
+    if (!open || !d.hasColor)
+        return;
+    const FragmentProgramEntry *fragment = GetFragmentProgram(device, d.copyFragment, d.copyVertex, nullptr);
+    if (!fragment)
+        return;
+    const float w = float(d.sceneWidth), h = float(d.sceneHeight);
+    Rect to = dstRect ? *dstRect : Rect{0, 0, int32_t(d.sceneWidth), int32_t(d.sceneHeight)};
+    to.left = std::max(to.left, 0);
+    to.top = std::max(to.top, 0);
+    to.right = std::min(to.right, int32_t(d.sceneWidth));
+    to.bottom = std::min(to.bottom, int32_t(d.sceneHeight));
+    if (to.right <= to.left || to.bottom <= to.top)
+        return;
+
+    FixedState state{};
+    state.viewport[0] = w * 0.5f;
+    state.viewport[1] = w * 0.5f;
+    state.viewport[2] = h * 0.5f;
+    state.viewport[3] = -h * 0.5f;
+    state.viewport[4] = 0.0f;
+    state.viewport[5] = 1.0f;
+    state.clip[0] = uint32_t(to.left);
+    state.clip[1] = uint32_t(to.top);
+    state.clip[2] = uint32_t(to.right - 1);
+    state.clip[3] = uint32_t(to.bottom - 1);
+    state.cull = SCE_GXM_CULL_NONE;
+    state.polygon = SCE_GXM_POLYGON_MODE_TRIANGLE_FILL;
+    state.depthFunc = SCE_GXM_DEPTH_FUNC_ALWAYS;
+    state.depthWrite = SCE_GXM_DEPTH_WRITE_DISABLED;
+    for (int side = 0; side < 2; ++side)
+    {
+        state.stencilFunc[side] = SCE_GXM_STENCIL_FUNC_ALWAYS;
+        state.stencilFail[side] = state.stencilDepthFail[side] = state.stencilPass[side] = SCE_GXM_STENCIL_OP_KEEP;
+    }
+    ApplyFixedState(device, state);
+    SetPrograms(device, d.copyVertexProgram, fragment->program);
+
+    float *quad = static_cast<float *>(Transient(device, 16 * sizeof(float)));
+    if (!quad)
+        return;
+    const float x0 = 2.0f * to.left / w - 1.0f, x1 = 2.0f * to.right / w - 1.0f;
+    const float y0 = 1.0f - 2.0f * to.top / h, y1 = 1.0f - 2.0f * to.bottom / h;
+    const float u0 = float(from.left) / width, u1 = float(from.right) / width;
+    const float v0 = float(from.top) / height, v1 = float(from.bottom) / height;
+    const float corners[16] = {x0, y0, u0, v0, x1, y0, u1, v0, x0, y1, u0, v1, x1, y1, u1, v1};
+    std::memcpy(quad, corners, sizeof(corners));
+    const SceGxmTextureFilter filter = linear ? SCE_GXM_TEXTURE_FILTER_LINEAR : SCE_GXM_TEXTURE_FILTER_POINT;
+    sceGxmTextureSetMagFilter(&view, filter);
+    sceGxmTextureSetMinFilter(&view, filter);
+    sceGxmTextureSetMipFilter(&view, SCE_GXM_TEXTURE_MIP_FILTER_DISABLED);
+    sceGxmTextureSetUAddrMode(&view, SCE_GXM_TEXTURE_ADDR_CLAMP);
+    sceGxmTextureSetVAddrMode(&view, SCE_GXM_TEXTURE_ADDR_CLAMP);
+    SceGxmContext *context = Gxm();
+    sceGxmSetFragmentTexture(context, unsigned(d.copyUnit), &view);
+    sceGxmSetVertexStream(context, 0, quad);
+    sceGxmDraw(context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP, SCE_GXM_INDEX_FORMAT_U16, d.sequential, 4);
+    ++d.copies;
+}
+
 void LogDrawSummary(Device &device)
 {
     const DrawState *d = device.draw;
     if (!d)
         return;
     Log(device,
-        "draws: %llu drawn in %llu scenes; %zu vertex and %zu fragment programs, %u shader variants made "
+        "draws: %llu drawn and %llu copies in %llu scenes; %zu vertex and %zu fragment programs, %u shader variants made "
         "(%u did not compile); %llu buffer renames, %llu blocks past the transient ring, %u failed draws",
-        (unsigned long long)d->drawn, (unsigned long long)d->scenes, d->vertexPrograms.size(),
+        (unsigned long long)d->drawn, (unsigned long long)d->copies, (unsigned long long)d->scenes, d->vertexPrograms.size(),
         d->fragmentPrograms.size(), d->variantsMade, d->variantFailures, (unsigned long long)d->renames,
         (unsigned long long)d->ringOverflows, d->drawFailures);
     for (int i = 0; i < SkipCount; ++i)
