@@ -14,6 +14,10 @@
 #include <chrono>
 #include <cstdio>
 
+#if defined(__linux__) || defined(__APPLE__)
+#include <pthread.h>
+#endif
+
 namespace gfx_vk
 {
 namespace
@@ -36,6 +40,13 @@ void RunChunk(RecordState &state, RecordChunk &chunk)
 void RecordThread(Core *core)
 {
     t_recordThread = true;
+    // A name for profilers and debuggers to show (15 characters at most on
+    // Linux). Windows names threads through windows.h, which the core leaves out.
+#if defined(__linux__)
+    pthread_setname_np(pthread_self(), "vk-record");
+#elif defined(__APPLE__)
+    pthread_setname_np("vk-record");
+#endif
     Recorder &recorder = core->recorder;
     RecordState &state = core->record;
     std::unique_lock<std::mutex> lock(recorder.mutex);
