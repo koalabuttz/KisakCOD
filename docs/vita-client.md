@@ -7,8 +7,10 @@ it follows the [Vita dedicated server](vita.md), which shares its toolchain,
 platform layer and memory rules. Started 2026-11-09.
 
 **State: stage 1 done (build and boot); stage 2 (graphics) under way: the
-GXM probe ran at 60 fps, the device runs the menu loop without drawing, and
-shaders are translated and compiled on the Vita.**
+GXM probe ran at 60 fps, the device ran the menu loop without drawing, and
+the game's shaders compile on the Vita (466 programs, none failed; read back
+from the card in 1.4 s). Step 2d, the first real draws, is built and not run
+on the Vita yet.**
 - The whole client compiles, links and packs into a `.vpk`: client, cgame, UI, sound, renderer and its own listen server.
 - Stage 1 had no graphics back end, so the client stopped at the renderer through `Sys_Error`. Stage 2 replaces that: the renderer gets the D3D9 front on the GXM back end ("Graphics" below), which does everything but draw.
 - Sound links the OpenAL stand-in ("no device").
@@ -51,15 +53,16 @@ uploads the RelWithDebInfo `.vpk`.
    as the PC game does.
 3. Start the bubble. The log is `ux0:data/KisakCOD/console-mp.log`. Configs
    and the player profile go to the same folder (`fs_homepath`).
-4. Expected now (stage 2, step 2c part 1): start-up, the file system, then
+4. Expected now (stage 2, step 2d): start-up, the file system, then
    `Graphics back end: GXM`, the GPU memory lines (`gxm legacy:`, `gxm:`),
-   the front-end zones and the menu loop. Every shader the game creates is
-   translated to Cg and compiled (`gxm legacy: shaders so far: ...` every
-   100 shaders, `shaders in all` at the end), and the compiled programs are
-   kept in `ux0:data/KisakCOD/gxp`. The screen shows clear colours only,
-   since nothing is drawn yet. The client needs `ur0:data/libshacccg.suprx`
-   for this, as the GXM probe does; without it the log says so and the
-   shaders are counted as failed.
+   the front-end zones and the menu loop, drawn. Every shader the game
+   creates is translated to Cg and compiled (`gxm legacy: shaders so far: ...`
+   every 100 shaders, `shaders in all` at the end), and the compiled programs
+   are kept in `ux0:data/KisakCOD/gxp`. `gxm legacy: draws: ...` lines at the
+   first frame, after ten seconds and every minute count what was drawn and
+   what was skipped, and why. The client needs
+   `ur0:data/libshacccg.suprx`, as the GXM probe does; without it the log
+   says so and nothing is drawn.
 
 START + SELECT quits.
 
@@ -120,23 +123,53 @@ when it creates and destroys a device. That seam has two implementations:
 Builds with `KISAK_GFX_GXM` leave the Vulkan parts of `vk_d3d9.h` and
 `vk_legacy.h` out.
 
-What the GXM back end does so far (step 2b):
+What the GXM back end does so far (step 2d):
 - The device owns the screen and reserves the GPU memory pools: nearly all of
-  CDRAM, 16 MB of main memory, and an 8 MB parameter buffer.
+  CDRAM, 20 MB of main memory, and an 8 MB parameter buffer.
 - Textures, surfaces and buffers live in those pools with D3D9's lock rules.
   Textures go to CDRAM first, dynamic buffers to main memory first.
-- Clears of 16- and 32-bit colour targets use `sceGxmTransferFill`.
-- Present shows the back buffer with vsync.
-- Shaders are translated to Cg and compiled on the Vita (below). Vertex
-  declarations are kept.
-- Draws are counted and skipped.
-- StretchRect, depth clears and locks of the back buffer are logged once as
+- Shaders are translated to Cg and compiled on the Vita (below).
+- Clears and draws happen in sceGxm scenes (`legacy/gxm_legacy_draw.cpp`,
+  below). Present ends the scene and shows the back buffer with vsync.
+- StretchRect, locks of the back buffer, cube and depth textures as shader
+  inputs, two-sided stencil and the blend factor colour are logged once as
   not done yet.
 
-The screen shows only clear colours. The client should run its menus, and
-the log shows the GPU memory taken and how the shaders fared. Next is
-drawing: sceGxm's texture layouts, vertex streams, blend state and the
-draws themselves.
+### Draws (step 2d)
+
+`src/gfx_gxm/legacy/gxm_legacy_draw.cpp` turns the D3D9 state into sceGxm's:
+- **Scenes.** A scene opens on render target 0 and the depth-stencil surface
+  at the first clear or draw after they change, and closes when they change,
+  before the CPU reads a target, and at Present. sceGxm wants a render target
+  object per surface size; `gxm_display` keeps one per size. Depth-stencil
+  surfaces (tiled S8D24) load and store their contents every scene, so a
+  frame can come back to a target.
+- **Clears** are quads drawn in the scene with two small built-in programs:
+  colour by the fragment program, depth and stencil by an always-pass depth
+  test. sceGxm has no clear call, and fills on the transfer queue would race
+  the scenes.
+- **Programs.** Each draw picks its shaders' variants: the vertex
+  declaration decides which inputs are D3DCOLOR (swapped), missing (read as
+  0, 0, 0, 1) or narrower than four components, and the alpha test picks the
+  pixel shader's. A variant other than the default compiles on first use
+  (through the cache) and is registered with the shader patcher. Vertex
+  programs are kept per variant, declaration and stream strides; fragment
+  programs per variant, vertex program, blend state and target format.
+- **Textures** are linear: rows of whole multiples of 8 texels, and the
+  levels of a mipmapped texture sized from the power of two above the base,
+  which is how sceGxm reads them and also a layout LockRect can hand out.
+  Render-target textures are strided (rows of 32 texels, as colour surfaces
+  want). Volume textures are their slices stacked. Cube and depth textures
+  are not sampled yet: draws bind a grey cube or a white texture.
+- **State.** The viewport moves half a pixel (D3D9 samples pixel centres at
+  whole coordinates); the viewport and scissor rect become the region clip;
+  depth, stencil, cull, fill mode and depth bias map to sceGxm's; blending
+  goes into the fragment program.
+- **Memory.** DISCARD on a buffer a draw read takes fresh memory. Memory the
+  GPU may still read (old buffers, destroyed resources, released programs) is
+  freed three frames later, since the display queue lets the CPU run at most
+  two frames ahead. DrawPrimitiveUP and the clear quads copy their vertices
+  into a 512 KB per-frame ring.
 
 ### Shaders (step 2c)
 
@@ -165,7 +198,7 @@ compile is logged with the compiler's first error (the first 40 failures;
 each reason a shader is not translated is logged once and counted at the end)
 and its Cg is left beside the cache as `failed-<hash>.cg`. A shader that
 cannot be translated or compiled is still created, as D3D9 would; draws with
-it will be skipped.
+it are skipped and counted.
 
 The client is packed unsafe for the compiler, like the probe.
 

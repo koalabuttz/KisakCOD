@@ -164,7 +164,8 @@ set(vita_mp_gfx_sources
     "${SRC_DIR}/gfx_gxm/gxm_shader_compiler.cpp"
     "${SRC_DIR}/gfx_gxm/shader/gxm_cg_translate.cpp"
     "${SRC_DIR}/gfx_gxm/legacy/gxm_d3d9_backend.cpp"
-    "${SRC_DIR}/gfx_gxm/legacy/gxm_legacy.cpp")
+    "${SRC_DIR}/gfx_gxm/legacy/gxm_legacy.cpp"
+    "${SRC_DIR}/gfx_gxm/legacy/gxm_legacy_draw.cpp")
 add_library(KisakCOD-mp-vita-gfx OBJECT ${vita_mp_gfx_sources})
 target_compile_features(KisakCOD-mp-vita-gfx PRIVATE cxx_std_20)
 target_compile_definitions(KisakCOD-mp-vita-gfx PRIVATE KISAK_GFX_GXM ENABLE_VITASDK_BUILD_ASSERT)

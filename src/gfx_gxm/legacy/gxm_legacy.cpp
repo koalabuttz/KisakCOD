@@ -1,22 +1,18 @@
 // The Legacy adapter's API (src/gfx_vk/legacy/vk_legacy.h) on the PS Vita's
 // sceGxm, for the D3D9 front (src/gfx_vk/d3d9) in the Vita client.
 //
-// Stage 2, step 2c (docs/vita-client.md): everything but drawing.
+// Stage 2, step 2d (docs/vita-client.md): drawing.
 // - The device owns the screen (gxm_display.h) and the GPU memory pools.
-// - Resources live in GPU-mapped memory with D3D9's lock semantics.
-// - Clears fill colour targets with sceGxmTransferFill.
-// - Present shows the back buffer.
+// - Resources live in GPU-mapped memory with D3D9's lock semantics; DISCARD
+//   renames a buffer a draw read.
 // - Shaders are translated to Cg (shader/gxm_cg_translate.h) and compiled,
-//   through the program cache (gxm_program_cache.h). Vertex declarations
-//   are kept.
-// - Draws are counted and skipped.
-// This lets the client run its menus, with real resource memory, on the
-// Vita. The next step draws.
+//   through the program cache (gxm_program_cache.h).
+// - Clears and draws happen in sceGxm scenes (gxm_legacy_draw.cpp).
+// - Present ends the scene and shows the back buffer.
 //
-// Texture levels are stored row by row (blocks of 4x4 for DXT), exactly as
-// D3D9 locks them, and LockRect hands out the GPU memory itself. The layouts
-// sceGxm samples (swizzled DXT, strides in multiples of 8 texels) come with
-// drawing. That step decides whether textures get converted on Unlock.
+// Texture levels are stored as sceGxm reads a linear texture, which is also
+// a layout D3D9's LockRect can hand out: rows of whole multiples of 8 texels
+// (blocks of 4x4 for DXT). LockRect hands out the GPU memory itself.
 //
 // One thread at a time calls everything; the front's lock sees to that.
 
@@ -167,30 +163,6 @@ uint32_t DisplayColor(uint32_t color)
     return (color & 0xff00ff00u) | ((color >> 16) & 0xffu) | ((color & 0xffu) << 16);
 }
 
-namespace
-{
-// A D3DCOLOR in a 16-bit format's bits; false for formats a fill cannot take.
-bool Color16(d3d::Format format, uint32_t color, uint32_t &out)
-{
-    const uint32_t a = color >> 24, r = (color >> 16) & 0xff, g = (color >> 8) & 0xff, b = color & 0xff;
-    switch (format)
-    {
-    case d3d::FMT_R5G6B5:
-        out = (r >> 3) << 11 | (g >> 2) << 5 | (b >> 3);
-        return true;
-    case d3d::FMT_A1R5G5B5:
-    case d3d::FMT_X1R5G5B5:
-        out = (a >> 7) << 15 | (r >> 3) << 10 | (g >> 3) << 5 | (b >> 3);
-        return true;
-    case d3d::FMT_A4R4G4B4:
-        out = (a >> 4) << 12 | (r >> 4) << 8 | (g >> 4) << 4 | (b >> 4);
-        return true;
-    default:
-        return false;
-    }
-}
-} // namespace
-
 bool Describe(const Surface *surface, Target &out)
 {
     out = Target{};
@@ -292,7 +264,9 @@ gxm::MemorySizes PoolSizes(Device &device)
     sizes.cdram = system.size_cdram > int(margin + (16u << 20))
                       ? (uint32_t(system.size_cdram) - margin) & ~((256u << 10) - 1)
                       : 16u << 20;
-    sizes.main = 16u << 20;
+    // 16 MB peaked at 15.1 in the menus before drawing; draws add the
+    // transient ring and renamed buffers.
+    sizes.main = 20u << 20;
     sizes.vertexUsse = 1u << 20;
     sizes.fragmentUsse = 1u << 20;
     Log(device, "system memory free before the GPU: %d MB main, %d MB CDRAM", system.size_user >> 20,
@@ -345,6 +319,12 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
     display.logUser = device.get();
     if (!gxm::InitDisplay(display, error))
         return nullptr;
+    if (!InitDraw(*device, error))
+    {
+        ShutdownDraw(*device);
+        gxm::ShutdownDisplay();
+        return nullptr;
+    }
     Log(*device, "%s", gxm::DescribeMemory().c_str());
     SetDefaultState(*device);
     return device.release();
@@ -357,6 +337,9 @@ void DestroyDevice(Device *device)
     if (device->live)
         Log(*device, "%u resources were not destroyed before the device", device->live);
     LogShaderSummary(*device, "in all");
+    FinishGpu(*device);
+    LogDrawSummary(*device);
+    ShutdownDraw(*device);
     Log(*device, "%s", gxm::DescribeMemory().c_str());
     gxm::ShutdownDisplay();
     delete device;
@@ -425,29 +408,13 @@ Texture *CreateTexture(Device *device, const TextureDesc &desc)
     const uint32_t depth = desc.kind == TextureKind::Volume ? desc.depth : 1;
     if (!texture->desc.levels)
         texture->desc.levels = FullChain(desc.width, desc.kind == TextureKind::Cube ? desc.width : desc.height, depth);
-    const uint32_t height = desc.kind == TextureKind::Cube ? desc.width : desc.height;
-    texture->desc.height = height;
-
-    uint32_t total = 0;
+    texture->desc.height = desc.kind == TextureKind::Cube ? desc.width : desc.height;
     texture->levels.resize(texture->faces * texture->desc.levels);
-    for (uint32_t face = 0; face < texture->faces; ++face)
-    {
-        for (uint32_t i = 0; i < texture->desc.levels; ++i)
-        {
-            Level &level = texture->levels[face * texture->desc.levels + i];
-            level.width = LevelSize(desc.width, i);
-            level.height = LevelSize(height, i);
-            level.depth = LevelSize(depth, i);
-            level.pitch = Pitch(*format, level.width, renderTarget);
-            level.slicePitch = level.pitch * Rows(*format, level.height);
-            total = AlignUp(total, 16);
-            level.offset = total;
-            total += level.slicePitch * level.depth;
-        }
-    }
+    const uint32_t total = LayoutTexture(*texture);
     // Textures and targets prefer CDRAM, the GPU's own memory.
     if (!AllocateMemory(*device, texture->memory, total, 256, desc.pool, true, desc.name))
         return nullptr;
+    SetUpTexture(*device, *texture);
     texture->surfaces.resize(texture->levels.size());
     ++device->live;
     return texture.release();
@@ -457,6 +424,9 @@ void DestroyTexture(Device *device, Texture *texture)
 {
     if (!texture)
         return;
+    // A scene may be drawing into it.
+    if (texture->desc.usage & (d3d::USAGE_RENDERTARGET | d3d::USAGE_DEPTHSTENCIL))
+        EndScene(*device);
     for (Texture *&bound : device->textures)
         if (bound == texture)
             bound = nullptr;
@@ -470,7 +440,7 @@ void DestroyTexture(Device *device, Texture *texture)
         if (device->depthStencil == surface.get())
             device->depthStencil = nullptr;
     }
-    FreeMemory(texture->memory);
+    Retire(*device, texture->memory);
     --device->live;
     delete texture;
 }
@@ -492,9 +462,9 @@ bool LockRect(Device *device, Texture *texture, uint32_t face, uint32_t level, c
         Log(*device, "LockRect: %s level %u is already locked", texture->name.c_str(), level);
         return false;
     }
-    // Clears and copies by the GPU must be done before the CPU looks.
-    if (texture->memory.gpu)
-        sceGxmTransferFinish();
+    // What the GPU draws into must be done before the CPU looks.
+    if (texture->memory.gpu && (texture->desc.usage & (d3d::USAGE_RENDERTARGET | d3d::USAGE_DEPTHSTENCIL)))
+        FinishGpu(*device);
     uint32_t x = 0, y = 0, z = 0;
     if (box && box->right)
     {
@@ -659,19 +629,21 @@ T *CreateBuffer(Device *device, uint32_t bytes, uint32_t usage, d3d::Pool pool, 
     return buffer.release();
 }
 
-void *LockBuffer(Device *device, GpuBuffer *buffer, uint32_t offset, uint32_t bytes, uint32_t)
+void *LockBuffer(Device *device, GpuBuffer *buffer, uint32_t offset, uint32_t bytes, uint32_t flags)
 {
     if (!device || !buffer || offset > buffer->size || (bytes && offset + bytes > buffer->size))
         return nullptr;
-    // DISCARD and NOOVERWRITE need no new memory while nothing is drawn: the
-    // GPU never reads a buffer yet. Drawing will rename discarded buffers.
+    // DISCARD on a buffer a draw read: fresh memory, so the GPU keeps what
+    // it reads. NOOVERWRITE and plain locks write in place.
+    if ((flags & d3d::LOCK_DISCARD) && buffer->drawn && buffer->memory.gpu)
+        Rename(*device, *buffer);
     buffer->locked = true;
     return buffer->memory.data + offset;
 }
 
 void DestroyBuffer(Device *device, GpuBuffer *buffer)
 {
-    FreeMemory(buffer->memory);
+    Retire(*device, buffer->memory);
     --device->live;
 }
 } // namespace
@@ -850,6 +822,7 @@ void DestroyShader(Device *device, Shader *shader)
         device->vertexShader = nullptr;
     if (device->pixelShader == shader)
         device->pixelShader = nullptr;
+    ForgetShader(*device, *shader);
     --device->live;
     delete shader;
 }
@@ -870,6 +843,7 @@ void DestroyVertexDecl(Device *device, VertexDecl *decl)
         return;
     if (device->decl == decl)
         device->decl = nullptr;
+    ForgetDecl(*device, *decl);
     --device->live;
     delete decl;
 }
@@ -1007,107 +981,40 @@ void SetDepthStencilSurface(Device *device, Surface *surface)
 
 // ---- Drawing --------------------------------------------------------------------------------
 
-namespace
-{
-void Fill(Device &device, const Target &target, const Rect &rect, uint32_t color)
-{
-    if (rect.right <= rect.left || rect.bottom <= rect.top)
-        return;
-    const uint32_t x = uint32_t(rect.left), y = uint32_t(rect.top);
-    const uint32_t width = uint32_t(rect.right - rect.left), height = uint32_t(rect.bottom - rect.top);
-    // The fill writes the value's bits as they are; the format gives only
-    // the texel size. The RAW formats are refused for fills (0x805b0009,
-    // unsupported, on the Vita), while U8U8U8U8_ABGR worked in the probe.
-    SceGxmTransferFormat format;
-    uint32_t value = 0;
-    if (target.format->blockBytes == 4 && !target.format->depth &&
-        (target.display || target.format->d3d == d3d::FMT_A8R8G8B8 || target.format->d3d == d3d::FMT_X8R8G8B8))
-    {
-        format = SCE_GXM_TRANSFER_FORMAT_U8U8U8U8_ABGR;
-        // A8R8G8B8 is D3DCOLOR's own byte order; the display is A8B8G8R8.
-        value = target.display ? DisplayColor(color) : color;
-    }
-    else if (target.format->blockBytes == 2 && Color16(target.format->d3d, color, value))
-        format = target.format->d3d == d3d::FMT_R5G6B5   ? SCE_GXM_TRANSFER_FORMAT_U5U6U5_BGR
-                 : target.format->d3d == d3d::FMT_A4R4G4B4 ? SCE_GXM_TRANSFER_FORMAT_U4U4U4U4_ABGR
-                                                           : SCE_GXM_TRANSFER_FORMAT_U1U5U5U5_ABGR;
-    else
-    {
-        NotYet(device, "Clear of a render target that is not 16- or 32-bit RGB");
-        return;
-    }
-    const int result = sceGxmTransferFill(value, format, target.data, x, y, width, height, int32_t(target.pitch),
-                                          nullptr, 0, nullptr);
-    if (result < 0)
-    {
-        if (!device.fillFailureLogged)
-        {
-            device.fillFailureLogged = true;
-            Log(device, "sceGxmTransferFill failed (0x%08x) on a %ux%u %s target, pitch %u, rect %u,%u %ux%u; "
-                        "clearing on the CPU from now on when it fails",
-                unsigned(result), target.width, target.height, target.display ? "display" : "texture",
-                target.pitch, x, y, width, height);
-        }
-        const uint32_t bytes = target.format->blockBytes;
-        for (uint32_t row = y; row < y + height; ++row)
-        {
-            uint8_t *line = target.data + size_t(row) * target.pitch + size_t(x) * bytes;
-            for (uint32_t column = 0; column < width; ++column)
-                std::memcpy(line + column * bytes, &value, bytes);
-        }
-    }
-}
-} // namespace
-
-void Clear(Device *device, uint32_t rectCount, const Rect *rects, uint32_t flags, uint32_t color, float, uint32_t)
+void Clear(Device *device, uint32_t rectCount, const Rect *rects, uint32_t flags, uint32_t color, float z,
+           uint32_t stencil)
 {
     if (!device || device->detached)
         return;
     ++device->stats.clears;
-    if (!(flags & d3d::CLEAR_TARGET))
-        return; // depth and stencil: nothing reads them until drawing works
-    Target target;
-    if (!Describe(device->renderTargets[0], target))
+    ClearTargets(*device, rectCount, rects, flags, color, z, stencil);
+}
+
+void DrawIndexedPrimitive(Device *device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t, uint32_t,
+                          uint32_t startIndex, uint32_t primitiveCount)
+{
+    if (!device || device->detached)
         return;
-    // D3D9 clears the viewport, cut by the scissor rect when the test is on,
-    // and the rects within that.
-    Rect area{int32_t(device->viewport.x), int32_t(device->viewport.y),
-              int32_t(device->viewport.x + device->viewport.width),
-              int32_t(device->viewport.y + device->viewport.height)};
-    auto intersect = [](Rect a, const Rect &b) {
-        a.left = std::max(a.left, b.left);
-        a.top = std::max(a.top, b.top);
-        a.right = std::min(a.right, b.right);
-        a.bottom = std::min(a.bottom, b.bottom);
-        return a;
-    };
-    area = intersect(area, Rect{0, 0, int32_t(target.width), int32_t(target.height)});
-    if (device->renderStates[d3d::RS_SCISSORTESTENABLE])
-        area = intersect(area, device->scissor);
-    if (!rectCount || !rects)
-        Fill(*device, target, area, color);
-    else
-        for (uint32_t i = 0; i < rectCount; ++i)
-            Fill(*device, target, intersect(area, rects[i]), color);
+    ++device->stats.draws;
+    Draw(*device, type, baseVertex, startIndex, primitiveCount, true, nullptr, 0);
 }
 
-void DrawIndexedPrimitive(Device *device, d3d::PrimitiveType, int32_t, uint32_t, uint32_t, uint32_t, uint32_t)
+void DrawPrimitive(Device *device, d3d::PrimitiveType type, uint32_t startVertex, uint32_t primitiveCount)
 {
-    if (device)
-        ++device->stats.draws;
+    if (!device || device->detached)
+        return;
+    ++device->stats.draws;
+    Draw(*device, type, int32_t(startVertex), 0, primitiveCount, false, nullptr, 0);
 }
 
-void DrawPrimitive(Device *device, d3d::PrimitiveType, uint32_t, uint32_t)
-{
-    if (device)
-        ++device->stats.draws;
-}
-
-void DrawPrimitiveUP(Device *device, d3d::PrimitiveType, uint32_t, const void *, uint32_t)
+void DrawPrimitiveUP(Device *device, d3d::PrimitiveType type, uint32_t primitiveCount, const void *vertices,
+                     uint32_t stride)
 {
     if (!device)
         return;
     ++device->stats.draws;
+    if (!device->detached && vertices)
+        Draw(*device, type, 0, 0, primitiveCount, false, vertices, stride);
     device->streams[0] = Device::Stream{};
 }
 
@@ -1130,8 +1037,7 @@ bool GetRenderTargetData(Device *device, Surface *renderTarget, Surface *dst)
         Log(*device, "GetRenderTargetData: the surfaces differ in size or are not 32-bit");
         return false;
     }
-    sceGxmTransferFinish();
-    gxm::Finish();
+    FinishGpu(*device);
     for (uint32_t y = 0; y < source.height; ++y)
     {
         const uint8_t *from = source.data + size_t(y) * source.pitch;
@@ -1157,7 +1063,6 @@ void UpdateTexture(Device *device, Texture *src, Texture *dst)
 {
     if (!device || !src || !dst || src->desc.format != dst->desc.format || src->faces != dst->faces)
         return;
-    sceGxmTransferFinish();
     const uint32_t skip = dst->desc.width < src->desc.width ? FullChain(src->desc.width / dst->desc.width, 1, 1) - 1 : 0;
     for (uint32_t face = 0; face < dst->faces; ++face)
     {
@@ -1180,10 +1085,10 @@ PresentResult Present(Device *device)
         return PresentResult::Failed;
     if (device->detached)
         return PresentResult::Skipped;
-    // Clears go through the transfer queue; the display queue waits only for
-    // scenes, so the fills must be done before the buffer is shown.
-    sceGxmTransferFinish();
-    if (!gxm::Present())
+    EndScene(*device);
+    const bool shown = gxm::Present();
+    FrameDone(*device);
+    if (!shown)
     {
         device->error = "sceGxm could not present";
         return PresentResult::Failed;
@@ -1216,10 +1121,10 @@ void ResetState(Device *device)
         SetDefaultState(*device);
 }
 
-void WaitIdle(Device *)
+void WaitIdle(Device *device)
 {
-    sceGxmTransferFinish();
-    gxm::Finish();
+    if (device)
+        FinishGpu(*device);
 }
 
 Query *CreateQuery(Device *device, QueryKind kind)

@@ -56,7 +56,15 @@ SceGxmShaderPatcher *ShaderPatcher();
 void *BackBufferData();
 void *FrontBufferData();
 const SceGxmColorSurface *BackBufferSurface();
+// The sync object a scene drawing into the back buffer passes as its
+// fragment sync object, so the display waits for it.
+SceGxmSyncObject *BackBufferSync();
 const SceGxmDepthStencilSurface *DepthStencilSurface();
+
+// A render target for scenes of this size, made on first use and kept until
+// ShutdownDisplay (sceGxm wants one per surface size). Null on failure,
+// logged.
+SceGxmRenderTarget *RenderTargetFor(uint32_t width, uint32_t height);
 
 // Scenes on the back buffer and the depth-stencil surface.
 bool BeginScene();
