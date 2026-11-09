@@ -11,18 +11,6 @@ static_assert(sizeof(PipelineKey) == 48 + 2 * kMaxStreams, "PipelineKey must hav
 
 namespace
 {
-// One-time warnings (Device::warnedOnce bits).
-enum Warning : uint32_t
-{
-    WarnFixedFunction,
-    WarnFeedback,
-    WarnNoTargets,
-    WarnUnboundStream,
-    WarnSystemMemTexture,
-    WarnRenderTargetGap,
-    WarnStretchRect,
-};
-
 float AsFloat(uint32_t bits)
 {
     float value;
@@ -1768,8 +1756,9 @@ void UpdateTexture(Device *device_, Texture *src, Texture *dst)
             const Subresource &from = src->subresources[face * src->desc.levels + level];
             if (from.cpu.empty())
                 continue; // never written
+            // The whole level is replaced, so nothing is read back.
             LockedRect locked;
-            if (!LockRect(device_, dst, face, level, nullptr, 0, locked))
+            if (!LockRect(device_, dst, face, level, nullptr, d3d::LOCK_DISCARD, locked))
                 return;
             Subresource &to = dst->subresources[face * dst->desc.levels + level];
             std::memcpy(to.cpu.data(), from.cpu.data(), std::min(to.cpu.size(), from.cpu.size()));

@@ -1064,10 +1064,11 @@ Readback *ReadImage(Core *core_, Image *image, uint32_t mipLevel, uint32_t layer
     }
     uint32_t blockWidth = 1;
     uint32_t blockHeight = 1;
-    if (FormatBlockBytes(image->desc.format, &blockWidth, &blockHeight) != 4 || blockWidth != 1
-        || image->aspect != VK_IMAGE_ASPECT_COLOR_BIT || mipLevel >= image->desc.mipLevels || layer >= image->layers)
+    const uint32_t blockBytes = FormatBlockBytes(image->desc.format, &blockWidth, &blockHeight);
+    if (!blockBytes || image->aspect != VK_IMAGE_ASPECT_COLOR_BIT || mipLevel >= image->desc.mipLevels
+        || layer >= image->layers)
     {
-        Fail(core, "ReadImage: %s is not a 4-byte colour image or has no such level", image->name.c_str());
+        Fail(core, "ReadImage: %s is not a colour image or has no such level", image->name.c_str());
         return nullptr;
     }
     if (!(image->desc.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT))
@@ -1077,8 +1078,11 @@ Readback *ReadImage(Core *core_, Image *image, uint32_t mipLevel, uint32_t layer
     }
     const uint32_t width = std::max(image->desc.width >> mipLevel, 1u);
     const uint32_t height = std::max(image->desc.height >> mipLevel, 1u);
+    const uint32_t depth = image->desc.kind == ImageKind::Tex3D ? std::max(image->desc.depth >> mipLevel, 1u) : 1u;
+    const uint32_t rowBytes = (width + blockWidth - 1) / blockWidth * blockBytes;
+    const uint32_t rows = (height + blockHeight - 1) / blockHeight;
     BufferDesc desc;
-    desc.size = static_cast<VkDeviceSize>(width) * height * 4;
+    desc.size = static_cast<VkDeviceSize>(rowBytes) * rows * depth;
     desc.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     desc.memory = MemoryKind::Readback;
     desc.name = "readback";
@@ -1094,7 +1098,7 @@ Readback *ReadImage(Core *core_, Image *image, uint32_t mipLevel, uint32_t layer
     }
     VkBufferImageCopy region{};
     region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mipLevel, layer, 1};
-    region.imageExtent = {width, height, 1};
+    region.imageExtent = {width, height, depth};
     core.vk.vkCmdCopyImageToBuffer(cmd, image->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, BufferHandle(buffer), 1,
                                    &region);
     VkBufferMemoryBarrier2 toHost{};
@@ -1123,6 +1127,9 @@ Readback *ReadImage(Core *core_, Image *image, uint32_t mipLevel, uint32_t layer
     readback->width = width;
     readback->height = height;
     readback->format = image->desc.format;
+    readback->depth = depth;
+    readback->rowBytes = rowBytes;
+    readback->rows = rows;
     core.readbacks.push_back(readback);
     return readback;
 }
@@ -1156,6 +1163,9 @@ bool WaitReadback(Core *core_, Readback *readback, ReadbackData *out)
     out->width = readback->width;
     out->height = readback->height;
     out->format = readback->format;
+    out->depth = readback->depth;
+    out->rowBytes = readback->rowBytes;
+    out->rows = readback->rows;
     return true;
 }
 

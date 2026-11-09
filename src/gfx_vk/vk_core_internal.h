@@ -90,6 +90,9 @@ struct Readback
     uint32_t width = 0;
     uint32_t height = 0;
     VkFormat format = VK_FORMAT_UNDEFINED;
+    uint32_t depth = 1;
+    uint32_t rowBytes = 0;
+    uint32_t rows = 0;
 };
 
 // Host-visible chunks handed out in order and recycled with their frame slot.
