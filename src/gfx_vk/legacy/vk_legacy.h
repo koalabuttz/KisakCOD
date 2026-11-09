@@ -248,6 +248,7 @@ struct DeviceStats
     uint32_t pipelinesInFrame;
     uint32_t shaderPairs;     // linked vertex/pixel shader pairs
     uint64_t descriptorSets;
+    uint64_t descriptorSetsReused; // sets bound again instead of allocated and written
     uint64_t constantBytes;   // constant and render-state uniform data written
     uint64_t dynamicRenames;  // DISCARD locks that took a new buffer
     // Where the time goes on the CPU, for the load and first-draw costs.

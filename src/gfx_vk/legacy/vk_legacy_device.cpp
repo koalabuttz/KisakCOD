@@ -201,6 +201,7 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
     // D3DRS_DEPTHBIAS is in units of the depth range; Vulkan's constant factor
     // is in units of the format's smallest step.
     device->depthBiasScale = device->depthFormat == VK_FORMAT_D24_UNORM_S8_UINT ? float(1u << 24) : float(1u << 23);
+    device->dynamicUniforms = !Features(core).staticUniforms;
     device->uniformAlignment = static_cast<uint32_t>(std::max<VkDeviceSize>(16, Limits(core).minUniformBufferOffsetAlignment));
     DefaultStates(*device);
 

@@ -330,6 +330,14 @@ VkCommandBuffer CurrentCommands(Device &device)
 
 // ---- Layouts and pipelines ------------------------------------------------------------
 
+uint32_t BitCount(uint32_t bits)
+{
+    uint32_t count = 0;
+    for (; bits; bits &= bits - 1)
+        ++count;
+    return count;
+}
+
 Layout *GetLayout(Device &device, const LayoutKey &key)
 {
     auto found = device.layouts.find(key);
@@ -340,13 +348,19 @@ Layout *GetLayout(Device &device, const LayoutKey &key)
     layout->key = key;
     const Dispatch &vk = *device.vk;
     std::vector<VkDescriptorSetLayoutBinding> bindings;
+    // Dynamic uniform buffers let a draw reuse a set with new offsets. Some
+    // devices allow as few as 8 in a pipeline layout; past that, plain ones.
+    const uint32_t uniformCount = BitCount(key.uniforms);
+    layout->dynamicUniforms =
+        device.dynamicUniforms && uniformCount <= Limits(device.core).maxDescriptorSetUniformBuffersDynamic;
     for (uint32_t bit = 0; bit < 32; ++bit)
     {
         if (key.uniforms & (1u << bit))
         {
             VkDescriptorSetLayoutBinding binding{};
             binding.binding = bit;
-            binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            binding.descriptorType =
+                layout->dynamicUniforms ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
             binding.descriptorCount = 1;
             binding.stageFlags = bit < 16 ? VK_SHADER_STAGE_VERTEX_BIT : VK_SHADER_STAGE_FRAGMENT_BIT;
             bindings.push_back(binding);
@@ -834,9 +848,13 @@ bool BindTextures(Device &device, const Shader &vs, const Shader &ps, DrawTextur
     return Usable(device);
 }
 
-void WriteUniforms(Device &device, const Shader &vs, const Shader &ps, const DrawTextures &textures,
-                   const Layout &layout, VkDescriptorSet set)
+// Fills this draw's uniform blocks in per-frame memory and binds set 0.
+// With dynamic uniform buffers a pipeline's set is written once per frame and
+// transient buffer, then bound again with this draw's offsets.
+bool BindUniforms(Device &device, const Shader &vs, const Shader &ps, const DrawTextures &textures,
+                  Pipeline &pipeline, VkCommandBuffer cmd)
 {
+    const Layout &layout = *pipeline.layout;
     struct Block
     {
         uint32_t binding;
@@ -894,15 +912,10 @@ void WriteUniforms(Device &device, const Shader &vs, const Shader &ps, const Dra
     }
     const Transient memory = AllocateTransient(device.core, total, device.uniformAlignment);
     if (!memory.data)
-    {
-        Fail(device, "out of per-frame memory for uniforms: %s", LastError(device.core));
-        return;
-    }
+        return Fail(device, "out of per-frame memory for uniforms: %s", LastError(device.core));
     device.stats.constantBytes += total;
     uint8_t *base = static_cast<uint8_t *>(memory.data);
     std::memset(base, 0, total);
-    VkDescriptorBufferInfo infos[2 * ls::kUniformCount];
-    VkWriteDescriptorSet writes[2 * ls::kUniformCount];
     for (uint32_t i = 0; i < count; ++i)
     {
         const Block &block = blocks[i];
@@ -956,35 +969,94 @@ void WriteUniforms(Device &device, const Shader &vs, const Shader &ps, const Dra
             // not used by the game's shaders, read as zero (off).
             break;
         }
-        infos[i] = {memory.buffer, memory.offset + block.offset, block.size};
+    }
+
+    const Dispatch &vk = *device.vk;
+    uint32_t dynamicOffsets[2 * ls::kUniformCount];
+    if (layout.dynamicUniforms)
+    {
+        // Offsets go in binding order, which is the order of blocks.
+        for (uint32_t i = 0; i < count; ++i)
+            dynamicOffsets[i] = static_cast<uint32_t>(memory.offset + blocks[i].offset);
+        if (pipeline.uniformFrame == device.frameSerial && pipeline.uniformBuffer == memory.buffer)
+        {
+            vk.vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout.pipeline, ls::kUniformSet, 1,
+                                       &pipeline.uniformSet, count, dynamicOffsets);
+            ++device.stats.descriptorSetsReused;
+            return true;
+        }
+    }
+    const VkDescriptorSet set = AllocateDescriptorSet(device.core, layout.uniformSet);
+    if (!set)
+        return Fail(device, "cannot allocate a descriptor set: %s", LastError(device.core));
+    VkDescriptorBufferInfo infos[2 * ls::kUniformCount];
+    VkWriteDescriptorSet writes[2 * ls::kUniformCount];
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        const Block &block = blocks[i];
+        // A dynamic buffer's offset is added at bind time.
+        infos[i] = {memory.buffer, layout.dynamicUniforms ? 0 : memory.offset + block.offset, block.size};
         writes[i] = {};
         writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         writes[i].dstSet = set;
         writes[i].dstBinding = block.binding;
         writes[i].descriptorCount = 1;
-        writes[i].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        writes[i].descriptorType =
+            layout.dynamicUniforms ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         writes[i].pBufferInfo = &infos[i];
     }
-    device.vk->vkUpdateDescriptorSets(device.dev, count, writes, 0, nullptr);
+    vk.vkUpdateDescriptorSets(device.dev, count, writes, 0, nullptr);
+    ++device.stats.descriptorSets;
+    if (layout.dynamicUniforms)
+    {
+        pipeline.uniformFrame = device.frameSerial;
+        pipeline.uniformBuffer = memory.buffer;
+        pipeline.uniformSet = set;
+    }
+    vk.vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout.pipeline, ls::kUniformSet, 1, &set,
+                               layout.dynamicUniforms ? count : 0, layout.dynamicUniforms ? dynamicOffsets : nullptr);
+    return true;
 }
 
-void WriteTextures(Device &device, const Shader &vs, const Shader &ps, const DrawTextures &textures,
-                   VkDescriptorSet set)
+// The views and samplers a draw's texture set holds, by LayoutKey::samplers bit.
+void TextureSetContents(Device &device, const Shader &vs, const Shader &ps, const DrawTextures &textures,
+                        Device::TextureSetCache &out)
+{
+    out.mask = textures.mask;
+    for (uint32_t bit = 0; bit < kSamplerSlots; ++bit)
+    {
+        out.views[bit] = VK_NULL_HANDLE;
+        out.samplers[bit] = VK_NULL_HANDLE;
+        if (!(textures.mask & (1u << bit)))
+            continue;
+        const uint32_t slot = SlotForBit(bit);
+        const Texture *bound = textures.bound[slot];
+        const Texture *texture = bound ? bound : NullTexture(device, DeclaredType(vs, ps, bit));
+        out.views[bit] = ImageSampleView(texture->image);
+        out.samplers[bit] = SamplerFor(device, slot, bound);
+    }
+}
+
+bool SameTextureSet(const Device::TextureSetCache &a, const Device::TextureSetCache &b)
+{
+    return a.layout == b.layout && a.mask == b.mask
+        && std::memcmp(a.views, b.views, sizeof(a.views)) == 0
+        && std::memcmp(a.samplers, b.samplers, sizeof(a.samplers)) == 0;
+}
+
+void WriteTextures(Device &device, const Device::TextureSetCache &contents, VkDescriptorSet set)
 {
     VkDescriptorImageInfo images[2 * kSamplerSlots];
     VkWriteDescriptorSet writes[2 * kSamplerSlots];
     uint32_t count = 0;
     for (uint32_t bit = 0; bit < kSamplerSlots; ++bit)
     {
-        if (!(textures.mask & (1u << bit)))
+        if (!(contents.mask & (1u << bit)))
             continue;
-        const uint32_t slot = SlotForBit(bit);
-        const Texture *bound = textures.bound[slot];
-        const Texture *texture = bound ? bound : NullTexture(device, DeclaredType(vs, ps, bit));
         const ls::Stage stage = bit < 16 ? ls::Stage::Pixel : ls::Stage::Vertex;
         const uint32_t sampler = bit < 16 ? bit : bit - 16;
-        images[count] = {VK_NULL_HANDLE, ImageSampleView(texture->image), VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL};
-        images[count + 1] = {SamplerFor(device, slot, bound), VK_NULL_HANDLE, VK_IMAGE_LAYOUT_UNDEFINED};
+        images[count] = {VK_NULL_HANDLE, contents.views[bit], VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL};
+        images[count + 1] = {contents.samplers[bit], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_UNDEFINED};
         writes[count] = {};
         writes[count].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         writes[count].dstSet = set;
@@ -1193,25 +1265,31 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
     }
 
     const Layout &layout = *pipeline->layout;
-    if (layout.uniformSet)
-    {
-        VkDescriptorSet set = AllocateDescriptorSet(device.core, layout.uniformSet);
-        if (!set)
-            return Fail(device, "cannot allocate a descriptor set: %s", LastError(device.core));
-        WriteUniforms(device, *vs, *ps, textures, layout, set);
-        vk.vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout.pipeline, ls::kUniformSet, 1, &set, 0,
-                                   nullptr);
-        ++device.stats.descriptorSets;
-    }
+    if (layout.uniformSet && !BindUniforms(device, *vs, *ps, textures, *pipeline, cmd))
+        return false;
     if (layout.textureSet)
     {
-        VkDescriptorSet set = AllocateDescriptorSet(device.core, layout.textureSet);
-        if (!set)
-            return Fail(device, "cannot allocate a descriptor set: %s", LastError(device.core));
-        WriteTextures(device, *vs, *ps, textures, set);
+        Device::TextureSetCache contents;
+        contents.layout = layout.textureSet;
+        TextureSetContents(device, *vs, *ps, textures, contents);
+        VkDescriptorSet set = VK_NULL_HANDLE;
+        if (device.lastTextureSet.set && SameTextureSet(contents, device.lastTextureSet))
+        {
+            set = device.lastTextureSet.set;
+            ++device.stats.descriptorSetsReused;
+        }
+        else
+        {
+            set = AllocateDescriptorSet(device.core, layout.textureSet);
+            if (!set)
+                return Fail(device, "cannot allocate a descriptor set: %s", LastError(device.core));
+            WriteTextures(device, contents, set);
+            contents.set = set;
+            device.lastTextureSet = contents;
+            ++device.stats.descriptorSets;
+        }
         vk.vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout.pipeline, ls::kTextureSet, 1, &set, 0,
                                    nullptr);
-        ++device.stats.descriptorSets;
     }
     return Usable(device);
 }
@@ -1250,6 +1328,9 @@ bool EnsureFrame(Device &device)
     {
     case FrameResult::Ok:
         device.frameOpen = true;
+        // Cached sets come from an earlier frame's pools.
+        ++device.frameSerial;
+        device.lastTextureSet = Device::TextureSetCache{};
         return true;
     case FrameResult::Skipped:
         device.frameSkipped = true;
@@ -1274,6 +1355,9 @@ void ForgetTexture(Device &device, Texture *texture)
 {
     if (!texture)
         return;
+    // A view handle can be handed out again once the texture is gone, so a
+    // cached set must not be matched by it.
+    device.lastTextureSet = Device::TextureSetCache{};
     for (uint32_t slot = 0; slot < kSamplerSlots; ++slot)
     {
         if (device.textures[slot] == texture)

@@ -194,6 +194,7 @@ struct Layout
 {
     LayoutKey key{};
     VkDescriptorSetLayout uniformSet = VK_NULL_HANDLE; // null when no uniforms
+    bool dynamicUniforms = false;                      // set 0 holds dynamic uniform buffers
     VkDescriptorSetLayout textureSet = VK_NULL_HANDLE; // null when no samplers
     VkPipelineLayout pipeline = VK_NULL_HANDLE;
 };
@@ -203,6 +204,11 @@ struct Pipeline
     VkPipeline pipeline = VK_NULL_HANDLE;
     Layout *layout = nullptr;
     uint32_t bindings = 0; // bit per vertex binding it reads (streams 0-15, kZeroBinding)
+    // With dynamic uniforms: the set 0 written for this frame and transient
+    // buffer. A pipeline fixes the shader pair, so the block sizes match.
+    uint64_t uniformFrame = 0; // Device::frameSerial
+    VkBuffer uniformBuffer = VK_NULL_HANDLE;
+    VkDescriptorSet uniformSet = VK_NULL_HANDLE;
 };
 
 // ---- The device ------------------------------------------------------------------------
@@ -257,6 +263,7 @@ struct Device
     VkFormat depthFormat = VK_FORMAT_UNDEFINED; // the core's depth-stencil format
     float depthBiasScale = 1.0f;                 // D3DRS_DEPTHBIAS to Vulkan's constant factor
     uint32_t uniformAlignment = 16;
+    bool dynamicUniforms = true; // !OptionalFeatures::staticUniforms
 
     VkDescriptorSetLayout emptySet = VK_NULL_HANDLE; // fills set 0 when a pair reads textures only
     std::unordered_map<LayoutKey, std::unique_ptr<Layout>, LayoutKeyHash> layouts;
@@ -291,6 +298,7 @@ struct Device
 
     // Recording.
     bool frameOpen = false;    // core BeginFrame done, Present not yet
+    uint64_t frameSerial = 0;  // counts opened frames; tells cached descriptor sets apart
     bool frameSkipped = false; // BeginFrame skipped: drop drawing until Present
     bool passOpen = false;
     Surface *passTargets[kMaxRenderTargets] = {};
@@ -300,6 +308,18 @@ struct Device
     VkPipeline boundPipeline = VK_NULL_HANDLE;
     DynamicState dynamic{};
     bool dynamicValid = false;
+    // The texture descriptor set the last draw wrote, and what it holds. A
+    // draw that needs the same views and samplers in a set of the same layout
+    // binds it again instead of allocating and writing a new one. Sets come
+    // from the frame's descriptor pool, so it is forgotten when a frame opens.
+    struct TextureSetCache
+    {
+        VkDescriptorSet set = VK_NULL_HANDLE;
+        VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+        uint32_t mask = 0;
+        VkImageView views[kSamplerSlots] = {};
+        VkSampler samplers[kSamplerSlots] = {};
+    } lastTextureSet;
     uint32_t warnedOnce = 0; // bit per one-time warning
 };
 
