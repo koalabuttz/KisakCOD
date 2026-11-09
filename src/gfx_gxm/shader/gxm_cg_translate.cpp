@@ -999,12 +999,18 @@ bool Emitter::Run(std::string &cg, std::string &error)
         {
             const std::string name = "in_v" + std::to_string(input.reg);
             const bool absent = (options_.absentInputs >> input.reg) & 1;
+            const bool bgra = (options_.bgraInputs >> input.reg) & 1;
+            const uint8_t given = input.reg < 16 ? options_.inputComponents[input.reg] : 0;
+            const uint8_t components = bgra || given == 0 || given > 4 ? 4 : given;
+            static const char *const kTypes[] = {"", "float", "float2", "float3", "float4"};
+            static const char *const kFill[] = {"", ", 0.0, 0.0, 1.0", ", 0.0, 1.0", ", 1.0", ""};
             if (!absent)
-                parameters.push_back("float4 " + name);
+                parameters.push_back(std::string(kTypes[components]) + " " + name);
             if (local("v" + std::to_string(input.reg)))
             {
-                const bool bgra = (options_.bgraInputs >> input.reg) & 1;
-                const std::string value = absent ? "float4(0.0, 0.0, 0.0, 1.0)" : name + (bgra ? ".zyxw" : "");
+                std::string value = absent ? "float4(0.0, 0.0, 0.0, 1.0)" : name + (bgra ? ".zyxw" : "");
+                if (!absent && components < 4)
+                    value = "float4(" + name + kFill[components] + ")";
                 prologue += "    float4 v" + std::to_string(input.reg) + " = " + value + ";\n";
                 declared_.erase("v" + std::to_string(input.reg));
             }

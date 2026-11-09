@@ -118,6 +118,10 @@ struct Options
     // Vertex shaders: inputs v<n> no vertex element feeds. D3D9 reads them
     // as (0, 0, 0, 1); the program then has no in_v<n> parameter.
     uint16_t absentInputs = 0;
+    // Vertex shaders: how many components the vertex element feeding v<n>
+    // has (1 to 4; 0 means 4). The parameter is declared that wide and the
+    // rest filled as D3D9 does: y and z 0, w 1.
+    uint8_t inputComponents[16] = {};
     // Pixel shaders: D3DRS_ALPHATESTENABLE's test, done in the program
     // since GXM has none. Always is no test.
     AlphaFunc alphaFunc = AlphaFunc::Always;
