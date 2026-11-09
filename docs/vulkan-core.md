@@ -242,12 +242,13 @@ ThreadSanitizer the D3D9 front's `threads` and `frame_loop` scenes, a probe run
 with draws, read-back and swapchain rebuilds and the Legacy adapter check, all
 with the thread on: no races in the core, the adapter or the front. Those runs
 set `LP_NUM_THREADS=0`. Lavapipe is not built with ThreadSanitizer, which then
-sees only the pthread calls the driver makes and reports a race inside it: one
-of lavapipe's threads destroys a mutex and a condition variable that an
-llvmpipe rasterizer thread locked and signalled (3 of 40 `frame_loop` runs
-here, every run of the adapter check, with or without the record thread).
-Without rasterizer threads lavapipe's other threads and every thread of ours
-are still there.
+sees only the libc calls the driver makes and reports races between the
+driver's own threads: one of lavapipe's threads destroys a mutex and a
+condition variable that an llvmpipe rasterizer thread locked and signalled
+(3 of 40 `frame_loop` runs here), and two rasterizer threads copy to and from
+the same block (every run of the adapter check, with or without the record
+thread). Without rasterizer threads lavapipe's other threads and every thread
+of ours are still there.
 
 The clear-and-present probe has run on both physical GPUs (2026-11-07): the
 Windows PC's RTX 2080 Super and the laptop's Intel ANV, i386 and x86_64 (report
