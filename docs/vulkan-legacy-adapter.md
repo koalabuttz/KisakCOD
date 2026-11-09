@@ -43,13 +43,25 @@ device it replaces.
   drawn with (outputs to inputs), and linked modules are kept per pair.
 * **Uniforms.** The translator turns float constants and the states shaders need
   (alpha test, sampler state, point size) into uniform blocks. For each draw
-  the adapter writes them into one per-frame allocation and a descriptor set
-  points at it. Alpha test is D3D9 state, compared in the pixel shader.
+  the adapter writes them into one per-frame allocation. The blocks are
+  dynamic uniform buffers: each pipeline writes its descriptor set once per
+  frame (and per transient buffer), and later draws bind that set again with
+  their own offsets. A layout with more blocks than the device's
+  `maxDescriptorSetUniformBuffersDynamic` (8 on some drivers), or every layout
+  with `KISAK_VK_UNIFORMS=static`, gets plain uniform buffers and a new set
+  for each draw instead. Alpha test is D3D9 state, compared in the pixel
+  shader.
 * **Textures.** Each sampler slot gets the bound texture's sample view (with the
   format's swizzle: L8, A8, A8L8, X8R8G8B8 and the rest read as D3D9 reads them)
   and a sampler cached per slot and state. Empty slots read a 1x1 black
   texture of the kind the shader declares. Depth textures sample with compare
-  (`LESS_OR_EQUAL`), as D3D9 shadow maps do.
+  (`LESS_OR_EQUAL`), as D3D9 shadow maps do. A draw that needs the same views
+  and samplers as the draw before, in the same layout, binds that draw's
+  texture set again instead of writing a new one. Destroying a texture forgets
+  the remembered set, since its view handle can be handed out again.
+* **Descriptor counts.** `DeviceStats::descriptorSets` counts sets allocated and
+  written, and `descriptorSetsReused` the binds that took an earlier set. The
+  D3D9 front's frame stats line prints both per frame.
 * **Vertices.** Streams bind at their offsets. Shader inputs the declaration
   does not supply read zero from a small buffer, as D3D9 does; a draw from a
   stream with no buffer is skipped with a warning.
@@ -170,8 +182,9 @@ targets wide`):
 
 `KISAK_VK_VERTEX_STRIDE=static`, `KISAK_VK_DEPTH_COMPARE=fixed` and
 `KISAK_VK_RENDER_TARGETS=wide` force each path on any device. The Linux
-lavapipe job runs the adapter and D3D9 front checks with all three set, with
-the validation layer required.
+lavapipe job runs the adapter and D3D9 front checks with all three set, and
+with `KISAK_VK_UNIFORMS=static` (plain uniform buffers, above), with the
+validation layer required.
 
 ## Building and running
 

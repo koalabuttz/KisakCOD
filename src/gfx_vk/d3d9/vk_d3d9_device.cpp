@@ -274,10 +274,11 @@ void Device::Destroy()
             const double gpuAverage = core.frame.samples ? core.frame.totalMs / double(core.frame.samples) : 0.0;
             HostLog(host(),
                     "vulkan d3d9: frame stats: %llu frames; per frame %.0f draws, %.1f passes, %.0f descriptor "
-                    "sets, %.1f KB constants, %.1f dynamic renames, %.2f submissions (%llu flushes in all); "
+                    "sets (%.0f reused), %.1f KB constants, %.1f dynamic renames, %.2f submissions (%llu flushes in all); "
                     "GPU frame %.2f ms average, %.2f min, %.2f max over %llu frames",
                     static_cast<unsigned long long>(core.framesPresented), double(stats.draws) / frames,
                     double(stats.passes) / frames, double(stats.descriptorSets) / frames,
+                    double(stats.descriptorSetsReused) / frames,
                     double(stats.constantBytes) / 1024.0 / frames, double(stats.dynamicRenames) / frames,
                     double(core.submissions) / frames, static_cast<unsigned long long>(core.flushes), gpuAverage,
                     core.frame.samples ? core.frame.minMs : 0.0, core.frame.samples ? core.frame.maxMs : 0.0,

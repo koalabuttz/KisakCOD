@@ -198,6 +198,7 @@ public:
     std::vector<uint8_t> pixels; // B, G, R, A per pixel
     SceneResult *result = nullptr;
     uint32_t presented = 0;
+    bool dynamicUniforms = true;
     std::vector<std::function<void()>> cleanup;
 
     bool Init(std::string &error);
@@ -488,8 +489,19 @@ void Check::TextureLevels()
     lg::SetTexture(device, 0, texture);
     lg::SetSamplerState(device, 0, d3d::SAMP_MIPFILTER, d3d::TEXF_POINT);
     lg::SetPixelShader(device, psTexture);
+    const uint64_t reusedBefore = lg::Stats(device).descriptorSetsReused;
     DrawQuadPx(0, 0, 64, 64, 0.5f, 0xffffffffu);   // level 0
     DrawQuadPx(80, 80, 96, 96, 0.5f, 0xffffffffu); // a quarter of the size: level 2
+    // The second draw needs the same texture set as the first, and with
+    // dynamic uniforms the same uniform set too: bound again, not written again.
+    const uint64_t reused = lg::Stats(device).descriptorSetsReused - reusedBefore;
+    std::printf("legacy_check.sets_reused=%llu\n", static_cast<unsigned long long>(reused));
+    ++result->points;
+    if (reused != (dynamicUniforms ? 2u : 1u))
+    {
+        ++result->mismatched;
+        result->detail += " sets_not_reused";
+    }
     // A partial lock rewrites the top-left quadrant only.
     lg::LockedRect locked;
     const lg::Box box{0, 0, 0, 32, 32, 1};
@@ -1149,10 +1161,12 @@ int Run(const Options &options)
     check.core = gfx_vk::CreateCore(coreDesc, window, coreError, sizeof(coreError));
     if (!check.core)
         return Failed("core", coreError);
+    check.dynamicUniforms = !gfx_vk::Features(check.core).staticUniforms;
     const gfx_vk::DeviceInfo &info = gfx_vk::Device(check.core);
     std::printf("legacy_check.device=%s\n", info.name);
     std::printf("legacy_check.driver=%s %s\n", info.driverName, info.driverInfo);
     std::printf("legacy_check.validation=%s\n", gfx_vk::ValidationEnabled(check.core) ? "on" : "off");
+    std::printf("legacy_check.uniforms=%s\n", check.dynamicUniforms ? "dynamic" : "static");
 
     std::string error;
     if (!check.Init(error))
@@ -1234,10 +1248,11 @@ int Run(const Options &options)
     const lg::DeviceStats stats = lg::Stats(check.device);
     std::printf("legacy_check.presented=%u\n", check.presented);
     std::printf("legacy_check.stats=draws %llu clears %llu passes %llu pipelines %u in_frame %u shader_pairs %u "
-                "descriptor_sets %llu constant_bytes %llu dynamic_renames %llu\n",
+                "descriptor_sets %llu reused %llu constant_bytes %llu dynamic_renames %llu\n",
                 static_cast<unsigned long long>(stats.draws), static_cast<unsigned long long>(stats.clears),
                 static_cast<unsigned long long>(stats.passes), stats.pipelines, stats.pipelinesInFrame,
                 stats.shaderPairs, static_cast<unsigned long long>(stats.descriptorSets),
+                static_cast<unsigned long long>(stats.descriptorSetsReused),
                 static_cast<unsigned long long>(stats.constantBytes),
                 static_cast<unsigned long long>(stats.dynamicRenames));
     check.Destroy();

@@ -2564,10 +2564,12 @@ jobs:
           # The paths the adapter takes on MoltenVK (docs/vulkan-legacy-adapter.md):
           # strides baked into pipelines, depth compare fixed per pipeline and
           # 16-bit packed render targets made as B8G8R8A8, here with the
-          # validation layer required.
+          # validation layer required. Also plain uniform buffers, the path a
+          # layout takes past the device's dynamic uniform buffer limit.
           KISAK_VK_VERTEX_STRIDE: static
           KISAK_VK_DEPTH_COMPARE: fixed
           KISAK_VK_RENDER_TARGETS: wide
+          KISAK_VK_UNIFORMS: static
         run: |
           set -euo pipefail
           python3 -u scripts/tests/test_vulkan_legacy_adapter.py \

@@ -261,6 +261,10 @@ struct OptionalFeatures
     // MoltenVK on Intel and AMD Macs (and macOS VMs) lacks them. True forces
     // that on every device (KISAK_VK_RENDER_TARGETS=wide), for testing.
     bool forceWideRenderTargets;
+    // The Legacy adapter writes a new uniform descriptor set for every draw
+    // instead of binding its pipeline's set again with dynamic offsets
+    // (KISAK_VK_UNIFORMS=static), to compare the two or rule one out.
+    bool staticUniforms;
 };
 const OptionalFeatures &Features(const Core *core);
 // Whether images of this format with optimal tiling support these features.
