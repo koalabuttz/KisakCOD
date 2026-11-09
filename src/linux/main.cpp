@@ -705,12 +705,14 @@ void Sys_Quit()
 
 void Sys_Print(const char *msg)
 {
-#ifdef KISAK_LINUX_GAME_CLIENT
+#if defined(KISAK_LINUX_GAME_CLIENT) && !defined(__vita__)
     // A client build's Com_PrintMessage already copies every message to stderr
     // (the Windows client's debug console). Writing it to stdout as well would
     // show each line twice in a terminal.
     (void)msg;
 #else
+    // The Vita client has no stderr: its console goes to console-mp.log
+    // through the console buffer, as the server's does.
     Conbuf_AppendTextInMainThread(msg);
 #endif
 }

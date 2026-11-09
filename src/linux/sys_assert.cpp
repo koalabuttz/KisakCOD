@@ -5,6 +5,10 @@
 #include <qcommon/qcommon.h>
 #include <universal/assertive.h>
 
+#if defined(__vita__)
+#include <vita/vita_platform.h> // Vita_LogMemoryAtError
+#endif
+
 #include <pthread.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -126,6 +130,10 @@ void MyAssertHandler(const char *filename, int line, int type, const char *fmt, 
         AssertCallback(message);
 
     fflush(stdout);
+#if defined(__vita__)
+    // Which pool ran out, if any, before the dump (vita_stats.cpp).
+    Vita_LogMemoryAtError();
+#endif
 
     // type is non-zero for "fatal" assertions in the engine's convention; every
     // assertion is treated as fatal here because continuing past one is how the
