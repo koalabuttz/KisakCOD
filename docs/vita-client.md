@@ -11,7 +11,7 @@ GXM probe ran at 60 fps, the device runs the menu loop without drawing, and
 shaders are translated and compiled on the Vita.**
 - The whole client compiles, links and packs into a `.vpk`: client, cgame, UI, sound, renderer and its own listen server.
 - Stage 1 had no graphics back end, so the client stopped at the renderer through `Sys_Error`. Stage 2 replaces that: the renderer gets the D3D9 front on the GXM back end ("Graphics" below), which does everything but draw.
-- Sound links the OpenAL stand-in ("no device").
+- Sound (part of stage 3) is built and tested on the host, and not run on the Vita yet: see "Sound" below.
 
 **Runs on David's Vita (2026-11-09):**
 - Run 1 reached the renderer, but its log was empty. A game client's `Sys_Print` was silent: on Linux `Com_PrintMessage` copies lines to stderr, which the Vita lacks. It then aborted on an assert, because `R_SetWndParms` read an empty display-mode list after the "no device" answer. Both are fixed.
@@ -23,7 +23,7 @@ shaders are translated and compiled on the Vita.**
 
 As for the server (see [vita.md](vita.md)), plus two header directories:
 - **DXVK Native's headers** supply the D3D9 declarations: the types and interface layouts only. No DXVK code is built or linked. The pinned 2.7.1 headers come from `scripts/tests/run_native_d3d9_boundary_checks.py --stage-dxvk-headers`, as in the Linux client jobs.
-- **OpenAL's `AL/al.h`** comes from libopenal-dev or the OpenAL Soft source.
+- **OpenAL's headers** (`AL/al.h`, `AL/alc.h`, `AL/efx.h`) come from libopenal-dev or the OpenAL Soft source, for the declarations only. No OpenAL library is linked ("Sound" below).
 
 ```sh
 export VITASDK="$(scripts/ci/install-vitasdk.sh "$HOME/vitasdk-pinned")"
@@ -39,7 +39,8 @@ cmake --build build-vita-mp --target KisakCOD-mp-vpk
 Hosted CI: the Linux workflow's **PS Vita multiplayer client** job builds Debug
 and RelWithDebInfo. It runs the server's float checks (no fused multiply-add, no
 NEON float) and link checks (weak pthread references, the main stack size), and
-uploads the RelWithDebInfo `.vpk`.
+uploads the RelWithDebInfo `.vpk`. It also runs the sound's host test
+(`scripts/tests/test_vita_sound.py`).
 
 ## Running
 
@@ -82,7 +83,7 @@ Around them:
 | Graphics device | `src/vita/client/vita_d3d9.cpp` | The D3D9 front's host: one 960 x 544 mode, one monitor, the log |
 | D3D9 front | `src/gfx_vk/d3d9` | The Vulkan work's IDirect3D9, unchanged, over the seam in `vk_d3d9_backend.h` |
 | GXM back end | `src/gfx_gxm` | The Legacy API on sceGxm (`legacy/gxm_legacy.cpp`), the screen, GPU memory |
-| Sound | `tests/linux_mp_client/openal_unavailable.cpp` | OpenAL stand-in until the Vita has an OpenAL |
+| Sound | `src/vita/client/sound/vita_al.cpp`, `vita_al_output.cpp` | The OpenAL calls the engine makes, on a small mixer, played through SceAudioOut ("Sound") |
 | Linux client pieces | `msvc_rand.cpp`, `mp_client_unavailable.cpp`, `texture_memory.cpp`, the Material_Sort span | As on Linux |
 
 `deps/binklib/radbase.h` gains a `__vita__` branch (the Linux one, with the
@@ -104,6 +105,66 @@ Other large static arrays in the client:
 - `clients` 1.7 MB, `g_streamState` 1.7 MB.
 
 The heap and the engine reservations are the server's for now: a 64 MB heap, the 128 MB zone arena and the hunks. Stage 1's run measures what is left. Textures will go to the GPU's own memory (CDRAM, about 112 MB), not main memory.
+
+## Sound (stage 3)
+
+The engine's sound driver (`src/sound/snd_openal.cpp`,
+`snd_driver_openal.cpp`) talks OpenAL 1.1 with a few EFX calls, 44 entry
+points in all. The Vita client answers them itself:
+
+- `src/vita/client/sound/vita_al.cpp` is a small OpenAL on an integer mixer.
+  It uses no Vita call and no engine header, so
+  `scripts/tests/test_vita_sound.py` builds it on the host under
+  AddressSanitizer, UBSan and ThreadSanitizer.
+- `src/vita/client/sound/vita_al_output.cpp` opens a SceAudioOut port and runs
+  the thread that pulls the mixer.
+
+OpenAL Soft was the other choice. Its float mixer, HRTF and reverb cost more
+of the Vita's CPU than sound should, and it would be one more dependency to
+build for the Vita. The engine needs little of it.
+
+What the small OpenAL keeps:
+- sources with one buffer or a queue of buffers, the four source states,
+  looping, gain, pitch and the play offset;
+- the buffer and queue rules the engine depends on: a buffer in use cannot be
+  deleted, a playing source cannot change its buffer, only played buffers
+  leave a queue;
+- mono and stereo buffers of 8 or 16 bits at any rate, resampled with linear
+  interpolation.
+
+What it leaves out:
+- **Distance models.** The engine sets `AL_NONE` and puts its own falloff
+  into the gain.
+- **The listener.** The engine keeps it at the origin and hands every
+  position in listener space, so a position only pans, left to right with
+  equal power.
+- **Reverb and filters.** Effects, filters and slots get names and nothing
+  else, so there is no reverb.
+
+The mixer adds every playing source into 32-bit sums and clips to 16 bits.
+Gains are Q15 and move toward their targets every 64 frames, so a volume or
+position change does not click. One lock guards all of it; the mixer holds it
+for one update.
+
+**Output.** The engine asks for 11025, 22050 or 44100 Hz (`snd_khz`, default
+44). SceAudioOut's main ports play 48000 Hz only, so the client opens the one
+background-music port, which takes the engine's rates, and mixes at the rate
+asked for. If that port does not open, it takes a main port and mixes at
+48000 Hz. One update is 1024 frames at 44100 Hz (23 ms), and
+`sceAudioOutOutput` blocks until the port has taken it, which paces the
+thread.
+
+**In the log** (`console-mp.log`): `vita sound: port ..., ... Hz stereo, ...
+frames per update` when sound starts, then after ten seconds and once a
+minute `vita sound: ... updates, mixing ... us each on average and ... at
+most, ... sources at most, ... clipped frames, ... refused updates`.
+
+Not run on the Vita yet. Known limits:
+- The engine decodes streamed sounds (music) on its main thread, 8192 frames
+  at a time. On the Vita that may show as a frame hitch; the console run will
+  tell.
+- The background-music port is the one the system's own music player takes
+  over when the user plays music from the home screen.
 
 ## Graphics (stage 2)
 

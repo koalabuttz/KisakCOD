@@ -1004,9 +1004,10 @@ jobs:
     # Opt-in PS Vita client, stage 1 (docs/vita-client.md): build KisakCOD-mp
     # with Clang against the pinned VitaSDK and pack its .vpk. The D3D9
     # declarations come from DXVK Native's headers (nothing of DXVK is built)
-    # and <AL/al.h> from libopenal-dev; the client links no D3D9 or OpenAL
-    # library. The same float and link checks as the Vita server. Nothing runs:
-    # start-up is checked on David's Vita.
+    # and the OpenAL ones from libopenal-dev; the client links no D3D9 or OpenAL
+    # library. The same float and link checks as the Vita server. The client
+    # does not run here: start-up is checked on David's Vita. Its small OpenAL
+    # does, as a host test.
     name: PS Vita multiplayer client ${{ matrix.config }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -1039,7 +1040,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # libopenal-dev only for <AL/al.h>, copied below on its own.
+          # libopenal-dev only for its headers, copied below on their own.
           scripts/ci/apt-install.sh cmake ninja-build clang python3 ccache libopenal-dev
           mkdir -p "$RUNNER_TEMP/al-include"
           cp -r /usr/include/AL "$RUNNER_TEMP/al-include/"
@@ -1094,6 +1095,15 @@ jobs:
         run: |
           set -euo pipefail
           scripts/ci/use-ccache.sh
+
+      - name: Check the client's sound on the host
+        # The small OpenAL makes no Vita call: the host compiler builds it
+        # with sanitizers and runs its checks.
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/tests/test_vita_sound.py --al-include "$RUNNER_TEMP/al-include"
 
       - name: Configure PS Vita client ${{ matrix.config }}
         timeout-minutes: 15
