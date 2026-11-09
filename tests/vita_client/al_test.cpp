@@ -10,6 +10,7 @@
 #include <AL/efx.h>
 
 #include <pthread.h>
+#include <sched.h>
 
 #include <atomic>
 #include <cstdio>
@@ -730,20 +731,44 @@ void GainsAndClipping()
 
 // The mixer on its own thread against a busy engine thread: what the Vita
 // runs. The sanitizers judge it.
+//
+// Neither thread may run away from the other. The console's output thread
+// waits in sceAudioOutOutput after every update. A mixer that comes straight
+// back for the lock instead holds it nearly all the time, a pthread mutex
+// promises a waiting thread nothing, and the engine thread then gets through
+// only as often as the machine happens to wake it in time: this test took
+// 0.1 to 12 seconds on one machine and more than five minutes on a hosted
+// runner. So the mixer waits for the engine thread to finish a round before
+// it mixes again, and the engine thread waits for an update every few rounds,
+// which also keeps a single processor from running every round before the
+// mixer has started.
+//
+// The flag and the counters are relaxed, so that they order nothing for
+// ThreadSanitizer: between these two threads only the mixer's lock may.
 std::atomic<bool> g_stopMixing{false};
+std::atomic<unsigned> g_engineRounds{0};
+std::atomic<unsigned> g_mixerUpdates{0};
 
 void *MixThread(void *)
 {
     std::vector<int16_t> out(512 * 2);
-    while (!g_stopMixing.load())
+    while (!g_stopMixing.load(std::memory_order_relaxed))
+    {
+        // Read before mixing: a round that ends during the update counts.
+        const unsigned rounds = g_engineRounds.load(std::memory_order_relaxed);
         Mix(out.data(), 512);
+        g_mixerUpdates.fetch_add(1, std::memory_order_relaxed);
+        while (g_engineRounds.load(std::memory_order_relaxed) == rounds &&
+               !g_stopMixing.load(std::memory_order_relaxed))
+            sched_yield();
+    }
     return nullptr;
 }
 
 void Threads()
 {
     Session session(22050);
-    g_stopMixing = false;
+    g_stopMixing.store(false, std::memory_order_relaxed);
     pthread_t thread;
     EXPECT(pthread_create(&thread, nullptr, MixThread, nullptr) == 0);
 
@@ -755,6 +780,7 @@ void Threads()
         seed = seed * 1103515245u + 12345u;
         return (seed >> 16) & 0x7FFFu;
     };
+    unsigned updates = g_mixerUpdates.load(std::memory_order_relaxed);
     for (int round = 0; round < 4000; ++round)
     {
         const int index = static_cast<int>(next() % 16);
@@ -799,11 +825,20 @@ void Threads()
             break;
         }
         }
+        g_engineRounds.fetch_add(1, std::memory_order_relaxed);
+        if (round % 8 == 7)
+        {
+            // At least one update for every eight rounds.
+            unsigned now;
+            while ((now = g_mixerUpdates.load(std::memory_order_relaxed)) == updates)
+                sched_yield();
+            updates = now;
+        }
     }
     EXPECT(alGetError() == AL_NO_ERROR);
     const kisak::vita_al::Stats stats = kisak::vita_al::TakeStats();
     EXPECT(stats.peakVoices > 0);
-    g_stopMixing = true;
+    g_stopMixing.store(true, std::memory_order_relaxed);
     pthread_join(thread, nullptr);
 }
 } // namespace
