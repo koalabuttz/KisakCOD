@@ -95,40 +95,20 @@ Device::~Device()
 bool Device::Init()
 {
     const Host &h = host();
-    if (!h.windowSystem || !h.windowSystem(h.user, window_, windowSystem_))
-    {
-        HostLog(h, "vulkan d3d9: CreateDevice: the host has no Vulkan window system for this window");
-        return false;
-    }
-
-    CoreDesc desc;
-    desc.validation = h.validation;
-    desc.deviceIndex = h.deviceIndex;
+    BackendDesc desc;
+    desc.host = &h;
+    desc.window = window_;
     desc.vsync = params_.PresentationInterval != D3DPRESENT_INTERVAL_IMMEDIATE;
-    desc.pipelineCachePath = h.pipelineCachePath;
-    desc.log = h.log;
-    desc.logUser = h.user;
-    char error[512] = {};
-    core_ = CreateCore(desc, windowSystem_, error, sizeof(error));
-    if (!core_)
+    desc.width = params_.BackBufferWidth;
+    desc.height = params_.BackBufferHeight;
+    std::string error;
+    backend_ = OpenBackend(desc, error);
+    if (!backend_)
     {
-        HostLog(h, "vulkan d3d9: CreateDevice: %s", error);
+        HostLog(h, "vulkan d3d9: CreateDevice: %s", error.c_str());
         return false;
     }
-
-    lg::DeviceDesc legacyDesc;
-    legacyDesc.width = params_.BackBufferWidth;
-    legacyDesc.height = params_.BackBufferHeight;
-    legacyDesc.log = h.log;
-    legacyDesc.logUser = h.user;
-    legacyDesc.shaderCachePath = h.shaderCachePath;
-    std::string legacyError;
-    legacy_ = lg::CreateDevice(core_, legacyDesc, legacyError);
-    if (!legacy_)
-    {
-        HostLog(h, "vulkan d3d9: CreateDevice: %s", legacyError.c_str());
-        return false;
-    }
+    legacy_ = LegacyDevice(backend_);
 
     backBuffer_.reset(new Surface(this, lg::BackBuffer(legacy_)));
     swapChain_.reset(new SwapChain(this));
@@ -147,8 +127,7 @@ bool Device::Init()
     if (params_.EnableAutoDepthStencil)
         HostLog(h, "vulkan d3d9: CreateDevice: no automatic depth-stencil surface (the renderer creates its own)");
 
-    const DeviceInfo &info = gfx_vk::Device(core_);
-    HostLog(h, "vulkan d3d9: device %s, back buffer %ux%u, vsync %s", info.name, width, height,
+    HostLog(h, "vulkan d3d9: device %s, back buffer %ux%u, vsync %s", BackendDeviceName(backend_), width, height,
             desc.vsync ? "on" : "off");
     DefaultState();
     return true;
@@ -266,37 +245,11 @@ void Device::Destroy()
                 stats.pipelines, stats.pipelineMicros / 1000.0, static_cast<unsigned long long>(stats.textureUploads),
                 stats.uploadBytes / (1024.0 * 1024.0), stats.uploadMicros / 1000.0,
                 static_cast<unsigned long long>(stats.textureReadbacks));
-        // What each frame cost, for comparing frame rates: the work recorded
-        // per presented frame, and the GPU's time from a frame's first
-        // command to its last (idle gaps between its submissions included).
-        if (core_)
-        {
-            const CoreStats &core = Stats(core_);
-            const double frames = core.framesPresented ? double(core.framesPresented) : 1.0;
-            const double gpuAverage = core.frame.samples ? core.frame.totalMs / double(core.frame.samples) : 0.0;
-            HostLog(host(),
-                    "vulkan d3d9: frame stats: %llu frames; per frame %.0f draws, %.1f passes, %.0f descriptor "
-                    "sets (%.0f reused), %.1f KB constants, %.1f dynamic renames, %.2f submissions (%llu flushes in all); "
-                    "GPU frame %.2f ms average, %.2f min, %.2f max over %llu frames",
-                    static_cast<unsigned long long>(core.framesPresented), double(stats.draws) / frames,
-                    double(stats.passes) / frames, double(stats.descriptorSets) / frames,
-                    double(stats.descriptorSetsReused) / frames,
-                    double(stats.constantBytes) / 1024.0 / frames, double(stats.dynamicRenames) / frames,
-                    double(core.submissions) / frames, static_cast<unsigned long long>(core.flushes), gpuAverage,
-                    core.frame.samples ? core.frame.minMs : 0.0, core.frame.samples ? core.frame.maxMs : 0.0,
-                    static_cast<unsigned long long>(core.frame.samples));
-        }
-        lg::DestroyDevice(legacy_);
-        legacy_ = nullptr;
     }
-    if (core_)
-    {
-        CoreStats final{};
-        DestroyCore(core_, &final);
-        core_ = nullptr;
-        if (parent_ && host().coreDestroyed)
-            host().coreDestroyed(host().user, final);
-    }
+    // The back end's statistics, then the Legacy device and the GPU go.
+    CloseBackend(backend_);
+    backend_ = nullptr;
+    legacy_ = nullptr;
     if (parent_)
     {
         parent_->Release();
@@ -306,10 +259,7 @@ void Device::Destroy()
 
 void Device::DetachWindow()
 {
-    if (legacy_)
-        lg::DetachWindow(legacy_);
-    else if (core_)
-        gfx_vk::DetachWindow(core_);
+    DetachBackendWindow(backend_);
 }
 
 DeviceCounters Device::counters() const
@@ -317,8 +267,7 @@ DeviceCounters Device::counters() const
     const FrontLock lock;
     DeviceCounters out = counters_;
     out.liveObjects = objects_;
-    out.validationErrors = core_ ? Stats(core_).validationErrors : 0;
-    out.validation = core_ && ValidationEnabled(core_);
+    BackendCounters(backend_, out);
     return out;
 }
 
@@ -344,14 +293,8 @@ HRESULT STDMETHODCALLTYPE Device::TestCooperativeLevel()
 UINT STDMETHODCALLTYPE Device::GetAvailableTextureMem()
 {
     const FrontLock lock;
-    // Device-local memory, as DXVK reports it, kept below 4 GB.
-    VkPhysicalDeviceMemoryProperties memory{};
-    Functions(core_).vkGetPhysicalDeviceMemoryProperties(PhysicalDeviceHandle(core_), &memory);
-    uint64_t bytes = 0;
-    for (uint32_t i = 0; i < memory.memoryHeapCount; ++i)
-        if (memory.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT)
-            bytes += memory.memoryHeaps[i].size;
-    return static_cast<UINT>(std::min<uint64_t>(bytes, 0xfff00000u));
+    // The back end's GPU memory, kept below 4 GB.
+    return static_cast<UINT>(std::min<uint64_t>(BackendTextureMemory(backend_), 0xfff00000u));
 }
 
 HRESULT STDMETHODCALLTYPE Device::GetDirect3D(IDirect3D9 **d3d)
@@ -435,10 +378,9 @@ HRESULT STDMETHODCALLTYPE Device::Reset(D3DPRESENT_PARAMETERS *params)
         HostLog(host(), "vulkan d3d9: Reset: the presentation interval changes only with a new device");
 
     uint32_t width = params->BackBufferWidth, height = params->BackBufferHeight;
-    if ((!width || !height) && windowSystem_.getPixelSize)
+    uint32_t windowWidth = 0, windowHeight = 0;
+    if ((!width || !height) && BackendWindowSize(backend_, windowWidth, windowHeight))
     {
-        uint32_t windowWidth = 0, windowHeight = 0;
-        windowSystem_.getPixelSize(windowSystem_.user, &windowWidth, &windowHeight);
         width = width ? width : windowWidth;
         height = height ? height : windowHeight;
     }

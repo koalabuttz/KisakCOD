@@ -16,6 +16,7 @@
 // FrontLock, as DXVK holds its device lock.
 
 #include "vk_d3d9.h"
+#include "vk_d3d9_backend.h"
 
 #include <gfx_vk/legacy/vk_legacy.h>
 
@@ -437,7 +438,8 @@ class Device final : public IDirect3DDevice9
 public:
     Device(Direct3D *parent, const D3DPRESENT_PARAMETERS &params, D3D9Window window, DWORD behavior);
     ~Device();
-    // Creates the core and the adapter device; false with the reason logged.
+    // Opens the back end (the GPU and the adapter device); false with the
+    // reason logged.
     bool Init();
 
     // The device's count, and the objects that keep it alive.
@@ -629,9 +631,8 @@ private:
     Direct3D *parent_;
     D3D9Window window_;
     DWORD behavior_;
-    WindowSystem windowSystem_{};
-    Core *core_ = nullptr;
-    lg::Device *legacy_ = nullptr;
+    Backend *backend_ = nullptr; // the GPU (vk_d3d9_backend.h)
+    lg::Device *legacy_ = nullptr; // the back end's Legacy device
     std::unique_ptr<Surface> backBuffer_;
     std::unique_ptr<SwapChain> swapChain_;
     D3DGAMMARAMP gamma_{};

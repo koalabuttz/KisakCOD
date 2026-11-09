@@ -74,6 +74,7 @@ endif()
 # The D3D9 front, compiled against the same D3D9 declarations as the renderer.
 if(WIN32 OR TARGET kisak_linux_native_d3d9)
     set(vk_d3d9_sources
+        "${SRC_DIR}/gfx_vk/d3d9/vk_d3d9_backend_vulkan.cpp"
         "${SRC_DIR}/gfx_vk/d3d9/vk_d3d9_device.cpp"
         "${SRC_DIR}/gfx_vk/d3d9/vk_d3d9_direct3d.cpp"
         "${SRC_DIR}/gfx_vk/d3d9/vk_d3d9_resources.cpp")
