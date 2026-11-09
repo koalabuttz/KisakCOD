@@ -1115,6 +1115,7 @@ PresentResult Present(Device *device)
         return PresentResult::Failed;
     if (device->detached)
         return PresentResult::Skipped;
+    DiagnoseFrame(*device);
     EndScene(*device);
     const bool shown = gxm::Present();
     FrameDone(*device);

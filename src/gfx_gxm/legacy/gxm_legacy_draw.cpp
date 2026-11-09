@@ -252,7 +252,15 @@ struct DrawState
     uint32_t drawFailures = 0;
     uint64_t copies = 0;
     uint32_t variantsMade = 0, variantFailures = 0;
+
+    // Run diagnostics (see DiagnoseFrame): draws of this frame still to log.
+    uint32_t diagnosedDraws = 0;
 };
+
+// Run diagnostics (DiagnoseDraw, DiagnoseFrame): which frames.
+constexpr uint64_t kDiagnosedFrames[] = {300, 1200};
+constexpr uint64_t kReadBackFrames[] = {300, 700, 1200};
+constexpr uint64_t kTestRectFirst = 600, kTestRectLast = 779;
 
 namespace
 {
@@ -733,6 +741,8 @@ void ApplyFixedState(Device &device, const FixedState &state)
         return;
     SceGxmContext *context = Gxm();
     const float *v = state.viewport;
+    // Said outright rather than trusting the context's default.
+    sceGxmSetViewportEnable(context, SCE_GXM_VIEWPORT_ENABLED);
     sceGxmSetViewport(context, v[0], v[1], v[2], v[3], v[4], v[5]);
     sceGxmSetRegionClip(context, SCE_GXM_REGION_CLIP_OUTSIDE, state.clip[0], state.clip[1], state.clip[2],
                         state.clip[3]);
@@ -1512,6 +1522,9 @@ void FrameDone(Device &device)
     DrawState &d = *device.draw;
     ++d.frame;
     d.ringUsed = 0;
+    for (const uint64_t frame : kDiagnosedFrames)
+        if (d.frame == frame)
+            d.diagnosedDraws = 8;
     // Work recorded in frame F was queued before Present F + 1, and after
     // Present P the frames before P - 1 have been shown.
     size_t done = 0;
@@ -1658,6 +1671,96 @@ void ClearTargets(Device &device, uint32_t rectCount, const Rect *rects, uint32_
         sceGxmDraw(context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP, SCE_GXM_INDEX_FORMAT_U16, d.sequential, 4);
     }
 }
+
+namespace
+{
+// ---- Run diagnostics -------------------------------------------------------------------------
+//
+// Stage 2d's first runs drew a black screen with no errors. These log what a
+// few draws ask for and what lands in the back buffer, so a run tells a
+// display problem from a draw-state one:
+// - frames 300 and 1200: the first 8 draws' state, the first vertex's
+//   position and the first vertex shader constants;
+// - frames 300, 700 and 1200: what the back buffer holds before it is shown;
+// - frames 600 to 779: a magenta rectangle (the top-left quarter) drawn
+//   through the clear path after the game's frame, so it shows on screen
+//   for three seconds and in frame 700's count.
+
+
+void DiagnoseDraw(Device &device, d3d::PrimitiveType type, uint32_t indexCount, const void *indexData, bool index32,
+                  int32_t baseVertex, const void *upVertices, uint32_t upStride, const FixedState &state,
+                  const Variant &vertex, const Variant &pixel, const SceGxmBlendInfo *blend)
+{
+    const DrawState &d = *device.draw;
+    const uint32_t *rs = device.renderStates;
+    const Viewport &vp = device.viewport;
+    const Surface *target = device.renderTargets[0];
+    const char *targetKind = !target ? "none" : target->kind == SurfaceKind::BackBuffer ? "back buffer"
+                                              : target->kind == SurfaceKind::FrontBuffer ? "front buffer"
+                                                                                         : "texture";
+    Log(device,
+        "diag frame %llu draw: type %u, %u indices%s; target %s, scene %ux%u%s; viewport %u,%u %ux%u z %.2f-%.2f "
+        "-> gxm %.1f %.1f %.1f %.1f %.2f %.2f; clip %u,%u-%u,%u; cull %u (d3d %u); z %u func %u write %u; stencil %u",
+        (unsigned long long)d.frame, unsigned(type), indexCount, indexData ? (index32 ? " (32-bit)" : " (16-bit)") : "",
+        targetKind, d.sceneWidth, d.sceneHeight, d.sceneDepth ? " with depth" : "", vp.x, vp.y, vp.width, vp.height,
+        vp.minZ, vp.maxZ, state.viewport[0], state.viewport[1], state.viewport[2], state.viewport[3],
+        state.viewport[4], state.viewport[5], state.clip[0], state.clip[1], state.clip[2], state.clip[3],
+        unsigned(state.cull), rs[d3d::RS_CULLMODE], rs[d3d::RS_ZENABLE], rs[d3d::RS_ZFUNC], rs[d3d::RS_ZWRITEENABLE],
+        rs[d3d::RS_STENCILENABLE]);
+    Log(device,
+        "diag frame %llu draw: blend %s (d3d on %u, src %u dst %u op %u), write mask d3d 0x%x gxm 0x%x; alpha test %u "
+        "func %u ref %u; vs %u-%u constants %u (parameter %s, uniforms %s), ps %u-%u constants %u (parameter %s)",
+        (unsigned long long)d.frame, blend ? "on" : "off", rs[d3d::RS_ALPHABLENDENABLE], rs[d3d::RS_SRCBLEND],
+        rs[d3d::RS_DESTBLEND], rs[d3d::RS_BLENDOP], rs[d3d::RS_COLORWRITEENABLE], blend ? unsigned(blend->colorMask) : 0xfu,
+        rs[d3d::RS_ALPHATESTENABLE], rs[d3d::RS_ALPHAFUNC], rs[d3d::RS_ALPHAREF],
+        unsigned(device.vertexShader->parsed.reflection.major), unsigned(device.vertexShader->parsed.reflection.minor),
+        unsigned(device.vertexShader->parsed.reflection.floatConstants), vertex.constants ? "found" : "MISSING",
+        vertex.uniforms ? "yes" : "no", unsigned(device.pixelShader->parsed.reflection.major),
+        unsigned(device.pixelShader->parsed.reflection.minor),
+        unsigned(device.pixelShader->parsed.reflection.floatConstants), pixel.constants ? "found" : "MISSING");
+    const float *c = device.vsConstants.data();
+    Log(device,
+        "diag frame %llu draw: vs c0 %g %g %g %g, c1 %g %g %g %g, c2 %g %g %g %g, c3 %g %g %g %g",
+        (unsigned long long)d.frame, c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9], c[10], c[11], c[12],
+        c[13], c[14], c[15]);
+    // The first vertex's position element, as the draw reads it.
+    const VertexElement *position = nullptr;
+    for (const VertexElement &e : device.decl->elements)
+        if (e.usage == d3d::DECLUSAGE_POSITION && e.usageIndex == 0)
+            position = &e;
+    if (!position)
+    {
+        Log(device, "diag frame %llu draw: the declaration has no POSITION0", (unsigned long long)d.frame);
+        return;
+    }
+    uint32_t first = 0;
+    if (indexData)
+        first = index32 ? *static_cast<const uint32_t *>(indexData) : *static_cast<const uint16_t *>(indexData);
+    const uint8_t *base = nullptr;
+    uint32_t stride = 0;
+    if (upVertices && position->stream == 0)
+    {
+        base = static_cast<const uint8_t *>(upVertices);
+        stride = upStride;
+    }
+    else if (const VertexBuffer *vb = device.streams[position->stream].buffer; vb && vb->memory.data)
+    {
+        stride = device.streams[position->stream].stride;
+        base = vb->memory.data + device.streams[position->stream].offset + int64_t(baseVertex) * stride;
+    }
+    if (!base)
+        return;
+    const uint8_t *at = base + size_t(first) * stride + position->offset;
+    float p[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+    const uint32_t n = position->type == d3d::DECLTYPE_FLOAT2   ? 2
+                       : position->type == d3d::DECLTYPE_FLOAT3 ? 3
+                       : position->type == d3d::DECLTYPE_FLOAT4 ? 4
+                                                                : 0;
+    std::memcpy(p, at, n * sizeof(float));
+    Log(device, "diag frame %llu draw: vertex %u position (type %u, stride %u) %g %g %g %g", (unsigned long long)d.frame,
+        first, unsigned(position->type), stride, p[0], p[1], p[2], p[3]);
+}
+} // namespace
 
 void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t startIndex, uint32_t primitiveCount,
           bool indexed, const void *upVertices, uint32_t upStride)
@@ -1820,6 +1923,12 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     BindTextures(device, *pixel, pixelUniforms);
     for (uint8_t i = 0; i < vertexProgram->streamCount; ++i)
         sceGxmSetVertexStream(context, i, streamData[i]);
+    if (d.diagnosedDraws)
+    {
+        --d.diagnosedDraws;
+        DiagnoseDraw(device, type, indexCount, indexed ? indexData : nullptr, index32, baseVertex, upVertices,
+                     upStride, state, *vertex, *pixel, blended ? &blend : nullptr);
+    }
     const int result = sceGxmDraw(context, primitive, index32 ? SCE_GXM_INDEX_FORMAT_U32 : SCE_GXM_INDEX_FORMAT_U16,
                                   indexData, indexCount);
     if (result < 0)
@@ -1939,6 +2048,66 @@ void Copy(Device &device, Surface *src, const Rect *srcRect, Surface *dst, const
     sceGxmSetVertexStream(context, 0, quad);
     sceGxmDraw(context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP, SCE_GXM_INDEX_FORMAT_U16, d.sequential, 4);
     ++d.copies;
+}
+
+void DiagnoseFrame(Device &device)
+{
+    DrawState *d = device.draw;
+    if (!d)
+        return;
+    // The frame being drawn is d->frame (FrameDone counts it after Present).
+    if (d->frame >= kTestRectFirst && d->frame <= kTestRectLast)
+    {
+        // Draw into the back buffer whatever the game left bound.
+        Surface *saved = device.renderTargets[0];
+        const Viewport savedViewport = device.viewport;
+        const uint32_t savedScissor = device.renderStates[d3d::RS_SCISSORTESTENABLE];
+        device.renderTargets[0] = &device.backBuffer;
+        device.viewport = Viewport{0, 0, gxm::kDisplayWidth, gxm::kDisplayHeight, 0.0f, 1.0f};
+        device.renderStates[d3d::RS_SCISSORTESTENABLE] = 0;
+        const Rect quarter{0, 0, int32_t(gxm::kDisplayWidth / 2), int32_t(gxm::kDisplayHeight / 2)};
+        ClearTargets(device, 1, &quarter, d3d::CLEAR_TARGET, 0xffff00ffu, 0.0f, 0);
+        device.renderTargets[0] = saved;
+        device.viewport = savedViewport;
+        device.renderStates[d3d::RS_SCISSORTESTENABLE] = savedScissor;
+        if (d->frame == kTestRectFirst)
+            Log(device, "diag: drawing a magenta rectangle over the top-left quarter until frame %llu",
+                (unsigned long long)kTestRectLast);
+    }
+    bool readBack = false;
+    for (const uint64_t frame : kReadBackFrames)
+        readBack |= d->frame == frame;
+    if (!readBack)
+        return;
+    FinishGpu(device);
+    const uint32_t *pixels = static_cast<const uint32_t *>(gxm::BackBufferData());
+    if (!pixels)
+        return;
+    uint32_t lit = 0, magenta = 0, litTopLeft = 0;
+    uint32_t sum[3] = {};
+    for (uint32_t y = 0; y < gxm::kDisplayHeight; ++y)
+        for (uint32_t x = 0; x < gxm::kDisplayWidth; ++x)
+        {
+            const uint32_t p = pixels[y * gxm::kDisplayStride + x];
+            if (p & 0x00ffffffu)
+            {
+                ++lit;
+                if (x < gxm::kDisplayWidth / 2 && y < gxm::kDisplayHeight / 2)
+                    ++litTopLeft;
+            }
+            if ((p & 0x00ffffffu) == 0x00ff00ffu)
+                ++magenta;
+            sum[0] += p & 0xff;
+            sum[1] += (p >> 8) & 0xff;
+            sum[2] += (p >> 16) & 0xff;
+        }
+    const uint32_t total = gxm::kDisplayWidth * gxm::kDisplayHeight;
+    auto at = [&](uint32_t x, uint32_t y) { return pixels[y * gxm::kDisplayStride + x]; };
+    Log(device,
+        "diag frame %llu back buffer: %u of %u pixels not black (%u in the top-left quarter), %u magenta; mean "
+        "r %u g %u b %u; samples (A8B8G8R8) centre %08x, quarter points %08x %08x %08x %08x, corner %08x",
+        (unsigned long long)d->frame, lit, total, litTopLeft, magenta, sum[0] / total, sum[1] / total, sum[2] / total,
+        at(480, 272), at(240, 136), at(720, 136), at(240, 408), at(720, 408), at(2, 2));
 }
 
 void LogDrawSummary(Device &device)

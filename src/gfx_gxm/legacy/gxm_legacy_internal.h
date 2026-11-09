@@ -299,6 +299,9 @@ void EndScene(Device &device);
 void FinishGpu(Device &device);
 // After each Present: frees what the GPU is done with.
 void FrameDone(Device &device);
+// Before each Present, while the frame's scene is still open: the run
+// diagnostics (draws a test rectangle, reads the back buffer back).
+void DiagnoseFrame(Device &device);
 // Drops programs made from a shader or declaration about to go.
 void ForgetShader(Device &device, Shader &shader);
 void ForgetDecl(Device &device, VertexDecl &decl);
