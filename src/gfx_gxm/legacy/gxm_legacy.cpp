@@ -248,6 +248,7 @@ struct Device
 
     // Things the back end does not do yet, each logged once.
     std::vector<const char *> notYet;
+    bool fillFailureLogged = false;
     uint32_t live = 0; // resources not yet destroyed
 };
 
@@ -1083,17 +1084,22 @@ void Fill(Device &device, const Target &target, const Rect &rect, uint32_t color
         return;
     const uint32_t x = uint32_t(rect.left), y = uint32_t(rect.top);
     const uint32_t width = uint32_t(rect.right - rect.left), height = uint32_t(rect.bottom - rect.top);
+    // The fill writes the value's bits as they are; the format gives only
+    // the texel size. The RAW formats are refused for fills (0x805b0009,
+    // unsupported, on the Vita), while U8U8U8U8_ABGR worked in the probe.
     SceGxmTransferFormat format;
     uint32_t value = 0;
     if (target.format->blockBytes == 4 && !target.format->depth &&
         (target.display || target.format->d3d == d3d::FMT_A8R8G8B8 || target.format->d3d == d3d::FMT_X8R8G8B8))
     {
-        format = SCE_GXM_TRANSFER_FORMAT_RAW32;
+        format = SCE_GXM_TRANSFER_FORMAT_U8U8U8U8_ABGR;
         // A8R8G8B8 is D3DCOLOR's own byte order; the display is A8B8G8R8.
         value = target.display ? DisplayColor(color) : color;
     }
     else if (target.format->blockBytes == 2 && Color16(target.format->d3d, color, value))
-        format = SCE_GXM_TRANSFER_FORMAT_RAW16;
+        format = target.format->d3d == d3d::FMT_R5G6B5   ? SCE_GXM_TRANSFER_FORMAT_U5U6U5_BGR
+                 : target.format->d3d == d3d::FMT_A4R4G4B4 ? SCE_GXM_TRANSFER_FORMAT_U4U4U4U4_ABGR
+                                                           : SCE_GXM_TRANSFER_FORMAT_U1U5U5U5_ABGR;
     else
     {
         NotYet(device, "Clear of a render target that is not 16- or 32-bit RGB");
@@ -1103,7 +1109,14 @@ void Fill(Device &device, const Target &target, const Rect &rect, uint32_t color
                                           nullptr, 0, nullptr);
     if (result < 0)
     {
-        Log(device, "sceGxmTransferFill failed (0x%08x); clearing on the CPU", unsigned(result));
+        if (!device.fillFailureLogged)
+        {
+            device.fillFailureLogged = true;
+            Log(device, "sceGxmTransferFill failed (0x%08x) on a %ux%u %s target, pitch %u, rect %u,%u %ux%u; "
+                        "clearing on the CPU from now on when it fails",
+                unsigned(result), target.width, target.height, target.display ? "display" : "texture",
+                target.pitch, x, y, width, height);
+        }
         const uint32_t bytes = target.format->blockBytes;
         for (uint32_t row = y; row < y + height; ++row)
         {
