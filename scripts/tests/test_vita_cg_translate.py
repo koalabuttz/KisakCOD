@@ -88,6 +88,8 @@ CHECKS = [
     ("ps3_texld_volume", [], "kisak_tex3D(s0, (v0).xyz, kisak_depth_s0)", "samplers=0:volume"),
     ("vs3_psize_fog", [], "out_FOG = o3.x;", "varyings=TEXCOORD0,FOG0,PSIZE0"),
     ("ps3_odepth", [], "return oC0;", "instructions=3"),
+    ("vs2_oT_oD_fog", ["--far-plane-inside"], "out_POSITION.z = min(out_POSITION.z, out_POSITION.w * 0.99999);",
+     "constants=6"),
 ]
 
 

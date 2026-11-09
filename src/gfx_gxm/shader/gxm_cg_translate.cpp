@@ -1073,6 +1073,8 @@ bool Emitter::Run(std::string &cg, std::string &error)
             parameters.push_back("out float4 out_POSITION : POSITION");
             epilogue += "    out_POSITION = float4(0.0, 0.0, 0.0, 1.0);\n";
         }
+        if (options_.farPlaneInside)
+            epilogue += "    out_POSITION.z = min(out_POSITION.z, out_POSITION.w * 0.99999);\n";
     }
     else
     {

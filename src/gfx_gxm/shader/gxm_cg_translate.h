@@ -125,6 +125,10 @@ struct Options
     // Pixel shaders: D3DRS_ALPHATESTENABLE's test, done in the program
     // since GXM has none. Always is no test.
     AlphaFunc alphaFunc = AlphaFunc::Always;
+    // Vertex shaders: keep the position's z just inside the far plane
+    // (z <= w * 0.99999). D3D9 draws z == w; a run-diagnostic option while
+    // finding out whether GXM clips it.
+    bool farPlaneInside = false;
 };
 
 // ---- Parsed form ---------------------------------------------------------------------------

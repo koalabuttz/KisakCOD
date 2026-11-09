@@ -253,14 +253,39 @@ struct DrawState
     uint64_t copies = 0;
     uint32_t variantsMade = 0, variantFailures = 0;
 
-    // Run diagnostics (see DiagnoseFrame): draws of this frame still to log.
+    // Run diagnostics (see DiagnoseFrame): draws of this frame still to log,
+    // and this frame's test (DiagMode).
     uint32_t diagnosedDraws = 0;
+    int diagMode = 0;
+    Variant diagGreen; // a fragment program that writes opaque green
 };
 
 // Run diagnostics (DiagnoseDraw, DiagnoseFrame): which frames.
-constexpr uint64_t kDiagnosedFrames[] = {300, 1200};
-constexpr uint64_t kReadBackFrames[] = {300, 700, 1200};
+constexpr uint64_t kDiagnosedFrames[] = {300};
+constexpr uint64_t kReadBackFrames[] = {300, 700, 1000, 1300, 1600, 1900};
 constexpr uint64_t kTestRectFirst = 600, kTestRectLast = 779;
+// Tests on the game's own draws, three seconds each (read back at 1000,
+// 1300, 1600 and 1900):
+enum DiagMode
+{
+    DiagNone = 0,
+    DiagGreen = 1,      // frames 900-1079: every draw writes opaque green, no blend
+    DiagFarPlane = 2,   // frames 1200-1379: positions kept inside the far plane
+    DiagBoth = 3,       // frames 1500-1679: both
+    DiagWhite = 4,      // frames 1800-1979: every texture is the white stand-in
+};
+int DiagModeFor(uint64_t frame)
+{
+    if (frame >= 900 && frame < 1080)
+        return DiagGreen;
+    if (frame >= 1200 && frame < 1380)
+        return DiagFarPlane;
+    if (frame >= 1500 && frame < 1680)
+        return DiagBoth;
+    if (frame >= 1800 && frame < 1980)
+        return DiagWhite;
+    return DiagNone;
+}
 
 namespace
 {
@@ -344,7 +369,8 @@ uint64_t VariantKey(const gxm::cg::Options &options)
     for (int i = 0; i < 16; ++i)
         components |= uint64_t(options.inputComponents[i] & 3) << (2 * i);
     return (uint64_t(options.bgraInputs) | uint64_t(options.absentInputs) << 16) ^ (components << 32) ^
-           (options.alphaFunc == gxm::cg::AlphaFunc::Always ? 0 : uint64_t(options.alphaFunc));
+           (options.alphaFunc == gxm::cg::AlphaFunc::Always ? 0 : uint64_t(options.alphaFunc)) ^
+           (options.farPlaneInside ? 0x5a5a000000000000ull : 0);
 }
 
 // The shader's program for these options: made, compiled and registered on
@@ -919,6 +945,8 @@ void BindTextures(Device &device, const Variant &pixel, void *uniforms)
         float depth = 1.0f;
         if (!texture)
             view = d.black;
+        else if (d.diagMode == DiagWhite)
+            view = d.white;
         else if (texture->sampleable)
         {
             view = texture->sampled;
@@ -1199,7 +1227,16 @@ bool InitDraw(Device &device, std::string &error)
     }
     for (uint32_t i = 0; i < kSequentialIndices; ++i)
         d.sequential[i] = uint16_t(i);
-    return MakeStandIns(device, error) && MakeClearPrograms(device, error) && MakeCopyPrograms(device, error);
+    if (!MakeStandIns(device, error) || !MakeClearPrograms(device, error) || !MakeCopyPrograms(device, error))
+        return false;
+    // Run diagnostics: opaque green (no inputs, so it links with any vertex
+    // program). Not having it only loses that test.
+    std::string log;
+    if (!gxm::GetProgram("// KisakCOD: diagnostics\nfloat4 main() : COLOR\n{\n    return float4(0.0, 1.0, 0.0, 1.0);\n}\n",
+                         gxm::ShaderStage::Fragment, d.diagGreen.gxp, log))
+        Log(device, "diag: the green program did not compile: %s", log.substr(0, log.find('\n')).c_str());
+    Register(device, d.diagGreen, "diag green program");
+    return true;
 }
 
 void ShutdownDraw(Device &device)
@@ -1525,6 +1562,11 @@ void FrameDone(Device &device)
     for (const uint64_t frame : kDiagnosedFrames)
         if (d.frame == frame)
             d.diagnosedDraws = 8;
+    const int mode = DiagModeFor(d.frame);
+    if (mode != d.diagMode)
+        Log(device, "diag: frame %llu, test %d (1 green, 2 far plane, 3 both, 4 white textures, 0 none)",
+            (unsigned long long)d.frame, mode);
+    d.diagMode = mode;
     // Work recorded in frame F was queued before Present F + 1, and after
     // Present P the frames before P - 1 have been shown.
     size_t done = 0;
@@ -1821,6 +1863,9 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     // Programs.
     InputPlan plan;
     PlanInputs(device, *vs, *device.decl, plan);
+    const int diag = d.diagMode;
+    if (diag == DiagFarPlane || diag == DiagBoth)
+        plan.options.farPlaneInside = true;
     Variant *vertex = GetVariant(device, *vs, plan.options);
     gxm::cg::Options pixelOptions;
     if (device.renderStates[d3d::RS_ALPHATESTENABLE])
@@ -1835,6 +1880,8 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         CountSkip(device, SkipNoProgram);
         return;
     }
+    if ((diag == DiagGreen || diag == DiagBoth) && !d.diagGreen.failed)
+        pixel = &d.diagGreen;
     if (!OpenScene(device))
     {
         CountSkip(device, SkipNoScene);
@@ -1854,7 +1901,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     if (!vertexProgram)
         return;
     SceGxmBlendInfo blend{};
-    const bool blended = MakeBlend(device, d.color.noAlpha, blend);
+    const bool blended = pixel != &d.diagGreen && MakeBlend(device, d.color.noAlpha, blend);
     const FragmentProgramEntry *fragmentProgram = GetFragmentProgram(device, *pixel, *vertex, blended ? &blend : nullptr);
     if (!fragmentProgram)
         return;
@@ -2083,7 +2130,7 @@ void DiagnoseFrame(Device &device)
     const uint32_t *pixels = static_cast<const uint32_t *>(gxm::BackBufferData());
     if (!pixels)
         return;
-    uint32_t lit = 0, magenta = 0, litTopLeft = 0;
+    uint32_t lit = 0, magenta = 0, green = 0, litTopLeft = 0;
     uint32_t sum[3] = {};
     for (uint32_t y = 0; y < gxm::kDisplayHeight; ++y)
         for (uint32_t x = 0; x < gxm::kDisplayWidth; ++x)
@@ -2097,6 +2144,8 @@ void DiagnoseFrame(Device &device)
             }
             if ((p & 0x00ffffffu) == 0x00ff00ffu)
                 ++magenta;
+            if ((p & 0x00ffffffu) == 0x0000ff00u)
+                ++green;
             sum[0] += p & 0xff;
             sum[1] += (p >> 8) & 0xff;
             sum[2] += (p >> 16) & 0xff;
@@ -2104,9 +2153,10 @@ void DiagnoseFrame(Device &device)
     const uint32_t total = gxm::kDisplayWidth * gxm::kDisplayHeight;
     auto at = [&](uint32_t x, uint32_t y) { return pixels[y * gxm::kDisplayStride + x]; };
     Log(device,
-        "diag frame %llu back buffer: %u of %u pixels not black (%u in the top-left quarter), %u magenta; mean "
-        "r %u g %u b %u; samples (A8B8G8R8) centre %08x, quarter points %08x %08x %08x %08x, corner %08x",
-        (unsigned long long)d->frame, lit, total, litTopLeft, magenta, sum[0] / total, sum[1] / total, sum[2] / total,
+        "diag frame %llu (test %d) back buffer: %u of %u pixels not black (%u in the top-left quarter), %u "
+        "magenta, %u green; mean r %u g %u b %u; samples (A8B8G8R8) centre %08x, quarter points %08x %08x %08x %08x, "
+        "corner %08x",
+        (unsigned long long)d->frame, d->diagMode, lit, total, litTopLeft, magenta, green, sum[0] / total, sum[1] / total, sum[2] / total,
         at(480, 272), at(240, 136), at(720, 136), at(240, 408), at(720, 408), at(2, 2));
 }
 
