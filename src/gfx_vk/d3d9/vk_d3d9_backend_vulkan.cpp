@@ -33,6 +33,9 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     coreDesc.deviceIndex = h.deviceIndex;
     coreDesc.vsync = desc.vsync;
     coreDesc.pipelineCachePath = h.pipelineCachePath;
+    // Vulkan calls on a thread of the core's own, off the render thread (as
+    // DXVK does); KISAK_VK_RECORD_THREAD=0 turns it off.
+    coreDesc.recordThread = true;
     coreDesc.log = h.log;
     coreDesc.logUser = h.user;
     char coreError[512] = {};
@@ -83,6 +86,12 @@ void CloseBackend(Backend *backend)
                 double(stats.dynamicRenames) / frames, double(core.submissions) / frames,
                 static_cast<unsigned long long>(core.flushes), gpuAverage, core.frame.samples ? core.frame.minMs : 0.0,
                 core.frame.samples ? core.frame.maxMs : 0.0, static_cast<unsigned long long>(core.frame.samples));
+        if (core.recordThread)
+            HostLog(h,
+                    "vulkan d3d9: record thread: per frame %.0f commands in %.1f blocks; render thread waited "
+                    "%.3f ms per frame for it",
+                    double(core.recordPackets) / frames, double(core.recordChunks) / frames,
+                    core.recordWaitMs / frames);
     }
     if (backend->legacy)
     {

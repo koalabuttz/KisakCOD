@@ -95,6 +95,14 @@ one lock rather than one per device because the renderer has one device and a
 adapter stay single-threaded behind it. The host's callbacks run under the
 lock too.
 
+Behind the lock, the front creates the core with its record thread on
+(`CoreDesc::recordThread`, see [vulkan-core.md](vulkan-core.md)):
+the core's own thread makes the `vkCmd*` calls, submissions and presents, as
+DXVK's command stream thread does, so the render thread no longer waits on the
+driver while it records. `KISAK_VK_RECORD_THREAD=0` turns it off. The device's
+teardown log line `record thread:` gives the commands and chunks per frame and
+the time the render thread waited for that thread.
+
 The check's `threads` scene does what the database thread does (a worker
 creates, locks, fills, unlocks and releases 200 textures while the main thread
 draws and presents), then draws the last one. Built with ThreadSanitizer it

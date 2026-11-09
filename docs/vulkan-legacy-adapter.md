@@ -18,7 +18,10 @@ vertex declarations, shaders and their float constants, render targets, draws,
 clears, copies, present and queries (`src/gfx_vk/legacy/vk_legacy.h`). It
 takes D3D9's enum values as plain numbers, so it needs no `d3d9.h` and builds on
 every platform the core does. One thread calls everything, as with the D3D9
-device it replaces.
+device it replaces. It records its commands through the core's `Record`, so
+with the core's record thread on (the D3D9 front's default) they run on that
+thread; the adapter tracks the bound pipeline and dynamic state per command
+buffer by the core's `Recording()` number.
 
 | File | What |
 | --- | --- |

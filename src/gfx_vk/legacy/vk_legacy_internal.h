@@ -312,7 +312,7 @@ struct Device
     Surface *passTargets[kMaxRenderTargets] = {};
     Surface *passDepth = nullptr;
     uint32_t passWidth = 0, passHeight = 0;
-    VkCommandBuffer stateCommands = VK_NULL_HANDLE; // the command buffer boundPipeline and dynamic belong to
+    uint64_t stateRecording = 0; // the command buffer (Recording()) boundPipeline and dynamic belong to
     VkPipeline boundPipeline = VK_NULL_HANDLE;
     DynamicState dynamic{};
     bool dynamicValid = false;

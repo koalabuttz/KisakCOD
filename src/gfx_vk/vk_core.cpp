@@ -98,6 +98,42 @@ bool Check(Core &core, VkResult result, const char *what)
 
 namespace
 {
+// The validation layer reports calls the record thread makes on that thread:
+// the message waits for the owning thread (SyncRecorder), which logs it and
+// counts it. The draw rule OnDebugMessage counts apart shows up here.
+VkBool32 OnRecordThreadMessage(Core &core, VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+                               VkDebugUtilsMessageTypeFlagsEXT types, const VkDebugUtilsMessengerCallbackDataEXT *data,
+                               const char *text)
+{
+    Recorder &recorder = core.recorder;
+    std::lock_guard<std::mutex> lock(recorder.messageMutex);
+    if (!(types & (VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)))
+    {
+        recorder.messages.push_back(std::string("loader: ") + text);
+        return VK_FALSE;
+    }
+    const char *id = data && data->pMessageIdName ? data->pMessageIdName : "";
+    const size_t idLength = std::strlen(id);
+    if (idLength > 11 && std::strcmp(id + idLength - 11, "-None-06479") == 0 && std::strncmp(id, "VUID-vkCmdDraw", 14) == 0)
+    {
+        ++recorder.validationIgnored;
+        return VK_FALSE;
+    }
+    const bool error = (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) != 0;
+    if (error)
+        ++recorder.validationErrors;
+    else if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+        ++recorder.validationWarnings;
+    else
+        return VK_FALSE;
+    if (++recorder.messagesSeen <= kValidationMessagesLogged)
+        recorder.messages.push_back(std::string(error ? "validation error" : "validation warning")
+                                    + " (record thread): " + text);
+    if (recorder.messagesSeen == kValidationMessagesLogged)
+        recorder.messages.push_back("validation: further record thread messages are counted, not printed");
+    return VK_FALSE;
+}
+
 VKAPI_ATTR VkBool32 VKAPI_CALL OnDebugMessage(
     VkDebugUtilsMessageSeverityFlagBitsEXT severity,
     VkDebugUtilsMessageTypeFlagsEXT types,
@@ -106,6 +142,8 @@ VKAPI_ATTR VkBool32 VKAPI_CALL OnDebugMessage(
 {
     Core &core = *static_cast<Core *>(user);
     const char *text = data && data->pMessage ? data->pMessage : "(no message)";
+    if (OffOwnerThread(core))
+        return OnRecordThreadMessage(core, severity, types, data, text);
     if (!(types & (VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)))
     {
         // General messages come from the loader (an installed driver that does
@@ -839,8 +877,9 @@ BuildResult BuildSwapchain(Core &core)
         }
     }
 
-    // Rebuilding: nothing in flight may still use the old images.
-    if (core.swapchain && !Check(core, vk.vkDeviceWaitIdle(core.dev), "vkDeviceWaitIdle"))
+    // Rebuilding: nothing in flight may still use the old images, and the
+    // record thread is done with the old swapchain and the queue.
+    if (core.swapchain && (!DrainRecorder(core) || !Check(core, vk.vkDeviceWaitIdle(core.dev), "vkDeviceWaitIdle")))
         return BuildResult::Failed;
 
     VkSwapchainCreateInfoKHR info{};
@@ -921,8 +960,12 @@ Core *CreateCore(const CoreDesc &desc, const WindowSystem &window, char *error, 
     Core *core = new Core();
     core->desc = desc;
     core->window = window;
+    if (EnvEquals("KISAK_VK_RECORD_THREAD", "0"))
+        core->desc.recordThread = false;
+    else if (EnvEquals("KISAK_VK_RECORD_THREAD", "1"))
+        core->desc.recordThread = true;
     bool ok = CreateInstance(*core) && PickDevice(*core) && CreateDevice(*core) && CreateFrameResources(*core)
-        && CreatePipelineCache(*core);
+        && StartRecorder(*core) && CreatePipelineCache(*core);
     if (ok)
     {
         const BuildResult built = BuildSwapchain(*core);
@@ -945,6 +988,9 @@ void DestroyCore(Core *core, CoreStats *finalStats)
     if (!core)
         return;
     Dispatch &vk = core->vk;
+    // Everything recorded runs (an open frame's commands are never submitted:
+    // the pool goes with them), then the thread ends.
+    StopRecorder(*core);
     if (core->dev)
     {
         vk.vkDeviceWaitIdle(core->dev);
@@ -985,6 +1031,7 @@ void DetachWindow(Core *core_)
     {
         // The acquired image is never presented.
         AbandonFrame(core);
+        DrainRecorder(core);
         vk.vkDeviceWaitIdle(core.dev);
         DestroySwapchainResources(core);
         if (core.swapchain)

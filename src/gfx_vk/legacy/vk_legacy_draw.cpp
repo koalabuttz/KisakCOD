@@ -303,17 +303,20 @@ bool BeginTargetsPass(Device &device)
     return true;
 }
 
-// The command buffer the bound pipeline and dynamic state belong to.
-VkCommandBuffer CurrentCommands(Device &device)
+// Starts recording if needed. The bound pipeline and dynamic state belong to
+// the command buffer being recorded: a new one starts without them.
+bool SyncRecording(Device &device)
 {
-    VkCommandBuffer cmd = Commands(device.core);
-    if (cmd != device.stateCommands)
+    const uint64_t recording = Recording(device.core);
+    if (!recording)
+        return false;
+    if (recording != device.stateRecording)
     {
-        device.stateCommands = cmd;
+        device.stateRecording = recording;
         device.boundPipeline = VK_NULL_HANDLE;
         device.dynamicValid = false;
     }
-    return cmd;
+    return true;
 }
 
 // ---- Layouts and pipelines ------------------------------------------------------------
@@ -839,8 +842,25 @@ bool BindTextures(Device &device, const Shader &vs, const Shader &ps, DrawTextur
 // Fills this draw's uniform blocks in per-frame memory and binds set 0.
 // With dynamic uniform buffers a pipeline's set is written once per frame and
 // transient buffer, then bound again with this draw's offsets.
+// A uniform set bound with its dynamic offsets (none for plain uniform buffers).
+struct UniformBind
+{
+    VkPipelineLayout layout;
+    VkDescriptorSet set;
+    uint32_t offsetCount;
+    uint32_t offsets[2 * ls::kUniformCount];
+};
+
+void RecordUniformBind(Device &device, const UniformBind &bind)
+{
+    Record(device.core, [bind](VkCommandBuffer cmd, const Dispatch &vk) {
+        vk.vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, bind.layout, ls::kUniformSet, 1, &bind.set,
+                                   bind.offsetCount, bind.offsetCount ? bind.offsets : nullptr);
+    });
+}
+
 bool BindUniforms(Device &device, const Shader &vs, const Shader &ps, const DrawTextures &textures,
-                  Pipeline &pipeline, VkCommandBuffer cmd)
+                  Pipeline &pipeline)
 {
     const Layout &layout = *pipeline.layout;
     struct Block
@@ -960,16 +980,18 @@ bool BindUniforms(Device &device, const Shader &vs, const Shader &ps, const Draw
     }
 
     const Dispatch &vk = *device.vk;
-    uint32_t dynamicOffsets[2 * ls::kUniformCount];
+    // Offsets go in binding order, which is the order of blocks.
+    UniformBind bind{};
+    bind.layout = layout.pipeline;
     if (layout.dynamicUniforms)
     {
-        // Offsets go in binding order, which is the order of blocks.
+        bind.offsetCount = count;
         for (uint32_t i = 0; i < count; ++i)
-            dynamicOffsets[i] = static_cast<uint32_t>(memory.offset + blocks[i].offset);
+            bind.offsets[i] = static_cast<uint32_t>(memory.offset + blocks[i].offset);
         if (pipeline.uniformFrame == device.frameSerial && pipeline.uniformBuffer == memory.buffer)
         {
-            vk.vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout.pipeline, ls::kUniformSet, 1,
-                                       &pipeline.uniformSet, count, dynamicOffsets);
+            bind.set = pipeline.uniformSet;
+            RecordUniformBind(device, bind);
             ++device.stats.descriptorSetsReused;
             return true;
         }
@@ -1001,8 +1023,8 @@ bool BindUniforms(Device &device, const Shader &vs, const Shader &ps, const Draw
         pipeline.uniformBuffer = memory.buffer;
         pipeline.uniformSet = set;
     }
-    vk.vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout.pipeline, ls::kUniformSet, 1, &set,
-                               layout.dynamicUniforms ? count : 0, layout.dynamicUniforms ? dynamicOffsets : nullptr);
+    bind.set = set;
+    RecordUniformBind(device, bind);
     return true;
 }
 
@@ -1087,7 +1109,7 @@ VkRect2D DrawArea(const Device &device)
     return ClampRect(left, top, right, bottom, device.passWidth, device.passHeight);
 }
 
-void ApplyDynamicState(Device &device, VkCommandBuffer cmd, d3d::PrimitiveType type)
+void ApplyDynamicState(Device &device, d3d::PrimitiveType type)
 {
     const uint32_t *rs = device.renderStates;
     DynamicState state{};
@@ -1135,28 +1157,29 @@ void ApplyDynamicState(Device &device, VkCommandBuffer cmd, d3d::PrimitiveType t
 
     if (device.dynamicValid && state == device.dynamic)
         return;
-    const Dispatch &vk = *device.vk;
-    vk.vkCmdSetViewport(cmd, 0, 1, &state.viewport);
-    vk.vkCmdSetScissor(cmd, 0, 1, &state.scissor);
-    vk.vkCmdSetDepthBias(cmd, state.depthBias, 0.0f, state.depthSlope);
-    vk.vkCmdSetDepthBiasEnable(cmd, state.depthBiasEnable);
-    vk.vkCmdSetBlendConstants(cmd, state.blendConstants);
-    vk.vkCmdSetCullMode(cmd, state.cullMode);
-    vk.vkCmdSetFrontFace(cmd, VK_FRONT_FACE_CLOCKWISE);
-    vk.vkCmdSetPrimitiveTopology(cmd, static_cast<VkPrimitiveTopology>(state.topology));
-    vk.vkCmdSetDepthTestEnable(cmd, state.depthTest);
-    vk.vkCmdSetDepthWriteEnable(cmd, state.depthWrite);
-    vk.vkCmdSetDepthCompareOp(cmd, static_cast<VkCompareOp>(state.depthCompare));
-    vk.vkCmdSetStencilTestEnable(cmd, state.stencilTest);
-    vk.vkCmdSetStencilOp(cmd, VK_STENCIL_FACE_FRONT_BIT, static_cast<VkStencilOp>(state.frontFail),
-                         static_cast<VkStencilOp>(state.frontPass), static_cast<VkStencilOp>(state.frontDepthFail),
-                         static_cast<VkCompareOp>(state.frontCompare));
-    vk.vkCmdSetStencilOp(cmd, VK_STENCIL_FACE_BACK_BIT, static_cast<VkStencilOp>(state.backFail),
-                         static_cast<VkStencilOp>(state.backPass), static_cast<VkStencilOp>(state.backDepthFail),
-                         static_cast<VkCompareOp>(state.backCompare));
-    vk.vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, state.stencilRef);
-    vk.vkCmdSetStencilCompareMask(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, state.stencilMask);
-    vk.vkCmdSetStencilWriteMask(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, state.stencilWriteMask);
+    Record(device.core, [state](VkCommandBuffer cmd, const Dispatch &vk) {
+        vk.vkCmdSetViewport(cmd, 0, 1, &state.viewport);
+        vk.vkCmdSetScissor(cmd, 0, 1, &state.scissor);
+        vk.vkCmdSetDepthBias(cmd, state.depthBias, 0.0f, state.depthSlope);
+        vk.vkCmdSetDepthBiasEnable(cmd, state.depthBiasEnable);
+        vk.vkCmdSetBlendConstants(cmd, state.blendConstants);
+        vk.vkCmdSetCullMode(cmd, state.cullMode);
+        vk.vkCmdSetFrontFace(cmd, VK_FRONT_FACE_CLOCKWISE);
+        vk.vkCmdSetPrimitiveTopology(cmd, static_cast<VkPrimitiveTopology>(state.topology));
+        vk.vkCmdSetDepthTestEnable(cmd, state.depthTest);
+        vk.vkCmdSetDepthWriteEnable(cmd, state.depthWrite);
+        vk.vkCmdSetDepthCompareOp(cmd, static_cast<VkCompareOp>(state.depthCompare));
+        vk.vkCmdSetStencilTestEnable(cmd, state.stencilTest);
+        vk.vkCmdSetStencilOp(cmd, VK_STENCIL_FACE_FRONT_BIT, static_cast<VkStencilOp>(state.frontFail),
+                             static_cast<VkStencilOp>(state.frontPass), static_cast<VkStencilOp>(state.frontDepthFail),
+                             static_cast<VkCompareOp>(state.frontCompare));
+        vk.vkCmdSetStencilOp(cmd, VK_STENCIL_FACE_BACK_BIT, static_cast<VkStencilOp>(state.backFail),
+                             static_cast<VkStencilOp>(state.backPass), static_cast<VkStencilOp>(state.backDepthFail),
+                             static_cast<VkCompareOp>(state.backCompare));
+        vk.vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, state.stencilRef);
+        vk.vkCmdSetStencilCompareMask(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, state.stencilMask);
+        vk.vkCmdSetStencilWriteMask(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, state.stencilWriteMask);
+    });
     device.dynamic = state;
     device.dynamicValid = true;
 }
@@ -1242,25 +1265,33 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
         strides[binding] = stream.stride;
     }
 
-    VkCommandBuffer cmd = CurrentCommands(device);
-    const Dispatch &vk = *device.vk;
+    if (!SyncRecording(device))
+        return false;
     if (device.boundPipeline != pipeline->pipeline)
     {
-        vk.vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
-        device.boundPipeline = pipeline->pipeline;
+        const VkPipeline bound = pipeline->pipeline;
+        Record(device.core, [bound](VkCommandBuffer cmd, const Dispatch &vk) {
+            vk.vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, bound);
+        });
+        device.boundPipeline = bound;
     }
-    ApplyDynamicState(device, cmd, type);
+    ApplyDynamicState(device, type);
     // Without dynamic strides the pipeline holds them (PipelineKey::strides).
     const bool dynamicStride = Features(device.core).dynamicVertexStride;
     for (uint32_t binding = 0; binding <= kZeroBinding; ++binding)
     {
-        if (pipeline->bindings & (1u << binding))
-            vk.vkCmdBindVertexBuffers2(cmd, binding, 1, &buffers[binding], &offsets[binding], nullptr,
-                                       dynamicStride ? &strides[binding] : nullptr);
+        if (!(pipeline->bindings & (1u << binding)))
+            continue;
+        const VkBuffer buffer = buffers[binding];
+        const VkDeviceSize offset = offsets[binding];
+        const VkDeviceSize stride = strides[binding];
+        Record(device.core, [=](VkCommandBuffer cmd, const Dispatch &vk) {
+            vk.vkCmdBindVertexBuffers2(cmd, binding, 1, &buffer, &offset, nullptr, dynamicStride ? &stride : nullptr);
+        });
     }
 
     const Layout &layout = *pipeline->layout;
-    if (layout.uniformSet && !BindUniforms(device, *vs, *ps, textures, *pipeline, cmd))
+    if (layout.uniformSet && !BindUniforms(device, *vs, *ps, textures, *pipeline))
         return false;
     if (layout.textureSet)
     {
@@ -1283,8 +1314,11 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
             device.lastTextureSet = contents;
             ++device.stats.descriptorSets;
         }
-        vk.vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout.pipeline, ls::kTextureSet, 1, &set, 0,
-                                   nullptr);
+        const VkPipelineLayout pipelineLayout = layout.pipeline;
+        Record(device.core, [pipelineLayout, set](VkCommandBuffer cmd, const Dispatch &vk) {
+            vk.vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, ls::kTextureSet, 1, &set,
+                                       0, nullptr);
+        });
     }
     return Usable(device);
 }
@@ -1621,8 +1655,26 @@ void Clear(Device *device_, uint32_t rectCount, const Rect *rects, uint32_t flag
                      clearRects.end());
     if (clearRects.empty())
         return;
-    device.vk->vkCmdClearAttachments(CurrentCommands(device), count, attachments,
-                                     static_cast<uint32_t>(clearRects.size()), clearRects.data());
+    // Fixed-size packets: the attachments, and up to kRects rectangles each.
+    constexpr uint32_t kRects = 8;
+    struct ClearPacket
+    {
+        VkClearAttachment attachments[kMaxRenderTargets + 1];
+        uint32_t attachmentCount;
+        VkClearRect rects[kRects];
+        uint32_t rectCount;
+    };
+    ClearPacket packet{};
+    std::memcpy(packet.attachments, attachments, sizeof(attachments));
+    packet.attachmentCount = count;
+    for (size_t first = 0; first < clearRects.size(); first += kRects)
+    {
+        packet.rectCount = static_cast<uint32_t>(std::min<size_t>(kRects, clearRects.size() - first));
+        std::memcpy(packet.rects, clearRects.data() + first, packet.rectCount * sizeof(VkClearRect));
+        Record(device.core, [packet](VkCommandBuffer cmd, const Dispatch &vk) {
+            vk.vkCmdClearAttachments(cmd, packet.attachmentCount, packet.attachments, packet.rectCount, packet.rects);
+        });
+    }
     ++device.stats.clears;
 }
 
@@ -1636,9 +1688,12 @@ void DrawIndexedPrimitive(Device *device, d3d::PrimitiveType type, int32_t baseV
         return;
     if (!PrepareDraw(*device, type))
         return;
-    VkCommandBuffer cmd = CurrentCommands(*device);
-    device->vk->vkCmdBindIndexBuffer(cmd, DrawBuffer(*device, *device->indices), 0, device->indices->indexType);
-    device->vk->vkCmdDrawIndexed(cmd, indexCount, 1, startIndex, baseVertex, 0);
+    const VkBuffer indices = DrawBuffer(*device, *device->indices);
+    const VkIndexType indexType = device->indices->indexType;
+    Record(device->core, [=](VkCommandBuffer cmd, const Dispatch &vk) {
+        vk.vkCmdBindIndexBuffer(cmd, indices, 0, indexType);
+        vk.vkCmdDrawIndexed(cmd, indexCount, 1, startIndex, baseVertex, 0);
+    });
     ++device->stats.draws;
 }
 
@@ -1647,7 +1702,7 @@ void DrawPrimitive(Device *device, d3d::PrimitiveType type, uint32_t startVertex
     const uint32_t count = VertexCount(type, primitiveCount);
     if (!count || !PrepareDraw(*device, type))
         return;
-    device->vk->vkCmdDraw(CurrentCommands(*device), count, 1, startVertex, 0);
+    Record(device->core, [=](VkCommandBuffer cmd, const Dispatch &vk) { vk.vkCmdDraw(cmd, count, 1, startVertex, 0); });
     ++device->stats.draws;
 }
 
@@ -1672,7 +1727,7 @@ void DrawPrimitiveUP(Device *device, d3d::PrimitiveType type, uint32_t primitive
         stream.stride = stride;
         if (PrepareDraw(*device, type))
         {
-            device->vk->vkCmdDraw(CurrentCommands(*device), count, 1, 0, 0);
+            Record(device->core, [count](VkCommandBuffer cmd, const Dispatch &vk) { vk.vkCmdDraw(cmd, count, 1, 0, 0); });
             ++device->stats.draws;
         }
     }
@@ -1790,7 +1845,7 @@ void DetachWindow(Device *device_)
     gfx_vk::DetachWindow(device.core); // ends an open frame without showing it
     device.frameOpen = false;
     device.frameSkipped = false;
-    device.stateCommands = VK_NULL_HANDLE;
+    device.stateRecording = 0;
     device.boundPipeline = VK_NULL_HANDLE;
     device.dynamicValid = false;
 }
@@ -1808,13 +1863,18 @@ PresentResult Present(Device *device_)
         return skipped ? PresentResult::Skipped : PresentResult::Failed;
     }
     EndPassIfOpen(device);
-    Image *swapchain = SwapchainImage(device.core);
-    const ImageDesc &shown = ImageInfo(swapchain);
-    const TextureDesc &back = device.backBuffer->desc;
-    const VkOffset3D src[2] = {{0, 0, 0}, {int32_t(back.width), int32_t(back.height), 1}};
-    const VkOffset3D dst[2] = {{0, 0, 0}, {int32_t(shown.width), int32_t(shown.height), 1}};
-    const bool scaled = shown.width != back.width || shown.height != back.height;
-    BlitImage(device.core, device.backBuffer->image, src, swapchain, dst, scaled ? VK_FILTER_LINEAR : VK_FILTER_NEAREST);
+    // Acquired here, at the end of the frame (null when out of date: the
+    // core's Present then skips the frame).
+    if (Image *swapchain = SwapchainImage(device.core))
+    {
+        const ImageDesc &shown = ImageInfo(swapchain);
+        const TextureDesc &back = device.backBuffer->desc;
+        const VkOffset3D src[2] = {{0, 0, 0}, {int32_t(back.width), int32_t(back.height), 1}};
+        const VkOffset3D dst[2] = {{0, 0, 0}, {int32_t(shown.width), int32_t(shown.height), 1}};
+        const bool scaled = shown.width != back.width || shown.height != back.height;
+        BlitImage(device.core, device.backBuffer->image, src, swapchain, dst,
+                  scaled ? VK_FILTER_LINEAR : VK_FILTER_NEAREST);
+    }
     // Flip: the image just shown becomes the front buffer, and the next frame
     // draws into the other one. Render target 0 and every other use of the
     // back buffer go through backBufferSurface, which keeps its address.
@@ -1823,7 +1883,7 @@ PresentResult Present(Device *device_)
     device.frontBufferSurface.texture = device.frontBuffer;
     const FrameResult result = gfx_vk::Present(device.core);
     device.frameOpen = false;
-    device.stateCommands = VK_NULL_HANDLE;
+    device.stateRecording = 0;
     device.boundPipeline = VK_NULL_HANDLE;
     device.dynamicValid = false;
     switch (result)

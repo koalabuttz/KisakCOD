@@ -1,14 +1,19 @@
 #pragma once
 
-// gfx_vk internals shared by vk_core.cpp, vk_memory.cpp, vk_frame.cpp and
-// vk_pipeline.cpp. Not part of the core's API: users include vk_core.h only.
+// gfx_vk internals shared by vk_core.cpp, vk_memory.cpp, vk_frame.cpp,
+// vk_record.cpp and vk_pipeline.cpp. Not part of the core's API: users include
+// vk_core.h only.
 
 #include "vk_core.h"
 
+#include <condition_variable>
 #include <cstdarg>
 #include <cstring>
+#include <deque>
 #include <map>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -135,9 +140,7 @@ struct TimedPass
 // Everything one frame in flight owns, recycled when its last submission ends.
 struct FrameSlot
 {
-    VkCommandPool pool = VK_NULL_HANDLE;
-    std::vector<VkCommandBuffer> commandBuffers;
-    uint32_t commandBuffersUsed = 0;
+    VkCommandPool pool = VK_NULL_HANDLE; // its command buffers: RecordState::slots
     VkSemaphore acquired = VK_NULL_HANDLE;
     uint64_t lastSerial = 0;
 
@@ -150,6 +153,92 @@ struct FrameSlot
     bool frameTimed = false;     // queries 0 and 1 of the slot hold the frame
     uint32_t queriesUsed = 0;
     bool queriesPending = false; // written, not yet collected
+};
+
+// ---- Recording ---------------------------------------------------------------------
+//
+// Every Vulkan call that records into a command buffer, or uses the queue, is a
+// packet: Record() and RecordControl() below. Without the record thread a
+// packet runs at once on the calling thread; with it, packets are copied into
+// chunks that the record thread runs in order. RecordState is what packets
+// work on; it belongs to whichever thread runs them.
+
+struct RecordSlot
+{
+    std::vector<VkCommandBuffer> buffers;
+    uint32_t used = 0;
+};
+
+struct RecordState : RecordContext
+{
+    Core *core = nullptr;
+    VkQueue queue = VK_NULL_HANDLE;
+    RecordSlot slots[kFramesInFlight];
+    // Results, read by the owning thread through SyncRecorder.
+    bool failed = false;
+    char error[256] = {};
+    uint64_t submitted = 0; // last serial submitted
+    uint64_t presents = 0;  // presents made
+    bool rebuild = false;   // a present found the swapchain out of date or suboptimal
+};
+
+// Packets start at multiples of kRecordAlign in memory from operator new,
+// which is aligned at least that much everywhere (i386 and 32-bit MSVC too).
+constexpr size_t kRecordAlign = 8;
+constexpr size_t kRecordChunkBytes = 64 << 10;
+
+struct RecordChunk
+{
+    RecordChunk() : data(static_cast<uint8_t *>(::operator new(kRecordChunkBytes))) {}
+    ~RecordChunk() { ::operator delete(data); }
+    RecordChunk(const RecordChunk &) = delete;
+    RecordChunk &operator=(const RecordChunk &) = delete;
+    uint8_t *data;
+    size_t used = 0;
+};
+
+struct PacketHeader
+{
+    RecordFn run;
+    uint32_t size; // header included; a multiple of kRecordAlign
+};
+constexpr size_t kPacketHeaderBytes = (sizeof(PacketHeader) + kRecordAlign - 1) / kRecordAlign * kRecordAlign;
+
+// What the record thread reports, under Recorder::mutex.
+struct RecordProgress
+{
+    bool failed = false;
+    char error[256] = {};
+    uint64_t submitted = 0;
+    uint64_t presents = 0;
+    bool rebuild = false;
+    uint64_t chunksDone = 0;
+};
+
+struct Recorder
+{
+    bool threaded = false;
+    std::thread thread;
+    std::mutex mutex;
+    std::condition_variable work;     // the record thread waits for chunks
+    std::condition_variable progress; // the owning thread waits for the record thread
+    std::deque<RecordChunk *> queue;
+    std::vector<RecordChunk *> spare;
+    bool stop = false;
+    RecordProgress published;
+    // Owning thread only.
+    RecordChunk *current = nullptr;
+    uint64_t chunksQueued = 0;
+    uint64_t presentsQueued = 0;
+    // Validation messages from the record thread: logged and counted by the
+    // owning thread at its next sync.
+    std::mutex messageMutex;
+    std::vector<std::string> messages;
+    uint32_t validationErrors = 0;
+    uint32_t validationWarnings = 0;
+    uint32_t validationIgnored = 0;
+    uint32_t messagesSeen = 0; // all record thread messages so far
+    std::thread::id owner;
 };
 
 enum class BuildResult
@@ -220,8 +309,11 @@ public:
     uint32_t frameIndex = 0;
     bool inFrame = false;
     uint32_t imageIndex = 0;
+    bool imageAcquired = false;      // SwapchainImage acquired the frame's image
+    bool imageMissing = false;       // the acquire found the swapchain out of date
     bool acquireWaitPending = false; // the next submission waits on the acquire
-    VkCommandBuffer recording = VK_NULL_HANDLE;
+    bool recordingOpen = false;      // a command buffer is being recorded
+    uint64_t recordingId = 0;        // counts command buffers begun
     bool inPass = false;
     int currentTimedPass = -1;
     bool bufferCopiesOpen = false;            // see CloseBufferCopies
@@ -248,6 +340,9 @@ public:
     Capture capture{};
 
     CoreStats stats{};
+
+    RecordState record;
+    Recorder recorder;
 };
 
 // vk_core.cpp
@@ -268,8 +363,56 @@ void DestroyMemoryPools(Core &core);
 uint32_t FormatBlockBytes(VkFormat format, uint32_t *blockWidth, uint32_t *blockHeight);
 VkImageAspectFlags FormatAspect(VkFormat format);
 
+// vk_record.cpp
+bool StartRecorder(Core &core);
+// Hands over what was recorded, waits until the record thread has run all of it,
+// and stops the thread. Harmless without one.
+void StopRecorder(Core &core);
+// Hands the current chunk to the record thread.
+void HandOff(Core &core);
+// Hands over and waits until everything recorded so far has run: before
+// anything that needs the queue or the swapchain to itself (vkDeviceWaitIdle,
+// swapchain rebuilds).
+bool DrainRecorder(Core &core);
+// Waits until the record thread has submitted serial (false: it failed).
+bool WaitSubmitted(Core &core, uint64_t serial);
+// Waits until every present handed over has been made.
+bool WaitPresents(Core &core);
+// Takes the record thread's results: failures, presents that want a rebuild,
+// validation messages. False once the core has failed.
+bool SyncRecorder(Core &core);
+// True on a thread other than the core's owner (the record thread): the
+// validation callback keeps its messages for SyncRecorder then.
+bool OffOwnerThread(const Core &core);
+// Space for a packet in the current chunk (null once the core has failed).
+void *ReservePacket(Core &core, size_t size, RecordFn run);
+// Bookkeeping packets (begin, submit, present, pool resets): f(RecordState &).
+// Without the record thread they run now and their failure fails the core.
+template <typename F> bool RecordControl(Core &core, F &&f)
+{
+    using Packet = typename std::decay<F>::type;
+    static_assert(std::is_trivially_destructible<Packet>::value, "RecordControl: trivially destructible captures");
+    static_assert(alignof(Packet) <= kRecordAlign, "RecordControl: over-aligned captures");
+    if (!core.recorder.threaded)
+    {
+        f(core.record);
+        return SyncRecorder(core);
+    }
+    void *packet = ReservePacket(core, sizeof(Packet), [](void *data, RecordContext &context) {
+        (*static_cast<Packet *>(data))(static_cast<RecordState &>(context));
+    });
+    if (!packet)
+        return false;
+    new (packet) Packet(std::forward<F>(f));
+    return true;
+}
+// Fails the record state (on whichever thread runs the packet).
+bool RecordCheck(RecordState &state, VkResult result, const char *what);
+
 // vk_frame.cpp
 bool CreateFrameResources(Core &core);
+// Begins a command buffer unless one is being recorded.
+bool EnsureRecording(Core &core);
 // Ends an open frame without presenting it: what was recorded is submitted
 // (it takes the acquire wait, so nothing stays pending on the swapchain).
 // Not inside a pass. For DetachWindow.

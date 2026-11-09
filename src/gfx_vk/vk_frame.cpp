@@ -49,7 +49,7 @@ VkDeviceSize AlignUp(VkDeviceSize value, VkDeviceSize alignment)
     return alignment ? (value + alignment - 1) / alignment * alignment : value;
 }
 
-void GlobalBarrier(Core &core, VkCommandBuffer cmd, VkPipelineStageFlags2 srcStages, VkAccessFlags2 srcAccess,
+void GlobalBarrier(Core &core, VkPipelineStageFlags2 srcStages, VkAccessFlags2 srcAccess,
                    VkPipelineStageFlags2 dstStages, VkAccessFlags2 dstAccess)
 {
     VkMemoryBarrier2 barrier{};
@@ -58,11 +58,13 @@ void GlobalBarrier(Core &core, VkCommandBuffer cmd, VkPipelineStageFlags2 srcSta
     barrier.srcAccessMask = srcAccess;
     barrier.dstStageMask = dstStages;
     barrier.dstAccessMask = dstAccess;
-    VkDependencyInfo dependency{};
-    dependency.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    dependency.memoryBarrierCount = 1;
-    dependency.pMemoryBarriers = &barrier;
-    core.vk.vkCmdPipelineBarrier2(cmd, &dependency);
+    Record(&core, [barrier](VkCommandBuffer cmd, const Dispatch &vk) {
+        VkDependencyInfo dependency{};
+        dependency.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        dependency.memoryBarrierCount = 1;
+        dependency.pMemoryBarriers = &barrier;
+        vk.vkCmdPipelineBarrier2(cmd, &dependency);
+    });
 }
 
 // ---- Arenas: staging and transient memory -------------------------------------------
@@ -127,97 +129,65 @@ FrameSlot &CurrentSlot(Core &core) { return core.frames[core.frameIndex]; }
 
 uint32_t SlotQueryBase(const Core &core) { return core.frameIndex * kTimestampsPerSlot; }
 
-VkCommandBuffer EnsureRecording(Core &core)
-{
-    if (core.recording)
-        return core.recording;
-    if (core.failed)
-        return VK_NULL_HANDLE;
-    FrameSlot &slot = CurrentSlot(core);
-    if (slot.commandBuffersUsed == slot.commandBuffers.size())
-    {
-        VkCommandBufferAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        allocInfo.commandPool = slot.pool;
-        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        allocInfo.commandBufferCount = 1;
-        VkCommandBuffer cmd = VK_NULL_HANDLE;
-        if (!Check(core, core.vk.vkAllocateCommandBuffers(core.dev, &allocInfo, &cmd), "vkAllocateCommandBuffers"))
-            return VK_NULL_HANDLE;
-        slot.commandBuffers.push_back(cmd);
-    }
-    VkCommandBuffer cmd = slot.commandBuffers[slot.commandBuffersUsed++];
-    VkCommandBufferBeginInfo begin{};
-    begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    if (!Check(core, core.vk.vkBeginCommandBuffer(cmd, &begin), "vkBeginCommandBuffer"))
-        return VK_NULL_HANDLE;
-    core.recording = cmd;
-    if (core.timestamps && slot.queriesUsed == 0)
-    {
-        // First recording of a recycled slot: its queries are reset here, so
-        // every write below comes after the reset in submission order.
-        core.vk.vkCmdResetQueryPool(cmd, core.timestamps, SlotQueryBase(core), kTimestampsPerSlot);
-        slot.queriesUsed = 2; // 0 and 1 are the frame's own pair
-    }
-    return cmd;
-}
-
 bool SubmitRecording(Core &core, bool present)
 {
-    FrameSlot &slot = CurrentSlot(core);
-    if (!core.recording && !present)
+    if (!core.recordingOpen && !present)
         return true;
     // A present needs a command buffer even when nothing else was recorded:
     // the swapchain image's hand-off barrier goes into it.
-    VkCommandBuffer cmd = EnsureRecording(core);
-    if (!cmd)
+    if (!EnsureRecording(core))
         return false;
-    if (!Check(core, core.vk.vkEndCommandBuffer(cmd), "vkEndCommandBuffer"))
-        return false;
-    core.recording = VK_NULL_HANDLE;
-
-    VkSemaphoreSubmitInfo waits[1]{};
-    uint32_t waitCount = 0;
+    FrameSlot &slot = CurrentSlot(core);
+    VkSemaphore acquired = VK_NULL_HANDLE;
     if (core.acquireWaitPending)
     {
-        waits[0].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-        waits[0].semaphore = slot.acquired;
-        waits[0].stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-        waitCount = 1;
+        acquired = slot.acquired;
         core.acquireWaitPending = false;
     }
-    VkSemaphoreSubmitInfo signals[2]{};
-    uint32_t signalCount = 0;
     const uint64_t serial = core.nextSerial;
-    signals[signalCount].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-    signals[signalCount].semaphore = core.timeline;
-    signals[signalCount].value = serial;
-    signals[signalCount].stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-    ++signalCount;
-    if (present)
-    {
-        signals[signalCount].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-        signals[signalCount].semaphore = core.renderDone[core.imageIndex];
-        signals[signalCount].stageMask = kPresentHandOffStage;
-        ++signalCount;
-    }
-    VkCommandBufferSubmitInfo cmdInfo{};
-    cmdInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
-    cmdInfo.commandBuffer = cmd;
-    VkSubmitInfo2 submit{};
-    submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
-    submit.waitSemaphoreInfoCount = waitCount;
-    submit.pWaitSemaphoreInfos = waits;
-    submit.commandBufferInfoCount = 1;
-    submit.pCommandBufferInfos = &cmdInfo;
-    submit.signalSemaphoreInfoCount = signalCount;
-    submit.pSignalSemaphoreInfos = signals;
-    if (!Check(core, core.vk.vkQueueSubmit2(core.queue, 1, &submit, VK_NULL_HANDLE), "vkQueueSubmit2"))
+    const VkSemaphore timeline = core.timeline;
+    const VkSemaphore renderDone = present ? core.renderDone[core.imageIndex] : VK_NULL_HANDLE;
+    core.recordingOpen = false;
+    const bool recorded = RecordControl(core, [=](RecordState &state) {
+        const Dispatch &vk = *state.vk;
+        if (!RecordCheck(state, vk.vkEndCommandBuffer(state.cmd), "vkEndCommandBuffer"))
+            return;
+        VkSemaphoreSubmitInfo wait{};
+        wait.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+        wait.semaphore = acquired;
+        wait.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+        VkSemaphoreSubmitInfo signals[2]{};
+        signals[0].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+        signals[0].semaphore = timeline;
+        signals[0].value = serial;
+        signals[0].stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+        signals[1].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+        signals[1].semaphore = renderDone;
+        signals[1].stageMask = kPresentHandOffStage;
+        VkCommandBufferSubmitInfo cmdInfo{};
+        cmdInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+        cmdInfo.commandBuffer = state.cmd;
+        VkSubmitInfo2 submit{};
+        submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+        submit.waitSemaphoreInfoCount = acquired ? 1 : 0;
+        submit.pWaitSemaphoreInfos = &wait;
+        submit.commandBufferInfoCount = 1;
+        submit.pCommandBufferInfos = &cmdInfo;
+        submit.signalSemaphoreInfoCount = renderDone ? 2 : 1;
+        submit.pSignalSemaphoreInfos = signals;
+        if (!RecordCheck(state, vk.vkQueueSubmit2(state.queue, 1, &submit, VK_NULL_HANDLE), "vkQueueSubmit2"))
+            return;
+        state.cmd = VK_NULL_HANDLE;
+        state.submitted = serial;
+    });
+    if (!recorded)
         return false;
     slot.lastSerial = serial;
     ++core.nextSerial;
     ++core.stats.submissions;
+    // A present hands over after its present packet.
+    if (!present)
+        HandOff(core);
     return true;
 }
 
@@ -281,9 +251,15 @@ bool RecycleSlot(Core &core, uint32_t slotIndex)
     if (!WaitSerial(core, slot.lastSerial))
         return false;
     CollectTimestamps(core, slotIndex);
-    if (!Check(core, core.vk.vkResetCommandPool(core.dev, slot.pool, 0), "vkResetCommandPool"))
+    // Recorded like the commands, so the pool is reset after the record
+    // thread's last use of it and before its next.
+    const VkDevice dev = core.dev;
+    const VkCommandPool pool = slot.pool;
+    if (!RecordControl(core, [=](RecordState &state) {
+            if (RecordCheck(state, state.vk->vkResetCommandPool(dev, pool, 0), "vkResetCommandPool"))
+                state.slots[slotIndex].used = 0;
+        }))
         return false;
-    slot.commandBuffersUsed = 0;
     ResetArena(slot.staging);
     ResetArena(slot.transient);
     for (VkDescriptorPool pool : slot.descriptorPools)
@@ -338,6 +314,12 @@ void SettleUploads(Core &core)
     CloseBufferCopies(core);
 }
 
+void WriteTimestamp(Core &core, VkPipelineStageFlags2 stage, uint32_t query)
+{
+    const VkQueryPool pool = core.timestamps;
+    Record(&core, [=](VkCommandBuffer cmd, const Dispatch &vk) { vk.vkCmdWriteTimestamp2(cmd, stage, pool, query); });
+}
+
 bool BeginTimed(Core &core, const char *name, int &queryOut)
 {
     queryOut = -1;
@@ -348,7 +330,7 @@ bool BeginTimed(Core &core, const char *name, int &queryOut)
     slot.queriesUsed += 2;
     slot.timedPasses.push_back({name, query});
     slot.queriesPending = true;
-    core.vk.vkCmdWriteTimestamp2(core.recording, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, core.timestamps, query);
+    WriteTimestamp(core, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, query);
     queryOut = static_cast<int>(query);
     return true;
 }
@@ -356,8 +338,7 @@ bool BeginTimed(Core &core, const char *name, int &queryOut)
 void EndTimed(Core &core, int query)
 {
     if (query >= 0)
-        core.vk.vkCmdWriteTimestamp2(core.recording, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, core.timestamps,
-                                     static_cast<uint32_t>(query) + 1);
+        WriteTimestamp(core, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, static_cast<uint32_t>(query) + 1);
 }
 } // namespace
 
@@ -368,20 +349,70 @@ bool AbandonFrame(Core &core)
     SettleUploads(core);
     const bool submitted = SubmitRecording(core, false);
     core.inFrame = false;
+    core.imageAcquired = false;
     core.acquireWaitPending = false;
     return submitted;
+}
+
+bool EnsureRecording(Core &core)
+{
+    if (core.recordingOpen)
+        return true;
+    if (core.failed)
+        return false;
+    FrameSlot &slot = CurrentSlot(core);
+    const uint32_t slotIndex = core.frameIndex;
+    const VkDevice dev = core.dev;
+    const VkCommandPool pool = slot.pool;
+    const VkQueryPool timestamps = core.timestamps;
+    const uint32_t queryBase = SlotQueryBase(core);
+    // First recording of a recycled slot: its queries are reset here, so every
+    // write after it comes after the reset in submission order.
+    const bool resetQueries = core.timestamps && slot.queriesUsed == 0;
+    if (resetQueries)
+        slot.queriesUsed = 2; // 0 and 1 are the frame's own pair
+    const bool begun = RecordControl(core, [=](RecordState &state) {
+        const Dispatch &vk = *state.vk;
+        RecordSlot &buffers = state.slots[slotIndex];
+        if (buffers.used == buffers.buffers.size())
+        {
+            VkCommandBufferAllocateInfo allocInfo{};
+            allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+            allocInfo.commandPool = pool;
+            allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+            allocInfo.commandBufferCount = 1;
+            VkCommandBuffer cmd = VK_NULL_HANDLE;
+            if (!RecordCheck(state, vk.vkAllocateCommandBuffers(dev, &allocInfo, &cmd), "vkAllocateCommandBuffers"))
+                return;
+            buffers.buffers.push_back(cmd);
+        }
+        VkCommandBuffer cmd = buffers.buffers[buffers.used++];
+        VkCommandBufferBeginInfo begin{};
+        begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        if (!RecordCheck(state, vk.vkBeginCommandBuffer(cmd, &begin), "vkBeginCommandBuffer"))
+            return;
+        if (resetQueries)
+            vk.vkCmdResetQueryPool(cmd, timestamps, queryBase, kTimestampsPerSlot);
+        state.cmd = cmd;
+    });
+    if (!begun)
+        return false;
+    core.recordingOpen = true;
+    ++core.recordingId;
+    return true;
 }
 
 namespace
 {
 // Buffer copies recorded since the last barrier must finish before anything
 // reads the buffers; one barrier before and one after cover all of them.
-void OpenBufferCopies(Core &core, VkCommandBuffer cmd)
+void OpenBufferCopies(Core &core)
 {
     if (core.bufferCopiesOpen)
         return;
     // Earlier reads and writes of any buffer finish before the copies write.
-    GlobalBarrier(core, cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, kBufferReadAccess | kWriteAccess,
+    GlobalBarrier(core, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, kBufferReadAccess | kWriteAccess,
                   VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
     core.bufferCopiesOpen = true;
 }
@@ -389,12 +420,12 @@ void OpenBufferCopies(Core &core, VkCommandBuffer cmd)
 
 void CloseBufferCopies(Core &core)
 {
-    if (!core.bufferCopiesOpen || !core.recording)
+    if (!core.bufferCopiesOpen || !core.recordingOpen)
     {
         core.bufferCopiesOpen = false;
         return;
     }
-    GlobalBarrier(core, core.recording, VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+    GlobalBarrier(core, VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
                   kBufferReadStages, kBufferReadAccess);
     core.bufferCopiesOpen = false;
 }
@@ -404,7 +435,7 @@ void CloseBufferCopies(Core &core)
 uint64_t PendingSerial(const Core &core) { return core.nextSerial; }
 
 uint64_t SubmissionSerial(const Core *core) { return PendingSerial(*core); }
-uint64_t RecordedSerial(const Core *core) { return core->recording ? core->nextSerial : core->nextSerial - 1; }
+uint64_t RecordedSerial(const Core *core) { return core->recordingOpen ? core->nextSerial : core->nextSerial - 1; }
 bool SerialFinished(Core *core, uint64_t serial) { return PollCompletedSerial(*core) >= serial; }
 
 uint64_t PollCompletedSerial(Core &core)
@@ -422,6 +453,10 @@ bool WaitSerial(Core &core, uint64_t serial)
 {
     if (!serial || serial <= core.completedSerial)
         return true;
+    // The record thread submits it first (and the wait would never end if it
+    // failed instead).
+    if (core.recorder.threaded && !WaitSubmitted(core, serial))
+        return false;
     VkSemaphoreWaitInfo info{};
     info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO;
     info.semaphoreCount = 1;
@@ -450,9 +485,6 @@ void Transition(Core &core, Image *image, VkImageLayout layout, VkPipelineStageF
              static_cast<int>(image->layout), static_cast<int>(layout));
         return;
     }
-    VkCommandBuffer cmd = EnsureRecording(core);
-    if (!cmd)
-        return;
     VkImageMemoryBarrier2 barrier{};
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
     barrier.srcStageMask = image->lastStages ? image->lastStages : VK_PIPELINE_STAGE_2_NONE;
@@ -465,11 +497,13 @@ void Transition(Core &core, Image *image, VkImageLayout layout, VkPipelineStageF
     barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.image = image->image;
     barrier.subresourceRange = {image->aspect, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS};
-    VkDependencyInfo dependency{};
-    dependency.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    dependency.imageMemoryBarrierCount = 1;
-    dependency.pImageMemoryBarriers = &barrier;
-    core.vk.vkCmdPipelineBarrier2(cmd, &dependency);
+    Record(&core, [barrier](VkCommandBuffer cmd, const Dispatch &vk) {
+        VkDependencyInfo dependency{};
+        dependency.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        dependency.imageMemoryBarrierCount = 1;
+        dependency.pImageMemoryBarriers = &barrier;
+        vk.vkCmdPipelineBarrier2(cmd, &dependency);
+    });
     ++core.stats.barriers;
     image->layout = layout;
     image->lastStages = stages;
@@ -523,6 +557,8 @@ void DestroyFrameResources(Core &core)
             core.vk.vkDestroyCommandPool(core.dev, slot.pool, nullptr);
         slot = FrameSlot();
     }
+    for (RecordSlot &slot : core.record.slots)
+        slot = RecordSlot(); // freed with their pools
 }
 
 // ---- Public API: frames -------------------------------------------------------------
@@ -530,8 +566,8 @@ void DestroyFrameResources(Core &core)
 FrameResult BeginFrame(Core *core_)
 {
     Core &core = *core_;
-    Dispatch &vk = core.vk;
-    if (core.failed)
+    // Presents made since the last frame may ask for a rebuild.
+    if (!SyncRecorder(core))
         return FrameResult::Failed;
     if (core.inFrame)
     {
@@ -572,22 +608,48 @@ FrameResult BeginFrame(Core *core_)
         }
     }
 
+    // The swapchain image is acquired later, by SwapchainImage.
+    core.inFrame = true;
+    core.imageAcquired = false;
+    core.imageMissing = false;
+    if (!EnsureRecording(core))
+        return FrameResult::Failed;
     FrameSlot &slot = CurrentSlot(core);
-    VkResult result = vk.vkAcquireNextImageKHR(core.dev, core.swapchain, UINT64_MAX, slot.acquired, VK_NULL_HANDLE,
-                                               &core.imageIndex);
+    if (core.timestamps)
+    {
+        WriteTimestamp(core, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, SlotQueryBase(core));
+        slot.frameTimed = true;
+        slot.queriesPending = true;
+    }
+    return core.failed ? FrameResult::Failed : FrameResult::Ok;
+}
+
+namespace
+{
+Image *AcquireImage(Core &core)
+{
+    if (core.imageAcquired)
+        return core.swapImages[core.imageIndex];
+    if (core.imageMissing || core.failed)
+        return nullptr;
+    // The swapchain is the record thread's while it presents: the previous
+    // frame's present goes first.
+    if (!WaitPresents(core))
+        return nullptr;
+    const VkResult result = core.vk.vkAcquireNextImageKHR(core.dev, core.swapchain, UINT64_MAX,
+                                                          CurrentSlot(core).acquired, VK_NULL_HANDLE, &core.imageIndex);
     if (result == VK_ERROR_OUT_OF_DATE_KHR)
     {
-        // Nothing was signalled. Rebuild next time.
+        // Nothing was signalled. This frame shows nothing; rebuild next time.
         core.rebuildPending = true;
-        ++core.stats.framesSkipped;
-        return FrameResult::Skipped;
+        core.imageMissing = true;
+        return nullptr;
     }
     if (result == VK_SUBOPTIMAL_KHR)
         core.rebuildPending = true; // still usable: draw this one, rebuild after
     else if (!Check(core, result, "vkAcquireNextImageKHR"))
-        return FrameResult::Failed;
-
-    core.inFrame = true;
+        return nullptr;
+    core.imageAcquired = true;
     core.acquireWaitPending = true;
     Image *image = core.swapImages[core.imageIndex];
     // Contents are undefined, and the acquire semaphore (waited at all
@@ -596,18 +658,9 @@ FrameResult BeginFrame(Core *core_)
     image->lastStages = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
     image->lastAccess = VK_ACCESS_2_NONE;
     image->writtenSubresources.clear();
-
-    VkCommandBuffer cmd = EnsureRecording(core);
-    if (!cmd)
-        return FrameResult::Failed;
-    if (core.timestamps)
-    {
-        vk.vkCmdWriteTimestamp2(cmd, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, core.timestamps, SlotQueryBase(core));
-        slot.frameTimed = true;
-        slot.queriesPending = true;
-    }
-    return FrameResult::Ok;
+    return image;
 }
+} // namespace
 
 FrameResult Present(Core *core_)
 {
@@ -619,32 +672,49 @@ FrameResult Present(Core *core_)
         Fail(core, core.inPass ? "Present inside a pass" : "Present outside a frame");
         return FrameResult::Failed;
     }
-    SettleUploads(core);
-    Image *image = core.swapImages[core.imageIndex];
-    Transition(core, image, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, kPresentHandOffStage, VK_ACCESS_2_NONE);
-    VkCommandBuffer cmd = EnsureRecording(core);
-    if (!cmd)
+    // A frame that never asked for its image shows it anyway (undefined).
+    Image *image = AcquireImage(core);
+    if (core.failed)
         return FrameResult::Failed;
+    if (!image)
+    {
+        // Out of date: submit what was recorded, show nothing.
+        if (!AbandonFrame(core))
+            return FrameResult::Failed;
+        ++core.stats.framesSkipped;
+        return FrameResult::Skipped;
+    }
+    SettleUploads(core);
+    Transition(core, image, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, kPresentHandOffStage, VK_ACCESS_2_NONE);
     FrameSlot &slot = CurrentSlot(core);
     if (core.timestamps && slot.frameTimed)
-        core.vk.vkCmdWriteTimestamp2(cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, core.timestamps,
-                                     SlotQueryBase(core) + 1);
+        WriteTimestamp(core, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, SlotQueryBase(core) + 1);
     if (!SubmitRecording(core, true))
         return FrameResult::Failed;
     core.inFrame = false;
+    core.imageAcquired = false;
 
-    VkPresentInfoKHR present{};
-    present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    present.waitSemaphoreCount = 1;
-    present.pWaitSemaphores = &core.renderDone[core.imageIndex];
-    present.swapchainCount = 1;
-    present.pSwapchains = &core.swapchain;
-    present.pImageIndices = &core.imageIndex;
-    const VkResult result = core.vk.vkQueuePresentKHR(core.queue, &present);
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
-        core.rebuildPending = true;
-    else if (!Check(core, result, "vkQueuePresentKHR"))
+    const VkSwapchainKHR swapchain = core.swapchain;
+    const VkSemaphore renderDone = core.renderDone[core.imageIndex];
+    const uint32_t imageIndex = core.imageIndex;
+    if (!RecordControl(core, [=](RecordState &state) {
+            VkPresentInfoKHR present{};
+            present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+            present.waitSemaphoreCount = 1;
+            present.pWaitSemaphores = &renderDone;
+            present.swapchainCount = 1;
+            present.pSwapchains = &swapchain;
+            present.pImageIndices = &imageIndex;
+            const VkResult result = state.vk->vkQueuePresentKHR(state.queue, &present);
+            ++state.presents;
+            if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+                state.rebuild = true;
+            else
+                RecordCheck(state, result, "vkQueuePresentKHR");
+        }))
         return FrameResult::Failed;
+    ++core.recorder.presentsQueued;
+    HandOff(core);
     ++core.stats.framesPresented;
 
     // The next slot becomes current: wait for its previous frame (the frames in
@@ -657,9 +727,7 @@ FrameResult Present(Core *core_)
 
 bool InFrame(const Core *core) { return core->inFrame; }
 
-Image *SwapchainImage(Core *core) { return core->inFrame ? core->swapImages[core->imageIndex] : nullptr; }
-
-VkCommandBuffer Commands(Core *core) { return EnsureRecording(*core); }
+Image *SwapchainImage(Core *core) { return core->inFrame ? AcquireImage(*core) : nullptr; }
 
 bool Flush(Core *core_, bool wait)
 {
@@ -685,6 +753,8 @@ bool Flush(Core *core_, bool wait)
 
 void WaitIdle(Core *core)
 {
+    // vkDeviceWaitIdle needs the queue to itself.
+    DrainRecorder(*core);
     if (core->dev)
         core->vk.vkDeviceWaitIdle(core->dev);
     PollCompletedSerial(*core);
@@ -764,28 +834,29 @@ bool BeginPass(Core *core_, const PassDesc &desc)
     if (core.failed)
         return false;
 
-    VkCommandBuffer cmd = EnsureRecording(core);
-    if (!cmd)
+    if (!EnsureRecording(core))
         return false;
     BeginTimed(core, desc.name, core.currentTimedPass);
 
-    VkRenderingInfo rendering{};
-    rendering.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-    rendering.renderArea = desc.area;
-    if (!rendering.renderArea.extent.width || !rendering.renderArea.extent.height)
-        rendering.renderArea = {{0, 0}, {first->desc.width, first->desc.height}};
-    rendering.layerCount = 1;
-    rendering.colorAttachmentCount = desc.colorCount;
-    rendering.pColorAttachments = colors;
-    if (depthImage)
-    {
-        rendering.pDepthAttachment = &depth;
-        if (depthImage->aspect & VK_IMAGE_ASPECT_STENCIL_BIT)
-            rendering.pStencilAttachment = &stencil;
-    }
-    core.vk.vkCmdBeginRendering(cmd, &rendering);
+    VkRect2D area = desc.area;
+    if (!area.extent.width || !area.extent.height)
+        area = {{0, 0}, {first->desc.width, first->desc.height}};
+    const uint32_t colorCount = desc.colorCount;
+    const bool hasDepth = depthImage != nullptr;
+    const bool hasStencil = depthImage && (depthImage->aspect & VK_IMAGE_ASPECT_STENCIL_BIT);
+    Record(&core, [=](VkCommandBuffer cmd, const Dispatch &vk) {
+        VkRenderingInfo rendering{};
+        rendering.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+        rendering.renderArea = area;
+        rendering.layerCount = 1;
+        rendering.colorAttachmentCount = colorCount;
+        rendering.pColorAttachments = colors;
+        rendering.pDepthAttachment = hasDepth ? &depth : nullptr;
+        rendering.pStencilAttachment = hasStencil ? &stencil : nullptr;
+        vk.vkCmdBeginRendering(cmd, &rendering);
+    });
     core.inPass = true;
-    return true;
+    return !core.failed;
 }
 
 void EndPass(Core *core_)
@@ -796,7 +867,7 @@ void EndPass(Core *core_)
         Fail(core, "EndPass outside a pass");
         return;
     }
-    core.vk.vkCmdEndRendering(core.recording);
+    Record(&core, [](VkCommandBuffer cmd, const Dispatch &vk) { vk.vkCmdEndRendering(cmd); });
     EndTimed(core, core.currentTimedPass);
     core.currentTimedPass = -1;
     core.inPass = false;
@@ -862,13 +933,13 @@ void *StageBufferWrite(Core *core_, Buffer *target, VkDeviceSize offset, VkDevic
     void *data = StageAllocate(core, size, 16, staging, stagingOffset);
     if (!data)
         return nullptr;
-    VkCommandBuffer cmd = EnsureRecording(core);
-    if (!cmd)
-        return nullptr;
-    OpenBufferCopies(core, cmd);
-    VkBufferCopy region{stagingOffset, offset, size};
-    core.vk.vkCmdCopyBuffer(cmd, staging, BufferHandle(target), 1, &region);
-    return data;
+    OpenBufferCopies(core);
+    const VkBufferCopy region{stagingOffset, offset, size};
+    const VkBuffer destination = BufferHandle(target);
+    Record(&core, [=](VkCommandBuffer cmd, const Dispatch &vk) {
+        vk.vkCmdCopyBuffer(cmd, staging, destination, 1, &region);
+    });
+    return core.failed ? nullptr : data;
 }
 
 void *StageImageWrite(Core *core_, Image *image, const ImageRegion &region, uint32_t *rowPitch, uint32_t *slicePitch)
@@ -927,9 +998,6 @@ void *StageImageWrite(Core *core_, Image *image, const ImageRegion &region, uint
                    VK_ACCESS_2_TRANSFER_WRITE_BIT);
     }
     image->writtenSubresources.push_back(subresource);
-    VkCommandBuffer cmd = EnsureRecording(core);
-    if (!cmd)
-        return nullptr;
     VkBufferImageCopy copy{};
     copy.bufferOffset = stagingOffset;
     copy.bufferRowLength = blocksWide * blockWidth;
@@ -938,7 +1006,12 @@ void *StageImageWrite(Core *core_, Image *image, const ImageRegion &region, uint
     copy.imageOffset = {static_cast<int32_t>(region.x), static_cast<int32_t>(region.y),
                         static_cast<int32_t>(region.z)};
     copy.imageExtent = {region.width, region.height, region.depth};
-    core.vk.vkCmdCopyBufferToImage(cmd, staging, image->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+    const VkImage target = image->image;
+    Record(&core, [=](VkCommandBuffer cmd, const Dispatch &vk) {
+        vk.vkCmdCopyBufferToImage(cmd, staging, target, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+    });
+    if (core.failed)
+        return nullptr;
     if ((desc.usage & VK_IMAGE_USAGE_SAMPLED_BIT) && !image->uploadPending)
     {
         image->uploadPending = true;
@@ -1038,9 +1111,6 @@ void BlitImage(Core *core_, Image *src, const VkOffset3D srcBox[2], Image *dst, 
     }
     UseImage(&core, src, ImageUse::TransferSrc);
     UseImage(&core, dst, ImageUse::TransferDst);
-    VkCommandBuffer cmd = EnsureRecording(core);
-    if (!cmd)
-        return;
     VkImageBlit blit{};
     blit.srcSubresource = {src->aspect, srcLevel, srcLayer, 1};
     blit.srcOffsets[0] = srcBox[0];
@@ -1048,8 +1118,12 @@ void BlitImage(Core *core_, Image *src, const VkOffset3D srcBox[2], Image *dst, 
     blit.dstSubresource = {dst->aspect, dstLevel, dstLayer, 1};
     blit.dstOffsets[0] = dstBox[0];
     blit.dstOffsets[1] = dstBox[1];
-    core.vk.vkCmdBlitImage(cmd, src->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst->image,
-                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, filter);
+    const VkImage from = src->image;
+    const VkImage to = dst->image;
+    Record(&core, [=](VkCommandBuffer cmd, const Dispatch &vk) {
+        vk.vkCmdBlitImage(cmd, from, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, to, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
+                          &blit, filter);
+    });
 }
 
 Readback *ReadImage(Core *core_, Image *image, uint32_t mipLevel, uint32_t layer)
@@ -1090,8 +1164,7 @@ Readback *ReadImage(Core *core_, Image *image, uint32_t mipLevel, uint32_t layer
     if (!buffer)
         return nullptr;
     UseImage(&core, image, ImageUse::TransferSrc);
-    VkCommandBuffer cmd = EnsureRecording(core);
-    if (!cmd)
+    if (!EnsureRecording(core))
     {
         DestroyBufferNow(core, buffer);
         return nullptr;
@@ -1099,8 +1172,6 @@ Readback *ReadImage(Core *core_, Image *image, uint32_t mipLevel, uint32_t layer
     VkBufferImageCopy region{};
     region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mipLevel, layer, 1};
     region.imageExtent = {width, height, depth};
-    core.vk.vkCmdCopyImageToBuffer(cmd, image->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, BufferHandle(buffer), 1,
-                                   &region);
     VkBufferMemoryBarrier2 toHost{};
     toHost.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
     toHost.srcStageMask = VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
@@ -1115,11 +1186,16 @@ Readback *ReadImage(Core *core_, Image *image, uint32_t mipLevel, uint32_t layer
     toHost.buffer = BufferHandle(buffer);
     toHost.offset = 0;
     toHost.size = VK_WHOLE_SIZE;
-    VkDependencyInfo dependency{};
-    dependency.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    dependency.bufferMemoryBarrierCount = 1;
-    dependency.pBufferMemoryBarriers = &toHost;
-    core.vk.vkCmdPipelineBarrier2(cmd, &dependency);
+    const VkImage source = image->image;
+    const VkBuffer target = BufferHandle(buffer);
+    Record(&core, [=](VkCommandBuffer cmd, const Dispatch &vk) {
+        vk.vkCmdCopyImageToBuffer(cmd, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, target, 1, &region);
+        VkDependencyInfo dependency{};
+        dependency.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        dependency.bufferMemoryBarrierCount = 1;
+        dependency.pBufferMemoryBarriers = &toHost;
+        vk.vkCmdPipelineBarrier2(cmd, &dependency);
+    });
 
     Readback *readback = new Readback();
     readback->buffer = buffer;
@@ -1201,6 +1277,8 @@ FrameResult ClearAndPresent(Core *core_, const float rgba[4])
     if (begun != FrameResult::Ok)
         return begun;
     Image *image = SwapchainImage(&core);
+    if (!image)
+        return core.failed ? FrameResult::Failed : Present(&core); // out of date: skipped
     PassDesc pass;
     pass.name = "clear";
     pass.colorCount = 1;

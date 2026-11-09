@@ -2747,6 +2747,28 @@ jobs:
             --binary "$OUT_DIR/KisakCOD-vulkan-d3d9-check" \
             --video-driver offscreen --validation require
 
+      - name: Run the checks again with the record thread switched
+        if: ${{ matrix.config == 'Debug' }}
+        timeout-minutes: 15
+        shell: bash
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          # The core can make its Vulkan calls on a thread of its own
+          # (CoreDesc::recordThread, docs/vulkan-core.md). The D3D9 front turns
+          # it on and the probe and the adapter check leave it off, so each
+          # runs here the other way.
+          KISAK_VK_RECORD_THREAD=1 python3 -u scripts/tests/test_vulkan_window_probe.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-probe" \
+            --video-driver offscreen --validation require
+          KISAK_VK_RECORD_THREAD=1 python3 -u scripts/tests/test_vulkan_legacy_adapter.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-legacy-check" \
+            --video-driver offscreen --validation require
+          KISAK_VK_RECORD_THREAD=0 python3 -u scripts/tests/test_vulkan_d3d9_front.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-d3d9-check" \
+            --video-driver offscreen --validation require
+
       - name: Check the D3D9 front's lock with ThreadSanitizer
         if: ${{ matrix.config == 'Debug' }}
         timeout-minutes: 15
@@ -2773,9 +2795,17 @@ jobs:
             -DKISAK_BUILD_LINUX_NATIVE_D3D9=ON \
             -DKISAK_DXVK_NATIVE_INCLUDE_DIR="$RUNNER_TEMP/dxvk-include/dxvk" \
             -DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3"
-          cmake --build "$tsan_build" --target KisakCOD-vulkan-d3d9-check --parallel "$(nproc)"
+          cmake --build "$tsan_build" --target KisakCOD-vulkan-d3d9-check KisakCOD-vulkan-probe --parallel "$(nproc)"
+          # The front records on the core's record thread, so this also
+          # checks the hand-over between the two.
           "$OUT_DIR/tsan/KisakCOD-vulkan-d3d9-check" --scene threads --validation off | tee "$RUNNER_TEMP/tsan.log"
           grep -qx 'd3d9_check=passed' "$RUNNER_TEMP/tsan.log"
+          # Frames, draws, read-back and swapchain rebuilds with the record
+          # thread on (the adapter check is not run here: lavapipe's own
+          # threads race in it, with or without ours).
+          KISAK_VK_RECORD_THREAD=1 "$OUT_DIR/tsan/KisakCOD-vulkan-probe" --draw --frames 60 --resize \
+            --validation off | tee "$RUNNER_TEMP/tsan-probe.log"
+          grep -qx 'vulkan_probe=passed' "$RUNNER_TEMP/tsan-probe.log"
 
       - name: Check the frame comparison script
         shell: bash
