@@ -2067,6 +2067,50 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
                 u ? u[5] : 0.0f, u ? u[6] : 0.0f, u ? u[7] : 0.0f);
         }
     }
+    if (d.diagnosedDraws)
+    {
+        // What the vertex program takes, and what this draw feeds it.
+        const SceGxmProgram *program = vertex->program();
+        std::string line;
+        char part[160];
+        const unsigned parameters = sceGxmProgramGetParameterCount(program);
+        for (unsigned i = 0; i < parameters && i < 24; ++i)
+        {
+            const SceGxmProgramParameter *p = sceGxmProgramGetParameter(program, i);
+            const char *name = p ? sceGxmProgramParameterGetName(p) : nullptr;
+            if (!p)
+                continue;
+            std::snprintf(part, sizeof(part), " %s(cat %u type %u x%u [%u] cont %u res %u)", name ? name : "?",
+                          unsigned(sceGxmProgramParameterGetCategory(p)), unsigned(sceGxmProgramParameterGetType(p)),
+                          sceGxmProgramParameterGetComponentCount(p), sceGxmProgramParameterGetArraySize(p),
+                          sceGxmProgramParameterGetContainerIndex(p), sceGxmProgramParameterGetResourceIndex(p));
+            line += part;
+        }
+        Log(device, "diag frame %llu draw: vertex program %u bytes, %u parameters, uniform buffer %u bytes:%s",
+            (unsigned long long)d.frame, unsigned(sceGxmProgramGetSize(program)), parameters,
+            unsigned(sceGxmProgramGetDefaultUniformBufferSize(program)), line.c_str());
+        line.clear();
+        for (int reg = 0; reg < 16; ++reg)
+        {
+            const VertexElement *element = plan.element[reg];
+            if (!element && !vertex->inputs[reg])
+                continue;
+            std::snprintf(part, sizeof(part), " v%d(%s, %s", reg, vertex->inputs[reg] ? "in program" : "NOT in program",
+                          element ? "" : "no element)");
+            line += part;
+            if (element)
+            {
+                std::snprintf(part, sizeof(part), "stream %u offset %u type %u -> format 0x%x x%u)",
+                              unsigned(element->stream), unsigned(element->offset), unsigned(element->type),
+                              unsigned(plan.format[reg]), unsigned(plan.components[reg]));
+                line += part;
+            }
+        }
+        Log(device, "diag frame %llu draw: %u streams (stride %u), absent 0x%x bgra 0x%x, inputs:%s",
+            (unsigned long long)d.frame, unsigned(vertexProgram->streamCount),
+            vertexProgram->streamCount ? unsigned(strides[vertexProgram->streams[0]]) : 0u,
+            unsigned(plan.options.absentInputs), unsigned(plan.options.bgraInputs), line.c_str());
+    }
     void *pixelUniforms = nullptr;
     if (pixel->uniforms)
     {

@@ -64,7 +64,9 @@ uploads the RelWithDebInfo `.vpk`.
    `ur0:data/libshacccg.suprx`, as the GXM probe does; without it the log
    says so and nothing is drawn.
 
-START + SELECT quits.
+START + SELECT quits. For a run nobody watches, `+set vita_quitAfter 90` in
+the command line file quits by itself 90 seconds after start-up (the
+dedicated server takes it too).
 
 ## What it builds
 
