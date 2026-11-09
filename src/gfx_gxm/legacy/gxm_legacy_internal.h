@@ -90,6 +90,9 @@ struct Level
     uint32_t slicePitch = 0;
     uint32_t width = 0, height = 0, depth = 1;
     bool locked = false;
+    bool readOnly = false;
+    // Swizzled textures: the level as D3D9 lays it out, while it is locked.
+    std::vector<uint8_t> scratch;
 };
 
 // Where a resource's bytes are: a GPU pool, or the C heap for SYSTEMMEM and
@@ -117,10 +120,14 @@ struct Texture
     bool sampleable = false;
     // Depth formats: the depth-stencil surface scenes use.
     SceGxmDepthStencilSurface depthSurface;
-    // Cube textures: memory holds the levels as D3D9 locks them (in the C
-    // heap); sceGxm samples a swizzled copy, made at each UnlockRect.
+    // Swizzled textures (cubes, and block-compressed 2D textures, which
+    // sceGxm cannot sample linear): memory stays empty and sceGxm samples
+    // swizzled. LockRect hands out a scratch copy of the level in D3D9's
+    // layout, and UnlockRect swizzles it in.
+    bool swizzledLayout = false;
     Memory swizzled;
     uint32_t faceStride = 0;
+    uint32_t layoutWidth = 0, layoutHeight = 0; // powers of two
     uint32_t mipOffset[14] = {};
 };
 
@@ -279,11 +286,12 @@ void ShutdownDraw(Device &device); // after the GPU is idle
 // once the memory is there.
 uint32_t LayoutTexture(Texture &texture);
 void SetUpTexture(Device &device, Texture &texture);
-// Whether the texture's levels stay in the C heap (cube textures, which
-// sceGxm samples from a swizzled copy).
-bool StagedTexture(const TextureDesc &desc);
-// A level the CPU wrote (UnlockRect, UpdateTexture) for the GPU to see.
-void TextureWritten(Device &device, Texture &texture, uint32_t face, uint32_t level);
+// Whether sceGxm samples the texture swizzled (see Texture::swizzledLayout).
+bool SwizzledTexture(const TextureDesc &desc, const FormatInfo &format);
+// A swizzled texture's level, to and from D3D9's layout (rows `pitch`
+// bytes apart).
+void WriteSwizzled(Texture &texture, uint32_t face, uint32_t level, const uint8_t *from, uint32_t pitch);
+void ReadSwizzled(const Texture &texture, uint32_t face, uint32_t level, uint8_t *to, uint32_t pitch);
 // GPU memory the GPU may still read: freed once the frames using it are done.
 void Retire(Device &device, Memory &memory);
 // The open scene, if any, goes to the GPU; Finish also waits for it.

@@ -181,7 +181,8 @@ bool Describe(const Surface *surface, Target &out)
         return out.data != nullptr;
     }
     const Texture *texture = surface->texture;
-    if (!texture)
+    // Swizzled textures have no level in D3D9's layout to point at.
+    if (!texture || !texture->memory.data)
         return false;
     const Level &level = texture->levels[surface->face * texture->desc.levels + surface->level];
     out.data = texture->memory.data + level.offset;
@@ -412,10 +413,11 @@ Texture *CreateTexture(Device *device, const TextureDesc &desc)
     texture->desc.height = desc.kind == TextureKind::Cube ? desc.width : desc.height;
     texture->levels.resize(texture->faces * texture->desc.levels);
     const uint32_t total = LayoutTexture(*texture);
-    // Textures and targets prefer CDRAM, the GPU's own memory. Cube textures
-    // keep D3D9's layout in the C heap and give the GPU a swizzled copy.
-    if (!AllocateMemory(*device, texture->memory, total, 256,
-                        StagedTexture(texture->desc) ? d3d::POOL_SYSTEMMEM : desc.pool, true, desc.name))
+    // Textures and targets prefer CDRAM, the GPU's own memory. Swizzled
+    // textures (cubes, block-compressed) have only their swizzled copy, which
+    // SetUpTexture makes.
+    texture->swizzledLayout = SwizzledTexture(texture->desc, *format);
+    if (!texture->swizzledLayout && !AllocateMemory(*device, texture->memory, total, 256, desc.pool, true, desc.name))
         return nullptr;
     SetUpTexture(*device, *texture);
     texture->surfaces.resize(texture->levels.size());
@@ -454,7 +456,7 @@ const TextureDesc &Describe(const Texture *texture)
     return texture->desc;
 }
 
-bool LockRect(Device *device, Texture *texture, uint32_t face, uint32_t level, const Box *box, uint32_t,
+bool LockRect(Device *device, Texture *texture, uint32_t face, uint32_t level, const Box *box, uint32_t flags,
               LockedRect &out)
 {
     out = LockedRect{};
@@ -482,7 +484,18 @@ bool LockRect(Device *device, Texture *texture, uint32_t face, uint32_t level, c
         }
     }
     lock.locked = true;
-    out.bits = texture->memory.data + lock.offset + z * lock.slicePitch + y * lock.pitch + x * texture->format->blockBytes;
+    uint8_t *base = texture->memory.data + lock.offset;
+    if (texture->swizzledLayout)
+    {
+        // A copy in D3D9's layout, filled from the GPU's copy only when the
+        // caller may read what it does not write.
+        lock.scratch.assign(size_t(lock.slicePitch) * lock.depth, 0);
+        base = lock.scratch.data();
+        if ((box && box->right) || (flags & d3d::LOCK_READONLY))
+            ReadSwizzled(*texture, face, level, base, lock.pitch);
+        lock.readOnly = (flags & d3d::LOCK_READONLY) != 0;
+    }
+    out.bits = base + z * lock.slicePitch + y * lock.pitch + x * texture->format->blockBytes;
     out.pitch = lock.pitch;
     out.slicePitch = lock.slicePitch;
     return true;
@@ -496,7 +509,12 @@ void UnlockRect(Device *device, Texture *texture, uint32_t face, uint32_t level)
     if (!lock.locked)
         return;
     lock.locked = false;
-    TextureWritten(*device, *texture, face, level);
+    if (texture->swizzledLayout)
+    {
+        if (!lock.readOnly)
+            WriteSwizzled(*texture, face, level, lock.scratch.data(), lock.pitch);
+        std::vector<uint8_t>().swap(lock.scratch);
+    }
     ++device->stats.textureUploads;
     device->stats.uploadBytes += uint64_t(lock.slicePitch) * lock.depth;
 }
@@ -1075,12 +1093,18 @@ void UpdateTexture(Device *device, Texture *src, Texture *dst)
         {
             const Level &from = src->levels[face * src->desc.levels + level + skip];
             const Level &to = dst->levels[face * dst->desc.levels + level];
+            if (!src->memory.data)
+                return;
+            if (dst->swizzledLayout)
+            {
+                WriteSwizzled(*dst, face, level, src->memory.data + from.offset, from.pitch);
+                continue;
+            }
             const uint32_t rows = Rows(*dst->format, to.height) * to.depth;
             const uint32_t bytes = std::min(from.pitch, to.pitch);
             for (uint32_t row = 0; row < rows; ++row)
                 std::memcpy(dst->memory.data + to.offset + size_t(row) * to.pitch,
                             src->memory.data + from.offset + size_t(row) * from.pitch, bytes);
-            TextureWritten(*device, *dst, face, level);
         }
     }
 }

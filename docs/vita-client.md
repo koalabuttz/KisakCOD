@@ -164,9 +164,14 @@ What the GXM back end does so far (step 2d):
   which is how sceGxm reads them and also a layout LockRect can hand out.
   Render-target textures are strided (rows of 32 texels, as colour surfaces
   want). Volume textures are their slices stacked. sceGxm samples cube
-  textures only swizzled, so a cube keeps D3D9's layout in the C heap and
-  each UnlockRect swizzles the level into the GPU's copy. Depth textures are
-  not sampled yet: draws bind a white texture.
+  textures only swizzled, and refuses linear DXT textures (run D:
+  `sceGxmTextureInit... failed (0x805b0009)` for every DXT1/3/5), so cube and
+  DXT textures are swizzled: the GPU holds only the swizzled copy, LockRect
+  hands out a scratch level in D3D9's layout (filled from the GPU's copy for
+  partial or read-only locks), and UnlockRect swizzles it in. DXT textures
+  whose sides are not powers of two use sceGxm's arbitrary swizzled layout,
+  padded to the powers of two. Depth textures are not sampled yet: draws
+  bind a white texture.
 - **State.** The viewport moves half a pixel (D3D9 samples pixel centres at
   whole coordinates); the viewport and scissor rect become the region clip;
   depth, stencil, cull, fill mode and depth bias map to sceGxm's; blending

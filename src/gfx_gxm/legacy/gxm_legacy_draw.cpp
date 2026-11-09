@@ -15,9 +15,10 @@
 //   programs per variant, vertex variant, blend state and target format.
 // - Textures are linear, laid out as sceGxm reads a linear texture (rows of
 //   whole multiples of 8 texels, mip levels sized from the power of two
-//   above the base). Render-target textures are strided. Cube textures are
-//   swizzled into a copy at each UnlockRect. Depth textures are not sampled
-//   yet: draws bind a stand-in.
+//   above the base). Render-target textures are strided. Cube and
+//   block-compressed (DXT) textures are swizzled, since sceGxm refuses linear
+//   DXT: LockRect hands out a scratch level that UnlockRect swizzles in.
+//   Depth textures are not sampled yet: draws bind a stand-in.
 // - Memory the GPU may still read (a DISCARD's old buffer, a destroyed
 //   resource, released programs) is freed three frames later: the display
 //   queue lets the CPU run at most two frames ahead.
@@ -1276,79 +1277,156 @@ uint32_t Part1By1(uint32_t x)
     return x;
 }
 
-// A square level's texel (or 4x4 block) in sceGxm's swizzled order: y in
-// the even bits, x in the odd ones.
-uint32_t Morton(uint32_t x, uint32_t y)
+uint32_t Log2(uint32_t powerOfTwo)
 {
-    return Part1By1(y) | Part1By1(x) << 1;
+    uint32_t bits = 0;
+    while (powerOfTwo > 1)
+    {
+        powerOfTwo >>= 1;
+        ++bits;
+    }
+    return bits;
 }
 
-// sceGxm's cube layout: each face holds every level down to 1x1 whatever
-// the texture has, swizzled, and faces of larger textures start on 2 KB.
-bool LayOutCube(Texture &texture)
+// A texel's (or 4x4 block's) place in sceGxm's swizzled order, on a
+// width x height grid (powers of two): Morton order over the largest square,
+// y in the even bits and x in the odd ones, and the squares one after
+// another along the longer side.
+uint32_t Morton(uint32_t x, uint32_t y, uint32_t width, uint32_t height)
+{
+    const uint32_t side = std::min(width, height);
+    const uint32_t k = Log2(side);
+    return ((x >> k) | (y >> k)) << (2 * k) | Part1By1(x & (side - 1)) << 1 | Part1By1(y & (side - 1));
+}
+
+// Blocks (or texels) across one side of a swizzled level.
+uint32_t GridSide(const FormatInfo &format, uint32_t layoutSide, uint32_t level)
+{
+    const uint32_t block = format.compressed ? 4 : 1;
+    return AlignUp(std::max(1u, layoutSide >> level), block) / block;
+}
+
+// sceGxm's swizzled layouts. A 2D texture's sampled levels follow each other,
+// each sized from the power of two above the base. Each cube face holds every
+// level down to 1x1 whatever the texture has, and faces of larger textures
+// start on 2 KB.
+bool LayOutSwizzled(Texture &texture)
 {
     const FormatInfo &format = *texture.format;
-    const uint32_t size = texture.desc.width;
-    if (size & (size - 1))
+    const TextureDesc &desc = texture.desc;
+    if (desc.width > 4096 || desc.height > 4096)
         return false;
-    const uint32_t block = format.compressed ? 4 : 1;
-    const uint32_t bits = format.compressed ? format.blockBytes * 8 / 16 : format.blockBytes * 8;
-    uint32_t offset = 0, level = 0;
-    for (uint32_t side = size; side >= 1; side >>= 1, ++level)
+    const bool cube = desc.kind == TextureKind::Cube;
+    if (cube && (desc.width & (desc.width - 1)))
+        return false;
+    texture.layoutWidth = NextPowerOfTwo(desc.width);
+    texture.layoutHeight = NextPowerOfTwo(desc.height);
+    const uint32_t levels = cube ? Log2(texture.layoutWidth) + 1 : SampledLevels(texture);
+    uint32_t offset = 0;
+    for (uint32_t level = 0; level < levels; ++level)
     {
         if (level < 14)
             texture.mipOffset[level] = offset;
-        const uint32_t blocks = AlignUp(side, block) / block;
-        offset += blocks * blocks * format.blockBytes;
+        offset += GridSide(format, texture.layoutWidth, level) * GridSide(format, texture.layoutHeight, level) *
+                  format.blockBytes;
     }
+    if (!cube)
+    {
+        texture.faceStride = AlignUp(offset, 4);
+        return true;
+    }
+    const uint32_t size = desc.width;
+    const uint32_t bits = format.compressed ? format.blockBytes * 8 / 16 : format.blockBytes * 8;
     const bool wide = (size >= 32 && (bits <= 8 || format.compressed)) || (size >= 16 && (bits == 16 || bits == 32)) ||
                       (size >= 8 && bits == 64);
     texture.faceStride = AlignUp(offset, wide ? 2048 : 4);
     return true;
 }
-} // namespace
 
-bool StagedTexture(const TextureDesc &desc)
-{
-    return desc.kind == TextureKind::Cube && desc.pool != d3d::POOL_SYSTEMMEM && desc.pool != d3d::POOL_SCRATCH;
-}
-
-void TextureWritten(Device &, Texture &texture, uint32_t face, uint32_t level)
+// Calls f(linear byte offset, swizzled byte offset) for each block of a level
+// D3D9 holds.
+template <typename F> bool ForEachSwizzledBlock(const Texture &texture, uint32_t face, uint32_t level, uint32_t pitch, F f)
 {
     if (!texture.swizzled.data || face >= 6 || level >= texture.desc.levels || level >= 14)
-        return;
+        return false;
     const FormatInfo &format = *texture.format;
-    const Level &from = texture.levels[face * texture.desc.levels + level];
-    uint8_t *to = texture.swizzled.data + face * texture.faceStride + texture.mipOffset[level];
+    if (texture.desc.kind != TextureKind::Cube && level >= SampledLevels(texture))
+        return false; // sceGxm never reads it
+    const Level &l = texture.levels[face * texture.desc.levels + level];
+    const uint32_t block = format.compressed ? 4 : 1;
+    const uint32_t across = AlignUp(l.width, block) / block, down = AlignUp(l.height, block) / block;
+    const uint32_t gridWidth = GridSide(format, texture.layoutWidth, level);
+    const uint32_t gridHeight = GridSide(format, texture.layoutHeight, level);
+    const size_t base = size_t(face) * texture.faceStride + texture.mipOffset[level];
     const uint32_t bytes = format.blockBytes;
-    const uint32_t side = format.compressed ? std::max(1u, (from.width + 3) / 4) : from.width;
-    for (uint32_t y = 0; y < side; ++y)
-    {
-        const uint8_t *row = texture.memory.data + from.offset + size_t(y) * from.pitch;
-        for (uint32_t x = 0; x < side; ++x)
-            std::memcpy(to + size_t(Morton(x, y)) * bytes, row + size_t(x) * bytes, bytes);
-    }
+    for (uint32_t y = 0; y < down && y < gridHeight; ++y)
+        for (uint32_t x = 0; x < across && x < gridWidth; ++x)
+            f(size_t(y) * pitch + size_t(x) * bytes, base + size_t(Morton(x, y, gridWidth, gridHeight)) * bytes);
+    return true;
+}
+} // namespace
+
+bool SwizzledTexture(const TextureDesc &desc, const FormatInfo &format)
+{
+    if (desc.pool == d3d::POOL_SYSTEMMEM || desc.pool == d3d::POOL_SCRATCH || format.depth ||
+        (desc.usage & d3d::USAGE_RENDERTARGET))
+        return false;
+    return desc.kind == TextureKind::Cube || (desc.kind == TextureKind::Tex2D && format.compressed);
+}
+
+void WriteSwizzled(Texture &texture, uint32_t face, uint32_t level, const uint8_t *from, uint32_t pitch)
+{
+    const uint32_t bytes = texture.format->blockBytes;
+    uint8_t *to = texture.swizzled.data;
+    ForEachSwizzledBlock(texture, face, level, pitch,
+                         [&](size_t linear, size_t swizzled) { std::memcpy(to + swizzled, from + linear, bytes); });
+}
+
+void ReadSwizzled(const Texture &texture, uint32_t face, uint32_t level, uint8_t *to, uint32_t pitch)
+{
+    const uint32_t bytes = texture.format->blockBytes;
+    const uint8_t *from = texture.swizzled.data;
+    ForEachSwizzledBlock(texture, face, level, pitch,
+                         [&](size_t linear, size_t swizzled) { std::memcpy(to + linear, from + swizzled, bytes); });
 }
 
 void SetUpTexture(Device &device, Texture &texture)
 {
     texture.sampleable = false;
     const TextureDesc &desc = texture.desc;
-    if (StagedTexture(desc))
+    if (texture.swizzledLayout)
     {
         SceGxmTextureFormat format;
-        if (!TextureFormat(desc.format, format) || !LayOutCube(texture) || desc.width > 4096)
+        if (!TextureFormat(desc.format, format) || !LayOutSwizzled(texture))
             return;
-        if (!AllocateMemory(device, texture.swizzled, texture.faceStride * 6, 4096, d3d::POOL_DEFAULT, true,
-                            texture.name.c_str()))
+        const uint32_t bytes = texture.faceStride * texture.faces;
+        if (!AllocateMemory(device, texture.swizzled, bytes, 4096, d3d::POOL_DEFAULT, true, texture.name.c_str()))
             return;
-        std::memset(texture.swizzled.data, 0x80, texture.faceStride * 6);
-        const int result = sceGxmTextureInitCube(&texture.sampled, texture.swizzled.data, format, desc.width,
-                                                 desc.width, std::min(desc.levels, 13u));
+        std::memset(texture.swizzled.data, desc.kind == TextureKind::Cube ? 0x80 : 0, bytes);
+        int result;
+        const char *call;
+        if (desc.kind == TextureKind::Cube)
+        {
+            call = "sceGxmTextureInitCube";
+            result = sceGxmTextureInitCube(&texture.sampled, texture.swizzled.data, format, desc.width, desc.width,
+                                           std::min(desc.levels, 13u));
+        }
+        else if (texture.layoutWidth == desc.width && texture.layoutHeight == desc.height)
+        {
+            call = "sceGxmTextureInitSwizzled";
+            result = sceGxmTextureInitSwizzled(&texture.sampled, texture.swizzled.data, format, desc.width,
+                                               desc.height, SampledLevels(texture));
+        }
+        else
+        {
+            call = "sceGxmTextureInitSwizzledArbitrary";
+            result = sceGxmTextureInitSwizzledArbitrary(&texture.sampled, texture.swizzled.data, format, desc.width,
+                                                        desc.height, SampledLevels(texture));
+        }
         if (result < 0)
         {
-            Log(device, "sceGxmTextureInitCube for %s (%u, format %u) failed (0x%08x)", texture.name.c_str(),
-                desc.width, unsigned(desc.format), unsigned(result));
+            Log(device, "%s for %s (%ux%u, format %u) failed (0x%08x)", call, texture.name.c_str(), desc.width,
+                desc.height, unsigned(desc.format), unsigned(result));
             return;
         }
         texture.sampleable = true;
@@ -1869,10 +1947,10 @@ void LogDrawSummary(Device &device)
     if (!d)
         return;
     Log(device,
-        "draws: %llu drawn and %llu copies in %llu scenes; %zu vertex and %zu fragment programs, %u shader variants made "
+        "draws: %llu drawn and %llu copies in %llu scenes; %u vertex and %u fragment programs, %u shader variants made "
         "(%u did not compile); %llu buffer renames, %llu blocks past the transient ring, %u failed draws",
-        (unsigned long long)d->drawn, (unsigned long long)d->copies, (unsigned long long)d->scenes, d->vertexPrograms.size(),
-        d->fragmentPrograms.size(), d->variantsMade, d->variantFailures, (unsigned long long)d->renames,
+        (unsigned long long)d->drawn, (unsigned long long)d->copies, (unsigned long long)d->scenes, unsigned(d->vertexPrograms.size()),
+        unsigned(d->fragmentPrograms.size()), d->variantsMade, d->variantFailures, (unsigned long long)d->renames,
         (unsigned long long)d->ringOverflows, d->drawFailures);
     for (int i = 0; i < SkipCount; ++i)
         if (d->skipped[i])
