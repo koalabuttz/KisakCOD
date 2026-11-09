@@ -8,9 +8,14 @@ platform layer and memory rules. Started 2026-11-09.
 
 **State: stage 1, build and boot.**
 - The whole client compiles, links and packs into a `.vpk`: client, cgame, UI, sound, renderer and its own listen server.
-- The renderer has no graphics back end yet. `Direct3DCreate9` answers "no device", as DXVK does without a GPU. The client should start, read its files, load the front-end zones and then stop with the renderer's own error.
-- Sound links the OpenAL stand-in, which also answers "no device".
-- It has not run on a Vita yet.
+- The renderer has no graphics back end yet. The stage-1 `Direct3DCreate9` stops the client through `Sys_Error` with that reason.
+- Sound links the OpenAL stand-in ("no device").
+
+**Runs on David's Vita (2026-11-09):**
+- Run 1 reached the renderer, but its log was empty. A game client's `Sys_Print` was silent: on Linux `Com_PrintMessage` copies lines to stderr, which the Vita lacks. It then aborted on an assert, because `R_SetWndParms` read an empty display-mode list after the "no device" answer. Both are fixed.
+- Run 2 stopped where expected: the banner at 1.6 s, `FS_Startup` at 2.0 s, the network up at 8.8 s, then `R_Init` and the fatal error at 9.0 s. No zones load before the renderer starts.
+- At the error: zone arena 128 MB free, heap 5.8 of 64 MB used, engine reservations 154 MB, and **61 MB of system memory free** (220 MB free at start-up).
+- Run 2 also showed every `.iwd` opened twice: newlib's `getcwd` spells the folder `ux0:/data/KisakCOD`. `Sys_Cwd` now drops that slash.
 
 ## Building
 
