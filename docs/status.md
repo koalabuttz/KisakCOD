@@ -133,11 +133,12 @@ These came before the playable client and still build and run in CI:
 
 ## Open pull requests
 
-As of 2026-11-08.
+As of 2026-11-09.
 
 | PR | What | Waits on |
 | --- | --- | --- |
 | 120 | Record the Vulkan probe's first GPU runs (docs) | Review. |
+| 152 | Vulkan back end: record commands on a second thread, as DXVK does, and submit a frame ahead of its `Present` when the engine waits on its swap fence ([core](vulkan-core.md), [adapter](vulkan-legacy-adapter.md)) | Laptop run 8: frame rate against DXVK. |
 
 ## Laptop and PC runs still to do
 
@@ -152,6 +153,10 @@ As of 2026-11-08.
   Windows game needs a Win32 host for the front first).
 - Vulkan probe with the Khronos validation layer (synchronisation checks) on a
   real GPU; the laptop and PC runs so far had no layer installed.
+- Vulkan back end frame rate with the record thread (PR 152) on the laptop:
+  default, swap fence flush off, both off and DXVK, interleaved (steps in the
+  project files, `renderer/vulkan-backend-laptop-run-8-steps.md`). Run 6 had
+  Vulkan at 116 fps against 151 to 159 on DXVK. Then the same on the PC.
 
 ## Roadmap
 
