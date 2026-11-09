@@ -6,7 +6,8 @@ multiplayer client, `KisakCOD-mp`, for a hacked PS Vita and packs it as
 it follows the [Vita dedicated server](vita.md), which shares its toolchain,
 platform layer and memory rules. Started 2026-11-09.
 
-**State: stage 1, build and boot.**
+**State: stage 1 done (build and boot); stage 2 (graphics) started with the
+GXM probe below.**
 - The whole client compiles, links and packs into a `.vpk`: client, cgame, UI, sound, renderer and its own listen server.
 - The renderer has no graphics back end yet. The stage-1 `Direct3DCreate9` stops the client through `Sys_Error` with that reason.
 - Sound links the OpenAL stand-in ("no device").
@@ -96,6 +97,58 @@ Other large static arrays in the client:
 - `clients` 1.7 MB, `g_streamState` 1.7 MB.
 
 The heap and the engine reservations are the server's for now: a 64 MB heap, the 128 MB zone arena and the hunks. Stage 1's run measures what is left. Textures will go to the GPU's own memory (CDRAM, about 112 MB), not main memory.
+
+## GXM probe (stage 2, step 1)
+
+`KisakCOD-gxm-probe.vpk` (title ID `KSKD00003`) is built with the client. It
+checks the graphics layer the client will stand on, on its own and in a few
+seconds, before the renderer runs on it. It uses no engine code and no game
+data. The source is `src/gfx_gxm/tools/gxm_probe.cpp`.
+
+What it does, in order:
+1. Brings up sceGxm, the GPU memory pools, three display buffers, a
+   depth-stencil surface and the shader patcher (`src/gfx_gxm/gxm_display.h`).
+2. Loads the shader compiler from `ur0:data/libshacccg.suprx` and compiles six
+   small Cg programs (`src/gfx_gxm/gxm_shader_compiler.h`), with their times.
+3. Draws for about five seconds, with the time per frame:
+   - a full-screen colour that cycles through the hues: the clear;
+   - a spinning, blended triangle whose colours are D3DCOLOR bytes;
+   - an orange and white checkerboard quad in the bottom right corner.
+4. Clears the screen with `sceGxmTransferFill`, then shows a green band on the
+   top third for a second.
+5. Logs free memory after each step to `ux0:data/KisakCOD/gxm-probe.log`.
+
+Without the shader compiler it skips steps 2 and 3, says so, and still runs
+step 4. START + SELECT stops it early.
+
+The probe and the client are packed **unsafe** (without `vita-make-fself -s`),
+because safe homebrew cannot read `ur0:`. VitaShell asks for confirmation when
+it installs them.
+
+### The shader compiler
+
+Each user extracts `libshacccg.suprx` once from their own console. It is part
+of Sony's PSM runtime and can't be shipped:
+1. Install ShaRKBR33D (Rinnegatamante's `.vpk`) with VitaShell.
+2. Run it with Wi-Fi on. It downloads the PSM runtime and writes
+   `ur0:data/libshacccg.suprx`.
+
+The program links the compiler through weak imports (`SceShaccCg_stub_weak`),
+so it starts without the file and reports that it is missing.
+
+### GPU memory
+
+`src/gfx_gxm/gxm_memory.h` reserves one kernel block per kind at start-up,
+maps it for the GPU, and hands out pieces with a first-fit heap
+(`gxm_heap.h`). The heap is plain offset arithmetic, so it is tested on the
+host by `scripts/tests/test_vita_gxm_heap.py`. The kinds are:
+- CDRAM: textures, render targets, the display buffers;
+- uncached main memory: vertex data, ring buffers;
+- the two USSE kinds: shader code.
+
+The display's own buffers take about 9 MB of CDRAM and 2.6 MB of main memory.
+The parameter buffer, which sceGxm takes from main memory itself, adds 16 MB.
+The probe measures what is left.
 
 ## Stages
 

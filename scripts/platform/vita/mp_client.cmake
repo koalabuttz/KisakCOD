@@ -178,3 +178,6 @@ add_dependencies(KisakCOD-mp update_build_number)
 
 set(KISAK_VITA_MP_TITLE_ID "KSKD00002" CACHE STRING "PS Vita title ID of the multiplayer client .vpk (9 characters)")
 kisak_vita_pack_vpk(KisakCOD-mp "${KISAK_VITA_MP_TITLE_ID}" "KisakCOD Multiplayer")
+
+# The graphics layer on its own (stage 2).
+include(${CMAKE_CURRENT_LIST_DIR}/gxm_probe.cmake)

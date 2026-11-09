@@ -303,6 +303,7 @@ jobs:
           python3 scripts/tests/test_openal_stream_seek.py
           python3 scripts/tests/test_linux_sp_level_sweep.py
           python3 scripts/tests/test_shader_spike.py
+          python3 scripts/tests/test_vita_gxm_heap.py
 
       - name: Run asset-free native checks
         timeout-minutes: 30
@@ -1113,8 +1114,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cmake --build "$BUILD_DIR" --target KisakCOD-mp-vpk --parallel "$(nproc)"
-          ls -l "$BINARY" "$BINARY.vpk"
+          cmake --build "$BUILD_DIR" --target KisakCOD-mp-vpk KisakCOD-gxm-probe-vpk --parallel "$(nproc)"
+          ls -l "$BINARY" "$BINARY.vpk" "$(dirname "$BINARY")/KisakCOD-gxm-probe.vpk"
           "$VITASDK/bin/arm-vita-eabi-size" -A "$BINARY" | grep -E '^\.(text|rodata|data|bss) '
           # Float results have to match x86 (docs/vita.md): client prediction
           # replays the server's movement math.
@@ -1145,7 +1146,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: KisakCOD-mp-vita-${{ matrix.config }}
-          path: ${{ env.BINARY }}.vpk
+          path: |
+            ${{ env.BINARY }}.vpk
+            ${{ env.CMAKE_RUNTIME_OUTPUT_DIRECTORY }}/KisakCOD-gxm-probe.vpk
           if-no-files-found: error
           retention-days: 14
 

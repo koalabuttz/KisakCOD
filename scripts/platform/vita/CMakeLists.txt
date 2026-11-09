@@ -111,16 +111,25 @@ add_dependencies(KisakCOD-dedi update_build_number)
 # a homebrew eboot.bin, and vita-pack-vpk zips it with the app's param.sfo.
 # ATTRIBUTE2=12 asks for the larger memory budget (extended mode): the engine's
 # reservations alone take about 154 MB (docs/vita.md).
-# kisak_vita_pack_vpk(<target> <title id> <title>) adds <target>-vpk, which
-# packs the target into <target>.vpk beside it.
+# kisak_vita_pack_vpk(<target> <title id> <title> [UNSAFE]) adds <target>-vpk,
+# which packs the target into <target>.vpk beside it. Programs are packed
+# "safe" (vita-make-fself -s: no restricted system calls, only the app's own
+# and ux0:data's files) unless UNSAFE is given; the client needs UNSAFE to
+# load the user's shader compiler from ur0:data (src/gfx_gxm/gxm_shader_compiler.h).
 function(kisak_vita_pack_vpk target title_id title)
+    cmake_parse_arguments(PARSE_ARGV 3 pack "UNSAFE" "" "")
+    if(pack_UNSAFE)
+        set(fself_safety)
+    else()
+        set(fself_safety -s)
+    endif()
     set(out "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
     set(work "${CMAKE_CURRENT_BINARY_DIR}/${target}-vpk")
     add_custom_command(
         OUTPUT "${out}/${target}.vpk"
         COMMAND "${CMAKE_COMMAND}" -E make_directory "${work}"
         COMMAND "${VITASDK}/bin/vita-elf-create" "$<TARGET_FILE:${target}>" "${work}/${target}.velf"
-        COMMAND "${VITASDK}/bin/vita-make-fself" -s -c "${work}/${target}.velf" "${work}/eboot.bin"
+        COMMAND "${VITASDK}/bin/vita-make-fself" ${fself_safety} -c "${work}/${target}.velf" "${work}/eboot.bin"
         COMMAND "${VITASDK}/bin/vita-mksfoex" -s TITLE_ID=${title_id} -d ATTRIBUTE2=12
             "${title}" "${work}/param.sfo"
         COMMAND "${VITASDK}/bin/vita-pack-vpk" -s "${work}/param.sfo"
