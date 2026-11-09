@@ -249,7 +249,7 @@ struct DrawState
 
     uint64_t drawn = 0, skipped[SkipCount] = {};
     uint64_t renames = 0, ringOverflows = 0;
-    uint32_t drawFailures = 0;
+    uint32_t drawFailures = 0, uniformFailures = 0;
     uint64_t copies = 0;
     uint32_t variantsMade = 0, variantFailures = 0;
 
@@ -258,6 +258,10 @@ struct DrawState
     uint32_t diagnosedDraws = 0;
     int diagMode = 0;
     Variant diagGreen; // a fragment program that writes opaque green
+    // A vertex program that takes the game's POSITION as screen pixels.
+    Variant diagPass;
+    const SceGxmProgramParameter *diagPassPosition = nullptr;
+    std::map<uint32_t, SceGxmVertexProgram *> diagPassPrograms;
 };
 
 // Run diagnostics (DiagnoseDraw, DiagnoseFrame): which frames.
@@ -265,25 +269,26 @@ constexpr uint64_t kDiagnosedFrames[] = {300};
 constexpr uint64_t kReadBackFrames[] = {300, 700, 1000, 1300, 1600, 1900};
 constexpr uint64_t kTestRectFirst = 600, kTestRectLast = 779;
 // Tests on the game's own draws, three seconds each (read back at 1000,
-// 1300, 1600 and 1900):
+// 1300, 1600 and 1900). Every test writes opaque green with no blending
+// (run G: the game's draws make no fragments at all, green or not).
 enum DiagMode
 {
     DiagNone = 0,
-    DiagGreen = 1,      // frames 900-1079: every draw writes opaque green, no blend
-    DiagFarPlane = 2,   // frames 1200-1379: positions kept inside the far plane
-    DiagBoth = 3,       // frames 1500-1679: both
-    DiagWhite = 4,      // frames 1800-1979: every texture is the white stand-in
+    DiagPassThrough = 1, // frames 900-1079: a pass-through vertex program reads the game's positions as pixels
+    DiagExpand = 2,      // frames 1200-1379: the game's program, vertices copied out, no index buffer
+    DiagPassExpand = 3,  // frames 1500-1679: both
+    DiagGreen = 4,       // frames 1800-1979: the game's program and buffers (run G's test 1 again)
 };
 int DiagModeFor(uint64_t frame)
 {
     if (frame >= 900 && frame < 1080)
-        return DiagGreen;
+        return DiagPassThrough;
     if (frame >= 1200 && frame < 1380)
-        return DiagFarPlane;
+        return DiagExpand;
     if (frame >= 1500 && frame < 1680)
-        return DiagBoth;
+        return DiagPassExpand;
     if (frame >= 1800 && frame < 1980)
-        return DiagWhite;
+        return DiagGreen;
     return DiagNone;
 }
 
@@ -945,8 +950,6 @@ void BindTextures(Device &device, const Variant &pixel, void *uniforms)
         float depth = 1.0f;
         if (!texture)
             view = d.black;
-        else if (d.diagMode == DiagWhite)
-            view = d.white;
         else if (texture->sampleable)
         {
             view = texture->sampled;
@@ -1236,6 +1239,16 @@ bool InitDraw(Device &device, std::string &error)
                          gxm::ShaderStage::Fragment, d.diagGreen.gxp, log))
         Log(device, "diag: the green program did not compile: %s", log.substr(0, log.find('\n')).c_str());
     Register(device, d.diagGreen, "diag green program");
+    if (!gxm::GetProgram("// KisakCOD: diagnostics\nvoid main(float4 in_position, out float4 out_POSITION : POSITION)\n{\n"
+                         "    out_POSITION = float4(in_position.x / 480.0 - 1.0, 1.0 - in_position.y / 272.0, 0.5, 1.0);\n}\n",
+                         gxm::ShaderStage::Vertex, d.diagPass.gxp, log))
+        Log(device, "diag: the pass-through program did not compile: %s", log.substr(0, log.find('\n')).c_str());
+    if (Register(device, d.diagPass, "diag pass-through program"))
+    {
+        d.diagPassPosition = sceGxmProgramFindParameterByName(d.diagPass.program(), "in_position");
+        if (!d.diagPassPosition)
+            d.diagPass.failed = true;
+    }
     return true;
 }
 
@@ -1564,7 +1577,7 @@ void FrameDone(Device &device)
             d.diagnosedDraws = 8;
     const int mode = DiagModeFor(d.frame);
     if (mode != d.diagMode)
-        Log(device, "diag: frame %llu, test %d (1 green, 2 far plane, 3 both, 4 white textures, 0 none)",
+        Log(device, "diag: frame %llu, test %d (1 pass-through, 2 copied vertices, 3 both, 4 green, 0 none)",
             (unsigned long long)d.frame, mode);
     d.diagMode = mode;
     // Work recorded in frame F was queued before Present F + 1, and after
@@ -1864,8 +1877,6 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     InputPlan plan;
     PlanInputs(device, *vs, *device.decl, plan);
     const int diag = d.diagMode;
-    if (diag == DiagFarPlane || diag == DiagBoth)
-        plan.options.farPlaneInside = true;
     Variant *vertex = GetVariant(device, *vs, plan.options);
     gxm::cg::Options pixelOptions;
     if (device.renderStates[d3d::RS_ALPHATESTENABLE])
@@ -1880,8 +1891,9 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         CountSkip(device, SkipNoProgram);
         return;
     }
-    if ((diag == DiagGreen || diag == DiagBoth) && !d.diagGreen.failed)
+    if (diag != DiagNone && !d.diagGreen.failed)
         pixel = &d.diagGreen;
+    const bool passThrough = (diag == DiagPassThrough || diag == DiagPassExpand) && !d.diagPass.failed;
     if (!OpenScene(device))
     {
         CountSkip(device, SkipNoScene);
@@ -1902,7 +1914,8 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         return;
     SceGxmBlendInfo blend{};
     const bool blended = pixel != &d.diagGreen && MakeBlend(device, d.color.noAlpha, blend);
-    const FragmentProgramEntry *fragmentProgram = GetFragmentProgram(device, *pixel, *vertex, blended ? &blend : nullptr);
+    const FragmentProgramEntry *fragmentProgram =
+        GetFragmentProgram(device, *pixel, passThrough ? d.diagPass : *vertex, blended ? &blend : nullptr);
     if (!fragmentProgram)
         return;
 
@@ -1943,16 +1956,116 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         return;
     }
     ApplyFixedState(device, state);
-    SetPrograms(device, vertexProgram->program, fragmentProgram->program);
+
+    // Run-diagnostic tests: vertices copied out of the game's buffers, and a
+    // pass-through vertex program.
+    const SceGxmVertexProgram *vertexGxm = vertexProgram->program;
+    const void *drawIndices = indexData;
+    bool drawIndex32 = index32;
+    uint8_t drawStreams = vertexProgram->streamCount;
+    if ((diag == DiagExpand || diag == DiagPassExpand) && indexCount <= kSequentialIndices)
+    {
+        bool copied = true;
+        for (uint8_t i = 0; i < vertexProgram->streamCount && copied; ++i)
+        {
+            const uint32_t stride = strides[vertexProgram->streams[i]];
+            uint8_t *copy = static_cast<uint8_t *>(Transient(device, indexCount * stride + 16));
+            if (!copy)
+            {
+                copied = false;
+                break;
+            }
+            const uint8_t *from = static_cast<const uint8_t *>(streamData[i]);
+            for (uint32_t k = 0; k < indexCount; ++k)
+            {
+                const uint32_t at = !indexData ? k
+                                    : index32  ? static_cast<const uint32_t *>(indexData)[k]
+                                               : static_cast<const uint16_t *>(indexData)[k];
+                std::memcpy(copy + size_t(k) * stride, from + size_t(at) * stride, stride);
+            }
+            streamData[i] = copy;
+        }
+        if (copied)
+        {
+            drawIndices = d.sequential;
+            drawIndex32 = false;
+            if (const VertexProgramEntry *sequential =
+                    GetVertexProgram(device, *vertex, *device.decl, plan, false, strides))
+                vertexGxm = sequential->program;
+        }
+    }
+    if (passThrough)
+    {
+        const VertexElement *position = nullptr;
+        for (const VertexElement &e : device.decl->elements)
+            if (e.usage == d3d::DECLUSAGE_POSITION && e.usageIndex == 0)
+                position = &e;
+        int slot = -1;
+        for (uint8_t i = 0; position && i < vertexProgram->streamCount; ++i)
+            if (vertexProgram->streams[i] == position->stream)
+                slot = i;
+        uint8_t format = 0, components = 0;
+        if (position && slot >= 0 && AttributeFormat(position->type, format, components) &&
+            format == SCE_GXM_ATTRIBUTE_FORMAT_F32)
+        {
+            const uint32_t stride = strides[position->stream];
+            const uint32_t key = stride | uint32_t(position->offset) << 12 | uint32_t(components) << 24 |
+                                 uint32_t(drawIndex32) << 30;
+            SceGxmVertexProgram *&program = d.diagPassPrograms[key];
+            if (!program)
+            {
+                SceGxmVertexAttribute attribute{};
+                attribute.streamIndex = 0;
+                attribute.offset = position->offset;
+                attribute.format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+                attribute.componentCount = components;
+                attribute.regIndex = uint16_t(sceGxmProgramParameterGetResourceIndex(d.diagPassPosition));
+                SceGxmVertexStream stream{uint16_t(stride), drawIndex32 ? SCE_GXM_INDEX_SOURCE_INDEX_32BIT
+                                                                        : SCE_GXM_INDEX_SOURCE_INDEX_16BIT};
+                const int made = sceGxmShaderPatcherCreateVertexProgram(gxm::ShaderPatcher(), d.diagPass.id,
+                                                                        &attribute, 1, &stream, 1, &program);
+                if (made < 0)
+                {
+                    Log(device, "diag: the pass-through vertex program could not be made (0x%08x)", unsigned(made));
+                    program = nullptr;
+                }
+            }
+            if (program)
+            {
+                vertexGxm = program;
+                streamData[0] = streamData[slot];
+                drawStreams = 1;
+            }
+        }
+    }
+    SetPrograms(device, vertexGxm, fragmentProgram->program);
 
     SceGxmContext *context = Gxm();
-    if (vertex->uniforms)
+    if (vertex->uniforms && vertexGxm == vertexProgram->program)
     {
         void *uniforms = nullptr;
-        sceGxmReserveVertexDefaultUniformBuffer(context, &uniforms);
+        const int reserved = sceGxmReserveVertexDefaultUniformBuffer(context, &uniforms);
         const uint16_t count = vs->parsed.reflection.floatConstants;
-        if (vertex->constants && count)
-            sceGxmSetUniformDataF(uniforms, vertex->constants, 0, count * 4u, device.vsConstants.data());
+        int set = 0;
+        if (vertex->constants && count && reserved >= 0)
+            set = sceGxmSetUniformDataF(uniforms, vertex->constants, 0, count * 4u, device.vsConstants.data());
+        if ((reserved < 0 || set < 0) && d.uniformFailures++ < 5)
+            Log(device, "vertex constants not set: reserve 0x%08x, set 0x%08x (%u constants)", unsigned(reserved),
+                unsigned(set), unsigned(count));
+        if (d.diagnosedDraws && vertex->constants)
+        {
+            const float *u = static_cast<const float *>(uniforms);
+            Log(device,
+                "diag frame %llu draw: constants parameter category %u container %u resource %u components %u array "
+                "%u; reserve 0x%08x set 0x%08x; buffer %g %g %g %g %g %g %g %g",
+                (unsigned long long)d.frame, unsigned(sceGxmProgramParameterGetCategory(vertex->constants)),
+                sceGxmProgramParameterGetContainerIndex(vertex->constants),
+                sceGxmProgramParameterGetResourceIndex(vertex->constants),
+                sceGxmProgramParameterGetComponentCount(vertex->constants),
+                sceGxmProgramParameterGetArraySize(vertex->constants), unsigned(reserved), unsigned(set),
+                u ? u[0] : 0.0f, u ? u[1] : 0.0f, u ? u[2] : 0.0f, u ? u[3] : 0.0f, u ? u[4] : 0.0f,
+                u ? u[5] : 0.0f, u ? u[6] : 0.0f, u ? u[7] : 0.0f);
+        }
     }
     void *pixelUniforms = nullptr;
     if (pixel->uniforms)
@@ -1968,7 +2081,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         }
     }
     BindTextures(device, *pixel, pixelUniforms);
-    for (uint8_t i = 0; i < vertexProgram->streamCount; ++i)
+    for (uint8_t i = 0; i < drawStreams; ++i)
         sceGxmSetVertexStream(context, i, streamData[i]);
     if (d.diagnosedDraws)
     {
@@ -1976,8 +2089,8 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         DiagnoseDraw(device, type, indexCount, indexed ? indexData : nullptr, index32, baseVertex, upVertices,
                      upStride, state, *vertex, *pixel, blended ? &blend : nullptr);
     }
-    const int result = sceGxmDraw(context, primitive, index32 ? SCE_GXM_INDEX_FORMAT_U32 : SCE_GXM_INDEX_FORMAT_U16,
-                                  indexData, indexCount);
+    const int result = sceGxmDraw(context, primitive, drawIndex32 ? SCE_GXM_INDEX_FORMAT_U32 : SCE_GXM_INDEX_FORMAT_U16,
+                                  drawIndices, indexCount);
     if (result < 0)
     {
         if (d.drawFailures++ < 5)
