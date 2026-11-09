@@ -1,15 +1,17 @@
 // The Legacy adapter's API (src/gfx_vk/legacy/vk_legacy.h) on the PS Vita's
 // sceGxm, for the D3D9 front (src/gfx_vk/d3d9) in the Vita client.
 //
-// Stage 2, step 2b (docs/vita-client.md): everything but drawing.
+// Stage 2, step 2c (docs/vita-client.md): everything but drawing.
 // - The device owns the screen (gxm_display.h) and the GPU memory pools.
 // - Resources live in GPU-mapped memory with D3D9's lock semantics.
 // - Clears fill colour targets with sceGxmTransferFill.
 // - Present shows the back buffer.
-// - Shaders and vertex declarations are kept but not compiled yet.
+// - Shaders are translated to Cg (shader/gxm_cg_translate.h) and compiled,
+//   through the program cache (gxm_program_cache.h). Vertex declarations
+//   are kept.
 // - Draws are counted and skipped.
 // This lets the client run its menus, with real resource memory, on the
-// Vita. The next step translates the shaders and draws.
+// Vita. The next step draws.
 //
 // Texture levels are stored row by row (blocks of 4x4 for DXT), exactly as
 // D3D9 locks them, and LockRect hands out the GPU memory itself. The layouts
@@ -22,10 +24,14 @@
 #error "gxm_legacy.cpp is the PS Vita's Legacy back end (KISAK_GFX_GXM)"
 #endif
 
+#include "gxm_legacy_internal.h"
+
 #include <gfx_vk/legacy/vk_legacy.h>
 
 #include <gfx_gxm/gxm_display.h>
 #include <gfx_gxm/gxm_memory.h>
+#include <gfx_gxm/gxm_program_cache.h>
+#include <gfx_gxm/shader/gxm_cg_translate.h>
 
 #include <psp2/gxm.h>
 #include <psp2/kernel/processmgr.h>
@@ -41,21 +47,10 @@
 
 namespace gfx_vk::legacy
 {
-namespace
-{
-namespace gxm = gfx_gxm;
-
 // ---- Formats -----------------------------------------------------------------------------
 
-struct FormatInfo
+namespace
 {
-    d3d::Format d3d;
-    uint8_t blockBytes; // per texel, or per 4x4 block
-    bool compressed;
-    bool depth;
-    bool renderTarget; // a colour format sceGxm can render to
-};
-
 const FormatInfo kFormats[] = {
     {d3d::FMT_A8R8G8B8, 4, false, false, true},
     {d3d::FMT_X8R8G8B8, 4, false, false, true},
@@ -89,6 +84,8 @@ const FormatInfo kFormats[] = {
     {d3d::FMT_D24FS8, 4, false, true, false},
 };
 
+} // namespace
+
 const FormatInfo *LookupFormat(d3d::Format format)
 {
     for (const FormatInfo &info : kFormats)
@@ -97,163 +94,6 @@ const FormatInfo *LookupFormat(d3d::Format format)
     return nullptr;
 }
 
-uint32_t LevelSize(uint32_t size, uint32_t level)
-{
-    return std::max(1u, size >> level);
-}
-
-uint32_t FullChain(uint32_t width, uint32_t height, uint32_t depth)
-{
-    uint32_t size = std::max({width, height, depth});
-    uint32_t levels = 1;
-    while (size > 1)
-    {
-        size >>= 1;
-        ++levels;
-    }
-    return levels;
-}
-
-uint32_t AlignUp(uint32_t value, uint32_t align)
-{
-    return (value + align - 1) & ~(align - 1);
-}
-
-// Rows of a level as LockRect sees them: texel rows, or rows of 4x4 blocks.
-uint32_t Rows(const FormatInfo &format, uint32_t height)
-{
-    return format.compressed ? std::max(1u, (height + 3) / 4) : height;
-}
-
-// Bytes per row. Colour formats sceGxm may render to keep rows a multiple
-// of 32 texels, which colour surfaces want; the rest are packed.
-uint32_t Pitch(const FormatInfo &format, uint32_t width, bool renderTarget)
-{
-    if (format.compressed)
-        return std::max(1u, (width + 3) / 4) * format.blockBytes;
-    if (renderTarget)
-        return AlignUp(width, 32) * format.blockBytes;
-    return width * format.blockBytes;
-}
-} // namespace
-
-// ---- Objects -----------------------------------------------------------------------------
-
-struct Level
-{
-    uint32_t offset = 0;
-    uint32_t pitch = 0;
-    uint32_t slicePitch = 0;
-    uint32_t width = 0, height = 0, depth = 1;
-    bool locked = false;
-};
-
-// Where a resource's bytes are: a GPU pool, or the C heap for SYSTEMMEM and
-// SCRATCH resources (which the GPU never reads).
-struct Memory
-{
-    uint8_t *data = nullptr;
-    gxm::MemoryKind kind = gxm::MemoryKind::Cdram;
-    bool gpu = false;
-    std::vector<uint8_t> host;
-};
-
-struct Texture
-{
-    TextureDesc desc{};
-    const FormatInfo *format = nullptr;
-    uint32_t faces = 1;
-    std::vector<Level> levels; // face * levels + level
-    Memory memory;
-    std::vector<std::unique_ptr<Surface>> surfaces; // GetSurfaceLevel views, same index
-    std::string name;
-};
-
-enum class SurfaceKind : uint8_t
-{
-    TextureLevel, // a level of a texture (standalone surfaces own theirs)
-    BackBuffer,   // whichever display buffer the frame draws into
-    FrontBuffer,  // the one shown last
-};
-
-struct Surface
-{
-    SurfaceKind kind = SurfaceKind::TextureLevel;
-    Texture *texture = nullptr;
-    uint32_t face = 0;
-    uint32_t level = 0;
-    bool standalone = false;
-};
-
-struct GpuBuffer
-{
-    uint32_t size = 0;
-    uint32_t usage = 0;
-    d3d::Pool pool = d3d::POOL_DEFAULT;
-    d3d::Format indexFormat = d3d::FMT_UNKNOWN;
-    Memory memory;
-    bool locked = false;
-    std::string name;
-};
-struct VertexBuffer : GpuBuffer
-{
-};
-struct IndexBuffer : GpuBuffer
-{
-};
-
-struct Shader
-{
-    std::vector<uint8_t> bytecode;
-    bool pixel = false;
-};
-
-struct VertexDecl
-{
-    std::vector<VertexElement> elements;
-};
-
-struct Query
-{
-    QueryKind kind = QueryKind::Event;
-    bool issued = false;
-};
-
-struct Device
-{
-    DeviceDesc desc;
-    std::string error;
-    DeviceStats stats{};
-    uint32_t width = gxm::kDisplayWidth, height = gxm::kDisplayHeight;
-    Surface backBuffer, frontBuffer;
-    bool detached = false;
-
-    uint32_t renderStates[d3d::RS_COUNT] = {};
-    uint32_t samplerStates[20][d3d::SAMP_COUNT] = {};
-    Texture *textures[20] = {};
-    Shader *vertexShader = nullptr;
-    Shader *pixelShader = nullptr;
-    VertexDecl *decl = nullptr;
-    struct Stream
-    {
-        VertexBuffer *buffer = nullptr;
-        uint32_t offset = 0, stride = 0;
-    } streams[kMaxStreams];
-    IndexBuffer *indices = nullptr;
-    Surface *renderTargets[kMaxRenderTargets] = {};
-    Surface *depthStencil = nullptr;
-    Viewport viewport{};
-    Rect scissor{};
-    std::vector<float> vsConstants, psConstants;
-
-    // Things the back end does not do yet, each logged once.
-    std::vector<const char *> notYet;
-    bool fillFailureLogged = false;
-    uint32_t live = 0; // resources not yet destroyed
-};
-
-namespace
-{
 void Log(Device &device, const char *format, ...)
 {
     if (!device.desc.log)
@@ -279,6 +119,11 @@ uint64_t Micros()
 {
     return sceKernelGetProcessTimeWide();
 }
+
+namespace
+{
+void LogShaderSummary(Device &device, const char *when); // with CreateShader
+} // namespace
 
 // GPU memory: the preferred pool, then the other one. SYSTEMMEM and SCRATCH
 // resources stay in the C heap.
@@ -322,6 +167,8 @@ uint32_t DisplayColor(uint32_t color)
     return (color & 0xff00ff00u) | ((color >> 16) & 0xffu) | ((color & 0xffu) << 16);
 }
 
+namespace
+{
 // A D3DCOLOR in a 16-bit format's bits; false for formats a fill cannot take.
 bool Color16(d3d::Format format, uint32_t color, uint32_t &out)
 {
@@ -342,15 +189,7 @@ bool Color16(d3d::Format format, uint32_t color, uint32_t &out)
         return false;
     }
 }
-
-// Where a colour surface's texels are.
-struct Target
-{
-    uint8_t *data = nullptr;
-    uint32_t width = 0, height = 0, pitch = 0;
-    const FormatInfo *format = nullptr;
-    bool display = false;
-};
+} // namespace
 
 bool Describe(const Surface *surface, Target &out)
 {
@@ -380,6 +219,8 @@ bool Describe(const Surface *surface, Target &out)
     return true;
 }
 
+namespace
+{
 void SetDefaultState(Device &device)
 {
     std::fill(std::begin(device.renderStates), std::end(device.renderStates), 0u);
@@ -486,6 +327,9 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
     }
     std::unique_ptr<Device> device(new Device);
     device->desc = desc;
+    // The GXM back end reads shaderCachePath as a folder of compiled
+    // programs (gxm_program_cache.h).
+    gxm::SetProgramCacheFolder(desc.shaderCachePath);
     device->backBuffer.kind = SurfaceKind::BackBuffer;
     device->frontBuffer.kind = SurfaceKind::FrontBuffer;
     device->vsConstants.assign(256 * 4, 0.0f);
@@ -512,6 +356,7 @@ void DestroyDevice(Device *device)
         return;
     if (device->live)
         Log(*device, "%u resources were not destroyed before the device", device->live);
+    LogShaderSummary(*device, "in all");
     Log(*device, "%s", gxm::DescribeMemory().c_str());
     gxm::ShutdownDisplay();
     delete device;
@@ -890,6 +735,87 @@ void Unlock(Device *, IndexBuffer *buffer)
 
 // ---- Shaders and declarations -------------------------------------------------------------
 
+namespace
+{
+void LogShaderSummary(Device &device, const char *when)
+{
+    const Device::ShaderCounts &c = device.shaderCounts;
+    const gxm::ProgramCacheStats &p = gxm::GetProgramCacheStats();
+    Log(device,
+        "shaders %s: %u created, %u refused by the translator (%.1f ms translating), %u programs ready, "
+        "%u failed to compile; %u compiled in %.1f s, %u read from the card in %.1f ms, %u not written",
+        when, c.created, c.refused, c.translateMicros / 1000.0, c.compiled, c.failed, p.compiled,
+        p.compileMicros / 1e6, p.fromFiles, p.readMicros / 1000.0, p.writeFailures);
+    if (std::strcmp(when, "in all") == 0)
+        for (const auto &[reason, count] : c.refusals)
+            Log(device, "shaders not translated: %u x %s", count, reason.c_str());
+}
+
+// Up to this many compile failures are logged one by one.
+constexpr uint32_t kLoggedShaderFailures = 40;
+
+void CompileDefaultVariant(Device &device, Shader &shader, uint64_t hash)
+{
+    Device::ShaderCounts &counts = device.shaderCounts;
+    std::string reason;
+    uint64_t begin = Micros();
+    const bool parsed = gxm::cg::Parse(shader.bytecode.data(), shader.bytecode.size(), shader.parsed, reason);
+    std::string cg;
+    const bool emitted = parsed && gxm::cg::Emit(shader.parsed, gxm::cg::Options{}, cg, reason);
+    counts.translateMicros += Micros() - begin;
+    const gxm::cg::Reflection &r = shader.parsed.reflection;
+    if (!emitted)
+    {
+        ++counts.refused;
+        // One line per distinct reason; the summary counts them all.
+        auto known = std::find_if(counts.refusals.begin(), counts.refusals.end(),
+                                  [&](const auto &entry) { return entry.first == reason; });
+        if (known != counts.refusals.end())
+        {
+            ++known->second;
+            return;
+        }
+        counts.refusals.emplace_back(reason, 1u);
+        Log(device, "shader %016llx (%s_%u_%u, %u tokens) not translated: %s (first of its kind)",
+            (unsigned long long)hash, shader.pixel ? "ps" : "vs", r.major, r.minor,
+            unsigned(shader.bytecode.size() / 4), reason.c_str());
+        return;
+    }
+    shader.translated = true;
+    std::string log;
+    if (!gxm::GetProgram(cg, shader.pixel ? gxm::ShaderStage::Fragment : gxm::ShaderStage::Vertex, shader.program,
+                         log))
+    {
+        shader.program.clear();
+        ++counts.failed;
+        if (counts.loggedFailures++ < kLoggedShaderFailures)
+        {
+            // The compiler's first error is enough to find the cause; the
+            // program itself stays on the card next to the cache.
+            std::string first = log.substr(0, log.find('\n'));
+            Log(device, "shader %016llx (%s_%u_%u) did not compile: %s", (unsigned long long)hash,
+                shader.pixel ? "ps" : "vs", r.major, r.minor, first.c_str());
+            if (device.desc.shaderCachePath && *device.desc.shaderCachePath)
+            {
+                char path[256];
+                std::snprintf(path, sizeof(path), "%s/failed-%016llx.cg", device.desc.shaderCachePath,
+                              (unsigned long long)hash);
+                if (FILE *file = std::fopen(path, "wb"))
+                {
+                    std::fwrite(cg.data(), 1, cg.size(), file);
+                    std::fputs("\n/* compiler log:\n", file);
+                    std::fwrite(log.data(), 1, log.size(), file);
+                    std::fputs("\n*/\n", file);
+                    std::fclose(file);
+                }
+            }
+        }
+        return;
+    }
+    ++counts.compiled;
+}
+} // namespace
+
 Shader *CreateShader(Device *device, const void *bytecode, size_t bytes, std::string &error)
 {
     if (!device || !bytecode || bytes < 8)
@@ -905,9 +831,14 @@ Shader *CreateShader(Device *device, const void *bytecode, size_t bytes, std::st
     uint32_t version = 0;
     std::memcpy(&version, code, sizeof(version));
     shader->pixel = (version >> 16) == 0xffffu;
+    // A shader that cannot be translated or compiled is still created, as
+    // D3D9 would; draws with it are skipped. The log says why.
+    CompileDefaultVariant(*device, *shader, gxm::cg::Hash(code, bytes));
     ++device->stats.shaders;
     device->stats.shaderMicros += Micros() - begin;
     ++device->live;
+    if (++device->shaderCounts.created % 100 == 0)
+        LogShaderSummary(*device, "so far");
     return shader.release();
 }
 

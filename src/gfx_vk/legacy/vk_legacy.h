@@ -239,6 +239,8 @@ struct DeviceDesc
     // The shader cache file (see LoadShaderCache): read when the device is
     // created, unless the process already read it, and written when the device
     // is destroyed if anything new was translated. Null or empty: none.
+    // The PS Vita's GXM back end reads it as a folder, one compiled program
+    // per file (src/gfx_gxm/gxm_program_cache.h).
     const char *shaderCachePath = nullptr;
 };
 
