@@ -124,8 +124,12 @@ source changes.
   says who has the mouse, a menu or the game, and that decides how the next
   reading is mapped.
 
-Not run on the Vita yet. The first console run has to confirm the layout
-below, the look speed, and the rear pad's left and right.
+**On the console** (run 1, 2026-11-09, in the menus, with nothing drawn yet
+and `vita_inputDebug 1`): every button arrived as the key in the tables
+below, the right stick as the wheel, and a start-up without a profile got the
+default layout and the profile name. Not confirmed yet: a touch on the screen
+(the log has none), which side of the rear pad is which, and the look speed
+and the layout in a game, which need a game on the screen.
 
 ### In the game
 
@@ -146,7 +150,7 @@ the Vita has the button.
 | D-pad up, down, left, right | `KP_UPARROW`, `KP_DOWNARROW`, `KP_LEFTARROW`, `KP_RIGHTARROW` | `+actionslot 1` to `4` | The console game's d-pad |
 | Select | `AUX7` | `+scores` | Scoreboard |
 | Start | `ESCAPE` | fixed | Menu |
-| Rear touch pad, left and right half | `AUX8`, `AUX16` | `+breath_sprint` | Sprint, hold breath (the left stick's click on a console) |
+| Rear touch pad, a tap on the left or right half | `AUX8`, `AUX16` | `+breath_sprint` | Sprint (the left stick's click on a console) |
 | Screen, left third | `AUX13` | `+smoke` | Special grenade |
 | Screen, right third, top half | `AUX14` | `+frag` | Frag grenade |
 | Screen, right third, bottom half | `AUX15` | `+melee` | Knife |
@@ -162,6 +166,15 @@ the Vita has the button.
   a small push turns slowly.
 - **Touch.** A finger keeps the area of the screen it landed in until it
   lifts, wherever it slides. The middle third of the screen is no key.
+- **The rear pad** is a tap. The fingers that hold the console lie on it: the
+  first console run logged 30 touches in 40 seconds where two taps were asked
+  for. So a finger that stays longer than 0.3 s is resting and does nothing. A
+  tap presses its half's key when the finger leaves, and the key stays down
+  while the left stick is pushed forward and for a quarter of a second after.
+  With the default binding that is the console game's sprint: tap, and run
+  until you stop. A tap while standing still is a short press, and a tap while
+  the key is down presses it again. Holding your breath behind a scope wants a
+  held key, so give `+holdbreath` a control of its own.
 
 ### In a menu
 
@@ -197,9 +210,9 @@ sets the whole default layout at any time.
 | `vita_lookCurve` | 2 | 1 is linear; higher is finer near the centre |
 | `vita_cursorSpeed` | 700 | Left stick in a menu, pixels a second |
 | `vita_frontTouch` | 1 | The screen's three areas are keys in the game |
-| `vita_rearTouch` | 1 | The rear pad's two halves are keys in the game |
+| `vita_rearTouch` | 1 | A tap on either half of the rear pad is a key in the game |
 | `vita_defaultBinds` | 1 | Set the default layout while no AUX key is bound |
-| `vita_inputDebug` | 0 | Log every key sent and every finger that lands, with its panel and screen position |
+| `vita_inputDebug` | 0 | Log every key sent, every finger that lands (with its panel and screen position) and how long it stayed |
 
 ### Not done yet
 
@@ -208,8 +221,10 @@ sets the whole default layout at any time.
   frames. Until then one field is filled in: with no player profile, the
   "create profile" box is offered the name `Vita` to accept.
 - Walking speed from how far the stick is pushed. The engine moves by keys.
-- The rear pad may fire by accident where fingers rest. `vita_rearTouch 0`
-  turns it off; the console run will say whether the default should change.
+- A stray touch on the rear pad that is as short as a tap still counts as
+  one. `vita_rearTouch 0` turns the pad off. The tap has not been tried on the
+  console; the next run logs how long each touch lasts, which will say whether
+  it needs a tighter rule.
 
 ## Sound (stage 3)
 

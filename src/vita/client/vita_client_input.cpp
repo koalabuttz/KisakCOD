@@ -125,8 +125,9 @@ Panel s_front = {0, 0, 1919, 1087, false};
 Panel s_rear = {0, 108, 1919, 889, false};
 vi::Mapper s_mapper;
 vi::Settings s_settings;
-// Fingers seen at the last reading, for vita_inputDebug.
+// Fingers seen at the last reading and when each landed, for vita_inputDebug.
 uint8_t s_debugIds[2][SCE_TOUCH_MAX_REPORT];
+uint32_t s_debugSince[2][SCE_TOUCH_MAX_REPORT];
 int s_debugCount[2];
 
 bool Debugging()
@@ -167,7 +168,7 @@ void ReadPanelInfo(SceUInt32 port, Panel *panel, bool display)
         *panel = read;
 }
 
-void ReadPanel(SceUInt32 port, const Panel &panel, vi::Touch *touches, uint8_t *count, int most)
+void ReadPanel(SceUInt32 port, const Panel &panel, uint32_t now, vi::Touch *touches, uint8_t *count, int most)
 {
     // A read that fails, or hands back nothing, leaves no reports: no fingers.
     SceTouchData data;
@@ -179,30 +180,49 @@ void ReadPanel(SceUInt32 port, const Panel &panel, vi::Touch *touches, uint8_t *
     if (reports > SCE_TOUCH_MAX_REPORT)
         reports = SCE_TOUCH_MAX_REPORT;
     const bool debug = Debugging();
+    const char *const name = port == SCE_TOUCH_PORT_FRONT ? "front" : "rear";
+    uint32_t since[SCE_TOUCH_MAX_REPORT];
     for (int i = 0; i < reports; ++i)
     {
         const SceTouchReport &report = data.report[i];
         const vi::Touch touch = {ToScreen(report.x, panel.minX, panel.maxX, kVitaScreenWidth),
                                  ToScreen(report.y, panel.minY, panel.maxY, kVitaScreenHeight), report.id};
-        if (debug)
+        // A finger landing, once: where the panel says it is and where that is
+        // on the screen. This is how a console run checks the rear pad's left
+        // and right.
+        bool seen = false;
+        since[i] = now;
+        for (int j = 0; j < s_debugCount[port]; ++j)
         {
-            // A finger landing, once: where the panel says it is and where
-            // that is on the screen. This is how a console run checks the rear
-            // pad's left and right.
-            bool seen = false;
-            for (int j = 0; j < s_debugCount[port]; ++j)
-                seen = seen || s_debugIds[port][j] == report.id;
-            if (!seen)
-                Com_Printf(CON_CHANNEL_SYSTEM, "vita input: %s touch %d at %d,%d on the panel, %d,%d on the screen\n",
-                           port == SCE_TOUCH_PORT_FRONT ? "front" : "rear", report.id, report.x, report.y, touch.x,
-                           touch.y);
+            if (s_debugIds[port][j] == report.id)
+            {
+                seen = true;
+                since[i] = s_debugSince[port][j];
+            }
         }
+        if (debug && !seen)
+            Com_Printf(CON_CHANNEL_SYSTEM, "vita input: %s touch %d at %d,%d on the panel, %d,%d on the screen\n", name,
+                       report.id, report.x, report.y, touch.x, touch.y);
         if (*count < most)
             touches[(*count)++] = touch;
     }
+    // And leaving, with how long it stayed: a tap on the rear pad is 300 ms at
+    // most, and a console run shows what fingers that only hold the console do.
+    for (int j = 0; debug && j < s_debugCount[port]; ++j)
+    {
+        bool there = false;
+        for (int i = 0; i < reports; ++i)
+            there = there || data.report[i].id == s_debugIds[port][j];
+        if (!there)
+            Com_Printf(CON_CHANNEL_SYSTEM, "vita input: %s touch %d lifted after %u ms\n", name, s_debugIds[port][j],
+                       static_cast<unsigned int>(now - s_debugSince[port][j]));
+    }
     s_debugCount[port] = reports;
     for (int i = 0; i < reports; ++i)
+    {
         s_debugIds[port][i] = data.report[i].id;
+        s_debugSince[port][i] = since[i];
+    }
 }
 
 void ReadSettings()
@@ -252,8 +272,8 @@ void Poll()
         state.rx = pad.rx;
         state.ry = pad.ry;
     }
-    ReadPanel(SCE_TOUCH_PORT_FRONT, s_front, state.front, &state.frontCount, vi::kMaxFrontTouches);
-    ReadPanel(SCE_TOUCH_PORT_BACK, s_rear, state.rear, &state.rearCount, vi::kMaxRearTouches);
+    ReadPanel(SCE_TOUCH_PORT_FRONT, s_front, now, state.front, &state.frontCount, vi::kMaxFrontTouches);
+    ReadPanel(SCE_TOUCH_PORT_BACK, s_rear, now, state.rear, &state.rearCount, vi::kMaxRearTouches);
 
     s_eventTime = now;
     s_mapper.Update(state, now, !s_look, Display_KeyBindPending() != 0, s_settings, s_keys);
@@ -398,7 +418,8 @@ void IN_Init()
     vita_frontTouch = Dvar_RegisterBool("vita_frontTouch", 1, DVAR_ARCHIVE,
                                         "The screen's left and right thirds are keys in the game (AUX13 to AUX15)");
     vita_rearTouch = Dvar_RegisterBool("vita_rearTouch", 1, DVAR_ARCHIVE,
-                                       "The rear touch pad's two halves are keys in the game (AUX8 and AUX16)");
+                                       "A tap on the rear touch pad's left or right half is a key in the game "
+                                       "(AUX8 and AUX16)");
     vita_defaultBinds = Dvar_RegisterBool("vita_defaultBinds", 1, DVAR_ARCHIVE,
                                           "Set the default layout while no AUX key has a binding");
     vita_inputDebug = Dvar_RegisterBool("vita_inputDebug", 0, 0, "Log every key the controls send and every touch");

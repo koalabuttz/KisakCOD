@@ -832,53 +832,31 @@ void TestGameTouch()
     rig.Step();
     CHECK(rig.keys.Drain() == (Events{{Aux(13), false}}));
 
-    // The rear pad's two halves.
-    rig.Rear(100, 300, 1);
-    rig.Step();
-    CHECK(rig.keys.Drain() == (Events{{Aux(8), true}}));
-    rig.Rear(700, 300, 2);
-    rig.Step();
-    CHECK(rig.keys.Drain() == (Events{{Aux(16), true}}));
-    rig.pad.rear[0] = rig.pad.rear[1];
-    rig.pad.rearCount = 1;
-    rig.Step();
-    CHECK(rig.keys.Drain() == (Events{{Aux(8), false}}));
-    rig.pad.rear[0] = {479, 10, 2};
-    rig.Step();
-    CHECK(rig.keys.Drain() == (Events{{Aux(8), true}, {Aux(16), false}}));
-    rig.pad.rear[0] = {480, 10, 2};
-    rig.Step();
-    CHECK(rig.keys.Drain() == (Events{{Aux(8), false}, {Aux(16), true}}));
-    rig.Lift();
-    rig.Step();
-    CHECK(rig.keys.Drain() == (Events{{Aux(16), false}}));
-
-    // Both panels can be turned off.
+    // The screen's keys can be turned off. Turned back on under a finger,
+    // the screen waits for a new touch.
     rig.settings.frontTouch = false;
-    rig.settings.rearTouch = false;
     rig.Touch(100, 300, 50);
-    rig.Rear(100, 300, 50);
     rig.Step();
     rig.Step();
     CHECK(rig.keys.Drain().empty());
-    // Turned back on under a resting finger: the rear pad holds at once, the
-    // screen waits for a new touch.
     rig.settings = Settings{};
     rig.Step();
-    CHECK(rig.keys.Drain() == (Events{{Aux(8), true}}));
+    CHECK(rig.keys.Drain().empty());
     rig.Lift();
     rig.Step();
-    CHECK(rig.keys.Drain() == (Events{{Aux(8), false}}));
+    rig.Touch(100, 300, 51);
+    rig.Step();
+    CHECK(rig.keys.Drain() == (Events{{Aux(13), true}}));
+    rig.Lift();
+    rig.Step();
+    CHECK(rig.keys.Drain() == (Events{{Aux(13), false}}));
 
-    // More reports than the panels have are not read.
+    // More reports than the panel has are not read.
     rig.pad.frontCount = 200;
-    rig.pad.rearCount = 200;
     for (int i = 0; i < kMaxFrontTouches; ++i)
         rig.pad.front[i] = {480, 272, static_cast<uint8_t>(60 + i)};
-    for (int i = 0; i < kMaxRearTouches; ++i)
-        rig.pad.rear[i] = {100, 100, static_cast<uint8_t>(60 + i)};
     rig.Step();
-    CHECK(rig.keys.Drain() == (Events{{Aux(8), true}}));
+    CHECK(rig.keys.Drain().empty());
 
     // Two reports with one number: the second is not a finger.
     rig.Lift();
@@ -891,13 +869,214 @@ void TestGameTouch()
     rig.End();
 }
 
+// The rear pad: a tap is the key press, a resting finger is nothing, and the
+// key stays down while the left stick pushes forward.
+void TestRearTap()
+{
+    g_test = "rear tap";
+    Rig rig;
+    rig.Step();
+    const auto tap = [&rig](int16_t x, uint8_t id, uint32_t ms = 80) {
+        rig.Rear(x, 300, id);
+        rig.Step();
+        rig.pad.rearCount = 0;
+        rig.Step(ms);
+    };
+
+    // A finger resting on the back of the console is nothing, however long it
+    // stays, and nothing when it leaves.
+    rig.Rear(100, 300, 1);
+    rig.Step();
+    for (int i = 0; i < 100; ++i)
+        rig.Step(50);
+    rig.Lift();
+    rig.Step();
+    CHECK(rig.keys.Drain().empty());
+
+    // A tap presses its half's key when the finger leaves; standing still,
+    // the key lets go a quarter of a second later.
+    rig.Rear(100, 300, 2);
+    rig.Step();
+    rig.Step(100);
+    CHECK(rig.keys.Drain().empty());
+    rig.Lift();
+    rig.Step();
+    CHECK(rig.keys.Drain() == (Events{{Aux(8), true}}));
+    CHECK(rig.mapper.Held(kRearLeft));
+    rig.Step(249);
+    CHECK(rig.keys.Drain().empty());
+    rig.Step(1);
+    CHECK(rig.keys.Drain() == (Events{{Aux(8), false}}));
+
+    // The other half is another key. The halves meet in the middle of the pad.
+    tap(700, 3);
+    CHECK(rig.keys.Drain() == (Events{{Aux(16), true}}));
+    rig.Step(250);
+    CHECK(rig.keys.Drain() == (Events{{Aux(16), false}}));
+    tap(479, 4);
+    CHECK(rig.keys.Drain() == (Events{{Aux(8), true}}));
+    tap(480, 5);
+    CHECK(rig.keys.Drain() == (Events{{Aux(16), true}}));
+    rig.Step(250);
+    CHECK(rig.keys.Drain() == (Events{{Aux(8), false}, {Aux(16), false}}));
+
+    // A finger keeps the half it landed on.
+    rig.Rear(100, 300, 6);
+    rig.Step();
+    rig.pad.rear[0] = {900, 300, 6};
+    rig.Step();
+    rig.Lift();
+    rig.Step();
+    CHECK(rig.keys.Drain() == (Events{{Aux(8), true}}));
+    rig.Step(250);
+    rig.keys.Drain();
+
+    // Three tenths of a second is still a tap; longer is a finger that rested.
+    tap(100, 7, 300);
+    CHECK(rig.keys.Drain() == (Events{{Aux(8), true}}));
+    rig.Step(250);
+    rig.keys.Drain();
+    tap(100, 8, 301);
+    CHECK(rig.keys.Drain().empty());
+    // So is one that was last seen in time and found gone after a stall.
+    rig.Rear(100, 300, 9);
+    rig.Step();
+    rig.Step(200);
+    rig.Lift();
+    rig.Step(7000);
+    CHECK(rig.keys.Drain().empty());
+
+    // Sprint. Tapped while the left stick pushes forward, the key stays down
+    // for as long as it does.
+    rig.pad.ly = 0;
+    rig.Step();
+    CHECK(rig.keys.Drain() == (Events{{Aux(9), true}}));
+    tap(700, 10);
+    CHECK(rig.keys.Drain() == (Events{{Aux(16), true}}));
+    for (int i = 0; i < 200; ++i)
+        rig.Step(50);
+    CHECK(rig.keys.Drain().empty());
+    // The stick is let go: the key follows a quarter of a second later.
+    rig.pad.ly = 128;
+    rig.Step();
+    CHECK(rig.keys.Drain() == (Events{{Aux(9), false}}));
+    rig.Step(239);
+    CHECK(rig.keys.Drain().empty());
+    rig.Step(1);
+    CHECK(rig.keys.Drain() == (Events{{Aux(16), false}}));
+
+    // A slip of the thumb shorter than that does not end it.
+    rig.pad.ly = 0;
+    rig.Step();
+    tap(700, 11);
+    rig.keys.Drain();
+    rig.pad.ly = 128;
+    rig.Step(100);
+    rig.pad.ly = 0;
+    rig.Step(100);
+    CHECK(rig.keys.Drain() == (Events{{Aux(9), false}, {Aux(9), true}}));
+    rig.Step(1000);
+    CHECK(rig.keys.Drain().empty());
+    CHECK(rig.mapper.Held(kRearRight));
+
+    // A tap while the key is down is a new press: up, then down.
+    tap(700, 12);
+    CHECK(rig.keys.Drain() == (Events{{Aux(16), false}, {Aux(16), true}}));
+    // The other half's key goes down beside it.
+    tap(100, 13);
+    CHECK(rig.keys.Drain() == (Events{{Aux(8), true}}));
+    rig.pad.ly = 128;
+    rig.Step();
+    rig.Step(250);
+    CHECK(rig.keys.Drain() == (Events{{Aux(9), false}, {Aux(8), false}, {Aux(16), false}}));
+
+    // The tap may come a moment before the push.
+    tap(100, 14);
+    CHECK(rig.keys.Drain() == (Events{{Aux(8), true}}));
+    rig.pad.ly = 0;
+    rig.Step(100);
+    CHECK(rig.keys.Drain() == (Events{{Aux(9), true}}));
+    rig.Step(1000);
+    CHECK(rig.keys.Drain().empty());
+    // Only forward holds it: backing up and stepping aside do not.
+    rig.pad.ly = 255;
+    rig.pad.lx = 255;
+    rig.Step();
+    CHECK(rig.keys.Drain() == (Events{{Aux(9), false}, {Aux(10), true}, {Aux(12), true}}));
+    rig.Step(250);
+    CHECK(rig.keys.Drain() == (Events{{Aux(8), false}}));
+    rig.pad.ly = 128;
+    rig.pad.lx = 128;
+    rig.Step();
+    rig.keys.Drain();
+
+    // Two fingers that leave one half together are one tap; more reports than
+    // the pad has are not read.
+    rig.pad.rearCount = 200;
+    for (int i = 0; i < kMaxRearTouches; ++i)
+        rig.pad.rear[i] = {100, 100, static_cast<uint8_t>(20 + i)};
+    rig.Step();
+    CHECK(rig.keys.Drain().empty());
+    rig.Lift();
+    rig.Step();
+    CHECK(rig.keys.Drain() == (Events{{Aux(8), true}}));
+    rig.Step(250);
+    rig.keys.Drain();
+
+    // Turned off, a tap is nothing, and a key that is down lets go.
+    rig.settings.rearTouch = false;
+    tap(100, 30);
+    CHECK(rig.keys.Drain().empty());
+    rig.settings = Settings{};
+    rig.pad.ly = 0;
+    rig.Step();
+    tap(100, 31);
+    CHECK(rig.keys.Drain() == (Events{{Aux(9), true}, {Aux(8), true}}));
+    rig.settings.rearTouch = false;
+    rig.Step();
+    CHECK(rig.keys.Drain() == (Events{{Aux(8), false}}));
+    // A finger that landed while the pad was off does not tap when it is on.
+    rig.Rear(100, 300, 32);
+    rig.Step();
+    rig.settings = Settings{};
+    rig.Step();
+    rig.Lift();
+    rig.Step();
+    CHECK(rig.keys.Drain().empty());
+    rig.pad.ly = 128;
+    rig.Step();
+    rig.keys.Drain();
+
+    // In a menu the pad is nothing, and a finger that was on it when the game
+    // took the mouse back does not tap.
+    rig.menu = true;
+    rig.Frame();
+    tap(100, 40);
+    CHECK(rig.keys.Drain().empty());
+    rig.Rear(100, 300, 41);
+    rig.Frame();
+    rig.menu = false;
+    rig.Step();
+    rig.Lift();
+    rig.Step();
+    CHECK(rig.keys.Drain().empty());
+    // The next one does.
+    tap(100, 42);
+    CHECK(rig.keys.Drain() == (Events{{Aux(8), true}}));
+    // A menu opening lets go of the key.
+    rig.menu = true;
+    rig.Step();
+    CHECK(rig.keys.Drain() == (Events{{Aux(8), false}}));
+    rig.End();
+}
+
 void TestModeChanges()
 {
     g_test = "mode changes";
     Rig rig;
     rig.Frame();
 
-    // In the game: walking forward, aiming, a thumb on the grenade, fingers
+    // In the game: walking forward, aiming, a thumb on the grenade, a finger
     // on the back.
     rig.pad.ly = 0;
     rig.pad.buttons = Bit(kLeftShoulder);
@@ -905,7 +1084,11 @@ void TestModeChanges()
     rig.Rear(100, 100, 1);
     rig.pad.rx = 255;
     rig.Step();
-    CHECK(rig.keys.Drain() == (Events{{Aux(5), true}, {Aux(14), true}, {Aux(8), true}, {Aux(9), true}}));
+    CHECK(rig.keys.Drain() == (Events{{Aux(5), true}, {Aux(14), true}, {Aux(9), true}}));
+    // The finger on the back taps: sprinting.
+    rig.pad.rearCount = 0;
+    rig.Step();
+    CHECK(rig.keys.Drain() == (Events{{Aux(8), true}}));
 
     // Start opens the menu. The sticks and the panels let go; L keeps its key
     // until it is let go, so the game sees the aim end when it does.
@@ -1074,6 +1257,9 @@ void TestBind()
     rig.Step();
     rig.Rear(900, 100, 1);
     rig.Step();
+    CHECK(rig.keys.Drain().empty()); // the rear pad's key is a tap here too
+    rig.Lift();
+    rig.Step();
     CHECK(rig.keys.Drain() == (Events{{Aux(16), true}}));
     rig.bind = false;
     rig.Step();
@@ -1126,8 +1312,11 @@ void TestRelease()
     rig.Touch(100, 100, 1);
     rig.Rear(900, 100, 1);
     rig.Step();
+    rig.pad.rearCount = 0; // a tap on the back: sprinting
     rig.Step(50);
     CHECK(rig.keys.DownCount() == 6);
+    rig.Rear(100, 100, 2); // and a finger just landed there
+    rig.Step();
     rig.keys.Drain();
 
     rig.mapper.Release(rig.keys);
@@ -1137,16 +1326,17 @@ void TestRelease()
     rig.mapper.Release(rig.keys);
     CHECK(rig.keys.Drain().empty());
 
-    // What is still held presses nothing again until it has been let go.
+    // What is still held presses nothing again until it has been let go, and
+    // the finger on the back does not tap when it leaves.
     rig.pad.rx = 128;
     rig.Step();
     rig.Step();
-    CHECK(rig.keys.Drain() == (Events{{Aux(16), true}})); // the back of the console is where fingers rest
+    CHECK(rig.keys.Drain().empty());
     rig.pad.buttons = 0;
     rig.pad.ly = 128;
     rig.Lift();
     rig.Step();
-    CHECK(rig.keys.Drain() == (Events{{Aux(16), false}}));
+    CHECK(rig.keys.Drain().empty());
     rig.pad.buttons = Bit(kRightShoulder);
     rig.pad.ly = 0;
     rig.Touch(100, 100, 2);
@@ -1243,6 +1433,7 @@ int main()
     TestWheel();
     TestTouchClick();
     TestGameTouch();
+    TestRearTap();
     TestModeChanges();
     TestBind();
     TestRelease();

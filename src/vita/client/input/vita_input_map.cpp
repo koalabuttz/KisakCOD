@@ -16,6 +16,9 @@ constexpr uint32_t kRepeatEveryMs = 110; // and then this often
 constexpr float kMoveHysteresis = 0.1f;  // a direction lets go this far below where it took hold
 constexpr float kCursorCurve = 2.0f;     // the menu cursor's response: fine near the centre
 constexpr float kMaxLook = 30000.0f;     // look motion kept while nothing takes it
+constexpr uint32_t kRearTapMs = 300;     // a finger on the rear pad for longer is resting there
+constexpr uint32_t kRearKeepMs = 250;    // a tapped key stays down this long past its tap, or
+                                         // past the left stick's last push forward
 
 struct ControlInfo
 {
@@ -25,9 +28,9 @@ struct ControlInfo
 };
 
 // In the order of Control. The layout is the console game's where the Vita has
-// the button: sprint (a click of the left stick there) is the rear touch pad,
-// melee (a click of the right stick) and the grenades (the upper shoulder
-// buttons) are areas of the screen.
+// the button: sprint (a click of the left stick there) is a tap on the rear
+// touch pad, melee (a click of the right stick) and the grenades (the upper
+// shoulder buttons) are areas of the screen.
 const ControlInfo kControls[kControlCount] = {
     {kKeyAux1 + 0, "Cross", "+gostand"},
     {kKeyAux1 + 1, "Circle", "+stance"},
@@ -196,6 +199,8 @@ void Mapper::EnterMode(Mode mode, KeySink &sink)
         ReleaseHolder(holder, sink);
     for (int i = 0; i < fingerCount_; ++i)
         fingers_[i].role = kFingerIdle;
+    for (int i = 0; i < rearFingerCount_; ++i)
+        rearFingers_[i].tap = false;
     click_ = Click::Idle;
     touchHeld_ = false;
     cursorDirty_ = false;
@@ -225,8 +230,8 @@ void Mapper::Update(const PadState &pad, uint32_t nowMs, bool menu, bool bindPen
 
     UpdateButtons(pad, nowMs, sink);
     UpdateFront(pad, settings, sink);
-    UpdateRear(pad, settings, sink);
     UpdateSticks(pad, seconds, settings, sink);
+    UpdateRear(pad, nowMs, settings, sink); // after the sticks: it asks whether the left one pushes forward
     UpdateClick(sink);
 }
 
@@ -352,23 +357,69 @@ void Mapper::UpdateFront(const PadState &pad, const Settings &settings, KeySink 
     }
 }
 
-void Mapper::UpdateRear(const PadState &pad, const Settings &settings, KeySink &sink)
+// The rear pad lies under the fingers that hold the console: the first
+// console run logged 30 touches in 40 seconds where two taps were asked for,
+// and one held its key for a second and a half before the menu was up. So a
+// finger that stays is nothing, and a tap is the key press. The key then
+// stays down for as long as the left stick is pushed forward, which makes the
+// default binding the console game's sprint: tap, and run until you stop. A
+// tap while the key is down is a new press.
+void Mapper::UpdateRear(const PadState &pad, uint32_t nowMs, const Settings &settings, KeySink &sink)
 {
-    bool left = false;
-    bool right = false;
-    if (mode_ != Mode::Menu && settings.rearTouch)
+    const bool active = mode_ != Mode::Menu && settings.rearTouch;
+    const int count = std::min<int>(pad.rearCount, kMaxRearTouches);
+
+    // The fingers there now. One that was there before keeps the half it
+    // landed on and its time; one that landed while the pad was off, or that
+    // has stayed too long, can no longer tap.
+    RearFinger fingers[kMaxRearTouches];
+    for (int i = 0; i < count; ++i)
     {
-        const int count = std::min<int>(pad.rearCount, kMaxRearTouches);
-        for (int i = 0; i < count; ++i)
+        const Touch &touch = pad.rear[i];
+        RearFinger finger = {touch.id, touch.x >= settings.screenWidth / 2, active, nowMs};
+        for (int j = 0; j < rearFingerCount_; ++j)
         {
-            if (pad.rear[i].x < settings.screenWidth / 2)
-                left = true;
-            else
-                right = true;
+            if (rearFingers_[j].id == touch.id)
+                finger = rearFingers_[j];
         }
+        if (!active || nowMs - finger.sinceMs > kRearTapMs)
+            finger.tap = false;
+        fingers[i] = finger;
     }
-    SetHeld(kRearLeft, left, sink);
-    SetHeld(kRearRight, right, sink);
+
+    // The fingers that left: a tap if it was soon enough. Two that leave one
+    // half together are one tap.
+    bool tapped[2] = {false, false};
+    for (int j = 0; j < rearFingerCount_; ++j)
+    {
+        const RearFinger &was = rearFingers_[j];
+        bool there = false;
+        for (int i = 0; i < count; ++i)
+            there = there || fingers[i].id == was.id;
+        if (!there && active && was.tap && nowMs - was.sinceMs <= kRearTapMs)
+            tapped[was.right] = true;
+    }
+    for (int i = 0; i < count; ++i)
+        rearFingers_[i] = fingers[i];
+    rearFingerCount_ = static_cast<uint8_t>(count);
+
+    for (int half = 0; half < 2; ++half)
+    {
+        const Control control = half ? kRearRight : kRearLeft;
+        if (tapped[half])
+        {
+            Press(control, GameKey(control), sink);
+            rearKeepMs_[half] = nowMs;
+        }
+        if (!heldKey_[control])
+            continue;
+        if (!active)
+            ReleaseHolder(control, sink);
+        else if (heldKey_[kStickUp])
+            rearKeepMs_[half] = nowMs;
+        else if (nowMs - rearKeepMs_[half] >= kRearKeepMs)
+            ReleaseHolder(control, sink);
+    }
 }
 
 void Mapper::UpdateSticks(const PadState &pad, float seconds, const Settings &settings, KeySink &sink)
@@ -472,6 +523,8 @@ void Mapper::Release(KeySink &sink)
         ReleaseHolder(holder, sink);
     for (int i = 0; i < fingerCount_; ++i)
         fingers_[i].role = kFingerIdle;
+    for (int i = 0; i < rearFingerCount_; ++i)
+        rearFingers_[i].tap = false;
     click_ = Click::Idle;
     touchHeld_ = false;
     cursorDirty_ = false;

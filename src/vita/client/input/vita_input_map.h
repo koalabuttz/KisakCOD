@@ -12,6 +12,9 @@
 //       pad's two halves and three areas of the screen are keys of their own
 //       (AUX1 to AUX16 and the keypad arrows), so they can be bound and
 //       rebound like any PC key;
+//     * the rear pad's keys are pressed by a tap, since the fingers that hold
+//       the console rest on it, and stay down while the left stick is pushed
+//       forward: sprint, by default, as the console game's click of the stick;
 //     * the right stick is the mouse: its motion goes through the engine's
 //       mouse path, with the game's own sensitivity, pitch inversion and
 //       aim-down-sight slowdown.
@@ -128,7 +131,7 @@ struct Settings
     float lookCurve = 2.0f;       // response: deflection to this power
     float cursorSpeed = 700.0f;   // menu cursor, pixels a second at full deflection
     float scrollRate = 12.0f;     // menu wheel steps a second at full deflection
-    bool rearTouch = true;        // the rear pad's two keys
+    bool rearTouch = true;        // the rear pad's two keys, by a tap
     bool frontTouch = true;       // the screen's three keys in the game
 };
 
@@ -201,6 +204,13 @@ private:
         uint8_t id;
         int8_t role;
     };
+    struct RearFinger
+    {
+        uint8_t id;
+        bool right;       // the half it landed on
+        bool tap;         // lifting soon enough presses that half's key
+        uint32_t sinceMs; // when it landed
+    };
 
     int KeyFor(Control control) const;
     void Press(int holder, int key, KeySink &sink);
@@ -209,7 +219,7 @@ private:
     void EnterMode(Mode mode, KeySink &sink);
     void UpdateButtons(const PadState &pad, uint32_t nowMs, KeySink &sink);
     void UpdateFront(const PadState &pad, const Settings &settings, KeySink &sink);
-    void UpdateRear(const PadState &pad, const Settings &settings, KeySink &sink);
+    void UpdateRear(const PadState &pad, uint32_t nowMs, const Settings &settings, KeySink &sink);
     void UpdateSticks(const PadState &pad, float seconds, const Settings &settings, KeySink &sink);
     void UpdateClick(KeySink &sink);
 
@@ -219,6 +229,9 @@ private:
     uint32_t lastMs_ = 0;
     Finger fingers_[kMaxFrontTouches] = {}; // the fingers on the screen at the last reading
     uint8_t fingerCount_ = 0;
+    RearFinger rearFingers_[kMaxRearTouches] = {}; // and on the rear pad
+    uint8_t rearFingerCount_ = 0;
+    uint32_t rearKeepMs_[2] = {}; // when each half's key was last wanted: its tap, or the stick forward
     bool started_ = false;
     Mode mode_ = Mode::Menu;
     bool cursorHidden_ = false;
