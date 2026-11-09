@@ -254,9 +254,9 @@ bool RecycleSlot(Core &core, uint32_t slotIndex)
     // Recorded like the commands, so the pool is reset after the record
     // thread's last use of it and before its next.
     const VkDevice dev = core.dev;
-    const VkCommandPool pool = slot.pool;
+    const VkCommandPool commandPool = slot.pool;
     if (!RecordControl(core, [=](RecordState &state) {
-            if (RecordCheck(state, state.vk->vkResetCommandPool(dev, pool, 0), "vkResetCommandPool"))
+            if (RecordCheck(state, state.vk->vkResetCommandPool(dev, commandPool, 0), "vkResetCommandPool"))
                 state.slots[slotIndex].used = 0;
         }))
         return false;
