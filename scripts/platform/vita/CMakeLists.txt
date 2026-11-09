@@ -20,7 +20,7 @@ foreach(kisak_not_on_vita
         KISAK_BUILD_WORLD_DEVICE_PROBE KISAK_BUILD_WORLD_DRAW_PROBE
         KISAK_BUILD_LINUX_SP_GAME KISAK_LINUX_STEAM KISAK_LINUX_TRACY KISAK_LINUX_CINEMATICS)
     if(${kisak_not_on_vita})
-        message(FATAL_ERROR "${kisak_not_on_vita} is not available with KISAK_PLATFORM=vita, which builds KisakCOD-dedi only")
+        message(FATAL_ERROR "${kisak_not_on_vita} is not available with KISAK_PLATFORM=vita, which builds KisakCOD-dedi (and, with KISAK_BUILD_VITA_MP_CLIENT, KisakCOD-mp)")
     endif()
 endforeach()
 message(WARNING "KISAK_PLATFORM=vita is the opt-in PS Vita track: KisakCOD-dedi builds into a .vpk; "
@@ -94,14 +94,16 @@ target_compile_options(KisakCOD-dedi PRIVATE
 # threads, which crashed the first map load on a Vita. CI checks that no weak
 # pthread reference is left unresolved, and the server refuses to start
 # without per-thread copies.
-target_link_options(KisakCOD-dedi PRIVATE -Wl,--gc-sections -Wl,--no-enum-size-warning
+set(KISAK_VITA_LINK_OPTIONS -Wl,--gc-sections -Wl,--no-enum-size-warning
     -Wl,--undefined=sceUserMainThreadStackSize
     -Wl,--undefined=pthread_cancel -Wl,--undefined=pthread_once)
-target_link_libraries(KisakCOD-dedi PRIVATE
+set(KISAK_VITA_LINK_LIBRARIES
     pthread
     SceNet_stub SceNetCtl_stub SceSysmodule_stub SceKernelThreadMgr_stub
     SceCtrl_stub ScePower_stub SceAppMgr_stub SceAppUtil_stub SceLibKernel_stub SceRtc_stub SceIofilemgr_stub
 )
+target_link_options(KisakCOD-dedi PRIVATE ${KISAK_VITA_LINK_OPTIONS})
+target_link_libraries(KisakCOD-dedi PRIVATE ${KISAK_VITA_LINK_LIBRARIES})
 add_dependencies(KisakCOD-dedi update_build_number)
 
 # Pack the ELF into a .vpk that VitaShell installs: vita-elf-create turns it
@@ -109,18 +111,28 @@ add_dependencies(KisakCOD-dedi update_build_number)
 # a homebrew eboot.bin, and vita-pack-vpk zips it with the app's param.sfo.
 # ATTRIBUTE2=12 asks for the larger memory budget (extended mode): the engine's
 # reservations alone take about 154 MB (docs/vita.md).
+# kisak_vita_pack_vpk(<target> <title id> <title>) adds <target>-vpk, which
+# packs the target into <target>.vpk beside it.
+function(kisak_vita_pack_vpk target title_id title)
+    set(out "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+    set(work "${CMAKE_CURRENT_BINARY_DIR}/${target}-vpk")
+    add_custom_command(
+        OUTPUT "${out}/${target}.vpk"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${work}"
+        COMMAND "${VITASDK}/bin/vita-elf-create" "$<TARGET_FILE:${target}>" "${work}/${target}.velf"
+        COMMAND "${VITASDK}/bin/vita-make-fself" -s -c "${work}/${target}.velf" "${work}/eboot.bin"
+        COMMAND "${VITASDK}/bin/vita-mksfoex" -s TITLE_ID=${title_id} -d ATTRIBUTE2=12
+            "${title}" "${work}/param.sfo"
+        COMMAND "${VITASDK}/bin/vita-pack-vpk" -s "${work}/param.sfo"
+            -b "${work}/eboot.bin" "${out}/${target}.vpk"
+        DEPENDS ${target}
+        COMMENT "Packing ${target}.vpk"
+        VERBATIM)
+    add_custom_target(${target}-vpk ALL DEPENDS "${out}/${target}.vpk")
+endfunction()
+
 set(KISAK_VITA_TITLE_ID "KSKD00001" CACHE STRING "PS Vita title ID of the dedicated server .vpk (9 characters)")
-set(KISAK_VITA_TITLE "KisakCOD Dedicated Server")
-set(kisak_vita_out "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
-add_custom_command(
-    OUTPUT "${kisak_vita_out}/KisakCOD-dedi.vpk"
-    COMMAND "${VITASDK}/bin/vita-elf-create" "$<TARGET_FILE:KisakCOD-dedi>" "${CMAKE_CURRENT_BINARY_DIR}/KisakCOD-dedi.velf"
-    COMMAND "${VITASDK}/bin/vita-make-fself" -s -c "${CMAKE_CURRENT_BINARY_DIR}/KisakCOD-dedi.velf" "${CMAKE_CURRENT_BINARY_DIR}/eboot.bin"
-    COMMAND "${VITASDK}/bin/vita-mksfoex" -s TITLE_ID=${KISAK_VITA_TITLE_ID} -d ATTRIBUTE2=12
-        "${KISAK_VITA_TITLE}" "${CMAKE_CURRENT_BINARY_DIR}/param.sfo"
-    COMMAND "${VITASDK}/bin/vita-pack-vpk" -s "${CMAKE_CURRENT_BINARY_DIR}/param.sfo"
-        -b "${CMAKE_CURRENT_BINARY_DIR}/eboot.bin" "${kisak_vita_out}/KisakCOD-dedi.vpk"
-    DEPENDS KisakCOD-dedi
-    COMMENT "Packing KisakCOD-dedi.vpk"
-    VERBATIM)
-add_custom_target(KisakCOD-dedi-vpk ALL DEPENDS "${kisak_vita_out}/KisakCOD-dedi.vpk")
+kisak_vita_pack_vpk(KisakCOD-dedi "${KISAK_VITA_TITLE_ID}" "KisakCOD Dedicated Server")
+
+# The opt-in multiplayer client (off by default; docs/vita-client.md).
+include(${CMAKE_CURRENT_LIST_DIR}/mp_client.cmake)

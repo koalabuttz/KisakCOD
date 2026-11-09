@@ -281,7 +281,10 @@ namespace
     const char *DefaultHomePath(char *out, size_t outSize)
     {
         int written;
-#if defined(__APPLE__)
+#if defined(__vita__)
+        // The data folder (ux0:data/KisakCOD) holds configs and profiles too.
+        written = snprintf(out, outSize, "%s", Sys_VitaDataPath());
+#elif defined(__APPLE__)
         const char *const home = getenv("HOME");
         if (!home || home[0] != '/')
             return "HOME is not an absolute path";

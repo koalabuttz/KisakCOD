@@ -1,0 +1,180 @@
+# ---------------------------------------------------------------------------
+# Opt-in PS Vita multiplayer client (KISAK_BUILD_VITA_MP_CLIENT, docs/vita-client.md)
+#
+# Off by default. Builds KisakCOD-mp for the Vita: the same engine source set
+# as the native Linux client (scripts/platform/linux/mp_client.cmake), with the
+# Vita platform layer the dedicated server uses (src/linux + src/vita) and the
+# client's own Vita pieces in src/vita/client:
+#
+#   * vita_win32_window.cpp: the Win32 window and monitor calls the renderer
+#     makes (src/linux/win32_window.h), for the Vita's one fixed 960x544 screen.
+#   * vita_client_input.cpp: the client's window pump and IN_* functions.
+#   * vita_d3d9.cpp: the renderer's Direct3DCreate9. Stage 1 has no GXM back
+#     end yet, so it answers "no device" and the client stops with the
+#     renderer's own error, after everything before it has started.
+#
+# The D3D9 declarations come from DXVK Native's headers through the native D3D9
+# boundary (KISAK_DXVK_NATIVE_INCLUDE_DIR), as on Linux and macOS: only the
+# types and the interface layouts are used, no DXVK code is built or linked.
+# Sound links the OpenAL stand-in (tests/linux_mp_client/openal_unavailable.cpp,
+# "no device") until the Vita has an OpenAL; it needs <AL/al.h> from
+# KISAK_OPENAL_INCLUDE_DIR.
+# ---------------------------------------------------------------------------
+option(KISAK_BUILD_VITA_MP_CLIENT
+    "Build the PS Vita multiplayer client KisakCOD-mp (needs KISAK_DXVK_NATIVE_INCLUDE_DIR and KISAK_OPENAL_INCLUDE_DIR)" OFF)
+if(NOT KISAK_BUILD_VITA_MP_CLIENT)
+    return()
+endif()
+
+message(STATUS "----- KisakCOD PS Vita multiplayer client (opt-in) -----")
+if(NOT KISAK_DXVK_NATIVE_INCLUDE_DIR)
+    message(FATAL_ERROR "KISAK_BUILD_VITA_MP_CLIENT needs KISAK_DXVK_NATIVE_INCLUDE_DIR: "
+        "DXVK Native's include directory (d3d9.h, windows.h), for the D3D9 declarations only")
+endif()
+get_filename_component(KISAK_DXVK_NATIVE_INCLUDE_DIR "${KISAK_DXVK_NATIVE_INCLUDE_DIR}" ABSOLUTE)
+foreach(dxvk_header d3d9.h d3d9types.h d3d9caps.h windows.h windows_base.h unknwn.h)
+    if(NOT EXISTS "${KISAK_DXVK_NATIVE_INCLUDE_DIR}/${dxvk_header}")
+        message(FATAL_ERROR "KISAK_DXVK_NATIVE_INCLUDE_DIR has no ${dxvk_header}: ${KISAK_DXVK_NATIVE_INCLUDE_DIR}")
+    endif()
+endforeach()
+set(KISAK_OPENAL_INCLUDE_DIR "" CACHE PATH "Directory holding AL/al.h (the client's sound headers include it)")
+if(NOT KISAK_OPENAL_INCLUDE_DIR OR NOT EXISTS "${KISAK_OPENAL_INCLUDE_DIR}/AL/al.h")
+    message(FATAL_ERROR "KISAK_BUILD_VITA_MP_CLIENT needs KISAK_OPENAL_INCLUDE_DIR holding AL/al.h "
+        "(got '${KISAK_OPENAL_INCLUDE_DIR}')")
+endif()
+
+# The boundary target the renderer units link, as scripts/platform/linux/native_d3d9.cmake
+# defines it, without a D3D9 library.
+add_library(kisak_linux_native_d3d9 INTERFACE)
+target_compile_definitions(kisak_linux_native_d3d9 INTERFACE KISAK_LINUX_NATIVE_D3D9)
+target_include_directories(kisak_linux_native_d3d9 SYSTEM INTERFACE "${KISAK_DXVK_NATIVE_INCLUDE_DIR}")
+file(STRINGS "${SCRIPTS_DIR}/platform/linux/native_d3d9_renderer_sources.txt" vita_native_lines)
+set(vita_mp_native_sources "")
+foreach(line IN LISTS vita_native_lines)
+    string(STRIP "${line}" line)
+    if(line STREQUAL "" OR line MATCHES "^#")
+        continue()
+    endif()
+    list(APPEND vita_mp_native_sources "${CMAKE_SOURCE_DIR}/${line}")
+endforeach()
+# r_utils.cpp defines R_ReleaseD3DSurface only through the boundary.
+list(APPEND vita_mp_native_sources "${SRC_DIR}/gfx_d3d/r_utils.cpp")
+
+# ---- the engine source set (as scripts/platform/linux/mp_client.cmake) ------
+# common_files.cmake and mp_files.cmake are already included, and the
+# dedicated server's trims applied to QCOMMON, UNIVERSAL and SCRIPT.
+set(vita_mp_groups
+    SRCROOT DYNENTITY EFFECTSCORE AIM_ASSIST BGAME CGAME CGAME_MP CLIENT CLIENT_MP
+    COMMON DATABASE DEVGUI GAME GAME_MP GFX_D3D GROUPVOICE PHYSICS PHYSICS_ODE
+    QCOMMON RAGDOLL SCRIPT SERVER SERVER_MP SOUND STRINGED UI UI_MP UNIVERSAL XANIM)
+set(vita_mp_engine_sources "")
+foreach(group ${vita_mp_groups})
+    foreach(path ${${group}})
+        if(path MATCHES "\\.cpp$")
+            list(APPEND vita_mp_engine_sources "${path}")
+        endif()
+    endforeach()
+endforeach()
+list(APPEND vita_mp_engine_sources "${SRC_DIR}/script/scr_debugger.cpp")
+file(STRINGS "${SCRIPTS_DIR}/platform/linux/mp_client_platform_sources.txt" vita_mp_platform_lines)
+foreach(line IN LISTS vita_mp_platform_lines)
+    string(REGEX REPLACE "#.*$" "" line "${line}")
+    string(STRIP "${line}" line)
+    if(NOT line STREQUAL "")
+        list(APPEND vita_mp_engine_sources "${CMAKE_SOURCE_DIR}/${line}")
+    endif()
+endforeach()
+list(REMOVE_DUPLICATES vita_mp_engine_sources)
+# What the Linux client census blocks never links (the Windows platform layer,
+# DirectSound voice, curl downloads), except the renderer units compiled
+# through the boundary and r_cinematic.cpp, built without CINEMA.
+file(STRINGS "${SCRIPTS_DIR}/tests/client_compile_census_blocked.txt" vita_mp_blocked_lines)
+set(vita_mp_blocked "")
+foreach(line IN LISTS vita_mp_blocked_lines)
+    string(REGEX REPLACE "#.*$" "" line "${line}")
+    string(STRIP "${line}" line)
+    if(line STREQUAL "")
+        continue()
+    endif()
+    string(REGEX REPLACE ":.*$" "" blocked_path "${line}")
+    string(STRIP "${blocked_path}" blocked_path)
+    list(APPEND vita_mp_blocked "${CMAKE_SOURCE_DIR}/${blocked_path}")
+endforeach()
+list(REMOVE_ITEM vita_mp_blocked ${vita_mp_native_sources} "${SRC_DIR}/gfx_d3d/r_cinematic.cpp")
+list(REMOVE_ITEM vita_mp_engine_sources ${vita_mp_blocked})
+set(vita_mp_standin_sources ${vita_mp_engine_sources})
+list(REMOVE_ITEM vita_mp_standin_sources ${vita_mp_native_sources})
+
+# ---- the platform layer ----------------------------------------------------
+# The dedicated server's POSIX layer (KISAK_VITA_POSIX_SOURCES), minus its
+# stand-ins for client systems this target links for real.
+set(vita_mp_posix_sources ${KISAK_VITA_POSIX_SOURCES})
+foreach(server_only
+        server_assets.cpp server_client.cpp server_device_counterparts.cpp
+        server_draw_counterparts.cpp server_renderer_counterparts.cpp server_sound.cpp
+        server_world.cpp sys_splash.cpp script_debugger.cpp)
+    list(FIND vita_mp_posix_sources "${SRC_DIR}/linux/${server_only}" server_only_at)
+    if(server_only_at EQUAL -1)
+        message(FATAL_ERROR "src/linux no longer has ${server_only}; review what the Vita KisakCOD-mp leaves out")
+    endif()
+    list(REMOVE_ITEM vita_mp_posix_sources "${SRC_DIR}/linux/${server_only}")
+endforeach()
+include(${SCRIPTS_DIR}/platform/linux/material_sort_span.cmake)
+file(GLOB vita_mp_client_sources CONFIGURE_DEPENDS "${SRC_DIR}/vita/client/*.cpp")
+set(vita_mp_own_sources
+    "${KISAK_MATERIAL_SORT_SPAN_UNIT}"
+    "${SRC_DIR}/linux/client/msvc_rand.cpp"
+    "${SRC_DIR}/linux/client/mp_client_unavailable.cpp"
+    "${SRC_DIR}/linux/client/texture_memory.cpp"
+    "${TESTS_DIR}/linux_mp_client/openal_unavailable.cpp")
+
+set(KISAK_VITA_MP_DEFINITIONS
+    KISAK_MP USE_SEPARATE_BLIT_TEXTURE KISAK_OPENAL RELEASE_ASSERTS
+    KISAK_LINUX_MP_CLIENT KISAK_VITA_MP_CLIENT
+    ENABLE_VITASDK_BUILD_ASSERT
+    $<$<CONFIG:Debug>:_DEBUG>)
+set(KISAK_VITA_MP_OPTIONS
+    $<$<COMPILE_LANGUAGE:CXX>:-fms-extensions>
+    -fno-strict-aliasing -ffunction-sections -fdata-sections
+    -Wno-c++11-narrowing -Wno-invalid-token-paste
+    -Wno-ignored-attributes -Werror=format-security)
+
+add_library(KisakCOD-mp-vita-native OBJECT ${vita_mp_native_sources} ${vita_mp_client_sources})
+add_library(KisakCOD-mp-vita-standin OBJECT ${vita_mp_standin_sources} ${vita_mp_posix_sources} ${KISAK_VITA_SOURCES})
+add_library(KisakCOD-mp-vita-own OBJECT ${vita_mp_own_sources})
+foreach(mp_target KisakCOD-mp-vita-native KisakCOD-mp-vita-standin KisakCOD-mp-vita-own)
+    target_compile_features(${mp_target} PRIVATE cxx_std_20)
+    target_compile_definitions(${mp_target} PRIVATE ${KISAK_VITA_MP_DEFINITIONS})
+    target_compile_options(${mp_target} PRIVATE ${KISAK_VITA_MP_OPTIONS})
+    target_include_directories(${mp_target} PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
+    target_include_directories(${mp_target} SYSTEM PRIVATE "${KISAK_OPENAL_INCLUDE_DIR}")
+    add_dependencies(${mp_target} update_build_number)
+endforeach()
+set_property(SOURCE "${SRC_DIR}/sound/snd_driver_load_obj.cpp" TARGET_DIRECTORY KisakCOD-mp-vita-standin
+    APPEND PROPERTY COMPILE_DEFINITIONS DR_WAV_IMPLEMENTATION DR_MP3_IMPLEMENTATION)
+target_link_libraries(KisakCOD-mp-vita-native PRIVATE kisak_linux_native_d3d9)
+target_link_libraries(KisakCOD-mp-vita-own PRIVATE kisak_linux_native_d3d9)
+
+set(vita_mp_c_sources "")
+foreach(path ${ODE} ${ZLIB})
+    if(path MATCHES "\\.(c|cpp)$")
+        list(APPEND vita_mp_c_sources "${path}")
+    endif()
+endforeach()
+
+add_executable(KisakCOD-mp
+    ${vita_mp_c_sources}
+    $<TARGET_OBJECTS:KisakCOD-mp-vita-native>
+    $<TARGET_OBJECTS:KisakCOD-mp-vita-standin>
+    $<TARGET_OBJECTS:KisakCOD-mp-vita-own>)
+target_compile_features(KisakCOD-mp PRIVATE cxx_std_20)
+target_compile_definitions(KisakCOD-mp PRIVATE ${KISAK_VITA_MP_DEFINITIONS})
+target_compile_options(KisakCOD-mp PRIVATE ${KISAK_VITA_MP_OPTIONS})
+target_include_directories(KisakCOD-mp PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
+# The dedicated server's link rules (CMakeLists.txt beside this file).
+target_link_options(KisakCOD-mp PRIVATE ${KISAK_VITA_LINK_OPTIONS})
+target_link_libraries(KisakCOD-mp PRIVATE ${KISAK_VITA_LINK_LIBRARIES} SceCtrl_stub SceTouch_stub)
+add_dependencies(KisakCOD-mp update_build_number)
+
+set(KISAK_VITA_MP_TITLE_ID "KSKD00002" CACHE STRING "PS Vita title ID of the multiplayer client .vpk (9 characters)")
+kisak_vita_pack_vpk(KisakCOD-mp "${KISAK_VITA_MP_TITLE_ID}" "KisakCOD Multiplayer")

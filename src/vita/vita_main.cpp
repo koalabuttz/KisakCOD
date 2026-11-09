@@ -46,10 +46,22 @@ extern "C" unsigned int sceUserMainThreadStackSize = 8 * 1024 * 1024;
 namespace
 {
     constexpr char kDataPath[] = "ux0:data/KisakCOD";
+#if defined(KISAK_VITA_MP_CLIENT)
+    // The client shares the data folder with the dedicated server but has its
+    // own log and command line, so neither overwrites the other's.
+    constexpr char kLogPath[] = "ux0:data/KisakCOD/console-mp.log";
+    constexpr char kCommandLinePath[] = "ux0:data/KisakCOD/cmdline-mp.txt";
+    constexpr char kProgramKind[] = "multiplayer client";
+    // The client starts at the main menu. cmdline-mp.txt replaces it
+    // (docs/vita-client.md).
+    constexpr char kDefaultCommandLine[] = "";
+#else
     constexpr char kLogPath[] = "ux0:data/KisakCOD/console.log";
     constexpr char kCommandLinePath[] = "ux0:data/KisakCOD/cmdline.txt";
+    constexpr char kProgramKind[] = "dedicated server";
     // A LAN server on mp_crash. cmdline.txt replaces it (docs/vita.md).
     constexpr char kDefaultCommandLine[] = "+set dedicated 1 +map mp_crash";
+#endif
 
     // The network library keeps its sockets and buffers in this pool.
     constexpr int kNetPoolSize = 1024 * 1024;
@@ -268,7 +280,7 @@ bool Vita_Startup(int *argc, char ***argv)
     mkdir(kDataPath, 0777);
     s_logFd = open(kLogPath, O_WRONLY | O_CREAT | O_TRUNC, 0666);
 
-    LogFormat("Vita: KisakCOD dedicated server starting, CPU at %d MHz\n", scePowerGetArmClockFrequency());
+    LogFormat("Vita: KisakCOD %s starting, CPU at %d MHz\n", kProgramKind, scePowerGetArmClockFrequency());
     const unsigned int fpscr = Vita_SetIeeeFloatMode();
     LogFormat("Vita: FPSCR was 0x%08x (flush-to-zero %s)\n", fpscr, (fpscr & (1u << 24)) ? "on, now off" : "off");
     // newlib's heap block is already taken; the engine's reservations come

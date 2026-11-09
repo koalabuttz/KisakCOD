@@ -192,6 +192,18 @@
         #endif
       #endif
 
+  #elif defined(__vita__)
+
+      // KisakCOD: the PS Vita client (Clang, 32-bit Arm, newlib). Declared as
+      // the Linux branch below (__RADLINUX__ picks its cdecl RADLINK), with the
+      // Vita's CPU. Only the declarations are used: the Vita build plays no Bink.
+      #define __RADLINUX__
+      #define __RADARM__
+      #define __RAD32__
+      #define __RADLITTLEENDIAN__
+      #define RADINLINE inline
+      #define RADRESTRICT __restrict
+
   #elif defined(linux)
 
       #define __RADLINUX__

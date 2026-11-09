@@ -318,9 +318,10 @@ class NativeD3D9BoundaryWorkflowTests(unittest.TestCase):
     # against the renderer's D3D9 declarations, linking no D3D9 library
     # (VulkanWindowWorkflowTests); vulkan_engine does it to build the engine's
     # programs with the Vulkan back end against the stand-ins
-    # (VulkanEngineWorkflowTests).
+    # (VulkanEngineWorkflowTests); vita_mp_client builds the PS Vita client
+    # through the boundary with DXVK's headers, linking no D3D9 library.
     BOUNDARY_JOBS = ('native_d3d9_boundary', 'device_probe', 'x64_client', 'arm64_client', 'vulkan_window',
-                     'vulkan_engine')
+                     'vulkan_engine', 'vita_mp_client')
 
     def test_other_jobs_keep_their_defaults(self):
         # The boundary stays opt-in: no other job turns the CMake option on, and
@@ -1015,7 +1016,7 @@ class CiCacheTests(unittest.TestCase):
 
     # Jobs that configure and build the engine with CMake.
     CCACHE_JOBS = ('window', 'native', 'native_d3d9_boundary', 'device_probe', 'x64_dedicated',
-                   'arm64_dedicated', 'armv7_dedicated', 'vita_dedicated', 'x64_client', 'arm64_client',
+                   'arm64_dedicated', 'armv7_dedicated', 'vita_dedicated', 'vita_mp_client', 'x64_client', 'arm64_client',
                    'vulkan_window', 'vulkan_engine')
     SDL3_JOBS = ('window', 'device_probe', 'vulkan_engine')
 
