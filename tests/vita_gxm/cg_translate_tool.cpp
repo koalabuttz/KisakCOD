@@ -2,7 +2,7 @@
 // (src/gfx_gxm/shader/gxm_cg_translate.h), used by
 // scripts/tests/test_vita_cg_translate.py.
 //
-//   cg_translate_tool [--bgra MASK] [--alpha FUNC] shader.bin
+//   cg_translate_tool [--bgra MASK] [--absent MASK] [--alpha FUNC] shader.bin
 //
 // Writes the Cg program to stdout and one line of reflection to stderr, or
 // "refused: <reason>" to stderr and exits 2.
@@ -26,6 +26,8 @@ int main(int argc, char **argv)
     {
         if (!std::strcmp(argv[i], "--bgra") && i + 1 < argc)
             options.bgraInputs = uint16_t(std::strtoul(argv[++i], nullptr, 0));
+        else if (!std::strcmp(argv[i], "--absent") && i + 1 < argc)
+            options.absentInputs = uint16_t(std::strtoul(argv[++i], nullptr, 0));
         else if (!std::strcmp(argv[i], "--alpha") && i + 1 < argc)
             options.alphaFunc = AlphaFunc(std::strtoul(argv[++i], nullptr, 0));
         else

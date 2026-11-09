@@ -998,11 +998,14 @@ bool Emitter::Run(std::string &cg, std::string &error)
         for (const VertexInput &input : r_.inputs)
         {
             const std::string name = "in_v" + std::to_string(input.reg);
-            parameters.push_back("float4 " + name);
+            const bool absent = (options_.absentInputs >> input.reg) & 1;
+            if (!absent)
+                parameters.push_back("float4 " + name);
             if (local("v" + std::to_string(input.reg)))
             {
                 const bool bgra = (options_.bgraInputs >> input.reg) & 1;
-                prologue += "    float4 v" + std::to_string(input.reg) + " = " + name + (bgra ? ".zyxw" : "") + ";\n";
+                const std::string value = absent ? "float4(0.0, 0.0, 0.0, 1.0)" : name + (bgra ? ".zyxw" : "");
+                prologue += "    float4 v" + std::to_string(input.reg) + " = " + value + ";\n";
                 declared_.erase("v" + std::to_string(input.reg));
             }
         }

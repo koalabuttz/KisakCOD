@@ -115,6 +115,9 @@ struct Options
     // Vertex shaders: inputs v<n> whose bytes are a D3DCOLOR (B, G, R, A in
     // memory). GXM reads them as R, G, B, A, so the program swaps them back.
     uint16_t bgraInputs = 0;
+    // Vertex shaders: inputs v<n> no vertex element feeds. D3D9 reads them
+    // as (0, 0, 0, 1); the program then has no in_v<n> parameter.
+    uint16_t absentInputs = 0;
     // Pixel shaders: D3DRS_ALPHATESTENABLE's test, done in the program
     // since GXM has none. Always is no test.
     AlphaFunc alphaFunc = AlphaFunc::Always;

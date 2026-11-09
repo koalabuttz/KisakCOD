@@ -75,6 +75,7 @@ REFUSED = {
 CHECKS = [
     ("vs2_oT_oD_fog", ["--bgra", "2"], "float4 v1 = in_v1.zyxw;", "varyings=TEXCOORD0,COLOR0,FOG0"),
     ("vs2_oT_oD_fog", [], "float4 v1 = in_v1;", "constants=6"),
+    ("vs2_oT_oD_fog", ["--absent", "2"], "float4 v1 = float4(0.0, 0.0, 0.0, 1.0);", "inputs=0:0.0,1:5.0"),
     ("ps3_texkill", ["--alpha", "7"], "if (!(a >= ref)) discard;", "kills=1"),
     ("ps3_texkill", ["--alpha", "1"], "if (!(false)) discard;", "kills=1"),
     ("ps3_texkill", [], "return oC0;", "kills=1"),
