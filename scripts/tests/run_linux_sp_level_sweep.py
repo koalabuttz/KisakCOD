@@ -210,7 +210,9 @@ class GameProcess:
     def hold(self, seconds):
         """Keeps reading for a while; False when the process ended meanwhile."""
         self.wait_for(None, seconds)
-        return self.process.poll() is None
+        # The output can end before the exit status is ready to collect, so
+        # poll() alone can still report a process that just crashed as running.
+        return not self.ended and self.process.poll() is None
 
     def finish(self, timeout):
         """Asks the game to quit and returns its exit status (None if it had to

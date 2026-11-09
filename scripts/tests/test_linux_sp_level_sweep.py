@@ -56,6 +56,12 @@ FAKE_GAME = textwrap.dedent('''\
         if name == os.environ.get("FAKE_ASSERT_LEVEL"):
             print("ASSERT FAILED: ent->health > 0\\n\\tg_main.cpp:42", file=sys.stderr, flush=True)
         if name == os.environ.get("FAKE_CRASH_LEVEL"):
+            if os.environ.get("FAKE_CLOSE_BEFORE_CRASH"):
+                # Output ends a moment before the exit status exists, as it
+                # can on a busy machine.
+                os.close(1)
+                os.close(2)
+                time.sleep(0.5)
             os.kill(os.getpid(), signal.SIGSEGV)
     load(level)
     for line in sys.stdin:
@@ -169,6 +175,13 @@ class SweepRunTests(unittest.TestCase):
         self.assertIn("| killhouse | all steps seen |", report)
         self.assertIn("| cargoship | stopped at: held 1 s | 1.2 s | signal 11 | 1 |", report)
         self.assertIn("- `ent->health > 0`", report)
+
+    def test_crash_after_output_ends(self):
+        os.environ["FAKE_CRASH_LEVEL"] = "cargoship"
+        os.environ["FAKE_CLOSE_BEFORE_CRASH"] = "1"
+        status, report = self.run_sweep("--levels", "cargoship")
+        self.assertEqual(status, 1)
+        self.assertIn("| cargoship | stopped at: held 1 s |", report)
 
     def test_level_that_never_loads(self):
         os.environ["FAKE_NOLOAD_LEVEL"] = "killhouse"
