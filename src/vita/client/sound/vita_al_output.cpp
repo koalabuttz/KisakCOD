@@ -11,9 +11,9 @@
 // the thread: one update of about 23 ms is always queued behind the one that
 // plays.
 //
-// Ten seconds after it starts, and then once a minute, the thread writes one
-// line to console-mp.log: how long the mixer took, how many sources played at
-// once, and what clipped or failed.
+// Ten seconds after it starts, then once a minute, and once more when it
+// stops, one line goes to console-mp.log: how long the mixer took, how many
+// sources played at once, and what clipped or failed.
 
 #if !defined(__vita__)
 #error "vita_al_output.cpp is the PS Vita's sound output"
@@ -71,6 +71,16 @@ int UpdateFramesFor(int rate)
     return 256;
 }
 
+// One line of what the mixer did since the last one.
+void Report(const char *when)
+{
+    const kisak::vita_al::Stats stats = kisak::vita_al::TakeStats();
+    Log("vita sound: %s%u updates, mixing %u us each on average and %u at most, %u sources at most, "
+        "%u clipped frames, %u refused updates\n",
+        when, stats.updates, stats.updates ? stats.mixMicros / stats.updates : 0, stats.maxMixMicros,
+        stats.peakVoices, stats.clippedFrames, stats.outputErrors);
+}
+
 bool IsBgmRate(int rate)
 {
     switch (rate)
@@ -120,11 +130,7 @@ void *OutputThread(void *)
         {
             updates = 0;
             nextReport = updatesASecond * 60;
-            const kisak::vita_al::Stats stats = kisak::vita_al::TakeStats();
-            Log("vita sound: %u updates, mixing %u us each on average and %u at most, %u sources at most, "
-                "%u clipped frames, %u refused updates\n",
-                stats.updates, stats.updates ? stats.mixMicros / stats.updates : 0, stats.maxMixMicros,
-                stats.peakVoices, stats.clippedFrames, stats.outputErrors);
+            Report("");
         }
     }
     return nullptr;
@@ -193,6 +199,8 @@ void OutputStop()
         g_stop.store(true);
         pthread_join(g_thread, nullptr);
         g_threadRunning = false;
+        // The minute that did not finish: a short run has its numbers too.
+        Report("stopped; since the last line ");
     }
     if (g_port >= 0)
     {

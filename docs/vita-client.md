@@ -11,7 +11,7 @@ GXM probe ran at 60 fps, the device runs the menu loop without drawing, and
 shaders are translated and compiled on the Vita.**
 - The whole client compiles, links and packs into a `.vpk`: client, cgame, UI, sound, renderer and its own listen server.
 - Stage 1 had no graphics back end, so the client stopped at the renderer through `Sys_Error`. Stage 2 replaces that: the renderer gets the D3D9 front on the GXM back end ("Graphics" below), which does everything but draw.
-- Stage 3 (controls and sound) is built and tested on the host, and not run on the Vita yet: see "Controls" and "Sound" below.
+- Stage 3 (controls and sound) runs on the console: on run 1 (2026-11-09) the menu music and the menu's sounds were heard, and every button arrived as its key. The screen's touch and the layout in a game are not confirmed yet: see "Controls" and "Sound" below.
 
 **Runs on David's Vita (2026-11-09):**
 - Run 1 reached the renderer, but its log was empty. A game client's `Sys_Print` was silent: on Linux `Com_PrintMessage` copies lines to stderr, which the Vita lacks. It then aborted on an assert, because `R_SetWndParms` read an empty display-mode list after the "no device" answer. Both are fixed.
@@ -270,19 +270,27 @@ for one update.
 44). SceAudioOut's main ports play 48000 Hz only, so the client opens the one
 background-music port, which takes the engine's rates, and mixes at the rate
 asked for. If that port does not open, it takes a main port and mixes at
-48000 Hz. One update is 1024 frames at 44100 Hz (23 ms), and
-`sceAudioOutOutput` blocks until the port has taken it, which paces the
+48000 Hz. One update is about 23 ms (512 frames at 22050 Hz, 1024 at 44100),
+and `sceAudioOutOutput` blocks until the port has taken it, which paces the
 thread.
 
 **In the log** (`console-mp.log`): `vita sound: port ..., ... Hz stereo, ...
-frames per update` when sound starts, then after ten seconds and once a
-minute `vita sound: ... updates, mixing ... us each on average and ... at
-most, ... sources at most, ... clipped frames, ... refused updates`.
+frames per update` when sound starts, then after ten seconds, once a minute
+and once more when sound stops `vita sound: ... updates, mixing ... us each on
+average and ... at most, ... sources at most, ... clipped frames, ... refused
+updates`.
 
-Not run on the Vita yet. Known limits:
+**On the console** (run 1, 2026-11-09): the menu music and the menu's sounds
+were heard. The port opened at 22050 Hz with 512 frames per update (that
+console's `snd_khz` is 22). An update with nothing playing took 34 µs on
+average and 89 at most. What an update costs with sources playing was not
+captured: the run ended before the second line, and the line at the end came
+after it.
+
+Known limits:
 - The engine decodes streamed sounds (music) on its main thread, 8192 frames
-  at a time. On the Vita that may show as a frame hitch; the console run will
-  tell.
+  at a time. On the Vita that may show as a frame hitch; a run with a picture
+  will tell.
 - The background-music port is the one the system's own music player takes
   over when the user plays music from the home screen.
 
