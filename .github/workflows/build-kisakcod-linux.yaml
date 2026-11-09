@@ -1006,8 +1006,8 @@ jobs:
     # declarations come from DXVK Native's headers (nothing of DXVK is built)
     # and the OpenAL ones from libopenal-dev; the client links no D3D9 or OpenAL
     # library. The same float and link checks as the Vita server. The client
-    # does not run here: start-up is checked on David's Vita. Its small OpenAL
-    # does, as a host test.
+    # does not run here: start-up is checked on David's Vita. Its control
+    # mapping and its small OpenAL do, as host tests.
     name: PS Vita multiplayer client ${{ matrix.config }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -1096,13 +1096,14 @@ jobs:
           set -euo pipefail
           scripts/ci/use-ccache.sh
 
-      - name: Check the client's sound on the host
-        # The small OpenAL makes no Vita call: the host compiler builds it
-        # with sanitizers and runs its checks.
+      - name: Check the client's controls and sound on the host
+        # The control mapping and the small OpenAL make no Vita call: the host
+        # compiler builds them with sanitizers and runs their checks.
         timeout-minutes: 10
         shell: bash
         run: |
           set -euo pipefail
+          python3 scripts/tests/test_vita_input.py
           python3 scripts/tests/test_vita_sound.py --al-include "$RUNNER_TEMP/al-include"
 
       - name: Configure PS Vita client ${{ matrix.config }}

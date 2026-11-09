@@ -8,7 +8,9 @@
 #
 #   * vita_win32_window.cpp: the Win32 window and monitor calls the renderer
 #     makes (src/linux/win32_window.h), for the Vita's one fixed 960x544 screen.
-#   * vita_client_input.cpp: the client's window pump and IN_* functions.
+#   * vita_client_input.cpp: the client's window pump and IN_* functions. It
+#     reads the pad and the touch panels; what they mean to the engine is
+#     input/vita_input_map.cpp (scripts/tests/test_vita_input.py).
 #   * sound/vita_al.cpp: the OpenAL calls the engine's sound driver makes, on a
 #     small mixer of its own (scripts/tests/test_vita_sound.py), played through
 #     SceAudioOut by sound/vita_al_output.cpp. No OpenAL library is linked.
@@ -129,9 +131,10 @@ set(vita_mp_own_sources
     "${SRC_DIR}/linux/client/msvc_rand.cpp"
     "${SRC_DIR}/linux/client/mp_client_unavailable.cpp"
     "${SRC_DIR}/linux/client/texture_memory.cpp")
-# The sound: no engine header, and the host test builds the same files
-# (scripts/tests/test_vita_sound.py).
+# The controls' mapping and the sound: no engine header, and the host tests
+# build the same files (scripts/tests/test_vita_input.py, test_vita_sound.py).
 set(vita_mp_input_sound_sources
+    "${SRC_DIR}/vita/client/input/vita_input_map.cpp"
     "${SRC_DIR}/vita/client/sound/vita_al.cpp"
     "${SRC_DIR}/vita/client/sound/vita_al_output.cpp")
 
@@ -181,7 +184,7 @@ target_link_libraries(KisakCOD-mp-vita-gfx PRIVATE kisak_linux_native_d3d9)
 # psp2/display.h's enum size checks assume -fshort-enums (gxm_display.cpp).
 set_source_files_properties("${SRC_DIR}/gfx_gxm/gxm_display.cpp" TARGET_DIRECTORY KisakCOD-mp-vita-gfx
     PROPERTIES COMPILE_OPTIONS "-UENABLE_VITASDK_BUILD_ASSERT")
-# The sound, with the warnings its host test uses.
+# The controls' mapping and the sound, with the warnings their host tests use.
 add_library(KisakCOD-mp-vita-input-sound OBJECT ${vita_mp_input_sound_sources})
 target_compile_features(KisakCOD-mp-vita-input-sound PRIVATE cxx_std_20)
 target_compile_definitions(KisakCOD-mp-vita-input-sound PRIVATE ENABLE_VITASDK_BUILD_ASSERT)
