@@ -96,6 +96,27 @@ if(KISAK_SL_TRACE)
     target_compile_definitions(KisakCOD-dedi PRIVATE KISAK_SL_TRACE)
     message(WARNING "KISAK_SL_TRACE is on: KisakCOD-dedi records a backtrace for every script string reference. Diagnostic builds only.")
 endif()
+# Diagnostics only: report every load and store at an address its type is not
+# aligned for (UBSan -fsanitize=alignment, recoverable, each source line once).
+# The PS Vita's CPU faults on unaligned float, double and 64-bit accesses where
+# x86 does not, so a run of this build with game data finds them ahead of the
+# console; scripts/tools/summarize_alignment_report.py sorts the report into
+# what faults on the Vita and what does not. See docs/vita.md.
+option(KISAK_ALIGNMENT_CHECK "Report misaligned memory accesses in KisakCOD-dedi (diagnostic, for the PS Vita port)" OFF)
+if(KISAK_ALIGNMENT_CHECK)
+    target_compile_options(KisakCOD-dedi PRIVATE -fsanitize=alignment -fno-omit-frame-pointer)
+    # Code that differs for 32-bit ARM's alignment rules takes its ARM path.
+    target_compile_definitions(KisakCOD-dedi PRIVATE KISAK_ALIGNMENT_CHECK)
+    # The report calls keep a few client-only paths in the link that the
+    # normal build drops; alignment_check_stubs.txt names their missing
+    # symbols, defined here as address 0.
+    target_link_options(KisakCOD-dedi PRIVATE -fsanitize=alignment)
+    file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/alignment_check_stubs.txt" kisak_alignment_stubs REGEX "^[^#]")
+    foreach(kisak_stub IN LISTS kisak_alignment_stubs)
+        target_link_options(KisakCOD-dedi PRIVATE "LINKER:--defsym=${kisak_stub}=0")
+    endforeach()
+    message(WARNING "KISAK_ALIGNMENT_CHECK is on: KisakCOD-dedi reports misaligned accesses (UBSan). Diagnostic builds only.")
+endif()
 include(${SCRIPTS_DIR}/extern/tracy.cmake)
 include(${SCRIPTS_DIR}/platform/linux/asset_export.cmake)
 include(${SCRIPTS_DIR}/platform/linux/native_d3d9.cmake)

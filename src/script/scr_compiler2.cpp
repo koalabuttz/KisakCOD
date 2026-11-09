@@ -1042,7 +1042,9 @@ EmitFloat
 void EmitFloat(float value)
 {
 	scrCompileGlob.codePos = (byte *)TempMallocAlignStrict(sizeof(float));
-	*(float *)scrCompileGlob.codePos = value;
+	// Operands are packed at any byte; a float store to an unaligned address
+	// faults on 32-bit ARM (VSTR), so copy the bytes.
+	memcpy(scrCompileGlob.codePos, &value, sizeof(value));
 }
 
 /*

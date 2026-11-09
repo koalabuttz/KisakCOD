@@ -15,9 +15,11 @@ while listing the `.iwd` files: an 8-byte store to an odd address, which the
 Vita's CPU refuses and Vita3K allows (see "Alignment" below). The main
 thread also had 256 KB of stack instead of 8 MB. The second run loaded
 mp_crash's zones in 32 s and crashed as the game started: every `thread_local`
-was one copy shared by all threads (see "Thread-local storage" below). All
-three are fixed; the network, the map and the memory budget are next checked
-on the console with the steps below.
+was one copy shared by all threads (see "Thread-local storage" below). The
+third run started the game and stopped in the first script vector sum: the
+script's vector constants sit unaligned in the bytecode, and float loads
+(`VLDR`) fault there (see "Alignment"). All are fixed; the network, the map
+and the memory budget are next checked on the console with the steps below.
 
 The Vita build takes at most **24 players** (`sv_maxclients` 1 to 24, default
 24). The server's snapshot buffers are sized by that cap; at retail's 64 they
@@ -110,6 +112,58 @@ The emulated `ux0:` is `~/.local/share/Vita3K/Vita3K/ux0`, so the log is at
 that `scripts/tests/test_linux_bootstrap.py` makes (two small `.iwd` files and
 a one-line `fileSysCheck.cfg` in `main/`) to get as far as the first zone.
 
+## Finding alignment faults before a console run
+
+Vita3K and x86 PCs read a float or an 8-byte value at any address, so the
+alignment faults described under "Alignment" below only show on the console,
+one crash per run. The i386 Linux server has the same structure layouts as
+the Vita build (4-byte pointers, little-endian), so it can find them first: a
+build with `-DKISAK_ALIGNMENT_CHECK=ON` compiles KisakCOD-dedi with UBSan's
+alignment check, which reports every load and store at an address its type
+is not aligned for, once per source line, and carries on.
+
+```sh
+cmake -S . -B build-linux/align -G Ninja \
+  -DKISAK_PLATFORM=linux -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+  -DKISAK_ALIGNMENT_CHECK=ON \
+  -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$PWD/build-linux/align/bin"
+cmake --build build-linux/align --target KisakCOD-dedi
+mkdir -p ~/kisak-private/align
+export UBSAN_OPTIONS=log_path=$HOME/kisak-private/align/ubsan:print_stacktrace=1
+# then run the server: the asset start-up test on each map, the bots test with
+# --cycles, or a server by hand
+python3 scripts/tools/summarize_alignment_report.py ~/kisak-private/align/ubsan.*
+```
+
+Each process writes its own `ubsan.<pid>`. The summary sorts the reported
+source lines into three tables: **faults** (a float, double or 64-bit access
+at an address that is not a multiple of 4, which crashes the Vita), **check**
+(a structure, union or enum reached through a misaligned pointer: it faults
+only if the code reads a float or 8-byte member through it), and **fine** (word
+aligned, or a single int, short or pointer, which the Cortex-A9 handles). It
+exits 1 when anything faults. The report holds source lines and addresses
+only, no game data.
+
+What it cannot see: code the run never reaches, the Vita-only code in
+`src/vita/`, and VitaSDK's own libraries. UBSan keeps
+a few client-only functions in the link that the normal server drops; they
+are never called, and `scripts/platform/linux/alignment_check_stubs.txt`
+defines their symbols as address 0 so the link completes; if a later change
+makes the link fail on another undefined client symbol, add its mangled name
+there. The build defines `KISAK_ALIGNMENT_CHECK`, so code with a separate
+32-bit ARM path (the script VM's vector constants) takes that path and the
+report shows what the Vita build would do.
+
+First scan (laptop, 2026-11-08, all 21 stock maps plus bots, before the
+build took the ARM vector path): 35 source lines. The 10 that fault are all
+reads of script vector constants inside the bytecode (`Scr_EvalPlus`,
+`Scr_EvalMinus`, vector indexing, `Scr_GetVector`): the console run 3 crash,
+already fixed on ARM. The 4 to check are `CM_AddStaticModelToNode`, which
+treats a sector's 2-byte model list head as a `cStaticModel_s` but only reads
+and writes its 2-byte first member (one halfword access, fine). The rest are
+word and halfword operands in the packed bytecode (fine).
+
 ## How the port works
 
 ### Toolchain: Clang compiles, VitaSDK links
@@ -163,9 +217,15 @@ linker script and stub libraries). `-Wl,-q` keeps the relocations that
   byte-buffer code), so every unit is compiled with
   `-mllvm -arm-assume-misaligned-load-store`, which stops Clang pairing two
   word accesses into one. Copies of whole 8-byte structures still use the
-  paired forms; they are safe while those structures stay aligned. A crash
+  paired forms; they are safe while those structures stay aligned. Float
+  loads and stores (`VLDR`/`VSTR`) need 4-byte alignment on every ARMv7, so
+  the script compiler and VM copy float operands out of the packed bytecode
+  with `memcpy`, and on 32-bit ARM `OP_GetVector` pushes an aligned,
+  reference-counted copy of the constant instead of a pointer into the code.
+  A crash
   with stop reason `0x30004` (data abort) on the console is the first thing
-  to check for this.
+  to check for this; "Finding alignment faults before a console run" above
+  finds them on a PC.
 - **Main thread stack.** `sceUserMainThreadStackSize` (8 MB, in
   `vita_main.cpp`) is read only by `vita-elf-create`, so the link keeps it
   with `--undefined`; `--gc-sections` dropped it in the first build and the
@@ -223,8 +283,8 @@ Vita cannot raise.
 
 ## Next steps
 
-1. Third run on David's Vita (steps above), with the alignment, stack and
-   thread-local fixes: reach "Dedicated server initialized", load mp_crash,
+1. Fourth run on David's Vita (steps above), with the alignment, stack,
+   thread-local and script vector fixes: reach "Dedicated server initialized", load mp_crash,
    join from the laptop. Expect more alignment faults; each dump's PC maps to
    source.
 2. Map load in Vita3K with game data (David's laptop has Vita3K and the

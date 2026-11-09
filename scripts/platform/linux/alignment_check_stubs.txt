@@ -1,0 +1,39 @@
+# Client-only symbols that KisakCOD-dedi references only when built with
+# KISAK_ALIGNMENT_CHECK (scripts/platform/linux/CMakeLists.txt). The sanitizer's
+# report calls change what the optimiser can drop, so some client paths stay
+# in the link; the server never runs them. Each name is defined as address 0,
+# so a call would crash at once instead of running the wrong code.
+# One mangled name per line; add a name if that build's link reports it.
+_Z11CG_DebugBoxPKfS0_S0_fS0_ii
+_Z11CL_KeyEventiiij
+_Z11UI_DrawTextPK15ScreenPlacementPKciP6Font_sffiifPKfi
+_Z11UI_FillRectPK15ScreenPlacementffffiiPKf
+_Z12CG_DebugLinePKfS0_S0_ii
+_Z12CL_CharEventii
+_Z14CG_DebugCirclePKffS0_S0_ii
+_Z14CL_PacketEventi8netadr_tP5msg_ti
+_Z14CL_UpdateSoundv
+_Z15DevGui_AddGraphPKcP8DevGraph
+_Z15R_EndDebugFramev
+_Z15UI_IsFullscreeni
+_Z16CG_DrawStringExtPK15ScreenPlacementffPcPKfiif
+_Z16R_GetBaseLodDistPKf
+_Z16UI_GetFontHandlePK15ScreenPlacementif
+_Z16UI_GetMenuScreenv
+_Z16UI_SetActiveMenui15uiMenuCommand_t
+_Z17CL_StartHunkUsersv
+_Z17R_BeginDebugFramev
+_Z18SND_IsMultiChannelv
+_Z19CG_DebugBoxOrientedPKfS0_S0_RA3_A3_S_S0_ii
+_Z19LiveStorage_NewUserv
+_Z19SND_AddPhysicsSoundP16snd_alias_list_tPf
+_Z20R_GetAdjustedLodDistf17XModelLodRampType
+_Z21LiveStorage_ReadStatsv
+_Z27CL_GetLocalClientConnectioni
+_Z8IN_Framev
+_Z9UI_SetMapPcS_
+cgArray
+cgMedia
+clientUIActives
+cls
+scrPlaceFull
