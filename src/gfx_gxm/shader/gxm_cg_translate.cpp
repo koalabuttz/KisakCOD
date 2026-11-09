@@ -847,7 +847,9 @@ float4 kisak_tex3D(sampler2D s, float3 p, float depth)
     float a = first - depth * floor(first / depth);
     float b = (a + 1.0) - depth * floor((a + 1.0) / depth);
     float v = frac(p.y);
-    return lerp(tex2D(s, float2(p.x, (a + v) / depth)), tex2D(s, float2(p.x, (b + v) / depth)), blend);
+    float4 lower = tex2D(s, float2(p.x, (a + v) / depth));
+    float4 upper = tex2D(s, float2(p.x, (b + v) / depth));
+    return lower + (upper - lower) * blend;
 }
 float4 kisak_expp(float x)
 {

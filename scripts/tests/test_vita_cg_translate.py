@@ -144,6 +144,11 @@ def main() -> int:
                 failures.append(f"{name}: not translated: {result.stderr.strip()}")
                 continue
             translated += 1
+            # The Vita's Cg compiler finds lerp(tex2D(...), tex2D(...), w)
+            # ambiguous (error 5476) though glslang accepts it; run C failed
+            # every shader on it.
+            if "lerp(tex2D" in result.stdout:
+                failures.append(f"{name}: lerp over tex2D results, which the Vita compiler refuses")
             program = work / (name + ".cg")
             program.write_text(result.stdout)
             if args.keep:
