@@ -25,7 +25,17 @@
 // Threading: one thread calls everything, like the D3D9 device it replaces.
 // See docs/vulkan-legacy-adapter.md.
 
+#if defined(KISAK_GFX_GXM)
+// The PS Vita's back end (src/gfx_gxm/legacy) implements this API on sceGxm
+// and owns the display itself: there is no Vulkan core, and CreateDevice
+// takes a null one.
+namespace gfx_vk
+{
+struct Core;
+}
+#else
 #include <gfx_vk/vk_core.h>
+#endif
 
 #include <cstddef>
 #include <cstdint>

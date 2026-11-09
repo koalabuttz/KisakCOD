@@ -21,7 +21,9 @@
 #include <linux/d3d9_types.h>
 #endif
 
+#if !defined(KISAK_GFX_GXM)
 #include <gfx_vk/vk_core.h>
+#endif
 
 #include <cstdint>
 
@@ -43,10 +45,12 @@ using D3D9Point = KisakDxvkPOINT;
 struct Host
 {
     void *user = nullptr;
+#if !defined(KISAK_GFX_GXM)
     // The window system for the window CreateDevice is given (the device
     // window, or the focus window when that is null). On Linux and macOS the
     // HWND is the SDL_Window the window host created.
     bool (*windowSystem)(void *user, D3D9Window window, WindowSystem &out) = nullptr;
+#endif
     // Display modes of the one adapter, for D3DFMT_X8R8G8B8 (the only format
     // the renderer enumerates). Null: one mode, the current one.
     uint32_t (*modeCount)(void *user) = nullptr;
@@ -60,18 +64,22 @@ struct Host
     // One line per call, no newline. Null: nowhere.
     void (*log)(void *user, const char *line) = nullptr;
 
-    // How the Vulkan core is created at CreateDevice (vsync follows the
-    // presentation interval).
-    Validation validation = Validation::Off;
-    int deviceIndex = -1;
-    const char *pipelineCachePath = nullptr;
     // The Legacy adapter's shader cache file (lg::DeviceDesc::shaderCachePath):
     // translated shaders kept between runs. Null: none (translated shaders are
     // still shared within the process).
     const char *shaderCachePath = nullptr;
+
+#if !defined(KISAK_GFX_GXM)
+    // How the Vulkan core is created at CreateDevice (vsync follows the
+    // presentation interval). The PS Vita's GXM back end (KISAK_GFX_GXM) has
+    // no core and none of these.
+    Validation validation = Validation::Off;
+    int deviceIndex = -1;
+    const char *pipelineCachePath = nullptr;
     // Called when a device's core is destroyed, with its final statistics
     // (validation messages about the teardown included). Null: not called.
     void (*coreDestroyed)(void *user, const CoreStats &stats) = nullptr;
+#endif
 };
 
 // The IDirect3D9 the renderer asks for adapters, caps and formats, and for its

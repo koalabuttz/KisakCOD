@@ -20,3 +20,7 @@ void Vita_ClientWindowChanged(void *hwnd);
 
 // Whether hwnd is the open game window (vita_win32_window.cpp).
 bool Vita_IsScreenWindow(const void *hwnd);
+
+// WM_DESTROY for the renderer: the D3D9 front's devices let go of the screen
+// before the window goes (vita_d3d9.cpp).
+void Vita_RendererWindowDestroying(void *hwnd);

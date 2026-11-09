@@ -94,6 +94,7 @@ BOOL WINAPI DestroyWindow(HWND hWnd)
     if (!Vita_IsScreenWindow(hWnd))
         return FALSE;
     // WM_DESTROY: the device and the window procedure let go first.
+    Vita_RendererWindowDestroying(hWnd);
     Vita_ClientWindowChanged(nullptr);
     g_windowOpen = false;
     return TRUE;
