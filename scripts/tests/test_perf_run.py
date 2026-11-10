@@ -393,6 +393,18 @@ def test_whole_run(bench):
           "the results' own compact_lines is the default")
     check("memory line 0" in run_report.render(with_lines) and "a few per pattern" in run_report.render(with_lines),
           "the report shows the kept lines and says they are a selection")
+    # Copies of a variant that disagree (laptop run 13, 2026-11-10) are named.
+    def made_row(name, variant, fps):
+        return {"name": name, "variant": variant, "status": "ok",
+                "framelog": [{"label": name, "fps": fps, "mean": 1000 / fps}]}
+    spread = [made_row("D1-1", "D1", 176.4), made_row("D4-1", "D4", 152.5), made_row("D4-2", "D4", 151.1),
+              made_row("D1-2", "D1", 138.1), made_row("V4-1", "V4", 100.7), made_row("V4-2", "V4", 95.7)]
+    check([(variant, round(share, 3)) for variant, share, _ in run_report.disagreeing(spread)] == [("D1", 0.217)],
+          "copies more than 7% apart are named, closer ones are not")
+    check("D1 copies differ by 22%" in run_report.summarize({"id": "r", "rows": spread})
+          and "D4 copies" not in run_report.summarize({"id": "r", "rows": spread})
+          and "**D1: its copies differ by 22%" in "\n".join(run_report.average_table(spread)),
+          "the summary and the report say so")
     pasted.write_text(short_text.replace("50.00 fps", "55.00 fps", 1))
     with contextlib.redirect_stdout(io.StringIO()) as printed:
         status = run_report.main([str(pasted), "--check"])
@@ -575,6 +587,13 @@ def test_load(bench):
         check(status == 0 and printed.count("waiting: cc1plus") == 2 and row["load"]["top"] == [["other", 20.0]]
               and row["load"]["over"] is False and row["load"]["at_capture"] == [["other", 5.0]],
               f"a row waits for a busy process to end and notes the load ({row['load']})")
+        # A quiet row keeps its note in the short form too (driver proof 2, 2026-11-10).
+        quiet = dict(row, load={"waited": 0, "over": False, "top": [["a", 9.0], ["b", 8.0], ["c", 7.0], ["d", 6.0]],
+                                "at_capture": [["a", 4.0]], "during_capture": [["e", 30.6]]})
+        short_load = run_report.compact(run_report.seal(dict(results, rows=[quiet])))["rows"][0].get("load")
+        check(short_load == {"waited": 0, "over": False, "top": [["a", 9.0], ["b", 8.0], ["c", 7.0]],
+                             "at_capture": [["a", 4.0]], "during_capture": [["e", 30.6]]},
+              f"the short form keeps a quiet row's load, three processes per list ({short_load})")
         # Busy for as long as the wait before the launch lasts, quiet by the capture
         # (only the checks inside a row leave the game's own process out).
         perf_run.sample_load = lambda window, exclude=(), root=None: [] if exclude else [("cc1plus", 180.0)]

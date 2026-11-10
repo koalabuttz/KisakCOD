@@ -1,0 +1,58 @@
+name: Machine run scripts
+
+# The scripts the test machines run (scripts/runs: the frame-rate driver
+# perf_run.py, run_report.py, the Vita3K runner) and their host tests. They are
+# Python and PowerShell that no build compiles or reads, so a change to them
+# alone starts this one job, not the Linux workflow's 17 or the PS Vita
+# workflow's 4 (docs/ci.md). The Linux workflow's native job runs the same two
+# tests whenever it runs anyway.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "master" ]
+    paths:
+      - scripts/runs/**
+      - tests/runs/**
+      - scripts/tests/test_perf_run.py
+      - scripts/tests/test_vita3k_runner.py
+      - .github/workflows/run-scripts.yaml
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [ "master" ]
+    paths:
+      - scripts/runs/**
+      - tests/runs/**
+      - scripts/tests/test_perf_run.py
+      - scripts/tests/test_vita3k_runner.py
+      - .github/workflows/run-scripts.yaml
+
+permissions:
+  contents: read
+
+# The same rule as the Linux workflow: a newer push to a pull request cancels
+# its older run; a master run in progress always finishes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  run_scripts:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    name: Machine run scripts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # The frame-rate driver against a stand-in game it compiles with the
+      # runner's own C++ compiler, and the Vita3K runner's sealing script,
+      # shell scripts and README examples. No game, no GPU, no Vita3K.
+      - name: Check the run driver and the Vita3K runner
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/tests/test_perf_run.py
+          python3 scripts/tests/test_vita3k_runner.py
