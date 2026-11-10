@@ -6,11 +6,12 @@ multiplayer client, `KisakCOD-mp`, for a hacked PS Vita and packs it as
 it follows the [Vita dedicated server](vita.md), which shares its toolchain,
 platform layer and memory rules. Started 2026-11-09.
 
-**State: stage 1 done (build and boot); stage 2 (graphics) under way: the
-GXM probe ran at 60 fps, the device runs the menu loop without drawing, and
-shaders are translated and compiled on the Vita.**
+**State: stages 1 to 3 run on the console. On 2026-11-10 the main menu
+showed on David's Vita and worked, with touch, buttons and music (run K).
+Starting a map does not work yet: the GPU's memory is full before the map
+loads ("Memory" below), which is the next piece of work.**
 - The whole client compiles, links and packs into a `.vpk`: client, cgame, UI, sound, renderer and its own listen server.
-- Stage 1 had no graphics back end, so the client stopped at the renderer through `Sys_Error`. Stage 2 replaces that: the renderer gets the D3D9 front on the GXM back end ("Graphics" below), which does everything but draw.
+- Stage 1 had no graphics back end, so the client stopped at the renderer through `Sys_Error`. Stage 2 replaces that: the renderer gets the D3D9 front on the GXM back end ("Graphics" below).
 - Stage 3 (controls and sound) runs on the console: on run 1 (2026-11-09) the menu music and the menu's sounds were heard, and every button arrived as its key. The screen's touch and the layout in a game are not confirmed yet: see "Controls" and "Sound" below.
 
 **Runs on David's Vita (2026-11-09):**
@@ -52,17 +53,30 @@ host tests (`scripts/tests/test_vita_input.py`, `test_vita_sound.py`).
    as the PC game does.
 3. Start the bubble. The log is `ux0:data/KisakCOD/console-mp.log`. Configs
    and the player profile go to the same folder (`fs_homepath`).
-4. Expected now (stage 2, step 2c part 1): start-up, the file system, then
+4. Expected now (stage 2, step 2d): start-up, the file system, then
    `Graphics back end: GXM`, the GPU memory lines (`gxm legacy:`, `gxm:`),
-   the front-end zones and the menu loop. Every shader the game creates is
-   translated to Cg and compiled (`gxm legacy: shaders so far: ...` every
-   100 shaders, `shaders in all` at the end), and the compiled programs are
-   kept in `ux0:data/KisakCOD/gxp`. The screen shows clear colours only,
-   since nothing is drawn yet. The client needs `ur0:data/libshacccg.suprx`
-   for this, as the GXM probe does; without it the log says so and the
-   shaders are counted as failed.
+   the front-end zones and the menu loop, drawn. Every shader the game
+   creates is translated to Cg and compiled (`gxm legacy: shaders so far: ...`
+   every 100 shaders, `shaders in all` at the end), and the compiled programs
+   are kept in `ux0:data/KisakCOD/gxp`. `gxm legacy: draws: ...` lines at the
+   first frame, after ten seconds and every minute count what was drawn and
+   what was skipped, and why. The client needs
+   `ur0:data/libshacccg.suprx`, as the GXM probe does; without it the log
+   says so and nothing is drawn.
 
-START + SELECT quits.
+START + SELECT quits. For a run nobody watches, `+set vita_quitAfter 90` in
+the command line file quits by itself 90 seconds after start-up (the
+dedicated server takes it too).
+
+To see what a translated shader looks like, put an empty file named
+`dump-cg` in `ux0:data/KisakCOD/gxp`: every program asked for then also
+leaves its Cg source there as `<same 16 hex digits>.cg`. Those sources come
+from the game's shaders, so keep them on that machine like the game's files.
+A file named `run-tests` in the same folder turns on the draw tests of
+`gxm_legacy_draw.cpp` (`kGuessEdits`): for the first minute and a half the
+screen shows test pictures, mostly plain green, and the log says what each
+left in the back buffer. Without the file the client only logs frame 300's
+first draws and what frames 300 and 700 left in the back buffer.
 
 ## What it builds
 
@@ -89,6 +103,11 @@ Around them:
 `deps/binklib/radbase.h` gains a `__vita__` branch (the Linux one, with the
 Vita's CPU), because the renderer's headers declare the Bink API.
 
+**Run K on David's Vita (2026-11-10, commit d4a03fa):**
+- The menu showed and worked: frame 300 left 480359 of 522240 pixels not black, the first frame came 44.5 s after the start, touch and buttons reached the menu and the music played.
+- The menu froze several times, once for 23.6 s, with the music paused. Those were shaders compiling the first time they were drawn: 139 programs in 94 s, about 0.7 s each. They are on the card afterwards, so a later start does not compile them again.
+- Starting a listen server on mp_crash stopped the game 58 ms into the map's fastfile: `out of GPU memory` for a 13 MB vertex buffer, then the renderer's fatal error ("Memory" below).
+
 ## Memory
 
 The client links the whole server for its listen server. At the server's 24-player cap, the server's snapshot buffers (`svs`) take 67 MB. The client build caps its own server at **8 players** (`SV_MAX_CLIENTS`, `bg_local.h`), which brings `svs` to 25 MB.
@@ -104,7 +123,26 @@ Other large static arrays in the client:
 - `cls` 2.9 MB, `odeGlob` 2.8 MB, `gfxBuf` 2.3 MB, `s_backEndData` 2.2 MB, `tess` 2.2 MB;
 - `clients` 1.7 MB, `g_streamState` 1.7 MB.
 
-The heap and the engine reservations are the server's for now: a 64 MB heap, the 128 MB zone arena and the hunks. Stage 1's run measures what is left. Textures will go to the GPU's own memory (CDRAM, about 112 MB), not main memory.
+The heap and the engine reservations are the server's for now: a 64 MB heap, the 128 MB zone arena and the hunks. Textures go to the GPU's own memory (CDRAM, about 112 MB), not main memory.
+
+What the menu takes (run K on the console, and the same build in Vita3K, 2026-11-10):
+- **Heap:** 55 of 64 MB once `common_mp` is loaded. About 41 MB of that is the loaded sounds, which are decoded to 16-bit PCM in the heap. At the failed map load the console's heap stood at 60.7 MB.
+- **System memory:** 15 MB free on the console beyond the heap and the reservations, so the heap cannot simply grow. Vita3K reports far more free system memory than a console has (107 MB at the same point); never size memory from its number.
+- **Zone arena:** 72 MB of 128 free in the menu, 46 MB at the failed map load.
+- **GPU:** 95 of 104 MB of CDRAM and 18 to 19 of the 20 MB main pool. By use, from the `gpu memory by use` log line:
+
+| Use | MB | Note |
+|---|---:|---|
+| Compressed textures | 33.7 | 899 textures at picmip 2; only five are 1 MB or more |
+| Dynamic vertices | 19.5 | the static model cache (8), the two skinned caches (4.5 each), smaller ones |
+| Depth | 14.1 | the sun's shadow map (8), the spot shadow map (4), the scene's (2) |
+| Render targets | 12.6 | the shadow maps' colour targets (4 and 2), three screen-sized ones (2 each) |
+| Dynamic indices | 10.0 | five of 2 MB |
+| Static vertices | 9.2 | `common_mp`'s vertex buffer |
+| The display's buffers | 8.0 | |
+| Static indices, volumes, other textures | 2.7 | |
+
+The main pool is too small for the dynamic buffers, so 14.5 MB of them spill into CDRAM. mp_crash's first vertex buffer alone is 13.4 MB, and neither pool had that much left. Making a map fit is the next piece of work: the shadow maps (18 MB) are not usable on the Vita yet, and the dynamic buffers are sized for a PC.
 
 ## Controls (stage 3)
 
@@ -379,23 +417,64 @@ when it creates and destroys a device. That seam has two implementations:
 Builds with `KISAK_GFX_GXM` leave the Vulkan parts of `vk_d3d9.h` and
 `vk_legacy.h` out.
 
-What the GXM back end does so far (step 2b):
+What the GXM back end does so far (step 2d):
 - The device owns the screen and reserves the GPU memory pools: nearly all of
-  CDRAM, 16 MB of main memory, and an 8 MB parameter buffer.
+  CDRAM, 20 MB of main memory, and an 8 MB parameter buffer.
 - Textures, surfaces and buffers live in those pools with D3D9's lock rules.
   Textures go to CDRAM first, dynamic buffers to main memory first.
-- Clears of 16- and 32-bit colour targets use `sceGxmTransferFill`.
-- Present shows the back buffer with vsync.
-- Shaders are translated to Cg and compiled on the Vita (below). Vertex
-  declarations are kept.
-- Draws are counted and skipped.
-- StretchRect, depth clears and locks of the back buffer are logged once as
-  not done yet.
+- Shaders are translated to Cg and compiled on the Vita (below).
+- Clears and draws happen in sceGxm scenes (`legacy/gxm_legacy_draw.cpp`,
+  below). Present ends the scene and shows the back buffer with vsync.
+- StretchRect draws a textured quad into the destination.
+- Locks of the back buffer, depth textures as shader inputs,
+  two-sided stencil and the blend factor colour are logged once as not done
+  yet.
 
-The screen shows only clear colours. The client should run its menus, and
-the log shows the GPU memory taken and how the shaders fared. Next is
-drawing: sceGxm's texture layouts, vertex streams, blend state and the
-draws themselves.
+### Draws (step 2d)
+
+`src/gfx_gxm/legacy/gxm_legacy_draw.cpp` turns the D3D9 state into sceGxm's:
+- **Scenes.** A scene opens on render target 0 and the depth-stencil surface
+  at the first clear or draw after they change, and closes when they change,
+  before the CPU reads a target, and at Present. sceGxm wants a render target
+  object per surface size; `gxm_display` keeps one per size. Depth-stencil
+  surfaces (tiled S8D24) load and store their contents every scene, so a
+  frame can come back to a target.
+- **StretchRect** (the renderer's resolves and cinematic frames) draws the
+  source, the back buffer or a texture level, as a textured quad into the
+  destination with two more built-in programs.
+- **Clears** are quads drawn in the scene with two small built-in programs:
+  colour by the fragment program, depth and stencil by an always-pass depth
+  test. sceGxm has no clear call, and fills on the transfer queue would race
+  the scenes.
+- **Programs.** Each draw picks its shaders' variants: the vertex
+  declaration decides which inputs are D3DCOLOR (swapped), missing (read as
+  0, 0, 0, 1) or narrower than four components, and the alpha test picks the
+  pixel shader's. A variant other than the default compiles on first use
+  (through the cache) and is registered with the shader patcher. Vertex
+  programs are kept per variant, declaration and stream strides; fragment
+  programs per variant, vertex program, blend state and target format.
+- **Textures** are linear: rows of whole multiples of 8 texels, and the
+  levels of a mipmapped texture sized from the power of two above the base,
+  which is how sceGxm reads them and also a layout LockRect can hand out.
+  Render-target textures are strided (rows of 32 texels, as colour surfaces
+  want). Volume textures are their slices stacked. sceGxm samples cube
+  textures only swizzled, and refuses linear DXT textures (run D:
+  `sceGxmTextureInit... failed (0x805b0009)` for every DXT1/3/5), so cube and
+  DXT textures are swizzled: the GPU holds only the swizzled copy, LockRect
+  hands out a scratch level in D3D9's layout (filled from the GPU's copy for
+  partial or read-only locks), and UnlockRect swizzles it in. DXT textures
+  whose sides are not powers of two use sceGxm's arbitrary swizzled layout,
+  padded to the powers of two. Depth textures are not sampled yet: draws
+  bind a white texture.
+- **State.** The viewport moves half a pixel (D3D9 samples pixel centres at
+  whole coordinates); the viewport and scissor rect become the region clip;
+  depth, stencil, cull, fill mode and depth bias map to sceGxm's; blending
+  goes into the fragment program.
+- **Memory.** DISCARD on a buffer a draw read takes fresh memory. Memory the
+  GPU may still read (old buffers, destroyed resources, released programs) is
+  freed three frames later, since the display queue lets the CPU run at most
+  two frames ahead. DrawPrimitiveUP and the clear quads copy their vertices
+  into a 512 KB per-frame ring.
 
 ### Shaders (step 2c)
 
@@ -419,12 +498,35 @@ program meets the back end through:
 
 `src/gfx_gxm/gxm_program_cache.cpp` keeps each compiled program in
 `ux0:data/KisakCOD/gxp/<hash>.gxp`, named by a hash of its Cg source, so a
-console compiles a program once (about 0.1 s each). A program that does not
+console compiles a program once (about 0.7 s each for the game's programs
+on a console; the probe's small ones took 0.1 s). A program that does not
 compile is logged with the compiler's first error (the first 40 failures;
 each reason a shader is not translated is logged once and counted at the end)
 and its Cg is left beside the cache as `failed-<hash>.cg`. A shader that
 cannot be translated or compiled is still created, as D3D9 would; draws with
-it will be skipped.
+it are skipped and counted.
+
+The compiler is loaded when the first program has to be compiled, so a start
+that finds every program on the card never loads it. It allocates from the
+game's heap and keeps working memory between programs, so the cache unloads
+it once it holds more than 2 MB of the heap and once it has compiled nothing
+for 5 s, and loads it again for the next program (0.4 s on a console; vitaGL
+does the same). A first start compiled 421 programs across 15 loads in
+Vita3K, with the compiler never above 4.1 MB; before that, such a start ran
+the heap out while the sounds loaded. The `shader compiler memory` log lines
+count what it held and gave back.
+
+**The compiler folds `x * 0 + 1` to 0.** HLSL writes `float4(v.xyz, 1)` as
+one multiply-add with the constant (1, 0, 0, 0): `mad r0, v0.xyzx, c8.xxxy,
+c8.yyyx`. Written to Cg as `r0 = v0.xyzx * k8.xxxy + k8.yyyx`, the Vita's
+compiler drops the w lane's 1, at every optimisation level but 0 and with or
+without fast maths. Every position then lost its w terms, which left the
+screen black until run K. The translator now takes the lanes whose factor is
+a constant zero out of the product (`WithoutZeroProducts`): they take the
+addend, or 0.0 for a plain multiply. Literals in place of the constant and
+one component per statement also compile right; a non-const or static
+constant, two statements, a function, and constructors around the swizzles
+do not.
 
 The client is packed unsafe for the compiler, like the probe.
 
@@ -482,6 +584,11 @@ host by `scripts/tests/test_vita_gxm_heap.py`. The kinds are:
 - CDRAM: textures, render targets, the display buffers;
 - uncached main memory: vertex data, ring buffers;
 - the two USSE kinds: shader code.
+
+The Legacy back end counts each pool's use by what it is for and logs it
+once a minute and at every failed allocation (`gpu memory by use (cdram +
+main MB, pieces): ...`), and logs each piece of 1 MB or more as it is made
+(`gpu memory piece N: ...`, with its size, format and usage).
 
 The display's own buffers take about 9 MB of CDRAM and 2.6 MB of main memory.
 The parameter buffer, which sceGxm takes from main memory itself, adds 16 MB.

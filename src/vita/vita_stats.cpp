@@ -48,6 +48,10 @@ namespace
 
     cmd_function_s s_statsCommand;
 
+    // Unattended runs: quit this many seconds after start-up (0: never).
+    const dvar_t *vita_quitAfter;
+    bool s_quitAfterDone;
+
     uint64_t Now()
     {
         return sceKernelGetProcessTimeWide();
@@ -107,6 +111,8 @@ namespace
 void Vita_StatsInit()
 {
     Cmd_AddCommandInternal("vitastats", Stats_f, &s_statsCommand);
+    vita_quitAfter = Dvar_RegisterInt("vita_quitAfter", 0, 0, 86400, DVAR_NOFLAG,
+        "Quit this many seconds after start-up, for runs nobody watches (0: never)");
     PrintMemory("after start-up");
     s_window = Window();
     s_window.start = Now();
@@ -139,6 +145,18 @@ void Vita_FrameEnd()
         s_window = Window();
         s_window.start = now;
     }
+}
+
+bool Vita_QuitAfterDue()
+{
+    if (!s_started || s_quitAfterDone || !vita_quitAfter || vita_quitAfter->current.integer <= 0)
+        return false;
+    if (Now() < (uint64_t)vita_quitAfter->current.integer * 1000000u)
+        return false;
+    // Once: quitting takes a few frames.
+    s_quitAfterDone = true;
+    Com_Printf(CON_CHANNEL_SYSTEM, "Vita: vita_quitAfter %d reached, quitting\n", vita_quitAfter->current.integer);
+    return true;
 }
 
 void Vita_AddIdleTime(uint64_t microseconds)

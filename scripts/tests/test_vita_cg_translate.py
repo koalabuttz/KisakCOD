@@ -70,12 +70,25 @@ REFUSED = {
     "vs2_loop": "loop",
 }
 
+# Cases of this test alone. HLSL writes float4(v.xyz, 1) as a mad with a
+# def'd constant's zeros and ones; the Vita's compiler folds x * 0 + c to 0
+# (the menu drew nothing until a console run showed it), so the translator
+# keeps products by a constant's zero out of the program.
+VITA_CASES = {
+    "vs3_vita_mad_zero": "vs_3_0\ndef c8, 1, 0, 0, 0\ndef c9, 0, 2, 0, 3\ndcl_position v0\ndcl_position o0\n"
+                         "dcl_texcoord o1\nmad r0, v0.xyzx, c8.xxxy, c8.yyyx\nmul r1, v0, c8.yxyx\n"
+                         "mad r2.xz, v0, c8.xxyy, c9.yyww\nmul r3.yw, c9, v0\nmad r4, r0, -c8.y, r0.wzyx\n"
+                         "mad r5, v0, c9.yyww, c1\nadd r0, r0, r1\nadd r2, r2, r3\nadd r4, r4, r5\n"
+                         "add o0, r0, r2\nmov o1, r4",
+}
+
 # (case, extra tool arguments, text the program must contain, text the
 # reflection line must contain)
 CHECKS = [
     ("vs2_oT_oD_fog", ["--bgra", "2"], "float4 v1 = in_v1.zyxw;", "varyings=TEXCOORD0,COLOR0,FOG0"),
     ("vs2_oT_oD_fog", [], "float4 v1 = in_v1;", "constants=6"),
     ("vs2_oT_oD_fog", ["--absent", "2"], "float4 v1 = float4(0.0, 0.0, 0.0, 1.0);", "inputs=0:0.0,1:5.0"),
+    ("vs2_oT_oD_fog", ["--components", "0=3,1=2"], "float4 v1 = float4(in_v1, 0.0, 1.0);", "inputs=0:0.0,1:5.0"),
     ("ps3_texkill", ["--alpha", "7"], "if (!(a >= ref)) discard;", "kills=1"),
     ("ps3_texkill", ["--alpha", "1"], "if (!(false)) discard;", "kills=1"),
     ("ps3_texkill", [], "return oC0;", "kills=1"),
@@ -87,6 +100,25 @@ CHECKS = [
     ("ps3_texld_volume", [], "kisak_tex3D(s0, (v0).xyz, kisak_depth_s0)", "samplers=0:volume"),
     ("vs3_psize_fog", [], "out_FOG = o3.x;", "varyings=TEXCOORD0,FOG0,PSIZE0"),
     ("ps3_odepth", [], "return oC0;", "instructions=3"),
+    ("vs2_oT_oD_fog", ["--far-plane-inside"], "out_POSITION.z = min(out_POSITION.z, out_POSITION.w * 0.99999);",
+     "constants=6"),
+    ("vs2_oT_oD_fog", ["--diag-position", "1"], "out_POSITION = float4(v0.x / 480.0 - 1.0, 1.0 - v0.y / 272.0, 0.5, 1.0);",
+     "constants=6"),
+    ("vs2_oT_oD_fog", ["--diag-position", "2"], "out_POSITION = float4(dot(v0, c[0]), dot(v0, c[1]), 0.5, 1.0);",
+     "constants=6"),
+    ("vs3_psize_fog", ["--diag-position", "3"], "out_POSITION.zw = float2(0.5, 1.0);", "constants=5"),
+    ("vs3_psize_fog", ["--diag-position", "4"], "out_POSITION.z = out_POSITION.w * 0.5;", "constants=5"),
+    ("vs3_vita_mad_zero", [], "r0 = float4((v0.xyzx * k8.xxxy + k8.yyyx).xyz, (k8.yyyx).w);", "constants=2"),
+    ("vs3_vita_mad_zero", [], "r1 = float4(0.0, (v0 * k8.yxyx).y, 0.0, (v0 * k8.yxyx).w);", "instructions=11"),
+    ("vs3_vita_mad_zero", [], "r2.xz = (float4((v0 * k8.xxyy + k9.yyww).xy, (k9.yyww).zw)).xz;", "constants=2"),
+    ("vs3_vita_mad_zero", [], "r3.yw = ((k9 * v0)).yw;", "constants=2"),
+    ("vs3_vita_mad_zero", [], "r4 = float4((r0.wzyx).xyzw);", "constants=2"),
+    ("vs3_vita_mad_zero", [], "r5 = (v0 * k9.yyww + c[1]);", "constants=2"),
+    ("vs2_oT_oD_fog", ["--diag-position", "5"],
+     "out_TEXCOORD0 = float4(out_POSITION.x * 0.5 + 0.5, out_POSITION.y * 0.5 + 0.5, out_POSITION.w * 0.5, 1.0);\n"
+     "    out_POSITION = float4(v0.x / 480.0 - 1.0, 1.0 - v0.y / 272.0, 0.5, 1.0);", "constants=6"),
+    ("vs2_oT_oD_fog", ["--diag-position", "8"],
+     "out_TEXCOORD0 = float4(out_POSITION.z * 0.25 + 0.5, out_POSITION.w * 0.25 + 0.5, 0.25, 1.0);", "constants=6"),
 ]
 
 
@@ -126,7 +158,7 @@ def main() -> int:
 
         translated = refused = compiled = 0
         binaries = {}
-        for name, source in cases.all_cases().items():
+        for name, source in {**cases.all_cases(), **VITA_CASES}.items():
             binary = work / (name + ".bin")
             binary.write_bytes(d3d9_asm.assemble(source))
             binaries[name] = binary
@@ -143,6 +175,11 @@ def main() -> int:
                 failures.append(f"{name}: not translated: {result.stderr.strip()}")
                 continue
             translated += 1
+            # The Vita's Cg compiler finds lerp(tex2D(...), tex2D(...), w)
+            # ambiguous (error 5476) though glslang accepts it; run C failed
+            # every shader on it.
+            if "lerp(tex2D" in result.stdout:
+                failures.append(f"{name}: lerp over tex2D results, which the Vita compiler refuses")
             program = work / (name + ".cg")
             program.write_text(result.stdout)
             if args.keep:

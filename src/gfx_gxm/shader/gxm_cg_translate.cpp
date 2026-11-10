@@ -1,9 +1,11 @@
 #include "gxm_cg_translate.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <map>
 #include <set>
 
 namespace gfx_gxm::cg
@@ -379,6 +381,9 @@ class Emitter
     bool usesAddress_ = false;
     // def'd float constants.
     std::set<uint16_t> defined_;
+    std::map<uint16_t, std::array<float, 4>> definedValues_;
+    uint8_t ZeroLanes(const Operand &op) const;
+    std::string WithoutZeroProducts(const Instruction &ins, const std::string &value, const std::string &instead);
     // vs_3_0 and ps_3_0 declarations: register -> (semantic, index, mask).
     struct Dcl
     {
@@ -523,6 +528,70 @@ std::string Emitter::Source(const Operand &op)
     return SourceWithNumber(op, op.number);
 }
 
+// The components (bit 0 = x) in which this source is a def'd constant's
+// zero.
+uint8_t Emitter::ZeroLanes(const Operand &op) const
+{
+    if (op.type != kConst || op.relative || (op.modifier != kSmNone && op.modifier != kSmNeg))
+        return 0;
+    const auto found = definedValues_.find(op.number);
+    if (found == definedValues_.end())
+        return 0;
+    uint8_t lanes = 0;
+    for (int i = 0; i < 4; ++i)
+        if (found->second[(op.swizzle >> (2 * i)) & 3] == 0.0f)
+            lanes |= uint8_t(1 << i);
+    return lanes;
+}
+
+// A product by a def'd constant's zero is never left to the Vita's compiler:
+// above optimisation level 0, with or without fast maths, it folds
+// x * k.y + k.x (k = 1, 0, 0, 0) to 0, not to 1, and takes the rest of the
+// program with it. The game's shaders are full of it: HLSL writes
+// float4(v.xyz, 1) as mad r0, v0.xyzx, c8.xxxy, c8.yyyx with c8 = (1, 0, 0,
+// 0), and the menu's position lost every w term (runs J and K of the
+// client's console runs: making the constant non-const or static, splitting
+// the statement, a function or constructors around the swizzles all compile
+// to the same wrong program; literals or one component at a time are right).
+// So in the components the instruction writes where a factor is such a
+// zero, the value is 'instead' (the addend, or 0.0), and the product is only
+// used for the others.
+std::string Emitter::WithoutZeroProducts(const Instruction &ins, const std::string &value, const std::string &instead)
+{
+    const uint8_t mask = ins.destination.mask;
+    const uint8_t zero = uint8_t((ZeroLanes(ins.sources[0]) | ZeroLanes(ins.sources[1])) & mask);
+    if (!zero)
+        return value;
+    // Runs of components from the same side, as constructor arguments.
+    // Components the instruction does not write take whichever side their
+    // neighbour does.
+    std::string out = "float4(";
+    for (int i = 0; i < 4;)
+    {
+        auto side = [&](int lane) { return (mask >> lane) & 1 ? int((zero >> lane) & 1) : -1; };
+        int from = side(i);
+        int end = i + 1;
+        while (end < 4 && (side(end) == from || side(end) < 0 || from < 0))
+        {
+            if (from < 0)
+                from = side(end);
+            ++end;
+        }
+        std::string lanes;
+        for (int lane = i; lane < end; ++lane)
+            lanes += kComponents[lane];
+        if (i)
+            out += ", ";
+        if (from > 0 && instead == "0.0")
+            for (int lane = i; lane < end; ++lane)
+                out += lane == i ? "0.0" : ", 0.0";
+        else
+            out += (from > 0 ? "(" + instead + ")" : value) + "." + lanes; // value comes parenthesised
+        i = end;
+    }
+    return out + ")";
+}
+
 bool Emitter::Write(const Instruction &ins, const std::string &valueIn)
 {
     const Operand &dst = ins.destination;
@@ -642,10 +711,10 @@ bool Emitter::Statement(const Instruction &ins)
         v = "(" + src(0) + " - " + src(1) + ")";
         break;
     case kMul:
-        v = "(" + src(0) + " * " + src(1) + ")";
+        v = WithoutZeroProducts(ins, "(" + src(0) + " * " + src(1) + ")", "0.0");
         break;
     case kMad:
-        v = "(" + src(0) + " * " + src(1) + " + " + src(2) + ")";
+        v = WithoutZeroProducts(ins, "(" + src(0) + " * " + src(1) + " + " + src(2) + ")", src(2));
         break;
     case kRcp:
         v = splat("1.0 / " + Scalar(s[0]));
@@ -847,7 +916,9 @@ float4 kisak_tex3D(sampler2D s, float3 p, float depth)
     float a = first - depth * floor(first / depth);
     float b = (a + 1.0) - depth * floor((a + 1.0) / depth);
     float v = frac(p.y);
-    return lerp(tex2D(s, float2(p.x, (a + v) / depth)), tex2D(s, float2(p.x, (b + v) / depth)), blend);
+    float4 lower = tex2D(s, float2(p.x, (a + v) / depth));
+    float4 upper = tex2D(s, float2(p.x, (b + v) / depth));
+    return lower + (upper - lower) * blend;
 }
 float4 kisak_expp(float x)
 {
@@ -929,7 +1000,12 @@ bool Emitter::Run(std::string &cg, std::string &error)
     for (const Instruction &ins : shader_.instructions)
     {
         if (ins.opcode == kDef)
+        {
             defined_.insert(ins.destination.number);
+            std::array<float, 4> values;
+            std::memcpy(values.data(), ins.literal, sizeof(float) * 4);
+            definedValues_[ins.destination.number] = values;
+        }
         if (ins.opcode != kDcl)
             continue;
         const Operand &dst = ins.destination;
@@ -995,17 +1071,26 @@ bool Emitter::Run(std::string &cg, std::string &error)
     auto local = [&](const std::string &name) { return declared_.count(name) != 0; };
     if (vertex_)
     {
+        std::string positionInput; // the register local holding POSITION0, when the program reads it
         for (const VertexInput &input : r_.inputs)
         {
             const std::string name = "in_v" + std::to_string(input.reg);
             const bool absent = (options_.absentInputs >> input.reg) & 1;
+            const bool bgra = (options_.bgraInputs >> input.reg) & 1;
+            const uint8_t given = input.reg < 16 ? options_.inputComponents[input.reg] : 0;
+            const uint8_t components = bgra || given == 0 || given > 4 ? 4 : given;
+            static const char *const kTypes[] = {"", "float", "float2", "float3", "float4"};
+            static const char *const kFill[] = {"", ", 0.0, 0.0, 1.0", ", 0.0, 1.0", ", 1.0", ""};
             if (!absent)
-                parameters.push_back("float4 " + name);
+                parameters.push_back(std::string(kTypes[components]) + " " + name);
             if (local("v" + std::to_string(input.reg)))
             {
-                const bool bgra = (options_.bgraInputs >> input.reg) & 1;
-                const std::string value = absent ? "float4(0.0, 0.0, 0.0, 1.0)" : name + (bgra ? ".zyxw" : "");
+                std::string value = absent ? "float4(0.0, 0.0, 0.0, 1.0)" : name + (bgra ? ".zyxw" : "");
+                if (!absent && components < 4)
+                    value = "float4(" + name + kFill[components] + ")";
                 prologue += "    float4 v" + std::to_string(input.reg) + " = " + value + ";\n";
+                if (input.usage == 0 && input.usageIndex == 0)
+                    positionInput = "v" + std::to_string(input.reg);
                 declared_.erase("v" + std::to_string(input.reg));
             }
         }
@@ -1064,6 +1149,38 @@ bool Emitter::Run(std::string &cg, std::string &error)
         {
             parameters.push_back("out float4 out_POSITION : POSITION");
             epilogue += "    out_POSITION = float4(0.0, 0.0, 0.0, 1.0);\n";
+        }
+        if (options_.farPlaneInside)
+            epilogue += "    out_POSITION.z = min(out_POSITION.z, out_POSITION.w * 0.99999);\n";
+        if (options_.diagPosition == 1 && !positionInput.empty())
+            epilogue += "    out_POSITION = float4(" + positionInput + ".x / 480.0 - 1.0, 1.0 - " + positionInput +
+                        ".y / 272.0, 0.5, 1.0);\n";
+        else if (options_.diagPosition == 2 && !positionInput.empty() && r_.floatConstants >= 2)
+            epilogue += "    out_POSITION = float4(dot(" + positionInput + ", c[0]), dot(" + positionInput +
+                        ", c[1]), 0.5, 1.0);\n";
+        else if (options_.diagPosition == 3)
+            epilogue += "    out_POSITION.zw = float2(0.5, 1.0);\n";
+        else if (options_.diagPosition == 4)
+            epilogue += "    out_POSITION.z = out_POSITION.w * 0.5;\n";
+        else if (options_.diagPosition >= 5 && options_.diagPosition <= 8 && !positionInput.empty())
+        {
+            bool texcoord = false;
+            for (const std::string &p : parameters)
+                if (p.find(" out_TEXCOORD0 ") != std::string::npos)
+                    texcoord = true;
+            const char *probe = nullptr;
+            if (options_.diagPosition == 5)
+                probe = "out_POSITION.x * 0.5 + 0.5, out_POSITION.y * 0.5 + 0.5, out_POSITION.w * 0.5";
+            else if (options_.diagPosition == 6 && r_.floatConstants >= 8)
+                probe = "c[1].w - 0.5, c[3].w * 0.5, c[7].w * 0.5";
+            else if (options_.diagPosition == 7 && r_.floatConstants >= 7)
+                probe = "c[4].x * 0.5, c[5].y * 0.5, c[6].z * 0.5";
+            else if (options_.diagPosition == 8)
+                probe = "out_POSITION.z * 0.25 + 0.5, out_POSITION.w * 0.25 + 0.5, 0.25";
+            if (texcoord && probe)
+                epilogue += std::string("    out_TEXCOORD0 = float4(") + probe + ", 1.0);\n";
+            epilogue += "    out_POSITION = float4(" + positionInput + ".x / 480.0 - 1.0, 1.0 - " + positionInput +
+                        ".y / 272.0, 0.5, 1.0);\n";
         }
     }
     else

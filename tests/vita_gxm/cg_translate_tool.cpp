@@ -2,7 +2,7 @@
 // (src/gfx_gxm/shader/gxm_cg_translate.h), used by
 // scripts/tests/test_vita_cg_translate.py.
 //
-//   cg_translate_tool [--bgra MASK] [--absent MASK] [--alpha FUNC] shader.bin
+//   cg_translate_tool [--bgra MASK] [--absent MASK] [--components REG=N,...] [--alpha FUNC] [--far-plane-inside] [--diag-position N] shader.bin
 //
 // Writes the Cg program to stdout and one line of reflection to stderr, or
 // "refused: <reason>" to stderr and exits 2.
@@ -28,14 +28,33 @@ int main(int argc, char **argv)
             options.bgraInputs = uint16_t(std::strtoul(argv[++i], nullptr, 0));
         else if (!std::strcmp(argv[i], "--absent") && i + 1 < argc)
             options.absentInputs = uint16_t(std::strtoul(argv[++i], nullptr, 0));
+        else if (!std::strcmp(argv[i], "--components") && i + 1 < argc)
+        {
+            // REG=N pairs, comma separated: v<REG> is fed N components.
+            for (const char *at = argv[++i]; *at;)
+            {
+                char *end = nullptr;
+                const unsigned long reg = std::strtoul(at, &end, 10);
+                if (*end != '=')
+                    break;
+                const unsigned long count = std::strtoul(end + 1, &end, 10);
+                if (reg < 16)
+                    options.inputComponents[reg] = uint8_t(count);
+                at = *end == ',' ? end + 1 : end;
+            }
+        }
         else if (!std::strcmp(argv[i], "--alpha") && i + 1 < argc)
             options.alphaFunc = AlphaFunc(std::strtoul(argv[++i], nullptr, 0));
+        else if (!std::strcmp(argv[i], "--far-plane-inside"))
+            options.farPlaneInside = true;
+        else if (!std::strcmp(argv[i], "--diag-position") && i + 1 < argc)
+            options.diagPosition = uint8_t(std::strtoul(argv[++i], nullptr, 0));
         else
             path = argv[i];
     }
     if (!path)
     {
-        std::fprintf(stderr, "usage: cg_translate_tool [--bgra MASK] [--alpha FUNC] shader.bin\n");
+        std::fprintf(stderr, "usage: cg_translate_tool [--bgra MASK] [--absent MASK] [--components REG=N,...] [--alpha FUNC] [--far-plane-inside] [--diag-position N] shader.bin\n");
         return 1;
     }
     std::ifstream file(path, std::ios::binary);

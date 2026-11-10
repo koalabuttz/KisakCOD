@@ -47,6 +47,11 @@ void Vita_FrameBegin();
 void Vita_FrameEnd();
 void Vita_AddIdleTime(uint64_t microseconds);
 
+// True once, when the vita_quitAfter dvar's seconds since start-up have
+// passed: "+set vita_quitAfter 90" in the command line file makes a run quit
+// by itself, so it needs nobody at the buttons.
+bool Vita_QuitAfterDue();
+
 // Logs memory use straight to console.log, for Sys_Error: an out-of-memory
 // error then shows which pool ran out.
 void Vita_LogMemoryAtError();
