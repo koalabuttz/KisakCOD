@@ -7,7 +7,9 @@ sizeof(GfxCmdDrawText2D) on i386. A struct that holds a pointer is larger on
 x86_64, so the literal allocates, copies or strides too few bytes there.
 
 This parses every source in a build's compile_commands.json twice with
-libclang, once as i386 (-m32) and once as x86_64 (-m64). In each statement it
+libclang, once as i386 (-m32) and once as x86_64 (-m64). A source that both
+the multiplayer and the singleplayer game compile is read once for each (its
+KISAK_MP and KISAK_SP branches differ). In each statement it
 looks at the record types the statement's expressions use (through pointers,
 arrays and references) and reports an integer literal of at least --min-size
 (or a 4 that multiplies a count, as in ``Alloc(4 * n)``) that equals one of
@@ -54,17 +56,25 @@ def load_clang():
     return ci
 
 
+def singleplayer_unit(args) -> bool:
+    """True for a source compiled for the singleplayer game (KISAK_SP)."""
+    return "-DKISAK_SP" in args
+
+
 def translation_units(build_dir: Path):
+    """Each source once per game: a source both games compile is read with KISAK_MP and with KISAK_SP."""
     database = build_dir / "compile_commands.json"
     if not database.is_file():
         sys.exit(f"{database} not found: configure the build with CMAKE_EXPORT_COMPILE_COMMANDS=ON")
     seen = set()
     for entry in json.loads(database.read_text(encoding="utf-8")):
         path = Path(entry["directory"], entry["file"]).resolve()
-        if path in seen or SRC not in path.parents:
+        if SRC not in path.parents:
             continue
-        seen.add(path)
         argv = shlex.split(entry["command"]) if "command" in entry else list(entry["arguments"])
+        if (path, singleplayer_unit(argv)) in seen:
+            continue
+        seen.add((path, singleplayer_unit(argv)))
         args, skip = [], False
         for arg in argv[1:]:
             if skip:

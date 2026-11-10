@@ -1188,11 +1188,13 @@ jobs:
     # client KisakCOD-mp with -DKISAK_LINUX_ARCH=x86_64 against x86_64 SDL3 and
     # the D3D9 and OpenAL stand-ins (built -m64), then run the same asset-free
     # checks as the i386 client: the game window test and the client's start
-    # from temporary trees with no game data. It is not playable yet; nothing
-    # here draws a frame. The i386 client job is untouched.
+    # from temporary trees with no game data. Nothing here draws a frame. The
+    # singleplayer game KisakCOD-sp is built in the same directory against the
+    # same stand-ins and started the same way, and the 32-bit layout checks
+    # read both games' sources. The i386 client job is untouched.
     name: x86_64 multiplayer client
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 110
 
     env:
       DXVK_REVISION: c3dd74be6baec53786d4e064a572185b70347a17
@@ -1353,12 +1355,41 @@ jobs:
             exit 1
           fi
 
+      # KisakCOD-sp for x86_64 (scripts/platform/linux/sp_game.cmake), added to
+      # the client's build directory as the i386 device-probe job adds it to
+      # its own. It comes before the layout checks so that they read the
+      # singleplayer sources too.
+      - name: Build the x86_64 singleplayer game against the stand-ins
+        timeout-minutes: 40
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B "$BUILD_DIR" -DKISAK_BUILD_LINUX_SP_GAME=ON
+          cmake --build "$BUILD_DIR" --target KisakCOD-sp --parallel "$(nproc)"
+          game="$OUT_DIR/KisakCOD-sp"
+          readelf -h "$game" | grep -Eq 'Class:[[:space:]]+ELF64'
+          readelf -h "$game" | grep -Eq 'Machine:[[:space:]]+Advanced Micro Devices X86-64'
+          readelf -d "$game" | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p' > "$RUNNER_TEMP/x64-sp-game-needed.txt"
+          cat "$RUNNER_TEMP/x64-sp-game-needed.txt"
+          grep -qx 'libSDL3.so.0' "$RUNNER_TEMP/x64-sp-game-needed.txt"
+          grep -qx 'libd3d9_unavailable.so' "$RUNNER_TEMP/x64-sp-game-needed.txt"
+          grep -qx 'libopenal_unavailable.so' "$RUNNER_TEMP/x64-sp-game-needed.txt"
+          if grep -Ev '^(libSDL3\.so\.0|libd3d9_unavailable\.so|libopenal_unavailable\.so|libavcodec\.so\.[0-9]+|libavutil\.so\.[0-9]+|libstdc\+\+\.so\.6|libm\.so\.6|libgcc_s\.so\.1|libc\.so\.6|libpthread\.so\.0|libdl\.so\.2)$' \
+              "$RUNNER_TEMP/x64-sp-game-needed.txt"; then
+            echo "the singleplayer game needs a library beyond SDL3, D3D9, OpenAL, libavcodec and the runtimes" >&2
+            exit 1
+          fi
+          if nm -D --defined-only "$game" | awk '{print $3}' | grep -vx '_IO_stdin_used'; then
+            echo "the singleplayer game exports names to shared libraries" >&2
+            exit 1
+          fi
+
       # A struct's i386 size written as a number allocates or clears too few
       # bytes on x86_64 when the struct holds a pointer (docs/linux-x64.md,
       # "Struct sizes written as numbers"). It runs after the build because
       # common.cpp includes the generated buildnumber.h.
       - name: Check for 32-bit struct sizes written as numbers
-        timeout-minutes: 20
+        timeout-minutes: 30
         shell: bash
         run: |
           set -euo pipefail
@@ -1370,7 +1401,7 @@ jobs:
       # wrong bytes on x86_64 (docs/linux-x64.md, "Byte offsets and union
       # copies").
       - name: Check for 32-bit byte offsets and union copies
-        timeout-minutes: 20
+        timeout-minutes: 30
         shell: bash
         run: |
           set -euo pipefail
@@ -1389,6 +1420,21 @@ jobs:
           export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/stand-ins"
           "$OUT_DIR/KisakCOD-mp-client-window-test"
           python3 -u scripts/tests/test_linux_mp_client.py --binary "$OUT_DIR/KisakCOD-mp"
+
+      # From temporary trees with no game data: an empty one must be refused at
+      # the file system check, a stub one must stop at autoconfigure for want
+      # of configure.csv.
+      - name: Run the x86_64 singleplayer game's fail-closed start
+        timeout-minutes: 10
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/stand-ins"
+          python3 -u scripts/tests/test_linux_sp_game.py --binary "$OUT_DIR/KisakCOD-sp"
 
       # The Bink shim on made-up movies and a stand-in decoder, plus
       # libavcodec's Bink decoders opened as the shim opens them. No game
