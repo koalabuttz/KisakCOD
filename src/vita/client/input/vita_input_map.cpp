@@ -545,4 +545,17 @@ void Mapper::Release(KeySink &sink)
     stickWait_ = true;
 }
 
+void Mapper::Rest(const PadState &pad, uint32_t nowMs, KeySink &sink)
+{
+    Release(sink);
+    lastMs_ = nowMs;
+    lastButtons_ = pad.buttons & ((1u << kButtonCount) - 1);
+    fingerCount_ = static_cast<uint8_t>(std::min<int>(pad.frontCount, kMaxFrontTouches));
+    for (int i = 0; i < fingerCount_; ++i)
+        fingers_[i] = {pad.front[i].id, kFingerIdle};
+    rearFingerCount_ = static_cast<uint8_t>(std::min<int>(pad.rearCount, kMaxRearTouches));
+    for (int i = 0; i < rearFingerCount_; ++i)
+        rearFingers_[i] = {pad.rear[i].id, false, false, nowMs};
+}
+
 } // namespace kisak::vita_input

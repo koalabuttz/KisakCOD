@@ -35,6 +35,9 @@
 // lifts: the touch that closed a menu must not throw a grenade. A button keeps
 // the key it pressed until it is released.
 //
+// While the on-screen keyboard is up the controls are the keyboard's: nothing
+// is sent, and whatever is still down when it closes waits to be let go.
+//
 // This file is the mapping alone: no engine call and no Vita call. The glue in
 // vita_client_input.cpp reads the hardware, feeds Update, and hands the keys
 // and the motion to the engine. scripts/tests/test_vita_input.py runs the same
@@ -181,6 +184,12 @@ public:
 
     // Lets go of everything held: the window lost focus or is closing.
     void Release(KeySink &sink);
+
+    // A reading while something else has the controls (the on-screen
+    // keyboard is up, or has just closed): everything held is let go, and what
+    // is down in this reading, a button or a finger, does nothing until it has
+    // been let go. The touch that closed the keyboard must not click a menu.
+    void Rest(const PadState &pad, uint32_t nowMs, KeySink &sink);
 
     bool CursorHidden() const { return cursorHidden_; }
     bool Held(Control control) const { return heldKey_[control] != 0; }

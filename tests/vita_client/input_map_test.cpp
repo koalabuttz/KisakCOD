@@ -1432,6 +1432,99 @@ void TestRelease()
     CHECK(menu.keys.DownCount() == 0);
 }
 
+// The on-screen keyboard has the controls: readings are taken and nothing is
+// sent, and what is down when it closes waits to be let go.
+void Rest(Rig &rig, uint32_t ms = 10)
+{
+    rig.now += ms;
+    rig.mapper.Rest(rig.pad, rig.now, rig.keys);
+}
+
+void TestRest()
+{
+    g_test = "rest";
+    // In a menu, with a click down when the keyboard comes up.
+    Rig menu;
+    menu.menu = true;
+    menu.Frame();
+    menu.Touch(100, 100, 1);
+    menu.Frame();
+    menu.Step();
+    CHECK(menu.keys.Down(kKeyMouse1));
+    menu.keys.Drain();
+    Rest(menu);
+    CHECK(menu.keys.Drain() == (Events{{kKeyMouse1, false}}));
+    menu.Lift();
+    Rest(menu);
+    // The keyboard's own button is touched and Cross pressed while it is up,
+    // and both are still down when it has closed: no click, no cursor moved.
+    menu.Touch(700, 80, 2);
+    menu.pad.buttons = Bit(kCross);
+    Rest(menu);
+    CHECK(menu.keys.Drain().empty());
+    const Motion after = menu.Frame();
+    CHECK(after.x == 100 && after.y == 100);
+    menu.Frame();
+    menu.Frame();
+    CHECK(menu.keys.Drain().empty());
+    menu.Lift();
+    menu.pad.buttons = 0;
+    menu.Frame();
+    CHECK(menu.keys.Drain().empty());
+    // Let go, they are themselves again.
+    menu.Touch(300, 200, 3);
+    menu.Frame();
+    menu.Step();
+    CHECK(menu.keys.Drain() == (Events{{kKeyMouse1, true}}));
+    menu.End();
+
+    // In the game: the chat line's keyboard.
+    Rig game;
+    game.Step();
+    game.pad.buttons = Bit(kRightShoulder);
+    game.Step();
+    CHECK(game.keys.Down(Aux(6)));
+    game.keys.Drain();
+    Rest(game);
+    CHECK(game.keys.Drain() == (Events{{Aux(6), false}}));
+    game.Touch(480, 50, 4);
+    game.Rear(100, 100, 1);
+    game.pad.buttons = Bit(kRightShoulder) | Bit(kSquare);
+    Rest(game);
+    Rest(game);
+    CHECK(game.keys.Drain().empty());
+    game.Step();
+    game.pad.rearCount = 0; // the finger on the back leaves soon enough for a tap, and is none
+    game.Step(50);
+    game.Step();
+    CHECK(game.keys.Drain().empty());
+    game.Lift();
+    game.pad.buttons = 0;
+    game.Step();
+    CHECK(game.keys.Drain().empty());
+    game.Touch(480, 50, 5);
+    game.pad.buttons = Bit(kSquare);
+    game.Step();
+    CHECK(game.keys.Drain() == (Events{{Aux(3), true}, {kKeyKp5, true}}));
+    game.End();
+
+    // A keyboard that is up before the first reading (vita_typecommand on the
+    // command line).
+    Rig first;
+    first.pad.buttons = Bit(kCross);
+    first.Touch(100, 300, 1);
+    Rest(first);
+    first.Step();
+    first.Step();
+    CHECK(first.keys.Drain().empty());
+    first.pad.buttons = 0;
+    first.Step();
+    first.pad.buttons = Bit(kCross);
+    first.Step();
+    CHECK(first.keys.Drain() == (Events{{Aux(1), true}}));
+    first.End();
+}
+
 // A long run of made-up readings: whatever the pad does, no key is sent down
 // twice or up twice, and letting go leaves nothing down.
 void TestRandom()
@@ -1506,6 +1599,7 @@ int main()
     TestModeChanges();
     TestBind();
     TestRelease();
+    TestRest();
     TestRandom();
     if (g_failures)
     {

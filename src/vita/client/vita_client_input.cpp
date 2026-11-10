@@ -155,6 +155,7 @@ vi::Mapper s_mapper;
 vi::Settings s_settings;
 vt::Entry s_text;
 bool s_keyboardRefused; // the system did not open the keyboard
+bool s_restOnce;        // the keyboard closed: the next reading still does nothing
 // Fingers seen at the last reading and when each landed, for vita_inputDebug.
 uint8_t s_debugIds[2][SCE_TOUCH_MAX_REPORT];
 uint32_t s_debugSince[2][SCE_TOUCH_MAX_REPORT];
@@ -277,9 +278,6 @@ void Poll()
     // while a map loads, and the mapping belongs to the main thread.
     if (!s_installed || !g_wv.hWnd || !in_appactive || !Sys_IsMainThread())
         return;
-    // The on-screen keyboard has the controls while it is up.
-    if (s_text.KeyboardUp())
-        return;
     const uint32_t now = Sys_Milliseconds();
     if (s_polled && now - s_lastPollMs < kPollEveryMs)
         return;
@@ -309,6 +307,15 @@ void Poll()
     ReadPanel(SCE_TOUCH_PORT_BACK, s_rear, now, state.rear, &state.rearCount, vi::kMaxRearTouches);
 
     s_eventTime = now;
+    // The on-screen keyboard has the controls while it is up. The touch or
+    // the button that closed it is still down in the reading after: that one
+    // does nothing either.
+    if (s_text.KeyboardUp() || s_restOnce)
+    {
+        s_restOnce = false;
+        s_mapper.Rest(state, now, s_keys);
+        return;
+    }
     s_mapper.Update(state, now, !s_look, Display_KeyBindPending() != 0, s_settings, s_keys);
 }
 
@@ -546,6 +553,7 @@ void TextFrame(uint32_t now)
                 Vita_AbortKeyboard();
             return;
         }
+        s_restOnce = true;
         if (result == VitaKeyboardResult::Failed)
         {
             s_keyboardRefused = true;
