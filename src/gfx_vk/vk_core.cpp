@@ -621,6 +621,31 @@ bool EnvEquals(const char *name, const char *value)
 #endif
 }
 
+// A count from 1 to 65535 in the variable, or fallback when it is not set or
+// is anything else.
+uint32_t EnvCount(const char *name, uint32_t fallback)
+{
+#if defined(_MSC_VER)
+    char *owned = nullptr;
+    size_t length = 0;
+    const char *text = _dupenv_s(&owned, &length, name) == 0 ? owned : nullptr;
+#else
+    const char *text = std::getenv(name);
+#endif
+    uint32_t count = fallback;
+    if (text && *text)
+    {
+        char *end = nullptr;
+        const unsigned long value = std::strtoul(text, &end, 10);
+        if (!*end && value >= 1 && value <= 65535)
+            count = static_cast<uint32_t>(value);
+    }
+#if defined(_MSC_VER)
+    std::free(owned);
+#endif
+    return count;
+}
+
 bool CreateDevice(Core &core)
 {
     Dispatch &vk = core.vk;
@@ -672,6 +697,16 @@ bool CreateDevice(Core &core)
     core.optional.forceWideRenderTargets = EnvEquals("KISAK_VK_RENDER_TARGETS", "wide");
     core.optional.staticUniforms = EnvEquals("KISAK_VK_UNIFORMS", "static");
     core.optional.fenceFlush = !EnvEquals("KISAK_VK_FENCE_FLUSH", "0");
+    // Tile-based GPUs pay for every part with a store and a load of the
+    // targets (see OptionalFeatures): Apple, Arm, Qualcomm, Imagination,
+    // Broadcom, and MoltenVK on any GPU.
+    const uint32_t vendor = core.properties.vendorID;
+    const bool tiled = portability || vendor == 0x106b || vendor == 0x13b5 || vendor == 0x5143 || vendor == 0x1010
+        || vendor == 0x14e4;
+    core.optional.gpuFeedAlways = EnvEquals("KISAK_VK_GPU_FEED", "always");
+    core.optional.gpuFeed =
+        core.optional.gpuFeedAlways || EnvEquals("KISAK_VK_GPU_FEED", "1") || (!tiled && !EnvEquals("KISAK_VK_GPU_FEED", "0"));
+    core.optional.gpuFeedDraws = EnvCount("KISAK_VK_GPU_FEED_DRAWS", 128);
 
     VkPhysicalDeviceVulkan13Features features13{};
     features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;

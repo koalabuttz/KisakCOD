@@ -97,6 +97,7 @@ struct DeviceCounters
     bool validation;           // the validation layer is loaded
     uint64_t submissions;      // queue submissions so far (Vulkan back end)
     uint64_t fenceFlushes;     // of those, frames submitted ahead of their Present by a swap fence poll
+    uint64_t feedFlushes;      // of those, parts of frames submitted while the frame was being drawn
 };
 bool Counters(IDirect3DDevice9 *device, DeviceCounters &out);
 

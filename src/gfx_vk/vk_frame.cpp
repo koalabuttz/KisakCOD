@@ -438,6 +438,13 @@ uint64_t SubmissionSerial(const Core *core) { return PendingSerial(*core); }
 uint64_t RecordedSerial(const Core *core) { return core->recordingOpen ? core->nextSerial : core->nextSerial - 1; }
 bool SerialFinished(Core *core, uint64_t serial) { return PollCompletedSerial(*core) >= serial; }
 
+uint32_t PendingSubmissions(Core *core)
+{
+    const uint64_t submitted = core->nextSerial - 1;
+    const uint64_t done = PollCompletedSerial(*core);
+    return submitted > done ? static_cast<uint32_t>(std::min<uint64_t>(submitted - done, UINT32_MAX)) : 0;
+}
+
 uint64_t PollCompletedSerial(Core &core)
 {
     if (core.timeline)

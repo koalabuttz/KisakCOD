@@ -264,6 +264,7 @@ struct DeviceStats
     uint64_t constantBytes;   // constant and render-state uniform data written
     uint64_t dynamicRenames;  // DISCARD locks that took a new buffer
     uint64_t fenceFlushes;    // frames submitted ahead of their Present by a frame fence poll (GetQueryData)
+    uint64_t feedFlushes;     // parts of frames submitted while the frame was being drawn (OptionalFeatures::gpuFeed)
     // Where the time goes on the CPU, for the load and first-draw costs.
     uint32_t shaders;          // shaders created
     uint32_t shadersCached;    // of those, served by the shader cache (not translated)

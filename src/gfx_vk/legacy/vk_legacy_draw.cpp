@@ -1322,6 +1322,61 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
     }
     return Usable(device);
 }
+
+// Called after every draw recorded. Submits what the frame has recorded so
+// far once that is worth a submission and the GPU is about to run out of
+// work, so the GPU draws the frame while the rest of it is recorded.
+//
+// Without this a frame reaches the GPU when it is presented, and the GPU
+// cannot start it before the render thread has finished it. The engine
+// holds each frame back until the GPU has finished the one before
+// (RB_AdaptiveGpuSyncFinal and R_SyncGpu, r_gpuSync 1), so the GPU then
+// idles from the end of every frame until the next has been recorded in
+// full: 1.9 ms of every 8.2 ms frame on an Intel U300 (laptop run 8), where
+// DXVK, which submits during the frame, kept the GPU busy throughout.
+//
+// The rule is DXVK's (GpuFlushTracker), counted in draws instead of command
+// chunks: submit after gpuFeedDraws draws while the GPU has fewer than two
+// submissions left to finish, and wait for that many again for each further
+// one, up to four times. A GPU that is behind is left alone, and a frame is
+// never cut into more than its draws divided by gpuFeedDraws.
+//
+// The draws that follow start a new command buffer and a new pass on the
+// same targets, which loads what the last one stored: the result is the same.
+void FeedGpu(Device &device)
+{
+    const OptionalFeatures &features = Features(device.core);
+    if (!features.gpuFeed)
+        return;
+    if (device.feedRecording != device.stateRecording)
+    {
+        // The frame's first command buffer, or the first draw since a flush.
+        device.feedRecording = device.stateRecording;
+        device.feedDraws = 0;
+        device.feedCheckAt = features.gpuFeedDraws;
+    }
+    ++device.feedDraws;
+    if (!features.gpuFeedAlways)
+    {
+        if (device.feedDraws < device.feedCheckAt)
+            return;
+        constexpr uint32_t kMaxBacklog = 4;
+        const uint32_t backlog = std::clamp(PendingSubmissions(device.core), 1u, kMaxBacklog);
+        if (device.feedDraws < features.gpuFeedDraws * backlog)
+        {
+            // The GPU has work: look again a quarter of a part later.
+            device.feedCheckAt = device.feedDraws + std::max(1u, features.gpuFeedDraws / 4);
+            return;
+        }
+    }
+    EndPassIfOpen(device);
+    if (!Flush(device.core, false))
+    {
+        Fail(device, "Flush: %s", LastError(device.core));
+        return;
+    }
+    ++device.stats.feedFlushes;
+}
 } // namespace
 
 size_t PipelineKeyHash::operator()(const PipelineKey &key) const
@@ -1695,6 +1750,7 @@ void DrawIndexedPrimitive(Device *device, d3d::PrimitiveType type, int32_t baseV
         vk.vkCmdDrawIndexed(cmd, indexCount, 1, startIndex, baseVertex, 0);
     });
     ++device->stats.draws;
+    FeedGpu(*device);
 }
 
 void DrawPrimitive(Device *device, d3d::PrimitiveType type, uint32_t startVertex, uint32_t primitiveCount)
@@ -1704,6 +1760,7 @@ void DrawPrimitive(Device *device, d3d::PrimitiveType type, uint32_t startVertex
         return;
     Record(device->core, [=](VkCommandBuffer cmd, const Dispatch &vk) { vk.vkCmdDraw(cmd, count, 1, startVertex, 0); });
     ++device->stats.draws;
+    FeedGpu(*device);
 }
 
 void DrawPrimitiveUP(Device *device, d3d::PrimitiveType type, uint32_t primitiveCount, const void *vertices,
@@ -1729,6 +1786,7 @@ void DrawPrimitiveUP(Device *device, d3d::PrimitiveType type, uint32_t primitive
         {
             Record(device->core, [count](VkCommandBuffer cmd, const Dispatch &vk) { vk.vkCmdDraw(cmd, count, 1, 0, 0); });
             ++device->stats.draws;
+            FeedGpu(*device);
         }
     }
     // As D3D9: stream 0 is unbound afterwards.

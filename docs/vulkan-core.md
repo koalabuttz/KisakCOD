@@ -45,7 +45,7 @@ Frames (`vk_frame.cpp`):
 
 | Piece | How |
 | --- | --- |
-| Recording | A command buffer is always open, so work recorded outside a frame (a map load's uploads) needs no frame; it goes with the next `Flush` or `Present`. Every submission signals a timeline semaphore with the next serial, which is how the core knows what the GPU has finished; `SubmissionSerial` and `SerialFinished` give users the same answer for memory they recycle themselves. |
+| Recording | A command buffer is always open, so work recorded outside a frame (a map load's uploads) needs no frame; it goes with the next `Flush` or `Present`. Every submission signals a timeline semaphore with the next serial, which is how the core knows what the GPU has finished; `SubmissionSerial` and `SerialFinished` give users the same answer for memory they recycle themselves, and `PendingSubmissions` counts the submissions the GPU has not finished. |
 | Frames | `BeginFrame` opens the frame; the swapchain image is acquired the first time `SwapchainImage` asks for it (the Legacy adapter does at its final blit), so the frame's work is recorded before the core has to wait for the present engine. `Present` hands the image over, submits and presents; a frame whose acquire found the swapchain out of date submits its work and is skipped. Two frames in flight: after a present the next frame slot waits for its previous use and recycles its command buffers, staging, transient memory, descriptor pools and queries. |
 | Record thread | See below. |
 | Image state | Each image's layout and last access are tracked; passes, copies, uploads and `UseImage` record the synchronization2 barriers they need (none for a read after a read in the same layout). A pass cannot record barriers, so images it samples are made Sampled first; images written by uploads go back to Sampled before the next pass on their own. |
@@ -238,10 +238,11 @@ probe, the Legacy adapter check and the D3D9 front check pass with the thread
 on and off, x86_64 with validation and synchronisation checks and i386 without;
 the device probe draws its frames through the engine with it on. The CI job
 runs each check again with the thread switched the other way, and under
-ThreadSanitizer the D3D9 front's `threads` and `frame_loop` scenes, a probe run
-with draws, read-back and swapchain rebuilds and the Legacy adapter check, all
-with the thread on: no races in the core, the adapter or the front. Those runs
-set `LP_NUM_THREADS=0`. Lavapipe is not built with ThreadSanitizer, which then
+ThreadSanitizer the D3D9 front's `threads`, `frame_loop` and `gpu_feed`
+scenes (the last since the GPU feed, 2026-11-10), a probe run with draws,
+read-back and swapchain rebuilds and the Legacy adapter check, all with the
+thread on: no races in the core, the adapter or the front. Those runs set `LP_NUM_THREADS=0`. Lavapipe is not built
+with ThreadSanitizer, which then
 sees only the libc calls the driver makes and reports races between the
 driver's own threads: one of lavapipe's threads destroys a mutex and a
 condition variable that an llvmpipe rasterizer thread locked and signalled

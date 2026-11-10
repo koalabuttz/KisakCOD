@@ -435,6 +435,7 @@ public:
     void Threads();
     void Queries();
     void FrameLoop();
+    void GpuFeed();
     void ResetDevice();
     void Present();
 };
@@ -939,12 +940,17 @@ void Check::Queries()
     // Present. The frame then goes on in a new submission with its state and
     // its target's contents. A heavy frame first, so that the poll finds the
     // fence unfinished; a GPU that still finishes first gets another try.
+    // The frame stays under the GPU feed's 128 draws, so it reaches the GPU
+    // whole at its Present: lavapipe waits for everything submitted so far
+    // whenever a query is read, which Present does for the frame before, and
+    // a frame already submitted in parts would be finished by the time
+    // Present returned.
     const char *fencePath = "finished_first";
     unsigned long long fenceFlushes = 0;
     for (int attempt = 0; attempt < 8 && fencePath[0] == 'f'; ++attempt)
     {
         Reset();
-        for (int i = 0; i < 256; ++i)
+        for (int i = 0; i < 112; ++i)
             DrawQuad(0, 0, kSize, kSize, 0.5f, Argb(255, 32, 32, 32));
         Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
         Ok(event->Issue(D3DISSUE_END), "Issue(event after Present)");
@@ -1045,7 +1051,9 @@ void Check::FrameLoop()
     mainThread.join();
     const front::DeviceCounters after = Counters();
     const uint64_t presents = after.presents - before.presents;
-    const uint64_t submissions = after.submissions - before.submissions;
+    // Parts submitted to feed the GPU are apart (none in frames this small,
+    // unless KISAK_VK_GPU_FEED=always submits after every draw).
+    const uint64_t submissions = after.submissions - before.submissions - (after.feedFlushes - before.feedFlushes);
     const uint64_t flushes = after.fenceFlushes - before.fenceFlushes;
     Equal("frames_presented", presents + (after.presentsSkipped - before.presentsSkipped), uint64_t(kFrames));
     Equal("swap_fence_never_stuck", stuck, 0);
@@ -1057,6 +1065,55 @@ void Check::FrameLoop()
                 static_cast<unsigned long long>(submissions), static_cast<unsigned long long>(flushes));
     SafeRelease(swapFence);
     SafeRelease(syncFence);
+}
+
+// A frame of many draws, as the engine's are. The adapter submits such a
+// frame in parts while it is drawn (OptionalFeatures::gpuFeed), each part in
+// a command buffer of its own with a pass of its own on the same target.
+// Every draw fills a cell of its own here, so the picture shows each one,
+// whichever part it fell in; the cells no draw touches show that no part
+// began by clearing; and the scissor rectangle, set once before the first
+// draw, still cuts the last column of cells from the draws of every part.
+// How many parts there were is printed, for the test that knows the setting.
+void Check::GpuFeed()
+{
+    constexpr int kDraws = 600;
+    constexpr int kCell = 4;
+    constexpr int kAcross = int(kSize) / kCell;
+    static_assert(kDraws < kAcross * kAcross, "a cell for every draw, and some left clear");
+    auto color = [](int draw) { return Argb(255, uint32_t(40 + draw % 200), uint32_t(draw / 3 % 256), 255); };
+    Reset(Argb(255, 0, 64, 0));
+    const RECT scissor = {0, 0, LONG(kSize) - kCell, LONG(kSize)};
+    Ok(device->SetScissorRect(&scissor), "SetScissorRect");
+    Ok(device->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE), "SetRenderState(scissor)");
+    const front::DeviceCounters before = Counters();
+    for (int draw = 0; draw < kDraws; ++draw)
+    {
+        const float x = float(draw % kAcross * kCell);
+        const float y = float(draw / kAcross * kCell);
+        DrawQuad(x, y, x + kCell, y + kCell, 0.5f, color(draw));
+    }
+    const front::DeviceCounters after = Counters();
+    Ok(device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE), "SetRenderState(scissor)");
+    if (Read())
+    {
+        for (int draw : {0, 1, 126, 127, 128, 129, 254, 255, 256, 257, 300, 383, 384, 510, 511, 512, 598, 599})
+        {
+            const UINT x = UINT(draw % kAcross * kCell + kCell / 2);
+            const UINT y = UINT(draw / kAcross * kCell + kCell / 2);
+            char name[32];
+            std::snprintf(name, sizeof(name), "feed_draw_%d", draw);
+            if (draw % kAcross == kAcross - 1)
+                Expect(name, x, y, 0, 64, 0); // cut by the scissor rectangle
+            else
+                Expect(name, x, y, 40 + draw % 200, (draw / 3) % 256, 255);
+        }
+        Expect("feed_clear_kept", 2, kSize - 2, 0, 64, 0);
+        Expect("feed_clear_kept_right", kSize - 6, kSize - 2, 0, 64, 0);
+    }
+    const uint64_t parts = after.feedFlushes - before.feedFlushes;
+    Equal("feed_at_most_a_part_a_draw", parts <= uint64_t(kDraws), true);
+    std::printf("d3d9_check.gpu_feed=draws=%d parts=%llu\n", kDraws, static_cast<unsigned long long>(parts));
 }
 
 // Reset to another back buffer size and back: the new size, default state,
@@ -1282,6 +1339,7 @@ int Run(const Options &options)
         {"threads", &Check::Threads, true},
         {"queries", &Check::Queries, true},
         {"frame_loop", &Check::FrameLoop, true},
+        {"gpu_feed", &Check::GpuFeed, true},
         {"reset", &Check::ResetDevice, true},
         {"present", &Check::Present, true},
     };

@@ -790,7 +790,9 @@ void Check::DynamicBuffer()
     const uint64_t renamed = lg::Stats(device).dynamicRenames - renames;
     std::printf("legacy_check.dynamic_renames=%llu\n", static_cast<unsigned long long>(renamed));
     ++result->points;
-    if (renamed < 2)
+    // With KISAK_VK_GPU_FEED=always each draw is submitted at once, and the
+    // GPU may have finished with the buffer before the next lock.
+    if (renamed < 2 && !gfx_vk::Features(core).gpuFeedAlways)
     {
         ++result->mismatched;
         result->detail += " renames<2";

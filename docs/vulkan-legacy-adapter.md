@@ -75,6 +75,33 @@ buffer by the core's `Recording()` number.
   targets and ends when targets change, a resource is uploaded, or a copy
   needs to run. Clears inside a pass are `vkCmdClearAttachments`, limited by
   viewport and scissor like D3D9's.
+* **Frames in parts (the GPU feed).** A frame of many draws goes to the GPU
+  in parts while it is still being drawn, as DXVK's does, instead of whole at
+  its `Present`. After a draw, once the command buffer holds 128 draws
+  (`KISAK_VK_GPU_FEED_DRAWS`) and the GPU has fewer than two submissions left
+  to finish, what is recorded is submitted; for each further unfinished
+  submission the adapter waits for 128 draws more, up to four times, so a GPU
+  that is behind is left alone (DXVK's rule, counted in draws instead of
+  command chunks). The draws that follow start a new command buffer and a new
+  pass that loads the targets, so the picture is the same.
+  Why: the engine holds every frame back until the GPU has finished the one
+  before (`r_gpuSync 1`: the render thread waits for the last frame's fence
+  when it has drawn a frame, and the main thread waits for it before it
+  starts the next). A frame that is submitted whole cannot start on the GPU
+  before it is fully recorded, so with that rule the GPU idles from the end of
+  each frame until the next one has been recorded. Laptop run 8 measured it:
+  6.3 ms of GPU work in every 8.2 ms frame, and 121 fps against DXVK's 150
+  (`renderer/vulkan-backend-laptop-run-8.md` in the project files).
+  Each part costs a tile-based GPU a store and a load of every target, so the
+  feed is off by default on Apple, Arm, Qualcomm, Imagination and Broadcom
+  GPUs and under MoltenVK. `KISAK_VK_GPU_FEED=0` turns it off and `=1` on
+  anywhere; `=always` submits after every draw, which the checks use to give
+  every draw of every scene a command buffer and a pass of its own. The
+  device's `device ready:` log line says which it is (`GPU feed every 128
+  draws`, `off`, `after every draw`), `DeviceStats::feedFlushes` counts the
+  parts, and the front's `frame stats:` line prints them. Its GPU frame time
+  runs from a frame's first command to its last, so with the feed it includes
+  the time the GPU waited for the next part.
 * **Present.** The back buffer is an offscreen A8R8G8B8 image; `Present` blits it
   into the swapchain image and presents. A minimised window skips the frame.
   There are two such images, and `Present` swaps them, as D3D9's DISCARD swap

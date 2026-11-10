@@ -203,6 +203,7 @@ a usage error.
 | `threads` | A worker thread creating and filling textures while this thread draws and presents; the last one drawn and read back; nothing left alive. |
 | `queries` | Support checks, an event query and an occlusion query finishing, and an event issued right after `Present` (the engine's swap fence) finishing without a flush while the next frame records; polled with `D3DGETDATA_FLUSH` while its frame is unfinished, it submits the next frame's work once, and the frame goes on with its state and contents. |
 | `frame_loop` | The engine's frame for 48 frames: draw, poll the swap fence with `D3DGETDATA_FLUSH` until the frame before has finished, issue the GPU sync fence, `Present`, issue the swap fence, while another thread polls the sync fence as the main thread does. At most three submissions a frame, at most one swap fence flush, and the last frame, drawn on both sides of its wait, comes out whole. |
+| `gpu_feed` | A frame of 600 draws, each filling a cell of its own, with a scissor rectangle set once that cuts the last column. The adapter submits such a frame in parts while it is drawn ([adapter](vulkan-legacy-adapter.md)): every draw must show whichever part it fell in, the cells no draw touches must keep the clear colour, and the scissor must hold in every part. Prints the number of parts. |
 | `reset` | `Reset` to 96x96 and back: the new size, default state, nothing bound, drawing at the new size. |
 | `present` | `Present` through the device and the swap chain, then `GetFrontBufferData` halfway through the next frame: it must give the frame last shown. |
 
@@ -211,14 +212,20 @@ adapter's runner does: usage errors, an unknown scene, one scene alone (with no
 unsupported call), and a full run in which every scene matches, the only
 unsupported call is the deliberate one, frames are presented, no object
 outlives its release, the device is destroyed at its last release and the
-validation layer reports no errors.
+validation layer reports no errors. It reads the GPU feed's setting from
+the device's log line and holds the `gpu_feed` scene's parts to it: none with
+the feed off, one for every draw with `KISAK_VK_GPU_FEED=always`, else one to
+four.
 
 The hosted `vulkan_window` job (Linux) stages DXVK Native's headers at the
 x86_64 client's pin, builds the check in Debug and RelWithDebInfo and runs that
 script on lavapipe with validation and synchronisation checks required. Its
-Debug run also builds the check with ThreadSanitizer and runs the `threads`
-and `frame_loop` scenes, which fail on any data race in our code (llvmpipe's
-rasterizer threads are off there, [vulkan-core.md](vulkan-core.md)). The
+Debug run repeats the script with the GPU feed off and with
+`KISAK_VK_GPU_FEED=always` (and the adapter's check with the latter), and
+builds the check with ThreadSanitizer and runs the `threads`, `frame_loop`
+(also with `KISAK_VK_GPU_FEED=always`) and `gpu_feed` scenes, which fail on
+any data race in our code (llvmpipe's rasterizer threads are off there,
+[vulkan-core.md](vulkan-core.md)). The
 Windows `vulkan-probe` job builds it with MSVC, checks that it imports neither
 `vulkan-1.dll` nor `d3d9.dll` and that it starts, and adds it to the
 `KisakCOD-vulkan-probe-x64` artifact.

@@ -2774,6 +2774,30 @@ jobs:
             --binary "$OUT_DIR/KisakCOD-vulkan-d3d9-check" \
             --video-driver offscreen --validation require
 
+      - name: Run the checks again with the GPU feed off and at its extreme
+        if: ${{ matrix.config == 'Debug' }}
+        timeout-minutes: 15
+        shell: bash
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          # The adapter submits a frame in parts while it is drawn
+          # (docs/vulkan-legacy-adapter.md, Frames). Off, a frame goes to the
+          # GPU whole, as it does by default on tile-based GPUs and MoltenVK.
+          KISAK_VK_GPU_FEED=0 python3 -u scripts/tests/test_vulkan_d3d9_front.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-d3d9-check" \
+            --video-driver offscreen --validation require
+          # "always" submits after every draw: every draw of every scene then
+          # starts a command buffer and a render pass of its own on the
+          # targets the last one left, and must come out the same.
+          KISAK_VK_GPU_FEED=always python3 -u scripts/tests/test_vulkan_d3d9_front.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-d3d9-check" \
+            --video-driver offscreen --validation require
+          KISAK_VK_GPU_FEED=always python3 -u scripts/tests/test_vulkan_legacy_adapter.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-legacy-check" \
+            --video-driver offscreen --validation require
+
       - name: Check the D3D9 front's lock with ThreadSanitizer
         if: ${{ matrix.config == 'Debug' }}
         timeout-minutes: 15
@@ -2824,6 +2848,14 @@ jobs:
           "$OUT_DIR/tsan/KisakCOD-vulkan-d3d9-check" --scene frame_loop --validation off \
             | tee "$RUNNER_TEMP/tsan-frames.log"
           grep -qx 'd3d9_check=passed' "$RUNNER_TEMP/tsan-frames.log"
+          # The same with a submission after every draw, and a frame of the
+          # engine's size that the adapter submits in parts while it is drawn.
+          KISAK_VK_GPU_FEED=always "$OUT_DIR/tsan/KisakCOD-vulkan-d3d9-check" --scene frame_loop \
+            --validation off | tee "$RUNNER_TEMP/tsan-frames-fed.log"
+          grep -qx 'd3d9_check=passed' "$RUNNER_TEMP/tsan-frames-fed.log"
+          "$OUT_DIR/tsan/KisakCOD-vulkan-d3d9-check" --scene gpu_feed --validation off \
+            | tee "$RUNNER_TEMP/tsan-feed.log"
+          grep -qx 'd3d9_check=passed' "$RUNNER_TEMP/tsan-feed.log"
           # Frames, draws, read-back and swapchain rebuilds with the record
           # thread on.
           KISAK_VK_RECORD_THREAD=1 "$OUT_DIR/tsan/KisakCOD-vulkan-probe" --draw --frames 60 --resize \

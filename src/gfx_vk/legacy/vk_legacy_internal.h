@@ -321,6 +321,11 @@ struct Device
     VkPipeline boundPipeline = VK_NULL_HANDLE;
     DynamicState dynamic{};
     bool dynamicValid = false;
+    // Feeding the GPU (FeedGpu): the draws recorded in command buffer
+    // feedRecording, and the count at which to look at the GPU again.
+    uint64_t feedRecording = 0;
+    uint32_t feedDraws = 0;
+    uint32_t feedCheckAt = 0;
     // The texture descriptor set the last draw wrote, and what it holds. A
     // draw that needs the same views and samplers in a set of the same layout
     // binds it again instead of allocating and writing a new one. Sets come

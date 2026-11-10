@@ -286,6 +286,21 @@ struct OptionalFeatures
     // engine waits for the frame before it (legacy::GetQueryData). On unless
     // KISAK_VK_FENCE_FLUSH=0, to compare the two.
     bool fenceFlush;
+    // The Legacy adapter submits a frame in parts while it is still being
+    // drawn, so the GPU works on a frame as it is recorded instead of
+    // starting when the frame ends (see FeedGpu in vk_legacy_draw.cpp). Each
+    // part ends its render pass and the next begins one that loads the
+    // targets again, which costs a tile-based GPU a store and a load of
+    // every target: off on Apple, Arm, Qualcomm, Imagination and Broadcom
+    // GPUs and on every portability-subset device. KISAK_VK_GPU_FEED=0 turns
+    // it off and =1 on, whatever the GPU; =always submits after every draw
+    // (testing: every draw then starts a command buffer and a pass).
+    bool gpuFeed;
+    bool gpuFeedAlways;
+    // Draws recorded before a part is submitted (KISAK_VK_GPU_FEED_DRAWS,
+    // default 128): that many while the GPU has under two submissions left,
+    // more for each further one (up to four times).
+    uint32_t gpuFeedDraws;
 };
 const OptionalFeatures &Features(const Core *core);
 // Whether images of this format with optimal tiling support these features.
@@ -458,6 +473,8 @@ bool SerialFinished(Core *core, uint64_t serial);
 // (as right after Present), and 0 before the first. For fences such as D3D9's
 // event queries, which finish once everything recorded before them has.
 uint64_t RecordedSerial(const Core *core);
+// Submissions made (Flush, Present) that the GPU has not finished.
+uint32_t PendingSubmissions(Core *core);
 
 // ---- Passes and image state ------------------------------------------------------
 //
