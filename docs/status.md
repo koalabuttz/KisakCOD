@@ -1,9 +1,8 @@
 # Linux port status
 
-Last updated 2026-11-10 11:23 UTC (master `ae20688`: the Vulkan back end's
-counted occlusion queries and IMMEDIATE present mode, PR 173; the PS Vita
-depth clear, PR 192; sleeping in the waits for the GPU by default on Linux,
-PR 197). This page is the current state of
+Last updated 2026-11-10 12:24 UTC (master `074f7f1`: the first daily
+security check's fixes, PR 191; modded Linux servers and HTTP downloads,
+PR 205). This page is the current state of
 the native Linux port and the other platform builds, the open pull requests and
 the roadmap. The [docs index](README.md) lists the detailed guides;
 older handoffs are in [history](history/README.md) and are not current.
@@ -123,8 +122,15 @@ builds use `-ffp-contract=off` (no fused multiply-add).
   ([list](linux-mp-client.md#what-it-does-not-have-yet)). **HTTP downloads**
   are off by default: `-DKISAK_LINUX_HTTP_DOWNLOADS=ON` builds the engine's
   libcurl downloader in since PR 170, checked against local HTTP and TLS
-  servers on hosted CI, but no download from a game server has been made
-  end to end yet ([guide](linux-mp-client.md#http-downloads)).
+  servers on hosted CI, and on the PC's WSL a client fetched a file from a
+  game server's redirect with one GET, status 200 and matching sha256 (local
+  HTTP download run 1). No client reached the game in that run: an optimized
+  server build with `fs_game` set listed the game's own fastfiles as mod
+  fastfiles, so no client could join a modded Linux server. PR 205 (merged)
+  fixes that and a `+set sv_wwwBaseURL http://...` on a Linux or macOS
+  command line that was cut to `http:`; it has not been rerun with the game
+  yet (PC run 2). A first start on a fresh client home ignores `+connect`
+  ([guide](linux-mp-client.md#http-downloads)).
 
 ## Security
 
@@ -134,9 +140,12 @@ built the Linux games and server with `_FORTIFY_SOURCE=2` and the usual
 hardening flags (laptop soak run passed). PR 106 also made CI retry slow apt
 mirrors instead of timing out. A daily security check now reads what
 merged since its last pass. The first (2026-11-10) read everything merged
-since that audit; its fixes are PR 191 (sound size math, the addresses
-Windows may open, and the Vita's text run settings) and PR 194 (a Steam
-ticket's later verdict), both open.
+since that audit; its fixes are PR 191 (merged: sound sizes that wrap in
+32-bit math are refused, Windows opens only http and https addresses for a
+server, and the Vita reads its text run settings once at start-up so a
+server cannot have them run commands; compiled and checked on hosted CI,
+not run on Windows, in Vita3K or on a console) and PR 194 (a Steam
+ticket's later verdict, open).
 
 ## Other Linux pieces
 
@@ -167,18 +176,17 @@ These came before the playable client and still build and run in CI:
 
 ## Open pull requests
 
-As of 2026-11-10 11:23 UTC, six. They change by the hour; the
+As of 2026-11-10 12:24 UTC, five. They change by the hour; the
 [list on GitHub](https://github.com/koalabuttz/KisakCOD/pulls) is the current
 one. A machine run a pull request waits on is named where its author has
 said so.
 
 | PR | What | Machine run it waits on |
 | --- | --- | --- |
-| 191 | Fixes from the first daily security check: sound size math, addresses Windows may open, the Vita's text run settings read once | |
 | 193 | Singleplayer: the 64-bit airlift crash and the movies-off load, and frame and death checks in the level sweep | The i386 sweep of all 21 levels with the new checks, on the laptop. |
 | 194 | Steam: a server acts on Steam's later verdict for a ticket | A run with a real Steam player: join, leave and join again, then a kick and an attempt to come back. |
 | 196 | Fewer Linux CI jobs per push: five quick checks run both configurations in one job | |
-| 202 | PS Vita client: the static model cache back at a quarter size, less CPU work per draw (with a `no-draw-reuse` switch to compare), and occlusion queries that count nothing so roofs hide the sun | Vita3K run AC: the same pictures with and without `no-draw-reuse`, lower draw times, and the sky at the Windows build's value (run AB measures the cache size). |
+| 202 | PS Vita client: the static model cache back (4 MB) and less CPU work per draw, with a `no-draw-reuse` switch to compare | A Vita3K run of the head (the 4 MB cache with the savings together). |
 | 203 | Vulkan back end: less work per draw, multisampled targets so `r_aaSamples` means the same as on D3D9, descriptor sets kept across frames, and `slow frame` lines in `r_vkStats` | Laptop run 13 (the first GPU run of multisampling) and a GPU run of the kept draw state on the laptop or PC. |
 
 ## Laptop and PC runs still to do
@@ -207,7 +215,7 @@ PR 168.
 - Multiplayer client: sweep run 1 passed all 21 stock maps on i386 and
   x86_64 ([guide](linux-mp-client.md#map-sweep)). Next: a follow-up on the
   nearly black i386 mp_convoy frame (queued), hand play beyond mp_crash, and
-  a 30-minute session on one map. A real HTTP download (PR 170, merged: none has been made end to end).
+  a 30-minute session on one map. PC HTTP download run 2 on PR 205's fixes (run 1 fetched the file, but no client reached the game).
   The setup tool on a real GPU and monitor (its first run, on the PC's WSL,
   passed with software rendering), and a real controller in the game.
 - Finding servers (PR 163, merged): the Join Game menu on a real client, and
@@ -245,8 +253,8 @@ no fixed order.
    in the project files, `renderer/modern-renderer-plan.md`). The target is
    Modern at 60 fps on the laptop's Intel U300.
 4. **Linux client polish**: hand play on the other maps (all 21 pass the
-   unattended sweep), a long session, a first real HTTP download (the
-   opt-in downloader is merged, PR 170), then voice chat and the remote
+   unattended sweep), a long session, an HTTP download that ends in the
+   game (PR 205's fixes, PC run 2), then voice chat and the remote
    script debugger
    ([list](linux-mp-client.md#what-it-does-not-have-yet)).
 5. **Linux singleplayer beyond two levels**: hand play of the swept levels,
@@ -276,7 +284,7 @@ no fixed order.
    through `r_backend vulkan` (first run on an Intel MacBook Pro; a release
    bundle also needs MoltenVK and the Vulkan loader), and bots on the PS Vita
    dedicated server ([guide](vita.md)).
-9. **Security**: the daily check's first fixes (PRs 191 and 194).
+9. **Security**: the daily check's first fixes (PR 191 merged, PR 194 open).
 
 ## Checks before a push
 
