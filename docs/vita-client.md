@@ -124,12 +124,17 @@ source changes.
   says who has the mouse, a menu or the game, and that decides how the next
   reading is mapped.
 
-**On the console** (run 1, 2026-11-09, in the menus, with nothing drawn yet
+**On the console.** Run 1 (2026-11-09, in the menus, with nothing drawn yet
 and `vita_inputDebug 1`): every button arrived as the key in the tables
 below, the right stick as the wheel, and a start-up without a profile got the
-default layout and the profile name. Not confirmed yet: a touch on the screen
-(the log has none), which side of the rear pad is which, and the look speed
-and the layout in a game, which need a game on the screen.
+default layout and the profile name. Run K (2026-11-10, with the menu on the
+screen): the screen works as the menu's pointer. The menu was worked by touch
+up to starting a server, and the log has nine touches, each a `MOUSE1` press
+and release within about 20 ms. Touches in the top-left, top-right and
+bottom-left corners of the panel landed in the same corners of the engine's
+960 by 544 screen. Not confirmed yet: the
+screen's three areas in a game, which side of the rear pad is which, and the
+look speed and the layout in a game, which need a game on the screen.
 
 ### In the game
 
@@ -222,15 +227,18 @@ sets the whole default layout at any time.
   "create profile" box is offered the name `Vita` to accept.
 - Walking speed from how far the stick is pushed. The engine moves by keys.
 - A stray touch on the rear pad that is as short as a tap still counts as
-  one. `vita_rearTouch 0` turns the pad off. The tap has not been tried on the
-  console; the next run logs how long each touch lasts, which will say whether
+  one. `vita_rearTouch 0` turns the pad off. Run K's log, from the menus where
+  the pad is no key, lists 16 rear touches: 14 stayed longer than 0.3 s (up to
+  71 s), which the tap rule ignores, and two were as short as a tap (152 and
+  205 ms). So a hand that only holds the console sends a stray tap now and
+  then. The tap itself has not been tried in a game; that run will say whether
   it needs a tighter rule.
 
 ## Sound (stage 3)
 
 The engine's sound driver (`src/sound/snd_openal.cpp`,
-`snd_driver_openal.cpp`) talks OpenAL 1.1 with a few EFX calls, 44 entry
-points in all. The Vita client answers them itself:
+`snd_driver_openal.cpp`) talks OpenAL 1.1 with a few EFX calls and three
+extensions, 47 entry points in all. The Vita client answers them itself:
 
 - `src/vita/client/sound/vita_al.cpp` is a small OpenAL on an integer mixer.
   It uses no Vita call and no engine header, so
@@ -250,7 +258,11 @@ What the small OpenAL keeps:
   deleted, a playing source cannot change its buffer, only played buffers
   leave a queue;
 - mono and stereo buffers of 8 or 16 bits at any rate, resampled with linear
-  interpolation.
+  interpolation;
+- IMA ADPCM buffers (`AL_EXT_IMA4`, with the block's frame count from
+  `AL_SOFT_block_alignment`), which stay packed and are decoded a block at a
+  time as they play, and loop points (`AL_SOFT_loop_points`) for a looping
+  source on one buffer. The next part says what they are for.
 
 What it leaves out:
 - **Distance models.** The engine sets `AL_NONE` and puts its own falloff
@@ -266,8 +278,58 @@ Gains are Q15 and move toward their targets every 64 frames, so a volume or
 position change does not click. One lock guards all of it; the mixer holds it
 for one update.
 
-**Output.** The engine asks for 11025, 22050 or 44100 Hz (`snd_khz`, default
-44). SceAudioOut's main ports play 48000 Hz only, so the client opens the one
+**Loaded sounds in memory** (`snd_adpcm`). The fastfiles hold loaded sounds
+as IMA ADPCM, four bits a sample, or as PCM. The retail game kept IMA ADPCM
+as it was loaded and decoded it while it played. The OpenAL driver expanded
+every sound to 16-bit PCM when it loaded, four times the size. On the Vita
+that was most of the heap: with sound on, a map's sounds took about 41 MB of
+the 64 MB (console run K: 60.7 of 64 MB in use when the load failed), and a
+start that ran out of heap crashed in `SND_SetData`, which wrote through the
+null pointer.
+
+With `snd_adpcm 1`, the default on the Vita, the driver keeps loaded sounds as
+IMA ADPCM in whole blocks (`src/sound/snd_ima_adpcm.h`) and OpenAL decodes
+them as they play:
+
+- A sound loaded as IMA ADPCM at a rate the mixer plays keeps its own blocks,
+  byte for byte.
+- Every other sound is encoded: PCM, and IMA ADPCM above the mixer's rate,
+  whose rate is halved first as it always was. The blocks are 505 frames, 256
+  bytes a channel. Encoding is lossy. In the tests a low tone comes back about
+  50 dB above the encoder's noise and a 2 kHz tone at 22 kHz about 27 dB.
+- The small OpenAL holds the packed bytes and one decoded block for each
+  buffer (1 KB for a mono sound's 505 frames). It decodes a block when a
+  source plays into it; a source at zero gain decodes nothing. In the tests a
+  packed buffer mixes to the same samples as a PCM buffer of its decoded
+  frames, at any pitch, looping, from an offset and in a queue.
+- A sound that ends inside its last block loops at its own end through loop
+  points. Played once, the rest of the block follows as silence, under 23 ms.
+
+`snd_adpcm` is read when the sound system starts, and `+set snd_adpcm 0`
+brings the 16-bit PCM back, to compare by ear or by memory. An OpenAL without
+one of the three extensions gets 16-bit PCM and a warning. The desktop builds
+leave `snd_adpcm` off; with it on, the same driver code plays through OpenAL
+Soft, which `scripts/tests/test_openal_packed_sounds.py` checks on its
+loopback device. `dumpraw` writes sounds as they are stored, so dump them with
+`snd_adpcm 0`.
+
+A sound that finds no memory when it loads is now left without data and does
+not play. The log has a warning for the first four and a count in the line
+below.
+
+After each burst of loading, with `snd_adpcm`, with `snd_alDebug 1` or when a
+sound found no memory, the log has one line: `sound data: ... sounds loaded,
+in ... KB (... KB as 16-bit PCM); they came as ... IMA ADPCM, ... 16-bit and
+... 8-bit; ... kept as IMA ADPCM, ... encoded to it, ... found no memory`.
+
+Not measured yet: which formats a map's sounds come in (that line says), what
+the heap holds after a map load with `snd_adpcm 1`, what the mixer costs with
+packed sources on the console, and how the encoded sounds sound.
+
+**Output.** The engine asks for 11025, 22050 or 44100 Hz (`snd_khz`). The
+default is 44, and 22 on the Vita, where a saved config still wins: at 22 the
+engine halves loaded sounds above 33075 Hz when they load, and at 44 it halves
+none, so they take up to twice the memory. SceAudioOut's main ports play 48000 Hz only, so the client opens the one
 background-music port, which takes the engine's rates, and mixes at the rate
 asked for. If that port does not open, it takes a main port and mixes at
 48000 Hz. One update is about 23 ms (512 frames at 22050 Hz, 1024 at 44100),
@@ -278,7 +340,7 @@ thread.
 frames per update` when sound starts, then after ten seconds, once a minute
 and once more when sound stops `vita sound: ... updates, mixing ... us each on
 average and ... at most, ... sources at most, ... clipped frames, ... refused
-updates`.
+updates, ... packed frames decoded, buffers ... KB at most`.
 
 **On the console** (run 1, 2026-11-09): the menu music and the menu's sounds
 were heard. The port opened at 22050 Hz with 512 frames per update (that
@@ -287,10 +349,18 @@ average and 89 at most. What an update costs with sources playing was not
 captured: the run ended before the second line, and the line at the end came
 after it.
 
+Run K (2026-11-10, the menu on the screen, with its music and sounds): two
+sources at most, an update took 39 to 53 µs on average and 220 at most, and no
+frame clipped and no update was refused. The music paused whenever the menu
+stopped responding, for up to 23.6 s while shaders compiled, and came back
+each time. The mixer thread ran through those pauses; it had no music to play,
+which is the first limit below.
+
 Known limits:
 - The engine decodes streamed sounds (music) on its main thread, 8192 frames
-  at a time. On the Vita that may show as a frame hitch; a run with a picture
-  will tell.
+  at a time. When the main thread stalls, the music stops until it is back
+  (run K, above). In a game the decoding may also show as a frame hitch; a run
+  in a game will tell.
 - The background-music port is the one the system's own music player takes
   over when the user plays music from the home screen.
 
