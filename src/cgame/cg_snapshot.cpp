@@ -26,7 +26,7 @@ void CG_ShutdownEntity(int localClientNum, centity_s *cent)
     FxEffect *effect; // r4
     trajectory_t *p_pos; // r29
     int ragdollHandle; // r3
-    int physObjId; // r4
+    uintptr_t physObjId; // the body pointer itself: an int cuts it short on 64-bit
 
     oldEType = cent->oldEType;
     if (oldEType == 8 || oldEType == 7)
@@ -51,11 +51,11 @@ void CG_ShutdownEntity(int localClientNum, centity_s *cent)
         cent->currentState.apos.trType = TR_STATIONARY;
     }
     physObjId = cent->pose.physObjId;
-    if (physObjId && physObjId != -1)
+    if (physObjId && physObjId != (uintptr_t)-1)
         goto LABEL_14;
     if (p_pos->trType != TR_PHYSICS)
         return;
-    if (physObjId != -1)
+    if (physObjId != (uintptr_t)-1)
     {
     LABEL_14:
         if (physObjId)

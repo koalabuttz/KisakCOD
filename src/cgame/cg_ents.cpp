@@ -1519,11 +1519,11 @@ void CG_CreatePhysicsObject(int localClientNum, centity_s *cent)
 
 void CG_UpdatePhysicsPose(centity_s *cent)
 {
-    int physObjId; // r11
+    uintptr_t physObjId; // r11
     float v3[4]; // [sp+50h] [-20h] BYREF
 
     physObjId = cent->pose.physObjId;
-    if (!physObjId || physObjId == -1)
+    if (!physObjId || physObjId == (uintptr_t)-1)
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\cgame\\cg_ents.cpp",
             1195,
@@ -1590,7 +1590,7 @@ void CG_CalcEntityPhysicsPositions(int localClientNum, centity_s *cent)
 void CG_SaveEntityPhysics(centity_s *cent, SaveGame *save)
 {
     const DObj_s *obj; // r28
-    int physObjId; // r11
+    uintptr_t physObjId; // r11
     char v6; // r11
     bool v7; // zf
     const char *modelName; // r29
@@ -1600,7 +1600,7 @@ void CG_SaveEntityPhysics(centity_s *cent, SaveGame *save)
     iassert(save);
 
     obj = Com_GetClientDObj(cent->nextState.number, 0);
-    if (!obj || (physObjId = cent->pose.physObjId) == 0 || (v7 = physObjId != -1, v6 = 1, !v7))
+    if (!obj || (physObjId = cent->pose.physObjId) == 0 || (v7 = physObjId != (uintptr_t)-1, v6 = 1, !v7))
         v6 = 0;
     v11 = v6;
     SaveMemory_SaveWrite(&v11, 1, save);
