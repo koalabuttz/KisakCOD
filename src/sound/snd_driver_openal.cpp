@@ -18,13 +18,54 @@
 #include <dr_libs/dr_wav.h>
 #include <dr_libs/dr_mp3.h>
 #include <AL/efx-presets.h>
+#include <atomic>
 #include <fstream>
+
+#include "snd_ima_adpcm.h"
+
+// AL_EXT_IMA4, AL_SOFT_block_alignment and AL_SOFT_loop_points (alext.h).
+#ifndef AL_FORMAT_MONO_IMA4
+#define AL_FORMAT_MONO_IMA4 0x1300
+#define AL_FORMAT_STEREO_IMA4 0x1301
+#endif
+#ifndef AL_UNPACK_BLOCK_ALIGNMENT_SOFT
+#define AL_UNPACK_BLOCK_ALIGNMENT_SOFT 0x200C
+#endif
+#ifndef AL_LOOP_POINTS_SOFT
+#define AL_LOOP_POINTS_SOFT 0x2015
+#endif
+
+// Retail Miles sound formats (MSS_DigitalFormatType): 1 is PCM, 17 is IMA ADPCM.
+#define SND_FORMAT_PCM 1
+#define SND_FORMAT_IMA_ADPCM 17
 
 AlLocal alGlob;
 
 const dvar_t *snd_khz;
 const dvar_t *snd_outputConfiguration;
 static const dvar_t *snd_alDebug;
+static const dvar_t *snd_adpcm;
+
+// Loaded sounds are kept as IMA ADPCM and decoded by OpenAL as they play:
+// snd_adpcm is on and this OpenAL takes such buffers. Set when the driver
+// starts; read by SND_SetData, which the database thread calls.
+static std::atomic<bool> s_keepSoundsPacked;
+
+// The PS Vita has 64 MB of heap for everything: its defaults are the small
+// ones. A saved config still wins.
+#ifdef __vita__
+#define SND_DEFAULT_KHZ 22
+#define SND_DEFAULT_ADPCM 1
+#else
+#define SND_DEFAULT_KHZ 44
+#define SND_DEFAULT_ADPCM 0
+#endif
+
+static bool SND_AlPlaysImaAdpcm()
+{
+    return alIsExtensionPresent("AL_EXT_IMA4") && alIsExtensionPresent("AL_SOFT_block_alignment")
+        && alIsExtensionPresent("AL_SOFT_loop_points");
+}
 
 void TRACK_snd_driver()
 {
@@ -38,7 +79,7 @@ bool SND_IsMultiChannel()
 
 char SND_InitDriver()
 {
-    snd_khz = Dvar_RegisterInt("snd_khz", 44, (DvarLimits)0x2C0000000BLL, DVAR_ARCHIVE | DVAR_LATCH, "The game sound frequency.");
+    snd_khz = Dvar_RegisterInt("snd_khz", SND_DEFAULT_KHZ, (DvarLimits)0x2C0000000BLL, DVAR_ARCHIVE | DVAR_LATCH, "The game sound frequency.");
     snd_outputConfiguration = Dvar_RegisterEnum(
         "snd_outputConfiguration",
         snd_outputConfigurationStrings,
@@ -50,14 +91,31 @@ char SND_InitDriver()
         0,
         DvarLimits(0, 2),
         DVAR_NOFLAG,
-        "OpenAL sound diagnostics: 1 prints errors, stream underruns and a summary every 5 seconds, 2 also prints each sound start");
+        "OpenAL sound diagnostics: 1 prints errors, stream underruns, a summary every 5 seconds and what loaded sounds take in memory, 2 also prints each sound start");
+    snd_adpcm = Dvar_RegisterBool(
+        "snd_adpcm",
+        SND_DEFAULT_ADPCM,
+        DVAR_NOFLAG,
+        "Keep loaded sounds in memory as IMA ADPCM, a quarter the size of 16-bit PCM, and decode them as they play. Read when the sound system starts; sounds already loaded stay as they are");
 
+    s_keepSoundsPacked.store(false, std::memory_order_relaxed);
     if (MSS_Startup())
     {
         if (MSS_Init())
         {
             MSS_InitChannels();
             MSS_InitEq();
+            if (snd_adpcm->current.enabled)
+            {
+                const bool plays = SND_AlPlaysImaAdpcm();
+                s_keepSoundsPacked.store(plays, std::memory_order_relaxed);
+                if (plays)
+                    Com_Printf(CON_CHANNEL_SOUND, "Loaded sounds are kept as IMA ADPCM (snd_adpcm)\n");
+                else
+                    Com_PrintWarning(
+                        CON_CHANNEL_SOUND,
+                        "WARNING: snd_adpcm is on, but this OpenAL does not play IMA ADPCM buffers with a block size and loop points; loaded sounds are kept as 16-bit PCM\n");
+            }
             return 1;
         }
         else
@@ -577,6 +635,34 @@ void SND_ApplyChannelMap(ALuint handle, const snd_alias_t *alias, int srcChannel
     // KISAK_OPENAL TODO (Phase 4): per-speaker channel-level mapping. 
 }
 
+// Hands a loaded sound to an OpenAL buffer. SND_SetData leaves a sound as 16-bit PCM
+// or, with snd_adpcm, as IMA ADPCM in whole blocks, which OpenAL decodes as it plays
+// (AL_EXT_IMA4, with the block's frame count through AL_SOFT_block_alignment).
+static void SND_SetBufferData(ALuint buffer, const MssSoundCOD4 *sound)
+{
+    const _AILSOUNDINFO_COD4 *info = &sound->info;
+    const bool stereo = info->channels == 2;
+    if (info->format != SND_FORMAT_IMA_ADPCM)
+    {
+        alBufferData(buffer, stereo ? AL_FORMAT_STEREO16 : AL_FORMAT_MONO16, sound->data, info->data_len, info->rate);
+        return;
+    }
+
+    const uint32_t blockFrames = kisak::ima_adpcm::BlockFrames(info->block_size, (uint32_t)info->channels);
+    if (!blockFrames)
+        return;
+    alBufferi(buffer, AL_UNPACK_BLOCK_ALIGNMENT_SOFT, (ALint)blockFrames);
+    alBufferData(buffer, stereo ? AL_FORMAT_STEREO_IMA4 : AL_FORMAT_MONO_IMA4, sound->data, info->data_len, info->rate);
+    // The last block is whole in memory, and the sound may end inside it. A loop turns
+    // where the sound ends (AL_SOFT_loop_points). Played once, the rest of the block
+    // follows: silence where SND_SetData encoded the sound, under 23 ms of it.
+    if (info->samples < info->data_len / info->block_size * blockFrames)
+    {
+        const ALint loopPoints[2] = { 0, (ALint)info->samples };
+        alBufferiv(buffer, AL_LOOP_POINTS_SOFT, loopPoints);
+    }
+}
+
 int SND_StartAlias2DSample(SndStartAliasInfo *startAliasInfo, int *pChannel)
 {
     iassert(startAliasInfo->alias0);
@@ -591,6 +677,10 @@ int SND_StartAlias2DSample(SndStartAliasInfo *startAliasInfo, int *pChannel)
     iassert(startAliasInfo->alias1->soundFile->type == SAT_LOADED);
     iassert(startAliasInfo->alias1->soundFile->u.loadSnd);
     iassert(startAliasInfo->alias1->soundFile->exists);
+
+    // A sound that found no memory when it loaded has nothing to play (SND_SetData).
+    if (!startAliasInfo->alias0->soundFile->u.loadSnd->sound.data)
+        return -1;
 
     int entchannel = SNDALIASFLAGS_GET_CHANNEL(startAliasInfo->alias0->flags);
     if (!SND_HasFreeVoice(entchannel))
@@ -608,13 +698,12 @@ int SND_StartAlias2DSample(SndStartAliasInfo *startAliasInfo, int *pChannel)
     ALuint source = alGlob.source[index];
     MssSoundCOD4 *sound = &startAliasInfo->alias0->soundFile->u.loadSnd->sound;
 
-    // SND_SetData stores every loaded sound as 16-bit PCM, so the format is always
-    // mono/stereo 16-bit - no need to replicate MSS_DigitalFormatType's branching here.
+    // SND_SetData stores every loaded sound as 16-bit PCM or as IMA ADPCM, so there is
+    // no need to replicate MSS_DigitalFormatType's branching here.
     SND_ReleaseChannelBuffer(index);
     ALuint buffer;
     alGenBuffers(1, &buffer);
-    ALenum format = (sound->info.channels == 2) ? AL_FORMAT_STEREO16 : AL_FORMAT_MONO16;
-    alBufferData(buffer, format, sound->data, sound->info.data_len, sound->info.rate);
+    SND_SetBufferData(buffer, sound);
     alGlob.channelBuffer[index] = buffer;
     alSourcei(source, AL_BUFFER, buffer);
 
@@ -712,6 +801,10 @@ int SND_StartAlias3DSample(SndStartAliasInfo *startAliasInfo, int *pChannel)
     iassert(startAliasInfo->alias1->soundFile->u.loadSnd);
     iassert(startAliasInfo->alias1->soundFile->exists);
 
+    // A sound that found no memory when it loaded has nothing to play (SND_SetData).
+    if (!startAliasInfo->alias0->soundFile->u.loadSnd->sound.data)
+        return -1;
+
     int entchannel = (startAliasInfo->alias0->flags & 0x3F00) >> 8;
     if (!SND_HasFreeVoice(entchannel))
         return -1;
@@ -732,8 +825,7 @@ int SND_StartAlias3DSample(SndStartAliasInfo *startAliasInfo, int *pChannel)
     SND_ReleaseChannelBuffer(index);
     ALuint buffer;
     alGenBuffers(1, &buffer);
-    ALenum format = (sound->info.channels == 2) ? AL_FORMAT_STEREO16 : AL_FORMAT_MONO16;
-    alBufferData(buffer, format, sound->data, sound->info.data_len, sound->info.rate);
+    SND_SetBufferData(buffer, sound);
     alGlob.channelBuffer[index] = buffer;
     alSourcei(source, AL_BUFFER, buffer);
 
@@ -1529,12 +1621,15 @@ int SND_GetSoundFileSize(uint32_t *pSoundFile)
     return pSoundFile[2];
 }
 
+static void SND_ReportLoadedData();
+
 void SND_DriverPostUpdate()
 {
 #ifndef KISAK_XBOX
     SND_UpdateEqs();
 #endif
     SND_AlDebugFrame();
+    SND_ReportLoadedData();
     KISAK_NULLSUB();
 }
 
@@ -1710,10 +1805,6 @@ void SND_SetHWND(HWND hwnd)
     // OpenAL has no window-handle dependency (no DirectSound backend to bind).
 }
 
-// Retail Miles sound formats (MSS_DigitalFormatType): 1 is PCM, 17 is IMA ADPCM.
-#define SND_FORMAT_PCM 1
-#define SND_FORMAT_IMA_ADPCM 17
-
 static void SND_PutLE16(uint8_t *p, uint32_t v)
 {
     p[0] = (uint8_t)v;
@@ -1740,6 +1831,11 @@ static uint32_t SND_DecodeImaAdpcm(const _AILSOUNDINFO_COD4 *info, const void *s
     const uint32_t headerSize = 12 + 8 + 20 + 8 + 4 + 8;
     const uint32_t fileSize = headerSize + info->data_len;
     uint8_t *file = (uint8_t *)Z_Malloc(fileSize, "SND_DecodeImaAdpcm", 15);
+    if (!file)
+    {
+        Com_PrintWarning(CON_CHANNEL_SOUND, "WARNING: no memory to decode a sound (%u bytes)\n", fileSize);
+        return 0;
+    }
 
     uint8_t *p = file;
     memcpy(p, "RIFF", 4);
@@ -1777,10 +1873,11 @@ static uint32_t SND_DecodeImaAdpcm(const _AILSOUNDINFO_COD4 *info, const void *s
     return framesRead;
 }
 
-// Turns a loaded sound into 16-bit PCM, the only layout the OpenAL calls below use.
-// Sounds loaded from loose files already are (dr_wav, SND_LoadFromBuffer). Fastfile sounds
-// keep the retail format: IMA ADPCM, 8-bit or 16-bit PCM. Returns a Z_Malloc buffer the
-// caller frees, or null when the sound is already 16-bit PCM.
+// Turns a loaded sound into 16-bit PCM, the layout the driver keeps sounds in unless
+// snd_adpcm is on. Sounds loaded from loose files already are (dr_wav,
+// SND_LoadFromBuffer). Fastfile sounds keep the retail format: IMA ADPCM, 8-bit or
+// 16-bit PCM. Returns a Z_Malloc buffer the caller frees, or null when the sound is
+// already 16-bit PCM, and also when there is no memory, with the sound left as it was.
 static int16_t *SND_ConvertToPcm16(_AILSOUNDINFO_COD4 *info, const void *srcData)
 {
     const int format = info->format;
@@ -1793,6 +1890,8 @@ static int16_t *SND_ConvertToPcm16(_AILSOUNDINFO_COD4 *info, const void *srcData
         frames = info->data_len / channels;
 
     int16_t *pcm = (int16_t *)Z_Malloc(frames * channels * sizeof(int16_t) + sizeof(int16_t), "SND_ConvertToPcm16", 15);
+    if (!pcm)
+        return nullptr;
     uint32_t written = 0;
     if (format == SND_FORMAT_PCM && info->bits == 8)
     {
@@ -1823,12 +1922,26 @@ static int16_t *SND_ConvertToPcm16(_AILSOUNDINFO_COD4 *info, const void *srcData
     return pcm;
 }
 
-void SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
+enum SndStored
 {
-    int16_t *converted = SND_ConvertToPcm16(&mssSound->info, srcData);
-    if (converted)
-        srcData = converted;
+    SND_STORED,        // the sound has its data
+    SND_NOT_STORED,    // not a sound this way of keeping it reads
+    SND_NO_MEMORY,
+};
 
+// Keeps the sound as 16-bit PCM, at a rate the mixer plays.
+static SndStored SND_SetPcmData(MssSoundCOD4 *mssSound, const void *srcData)
+{
+    int16_t *converted = nullptr;
+    if (mssSound->info.format != SND_FORMAT_PCM || mssSound->info.bits != 16)
+    {
+        converted = SND_ConvertToPcm16(&mssSound->info, srcData);
+        if (!converted)
+            return SND_NO_MEMORY;
+        srcData = converted;
+    }
+
+    SndStored stored = SND_STORED;
     if (mssSound->info.rate > g_snd.playback_rate)
     {
         // Resample down to g_snd.playback_rate via simple decimation (nearest-frame
@@ -1848,31 +1961,185 @@ void SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
 
         uint32_t newDataLen = frameCount * channels * sizeof(int16_t);
         mssSound->data = MSS_Alloc(newDataLen, rate);
-
-        const int16_t *src16 = (const int16_t *)srcData;
-        int16_t *dst16 = (int16_t *)mssSound->data;
-        for (uint32_t i = 0; i < frameCount; ++i)
+        if (!mssSound->data && newDataLen)
         {
-            uint32_t srcFrame = (uint32_t)((uint64_t)i * srcFrameCount / frameCount);
-            for (uint32_t c = 0; c < channels; ++c)
-                dst16[i * channels + c] = src16[srcFrame * channels + c];
+            stored = SND_NO_MEMORY;
         }
+        else
+        {
+            const int16_t *src16 = (const int16_t *)srcData;
+            int16_t *dst16 = (int16_t *)mssSound->data;
+            for (uint32_t i = 0; i < frameCount; ++i)
+            {
+                uint32_t srcFrame = (uint32_t)((uint64_t)i * srcFrameCount / frameCount);
+                for (uint32_t c = 0; c < channels; ++c)
+                    dst16[i * channels + c] = src16[srcFrame * channels + c];
+            }
 
-        mssSound->info.rate = rate;
-        mssSound->info.samples = frameCount;
-        mssSound->info.data_len = newDataLen;
+            mssSound->info.rate = rate;
+            mssSound->info.samples = frameCount;
+            mssSound->info.data_len = newDataLen;
+        }
     }
     else
     {
         mssSound->data = MSS_Alloc(mssSound->info.data_len, mssSound->info.rate);
-        Com_Memcpy(mssSound->data, srcData, mssSound->info.data_len);
+        if (!mssSound->data && mssSound->info.data_len)
+            stored = SND_NO_MEMORY;
+        else
+            Com_Memcpy(mssSound->data, srcData, mssSound->info.data_len);
     }
 
     if (converted)
         Z_Free(converted, 15);
+    return stored;
+}
+
+// Keeps the sound as IMA ADPCM in whole blocks (snd_ima_adpcm.h): its own blocks when
+// it was loaded as IMA ADPCM at a rate the mixer plays, as the retail game kept them;
+// otherwise it is brought to such a rate and encoded. *asLoaded says which.
+static SndStored SND_SetPackedData(MssSoundCOD4 *mssSound, const void *srcData, bool *asLoaded)
+{
+    _AILSOUNDINFO_COD4 *info = &mssSound->info;
+    const kisak::ima_adpcm::Sound sound = {
+        (uint32_t)info->format, (uint32_t)info->bits, (uint32_t)info->channels,
+        info->rate, info->samples, info->block_size, info->data_len };
+    const kisak::ima_adpcm::PackPlan plan = kisak::ima_adpcm::PlanPack(sound, g_snd.playback_rate);
+    if (!plan.possible)
+        return SND_NOT_STORED;
+
+    // One block of the sound, decoded, when its blocks are decoded to be encoded again.
+    int16_t *scratch = nullptr;
+    if (plan.scratchSamples)
+    {
+        scratch = (int16_t *)Z_Malloc(plan.scratchSamples * sizeof(int16_t), "SND_SetPackedData", 15);
+        if (!scratch)
+            return SND_NO_MEMORY;
+    }
+    uint8_t *data = MSS_Alloc(plan.packed.bytes, plan.packed.rate);
+    if (data)
+        kisak::ima_adpcm::Pack(sound, (const uint8_t *)srcData, plan, scratch, data);
+    Z_Free(scratch, 15);
+    if (!data)
+        return SND_NO_MEMORY;
+
+    mssSound->data = data;
+    info->format = SND_FORMAT_IMA_ADPCM;
+    info->bits = 4;
+    info->rate = plan.packed.rate;
+    info->samples = plan.packed.frames;
+    info->block_size = plan.packed.blockBytes;
+    info->data_len = plan.packed.bytes;
+    *asLoaded = plan.asLoaded;
+    return SND_STORED;
+}
+
+// What SND_SetData has stored since the last report. The database thread counts, the
+// main thread reports: relaxed atomics, which only ever make a report a sound late.
+struct SndDataStats
+{
+    std::atomic<uint32_t> sounds;
+    std::atomic<uint32_t> heldBytes;      // as stored
+    std::atomic<uint32_t> pcmBytes;       // as 16-bit PCM at the stored rate
+    std::atomic<uint32_t> fromAdpcm;      // loaded as IMA ADPCM
+    std::atomic<uint32_t> from16;         // as 16-bit PCM
+    std::atomic<uint32_t> from8;          // as 8-bit PCM
+    std::atomic<uint32_t> asLoaded;       // IMA ADPCM kept as loaded
+    std::atomic<uint32_t> encoded;        // encoded to IMA ADPCM
+    std::atomic<uint32_t> noMemory;
+};
+static SndDataStats s_dataStats;
+static uint32_t s_dataReportSounds;       // s_dataStats.sounds when the main thread last looked
+static int s_dataReportTime;              // g_snd.time when that last changed
+
+static void SND_CountUp(std::atomic<uint32_t> &counter, uint32_t by)
+{
+    counter.fetch_add(by, std::memory_order_relaxed);
+}
+
+static uint32_t SND_TakeCount(std::atomic<uint32_t> &counter)
+{
+    return counter.exchange(0, std::memory_order_relaxed);
+}
+
+// One line for each burst of loading, a second after its last sound: how many sounds,
+// what they take, and what they would take as 16-bit PCM. Printed with snd_adpcm or
+// snd_alDebug, and always when a sound found no memory.
+static void SND_ReportLoadedData()
+{
+    const uint32_t sounds = s_dataStats.sounds.load(std::memory_order_relaxed);
+    if (sounds != s_dataReportSounds)
+    {
+        s_dataReportSounds = sounds;
+        s_dataReportTime = g_snd.time;
+        return;
+    }
+    if (!sounds || g_snd.time - s_dataReportTime < 1000)
+        return;
+
+    s_dataReportSounds = 0;
+    const uint32_t count = SND_TakeCount(s_dataStats.sounds);
+    const uint32_t held = SND_TakeCount(s_dataStats.heldBytes);
+    const uint32_t pcm = SND_TakeCount(s_dataStats.pcmBytes);
+    const uint32_t fromAdpcm = SND_TakeCount(s_dataStats.fromAdpcm);
+    const uint32_t from16 = SND_TakeCount(s_dataStats.from16);
+    const uint32_t from8 = SND_TakeCount(s_dataStats.from8);
+    const uint32_t asLoaded = SND_TakeCount(s_dataStats.asLoaded);
+    const uint32_t encoded = SND_TakeCount(s_dataStats.encoded);
+    const uint32_t noMemory = SND_TakeCount(s_dataStats.noMemory);
+    if (!s_keepSoundsPacked.load(std::memory_order_relaxed) && !noMemory && !SND_AlDebug(1))
+        return;
+    Com_Printf(
+        CON_CHANNEL_SOUND,
+        "sound data: %u sounds loaded, in %u KB (%u KB as 16-bit PCM); they came as %u IMA ADPCM, %u 16-bit and %u 8-bit; "
+        "%u kept as IMA ADPCM, %u encoded to it, %u found no memory\n",
+        count,
+        (held + 1023) / 1024,
+        (pcm + 1023) / 1024,
+        fromAdpcm,
+        from16,
+        from8,
+        asLoaded,
+        encoded,
+        noMemory);
+}
+
+// Takes a loaded sound's data into the driver's own memory. A sound that finds no
+// memory is left without data and never plays (SND_StartAlias2DSample, 3DSample).
+void SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
+{
+    const int loadedFormat = mssSound->info.format;
+    const int loadedBits = mssSound->info.bits;
+    const uint32_t loadedBytes = mssSound->info.data_len;
+
+    bool asLoaded = false;
+    SndStored stored = SND_NOT_STORED;
+    if (s_keepSoundsPacked.load(std::memory_order_relaxed))
+        stored = SND_SetPackedData(mssSound, srcData, &asLoaded);
+    const bool packed = stored == SND_STORED;
+    if (stored == SND_NOT_STORED)
+        stored = SND_SetPcmData(mssSound, srcData);
+
+    if (stored == SND_NO_MEMORY)
+    {
+        // Only the first few are printed; the report line counts them all.
+        if (s_dataStats.noMemory.load(std::memory_order_relaxed) < 4)
+            Com_PrintWarning(CON_CHANNEL_SOUND, "WARNING: no memory for a loaded sound of %u bytes; it will not play\n", loadedBytes);
+        SND_CountUp(s_dataStats.noMemory, 1);
+        mssSound->data = nullptr;
+        mssSound->info.data_len = 0;
+        mssSound->info.samples = 0;
+    }
 
     mssSound->info.data_ptr = mssSound->data;
     mssSound->info.initial_ptr = mssSound->data;
+
+    SND_CountUp(s_dataStats.heldBytes, mssSound->info.data_len);
+    SND_CountUp(s_dataStats.pcmBytes, mssSound->info.samples * (uint32_t)mssSound->info.channels * sizeof(int16_t));
+    SND_CountUp(loadedFormat == SND_FORMAT_IMA_ADPCM ? s_dataStats.fromAdpcm : loadedBits == 8 ? s_dataStats.from8 : s_dataStats.from16, 1);
+    if (packed)
+        SND_CountUp(asLoaded ? s_dataStats.asLoaded : s_dataStats.encoded, 1);
+    SND_CountUp(s_dataStats.sounds, 1);
 }
 
 #ifdef KISAK_SP

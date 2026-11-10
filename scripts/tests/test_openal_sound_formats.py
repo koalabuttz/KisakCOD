@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
-"""Check that the OpenAL sound path turns fastfile sounds into 16-bit PCM.
+"""Check how the OpenAL sound path takes fastfile sounds into memory.
 
 Retail fastfiles store loaded sounds in the Miles formats: IMA ADPCM (format 17),
-8-bit PCM or 16-bit PCM. The OpenAL driver hands every loaded sound to OpenAL as 16-bit
-PCM, so SND_SetData must decode the others first; before this check existed it copied
-ADPCM blocks through unchanged and they played as noise.
+8-bit PCM or 16-bit PCM. By default the OpenAL driver hands every loaded sound to
+OpenAL as 16-bit PCM, so SND_SetData must decode the others first; before this check
+existed it copied ADPCM blocks through unchanged and they played as noise.
 
-The production helpers are extracted from src/sound/snd_driver_openal.cpp and compiled
+With snd_adpcm the driver keeps sounds as IMA ADPCM instead, a quarter of the size
+(src/sound/snd_ima_adpcm.h; the PS Vita client's default). Either way a sound that
+finds no memory must end up without data and with a warning, not with a write through
+a null pointer: that crashed the PS Vita client when its 64 MB heap ran out.
+
+The production functions are extracted from src/sound/snd_driver_openal.cpp and compiled
 with the vendored dr_wav. A small reference IMA ADPCM encoder (Microsoft block layout)
-writes a sine wave, and the decoded result must match it closely. No game assets are used.
+writes a sine wave, and the decoded result must match it closely. Allocations can be made
+to fail one at a time. No game assets are used.
 """
 
 from pathlib import Path
@@ -34,42 +40,91 @@ def extract(source: str, pattern: str, name: str) -> str:
         elif token.group() == "}":
             depth -= 1
             if depth == 0:
-                return source[signature.start():token.end()]
+                end = token.end()
+                if source.startswith(";", end):
+                    end += 1
+                return source[signature.start():end]
     raise ValueError(f"{name} body was not terminated")
 
 
 def production_code() -> str:
     source = SOURCE.read_text(errors="replace")
     header = HEADER.read_text(errors="replace")
-    info = re.search(r"struct _AILSOUNDINFO_COD4\b[^{;]*\{.*?\};", header, re.DOTALL)
-    if info is None:
-        raise ValueError("_AILSOUNDINFO_COD4 definition was not found")
+    parts = []
+    for name in ("_AILSOUNDINFO_COD4", "MssSoundCOD4"):
+        struct = re.search(rf"struct {name}\b[^{{;]*\{{.*?\}};", header, re.DOTALL)
+        if struct is None:
+            raise ValueError(f"{name} definition was not found")
+        parts.append(struct.group(0))
     defines = "\n".join(re.findall(r"^#define SND_FORMAT_\w+ \d+$", source, re.MULTILINE))
     if "SND_FORMAT_IMA_ADPCM" not in defines:
         raise ValueError("SND_FORMAT_* defines were not found")
-    parts = [info.group(0), defines]
-    for name in ("SND_PutLE16", "SND_PutLE32", "SND_DecodeImaAdpcm", "SND_ConvertToPcm16"):
+    parts.append(defines)
+    for name in ("s_keepSoundsPacked", "s_dataStats", "s_dataReportSounds", "s_dataReportTime"):
+        line = re.search(rf"^static [^\n(]*\b{name};", source, re.MULTILINE)
+        if line is None:
+            raise ValueError(f"{name} was not found")
+        if name == "s_dataStats":
+            parts.append(extract(source, r"^struct SndDataStats\s*\{", "SndDataStats"))
+        parts.append(line.group(0))
+    parts.append(extract(source, r"^enum SndStored\s*\{", "SndStored"))
+    for name in ("SND_PutLE16", "SND_PutLE32", "SND_DecodeImaAdpcm", "SND_ConvertToPcm16", "SND_SetPcmData",
+                 "SND_SetPackedData", "SND_CountUp", "SND_TakeCount", "SND_ReportLoadedData"):
         parts.append(extract(source, rf"^static \w+ \*?{name}\([^)]*\)\s*\{{", name))
+    parts.append(extract(source, r"^void SND_SetData\([^)]*\)\s*\{", "SND_SetData"))
     return "\n\n".join(parts)
 
 
 HARNESS = r"""
 #define DR_WAV_IMPLEMENTATION
 #include <dr_libs/dr_wav.h>
+#include <sound/snd_ima_adpcm.h>
+#include <atomic>
 #include <cmath>
 #include <cstdarg>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 #include <vector>
 
 enum { CON_CHANNEL_SOUND = 9 };
 static int warnings = 0;
 static int liveAllocations = 0;
-void *Z_Malloc(int size, const char *, int) { ++liveAllocations; return calloc(1, size); }
+// The allocation that fails: 1 is the next one, 0 none. Z_Malloc and MSS_Alloc share
+// the count, as they share the heap.
+static int failAllocation = 0;
+static bool AllocationFails() { return failAllocation && --failAllocation == 0; }
+void *Z_Malloc(int size, const char *, int) {
+    if (AllocationFails()) return nullptr;
+    ++liveAllocations;
+    return calloc(1, size);
+}
 void Z_Free(void *ptr, int) { if (ptr) { --liveAllocations; free(ptr); } }
+// The sound's own memory, exactly as large as asked for (the sanitizer watches).
+static std::vector<uint8_t *> soundMemory;
+uint8_t *MSS_Alloc(uint32_t bytes, uint32_t) {
+    if (AllocationFails()) return nullptr;
+    soundMemory.push_back((uint8_t *)malloc(bytes));
+    return soundMemory.back();
+}
+void Com_Memcpy(void *to, const void *from, size_t bytes) { memcpy(to, from, bytes); }
+void Com_PrintWarning(int, const char *, ...) __attribute__((format(printf, 2, 3)));
 void Com_PrintWarning(int, const char *, ...) { ++warnings; }
+static std::string printed;
+void Com_Printf(int, const char *, ...) __attribute__((format(printf, 2, 3)));
+void Com_Printf(int, const char *format, ...) {
+    char line[512];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(line, sizeof(line), format, args);
+    va_end(args);
+    printed += line;
+}
+static struct { uint32_t playback_rate; int time; } g_snd;
+static bool alDebug = false;
+static bool SND_AlDebug(int) { return alDebug; }
 
 %(production)s
 
@@ -173,6 +228,226 @@ static void CheckAdpcm(int channels, int blockSize, uint32_t frames) {
     Z_Free(out, 15);
 }
 
+static std::vector<int16_t> Sine(uint32_t frames, int channels) {
+    std::vector<int16_t> pcm(frames * channels);
+    for (uint32_t i = 0; i < frames; ++i)
+        for (int c = 0; c < channels; ++c)
+            pcm[i * channels + c] = (int16_t)(12000.0 * std::sin(i * (0.031 + 0.017 * c)));
+    return pcm;
+}
+
+static MssSoundCOD4 Sound(int format, int bits, int channels, uint32_t rate, uint32_t frames, uint32_t blockSize, uint32_t bytes) {
+    MssSoundCOD4 sound{};
+    sound.info.format = format;
+    sound.info.bits = bits;
+    sound.info.channels = channels;
+    sound.info.rate = rate;
+    sound.info.samples = frames;
+    sound.info.block_size = blockSize;
+    sound.info.data_len = bytes;
+    sound.data = (uint8_t *)(uintptr_t)0x1234; // what the fastfile left there
+    return sound;
+}
+
+static bool HasNoData(const MssSoundCOD4 &sound) {
+    return sound.data == nullptr && sound.info.data_ptr == nullptr && sound.info.initial_ptr == nullptr
+        && sound.info.data_len == 0 && sound.info.samples == 0;
+}
+
+// How close the stored sound is to `pcm`, every 2^shift-th frame of it, in dB.
+static double StoredSnr(const MssSoundCOD4 &sound, const std::vector<int16_t> &pcm, int shift) {
+    const int channels = sound.info.channels;
+    std::vector<int16_t> stored;
+    if (sound.info.format == SND_FORMAT_IMA_ADPCM) {
+        const uint32_t perBlock = kisak::ima_adpcm::BlockFrames(sound.info.block_size, channels);
+        stored.resize((size_t)(sound.info.data_len / sound.info.block_size) * perBlock * channels);
+        for (uint32_t block = 0; block < sound.info.data_len / sound.info.block_size; ++block)
+            kisak::ima_adpcm::DecodeBlock(sound.data + block * sound.info.block_size, sound.info.block_size, channels,
+                                          stored.data() + (size_t)block * perBlock * channels, perBlock);
+    } else {
+        stored.resize(sound.info.data_len / 2);
+        memcpy(stored.data(), sound.data, stored.size() * 2);
+    }
+    if (stored.size() < (size_t)sound.info.samples * channels)
+        return -1;
+    double signal = 0, noise = 0;
+    for (uint32_t i = 0; i < sound.info.samples; ++i)
+        for (int c = 0; c < channels; ++c) {
+            const double want = pcm[((size_t)i << shift) * channels + c];
+            signal += want * want;
+            noise += (want - stored[(size_t)i * channels + c]) * (want - stored[(size_t)i * channels + c]);
+        }
+    return noise > 0 ? 10 * std::log10(signal / noise) : 99.0;
+}
+
+// SND_SetData whole, both ways of keeping a sound, with the mixer at snd_khz 22
+// (it plays up to 33075 Hz) and with allocations failing one at a time.
+static void CheckSetData() {
+    g_snd.playback_rate = 33075;
+    const std::vector<int16_t> mono = Sine(6000, 1), stereo = Sine(6000, 2);
+    const std::vector<uint8_t> adpcmMono = EncodeIma(mono, 1, 512, 6000);
+    const std::vector<uint8_t> adpcmStereo = EncodeIma(stereo, 2, 2048, 6000);
+    std::vector<uint8_t> eight(6000);
+    std::vector<int16_t> eightWide(6000);
+    for (int i = 0; i < 6000; ++i) {
+        eight[i] = (uint8_t)(128 + 90.0 * std::sin(i * 0.031));
+        eightWide[i] = (int16_t)((eight[i] - 128) * 256);
+    }
+
+    // ---- as 16-bit PCM (the default) ----
+    s_keepSoundsPacked = false;
+    {
+        MssSoundCOD4 sound = Sound(SND_FORMAT_IMA_ADPCM, 4, 1, 22050, 6000, 512, (uint32_t)adpcmMono.size());
+        SND_SetData(&sound, (void *)adpcmMono.data());
+        Check(sound.info.format == SND_FORMAT_PCM && sound.info.bits == 16 && sound.info.rate == 22050
+                  && sound.info.samples == 6000 && sound.info.data_len == 12000 && sound.data == soundMemory.back()
+                  && sound.info.data_ptr == sound.data && sound.info.initial_ptr == sound.data
+                  && StoredSnr(sound, mono, 0) > 30,
+              "by default IMA ADPCM is stored as 16-bit PCM");
+    }
+    {
+        MssSoundCOD4 sound = Sound(SND_FORMAT_PCM, 16, 2, 44100, 6000, 4, 24000);
+        SND_SetData(&sound, (void *)stereo.data());
+        Check(sound.info.format == SND_FORMAT_PCM && sound.info.rate == 22050 && sound.info.samples == 3000
+                  && sound.info.data_len == 12000 && StoredSnr(sound, stereo, 1) > 90,
+              "by default 16-bit PCM above the mixer's rate is halved");
+    }
+    for (int fail = 1; fail <= 3; ++fail) {
+        // 1: the 16-bit copy. 2: dr_wav's copy of the blocks. 3: the sound's own memory.
+        MssSoundCOD4 sound = Sound(SND_FORMAT_IMA_ADPCM, 4, 1, 44100, 6000, 512, (uint32_t)adpcmMono.size());
+        const int before = warnings;
+        failAllocation = fail;
+        SND_SetData(&sound, (void *)adpcmMono.data());
+        char what[120];
+        std::snprintf(what, sizeof(what), "by default a sound whose allocation %%d fails has no data, or is silent", fail);
+        // Without dr_wav's copy the sound is stored, as silence: nothing could be decoded.
+        const bool silent = fail == 2 && sound.data && sound.info.samples == 3000 && sound.data[0] == 0 && sound.data[5999] == 0;
+        Check(failAllocation == 0 && warnings > before && (silent || HasNoData(sound)) && liveAllocations == 0, what);
+    }
+    {
+        MssSoundCOD4 sound = Sound(SND_FORMAT_PCM, 16, 1, 22050, 6000, 2, 12000);
+        const int before = warnings;
+        failAllocation = 1;
+        SND_SetData(&sound, (void *)mono.data());
+        Check(failAllocation == 0 && warnings == before + 1 && HasNoData(sound),
+              "by default a 16-bit sound that finds no memory has no data");
+    }
+    {
+        // A sound with nothing in it is not a failure, whatever malloc(0) says.
+        MssSoundCOD4 sound = Sound(SND_FORMAT_PCM, 16, 1, 22050, 0, 2, 0);
+        const int before = warnings;
+        SND_SetData(&sound, (void *)mono.data());
+        Check(warnings == before && sound.info.data_len == 0, "an empty sound loads without a warning");
+    }
+    // Two sounds of 12000 bytes and the 6000 of the one stored as silence.
+    printed.clear();
+    g_snd.time = 1000;
+    SND_ReportLoadedData();
+    g_snd.time = 5000;
+    SND_ReportLoadedData();
+    Check(printed.find("sound data: 7 sounds loaded, in 30 KB (30 KB as 16-bit PCM); they came as 4 IMA ADPCM, 3 16-bit and 0 8-bit; "
+                       "0 kept as IMA ADPCM, 0 encoded to it, 3 found no memory") == 0,
+          "the report counts what loaded, and is printed when a sound found no memory");
+    if (failures) std::printf("     %%s", printed.c_str());
+
+    // ---- as IMA ADPCM (snd_adpcm) ----
+    s_keepSoundsPacked = true;
+    {
+        MssSoundCOD4 sound = Sound(SND_FORMAT_IMA_ADPCM, 4, 1, 22050, 6000, 512, (uint32_t)adpcmMono.size());
+        SND_SetData(&sound, (void *)adpcmMono.data());
+        Check(sound.info.format == SND_FORMAT_IMA_ADPCM && sound.info.bits == 4 && sound.info.channels == 1
+                  && sound.info.rate == 22050 && sound.info.samples == 6000 && sound.info.block_size == 512
+                  && sound.info.data_len == adpcmMono.size() && sound.data == soundMemory.back()
+                  && memcmp(sound.data, adpcmMono.data(), adpcmMono.size()) == 0
+                  && sound.info.data_ptr == sound.data && sound.info.initial_ptr == sound.data,
+              "with snd_adpcm IMA ADPCM at the mixer's rate is kept as it was loaded");
+    }
+    {
+        // Above the mixer's rate: decoded, halved and encoded again, in the 256-byte
+        // blocks a channel the encoder writes.
+        MssSoundCOD4 sound = Sound(SND_FORMAT_IMA_ADPCM, 4, 2, 44100, 6000, 2048, (uint32_t)adpcmStereo.size());
+        SND_SetData(&sound, (void *)adpcmStereo.data());
+        Check(sound.info.format == SND_FORMAT_IMA_ADPCM && sound.info.channels == 2 && sound.info.rate == 22050
+                  && sound.info.samples == 3000 && sound.info.block_size == 512 && sound.info.data_len == 6 * 512
+                  && StoredSnr(sound, stereo, 1) > 25 && liveAllocations == 0,
+              "with snd_adpcm IMA ADPCM above the mixer's rate is halved and encoded again");
+    }
+    {
+        MssSoundCOD4 sound = Sound(SND_FORMAT_PCM, 16, 1, 22050, 6000, 2, 12000);
+        SND_SetData(&sound, (void *)mono.data());
+        Check(sound.info.format == SND_FORMAT_IMA_ADPCM && sound.info.bits == 4 && sound.info.rate == 22050
+                  && sound.info.samples == 6000 && sound.info.block_size == 256 && sound.info.data_len == 12 * 256
+                  && StoredSnr(sound, mono, 0) > 30,
+              "with snd_adpcm 16-bit PCM is encoded: 3 KB where 12 KB were");
+    }
+    {
+        MssSoundCOD4 sound = Sound(SND_FORMAT_PCM, 8, 1, 11025, 6000, 1, 6000);
+        SND_SetData(&sound, eight.data());
+        Check(sound.info.format == SND_FORMAT_IMA_ADPCM && sound.info.rate == 11025 && sound.info.samples == 6000
+                  && sound.info.data_len == 12 * 256 && StoredSnr(sound, eightWide, 0) > 30,
+              "with snd_adpcm 8-bit PCM is encoded");
+    }
+    {
+        // Not a sound the packer reads: the 16-bit path takes it, as before.
+        const uint8_t src[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+        MssSoundCOD4 sound = Sound(2, 4, 1, 22050, 4, 8, 8);
+        const int before = warnings;
+        SND_SetData(&sound, (void *)src);
+        Check(sound.info.format == SND_FORMAT_PCM && sound.info.bits == 16 && sound.info.data_len == 8 && warnings == before + 1,
+              "with snd_adpcm an unknown format is still silence with a warning");
+    }
+    for (int fail = 1; fail <= 2; ++fail) {
+        // 1: the block of scratch. 2: the sound's own memory.
+        MssSoundCOD4 sound = Sound(SND_FORMAT_IMA_ADPCM, 4, 2, 44100, 6000, 2048, (uint32_t)adpcmStereo.size());
+        const int before = warnings;
+        failAllocation = fail;
+        SND_SetData(&sound, (void *)adpcmStereo.data());
+        Check(failAllocation == 0 && warnings == before + 1 && HasNoData(sound) && liveAllocations == 0,
+              "with snd_adpcm a sound that finds no memory has no data");
+    }
+    // Four sounds of 3072 bytes where 12000 were, and the unknown one's 8.
+    printed.clear();
+    g_snd.time = 9000;
+    SND_ReportLoadedData();
+    Check(printed.empty(), "the report waits for loading to pause");
+    g_snd.time = 9999;
+    SND_ReportLoadedData();
+    Check(printed.empty(), "  for a second");
+    g_snd.time = 10000;
+    SND_ReportLoadedData();
+    Check(printed == "sound data: 7 sounds loaded, in 13 KB (47 KB as 16-bit PCM); they came as 4 IMA ADPCM, 2 16-bit and 1 8-bit; "
+                     "1 kept as IMA ADPCM, 3 encoded to it, 2 found no memory\n",
+          "the report says what the sounds take and what they would take as 16-bit PCM");
+    if (failures) std::printf("     %%s", printed.c_str());
+    printed.clear();
+    g_snd.time = 20000;
+    SND_ReportLoadedData();
+    SND_ReportLoadedData();
+    Check(printed.empty(), "and is printed once");
+
+    // Without snd_adpcm, snd_alDebug and failures there is no line.
+    s_keepSoundsPacked = false;
+    {
+        MssSoundCOD4 sound = Sound(SND_FORMAT_PCM, 16, 1, 22050, 6000, 2, 12000);
+        SND_SetData(&sound, (void *)mono.data());
+    }
+    g_snd.time = 30000;
+    SND_ReportLoadedData();
+    g_snd.time = 40000;
+    SND_ReportLoadedData();
+    Check(printed.empty(), "by default the report stays quiet");
+    alDebug = true;
+    {
+        MssSoundCOD4 sound = Sound(SND_FORMAT_PCM, 16, 1, 22050, 6000, 2, 12000);
+        SND_SetData(&sound, (void *)mono.data());
+    }
+    g_snd.time = 50000;
+    SND_ReportLoadedData();
+    g_snd.time = 60000;
+    SND_ReportLoadedData();
+    Check(printed.find("sound data: 1 sounds loaded, in 12 KB (12 KB as 16-bit PCM)") == 0, "snd_alDebug prints it");
+}
+
 int main() {
     CheckAdpcm(1, 512, 5000);
     CheckAdpcm(1, 1024, 2041);
@@ -215,6 +490,11 @@ int main() {
         Z_Free(out, 15);
     }
     Check(liveAllocations == 0, "temporary buffers are freed");
+
+    CheckSetData();
+    Check(liveAllocations == 0, "temporary buffers are freed after SND_SetData");
+    for (uint8_t *memory : soundMemory)
+        free(memory);
     return failures ? 1 : 0;
 }
 """
@@ -227,8 +507,9 @@ def main() -> int:
         binary = Path(tmp) / "sound_formats"
         program.write_text(code)
         subprocess.run(
-            ["c++", "-std=c++17", "-O1", "-Wall", "-Wno-unused-function", "-I", str(ROOT / "deps"),
-             str(program), "-o", str(binary)],
+            ["c++", "-std=c++20", "-O1", "-g", "-Wall", "-Wno-unused-function",
+             "-fsanitize=address,undefined", "-fno-sanitize-recover=all",
+             "-I", str(ROOT / "src"), "-isystem", str(ROOT / "deps"), str(program), "-o", str(binary)],
             check=True,
         )
         result = subprocess.run([str(binary)])

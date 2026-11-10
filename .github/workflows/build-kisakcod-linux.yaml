@@ -397,14 +397,16 @@ jobs:
           set -euo pipefail
           python3 scripts/tests/test_client_compile_census.py
 
-      - name: Check OpenAL channel stop and stream restart
-        # Runs the sound driver's channel-stop and stream-refill code against the
-        # system OpenAL Soft (libopenal-dev above) through its offline loopback
-        # device. No sound card, no game data.
+      - name: Check OpenAL channel stop, stream restart and packed sounds
+        # Runs the sound driver's channel-stop and stream-refill code, and the
+        # code that hands OpenAL a sound kept as IMA ADPCM (snd_adpcm), against
+        # the system OpenAL Soft (libopenal-dev above) through its offline
+        # loopback device. No sound card, no game data.
         shell: bash
         run: |
           set -euo pipefail
           python3 scripts/tests/test_openal_channel_stop.py
+          python3 scripts/tests/test_openal_packed_sounds.py
 
       - name: Run client compile census
         timeout-minutes: 20
