@@ -7,7 +7,7 @@ an aarch64 build compiles and passes the asset-free checks, see
 server, game, cgame, client, UI, sound and renderer, as the Windows `KisakCOD-mp`
 target builds them. It is opt-in and off by default. It reached the
 player-spawn milestone: a listen server whose own client joins it over the
-engine's in-process loopback (see [linux-client.md](linux-client.md#joining-servers-local-yes-remote-no)).
+engine's in-process loopback (see [linux-client.md](linux-client.md#joining-servers)).
 
 Status: it links and starts, and its game window takes keyboard and mouse
 input. Without game files it stops where the engine needs them. On a developer
@@ -38,6 +38,11 @@ CI links stand-ins for the last two parts instead: the device probe's
 whose `alcOpenDevice` finds no device. For an x86_64 build, add
 `-DKISAK_LINUX_ARCH=x86_64` and use x86_64 builds of the same libraries
 ([linux-x64.md](linux-x64.md#x86_64-multiplayer-client)).
+
+The client draws through DXVK Native by default. `-DKISAK_BUILD_VULKAN_BACKEND=ON`
+(with the Vulkan options it needs) also links this project's own Vulkan back
+end, chosen at start with `+set r_backend vulkan`; DXVK stays the default
+([vulkan-d3d9-front.md](vulkan-d3d9-front.md#in-the-game-r_backend-vulkan)).
 
 For profiling, add `-DKISAK_LINUX_TRACY=ON`. It builds `KisakCOD-mp`,
 `KisakCOD-sp` and `KisakCOD-dedi` with the Tracy profiler (the version
@@ -175,9 +180,11 @@ Functions that only raw-asset loading (`useFastFile 0`) or an attached remote
 debugger reaches abort with their name. `Material_FreeAll` runs its fast-file
 branch: it releases the technique sets and nothing else.
 
-Joining a remote server is refused, because the default build has no Steam
-ticket provider
-([linux-client.md](linux-client.md#joining-servers-local-yes-remote-no)).
+The default build has no Steam ticket provider, so it joins a remote server
+only with a key code, and only where the server accepts unverified GUIDs
+(`sv_allowUnverifiedGuids 1`, [key-codes.md](key-codes.md)). With no key code
+the join is refused before any packet is sent
+([linux-client.md](linux-client.md#joining-servers)).
 Build with `-DKISAK_LINUX_STEAM=ON` to authenticate through the running Steam
 client instead ([linux-steam.md](linux-steam.md)).
 
@@ -246,7 +253,10 @@ evidence. All three pass as of master `998344d`:
    minutes of play printed about 140 prediction misses, 1.2 units on average
    and 7.7 at most, and about 190 prediction errors. The Windows build over
    similar play (2026-11-04, a desktop PC) printed 32 misses, 0.47 units on
-   average, and 34 errors; the gap is being investigated.
+   average, and 34 errors. Later laptop runs put the difference down to what
+   happened in play (concussion grenades, obstacles), not to the Linux build:
+   by hand both builds miss about as often per minute
+   ([status](status.md#prediction)).
 
 The x86_64 build passed the same steps on the same laptop on 2026-11-04,
 including a clean quit ([linux-x64.md](linux-x64.md#x86_64-multiplayer-client)).

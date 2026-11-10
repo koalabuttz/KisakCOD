@@ -7,7 +7,7 @@ units compiled into small asset-free tests, a discovery diagnostic and an SDL2
 window/input shell. They came before the game client and are still built and
 run in CI. The playable client is a separate target, `KisakCOD-mp`
 ([linux-mp-client.md](linux-mp-client.md)); this page still owns the rule for
-[joining servers](#joining-servers-local-yes-remote-no).
+[joining servers](#joining-servers).
 
 The opt-in foundation includes ten full production client translation units,
 asset-free runtime integration tests, a runnable Linux discovery diagnostic, and
@@ -243,13 +243,20 @@ sections, contradictory totals and nonzero process exits. The default build
 still exposes none of the optional client targets and the dedicated executable
 fingerprint is checked even when a client build fails.
 
-## Joining servers: local yes, remote no
+## Joining servers
+
+A listen server's own client always joins. A remote server is joined only
+with something to authenticate with: a Steam ticket in a build with
+`KISAK_LINUX_STEAM` ([linux-steam.md](linux-steam.md)), or a key code GUID for
+servers that accept unverified GUIDs ([key-codes.md](key-codes.md)). With
+neither, the client refuses before any packet is sent, as described here.
 
 `src/client_mp/cl_main_pc_mp.cpp` used to stop the Linux compile with
-`#error Steam Auth for Arch`. Its Linux branch now fails closed instead:
-`CL_CDKeyValidate` prints "Client authentication unavailable" and returns false,
-so `connect <address>` drops with `EXE_ERR_INVALID_CD_KEY` before any packet is
-sent. Windows keeps its Steam path unchanged.
+`#error Steam Auth for Arch`. Its Linux branch fails closed instead:
+`CL_CDKeyValidate` asks `CL_PrepareRemoteAuth` (`cl_auth.cpp`) for a Steam
+ticket or a key code; when there is neither it prints "Client authentication
+unavailable" and returns false, so `connect <address>` drops with
+`EXE_ERR_INVALID_CD_KEY` before any packet is sent.
 
 `CL_Connect_f` only asks for authentication when the address is not local.
 `connect localhost` (and a listen server's own client after `map`/`devmap`)
@@ -270,8 +277,8 @@ remote IPv4 address, `127.0.0.1:28960` and bare `127.0.0.1` all resolve to
 that an already connected client is left alone. Making the Linux branch accept
 fails seven of its 25 checks.
 
-Joining a remote server from Linux needs a real ticket provider; until then it
-stays refused rather than sending an unauthenticated challenge.
+A client with neither a Steam ticket nor a key code stays refused rather than
+sending an unauthenticated challenge.
 
 ## What still blocks a real native client
 
