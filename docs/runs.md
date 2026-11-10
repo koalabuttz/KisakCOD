@@ -209,7 +209,7 @@ A Vita3K or console start should end as soon as it has its numbers:
 `vita_assertExit` are described under
 [Runs nobody watches](vita.md#runs-nobody-watches).
 
-The hosted `PS Vita multiplayer client RelWithDebInfo` job uploads the ELF with
+The hosted `PS Vita multiplayer client` job uploads its RelWithDebInfo ELF with
 its symbols beside the `.vpk` (`KisakCOD-mp.elf` in the artifact
 `KisakCOD-mp-vita-RelWithDebInfo`), so a crash dump's addresses can be named
 with `arm-vita-eabi-addr2line -f -C -i -e KisakCOD-mp.elf <address>` on the

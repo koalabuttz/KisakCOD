@@ -951,6 +951,27 @@ class CiTriggerTests(unittest.TestCase):
                 self.assertIn(f'python3 {path}', vita_commands)
         self.assertIn('python3 scripts/tools/strip_cdecl.py --check', vita_commands)
 
+    def test_each_vita_job_builds_both_configurations_and_keeps_its_artifact_name(self):
+        # One job per program; the machines fetch the RelWithDebInfo .vpk by
+        # its artifact name, so the names stay what they were.
+        jobs = self.vita['jobs']
+        assert_both_configurations_in_one_job(self, jobs['vita_dedicated'], [
+            'Configure PS Vita', 'Build PS Vita KisakCOD-dedi and its .vpk'])
+        assert_both_configurations_in_one_job(self, jobs['vita_mp_client'], [
+            'Configure PS Vita client', 'Build PS Vita KisakCOD-mp and its .vpk'])
+        uploads = {job: next(step for step in jobs[job]['steps']
+                             if step.get('uses', '').startswith('actions/upload-artifact@'))
+                   for job in ('vita_dedicated', 'vita_mp_client')}
+        self.assertEqual(uploads['vita_dedicated']['with']['name'], 'KisakCOD-dedi-vita-RelWithDebInfo')
+        self.assertEqual(uploads['vita_dedicated']['with']['path'], 'out/vita-RelWithDebInfo/KisakCOD-dedi.vpk')
+        self.assertEqual(uploads['vita_mp_client']['with']['name'], 'KisakCOD-mp-vita-RelWithDebInfo')
+        for name in ('out/vita-mp-RelWithDebInfo/KisakCOD-mp.vpk', 'out/vita-mp-RelWithDebInfo/KisakCOD-mp.elf',
+                     'out/vita-mp-RelWithDebInfo/KisakCOD-gxm-probe.vpk'):
+            self.assertIn(name, uploads['vita_mp_client']['with']['path'])
+        for upload in uploads.values():
+            self.assertNotIn('if', upload)
+            self.assertEqual(upload['with']['if-no-files-found'], 'error')
+
     def test_the_linux_workflow_runs_when_the_vita_workflow_changes(self):
         # This file checks the Vita workflow, and the Linux native job runs it.
         for event in ('push', 'pull_request'):

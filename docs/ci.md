@@ -1,7 +1,7 @@
 # What hosted CI runs, and when
 
 Hosted runners cost this public repository nothing, but the account runs about
-20 jobs at a time (5 on macOS). One full run is about 38 jobs and 150 runner
+20 jobs at a time (5 on macOS). One full run is about 36 jobs and 150 runner
 minutes (Linux 74, Windows 43, macOS 30), so with a dozen pull requests open
 the checks of each wait for the others. The rules below keep a pull request's
 run to what is likely to tell something new, and leave the full run to master.
@@ -14,7 +14,7 @@ of them.
 | Linux workflow | every job; the window jobs on SDL3 only | every job, SDL2 and SDL3 |
 | Windows | Win32 Debug and Release, Vulkan probe, regression checks | also MSVC x64 and MSVC ARM64 |
 | macOS | Apple silicon (arm64) | also Intel (x86_64) |
-| PS Vita workflow | dedicated server and client, Debug and RelWithDebInfo, and the port's host tests | the same |
+| PS Vita workflow | dedicated server and client, each one job building Debug and RelWithDebInfo, and the port's host tests | the same |
 | Upstream patch queue | only when `docs/upstream` or its tool changes: the patches apply, and the patched upstream tree builds with MSVC | the same |
 
 - **Drafts.** No job runs while a pull request is a draft. Marking it ready for
@@ -35,14 +35,16 @@ of them.
   start only the one-job **Machine run scripts** workflow (`run-scripts.yaml`);
   on 2026-11-10 a PowerShell-only change had started 26 Linux and PS Vita
   jobs. The filters look at the whole pull request, not the last push.
-- **PS Vita.** The port's four build jobs and its host tests are their own
+- **PS Vita.** The port's two build jobs and its host tests are their own
   workflow (`build-kisakcod-vita.yaml`; they were part of the Linux one). A
   change to the port's own files only (`src/vita`, `src/gfx_gxm`,
   `scripts/platform/vita`, `tests/vita_*`, `scripts/tests/test_vita_*.py`,
-  `scripts/ci/install-vitasdk.sh`) starts that workflow alone: four jobs
+  `scripts/ci/install-vitasdk.sh`) starts that workflow alone: two jobs
   where a push used to start about thirty Linux jobs that neither compile nor
-  read those files. A change to shared source starts both. The `.vpk`
-  artifacts keep their names; fetch them from the run of the **PS Vita server
+  read those files. A change to shared source starts both. Each job builds
+  Debug and RelWithDebInfo (below) and uploads the RelWithDebInfo `.vpk`; the
+  artifacts keep their names (`KisakCOD-dedi-vita-RelWithDebInfo`,
+  `KisakCOD-mp-vita-RelWithDebInfo`); fetch them from the run of the **PS Vita server
   and client** workflow (`gh run list --workflow build-kisakcod-vita.yaml`).
   A new host test for the port goes in the Vita client job, and a file a
   Linux job needs must not sit under those paths; `CiTriggerTests` checks
@@ -70,8 +72,8 @@ of them.
   Linux job that took a few minutes per configuration builds and tests Debug
   and then RelWithDebInfo itself: the SDL window, the native D3D9 boundary,
   the D3D9 device probe, the Vulkan window probe, the free camera, world
-  surface and world front-end checks, and the x86_64, aarch64 and armv7
-  dedicated servers. A pull request starts 17 Linux jobs, where it started 27.
+  surface and world front-end checks, the x86_64, aarch64 and armv7
+  dedicated servers, and the PS Vita server and client. A pull request starts 17 Linux jobs, where it started 27.
   Each step that depends on the configuration hands its commands to
   `scripts/ci/each-config.sh` (tested by `test_ci_each_config.py`), which runs
   them for both with `$config` set, keeps going when the first fails, and fails

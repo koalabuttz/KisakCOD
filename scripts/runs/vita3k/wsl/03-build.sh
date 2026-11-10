@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Local build of the PS Vita multiplayer client, following the CI job
-# "PS Vita multiplayer client RelWithDebInfo" of .github/workflows/build-kisakcod-vita.yaml.
+# "PS Vita multiplayer client" (its RelWithDebInfo build) of .github/workflows/build-kisakcod-vita.yaml.
 #
 #   03-build.sh <commit|branch|keep> [touch-file]
 #
