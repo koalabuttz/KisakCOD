@@ -42,6 +42,7 @@ on:
       - tests/linux_mp_client/**
       - tests/linux_cinematic/**
       - tests/linux_steam/**
+      - tests/linux_perf/**
       - tests/skinning/**
       - .github/workflows/build-kisakcod-linux.yaml
       - .github/workflows/build-kisarcod-win.yaml
@@ -67,6 +68,7 @@ on:
       - tests/linux_mp_client/**
       - tests/linux_cinematic/**
       - tests/linux_steam/**
+      - tests/linux_perf/**
       - tests/skinning/**
       - .github/workflows/build-kisakcod-linux.yaml
       - .github/workflows/build-kisarcod-win.yaml

@@ -465,6 +465,7 @@ dedi src/linux/sys_fileio.cpp
 dedi src/linux/sys_files.cpp
 dedi src/linux/sys_localize.cpp
 dedi src/linux/sys_memory.cpp
+dedi src/linux/sys_perf.cpp
 dedi src/linux/sys_posix.cpp
 dedi src/linux/sys_runtime_test.cpp
 dedi src/linux/sys_selftest.cpp

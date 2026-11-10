@@ -20,6 +20,9 @@ struct XAnimToXModel // sizeof=0x94
     // padding byte
 };
 
+// Registered by XAnimInit; see XAnimCalcFirstBlendChild.
+extern const dvar_t *xanim_blendOnce;
+
 void XAnimCalc(
     const DObj_s *obj,
     XAnimInfo *info,
