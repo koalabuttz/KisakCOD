@@ -2839,7 +2839,9 @@ jobs:
         shell: bash
         env:
           SDL_VIDEODRIVER: offscreen
-          TSAN_OPTIONS: halt_on_error=1
+          # The suppressions drop reports of races inside the lavapipe driver
+          # (see below). A missing file stops the first run.
+          TSAN_OPTIONS: halt_on_error=1 suppressions=${{ github.workspace }}/scripts/tests/vulkan_tsan_suppressions.txt
           # llvmpipe rasterizes on the thread that runs the commands, with no
           # worker threads of its own (see below).
           LP_NUM_THREADS: "0"
@@ -2852,13 +2854,19 @@ jobs:
           #
           # Lavapipe itself is not instrumented, so ThreadSanitizer sees only
           # the libc calls it makes (locks, memcpy), and it reports races
-          # between the driver's own threads. In some frame_loop runs one of
-          # lavapipe's threads destroys a mutex and a condition variable that
-          # an llvmpipe rasterizer thread locked and signalled; in every run
-          # of the adapter check two rasterizer threads copy to and from the
-          # same block. LP_NUM_THREADS=0 takes the rasterizer threads away and
+          # between the driver's own threads. In some runs one of lavapipe's
+          # threads destroys a mutex and a condition variable that an llvmpipe
+          # rasterizer thread locked and signalled; in every run of the
+          # adapter check two rasterizer threads copy to and from the same
+          # block. LP_NUM_THREADS=0 takes the rasterizer threads away and
           # leaves lavapipe's other threads and every thread of ours as they
-          # are.
+          # are. That alone was not enough: a hosted run of the threads scene
+          # still failed on the mutex, with a thread named llvmpipe-1 in the
+          # report. So scripts/tests/vulkan_tsan_suppressions.txt drops the
+          # reports that have the driver in either access's stack or in the
+          # stack that created one of their threads. A race between two
+          # accesses in the front, the adapter or the core is reported as
+          # before.
           tsan_build="build-x64/vulkan-probe-tsan"
           cmake -S . -B "$tsan_build" -G Ninja \
             -DKISAK_PLATFORM=linux -DKISAK_LINUX_ARCH=x86_64 \

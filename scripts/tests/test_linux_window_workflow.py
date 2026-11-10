@@ -951,8 +951,15 @@ class VulkanWindowWorkflowTests(unittest.TestCase):
         self.assertEqual(step['env']['SDL_VIDEODRIVER'], 'offscreen')
         self.assertIn('halt_on_error=1', step['env']['TSAN_OPTIONS'])
         # Lavapipe is not instrumented: its rasterizer threads' hand-over to
-        # its queue thread reads as a race, so they are off for these runs.
+        # its queue thread reads as a race, so they are off for these runs,
+        # and reports from inside the driver are dropped. The file holds
+        # that one rule and nothing that could hide a race in our code.
         self.assertEqual(step['env']['LP_NUM_THREADS'], '0')
+        suppressions = 'scripts/tests/vulkan_tsan_suppressions.txt'
+        self.assertIn('suppressions=${{ github.workspace }}/' + suppressions, step['env']['TSAN_OPTIONS'])
+        rules = [line.strip() for line in (ROOT / suppressions).read_text().splitlines()
+                 if line.strip() and not line.startswith('#')]
+        self.assertEqual(rules, ['race:libvulkan_lvp.so'])
         run = step['run']
         self.assertIn('-DCMAKE_CXX_FLAGS=-fsanitize=thread', run)
         self.assertIn('--scene threads', run)

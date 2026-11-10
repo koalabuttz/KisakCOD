@@ -303,7 +303,8 @@ both scripts with `KISAK_VK_OCCLUSION_QUERIES=0`, and
 builds the check with ThreadSanitizer and runs the `threads`, `frame_loop`
 (also with `KISAK_VK_GPU_FEED=always`), `gpu_feed`, `bench`, `occlusion` and
 `tuning` scenes, which fail on any data race in our code (llvmpipe's rasterizer threads
-are off there, [vulkan-core.md](vulkan-core.md)). The
+are off there and reports from inside the driver are dropped,
+[vulkan-core.md](vulkan-core.md)). The
 Windows `vulkan-probe` job builds it with MSVC, checks that it imports neither
 `vulkan-1.dll` nor `d3d9.dll` and that it starts, and adds it to the
 `KisakCOD-vulkan-probe-x64` artifact.
