@@ -35,6 +35,8 @@ from pathlib import Path
 import shlex
 import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src"
 DEFAULT_ALLOW = ROOT / "scripts" / "tools" / "check_32bit_size_literals_allow.txt"
@@ -287,6 +289,8 @@ def main() -> int:
     parser.add_argument("--only", nargs="*", default=None, help="scan only sources whose path contains one of these")
     parser.add_argument("--include-raw-loaders", action="store_true",
                         help="also scan the raw asset loaders (*_load_obj.cpp), which the game never runs")
+    parser.add_argument("--changed-since", metavar="COMMIT",
+                        help="scan only the units a change since this commit can reach (changed_units.py)")
     args = parser.parse_args()
     load_clang()
     allowed = load_allow(args.allow)
@@ -294,6 +298,12 @@ def main() -> int:
             if (args.only is None or any(o in p for o in args.only))
             and str(Path(p).relative_to(ROOT)) not in RETAIL_RECORD_SOURCES
             and (args.include_raw_loaders or not raw_asset_loader(p))]
+    if args.changed_since:
+        import changed_units
+        reach, why = changed_units.select({job[0] for job in jobs}, [args.build_dir.resolve()], args.changed_since)
+        print(f"--changed-since {args.changed_since}: " + (why if reach is not None else f"scanning everything, {why}"))
+        if reach is not None:
+            jobs = [job for job in jobs if job[0] in reach]
     hits, failures, used = {}, [], set()
     with Pool(args.jobs) as pool:
         for path, found, errors in pool.imap_unordered(scan, jobs):

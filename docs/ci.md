@@ -31,6 +31,15 @@ of them.
   sources and tests, and the test machines' run scripts; the macOS workflow
   skips the PS Vita port's sources. The filters look at the whole pull request,
   not the last push.
+- **Source scans.** The x86_64 client job's two whole-tree scans
+  (`check_32bit_size_literals.py`, `check_32bit_layout_offsets.py`) parse every
+  translation unit twice with libclang, about eight minutes each. On a pull
+  request they scan only the units the change can reach (`--changed-since
+  HEAD^1`, `scripts/tools/changed_units.py`): those whose dependency list in
+  the job's own Ninja build holds a changed file. They scan everything when
+  the reach is not known (a CMake file, the tools, their allow lists or the
+  Linux workflow changed, or a changed header is named in an `#include` but in
+  no compiled unit's list), and always on master.
 - **Newer pushes.** A newer push to a pull request cancels that pull request's
   older run, and a newer push to master cancels the older master run.
 
