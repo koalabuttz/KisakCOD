@@ -9,6 +9,8 @@
 #define AL_ALEXT_PROTOTYPES
 #include <AL/efx.h>
 
+#include <sound/snd_ima_adpcm.h>
+
 #include <pthread.h>
 
 #include <cmath>
@@ -25,6 +27,20 @@
 #define KISAK_ALC_NOEXCEPT ALC_API_NOEXCEPT
 #else
 #define KISAK_ALC_NOEXCEPT
+#endif
+
+// AL_EXT_IMA4, AL_SOFT_block_alignment and AL_SOFT_loop_points. Their names are
+// in alext.h, which the engine's sound units do not include.
+#ifndef AL_FORMAT_MONO_IMA4
+#define AL_FORMAT_MONO_IMA4 0x1300
+#define AL_FORMAT_STEREO_IMA4 0x1301
+#endif
+#ifndef AL_UNPACK_BLOCK_ALIGNMENT_SOFT
+#define AL_UNPACK_BLOCK_ALIGNMENT_SOFT 0x200C
+#define AL_PACK_BLOCK_ALIGNMENT_SOFT 0x200D
+#endif
+#ifndef AL_LOOP_POINTS_SOFT
+#define AL_LOOP_POINTS_SOFT 0x2015
 #endif
 
 // The headers only name these two; nothing reads their contents.
@@ -52,13 +68,26 @@ constexpr float kMaxPitch = 64.0f;
 // How far a source at the listener's side leans: 1 would silence the far ear.
 constexpr float kPanWidth = 0.8f;
 constexpr float kQuarterPi = 0.78539816339744830962f;
+constexpr uint32_t kNoBlock = 0xFFFFFFFFu;
+constexpr uint32_t kDefaultBlockFrames = 65; // OpenAL Soft's, for IMA4 data
+const char *const kExtensions[] = {"AL_EXT_IMA4", "AL_SOFT_block_alignment", "AL_SOFT_loop_points"};
 
 struct Buffer
 {
-    int16_t *data;     // interleaved, `frames` frames
+    // PCM: interleaved, `frames` frames. Packed: room for one decoded block,
+    // with the packed bytes behind it in the same allocation.
+    int16_t *data;
+    uint8_t *packed;       // IMA ADPCM blocks, or null for PCM
     uint32_t frames;
     uint32_t rate;
-    uint32_t attached; // how many times sources hold it
+    uint32_t attached;     // how many times sources hold it
+    uint32_t loopStart;    // a looping static source plays [loopStart, loopEnd)
+    uint32_t loopEnd;
+    uint32_t blockFrames;  // packed: frames in a block
+    uint32_t blockBytes;   // packed: bytes in a block
+    uint32_t decoded;      // packed: the block `data` holds, or kNoBlock
+    uint32_t unpackFrames; // AL_UNPACK_BLOCK_ALIGNMENT_SOFT, for the next alBufferData
+    uint32_t bytes;        // what `data` was allocated with
     uint8_t channels;
     bool used;
 };
@@ -104,6 +133,7 @@ ALCcontext g_contextToken;
 ALCcontext *g_current;
 Context g_context;
 Stats g_stats;
+uint32_t g_bufferBytes; // what all buffers hold now
 int32_t g_accumulator[kMaxUpdateFrames * 2];
 
 class Lock
@@ -138,6 +168,65 @@ Buffer *FindBuffer(ALuint name)
 Buffer *CurrentBuffer(const Source &source)
 {
     return source.current < source.queued ? FindBuffer(source.queue[source.current]) : nullptr;
+}
+
+// ---- buffers ---------------------------------------------------------------
+
+// Block `block` of a packed buffer, decoded. A buffer keeps one decoded block:
+// the engine gives every sounding channel a buffer of its own, so a source
+// decodes each block once as it plays through. Two sources on one buffer
+// would decode in turns, and still play right.
+const int16_t *DecodedBlock(Buffer &buffer, uint32_t block)
+{
+    if (buffer.decoded != block)
+    {
+        kisak::ima_adpcm::DecodeBlock(buffer.packed + static_cast<size_t>(block) * buffer.blockBytes, buffer.blockBytes,
+                                      buffer.channels, buffer.data, buffer.blockFrames);
+        buffer.decoded = block;
+        g_stats.packedFrames += buffer.blockFrames;
+    }
+    return buffer.data;
+}
+
+// Frame `frame` of `buffer`, which has it. A mono frame fills both.
+void FrameAt(Buffer &buffer, uint32_t frame, int32_t out[2])
+{
+    const int16_t *at;
+    if (!buffer.packed)
+        at = buffer.data + static_cast<size_t>(frame) * buffer.channels;
+    else
+    {
+        const uint32_t block = frame / buffer.blockFrames;
+        const uint32_t within = frame - block * buffer.blockFrames;
+        if (within == 0 && buffer.decoded != block)
+        {
+            // A block's first frame stands in its header: nothing to decode.
+            const uint8_t *const header = buffer.packed + static_cast<size_t>(block) * buffer.blockBytes;
+            out[0] = static_cast<int16_t>(static_cast<uint16_t>(header[0] | (header[1] << 8)));
+            out[1] = buffer.channels == 2 ? static_cast<int16_t>(static_cast<uint16_t>(header[4] | (header[5] << 8))) : out[0];
+            return;
+        }
+        at = DecodedBlock(buffer, block) + static_cast<size_t>(within) * buffer.channels;
+    }
+    out[0] = at[0];
+    out[1] = buffer.channels == 2 ? at[1] : at[0];
+}
+
+// The frame a source stops reading `buffer` at. A looping static source turns
+// at the loop's end and never plays what lies past it.
+uint32_t PlayEnd(const Source &source, const Buffer &buffer)
+{
+    return source.isStatic && source.looping ? buffer.loopEnd : buffer.frames;
+}
+
+void ReleaseData(Buffer &buffer)
+{
+    std::free(buffer.data);
+    g_bufferBytes -= buffer.bytes;
+    buffer.data = nullptr;
+    buffer.packed = nullptr;
+    buffer.bytes = 0;
+    buffer.frames = 0;
 }
 
 // ---- gains -----------------------------------------------------------------
@@ -224,20 +313,21 @@ bool QueueHasFrames(const Source &source)
     return false;
 }
 
-// The play position ran off the end of `buffer`: go on to what plays next,
+// The play position reached `end` in `buffer`: go on to what plays next,
 // keeping the frames it overshot by.
-void Advance(Source &source, const Buffer *buffer)
+void Advance(Source &source, const Buffer *buffer, uint32_t end)
 {
     if (!buffer)
     {
         Finish(source);
         return;
     }
-    const uint32_t over = source.pos > buffer->frames ? source.pos - buffer->frames : 0;
+    const uint32_t over = source.pos > end ? source.pos - end : 0;
     if (source.isStatic)
     {
-        if (source.looping && buffer->frames)
-            source.pos = over % buffer->frames;
+        const uint32_t length = buffer->loopEnd - buffer->loopStart;
+        if (source.looping && length)
+            source.pos = buffer->loopStart + over % length;
         else
             Finish(source);
         return;
@@ -396,25 +486,26 @@ uint32_t StepFor(Source &source, const Buffer &buffer)
     return source.step;
 }
 
-// The frame that follows the last one of `buffer`: the next buffer's first, the
-// loop's first, or the last frame again.
-void Successor(const Source &source, const Buffer &buffer, const int32_t last[2], int32_t next[2])
+// The frame that follows the last one a source plays of `buffer`: the next
+// buffer's first, the loop's first, or the last frame again.
+void Successor(const Source &source, Buffer &buffer, const int32_t last[2], int32_t next[2])
 {
-    const Buffer *following = nullptr;
+    Buffer *following = nullptr;
+    uint32_t first = 0;
     if (source.isStatic)
     {
         if (source.looping)
+        {
             following = &buffer;
+            first = buffer.loopStart;
+        }
     }
     else if (source.current + 1 < source.queued)
         following = FindBuffer(source.queue[source.current + 1]);
     else if (source.looping)
         following = FindBuffer(source.queue[0]);
     if (following && following->frames && following->channels == buffer.channels)
-    {
-        next[0] = following->data[0];
-        next[1] = buffer.channels == 2 ? following->data[1] : next[0];
-    }
+        FrameAt(*following, first, next);
     else
     {
         next[0] = last[0];
@@ -427,39 +518,61 @@ void Successor(const Source &source, const Buffer &buffer, const int32_t last[2]
 uint32_t MixRun(Source &source, int32_t *acc, uint32_t wanted)
 {
     Buffer *const buffer = CurrentBuffer(source);
-    if (!buffer || buffer->frames == 0 || source.pos >= buffer->frames)
+    const uint32_t end = buffer ? PlayEnd(source, *buffer) : 0;
+    if (!buffer || source.pos >= end)
     {
-        Advance(source, buffer);
+        Advance(source, buffer, end);
         return 0;
     }
     const uint32_t step = StepFor(source, *buffer);
     const bool stereo = buffer->channels == 2;
     const int32_t gainLeft = stereo ? source.centre : source.left;
     const int32_t gainRight = stereo ? source.centre : source.right;
-    const uint32_t last = buffer->frames - 1;
+    if ((gainLeft | gainRight) == 0)
+    {
+        // Silent: only the position moves, and nothing is decoded.
+        const uint32_t count = RunLength(source.pos, source.frac, step, end, wanted);
+        const uint64_t at = ((static_cast<uint64_t>(source.pos) << 16) | source.frac) + static_cast<uint64_t>(count) * step;
+        source.pos = static_cast<uint32_t>(at >> 16);
+        source.frac = static_cast<uint32_t>(at & 0xFFFFu);
+        return count;
+    }
+
+    // The frames that can be read in place, [first, stop): all a PCM buffer
+    // plays, or the block of a packed buffer the position is in.
+    const int16_t *data = buffer->data;
+    uint32_t first = 0, stop = end;
+    if (buffer->packed)
+    {
+        const uint32_t block = source.pos / buffer->blockFrames;
+        data = DecodedBlock(*buffer, block);
+        first = block * buffer->blockFrames;
+        if (stop - first > buffer->blockFrames)
+            stop = first + buffer->blockFrames;
+    }
+    const uint32_t last = stop - 1;
 
     if (source.pos < last)
     {
         const uint32_t count = RunLength(source.pos, source.frac, step, last, wanted);
-        if ((gainLeft | gainRight) == 0)
-        {
-            // Silent: only the position moves.
-            const uint64_t at = ((static_cast<uint64_t>(source.pos) << 16) | source.frac) + static_cast<uint64_t>(count) * step;
-            source.pos = static_cast<uint32_t>(at >> 16);
-            source.frac = static_cast<uint32_t>(at & 0xFFFFu);
-        }
-        else if (stereo)
-            MixStereo(buffer->data, source.pos, source.frac, step, gainLeft, acc, count);
+        uint32_t pos = source.pos - first;
+        if (stereo)
+            MixStereo(data, pos, source.frac, step, gainLeft, acc, count);
         else
-            MixMono(buffer->data, source.pos, source.frac, step, gainLeft, gainRight, acc, count);
+            MixMono(data, pos, source.frac, step, gainLeft, gainRight, acc, count);
+        source.pos = first + pos;
         return count;
     }
 
-    // The last frame blends toward whatever plays next.
+    // The last of those frames blends toward the frame that plays next: the
+    // next block's first, or whatever follows the buffer.
     int32_t from[2], to[2];
-    from[0] = buffer->data[static_cast<size_t>(last) * buffer->channels];
-    from[1] = stereo ? buffer->data[static_cast<size_t>(last) * 2 + 1] : from[0];
-    Successor(source, *buffer, from, to);
+    from[0] = data[static_cast<size_t>(last - first) * buffer->channels];
+    from[1] = stereo ? data[static_cast<size_t>(last - first) * 2 + 1] : from[0];
+    if (stop < end)
+        FrameAt(*buffer, stop, to);
+    else
+        Successor(source, *buffer, from, to);
     uint32_t count = 0;
     while (count < wanted && source.pos == last)
     {
@@ -537,6 +650,20 @@ void FreeBuffers()
 {
     for (Buffer &buffer : g_context.buffers)
         std::free(buffer.data);
+    g_bufferBytes = 0;
+}
+
+bool SameName(const char *a, const char *b)
+{
+    for (;; ++a, ++b)
+    {
+        const char x = *a >= 'a' && *a <= 'z' ? static_cast<char>(*a - 'a' + 'A') : *a;
+        const char y = *b >= 'a' && *b <= 'z' ? static_cast<char>(*b - 'a' + 'A') : *b;
+        if (x != y)
+            return false;
+        if (!x)
+            return true;
+    }
 }
 
 } // namespace
@@ -598,6 +725,7 @@ Stats TakeStats()
     const Lock lock;
     const Stats stats = g_stats;
     g_stats = Stats{};
+    g_stats.peakBufferBytes = g_bufferBytes;
     return stats;
 }
 
@@ -642,10 +770,26 @@ const ALchar *AL_APIENTRY alGetString(ALenum param) KISAK_AL_NOEXCEPT
     case AL_VERSION:
         return "1.1 KisakCOD Vita mixer";
     case AL_EXTENSIONS:
-        return "";
+        return "AL_EXT_IMA4 AL_SOFT_block_alignment AL_SOFT_loop_points";
     default:
         return nullptr;
     }
+}
+
+ALboolean AL_APIENTRY alIsExtensionPresent(const ALchar *extname) KISAK_AL_NOEXCEPT
+{
+    const Lock lock;
+    if (!g_context.exists)
+        return AL_FALSE;
+    if (!extname)
+    {
+        SetError(AL_INVALID_VALUE);
+        return AL_FALSE;
+    }
+    for (const char *const extension : kExtensions)
+        if (SameName(extname, extension))
+            return AL_TRUE;
+    return AL_FALSE;
 }
 
 void AL_APIENTRY alDistanceModel(ALenum distanceModel) KISAK_AL_NOEXCEPT
@@ -720,7 +864,7 @@ void AL_APIENTRY alDeleteBuffers(ALsizei n, const ALuint *buffers) KISAK_AL_NOEX
         Buffer *const buffer = FindBuffer(buffers[i]);
         if (!buffer)
             continue;
-        std::free(buffer->data);
+        ReleaseData(*buffer);
         *buffer = Buffer{};
     }
 }
@@ -736,6 +880,7 @@ void AL_APIENTRY alBufferData(ALuint name, ALenum format, const ALvoid *data, AL
         SetError(AL_INVALID_NAME);
         return;
     }
+    // Bytes in a PCM sample; 0 for IMA ADPCM.
     int channels, bytes;
     switch (format)
     {
@@ -751,6 +896,12 @@ void AL_APIENTRY alBufferData(ALuint name, ALenum format, const ALvoid *data, AL
     case AL_FORMAT_STEREO16:
         channels = 2, bytes = 2;
         break;
+    case AL_FORMAT_MONO_IMA4:
+        channels = 1, bytes = 0;
+        break;
+    case AL_FORMAT_STEREO_IMA4:
+        channels = 2, bytes = 0;
+        break;
     default:
         SetError(AL_INVALID_ENUM);
         return;
@@ -765,34 +916,141 @@ void AL_APIENTRY alBufferData(ALuint name, ALenum format, const ALvoid *data, AL
         SetError(AL_INVALID_OPERATION);
         return;
     }
-    const uint32_t frames = static_cast<uint32_t>(size) / static_cast<uint32_t>(channels * bytes);
-    const size_t samples = static_cast<size_t>(frames) * static_cast<size_t>(channels);
-    int16_t *copy = nullptr;
-    if (samples)
+
+    uint32_t frames, blockFrames = 0, blockBytes = 0;
+    uint64_t allocation;
+    if (bytes)
     {
-        copy = static_cast<int16_t *>(std::malloc(samples * sizeof(int16_t)));
+        frames = static_cast<uint32_t>(size) / static_cast<uint32_t>(channels * bytes);
+        allocation = static_cast<uint64_t>(frames) * static_cast<uint32_t>(channels) * sizeof(int16_t);
+    }
+    else
+    {
+        // Whole blocks of 8 k + 1 frames, as OpenAL Soft takes them. They stay
+        // packed; one decoded block sits in front of them.
+        blockFrames = buffer->unpackFrames ? buffer->unpackFrames : kDefaultBlockFrames;
+        if ((blockFrames & 7) != 1)
+        {
+            SetError(AL_INVALID_VALUE);
+            return;
+        }
+        blockBytes = kisak::ima_adpcm::BlockBytes(blockFrames, static_cast<uint32_t>(channels));
+        const uint64_t all = static_cast<uint64_t>(static_cast<uint32_t>(size) / blockBytes) * blockFrames;
+        if (static_cast<uint32_t>(size) % blockBytes != 0 || all > 0x7FFFFFFFu)
+        {
+            SetError(AL_INVALID_VALUE);
+            return;
+        }
+        frames = static_cast<uint32_t>(all);
+        allocation = static_cast<uint64_t>(blockFrames) * static_cast<uint32_t>(channels) * sizeof(int16_t) +
+                     static_cast<uint32_t>(size);
+    }
+
+    int16_t *copy = nullptr;
+    if (frames)
+    {
+        copy = allocation <= 0x7FFFFFFFu ? static_cast<int16_t *>(std::malloc(static_cast<size_t>(allocation))) : nullptr;
         if (!copy)
         {
             SetError(AL_OUT_OF_MEMORY);
             return;
         }
-        if (bytes == 2)
-        {
-            // The caller's bytes may sit at an odd address.
-            std::memcpy(copy, data, samples * sizeof(int16_t));
-        }
-        else
-        {
-            const uint8_t *const bytes8 = static_cast<const uint8_t *>(data);
-            for (size_t i = 0; i < samples; ++i)
-                copy[i] = static_cast<int16_t>((static_cast<int>(bytes8[i]) - 128) * 256);
-        }
     }
-    std::free(buffer->data);
+    else
+        allocation = 0;
+    ReleaseData(*buffer);
     buffer->data = copy;
+    buffer->bytes = static_cast<uint32_t>(allocation);
+    g_bufferBytes += buffer->bytes;
+    if (g_bufferBytes > g_stats.peakBufferBytes)
+        g_stats.peakBufferBytes = g_bufferBytes;
+    if (copy && !bytes)
+    {
+        buffer->packed = reinterpret_cast<uint8_t *>(copy + static_cast<size_t>(blockFrames) * static_cast<size_t>(channels));
+        std::memcpy(buffer->packed, data, static_cast<size_t>(size));
+    }
+    else if (copy && bytes == 2)
+    {
+        // The caller's bytes may sit at an odd address.
+        std::memcpy(copy, data, static_cast<size_t>(allocation));
+    }
+    else if (copy)
+    {
+        const uint8_t *const bytes8 = static_cast<const uint8_t *>(data);
+        const size_t samples = static_cast<size_t>(frames) * static_cast<size_t>(channels);
+        for (size_t i = 0; i < samples; ++i)
+            copy[i] = static_cast<int16_t>((static_cast<int>(bytes8[i]) - 128) * 256);
+    }
     buffer->frames = frames;
     buffer->rate = static_cast<uint32_t>(samplerate);
     buffer->channels = static_cast<uint8_t>(channels);
+    buffer->blockFrames = blockFrames;
+    buffer->blockBytes = blockBytes;
+    buffer->decoded = kNoBlock;
+    // New data plays whole.
+    buffer->loopStart = 0;
+    buffer->loopEnd = frames;
+}
+
+void AL_APIENTRY alBufferi(ALuint name, ALenum param, ALint value) KISAK_AL_NOEXCEPT
+{
+    const Lock lock;
+    if (!g_context.exists)
+        return;
+    Buffer *const buffer = FindBuffer(name);
+    if (!buffer)
+    {
+        SetError(AL_INVALID_NAME);
+        return;
+    }
+    switch (param)
+    {
+    case AL_UNPACK_BLOCK_ALIGNMENT_SOFT:
+        // Frames in a block of the data alBufferData is given next; 0 is the
+        // format's default. Whether IMA4 data can have it is checked there.
+        if (value < 0)
+            SetError(AL_INVALID_VALUE);
+        else
+            buffer->unpackFrames = static_cast<uint32_t>(value);
+        break;
+    case AL_PACK_BLOCK_ALIGNMENT_SOFT:
+        // For reading samples back, which nothing here does.
+        if (value < 0)
+            SetError(AL_INVALID_VALUE);
+        break;
+    default:
+        SetError(AL_INVALID_ENUM);
+        break;
+    }
+}
+
+void AL_APIENTRY alBufferiv(ALuint name, ALenum param, const ALint *values) KISAK_AL_NOEXCEPT
+{
+    if (values && (param == AL_UNPACK_BLOCK_ALIGNMENT_SOFT || param == AL_PACK_BLOCK_ALIGNMENT_SOFT))
+    {
+        alBufferi(name, param, values[0]);
+        return;
+    }
+    const Lock lock;
+    if (!g_context.exists)
+        return;
+    Buffer *const buffer = FindBuffer(name);
+    if (!buffer)
+        SetError(AL_INVALID_NAME);
+    else if (!values)
+        SetError(AL_INVALID_VALUE);
+    else if (param != AL_LOOP_POINTS_SOFT)
+        SetError(AL_INVALID_ENUM);
+    else if (buffer->attached)
+        SetError(AL_INVALID_OPERATION);
+    else if (values[0] < 0 || values[0] >= values[1] || static_cast<uint32_t>(values[1]) > buffer->frames)
+        SetError(AL_INVALID_VALUE);
+    else
+    {
+        // Where a looping source that plays this buffer alone turns, in frames.
+        buffer->loopStart = static_cast<uint32_t>(values[0]);
+        buffer->loopEnd = static_cast<uint32_t>(values[1]);
+    }
 }
 
 // ---- sources ----

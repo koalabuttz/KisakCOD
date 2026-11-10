@@ -7,11 +7,12 @@ The Windows MP/SP/editor build paths remain separate.
 This is an initial port, not a gameplay-ready release. The native Linux game
 client is a separate opt-in target, `KisakCOD-mp`
 ([linux-mp-client.md](linux-mp-client.md)); it plays on its own listen server
-but cannot join a remote one. This page is about the dedicated server, and a
+and joins a remote one with a key code or, opt-in, through Steam. This page is
+about the dedicated server, and a
 64-bit build of it is described in [linux-x64.md](linux-x64.md#x86_64-dedicated-server).
-In particular, **Steam
-authentication is not implemented on Linux yet: ordinary client tickets are
-rejected**. An explicit startup-only, loopback-only test mode can skip ticket
+In particular, **the default build has no Steam authentication: ordinary
+client tickets are rejected** (the opt-in `KISAK_LINUX_STEAM` build verifies
+them, [linux-steam.md](linux-steam.md)). An explicit startup-only, loopback-only test mode can skip ticket
 verification; it does not by itself establish playable-client compatibility.
 Separately, the opt-in boolean `sv_allowProtocol6` lets retail CoD4 1.7 clients
 through the connect-version check
@@ -403,7 +404,8 @@ With the dvar off, the same reply is
 `error` / `This server requires protocol version 1 (CoD4 1.0); your client uses
 protocol 21.` The switch changes the version check only: the challenge token, the
 Steam ticket handshake, the game password and the capacity checks are unchanged.
-Native Steam ticket verification is still unimplemented. Testing with a retail
+The default build verifies no Steam tickets (that is the opt-in
+`KISAK_LINUX_STEAM` build). Testing with a retail
 client therefore needs an explicit authentication opt-in: the loopback-only test
 mode below, or the separate
 [unverified retail GUID mode](#unverified-retail-guids-and-sv_allowunverifiedguids)
@@ -531,7 +533,9 @@ arbitrary non-default ports are not covered by that broadcast scan. Network
 reachability and browser filters still apply. The stock 1.7 internet list targets
 `cod4master.activision.com`, which did not resolve during this investigation.
 Changing the advertised protocol cannot repair an unavailable master; use LAN
-browsing or a direct `/connect`.
+browsing or a direct `/connect`. This server reports to a master only when
+`masterServerName` is set (it is empty by default) and `dedicated` is 2; see
+[Finding servers](server-browser.md).
 
 #### Unverified retail GUIDs and `sv_allowUnverifiedGuids`
 
@@ -653,9 +657,11 @@ because of someone else's flood. There is no switch to turn the limits off.
   shellshock configuration, script compilation, and the script VM remain.
 - Steam ticket verification is opt-in: `-DKISAK_LINUX_STEAM=ON` checks tickets
   through a Steam client running on the server machine, as the Windows build
-  does ([linux-steam.md](linux-steam.md)). Steam GameServer login (a headless
-  server without a Steam client) is not implemented. There is no automatic
-  authentication fallback; only the explicit local test mode above.
+  does ([linux-steam.md](linux-steam.md)). A server can instead log on as an
+  anonymous Steam game server (`KISAK_STEAM_SERVER_LOGIN=anonymous`, same
+  guide): Steam must be installed, but its client need not run and no account
+  is used. There is no automatic
+  authentication fallback; only the explicit opt-ins above.
 - Windows source paths are retained, but native MSVC/MinGW builds must still be
   checked in their own environments after shared-header changes.
 

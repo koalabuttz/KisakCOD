@@ -1,0 +1,29 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 04:21:28 +0000
+Subject: [PATCH] fix: release the cached tag name when the multiplayer game
+ shuts down
+
+getTagOrigin and getTagAngles keep the last tag name in
+level.cachedTagMat with a counted string reference. Only Com_Quit_f
+released it, and G_InitGame clears level with memset on every map
+change, so the reference was lost and SL_CheckLeaks failed at quit.
+
+Call GScr_Shutdown from G_ShutdownGame, as singleplayer releases its
+cached tag names there.
+---
+ src/game_mp/g_main_mp.cpp | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/game_mp/g_main_mp.cpp b/src/game_mp/g_main_mp.cpp
+index 78b5dbb9..724d34ed 100644
+--- a/src/game_mp/g_main_mp.cpp
++++ b/src/game_mp/g_main_mp.cpp
+@@ -830,6 +830,7 @@ void __cdecl G_ShutdownGame(int32_t freeScripts)
+     HudElem_DestroyAll();
+     if (Scr_IsSystemActive() && !level.savepersist)
+         SV_FreeClientScriptPers();
++    GScr_Shutdown(); // release the cached tag name before G_InitGame clears level
+     Scr_ShutdownSystem(1u, level.savepersist == 0);
+     if (freeScripts)
+     {

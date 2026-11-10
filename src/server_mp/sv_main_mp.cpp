@@ -548,7 +548,10 @@ void SVC_Info(netadr_t from)
     SV_SetAdvertisedProtocolInfo(infostring);
     Info_SetValueForKey(infostring, "hostname", sv_hostname->current.string);
     Info_SetValueForKey(infostring, "mapname", sv_mapname->current.string);
-    if (clientCount)
+    // Retail leaves "clients" out of an empty server's reply and browsers read
+    // that as 0. dpmaster-style masters refuse a reply without the key, so a
+    // server that reports to a master always sends it.
+    if (clientCount || SV_UsesMasterServer())
     {
         v3 = va("%i", clientCount);
         Info_SetValueForKey(infostring, "clients", v3);
