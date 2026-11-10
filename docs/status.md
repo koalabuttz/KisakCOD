@@ -1,7 +1,7 @@
 # Linux port status
 
-Last updated 2026-11-10 07:40 UTC (master `bbbc564`, the PS Vita client's
-smaller dynamic buffers, PR 166). This page is the current state of
+Last updated 2026-11-10 07:50 UTC (master `6566d88`, the x86_64 Linux
+singleplayer build, PR 167). This page is the current state of
 the native Linux port and the other platform builds, the open pull requests and
 the roadmap. The [docs index](README.md) lists the detailed guides;
 older handoffs are in [history](history/README.md) and are not current.
@@ -82,8 +82,11 @@ builds use `-ffp-contract=off` (no fused multiply-add).
   ([linux-sp-levels.md](linux-sp-levels.md)). Only killhouse and cargoship
   have been played by hand; night vision, ac130, the Javelin, slow motion,
   death and retry, and the victory screen are untried.
-- **x86_64 Linux singleplayer.** The 64-bit Linux configuration refuses the SP
-  game for now (Windows x64 singleplayer plays, see the table).
+- **A level in x86_64 Linux singleplayer.** `KisakCOD-sp` builds for x86_64
+  since PR 167 and passes its asset-free start test on hosted CI, but it has
+  not loaded a level there yet; a laptop sweep is queued (Windows x64
+  singleplayer plays, see the table;
+  [guide](linux-x64.md#x86_64-singleplayer-game)).
 - **A map on the PS Vita client's console.** The menu works on the console.
   A map loads and draws in the Vita3K emulator (PRs 154, 155, 161 and 166);
   that build has not run on the console
@@ -150,7 +153,7 @@ These came before the playable client and still build and run in CI:
 
 ## Open pull requests
 
-As of 2026-11-10 07:40 UTC, eleven. They change by the hour; the
+As of 2026-11-10 07:50 UTC, ten. They change by the hour; the
 [list on GitHub](https://github.com/koalabuttz/KisakCOD/pulls) is the current
 one. A machine run a pull request waits on is named where its author has
 said so.
@@ -164,7 +167,6 @@ said so.
 | 175 | A copied sound counts the frames it holds (some stereo sounds claimed twice their length; this is the desktop's default sound path too), and the Vita build removes a file before it rewrites it, because Vita3K does not cut a rewritten file | PC run W: a Vita3K start that leaves no old lines in rewritten files, and the first map with PRs 164 and 166 in one build. Nobody has listened for the sound change. |
 | 159 | Save a key code typed into the game's key code menu as `codkey.txt` | Nobody has typed a key into the menu yet. |
 | 170 | Linux client: opt-in HTTP downloads (`-DKISAK_LINUX_HTTP_DOWNLOADS=ON`) through the engine's own libcurl downloader | A laptop run of a real download is planned; none has been made. |
-| 167 | Build the singleplayer game for x86_64 Linux | It has not loaded a level; a laptop sweep of the 21 levels is queued. |
 | 160 | In-game A/B measuring (`perf_ab`, `perf_sample`) and two switches to measure with it, off by default | Laptop perf run 5 is their first run in a real game. |
 | 168 | Shorter machine runs and pull request CI: timed Vita starts, a frame log, a run driver, trimmed PR checks | |
 | 169 | Five more patches in the upstream patch queue | |
@@ -198,7 +200,8 @@ As of 2026-11-10. Each machine does one run at a time.
 - Finding servers (PR 163, merged): the Join Game menu on a real client, and
   a real dedicated server, the test master and a client together (laptop run
   queued; [guide](server-browser.md#what-is-checked)).
-- x86_64 Linux singleplayer: a first sweep of the 21 levels (PR 167).
+- x86_64 Linux singleplayer (PR 167, merged): a first sweep of the 21
+  levels on the laptop, and a Windows x64 tour of the same commit.
 - CPU measuring: laptop perf run 5, the first use of PR 160's in-game A/B
   commands.
 
@@ -225,7 +228,7 @@ no fixed order.
    unattended sweep), a long session, HTTP downloads (PR 170), then voice chat and the remote script debugger
    ([list](linux-mp-client.md#what-it-does-not-have-yet)).
 5. **Linux singleplayer beyond two levels**: hand play of the swept levels,
-   and x86_64 singleplayer (PR 167 builds it).
+   and a first level in x86_64 singleplayer (it builds since PR 167).
 6. **Performance on the CPU**: the laptop A/B runs and the function-level
    profile are done (PRs 97 and 112). Their reading is that the laptop is
    limited by its GPU at both sizes measured, so CPU work there is about

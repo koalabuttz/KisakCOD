@@ -109,7 +109,8 @@ both builds; one map has been played by hand. Movies play with the opt-in FFmpeg
 [multiplayer client](docs/linux-mp-client.md). The singleplayer game
 ([guide](docs/linux-sp-game.md), i386) plays its first levels, killhouse and
 cargoship, and all 21 levels load and run unattended
-([levels](docs/linux-sp-levels.md)).
+([levels](docs/linux-sp-levels.md)); it also builds for x86_64, where it has
+not loaded a level yet.
 
 **Vulkan.** An opt-in back end (`-DKISAK_BUILD_VULKAN_BACKEND=ON`, then
 `+set r_backend vulkan`) draws the same renderer through Vulkan directly,
