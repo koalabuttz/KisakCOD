@@ -18,7 +18,10 @@ vertex declarations, shaders and their float constants, render targets, draws,
 clears, copies, present and queries (`src/gfx_vk/legacy/vk_legacy.h`). It
 takes D3D9's enum values as plain numbers, so it needs no `d3d9.h` and builds on
 every platform the core does. One thread calls everything, as with the D3D9
-device it replaces.
+device it replaces. It records its commands through the core's `Record`, so
+with the core's record thread on (the D3D9 front's default) they run on that
+thread; the adapter tracks the bound pipeline and dynamic state per command
+buffer by the core's `Recording()` number.
 
 | File | What |
 | --- | --- |
@@ -72,6 +75,33 @@ device it replaces.
   targets and ends when targets change, a resource is uploaded, or a copy
   needs to run. Clears inside a pass are `vkCmdClearAttachments`, limited by
   viewport and scissor like D3D9's.
+* **Frames in parts (the GPU feed).** A frame of many draws goes to the GPU
+  in parts while it is still being drawn, as DXVK's does, instead of whole at
+  its `Present`. After a draw, once the command buffer holds 128 draws
+  (`KISAK_VK_GPU_FEED_DRAWS`) and the GPU has fewer than two submissions left
+  to finish, what is recorded is submitted; for each further unfinished
+  submission the adapter waits for 128 draws more, up to four times, so a GPU
+  that is behind is left alone (DXVK's rule, counted in draws instead of
+  command chunks). The draws that follow start a new command buffer and a new
+  pass that loads the targets, so the picture is the same.
+  Why: the engine holds every frame back until the GPU has finished the one
+  before (`r_gpuSync 1`: the render thread waits for the last frame's fence
+  when it has drawn a frame, and the main thread waits for it before it
+  starts the next). A frame that is submitted whole cannot start on the GPU
+  before it is fully recorded, so with that rule the GPU idles from the end of
+  each frame until the next one has been recorded. Laptop run 8 measured it:
+  6.3 ms of GPU work in every 8.2 ms frame, and 121 fps against DXVK's 150
+  (`renderer/vulkan-backend-laptop-run-8.md` in the project files).
+  Each part costs a tile-based GPU a store and a load of every target, so the
+  feed is off by default on Apple, Arm, Qualcomm, Imagination and Broadcom
+  GPUs and under MoltenVK. `KISAK_VK_GPU_FEED=0` turns it off and `=1` on
+  anywhere; `=always` submits after every draw, which the checks use to give
+  every draw of every scene a command buffer and a pass of its own. The
+  device's `device ready:` log line says which it is (`GPU feed every 128
+  draws`, `off`, `after every draw`), `DeviceStats::feedFlushes` counts the
+  parts, and the front's `frame stats:` line prints them. Its GPU frame time
+  runs from a frame's first command to its last, so with the feed it includes
+  the time the GPU waited for the next part.
 * **Present.** The back buffer is an offscreen A8R8G8B8 image; `Present` blits it
   into the swapchain image and presents. A minimised window skips the frame.
   There are two such images, and `Present` swaps them, as D3D9's DISCARD swap
@@ -95,7 +125,7 @@ device it replaces.
 | Render targets and depth surfaces | 2D, one level. A texture with RENDERTARGET usage can be drawn to and sampled. |
 | Static buffers | Device memory with a CPU shadow; unlock uploads the locked range. |
 | Dynamic buffers | Mapped upload memory. `D3DLOCK_DISCARD` while the GPU still reads the old contents renames the buffer onto new memory; `NOOVERWRITE` writes in place; a plain lock of a busy buffer renames and copies the old contents. |
-| Queries | Event queries finish when the GPU passes the point they were issued at: the open recording's submission, or the last one submitted when nothing is being recorded (right after `Present`). Until laptop run 4, an event issued after `Present` waited for the next frame's submission instead. The engine polls such an event (its swap fence) before ending every frame, so the CPU and GPU never overlapped. |
+| Queries | Event queries finish when the GPU passes the point they were issued at: the open recording's submission, or the last one submitted when nothing is being recorded (right after `Present`). Until laptop run 4, an event issued after `Present` waited for the next frame's submission instead. The engine polls such an event (its swap fence) before ending every frame, so the CPU and GPU never overlapped. A poll with `D3DGETDATA_FLUSH` that finds such a frame fence unfinished also submits what was recorded after it, once per issue: the engine has drawn the next frame by then and only waits, in steps of up to 1 ms, so the GPU gets that frame queued behind the one it is on instead of idling from the end of one until `Present` submits the next. `Present` then submits only the copy to the swapchain. `KISAK_VK_FENCE_FLUSH=0` turns this off, to compare; the front's `frame stats:` line counts these flushes. |
 
 ## The shader cache
 

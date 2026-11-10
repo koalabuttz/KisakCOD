@@ -26,6 +26,7 @@
 #include <gfx_vk/legacy/vk_legacy.h>
 
 #include <gfx_gxm/gxm_display.h>
+#include <gfx_gxm/gxm_heap.h>
 #include <gfx_gxm/gxm_memory.h>
 #include <gfx_gxm/gxm_program_cache.h>
 #include <gfx_gxm/shader/gxm_cg_translate.h>
@@ -121,6 +122,7 @@ uint64_t Micros()
 namespace
 {
 void LogShaderSummary(Device &device, const char *when); // with CreateShader
+void LogProgramFailures(Device &device);
 } // namespace
 
 // GPU memory in use by what it is for, in each of the two pools it can be in.
@@ -240,6 +242,20 @@ bool AllocateMemory(Device &device, Memory &memory, uint32_t bytes, uint32_t ali
         bytes >> 10, gxm::DescribeMemory().c_str());
     Log(device, "%s", DescribeMemoryUse().c_str());
     return false;
+}
+
+bool AllocateRenamed(Memory &memory, uint32_t bytes, uint32_t align, gxm::MemoryKind kind, MemoryUse use)
+{
+    void *data = gxm::Allocate(kind, bytes, align);
+    if (!data)
+        return false;
+    memory.data = static_cast<uint8_t *>(data);
+    memory.kind = kind;
+    memory.gpu = true;
+    memory.use = use;
+    memory.bytes = bytes;
+    Account(kind, use, bytes, true);
+    return true;
 }
 
 void FreeGpuMemory(gxm::MemoryKind kind, void *data, MemoryUse use, uint32_t bytes)
@@ -401,6 +417,109 @@ void DisplayLog(void *user, const char *line)
 }
 } // namespace
 
+// ---- The target reserve ------------------------------------------------------------------
+//
+// The renderer makes its targets at start-up, and they take their memory when
+// they are first drawn to (EnsureTargetMemory). In a map that is after the
+// map's textures and vertices have filled the pools: mp_crash in Vita3K (runs
+// M and U) refused the two screen-sized targets a game frame needs with 4.5 MB
+// of CDRAM free, none of it 2 MB in one piece. One of them is the copy of the
+// scene that the post effects read, and the film colour pass then painted the
+// world black behind the HUD; the other is the depth copy (R32F) that soft
+// particles and depth of field read.
+//
+// So a piece of CDRAM is set aside at start-up for colour targets alone, with
+// room for two screen-sized ones and the four of a quarter the size (glow,
+// depth of field, blur). Colour targets take from it first; what does not fit
+// there comes from the pools as before.
+namespace
+{
+struct TargetReserve
+{
+    uint8_t *base = nullptr;
+    gxm::Heap heap;
+} g_targetReserve;
+
+constexpr uint32_t kTargetAlign = 256;
+constexpr uint64_t kTargetRetryMicros = 1000 * 1000;
+
+uint32_t TargetReserveBytes()
+{
+    // As LayoutTexture lays out a 32-bit colour target: rows of whole 32 texels.
+    const uint32_t full = AlignUp(gxm::kDisplayWidth, 32) * 4 * gxm::kDisplayHeight;
+    const uint32_t quarter = AlignUp(gxm::kDisplayWidth / 4, 32) * 4 * (gxm::kDisplayHeight / 4);
+    return AlignUp(2 * full + 4 * quarter, 4096);
+}
+
+void InitTargetReserve(Device &device)
+{
+    // For checking in an emulator what a full pool does to a frame: a file
+    // named no-target-reserve beside the compiled programs leaves the reserve
+    // out.
+    if (gxm::ProgramCacheMarker("no-target-reserve"))
+    {
+        Log(device, "diag: no-target-reserve is there: render targets take what the pools have left");
+        return;
+    }
+    const uint32_t bytes = TargetReserveBytes();
+    g_targetReserve.base = static_cast<uint8_t *>(gxm::Allocate(gxm::MemoryKind::Cdram, bytes, 4096));
+    if (!g_targetReserve.base)
+    {
+        Log(device, "no CDRAM for the target reserve (%u KB): render targets take what the pools have left",
+            bytes >> 10);
+        return;
+    }
+    g_targetReserve.heap.Reset(bytes);
+    Log(device, "target reserve: %u KB of CDRAM kept for colour render targets", bytes >> 10);
+}
+
+bool TakeFromTargetReserve(Texture &texture, uint32_t bytes, MemoryUse use)
+{
+    if (!g_targetReserve.base)
+        return false;
+    const uint32_t offset = g_targetReserve.heap.Allocate(bytes, kTargetAlign);
+    if (offset == gxm::Heap::kNoSpace)
+        return false;
+    Memory &memory = texture.memory;
+    memory.data = g_targetReserve.base + offset;
+    memory.kind = gxm::MemoryKind::Cdram;
+    memory.gpu = true;
+    memory.use = use;
+    memory.bytes = bytes;
+    Account(memory.kind, use, bytes, true);
+    texture.reserved = true;
+    return true;
+}
+
+// A reserved target's memory goes back to the reserve. The GPU must be idle.
+void ReturnToTargetReserve(Texture &texture)
+{
+    Memory &memory = texture.memory;
+    if (g_targetReserve.heap.Free(uint32_t(memory.data - g_targetReserve.base)))
+        Account(memory.kind, memory.use, memory.bytes, false);
+    memory = Memory{};
+    texture.reserved = false;
+}
+
+// AllocateMemory for a target's later tries, which say nothing: the first
+// refusal was logged with the pools' state.
+bool TakeFromPoolsQuietly(Memory &memory, uint32_t bytes, MemoryUse use)
+{
+    for (const gxm::MemoryKind kind : {gxm::MemoryKind::Cdram, gxm::MemoryKind::Main})
+        if (void *data = gxm::Allocate(kind, bytes, kTargetAlign))
+        {
+            memory.data = static_cast<uint8_t *>(data);
+            memory.kind = kind;
+            memory.gpu = true;
+            memory.use = use;
+            memory.bytes = bytes;
+            Account(kind, use, bytes, true);
+            return true;
+        }
+    return false;
+}
+} // namespace
+
 // ---- The device ------------------------------------------------------------------------
 
 Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
@@ -444,6 +563,7 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
         gxm::ShutdownDisplay();
         return nullptr;
     }
+    InitTargetReserve(*device);
     Log(*device, "%s", gxm::DescribeMemory().c_str());
     SetDefaultState(*device);
     return device.release();
@@ -455,12 +575,14 @@ void DestroyDevice(Device *device)
         return;
     if (device->live)
         Log(*device, "%u resources were not destroyed before the device", device->live);
+    LogProgramFailures(*device);
     LogShaderSummary(*device, "in all");
     FinishGpu(*device);
     LogDrawSummary(*device);
     ShutdownDraw(*device);
     Log(*device, "%s", gxm::DescribeMemory().c_str());
-    gxm::ShutdownDisplay();
+    gxm::ShutdownDisplay(); // the pools go, the reserve with them
+    g_targetReserve = TargetReserve{};
     delete device;
 }
 
@@ -524,15 +646,35 @@ bool EnsureTargetMemory(Device &device, Texture &texture)
 {
     if (!texture.deferredBytes)
         return texture.memory.data != nullptr;
-    if (texture.deferFailed)
+    // A target that found no memory tries again, but not at every draw.
+    if (texture.deferFailed && Micros() < texture.deferRetryAt)
         return false;
-    if (!AllocateMemory(device, texture.memory, texture.deferredBytes, 256, texture.desc.pool, true,
-                        TextureUse(texture.desc, *texture.format), texture.name.c_str()))
+    const uint32_t bytes = texture.deferredBytes;
+    const TextureDesc &desc = texture.desc;
+    const MemoryUse use = TextureUse(desc, *texture.format);
+    bool got = (desc.usage & d3d::USAGE_RENDERTARGET) && TakeFromTargetReserve(texture, bytes, use);
+    if (!got)
+        got = texture.deferFailed
+                  ? TakeFromPoolsQuietly(texture.memory, bytes, use)
+                  : AllocateMemory(device, texture.memory, bytes, kTargetAlign, desc.pool, true, use,
+                                   texture.name.c_str());
+    if (!got)
     {
         texture.deferFailed = true;
+        texture.deferRetryAt = Micros() + kTargetRetryMicros;
+        if (texture.deferRefusals++ == 0)
+            Log(device,
+                "target %ux%u (format %u, usage 0x%x) has no GPU memory: it tries again each second; until then "
+                "draws into it are skipped, and so is what samples it",
+                desc.width, desc.height, unsigned(desc.format), desc.usage);
         return false;
     }
-    std::memset(texture.memory.data, 0, texture.deferredBytes);
+    if (texture.deferRefusals)
+        Log(device, "target %ux%u (format %u, usage 0x%x) has its GPU memory now, after %u refusals", desc.width,
+            desc.height, unsigned(desc.format), desc.usage, texture.deferRefusals);
+    texture.deferFailed = false;
+    texture.deferRefusals = 0;
+    std::memset(texture.memory.data, 0, bytes);
     texture.deferredBytes = 0;
     SetUpTexture(device, texture);
     LogLargeTexture(device, texture);
@@ -601,6 +743,13 @@ void DestroyTexture(Device *device, Texture *texture)
                 target = nullptr;
         if (device->depthStencil == surface.get())
             device->depthStencil = nullptr;
+    }
+    if (texture->reserved)
+    {
+        // Targets go at a renderer restart or at shutdown: waiting for the GPU
+        // here costs nothing that matters.
+        FinishGpu(*device);
+        ReturnToTargetReserve(*texture);
     }
     Retire(*device, texture->memory);
     Retire(*device, texture->swizzled);
@@ -901,12 +1050,23 @@ namespace
 void LogShaderSummary(Device &device, const char *when)
 {
     const Device::ShaderCounts &c = device.shaderCounts;
-    const gxm::ProgramCacheStats &p = gxm::GetProgramCacheStats();
+    const gxm::ProgramCacheStats p = gxm::GetProgramCacheStats();
+    // "programs ready" and "failed to compile" count every program the cache
+    // was asked for: the shaders' own, their variants and the back end's.
     Log(device,
         "shaders %s: %u created, %u refused by the translator (%.1f ms translating), %u programs ready, "
         "%u failed to compile; %u compiled in %.1f s, %u read from the card in %.1f ms, %u not written",
-        when, c.created, c.refused, c.translateMicros / 1000.0, c.compiled, c.failed, p.compiled,
+        when, c.created, c.refused, c.translateMicros / 1000.0, p.compiled + p.fromFiles, p.failed, p.compiled,
         p.compileMicros / 1e6, p.fromFiles, p.readMicros / 1000.0, p.writeFailures);
+    // No frame waits for a program: these say how far behind the cache's
+    // thread is and how many draws were left out of a frame meanwhile.
+    Log(device,
+        "programs in the background %s: %llu asked for, %u waiting now (%u at most), %llu hurried by a draw, "
+        "%llu dropped unmade; slowest compile %.0f ms, slowest read %.0f ms; %llu draws left out of %llu frames "
+        "while their program was made",
+        when, (unsigned long long)p.requested, unsigned(gxm::ProgramsWaiting()), p.mostWaiting,
+        (unsigned long long)p.hurried, (unsigned long long)p.dropped, p.slowestCompileMicros / 1000.0,
+        p.slowestReadMicros / 1000.0, (unsigned long long)c.drawsWaited, (unsigned long long)c.framesWaited);
     size_t held = 0, peak = 0;
     uint32_t refused = 0;
     gxm::ShaderCompilerMemory(held, peak, refused);
@@ -923,7 +1083,12 @@ void LogShaderSummary(Device &device, const char *when)
 // Up to this many compile failures are logged one by one.
 constexpr uint32_t kLoggedShaderFailures = 40;
 
-void CompileDefaultVariant(Device &device, Shader &shader, uint64_t hash)
+// Translates the shader and asks the program cache for its default variant.
+// Nothing is read from the card or compiled here: the game creates its
+// shaders on its loading thread inside the renderer's lock, hundreds in a
+// row, and a compile there (0.5 to 1.4 s on a console) stopped every frame
+// that was being drawn meanwhile.
+void RequestDefaultVariant(Device &device, Shader &shader, uint64_t hash)
 {
     Device::ShaderCounts &counts = device.shaderCounts;
     std::string reason;
@@ -951,39 +1116,44 @@ void CompileDefaultVariant(Device &device, Shader &shader, uint64_t hash)
         return;
     }
     shader.translated = true;
-    shader.programCacheKey =
-        gxm::ProgramCacheKey(cg, shader.pixel ? gxm::ShaderStage::Fragment : gxm::ShaderStage::Vertex);
-    std::string log;
-    if (!gxm::GetProgram(cg, shader.pixel ? gxm::ShaderStage::Fragment : gxm::ShaderStage::Vertex, shader.program,
-                         log))
+    char label[64];
+    std::snprintf(label, sizeof(label), "shader %016llx (%s_%u_%u)", (unsigned long long)hash,
+                  shader.pixel ? "ps" : "vs", r.major, r.minor);
+    shader.request = gxm::RequestProgram(std::move(cg),
+                                         shader.pixel ? gxm::ShaderStage::Fragment : gxm::ShaderStage::Vertex, label);
+}
+
+// Once a frame: the programs the cache's thread could not make since the
+// last frame. A shader that cannot be compiled is still created, as D3D9
+// would; draws with it are skipped.
+void LogProgramFailures(Device &device)
+{
+    std::vector<gxm::ProgramRequestRef> failures;
+    gxm::TakeProgramFailures(failures);
+    for (const gxm::ProgramRequestRef &failed : failures)
     {
-        shader.program.clear();
-        ++counts.failed;
-        if (counts.loggedFailures++ < kLoggedShaderFailures)
+        if (device.shaderCounts.loggedFailures++ >= kLoggedShaderFailures)
+            break;
+        // The compiler's first error is enough to find the cause; the
+        // program itself stays on the card next to the cache.
+        const std::string first = failed->log.substr(0, failed->log.find('\n'));
+        Log(device, "%s did not compile (cache file %016llx): %s", failed->label.c_str(),
+            (unsigned long long)failed->key, first.c_str());
+        if (device.desc.shaderCachePath && *device.desc.shaderCachePath && !failed->cg.empty())
         {
-            // The compiler's first error is enough to find the cause; the
-            // program itself stays on the card next to the cache.
-            std::string first = log.substr(0, log.find('\n'));
-            Log(device, "shader %016llx (%s_%u_%u) did not compile: %s", (unsigned long long)hash,
-                shader.pixel ? "ps" : "vs", r.major, r.minor, first.c_str());
-            if (device.desc.shaderCachePath && *device.desc.shaderCachePath)
+            char path[256];
+            std::snprintf(path, sizeof(path), "%s/failed-%016llx.cg", device.desc.shaderCachePath,
+                          (unsigned long long)failed->key);
+            if (FILE *file = std::fopen(path, "wb"))
             {
-                char path[256];
-                std::snprintf(path, sizeof(path), "%s/failed-%016llx.cg", device.desc.shaderCachePath,
-                              (unsigned long long)hash);
-                if (FILE *file = std::fopen(path, "wb"))
-                {
-                    std::fwrite(cg.data(), 1, cg.size(), file);
-                    std::fputs("\n/* compiler log:\n", file);
-                    std::fwrite(log.data(), 1, log.size(), file);
-                    std::fputs("\n*/\n", file);
-                    std::fclose(file);
-                }
+                std::fwrite(failed->cg.data(), 1, failed->cg.size(), file);
+                std::fputs("\n/* compiler log:\n", file);
+                std::fwrite(failed->log.data(), 1, failed->log.size(), file);
+                std::fputs("\n*/\n", file);
+                std::fclose(file);
             }
         }
-        return;
     }
-    ++counts.compiled;
 }
 } // namespace
 
@@ -1004,7 +1174,7 @@ Shader *CreateShader(Device *device, const void *bytecode, size_t bytes, std::st
     shader->pixel = (version >> 16) == 0xffffu;
     // A shader that cannot be translated or compiled is still created, as
     // D3D9 would; draws with it are skipped. The log says why.
-    CompileDefaultVariant(*device, *shader, gxm::cg::Hash(code, bytes));
+    RequestDefaultVariant(*device, *shader, gxm::cg::Hash(code, bytes));
     ++device->stats.shaders;
     device->stats.shaderMicros += Micros() - begin;
     ++device->live;
@@ -1290,6 +1460,44 @@ void UpdateTexture(Device *device, Texture *src, Texture *dst)
     }
 }
 
+namespace
+{
+// A frame that took this long is logged with what else went on meanwhile:
+// the game's loading thread shares the renderer's lock with the frame, and
+// a console run should say what a hitch was made of. The first of them only.
+constexpr uint64_t kLongFrameMicros = 250 * 1000;
+constexpr uint32_t kLoggedLongFrames = 60;
+
+void LogLongFrame(Device &device)
+{
+    using Mark = Device::ShaderCounts::FrameMark;
+    Device::ShaderCounts &c = device.shaderCounts;
+    const Mark last = c.lastFrame;
+    const gxm::ProgramCacheStats p = gxm::GetProgramCacheStats();
+    Mark now;
+    now.at = Micros();
+    now.shaders = device.stats.shaders;
+    now.translateMicros = c.translateMicros;
+    now.uploads = device.stats.textureUploads;
+    now.uploadBytes = device.stats.uploadBytes;
+    now.programs = uint64_t(p.compiled) + p.fromFiles;
+    now.drawsWaited = c.drawsWaited;
+    c.lastFrame = now;
+    const uint64_t frames = ++c.frames;
+    if (last.at && now.at - last.at > kLongFrameMicros && c.loggedLongFrames < kLoggedLongFrames)
+    {
+        ++c.loggedLongFrames;
+        Log(device,
+            "long frame %llu: %.0f ms; meanwhile %u shaders created (%.1f ms translating), %llu texture levels "
+            "filled (%.2f MB), %llu programs made in the background (%u waiting), %llu draws left out",
+            (unsigned long long)frames, (now.at - last.at) / 1000.0, now.shaders - last.shaders,
+            (now.translateMicros - last.translateMicros) / 1000.0, (unsigned long long)(now.uploads - last.uploads),
+            (now.uploadBytes - last.uploadBytes) / 1048576.0, (unsigned long long)(now.programs - last.programs),
+            unsigned(gxm::ProgramsWaiting()), (unsigned long long)(now.drawsWaited - last.drawsWaited));
+    }
+}
+} // namespace
+
 PresentResult Present(Device *device)
 {
     if (!device)
@@ -1301,6 +1509,13 @@ PresentResult Present(Device *device)
     const bool shown = gxm::Present();
     FrameDone(*device);
     gxm::ProgramCacheFrame();
+    LogProgramFailures(*device);
+    if (device->shaderCounts.waitedThisFrame)
+    {
+        device->shaderCounts.waitedThisFrame = false;
+        ++device->shaderCounts.framesWaited;
+    }
+    LogLongFrame(*device);
     // Once a minute, beside the system's memory line (vita_stats.cpp).
     static uint64_t memoryLogged = 0;
     if (Micros() - memoryLogged > 60 * 1000 * 1000)

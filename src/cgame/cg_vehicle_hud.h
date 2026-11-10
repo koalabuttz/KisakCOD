@@ -16,19 +16,6 @@ enum Clip_t : __int32
     CLIP_LEFT = 0x4,
 };
 
-bool ClampScreenPosToEdges(
-    const float *localClientNum,
-    Material *point,
-    double padLeft,
-    double padRight,
-    double padTop,
-    double padBottom,
-    float *resultNormal,
-    float *resultDist,
-    int a9,
-    int a10,
-    float *a11,
-    float *a12);
 void CG_VehicleHudRegisterDvars();
 int WorldDirToScreenPos(int localClientNum, const float *worldDir, float *outScreenPos);
 void CG_DrawVehicleTargets(int localClientNum, rectDef_s *rect, float *color, Material *defaultMaterial);

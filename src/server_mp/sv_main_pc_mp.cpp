@@ -6,43 +6,64 @@
 #include "server_mp.h"
 #include "sv_remote_input.h"
 #include "sv_query_limit.h"
+#include <qcommon/master_server.h>
 #include <qcommon/cmd.h>
 
 #include <cgame_mp/cg_local_mp.h>
 #include <game_mp/g_main_mp.h>
 
-netadr_t adr;
+static netadr_t adr;
+static MasterResolveState s_masterResolve;
 
+// True when this server reports to a master: `dedicated 2` and a master named
+// in masterServerName. The setting is empty by default, so by default the
+// server contacts nobody.
+bool SV_UsesMasterServer()
+{
+    return com_dedicated && com_masterServerName
+        && Master_ServerUsesMaster(com_dedicated->current.integer, com_masterServerName->current.string);
+}
+
+// The master's address, or an address of type NA_BAD when no master is set or
+// its name does not resolve. The lookup is cached: see Master_ShouldResolve.
 const netadr_t *SV_MasterAddress()
 {
-    __int16 v1; // ax
+    const char *name = com_masterServerName->current.string;
+    const int port = com_masterPort->current.integer;
+    const uint32_t now = Sys_Milliseconds();
 
-    if (adr.type == NA_BOT)
+    if (!Master_NameIsSet(name))
     {
-        Com_Printf(CON_CHANNEL_SERVER, "Resolving %s\n", com_masterServerName->current.string);
-        if (NET_StringToAdr((char *)com_masterServerName->current.string, &adr))
+        memset(&adr, 0, sizeof(adr));
+        adr.type = NA_BAD;
+        return &adr;
+    }
+    if (Master_ShouldResolve(&s_masterResolve, name, port, now))
+    {
+        Com_Printf(CON_CHANNEL_SERVER, "Resolving %s\n", name);
+        memset(&adr, 0, sizeof(adr));
+        // "localhost" is the in-process address, not somewhere a packet can go.
+        if (NET_StringToAdr((char *)name, &adr) && adr.type == NA_IP)
         {
-            const char* result = strstr(":", (char*)com_masterServerName->current.string);
-            if (!result)
-                adr.port = BigShort(com_masterPort->current.integer);
-            v1 = BigShort(adr.port);
+            if (!Master_NameHasPort(name))
+                adr.port = BigShort(port);
             Com_Printf(
                 CON_CHANNEL_SERVER,
                 "%s resolved to %i.%i.%i.%i:%i\n",
-                com_masterServerName->current.string,
+                name,
                 adr.ip[0],
                 adr.ip[1],
                 adr.ip[2],
                 adr.ip[3],
-                v1);
-            if (adr.type == NA_BOT)
-                MyAssertHandler(".\\server_mp\\sv_main_pc_mp.cpp", 50, 0, "%s", "adr.type != 0");
+                (uint16_t)BigShort(adr.port));
+            Master_ResolveAttempted(&s_masterResolve, name, port, true, now);
         }
         else
         {
-            if (adr.type != NA_BAD)
-                MyAssertHandler(".\\server_mp\\sv_main_pc_mp.cpp", 42, 0, "%s", "adr.type == NA_BAD");
-            Com_Printf(CON_CHANNEL_SERVER, "Couldn't resolve address: %s\n", com_masterServerName->current.string);
+            memset(&adr, 0, sizeof(adr));
+            adr.type = NA_BAD;
+            Com_Printf(CON_CHANNEL_SERVER, "Couldn't resolve address: %s\n", name);
+            Master_ResolveAttempted(&s_masterResolve, name, port, false, now);
         }
     }
     return &adr;
@@ -62,40 +83,42 @@ void SV_UpdateLastTimeMasterServerCommunicated(netadr_t from)
 
 void SV_MasterGameCompleteStatus()
 {
-    netadr_t *adr; // [esp+0h] [ebp-4h]
+    const netadr_t *master;
 
-    if (com_dedicated && com_dedicated->current.integer == 2)
+    if (!SV_UsesMasterServer())
+        return;
+    master = SV_MasterAddress();
+    if (master->type == NA_IP)
     {
-        adr = (netadr_t *)SV_MasterAddress();
-        if (!adr)
-            MyAssertHandler(".\\server_mp\\sv_main_pc_mp.cpp", 125, 0, "%s", "adr");
-        if (adr->type != NA_BAD)
-        {
-            Com_Printf(CON_CHANNEL_SERVER, "Sending gameCompleteStatus to %s\n", com_masterServerName->current.string);
-            SVC_GameCompleteStatus(*adr);
-        }
+        Com_Printf(CON_CHANNEL_SERVER, "Sending gameCompleteStatus to %s\n", com_masterServerName->current.string);
+        SVC_GameCompleteStatus(*master);
     }
 }
 
+// Upstream commented the heartbeat out because the retail master's replies ran
+// into the Steam authentication code, and that master is gone. It is sent
+// again, but only to a master the server's owner named: with masterServerName
+// empty (the default) this returns before looking anything up.
 void SV_MasterHeartbeat(const char *hbname)
 {
-    // LWSS: this was disabled because the master server sends responses back that end up in the Steam Auth code
-    //const char *v1; // eax
-    //netadr_t *adr; // [esp+0h] [ebp-4h]
-    //
-    //if (com_dedicated && com_dedicated->current.integer == 2 && svs.time >= svs.nextHeartbeatTime)
-    //{
-    //    svs.nextHeartbeatTime = svs.time + 180000;
-    //    adr = (netadr_t *)SV_MasterAddress();
-    //    if (!adr)
-    //        MyAssertHandler(".\\server_mp\\sv_main_pc_mp.cpp", 94, 0, "%s", "adr");
-    //    if (adr->type != NA_BAD)
-    //    {
-    //        Com_Printf(CON_CHANNEL_SERVER, "Sending heartbeat to %s\n", com_masterServerName->current.string);
-    //        v1 = va("heartbeat %s\n", hbname);
-    //        NET_OutOfBandPrint(NS_SERVER, *adr, v1);
-    //    }
-    //}
+    const netadr_t *master;
+
+    if (!com_dedicated || !com_masterServerName
+        || !Master_HeartbeatDue(
+            com_dedicated->current.integer,
+            com_masterServerName->current.string,
+            svs.time,
+            svs.nextHeartbeatTime))
+    {
+        return;
+    }
+    svs.nextHeartbeatTime = svs.time + MASTER_HEARTBEAT_MSEC;
+    master = SV_MasterAddress();
+    if (master->type == NA_IP)
+    {
+        Com_Printf(CON_CHANNEL_SERVER, "Sending heartbeat to %s\n", com_masterServerName->current.string);
+        NET_OutOfBandPrint(NS_SERVER, *master, va("heartbeat %s\n", hbname));
+    }
 }
 
 void SV_MasterShutdown()

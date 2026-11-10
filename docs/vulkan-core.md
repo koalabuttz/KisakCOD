@@ -45,8 +45,10 @@ Frames (`vk_frame.cpp`):
 
 | Piece | How |
 | --- | --- |
-| Recording | A command buffer is always open, so work recorded outside a frame (a map load's uploads) needs no frame; it goes with the next `Flush` or `Present`. Every submission signals a timeline semaphore with the next serial, which is how the core knows what the GPU has finished; `SubmissionSerial` and `SerialFinished` give users the same answer for memory they recycle themselves. |
-| Frames | `BeginFrame` acquires a swapchain image; `Present` hands it over, submits and presents. Two frames in flight: after a present the next frame slot waits for its previous use and recycles its command buffers, staging, transient memory, descriptor pools and queries. |
+| Recording | A command buffer is always open, so work recorded outside a frame (a map load's uploads) needs no frame; it goes with the next `Flush` or `Present`. Every submission signals a timeline semaphore with the next serial, which is how the core knows what the GPU has finished; `SubmissionSerial` and `SerialFinished` give users the same answer for memory they recycle themselves, and `PendingSubmissions` counts the submissions the GPU has not finished. |
+| GPU progress | Asking the device how far the timeline has got is a system call on most drivers, so the answer is kept for 10 microseconds and a loop that polls asks at most that often. `RefreshProgress` is that question alone, and the one call any thread may make at any time while the core exists: it touches two atomics and what never changes (the device, the timeline). A caller that serialises its core calls with a lock asks before it takes the lock, and the poll that follows under the lock makes no system call (the D3D9 front does this for queries, [vulkan-d3d9-front.md](vulkan-d3d9-front.md#threads)). |
+| Frames | `BeginFrame` opens the frame; the swapchain image is acquired the first time `SwapchainImage` asks for it (the Legacy adapter does at its final blit), so the frame's work is recorded before the core has to wait for the present engine. `Present` hands the image over, submits and presents; a frame whose acquire found the swapchain out of date submits its work and is skipped. Two frames in flight: after a present the next frame slot waits for its previous use and recycles its command buffers, staging, transient memory, descriptor pools and queries. |
+| Record thread | See below. |
 | Image state | Each image's layout and last access are tracked; passes, copies, uploads and `UseImage` record the synchronization2 barriers they need (none for a read after a read in the same layout). A pass cannot record barriers, so images it samples are made Sampled first; images written by uploads go back to Sampled before the next pass on their own. |
 | Passes | Dynamic rendering with up to four colour attachments and a depth-stencil attachment, clear or load. A clear or don't-care load discards the old contents (no layout transition cost). |
 | Uploads | `StageBufferWrite` and `StageImageWrite` return staging memory and record the copy at once, so it is ordered with the work around it. Buffer copies share one barrier before and one after a run of them. Rewriting a texture level already written since the last barrier gets a barrier first; other levels do not. A frame slot that holds 64 MB of staging flushes and waits instead of growing (a long map load). |
@@ -54,6 +56,27 @@ Frames (`vk_frame.cpp`):
 | Descriptor sets | Allocated from per-frame pools, reset when the slot comes round again. |
 | Copies and read-back | Blits between any level and layer of two images (scaling and format conversion), and read-back of a level of any colour image (every slice of a 3D one, compressed formats as blocks), the swapchain image included, waited on by `WaitReadback`. |
 | Timing | GPU timestamps around every pass, kept per pass name (min, max, average), and around each whole frame. |
+
+Recording (`vk_record.cpp`):
+
+Users record commands with `Record(core, f)`, where `f(cmd, vk)` makes the
+`vkCmd*` calls; the core records its own barriers, copies, passes and
+timestamps the same way, and its command buffer begins, submissions and
+presents as bookkeeping packets. Without the record thread (the default) each
+one runs at once. With `CoreDesc::recordThread` (the D3D9 front sets it;
+`KISAK_VK_RECORD_THREAD=0` or `1` overrides it) the core starts a thread of its
+own: `Record` copies `f` into 64 KB chunks, and that thread runs them in order.
+This is DXVK's design: the render thread no longer pays for the driver's
+recording, which was about 2.5 ms of each laptop frame
+(`renderer/vulkan-backend-laptop-run-6.md` in the project files).
+
+| Piece | How |
+| --- | --- |
+| Split | The owning thread keeps everything that decides what is recorded: layouts and barriers, staging and transient memory, descriptor sets (allocated and written there, bound by a packet), serials, timestamps' bookkeeping and deferred destruction. The record thread owns the command pools' use: allocating, beginning, recording, ending, resetting; and the queue: `vkQueueSubmit2` and `vkQueuePresentKHR`. |
+| Packets | `f` is captured by value and must be trivially destructible; structures holding pointers (`VkDependencyInfo`, `VkRenderingInfo`) are built inside it, pointing at the captured copies. A chunk goes to the thread when it fills and at every submission. |
+| Waiting | `WaitSerial` first waits until the thread has submitted that serial; `WaitIdle`, swapchain rebuilds, `DetachWindow` and `DestroyCore` wait until it has run everything. The swapchain is the thread's while it presents, so the acquire waits until the previous frame's present has been made: late in the frame, so normally not at all. The time the owning thread waits is `CoreStats::recordWaitMs`. |
+| Errors | A failed call on the thread stops it running packets; the owning thread fails with that message at its next wait, submission or frame. Validation messages raised on the thread are kept and logged, and counted, by the owning thread at its next sync; every other caller's are logged at once. |
+| Lifetime | Objects a packet uses must live until it has run. `Destroy*` waits for the GPU to finish the submission, which comes after the thread has run it, so the rule is unchanged. |
 
 Pipelines (`vk_pipeline.cpp`):
 
@@ -210,6 +233,25 @@ hosted runners' paravirtualized Metal GPU. Both pass with validation and
 synchronisation checks on (2026-11-07, MoltenVK 1.4.2), the first runs on a
 GPU of any kind; the Intel VM needs `MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=0`
 ([macos.md](macos.md#vulkan-window-probe)).
+
+The record thread (2026-11-09, cloud sandbox, lavapipe from Mesa 25.2.8): the
+probe, the Legacy adapter check and the D3D9 front check pass with the thread
+on and off, x86_64 with validation and synchronisation checks and i386 without;
+the device probe draws its frames through the engine with it on. The CI job
+runs each check again with the thread switched the other way, and under
+ThreadSanitizer the D3D9 front's `threads`, `frame_loop`, `gpu_feed` and
+`bench` scenes (the last two since the GPU feed and the front's lock change,
+2026-11-10), a probe run with draws, read-back and swapchain rebuilds and the
+Legacy adapter check, all with the thread on: no races in the core, the
+adapter or the front. Those runs set `LP_NUM_THREADS=0`. Lavapipe is not built
+with ThreadSanitizer, which then
+sees only the libc calls the driver makes and reports races between the
+driver's own threads: one of lavapipe's threads destroys a mutex and a
+condition variable that an llvmpipe rasterizer thread locked and signalled
+(3 of 40 `frame_loop` runs here), and two rasterizer threads copy to and from
+the same block (every run of the adapter check, with or without the record
+thread). Without rasterizer threads lavapipe's other threads and every thread
+of ours are still there.
 
 The clear-and-present probe has run on both physical GPUs (2026-11-07): the
 Windows PC's RTX 2080 Super and the laptop's Intel ANV, i386 and x86_64 (report

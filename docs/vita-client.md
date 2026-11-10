@@ -8,8 +8,10 @@ platform layer and memory rules. Started 2026-11-09.
 
 **State: stages 1 to 3 run on the console. On 2026-11-10 the main menu
 showed on David's Vita and worked, with touch, buttons and music (run K).
-Starting a map does not work yet: the GPU's memory is full before the map
-loads ("Memory" below), which is the next piece of work.**
+A map load failed on the console in that run. Since then a map loads, a
+player spawns and the world is drawn in Vita3K on the console's heap size
+(runs U and BW). The GPU's memory is still full in a game there ("Memory"
+below), and no map load has been tried on a console since run K.**
 - The whole client compiles, links and packs into a `.vpk`: client, cgame, UI, sound, renderer and its own listen server.
 - Stage 1 had no graphics back end, so the client stopped at the renderer through `Sys_Error`. Stage 2 replaces that: the renderer gets the D3D9 front on the GXM back end ("Graphics" below).
 - Stage 3 (controls and sound) runs on the console: on run 1 (2026-11-09) the menu music and the menu's sounds were heard, and every button arrived as its key. The screen's touch and the layout in a game are not confirmed yet: see "Controls" and "Sound" below.
@@ -56,9 +58,13 @@ host tests (`scripts/tests/test_vita_input.py`, `test_vita_sound.py`).
 4. Expected now (stage 2, step 2d): start-up, the file system, then
    `Graphics back end: GXM`, the GPU memory lines (`gxm legacy:`, `gxm:`),
    the front-end zones and the menu loop, drawn. Every shader the game
-   creates is translated to Cg and compiled (`gxm legacy: shaders so far: ...`
-   every 100 shaders, `shaders in all` at the end), and the compiled programs
-   are kept in `ux0:data/KisakCOD/gxp`. `gxm legacy: draws: ...` lines at the
+   creates is translated to Cg and its program compiled on a thread of its
+   own (`gxm legacy: shaders so far: ...` and `programs in the background
+   so far: ...` every 100 shaders, `in all` at the end), and the compiled
+   programs are kept in `ux0:data/KisakCOD/gxp`. On a first start the menu
+   fills in piece by piece while its programs compile; a frame that still
+   takes over 250 ms is logged as `long frame N: ...` with what the loading
+   thread did meanwhile. `gxm legacy: draws: ...` lines at the
    first frame, after ten seconds and every minute count what was drawn and
    what was skipped, and why. The client needs
    `ur0:data/libshacccg.suprx`, as the GXM probe does; without it the log
@@ -113,7 +119,7 @@ Vita's CPU), because the renderer's headers declare the Bink API.
 
 **Run K on David's Vita (2026-11-10, commit d4a03fa):**
 - The menu showed and worked: frame 300 left 480359 of 522240 pixels not black, the first frame came 44.5 s after the start, touch and buttons reached the menu and the music played.
-- The menu froze several times, once for 23.6 s, with the music paused. Those were shaders compiling the first time they were drawn: 139 programs in 94 s, about 0.7 s each. They are on the card afterwards, so a later start does not compile them again.
+- The menu froze several times, once for 23.6 s, with the music paused. Programs were compiling while the menu was up: 139 in 94 s, about 0.7 s each, and 672 more were read from the card in 16 s. The game was still loading `common_mp` behind the menu, and its loading thread compiled each shader inside the renderer's lock, so the frame being drawn waited ("Programs in the background" below, which takes that work off both threads; not yet run on a console).
 - Starting a listen server on mp_crash stopped the game 58 ms into the map's fastfile: `out of GPU memory` for a 13 MB vertex buffer, then the renderer's fatal error ("Memory" below).
 
 ## Memory
@@ -128,7 +134,7 @@ Static data of the RelWithDebInfo build (2026-11-09):
 | `.bss` | 66.2 MB | 88.7 MB |
 
 Other large static arrays in the client:
-- `cls` 2.9 MB, `odeGlob` 2.8 MB, `gfxBuf` 2.3 MB, `s_backEndData` 2.2 MB, `tess` 2.2 MB;
+- `cls` 2.9 MB, `odeGlob` 2.8 MB, `gfxBuf` 2.3 MB (1.5 MB since the smaller skinned caches below), `s_backEndData` 2.2 MB, `tess` 2.2 MB;
 - `clients` 1.7 MB, `g_streamState` 1.7 MB.
 
 The heap and the engine reservations are the server's for now: a 64 MB heap, the 128 MB zone arena and the hunks. Textures go to the GPU's own memory (CDRAM, about 112 MB), not main memory.
@@ -152,8 +158,44 @@ What the menu takes (run K on the console, and the same build in Vita3K, 2026-11
 
 The main pool is too small for the dynamic buffers, so 14.5 MB of them spill into CDRAM. mp_crash's first vertex buffer alone is 13.4 MB, and neither pool had that much left. Making a map fit is the work in progress. The table above is the state before it; so far:
 - **Targets take memory when first used.** The renderer makes every render target and depth texture it might use at start-up. On the Vita each one gets its GPU memory when a scene first draws to it, or when it is first locked or copied from (`EnsureTargetMemory`). Until then a draw that samples it reads black. The log names each one as it takes its memory (`gpu memory piece`).
+- **A reserve for the targets a game frame needs.** In a map, first use comes after the map's textures and vertices have filled the pools: in runs M and U the two screen-sized targets were refused with 4.5 MB of CDRAM free in pieces, none of them 2 MB long. The back end sets 4.5 MB of CDRAM aside at start-up for colour targets alone (`target reserve` in the log): room for two screen-sized targets and the four quarter-size ones of glow, depth of field and blur. Colour targets take from it first and from the pools after that. A file named `no-target-reserve` in the program cache folder leaves the reserve out, for checking in an emulator what a full pool does.
+- **A target without memory.** A refused target tries again each second; the log names the first refusal and the moment it gets its memory. Until then draws into it are skipped and counted (`its colour target has no GPU memory`), clears of the depth bound with it still happen, and a draw or copy that samples it is skipped too (`it samples a render target that has no GPU memory or was not filled`), which passes the mark on to its own target. So a missing target costs the effects that need it (film colour, glow, depth of field, blur, soft particles, distortion) and not the frame. In Vita3K runs M and U mp_crash loaded and a player spawned, but the world was black behind a correct HUD: the two screen-sized colour targets of a game frame were refused. One is the copy of the scene the post effects read, and the film colour pass painted the frame from it. The other is the depth copy (`r_floatz`, R32F) that soft particles and depth of field read; the renderer clears the frame's depth while that target is bound, and nothing cleared it.
 - **No shadow maps.** `sm_enable` is 0 and read-only in the Vita build. The back end cannot sample depth textures yet, so the shadow maps would be drawn and never read. With the change above, their 18 MB of targets are never taken.
-- Still to do: the dynamic buffers are sized for a PC (the static model cache 8 MB, the skinned caches 9 MB, the index buffers 10 MB).
+- **Smaller dynamic buffers** (built, not run yet). The engine's dynamic buffers are sized for the PC game: 25.5 MB before any copy. The Vita build (`KISAK_GFX_GXM`, the sizes in `r_gfx.h`) makes them 12.5 MB:
+
+| Buffer | Retail | Vita | When it is full or absent |
+|---|---:|---:|---|
+| Static model cache | 8 MB, and 2 MB of indices in main memory | none | `r_smc_enable` is 0 and read-only: each static model is drawn from the map's own buffers, one draw apiece |
+| Skinned caches, two taking turns | 4.5 MB each | 3 MB each | a model that finds no room is not drawn that frame |
+| Pretess index buffers, two taking turns | 2 MB each | 1 MB each | world surfaces that find no room are drawn unbatched |
+| Dynamic index buffer | 2 MB | 2 MB | |
+| Dynamic vertex buffer | 1 MB | 1 MB | |
+| Code and mark meshes, two of each | 1.5 MB | 1.5 MB | |
+
+- **The sizes are guesses until a run reports them.** Once a minute the log says how full each got (`r_dynamicBufferReport`, in seconds; 60 on the Vita, 0 and so silent elsewhere): `dynamic buffers, the most one frame asked for in N frames: skinned cache X of 3072 KB (N models left out), pretess X of 524288 indices (N batches left unbatched), dynamic indices X of 1048576, dynamic vertices X of 1024 KB`. A skinned cache figure above its size is what the frame wanted.
+- **A renamed buffer's copies stay in its own pool.** The engine locks most dynamic buffers with DISCARD every frame. The back end then gives the buffer fresh memory (a rename) and frees the old once the frames that might read it are done, up to three frames later, so a buffer can hold four times its size. Those copies used to spill from the main pool into CDRAM, where they took the room the scene's render targets needed. Now a rename takes memory from the buffer's own pool only (main, for dynamic buffers). With no room there, the lock ends the scene, waits for the GPU and writes in place, which costs time and no memory. One wait serves every buffer drawn before it: after it the GPU reads none of them, so until a draw reads one again its locks write in place without a rename or another wait. The draw summary counts all three: `buffer renames: N took fresh memory, N waited for the GPU instead (their pool was full) and N needed neither (a wait since their last draw); old copies the GPU might still read took N KB at most`. A refused rename no longer writes two lines to the log each time. What the waits cost in frame time on a console is not known.
+
+**In a game.** No map has loaded on a console yet. In Vita3K on the Windows PC (builds made on that PC, 2026-11-10; not a console):
+- **Run M** (before `snd_adpcm`): on the 64 MB heap the mp_crash fastfile loads and then the heap runs out. On a 128 MB heap the map loads and a player spawns, with 71 MB of heap in use.
+- **Run U** (with `snd_adpcm`, targets taking memory at first use and no shadow maps; before the target reserve and the smaller buffers): the map loads on the 64 MB heap and a player spawns. Heap 31.8 MB after the load and 32.9 MB in the game; zone arena 46 MB free. Menus and the HUD are drawn. The world is black.
+- **Why black in run U:** both pools were full, CDRAM at 103.5 of the 108 MB Vita3K offers (a console has 104) and main at 19.3 of 20. The scene's two screen-sized render targets, 2040 KB each, found no room 0.7 s after the game's own start-up (`CL_InitCGame`), and every draw to them was skipped: 571753 draws, against 997449 drawn. 2308 allocations were refused in seven minutes. All but those two were fresh copies for renamed dynamic buffers.
+- **Run BW** (run U's build with the target reserve and the rule for a target without memory; still before the smaller buffers): the world is drawn. Ground, buildings and the held weapon are in colour under the HUD at five looks while turning and walking. Both screen-sized targets take their memory from the reserve, no draw is skipped, and 842866 draws and 1172 copies are made in five minutes. The pools are as full as in run U: 1667 allocations refused, 1666 of them fresh copies for renamed dynamic buffers and one a cube map of 4104 KB, which gets a grey stand-in. About 2 frames a second, as in run U. With the marker `no-target-reserve` the same build draws the world without its film colour, the two targets refused as in run U.
+- The smaller buffers and the reserve have not run together yet.
+
+| Use in the game (run U) | CDRAM + main, MB | Note |
+|---|---:|---|
+| Compressed textures | 34.9 | 1569 pieces |
+| Static vertices | 29.0 | `common_mp` 9.2, mp_crash 12.8 and 7.0 |
+| Dynamic vertices | 4.5 + 15.5 | one skinned cache did not fit the main pool |
+| Dynamic indices | 8.0 | three buffers of 2 MB and one copy |
+| Other textures | 6.5 | |
+| Cubes | 6.5 | 21; one of 4 MB |
+| Static indices | 3.1 | |
+| Depth | 2.0 | |
+| Volumes | 1.0 | |
+| Render targets | 0.4 | three small ones; the screen-sized ones got none |
+
+The display's buffers (8 MB of CDRAM) and the context's ring buffers (in the main pool) are not in the by-use line.
 
 ## Controls (stage 3)
 
@@ -401,11 +443,22 @@ the count was 711 sounds in 9693 KB. The two columns disagree on the second
 row by 3477 KB: that is what the 16-bit path read from past the ends of
 sounds, as above.
 
+Run T (the same PC and Vita3K, the PC's build of the fix, 2026-11-10) has the
+fix's figures. With `snd_adpcm 0` the 702 sounds take 37405 KB by both figures
+of the log line, and the heap at the menu holds 51.3 MB. With
+`snd_adpcm 1` nothing changed: 9574 KB and 23.8 MB. Encoding the 702 sounds
+took 1232 ms in the emulator. 26 of them claim more frames than their bytes
+hold, and every one the log printed is a 16-bit stereo sound at 44100 Hz that
+claims exactly twice its frames, so a stereo sound's frame count seems to
+count both channels. Where sounds are not halved (the desktop's default) the
+driver still works out such a sound's length from that count; not looked at
+yet. Run U loaded Crash: 749 sounds in 12184 KB, where 16-bit PCM would take
+47675 KB, and the heap in the game held 32.9 MB.
+
 Not measured yet: all of this on a console (Vita3K's memory figures are not a
-console's), what the encoding adds to a load there, the claim count and which
-sounds claim too much, the path that keeps a sound's own IMA ADPCM blocks with
-real data, and how the encoded sounds sound. Nobody has listened to them: the
-runs had no listener.
+console's), what the encoding adds to a load there, the path that keeps a
+sound's own IMA ADPCM blocks with real data, and how the encoded sounds sound.
+Nobody has listened to them: the runs had no listener.
 
 **Output.** The engine asks for 11025, 22050 or 44100 Hz (`snd_khz`). The
 default is 44, and 22 on the Vita, where a saved config still wins: at 22 the
@@ -484,7 +537,8 @@ What the GXM back end does so far (step 2d):
   frame can come back to a target.
 - **StretchRect** (the renderer's resolves and cinematic frames) draws the
   source, the back buffer or a texture level, as a textured quad into the
-  destination with two more built-in programs.
+  destination with two more built-in programs. One that cannot happen (no
+  GPU memory for either side) is counted as a skipped draw.
 - **Clears** are quads drawn in the scene with two small built-in programs:
   colour by the fragment program, depth and stencil by an always-pass depth
   test. sceGxm has no clear call, and fills on the transfer queue would race
@@ -492,8 +546,9 @@ What the GXM back end does so far (step 2d):
 - **Programs.** Each draw picks its shaders' variants: the vertex
   declaration decides which inputs are D3DCOLOR (swapped), missing (read as
   0, 0, 0, 1) or narrower than four components, and the alpha test picks the
-  pixel shader's. A variant other than the default compiles on first use
-  (through the cache) and is registered with the shader patcher. Vertex
+  pixel shader's. A variant other than the default is asked for on first
+  use and made on the cache's thread; the draw is left out until it is
+  ready, then it is registered with the shader patcher. Vertex
   programs are kept per variant, declaration and stream strides; fragment
   programs per variant, vertex program, blend state and target format.
 - **Textures** are linear: rows of whole multiples of 8 texels, and the
@@ -558,6 +613,40 @@ does the same). A first start compiled 421 programs across 15 loads in
 Vita3K, with the compiler never above 4.1 MB; before that, such a start ran
 the heap out while the sounds loaded. The `shader compiler memory` log lines
 count what it held and gave back.
+
+**Programs in the background.** The game creates its shaders while a zone
+loads: on its loading thread, hundreds in a row, inside the lock every D3D9
+call takes (`FrontLock`, `src/gfx_vk/d3d9`). `common_mp` loads behind the
+menu, so the menu's frames want that lock too. Up to run K each shader's
+program was read from the card or compiled right there, 24 ms or 0.5 to
+1.4 s with the lock held, and the lock went straight back to the loading
+thread for the next shader: a run of new shaders stopped the menu, and the
+music the main thread feeds, for as long as the whole run took (23.6 s for
+about 23 programs in run K).
+
+Now creating a shader only translates it (1.6 ms on a console) and asks for
+its program. `src/gfx_gxm/gxm_program_queue.cpp` makes the programs on one
+worker thread, in the order asked, through the same cache; the compiler is
+loaded, used and unloaded on that thread. A draw whose vertex or pixel
+program is not ready is left out of that frame and moves its program to the
+front of the queue, so what is on the screen is made first and nothing waits
+for the card or the compiler. A shader destroyed before its turn is dropped
+unmade. The back end's few built-in programs are still made at start-up,
+before the first frame. What to expect: on a first start the menu fills in
+over the first seconds instead of freezing, and compiling goes on quietly for
+some minutes; later starts read the programs from the card in the
+background. Log lines: `programs in the background so far: N asked for, N
+waiting now (N at most), N hurried by a draw, N dropped unmade; slowest
+compile N ms, slowest read N ms; N draws left out of N frames while their
+program was made`, and `long frame N: ...` for any frame over 250 ms (the
+first 60), with the shaders created, texture levels filled and programs made
+meanwhile. "programs ready" in the `shaders` line now counts every program
+the cache made, variants and built-in ones included. The queue itself makes
+no Vita call and is checked on the host with the address and thread
+sanitizers (`scripts/tests/test_vita_program_queue.py`). Status: builds for
+the Vita; not yet run in Vita3K or on a console. Music still stops in any
+other stall of the main thread longer than the 0.7 s it queues ahead (a map
+load); that needs the stream fed from another thread.
 
 **The compiler folds `x * 0 + 1` to 0.** HLSL writes `float4(v.xyz, 1)` as
 one multiply-add with the constant (1, 0, 0, 0): `mad r0, v0.xyzx, c8.xxxy,

@@ -95,6 +95,39 @@ one lock rather than one per device because the renderer has one device and a
 adapter stay single-threaded behind it. The host's callbacks run under the
 lock too.
 
+The lock is taken thousands of times a frame by the render thread, and the
+engine's main thread asks for it too: while the GPU is behind, `R_SyncGpu`
+polls the GPU sync fence every 20 microseconds, for milliseconds of each
+frame. Two things keep that from costing the render thread:
+
+* A thread that finds the lock taken tries again for a short while without
+  sleeping (2000 tries, tens of microseconds), as DXVK's device lock does, and
+  only then sleeps on the mutex. Nearly every call holds the lock for a
+  microsecond or less; a waiter that sleeps at once makes the holder pay a
+  system call to wake it, and then often finds the lock taken again.
+  `KISAK_VK_FRONT_SPIN=0` makes every waiter sleep at once, to compare. The PS
+  Vita build keeps the plain recursive mutex.
+* `IDirect3DQuery9::GetData` asks the GPU how far it has got before it takes
+  the lock (`BackendPollProgress`, the core's `RefreshProgress`,
+  [vulkan-core.md](vulkan-core.md)), which is the part that takes a system
+  call. Under the lock the poll is then a comparison.
+
+The check's `bench` scene measures this: the time one thread spends on the
+3072 calls of a 768-draw frame while another polls a fence every 20
+microseconds. In the cloud sandbox (4 cores, lavapipe, RelWithDebInfo) that
+was 6.9 to 8.8 ms a frame before the GPU feed and the two changes (eight
+runs) and 3.2 to 5.9 ms after (sixteen). With the feed off it was 3.7 to
+4.6 ms, and with `KISAK_VK_FRONT_SPIN=0` 9.2 to 11.3 ms, so there the spin is
+what pays. Those are local numbers from a virtual machine, not a GPU's.
+
+Behind the lock, the front creates the core with its record thread on
+(`CoreDesc::recordThread`, see [vulkan-core.md](vulkan-core.md)):
+the core's own thread makes the `vkCmd*` calls, submissions and presents, as
+DXVK's command stream thread does, so the render thread no longer waits on the
+driver while it records. `KISAK_VK_RECORD_THREAD=0` turns it off. The device's
+teardown log line `record thread:` gives the commands and chunks per frame and
+the time the render thread waited for that thread.
+
 The check's `threads` scene does what the database thread does (a worker
 creates, locks, fills, unlocks and releases 200 textures while the main thread
 draws and presents), then draws the last one. Built with ThreadSanitizer it
@@ -193,22 +226,32 @@ a usage error.
 | `shadow_map` | The sun shadow's path: a D24S8 texture made with `D3DUSAGE_DEPTHSTENCIL` as the depth target beside a R5G6B5 colour target, then sampled with linear filtering as a hardware shadow map (0 behind the stored depth, 1 in front). |
 | `references` | Counts of textures and their levels, `GetContainer`, `QueryInterface`, a released texture that still draws while bound and goes when unbound, the back buffer's and swap chain's own counts (last `Release` returns 0) and the device reference they hold. |
 | `threads` | A worker thread creating and filling textures while this thread draws and presents; the last one drawn and read back; nothing left alive. |
-| `queries` | Support checks, an event query and an occlusion query finishing, and an event issued right after `Present` (the engine's swap fence) finishing without a flush while the next frame records. |
+| `queries` | Support checks, an event query and an occlusion query finishing, and an event issued right after `Present` (the engine's swap fence) finishing without a flush while the next frame records; polled with `D3DGETDATA_FLUSH` while its frame is unfinished, it submits the next frame's work once, and the frame goes on with its state and contents. |
+| `frame_loop` | The engine's frame for 48 frames: draw, poll the swap fence with `D3DGETDATA_FLUSH` until the frame before has finished, issue the GPU sync fence, `Present`, issue the swap fence, while another thread polls the sync fence as the main thread does. At most three submissions a frame, at most one swap fence flush, and the last frame, drawn on both sides of its wait, comes out whole. |
+| `gpu_feed` | A frame of 600 draws, each filling a cell of its own, with a scissor rectangle set once that cuts the last column. The adapter submits such a frame in parts while it is drawn ([adapter](vulkan-legacy-adapter.md)): every draw must show whichever part it fell in, the cells no draw touches must keep the clear colour, and the scissor must hold in every part. Prints the number of parts. |
+| `bench` | Only when named (`--scene bench`), never in a full run: 120 frames of 768 draws of four D3D9 calls each, ended as `frame_loop`'s are, while another thread polls the sync fence every 20 microseconds. Prints the time the drawing thread spent on its draw calls per frame and the polls made meanwhile; passes when its frames were presented. |
 | `reset` | `Reset` to 96x96 and back: the new size, default state, nothing bound, drawing at the new size. |
 | `present` | `Present` through the device and the swap chain, then `GetFrontBufferData` halfway through the next frame: it must give the frame last shown. |
 
 `scripts/tests/test_vulkan_d3d9_front.py --binary <check>` runs it the way the
 adapter's runner does: usage errors, an unknown scene, one scene alone (with no
-unsupported call), and a full run in which every scene matches, the only
-unsupported call is the deliberate one, frames are presented, no object
-outlives its release, the device is destroyed at its last release and the
-validation layer reports no errors.
+unsupported call), the `bench` scene, and a full run in which every scene
+matches, the only unsupported call is the deliberate one, frames are presented,
+no object outlives its release, the device is destroyed at its last release and
+the validation layer reports no errors. It reads the GPU feed's setting from
+the device's log line and holds the `gpu_feed` scene's parts to it: none with
+the feed off, one for every draw with `KISAK_VK_GPU_FEED=always`, else one to
+four.
 
 The hosted `vulkan_window` job (Linux) stages DXVK Native's headers at the
 x86_64 client's pin, builds the check in Debug and RelWithDebInfo and runs that
 script on lavapipe with validation and synchronisation checks required. Its
-Debug run also builds the check with ThreadSanitizer and runs the `threads`
-scene, which fails on any data race. The
+Debug run repeats the script with the GPU feed off and with
+`KISAK_VK_GPU_FEED=always` (and the adapter's check with the latter), and
+builds the check with ThreadSanitizer and runs the `threads`, `frame_loop`
+(also with `KISAK_VK_GPU_FEED=always`), `gpu_feed` and `bench` scenes, which
+fail on any data race in our code (llvmpipe's rasterizer threads are off
+there, [vulkan-core.md](vulkan-core.md)). The
 Windows `vulkan-probe` job builds it with MSVC, checks that it imports neither
 `vulkan-1.dll` nor `d3d9.dll` and that it starts, and adds it to the
 `KisakCOD-vulkan-probe-x64` artifact.
@@ -378,21 +421,25 @@ evidence):
   (shader translation and uploads), and +9.9 s cold, mostly pipelines built
   at the first draw. The shader and pipeline caches (`r_vkShaderCache`) came
   after that run.
-* Frame rate at a fixed view, on battery: 116 to 125 fps against 151 to 159
-  through DXVK (runs 5 and 6). The GPU is not the limit; the back end does
-  all its recording and driver calls on the render thread, where DXVK uses a
-  second thread.
+* Frame rate at a fixed view: 116 to 125 fps on battery against 151 to 159
+  through DXVK (runs 5 and 6), while the back end made every driver call on
+  the render thread and handed the GPU each frame whole. With the record
+  thread, the GPU feed and the cheaper fence polls ([Threads](#threads),
+  [adapter](vulkan-legacy-adapter.md#how-a-draw-works)), run 9 measured 140.9
+  fps against DXVK's 151.3, on mains in power-saver mode, where the code
+  before them gave 117.6 (run 8).
 * Picture: models drew dark where the profile had
   `r_altModelLightingUpdate 0`, because the adapter dropped a texture's
   contents when it was locked again; fixed, and run 7 matches DXVK at 40.1 dB
   there. With `r_altModelLightingUpdate 1` (the default) models are still 2.7
   to 6.7 luma darker than through DXVK (33.6 dB); not explained yet.
 
-Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7}.md` in the project
+Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9}.md` in the project
 files.
 
 ## Next
 
-The frame rate against DXVK (a thread that records commands, as DXVK has),
-the model lighting difference above, occlusion queries (the adapter reports
-every sample as passed), and a long frame about every two minutes.
+The rest of the frame rate gap to DXVK (how often to feed the GPU, then the
+render thread's time per draw), the model lighting difference above,
+occlusion queries (the adapter reports every sample as passed), and a long
+frame about every two minutes.
