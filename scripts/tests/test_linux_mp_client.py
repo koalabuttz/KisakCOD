@@ -5,7 +5,7 @@ Two parts:
 
 * Source checks (always): the opt-in target stays off by default (i386, or
   x86_64 only through KISAK_LINUX_ARCH=x86_64),
-  CINEMA is read only by the unit the target compiles without it, the platform
+  CINEMA is read only by the cinematic unit, movies come on only when FFmpeg links, the platform
   units it links are real files, and the stand-ins it links say what they are.
 * Run checks (with ``--binary``): start the client from temporary trees that hold
   no game data. ``--help`` and ``--version`` exit before the engine starts. With
@@ -93,7 +93,21 @@ def source_checks(checker):
 
     definitions = re.search(r"set\(KISAK_MP_CLIENT_DEFINITIONS(.*?)\)", module, re.S)
     checker.require(definitions is not None and "CINEMA" not in definitions.group(1).split(),
-                    "the client compiles without CINEMA")
+                    "the client's own definitions leave CINEMA to the cinematic unit")
+    # Movies resolve themselves (AUTO): on only when FFmpeg is found and links
+    # with the build's own flags, and never looked for unless a client is built.
+    movies = module.split('set(kisak_cinematics_asked "${KISAK_LINUX_CINEMATICS}")', 1)[-1].split(
+        "if(NOT KISAK_BUILD_LINUX_MP_CLIENT)\n    return()", 1)[0]
+    checker.require('set(KISAK_LINUX_CINEMATICS "AUTO" CACHE STRING' in module
+                    and "PROPERTY STRINGS AUTO ON OFF)" in module
+                    and "option(KISAK_LINUX_CINEMATICS" not in module,
+                    "KISAK_LINUX_CINEMATICS is AUTO by default and can be forced ON or OFF")
+    checker.require(movies != module
+                    and 0 < movies.find("elseif(NOT KISAK_BUILD_LINUX_MP_CLIENT AND NOT KISAK_BUILD_LINUX_SP_GAME)")
+                    < movies.find("find_package(PkgConfig QUIET)")
+                    < movies.find("check_cxx_source_compiles(")
+                    < movies.find("if(KISAK_FFMPEG_LINKS_FOR_TARGET)\n            set(KISAK_LINUX_CINEMATICS ON)"),
+                    "AUTO looks for FFmpeg only when a game client is built and turns movies on only after a test link")
     # The profiler is opt-in: player builds carry no Tracy, profiling builds turn it on.
     checker.require(re.search(r'option\(KISAK_LINUX_TRACY\s+"[^"]*"\s+OFF\)', module) is not None,
                     "KISAK_LINUX_TRACY is off by default")

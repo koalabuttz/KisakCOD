@@ -51,8 +51,9 @@
 # The link uses --gc-sections like the dedicated target. See
 # docs/linux-mp-client.md.
 # ---------------------------------------------------------------------------
-option(KISAK_LINUX_CINEMATICS
-    "Play Bink movies in KisakCOD-mp through the Linux Bink shim (needs libavcodec and libavutil, found with pkg-config)" OFF)
+set(KISAK_LINUX_CINEMATICS "AUTO" CACHE STRING
+    "Play Bink movies in KisakCOD-mp and KisakCOD-sp through the Linux Bink shim (libavcodec and libavutil, found with pkg-config). ON, OFF, or AUTO: on when both are found and link for the target architecture")
+set_property(CACHE KISAK_LINUX_CINEMATICS PROPERTY STRINGS AUTO ON OFF)
 option(KISAK_LINUX_HTTP_DOWNLOADS
     "Fetch a server's map and mod files over HTTP(S) in KisakCOD-mp with the engine's libcurl downloader (needs libcurl 7.85 or newer, found with pkg-config)" OFF)
 option(KISAK_LINUX_TRACY
@@ -61,6 +62,54 @@ option(KISAK_LINUX_PORTABLE_RUNPATH
     "Give KisakCOD-mp the run path $ORIGIN/lib instead of the build machine's SDK folders, for a folder made with scripts/tools/package_linux_client.py. The build tree then needs LD_LIBRARY_PATH to run it" OFF)
 option(KISAK_BUILD_LINUX_MP_CLIENT
     "Build the native Linux multiplayer client KisakCOD-mp (needs KISAK_BUILD_LINUX_NATIVE_D3D9, KISAK_DXVK_NATIVE_LIBRARY, KISAK_OPENAL_LIBRARY and SDL3)" OFF)
+
+# Movies: the cache holds what was asked for (AUTO unless the command line says
+# ON or OFF); from here on KISAK_LINUX_CINEMATICS is a plain ON or OFF, which
+# is also what scripts/platform/linux/sp_game.cmake reads. AUTO looks only when
+# a game client is being built, so a dedicated-server configure never asks
+# pkg-config for anything.
+set(kisak_cinematics_asked "${KISAK_LINUX_CINEMATICS}")
+if(NOT kisak_cinematics_asked STREQUAL "AUTO")
+    if(kisak_cinematics_asked)
+        set(KISAK_LINUX_CINEMATICS ON)
+    else()
+        set(KISAK_LINUX_CINEMATICS OFF)
+    endif()
+elseif(NOT KISAK_BUILD_LINUX_MP_CLIENT AND NOT KISAK_BUILD_LINUX_SP_GAME)
+    set(KISAK_LINUX_CINEMATICS OFF)
+else()
+    set(KISAK_LINUX_CINEMATICS OFF)
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(KISAK_FFMPEG QUIET IMPORTED_TARGET libavcodec libavutil)
+    endif()
+    if(KISAK_FFMPEG_FOUND)
+        # pkg-config answers for the host's own architecture unless it is
+        # pointed elsewhere, so an i386 build on an x86_64 host finds x86_64
+        # libraries. Only a link with the target's own flags shows that what
+        # was found can be used.
+        include(CheckCXXSourceCompiles)
+        set(CMAKE_REQUIRED_LIBRARIES PkgConfig::KISAK_FFMPEG)
+        check_cxx_source_compiles("
+            extern \"C\" {
+            #include <libavcodec/avcodec.h>
+            #include <libavutil/avutil.h>
+            }
+            int main() { return (avcodec_version() != 0 && avutil_version() != 0) ? 0 : 1; }"
+            KISAK_FFMPEG_LINKS_FOR_TARGET)
+        unset(CMAKE_REQUIRED_LIBRARIES)
+        if(KISAK_FFMPEG_LINKS_FOR_TARGET)
+            set(KISAK_LINUX_CINEMATICS ON)
+        endif()
+    endif()
+    if(KISAK_LINUX_CINEMATICS)
+        message(STATUS "KisakCOD movies: on (libavcodec and libavutil found; -DKISAK_LINUX_CINEMATICS=OFF leaves them out)")
+    elseif(KISAK_FFMPEG_FOUND)
+        message(STATUS "KisakCOD movies: off (pkg-config found libavcodec and libavutil, but a test program does not link with them in this build; they are probably for another architecture, see docs/linux-cinematics.md)")
+    else()
+        message(STATUS "KisakCOD movies: off (no libavcodec and libavutil development files found with pkg-config; see docs/linux-cinematics.md)")
+    endif()
+endif()
 if(NOT KISAK_BUILD_LINUX_MP_CLIENT)
     return()
 endif()
