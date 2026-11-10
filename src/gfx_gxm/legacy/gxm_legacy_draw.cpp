@@ -259,6 +259,10 @@ struct DrawState
     // and this frame's test (DiagMode).
     uint32_t diagnosedDraws = 0;
     int diagMode = 0;
+    // The tests and the magenta rectangle only run when the program cache
+    // folder holds a file named "run-tests"; frame 300's log and the two
+    // read-backs always do.
+    bool diagTests = false;
     Variant diagGreen; // a fragment program that writes opaque green
     // A vertex program that takes the game's POSITION as screen pixels.
     Variant diagPass;
@@ -1493,6 +1497,11 @@ bool InitDraw(Device &device, std::string &error)
         if (!d.diagSynthetic[i].translated)
             Log(device, "diag: synthetic shader %d not translated: %s", i + 1, reason.c_str());
     }
+    d.diagTests = gxm::ProgramCacheMarker("run-tests");
+    Log(device, "diag: draw tests %s (a file named run-tests in the program cache folder turns them on)",
+        d.diagTests ? "on" : "off");
+    if (!d.diagTests)
+        return true;
     // The guess translated for the menu's vertex layout (a D3DCOLOR colour,
     // a two-float coordinate), then each edit of it.
     gxm::cg::Options menuOptions;
@@ -1864,7 +1873,7 @@ void FrameDone(Device &device)
     ++d.frame;
     d.ringUsed = 0;
     uint64_t into = 0;
-    const int mode = DiagModeFor(d.frame, &into);
+    const int mode = d.diagTests ? DiagModeFor(d.frame, &into) : 0;
     if (d.frame == kDiagnosedFrame)
         d.diagnosedDraws = 8;
     else if (mode && into == kTestLogged)
@@ -2595,7 +2604,7 @@ void DiagnoseFrame(Device &device)
     if (!d)
         return;
     // The frame being drawn is d->frame (FrameDone counts it after Present).
-    if (d->frame >= kTestRectFirst && d->frame <= kTestRectLast)
+    if (d->diagTests && d->frame >= kTestRectFirst && d->frame <= kTestRectLast)
     {
         // Draw into the back buffer whatever the game left bound.
         Surface *saved = device.renderTargets[0];
@@ -2614,7 +2623,7 @@ void DiagnoseFrame(Device &device)
                 (unsigned long long)kTestRectLast);
     }
     uint64_t into = 0;
-    bool readBack = DiagModeFor(d->frame, &into) && into == kTestRead;
+    bool readBack = d->diagTests && DiagModeFor(d->frame, &into) && into == kTestRead;
     for (const uint64_t frame : kReadBackFrames)
         readBack |= d->frame == frame;
     if (!readBack)

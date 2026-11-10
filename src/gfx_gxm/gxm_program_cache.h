@@ -39,6 +39,9 @@ struct ProgramCacheStats
 // found by the source alone.
 bool GetProgram(const std::string &cg, ShaderStage stage, std::vector<uint8_t> &program, std::string &log,
                 bool fastMath = true, int optimization = 3);
+// Whether the folder holds a file of this name: switches for runs on a
+// console or an emulator ("dump-cg" below, the draw tests' "run-tests").
+bool ProgramCacheMarker(const char *name);
 // The 16 hex digits of this source's file name, for logs.
 uint64_t ProgramCacheKey(const std::string &cg, ShaderStage stage);
 //

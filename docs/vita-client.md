@@ -73,6 +73,11 @@ To see what a translated shader looks like, put an empty file named
 `dump-cg` in `ux0:data/KisakCOD/gxp`: every program asked for then also
 leaves its Cg source there as `<same 16 hex digits>.cg`. Those sources come
 from the game's shaders, so keep them on that machine like the game's files.
+A file named `run-tests` in the same folder turns on the draw tests of
+`gxm_legacy_draw.cpp` (`kGuessEdits`): for the first minute and a half the
+screen shows test pictures, mostly plain green, and the log says what each
+left in the back buffer. Without the file the client only logs frame 300's
+first draws and what frames 300 and 700 left in the back buffer.
 
 ## What it builds
 

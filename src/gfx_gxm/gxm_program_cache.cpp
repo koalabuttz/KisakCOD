@@ -91,8 +91,7 @@ void DumpSource(const std::string &cg, ShaderStage stage)
     if (!g_dumpChecked)
     {
         g_dumpChecked = true;
-        SceIoStat stat{};
-        g_dump = sceIoGetstat((g_folder + "/dump-cg").c_str(), &stat) >= 0;
+        g_dump = ProgramCacheMarker("dump-cg");
     }
     if (!g_dump)
         return;
@@ -115,6 +114,14 @@ void SetProgramCacheFolder(const char *folder)
         g_folder.pop_back();
     g_folderMade = false;
     g_dumpChecked = false;
+}
+
+bool ProgramCacheMarker(const char *name)
+{
+    if (g_folder.empty())
+        return false;
+    SceIoStat stat{};
+    return sceIoGetstat((g_folder + "/" + name).c_str(), &stat) >= 0;
 }
 
 uint64_t ProgramCacheKey(const std::string &cg, ShaderStage stage)
