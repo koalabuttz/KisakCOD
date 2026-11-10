@@ -31,11 +31,12 @@ on:
       - scripts/tests/test_upstream_queue.py
       - .github/workflows/upstream-queue.yaml
 
-# A newer push to the same pull request or branch replaces the run in progress.
-# Manual runs always finish.
+# A newer push to a pull request replaces its run in progress. A master run in
+# progress finishes and only the newest later merge waits. Manual runs always
+# finish.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Read-only token: these jobs only check out and build.
 permissions:

@@ -692,8 +692,17 @@ def _selected(path, patterns):
 class CiTriggerTests(unittest.TestCase):
     """When the Linux and Windows workflows run, and which runs a newer push cancels."""
 
+    # Pull requests: one group per pull request, the newer push cancels. Master:
+    # one group, the run in progress finishes and GitHub keeps only the newest
+    # run waiting. Manual runs: a group each.
     CONCURRENCY = {
         'group': "${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}",
+        'cancel-in-progress': "${{ github.event_name == 'pull_request' }}",
+    }
+    # The PS Vita workflow: every master run finishes too, each in a group of
+    # its own, so each merge that changes the port keeps its vpk.
+    VITA_CONCURRENCY = {
+        'group': "${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}",
         'cancel-in-progress': 'true',
     }
 
@@ -774,11 +783,23 @@ class CiTriggerTests(unittest.TestCase):
         cls.vita = load('build-kisakcod-vita.yaml')
         cls.windows_paths = cls.windows['on']['pull_request']['paths']
 
-    def test_a_newer_push_cancels_only_the_same_branchs_older_run(self):
-        for name, workflow in (('linux', self.linux), ('windows', self.windows), ('macos', self.macos),
-                               ('vita', self.vita)):
+    def test_a_newer_push_cancels_only_the_same_pull_requests_older_run(self):
+        for name, workflow in (('linux', self.linux), ('windows', self.windows), ('macos', self.macos)):
             with self.subTest(workflow=name):
                 self.assertEqual(workflow['concurrency'], self.CONCURRENCY)
+        self.assertEqual(self.vita['concurrency'], self.VITA_CONCURRENCY)
+
+    def test_no_workflow_cancels_a_master_run_in_progress(self):
+        # With merges coming faster than the hosted queue, cancelling the older
+        # master run meant that none finished: the platforms checked only
+        # after a merge went unchecked and master had no vpk.
+        for path in sorted((ROOT / '.github/workflows').glob('*.y*ml')):
+            workflow = yaml.load(path.read_text(encoding='utf-8'), Loader=yaml.BaseLoader)
+            concurrency = workflow.get('concurrency')
+            if concurrency is None:
+                continue
+            with self.subTest(workflow=path.name):
+                self.assertIn(concurrency, (self.CONCURRENCY, self.VITA_CONCURRENCY))
 
     # The PS Vita port's own files: only its workflow builds or reads them.
     VITA_ONLY = (

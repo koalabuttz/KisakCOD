@@ -98,11 +98,12 @@ on:
 permissions:
   contents: read
 
-# Same rule as the Linux and Windows workflows: a newer push to a branch
-# cancels that branch's older run; manual runs always finish.
+# Same rule as the Linux and Windows workflows: a newer push to a pull request
+# cancels its older run; a master run in progress finishes and only the newest
+# later merge waits; manual runs always finish.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   dedicated:
