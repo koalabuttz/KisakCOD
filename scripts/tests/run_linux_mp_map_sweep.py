@@ -89,7 +89,6 @@ import importlib.util
 from pathlib import Path
 import re
 import shutil
-import struct
 import sys
 import tempfile
 import time
@@ -242,55 +241,8 @@ def script_menus(lines):
     return menus
 
 
-class Frame:
-    """Numbers that describe a screenshot without showing it, from every 4th
-    pixel of every 4th row. Colours are counted in 32 steps per channel."""
-
-    FLAT_SHARE = 0.98  # one colour on this much of the frame: nothing was drawn
-
-    def __init__(self, path):
-        data = path.read_bytes()
-        if len(data) < 18:
-            raise ValueError(f"{path.name}: too short for a TGA header")
-        id_length, colour_map, kind = data[0], data[1], data[2]
-        width, height, depth, descriptor = struct.unpack_from("<HHBB", data, 12)
-        if colour_map != 0 or kind != 2 or depth not in (24, 32) or not width or not height:
-            raise ValueError(f"{path.name}: not an uncompressed 24 or 32-bit TGA")
-        step = depth // 8
-        start = 18 + id_length
-        if len(data) < start + width * height * step:
-            raise ValueError(f"{path.name}: pixel data is cut short")
-        top_first = bool(descriptor & 0x20)
-        colours = {}
-        thirds = [[0, 0, 0, 0] for _ in range(3)]  # red, green, blue, samples
-        luma = 0.0
-        lit = 0
-        count = 0
-        for row in range(0, height, 4):
-            third = thirds[min((row if top_first else height - 1 - row) * 3 // height, 2)]
-            base = start + row * width * step
-            for column in range(0, width, 4):
-                blue, green, red = data[base + column * step:base + column * step + 3]
-                brightness = 0.299 * red + 0.587 * green + 0.114 * blue
-                luma += brightness
-                lit += brightness > 16
-                count += 1
-                key = (red >> 3, green >> 3, blue >> 3)
-                colours[key] = colours.get(key, 0) + 1
-                third[0] += red
-                third[1] += green
-                third[2] += blue
-                third[3] += 1
-        self.size = f"{width}x{height}"
-        self.mean = luma / count
-        self.lit = lit / count
-        self.colours = len(colours)
-        self.commonest = max(colours.values()) / count
-        self.thirds = ["#%02x%02x%02x" % tuple(round(total / max(third[3], 1)) for total in third[:3])
-                       for third in thirds]
-
-    def flat(self):
-        return self.commonest >= self.FLAT_SHARE
+# Screenshots are measured the same way in both sweeps.
+Frame = sp.Frame
 
 
 class MapResult(sp.LevelResult):
@@ -381,30 +333,6 @@ class Sweep:
             alive = game.hold(options.menu_wait)
         return result.step("joined", alive, "" if alive else "process ended")
 
-    def screenshot(self, game, result):
-        options = self.options
-        name = f"sweep_{result.level}"
-        path = self.home / "main" / "screenshots" / f"{name}.tga"
-        if path.exists():
-            path.unlink()
-        game.send(f"screenshot {name}")
-        deadline = time.monotonic() + options.probe_timeout
-        while not path.is_file() and time.monotonic() < deadline and game.hold(0.5):
-            pass
-        game.hold(1)  # let the write finish
-        if not path.is_file():
-            return result.step("frame drawn", False, f"no {path.relative_to(self.home)}")
-        try:
-            frame = Frame(path)
-        except (OSError, ValueError) as error:
-            return result.step("frame drawn", False, str(error))
-        result.frame = frame
-        if options.delete_screenshots:
-            path.unlink()
-        return result.step("frame drawn", not frame.flat(),
-                           f"mean brightness {frame.mean:.0f} of 255, {frame.colours} colours"
-                           + (f", one colour on {frame.commonest:.0%} of it" if frame.flat() else ""))
-
     def run_map(self, game, result, asked_at):
         """The steps after a map was asked for. Returns False to stop the process."""
         options = self.options
@@ -444,7 +372,8 @@ class Sweep:
         if not result.step("console answers", bool(match) and match.group(1) == result.level and state == CA_ACTIVE,
                            detail):
             return False
-        if options.screenshot and not self.screenshot(game, result) and game.ended:
+        if (options.screenshot and not sp.take_screenshot(game, result, self.home, options, f"sweep_{result.level}")
+                and game.ended):
             return False
         before = self.deaths_logged()
         game.send("kill")
@@ -574,17 +503,7 @@ def write_report(path, options, results, missing):
             if result.sound:
                 starts, cuts, underruns, al_errors, gap = result.sound
                 lines.append(f"| {result.level} | {starts} | {cuts} | {underruns} | {al_errors} | {gap} ms |")
-    if any(result.frame for result in results):
-        lines += ["", "Screenshots as numbers (every 4th pixel of every 4th row; colours counted in 32 steps per "
-                  "channel). A map whose row stands apart from the others is worth a look:", "",
-                  "| Map | Size | Mean brightness | Not black | Colours | Commonest colour | Mean colour, top third | "
-                  "Middle | Bottom |",
-                  "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
-        for result in results:
-            frame = result.frame
-            if frame:
-                lines.append(f"| {result.level} | {frame.size} | {frame.mean:.0f} | {frame.lit:.0%} | {frame.colours} | "
-                             f"{frame.commonest:.0%} | {frame.thirds[0]} | {frame.thirds[1]} | {frame.thirds[2]} |")
+    lines += sp.frame_table(results, "map")
     menus = list(dict.fromkeys(result.menus for result in results if result.menus))
     if menus:
         lines += ["", "Menus answered (name and position): " + "; ".join(menus) + "."]

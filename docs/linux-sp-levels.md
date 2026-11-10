@@ -71,6 +71,21 @@ python3 scripts/tests/run_linux_sp_level_sweep.py "$GAME" --binary "$BUILD/Kisak
 - `--save-load` adds `devsave sweep`, a check that
   `home/players/profiles/sweep/save/sweep.svg` appeared, `loadgame sweep` and a
   second hold.
+- `--screenshot` adds `screenshot sweep_<level>` and reads the image the game
+  wrote under `home/main/screenshots/`. The step "frame drawn" is seen when
+  the file is there and is not nearly all one colour, and the report gets a
+  table of numbers for each frame: size, mean brightness, share that is not
+  black, colour count, and the mean colour of the top, middle and bottom
+  third. A black or one-colour screen shows up with nobody watching, and a
+  level whose row stands apart from the others is worth a look. The images
+  are game output: they stay on the machine (`--delete-screenshots` removes
+  each one once it is measured).
+- `--death-retry` adds, last in each level, `kill`, a wait for the retry's
+  load (the game starts `loadgame_continue` by itself 3 seconds after the
+  death), a hold and the `mapname` question again. The retry loads the last
+  save: the level's own start save or autosave, or `--save-load`'s when both
+  are asked for. A level with no save at all stops with "Save '' not
+  available", which the report lists.
 - `--assert-continue` sets `KISAK_ASSERT_CONTINUE=1`. `--gdb` runs the game
   under `gdb -batch` and keeps the backtraces in the log.
 - `--set DVAR VALUE` adds a `+set`. Default window 1280x720, `snd_volume 0.8`.
@@ -84,7 +99,8 @@ writes only under the work directory. Each level's console output is in
 
 The report says which steps were seen, the load time, how the process
 ended, and the assertions, errors and warning count. It does not say that a
-level looks or plays right. Screenshots and hand play do that.
+level looks or plays right: the frame numbers only rule out a blank screen.
+Looking at the screen and hand play do the rest.
 
 ## Laptop run plan
 
@@ -108,6 +124,10 @@ rebuilt at the commit under test. Sound on: the sweep sets `snd_volume 0.8`.
    the gunship in ac130, the Javelin in launchfacility_a, the slow-motion
    breach in airplane, one death and retry, and one real mission end through
    the victory screen (the sweep cannot click it).
+7. **Frames and deaths:** all 21 levels with `--hold 30 --screenshot
+   --death-retry`. This says whether each level draws something and whether a
+   death brings the level back, with nobody at the laptop, so it can run
+   before step 6. Not run yet.
 
 Report back the `report.md` tables and the failing levels' logs. Report
 console lines and file names, never game file contents.
