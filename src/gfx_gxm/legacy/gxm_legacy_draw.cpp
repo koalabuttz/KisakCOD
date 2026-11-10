@@ -333,6 +333,19 @@ struct DrawState
     bool sceneTimes = false;
     std::vector<SceneTime> sceneTimeList;
     uint64_t sceneDraws = 0, sceneTimesFrames = 0;
+    // Run diagnostic (gpu-draw-times): every draw is a scene of its own, ended
+    // and waited for, and the wait goes to its pair of programs. Each such
+    // scene also loads and stores its whole targets, so the smallest time a
+    // draw shows is mostly that, not the draw.
+    struct DrawTime
+    {
+        uint64_t vertexKey = 0, pixelKey = 0;
+        std::string target;
+        uint64_t micros = 0, draws = 0, indices = 0, slowest = 0;
+    };
+    bool drawTimes = false;
+    std::vector<DrawTime> drawTimeList;
+    uint64_t drawTimesFrames = 0, drawTimesFastest = ~0ull, drawTimesSince = 0;
     // Renames that found no room and waited for the GPU, renames a wait since
     // the buffer's last draw made needless, and the bytes of renamed buffers'
     // old memory the GPU may still read.
@@ -1700,6 +1713,12 @@ bool InitDraw(Device &device, std::string &error)
         Log(device, "diag: gpu-scene-times is there: the CPU waits for the GPU after every scene, and the GPU's "
                     "time is logged by scene every 60 frames (frames are slower with it)");
     }
+    if (gxm::ProgramCacheMarker("gpu-draw-times"))
+    {
+        d.drawTimes = true;
+        Log(device, "diag: gpu-draw-times is there: every draw is a scene of its own and is waited for, and the "
+                    "GPU's time is logged by program pair every 60 frames or 10 s (frames are much slower with it)");
+    }
     if (gxm::ProgramCacheMarker("no-draw-reuse"))
     {
         d.reuse = false;
@@ -2174,6 +2193,79 @@ void TimeScene(Device &device, const Surface *color, const Surface *depth)
     d.sceneDraws = 0;
 }
 
+// gpu-draw-times: the draw just made ends its scene and is waited for.
+void TimeDraw(Device &device, const Variant &vertex, const Variant &pixel, uint32_t indexCount)
+{
+    DrawState &d = *device.draw;
+    const std::string target = SurfaceName(d.sceneColor);
+    const bool timeScene = d.sceneTimes;
+    d.sceneTimes = false; // this wait is the draw's, not the scene's
+    EndScene(device);
+    d.sceneTimes = timeScene;
+    const uint64_t from = Micros();
+    gxm::Finish();
+    const uint64_t took = Micros() - from;
+    ++d.gpuWaits;
+    d.drawTimesFastest = std::min(d.drawTimesFastest, took);
+    DrawState::DrawTime *entry = nullptr;
+    for (auto &e : d.drawTimeList)
+        if (e.vertexKey == vertex.cacheKey && e.pixelKey == pixel.cacheKey && e.target == target)
+            entry = &e;
+    if (!entry)
+    {
+        if (d.drawTimeList.size() >= 512)
+            return;
+        DrawState::DrawTime fresh;
+        fresh.vertexKey = vertex.cacheKey;
+        fresh.pixelKey = pixel.cacheKey;
+        fresh.target = target;
+        d.drawTimeList.push_back(fresh);
+        entry = &d.drawTimeList.back();
+    }
+    entry->micros += took;
+    ++entry->draws;
+    entry->indices += indexCount;
+    entry->slowest = std::max(entry->slowest, took);
+}
+
+// Every 60 frames (or 10 s): the twelve program pairs that took the GPU
+// longest.
+void LogDrawTimes(Device &device)
+{
+    DrawState &d = *device.draw;
+    // Every 60 frames, or every 10 s when frames are that slow.
+    if (!d.drawTimesSince)
+        d.drawTimesSince = Micros();
+    if (++d.drawTimesFrames < 60 && Micros() - d.drawTimesSince < 10000000)
+        return;
+    d.drawTimesSince = Micros();
+    std::sort(d.drawTimeList.begin(), d.drawTimeList.end(),
+              [](const DrawState::DrawTime &a, const DrawState::DrawTime &b) { return a.micros > b.micros; });
+    const double frames = double(d.drawTimesFrames);
+    uint64_t total = 0, draws = 0;
+    for (const auto &e : d.drawTimeList)
+    {
+        total += e.micros;
+        draws += e.draws;
+    }
+    Log(device, "diag: gpu by draw, frames %llu to %llu: %.2f ms a frame for %.1f draws a frame, %zu program pairs, "
+        "fastest single draw %.3f ms (mostly the scene's own cost)",
+        (unsigned long long)(d.frame - d.drawTimesFrames), (unsigned long long)d.frame, total / 1000.0 / frames,
+        draws / frames, d.drawTimeList.size(), d.drawTimesFastest == ~0ull ? 0.0 : d.drawTimesFastest / 1000.0);
+    for (size_t i = 0; i < d.drawTimeList.size() && i < 12; ++i)
+    {
+        const auto &e = d.drawTimeList[i];
+        Log(device, "diag: gpu by draw: %.2f ms a frame, %.1f draws a frame, slowest %.2f ms, %llu indices a "
+            "draw: vs %016llx ps %016llx into %s",
+            e.micros / 1000.0 / frames, e.draws / frames, e.slowest / 1000.0,
+            (unsigned long long)(e.draws ? e.indices / e.draws : 0), (unsigned long long)e.vertexKey,
+            (unsigned long long)e.pixelKey, e.target.c_str());
+    }
+    d.drawTimeList.clear();
+    d.drawTimesFrames = 0;
+    d.drawTimesFastest = ~0ull;
+}
+
 // Every 60 frames: the GPU's time by scene target, most first.
 void LogSceneTimes(Device &device)
 {
@@ -2229,6 +2321,8 @@ void FrameDone(Device &device)
     d.ringUsed = 0;
     if (d.sceneTimes)
         LogSceneTimes(device);
+    if (d.drawTimes)
+        LogDrawTimes(device);
     uint64_t into = 0;
     const int mode = d.diagTests ? DiagModeFor(d.frame, &into) : 0;
     if (d.frame == kDiagnosedFrame)
@@ -3051,6 +3145,8 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     ++d.sceneDraws;
     if (target)
         target->unfilled = false;
+    if (d.drawTimes)
+        TimeDraw(device, *vertex, *pixel, indexCount);
 }
 
 void Copy(Device &device, Surface *src, const Rect *srcRect, Surface *dst, const Rect *dstRect, bool linear)

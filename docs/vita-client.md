@@ -767,7 +767,15 @@ What the GXM back end does so far (step 2d):
   The back buffer's scene also holds any wait for the display to let the
   buffer go. The waits stop the CPU and the GPU working at once, so frames
   are slower with it; it is for finding the costly pass, not for frame
-  rates.
+  rates. In Vita3K (PC run Z12) nearly all of mp_crash's GPU time is one
+  scene, the back buffer's, so a file named `gpu-draw-times` goes further:
+  every draw becomes a scene of its own and is waited for, and every 60
+  frames (or 10 s) the log names the twelve pairs of programs that took
+  longest: `diag: gpu by draw: N ms a frame, N draws a frame, slowest N
+  ms, N indices a draw: vs <key> ps <key> into <target>`, after a header
+  with the frame's total and the fastest single draw. Each of those scenes
+  also loads and stores its whole targets, so the fastest draw's time is
+  mostly that cost; frames are much slower with it.
 - **Textures** are linear: rows of whole multiples of 8 texels, and the
   levels of a mipmapped texture sized from the power of two above the base,
   which is how sceGxm reads them and also a layout LockRect can hand out.
