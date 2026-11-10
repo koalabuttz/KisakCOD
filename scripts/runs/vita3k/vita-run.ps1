@@ -298,7 +298,10 @@ $state = [ordered]@{
     installed_build = $(if (Test-Path "$v\installed-build.txt") { (Get-Content "$v\installed-build.txt" -TotalCount 1).Trim() } else { 'unknown' })
     cmdline_mp_txt = $(if (Test-Path "$card\cmdline-mp.txt") { [IO.File]::ReadAllText("$card\cmdline-mp.txt") } else { '' })
     programs_in_gxp = @($gxp | Where-Object { $_.Extension -eq '.gxp' }).Count
-    marker_files = (@($gxp | Where-Object { $_.Extension -ne '.gxp' } | ForEach-Object { $_.Name }) -join ', ')
+    # A dump-cg start leaves hundreds of .cg sources here: counted, not named,
+    # so the sealed line stays short.
+    cg_files_in_gxp = @($gxp | Where-Object { $_.Extension -eq '.cg' }).Count
+    marker_files = (@($gxp | Where-Object { $_.Extension -notin '.gxp', '.cg' } | ForEach-Object { $_.Name }) -join ', ')
 }
 $body = [ordered]@{ format = 'kisak-run-result/1'; id = $id; title = $(if (Has $d 'title') { [string]$d.title } else { $id })
     machine = $machine; started = $started; finished = (Utc); status = $status
