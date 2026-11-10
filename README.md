@@ -104,13 +104,15 @@ the engine's own D3D9 renderer on DXVK Native, with SDL3 for the window and
 OpenAL for sound. On a developer laptop with the game files it hosts a listen
 server, spawns the player, and plays: moving, shooting, grenades, sound and a
 clean quit. All 21 stock maps load and take a player in an unattended sweep of
-both builds; one map has been played by hand. Movies play with the opt-in FFmpeg shim
-([cinematics](docs/linux-cinematics.md)). Build steps:
-[multiplayer client](docs/linux-mp-client.md). The singleplayer game
+both builds; one map has been played by hand. Movies play through an FFmpeg
+shim, built in when FFmpeg is found ([cinematics](docs/linux-cinematics.md)).
+On x86_64, `python3 scripts/tools/setup_linux_client.py` fetches and builds
+SDL3, DXVK and the client in one command. Build steps, a portable folder and
+opt-in controller support: [multiplayer client](docs/linux-mp-client.md). The singleplayer game
 ([guide](docs/linux-sp-game.md), i386) plays its first levels, killhouse and
 cargoship, and all 21 levels load and run unattended
-([levels](docs/linux-sp-levels.md)); it also builds for x86_64, where it has
-not loaded a level yet.
+([levels](docs/linux-sp-levels.md)); it also builds for x86_64, where the
+first levels have loaded in local runs ([status](docs/status.md)).
 
 **Vulkan.** An opt-in back end (`-DKISAK_BUILD_VULKAN_BACKEND=ON`, then
 `+set r_backend vulkan`) draws the same renderer through Vulkan directly,
