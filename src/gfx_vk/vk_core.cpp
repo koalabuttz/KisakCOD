@@ -698,6 +698,7 @@ bool CreateDevice(Core &core)
     core.optional.forceWideRenderTargets = EnvEquals("KISAK_VK_RENDER_TARGETS", "wide");
     core.optional.staticUniforms = EnvEquals("KISAK_VK_UNIFORMS", "static");
     core.optional.fenceFlush = !EnvEquals("KISAK_VK_FENCE_FLUSH", "0");
+    core.optional.passClears = !EnvEquals("KISAK_VK_PASS_CLEARS", "0");
     // Tile-based GPUs pay for every part with a store and a load of the
     // targets (see OptionalFeatures): Apple, Arm, Qualcomm, Imagination,
     // Broadcom, and MoltenVK on any GPU.

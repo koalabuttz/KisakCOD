@@ -328,6 +328,12 @@ struct OptionalFeatures
     // engine waits for the frame before it (legacy::GetQueryData). On unless
     // KISAK_VK_FENCE_FLUSH=0, to compare the two.
     bool fenceFlush;
+    // The Legacy adapter turns a Clear of the whole target that comes before
+    // any draw of a pass into the pass's load operation (LOAD_OP_CLEAR), as
+    // DXVK does: drivers clear an attachment that way with their fast clears
+    // (Mesa's ANV counts vkCmdClearAttachments as a slow clear), and a
+    // tile-based GPU loads nothing. On unless KISAK_VK_PASS_CLEARS=0.
+    bool passClears;
     // The Legacy adapter submits a frame in parts while it is still being
     // drawn, so the GPU works on a frame as it is recorded instead of
     // starting when the frame ends (see FeedGpu in vk_legacy_draw.cpp). Each
