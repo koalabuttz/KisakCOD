@@ -16,6 +16,12 @@ involved. The checks:
                  for the display
   bench          --scene bench, which a full run leaves out, passes and prints
                  its timings (they depend on the machine and are not judged)
+  bench-runs     --scene bench_runs, which a full run leaves out too: frames of
+                 768 draws in runs of eight that share their state, as the
+                 engine's sorted draws do. It runs with the validation layer,
+                 where the adapter checks every block, pipeline and dynamic
+                 state it keeps from an earlier draw, and its last frame is
+                 read back; timings are printed and not judged
   full           a full run passes: every scene in SCENES ran, had points and
                  no mismatch; the only unsupported call is the one the states
                  scene makes on purpose; frames were presented; no object
@@ -140,6 +146,21 @@ def main():
                   bench or 'missing')
     if bench:
         print(f'bench: {bench}')
+
+    # bench_runs (with the validation layer: the adapter then checks what it keeps between draws)
+    code, stdout, _ = run(binary, ['--scene', 'bench_runs', '--validation', args.validation], env, timeout=900)
+    found, scenes = parse(stdout)
+    checks.expect('bench_runs passes', code == 0 and found.get('d3d9_check') == 'passed', f'status {code}\n{stdout}')
+    checks.expect('bench_runs ran alone and its frame matches',
+                  len(scenes) == 1 and scenes[0][0] == 'bench_runs' and scenes[0][1] > 0 and scenes[0][2] == 0,
+                  repr(scenes))
+    bench_runs = found.get('d3d9_check.bench_runs', '')
+    checks.expect('bench_runs prints its timings',
+                  re.match(r'frames=\d+ draws=\d+ calls=\d+ draw_ms_average=[\d.]+ draw_ms_min=[\d.]+ '
+                           r'polls_per_frame=\d+ submissions_per_frame=[\d.]+$', bench_runs) is not None,
+                  bench_runs or 'missing')
+    if bench_runs:
+        print(f'bench_runs: {bench_runs}')
 
     # full
     code, stdout, stderr = run(binary, ['--validation', args.validation], env)
