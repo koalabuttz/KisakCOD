@@ -1,0 +1,103 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 08:48:03 +0000
+Subject: [PATCH] refactor: name the map centre rounding of the origin codec
+
+The origin readers and writers each round the map centre with a bare
+"+ 0.5" and a truncating cast, six times in two files. qcommon.h now
+has MSG_RoundMapCenter() for it, so the two ends cannot drift apart.
+
+No behaviour change, on purpose. Upstream issue 56 suggests std::round
+because -1.49 becomes 0. Retail 1.7 iw3mp.exe does the same: fadd 0.5,
+then _ftol2_sse, at 0x506650 and 0x5066d5. Both ends XOR the 16-bit
+origin against this centre, so a build that rounds it another way
+decodes a retail peer's origins wrongly on maps with such a centre.
+---
+ src/qcommon/msg_mp.cpp          |  4 ++--
+ src/qcommon/qcommon.h           | 10 ++++++++++
+ src/qcommon/sv_msg_write_mp.cpp |  8 ++++----
+ 3 files changed, 16 insertions(+), 6 deletions(-)
+
+diff --git a/src/qcommon/msg_mp.cpp b/src/qcommon/msg_mp.cpp
+index edd18698..b27ec781 100644
+--- a/src/qcommon/msg_mp.cpp
++++ b/src/qcommon/msg_mp.cpp
+@@ -1272,7 +1272,7 @@ double __cdecl MSG_ReadOriginFloat(int bits, msg_t *msg, float oldValue)
+             iassert( bits == MSG_FIELD_ORIGINY );
+             index = 1;
+         }
+-        roundedCenter = (int)((*CL_GetMapCenter())[index] + 0.5);
++        roundedCenter = MSG_RoundMapCenter((*CL_GetMapCenter())[index]);
+         return (float)(roundedCenter + (((int)oldValue + 0x8000 - roundedCenter) ^ MSG_ReadBits(msg, 0x10u)) - 0x8000);
+     }
+     else
+@@ -1287,7 +1287,7 @@ double __cdecl MSG_ReadOriginZFloat(msg_t *msg, float oldValue)
+ 
+     if (MSG_ReadBit(msg))
+     {
+-        roundedCenter = (int)((*CL_GetMapCenter())[2] + 0.5);
++        roundedCenter = MSG_RoundMapCenter((*CL_GetMapCenter())[2]);
+         return (float)(roundedCenter + (((int)oldValue + 0x8000 - roundedCenter) ^ MSG_ReadBits(msg, 0x10u)) - 0x8000);
+     }
+     else
+diff --git a/src/qcommon/qcommon.h b/src/qcommon/qcommon.h
+index 1d1a0069..44e565bf 100644
+--- a/src/qcommon/qcommon.h
++++ b/src/qcommon/qcommon.h
+@@ -1628,6 +1628,16 @@ inline int SnapFloatToInt(float x)
+     return retval;
+ }
+ 
++// Rounds a map centre coordinate for the origin codec (MSG_ReadOriginFloat,
++// MSG_WriteOriginFloat and their Z variants). Retail 1.7 adds 0.5 and
++// truncates, so -1.49 becomes 0 and not -1. Both ends XOR the 16-bit origin
++// against this centre, so a build that rounds it another way decodes a retail
++// peer's origins wrongly.
++inline int MSG_RoundMapCenter(float center)
++{
++    return (int)(center + 0.5);
++}
++
+ // Float-returning snap-to-grid (Sys_SnapVector, SnapPointToIntersectingPlanes).
+ // same as above, just returns the result as a float
+ inline float SnapFloat(float x)
+diff --git a/src/qcommon/sv_msg_write_mp.cpp b/src/qcommon/sv_msg_write_mp.cpp
+index 9833f6fc..dea4a12e 100644
+--- a/src/qcommon/sv_msg_write_mp.cpp
++++ b/src/qcommon/sv_msg_write_mp.cpp
+@@ -1004,7 +1004,7 @@ void __cdecl MSG_WriteOriginFloat(const int clientNum, msg_t *msg, int bits, flo
+             indexa = 1;
+         }
+         iassert( svsHeaderValid );
+-        roundedCentera = (svsHeader.mapCenter[indexa] + 0.5);
++        roundedCentera = MSG_RoundMapCenter(svsHeader.mapCenter[indexa]);
+         roundedValuea = (roundedOldValue + 0x8000 - roundedCentera) ^ (roundedValue - roundedCentera + 0x8000);
+         SV_PacketDataIsOrigin(clientNum, msg);
+         MinBitCountForNum = GetMinBitCountForNum(roundedValuea);
+@@ -1057,7 +1057,7 @@ void __cdecl MSG_WriteOriginFloat(const int clientNum, msg_t *msg, int bits, flo
+             index = 1;
+         }
+         iassert( svsHeaderValid );
+-        roundedCenter = (svsHeader.mapCenter[index] + 0.5);
++        roundedCenter = MSG_RoundMapCenter(svsHeader.mapCenter[index]);
+         if (GetMinBitCountForNum((roundedOldValue + 0x8000 - roundedCenter) ^ (roundedValue - roundedCenter + 0x8000)) > 16)
+         {
+             if (index)
+@@ -1109,7 +1109,7 @@ void __cdecl MSG_WriteOriginZFloat(const int clientNum, msg_t *msg, float value,
+     {
+         MSG_WriteBit1(msg);
+         iassert( svsHeaderValid );
+-        roundedCentera = (svsHeader.mapCenter[2] + 0.5);
++        roundedCentera = MSG_RoundMapCenter(svsHeader.mapCenter[2]);
+         roundedValuea = (roundedOldValue + 0x8000 - roundedCentera) ^ (roundedValue - roundedCentera + 0x8000);
+         SV_PacketDataIsOrigin(clientNum, msg);
+         if (GetMinBitCountForNum(roundedValuea) > 16)
+@@ -1133,7 +1133,7 @@ void __cdecl MSG_WriteOriginZFloat(const int clientNum, msg_t *msg, float value,
+         MSG_WriteBit0(msg);
+         SV_PacketDataIsOriginDelta(clientNum, msg);
+         iassert( svsHeaderValid );
+-        roundedCenter = (svsHeader.mapCenter[2] + 0.5);
++        roundedCenter = MSG_RoundMapCenter(svsHeader.mapCenter[2]);
+         if (GetMinBitCountForNum((roundedOldValue + 0x8000 - roundedCenter) ^ (roundedValue - roundedCenter + 0x8000)) > 16)
+             Com_Error(
+                 ERR_DROP,

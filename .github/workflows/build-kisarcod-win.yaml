@@ -113,13 +113,13 @@ on:
       - 'scripts/tests/test_windows_tracy_option.py'
       - 'scripts/tests/test_windows_vulkan_backend_option.py'
 
-# A newer push to a pull request cancels that pull request's older run, and a
-# newer push to master cancels an older master run (the newer one checks
-# everything merged so far). Manual runs get a group of their own and always
-# finish.
+# A newer push to a pull request cancels that pull request's older run. A
+# master run in progress always finishes; of the merges after it only the
+# newest waits (it checks everything merged so far). Manual runs get a group
+# of their own and always finish. See the Linux workflow.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Read-only token: these jobs only check out, build and upload artifacts.
 permissions:

@@ -17,6 +17,11 @@
 //     a close into Com_Quit_f's command.
 // Joysticks, MIDI and raw DirectInput are not ported; the Windows build does not
 // use them either (IN_StartupMouse never starts DirectInput).
+//
+// With KISAK_LINUX_GAMEPAD, KisakCOD-mp also takes a game controller
+// (mp_client_gamepad.cpp): its buttons arrive as keys when the window is
+// pumped, and its sticks join the mouse where the window hands the mouse to
+// CL_MouseEvent. Without the option nothing below changes.
 
 // KisakCOD-sp links it too: the singleplayer client's input and window
 // procedure are the same Windows units built with KISAK_SP.
@@ -26,6 +31,9 @@
 
 #include "mp_client_input.h"
 #include "mp_client_window.h"
+#ifdef KISAK_LINUX_GAMEPAD
+#include "mp_client_gamepad.h"
+#endif
 
 #include <universal/q_shared.h>
 #include <universal/com_memory.h>
@@ -109,7 +117,11 @@ void Sys_InstallClientWindow()
     // would otherwise replace those handlers when the renderer starts video.
     SDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, "1");
     kisak::mp_client::ClientWindowEngine engine;
+#ifdef KISAK_LINUX_GAMEPAD
+    engine.mouse = kisak::mp_client::GamepadMouse;
+#else
     engine.mouse = CL_MouseEvent;
+#endif
     engine.clearKeys = Key_ClearStates;
     engine.activate = AppActivate;
     engine.close = CloseWindow;
@@ -125,7 +137,13 @@ void Sys_PumpClientWindow()
     std::string failure;
     try
     {
+#ifdef KISAK_LINUX_GAMEPAD
+        // Only the window's own thread gets its events, and the controller's.
+        if (window->Pump())
+            kisak::mp_client::GamepadPump();
+#else
         window->Pump();
+#endif
     }
     catch (const std::exception &error)
     {
@@ -143,12 +161,18 @@ void IN_Init()
     if (!s_mouseInitialized)
         Com_Printf(CON_CHANNEL_SYSTEM, "Mouse control not active.\n");
     Dvar_ClearModified((dvar_s *)in_mouse);
+#ifdef KISAK_LINUX_GAMEPAD
+    kisak::mp_client::GamepadInit();
+#endif
 }
 
 void IN_Shutdown()
 {
     IN_DeactivateMouse();
     s_mouseInitialized = false;
+#ifdef KISAK_LINUX_GAMEPAD
+    kisak::mp_client::GamepadShutdown();
+#endif
 }
 
 void IN_Activate(qboolean active)
@@ -172,8 +196,12 @@ void IN_DeactivateMouse()
 
 void IN_Frame()
 {
-    if (kisak::mp_client::ClientWindow *const window = Window())
+    kisak::mp_client::ClientWindow *const window = Window();
+    if (window)
         window->Frame(s_mouseInitialized && in_appactive && in_mouse->current.enabled);
+#ifdef KISAK_LINUX_GAMEPAD
+    kisak::mp_client::GamepadFrame(in_appactive && window && window->Foreground());
+#endif
 }
 
 void IN_ShowSystemCursor(BOOL show)
@@ -186,6 +214,9 @@ void IN_SetCursorPos(tagPOINT x)
 {
     if (kisak::mp_client::ClientWindow *const window = Window())
         window->SetCursorPos(x.x, x.y);
+#ifdef KISAK_LINUX_GAMEPAD
+    kisak::mp_client::GamepadSetCursor(x.x, x.y);
+#endif
 }
 
 bool IN_IsForegroundWindow()
