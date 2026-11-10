@@ -65,7 +65,7 @@ COMPILER_PREFIX = ("-m32", "-fms-extensions", "-pthread")
 # width, so the platform code they exercise (timed waits, sockets, virtual
 # memory, files) is tested on that platform; the rest stay i386 checks.
 ARCHITECTURES = ("i386", "x86_64", "aarch64", "macos-arm64", "macos-x86_64")
-NATIVE_CHECKS = ("bootstrap", "runtime", "net_deadline", "udp", "sys_fileio", "sys_virtualmem")
+NATIVE_CHECKS = ("bootstrap", "runtime", "net_deadline", "udp", "sys_fileio", "sys_virtualmem", "perf_ab")
 
 
 def compiler_prefix(arch):
@@ -367,6 +367,17 @@ def plan_checks(options, workdir, build_dir, binary, python, cxx):
         )
     )
 
+    # perf_ab and perf_sample: a laptop run costs battery and a place in a
+    # queue, so what they compute is checked here first (docs/perf-ab.md).
+    checks.append(
+        Check(
+            "perf_ab",
+            "in-game A/B measuring: window order, statistics, machine readings",
+            [Command([python, TESTS / "test_linux_perf_ab.py", "--cxx", cxx,
+                      *([] if native else ["--m32"])], timeout=300)],
+        )
+    )
+
     if native and not options.only:
         checks = [check for check in checks if check.name in NATIVE_CHECKS]
     if options.only:
@@ -574,7 +585,7 @@ def main():
     parser.add_argument("--list", action="store_true", help="print the command list and exit without running")
     options = parser.parse_args()
 
-    known = ["bootstrap", "runtime", "lifecycle_driver", "handshake_auth", "remote_input", "debugger", "fastfile", "net_deadline", "huffman", "udp", "sys_fileio", "sys_virtualmem", "lexer_eof", "random_range", "gameplay_lifecycle", "server_test_clients", "weapon_def_ownership", "bot_driver", "database_publication", "crt_shims", "assert_continue", "sl_trace", "phys_objid"]
+    known = ["bootstrap", "runtime", "lifecycle_driver", "handshake_auth", "remote_input", "debugger", "fastfile", "net_deadline", "huffman", "udp", "sys_fileio", "sys_virtualmem", "lexer_eof", "random_range", "gameplay_lifecycle", "server_test_clients", "weapon_def_ownership", "bot_driver", "database_publication", "crt_shims", "assert_continue", "sl_trace", "phys_objid", "perf_ab"]
     options.only = parse_names(options.only)
     options.skip = parse_names(options.skip)
     for name in options.only | options.skip:

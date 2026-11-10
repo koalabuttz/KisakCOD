@@ -39,6 +39,8 @@ on:
       - scripts/tests/run_linux_checks.py
       - scripts/tests/test_linux_runtime.py
       - scripts/tests/test_linux_net_deadline.py
+      - scripts/tests/test_linux_perf_ab.py
+      - tests/linux_perf/**
       - tests/linux_net/**
       - scripts/tests/test_linux_mp_client.py
       - scripts/tests/run_native_d3d9_boundary_checks.py
@@ -65,6 +67,8 @@ on:
       - scripts/tests/run_linux_checks.py
       - scripts/tests/test_linux_runtime.py
       - scripts/tests/test_linux_net_deadline.py
+      - scripts/tests/test_linux_perf_ab.py
+      - tests/linux_perf/**
       - tests/linux_net/**
       - scripts/tests/test_linux_mp_client.py
       - scripts/tests/run_native_d3d9_boundary_checks.py
