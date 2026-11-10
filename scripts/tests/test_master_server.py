@@ -238,6 +238,44 @@ int main(int argc, char** argv)
     expect(Master_QueryAccepts(&query, masterIp, 1234, 7000), false, "a new request replaces the old master");
     expect(Master_QueryAccepts(&query, otherIp, 99, 7000), true, "the newly asked master may answer");
 
+    // ---- which unasked infoResponse the Local list accepts ----------------------
+    LanScan scan{};
+    const uint8_t randomA[LAN_SCAN_TOKEN_BYTES] = {0x00, 0x1f, 0xa0, 0xff, 0x12, 0x34, 0x56, 0x78};
+    const uint8_t randomB[LAN_SCAN_TOKEN_BYTES] = {0x00, 0x1f, 0xa0, 0xff, 0x12, 0x34, 0x56, 0x79};
+    expect(Master_LanScanAccepts(&scan, "", 0), false, "no reply is accepted before any scan, not even an empty challenge");
+    expect(Master_LanScanAccepts(&scan, "xxx", 0), false, "retail's fixed challenge is refused before any scan");
+    expect(Master_LanScanAccepts(nullptr, "001fa0ff12345678", 0), false, "null scan accepts nothing");
+    Master_LanScanAsked(&scan, randomA, 5000);
+    expect(std::string(scan.token) == "001fa0ff12345678", true, "the token is the random bytes in lower-case hex");
+    expect(Master_LanScanAccepts(&scan, "001fa0ff12345678", 5000), true, "a reply with the token is accepted at once");
+    expect(Master_LanScanAccepts(&scan, "001fa0ff12345678", 5000 + LAN_SCAN_RESPONSE_WINDOW_MS), true,
+        "a reply with the token is accepted until the window closes");
+    expect(Master_LanScanAccepts(&scan, "001fa0ff12345678", 5001 + LAN_SCAN_RESPONSE_WINDOW_MS), false,
+        "a reply after the window is refused");
+    expect(Master_LanScanAccepts(&scan, "001fa0ff12345678", 4999), false, "a clock before the scan is refused");
+    expect(Master_LanScanAccepts(&scan, nullptr, 5000), false, "null challenge");
+    expect(Master_LanScanAccepts(&scan, "", 5000), false, "an empty challenge is refused");
+    expect(Master_LanScanAccepts(&scan, "xxx", 5000), false, "retail's fixed challenge is refused");
+    expect(Master_LanScanAccepts(&scan, "001fa0ff1234567", 5000), false, "a token cut short is refused");
+    expect(Master_LanScanAccepts(&scan, "001fa0ff123456789", 5000), false, "a token with a digit added is refused");
+    expect(Master_LanScanAccepts(&scan, "001fa0ff12345679", 5000), false, "a token with the last digit wrong is refused");
+    expect(Master_LanScanAccepts(&scan, "101fa0ff12345678", 5000), false, "a token with the first digit wrong is refused");
+    expect(Master_LanScanAccepts(&scan, "001FA0FF12345678", 5000), false, "the token is compared exactly, case included");
+    {
+        // Exact-size buffers: nothing past the challenge's terminator is read.
+        const std::vector<char> exact = {'0', '0', '1', 0};
+        expect(Master_LanScanAccepts(&scan, exact.data(), 5000), false, "a short challenge in an exact-size buffer");
+        const std::string full = "001fa0ff12345678";
+        const std::vector<char> whole(full.c_str(), full.c_str() + full.size() + 1);
+        expect(Master_LanScanAccepts(&scan, whole.data(), 5000), true, "the token in an exact-size buffer");
+    }
+    Master_LanScanAsked(&scan, randomB, 0xFFFFFF00u);
+    expect(Master_LanScanAccepts(&scan, "001fa0ff12345679", 0x00000100u), true, "the window survives the millisecond wrap");
+    expect(Master_LanScanAccepts(&scan, "001fa0ff12345678", 0xFFFFFF00u), false, "a new scan replaces the old token");
+    Master_LanScanAsked(nullptr, randomA, 0);
+    Master_LanScanAsked(&scan, nullptr, 0);
+    expect(std::string(scan.token) == "001fa0ff12345679", true, "a scan without random bytes changes nothing");
+
     // ---- server side -----------------------------------------------------------
     expect(Master_ServerUsesMaster(2, "master.example"), true, "dedicated 2 with a master reports to it");
     expect(Master_ServerUsesMaster(2, ""), false, "dedicated 2 without a master reports to nobody");

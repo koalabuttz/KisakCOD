@@ -75,6 +75,21 @@ KISAK_STEAM_SERVER_LOGIN=anonymous ./KisakCOD-dedi +set dedicated 2 +map mp_cras
 `scripts/tools/linux_steam_probe/steam_probe.cpp gameserver <steamclient.so>`
 checks the logon on its own.
 
+### The Windows dedicated server
+
+The 32-bit Windows dedicated server reads the same variable (`set
+KISAK_STEAM_SERVER_LOGIN=anonymous` before starting it) and logs on through
+`steam_api.dll`'s game server interface (`src/win32/win_steam.cpp`). Without the
+variable it checks tickets as the machine's signed-in Steam user, as before.
+With it, the machine's Steam account is not used, so one account can host on
+the Windows PC and play from another computer. The rules are the same as on
+Linux: tickets are rejected until the logon line is printed and while Steam is
+unreachable, any other value turns Steam off, the server is not listed, and a
+client or listen server ignores the variable. The 64-bit Windows build has no
+Steam at all (there is no 64-bit `steam_api` in `deps/steamsdk`).
+
+This mode has not been run yet (see Verified).
+
 If Steam is not running, not logged in, or the library is missing, start-up
 prints why and the backend stays off: the client refuses remote servers and the
 server rejects every Steam ticket. There is no fallback that admits players
@@ -154,8 +169,9 @@ as `steam_session`) needs no Steam:
   after the logon line, one quit before the logon finished, and one client-mode
   quit all exited 0.
 
-Not verified: a Windows server, two different Steam accounts, and a Windows
-client against a Linux server in client mode (one account can't be signed in on
+Not verified: a Windows server in either mode (its anonymous game server
+login has never been run against Steam), two different Steam accounts, and a
+Windows client against a Linux server in client mode (one account can't be signed in on
 two computers at once, which is why the anonymous login exists).
 
 Steam delivers auth verdicts to every process logged in to the same account,

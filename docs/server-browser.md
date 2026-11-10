@@ -18,6 +18,15 @@ ports 28960 to 28963. Favourites are kept in `servercache.dat` in the home
 folder. A server on another network is reached by address, or by adding it to
 the favourites once.
 
+Retail put any address that sent it an `infoResponse` on the local list while
+the browser showed Local games, whether or not it had scanned, so anyone who
+could reach the client's port could fill that list. Each scan now sends a random
+token as the `getinfo` challenge (retail always sent `xxx`), servers echo it as
+they always did, and a reply nobody asked for by address is listed only when it
+carries the last scan's token and arrives within 10 seconds of it. A host has to
+see the broadcast, so be on the local network, to appear. Pings, favourites and
+the internet list ask each address by name and are matched by address as before.
+
 The client speaks protocol 1 and drops replies for another protocol, so these
 lists show KisakCOD servers (and servers started with
 [`sv_advertisedProtocol 1`](linux-dedicated.md#server-browser-listing-and-sv_advertisedprotocol)).
@@ -111,7 +120,8 @@ Asset-free, on hosted CI:
 
 - `scripts/tests/test_master_server.py` compiles the rules in
   `src/qcommon/master_server.h` 64- and 32-bit with sanitizers (list parsing
-  from exact-size buffers, who may answer, when a server reports), checks that
+  from exact-size buffers, who may answer, which LAN replies are listed, when a
+  server reports), checks that
   `masterServerName` is registered empty, and drives the local test master over
   loopback, reading its lists back with the production parser.
 - `KisakCOD-client-server-list-test` (part of the
@@ -119,7 +129,8 @@ Asset-free, on hosted CI:
   and `localservers` commands, the list and `infoResponse` handlers and the
   server's heartbeat code through the engine's own UDP socket against sockets
   on 127.0.0.1: nothing is sent without a master, retail's packets go to a set
-  master, a list from anyone else is ignored, and a connected client's master
+  master, a list from anyone else is ignored, a LAN reply is listed only with
+  the last scan's token and soon after it, and a connected client's master
   settings cannot be changed.
 
 Not yet checked: the Join Game menu itself on a real client, and a real

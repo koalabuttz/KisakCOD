@@ -165,6 +165,70 @@ inline bool Master_QueryAccepts(const MasterQuery* query, const uint8_t ip[4], u
 }
 
 // ---------------------------------------------------------------------------
+// Which unasked infoResponse packets the Local list accepts
+// ---------------------------------------------------------------------------
+
+// `localservers` broadcasts one getinfo, so the client cannot know beforehand
+// who will answer.  Retail therefore listed any address that sent it an
+// infoResponse while the browser showed Local games, at any time and without
+// having scanned at all: anyone who could reach the client's port could fill
+// the Local list with up to 128 addresses and print a line of their own text
+// in its console.  A scan now sends a random token as the getinfo challenge
+// (retail sent "xxx"), which servers echo in the reply's "challenge" key, and
+// an unasked reply is listed only when it carries the token of the last scan
+// and arrives shortly after it.  A host has to see the broadcast, so be on the
+// LAN, to get listed.  Replies to a getinfo sent to one address (pings,
+// favourites, the internet list) are matched by address and are not affected.
+
+constexpr uint32_t LAN_SCAN_RESPONSE_WINDOW_MS = 10000;
+constexpr int LAN_SCAN_TOKEN_BYTES = 8;
+
+struct LanScan
+{
+    bool asked;
+    char token[LAN_SCAN_TOKEN_BYTES * 2 + 1]; // lower-case hex, safe in an info string
+    uint32_t askedTime;                       // ms, Sys_Milliseconds clock
+};
+
+inline void Master_LanScanAsked(LanScan* scan, const uint8_t random[LAN_SCAN_TOKEN_BYTES], uint32_t now)
+{
+    static const char digits[] = "0123456789abcdef";
+
+    if (!scan || !random)
+        return;
+    for (int i = 0; i < LAN_SCAN_TOKEN_BYTES; ++i)
+    {
+        scan->token[i * 2] = digits[random[i] >> 4];
+        scan->token[i * 2 + 1] = digits[random[i] & 15];
+    }
+    scan->token[LAN_SCAN_TOKEN_BYTES * 2] = 0;
+    scan->asked = true;
+    scan->askedTime = now;
+}
+
+inline bool Master_LanScanAccepts(const LanScan* scan, const char* challenge, uint32_t now)
+{
+    if (!scan || !scan->asked || !challenge)
+        return false;
+    // Every byte is compared so the time taken says nothing about the token.
+    unsigned char difference = 0;
+    for (int i = 0; i <= LAN_SCAN_TOKEN_BYTES * 2; ++i)
+    {
+        difference |= static_cast<unsigned char>(scan->token[i] ^ challenge[i]);
+        if (!challenge[i])
+        {
+            if (i != LAN_SCAN_TOKEN_BYTES * 2)
+                return false;
+            break;
+        }
+    }
+    if (difference)
+        return false;
+    // Unsigned difference, so the 49-day millisecond wrap is harmless.
+    return now - scan->askedTime <= LAN_SCAN_RESPONSE_WINDOW_MS;
+}
+
+// ---------------------------------------------------------------------------
 // Server side: when to look the master up, when to send a heartbeat
 // ---------------------------------------------------------------------------
 
