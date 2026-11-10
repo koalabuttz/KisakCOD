@@ -237,6 +237,7 @@ extern const dvar_t *r_gpuSync;
 #if !defined(_WIN32)
 extern const dvar_t *r_gpuSyncSleep;
 extern const dvar_t *r_gpuSyncSleepThreads;
+extern const dvar_t *r_gpuSyncSleepUnlocked;
 #endif
 extern const dvar_t *r_multiGpu;
 extern const dvar_t *r_skinCache;
