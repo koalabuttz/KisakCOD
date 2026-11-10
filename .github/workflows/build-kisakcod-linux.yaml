@@ -304,6 +304,7 @@ jobs:
           python3 scripts/tests/test_openal_stream_seek.py
           python3 scripts/tests/test_linux_sp_level_sweep.py
           python3 scripts/tests/test_linux_mp_map_sweep.py
+          python3 scripts/tests/test_package_linux_client.py
           python3 scripts/tests/test_shader_spike.py
           python3 scripts/tests/test_vita_gxm_heap.py
           python3 scripts/tests/test_vita_cg_translate.py --require-glslang
@@ -1319,7 +1320,7 @@ jobs:
             -DKISAK_DXVK_NATIVE_INCLUDE_DIR="$RUNNER_TEMP/dxvk-include/dxvk" \
             -DKISAK_DXVK_NATIVE_LIBRARY="$d3d9" \
             -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_OPENAL_LIBRARY="$openal" \
-            -DKISAK_LINUX_CINEMATICS=ON \
+            -DKISAK_LINUX_CINEMATICS=ON -DKISAK_LINUX_PORTABLE_RUNPATH=ON \
             -DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3" \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
           cmake --build "$BUILD_DIR" --target KisakCOD-mp KisakCOD-mp-client-window-test \
@@ -1387,6 +1388,38 @@ jobs:
           export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/stand-ins"
           "$OUT_DIR/KisakCOD-mp-client-window-test"
           python3 -u scripts/tests/test_linux_mp_client.py --binary "$OUT_DIR/KisakCOD-mp"
+
+      # The client was built with KISAK_LINUX_PORTABLE_RUNPATH, so its run path
+      # is $ORIGIN/lib and names no folder of this runner. Pack it with the
+      # SDL3 SDK and the stand-ins and start it through the packed launcher with
+      # no library path set: this runner has no system SDL3, so the start only
+      # works when the folder carries the libraries itself.
+      - name: Pack the x86_64 client into a folder and start it from there
+        timeout-minutes: 5
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          set -euo pipefail
+          runpath=$(readelf -d "$OUT_DIR/KisakCOD-mp" | sed -n 's/.*(RUNPATH).*\[\(.*\)\]/\1/p')
+          if [[ "$runpath" != '$ORIGIN/lib' ]] || readelf -d "$OUT_DIR/KisakCOD-mp" | grep -q '(RPATH)'; then
+            echo "::error::KisakCOD-mp's run path is '$runpath', expected \$ORIGIN/lib and no RPATH"
+            exit 1
+          fi
+          package="$RUNNER_TEMP/KisakCOD-linux-x86_64"
+          python3 scripts/tools/package_linux_client.py --binary "$OUT_DIR/KisakCOD-mp" \
+            --lib-dir "$RUNNER_TEMP/SDL3-sdk/lib" --lib-dir "$RUNNER_TEMP/stand-ins" \
+            --out "$package" --label "$GITHUB_SHA" --archive
+          test -f "$package/lib/libSDL3.so.0"
+          cat "$package/README.txt"
+          mkdir -p "$RUNNER_TEMP/empty-game/main" "$RUNNER_TEMP/empty-game/zone"
+          cd /
+          if env -u LD_LIBRARY_PATH "$OUT_DIR/KisakCOD-mp" --version >/dev/null 2>&1; then
+            echo "::error::the build tree's KisakCOD-mp started with no library path: the check below would prove nothing"
+            exit 1
+          fi
+          env -u LD_LIBRARY_PATH "$package/run-mp.sh" --game "$RUNNER_TEMP/empty-game" --version
 
       # The Bink shim on made-up movies and a stand-in decoder, plus
       # libavcodec's Bink decoders opened as the shim opens them. No game

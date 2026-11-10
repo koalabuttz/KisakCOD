@@ -66,6 +66,14 @@ def source_checks(checker):
     module = TARGET_MODULE.read_text(encoding="utf-8")
     checker.require(re.search(r'option\(KISAK_BUILD_LINUX_MP_CLIENT\s+"[^"]*"\s+OFF\)', module) is not None,
                     "KISAK_BUILD_LINUX_MP_CLIENT is off by default")
+    # A packaged client's run path is opt-in and names only the folder next to
+    # the binary (scripts/tools/package_linux_client.py).
+    portable = module.split("if(KISAK_LINUX_PORTABLE_RUNPATH)", 1)[-1].split("endif()\nif(KISAK_LINUX_CINEMATICS)", 1)[0]
+    checker.require(re.search(r'option\(KISAK_LINUX_PORTABLE_RUNPATH\s+"[^"]*"\s+OFF\)', module) is not None
+                    and module.count("if(KISAK_LINUX_PORTABLE_RUNPATH)") == 1
+                    and "BUILD_WITH_INSTALL_RPATH ON" in portable
+                    and 'INSTALL_RPATH "\\$ORIGIN/lib")' in portable,
+                    "the portable run path is off by default and is $ORIGIN/lib alone")
     checker.require('set(KISAK_OPENAL_INCLUDE_DIR "" CACHE PATH' in module
                     and 'NOT EXISTS "${KISAK_OPENAL_INCLUDE_DIR}/AL/al.h"' in module,
                     "the optional OpenAL header directory is checked for AL/al.h")

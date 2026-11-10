@@ -234,6 +234,60 @@ LD_LIBRARY_PATH=<sdl3-sdk>/lib SDL_VIDEODRIVER=dummy <bin>/KisakCOD-mp-client-wi
 
 CI builds both in the device-probe job with the stand-ins and runs both.
 
+## A folder that runs on another PC
+
+A client built as above runs where it was built: its run path names that
+machine's SDL3 and DXVK folders. `scripts/tools/package_linux_client.py` makes a
+folder that can be copied to another Linux PC of the same architecture:
+
+```sh
+cmake ... -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_LINUX_PORTABLE_RUNPATH=ON
+cmake --build <build> --target KisakCOD-mp
+python3 scripts/tools/package_linux_client.py \
+  --binary <bin>/KisakCOD-mp \
+  --lib-dir <sdl3-sdk>/lib --lib-dir <dxvk>/lib \
+  --license SDL3=<sdl3-source>/LICENSE.txt --license DXVK=<dxvk-source>/LICENSE \
+  --label "$(git rev-parse --short HEAD)" --out KisakCOD-linux --archive
+```
+
+`KISAK_LINUX_PORTABLE_RUNPATH` (off by default) makes the client's run path
+`$ORIGIN/lib` and nothing else. The tool refuses a binary whose run path names
+build folders, because on another PC the loader would still look in them
+first, and there they are folders anyone may be able to create
+(`--allow-build-runpath` packs it anyway, for a folder that stays on the build
+machine). With the option on, the build tree's own client needs
+`LD_LIBRARY_PATH` to start, as the checks above already set it.
+
+The tool reads each file's ELF `NEEDED` list and copies, by soname, every
+library it finds in a `--lib-dir`, and what those need in turn (the SDL3 SDK's
+own libraries next to `libSDL3.so`, for example). `--also <soname>` adds a
+library that is only loaded by name at run time. It runs nothing and reads no
+game file. What it does not find stays the other PC's job and is listed in the
+folder's `README.txt`: typically OpenAL, and FFmpeg or libcurl when those
+options are on. The C library, `libstdc++`, `libgcc_s` and the Vulkan and GL
+libraries are never packed, whatever the folders hold.
+
+The folder holds the binary, `lib/`, a launcher, `README.txt`, `MANIFEST.txt`
+(size and SHA-256 of every file) and the licence texts given with `--license`.
+The launcher puts `lib/` first on the library path, which also covers what the
+packed libraries need themselves, and passes the game folder as `fs_basepath`:
+
+```sh
+KisakCOD-linux/run-mp.sh --game "<Call of Duty 4 folder>" +set r_fullscreen 0
+```
+
+The game folder can also come from `KISAKCOD_GAME_DIR` or be the current
+folder. For fullscreen on a native Wayland session, pack a DXVK build that has
+the fix named under [The game window and input](#the-game-window-and-input).
+Several binaries of one architecture can share a folder (`--binary` again for
+`KisakCOD-sp` or `KisakCOD-dedi`; each gets its own `run-*.sh`).
+
+`scripts/tests/test_package_linux_client.py` checks the tool with a made-up
+binary and SDK built by the host compiler: the packed folder still runs after
+the SDK is moved away. Hosted CI also packs the x86_64 client with the SDL3 SDK
+and the stand-ins and starts it through the launcher with no library path set.
+No packed folder has been tried on a second real PC yet.
+
 ## On the laptop
 
 These steps need a GPU and the game files, so they ran on a developer laptop
