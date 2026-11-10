@@ -2248,10 +2248,10 @@ void LogDrawTimes(Device &device)
         total += e.micros;
         draws += e.draws;
     }
-    Log(device, "diag: gpu by draw, frames %llu to %llu: %.2f ms a frame for %.1f draws a frame, %zu program pairs, "
+    Log(device, "diag: gpu by draw, frames %llu to %llu: %.2f ms a frame for %.1f draws a frame, %u program pairs, "
         "fastest single draw %.3f ms (mostly the scene's own cost)",
         (unsigned long long)(d.frame - d.drawTimesFrames), (unsigned long long)d.frame, total / 1000.0 / frames,
-        draws / frames, d.drawTimeList.size(), d.drawTimesFastest == ~0ull ? 0.0 : d.drawTimesFastest / 1000.0);
+        draws / frames, unsigned(d.drawTimeList.size()), d.drawTimesFastest == ~0ull ? 0.0 : d.drawTimesFastest / 1000.0);
     for (size_t i = 0; i < d.drawTimeList.size() && i < 12; ++i)
     {
         const auto &e = d.drawTimeList[i];
