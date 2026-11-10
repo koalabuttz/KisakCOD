@@ -1157,14 +1157,20 @@ jobs:
               exit 1
             fi
           done
+          # The ELF with its symbols goes beside the .vpk it was packed from,
+          # so a crash dump's addresses can be named with arm-vita-eabi-addr2line
+          # on whatever machine fetched the artifact.
+          cp "$BINARY" "$BINARY.elf"
+          sha256sum "$BINARY.vpk" "$BINARY.elf"
 
-      - name: Upload the .vpk
+      - name: Upload the .vpk and its ELF
         if: ${{ matrix.config == 'RelWithDebInfo' }}
         uses: actions/upload-artifact@v4
         with:
           name: KisakCOD-mp-vita-${{ matrix.config }}
           path: |
             ${{ env.BINARY }}.vpk
+            ${{ env.BINARY }}.elf
             ${{ env.CMAKE_RUNTIME_OUTPUT_DIRECTORY }}/KisakCOD-gxm-probe.vpk
           if-no-files-found: error
           retention-days: 14
