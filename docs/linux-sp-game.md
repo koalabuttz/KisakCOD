@@ -105,14 +105,18 @@ back end builds, links and leaves the start alone, not that it draws.
   set them, and the frame stopped with "Tried to use 'cinematicY' when it
   isn't valid" behind a render thread assert. The stand-in now sets them to
   the black picture the full build shows while no movie has a frame. Found
-  by the first x86_64 sweep on the laptop; not re-run on a level yet (the
-  sweep that followed had movies on).
+  by the first x86_64 sweep on the laptop. With the fix, an x86_64 build
+  without movies loads killhouse and cargoship and quits cleanly (Linux in
+  WSL on the PC, software rendering, 2026-11-10).
 - Four structs were read through a void pointer in slots that fit the 32-bit
   layout only. One of them crashed the 64-bit game 4.5 s into airlift (an
   effect model's physics preset read as null; seen on Windows x64). They are
   read by their fields now, and `check_32bit_layout_offsets.py` reports the
-  shape. With the fix the x86_64 Linux game holds airlift for 45 s and quits
-  cleanly (laptop sweep); the Windows x64 game has not been re-run yet.
+  shape. With the fix the Windows x64 game holds airlift for 60 s and quits
+  with exit code 0, three launches of three, where it crashed three of three
+  before. The x86_64 Linux game holds airlift with the fix too, but it did
+  not crash there without it either (Linux in WSL on the PC), so only the
+  Windows runs show the fix works.
 - Loading a save stored the body of a dynamic entity that was still moving
   as the pointer itself in the 32-bit `physObjId` field
   (`DynEnt_LoadEntities`). A 64-bit pointer does not fit, and every later
