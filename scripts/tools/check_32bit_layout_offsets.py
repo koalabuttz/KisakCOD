@@ -40,7 +40,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_32bit_size_literals import (  # noqa: E402
-    ROOT, RETAIL_RECORD_SOURCES, load_allow, load_clang, raw_asset_loader, translation_units)
+    ROOT, RETAIL_RECORD_SOURCES, load_allow, load_clang, raw_asset_loader, singleplayer_unit, translation_units)
 
 DEFAULT_ALLOW = ROOT / "scripts" / "tools" / "check_32bit_layout_offsets_allow.txt"
 
@@ -623,9 +623,9 @@ def main() -> int:
     jobs, seen = [], set()
     for build in args.build_dir:
         for p, a, d in translation_units(build.resolve()):
-            if p in seen:
+            if (p, singleplayer_unit(a)) in seen:
                 continue
-            seen.add(p)
+            seen.add((p, singleplayer_unit(a)))
             if args.only is not None and not any(o in p for o in args.only):
                 continue
             if str(Path(p).relative_to(ROOT)) in RETAIL_RECORD_SOURCES:
