@@ -1,7 +1,7 @@
 # Linux port status
 
-Last updated 2026-11-10 07:45 UTC (master `85dad4f`, in-game A/B
-measuring, PR 160). This page is the current state of
+Last updated 2026-11-10 08:30 UTC (master `0b47ab8`, the Vulkan guide's
+model lighting recheck, PR 183). This page is the current state of
 the native Linux port and the other platform builds, the open pull requests and
 the roadmap. The [docs index](README.md) lists the detailed guides;
 older handoffs are in [history](history/README.md) and are not current.
@@ -33,7 +33,7 @@ Vulkan checks run on lavapipe and MoltenVK).
 | Key codes (no Steam) | default | A client without Steam (or with `cl_keyCodeOnly 1`) joins servers with `sv_allowUnverifiedGuids 1` using a GUID derived from `codkey.txt` or, on Windows, the retail registry key. Unverified by design. Laptop run (x86_64 client and dedi, made-up key): joined, spawned and reconnected with the GUID; refused without the server opt-in, without a key file, with a group-readable file and with a mistyped key. Since PR 159 the game's own key code menu saves a typed key as `codkey.txt` (mode 600) and keeps it out of the dvars a server's menus can read; that is checked asset-free on hosted CI, and the menu has not been used on screen yet. [Guide](key-codes.md) |
 | Finding servers | default | The local list, favourites and `connect` need no setup. The internet list is opt-in: `masterServerName` is empty by default, so no master server is contacted (retail's is gone); when set, the client asks that master and a `dedicated 2` server sends it heartbeats. A list is accepted only from the master that was asked. Checked asset-free over loopback UDP on hosted CI; the Join Game menu has not been opened on a real client yet. [Guide](server-browser.md) |
 | Singleplayer `KisakCOD-sp`, i386 | `-DKISAK_BUILD_LINUX_SP_GAME=ON` | killhouse and cargoship load, leave the pregame by themselves and play about a minute each, clean quit (laptop). All 21 levels load, run 45 s and quit cleanly; a 4-level mission chain and devsave/loadgame pass (laptop sweep run 1, [levels](linux-sp-levels.md)). [Guide](linux-sp-game.md) |
-| Vulkan renderer back end | `-DKISAK_BUILD_VULKAN_BACKEND=ON`, then `+set r_backend vulkan` | The game's own D3D9 renderer drawn through this project's Vulkan back end in place of DXVK (Linux) or `d3d9.dll` (Windows), with the original visuals. `KisakCOD-mp` plays mp_crash through it on the laptop (x86_64) and on the PC (the Win32 build from CI), and quits cleanly. The picture matches: the world draw probe's two views agree with DXVK at PSNR 66.7 and 100 (laptop), and on the PC Vulkan and real D3D9 agree at 37 to 44 dB from one indoor view, the same spread as repeats of that comparison. Speed at a fixed mp_crash view on the laptop: since PR 152 (commands recorded on a second thread, a frame handed to the GPU in parts while it is drawn) 140.9 fps against 151.3 through DXVK on mains in power-saver mode (run 9), and 139.5 against 138.2 on battery (run 10, one pass); before it, 116 to 125 against 151 to 159. On the PC every Vulkan launch sat at the display's 75 fps with vsync off, where real D3D9 ran the scene at about 215 (PC run 6; PR 173, open, asks for the IMMEDIATE present mode). Translated shaders and pipelines are kept between runs (PC, Debug build: 15 s to the map warm, 62 s cold). Hosted CI builds it into the i386 Linux client, the macOS client and the Windows game (Win32 and x64), runs the device probe and the adapter and front pixel checks on lavapipe, and runs those two checks on macOS through MoltenVK. Open: on the laptop models are slightly darker than through DXVK with `r_altModelLightingUpdate 1` (the default), while on the PC the two settings differ by no more than launch-to-launch noise on either back end (PC run 6); occlusion queries report every sample as passed (PR 173, open, counts them); and about one frame in two minutes takes 110 to 230 ms. Off by default. [Guide](vulkan-d3d9-front.md#in-the-game-r_backend-vulkan) |
+| Vulkan renderer back end | `-DKISAK_BUILD_VULKAN_BACKEND=ON`, then `+set r_backend vulkan` | The game's own D3D9 renderer drawn through this project's Vulkan back end in place of DXVK (Linux) or `d3d9.dll` (Windows), with the original visuals. `KisakCOD-mp` plays mp_crash through it on the laptop (x86_64) and on the PC (the Win32 build from CI), and quits cleanly. The picture matches: the world draw probe's two views agree with DXVK at PSNR 66.7 and 100 (laptop), and on the PC Vulkan and real D3D9 agree at 37 to 44 dB from one indoor view, the same spread as repeats of that comparison. Speed at a fixed mp_crash view on the laptop: since PR 152 (commands recorded on a second thread, a frame handed to the GPU in parts while it is drawn) 140.9 fps against 151.3 through DXVK on mains in power-saver mode (run 9), and 139.5 against 138.2 on battery (run 10, one pass); before it, 116 to 125 against 151 to 159. On the PC every Vulkan launch sat at the display's 75 fps with vsync off, where real D3D9 ran the scene at about 215 (PC run 6; PR 173, open, asks for the IMMEDIATE present mode). Translated shaders and pipelines are kept between runs (PC, Debug build: 15 s to the map warm, 62 s cold). Hosted CI builds it into the i386 Linux client, the macOS client and the Windows game (Win32 and x64), runs the device probe and the adapter and front pixel checks on lavapipe, and runs those two checks on macOS through MoltenVK. The darker models an earlier laptop run showed with `r_altModelLightingUpdate 1` (the default) were the view moving between screenshots, not the back end: measured again over several shots a launch, Vulkan and DXVK on the laptop, and Vulkan and real D3D9 on the PC (PC run 6), draw the same brightness at 0 and at 1, and hosted CI now checks both update paths through the front (PRs 165 and 183). Open: occlusion queries report every sample as passed (PR 173, open, counts them), and about one frame in two minutes takes 110 to 230 ms. Off by default. [Guide](vulkan-d3d9-front.md#in-the-game-r_backend-vulkan) |
 | Windows x64 | MSVC `-A x64` (`KISAK_WIN64`) | sp, mp and dedi build and link (CI job "MSVC x64 build"); opt-in FFmpeg movies; OpenAL sound, no Steam. On the PC, mp_crash loads to class select, the dedicated server hosts bots, and singleplayer plays: killhouse and cargoship with autosave and checkpoint loads (PR 95), and a 12-level tour loaded, saved and played without a crash or script error (PRs 111 and 114). [x64 track](linux-x64.md#windows-msvc-x64-build) |
 | Windows ARM64 | MSVC `KISAK_WIN_ARM64` | sp, mp and dedi build and start up to the missing-game-data error on hosted Windows on Arm. Not run with game data. [arm64 track](linux-arm64.md) |
 | Profiling | `KISAK_LINUX_TRACY` / `KISAK_WIN_TRACY` | Opt-in Tracy builds of the game clients on Linux and Windows. |
@@ -153,7 +153,7 @@ These came before the playable client and still build and run in CI:
 
 ## Open pull requests
 
-As of 2026-11-10 07:45 UTC, ten. They change by the hour; the
+As of 2026-11-10 08:30 UTC, nine. They change by the hour; the
 [list on GitHub](https://github.com/koalabuttz/KisakCOD/pulls) is the current
 one. A machine run a pull request waits on is named where its author has
 said so.
@@ -161,19 +161,21 @@ said so.
 | PR | What | Machine run it waits on |
 | --- | --- | --- |
 | 173 | Vulkan back end: occlusion queries that count samples, the IMMEDIATE present mode when vsync is off, and GPU feed settings and statistics from the console (`r_vkGpuFeed`, `r_vkStats`) | PC run 7 (is the 75 fps cap gone, the sun against real D3D9) and laptop run 11 (the sun against DXVK, feed settings inside one launch). |
-| 165 | Vulkan back end: a check of both model lighting update paths through the D3D9 front | |
 | 162 | PS Vita client: an on-screen keyboard and a chat control | None named: PC runs KB1 and KB2 checked the game's side in Vita3K. No text has come back from the system's keyboard yet, and nothing has run on a console. |
 | 174 | PS Vita client: read the back buffer for the log only when a run asks, which makes Vita3K runs several times faster | None named: PC run H2 measured it in Vita3K (menu: 5135 frames in 120 s against 1174). Not run on a console. |
 | 175 | A copied sound counts the frames it holds (some stereo sounds claimed twice their length; this is the desktop's default sound path too), and the Vita build removes a file before it rewrites it, because Vita3K does not cut a rewritten file | PC run W: a Vita3K start that leaves no old lines in rewritten files, and the first map with PRs 164 and 166 in one build. Nobody has listened for the sound change. |
 | 170 | Linux client: opt-in HTTP downloads (`-DKISAK_LINUX_HTTP_DOWNLOADS=ON`) through the engine's own libcurl downloader | A laptop run of a real download is planned; none has been made. |
 | 179 | The Local server list lists only answers to its own scan, and an anonymous Steam game server login for the 32-bit Windows dedicated server | None named. The Windows login is compiled only and has never run. |
-| 168 | Shorter machine runs and pull request CI: timed Vita starts, a frame log, a run driver, trimmed PR checks | |
-| 169 | Five more patches in the upstream patch queue | |
+| 182 | Six more patches in the upstream patch queue (download names, OpenAL, angle cleanup) | |
+| 181 | Linux: opt-in speed builds for measuring (a CPU level, ThinLTO, a client without assertions) | |
 | 177 | Tests only: close a race in the suspend gate self-test that turned a macOS check red | |
 
 ## Laptop and PC runs still to do
 
-As of 2026-11-10. Each machine does one run at a time.
+As of 2026-11-10. Each machine does one run at a time. How a run is asked
+for, kept short and reported (the `framelog` line, the recipe-driven
+frame-rate driver, timed PS Vita starts) is in [runs.md](runs.md), since
+PR 168.
 
 - Vulkan back end, PR 173's code: PC run 7 (whether the 75 fps cap is gone,
   the sun against real D3D9) and laptop run 11 (the sun against DXVK, and
@@ -262,6 +264,11 @@ no fixed order.
 python3 scripts/tests/test_linux_bootstrap.py
 python3 scripts/tests/run_linux_checks.py --build-dir build-linux --binary bin/KisakCOD-dedi
 ```
+
+What hosted CI then runs is in [ci.md](ci.md). Since PR 168 a draft pull
+request runs nothing, a pull request runs only the workflows its changed
+paths can reach, and MSVC x64, MSVC ARM64 and Intel macOS build after the
+merge to master, not on the pull request.
 
 Window and renderer changes also run `test_linux_window_workflow.py`,
 `test_world_surface_check_runner.py` and `run_world_surface_checks.py` in Debug
