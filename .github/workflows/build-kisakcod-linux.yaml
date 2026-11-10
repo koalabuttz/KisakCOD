@@ -2762,6 +2762,57 @@ jobs:
             --binary "$OUT_DIR/KisakCOD-vulkan-d3d9-check" \
             --video-driver offscreen --validation require
 
+      - name: Run the checks again with the record thread switched
+        if: ${{ matrix.config == 'Debug' }}
+        timeout-minutes: 15
+        shell: bash
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          # The core can make its Vulkan calls on a thread of its own
+          # (CoreDesc::recordThread, docs/vulkan-core.md). The D3D9 front turns
+          # it on and the probe and the adapter check leave it off, so each
+          # runs here the other way.
+          KISAK_VK_RECORD_THREAD=1 python3 -u scripts/tests/test_vulkan_window_probe.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-probe" \
+            --video-driver offscreen --validation require
+          KISAK_VK_RECORD_THREAD=1 python3 -u scripts/tests/test_vulkan_legacy_adapter.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-legacy-check" \
+            --video-driver offscreen --validation require
+          KISAK_VK_RECORD_THREAD=0 python3 -u scripts/tests/test_vulkan_d3d9_front.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-d3d9-check" \
+            --video-driver offscreen --validation require
+          # And with the swap fence's flush off (docs/vulkan-legacy-adapter.md,
+          # Queries): a frame is then submitted at its Present only.
+          KISAK_VK_FENCE_FLUSH=0 python3 -u scripts/tests/test_vulkan_d3d9_front.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-d3d9-check" \
+            --video-driver offscreen --validation require
+
+      - name: Run the checks again with the GPU feed off and at its extreme
+        if: ${{ matrix.config == 'Debug' }}
+        timeout-minutes: 15
+        shell: bash
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          # The adapter submits a frame in parts while it is drawn
+          # (docs/vulkan-legacy-adapter.md, Frames). Off, a frame goes to the
+          # GPU whole, as it does by default on tile-based GPUs and MoltenVK.
+          KISAK_VK_GPU_FEED=0 python3 -u scripts/tests/test_vulkan_d3d9_front.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-d3d9-check" \
+            --video-driver offscreen --validation require
+          # "always" submits after every draw: every draw of every scene then
+          # starts a command buffer and a render pass of its own on the
+          # targets the last one left, and must come out the same.
+          KISAK_VK_GPU_FEED=always python3 -u scripts/tests/test_vulkan_d3d9_front.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-d3d9-check" \
+            --video-driver offscreen --validation require
+          KISAK_VK_GPU_FEED=always python3 -u scripts/tests/test_vulkan_legacy_adapter.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-legacy-check" \
+            --video-driver offscreen --validation require
+
       - name: Check the D3D9 front's lock with ThreadSanitizer
         if: ${{ matrix.config == 'Debug' }}
         timeout-minutes: 15
@@ -2769,13 +2820,25 @@ jobs:
         env:
           SDL_VIDEODRIVER: offscreen
           TSAN_OPTIONS: halt_on_error=1
+          # llvmpipe rasterizes on the thread that runs the commands, with no
+          # worker threads of its own (see below).
+          LP_NUM_THREADS: "0"
         run: |
           set -euo pipefail
           # The renderer calls D3D9 from several threads; the check's threads
           # scene does too (a worker creates and fills textures while this
           # thread draws). Built with ThreadSanitizer, any data race in the
-          # front, the adapter or the core fails the run. Lavapipe itself is
-          # not instrumented.
+          # front, the adapter or the core fails the run.
+          #
+          # Lavapipe itself is not instrumented, so ThreadSanitizer sees only
+          # the libc calls it makes (locks, memcpy), and it reports races
+          # between the driver's own threads. In some frame_loop runs one of
+          # lavapipe's threads destroys a mutex and a condition variable that
+          # an llvmpipe rasterizer thread locked and signalled; in every run
+          # of the adapter check two rasterizer threads copy to and from the
+          # same block. LP_NUM_THREADS=0 takes the rasterizer threads away and
+          # leaves lavapipe's other threads and every thread of ours as they
+          # are.
           tsan_build="build-x64/vulkan-probe-tsan"
           cmake -S . -B "$tsan_build" -G Ninja \
             -DKISAK_PLATFORM=linux -DKISAK_LINUX_ARCH=x86_64 \
@@ -2788,9 +2851,42 @@ jobs:
             -DKISAK_BUILD_LINUX_NATIVE_D3D9=ON \
             -DKISAK_DXVK_NATIVE_INCLUDE_DIR="$RUNNER_TEMP/dxvk-include/dxvk" \
             -DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3"
-          cmake --build "$tsan_build" --target KisakCOD-vulkan-d3d9-check --parallel "$(nproc)"
+          cmake --build "$tsan_build" \
+            --target KisakCOD-vulkan-d3d9-check KisakCOD-vulkan-probe KisakCOD-vulkan-legacy-check \
+            --parallel "$(nproc)"
+          # The front records on the core's record thread, so this also
+          # checks the hand-over between the two.
           "$OUT_DIR/tsan/KisakCOD-vulkan-d3d9-check" --scene threads --validation off | tee "$RUNNER_TEMP/tsan.log"
           grep -qx 'd3d9_check=passed' "$RUNNER_TEMP/tsan.log"
+          # The engine's frame: the render thread draws, waits on its swap
+          # fence and presents while another thread polls the GPU sync fence.
+          "$OUT_DIR/tsan/KisakCOD-vulkan-d3d9-check" --scene frame_loop --validation off \
+            | tee "$RUNNER_TEMP/tsan-frames.log"
+          grep -qx 'd3d9_check=passed' "$RUNNER_TEMP/tsan-frames.log"
+          # The same with a submission after every draw, and a frame of the
+          # engine's size that the adapter submits in parts while it is drawn.
+          KISAK_VK_GPU_FEED=always "$OUT_DIR/tsan/KisakCOD-vulkan-d3d9-check" --scene frame_loop \
+            --validation off | tee "$RUNNER_TEMP/tsan-frames-fed.log"
+          grep -qx 'd3d9_check=passed' "$RUNNER_TEMP/tsan-frames-fed.log"
+          "$OUT_DIR/tsan/KisakCOD-vulkan-d3d9-check" --scene gpu_feed --validation off \
+            | tee "$RUNNER_TEMP/tsan-feed.log"
+          grep -qx 'd3d9_check=passed' "$RUNNER_TEMP/tsan-feed.log"
+          # The lock itself under the engine's load: one thread makes 3072
+          # calls a frame while another polls a fence every 20 microseconds,
+          # asking the GPU's progress outside the lock.
+          "$OUT_DIR/tsan/KisakCOD-vulkan-d3d9-check" --scene bench --validation off \
+            | tee "$RUNNER_TEMP/tsan-bench.log"
+          grep -qx 'd3d9_check=passed' "$RUNNER_TEMP/tsan-bench.log"
+          # Frames, draws, read-back and swapchain rebuilds with the record
+          # thread on.
+          KISAK_VK_RECORD_THREAD=1 "$OUT_DIR/tsan/KisakCOD-vulkan-probe" --draw --frames 60 --resize \
+            --validation off | tee "$RUNNER_TEMP/tsan-probe.log"
+          grep -qx 'vulkan_probe=passed' "$RUNNER_TEMP/tsan-probe.log"
+          # And every scene of the adapter check, which leaves the record
+          # thread off unless told.
+          KISAK_VK_RECORD_THREAD=1 "$OUT_DIR/tsan/KisakCOD-vulkan-legacy-check" --validation off \
+            | tee "$RUNNER_TEMP/tsan-legacy.log"
+          grep -qx 'legacy_check=passed' "$RUNNER_TEMP/tsan-legacy.log"
 
       - name: Check the frame comparison script
         shell: bash

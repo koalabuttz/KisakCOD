@@ -5,9 +5,14 @@
 
 #include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <vector>
+
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
 
 namespace gfx_vk::d3d9
 {
@@ -51,10 +56,78 @@ void HostLog(const Host &host, const char *format, ...)
     host.log(host.user, line);
 }
 
-std::recursive_mutex &FrontMutex()
+#if !defined(__vita__)
+namespace
+{
+// Tells the processor the loop is a wait (and lets a sibling hyperthread run).
+inline void CpuRelax()
+{
+#if defined(_MSC_VER) && (defined(_M_IX86) || defined(_M_X64))
+    _mm_pause();
+#elif defined(__i386__) || defined(__x86_64__)
+    __builtin_ia32_pause();
+#elif defined(_MSC_VER) && defined(_M_ARM64)
+    __yield();
+#elif defined(__aarch64__) || defined(__arm__)
+    __asm__ __volatile__("yield");
+#endif
+}
+
+bool SpinDisabled()
+{
+#if defined(_MSC_VER)
+    char *text = nullptr;
+    size_t length = 0;
+    const bool off = _dupenv_s(&text, &length, "KISAK_VK_FRONT_SPIN") == 0 && text && std::strcmp(text, "0") == 0;
+    std::free(text);
+    return off;
+#else
+    const char *text = std::getenv("KISAK_VK_FRONT_SPIN");
+    return text && std::strcmp(text, "0") == 0;
+#endif
+}
+} // namespace
+
+FrontMutexType::FrontMutexType() : spins_(SpinDisabled() ? 0 : kSpins) {}
+
+void FrontMutexType::lock()
+{
+    // Any address that is this thread's alone.
+    static thread_local const char t_token = 0;
+    const void *const self = &t_token;
+    if (owner_.load(std::memory_order_relaxed) == self)
+    {
+        ++depth_;
+        return;
+    }
+    bool held = mutex_.try_lock();
+    for (uint32_t spin = 0; !held && spin < spins_; ++spin)
+    {
+        CpuRelax();
+        // Looks before it tries: a failed try still takes the mutex's cache
+        // line from the thread that will unlock it.
+        held = owner_.load(std::memory_order_relaxed) == nullptr && mutex_.try_lock();
+    }
+    if (!held)
+        mutex_.lock();
+    owner_.store(self, std::memory_order_relaxed);
+    depth_ = 1;
+}
+
+void FrontMutexType::unlock()
+{
+    if (--depth_ == 0)
+    {
+        owner_.store(nullptr, std::memory_order_relaxed);
+        mutex_.unlock();
+    }
+}
+#endif
+
+FrontMutexType &FrontMutex()
 {
     // Never destroyed: a device released from a static destructor still locks it.
-    static std::recursive_mutex *const mutex = new std::recursive_mutex;
+    static FrontMutexType *const mutex = new FrontMutexType;
     return *mutex;
 }
 

@@ -875,6 +875,12 @@ HRESULT STDMETHODCALLTYPE Query::Issue(DWORD flags)
 
 HRESULT STDMETHODCALLTYPE Query::GetData(void *data, DWORD size, DWORD flags)
 {
+    // Before the lock: the engine's main thread polls a fence this way every
+    // 20 microseconds for milliseconds of each frame (R_SyncGpu) while the
+    // render thread makes thousands of calls that need the lock. The question
+    // that takes a system call is asked out here, and what follows under the
+    // lock is a comparison.
+    device_->PollProgress();
     const FrontLock lock;
     if (size && !data)
         return D3DERR_INVALIDCALL;
