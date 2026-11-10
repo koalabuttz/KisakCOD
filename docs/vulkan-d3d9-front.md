@@ -547,7 +547,12 @@ mode's size at the desktop's resolution, so use windowed mode or the desktop's
 own resolution for now. The Windows workflow builds it for Win32 Debug and for
 x64 (whose artifact is the PC's), checks the configure log says `Vulkan back
 end: linked into KisakCOD-mp`, and checks the Win32 executable does not import
-`vulkan-1.dll`. Hosted runners have no GPU, so CI never draws the game through
+`vulkan-1.dll`. The Win32 Release player build leaves it out, except in a
+manual run of the workflow with the `vulkan` input set: that run's Release
+artifact, `KisakCOD-Release-Vulkan`, carries it with the same two checks, so a
+PC run can compare the two back ends in an optimised build. Debug code slows
+the back end's own work, which runs in the game's executable, far more than
+the system's `d3d9.dll`, which is optimised in either build. Hosted runners have no GPU, so CI never draws the game through
 it. On a Windows PC with the game files (RTX 2080 Super, Win32 Debug builds
 from CI, 2026-11-08; not CI evidence) the game draws mp_crash on Vulkan and
 quits cleanly. From one indoor view, Vulkan and the real `d3d9.dll` agree at

@@ -10,6 +10,15 @@ on:
         description: 'Build the Win32 and x64 games with the Tracy profiler'
         type: boolean
         default: false
+      vulkan:
+        # For a Vulkan run on a Windows PC in an optimised build: the Win32
+        # Release KisakCOD-mp of this run carries the opt-in Vulkan back end
+        # (r_backend vulkan) as the Debug one always does, and its artifact
+        # name ends in -Vulkan. Debug code slows the back end's own work far
+        # more than the system d3d9.dll it is compared with.
+        description: 'Build the Win32 Release game with the Vulkan back end'
+        type: boolean
+        default: false
   # Changes that cannot affect the Windows builds skip this workflow. The path
   # list is the same for both events, and the order matters: a later pattern
   # overrides an earlier one. scripts/tests/test_linux_window_workflow.py checks it.
@@ -228,19 +237,19 @@ jobs:
       # The Debug build also turns on the opt-in Tracy profiler and the opt-in
       # Vulkan back end (r_backend vulkan in KisakCOD-mp), so both compile and
       # link for Win32 on every push; Release stays the player build with
-      # neither unless a manual run asks for the profiler.
+      # neither unless a manual run asks for the profiler or the back end.
       - name: Configure CMake ${{ matrix.config }}
         run: |
           $tracy = 'OFF'
           if ('${{ matrix.config }}' -eq 'Debug' -or '${{ inputs.tracy }}' -eq 'true') { $tracy = 'ON' }
           $vulkan = @()
-          if ('${{ matrix.config }}' -eq 'Debug') {
+          if ('${{ matrix.config }}' -eq 'Debug' -or '${{ inputs.vulkan }}' -eq 'true') {
             $vulkan = @('-DKISAK_BUILD_VULKAN_BACKEND=ON', "-DKISAK_VULKAN_INCLUDE_DIR=$env:RUNNER_TEMP/Vulkan-Headers/include")
           }
           cmake -S . -B build-${{ matrix.config }} -G "Visual Studio 17 2022" -A Win32 -DDXSDK_DIR="${{ env.DXSDK_DIR }}" -DCICD=1 -DCMAKE_BUILD_TYPE=${{ matrix.config }} `
             -DKISAK_WIN_TRACY="$tracy" @vulkan | Tee-Object -FilePath configure.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          if ('${{ matrix.config }}' -eq 'Debug') {
+          if ($vulkan.Count -gt 0) {
             if (-not (Select-String -Path configure.log -SimpleMatch -Quiet 'Vulkan back end: linked into KisakCOD-mp')) {
               Write-Host "::error::the Vulkan back end was not linked into KisakCOD-mp"
               exit 1
@@ -262,11 +271,11 @@ jobs:
 
       # The Vulkan loader is opened at run time (src/win32/vulkan), never
       # imported, so the game still starts on a machine without Vulkan; the
-      # bootstrap check above starts the Debug game with the back end linked.
+      # bootstrap check above starts the game with the back end linked.
       # dumpbin reads the import table itself: the name also appears in the
       # host's messages, so a plain text search would match.
       - name: Check KisakCOD-mp does not import vulkan-1.dll
-        if: matrix.config == 'Debug'
+        if: matrix.config == 'Debug' || inputs.vulkan
         run: |
           $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
           $dumpbin = & $vswhere -latest -products * -find 'VC\Tools\MSVC\**\bin\Hostx64\x64\dumpbin.exe' | Select-Object -First 1
@@ -299,11 +308,11 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: KisakCOD-${{ matrix.config }}${{ inputs.tracy && '-Tracy' || '' }}
+          name: KisakCOD-${{ matrix.config }}${{ inputs.tracy && '-Tracy' || '' }}${{ inputs.vulkan && matrix.config == 'Release' && '-Vulkan' || '' }}
           path: ${{ github.workspace }}/bin
           compression-level: 9
-          # A profiling build is kept as long as the x64 one, for the next PC run.
-          retention-days: ${{ inputs.tracy && 3 || 1 }}
+          # A profiling or Vulkan build is kept as long as the x64 one, for the next PC run.
+          retention-days: ${{ (inputs.tracy || inputs.vulkan) && 3 || 1 }}
 
   x64-census:
     # The Windows x64 row of the CI matrix upstream issue 1 asks for
