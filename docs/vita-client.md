@@ -6,13 +6,12 @@ multiplayer client, `KisakCOD-mp`, for a hacked PS Vita and packs it as
 it follows the [Vita dedicated server](vita.md), which shares its toolchain,
 platform layer and memory rules. Started 2026-11-09.
 
-**State: stage 1 done (build and boot); stage 2 (graphics) under way: the
-GXM probe ran at 60 fps, the device ran the menu loop without drawing, and
-the game's shaders compile on the Vita (466 programs, none failed; read back
-from the card in 1.4 s). Step 2d, the first real draws, is built and not run
-on the Vita yet.**
+**State: stages 1 to 3 run on the console. On 2026-11-10 the main menu
+showed on David's Vita and worked, with touch, buttons and music (run K).
+Starting a map does not work yet: the GPU's memory is full before the map
+loads ("Memory" below), which is the next piece of work.**
 - The whole client compiles, links and packs into a `.vpk`: client, cgame, UI, sound, renderer and its own listen server.
-- Stage 1 had no graphics back end, so the client stopped at the renderer through `Sys_Error`. Stage 2 replaces that: the renderer gets the D3D9 front on the GXM back end ("Graphics" below), which does everything but draw.
+- Stage 1 had no graphics back end, so the client stopped at the renderer through `Sys_Error`. Stage 2 replaces that: the renderer gets the D3D9 front on the GXM back end ("Graphics" below).
 - Stage 3 (controls and sound) runs on the console: on run 1 (2026-11-09) the menu music and the menu's sounds were heard, and every button arrived as its key. The screen's touch and the layout in a game are not confirmed yet: see "Controls" and "Sound" below.
 
 **Runs on David's Vita (2026-11-09):**
@@ -104,6 +103,11 @@ Around them:
 `deps/binklib/radbase.h` gains a `__vita__` branch (the Linux one, with the
 Vita's CPU), because the renderer's headers declare the Bink API.
 
+**Run K on David's Vita (2026-11-10, commit d4a03fa):**
+- The menu showed and worked: frame 300 left 480359 of 522240 pixels not black, the first frame came 44.5 s after the start, touch and buttons reached the menu and the music played.
+- The menu froze several times, once for 23.6 s, with the music paused. Those were shaders compiling the first time they were drawn: 139 programs in 94 s, about 0.7 s each. They are on the card afterwards, so a later start does not compile them again.
+- Starting a listen server on mp_crash stopped the game 58 ms into the map's fastfile: `out of GPU memory` for a 13 MB vertex buffer, then the renderer's fatal error ("Memory" below).
+
 ## Memory
 
 The client links the whole server for its listen server. At the server's 24-player cap, the server's snapshot buffers (`svs`) take 67 MB. The client build caps its own server at **8 players** (`SV_MAX_CLIENTS`, `bg_local.h`), which brings `svs` to 25 MB.
@@ -119,7 +123,26 @@ Other large static arrays in the client:
 - `cls` 2.9 MB, `odeGlob` 2.8 MB, `gfxBuf` 2.3 MB, `s_backEndData` 2.2 MB, `tess` 2.2 MB;
 - `clients` 1.7 MB, `g_streamState` 1.7 MB.
 
-The heap and the engine reservations are the server's for now: a 64 MB heap, the 128 MB zone arena and the hunks. Stage 1's run measures what is left. Textures will go to the GPU's own memory (CDRAM, about 112 MB), not main memory.
+The heap and the engine reservations are the server's for now: a 64 MB heap, the 128 MB zone arena and the hunks. Textures go to the GPU's own memory (CDRAM, about 112 MB), not main memory.
+
+What the menu takes (run K on the console, and the same build in Vita3K, 2026-11-10):
+- **Heap:** 55 of 64 MB once `common_mp` is loaded. About 41 MB of that is the loaded sounds, which are decoded to 16-bit PCM in the heap. At the failed map load the console's heap stood at 60.7 MB.
+- **System memory:** 15 MB free on the console beyond the heap and the reservations, so the heap cannot simply grow. Vita3K reports far more free system memory than a console has (107 MB at the same point); never size memory from its number.
+- **Zone arena:** 72 MB of 128 free in the menu, 46 MB at the failed map load.
+- **GPU:** 95 of 104 MB of CDRAM and 18 to 19 of the 20 MB main pool. By use, from the `gpu memory by use` log line:
+
+| Use | MB | Note |
+|---|---:|---|
+| Compressed textures | 33.7 | 899 textures at picmip 2; only five are 1 MB or more |
+| Dynamic vertices | 19.5 | the static model cache (8), the two skinned caches (4.5 each), smaller ones |
+| Depth | 14.1 | the sun's shadow map (8), the spot shadow map (4), the scene's (2) |
+| Render targets | 12.6 | the shadow maps' colour targets (4 and 2), three screen-sized ones (2 each) |
+| Dynamic indices | 10.0 | five of 2 MB |
+| Static vertices | 9.2 | `common_mp`'s vertex buffer |
+| The display's buffers | 8.0 | |
+| Static indices, volumes, other textures | 2.7 | |
+
+The main pool is too small for the dynamic buffers, so 14.5 MB of them spill into CDRAM. mp_crash's first vertex buffer alone is 13.4 MB, and neither pool had that much left. Making a map fit is the next piece of work: the shadow maps (18 MB) are not usable on the Vita yet, and the dynamic buffers are sized for a PC.
 
 ## Controls (stage 3)
 
@@ -405,12 +428,35 @@ program meets the back end through:
 
 `src/gfx_gxm/gxm_program_cache.cpp` keeps each compiled program in
 `ux0:data/KisakCOD/gxp/<hash>.gxp`, named by a hash of its Cg source, so a
-console compiles a program once (about 0.1 s each). A program that does not
+console compiles a program once (about 0.7 s each for the game's programs
+on a console; the probe's small ones took 0.1 s). A program that does not
 compile is logged with the compiler's first error (the first 40 failures;
 each reason a shader is not translated is logged once and counted at the end)
 and its Cg is left beside the cache as `failed-<hash>.cg`. A shader that
 cannot be translated or compiled is still created, as D3D9 would; draws with
 it are skipped and counted.
+
+The compiler is loaded when the first program has to be compiled, so a start
+that finds every program on the card never loads it. It allocates from the
+game's heap and keeps working memory between programs, so the cache unloads
+it once it holds more than 2 MB of the heap and once it has compiled nothing
+for 5 s, and loads it again for the next program (0.4 s on a console; vitaGL
+does the same). A first start compiled 421 programs across 15 loads in
+Vita3K, with the compiler never above 4.1 MB; before that, such a start ran
+the heap out while the sounds loaded. The `shader compiler memory` log lines
+count what it held and gave back.
+
+**The compiler folds `x * 0 + 1` to 0.** HLSL writes `float4(v.xyz, 1)` as
+one multiply-add with the constant (1, 0, 0, 0): `mad r0, v0.xyzx, c8.xxxy,
+c8.yyyx`. Written to Cg as `r0 = v0.xyzx * k8.xxxy + k8.yyyx`, the Vita's
+compiler drops the w lane's 1, at every optimisation level but 0 and with or
+without fast maths. Every position then lost its w terms, which left the
+screen black until run K. The translator now takes the lanes whose factor is
+a constant zero out of the product (`WithoutZeroProducts`): they take the
+addend, or 0.0 for a plain multiply. Literals in place of the constant and
+one component per statement also compile right; a non-const or static
+constant, two statements, a function, and constructors around the swizzles
+do not.
 
 The client is packed unsafe for the compiler, like the probe.
 
@@ -468,6 +514,11 @@ host by `scripts/tests/test_vita_gxm_heap.py`. The kinds are:
 - CDRAM: textures, render targets, the display buffers;
 - uncached main memory: vertex data, ring buffers;
 - the two USSE kinds: shader code.
+
+The Legacy back end counts each pool's use by what it is for and logs it
+once a minute and at every failed allocation (`gpu memory by use (cdram +
+main MB, pieces): ...`), and logs each piece of 1 MB or more as it is made
+(`gpu memory piece N: ...`, with its size, format and usage).
 
 The display's own buffers take about 9 MB of CDRAM and 2.6 MB of main memory.
 The parameter buffer, which sceGxm takes from main memory itself, adds 16 MB.
