@@ -28,8 +28,12 @@ on:
       - scripts/**
       - src/**
       # The PS Vita port's own files are built and checked by
-      # build-kisakcod-vita.yaml; no job here compiles or reads them.
+      # build-kisakcod-vita.yaml; no job here compiles or reads them, with one
+      # exception: the pad mapping, which the Linux client's controller support
+      # (KISAK_LINUX_GAMEPAD) compiles and scripts/tests/test_linux_gamepad.py
+      # builds on.
       - '!src/vita/**'
+      - src/vita/client/input/**
       - '!src/gfx_gxm/**'
       - '!scripts/platform/vita/**'
       - '!scripts/tests/test_vita_*.py'
@@ -64,8 +68,12 @@ on:
       - scripts/**
       - src/**
       # The PS Vita port's own files are built and checked by
-      # build-kisakcod-vita.yaml; no job here compiles or reads them.
+      # build-kisakcod-vita.yaml; no job here compiles or reads them, with one
+      # exception: the pad mapping, which the Linux client's controller support
+      # (KISAK_LINUX_GAMEPAD) compiles and scripts/tests/test_linux_gamepad.py
+      # builds on.
       - '!src/vita/**'
+      - src/vita/client/input/**
       - '!src/gfx_gxm/**'
       - '!scripts/platform/vita/**'
       - '!scripts/tests/test_vita_*.py'
@@ -333,6 +341,9 @@ jobs:
           python3 scripts/tests/test_openal_stream_seek.py
           python3 scripts/tests/test_linux_sp_level_sweep.py
           python3 scripts/tests/test_linux_mp_map_sweep.py
+          python3 scripts/tests/test_package_linux_client.py
+          python3 scripts/tests/test_setup_linux_client.py
+          python3 scripts/tests/test_linux_gamepad.py
           python3 scripts/tests/test_shader_spike.py
 
       - name: Run asset-free native checks
@@ -1048,12 +1059,16 @@ jobs:
             -DKISAK_DXVK_NATIVE_INCLUDE_DIR="$RUNNER_TEMP/dxvk-include/dxvk" \
             -DKISAK_DXVK_NATIVE_LIBRARY="$d3d9" \
             -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_OPENAL_LIBRARY="$openal" \
-            -DKISAK_LINUX_CINEMATICS=ON -DKISAK_LINUX_HTTP_DOWNLOADS=ON \
+            -DKISAK_LINUX_HTTP_DOWNLOADS=ON -DKISAK_LINUX_PORTABLE_RUNPATH=ON \
+            -DKISAK_LINUX_GAMEPAD=ON \
             -DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3" \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON 2>&1 | tee "$RUNNER_TEMP/x64-mp-client-configure.log"
+          # Movies are not asked for: with libavcodec-dev and libavutil-dev
+          # installed above, the default (AUTO) has to turn them on.
+          grep -q -- '-- KisakCOD movies: on ' "$RUNNER_TEMP/x64-mp-client-configure.log"
           cmake --build "$BUILD_DIR" --target KisakCOD-mp KisakCOD-mp-client-window-test \
             KisakCOD-native-d3d9-proofs KisakCOD-bink-shim-test KisakCOD-skin-sse2-test \
-            KisakCOD-skin-scalar-test \
+            KisakCOD-skin-scalar-test KisakCOD-mp-gamepad-test \
             --parallel "$(nproc)"
           for binary in "$OUT_DIR/KisakCOD-mp" "$OUT_DIR/KisakCOD-mp-client-window-test"; do
             readelf -h "$binary" | grep -Eq 'Class:[[:space:]]+ELF64'
@@ -1157,6 +1172,9 @@ jobs:
           set -euo pipefail
           export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/stand-ins"
           "$OUT_DIR/KisakCOD-mp-client-window-test"
+          # The controller reader against this SDL3, with one of SDL's virtual
+          # controllers; the client above is built with KISAK_LINUX_GAMEPAD.
+          "$OUT_DIR/KisakCOD-mp-gamepad-test"
           python3 -u scripts/tests/test_linux_mp_client.py --binary "$OUT_DIR/KisakCOD-mp"
 
       # From temporary trees with no game data: an empty one must be refused at
@@ -1173,6 +1191,38 @@ jobs:
           set -euo pipefail
           export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/stand-ins"
           python3 -u scripts/tests/test_linux_sp_game.py --binary "$OUT_DIR/KisakCOD-sp"
+
+      # The client was built with KISAK_LINUX_PORTABLE_RUNPATH, so its run path
+      # is $ORIGIN/lib and names no folder of this runner. Pack it with the
+      # SDL3 SDK and the stand-ins and start it through the packed launcher with
+      # no library path set: this runner has no system SDL3, so the start only
+      # works when the folder carries the libraries itself.
+      - name: Pack the x86_64 client into a folder and start it from there
+        timeout-minutes: 5
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          set -euo pipefail
+          runpath=$(readelf -d "$OUT_DIR/KisakCOD-mp" | sed -n 's/.*(RUNPATH).*\[\(.*\)\]/\1/p')
+          if [[ "$runpath" != '$ORIGIN/lib' ]] || readelf -d "$OUT_DIR/KisakCOD-mp" | grep -q '(RPATH)'; then
+            echo "::error::KisakCOD-mp's run path is '$runpath', expected \$ORIGIN/lib and no RPATH"
+            exit 1
+          fi
+          package="$RUNNER_TEMP/KisakCOD-linux-x86_64"
+          python3 scripts/tools/package_linux_client.py --binary "$OUT_DIR/KisakCOD-mp" \
+            --lib-dir "$RUNNER_TEMP/SDL3-sdk/lib" --lib-dir "$RUNNER_TEMP/stand-ins" \
+            --out "$package" --label "$GITHUB_SHA" --archive
+          test -f "$package/lib/libSDL3.so.0"
+          cat "$package/README.txt"
+          mkdir -p "$RUNNER_TEMP/empty-game/main" "$RUNNER_TEMP/empty-game/zone"
+          cd /
+          if env -u LD_LIBRARY_PATH "$OUT_DIR/KisakCOD-mp" --version >/dev/null 2>&1; then
+            echo "::error::the build tree's KisakCOD-mp started with no library path: the check below would prove nothing"
+            exit 1
+          fi
+          env -u LD_LIBRARY_PATH "$package/run-mp.sh" --game "$RUNNER_TEMP/empty-game" --version
 
       # The Bink shim on made-up movies and a stand-in decoder, plus
       # libavcodec's Bink decoders opened as the shim opens them. No game
@@ -2111,7 +2161,7 @@ jobs:
           tracy=OFF
           if [ "${{ matrix.config }}" = Debug ]; then tracy=ON; fi
           cmake -S . -B "$BUILD_DIR" -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_OPENAL_LIBRARY="$openal" \
-            -DKISAK_LINUX_TRACY="$tracy" \
+            -DKISAK_LINUX_TRACY="$tracy" -DKISAK_LINUX_CINEMATICS=OFF \
             2>&1 | tee "artifacts/mp-client-${{ matrix.config }}.log"
           cmake --build "$BUILD_DIR" --target KisakCOD-mp KisakCOD-mp-client-window-test --parallel "$(nproc)" \
             2>&1 | tee -a "artifacts/mp-client-${{ matrix.config }}.log"
@@ -2176,6 +2226,7 @@ jobs:
           # same directory with the same stand-ins. Only built and inspected here.
           openal="$RUNNER_TEMP/openal-unavailable/libopenal_unavailable.so"
           cmake -S . -B "$BUILD_DIR" -DKISAK_BUILD_LINUX_SP_GAME=ON -DKISAK_OPENAL_LIBRARY="$openal" \
+            -DKISAK_LINUX_CINEMATICS=OFF \
             2>&1 | tee "artifacts/sp-game-${{ matrix.config }}.log"
           cmake --build "$BUILD_DIR" --target KisakCOD-sp --parallel "$(nproc)" \
             2>&1 | tee -a "artifacts/sp-game-${{ matrix.config }}.log"
@@ -2838,7 +2889,7 @@ jobs:
             -DKISAK_OPENAL_LIBRARY="$stubs/libopenal_unavailable.so" \
             -DKISAK_BUILD_DEVICE_PROBE=ON -DKISAK_BUILD_WORLD_FRONTEND_PROBE=ON \
             -DKISAK_BUILD_WORLD_DEVICE_PROBE=ON -DKISAK_BUILD_WORLD_DRAW_PROBE=ON \
-            -DKISAK_BUILD_LINUX_MP_CLIENT=ON \
+            -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_LINUX_CINEMATICS=OFF \
             -DKISAK_BUILD_VULKAN_PROBE=ON -DKISAK_BUILD_VULKAN_SHADERS=ON \
             -DKISAK_BUILD_VULKAN_LEGACY=ON -DKISAK_BUILD_VULKAN_BACKEND=ON \
             -DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3" \

@@ -5,7 +5,7 @@ Two parts:
 
 * Source checks (always): the opt-in target stays off by default (i386, or
   x86_64 only through KISAK_LINUX_ARCH=x86_64),
-  CINEMA is read only by the unit the target compiles without it, the platform
+  CINEMA is read only by the cinematic unit, movies come on only when FFmpeg links, the platform
   units it links are real files, and the stand-ins it links say what they are.
 * Run checks (with ``--binary``): start the client from temporary trees that hold
   no game data. ``--help`` and ``--version`` exit before the engine starts. With
@@ -66,6 +66,14 @@ def source_checks(checker):
     module = TARGET_MODULE.read_text(encoding="utf-8")
     checker.require(re.search(r'option\(KISAK_BUILD_LINUX_MP_CLIENT\s+"[^"]*"\s+OFF\)', module) is not None,
                     "KISAK_BUILD_LINUX_MP_CLIENT is off by default")
+    # A packaged client's run path is opt-in and names only the folder next to
+    # the binary (scripts/tools/package_linux_client.py).
+    portable = module.split("if(KISAK_LINUX_PORTABLE_RUNPATH)", 1)[-1].split("endif()\nif(KISAK_LINUX_CINEMATICS)", 1)[0]
+    checker.require(re.search(r'option\(KISAK_LINUX_PORTABLE_RUNPATH\s+"[^"]*"\s+OFF\)', module) is not None
+                    and module.count("if(KISAK_LINUX_PORTABLE_RUNPATH)") == 1
+                    and "BUILD_WITH_INSTALL_RPATH ON" in portable
+                    and 'INSTALL_RPATH "\\$ORIGIN/lib")' in portable,
+                    "the portable run path is off by default and is $ORIGIN/lib alone")
     checker.require('set(KISAK_OPENAL_INCLUDE_DIR "" CACHE PATH' in module
                     and 'NOT EXISTS "${KISAK_OPENAL_INCLUDE_DIR}/AL/al.h"' in module,
                     "the optional OpenAL header directory is checked for AL/al.h")
@@ -85,7 +93,50 @@ def source_checks(checker):
 
     definitions = re.search(r"set\(KISAK_MP_CLIENT_DEFINITIONS(.*?)\)", module, re.S)
     checker.require(definitions is not None and "CINEMA" not in definitions.group(1).split(),
-                    "the client compiles without CINEMA")
+                    "the client's own definitions leave CINEMA to the cinematic unit")
+    # Movies resolve themselves (AUTO): on only when FFmpeg is found and links
+    # with the build's own flags, and never looked for unless a client is built.
+    movies = module.split('set(kisak_cinematics_asked "${KISAK_LINUX_CINEMATICS}")', 1)[-1].split(
+        "if(NOT KISAK_BUILD_LINUX_MP_CLIENT)\n    return()", 1)[0]
+    checker.require('set(KISAK_LINUX_CINEMATICS "AUTO" CACHE STRING' in module
+                    and "PROPERTY STRINGS AUTO ON OFF)" in module
+                    and "option(KISAK_LINUX_CINEMATICS" not in module,
+                    "KISAK_LINUX_CINEMATICS is AUTO by default and can be forced ON or OFF")
+    checker.require(movies != module
+                    and 0 < movies.find("elseif(NOT KISAK_BUILD_LINUX_MP_CLIENT AND NOT KISAK_BUILD_LINUX_SP_GAME)")
+                    < movies.find("find_package(PkgConfig QUIET)")
+                    < movies.find("check_cxx_source_compiles(")
+                    < movies.find("if(KISAK_FFMPEG_LINKS_FOR_TARGET)\n            set(KISAK_LINUX_CINEMATICS ON)"),
+                    "AUTO looks for FFmpeg only when a game client is built and turns movies on only after a test link")
+    # Controller support is opt-in, and without the option the client has no
+    # controller code at all: the input unit names it only inside #ifdef blocks.
+    own = re.search(r"target_compile_definitions\(KisakCOD-mp-own PRIVATE(.*?)\)\n", module, re.S)
+    pad_sources = module.split("if(KISAK_LINUX_GAMEPAD)\n    list(APPEND mp_client_own_sources", 1)[-1].split("endif()", 1)[0]
+    checker.require(re.search(r'option\(KISAK_LINUX_GAMEPAD\s+"[^"]*"\s+OFF\)', module) is not None
+                    and own is not None and "$<$<BOOL:${KISAK_LINUX_GAMEPAD}>:KISAK_LINUX_GAMEPAD>" in own.group(1)
+                    and definitions is not None and "GAMEPAD" not in definitions.group(1)
+                    and module.count("mp_client_gamepad.cpp") == 2
+                    and "mp_client_gamepad.cpp" in pad_sources,
+                    "KISAK_LINUX_GAMEPAD is off by default and its sources and definition reach only the client's own units")
+    input_unit = (SRC / "linux" / "client" / "mp_client_input.cpp").read_text(encoding="utf-8")
+    without_pad = re.sub(r"#ifdef KISAK_LINUX_GAMEPAD\n.*?#endif\n", "", input_unit, flags=re.S)
+    checker.require(input_unit.count("#ifdef KISAK_LINUX_GAMEPAD\n") == 7
+                    and "Gamepad" not in without_pad and "mp_client_gamepad.h" not in without_pad
+                    and "#else\n    engine.mouse = CL_MouseEvent;\n#endif" in input_unit,
+                    "the input unit reaches the controller only under KISAK_LINUX_GAMEPAD and hands the mouse "
+                    "straight to CL_MouseEvent without it")
+    pad_map = (SRC / "linux" / "client" / "input" / "gamepad_map.cpp").read_text(encoding="utf-8") + (
+        SRC / "linux" / "client" / "input" / "gamepad_map.h").read_text(encoding="utf-8")
+    pad_sdl = (SRC / "linux" / "client" / "input" / "gamepad_sdl.cpp").read_text(encoding="utf-8") + (
+        SRC / "linux" / "client" / "input" / "gamepad_sdl.h").read_text(encoding="utf-8")
+    pad_includes = set(re.findall(r'#include [<"]([^>"]+)[>"]', pad_map + pad_sdl))
+    engine_headers = [name for name in pad_includes
+                      if name.split("/")[0] in ("qcommon", "client", "client_mp", "universal", "ui", "win32", "sound")]
+    map_includes = re.findall(r'#include [<"]([^>"]+)[>"]', pad_map)
+    checker.require(not engine_headers and not [name for name in map_includes if "sdl" in name.lower()]
+                    and "<vita/client/input/vita_input_map.h>" in pad_map,
+                    "the controller mapping and reader include no engine header, and the mapping no SDL",
+                    ", ".join(engine_headers))
     # The profiler is opt-in: player builds carry no Tracy, profiling builds turn it on.
     checker.require(re.search(r'option\(KISAK_LINUX_TRACY\s+"[^"]*"\s+OFF\)', module) is not None,
                     "KISAK_LINUX_TRACY is off by default")
