@@ -228,6 +228,24 @@ def averages(rows):
     return table
 
 
+# Copies of one variant further apart than this share of the fastest are not
+# noise: on the laptop, run 13 (2026-11-10) read D4 152.5 / 151.1 and V4
+# 100.7 / 95.7, but D1 176.4 / 138.1 after a foreign process had run.
+SPREAD_LIMIT = 0.07
+
+
+def disagreeing(rows):
+    """[(variant, share, fps values)] for each variant whose ok copies differ
+    by more than SPREAD_LIMIT of the fastest one."""
+    found = []
+    for variant, count, _, each in averages(rows):
+        if count > 1 and each and max(each) > 0:
+            share = (max(each) - min(each)) / max(each)
+            if share > SPREAD_LIMIT:
+                found.append((variant, share, each))
+    return found
+
+
 def average_table(rows):
     table = averages(rows)
     if not table:
@@ -238,6 +256,10 @@ def average_table(rows):
         cells = [_number(means.get(key), digits) for key, _, digits in FRAME_COLUMNS]
         lines.append(f"| {variant} | {count} | " + " | ".join(cells) + " | "
                      + ", ".join(f"{value:.1f}" for value in each) + " |")
+    for variant, share, each in disagreeing(rows):
+        lines += ["", f"**{variant}: its copies differ by {100 * share:.0f}% ("
+                  + ", ".join(f"{value:.1f}" for value in each)
+                  + " fps); the mean is not a measurement. Look at the load and power of each copy.**"]
     return lines
 
 
@@ -344,6 +366,8 @@ def summarize(results, problem=None, limit=SUMMARY_LIMIT):
             f"{variant} {means.get('fps', 0):.1f} ({means.get('mean', 0):.3f}, {means.get('p99', 0):.3f}) "
             f"from {count}" + (f" [{', '.join(f'{value:.1f}' for value in each)}]" if count > 1 else "")
             for variant, count, means, each in table) + ".")
+    for variant, share, each in disagreeing(rows):
+        parts.append(f"{variant} copies differ by {100 * share:.0f}%: do not use its mean.")
     for row in rows:
         if row.get("status") != "ok":
             parts.append(f"{row['name']}: {row.get('status')}.")

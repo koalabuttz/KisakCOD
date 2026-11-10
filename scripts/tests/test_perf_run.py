@@ -393,6 +393,18 @@ def test_whole_run(bench):
           "the results' own compact_lines is the default")
     check("memory line 0" in run_report.render(with_lines) and "a few per pattern" in run_report.render(with_lines),
           "the report shows the kept lines and says they are a selection")
+    # Copies of a variant that disagree (laptop run 13, 2026-11-10) are named.
+    def made_row(name, variant, fps):
+        return {"name": name, "variant": variant, "status": "ok",
+                "framelog": [{"label": name, "fps": fps, "mean": 1000 / fps}]}
+    spread = [made_row("D1-1", "D1", 176.4), made_row("D4-1", "D4", 152.5), made_row("D4-2", "D4", 151.1),
+              made_row("D1-2", "D1", 138.1), made_row("V4-1", "V4", 100.7), made_row("V4-2", "V4", 95.7)]
+    check([(variant, round(share, 3)) for variant, share, _ in run_report.disagreeing(spread)] == [("D1", 0.217)],
+          "copies more than 7% apart are named, closer ones are not")
+    check("D1 copies differ by 22%" in run_report.summarize({"id": "r", "rows": spread})
+          and "D4 copies" not in run_report.summarize({"id": "r", "rows": spread})
+          and "**D1: its copies differ by 22%" in "\n".join(run_report.average_table(spread)),
+          "the summary and the report say so")
     pasted.write_text(short_text.replace("50.00 fps", "55.00 fps", 1))
     with contextlib.redirect_stdout(io.StringIO()) as printed:
         status = run_report.main([str(pasted), "--check"])
