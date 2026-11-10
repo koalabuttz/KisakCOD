@@ -2580,16 +2580,6 @@ void UI_SelectCurrentGameType()
     }
 }
 
-// KISAK: empties the key code menu's five fields.
-static void UI_ClearKeyCodeFields()
-{
-    Dvar_SetStringByName("cdkey1", "");
-    Dvar_SetStringByName("cdkey2", "");
-    Dvar_SetStringByName("cdkey3", "");
-    Dvar_SetStringByName("cdkey4", "");
-    Dvar_SetStringByName("cdkey5", "");
-}
-
 void UI_RunMenuScript(int localClientNum, const char **args, const char *actualScript)
 {
     char *v3; // eax
@@ -3182,24 +3172,22 @@ void UI_RunMenuScript(int localClientNum, const char **args, const char *actualS
                     const char *homePath = fs_homepath ? fs_homepath->current.string : "";
                     const KeyCodeStatus keyStatus = typed ? CL_SaveKeyCode(homePath, key) : CL_StoredKeyCodeStatus(homePath);
                     CL_WipeKeyCode(key, sizeof(key));
-                    if (keyStatus == KeyCodeStatus::ok)
-                    {
-                        Dvar_SetStringByName("ui_cdkeyvalid", UI_SafeTranslateString("EXE_CDKEYVALID"));
-                        // The saved key does not stay behind in the menu's dvars.
-                        if (typed)
-                            UI_ClearKeyCodeFields();
-                    }
-                    else
-                    {
-                        Dvar_SetStringByName("ui_cdkeyvalid", UI_SafeTranslateString("EXE_CDKEYINVALID"));
-                    }
+                    Dvar_SetStringByName("ui_cdkeyvalid",
+                        UI_SafeTranslateString(keyStatus == KeyCodeStatus::ok ? "EXE_CDKEYVALID" : "EXE_CDKEYINVALID"));
+                    // A saved key does not stay behind in the menu's dvars, where a server's
+                    // menus could read it. A refused one stays to be corrected, unless this
+                    // client is on someone else's server (CL_ClearKeyCodeMenuFields).
+                    const bool onRemoteServer = clientUIActives[0].connectionState >= CA_CONNECTING
+                        && !NET_IsLocalAddress(CL_GetLocalClientConnection(0)->serverAddress);
+                    if (typed && (keyStatus == KeyCodeStatus::ok || onRemoteServer))
+                        CL_ClearKeyCodeMenuFields();
                 }
             }
             else
             {
                 // KISAK: retail filled the fields with the stored key. The stored key is never
                 // read back into dvars; the menu opens empty and says whether one is stored.
-                UI_ClearKeyCodeFields();
+                CL_ClearKeyCodeMenuFields();
                 const char *homePath = fs_homepath ? fs_homepath->current.string : "";
                 Dvar_SetStringByName("ui_cdkeyvalid",
                     CL_StoredKeyCodeStatus(homePath) == KeyCodeStatus::ok ? UI_SafeTranslateString("EXE_CDKEYVALID") : "");

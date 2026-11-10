@@ -46,20 +46,31 @@ chmod 600 ~/path/to/home/codkey.txt
 
 ### The key code menu
 
-The menu's five fields take the key as printed. When the menu checks it:
+The stock menus offer it from the multiplayer options screen (`options_multi`):
+its key code button opens `cdkey_menu`, five fields of four characters. The
+button under the fields checks the key and shows the result; Enter in the last
+field checks it too, but that menu then shows its instruction line and not the
+result (the console line tells you either way).
 
 - A correctly typed key is saved as `codkey.txt` in the home folder, replacing
   any earlier one, readable only by you (mode 600 on Linux and macOS; the home
   folder is created if it is missing). The console prints where it went and the
-  GUID servers will see, never the key. The fields are then emptied, so the key
-  does not stay in the game's variables.
+  GUID servers will see, never the key. The fields are then emptied.
 - A mistyped or incomplete key is refused and nothing is written; the fields
   keep what you typed so you can fix it.
-- With the fields empty, it reports whether a usable key is already stored.
+- With the fields empty, the check reports whether a usable key is already
+  stored.
 
 Unlike retail, the menu opens empty: a stored key is never read back into the
-fields. "Valid" here means the key's own check characters match, and nothing
-more; no key is checked against Activision.
+fields. The fields are game variables (`cdkey1` to `cdkey5`), and a server's own
+menus can make a client report or copy any variable, so the game does not leave
+a key in them: they are emptied when the menu opens, after a save, before any
+connection to a remote server starts, and after any check made while you are on
+someone else's server (there even a refused entry is emptied). Type your key
+from the main menu, not while connected to a server.
+
+"Valid" here means the key's own check characters match, and nothing more; no
+key is checked against Activision.
 
 ## When it is used
 
@@ -92,8 +103,11 @@ file, a group-readable file or a mistyped key, the client refused to connect
 and said why, and nothing reached the server. The key text appeared in no log.
 Not yet run: a Windows client (registry or file), a real key, and the key code
 menu in the game. Its saving and refusing are covered by the checks below, with
-made-up keys, but nobody has typed a key into the menu on screen yet, and where
-the stock menus offer it has not been looked up.
+made-up keys, but nobody has typed a key into the menu on screen yet. How the
+stock menus use it (2026-11-10, read from the menu assets on David's laptop
+without starting the game): only `cdkey_menu` calls the two script commands,
+`getCDKey` when it opens and `verifyCDKey` from its button and from Enter in the
+fifth field; only the `options_multi` button opens it.
 
 ## Checks
 
@@ -107,4 +121,6 @@ that a mistyped or short entry leaves the stored key alone, that a file others
 can read, a link in the file's place and a leftover from an interrupted save
 are replaced and never written through, that a missing home folder is created
 private, that an unwritable place is reported, and that neither saving nor
-refusing prints the key.
+refusing prints the key. The connect test checks that the menu's fields are
+emptied before a remote connection starts (also one that is then refused), and
+left alone when joining your own listen server.

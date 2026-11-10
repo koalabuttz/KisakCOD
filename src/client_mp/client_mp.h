@@ -1191,6 +1191,7 @@ void CL_ServerInfoPacket(netadr_t from, msg_t *msg, int32_t time);
 void CL_Connect_f();
 //bool CL_CDKeyValidate(const char *key, const char *checksum);
 bool CL_CDKeyValidate(netadr_t addr);
+void CL_ClearKeyCodeMenuFields();
 
 void CL_GlobalServers_f();
 void CL_ServerStatusResponse(netadr_t from, msg_t *msg);
