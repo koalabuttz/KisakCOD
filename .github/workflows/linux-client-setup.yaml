@@ -27,11 +27,12 @@ on:
       - scripts/tests/test_setup_linux_client.py
       - .github/workflows/linux-client-setup.yaml
 
-# A newer push to the same pull request or branch replaces the run in progress.
-# Manual runs always finish.
+# A newer push to the same pull request replaces the run in progress. A run on
+# master that is in progress finishes; of the ones waiting behind it only the
+# newest is kept. Manual runs always finish.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Read-only token: this job only checks out and builds.
 permissions:
