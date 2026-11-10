@@ -1049,6 +1049,9 @@ void SV_SendClientMessages();
 
 
 // sv_client_mp
+void SV_ForgetChallengesForIdentity(const char *identity, const challenge_t *keep);
+client_t *SV_FindClientWithIdentity(const char *identity, const client_t *except, const client_t *after);
+void SV_OnSteamAuthRejected(uint64_t steamID64);
 void SV_GetChallenge(netadr_t from);
 void SV_CaptureUnverifiedGuids();
 bool SV_UnverifiedGuidsEnabled();
