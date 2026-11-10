@@ -421,21 +421,25 @@ evidence):
   (shader translation and uploads), and +9.9 s cold, mostly pipelines built
   at the first draw. The shader and pipeline caches (`r_vkShaderCache`) came
   after that run.
-* Frame rate at a fixed view, on battery: 116 to 125 fps against 151 to 159
-  through DXVK (runs 5 and 6). The GPU is not the limit; the back end does
-  all its recording and driver calls on the render thread, where DXVK uses a
-  second thread.
+* Frame rate at a fixed view: 116 to 125 fps on battery against 151 to 159
+  through DXVK (runs 5 and 6), while the back end made every driver call on
+  the render thread and handed the GPU each frame whole. With the record
+  thread, the GPU feed and the cheaper fence polls ([Threads](#threads),
+  [adapter](vulkan-legacy-adapter.md#how-a-draw-works)), run 9 measured 140.9
+  fps against DXVK's 151.3, on mains in power-saver mode, where the code
+  before them gave 117.6 (run 8).
 * Picture: models drew dark where the profile had
   `r_altModelLightingUpdate 0`, because the adapter dropped a texture's
   contents when it was locked again; fixed, and run 7 matches DXVK at 40.1 dB
   there. With `r_altModelLightingUpdate 1` (the default) models are still 2.7
   to 6.7 luma darker than through DXVK (33.6 dB); not explained yet.
 
-Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7}.md` in the project
+Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9}.md` in the project
 files.
 
 ## Next
 
-The frame rate against DXVK (a thread that records commands, as DXVK has),
-the model lighting difference above, occlusion queries (the adapter reports
-every sample as passed), and a long frame about every two minutes.
+The rest of the frame rate gap to DXVK (how often to feed the GPU, then the
+render thread's time per draw), the model lighting difference above,
+occlusion queries (the adapter reports every sample as passed), and a long
+frame about every two minutes.
