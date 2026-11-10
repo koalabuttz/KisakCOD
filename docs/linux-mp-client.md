@@ -285,9 +285,13 @@ For each of the 21 stock maps (or `--maps a,b`) it starts a listen server with
    checks that `mapname` answers with the map and the client is still in
    state 9;
 5. with `--screenshot`, takes one screenshot with the game's own command and
-   fails the step when the file is missing or one flat colour. The report
-   gives the mean brightness; the images stay in the work directory for
-   someone to look at;
+   fails the step when the file is missing or nearly all one colour. The
+   report describes each image in numbers (mean brightness, the share that is
+   not black, how many colours, the share of the commonest colour, the mean
+   colour of the top, middle and bottom third), so a map that stands apart
+   from the others shows without the images leaving the machine.
+   `--delete-screenshots` removes each image once it is measured; otherwise
+   they stay in the work directory for someone to look at;
 6. sends `kill`, which only acts on a playing client, and looks for the death
    the stock scripts log (a `K;` line in `games_mp.log`). That shows the join
    really spawned the player;

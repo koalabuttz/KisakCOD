@@ -41,8 +41,12 @@ Steps in each map
 7. *console answers*: ``mapname`` is the map and the client is still in state 9.
 8. *frame drawn* (``--screenshot``): the game's own ``screenshot`` command
    writes a TGA under the work directory; the step fails when the file is
-   missing or one flat colour. The report gives its mean brightness. The
-   images stay in the work directory for someone to look at.
+   missing or nearly all one colour. The report describes each image in
+   numbers (mean brightness, share that is not black, how many colours, the
+   share of the commonest colour, the mean colour of the top, middle and
+   bottom third), so maps can be compared without the images leaving the
+   machine. ``--delete-screenshots`` removes each image once it is measured;
+   otherwise they stay in the work directory for someone to look at.
 9. *player was alive*: ``kill`` only acts on a playing client, and the stock
    scripts log the death (a ``K;`` line in ``games_mp.log``). Seeing that line
    shows step 4 really spawned the player.
@@ -85,6 +89,7 @@ import importlib.util
 from pathlib import Path
 import re
 import shutil
+import struct
 import sys
 import tempfile
 import time
@@ -99,10 +104,8 @@ def _load(name, path):
     return module
 
 
-# The console driver, the staging and the patterns are the singleplayer
-# sweep's; the TGA reader is the shellshock check's.
+# The console driver, the staging and the patterns are the singleplayer sweep's.
 sp = _load("run_linux_sp_level_sweep", HERE / "run_linux_sp_level_sweep.py")
-shots = _load("shellshock_screenshot_check", HERE.parent / "tools" / "shellshock_screenshot_check.py")
 
 # The 16 maps the game shipped with, then the five the patches added.
 STOCK_MAPS = (
@@ -239,13 +242,55 @@ def script_menus(lines):
     return menus
 
 
-def frame_numbers(path):
-    """Mean brightness (0-255) and the brightness range of a screenshot, from
-    every 16th pixel of every 4th row."""
-    image = shots.read_tga(path)
-    sample = [image.luma[row * image.width + column]
-              for row in range(0, image.height, 4) for column in range(0, image.width, 16)]
-    return sum(sample) / len(sample), max(sample) - min(sample)
+class Frame:
+    """Numbers that describe a screenshot without showing it, from every 4th
+    pixel of every 4th row. Colours are counted in 32 steps per channel."""
+
+    FLAT_SHARE = 0.98  # one colour on this much of the frame: nothing was drawn
+
+    def __init__(self, path):
+        data = path.read_bytes()
+        if len(data) < 18:
+            raise ValueError(f"{path.name}: too short for a TGA header")
+        id_length, colour_map, kind = data[0], data[1], data[2]
+        width, height, depth, descriptor = struct.unpack_from("<HHBB", data, 12)
+        if colour_map != 0 or kind != 2 or depth not in (24, 32) or not width or not height:
+            raise ValueError(f"{path.name}: not an uncompressed 24 or 32-bit TGA")
+        step = depth // 8
+        start = 18 + id_length
+        if len(data) < start + width * height * step:
+            raise ValueError(f"{path.name}: pixel data is cut short")
+        top_first = bool(descriptor & 0x20)
+        colours = {}
+        thirds = [[0, 0, 0, 0] for _ in range(3)]  # red, green, blue, samples
+        luma = 0.0
+        lit = 0
+        count = 0
+        for row in range(0, height, 4):
+            third = thirds[min((row if top_first else height - 1 - row) * 3 // height, 2)]
+            base = start + row * width * step
+            for column in range(0, width, 4):
+                blue, green, red = data[base + column * step:base + column * step + 3]
+                brightness = 0.299 * red + 0.587 * green + 0.114 * blue
+                luma += brightness
+                lit += brightness > 16
+                count += 1
+                key = (red >> 3, green >> 3, blue >> 3)
+                colours[key] = colours.get(key, 0) + 1
+                third[0] += red
+                third[1] += green
+                third[2] += blue
+                third[3] += 1
+        self.size = f"{width}x{height}"
+        self.mean = luma / count
+        self.lit = lit / count
+        self.colours = len(colours)
+        self.commonest = max(colours.values()) / count
+        self.thirds = ["#%02x%02x%02x" % tuple(round(total / max(third[3], 1)) for total in third[:3])
+                       for third in thirds]
+
+    def flat(self):
+        return self.commonest >= self.FLAT_SHARE
 
 
 class MapResult(sp.LevelResult):
@@ -256,7 +301,7 @@ class MapResult(sp.LevelResult):
         self.script_errors = 0
         self.sound = None
         self.menus = ""
-        self.frame = ""
+        self.frame = None
 
 
 class Sweep:
@@ -350,12 +395,15 @@ class Sweep:
         if not path.is_file():
             return result.step("frame drawn", False, f"no {path.relative_to(self.home)}")
         try:
-            mean, spread = frame_numbers(path)
+            frame = Frame(path)
         except (OSError, ValueError) as error:
             return result.step("frame drawn", False, str(error))
-        result.frame = f"{mean:.0f}"
-        return result.step("frame drawn", spread >= 8, f"mean brightness {mean:.0f} of 255"
-                           + ("" if spread >= 8 else ", one flat colour"))
+        result.frame = frame
+        if options.delete_screenshots:
+            path.unlink()
+        return result.step("frame drawn", not frame.flat(),
+                           f"mean brightness {frame.mean:.0f} of 255, {frame.colours} colours"
+                           + (f", one colour on {frame.commonest:.0%} of it" if frame.flat() else ""))
 
     def run_map(self, game, result, asked_at):
         """The steps after a map was asked for. Returns False to stop the process."""
@@ -514,7 +562,8 @@ def write_report(path, options, results, missing):
         if not result.ok():
             verdict = "stopped at: " + verdict
         load = f"{result.load_s:.1f} s" if result.load_s is not None else "-"
-        lines.append(f"| {result.level} | {verdict} | {load} | {result.drops} | {result.frame or '-'} | "
+        frame = f"{result.frame.mean:.0f}" if result.frame else "-"
+        lines.append(f"| {result.level} | {verdict} | {load} | {result.drops} | {frame} | "
                      f"{result.status} | {len(result.assertions)} | {len(result.errors)} | {result.script_errors} | "
                      f"{result.warnings} |")
     if any(result.sound for result in results):
@@ -525,6 +574,17 @@ def write_report(path, options, results, missing):
             if result.sound:
                 starts, cuts, underruns, al_errors, gap = result.sound
                 lines.append(f"| {result.level} | {starts} | {cuts} | {underruns} | {al_errors} | {gap} ms |")
+    if any(result.frame for result in results):
+        lines += ["", "Screenshots as numbers (every 4th pixel of every 4th row; colours counted in 32 steps per "
+                  "channel). A map whose row stands apart from the others is worth a look:", "",
+                  "| Map | Size | Mean brightness | Not black | Colours | Commonest colour | Mean colour, top third | "
+                  "Middle | Bottom |",
+                  "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+        for result in results:
+            frame = result.frame
+            if frame:
+                lines.append(f"| {result.level} | {frame.size} | {frame.mean:.0f} | {frame.lit:.0%} | {frame.colours} | "
+                             f"{frame.commonest:.0%} | {frame.thirds[0]} | {frame.thirds[1]} | {frame.thirds[2]} |")
     menus = list(dict.fromkeys(result.menus for result in results if result.menus))
     if menus:
         lines += ["", "Menus answered (name and position): " + "; ".join(menus) + "."]
@@ -566,7 +626,10 @@ def main(argv=None):
                         help="seconds to keep each map running after joining, the exercise included (default 45)")
     parser.add_argument("--no-exercise", action="store_true", help="join and hold, without pressing buttons")
     parser.add_argument("--screenshot", action="store_true",
-                        help="take one screenshot per map into the work directory and check it is not one flat colour")
+                        help="take one screenshot per map into the work directory, describe it in numbers and "
+                             "check it is not all one colour")
+    parser.add_argument("--delete-screenshots", action="store_true",
+                        help="with --screenshot: delete each image once its numbers are taken")
     parser.add_argument("--sound-debug", action="store_true",
                         help="set snd_alDebug 1 and report the OpenAL driver's counts")
     parser.add_argument("--team-menu", type=menu_ref, default=8, metavar="MENU",

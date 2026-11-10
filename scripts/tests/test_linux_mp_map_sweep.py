@@ -131,7 +131,12 @@ FAKE_GAME = textwrap.dedent('''\
             width, height = 64, 32
             header = bytes([0, 0, 2]) + bytes(9) + struct.pack("<HHBB", width, height, 24, 0x20)
             flat = name == env("FAKE_FLAT_MAP")
-            pixels = bytes(0 if flat else (x * 4) % 256 for y in range(height) for x in range(width) for c in range(3))
+            # Top first: a blue sky third, then a ramp of greys.
+            def pixel(x, y):
+                if flat:
+                    return (0, 0, 0)
+                return (224, 128, 64) if y < height // 3 else ((x * 4) % 256,) * 3
+            pixels = bytes(v for y in range(height) for x in range(width) for v in pixel(x, y))
             with open(os.path.join(folder, cmd[1] + ".tga"), "wb") as shot:
                 shot.write(header + pixels)
 ''')
@@ -170,6 +175,34 @@ class SweepPatternTests(unittest.TestCase):
         self.assertEqual(summary.groups(), ("103", "8", "0", "2", "7600"))
         answer = sweep.re.compile(sweep.sp.dvar_answer(sweep.SERVER_ID_DVAR).pattern, sweep.re.I)
         self.assertEqual(answer.search('"sv_serverid" is: "16^7" default: "0^7"').group(1), "16")
+
+    def test_frame_numbers(self):
+        import struct
+        with tempfile.TemporaryDirectory() as folder:
+            def tga(name, width, height, descriptor, depth, pixel):
+                header = bytes([0, 0, 2]) + bytes(9) + struct.pack("<HHBB", width, height, depth, descriptor)
+                rows = range(height) if descriptor & 0x20 else reversed(range(height))
+                path = Path(folder) / name
+                path.write_bytes(header + bytes(v for y in rows for x in range(width) for v in pixel(x, y)))
+                return path
+            # Blue-green-red order in the file; a red top half over a black bottom half.
+            halves = lambda x, y: (0, 0, 255, 255) if y < 8 else (0, 0, 0, 255)
+            for descriptor in (0x20, 0):  # rows stored top first, then bottom first
+                frame = sweep.Frame(tga("halves.tga", 16, 16, descriptor, 32, halves))
+                self.assertEqual(frame.size, "16x16")
+                self.assertEqual(frame.colours, 2)
+                self.assertAlmostEqual(frame.lit, 0.5)
+                self.assertAlmostEqual(frame.commonest, 0.5)
+                self.assertEqual(frame.thirds[0], "#ff0000")
+                self.assertEqual(frame.thirds[2], "#000000")
+                self.assertFalse(frame.flat())
+            self.assertTrue(sweep.Frame(tga("grey.tga", 16, 16, 0x20, 24, lambda x, y: (90, 90, 90))).flat())
+            with self.assertRaises(ValueError):
+                sweep.Frame(tga("short.tga", 16, 16, 0x20, 24, lambda x, y: (1, 2, 3) if y < 4 and x < 4 else ()))
+            rle = Path(folder) / "rle.tga"
+            rle.write_bytes(bytes([0, 0, 10]) + bytes(15))
+            with self.assertRaises(ValueError):
+                sweep.Frame(rle)
 
     def test_exercise_releases_every_button_it_presses(self):
         held = set()
@@ -216,13 +249,18 @@ class SweepRunTests(unittest.TestCase):
     def test_maps_plan_passes_and_skips_missing_zones(self):
         status, report = self.run_sweep("--maps", "mp_crash,mp_backlot,mp_vacant", "--screenshot", "--sound-debug")
         self.assertEqual(status, 0, report)
-        self.assertRegex(report, r"\| mp_crash \| all steps seen \| \d+\.\d s \| 0 \| 96 \| exit 0 \| 0 \| 0 \| 0 \| 0 \|")
+        self.assertRegex(report, r"\| mp_crash \| all steps seen \| \d+\.\d s \| 0 \| 120 \| exit 0 \| 0 \| 0 \| 0 \| 0 \|")
+        self.assertIn("| mp_crash | 64x32 | 120 | 92% | 17 | 38% | #4080e0 | #787878 | #787878 |", report)
         self.assertIn("| mp_backlot | all steps seen |", report)
         self.assertIn("Maps without a zone file (not run): mp_vacant", report)
         self.assertIn("| mp_crash | 12 | 1 | 0 | 0 | 31 ms |", report)
         self.assertIn("Menus answered (name and position): team_marinesopfor (8), changeclass_mw (15).", report)
         self.assertTrue((self.work / "mp_crash.log").is_file())
         self.assertTrue((self.work / "home" / "main" / "screenshots" / "sweep_mp_crash.tga").is_file())
+        status, report = self.run_sweep("--maps", "mp_crash", "--screenshot", "--delete-screenshots", "--no-exercise")
+        self.assertEqual(status, 0, report)
+        self.assertIn("| mp_crash | 64x32 | 120 |", report)
+        self.assertFalse((self.work / "home" / "main" / "screenshots" / "sweep_mp_crash.tga").exists())
         self.assertEqual((self.work / "home" / "players" / "profiles" / "active.txt").read_text(), "sweep\n")
         self.assertTrue((self.work / "base" / "main").is_symlink())
         self.assertEqual(sorted(path.name for path in self.game.rglob("*")),
@@ -272,7 +310,8 @@ class SweepRunTests(unittest.TestCase):
         status, report = self.run_sweep("--maps", "mp_crash", "--screenshot")
         self.assertEqual(status, 1)
         self.assertRegex(report, r"\| mp_crash \| stopped at: frame drawn \| \d+\.\d s \| 0 \| 0 \| exit 0 \| 0 \| 0 \| 1 \|")
-        self.assertIn("NOT SEEN: frame drawn (mean brightness 0 of 255, one flat colour)", report)
+        self.assertIn("NOT SEEN: frame drawn (mean brightness 0 of 255, 1 colours, one colour on 100% of it)", report)
+        self.assertIn("| mp_crash | 64x32 | 0 | 0% | 1 | 100% | #000000 | #000000 | #000000 |", report)
         self.assertIn("- ok: player was alive", report)
         self.assertIn("Script errors: 1", report)
 
