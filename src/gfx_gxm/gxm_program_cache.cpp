@@ -189,16 +189,29 @@ void DumpSource(const std::string &folder, const std::string &cg, ShaderStage st
 // The queue's worker thread makes a requested program the way GetProgram
 // makes any other.
 // Run diagnostic: a file named cg-opt0 beside the programs makes the
-// compiler build programs with no optimisation and no fast maths. Empty, it
-// applies to all of them; otherwise to the programs whose cache keys it
-// lists (16 hex digits each, as the census lines print them, separated by
-// anything else). A first line of their own keeps them apart in the folder
-// from the programs built the usual way.
+// compiler build programs with other settings. Empty, every program is built
+// with no optimisation and no fast maths. Otherwise each line names one
+// program by its cache key (16 hex digits, as the census lines print them),
+// optionally followed by the optimisation level (0 to 4) and fast maths (0 or
+// 1): "0bb21227526831c5 2 0". A key alone means "0 0". A first line of their
+// own keeps them apart in the folder from the programs built the usual way.
+struct PlainProgram
+{
+    uint64_t key = 0;
+    int optimization = 0;
+    bool fastMath = false;
+};
+
 struct PlainPrograms
 {
     bool on = false;
-    std::vector<uint64_t> keys; // empty: every program
+    std::vector<PlainProgram> keys; // empty: every program, at 0 0
 };
+
+int HexDigit(int c)
+{
+    return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+}
 
 PlainPrograms ReadPlainPrograms()
 {
@@ -209,23 +222,45 @@ PlainPrograms ReadPlainPrograms()
     plain.on = true;
     std::vector<uint8_t> text;
     ReadFile(folder + "/cg-opt0", text);
-    uint64_t key = 0;
-    int digits = 0;
-    for (size_t i = 0; i <= text.size(); ++i)
+    size_t at = 0;
+    while (at < text.size())
     {
-        const int c = i < text.size() ? text[i] : ' ';
-        const int value = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10
-                        : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
-        if (value >= 0)
+        size_t end = at;
+        while (end < text.size() && text[end] != '\n')
+            ++end;
+        // The line's words: the key, then up to two small numbers.
+        std::vector<std::string> words;
+        std::string word;
+        for (size_t i = at; i <= end; ++i)
         {
-            key = key << 4 | uint64_t(value);
-            ++digits;
-            continue;
+            const int c = i < end ? text[i] : ' ';
+            if (c == ' ' || c == '\t' || c == '\r' || c == ',')
+            {
+                if (!word.empty())
+                    words.push_back(word);
+                word.clear();
+            }
+            else
+                word += char(c);
         }
-        if (digits == 16)
-            plain.keys.push_back(key);
-        key = 0;
-        digits = 0;
+        at = end + 1;
+        if (words.empty() || words[0].size() != 16)
+            continue;
+        PlainProgram entry;
+        bool hex = true;
+        for (const char c : words[0])
+        {
+            const int value = HexDigit(c);
+            hex &= value >= 0;
+            entry.key = entry.key << 4 | uint64_t(value < 0 ? 0 : value);
+        }
+        if (!hex)
+            continue;
+        if (words.size() > 1 && words[1].size() == 1 && words[1][0] >= '0' && words[1][0] <= '4')
+            entry.optimization = words[1][0] - '0';
+        if (words.size() > 2 && words[2] == "1")
+            entry.fastMath = true;
+        plain.keys.push_back(entry);
     }
     return plain;
 }
@@ -236,12 +271,21 @@ bool MakeRequested(void *, const std::string &cg, ShaderStage stage, std::vector
     if (plain.on)
     {
         const uint64_t key = KeyFor(cg, stage);
+        PlainProgram use;
         bool listed = plain.keys.empty();
-        for (const uint64_t k : plain.keys)
-            listed |= k == key;
+        for (const PlainProgram &entry : plain.keys)
+            if (entry.key == key)
+            {
+                use = entry;
+                listed = true;
+            }
         if (listed)
-            return GetProgram("// KisakCOD: diagnostics, optimisation 0, no fast maths\n" + cg, stage, program, log,
-                              false, 0);
+        {
+            char first[96];
+            std::snprintf(first, sizeof(first), "// KisakCOD: diagnostics, optimisation %d, fast maths %s\n",
+                          use.optimization, use.fastMath ? "on" : "off");
+            return GetProgram(first + cg, stage, program, log, use.fastMath, use.optimization);
+        }
     }
     return GetProgram(cg, stage, program, log);
 }
