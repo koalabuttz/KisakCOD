@@ -75,6 +75,23 @@ class WindowWorkflowTests(unittest.TestCase):
         self.assertIn('sdl${{ matrix.sdl }}', upload['with']['name'])
 
 
+def each_config_commands(test, job, step_name):
+    """The commands a step hands to scripts/ci/each-config.sh, which runs them
+    for Debug and then RelWithDebInfo in the one job (its own test,
+    test_ci_each_config.py, checks that a failure in either is kept)."""
+    run = next(step['run'] for step in job['steps'] if step.get('name') == step_name)
+    test.assertNotIn('strategy', job)
+    test.assertNotIn('matrix.', run)
+    test.assertTrue(run.lstrip().startswith('set -euo pipefail'))
+    lines = run.splitlines()
+    start = lines.index("scripts/ci/each-config.sh <<'COMMANDS'")
+    end = lines.index('COMMANDS')
+    test.assertLess(start, end)
+    # Nothing after the list could change the step's status.
+    test.assertEqual([line for line in lines[end + 1:] if line.strip()], [])
+    return '\n'.join(lines[start + 1:end])
+
+
 class AssetFreeWorldSurfaceWorkflowTests(unittest.TestCase):
     """The asset-free job: no DXVK, no SDL, no GPU, no game assets, no CMake."""
 
@@ -97,11 +114,10 @@ class AssetFreeWorldSurfaceWorkflowTests(unittest.TestCase):
                     self.assertIn(path, paths)
 
     def test_exactly_two_explicit_configurations(self):
-        self.assertEqual(self.job['strategy']['matrix']['config'], ['Debug', 'RelWithDebInfo'])
+        # One job runs both configurations, so the pair needs one runner.
+        each_config_commands(self, self.job, 'Run asset-free world surface checks')
         self.assertEqual(self.job['runs-on'], 'ubuntu-24.04')
         self.assertIn('timeout-minutes', self.job)
-        # One job, not one per configuration plus a variant.
-        self.assertNotIn('sdl', self.job['strategy']['matrix'])
 
     def test_the_job_installs_only_the_multilib_c_plus_plus_toolchain(self):
         install = next(step for step in self.job['steps']
@@ -141,16 +157,15 @@ class AssetFreeWorldSurfaceWorkflowTests(unittest.TestCase):
         self.assertIn('python3 scripts/tests/test_world_surface_check_runner.py', self.commands)
 
     def test_the_runner_is_invoked_per_configuration_with_pipefail(self):
-        step = next(step for step in self.job['steps']
-                    if step.get('name') == 'Run asset-free world surface checks')
-        self.assertIn('scripts/tests/run_world_surface_checks.py', step['run'])
-        self.assertIn('--config "${{ matrix.config }}"', step['run'])
-        self.assertIn('--cxx g++', step['run'])
-        self.assertIn('--log-dir "artifacts/world-surface-${{ matrix.config }}"', step['run'])
-        self.assertIn('python3 -u', step['run'])
-        # tee alone would hide the runner's exit status; pipefail carries it.
-        self.assertIn('2>&1 | tee', step['run'])
-        self.assertIn('set -euo pipefail', step['run'])
+        commands = each_config_commands(self, self.job, 'Run asset-free world surface checks')
+        self.assertIn('scripts/tests/run_world_surface_checks.py', commands)
+        self.assertIn('--config "$config"', commands)
+        self.assertIn('--cxx g++', commands)
+        self.assertIn('--log-dir "artifacts/world-surface-$config"', commands)
+        self.assertIn('python3 -u', commands)
+        # tee alone would hide the runner's exit status; the pipefail that
+        # each-config.sh sets carries it.
+        self.assertIn('2>&1 | tee', commands)
 
     def test_every_command_block_propagates_failure(self):
         # A run block without these would let a failed compile or check pass the job.
@@ -171,7 +186,7 @@ class AssetFreeWorldSurfaceWorkflowTests(unittest.TestCase):
         upload = next(step for step in self.job['steps']
                       if step.get('uses', '').startswith('actions/upload-artifact@'))
         self.assertEqual(upload['if'], 'always()')
-        self.assertIn('world-surface-${{ matrix.config }}', upload['with']['name'])
+        self.assertEqual(upload['with']['name'], 'KisakCOD-world-surface')
         self.assertEqual(upload['with']['path'], 'artifacts/')
         self.assertEqual(upload['with']['if-no-files-found'], 'warn')
 
@@ -610,7 +625,7 @@ class AssetFreeFreeCameraWorkflowTests(unittest.TestCase):
             self.assertIn('tests/linux_free_camera/**', self.workflow['on'][event]['paths'])
 
     def test_exactly_two_explicit_configurations(self):
-        self.assertEqual(self.job['strategy']['matrix']['config'], ['Debug', 'RelWithDebInfo'])
+        each_config_commands(self, self.job, 'Run asset-free free camera checks')
         self.assertEqual(self.job['runs-on'], 'ubuntu-24.04')
         self.assertIn('timeout-minutes', self.job)
 
@@ -638,12 +653,11 @@ class AssetFreeFreeCameraWorkflowTests(unittest.TestCase):
         self.assertIn('python3 scripts/tests/test_free_camera_check_runner.py', self.commands)
 
     def test_runner_invocation_carries_its_exit_status(self):
-        step = next(step for step in self.job['steps']
-                    if step.get('name') == 'Run asset-free free camera checks')
-        for part in ('scripts/tests/run_free_camera_checks.py', '--config "${{ matrix.config }}"',
-                     '--cxx clang++', '--log-dir "artifacts/free-camera-${{ matrix.config }}"',
+        commands = each_config_commands(self, self.job, 'Run asset-free free camera checks')
+        for part in ('scripts/tests/run_free_camera_checks.py', '--config "$config"',
+                     '--cxx clang++', '--log-dir "artifacts/free-camera-$config"',
                      'python3 -u', '2>&1 | tee'):
-            self.assertIn(part, step['run'])
+            self.assertIn(part, commands)
         for step in self.job['steps']:
             if 'run' in step:
                 self.assertTrue(step['run'].lstrip().startswith('set -euo pipefail'), step.get('name'))
@@ -652,7 +666,7 @@ class AssetFreeFreeCameraWorkflowTests(unittest.TestCase):
         upload = next(step for step in self.job['steps']
                       if step.get('uses', '').startswith('actions/upload-artifact@'))
         self.assertEqual(upload['if'], 'always()')
-        self.assertIn('free-camera-${{ matrix.config }}', upload['with']['name'])
+        self.assertEqual(upload['with']['name'], 'KisakCOD-free-camera')
         self.assertEqual(upload['with']['path'], 'artifacts/')
 
 

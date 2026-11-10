@@ -303,14 +303,22 @@ class WorkflowTests(unittest.TestCase):
         cls.commands = "\n".join(step.get("run", "") for step in cls.job["steps"])
 
     def test_both_configurations_run(self):
-        self.assertEqual(self.job["strategy"]["matrix"]["config"], ["Debug", "RelWithDebInfo"])
-        self.assertEqual(self.job["strategy"]["fail-fast"], "false")
+        # One job runs both through scripts/ci/each-config.sh, so the pair needs
+        # one runner; test_ci_each_config.py checks that either failure is kept.
+        self.assertNotIn("strategy", self.job)
+        run = next(step["run"] for step in self.job["steps"]
+                   if step.get("name") == "Run world front-end checks")
+        lines = run.splitlines()
+        start = lines.index("scripts/ci/each-config.sh <<'COMMANDS'")
+        end = lines.index("COMMANDS")
+        self.assertIn('--log-dir "artifacts/world-frontend-$config"', "\n".join(lines[start:end]))
+        self.assertEqual([line for line in lines[end + 1:] if line.strip()], [])
 
     def test_the_self_tests_run_before_the_checks(self):
         names = [step.get("name") for step in self.job["steps"]]
         self.assertLess(names.index("Check world front-end runner"), names.index("Run world front-end checks"))
         self.assertIn("python3 scripts/tests/test_world_frontend_check_runner.py", self.commands)
-        self.assertIn('--config "${{ matrix.config }}"', self.commands)
+        self.assertIn('--config "$config"', self.commands)
         self.assertIn("--cxx clang++", self.commands)
 
     def test_every_command_block_propagates_failure(self):
