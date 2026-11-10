@@ -440,6 +440,16 @@ first build with the command did not, and the Linux game had the dvars
 without the command until laptop run 11 typed it), and CI's `vulkan_engine`
 job looks for the command in the programs it builds.
 
+`scripts/runs/recipes/vulkan-settings-mp-crash.json` measures these settings
+on a machine with `perf_run.py` ([runs](runs.md)), in the standing scene
+(mp_crash, a fixed view, 12 bots, a slow turn). Each of its two launches
+takes the statistics over 120 seconds, with their `slow frame` lines, and
+then compares inside the launch, with `perf_ab` in windows of one full turn:
+the kept draw state on and off, the GPU feed at its default and off, the idle
+rule at 0 and 16 draws, 128 and 32 draws to a part, and last a setting
+against itself, which says how far two equal settings sit apart on that
+machine. A launch takes about twelve minutes.
+
 With `r_backend vulkan`, `R_HW_Direct3DCreate9`
 (`src/gfx_d3d/rhi/r_rhi_d3d9_calls.cpp`, built with `KISAK_VULKAN_BACKEND`)
 returns the front and DXVK is never called. There is no fallback: if the Vulkan
