@@ -41,6 +41,9 @@ enum class ShaderStage : uint8_t
 // Compiles Cg source with entry point main into a GXM program (what a .gxp
 // file holds), checked with sceGxmProgramCheck. log receives the compiler's
 // diagnostics, one per line, errors and warnings alike.
+//
+// The game's programs are compiled with fast maths at optimisation level 3;
+// the two parameters are for finding out what the compiler does otherwise.
 bool CompileCg(const char *source, size_t length, ShaderStage stage, std::vector<uint8_t> &program,
-               std::string &log);
+               std::string &log, bool fastMath = true, int optimization = 3);
 } // namespace gfx_gxm

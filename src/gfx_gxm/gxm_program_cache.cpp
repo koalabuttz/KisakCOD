@@ -122,7 +122,8 @@ uint64_t ProgramCacheKey(const std::string &cg, ShaderStage stage)
     return KeyFor(cg, stage);
 }
 
-bool GetProgram(const std::string &cg, ShaderStage stage, std::vector<uint8_t> &program, std::string &log)
+bool GetProgram(const std::string &cg, ShaderStage stage, std::vector<uint8_t> &program, std::string &log,
+                bool fastMath, int optimization)
 {
     log.clear();
     std::string path;
@@ -152,7 +153,7 @@ bool GetProgram(const std::string &cg, ShaderStage stage, std::vector<uint8_t> &
         return false;
     }
     const uint64_t begin = Micros();
-    const bool compiled = CompileCg(cg.data(), cg.size(), stage, program, log);
+    const bool compiled = CompileCg(cg.data(), cg.size(), stage, program, log, fastMath, optimization);
     g_stats.compileMicros += Micros() - begin;
     if (!compiled)
     {

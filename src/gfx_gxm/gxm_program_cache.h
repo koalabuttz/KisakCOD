@@ -34,7 +34,11 @@ struct ProgramCacheStats
 
 // The program for this source, from its file or compiled now (and then
 // written). False with the compiler's log (or why the compiler is missing).
-bool GetProgram(const std::string &cg, ShaderStage stage, std::vector<uint8_t> &program, std::string &log);
+// fastMath and optimization are CompileCg's: a caller that changes them
+// gives the source a different text (a comment will do), since the file is
+// found by the source alone.
+bool GetProgram(const std::string &cg, ShaderStage stage, std::vector<uint8_t> &program, std::string &log,
+                bool fastMath = true, int optimization = 3);
 // The 16 hex digits of this source's file name, for logs.
 uint64_t ProgramCacheKey(const std::string &cg, ShaderStage stage);
 //

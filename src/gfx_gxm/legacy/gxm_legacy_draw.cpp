@@ -208,6 +208,8 @@ constexpr uint32_t kSequentialIndices = 60000; // sceGxm wants 16-bit index valu
 constexpr uint64_t kFramesInFlight = 3;
 } // namespace
 
+constexpr int kMaxGuessEdits = 16; // run diagnostics (kGuessEdits)
+
 struct DrawState
 {
     // The open scene.
@@ -274,6 +276,8 @@ struct DrawState
     // one is plain Cg.
     Shader diagSynthetic[3];
     Variant diagPlain;
+    // The guess's translation with one thing changed each (kGuessEdits).
+    Variant diagEdited[kMaxGuessEdits];
 };
 
 // Run diagnostics (DiagnoseDraw, DiagnoseFrame). Frame 300's first 8 draws
@@ -282,11 +286,17 @@ struct DrawState
 // own draws: one every 300 frames from frame 900, on for 180 frames, 2 draws
 // logged 60 frames in and the back buffer read 100 frames in.
 //
-// Runs H and I: a pass-through vertex program on the game's vertices fills
-// the screen; the game's translated vertex program computes a wrong
-// position (its w above all), on the console and in Vita3K. So these tests
-// read the numbers the program computes, and try shaders written here in
-// the menu vertex shader's shape, which can be told apart from the game's.
+// Runs H to J: the menu's translated vertex shader computed a position
+// whose every w term was missing. A shader written here in its shape (the
+// guess, kGuessShader; its program came out byte for byte the menu's) did
+// the same once translated: its first statement was
+//   r0 = (v0.xyzx * k8.xxxy + k8.yyyx);   with k8 = (1, 0, 0, 0)
+// and the console's compiler folded the w component, x * 0 + 1, to 0. The
+// translator now writes that statement another way (WithoutZeroProducts in
+// gxm_cg_translate.cpp). These tests compile the guess's translation as it
+// is now, as it was, and with that statement written other ways, to see
+// which spellings the compiler gets right; then they draw the game's own
+// program in green.
 constexpr uint64_t kDiagnosedFrame = 300, kReadBackFrames[] = {300, 700};
 constexpr uint64_t kTestRectFirst = 600, kTestRectLast = 779;
 constexpr uint64_t kTestsFirst = 900, kTestEvery = 300, kTestFrames = 180, kTestLogged = 60, kTestRead = 100;
@@ -296,24 +306,98 @@ struct DiagTest
     uint8_t option;    // gxm::cg::Options::diagPosition for the vertex program
     uint8_t standIn;   // 1: the pass-through program, 2: the mimic
     uint8_t synthetic; // draws with the menu's vertex shader use: 1 the guess, 3 four dots, 4 eight dots, all
-                       // translated like the game's; 2 the guess as plain Cg
+                       // translated like the game's; 2 the guess as plain Cg; 5 the guess's translation edited
     bool probe;        // TEXCOORD0 shown as the colour (else opaque green)
+    int8_t edit;       // synthetic 5: which of kGuessEdits
 };
+// The lines of the guess's translation these replace. An edit starts from
+// the translation as it was before the fix (kGuessMad), or as it is now.
+constexpr char kGuessConstant[] = "    const float4 k8 = float4(1.0, 0.0, 0.0, 0.0);\n";
+constexpr char kGuessMadNow[] = "    r0 = float4((v0.xyzx * k8.xxxy + k8.yyyx).xyz, (k8.yyyx).w);\n";
+constexpr char kGuessMad[] = "    r0 = (v0.xyzx * k8.xxxy + k8.yyyx);\n";
+constexpr char kGuessRegister[] = "    float4 r0 = float4(0.0, 0.0, 0.0, 0.0);\n";
+constexpr char kGuessMain[] = "void main(";
+struct GuessEdit
+{
+    const char *name;
+    bool asNow; // no edit: the translator's text as it is
+    const char *find[2];
+    const char *replace[2];
+    bool fastMath;
+    int optimization;
+};
+constexpr GuessEdit kGuessEdits[] = {
+    {"guess as the translator writes it now (the fix)", true, {nullptr, nullptr}, {nullptr, nullptr}, true, 3},
+    {"guess as translated before (black in run J)", false, {nullptr, nullptr}, {nullptr, nullptr}, true, 3},
+    {"guess: constant not const",
+     false,
+     {kGuessConstant, nullptr},
+     {"    float4 k8 = float4(1.0, 0.0, 0.0, 0.0);\n", nullptr},
+     true,
+     3},
+    {"guess: swizzles of the constant written as literals",
+     false,
+     {kGuessMad, nullptr},
+     {"    r0 = (v0.xyzx * float4(1.0, 1.0, 1.0, 0.0) + float4(0.0, 0.0, 0.0, 1.0));\n", nullptr},
+     true,
+     3},
+    {"guess: multiply and add in two statements",
+     false,
+     {kGuessMad, nullptr},
+     {"    r0 = v0.xyzx * k8.xxxy;\n    r0 = r0 + k8.yyyx;\n", nullptr},
+     true,
+     3},
+    {"guess: register not zeroed first", false, {kGuessRegister, nullptr}, {"    float4 r0;\n", nullptr}, true, 3},
+    {"guess: constant static const outside main",
+     false,
+     {kGuessConstant, kGuessMain},
+     {"", "static const float4 k8 = float4(1.0, 0.0, 0.0, 0.0);\nvoid main("},
+     true,
+     3},
+    {"guess: constructors in place of swizzles",
+     false,
+     {kGuessMad, nullptr},
+     {"    r0 = (v0.xyzx * float4(k8.x, k8.x, k8.x, k8.y) + float4(k8.y, k8.y, k8.y, k8.x));\n", nullptr},
+     true,
+     3},
+    {"guess: multiply-add through a function",
+     false,
+     {kGuessMad, kGuessMain},
+     {"    r0 = kisak_mad(v0.xyzx, k8.xxxy, k8.yyyx);\n",
+      "float4 kisak_mad(float4 a, float4 b, float4 m)\n{\n    return a * b + m;\n}\nvoid main("},
+     true,
+     3},
+    {"guess: one component at a time",
+     false,
+     {kGuessMad, nullptr},
+     {"    r0.x = v0.x * k8.x + k8.y;\n    r0.y = v0.y * k8.x + k8.y;\n    r0.z = v0.z * k8.x + k8.y;\n"
+      "    r0.w = v0.x * k8.y + k8.x;\n",
+      nullptr},
+     true,
+     3},
+    {"guess as before, compiled without fast maths", false, {nullptr, nullptr}, {nullptr, nullptr}, false, 3},
+    {"guess as before, compiled at optimisation level 2", false, {nullptr, nullptr}, {nullptr, nullptr}, true, 2},
+    {"guess as before, compiled at optimisation level 0", false, {nullptr, nullptr}, {nullptr, nullptr}, true, 0},
+    {"guess: literals, compiled without fast maths",
+     false,
+     {kGuessMad, nullptr},
+     {"    r0 = (v0.xyzx * float4(1.0, 1.0, 1.0, 0.0) + float4(0.0, 0.0, 0.0, 1.0));\n", nullptr},
+     false,
+     3},
+};
+constexpr int kGuessEditCount = int(sizeof(kGuessEdits) / sizeof(kGuessEdits[0]));
+static_assert(kGuessEditCount <= kMaxGuessEdits, "DrawState::diagEdited is too short");
+// The edits in order, then these.
 constexpr DiagTest kDiagTests[] = {
-    {"x and y as computed, z 0.5, w 1", 3, 0, 0, false},
-    {"probe: computed x / 2 + 0.5, y / 2 + 0.5, w / 2", 5, 0, 0, true},
-    {"probe: computed z / 4 + 0.5, w / 4 + 0.5, 0.25", 8, 0, 0, true},
-    {"probe: constants c1.w - 0.5, c3.w / 2, c7.w / 2", 6, 0, 0, true},
-    {"probe: constants c4.x / 2, c5.y / 2, c6.z / 2", 7, 0, 0, true},
-    {"synthetic: the guess, translated", 0, 0, 1, false},
-    {"synthetic: the guess, plain Cg", 0, 0, 2, false},
-    {"synthetic: four dots, translated", 0, 0, 3, false},
-    {"synthetic: eight dots, translated", 0, 0, 4, false},
-    {"synthetic: the guess, translated; probe x, y, w", 5, 0, 1, true},
-    {"synthetic: the guess, translated; probe z, w", 8, 0, 1, true},
-    {"pass-through", 0, 1, 0, false},
+    {"the game's own programs, green", 0, 0, 0, false, -1},
+    {"pass-through", 0, 1, 0, false, -1},
 };
-constexpr int kDiagTestCount = int(sizeof(kDiagTests) / sizeof(kDiagTests[0]));
+constexpr int kDiagTestCount = kGuessEditCount + int(sizeof(kDiagTests) / sizeof(kDiagTests[0]));
+// Test t (from 0).
+constexpr DiagTest DiagTestAt(int t)
+{
+    return t < kGuessEditCount ? DiagTest{kGuessEdits[t].name, 0, 0, 5, false, int8_t(t)} : kDiagTests[t - kGuessEditCount];
+}
 // The test of this frame, from 1; 0 for none.
 int DiagModeFor(uint64_t frame, uint64_t *into = nullptr)
 {
@@ -1409,6 +1493,47 @@ bool InitDraw(Device &device, std::string &error)
         if (!d.diagSynthetic[i].translated)
             Log(device, "diag: synthetic shader %d not translated: %s", i + 1, reason.c_str());
     }
+    // The guess translated for the menu's vertex layout (a D3DCOLOR colour,
+    // a two-float coordinate), then each edit of it.
+    gxm::cg::Options menuOptions;
+    menuOptions.bgraInputs = 2;
+    menuOptions.inputComponents[2] = 2;
+    std::string guess, reason;
+    if (!d.diagSynthetic[0].translated || !gxm::cg::Emit(d.diagSynthetic[0].parsed, menuOptions, guess, reason))
+        Log(device, "diag: the guess was not translated: %s", reason.c_str());
+    // As it was before the translator kept zero products out.
+    std::string before = guess;
+    if (const size_t at = before.find(kGuessMadNow); at != std::string::npos)
+        before.replace(at, std::strlen(kGuessMadNow), kGuessMad);
+    else if (!guess.empty())
+        Log(device, "diag: the guess's translation lacks the statement these tests are about");
+    for (int i = 0; i < kGuessEditCount && !guess.empty(); ++i)
+    {
+        const GuessEdit &edit = kGuessEdits[i];
+        std::string cg = edit.asNow ? guess : before;
+        bool found = true;
+        for (int e = 0; e < 2; ++e)
+            if (edit.find[e])
+            {
+                const size_t at = cg.find(edit.find[e]);
+                if (at == std::string::npos)
+                    found = false;
+                else
+                    cg.replace(at, std::strlen(edit.find[e]), edit.replace[e]);
+            }
+        if (!edit.fastMath || edit.optimization != 3)
+            cg = "// KisakCOD: diagnostics, fast maths " + std::to_string(int(edit.fastMath)) + ", optimisation " +
+                 std::to_string(edit.optimization) + "\n" + cg;
+        Variant &variant = d.diagEdited[i];
+        variant.cacheKey = gxm::ProgramCacheKey(cg, gxm::ShaderStage::Vertex);
+        if (!found)
+            Log(device, "diag: guess edit %d: the line to replace is not in the translation", i);
+        else if (!gxm::GetProgram(cg, gxm::ShaderStage::Vertex, variant.gxp, log, edit.fastMath, edit.optimization))
+            Log(device, "diag: guess edit %d did not compile: %s", i, log.substr(0, log.find('\n')).c_str());
+        if (Register(device, variant, "diag guess edit"))
+            Log(device, "diag: guess edit %d, cache file %016llx: %s", i, (unsigned long long)variant.cacheKey,
+                DescribeProgram(variant.program()).c_str());
+    }
     d.diagPlain.cacheKey = gxm::ProgramCacheKey(kGuessPlainCg, gxm::ShaderStage::Vertex);
     if (!gxm::GetProgram(kGuessPlainCg, gxm::ShaderStage::Vertex, d.diagPlain.gxp, log))
         Log(device, "diag: the plain guess did not compile: %s", log.substr(0, log.find('\n')).c_str());
@@ -1746,7 +1871,7 @@ void FrameDone(Device &device)
         d.diagnosedDraws = 2;
     if (mode != d.diagMode)
         Log(device, "diag: frame %llu, test %d of %d: %s", (unsigned long long)d.frame, mode, kDiagTestCount,
-            mode ? kDiagTests[mode - 1].name : "none");
+            mode ? DiagTestAt(mode - 1).name : "none");
     d.diagMode = mode;
     // Work recorded in frame F was queued before Present F + 1, and after
     // Present P the frames before P - 1 have been shown.
@@ -2068,7 +2193,8 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     InputPlan plan;
     PlanInputs(device, *vs, *device.decl, plan);
     const int diag = d.diagMode;
-    const DiagTest *test = diag ? &kDiagTests[diag - 1] : nullptr;
+    const DiagTest thisTest = DiagTestAt(diag ? diag - 1 : 0);
+    const DiagTest *test = diag ? &thisTest : nullptr;
     // The shader whose program this draw runs: the game's, or in some tests
     // one written here for draws with the menu's vertex shader.
     Shader *vsUsed = vs;
@@ -2080,6 +2206,8 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         {
             if (test->synthetic == 2)
                 vertex = d.diagPlain.failed ? nullptr : &d.diagPlain;
+            else if (test->synthetic == 5)
+                vertex = test->edit < 0 || d.diagEdited[test->edit].failed ? nullptr : &d.diagEdited[test->edit];
             else if (Shader &synthetic = d.diagSynthetic[test->synthetic == 1 ? 0 : test->synthetic - 2];
                      synthetic.translated)
                 vsUsed = &synthetic;
@@ -2281,7 +2409,10 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         char part[160];
         Log(device, "diag frame %llu draw: vertex program (cache file %016llx%s) %s", (unsigned long long)d.frame,
             (unsigned long long)vertex->cacheKey,
-            vertex == &d.diagPlain ? ", the plain guess" : vsUsed != vs ? ", a synthetic shader" : "",
+            vertex == &d.diagPlain ? ", the plain guess"
+            : vsUsed != vs || (test && test->synthetic == 5 && test->edit >= 0 && vertex == &d.diagEdited[test->edit])
+                ? ", a synthetic shader"
+                : "",
             DescribeProgram(vertex->program()).c_str());
         line.clear();
         for (int reg = 0; reg < 16; ++reg)

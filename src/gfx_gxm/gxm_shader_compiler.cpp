@@ -105,7 +105,7 @@ void ReleaseShaderCompiler()
 }
 
 bool CompileCg(const char *source, size_t length, ShaderStage stage, std::vector<uint8_t> &program,
-               std::string &log)
+               std::string &log, bool fastMath, int optimization)
 {
     program.clear();
     log.clear();
@@ -125,8 +125,8 @@ bool CompileCg(const char *source, size_t length, ShaderStage stage, std::vector
     options.entryFunctionName = "main";
     options.locale = SCE_SHACCCG_ENGLISH;
     options.useFx = 1;
-    options.optimizationLevel = 3;
-    options.useFastmath = 1;
+    options.optimizationLevel = optimization;
+    options.useFastmath = fastMath ? 1 : 0;
     options.warningLevel = 1;
 
     SceShaccCgCallbackList callbacks;
