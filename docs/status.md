@@ -1,7 +1,7 @@
 # Linux port status
 
-Last updated 2026-11-10 07:50 UTC (master `6566d88`, the x86_64 Linux
-singleplayer build, PR 167). This page is the current state of
+Last updated 2026-11-10 07:40 UTC (master `c4158aa`, the key code menu,
+PR 159). This page is the current state of
 the native Linux port and the other platform builds, the open pull requests and
 the roadmap. The [docs index](README.md) lists the detailed guides;
 older handoffs are in [history](history/README.md) and are not current.
@@ -30,7 +30,7 @@ Vulkan checks run on lavapipe and MoltenVK).
 | Dedicated server, macOS (arm64 and x86_64) | `-DKISAK_PLATFORM=macos` | Builds with Apple Clang on hosted macOS runners (Apple silicon and Intel) and boots without game data to the first missing fastfile. Not yet run with game data or on a real Mac. [Guide](macos.md) |
 | Movies | `-DKISAK_LINUX_CINEMATICS=ON` | Bink movies play through an FFmpeg-backed shim on i386 and x86_64 (laptop). Off by default. [Guide](linux-cinematics.md) |
 | Steam authentication | `-DKISAK_LINUX_STEAM=ON` | Added by PR 85. Logs in through the running Steam client's `steamclient.so`; a probe got a ticket validated on i386 and x86_64, and an i386 client joined, reconnected to and was refused by (with Steam off) an i386 dedicated server; the same passed with x86_64 client and server, and across i386 and x86_64 in both directions (laptop, one Steam account). A dedicated server can instead log on as an anonymous Steam game server (`KISAK_STEAM_SERVER_LOGIN=anonymous`); a Windows client on David's PC joined such a laptop server and was refused with the server's Steam off. Off by default. [Guide](linux-steam.md) |
-| Key codes (no Steam) | default | A client without Steam (or with `cl_keyCodeOnly 1`) joins servers with `sv_allowUnverifiedGuids 1` using a GUID derived from `codkey.txt` or, on Windows, the retail registry key. Unverified by design. Laptop run (x86_64 client and dedi, made-up key): joined, spawned and reconnected with the GUID; refused without the server opt-in, without a key file, with a group-readable file and with a mistyped key. [Guide](key-codes.md) |
+| Key codes (no Steam) | default | A client without Steam (or with `cl_keyCodeOnly 1`) joins servers with `sv_allowUnverifiedGuids 1` using a GUID derived from `codkey.txt` or, on Windows, the retail registry key. Unverified by design. Laptop run (x86_64 client and dedi, made-up key): joined, spawned and reconnected with the GUID; refused without the server opt-in, without a key file, with a group-readable file and with a mistyped key. Since PR 159 the game's own key code menu saves a typed key as `codkey.txt` (mode 600) and keeps it out of the dvars a server's menus can read; that is checked asset-free on hosted CI, and the menu has not been used on screen yet. [Guide](key-codes.md) |
 | Finding servers | default | The local list, favourites and `connect` need no setup. The internet list is opt-in: `masterServerName` is empty by default, so no master server is contacted (retail's is gone); when set, the client asks that master and a `dedicated 2` server sends it heartbeats. A list is accepted only from the master that was asked. Checked asset-free over loopback UDP on hosted CI; the Join Game menu has not been opened on a real client yet. [Guide](server-browser.md) |
 | Singleplayer `KisakCOD-sp`, i386 | `-DKISAK_BUILD_LINUX_SP_GAME=ON` | killhouse and cargoship load, leave the pregame by themselves and play about a minute each, clean quit (laptop). All 21 levels load, run 45 s and quit cleanly; a 4-level mission chain and devsave/loadgame pass (laptop sweep run 1, [levels](linux-sp-levels.md)). [Guide](linux-sp-game.md) |
 | Vulkan renderer back end | `-DKISAK_BUILD_VULKAN_BACKEND=ON`, then `+set r_backend vulkan` | The game's own D3D9 renderer drawn through this project's Vulkan back end in place of DXVK (Linux) or `d3d9.dll` (Windows), with the original visuals. `KisakCOD-mp` plays mp_crash through it on the laptop (x86_64) and on the PC (the Win32 build from CI), and quits cleanly. The picture matches: the world draw probe's two views agree with DXVK at PSNR 66.7 and 100 (laptop), and on the PC Vulkan and real D3D9 agree at 37 to 44 dB from one indoor view, the same spread as repeats of that comparison. Speed at a fixed mp_crash view on the laptop: since PR 152 (commands recorded on a second thread, a frame handed to the GPU in parts while it is drawn) 140.9 fps against 151.3 through DXVK on mains in power-saver mode (run 9), and 139.5 against 138.2 on battery (run 10, one pass); before it, 116 to 125 against 151 to 159. On the PC every Vulkan launch sat at the display's 75 fps with vsync off, where real D3D9 ran the scene at about 215 (PC run 6; PR 173, open, asks for the IMMEDIATE present mode). Translated shaders and pipelines are kept between runs (PC, Debug build: 15 s to the map warm, 62 s cold). Hosted CI builds it into the i386 Linux client, the macOS client and the Windows game (Win32 and x64), runs the device probe and the adapter and front pixel checks on lavapipe, and runs those two checks on macOS through MoltenVK. Open: on the laptop models are slightly darker than through DXVK with `r_altModelLightingUpdate 1` (the default), while on the PC the two settings differ by no more than launch-to-launch noise on either back end (PC run 6); occlusion queries report every sample as passed (PR 173, open, counts them); and about one frame in two minutes takes 110 to 230 ms. Off by default. [Guide](vulkan-d3d9-front.md#in-the-game-r_backend-vulkan) |
@@ -153,7 +153,7 @@ These came before the playable client and still build and run in CI:
 
 ## Open pull requests
 
-As of 2026-11-10 07:50 UTC, ten. They change by the hour; the
+As of 2026-11-10 07:40 UTC, ten. They change by the hour; the
 [list on GitHub](https://github.com/koalabuttz/KisakCOD/pulls) is the current
 one. A machine run a pull request waits on is named where its author has
 said so.
@@ -165,11 +165,11 @@ said so.
 | 162 | PS Vita client: an on-screen keyboard and a chat control | None named: PC runs KB1 and KB2 checked the game's side in Vita3K. No text has come back from the system's keyboard yet, and nothing has run on a console. |
 | 174 | PS Vita client: read the back buffer for the log only when a run asks, which makes Vita3K runs several times faster | None named: PC run H2 measured it in Vita3K (menu: 5135 frames in 120 s against 1174). Not run on a console. |
 | 175 | A copied sound counts the frames it holds (some stereo sounds claimed twice their length; this is the desktop's default sound path too), and the Vita build removes a file before it rewrites it, because Vita3K does not cut a rewritten file | PC run W: a Vita3K start that leaves no old lines in rewritten files, and the first map with PRs 164 and 166 in one build. Nobody has listened for the sound change. |
-| 159 | Save a key code typed into the game's key code menu as `codkey.txt` | Nobody has typed a key into the menu yet. |
 | 170 | Linux client: opt-in HTTP downloads (`-DKISAK_LINUX_HTTP_DOWNLOADS=ON`) through the engine's own libcurl downloader | A laptop run of a real download is planned; none has been made. |
 | 160 | In-game A/B measuring (`perf_ab`, `perf_sample`) and two switches to measure with it, off by default | Laptop perf run 5 is their first run in a real game. |
 | 168 | Shorter machine runs and pull request CI: timed Vita starts, a frame log, a run driver, trimmed PR checks | |
 | 169 | Five more patches in the upstream patch queue | |
+| 177 | Tests only: close a race in the suspend gate self-test that turned a macOS check red | |
 
 ## Laptop and PC runs still to do
 
@@ -200,6 +200,8 @@ As of 2026-11-10. Each machine does one run at a time.
 - Finding servers (PR 163, merged): the Join Game menu on a real client, and
   a real dedicated server, the test master and a client together (laptop run
   queued; [guide](server-browser.md#what-is-checked)).
+- Key code menu (PR 159, merged): a key typed into the menu on screen
+  ([guide](key-codes.md#the-key-code-menu)).
 - x86_64 Linux singleplayer (PR 167, merged): a first sweep of the 21
   levels on the laptop, and a Windows x64 tour of the same commit.
 - CPU measuring: laptop perf run 5, the first use of PR 160's in-game A/B
