@@ -1407,6 +1407,52 @@ void Check::StateReuse()
         return;
     Expect("next_frame", 8, 8, 0, 255, 0);
     Expect("next_frame_clear", 24, 8, 0, 0, 64);
+
+    // The kept state turned off (lg::SetKeepDrawState, the engine's
+    // r_vkKeepDrawState): each draw writes every block and leaves no bind
+    // out, whatever the draw before it was. 8 and 9 are two draws alike, 10
+    // has a constant changed and 11 is indexed from the buffers 12 then uses
+    // again. Turned on again, 13 is a draw like 12 and takes up what 12 left.
+    point("kept_by_default", lg::GetKeepDrawState(device), 0);
+    lg::SetKeepDrawState(device, false);
+    point("keep_off_read_back", !lg::GetKeepDrawState(device), 1);
+    written();
+    skips();
+    draw(8);
+    draw(9);
+    SetConstant(true, 0, kStep, 0, 0, 0);
+    draw(10, true);
+    SetConstant(true, 0, 0, 0, 0, 0);
+    lg::SetStreamSource(device, 0, vertices, 0, sizeof(Vertex));
+    lg::SetIndices(device, indices16);
+    SetConstant(true, 0, 3 * kStep, kStep, 0, 0);
+    lg::DrawIndexedPrimitive(device, d3d::PT_TRIANGLELIST, 0, 0, 8, 0, 2); // cell 16 at 11
+    SetConstant(true, 0, 4 * kStep, kStep, 0, 0);
+    lg::DrawIndexedPrimitive(device, d3d::PT_TRIANGLELIST, 0, 0, 8, 0, 2); // and at 12
+    wrote = written();
+    point("keep_off_writes_every_block", wrote == 5 * all, wrote);
+    left = skips();
+    point("keep_off_skips_no_bind", left == 0, left);
+    lg::SetKeepDrawState(device, true);
+    SetConstant(true, 0, 5 * kStep, kStep, 0, 0);
+    lg::DrawIndexedPrimitive(device, d3d::PT_TRIANGLELIST, 0, 0, 8, 0, 2); // and at 13
+    wrote = written();
+    point("keep_on_again_writes_one_block", wrote == vertexBlock, wrote);
+    left = skips();
+    // The vertex buffer, the index buffer and the texture set; set 0 has a new offset.
+    point("keep_on_again_skips_binds", left == (alone ? 0u : 3u), left);
+    lg::SetStreamSource(device, 0, nullptr, 0, 0);
+    lg::SetIndices(device, nullptr);
+    SetConstant(true, 0, 0, 0, 0, 0);
+    if (!Read())
+        return;
+    for (uint32_t cell = 8; cell <= 13; ++cell)
+    {
+        char name[32];
+        std::snprintf(name, sizeof(name), "keep_off_cell_%u", cell);
+        Expect(name, cell % 8 * 16 + 8, cell / 8 * 16 + 8, 0, 255, 0);
+    }
+    Expect("keep_off_clear", 6 * 16 + 8, 16 + 8, 0, 0, 64);
 }
 
 void Check::ShaderCache()

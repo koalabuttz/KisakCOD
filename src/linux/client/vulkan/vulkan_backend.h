@@ -31,6 +31,8 @@ struct IDirect3D9;
 //   r_vkGpuFeedDraws     draws to a part of a frame; 0 is the default, 128
 //   r_vkGpuFeedIdleDraws draws to a part while the GPU has nothing left; 0
 //                        for no such parts
+//   r_vkKeepDrawState    a draw takes up what the one before left (default);
+//                        0 makes every draw set everything again
 void Kisak_VulkanRegisterDvars();
 
 // Registers the dvars; whether r_backend is vulkan.

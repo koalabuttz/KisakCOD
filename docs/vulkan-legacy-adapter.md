@@ -85,6 +85,14 @@ buffer by the core's `Recording()` number.
   earlier draw...`, `the pipeline kept...`, `the dynamic state kept...`). So
   every check run with validation, and the game with `r_vkValidation` on,
   tests the rules above against what a draw without shortcuts would do.
+
+  `SetKeepDrawState(device, false)` turns all three off while the device
+  runs (the game's `r_vkKeepDrawState 0`): every draw then makes its pipeline
+  key and dynamic state, writes all its uniform blocks and records every
+  bind, which is what the adapter did before it kept them. It is there to
+  measure what the kept state is worth on a machine, in one launch, and to
+  tell a drawing fault of the kept state from any other. The change is
+  logged (`draw state kept from one draw to the next: now off`).
 * **Textures.** Each sampler slot gets the bound texture's sample view (with the
   format's swizzle: L8, A8, A8L8, X8R8G8B8 and the rest read as D3D9 reads them)
   and a sampler cached per slot and state. Empty slots read a 1x1 black
@@ -304,7 +312,7 @@ statistics, the validation counts, and `legacy_check=passed` or
 | `missing_input` | A vertex shader input the declaration does not supply reads zero. |
 | `event_query` | An event query finishes after the GPU passes it. |
 | `occlusion_query` | Occlusion queries report exact sample counts: a quad's pixels, the visible half of a quad behind another, 0 for a hidden one, and two overlapping queries across a change of targets (0xffffff each where the device cannot count). |
-| `state_reuse` | What a draw writes and records when it is like the one before, by the constant bytes written and the binds skipped: the same state again (nothing written, set 0 and the vertex buffer not bound again), a vertex shader constant set to another value (its block alone), to the same value and outside the block (nothing), another texture, an unbound and a rebound texture (the sampler state block), the alpha test turned on and changed (its block), a layout with pixel shader constants and back, a new command buffer (binds recorded again, nothing written), indexed draws that keep their buffers, a stream offset and 32-bit indices, the frame's memory moving to another buffer (every block again under dynamic uniform buffers), a viewport, a scissor rectangle and a vertex declaration each changed alone between two draws, the same vertex shader code created a second time (another object, so its pipeline is looked up), a pixel shader constant block that was last written before the frame's memory moved (written again under dynamic uniform buffers, kept otherwise), and the next frame (every block again). Each step's pixel is read back. The counts follow the device: no bind is skipped with `KISAK_VK_GPU_FEED=always`, where every draw has a command buffer of its own. |
+| `state_reuse` | What a draw writes and records when it is like the one before, by the constant bytes written and the binds skipped: the same state again (nothing written, set 0 and the vertex buffer not bound again), a vertex shader constant set to another value (its block alone), to the same value and outside the block (nothing), another texture, an unbound and a rebound texture (the sampler state block), the alpha test turned on and changed (its block), a layout with pixel shader constants and back, a new command buffer (binds recorded again, nothing written), indexed draws that keep their buffers, a stream offset and 32-bit indices, the frame's memory moving to another buffer (every block again under dynamic uniform buffers), a viewport, a scissor rectangle and a vertex declaration each changed alone between two draws, the same vertex shader code created a second time (another object, so its pipeline is looked up), a pixel shader constant block that was last written before the frame's memory moved (written again under dynamic uniform buffers, kept otherwise), and the next frame (every block again). Last, with the kept state turned off (`SetKeepDrawState`), five draws (two alike, one with a constant changed, two indexed from the same buffers) each write every block and skip no bind, and turned on again a sixth like the fifth writes one block and keeps its buffers and texture set. Each step's pixel is read back. The counts follow the device: no bind is skipped with `KISAK_VK_GPU_FEED=always`, where every draw has a command buffer of its own. |
 
 The scenes' shaders are D3D9 assembly in
 `scripts/tools/vulkan/gen_legacy_check_shaders.py`, assembled with the shader
@@ -358,6 +366,21 @@ own cross-check, 7 by a wrong pixel, a wrong count or a validation error (5 of
 the 18 went unseen at first, and the scene got a step for each). No GPU has
 run it and no frame rate was measured: what it is worth in the game is for a
 laptop run to say.
+
+The switch that turns the kept state off (`SetKeepDrawState`, 2026-11-10, same
+sandbox; `state_reuse` has 72 points with its steps): the check passes in
+Debug and RelWithDebInfo with validation under the same eight sets of
+switches, and the front's check, with its `kept_state` scene, under its seven.
+Three lines were taken out in turn, the one that passes the front's setting to
+the adapter, the one that lets go of the uniform blocks and the ones that
+forget the binds, and a check fails each time. That a draw makes its pipeline
+key and dynamic state again has no count to check: it is two flags set in the
+same function. With the switch off, `bench_runs` writes 457 KB of constants a
+frame where it writes 14 KB with it on, and callgrind counts 4,419
+instructions per draw on the drawing thread against 2,838. Before the adapter
+kept anything it was 4,626: a draw without kept state writes and records what
+it did then, and the newer code spends a little less on doing so. No GPU has
+run it.
 
 Laptop run 1 (2026-11-08, Intel RPL-U iGPU, Mesa 25.0.7 ANV, x86_64 and i386
 RelWithDebInfo, SDL offscreen and Wayland, no validation layer installed): all

@@ -66,7 +66,8 @@ instead (`vk_d3d9.h`), which the program fills once:
   validation counts here).
 * `tuning`: settings the program may change while the device exists
   (`Tuning`: the GPU feed on, off or after every draw, its draws to a part,
-  and the idle rule's count, see the [adapter](vulkan-legacy-adapter.md)).
+  the idle rule's count, and whether a draw takes up the state the draw
+  before it left, see the [adapter](vulkan-legacy-adapter.md)).
   The front asks at every `Present` and takes up what changed, so a change
   shows in the next frame. In the game these are dvars.
 
@@ -284,6 +285,7 @@ a usage error.
 | `gpu_feed` | A frame of 600 draws, each filling a cell of its own, with a scissor rectangle set once that cuts the last column. The adapter submits such a frame in parts while it is drawn ([adapter](vulkan-legacy-adapter.md)): every draw must show whichever part it fell in, the cells no draw touches must keep the clear colour, and the scissor must hold in every part. Prints the number of parts. |
 | `tuning` | What a program changes and asks for while its device runs. Five frames of 600 draws, each under a GPU feed setting handed over through `Host::tuning` and taken up by the `Present` before it: off (no parts), after every draw (600 parts), 50 draws a part (2 to 12), 300 draws with an idle count of 10 (the frame starts with the GPU read back, so its first part goes after 10 draws; one to five parts go early, and the picture of that frame is checked on both sides of them), and an idle count no smaller than the plain one (no early part). Every change is logged, the last one back to the device's own setting. `LogDeviceStats` then reports exactly the frames, draws and parts the scene counted since it started the statistics, a second report repeats them and starts again, and a third has no frame in it. Last, another thread changes the setting and asks for the statistics eight times while this one draws and presents, as the engine's main thread does beside its render thread, and the last frame comes out whole. |
 | `slow_frames` | The statistics' `slow frame` lines. Eight frames, of which the second makes the only blended draws of the check (so a pipeline is built) and then stands still for 400 ms, and the third uploads a texture and stands still for 250 ms. A report after the first frame has one line, for frame 1 with its 10 draws. The report after the eighth has three, the longest first, and names frames 2 and 3 with their times, their draws, the pipeline and the upload, and with the GPU's times where the device has timestamps. A report that starts the statistics again is followed by one with no such line. The two frames are found by number and not by rank, so a machine busy enough to hold another frame up for longer still passes. |
+| `kept_state` | The switch for what a draw takes up from the draw before it (`Tuning::keepDrawState`, the game's `r_vkKeepDrawState`). The same frame of 600 draws, in runs of eight that share a texture and with a vertex shader constant set to another value for every draw, is drawn with the state kept, not kept and kept again. Each change is taken up by the `Present` after it and logged once, the first frame logs none, and the statistics count 600 draws in each. The three pictures are the same to the pixel and every one of the 600 cells has its run's texture (a draw that took the constant of the one before would land in another cell). The frame drawn without the kept state writes close to twice the constants of the other two or more, which write the same as each other. |
 | `bench` | Only when named (`--scene bench`), never in a full run: 120 frames of 768 draws of four D3D9 calls each, ended as `frame_loop`'s are, while another thread polls the sync fence every 20 microseconds. Prints the time the drawing thread spent on its draw calls per frame and the polls made meanwhile; passes when its frames were presented. |
 | `bench_runs` | Only when named, as `bench`: 100 frames of 768 draws in runs of eight that share a texture, an alpha reference and a pixel shader constant, as the engine's draws sorted by material do; each draw sets one vertex shader constant and draws its own quad from one static vertex and index buffer. It measures what the adapter does for a draw like the one before ([adapter](vulkan-legacy-adapter.md)). The last frame is read back and ten of its cells checked. Prints what `bench` prints. |
 | `reset` | `Reset` to 96x96 and back: the new size, default state, nothing bound, drawing at the new size. |
@@ -369,6 +371,16 @@ ms and 300 ms; nearly all of it shows as GPU time without work before the
 frame. No GPU has run it: what the lines say about the long frame the laptop
 sees about every two minutes is for its next measuring run.
 
+The `kept_state` scene (2026-11-10, same sandbox) passes its 20 points on
+x86_64 Debug and RelWithDebInfo with validation in the same seven
+configurations and on i386 without validation, and ThreadSanitizer finds
+nothing in it with the record thread on or off. Its frame of 600 draws writes
+10.0 KB of constants with the state kept and 365.6 KB without. No GPU has run
+it. The check also takes `--keep-draw-state 0`, which draws the `bench` and
+`bench_runs` scenes without the kept state, so their timings and instruction
+counts can be set beside the default's (the [adapter](vulkan-legacy-adapter.md)
+has the counts).
+
 ## In the game: r_backend vulkan
 
 `-DKISAK_BUILD_VULKAN_BACKEND=ON` (`scripts/vulkan_probe/vulkan_backend.cmake`,
@@ -396,7 +408,7 @@ archived and latched (a change applies at the next `vid_restart`):
   ignored when another device or driver wrote it). 0 translates every shader
   and builds every pipeline from scratch at every start.
 
-Three more are for measuring. They are not saved and take effect in the next
+Four more are for measuring. They are not saved and take effect in the next
 frame (the front's `Tuning`), so one launch can compare settings, by hand, in
 a config script or with `perf_ab`:
 
@@ -405,6 +417,13 @@ a config script or with `perf_ab`:
 * `r_vkGpuFeedDraws`: the draws to a part of a frame; 0 (default) leaves the
   device's own count, 128 unless `KISAK_VK_GPU_FEED_DRAWS` says otherwise.
 * `r_vkGpuFeedIdleDraws`: the idle rule's count; 0 (default) for no rule.
+* `r_vkKeepDrawState`: 1 (default) lets a draw take up the pipeline, the
+  constants and the binds the draw before it left (the
+  [adapter](vulkan-legacy-adapter.md)'s work per draw); 0 makes every draw
+  set them all again. The `frame stats` line shows which is in effect by its
+  constants per frame. It is also the switch to try when a picture is wrong
+  in a way a stale state would explain: if 0 puts it right, the fault is in
+  what is kept.
 
 The `r_vkStats` command (`src/gfx_d3d/r_cmds.cpp`, in the game and the world
 draw probe) prints the device's statistics lines since it last ran, or since
