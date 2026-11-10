@@ -284,38 +284,41 @@ bool GetProgram(const std::string &cg, ShaderStage stage, std::vector<uint8_t> &
     // Vertex programs keep it.
     const bool fast = fastMath && stage == ShaderStage::Vertex;
     bool compiled = CompileCg(cg.data(), cg.size(), stage, program, log, fast, optimization);
-    if (!compiled)
-    {
-        // Once the compiler has stopped with "fatal internal error" every
-        // later program fails the same way within milliseconds (PC run Z11:
-        // 279 in a row). A fresh compiler gets one more try, so a broken
-        // compiler costs one program at most, not all that follow.
+    // Once the compiler has stopped with "fatal internal error" every later
+    // program fails the same way within milliseconds, and then the queue
+    // made nothing more (PC run Z11: 279 in a row on the first program of a
+    // start, then 543 left waiting for ten minutes). So each retry gets a
+    // compiler loaded afresh, and a program that fails every try leaves it
+    // unloaded for the next. A fragment program that fails without fast maths
+    // gets a last try with it, as it was built before run Z10.
+    auto freshCompiler = [&]() {
         UnloadCompiler();
         std::string message;
-        if (LoadShaderCompiler(message))
+        const bool loaded = LoadShaderCompiler(message);
+        g_compilerTried = true;
+        g_compilerLoaded.store(ShaderCompilerLoaded(), std::memory_order_release);
+        if (!loaded)
         {
-            g_compilerTried = true;
-            g_compilerLoaded.store(true, std::memory_order_release);
-            {
-                const std::lock_guard<std::mutex> state(g_state);
-                ++g_stats.compilerRetries;
-            }
-            std::string again;
-            compiled = CompileCg(cg.data(), cg.size(), stage, program, again, fast, optimization);
-            // Still failing without fast maths: the program as it was built
-            // before run Z10 beats no program at all.
-            if (!compiled && fast != fastMath)
-                compiled = CompileCg(cg.data(), cg.size(), stage, program, again, fastMath, optimization);
-            log = compiled ? std::string() : again;
-        }
-        else
-        {
-            g_compilerTried = true;
             g_compilerReady = false;
             g_compilerMessage = message;
-            g_compilerLoaded.store(false, std::memory_order_release);
         }
+        return loaded;
+    };
+    for (int attempt = 1; !compiled && attempt <= (fast != fastMath ? 2 : 1); ++attempt)
+    {
+        if (!freshCompiler())
+            break;
+        {
+            const std::lock_guard<std::mutex> state(g_state);
+            ++g_stats.compilerRetries;
+        }
+        std::string again;
+        compiled = CompileCg(cg.data(), cg.size(), stage, program, again, attempt == 1 ? fast : fastMath,
+                             optimization);
+        log = compiled ? std::string() : again;
     }
+    if (!compiled && ShaderCompilerLoaded())
+        UnloadCompiler();
     const uint64_t end = Micros();
     g_lastCompile.store(end, std::memory_order_release);
     size_t held = 0, peak = 0;

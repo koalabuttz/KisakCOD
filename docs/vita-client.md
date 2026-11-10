@@ -823,12 +823,14 @@ for 5 s, and loads it again for the next program (0.4 s on a console; vitaGL
 does the same). A first start compiled 421 programs across 15 loads in
 Vita3K, with the compiler never above 4.1 MB; before that, such a start ran
 the heap out while the sounds loaded. The `shader compiler memory` log lines
-count what it held and gave back. A program that fails to compile is tried
-once more with the compiler unloaded and loaded afresh: in PC run Z11
-(Vita3K) the compiler stopped once with `error 403, line 0: fatal internal
-error` and then failed every program after it the same way, 279 in a row.
-A fragment program that fails both times is tried a third time with fast
-maths, as it was built before run Z10. The same lines count those retries.
+count what it held and gave back. In PC run Z11 (Vita3K) the compiler
+stopped on the first program of a start with `error 403, line 0: fatal
+internal error`, failed the next 278 the same way within a fifth of a
+second, and then made nothing more for ten minutes. A program that fails to
+compile is now tried again with the compiler unloaded and loaded afresh; a
+fragment program that still fails gets a last try with fast maths, as it was
+built before run Z10; and a program that fails every try leaves the
+compiler unloaded for the next. The same lines count the retries.
 
 **Programs in the background.** The game creates its shaders while a zone
 loads: on its loading thread, hundreds in a row, inside the lock every D3D9
