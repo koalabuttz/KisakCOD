@@ -493,6 +493,24 @@ std::string Emitter::SourceWithNumber(const Operand &op, uint16_t number)
         base = RegisterName(numbered, false);
     }
     std::string value = base + SwizzleSuffix(op.swizzle);
+    // A def'd constant is read as a literal of the components the swizzle
+    // picks, never as its variable and a swizzle: above optimisation level 0
+    // the Vita's compiler gets lanes of a swizzled constant wrong. The menu's
+    // position lost its w that way (see WithoutZeroProducts), and in PC run
+    // Z7 (2026-11-10, Vita3K, mp_crash) the posters' decal shader dropped
+    // the colour map from red and green: compiled at optimisation 0 the
+    // same program drew them as Windows does. Literals compile right.
+    if (op.type == kConst && !op.relative)
+    {
+        const auto found = definedValues_.find(number);
+        if (found != definedValues_.end())
+        {
+            value = "float4(";
+            for (int i = 0; i < 4; ++i)
+                value += (i ? ", " : "") + Float(found->second[(op.swizzle >> (2 * i)) & 3]);
+            value += ")";
+        }
+    }
     switch (op.modifier)
     {
     case kSmNone:

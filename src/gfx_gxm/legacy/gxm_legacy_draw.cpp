@@ -412,7 +412,8 @@ struct DiagTest
 // The lines of the guess's translation these replace. An edit starts from
 // the translation as it was before the fix (kGuessMad), or as it is now.
 constexpr char kGuessConstant[] = "    const float4 k8 = float4(1.0, 0.0, 0.0, 0.0);\n";
-constexpr char kGuessMadNow[] = "    r0 = float4((v0.xyzx * k8.xxxy + k8.yyyx).xyz, (k8.yyyx).w);\n";
+constexpr char kGuessMadNow[] =
+    "    r0 = float4((v0.xyzx * float4(1.0, 1.0, 1.0, 0.0) + float4(0.0, 0.0, 0.0, 1.0)).xyz, (float4(0.0, 0.0, 0.0, 1.0)).w);\n";
 constexpr char kGuessMad[] = "    r0 = (v0.xyzx * k8.xxxy + k8.yyyx);\n";
 constexpr char kGuessRegister[] = "    float4 r0 = float4(0.0, 0.0, 0.0, 0.0);\n";
 constexpr char kGuessMain[] = "void main(";

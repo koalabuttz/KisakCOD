@@ -73,7 +73,9 @@ REFUSED = {
 # Cases of this test alone. HLSL writes float4(v.xyz, 1) as a mad with a
 # def'd constant's zeros and ones; the Vita's compiler folds x * 0 + c to 0
 # (the menu drew nothing until a console run showed it), so the translator
-# keeps products by a constant's zero out of the program.
+# keeps products by a constant's zero out of the program. It also reads every
+# def'd constant as a literal of the swizzled components: the compiler got
+# lanes of a swizzled constant wrong in a decal shader too (PC run Z7).
 VITA_CASES = {
     "vs3_vita_mad_zero": "vs_3_0\ndef c8, 1, 0, 0, 0\ndef c9, 0, 2, 0, 3\ndcl_position v0\ndcl_position o0\n"
                          "dcl_texcoord o1\nmad r0, v0.xyzx, c8.xxxy, c8.yyyx\nmul r1, v0, c8.yxyx\n"
@@ -108,12 +110,14 @@ CHECKS = [
      "constants=6"),
     ("vs3_psize_fog", ["--diag-position", "3"], "out_POSITION.zw = float2(0.5, 1.0);", "constants=5"),
     ("vs3_psize_fog", ["--diag-position", "4"], "out_POSITION.z = out_POSITION.w * 0.5;", "constants=5"),
-    ("vs3_vita_mad_zero", [], "r0 = float4((v0.xyzx * k8.xxxy + k8.yyyx).xyz, (k8.yyyx).w);", "constants=2"),
-    ("vs3_vita_mad_zero", [], "r1 = float4(0.0, (v0 * k8.yxyx).y, 0.0, (v0 * k8.yxyx).w);", "instructions=11"),
-    ("vs3_vita_mad_zero", [], "r2.xz = (float4((v0 * k8.xxyy + k9.yyww).xy, (k9.yyww).zw)).xz;", "constants=2"),
-    ("vs3_vita_mad_zero", [], "r3.yw = ((k9 * v0)).yw;", "constants=2"),
+    ("vs3_vita_mad_zero", [], "r0 = float4((v0.xyzx * float4(1.0, 1.0, 1.0, 0.0) + float4(0.0, 0.0, 0.0, 1.0)).xyz, "
+     "(float4(0.0, 0.0, 0.0, 1.0)).w);", "constants=2"),
+    ("vs3_vita_mad_zero", [], "r1 = float4(0.0, (v0 * float4(0.0, 1.0, 0.0, 1.0)).y, 0.0, (v0 * float4(0.0, 1.0, 0.0, 1.0)).w);", "instructions=11"),
+    ("vs3_vita_mad_zero", [], "r2.xz = (float4((v0 * float4(1.0, 1.0, 0.0, 0.0) + float4(2.0, 2.0, 3.0, 3.0)).xy, "
+     "(float4(2.0, 2.0, 3.0, 3.0)).zw)).xz;", "constants=2"),
+    ("vs3_vita_mad_zero", [], "r3.yw = ((float4(0.0, 2.0, 0.0, 3.0) * v0)).yw;", "constants=2"),
     ("vs3_vita_mad_zero", [], "r4 = float4((r0.wzyx).xyzw);", "constants=2"),
-    ("vs3_vita_mad_zero", [], "r5 = (v0 * k9.yyww + c[1]);", "constants=2"),
+    ("vs3_vita_mad_zero", [], "r5 = (v0 * float4(2.0, 2.0, 3.0, 3.0) + c[1]);", "constants=2"),
     ("vs2_oT_oD_fog", ["--diag-position", "5"],
      "out_TEXCOORD0 = float4(out_POSITION.x * 0.5 + 0.5, out_POSITION.y * 0.5 + 0.5, out_POSITION.w * 0.5, 1.0);\n"
      "    out_POSITION = float4(v0.x / 480.0 - 1.0, 1.0 - v0.y / 272.0, 0.5, 1.0);", "constants=6"),

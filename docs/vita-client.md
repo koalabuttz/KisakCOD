@@ -878,6 +878,18 @@ one component per statement also compile right; a non-const or static
 constant, two statements, a function, and constructors around the swizzles
 do not.
 
+**It gets other lanes of swizzled constants wrong too.** In PC run Z7
+(Vita3K, 2026-11-10, mp_crash) the world's decals drew red and green that
+ignored their colour map (posters on a wall came out flat yellow; with
+black colour maps Windows drew them black and the Vita 145 135 0), while
+blue was right. Compiled at optimisation 0 the posters' two programs drew
+them as Windows does. The translator now writes every def'd constant it
+reads as a literal of the components the swizzle picks
+(`float4(1.0, 1.0, 1.0, 0.0)` for `c8.xxxy`), never as the constant and a
+swizzle. That changes the text, and so the cache file, of nearly every
+program: the first start after it compiles them all again (about 1200 on
+mp_crash), in the background as usual.
+
 The client is packed unsafe for the compiler, like the probe.
 
 `scripts/tests/test_vita_cg_translate.py` checks the translator on the
