@@ -38,11 +38,12 @@ platform code.
 | 0016 | With `sv_allowDownload` on, a client can download any file under the server's home path, such as its config | security fixes merge `52fdd24`, written smaller |
 | 0017 | The OpenAL driver detaches a buffer from a source that is still playing, so cut sounds keep playing and the next one is lost (upstream issue 76) | commit `0b48d2e` |
 | 0018 | An OpenAL stream that runs out of queued audio stays silent (upstream issue 76) | commit `0b48d2e` |
+| 0019 | The 16-bit angle factors are bare numbers in 16 files (upstream issue 53) | commit `7fc5013` |
 
 Patches 0001 to 0004 are the proposed first batch and 0005 to 0010 the
 second. 0011 to 0015 answer open upstream issues or sit next to one, and
 come after those. 0016 belongs with the second batch; 0017 and 0018 go with
-the other fixes for open issues.
+the other fixes for open issues. 0019 is the first of the cleanup issues.
 
 Open points on single patches, to settle before each is offered:
 
@@ -62,6 +63,12 @@ Open points on single patches, to settle before each is offered:
   which is off there, so the hosted build of the queue does not compile
   them. Both were run against OpenAL Soft's loopback device with upstream's
   own driver code.
+- 0019 uses the fork's names (`DEGREES_PER_SHORT`, `SHORTS_PER_DEGREE`). On
+  upstream issue 53 one maintainer suggested writing the first as `45/8192`
+  and a contributor suggested Quake's `SHORT2ANGLE` and `ANGLE2SHORT` macros.
+  Quake's `ANGLE2SHORT` formula would change results, because the game
+  multiplies by the float factor; the names can still be changed before this
+  is offered. Upstream issue 59 was a duplicate of 53 and is closed.
 - Upstream issue 36 needs nothing from the fork: upstream has already
   commented out the copies it names.
 
