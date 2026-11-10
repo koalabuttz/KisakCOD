@@ -342,4 +342,7 @@ void Vita_LogMemoryAtError()
     char line[256];
     FormatMemory(line, sizeof(line), "at the error");
     Vita_ConsoleWrite(line, strlen(line));
+    // An emulator echoes this; it survives when the file's tail does not.
+    fputs(line, stdout);
+    fflush(stdout);
 }

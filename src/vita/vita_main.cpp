@@ -225,6 +225,10 @@ namespace
                 }
             }
             LogFormat("Vita: ERROR: uncaught exception (%s); the process ends\n", what);
+            // And where an emulator echoes the program's output, in case the
+            // file's tail is lost with the emulator.
+            printf("Vita: ERROR: uncaught exception (%s); the process ends\n", what);
+            fflush(stdout);
             Vita_LogMemoryAtError();
             Vita_ConsoleSync();
         }
@@ -292,6 +296,28 @@ void Vita_ConsoleSync()
 
 void Vita_Exit(int status)
 {
+    // console.log is closed first. Vita3K does not implement the sync call
+    // and holds a file's last 4 KB until the file is closed, and after an exit
+    // with a code other than 0 its own process stays and has to be killed,
+    // which loses them: the lines that said why a start failed never reached
+    // the file (PC run of 2026-11-10). Another thread may hold the lock, or
+    // this one does (an error while printing): wait a moment, not for ever.
+    bool locked = false;
+    for (int tries = 0; tries < 50 && !locked; ++tries)
+    {
+        locked = pthread_mutex_trylock(&s_logLock) == 0;
+        if (!locked)
+            usleep(2000);
+    }
+    if (s_logFd >= 0)
+    {
+        const int fd = s_logFd;
+        s_logFd = -1;
+        fsync(fd);
+        close(fd);
+    }
+    if (locked)
+        pthread_mutex_unlock(&s_logLock);
     sceKernelExitProcess(status);
     for (;;)
         ;

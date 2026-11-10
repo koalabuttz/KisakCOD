@@ -146,9 +146,14 @@ vita_assertExit 1`, then `Vita: vita_atMap "..."` when one is set).
 
 An exception nothing caught (a `std::bad_alloc` when the heap is spent) logs
 `Vita: ERROR: uncaught exception (std::bad_alloc); the process ends` and the
-memory left, and syncs the log, with or without `vita_assertExit`. What
-neither switch can end is a fault or a plain `abort()`: a runner still needs
-its own time limit and a kill.
+memory left, to the log and to standard output (an emulator's echo), and
+syncs the log, with or without `vita_assertExit`. Every exit the port makes
+itself closes `console.log` first: Vita3K does not implement the sync call
+and holds a file's last 4 KB until it is closed, and after an exit code
+other than 0 Vita3K's own process stays and has to be killed, so a runner
+ends a start when Vita3K logs `The app exited with code N`. What neither
+switch can end is a fault or a plain `abort()`: a runner still needs its own
+time limit and a kill.
 
 A menu start that is done 15 seconds after the menu shows:
 

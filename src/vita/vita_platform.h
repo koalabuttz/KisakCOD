@@ -74,14 +74,15 @@ void Vita_SetAssertExits(bool exits);
 // Has the system write console.log's bytes out.
 void Vita_ConsoleSync();
 
-// Logs memory use straight to console.log, for Sys_Error: an out-of-memory
-// error then shows which pool ran out.
+// Logs memory use straight to console.log and to standard output, for
+// Sys_Error: an out-of-memory error then shows which pool ran out.
 void Vita_LogMemoryAtError();
 
 // Size of newlib's heap block in MB (_newlib_heap_size_user).
 int Vita_HeapSizeMB();
 
-// Ends the process at once. newlib's exit() and _exit() free the heap block
+// Closes console.log and ends the process at once (no line is logged after
+// it). newlib's exit() and _exit() free the heap block
 // before the kernel stops the other threads, and a worker still running in that
 // gap faults on freed memory (Vita3K shows it at every fatal error). The
 // kernel reclaims everything anyway, so the server's exits skip that clean-up.
