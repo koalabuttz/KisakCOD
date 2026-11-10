@@ -925,7 +925,16 @@
          1,
          DVAR_ARCHIVE | DVAR_LATCH,
          "Enable v-sync before drawing the next frame to avoid 'tearing' artifacts.");
+#ifdef KISAK_GFX_GXM
+     // "steady": the Vita clears a scene's colour to r_clearColor before it
+     // draws. The retail game clears it only when a frame has no float-Z
+     // pass, because a scene covers every pixel. The Vita leaves draws out
+     // while their program is being made, and what shows through is what
+     // that display buffer held three frames before. 1 is the retail game's.
+     r_clear = Dvar_RegisterEnum("r_clear", r_clearNames, 3, DVAR_NOFLAG, "Controls how the color buffer is cleared");
+#else
      r_clear = Dvar_RegisterEnum("r_clear", r_clearNames, 1, DVAR_NOFLAG, "Controls how the color buffer is cleared");
+#endif
 #ifdef KISAK_XBOX
      r_clearColor = Dvar_RegisterColor(
          "r_clearColor",
