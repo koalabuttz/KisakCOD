@@ -331,6 +331,7 @@ jobs:
           python3 scripts/tests/test_linux_sp_level_sweep.py
           python3 scripts/tests/test_linux_mp_map_sweep.py
           python3 scripts/tests/test_package_linux_client.py
+          python3 scripts/tests/test_setup_linux_client.py
           python3 scripts/tests/test_shader_spike.py
 
       - name: Run asset-free native checks

@@ -19,6 +19,55 @@ Movies are opt-in ([linux-cinematics.md](linux-cinematics.md)).
 
 ## Building
 
+### One command (x86_64)
+
+```sh
+python3 scripts/tools/setup_linux_client.py
+```
+
+fetches SDL3 and DXVK Native at the revisions this project pins, builds both
+into `kisak-sdk` next to the repository (`--prefix` moves it), and builds the
+x86_64 `KisakCOD-mp` against them in `build-linux/mp-x64`. It ends by printing
+the line that starts the client. Its DXVK is 2.7.1 plus the one upstream commit
+that fullscreen on a Wayland session needs (see
+[The game window and input](#the-game-window-and-input)), so that works without
+patching anything by hand.
+
+It installs nothing. When a build tool is missing it stops and names the
+Debian/Ubuntu package; the full set is:
+
+```sh
+sudo apt install git cmake ninja-build clang meson glslang-tools pkg-config \
+  libopenal-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev \
+  libxi-dev libxkbcommon-dev libwayland-dev libdecor-0-dev libegl1-mesa-dev libudev-dev
+```
+
+The last two lines are what SDL3 needs to open windows on X11 and Wayland. The
+tool prints which of the two its SDL3 got, and says so when Wayland is missing.
+
+Running it again skips what is already built at the same revision, so after a
+`git pull` it only rebuilds the client. It removes only folders it made itself
+(each holds a `.kisak-setup` file). Useful switches:
+
+| Switch | What it does |
+| --- | --- |
+| `--package <new folder>` | Also packs the client, SDL3 and DXVK into a [folder that runs on another PC](#a-folder-that-runs-on-another-pc), and `<new folder>.tar.gz`. That client is built without movies, because a movie build only starts where the build machine's own FFmpeg version is installed; `--movies` keeps them. |
+| `--sdk-only` | Builds SDL3 and DXVK and stops. |
+| `--build-type Debug` | The client's build type (default `RelWithDebInfo`). |
+| `--cmake-arg=-D...` | One more option for the client's configure, for example `--cmake-arg=-DKISAK_LINUX_HTTP_DOWNLOADS=ON`. |
+| `--openal-include <folder>` | Where `AL/al.h` is, when `libopenal-dev` is not installed (see below). |
+| `--dry-run` | Prints every command and runs nothing. |
+
+Checked so far in a cloud container only (x86_64, Clang 18, no GPU, SDL3 built
+without desktop support): a full run took about five minutes and the packed
+folder started (`--version`) with no library path set. It has not been run on
+a desktop PC yet. `scripts/tests/test_setup_linux_client.py` checks the tool's
+logic without the network; the hosted workflow "Linux client setup tool" does
+the real fetch and build when the tool changes. The i386 client still needs
+the recipe below.
+
+### By hand
+
 ```sh
 cmake -S . -B build-linux/mp -G Ninja -DCMAKE_BUILD_TYPE=Debug \
   -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
@@ -124,7 +173,8 @@ fullscreen, Wayland refuses to position it, and 2.7.1 gives up. With that one
 commit, the laptop played fullscreen on GNOME Wayland, and Alt-Tab worked. The
 project still builds against 2.7.1's headers. Only the library the client loads
 at run time needs the fix, so putting the patched library first on
-`LD_LIBRARY_PATH` is enough. Without it, run windowed (`+set r_fullscreen 0`),
+`LD_LIBRARY_PATH` is enough, and `scripts/tools/setup_linux_client.py` builds
+exactly that library. Without it, run windowed (`+set r_fullscreen 0`),
 or use XWayland (`SDL_VIDEO_DRIVER=x11`). Fullscreen uses `r_mode` as on
 Windows, so set it to the panel's size for a sharp picture; a smaller mode is
 scaled up. `vid_restart` is refused while a listen server runs, as in the
@@ -309,7 +359,9 @@ KisakCOD-linux/run-mp.sh --game "<Call of Duty 4 folder>" +set r_fullscreen 0
 
 The game folder can also come from `KISAKCOD_GAME_DIR` or be the current
 folder. For fullscreen on a native Wayland session, pack a DXVK build that has
-the fix named under [The game window and input](#the-game-window-and-input).
+the fix named under [The game window and input](#the-game-window-and-input);
+`scripts/tools/setup_linux_client.py --package <new folder>` builds that DXVK
+and packs the folder in one go.
 Several binaries of one architecture can share a folder (`--binary` again for
 `KisakCOD-sp` or `KisakCOD-dedi`; each gets its own `run-*.sh`).
 
