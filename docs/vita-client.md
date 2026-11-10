@@ -78,6 +78,14 @@ screen shows test pictures, mostly plain green, and the log says what each
 left in the back buffer. Without the file the client only logs frame 300's
 first draws and what frames 300 and 700 left in the back buffer.
 
+Two switches are for measuring in an emulator what the game would take if it
+had the room; a console has no memory for either:
+- a file named `big-gpu-pool` in the same folder adds 96 MB to the GPU's main
+  pool, so a map's buffers and textures can all be made and the
+  `gpu memory by use` line says what they come to;
+- `-DKISAK_VITA_HEAP_MB=128` at configure time builds a client with a 128 MB
+  heap instead of 64.
+
 ## What it builds
 
 `scripts/platform/vita/mp_client.cmake` takes the same engine sources as the
@@ -142,7 +150,10 @@ What the menu takes (run K on the console, and the same build in Vita3K, 2026-11
 | The display's buffers | 8.0 | |
 | Static indices, volumes, other textures | 2.7 | |
 
-The main pool is too small for the dynamic buffers, so 14.5 MB of them spill into CDRAM. mp_crash's first vertex buffer alone is 13.4 MB, and neither pool had that much left. Making a map fit is the next piece of work: the shadow maps (18 MB) are not usable on the Vita yet, and the dynamic buffers are sized for a PC.
+The main pool is too small for the dynamic buffers, so 14.5 MB of them spill into CDRAM. mp_crash's first vertex buffer alone is 13.4 MB, and neither pool had that much left. Making a map fit is the work in progress. The table above is the state before it; so far:
+- **Targets take memory when first used.** The renderer makes every render target and depth texture it might use at start-up. On the Vita each one gets its GPU memory when a scene first draws to it, or when it is first locked or copied from (`EnsureTargetMemory`). Until then a draw that samples it reads black. The log names each one as it takes its memory (`gpu memory piece`).
+- **No shadow maps.** `sm_enable` is 0 and read-only in the Vita build. The back end cannot sample depth textures yet, so the shadow maps would be drawn and never read. With the change above, their 18 MB of targets are never taken.
+- Still to do: the dynamic buffers are sized for a PC (the static model cache 8 MB, the skinned caches 9 MB, the index buffers 10 MB).
 
 ## Controls (stage 3)
 

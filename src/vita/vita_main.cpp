@@ -34,7 +34,12 @@
 //   main thread stack 8 MB, worker stacks 1 MB each
 // which leaves about 45 MB. console.log reports the heap's use once a minute
 // (vita_stats.cpp); size it again from the first runs.
-extern "C" int _newlib_heap_size_user = 64 * 1024 * 1024;
+// KISAK_VITA_HEAP_MB (a CMake option) is for emulator builds that measure what
+// the game would take with more; a console build keeps 64.
+#ifndef KISAK_VITA_HEAP_MB
+#define KISAK_VITA_HEAP_MB 64
+#endif
+extern "C" int _newlib_heap_size_user = KISAK_VITA_HEAP_MB * 1024 * 1024;
 
 // The main thread runs Com_Frame. Linux gives it 8 MB; the Vita default is
 // 256 KB, and engine code keeps large arrays on the stack. vita-elf-create

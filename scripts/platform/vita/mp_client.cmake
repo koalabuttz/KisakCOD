@@ -152,6 +152,10 @@ set(KISAK_VITA_MP_OPTIONS
 add_library(KisakCOD-mp-vita-native OBJECT ${vita_mp_native_sources} ${vita_mp_client_sources})
 add_library(KisakCOD-mp-vita-standin OBJECT ${vita_mp_standin_sources} ${vita_mp_posix_sources} ${KISAK_VITA_SOURCES})
 add_library(KisakCOD-mp-vita-own OBJECT ${vita_mp_own_sources})
+# newlib's heap (src/vita/vita_main.cpp). More than 64 is for measuring in an
+# emulator what the game would take; a console has no memory for it.
+set(KISAK_VITA_HEAP_MB "64" CACHE STRING "Size of the Vita client's heap in MB (64 on a console; more only for emulator measurements)")
+target_compile_definitions(KisakCOD-mp-vita-standin PRIVATE KISAK_VITA_HEAP_MB=${KISAK_VITA_HEAP_MB})
 foreach(mp_target KisakCOD-mp-vita-native KisakCOD-mp-vita-standin KisakCOD-mp-vita-own)
     target_compile_features(${mp_target} PRIVATE cxx_std_20)
     target_compile_definitions(${mp_target} PRIVATE ${KISAK_VITA_MP_DEFINITIONS})
