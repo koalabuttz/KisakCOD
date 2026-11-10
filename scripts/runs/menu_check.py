@@ -56,6 +56,7 @@ from perf_run import Game  # noqa: E402  (the same stdin/stdout wrapper as frame
 
 TEST_KEY = "K1SAK-C0DTE-STKEY-98B44"
 HOSTNAME = "KisakCOD menu check"
+PROFILE = "menucheck"
 
 ITEM_RE = re.compile(
     r'^menuitem menu=(?P<menu>\S+) item=(?P<item>\d+) type=(?P<type>-?\d+) name=(?P<name>\S+) '
@@ -139,24 +140,85 @@ def wrong_checksum(key: str) -> str:
     return bare[:-1] + last
 
 
+def seed_profile(home: Path, name: str = PROFILE):
+    """A new home has no player profile, and the menus then open "You need a
+    player profile" pop-ups over everything. Gives the home one, as the game
+    would after the player made it: players/profiles/<name>/ and active.txt."""
+    profiles = home / "players" / "profiles"
+    (profiles / name).mkdir(parents=True, exist_ok=True)
+    active = profiles / "active.txt"
+    if not active.exists():
+        active.write_text(name + "\n")
+
+
 # --- the private display --------------------------------------------------------------------------
 
 class Display:
     def __init__(self, xvfb, xdotool, width, height, log_path):
         self.xdotool = xdotool
-        read_fd, write_fd = os.pipe()
         self.log = open(log_path, "w")
-        self.process = subprocess.Popen(
-            [xvfb, "-displayfd", str(write_fd), "-screen", "0", f"{width}x{height}x24", "-nolisten", "tcp"],
-            pass_fds=(write_fd,), stdout=self.log, stderr=subprocess.STDOUT)
-        os.close(write_fd)
-        if not select.select([read_fd], [], [], 15)[0]:
-            raise RuntimeError("Xvfb did not report a display")
-        self.name = ":" + os.read(read_fd, 64).decode().strip()
-        os.close(read_fd)
+        screen = ["-screen", "0", f"{width}x{height}x24", "-nolisten", "tcp"]
+        number = self._start_with_displayfd(xvfb, screen)
+        if not number:
+            # In WSL /tmp/.X11-unix is a read-only mount: -displayfd finds no
+            # display it can make a socket for and reports nothing, while an
+            # explicit number still works (abstract socket).
+            number = self._start_with_number(xvfb, screen)
+        if not number:
+            raise RuntimeError("Xvfb did not start a display (see xvfb.log)")
+        self.name = f":{number}"
         self.env = dict(os.environ, DISPLAY=self.name)
         self.window = None
         self.origin = (0, 0)
+
+    def _start_with_displayfd(self, xvfb, screen):
+        read_fd, write_fd = os.pipe()
+        self.process = subprocess.Popen([xvfb, "-displayfd", str(write_fd), *screen],
+                                        pass_fds=(write_fd,), stdout=self.log, stderr=subprocess.STDOUT)
+        os.close(write_fd)
+        number = ""
+        if select.select([read_fd], [], [], 15)[0]:
+            number = os.read(read_fd, 64).decode().strip()
+        os.close(read_fd)
+        if number.isdigit() and self.process.poll() is None:
+            return number
+        self._stop_process()
+        self.log.write("\n[menu_check] -displayfd reported no display; trying explicit numbers\n")
+        self.log.flush()
+        return None
+
+    def _start_with_number(self, xvfb, screen):
+        for number in range(90, 200):
+            if Path(f"/tmp/.X{number}-lock").exists() or Path(f"/tmp/.X11-unix/X{number}").exists():
+                continue
+            if self._display_answers(number):
+                continue  # someone else's display
+            self.process = subprocess.Popen([xvfb, f":{number}", *screen],
+                                            stdout=self.log, stderr=subprocess.STDOUT)
+            deadline = time.monotonic() + 15
+            while time.monotonic() < deadline and self.process.poll() is None:
+                if self._display_answers(number):
+                    return str(number)
+                time.sleep(0.5)
+            self._stop_process()
+        return None
+
+    def _display_answers(self, number):
+        try:
+            result = subprocess.run([self.xdotool, "getdisplaygeometry"], env=dict(os.environ, DISPLAY=f":{number}"),
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+        except subprocess.TimeoutExpired:
+            return False
+        return result.returncode == 0
+
+    def _stop_process(self):
+        if self.process.poll() is None:
+            self.process.terminate()
+            try:
+                self.process.wait(10)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait()
 
     def xdo(self, *args, check=True):
         result = subprocess.run([self.xdotool, *map(str, args)], env=self.env, text=True,
@@ -198,12 +260,7 @@ class Display:
             time.sleep(0.15)
 
     def close(self):
-        if self.process.poll() is None:
-            self.process.terminate()
-            try:
-                self.process.wait(10)
-            except subprocess.TimeoutExpired:
-                self.process.kill()
+        self._stop_process()
         self.log.close()
 
 
@@ -271,7 +328,7 @@ class Run:
     def start_client(self):
         self.client_launches += 1
         home = self.out / "client-home"
-        home.mkdir(parents=True, exist_ok=True)
+        seed_profile(home)
         env = dict(self.display.env, ALSOFT_DRIVERS="null")
         command = [str(self.args.client), *self.common_args(home),
                    "+set", "com_introPlayed", "1", "+set", "snd_volume", "0", "+set", "developer", "1",
@@ -505,7 +562,11 @@ class Run:
             if self.start_client() is None:
                 self.check("the client reaches its main menu", False)
                 return
-            self.check("the client reaches its main menu", True, f"top menu {self.last_top()}")
+            top = self.last_top()
+            # A profile pop-up on top means the seeded profile was not taken,
+            # and every later step would click under it.
+            if not self.check("the client reaches its main menu", not top.startswith("profile_"), f"top menu {top}"):
+                return
             if self.key_code_menu():
                 self.favourite_and_join()
             else:

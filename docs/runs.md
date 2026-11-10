@@ -224,6 +224,12 @@ It writes `results.json` (one entry per check, with the last menu listing for
 a failed one) and the logs in the `--out` folder. The key typed is never
 printed or logged.
 
+The client's home gets a player profile (`players/profiles/menucheck` and
+`active.txt`) before the first start; without one the menus open "You need a
+player profile" pop-ups over everything. In WSL `/tmp/.X11-unix` is a
+read-only mount and `Xvfb -displayfd` finds no display, so the script then
+starts Xvfb on an explicit free number from `:90` up.
+
 The client's `listmenuitems` console command is what makes this possible: it
 prints every item of the open menus with its action script, dvar, text and the
 window pixel to click, and the rows of each list. Items are found by what they

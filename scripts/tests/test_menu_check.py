@@ -10,8 +10,11 @@ runs on a test machine (docs/runs.md).
 
 from __future__ import annotations
 
+import os
 import re
 import sys
+import tempfile
+import textwrap
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -127,11 +130,72 @@ def test_dvar_pattern():
     check(match is not None and match["value"] == "", "an empty dvar reads as empty")
 
 
+def test_profile_seed():
+    with tempfile.TemporaryDirectory() as work:
+        home = Path(work) / "client-home"
+        menu_check.seed_profile(home)
+        profiles = home / "players" / "profiles"
+        check((profiles / menu_check.PROFILE).is_dir(), "the profile folder is made under players/profiles")
+        check((profiles / "active.txt").read_text().split() == [menu_check.PROFILE], "active.txt names it")
+        (profiles / "active.txt").write_text("other\n")
+        menu_check.seed_profile(home)
+        check((profiles / "active.txt").read_text() == "other\n", "a second start keeps the active profile")
+
+
+FAKE_XVFB = textwrap.dedent("""\
+    #!/usr/bin/env python3
+    # Like Xvfb in WSL: -displayfd reports nothing, an explicit :N works.
+    import os, signal, sys, time
+    if "-displayfd" in sys.argv:
+        sys.exit(1)
+    with open(os.environ["FAKE_X_STATE"], "w") as state:
+        state.write(sys.argv[1].lstrip(":"))
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    while True:
+        time.sleep(1)
+    """)
+
+FAKE_XDOTOOL = textwrap.dedent("""\
+    #!/usr/bin/env python3
+    import os, sys
+    try:
+        live = open(os.environ["FAKE_X_STATE"]).read()
+    except OSError:
+        live = ""
+    sys.exit(0 if os.environ.get("DISPLAY", "") == ":" + live and live else 1)
+    """)
+
+
+def test_display_fallback():
+    with tempfile.TemporaryDirectory() as work:
+        work = Path(work)
+        for name, text in (("Xvfb", FAKE_XVFB), ("xdotool", FAKE_XDOTOOL)):
+            (work / name).write_text(text)
+            (work / name).chmod(0o755)
+        os.environ["FAKE_X_STATE"] = str(work / "state")
+        display = None
+        try:
+            display = menu_check.Display(str(work / "Xvfb"), str(work / "xdotool"), 640, 480, work / "xvfb.log")
+            number = display.name.lstrip(":")
+            check(number.isdigit() and display.env["DISPLAY"] == display.name,
+                  f"an explicit display is used when -displayfd reports none (got {display.name!r})")
+            check(display.process.poll() is None, "the fallback display is running")
+        except RuntimeError as error:
+            check(False, f"an explicit display is used when -displayfd reports none ({error})")
+        finally:
+            if display:
+                display.close()
+                check(display.process.poll() is not None, "close stops the display")
+            os.environ.pop("FAKE_X_STATE", None)
+
+
 def main():
     test_format_contract()
     test_matching()
     test_key_helpers()
     test_dvar_pattern()
+    test_profile_seed()
+    test_display_fallback()
     print(f"{checks} checks, {failures} failures")
     return 1 if failures else 0
 
