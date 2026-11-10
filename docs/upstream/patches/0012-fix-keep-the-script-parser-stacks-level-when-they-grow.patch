@@ -1,0 +1,49 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 05:26:34 +0000
+Subject: [PATCH] fix: keep the script parser's state and value stacks level
+ when they grow
+
+yyparse stored the first state at yyss[1] while the first value stayed at
+yyvs[0], so the state stack ran one slot ahead. When the stacks grew,
+yyvsp was set from the state stack's depth, one slot too high, and every
+later rule read the wrong values: the parse tree came out as garbage and
+the compiler crashed on it. The stacks grow at about 200 states, which a
+chain of 32 "if ... else if" branches or 200 nested parentheses reaches.
+
+Restore bison's layout: the first state goes to yyss[0] through
+yysetstate, and yynewstate increments before the store.
+
+Checked with the parser built alone, 32-bit, under ASan: both cases crash
+before and build the right tree after. May be behind upstream issue 89.
+---
+ src/script/scr_yacc2.cpp | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/script/scr_yacc2.cpp b/src/script/scr_yacc2.cpp
+index ae07d668..79beda16 100644
+--- a/src/script/scr_yacc2.cpp
++++ b/src/script/scr_yacc2.cpp
+@@ -1080,7 +1080,7 @@ int yyparse()
+ 	yyssp = yyss;
+ 	yyvsp = yyvs;
+ 
+-//	goto yysetstate;
++	goto yysetstate;
+ 
+ 	while (1)
+ 	{
+@@ -1090,10 +1090,10 @@ int yyparse()
+ yynewstate:
+ 		/* In all cases, when you get here, the value and location stacks
+ 		have just been pushed.  So pushing a state here evens the stacks.  */
+-		//yyssp++; // LWSS CHANGE - move ++ below
++		yyssp++;
+ 
+-//	yysetstate:
+-		*++yyssp = yystate;
++yysetstate:
++		*yyssp = yystate;
+ 
+ 		if (yyssp >= &yyss[yystacksize - 1])
+ 		{
