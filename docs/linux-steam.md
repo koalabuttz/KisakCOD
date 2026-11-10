@@ -88,7 +88,11 @@ unreachable, any other value turns Steam off, the server is not listed, and a
 client or listen server ignores the variable. The 64-bit Windows build has no
 Steam at all (there is no 64-bit `steam_api` in `deps/steamsdk`).
 
-This mode has not been run yet (see Verified).
+Steam Windows run 3 ran this mode against Steam (see Verified). Steam_Init
+runs before the console and log file exist on Windows, so the lines it prints
+(a wrong login value, "logging on as an anonymous game server") are kept and
+printed right after start-up; the later "logged on" line is printed when Steam
+answers.
 
 ### After a ticket is accepted
 
@@ -198,8 +202,18 @@ as `steam_session`) needs no Steam:
   after the logon line, one quit before the logon finished, and one client-mode
   quit all exited 0.
 
-Not verified: a Windows server in either mode (its anonymous game server
-login has never been run against Steam), a negative verdict from Steam for a
+- 2026-11-10, Steam Windows run 3 (a local Win32 Release dedi of master
+  c7a6dcc on the Windows PC with `KISAK_STEAM_SERVER_LOGIN=anonymous`; the
+  laptop's x86_64 Linux Steam client at 45896f4 over the LAN): the server
+  printed "logged on as an anonymous game server for app 7940", the laptop
+  joined, passed the server's Steam auth check and spawned, and did it again
+  after `disconnect` and `connect`; `quit` exited 0. With `anon` as the login
+  value the server left Steam off and the laptop was refused ("Your Steam
+  Client Ticket was Invalid"). That run found that the Windows server's
+  start-up lines were never shown (they were printed before the console
+  existed) and that two of its lines had no line break; both are fixed.
+
+Not verified: a Windows server in client mode, a negative verdict from Steam for a
 player who is connected or about to connect (only host tests cover it), two
 different Steam accounts, and a
 Windows client against a Linux server in client mode (one account can't be signed in on
