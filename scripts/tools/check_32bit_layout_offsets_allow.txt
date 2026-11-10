@@ -75,3 +75,7 @@ src/ui/ui_shared_obj.cpp: v3[3] = *((EvalOperatorType *)&v2->u.s + 1);
 
 # aligns the address of the trailing buffer, not a field offset.
 src/universal/com_memory.cpp: pos = (void*)(((uintptr_t)user->buf + 4095) & ~(uintptr_t)4095);
+
+# a file handle compared with INVALID_HANDLE_VALUE (-1) the decompiler's way;
+# no field is read through the void pointer.
+src/database/db_registry.cpp: modZone = (char *)zoneFile + 1 != 0;

@@ -2594,14 +2594,17 @@ void Phys_CollideOrientedBrushWithTriangleList_Wrapper(const cbrush_t *orientedB
 {
     if (!userData)
         MyAssertHandler(".\\physics\\phys_coll_boxbrush.cpp", 1855, 0, "%s", "userData");
+    // By the fields: the decompiled reads counted the two ints in four-byte
+    // slots and the pointers in pointer-sized ones, which agree only on i386.
+    const BrushTrimeshData *data = (const BrushTrimeshData *)userData;
     Phys_CollideOrientedBrushWithTriangleList(
         orientedBrush,
-        *(const unsigned __int16 **)userData,
-        *((const float (**)[3])userData + 1),
-        *((uint32_t *)userData + 2),
-        *((const objInfo **)userData + 3),
-        *((uint32_t *)userData + 4),
-        *((Results **)userData + 5));
+        data->indices,
+        data->verts,
+        data->triCount,
+        data->input,
+        data->surfaceFlags,
+        data->results);
 }
 
 void Phys_CollideBoxWithTriangleList(

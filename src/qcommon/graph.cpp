@@ -115,7 +115,7 @@ void GraphFloat_DevGuiCB_Text(const DevGraph *devGuiGraph, float inputX, float i
 {
     float inputYa; // [esp+24h] [ebp+10h]
 
-    inputYa = inputY * *((float *)devGuiGraph->data + 81);
+    inputYa = inputY * ((const GraphFloat *)devGuiGraph->data)->scale;
     Com_sprintf(text, textLength, "Fraction: %.3f, Value: %.3f", inputX, inputYa);
 }
 

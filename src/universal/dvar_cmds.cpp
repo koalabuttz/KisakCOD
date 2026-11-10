@@ -442,8 +442,11 @@ void Com_DvarDumpSingle(const dvar_s *dvar, void *userData)
     const char *v4; // [esp-4h] [ebp-810h]
     char message[2052]; // [esp+4h] [ebp-808h] BYREF
 
-    ++*(uint32_t *)userData;
-    if (!*((uint32_t *)userData + 2) || Com_Filter(*((const char **)userData + 2), (char *)dvar->name, 0))
+    // By the fields: `match` is the third four-byte slot only on i386.
+    DvarDumpInfo *dumpInfo = (DvarDumpInfo *)userData;
+
+    ++dumpInfo->count;
+    if (!dumpInfo->match || Com_Filter(dumpInfo->match, (char *)dvar->name, 0))
     {
         if (Dvar_HasLatchedValue(dvar))
         {
@@ -457,7 +460,7 @@ void Com_DvarDumpSingle(const dvar_s *dvar, void *userData)
             Com_sprintf(message, 0x800u, "      %s \"%s\"\n", dvar->name, v3);
         }
 #ifndef KISAK_RADIANT
-        Com_PrintMessage(*((uint32_t *)userData + 1), message, 0);
+        Com_PrintMessage(dumpInfo->channel, message, 0);
 #else
         Com_PrintMessage("%s", message);
 #endif

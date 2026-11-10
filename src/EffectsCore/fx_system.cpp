@@ -1827,14 +1827,16 @@ bool FX_SpawnModelPhysics(
     angularVelocity[2] = v6 * 1000.0;
     Sys_EnterCriticalSection(CRITSECT_PHYSICS);
     visuals.anonymous = FX_GetElemVisuals(elemDef, randomSeed).anonymous;
-    if (!*((_DWORD*)visuals.anonymous + 53))
+    // By the field: the decompiled read (the model's 53rd pointer-sized slot)
+    // is the preset only where a pointer is four bytes.
+    if (!visuals.model->physPreset)
         MyAssertHandler(".\\EffectsCore\\fx_system.cpp", 1853, 0, "%s", "visuals.model->physPreset");
     elem->physObjId = Phys_IdFromObj(Phys_ObjCreate(
         PHYS_WORLD_FX,
         worldOrigin,
         quat,
         velocity,
-        *((const PhysPreset**)visuals.anonymous + 53)));
+        visuals.model->physPreset));
     if (elem->physObjId)
     {
         Phys_ObjSetCollisionFromXModel(visuals.model, PHYS_WORLD_FX, Phys_ObjFromId(elem->physObjId));
