@@ -54,7 +54,8 @@ struct ProgramCacheStats
 // written). False with the compiler's log (or why the compiler is missing).
 // fastMath and optimization are CompileCg's: a caller that changes them
 // gives the source a different text (a comment will do), since the file is
-// found by the source alone.
+// found by the source alone. Fragment programs are always built without
+// fast maths.
 bool GetProgram(const std::string &cg, ShaderStage stage, std::vector<uint8_t> &program, std::string &log,
                 bool fastMath = true, int optimization = 3);
 // The same program without waiting for it: read or compiled on the cache's

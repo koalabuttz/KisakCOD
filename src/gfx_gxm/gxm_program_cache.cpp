@@ -102,7 +102,9 @@ void UnloadIdleCompiler()
 
 uint64_t KeyFor(const std::string &cg, ShaderStage stage)
 {
-    const uint8_t tag = stage == ShaderStage::Vertex ? 'v' : 'f';
+    // Fragment programs are built without fast maths since PC run Z10: the
+    // tag moved from 'f' to 'g' so that no file built with it is read.
+    const uint8_t tag = stage == ShaderStage::Vertex ? 'v' : 'g';
     return cg::Hash(cg.data(), cg.size(), cg::Hash(&tag, 1));
 }
 
@@ -276,7 +278,12 @@ bool GetProgram(const std::string &cg, ShaderStage stage, std::vector<uint8_t> &
         return false;
     }
     const uint64_t begin = Micros();
-    const bool compiled = CompileCg(cg.data(), cg.size(), stage, program, log, fastMath, optimization);
+    // With fast maths the world decals' specular programs on mp_crash draw a
+    // speckle that ignores the specular map; without it they draw as on
+    // Windows (PC runs Z9 and Z10). So fragment programs never use it.
+    // Vertex programs keep it.
+    const bool fast = fastMath && stage == ShaderStage::Vertex;
+    const bool compiled = CompileCg(cg.data(), cg.size(), stage, program, log, fast, optimization);
     const uint64_t end = Micros();
     g_lastCompile.store(end, std::memory_order_release);
     size_t held = 0, peak = 0;

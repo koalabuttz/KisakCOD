@@ -895,6 +895,19 @@ swizzle. That changes the text, and so the cache file, of nearly every
 program: the first start after it compiles them all again (about 1200 on
 mp_crash), in the background as usual.
 
+**Fast maths breaks the specular decals.** With the literals the
+posters were right, but the ground under Crash's decals still showed a fine
+red and green speckle (PC run Z8). It needed both the normal map and
+specular lighting, and black specular maps did not remove it on the Vita
+(run Z9). The two specular decal programs add a reflection made of the
+cube map times the specular map times the vertex alpha times a Fresnel
+factor; the specular map's alpha also picks the cube's level. Built at the
+usual optimisation level with fast maths off, they drew the ground as
+Windows does, within 1 (run Z10). Fragment programs are therefore built
+without fast maths; vertex programs keep it. The cache key of a fragment
+program changed with it, so its first start compiles them again. What fast
+maths off costs on a console's GPU is not measured yet.
+
 The client is packed unsafe for the compiler, like the probe.
 
 `scripts/tests/test_vita_cg_translate.py` checks the translator on the
