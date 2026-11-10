@@ -223,6 +223,10 @@
  //const dvar_t *r_warningRepeatDelay;
 
  const dvar_t *r_gpuSync;
+#if !defined(_WIN32)
+ const dvar_t *r_gpuSyncSleep;
+ const dvar_t *r_gpuSyncSleepThreads;
+#endif
  const dvar_t *r_multiGpu;
  const dvar_t *r_skinCache;
  const dvar_t *r_fastSkin;
@@ -575,6 +579,22 @@
          1,
          DVAR_NOFLAG,
          "GPU synchronization type (used to improve mouse responsiveness)");
+#if !defined(_WIN32)
+     r_gpuSyncSleep = Dvar_RegisterInt(
+         "r_gpuSyncSleep",
+         0,
+         0,
+         1000,
+         DVAR_NOFLAG,
+         "Microseconds a thread sleeps between checks while it waits for the GPU under r_gpuSync (0 keeps the CPU busy)");
+     r_gpuSyncSleepThreads = Dvar_RegisterInt(
+         "r_gpuSyncSleepThreads",
+         3,
+         1,
+         3,
+         DVAR_NOFLAG,
+         "Which waits r_gpuSyncSleep applies to: 1 the main thread's, 2 the render thread's, 3 both");
+#endif
      r_multiGpu = Dvar_RegisterBool("r_multiGpu", false, DVAR_ARCHIVE, "Use multiple GPUs");
      r_skinCache = Dvar_RegisterBool("r_skinCache", true, DVAR_NOFLAG, "Enable cache for vertices of animated models");
      r_fastSkin = Dvar_RegisterBool("r_fastSkin", false, DVAR_ARCHIVE, "Enable fast model skinning");

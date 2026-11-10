@@ -18,7 +18,7 @@ perf_sample [seconds] [windows] [settle seconds]
 perf_stop
 ```
 
-- `perf_ab "set r_gpuSync 1" "set r_gpuSync 0" 15 4` measures
+- `perf_ab "set r_gpuSyncSleep 0" "set r_gpuSyncSleep 100" 15 4` measures
   eight windows of 15 s: A B B A A B B A. A and B are console command lines,
   so one variant can set several things (`"set a 1; set b 2"`).
 - `perf_sample 20 3` measures three windows of 20 s without changing anything.
@@ -70,6 +70,22 @@ perf: done
   when power is the question.
 - **windows of one variant differ by up to** is the yardstick: a difference
   between A and B smaller than that is not shown by this run.
+
+## `r_gpuSyncSleep`
+
+With `r_gpuSync 1` (the default) the engine waits for the GPU in two places:
+the main thread before it starts a frame (`R_SyncGpu`), and the render thread
+at the end of a frame (`RB_AdaptiveGpuSyncFinal`). Both waits keep a core busy.
+When the GPU is the limit they are most of the frame: at 1920x1200 on the
+laptop the main thread waited 9 ms of a 14.8 ms frame (perf run 1). On a
+laptop the CPU cores and the GPU share one power budget.
+
+`r_gpuSyncSleep <microseconds>` (non-Windows builds, default 0 = unchanged)
+makes both waits sleep that long between checks of the fence. A wait then ends
+up to one sleep late. `r_gpuSyncSleepThreads` picks the waits it applies to
+(1 the main thread's, 2 the render thread's, 3 both, the default), to tell
+their effects apart. The sleep is off until a laptop run shows what it does
+to frame rate and power; `perf_ab` was written to measure it.
 
 ## Checks
 
