@@ -142,7 +142,9 @@ What the menu takes (run K on the console, and the same build in Vita3K, 2026-11
 | The display's buffers | 8.0 | |
 | Static indices, volumes, other textures | 2.7 | |
 
-The main pool is too small for the dynamic buffers, so 14.5 MB of them spill into CDRAM. mp_crash's first vertex buffer alone is 13.4 MB, and neither pool had that much left. Making a map fit is the next piece of work: the shadow maps (18 MB) are not usable on the Vita yet, and the dynamic buffers are sized for a PC.
+The main pool is too small for the dynamic buffers, so 14.5 MB of them spill into CDRAM. mp_crash's first vertex buffer alone is 13.4 MB, and neither pool had that much left. Making a map fit is the work in progress. The table above is the state before it; so far:
+- **Targets take memory when first used.** The renderer makes every render target and depth texture it might use at start-up. On the Vita each one gets its GPU memory when a scene first draws to it, or when it is first locked or copied from (`EnsureTargetMemory`). Until then a draw that samples it reads black. The log names each one as it takes its memory (`gpu memory piece`).
+- Still to do: the dynamic buffers are sized for a PC (the static model cache 8 MB, the skinned caches 9 MB, the index buffers 10 MB).
 
 ## Controls (stage 3)
 

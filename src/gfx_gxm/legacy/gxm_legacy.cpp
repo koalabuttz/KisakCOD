@@ -497,6 +497,38 @@ bool FormatSupported(Device *, d3d::Format format, uint32_t usage)
     return !info->depth;
 }
 
+namespace
+{
+void LogLargeTexture(Device &device, const Texture &texture)
+{
+    const TextureDesc &desc = texture.desc;
+    char what[96];
+    std::snprintf(what, sizeof(what), "%ux%ux%u, %u levels, format %u, usage 0x%x", desc.width, desc.height,
+                  desc.kind == TextureKind::Cube ? 6u : desc.kind == TextureKind::Volume ? desc.depth : 1u,
+                  desc.levels, unsigned(desc.format), desc.usage);
+    LogLargePiece(device, texture.swizzledLayout ? texture.swizzled : texture.memory, what);
+}
+} // namespace
+
+bool EnsureTargetMemory(Device &device, Texture &texture)
+{
+    if (!texture.deferredBytes)
+        return texture.memory.data != nullptr;
+    if (texture.deferFailed)
+        return false;
+    if (!AllocateMemory(device, texture.memory, texture.deferredBytes, 256, texture.desc.pool, true,
+                        TextureUse(texture.desc, *texture.format), texture.name.c_str()))
+    {
+        texture.deferFailed = true;
+        return false;
+    }
+    std::memset(texture.memory.data, 0, texture.deferredBytes);
+    texture.deferredBytes = 0;
+    SetUpTexture(device, texture);
+    LogLargeTexture(device, texture);
+    return true;
+}
+
 Texture *CreateTexture(Device *device, const TextureDesc &desc)
 {
     const FormatInfo *format = LookupFormat(desc.format);
@@ -524,16 +556,16 @@ Texture *CreateTexture(Device *device, const TextureDesc &desc)
     // textures (cubes, block-compressed) have only their swizzled copy, which
     // SetUpTexture makes.
     texture->swizzledLayout = SwizzledTexture(texture->desc, *format);
-    if (!texture->swizzledLayout && !AllocateMemory(*device, texture->memory, total, 256, desc.pool, true,
-                                                    TextureUse(texture->desc, *format), desc.name))
-        return nullptr;
-    SetUpTexture(*device, *texture);
+    const bool target = (desc.usage & (d3d::USAGE_RENDERTARGET | d3d::USAGE_DEPTHSTENCIL)) != 0;
+    if (target && !texture->swizzledLayout && desc.pool != d3d::POOL_SYSTEMMEM && desc.pool != d3d::POOL_SCRATCH)
+        texture->deferredBytes = total; // EnsureTargetMemory, at its first use
+    else
     {
-        char what[96];
-        std::snprintf(what, sizeof(what), "%ux%ux%u, %u levels, format %u, usage 0x%x", texture->desc.width,
-                      texture->desc.height, texture->desc.kind == TextureKind::Cube ? 6u : depth,
-                      texture->desc.levels, unsigned(desc.format), desc.usage);
-        LogLargePiece(*device, texture->swizzledLayout ? texture->swizzled : texture->memory, what);
+        if (!texture->swizzledLayout && !AllocateMemory(*device, texture->memory, total, 256, desc.pool, true,
+                                                        TextureUse(texture->desc, *format), desc.name))
+            return nullptr;
+        SetUpTexture(*device, *texture);
+        LogLargeTexture(*device, *texture);
     }
     texture->surfaces.resize(texture->levels.size());
     ++device->live;
@@ -598,6 +630,8 @@ bool LockRect(Device *device, Texture *texture, uint32_t face, uint32_t level, c
             y /= 4;
         }
     }
+    if (!EnsureTargetMemory(*device, *texture) && !texture->swizzledLayout)
+        return false;
     lock.locked = true;
     uint8_t *base = texture->memory.data + lock.offset;
     if (texture->swizzledLayout)
@@ -1184,7 +1218,12 @@ void StretchRect(Device *device, Surface *src, const Rect *srcRect, Surface *dst
 bool GetRenderTargetData(Device *device, Surface *renderTarget, Surface *dst)
 {
     Target source, destination;
-    if (!device || !Describe(renderTarget, source) || !Describe(dst, destination))
+    if (!device)
+        return false;
+    for (Surface *surface : {renderTarget, dst})
+        if (surface && surface->kind == SurfaceKind::TextureLevel && surface->texture)
+            EnsureTargetMemory(*device, *surface->texture);
+    if (!Describe(renderTarget, source) || !Describe(dst, destination))
         return false;
     if (source.width != destination.width || source.height != destination.height ||
         source.format->blockBytes != 4 || destination.format->blockBytes != 4)
