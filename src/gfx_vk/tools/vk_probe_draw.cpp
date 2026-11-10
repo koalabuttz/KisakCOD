@@ -522,28 +522,42 @@ bool RecordDrawFrame(gfx_vk::Core *core, DrawScene *scene, int animate, std::str
         error = gfx_vk::LastError(core);
         return false;
     }
-    VkCommandBuffer cmd = gfx_vk::Commands(core);
-    vk.vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, scene->pipeline);
-    const VkViewport viewport{0.0f, 0.0f, float(kTargetSize), float(kTargetSize), 0.0f, 1.0f};
-    const VkRect2D scissor{{0, 0}, {kTargetSize, kTargetSize}};
-    vk.vkCmdSetViewport(cmd, 0, 1, &viewport);
-    vk.vkCmdSetScissor(cmd, 0, 1, &scissor);
-    vk.vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, scene->layout, 0, 1, &set, 0, nullptr);
-    float lod = -1.0f;
-    vk.vkCmdPushConstants(cmd, scene->layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(lod), &lod);
+    // One packet: everything it uses is captured by value (api is the same
+    // dispatch table as vk, named apart so it does not shadow it).
+    const VkPipeline pipeline = scene->pipeline;
+    const VkPipelineLayout layout = scene->layout;
     const VkBuffer staticBuffer = gfx_vk::BufferHandle(scene->vertices);
-    const VkDeviceSize zero = 0;
-    vk.vkCmdBindVertexBuffers(cmd, 0, 1, &staticBuffer, &zero);
-    vk.vkCmdBindIndexBuffer(cmd, gfx_vk::BufferHandle(scene->indices), 0, VK_INDEX_TYPE_UINT16);
-    vk.vkCmdDrawIndexed(cmd, kStaticIndices, 1, 0, 0, 0);
-    lod = 2.0f;
-    vk.vkCmdPushConstants(cmd, scene->layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(lod), &lod);
-    vk.vkCmdBindVertexBuffers(cmd, 0, 1, &dynamic.buffer, &dynamic.offset);
-    vk.vkCmdDraw(cmd, 6, 1, 0, 0);
+    const VkBuffer indexBuffer = gfx_vk::BufferHandle(scene->indices);
+    const VkBuffer dynamicBuffer = dynamic.buffer;
+    const VkDeviceSize dynamicOffset = dynamic.offset;
+    gfx_vk::Record(core, [=](VkCommandBuffer cmd, const gfx_vk::Dispatch &api) {
+        api.vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+        const VkViewport viewport{0.0f, 0.0f, float(kTargetSize), float(kTargetSize), 0.0f, 1.0f};
+        const VkRect2D scissor{{0, 0}, {kTargetSize, kTargetSize}};
+        api.vkCmdSetViewport(cmd, 0, 1, &viewport);
+        api.vkCmdSetScissor(cmd, 0, 1, &scissor);
+        api.vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 1, &set, 0, nullptr);
+        float lod = -1.0f;
+        api.vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(lod), &lod);
+        const VkDeviceSize zero = 0;
+        api.vkCmdBindVertexBuffers(cmd, 0, 1, &staticBuffer, &zero);
+        api.vkCmdBindIndexBuffer(cmd, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+        api.vkCmdDrawIndexed(cmd, kStaticIndices, 1, 0, 0, 0);
+        lod = 2.0f;
+        api.vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(lod), &lod);
+        api.vkCmdBindVertexBuffers(cmd, 0, 1, &dynamicBuffer, &dynamicOffset);
+        api.vkCmdDraw(cmd, 6, 1, 0, 0);
+    });
     gfx_vk::EndPass(core);
 
     // Shown by stretching the target over the whole swapchain image.
     gfx_vk::Image *swapchain = gfx_vk::SwapchainImage(core);
+    if (!swapchain)
+    {
+        // Out of date (Present skips the frame), or the core failed.
+        error = gfx_vk::LastError(core);
+        return error.empty();
+    }
     const gfx_vk::ImageDesc &shown = gfx_vk::ImageInfo(swapchain);
     const VkOffset3D src[2] = {{0, 0, 0}, {int32_t(kTargetSize), int32_t(kTargetSize), 1}};
     const VkOffset3D dst[2] = {{0, 0, 0}, {int32_t(shown.width), int32_t(shown.height), 1}};
@@ -560,7 +574,15 @@ bool StartDrawCheck(gfx_vk::Core *core, DrawScene *scene, bool alsoSwapchain, st
 {
     scene->targetRead = gfx_vk::ReadImage(core, scene->target, 0, 0);
     if (scene->targetRead && alsoSwapchain && gfx_vk::Swapchain(core).canCapture)
-        scene->swapchainRead = gfx_vk::ReadImage(core, gfx_vk::SwapchainImage(core), 0, 0);
+    {
+        gfx_vk::Image *shown = gfx_vk::SwapchainImage(core);
+        if (!shown)
+        {
+            error = gfx_vk::LastError(core)[0] ? gfx_vk::LastError(core) : "the swapchain went out of date";
+            return false;
+        }
+        scene->swapchainRead = gfx_vk::ReadImage(core, shown, 0, 0);
+    }
     if (!scene->targetRead || (alsoSwapchain && gfx_vk::Swapchain(core).canCapture && !scene->swapchainRead))
     {
         error = gfx_vk::LastError(core);

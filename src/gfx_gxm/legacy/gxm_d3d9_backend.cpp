@@ -99,5 +99,11 @@ void BackendCounters(const Backend *, DeviceCounters &out)
 {
     out.validationErrors = 0;
     out.validation = false;
+    out.submissions = 0;
+    out.fenceFlushes = 0;
+    out.feedFlushes = 0;
 }
+
+// sceGxm's queries need no system call under the front's lock.
+void BackendPollProgress(Backend *) {}
 } // namespace gfx_vk::d3d9

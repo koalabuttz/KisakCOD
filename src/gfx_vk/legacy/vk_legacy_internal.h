@@ -147,6 +147,11 @@ struct Query
 {
     QueryKind kind = QueryKind::Event;
     uint64_t serial = 0; // submission that contains its end; 0: never issued
+    // Issued between frames with nothing recorded since Present: it marks the
+    // end of the frame just presented (the engine's swap fence). See
+    // GetQueryData.
+    bool frameFence = false;
+    bool flushedAhead = false; // a poll has submitted the work recorded after it
 };
 
 // ---- Pipelines (vk_legacy_draw.cpp) --------------------------------------------------
@@ -312,10 +317,15 @@ struct Device
     Surface *passTargets[kMaxRenderTargets] = {};
     Surface *passDepth = nullptr;
     uint32_t passWidth = 0, passHeight = 0;
-    VkCommandBuffer stateCommands = VK_NULL_HANDLE; // the command buffer boundPipeline and dynamic belong to
+    uint64_t stateRecording = 0; // the command buffer (Recording()) boundPipeline and dynamic belong to
     VkPipeline boundPipeline = VK_NULL_HANDLE;
     DynamicState dynamic{};
     bool dynamicValid = false;
+    // Feeding the GPU (FeedGpu): the draws recorded in command buffer
+    // feedRecording, and the count at which to look at the GPU again.
+    uint64_t feedRecording = 0;
+    uint32_t feedDraws = 0;
+    uint32_t feedCheckAt = 0;
     // The texture descriptor set the last draw wrote, and what it holds. A
     // draw that needs the same views and samplers in a set of the same layout
     // binds it again instead of allocating and writing a new one. Sets come
