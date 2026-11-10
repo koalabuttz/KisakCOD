@@ -211,8 +211,12 @@ struct FixedState
     uint32_t stencilFunc[2], stencilFail[2], stencilDepthFail[2], stencilPass[2];
     uint8_t stencilMask, stencilWriteMask, stencilRef, pad;
     int32_t biasFactor, biasUnits;
+    // SCE_GXM_FRAGMENT_PROGRAM_DISABLED: depth and stencil only, no colour
+    // written and no fragment program run (clears that keep the colour).
+    uint32_t fragmentMode;
     bool operator==(const FixedState &other) const { return std::memcmp(this, &other, sizeof(*this)) == 0; }
 };
+static_assert(SCE_GXM_FRAGMENT_PROGRAM_ENABLED == 0, "a zeroed FixedState leaves the fragment program on");
 
 constexpr uint32_t kRingSegment = 512u << 10; // per frame, for DrawPrimitiveUP and clears
 constexpr uint32_t kRingSegments = 3;
@@ -1096,6 +1100,7 @@ void ApplyFixedState(Device &device, const FixedState &state)
                               state.stencilMask, state.stencilWriteMask);
     sceGxmSetFrontStencilRef(context, state.stencilRef);
     sceGxmSetFrontDepthBias(context, state.biasFactor, state.biasUnits);
+    sceGxmSetFrontFragmentProgramEnable(context, SceGxmFragmentProgramMode(state.fragmentMode));
     d.fixed = state;
     d.fixedValid = true;
 }
@@ -1447,16 +1452,15 @@ bool MakeCopyPrograms(Device &device, std::string &error)
     return true;
 }
 
-SceGxmFragmentProgram *ClearFragmentProgram(Device &device, bool writeColor)
+// One program a target format, with no blend info. A clear that keeps the
+// colour draws with the fragment program switched off instead of a colour
+// mask: a console refuses a program with blend info on a float target
+// (SCE_GXM_ERROR_UNSUPPORTED; Vita3K makes it), and that was the clear of
+// depth and stencil before every float-Z pass.
+SceGxmFragmentProgram *ClearFragmentProgram(Device &device)
 {
     DrawState &d = *device.draw;
-    SceGxmBlendInfo blend{};
-    blend.colorMask = writeColor ? SCE_GXM_COLOR_MASK_ALL : SCE_GXM_COLOR_MASK_NONE;
-    blend.colorFunc = blend.alphaFunc = SCE_GXM_BLEND_FUNC_NONE;
-    blend.colorSrc = blend.alphaSrc = SCE_GXM_BLEND_FACTOR_ONE;
-    blend.colorDst = blend.alphaDst = SCE_GXM_BLEND_FACTOR_ZERO;
-    const FragmentProgramEntry *entry =
-        GetFragmentProgram(device, d.clearFragment, d.clearVertex, writeColor ? nullptr : &blend);
+    const FragmentProgramEntry *entry = GetFragmentProgram(device, d.clearFragment, d.clearVertex, nullptr);
     return entry ? entry->program : nullptr;
 }
 
@@ -2106,7 +2110,7 @@ void ClearTargets(Device &device, uint32_t rectCount, const Rect *rects, uint32_
     const bool writeStencil = (flags & d3d::CLEAR_STENCIL) && d.sceneDepth;
     if (!writeColor && !writeDepth && !writeStencil)
         return;
-    SceGxmFragmentProgram *fragment = ClearFragmentProgram(device, writeColor);
+    SceGxmFragmentProgram *fragment = ClearFragmentProgram(device);
     if (!fragment)
         return;
     uint32_t area[4];
@@ -2135,6 +2139,7 @@ void ClearTargets(Device &device, uint32_t rectCount, const Rect *rects, uint32_
     state.stencilMask = 0xff;
     state.stencilWriteMask = writeStencil ? 0xff : 0;
     state.stencilRef = uint8_t(stencil);
+    state.fragmentMode = writeColor ? SCE_GXM_FRAGMENT_PROGRAM_ENABLED : SCE_GXM_FRAGMENT_PROGRAM_DISABLED;
     ApplyFixedState(device, state);
     SetPrograms(device, d.clearVertexProgram, fragment);
 
