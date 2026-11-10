@@ -14,6 +14,7 @@
 
 #include <gfx_gxm/gxm_display.h>
 #include <gfx_gxm/gxm_memory.h>
+#include <gfx_gxm/gxm_program_queue.h>
 #include <gfx_gxm/shader/gxm_cg_translate.h>
 
 #include <psp2/gxm.h>
@@ -191,13 +192,17 @@ struct IndexBuffer : GpuBuffer
 {
 };
 
-// One compiled program of a shader for one set of translator options,
-// registered with the shader patcher on first use. Draws pick the variant
-// their state needs (gxm_legacy_draw.cpp).
+// One compiled program of a shader for one set of translator options. It is
+// asked for on first use, made on the program cache's thread, and registered
+// with the shader patcher by the first draw that finds it ready. Draws pick
+// the variant their state needs (gxm_legacy_draw.cpp).
 struct Variant
 {
     uint64_t key = 0; // the options, packed (VariantKey)
     uint64_t cacheKey = 0; // its file in the program cache (gxm::ProgramCacheKey), for logs
+    // Its program while that is being made; null once it is registered or
+    // has failed.
+    gfx_gxm::ProgramRequestRef request;
     std::vector<uint8_t> gxp; // never resized once registered
     SceGxmShaderPatcherId id = nullptr;
     bool failed = false; // did not compile or register; draws with it skip
@@ -216,12 +221,14 @@ struct Shader
 {
     std::vector<uint8_t> bytecode;
     bool pixel = false;
-    // Translated (cg::Parse) and its default variant compiled: no alpha
+    // Translated (cg::Parse) and its default variant asked for: no alpha
     // test, no D3DCOLOR inputs. Draw state picks other variants later.
     bool translated = false;
     gfx_gxm::cg::Shader parsed;
-    std::vector<uint8_t> program; // the default variant; empty when it did not compile
-    uint64_t programCacheKey = 0;
+    // The default variant's program, asked for when the shader is created so
+    // that it is usually ready before the first draw. Null when the shader
+    // was not translated.
+    gfx_gxm::ProgramRequestRef request;
     std::vector<std::unique_ptr<Variant>> variants;
 };
 
@@ -271,8 +278,22 @@ struct Device
     // Shader translation and compilation, for the summary lines.
     struct ShaderCounts
     {
-        uint32_t created = 0, refused = 0, compiled = 0, failed = 0;
+        uint32_t created = 0, refused = 0;
         uint32_t loggedFailures = 0;
+        // Draws left out of a frame because a program of theirs was still
+        // being made, and the frames that had such a draw.
+        uint64_t drawsWaited = 0, framesWaited = 0;
+        bool waitedThisFrame = false;
+        // The last frame's end and the counts then, for the `long frame`
+        // lines (LogLongFrame).
+        struct FrameMark
+        {
+            uint64_t at = 0;
+            uint32_t shaders = 0;
+            uint64_t translateMicros = 0, uploads = 0, uploadBytes = 0, programs = 0, drawsWaited = 0;
+        } lastFrame;
+        uint64_t frames = 0;
+        uint32_t loggedLongFrames = 0;
         uint64_t translateMicros = 0;
         // Each reason the translator gave, with how many shaders it refused.
         std::vector<std::pair<std::string, uint32_t>> refusals;

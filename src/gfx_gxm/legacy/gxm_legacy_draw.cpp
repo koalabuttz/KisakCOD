@@ -576,39 +576,75 @@ uint64_t VariantKey(const gxm::cg::Options &options)
            (options.farPlaneInside ? 0x5a5a000000000000ull : 0) ^ (uint64_t(options.diagPosition) * 0x9e3779b97f4a7c15ull);
 }
 
-// The shader's program for these options: made, compiled and registered on
-// first use. Null when it cannot be had (logged once per variant).
-Variant *GetVariant(Device &device, Shader &shader, const gxm::cg::Options &options)
+// The shader's program for these options. It is asked for on first use and
+// made on the program cache's thread (the default one was asked for when the
+// shader was created); the first call that finds it ready registers it.
+// Null while it is being made, with waiting set: the draw is left out of
+// this frame and its program moves to the front of the queue, so no frame
+// waits for the card or the compiler. Null as well when it cannot be had
+// (the cache's failures are logged once a frame, LogProgramFailures).
+Variant *GetVariant(Device &device, Shader &shader, const gxm::cg::Options &options, bool &waiting)
 {
     const uint64_t key = VariantKey(options);
+    DrawState &d = *device.draw;
+    Variant *found = nullptr;
     for (const auto &variant : shader.variants)
         if (variant->key == key)
-            return variant->failed ? nullptr : variant.get();
-    DrawState &d = *device.draw;
-    std::unique_ptr<Variant> variant(new Variant);
-    variant->key = key;
-    if (key == 0)
+        {
+            found = variant.get();
+            break;
+        }
+    if (!found)
     {
-        variant->gxp = shader.program;
-        variant->cacheKey = shader.programCacheKey;
+        std::unique_ptr<Variant> variant(new Variant);
+        variant->key = key;
+        if (key == 0)
+            variant->request = shader.request;
+        else
+        {
+            const gxm::ShaderStage stage = shader.pixel ? gxm::ShaderStage::Fragment : gxm::ShaderStage::Vertex;
+            std::string cg, error;
+            if (gxm::cg::Emit(shader.parsed, options, cg, error))
+            {
+                char label[64];
+                std::snprintf(label, sizeof(label), "%s shader variant %016llx", shader.pixel ? "pixel" : "vertex",
+                              (unsigned long long)key);
+                variant->request = gxm::RequestProgram(std::move(cg), stage, label);
+            }
+            else if (d.variantFailures++ < 20)
+                Log(device, "%s shader variant %016llx was not translated: %s", shader.pixel ? "pixel" : "vertex",
+                    (unsigned long long)key, error.c_str());
+        }
+        if (variant->request)
+            variant->cacheKey = variant->request->key;
+        else
+            variant->failed = true;
+        ++d.variantsMade;
+        shader.variants.push_back(std::move(variant));
+        found = shader.variants.back().get();
     }
-    else
+    if (found->request)
     {
-        const gxm::ShaderStage stage = shader.pixel ? gxm::ShaderStage::Fragment : gxm::ShaderStage::Vertex;
-        std::string cg, error, log;
-        if (!gxm::cg::Emit(shader.parsed, options, cg, error))
-            log = error;
-        else if (variant->cacheKey = gxm::ProgramCacheKey(cg, stage); !gxm::GetProgram(cg, stage, variant->gxp, log))
-            variant->gxp.clear();
-        if (variant->gxp.empty() && d.variantFailures++ < 20)
-            Log(device, "%s shader variant %016llx did not compile: %s", shader.pixel ? "pixel" : "vertex",
-                (unsigned long long)key, log.substr(0, log.find('\n')).c_str());
+        switch (found->request->state.load(std::memory_order_acquire))
+        {
+        case gxm::ProgramState::Waiting:
+            gxm::HurryProgram(found->request);
+            waiting = true;
+            return nullptr;
+        case gxm::ProgramState::Ready:
+            // A copy: the default variant's request stays with its shader.
+            found->gxp = found->request->program;
+            Register(device, *found, "shader variant");
+            break;
+        case gxm::ProgramState::Failed:
+            found->failed = true;
+            if (key != 0)
+                ++d.variantFailures;
+            break;
+        }
+        found->request.reset();
     }
-    ++d.variantsMade;
-    Register(device, *variant, "shader variant");
-    shader.variants.push_back(std::move(variant));
-    Variant *made = shader.variants.back().get();
-    return made->failed ? nullptr : made;
+    return found->failed ? nullptr : found;
 }
 
 void ReleaseVertexProgram(Device &device, SceGxmVertexProgram *program)
@@ -2233,8 +2269,10 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
                 vsUsed = &synthetic;
         }
     }
+    // Both programs are asked for before either is waited on.
+    bool waiting = false;
     if (!vertex)
-        vertex = GetVariant(device, *vsUsed, plan.options);
+        vertex = GetVariant(device, *vsUsed, plan.options, waiting);
     gxm::cg::Options pixelOptions;
     if (device.renderStates[d3d::RS_ALPHATESTENABLE])
     {
@@ -2242,10 +2280,17 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         if (func >= d3d::CMP_NEVER && func < d3d::CMP_ALWAYS)
             pixelOptions.alphaFunc = gxm::cg::AlphaFunc(func);
     }
-    Variant *pixel = GetVariant(device, *ps, pixelOptions);
+    Variant *pixel = GetVariant(device, *ps, pixelOptions, waiting);
     if (!vertex || !pixel)
     {
-        CountSkip(device, SkipNoProgram);
+        if (waiting)
+        {
+            // Not a failure: the draw comes back once its program is made.
+            ++device.shaderCounts.drawsWaited;
+            device.shaderCounts.waitedThisFrame = true;
+        }
+        else
+            CountSkip(device, SkipNoProgram);
         return;
     }
     bool diagPixel = false;

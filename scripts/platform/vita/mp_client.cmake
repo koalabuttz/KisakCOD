@@ -174,6 +174,7 @@ set(vita_mp_gfx_sources
     "${SRC_DIR}/gfx_gxm/gxm_heap.cpp"
     "${SRC_DIR}/gfx_gxm/gxm_memory.cpp"
     "${SRC_DIR}/gfx_gxm/gxm_program_cache.cpp"
+    "${SRC_DIR}/gfx_gxm/gxm_program_queue.cpp"
     "${SRC_DIR}/gfx_gxm/gxm_shader_compiler.cpp"
     "${SRC_DIR}/gfx_gxm/shader/gxm_cg_translate.cpp"
     "${SRC_DIR}/gfx_gxm/legacy/gxm_d3d9_backend.cpp"

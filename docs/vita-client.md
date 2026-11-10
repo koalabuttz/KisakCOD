@@ -56,9 +56,13 @@ host tests (`scripts/tests/test_vita_input.py`, `test_vita_sound.py`).
 4. Expected now (stage 2, step 2d): start-up, the file system, then
    `Graphics back end: GXM`, the GPU memory lines (`gxm legacy:`, `gxm:`),
    the front-end zones and the menu loop, drawn. Every shader the game
-   creates is translated to Cg and compiled (`gxm legacy: shaders so far: ...`
-   every 100 shaders, `shaders in all` at the end), and the compiled programs
-   are kept in `ux0:data/KisakCOD/gxp`. `gxm legacy: draws: ...` lines at the
+   creates is translated to Cg and its program compiled on a thread of its
+   own (`gxm legacy: shaders so far: ...` and `programs in the background
+   so far: ...` every 100 shaders, `in all` at the end), and the compiled
+   programs are kept in `ux0:data/KisakCOD/gxp`. On a first start the menu
+   fills in piece by piece while its programs compile; a frame that still
+   takes over 250 ms is logged as `long frame N: ...` with what the loading
+   thread did meanwhile. `gxm legacy: draws: ...` lines at the
    first frame, after ten seconds and every minute count what was drawn and
    what was skipped, and why. The client needs
    `ur0:data/libshacccg.suprx`, as the GXM probe does; without it the log
@@ -113,7 +117,7 @@ Vita's CPU), because the renderer's headers declare the Bink API.
 
 **Run K on David's Vita (2026-11-10, commit d4a03fa):**
 - The menu showed and worked: frame 300 left 480359 of 522240 pixels not black, the first frame came 44.5 s after the start, touch and buttons reached the menu and the music played.
-- The menu froze several times, once for 23.6 s, with the music paused. Those were shaders compiling the first time they were drawn: 139 programs in 94 s, about 0.7 s each. They are on the card afterwards, so a later start does not compile them again.
+- The menu froze several times, once for 23.6 s, with the music paused. Programs were compiling while the menu was up: 139 in 94 s, about 0.7 s each, and 672 more were read from the card in 16 s. The game was still loading `common_mp` behind the menu, and its loading thread compiled each shader inside the renderer's lock, so the frame being drawn waited ("Programs in the background" below, which takes that work off both threads; not yet run on a console).
 - Starting a listen server on mp_crash stopped the game 58 ms into the map's fastfile: `out of GPU memory` for a 13 MB vertex buffer, then the renderer's fatal error ("Memory" below).
 
 ## Memory
@@ -492,8 +496,9 @@ What the GXM back end does so far (step 2d):
 - **Programs.** Each draw picks its shaders' variants: the vertex
   declaration decides which inputs are D3DCOLOR (swapped), missing (read as
   0, 0, 0, 1) or narrower than four components, and the alpha test picks the
-  pixel shader's. A variant other than the default compiles on first use
-  (through the cache) and is registered with the shader patcher. Vertex
+  pixel shader's. A variant other than the default is asked for on first
+  use and made on the cache's thread; the draw is left out until it is
+  ready, then it is registered with the shader patcher. Vertex
   programs are kept per variant, declaration and stream strides; fragment
   programs per variant, vertex program, blend state and target format.
 - **Textures** are linear: rows of whole multiples of 8 texels, and the
@@ -558,6 +563,40 @@ does the same). A first start compiled 421 programs across 15 loads in
 Vita3K, with the compiler never above 4.1 MB; before that, such a start ran
 the heap out while the sounds loaded. The `shader compiler memory` log lines
 count what it held and gave back.
+
+**Programs in the background.** The game creates its shaders while a zone
+loads: on its loading thread, hundreds in a row, inside the lock every D3D9
+call takes (`FrontLock`, `src/gfx_vk/d3d9`). `common_mp` loads behind the
+menu, so the menu's frames want that lock too. Up to run K each shader's
+program was read from the card or compiled right there, 24 ms or 0.5 to
+1.4 s with the lock held, and the lock went straight back to the loading
+thread for the next shader: a run of new shaders stopped the menu, and the
+music the main thread feeds, for as long as the whole run took (23.6 s for
+about 23 programs in run K).
+
+Now creating a shader only translates it (1.6 ms on a console) and asks for
+its program. `src/gfx_gxm/gxm_program_queue.cpp` makes the programs on one
+worker thread, in the order asked, through the same cache; the compiler is
+loaded, used and unloaded on that thread. A draw whose vertex or pixel
+program is not ready is left out of that frame and moves its program to the
+front of the queue, so what is on the screen is made first and nothing waits
+for the card or the compiler. A shader destroyed before its turn is dropped
+unmade. The back end's few built-in programs are still made at start-up,
+before the first frame. What to expect: on a first start the menu fills in
+over the first seconds instead of freezing, and compiling goes on quietly for
+some minutes; later starts read the programs from the card in the
+background. Log lines: `programs in the background so far: N asked for, N
+waiting now (N at most), N hurried by a draw, N dropped unmade; slowest
+compile N ms, slowest read N ms; N draws left out of N frames while their
+program was made`, and `long frame N: ...` for any frame over 250 ms (the
+first 60), with the shaders created, texture levels filled and programs made
+meanwhile. "programs ready" in the `shaders` line now counts every program
+the cache made, variants and built-in ones included. The queue itself makes
+no Vita call and is checked on the host with the address and thread
+sanitizers (`scripts/tests/test_vita_program_queue.py`). Status: builds for
+the Vita; not yet run in Vita3K or on a console. Music still stops in any
+other stall of the main thread longer than the 0.7 s it queues ahead (a map
+load); that needs the stream fed from another thread.
 
 **The compiler folds `x * 0 + 1` to 0.** HLSL writes `float4(v.xyz, 1)` as
 one multiply-add with the constant (1, 0, 0, 0): `mad r0, v0.xyzx, c8.xxxy,
