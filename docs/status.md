@@ -164,7 +164,7 @@ These came before the playable client and still build and run in CI:
 
 ## Open pull requests
 
-As of 2026-11-10 10:26 UTC, eight. They change by the hour; the
+As of 2026-11-10 10:26 UTC, nine. They change by the hour; the
 [list on GitHub](https://github.com/koalabuttz/KisakCOD/pulls) is the current
 one. A machine run a pull request waits on is named where its author has
 said so.
@@ -178,6 +178,7 @@ said so.
 | 193 | Singleplayer: the 64-bit airlift crash and the movies-off load, and frame and death checks in the level sweep | The i386 sweep of all 21 levels with the new checks, on the laptop. |
 | 194 | Steam: a server acts on Steam's later verdict for a ticket | A run with a real Steam player: join, leave and join again, then a kick and an attempt to come back. |
 | 195 | The first two 64-bit steps as patches in the upstream patch queue | |
+| 197 | Linux: sleep in the waits for the GPU by default (`r_gpuSyncSleep`), and an opt-in to stop them blocking the render thread | |
 | 196 | Fewer Linux CI jobs per push: five quick checks run both configurations in one job | |
 
 ## Laptop and PC runs still to do
