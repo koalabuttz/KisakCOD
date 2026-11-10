@@ -7,12 +7,14 @@ it follows the [Vita dedicated server](vita.md), which shares its toolchain,
 platform layer and memory rules. Started 2026-11-09.
 
 **State: stages 1 to 3 run on the console. On 2026-11-10 the main menu
-showed on David's Vita and worked, with touch, buttons and music (run K).
-A map load failed on the console in that run. Since then a map loads, a
-player spawns and the world is drawn in Vita3K on the console's heap size
-(runs U, BW and V), and since run V nothing is refused GPU memory in a game
-there ("Memory" below). No map load has been tried on a console since
-run K.**
+showed on David's Vita and worked, with touch, buttons and music (run K),
+and later that day mp_crash loaded there and a player walked around in it
+(run L, "Memory" below): nothing was refused GPU memory, and with the
+picture right the console drew 5 to 8 frames a second. The picture was
+right only with depth of field and soft particles off: with them on the
+console showed two and three images at once, from a depth clear it
+refuses. The fix for that is built and has not run on a console yet
+("Clears" under "Graphics").**
 - The whole client compiles, links and packs into a `.vpk`: client, cgame, UI, sound, renderer and its own listen server.
 - Stage 1 had no graphics back end, so the client stopped at the renderer through `Sys_Error`. Stage 2 replaces that: the renderer gets the D3D9 front on the GXM back end ("Graphics" below).
 - Stage 3 (controls and sound) runs on the console: on run 1 (2026-11-09) the menu music and the menu's sounds were heard, and every button arrived as its key. The screen's touch and the layout in a game are not confirmed yet: see "Controls" and "Sound" below.
@@ -199,7 +201,16 @@ The main pool is too small for the dynamic buffers, so 14.5 MB of them spill int
 - **The sizes are estimates, and the log reports them.** Once a minute the log says how full each got (`r_dynamicBufferReport`, in seconds; 60 on the Vita, 0 and so silent elsewhere): `dynamic buffers, the most one frame asked for in N frames: skinned cache X of 3072 KB (N models left out), pretess X of 524288 indices (N batches left unbatched), dynamic indices X of 1048576, dynamic vertices X of 1024 KB`. A skinned cache figure above its size is what the frame wanted. In run V (one player on mp_crash) the most a frame asked for was 100 KB of skinned cache, 178056 pretess indices, 5904 dynamic indices and 107 KB of dynamic vertices, and nothing was left out or left unbatched. A full game's players have not been measured.
 - **A renamed buffer's copies stay in its own pool.** The engine locks most dynamic buffers with DISCARD every frame. The back end then gives the buffer fresh memory (a rename) and frees the old once the frames that might read it are done, up to three frames later, so a buffer can hold four times its size. Those copies used to spill from the main pool into CDRAM, where they took the room the scene's render targets needed. Now a rename takes memory from the buffer's own pool only (main, for dynamic buffers). With no room there, the lock ends the scene, waits for the GPU and writes in place, which costs time and no memory. One wait serves every buffer drawn before it: after it the GPU reads none of them, so until a draw reads one again its locks write in place without a rename or another wait. The draw summary counts all three: `buffer renames: N took fresh memory, N waited for the GPU instead (their pool was full) and N needed neither (a wait since their last draw); old copies the GPU might still read took N KB at most`. A refused rename no longer writes two lines to the log each time. In run V's 1356 frames 248 renames took fresh memory, 953 waited and 2013 needed neither, and old copies took 3072 KB at most. What the waits cost in frame time on a console is not known.
 
-**In a game.** No map has loaded on a console yet. In Vita3K on the Windows PC (builds made on that PC, 2026-11-10; not a console):
+**In a game, on the console.** Run L (2026-11-10, David's Vita, a build of master with the Vita changes up to the stereo frame count fix): mp_crash loaded for the first time on a console, in three starts.
+- **The load:** the map was up 106 and 122 s after a start from the command line (starts 1 and 3), and 61 s after the server was started from the menu (start 2). Nothing was refused GPU memory and nothing failed; every start quit cleanly.
+- **Memory:** CDRAM 95.5 MB as the map came up and 97.5 of 104 at most, so 6.5 MB spare on this map. Main pool 19.8 of 20. Heap 35 to 36.5 of 64 MB, system memory 16 MB free. By use the figures are close to run V's (the table below): dynamic indices 6.0 MB where run V had 4.0, and the render targets 4.0 to 6.5 MB.
+- **The picture was wrong with the default settings** (starts 1 and 2). David: "I was seeing double/triple. the view changed as I moved the camera but not as you would expect", and it would "randomly snap into looking more normal" while moving and looking around. The log had one line of its kind, 35 ms after the map was up: `draw skipped: the fragment program could not be made: sceGxmShaderPatcherCreateFragmentProgram 0x805b0009`, counted once. Read from the code, that program is the clear of depth and stencil before the float-Z pass, which a console refuses and Vita3K makes; it was left out every frame after that one count ("Clears" under "Graphics" has the fix).
+- **With no float-Z pass the picture is right** (start 3: `+set r_dof_enable 0 +set r_zFeather 0`, so no frame needs one). David: "image was fixed". The 0x805b0009 line is gone from the log.
+- **Speed:** 5 to 8 frames a second in start 3, walking around with the picture right (163 to 243 frames each 30 s), the system's load line at 100% busy. Starts 1 and 2 drew up to 20 a second with the faulty picture. Depth left standing from earlier frames rejects pixels before they are shaded, which probably spared the GPU most of its work, so those figures are no measure of the game's speed. Where a frame's time goes on the console is not known yet: that build had no `frame time` line.
+- **Programs:** the first start compiled 127 programs on the console in 101 s, beside the game, and left 329661 draws out of 1300 frames while it did; the second compiled 104 and left 3739 draws out of 101 frames; the third compiled 54 and left 27275 out of 104 frames, with none waiting at the end. The program cache on the card grew from 803 files to 1088. So the first minutes on a map get better with each start.
+- **The start-up benchmark** measured 2.35 GHz on the console (18.36 in Vita3K on the PC) and, of the settings compared, chose the same as there but for `fx_marks 0` and `ragdoll_enable 0`.
+
+**In a game, in Vita3K** on the Windows PC (builds made on that PC, 2026-11-10; not a console):
 - **Run M** (before `snd_adpcm`): on the 64 MB heap the mp_crash fastfile loads and then the heap runs out. On a 128 MB heap the map loads and a player spawns, with 71 MB of heap in use.
 - **Run U** (with `snd_adpcm`, targets taking memory at first use and no shadow maps; before the target reserve and the smaller buffers): the map loads on the 64 MB heap and a player spawns. Heap 31.8 MB after the load and 32.9 MB in the game; zone arena 46 MB free. Menus and the HUD are drawn. The world is black.
 - **Why black in run U:** both pools were full, CDRAM at 103.5 of the 108 MB Vita3K offers (a console has 104) and main at 19.3 of 20. The scene's two screen-sized render targets, 2040 KB each, found no room 0.7 s after the game's own start-up (`CL_InitCGame`), and every draw to them was skipped: 571753 draws, against 997449 drawn. 2308 allocations were refused in seven minutes. All but those two were fresh copies for renamed dynamic buffers.
@@ -690,7 +701,29 @@ What the GXM back end does so far (step 2d):
 - **Clears** are quads drawn in the scene with two small built-in programs:
   colour by the fragment program, depth and stencil by an always-pass depth
   test. sceGxm has no clear call, and fills on the transfer queue would race
-  the scenes.
+  the scenes. A clear that keeps the colour (depth and stencil only) draws
+  with the fragment program switched off
+  (`sceGxmSetFrontFragmentProgramEnable`), which writes no colour on any
+  target format. It used a colour mask until console run L: a mask needs a
+  program made with blend info, and a console refuses that for a float
+  target (`SCE_GXM_ERROR_UNSUPPORTED`, 0x805b0009) where Vita3K makes it.
+  The renderer clears depth and stencil that way before every float-Z
+  pass, so on the console no frame with depth of field or soft particles
+  had its depth cleared ("Run L" under "Memory").
+- **A scene's colour is cleared before it is drawn.** `r_clear` is `steady`
+  (3) in the Vita build and the retail game's `dev-only blink` (1)
+  elsewhere, so the renderer clears the scene to `r_clearColor`, black,
+  every frame. The retail game clears the colour only on a frame without a
+  float-Z pass, because its scene covers every pixel. The Vita leaves a
+  draw out while its program is being made ("Programs in the background"),
+  and without the clear the hole shows what that display buffer held three
+  frames before. `+set r_clear 1` gives the retail behaviour back.
+- **A program sceGxm refuses to make** is logged once, with sceGxm's error
+  (`draw skipped: the fragment program could not be made: ...`), and every
+  draw or clear that asks for it afterwards is counted in the summary
+  (`draws skipped: N x ...`). Logs from before 2026-11-10 counted only the
+  first: a `1 x` there means one program, and it may be a clear that never
+  happened.
 - **Programs.** Each draw picks its shaders' variants: the vertex
   declaration decides which inputs are D3DCOLOR (swapped), missing (read as
   0, 0, 0, 1) or narrower than four components, and the alpha test picks the
