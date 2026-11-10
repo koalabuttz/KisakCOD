@@ -43,6 +43,7 @@
 #include <cstring>
 #include <functional>
 #include <map>
+#include <set>
 
 namespace gfx_vk::legacy
 {
@@ -330,6 +331,12 @@ struct DrawState
     // Run diagnostics (see DiagnoseFrame): draws of this frame still to log,
     // and this frame's test (DiagMode).
     uint32_t diagnosedDraws = 0;
+    // Run diagnostic: a file named diag-state-census beside the compiled
+    // programs logs each new combination of shaders, declaration, blend and
+    // texture state a draw brings, once (LogCensus).
+    bool census = false;
+    std::set<uint64_t> censusSeen;
+    uint32_t censusLines = 0;
     int diagMode = 0;
     // The tests and the magenta rectangle only run when the program cache
     // folder holds a file named "run-tests"; frame 300's log and the two
@@ -1666,6 +1673,11 @@ bool InitDraw(Device &device, std::string &error)
     }
     for (uint32_t i = 0; i < kSequentialIndices; ++i)
         d.sequential[i] = uint16_t(i);
+    if (gxm::ProgramCacheMarker("diag-state-census"))
+    {
+        d.census = true;
+        Log(device, "diag: diag-state-census is there: each new draw state is logged once (census lines)");
+    }
     if (gxm::ProgramCacheMarker("no-draw-reuse"))
     {
         d.reuse = false;
@@ -2412,6 +2424,97 @@ void DiagnoseDraw(Device &device, d3d::PrimitiveType type, uint32_t indexCount, 
 }
 } // namespace
 
+// Run diagnostic (diag-state-census): the D3D9 state of each new
+// combination a draw brings, in numbers, so that a run can say which state
+// a group of draws (decals, say) is drawn with. Formats print as their
+// D3DFORMAT number, or as four letters for a FourCC.
+void FormatName(uint32_t format, char *out, size_t size)
+{
+    if (format > 0xffff)
+        std::snprintf(out, size, "%c%c%c%c", char(format), char(format >> 8), char(format >> 16), char(format >> 24));
+    else
+        std::snprintf(out, size, "%u", format);
+}
+
+void LogCensus(Device &device, const Shader &vs, const Shader &ps, const Variant &vertex, const Variant &pixel,
+               bool blended, const SceGxmBlendInfo &blend)
+{
+    DrawState &d = *device.draw;
+    const uint32_t *rs = device.renderStates;
+    uint64_t key = 1469598103934665603ull;
+    auto mix = [&](uint64_t v) { key = (key ^ v) * 1099511628211ull; };
+    mix(uint64_t(uintptr_t(&vs)));
+    mix(uint64_t(uintptr_t(&ps)));
+    mix(uint64_t(uintptr_t(device.decl)));
+    mix(uint64_t(uintptr_t(&vertex)));
+    mix(uint64_t(uintptr_t(&pixel)));
+    static const uint32_t states[] = {d3d::RS_ALPHABLENDENABLE, d3d::RS_SRCBLEND, d3d::RS_DESTBLEND, d3d::RS_BLENDOP,
+                                      d3d::RS_SEPARATEALPHABLENDENABLE, d3d::RS_SRCBLENDALPHA, d3d::RS_DESTBLENDALPHA,
+                                      d3d::RS_BLENDOPALPHA, d3d::RS_COLORWRITEENABLE, d3d::RS_ALPHATESTENABLE,
+                                      d3d::RS_ALPHAFUNC, d3d::RS_SRGBWRITEENABLE, d3d::RS_ZFUNC, d3d::RS_ZWRITEENABLE,
+                                      d3d::RS_CULLMODE, d3d::RS_STENCILENABLE};
+    for (uint32_t state : states)
+        mix(rs[state]);
+    mix(uint64_t(d.color.format));
+    for (int i = 0; i < 16; ++i)
+    {
+        if (pixel.textureUnit[i] < 0)
+            continue;
+        const Texture *texture = device.textures[i];
+        mix(texture ? uint64_t(texture->desc.format) : 0);
+        mix(device.samplerStates[i][d3d::SAMP_SRGBTEXTURE]);
+        mix(device.samplerStates[i][d3d::SAMP_ADDRESSU]);
+    }
+    if (!d.censusSeen.insert(key).second || d.censusLines >= 600)
+        return;
+    const uint32_t n = d.censusLines++;
+    std::string decl;
+    char part[160];
+    for (const VertexElement &e : device.decl->elements)
+    {
+        std::snprintf(part, sizeof(part), " %u/%u/t%u/u%u.%u", unsigned(e.stream), unsigned(e.offset), unsigned(e.type),
+                      unsigned(e.usage), unsigned(e.usageIndex));
+        decl += part;
+    }
+    Log(device,
+        "census %u (frame %llu, %llu drawn): vs %016llx (%u instructions, %u constants) ps %016llx (%u instructions, "
+        "%u constants); target format 0x%08x%s; decl%s",
+        n, (unsigned long long)d.frame, (unsigned long long)d.drawn, (unsigned long long)vertex.cacheKey,
+        unsigned(vs.parsed.reflection.instructions), unsigned(vs.parsed.reflection.floatConstants),
+        (unsigned long long)pixel.cacheKey, unsigned(ps.parsed.reflection.instructions),
+        unsigned(ps.parsed.reflection.floatConstants), unsigned(d.color.format), d.color.noAlpha ? " (no alpha)" : "",
+        decl.c_str());
+    Log(device,
+        "census %u state: blend %u src %u dst %u op %u, separate %u src %u dst %u op %u, write mask 0x%x, srgb write %u; "
+        "alpha test %u func %u ref %u; z func %u write %u; cull %u; stencil %u; gxm blend %s (mask 0x%x, colour %u %u %u, "
+        "alpha %u %u %u)",
+        n, rs[d3d::RS_ALPHABLENDENABLE], rs[d3d::RS_SRCBLEND], rs[d3d::RS_DESTBLEND], rs[d3d::RS_BLENDOP],
+        rs[d3d::RS_SEPARATEALPHABLENDENABLE], rs[d3d::RS_SRCBLENDALPHA], rs[d3d::RS_DESTBLENDALPHA],
+        rs[d3d::RS_BLENDOPALPHA], rs[d3d::RS_COLORWRITEENABLE], rs[d3d::RS_SRGBWRITEENABLE],
+        rs[d3d::RS_ALPHATESTENABLE], rs[d3d::RS_ALPHAFUNC], rs[d3d::RS_ALPHAREF], rs[d3d::RS_ZFUNC],
+        rs[d3d::RS_ZWRITEENABLE], rs[d3d::RS_CULLMODE], rs[d3d::RS_STENCILENABLE], blended ? "on" : "off",
+        unsigned(blend.colorMask), unsigned(blend.colorFunc), unsigned(blend.colorSrc), unsigned(blend.colorDst),
+        unsigned(blend.alphaFunc), unsigned(blend.alphaSrc), unsigned(blend.alphaDst));
+    std::string textures;
+    for (int i = 0; i < 16; ++i)
+    {
+        if (pixel.textureUnit[i] < 0)
+            continue;
+        const Texture *texture = device.textures[i];
+        const uint32_t *ss = device.samplerStates[i];
+        char format[16] = "none";
+        if (texture)
+            FormatName(uint32_t(texture->desc.format), format, sizeof(format));
+        std::snprintf(part, sizeof(part), " s%d(%s %ux%u kind %u levels %u; filter %u %u %u address %u %u srgb %u)", i,
+                      format, texture ? texture->desc.width : 0u, texture ? texture->desc.height : 0u,
+                      texture ? unsigned(texture->desc.kind) : 0u, texture ? unsigned(texture->levels.size()) : 0u,
+                      ss[d3d::SAMP_MINFILTER], ss[d3d::SAMP_MAGFILTER], ss[d3d::SAMP_MIPFILTER],
+                      ss[d3d::SAMP_ADDRESSU], ss[d3d::SAMP_ADDRESSV], ss[d3d::SAMP_SRGBTEXTURE]);
+        textures += part;
+    }
+    Log(device, "census %u textures:%s", n, textures.empty() ? " none" : textures.c_str());
+}
+
 void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t startIndex, uint32_t primitiveCount,
           bool indexed, const void *upVertices, uint32_t upStride)
 {
@@ -2811,6 +2914,8 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         d.fragmentUniformsVersion = device.psConstantsVersion;
         d.fragmentAlphaRef = alphaRef;
     }
+    if (d.census)
+        LogCensus(device, *vs, *ps, *vertex, *pixel, blended, blend);
     Texture *const target = SceneTexture(d);
     if (!BindTextures(device, *pixel, pixelUniforms))
     {
