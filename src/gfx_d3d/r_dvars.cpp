@@ -228,6 +228,7 @@
  const dvar_t *r_fastSkin;
  const dvar_t *r_smc_enable;
  const dvar_t *r_pretess;
+ const dvar_t *r_dynamicBufferReport;
  const dvar_t *r_picmip_manual;
  const dvar_t *r_picmip;
  const dvar_t *r_picmip_bump;
@@ -578,8 +579,26 @@
      r_multiGpu = Dvar_RegisterBool("r_multiGpu", false, DVAR_ARCHIVE, "Use multiple GPUs");
      r_skinCache = Dvar_RegisterBool("r_skinCache", true, DVAR_NOFLAG, "Enable cache for vertices of animated models");
      r_fastSkin = Dvar_RegisterBool("r_fastSkin", false, DVAR_ARCHIVE, "Enable fast model skinning");
+#if R_STATIC_MODEL_CACHE
      r_smc_enable = Dvar_RegisterBool("r_smc_enable", true, DVAR_NOFLAG, "Enable static model cache");
+#else
+     // The cache's buffers are not made (r_gfx.h), so nothing may turn it on.
+     r_smc_enable = Dvar_RegisterBool("r_smc_enable", false, DVAR_ROM, "Enable static model cache");
+#endif
      r_pretess = Dvar_RegisterBool("r_pretess", true, DVAR_NOFLAG, "Batch surfaces to reduce primitive count");
+     // The PS Vita's buffers are smaller than the retail game's (r_gfx.h), and
+     // its runs are read from the log: there the line is on.
+     r_dynamicBufferReport = Dvar_RegisterInt(
+         "r_dynamicBufferReport",
+#ifdef KISAK_GFX_GXM
+         60,
+#else
+         0,
+#endif
+         0,
+         3600,
+         DVAR_NOFLAG,
+         "Seconds between log lines on how full the dynamic buffers got (0: none)");
      minb.value.max = FLT_MAX;
      minb.value.min = 0.0f;
      r_lodScaleRigid = Dvar_RegisterFloat(

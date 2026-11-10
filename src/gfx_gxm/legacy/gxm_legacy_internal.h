@@ -193,6 +193,7 @@ struct GpuBuffer
     Memory memory;
     bool locked = false;
     bool drawn = false; // read by a draw since its memory was last renamed
+    uint64_t drawnWait = 0; // the count of waits for the GPU when a draw last read it
     std::string name;
 };
 struct VertexBuffer : GpuBuffer
@@ -342,6 +343,10 @@ uint64_t Micros();
 // resources stay in the C heap.
 bool AllocateMemory(Device &device, Memory &memory, uint32_t bytes, uint32_t align, d3d::Pool pool, bool preferCdram,
                     MemoryUse use, const char *name);
+// A buffer's fresh memory for a rename: from the one pool named, and no log
+// line when it has no room (Rename waits for the GPU then, every frame if it
+// must).
+bool AllocateRenamed(Memory &memory, uint32_t bytes, uint32_t align, gxm::MemoryKind kind, MemoryUse use);
 void FreeMemory(Memory &memory);
 // Frees a piece AllocateMemory handed out, by its parts (for frees that wait
 // for the GPU).
@@ -389,7 +394,9 @@ void DiagnoseFrame(Device &device);
 // Drops programs made from a shader or declaration about to go.
 void ForgetShader(Device &device, Shader &shader);
 void ForgetDecl(Device &device, VertexDecl &decl);
-// DISCARD on a buffer a draw read: fresh memory, the old retired.
+// DISCARD on a buffer a draw read: fresh memory with the old retired, or,
+// when the buffer's pool has no room for that, a wait for the GPU. Neither
+// when the GPU has been waited for since that draw.
 void Rename(Device &device, GpuBuffer &buffer);
 void ClearTargets(Device &device, uint32_t rectCount, const Rect *rects, uint32_t flags, uint32_t color, float z,
                   uint32_t stencil);

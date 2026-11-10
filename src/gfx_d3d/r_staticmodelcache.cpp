@@ -33,7 +33,9 @@ void *R_AllocStaticModelCache()
 
 void R_InitStaticModelCache()
 {
+#if R_STATIC_MODEL_CACHE
     R_AllocStaticModelCache();
+#endif
     SMC_ClearCache();
 }
 
