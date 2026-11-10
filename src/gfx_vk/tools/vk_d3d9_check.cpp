@@ -24,6 +24,7 @@
 #include <SDL3/SDL_vulkan.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -435,6 +436,9 @@ public:
     void References();
     void Threads();
     void Queries();
+    void FrameLoop();
+    void GpuFeed();
+    void Bench();
     void ResetDevice();
     void Present();
 };
@@ -1085,8 +1089,293 @@ void Check::Queries()
     }
     Equal("swap_fence_done_without_flush", hr == S_OK && done == TRUE, true);
     std::printf("d3d9_check.swap_fence_polls=%d\n", fencePolls);
+
+    // Polled with FLUSH, as the engine polls it once the next frame is drawn:
+    // it still finishes with its own frame, and the first poll that finds it
+    // unfinished hands the next frame's work to the GPU, once, ahead of its
+    // Present. The frame then goes on in a new submission with its state and
+    // its target's contents. A heavy frame first, so that the poll finds the
+    // fence unfinished; a GPU that still finishes first gets another try.
+    // The frame stays under the GPU feed's 128 draws, so it reaches the GPU
+    // whole at its Present: lavapipe waits for everything submitted so far
+    // whenever a query is read, which Present does for the frame before, and
+    // a frame already submitted in parts would be finished by the time
+    // Present returned.
+    const char *fencePath = "finished_first";
+    unsigned long long fenceFlushes = 0;
+    for (int attempt = 0; attempt < 8 && fencePath[0] == 'f'; ++attempt)
+    {
+        Reset();
+        for (int i = 0; i < 112; ++i)
+            DrawQuad(0, 0, kSize, kSize, 0.5f, Argb(255, 32, 32, 32));
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+        Ok(event->Issue(D3DISSUE_END), "Issue(event after Present)");
+        Reset(Argb(255, 0, 64, 0));
+        DrawQuad(0, 0, 32, 32, 0.5f, Argb(255, 255, 0, 0)); // the next frame's work so far
+        const uint64_t before = Counters().fenceFlushes;
+        done = FALSE;
+        if (event->GetData(&done, sizeof(done), D3DGETDATA_FLUSH) != S_FALSE)
+            continue;
+        fencePath = "ahead";
+        const uint64_t afterFirst = Counters().fenceFlushes;
+        int waits = 0;
+        while ((hr = event->GetData(&done, sizeof(done), D3DGETDATA_FLUSH)) == S_FALSE && waits < 5000)
+        {
+            ++waits;
+            SDL_Delay(1);
+        }
+        Equal("swap_fence_done_after_flush", hr == S_OK && done == TRUE, true);
+        Equal("swap_fence_flushes_once", Counters().fenceFlushes, afterFirst);
+        fenceFlushes = afterFirst - before;
+        DrawQuad(64, 64, 96, 96, 0.5f, Argb(255, 0, 0, 255));
+        if (Read())
+        {
+            Expect("fence_flush_drawn_before", 16, 16, 255, 0, 0);
+            Expect("fence_flush_drawn_after", 80, 80, 0, 0, 255);
+            Expect("fence_flush_clear", 120, 16, 0, 64, 0);
+        }
+    }
+    std::printf("d3d9_check.fence_flush=%s flushes=%llu\n", fencePath, fenceFlushes);
     SafeRelease(event);
     SafeRelease(occlusion);
+}
+
+// The engine's frame, as its render thread runs it (RB_RenderCommandFrame,
+// RB_EndFrame, RB_SwapBuffers): draw; poll the swap fence with FLUSH until the
+// frame before has finished; issue the GPU sync fence; Present; issue the swap
+// fence. Meanwhile another thread polls the GPU sync fence with FLUSH, as the
+// main thread does in R_SyncGpu. Every frame takes at most three submissions
+// (the swap fence's flush or the sync fence's own, and the present), the swap
+// fence flushes at most once a frame, and the last frame comes out whole,
+// drawn on both sides of its wait.
+void Check::FrameLoop()
+{
+    constexpr int kFrames = 48;
+    IDirect3DQuery9 *swapFence = nullptr, *syncFence = nullptr;
+    if (!Ok(device->CreateQuery(D3DQUERYTYPE_EVENT, &swapFence), "CreateQuery(swap fence)")
+        || !Ok(device->CreateQuery(D3DQUERYTYPE_EVENT, &syncFence), "CreateQuery(sync fence)"))
+    {
+        SafeRelease(swapFence);
+        return;
+    }
+    std::atomic<bool> stop{false};
+    std::atomic<bool> pollFailed{false};
+    IDirect3DQuery9 *const polled = syncFence;
+    std::thread mainThread([&] {
+        while (!stop.load())
+        {
+            BOOL done = FALSE;
+            if (FAILED(polled->GetData(&done, sizeof(done), D3DGETDATA_FLUSH)))
+                pollFailed = true;
+            std::this_thread::yield();
+        }
+    });
+    const front::DeviceCounters before = Counters();
+    int stuck = 0;
+    for (int frame = 0; frame < kFrames; ++frame)
+    {
+        const bool last = frame == kFrames - 1;
+        Reset(Argb(255, 0, 64, 0));
+        for (int i = 0; i < 24; ++i)
+            DrawQuad(0, 0, 32, 32, 0.5f, Argb(255, 255, 0, 0));
+        BOOL done = FALSE;
+        int waits = 0;
+        while (swapFence->GetData(&done, sizeof(done), D3DGETDATA_FLUSH) == S_FALSE && waits < 20000)
+        {
+            ++waits;
+            if (waits > 200)
+                SDL_Delay(1);
+            else
+                std::this_thread::yield();
+        }
+        stuck += waits >= 20000;
+        Ok(syncFence->Issue(D3DISSUE_END), "Issue(sync fence)");
+        if (last)
+        {
+            DrawQuad(64, 64, 96, 96, 0.5f, Argb(255, 0, 0, 255));
+            if (Read())
+            {
+                Expect("frame_drawn_before_wait", 16, 16, 255, 0, 0);
+                Expect("frame_drawn_after_wait", 80, 80, 0, 0, 255);
+                Expect("frame_clear", 120, 16, 0, 64, 0);
+            }
+        }
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+        Ok(swapFence->Issue(D3DISSUE_END), "Issue(swap fence)");
+    }
+    stop = true;
+    mainThread.join();
+    const front::DeviceCounters after = Counters();
+    const uint64_t presents = after.presents - before.presents;
+    // Parts submitted to feed the GPU are apart (none in frames this small,
+    // unless KISAK_VK_GPU_FEED=always submits after every draw).
+    const uint64_t submissions = after.submissions - before.submissions - (after.feedFlushes - before.feedFlushes);
+    const uint64_t flushes = after.fenceFlushes - before.fenceFlushes;
+    Equal("frames_presented", presents + (after.presentsSkipped - before.presentsSkipped), uint64_t(kFrames));
+    Equal("swap_fence_never_stuck", stuck, 0);
+    Equal("sync_fence_polls_ok", pollFailed.load(), false);
+    // The read-back of the last frame is one more.
+    Equal("at_most_three_submissions_a_frame", submissions <= 3u * kFrames + 1, true);
+    Equal("swap_fence_flushes_at_most_once_a_frame", flushes <= uint64_t(kFrames), true);
+    std::printf("d3d9_check.frame_loop=frames=%d submissions=%llu fence_flushes=%llu\n", kFrames,
+                static_cast<unsigned long long>(submissions), static_cast<unsigned long long>(flushes));
+    SafeRelease(swapFence);
+    SafeRelease(syncFence);
+}
+
+// A frame of many draws, as the engine's are. The adapter submits such a
+// frame in parts while it is drawn (OptionalFeatures::gpuFeed), each part in
+// a command buffer of its own with a pass of its own on the same target.
+// Every draw fills a cell of its own here, so the picture shows each one,
+// whichever part it fell in; the cells no draw touches show that no part
+// began by clearing; and the scissor rectangle, set once before the first
+// draw, still cuts the last column of cells from the draws of every part.
+// How many parts there were is printed, for the test that knows the setting.
+void Check::GpuFeed()
+{
+    constexpr int kDraws = 600;
+    constexpr int kCell = 4;
+    constexpr int kAcross = int(kSize) / kCell;
+    static_assert(kDraws < kAcross * kAcross, "a cell for every draw, and some left clear");
+    auto color = [](int draw) { return Argb(255, uint32_t(40 + draw % 200), uint32_t(draw / 3 % 256), 255); };
+    Reset(Argb(255, 0, 64, 0));
+    const RECT scissor = {0, 0, LONG(kSize) - kCell, LONG(kSize)};
+    Ok(device->SetScissorRect(&scissor), "SetScissorRect");
+    Ok(device->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE), "SetRenderState(scissor)");
+    const front::DeviceCounters before = Counters();
+    for (int draw = 0; draw < kDraws; ++draw)
+    {
+        const float x = float(draw % kAcross * kCell);
+        const float y = float(draw / kAcross * kCell);
+        DrawQuad(x, y, x + kCell, y + kCell, 0.5f, color(draw));
+    }
+    const front::DeviceCounters after = Counters();
+    Ok(device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE), "SetRenderState(scissor)");
+    if (Read())
+    {
+        for (int draw : {0, 1, 126, 127, 128, 129, 254, 255, 256, 257, 300, 383, 384, 510, 511, 512, 598, 599})
+        {
+            const UINT x = UINT(draw % kAcross * kCell + kCell / 2);
+            const UINT y = UINT(draw / kAcross * kCell + kCell / 2);
+            char name[32];
+            std::snprintf(name, sizeof(name), "feed_draw_%d", draw);
+            if (draw % kAcross == kAcross - 1)
+                Expect(name, x, y, 0, 64, 0); // cut by the scissor rectangle
+            else
+                Expect(name, x, y, 40 + draw % 200, (draw / 3) % 256, 255);
+        }
+        Expect("feed_clear_kept", 2, kSize - 2, 0, 64, 0);
+        Expect("feed_clear_kept_right", kSize - 6, kSize - 2, 0, 64, 0);
+    }
+    const uint64_t parts = after.feedFlushes - before.feedFlushes;
+    Equal("feed_at_most_a_part_a_draw", parts <= uint64_t(kDraws), true);
+    std::printf("d3d9_check.gpu_feed=draws=%d parts=%llu\n", kDraws, static_cast<unsigned long long>(parts));
+}
+
+// Not part of a full run: --scene bench. What a frame of the engine's size
+// costs the thread that draws it, with the engine's other habits around it:
+// 768 draws of four D3D9 calls each (a constant, a texture, a render state,
+// the draw), while a second thread polls the GPU sync fence with FLUSH every
+// 20 microseconds, as the main thread does in R_SyncGpu for as long as the
+// GPU is behind (here all the time, whatever the GPU: the worst case). Each
+// frame ends as FrameLoop's do. Prints the time the drawing thread spent on
+// its draw calls per frame (wall clock, so the cost of sharing the front's
+// lock with the poller is in it) and the polls made meanwhile. The numbers
+// depend on the machine and on what else runs on it; the scene passes when
+// its frames were presented.
+void Check::Bench()
+{
+    constexpr int kFrames = 120;
+    constexpr int kWarmUp = 20;
+    constexpr int kDraws = 768;
+    constexpr int kCell = 4;
+    constexpr int kAcross = int(kSize) / kCell;
+    using Clock = std::chrono::steady_clock;
+    IDirect3DQuery9 *swapFence = nullptr, *syncFence = nullptr;
+    IDirect3DTexture9 *textures[2] = {FilledTexture(2, 2, [](UINT, UINT) { return Argb(255, 255, 255, 255); }),
+                                      FilledTexture(2, 2, [](UINT, UINT) { return Argb(255, 128, 128, 128); })};
+    if (!textures[0] || !textures[1]
+        || !Ok(device->CreateQuery(D3DQUERYTYPE_EVENT, &swapFence), "CreateQuery(swap fence)")
+        || !Ok(device->CreateQuery(D3DQUERYTYPE_EVENT, &syncFence), "CreateQuery(sync fence)"))
+    {
+        SafeRelease(swapFence);
+        SafeRelease(textures[0]);
+        SafeRelease(textures[1]);
+        return;
+    }
+    std::atomic<bool> stop{false};
+    std::atomic<uint64_t> polls{0};
+    IDirect3DQuery9 *const polled = syncFence;
+    std::thread mainThread([&] {
+        Clock::time_point last = Clock::now();
+        while (!stop.load(std::memory_order_relaxed))
+        {
+            const Clock::time_point now = Clock::now();
+            if (now - last < std::chrono::microseconds(20))
+                continue;
+            last = now;
+            BOOL done = FALSE;
+            polled->GetData(&done, sizeof(done), D3DGETDATA_FLUSH);
+            polls.fetch_add(1, std::memory_order_relaxed);
+        }
+    });
+    const front::DeviceCounters before = Counters();
+    double totalMs = 0.0, minMs = 1e9;
+    uint64_t pollsCounted = 0;
+    for (int frame = 0; frame < kFrames; ++frame)
+    {
+        Reset(Argb(255, 0, 64, 0));
+        Ok(device->SetPixelShader(psTexture), "SetPixelShader");
+        const uint64_t pollsBefore = polls.load(std::memory_order_relaxed);
+        const Clock::time_point start = Clock::now();
+        for (int draw = 0; draw < kDraws; ++draw)
+        {
+            const float offset[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+            device->SetVertexShaderConstantF(0, offset, 1);
+            device->SetTexture(0, textures[draw & 1]);
+            device->SetRenderState(D3DRS_ALPHAREF, DWORD(draw & 0xff));
+            const float x = float(draw % kAcross * kCell);
+            const float y = float(draw / kAcross * kCell);
+            Vertex quad[6];
+            QuadList(quad, x, y, x + kCell, y + kCell, 0.5f, Argb(255, 255, 255, 255), kSize);
+            device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, quad, sizeof(Vertex));
+        }
+        const double ms = std::chrono::duration<double, std::milli>(Clock::now() - start).count();
+        if (frame >= kWarmUp)
+        {
+            totalMs += ms;
+            minMs = ms < minMs ? ms : minMs;
+            pollsCounted += polls.load(std::memory_order_relaxed) - pollsBefore;
+        }
+        BOOL done = FALSE;
+        int waits = 0;
+        while (swapFence->GetData(&done, sizeof(done), D3DGETDATA_FLUSH) == S_FALSE && waits < 20000)
+        {
+            ++waits;
+            if (waits > 200)
+                SDL_Delay(1);
+            else
+                std::this_thread::yield();
+        }
+        Ok(syncFence->Issue(D3DISSUE_END), "Issue(sync fence)");
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+        Ok(swapFence->Issue(D3DISSUE_END), "Issue(swap fence)");
+    }
+    stop = true;
+    mainThread.join();
+    device->SetTexture(0, nullptr);
+    const front::DeviceCounters after = Counters();
+    Equal("bench_frames_presented",
+          (after.presents - before.presents) + (after.presentsSkipped - before.presentsSkipped), uint64_t(kFrames));
+    const int counted = kFrames - kWarmUp;
+    std::printf("d3d9_check.bench=frames=%d draws=%d calls=%d draw_ms_average=%.3f draw_ms_min=%.3f "
+                "polls_per_frame=%.0f submissions_per_frame=%.2f\n",
+                counted, kDraws, 4 * kDraws, totalMs / counted, minMs, double(pollsCounted) / counted,
+                double(after.submissions - before.submissions) / kFrames);
+    SafeRelease(swapFence);
+    SafeRelease(syncFence);
+    SafeRelease(textures[0]);
+    SafeRelease(textures[1]);
 }
 
 // Reset to another back buffer size and back: the new size, default state,
@@ -1304,6 +1593,7 @@ int Run(const Options &options)
         const char *name;
         void (Check::*run)();
         bool needsDevice;
+        bool byNameOnly = false; // not part of a full run
     };
     const Scene scenes[] = {
         {"adapter", &Check::Adapter, false},
@@ -1315,6 +1605,9 @@ int Run(const Options &options)
         {"references", &Check::References, true},
         {"threads", &Check::Threads, true},
         {"queries", &Check::Queries, true},
+        {"frame_loop", &Check::FrameLoop, true},
+        {"gpu_feed", &Check::GpuFeed, true},
+        {"bench", &Check::Bench, true, true},
         {"reset", &Check::ResetDevice, true},
         {"present", &Check::Present, true},
     };
@@ -1324,7 +1617,7 @@ int Run(const Options &options)
     std::string error;
     for (const Scene &scene : scenes)
     {
-        if (!options.only.empty() && options.only != scene.name)
+        if (options.only.empty() ? scene.byNameOnly : options.only != scene.name)
             continue;
         ++ran;
         if (scene.needsDevice && !check.device)

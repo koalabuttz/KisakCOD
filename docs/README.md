@@ -23,6 +23,8 @@ what is still missing. Build steps are in the
   an anonymous Steam game server
 - [Key codes](key-codes.md): join a server that accepts unverified GUIDs with
   a CoD4 key code and no Steam (all platforms)
+- [Finding servers](server-browser.md): local list, favourites, `connect`, and
+  the opt-in internet list (`masterServerName`, empty by default)
 
 ## Linux dedicated server
 
@@ -88,6 +90,12 @@ in a build with `KISAK_BUILD_VULKAN_BACKEND`. Bottom to top:
 - [Legacy shader translator](vulkan-legacy-shaders.md): the game's D3D9 shader bytecode to SPIR-V through dxbc-spirv ([how the converter was picked](shader-translator-spike.md))
 - [Legacy adapter](vulkan-legacy-adapter.md): the part of D3D9 the renderer uses, on the core, with a pixel check
 - [D3D9 front](vulkan-d3d9-front.md): the D3D9 interfaces on the adapter, and [the back end in the game](vulkan-d3d9-front.md#in-the-game-r_backend-vulkan) on Linux and Windows, its dvars, caches and the comparison with DXVK
+
+## Upstream
+
+- [Upstream patch queue](upstream/README.md): changes prepared for the
+  upstream repository, one patch per future pull request. Nothing in it has
+  been sent.
 
 ## Tests
 

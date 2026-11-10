@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 04:21:50 +0000
+Subject: [PATCH] fix: send deactivateReverb and deactivateChannelVolumes as
+ cgame reads them
+
+Both commands formatted setReverb's six-field string with one float, so
+va() read past its arguments and the client got the wrong field count.
+CG_DeactivateReverbCmd and CG_DeactivateChannelVolCmd expect
+"<prio> <fadetime>".
+
+Send that, with the priority numbers the matching set commands use.
+---
+ src/game_mp/g_client_script_cmd_mp.cpp | 12 ++++++++++--
+ 1 file changed, 10 insertions(+), 2 deletions(-)
+
+diff --git a/src/game_mp/g_client_script_cmd_mp.cpp b/src/game_mp/g_client_script_cmd_mp.cpp
+index 4e7f8b19..af12bc2f 100644
+--- a/src/game_mp/g_client_script_cmd_mp.cpp
++++ b/src/game_mp/g_client_script_cmd_mp.cpp
+@@ -2434,7 +2434,9 @@ LABEL_6:
+     ConstString = Scr_GetConstString(0);
+     if (ConstString != scr_const.snd_enveffectsprio_level && ConstString != scr_const.snd_enveffectsprio_shellshock)
+         Scr_Error("priority must be 'snd_enveffectsprio_level' or 'snd_enveffectsprio_shellshock'\n");
+-    SV_GameSendServerCommand(v1, SV_CMD_RELIABLE, va("%c %i \"%s\" %g %g %g", 68, Float));
++    // CG_DeactivateReverbCmd reads "<prio> <fadetime>"
++    const int32_t prio = ConstString == scr_const.snd_enveffectsprio_shellshock ? 2 : 1;
++    SV_GameSendServerCommand(v1, SV_CMD_RELIABLE, va("%c %i %g", 68, prio, Float));
+ }
+ 
+ void __cdecl PlayerCmd_SetChannelVolumes(scr_entref_t entref)
+@@ -2547,7 +2549,13 @@ LABEL_6:
+         Scr_Error(
+             "priority must be 'snd_channelvolprio_holdbreath', 'snd_channelvolprio_pain', or 'snd_channelvolprio_shellshock'\n");
+     }
+-    SV_GameSendServerCommand(v1, SV_CMD_RELIABLE, va("%c %i \"%s\" %g %g %g", 70, Float));
++    // CG_DeactivateChannelVolCmd reads "<prio> <fadetime>"
++    int32_t prio = 1;
++    if (ConstString == scr_const.snd_channelvolprio_pain)
++        prio = 2;
++    else if (ConstString == scr_const.snd_channelvolprio_shellshock)
++        prio = 3;
++    SV_GameSendServerCommand(v1, SV_CMD_RELIABLE, va("%c %i %g", 70, prio, Float));
+ }
+ 
+ void __cdecl ScrCmd_PlayLocalSound(scr_entref_t entref)

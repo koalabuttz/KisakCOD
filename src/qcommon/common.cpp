@@ -1634,17 +1634,26 @@ void Com_InitDvars()
 
     sys_smp_allowed = Dvar_RegisterBool("sys_smp_allowed", Sys_GetCpuCount() > 1u, DVAR_INIT, "Allow multi-threading");
 #ifdef KISAK_MP
+    // Retail's master, cod4master.activision.com, is gone. Nobody is contacted
+    // until the player or server owner names a master here; see
+    // qcommon/master_server.h and docs/server-browser.md.
     com_masterServerName = Dvar_RegisterString(
         "masterServerName",
-        "cod4master.activision.com",
-        DVAR_CHEAT,
-        "Master server name for listing public inet games");
+        "",
+        DVAR_ARCHIVE,
+        "Master server for listing public internet games, as host or host:port. Empty: no master is contacted");
     com_authServerName = Dvar_RegisterString(
         "authServerName",
         "cod4master.activision.com",
         DVAR_CHEAT,
         "Authentication server name for listing public inet games");
-    com_masterPort = Dvar_RegisterInt("masterPort", 20810, 0, 0xFFFF, DVAR_CHEAT, "Master server port");
+    com_masterPort = Dvar_RegisterInt(
+        "masterPort",
+        20810,
+        0,
+        0xFFFF,
+        DVAR_ARCHIVE,
+        "Master server port, used when masterServerName has no :port");
     com_authPort = Dvar_RegisterInt("authPort", 20800, 0, 0xFFFF, DVAR_CHEAT, "Auth server port");
 #endif
     com_developer = Dvar_RegisterInt("developer", 0, 0, 2, DVAR_NOFLAG, "Enable development options");

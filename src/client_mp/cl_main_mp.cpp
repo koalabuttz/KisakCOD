@@ -38,6 +38,7 @@
 
 #include "cl_auth.h"
 #include "cl_connection_mp.h"
+#include "cl_master.h"
 
 const dvar_t *cl_conXOffset;
 const dvar_t *cl_hudDrawsBehindsUI;
@@ -1099,67 +1100,83 @@ void CL_SortGlobalServers()
         (int(*)(const void *, const void *))CL_CompareAdrSigned);
 }
 
+MasterQuery cl_masterQuery;
+
+// Refuses a new master address while a remote server is in control of the
+// client.  Game servers set client dvars by name (systeminfo, codinfo,
+// setClientDvar); none of those may decide who the client asks for its server
+// list.  A listen server's own client is not restricted.
+static bool CL_MasterDvarChangeAllowed(dvar_s *dvar, DvarValue value)
+{
+    (void)value;
+    if (clientUIActives[0].connectionState < CA_CONNECTING)
+        return true;
+    if (com_sv_running && com_sv_running->current.enabled)
+        return true;
+    Com_Printf(
+        CON_CHANNEL_CLIENT,
+        "%s cannot be changed while connected to a server\n",
+        dvar && dvar->name ? dvar->name : "The master server");
+    return false;
+}
+
+void CL_ProtectMasterDvars()
+{
+    // Installing the check validates the current value with it, so install it
+    // only once: a second call while connected would reset the setting.
+    for (const dvar_t *dvar : { com_masterServerName, com_masterPort })
+    {
+        if (dvar && dvar->domainFunc != CL_MasterDvarChangeAllowed)
+            Dvar_SetDomainFunc((dvar_s *)dvar, CL_MasterDvarChangeAllowed);
+    }
+}
+
 void CL_ServersResponsePacket(netadr_t from, msg_t *msg)
 {
-    int32_t v2; // eax
-    netadr_t v3; // [esp-14h] [ebp-64Ch]
-    int32_t numservers; // [esp+8h] [ebp-630h]
-    uint8_t *buffend; // [esp+Ch] [ebp-62Ch]
-    serverAddress_t addresses[256]; // [esp+10h] [ebp-628h] BYREF
-    uint8_t *buffptr; // [esp+610h] [ebp-28h]
-    int32_t i; // [esp+614h] [ebp-24h]
-    serverInfo_t *server; // [esp+618h] [ebp-20h]
-    int32_t count; // [esp+61Ch] [ebp-1Ch]
-    netadr_t adr; // [esp+620h] [ebp-18h]
+    MasterServerEntry addresses[MASTER_MAX_ENTRIES_PER_PACKET];
+    int32_t numservers;
+    int32_t skipped;
+    int32_t i;
+    serverInfo_t *server;
+    int32_t count;
+    netadr_t adr;
+
+    // Only the master this client asked may answer, and only soon after it was
+    // asked.  Retail took a list from anyone.
+    if (from.type != NA_IP || !Master_QueryAccepts(&cl_masterQuery, from.ip, from.port, Sys_Milliseconds()))
+    {
+        Com_DPrintf(
+            CON_CHANNEL_CLIENT,
+            "Ignoring a server list from %s: it is not the master server that was asked\n",
+            NET_AdrToString(from));
+        return;
+    }
 
     Com_Printf(CON_CHANNEL_CLIENT, "CL_ServersResponsePacket\n");
     cls.waitglobalserverresponse = 0;
-    numservers = 0;
-    buffptr = msg->data;
-    buffend = &buffptr[msg->cursize];
-    do
-    {
-        if (buffptr + 1 >= buffend)
-            break;
-        do
-            v2 = *buffptr++;
-        while (v2 != 92 && buffptr < buffend);
-        if (buffptr >= buffend - 6)
-            break;
-        addresses[numservers].ip[0] = *buffptr++;
-        addresses[numservers].ip[1] = *buffptr++;
-        addresses[numservers].ip[2] = *buffptr++;
-        addresses[numservers].ip[3] = *buffptr++;
-        addresses[numservers].port = *buffptr++ << 8;
-        addresses[numservers].port += *buffptr++;
-        addresses[numservers].port = BigShort(addresses[numservers].port);
-        if (*buffptr != 92)
-            break;
-        Com_DPrintf(
-            CON_CHANNEL_CLIENT,
-            "server: %d ip: %d.%d.%d.%d:%d\n",
-            numservers,
-            addresses[numservers].ip[0],
-            addresses[numservers].ip[1],
-            addresses[numservers].ip[2],
-            addresses[numservers].ip[3],
-            addresses[numservers].port);
-        if (++numservers >= 256)
-            break;
-    } while (buffptr[1] != 69 || buffptr[2] != 79 || buffptr[3] != 84);
+    numservers = Master_ParseServersResponse(msg->data, msg->cursize, addresses, MASTER_MAX_ENTRIES_PER_PACKET, &skipped);
+    if (skipped)
+        Com_DPrintf(CON_CHANNEL_CLIENT, "%d unusable addresses in the server list were skipped\n", skipped);
     count = cls.numglobalservers;
     for (i = 0; i < numservers && count < 20000; ++i)
     {
+        Com_DPrintf(
+            CON_CHANNEL_CLIENT,
+            "server: %d ip: %d.%d.%d.%d:%d\n",
+            i,
+            addresses[i].ip[0],
+            addresses[i].ip[1],
+            addresses[i].ip[2],
+            addresses[i].ip[3],
+            (addresses[i].portHigh << 8) | addresses[i].portLow);
+        memset(&adr, 0, sizeof(adr));
         adr.type = NA_IP;
         adr.ip[0] = addresses[i].ip[0];
         adr.ip[1] = addresses[i].ip[1];
         adr.ip[2] = addresses[i].ip[2];
         adr.ip[3] = addresses[i].ip[3];
-        adr.port = addresses[i].port;
-        *(_QWORD *)&v3.type = __PAIR64__(*(uint32_t *)adr.ip, 4);
-        *(_DWORD *)&v3.port = *(_DWORD *)&adr.port;
-        *(_QWORD *)&v3.ipx[2] = *(_QWORD *)&adr.ipx[2];
-        if (!CL_FindServerInfo(v3))
+        adr.port = BigShort((int16_t)((addresses[i].portHigh << 8) | addresses[i].portLow));
+        if (!CL_FindServerInfo(adr))
         {
             server = &cls.globalServers[count++];
             CL_InitServerInfo(server, adr);
@@ -3033,6 +3050,7 @@ void CL_InitOnceForAllClients()
     Cmd_AddServerCommandInternal("reconnect", CL_Reconnect_f, &CL_Reconnect_f_VAR_SERVER);
     Cmd_AddCommandInternal("localservers", CL_LocalServers_f, &CL_LocalServers_f_VAR);
     Cmd_AddCommandInternal("globalservers", CL_GlobalServers_f, &CL_GlobalServers_f_VAR);
+    CL_ProtectMasterDvars();
     CL_RconInit();
     Cmd_AddCommandInternal("rcon", CL_Rcon_f, &CL_Rcon_f_VAR);
     Cmd_AddCommandInternal("ping", Cbuf_AddServerText_f, &CL_Ping_f_VAR);

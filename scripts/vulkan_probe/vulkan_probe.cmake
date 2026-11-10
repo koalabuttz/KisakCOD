@@ -79,8 +79,12 @@ add_library(kisak_gfx_vk STATIC
     "${SRC_DIR}/gfx_vk/vk_core.cpp"
     "${SRC_DIR}/gfx_vk/vk_frame.cpp"
     "${SRC_DIR}/gfx_vk/vk_memory.cpp"
-    "${SRC_DIR}/gfx_vk/vk_pipeline.cpp")
+    "${SRC_DIR}/gfx_vk/vk_pipeline.cpp"
+    "${SRC_DIR}/gfx_vk/vk_record.cpp")
 target_compile_features(kisak_gfx_vk PUBLIC cxx_std_20)
+# The record thread (CoreDesc::recordThread).
+find_package(Threads REQUIRED)
+target_link_libraries(kisak_gfx_vk PUBLIC Threads::Threads)
 target_include_directories(kisak_gfx_vk PUBLIC "${SRC_DIR}")
 target_include_directories(kisak_gfx_vk SYSTEM PUBLIC "${KISAK_VULKAN_HEADERS}")
 target_compile_definitions(kisak_gfx_vk PUBLIC VK_NO_PROTOTYPES)
