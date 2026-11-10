@@ -1045,6 +1045,66 @@ void RecordUniformBind(Device &device, const UniformBind &bind)
     });
 }
 
+// ---- Lasting descriptor sets ------------------------------------------------------------
+
+constexpr uint32_t kLastingSetLimit = 8192;       // texture and uniform sets together
+constexpr uint32_t kLastingTableSlots = 2 * kLastingSetLimit; // a power of two
+
+void RetireLastingSets(Device &device)
+{
+    if (LastingDescriptorSets(device.core))
+        ++device.stats.lastingRetires;
+    RetireLastingDescriptorSets(device.core);
+    ++device.lastingGeneration;
+    device.lastingTextures.entries.clear();
+    device.lastingTextures.slots.assign(kLastingTableSlots, 0);
+    device.lastingTextures.imagesDestroyed = ImagesDestroyed(device.core);
+    // The last set may be one of those given up.
+    device.lastTextureSet = Device::TextureSetCache{};
+}
+
+// A set from the lasting pools; gives every lasting set up first when there
+// are too many.
+VkDescriptorSet AllocateLastingSet(Device &device, VkDescriptorSetLayout layout)
+{
+    if (LastingDescriptorSets(device.core) >= kLastingSetLimit)
+        RetireLastingSets(device);
+    const VkDescriptorSet set = AllocateLastingDescriptorSet(device.core, layout);
+    if (set)
+        ++device.stats.lastingSets;
+    return set;
+}
+
+// Before a draw takes any lasting set: gives them all up once an image has
+// been destroyed since they were written.
+void CheckLastingSets(Device &device)
+{
+    Device::LastingTextureSets &table = device.lastingTextures;
+    if (table.slots.empty())
+    {
+        table.slots.assign(kLastingTableSlots, 0);
+        table.imagesDestroyed = ImagesDestroyed(device.core);
+    }
+    else if (table.imagesDestroyed != ImagesDestroyed(device.core))
+    {
+        RetireLastingSets(device);
+    }
+}
+
+uint64_t HashTextureSet(const Device::TextureSetCache &contents)
+{
+    auto mix = [](uint64_t h, uint64_t value) { return (h ^ value) * 0x100000001b3ull; };
+    uint64_t h = mix(0xcbf29ce484222325ull, (uint64_t)contents.layout);
+    h = mix(h, contents.mask);
+    for (uint32_t left = contents.mask; left; left &= left - 1)
+    {
+        const uint32_t bit = LowestBit(left);
+        h = mix(h, (uint64_t)contents.views[bit]);
+        h = mix(h, (uint64_t)contents.samplers[bit]);
+    }
+    return h ^ (h >> 31);
+}
+
 // Puts this draw's uniform blocks in per-frame memory and binds set 0.
 bool BindUniforms(Device &device, const Shader &vs, const Shader &ps, const DrawTextures &textures,
                   Pipeline &pipeline)
@@ -1127,7 +1187,21 @@ bool BindUniforms(Device &device, const Shader &vs, const Shader &ps, const Draw
         bind.offsetCount = count;
         for (uint32_t i = 0; i < count; ++i)
             bind.offsets[i] = static_cast<uint32_t>(device.uniformSlots[pipeline.blocks[i].binding].offset);
-        if (pipeline.uniformFrame == device.frameSerial && pipeline.uniformBuffer == device.uniformBuffer)
+        if (device.keepDrawState)
+        {
+            // A set 0 holds the pipeline's blocks in one transient buffer,
+            // which lives as long as the core: kept across frames.
+            for (const Pipeline::LastingUniformSet &kept : pipeline.lastingUniforms)
+            {
+                if (kept.generation == device.lastingGeneration && kept.buffer == device.uniformBuffer)
+                {
+                    bind.set = kept.set;
+                    ++device.stats.descriptorSetsReused;
+                    break;
+                }
+            }
+        }
+        else if (pipeline.uniformFrame == device.frameSerial && pipeline.uniformBuffer == device.uniformBuffer)
         {
             bind.set = pipeline.uniformSet;
             ++device.stats.descriptorSetsReused;
@@ -1135,7 +1209,9 @@ bool BindUniforms(Device &device, const Shader &vs, const Shader &ps, const Draw
     }
     if (!bind.set)
     {
-        bind.set = AllocateDescriptorSet(device.core, layout.uniformSet);
+        const bool lasting = dynamic && device.keepDrawState;
+        bind.set = lasting ? AllocateLastingSet(device, layout.uniformSet)
+                           : AllocateDescriptorSet(device.core, layout.uniformSet);
         if (!bind.set)
             return Fail(device, "cannot allocate a descriptor set: %s", LastError(device.core));
         VkDescriptorBufferInfo infos[kMaxUniformBlocks];
@@ -1157,7 +1233,15 @@ bool BindUniforms(Device &device, const Shader &vs, const Shader &ps, const Draw
         }
         device.vk->vkUpdateDescriptorSets(device.dev, count, writes, 0, nullptr);
         ++device.stats.descriptorSets;
-        if (dynamic)
+        if (lasting)
+        {
+            Pipeline::LastingUniformSet &kept =
+                pipeline.lastingUniforms[pipeline.lastingUniformNext++ % kLastingUniformSets];
+            kept.generation = device.lastingGeneration;
+            kept.buffer = device.uniformBuffer;
+            kept.set = bind.set;
+        }
+        else if (dynamic)
         {
             pipeline.uniformFrame = device.frameSerial;
             pipeline.uniformBuffer = device.uniformBuffer;
@@ -1234,6 +1318,41 @@ void WriteTextures(Device &device, const Device::TextureSetCache &contents, VkDe
         count += 2;
     }
     device.vk->vkUpdateDescriptorSets(device.dev, count, writes, 0, nullptr);
+}
+
+// The lasting texture set with these contents, written now if there is none.
+// Leaves it in lastTextureSet. Null on failure.
+VkDescriptorSet LastingTextureSet(Device &device, Device::TextureSetCache &contents)
+{
+    Device::LastingTextureSets &table = device.lastingTextures;
+    const uint32_t mask = kLastingTableSlots - 1;
+    uint32_t at = static_cast<uint32_t>(HashTextureSet(contents)) & mask;
+    for (; table.slots[at]; at = (at + 1) & mask)
+    {
+        const Device::TextureSetCache &entry = table.entries[table.slots[at] - 1];
+        if (SameTextureSet(contents, entry))
+        {
+            ++device.stats.descriptorSetsReused;
+            device.lastTextureSet = entry;
+            return entry.set;
+        }
+    }
+    const uint64_t generation = device.lastingGeneration;
+    const VkDescriptorSet set = AllocateLastingSet(device, contents.layout);
+    if (!set)
+        return VK_NULL_HANDLE;
+    if (device.lastingGeneration != generation)
+    {
+        // Every lasting set was given up for this one: the table is empty.
+        at = static_cast<uint32_t>(HashTextureSet(contents)) & mask;
+    }
+    WriteTextures(device, contents, set);
+    ++device.stats.descriptorSets;
+    contents.set = set;
+    table.entries.push_back(contents);
+    table.slots[at] = static_cast<uint32_t>(table.entries.size());
+    device.lastTextureSet = contents;
+    return set;
 }
 
 VkRect2D ClampRect(int32_t left, int32_t top, int32_t right, int32_t bottom, uint32_t width, uint32_t height)
@@ -1509,6 +1628,8 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
         device.boundUniforms.set = VK_NULL_HANDLE;
         device.boundTextureSet = VK_NULL_HANDLE;
     }
+    if (device.keepDrawState)
+        CheckLastingSets(device);
     if (layout.uniformSet && !BindUniforms(device, *vs, *ps, textures, *pipeline))
         return false;
     if (layout.textureSet)
@@ -1521,6 +1642,12 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
         {
             set = device.lastTextureSet.set;
             ++device.stats.descriptorSetsReused;
+        }
+        else if (device.keepDrawState)
+        {
+            set = LastingTextureSet(device, contents);
+            if (!set)
+                return Fail(device, "cannot allocate a descriptor set: %s", LastError(device.core));
         }
         else
         {

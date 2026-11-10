@@ -2016,7 +2016,7 @@ void Check::KeptState()
     };
     struct Frame
     {
-        double frames = -1, draws = -1, constantKb = -1;
+        double frames = -1, draws = -1, constantKb = -1, sets = -1;
         size_t saidOn = 0, saidOff = 0;
         std::vector<uint8_t> picture;
     };
@@ -2081,6 +2081,7 @@ void Check::KeptState()
                 out.frames = behind(line, "frame stats: ");
                 out.draws = before(line, " draws, ");
                 out.constantKb = before(line, " KB constants");
+                out.sets = before(line, " descriptor sets (");
             }
         }
         const std::lock_guard<std::mutex> lock(host->mutex);
@@ -2112,6 +2113,13 @@ void Check::KeptState()
     Equal("kept_writes_constants", kept.constantKb > 0.0, true);
     Equal("unkept_writes_more", unkept.constantKb >= 1.9 * kept.constantKb, true);
     Equal("again_writes_as_before", again.constantKb, kept.constantKb);
+    // Not kept, a draw takes its sets from the frame's pools; kept, the sets
+    // the first frame wrote last across frames, so the third writes none.
+    // Under plain uniform buffers (KISAK_VK_UNIFORMS=static) a set 0 holds
+    // the draw's offsets and is written for every draw: one a draw, and no
+    // texture set.
+    Equal("unkept_writes_sets", unkept.sets > 0.0, true);
+    Equal("again_writes_no_kept_set", again.sets == 0.0 || again.sets == double(kDraws), true);
     Equal("kept_picture_read", kept.picture.size(), size_t(kSize) * kSize * 4);
     Equal("unkept_picture_same", unkept.picture == kept.picture, true);
     Equal("again_picture_same", again.picture == kept.picture, true);

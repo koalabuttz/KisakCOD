@@ -264,6 +264,8 @@ struct DeviceStats
     uint32_t shaderPairs;     // linked vertex/pixel shader pairs
     uint64_t descriptorSets;
     uint64_t descriptorSetsReused; // sets bound again instead of allocated and written
+    uint64_t lastingSets;     // of descriptorSets, those kept across frames (kept draw state)
+    uint32_t lastingRetires;  // times every lasting set was given up (an image destroyed, too many)
     uint64_t constantBytes;   // constant and render-state uniform data written
     // Vertex buffer, index buffer and descriptor set binds a draw did not
     // record because its command buffer had them from an earlier draw.

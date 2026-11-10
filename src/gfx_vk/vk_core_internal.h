@@ -123,6 +123,7 @@ enum class DeferredKind
     Image,
     Pipeline,
     ShaderModule,
+    DescriptorPool,
 };
 
 struct Deferred
@@ -130,7 +131,7 @@ struct Deferred
     DeferredKind kind;
     uint64_t serial; // destroy once this submission has finished
     void *object;    // Buffer* or Image*
-    uint64_t handle; // VkPipeline or VkShaderModule
+    uint64_t handle; // VkPipeline, VkShaderModule or VkDescriptorPool
 };
 
 struct TimedPass
@@ -365,6 +366,12 @@ public:
 
     std::vector<MemoryPool> memoryPools;
     std::vector<Deferred> deferred;
+    // AllocateLastingDescriptorSet's pools, the one it allocates from, and
+    // what DestroyImage has been asked for (ImagesDestroyed).
+    std::vector<VkDescriptorPool> lastingPools;
+    uint32_t lastingPoolsUsed = 0;
+    uint32_t lastingSets = 0;
+    uint64_t imagesDestroyed = 0;
 
     VkPipelineCache pipelineCache = VK_NULL_HANDLE;
     // What the cache file held at start-up (empty: none), so an unchanged cache

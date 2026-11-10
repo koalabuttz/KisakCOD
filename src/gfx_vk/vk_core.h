@@ -183,6 +183,8 @@ struct CoreStats
     uint64_t stagingBytes;      // copied through staging memory, all frames
     uint64_t transientBytes;    // handed out by AllocateTransient, all frames
     uint64_t descriptorSets;    // allocated by AllocateDescriptorSet, all frames
+    uint64_t lastingDescriptorSets; // allocated by AllocateLastingDescriptorSet, all frames
+    uint32_t lastingRetires;    // RetireLastingDescriptorSets calls that gave up any set
     uint32_t barriers;          // image barriers recorded, all frames
     uint64_t occlusionCounts;   // begun by BeginOcclusionCount, all frames
     uint32_t occlusionPools;    // query pools made for them (256 counts each)
@@ -650,6 +652,20 @@ Transient AllocateTransient(Core *core, VkDeviceSize size, VkDeviceSize alignmen
 // A descriptor set valid for the current frame slot (the pools are reset when
 // the slot comes round again). Null on failure.
 VkDescriptorSet AllocateDescriptorSet(Core *core, VkDescriptorSetLayout layout);
+
+// A descriptor set that lasts across frames, from pools the core keeps until
+// RetireLastingDescriptorSets: the caller decides when what such a set points
+// at is gone (ImagesDestroyed) and retires them all. Null on failure.
+VkDescriptorSet AllocateLastingDescriptorSet(Core *core, VkDescriptorSetLayout layout);
+// Gives up every lasting set: their pools go once the GPU has finished the
+// work recorded so far, so sets bound in it stay valid until then.
+void RetireLastingDescriptorSets(Core *core);
+// The sets AllocateLastingDescriptorSet has handed out since the last retire.
+uint32_t LastingDescriptorSets(const Core *core);
+// Counts DestroyImage calls. An image view handle can be handed out again
+// once its image is destroyed, so a set kept by view handles is stale once
+// this has moved on.
+uint64_t ImagesDestroyed(const Core *core);
 
 // ---- Copies and read-back ---------------------------------------------------------
 

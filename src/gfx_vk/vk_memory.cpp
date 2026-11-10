@@ -402,6 +402,9 @@ void RunDeferred(Core &core, bool everything)
         case DeferredKind::ShaderModule:
             core.vk.vkDestroyShaderModule(core.dev, (VkShaderModule)item.handle, nullptr);
             break;
+        case DeferredKind::DescriptorPool:
+            core.vk.vkDestroyDescriptorPool(core.dev, (VkDescriptorPool)item.handle, nullptr);
+            break;
         }
         ++core.stats.deferredDestroyed;
     }
@@ -573,9 +576,13 @@ Image *CreateImage(Core *core, const ImageDesc &desc)
 
 void DestroyImage(Core *core, Image *image)
 {
-    if (image)
-        core->deferred.push_back({DeferredKind::Image, PendingSerial(*core), image, 0});
+    if (!image)
+        return;
+    ++core->imagesDestroyed;
+    core->deferred.push_back({DeferredKind::Image, PendingSerial(*core), image, 0});
 }
+
+uint64_t ImagesDestroyed(const Core *core) { return core->imagesDestroyed; }
 
 const ImageDesc &ImageInfo(const Image *image) { return image->desc; }
 VkImage ImageHandle(const Image *image) { return image->image; }

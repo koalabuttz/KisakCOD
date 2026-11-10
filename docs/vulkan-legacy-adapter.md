@@ -47,8 +47,8 @@ buffer by the core's `Recording()` number.
 * **Uniforms.** The translator turns float constants and the states shaders need
   (alpha test, sampler state, point size) into uniform blocks, which live in
   per-frame memory. The blocks are dynamic uniform buffers: each pipeline
-  writes its descriptor set once per frame (and per transient buffer), and
-  later draws bind that set again with their own offsets. A layout with more
+  writes its descriptor set once per transient buffer (kept across frames,
+  below), and later draws bind that set again with their own offsets. A layout with more
   blocks than the device's `maxDescriptorSetUniformBuffersDynamic` (8 on some
   drivers), or every layout with `KISAK_VK_UNIFORMS=static`, gets plain
   uniform buffers and a new set for each draw instead. Alpha test is D3D9
@@ -77,6 +77,20 @@ buffer by the core's `Recording()` number.
     the targets of the pass. Where the device fixes vertex strides or depth
     compare in the pipeline, the key also holds stream strides and bound
     textures and is made for every draw.
+  * *Descriptor sets kept across frames.* A frame of the game draws the same
+    materials as the one before, so its descriptor sets are the same too.
+    They come from pools the core keeps (`AllocateLastingDescriptorSet`), not
+    the frame's. A pipeline keeps its set 0 for each transient buffer its
+    blocks were in (six at most; the buffers live as long as the core), and
+    texture sets are found by their contents (layout, views, samplers) in a
+    table. A set holds view handles, which can be handed out again once their
+    image is destroyed, so all of them are given up together
+    (`RetireLastingDescriptorSets`; their pools go when the GPU has finished
+    with them) when the core's count of destroyed images has moved on, or
+    when there are 8192 of them. A map load does that once; in the draw
+    benchmark a frame then writes no set at all. `DeviceStats::lastingSets`
+    and `lastingRetires` count them, and the front's `device stats` line
+    prints both.
 
   With the validation layer on, the adapter checks every one of those
   shortcuts as it takes it: the kept block is written again elsewhere and
@@ -86,10 +100,11 @@ buffer by the core's `Recording()` number.
   every check run with validation, and the game with `r_vkValidation` on,
   tests the rules above against what a draw without shortcuts would do.
 
-  `SetKeepDrawState(device, false)` turns all three off while the device
+  `SetKeepDrawState(device, false)` turns all four off while the device
   runs (the game's `r_vkKeepDrawState 0`): every draw then makes its pipeline
-  key and dynamic state, writes all its uniform blocks and records every
-  bind, which is what the adapter did before it kept them. It is there to
+  key and dynamic state, writes all its uniform blocks, records every bind
+  and takes its sets from the frame's pools, which is what the adapter did
+  before it kept them. It is there to
   measure what the kept state is worth on a machine, in one launch, and to
   tell a drawing fault of the kept state from any other. The change is
   logged (`draw state kept from one draw to the next: now off`).
@@ -383,6 +398,15 @@ instructions per draw on the drawing thread against 2,838. Before the adapter
 kept anything it was 4,626: a draw without kept state writes and records what
 it did then, and the newer code spends a little less on doing so. No GPU has
 run it.
+
+Descriptor sets kept across frames (2026-11-10, same sandbox): `bench_runs`
+writes no set a frame with the kept state where it wrote 95 of its 768 draws'
+worth before, and callgrind counts 2,533 instructions per draw on the drawing
+thread against 2,838. The benchmark shares a texture over runs of eight
+draws, so it needed few sets to begin with; the game on the Windows PC wrote
+231 sets a frame for 526 draws (PC run 7), so it should gain more there. The
+front's `kept_state` scene checks that the frame drawn after the one without
+the kept state writes no set. No GPU has run it.
 
 Laptop run 1 (2026-11-08, Intel RPL-U iGPU, Mesa 25.0.7 ANV, x86_64 and i386
 RelWithDebInfo, SDL offscreen and Wayland, no validation layer installed): all
