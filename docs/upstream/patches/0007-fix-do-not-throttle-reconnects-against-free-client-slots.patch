@@ -1,0 +1,29 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 04:21:28 +0000
+Subject: [PATCH] fix: do not throttle reconnects against free client slots
+
+SV_DirectConnect applied sv_reconnectlimit to any slot with the
+client's address. A connect the game refused, such as a wrong password,
+leaves its slot CS_FREE with the address and qport already stored, so
+the corrected retry matched it and was dropped without a reply.
+
+Apply the throttle only to slots that are in use.
+---
+ src/server_mp/sv_client_mp.cpp | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/server_mp/sv_client_mp.cpp b/src/server_mp/sv_client_mp.cpp
+index 0d706792..f4c39813 100644
+--- a/src/server_mp/sv_client_mp.cpp
++++ b/src/server_mp/sv_client_mp.cpp
+@@ -620,7 +620,8 @@ void __cdecl SV_DirectConnect(netadr_t from)
+     clients = svs.clients;
+     while (i < sv_maxclients->current.integer)
+     {
+-        if (NET_CompareBaseAdr(from, clients->header.netchan.remoteAddress)
++        if (clients->header.state != CS_FREE
++            && NET_CompareBaseAdr(from, clients->header.netchan.remoteAddress)
+             && (clients->header.netchan.qport == qport || from.port == clients->header.netchan.remoteAddress.port))
+         {
+             if (svs.time - clients->lastConnectTime < 1000 * sv_reconnectlimit->current.integer)

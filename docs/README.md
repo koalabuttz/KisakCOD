@@ -75,6 +75,11 @@ what is still missing. Build steps are in the
 - [Standalone renderer build/run](../tests/linux_renderer/README.md)
 - [Vulkan core and window probe](vulkan-core.md) (opt-in): the first piece of the Vulkan back end; opens an SDL3 window and clears, presents and resizes it through `src/gfx_vk`
 
+## Upstream
+
+- [Upstream patch queue](upstream/README.md): changes prepared for the upstream
+  repository, one patch per future pull request; nothing in it has been sent
+
 ## Tests
 
 - [Asset-free tests](../scripts/tests/README.md)
