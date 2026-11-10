@@ -187,9 +187,7 @@
       "expect": "^\\(-716 461 ",
       "timeout": 5
     },
-    {
-      "send": "sv_botsPressAttackBtn 1"
-    },
+    {"send": ["sv_botsPressAttackBtn 1", "cl_yawspeed 40"], "gap": 0.5},
     {
       "send": [
         "developer",
@@ -263,11 +261,11 @@
   ],
   "lines": [
     "^Vulkan: legacy: device ready:",
-    "frame stats:",
+    "frame stats:", "record thread:",
     "\" is: \""
   ],
   "counts": {
-    "validation": "validation error"
+    "validation": "^(?!.*\\b0 validation errors).*validation error"
   },
   "power": {
     "require": "same",

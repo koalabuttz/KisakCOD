@@ -25,8 +25,12 @@ What it checks by itself, because each has spoiled a row before:
 * suspend: a machine that slept while a row ran (a closed lid) wakes up and
   carries on as if nothing happened, with a row whose waits and frame times
   are wrong. Such a row is marked and run again like one whose power changed;
-* other load: it waits while another process uses more than a share of one
-  core, and notes the busiest processes with each row;
+* other load: before a launch and again before a capture it waits while
+  another process uses more than a share of one core, and it measures the
+  other processes over the capture itself. A row captured beside a busy
+  process is marked and run again like one whose power changed (on the
+  laptop a process that was not ours started inside a row and cost it a
+  sixth of its frame rate, and the row read "ok");
 * leftovers: no launch while a process of the same binary still runs;
 * the guard: listings (names, sizes, times; no contents) of the folders named
   in the recipe are compared before and after every row;
@@ -251,9 +255,10 @@ def sample_load(seconds=2.0, exclude=(), root=None):
     after = _process_times(root)
     load = []
     for pid, (name, used) in after.items():
-        if pid in skip or pid not in before:
+        if pid in skip:
             continue
-        share = 100.0 * (used - before[pid][1]) / ticks / seconds
+        # A process that began inside the window did all its work inside it.
+        share = 100.0 * (used - before.get(pid, (name, 0))[1]) / ticks / seconds
         if share >= 1.0:
             load.append((name, round(share, 1)))
     load.sort(key=lambda item: -item[1])
@@ -824,10 +829,24 @@ class Run:
         if wanted is not None and read_power()["ac"] not in (None, wanted):
             row["power"]["changed"] = True
             return False, "the power state changed before the capture"
-        if self.load_rules.get("max_cpu_percent") is not None:
+        limit = self.load_rules.get("max_cpu_percent")
+        if limit is not None:
+            # The wait before the launch says nothing about now: the load, the
+            # spawn and the bots took a minute or more.
             window = min(1.0, float(self.load_rules.get("window", 2.0)))
-            row["load"]["at_capture"] = [list(item) for item in
-                                         sample_load(window, exclude=(game.process.pid,))[:5]]
+            began = time.monotonic()
+            deadline = began + min(float(self.load_rules.get("wait", 600)),
+                                   float(self.load_rules.get("wait_at_capture", 120)))
+            while True:
+                top = sample_load(window, exclude=(game.process.pid,))[:5]
+                if not top or top[0][1] <= float(limit) or time.monotonic() >= deadline or not game.alive():
+                    break
+                self.echo(f"  waiting before the capture: {top[0][0]} uses {top[0][1]:.0f}% of a core")
+                time.sleep(float(self.load_rules.get("every", 3.0)))
+            row["load"]["at_capture"] = [list(item) for item in top]
+            waited = time.monotonic() - began - window
+            if waited >= 1.0:
+                row["load"]["waited_at_capture"] = round(waited, 1)
         beside = None
         if step.get("with"):
             argv = [expand(str(part), names) for part in step["with"]["run"]]
@@ -837,6 +856,14 @@ class Run:
             except OSError as error:
                 return False, f"{argv[0]}: {error}"
         watch = PowerWatch(float(self.power_rules.get("watch_every", 1.0)))
+        during, sampler = [], None
+        if limit is not None:
+            # The other processes over the capture itself (a tool that rides
+            # along with the row is part of the row).
+            skip = (game.process.pid,) + ((beside.pid,) if beside else ())
+            sampler = threading.Thread(target=lambda: during.extend(sample_load(seconds, exclude=skip)[:5]),
+                                       daemon=True)
+            sampler.start()
         if not game.send(f"framelog {seconds:g} {label}"):
             watch.stop()
             if beside:
@@ -854,6 +881,11 @@ class Run:
                 break
         if watch.stop():
             row["power"]["changed"] = True
+        if sampler:
+            sampler.join(seconds + 10)
+            row["load"]["during_capture"] = [list(item) for item in during]
+            if during and during[0][1] > float(limit):
+                row["load"]["busy"] = f"{during[0][0]} {during[0][1]:.0f}%"
         beside_note = ""
         if beside:
             name = step["with"].get("name") or Path(beside.args[0]).name
@@ -937,6 +969,8 @@ class Run:
             row["status"] = f"flagged: the power: the machine slept {row['power']['slept']:g} s during the row"
         elif row["power"]["changed"]:
             row["status"] = "flagged: the power state changed during the capture"
+        elif row["load"].get("busy"):
+            row["status"] = f"flagged: other load during the capture ({row['load']['busy']} of a core)"
         elif not played:
             failed = next((step for step in row["steps"] if not step[1]), None)
             row["status"] = "failed: " + (f"{failed[0]} ({failed[2]})" if failed else "the scene did not finish")
@@ -966,8 +1000,8 @@ class Run:
                     self.echo(f"{row_name}: launching")
                     row = self.row(row_name, variant)
                     self.echo(f"{row_name}: {row['status']}")
-                    power_spoiled = row["status"].startswith("flagged: the power")
-                    if power_spoiled and attempt < retries:
+                    spoiled = row["status"].startswith(("flagged: the power", "flagged: other load"))
+                    if spoiled and attempt < retries:
                         attempt += 1
                         row["name"] = f"{row_name}.spoiled{attempt}"
                         self.results["rows"].append(row)

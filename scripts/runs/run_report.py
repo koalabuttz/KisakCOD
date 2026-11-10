@@ -176,8 +176,9 @@ def compact(results, lines=None):
         if failed:
             kept["steps"] = failed
         load_note = row.get("load") or {}
-        if load_note.get("waited") or load_note.get("over"):
-            kept["load"] = {key: load_note[key] for key in ("waited", "over") if key in load_note}
+        if any(load_note.get(key) for key in ("waited", "over", "waited_at_capture", "busy")):
+            kept["load"] = {key: load_note[key] for key in ("waited", "over", "waited_at_capture", "busy")
+                            if key in load_note}
         short["rows"].append(kept)
     return seal(short)
 
@@ -285,9 +286,16 @@ def render(results, problem=None):
             facts.append("busiest other processes before the launch: "
                          + ", ".join(f"{name} {share:.0f}%" for name, share in load_note["top"])
                          + (" (still over the limit when the wait ran out)" if load_note.get("over") else ""))
+        if load_note.get("waited_at_capture"):
+            facts.append(f"waited {load_note['waited_at_capture']:.0f} s for other load before the capture")
         if load_note.get("at_capture"):
             facts.append("busiest other processes at the capture: "
                          + ", ".join(f"{name} {share:.0f}%" for name, share in load_note["at_capture"]))
+        if load_note.get("during_capture"):
+            facts.append("busiest other processes during the capture: "
+                         + ", ".join(f"{name} {share:.0f}%" for name, share in load_note["during_capture"]))
+        if load_note.get("busy"):
+            facts.append(f"**{load_note['busy']} of a core went to another process during the capture**")
         values = row.get("values") or {}
         if values:
             facts.append("values: " + ", ".join(f"{name} {values[name]}" for name in sorted(values)))
