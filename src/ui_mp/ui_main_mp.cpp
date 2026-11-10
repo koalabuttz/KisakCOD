@@ -4384,6 +4384,122 @@ void UI_ListMenus_f()
     Menus_PrintAllLoadedMenus(&uiInfoArray.uiDC);
 }
 
+// KISAK: `listmenuitems` prints what the open menus show, one line per item,
+// so a script can click through a menu (scripts/runs/menu_check.py) and check
+// what it shows without anyone looking at the screen.
+//
+//   menustack count=<n> top=<name> cursor=<x>,<y>
+//   menuitem menu=<name> item=<i> type=<t> name=<name> visible=<0|1>
+//       rect=<x>,<y>,<w>,<h> click=<x>,<y> dvar=<name> text="<text>" action="<script>"
+//   menurow menu=<name> item=<i> row=<r> selected=<0|1> click=<x>,<y> text="<col>|<col>|..."
+//
+// Positions are window pixels, as the mouse reports them. A list row's click
+// point follows the list's own row test (Item_ListBox_MouseEnter). Only the
+// menu's own text is printed: an item that shows a dvar's value (an edit
+// field, such as the key code fields) prints its dvar's name, never the value.
+static void UI_ListMenuItems_Quote(const char *in, char *out, size_t outSize)
+{
+    size_t used = 0;
+    for (; in && *in && used + 1 < outSize; ++in)
+    {
+        char c = *in;
+        if (c == '"')
+            c = '\'';
+        else if (c == '\n' || c == '\r' || c == '\t')
+            c = ' ';
+        else if (static_cast<unsigned char>(c) < ' ')
+            continue;
+        out[used++] = c;
+    }
+    out[used] = 0;
+}
+
+static const char *UI_ListMenuItems_Text(int localClientNum, itemDef_s *item)
+{
+    const char *text = nullptr;
+    if (item->text)
+        text = item->text;
+    else if (item->textExp.numEntries)
+        text = GetExpressionResultString(localClientNum, &item->textExp);
+    if (!text)
+        return "";
+    if (*text == '@')
+        text = UI_SafeTranslateString(text + 1);
+    return text;
+}
+
+static void UI_ListMenuItems_Center(const ScreenPlacement *scrPlace, const rectDef_s *rect, float *x, float *y, float *w, float *h)
+{
+    *x = rect->x;
+    *y = rect->y;
+    *w = rect->w;
+    *h = rect->h;
+    ScrPlace_ApplyRect(scrPlace, x, y, w, h, rect->horzAlign, rect->vertAlign);
+}
+
+void UI_ListMenuItems_f()
+{
+    UiContext *dc = &uiInfoArray.uiDC;
+    const int localClientNum = 0;
+    const ScreenPlacement *scrPlace = &scrPlaceView[localClientNum];
+    menuDef_t *top = dc->openMenuCount > 0 ? dc->menuStack[dc->openMenuCount - 1] : nullptr;
+    Com_Printf(CON_CHANNEL_DONT_FILTER, "menustack count=%i top=%s cursor=%.0f,%.0f\n", dc->openMenuCount,
+        top && top->window.name ? top->window.name : "-",
+        dc->cursor.x * scrPlaceFull.scaleVirtualToFull[0], dc->cursor.y * scrPlaceFull.scaleVirtualToFull[1]);
+
+    char text[1024];
+    char action[256];
+    for (int m = dc->openMenuCount - 1; m >= 0; --m)
+    {
+        menuDef_t *menu = dc->menuStack[m];
+        if (!menu)
+            continue;
+        const char *menuName = menu->window.name ? menu->window.name : "-";
+        for (int i = 0; i < menu->itemCount; ++i)
+        {
+            itemDef_s *item = menu->items[i];
+            if (!item)
+                continue;
+            float x, y, w, h;
+            UI_ListMenuItems_Center(scrPlace, &item->window.rect, &x, &y, &w, &h);
+            UI_ListMenuItems_Quote(UI_ListMenuItems_Text(localClientNum, item), text, sizeof(text));
+            UI_ListMenuItems_Quote(item->action, action, sizeof(action));
+            Com_Printf(CON_CHANNEL_DONT_FILTER,
+                "menuitem menu=%s item=%i type=%i name=%s visible=%i rect=%.0f,%.0f,%.0f,%.0f click=%.0f,%.0f dvar=%s text=\"%s\" action=\"%s\"\n",
+                menuName, i, item->type, item->window.name ? item->window.name : "-",
+                Item_IsVisible(localClientNum, item) ? 1 : 0, x, y, w, h, x + w * 0.5f, y + h * 0.5f,
+                item->dvar ? item->dvar : "-", text, action);
+
+            // A list box (ITEM_TYPE_LISTBOX): typeData holds its listBoxDef_s, as in Item_GetListBoxDef.
+            if (item->dataType != 6 || !item->typeData.listBox)
+                continue;
+            const listBoxDef_s *list = item->typeData.listBox;
+            const int count = UI_FeederCount(localClientNum, item->special);
+            const int first = list->startPos[localClientNum];
+            for (int row = first; row < count && row < first + 32; ++row)
+            {
+                char rowText[1024] = {};
+                for (int col = 0; col < list->numColumns && col < 16; ++col)
+                {
+                    Material *image = nullptr;
+                    const char *cell = UI_FeederItemText(localClientNum, item, item->special, row, col, &image);
+                    if (col)
+                        I_strncat(rowText, sizeof(rowText), "|");
+                    I_strncat(rowText, sizeof(rowText), cell ? cell : "");
+                }
+                UI_ListMenuItems_Quote(rowText, text, sizeof(text));
+                // Item_ListBox_MouseEnter: row = (cursor.y - (rect.y + 2)) / elementHeight,
+                // in the menu's 640x480 space, rounded to the nearest whole row.
+                const float rowY = (item->window.rect.y + 2.0f + (row - first + 0.5f) * list->elementHeight)
+                    * scrPlaceFull.scaleVirtualToFull[1];
+                Com_Printf(CON_CHANNEL_DONT_FILTER, "menurow menu=%s item=%i row=%i selected=%i click=%.0f,%.0f text=\"%s\"\n",
+                    menuName, i, row, item->cursorPos[localClientNum] == row ? 1 : 0, x + w * 0.25f, rowY, text);
+            }
+        }
+    }
+    Com_Printf(CON_CHANNEL_DONT_FILTER, "menuend\n");
+}
+
 void CL_SelectStringTableEntryInDvar_f()
 {
 #ifndef KISAK_NO_FASTFILES

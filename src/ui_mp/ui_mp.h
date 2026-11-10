@@ -249,6 +249,7 @@ void UI_GetGameTypesList();
 void UI_GetGameTypesList_FastFile();
 void UI_OpenMenu_f();
 void UI_ListMenus_f();
+void UI_ListMenuItems_f();
 void CL_SelectStringTableEntryInDvar_f();
 void UI_CloseMenu_f();
 void UI_Init(int localClientNum);
