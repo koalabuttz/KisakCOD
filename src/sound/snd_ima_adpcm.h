@@ -23,6 +23,12 @@ namespace kisak::ima_adpcm {
 
 inline constexpr uint32_t kMaxChannels = 2;
 inline constexpr int32_t kLastStep = 88;
+// The longest block read. A WAVE file names its block size in 16 bits, and the
+// sizes in use are a few hundred bytes to a few thousand. A sound's block size
+// comes from its file, and one near 4 GB made the frame count below wrap round
+// to a small number while the blocks were still stepped through at their
+// claimed size, far past the sound's bytes.
+inline constexpr uint32_t kMaxBlockBytes = 0xFFFF;
 
 inline constexpr int16_t kSteps[kLastStep + 1] = {
     7,     8,     9,     10,    11,    12,    13,    14,    16,    17,    19,    21,    23,
@@ -38,10 +44,11 @@ inline constexpr int8_t kIndexMoves[8] = {-1, -1, -1, -1, 2, 4, 6, 8};
 // ---- blocks ------------------------------------------------------------------
 
 // Frames in a block of `bytes` bytes: the header's sample, and eight for every
-// whole group behind it. 0 when the block has no room for its header.
+// whole group behind it. 0 when the block has no room for its header, or is
+// longer than kMaxBlockBytes.
 constexpr uint32_t BlockFrames(uint32_t bytes, uint32_t channels)
 {
-    if (channels < 1 || channels > kMaxChannels || bytes < 4 * channels)
+    if (channels < 1 || channels > kMaxChannels || bytes < 4 * channels || bytes > kMaxBlockBytes)
         return 0;
     return 1 + (bytes - 4 * channels) / (4 * channels) * 8;
 }
@@ -211,8 +218,8 @@ struct Sound
 };
 
 // The frames `sound`'s bytes can give: fewer than it claims when the bytes end
-// first. 8-bit sounds are measured by their bytes alone, as the driver's own
-// conversion does.
+// first, and none when its blocks are not ones BlockFrames reads. 8-bit sounds
+// are measured by their bytes alone, as the driver's own conversion does.
 constexpr uint32_t ReadableFrames(const Sound &sound)
 {
     if (sound.channels < 1 || sound.channels > kMaxChannels)
@@ -222,7 +229,7 @@ constexpr uint32_t ReadableFrames(const Sound &sound)
         return sound.bytes / sound.channels;
     if (sound.format == kFormatPcm && sound.bits == 16)
         held = sound.bytes / (2 * sound.channels);
-    else if (sound.format == kFormatImaAdpcm && sound.blockBytes >= 4 * sound.channels)
+    else if (sound.format == kFormatImaAdpcm && BlockFrames(sound.blockBytes, sound.channels) != 0)
     {
         const uint64_t whole = static_cast<uint64_t>(sound.bytes / sound.blockBytes) *
                                BlockFrames(sound.blockBytes, sound.channels);

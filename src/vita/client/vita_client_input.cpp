@@ -43,6 +43,7 @@
 #include "input/vita_text_entry.h"
 
 #include <linux/client/mp_client_input.h>
+#include <vita/vita_run_plan.h> // StartText
 
 #include <universal/q_shared.h>
 #include <qcommon/qcommon.h>
@@ -158,7 +159,10 @@ vi::Settings s_settings;
 vt::Entry s_text;
 bool s_keyboardRefused; // the system did not open the keyboard
 bool s_restOnce;        // the keyboard closed: the next reading still does nothing
-// vita_keyboardAnswer stands in for the keyboard that was asked for.
+// vita_keyboardAnswer stands in for the keyboard that was asked for. Its text
+// is typed into the chat line and run by vita_typecommand, so the dvar is read
+// once, at start-up (kisak::vita_run::StartText), and this is used after that.
+kisak::vita_run::StartText<1024> s_keyboardAnswer;
 bool s_answering;
 bool s_answerDropped;
 uint32_t s_answerSinceMs;
@@ -444,7 +448,7 @@ bool KeyboardWanted()
 // asked for hands back, and no keyboard is shown.
 bool AnswerSet()
 {
-    return vita_keyboardAnswer && *vita_keyboardAnswer->current.string;
+    return *s_keyboardAnswer.Get() != '\0';
 }
 
 // What the game waits for typed text in.
@@ -572,7 +576,7 @@ VitaKeyboardResult TakeKeyboard(uint16_t *typed, uint32_t now)
     s_answering = false;
     if (s_answerDropped || !AnswerSet())
         return VitaKeyboardResult::Cancelled;
-    vt::ToKeyboard(vita_keyboardAnswer->current.string, typed, kVitaKeyboardMaxText + 1);
+    vt::ToKeyboard(s_keyboardAnswer.Get(), typed, kVitaKeyboardMaxText + 1);
     if (s_answerLength >= 0 && s_answerLength < kVitaKeyboardMaxText)
         typed[s_answerLength] = 0;
     return VitaKeyboardResult::Entered;
@@ -734,7 +738,12 @@ void IN_Init()
                                       "for text");
     vita_keyboardAnswer = Dvar_RegisterString("vita_keyboardAnswer", "", DVAR_NOFLAG,
                                               "For a run with nobody to type: when not empty, no keyboard is shown "
-                                              "and every keyboard asked for is answered with this text");
+                                              "and every keyboard asked for is answered with this text (read at "
+                                              "start-up only)");
+    // Read here and nowhere else, and only the first time this runs: a game
+    // server can set the dvar later, and its text is what gets typed.
+    if (!s_keyboardAnswer.Take(vita_keyboardAnswer ? vita_keyboardAnswer->current.string : ""))
+        Com_PrintError(CON_CHANNEL_SYSTEM, "vita input: vita_keyboardAnswer is too long; no keyboard is answered\n");
     if (!s_commandAdded)
     {
         Cmd_AddCommandInternal("vita_binddefaults", BindDefaults_f, &s_bindDefaultsCommand);

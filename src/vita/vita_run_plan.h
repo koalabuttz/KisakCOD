@@ -17,6 +17,8 @@
 // Every quit timer prints all figures first and leaves the renderer and the
 // sound thread a moment to add theirs.
 //
+// The settings that carry text are read once, at start-up (StartText below).
+//
 // No engine call and no Vita call: src/vita/vita_stats.cpp feeds it the clock
 // and what the client shows, and scripts/tests/test_vita_run_plan.py runs it
 // on the host.
@@ -34,6 +36,8 @@ namespace kisak::vita_run
 
 constexpr size_t kMaxTimedCommands = 8;
 constexpr size_t kMaxCommandLength = 160;
+// Room for a full list: every command at its longest, with its time and bar.
+constexpr size_t kMaxTimedListLength = kMaxTimedCommands * (kMaxCommandLength + 32);
 constexpr uint64_t kSecond = 1000000u;
 // From the last figures to the quit. The renderer prints its memory lines
 // at its next frame and the sound thread at its next update, so the wait is
@@ -111,14 +115,54 @@ inline bool ParseTimedCommands(const char *text, TimedCommands *out, char *error
     return true;
 }
 
+// A text setting as the start gave it.
+//
+// The text of vita_atMenu and vita_atMap goes to the console as commands, and
+// vita_keyboardAnswer's is typed into the chat line and run by
+// vita_typecommand. A game server sets a client's dvars by name (its
+// systeminfo names any dvar it likes), so a dvar read while a game is on can
+// hold a server's text. Each of these dvars is therefore read once, at
+// start-up, into a StartText, and only the StartText is used after that: the
+// command line decides, and a later change does nothing.
+template <size_t Size> class StartText
+{
+  public:
+    // Takes `value` the first time it is called and returns whether it fit.
+    // Text that does not fit is left out whole, not cut: a cut command is
+    // another command. Later calls change nothing and return the same.
+    bool Take(const char *value)
+    {
+        if (m_taken)
+            return m_fits;
+        m_taken = true;
+        const size_t length = value ? strlen(value) : 0;
+        m_fits = length < Size;
+        if (m_fits && length)
+            memcpy(m_text, value, length);
+        m_text[m_fits ? length : 0] = '\0';
+        return m_fits;
+    }
+
+    // The text taken; empty before Take and when it did not fit.
+    const char *Get() const
+    {
+        return m_text;
+    }
+
+  private:
+    char m_text[Size] = {};
+    bool m_taken = false;
+    bool m_fits = true;
+};
+
 struct Settings
 {
     unsigned quitAfter = 0;     // seconds since start-up; 0: never
     unsigned quitAfterMenu = 0; // seconds since the menu first showed
     unsigned quitAfterMap = 0;  // seconds since the map was first in play
     unsigned statsEvery = 60;   // seconds between the figures
-    const char *atMenu = "";    // timed commands, read when the menu comes up
-    const char *atMap = "";     // timed commands, read when the map comes up
+    const char *atMenu = "";    // timed commands, read when the menu comes up; the caller's StartText
+    const char *atMap = "";     // timed commands, read when the map comes up; the caller's StartText
 };
 
 // What the caller does after a frame, in this order.

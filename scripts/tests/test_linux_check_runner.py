@@ -121,7 +121,7 @@ class PlannedCommandTests(unittest.TestCase):
         for name, flag in (("debugger", "--cxx"), ("fastfile", "--cxx"), ("net_deadline", "--cxx"),
                            ("huffman", "--cxx"), ("handshake_auth", "--cxx"),
                            ("remote_input", "--cxx"), ("master_server", "--cxx"),
-                           ("steam_session", "--cxx"),
+                           ("open_url", "--cxx"), ("steam_session", "--cxx"),
                            ("random_range", "--cxx"), ("gameplay_lifecycle", "--cxx"),
                            ("server_test_clients", "--cxx")):
             argv = check_named(self.checks, name).commands[0].argv
@@ -137,6 +137,9 @@ class PlannedCommandTests(unittest.TestCase):
 
     def test_master_server_requires_32_bit_execution(self):
         self.assertIn("--m32", check_named(self.checks, "master_server").commands[0].argv)
+
+    def test_open_url_requires_32_bit_execution(self):
+        self.assertIn("--m32", check_named(self.checks, "open_url").commands[0].argv)
 
     def test_steam_session_requires_32_bit_execution(self):
         self.assertIn("--m32", check_named(self.checks, "steam_session").commands[0].argv)
@@ -211,6 +214,7 @@ class PlannedCommandTests(unittest.TestCase):
             "handshake_auth",
             "remote_input",
             "master_server",
+            "open_url",
             "steam_session",
             "debugger",
             "fastfile",
