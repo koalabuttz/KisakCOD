@@ -99,6 +99,7 @@ constexpr uint32_t kHousekeepingEveryMs = 1000;
 constexpr char kProfileName[] = "Vita";
 // The longest chat line the keyboard takes.
 constexpr int kChatLength = 120;
+constexpr uint32_t kAnswerAfterMs = 500; // vita_keyboardAnswer: how long its keyboard stays "up"
 // The menus' text field types (Item_IsTextField) that take digits only.
 constexpr int kItemNumericField = 9;
 constexpr int kItemDecimalField = 17;
@@ -136,6 +137,7 @@ const dvar_t *vita_layout;
 const dvar_t *vita_buttonNames;
 const dvar_t *vita_inputDebug;
 const dvar_t *vita_keyboard;
+const dvar_t *vita_keyboardAnswer;
 cmd_function_s s_bindDefaultsCommand;
 cmd_function_s s_typeCommandCommand;
 bool s_commandAdded;
@@ -156,6 +158,11 @@ vi::Settings s_settings;
 vt::Entry s_text;
 bool s_keyboardRefused; // the system did not open the keyboard
 bool s_restOnce;        // the keyboard closed: the next reading still does nothing
+// vita_keyboardAnswer stands in for the keyboard that was asked for.
+bool s_answering;
+bool s_answerDropped;
+uint32_t s_answerSinceMs;
+int s_answerLength;
 // Fingers seen at the last reading and when each landed, for vita_inputDebug.
 uint8_t s_debugIds[2][SCE_TOUCH_MAX_REPORT];
 uint32_t s_debugSince[2][SCE_TOUCH_MAX_REPORT];
@@ -433,6 +440,13 @@ bool KeyboardWanted()
     return vita_keyboard && vita_keyboard->current.enabled && !s_keyboardRefused;
 }
 
+// A run with nobody to type: vita_keyboardAnswer's text is what every keyboard
+// asked for hands back, and no keyboard is shown.
+bool AnswerSet()
+{
+    return vita_keyboardAnswer && *vita_keyboardAnswer->current.string;
+}
+
 // What the game waits for typed text in.
 vt::Waiting TextWaiting()
 {
@@ -486,14 +500,24 @@ public:
         }
         vt::ToKeyboard(title, request.title, kVitaKeyboardMaxTitle + 1);
         vt::ToKeyboard(initial, request.initial, kVitaKeyboardMaxText + 1);
-        if (!Vita_AskKeyboard(request))
+        const bool answered = AnswerSet();
+        if (answered)
+        {
+            s_answering = true;
+            s_answerDropped = false;
+            s_answerSinceMs = s_eventTime;
+            s_answerLength = request.maxLength;
+        }
+        else if (!Vita_AskKeyboard(request))
+        {
             return false;
+        }
         // Nothing stays held under the keyboard.
         ReleaseAll();
-        if (Debugging())
-            Com_Printf(CON_CHANNEL_SYSTEM, "vita input: keyboard asked for (%s, %d characters at most)\n",
+        if (Debugging() || answered)
+            Com_Printf(CON_CHANNEL_SYSTEM, "vita input: keyboard asked for (%s, %d characters at most)%s\n",
                        target == vt::Target::MenuField ? "a menu field" : target == vt::Target::Chat ? "chat" : "a command",
-                       request.maxLength);
+                       request.maxLength, answered ? "; vita_keyboardAnswer answers, none is shown" : "");
         return true;
     }
 
@@ -536,6 +560,24 @@ public:
 };
 EngineText s_engineText;
 
+// The keyboard's result: the system's, or after half a second
+// vita_keyboardAnswer's, cut to the length the field takes as the keyboard
+// would have cut it.
+VitaKeyboardResult TakeKeyboard(uint16_t *typed, uint32_t now)
+{
+    if (!s_answering)
+        return Vita_TakeKeyboard(typed);
+    if (!s_answerDropped && now - s_answerSinceMs < kAnswerAfterMs)
+        return VitaKeyboardResult::Waiting;
+    s_answering = false;
+    if (s_answerDropped || !AnswerSet())
+        return VitaKeyboardResult::Cancelled;
+    vt::ToKeyboard(vita_keyboardAnswer->current.string, typed, kVitaKeyboardMaxText + 1);
+    if (s_answerLength >= 0 && s_answerLength < kVitaKeyboardMaxText)
+        typed[s_answerLength] = 0;
+    return VitaKeyboardResult::Entered;
+}
+
 // Once a frame: the keyboard's result, if it closed, and what the game waits
 // for now.
 void TextFrame(uint32_t now)
@@ -544,13 +586,18 @@ void TextFrame(uint32_t now)
     if (s_text.KeyboardUp())
     {
         uint16_t typed[kVitaKeyboardMaxText + 1];
-        const VitaKeyboardResult result = Vita_TakeKeyboard(typed);
+        const bool answered = s_answering;
+        const VitaKeyboardResult result = TakeKeyboard(typed, now);
         if (result == VitaKeyboardResult::Waiting)
         {
             // The menu closed under the keyboard, or the match ended: the
             // keyboard goes too. What it held is dropped when it has closed.
             if (s_text.Orphaned(TextWaiting()))
-                Vita_AbortKeyboard();
+            {
+                s_answerDropped = s_answering;
+                if (!s_answering)
+                    Vita_AbortKeyboard();
+            }
             return;
         }
         s_restOnce = true;
@@ -559,7 +606,7 @@ void TextFrame(uint32_t now)
             s_keyboardRefused = true;
             Com_Printf(CON_CHANNEL_SYSTEM, "vita input: no on-screen keyboard; text fields stay as they are\n");
         }
-        if (Debugging())
+        if (Debugging() || answered)
             Com_Printf(CON_CHANNEL_SYSTEM, "vita input: keyboard closed (%s)\n",
                        result == VitaKeyboardResult::Entered ? "entered" : "not entered");
         s_text.KeyboardClosed(result == VitaKeyboardResult::Entered, typed);
@@ -685,6 +732,9 @@ void IN_Init()
     vita_keyboard = Dvar_RegisterBool("vita_keyboard", 1, DVAR_ARCHIVE,
                                       "Open the on-screen keyboard when a menu's text field or the chat line waits "
                                       "for text");
+    vita_keyboardAnswer = Dvar_RegisterString("vita_keyboardAnswer", "", DVAR_NOFLAG,
+                                              "For a run with nobody to type: when not empty, no keyboard is shown "
+                                              "and every keyboard asked for is answered with this text");
     if (!s_commandAdded)
     {
         Cmd_AddCommandInternal("vita_binddefaults", BindDefaults_f, &s_bindDefaultsCommand);
