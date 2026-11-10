@@ -478,12 +478,16 @@ parses every source twice with libclang, as i386 and as x86_64, and reports:
 - **union**: a union copied through a member narrower than the union on
   x86_64 (`a.u.intValue = b.u.intValue`);
 - **pun**: a cast from `U *` to `T *` where U and T have the same i386 size
-  but not the same x86_64 size, such as `(int *)&pointerField`.
+  but not the same x86_64 size, such as `(int *)&pointerField`;
+- **void**: a `void *` (a callback's user data, a union's untyped member)
+  cast to `T *` and moved by a non-zero constant, such as
+  `*((const char **)userData + 2)`. There is no record to place the offset
+  in, so every such line is reported and read.
 
 `scripts/tests/test_check_32bit_layout_offsets.py` checks these rules on a
 small generated file. Offset tables built with numbers (`g_animRateOffsets`
-was one) and `void *` arithmetic whose result is read as a 4-byte value are
-out of its reach; those still need reading.
+was one) and buffers sized with a number and cast to a struct are out of its
+reach; those still need reading.
 
 ```sh
 /usr/bin/python3 scripts/tools/check_32bit_layout_offsets.py --build-dir build-x64-mp
@@ -511,9 +515,17 @@ shared engine, and the Windows x64 build had already taken the singleplayer
 sources (AI, path nodes, save games) through their pointer-size fixes.
 
 Status: it builds and passes the asset-free start test
-(`scripts/tests/test_linux_sp_game.py`) in the x86_64 client CI job. It has
-not loaded a level on Linux yet. The laptop level sweep
-([linux-sp-levels.md](linux-sp-levels.md)) is the next step.
+(`scripts/tests/test_linux_sp_game.py`) in the x86_64 client CI job. On the
+laptop it loads all 21 levels in the level sweep, each held 45 s with a clean
+quit ([linux-sp-levels.md](linux-sp-levels.md#x86_64-sweep-run-1-laptop-2026-11-10)).
+Nobody has played it by hand, and the level chain and save and load have not
+been run on it yet.
+
+The first runs with game data found two bugs the checks above could not see:
+an effect model's physics preset read through a void pointer at an offset
+that is right on i386 only (airlift crashed on Windows x64; the **void**
+report above now finds the shape), and a game built without movies loading
+no level at all ([linux-sp-game.md](linux-sp-game.md#fixes-the-first-level-loads-found)).
 
 Both layout checks above now read a source once for each game that compiles
 it, because a shared source's `KISAK_SP` branches are different code. Run on

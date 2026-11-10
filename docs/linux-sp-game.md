@@ -11,8 +11,9 @@ Status: killhouse and cargoship load and play on a developer laptop (Intel
 GPU, DXVK, cinematics on): the pregame ends by itself, about a minute of play,
 clean quit. Without game files it stops where the engine needs them (the
 autoconfigure step's `configure.csv`), which is how CI runs it. Those runs
-were the i386 game; the x86_64 game builds and starts but has not loaded a
-level yet.
+were the i386 game. The x86_64 game loads all 21 levels in the sweep tool on
+the same laptop (2026-11-10, cinematics on, nobody watching the screen); by
+hand it has not been played yet.
 
 ## Building
 
@@ -104,20 +105,22 @@ back end builds, links and leaves the start alone, not that it draws.
   set them, and the frame stopped with "Tried to use 'cinematicY' when it
   isn't valid" behind a render thread assert. The stand-in now sets them to
   the black picture the full build shows while no movie has a frame. Found
-  by the first x86_64 sweep on the laptop; not re-run on a level yet.
+  by the first x86_64 sweep on the laptop; not re-run on a level yet (the
+  sweep that followed had movies on).
 - Four structs were read through a void pointer in slots that fit the 32-bit
   layout only. One of them crashed the 64-bit game 4.5 s into airlift (an
   effect model's physics preset read as null; seen on Windows x64). They are
   read by their fields now, and `check_32bit_layout_offsets.py` reports the
-  shape. No 64-bit build with the fix has loaded airlift yet.
+  shape. With the fix the x86_64 Linux game holds airlift for 45 s and quits
+  cleanly (laptop sweep); the Windows x64 game has not been re-run yet.
 
 ## Next
 
 1. Longer play and more levels, with sound: what the other levels use, the
    sweep tool (`scripts/tests/run_linux_sp_level_sweep.py`) and the run plan
    are in [linux-sp-levels.md](linux-sp-levels.md).
-2. The x86_64 game's first level loads: the same sweep on the laptop with an
-   x86_64 build.
+2. The x86_64 game by hand, and its level chain and save and load in the
+   sweep tool.
 3. A first level through `r_backend vulkan` on the laptop, to find what the
    singleplayer levels ask of the D3D9 front that multiplayer maps do not.
 4. Compare with the Windows `KisakCOD-sp` build on the same data, to tell
