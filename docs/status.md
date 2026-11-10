@@ -1,7 +1,7 @@
 # Linux port status
 
-Last updated 2026-11-10 07:40 UTC (master `c4158aa`, the key code menu,
-PR 159). This page is the current state of
+Last updated 2026-11-10 07:45 UTC (master `85dad4f`, in-game A/B
+measuring, PR 160). This page is the current state of
 the native Linux port and the other platform builds, the open pull requests and
 the roadmap. The [docs index](README.md) lists the detailed guides;
 older handoffs are in [history](history/README.md) and are not current.
@@ -153,7 +153,7 @@ These came before the playable client and still build and run in CI:
 
 ## Open pull requests
 
-As of 2026-11-10 07:40 UTC, ten. They change by the hour; the
+As of 2026-11-10 07:45 UTC, ten. They change by the hour; the
 [list on GitHub](https://github.com/koalabuttz/KisakCOD/pulls) is the current
 one. A machine run a pull request waits on is named where its author has
 said so.
@@ -166,7 +166,7 @@ said so.
 | 174 | PS Vita client: read the back buffer for the log only when a run asks, which makes Vita3K runs several times faster | None named: PC run H2 measured it in Vita3K (menu: 5135 frames in 120 s against 1174). Not run on a console. |
 | 175 | A copied sound counts the frames it holds (some stereo sounds claimed twice their length; this is the desktop's default sound path too), and the Vita build removes a file before it rewrites it, because Vita3K does not cut a rewritten file | PC run W: a Vita3K start that leaves no old lines in rewritten files, and the first map with PRs 164 and 166 in one build. Nobody has listened for the sound change. |
 | 170 | Linux client: opt-in HTTP downloads (`-DKISAK_LINUX_HTTP_DOWNLOADS=ON`) through the engine's own libcurl downloader | A laptop run of a real download is planned; none has been made. |
-| 160 | In-game A/B measuring (`perf_ab`, `perf_sample`) and two switches to measure with it, off by default | Laptop perf run 5 is their first run in a real game. |
+| 179 | The Local server list lists only answers to its own scan, and an anonymous Steam game server login for the 32-bit Windows dedicated server | None named. The Windows login is compiled only and has never run. |
 | 168 | Shorter machine runs and pull request CI: timed Vita starts, a frame log, a run driver, trimmed PR checks | |
 | 169 | Five more patches in the upstream patch queue | |
 | 177 | Tests only: close a race in the suspend gate self-test that turned a macOS check red | |
@@ -204,8 +204,9 @@ As of 2026-11-10. Each machine does one run at a time.
   ([guide](key-codes.md#the-key-code-menu)).
 - x86_64 Linux singleplayer (PR 167, merged): a first sweep of the 21
   levels on the laptop, and a Windows x64 tour of the same commit.
-- CPU measuring: laptop perf run 5, the first use of PR 160's in-game A/B
-  commands.
+- CPU measuring: laptop perf run 5, the first use of the in-game A/B
+  commands, the timed probes and `r_gpuSyncSleep` on a GPU (PR 160, merged;
+  [guide](perf-ab.md)).
 
 ## Roadmap
 
@@ -234,9 +235,12 @@ no fixed order.
 6. **Performance on the CPU**: the laptop A/B runs and the function-level
    profile are done (PRs 97 and 112). Their reading is that the laptop is
    limited by its GPU at both sizes measured, so CPU work there is about
-   power and long frames. Next is measuring inside one launch (PR 160),
-   because the laptop's speed drifts more between launches than most changes
-   are worth.
+   power and long frames. Measuring inside one launch is merged (`perf_ab`,
+   PR 160, [guide](perf-ab.md)), because the laptop's speed drifts more
+   between launches than most changes are worth; its first run on the laptop
+   is next. One switch it brought, `xanim_blendOnce` (off by default),
+   calculated 131072 animation blends both ways on the PC with none
+   different.
 7. **Remote play**: Steam login is opt-in (`KISAK_LINUX_STEAM`, PR 85); a
    Windows client joined a Linux server logged on as an anonymous game server
    (PR 133), and a client without Steam joins servers that accept key code

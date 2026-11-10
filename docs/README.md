@@ -91,6 +91,13 @@ in a build with `KISAK_BUILD_VULKAN_BACKEND`. Bottom to top:
 - [Legacy adapter](vulkan-legacy-adapter.md): the part of D3D9 the renderer uses, on the core, with a pixel check
 - [D3D9 front](vulkan-d3d9-front.md): the D3D9 interfaces on the adapter, and [the back end in the game](vulkan-d3d9-front.md#in-the-game-r_backend-vulkan) on Linux and Windows, its dvars, caches and the comparison with DXVK
 
+## Performance
+
+- [Measuring a change from inside the game](perf-ab.md): `perf_ab` and
+  `perf_sample` compare two settings in one launch (Linux and the other
+  native builds, not Windows yet), with the switches to measure:
+  `r_gpuSyncSleep` and `xanim_blendOnce`, both off by default
+
 ## Upstream
 
 - [Upstream patch queue](upstream/README.md): changes prepared for the
