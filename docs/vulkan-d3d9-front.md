@@ -385,7 +385,9 @@ sandbox's four cores, without a failure. ThreadSanitizer finds nothing in it
 with the record thread on or off. On an idle sandbox the two frames it holds
 up read 406 to 413 ms and 257 to 265 ms, and beside the busy loops up to 520
 ms and 300 ms; nearly all of it shows as GPU time without work before the
-frame. No GPU has run it: what the lines say about the long frame the laptop
+frame. No GPU has run the scene. The game has printed the lines on the
+Windows PC (PC run 8, below), where the slowest frame of a launch was one
+pipeline built during play; what they say about the long frame the laptop
 sees about every two minutes is for its next measuring run.
 
 The `kept_state` scene (2026-11-10, same sandbox) passes its 20 points on
@@ -393,7 +395,8 @@ x86_64 Debug and RelWithDebInfo with validation in the same seven
 configurations and on i386 without validation, and ThreadSanitizer finds
 nothing in it with the record thread on or off. Its frame of 600 draws writes
 10.0 KB of constants with the state kept and 365.6 KB without. No GPU has run
-it. The check also takes `--keep-draw-state 0`, which draws the `bench` and
+the scene; the game has run with the state kept and without on the Windows PC
+(PC run 8, below). The check also takes `--keep-draw-state 0`, which draws the `bench` and
 `bench_runs` scenes without the kept state, so their timings and instruction
 counts can be set beside the default's (the [adapter](vulkan-legacy-adapter.md)
 has the counts).
@@ -405,7 +408,8 @@ level. The resolved triangle has 188 edge pixels between red and green; the
 top row and left column of a quad that fills the target are half covered,
 because the half-pixel shift of the viewport (the same as DXVK's) moves the
 clip volume by half a pixel. The 8-sample target is made with 4. No GPU has
-run it.
+run the scene; the game has drawn with 4 samples on the Windows PC (PC run 8,
+below).
 
 ## In the game: r_backend vulkan
 
@@ -591,6 +595,24 @@ result a frame, and screenshots whose mean colour, in the centre and over
 the whole picture, is within one level of Direct3D 9's at both places.
 Nobody watched the window, so tearing with IMMEDIATE is not judged. Report:
 `renderer/vulkan-backend-pc-run-7.md`.
+PC run 8 (2026-11-10, bc299ba6, same PC, the hosted Win32 Debug artifact, the
+machine alone, the scene of run 7 with 12 bots) ran the kept draw state,
+descriptor sets kept across frames and multisampling on a GPU for the first
+time. Every launch quit cleanly. With the state kept the scene runs at 171.2
+frames a second (167.3 in a repeat at the end) and writes no descriptor set
+and 101 KB of constants a frame; with `r_vkKeepDrawState 0` it runs at 160.8
+and writes 227 sets and 454 KB. The kept sets are given up once a launch, at
+the map's load. The real `d3d9.dll` read 209.5, so this Debug build reaches
+about 80% of Direct3D 9, up from about three quarters in run 7. With
+`r_aaSamples 4` both back ends print `Using 4x anti-aliasing`, the device
+line says `4 samples`, Vulkan runs at 175.8 and Direct3D 9 at 230.0 (four
+samples cost nothing measurable on that GPU; the Direct3D 9 pair differs by
+its launch-to-launch spread), and screenshots from the same view read a mean
+luma of 87.4 and 87.0 with every cell of a 5x5 grid within 3. The GPU is
+busy for about 0.9 ms in passes of a 5.8 ms frame, so the PC still waits for
+the CPU. The slowest frame of the four Vulkan launches was 126 ms, one
+pipeline built in the window in 116.75 ms; every other slow frame was 13 to
+18 ms. Report: `renderer/vulkan-backend-pc-run-8.md`.
 
 The device probe with `--backend vulkan` runs `r_init.cpp`'s device start
 unchanged (`R_PreCreateWindow`, `R_CreateWindow`, `R_CreateDevice`), clears,
@@ -734,7 +756,7 @@ evidence):
   (`renderer/model-lighting/luma_grid.py` in the project files).
 
 Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9,11}.md`,
-`renderer/vulkan-backend-pc-run-{6,7}.md` and
+`renderer/vulkan-backend-pc-run-{6,7,8}.md` and
 `renderer/model-lighting/laptop-run-1.md` in the project files.
 
 ## Next
@@ -746,10 +768,11 @@ driver, and whether a feed setting is better than the default at all (laptop
 run 12 measures the settings in one launch, and the kept draw state with
 them). Laptop run 13 sets Vulkan with `r_aaSamples 4`, now that the back
 end has multisampled targets, beside DXVK with 4. On the Windows PC the gap
-is the render thread's time per draw: a run of a build that keeps
-descriptor sets across frames (the frame stats line should show close to
-none written), then the front's lock. The PC's runs so far used the hosted
-Debug build, whose render thread is slower than a release build's.
-Then the long frame the laptop sees about every two minutes, which the
-`slow frame` lines are there to name, and the second or so a launch spends
-building pipelines on the PC.
+is the CPU's time per frame (PC run 8: about 80% of Direct3D 9 in the Debug
+build). The PC's runs so far used the hosted Debug build, where the back end's
+own work runs unoptimised and the system's `d3d9.dll` does not, so the next
+PC run compares the two in the Release build of a manual `vulkan` run (above)
+before more work goes into the time per draw (the front's lock, a clean flag
+for textures). Then the long frame the laptop sees about every two minutes,
+which the `slow frame` lines are there to name, and the pipelines built
+during play: one took 117 ms on the PC.

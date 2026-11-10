@@ -396,8 +396,10 @@ same function. With the switch off, `bench_runs` writes 457 KB of constants a
 frame where it writes 14 KB with it on, and callgrind counts 4,419
 instructions per draw on the drawing thread against 2,838. Before the adapter
 kept anything it was 4,626: a draw without kept state writes and records what
-it did then, and the newer code spends a little less on doing so. No GPU has
-run it.
+it did then, and the newer code spends a little less on doing so. On the
+Windows PC (PC run 8, RTX 2080 SUPER, hosted Win32 Debug build, mp_crash with
+12 bots) the game ran at 171.2 frames a second with the state kept and 160.8
+without, writing 101 KB and 454 KB of constants a frame.
 
 Descriptor sets kept across frames (2026-11-10, same sandbox): `bench_runs`
 writes no set a frame with the kept state where it wrote 95 of its 768 draws'
@@ -406,7 +408,9 @@ thread against 2,838. The benchmark shares a texture over runs of eight
 draws, so it needed few sets to begin with; the game on the Windows PC wrote
 231 sets a frame for 526 draws (PC run 7), so it should gain more there. The
 front's `kept_state` scene checks that the frame drawn after the one without
-the kept state writes no set. No GPU has run it.
+the kept state writes no set. In PC run 8 the game wrote no set a frame with
+the kept state (about 850 reused) against 227 without, kept 1,386 to 1,695
+sets, and gave them all up once a launch, at the map's load.
 
 Laptop run 1 (2026-11-08, Intel RPL-U iGPU, Mesa 25.0.7 ANV, x86_64 and i386
 RelWithDebInfo, SDL offscreen and Wayland, no validation layer installed): all
