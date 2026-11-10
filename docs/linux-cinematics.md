@@ -4,26 +4,43 @@ The game's movies (`main/video/*.bik`) are Bink 1 files. The engine plays them
 with RAD's Bink library, which exists only for 32-bit Windows (`deps/binklib`).
 The 32-bit Windows `KisakCOD-mp` and `KisakCOD-sp` targets define `CINEMA` and
 link it. The Linux client and 64-bit Windows build `r_cinematic.cpp` without
-`CINEMA` by default, so they play no movies. Both can opt into the Bink shim
-described here; for 64-bit Windows see [64-bit Windows](#64-bit-windows).
+`CINEMA` unless the Bink shim described here is built in; for 64-bit Windows
+see [64-bit Windows](#64-bit-windows).
 
-On Linux, `KisakCOD-mp` can play them through a Bink shim. It is off by
-default.
+On Linux, `KisakCOD-mp` and `KisakCOD-sp` play them through a Bink shim, which
+needs libavcodec and libavutil (FFmpeg 6 or 7) for the target architecture,
+found with pkg-config. `KISAK_LINUX_CINEMATICS` decides whether it is built:
+
+| Value | What happens |
+| --- | --- |
+| `AUTO` (the default) | Movies are built in when pkg-config finds both libraries and a test program links with them using the build's own flags. Otherwise they are left out. The configure prints one `KisakCOD movies: on` or `off` line with the reason. |
+| `ON` | Movies are built in; the configure fails when the libraries are missing. |
+| `OFF` | Movies are left out, whatever is installed. |
 
 ```sh
-cmake ... -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_LINUX_CINEMATICS=ON
+cmake ... -DKISAK_BUILD_LINUX_MP_CLIENT=ON                              # movies when FFmpeg is found
+cmake ... -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_LINUX_CINEMATICS=ON  # movies, or an error
 ```
 
-It needs libavcodec and libavutil (FFmpeg 6 or 7) for the target
-architecture, found with pkg-config. Debian and Ubuntu package names:
-`libavcodec-dev libavutil-dev`, with `:i386` for an i386 build. For an i386
-build on an x86_64 host, point pkg-config at the i386 files:
+The default was `OFF` until November 2026. A build folder made before then
+keeps the `OFF` it stored; pass the value you want, or use a new folder. A
+client with movies needs `libavcodec` and `libavutil` at run time as well, at
+the versions it was built with, so a build meant to be copied to other
+machines may want `OFF` or its own FFmpeg next to it
+([portable folder](linux-mp-client.md#a-folder-that-runs-on-another-pc)). With
+movies built in, the game's intro movies play at start as on Windows. A
+configure that builds neither game client never looks for FFmpeg.
+
+Debian and Ubuntu package names: `libavcodec-dev libavutil-dev`, with `:i386`
+for an i386 build. For an i386 build on an x86_64 host, point pkg-config at the
+i386 files, or `AUTO` finds the x86_64 ones, fails its link test and leaves
+movies out:
 
 ```sh
 PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig cmake ...
 ```
 
-With the option on, `r_cinematic.cpp` is built with `CINEMA` through the native
+With movies built in, `r_cinematic.cpp` is built with `CINEMA` through the native
 D3D9 boundary. The engine code is the Windows code. The only changes are
 Linux paths and a hunk allocator that returned a pointer as an `int`.
 

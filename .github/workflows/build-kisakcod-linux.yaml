@@ -1321,9 +1321,12 @@ jobs:
             -DKISAK_DXVK_NATIVE_INCLUDE_DIR="$RUNNER_TEMP/dxvk-include/dxvk" \
             -DKISAK_DXVK_NATIVE_LIBRARY="$d3d9" \
             -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_OPENAL_LIBRARY="$openal" \
-            -DKISAK_LINUX_CINEMATICS=ON -DKISAK_LINUX_PORTABLE_RUNPATH=ON \
+            -DKISAK_LINUX_PORTABLE_RUNPATH=ON \
             -DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3" \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON 2>&1 | tee "$RUNNER_TEMP/x64-mp-client-configure.log"
+          # Movies are not asked for: with libavcodec-dev and libavutil-dev
+          # installed above, the default (AUTO) has to turn them on.
+          grep -q -- '-- KisakCOD movies: on ' "$RUNNER_TEMP/x64-mp-client-configure.log"
           cmake --build "$BUILD_DIR" --target KisakCOD-mp KisakCOD-mp-client-window-test \
             KisakCOD-native-d3d9-proofs KisakCOD-bink-shim-test KisakCOD-skin-sse2-test \
             KisakCOD-skin-scalar-test \
@@ -2354,7 +2357,7 @@ jobs:
           tracy=OFF
           if [ "${{ matrix.config }}" = Debug ]; then tracy=ON; fi
           cmake -S . -B "$BUILD_DIR" -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_OPENAL_LIBRARY="$openal" \
-            -DKISAK_LINUX_TRACY="$tracy" \
+            -DKISAK_LINUX_TRACY="$tracy" -DKISAK_LINUX_CINEMATICS=OFF \
             2>&1 | tee "artifacts/mp-client-${{ matrix.config }}.log"
           cmake --build "$BUILD_DIR" --target KisakCOD-mp KisakCOD-mp-client-window-test --parallel "$(nproc)" \
             2>&1 | tee -a "artifacts/mp-client-${{ matrix.config }}.log"
@@ -2419,6 +2422,7 @@ jobs:
           # same directory with the same stand-ins. Only built and inspected here.
           openal="$RUNNER_TEMP/openal-unavailable/libopenal_unavailable.so"
           cmake -S . -B "$BUILD_DIR" -DKISAK_BUILD_LINUX_SP_GAME=ON -DKISAK_OPENAL_LIBRARY="$openal" \
+            -DKISAK_LINUX_CINEMATICS=OFF \
             2>&1 | tee "artifacts/sp-game-${{ matrix.config }}.log"
           cmake --build "$BUILD_DIR" --target KisakCOD-sp --parallel "$(nproc)" \
             2>&1 | tee -a "artifacts/sp-game-${{ matrix.config }}.log"
@@ -2982,7 +2986,7 @@ jobs:
             -DKISAK_OPENAL_LIBRARY="$stubs/libopenal_unavailable.so" \
             -DKISAK_BUILD_DEVICE_PROBE=ON -DKISAK_BUILD_WORLD_FRONTEND_PROBE=ON \
             -DKISAK_BUILD_WORLD_DEVICE_PROBE=ON -DKISAK_BUILD_WORLD_DRAW_PROBE=ON \
-            -DKISAK_BUILD_LINUX_MP_CLIENT=ON \
+            -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_LINUX_CINEMATICS=OFF \
             -DKISAK_BUILD_VULKAN_PROBE=ON -DKISAK_BUILD_VULKAN_SHADERS=ON \
             -DKISAK_BUILD_VULKAN_LEGACY=ON -DKISAK_BUILD_VULKAN_BACKEND=ON \
             -DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3" \
