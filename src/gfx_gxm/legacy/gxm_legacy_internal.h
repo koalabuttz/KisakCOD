@@ -156,6 +156,11 @@ struct Texture
     // sampleable false: draws bind a stand-in (cube and depth textures).
     SceGxmTexture sampled;
     bool sampleable = false;
+    // `sampled` with the filters and addressing of the last draw that bound
+    // it (viewBits), for as long as `sampled` is still viewOf. A texture is
+    // nearly always sampled one way, so most draws set none of that again.
+    mutable SceGxmTexture view, viewOf;
+    mutable uint32_t viewBits = ~0u;
     // Depth formats: the depth-stencil surface scenes use.
     SceGxmDepthStencilSurface depthSurface;
     // Swizzled textures (cubes, and block-compressed 2D textures, which
@@ -225,6 +230,7 @@ struct Variant
     const SceGxmProgramParameter *inputs[16] = {};     // "in_v<n>"
     int8_t textureUnit[16];                            // sampler s<n>'s unit, -1 none
     bool uniforms = false; // has a default uniform buffer
+    bool depthUniforms = false; // any of depth[] is there: its uniforms follow the textures
 
     const SceGxmProgram *program() const { return reinterpret_cast<const SceGxmProgram *>(gxp.data()); }
 };
@@ -283,6 +289,8 @@ struct Device
     Viewport viewport{};
     Rect scissor{};
     std::vector<float> vsConstants, psConstants;
+    // Count the calls that changed a value (SetConstants).
+    uint64_t vsConstantsVersion = 0, psConstantsVersion = 0;
 
     // Things the back end does not do yet, each logged once.
     std::vector<const char *> notYet;

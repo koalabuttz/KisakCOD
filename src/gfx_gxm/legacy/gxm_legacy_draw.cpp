@@ -43,6 +43,7 @@
 #include <cstring>
 #include <functional>
 #include <map>
+#include <set>
 
 namespace gfx_vk::legacy
 {
@@ -165,6 +166,35 @@ struct FragmentProgramEntry
     const Variant *vertex = nullptr;
 };
 
+// The programs a draw ran with, kept by what they depend on. Finding them
+// the long way takes the vertex input plan, two variant keys and two map
+// keys built as strings, for every draw, and a frame of a map is thousands
+// of draws from a few hundred combinations. A draw looks its combination up
+// in a small table first (FindPipeline) and takes the long way only when it
+// is not there. Only programs that were made are kept, so a draw that waits
+// for its program or is refused one takes the long way and is counted there.
+struct PipelineKey
+{
+    const Shader *vs, *ps;
+    const VertexDecl *decl;
+    uint32_t strides[kMaxStreams];
+    uint8_t alphaFunc; // the pixel shader variant's alpha test
+    uint8_t index32;
+    uint8_t pad[2];
+};
+struct Pipeline
+{
+    PipelineKey key; // key.vs null: empty
+    Variant *vertex, *pixel;
+    const VertexProgramEntry *vertexProgram;
+    // The fragment program for the blend state and the target format it was
+    // last drawn with; another takes the long way and takes its place.
+    const FragmentProgramEntry *fragmentProgram;
+    uint32_t blendBits, output;
+    bool blended;
+};
+constexpr uint32_t kPipelines = 512; // a power of two
+
 // What a draw failed on, each counted and the first of each logged.
 enum Skip : uint8_t
 {
@@ -240,8 +270,27 @@ struct DrawState
 
     std::map<std::string, VertexProgramEntry> vertexPrograms;
     std::map<std::string, FragmentProgramEntry> fragmentPrograms;
+    Pipeline pipelines[kPipelines] = {};
+    uint64_t pipelineLookups = 0, pipelineHits = 0;
+    // The per-draw savings (Pipeline, kept texture views and binds, uniform
+    // buffers left out). A file named no-draw-reuse beside the compiled
+    // programs turns them off, to tell a fault of theirs on a console.
+    bool reuse = true;
     const SceGxmVertexProgram *boundVertex = nullptr;
     const SceGxmFragmentProgram *boundFragment = nullptr;
+    // What each fragment texture unit holds in the open scene (bit set in
+    // unitBound), so that a draw does not set what is set already.
+    SceGxmTexture unitView[SCE_GXM_MAX_TEXTURE_UNITS];
+    uint32_t unitBound = 0;
+    uint64_t textureBinds = 0, textureBindsLeftOut = 0, textureViewsMade = 0;
+    // The default uniform buffers the bound programs last reserved hold these
+    // constants: a draw with the same two programs and the same constants
+    // reserves and writes neither again. Both end when either program is set
+    // (SetPrograms) and with the scene.
+    bool vertexUniformsLive = false, fragmentUniformsLive = false;
+    uint64_t vertexUniformsVersion = 0, fragmentUniformsVersion = 0;
+    uint32_t fragmentAlphaRef = 0;
+    uint64_t uniformWrites = 0, uniformWritesLeftOut = 0;
     FixedState fixed{};
     bool fixedValid = false;
 
@@ -282,6 +331,12 @@ struct DrawState
     // Run diagnostics (see DiagnoseFrame): draws of this frame still to log,
     // and this frame's test (DiagMode).
     uint32_t diagnosedDraws = 0;
+    // Run diagnostic: a file named diag-state-census beside the compiled
+    // programs logs each new combination of shaders, declaration, blend and
+    // texture state a draw brings, once (LogCensus).
+    bool census = false;
+    std::set<uint64_t> censusSeen;
+    uint32_t censusLines = 0;
     int diagMode = 0;
     // The tests and the magenta rectangle only run when the program cache
     // folder holds a file named "run-tests"; frame 300's log and the two
@@ -597,6 +652,7 @@ bool Register(Device &device, Variant &variant, const char *what)
                 variant.textureUnit[i] = int8_t(sceGxmProgramParameterGetResourceIndex(sampler));
         std::snprintf(name, sizeof(name), "kisak_depth_s%d", i);
         variant.depth[i] = sceGxmProgramFindParameterByName(program, name);
+        variant.depthUniforms |= variant.depth[i] != nullptr;
         std::snprintf(name, sizeof(name), "in_v%d", i);
         variant.inputs[i] = sceGxmProgramFindParameterByName(program, name);
     }
@@ -784,6 +840,25 @@ bool MenuShaped(const Shader &shader, const InputPlan &plan)
 template <class T> void Append(std::string &key, const T &value)
 {
     key.append(reinterpret_cast<const char *>(&value), sizeof(value));
+}
+
+// The table's place for a key. The caller compares the key that is there.
+Pipeline &PipelineSlot(DrawState &d, const PipelineKey &key)
+{
+    // Heap addresses differ above their low alignment bits.
+    uint32_t hash = uint32_t(reinterpret_cast<uintptr_t>(key.vs) >> 4) * 0x9e3779b1u;
+    hash ^= uint32_t(reinterpret_cast<uintptr_t>(key.ps) >> 4) * 0x85ebca6bu;
+    hash ^= uint32_t(reinterpret_cast<uintptr_t>(key.decl) >> 4) * 0xc2b2ae35u;
+    hash ^= (uint32_t(key.alphaFunc) << 1 | key.index32) * 0x27d4eb2fu;
+    return d.pipelines[(hash >> 16) & (kPipelines - 1)];
+}
+
+// Every kept combination goes when a program, a shader or a vertex layout
+// does: a table entry points at them, and a new object may get the address
+// of a dead one.
+void ForgetPipelines(DrawState &d)
+{
+    std::memset(static_cast<void *>(d.pipelines), 0, sizeof(d.pipelines));
 }
 
 const VertexProgramEntry *GetVertexProgram(Device &device, const Variant &variant, const VertexDecl &decl,
@@ -1072,6 +1147,9 @@ bool OpenScene(Device &device)
     d.boundVertex = nullptr;
     d.boundFragment = nullptr;
     d.fixedValid = false;
+    d.unitBound = 0;
+    d.vertexUniformsLive = false;
+    d.fragmentUniformsLive = false;
     ++d.scenes;
     ++device.stats.passes;
     return true;
@@ -1289,14 +1367,45 @@ bool BindTextures(Device &device, const Variant &pixel, void *uniforms)
         }
         const bool linearMin = ss[d3d::SAMP_MINFILTER] >= d3d::TEXF_LINEAR;
         const bool linearMag = ss[d3d::SAMP_MAGFILTER] >= d3d::TEXF_LINEAR;
-        sceGxmTextureSetMagFilter(&view, linearMag ? SCE_GXM_TEXTURE_FILTER_LINEAR : SCE_GXM_TEXTURE_FILTER_POINT);
-        sceGxmTextureSetMinFilter(&view, linearMin ? SCE_GXM_TEXTURE_FILTER_LINEAR : SCE_GXM_TEXTURE_FILTER_POINT);
-        sceGxmTextureSetMipFilter(&view, ss[d3d::SAMP_MIPFILTER] == d3d::TEXF_LINEAR
-                                             ? SCE_GXM_TEXTURE_MIP_FILTER_ENABLED
-                                             : SCE_GXM_TEXTURE_MIP_FILTER_DISABLED);
-        sceGxmTextureSetUAddrMode(&view, AddressMode(ss[d3d::SAMP_ADDRESSU]));
-        sceGxmTextureSetVAddrMode(&view, AddressMode(ss[d3d::SAMP_ADDRESSV]));
-        sceGxmSetFragmentTexture(Gxm(), unsigned(pixel.textureUnit[i]), &view);
+        const bool linearMip = ss[d3d::SAMP_MIPFILTER] == d3d::TEXF_LINEAR;
+        // Everything the five calls below take from the sampler state.
+        const uint32_t bits = uint32_t(linearMin) | uint32_t(linearMag) << 1 | uint32_t(linearMip) << 2 |
+                              (ss[d3d::SAMP_ADDRESSU] & 0xffu) << 8 | (ss[d3d::SAMP_ADDRESSV] & 0xffu) << 16;
+        // Its own view, not a stand-in's: the one kept with the texture serves.
+        const bool own = d.reuse && texture && texture->sampleable;
+        if (own && texture->viewBits == bits && std::memcmp(&texture->viewOf, &view, sizeof(view)) == 0)
+            view = texture->view;
+        else
+        {
+            const SceGxmTexture plainView = view;
+            sceGxmTextureSetMagFilter(&view, linearMag ? SCE_GXM_TEXTURE_FILTER_LINEAR : SCE_GXM_TEXTURE_FILTER_POINT);
+            sceGxmTextureSetMinFilter(&view, linearMin ? SCE_GXM_TEXTURE_FILTER_LINEAR : SCE_GXM_TEXTURE_FILTER_POINT);
+            sceGxmTextureSetMipFilter(&view, linearMip ? SCE_GXM_TEXTURE_MIP_FILTER_ENABLED
+                                                       : SCE_GXM_TEXTURE_MIP_FILTER_DISABLED);
+            sceGxmTextureSetUAddrMode(&view, AddressMode(ss[d3d::SAMP_ADDRESSU]));
+            sceGxmTextureSetVAddrMode(&view, AddressMode(ss[d3d::SAMP_ADDRESSV]));
+            ++d.textureViewsMade;
+            if (own)
+            {
+                texture->viewOf = plainView;
+                texture->view = view;
+                texture->viewBits = bits;
+            }
+        }
+        const unsigned unit = unsigned(pixel.textureUnit[i]);
+        ++d.textureBinds;
+        if (d.reuse && unit < SCE_GXM_MAX_TEXTURE_UNITS && (d.unitBound & (1u << unit)) &&
+            std::memcmp(&d.unitView[unit], &view, sizeof(view)) == 0)
+            ++d.textureBindsLeftOut;
+        else
+        {
+            sceGxmSetFragmentTexture(Gxm(), unit, &view);
+            if (unit < SCE_GXM_MAX_TEXTURE_UNITS)
+            {
+                d.unitView[unit] = view;
+                d.unitBound |= 1u << unit;
+            }
+        }
         if (pixel.depth[i] && uniforms)
             sceGxmSetUniformDataF(uniforms, pixel.depth[i], 0, 1, &depth);
     }
@@ -1467,6 +1576,8 @@ SceGxmFragmentProgram *ClearFragmentProgram(Device &device)
 void SetPrograms(Device &device, const SceGxmVertexProgram *vertex, const SceGxmFragmentProgram *fragment)
 {
     DrawState &d = *device.draw;
+    if (d.boundVertex == vertex && d.boundFragment == fragment)
+        return;
     if (d.boundVertex != vertex)
     {
         sceGxmSetVertexProgram(Gxm(), vertex);
@@ -1477,6 +1588,11 @@ void SetPrograms(Device &device, const SceGxmVertexProgram *vertex, const SceGxm
         sceGxmSetFragmentProgram(Gxm(), fragment);
         d.boundFragment = fragment;
     }
+    // A reserved default uniform buffer is its program's until the program
+    // is set anew. Both end here when one program changes: the pair is what
+    // other sceGxm code is known to rely on.
+    d.vertexUniformsLive = false;
+    d.fragmentUniformsLive = false;
 }
 
 uint32_t IndexCount(d3d::PrimitiveType type, uint32_t primitives)
@@ -1509,6 +1625,9 @@ void DropProgramsIf(Device &device, const std::function<bool(const VertexProgram
                     const std::function<bool(const FragmentProgramEntry &)> &fragmentMatch)
 {
     DrawState &d = *device.draw;
+    ForgetPipelines(d);
+    d.vertexUniformsLive = false;
+    d.fragmentUniformsLive = false;
     for (auto it = d.vertexPrograms.begin(); it != d.vertexPrograms.end();)
     {
         if (!vertexMatch(it->second))
@@ -1554,6 +1673,17 @@ bool InitDraw(Device &device, std::string &error)
     }
     for (uint32_t i = 0; i < kSequentialIndices; ++i)
         d.sequential[i] = uint16_t(i);
+    if (gxm::ProgramCacheMarker("diag-state-census"))
+    {
+        d.census = true;
+        Log(device, "diag: diag-state-census is there: each new draw state is logged once (census lines)");
+    }
+    if (gxm::ProgramCacheMarker("no-draw-reuse"))
+    {
+        d.reuse = false;
+        Log(device, "diag: no-draw-reuse is there: every draw finds its programs, sets its textures and writes its "
+                    "uniform buffers anew");
+    }
     if (!MakeStandIns(device, error) || !MakeClearPrograms(device, error) || !MakeCopyPrograms(device, error))
         return false;
     // Run diagnostics: opaque green (no inputs, so it links with any vertex
@@ -2294,6 +2424,97 @@ void DiagnoseDraw(Device &device, d3d::PrimitiveType type, uint32_t indexCount, 
 }
 } // namespace
 
+// Run diagnostic (diag-state-census): the D3D9 state of each new
+// combination a draw brings, in numbers, so that a run can say which state
+// a group of draws (decals, say) is drawn with. Formats print as their
+// D3DFORMAT number, or as four letters for a FourCC.
+void FormatName(uint32_t format, char *out, size_t size)
+{
+    if (format > 0xffff)
+        std::snprintf(out, size, "%c%c%c%c", char(format), char(format >> 8), char(format >> 16), char(format >> 24));
+    else
+        std::snprintf(out, size, "%u", format);
+}
+
+void LogCensus(Device &device, const Shader &vs, const Shader &ps, const Variant &vertex, const Variant &pixel,
+               bool blended, const SceGxmBlendInfo &blend)
+{
+    DrawState &d = *device.draw;
+    const uint32_t *rs = device.renderStates;
+    uint64_t key = 1469598103934665603ull;
+    auto mix = [&](uint64_t v) { key = (key ^ v) * 1099511628211ull; };
+    mix(uint64_t(uintptr_t(&vs)));
+    mix(uint64_t(uintptr_t(&ps)));
+    mix(uint64_t(uintptr_t(device.decl)));
+    mix(uint64_t(uintptr_t(&vertex)));
+    mix(uint64_t(uintptr_t(&pixel)));
+    static const uint32_t states[] = {d3d::RS_ALPHABLENDENABLE, d3d::RS_SRCBLEND, d3d::RS_DESTBLEND, d3d::RS_BLENDOP,
+                                      d3d::RS_SEPARATEALPHABLENDENABLE, d3d::RS_SRCBLENDALPHA, d3d::RS_DESTBLENDALPHA,
+                                      d3d::RS_BLENDOPALPHA, d3d::RS_COLORWRITEENABLE, d3d::RS_ALPHATESTENABLE,
+                                      d3d::RS_ALPHAFUNC, d3d::RS_SRGBWRITEENABLE, d3d::RS_ZFUNC, d3d::RS_ZWRITEENABLE,
+                                      d3d::RS_CULLMODE, d3d::RS_STENCILENABLE};
+    for (uint32_t state : states)
+        mix(rs[state]);
+    mix(uint64_t(d.color.format));
+    for (int i = 0; i < 16; ++i)
+    {
+        if (pixel.textureUnit[i] < 0)
+            continue;
+        const Texture *texture = device.textures[i];
+        mix(texture ? uint64_t(texture->desc.format) : 0);
+        mix(device.samplerStates[i][d3d::SAMP_SRGBTEXTURE]);
+        mix(device.samplerStates[i][d3d::SAMP_ADDRESSU]);
+    }
+    if (!d.censusSeen.insert(key).second || d.censusLines >= 600)
+        return;
+    const uint32_t n = d.censusLines++;
+    std::string decl;
+    char part[160];
+    for (const VertexElement &e : device.decl->elements)
+    {
+        std::snprintf(part, sizeof(part), " %u/%u/t%u/u%u.%u", unsigned(e.stream), unsigned(e.offset), unsigned(e.type),
+                      unsigned(e.usage), unsigned(e.usageIndex));
+        decl += part;
+    }
+    Log(device,
+        "census %u (frame %llu, %llu drawn): vs %016llx (%u instructions, %u constants) ps %016llx (%u instructions, "
+        "%u constants); target format 0x%08x%s; decl%s",
+        n, (unsigned long long)d.frame, (unsigned long long)d.drawn, (unsigned long long)vertex.cacheKey,
+        unsigned(vs.parsed.reflection.instructions), unsigned(vs.parsed.reflection.floatConstants),
+        (unsigned long long)pixel.cacheKey, unsigned(ps.parsed.reflection.instructions),
+        unsigned(ps.parsed.reflection.floatConstants), unsigned(d.color.format), d.color.noAlpha ? " (no alpha)" : "",
+        decl.c_str());
+    Log(device,
+        "census %u state: blend %u src %u dst %u op %u, separate %u src %u dst %u op %u, write mask 0x%x, srgb write %u; "
+        "alpha test %u func %u ref %u; z func %u write %u; cull %u; stencil %u; gxm blend %s (mask 0x%x, colour %u %u %u, "
+        "alpha %u %u %u)",
+        n, rs[d3d::RS_ALPHABLENDENABLE], rs[d3d::RS_SRCBLEND], rs[d3d::RS_DESTBLEND], rs[d3d::RS_BLENDOP],
+        rs[d3d::RS_SEPARATEALPHABLENDENABLE], rs[d3d::RS_SRCBLENDALPHA], rs[d3d::RS_DESTBLENDALPHA],
+        rs[d3d::RS_BLENDOPALPHA], rs[d3d::RS_COLORWRITEENABLE], rs[d3d::RS_SRGBWRITEENABLE],
+        rs[d3d::RS_ALPHATESTENABLE], rs[d3d::RS_ALPHAFUNC], rs[d3d::RS_ALPHAREF], rs[d3d::RS_ZFUNC],
+        rs[d3d::RS_ZWRITEENABLE], rs[d3d::RS_CULLMODE], rs[d3d::RS_STENCILENABLE], blended ? "on" : "off",
+        unsigned(blend.colorMask), unsigned(blend.colorFunc), unsigned(blend.colorSrc), unsigned(blend.colorDst),
+        unsigned(blend.alphaFunc), unsigned(blend.alphaSrc), unsigned(blend.alphaDst));
+    std::string textures;
+    for (int i = 0; i < 16; ++i)
+    {
+        if (pixel.textureUnit[i] < 0)
+            continue;
+        const Texture *texture = device.textures[i];
+        const uint32_t *ss = device.samplerStates[i];
+        char format[16] = "none";
+        if (texture)
+            FormatName(uint32_t(texture->desc.format), format, sizeof(format));
+        std::snprintf(part, sizeof(part), " s%d(%s %ux%u kind %u levels %u; filter %u %u %u address %u %u srgb %u)", i,
+                      format, texture ? texture->desc.width : 0u, texture ? texture->desc.height : 0u,
+                      texture ? unsigned(texture->desc.kind) : 0u, texture ? unsigned(texture->levels.size()) : 0u,
+                      ss[d3d::SAMP_MINFILTER], ss[d3d::SAMP_MAGFILTER], ss[d3d::SAMP_MIPFILTER],
+                      ss[d3d::SAMP_ADDRESSU], ss[d3d::SAMP_ADDRESSV], ss[d3d::SAMP_SRGBTEXTURE]);
+        textures += part;
+    }
+    Log(device, "census %u textures:%s", n, textures.empty() ? " none" : textures.c_str());
+}
+
 void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t startIndex, uint32_t primitiveCount,
           bool indexed, const void *upVertices, uint32_t upStride)
 {
@@ -2352,15 +2573,48 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     }
 
     // Programs.
-    InputPlan plan;
-    PlanInputs(device, *vs, *device.decl, plan);
     const int diag = d.diagMode;
     const DiagTest thisTest = DiagTestAt(diag ? diag - 1 : 0);
     const DiagTest *test = diag ? &thisTest : nullptr;
+    uint32_t strides[kMaxStreams];
+    for (uint32_t s = 0; s < kMaxStreams; ++s)
+        strides[s] = device.streams[s].stride;
+    if (upVertices)
+        strides[0] = upStride;
+    gxm::cg::Options pixelOptions;
+    if (device.renderStates[d3d::RS_ALPHATESTENABLE])
+    {
+        const uint32_t func = device.renderStates[d3d::RS_ALPHAFUNC];
+        if (func >= d3d::CMP_NEVER && func < d3d::CMP_ALWAYS)
+            pixelOptions.alphaFunc = gxm::cg::AlphaFunc(func);
+    }
+    // The programs this combination last drew with (Pipeline), unless a
+    // run diagnostic wants to see or change how they are found.
+    const bool plain = d.reuse && !test && !d.diagnosedDraws;
+    PipelineKey pipelineKey;
+    Pipeline *pipeline = nullptr;
+    bool known = false;
+    if (plain)
+    {
+        std::memset(&pipelineKey, 0, sizeof(pipelineKey));
+        pipelineKey.vs = vs;
+        pipelineKey.ps = ps;
+        pipelineKey.decl = device.decl;
+        std::memcpy(pipelineKey.strides, strides, sizeof(strides));
+        pipelineKey.alphaFunc = uint8_t(pixelOptions.alphaFunc);
+        pipelineKey.index32 = index32;
+        pipeline = &PipelineSlot(d, pipelineKey);
+        known = std::memcmp(&pipeline->key, &pipelineKey, sizeof(pipelineKey)) == 0;
+        ++d.pipelineLookups;
+        d.pipelineHits += known;
+    }
+    InputPlan plan;
+    if (!known)
+        PlanInputs(device, *vs, *device.decl, plan);
     // The shader whose program this draw runs: the game's, or in some tests
     // one written here for draws with the menu's vertex shader.
     Shader *vsUsed = vs;
-    Variant *vertex = nullptr;
+    Variant *vertex = known ? pipeline->vertex : nullptr;
     if (test)
     {
         plan.options.diagPosition = test->option;
@@ -2379,14 +2633,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     bool waiting = false;
     if (!vertex)
         vertex = GetVariant(device, *vsUsed, plan.options, waiting);
-    gxm::cg::Options pixelOptions;
-    if (device.renderStates[d3d::RS_ALPHATESTENABLE])
-    {
-        const uint32_t func = device.renderStates[d3d::RS_ALPHAFUNC];
-        if (func >= d3d::CMP_NEVER && func < d3d::CMP_ALWAYS)
-            pixelOptions.alphaFunc = gxm::cg::AlphaFunc(func);
-    }
-    Variant *pixel = GetVariant(device, *ps, pixelOptions, waiting);
+    Variant *pixel = known ? pipeline->pixel : GetVariant(device, *ps, pixelOptions, waiting);
     if (!vertex || !pixel)
     {
         if (waiting)
@@ -2441,20 +2688,33 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             NotYet(device, "drawing with no colour target (depth only; skipped)");
         return;
     }
-    uint32_t strides[kMaxStreams];
-    for (uint32_t s = 0; s < kMaxStreams; ++s)
-        strides[s] = device.streams[s].stride;
-    if (upVertices)
-        strides[0] = upStride;
-    const VertexProgramEntry *vertexProgram = GetVertexProgram(device, *vertex, *device.decl, plan, index32, strides);
+    const VertexProgramEntry *vertexProgram =
+        known ? pipeline->vertexProgram : GetVertexProgram(device, *vertex, *device.decl, plan, index32, strides);
     if (!vertexProgram)
         return;
     SceGxmBlendInfo blend{};
     const bool blended = !diagPixel && MakeBlend(device, d.color.noAlpha, blend);
+    uint32_t blendBits = 0;
+    if (blended)
+        std::memcpy(&blendBits, &blend, sizeof(blendBits));
     const FragmentProgramEntry *fragmentProgram =
-        GetFragmentProgram(device, *pixel, passThrough ? *standIn : *vertex, blended ? &blend : nullptr);
+        known && pipeline->blended == blended && pipeline->blendBits == blendBits &&
+                pipeline->output == uint32_t(d.color.output)
+            ? pipeline->fragmentProgram
+            : GetFragmentProgram(device, *pixel, passThrough ? *standIn : *vertex, blended ? &blend : nullptr);
     if (!fragmentProgram)
         return;
+    if (plain)
+    {
+        pipeline->key = pipelineKey;
+        pipeline->vertex = vertex;
+        pipeline->pixel = pixel;
+        pipeline->vertexProgram = vertexProgram;
+        pipeline->fragmentProgram = fragmentProgram;
+        pipeline->blendBits = blendBits;
+        pipeline->output = uint32_t(d.color.output);
+        pipeline->blended = blended;
+    }
 
     // Vertex data.
     const void *streamData[kMaxStreams];
@@ -2548,7 +2808,14 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     SetPrograms(device, vertexGxm, fragmentProgram->program);
 
     SceGxmContext *context = Gxm();
-    if (vertex->uniforms && vertexGxm == vertexProgram->program)
+    // The buffers the last draw reserved still hold this draw's constants
+    // when the programs and the constants are the last draw's.
+    const bool ownProgram = vertexGxm == vertexProgram->program;
+    const bool vertexKept = plain && ownProgram && d.vertexUniformsLive &&
+                            d.vertexUniformsVersion == device.vsConstantsVersion;
+    d.uniformWrites += vertex->uniforms && ownProgram;
+    d.uniformWritesLeftOut += vertex->uniforms && vertexKept;
+    if (vertex->uniforms && ownProgram && !vertexKept)
     {
         void *uniforms = nullptr;
         const int reserved = sceGxmReserveVertexDefaultUniformBuffer(context, &uniforms);
@@ -2562,6 +2829,8 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         if ((reserved < 0 || set < 0) && d.uniformFailures++ < 5)
             Log(device, "vertex constants not set: reserve 0x%08x, set 0x%08x (%u constants)", unsigned(reserved),
                 unsigned(set), unsigned(count));
+        d.vertexUniformsLive = reserved >= 0 && set >= 0;
+        d.vertexUniformsVersion = device.vsConstantsVersion;
         if (d.diagnosedDraws && vertex->constants)
         {
             const float *u = static_cast<const float *>(uniforms);
@@ -2622,18 +2891,31 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             Log(device, "diag: mimic constants not set: reserve 0x%08x, set 0x%08x", unsigned(reserved), unsigned(set));
     }
     void *pixelUniforms = nullptr;
-    if (pixel->uniforms)
+    // Not kept for a program that takes a texture's depth as a uniform
+    // (BindTextures writes those).
+    const uint32_t alphaRef = device.renderStates[d3d::RS_ALPHAREF] & 0xff;
+    const bool pixelKept = plain && d.fragmentUniformsLive && !pixel->depthUniforms &&
+                           d.fragmentUniformsVersion == device.psConstantsVersion &&
+                           (!pixel->alphaRef || d.fragmentAlphaRef == alphaRef);
+    d.uniformWrites += pixel->uniforms;
+    d.uniformWritesLeftOut += pixel->uniforms && pixelKept;
+    if (pixel->uniforms && !pixelKept)
     {
-        sceGxmReserveFragmentDefaultUniformBuffer(context, &pixelUniforms);
+        const int reserved = sceGxmReserveFragmentDefaultUniformBuffer(context, &pixelUniforms);
         const uint16_t count = ps->parsed.reflection.floatConstants;
         if (pixel->constants && count)
             sceGxmSetUniformDataF(pixelUniforms, pixel->constants, 0, count * 4u, device.psConstants.data());
         if (pixel->alphaRef)
         {
-            const float ref = float(device.renderStates[d3d::RS_ALPHAREF] & 0xff) / 255.0f;
+            const float ref = float(alphaRef) / 255.0f;
             sceGxmSetUniformDataF(pixelUniforms, pixel->alphaRef, 0, 1, &ref);
         }
+        d.fragmentUniformsLive = reserved >= 0 && pixelUniforms != nullptr;
+        d.fragmentUniformsVersion = device.psConstantsVersion;
+        d.fragmentAlphaRef = alphaRef;
     }
+    if (d.census)
+        LogCensus(device, *vs, *ps, *vertex, *pixel, blended, blend);
     Texture *const target = SceneTexture(d);
     if (!BindTextures(device, *pixel, pixelUniforms))
     {
@@ -2788,6 +3070,7 @@ void Copy(Device &device, Surface *src, const Rect *srcRect, Surface *dst, const
     sceGxmTextureSetVAddrMode(&view, SCE_GXM_TEXTURE_ADDR_CLAMP);
     SceGxmContext *context = Gxm();
     sceGxmSetFragmentTexture(context, unsigned(d.copyUnit), &view);
+    d.unitBound = 0; // a unit's texture changed behind BindTextures
     sceGxmSetVertexStream(context, 0, quad);
     sceGxmDraw(context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP, SCE_GXM_INDEX_FORMAT_U16, d.sequential, 4);
     ++d.copies;
@@ -2875,6 +3158,15 @@ void LogDrawSummary(Device &device)
         (unsigned long long)d->drawn, (unsigned long long)d->copies, (unsigned long long)d->scenes, unsigned(d->vertexPrograms.size()),
         unsigned(d->fragmentPrograms.size()), d->variantsMade, d->variantFailures, (unsigned long long)d->renames,
         (unsigned long long)d->ringOverflows, d->drawFailures);
+    // What the draws did not do again (Pipeline, BindTextures, the uniform
+    // buffers in Draw).
+    Log(device,
+        "draw work left out: %llu of %llu draws found their programs in the table; of %llu texture binds %llu were "
+        "set already and %llu set their filters anew; of %llu uniform buffers %llu were the last draw's",
+        (unsigned long long)d->pipelineHits, (unsigned long long)d->pipelineLookups,
+        (unsigned long long)d->textureBinds, (unsigned long long)d->textureBindsLeftOut,
+        (unsigned long long)d->textureViewsMade, (unsigned long long)d->uniformWrites,
+        (unsigned long long)d->uniformWritesLeftOut);
     for (int i = 0; i < SkipCount; ++i)
         if (d->skipped[i])
             Log(device, "draws skipped: %llu x %s", (unsigned long long)d->skipped[i], kSkipNames[i]);

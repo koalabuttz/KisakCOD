@@ -157,6 +157,18 @@ add_library(KisakCOD-mp-vita-own OBJECT ${vita_mp_own_sources})
 # emulator what the game would take; a console has no memory for it.
 set(KISAK_VITA_HEAP_MB "64" CACHE STRING "Size of the Vita client's heap in MB (64 on a console; more only for emulator measurements)")
 target_compile_definitions(KisakCOD-mp-vita-standin PRIVATE KISAK_VITA_HEAP_MB=${KISAK_VITA_HEAP_MB})
+# The static model cache's size (src/gfx_d3d/r_staticmodelcache_sizes.h): 2^n
+# trees in each of its four sections, 1 to 7. Empty is the header's own
+# choice for the Vita (6: 4 MB of GPU memory). For measuring other sizes.
+set(KISAK_VITA_SMC_SECTION_TREE_BITS "" CACHE STRING
+    "Trees in a section of the Vita client's static model cache, as a power of two (1 to 7); empty for the default")
+if(NOT KISAK_VITA_SMC_SECTION_TREE_BITS STREQUAL "")
+    if(NOT KISAK_VITA_SMC_SECTION_TREE_BITS MATCHES "^[1-7]$")
+        message(FATAL_ERROR "KISAK_VITA_SMC_SECTION_TREE_BITS must be 1 to 7 or empty, not '${KISAK_VITA_SMC_SECTION_TREE_BITS}'")
+    endif()
+    message(STATUS "Static model cache: 2^${KISAK_VITA_SMC_SECTION_TREE_BITS} trees a section")
+    list(APPEND KISAK_VITA_MP_DEFINITIONS R_SMC_SECTION_TREE_BITS=${KISAK_VITA_SMC_SECTION_TREE_BITS})
+endif()
 foreach(mp_target KisakCOD-mp-vita-native KisakCOD-mp-vita-standin KisakCOD-mp-vita-own)
     target_compile_features(${mp_target} PRIVATE cxx_std_20)
     target_compile_definitions(${mp_target} PRIVATE ${KISAK_VITA_MP_DEFINITIONS})

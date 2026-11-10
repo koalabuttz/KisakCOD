@@ -54,7 +54,7 @@ char R_PreTessStaticModelCachedList(
         for (listIter = 0; listIter < count; ++listIter)
         {
             baseIndex = 3 * xsurf->baseTriIndex + 4 * R_GetCachedSModelSurf(list[listIter])->baseVertIndex;
-            if (baseIndex >= 0x100000 || surfIndexCount + baseIndex > 0x100000)
+            if (baseIndex >= SMC_MAX_INDEX_IN_CACHE || surfIndexCount + baseIndex > SMC_MAX_INDEX_IN_CACHE)
             {
                 v9 = va("%i, %i", baseIndex, surfIndexCount);
                 MyAssertHandler(

@@ -18,7 +18,10 @@
 
 
 static_model_cache_t s_cache;
-
+// For the dynamic buffers report (r_buffers.h): the vertices handed out, and
+// the frame they were last reported in. The front end's thread only.
+static uint32_t s_allocatedVerts;
+static uint32_t s_allocatedVertsNotedFrame;
 
 void TRACK_r_staticmodelcache()
 {
@@ -28,7 +31,16 @@ void TRACK_r_staticmodelcache()
 void *R_AllocStaticModelCache()
 {
     iassert(!gfxBuf.smodelCacheVb);
-    return R_AllocDynamicVertexBuffer(&gfxBuf.smodelCacheVb, 0x800000);
+#ifdef KISAK_GFX_GXM
+    // The cache is written in pieces as models come into view and never
+    // discarded, so the GXM back end needs no fresh copy of it. Asked for as
+    // a plain write-only buffer it goes to the GPU's own memory; a dynamic
+    // one would take 4 MB of the main pool, which the buffers that are
+    // rewritten every frame fill already (docs/vita-client.md, "Memory").
+    return R_AllocWriteOnlyVertexBuffer(&gfxBuf.smodelCacheVb, R_SMC_VERTEX_BYTES);
+#else
+    return R_AllocDynamicVertexBuffer(&gfxBuf.smodelCacheVb, R_SMC_VERTEX_BYTES);
+#endif
 }
 
 void R_InitStaticModelCache()
@@ -92,12 +104,16 @@ void R_CacheStaticModelIndices(uint32_t smodelIndex, uint32_t lod, uint32_t cach
     for (surfIndex = 0; surfIndex < surfCount; ++surfIndex)
     {
         xsurf = &surfs[surfIndex];
-        twoBaseOffsets = (uint16_t)(cacheBaseVertIndex + xsurf->baseVertIndex)
-            | ((uint16_t)(cacheBaseVertIndex + xsurf->baseVertIndex) << 16);
+        // The indices count from the start of the model's section, where
+        // the draw's stream starts (R_SetStaticModelCachedBuffer). With the
+        // retail section of 65536 vertices that is the low 16 bits.
+        const uint32_t sectionVertIndex = R_StaticModelCacheSectionVert(cacheBaseVertIndex) + xsurf->baseVertIndex;
+        iassert(sectionVertIndex + xsurf->vertCount <= R_SMC_SECTION_VERTS);
+        twoBaseOffsets = (uint16_t)sectionVertIndex | ((uint16_t)sectionVertIndex << 16);
         twoSrcIndices = (uint32_t *)xsurf->triIndices;
         baseIndex = 3 * xsurf->baseTriIndex + 4 * cacheBaseVertIndex;
         iassert( baseIndex < SMC_MAX_INDEX_IN_CACHE );
-        if (baseIndex + 3 * xsurf->triCount > 0x100000)
+        if (baseIndex + 3 * xsurf->triCount > SMC_MAX_INDEX_IN_CACHE)
             MyAssertHandler(
                 ".\\r_staticmodelcache.cpp",
                 478,
@@ -141,6 +157,7 @@ char SMC_ForceFreeBlock(uint32_t smcIndex)
             "(tree->nodes[0].usedVerts > 0)",
             treenode->nodes[0].usedVerts);
     leafs = s_cache.leafs[((char *)treenode - (char *)&s_cache) / sizeof(static_model_tree_t)];
+    s_allocatedVerts -= treenode->nodes[0].usedVerts;
     SMC_FreeCachedSurface_r(treenode, leafs, 0, 5);
     treenode->usedlist.next->prev = treenode->usedlist.prev;
     treenode->usedlist.prev->next = treenode->usedlist.next;
@@ -276,11 +293,13 @@ uint16_t SMC_Allocate(uint32_t smcIndex, uint32_t bitCount)
         nodeIndex = (nodeIndex - 1) >> 1;
     }
 
-    unsigned short cacheIndex = (32 * treeIndex + index + 1);
+    s_allocatedVerts += 1u << bitCount;
+
+    unsigned short cacheIndex = R_StaticModelCacheIndex(treeIndex, index);
     iassert(cacheIndex);
     iassert(&leafs[index] == SMC_GetLeaf(cacheIndex));
 
-    leafs[index].cachedSurf.baseVertIndex = 16 * index + (treeIndex << 9);
+    leafs[index].cachedSurf.baseVertIndex = R_StaticModelCacheBaseVert(treeIndex, index);
     return cacheIndex;
 }
 
@@ -306,6 +325,12 @@ uint16_t R_CacheStaticModelSurface(
 
     if (dx.deviceLost)
         return 0;
+
+    if (s_allocatedVertsNotedFrame != rg.frontEndFrameCount)
+    {
+        s_allocatedVertsNotedFrame = rg.frontEndFrameCount;
+        R_NoteStaticModelCacheUse(s_allocatedVerts);
+    }
 
     cacheIndex = rgp.world->dpvs.smodelDrawInsts[smodelIndex].smodelCacheIndex[lodInfo->lod];
     if (cacheIndex)
@@ -374,10 +399,14 @@ uint16_t R_CacheStaticModelSurface(
                 treea->usedlist.prev->next = &treea->usedlist;
                 treea->usedlist.next->prev = &treea->usedlist;
 
+                R_NoteStaticModelCacheUse(s_allocatedVerts);
                 return cacheIndexa;
             }
             else
             {
+                // Full of models drawn in the last four frames: this one is
+                // drawn by itself (R_GetStaticModelId).
+                R_NoteStaticModelCacheFull();
                 return 0;
             }
         }
@@ -424,6 +453,7 @@ void SMC_FreeCachedSurface_r(
 
 void SMC_ClearCache()
 {
+    s_allocatedVerts = 0;
     static_model_leaf_t *v0; // [esp+4h] [ebp-14h]
     uint32_t treeIter; // [esp+8h] [ebp-10h]
     uint32_t treeItera; // [esp+8h] [ebp-10h]
@@ -431,7 +461,7 @@ void SMC_ClearCache()
     uint32_t listIter; // [esp+10h] [ebp-8h]
     uint32_t smcIter; // [esp+14h] [ebp-4h]
 
-    for (treeIter = 0; treeIter < 0x200; ++treeIter)
+    for (treeIter = 0; treeIter < R_SMC_TREE_COUNT; ++treeIter)
     {
         for (leafIter = 0; leafIter < 0x20; ++leafIter)
             s_cache.leafs[treeIter][leafIter].cachedSurf.smodelIndex = -1;
@@ -445,9 +475,9 @@ void SMC_ClearCache()
             s_cache.freelist[smcIter][listIter].prev = &s_cache.freelist[smcIter][listIter];
             s_cache.freelist[smcIter][listIter].next = &s_cache.freelist[smcIter][listIter];
         }
-        for (treeItera = 0; treeItera < 0x80; ++treeItera)
+        for (treeItera = 0; treeItera < (1u << R_SMC_SECTION_TREE_BITS); ++treeItera)
         {
-            v0 = s_cache.leafs[treeItera + (smcIter << 7)];
+            v0 = s_cache.leafs[treeItera + (smcIter << R_SMC_SECTION_TREE_BITS)];
             v0->freenode.prev = s_cache.freelist[smcIter];
             v0->freenode.next = s_cache.freelist[smcIter][0].next;
             v0->freenode.prev->next = (static_model_node_list_t *)v0;
@@ -574,7 +604,7 @@ void R_StaticModelCacheStats_f()
                 }
             }
         }
-        Com_Printf(CON_CHANNEL_GFX, "%.2f%% of cache is currently allocated.\n", (double)allocCount * 100.0 / 262144.0);
+        Com_Printf(CON_CHANNEL_GFX, "%.2f%% of cache is currently allocated.\n", (double)allocCount * 100.0 / (double)R_SMC_VERT_COUNT);
         if (allocCount)
             Com_Printf(CON_CHANNEL_GFX, "%.2f%% allocated cache vertices are used.\n", (double)usedCount * 100.0 / (double)allocCount);
     }
