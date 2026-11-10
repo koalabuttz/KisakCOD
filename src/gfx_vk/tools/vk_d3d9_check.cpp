@@ -263,7 +263,7 @@ public:
     IDirect3D9 *d3d = nullptr;
     IDirect3DDevice9 *device = nullptr;
     IDirect3DVertexShader9 *vsBasic = nullptr;
-    IDirect3DPixelShader9 *psColor = nullptr, *psTexture = nullptr, *psShadow = nullptr;
+    IDirect3DPixelShader9 *psColor = nullptr, *psTexture = nullptr, *psShadow = nullptr, *psVolume = nullptr;
     IDirect3DVertexDeclaration9 *decl = nullptr;
     IDirect3DSurface9 *readSurface = nullptr;
     IDirect3DSurface9 *backBuffer = nullptr;
@@ -431,6 +431,7 @@ public:
     void Draw();
     void RenderTarget();
     void ShadowMap();
+    void ModelLighting();
     void References();
     void Threads();
     void Queries();
@@ -733,6 +734,159 @@ void Check::ShadowMap()
     SafeRelease(color);
     SafeRelease(shadowLevel);
     SafeRelease(shadow);
+}
+
+// The renderer's model lighting volume (RB_PatchModelLighting): a 256-wide,
+// 4-deep A8R8G8B8 volume of 4x4x4-texel cells, a few of them rewritten each
+// frame and every other cell expected to keep its texels. The renderer has two
+// ways to do that, chosen by r_altModelLightingUpdate, and they must give the
+// same texels:
+//   0: one MANAGED volume, locked whole with no flags, cells written in place.
+//   1: a SYSTEMMEM volume locked whole with D3DLOCK_NO_DIRTY_UPDATE, one
+//      AddDirtyBox per cell written, then UpdateTexture into a DEFAULT volume
+//      (made with usage 0, as Image_Create3DTexture_PC makes it), which is
+//      the one that is drawn with.
+// Two frames of patches go through both; after each, every cell is drawn
+// slice by slice from both volumes and read back.
+void Check::ModelLighting()
+{
+    Reset();
+    constexpr UINT kWidth = 256, kHeight = 8, kDepth = 4, kCell = 4;
+    IDirect3DVolumeTexture9 *managed = nullptr, *staging = nullptr, *shown = nullptr;
+    if (!Ok(device->CreateVolumeTexture(kWidth, kHeight, kDepth, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &managed,
+                                        nullptr),
+            "CreateVolumeTexture(managed)")
+        || !Ok(device->CreateVolumeTexture(kWidth, kHeight, kDepth, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM,
+                                           &staging, nullptr),
+               "CreateVolumeTexture(system memory)")
+        || !Ok(device->CreateVolumeTexture(kWidth, kHeight, kDepth, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &shown,
+                                           nullptr),
+               "CreateVolumeTexture(default)"))
+    {
+        SafeRelease(staging);
+        SafeRelease(managed);
+        return;
+    }
+
+    struct Patch
+    {
+        UINT cell;     // the renderer's modelLightingIndex: 64 cells a row
+        uint32_t seed; // the red of every texel written, 0 for a cell never written
+    };
+    // A cell's texel: red says which patch wrote it, green its x, blue its y and z.
+    const auto texel = [](uint32_t seed, UINT x, UINT y, UINT z) {
+        return Argb(255, seed, 30 + 70 * x, 15 + 60 * y + 15 * z);
+    };
+    // The renderer's own addressing and call order for one frame's patches.
+    const auto patch = [&](bool alt, const Patch *patches, size_t count) {
+        IDirect3DVolumeTexture9 *texture = alt ? staging : managed;
+        D3DLOCKED_BOX locked{};
+        if (!Ok(texture->LockBox(0, &locked, nullptr, alt ? D3DLOCK_NO_DIRTY_UPDATE : 0), "LockBox"))
+            return false;
+        Equal("row_pitch", locked.RowPitch, kWidth * 4);
+        Equal("slice_pitch", locked.SlicePitch, kWidth * 4 * kHeight);
+        for (size_t i = 0; i < count; ++i)
+        {
+            const UINT x0 = kCell * (patches[i].cell & 0x3f);
+            const UINT y0 = (patches[i].cell >> 4) & ~3u;
+            if (alt)
+            {
+                D3DBOX dirty{};
+                dirty.Left = x0;
+                dirty.Right = x0 + kCell;
+                dirty.Top = y0;
+                dirty.Bottom = y0 + kCell;
+                dirty.Front = 0;
+                dirty.Back = kDepth;
+                Ok(texture->AddDirtyBox(&dirty), "AddDirtyBox");
+            }
+            for (UINT z = 0; z < kDepth; ++z)
+                for (UINT y = 0; y < kCell; ++y)
+                    for (UINT x = 0; x < kCell; ++x)
+                    {
+                        const uint32_t value = texel(patches[i].seed, x, y, z);
+                        std::memcpy(static_cast<uint8_t *>(locked.pBits) + z * locked.SlicePitch
+                                        + (y0 + y) * locked.RowPitch + 4 * (x0 + x),
+                                    &value, 4);
+                    }
+        }
+        if (!Ok(texture->UnlockBox(0), "UnlockBox"))
+            return false;
+        return !alt || Ok(device->UpdateTexture(staging, shown), "UpdateTexture");
+    };
+    // Draws the four watched cells from both volumes, one 16x16 block per
+    // slice (each texel 4x4 pixels): the managed volume in columns 0 to 3, the
+    // updated one in columns 4 to 7, a row per cell. Then checks every texel
+    // of both against what the patches so far should have left.
+    const auto drawAndExpect = [&](const char *frame, const Patch watched[4]) {
+        Reset();
+        device->SetPixelShader(psVolume);
+        for (UINT path = 0; path < 2; ++path)
+        {
+            Ok(device->SetTexture(0, path ? static_cast<IDirect3DBaseTexture9 *>(shown) : managed), "SetTexture");
+            for (UINT row = 0; row < 4; ++row)
+            {
+                const UINT x0 = kCell * (watched[row].cell & 0x3f);
+                const UINT y0 = (watched[row].cell >> 4) & ~3u;
+                for (UINT z = 0; z < kDepth; ++z)
+                {
+                    // The pixel shader takes the volume's third coordinate
+                    // from the colour's red: the middle of slice z.
+                    const uint32_t w = (2 * z + 1) * 255 / (2 * kDepth);
+                    const float px = float((path * kDepth + z) * 16), py = float(row * 16);
+                    Vertex quad[6];
+                    QuadList(quad, px, py, px + 16, py + 16, 0.5f, Argb(255, w, 0, 0));
+                    for (Vertex &vertex : quad)
+                    {
+                        vertex.u = (float(x0) + vertex.u * kCell) / kWidth;
+                        vertex.v = (float(y0) + vertex.v * kCell) / kHeight;
+                    }
+                    Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, quad, sizeof(Vertex)), "DrawPrimitiveUP");
+                }
+            }
+        }
+        device->SetTexture(0, nullptr);
+        if (!Read())
+            return;
+        for (UINT path = 0; path < 2; ++path)
+            for (UINT row = 0; row < 4; ++row)
+                for (UINT z = 0; z < kDepth; ++z)
+                    for (UINT y = 0; y < kCell; ++y)
+                        for (UINT x = 0; x < kCell; ++x)
+                        {
+                            const uint32_t seed = watched[row].seed;
+                            const uint32_t want = seed ? texel(seed, x, y, z) : 0;
+                            char name[64];
+                            std::snprintf(name, sizeof(name), "%s_%s_cell%u_%u%u%u", frame,
+                                          path ? "updated" : "managed", watched[row].cell, x, y, z);
+                            Expect(name, (path * kDepth + z) * 16 + x * 4 + 2, row * 16 + y * 4 + 2,
+                                   int(want >> 16 & 0xff), int(want >> 8 & 0xff), int(want & 0xff));
+                        }
+    };
+
+    const front::DeviceCounters before = Counters();
+    // Frame 1: the first and the last cell of row 0.
+    const Patch first[] = {{0, 60}, {63, 120}};
+    // Frame 2: a cell of row 1, and cell 0 again. Cell 63 is not written and
+    // must keep frame 1's texels; cell 70 is never written.
+    const Patch second[] = {{69, 180}, {0, 240}};
+    bool ok = patch(false, first, 2) && patch(true, first, 2);
+    if (ok)
+    {
+        const Patch watched[4] = {{0, 60}, {63, 120}, {69, 0}, {70, 0}};
+        drawAndExpect("frame1", watched);
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+        ok = patch(false, second, 2) && patch(true, second, 2);
+    }
+    if (ok)
+    {
+        const Patch watched[4] = {{0, 240}, {63, 120}, {69, 180}, {70, 0}};
+        drawAndExpect("frame2", watched);
+    }
+    Equal("no_unsupported_calls", Counters().unsupportedCalls, before.unsupportedCalls);
+    SafeRelease(shown);
+    SafeRelease(staging);
+    SafeRelease(managed);
 }
 
 // D3D9's reference counts: levels share their texture's count, objects the
@@ -1064,6 +1218,8 @@ bool Check::CreateObjects(std::string &error)
         hr = device->CreatePixelShader(reinterpret_cast<const DWORD *>(shaders::kPsTexture), &psTexture);
     if (SUCCEEDED(hr))
         hr = device->CreatePixelShader(reinterpret_cast<const DWORD *>(shaders::kPsShadow), &psShadow);
+    if (SUCCEEDED(hr))
+        hr = device->CreatePixelShader(reinterpret_cast<const DWORD *>(shaders::kPsVolume), &psVolume);
     const D3DVERTEXELEMENT9 elements[] = {
         {0, 0, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0},
         {0, 12, D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0},
@@ -1107,6 +1263,7 @@ void Check::ReleaseObjects()
     SafeRelease(psColor);
     SafeRelease(psTexture);
     SafeRelease(psShadow);
+    SafeRelease(psVolume);
     SafeRelease(decl);
     SafeRelease(readSurface);
     SafeRelease(backBuffer);
@@ -1154,6 +1311,7 @@ int Run(const Options &options)
         {"draw", &Check::Draw, true},
         {"render_target", &Check::RenderTarget, true},
         {"shadow_map", &Check::ShadowMap, true},
+        {"model_lighting", &Check::ModelLighting, true},
         {"references", &Check::References, true},
         {"threads", &Check::Threads, true},
         {"queries", &Check::Queries, true},

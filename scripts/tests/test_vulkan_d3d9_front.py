@@ -27,7 +27,7 @@ import subprocess
 import sys
 
 # The scenes the check runs, in order. A scene added to the check is added here.
-SCENES = ('adapter', 'states', 'draw', 'render_target', 'shadow_map', 'references', 'threads', 'queries', 'reset', 'present')
+SCENES = ('adapter', 'states', 'draw', 'render_target', 'shadow_map', 'model_lighting', 'references', 'threads', 'queries', 'reset', 'present')
 
 
 def run(binary, args, env, timeout=300):
