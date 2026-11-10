@@ -50,6 +50,81 @@ inline void Sys_PerfSleepMicroseconds(uint32_t microseconds)
     nanosleep(&request, nullptr);
 }
 
+// ---------------------------------------------------------------------------
+// Probes: pieces of the game that are timed while a perf_ab or perf_sample run
+// is active. Outside a run a probe costs one load and one branch.
+// ---------------------------------------------------------------------------
+
+inline constexpr uint32_t SYS_PERF_WORKER_TYPE_SLOTS = 24; // at least WRKCMD_COUNT
+inline constexpr uint32_t SYS_PERF_LOCK_SLOTS = 40;        // at least CRITSECT_COUNT
+
+enum SysPerfProbe : uint32_t
+{
+    SYS_PERF_PROBE_SERVER_FRAME,       // one 20 Hz frame of a listen server, with its sends
+    SYS_PERF_PROBE_HUD,                // CG_Draw2D
+    SYS_PERF_PROBE_WAIT_RENDERER,      // main thread asleep until the render thread takes the frame
+    SYS_PERF_PROBE_WAIT_WORKERS_ALL,   // ... until every front-end worker command is done
+    SYS_PERF_PROBE_WAIT_WORKERS_OTHER, // ... in any other wait that runs worker commands
+    SYS_PERF_PROBE_WAIT_WORKER_TYPE,   // + WorkerCmdType: ... until the commands of that type are done
+    SYS_PERF_PROBE_LOCK = SYS_PERF_PROBE_WAIT_WORKER_TYPE + SYS_PERF_WORKER_TYPE_SLOTS,
+                                       // + critical section: any thread getting into it
+    SYS_PERF_PROBE_COUNT = SYS_PERF_PROBE_LOCK + SYS_PERF_LOCK_SLOTS
+};
+
+struct SysPerfProbeSlot
+{
+    std::atomic<uint32_t> ns;    // wraps; the reader takes differences once a frame
+    std::atomic<uint32_t> calls; // wraps
+    std::atomic<uint32_t> maxNs; // the reader resets it
+};
+
+inline SysPerfProbeSlot g_sysPerfProbes[SYS_PERF_PROBE_COUNT];
+inline std::atomic<bool> g_sysPerfProbesOn;
+
+inline bool Sys_PerfProbesOn()
+{
+    return g_sysPerfProbesOn.load(std::memory_order_relaxed);
+}
+
+inline uint64_t Sys_PerfNowNs()
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+}
+
+inline void Sys_PerfProbeAdd(uint32_t probe, uint64_t ns)
+{
+    if (probe >= SYS_PERF_PROBE_COUNT)
+        return;
+    const uint32_t ns32 = ns > 0xFFFFFFFFull ? 0xFFFFFFFFu : (uint32_t)ns;
+    SysPerfProbeSlot &slot = g_sysPerfProbes[probe];
+    slot.ns.fetch_add(ns32, std::memory_order_relaxed);
+    slot.calls.fetch_add(1, std::memory_order_relaxed);
+    // Two threads can race here and lose the larger value; the longest call
+    // is a hint, not a sum.
+    if (ns32 > slot.maxNs.load(std::memory_order_relaxed))
+        slot.maxNs.store(ns32, std::memory_order_relaxed);
+}
+
+// Times its scope into one probe while a run is active.
+class SysPerfScope
+{
+public:
+    explicit SysPerfScope(uint32_t probe) : probe_(probe), startNs_(Sys_PerfProbesOn() ? Sys_PerfNowNs() : 0) {}
+    ~SysPerfScope()
+    {
+        if (startNs_)
+            Sys_PerfProbeAdd(probe_, Sys_PerfNowNs() - startNs_);
+    }
+    SysPerfScope(const SysPerfScope &) = delete;
+    SysPerfScope &operator=(const SysPerfScope &) = delete;
+
+private:
+    uint32_t probe_;
+    uint64_t startNs_;
+};
+
 // Registers the commands. Main thread, after the command system is up.
 void Sys_PerfInit();
 // Once per main-loop frame, on the main thread.

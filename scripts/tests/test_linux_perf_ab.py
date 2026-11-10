@@ -16,7 +16,9 @@ they are:
     differences across a wrap, the lines printed;
   * ``src/linux/sys_perf_readings.h``: the files Linux reports power,
     frequency, temperature and per-thread CPU time in, read from a made-up tree
-    of the same shape.
+    of the same shape;
+  * ``src/linux/sys_perf.h``: the probe slots engine code feeds (the server's
+    frame, waits for the worker threads, locks), fed here from four threads.
 
 ``tests/linux_perf/perf_ab_test.cpp`` drives both with a made-up clock, a
 made-up game whose speed depends on the variant, and made-up files. No engine,
@@ -49,7 +51,7 @@ def main() -> int:
         compile_command = [
             options.cxx,
             *(["-m32"] if options.m32 else []),
-            "-std=c++20", "-O1", "-Wall", "-Wextra", "-Werror",
+            "-std=c++20", "-O1", "-Wall", "-Wextra", "-Werror", "-pthread",
             "-I", str(ROOT / "src"),
             str(SOURCE),
             "-o", str(binary),

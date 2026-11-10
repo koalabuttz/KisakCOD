@@ -5,10 +5,11 @@
 //
 // A run is a list of equal windows. Each window applies one variant (a console
 // command line), lets the game settle, then records every frame for a fixed
-// time together with CPU time, GPU wait time and, where the machine reports
-// them, power, frequencies and temperature. Two variants alternate in the
-// order A B B A A B B A, so a drift that is steady over the run (a laptop
-// warming up, a battery running down) falls on both alike.
+// time together with CPU time, GPU wait time, the time inside the host's probes
+// and, where the machine reports them, power, frequencies and temperature. Two
+// variants alternate in the order A B B A A B B A, so a drift that is steady
+// over the run (a laptop warming up, a battery running down) falls on both
+// alike.
 //
 // Nothing here touches the engine: the host supplies the clock, runs the
 // commands, prints the lines and reads the counters. sys_perf.cpp is the host
@@ -57,6 +58,15 @@ struct PerfGauges
     double temperatureC = 0.0;
 };
 
+// A probe is a piece of the game that is timed while a run is active: the
+// server's frame, a wait for the worker threads, the wait for one lock.
+struct PerfProbeReading
+{
+    uint32_t ns = 0;    // time spent inside; only grows, wraps
+    uint32_t calls = 0; // only grows, wraps
+    uint32_t maxNs = 0; // the longest single call since the reading before
+};
+
 struct PerfHost
 {
     virtual ~PerfHost() = default;
@@ -64,6 +74,14 @@ struct PerfHost
     virtual void Print(const char *line) = 0;
     virtual void ReadCounters(PerfCounters *counters) = 0;
     virtual void ReadGauges(PerfGauges *gauges) = 0;
+
+    // Probes are optional. They are read once a frame while a window records,
+    // so one frame must not spend more than 4 s inside one probe.
+    virtual size_t ProbeCount() { return 0; }
+    virtual std::string ProbeName(size_t /*probe*/) { return std::string(); }
+    virtual void ReadProbes(PerfProbeReading * /*readings*/) {}
+    // True from the start of a run to its end, so probes cost nothing otherwise.
+    virtual void SetProbesActive(bool /*active*/) {}
 };
 
 struct PerfFrameStats
@@ -130,6 +148,18 @@ struct PerfConfig
     int rounds = 1;                    // windows = rounds * variants.size()
     double gaugeSeconds = 0.25;        // time between gauge samples
     size_t threadRows = 8;             // busiest threads listed per window
+    size_t probeRows = 12;             // probes with the most time listed per window
+    // Frames in which this probe ran are also reported apart from the others
+    // (the server's 20 Hz frame on a listen server). -1 for none.
+    int tickProbe = -1;
+};
+
+struct PerfProbeResult
+{
+    std::string name;
+    double msPerFrame = 0.0;
+    double callsPerFrame = 0.0;
+    double maxMs = 0.0;
 };
 
 struct PerfWindowResult
@@ -143,6 +173,9 @@ struct PerfWindowResult
     bool hasPackageWatts = false;
     double packageWatts = 0.0;
     PerfGauges gauges;             // means over the window
+    std::vector<PerfProbeResult> probes; // those that ran, most time first
+    PerfFrameStats tickFrames;     // frames in which the tick probe ran
+    PerfFrameStats otherFrames;    // the rest; both empty without a tick probe
 };
 
 class PerfRunner
@@ -169,6 +202,12 @@ public:
         results_.clear();
         window_ = 0;
         appliedVariant_ = -1;
+        probeNow_.assign(host_->ProbeCount(), PerfProbeReading());
+        probeLast_ = probeNow_;
+        probeTotals_.assign(probeNow_.size(), ProbeTotal());
+        if (config_.tickProbe >= (int)probeNow_.size())
+            config_.tickProbe = -1;
+        host_->SetProbesActive(true);
         Printf("perf: %d windows of %.1f s after %.1f s to settle",
                WindowCount(), config_.sampleSeconds, config_.settleSeconds);
         for (size_t i = 0; i < config_.variants.size(); ++i)
@@ -181,6 +220,7 @@ public:
         if (!Active())
             return;
         phase_ = Phase::Idle;
+        host_->SetProbesActive(false);
         Printf("perf: stopped after %d of %d windows", (int)results_.size(), WindowCount());
     }
 
@@ -196,6 +236,12 @@ public:
             lastFrameNs_ = nowNs;
             lastGaugeNs_ = nowNs;
             frameMs_.clear();
+            tickFrameMs_.clear();
+            otherFrameMs_.clear();
+            // The first reading is only the starting point of the window.
+            if (!probeNow_.empty())
+                host_->ReadProbes(probeLast_.data());
+            probeTotals_.assign(probeNow_.size(), ProbeTotal());
             gaugeSum_ = PerfGauges();
             gaugeCounts_[0] = gaugeCounts_[1] = gaugeCounts_[2] = gaugeCounts_[3] = 0;
             host_->ReadCounters(&startCounters_);
@@ -205,8 +251,29 @@ public:
         if (phase_ != Phase::Sample)
             return;
 
-        frameMs_.push_back((float)((double)(nowNs - lastFrameNs_) / 1e6));
+        const float frameMs = (float)((double)(nowNs - lastFrameNs_) / 1e6);
+        frameMs_.push_back(frameMs);
         lastFrameNs_ = nowNs;
+        if (!probeNow_.empty())
+        {
+            host_->ReadProbes(probeNow_.data());
+            for (size_t i = 0; i < probeNow_.size(); ++i)
+            {
+                // Unsigned 32-bit differences stay right across one wrap.
+                probeTotals_[i].ns += (uint32_t)(probeNow_[i].ns - probeLast_[i].ns);
+                probeTotals_[i].calls += (uint32_t)(probeNow_[i].calls - probeLast_[i].calls);
+                probeTotals_[i].maxNs = std::max(probeTotals_[i].maxNs, probeNow_[i].maxNs);
+            }
+            if (config_.tickProbe >= 0)
+            {
+                const size_t tick = (size_t)config_.tickProbe;
+                if (probeNow_[tick].calls != probeLast_[tick].calls)
+                    tickFrameMs_.push_back(frameMs);
+                else
+                    otherFrameMs_.push_back(frameMs);
+            }
+            probeLast_.swap(probeNow_);
+        }
         if (NsToSeconds(nowNs - lastGaugeNs_) >= config_.gaugeSeconds)
         {
             lastGaugeNs_ = nowNs;
@@ -221,6 +288,7 @@ public:
         {
             PrintSummary();
             phase_ = Phase::Idle;
+            host_->SetProbesActive(false);
             Printf("perf: done");
             return;
         }
@@ -297,6 +365,7 @@ private:
         if (gaugeCounts_[1]) { result.gauges.hasGpuMhz = true; result.gauges.gpuMhz = gaugeSum_.gpuMhz / gaugeCounts_[1]; }
         if (gaugeCounts_[2]) { result.gauges.hasCpuMhz = true; result.gauges.cpuMhz = gaugeSum_.cpuMhz / gaugeCounts_[2]; }
         if (gaugeCounts_[3]) { result.gauges.hasTemperature = true; result.gauges.temperatureC = gaugeSum_.temperatureC / gaugeCounts_[3]; }
+        CollectProbes(&result, frames);
         results_.push_back(result);
 
         std::string line;
@@ -320,6 +389,53 @@ private:
         host_->Print(line.c_str());
 
         PrintThreads(end, frames);
+        PrintProbes(result);
+    }
+
+    void CollectProbes(PerfWindowResult *result, double frames)
+    {
+        for (size_t i = 0; i < probeTotals_.size(); ++i)
+        {
+            if (!probeTotals_[i].calls)
+                continue;
+            PerfProbeResult probe;
+            probe.name = host_->ProbeName(i);
+            probe.msPerFrame = (double)probeTotals_[i].ns / 1e6 / frames;
+            probe.callsPerFrame = (double)probeTotals_[i].calls / frames;
+            probe.maxMs = (double)probeTotals_[i].maxNs / 1e6;
+            result->probes.push_back(probe);
+        }
+        std::stable_sort(result->probes.begin(), result->probes.end(),
+                         [](const PerfProbeResult &a, const PerfProbeResult &b) { return a.msPerFrame > b.msPerFrame; });
+        if (config_.tickProbe >= 0)
+        {
+            result->tickFrames = Perf_SummarizeFrames(&tickFrameMs_);
+            result->otherFrames = Perf_SummarizeFrames(&otherFrameMs_);
+        }
+    }
+
+    void PrintProbes(const PerfWindowResult &result)
+    {
+        if (!result.probes.empty())
+        {
+            std::string line = "perf:   timed, ms/frame (calls/frame, longest ms):";
+            for (size_t i = 0; i < result.probes.size() && i < config_.probeRows; ++i)
+            {
+                const PerfProbeResult &probe = result.probes[i];
+                Appendf(&line, "%s %s %.3f (%.2f, %.3f)", i ? "," : "", probe.name.c_str(), probe.msPerFrame,
+                        probe.callsPerFrame, probe.maxMs);
+            }
+            host_->Print(line.c_str());
+        }
+        if (config_.tickProbe >= 0 && result.tickFrames.frames > 0)
+        {
+            const PerfFrameStats &tick = result.tickFrames;
+            const PerfFrameStats &other = result.otherFrames;
+            Printf("perf:   %d frames with a %s: frame ms mean %.3f p50 %.3f p95 %.3f max %.3f;"
+                   " the other %d: mean %.3f p50 %.3f p95 %.3f max %.3f",
+                   tick.frames, host_->ProbeName((size_t)config_.tickProbe).c_str(), tick.meanMs, tick.p50Ms,
+                   tick.p95Ms, tick.maxMs, other.frames, other.meanMs, other.p50Ms, other.p95Ms, other.maxMs);
+        }
     }
 
     void PrintThreads(const PerfCounters &end, double frames)
@@ -466,6 +582,12 @@ private:
     uint64_t lastFrameNs_ = 0;
     uint64_t lastGaugeNs_ = 0;
     std::vector<float> frameMs_;
+    std::vector<float> tickFrameMs_;
+    std::vector<float> otherFrameMs_;
+    struct ProbeTotal { uint64_t ns = 0; uint64_t calls = 0; uint32_t maxNs = 0; };
+    std::vector<PerfProbeReading> probeNow_;
+    std::vector<PerfProbeReading> probeLast_;
+    std::vector<ProbeTotal> probeTotals_;
     PerfCounters startCounters_;
     PerfGauges gaugeSum_;
     int gaugeCounts_[4] = {0, 0, 0, 0};

@@ -1,6 +1,8 @@
-// Drives src/linux/sys_perf_core.h with a made-up clock and made-up counters.
+// Drives src/linux/sys_perf_core.h with a made-up clock and made-up counters,
+// and the probe slots of src/linux/sys_perf.h with real threads.
 // Built and run by scripts/tests/test_linux_perf_ab.py. No engine, no game data.
 
+#include <linux/sys_perf.h>
 #include <linux/sys_perf_core.h>
 #if defined(__linux__)
 #include <linux/sys_perf_readings.h>
@@ -10,6 +12,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <thread>
 
 namespace
 {
@@ -102,7 +105,8 @@ namespace
         }
     };
 
-    const std::string *FindLine(const FakeGame &game, const char *start)
+    template <typename Game>
+    const std::string *FindLine(const Game &game, const char *start)
     {
         for (const std::string &line : game.lines)
         {
@@ -238,7 +242,203 @@ namespace
             Check(verdict->find("windows of one variant differ by up to") != std::string::npos, "the comparison names its yardstick");
         }
         Check(FindLine(game, "perf: A mean of 2:") && FindLine(game, "perf: B mean of 2:"), "each variant prints its mean");
+        Check(!FindLine(game, "perf:   timed"), "a host without probes prints no probe line");
         Check(!game.lines.empty() && game.lines.back() == "perf: done", "the last line is 'perf: done'");
+    }
+
+    // A game with three probes: a server frame of 3 ms in every fourth frame,
+    // a HUD drawn in two calls of 0.25 ms every frame, and one that never runs.
+    struct ProbeGame final : PerfHost
+    {
+        std::vector<std::string> lines;
+        uint64_t nowNs = 0;
+        int frame = 0;
+        bool probesActive = false;
+        int activations = 0;
+        // The server frame's time and calls both wrap inside the first window:
+        // settling takes about 115 ms and 22 calls of them, a window 260 ms and 87.
+        PerfProbeReading probes[3] = {{0xFFFFFFFFu - 200000000u, 0xFFFFFFFFu - 60u, 0}, {0, 0, 0}, {0, 0, 0}};
+
+        void Execute(const char *) override {}
+        void Print(const char *line) override { lines.emplace_back(line); }
+        void ReadCounters(PerfCounters *counters) override { *counters = PerfCounters(); }
+        void ReadGauges(PerfGauges *gauges) override { *gauges = PerfGauges(); }
+
+        size_t ProbeCount() override { return 3; }
+        std::string ProbeName(size_t probe) override
+        {
+            return probe == 0 ? "server frame" : probe == 1 ? "hud" : "never";
+        }
+        void ReadProbes(PerfProbeReading *readings) override
+        {
+            for (int i = 0; i < 3; ++i)
+            {
+                readings[i] = probes[i];
+                probes[i].maxNs = 0; // the longest call is handed out once
+            }
+        }
+        void SetProbesActive(bool active) override
+        {
+            probesActive = active;
+            activations += active ? 1 : 0;
+        }
+
+        void Add(int probe, uint32_t ns)
+        {
+            probes[probe].ns += ns;
+            probes[probe].calls += 1;
+            probes[probe].maxNs = std::max(probes[probe].maxNs, ns);
+        }
+
+        void Step(PerfRunner *runner, uint32_t serverNs = 3000000u)
+        {
+            uint64_t frameNs = 5000000;
+            if (frame % 4 == 0)
+            {
+                Add(0, serverNs);
+                frameNs += serverNs;
+            }
+            Add(1, 250000);
+            Add(1, 250000);
+            ++frame;
+            nowNs += frameNs;
+            runner->Frame(nowNs);
+        }
+    };
+
+    void TestProbes()
+    {
+        ProbeGame game;
+        PerfRunner runner(&game);
+        PerfConfig config;
+        config.variants = {""};
+        config.sampleSeconds = 2.0;
+        config.settleSeconds = 0.5;
+        config.rounds = 2;
+        config.tickProbe = 0;
+        runner.Start(config, game.nowNs);
+        Check(game.probesActive, "probes are switched on for a run");
+        // One server frame of 50 ms while the first window settles: it belongs
+        // to no window, not even as the longest call.
+        game.Step(&runner, 50000000u);
+        for (int i = 0; i < 100000 && runner.Active(); ++i)
+            game.Step(&runner);
+        Check(!runner.Active(), "the run with probes ends by itself");
+        Check(!game.probesActive && game.activations == 1, "probes are switched off when the run is done");
+
+        const std::vector<PerfWindowResult> &results = runner.Results();
+        Check(results.size() == 2, "two windows with probes");
+        if (results.size() != 2)
+            return;
+        for (const PerfWindowResult &r : results)
+        {
+            Check(r.probes.size() == 2, "a probe that never ran is not listed");
+            if (r.probes.size() != 2)
+                continue;
+            Check(r.probes[0].name == "server frame" && r.probes[1].name == "hud", "the probe with the most time comes first");
+            Check(Near(r.probes[0].msPerFrame, 0.75, 0.01), "server frame time per frame, across a 32-bit wrap");
+            Check(Near(r.probes[0].callsPerFrame, 0.25, 0.005), "server frames per frame, across a 32-bit wrap");
+            Check(Near(r.probes[0].maxMs, 3.0, 1e-6), "the longest call of a window leaves out the time before it");
+            Check(Near(r.probes[1].msPerFrame, 0.5, 1e-6), "HUD time per frame");
+            Check(Near(r.probes[1].callsPerFrame, 2.0, 1e-6), "HUD calls per frame");
+            Check(Near(r.probes[1].maxMs, 0.25, 1e-6), "the longest HUD call");
+            Check(r.tickFrames.frames + r.otherFrames.frames == r.frames.frames, "every frame is with or without a server frame");
+            Check(std::abs(r.tickFrames.frames * 3 - r.otherFrames.frames) <= 3, "one frame in four has a server frame");
+            Check(Near(r.tickFrames.meanMs, 8.0, 1e-4) && Near(r.tickFrames.maxMs, 8.0, 1e-4), "frames with a server frame take 8 ms");
+            Check(Near(r.otherFrames.meanMs, 5.0, 1e-4) && Near(r.otherFrames.p95Ms, 5.0, 1e-4), "the other frames take 5 ms");
+        }
+        const std::string *timed = FindLine(game, "perf:   timed, ms/frame (calls/frame, longest ms):");
+        Check(timed != nullptr, "each window lists its probes");
+        if (timed)
+        {
+            Check(timed->find(" server frame 0.75") != std::string::npos && timed->find("(0.25, 3.000)") != std::string::npos,
+                  "the probe line carries time, calls and the longest call");
+            Check(timed->find(", hud 0.500 (2.00, 0.250)") != std::string::npos, "the probe line lists the HUD second");
+            Check(timed->find("never") == std::string::npos, "the probe line leaves out a probe that never ran");
+        }
+        bool sawSplit = false;
+        for (const std::string &line : game.lines)
+        {
+            if (line.find(" frames with a server frame: frame ms mean 8.000") != std::string::npos
+                && line.find("; the other ") != std::string::npos && line.find(": mean 5.000") != std::string::npos)
+                sawSplit = true;
+        }
+        Check(sawSplit, "each window reports frames with and without a server frame apart");
+
+        // One row asked for: only the first probe is printed.
+        ProbeGame brief;
+        PerfRunner briefRunner(&brief);
+        config.rounds = 1;
+        config.probeRows = 1;
+        config.tickProbe = 7; // not a probe of this host: ignored
+        briefRunner.Start(config, brief.nowNs);
+        for (int i = 0; i < 100000 && briefRunner.Active(); ++i)
+            brief.Step(&briefRunner);
+        const std::string *one = FindLine(brief, "perf:   timed");
+        Check(one && one->find("server frame") != std::string::npos && one->find("hud") == std::string::npos,
+              "the probe line stops at the row limit");
+        for (const std::string &line : brief.lines)
+            Check(line.find("frames with a") == std::string::npos, "a tick probe the host lacks is ignored");
+
+        // A stopped run switches the probes off as well.
+        ProbeGame stopped;
+        PerfRunner stoppedRunner(&stopped);
+        stoppedRunner.Start(config, stopped.nowNs);
+        stopped.Step(&stoppedRunner);
+        stoppedRunner.Stop();
+        Check(!stopped.probesActive, "perf_stop switches the probes off");
+    }
+
+    // The slots engine code feeds (src/linux/sys_perf.h).
+    void TestProbeSlots()
+    {
+        const uint32_t probe = SYS_PERF_PROBE_LOCK + 3;
+        SysPerfProbeSlot &slot = g_sysPerfProbes[probe];
+        {
+            SysPerfScope scope(probe);
+            Sys_PerfSleepMicroseconds(1000);
+        }
+        Check(slot.calls.load() == 0 && slot.ns.load() == 0, "a probe outside a run records nothing");
+
+        g_sysPerfProbesOn.store(true);
+        {
+            SysPerfScope scope(probe);
+            Sys_PerfSleepMicroseconds(2000);
+        }
+        Check(slot.calls.load() == 1, "a probe in a run counts its call");
+        Check(slot.ns.load() >= 2000000u && slot.ns.load() < 2000000000u, "a probe in a run times its scope");
+        Check(slot.maxNs.load() == slot.ns.load(), "one call is also the longest call");
+        {
+            // Started while off: the end of the scope must not record half a time.
+            g_sysPerfProbesOn.store(false);
+            SysPerfScope scope(probe);
+            g_sysPerfProbesOn.store(true);
+        }
+        Check(slot.calls.load() == 1, "a scope that began outside a run records nothing");
+        {
+            SysPerfScope scope(SYS_PERF_PROBE_COUNT); // "no probe"
+        }
+        Sys_PerfProbeAdd(SYS_PERF_PROBE_COUNT + 5, 1000);
+
+        // Four threads into one slot, as with a lock: nothing is lost.
+        SysPerfProbeSlot &shared = g_sysPerfProbes[SYS_PERF_PROBE_HUD];
+        std::thread threads[4];
+        for (std::thread &thread : threads)
+        {
+            thread = std::thread([] {
+                for (int i = 1; i <= 10000; ++i)
+                    Sys_PerfProbeAdd(SYS_PERF_PROBE_HUD, (uint64_t)(i % 100));
+            });
+        }
+        for (std::thread &thread : threads)
+            thread.join();
+        Check(shared.calls.load() == 40000u, "calls from four threads all count");
+        Check(shared.ns.load() == 4u * 100u * 4950u, "time from four threads all counts");
+        Check(shared.maxNs.load() == 99u, "the longest call is the longest of all threads");
+
+        Sys_PerfProbeAdd(SYS_PERF_PROBE_SERVER_FRAME, 10000000000ull);
+        Check(g_sysPerfProbes[SYS_PERF_PROBE_SERVER_FRAME].maxNs.load() == 0xFFFFFFFFu, "a call over 4 s is capped, not wrapped");
+        g_sysPerfProbesOn.store(false);
     }
 
     void TestSampleRunAndStop()
@@ -425,6 +625,8 @@ int main(int argc, char **argv)
     TestPercentiles();
     TestOrder();
     TestAbRun();
+    TestProbes();
+    TestProbeSlots();
     TestSampleRunAndStop();
     TestLongFirstFrame();
     if (s_failures)

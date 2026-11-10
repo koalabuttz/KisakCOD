@@ -35,13 +35,17 @@ window of a pair does not apply its commands again but still waits to settle.
 
 ## What it prints
 
-One line per window, a line with that window's busiest threads, then a mean
-per variant and, for two variants, the comparison. Every line starts with
-`perf:` and the last one is `perf: done`.
+One line per window, a line with that window's busiest threads, a line with
+the timed pieces of the frame, on a listen server a line that splits the frames
+by whether the server ran in them, then a mean per variant and, for two
+variants, the comparison. Every line starts with `perf:` and the last one is
+`perf: done`. The numbers in this example are made up.
 
 ```
 perf: window 1/8 A: 152.3 fps, frame ms mean 6.566 p50 6.110 p95 12.009 p99 14.385 max 54.861, 2285 frames, cpu ms/frame main 5.612 all 12.403, gpu wait ms/frame main 1.664 render 0.212, battery 11.82 W, gpu 950 MHz, cpu 2210 MHz, 71.0 C
 perf:   threads, cpu ms/frame: KisakCOD-mp 5.612, Backend 2.911, dxvk-cs 1.204, ...
+perf:   timed, ms/frame (calls/frame, longest ms): hud 0.880 (1.00, 1.420), server frame 0.750 (0.13, 7.310), wait for workers: skin ent delayed 0.410 (0.62, 1.105), lock CONSOLE 0.004 (2.00, 0.012), ...
+perf:   301 frames with a server frame: frame ms mean 11.204 p50 10.870 p95 14.911 max 54.861; the other 1984: mean 5.862 p50 5.790 p95 8.004 max 15.220
 perf: A mean of 4: ...
 perf: B mean of 4: ...
 perf: B against A: fps +3.0 %, frame -0.190 ms, cpu all -1.100 ms/frame, battery -0.90 W; windows of one variant differ by up to 1.4 %
@@ -59,6 +63,24 @@ perf: done
   `r_gpuSync 0` and in builds without a renderer.
 - **threads** comes from `/proc/self/task/*/schedstat`. Threads of one name are
   added up.
+- **timed** lists pieces of the frame that are timed while a run is active,
+  the twelve with the most time: per frame, calls per frame, and the longest
+  single call of the window.
+  - `server frame`: one frame of a listen server (20 a second) with its sends.
+  - `hud`: `CG_Draw2D`.
+  - `wait for workers: <type>`: the main thread asleep until the worker
+    threads finish the commands of that type; `all` is the wait for every
+    front-end command before the frame is handed over, `other` any other.
+  - `wait for the render thread`: the main thread asleep until the render
+    thread takes the frame.
+  - `lock <name>`: any thread getting into that critical section. The time is
+    the wait for the lock plus two readings of the clock (about 50 ns).
+  Outside a run each of these costs one load and one branch.
+- **frames with a server frame** compares the frames in which the server ran
+  with the others. With bots on a listen server the server's frame lands in
+  one frame in several, so it shows as uneven frames more than as a lower
+  mean. The line is left out when no server frame ran (a client on a remote
+  server).
 - **battery**, **package**, **gpu MHz**, **cpu MHz** and the temperature are
   read four times a second from sysfs where the machine has them and the user
   may read them: `power_supply/BAT*/power_now` (or current times voltage),
@@ -93,6 +115,6 @@ to frame rate and power; `perf_ab` was written to measure it.
 `run_linux_checks.py`) compiles the logic as it is and drives it with a
 made-up clock, a made-up game whose speed and power depend on the variant, and
 a made-up `/sys` and `/proc` tree: window order, settle time, statistics,
-counters across a wrap, the printed lines, and each machine reading. It uses no
-game data. The commands themselves need a running game, so they have only run
+counters across a wrap, the printed lines, each machine reading, and the timed
+pieces (fed from four threads). It uses no game data. The commands themselves need a running game, so they have only run
 on machines with the game files; say which when quoting numbers.
