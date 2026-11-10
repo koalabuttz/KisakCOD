@@ -410,19 +410,36 @@ How it is built:
   system's dialog.
 
 **Run so far.** The host tests cover when the keyboard opens and what the
-game gets. In Vita3K (run KB1, 2026-11-10, a build of 9625bbad made on the
-Windows PC, by hand): the keyboard was asked for by `vita_typecommand` at
-start-up, by the "create profile" box's name field (by itself and again on a
-touch), and by the chat line after a touch on the top middle of the screen in
-a game; closing it with and without Enter was told apart each time; an older
-profile got the chat area's binding once; no error, both starts ended by
-themselves. Vita3K draws a dialog of its own and its `sceCommonDialogUpdate`
-does nothing, and its text field took no scripted typing, so **no entered
-text has reached the game from the system's dialog yet**, in Vita3K or
-anywhere. Also not run: everything on a console (the dialog drawn into the
-frame, which thread may call it, the memory it takes beside a loaded map),
-and `vita_keyboardAnswer`, the resting controls and the "L button" names,
-which came after that run.
+game gets. Two runs in Vita3K on the Windows PC (2026-11-10, builds made on
+that PC, by hand):
+
+- **KB1** (a build of 9625bbad): the keyboard was asked for by
+  `vita_typecommand` at start-up, by the "create profile" box's name field (by
+  itself and again on a touch), and by the chat line after a touch on the top
+  middle of the screen in a game; closing it with and without Enter was told
+  apart each time; an older profile got the chat area's binding once. The
+  click that closed Vita3K's dialog also clicked the game, which is what the
+  resting controls are for.
+- **KB2** (a build of df2902fa, with `vita_keyboardAnswer`): a typed command
+  ran; a menu field (the server name, 20 characters at most) took the text
+  and left editing; the chat line was said, and the log has it. The controls
+  worked after each. Without the switch, the click that closed Vita3K's
+  dialog was no longer a `MOUSE1` press. The controls menu read "Left Mouse
+  or R button" and "L button".
+
+No error in either, and every start ended by itself. Vita3K draws a dialog
+of its own, its `sceCommonDialogUpdate` does nothing, and its text field took
+no scripted typing, so **no entered text has come back from the system's
+dialog yet**, in Vita3K or anywhere. Also not run: everything on a console
+(the dialog drawn into the frame, which thread may call it, the memory it
+takes beside a loaded map, and whether a console hands the game any touch
+while the keyboard is up).
+
+Run KB2 also showed the game's chat font drawing no underscore, and the
+profile's `config_mp.cfg` keeping its old length when a shorter one was
+written, which left a stray last line. That is Vita3K: the port opens the
+file to be cut and a console cuts it, and Vita3K's file layer ignores the
+flag (the Vita client thread's reading of both sources).
 
 ### Not done yet
 
@@ -844,6 +861,6 @@ The plan, with reasons and risks: `vita-client-plan.md` in the project files.
 
 1. **Build and boot** (this page).
 2. **Screen:** a GXM back end for the Legacy adapter API (`src/gfx_vk/legacy/vk_legacy.h`), under the existing D3D9 front (`src/gfx_vk/d3d9`). Game shaders are translated to Cg, compiled on the Vita by `libshacccg.suprx` (each user extracts it from their own firmware) and cached as `.gxp`.
-3. **Controls and sound:** buttons, sticks and touch become engine input, and sound gets a Vita output. Built and tested on the host ("Controls", "Sound"). Text is typed on the system's on-screen keyboard ("Typing"): it opens and closes in Vita3K (run KB1), and has not run on a console.
+3. **Controls and sound:** buttons, sticks and touch become engine input, and sound gets a Vita output. Built and tested on the host ("Controls", "Sound"). Text is typed on the system's on-screen keyboard ("Typing"): it opens and closes in Vita3K, and a text given by a switch reaches the game there (runs KB1 and KB2); it has not run on a console.
 4. **Join and play:** connect to a server and play, with the visual cuts from the feasibility study.
 5. **Make it fast:** profile on the Vita, then cut the hot spots.
