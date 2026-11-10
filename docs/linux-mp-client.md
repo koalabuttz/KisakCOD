@@ -194,7 +194,7 @@ turns it on) builds controller support into `KisakCOD-mp` through SDL3's
 gamepad API, which also covers a Steam Deck's own controls. The retail PC game
 has none, and the engine takes keys and a mouse only, so the controller is
 turned into those, with the mapping the PS Vita client already uses
-([vita-client.md](vita-client.md#controls)):
+([vita-client.md](vita-client.md#controls-stage-3)):
 
 | Control | In the game (default) | In a menu |
 | --- | --- | --- |

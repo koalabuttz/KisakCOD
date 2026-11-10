@@ -10,14 +10,15 @@ what is still missing. Build steps are in the
 
 - [Multiplayer client](linux-mp-client.md): `KisakCOD-mp`, the whole game in one
   native process; playable on a listen server (i386 and x86_64). It joins a
-  remote server with a key code or, opt-in, through Steam
+  remote server with a key code or, opt-in, through Steam. One-command setup
+  on x86_64, a portable folder, and opt-in controllers
 - [Singleplayer game](linux-sp-game.md): `KisakCOD-sp`, built like the
   multiplayer client from the singleplayer lists; killhouse and cargoship load
-  and play on i386, and the x86_64 build has not loaded a level yet
+  and play on i386; the x86_64 build has loaded its first levels in local runs
 - [Singleplayer levels](linux-sp-levels.md): what the other levels use, the
   level sweep tool and the laptop run plan
 - [Cinematics](linux-cinematics.md): Bink movies through an FFmpeg-backed shim
-  (`KISAK_LINUX_CINEMATICS`)
+  (`KISAK_LINUX_CINEMATICS`, on when FFmpeg is found)
 - [Steam authentication](linux-steam.md): join and host Steam-authenticated
   servers through the running Steam client (`KISAK_LINUX_STEAM`), or host as
   an anonymous Steam game server

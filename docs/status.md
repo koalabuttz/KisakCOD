@@ -1,7 +1,8 @@
 # Linux port status
 
-Last updated 2026-11-10 10:26 UTC (master `f811343`, opt-in Linux speed
-builds, PR 181). This page is the current state of
+Last updated 2026-11-10 10:34 UTC (master `eeb8367`, the Linux client's
+setup tool, portable folder, movies default and controllers, PR 187; the
+first two 64-bit steps in the upstream patch queue, PR 195). This page is the current state of
 the native Linux port and the other platform builds, the open pull requests and
 the roadmap. The [docs index](README.md) lists the detailed guides;
 older handoffs are in [history](history/README.md) and are not current.
@@ -21,14 +22,14 @@ Vulkan checks run on lavapipe and MoltenVK).
 | Dedicated server, i386 | `build-linux.sh` (default) | Loads all 21 stock maps, hosts bots through map cycles, clean shutdown (laptop). Retail CoD4 1.7 and CoD4x 21.1 clients have each played a brief local session through the authentication opt-ins. [Guide](linux-dedicated.md) |
 | Dedicated server, x86_64 | `-DKISAK_LINUX_ARCH=x86_64` | Same as i386: 21 of 21 stock maps, bots through map cycles, clean quit (laptop). [Guide](linux-x64.md#x86_64-dedicated-server) |
 | Multiplayer client `KisakCOD-mp`, i386 | `-DKISAK_BUILD_LINUX_MP_CLIENT=ON` | Playable on a listen server (laptop): `+devmap mp_crash`, team and class menus, spawn, move, shoot, grenades, OpenAL sound, flashbang white-out, clean quit. All 21 stock maps load, take a player and keep running on i386 and x86_64 in an unattended sweep (laptop, 2026-11-10, master `6e11f2b`: listen server, team and class joined, key presses, one frame measured, a death, clean quit; no assertion, error, script error or dropped connection). Only mp_crash has been played by hand, the sweep's sound went to a silent device, and one of its 42 frames, i386 mp_convoy, was nearly black; a follow-up run is queued ([map sweep](linux-mp-client.md#map-sweep)). Client prediction misses as often as the Windows build (see [Prediction](#prediction)). [Guide](linux-mp-client.md) |
-| Multiplayer client, x86_64 | the same, with `-DKISAK_LINUX_ARCH=x86_64` | Playable on the same terms as i386 (laptop), including sprint and mantle animations and a clean quit; all 21 stock maps pass the unattended sweep (see the i386 row). [Guide](linux-x64.md#x86_64-multiplayer-client) |
+| Multiplayer client, x86_64 | the same, with `-DKISAK_LINUX_ARCH=x86_64` | Playable on the same terms as i386 (laptop), including sprint and mantle animations and a clean quit; all 21 stock maps pass the unattended sweep (see the i386 row). Since PR 187 one command (`scripts/tools/setup_linux_client.py`) fetches and builds the pinned SDL3 and DXVK, with the DXVK fix fullscreen on native Wayland needs, and builds the client; a tool packs it into a folder that starts on another PC with no library path; and `-DKISAK_LINUX_GAMEPAD=ON` (off by default, on in the setup tool) maps a controller to keys and mouse. Hosted CI runs the setup tool end to end on a fresh runner; it has not run on the laptop or PC yet, and no real controller has been used in the game. [Guide](linux-x64.md#x86_64-multiplayer-client) |
 | Dedicated server, aarch64 (64-bit Arm) | `-DKISAK_LINUX_ARCH=aarch64` | Builds natively on Arm or cross-compiled from x86, boots without game data (qemu and hosted Arm CI). Not yet run with game data. [Guide](linux-arm64.md) |
 | Multiplayer client, aarch64 | the client options with `-DKISAK_LINUX_ARCH=aarch64` | Builds and passes the asset-free client checks (qemu and hosted Arm CI) against a D3D9 stand-in; no aarch64 DXVK build yet, so it has not drawn a frame. [Guide](linux-arm64.md#building-the-aarch64-client) |
 | Dedicated server, armv7 (32-bit Arm) | `-DKISAK_LINUX_ARCH=armv7` | Cross-compiled from x86, boots without game data under qemu-arm (hosted CI). First step toward a PS Vita port. Not yet run with game data. [Guide](linux-armv7.md) |
 | Dedicated server, PS Vita | `-DKISAK_PLATFORM=vita` | Clang + VitaSDK build packed into `KisakCOD-dedi.vpk` (hosted CI job, artifact). Boots in Vita3K without game data; capped at 24 players so its snapshot buffers fit the Vita's memory. Runs on David's Vita (2026-11-08): run 1 crashed on an unaligned 8-byte store, run 2 loaded mp_crash's zones then crashed on shared thread-locals, run 3 started the game then crashed on an unaligned script vector (all fixed). The run 4 build ran 9 h idle on mp_crash without a crash, and a key-code client on the laptop joined it over Wi-Fi (2026-11-09). An opt-in i386 Linux build (`-DKISAK_ALIGNMENT_CHECK=ON`) lists misaligned accesses ahead of time; the laptop scan of all 21 maps with bots is clean. [Guide](vita.md) |
 | Multiplayer client, PS Vita | `-DKISAK_PLATFORM=vita -DKISAK_BUILD_VITA_MP_CLIENT=ON` | KisakCOD-mp compiles, links and packs into `KisakCOD-mp.vpk` (hosted CI job); its own listen server is capped at 8 players. On David's Vita the main menu works (run K), and since console run L (2026-11-10, a build of master with PRs 162, 168, 174 and 175, all since merged) mp_crash loads on the console from the command line and from the menu and quits cleanly, with no GPU memory refused (at most 97.5 of 104 MB). A sceGxm back end under the D3D9 front draws it, the game's shaders are translated to Cg and compiled on the console, and touch, buttons and music work. With the default settings the picture showed double and triple images: the console refuses the depth clear the back end makes for depth of field and soft particles. With `r_dof_enable 0` and `r_zFeather 0` the picture was right and play ran at 5 to 8 frames a second; PR 192 (open) fixes the clear. What made the map fit, each measured first in Vita3K on the PC: render targets get GPU memory at first use and shadow maps are off (PR 155), loaded sounds are compressed to IMA ADPCM (`snd_adpcm`, PR 154; nobody has listened to them), GPU memory is set aside for the colour targets (PR 161), the engine's dynamic buffers take 12.5 MB instead of 25.5 (PR 166), and shader programs are made on a worker thread so the menu no longer freezes for up to 23.6 s while the game loads (PR 164). Sunlit ground is too yellow, a fault of the Vita build in the lightmap term; the flat white sky is the map's own look (PC run Y, beside the Windows build). Since PR 162 the system's on-screen keyboard opens for a menu's text field, the chat line and a typed command; a scripted answer reached the game in Vita3K (PC runs KB1 and KB2), but no text has come back from the system's own dialog and the keyboard has not been tried on the console. The layout of the controls in a game is not confirmed yet. [Guide](vita-client.md) |
 | Dedicated server, macOS (arm64 and x86_64) | `-DKISAK_PLATFORM=macos` | Builds with Apple Clang on hosted macOS runners (Apple silicon and Intel) and boots without game data to the first missing fastfile. Not yet run with game data or on a real Mac. [Guide](macos.md) |
-| Movies | `-DKISAK_LINUX_CINEMATICS=ON` | Bink movies play through an FFmpeg-backed shim on i386 and x86_64 (laptop). Off by default. [Guide](linux-cinematics.md) |
+| Movies | `KISAK_LINUX_CINEMATICS` (`AUTO`, the default since PR 187) | Bink movies play through an FFmpeg-backed shim on i386 and x86_64 (laptop). Built in when the FFmpeg development files are found at configure time; `OFF` leaves them out, and a build folder made before PR 187 keeps the `OFF` it stored. [Guide](linux-cinematics.md) |
 | Steam authentication | `-DKISAK_LINUX_STEAM=ON` | Added by PR 85. Logs in through the running Steam client's `steamclient.so`; a probe got a ticket validated on i386 and x86_64, and an i386 client joined, reconnected to and was refused by (with Steam off) an i386 dedicated server; the same passed with x86_64 client and server, and across i386 and x86_64 in both directions (laptop, one Steam account). A dedicated server can instead log on as an anonymous Steam game server (`KISAK_STEAM_SERVER_LOGIN=anonymous`); a Windows client on David's PC joined such a laptop server and was refused with the server's Steam off. The 32-bit Windows dedicated server can log on the same way since PR 179; that is compiled on hosted CI and has not been run against Steam yet. Off by default. [Guide](linux-steam.md) |
 | Key codes (no Steam) | default | A client without Steam (or with `cl_keyCodeOnly 1`) joins servers with `sv_allowUnverifiedGuids 1` using a GUID derived from `codkey.txt` or, on Windows, the retail registry key. Unverified by design. Laptop run (x86_64 client and dedi, made-up key): joined, spawned and reconnected with the GUID; refused without the server opt-in, without a key file, with a group-readable file and with a mistyped key. Since PR 159 the game's own key code menu saves a typed key as `codkey.txt` (mode 600) and keeps it out of the dvars a server's menus can read; that is checked asset-free on hosted CI, and the menu has not been used on screen yet. [Guide](key-codes.md) |
 | Finding servers | default | The local list, favourites and `connect` need no setup. The internet list is opt-in: `masterServerName` is empty by default, so no master server is contacted (retail's is gone); when set, the client asks that master and a `dedicated 2` server sends it heartbeats. A list is accepted only from the master that was asked, and since PR 179 the local list shows an unasked reply only when it echoes the random token of the client's last scan and arrives within 10 seconds. Checked asset-free over loopback UDP on hosted CI; no scan of a real network has been run, and the Join Game menu has not been opened on a real client yet. [Guide](server-browser.md) |
@@ -82,11 +83,11 @@ builds use `-ffp-contract=off` (no fused multiply-add).
   ([linux-sp-levels.md](linux-sp-levels.md)). Only killhouse and cargoship
   have been played by hand; night vision, ac130, the Javelin, slow motion,
   death and retry, and the victory screen are untried.
-- **Singleplayer without movies.** A `KisakCOD-sp` built without
-  `-DKISAK_LINUX_CINEMATICS=ON` (off is master's default) loads no level:
-  the loading screen samples the movie images and nothing sets them (found
-  on the laptop, x86_64). PR 193 (open) fixes it; build with movies on until
-  then.
+- **Singleplayer without movies.** A `KisakCOD-sp` built without movies
+  (`KISAK_LINUX_CINEMATICS` `OFF`, or `AUTO` on a machine without the FFmpeg
+  development files) loads no level: the loading screen samples the movie
+  images and nothing sets them (found on the laptop, x86_64). PR 193 (open)
+  fixes it; build with movies until then.
 - **x86_64 Linux singleplayer beyond two levels.** `KisakCOD-sp` builds for
   x86_64 since PR 167. Master's x86_64 build loaded killhouse and airlift
   and quit cleanly in WSL on the PC (software rendering, local runs); PR 193
@@ -164,7 +165,7 @@ These came before the playable client and still build and run in CI:
 
 ## Open pull requests
 
-As of 2026-11-10 10:26 UTC, nine. They change by the hour; the
+As of 2026-11-10 10:34 UTC, seven. They change by the hour; the
 [list on GitHub](https://github.com/koalabuttz/KisakCOD/pulls) is the current
 one. A machine run a pull request waits on is named where its author has
 said so.
@@ -172,12 +173,10 @@ said so.
 | PR | What | Machine run it waits on |
 | --- | --- | --- |
 | 173 | Vulkan back end: occlusion queries that count samples, the IMMEDIATE present mode when vsync is off, and GPU feed settings and statistics from the console (`r_vkGpuFeed`, `r_vkStats`) | PC run 7 (is the 75 fps cap gone, the sun against real D3D9) and laptop run 11 (the sun against DXVK, feed settings inside one launch). |
-| 187 | Linux client: a portable folder, a one-command setup tool, movies on when FFmpeg is found, and opt-in controller support | |
 | 191 | Fixes from the first daily security check: sound size math, addresses Windows may open, the Vita's text run settings read once | |
 | 192 | PS Vita client: clear depth the way a console accepts, clear the scene's colour every frame, log where a frame's time goes | Vita3K run AA, and a console run with depth of field and soft particles on to prove the fix. |
 | 193 | Singleplayer: the 64-bit airlift crash and the movies-off load, and frame and death checks in the level sweep | The i386 sweep of all 21 levels with the new checks, on the laptop. |
 | 194 | Steam: a server acts on Steam's later verdict for a ticket | A run with a real Steam player: join, leave and join again, then a kick and an attempt to come back. |
-| 195 | The first two 64-bit steps as patches in the upstream patch queue | |
 | 197 | Linux: sleep in the waits for the GPU by default (`r_gpuSyncSleep`), and an opt-in to stop them blocking the render thread | |
 | 196 | Fewer Linux CI jobs per push: five quick checks run both configurations in one job | |
 
@@ -209,6 +208,8 @@ PR 168.
   x86_64 ([guide](linux-mp-client.md#map-sweep)). Next: a follow-up on the
   nearly black i386 mp_convoy frame (queued), hand play beyond mp_crash, and
   a 30-minute session on one map. A real HTTP download (PR 170, merged: none has been made end to end).
+  The setup tool's first run on a real machine (PR 187, merged; queued on
+  the PC's WSL), and a real controller in the game.
 - Finding servers (PR 163, merged): the Join Game menu on a real client, and
   a real dedicated server, the test master and a client together (laptop run
   queued; [guide](server-browser.md#what-is-checked)). A scan of a real
