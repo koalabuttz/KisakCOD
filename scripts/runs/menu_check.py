@@ -591,7 +591,9 @@ class Run:
 
     def favourites_after_restart(self):
         status = self.client.finish(30)
-        self.note(f"client exit {status} before the restart")
+        # The first client is asked to quit here; a crash before it would
+        # otherwise show only in the restarted client's checks.
+        self.check("the first client exits with 0 before the restart", status == 0, f"exit {status}")
         if self.start_client() is None:
             self.check("the client starts again", False)
             return
