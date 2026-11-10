@@ -235,8 +235,10 @@ The Mac build uses the same POSIX platform layer as Linux (`src/linux`,
 ## Checks
 
 Hosted CI (`.github/workflows/build-kisakcod-macos.yaml`) builds Debug and
-RelWithDebInfo for each architecture on its own runner (`macos-26` for arm64,
-`macos-15-intel` for x86_64), checks that the arm64 binary contains no fused
+RelWithDebInfo for each architecture on its own runner (arm64: `macos-15` on pull
+requests and `macos-26` on master and manual runs, because the `macos-26` pool
+let a third of its jobs wait out their time on 2026-11-10; `macos-15-intel` for
+x86_64), checks that the arm64 binary contains no fused
 multiply-add instructions, and runs the asset-free checks:
 
 ```sh
