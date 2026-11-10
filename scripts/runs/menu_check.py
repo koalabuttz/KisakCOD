@@ -169,7 +169,9 @@ class Display:
         self.name = f":{number}"
         self.env = dict(os.environ, DISPLAY=self.name)
         self.window = None
+        self.pid = None
         self.origin = (0, 0)
+        self.size = (0, 0)
 
     def _start_with_displayfd(self, xvfb, screen):
         read_fd, write_fd = os.pipe()
@@ -228,22 +230,55 @@ class Display:
         return result.stdout.strip()
 
     def find_window(self, pid, timeout):
+        """Waits for the client's window. The client opens short-lived windows
+        first (a 1x1 probe, a splash), so the game's window is the largest one
+        it shows, and it is looked up again before every action (focus)."""
+        self.pid = pid
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            for query in (("search", "--onlyvisible", "--pid", pid), ("search", "--onlyvisible", "--name", ".")):
-                out = self.xdo(*query, check=False)
-                ids = [line for line in out.splitlines() if line.strip().isdigit()]
-                if ids:
-                    self.window = ids[-1]
-                    geometry = self.xdo("getwindowgeometry", self.window, check=False)
-                    match = re.search(r"Position: (-?\d+),(-?\d+)", geometry)
-                    self.origin = (int(match[1]), int(match[2])) if match else (0, 0)
-                    self.xdo("windowfocus", self.window, check=False)
-                    return True
+            if self._pick_window() and self.size[0] >= 320:
+                return True
             time.sleep(1)
         return False
 
+    def _pick_window(self):
+        out = self.xdo("search", "--onlyvisible", "--pid", self.pid, check=False)
+        best = None
+        for wid in (line.strip() for line in out.splitlines()):
+            if not wid.isdigit():
+                continue
+            geometry = self.xdo("getwindowgeometry", wid, check=False)
+            pos = re.search(r"Position: (-?\d+),(-?\d+)", geometry)
+            size = re.search(r"Geometry: (\d+)x(\d+)", geometry)
+            if not pos or not size:
+                continue
+            area = int(size[1]) * int(size[2])
+            if best is None or area > best[0]:
+                best = (area, wid, (int(pos[1]), int(pos[2])), (int(size[1]), int(size[2])))
+        if best is None:
+            return False
+        _, self.window, self.origin, self.size = best
+        return True
+
+    def focus(self):
+        """Gives the game's window the keyboard focus. With no window manager
+        nothing else does, and the client drops mouse and keys without it.
+        True when the X server says the window has it."""
+        for _ in range(5):
+            self._pick_window()
+            if self.window is None:
+                time.sleep(0.5)
+                continue
+            if self.xdo("getwindowfocus", "-f", check=False) == self.window:
+                return True
+            self.xdo("windowfocus", "--sync", self.window, check=False)
+            time.sleep(0.3)  # SDL takes the focus change on its next pump
+            if self.xdo("getwindowfocus", "-f", check=False) == self.window:
+                return True
+        return False
+
     def click(self, point):
+        self.focus()
         x, y = point
         self.xdo("mousemove", self.origin[0] + x, self.origin[1] + y)
         time.sleep(0.4)  # the menu takes focus from the mouse move first
@@ -251,10 +286,12 @@ class Display:
         time.sleep(0.6)
 
     def type_text(self, text):
+        self.focus()
         self.xdo("type", "--delay", "60", text)
         time.sleep(0.3)
 
     def key(self, name, times=1):
+        self.focus()
         for _ in range(times):
             self.xdo("key", name)
             time.sleep(0.15)
@@ -456,7 +493,10 @@ class Run:
         wrong = wrong_checksum(self.args.key)
         type_key(split_key(wrong))
         refused_text = self.dvar("ui_cdkeyvalid")
-        self.check("a mistyped key is refused and saves nothing", not key_file.exists(),
+        # An empty ui_cdkeyvalid means Verify never ran (input did not reach
+        # the menu), which is not a refusal.
+        self.check("a mistyped key is refused and saves nothing",
+                   not key_file.exists() and bool(plain(refused_text or "")),
                    f"ui_cdkeyvalid \"{plain(refused_text or '')}\"")
 
         listing = self.listing()
@@ -557,6 +597,7 @@ class Run:
             raise RuntimeError(f"{self.out}/client-home is not empty; use a new --out folder")
         self.display = Display(self.args.xvfb, self.args.xdotool, self.args.width, self.args.height,
                                self.out / "xvfb.log")
+        self.note(f"using display {self.display.name}")
         try:
             self.start_server()
             if self.start_client() is None:
@@ -566,6 +607,10 @@ class Run:
             # A profile pop-up on top means the seeded profile was not taken,
             # and every later step would click under it.
             if not self.check("the client reaches its main menu", not top.startswith("profile_"), f"top menu {top}"):
+                return
+            size = "x".join(map(str, self.display.size))
+            if not self.check("the game window has the keyboard focus", self.display.focus(),
+                              f"window {self.display.window} ({size}) on display {self.display.name}"):
                 return
             if self.key_code_menu():
                 self.favourite_and_join()
