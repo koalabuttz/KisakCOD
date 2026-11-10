@@ -432,15 +432,29 @@ evidence):
 * Picture: models drew dark where the profile had
   `r_altModelLightingUpdate 0`, because the adapter dropped a texture's
   contents when it was locked again; fixed, and run 7 matches DXVK at 40.1 dB
-  there. With `r_altModelLightingUpdate 1` (the default) models are still 2.7
-  to 6.7 luma darker than through DXVK (33.6 dB); not explained yet.
+  there. With `r_altModelLightingUpdate 1` (the default) run 7 had models 2.7
+  to 6.7 luma darker than through DXVK (33.6 dB, one screenshot each). That is
+  not a fault of this back end: on the Windows PC (RTX 2080 SUPER, PC run 6)
+  real Direct3D 9 and Vulkan, each at 0 and at 1, draw the same brightness.
+  Five launches with three screenshots each gave a mean luma between 63.50
+  and 63.90 for all 15, and no cell of a 4x4 grid differs between any two
+  settings by more than it moves inside one launch. Whether DXVK at 1 really
+  is brighter on the laptop is a question about DXVK, being rechecked the
+  same way (model lighting laptop run 1).
+* Comparing screenshots of that indoor view (`setviewpos 1504 512 200 90 0`
+  on mp_crash): one pair says little. Parts of the view move, and each launch
+  lands in one of a few states: on the PC a plain repeat of the same launch
+  was 31.1 dB from its twin, while two shots inside one launch are about 50
+  dB apart. Compare the mean luma per grid cell over several shots of each
+  launch, with a repeated launch as the baseline
+  (`renderer/model-lighting/luma_grid.py` in the project files).
 
-Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9}.md` in the project
-files.
+Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9}.md` and
+`renderer/vulkan-backend-pc-run-6.md` in the project files.
 
 ## Next
 
 The rest of the frame rate gap to DXVK (how often to feed the GPU, then the
-render thread's time per draw), the model lighting difference above,
+render thread's time per draw),
 occlusion queries (the adapter reports every sample as passed), and a long
 frame about every two minutes.
