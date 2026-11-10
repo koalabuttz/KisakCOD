@@ -9,11 +9,18 @@ involved. The checks:
   unknown-scene  --scene with a name no scene has fails at the "usage" stage
   one-scene      --scene runs that scene alone and passes, with no unsupported
                  call
+  bench          --scene bench, which a full run leaves out, passes and prints
+                 its timings (they depend on the machine and are not judged)
   full           a full run passes: every scene in SCENES ran, had points and
                  no mismatch; the only unsupported call is the one the states
                  scene makes on purpose; frames were presented; no object
                  outlived its release; the device and IDirect3D9 were destroyed
-                 at their last release; the validation layer reported no errors
+                 at their last release; the validation layer reported no errors;
+                 the swap fence flushed the next frame once; and the frame of
+                 600 draws was submitted in as many parts as the device's GPU
+                 feed setting allows (the setting is read from the device's
+                 own log line, so KISAK_VK_GPU_FEED and a GPU that has it off
+                 by default are both covered)
 
 Usage:
   test_vulkan_d3d9_front.py --binary build/bin/KisakCOD-vulkan-d3d9-check
@@ -27,7 +34,8 @@ import subprocess
 import sys
 
 # The scenes the check runs, in order. A scene added to the check is added here.
-SCENES = ('adapter', 'states', 'draw', 'render_target', 'shadow_map', 'references', 'threads', 'queries', 'reset', 'present')
+SCENES = ('adapter', 'states', 'draw', 'render_target', 'shadow_map', 'references', 'threads', 'queries', 'frame_loop',
+          'gpu_feed', 'reset', 'present')
 
 
 def run(binary, args, env, timeout=300):
@@ -96,6 +104,19 @@ def main():
                   found.get('d3d9_check.unsupported_calls') == '0 expected=0',
                   found.get('d3d9_check.unsupported_calls', 'missing'))
 
+    # bench (timings: without the validation layer)
+    code, stdout, _ = run(binary, ['--scene', 'bench', '--validation', 'off'], env)
+    found, scenes = parse(stdout)
+    checks.expect('bench passes', code == 0 and found.get('d3d9_check') == 'passed', f'status {code}\n{stdout}')
+    checks.expect('bench ran alone', [s[0] for s in scenes] == ['bench'], repr(scenes))
+    bench = found.get('d3d9_check.bench', '')
+    checks.expect('bench prints its timings',
+                  re.match(r'frames=\d+ draws=\d+ calls=\d+ draw_ms_average=[\d.]+ draw_ms_min=[\d.]+ '
+                           r'polls_per_frame=\d+ submissions_per_frame=[\d.]+$', bench) is not None,
+                  bench or 'missing')
+    if bench:
+        print(f'bench: {bench}')
+
     # full
     code, stdout, stderr = run(binary, ['--validation', args.validation], env)
     print(stdout, end='')
@@ -120,6 +141,42 @@ def main():
                   found.get('d3d9_check.device_release', 'missing'))
     polls = found.get('d3d9_check.event_query_polls', '')
     checks.expect('event query finished', polls.isdigit(), polls or 'missing')
+    # A swap fence polled with FLUSH while its frame is unfinished submits the
+    # next frame's work ahead of its Present, once (not at all with
+    # KISAK_VK_FENCE_FLUSH=0). Without the record thread a software GPU has
+    # finished the frame inside vkQueueSubmit2, before any poll.
+    fence_flushes = '0' if env.get('KISAK_VK_FENCE_FLUSH') == '0' else '1'
+    fence_paths = [f'ahead flushes={fence_flushes}']
+    if env.get('KISAK_VK_RECORD_THREAD') == '0':
+        fence_paths.append('finished_first flushes=0')
+    # The GPU feed, as the device says it is set: "off", "every N draws", or
+    # "after every draw" (KISAK_VK_GPU_FEED=always, for testing).
+    feed = re.search(r'legacy: device ready: .*, GPU feed (off|after every draw|every (\d+) draws)$', stdout, re.M)
+    checks.expect('the device logs its GPU feed setting', feed is not None)
+    feed_setting = feed.group(1) if feed else 'off'
+    if feed_setting == 'after every draw':
+        # Nothing is left to flush at the poll: every draw was submitted as it was made.
+        fence_paths = ['ahead flushes=0', 'finished_first flushes=0']
+    checks.expect('swap fence poll flushes the next frame once',
+                  found.get('d3d9_check.fence_flush') in fence_paths,
+                  found.get('d3d9_check.fence_flush', 'missing'))
+    # The frame of 600 draws: whole with the feed off; a part for every draw
+    # with "after every draw"; else at least one part (the feed waits for at
+    # most four times its draw count, however far behind the GPU is) and at
+    # most one for every N draws.
+    parts = re.match(r'draws=(\d+) parts=(\d+)$', found.get('d3d9_check.gpu_feed', ''))
+    checks.expect('the feed scene reports its parts', parts is not None, found.get('d3d9_check.gpu_feed', 'missing'))
+    if parts:
+        draws, count = int(parts.group(1)), int(parts.group(2))
+        if feed_setting == 'off':
+            low, high = 0, 0
+        elif feed_setting == 'after every draw':
+            low, high = draws, draws
+        else:
+            every = int(feed.group(2))
+            low, high = (1 if draws >= 4 * every else 0), draws // every
+        checks.expect(f'GPU feed {feed_setting}: the frame went to the GPU in {low} to {high} parts',
+                      low <= count <= high, f'{count} parts')
     if args.validation == 'require':
         checks.expect('validation was on', found.get('d3d9_check.validation') == 'on',
                       found.get('d3d9_check.validation', 'missing'))

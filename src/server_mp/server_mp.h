@@ -1135,6 +1135,7 @@ extern int sv_serverId_value;
 
 // sv_main_pc_mp
 const netadr_t *SV_MasterAddress();
+bool SV_UsesMasterServer();
 void SV_MasterGameCompleteStatus();
 void SV_MasterHeartbeat(const char *hbname);
 void SV_MasterShutdown();

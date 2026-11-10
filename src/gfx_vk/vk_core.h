@@ -20,8 +20,8 @@
 // It knows nothing about the engine, materials or D3D9; the window system is
 // handed in (WindowSystem below), so the same code serves SDL3 on Linux, Windows
 // and macOS. Users that build pipelines or descriptor sets record Vulkan
-// commands themselves into Commands() with Functions(); the core keeps the parts
-// that are easy to get wrong (memory, lifetime, synchronisation) behind its API.
+// commands themselves through Record(); the core keeps the parts that are easy
+// to get wrong (memory, lifetime, synchronisation) behind its API.
 //
 // Requirements on the driver: Vulkan 1.3 (dynamic rendering, synchronization2
 // and pipeline creation feedback are core there), timeline semaphores and
@@ -30,12 +30,20 @@
 // that does graphics and presents to the window. Mesa's lavapipe, Intel ANV,
 // NVIDIA's driver for the RTX 2080 Super and MoltenVK all meet them.
 //
-// Threading: one thread owns a Core and calls everything on it.
+// Threading: one thread at a time calls a Core, the "owning thread" in these
+// comments. It need not always be the same one: the D3D9 front's callers (the
+// engine's render, database and main threads) take turns behind its lock. With
+// CoreDesc::recordThread the core keeps a second thread of its own that makes
+// the vkCmd* calls, vkQueueSubmit2 and vkQueuePresentKHR (see Record()).
 // See docs/vulkan-core.md.
 
 #include "vk_dispatch.h"
 
+#include <cstddef>
 #include <cstdint>
+#include <new>
+#include <type_traits>
+#include <utility>
 
 namespace gfx_vk
 {
@@ -77,6 +85,11 @@ struct CoreDesc
     // the device, written back by DestroyCore. Null: no file, an in-memory
     // cache only.
     const char *pipelineCachePath = nullptr;
+    // Record commands on a thread of the core's own: Record() stores each
+    // command and that thread makes the Vulkan calls, submits and presents,
+    // so the driver's recording cost leaves the calling thread (as DXVK does).
+    // The environment can override it: KISAK_VK_RECORD_THREAD=0 or 1.
+    bool recordThread = false;
     // Where the core's messages go (one line per call, no newline). Null: nowhere.
     void (*log)(void *user, const char *line) = nullptr;
     void *logUser = nullptr;
@@ -132,6 +145,10 @@ struct CoreStats
     PassTimings frame;        // first to last timestamp of each presented frame
 
     uint64_t submissions;     // queue submissions, flushes included
+    bool recordThread;        // commands are recorded on the core's own thread
+    uint64_t recordPackets;   // commands stored for that thread, all frames
+    uint64_t recordChunks;    // blocks of them handed over
+    double recordWaitMs;      // time the calling thread waited for that thread
     uint64_t flushes;         // Flush() calls and flushes forced by staging use
 
     // Memory, in bytes, as allocated from the driver (blocks, not suballocations):
@@ -265,6 +282,25 @@ struct OptionalFeatures
     // instead of binding its pipeline's set again with dynamic offsets
     // (KISAK_VK_UNIFORMS=static), to compare the two or rule one out.
     bool staticUniforms;
+    // The Legacy adapter submits a frame's work ahead of its Present when the
+    // engine waits for the frame before it (legacy::GetQueryData). On unless
+    // KISAK_VK_FENCE_FLUSH=0, to compare the two.
+    bool fenceFlush;
+    // The Legacy adapter submits a frame in parts while it is still being
+    // drawn, so the GPU works on a frame as it is recorded instead of
+    // starting when the frame ends (see FeedGpu in vk_legacy_draw.cpp). Each
+    // part ends its render pass and the next begins one that loads the
+    // targets again, which costs a tile-based GPU a store and a load of
+    // every target: off on Apple, Arm, Qualcomm, Imagination and Broadcom
+    // GPUs and on every portability-subset device. KISAK_VK_GPU_FEED=0 turns
+    // it off and =1 on, whatever the GPU; =always submits after every draw
+    // (testing: every draw then starts a command buffer and a pass).
+    bool gpuFeed;
+    bool gpuFeedAlways;
+    // Draws recorded before a part is submitted (KISAK_VK_GPU_FEED_DRAWS,
+    // default 128): that many while the GPU has under two submissions left,
+    // more for each further one (up to four times).
+    uint32_t gpuFeedDraws;
 };
 const OptionalFeatures &Features(const Core *core);
 // Whether images of this format with optimal tiling support these features.
@@ -349,9 +385,11 @@ bool ImageReadyToSample(const Image *image);
 //
 // The core always has a command buffer open for recording; work recorded
 // outside a frame (uploads at map load, say) is submitted with the next Flush
-// or Present. A frame is BeginFrame ... Present: BeginFrame waits until the
-// frame slot's previous use has finished on the GPU, recycles its staging,
-// transient and descriptor memory, and acquires a swapchain image.
+// or Present. A frame is BeginFrame ... Present. The frame slot's previous use
+// has finished on the GPU and its staging, transient and descriptor memory are
+// recycled by then. The swapchain image is acquired the first time
+// SwapchainImage() asks for it, as late as possible: with the record thread,
+// the previous frame's present must have been made first.
 //
 //   Ok       go on; SwapchainImage() is the frame's image
 //   Skipped  nothing to draw to (minimised, swapchain rebuilt): do not record
@@ -360,15 +398,66 @@ bool ImageReadyToSample(const Image *image);
 
 FrameResult BeginFrame(Core *core);
 // Transitions the swapchain image for presentation, submits and presents.
+// Skipped when the frame got no image (see SwapchainImage): what was recorded
+// is submitted, nothing is shown.
 FrameResult Present(Core *core);
 bool InFrame(const Core *core);
-// The swapchain image of the current frame; null outside a frame. Its contents
-// are undefined at BeginFrame. Copies from it need CoreDesc::allowCapture.
+// The swapchain image of the current frame, acquired at the first call; null
+// outside a frame, or when the swapchain is out of date (rebuilt at the next
+// BeginFrame). Its contents are undefined. Copies from it need
+// CoreDesc::allowCapture.
 Image *SwapchainImage(Core *core);
 
-// The command buffer being recorded. It changes at Flush and Present, so fetch
-// it again after either.
-VkCommandBuffer Commands(Core *core);
+// ---- Recording commands --------------------------------------------------------
+//
+// Record(core, f) records Vulkan commands into the command buffer being
+// recorded: f(VkCommandBuffer cmd, const Dispatch &vk) makes the vkCmd* calls.
+// Without the record thread f runs at once. With it, f is copied and runs on
+// that thread later, in order with everything else recorded, so:
+//   - capture by value ([=]), never by reference: f outlives the caller;
+//   - build pointer-holding structs (VkDependencyInfo, VkRenderingInfo) inside
+//     f, pointing at the captured copies;
+//   - only trivially destructible captures (handles, structs, arrays).
+// Objects f uses must stay alive until the work is submitted; Destroy* waits
+// for that already. Nothing is recorded once the core has failed.
+
+struct RecordContext
+{
+    VkCommandBuffer cmd;
+    const Dispatch *vk;
+};
+using RecordFn = void (*)(void *packet, RecordContext &context);
+
+namespace detail
+{
+struct RecordSpace
+{
+    RecordContext *direct; // run now with this
+    void *packet;          // or construct the copy here
+};
+// Starts a command buffer if none is being recorded.
+RecordSpace ReserveRecord(Core *core, size_t size, RecordFn run);
+} // namespace detail
+
+template <typename F> void Record(Core *core, F &&f)
+{
+    using Packet = typename std::decay<F>::type;
+    static_assert(std::is_trivially_destructible<Packet>::value, "Record: capture only trivially destructible values");
+    static_assert(alignof(Packet) <= 8, "Record: captures aligned to more than 8 bytes");
+    const detail::RecordSpace space = detail::ReserveRecord(
+        core, sizeof(Packet), [](void *packet, RecordContext &context) {
+            (*static_cast<Packet *>(packet))(context.cmd, *context.vk);
+        });
+    if (space.direct)
+        f(space.direct->cmd, *space.direct->vk);
+    else if (space.packet)
+        new (space.packet) Packet(std::forward<F>(f));
+}
+
+// Starts a command buffer if none is being recorded and returns a number that
+// changes whenever a new one starts (at Flush and Present): bound pipelines and
+// dynamic state are lost then. 0 on failure.
+uint64_t Recording(Core *core);
 // Submits what was recorded so far; wait also waits for it (and everything
 // before it) to finish. Not inside a pass. A flush inside a frame keeps the
 // frame going.
@@ -384,6 +473,17 @@ bool SerialFinished(Core *core, uint64_t serial);
 // (as right after Present), and 0 before the first. For fences such as D3D9's
 // event queries, which finish once everything recorded before them has.
 uint64_t RecordedSerial(const Core *core);
+// Submissions made (Flush, Present) that the GPU has not finished.
+uint32_t PendingSubmissions(Core *core);
+// SerialFinished and PendingSubmissions ask the device how far it has got,
+// which is a system call on most drivers. The answer is kept for 10
+// microseconds, so a thread that polls in a loop asks at most that often.
+// RefreshProgress is that question alone, and the one call here that any
+// thread may make at any time while the core exists, whatever another thread
+// is doing with the core: a caller that serialises its core calls with a lock
+// (the D3D9 front) asks before it takes the lock, and the poll that follows
+// under the lock then makes no system call.
+void RefreshProgress(Core *core);
 
 // ---- Passes and image state ------------------------------------------------------
 //

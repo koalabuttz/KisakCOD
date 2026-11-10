@@ -925,15 +925,39 @@ class VulkanWindowWorkflowTests(unittest.TestCase):
         self.assertIn('--video-driver offscreen', run)
         self.assertIn('--validation require', run)
 
+    def test_the_gpu_feed_is_checked_off_and_at_its_extreme(self):
+        step = self.step('Run the checks again with the GPU feed off and at its extreme')
+        self.assertEqual(step['if'], "${{ matrix.config == 'Debug' }}")
+        run = step['run']
+        # Off: the path tile-based GPUs and MoltenVK take by default.
+        self.assertIn('KISAK_VK_GPU_FEED=0 python3 -u scripts/tests/test_vulkan_d3d9_front.py', run)
+        # A submission, a command buffer and a pass for every draw, in both checks.
+        self.assertIn('KISAK_VK_GPU_FEED=always python3 -u scripts/tests/test_vulkan_d3d9_front.py', run)
+        self.assertIn('KISAK_VK_GPU_FEED=always python3 -u scripts/tests/test_vulkan_legacy_adapter.py', run)
+        self.assertEqual(run.count('--validation require'), 3)
+
     def test_the_front_lock_is_checked_with_thread_sanitizer(self):
         step = self.step("Check the D3D9 front's lock with ThreadSanitizer")
         self.assertEqual(step['if'], "${{ matrix.config == 'Debug' }}")
         self.assertEqual(step['env']['SDL_VIDEODRIVER'], 'offscreen')
         self.assertIn('halt_on_error=1', step['env']['TSAN_OPTIONS'])
+        # Lavapipe is not instrumented: its rasterizer threads' hand-over to
+        # its queue thread reads as a race, so they are off for these runs.
+        self.assertEqual(step['env']['LP_NUM_THREADS'], '0')
         run = step['run']
         self.assertIn('-DCMAKE_CXX_FLAGS=-fsanitize=thread', run)
         self.assertIn('--scene threads', run)
-        self.assertIn("grep -qx 'd3d9_check=passed'", run)
+        self.assertIn('--scene frame_loop', run)
+        # The frame loop again with a submission after every draw, a frame
+        # submitted in parts, and the lock under a 20 microsecond poller.
+        self.assertIn('KISAK_VK_GPU_FEED=always "$OUT_DIR/tsan/KisakCOD-vulkan-d3d9-check" --scene frame_loop', run)
+        self.assertIn('--scene gpu_feed', run)
+        self.assertIn('--scene bench', run)
+        self.assertEqual(run.count("grep -qx 'd3d9_check=passed'"), 5)
+        self.assertIn('KISAK_VK_RECORD_THREAD=1 "$OUT_DIR/tsan/KisakCOD-vulkan-probe"', run)
+        self.assertIn("grep -qx 'vulkan_probe=passed'", run)
+        self.assertIn('KISAK_VK_RECORD_THREAD=1 "$OUT_DIR/tsan/KisakCOD-vulkan-legacy-check"', run)
+        self.assertIn("grep -qx 'legacy_check=passed'", run)
         self.assertIn('python3 scripts/tests/test_compare_frames.py', self.step('Check the frame comparison script')['run'])
 
     def test_no_other_job_builds_the_probe(self):

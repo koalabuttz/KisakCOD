@@ -48,6 +48,12 @@ the Windows workflow with the `tracy` input builds Win32 Release and x64
 profiling executables (artifacts named `-Tracy`). Linux has `KISAK_LINUX_TRACY`
 ([Linux client](docs/linux-mp-client.md)).
 
+The same CMake project also configures for 64-bit Windows with `-A x64`
+(sound through OpenAL, no Steam, movies through an opt-in FFmpeg shim;
+[notes](docs/linux-x64.md#windows-msvc-x64-build)) and for Windows on Arm with
+`-A ARM64` ([notes](docs/linux-arm64.md#building-for-windows-arm64)). The
+32-bit build above stays the main one.
+
 
 ```
 Keep in Mind: This is a ~20 year old game with some known exploits. We will try to fix these as we become aware of them.
@@ -100,8 +106,15 @@ server, spawns the player, and plays: moving, shooting, grenades, sound and a
 clean quit. Movies play with the opt-in FFmpeg shim
 ([cinematics](docs/linux-cinematics.md)). Build steps:
 [multiplayer client](docs/linux-mp-client.md). The singleplayer game
-([guide](docs/linux-sp-game.md), i386) loads and plays its first levels,
-killhouse and cargoship.
+([guide](docs/linux-sp-game.md), i386) plays its first levels, killhouse and
+cargoship, and all 21 levels load and run unattended
+([levels](docs/linux-sp-levels.md)).
+
+**Vulkan.** An opt-in back end (`-DKISAK_BUILD_VULKAN_BACKEND=ON`, then
+`+set r_backend vulkan`) draws the same renderer through Vulkan directly,
+without DXVK on Linux or `d3d9.dll` on Windows. It plays a map on a developer
+laptop and a Windows PC; on the laptop it is slower than DXVK for now
+([guide](docs/vulkan-d3d9-front.md#in-the-game-r_backend-vulkan)).
 
 **Authentication.** Steam authentication on Linux is opt-in
 (`KISAK_LINUX_STEAM`, [guide](docs/linux-steam.md)); without it the dedicated
@@ -114,6 +127,13 @@ are spoofable and must not carry bans, privileges or persistent identity. Stock
 retail CoD4 1.7 and CoD4x 21.1 have each played in separate brief local sessions
 against the Linux server. These are not simultaneous human-player, mixed-client,
 public-server authentication or general compatibility proof.
+
+**Other platforms.** Opt-in builds exist for 64-bit Arm Linux
+([aarch64](docs/linux-arm64.md)), 32-bit Arm Linux ([armv7](docs/linux-armv7.md),
+dedicated server), macOS on Apple silicon and Intel ([macOS](docs/macos.md)) and
+a hacked PS Vita ([server](docs/vita.md), [client](docs/vita-client.md)). They
+build and pass their checks in hosted CI; how far each has run with game data
+is in the [status page](docs/status.md).
 
 Further reading:
 - [Linux port status](docs/status.md): what works, what is verified and where,

@@ -234,11 +234,20 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
                                        && FormatSupports(device->core, VK_FORMAT_R5G6B5_UNORM_PACK16,
                                                          VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT
                                                              | VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT);
+            // How a frame reaches the GPU (FeedGpu in vk_legacy_draw.cpp).
+            const OptionalFeatures &features = Features(device->core);
+            char feed[48];
+            if (!features.gpuFeed)
+                std::snprintf(feed, sizeof(feed), "off");
+            else if (features.gpuFeedAlways)
+                std::snprintf(feed, sizeof(feed), "after every draw");
+            else
+                std::snprintf(feed, sizeof(feed), "every %u draws", features.gpuFeedDraws);
             Log(*device,
-                "device ready: back buffer %ux%u, depth %s, vertex stride %s, depth compare %s, 16-bit targets %s",
-                width, height, FormatName(device->depthFormat),
-                Features(device->core).dynamicVertexStride ? "dynamic" : "static",
-                Features(device->core).fixedDepthCompare ? "fixed" : "dynamic", packedTargets ? "packed" : "wide");
+                "device ready: back buffer %ux%u, depth %s, vertex stride %s, depth compare %s, 16-bit targets %s, "
+                "GPU feed %s",
+                width, height, FormatName(device->depthFormat), features.dynamicVertexStride ? "dynamic" : "static",
+                features.fixedDepthCompare ? "fixed" : "dynamic", packedTargets ? "packed" : "wide", feed);
             return device.release();
         }
         Fail(*device, "core: %s", LastError(core));
