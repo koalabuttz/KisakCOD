@@ -1,7 +1,7 @@
 # Linux port status
 
-Last updated 2026-11-10 05:50 UTC (master `2fa722a`, the PS Vita client's
-render target memory, PR 161). This page is the current state of
+Last updated 2026-11-10 06:10 UTC (master `51f109d`, the opt-in internet
+server list, PR 163). This page is the current state of
 the native Linux port and the other platform builds, the open pull requests and
 the roadmap. The [docs index](README.md) lists the detailed guides;
 older handoffs are in [history](history/README.md) and are not current.
@@ -88,10 +88,12 @@ builds use `-ffp-contract=off` (no fused multiply-add).
   A map loads and draws in the Vita3K emulator since PRs 154, 155 and 161;
   that build has not run on the console
   ([guide](vita-client.md#memory)).
-- **The internet server list**, in any build: the retail master,
-  `cod4master.activision.com`, no longer resolves. Players find servers by
-  the local list, favourites or `connect <address>`. PR 163 (open) makes the
-  master a setting.
+- **A public internet server list**, in any build: the retail master,
+  `cod4master.activision.com`, no longer resolves, and no public master
+  lists KisakCOD servers. Players find servers by the local list, favourites
+  or `connect <address>`. Since PR 163 the master is a setting
+  (`masterServerName`, empty by default) for whoever runs one
+  ([guide](server-browser.md#the-internet-list)).
 - **macOS client.** The multiplayer client builds for Macs, with the Bink movie
   shim and the Vulkan back end (`r_backend vulkan`) linked in. It passes its
   asset-free checks in hosted CI against the D3D9 and OpenAL stand-ins. The
@@ -148,7 +150,7 @@ These came before the playable client and still build and run in CI:
 
 ## Open pull requests
 
-As of 2026-11-10 05:50 UTC, twelve. They change by the hour; the
+As of 2026-11-10 06:10 UTC, eleven. They change by the hour; the
 [list on GitHub](https://github.com/koalabuttz/KisakCOD/pulls) is the current
 one. A machine run a pull request waits on is named where its author has
 said so.
@@ -161,7 +163,6 @@ said so.
 | 164 (draft) | PS Vita client: make shader programs in the background so the menu does not freeze | |
 | 166 | PS Vita client: cut the dynamic buffers that fill the GPU's memory in a game | A PC-built Vita3K run of a game on mp_crash (run V). |
 | 159 | Save a key code typed into the game's key code menu as `codkey.txt` | Nobody has typed a key into the menu yet. |
-| 163 | Make the internet server list opt-in (`masterServerName`, empty by default), so the game contacts no master unless told to | |
 | 170 | Linux client: opt-in HTTP downloads (`-DKISAK_LINUX_HTTP_DOWNLOADS=ON`) through the engine's own libcurl downloader | A laptop run of a real download is planned; none has been made. |
 | 167 | Build the singleplayer game for x86_64 Linux | It has not loaded a level; a laptop sweep of the 21 levels is queued. |
 | 160 | In-game A/B measuring (`perf_ab`, `perf_sample`) and two switches to measure with it, off by default | Laptop perf run 5 is their first run in a real game. |
@@ -194,6 +195,9 @@ As of 2026-11-10. Each machine does one run at a time.
   the first sweep of all 21 stock maps with the map sweep tool (PR 157,
   merged; [guide](linux-mp-client.md#map-sweep)), i386 and x86_64, then a
   30-minute session on one map. A real HTTP download for PR 170.
+- Finding servers (PR 163, merged): the Join Game menu on a real client, and
+  a real dedicated server, the test master and a client together (laptop run
+  queued; [guide](server-browser.md#what-is-checked)).
 - x86_64 Linux singleplayer: a first sweep of the 21 levels (PR 167).
 - CPU measuring: laptop perf run 5, the first use of PR 160's in-game A/B
   commands.
@@ -232,7 +236,8 @@ no fixed order.
    (PR 133), and a client without Steam joins servers that accept key code
    GUIDs (PR 134). Next: a Linux Steam client on an anonymous-login server,
    a Windows key code client, a Steam player and a key code player on one
-   server, two Steam accounts, and a server list that works (PR 163).
+   server, two Steam accounts, and the internet list seen working in the
+   Join Game menu (PR 163 made the master a setting).
    Admission is never weakened to fake it.
 8. **Other platforms**: an aarch64 DXVK build and a first Arm run with game
    data, Windows ARM64 with game data, the macOS client with game data
