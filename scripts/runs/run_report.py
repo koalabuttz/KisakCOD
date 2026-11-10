@@ -106,6 +106,8 @@ def _power(row):
         state += f", {power['profile']}"
     if power.get("changed"):
         state = "**" + state + ", changed during the capture**"
+    if power.get("slept"):
+        state = "**" + state + f", slept {power['slept']:g} s during the row**"
     return state
 
 

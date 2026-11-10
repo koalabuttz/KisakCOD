@@ -524,6 +524,28 @@ def test_power(bench):
     marker.unlink(missing_ok=True)
     set_power(bench.power, True, 80)
 
+    # A lid closed for 13 s while the first row ran (the laptop did this on
+    # 2026-11-10): the row is kept, marked and run again.
+    clock = iter([100.0, 113.1])
+    real = perf_run.slept_seconds
+    perf_run.slept_seconds = lambda: next(clock, 113.1)
+    try:
+        status, results, _, printed = bench.run(bench.recipe(rows=["A", "B"]))
+    finally:
+        perf_run.slept_seconds = real
+    names = [row["name"] for row in results["rows"]]
+    check(status == 0 and results["status"] == "complete" and names == ["A-1.spoiled1", "A-1", "B-1"],
+          f"a row the machine slept through is run again ({status}, {names}, {results['status']})\n{printed}")
+    if len(results["rows"]) == 3:
+        slept, again = results["rows"][0], results["rows"][1]
+        check(slept["status"] == "flagged: the power: the machine slept 13.1 s during the row"
+              and slept["power"]["slept"] == 13.1 and again["status"] == "ok" and "slept" not in again["power"],
+              f"the row is marked with the seconds slept ({slept['status']})")
+        check("slept 13.1 s during the row**" in run_report.render(results), "the report marks the row slept through")
+        compact = run_report.compact(results)
+        check(compact["rows"][0]["power"].get("slept") == 13.1, "the short form keeps the mark")
+    check(isinstance(real(), float) and real() >= 0.0, "the real suspend clock reads")
+
 
 def test_load(bench):
     print("other load")

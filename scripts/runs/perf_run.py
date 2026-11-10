@@ -22,6 +22,9 @@ What it checks by itself, because each has spoiled a row before:
   battery floor before a launch, the power profile, and the AC state once a
   second while a capture runs. A row whose power changed is marked and run
   again (``retries``), after waiting for the state to come back;
+* suspend: a machine that slept while a row ran (a closed lid) wakes up and
+  carries on as if nothing happened, with a row whose waits and frame times
+  are wrong. Such a row is marked and run again like one whose power changed;
 * other load: it waits while another process uses more than a share of one
   core, and notes the busiest processes with each row;
 * leftovers: no launch while a process of the same binary still runs;
@@ -188,6 +191,17 @@ def read_power(root=None):
         except (OSError, ValueError):
             continue
     return {"ac": ac, "battery": battery}
+
+
+def slept_seconds():
+    """Seconds this machine has spent suspended since it booted (Linux: the
+    boot-time clock counts them, the monotonic clock does not). 0.0 where the
+    system cannot say."""
+    try:
+        awake = time.clock_gettime(time.CLOCK_MONOTONIC)
+        return max(0.0, time.clock_gettime(time.CLOCK_BOOTTIME) - awake)
+    except (AttributeError, OSError):
+        return 0.0
 
 
 def read_profile():
@@ -873,6 +887,7 @@ class Run:
                "steps": [], "tail": []}
         if self.recipe["variants"].get(variant, {}).get("note"):
             row["note"] = self.recipe["variants"][variant]["note"]
+        slept_before = slept_seconds()
         command, env, cwd, names, binary = self.command(row_name, variant)
         Path(cwd).mkdir(parents=True, exist_ok=True)
         row["binary"] = binary_identity(binary)
@@ -910,8 +925,13 @@ class Run:
                          for name, pattern in counts.items()}
         if self.guard:
             row["guard"] = compare_snapshots(self.baseline, snapshot(self.guard))
-        if row["power"]["changed"]:
-            # First, so that a capture skipped or spoiled by the power is run again.
+        slept = slept_seconds() - slept_before
+        if slept >= 1.0:
+            row["power"]["slept"] = round(slept, 1)
+        if row["power"].get("slept"):
+            # First, like the next: a row spoiled by the power is run again.
+            row["status"] = f"flagged: the power: the machine slept {row['power']['slept']:g} s during the row"
+        elif row["power"]["changed"]:
             row["status"] = "flagged: the power state changed during the capture"
         elif not played:
             failed = next((step for step in row["steps"] if not step[1]), None)

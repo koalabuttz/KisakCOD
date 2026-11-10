@@ -131,7 +131,10 @@ What the driver does by itself, because each has spoiled a row before:
   that state, and stops the run when the battery is under `battery_floor` plus
   `battery_per_launch`, or the power profile is another one. During a capture
   it reads the charger once a second; a row whose power changed is kept, marked
-  `.spoiled1`, left out of the averages and run again (`retries`).
+  `.spoiled1`, left out of the averages and run again (`retries`). A row
+  during which the machine slept (a closed lid: the game wakes up and carries
+  on, with wrong waits and frame times) is treated the same way, and says how
+  many seconds it slept.
 - **Other load.** It waits while another process uses more than
   `max_cpu_percent` of a core, and notes the busiest other processes before the
   launch and at the capture.
