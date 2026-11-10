@@ -647,6 +647,12 @@ VkSampler GetSampler(Core *core, const VkSamplerCreateInfo &info);
 // Writes the pipeline cache file now (DestroyCore does it too).
 bool SavePipelineCache(Core *core);
 
+// The present mode a swapchain takes of those its surface offers. With vsync:
+// FIFO, which every surface has. Without: IMMEDIATE, else MAILBOX, else FIFO.
+// `wanted` is "immediate", "mailbox" or "fifo" (anything else, or null, is no
+// wish): that mode is taken whenever it is offered, vsync or not. The core
+// passes KISAK_VK_PRESENT_MODE there, to compare the modes on one machine.
+VkPresentModeKHR ChoosePresentMode(const VkPresentModeKHR *offered, uint32_t count, bool vsync, const char *wanted);
 const char *PresentModeName(VkPresentModeKHR mode);
 const char *FormatName(VkFormat format);
 const char *DeviceTypeName(VkPhysicalDeviceType type);

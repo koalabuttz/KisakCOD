@@ -237,6 +237,50 @@ bool PumpEvents(SDL_Window *window, gfx_vk::Core *core)
     return open;
 }
 
+// The first case ChoosePresentMode gets wrong, or null: without vsync a frame
+// is shown at once where the surface can (IMMEDIATE, as D3D9's immediate
+// interval and DXVK), else replaces the waiting one (MAILBOX), else waits its
+// turn (FIFO); with vsync it waits its turn; and a mode asked for by name is
+// taken whenever the surface offers it.
+const char *PresentModeChoiceFault()
+{
+    const VkPresentModeKHR all[] = {VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_FIFO_RELAXED_KHR,
+                                    VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR};
+    const VkPresentModeKHR noImmediate[] = {VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_FIFO_KHR};
+    const VkPresentModeKHR noMailbox[] = {VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR};
+    const VkPresentModeKHR fifoOnly[] = {VK_PRESENT_MODE_FIFO_KHR};
+    struct Case
+    {
+        const char *name;
+        const VkPresentModeKHR *offered;
+        uint32_t count;
+        bool vsync;
+        const char *wanted;
+        VkPresentModeKHR expected;
+    };
+    const Case cases[] = {
+        {"no vsync takes IMMEDIATE", all, 4, false, nullptr, VK_PRESENT_MODE_IMMEDIATE_KHR},
+        {"no vsync without IMMEDIATE takes MAILBOX", noImmediate, 2, false, nullptr, VK_PRESENT_MODE_MAILBOX_KHR},
+        {"no vsync without MAILBOX takes IMMEDIATE", noMailbox, 2, false, nullptr, VK_PRESENT_MODE_IMMEDIATE_KHR},
+        {"no vsync with FIFO alone takes FIFO", fifoOnly, 1, false, nullptr, VK_PRESENT_MODE_FIFO_KHR},
+        {"vsync takes FIFO", all, 4, true, nullptr, VK_PRESENT_MODE_FIFO_KHR},
+        {"mailbox asked for", all, 4, false, "mailbox", VK_PRESENT_MODE_MAILBOX_KHR},
+        {"mailbox asked for with vsync", all, 4, true, "mailbox", VK_PRESENT_MODE_MAILBOX_KHR},
+        {"immediate asked for with vsync", all, 4, true, "immediate", VK_PRESENT_MODE_IMMEDIATE_KHR},
+        {"fifo asked for without vsync", all, 4, false, "fifo", VK_PRESENT_MODE_FIFO_KHR},
+        {"mailbox asked for but not offered", noMailbox, 2, false, "mailbox", VK_PRESENT_MODE_IMMEDIATE_KHR},
+        {"immediate asked for but not offered, with vsync", noImmediate, 2, true, "immediate",
+         VK_PRESENT_MODE_FIFO_KHR},
+        {"an unknown name is no wish", all, 4, false, "fastest", VK_PRESENT_MODE_IMMEDIATE_KHR},
+    };
+    for (const Case &test : cases)
+    {
+        if (gfx_vk::ChoosePresentMode(test.offered, test.count, test.vsync, test.wanted) != test.expected)
+            return test.name;
+    }
+    return nullptr;
+}
+
 int Run(const Options &options)
 {
     if (!SDL_Init(SDL_INIT_VIDEO))
@@ -303,6 +347,14 @@ int Run(const Options &options)
     std::printf("vulkan_probe.swapchain=%ux%u %s %s images=%u\n", first.width, first.height,
                 gfx_vk::FormatName(first.format), gfx_vk::PresentModeName(first.presentMode), first.imageCount);
     std::fflush(stdout);
+    // Which present mode the core takes of those a surface offers, for the
+    // surfaces this machine's does not stand for.
+    if (const char *wrong = PresentModeChoiceFault())
+    {
+        gfx_vk::DestroyCore(core);
+        return Failed("present_mode", wrong);
+    }
+    std::printf("vulkan_probe.present_mode_choice=checked\n");
 
     vk_probe::DrawScene *scene = nullptr;
     if (options.draw)

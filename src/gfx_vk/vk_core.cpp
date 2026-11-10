@@ -827,19 +827,41 @@ VkSurfaceFormatKHR ChooseFormat(const std::vector<VkSurfaceFormatKHR> &formats)
     return formats[0];
 }
 
-VkPresentModeKHR ChoosePresentMode(const std::vector<VkPresentModeKHR> &modes, bool vsync)
+// KISAK_VK_PRESENT_MODE, when it names a mode (ChoosePresentMode's `wanted`).
+const char *WantedPresentMode()
 {
-    if (vsync)
-        return VK_PRESENT_MODE_FIFO_KHR; // always available
-    const VkPresentModeKHR preferred[] = {VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR};
-    for (VkPresentModeKHR mode : preferred)
+    for (const char *mode : {"immediate", "mailbox", "fifo"})
     {
-        if (std::find(modes.begin(), modes.end(), mode) != modes.end())
+        if (EnvEquals("KISAK_VK_PRESENT_MODE", mode))
+            return mode;
+    }
+    return nullptr;
+}
+} // namespace
+
+// IMMEDIATE first without vsync: it is what D3D9's immediate presentation
+// interval means (a frame is shown at once and may tear) and what DXVK asks
+// for first. MAILBOX, tried first until 2026-11-10, held the game to the
+// display's 75 frames a second in a window on an RTX 2080 Super under Windows
+// (PC run 6), where D3D9 ran at 215.
+VkPresentModeKHR ChoosePresentMode(const VkPresentModeKHR *offered, uint32_t count, bool vsync, const char *wanted)
+{
+    const auto has = [&](VkPresentModeKHR mode) {
+        return std::find(offered, offered + count, mode) != offered + count;
+    };
+    if (wanted && !std::strcmp(wanted, "immediate") && has(VK_PRESENT_MODE_IMMEDIATE_KHR))
+        return VK_PRESENT_MODE_IMMEDIATE_KHR;
+    if (wanted && !std::strcmp(wanted, "mailbox") && has(VK_PRESENT_MODE_MAILBOX_KHR))
+        return VK_PRESENT_MODE_MAILBOX_KHR;
+    if (vsync || (wanted && !std::strcmp(wanted, "fifo")))
+        return VK_PRESENT_MODE_FIFO_KHR; // every surface has it
+    for (VkPresentModeKHR mode : {VK_PRESENT_MODE_IMMEDIATE_KHR, VK_PRESENT_MODE_MAILBOX_KHR})
+    {
+        if (has(mode))
             return mode;
     }
     return VK_PRESENT_MODE_FIFO_KHR;
 }
-} // namespace
 
 bool SurfaceExtent(Core &core, VkSurfaceCapabilitiesKHR &caps, VkExtent2D &extent)
 {
@@ -887,7 +909,8 @@ BuildResult BuildSwapchain(Core &core)
     }
 
     const VkSurfaceFormatKHR format = ChooseFormat(formats);
-    const VkPresentModeKHR mode = ChoosePresentMode(modes, core.desc.vsync);
+    const VkPresentModeKHR mode =
+        ChoosePresentMode(modes.data(), static_cast<uint32_t>(modes.size()), core.desc.vsync, WantedPresentMode());
     uint32_t imageCount = caps.minImageCount + 1;
     if (caps.maxImageCount && imageCount > caps.maxImageCount)
         imageCount = caps.maxImageCount;

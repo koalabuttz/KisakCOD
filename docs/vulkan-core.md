@@ -29,7 +29,7 @@ Start-up (`vk_core.cpp`):
 | Loader | Not linked. The window system hands the core `vkGetInstanceProcAddr` (SDL3 opens the loader), and every function is looked up through it (`vk_dispatch.h`). A machine without Vulkan fails with a message, not a dynamic-linker error. |
 | Instance | Vulkan 1.3. The window system's surface extensions, portability enumeration where offered (MoltenVK), and the Khronos validation layer on request. With validation on, synchronisation validation is on too. |
 | Device | Needs Vulkan 1.3, dynamic rendering, synchronization2, timeline semaphores, scalar block layout (for the [Legacy shaders](vulkan-legacy-shaders.md)' uniform blocks), the Vulkan memory model, buffer device addresses and demote-to-helper (all three used by the Legacy shaders' SPIR-V and required by Vulkan 1.3), `VK_KHR_swapchain` and one queue that draws and presents to the window. Picks discrete, then integrated, then virtual, then CPU devices, or the index given. Turns on anisotropic filtering, wireframe fill, independent blend, clip distances, 16-bit shader floats and occlusion queries that count samples (precise queries with host query reset) where the device has them (`Features` says which). Picks the depth-stencil format: D24S8 where it can be an attachment and sampled, else D32S8. |
-| Swapchain | `B8G8R8A8_UNORM` or `R8G8B8A8_UNORM` in sRGB-nonlinear colour space: UNORM because the retail renderer writes gamma-space values and never asks for sRGB conversion. FIFO with vsync, otherwise mailbox, then immediate. Rebuilt when the surface is out of date or suboptimal, or when the window reports a new size; a minimised window skips frames. |
+| Swapchain | `B8G8R8A8_UNORM` or `R8G8B8A8_UNORM` in sRGB-nonlinear colour space: UNORM because the retail renderer writes gamma-space values and never asks for sRGB conversion. FIFO with vsync; otherwise IMMEDIATE (what D3D9's immediate presentation interval means, and DXVK's first choice), then MAILBOX, then FIFO. `KISAK_VK_PRESENT_MODE=immediate`, `mailbox` or `fifo` takes that mode wherever the surface offers it, vsync or not, to compare them on one machine. MAILBOX came first until 2026-11-10: in a window on an RTX 2080 Super under Windows it held the game at the display's 75 frames a second, where D3D9 ran the scene at 215 (PC run 6). Rebuilt when the surface is out of date or suboptimal, or when the window reports a new size; a minimised window skips frames. |
 | Swapchain images | Wrapped as core images, so passes, blits and read-back treat them like any other image. Copyable and blit targets where the surface allows. |
 
 Memory (`vk_memory.cpp`):
@@ -178,8 +178,12 @@ KisakCOD-vulkan-probe [--frames N] [--size WxH] [--validation off|auto|require]
 Output is `key=value` lines on stdout ending in `vulkan_probe=passed` or
 `vulkan_probe=failed stage=<stage>` with a `vulkan_probe.reason=` line. Exit
 status 0 is a pass, 1 a failed stage, 2 a usage error. The stages are `sdl`,
-`loader`, `window`, `core`, `frames`, `resize`, `draw`, `capture` and
-`validation`. Each run also prints its pass and frame GPU times, submissions,
+`loader`, `window`, `core`, `present_mode`, `frames`, `resize`, `draw`,
+`capture` and `validation`. The `present_mode` stage holds the core's choice
+of present mode (`ChoosePresentMode`) to a table of surfaces this machine's
+own surface does not stand for: IMMEDIATE before MAILBOX before FIFO without
+vsync, FIFO with it, and a mode asked for by name taken where it is offered
+(`vulkan_probe.present_mode_choice=checked`). Each run also prints its pass and frame GPU times, submissions,
 memory, upload and descriptor counts, and pipeline counts.
 
 To see it on a desktop, run it with no options: a 960x540 window cycles colours
@@ -191,7 +195,8 @@ for 300 frames (about five seconds with vsync).
 several ways: bad arguments exit 2; `--list-devices` finds a usable device; with
 no Vulkan driver visible it fails closed (stage `loader` or `core`); a full run
 with `--resize --check-capture` passes, follows the resize, reads back the
-cleared colour, times the pass and has no validation errors; and two `--draw`
+cleared colour, times the pass, checked the present mode choice and has no
+validation errors; and two `--draw`
 runs sharing a pipeline cache file pass every point in the target and the
 swapchain, build their pipeline before the first frame, time the scene pass,
 run uploads, transient memory, descriptor sets and deferred destruction, and

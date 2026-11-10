@@ -9,6 +9,11 @@ involved. The checks:
   unknown-scene  --scene with a name no scene has fails at the "usage" stage
   one-scene      --scene runs that scene alone and passes, with no unsupported
                  call
+  present-mode   the device asks for no vsync, as the engine does by default:
+                 with KISAK_VK_PRESENT_MODE=fifo its swapchain is FIFO all the
+                 same (the one mode every surface offers), and without the
+                 switch lavapipe's surface gives it a mode that does not wait
+                 for the display
   bench          --scene bench, which a full run leaves out, passes and prints
                  its timings (they depend on the machine and are not judged)
   full           a full run passes: every scene in SCENES ran, had points and
@@ -107,6 +112,17 @@ def main():
                   found.get('d3d9_check.unsupported_calls') == '0 expected=0',
                   found.get('d3d9_check.unsupported_calls', 'missing'))
 
+    # present-mode
+    fifo = dict(env)
+    fifo['KISAK_VK_PRESENT_MODE'] = 'fifo'
+    code, stdout, _ = run(binary, ['--scene', 'draw', '--validation', args.validation], fifo)
+    found, _ = parse(stdout)
+    mode = re.search(r'^d3d9_check\.log=swapchain \S+ \S+ (\w+), \d+ images', stdout, re.M)
+    checks.expect('KISAK_VK_PRESENT_MODE=fifo run passes', code == 0 and found.get('d3d9_check') == 'passed',
+                  f'status {code}\n{stdout}')
+    checks.expect('KISAK_VK_PRESENT_MODE=fifo gives a FIFO swapchain', bool(mode) and mode.group(1) == 'FIFO',
+                  mode.group(0) if mode else 'no swapchain line')
+
     # bench (timings: without the validation layer)
     code, stdout, _ = run(binary, ['--scene', 'bench', '--validation', 'off'], env)
     found, scenes = parse(stdout)
@@ -132,6 +148,13 @@ def main():
     for name, points, mismatched in scenes:
         checks.expect(f'scene {name} matches', points > 0 and mismatched == 0,
                       f'points {points} mismatched {mismatched}')
+    # No vsync was asked for: IMMEDIATE where the surface has it, else
+    # MAILBOX, and FIFO only where it has neither. CI's software GPU has one.
+    mode = re.search(r'^d3d9_check\.log=swapchain \S+ \S+ (\w+), \d+ images', stdout, re.M)
+    checks.expect('the swapchain logs its present mode', mode is not None)
+    if mode and env.get('KISAK_VK_PRESENT_MODE') is None and re.search(r'vulkan d3d9: device llvmpipe ', stdout):
+        checks.expect('without vsync lavapipe presents without waiting', mode.group(1) in ('IMMEDIATE', 'MAILBOX'),
+                      mode.group(1))
     checks.expect('only the deliberate unsupported call', found.get('d3d9_check.unsupported_calls') == '1 expected=1',
                   found.get('d3d9_check.unsupported_calls', 'missing'))
     presents = re.match(r'(\d+) skipped=(\d+)$', found.get('d3d9_check.presents', ''))
