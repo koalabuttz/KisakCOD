@@ -1323,6 +1323,34 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
     return Usable(device);
 }
 
+// Called for a draw about to be recorded, in its pass. While occlusion
+// queries are between BEGIN and END, draws are inside one of the core's
+// counts, which every such query shares. The count ends with the pass (a
+// target change, a part handed to the GPU, Present) or when a query begins
+// or ends, and the next draw starts another.
+void CountDraw(Device &device)
+{
+    if (device.countingQueries.empty() || OpenOcclusionCount(device.core) != kNoOcclusionCount)
+        return;
+    const uint32_t count = BeginOcclusionCount(device.core);
+    if (count == kNoOcclusionCount)
+        return;
+    for (Query *query : device.countingQueries)
+    {
+        // The first query has the count from BeginOcclusionCount.
+        if (query != device.countingQueries.front())
+            ShareOcclusionCount(device.core, count);
+        query->counts.push_back(count);
+    }
+}
+
+void ReleaseCounts(Device &device, Query &query)
+{
+    for (uint32_t count : query.counts)
+        ReleaseOcclusionCount(device.core, count);
+    query.counts.clear();
+}
+
 // Called after every draw recorded. Submits what the frame has recorded so
 // far once that is worth a submission and the GPU is about to run out of
 // work, so the GPU draws the frame while the rest of it is recorded.
@@ -1745,6 +1773,7 @@ void DrawIndexedPrimitive(Device *device, d3d::PrimitiveType type, int32_t baseV
         return;
     const VkBuffer indices = DrawBuffer(*device, *device->indices);
     const VkIndexType indexType = device->indices->indexType;
+    CountDraw(*device);
     Record(device->core, [=](VkCommandBuffer cmd, const Dispatch &vk) {
         vk.vkCmdBindIndexBuffer(cmd, indices, 0, indexType);
         vk.vkCmdDrawIndexed(cmd, indexCount, 1, startIndex, baseVertex, 0);
@@ -1758,6 +1787,7 @@ void DrawPrimitive(Device *device, d3d::PrimitiveType type, uint32_t startVertex
     const uint32_t count = VertexCount(type, primitiveCount);
     if (!count || !PrepareDraw(*device, type))
         return;
+    CountDraw(*device);
     Record(device->core, [=](VkCommandBuffer cmd, const Dispatch &vk) { vk.vkCmdDraw(cmd, count, 1, startVertex, 0); });
     ++device->stats.draws;
     FeedGpu(*device);
@@ -1784,6 +1814,7 @@ void DrawPrimitiveUP(Device *device, d3d::PrimitiveType type, uint32_t primitive
         stream.stride = stride;
         if (PrepareDraw(*device, type))
         {
+            CountDraw(*device);
             Record(device->core, [count](VkCommandBuffer cmd, const Dispatch &vk) { vk.vkCmdDraw(cmd, count, 1, 0, 0); });
             ++device->stats.draws;
             FeedGpu(*device);
@@ -1967,38 +1998,97 @@ Query *CreateQuery(Device *device, QueryKind kind)
 
 void DestroyQuery(Device *device, Query *query)
 {
-    (void)device;
+    if (!query)
+        return;
+    auto &counting = device->countingQueries;
+    counting.erase(std::remove(counting.begin(), counting.end(), query), counting.end());
+    ReleaseCounts(*device, *query);
     delete query;
 }
 
 void IssueQuery(Device *device, Query *query, bool begin)
 {
+    if (!query)
+        return;
+    if (query->kind == QueryKind::Occlusion && Features(device->core).occlusionCounts)
+    {
+        // The count that is open belongs to the queries open until now.
+        EndOcclusionCount(device->core);
+        auto &counting = device->countingQueries;
+        counting.erase(std::remove(counting.begin(), counting.end(), query), counting.end());
+        const bool begun = query->counting;
+        query->counting = begin;
+        if (begin || !begun)
+        {
+            // A query issued again starts from nothing, whether it was read
+            // or not; so does an END that no BEGIN came before.
+            ReleaseCounts(*device, *query);
+            query->counted = false;
+            query->samples = 0;
+        }
+        if (begin)
+            counting.push_back(query);
+    }
     // An event marks everything recorded before it. Right after Present
     // nothing is being recorded, so it is the frame just submitted, not the
     // next one: the engine's swap fence (RB_SwapBuffers) then finishes with
     // its frame, and the render thread no longer waits for the next frame's
     // GPU work as well before it ends that frame.
-    if (query && !begin)
+    if (!begin)
     {
         query->serial = RecordedSerial(device->core);
         // Between frames with nothing recorded: the end of the frame just
         // presented. (Not an event issued inside a frame after a flush.)
-        query->frameFence = !device->frameOpen && query->serial != SubmissionSerial(device->core);
+        query->frameFence = query->kind == QueryKind::Event && !device->frameOpen
+            && query->serial != SubmissionSerial(device->core);
         query->flushedAhead = false;
     }
 }
 
+namespace
+{
+// An occlusion query whose end the GPU has passed: adds its counts up. False
+// if one of them cannot be read yet.
+bool AddCounts(Device &device, Query &query)
+{
+    if (query.counted)
+        return true;
+    uint64_t total = 0;
+    for (uint32_t count : query.counts)
+    {
+        uint64_t samples = 0;
+        if (!ReadOcclusionCount(device.core, count, samples))
+            return false;
+        total += samples;
+    }
+    ReleaseCounts(device, query);
+    query.samples = static_cast<uint32_t>(std::min<uint64_t>(total, UINT32_MAX));
+    query.counted = true;
+    return true;
+}
+} // namespace
+
 bool GetQueryData(Device *device_, Query *query, bool flush, uint32_t &result)
 {
     Device &device = *device_;
-    // Occlusion queries are not counted yet: every sample passed.
-    const uint32_t done = query && query->kind == QueryKind::Occlusion ? 0xffffffu : 1u;
     result = 0;
     if (!query || !Usable(device))
         return true; // a lost device reports done, as D3D9's does
+    const bool occlusion = query->kind == QueryKind::Occlusion;
+    const bool counts = occlusion && Features(device.core).occlusionCounts;
+    // Between BEGIN and END there is no result.
+    if (counts && query->counting)
+        return false;
     if (!query->serial || SerialFinished(device.core, query->serial))
     {
-        result = done;
+        if (!occlusion)
+            result = 1;
+        else if (!counts)
+            result = 0xffffffu; // a device that cannot count: every sample passed
+        else if (AddCounts(device, *query))
+            result = query->samples;
+        else
+            return false;
         return true;
     }
     if (!flush)

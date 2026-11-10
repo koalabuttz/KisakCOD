@@ -12,8 +12,8 @@
 //   frames      command recording, submission on a timeline, frames in
 //               flight, uploads through staging memory, per-frame
 //               transient memory and descriptor sets, passes with
-//               layout tracking and barriers, copies, read-back and
-//               GPU timestamps per pass                          (vk_frame.cpp)
+//               layout tracking and barriers, copies, read-back,
+//               GPU timestamps per pass and occlusion counts     (vk_frame.cpp)
 //   pipelines   shader modules, graphics pipelines through an on-disk
 //               pipeline cache with a compile counter, samplers  (vk_pipeline.cpp)
 //
@@ -164,6 +164,8 @@ struct CoreStats
     uint64_t transientBytes;    // handed out by AllocateTransient, all frames
     uint64_t descriptorSets;    // allocated by AllocateDescriptorSet, all frames
     uint32_t barriers;          // image barriers recorded, all frames
+    uint64_t occlusionCounts;   // begun by BeginOcclusionCount, all frames
+    uint32_t occlusionPools;    // query pools made for them (256 counts each)
 
     uint32_t pipelinesCreated;         // all graphics pipelines
     uint32_t pipelinesCreatedInFrame;  // of those, created between BeginFrame and Present
@@ -301,6 +303,11 @@ struct OptionalFeatures
     // default 128): that many while the GPU has under two submissions left,
     // more for each further one (up to four times).
     uint32_t gpuFeedDraws;
+    // BeginOcclusionCount works: the device counts the samples of an
+    // occlusion query exactly (occlusionQueryPrecise) and lets the host reset
+    // a query (hostQueryReset). KISAK_VK_OCCLUSION_QUERIES=0 turns it off,
+    // to compare with a device that has neither.
+    bool occlusionCounts;
 };
 const OptionalFeatures &Features(const Core *core);
 // Whether images of this format with optimal tiling support these features.
@@ -533,6 +540,36 @@ bool InPass(const Core *core);
 // GPU time of every pass recorded under this name so far; supported false when
 // the queue has no timestamps or no such pass ran.
 PassTimings PassTimingsFor(const Core *core, const char *name);
+
+// ---- Occlusion counts ---------------------------------------------------------------
+//
+// The number of samples that pass the depth and stencil tests in the draws
+// recorded between BeginOcclusionCount and EndOcclusionCount (an occlusion
+// query with VK_QUERY_CONTROL_PRECISE_BIT). A count lives inside one pass:
+// it begins after BeginPass, and EndPass ends one that is still open, so a
+// user whose counting spans passes or submissions adds several counts up.
+// One count can be open at a time. Needs OptionalFeatures::occlusionCounts.
+//
+// A count has users: the caller of BeginOcclusionCount is the first,
+// ShareOcclusionCount adds one and ReleaseOcclusionCount takes one away. The
+// last release gives the count up; its number is handed out again once the
+// GPU has finished the submission that holds it.
+
+constexpr uint32_t kNoOcclusionCount = UINT32_MAX;
+// kNoOcclusionCount outside a pass, while a count is open, without the
+// feature, and once the core has failed.
+uint32_t BeginOcclusionCount(Core *core);
+// Ends the open count; nothing if none is open.
+void EndOcclusionCount(Core *core);
+// The count open in the pass being recorded, or kNoOcclusionCount.
+uint32_t OpenOcclusionCount(const Core *core);
+// False until the GPU has finished the submission that holds the count; it
+// does not wait for that, and a count recorded since the last Flush or
+// Present is not submitted yet. True with no samples for a number that is
+// not a count in use, and once the core has failed.
+bool ReadOcclusionCount(Core *core, uint32_t count, uint64_t &samples);
+void ShareOcclusionCount(Core *core, uint32_t count);
+void ReleaseOcclusionCount(Core *core, uint32_t count);
 
 // ---- Uploads, transient memory and descriptor sets -------------------------------
 //

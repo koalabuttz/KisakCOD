@@ -668,7 +668,8 @@ bool CreateDevice(Core &core)
 
     // Optional features D3D9 content uses where the device has them:
     // anisotropic filtering, wireframe fill, independent blend for MRT, clip
-    // distances (user clip planes) and 16-bit floats in translated shaders.
+    // distances (user clip planes), 16-bit floats in translated shaders, and
+    // occlusion queries that count samples.
     VkPhysicalDeviceFeatures supported{};
     VkPhysicalDeviceVulkan12Features supported12{};
     // On a portability device (MoltenVK) every subset feature it has is
@@ -707,6 +708,8 @@ bool CreateDevice(Core &core)
     core.optional.gpuFeed =
         core.optional.gpuFeedAlways || EnvEquals("KISAK_VK_GPU_FEED", "1") || (!tiled && !EnvEquals("KISAK_VK_GPU_FEED", "0"));
     core.optional.gpuFeedDraws = EnvCount("KISAK_VK_GPU_FEED_DRAWS", 128);
+    core.optional.occlusionCounts = supported.occlusionQueryPrecise && supported12.hostQueryReset
+        && !EnvEquals("KISAK_VK_OCCLUSION_QUERIES", "0");
 
     VkPhysicalDeviceVulkan13Features features13{};
     features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
@@ -723,6 +726,7 @@ bool CreateDevice(Core &core)
     features12.vulkanMemoryModel = VK_TRUE;
     features12.bufferDeviceAddress = VK_TRUE;
     features12.shaderFloat16 = supported12.shaderFloat16;
+    features12.hostQueryReset = core.optional.occlusionCounts ? VK_TRUE : VK_FALSE;
     VkPhysicalDeviceFeatures2 features{};
     features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     features.pNext = &features12;
@@ -730,6 +734,7 @@ bool CreateDevice(Core &core)
     features.features.fillModeNonSolid = supported.fillModeNonSolid;
     features.features.independentBlend = supported.independentBlend;
     features.features.shaderClipDistance = supported.shaderClipDistance;
+    features.features.occlusionQueryPrecise = core.optional.occlusionCounts ? VK_TRUE : VK_FALSE;
 
     VkDeviceCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -1040,6 +1045,8 @@ void DestroyCore(Core *core, CoreStats *finalStats)
             vk.vkDestroySwapchainKHR(core->dev, core->swapchain, nullptr);
         if (core->timestamps)
             vk.vkDestroyQueryPool(core->dev, core->timestamps, nullptr);
+        for (VkQueryPool pool : core->occlusionPools)
+            vk.vkDestroyQueryPool(core->dev, pool, nullptr);
         if (core->timeline)
             vk.vkDestroySemaphore(core->dev, core->timeline, nullptr);
         DestroyMemoryPools(*core);

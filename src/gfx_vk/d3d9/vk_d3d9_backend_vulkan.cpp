@@ -95,6 +95,14 @@ void CloseBackend(Backend *backend)
                     "%.3f ms per frame for it",
                     double(core.recordPackets) / frames, double(core.recordChunks) / frames,
                     core.recordWaitMs / frames);
+        // Whether the engine's occlusion queries were answered with counts
+        // (the sun's flare: about one Vulkan query a frame while the sun is
+        // drawn), and how many pools they took.
+        if (Features(backend->core).occlusionCounts)
+            HostLog(h, "vulkan d3d9: occlusion queries: counted, with %llu Vulkan queries from %u pools",
+                    static_cast<unsigned long long>(core.occlusionCounts), core.occlusionPools);
+        else
+            HostLog(h, "vulkan d3d9: occlusion queries: not counted, every finished query reports all samples passed");
     }
     if (backend->legacy)
     {
@@ -161,6 +169,9 @@ void BackendCounters(const Backend *backend, DeviceCounters &out)
     out.submissions = backend && backend->core ? Stats(backend->core).submissions : 0;
     out.fenceFlushes = backend && backend->legacy ? lg::Stats(backend->legacy).fenceFlushes : 0;
     out.feedFlushes = backend && backend->legacy ? lg::Stats(backend->legacy).feedFlushes : 0;
+    out.occlusionCounted = backend && backend->core && Features(backend->core).occlusionCounts;
+    out.occlusionCounts = backend && backend->core ? Stats(backend->core).occlusionCounts : 0;
+    out.occlusionPools = backend && backend->core ? Stats(backend->core).occlusionPools : 0;
 }
 
 void BackendPollProgress(Backend *backend)

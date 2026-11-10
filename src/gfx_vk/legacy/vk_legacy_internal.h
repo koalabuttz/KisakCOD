@@ -152,6 +152,14 @@ struct Query
     // GetQueryData.
     bool frameFence = false;
     bool flushedAhead = false; // a poll has submitted the work recorded after it
+    // Occlusion queries, where the core counts samples
+    // (OptionalFeatures::occlusionCounts). A query is a sum of the core's
+    // counts: one for each run of draws between its BEGIN and its END that
+    // no pass end, submission or other query's BEGIN or END interrupts.
+    bool counting = false;        // BEGIN issued, END not yet
+    std::vector<uint32_t> counts; // not added up yet
+    bool counted = false;         // samples holds the result
+    uint32_t samples = 0;
 };
 
 // ---- Pipelines (vk_legacy_draw.cpp) --------------------------------------------------
@@ -326,6 +334,9 @@ struct Device
     uint64_t feedRecording = 0;
     uint32_t feedDraws = 0;
     uint32_t feedCheckAt = 0;
+    // Occlusion queries between BEGIN and END: the draws recorded now count
+    // for each of them (CountDraw).
+    std::vector<Query *> countingQueries;
     // The texture descriptor set the last draw wrote, and what it holds. A
     // draw that needs the same views and samplers in a set of the same layout
     // binds it again instead of allocating and writing a new one. Sets come

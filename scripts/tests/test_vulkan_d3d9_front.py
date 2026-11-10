@@ -20,7 +20,10 @@ involved. The checks:
                  600 draws was submitted in as many parts as the device's GPU
                  feed setting allows (the setting is read from the device's
                  own log line, so KISAK_VK_GPU_FEED and a GPU that has it off
-                 by default are both covered)
+                 by default are both covered); and the occlusion scene counted
+                 samples, or with KISAK_VK_OCCLUSION_QUERIES=0 did not, as the
+                 device's log line says (its exact counts are the scene's own
+                 points)
 
 Usage:
   test_vulkan_d3d9_front.py --binary build/bin/KisakCOD-vulkan-d3d9-check
@@ -34,8 +37,8 @@ import subprocess
 import sys
 
 # The scenes the check runs, in order. A scene added to the check is added here.
-SCENES = ('adapter', 'states', 'draw', 'render_target', 'shadow_map', 'references', 'threads', 'queries', 'frame_loop',
-          'gpu_feed', 'reset', 'present')
+SCENES = ('adapter', 'states', 'draw', 'render_target', 'shadow_map', 'references', 'threads', 'queries', 'occlusion',
+          'frame_loop', 'gpu_feed', 'reset', 'present')
 
 
 def run(binary, args, env, timeout=300):
@@ -177,6 +180,32 @@ def main():
             low, high = (1 if draws >= 4 * every else 0), draws // every
         checks.expect(f'GPU feed {feed_setting}: the frame went to the GPU in {low} to {high} parts',
                       low <= count <= high, f'{count} parts')
+    # Occlusion queries, as the device says it has them: counted, unless the
+    # GPU cannot or KISAK_VK_OCCLUSION_QUERIES=0 says not to. The scene's 700
+    # queries then took at least one Vulkan query each, out of two pools (it
+    # holds 300 at once, and a pool has 256).
+    counted = re.search(r'legacy: device ready: .*, occlusion queries (counted|not counted), ', stdout)
+    checks.expect('the device logs whether it counts occlusion queries', counted is not None)
+    if counted and env.get('KISAK_VK_OCCLUSION_QUERIES') == '0':
+        checks.expect('KISAK_VK_OCCLUSION_QUERIES=0 turns counting off', counted.group(1) == 'not counted',
+                      counted.group(1))
+    elif counted and re.search(r'vulkan d3d9: device llvmpipe ', stdout):
+        # CI's software GPU can count, so a run there that does not is a fault.
+        checks.expect('lavapipe counts occlusion queries', counted.group(1) == 'counted', counted.group(1))
+    occlusion = re.match(r'counted=(yes|no) queries=(\d+) counts=(\d+) pools=(\d+)$',
+                         found.get('d3d9_check.occlusion', ''))
+    checks.expect('the occlusion scene reports its counts', occlusion is not None,
+                  found.get('d3d9_check.occlusion', 'missing'))
+    if counted and occlusion:
+        queries, counts, pools = (int(occlusion.group(i)) for i in (2, 3, 4))
+        if counted.group(1) == 'counted':
+            checks.expect('occlusion queries were counted',
+                          occlusion.group(1) == 'yes' and counts >= queries and pools == 2,
+                          found['d3d9_check.occlusion'])
+        else:
+            checks.expect('occlusion queries were not counted',
+                          occlusion.group(1) == 'no' and counts == 0 and pools == 0,
+                          found['d3d9_check.occlusion'])
     if args.validation == 'require':
         checks.expect('validation was on', found.get('d3d9_check.validation') == 'on',
                       found.get('d3d9_check.validation', 'missing'))

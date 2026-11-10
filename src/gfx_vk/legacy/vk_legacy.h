@@ -477,16 +477,25 @@ void WaitIdle(Device *device);
 enum class QueryKind : uint8_t
 {
     Event,     // D3DQUERYTYPE_EVENT: done when the GPU passed it
-    Occlusion, // D3DQUERYTYPE_OCCLUSION: not counted yet; reports every
-               // sample as passed once the GPU reached the end
+    Occlusion, // D3DQUERYTYPE_OCCLUSION: the samples that passed the depth
+               // and stencil tests in the draws between BEGIN and END
 };
 Query *CreateQuery(Device *device, QueryKind kind);
 void DestroyQuery(Device *device, Query *query);
 // D3DISSUE_BEGIN / D3DISSUE_END. Event queries take End only.
+//
+// Occlusion queries may overlap, and may span passes, parts of a frame and
+// frames: each is the sum of the counts the core takes for it (CountDraw in
+// vk_legacy_draw.cpp). BEGIN on a query that already has a result, or was
+// never ended, starts it again from nothing. An END with no BEGIN counts
+// nothing.
 void IssueQuery(Device *device, Query *query, bool begin);
 // D3D9's GetData: false while the result is not ready (flush asks the GPU to
 // start, like D3DGETDATA_FLUSH). result receives TRUE for events and the
-// sample count for occlusion queries.
+// sample count for occlusion queries: 0 for one never issued, and no result
+// between BEGIN and END. A device that cannot count samples
+// (OptionalFeatures::occlusionCounts off) reports 0xffffff, every sample
+// passed, once the GPU reached the query's end.
 //
 // An event issued right after Present, with nothing recorded since, is a
 // frame fence: it marks the end of the frame just presented. A caller

@@ -126,6 +126,7 @@ buffer by the core's `Recording()` number.
 | Static buffers | Device memory with a CPU shadow; unlock uploads the locked range. |
 | Dynamic buffers | Mapped upload memory. `D3DLOCK_DISCARD` while the GPU still reads the old contents renames the buffer onto new memory; `NOOVERWRITE` writes in place; a plain lock of a busy buffer renames and copies the old contents. |
 | Queries | Event queries finish when the GPU passes the point they were issued at: the open recording's submission, or the last one submitted when nothing is being recorded (right after `Present`). Until laptop run 4, an event issued after `Present` waited for the next frame's submission instead. The engine polls such an event (its swap fence) before ending every frame, so the CPU and GPU never overlapped. A poll with `D3DGETDATA_FLUSH` that finds such a frame fence unfinished also submits what was recorded after it, once per issue: the engine has drawn the next frame by then and only waits, in steps of up to 1 ms, so the GPU gets that frame queued behind the one it is on instead of idling from the end of one until `Present` submits the next. `Present` then submits only the copy to the swapchain. `KISAK_VK_FENCE_FLUSH=0` turns this off, to compare; the front's `frame stats:` line counts these flushes. |
+| Occlusion queries | Report the samples that passed the depth and stencil tests in the draws between `BEGIN` and `END`, as D3D9's do. The engine divides one such number by another for the sun's flare (`RB_DrawSunQuerySprite` over `RB_CalcSunSpriteSamples`' 16x16 sprite), so they are exact: precise Vulkan queries, taken through the core's occlusion counts ([vulkan-core.md](vulkan-core.md)). A Vulkan query lives inside one pass, and a D3D9 query does not: it may span target changes, the parts the GPU feed cuts a frame into, a `Present`, and other queries. So a query is a sum. The first draw after `BEGIN` starts a count; the pass's end, or any query's `BEGIN` or `END`, ends it; the next draw starts another; and every query open at the time shares each count. `GetData` adds a query's counts up once the GPU has passed its `END`, and until then answers as an event query does, flushing its own unsubmitted work when asked to. A query begun again starts from nothing; one never issued, or ended without a `BEGIN`, reports 0. A device without precise occlusion queries or host query reset cannot count: every finished query then reports 0xffffff, all samples passed, which is what the adapter always did before 2026-11-10 (the engine then takes the sun as fully visible wherever it is on screen, behind a wall too). `KISAK_VK_OCCLUSION_QUERIES=0` forces that path, and the `device ready:` log line says which it is (`occlusion queries counted` or `not counted`). The front's `occlusion queries:` line at teardown gives the Vulkan queries they took: about one a frame while the game draws its sun. |
 
 ## The shader cache
 
@@ -157,7 +158,9 @@ is below the shader count.
 These are not needed by the shaders and calls checked so far; each is listed
 so the renderer hookup can see where it stands.
 
-* Occlusion queries are a stub: they finish at once and report 0xffffff pixels.
+* Occlusion queries count samples only where the device has precise queries
+  and host query reset (every desktop driver checked so far); elsewhere they
+  report 0xffffff, every sample passed.
 * Render targets are single-level 2D (no rendering into a cube face or a mip
   level yet).
 * No fixed-function pipeline: draws without both shaders are skipped with a
@@ -253,6 +256,7 @@ statistics, the validation counts, and `legacy_check=passed` or
 | `partial_precision` | `_pp` instructions computed at 32-bit precision, as D3D9 hardware and DXVK compute them (a 16-bit overflow would turn the pixel white). |
 | `missing_input` | A vertex shader input the declaration does not supply reads zero. |
 | `event_query` | An event query finishes after the GPU passes it. |
+| `occlusion_query` | Occlusion queries report exact sample counts: a quad's pixels, the visible half of a quad behind another, 0 for a hidden one, and two overlapping queries across a change of targets (0xffffff each where the device cannot count). |
 
 The scenes' shaders are D3D9 assembly in
 `scripts/tools/vulkan/gen_legacy_check_shaders.py`, assembled with the shader
@@ -265,7 +269,9 @@ spike's assembler (plain Python) into `src/gfx_vk/tools/vk_legacy_check_shaders.
 several ways: bad arguments exit 2; an unknown scene fails at the `usage`
 stage; one scene runs alone; and a full run passes every scene in order with no
 mismatched pixel, presents every scene, renames the dynamic buffer, finishes
-the event query, builds pipelines and has no validation errors. The
+the event query, counts the occlusion queries (always on lavapipe, never with
+`KISAK_VK_OCCLUSION_QUERIES=0`), builds pipelines and has no validation
+errors. The
 `shader_cache` scene translates two shaders, takes one again from memory,
 writes and reads back a cache file in the temporary directory, draws with the
 shaders read from it, and checks that a damaged file is refused.
@@ -281,7 +287,12 @@ artifact for a run on the PC.
 Results so far (2026-11-08, cloud sandbox, no GPU, x86_64 Debug, lavapipe from
 Mesa 25.2.8, validation with synchronisation checks): all 17 scenes match, no
 validation errors, 11 pipelines. The `partial_precision` scene, added later
-(18 scenes), passes there too, and failed (white) before the fix below.
+(18 scenes), passes there too, and failed (white) before the fix below. The
+`occlusion_query` scene (2026-11-10, same sandbox, 20 scenes by then) gets
+its sample counts exactly, in Debug and RelWithDebInfo, with the record thread
+on and off and the GPU feed off, at its default and after every draw, and
+reports 0xffffff for each query with `KISAK_VK_OCCLUSION_QUERIES=0`. No GPU
+has run it yet.
 
 Laptop run 1 (2026-11-08, Intel RPL-U iGPU, Mesa 25.0.7 ANV, x86_64 and i386
 RelWithDebInfo, SDL offscreen and Wayland, no validation layer installed): all

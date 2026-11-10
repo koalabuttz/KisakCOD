@@ -936,6 +936,15 @@ class VulkanWindowWorkflowTests(unittest.TestCase):
         self.assertIn('KISAK_VK_GPU_FEED=always python3 -u scripts/tests/test_vulkan_legacy_adapter.py', run)
         self.assertEqual(run.count('--validation require'), 3)
 
+    def test_the_checks_run_again_without_occlusion_counts(self):
+        step = self.step('Run the checks again without occlusion counts')
+        self.assertEqual(step['if'], "${{ matrix.config == 'Debug' }}")
+        run = step['run']
+        # The path of a device that cannot count samples, in both checks.
+        self.assertIn('KISAK_VK_OCCLUSION_QUERIES=0 python3 -u scripts/tests/test_vulkan_d3d9_front.py', run)
+        self.assertIn('KISAK_VK_OCCLUSION_QUERIES=0 python3 -u scripts/tests/test_vulkan_legacy_adapter.py', run)
+        self.assertEqual(run.count('--validation require'), 2)
+
     def test_the_front_lock_is_checked_with_thread_sanitizer(self):
         step = self.step("Check the D3D9 front's lock with ThreadSanitizer")
         self.assertEqual(step['if'], "${{ matrix.config == 'Debug' }}")
@@ -953,7 +962,9 @@ class VulkanWindowWorkflowTests(unittest.TestCase):
         self.assertIn('KISAK_VK_GPU_FEED=always "$OUT_DIR/tsan/KisakCOD-vulkan-d3d9-check" --scene frame_loop', run)
         self.assertIn('--scene gpu_feed', run)
         self.assertIn('--scene bench', run)
-        self.assertEqual(run.count("grep -qx 'd3d9_check=passed'"), 5)
+        # Queries reset and read on one thread, begun and ended on another.
+        self.assertIn('--scene occlusion', run)
+        self.assertEqual(run.count("grep -qx 'd3d9_check=passed'"), 6)
         self.assertIn('KISAK_VK_RECORD_THREAD=1 "$OUT_DIR/tsan/KisakCOD-vulkan-probe"', run)
         self.assertIn("grep -qx 'vulkan_probe=passed'", run)
         self.assertIn('KISAK_VK_RECORD_THREAD=1 "$OUT_DIR/tsan/KisakCOD-vulkan-legacy-check"', run)

@@ -226,7 +226,8 @@ a usage error.
 | `shadow_map` | The sun shadow's path: a D24S8 texture made with `D3DUSAGE_DEPTHSTENCIL` as the depth target beside a R5G6B5 colour target, then sampled with linear filtering as a hardware shadow map (0 behind the stored depth, 1 in front). |
 | `references` | Counts of textures and their levels, `GetContainer`, `QueryInterface`, a released texture that still draws while bound and goes when unbound, the back buffer's and swap chain's own counts (last `Release` returns 0) and the device reference they hold. |
 | `threads` | A worker thread creating and filling textures while this thread draws and presents; the last one drawn and read back; nothing left alive. |
-| `queries` | Support checks, an event query and an occlusion query finishing, and an event issued right after `Present` (the engine's swap fence) finishing without a flush while the next frame records; polled with `D3DGETDATA_FLUSH` while its frame is unfinished, it submits the next frame's work once, and the frame goes on with its state and contents. |
+| `queries` | Support checks, an event query and an occlusion query finishing (with samples), and an event issued right after `Present` (the engine's swap fence) finishing without a flush while the next frame records; polled with `D3DGETDATA_FLUSH` while its frame is unfinished, it submits the next frame's work once, and the frame goes on with its state and contents. |
+| `occlusion` | Occlusion queries count samples exactly, as the engine's sun flare needs: a quad's pixels, two draws, none for a clear, a scissor rectangle, a query begun again, an `END` alone, two queries that overlap, a quad half and wholly hidden by depth, a query over two render targets and over a `Present`, a query released while open. Then 300 queries held at once (more than one pool of Vulkan queries, so a second is made) and one query used and read 400 times (no pool is added: the Vulkan queries given up are used again). Where the device cannot count, every finished query must report 0xffffff. Prints whether it counted, and the Vulkan queries and pools used. |
 | `frame_loop` | The engine's frame for 48 frames: draw, poll the swap fence with `D3DGETDATA_FLUSH` until the frame before has finished, issue the GPU sync fence, `Present`, issue the swap fence, while another thread polls the sync fence as the main thread does. At most three submissions a frame, at most one swap fence flush, and the last frame, drawn on both sides of its wait, comes out whole. |
 | `gpu_feed` | A frame of 600 draws, each filling a cell of its own, with a scissor rectangle set once that cuts the last column. The adapter submits such a frame in parts while it is drawn ([adapter](vulkan-legacy-adapter.md)): every draw must show whichever part it fell in, the cells no draw touches must keep the clear colour, and the scissor must hold in every part. Prints the number of parts. |
 | `bench` | Only when named (`--scene bench`), never in a full run: 120 frames of 768 draws of four D3D9 calls each, ended as `frame_loop`'s are, while another thread polls the sync fence every 20 microseconds. Prints the time the drawing thread spent on its draw calls per frame and the polls made meanwhile; passes when its frames were presented. |
@@ -241,17 +242,21 @@ no object outlives its release, the device is destroyed at its last release and
 the validation layer reports no errors. It reads the GPU feed's setting from
 the device's log line and holds the `gpu_feed` scene's parts to it: none with
 the feed off, one for every draw with `KISAK_VK_GPU_FEED=always`, else one to
-four.
+four. It reads from the same line whether occlusion queries are counted
+(always on lavapipe, never with `KISAK_VK_OCCLUSION_QUERIES=0`) and holds the
+`occlusion` scene's report to that: at least one Vulkan query for each of its
+700 queries out of two pools, or none at all.
 
 The hosted `vulkan_window` job (Linux) stages DXVK Native's headers at the
 x86_64 client's pin, builds the check in Debug and RelWithDebInfo and runs that
 script on lavapipe with validation and synchronisation checks required. Its
 Debug run repeats the script with the GPU feed off and with
-`KISAK_VK_GPU_FEED=always` (and the adapter's check with the latter), and
+`KISAK_VK_GPU_FEED=always` (and the adapter's check with the latter), repeats
+both scripts with `KISAK_VK_OCCLUSION_QUERIES=0`, and
 builds the check with ThreadSanitizer and runs the `threads`, `frame_loop`
-(also with `KISAK_VK_GPU_FEED=always`), `gpu_feed` and `bench` scenes, which
-fail on any data race in our code (llvmpipe's rasterizer threads are off
-there, [vulkan-core.md](vulkan-core.md)). The
+(also with `KISAK_VK_GPU_FEED=always`), `gpu_feed`, `bench` and `occlusion`
+scenes, which fail on any data race in our code (llvmpipe's rasterizer threads
+are off there, [vulkan-core.md](vulkan-core.md)). The
 Windows `vulkan-probe` job builds it with MSVC, checks that it imports neither
 `vulkan-1.dll` nor `d3d9.dll` and that it starts, and adds it to the
 `KisakCOD-vulkan-probe-x64` artifact.
@@ -260,6 +265,14 @@ Results so far (2026-11-08, cloud sandbox, no GPU, lavapipe from Mesa 25.2.8):
 all 10 scenes pass on x86_64 (Debug and RelWithDebInfo, validation with
 synchronisation checks, no errors) and on i386 (Debug, no validation layer:
 Ubuntu ships none for i386), with the one deliberate unsupported call.
+
+The `occlusion` scene (2026-11-10, same sandbox, 13 scenes by then) passes on
+x86_64 Debug and RelWithDebInfo with validation and on i386 without: every
+count exact with the record thread on and off and the GPU feed off, at its
+default and after every draw (717 or 718 Vulkan queries for its 700 queries,
+from two pools), and 0xffffff from every query with
+`KISAK_VK_OCCLUSION_QUERIES=0`. In the game the queries have not run on a GPU
+yet.
 
 ## In the game: r_backend vulkan
 
@@ -440,6 +453,8 @@ files.
 ## Next
 
 The rest of the frame rate gap to DXVK (how often to feed the GPU, then the
-render thread's time per draw), the model lighting difference above,
-occlusion queries (the adapter reports every sample as passed), and a long
-frame about every two minutes.
+render thread's time per draw), the model lighting difference above, a look
+at the sun's flare on a GPU now that occlusion queries count samples (until
+2026-11-10 the adapter reported every sample as passed, which the engine
+reads as a sun in full view; the counting has run on lavapipe only), and a
+long frame about every two minutes.

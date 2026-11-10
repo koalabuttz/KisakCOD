@@ -138,6 +138,16 @@ struct TimedPass
     uint32_t query; // first of two
 };
 
+// Occlusion counts (BeginOcclusionCount): query pools of this many, made as
+// they are needed. A count's number is pool * kOcclusionCountsPerPool + query.
+constexpr uint32_t kOcclusionCountsPerPool = 256;
+
+struct OcclusionCount
+{
+    uint64_t serial = 0; // the submission that holds its begin and end
+    uint32_t users = 0;  // 0: free, or given up and waiting for its submission
+};
+
 // Everything one frame in flight owns, recycled when its last submission ends.
 struct FrameSlot
 {
@@ -328,6 +338,14 @@ public:
     double timestampPeriodNs = 0.0;
     uint64_t timestampMask = 0;
     std::vector<std::pair<const char *, PassTimings>> passTimings;
+
+    std::vector<VkQueryPool> occlusionPools;
+    std::vector<OcclusionCount> occlusionCounts; // by number
+    std::vector<uint32_t> occlusionFree;         // numbers never used, or used and finished on the GPU
+    // Given up by their last user: free once their submission has finished
+    // (a query is reset only after every command that uses it has run).
+    std::vector<uint32_t> occlusionRetired;
+    uint32_t occlusionOpen = kNoOcclusionCount;  // begun in the pass being recorded
 
     std::vector<MemoryPool> memoryPools;
     std::vector<Deferred> deferred;

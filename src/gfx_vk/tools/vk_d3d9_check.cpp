@@ -435,6 +435,7 @@ public:
     void References();
     void Threads();
     void Queries();
+    void Occlusion();
     void FrameLoop();
     void GpuFeed();
     void Bench();
@@ -986,6 +987,229 @@ void Check::Queries()
     SafeRelease(occlusion);
 }
 
+// Occlusion queries count the samples their draws put on the target: the
+// engine's sun flare divides one query's count by another's
+// (RB_DrawSunQuerySprite, RB_CalcSunSpriteSamples), so the numbers must be
+// exact. A quad of w x h pixels is w * h samples (no multisampling here).
+// The queries here are cut by everything that ends a Vulkan pass, a query
+// there being unable to outlive its pass: other queries, target changes,
+// Present, and the GPU feed, which with KISAK_VK_GPU_FEED=always submits
+// after every draw. Where the device cannot count, every finished query
+// reports 0xffffff and the scene checks that instead.
+void Check::Occlusion()
+{
+    constexpr DWORD kEverySample = 0xffffff;
+    const front::DeviceCounters before = Counters();
+    const bool counted = before.occlusionCounted;
+    IDirect3DQuery9 *a = nullptr, *b = nullptr;
+    if (!Ok(device->CreateQuery(D3DQUERYTYPE_OCCLUSION, &a), "CreateQuery(occlusion)")
+        || !Ok(device->CreateQuery(D3DQUERYTYPE_OCCLUSION, &b), "CreateQuery(occlusion)"))
+    {
+        SafeRelease(a);
+        return;
+    }
+    // Polls as the engine does (RB_HW_ReadOcclusionQuery).
+    auto read = [&](IDirect3DQuery9 *query, DWORD &samples) {
+        HRESULT hr = S_FALSE;
+        for (int polls = 0; polls < 200000; ++polls)
+        {
+            hr = query->GetData(&samples, sizeof(samples), D3DGETDATA_FLUSH);
+            if (hr != S_FALSE)
+                break;
+            SDL_Delay(polls > 100 ? 1 : 0);
+        }
+        return hr == S_OK;
+    };
+    auto expect = [&](const char *name, IDirect3DQuery9 *query, DWORD want) {
+        DWORD samples = 0;
+        if (!read(query, samples))
+            Fail(std::string(name) + ": the query did not finish");
+        else
+            Equal(name, samples, counted ? want : kEverySample);
+    };
+    Reset();
+
+    // Never issued: done, with nothing counted.
+    DWORD samples = 12345;
+    Equal("occlusion_unissued_done", a->GetData(&samples, sizeof(samples), 0), S_OK);
+    Equal("occlusion_unissued", samples, counted ? 0u : kEverySample);
+
+    // One quad. Between BEGIN and END a query has no result.
+    Ok(a->Issue(D3DISSUE_BEGIN), "Issue(begin)");
+    if (counted)
+        Equal("occlusion_open_has_no_result", a->GetData(&samples, sizeof(samples), D3DGETDATA_FLUSH), S_FALSE);
+    DrawQuad(0, 0, 64, 64, 0.5f, Argb(255, 255, 255, 255));
+    Ok(a->Issue(D3DISSUE_END), "Issue(end)");
+    expect("occlusion_quad", a, 64 * 64);
+    // Asked again, the same answer.
+    expect("occlusion_quad_again", a, 64 * 64);
+
+    // Two draws, the second on top of the first: both count.
+    Ok(a->Issue(D3DISSUE_BEGIN), "Issue(begin)");
+    DrawQuad(0, 0, 32, 32, 0.5f, Argb(255, 255, 0, 0));
+    DrawQuad(16, 16, 32, 32, 0.5f, Argb(255, 0, 255, 0));
+    Ok(a->Issue(D3DISSUE_END), "Issue(end)");
+    expect("occlusion_two_draws", a, 32 * 32 + 16 * 16);
+
+    // No draw, and a clear, which is not one.
+    Ok(a->Issue(D3DISSUE_BEGIN), "Issue(begin)");
+    Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET, Argb(255, 0, 0, 64), 1.0f, 0), "Clear");
+    Ok(a->Issue(D3DISSUE_END), "Issue(end)");
+    expect("occlusion_no_draw", a, 0);
+
+    // The scissor rectangle cuts samples off.
+    const RECT scissor = {0, 0, 16, LONG(kSize)};
+    Ok(device->SetScissorRect(&scissor), "SetScissorRect");
+    Ok(device->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE), "SetRenderState(scissor)");
+    Ok(a->Issue(D3DISSUE_BEGIN), "Issue(begin)");
+    DrawQuad(0, 0, 64, 64, 0.5f, Argb(255, 255, 255, 0));
+    Ok(a->Issue(D3DISSUE_END), "Issue(end)");
+    Ok(device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE), "SetRenderState(scissor)");
+    expect("occlusion_scissor", a, 16 * 64);
+
+    // Begun again before it was read: only the second count stands. And an
+    // END that no BEGIN came before counts nothing.
+    Ok(a->Issue(D3DISSUE_BEGIN), "Issue(begin)");
+    DrawQuad(0, 0, 64, 64, 0.5f, Argb(255, 255, 255, 255));
+    Ok(a->Issue(D3DISSUE_END), "Issue(end)");
+    Ok(a->Issue(D3DISSUE_BEGIN), "Issue(begin)");
+    DrawQuad(0, 0, 16, 16, 0.5f, Argb(255, 255, 255, 255));
+    Ok(a->Issue(D3DISSUE_END), "Issue(end)");
+    expect("occlusion_begun_again", a, 16 * 16);
+    Ok(a->Issue(D3DISSUE_END), "Issue(end)");
+    expect("occlusion_end_alone", a, 0);
+
+    // Two queries that overlap: the middle draw counts for both.
+    Ok(a->Issue(D3DISSUE_BEGIN), "Issue(begin)");
+    DrawQuad(0, 0, 32, 32, 0.5f, Argb(255, 255, 0, 0));
+    Ok(b->Issue(D3DISSUE_BEGIN), "Issue(begin)");
+    DrawQuad(0, 0, 16, 16, 0.5f, Argb(255, 0, 255, 0));
+    Ok(a->Issue(D3DISSUE_END), "Issue(end)");
+    DrawQuad(0, 0, 8, 8, 0.5f, Argb(255, 0, 0, 255));
+    Ok(b->Issue(D3DISSUE_END), "Issue(end)");
+    expect("occlusion_overlap_first", a, 32 * 32 + 16 * 16);
+    expect("occlusion_overlap_second", b, 16 * 16 + 8 * 8);
+
+    // Depth: a far quad half behind a near one, and one wholly behind it.
+    IDirect3DSurface9 *depth = nullptr;
+    if (Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth, nullptr),
+           "CreateDepthStencilSurface"))
+    {
+        Ok(device->SetDepthStencilSurface(depth), "SetDepthStencilSurface");
+        Ok(device->Clear(0, nullptr, D3DCLEAR_ZBUFFER, 0, 1.0f, 0), "Clear(depth)");
+        device->SetRenderState(D3DRS_ZENABLE, TRUE);
+        device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+        DrawQuad(0, 0, 64, kSize, 0.25f, Argb(255, 255, 0, 0)); // near: the left half
+        Ok(a->Issue(D3DISSUE_BEGIN), "Issue(begin)");
+        DrawQuad(32, 0, 96, 64, 0.75f, Argb(255, 0, 255, 0)); // far: its right half shows
+        Ok(a->Issue(D3DISSUE_END), "Issue(end)");
+        Ok(b->Issue(D3DISSUE_BEGIN), "Issue(begin)");
+        DrawQuad(0, 64, 64, kSize, 0.75f, Argb(255, 0, 0, 255)); // far: hidden
+        Ok(b->Issue(D3DISSUE_END), "Issue(end)");
+        device->SetRenderState(D3DRS_ZENABLE, FALSE);
+        device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+        Ok(device->SetDepthStencilSurface(nullptr), "SetDepthStencilSurface(null)");
+        expect("occlusion_half_hidden", a, 32 * 64);
+        expect("occlusion_hidden", b, 0);
+        if (Read())
+        {
+            Expect("occlusion_near_kept", 48, 32, 255, 0, 0);
+            Expect("occlusion_far_shown", 80, 32, 0, 255, 0);
+            Expect("occlusion_far_hidden", 32, 96, 255, 0, 0);
+        }
+    }
+    SafeRelease(depth);
+
+    // A query over two targets, and over a Present.
+    IDirect3DTexture9 *texture = nullptr;
+    IDirect3DSurface9 *level = nullptr;
+    if (Ok(device->CreateTexture(64, 64, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &texture, nullptr),
+           "CreateTexture(render target)")
+        && Ok(texture->GetSurfaceLevel(0, &level), "GetSurfaceLevel"))
+    {
+        Ok(a->Issue(D3DISSUE_BEGIN), "Issue(begin)");
+        DrawQuad(0, 0, 32, 32, 0.5f, Argb(255, 255, 0, 0));
+        Ok(device->SetRenderTarget(0, level), "SetRenderTarget(level)");
+        DrawQuad(0, 0, 16, 16, 0.5f, Argb(255, 0, 255, 0), 64);
+        Ok(device->SetRenderTarget(0, backBuffer), "SetRenderTarget(back buffer)");
+        DrawQuad(0, 0, 8, 8, 0.5f, Argb(255, 0, 0, 255));
+        Ok(a->Issue(D3DISSUE_END), "Issue(end)");
+        expect("occlusion_two_targets", a, 32 * 32 + 16 * 16 + 8 * 8);
+    }
+    SafeRelease(level);
+    SafeRelease(texture);
+    Ok(a->Issue(D3DISSUE_BEGIN), "Issue(begin)");
+    DrawQuad(0, 0, 32, 32, 0.5f, Argb(255, 255, 0, 0));
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    DrawQuad(0, 0, 16, 16, 0.5f, Argb(255, 0, 255, 0));
+    Ok(a->Issue(D3DISSUE_END), "Issue(end)");
+    expect("occlusion_two_frames", a, 32 * 32 + 16 * 16);
+
+    // A query released between its BEGIN and its END takes nothing with it.
+    IDirect3DQuery9 *dropped = nullptr;
+    if (Ok(device->CreateQuery(D3DQUERYTYPE_OCCLUSION, &dropped), "CreateQuery(occlusion)"))
+    {
+        Ok(dropped->Issue(D3DISSUE_BEGIN), "Issue(begin)");
+        DrawQuad(0, 0, 32, 32, 0.5f, Argb(255, 255, 0, 0));
+        Equal("occlusion_dropped_release", dropped->Release(), 0ul);
+        Ok(a->Issue(D3DISSUE_BEGIN), "Issue(begin)");
+        DrawQuad(0, 0, 8, 8, 0.5f, Argb(255, 0, 0, 255));
+        Ok(a->Issue(D3DISSUE_END), "Issue(end)");
+        expect("occlusion_after_dropped", a, 8 * 8);
+    }
+
+    // More queries held at once than one pool of Vulkan queries has: a
+    // second pool is made, and every count is still its own.
+    constexpr size_t kHeld = 300;
+    std::vector<IDirect3DQuery9 *> held(kHeld, nullptr);
+    auto heldWidth = [](size_t i) { return DWORD(1 + i % 8); };
+    for (size_t i = 0; i < kHeld; ++i)
+    {
+        if (!Ok(device->CreateQuery(D3DQUERYTYPE_OCCLUSION, &held[i]), "CreateQuery(occlusion)"))
+            break;
+        Ok(held[i]->Issue(D3DISSUE_BEGIN), "Issue(begin)");
+        DrawQuad(0, 0, float(heldWidth(i)), 8, 0.5f, Argb(255, 255, 255, 255));
+        Ok(held[i]->Issue(D3DISSUE_END), "Issue(end)");
+    }
+    int heldWrong = 0;
+    for (size_t i = 0; i < kHeld; ++i)
+    {
+        samples = 0;
+        if (!held[i] || !read(held[i], samples) || samples != (counted ? heldWidth(i) * 8 : kEverySample))
+            ++heldWrong;
+        SafeRelease(held[i]);
+    }
+    Equal("occlusion_held_wrong", heldWrong, 0);
+    const front::DeviceCounters afterHeld = Counters();
+    if (counted)
+        Equal("occlusion_second_pool", afterHeld.occlusionPools, 2u);
+
+    // One query used over and over, read each time, as the engine uses its
+    // own: the Vulkan queries it gives up are used again once the GPU has
+    // finished with them, and no pool is added.
+    constexpr int kRounds = 400;
+    int roundsWrong = 0;
+    for (int i = 0; i < kRounds; ++i)
+    {
+        Ok(a->Issue(D3DISSUE_BEGIN), "Issue(begin)");
+        DrawQuad(0, 0, 8, 8, 0.5f, Argb(255, 255, 255, 255));
+        Ok(a->Issue(D3DISSUE_END), "Issue(end)");
+        samples = 0;
+        if (!read(a, samples) || samples != (counted ? 64u : kEverySample))
+            ++roundsWrong;
+    }
+    Equal("occlusion_rounds_wrong", roundsWrong, 0);
+    const front::DeviceCounters after = Counters();
+    Equal("occlusion_pools_kept", after.occlusionPools, afterHeld.occlusionPools);
+    if (!counted)
+        Equal("occlusion_nothing_counted", after.occlusionCounts, 0u);
+    SafeRelease(b);
+    SafeRelease(a);
+    std::printf("d3d9_check.occlusion=counted=%s queries=%d counts=%llu pools=%u\n", counted ? "yes" : "no",
+                int(kHeld) + kRounds, static_cast<unsigned long long>(after.occlusionCounts - before.occlusionCounts),
+                after.occlusionPools);
+}
+
 // The engine's frame, as its render thread runs it (RB_RenderCommandFrame,
 // RB_EndFrame, RB_SwapBuffers): draw; poll the swap fence with FLUSH until the
 // frame before has finished; issue the GPU sync fence; Present; issue the swap
@@ -1447,6 +1671,7 @@ int Run(const Options &options)
         {"references", &Check::References, true},
         {"threads", &Check::Threads, true},
         {"queries", &Check::Queries, true},
+        {"occlusion", &Check::Occlusion, true},
         {"frame_loop", &Check::FrameLoop, true},
         {"gpu_feed", &Check::GpuFeed, true},
         {"bench", &Check::Bench, true, true},

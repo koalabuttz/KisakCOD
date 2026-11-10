@@ -102,6 +102,9 @@ void BackendCounters(const Backend *, DeviceCounters &out)
     out.submissions = 0;
     out.fenceFlushes = 0;
     out.feedFlushes = 0;
+    out.occlusionCounted = false;
+    out.occlusionCounts = 0;
+    out.occlusionPools = 0;
 }
 
 // sceGxm's queries need no system call under the front's lock.

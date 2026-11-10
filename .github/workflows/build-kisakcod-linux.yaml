@@ -2813,6 +2813,26 @@ jobs:
             --binary "$OUT_DIR/KisakCOD-vulkan-legacy-check" \
             --video-driver offscreen --validation require
 
+      - name: Run the checks again without occlusion counts
+        if: ${{ matrix.config == 'Debug' }}
+        timeout-minutes: 15
+        shell: bash
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          # Occlusion queries count samples where the device can
+          # (docs/vulkan-legacy-adapter.md, Queries), which lavapipe can: the
+          # runs above check the counts. Switched off, the adapter takes the
+          # path of a device that cannot: no Vulkan query is made and every
+          # finished query reports all samples passed.
+          KISAK_VK_OCCLUSION_QUERIES=0 python3 -u scripts/tests/test_vulkan_d3d9_front.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-d3d9-check" \
+            --video-driver offscreen --validation require
+          KISAK_VK_OCCLUSION_QUERIES=0 python3 -u scripts/tests/test_vulkan_legacy_adapter.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-legacy-check" \
+            --video-driver offscreen --validation require
+
       - name: Check the D3D9 front's lock with ThreadSanitizer
         if: ${{ matrix.config == 'Debug' }}
         timeout-minutes: 15
@@ -2877,6 +2897,11 @@ jobs:
           "$OUT_DIR/tsan/KisakCOD-vulkan-d3d9-check" --scene bench --validation off \
             | tee "$RUNNER_TEMP/tsan-bench.log"
           grep -qx 'd3d9_check=passed' "$RUNNER_TEMP/tsan-bench.log"
+          # Occlusion queries: this thread resets and reads Vulkan queries
+          # while the record thread begins and ends them.
+          "$OUT_DIR/tsan/KisakCOD-vulkan-d3d9-check" --scene occlusion --validation off \
+            | tee "$RUNNER_TEMP/tsan-occlusion.log"
+          grep -qx 'd3d9_check=passed' "$RUNNER_TEMP/tsan-occlusion.log"
           # Frames, draws, read-back and swapchain rebuilds with the record
           # thread on.
           KISAK_VK_RECORD_THREAD=1 "$OUT_DIR/tsan/KisakCOD-vulkan-probe" --draw --frames 60 --resize \

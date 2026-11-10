@@ -98,6 +98,14 @@ struct DeviceCounters
     uint64_t submissions;      // queue submissions so far (Vulkan back end)
     uint64_t fenceFlushes;     // of those, frames submitted ahead of their Present by a swap fence poll
     uint64_t feedFlushes;      // of those, parts of frames submitted while the frame was being drawn
+    // Occlusion queries count samples. False where the back end cannot, and
+    // with KISAK_VK_OCCLUSION_QUERIES=0: a finished query then reports every
+    // sample as passed (0xffffff on Vulkan).
+    bool occlusionCounted;
+    // Vulkan queries begun for them (a query takes one for every run of its
+    // draws that no pass end interrupts), and the pools of 256 made for them.
+    uint64_t occlusionCounts;
+    uint32_t occlusionPools;
 };
 bool Counters(IDirect3DDevice9 *device, DeviceCounters &out);
 

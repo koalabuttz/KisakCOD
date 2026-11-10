@@ -918,6 +918,8 @@ void EndPass(Core *core_)
         Fail(core, "EndPass outside a pass");
         return;
     }
+    // A query begun in a pass ends in it.
+    EndOcclusionCount(core_);
     Record(&core, [](VkCommandBuffer cmd, const Dispatch &vk) { vk.vkCmdEndRendering(cmd); });
     EndTimed(core, core.currentTimedPass);
     core.currentTimedPass = -1;
@@ -934,6 +936,131 @@ PassTimings PassTimingsFor(const Core *core, const char *name)
             return entry.second;
     }
     return PassTimings{};
+}
+
+// ---- Public API: occlusion counts -------------------------------------------------------
+
+namespace
+{
+VkQueryPool OcclusionPool(const Core &core, uint32_t count)
+{
+    return core.occlusionPools[count / kOcclusionCountsPerPool];
+}
+
+bool AddOcclusionPool(Core &core)
+{
+    VkQueryPoolCreateInfo info{};
+    info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+    info.queryType = VK_QUERY_TYPE_OCCLUSION;
+    info.queryCount = kOcclusionCountsPerPool;
+    VkQueryPool pool = VK_NULL_HANDLE;
+    if (!Check(core, core.vk.vkCreateQueryPool(core.dev, &info, nullptr, &pool), "vkCreateQueryPool"))
+        return false;
+    const uint32_t first = static_cast<uint32_t>(core.occlusionCounts.size());
+    core.occlusionPools.push_back(pool);
+    ++core.stats.occlusionPools;
+    core.occlusionCounts.resize(first + kOcclusionCountsPerPool);
+    // Handed out from the back: lowest number first.
+    for (uint32_t i = kOcclusionCountsPerPool; i-- > 0;)
+        core.occlusionFree.push_back(first + i);
+    return true;
+}
+
+// Numbers given up whose submission has finished can be handed out again.
+void RecycleOcclusionCounts(Core &core)
+{
+    const uint64_t done = PollCompletedSerial(core);
+    auto &retired = core.occlusionRetired;
+    retired.erase(std::remove_if(retired.begin(), retired.end(),
+                                 [&](uint32_t count) {
+                                     if (core.occlusionOpen == count || core.occlusionCounts[count].serial > done)
+                                         return false;
+                                     core.occlusionFree.push_back(count);
+                                     return true;
+                                 }),
+                  retired.end());
+}
+
+bool OcclusionCountInUse(const Core &core, uint32_t count)
+{
+    return count < core.occlusionCounts.size() && core.occlusionCounts[count].users;
+}
+} // namespace
+
+uint32_t BeginOcclusionCount(Core *core_)
+{
+    Core &core = *core_;
+    if (core.failed || !core.optional.occlusionCounts || !core.inPass || core.occlusionOpen != kNoOcclusionCount)
+        return kNoOcclusionCount;
+    if (core.occlusionFree.empty())
+        RecycleOcclusionCounts(core);
+    if (core.occlusionFree.empty() && !AddOcclusionPool(core))
+        return kNoOcclusionCount;
+    const uint32_t count = core.occlusionFree.back();
+    core.occlusionFree.pop_back();
+    const VkQueryPool pool = OcclusionPool(core, count);
+    const uint32_t query = count % kOcclusionCountsPerPool;
+    // A query is reset before it begins, and only once every command that
+    // used it has finished: this one is new, or came back through
+    // RecycleOcclusionCounts. Done from here, not in the command buffer,
+    // which cannot reset a query inside a pass.
+    core.vk.vkResetQueryPool(core.dev, pool, query, 1);
+    // Inside a pass a command buffer is being recorded: this is its serial.
+    core.occlusionCounts[count].serial = PendingSerial(core);
+    core.occlusionCounts[count].users = 1;
+    Record(&core, [=](VkCommandBuffer cmd, const Dispatch &vk) {
+        vk.vkCmdBeginQuery(cmd, pool, query, VK_QUERY_CONTROL_PRECISE_BIT);
+    });
+    core.occlusionOpen = count;
+    ++core.stats.occlusionCounts;
+    return count;
+}
+
+void EndOcclusionCount(Core *core_)
+{
+    Core &core = *core_;
+    const uint32_t count = core.occlusionOpen;
+    if (count == kNoOcclusionCount)
+        return;
+    core.occlusionOpen = kNoOcclusionCount;
+    const VkQueryPool pool = OcclusionPool(core, count);
+    const uint32_t query = count % kOcclusionCountsPerPool;
+    Record(&core, [=](VkCommandBuffer cmd, const Dispatch &vk) { vk.vkCmdEndQuery(cmd, pool, query); });
+}
+
+uint32_t OpenOcclusionCount(const Core *core) { return core->occlusionOpen; }
+
+bool ReadOcclusionCount(Core *core_, uint32_t count, uint64_t &samples)
+{
+    Core &core = *core_;
+    samples = 0;
+    // Nothing to wait for: not a count in use, or a device that is gone.
+    if (core.failed || !OcclusionCountInUse(core, count))
+        return true;
+    if (core.occlusionOpen == count || PollCompletedSerial(core) < core.occlusionCounts[count].serial)
+        return false;
+    // Its submission has finished, so the result is there or about to be:
+    // the wait covers a driver that publishes results a moment after the
+    // commands end, and cannot last (both the begin and the end have run).
+    uint64_t value = 0;
+    if (core.vk.vkGetQueryPoolResults(core.dev, OcclusionPool(core, count), count % kOcclusionCountsPerPool, 1,
+                                      sizeof(value), &value, sizeof(value),
+                                      VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT)
+        == VK_SUCCESS)
+        samples = value;
+    return true;
+}
+
+void ShareOcclusionCount(Core *core, uint32_t count)
+{
+    if (OcclusionCountInUse(*core, count))
+        ++core->occlusionCounts[count].users;
+}
+
+void ReleaseOcclusionCount(Core *core, uint32_t count)
+{
+    if (OcclusionCountInUse(*core, count) && --core->occlusionCounts[count].users == 0)
+        core->occlusionRetired.push_back(count);
 }
 
 // ---- Public API: uploads, transient memory, descriptor sets --------------------------
