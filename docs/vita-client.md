@@ -152,6 +152,7 @@ What the menu takes (run K on the console, and the same build in Vita3K, 2026-11
 
 The main pool is too small for the dynamic buffers, so 14.5 MB of them spill into CDRAM. mp_crash's first vertex buffer alone is 13.4 MB, and neither pool had that much left. Making a map fit is the work in progress. The table above is the state before it; so far:
 - **Targets take memory when first used.** The renderer makes every render target and depth texture it might use at start-up. On the Vita each one gets its GPU memory when a scene first draws to it, or when it is first locked or copied from (`EnsureTargetMemory`). Until then a draw that samples it reads black. The log names each one as it takes its memory (`gpu memory piece`).
+- **A target without memory.** When a target is refused, draws into it are skipped and counted (`its colour target has no GPU memory`), clears of the depth bound with it still happen, and a draw or copy that samples it is skipped too (`it samples a render target that has no GPU memory or was not filled`), which passes the mark on to its own target. So a missing target costs the effects that need it (film colour, glow, depth of field, blur, soft particles, distortion) and not the frame. In Vita3K runs M and U mp_crash loaded and a player spawned, but the world was black behind a correct HUD: the two screen-sized colour targets of a game frame were refused. One is the copy of the scene the post effects read, and the film colour pass painted the frame from it. The other is the depth copy (`r_floatz`, R32F) that soft particles and depth of field read; the renderer clears the frame's depth while that target is bound, and nothing cleared it.
 - **No shadow maps.** `sm_enable` is 0 and read-only in the Vita build. The back end cannot sample depth textures yet, so the shadow maps would be drawn and never read. With the change above, their 18 MB of targets are never taken.
 - Still to do: the dynamic buffers are sized for a PC (the static model cache 8 MB, the skinned caches 9 MB, the index buffers 10 MB).
 
@@ -484,7 +485,8 @@ What the GXM back end does so far (step 2d):
   frame can come back to a target.
 - **StretchRect** (the renderer's resolves and cinematic frames) draws the
   source, the back buffer or a texture level, as a textured quad into the
-  destination with two more built-in programs.
+  destination with two more built-in programs. One that cannot happen (no
+  GPU memory for either side) is counted as a skipped draw.
 - **Clears** are quads drawn in the scene with two small built-in programs:
   colour by the fragment program, depth and stencil by an always-pass depth
   test. sceGxm has no clear call, and fills on the transfer queue would race

@@ -138,6 +138,9 @@ struct Texture
     // reads the stand-in.
     uint32_t deferredBytes = 0;
     bool deferFailed = false;
+    // Colour targets: what was to fill it could not be drawn (its own source
+    // had no memory), so what it holds is not this frame's. See Unfilled.
+    bool unfilled = false;
     std::vector<std::unique_ptr<Surface>> surfaces; // GetSurfaceLevel views, same index
     std::string name;
     // How sceGxm samples it (filters and addressing are set per draw);
@@ -289,6 +292,17 @@ struct Target
     const FormatInfo *format = nullptr;
     bool display = false;
 };
+
+// Whether a colour target holds nothing a draw may sample: it found no GPU
+// memory, or what was to fill it was itself skipped. A draw or copy that
+// samples one is skipped (it could only paint what the target does not hold;
+// a full-screen pass would paint the frame black) and passes the mark on to
+// its own target. A target nothing ever tried to draw to is not unfilled: it
+// samples as black, which is what an untouched target holds.
+inline bool Unfilled(const Texture &texture)
+{
+    return !texture.format->depth && (texture.unfilled || (texture.deferredBytes && texture.deferFailed));
+}
 
 // ---- Shared helpers (gxm_legacy.cpp) ------------------------------------------------------
 
