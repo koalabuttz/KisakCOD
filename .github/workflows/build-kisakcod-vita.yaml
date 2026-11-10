@@ -295,6 +295,9 @@ jobs:
           python3 scripts/tests/test_vita_gxm_heap.py
           python3 scripts/tests/test_vita_frame_time.py
           python3 scripts/tests/test_vita_cg_translate.py --require-glslang
+          # The static model cache's size arithmetic, at every size: the
+          # Vita build runs a smaller cache than the retail game.
+          python3 scripts/tests/test_static_model_cache_sizes.py
           # The tree-wide source rule of the native Linux job, for a change
           # that touches only this port and so does not start that job.
           python3 scripts/tools/strip_cdecl.py --check

@@ -12,6 +12,8 @@
 #include <qcommon/com_pack.h>
 #include <cstdint>
 
+#include "r_staticmodelcache_sizes.h"
+
 struct Material;
 struct XModel;
 
@@ -266,17 +268,16 @@ struct GfxCodeMatrices // sizeof=0x800
 //   remove corpses; nothing reads it elsewhere.
 // - The pretess buffers hold a frame's batched world indices, also two taking
 //   turns. Surfaces that find one full are drawn unbatched.
-// - The static model cache is 8 MB of vertices and 2 MB of indices that
-//   r_smc_enable 0 does without.
+// - The static model cache is 8 MB of vertices and 2 MB of indices in the
+//   retail game and a quarter of that on the Vita: r_staticmodelcache_sizes.h.
 #ifdef KISAK_GFX_GXM
 #define R_SKINNED_CACHE_BYTES 0x300000
 #define R_PRETESS_INDEX_COUNT 0x80000
-#define R_STATIC_MODEL_CACHE 0
 #else
 #define R_SKINNED_CACHE_BYTES 0x480000
 #define R_PRETESS_INDEX_COUNT 0x100000
-#define R_STATIC_MODEL_CACHE 1
 #endif
+#define R_STATIC_MODEL_CACHE 1
 #define R_SKINNED_CACHE_VERTS (R_SKINNED_CACHE_BYTES / 32)
 #define R_SKINNED_CACHE_THRESHOLD (R_SKINNED_CACHE_BYTES - 0x70000)
 static_assert(R_SKINNED_CACHE_BYTES % 32 == 0 && R_SKINNED_CACHE_BYTES > 0x70000);

@@ -218,13 +218,13 @@ XSurface *R_GetCurrentStaticModelCachedSurf(
 void R_SetStaticModelCachedPrimArgs(const XSurface *xsurf, GfxDrawPrimArgs *args)
 {
     iassert(xsurf);
-    args->vertexCount = 0x10000;
+    args->vertexCount = R_SMC_SECTION_VERTS;
     args->triCount = xsurf->triCount;
 }
 
 void R_SetStaticModelCachedBuffer(GfxCmdBufState *state, uint32_t cachedIndex)
 {
-    R_SetStreamSource(&state->prim, gfxBuf.smodelCacheVb, ((cachedIndex - 1) & 0xFFFFF000) << 9, 32);
+    R_SetStreamSource(&state->prim, gfxBuf.smodelCacheVb, R_StaticModelCacheSectionOffset(cachedIndex), 32);
 }
 
 void R_DrawStaticModelsCachedDrawSurfLighting(GfxStaticModelDrawStream *drawStream, GfxCmdBufContext context)
@@ -382,9 +382,9 @@ const GfxStaticModelDrawInst *R_SetupCachedSModelSurface(
     xsurf = XModelGetSurface(smodelDrawInst->model, lod, surfIndex);
     if (baseIndex)
         *baseIndex = 3 * xsurf->baseTriIndex;
-    args->vertexCount = 0x10000;
+    args->vertexCount = R_SMC_SECTION_VERTS;
     args->triCount = count * xsurf->triCount;
-    R_SetStreamSource(&state->prim, gfxBuf.smodelCacheVb, ((cachedIndex - 1) & 0xFFFFF000) << 9, 32);
+    R_SetStreamSource(&state->prim, gfxBuf.smodelCacheVb, R_StaticModelCacheSectionOffset(cachedIndex), 32);
     g_frameStatsCur.geoIndexCount += 3 * count * xsurf->triCount;
     iassert(g_primStats);
     g_primStats->dynamicIndexCount += 3 * count * xsurf->triCount;
