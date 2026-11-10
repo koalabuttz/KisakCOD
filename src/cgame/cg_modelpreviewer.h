@@ -68,7 +68,7 @@ struct MdlPrvClone
     GfxSceneEntity ent;
     DObj_s *obj;
     cpose_t pose;
-    char objBuf[100];
+    alignas(DObj_s) char objBuf[sizeof(DObj_s)]; // a DObj_s, built in place (100 bytes on i386)
 };
 
 enum MdlPrvFocusedMode : __int32
@@ -176,7 +176,7 @@ struct ModelPreviewer_Model
     GfxSceneEntity currentEntity;
     cpose_t pose;
     DObj_s *currentObj;
-    char objBuf[100];
+    alignas(DObj_s) char objBuf[sizeof(DObj_s)]; // a DObj_s, built in place (100 bytes on i386)
     float initialOrigin[3];
     float initialYaw;
     int lodDist[4];

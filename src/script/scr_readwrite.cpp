@@ -1324,7 +1324,7 @@ void Scr_LoadSource(MemoryFile *memFile, void *fileHandle)
             return;
         }
         saveSourceBufferLookup = (SaveSourceBufferInfo *)Hunk_AllocDebugMem(
-            8 * scrParserGlob.saveSourceBufferLookupLen,
+            sizeof(SaveSourceBufferInfo) * scrParserGlob.saveSourceBufferLookupLen,
             "Scr_LoadSource");
         scrParserGlob.saveSourceBufferLookup = saveSourceBufferLookup;
         v5 = scrParserGlob.saveSourceBufferLookupLen - 1;
