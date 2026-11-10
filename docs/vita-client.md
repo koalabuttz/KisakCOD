@@ -373,7 +373,7 @@ bound is changed. To change the defaults, edit `kControls` in
 | `vita_layout` | 1 | The default layout the profile's controls were last given (kept in the profile) |
 | `vita_buttonNames` | 1 | The controls menu and the hints name the Vita's controls, not the engine's keys |
 | `vita_keyboard` | 1 | Open the on-screen keyboard when a menu's text field or the chat line waits for text |
-| `vita_keyboardAnswer` | empty | For a run with nobody to type: no keyboard is shown, and every keyboard asked for is answered with this text after half a second (not kept in the profile) |
+| `vita_keyboardAnswer` | empty | For a run with nobody to type: no keyboard is shown, and every keyboard asked for is answered with this text after half a second (not kept in the profile; read at start-up only, so a game server cannot set the text that gets typed) |
 | `vita_inputDebug` | 0 | Log every key sent, every finger that lands (with its panel and screen position) and how long it stayed |
 
 ### Typing
