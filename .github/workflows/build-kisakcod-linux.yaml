@@ -298,6 +298,7 @@ jobs:
           python3 scripts/tools/strip_cdecl.py --check
           python3 scripts/tests/test_summarize_alignment_report.py
           python3 scripts/tests/test_frame_log.py
+          python3 scripts/tests/test_perf_run.py
           python3 scripts/tests/test_float_int_rounding.py
           python3 scripts/tests/test_retail_float_int_scan.py
           python3 scripts/tests/test_openal_sound_formats.py
