@@ -2580,6 +2580,10 @@ void UI_SelectCurrentGameType()
     }
 }
 
+// KISAK: the selected server's index (serverStatus.string[1128]) is read as an
+// int where it indexes the display list at gap8EB4[4 * index - 7100]. As
+// _DWORD the sum was unsigned: 32-bit builds wrapped back to the list, x86_64
+// builds read 4 GB past it and crashed on Add To Favorites.
 void UI_RunMenuScript(int localClientNum, const char **args, const char *actualScript)
 {
     char *v3; // eax
@@ -2862,7 +2866,7 @@ void UI_RunMenuScript(int localClientNum, const char **args, const char *actualS
                                                                                                                                                 UI_UpdateDisplayServers((uiInfo_s *)dc);
                                                                                                                                                 LAN_GetServerInfo(
                                                                                                                                                     ui_netSource->current.integer,
-                                                                                                                                                    *(_DWORD *)&sharedUiInfo.gap8EB4[4 * *(_DWORD *)&sharedUiInfo.serverStatus.string[1128] - 7100],
+                                                                                                                                                    *(_DWORD *)&sharedUiInfo.gap8EB4[4 * *(int *)&sharedUiInfo.serverStatus.string[1128] - 7100],
                                                                                                                                                     v39,
                                                                                                                                                     1024);
                                                                                                                                                 addr = 0;
@@ -2882,7 +2886,7 @@ void UI_RunMenuScript(int localClientNum, const char **args, const char *actualS
                                                                                                                                             {
                                                                                                                                                 LAN_GetServerInfo(
                                                                                                                                                     ui_netSource->current.integer,
-                                                                                                                                                    *(_DWORD *)&sharedUiInfo.gap8EB4[4 * *(_DWORD *)&sharedUiInfo.serverStatus.string[1128] - 7100],
+                                                                                                                                                    *(_DWORD *)&sharedUiInfo.gap8EB4[4 * *(int *)&sharedUiInfo.serverStatus.string[1128] - 7100],
                                                                                                                                                     s,
                                                                                                                                                     1024);
                                                                                                                                                 v20 = Info_ValueForKey(s, "hostname");
@@ -2955,7 +2959,7 @@ void UI_RunMenuScript(int localClientNum, const char **args, const char *actualS
                                                                                                             // LWSS: Remove punkbuster crap
                                                                                                             //ServerPunkBuster = LAN_GetServerPunkBuster(
                                                                                                             //    ui_netSource->current.integer,
-                                                                                                            //    *(_DWORD *)&sharedUiInfo.gap8EB4[4 * *(_DWORD *)&sharedUiInfo.serverStatus.string[1128] - 7100]);
+                                                                                                            //    *(_DWORD *)&sharedUiInfo.gap8EB4[4 * *(int *)&sharedUiInfo.serverStatus.string[1128] - 7100]);
                                                                                                             //if (ServerPunkBuster != 1 || Dvar_GetBool("cl_punkbuster"))
                                                                                                             //{
                                                                                                                 if (*(int *)&sharedUiInfo.serverStatus.string[1128] >= 0
@@ -2964,7 +2968,7 @@ void UI_RunMenuScript(int localClientNum, const char **args, const char *actualS
                                                                                                                     LAN_GetServerAddressString(
                                                                                                                         ui_netSource->current.integer,
                                                                                                                         *(_DWORD *)&sharedUiInfo.gap8EB4[4
-                                                                                                                        * *(_DWORD *)&sharedUiInfo.serverStatus.string[1128]
+                                                                                                                        * *(int *)&sharedUiInfo.serverStatus.string[1128]
                                                                                                                         - 7100],
                                                                                                                         v44,
                                                                                                                         1024);
@@ -2995,7 +2999,7 @@ void UI_RunMenuScript(int localClientNum, const char **args, const char *actualS
                                                                                                         LAN_GetServerAddressString(
                                                                                                             ui_netSource->current.integer,
                                                                                                             *(_DWORD *)&sharedUiInfo.gap8EB4[4
-                                                                                                            * *(_DWORD *)&sharedUiInfo.serverStatus.string[1128]
+                                                                                                            * *(int *)&sharedUiInfo.serverStatus.string[1128]
                                                                                                             - 7100],
                                                                                                             sharedUiInfo.serverStatusAddress,
                                                                                                             64);
