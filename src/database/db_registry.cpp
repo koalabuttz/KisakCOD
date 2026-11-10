@@ -2695,7 +2695,12 @@ int32_t DB_TryLoadXFileInternal(char *zoneName, int32_t zoneFlags)
         {
             DB_BuildOSPath_Mod(zoneName, 256, filename);
             zoneFile = CreateFileA(filename, 0x80000000, 1u, 0, 3u, 0x60000000u, 0);
-            modZone = (char *)zoneFile + 1 != 0;
+            // The decompiled test was '(char *)zoneFile + 1 != 0'. Clang and GCC may
+            // assume pointer arithmetic never yields null and fold it to true, which
+            // marked every zone as a mod zone once fs_game was set: the server then
+            // listed the base fastfiles under the mod folder and dropped every
+            // client that tried to download them.
+            modZone = zoneFile != (void *)-1;
         }
         else
         {

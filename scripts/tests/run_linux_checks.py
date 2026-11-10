@@ -350,6 +350,13 @@ def plan_checks(options, workdir, build_dir, binary, python, cxx):
             [Command([python, TESTS / "test_database_work_publication.py", "--cxx", cxx], timeout=120)],
         )
     )
+    checks.append(
+        Check(
+            "mod_zone_detection",
+            "a zone counts as a mod zone only when the mod folder's file opened",
+            [Command([python, TESTS / "test_mod_zone_detection.py", "--cxx", cxx], timeout=120)],
+        )
+    )
 
     # Client sources call a few MSVC CRT entry points directly; compat.h maps
     # them, and the fail-closed cases must still terminate on Linux.
@@ -611,7 +618,7 @@ def main():
     parser.add_argument("--list", action="store_true", help="print the command list and exit without running")
     options = parser.parse_args()
 
-    known = ["bootstrap", "runtime", "lifecycle_driver", "handshake_auth", "remote_input", "master_server", "open_url", "steam_session", "debugger", "fastfile", "net_deadline", "huffman", "udp", "sys_fileio", "sys_virtualmem", "lexer_eof", "random_range", "gameplay_lifecycle", "server_test_clients", "weapon_def_ownership", "bot_driver", "database_publication", "crt_shims", "assert_continue", "sl_trace", "phys_objid", "speed_build", "perf_ab"]
+    known = ["bootstrap", "runtime", "lifecycle_driver", "handshake_auth", "remote_input", "master_server", "open_url", "steam_session", "debugger", "fastfile", "net_deadline", "huffman", "udp", "sys_fileio", "sys_virtualmem", "lexer_eof", "random_range", "gameplay_lifecycle", "server_test_clients", "weapon_def_ownership", "bot_driver", "database_publication", "mod_zone_detection", "crt_shims", "assert_continue", "sl_trace", "phys_objid", "speed_build", "perf_ab"]
     options.only = parse_names(options.only)
     options.skip = parse_names(options.skip)
     for name in options.only | options.skip:
