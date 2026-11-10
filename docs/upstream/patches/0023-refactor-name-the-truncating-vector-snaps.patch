@@ -1,0 +1,142 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 08:48:24 +0000
+Subject: [PATCH] refactor: name the truncating vector snaps
+
+Eight places snap a vector with three (float)(int) casts: temp entity
+origins, missile deltas, the snapped entity state and objective
+origins. q_shared.h now has SnapVectorTowardZero() for them, next to
+the rounding Sys_SnapVector(), with the difference written down.
+
+No behaviour change. For upstream issue 52: in retail 1.7 iw3mp.exe
+these snaps go through _ftol2_sse and truncate (0x40c66c, 0x40c6a5,
+0x4c7f9b, 0x4c787b, 0x4c4cf6, 0x4e3d9e). The only snap triple done
+with fistp is Sys_SnapVector at 0x578fed, which already rounds.
+---
+ src/bgame/bg_misc.cpp         |  8 ++------
+ src/game/g_missile.cpp        | 12 +++---------
+ src/game_mp/g_scr_main_mp.cpp |  8 ++------
+ src/game_mp/g_utils_mp.cpp    |  4 +---
+ src/universal/q_shared.h      | 11 +++++++++++
+ 5 files changed, 19 insertions(+), 24 deletions(-)
+
+diff --git a/src/bgame/bg_misc.cpp b/src/bgame/bg_misc.cpp
+index 2ab6faad..1c0933b5 100644
+--- a/src/bgame/bg_misc.cpp
++++ b/src/bgame/bg_misc.cpp
+@@ -1812,12 +1812,8 @@ void __cdecl BG_PlayerToEntitySetTrajectory(playerState_s *ps, entityState_s *s,
+     s->lerp.u.player.movementDir = ps->movementDir;
+     if (snap)
+     {
+-        s->lerp.pos.trBase[0] = (float)(int)s->lerp.pos.trBase[0];
+-        s->lerp.pos.trBase[1] = (float)(int)s->lerp.pos.trBase[1];
+-        s->lerp.pos.trBase[2] = (float)(int)s->lerp.pos.trBase[2];
+-        s->lerp.apos.trBase[0] = (float)(int)s->lerp.apos.trBase[0];
+-        s->lerp.apos.trBase[1] = (float)(int)s->lerp.apos.trBase[1];
+-        s->lerp.apos.trBase[2] = (float)(int)s->lerp.apos.trBase[2];
++        SnapVectorTowardZero(s->lerp.pos.trBase);
++        SnapVectorTowardZero(s->lerp.apos.trBase);
+     }
+ #endif
+ }
+diff --git a/src/game/g_missile.cpp b/src/game/g_missile.cpp
+index 43ee9adb..aff7d258 100644
+--- a/src/game/g_missile.cpp
++++ b/src/game/g_missile.cpp
+@@ -392,9 +392,7 @@ void __cdecl G_ExplodeMissile(gentity_s *ent)
+ #ifdef KISAK_MP
+             if (weapDef->projExplosion == WEAPPROJEXP_SMOKE && weapDef->projExplosionEffect)
+             {
+-                eventEnt->s.lerp.pos.trBase[0] = (float)(int)eventEnt->s.lerp.pos.trBase[0];
+-                eventEnt->s.lerp.pos.trBase[1] = (float)(int)eventEnt->s.lerp.pos.trBase[1];
+-                eventEnt->s.lerp.pos.trBase[2] = (float)(int)eventEnt->s.lerp.pos.trBase[2];
++                SnapVectorTowardZero(eventEnt->s.lerp.pos.trBase);
+                 G_SetOrigin(eventEnt, eventEnt->s.lerp.pos.trBase);
+                 eventEnt->s.lerp.eFlags |= 0x10000u;
+                 eventEnt->s.lerp.u.customExplode.startTime = level.time;
+@@ -2772,9 +2770,7 @@ void __cdecl G_InitGrenadeMovement(gentity_s *grenade, const float *start, const
+             ".pos.trDelta)[2])");
+     }
+     vectoangles(dir, grenade->r.currentAngles);
+-    grenade->s.lerp.pos.trDelta[0] = (float)(int)grenade->s.lerp.pos.trDelta[0];
+-    grenade->s.lerp.pos.trDelta[1] = (float)(int)grenade->s.lerp.pos.trDelta[1];
+-    grenade->s.lerp.pos.trDelta[2] = (float)(int)grenade->s.lerp.pos.trDelta[2];
++    SnapVectorTowardZero(grenade->s.lerp.pos.trDelta);
+     if (rotate)
+     {
+         grenade->s.lerp.apos.trType = TR_LINEAR;
+@@ -3029,9 +3025,7 @@ gentity_s *__cdecl G_FireRocket(
+             "!IS_NAN((bolt->s.lerp.pos.trDelta)[0]) && !IS_NAN((bolt->s.lerp.pos.trDelta)[1]) && !IS_NAN((bolt->s.lerp.pos.trDelta)[2])");
+     }
+ #ifdef KISAK_MP
+-    bolt->s.lerp.pos.trDelta[0] = (float)(int)bolt->s.lerp.pos.trDelta[0];
+-    bolt->s.lerp.pos.trDelta[1] = (float)(int)bolt->s.lerp.pos.trDelta[1];
+-    bolt->s.lerp.pos.trDelta[2] = (float)(int)bolt->s.lerp.pos.trDelta[2];
++    SnapVectorTowardZero(bolt->s.lerp.pos.trDelta);
+ #endif
+     currentOrigin = bolt->r.currentOrigin;
+     bolt->r.currentOrigin[0] = *start;
+diff --git a/src/game_mp/g_scr_main_mp.cpp b/src/game_mp/g_scr_main_mp.cpp
+index e46c3460..c247660f 100644
+--- a/src/game_mp/g_scr_main_mp.cpp
++++ b/src/game_mp/g_scr_main_mp.cpp
+@@ -2243,9 +2243,7 @@ void Scr_Objective_Add()
+     if (numParam >= 3)
+     {
+         Scr_GetVector(2u, obj->origin);
+-        obj->origin[0] = (float)(int)obj->origin[0];
+-        obj->origin[1] = (float)(int)obj->origin[1];
+-        obj->origin[2] = (float)(int)obj->origin[2];
++        SnapVectorTowardZero(obj->origin);
+         result = obj;
+         obj->entNum = ENTITYNUM_NONE;
+         if (numParam >= 4)
+@@ -2350,10 +2348,8 @@ void Scr_Objective_Position()
+     obj = &level.objectives[objNum];
+     ClearObjective_OnEntity(obj);
+     Scr_GetVector(1u, obj->origin);
+-    obj->origin[0] = (float)(int)obj->origin[0];
+-    obj->origin[1] = (float)(int)obj->origin[1];
++    SnapVectorTowardZero(obj->origin);
+     result = obj;
+-    obj->origin[2] = (float)(int)obj->origin[2];
+ }
+ 
+ objective_t *Scr_Objective_OnEntity()
+diff --git a/src/game_mp/g_utils_mp.cpp b/src/game_mp/g_utils_mp.cpp
+index 8f05acc9..3437805e 100644
+--- a/src/game_mp/g_utils_mp.cpp
++++ b/src/game_mp/g_utils_mp.cpp
+@@ -1374,9 +1374,7 @@ gentity_s *__cdecl G_TempEntity(const float *origin, int event)
+     snapped[0] = *origin;
+     snapped[1] = origin[1];
+     snapped[2] = origin[2];
+-    snapped[0] = (float)(int)snapped[0];
+-    snapped[1] = (float)(int)snapped[1];
+-    snapped[2] = (float)(int)snapped[2];
++    SnapVectorTowardZero(snapped);
+     G_SetOrigin(e, snapped);
+     SV_LinkEntity(e);
+     return e;
+diff --git a/src/universal/q_shared.h b/src/universal/q_shared.h
+index 40b74432..c8066898 100644
+--- a/src/universal/q_shared.h
++++ b/src/universal/q_shared.h
+@@ -971,6 +971,17 @@ uint32_t __cdecl Sys_Milliseconds();
+ uint32_t __cdecl Sys_MillisecondsRaw();
+ void __cdecl Sys_SnapVector(float *v);
+ 
++// Quake 3's SnapVector: truncates each component toward zero (-1.7 -> -1).
++// Retail 1.7 compiles these game-side snaps (temp entities, missile deltas,
++// snapped entity states, objective origins) through _ftol2_sse, so they
++// truncate. Sys_SnapVector above is the other kind: it rounds with fistp.
++inline void SnapVectorTowardZero(float *v)
++{
++    v[0] = (float)(int)v[0];
++    v[1] = (float)(int)v[1];
++    v[2] = (float)(int)v[2];
++}
++
+ // com_shared
+ struct qtime_s // sizeof=0x24
+ {                                       // ...
