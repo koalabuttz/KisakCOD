@@ -432,7 +432,8 @@ def check_build_and_run(cxx, cc, build_dir, build_type, jobs, timeout, build_tim
                    "KisakCOD-client-state-test", "KisakCOD-client-packet-test",
                    "KisakCOD-client-auth-test", "KisakCOD-client-headless",
                    "KisakCOD-client-receive-test", "KisakCOD-client-platform-test",
-                   "KisakCOD-client-connect-test", "-j", str(jobs)]
+                   "KisakCOD-client-connect-test", "KisakCOD-client-server-list-test",
+                   "-j", str(jobs)]
         result = run(["cmake", "--build", build_dir] + targets, build_timeout)
         if not check(f"build ({build_type}) client core and runtime tests",
                      result.returncode == 0,
@@ -454,6 +455,7 @@ def check_build_and_run(cxx, cc, build_dir, build_type, jobs, timeout, build_tim
             ("KisakCOD-client-receive-test", "client receive/lifecycle test", (), 34),
             ("KisakCOD-client-platform-test", "client platform test", (), 10),
             ("KisakCOD-client-connect-test", "client connect test", (), 25),
+            ("KisakCOD-client-server-list-test", "client server list test", (), 44),
             ("KisakCOD-client-state-test", "client state test", ("parser", "input"), 15),
         ):
             binary = build_dir / "bin" / name
@@ -509,7 +511,7 @@ def check_default_build_has_no_client_targets(cxx, cc, timeout, build_timeout):
               "KisakCOD-client-packet-test" not in help_text)
         for name in ("KisakCOD-client-auth-test", "KisakCOD-client-headless",
                      "KisakCOD-client-receive-test", "KisakCOD-client-platform-test",
-                     "KisakCOD-client-connect-test",
+                     "KisakCOD-client-connect-test", "KisakCOD-client-server-list-test",
                      "KisakCOD-client-window", "KisakCOD-window-platform", "KisakCOD-window-test", "KisakCOD-client-input", "KisakCOD-client-input-test", "KisakCOD-shutdown-signal-test", "KisakCOD-client-command-test", "KisakCOD-client-runtime-test", "KisakCOD-string-owner-test", "KisakCOD-string-consumers-test", "KisakCOD-dvar-string-failure-test", "KisakCOD-client-input-startup-test", "KisakCOD-presentation-test", "KisakCOD-frame-deadline-test", "KisakCOD-pixel-resource-test", "KisakCOD-cpu-renderer-test", "KisakCOD-cpu-renderer-fault-test", "KisakCOD-cpu-raw-test", "KisakCOD-material-clone-mp-test", "KisakCOD-material-clone-radiant-test", "KisakCOD-cpu-ui-test", "KisakCOD-material-layered-mp-test", "KisakCOD-material-layered-sp-test", "KisakCOD-material-layered-radiant-test", "KisakCOD-cpu-text-test", "KisakCOD-cpu-menu-test", "KisakCOD-menu-assets-test", "KisakCOD-ui-material-assets-test", "KisakCOD-menu-composition-assets-test", "KisakCOD-iwi-assets-test", "KisakCOD-ui-asset-export", "KisakCOD-font-assets-test", "KisakCOD-menu-input-owner-test", "KisakCOD-menu-control-assets-test", "KisakCOD-menu-script-test", "KisakCOD-ui-audio-test", "KisakCOD-ui-audio-assets-test", "KisakCOD-ui-audio-failure-test", "KisakCOD-menu-input-failure-test", "KisakCOD-cpu-viewport-test", "KisakCOD-ui-time-test", "KisakCOD-ui-registration-test", "KisakCOD-cpu-composition-test", "KisakCOD-cpu-traversal-test", "KisakCOD-cpu-menu-frame-test", "KisakCOD-cpu-frame-owner-test"):
             check(f"default build exposes no {name} target", name not in help_text)
     finally:

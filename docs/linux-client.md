@@ -21,7 +21,7 @@ window option adds no SDL dependency to it. The shared event queue is extracted 
 
 ## What the milestone builds
 
-`KISAK_BUILD_LINUX_CLIENT_CORE` (default `OFF`) adds nine targets:
+`KISAK_BUILD_LINUX_CLIENT_CORE` (default `OFF`) adds ten targets:
 
 | Target | Kind | Purpose |
 | --- | --- | --- |
@@ -33,6 +33,7 @@ window option adds no SDL dependency to it. The shared event queue is extracted 
 | `KisakCOD-client-receive-test` | executable | Production reader/tokenizer/receive lifecycle and connection guards |
 | `KisakCOD-client-platform-test` | executable | Full client-main compilation and portable setenv behavior |
 | `KisakCOD-client-connect-test` | executable | Production `connect` command: local server joined, remote servers refused |
+| `KisakCOD-client-server-list-test` | executable | Production server list commands and master heartbeat over loopback UDP ([Finding servers](server-browser.md)) |
 | `KisakCOD-client-headless` | executable | Read-only UDP server discovery, no game admission |
 
 The object library compiles these files **unmodified**, from their production
