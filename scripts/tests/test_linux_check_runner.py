@@ -230,6 +230,7 @@ class PlannedCommandTests(unittest.TestCase):
             "weapon_def_ownership",
             "bot_driver",
             "database_publication",
+            "mod_zone_detection",
             "crt_shims",
             "assert_continue",
             "sl_trace",
