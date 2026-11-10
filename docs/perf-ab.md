@@ -102,12 +102,22 @@ When the GPU is the limit they are most of the frame: at 1920x1200 on the
 laptop the main thread waited 9 ms of a 14.8 ms frame (perf run 1). On a
 laptop the CPU cores and the GPU share one power budget.
 
-`r_gpuSyncSleep <microseconds>` (non-Windows builds, default 0 = unchanged)
-makes both waits sleep that long between checks of the fence. A wait then ends
-up to one sleep late. `r_gpuSyncSleepThreads` picks the waits it applies to
-(1 the main thread's, 2 the render thread's, 3 both, the default), to tell
-their effects apart. The sleep is off until a laptop run shows what it does
-to frame rate and power; `perf_ab` was written to measure it.
+`r_gpuSyncSleep <microseconds>` (non-Windows builds) makes both waits sleep
+that long between checks of the fence. A wait then ends up to one sleep late.
+`r_gpuSyncSleepThreads` picks the waits it applies to (1 the main thread's, 2
+the render thread's, 3 both, the default), to tell their effects apart. 0
+keeps a core busy as before.
+
+The default is 100 on Linux and 0 elsewhere. Laptop perf run 5 (Intel U300,
+battery, power saver, mp_crash with 12 bots, `perf_ab` 0 against 100 in one
+launch) measured:
+
+| | fps | CPU ms/frame, whole game | battery |
+|---|---|---|---|
+| 1280x800 windowed | +2.8 % | -2.75 | -0.54 W |
+| 1920x1200 fullscreen | +12.6 % | -8.25 | -0.23 W |
+
+50 and 200 were no better than 100. Vita and macOS have had no such run.
 
 ## `xanim_blendOnce`
 

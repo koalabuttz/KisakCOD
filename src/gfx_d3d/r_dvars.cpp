@@ -581,9 +581,17 @@
          DVAR_NOFLAG,
          "GPU synchronization type (used to improve mouse responsiveness)");
 #if !defined(_WIN32)
+     // Linux sleeps 100 us by default: laptop perf run 5 measured +2.8 % fps
+     // at 1280x800 and +12.6 % at 1920x1200, with 2.7 and 8.2 ms less CPU per
+     // frame, against 0. Vita and macOS have no such run yet and keep 0.
+#if defined(__linux__)
+     constexpr int gpuSyncSleepDefault = 100;
+#else
+     constexpr int gpuSyncSleepDefault = 0;
+#endif
      r_gpuSyncSleep = Dvar_RegisterInt(
          "r_gpuSyncSleep",
-         0,
+         gpuSyncSleepDefault,
          0,
          1000,
          DVAR_NOFLAG,
