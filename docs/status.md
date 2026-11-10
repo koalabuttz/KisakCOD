@@ -1,7 +1,7 @@
 # Linux port status
 
-Last updated 2026-11-10 (master `83c8f8a`, the PS Vita client's GPU memory
-cuts, PR 155). This page is the current state of
+Last updated 2026-11-10 (master `ac06197`, the PS Vita client's compressed
+sounds, PR 154). This page is the current state of
 the native Linux port and the other platform builds, the open pull requests and
 the roadmap. The [docs index](README.md) lists the detailed guides;
 older handoffs are in [history](history/README.md) and are not current.
@@ -26,7 +26,7 @@ Vulkan checks run on lavapipe and MoltenVK).
 | Multiplayer client, aarch64 | the client options with `-DKISAK_LINUX_ARCH=aarch64` | Builds and passes the asset-free client checks (qemu and hosted Arm CI) against a D3D9 stand-in; no aarch64 DXVK build yet, so it has not drawn a frame. [Guide](linux-arm64.md#building-the-aarch64-client) |
 | Dedicated server, armv7 (32-bit Arm) | `-DKISAK_LINUX_ARCH=armv7` | Cross-compiled from x86, boots without game data under qemu-arm (hosted CI). First step toward a PS Vita port. Not yet run with game data. [Guide](linux-armv7.md) |
 | Dedicated server, PS Vita | `-DKISAK_PLATFORM=vita` | Clang + VitaSDK build packed into `KisakCOD-dedi.vpk` (hosted CI job, artifact). Boots in Vita3K without game data; capped at 24 players so its snapshot buffers fit the Vita's memory. Runs on David's Vita (2026-11-08): run 1 crashed on an unaligned 8-byte store, run 2 loaded mp_crash's zones then crashed on shared thread-locals, run 3 started the game then crashed on an unaligned script vector (all fixed). The run 4 build ran 9 h idle on mp_crash without a crash, and a key-code client on the laptop joined it over Wi-Fi (2026-11-09). An opt-in i386 Linux build (`-DKISAK_ALIGNMENT_CHECK=ON`) lists misaligned accesses ahead of time; the laptop scan of all 21 maps with bots is clean. [Guide](vita.md) |
-| Multiplayer client, PS Vita | `-DKISAK_PLATFORM=vita -DKISAK_BUILD_VITA_MP_CLIENT=ON` | KisakCOD-mp compiles, links and packs into `KisakCOD-mp.vpk` (hosted CI job); its own listen server is capped at 8 players. On David's Vita the main menu shows and works (run K, 2026-11-10): a sceGxm back end under the D3D9 front draws it, the game's 826 shaders are translated to Cg and compiled on the console, and touch, buttons and the menu's music work. A map does not load yet, and memory is the work in progress. On the console (run K) the menu filled 95 of the GPU's 104 MB, and a listen server on mp_crash ran out of GPU memory. PR 155 (merged) gives render targets their GPU memory at first use and turns shadow maps off; in Vita3K on the PC the menu then holds 71 of 108 MB and the whole mp_crash fastfile loads, after which the 64 MB heap runs out (the menu's sounds alone hold 55 MB of it as 16-bit PCM; PR 154, open, compresses them). With a 128 MB heap, which a console does not have, the map loads and a match runs in Vita3K with menus and HUD drawn, but the world is black. PR 155's build has not run on the console. The layout of the controls in a game is not confirmed yet. [Guide](vita-client.md) |
+| Multiplayer client, PS Vita | `-DKISAK_PLATFORM=vita -DKISAK_BUILD_VITA_MP_CLIENT=ON` | KisakCOD-mp compiles, links and packs into `KisakCOD-mp.vpk` (hosted CI job); its own listen server is capped at 8 players. On David's Vita the main menu shows and works (run K, 2026-11-10): a sceGxm back end under the D3D9 front draws it, the game's 826 shaders are translated to Cg and compiled on the console, and touch, buttons and the menu's music work. A map does not load yet, and memory is the work in progress. On the console (run K) the menu filled 95 of the GPU's 104 MB and 55 of the 64 MB heap, most of the heap with sounds held as 16-bit PCM, and a listen server on mp_crash ran out of GPU memory. Two merged changes cut both, measured so far only in Vita3K on the PC. PR 155 gives render targets their GPU memory at first use and turns shadow maps off: the menu holds 71 of 108 MB, and the whole mp_crash fastfile loads before the heap runs out. PR 154 compresses loaded sounds to IMA ADPCM when they load (`snd_adpcm`, the Vita's default): the menu's heap is at 24 MB. The two have not run together, neither has run on the console, and nobody has listened to the compressed sounds. With a 128 MB heap, which a console does not have, and without PR 154, the map loaded and a match ran in Vita3K with menus and HUD drawn, but the world was black. The layout of the controls in a game is not confirmed yet. [Guide](vita-client.md) |
 | Dedicated server, macOS (arm64 and x86_64) | `-DKISAK_PLATFORM=macos` | Builds with Apple Clang on hosted macOS runners (Apple silicon and Intel) and boots without game data to the first missing fastfile. Not yet run with game data or on a real Mac. [Guide](macos.md) |
 | Movies | `-DKISAK_LINUX_CINEMATICS=ON` | Bink movies play through an FFmpeg-backed shim on i386 and x86_64 (laptop). Off by default. [Guide](linux-cinematics.md) |
 | Steam authentication | `-DKISAK_LINUX_STEAM=ON` | Added by PR 85. Logs in through the running Steam client's `steamclient.so`; a probe got a ticket validated on i386 and x86_64, and an i386 client joined, reconnected to and was refused by (with Steam off) an i386 dedicated server; the same passed with x86_64 client and server, and across i386 and x86_64 in both directions (laptop, one Steam account). A dedicated server can instead log on as an anonymous Steam game server (`KISAK_STEAM_SERVER_LOGIN=anonymous`); a Windows client on David's PC joined such a laptop server and was refused with the server's Steam off. Off by default. [Guide](linux-steam.md) |
@@ -146,7 +146,6 @@ As of 2026-11-10.
 | PR | What | Waits on |
 | --- | --- | --- |
 | 152 | Vulkan back end: record commands on a second thread, as DXVK does, and submit a frame to the GPU in parts while it is drawn ([front](vulkan-d3d9-front.md#threads)) | Hosted CI is green. Laptop run 9 measured 141 fps against 151 to 155 through DXVK with an unchanged picture; a run of the feed interval on the laptop and a first run on the PC are queued. |
-| 154 | PS Vita client: compress loaded sounds to IMA ADPCM (`snd_adpcm`) so the menu's sounds leave room in the heap, and survive a sound without memory ([guide](vita-client.md#sound-stage-3)) | A Vita3K run of a PC-built package of its head, and hosted CI. Nobody has listened to the compressed sounds yet. |
 
 ## Laptop and PC runs still to do
 
@@ -160,9 +159,10 @@ As of 2026-11-10. Each machine does one run at a time.
   real GPU; the laptop and PC runs so far had no layer installed. The
   standalone Legacy adapter and D3D9 front checks have no recorded PC run
   either (the game itself draws through both there).
-- PS Vita client: PRs 154 and 155 together in Vita3K, then on the console, to
-  see whether mp_crash fits the 64 MB heap; the black world seen in Vita3K; a
-  listen of the compressed sounds; the controls' layout in a game.
+- PS Vita client: master, with PRs 154 and 155 together, in Vita3K and then
+  on the console, to see whether mp_crash fits the 64 MB heap; the black world
+  seen in Vita3K; a listen of the compressed sounds; the controls' layout in a
+  game.
 - PS Vita dedicated server with bots (it has taken one player).
 - Sound listening run for the OpenAL fix (PR 102, merged): plan in
   `sound/laptop-sound-run-1.md`, with `+set snd_alDebug 1`. Needs someone at
@@ -179,8 +179,8 @@ no fixed order.
 
 1. **Land the open work above**.
 2. **PS Vita client** (the priority since 2026-11-09): the menu runs on the
-   console. Next is a map that fits the Vita's memory (GPU buffers sized for a
-   PC, sounds), then the black world, the on-screen keyboard, joining a
+   console. Next is a map that fits the Vita's memory (the dynamic GPU buffers
+   are still sized for a PC), then the black world, the on-screen keyboard, joining a
    server, and speed ([guide](vita-client.md#stages)).
 3. **Renderer**: the Vulkan back end with the original visuals draws the game
    on the laptop and the PC (PRs 124 to 148). Next is its speed against DXVK
