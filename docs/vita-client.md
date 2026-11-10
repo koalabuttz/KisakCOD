@@ -755,8 +755,19 @@ What the GXM back end does so far (step 2d):
   and N set their filters anew; of N uniform buffers N were the last
   draw's`. A file named `no-draw-reuse` in the folder of the compiled
   programs turns all three off (the log says so at start-up), so that a
-  console run can tell a fault of theirs without another build. What they
-  save in a frame's time is not measured yet, in Vita3K or on a console.
+  console run can tell a fault of theirs without another build. Console run
+  N (2026-11-10, mp_crash) measured them: the back end's draw time fell from
+  28 to 30 ms a frame to 13 to 17 ms, but frames took as long (130 to 165
+  ms), since the console waits 80 to 110 ms a frame for the GPU there.
+- **Where the GPU's time goes.** A file named `gpu-scene-times` in the same
+  folder makes the CPU wait for the GPU at the end of every scene and add
+  the wait to that scene's targets. Every 60 frames the log gives the GPU's
+  time a frame by target, most first: `diag: gpu by scene: N ms a frame, N
+  scenes and N draws a frame: <colour target> + depth <depth target> WxH`.
+  The back buffer's scene also holds any wait for the display to let the
+  buffer go. The waits stop the CPU and the GPU working at once, so frames
+  are slower with it; it is for finding the costly pass, not for frame
+  rates.
 - **Textures** are linear: rows of whole multiples of 8 texels, and the
   levels of a mipmapped texture sized from the power of two above the base,
   which is how sceGxm reads them and also a layout LockRect can hand out.
