@@ -38,6 +38,10 @@ on:
       - '!scripts/platform/vita/**'
       - '!scripts/tests/test_vita_*.py'
       - '!scripts/ci/install-vitasdk.sh'
+      # The test machines' run scripts and their tests: run-scripts.yaml.
+      - '!scripts/runs/**'
+      - '!scripts/tests/test_perf_run.py'
+      - '!scripts/tests/test_vita3k_runner.py'
       - deps/**
       - tests/linux_net/**
       - tests/linux_client_core/**
@@ -78,6 +82,10 @@ on:
       - '!scripts/platform/vita/**'
       - '!scripts/tests/test_vita_*.py'
       - '!scripts/ci/install-vitasdk.sh'
+      # The test machines' run scripts and their tests: run-scripts.yaml.
+      - '!scripts/runs/**'
+      - '!scripts/tests/test_perf_run.py'
+      - '!scripts/tests/test_vita3k_runner.py'
       - deps/**
       - tests/linux_net/**
       - tests/linux_client_core/**

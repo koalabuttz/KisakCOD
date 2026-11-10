@@ -878,6 +878,47 @@ class CiTriggerTests(unittest.TestCase):
                 with self.subTest(event=event, path=path):
                     self.assertFalse(_selected(path, self.vita['on'][event]['paths']))
 
+    # The test machines' run scripts and their host tests: Python and
+    # PowerShell no build compiles or reads.
+    RUN_SCRIPTS_ONLY = (
+        'scripts/runs/perf_run.py',
+        'scripts/runs/run_report.py',
+        'scripts/runs/recipes/vulkan-ab-mp-crash.json',
+        'scripts/runs/vita3k/vita-run.ps1',
+        'scripts/runs/vita3k/wsl/03-build.sh',
+        'tests/runs/fake_game.cpp',
+        'scripts/tests/test_perf_run.py',
+        'scripts/tests/test_vita3k_runner.py',
+    )
+
+    def test_run_script_changes_start_the_run_scripts_workflow_alone(self):
+        scripts = yaml.load((ROOT / '.github/workflows/run-scripts.yaml').read_text(), Loader=yaml.BaseLoader)
+        for event in ('push', 'pull_request'):
+            for path in self.RUN_SCRIPTS_ONLY + ('.github/workflows/run-scripts.yaml',):
+                with self.subTest(event=event, path=path):
+                    self.assertTrue(_selected(path, scripts['on'][event]['paths']))
+                    if path.startswith('.github/'):
+                        continue
+                    for other in (self.linux, self.vita, self.windows, self.macos):
+                        self.assertFalse(_selected(path, other['on'][event]['paths']))
+            # Everything else under scripts/ still starts the Linux workflow.
+            for path in ('scripts/tools/changed_units.py', 'scripts/tests/test_frame_log.py'):
+                with self.subTest(event=event, path=path):
+                    self.assertFalse(_selected(path, scripts['on'][event]['paths']))
+                    self.assertTrue(_selected(path, self.linux['on'][event]['paths']))
+        # Its one job runs both host tests; the Linux native job runs them too
+        # whenever a wider change starts it.
+        commands = '\n'.join(step.get('run', '') for job in scripts['jobs'].values() for step in job['steps'])
+        native = '\n'.join(step.get('run', '') for step in self.linux['jobs']['native']['steps'])
+        for test in ('scripts/tests/test_perf_run.py', 'scripts/tests/test_vita3k_runner.py'):
+            with self.subTest(test=test):
+                self.assertIn(f'python3 {test}', commands)
+                self.assertIn(f'python3 {test}', native)
+        self.assertEqual(scripts['on']['push']['branches'], ['master'])
+        self.assertIn('workflow_dispatch', scripts['on'])
+        for job in scripts['jobs'].values():
+            self.assertEqual(job['if'], "github.event_name != 'pull_request' || github.event.pull_request.draft == false")
+
     def test_shared_changes_start_the_vita_and_the_linux_workflow(self):
         for event in ('push', 'pull_request'):
             for path in self.VITA_AND_LINUX:

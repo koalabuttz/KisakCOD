@@ -21,6 +21,10 @@ on:
     paths:
       - CMakeLists.txt
       - scripts/**
+      # The test machines' run scripts and their tests: run-scripts.yaml.
+      - '!scripts/runs/**'
+      - '!scripts/tests/test_perf_run.py'
+      - '!scripts/tests/test_vita3k_runner.py'
       - src/**
       - deps/**
       - tests/vita_*/**
@@ -31,6 +35,10 @@ on:
     paths:
       - CMakeLists.txt
       - scripts/**
+      # The test machines' run scripts and their tests: run-scripts.yaml.
+      - '!scripts/runs/**'
+      - '!scripts/tests/test_perf_run.py'
+      - '!scripts/tests/test_vita3k_runner.py'
       - src/**
       - deps/**
       - tests/vita_*/**
