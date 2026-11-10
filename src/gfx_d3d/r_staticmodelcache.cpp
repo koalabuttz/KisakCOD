@@ -35,7 +35,7 @@ void *R_AllocStaticModelCache()
     // The cache is written in pieces as models come into view and never
     // discarded, so the GXM back end needs no fresh copy of it. Asked for as
     // a plain write-only buffer it goes to the GPU's own memory; a dynamic
-    // one would take 2 MB of the main pool, which the buffers that are
+    // one would take 4 MB of the main pool, which the buffers that are
     // rewritten every frame fill already (docs/vita-client.md, "Memory").
     return R_AllocWriteOnlyVertexBuffer(&gfxBuf.smodelCacheVb, R_SMC_VERTEX_BYTES);
 #else

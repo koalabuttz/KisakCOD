@@ -12,9 +12,10 @@
 // vertices at most.
 //
 // Retail: 128 trees a section, 8 MB of vertices and 2 MB of indices. The PS
-// Vita's GXM back end: 32 trees a section, 2 MB and 512 KB, because a
+// Vita's GXM back end: 64 trees a section, 4 MB and 1 MB, because a
 // console's GPU has 104 MB for a map and mp_crash leaves 6.5 of them free
-// (docs/vita-client.md, "Memory"). A model that finds the cache full of the
+// (docs/vita-client.md, "Memory"). In Vita3K on mp_crash 2 MB was full in
+// every view and 4 MB nearly never (PC run AB, 2026-11-10). A model that finds the cache full of the
 // last four frames' models is drawn by itself that frame, as with
 // r_smc_enable 0, so a smaller cache costs draws and never a model. What a
 // view asks for: on mp_crash the retail cache held 2.2 MB at the team menu,
@@ -30,7 +31,7 @@
 
 #ifndef R_SMC_SECTION_TREE_BITS
 #ifdef KISAK_GFX_GXM
-#define R_SMC_SECTION_TREE_BITS 5
+#define R_SMC_SECTION_TREE_BITS 6
 #else
 #define R_SMC_SECTION_TREE_BITS 7
 #endif

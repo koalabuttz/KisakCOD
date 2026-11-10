@@ -159,7 +159,7 @@ set(KISAK_VITA_HEAP_MB "64" CACHE STRING "Size of the Vita client's heap in MB (
 target_compile_definitions(KisakCOD-mp-vita-standin PRIVATE KISAK_VITA_HEAP_MB=${KISAK_VITA_HEAP_MB})
 # The static model cache's size (src/gfx_d3d/r_staticmodelcache_sizes.h): 2^n
 # trees in each of its four sections, 1 to 7. Empty is the header's own
-# choice for the Vita (5: 2 MB of GPU memory). For measuring other sizes.
+# choice for the Vita (6: 4 MB of GPU memory). For measuring other sizes.
 set(KISAK_VITA_SMC_SECTION_TREE_BITS "" CACHE STRING
     "Trees in a section of the Vita client's static model cache, as a power of two (1 to 7); empty for the default")
 if(NOT KISAK_VITA_SMC_SECTION_TREE_BITS STREQUAL "")

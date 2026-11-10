@@ -29,7 +29,7 @@ SOURCE = ROOT / "tests" / "vita_gxm" / "smodel_cache_sizes_test.cpp"
 VARIANTS = [(f"{1 << bits} trees a section", [f"-DR_SMC_SECTION_TREE_BITS={bits}"]) for bits in range(1, 8)]
 VARIANTS += [
     ("the default", ["-DEXPECT_BITS=7"]),
-    ("the default of the GXM back end", ["-DKISAK_GFX_GXM", "-DEXPECT_BITS=5"]),
+    ("the default of the GXM back end", ["-DKISAK_GFX_GXM", "-DEXPECT_BITS=6"]),
 ]
 
 
