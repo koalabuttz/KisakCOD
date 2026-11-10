@@ -88,13 +88,15 @@ void SV_WWWDownload_f(client_t *cl)
                 }
                 else
                 {
-                    SV_WWWDownLoad_Clear(cl);
-                    cl->wwwFallback = 1;
+                    // Print before clearing: SV_WWWDownLoad_Clear empties
+                    // downloadName, and the line named the file as ''.
                     Com_Printf(
                         CON_CHANNEL_SERVER,
                         "Client '%s' reported that the http download of '%s' failed, falling back to a server download\n",
                         cl->name,
                         cl->downloadName);
+                    SV_WWWDownLoad_Clear(cl);
+                    cl->wwwFallback = 1;
                     SV_SendClientGameState(cl);
                 }
             }
